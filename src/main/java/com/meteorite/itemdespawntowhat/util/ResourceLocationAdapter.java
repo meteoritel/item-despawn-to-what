@@ -1,4 +1,4 @@
-package com.meteorite.expiringitemlib.util;
+package com.meteorite.itemdespawntowhat.util;
 
 import com.google.gson.*;
 import net.minecraft.resources.ResourceLocation;

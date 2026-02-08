@@ -1,4 +1,4 @@
-package com.meteorite.expiringitemlib.util;
+package com.meteorite.itemdespawntowhat.util;
 
 import net.minecraft.core.Direction;
 

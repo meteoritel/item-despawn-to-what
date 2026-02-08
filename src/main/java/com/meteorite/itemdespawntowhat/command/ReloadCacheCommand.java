@@ -1,6 +1,6 @@
-package com.meteorite.expiringitemlib.command;
+package com.meteorite.itemdespawntowhat.command;
 
-import com.meteorite.expiringitemlib.ConfigExtractorManager;
+import com.meteorite.itemdespawntowhat.ConfigExtractorManager;
 import com.mojang.brigadier.CommandDispatcher;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;

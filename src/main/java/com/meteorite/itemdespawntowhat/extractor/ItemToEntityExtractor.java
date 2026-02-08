@@ -1,6 +1,6 @@
-package com.meteorite.expiringitemlib.extractor;
+package com.meteorite.itemdespawntowhat.extractor;
 
-import com.meteorite.expiringitemlib.config.ItemToEntityConfig;
+import com.meteorite.itemdespawntowhat.config.ItemToEntityConfig;
 
 // 用于item -> entity 的配置提取器
 @Deprecated

@@ -1,4 +1,4 @@
-package com.meteorite.expiringitemlib;
+package com.meteorite.itemdespawntowhat;
 
 import java.util.Collections;
 import java.util.Map;
@@ -6,11 +6,11 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-import com.meteorite.expiringitemlib.config.BaseConversionConfig;
-import com.meteorite.expiringitemlib.handler.BaseConfigHandler;
-import com.meteorite.expiringitemlib.handler.ItemToBlockConfigHandler;
-import com.meteorite.expiringitemlib.handler.ItemToEntityConfigHandler;
-import com.meteorite.expiringitemlib.handler.ItemToItemConfigHandler;
+import com.meteorite.itemdespawntowhat.config.BaseConversionConfig;
+import com.meteorite.itemdespawntowhat.handler.BaseConfigHandler;
+import com.meteorite.itemdespawntowhat.handler.ItemToBlockConfigHandler;
+import com.meteorite.itemdespawntowhat.handler.ItemToEntityConfigHandler;
+import com.meteorite.itemdespawntowhat.handler.ItemToItemConfigHandler;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

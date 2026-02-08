@@ -1,11 +1,10 @@
-package com.meteorite.expiringitemlib.event;
+package com.meteorite.itemdespawntowhat.event;
 
-import com.meteorite.expiringitemlib.ConfigExtractorManager;
-import com.meteorite.expiringitemlib.ExpiringItemLib;
-import com.meteorite.expiringitemlib.config.BaseConversionConfig;
-import com.meteorite.expiringitemlib.config.ItemToEntityConfig;
-import com.meteorite.expiringitemlib.config.ItemToItemConfig;
-import com.meteorite.expiringitemlib.util.ConditionChecker;
+import com.meteorite.itemdespawntowhat.ConfigExtractorManager;
+import com.meteorite.itemdespawntowhat.config.BaseConversionConfig;
+import com.meteorite.itemdespawntowhat.config.ItemToEntityConfig;
+import com.meteorite.itemdespawntowhat.config.ItemToItemConfig;
+import com.meteorite.itemdespawntowhat.util.ConditionChecker;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -26,16 +25,18 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.*;
 
-@EventBusSubscriber(modid = ExpiringItemLib.MOD_ID)
+import static com.meteorite.itemdespawntowhat.ItemDespawnToWhat.MOD_ID;
+
+@EventBusSubscriber(modid = MOD_ID)
 public class ItemConversionEvent {
     // ---------- 掉落物加入世界后的逻辑 ---------- //
 
     private static final Logger LOGGER = LogManager.getLogger();
 
-    private static final String CHECK_TAG = "expiringitemlib:needs_check";
-    private static final String TIMER_TAG = "expiringitemlib:check_timer";
-    private static final String SELECTED_CONFIG_TAG = "expiringitemlib:selected_config";
-    private static final String CONVERSION_LOCK_TAG = "expiringitemlib:conversion_lock";
+    private static final String CHECK_TAG = MOD_ID + ":needs_check";
+    private static final String TIMER_TAG = MOD_ID + ":check_timer";
+    private static final String SELECTED_CONFIG_TAG = MOD_ID + ":selected_config";
+    private static final String CONVERSION_LOCK_TAG = MOD_ID + ":conversion_lock";
 
     // 检查间隔（每20tick检查一次）
     private static final int CHECK_INTERVAL = 20;

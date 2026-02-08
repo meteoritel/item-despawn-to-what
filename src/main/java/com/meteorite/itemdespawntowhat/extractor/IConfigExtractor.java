@@ -1,6 +1,6 @@
-package com.meteorite.expiringitemlib.extractor;
+package com.meteorite.itemdespawntowhat.extractor;
 
-import com.meteorite.expiringitemlib.config.BaseConversionConfig;
+import com.meteorite.itemdespawntowhat.config.BaseConversionConfig;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.List;

@@ -1,4 +1,4 @@
-package com.meteorite.expiringitemlib.config;
+package com.meteorite.itemdespawntowhat.config;
 
 import com.google.gson.annotations.SerializedName;
 

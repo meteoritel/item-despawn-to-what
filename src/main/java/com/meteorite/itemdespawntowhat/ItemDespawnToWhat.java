@@ -1,7 +1,7 @@
-package com.meteorite.expiringitemlib;
+package com.meteorite.itemdespawntowhat;
 
-import com.meteorite.expiringitemlib.command.ReloadCacheCommand;
-import com.meteorite.expiringitemlib.event.ItemConversionEvent;
+import com.meteorite.itemdespawntowhat.command.ReloadCacheCommand;
+import com.meteorite.itemdespawntowhat.event.ItemConversionEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import org.slf4j.Logger;
@@ -15,16 +15,15 @@ import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
 
-// 之后要记得把模组名字改一下
-@Mod(ExpiringItemLib.MOD_ID)
-public class ExpiringItemLib {
+@Mod(ItemDespawnToWhat.MOD_ID)
+public class ItemDespawnToWhat {
 
-    public static final String MOD_ID = "expiringitemlib";
+    public static final String MOD_ID = "itemdespawntowhat";
     public static final Logger LOGGER = LogUtils.getLogger();
 
-    private static ExpiringItemLib instance;
+    private static ItemDespawnToWhat instance;
 
-    public ExpiringItemLib(IEventBus modEventBus) {
+    public ItemDespawnToWhat(IEventBus modEventBus) {
         // 初始化主类单例
         instance = this;
         modEventBus.addListener(this::commonSetup);
@@ -77,7 +76,7 @@ public class ExpiringItemLib {
     }
 
     // 获取实例
-    public static ExpiringItemLib getInstance() {
+    public static ItemDespawnToWhat getInstance() {
         return instance;
     }
 

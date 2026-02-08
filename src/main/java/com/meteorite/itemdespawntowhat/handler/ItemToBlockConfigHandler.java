@@ -1,8 +1,8 @@
-package com.meteorite.expiringitemlib.handler;
+package com.meteorite.itemdespawntowhat.handler;
 
 import com.google.gson.reflect.TypeToken;
-import com.meteorite.expiringitemlib.config.ItemToBlockConfig;
-import com.meteorite.expiringitemlib.config.SurroundingBlocks;
+import com.meteorite.itemdespawntowhat.config.ItemToBlockConfig;
+import com.meteorite.itemdespawntowhat.config.SurroundingBlocks;
 import net.minecraft.resources.ResourceLocation;
 
 import java.lang.reflect.Type;

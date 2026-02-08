@@ -1,7 +1,7 @@
-package com.meteorite.expiringitemlib.util;
+package com.meteorite.itemdespawntowhat.util;
 
-import com.meteorite.expiringitemlib.ExpiringItemLib;
-import com.meteorite.expiringitemlib.config.SurroundingBlocks;
+import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
+import com.meteorite.itemdespawntowhat.config.SurroundingBlocks;
 import com.mojang.datafixers.util.Either;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -36,19 +36,19 @@ public class ConditionCheckerUtil {
     private static void registerConditionBuilders() {
         // 维度条件构建器
         CONDITION_BUILDER_MAP.put(
-                ResourceLocation.fromNamespaceAndPath(ExpiringItemLib.MOD_ID, "dimension"),
+                ResourceLocation.fromNamespaceAndPath(ItemDespawnToWhat.MOD_ID, "dimension"),
                 ConditionCheckerUtil::buildDimensionChecker
         );
 
         // 露天条件构建器
         CONDITION_BUILDER_MAP.put(
-                ResourceLocation.fromNamespaceAndPath(ExpiringItemLib.MOD_ID, "is_outdoor"),
+                ResourceLocation.fromNamespaceAndPath(ItemDespawnToWhat.MOD_ID, "is_outdoor"),
                 ConditionCheckerUtil::buildOutdoorChecker
         );
 
         // 周围方块条件构建器
         CONDITION_BUILDER_MAP.put(
-                ResourceLocation.fromNamespaceAndPath(ExpiringItemLib.MOD_ID, "surrounding_blocks"),
+                ResourceLocation.fromNamespaceAndPath(ItemDespawnToWhat.MOD_ID, "surrounding_blocks"),
                 ConditionCheckerUtil::buildSurroundingBlocksChecker
         );
     }

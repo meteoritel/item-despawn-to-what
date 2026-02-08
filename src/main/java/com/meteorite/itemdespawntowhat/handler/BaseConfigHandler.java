@@ -1,11 +1,10 @@
-package com.meteorite.expiringitemlib.handler;
+package com.meteorite.itemdespawntowhat.handler;
 
-import com.google.common.reflect.TypeToken;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.meteorite.expiringitemlib.ExpiringItemLib;
-import com.meteorite.expiringitemlib.config.BaseConversionConfig;
-import com.meteorite.expiringitemlib.util.ResourceLocationAdapter;
+import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
+import com.meteorite.itemdespawntowhat.config.BaseConversionConfig;
+import com.meteorite.itemdespawntowhat.util.ResourceLocationAdapter;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.fml.loading.FMLPaths;
 import org.apache.logging.log4j.LogManager;
@@ -40,7 +39,7 @@ public abstract class BaseConfigHandler<T extends BaseConversionConfig> {
     // 配置文件生成路径
     public Path getConfigPath() {
         return FMLPaths.CONFIGDIR.get()
-                .resolve(ExpiringItemLib.MOD_ID)
+                .resolve(ItemDespawnToWhat.MOD_ID)
                 .resolve(fileName);
     }
 

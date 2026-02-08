@@ -1,6 +1,6 @@
-package com.meteorite.expiringitemlib.extractor;
+package com.meteorite.itemdespawntowhat.extractor;
 
-import com.meteorite.expiringitemlib.config.ItemToItemConfig;
+import com.meteorite.itemdespawntowhat.config.ItemToItemConfig;
 
 @Deprecated
 public class ItemToItemExtractor extends BaseConfigExtractor<ItemToItemConfig>{

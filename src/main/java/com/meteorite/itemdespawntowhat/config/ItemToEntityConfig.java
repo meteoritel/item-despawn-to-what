@@ -1,4 +1,4 @@
-package com.meteorite.expiringitemlib.config;
+package com.meteorite.itemdespawntowhat.config;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;

@@ -1,10 +1,10 @@
-package com.meteorite.expiringitemlib.extractor;
+package com.meteorite.itemdespawntowhat.extractor;
 
 
-import com.meteorite.expiringitemlib.config.BaseConversionConfig;
-import com.meteorite.expiringitemlib.config.SurroundingBlocks;
-import com.meteorite.expiringitemlib.util.ConditionChecker;
-import com.meteorite.expiringitemlib.util.ConditionCheckerUtil;
+import com.meteorite.itemdespawntowhat.config.BaseConversionConfig;
+import com.meteorite.itemdespawntowhat.config.SurroundingBlocks;
+import com.meteorite.itemdespawntowhat.util.ConditionChecker;
+import com.meteorite.itemdespawntowhat.util.ConditionCheckerUtil;
 import net.minecraft.resources.ResourceLocation;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

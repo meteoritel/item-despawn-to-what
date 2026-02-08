@@ -1,8 +1,8 @@
-package com.meteorite.expiringitemlib.config;
+package com.meteorite.itemdespawntowhat.config;
 
 import com.google.gson.annotations.SerializedName;
-import com.meteorite.expiringitemlib.util.ConditionChecker;
-import com.meteorite.expiringitemlib.util.ConditionCheckerUtil;
+import com.meteorite.itemdespawntowhat.util.ConditionChecker;
+import com.meteorite.itemdespawntowhat.util.ConditionCheckerUtil;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.item.ItemEntity;
 
