@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.event;
 
 import com.meteorite.itemdespawntowhat.ConfigExtractorManager;
 import com.meteorite.itemdespawntowhat.config.BaseConversionConfig;
+import com.meteorite.itemdespawntowhat.config.ItemToBlockConfig;
 import com.meteorite.itemdespawntowhat.config.ItemToEntityConfig;
 import com.meteorite.itemdespawntowhat.config.ItemToItemConfig;
 import com.meteorite.itemdespawntowhat.util.ConditionChecker;
@@ -16,6 +17,7 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
@@ -29,23 +31,24 @@ import static com.meteorite.itemdespawntowhat.ItemDespawnToWhat.MOD_ID;
 
 @EventBusSubscriber(modid = MOD_ID)
 public class ItemConversionEvent {
-    // ---------- 掉落物加入世界后的逻辑 ---------- //
 
     private static final Logger LOGGER = LogManager.getLogger();
 
-    private static final String CHECK_TAG = MOD_ID + ":needs_check";
-    private static final String TIMER_TAG = MOD_ID + ":check_timer";
-    private static final String SELECTED_CONFIG_TAG = MOD_ID + ":selected_config";
-    private static final String CONVERSION_LOCK_TAG = MOD_ID + ":conversion_lock";
+    public static final String CHECK_TAG = MOD_ID + ":needs_check";
+    public static final String TIMER_TAG = MOD_ID + ":check_timer";
+    public static final String SELECTED_CONFIG_TAG = MOD_ID + ":selected_config";
+    public static final String CONVERSION_LOCK_TAG = MOD_ID + ":conversion_lock";
+    public static final String CHECK_TAG_LOCK = MOD_ID + ":check_lock";
 
     // 检查间隔（每20tick检查一次）
     private static final int CHECK_INTERVAL = 20;
-
     // 防止刷物品的全局锁（按物品UUID记录转化状态）
     private static final Set<UUID> CONVERSION_IN_PROGRESS = Collections.newSetFromMap(new WeakHashMap<>());
     // 预分配的列表，减少内存分配
     private static final List<ItemEntity> ITEM_ENTITIES_CACHE = new ArrayList<>(64);
 
+
+    // ---------- 掉落物加入世界后的逻辑 ---------- //
     // 订阅实体加入世界事件
     @SubscribeEvent
     public static void onItemSpawn(EntityJoinLevelEvent event) {
@@ -75,11 +78,12 @@ public class ItemConversionEvent {
     @SubscribeEvent
     public static void onLevelTick(LevelTickEvent.Post event) {
         Level level = event.getLevel();
-
         // 仅在服务端检测
         if (!(level instanceof ServerLevel serverLevel) ) {
             return;
         }
+        // 执行预先加入的延迟任务，如果有
+        LevelTaskManager.tick(serverLevel);
 
         // 每20tick检查一次
         if (serverLevel.getGameTime() % CHECK_INTERVAL != 0) {
@@ -159,7 +163,6 @@ public class ItemConversionEvent {
             itemEntity.getPersistentData().remove(TIMER_TAG);
             itemEntity.getPersistentData().remove(SELECTED_CONFIG_TAG);
         }
-
     }
 
     // 当物品查找到满足的第一个条件时，便不会再检测其他条件，直到该条件不再满足
@@ -176,7 +179,8 @@ public class ItemConversionEvent {
 
             // 所选择的配置不应已经超过上限，并且条件检查器不为空且条件符合
             if (!config.isResultLimitExceeded(itemEntity) &&
-                    checker != null && checker.checkCondition(itemEntity, serverLevel)) {
+                    checker != null &&
+                    checker.checkCondition(itemEntity, serverLevel)) {
                 LOGGER.debug("Selected config {} for item {}", configId, itemId);
                 return config;
             }
@@ -204,6 +208,8 @@ public class ItemConversionEvent {
                 convertToEntity(itemEntity, entityConfig, serverLevel);
             } else if (config instanceof ItemToItemConfig itemConfig) {
                 convertToItem(itemEntity, itemConfig, serverLevel);
+            } else if (config instanceof ItemToBlockConfig blockConfig) {
+                convertToBlock(itemEntity, blockConfig, serverLevel);
             } else {
                 LOGGER.warn("Unknown config type: {}", config.getClass().getName());
             }
@@ -214,6 +220,7 @@ public class ItemConversionEvent {
         }
     }
 
+    // 转化为实体逻辑
     private static void convertToEntity(ItemEntity itemEntity,
                                         ItemToEntityConfig config,
                                         ServerLevel serverLevel) {
@@ -272,11 +279,15 @@ public class ItemConversionEvent {
 
         // 创建返还物品
         if (itemsRemaining > 0) {
-            createReturnItem(itemEntity, serverLevel, itemsRemaining, pos);
+            ItemStack returnStack = itemEntity.getItem().copy();
+            returnStack.setCount(itemsRemaining);
+            ItemEntity returnItem = new ItemEntity(serverLevel, pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, returnStack);
+            serverLevel.addFreshEntity(returnItem);
         }
 
     }
 
+    // 转化为物品逻辑
     private static void convertToItem(ItemEntity itemEntity,
                                       ItemToItemConfig config,
                                       ServerLevel serverLevel) {
@@ -316,9 +327,20 @@ public class ItemConversionEvent {
                 resultMultiple, originalStackSize);
     }
 
+    // 转化为方块逻辑
+    private static void convertToBlock(ItemEntity itemEntity,
+                                      ItemToBlockConfig config,
+                                      ServerLevel serverLevel){
+        Block resultBlock = config.getResultBlock();
+        // 物品下一tick消失
+        itemEntity.makeFakeItem();
+        // 下一tick开始执行延迟放置方块的任务
+        LevelTaskManager.addTask(serverLevel, new ItemToBlockTask(itemEntity, resultBlock));
+    }
+
     // ========== 辅助方法 ========== //
 
-    // 获取所有带有CHECK_TAG标签的处于tick()状态的itemEntity
+    // 获取所有带有CHECK_TAG标签的、不属于检查锁定、处于tick()状态的itemEntity
     private static void collectTaggedItemEntities(ServerLevel level) {
         // 复用列表，避免每次分配新内存
         ITEM_ENTITIES_CACHE.clear();
@@ -327,9 +349,11 @@ public class ItemConversionEvent {
             if (! (entity instanceof ItemEntity itemEntity)) {
                 return;
             }
+
             if (!itemEntity.isAlive() ||
                     !level.isLoaded(itemEntity.blockPosition()) ||
-                    !itemEntity.getPersistentData().getBoolean(CHECK_TAG)) {
+                    !itemEntity.getPersistentData().getBoolean(CHECK_TAG) ||
+                    itemEntity.getPersistentData().getBoolean(CHECK_TAG_LOCK)) {
                 return;
             }
 
@@ -337,18 +361,6 @@ public class ItemConversionEvent {
                 ITEM_ENTITIES_CACHE.add(itemEntity);
             }
         });
-    }
-
-    // 创建返还物品
-    private static void createReturnItem(ItemEntity originalItem, ServerLevel serverLevel,
-                                         int remainingCount, BlockPos pos) {
-        if (remainingCount <= 0) return;
-        ItemStack returnStack = originalItem.getItem().copy();
-        returnStack.setCount(remainingCount);
-
-        ItemEntity returnItem = new ItemEntity(serverLevel, pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5, returnStack);
-
-        serverLevel.addFreshEntity(returnItem);
     }
 
 }

@@ -21,6 +21,12 @@ public class ItemToEntityConfig extends BaseConversionConfig{
         return BuiltInRegistries.ENTITY_TYPE.get(resultId);
     }
 
+    // 确保实体不为空，名字没有拼写错
+    @Override
+    public boolean shouldProcess() {
+        return super.shouldProcess() && this.getResultEntityType() != null;
+    }
+
     // 其他实体就直接按照数量计数
     @Override
     public int countNearbyResult(ItemEntity itemEntity) {

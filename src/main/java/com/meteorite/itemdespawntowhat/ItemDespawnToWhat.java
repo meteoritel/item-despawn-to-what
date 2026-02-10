@@ -24,7 +24,6 @@ public class ItemDespawnToWhat {
     private static ItemDespawnToWhat instance;
 
     public ItemDespawnToWhat(IEventBus modEventBus) {
-        // 初始化主类单例
         instance = this;
         modEventBus.addListener(this::commonSetup);
 
@@ -35,17 +34,15 @@ public class ItemDespawnToWhat {
         LOGGER.info("{} mod initialized", MOD_ID);
     }
 
+    // 游戏启动时，生成默认配置文件
     private void commonSetup(FMLCommonSetupEvent event) {
         LOGGER.info("Starting common setup for {}", MOD_ID);
-
-        // 后台线程生成默认配置文件
         event.enqueueWork(() -> {
             ConfigManager.initialize();
             LOGGER.debug("Configurations loaded during common setup");
 
         });
     }
-
 
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
@@ -63,8 +60,6 @@ public class ItemDespawnToWhat {
     @SubscribeEvent
     public void onServerStopped(ServerStoppedEvent event) {
         LOGGER.info("Server stopped - clearing caches");
-
-        // 清除缓存
         ConfigExtractorManager.clearAllCaches();
     }
 
@@ -75,7 +70,6 @@ public class ItemDespawnToWhat {
         );
     }
 
-    // 获取实例
     public static ItemDespawnToWhat getInstance() {
         return instance;
     }

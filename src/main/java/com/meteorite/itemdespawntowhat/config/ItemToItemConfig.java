@@ -21,17 +21,7 @@ public class ItemToItemConfig extends BaseConversionConfig{
     // 物品转化需要保证转化前后结果不同，防止循环转化
     @Override
     public boolean shouldProcess() {
-        // 输入输出不能为空，且输入和输出不能相同
-        if (itemId == null || resultId == null || itemId == resultId ) {
-            return false;
-        }
-
-        // 确保内部ID存在
-        if (this.getInternalId() == null || this.getInternalId().isEmpty()) {
-            this.setInternalId(UUID.randomUUID().toString());
-        }
-
-        return true;
+        return super.shouldProcess() && this.itemId != this.resultId;
     }
 
     public Item hasResultItem() {

@@ -21,15 +21,12 @@ public class ConfigManager {
 
     // 注册表，配置类型 -> 配置处理器实例
     private final ConcurrentMap<String, BaseConfigHandler<?>> handlerRegistry = new ConcurrentHashMap<>();
-
-    // 配置加载状态
     private volatile boolean loaded = false;
 
     private ConfigManager() {
         registerDefaultHandlers();
     }
 
-    // 获取单例实例
     public static ConfigManager getInstance() {
         return INSTANCE;
     }

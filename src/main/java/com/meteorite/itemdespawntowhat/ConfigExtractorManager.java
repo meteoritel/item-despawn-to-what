@@ -166,7 +166,7 @@ public class ConfigExtractorManager {
     }
     // ========== 辅助方法 ========== //
 
-    // 清除所有缓存，用于服务端结束
+    // 清除所有缓存
     public static synchronized void clearAllCaches() {
         ITEM_CONFIGS_CACHE.clear();
         INTERNAL_ID_CACHE.clear();
@@ -230,7 +230,7 @@ public class ConfigExtractorManager {
         }
     }
 
-    // 加载统计信息，用于日志
+    // 加载统计信息，用于日志调试
     private static void logCacheStats() {
         Map<String, Object> stats = getCacheStats();
         LOGGER.info("=== Config Cache Statistics ===");

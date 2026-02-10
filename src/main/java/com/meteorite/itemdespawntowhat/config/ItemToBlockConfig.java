@@ -16,6 +16,12 @@ public class ItemToBlockConfig extends BaseConversionConfig{
         return BuiltInRegistries.BLOCK.get(resultId);
     }
 
+    // 确保方块形式存在
+    @Override
+    public boolean shouldProcess() {
+        return super.shouldProcess() && this.getResultBlock() != null;
+    }
+
     // 这个类不会用到这个方法
     @Override
     public int countNearbyResult(ItemEntity itemEntity) {

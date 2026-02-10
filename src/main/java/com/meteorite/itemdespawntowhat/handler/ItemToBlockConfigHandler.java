@@ -19,16 +19,12 @@ public class ItemToBlockConfigHandler extends BaseConfigHandler<ItemToBlockConfi
     protected List<ItemToBlockConfig> createDefaultEntries() {
         List<ItemToBlockConfig> entries = new ArrayList<>();
 
-        ItemToBlockConfig leatherEntry = new ItemToBlockConfig(
+        ItemToBlockConfig entry = new ItemToBlockConfig(
                 ResourceLocation.parse("minecraft:oak_sapling"),
                 ResourceLocation.parse("minecraft:oak_sapling")
         );
 
-        SurroundingBlocks blocks = new SurroundingBlocks();
-        blocks.setDown("minecraft:dirt");
-        leatherEntry.setSurroundingBlocks(blocks);
-
-        entries.add(leatherEntry);
+        entries.add(entry);
 
         return entries;
     }
