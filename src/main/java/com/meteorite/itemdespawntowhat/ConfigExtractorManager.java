@@ -151,19 +151,6 @@ public class ConfigExtractorManager {
         return configs != null && !configs.isEmpty();
     }
 
-    // 获取所有配置的物品ID
-    public static Set<ResourceLocation> getAllConfiguredItems() {
-        checkInitialized();
-        return Collections.unmodifiableSet(ITEM_CONFIGS_CACHE.keySet());
-    }
-
-    // 获取所有配置实例
-    public static List<BaseConversionConfig> getAllConfigs() {
-        checkInitialized();
-        return ITEM_CONFIGS_CACHE.values().stream()
-                .flatMap(List::stream)
-                .collect(Collectors.toList());
-    }
     // ========== 辅助方法 ========== //
 
     // 清除所有缓存

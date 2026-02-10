@@ -47,7 +47,6 @@ public class ItemConversionEvent {
     // 预分配的列表，减少内存分配
     private static final List<ItemEntity> ITEM_ENTITIES_CACHE = new ArrayList<>(64);
 
-
     // ---------- 掉落物加入世界后的逻辑 ---------- //
     // 订阅实体加入世界事件
     @SubscribeEvent
@@ -62,8 +61,11 @@ public class ItemConversionEvent {
             return;
         }
 
-        ItemStack itemStack = itemEntity.getItem();
-        ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(itemStack.getItem());
+        if (itemEntity.getPersistentData().contains(CHECK_TAG)) {
+            return ;
+        }
+
+        ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(itemEntity.getItem().getItem());
 
         if (ConfigExtractorManager.hasAnyConfigs(itemId)) {
             // 标记为需要检查

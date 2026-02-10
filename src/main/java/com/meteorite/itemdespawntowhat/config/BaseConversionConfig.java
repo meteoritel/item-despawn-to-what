@@ -14,30 +14,27 @@ public abstract class BaseConversionConfig {
     // 内部唯一标识符，不会进行序列化
     protected transient String internalId;
     // 基础限制实体数量，没有规定实体数量的时候返回这个值
-    protected static final int BASE_LIMIT = 30;
+    protected static final int DEFAULT_LIMIT = 30;
     // 检查限制的范围
     protected static final int RADIUS = 6;
     // 默认转化时间300秒
-    private static final int DEFAULT_CONVERSION_TIME = 300;
-
-    // ==========         所有的序列名都在父类中         ========= //
-    // ========== 子类后续的判定如果不需要这个写上也不会生效 ========= //
+    protected static final int DEFAULT_CONVERSION_TIME = 300;
 
     // 物品注册名
     @SerializedName("item")
     protected ResourceLocation itemId;
 
-    // 消失的方式 - 自然消失 timeout， 岩浆烧毁 lava， 暂时没有作用
-    @SerializedName("disappear_cause")
+    // 消失的方式 - 自然消失 timeout， 岩浆烧毁 lava，暂时没有作用，未来再添加
+    // @SerializedName("disappear_cause")
     protected String disappearCause;
 
     // 所处维度
     @SerializedName("dimension")
     protected String dimension;
 
-    // 是否露天
-    @SerializedName("is_outdoor")
-    protected String isOutdoor;
+    // 是否需要露天
+    @SerializedName("need_outdoor")
+    protected boolean needOutdoor;
 
     // 六个方向的方块
     @SerializedName("surrounding_blocks")
@@ -51,17 +48,13 @@ public abstract class BaseConversionConfig {
     @SerializedName("conversion_time")
     protected int conversionTime;
 
-    //生成实体的数量
+    //生成的倍率
     @SerializedName("result_multiple")
     protected int resultMultiple;
 
-    // 生成实体的数量限制，当周围同类型实体超过某个数值后便不会再生成
+    // 生成数量限制
     @SerializedName("result_limit")
     private int resultLimit;
-
-    // 生成实体的age（如果需要）
-    @SerializedName("entity_age")
-    protected int entityAge;
 
     public BaseConversionConfig() {
         this.internalId = UUID.randomUUID().toString();
@@ -72,10 +65,10 @@ public abstract class BaseConversionConfig {
         this.itemId = item;
         this.disappearCause = "timeout";
         this.dimension = "";
-        this.isOutdoor = "false";
+        this.needOutdoor = false;
         this.surroundingBlocks = new SurroundingBlocks();
         this.conversionTime = 10;
-        this.resultLimit = BASE_LIMIT;
+        this.resultLimit = DEFAULT_LIMIT;
         this.resultMultiple = 1;
 
     }
@@ -102,9 +95,7 @@ public abstract class BaseConversionConfig {
         }
 
         String dimension = Optional.ofNullable(this.getDimension()).orElse("");
-        String isOutdoor = Optional.ofNullable(this.getIsOutdoor()).orElse("");
-
-        return ConditionCheckerUtil.buildCombinedChecker(dimension, isOutdoor, this.getSurroundingBlocks());
+        return ConditionCheckerUtil.buildCombinedChecker(dimension, needOutdoor, this.getSurroundingBlocks());
 
     }
 
@@ -123,20 +114,12 @@ public abstract class BaseConversionConfig {
 
     // 限制默认为30
     public int getResultLimit() {
-        return resultLimit <= 0 ? BASE_LIMIT : resultLimit;
+        return resultLimit <= 0 ? DEFAULT_LIMIT : resultLimit;
     }
 
     // 转化倍率最小为1
     public int getResultMultiple() {
         return  Math.max(1, resultMultiple);
-    }
-
-    public int getEntityAge() {
-        return entityAge;
-    }
-
-    public void setEntityAge(int entityAge) {
-        this.entityAge = entityAge;
     }
 
     public void setResultLimit(int resultLimit) {
@@ -175,12 +158,12 @@ public abstract class BaseConversionConfig {
         this.resultMultiple = resultMultiple;
     }
 
-    public String getIsOutdoor() {
-        return isOutdoor;
+    public boolean isNeedOutdoor() {
+        return needOutdoor;
     }
 
-    public void setIsOutdoor(String isOutdoor) {
-        this.isOutdoor = isOutdoor;
+    public void setNeedOutdoor(boolean needOutdoor) {
+        this.needOutdoor = needOutdoor;
     }
 
     public ResourceLocation getItemId() {

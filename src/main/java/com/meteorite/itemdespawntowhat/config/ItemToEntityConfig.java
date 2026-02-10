@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.config;
 
+import com.google.gson.annotations.SerializedName;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -10,6 +11,10 @@ import net.minecraft.world.phys.AABB;
 
 
 public class ItemToEntityConfig extends BaseConversionConfig{
+
+    // 生成实体的age（如果需要）
+    @SerializedName("entity_age")
+    protected int entityAge;
 
     public ItemToEntityConfig(ResourceLocation item, ResourceLocation resultEntity) {
         super(item);
@@ -45,5 +50,13 @@ public class ItemToEntityConfig extends BaseConversionConfig{
     @Override
     public boolean isResultLimitExceeded(ItemEntity itemEntity) {
         return this.countNearbyResult(itemEntity) >= this.getResultLimit();
+    }
+
+    public int getEntityAge() {
+        return entityAge;
+    }
+
+    public void setEntityAge(int entityAge) {
+        this.entityAge = entityAge;
     }
 }

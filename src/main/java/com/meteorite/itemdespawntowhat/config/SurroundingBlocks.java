@@ -70,7 +70,7 @@ public class SurroundingBlocks {
     }
 
     // 检查是否存在周围方块设置的需求
-    public boolean hasAnyBlock() {
+    public boolean hasAnySurroundBlock() {
         return !(north.isEmpty() && south.isEmpty() && east.isEmpty() &&
                 west.isEmpty() && up.isEmpty() && down.isEmpty());
     }

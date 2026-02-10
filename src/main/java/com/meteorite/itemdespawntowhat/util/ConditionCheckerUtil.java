@@ -23,10 +23,12 @@ public class ConditionCheckerUtil {
     private static final Logger LOGGER = LogManager.getLogger();
 
     // 条件映射表
-    private static final Map<ResourceLocation, ConditionBuilder> CONDITION_BUILDER_MAP = new HashMap<>();
+    private static final Map<ResourceLocation, ConditionBuilder> CONDITION_BUILDER_MAP = new HashMap<>(3);
 
-    private static final Map<ResourceLocation, ConditionChecker> CONDITION_MAP = new HashMap<>();
-
+    // 键名
+    private static final ResourceLocation DIMENSION_KEY = ResourceLocation.fromNamespaceAndPath(ItemDespawnToWhat.MOD_ID, "dimension");
+    private static final ResourceLocation NEED_OUTDOOR_KEY = ResourceLocation.fromNamespaceAndPath(ItemDespawnToWhat.MOD_ID, "need_outdoor");
+    private static final ResourceLocation SURROUNDING_BLOCKS_KEY = ResourceLocation.fromNamespaceAndPath(ItemDespawnToWhat.MOD_ID, "surrounding_blocks");
 
     static {
         registerConditionBuilders();
@@ -34,27 +36,13 @@ public class ConditionCheckerUtil {
 
     // 注册所有的单独条件构建器
     private static void registerConditionBuilders() {
-        // 维度条件构建器
-        CONDITION_BUILDER_MAP.put(
-                ResourceLocation.fromNamespaceAndPath(ItemDespawnToWhat.MOD_ID, "dimension"),
-                ConditionCheckerUtil::buildDimensionChecker
-        );
-
-        // 露天条件构建器
-        CONDITION_BUILDER_MAP.put(
-                ResourceLocation.fromNamespaceAndPath(ItemDespawnToWhat.MOD_ID, "is_outdoor"),
-                ConditionCheckerUtil::buildOutdoorChecker
-        );
-
-        // 周围方块条件构建器
-        CONDITION_BUILDER_MAP.put(
-                ResourceLocation.fromNamespaceAndPath(ItemDespawnToWhat.MOD_ID, "surrounding_blocks"),
-                ConditionCheckerUtil::buildSurroundingBlocksChecker
-        );
+        CONDITION_BUILDER_MAP.put(DIMENSION_KEY, ConditionCheckerUtil::buildDimensionChecker);
+        CONDITION_BUILDER_MAP.put(NEED_OUTDOOR_KEY, ConditionCheckerUtil::buildOutdoorChecker);
+        CONDITION_BUILDER_MAP.put(SURROUNDING_BLOCKS_KEY, ConditionCheckerUtil::buildSurroundingBlocksChecker);
     }
 
     // ========== 组合所有的条件检查器 ========== //
-    // AND逻辑，目前不需要OR逻辑，大概不需要吧 =_=
+
     public static ConditionChecker combineAll(List<ConditionChecker> checkers) {
         if (checkers.isEmpty()) {
             return (itemEntity, level) -> true;
@@ -71,27 +59,34 @@ public class ConditionCheckerUtil {
         };
     }
 
-
     // 构建结合条件检查器 : 从条件映射来构建。
     public static ConditionChecker buildCombinedChecker (Map<String, String> conditions) {
-        List<ConditionChecker> checkers = new ArrayList<>();
+
+        if (conditions == null || conditions.isEmpty()) {
+            return (itemEntity, level) -> true;
+        }
+
+        List<ConditionChecker> checkers = new ArrayList<>(3);
 
         for (Map.Entry<ResourceLocation, ConditionBuilder> entry : CONDITION_BUILDER_MAP.entrySet()) {
             ConditionChecker checker = entry.getValue().build(conditions);
             checkers.add(checker);
         }
-
         return combineAll(checkers);
-
     }
 
     // 外部使用，针对需要的条件构建
-    public static ConditionChecker buildCombinedChecker(String dimension, String isOutdoor, SurroundingBlocks surroundingBlocks) {
+    public static ConditionChecker buildCombinedChecker(String dimension, boolean needOutdoor, SurroundingBlocks surroundingBlocks) {
+        // 如果所有条件都是默认值，直接返回始终为true的检查器
+        if ((dimension == null || dimension.isEmpty()) && !needOutdoor && !surroundingBlocks.hasAnySurroundBlock()) {
+            return (itemEntity, level) -> true;
+        }
+
         Map<String, String> conditions = new HashMap<>();
 
         // 将条件转换为统一的键值对格式
         conditions.put("dimension", dimension != null ? dimension : "");
-        conditions.put("is_outdoor", isOutdoor != null ? isOutdoor : "");
+        conditions.put("need_outdoor", Boolean.toString(needOutdoor));
 
         // 将周围方块条件展开为键值对
         if (surroundingBlocks != null) {
@@ -127,15 +122,13 @@ public class ConditionCheckerUtil {
     // 构建露天检查器
     private static ConditionChecker buildOutdoorChecker(Map<String, String> conditions) {
 
-        String isOutdoorStr = conditions.getOrDefault("is_outdoor", "");
-        if (isOutdoorStr.isEmpty()) {
+        String needOutdoor = conditions.getOrDefault("need_outdoor", "");
+        if (needOutdoor.isEmpty()) {
             return (itemEntity, level) -> true;
         }
 
-        boolean requireOutdoor = Boolean.parseBoolean(isOutdoorStr);
-
         // 不要求露天
-        if (!requireOutdoor) {
+        if (!Boolean.parseBoolean(needOutdoor)) {
             return (itemEntity, level) -> true;
         }
 
@@ -151,7 +144,6 @@ public class ConditionCheckerUtil {
                     return false;
                 }
             }
-
             return true;
         };
 
@@ -183,7 +175,6 @@ public class ConditionCheckerUtil {
             }
             return true;
         };
-
     }
 
     // ========== 辅助方法：解析所有的条件键 ========== //
@@ -244,13 +235,5 @@ public class ConditionCheckerUtil {
     }
 
 
-    // =========== 公共方法 ========== //
-    public static void clearAllCheckers() {
-        CONDITION_MAP.clear();
-    }
-
-    public static Set<ResourceLocation> getAllConditionItems() {
-        return CONDITION_MAP.keySet();
-    }
 
 }
