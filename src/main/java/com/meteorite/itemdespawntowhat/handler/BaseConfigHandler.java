@@ -109,19 +109,7 @@ public abstract class BaseConfigHandler<T extends BaseConversionConfig> {
 
     // 子类中创建默认的json内容
     protected abstract List<T> createDefaultEntries();
-    // 子类中明确指定具体类型，避免泛型擦除问题
+    // 子类中指定具体类型，避免泛型擦除
     protected abstract Type createListType();
-
-    // ========= 用于热重载，暂时无作用======== //
-    // 配置是否改变了
-    public boolean isConfigsChanged() {
-        return configsChanged;
-    }
-
-    // 获取上次加载的配置
-    public List<T> getLastLoadedConfigs() {
-        return lastLoadedConfigs != null ?
-                new ArrayList<>(lastLoadedConfigs) : new ArrayList<>();
-    }
 
 }

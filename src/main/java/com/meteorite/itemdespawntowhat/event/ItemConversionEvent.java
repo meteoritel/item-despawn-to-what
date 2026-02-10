@@ -206,14 +206,11 @@ public class ItemConversionEvent {
             CONVERSION_IN_PROGRESS.add(itemUuid);
 
             // 根据配置类型执行不同的转化逻辑
-            if (config instanceof ItemToEntityConfig entityConfig) {
-                convertToEntity(itemEntity, entityConfig, serverLevel);
-            } else if (config instanceof ItemToItemConfig itemConfig) {
-                convertToItem(itemEntity, itemConfig, serverLevel);
-            } else if (config instanceof ItemToBlockConfig blockConfig) {
-                convertToBlock(itemEntity, blockConfig, serverLevel);
-            } else {
-                LOGGER.warn("Unknown config type: {}", config.getClass().getName());
+            switch (config) {
+                case ItemToEntityConfig entityConfig -> convertToEntity(itemEntity, entityConfig, serverLevel);
+                case ItemToItemConfig itemConfig -> convertToItem(itemEntity, itemConfig, serverLevel);
+                case ItemToBlockConfig blockConfig -> convertToBlock(itemEntity, blockConfig, serverLevel);
+                default -> LOGGER.warn("Unknown config type: {}", config.getClass().getName());
             }
 
         } finally {
