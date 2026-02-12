@@ -54,7 +54,6 @@ public class ItemDespawnToWhat {
         } else {
             LOGGER.info("Caches already initialized, skipping...");
         }
-
     }
 
     @SubscribeEvent

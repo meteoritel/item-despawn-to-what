@@ -7,6 +7,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 import com.meteorite.itemdespawntowhat.config.BaseConversionConfig;
+import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.handler.BaseConfigHandler;
 import com.meteorite.itemdespawntowhat.handler.ItemToBlockConfigHandler;
 import com.meteorite.itemdespawntowhat.handler.ItemToEntityConfigHandler;
@@ -20,7 +21,7 @@ public class ConfigManager {
     private static final ConfigManager INSTANCE = new ConfigManager();
 
     // 注册表，配置类型 -> 配置处理器实例
-    private final ConcurrentMap<String, BaseConfigHandler<?>> handlerRegistry = new ConcurrentHashMap<>();
+    private final ConcurrentMap<ConfigType, BaseConfigHandler<?>> handlerRegistry = new ConcurrentHashMap<>();
     private volatile boolean loaded = false;
 
     private ConfigManager() {
@@ -39,24 +40,26 @@ public class ConfigManager {
 
     // 注册所有配置处理器
     private void registerDefaultHandlers() {
-        registerHandler("item_to_item", new ItemToItemConfigHandler());
-        registerHandler("item_to_entity", new ItemToEntityConfigHandler());
-        registerHandler("item_to_block", new ItemToBlockConfigHandler());
+        registerHandler(new ItemToItemConfigHandler());
+        registerHandler(new ItemToEntityConfigHandler());
+        registerHandler(new ItemToBlockConfigHandler());
         LOGGER.debug("Default configuration handlers registered");
     }
 
-    private void registerHandler(String configType, BaseConfigHandler<?> handler) {
+    private void registerHandler(BaseConfigHandler<?> handler) {
         if (loaded) {
-            LOGGER.info("Default configs already generation: {}", configType);
+            LOGGER.info("Default configs already generation: {}", handler.getConfigType().name());
             return;
         }
+
+        ConfigType configType = handler.getConfigType();
 
         if (handlerRegistry.putIfAbsent(configType, handler) != null) {
-            LOGGER.warn("Handler already registered for type: {}", configType);
+            LOGGER.warn("Handler already registered for type: {}", configType.name());
             return;
         }
 
-        LOGGER.debug("Registered configuration handler: {}", configType);
+        LOGGER.debug("Registered configuration handler: {}", configType.name());
     }
 
     // ---------- 生成所有的默认配置文件 ----------//
@@ -66,8 +69,8 @@ public class ConfigManager {
             return;
         }
 
-        for (Map.Entry<String, BaseConfigHandler<?>> entry : handlerRegistry.entrySet()) {
-            String configType = entry.getKey();
+        for (Map.Entry<ConfigType, BaseConfigHandler<?>> entry : handlerRegistry.entrySet()) {
+            ConfigType configType = entry.getKey();
             BaseConfigHandler<?> handler = entry.getValue();
 
             try{
@@ -85,18 +88,9 @@ public class ConfigManager {
         return loaded;
     }
 
-    // 清除缓存
-    public void clearCaches() {
-        synchronized (this) {
-            handlerRegistry.clear();
-            loaded = false;
-            LOGGER.debug("Configuration caches cleared");
-        }
-    }
-
     // 获取指定类型的配置处理器
     @SuppressWarnings("unchecked")
-    public <T extends BaseConversionConfig> BaseConfigHandler<T> getHandler(String configType) {
+    public <T extends BaseConversionConfig> BaseConfigHandler<T> getHandler(ConfigType configType) {
         if (!handlerRegistry.containsKey(configType)) {
             LOGGER.warn("No handler registered for config type: {}", configType);
             return null;
@@ -104,7 +98,7 @@ public class ConfigManager {
         return (BaseConfigHandler<T>) handlerRegistry.get(configType);
     }
 
-    public Set<String> getRegisteredHandlerTypes() {
+    public Set<ConfigType> getRegisteredHandlerTypes() {
         return Collections.unmodifiableSet(handlerRegistry.keySet());
     }
 

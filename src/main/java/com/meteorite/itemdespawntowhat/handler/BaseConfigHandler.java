@@ -4,6 +4,8 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
 import com.meteorite.itemdespawntowhat.config.BaseConversionConfig;
+import com.meteorite.itemdespawntowhat.config.ConfigType;
+import com.meteorite.itemdespawntowhat.util.JsonOrderTypeAdapterFactory;
 import com.meteorite.itemdespawntowhat.util.ResourceLocationAdapter;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.fml.loading.FMLPaths;
@@ -24,15 +26,18 @@ public abstract class BaseConfigHandler<T extends BaseConversionConfig> {
     protected static final Gson GSON = new GsonBuilder()
             .setPrettyPrinting()
             .registerTypeAdapter(ResourceLocation.class,new ResourceLocationAdapter())
+            .registerTypeAdapterFactory(new JsonOrderTypeAdapterFactory())
             .create();
 
     protected final String fileName;
     protected final Type listType;
     protected List<T> lastLoadedConfigs = null;
     protected boolean configsChanged = false;
+    protected final ConfigType configType;
 
-    public BaseConfigHandler(String fileName) {
-        this.fileName = fileName;
+    public BaseConfigHandler(ConfigType configType) {
+        this.configType = configType;
+        this.fileName = configType.getFileName();
         this.listType = createListType();
     }
 
@@ -51,7 +56,7 @@ public abstract class BaseConfigHandler<T extends BaseConversionConfig> {
             // 创建父目录
             Files.createDirectories(configPath.getParent());
 
-            if (!Files.exists(configPath)) {
+            if (!configFileExists()) {
                 List<T> defaultEntries = createDefaultEntries();
                 saveConfig(defaultEntries);
                 LOGGER.info("Generate default configuration file: {}", configPath);
@@ -59,7 +64,6 @@ public abstract class BaseConfigHandler<T extends BaseConversionConfig> {
         } catch (IOException e) {
             LOGGER.error("Failed to generate configuration file: {}", fileName, e);
         }
-
     }
 
     // 加载配置
@@ -103,6 +107,12 @@ public abstract class BaseConfigHandler<T extends BaseConversionConfig> {
         }
     }
 
+    // 配置文件是否存在
+    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
+    public boolean configFileExists() {
+        return Files.exists(getConfigPath());
+    }
+
     protected boolean isValidEntry(T entry) {
         return entry != null && entry.shouldProcess();
     }
@@ -112,4 +122,7 @@ public abstract class BaseConfigHandler<T extends BaseConversionConfig> {
     // 子类中指定具体类型，避免泛型擦除
     protected abstract Type createListType();
 
+    public ConfigType getConfigType() {
+        return configType;
+    }
 }

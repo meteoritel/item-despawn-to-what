@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.handler;
 
 import com.google.gson.reflect.TypeToken;
+import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.ItemToBlockConfig;
 import net.minecraft.resources.ResourceLocation;
 
@@ -11,7 +12,7 @@ import java.util.List;
 public class ItemToBlockConfigHandler extends BaseConfigHandler<ItemToBlockConfig>{
 
     public ItemToBlockConfigHandler() {
-        super("item_to_block.json");
+        super(ConfigType.ITEM_TO_BLOCK);
     }
 
     @Override

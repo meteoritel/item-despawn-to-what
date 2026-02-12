@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.util;
 
 import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
+import com.meteorite.itemdespawntowhat.config.ConfigDirection;
 import com.meteorite.itemdespawntowhat.config.SurroundingBlocks;
 import com.mojang.datafixers.util.Either;
 import net.minecraft.core.BlockPos;

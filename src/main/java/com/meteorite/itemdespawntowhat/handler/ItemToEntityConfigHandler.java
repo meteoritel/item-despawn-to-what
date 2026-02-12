@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.handler;
 
 import com.google.gson.reflect.TypeToken;
+import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.ItemToEntityConfig;
 import com.meteorite.itemdespawntowhat.config.SurroundingBlocks;
 import net.minecraft.resources.ResourceLocation;
@@ -13,7 +14,7 @@ public class ItemToEntityConfigHandler extends BaseConfigHandler<ItemToEntityCon
 
 
     public ItemToEntityConfigHandler() {
-        super("item_to_entity.json");
+        super(ConfigType.ITEM_TO_ENTITY);
     }
 
     // 默认有一个鸡蛋变成小鸡的示例

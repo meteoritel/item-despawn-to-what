@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.config;
 
+import com.google.gson.annotations.SerializedName;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -13,8 +14,12 @@ import java.util.UUID;
 
 public class ItemToItemConfig extends BaseConversionConfig{
 
+    @SerializedName("result_limit")
+    private int resultLimit;
+
     public ItemToItemConfig(ResourceLocation item, ResourceLocation resultItem) {
         super(item);
+        this.resultLimit = DEFAULT_RESULT_LIMIT;
         this.resultId = resultItem;
     }
 
@@ -39,7 +44,6 @@ public class ItemToItemConfig extends BaseConversionConfig{
                 itemEntity.getX() - RADIUS, itemEntity.getY() - RADIUS, itemEntity.getZ() - RADIUS,
                 itemEntity.getX() + RADIUS, itemEntity.getY() + RADIUS, itemEntity.getZ() + RADIUS);
 
-
         return serverLevel.getEntitiesOfClass(ItemEntity.class, box, Entity::isAlive)
                 .stream()
                 .map(ItemEntity::getItem)
@@ -48,9 +52,11 @@ public class ItemToItemConfig extends BaseConversionConfig{
                 .sum();
     }
 
-    @Override
     public int getResultLimit() {
-        return super.getResultLimit() * 64;
+        return resultLimit <= 0 ? DEFAULT_RESULT_LIMIT : resultLimit * 64;
+    }
+    public void setResultLimit(int resultLimit) {
+        this.resultLimit = resultLimit;
     }
 
     @Override

@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat;
 
 import com.meteorite.itemdespawntowhat.config.BaseConversionConfig;
+import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.handler.BaseConfigHandler;
 import com.meteorite.itemdespawntowhat.util.ConditionChecker;
 import net.minecraft.resources.ResourceLocation;
@@ -11,7 +12,6 @@ import org.jetbrains.annotations.Nullable;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.stream.Collectors;
 
 public class ConfigExtractorManager {
     private static final Logger LOGGER = LogManager.getLogger();
@@ -44,7 +44,6 @@ public class ConfigExtractorManager {
         try {
             // 初始化提取器缓存
             loadAllConfigs();
-
             initialized = true;
             LOGGER.info("ConfigExtractorManager initialized successfully");
             LOGGER.info("Total items with configs: {}, Total configs: {}",
@@ -68,14 +67,19 @@ public class ConfigExtractorManager {
         }
 
         // 获取所有已注册的配置处理器类型
-        Set<String> handlerTypes = configManager.getRegisteredHandlerTypes();
+        Set<ConfigType> handlerTypes = configManager.getRegisteredHandlerTypes();
 
-        for (String configType : handlerTypes) {
+        for (ConfigType configType : handlerTypes) {
             try {
                 BaseConfigHandler<?> handler = configManager.getHandler(configType);
                 if (handler == null) {
                     LOGGER.warn("No handler found for config type: {}", configType);
                     continue;
+                }
+
+                // 如果中途json文件被删掉了，加载之前也会重新生成
+                if (!handler.configFileExists()) {
+                    handler.generateDefaultConfig();
                 }
 
                 List<? extends BaseConversionConfig> configs = handler.loadConfig();

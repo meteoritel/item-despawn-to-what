@@ -9,15 +9,18 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.phys.AABB;
 
-
 public class ItemToEntityConfig extends BaseConversionConfig{
 
+    // 生成数量限制
+    @SerializedName("result_limit")
+    private int resultLimit;
     // 生成实体的age（如果需要）
     @SerializedName("entity_age")
     protected int entityAge;
 
     public ItemToEntityConfig(ResourceLocation item, ResourceLocation resultEntity) {
         super(item);
+        this.resultLimit = DEFAULT_RESULT_LIMIT;
         this.resultId = resultEntity;
         this.entityAge = 0;
     }
@@ -45,6 +48,13 @@ public class ItemToEntityConfig extends BaseConversionConfig{
 
         return serverLevel.getEntitiesOfClass(this.getResultEntityType().getBaseClass(), box, Entity::isAlive)
                 .size();
+    }
+
+    public int getResultLimit() {
+        return resultLimit <= 0 ? DEFAULT_RESULT_LIMIT : resultLimit;
+    }
+    public void setResultLimit(int resultLimit) {
+        this.resultLimit = resultLimit;
     }
 
     @Override

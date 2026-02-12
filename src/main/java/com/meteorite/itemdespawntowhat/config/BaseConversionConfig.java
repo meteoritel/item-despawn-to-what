@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.config;
 import com.google.gson.annotations.SerializedName;
 import com.meteorite.itemdespawntowhat.util.ConditionChecker;
 import com.meteorite.itemdespawntowhat.util.ConditionCheckerUtil;
+import com.meteorite.itemdespawntowhat.util.JsonOrder;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.item.ItemEntity;
 
@@ -14,47 +15,51 @@ public abstract class BaseConversionConfig {
     // 内部唯一标识符，不会进行序列化
     protected transient String internalId;
     // 基础限制实体数量，没有规定实体数量的时候返回这个值
-    protected static final int DEFAULT_LIMIT = 30;
+    protected static final int DEFAULT_RESULT_LIMIT = 30;
     // 检查限制的范围
     protected static final int RADIUS = 6;
     // 默认转化时间300秒
     protected static final int DEFAULT_CONVERSION_TIME = 300;
 
     // 物品注册名
+    @JsonOrder(1)
     @SerializedName("item")
     protected ResourceLocation itemId;
 
     // 消失的方式 - 自然消失 timeout， 岩浆烧毁 lava，暂时没有作用，未来再添加
+    // @JsonOrder(2)
     // @SerializedName("disappear_cause")
     protected String disappearCause;
 
     // 所处维度
+    @JsonOrder(2)
     @SerializedName("dimension")
     protected String dimension;
 
     // 是否需要露天
+    @JsonOrder(2)
     @SerializedName("need_outdoor")
     protected boolean needOutdoor;
 
     // 六个方向的方块
+    @JsonOrder(2)
     @SerializedName("surrounding_blocks")
     protected SurroundingBlocks surroundingBlocks;
 
     // 生成结果注册名
+    @JsonOrder(3)
     @SerializedName("result")
     protected ResourceLocation resultId;
 
     // 转化的时间，单位为秒
+    @JsonOrder(3)
     @SerializedName("conversion_time")
     protected int conversionTime;
 
     //生成的倍率
+    @JsonOrder(3)
     @SerializedName("result_multiple")
     protected int resultMultiple;
-
-    // 生成数量限制
-    @SerializedName("result_limit")
-    private int resultLimit;
 
     public BaseConversionConfig() {
         this.internalId = UUID.randomUUID().toString();
@@ -63,12 +68,11 @@ public abstract class BaseConversionConfig {
     public BaseConversionConfig(ResourceLocation item) {
         this();
         this.itemId = item;
-        this.disappearCause = "timeout";
+        //this.disappearCause = "timeout";
         this.dimension = "";
         this.needOutdoor = false;
         this.surroundingBlocks = new SurroundingBlocks();
         this.conversionTime = 10;
-        this.resultLimit = DEFAULT_LIMIT;
         this.resultMultiple = 1;
 
     }
@@ -112,18 +116,9 @@ public abstract class BaseConversionConfig {
         return (conversionTime <= 0 || conversionTime > DEFAULT_CONVERSION_TIME) ? DEFAULT_CONVERSION_TIME : conversionTime;
     }
 
-    // 限制默认为30
-    public int getResultLimit() {
-        return resultLimit <= 0 ? DEFAULT_LIMIT : resultLimit;
-    }
-
     // 转化倍率最小为1
     public int getResultMultiple() {
         return  Math.max(1, resultMultiple);
-    }
-
-    public void setResultLimit(int resultLimit) {
-        this.resultLimit = resultLimit;
     }
 
     public String getInternalId() {

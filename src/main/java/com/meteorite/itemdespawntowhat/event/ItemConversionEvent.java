@@ -151,7 +151,7 @@ public class ItemConversionEvent {
 
         // 检查是否达到转化条件
         if ((newTimer >= maxConsecutiveChecks ||
-                itemEntity.getAge() >= itemStack.getEntityLifespan(serverLevel) - CHECK_INTERVAL)) {
+                itemEntity.getAge() > itemStack.getEntityLifespan(serverLevel) - CHECK_INTERVAL)) {
             if (selectedConfig.isResultLimitExceeded(itemEntity)) {
                 itemEntity.getPersistentData().putInt(TIMER_TAG, 0);
                 itemEntity.getPersistentData().remove(SELECTED_CONFIG_TAG);

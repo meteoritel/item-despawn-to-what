@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.util;
+package com.meteorite.itemdespawntowhat.config;
 
 import net.minecraft.core.Direction;
 

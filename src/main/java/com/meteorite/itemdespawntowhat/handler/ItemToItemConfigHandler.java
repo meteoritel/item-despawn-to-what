@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.handler;
 
 import com.google.gson.reflect.TypeToken;
+import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.ItemToItemConfig;
 import com.meteorite.itemdespawntowhat.config.SurroundingBlocks;
 import net.minecraft.resources.ResourceLocation;
@@ -12,7 +13,7 @@ import java.util.List;
 public class ItemToItemConfigHandler extends BaseConfigHandler<ItemToItemConfig>{
 
     public ItemToItemConfigHandler() {
-        super("item_to_item.json");
+        super(ConfigType.ITEM_TO_ITEM);
     }
 
     // 默认有一个腐肉变皮革的实例
