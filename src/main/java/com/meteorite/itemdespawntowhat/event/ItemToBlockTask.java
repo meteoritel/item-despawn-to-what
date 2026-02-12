@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.event;
 
+import com.meteorite.itemdespawntowhat.config.ItemToBlockConfig;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -14,23 +15,24 @@ import java.util.List;
 public class ItemToBlockTask implements LevelDelayTask{
 
     private static final Logger LOGGER = LogManager.getLogger();
-    private static final int MAX_RADIUS = 6;
 
     private final ItemEntity originalItem;
 
     private final BlockPos center;
     private final int maxBlocks;
     private final Block block;
+    private final int maxRadius;
 
     private int radius = 0;
     private int placed = 0;
     private boolean finished = false;
 
-    public ItemToBlockTask(ItemEntity itemEntity, Block block){
+    public ItemToBlockTask(ItemEntity itemEntity,ItemToBlockConfig config){
         this.originalItem = itemEntity;
         this.center = itemEntity.blockPosition();
-        this.block = block;
+        this.block = config.getResultBlock();
         this.maxBlocks = itemEntity.getItem().getCount();
+        this.maxRadius = config.getRadius();
     }
 
     @Override
@@ -62,7 +64,7 @@ public class ItemToBlockTask implements LevelDelayTask{
     @Override
     public void tick(ServerLevel serverLevel) {
         if (finished) return;
-        if (radius > MAX_RADIUS || placed >= maxBlocks) {
+        if (radius > maxRadius || placed >= maxBlocks) {
             finished = true;
             return;
         }

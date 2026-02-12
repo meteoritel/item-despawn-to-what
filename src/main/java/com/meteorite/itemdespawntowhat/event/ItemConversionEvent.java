@@ -69,9 +69,9 @@ public class ItemConversionEvent {
 
         if (ConfigExtractorManager.hasAnyConfigs(itemId)) {
             // 标记为需要检查
-            entity.getPersistentData().putBoolean(CHECK_TAG, true);
+            itemEntity.getPersistentData().putBoolean(CHECK_TAG, true);
             // 初始化计时器为0
-            entity.getPersistentData().putInt(TIMER_TAG, 0);
+            itemEntity.getPersistentData().putInt(TIMER_TAG, 0);
 
             LOGGER.debug("Marked item {} for condition checking, tag", itemId);
         }
@@ -80,11 +80,11 @@ public class ItemConversionEvent {
     @SubscribeEvent
     public static void onLevelTick(LevelTickEvent.Post event) {
         Level level = event.getLevel();
-        // 仅在服务端检测
+
         if (!(level instanceof ServerLevel serverLevel) ) {
             return;
         }
-        // 执行预先加入的延迟任务，如果有
+        // 执行预先加入的延迟任务，如果有的话
         LevelTaskManager.tick(serverLevel);
 
         // 每20tick检查一次
@@ -150,6 +150,7 @@ public class ItemConversionEvent {
         LOGGER.debug("Condition check passed for item {} (timer: {}/{})", itemId, newTimer, maxConsecutiveChecks);
 
         // 检查是否达到转化条件
+        // 转化时间目前还有点小问题，未来要改成最后一秒进入延迟任务池，然后指定tick后消失再转化
         if ((newTimer >= maxConsecutiveChecks ||
                 itemEntity.getAge() > itemStack.getEntityLifespan(serverLevel) - CHECK_INTERVAL)) {
             if (selectedConfig.isResultLimitExceeded(itemEntity)) {
@@ -330,11 +331,10 @@ public class ItemConversionEvent {
     private static void convertToBlock(ItemEntity itemEntity,
                                       ItemToBlockConfig config,
                                       ServerLevel serverLevel){
-        Block resultBlock = config.getResultBlock();
         // 物品下一tick消失
         itemEntity.makeFakeItem();
         // 下一tick开始执行延迟放置方块的任务
-        LevelTaskManager.addTask(serverLevel, new ItemToBlockTask(itemEntity, resultBlock));
+        LevelTaskManager.addTask(serverLevel, new ItemToBlockTask(itemEntity, config));
     }
 
     // ========== 辅助方法 ========== //

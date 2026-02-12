@@ -10,8 +10,6 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 
-import java.util.UUID;
-
 public class ItemToItemConfig extends BaseConversionConfig{
 
     @SerializedName("result_limit")
@@ -41,8 +39,8 @@ public class ItemToItemConfig extends BaseConversionConfig{
         }
 
         AABB box = new AABB(
-                itemEntity.getX() - RADIUS, itemEntity.getY() - RADIUS, itemEntity.getZ() - RADIUS,
-                itemEntity.getX() + RADIUS, itemEntity.getY() + RADIUS, itemEntity.getZ() + RADIUS);
+                itemEntity.getX() - MAX_RADIUS, itemEntity.getY() - MAX_RADIUS, itemEntity.getZ() - MAX_RADIUS,
+                itemEntity.getX() + MAX_RADIUS, itemEntity.getY() + MAX_RADIUS, itemEntity.getZ() + MAX_RADIUS);
 
         return serverLevel.getEntitiesOfClass(ItemEntity.class, box, Entity::isAlive)
                 .stream()

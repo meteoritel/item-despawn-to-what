@@ -17,7 +17,7 @@ public abstract class BaseConversionConfig {
     // 基础限制实体数量，没有规定实体数量的时候返回这个值
     protected static final int DEFAULT_RESULT_LIMIT = 30;
     // 检查限制的范围
-    protected static final int RADIUS = 6;
+    protected static final int MAX_RADIUS = 6;
     // 默认转化时间300秒
     protected static final int DEFAULT_CONVERSION_TIME = 300;
 
@@ -72,7 +72,7 @@ public abstract class BaseConversionConfig {
         this.dimension = "";
         this.needOutdoor = false;
         this.surroundingBlocks = new SurroundingBlocks();
-        this.conversionTime = 10;
+        this.conversionTime = 5;
         this.resultMultiple = 1;
 
     }

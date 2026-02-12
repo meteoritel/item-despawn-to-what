@@ -43,8 +43,8 @@ public class ItemToEntityConfig extends BaseConversionConfig{
         }
 
         AABB box = new AABB(
-                itemEntity.getX() - RADIUS, itemEntity.getY() - RADIUS, itemEntity.getZ() - RADIUS,
-                itemEntity.getX() + RADIUS, itemEntity.getY() + RADIUS, itemEntity.getZ() + RADIUS);
+                itemEntity.getX() - MAX_RADIUS, itemEntity.getY() - MAX_RADIUS, itemEntity.getZ() - MAX_RADIUS,
+                itemEntity.getX() + MAX_RADIUS, itemEntity.getY() + MAX_RADIUS, itemEntity.getZ() + MAX_RADIUS);
 
         return serverLevel.getEntitiesOfClass(this.getResultEntityType().getBaseClass(), box, Entity::isAlive)
                 .size();
