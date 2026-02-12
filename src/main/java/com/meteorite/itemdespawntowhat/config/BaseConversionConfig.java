@@ -99,7 +99,7 @@ public abstract class BaseConversionConfig {
         }
 
         String dimension = Optional.ofNullable(this.getDimension()).orElse("");
-        return ConditionCheckerUtil.buildCombinedChecker(dimension, needOutdoor, this.getSurroundingBlocks());
+        return ConditionCheckerUtil.buildCombinedChecker(dimension, this.isNeedOutdoor(), this.getSurroundingBlocks());
 
     }
 
@@ -178,6 +178,9 @@ public abstract class BaseConversionConfig {
     }
 
     public SurroundingBlocks getSurroundingBlocks() {
+        if (surroundingBlocks == null) {
+            return new SurroundingBlocks();
+        }
         return surroundingBlocks;
     }
 

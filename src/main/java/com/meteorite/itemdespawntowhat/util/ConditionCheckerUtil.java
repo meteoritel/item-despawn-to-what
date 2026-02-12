@@ -79,7 +79,7 @@ public class ConditionCheckerUtil {
     // 外部使用，针对需要的条件构建
     public static ConditionChecker buildCombinedChecker(String dimension, boolean needOutdoor, SurroundingBlocks surroundingBlocks) {
         // 如果所有条件都是默认值，直接返回始终为true的检查器
-        if ((dimension == null || dimension.isEmpty()) && !needOutdoor && !surroundingBlocks.hasAnySurroundBlock()) {
+        if ((dimension == null || dimension.isEmpty()) && !needOutdoor && (!surroundingBlocks.hasAnySurroundBlock())) {
             return (itemEntity, level) -> true;
         }
 
@@ -234,7 +234,5 @@ public class ConditionCheckerUtil {
                 blockState::is
         );
     }
-
-
 
 }
