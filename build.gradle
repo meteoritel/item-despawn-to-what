@@ -22,7 +22,7 @@ repositories {
 }
 
 base {
-    archivesName = mod_id
+    archivesName = "itemDespawnToWhat-neoforge1.21.1"
 }
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
