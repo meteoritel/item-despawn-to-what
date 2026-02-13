@@ -51,7 +51,6 @@ public class ItemConversionEvent {
     // 订阅实体加入世界事件
     @SubscribeEvent
     public static void onItemSpawn(EntityJoinLevelEvent event) {
-        // 只在服务端处理
         if (event.getLevel().isClientSide()) {
             return;
         }
@@ -61,7 +60,8 @@ public class ItemConversionEvent {
             return;
         }
 
-        if (itemEntity.getPersistentData().contains(CHECK_TAG)) {
+        if (itemEntity.getPersistentData().contains(CHECK_TAG) ||
+                itemEntity.getPersistentData().contains(CHECK_TAG_LOCK)) {
             return ;
         }
 
