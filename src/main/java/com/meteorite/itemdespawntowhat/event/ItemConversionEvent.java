@@ -14,13 +14,14 @@ import net.minecraft.world.entity.AgeableMob;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.Block;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
+import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -77,6 +78,19 @@ public class ItemConversionEvent {
         }
     }
 
+    // 玩家死亡掉落物添加锁定，不会进行转化
+    @SubscribeEvent
+    public  static void onLivingDrops(LivingDropsEvent event) {
+        if (event.isCanceled()) return;
+
+        if (event.getEntity() instanceof Player player && !player.level().isClientSide) {
+            for (ItemEntity itemEntity : event.getDrops()) {
+                itemEntity.getPersistentData().putBoolean(CHECK_TAG_LOCK, true);
+            }
+        }
+    }
+
+    // 转化的主订阅事件
     @SubscribeEvent
     public static void onLevelTick(LevelTickEvent.Post event) {
         Level level = event.getLevel();
