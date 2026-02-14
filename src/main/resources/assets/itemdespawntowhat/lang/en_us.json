@@ -1,0 +1,10 @@
+{
+  "gui.itemdespawntowhat.config_selection.title": "Config selection",
+  "gui.itemdespawntowhat.edit.title": "Edit file: %s",
+  "gui.itemdespawntowhat.save_to_cache": "Add to cache",
+  "gui.itemdespawntowhat.apply_to_file": "Apply",
+
+  "gui.itemdespawntowhat.config_type.item_to_item": "Item to item",
+  "gui.itemdespawntowhat.config_type.item_to_entity": "Item to entity",
+  "gui.itemdespawntowhat.config_type.item_to_block": "Item to block"
+}

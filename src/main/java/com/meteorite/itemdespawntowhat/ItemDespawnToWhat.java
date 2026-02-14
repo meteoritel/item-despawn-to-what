@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat;
 
 import com.meteorite.itemdespawntowhat.command.ReloadCacheCommand;
+import com.meteorite.itemdespawntowhat.debug.DebugClientModEvents;
 import com.meteorite.itemdespawntowhat.event.ItemConversionEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
@@ -30,6 +31,9 @@ public class ItemDespawnToWhat {
         // 注册事件管理器
         NeoForge.EVENT_BUS.register(this);
         NeoForge.EVENT_BUS.register(ItemConversionEvent.class);
+
+        // 调试用的事件类，后续会删掉
+        NeoForge.EVENT_BUS.register(DebugClientModEvents.class);
 
         LOGGER.info("{} mod initialized", MOD_ID);
     }

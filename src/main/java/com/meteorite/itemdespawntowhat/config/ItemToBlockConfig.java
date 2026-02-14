@@ -12,6 +12,10 @@ public class ItemToBlockConfig extends BaseConversionConfig{
     @SerializedName("radius_limit")
     private int radius;
 
+    public ItemToBlockConfig() {
+        super();
+    }
+
     public ItemToBlockConfig(ResourceLocation item, ResourceLocation resultBlock) {
         super(item);
         this.radius = MAX_RADIUS;

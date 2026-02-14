@@ -15,6 +15,10 @@ public class ItemToItemConfig extends BaseConversionConfig{
     @SerializedName("result_limit")
     private int resultLimit;
 
+    public ItemToItemConfig() {
+        super();
+    }
+
     public ItemToItemConfig(ResourceLocation item, ResourceLocation resultItem) {
         super(item);
         this.resultLimit = DEFAULT_RESULT_LIMIT;

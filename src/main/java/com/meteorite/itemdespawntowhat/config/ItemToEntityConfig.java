@@ -18,6 +18,10 @@ public class ItemToEntityConfig extends BaseConversionConfig{
     @SerializedName("entity_age")
     protected int entityAge;
 
+    public ItemToEntityConfig() {
+        super();
+    }
+
     public ItemToEntityConfig(ResourceLocation item, ResourceLocation resultEntity) {
         super(item);
         this.resultLimit = DEFAULT_RESULT_LIMIT;

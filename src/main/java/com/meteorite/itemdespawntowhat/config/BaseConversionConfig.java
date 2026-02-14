@@ -74,7 +74,6 @@ public abstract class BaseConversionConfig {
         this.surroundingBlocks = new SurroundingBlocks();
         this.conversionTime = 5;
         this.resultMultiple = 1;
-
     }
 
     // 限制条件，子类可覆盖，不符合条件的配置不会被读取
