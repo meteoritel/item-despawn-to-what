@@ -3,9 +3,8 @@ package com.meteorite.itemdespawntowhat.ui.Screen;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.ItemToBlockConfig;
 import com.meteorite.itemdespawntowhat.ui.FormList;
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
-import org.jetbrains.annotations.NotNull;
+import net.minecraft.network.chat.Component;
 
 public class ItemToBlockEditScreen extends BaseConfigEditScreen<ItemToBlockConfig>{
 
@@ -18,7 +17,7 @@ public class ItemToBlockEditScreen extends BaseConfigEditScreen<ItemToBlockConfi
     @Override
     protected void addCustomEntries(FormList fromList) {
         radiusLimitInput = numericBox();
-        fromList.add("Radius limit", radiusLimitInput);
+        fromList.add(Component.translatable(LABEL_PREFIX + "radius limit"), radiusLimitInput);
     }
 
     @Override
@@ -34,8 +33,4 @@ public class ItemToBlockEditScreen extends BaseConfigEditScreen<ItemToBlockConfi
         radiusLimitInput.setValue("");
     }
 
-    @Override
-    public void render(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        super.render(guiGraphics, mouseX, mouseY, partialTick);
-    }
 }

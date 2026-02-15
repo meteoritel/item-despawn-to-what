@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.ui;
 
+import com.meteorite.itemdespawntowhat.ui.Screen.BaseConfigEditScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -7,6 +8,7 @@ import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.ContainerObjectSelectionList;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.NarratableEntry;
+import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
@@ -21,7 +23,7 @@ public class FormList extends ContainerObjectSelectionList<FormList.Entry> {
         super(mc, width, height, y, itemHeight);
     }
 
-    public void add(String label, AbstractWidget widget) {
+    public void add(Component label, AbstractWidget widget) {
         addEntry(new Entry(minecraft.font, label, widget));
     }
 
@@ -31,13 +33,13 @@ public class FormList extends ContainerObjectSelectionList<FormList.Entry> {
         return 340;
     }
 
-    public static class Entry extends ContainerObjectSelectionList.Entry<Entry> {
+    public class Entry extends ContainerObjectSelectionList.Entry<Entry> {
         private final Font font;
-        private final String label;
+        private final Component label;
         private final AbstractWidget widget;
 
 
-        public Entry(Font font, String label, AbstractWidget widget) {
+        public Entry(Font font, Component label, AbstractWidget widget) {
             this.font = font;
             this.label = label;
             this.widget = widget;
@@ -60,14 +62,21 @@ public class FormList extends ContainerObjectSelectionList<FormList.Entry> {
 
         @Override
         public boolean mouseClicked(double mouseX, double mouseY, int button) {
-            if (!widget.isFocused()) {
-                widget.setFocused(true);
-                return widget.mouseClicked(mouseX, mouseY, button);
+            boolean clicked = widget.mouseClicked(mouseX, mouseY, button);
+
+            if (clicked
+                    && minecraft.screen instanceof BaseConfigEditScreen<?> screen
+                    && screen.shouldTakeFocus(widget)) {
+                screen.setFocusedInput(widget);
             }
-            widget.setFocused(false);
-            return false;
+            return clicked;
         }
 
+        // 按钮组件绑定的是release事件
+        @Override
+        public boolean mouseReleased(double mouseX, double mouseY, int button) {
+            return widget.mouseReleased(mouseX, mouseY, button);
+        }
 
         @Override
         public boolean keyPressed(int keyCode, int scanCode, int modifiers) {

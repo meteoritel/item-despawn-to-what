@@ -21,8 +21,6 @@ public class SurroundingBlocksWidget extends AbstractWidget {
     // 文本
     private static final int LABEL_HEIGHT = 9;
 
-    // 间距
-    private static final int GAP = 4;
     // 水平间距
     private static final int H_GAP = 4;
     // 垂直间距
@@ -43,13 +41,12 @@ public class SurroundingBlocksWidget extends AbstractWidget {
         }
     }
 
-    // 同包内使用
-    static int totalWidth() {
+    public static int totalWidth() {
         int count = ConfigDirection.values().length;
         return count * BOX_WIDTH + (count - 1) * H_GAP;
     }
 
-    static int totalHeight() {
+    public static int totalHeight() {
         return LABEL_HEIGHT + V_GAP + BOX_HEIGHT;
     }
 
@@ -90,7 +87,6 @@ public class SurroundingBlocksWidget extends AbstractWidget {
                 return true;
             }
         }
-        clearFocus();
         return false;
     }
 

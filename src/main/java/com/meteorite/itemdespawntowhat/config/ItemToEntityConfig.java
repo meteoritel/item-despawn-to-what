@@ -23,10 +23,10 @@ public class ItemToEntityConfig extends BaseConversionConfig{
     }
 
     public ItemToEntityConfig(ResourceLocation item, ResourceLocation resultEntity) {
-        super(item);
+        super(item, resultEntity);
         this.resultLimit = DEFAULT_RESULT_LIMIT;
-        this.resultId = resultEntity;
         this.entityAge = 0;
+        this.configType = ConfigType.ITEM_TO_ENTITY;
     }
 
     public EntityType<?> getResultEntityType() {

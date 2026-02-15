@@ -17,9 +17,10 @@ public class ItemToBlockConfig extends BaseConversionConfig{
     }
 
     public ItemToBlockConfig(ResourceLocation item, ResourceLocation resultBlock) {
-        super(item);
+        super(item, resultBlock);
         this.radius = MAX_RADIUS;
-        this.resultId = resultBlock;
+
+        this.configType = ConfigType.ITEM_TO_BLOCK;
     }
 
     public Block getResultBlock() {

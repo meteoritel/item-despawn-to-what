@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.util;
+package com.meteorite.itemdespawntowhat.condition;
 
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;

@@ -3,7 +3,7 @@ package com.meteorite.itemdespawntowhat;
 import com.meteorite.itemdespawntowhat.config.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.handler.BaseConfigHandler;
-import com.meteorite.itemdespawntowhat.util.ConditionChecker;
+import com.meteorite.itemdespawntowhat.condition.ConditionChecker;
 import net.minecraft.resources.ResourceLocation;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -133,7 +133,6 @@ public class ConfigExtractorManager {
         return configs != null ? Collections.unmodifiableList(configs) : Collections.emptyList();
     }
 
-
     // 根据实例uuid获取配置实例
     @Nullable
     public static BaseConversionConfig getConfigByInternalId(String internalId) {
@@ -153,6 +152,26 @@ public class ConfigExtractorManager {
         checkInitialized();
         List<BaseConversionConfig> configs = ITEM_CONFIGS_CACHE.get(itemId);
         return configs != null && !configs.isEmpty();
+    }
+
+    // 根据配置类型获取已加载的对应缓存
+    @SuppressWarnings("unchecked")
+    public static <T extends BaseConversionConfig> List<T> getConfigByType(ConfigType configType) {
+        checkInitialized();
+
+        Class<T> targetClass = (Class<T>) configType.getConfigClass();
+        List<T> result = new ArrayList<>();
+
+        for (BaseConversionConfig config : INTERNAL_ID_CACHE.values()) {
+            if (config.getConfigType() == configType) {
+                if (targetClass.isInstance(config)) {
+                    result.add(targetClass.cast(config));
+                }
+            }
+        }
+        return result.isEmpty()
+                ? Collections.emptyList()
+                : Collections.unmodifiableList(result);
     }
 
     // ========== 辅助方法 ========== //

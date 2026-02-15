@@ -1,8 +1,10 @@
 package com.meteorite.itemdespawntowhat;
 
+import com.meteorite.itemdespawntowhat.command.ConfigEditingCommand;
 import com.meteorite.itemdespawntowhat.command.ReloadCacheCommand;
 import com.meteorite.itemdespawntowhat.debug.DebugClientModEvents;
 import com.meteorite.itemdespawntowhat.event.ItemConversionEvent;
+import com.meteorite.itemdespawntowhat.network.NetworkEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import org.slf4j.Logger;
@@ -69,6 +71,9 @@ public class ItemDespawnToWhat {
     @SubscribeEvent
     public void onRegisterCommands(RegisterCommandsEvent event) {
         ReloadCacheCommand.register(
+                event.getDispatcher()
+        );
+        ConfigEditingCommand.register(
                 event.getDispatcher()
         );
     }

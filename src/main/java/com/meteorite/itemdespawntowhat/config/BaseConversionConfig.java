@@ -1,8 +1,8 @@
 package com.meteorite.itemdespawntowhat.config;
 
 import com.google.gson.annotations.SerializedName;
-import com.meteorite.itemdespawntowhat.util.ConditionChecker;
-import com.meteorite.itemdespawntowhat.util.ConditionCheckerUtil;
+import com.meteorite.itemdespawntowhat.condition.ConditionChecker;
+import com.meteorite.itemdespawntowhat.condition.ConditionCheckerUtil;
 import com.meteorite.itemdespawntowhat.util.JsonOrder;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -14,6 +14,7 @@ import java.util.UUID;
 public abstract class BaseConversionConfig {
     // 内部唯一标识符，不会进行序列化
     protected transient String internalId;
+    protected transient ConfigType configType;
     // 基础限制实体数量，没有规定实体数量的时候返回这个值
     protected static final int DEFAULT_RESULT_LIMIT = 30;
     // 检查限制的范围
@@ -65,13 +66,14 @@ public abstract class BaseConversionConfig {
         this.internalId = UUID.randomUUID().toString();
     }
 
-    public BaseConversionConfig(ResourceLocation item) {
+    public BaseConversionConfig(ResourceLocation item, ResourceLocation result) {
         this();
         this.itemId = item;
         //this.disappearCause = "timeout";
         this.dimension = "";
         this.needOutdoor = false;
         this.surroundingBlocks = new SurroundingBlocks();
+        this.resultId = result;
         this.conversionTime = 5;
         this.resultMultiple = 1;
     }
@@ -185,5 +187,10 @@ public abstract class BaseConversionConfig {
 
     public void setSurroundingBlocks(SurroundingBlocks surroundingBlocks) {
         this.surroundingBlocks = surroundingBlocks;
+    }
+
+    // config类型只能获取不能设置
+    public ConfigType getConfigType() {
+        return configType;
     }
 }

@@ -20,9 +20,9 @@ public class ItemToItemConfig extends BaseConversionConfig{
     }
 
     public ItemToItemConfig(ResourceLocation item, ResourceLocation resultItem) {
-        super(item);
+        super(item, resultItem);
         this.resultLimit = DEFAULT_RESULT_LIMIT;
-        this.resultId = resultItem;
+        this.configType = ConfigType.ITEM_TO_ITEM;
     }
 
     // 物品转化需要保证转化前后结果不同，防止循环转化

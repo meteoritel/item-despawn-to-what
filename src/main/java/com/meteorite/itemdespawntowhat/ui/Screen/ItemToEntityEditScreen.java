@@ -3,9 +3,8 @@ package com.meteorite.itemdespawntowhat.ui.Screen;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.ItemToEntityConfig;
 import com.meteorite.itemdespawntowhat.ui.FormList;
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
-import org.jetbrains.annotations.NotNull;
+import net.minecraft.network.chat.Component;
 
 public class ItemToEntityEditScreen extends BaseConfigEditScreen<ItemToEntityConfig> {
     private EditBox resultLimitInput;
@@ -20,8 +19,8 @@ public class ItemToEntityEditScreen extends BaseConfigEditScreen<ItemToEntityCon
         resultLimitInput = numericBox();
         entityAgeInput = numericBox();
 
-        fromList.add("Result limit", resultLimitInput);
-        fromList.add("Entity age", entityAgeInput);
+        fromList.add(Component.translatable(LABEL_PREFIX + "result_limit"), resultLimitInput);
+        fromList.add(Component.translatable(LABEL_PREFIX + "result_age"), entityAgeInput);
     }
 
     @Override
@@ -40,8 +39,4 @@ public class ItemToEntityEditScreen extends BaseConfigEditScreen<ItemToEntityCon
         entityAgeInput.setValue("");
     }
 
-    @Override
-    public void render(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        super.render(guiGraphics, mouseX, mouseY, partialTick);
-    }
 }

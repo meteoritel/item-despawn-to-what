@@ -1,10 +1,23 @@
 {
-  "gui.itemdespawntowhat.config_selection.title": "Config selection",
   "gui.itemdespawntowhat.edit.title": "Edit file: %s",
   "gui.itemdespawntowhat.save_to_cache": "Add to cache",
   "gui.itemdespawntowhat.apply_to_file": "Apply",
 
+  "gui.itemdespawntowhat.config_selection.title": "Config selection",
   "gui.itemdespawntowhat.config_type.item_to_item": "Item to item",
   "gui.itemdespawntowhat.config_type.item_to_entity": "Item to entity",
-  "gui.itemdespawntowhat.config_type.item_to_block": "Item to block"
+  "gui.itemdespawntowhat.config_type.item_to_block": "Item to block",
+
+  "gui.itemdespawntowhat.edit.item_id": "Item ID",
+  "gui.itemdespawntowhat.edit.dimension": "Dimension",
+  "gui.itemdespawntowhat.edit.need_outdoor": "Need Outdoor",
+  "gui.itemdespawntowhat.edit.surrounding_blocks": "Surrounding Blocks",
+  "gui.itemdespawntowhat.edit.result_id": "Result ID",
+  "gui.itemdespawntowhat.edit.conversion_time": "Conversion Time (s)",
+  "gui.itemdespawntowhat.edit.result_multiple": "Result Multiple",
+  "gui.itemdespawntowhat.edit.result_limit": "Result Limit",
+  "gui.itemdespawntowhat.edit.result_age": "Result Age(e.g. baby mob:-2400)",
+  "gui.itemdespawntowhat.edit.radius_limit": "Radius Limit",
+  "gui.itemdespawntowhat.edit.need_outdoor.on": "ON",
+  "gui.itemdespawntowhat.edit.need_outdoor.off": "OFF"
 }

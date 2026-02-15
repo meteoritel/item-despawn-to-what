@@ -5,7 +5,7 @@ import com.meteorite.itemdespawntowhat.config.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ItemToBlockConfig;
 import com.meteorite.itemdespawntowhat.config.ItemToEntityConfig;
 import com.meteorite.itemdespawntowhat.config.ItemToItemConfig;
-import com.meteorite.itemdespawntowhat.util.ConditionChecker;
+import com.meteorite.itemdespawntowhat.condition.ConditionChecker;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;

@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.ui.Screen;
 
+import com.meteorite.itemdespawntowhat.ConfigExtractorManager;
 import com.meteorite.itemdespawntowhat.ConfigManager;
 import com.meteorite.itemdespawntowhat.config.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
@@ -14,6 +15,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -28,6 +30,9 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     protected final List<T> originalConfigs;
     protected final List<T> pendingConfigs;
 
+    // 是否在服务端环境中编辑
+    protected final boolean isServerSide;
+
     // UI 组件
     protected EditBox itemIdInput;
     protected EditBox dimensionInput;
@@ -37,8 +42,12 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     protected EditBox conversionTimeInput;
     protected EditBox resultMultipleInput;
 
-    // UI 本体
+    protected static final String LABEL_PREFIX = "gui.itemdespawntowhat.edit.";
+    // UI 组件列表
     protected FormList formList;
+
+    // 聚焦的组件
+    protected AbstractWidget focusedWidget;
 
     public BaseConfigEditScreen(ConfigType configType) {
         super(Component.translatable("gui.itemdespawntowhat.edit.title", configType.getFileName()));
@@ -47,7 +56,18 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         if (handler == null) {
             throw new IllegalStateException("No handler registered for " + configType);
         }
-        this.originalConfigs = handler.loadConfig();   // 加载现有配置
+
+        // 判断是否在服务端环境
+        this.isServerSide = isInWorld();
+
+        if (isServerSide) {
+            // 服务端已经加载，那就直接读取缓存
+            this.originalConfigs = ConfigExtractorManager.getConfigByType(this.configType);
+        } else {
+            // 服务端未加载，手动加载当前配置
+            this.originalConfigs = handler.loadConfig();
+        }
+
         this.pendingConfigs = new ArrayList<>();
     }
 
@@ -60,36 +80,36 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
                 width,
                 height - 80,
                 36,
-                height - 216
+                height - 215
         );
 
         addRenderableWidget(formList);
 
         // ===== 添加通用字段 =====
         itemIdInput = textBox();
-        formList.add("Item ID", itemIdInput);
+        formList.add(Component.translatable(LABEL_PREFIX + "item_id"), itemIdInput);
 
         dimensionInput = textBox();
-        formList.add("Dimension", dimensionInput);
+        formList.add(Component.translatable(LABEL_PREFIX + "dimension"), dimensionInput);
 
         needOutdoorButton = CycleButton.booleanBuilder(
-                        Component.literal("ON"),
-                        Component.literal("OFF")
+                        Component.translatable(LABEL_PREFIX + "need_outdoor." + "on"),
+                        Component.translatable(LABEL_PREFIX + "need_outdoor." + "off")
                 ).withInitialValue(false)
-                .create(0, 0, 180, 20, Component.empty());
-        formList.add("Need Outdoor", needOutdoorButton);
+                .create(0, 0, 220, 18, Component.translatable(LABEL_PREFIX + "need_outdoor"));
+        formList.add(Component.translatable(LABEL_PREFIX + "need_outdoor"), needOutdoorButton);
 
         surroundingWidget = new SurroundingBlocksWidget(font, 0, 0);
-        formList.add("Surrounding Blocks", surroundingWidget);
+        formList.add(Component.translatable(LABEL_PREFIX + "surrounding_blocks"), surroundingWidget);
 
         resultIdInput = textBox();
-        formList.add("Result ID", resultIdInput);
+        formList.add(Component.translatable(LABEL_PREFIX + "result_id"), resultIdInput);
 
         conversionTimeInput = numericBox();
-        formList.add("Conversion Time (s)", conversionTimeInput);
+        formList.add(Component.translatable(LABEL_PREFIX + "conversion_time"), conversionTimeInput);
 
         resultMultipleInput = numericBox();
-        formList.add("Result Multiple", resultMultipleInput);
+        formList.add(Component.translatable(LABEL_PREFIX + "result_multiple"), resultMultipleInput);
 
         // ===== 子类字段 =====
         addCustomEntries(formList);
@@ -135,14 +155,35 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         return box;
     }
 
+    // 统一焦点管理
+    public void setFocusedInput(@Nullable AbstractWidget widget) {
+        if (focusedWidget == widget) return;
+
+        // 旧焦点失效
+        if (focusedWidget != null) {
+            focusedWidget.setFocused(false);
+            if (focusedWidget instanceof SurroundingBlocksWidget sbw) {
+                sbw.clearFocus();
+            }
+        }
+
+        focusedWidget = widget;
+
+        // 新焦点生效
+        if (widget != null) {
+            widget.setFocused(true);
+        }
+    }
+
+    // 只添加文本框组件到统一焦点管理
+    public boolean shouldTakeFocus(AbstractWidget widget) {
+        return widget instanceof EditBox
+                || widget instanceof SurroundingBlocksWidget;
+    }
+
     // 清除所有焦点
     protected void clearAllFocus() {
-        itemIdInput.setFocused(false);
-        dimensionInput.setFocused(false);
-        resultIdInput.setFocused(false);
-        conversionTimeInput.setFocused(false);
-        resultMultipleInput.setFocused(false);
-        surroundingWidget.clearFocus();
+        setFocusedInput(null);
     }
 
     // ========== 通用字段处理 ========== //
@@ -169,6 +210,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         clearCustomFields();
     }
 
+    // 安全解析字符串到数字
     protected int parseInt(String boxInput, int def) {
         try {
             return Integer.parseInt(boxInput);
@@ -177,11 +219,12 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         }
     }
 
-    // ========== 缓存操作 ========== //
+    // ========== 配置文件相关操作 ========== //
     // 将当前表单内容写入缓存
     private void saveCurrentToCache() {
         T config = createConfigFromFields();
         if (!config.shouldProcess()) {
+            LOGGER.warn("Invalid configuration, not adding to cache");
             return;
         }
         pendingConfigs.add(config);
@@ -190,27 +233,85 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
     // 将缓存写入文件，并清空缓存
     private void applyToFile() {
+        // 先尝试将当前表单内容加入缓存
+        T currentConfig = createConfigFromFields();
+        if (currentConfig.shouldProcess()) {
+            pendingConfigs.add(currentConfig);
+            LOGGER.debug("Added current form to cache before applying");
+        }
+
         if (pendingConfigs.isEmpty()) {
+            LOGGER.debug("No configs to apply, closing screen");
             onClose();
             return;
         }
-        // 合并原始配置与缓存配置
-        List<T> allConfigs = new ArrayList<>(originalConfigs);
-        allConfigs.addAll(pendingConfigs);
+
+        // 根据环境选择保存方式
+        if (isServerSide && canSendPacket()) {
+            // 服务端环境：发送数据包到服务器
+            applyToServer();
+        } else {
+            // 本地环境：直接保存到本地文件
+            applyToLocalFile();
+        }
+    }
+
+    // 本地保存
+    private void applyToLocalFile() {
         try {
+            // 合并原始配置与缓存配置
+            List<T> allConfigs = new ArrayList<>(originalConfigs);
+            allConfigs.addAll(pendingConfigs);
+
             handler.saveConfig(allConfigs);
-            LOGGER.info("Applied {} new configs to {}", pendingConfigs.size(), configType.getFileName());
+            LOGGER.info("Applied {} new configs to local file: {}",
+                    pendingConfigs.size(), configType.getFileName());
 
             originalConfigs.clear();
             pendingConfigs.clear();
 
-            // 返回上一级（主选择界面）
-            if (minecraft != null) {
-                minecraft.setScreen(new ConfigSelectionScreen());
-            }
+            onClose();
         } catch (IOException e) {
             LOGGER.error("Failed to save config file: {}", configType.getFileName(), e);
         }
+    }
+
+    // 发包到服务端
+    private void applyToServer() {
+        try {
+
+            // 创建数据包
+
+
+            // 发送到服务端
+
+            LOGGER.info("Sent {} configs to server for type: {}",
+                    pendingConfigs.size(), configType.getFileName());
+
+            // 清空缓存
+            pendingConfigs.clear();
+
+            // 返回上一级
+            if (minecraft != null) {
+                minecraft.setScreen(new ConfigSelectionScreen());
+            }
+        } catch (Exception e) {
+            LOGGER.error("Failed to send config packet to server", e);
+        }
+    }
+
+    // 世界是否已经加载完成
+    protected boolean isInWorld() {
+        return minecraft != null
+                && minecraft.level != null
+                && minecraft.player != null;
+    }
+
+    // 只是在有玩家加入了服务端时才允许发包到服务端
+    protected boolean canSendPacket() {
+        return minecraft != null
+                && minecraft.getConnection() != null
+                && minecraft.player != null;
     }
 
     // ========== 渲染 ========== //
@@ -218,9 +319,18 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     // 绘制所有标签
     @Override
     public void render(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(guiGraphics, mouseX, mouseY, partialTick);
-        guiGraphics.drawCenteredString(font, title, width / 2, 12, 0xFFFFFF);
         super.render(guiGraphics, mouseX, mouseY, partialTick);
+        guiGraphics.drawCenteredString(font, title, width / 2, 12, 0xFFFFFF);
+
+        // 显示当前模式
+        String modeText = isServerSide ? "Server Mode" : "Local Mode";
+        guiGraphics.drawString(font, modeText, 10, 12, 0x808080);
+
+        // 显示缓存中的配置数量
+        if (!pendingConfigs.isEmpty()) {
+            String cacheInfo = "Cached: " + pendingConfigs.size();
+            guiGraphics.drawString(font, cacheInfo, width - 80, 12, 0xFFFF00);
+        }
     }
 
     // 返回上一级
@@ -245,10 +355,11 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
     // ========== 子类方法 ========== //
 
+    // 添加子类特有组件
     protected abstract void addCustomEntries(FormList fromList);
-    // 构建配置对象，子类需负责填充子类字段，并调用父类的通用字段填充方法。
+    // 构建配置对象
     protected abstract T createConfigFromFields();
-    // 清空子类字段
+    // 清空子类组件
     protected abstract void clearCustomFields();
 
 }

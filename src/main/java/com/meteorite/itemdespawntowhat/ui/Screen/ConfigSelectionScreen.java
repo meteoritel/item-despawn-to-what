@@ -1,9 +1,11 @@
 package com.meteorite.itemdespawntowhat.ui.Screen;
 
 import com.meteorite.itemdespawntowhat.config.ConfigType;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import org.jetbrains.annotations.NotNull;
 
 // 配置选择UI
 public class ConfigSelectionScreen extends Screen {
@@ -34,5 +36,11 @@ public class ConfigSelectionScreen extends Screen {
         if (minecraft != null) {
             minecraft.setScreen(screen);
         }
+    }
+
+    @Override
+    public void render(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        super.render(guiGraphics, mouseX, mouseY, partialTick);
+        guiGraphics.drawCenteredString(font, title, width / 2, 12, 0xFFFFFF);
     }
 }
