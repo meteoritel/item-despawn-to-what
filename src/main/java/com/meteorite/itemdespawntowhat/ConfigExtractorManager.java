@@ -2,7 +2,7 @@ package com.meteorite.itemdespawntowhat;
 
 import com.meteorite.itemdespawntowhat.config.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
-import com.meteorite.itemdespawntowhat.handler.BaseConfigHandler;
+import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
 import com.meteorite.itemdespawntowhat.condition.ConditionChecker;
 import net.minecraft.resources.ResourceLocation;
 import org.apache.logging.log4j.LogManager;

@@ -1,7 +1,8 @@
-package com.meteorite.itemdespawntowhat.handler;
+package com.meteorite.itemdespawntowhat.config.handler;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.reflect.TypeToken;
 import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
 import com.meteorite.itemdespawntowhat.config.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
@@ -111,6 +112,27 @@ public abstract class BaseConfigHandler<T extends BaseConversionConfig> {
     @SuppressWarnings("BooleanMethodIsAlwaysInverted")
     public boolean configFileExists() {
         return Files.exists(getConfigPath());
+    }
+
+    // 序列化配置列表为JSON字符串，用于数据传输
+    public String serializeToJson(List<T> configs) throws IOException {
+        return GSON.toJson(configs);
+    }
+
+    // 从JSON字符串反序列化为配置列表，用于数据传输
+    public List<T> deserializeFromJson(String json) {
+        try {
+            return GSON.fromJson(json, listType);
+        } catch (Exception e) {
+            LOGGER.error("Failed to deserialize config from JSON", e);
+            return new ArrayList<>();
+        }
+    }
+
+    // 无类型检查的保存方法，供网络处理使用
+    @SuppressWarnings("unchecked")
+    public void saveConfigUnchecked(List<? extends BaseConversionConfig> configs) throws IOException {
+        saveConfig((List<T>) configs);
     }
 
     protected boolean isValidEntry(T entry) {

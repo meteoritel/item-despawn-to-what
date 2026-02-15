@@ -8,10 +8,10 @@ import java.util.concurrent.ConcurrentMap;
 
 import com.meteorite.itemdespawntowhat.config.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
-import com.meteorite.itemdespawntowhat.handler.BaseConfigHandler;
-import com.meteorite.itemdespawntowhat.handler.ItemToBlockConfigHandler;
-import com.meteorite.itemdespawntowhat.handler.ItemToEntityConfigHandler;
-import com.meteorite.itemdespawntowhat.handler.ItemToItemConfigHandler;
+import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
+import com.meteorite.itemdespawntowhat.config.handler.ItemToBlockConfigHandler;
+import com.meteorite.itemdespawntowhat.config.handler.ItemToEntityConfigHandler;
+import com.meteorite.itemdespawntowhat.config.handler.ItemToItemConfigHandler;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

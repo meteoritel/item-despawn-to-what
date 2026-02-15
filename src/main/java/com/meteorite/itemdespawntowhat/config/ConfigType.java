@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.config;
 
+import java.util.List;
+
 public enum ConfigType {
     ITEM_TO_ITEM("item_to_item.json", ItemToItemConfig.class),
     ITEM_TO_ENTITY("item_to_entity.json", ItemToEntityConfig.class),
@@ -21,12 +23,10 @@ public enum ConfigType {
         return configClass;
     }
 
-    public static ConfigType fromString(String type) {
-        for (ConfigType ct : values()) {
-            if (ct.name().equalsIgnoreCase(type) || ct.fileName.equals(type)) {
-                return ct;
-            }
-        }
-        throw new IllegalArgumentException("Unknown config type: " + type);
+    @SuppressWarnings("unchecked")
+    public <T extends BaseConversionConfig> List<T> cast(List<? extends BaseConversionConfig> list) {
+        return list.stream()
+                .map(cfg -> (T) configClass.cast(cfg))
+                .toList();
     }
 }

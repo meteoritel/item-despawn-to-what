@@ -4,7 +4,8 @@ import com.meteorite.itemdespawntowhat.ConfigExtractorManager;
 import com.meteorite.itemdespawntowhat.ConfigManager;
 import com.meteorite.itemdespawntowhat.config.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
-import com.meteorite.itemdespawntowhat.handler.BaseConfigHandler;
+import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
+import com.meteorite.itemdespawntowhat.network.SaveConfigPayload;
 import com.meteorite.itemdespawntowhat.ui.FormList;
 import com.meteorite.itemdespawntowhat.ui.SurroundingBlocksWidget;
 import net.minecraft.client.gui.GuiGraphics;
@@ -12,6 +13,7 @@ import net.minecraft.client.gui.components.*;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.neoforged.neoforge.network.PacketDistributor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -29,9 +31,6 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     protected final BaseConfigHandler<T> handler;
     protected final List<T> originalConfigs;
     protected final List<T> pendingConfigs;
-
-    // 是否在服务端环境中编辑
-    protected final boolean isServerSide;
 
     // UI 组件
     protected EditBox itemIdInput;
@@ -57,17 +56,13 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
             throw new IllegalStateException("No handler registered for " + configType);
         }
 
-        // 判断是否在服务端环境
-        this.isServerSide = isInWorld();
-
-        if (isServerSide) {
+        if (isServerReady()) {
             // 服务端已经加载，那就直接读取缓存
             this.originalConfigs = ConfigExtractorManager.getConfigByType(this.configType);
         } else {
             // 服务端未加载，手动加载当前配置
             this.originalConfigs = handler.loadConfig();
         }
-
         this.pendingConfigs = new ArrayList<>();
     }
 
@@ -247,7 +242,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         }
 
         // 根据环境选择保存方式
-        if (isServerSide && canSendPacket()) {
+        if (isMultiplayerServer()) {
             // 服务端环境：发送数据包到服务器
             applyToServer();
         } else {
@@ -279,11 +274,12 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     // 发包到服务端
     private void applyToServer() {
         try {
-
-            // 创建数据包
-
-
-            // 发送到服务端
+            List<T> allConfigs = new ArrayList<>(originalConfigs);
+            allConfigs.addAll(pendingConfigs);
+            // 创建并发送数据包
+            String jsonData = handler.serializeToJson(allConfigs);
+            SaveConfigPayload payload = new SaveConfigPayload(configType, jsonData);
+            PacketDistributor.sendToServer(payload);
 
             LOGGER.info("Sent {} configs to server for type: {}",
                     pendingConfigs.size(), configType.getFileName());
@@ -292,9 +288,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
             pendingConfigs.clear();
 
             // 返回上一级
-            if (minecraft != null) {
-                minecraft.setScreen(new ConfigSelectionScreen());
-            }
+            onClose();
         } catch (Exception e) {
             LOGGER.error("Failed to send config packet to server", e);
         }
@@ -307,11 +301,36 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
                 && minecraft.player != null;
     }
 
-    // 只是在有玩家加入了服务端时才允许发包到服务端
-    protected boolean canSendPacket() {
+    // 单人玩家，但是服务端尚未启动
+    protected boolean isSinglePlayer() {
+        return minecraft!= null
+                && (minecraft.level == null || minecraft.player == null)
+                && minecraft.isSingleplayer();
+    }
+
+    // 单人玩家，世界已加载，服务端已经启动
+    protected boolean isSinglePlayerInWorld() {
         return minecraft != null
+                && minecraft.level != null
+                && minecraft.player != null
+                && minecraft.isSingleplayer();
+    }
+
+    // 是否是多人服务器，服务端已经完全启动，且有玩家存在
+    protected boolean isMultiplayerServer() {
+        return isInWorld()
+                && minecraft != null
+                && minecraft.player != null
+                && !minecraft.isSingleplayer()
                 && minecraft.getConnection() != null
-                && minecraft.player != null;
+                && minecraft.getConnection().getConnection().isConnected();
+    }
+
+    // 服务端是否已经完全启动（单人内置服务端或多人服务器）
+    protected boolean isServerReady() {
+        return minecraft != null &&
+                ((isSinglePlayerInWorld() && minecraft.getSingleplayerServer() != null)
+                        || isMultiplayerServer());
     }
 
     // ========== 渲染 ========== //
@@ -323,7 +342,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         guiGraphics.drawCenteredString(font, title, width / 2, 12, 0xFFFFFF);
 
         // 显示当前模式
-        String modeText = isServerSide ? "Server Mode" : "Local Mode";
+        String modeText = isMultiplayerServer() ? "Server Mode" : "Local Mode";
         guiGraphics.drawString(font, modeText, 10, 12, 0x808080);
 
         // 显示缓存中的配置数量

@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.handler;
+package com.meteorite.itemdespawntowhat.config.handler;
 
 import com.google.gson.reflect.TypeToken;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
