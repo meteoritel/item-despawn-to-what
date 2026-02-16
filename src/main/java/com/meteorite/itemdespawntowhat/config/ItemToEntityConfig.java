@@ -20,6 +20,7 @@ public class ItemToEntityConfig extends BaseConversionConfig{
 
     public ItemToEntityConfig() {
         super();
+        this.configType = ConfigType.ITEM_TO_ENTITY;
     }
 
     public ItemToEntityConfig(ResourceLocation item, ResourceLocation resultEntity) {

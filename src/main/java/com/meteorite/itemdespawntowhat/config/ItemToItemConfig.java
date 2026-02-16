@@ -17,6 +17,7 @@ public class ItemToItemConfig extends BaseConversionConfig{
 
     public ItemToItemConfig() {
         super();
+        this.configType = ConfigType.ITEM_TO_ITEM;
     }
 
     public ItemToItemConfig(ResourceLocation item, ResourceLocation resultItem) {

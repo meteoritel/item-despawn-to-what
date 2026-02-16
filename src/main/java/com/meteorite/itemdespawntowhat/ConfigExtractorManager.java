@@ -159,14 +159,12 @@ public class ConfigExtractorManager {
     public static <T extends BaseConversionConfig> List<T> getConfigByType(ConfigType configType) {
         checkInitialized();
 
-        Class<T> targetClass = (Class<T>) configType.getConfigClass();
         List<T> result = new ArrayList<>();
 
         for (BaseConversionConfig config : INTERNAL_ID_CACHE.values()) {
             if (config.getConfigType() == configType) {
-                if (targetClass.isInstance(config)) {
-                    result.add(targetClass.cast(config));
-                }
+                result.add((T) config);
+                LOGGER.debug("");
             }
         }
         return result.isEmpty()

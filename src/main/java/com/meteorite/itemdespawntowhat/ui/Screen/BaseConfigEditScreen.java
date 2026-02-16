@@ -8,6 +8,8 @@ import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
 import com.meteorite.itemdespawntowhat.network.SaveConfigPayload;
 import com.meteorite.itemdespawntowhat.ui.FormList;
 import com.meteorite.itemdespawntowhat.ui.SurroundingBlocksWidget;
+import com.meteorite.itemdespawntowhat.util.PlayerStateChecker;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.*;
 import net.minecraft.client.gui.screens.Screen;
@@ -23,8 +25,12 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+
+// ============== 目前对于玩家所处的状态判定有问题 服务端发包 json的序列化似乎也有问题 ========== //
+
 public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> extends Screen {
     protected static final Logger LOGGER = LogManager.getLogger();
+    Minecraft mc;
 
     // 配置相关
     protected final ConfigType configType;
@@ -50,19 +56,28 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
     public BaseConfigEditScreen(ConfigType configType) {
         super(Component.translatable("gui.itemdespawntowhat.edit.title", configType.getFileName()));
+        this.mc = Minecraft.getInstance();
         this.configType = configType;
         this.handler = ConfigManager.getInstance().getHandler(configType);
         if (handler == null) {
             throw new IllegalStateException("No handler registered for " + configType);
         }
 
-        if (isServerReady()) {
-            // 服务端已经加载，那就直接读取缓存
-            this.originalConfigs = ConfigExtractorManager.getConfigByType(this.configType);
-        } else {
-            // 服务端未加载，手动加载当前配置
-            this.originalConfigs = handler.loadConfig();
+        List<T> configs = new ArrayList<>();
+
+        if (!PlayerStateChecker.isClientWorldLoaded(mc)) {
+            // 处于游戏主页面，缓存还未加载，需要手动加载本地文件
+            configs = handler.loadConfig();
         }
+
+        if(PlayerStateChecker.isSinglePlayerServerReady(mc)
+                || PlayerStateChecker.isMultiPlayerServerConnected(mc)) {
+            // 服务端已经加载，那就直接读取缓存
+            configs = ConfigExtractorManager.getConfigByType(configType);
+            LOGGER.debug("已从 {} 读取缓存，数量为 {}", this.configType.name(), configs.size());
+        }
+
+        this.originalConfigs = configs;
         this.pendingConfigs = new ArrayList<>();
     }
 
@@ -185,6 +200,11 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
     // 填充通用字段到给定的配置对象
     protected void populateCommonFields(T config) {
+        if (itemIdInput.getValue().isEmpty() || resultIdInput.getValue().isEmpty()) {
+            LOGGER.warn("Illegal configuration fields, it will not save");
+            return;
+        }
+
         config.setItemId(ResourceLocation.tryParse(itemIdInput.getValue()));
         config.setDimension(dimensionInput.getValue().isEmpty() ? null : dimensionInput.getValue());
         config.setNeedOutdoor(needOutdoorButton.getValue());
@@ -228,6 +248,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
     // 将缓存写入文件，并清空缓存
     private void applyToFile() {
+
         // 先尝试将当前表单内容加入缓存
         T currentConfig = createConfigFromFields();
         if (currentConfig.shouldProcess()) {
@@ -242,12 +263,15 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         }
 
         // 根据环境选择保存方式
-        if (isMultiplayerServer()) {
-            // 服务端环境：发送数据包到服务器
-            applyToServer();
-        } else {
+        if (!PlayerStateChecker.isClientWorldLoaded(mc)
+                || PlayerStateChecker.isSinglePlayerServerReady(mc)) {
             // 本地环境：直接保存到本地文件
             applyToLocalFile();
+        }
+
+        if(PlayerStateChecker.isMultiPlayerServerConnected(mc)) {
+            // 服务端环境：发送数据包到服务器
+            applyToServer();
         }
     }
 
@@ -294,45 +318,6 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         }
     }
 
-    // 世界是否已经加载完成
-    protected boolean isInWorld() {
-        return minecraft != null
-                && minecraft.level != null
-                && minecraft.player != null;
-    }
-
-    // 单人玩家，但是服务端尚未启动
-    protected boolean isSinglePlayer() {
-        return minecraft!= null
-                && (minecraft.level == null || minecraft.player == null)
-                && minecraft.isSingleplayer();
-    }
-
-    // 单人玩家，世界已加载，服务端已经启动
-    protected boolean isSinglePlayerInWorld() {
-        return minecraft != null
-                && minecraft.level != null
-                && minecraft.player != null
-                && minecraft.isSingleplayer();
-    }
-
-    // 是否是多人服务器，服务端已经完全启动，且有玩家存在
-    protected boolean isMultiplayerServer() {
-        return isInWorld()
-                && minecraft != null
-                && minecraft.player != null
-                && !minecraft.isSingleplayer()
-                && minecraft.getConnection() != null
-                && minecraft.getConnection().getConnection().isConnected();
-    }
-
-    // 服务端是否已经完全启动（单人内置服务端或多人服务器）
-    protected boolean isServerReady() {
-        return minecraft != null &&
-                ((isSinglePlayerInWorld() && minecraft.getSingleplayerServer() != null)
-                        || isMultiplayerServer());
-    }
-
     // ========== 渲染 ========== //
 
     // 绘制所有标签
@@ -342,7 +327,15 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         guiGraphics.drawCenteredString(font, title, width / 2, 12, 0xFFFFFF);
 
         // 显示当前模式
-        String modeText = isMultiplayerServer() ? "Server Mode" : "Local Mode";
+        String modeText = null;
+        // 处于主页面或者单人服务器世界中
+        if (!PlayerStateChecker.isClientWorldLoaded(mc)
+                || PlayerStateChecker.isSinglePlayerServerReady(mc)) {
+            modeText = "Local Mode";
+        } else if (PlayerStateChecker.isMultiPlayerServerConnected(mc)) {
+            modeText = "Server Mode";
+        }
+
         guiGraphics.drawString(font, modeText, 10, 12, 0x808080);
 
         // 显示缓存中的配置数量

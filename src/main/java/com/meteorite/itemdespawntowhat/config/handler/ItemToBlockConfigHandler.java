@@ -15,8 +15,6 @@ public class ItemToBlockConfigHandler extends BaseConfigHandler<ItemToBlockConfi
         super(ConfigType.ITEM_TO_BLOCK);
     }
 
-
-
     @Override
     protected List<ItemToBlockConfig> createDefaultEntries() {
         List<ItemToBlockConfig> entries = new ArrayList<>();
