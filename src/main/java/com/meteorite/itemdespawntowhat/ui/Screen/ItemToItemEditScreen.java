@@ -33,5 +33,4 @@ public class ItemToItemEditScreen extends BaseConfigEditScreen<ItemToItemConfig>
     protected void clearCustomFields() {
         resultLimitInput.setValue("");
     }
-
 }

@@ -81,7 +81,9 @@ public abstract class BaseConversionConfig {
     // 限制条件，子类可覆盖，不符合条件的配置不会被读取
     public boolean shouldProcess() {
         // 输入输出不能为空
-        if (itemId == null || resultId == null) {
+        if (itemId == null || resultId == null
+                || itemId == ResourceLocation.tryParse("")
+                || resultId == ResourceLocation.tryParse("")) {
             return false;
         }
 

@@ -91,7 +91,6 @@ public class ConfigExtractorManager {
                 LOGGER.error("Failed to load configs for type: {}", configType, e);
             }
         }
-
     }
 
     private static void processConfigs(List<? extends BaseConversionConfig> configs) {
@@ -164,7 +163,6 @@ public class ConfigExtractorManager {
         for (BaseConversionConfig config : INTERNAL_ID_CACHE.values()) {
             if (config.getConfigType() == configType) {
                 result.add((T) config);
-                LOGGER.debug("");
             }
         }
         return result.isEmpty()
@@ -223,7 +221,7 @@ public class ConfigExtractorManager {
         ITEM_CONFIGS_CACHE.values().stream()
                 .flatMap(List::stream)
                 .forEach(config -> {
-                    String type = config.getClass().getSimpleName();
+                    String type = config.getConfigType().name();
                     typeStats.put(type, typeStats.getOrDefault(type, 0) + 1);
                 });
 

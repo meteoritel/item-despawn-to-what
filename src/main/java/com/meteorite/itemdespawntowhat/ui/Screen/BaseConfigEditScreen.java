@@ -12,6 +12,7 @@ import com.meteorite.itemdespawntowhat.util.PlayerStateChecker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.*;
+import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -24,9 +25,6 @@ import org.jetbrains.annotations.Nullable;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-
-
-// ============== 目前对于玩家所处的状态判定有问题 服务端发包 json的序列化似乎也有问题 ========== //
 
 public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> extends Screen {
     protected static final Logger LOGGER = LogManager.getLogger();
@@ -121,7 +119,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         resultMultipleInput = numericBox();
         formList.add(Component.translatable(LABEL_PREFIX + "result_multiple"), resultMultipleInput);
 
-        // ===== 子类字段 =====
+        // 子类字段
         addCustomEntries(formList);
 
         initButtons();
@@ -135,7 +133,9 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
         addRenderableWidget(Button.builder(
                 Component.translatable("gui.itemdespawntowhat.save_to_cache"),
-                b -> saveCurrentToCache()
+                b -> {
+                    saveCurrentToCache();
+                }
         ).bounds(centerX - 160, y, 100, 20).build());
 
         addRenderableWidget(Button.builder(
@@ -201,7 +201,6 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     // 填充通用字段到给定的配置对象
     protected void populateCommonFields(T config) {
         if (itemIdInput.getValue().isEmpty() || resultIdInput.getValue().isEmpty()) {
-            LOGGER.warn("Illegal configuration fields, it will not save");
             return;
         }
 
@@ -238,11 +237,12 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     // 将当前表单内容写入缓存
     private void saveCurrentToCache() {
         T config = createConfigFromFields();
-        if (!config.shouldProcess()) {
-            LOGGER.warn("Invalid configuration, not adding to cache");
-            return;
+        if (config.shouldProcess()) {
+            pendingConfigs.add(config);
+        } else {
+            LOGGER.warn("Invalid config, this won't be saved");
         }
-        pendingConfigs.add(config);
+
         clearFields();
     }
 
@@ -357,12 +357,19 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        boolean handled = super.mouseClicked(mouseX, mouseY, button);
-        if (!handled) {
-            clearAllFocus();
+    public void setFocused(GuiEventListener focused) {
+        if (focused instanceof AbstractWidget widget && !shouldTakeFocus(widget)) {
+            // 不允许非输入组件持有Screen焦点
+            super.setFocused(null);
+            return;
         }
-        return handled;
+        super.setFocused(focused);
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        clearAllFocus();
+        return super.mouseClicked(mouseX, mouseY, button);
     }
 
     // ========== 子类方法 ========== //

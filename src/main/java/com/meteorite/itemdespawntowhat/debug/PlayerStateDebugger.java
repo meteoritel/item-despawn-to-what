@@ -17,10 +17,9 @@ import java.util.Collection;
 import java.util.List;
 
 /*
-    被游戏各个时候参数的神奇变化气晕 =_=
-    一气之下让小克同学写了一份详细的日志调试
-    用来输出游戏当前的各种信息
-    先留着吧，万一后面还有用呢
+ * 被游戏各个时候参数的神奇变化气晕 =_=
+ * 一气之下让小克同学帮忙写了一份详细的调试日志……
+ * screen类的minecraft实例不是主类单例啊可恶！
 */
 @EventBusSubscriber(modid = ItemDespawnToWhat.MOD_ID)
 public class PlayerStateDebugger {
@@ -29,10 +28,11 @@ public class PlayerStateDebugger {
     // 调试信息输出开关
     private static boolean ENABLE_DEBUG = false;
     // 输出日志的时间间隔
-    private static int LOG_INTERVAL_TICKS = 160; // 8秒
+    private static int LOG_INTERVAL_TICKS = 100; // 5秒
     // 只在状态变化时输出日志
     private static boolean LOG_ONLY_ON_CHANGE = true;
-    private static boolean SHOW_PLAYER_LIST = true; // 是否显示玩家列表
+    // 是否显示玩家列表
+    private static boolean SHOW_PLAYER_LIST = true;
 
     private static int tickCounter = 0;
     private static GameState lastState = null;
@@ -51,7 +51,6 @@ public class PlayerStateDebugger {
             logCurrentState();
         }
     }
-
 
     private static void logCurrentState() {
         Minecraft minecraft = Minecraft.getInstance();
@@ -98,9 +97,7 @@ public class PlayerStateDebugger {
                     String.format("%.2f", minecraft.player.getX()),
                     String.format("%.2f", minecraft.player.getY()),
                     String.format("%.2f", minecraft.player.getZ()));
-            if (minecraft.player.level() != null) {
-                LOGGER.info("│  - 当前维度: {}", minecraft.player.level().dimension().location());
-            }
+            LOGGER.info("│  - 当前维度: {}", minecraft.player.level().dimension().location());
         }
 
         if (minecraft.level != null) {
@@ -153,10 +150,8 @@ public class PlayerStateDebugger {
 
 
             // 服务端世界信息
-            if (server.overworld() != null) {
-                LOGGER.info("│  - 服务端世界时间: {}", server.overworld().getDayTime());
-                LOGGER.info("│  - 服务端已加载区块数: {}", server.overworld().getChunkSource().getLoadedChunksCount());
-            }
+            LOGGER.info("│  - 服务端世界时间: {}", server.overworld().getDayTime());
+            LOGGER.info("│  - 服务端已加载区块数: {}", server.overworld().getChunkSource().getLoadedChunksCount());
 
             // 在线玩家详情
             if (server.getPlayerCount() > 0) {
@@ -188,14 +183,10 @@ public class PlayerStateDebugger {
             }
 
             // 连接状态
-            boolean isConnected = connection.getConnection() != null
-                    && connection.getConnection().isConnected();
+            boolean isConnected = connection.getConnection().isConnected();
             LOGGER.info("│  - 连接状态: {}", isConnected ? "已连接" : "未连接");
-
-            if (connection.getConnection() != null) {
-                LOGGER.info("│  - 连接地址: {}", connection.getConnection().getRemoteAddress());
-                LOGGER.info("│  - 加密连接: {}", connection.getConnection().isEncrypted());
-            }
+            LOGGER.info("│  - 连接地址: {}", connection.getConnection().getRemoteAddress());
+            LOGGER.info("│  - 加密连接: {}", connection.getConnection().isEncrypted());
 
             // 服务器品牌信息
             String serverBrand = connection.serverBrand();
@@ -210,14 +201,16 @@ public class PlayerStateDebugger {
     private static void logNetworkInfo(Minecraft minecraft) {
         ClientPacketListener connection = minecraft.getConnection();
 
-        if (connection != null && connection.getConnection() != null) {
+        if (connection != null) {
             LOGGER.info("│  - 网络已连接: {}", connection.getConnection().isConnected());
             LOGGER.info("│  - 网络通道活跃: {}", connection.getConnection().channel().isActive());
             LOGGER.info("│  - 平均延迟: {} ms", connection.getConnection().getAverageReceivedPackets());
 
             if (minecraft.player != null && connection.getPlayerInfo(minecraft.player.getUUID()) != null) {
                 PlayerInfo playerInfo = connection.getPlayerInfo(minecraft.player.getUUID());
-                LOGGER.info("│  - 当前Ping: {} ms", playerInfo.getLatency());
+                if (playerInfo != null) {
+                    LOGGER.info("│  - 当前Ping: {} ms", playerInfo.getLatency());
+                }
             }
         } else if (isSinglePlayerMode(minecraft)) {
             LOGGER.info("│  - 网络类型: 单人本地连接（无网络延迟）");
@@ -238,8 +231,7 @@ public class PlayerStateDebugger {
                 LOGGER.info("   - 在线玩家列表 (共{}人):", players.size());
                 int index = 1;
                 for (PlayerInfo player : players) {
-                    String gameMode = player.getGameMode() != null ?
-                            player.getGameMode().getName() : "未知";
+                    String gameMode = player.getGameMode().getName();
                     LOGGER.info("   {}. {} | Ping: {}ms | 模式: {} | UUID: {}",
                             index++,
                             player.getProfile().getName(),
@@ -320,9 +312,8 @@ public class PlayerStateDebugger {
             return false;
         }
         ClientPacketListener connection = minecraft.getConnection();
-        return connection != null
-                && connection.getConnection() != null
-                && connection.getConnection().isConnected();
+        if (connection == null) return false;
+        return connection.getConnection().isConnected();
     }
 
     private static GameState getCurrentState(Minecraft minecraft) {
