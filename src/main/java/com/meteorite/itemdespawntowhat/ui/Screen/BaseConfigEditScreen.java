@@ -133,9 +133,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
         addRenderableWidget(Button.builder(
                 Component.translatable("gui.itemdespawntowhat.save_to_cache"),
-                b -> {
-                    saveCurrentToCache();
-                }
+                b -> saveCurrentToCache()
         ).bounds(centerX - 160, y, 100, 20).build());
 
         addRenderableWidget(Button.builder(
@@ -185,10 +183,10 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         }
     }
 
-    // 只添加文本框组件到统一焦点管理
+    // 将按钮等不需要焦点的排除出统一焦点管理
     public boolean shouldTakeFocus(AbstractWidget widget) {
-        return widget instanceof EditBox
-                || widget instanceof SurroundingBlocksWidget;
+        return !(widget instanceof Button)
+                && !(widget instanceof CycleButton);
     }
 
     // 清除所有焦点
