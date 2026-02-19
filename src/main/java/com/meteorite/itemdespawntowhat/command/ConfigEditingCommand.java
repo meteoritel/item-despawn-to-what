@@ -12,7 +12,7 @@ public class ConfigEditingCommand {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(
-                Commands.literal("editConversionConfig")
+                Commands.literal("editConversionConfigs")
                         .requires(source -> {
                             MinecraftServer server = source.getServer();
                             // 单人模式 或 op 权限
