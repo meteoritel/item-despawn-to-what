@@ -3,7 +3,6 @@ package com.meteorite.itemdespawntowhat.ui.Screen;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.ItemToBlockConfig;
 import com.meteorite.itemdespawntowhat.ui.FormList;
-import com.meteorite.itemdespawntowhat.ui.SuggestionWidget;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
