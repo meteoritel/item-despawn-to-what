@@ -13,10 +13,10 @@
   "gui.itemdespawntowhat.edit.need_outdoor": "需要露天",
   "gui.itemdespawntowhat.edit.surrounding_blocks": "六面的方块",
   "gui.itemdespawntowhat.edit.result_id": "结果ID",
-  "gui.itemdespawntowhat.edit.conversion_time": "转化时间 (单位：秒)",
+  "gui.itemdespawntowhat.edit.conversion_time": "转化时间 (单位:秒)",
   "gui.itemdespawntowhat.edit.result_multiple": "结果倍率",
   "gui.itemdespawntowhat.edit.result_limit": "结果上限",
-  "gui.itemdespawntowhat.edit.result_age": "结果年龄(小动物为-2400)",
+  "gui.itemdespawntowhat.edit.result_age": "结果年龄(小动物:-2400)",
   "gui.itemdespawntowhat.edit.radius_limit": "最大放置半径",
   "gui.itemdespawntowhat.edit.need_outdoor.on": "开",
   "gui.itemdespawntowhat.edit.need_outdoor.off": "关"

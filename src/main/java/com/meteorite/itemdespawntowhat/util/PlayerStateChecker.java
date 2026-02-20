@@ -8,7 +8,6 @@ import net.minecraft.server.MinecraftServer;
 public class PlayerStateChecker {
 
     // 如果客户端世界未加载，游戏应处于开始界面，此时isSinglePlayerMode是false，因为世界加载前不会为其赋值
-
     public static boolean isClientWorldLoaded(Minecraft minecraft) {
         return minecraft.level != null && minecraft.player != null;
     }
@@ -39,8 +38,6 @@ public class PlayerStateChecker {
             return false;
         }
         ClientPacketListener connection = minecraft.getConnection();
-        return connection != null
-                && connection.getConnection() != null
-                && connection.getConnection().isConnected();
+        return connection != null && connection.getConnection().isConnected();
     }
 }

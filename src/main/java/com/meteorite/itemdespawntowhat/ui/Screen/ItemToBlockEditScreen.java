@@ -3,7 +3,9 @@ package com.meteorite.itemdespawntowhat.ui.Screen;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.ItemToBlockConfig;
 import com.meteorite.itemdespawntowhat.ui.FormList;
+import com.meteorite.itemdespawntowhat.ui.SuggestionWidget;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 
 public class ItemToBlockEditScreen extends BaseConfigEditScreen<ItemToBlockConfig>{
@@ -18,6 +20,9 @@ public class ItemToBlockEditScreen extends BaseConfigEditScreen<ItemToBlockConfi
     protected void addCustomEntries(FormList fromList) {
         radiusLimitInput = numericBox();
         fromList.add(Component.translatable(LABEL_PREFIX + "radius limit"), radiusLimitInput);
+
+        resultIdSuggestion = registerSuggestion(resultIdInput, BuiltInRegistries.BLOCK);
+        addSuggestionListener(resultIdInput, resultIdSuggestion);
     }
 
     @Override

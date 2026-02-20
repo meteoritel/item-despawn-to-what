@@ -4,6 +4,7 @@ import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.ItemToEntityConfig;
 import com.meteorite.itemdespawntowhat.ui.FormList;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 
 public class ItemToEntityEditScreen extends BaseConfigEditScreen<ItemToEntityConfig> {
@@ -21,6 +22,9 @@ public class ItemToEntityEditScreen extends BaseConfigEditScreen<ItemToEntityCon
 
         fromList.add(Component.translatable(LABEL_PREFIX + "result_limit"), resultLimitInput);
         fromList.add(Component.translatable(LABEL_PREFIX + "result_age"), entityAgeInput);
+
+        resultIdSuggestion = registerSuggestion(resultLimitInput, BuiltInRegistries.ENTITY_TYPE);
+        addSuggestionListener(resultIdInput, resultIdSuggestion);
     }
 
     @Override

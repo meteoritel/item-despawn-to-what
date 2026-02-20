@@ -19,5 +19,8 @@
   "gui.itemdespawntowhat.edit.result_age": "Result Age(e.g. baby mob:-2400)",
   "gui.itemdespawntowhat.edit.radius_limit": "Radius Limit",
   "gui.itemdespawntowhat.edit.need_outdoor.on": "ON",
-  "gui.itemdespawntowhat.edit.need_outdoor.off": "OFF"
+  "gui.itemdespawntowhat.edit.need_outdoor.off": "OFF",
+
+  "key.category.itemdespawntowhat.general": "Item Depsawn To What",
+  "key.itemdespawntowhat.open_gui": "Open editing GUI"
 }

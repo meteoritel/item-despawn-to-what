@@ -6,18 +6,23 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.ContainerObjectSelectionList;
+import net.minecraft.client.gui.components.events.ContainerEventHandler;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.NarratableEntry;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
 public class FormList extends ContainerObjectSelectionList<FormList.Entry> {
 
-    public static final int BASE_X = 30;
-    private static final int LABEL_WIDTH = 100;
-    public static final int GAP = 30;
+    private static final int BASE_X = 20;
+    private static final int LABEL_WIDTH = 80;
+    private static final int GAP = 30;
+
+    // 每个组件上下各留的边距
+    private static final int ITEM_PADDING = 6;
 
     public FormList(Minecraft mc, int width, int height, int y, int itemHeight) {
         super(mc, width, height, y, itemHeight);
@@ -33,6 +38,100 @@ public class FormList extends ContainerObjectSelectionList<FormList.Entry> {
         return 340;
     }
 
+    // 根据widget实际高度来计算列表元素的行高
+    private int getEntryHeight(Entry entry) {
+        return Math.max(entry.widget.getHeight(), minecraft.font.lineHeight) + ITEM_PADDING * 2;
+    }
+
+    /*
+     * 重写：返回所有 Entry 的总高度，父类用它计算 getMaxScroll()。
+     * 父类实现是 itemHeight * getItemCount()，这里改为累加各自真实高度。
+     */
+    @Override
+    protected int getMaxPosition() {
+        int total = 0;
+        for (Entry entry : children()) {
+            total += getEntryHeight(entry);
+        }
+        return total;
+    }
+
+    /*
+     * 重写：返回第 index 个 Entry 的顶部 Y 坐标（含滚动偏移）。
+     * 父类实现是 top + 4 - scrollAmount + index * itemHeight，
+     * 这里改为累加前面所有 Entry 的真实高度。
+     */
+    @Override
+    protected int getRowTop(int index) {
+        int y = this.getY() + 4 - (int) this.getScrollAmount();
+        List<Entry> entries = children();
+        for (int i = 0; i < index && i < entries.size(); i++) {
+            y += getEntryHeight(entries.get(i));
+        }
+        return y;
+    }
+
+    // 用累加逻辑找到鼠标位置对应的 Entry，替代父类final类型的getEntryAtPosition
+    @Nullable
+    private Entry getEntryAtMouse(double mouseX, double mouseY) {
+        int halfRowWidth = this.getRowWidth() / 2;
+        int centerX = this.getX() + this.width / 2;
+        if (mouseX < centerX - halfRowWidth || mouseX > centerX + halfRowWidth) {
+            return null;
+        }
+
+        List<Entry> entries = children();
+        int currentY = this.getY() + 4 - (int) this.getScrollAmount();
+        for (Entry entry : entries) {
+            int entryHeight = getEntryHeight(entry);
+            if (mouseY >= currentY && mouseY < currentY + entryHeight) {
+                return entry;
+            }
+            currentY += entryHeight;
+        }
+        return null;
+    }
+
+    /*
+     * 重写 mouseClicked，绕过父类对 final getEntryAtPosition 的调用。
+     * 逻辑参照父类 AbstractSelectionList.mouseClicked，将 getEntryAtPosition 替换为 getEntryAtMouse。
+     */
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button != 0) {
+            return false;
+        }
+        // 让父类处理滚动条拖拽状态的更新
+        this.updateScrollingState(mouseX, mouseY, button);
+
+        if (!this.isMouseOver(mouseX, mouseY)) {
+            return false;
+        }
+
+        Entry e = getEntryAtMouse(mouseX, mouseY);
+        if (e != null) {
+            if (e.mouseClicked(mouseX, mouseY, button)) {
+                // 与父类保持一致：切换焦点时清除旧焦点
+                Entry prevFocused = this.getFocused();
+                if (prevFocused != e && prevFocused instanceof ContainerEventHandler ceh) {
+                    ceh.setFocused(null);
+                }
+                this.setFocused(e);
+                this.setDragging(true);
+                return true;
+            }
+        }
+        // 父类这里还有 clickedHeader 分支，FormList 不使用 header，省略
+        // 如果在滚动条区域则返回 true（与父类行为一致）
+        return this.isScrolling();
+    }
+
+    private boolean isScrolling() {
+        // 滚动条可见时才有意义；此处保守返回 false 不影响核心功能
+        return false;
+    }
+
+    // ===============================================================================
     public class Entry extends ContainerObjectSelectionList.Entry<Entry> {
         private final Font font;
         private final Component label;
@@ -47,16 +146,13 @@ public class FormList extends ContainerObjectSelectionList<FormList.Entry> {
         @Override
         public void render(GuiGraphics g, int index, int y, int x, int width, int height,
                            int mx, int my, boolean hovered, float pt) {
-            int labelX = BASE_X;
             int widgetX = BASE_X + LABEL_WIDTH + GAP;
 
-            int labelY  = y + (height - font.lineHeight) / 2;
-            int widgetY = y + (height - widget.getHeight()) / 2;
-
-            g.drawString(font, label, labelX, labelY, 0xE0E0E0, false);
+            int labelY  = y + (widget.getHeight()) / 2;
+            g.drawString(font, label, BASE_X, labelY, 0xE0E0E0, false);
 
             widget.setX(widgetX);
-            widget.setY(widgetY);
+            widget.setY(y);
             widget.render(g, mx, my, pt);
         }
 
@@ -67,7 +163,7 @@ public class FormList extends ContainerObjectSelectionList<FormList.Entry> {
             if (clicked
                     && minecraft.screen instanceof BaseConfigEditScreen<?> screen
                     && screen.shouldTakeFocus(widget)) {
-                screen.setFocusedInput(widget);
+                screen.setFocusedWidget(widget);
             }
             return clicked;
         }
@@ -80,17 +176,11 @@ public class FormList extends ContainerObjectSelectionList<FormList.Entry> {
 
         @Override
         public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-            if (widget.isFocused()) {
-                return widget.keyPressed(keyCode, scanCode, modifiers);
-            }
             return false;
         }
 
         @Override
         public boolean charTyped(char codePoint, int modifiers) {
-            if (widget.isFocused()) {
-                return widget.charTyped(codePoint, modifiers);
-            }
             return false;
         }
 
