@@ -18,10 +18,7 @@ public class ItemToBlockEditScreen extends BaseConfigEditScreen<ItemToBlockConfi
     @Override
     protected void addCustomEntries(FormList fromList) {
         radiusLimitInput = numericBox();
-        fromList.add(Component.translatable(LABEL_PREFIX + "radius limit"), radiusLimitInput);
-
-        resultIdSuggestion = registerSuggestion(resultIdInput, BuiltInRegistries.BLOCK);
-        addSuggestionListener(resultIdInput, resultIdSuggestion);
+        fromList.add(Component.translatable(LABEL_PREFIX + "radius_limit"), radiusLimitInput);
     }
 
     @Override
@@ -37,4 +34,9 @@ public class ItemToBlockEditScreen extends BaseConfigEditScreen<ItemToBlockConfi
         radiusLimitInput.setValue("");
     }
 
+    @Override
+    protected void addCustomSuggestion() {
+        resultIdSuggestion = registerSuggestion(resultIdInput, BuiltInRegistries.BLOCK);
+        addSuggestionListener(resultIdInput, resultIdSuggestion);
+    }
 }

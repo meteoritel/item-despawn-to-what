@@ -22,9 +22,6 @@ public class ItemToEntityEditScreen extends BaseConfigEditScreen<ItemToEntityCon
 
         fromList.add(Component.translatable(LABEL_PREFIX + "result_limit"), resultLimitInput);
         fromList.add(Component.translatable(LABEL_PREFIX + "result_age"), entityAgeInput);
-
-        resultIdSuggestion = registerSuggestion(resultLimitInput, BuiltInRegistries.ENTITY_TYPE);
-        addSuggestionListener(resultIdInput, resultIdSuggestion);
     }
 
     @Override
@@ -43,4 +40,9 @@ public class ItemToEntityEditScreen extends BaseConfigEditScreen<ItemToEntityCon
         entityAgeInput.setValue("");
     }
 
+    @Override
+    protected void addCustomSuggestion() {
+        resultIdSuggestion = registerSuggestion(resultIdInput, BuiltInRegistries.ENTITY_TYPE);
+        addSuggestionListener(resultIdInput, resultIdSuggestion);
+    }
 }

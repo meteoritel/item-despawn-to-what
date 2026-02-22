@@ -126,23 +126,20 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         formList.add(Component.translatable(LABEL_PREFIX + "result_id"), resultIdInput);
         formList.add(Component.translatable(LABEL_PREFIX + "conversion_time"), conversionTimeInput);
         formList.add(Component.translatable(LABEL_PREFIX + "result_multiple"), resultMultipleInput);
-
-        // 注册文本自动补全组件，在所有列表组件添加完成之后再添加
-        itemIdSuggestion = registerSuggestion(itemIdInput, BuiltInRegistries.ITEM);
-        for (EditBox box : surroundingWidget.getBoxes().values()) {
-            sbSuggestions.add(registerSuggestion(box, BuiltInRegistries.BLOCK));
-        }
-
-        // 添加文本监听，用于自动补全
-        addSuggestionListener(itemIdInput, itemIdSuggestion);
-        int index = 0;
-        for (EditBox box : surroundingWidget.getBoxes().values()) {
-            addSuggestionListener(box, sbSuggestions.get(index));
-            index++;
-        }
-
         // 将子类字段加入列表
         addCustomEntries(formList);
+        // 注册下拉建议框组件，在所有列表组件添加完成之后再添加，并添加文本监听
+        itemIdSuggestion = registerSuggestion(itemIdInput, BuiltInRegistries.ITEM);
+        for (EditBox box : surroundingWidget.getBoxes().values()) {
+            SuggestionWidget widget = registerSuggestion(box, BuiltInRegistries.BLOCK);
+            sbSuggestions.add(widget);
+            addSuggestionListener(box,widget);
+        }
+        addSuggestionListener(itemIdInput, itemIdSuggestion);
+
+        // 添加子类下拉建议框监听
+        addCustomSuggestion();
+
         initButtons();
         clearFields();
     }
@@ -335,12 +332,14 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
             guiGraphics.drawString(font, cacheInfo, width - 80, 12, 0xFFFF00);
         }
 
-        guiGraphics.flush();
-
+        // 因为文本的按钮文本开启了深度测试，所以需要把z值拉高
+        guiGraphics.pose().pushPose();
+        guiGraphics.pose().translate(0, 0, 300);
         // 建议下拉框要最后渲染
         for (SuggestionWidget widget : suggestionWidgets) {
             renderSuggestion(guiGraphics, mouseX, mouseY, widget);
         }
+        guiGraphics.pose().popPose();
     }
 
     // 返回上一级
@@ -390,7 +389,6 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     public AbstractWidget getFocusedWidget() {
         return focusedWidget;
     }
-
 
     // ========== 输入相关 ========== //
     @Override
@@ -491,8 +489,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         return super.charTyped(codePoint, modifiers);
     }
 
-    // ========== 悬浮建议框框方法 ========== //
-
+    // ========== 悬浮建议下拉框方法 ========== //
     // 渲染建议下拉框
     protected void renderSuggestion(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, SuggestionWidget suggestionWidget) {
         if (suggestionWidget.isVisible()) {
@@ -530,4 +527,5 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     protected abstract T createConfigFromFields();
     // 清空子类组件
     protected abstract void clearCustomFields();
+    protected abstract void addCustomSuggestion();
 }

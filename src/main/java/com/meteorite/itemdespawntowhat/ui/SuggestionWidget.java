@@ -187,7 +187,6 @@ public class SuggestionWidget {
             applySuggestion(suggestions.get(idx));
             return true;
         }
-
         return false;
     }
 
@@ -207,20 +206,21 @@ public class SuggestionWidget {
                 selectedIndex = scrollOffset + MAX_VISIBLE - 1;
             }
         }
-
         return true;
     }
 
     // ========== 渲染 ========== //
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         if (!visible || suggestions.isEmpty()) return;
-
+        if (attachedBox.getX() == 0 && attachedBox.getY() == 0) return;
         // 渲染选择框
         int visibleCount = Math.min(MAX_VISIBLE, suggestions.size());
         int dropdownX = attachedBox.getX();
         int dropdownY = attachedBox.getY() + attachedBox.getHeight();
+
         int dropdownWidth = attachedBox.getWidth();
         int dropdownHeight = visibleCount * ENTRY_HEIGHT + PADDING * 2;
+
 
         // 背景
         guiGraphics.fill(dropdownX, dropdownY, dropdownX + dropdownWidth, dropdownY + dropdownHeight, 0xD0000000);

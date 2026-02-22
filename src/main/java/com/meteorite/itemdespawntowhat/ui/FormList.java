@@ -38,6 +38,15 @@ public class FormList extends ContainerObjectSelectionList<FormList.Entry> {
         return 340;
     }
 
+    @Override
+    protected int getRowBottom(int index) {
+        List<Entry> entries = children();
+        if (index < 0 || index >= entries.size()) {
+            return getRowTop(index) + itemHeight;
+        }
+        return getRowTop(index) + getEntryHeight(entries.get(index));
+    }
+
     // 根据widget实际高度来计算列表元素的行高
     private int getEntryHeight(Entry entry) {
         return Math.max(entry.widget.getHeight(), minecraft.font.lineHeight) + ITEM_PADDING * 2;
@@ -92,10 +101,7 @@ public class FormList extends ContainerObjectSelectionList<FormList.Entry> {
         return null;
     }
 
-    /*
-     * 重写 mouseClicked，绕过父类对 final getEntryAtPosition 的调用。
-     * 逻辑参照父类 AbstractSelectionList.mouseClicked，将 getEntryAtPosition 替换为 getEntryAtMouse。
-     */
+    // 重写 mouseClicked，绕过父类对 final getEntryAtPosition 的调用
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button != 0) {
@@ -111,7 +117,7 @@ public class FormList extends ContainerObjectSelectionList<FormList.Entry> {
         Entry e = getEntryAtMouse(mouseX, mouseY);
         if (e != null) {
             if (e.mouseClicked(mouseX, mouseY, button)) {
-                // 与父类保持一致：切换焦点时清除旧焦点
+                // 切换焦点时清除旧焦点
                 Entry prevFocused = this.getFocused();
                 if (prevFocused != e && prevFocused instanceof ContainerEventHandler ceh) {
                     ceh.setFocused(null);
@@ -121,15 +127,20 @@ public class FormList extends ContainerObjectSelectionList<FormList.Entry> {
                 return true;
             }
         }
-        // 父类这里还有 clickedHeader 分支，FormList 不使用 header，省略
-        // 如果在滚动条区域则返回 true（与父类行为一致）
-        return this.isScrolling();
+        // 拖拽的时候还有问题，之后再解决
+        return this.isScrollBarVisible() && isScrolling(mouseX, mouseY);
     }
 
-    private boolean isScrolling() {
-        // 滚动条可见时才有意义；此处保守返回 false 不影响核心功能
-        return false;
+    private boolean isScrolling(double mouseX, double mouseY) {
+        int scrollBarX = this.getX() + this.getRowWidth() - 6;
+        return mouseX >= scrollBarX && mouseX <= scrollBarX + 6
+                && mouseY >= this.getY() && mouseY <= this.getBottom();
     }
+
+    private boolean isScrollBarVisible() {
+        return this.getMaxScroll() > 0;
+    }
+
 
     // ===============================================================================
     public class Entry extends ContainerObjectSelectionList.Entry<Entry> {
@@ -148,7 +159,7 @@ public class FormList extends ContainerObjectSelectionList<FormList.Entry> {
                            int mx, int my, boolean hovered, float pt) {
             int widgetX = BASE_X + LABEL_WIDTH + GAP;
 
-            int labelY  = y + (widget.getHeight()) / 2;
+            int labelY  = y + widget.getHeight() / 2 - font.lineHeight / 2;
             g.drawString(font, label, BASE_X, labelY, 0xE0E0E0, false);
 
             widget.setX(widgetX);
