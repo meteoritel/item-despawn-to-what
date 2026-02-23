@@ -32,9 +32,8 @@ import static com.meteorite.itemdespawntowhat.ItemDespawnToWhat.MOD_ID;
 
 @EventBusSubscriber(modid = MOD_ID)
 public class ItemConversionEvent {
-
     private static final Logger LOGGER = LogManager.getLogger();
-
+    // 标签
     public static final String CHECK_TAG = MOD_ID + ":needs_check";
     public static final String TIMER_TAG = MOD_ID + ":check_timer";
     public static final String SELECTED_CONFIG_TAG = MOD_ID + ":selected_config";

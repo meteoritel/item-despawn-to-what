@@ -2,7 +2,6 @@ package com.meteorite.itemdespawntowhat.config.handler;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.google.gson.reflect.TypeToken;
 import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
 import com.meteorite.itemdespawntowhat.config.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
@@ -32,8 +31,6 @@ public abstract class BaseConfigHandler<T extends BaseConversionConfig> {
 
     protected final String fileName;
     protected final Type listType;
-    protected List<T> lastLoadedConfigs = null;
-    protected boolean configsChanged = false;
     protected final ConfigType configType;
 
     public BaseConfigHandler(ConfigType configType) {
@@ -87,11 +84,6 @@ public abstract class BaseConfigHandler<T extends BaseConversionConfig> {
 
             entries.removeIf(entry -> !isValidEntry(entry));
 
-            // 检查配置是否变化
-            configsChanged = !entries.equals(lastLoadedConfigs);
-            // 缓存上次配置
-            lastLoadedConfigs = new ArrayList<>(entries);
-
             LOGGER.debug("Loaded {} entries from {}", entries.size(), configPath);
         } catch (Exception e) {
             LOGGER.error("Failed to read configuration file: {}", fileName, e);
@@ -115,7 +107,7 @@ public abstract class BaseConfigHandler<T extends BaseConversionConfig> {
     }
 
     // 序列化配置列表为JSON字符串，用于数据传输
-    public String serializeToJson(List<T> configs) throws IOException {
+    public String serializeToJson(List<T> configs) {
         return GSON.toJson(configs);
     }
 

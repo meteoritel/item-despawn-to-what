@@ -141,7 +141,6 @@ public class FormList extends ContainerObjectSelectionList<FormList.Entry> {
         return this.getMaxScroll() > 0;
     }
 
-
     // ===============================================================================
     public class Entry extends ContainerObjectSelectionList.Entry<Entry> {
         private final Font font;

@@ -13,6 +13,7 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.InputEvent;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 
+// 客户端输入事件类：按键注册，按钮注册
 @EventBusSubscriber(modid = ItemDespawnToWhat.MOD_ID)
 public class ClientInputEvents {
     @SubscribeEvent

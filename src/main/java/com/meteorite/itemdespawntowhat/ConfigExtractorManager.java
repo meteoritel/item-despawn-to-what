@@ -31,7 +31,6 @@ public class ConfigExtractorManager {
 
     private ConfigExtractorManager() {
         throw new UnsupportedOperationException("Utility class");
-
     }
 
     // 初始化所有缓存

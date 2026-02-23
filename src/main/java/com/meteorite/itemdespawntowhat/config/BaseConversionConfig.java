@@ -10,7 +10,6 @@ import net.minecraft.world.entity.item.ItemEntity;
 import java.util.Optional;
 import java.util.UUID;
 
-
 public abstract class BaseConversionConfig {
     // 内部唯一标识符，不会进行序列化
     protected transient String internalId;
@@ -103,11 +102,10 @@ public abstract class BaseConversionConfig {
 
         String dimension = Optional.ofNullable(this.getDimension()).orElse("");
         return ConditionCheckerUtil.buildCombinedChecker(dimension, this.isNeedOutdoor(), this.getSurroundingBlocks());
-
     }
 
     // ========== 子类方法 ========== //
-    // 获取当前配置输入物品周围的结果数量，由子类重写
+    // 获取当前配置输入物品周围的结果数量
     public abstract int countNearbyResult(ItemEntity itemEntity);
     // 当前的周围结果数量是否已经超过了上限
     public abstract boolean isResultLimitExceeded(ItemEntity itemEntity);
@@ -121,7 +119,7 @@ public abstract class BaseConversionConfig {
 
     // 转化倍率最小为1
     public int getResultMultiple() {
-        return  Math.max(1, resultMultiple);
+        return Math.max(1, resultMultiple);
     }
 
     public String getInternalId() {
