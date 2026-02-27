@@ -28,6 +28,9 @@ import java.util.List;
 public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> extends Screen
         implements Callback<T>, ListScreenCallback<T> {
 
+    protected T draftConfig;
+    protected boolean listEditPerformed;
+
     protected static final Logger LOGGER = LogManager.getLogger();
     protected static final String LABEL_PREFIX = "gui.itemdespawntowhat.edit.";
     protected static final int BOX_WIDTH = 240;
@@ -180,6 +183,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
     @Override
     public void onEditRequested(ConfigListPanel.EntrySource source, int indexInSource) {
+        listEditPerformed = true;
         editHandler.startEditConfig(source, indexInSource, this);
     }
 
@@ -190,6 +194,16 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
     @Override
     public void onListScreenClosed() {
+        if (!listEditPerformed && draftConfig != null) {
+            onRefillFields(draftConfig);
+            // 隐藏所有建议框，避免自动弹出
+            for (SuggestionWidget widget : suggestionWidgets) {
+                widget.hide();
+            }
+        }
+        // 重置标志和草稿，避免下次误用
+        listEditPerformed = false;
+        draftConfig = null;
         refreshConfigListButton();
     }
 
@@ -218,6 +232,8 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
     // 打开配置列表screen
     private void openConfigListScreen() {
+        draftConfig = buildConfigFromFields();
+        listEditPerformed = false;
         if (minecraft != null) {
             minecraft.setScreen(new ConfigListScreen<>(this, editHandler, this));
         }

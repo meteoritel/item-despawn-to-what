@@ -75,10 +75,10 @@ public class ConfigListScreen<T extends BaseConversionConfig> extends Screen {
 
     @Override
     public void onClose() {
-        listCallback.onListScreenClosed();
         if (minecraft != null) {
             minecraft.setScreen(parentScreen);
         }
+        listCallback.onListScreenClosed();
     }
 
     // ========== 渲染 ========== //
@@ -86,11 +86,9 @@ public class ConfigListScreen<T extends BaseConversionConfig> extends Screen {
     @Override
     public void render(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         super.render(guiGraphics, mouseX, mouseY, partialTick);
-
-        // 标题
         guiGraphics.drawCenteredString(font, title, width / 2, 12, 0xFFFFFF);
 
-        // 统计行（右上角）
+        // 统计行
         int total   = editHandler.getOriginalConfigs().size() + editHandler.getPendingConfigs().size();
         int pending = editHandler.getPendingConfigs().size();
         String stat = "Total: " + total + "  Pending: " + pending;
