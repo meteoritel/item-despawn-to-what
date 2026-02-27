@@ -15,12 +15,14 @@ public class ItemToBlockConfig extends BaseConversionConfig{
     public ItemToBlockConfig() {
         super();
         this.configType = ConfigType.ITEM_TO_BLOCK;
+        this.registry = BuiltInRegistries.BLOCK;
     }
 
     public ItemToBlockConfig(ResourceLocation item, ResourceLocation resultBlock) {
         super(item, resultBlock);
         this.radius = MAX_RADIUS;
         this.configType = ConfigType.ITEM_TO_BLOCK;
+        this.registry = BuiltInRegistries.BLOCK;
     }
 
     public Block getResultBlock() {

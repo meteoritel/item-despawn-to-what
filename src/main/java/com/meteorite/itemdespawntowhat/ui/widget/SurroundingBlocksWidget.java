@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.ui;
+package com.meteorite.itemdespawntowhat.ui.widget;
 
 import com.meteorite.itemdespawntowhat.config.ConfigDirection;
 import com.meteorite.itemdespawntowhat.config.SurroundingBlocks;
@@ -134,9 +134,16 @@ public class SurroundingBlocksWidget extends AbstractWidget {
     protected void updateWidgetNarration(@NotNull NarrationElementOutput narration) { }
 
     public SurroundingBlocks getValue() {
-        SurroundingBlocks sb = new SurroundingBlocks();
-        boxes.forEach((dir, box) -> sb.set(dir, box.getValue()));
-        return sb;
+        SurroundingBlocks sbs = new SurroundingBlocks();
+        boxes.forEach((dir, box) -> sbs.set(dir, box.getValue()));
+        return sbs;
+    }
+
+    public void setValue(@NotNull SurroundingBlocks sbs) {
+        boxes.forEach((dir, box) -> {
+            String value = sbs.get(dir);
+            box.setValue(value != null ? value : "");
+        });
     }
 
     public void clear() {

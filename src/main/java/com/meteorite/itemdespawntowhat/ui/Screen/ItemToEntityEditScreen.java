@@ -2,7 +2,7 @@ package com.meteorite.itemdespawntowhat.ui.Screen;
 
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.ItemToEntityConfig;
-import com.meteorite.itemdespawntowhat.ui.FormList;
+import com.meteorite.itemdespawntowhat.ui.widget.FormListPanel;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -16,7 +16,7 @@ public class ItemToEntityEditScreen extends BaseConfigEditScreen<ItemToEntityCon
     }
 
     @Override
-    protected void addCustomEntries(FormList fromList) {
+    protected void addCustomEntries(FormListPanel fromList) {
         resultLimitInput = numericBox();
         entityAgeInput = numericBox();
 
@@ -27,11 +27,15 @@ public class ItemToEntityEditScreen extends BaseConfigEditScreen<ItemToEntityCon
     @Override
     protected ItemToEntityConfig createConfigFromFields() {
         ItemToEntityConfig config = new ItemToEntityConfig();
-        populateCommonFields(config); // 填充通用字段
+        populateCommonFields(config);
+        populateCustomFields(config);
+        return config;
+    }
+
+    @Override
+    protected void populateCustomFields(ItemToEntityConfig config) {
         config.setResultLimit(parseInt(resultLimitInput.getValue(), 30));
         config.setEntityAge(parseInt(entityAgeInput.getValue(), 0));
-
-        return config;
     }
 
     @Override
@@ -41,8 +45,15 @@ public class ItemToEntityEditScreen extends BaseConfigEditScreen<ItemToEntityCon
     }
 
     @Override
+    protected void refillCustomFields(ItemToEntityConfig config) {
+        resultLimitInput.setValue(String.valueOf(config.getResultLimit()));
+        entityAgeInput.setValue(String.valueOf(config.getEntityAge()));
+    }
+
+    @Override
     protected void addCustomSuggestion() {
         resultIdSuggestion = registerSuggestion(resultIdInput, BuiltInRegistries.ENTITY_TYPE);
         addSuggestionListener(resultIdInput, resultIdSuggestion);
     }
+
 }

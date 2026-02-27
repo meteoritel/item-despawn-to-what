@@ -81,10 +81,10 @@ public class SurroundingBlocks {
         return switch(dir) {
             case NORTH -> north;
             case SOUTH -> south;
-            case EAST  -> east;
-            case WEST  -> west;
-            case UP    -> up;
-            case DOWN  -> down;
+            case EAST -> east;
+            case WEST -> west;
+            case UP -> up;
+            case DOWN -> down;
         };
     }
 
@@ -92,10 +92,10 @@ public class SurroundingBlocks {
         switch (dir) {
             case NORTH -> north = value;
             case SOUTH -> south = value;
-            case EAST  -> east = value;
-            case WEST  -> west = value;
-            case UP    -> up = value;
-            case DOWN  -> down = value;
+            case EAST -> east = value;
+            case WEST -> west = value;
+            case UP -> up = value;
+            case DOWN -> down = value;
         }
     }
 

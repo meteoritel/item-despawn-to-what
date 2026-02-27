@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.ui;
+package com.meteorite.itemdespawntowhat.ui.widget;
 
 
 import net.minecraft.client.gui.Font;
@@ -14,6 +14,7 @@ import java.util.stream.Collectors;
 /*
  * 物品ID输入建议组件
  * 支持逗号分隔，Tab补全，上下键选择
+ * 逗号分隔似乎没用了，要改成列表
  */
 public class SuggestionWidget {
     private static final int MAX_FETCH = 100;       // 最多匹配条数
@@ -220,7 +221,6 @@ public class SuggestionWidget {
 
         int dropdownWidth = attachedBox.getWidth();
         int dropdownHeight = visibleCount * ENTRY_HEIGHT + PADDING * 2;
-
 
         // 背景
         guiGraphics.fill(dropdownX, dropdownY, dropdownX + dropdownWidth, dropdownY + dropdownHeight, 0xD0000000);

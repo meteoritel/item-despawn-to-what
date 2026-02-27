@@ -18,12 +18,14 @@ public class ItemToItemConfig extends BaseConversionConfig{
     public ItemToItemConfig() {
         super();
         this.configType = ConfigType.ITEM_TO_ITEM;
+        this.registry = BuiltInRegistries.ITEM;
     }
 
     public ItemToItemConfig(ResourceLocation item, ResourceLocation resultItem) {
         super(item, resultItem);
         this.resultLimit = DEFAULT_RESULT_LIMIT;
         this.configType = ConfigType.ITEM_TO_ITEM;
+        this.registry = BuiltInRegistries.ITEM;
     }
 
     // 物品转化需要保证转化前后结果不同，防止循环转化

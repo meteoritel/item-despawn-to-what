@@ -21,6 +21,7 @@ public class ItemToEntityConfig extends BaseConversionConfig{
     public ItemToEntityConfig() {
         super();
         this.configType = ConfigType.ITEM_TO_ENTITY;
+        this.registry = BuiltInRegistries.ENTITY_TYPE;
     }
 
     public ItemToEntityConfig(ResourceLocation item, ResourceLocation resultEntity) {
@@ -28,6 +29,7 @@ public class ItemToEntityConfig extends BaseConversionConfig{
         this.resultLimit = DEFAULT_RESULT_LIMIT;
         this.entityAge = 0;
         this.configType = ConfigType.ITEM_TO_ENTITY;
+        this.registry = BuiltInRegistries.ENTITY_TYPE;
     }
 
     public EntityType<?> getResultEntityType() {

@@ -4,6 +4,7 @@ import com.google.gson.annotations.SerializedName;
 import com.meteorite.itemdespawntowhat.condition.ConditionChecker;
 import com.meteorite.itemdespawntowhat.condition.ConditionCheckerUtil;
 import com.meteorite.itemdespawntowhat.util.JsonOrder;
+import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.item.ItemEntity;
 
@@ -11,9 +12,10 @@ import java.util.Optional;
 import java.util.UUID;
 
 public abstract class BaseConversionConfig {
-    // 内部唯一标识符，不会进行序列化
+    // 内部标识符，不会进行序列化
     protected transient String internalId;
     protected transient ConfigType configType;
+    protected transient Registry<?> registry;
     // 基础限制实体数量，没有规定实体数量的时候返回这个值
     protected static final int DEFAULT_RESULT_LIMIT = 30;
     // 检查限制的范围
@@ -104,6 +106,10 @@ public abstract class BaseConversionConfig {
         return ConditionCheckerUtil.buildCombinedChecker(dimension, this.isNeedOutdoor(), this.getSurroundingBlocks());
     }
 
+    public String getSummary() {
+        return getItemId().toString() + " -> " + getResultId().toString();
+    }
+
     // ========== 子类方法 ========== //
     // 获取当前配置输入物品周围的结果数量
     public abstract int countNearbyResult(ItemEntity itemEntity);
@@ -192,5 +198,8 @@ public abstract class BaseConversionConfig {
     // config类型只能获取不能设置
     public ConfigType getConfigType() {
         return configType;
+    }
+    public Registry<?> getRegistry() {
+        return registry;
     }
 }

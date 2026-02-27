@@ -1,45 +1,39 @@
 package com.meteorite.itemdespawntowhat.ui.Screen;
 
-import com.meteorite.itemdespawntowhat.ConfigExtractorManager;
-import com.meteorite.itemdespawntowhat.ConfigManager;
 import com.meteorite.itemdespawntowhat.config.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
-import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
-import com.meteorite.itemdespawntowhat.network.SaveConfigPayload;
-import com.meteorite.itemdespawntowhat.ui.FormList;
-import com.meteorite.itemdespawntowhat.ui.SuggestionWidget;
-import com.meteorite.itemdespawntowhat.ui.SurroundingBlocksWidget;
-import com.meteorite.itemdespawntowhat.util.PlayerStateChecker;
-import net.minecraft.client.Minecraft;
+import com.meteorite.itemdespawntowhat.ui.BaseConfigEditHandler;
+import com.meteorite.itemdespawntowhat.ui.Callback;
+import com.meteorite.itemdespawntowhat.ui.ListScreenCallback;
+import com.meteorite.itemdespawntowhat.ui.widget.ConfigListPanel;
+import com.meteorite.itemdespawntowhat.ui.widget.FormListPanel;
+import com.meteorite.itemdespawntowhat.ui.widget.SuggestionWidget;
+import com.meteorite.itemdespawntowhat.ui.widget.SurroundingBlocksWidget;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.*;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.neoforged.neoforge.network.PacketDistributor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> extends Screen {
+public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> extends Screen
+        implements Callback<T>, ListScreenCallback<T> {
+
     protected static final Logger LOGGER = LogManager.getLogger();
     protected static final String LABEL_PREFIX = "gui.itemdespawntowhat.edit.";
-    protected static final int  BOX_WIDTH = 240;
-
-    // 配置相关
-    protected final ConfigType configType;
-    protected final BaseConfigHandler<T> handler;
-    protected final List<T> originalConfigs;
-    protected final List<T> pendingConfigs;
-
+    protected static final int BOX_WIDTH = 240;
+    // 后端处理器
+    protected final BaseConfigEditHandler<T> editHandler;
     // UI 组件
     protected EditBox itemIdInput;
     protected EditBox dimensionInput;
@@ -48,47 +42,23 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     protected EditBox resultIdInput;
     protected EditBox conversionTimeInput;
     protected EditBox resultMultipleInput;
-
     // UI 组件列表
-    protected FormList formList;
-    // 物品ID建议组件
+    protected FormListPanel formList;
+    // 下拉建议框组件
     protected SuggestionWidget itemIdSuggestion;
     protected SuggestionWidget resultIdSuggestion;
     // 周围方块组件有6个文本框，需要定义多个建议组件
-    protected List<SuggestionWidget> sbSuggestions = new ArrayList<>();
-
+    protected final List<SuggestionWidget> sbSuggestions = new ArrayList<>();
     // 存储所有建议组件的列表
     protected final List<SuggestionWidget> suggestionWidgets = new ArrayList<>();
-    // 游戏主类实例
-    Minecraft mc;
     // 聚焦的组件
     protected AbstractWidget focusedWidget;
+    // 右上角配置列表按钮
+    private Button configListButton;
 
     public BaseConfigEditScreen(ConfigType configType) {
         super(Component.translatable("gui.itemdespawntowhat.edit.title", configType.getFileName()));
-        this.mc = Minecraft.getInstance();
-        this.configType = configType;
-        this.handler = ConfigManager.getInstance().getHandler(configType);
-        if (handler == null) {
-            throw new IllegalStateException("No handler registered for " + configType);
-        }
-
-        List<T> configs = new ArrayList<>();
-
-        if (!PlayerStateChecker.isClientWorldLoaded(mc)) {
-            // 处于游戏主页面，缓存还未加载，需要手动加载本地文件
-            configs = handler.loadConfig();
-        }
-
-        if(PlayerStateChecker.isSinglePlayerServerReady(mc)
-                || PlayerStateChecker.isMultiPlayerServerConnected(mc)) {
-            // 服务端已经加载，那就直接读取缓存
-            configs = ConfigExtractorManager.getConfigByType(configType);
-            LOGGER.debug("Read cache from {} , count is {}", this.configType.name(), configs.size());
-        }
-
-        this.originalConfigs = configs;
-        this.pendingConfigs = new ArrayList<>();
+        this.editHandler = new BaseConfigEditHandler<>(configType);
     }
 
     @Override
@@ -96,7 +66,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         super.init();
         focusedWidget = null;
 
-        formList = new FormList(
+        formList = new FormListPanel(
                 minecraft,
                 width,
                 height - 80,
@@ -130,12 +100,12 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         addCustomEntries(formList);
         // 注册下拉建议框组件，在所有列表组件添加完成之后再添加，并添加文本监听
         itemIdSuggestion = registerSuggestion(itemIdInput, BuiltInRegistries.ITEM);
+        addSuggestionListener(itemIdInput, itemIdSuggestion);
         for (EditBox box : surroundingWidget.getBoxes().values()) {
             SuggestionWidget widget = registerSuggestion(box, BuiltInRegistries.BLOCK);
             sbSuggestions.add(widget);
             addSuggestionListener(box,widget);
         }
-        addSuggestionListener(itemIdInput, itemIdSuggestion);
 
         // 添加子类下拉建议框监听
         addCustomSuggestion();
@@ -150,19 +120,108 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
         addRenderableWidget(Button.builder(
                 Component.translatable("gui.itemdespawntowhat.save_to_cache"),
-                b -> saveCurrentToCache()
+                b -> editHandler.saveCurrentToCache(this)
         ).bounds(centerX - 160, y, 100, 20).build());
 
         addRenderableWidget(Button.builder(
                 Component.translatable("gui.itemdespawntowhat.apply_to_file"),
-                b -> applyToFile()
+                b -> editHandler.applyToFile(this)
         ).bounds(centerX - 50, y, 100, 20).build());
 
         addRenderableWidget(Button.builder(
                 Component.translatable("gui.cancel"),
                 b -> onClose()
         ).bounds(centerX + 60, y, 100, 20).build());
+
+        // 右上角配置列表按钮
+        configListButton = Button.builder(
+                buildConfigListButtonLabel(),
+                b -> openConfigListScreen()
+        ).bounds(width - 110, 6, 100, 16).build();
+        addRenderableWidget(configListButton);
     }
+
+    // ========== Callback 接口实现 =========== //
+    @Override
+    public void onClearFields() {
+        clearFields();
+    }
+
+    @Override
+    public T buildConfigFromFields() {
+        return createConfigFromFields();
+    }
+
+    @Override
+    public void onRefillFields(T config) {
+        refillCommonFields(config);
+        refillCustomFields(config);
+    }
+
+    @Override
+    public void onListChanged() {
+        refreshConfigListButton();
+    }
+
+    @Override
+    public void onClose() {
+        List<?> pending = editHandler.getPendingConfigs();
+        if (!pending.isEmpty()) {
+            LOGGER.info("Discarding {} unsaved configs", pending.size());
+        }
+        if (minecraft != null) {
+            minecraft.setScreen(new ConfigSelectionScreen());
+        }
+    }
+
+    // ========== ListScreenCallback 实现 ========== //
+
+    @Override
+    public void onEditRequested(ConfigListPanel.EntrySource source, int indexInSource) {
+        editHandler.startEditConfig(source, indexInSource, this);
+    }
+
+    @Override
+    public void onDeleteRequested(ConfigListPanel.EntrySource source, int indexInSource) {
+        editHandler.deleteConfig(source, indexInSource, this);
+    }
+
+    @Override
+    public void onListScreenClosed() {
+        refreshConfigListButton();
+    }
+
+
+// ============================
+
+    private Component buildConfigListButtonLabel() {
+        int total = editHandler.getOriginalConfigs().size()
+                + editHandler.getPendingConfigs().size();
+        int pending = editHandler.getPendingConfigs().size();
+
+        if (pending > 0) {
+            // 橙色星号标注待定条目
+            return Component.literal("★ Configs: " + total + " (+" + pending + ")");
+        } else {
+            return Component.literal("☰ Configs: " + total);
+        }
+    }
+
+    // 刷新右上角按钮文字，每次列表变化后调用
+    private void refreshConfigListButton() {
+        if (configListButton != null) {
+            configListButton.setMessage(buildConfigListButtonLabel());
+        }
+    }
+
+    // 打开配置列表screen
+    private void openConfigListScreen() {
+        if (minecraft != null) {
+            minecraft.setScreen(new ConfigListScreen<>(this, editHandler, this));
+        }
+    }
+
+
 
     // ========== 辅助布局方法 ========== //
 
@@ -180,19 +239,15 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         return box;
     }
 
-    // ========== 通用字段处理 ========== //
+    // ========== 字段处理 ========== //
 
     // 填充通用字段到给定的配置对象
     protected void populateCommonFields(T config) {
-        if (itemIdInput.getValue().isEmpty() || resultIdInput.getValue().isEmpty()) {
-            return;
-        }
-
-        config.setItemId(ResourceLocation.tryParse(itemIdInput.getValue()));
+        config.setItemId(parseResourceLocation(itemIdInput.getValue()));
         config.setDimension(dimensionInput.getValue().isEmpty() ? null : dimensionInput.getValue());
         config.setNeedOutdoor(needOutdoorButton.getValue());
         config.setSurroundingBlocks(surroundingWidget.getValue());
-        config.setResultId(ResourceLocation.tryParse(resultIdInput.getValue()));
+        config.setResultId(parseResourceLocation(resultIdInput.getValue()));
         config.setConversionTime(parseInt(conversionTimeInput.getValue(),300));
         config.setResultMultiple(parseInt(resultMultipleInput.getValue(), 1));
     }
@@ -201,15 +256,25 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         itemIdInput.setValue("");
         dimensionInput.setValue("");
         needOutdoorButton.setValue(false);
-        surroundingWidget.clear();
         resultIdInput.setValue("");
         conversionTimeInput.setValue("");
         resultMultipleInput.setValue("");
         clearCustomFields();
 
+        surroundingWidget.clear();
         for (SuggestionWidget widget : suggestionWidgets) {
             widget.hide();
         }
+    }
+
+    protected void refillCommonFields(T config) {
+        itemIdInput.setValue(config.getItemId().toString());
+        dimensionInput.setValue(config.getDimension());
+        needOutdoorButton.setValue(config.isNeedOutdoor());
+        resultIdInput.setValue(config.getResultId().toString());
+        conversionTimeInput.setValue(String.valueOf(config.getConversionTime()));
+        resultMultipleInput.setValue(String.valueOf(config.getResultMultiple()));
+        surroundingWidget.setValue(config.getSurroundingBlocks());
     }
 
     // 安全解析字符串到数字
@@ -221,89 +286,9 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         }
     }
 
-    // ========== 配置文件相关操作 ========== //
-    // 将当前表单内容写入缓存
-    private void saveCurrentToCache() {
-        T config = createConfigFromFields();
-        if (config.shouldProcess()) {
-            pendingConfigs.add(config);
-        } else {
-            LOGGER.warn("Invalid config, this won't be saved");
-        }
-
-        clearFields();
-    }
-
-    // 将缓存写入文件，并清空缓存
-    private void applyToFile() {
-
-        // 先尝试将当前表单内容加入缓存
-        T currentConfig = createConfigFromFields();
-        if (currentConfig.shouldProcess()) {
-            pendingConfigs.add(currentConfig);
-            LOGGER.debug("Added current form to cache before applying");
-        }
-
-        if (pendingConfigs.isEmpty()) {
-            LOGGER.debug("No configs to apply, closing screen");
-            onClose();
-            return;
-        }
-
-        // 根据环境选择保存方式
-        if (!PlayerStateChecker.isClientWorldLoaded(mc)
-                || PlayerStateChecker.isSinglePlayerServerReady(mc)) {
-            // 本地环境：直接保存到本地文件
-            applyToLocalFile();
-        }
-
-        if(PlayerStateChecker.isMultiPlayerServerConnected(mc)) {
-            // 服务端环境：发送数据包到服务器
-            applyToServer();
-        }
-    }
-
-    // 本地保存
-    private void applyToLocalFile() {
-        try {
-            // 合并原始配置与缓存配置
-            List<T> allConfigs = new ArrayList<>(originalConfigs);
-            allConfigs.addAll(pendingConfigs);
-
-            handler.saveConfig(allConfigs);
-            LOGGER.info("Applied {} new configs to local file: {}",
-                    pendingConfigs.size(), configType.getFileName());
-
-            originalConfigs.clear();
-            pendingConfigs.clear();
-
-            onClose();
-        } catch (IOException e) {
-            LOGGER.error("Failed to save config file: {}", configType.getFileName(), e);
-        }
-    }
-
-    // 发包到服务端
-    private void applyToServer() {
-        try {
-            List<T> allConfigs = new ArrayList<>(originalConfigs);
-            allConfigs.addAll(pendingConfigs);
-            // 创建并发送数据包
-            String jsonData = handler.serializeToJson(allConfigs);
-            SaveConfigPayload payload = new SaveConfigPayload(configType, jsonData);
-            PacketDistributor.sendToServer(payload);
-
-            LOGGER.info("Sent {} configs to server for type: {}",
-                    pendingConfigs.size(), configType.getFileName());
-
-            // 清空缓存
-            pendingConfigs.clear();
-
-            // 返回上一级
-            onClose();
-        } catch (Exception e) {
-            LOGGER.error("Failed to send config packet to server", e);
-        }
+    // 解析 ResourceLocation，字符串为空时返回 null
+    public static ResourceLocation parseResourceLocation(String value) {
+        return value == null || value.isEmpty() ? null : ResourceLocation.tryParse(value);
     }
 
     // ========== 渲染 ========== //
@@ -315,42 +300,19 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         guiGraphics.drawCenteredString(font, title, width / 2, 12, 0xFFFFFF);
 
         // 显示当前模式
-        String modeText = null;
-        // 处于主页面或者单人服务器世界中
-        if (!PlayerStateChecker.isClientWorldLoaded(mc)
-                || PlayerStateChecker.isSinglePlayerServerReady(mc)) {
-            modeText = "Local Mode";
-        } else if (PlayerStateChecker.isMultiPlayerServerConnected(mc)) {
-            modeText = "Server Mode";
-        }
-
+        String modeText = editHandler.getModeLabelText();
         guiGraphics.drawString(font, modeText, 10, 12, 0x808080);
-
-        // 显示缓存中的配置数量
-        if (!pendingConfigs.isEmpty()) {
-            String cacheInfo = "Cached: " + pendingConfigs.size();
-            guiGraphics.drawString(font, cacheInfo, width - 80, 12, 0xFFFF00);
-        }
 
         // 因为文本的按钮文本开启了深度测试，所以需要把z值拉高
         guiGraphics.pose().pushPose();
         guiGraphics.pose().translate(0, 0, 300);
         // 建议下拉框要最后渲染
         for (SuggestionWidget widget : suggestionWidgets) {
-            renderSuggestion(guiGraphics, mouseX, mouseY, widget);
+            if (widget.isVisible()) {
+                widget.render(guiGraphics, mouseX, mouseY);
+            }
         }
         guiGraphics.pose().popPose();
-    }
-
-    // 返回上一级
-    @Override
-    public void onClose() {
-        if (!pendingConfigs.isEmpty()) {
-            LOGGER.info("Discarding {} unsaved configs", pendingConfigs.size());
-        }
-        if (minecraft != null) {
-            minecraft.setScreen(new ConfigSelectionScreen());
-        }
     }
 
     // ========== 统一焦点管理 ========== //
@@ -403,7 +365,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        // 优先让建议组件处理点击（点击建议条目）
+        // 优先让建议下拉框处理点击
         for (SuggestionWidget widget : suggestionWidgets) {
             if (widget.isVisible() && widget.mouseClicked(mouseX, mouseY, button)) {
                 return true;
@@ -489,13 +451,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         return super.charTyped(codePoint, modifiers);
     }
 
-    // ========== 悬浮建议下拉框方法 ========== //
-    // 渲染建议下拉框
-    protected void renderSuggestion(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, SuggestionWidget suggestionWidget) {
-        if (suggestionWidget.isVisible()) {
-            suggestionWidget.render(guiGraphics, mouseX, mouseY);
-        }
-    }
+    // ========== 建议下拉框方法 ========== //
 
     // 创建并注册一个建议组件
     protected SuggestionWidget registerSuggestion(EditBox editBox, Registry<?> registry) {
@@ -520,12 +476,14 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     }
 
     // ========== 子类方法 ========== //
-
-    // 添加子类特有组件
-    protected abstract void addCustomEntries(FormList fromList);
+    protected abstract void addCustomEntries(FormListPanel fromList);
     // 构建配置对象
     protected abstract T createConfigFromFields();
-    // 清空子类组件
+    protected abstract void populateCustomFields(T config);
     protected abstract void clearCustomFields();
+    protected abstract void refillCustomFields(T config);
+    // 添加子类下拉框组件
     protected abstract void addCustomSuggestion();
+
+
 }

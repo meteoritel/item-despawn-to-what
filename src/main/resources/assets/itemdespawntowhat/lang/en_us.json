@@ -1,5 +1,6 @@
 {
   "gui.itemdespawntowhat.edit.title": "Edit file: %s",
+
   "gui.itemdespawntowhat.save_to_cache": "Add to cache",
   "gui.itemdespawntowhat.apply_to_file": "Apply",
 
@@ -20,6 +21,9 @@
   "gui.itemdespawntowhat.edit.radius_limit": "Radius Limit",
   "gui.itemdespawntowhat.edit.need_outdoor.on": "ON",
   "gui.itemdespawntowhat.edit.need_outdoor.off": "OFF",
+
+  "gui.itemdespawntowhat.edit.list.edit": "Edit",
+  "gui.itemdespawntowhat.edit.list.delete": "Delete",
 
   "key.category.itemdespawntowhat.general": "Item Depsawn To What",
   "key.itemdespawntowhat.open_gui": "Open editing GUI"

@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.ui;
+package com.meteorite.itemdespawntowhat.ui.widget;
 
 import com.meteorite.itemdespawntowhat.ui.Screen.BaseConfigEditScreen;
 import net.minecraft.client.Minecraft;
@@ -15,8 +15,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
-public class FormList extends ContainerObjectSelectionList<FormList.Entry> {
-
+public class FormListPanel extends ContainerObjectSelectionList<FormListPanel.Entry> {
     private static final int BASE_X = 20;
     private static final int LABEL_WIDTH = 80;
     private static final int GAP = 30;
@@ -24,7 +23,7 @@ public class FormList extends ContainerObjectSelectionList<FormList.Entry> {
     // 每个组件上下各留的边距
     private static final int ITEM_PADDING = 6;
 
-    public FormList(Minecraft mc, int width, int height, int y, int itemHeight) {
+    public FormListPanel(Minecraft mc, int width, int height, int y, int itemHeight) {
         super(mc, width, height, y, itemHeight);
     }
 
@@ -127,19 +126,19 @@ public class FormList extends ContainerObjectSelectionList<FormList.Entry> {
                 return true;
             }
         }
-        // 拖拽的时候还有问题，之后再解决
-        return this.isScrollBarVisible() && isScrolling(mouseX, mouseY);
+        // 拖拽的时候还有问题，之后再解决，现在直接不让拖拽滑条了
+        return false;
     }
 
-    private boolean isScrolling(double mouseX, double mouseY) {
-        int scrollBarX = this.getX() + this.getRowWidth() - 6;
-        return mouseX >= scrollBarX && mouseX <= scrollBarX + 6
-                && mouseY >= this.getY() && mouseY <= this.getBottom();
-    }
-
-    private boolean isScrollBarVisible() {
-        return this.getMaxScroll() > 0;
-    }
+//    private boolean isScrolling(double mouseX, double mouseY) {
+//        int scrollBarX = this.getX() + this.getRowWidth() - 6;
+//        return mouseX >= scrollBarX && mouseX <= scrollBarX + 6
+//                && mouseY >= this.getY() && mouseY <= this.getBottom();
+//    }
+//
+//    private boolean isScrollBarVisible() {
+//        return this.getMaxScroll() > 0;
+//    }
 
     // ===============================================================================
     public class Entry extends ContainerObjectSelectionList.Entry<Entry> {
