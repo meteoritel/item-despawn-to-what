@@ -13,7 +13,6 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.*;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.core.HolderLookup;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -346,11 +345,6 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     // 清除所有焦点
     protected void clearAllFocus() {
         setFocusedWidget(null);
-    }
-
-    @Nullable
-    public AbstractWidget getFocusedWidget() {
-        return focusedWidget;
     }
 
     // ========== 输入相关 ========== //

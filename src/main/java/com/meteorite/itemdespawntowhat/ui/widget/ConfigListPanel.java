@@ -35,9 +35,9 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
     // ========== 布局常量 ========== //
     private static final int ENTRY_HEIGHT = 26;
     private static final int ICON_SIZE = 16;
-    private static final int BUTTON_WIDTH = 36;
+    private static final int BUTTON_WIDTH = 40;
     private static final int BUTTON_HEIGHT = 16;
-    private static final int BUTTON_GAP = 2;
+    private static final int BUTTON_GAP = 4;
 
     private final EditCallback<T> editCallback;
     private final DeleteCallback<T> deleteCallback;
@@ -45,13 +45,13 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
     public ConfigListPanel(
             Minecraft mc,
             int width, int height,
-            int top, int bottom,
+            int bottom, int top,
             List<T> originalConfigs,
             List<T> pendingConfigs,
             EditCallback<T> editCallback,
             DeleteCallback<T> deleteCallback
     ) {
-        super(mc, width, height - top, top, ENTRY_HEIGHT);
+        super(mc, width, height - bottom, top, ENTRY_HEIGHT);
         this.editCallback = editCallback;
         this.deleteCallback = deleteCallback;
         rebuild(originalConfigs, pendingConfigs);
