@@ -67,6 +67,11 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
         }
     }
 
+    @Override
+    public int getRowWidth() {
+        return 340;
+    }
+
     // 触发 edit 回调
     void fireEdit(T config, EntrySource source, int idx) {
         if (editCallback != null) editCallback.onEdit(config, source, idx);
@@ -80,10 +85,9 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
     // ========== 列表条目 ========== //
     public static class ConfigEntry<T extends BaseConversionConfig>
             extends ObjectSelectionList.Entry<ConfigEntry<T>> {
-        private final ConfigListPanel<T> parent;
+
         private final T config;
         private final EntrySource source;
-        private final int indexInSource;
 
         private final Button editButton;
         private final Button deleteButton;
@@ -93,10 +97,8 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
         private final ItemStack resultIcon;
 
         ConfigEntry(ConfigListPanel<T> parent, T config, EntrySource source, int indexInSource) {
-            this.parent = parent;
             this.config = config;
             this.source = source;
-            this.indexInSource = indexInSource;
 
             // 预解析图标
             this.itemIcon = resolveItemStack(config.getItemId());
@@ -187,18 +189,6 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             String path = rl.getPath();
             return path.length() > 18 ? path.substring(0, 16) + "…" : path;
         }
-
-//        //** 构建显示在行内的简短摘要，优先显示 itemId，截断过长内容
-//        private String buildLabel() {
-//            String raw = config.getSummary();
-//            if (raw == null || raw.isBlank()) raw = config.toString();
-//            // 截断：最多 40 字符
-//            if (raw.length() > 40) raw = raw.substring(0, 38) + "…";
-//
-//            // pending 条目加星号标注
-//            String prefix = (source == EntrySource.PENDING) ? "* " : "  ";
-//            return prefix + raw;
-//        }
 
         @Override
         public @NotNull Component getNarration() {

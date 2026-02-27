@@ -60,6 +60,9 @@ public class ItemToItemConfig extends BaseConversionConfig{
     public int getResultLimit() {
         return resultLimit <= 0 ? DEFAULT_RESULT_LIMIT : resultLimit * 64;
     }
+    public int getRawResultLimit() {
+        return resultLimit;
+    }
     public void setResultLimit(int resultLimit) {
         this.resultLimit = resultLimit;
     }

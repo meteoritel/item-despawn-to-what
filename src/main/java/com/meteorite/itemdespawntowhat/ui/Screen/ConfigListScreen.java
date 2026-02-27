@@ -59,9 +59,12 @@ public class ConfigListScreen<T extends BaseConversionConfig> extends Screen {
     private void handleEdit(T config, ConfigListPanel.EntrySource source, int indexInSource) {
         // 然后切回父 Screen
         if (minecraft != null) {
-            minecraft.setScreen(parentScreen);
+            minecraft.tell(() -> {
+                minecraft.setScreen(parentScreen);
+                minecraft.tell(() -> listCallback.onEditRequested(source, indexInSource));
+            });
         }
-        listCallback.onEditRequested(source, indexInSource);
+
     }
 
     private void handleDelete(T config, ConfigListPanel.EntrySource source, int indexInSource) {

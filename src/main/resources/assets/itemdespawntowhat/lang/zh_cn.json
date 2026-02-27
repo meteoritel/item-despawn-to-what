@@ -19,5 +19,8 @@
   "gui.itemdespawntowhat.edit.result_age": "结果年龄(小动物:-2400)",
   "gui.itemdespawntowhat.edit.radius_limit": "最大放置半径",
   "gui.itemdespawntowhat.edit.need_outdoor.on": "开",
-  "gui.itemdespawntowhat.edit.need_outdoor.off": "关"
+  "gui.itemdespawntowhat.edit.need_outdoor.off": "关",
+
+  "gui.itemdespawntowhat.edit.list.edit": "重新编辑",
+  "gui.itemdespawntowhat.edit.list.delete": "删除"
 }

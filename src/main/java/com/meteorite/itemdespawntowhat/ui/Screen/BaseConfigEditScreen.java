@@ -156,6 +156,9 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     public void onRefillFields(T config) {
         refillCommonFields(config);
         refillCustomFields(config);
+        for (SuggestionWidget widget : suggestionWidgets) {
+            widget.hide();
+        }
     }
 
     @Override
@@ -193,7 +196,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
 
 // ============================
-
+    // 按钮文本构建方法
     private Component buildConfigListButtonLabel() {
         int total = editHandler.getOriginalConfigs().size()
                 + editHandler.getPendingConfigs().size();
@@ -220,8 +223,6 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
             minecraft.setScreen(new ConfigListScreen<>(this, editHandler, this));
         }
     }
-
-
 
     // ========== 辅助布局方法 ========== //
 

@@ -81,10 +81,12 @@ public abstract class BaseConversionConfig {
 
     // 限制条件，子类可覆盖，不符合条件的配置不会被读取
     public boolean shouldProcess() {
-        // 输入输出不能为空
+        // 输入输出不能为空，转化时间和倍率不能小于0
         if (itemId == null || resultId == null
                 || itemId == ResourceLocation.tryParse("")
-                || resultId == ResourceLocation.tryParse("")) {
+                || resultId == ResourceLocation.tryParse("")
+                || conversionTime <= 0
+                || resultMultiple <= 0) {
             return false;
         }
 
@@ -104,10 +106,6 @@ public abstract class BaseConversionConfig {
 
         String dimension = Optional.ofNullable(this.getDimension()).orElse("");
         return ConditionCheckerUtil.buildCombinedChecker(dimension, this.isNeedOutdoor(), this.getSurroundingBlocks());
-    }
-
-    public String getSummary() {
-        return getItemId().toString() + " -> " + getResultId().toString();
     }
 
     // ========== 子类方法 ========== //
