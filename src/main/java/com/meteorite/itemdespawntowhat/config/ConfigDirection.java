@@ -2,9 +2,6 @@ package com.meteorite.itemdespawntowhat.config;
 
 import net.minecraft.core.Direction;
 
-import java.util.HashMap;
-import java.util.Map;
-
 public enum ConfigDirection {
     NORTH("north", Direction.NORTH),
     SOUTH("south", Direction.SOUTH),
@@ -23,10 +20,6 @@ public enum ConfigDirection {
 
     public Direction getDirection() {
         return direction;
-    }
-
-    public String getKey() {
-        return key;
     }
 
     public static ConfigDirection fromString (String key) {

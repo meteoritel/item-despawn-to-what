@@ -49,16 +49,13 @@ public class BaseConfigEditHandler<T extends BaseConversionConfig> {
             LOGGER.debug("Loaded from local file: {}, count = {}", configType.getFileName(), configs.size());
         }
 
-        this.originalConfigs = new ArrayList<>(configs);;
+        this.originalConfigs = new ArrayList<>(configs);
     }
 
     // ========== 公开查询方法 ========== //
 
     public ConfigType getConfigType() {
         return configType;
-    }
-    public BaseConfigHandler<T> getHandler() {
-        return handler;
     }
     public List<T> getPendingConfigs() {
         return pendingConfigs;
