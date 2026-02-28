@@ -158,9 +158,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     public void onRefillFields(T config) {
         refillCommonFields(config);
         refillCustomFields(config);
-        for (SuggestionWidget widget : suggestionWidgets) {
-            widget.hide();
-        }
+        clearAllSuggestions();
     }
 
     @Override
@@ -194,12 +192,8 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
     @Override
     public void onListScreenClosed() {
-        if (!listEditPerformed && draftConfig != null) {
+        if (!listEditPerformed && draftConfig != null && draftConfig.shouldProcess()) {
             onRefillFields(draftConfig);
-            // 隐藏所有建议框，避免自动弹出
-            for (SuggestionWidget widget : suggestionWidgets) {
-                widget.hide();
-            }
         }
         // 重置标志和草稿，避免下次误用
         listEditPerformed = false;
@@ -278,9 +272,11 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         clearCustomFields();
 
         surroundingWidget.clear();
-        for (SuggestionWidget widget : suggestionWidgets) {
-            widget.hide();
-        }
+        clearAllSuggestions();
+    }
+
+    protected void clearAllSuggestions() {
+        suggestionWidgets.forEach((SuggestionWidget::hide));
     }
 
     protected void refillCommonFields(T config) {
@@ -291,6 +287,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         conversionTimeInput.setValue(String.valueOf(config.getConversionTime()));
         resultMultipleInput.setValue(String.valueOf(config.getResultMultiple()));
         surroundingWidget.setValue(config.getSurroundingBlocks());
+
     }
 
     // 安全解析字符串到数字

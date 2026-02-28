@@ -33,7 +33,7 @@ public class ConfigListScreen<T extends BaseConversionConfig> extends Screen {
 
     @Override
     protected void init() {
-        // 列表面板：从顶部 36px 开始，底部留 36px 给按钮
+        // 列表面板：从顶部 36px 开始，底部留 80px 给按钮
         listPanel = new ConfigListPanel<>(
                 minecraft,
                 width,
@@ -54,17 +54,14 @@ public class ConfigListScreen<T extends BaseConversionConfig> extends Screen {
         ).bounds(width / 2 - 50, height - 28, 100, 20).build());
     }
 
-    // ── 列表事件处理 ── //
-
+    // ========== 列表事件处理 ========== //
     private void handleEdit(T config, ConfigListPanel.EntrySource source, int indexInSource) {
-        // 然后切回父 Screen
         if (minecraft != null) {
             minecraft.tell(() -> {
                 minecraft.setScreen(parentScreen);
                 minecraft.tell(() -> listCallback.onEditRequested(source, indexInSource));
             });
         }
-
     }
 
     private void handleDelete(T config, ConfigListPanel.EntrySource source, int indexInSource) {
@@ -89,7 +86,7 @@ public class ConfigListScreen<T extends BaseConversionConfig> extends Screen {
         guiGraphics.drawCenteredString(font, title, width / 2, 12, 0xFFFFFF);
 
         // 统计行
-        int total   = editHandler.getOriginalConfigs().size() + editHandler.getPendingConfigs().size();
+        int total = editHandler.getOriginalConfigs().size() + editHandler.getPendingConfigs().size();
         int pending = editHandler.getPendingConfigs().size();
         String stat = "Total: " + total + "  Pending: " + pending;
         guiGraphics.drawString(font, stat, width - font.width(stat) - 6, 12, 0xAAAAAA);

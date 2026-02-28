@@ -54,7 +54,7 @@ public abstract class BaseConfigHandler<T extends BaseConversionConfig> {
             // 创建父目录
             Files.createDirectories(configPath.getParent());
 
-            if (!configFileExists()) {
+            if (!isConfigFileExists()) {
                 List<T> defaultEntries = createDefaultEntries();
                 saveConfig(defaultEntries);
                 LOGGER.info("Generate default configuration file: {}", configPath);
@@ -102,7 +102,7 @@ public abstract class BaseConfigHandler<T extends BaseConversionConfig> {
 
     // 配置文件是否存在
     @SuppressWarnings("BooleanMethodIsAlwaysInverted")
-    public boolean configFileExists() {
+    public boolean isConfigFileExists() {
         return Files.exists(getConfigPath());
     }
 

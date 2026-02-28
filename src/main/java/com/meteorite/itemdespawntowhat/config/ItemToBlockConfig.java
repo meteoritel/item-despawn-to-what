@@ -29,6 +29,11 @@ public class ItemToBlockConfig extends BaseConversionConfig{
         return BuiltInRegistries.BLOCK.get(resultId);
     }
 
+    @Override
+    public String getResultDescriptionId() {
+        return getResultBlock().getDescriptionId();
+    }
+
     // 确保方块形式存在
     @Override
     public boolean shouldProcess() {

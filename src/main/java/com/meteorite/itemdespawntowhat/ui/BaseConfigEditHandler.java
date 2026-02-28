@@ -92,7 +92,7 @@ public class BaseConfigEditHandler<T extends BaseConversionConfig> {
             pendingConfigs.add(config);
             LOGGER.debug("Saved to cache: {}", config);
         } else {
-            LOGGER.warn("Invalid config, this won't be saved");
+            LOGGER.warn("Invalid config, this won't be saved, config is {}",config);
         }
         callback.onClearFields();
         callback.onListChanged();

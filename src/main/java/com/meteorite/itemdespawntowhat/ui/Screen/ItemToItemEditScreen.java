@@ -40,7 +40,7 @@ public class ItemToItemEditScreen extends BaseConfigEditScreen<ItemToItemConfig>
 
     @Override
     protected void refillCustomFields(ItemToItemConfig config) {
-        resultLimitInput.setValue(String.valueOf(config.getRawResultLimit()));
+        resultLimitInput.setValue(String.valueOf(config.getResultLimit()));
     }
 
     @Override

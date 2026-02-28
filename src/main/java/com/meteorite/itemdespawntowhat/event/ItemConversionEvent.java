@@ -304,7 +304,7 @@ public class ItemConversionEvent {
     private static void convertToItem(ItemEntity itemEntity,
                                       ItemToItemConfig config,
                                       ServerLevel serverLevel) {
-        Item resultItem = config.hasResultItem();
+        Item resultItem = config.getResultItem();
         BlockPos pos = itemEntity.blockPosition();
 
         // 获取当前物品堆叠

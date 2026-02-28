@@ -19,7 +19,7 @@ import java.util.Optional;
 
 public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelectionList<ConfigListPanel.ConfigEntry<T>> {
 
-    //** 条目来源标记 */
+    // 条目来源标记
     public enum EntrySource { ORIGINAL, PENDING }
 
     // 当用户点击 Edit 时的回调，携带配置对象与其来源
@@ -35,10 +35,42 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
     // ========== 布局常量 ========== //
     private static final int ENTRY_HEIGHT = 26;
     private static final int ICON_SIZE = 16;
-    private static final int BUTTON_WIDTH = 40;
+    private static final int BUTTON_WIDTH = 46;
     private static final int BUTTON_HEIGHT = 16;
     private static final int BUTTON_GAP = 4;
 
+    // 固定列布局
+    private static final int COL_TAG_W = 3;
+    private static final int COL_ICON1_X = COL_TAG_W + 4;                              // 7
+    private static final int COL_TEXT1_X = COL_ICON1_X + ICON_SIZE + 3;                // 26
+    private static final int TEXT_COL_W = 90;  // 每列文本宽度（固定）
+    private static final int COL_ARROW_X = COL_TEXT1_X + TEXT_COL_W + 4;               // 120
+    private static final int ARROW_W = 12;
+    private static final int COL_ICON2_X = COL_ARROW_X + ARROW_W + 4;                  // 136
+    private static final int COL_TEXT2_X = COL_ICON2_X + ICON_SIZE + 3;                // 155
+
+    // 文本超出自动滚动
+    // 文本滚动速度：像素/ms
+    private static final float SCROLL_SPEED_PX_MS = 0.025f;
+    // 滚动前静止时长（ms）
+    private static final long SCROLL_PAUSE_MS = 1500L;
+    // 文字与裁剪区右边缘的最小间距
+    private static final int SCROLL_PADDING = 6;
+
+    // 确认弹窗常量
+    private static final int DIALOG_W = 160;
+    private static final int DIALOG_H = 54;
+    private static final int DIALOG_BTN_W = 60;
+    private static final int DIALOG_BTN_H = 16;
+
+    // 待确认删除项，null 表示弹窗关闭
+    private @Nullable PendingDelete<T> pendingDelete = null;
+
+    // 弹窗的确认与取消按钮
+    private final Button confirmButton;
+    private final Button cancelButton;
+
+    // ========== 回调接口 ========== //
     private final EditCallback<T> editCallback;
     private final DeleteCallback<T> deleteCallback;
 
@@ -54,6 +86,16 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
         super(mc, width, height - bottom, top, ENTRY_HEIGHT);
         this.editCallback = editCallback;
         this.deleteCallback = deleteCallback;
+
+        this.confirmButton = Button.builder(
+                Component.translatable("gui.itemdespawntowhat.edit.list.delete"),
+                b -> commitDelete()
+        ).size(DIALOG_BTN_W, DIALOG_BTN_H).build();
+        this.cancelButton = Button.builder(
+                Component.translatable("gui.cancel"),
+                b -> pendingDelete = null
+        ).size(DIALOG_BTN_W, DIALOG_BTN_H).build();
+
         rebuild(originalConfigs, pendingConfigs);
     }
 
@@ -78,10 +120,82 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
     }
 
     // 触发 delete 回调
-    void fireDelete(T config, EntrySource source, int idx) {
-        if (deleteCallback != null) deleteCallback.onDelete(config, source, idx);
+    void requestDelete(T config, EntrySource source, int idx) {
+        pendingDelete = new PendingDelete<>(config, source, idx);
     }
 
+    // 真正执行delete
+    private void commitDelete() {
+        if (pendingDelete != null && deleteCallback != null) {
+            deleteCallback.onDelete(pendingDelete.config, pendingDelete.source, pendingDelete.index);
+        }
+        pendingDelete = null;
+    }
+
+    @Override
+    public void renderWidget(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        // 先渲染列表本体
+        super.renderWidget(guiGraphics, mouseX, mouseY, partialTick);
+
+        if (pendingDelete == null) return;
+
+        Minecraft mc = Minecraft.getInstance();
+
+        // 半透明遮罩，遮住整个列表区域防止穿透点击
+        guiGraphics.pose().pushPose();
+        guiGraphics.pose().translate(0, 0, 300);
+        guiGraphics.fill(getX(), getY(), getX() + this.width, getY() + this.height, 0xAA_000000);
+
+        // 弹窗居中于列表区域
+        int dlgX = getX() + (this.width  - DIALOG_W) / 2;
+        int dlgY = getY() + (this.height - DIALOG_H) / 2;
+
+        // 弹窗背景 + 边框
+        guiGraphics.fill(dlgX, dlgY, dlgX + DIALOG_W, dlgY + DIALOG_H, 0xFF_2B2B2B);
+        guiGraphics.renderOutline(dlgX, dlgY, DIALOG_W, DIALOG_H, 0xFF_AAAAAA);
+
+        // 警告标题（红色）
+        int titleY = dlgY + 8;
+        guiGraphics.drawCenteredString(mc.font,
+                Component.translatable("gui.itemdespawntowhat.edit.list.delete.title"),
+                dlgX + DIALOG_W / 2, titleY, 0xFF_FF5555);
+
+        // 提示正文
+        guiGraphics.drawCenteredString(mc.font,
+                Component.translatable("gui.itemdespawntowhat.edit.list.delete.body"),
+                dlgX + DIALOG_W / 2, titleY + mc.font.lineHeight + 3, 0xFF_CCCCCC);
+
+        // 按钮行（确认在左，取消在右）
+        int btnY = dlgY + DIALOG_H - DIALOG_BTN_H - 6;
+        int totalBtnW = DIALOG_BTN_W * 2 + 6;
+        int confirmX = dlgX + (DIALOG_W - totalBtnW) / 2;
+        int cancelX = confirmX + DIALOG_BTN_W + 6;
+
+        confirmButton.setPosition(confirmX, btnY);
+        cancelButton.setPosition(cancelX, btnY);
+
+        confirmButton.render(guiGraphics, mouseX, mouseY, partialTick);
+        cancelButton.render(guiGraphics, mouseX, mouseY, partialTick);
+        guiGraphics.pose().popPose();
+    }
+
+    // 弹窗打开时拦截所有鼠标点击，仅转发给弹窗按钮，防止穿透到列表条目
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (pendingDelete != null) {
+            confirmButton.mouseClicked(mouseX, mouseY, button);
+            cancelButton .mouseClicked(mouseX, mouseY, button);
+            return true; // 吞掉事件，不传递给列表
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+    @Override
+    public void setSelected(@Nullable ConfigEntry<T> entry) {
+        // 这个列表不需要焦点，直接全部取消
+    }
+
+    // ========== 内部记录：待确认删除项 ========== //
+    private record PendingDelete<T>(T config, EntrySource source, int index) {}
     // ========== 列表条目 ========== //
     public static class ConfigEntry<T extends BaseConversionConfig>
             extends ObjectSelectionList.Entry<ConfigEntry<T>> {
@@ -92,9 +206,12 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
         private final Button editButton;
         private final Button deleteButton;
 
-        //** 缓存的图标 ItemStack（避免每帧重新查找注册表）*/
+        // 缓存图标 ItemStack
         private final ItemStack itemIcon;
         private final ItemStack resultIcon;
+
+        // 条目创建的时间，用于计算滚动偏移
+        private final long createdAt = System.currentTimeMillis();
 
         ConfigEntry(ConfigListPanel<T> parent, T config, EntrySource source, int indexInSource) {
             this.config = config;
@@ -111,7 +228,7 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
 
             this.deleteButton = Button.builder(
                     Component.translatable("gui.itemdespawntowhat.edit.list.delete"),
-                    b -> parent.fireDelete(config, source, indexInSource)
+                    b -> parent.requestDelete(config, source, indexInSource)
             ).size(BUTTON_WIDTH, BUTTON_HEIGHT).build();
         }
 
@@ -129,50 +246,41 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
                            boolean hovered, float partialTick) {
             Minecraft mc = Minecraft.getInstance();
 
-            // ── 悬停背景 ── //
+            // 悬停背景
             if (hovered) {
                 guiGraphics.fill(left, top, left + width, top + height, 0x22_FFFFFF);
             }
 
-            // ── 来源标签（左侧色块） ──
+            // 来源标签（左侧色块）
             int tagColor = (source == EntrySource.PENDING) ? 0xFF_FFA500 : 0xFF_44AA44;
-            guiGraphics.fill(left, top + 1, left + 3, top + height - 1, tagColor);
+            guiGraphics.fill(left, top + 1, left + COL_TAG_W, top + height - 1, tagColor);
 
-            // ── 图标 + 文字区域布局 ── //
-            int cursorX = left + 6;
-            int iconY = top + (height - ICON_SIZE) / 2;
+            // 图标 + 文字区域布局
+            int iconY  = top + (height - ICON_SIZE) / 2;
+            int textY  = top + (height - mc.font.lineHeight) / 2;
 
-            // itemId 图标
-            guiGraphics.renderItem(itemIcon, cursorX, iconY);
-            cursorX += ICON_SIZE + 2;
+            // 第一列itemId 图标
+            guiGraphics.renderItem(itemIcon, left + COL_ICON1_X, iconY);
 
-            // itemId 文字（最多 20 字符）
-            String itemStr = shortenId(config.getItemId());
-            guiGraphics.drawString(mc.font, itemStr, cursorX, top + (height - 8) / 2, 0xFFFFFF, false);
-            cursorX += mc.font.width(itemStr) + 4;
+            // 第一列itemId 文字，超出范围自动滚动
+            String itemStr = config.getStartItem().getDescriptionId();
+            int rightReserve = BUTTON_WIDTH * 2 + BUTTON_GAP + 8;
+            int col2Right = left + width - rightReserve;
+            int col2TextMaxW = col2Right - (left + COL_TEXT2_X);
+            drawScrollableText(guiGraphics, mc, Component.translatable(itemStr), left + COL_TEXT1_X, textY, TEXT_COL_W, 0xFFFFFF);
 
-            // "→" 分隔符
-            guiGraphics.drawString(mc.font, "→", cursorX, top + (height - 8) / 2, 0xAAAAAA, false);
-            cursorX += mc.font.width("→") + 4;
+            // 箭头
+            guiGraphics.drawString(mc.font, "->", left + COL_ARROW_X, textY, 0x888888, false);
 
-            // resultId 图标
-            guiGraphics.renderItem(resultIcon, cursorX, iconY);
-            cursorX += ICON_SIZE + 2;
-
-            // resultId 文字
-            String resultStr = shortenId(config.getResultId());
+            // 第二列 resultId 图标
+            guiGraphics.renderItem(resultIcon, left + COL_ICON2_X, iconY);
+            // 第二列 resultId 文字
+            String resultStr = config.getResultDescriptionId();
             int textColor = (source == EntrySource.PENDING) ? 0xFFFF88 : 0xFFFFFF;
-            guiGraphics.drawString(mc.font, resultStr, cursorX, top + (height - 8) / 2, textColor, false);
+            int safeCol2W = Math.max(10, col2TextMaxW);
+            drawScrollableText(guiGraphics, mc, Component.translatable(resultStr), left + COL_TEXT2_X, textY, safeCol2W, textColor);
 
-            // pending 星号前缀
-            if (source == EntrySource.PENDING) {
-                guiGraphics.drawString(mc.font, "★",
-                        left + width - BUTTON_WIDTH * 2 - BUTTON_GAP - 12,
-                        top + (height - 8) / 2,
-                        0xFF_FFA500, false);
-            }
-
-            // ── 右侧按钮 ── //
+            // 右侧按钮
             int btnAreaRight = left + width - 4;
             int btnY = top + (height - BUTTON_HEIGHT) / 2;
 
@@ -183,18 +291,52 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             deleteButton.render(guiGraphics, mouseX, mouseY, partialTick);
         }
 
-        //** 从 ResourceLocation 提取 path 部分，最多保留 18 字符 */
-        private String shortenId(@Nullable ResourceLocation rl) {
-            if (rl == null) return "—";
-            String path = rl.getPath();
-            return path.length() > 18 ? path.substring(0, 16) + "…" : path;
+        // ========== 排列辅助方法 ========== //
+
+        // 计算当前的文本x偏移量
+        private int calcScrollOffset(int textWidth, int maxWidth) {
+            if (textWidth <= maxWidth) return 0;
+
+            long elapsed = System.currentTimeMillis() - createdAt;
+            // 超出宽度
+            int overflow = textWidth - maxWidth + SCROLL_PADDING;
+            // 一次完整来回时长 = pause + scroll_to_end + pause + scroll_back
+            long scrollDuration = (long) (overflow / SCROLL_SPEED_PX_MS);
+            long cycleDuration = SCROLL_PAUSE_MS * 2 + scrollDuration * 2;
+            long t = elapsed % cycleDuration;
+
+            if (t < SCROLL_PAUSE_MS) {
+                // 初始静止
+                return 0;
+            } else if (t < SCROLL_PAUSE_MS + scrollDuration) {
+                // 向左滚动
+                return -(int) ((t - SCROLL_PAUSE_MS) * SCROLL_SPEED_PX_MS);
+            } else if (t < SCROLL_PAUSE_MS * 2 + scrollDuration) {
+                // 末尾静止
+                return -overflow;
+            } else {
+                // 向右滚回
+                long phase = t - SCROLL_PAUSE_MS * 2 - scrollDuration;
+                return -(overflow - (int) (phase * SCROLL_SPEED_PX_MS));
+            }
+        }
+
+        // 在固定宽度内绘制可滚动文本
+        private void drawScrollableText(GuiGraphics guiGraphics, Minecraft mc,
+                                        Component text, int x, int y,
+                                        int maxWidth, int color) {
+            int textWidth = mc.font.width(text);
+            int offset = calcScrollOffset(textWidth, maxWidth);
+
+            // scissor 裁剪区（屏幕坐标，需要乘以 guiScale）
+            guiGraphics.enableScissor(x, y - 1, x + maxWidth, y + mc.font.lineHeight + 1);
+            guiGraphics.drawString(mc.font, text, x + offset, y, color, false);
+            guiGraphics.disableScissor();
         }
 
         @Override
         public @NotNull Component getNarration() {
-            return Component.literal(
-                    shortenId(config.getItemId()) + " → " + shortenId(config.getResultId())
-            );
+            return Component.empty();
         }
 
         @Override

@@ -34,8 +34,13 @@ public class ItemToItemConfig extends BaseConversionConfig{
         return super.shouldProcess() && this.itemId != this.resultId;
     }
 
-    public Item hasResultItem() {
+    public Item getResultItem() {
         return BuiltInRegistries.ITEM.get(resultId);
+    }
+
+    @Override
+    public String getResultDescriptionId() {
+        return getResultItem().getDescriptionId();
     }
 
     // 对于物掉落物结果，计算所有的stack堆叠之和
@@ -58,17 +63,15 @@ public class ItemToItemConfig extends BaseConversionConfig{
     }
 
     public int getResultLimit() {
-        return resultLimit <= 0 ? DEFAULT_RESULT_LIMIT : resultLimit * 64;
+        return resultLimit <= 0 ? DEFAULT_RESULT_LIMIT : resultLimit;
     }
-    public int getRawResultLimit() {
-        return resultLimit;
-    }
+
     public void setResultLimit(int resultLimit) {
         this.resultLimit = resultLimit;
     }
 
     @Override
     public boolean isResultLimitExceeded(ItemEntity itemEntity) {
-        return this.countNearbyResult(itemEntity) >= this.getResultLimit();
+        return this.countNearbyResult(itemEntity) >= this.getResultLimit() * 64;
     }
 }

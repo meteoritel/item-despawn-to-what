@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.config.handler;
 
 import com.google.gson.reflect.TypeToken;
+import com.meteorite.itemdespawntowhat.config.ConfigDirection;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.ItemToItemConfig;
 import com.meteorite.itemdespawntowhat.config.SurroundingBlocks;
@@ -27,7 +28,7 @@ public class ItemToItemConfigHandler extends BaseConfigHandler<ItemToItemConfig>
         );
 
         SurroundingBlocks blocks = new SurroundingBlocks();
-        blocks.setDown("minecraft:magma_block");
+        blocks.set(ConfigDirection.DOWN,"minecraft:magma_block");
         leatherEntry.setSurroundingBlocks(blocks);
 
         entries.add(leatherEntry);

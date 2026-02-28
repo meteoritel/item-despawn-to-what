@@ -36,6 +36,10 @@ public class ItemToEntityConfig extends BaseConversionConfig{
         return BuiltInRegistries.ENTITY_TYPE.get(resultId);
     }
 
+    @Override
+    public String getResultDescriptionId() {
+        return getResultEntityType().getDescriptionId();
+    }
     // 确保实体不为空，名字没有拼写错
     @Override
     public boolean shouldProcess() {

@@ -77,7 +77,7 @@ public class ConfigExtractorManager {
                 }
 
                 // 如果中途json文件被删掉了，加载之前也会重新生成
-                if (!handler.configFileExists()) {
+                if (!handler.isConfigFileExists()) {
                     handler.generateDefaultConfig();
                 }
 

@@ -24,6 +24,8 @@
 
   "gui.itemdespawntowhat.edit.list.edit": "Reedit",
   "gui.itemdespawntowhat.edit.list.delete": "Delete",
+  "gui.itemdespawntowhat.edit.list.delete.title": "Confirm Delete",
+  "gui.itemdespawntowhat.edit.list.delete.body": "This action cannot be undone！",
 
   "key.category.itemdespawntowhat.general": "Item Depsawn To What",
   "key.itemdespawntowhat.open_gui": "Open editing GUI"

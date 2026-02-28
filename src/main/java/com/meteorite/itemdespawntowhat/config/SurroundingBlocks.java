@@ -3,7 +3,6 @@ package com.meteorite.itemdespawntowhat.config;
 import com.google.gson.annotations.SerializedName;
 
 // 六个面挨个写太麻烦，优化中
-
 public class SurroundingBlocks {
     @SerializedName("north")
     private String north = "";
@@ -23,52 +22,8 @@ public class SurroundingBlocks {
     @SerializedName("down")
     private String down = "";
 
-    public String getDown() {
-        return down;
-    }
-
-    public void setDown(String down) {
-        this.down = down;
-    }
-
-    public String getEast() {
-        return east;
-    }
-
-    public void setEast(String east) {
-        this.east = east;
-    }
-
-    public String getNorth() {
-        return north;
-    }
-
-    public void setNorth(String north) {
-        this.north = north;
-    }
-
-    public String getSouth() {
-        return south;
-    }
-
-    public void setSouth(String south) {
-        this.south = south;
-    }
-
-    public String getUp() {
-        return up;
-    }
-
     public void setUp(String up) {
         this.up = up;
-    }
-
-    public String getWest() {
-        return west;
-    }
-
-    public void setWest(String west) {
-        this.west = west;
     }
 
     // 检查是否存在周围方块设置的需求
@@ -99,4 +54,12 @@ public class SurroundingBlocks {
         }
     }
 
+    public void setAll(String value) {
+        north = value;
+        south = value;
+        east = value;
+        west = value;
+        up = value;
+        down = value;
+    }
 }

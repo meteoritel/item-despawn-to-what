@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.config.handler;
 
 import com.google.gson.reflect.TypeToken;
+import com.meteorite.itemdespawntowhat.config.ConfigDirection;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.ItemToEntityConfig;
 import com.meteorite.itemdespawntowhat.config.SurroundingBlocks;
@@ -28,7 +29,7 @@ public class ItemToEntityConfigHandler extends BaseConfigHandler<ItemToEntityCon
         );
 
         SurroundingBlocks blocks = new SurroundingBlocks();
-        blocks.setDown("minecraft:hay_block");
+        blocks.set(ConfigDirection.DOWN,"minecraft:hay_block");
         eggEntry.setSurroundingBlocks(blocks);
 
         entries.add(eggEntry);

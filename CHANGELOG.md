@@ -20,3 +20,9 @@
 
 - Add input preview functionality for text fields within the GUI.
 - Support list-based input for `itemId` entries.
+
+## [1.0.5]
+### 新增 New Features
+- 新增
+
+- 现在可以选择一个主物品，其他多个次要物品扔到一起进行转化了
