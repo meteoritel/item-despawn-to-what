@@ -1,5 +1,9 @@
 {
-  "gui.itemdespawntowhat.edit.title": "当前编辑文件: %s",
+  "gui.itemdespawntowhat.edit.title": "当前编辑文件：%s",
+  "gui.itemdespawntowhat.edit.config_stat_1": "☰ 配置数：%d",
+  "gui.itemdespawntowhat.edit.config_stat_2": "★ 配置数：%s (%s + %s)",
+  "gui.itemdespawntowhat.edit.stat": "总计：%d  缓存：%d",
+
   "gui.itemdespawntowhat.save_to_cache": "添加到缓存",
   "gui.itemdespawntowhat.apply_to_file": "执行修改",
 
@@ -18,8 +22,9 @@
   "gui.itemdespawntowhat.edit.result_limit": "结果上限",
   "gui.itemdespawntowhat.edit.result_age": "结果年龄(小动物:-2400)",
   "gui.itemdespawntowhat.edit.radius_limit": "最大放置半径",
-  "gui.itemdespawntowhat.edit.need_outdoor.on": "开",
-  "gui.itemdespawntowhat.edit.need_outdoor.off": "关",
+  "gui.itemdespawntowhat.edit.block_of_item": "使用物品对应方块",
+  "gui.itemdespawntowhat.edit.on": "开",
+  "gui.itemdespawntowhat.edit.off": "关",
 
   "gui.itemdespawntowhat.edit.list.edit": "重新编辑",
   "gui.itemdespawntowhat.edit.list.delete": "删除",

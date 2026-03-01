@@ -88,7 +88,7 @@ public class ConfigListScreen<T extends BaseConversionConfig> extends Screen {
         // 统计行
         int total = editHandler.getOriginalConfigs().size() + editHandler.getPendingConfigs().size();
         int pending = editHandler.getPendingConfigs().size();
-        String stat = "Total: " + total + "  Pending: " + pending;
+        Component stat = Component.translatable("gui.itemdespawntowhat.edit.stat", total, pending);
         guiGraphics.drawString(font, stat, width - font.width(stat) - 6, 12, 0xAAAAAA);
     }
 

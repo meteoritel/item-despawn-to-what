@@ -15,7 +15,6 @@ import net.minecraft.world.level.block.state.BlockState;
 import java.util.EnumMap;
 import java.util.Map;
 
-
 public class SurroundingBlocksConditionChecker extends AbstractConditionChecker {
 
     private static final String CONDITION_PREFIX = "surrounding_blocks.";
@@ -24,12 +23,10 @@ public class SurroundingBlocksConditionChecker extends AbstractConditionChecker 
     @Override
     public AbstractConditionChecker parse(Map<String, String> conditions) {
         this.directionConditions = parseDirectionConditions(conditions);
-
         // 如果没有任何方向的条件，返回null跳过
         if (directionConditions.isEmpty()) {
             return null;
         }
-
         return this;
     }
 
@@ -94,5 +91,4 @@ public class SurroundingBlocksConditionChecker extends AbstractConditionChecker 
                 blockState::is
         );
     }
-
 }

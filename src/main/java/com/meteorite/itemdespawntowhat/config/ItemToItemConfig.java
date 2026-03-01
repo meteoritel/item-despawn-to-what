@@ -8,7 +8,10 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.AABB;
+
+import java.util.Optional;
 
 public class ItemToItemConfig extends BaseConversionConfig{
 
@@ -18,14 +21,12 @@ public class ItemToItemConfig extends BaseConversionConfig{
     public ItemToItemConfig() {
         super();
         this.configType = ConfigType.ITEM_TO_ITEM;
-        this.registry = BuiltInRegistries.ITEM;
     }
 
     public ItemToItemConfig(ResourceLocation item, ResourceLocation resultItem) {
         super(item, resultItem);
         this.resultLimit = DEFAULT_RESULT_LIMIT;
         this.configType = ConfigType.ITEM_TO_ITEM;
-        this.registry = BuiltInRegistries.ITEM;
     }
 
     // 物品转化需要保证转化前后结果不同，防止循环转化
@@ -41,6 +42,12 @@ public class ItemToItemConfig extends BaseConversionConfig{
     @Override
     public String getResultDescriptionId() {
         return getResultItem().getDescriptionId();
+    }
+
+    @Override
+    public ItemStack getResultIcon() {
+        return BuiltInRegistries.ITEM.getOptional(resultId)
+                .map(ItemStack::new).orElseGet(() -> new ItemStack(Items.BARRIER));
     }
 
     // 对于物掉落物结果，计算所有的stack堆叠之和
@@ -65,7 +72,6 @@ public class ItemToItemConfig extends BaseConversionConfig{
     public int getResultLimit() {
         return resultLimit <= 0 ? DEFAULT_RESULT_LIMIT : resultLimit;
     }
-
     public void setResultLimit(int resultLimit) {
         this.resultLimit = resultLimit;
     }

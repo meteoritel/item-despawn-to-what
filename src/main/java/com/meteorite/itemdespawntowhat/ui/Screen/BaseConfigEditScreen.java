@@ -9,6 +9,7 @@ import com.meteorite.itemdespawntowhat.ui.widget.ConfigListPanel;
 import com.meteorite.itemdespawntowhat.ui.widget.FormListPanel;
 import com.meteorite.itemdespawntowhat.ui.widget.SuggestionWidget;
 import com.meteorite.itemdespawntowhat.ui.widget.SurroundingBlocksWidget;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.*;
 import net.minecraft.client.gui.components.events.GuiEventListener;
@@ -81,8 +82,8 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         itemIdInput = textBox();
         dimensionInput = textBox();
         needOutdoorButton = CycleButton.booleanBuilder(
-                        Component.translatable(LABEL_PREFIX + "need_outdoor." + "on"),
-                        Component.translatable(LABEL_PREFIX + "need_outdoor." + "off")
+                        Component.translatable(LABEL_PREFIX + "on"),
+                        Component.translatable(LABEL_PREFIX + "off")
                 ).withInitialValue(false)
                 .create(0, 0, BOX_WIDTH, 18, Component.translatable(LABEL_PREFIX + "need_outdoor"));
         surroundingWidget = new SurroundingBlocksWidget(font, 0, 0);
@@ -201,7 +202,6 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         refreshConfigListButton();
     }
 
-
 // ============================
     // 按钮文本构建方法
     private Component buildConfigListButtonLabel() {
@@ -211,9 +211,12 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
         if (pending > 0) {
             // 橙色星号标注待定条目
-            return Component.literal("★ Configs: " + total + " (+" + pending + ")");
+            return Component.translatable("gui.itemdespawntowhat.edit.config_stat_2",
+                    Component.literal(String.valueOf(total)).withStyle(ChatFormatting.GREEN),
+                    Component.literal(String.valueOf(total - pending)).withStyle(ChatFormatting.GREEN),
+                    Component.literal(String.valueOf(pending)).withStyle(ChatFormatting.YELLOW));
         } else {
-            return Component.literal("☰ Configs: " + total);
+            return Component.translatable("gui.itemdespawntowhat.edit.config_stat_1",total);
         }
     }
 
@@ -280,14 +283,13 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     }
 
     protected void refillCommonFields(T config) {
-        itemIdInput.setValue(config.getItemId().toString());
+        itemIdInput.setValue(rlToString(config.getItemId()));
         dimensionInput.setValue(config.getDimension());
         needOutdoorButton.setValue(config.isNeedOutdoor());
-        resultIdInput.setValue(config.getResultId().toString());
+        resultIdInput.setValue(rlToString(config.getResultId()));
         conversionTimeInput.setValue(String.valueOf(config.getConversionTime()));
         resultMultipleInput.setValue(String.valueOf(config.getResultMultiple()));
         surroundingWidget.setValue(config.getSurroundingBlocks());
-
     }
 
     // 安全解析字符串到数字
@@ -297,6 +299,13 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         } catch (Exception e) {
             return def;
         }
+    }
+
+    protected String rlToString(ResourceLocation rl) {
+        if (rl == null) {
+            return "";
+        }
+        return rl.toString();
     }
 
     // 解析 ResourceLocation，字符串为空时返回 null

@@ -41,13 +41,13 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
 
     // 固定列布局
     private static final int COL_TAG_W = 3;
-    private static final int COL_ICON1_X = COL_TAG_W + 4;                              // 7
-    private static final int COL_TEXT1_X = COL_ICON1_X + ICON_SIZE + 3;                // 26
-    private static final int TEXT_COL_W = 90;  // 每列文本宽度（固定）
-    private static final int COL_ARROW_X = COL_TEXT1_X + TEXT_COL_W + 4;               // 120
+    private static final int COL_ICON1_X = COL_TAG_W + 4;
+    private static final int COL_TEXT1_X = COL_ICON1_X + ICON_SIZE + 3;
+    private static final int TEXT_COL_W = 90;  // 每列文本宽度
+    private static final int COL_ARROW_X = COL_TEXT1_X + TEXT_COL_W + 4;
     private static final int ARROW_W = 12;
-    private static final int COL_ICON2_X = COL_ARROW_X + ARROW_W + 4;                  // 136
-    private static final int COL_TEXT2_X = COL_ICON2_X + ICON_SIZE + 3;                // 155
+    private static final int COL_ICON2_X = COL_ARROW_X + ARROW_W + 4;
+    private static final int COL_TEXT2_X = COL_ICON2_X + ICON_SIZE + 3;
 
     // 文本超出自动滚动
     // 文本滚动速度：像素/ms
@@ -218,8 +218,8 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             this.source = source;
 
             // 预解析图标
-            this.itemIcon = resolveItemStack(config.getItemId());
-            this.resultIcon = resolveItemStack(config.getResultId());
+            this.itemIcon = config.getStartItemIcon();
+            this.resultIcon = config.getResultIcon();
 
             this.editButton = Button.builder(
                     Component.translatable("gui.itemdespawntowhat.edit.list.edit"),
@@ -230,12 +230,6 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
                     Component.translatable("gui.itemdespawntowhat.edit.list.delete"),
                     b -> parent.requestDelete(config, source, indexInSource)
             ).size(BUTTON_WIDTH, BUTTON_HEIGHT).build();
-        }
-
-        private static ItemStack resolveItemStack(@Nullable ResourceLocation rl) {
-            if (rl == null) return new ItemStack(Items.BARRIER);
-            Optional<Item> found = BuiltInRegistries.ITEM.getOptional(rl);
-            return found.map(ItemStack::new).orElseGet(() -> new ItemStack(Items.BARRIER));
         }
 
         @Override
@@ -256,8 +250,8 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             guiGraphics.fill(left, top + 1, left + COL_TAG_W, top + height - 1, tagColor);
 
             // 图标 + 文字区域布局
-            int iconY  = top + (height - ICON_SIZE) / 2;
-            int textY  = top + (height - mc.font.lineHeight) / 2;
+            int iconY = top + (height - ICON_SIZE) / 2;
+            int textY = top + (height - mc.font.lineHeight) / 2;
 
             // 第一列itemId 图标
             guiGraphics.renderItem(itemIcon, left + COL_ICON1_X, iconY);

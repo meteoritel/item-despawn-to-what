@@ -4,13 +4,15 @@ import com.google.gson.annotations.SerializedName;
 import com.meteorite.itemdespawntowhat.condition.ConditionChecker;
 import com.meteorite.itemdespawntowhat.condition.ConditionCheckerUtil;
 import com.meteorite.itemdespawntowhat.util.JsonOrder;
-import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -19,8 +21,7 @@ public abstract class BaseConversionConfig {
     protected static final Logger LOGGER = LogManager.getLogger();
     // 内部标识符，不会进行序列化
     protected transient String internalId;
-    protected ConfigType configType;
-    protected Registry<?> registry;
+    protected transient ConfigType configType;
     // 基础限制实体数量，没有规定实体数量的时候返回这个值
     protected static final int DEFAULT_RESULT_LIMIT = 30;
     // 检查限制的范围
@@ -128,6 +129,10 @@ public abstract class BaseConversionConfig {
         return rl != null && !rl.getPath().isEmpty();
     }
 
+    public ItemStack getStartItemIcon() {
+        return BuiltInRegistries.ITEM.getOptional(itemId)
+                .map(ItemStack::new).orElseGet(() -> new ItemStack(Items.BARRIER));
+    }
     // ========== 子类方法 ========== //
     // 获取当前配置输入物品周围的结果数量
     public abstract int countNearbyResult(ItemEntity itemEntity);
@@ -135,6 +140,7 @@ public abstract class BaseConversionConfig {
     public abstract boolean isResultLimitExceeded(ItemEntity itemEntity);
     // 获得结果对应的对象键名称
     public abstract String getResultDescriptionId();
+    public abstract ItemStack getResultIcon();
     // ========== setter 和 getter ========== //
 
     // 转化时间限制在1-300
@@ -217,8 +223,5 @@ public abstract class BaseConversionConfig {
     // config类型只能获取不能设置
     public ConfigType getConfigType() {
         return configType;
-    }
-    public Registry<?> getRegistry() {
-        return registry;
     }
 }

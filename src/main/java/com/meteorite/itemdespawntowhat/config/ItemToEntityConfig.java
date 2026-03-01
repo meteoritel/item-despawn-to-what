@@ -7,6 +7,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.AABB;
 
 public class ItemToEntityConfig extends BaseConversionConfig{
@@ -21,7 +23,6 @@ public class ItemToEntityConfig extends BaseConversionConfig{
     public ItemToEntityConfig() {
         super();
         this.configType = ConfigType.ITEM_TO_ENTITY;
-        this.registry = BuiltInRegistries.ENTITY_TYPE;
     }
 
     public ItemToEntityConfig(ResourceLocation item, ResourceLocation resultEntity) {
@@ -29,7 +30,6 @@ public class ItemToEntityConfig extends BaseConversionConfig{
         this.resultLimit = DEFAULT_RESULT_LIMIT;
         this.entityAge = 0;
         this.configType = ConfigType.ITEM_TO_ENTITY;
-        this.registry = BuiltInRegistries.ENTITY_TYPE;
     }
 
     public EntityType<?> getResultEntityType() {
@@ -40,6 +40,14 @@ public class ItemToEntityConfig extends BaseConversionConfig{
     public String getResultDescriptionId() {
         return getResultEntityType().getDescriptionId();
     }
+
+    // 实体的图标还在考虑中，暂时用物品代替
+    @Override
+    public ItemStack getResultIcon() {
+        return BuiltInRegistries.ITEM.getOptional(resultId)
+                .map(ItemStack::new).orElseGet(() -> new ItemStack(Items.BARRIER));
+    }
+
     // 确保实体不为空，名字没有拼写错
     @Override
     public boolean shouldProcess() {

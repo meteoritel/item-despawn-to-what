@@ -37,7 +37,6 @@ public class BaseConfigEditHandler<T extends BaseConversionConfig> {
 
         List<T> configs;
 
-
         if (PlayerStateChecker.isSinglePlayerServerReady(mc)
                 || PlayerStateChecker.isMultiPlayerServerConnected(mc)) {
             // 服务端已经加载，直接读取缓存

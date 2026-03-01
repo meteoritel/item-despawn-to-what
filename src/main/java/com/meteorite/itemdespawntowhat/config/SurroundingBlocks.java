@@ -22,9 +22,9 @@ public class SurroundingBlocks {
     @SerializedName("down")
     private String down = "";
 
-    public void setUp(String up) {
-        this.up = up;
-    }
+//    public void setUp(String up) {
+//        this.up = up;
+//    }
 
     // 检查是否存在周围方块设置的需求
     public boolean hasAnySurroundBlock() {

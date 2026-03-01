@@ -101,7 +101,6 @@ public abstract class BaseConfigHandler<T extends BaseConversionConfig> {
     }
 
     // 配置文件是否存在
-    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
     public boolean isConfigFileExists() {
         return Files.exists(getConfigPath());
     }
