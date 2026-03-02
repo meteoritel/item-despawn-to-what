@@ -13,6 +13,7 @@ import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Collection;
 import java.util.EnumMap;
 
 public class SurroundingBlocksWidget extends AbstractWidget implements ICompositeWidget {
@@ -167,5 +168,19 @@ public class SurroundingBlocksWidget extends AbstractWidget implements IComposit
         setInternalFocused(box);
     }
 
+    @Override
+    public Collection<EditBox> getAllEditBoxes() {
+        return boxes.values();
+    }
 
+    @Override
+    public boolean handleMouseClicked(double mouseX, double mouseY, int button) {
+        for (EditBox box : boxes.values()) {
+            if (box.mouseClicked(mouseX, mouseY, button)) {
+                setInternalFocused(box);
+                return true;
+            }
+        }
+        return false;
+    }
 }
