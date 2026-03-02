@@ -32,7 +32,7 @@ public class ItemToItemConfig extends BaseConversionConfig{
     // 物品转化需要保证转化前后结果不同，防止循环转化
     @Override
     public boolean shouldProcess() {
-        return super.shouldProcess() && this.itemId != this.resultId;
+        return super.shouldProcess() && !this.itemId.equals(resultId);
     }
 
     public Item getResultItem() {

@@ -5,10 +5,7 @@ import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.ui.BaseConfigEditHandler;
 import com.meteorite.itemdespawntowhat.ui.Callback;
 import com.meteorite.itemdespawntowhat.ui.ListScreenCallback;
-import com.meteorite.itemdespawntowhat.ui.widget.ConfigListPanel;
-import com.meteorite.itemdespawntowhat.ui.widget.FormListPanel;
-import com.meteorite.itemdespawntowhat.ui.widget.SuggestionWidget;
-import com.meteorite.itemdespawntowhat.ui.widget.SurroundingBlocksWidget;
+import com.meteorite.itemdespawntowhat.ui.widget.*;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.*;
@@ -42,6 +39,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     protected EditBox dimensionInput;
     protected CycleButton<Boolean> needOutdoorButton;
     protected SurroundingBlocksWidget surroundingWidget;
+    protected CatalystItemsWidget catalystWidget;
     protected EditBox resultIdInput;
     protected EditBox conversionTimeInput;
     protected EditBox resultMultipleInput;
@@ -87,6 +85,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
                 ).withInitialValue(false)
                 .create(0, 0, BOX_WIDTH, 18, Component.translatable(LABEL_PREFIX + "need_outdoor"));
         surroundingWidget = new SurroundingBlocksWidget(font, 0, 0);
+        catalystWidget = new CatalystItemsWidget(font, 0, 0);
         resultIdInput = textBox();
         conversionTimeInput = numericBox();
         resultMultipleInput = numericBox();
@@ -96,19 +95,22 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         formList.add(Component.translatable(LABEL_PREFIX + "dimension"), dimensionInput);
         formList.add(Component.translatable(LABEL_PREFIX + "need_outdoor"), needOutdoorButton);
         formList.add(Component.translatable(LABEL_PREFIX + "surrounding_blocks"), surroundingWidget);
+        formList.add(Component.translatable(LABEL_PREFIX + "catalyst_items"), catalystWidget);
         formList.add(Component.translatable(LABEL_PREFIX + "result_id"), resultIdInput);
         formList.add(Component.translatable(LABEL_PREFIX + "conversion_time"), conversionTimeInput);
         formList.add(Component.translatable(LABEL_PREFIX + "result_multiple"), resultMultipleInput);
         // 将子类字段加入列表
         addCustomEntries(formList);
+
         // 注册下拉建议框组件，在所有列表组件添加完成之后再添加，并添加文本监听
         itemIdSuggestion = registerSuggestion(itemIdInput, BuiltInRegistries.ITEM);
-        addSuggestionListener(itemIdInput, itemIdSuggestion);
         for (EditBox box : surroundingWidget.getBoxes().values()) {
             SuggestionWidget widget = registerSuggestion(box, BuiltInRegistries.BLOCK);
             sbSuggestions.add(widget);
-            addSuggestionListener(box,widget);
         }
+
+        registerSuggestion(catalystWidget.getItemBox(), BuiltInRegistries.ITEM);
+
 
         // 添加子类下拉建议框监听
         addCustomSuggestion();
@@ -210,7 +212,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         int pending = editHandler.getPendingConfigs().size();
 
         if (pending > 0) {
-            // 橙色星号标注待定条目
+            // 星号标注待定条目
             return Component.translatable("gui.itemdespawntowhat.edit.config_stat_2",
                     Component.literal(String.valueOf(total)).withStyle(ChatFormatting.GREEN),
                     Component.literal(String.valueOf(total - pending)).withStyle(ChatFormatting.GREEN),
@@ -260,6 +262,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         config.setDimension(dimensionInput.getValue().isEmpty() ? null : dimensionInput.getValue());
         config.setNeedOutdoor(needOutdoorButton.getValue());
         config.setSurroundingBlocks(surroundingWidget.getValue());
+        config.setCatalystItems(catalystWidget.getValue());
         config.setResultId(parseResourceLocation(resultIdInput.getValue()));
         config.setConversionTime(parseInt(conversionTimeInput.getValue(),300));
         config.setResultMultiple(parseInt(resultMultipleInput.getValue(), 1));
@@ -272,9 +275,10 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         resultIdInput.setValue("");
         conversionTimeInput.setValue("");
         resultMultipleInput.setValue("");
-        clearCustomFields();
-
         surroundingWidget.clear();
+        catalystWidget.clear();
+
+        clearCustomFields();
         clearAllSuggestions();
     }
 
@@ -290,6 +294,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         conversionTimeInput.setValue(String.valueOf(config.getConversionTime()));
         resultMultipleInput.setValue(String.valueOf(config.getResultMultiple()));
         surroundingWidget.setValue(config.getSurroundingBlocks());
+        catalystWidget.setValue(config.getCatalystItems());
     }
 
     // 安全解析字符串到数字
@@ -347,6 +352,8 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
             focusedWidget.setFocused(false);
             if (focusedWidget instanceof SurroundingBlocksWidget sbw) {
                 sbw.clearInternalFocus();
+            } else if (focusedWidget instanceof CatalystItemsWidget ciw) {
+                ciw.clearInternalFocus();
             }
         }
 
@@ -436,12 +443,27 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
                     }
                 }
             }
+        } else if (focusedWidget instanceof CatalystItemsWidget ciw) {
+            EditBox active = ciw.getInternalFocused();
+            if (active != null) {
+                for (SuggestionWidget sw : suggestionWidgets) {
+                    if (sw.getAttachedBox() == active && sw.isVisible()) {
+                        if (sw.keyPressed(keyCode)) return true;
+                        break;
+                    }
+                }
+            }
         }
 
         if (focusedWidget != null) {
             if (focusedWidget instanceof SurroundingBlocksWidget sbw) {
                 // 委托给内部活跃 EditBox
                 EditBox active = sbw.getInternalFocused();
+                if (active != null && active.keyPressed(keyCode, scanCode, modifiers)) {
+                    return true;
+                }
+            } else if (focusedWidget instanceof CatalystItemsWidget ciw) {
+                EditBox active = ciw.getInternalFocused();
                 if (active != null && active.keyPressed(keyCode, scanCode, modifiers)) {
                     return true;
                 }
@@ -470,14 +492,17 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
     // ========== 建议下拉框方法 ========== //
 
-    // 创建并注册一个建议组件
+    // 创建并注册一个建议组件，并添加监听
     protected SuggestionWidget registerSuggestion(EditBox editBox, Registry<?> registry) {
         SuggestionWidget widget = new SuggestionWidget(font, editBox, registry);
         suggestionWidgets.add(widget);
+        editBox.setResponder(text -> widget.updateSuggestions());
         return widget;
     }
 
+
     // 添加建议组件的文本监听
+    @Deprecated
     protected void addSuggestionListener(EditBox editBox, SuggestionWidget suggestionWidget) {
         editBox.setResponder(text -> {
             if (suggestionWidget != null) {

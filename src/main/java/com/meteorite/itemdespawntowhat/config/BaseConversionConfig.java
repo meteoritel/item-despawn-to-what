@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.config;
 import com.google.gson.annotations.SerializedName;
 import com.meteorite.itemdespawntowhat.condition.ConditionChecker;
 import com.meteorite.itemdespawntowhat.condition.ConditionCheckerUtil;
+import com.meteorite.itemdespawntowhat.condition.ConditionContext;
 import com.meteorite.itemdespawntowhat.util.JsonOrder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -12,7 +13,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.jetbrains.annotations.Nullable;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -54,6 +54,10 @@ public abstract class BaseConversionConfig {
     @SerializedName("surrounding_blocks")
     protected SurroundingBlocks surroundingBlocks;
 
+    @JsonOrder(2)
+    @SerializedName("catalyst_items")
+    protected CatalystItems catalystItems;
+
     // 生成结果注册名
     @JsonOrder(3)
     @SerializedName("result")
@@ -80,6 +84,7 @@ public abstract class BaseConversionConfig {
         this.dimension = "";
         this.needOutdoor = false;
         this.surroundingBlocks = new SurroundingBlocks();
+        this.catalystItems = new CatalystItems();
         this.resultId = result;
         this.conversionTime = 5;
         this.resultMultiple = 1;
@@ -117,8 +122,8 @@ public abstract class BaseConversionConfig {
             return null;
         }
 
-        String dimension = Optional.ofNullable(this.getDimension()).orElse("");
-        return ConditionCheckerUtil.buildCombinedChecker(dimension, this.isNeedOutdoor(), this.getSurroundingBlocks());
+        ConditionContext ctx = new ConditionContext(getDimension(), isNeedOutdoor(), getSurroundingBlocks(), getCatalystItems());
+        return ConditionCheckerUtil.buildCombinedChecker(ctx);
     }
 
     public Item getStartItem() {
@@ -166,7 +171,7 @@ public abstract class BaseConversionConfig {
     }
 
     public String getDimension() {
-        return dimension;
+        return Optional.ofNullable(dimension).orElse("");
     }
 
     public void setDimension(String dimension) {
@@ -218,6 +223,14 @@ public abstract class BaseConversionConfig {
 
     public void setSurroundingBlocks(SurroundingBlocks surroundingBlocks) {
         this.surroundingBlocks = surroundingBlocks;
+    }
+
+    public CatalystItems getCatalystItems() {
+        return catalystItems;
+    }
+
+    public void setCatalystItems(CatalystItems catalystItems) {
+        this.catalystItems = catalystItems;
     }
 
     // config类型只能获取不能设置

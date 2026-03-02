@@ -1,9 +1,11 @@
 package com.meteorite.itemdespawntowhat.config;
 
 import com.google.gson.annotations.SerializedName;
+import com.meteorite.itemdespawntowhat.condition.ConditionSerializable;
 
-// 六个面挨个写太麻烦，优化中
-public class SurroundingBlocks {
+import java.util.Map;
+
+public class SurroundingBlocks implements ConditionSerializable<SurroundingBlocks> {
     @SerializedName("north")
     private String north = "";
 
@@ -22,9 +24,37 @@ public class SurroundingBlocks {
     @SerializedName("down")
     private String down = "";
 
-//    public void setUp(String up) {
-//        this.up = up;
-//    }
+    // ========== 接口实现 ========== //
+
+    // 将非空的六面配置以 conditionKey.<direction> 为键写入 。
+    @Override
+    public void toConditionMap(Map<String, String> out, String conditionKey) {
+        for (ConfigDirection dir : ConfigDirection.values()) {
+            String value = get(dir);
+            if (value != null && !value.isEmpty()) {
+                out.put(conditionKey + "." + dir.name().toLowerCase(), value);
+            }
+        }
+    }
+
+    @Override
+    public SurroundingBlocks fromConditionMap(Map<String, String> conditions, String conditionKey) {
+        String prefix = conditionKey + ".";
+        boolean anySet = false;
+
+        for (Map.Entry<String, String> entry : conditions.entrySet()) {
+            if (entry.getKey().startsWith(prefix)) {
+                String dirStr = entry.getKey().substring(prefix.length());
+                ConfigDirection dir = ConfigDirection.fromString(dirStr);
+                if (dir != null && !entry.getValue().isEmpty()) {
+                    set(dir, entry.getValue());
+                    anySet = true;
+                }
+            }
+        }
+
+        return anySet ? this : null;
+    }
 
     // 检查是否存在周围方块设置的需求
     public boolean hasAnySurroundBlock() {
@@ -55,11 +85,6 @@ public class SurroundingBlocks {
     }
 
     public void setAll(String value) {
-        north = value;
-        south = value;
-        east = value;
-        west = value;
-        up = value;
-        down = value;
+        north = south = east = west = up = down = value;
     }
 }

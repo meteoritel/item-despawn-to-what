@@ -58,6 +58,5 @@ public class ItemToBlockEditScreen extends BaseConfigEditScreen<ItemToBlockConfi
     @Override
     protected void addCustomSuggestion() {
         resultIdSuggestion = registerSuggestion(resultIdInput, BuiltInRegistries.BLOCK);
-        addSuggestionListener(resultIdInput, resultIdSuggestion);
     }
 }

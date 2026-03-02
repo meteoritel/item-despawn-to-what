@@ -1,5 +1,6 @@
-package com.meteorite.itemdespawntowhat.condition;
+package com.meteorite.itemdespawntowhat.condition.checker;
 
+import com.meteorite.itemdespawntowhat.condition.ConditionContext;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -9,17 +10,29 @@ import java.util.Map;
 
 public class OutdoorConditionChecker extends AbstractConditionChecker{
 
-    private static final String CONDITION_KEY = "need_outdoor";
+    public static final String KEY = "need_outdoor";
+
+    @Override
+    public String getConditionKey() {
+        return KEY;
+    }
+
+    @Override
+    public boolean shouldApply(ConditionContext ctx) {
+        return ctx.needOutdoor();
+    }
+
+    @Override
+    public void applyCondition(Map<String, String> conditions, ConditionContext ctx) {
+        conditions.put(getConditionKey(), "true");
+    }
 
     @Override
     public AbstractConditionChecker parse(Map<String, String> conditions) {
-        boolean needOutdoor = getConditionBoolean(conditions, CONDITION_KEY, false);
-
         // 如果不需要露天检查，返回null表示跳过此条件
-        if (!needOutdoor) {
+        if (!getConditionBoolean(conditions, false)) {
             return null;
         }
-
         return this;
     }
 
@@ -37,7 +50,6 @@ public class OutdoorConditionChecker extends AbstractConditionChecker{
                 return false;
             }
         }
-
         return true;
     }
 }

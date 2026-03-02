@@ -15,7 +15,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.EnumMap;
 
-public class SurroundingBlocksWidget extends AbstractWidget {
+public class SurroundingBlocksWidget extends AbstractWidget implements ICompositeWidget {
 
     // =========== 布局常量 ========== //
     private static final int TOTAL_WIDTH = 240;
@@ -86,7 +86,7 @@ public class SurroundingBlocksWidget extends AbstractWidget {
         }
     }
 
-    // ========== 输入方法 ========== //
+    // ========== 焦点与输入 ========== //
 
     private void setInternalFocused(@Nullable EditBox box) {
         if (internalFocused == box) return;
@@ -131,8 +131,9 @@ public class SurroundingBlocksWidget extends AbstractWidget {
     }
 
     @Override
-    protected void updateWidgetNarration(@NotNull NarrationElementOutput narration) { }
+    protected void updateWidgetNarration(@NotNull NarrationElementOutput narration) {}
 
+    // ========== 值绑定 ========== //
     public SurroundingBlocks getValue() {
         SurroundingBlocks sbs = new SurroundingBlocks();
         boxes.forEach((dir, box) -> sbs.set(dir, box.getValue()));
@@ -153,4 +154,18 @@ public class SurroundingBlocksWidget extends AbstractWidget {
     public EnumMap<ConfigDirection, EditBox> getBoxes() {
         return boxes;
     }
+
+    // ========== 接口实现 ========== //
+    @Override
+    @Nullable
+    public EditBox getFocusedEditBox() {
+        return internalFocused;
+    }
+
+    @Override
+    public void setFocusedEditBox(@Nullable EditBox box) {
+        setInternalFocused(box);
+    }
+
+
 }

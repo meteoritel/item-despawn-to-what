@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.condition;
 
+import com.meteorite.itemdespawntowhat.condition.checker.*;
+
 import java.util.*;
 import java.util.function.Supplier;
 
@@ -16,6 +18,7 @@ public class ConditionCheckerRegistry {
         register(DimensionConditionChecker::new);
         register(OutdoorConditionChecker::new);
         register(SurroundingBlocksConditionChecker::new);
+        register(CatalystConditionChecker::new);
     }
 
     public static void register(Supplier<AbstractConditionChecker> factory) {
@@ -23,7 +26,6 @@ public class ConditionCheckerRegistry {
     }
 
     public static List<Supplier<AbstractConditionChecker>> getFactories() {
-        return new ArrayList<>(CHECKER_FACTORIES);
+        return Collections.unmodifiableList(CHECKER_FACTORIES);
     }
-
 }

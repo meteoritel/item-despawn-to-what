@@ -16,6 +16,7 @@
   "gui.itemdespawntowhat.edit.dimension": "Dimension",
   "gui.itemdespawntowhat.edit.need_outdoor": "Need Outdoor",
   "gui.itemdespawntowhat.edit.surrounding_blocks": "Surrounding Blocks",
+  "gui.itemdespawntowhat.edit.catalyst_items": "Catalyst items",
   "gui.itemdespawntowhat.edit.result_id": "Result ID",
   "gui.itemdespawntowhat.edit.conversion_time": "Conversion Time (s)",
   "gui.itemdespawntowhat.edit.result_multiple": "Result Multiple",

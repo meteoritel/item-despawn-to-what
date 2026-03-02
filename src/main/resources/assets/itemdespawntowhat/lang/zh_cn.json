@@ -16,6 +16,7 @@
   "gui.itemdespawntowhat.edit.dimension": "生效维度",
   "gui.itemdespawntowhat.edit.need_outdoor": "需要露天",
   "gui.itemdespawntowhat.edit.surrounding_blocks": "六面的方块",
+  "gui.itemdespawntowhat.edit.catalyst_items": "辅助物品",
   "gui.itemdespawntowhat.edit.result_id": "结果ID",
   "gui.itemdespawntowhat.edit.conversion_time": "转化时间 (单位:秒)",
   "gui.itemdespawntowhat.edit.result_multiple": "结果倍率",

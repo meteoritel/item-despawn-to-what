@@ -14,7 +14,8 @@ import java.util.stream.Collectors;
 /*
  * 物品ID输入建议组件
  * 支持逗号分隔，Tab补全，上下键选择
- * 逗号分隔似乎没用了，要改成列表
+ * 逗号分隔似乎没用了，输入改成列表好麻烦
+ * 现在又有用了，拿来废物利用下
  */
 public class SuggestionWidget {
     private static final int MAX_FETCH = 100;       // 最多匹配条数
