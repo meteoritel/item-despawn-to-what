@@ -46,3 +46,11 @@
 - **Command Updates**:
   - `/conversion_config reload` – Reload all configuration files.
   - `/conversion_config edit` – Open the configuration editor GUI.
+
+## [1.1.1]
+
+### 新增
+
+
+### 修复
+- 修复了多个维度同时进行转化出现异常的bug

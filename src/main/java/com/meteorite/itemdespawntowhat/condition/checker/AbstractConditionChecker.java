@@ -38,21 +38,4 @@ public abstract class AbstractConditionChecker implements ConditionChecker {
         }
         return Boolean.parseBoolean(value);
     }
-
-    // 安全获得字符串值
-    //@Deprecated
-    protected String getConditionValue(Map<String, String> conditions, String key, String defaultValue) {
-        String value = conditions.get(key);
-        return value != null ? value : defaultValue;
-    }
-
-    // 安全获得布尔值
-    //@Deprecated
-    protected boolean getConditionBoolean(Map<String, String> conditions, String key, boolean defaultValue) {
-        String value = conditions.get(key);
-        if (value == null || value.isEmpty()) {
-            return defaultValue;
-        }
-        return Boolean.parseBoolean(value);
-    }
 }

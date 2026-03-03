@@ -7,6 +7,7 @@ import com.meteorite.itemdespawntowhat.condition.ConditionContext;
 import com.meteorite.itemdespawntowhat.util.JsonOrder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -126,6 +127,14 @@ public abstract class BaseConversionConfig {
         return ConditionCheckerUtil.buildCombinedChecker(ctx);
     }
 
+    // 消耗催化剂的方法
+    public void consumeCatalysts(ItemEntity itemEntity, int startItemCount) {
+        if (catalystItems == null || catalystItems.hasAnyCatalyst()) {
+            return;
+        }
+        catalystItems.consumeFromLevel(itemEntity, startItemCount);
+    }
+
     public Item getStartItem() {
         return BuiltInRegistries.ITEM.get(itemId);
     }
@@ -138,16 +147,15 @@ public abstract class BaseConversionConfig {
         return BuiltInRegistries.ITEM.getOptional(itemId)
                 .map(ItemStack::new).orElseGet(() -> new ItemStack(Items.BARRIER));
     }
+
     // ========== 子类方法 ========== //
-    // 获取当前配置输入物品周围的结果数量
     public abstract int countNearbyResult(ItemEntity itemEntity);
-    // 当前的周围结果数量是否已经超过了上限
     public abstract boolean isResultLimitExceeded(ItemEntity itemEntity);
-    // 获得结果对应的对象键名称
     public abstract String getResultDescriptionId();
     public abstract ItemStack getResultIcon();
-    // ========== setter 和 getter ========== //
+    public abstract void performConversion(ItemEntity itemEntity, ServerLevel serverLevel);
 
+    // ========== setter 和 getter ========== //
     // 转化时间限制在1-300
     public int getConversionTime() {
         return (conversionTime <= 0 || conversionTime > DEFAULT_CONVERSION_TIME) ? DEFAULT_CONVERSION_TIME : conversionTime;

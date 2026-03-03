@@ -1,9 +1,12 @@
 package com.meteorite.itemdespawntowhat.config;
 
 import com.google.gson.annotations.SerializedName;
+import com.meteorite.itemdespawntowhat.event.ItemConversionEvent;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.AgeableMob;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -32,6 +35,103 @@ public class ItemToEntityConfig extends BaseConversionConfig{
         this.configType = ConfigType.ITEM_TO_ENTITY;
     }
 
+    // 确保实体不为空，名字没有拼写错
+    @Override
+    public boolean shouldProcess() {
+        return super.shouldProcess() && this.getResultEntityType() != null;
+    }
+
+    // ========== 转化逻辑 ========== //
+    @Override
+    public void performConversion(ItemEntity itemEntity, ServerLevel serverLevel) {
+        ResourceLocation resultEntityId = getResultId();
+        EntityType<?> entityType = getResultEntityType();
+        BlockPos pos = itemEntity.blockPosition();
+
+        if (entityType == null) {
+            LOGGER.warn("Unknown entity type: {}", resultEntityId);
+            return;
+        }
+
+        ItemStack originalStack = itemEntity.getItem();
+        int originalStackSize = originalStack.getCount();
+        int resultMultiple = getResultMultiple();
+
+        int currentCount = countNearbyResult(itemEntity);
+        int maxLimit = getResultLimit();
+
+        // 计算本次可以生成的实体数量和需要返还的物品数量
+        int actualEntitiesToSpawn = Math.min(originalStackSize * resultMultiple, maxLimit - currentCount);
+        if (actualEntitiesToSpawn <= 0) {
+            LOGGER.debug("No capacity for entity conversion of {}", resultEntityId);
+            return;
+        }
+
+        int itemsUsed = (int) Math.ceil((double) actualEntitiesToSpawn / resultMultiple);
+        int itemsRemaining = originalStackSize - itemsUsed;
+
+        LOGGER.debug("Converting to entity: {} -> {} ({} entities, using {} items, {} remaining)",
+                originalStack.getItem().getDescriptionId(), resultEntityId,
+                actualEntitiesToSpawn, itemsUsed, itemsRemaining);
+
+        // 物品实体下一tick消失
+        itemEntity.makeFakeItem();
+        // 根据条件决定是否消耗催化剂
+        consumeCatalysts(itemEntity, originalStackSize);
+        // 生成实体
+        for (int i = 0; i < actualEntitiesToSpawn; i++) {
+            Entity resultEntity = entityType.create(serverLevel);
+            if (resultEntity != null) {
+                // 稍微分散位置，避免重叠
+                double offsetX = (serverLevel.random.nextDouble() - 0.5) * 0.5;
+                double offsetZ = (serverLevel.random.nextDouble() - 0.5) * 0.5;
+
+                resultEntity.moveTo(pos.getX() + 0.5 + offsetX, pos.getY(), pos.getZ() + 0.5 + offsetZ, 0, 0);
+
+                // 设置实体年龄（如果需要）
+                if (resultEntity instanceof AgeableMob ageable) {
+                    ageable.setAge(getEntityAge());
+                }
+
+                serverLevel.addFreshEntity(resultEntity);
+            }
+        }
+
+        // 返还多余物品，并打上锁防止再次触发转化
+        if (itemsRemaining > 0) {
+            ItemStack returnStack = originalStack.copy();
+            returnStack.setCount(itemsRemaining);
+            ItemEntity returnItem = new ItemEntity(
+                    serverLevel,
+                    pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5,
+                    returnStack
+            );
+            returnItem.getPersistentData().putBoolean(ItemConversionEvent.CHECK_LOCK_TAG, true);
+            serverLevel.addFreshEntity(returnItem);
+        }
+    }
+
+    // 实体直接按照数量计数
+    @Override
+    public int countNearbyResult(ItemEntity itemEntity) {
+        if (!(itemEntity.level() instanceof ServerLevel serverLevel)) {
+            return 0;
+        }
+
+        AABB box = new AABB(
+                itemEntity.getX() - MAX_RADIUS, itemEntity.getY() - MAX_RADIUS, itemEntity.getZ() - MAX_RADIUS,
+                itemEntity.getX() + MAX_RADIUS, itemEntity.getY() + MAX_RADIUS, itemEntity.getZ() + MAX_RADIUS);
+
+        return serverLevel.getEntitiesOfClass(this.getResultEntityType().getBaseClass(), box, Entity::isAlive)
+                .size();
+    }
+
+    @Override
+    public boolean isResultLimitExceeded(ItemEntity itemEntity) {
+        return this.countNearbyResult(itemEntity) >= this.getResultLimit();
+    }
+
+    // ========== 结果相关方法 ========== //
     public EntityType<?> getResultEntityType() {
         return BuiltInRegistries.ENTITY_TYPE.get(resultId);
     }
@@ -48,44 +148,16 @@ public class ItemToEntityConfig extends BaseConversionConfig{
                 .map(ItemStack::new).orElseGet(() -> new ItemStack(Items.BARRIER));
     }
 
-    // 确保实体不为空，名字没有拼写错
-    @Override
-    public boolean shouldProcess() {
-        return super.shouldProcess() && this.getResultEntityType() != null;
+    public int getEntityAge() {
+        return entityAge;
     }
-
-    // 其他实体就直接按照数量计数
-    @Override
-    public int countNearbyResult(ItemEntity itemEntity) {
-        if (!(itemEntity.level() instanceof ServerLevel serverLevel)) {
-            return 0;
-        }
-
-        AABB box = new AABB(
-                itemEntity.getX() - MAX_RADIUS, itemEntity.getY() - MAX_RADIUS, itemEntity.getZ() - MAX_RADIUS,
-                itemEntity.getX() + MAX_RADIUS, itemEntity.getY() + MAX_RADIUS, itemEntity.getZ() + MAX_RADIUS);
-
-        return serverLevel.getEntitiesOfClass(this.getResultEntityType().getBaseClass(), box, Entity::isAlive)
-                .size();
+    public void setEntityAge(int entityAge) {
+        this.entityAge = entityAge;
     }
-
     public int getResultLimit() {
         return resultLimit <= 0 ? DEFAULT_RESULT_LIMIT : resultLimit;
     }
     public void setResultLimit(int resultLimit) {
         this.resultLimit = resultLimit;
-    }
-
-    @Override
-    public boolean isResultLimitExceeded(ItemEntity itemEntity) {
-        return this.countNearbyResult(itemEntity) >= this.getResultLimit();
-    }
-
-    public int getEntityAge() {
-        return entityAge;
-    }
-
-    public void setEntityAge(int entityAge) {
-        this.entityAge = entityAge;
     }
 }

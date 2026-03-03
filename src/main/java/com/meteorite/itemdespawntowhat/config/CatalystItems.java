@@ -3,20 +3,35 @@ package com.meteorite.itemdespawntowhat.config;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.meteorite.itemdespawntowhat.condition.ConditionSerializable;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class CatalystItems implements ConditionSerializable<CatalystItems> {
     private static final Gson GSON = new Gson();
+    private static final Logger LOGGER = LogManager.getLogger();
 
     @SerializedName("catalyst_items")
     private List<CatalystEntry> catalystList;
 
+    @SerializedName("consume_catalyst")
+    private boolean catalystConsume;
+
     public CatalystItems() {
         this.catalystList = new ArrayList<>();
+        this.catalystConsume = true;
     }
 
     // ========== 接口实现 ========== //
@@ -43,6 +58,97 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
         return parsed.hasAnyCatalyst() ? parsed : null;
     }
 
+    // =========== 催化剂消耗 ========== //
+    // 在世界上消耗催化剂物品
+    public void consumeFromLevel(ItemEntity triggerEntity, int startItemCount) {
+        if (!catalystConsume || !hasAnyCatalyst()) {
+            return;
+        }
+
+        // 查找范围：起始物品所在格子的 1×1×1 AABB
+        BlockPos blockPos = triggerEntity.blockPosition();
+        AABB searchBox = AABB.unitCubeFromLowerCorner(Vec3.atLowerCornerOf(blockPos));
+
+        for (CatalystEntry entry : getCatalystList()) {
+            if (!entry.isValid()) continue;
+
+            // 需要消耗的总数量 = 催化剂倍率 × 起始物品堆叠数
+            Item targetItem = BuiltInRegistries.ITEM.get(entry.getItemId());
+            int remaining = entry.getRequiredCount(startItemCount);
+
+            List<ItemEntity> candidates = triggerEntity.level().getEntitiesOfClass(ItemEntity.class, searchBox,
+                    entity -> entity != triggerEntity
+                            && entity.isAlive()
+                            && entity.getItem().getItem() == targetItem
+            );
+
+            for (ItemEntity candidate : candidates) {
+                if (remaining <= 0) {
+                    break;
+                }
+
+                // 按顺序消耗周围的物品实体
+                int available = candidate.getItem().getCount();
+                if (available <= remaining) {
+                    remaining -= available;
+                    candidate.discard();
+                    LOGGER.debug("Consumed entire catalyst entity: {} x{}", entry.getItemId(), available);
+                } else {
+                    candidate.getItem().shrink(remaining);
+                    LOGGER.debug("Consumed partial catalyst: {} x{} (entity has {} remaining)",
+                            entry.getItemId(), remaining, candidate.getItem().getCount());
+                    remaining = 0;
+                }
+            }
+            if (remaining > 0) {
+                // 理论上不应发生，记录警告
+                LOGGER.warn("Catalyst consumption incomplete for {}: still need {} more",
+                        entry.getItemId(), remaining);
+            }
+        }
+    }
+
+    // 获取最大能转化的数量
+    public int getMaxConvertible(ItemEntity triggerEntity, int startCount) {
+        if (!hasAnyCatalyst()) {
+            return startCount;
+        }
+        if (!catalystConsume) {
+            // 不消耗模式下，只要通过检查，整个堆叠都可转化
+            return startCount;
+        }
+        Map<Item, Integer> nearbyCounts = collectNearbyItemCounts(triggerEntity);
+        int max = startCount;
+        for (CatalystEntry entry : catalystList) {
+            Item requiredItem = BuiltInRegistries.ITEM.get(entry.getItemId());
+            int available = nearbyCounts.getOrDefault(requiredItem, 0);
+            int possible = available / entry.getCount(); // 整数除法，向下取整
+            if (possible < max) {
+                max = possible;
+            }
+        }
+        return max;
+    }
+
+    // 统计起始物品所在格子内（排除自己）各物品的总数量
+    public static Map<Item, Integer> collectNearbyItemCounts(ItemEntity triggerEntity) {
+        BlockPos pos = triggerEntity.blockPosition();
+        AABB searchBox = new AABB(pos);
+
+        Map<Item, Integer> counts = new HashMap<>();
+        triggerEntity.level().getEntitiesOfClass(
+                ItemEntity.class,
+                searchBox,
+                e -> e != triggerEntity && e.isAlive()
+        ).forEach(e -> {
+            ItemStack stack = e.getItem();
+            if (!stack.isEmpty()) {
+                counts.merge(stack.getItem(), stack.getCount(), Integer::sum);
+            }
+        });
+        return counts;
+    }
+
     public boolean hasAnyCatalyst() {
         return catalystList != null && !catalystList.isEmpty();
     }
@@ -53,6 +159,14 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
 
     public void setCatalystList(List<CatalystEntry> catalystList) {
         this.catalystList = catalystList;
+    }
+
+    public boolean isCatalystConsume() {
+        return catalystConsume;
+    }
+
+    public void setCatalystConsume(boolean catalystConsume) {
+        this.catalystConsume = catalystConsume;
     }
 
     // ========== 内部条目类 ========== //

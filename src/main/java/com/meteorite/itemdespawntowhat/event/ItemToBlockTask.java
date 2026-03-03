@@ -57,7 +57,7 @@ public class ItemToBlockTask implements LevelDelayTask{
                 center.getZ() + 0.5, returnStack);
 
         // 返还物品添加转化锁定的标签，防止重复转化
-        returnItem.getPersistentData().putBoolean(ItemConversionEvent.CHECK_TAG_LOCK, true);
+        returnItem.getPersistentData().putBoolean(ItemConversionEvent.CHECK_LOCK_TAG, true);
         serverLevel.addFreshEntity(returnItem);
     }
 

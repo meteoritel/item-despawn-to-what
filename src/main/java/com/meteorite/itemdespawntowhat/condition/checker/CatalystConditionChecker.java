@@ -1,6 +1,5 @@
 package com.meteorite.itemdespawntowhat.condition.checker;
 
-import com.google.gson.Gson;
 import com.meteorite.itemdespawntowhat.condition.ConditionContext;
 import com.meteorite.itemdespawntowhat.config.CatalystItems;
 import net.minecraft.core.BlockPos;
@@ -20,10 +19,7 @@ import java.util.Map;
 
 public class CatalystConditionChecker extends AbstractConditionChecker {
     private static final Logger LOGGER = LogManager.getLogger();
-    private static final Gson GSON = new Gson();
-
     public static final String KEY = "catalyst";
-
     private CatalystItems catalystItems;
 
     public CatalystConditionChecker() {}
@@ -63,17 +59,25 @@ public class CatalystConditionChecker extends AbstractConditionChecker {
             return true;
         }
 
-        int startCount = itemEntity.getItem().getCount();
-
         Map<Item, Integer> nearbyItemCounts = collectNearbyItems(itemEntity, level);
         List<CatalystItems.CatalystEntry> entries = catalystItems.getCatalystList();
 
+        return checkFixedAmountEach(entries, nearbyItemCounts);
+    }
+
+    // 每种催化剂需存在至少1 份，满足后整批起始物品均可转化
+    private boolean checkFixedAmountEach(
+            List<CatalystItems.CatalystEntry> entries,
+            Map<Item, Integer> nearbyCounts) {
+
         for (CatalystItems.CatalystEntry entry : entries) {
             Item requiredItem = BuiltInRegistries.ITEM.get(entry.getItemId());
-            int requiredCount = entry.getRequiredCount(startCount);
-            int availableCount = nearbyItemCounts.getOrDefault(requiredItem, 0);
+            int required = entry.getCount();
+            int available = nearbyCounts.getOrDefault(requiredItem, 0);
 
-            if (availableCount < requiredCount) {
+            if (available < required) {
+                LOGGER.debug("No-consume-mode catalyst check failed: {} needs {} but has {}",
+                        entry.getItemId(), required, available);
                 return false;
             }
         }

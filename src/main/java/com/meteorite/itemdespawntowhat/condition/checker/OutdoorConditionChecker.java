@@ -24,7 +24,7 @@ public class OutdoorConditionChecker extends AbstractConditionChecker{
 
     @Override
     public void applyCondition(Map<String, String> conditions, ConditionContext ctx) {
-        conditions.put(getConditionKey(), "true");
+        conditions.put(getConditionKey(),String.valueOf(ctx.needOutdoor()));
     }
 
     @Override

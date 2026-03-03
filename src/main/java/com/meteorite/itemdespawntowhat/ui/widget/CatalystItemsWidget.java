@@ -10,7 +10,9 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.function.Consumer;
 
 public class CatalystItemsWidget extends AbstractCompositeWidget {
     // ===== 布局常量 ===== //
@@ -24,15 +26,26 @@ public class CatalystItemsWidget extends AbstractCompositeWidget {
     private static final int BOX_WIDTH = (TOTAL_WIDTH - H_GAP) / 2;
 
     private final Font font;
-    private final EditBox itemBox;
+    private final FocusAwareEditBox itemBox;
     private final EditBox countBox;
+
+    private List<String> itemSnapshotOnFocus = List.of();
 
     public CatalystItemsWidget(Font font, int x, int y) {
         super(x, y, TOTAL_WIDTH, getTotalHeight(), Component.empty());
         this.font = font;
 
-        this.itemBox = new EditBox(font, 0, 0, BOX_WIDTH, BOX_HEIGHT, Component.empty());
+        this.itemBox = new FocusAwareEditBox(font, 0, 0, BOX_WIDTH, BOX_HEIGHT, Component.empty());
         this.itemBox.setMaxLength(256);
+        this.itemBox.setFocusListener(focused -> {
+            if (focused) {
+                // 获得焦点：保存当前物品列表快照，供失焦时 diff 使用
+                itemSnapshotOnFocus = parseItemList(itemBox.getValue());
+            } else {
+                // 失去焦点：同步数量框
+                adjustCountBox(itemSnapshotOnFocus);
+            }
+        });
 
         this.countBox = new EditBox(font, 0, 0, BOX_WIDTH, BOX_HEIGHT, Component.empty());
         this.countBox.setMaxLength(64);
@@ -148,6 +161,50 @@ public class CatalystItemsWidget extends AbstractCompositeWidget {
         countBox.setValue(countSb.toString());
     }
 
+    // 同步数量文本框数量
+    private void adjustCountBox(List<String> oldItems) {
+        List<String> newItems = parseItemList(itemBox.getValue());
+        List<String> oldCounts = parseCountList(countBox.getValue());
+
+        // 物品为空，直接清空数量框
+        if (newItems.isEmpty()) {
+            countBox.setValue("");
+            return;
+        }
+
+        // 补齐旧数量列表长度，不足部分默认为 "1"
+        List<String> counts = new ArrayList<>(oldCounts);
+        while (counts.size() < oldItems.size()) {
+            counts.add("1");
+        }
+
+        // 用游标在旧列表中从左向右顺序查找，避免重复消费同一位置
+        int searchFrom = 0;
+        List<String> newCounts = new ArrayList<>(newItems.size());
+
+        for (String newItem : newItems) {
+            // 在 oldItems[searchFrom..] 中寻找第一个与 newItem 相同的项
+            int foundIdx = -1;
+            for (int i = searchFrom; i < oldItems.size(); i++) {
+                if (oldItems.get(i).equals(newItem)) {
+                    foundIdx = i;
+                    break;
+                }
+            }
+
+            if (foundIdx >= 0) {
+                // 找到：迁移对应数量，游标推进到该位置的下一位
+                newCounts.add(counts.get(foundIdx));
+                searchFrom = foundIdx + 1;
+            } else {
+                // 未找到（新增项）：补默认值 "1"
+                newCounts.add("1");
+                // searchFrom 不变，继续从同一位置向后匹配后续新项
+            }
+        }
+        countBox.setValue(String.join(",", newCounts));
+    }
+
     public void clear() {
         itemBox.setValue("");
         countBox.setValue("");
@@ -157,6 +214,42 @@ public class CatalystItemsWidget extends AbstractCompositeWidget {
         return itemBox;
     }
 
-    // ========== 接口实现 ========== //
+    // 将原始文本解析为物品注册名列表（去除空格、过滤空串）
+    private static List<String> parseItemList(String raw) {
+        return Arrays.stream(raw.replace(" ", "").split(",", -1))
+                .filter(s -> !s.isEmpty())
+                .toList();
+    }
 
+    // 将数量文本框解析为可变列表（去除空格，保留空串占位）
+    private static List<String> parseCountList(String raw) {
+        String[] parts = raw.replace(" ", "").split(",", -1);
+        List<String> list = new ArrayList<>(Arrays.asList(parts));
+        while (!list.isEmpty() && list.getLast().isEmpty()) {
+            list.removeLast();
+        }
+        return list;
+    }
+
+    // ========== 内部可监听的文本框类 ========== //
+    public static class FocusAwareEditBox extends EditBox {
+        @Nullable
+        private Consumer<Boolean> focusListener;
+        public FocusAwareEditBox(Font font, int x, int y, int width, int height, Component message) {
+            super(font, x, y, width, height, message);
+        }
+
+        public void setFocusListener(@Nullable Consumer<Boolean> listener) {
+            this.focusListener = listener;
+        }
+
+        @Override
+        public void setFocused(boolean focused) {
+            boolean old = isFocused();
+            super.setFocused(focused);
+            if (old != focused && focusListener != null) {
+                focusListener.accept(focused);
+            }
+        }
+    }
 }

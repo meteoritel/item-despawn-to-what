@@ -1,8 +1,6 @@
 package com.meteorite.itemdespawntowhat.condition;
 
 import com.meteorite.itemdespawntowhat.condition.checker.*;
-import com.meteorite.itemdespawntowhat.config.CatalystItems;
-import com.meteorite.itemdespawntowhat.config.SurroundingBlocks;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
