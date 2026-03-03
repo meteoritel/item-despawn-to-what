@@ -1,23 +1,18 @@
 package com.meteorite.itemdespawntowhat.ui.widget;
 
 import com.meteorite.itemdespawntowhat.config.CatalystItems;
-import com.meteorite.itemdespawntowhat.ui.Screen.BaseConfigEditScreen;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 
-public class CatalystItemsWidget extends AbstractWidget implements ICompositeWidget {
+public class CatalystItemsWidget extends AbstractCompositeWidget {
     // ===== 布局常量 ===== //
     private static final int TOTAL_WIDTH = 240;
     private static final int BOX_HEIGHT = 18;
@@ -29,15 +24,11 @@ public class CatalystItemsWidget extends AbstractWidget implements ICompositeWid
     private static final int BOX_WIDTH = (TOTAL_WIDTH - H_GAP) / 2;
 
     private final Font font;
-
     private final EditBox itemBox;
     private final EditBox countBox;
 
-    @Nullable
-    private EditBox internalFocused;
-
     public CatalystItemsWidget(Font font, int x, int y) {
-        super(x, y, TOTAL_WIDTH, totalHeight(), Component.empty());
+        super(x, y, TOTAL_WIDTH, getTotalHeight(), Component.empty());
         this.font = font;
 
         this.itemBox = new EditBox(font, 0, 0, BOX_WIDTH, BOX_HEIGHT, Component.empty());
@@ -47,7 +38,7 @@ public class CatalystItemsWidget extends AbstractWidget implements ICompositeWid
         this.countBox.setMaxLength(64);
     }
 
-    public static int totalHeight() {
+    public static int getTotalHeight() {
         return LABEL_HEIGHT + V_GAP + BOX_HEIGHT + V_GAP + TIP_HEIGHT;
     }
 
@@ -81,50 +72,9 @@ public class CatalystItemsWidget extends AbstractWidget implements ICompositeWid
         );
     }
 
-    // ========== 焦点与输入 ========== //
-    private void setInternalFocused(@Nullable EditBox box) {
-        if (internalFocused == box) return;
-
-        if (internalFocused != null) {
-            internalFocused.setFocused(false);
-        }
-        internalFocused = box;
-        if (internalFocused != null) {
-            internalFocused.setFocused(true);
-        }
-    }
-
-    @Nullable
-    public EditBox getInternalFocused() {
-        return internalFocused;
-    }
-
-    public void clearInternalFocus() {
-        setInternalFocused(null);
-    }
-
     @Override
-    protected void updateWidgetNarration(@NotNull NarrationElementOutput narration) {}
-
-    @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        EditBox clicked = null;
-
-        if (itemBox.mouseClicked(mouseX, mouseY, button)) {
-            clicked = itemBox;
-        } else if (countBox.mouseClicked(mouseX, mouseY, button)) {
-            clicked = countBox;
-        }
-
-        if (clicked == null) return false;
-
-        setInternalFocused(clicked);
-
-        if (Minecraft.getInstance().screen instanceof BaseConfigEditScreen<?> screen) {
-            screen.setFocusedWidget(this);
-        }
-
-        return true;
+    protected Iterable<EditBox> getEditBoxes() {
+        return List.of(itemBox, countBox);
     }
 
     // ========== 值绑定 ========== //
@@ -208,36 +158,5 @@ public class CatalystItemsWidget extends AbstractWidget implements ICompositeWid
     }
 
     // ========== 接口实现 ========== //
-    @Override
-    @Nullable
-    public EditBox getFocusedEditBox() {
-        return internalFocused;
-    }
 
-    @Override
-    public void setFocusedEditBox(@Nullable EditBox box) {
-        setInternalFocused(box);
-    }
-
-    @Override
-    public Collection<EditBox> getAllEditBoxes() {
-        return List.of(itemBox, countBox);
-    }
-
-    @Override
-    public boolean handleMouseClicked(double mouseX, double mouseY, int button) {
-        EditBox clicked = null;
-
-        if (itemBox.mouseClicked(mouseX, mouseY, button)) {
-            clicked = itemBox;
-        } else if (countBox.mouseClicked(mouseX, mouseY, button)) {
-            clicked = countBox;
-        }
-
-        if (clicked != null) {
-            setInternalFocused(clicked);
-            return true;
-        }
-        return false;
-    }
 }

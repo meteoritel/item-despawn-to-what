@@ -52,7 +52,7 @@ public class ItemToEntityEditScreen extends BaseConfigEditScreen<ItemToEntityCon
 
     @Override
     protected void addCustomSuggestion() {
-        resultIdSuggestion = registerSuggestion(resultIdInput, BuiltInRegistries.ENTITY_TYPE);
+        registerSuggestion(resultIdInput, BuiltInRegistries.ENTITY_TYPE);
     }
 
 }

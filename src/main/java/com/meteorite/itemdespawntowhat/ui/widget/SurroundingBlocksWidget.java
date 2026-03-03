@@ -2,21 +2,15 @@ package com.meteorite.itemdespawntowhat.ui.widget;
 
 import com.meteorite.itemdespawntowhat.config.ConfigDirection;
 import com.meteorite.itemdespawntowhat.config.SurroundingBlocks;
-import com.meteorite.itemdespawntowhat.ui.Screen.BaseConfigEditScreen;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
-import java.util.Collection;
 import java.util.EnumMap;
 
-public class SurroundingBlocksWidget extends AbstractWidget implements ICompositeWidget {
+public class SurroundingBlocksWidget extends AbstractCompositeWidget {
 
     // =========== 布局常量 ========== //
     private static final int TOTAL_WIDTH = 240;
@@ -26,15 +20,13 @@ public class SurroundingBlocksWidget extends AbstractWidget implements IComposit
     private static final int H_GAP = 4;
     private static final int V_GAP = 3;
     // 文本框宽度：由总宽度计算
-    private static final int BOX_WIDTH = (TOTAL_WIDTH - H_GAP) / BOX_PER_ROW;
+    private final int BOX_WIDTH = (TOTAL_WIDTH - H_GAP) / BOX_PER_ROW;
 
     private final Font font;
     private final EnumMap<ConfigDirection, EditBox> boxes = new EnumMap<>(ConfigDirection.class);
-    @Nullable
-    private EditBox internalFocused;
 
     public SurroundingBlocksWidget(Font font, int x, int y) {
-        super(x, y, totalWidth(), totalHeight(), Component.empty());
+        super(x, y, TOTAL_WIDTH, getTotalHeight(), Component.empty());
         this.font = font;
 
         for (ConfigDirection dir : ConfigDirection.values()) {
@@ -44,11 +36,11 @@ public class SurroundingBlocksWidget extends AbstractWidget implements IComposit
         }
     }
 
-    public static int totalWidth() {
+    public static int getTotalWidth() {
         return TOTAL_WIDTH;
     }
 
-    public static int totalHeight() {
+    public static int getTotalHeight() {
         return 3 * (LABEL_HEIGHT + V_GAP + BOX_HEIGHT)
                 + (3 - 1) * V_GAP;
     }
@@ -87,52 +79,10 @@ public class SurroundingBlocksWidget extends AbstractWidget implements IComposit
         }
     }
 
-    // ========== 焦点与输入 ========== //
-
-    private void setInternalFocused(@Nullable EditBox box) {
-        if (internalFocused == box) return;
-
-        if (internalFocused != null) {
-            internalFocused.setFocused(false);
-        }
-        internalFocused = box;
-        if (internalFocused != null) {
-            internalFocused.setFocused(true);
-        }
-    }
-
-    @Nullable
-    public EditBox getInternalFocused() {
-        return internalFocused;
-    }
-
-    public void clearInternalFocus() {
-        setInternalFocused(null);
-    }
-
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        EditBox clicked = null;
-        for (EditBox box : boxes.values()) {
-            if (box.mouseClicked(mouseX, mouseY, button)) {
-                clicked = box;
-                break;
-            }
-        }
-
-        if (clicked == null) return false;
-
-        setInternalFocused(clicked);
-        // 将本 widget 整体上报给 Screen 焦点管理器
-        if (Minecraft.getInstance().screen instanceof BaseConfigEditScreen<?> screen) {
-            screen.setFocusedWidget(this);
-        }
-
-        return true;
+    protected Iterable<EditBox> getEditBoxes() {
+        return boxes.values();
     }
-
-    @Override
-    protected void updateWidgetNarration(@NotNull NarrationElementOutput narration) {}
 
     // ========== 值绑定 ========== //
     public SurroundingBlocks getValue() {
@@ -156,31 +106,4 @@ public class SurroundingBlocksWidget extends AbstractWidget implements IComposit
         return boxes;
     }
 
-    // ========== 接口实现 ========== //
-    @Override
-    @Nullable
-    public EditBox getFocusedEditBox() {
-        return internalFocused;
-    }
-
-    @Override
-    public void setFocusedEditBox(@Nullable EditBox box) {
-        setInternalFocused(box);
-    }
-
-    @Override
-    public Collection<EditBox> getAllEditBoxes() {
-        return boxes.values();
-    }
-
-    @Override
-    public boolean handleMouseClicked(double mouseX, double mouseY, int button) {
-        for (EditBox box : boxes.values()) {
-            if (box.mouseClicked(mouseX, mouseY, button)) {
-                setInternalFocused(box);
-                return true;
-            }
-        }
-        return false;
-    }
 }

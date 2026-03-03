@@ -45,6 +45,6 @@ public class ItemToItemEditScreen extends BaseConfigEditScreen<ItemToItemConfig>
 
     @Override
     protected void addCustomSuggestion() {
-        resultIdSuggestion = registerSuggestion(resultIdInput, BuiltInRegistries.ITEM);
+        registerSuggestion(resultIdInput, BuiltInRegistries.ITEM);
     }
 }

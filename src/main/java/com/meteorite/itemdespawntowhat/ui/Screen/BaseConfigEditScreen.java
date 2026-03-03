@@ -45,12 +45,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     protected EditBox resultMultipleInput;
     // UI 组件列表
     protected FormListPanel formList;
-    // 下拉建议框组件
-    protected SuggestionWidget itemIdSuggestion;
-    protected SuggestionWidget resultIdSuggestion;
-    // 周围方块组件有6个文本框，需要定义多个建议组件
-    protected final List<SuggestionWidget> sbSuggestions = new ArrayList<>();
-    // 存储所有建议组件的列表
+    // 存储所有建议下拉框的列表
     protected final List<SuggestionWidget> suggestionWidgets = new ArrayList<>();
     // 聚焦的组件
     protected AbstractWidget focusedWidget;
@@ -103,14 +98,12 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         addCustomEntries(formList);
 
         // 注册下拉建议框组件，在所有列表组件添加完成之后再添加，并添加文本监听
-        itemIdSuggestion = registerSuggestion(itemIdInput, BuiltInRegistries.ITEM);
+        registerSuggestion(itemIdInput, BuiltInRegistries.ITEM);
         for (EditBox box : surroundingWidget.getBoxes().values()) {
-            SuggestionWidget widget = registerSuggestion(box, BuiltInRegistries.BLOCK);
-            sbSuggestions.add(widget);
+            registerSuggestion(box, BuiltInRegistries.BLOCK);
         }
 
         registerSuggestion(catalystWidget.getItemBox(), BuiltInRegistries.ITEM);
-
 
         // 添加子类下拉建议框监听
         addCustomSuggestion();
@@ -181,7 +174,6 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     }
 
     // ========== ListScreenCallback 实现 ========== //
-
     @Override
     public void onEditRequested(ConfigListPanel.EntrySource source, int indexInSource) {
         listEditPerformed = true;
@@ -350,10 +342,8 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         // 旧焦点失效
         if (focusedWidget != null) {
             focusedWidget.setFocused(false);
-            if (focusedWidget instanceof SurroundingBlocksWidget sbw) {
-                sbw.clearInternalFocus();
-            } else if (focusedWidget instanceof CatalystItemsWidget ciw) {
-                ciw.clearInternalFocus();
+            if (focusedWidget instanceof ICompositeWidget comp) {
+                comp.clearInternalFocus();
             }
         }
 
@@ -421,71 +411,42 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        // 优先让建议组件处理 Tab / 方向键 / Enter
-        if (focusedWidget instanceof EditBox editBox) {
+        // 优先让建议组件处理建议下拉框中的按键
+        if (focusedWidget instanceof EditBox editBox ) {
             // 查找与该输入框关联的建议组件
-            for (SuggestionWidget widget : suggestionWidgets) {
-                if (widget.getAttachedBox() == editBox && widget.isVisible()) {
-                    if (widget.keyPressed(keyCode)) {
-                        return true;
-                    }
-                    break;
-                }
+            if (suggestionKeyPressed(keyCode, editBox)){
+                return true;
             }
-        } else if (focusedWidget instanceof SurroundingBlocksWidget sbw) {
-            // 周围方块组件是复合组件，需要单独处理
-            EditBox active = sbw.getInternalFocused();
-            if (active != null) {
-                for (SuggestionWidget sw : suggestionWidgets) {
-                    if (sw.getAttachedBox() == active && sw.isVisible()) {
-                        if (sw.keyPressed(keyCode)) return true;
-                        break;
-                    }
-                }
-            }
-        } else if (focusedWidget instanceof CatalystItemsWidget ciw) {
-            EditBox active = ciw.getInternalFocused();
-            if (active != null) {
-                for (SuggestionWidget sw : suggestionWidgets) {
-                    if (sw.getAttachedBox() == active && sw.isVisible()) {
-                        if (sw.keyPressed(keyCode)) return true;
-                        break;
-                    }
-                }
-            }
-        }
-
-        if (focusedWidget != null) {
-            if (focusedWidget instanceof SurroundingBlocksWidget sbw) {
-                // 委托给内部活跃 EditBox
-                EditBox active = sbw.getInternalFocused();
-                if (active != null && active.keyPressed(keyCode, scanCode, modifiers)) {
-                    return true;
-                }
-            } else if (focusedWidget instanceof CatalystItemsWidget ciw) {
-                EditBox active = ciw.getInternalFocused();
-                if (active != null && active.keyPressed(keyCode, scanCode, modifiers)) {
-                    return true;
-                }
-            } else if (focusedWidget.keyPressed(keyCode, scanCode, modifiers)) {
+        } else if (focusedWidget instanceof ICompositeWidget comp) {
+            // 复合组件需要单独处理
+            EditBox active = comp.getInternalFocused();
+            if (suggestionKeyPressed(keyCode, active)) {
                 return true;
             }
         }
 
+        if (focusedWidget != null && focusedWidget.keyPressed(keyCode, scanCode, modifiers)) {
+            return true;
+        }
         return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    private boolean suggestionKeyPressed(int keyCode, EditBox editBox) {
+        for (SuggestionWidget sw : suggestionWidgets) {
+            if (sw.getAttachedBox() == editBox && sw.isVisible()) {
+                if (sw.keyPressed(keyCode)) {
+                    return true;
+                }
+                break;
+            }
+        }
+        return false;
     }
 
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
-        if (focusedWidget != null) {
-            if (focusedWidget instanceof SurroundingBlocksWidget sbw) {
-                EditBox active = sbw.getInternalFocused();
-                if (active != null && active.charTyped(codePoint, modifiers)) {
-                    return true;
-                }
-            } else if (focusedWidget.charTyped(codePoint, modifiers)) {
-                return true;
-            }
+        if (focusedWidget != null && focusedWidget.charTyped(codePoint, modifiers)) {
+            return true;
         }
         return super.charTyped(codePoint, modifiers);
     }
@@ -499,7 +460,6 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         editBox.setResponder(text -> widget.updateSuggestions());
         return widget;
     }
-
 
     // 添加建议组件的文本监听
     @Deprecated
