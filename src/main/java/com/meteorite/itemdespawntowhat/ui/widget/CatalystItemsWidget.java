@@ -101,12 +101,20 @@ public class CatalystItemsWidget extends AbstractCompositeWidget {
         countBox.render(gfx, mouseX, mouseY, partialTick);
 
         // 第四行：提示
-        gfx.drawString(font, Component.translatable(KEY_TIP), x, boxY + BOX_HEIGHT + V_GAP, 0x708090, false);
+        gfx.drawString(font, Component.translatable(KEY_TIP), x, boxY + BOX_HEIGHT + V_GAP, 0xAAAAAA, false);
     }
 
     @Override
     protected Iterable<EditBox> getEditBoxes() {
         return List.of(itemBox, countBox);
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (consumeButton.mouseClicked(mouseX, mouseY, button)) {
+            return true;
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
     }
 
     // ========== 值绑定 ========== //

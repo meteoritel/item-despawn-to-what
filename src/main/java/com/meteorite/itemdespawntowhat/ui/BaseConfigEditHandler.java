@@ -6,7 +6,7 @@ import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
 import com.meteorite.itemdespawntowhat.network.SaveConfigPayload;
-import com.meteorite.itemdespawntowhat.ui.widget.ConfigListPanel;
+import com.meteorite.itemdespawntowhat.ui.panel.ConfigListPanel;
 import com.meteorite.itemdespawntowhat.util.PlayerStateChecker;
 import net.minecraft.client.Minecraft;
 import net.neoforged.neoforge.network.PacketDistributor;

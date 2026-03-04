@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.ui.widget;
+package com.meteorite.itemdespawntowhat.ui.panel;
 
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import net.minecraft.client.Minecraft;

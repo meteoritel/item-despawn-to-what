@@ -5,8 +5,11 @@ import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.ui.BaseConfigEditHandler;
 import com.meteorite.itemdespawntowhat.ui.Callback;
 import com.meteorite.itemdespawntowhat.ui.ListScreenCallback;
+import com.meteorite.itemdespawntowhat.ui.panel.ConfigListPanel;
+import com.meteorite.itemdespawntowhat.ui.panel.FormListPanel;
 import com.meteorite.itemdespawntowhat.ui.widget.*;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.*;
 import net.minecraft.client.gui.components.events.GuiEventListener;
@@ -27,6 +30,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         implements Callback<T>, ListScreenCallback<T> {
 
     protected T draftConfig;
+    protected T resizeBackup; // 用于窗口调整时的临时备份
     protected boolean listEditPerformed;
 
     protected static final Logger LOGGER = LogManager.getLogger();
@@ -114,6 +118,11 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
         initButtons();
         clearFields();
+
+        if (resizeBackup != null) {
+            onRefillFields(resizeBackup);
+            resizeBackup = null;
+        }
     }
 
     private void initButtons() {
@@ -456,6 +465,13 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
             return true;
         }
         return super.charTyped(codePoint, modifiers);
+    }
+
+    // 备份当前表单内容, 用来调整大小时恢复
+    @Override
+    public void resize(@NotNull Minecraft minecraft, int width, int height) {
+        this.resizeBackup = buildConfigFromFields();
+        super.resize(minecraft, width, height);
     }
 
     // ========== 建议下拉框方法 ========== //

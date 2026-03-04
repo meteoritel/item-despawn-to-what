@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.ui;
 
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
-import com.meteorite.itemdespawntowhat.ui.widget.ConfigListPanel;
+import com.meteorite.itemdespawntowhat.ui.panel.ConfigListPanel;
 
 // 回调到父 EditScreen 的接口
 public interface ListScreenCallback<T extends BaseConversionConfig> {
