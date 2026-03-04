@@ -62,11 +62,11 @@ public class CatalystConditionChecker extends AbstractConditionChecker {
         Map<Item, Integer> nearbyItemCounts = collectNearbyItems(itemEntity, level);
         List<CatalystItems.CatalystEntry> entries = catalystItems.getCatalystList();
 
-        return checkFixedAmountEach(entries, nearbyItemCounts);
+        return hasAtLeastOneCompleteSet(entries, nearbyItemCounts);
     }
 
-    // 每种催化剂需存在至少1 份，满足后整批起始物品均可转化
-    private boolean checkFixedAmountEach(
+    // 检查周围是否存在至少一套完整的催化剂（每种催化剂至少有entry.count数量）
+    private boolean hasAtLeastOneCompleteSet(
             List<CatalystItems.CatalystEntry> entries,
             Map<Item, Integer> nearbyCounts) {
 
@@ -76,13 +76,14 @@ public class CatalystConditionChecker extends AbstractConditionChecker {
             int available = nearbyCounts.getOrDefault(requiredItem, 0);
 
             if (available < required) {
-                LOGGER.debug("No-consume-mode catalyst check failed: {} needs {} but has {}",
+                LOGGER.debug("Catalyst check failed: {} needs {} but has {}",
                         entry.getItemId(), required, available);
                 return false;
             }
         }
         return true;
     }
+
 
     // 统计起始物品所在一格的物品掉落物
     private Map<Item, Integer> collectNearbyItems(ItemEntity startEntity, ServerLevel level) {

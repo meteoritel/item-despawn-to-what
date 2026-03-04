@@ -1,7 +1,7 @@
-package com.meteorite.itemdespawntowhat.config;
+package com.meteorite.itemdespawntowhat.config.conversion;
 
 import com.google.gson.annotations.SerializedName;
-import com.meteorite.itemdespawntowhat.event.ItemConversionEvent;
+import com.meteorite.itemdespawntowhat.config.ConfigType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -57,27 +57,23 @@ public class ItemToEntityConfig extends BaseConversionConfig{
         int originalStackSize = originalStack.getCount();
         int resultMultiple = getResultMultiple();
 
-        int currentCount = countNearbyResult(itemEntity);
-        int maxLimit = getResultLimit();
-
-        // 计算本次可以生成的实体数量和需要返还的物品数量
-        int actualEntitiesToSpawn = Math.min(originalStackSize * resultMultiple, maxLimit - currentCount);
-        if (actualEntitiesToSpawn <= 0) {
+        int actualConvertCount = computeActualConvertCount(itemEntity, originalStackSize);
+        if (actualConvertCount <= 0) {
             LOGGER.debug("No capacity for entity conversion of {}", resultEntityId);
             return;
         }
 
-        int itemsUsed = (int) Math.ceil((double) actualEntitiesToSpawn / resultMultiple);
-        int itemsRemaining = originalStackSize - itemsUsed;
-
-        LOGGER.debug("Converting to entity: {} -> {} ({} entities, using {} items, {} remaining)",
+        // 计算本次可以生成的实体数量和需要返还的物品数量
+        int actualEntitiesToSpawn = actualConvertCount * resultMultiple;
+        LOGGER.debug("Converting to entity: {} -> {} ({} entities from {} items, {} items remaining)",
                 originalStack.getItem().getDescriptionId(), resultEntityId,
-                actualEntitiesToSpawn, itemsUsed, itemsRemaining);
+                actualEntitiesToSpawn, actualConvertCount, originalStackSize - actualConvertCount);
 
         // 物品实体下一tick消失
         itemEntity.makeFakeItem();
-        // 根据条件决定是否消耗催化剂
-        consumeCatalysts(itemEntity, originalStackSize);
+        // 根据条件消耗催化剂与流体
+        consumeAllOthers(itemEntity, actualConvertCount);
+
         // 生成实体
         for (int i = 0; i < actualEntitiesToSpawn; i++) {
             Entity resultEntity = entityType.create(serverLevel);
@@ -92,23 +88,11 @@ public class ItemToEntityConfig extends BaseConversionConfig{
                 if (resultEntity instanceof AgeableMob ageable) {
                     ageable.setAge(getEntityAge());
                 }
-
                 serverLevel.addFreshEntity(resultEntity);
             }
         }
-
-        // 返还多余物品，并打上锁防止再次触发转化
-        if (itemsRemaining > 0) {
-            ItemStack returnStack = originalStack.copy();
-            returnStack.setCount(itemsRemaining);
-            ItemEntity returnItem = new ItemEntity(
-                    serverLevel,
-                    pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5,
-                    returnStack
-            );
-            returnItem.getPersistentData().putBoolean(ItemConversionEvent.CHECK_LOCK_TAG, true);
-            serverLevel.addFreshEntity(returnItem);
-        }
+        int itemsRemaining = originalStackSize - actualConvertCount;
+        addRemainingItems(itemEntity, serverLevel, itemsRemaining);
     }
 
     // 实体直接按照数量计数
@@ -129,6 +113,16 @@ public class ItemToEntityConfig extends BaseConversionConfig{
     @Override
     public boolean isResultLimitExceeded(ItemEntity itemEntity) {
         return this.countNearbyResult(itemEntity) >= this.getResultLimit();
+    }
+
+    @Override
+    protected int getResultCapacityInStartItems(ItemEntity itemEntity) {
+        int current = countNearbyResult(itemEntity);
+        int remaining = getResultLimit() - current;
+        if (remaining <= 0) {
+            return 0;
+        }
+        return remaining / Math.max(1, getResultMultiple());
     }
 
     // ========== 结果相关方法 ========== //

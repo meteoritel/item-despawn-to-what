@@ -3,7 +3,7 @@ package com.meteorite.itemdespawntowhat.config.handler;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
-import com.meteorite.itemdespawntowhat.config.BaseConversionConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.util.JsonOrderTypeAdapterFactory;
 import com.meteorite.itemdespawntowhat.util.ResourceLocationAdapter;

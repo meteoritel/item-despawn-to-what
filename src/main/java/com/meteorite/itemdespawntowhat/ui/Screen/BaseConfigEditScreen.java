@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.ui.Screen;
 
-import com.meteorite.itemdespawntowhat.config.BaseConversionConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.ui.BaseConfigEditHandler;
 import com.meteorite.itemdespawntowhat.ui.Callback;
@@ -40,6 +40,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     protected CycleButton<Boolean> needOutdoorButton;
     protected SurroundingBlocksWidget surroundingWidget;
     protected CatalystItemsWidget catalystWidget;
+    protected InnerFluidWidget innerFluidWidget;
     protected EditBox resultIdInput;
     protected EditBox conversionTimeInput;
     protected EditBox resultMultipleInput;
@@ -81,6 +82,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
                 .create(0, 0, BOX_WIDTH, 18, Component.translatable(LABEL_PREFIX + "need_outdoor"));
         surroundingWidget = new SurroundingBlocksWidget(font, 0, 0);
         catalystWidget = new CatalystItemsWidget(font, 0, 0);
+        innerFluidWidget = new InnerFluidWidget(font, 0, 0);
         resultIdInput = textBox();
         conversionTimeInput = numericBox();
         resultMultipleInput = numericBox();
@@ -91,6 +93,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         formList.add(Component.translatable(LABEL_PREFIX + "need_outdoor"), needOutdoorButton);
         formList.add(Component.translatable(LABEL_PREFIX + "surrounding_blocks"), surroundingWidget);
         formList.add(Component.translatable(LABEL_PREFIX + "catalyst_items"), catalystWidget);
+        formList.add(Component.translatable(LABEL_PREFIX + "inner_fluid"), innerFluidWidget);
         formList.add(Component.translatable(LABEL_PREFIX + "result_id"), resultIdInput);
         formList.add(Component.translatable(LABEL_PREFIX + "conversion_time"), conversionTimeInput);
         formList.add(Component.translatable(LABEL_PREFIX + "result_multiple"), resultMultipleInput);
@@ -104,6 +107,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         }
 
         registerSuggestion(catalystWidget.getItemBox(), BuiltInRegistries.ITEM);
+        registerSuggestion(innerFluidWidget.getFluidBox(), BuiltInRegistries.FLUID);
 
         // 添加子类下拉建议框监听
         addCustomSuggestion();
@@ -255,6 +259,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         config.setNeedOutdoor(needOutdoorButton.getValue());
         config.setSurroundingBlocks(surroundingWidget.getValue());
         config.setCatalystItems(catalystWidget.getValue());
+        config.setInnerFluid(innerFluidWidget.getValue());
         config.setResultId(parseResourceLocation(resultIdInput.getValue()));
         config.setConversionTime(parseInt(conversionTimeInput.getValue(),300));
         config.setResultMultiple(parseInt(resultMultipleInput.getValue(), 1));
@@ -269,6 +274,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         resultMultipleInput.setValue("");
         surroundingWidget.clear();
         catalystWidget.clear();
+        innerFluidWidget.clear();
 
         clearCustomFields();
         clearAllSuggestions();
@@ -287,6 +293,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         resultMultipleInput.setValue(String.valueOf(config.getResultMultiple()));
         surroundingWidget.setValue(config.getSurroundingBlocks());
         catalystWidget.setValue(config.getCatalystItems());
+        innerFluidWidget.setValue(config.getInnerFluid());
     }
 
     // 安全解析字符串到数字
@@ -454,11 +461,10 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     // ========== 建议下拉框方法 ========== //
 
     // 创建并注册一个建议组件，并添加监听
-    protected SuggestionWidget registerSuggestion(EditBox editBox, Registry<?> registry) {
+    protected void registerSuggestion(EditBox editBox, Registry<?> registry) {
         SuggestionWidget widget = new SuggestionWidget(font, editBox, registry);
         suggestionWidgets.add(widget);
         editBox.setResponder(text -> widget.updateSuggestions());
-        return widget;
     }
 
     // 添加建议组件的文本监听

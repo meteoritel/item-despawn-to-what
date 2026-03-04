@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.ui.widget;
 import com.meteorite.itemdespawntowhat.config.CatalystItems;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -15,19 +16,30 @@ import java.util.List;
 import java.util.function.Consumer;
 
 public class CatalystItemsWidget extends AbstractCompositeWidget {
+    // ===== 本地化键名 ===== //
+    private static final String KEY_ITEM_LABEL = "gui.itemdespawntowhat.edit.catalyst.item_label";
+    private static final String KEY_COUNT_LABEL = "gui.itemdespawntowhat.edit.catalyst.count_label";
+    private static final String KEY_TIP = "gui.itemdespawntowhat.edit.catalyst.tip";
+    private static final String KEY_CONSUME = "gui.itemdespawntowhat.edit.catalyst.consume_button";
+    private static final String KEY_CONSUME_ON = "gui.itemdespawntowhat.edit.on";
+    private static final String KEY_CONSUME_OFF = "gui.itemdespawntowhat.edit.off";
+
     // ===== 布局常量 ===== //
     private static final int TOTAL_WIDTH = 240;
     private static final int BOX_HEIGHT = 18;
+    private static final int BTN_HEIGHT   = 18;
     private static final int LABEL_HEIGHT = 9;
     private static final int TIP_HEIGHT = 9;
     private static final int H_GAP = 6;
     private static final int V_GAP = 3;
 
-    private static final int BOX_WIDTH = (TOTAL_WIDTH - H_GAP) / 2;
+    private static final int COUNT_BOX_WIDTH = 80;
+    private static final int ITEM_BOX_WIDTH = TOTAL_WIDTH - COUNT_BOX_WIDTH - H_GAP;
 
     private final Font font;
     private final FocusAwareEditBox itemBox;
     private final EditBox countBox;
+    private final CycleButton<Boolean> consumeButton;
 
     private List<String> itemSnapshotOnFocus = List.of();
 
@@ -35,24 +47,32 @@ public class CatalystItemsWidget extends AbstractCompositeWidget {
         super(x, y, TOTAL_WIDTH, getTotalHeight(), Component.empty());
         this.font = font;
 
-        this.itemBox = new FocusAwareEditBox(font, 0, 0, BOX_WIDTH, BOX_HEIGHT, Component.empty());
+        this.itemBox = new FocusAwareEditBox(font, 0, 0, ITEM_BOX_WIDTH, BOX_HEIGHT, Component.empty());
         this.itemBox.setMaxLength(256);
         this.itemBox.setFocusListener(focused -> {
             if (focused) {
-                // 获得焦点：保存当前物品列表快照，供失焦时 diff 使用
                 itemSnapshotOnFocus = parseItemList(itemBox.getValue());
             } else {
-                // 失去焦点：同步数量框
                 adjustCountBox(itemSnapshotOnFocus);
             }
         });
 
-        this.countBox = new EditBox(font, 0, 0, BOX_WIDTH, BOX_HEIGHT, Component.empty());
+        this.countBox = new EditBox(font, 0, 0, COUNT_BOX_WIDTH, BOX_HEIGHT, Component.empty());
         this.countBox.setMaxLength(64);
+
+        this.consumeButton = CycleButton.<Boolean>builder(
+                        value -> Component.translatable(value ? KEY_CONSUME_ON : KEY_CONSUME_OFF))
+                .withValues(true, false)
+                .withInitialValue(true)
+                .create(0, 0, TOTAL_WIDTH, BTN_HEIGHT,
+                        Component.translatable(KEY_CONSUME));
     }
 
     public static int getTotalHeight() {
-        return LABEL_HEIGHT + V_GAP + BOX_HEIGHT + V_GAP + TIP_HEIGHT;
+        return BTN_HEIGHT + V_GAP +
+                LABEL_HEIGHT + V_GAP +
+                BOX_HEIGHT + V_GAP +
+                TIP_HEIGHT;
     }
 
     @Override
@@ -60,29 +80,28 @@ public class CatalystItemsWidget extends AbstractCompositeWidget {
         int x = getX();
         int y = getY();
 
-        // —— 第一行：标签
-        gfx.drawString(font, "物品注册名", x, y, 0xAAAAAA, false);
-        gfx.drawString(font, "数量", x + BOX_WIDTH + H_GAP, y, 0xAAAAAA, false);
+        // 第一行：按钮
+        consumeButton.setX(x);
+        consumeButton.setY(y);
+        consumeButton.render(gfx, mouseX, mouseY, partialTick);
 
-        // —— 第二行：文本框
-        int boxY = y + LABEL_HEIGHT + V_GAP;
+        // 第二行：标签
+        int labelY = y + BTN_HEIGHT + V_GAP;
+        gfx.drawString(font, Component.translatable(KEY_ITEM_LABEL), x, labelY, 0xAAAAAA, false);
+        gfx.drawString(font, Component.translatable(KEY_COUNT_LABEL), x + ITEM_BOX_WIDTH + H_GAP, labelY, 0xAAAAAA, false);
+
+        // 第三行：文本框
+        int boxY = labelY + LABEL_HEIGHT + V_GAP;
         itemBox.setX(x);
         itemBox.setY(boxY);
         itemBox.render(gfx, mouseX, mouseY, partialTick);
 
-        countBox.setX(x + BOX_WIDTH + H_GAP);
+        countBox.setX(x + ITEM_BOX_WIDTH + H_GAP);
         countBox.setY(boxY);
         countBox.render(gfx, mouseX, mouseY, partialTick);
 
-        // —— 第三行：提示
-        gfx.drawString(
-                font,
-                "（多个物品使用英文逗号隔开）",
-                x,
-                boxY + BOX_HEIGHT + V_GAP,
-                0x777777,
-                false
-        );
+        // 第四行：提示
+        gfx.drawString(font, Component.translatable(KEY_TIP), x, boxY + BOX_HEIGHT + V_GAP, 0x708090, false);
     }
 
     @Override

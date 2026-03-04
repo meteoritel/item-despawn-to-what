@@ -2,7 +2,7 @@ package com.meteorite.itemdespawntowhat.network;
 
 import com.meteorite.itemdespawntowhat.ConfigManager;
 import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
-import com.meteorite.itemdespawntowhat.config.BaseConversionConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
 import com.meteorite.itemdespawntowhat.ui.Screen.ConfigSelectionScreen;
 import net.minecraft.client.Minecraft;

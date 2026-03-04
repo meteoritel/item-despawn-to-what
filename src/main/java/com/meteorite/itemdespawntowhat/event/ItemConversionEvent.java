@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.event;
 
 import com.meteorite.itemdespawntowhat.ConfigExtractorManager;
-import com.meteorite.itemdespawntowhat.config.BaseConversionConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.condition.ConditionChecker;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -206,15 +206,15 @@ public class ItemConversionEvent {
             itemEntity.getPersistentData().putBoolean(CONVERSION_LOCK_TAG, true);
             CONVERSION_IN_PROGRESS.add(itemUuid);
 
-            // 转化逻辑在配置类中
+            // 转化逻辑在各个配置子类中
             config.performConversion(itemEntity, serverLevel);
         } finally {
             itemEntity.getPersistentData().remove(CONVERSION_LOCK_TAG);
             CONVERSION_IN_PROGRESS.remove(itemUuid);
         }
     }
-    // ========== 辅助方法 ========== //
 
+    // ========== 辅助方法 ========== //
     // 收集当前 Level 中所有需要检查、存活、已加载、未锁定且尚未到期的 ItemEntity
     private static List<ItemEntity> collectTaggedItemEntities(ServerLevel level) {
         List<ItemEntity> result = new ArrayList<>();

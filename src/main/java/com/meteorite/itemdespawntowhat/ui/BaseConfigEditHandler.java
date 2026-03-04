@@ -2,7 +2,7 @@ package com.meteorite.itemdespawntowhat.ui;
 
 import com.meteorite.itemdespawntowhat.ConfigExtractorManager;
 import com.meteorite.itemdespawntowhat.ConfigManager;
-import com.meteorite.itemdespawntowhat.config.BaseConversionConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
 import com.meteorite.itemdespawntowhat.network.SaveConfigPayload;

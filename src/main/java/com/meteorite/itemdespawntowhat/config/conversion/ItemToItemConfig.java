@@ -1,6 +1,7 @@
-package com.meteorite.itemdespawntowhat.config;
+package com.meteorite.itemdespawntowhat.config.conversion;
 
 import com.google.gson.annotations.SerializedName;
+import com.meteorite.itemdespawntowhat.config.ConfigType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -45,17 +46,21 @@ public class ItemToItemConfig extends BaseConversionConfig{
         int originalStackSize = originalStack.getCount();
         int resultMultiple = getResultMultiple();
 
-        CatalystItems catalyst = getCatalystItems();
+        // 综合催化剂和结果上限，计算实际能转化的起始物品数量
+        int actualConvertCount = computeActualConvertCount(itemEntity, originalStackSize);
+        if (actualConvertCount <= 0) {
+            LOGGER.debug("No items can be converted for {} (catalysts or limit exhausted)", getResultId());
+            return;
+        }
 
         // 物品实体下一tick消失
         itemEntity.makeFakeItem();
 
-        // 根据条件决定是否消耗催化剂
-        consumeCatalysts(itemEntity, originalStackSize);
+        // 根据条件消耗催化剂与流体
+        consumeAllOthers(itemEntity, actualConvertCount);
 
-        ItemStack resultStack = new ItemStack(resultItem, originalStackSize);
-
-        // 生成结果物品实体（如果倍率大于1，生成多个实体）
+        ItemStack resultStack = new ItemStack(resultItem, actualConvertCount);
+        // 生成结果物品实体（每个起始物品产出 resultMultiple 堆，每堆数量为 actualConvertCount）
         for (int i = 0; i < resultMultiple; i++) {
             ItemEntity resultItemEntity = new ItemEntity(
                     serverLevel,
@@ -64,7 +69,6 @@ public class ItemToItemConfig extends BaseConversionConfig{
                     pos.getZ() + 0.5 + (serverLevel.random.nextDouble() - 0.5) * 0.3,
                     resultStack.copy()
             );
-
             // 设置一些随机速度，让物品生成时飞起来
             resultItemEntity.setDeltaMovement(
                     (serverLevel.random.nextDouble() - 0.5) * 0.1,
@@ -73,9 +77,13 @@ public class ItemToItemConfig extends BaseConversionConfig{
             );
             serverLevel.addFreshEntity(resultItemEntity);
         }
-        LOGGER.debug("Converted to item: {} -> {} ({}x, stack size: {})",
+
+        int itemsRemaining = originalStackSize - actualConvertCount;
+        // 添加未转转化完成的返还物品
+        addRemainingItems(itemEntity, serverLevel, itemsRemaining);
+        LOGGER.debug("Converted to item: {} -> {} ({}x, converted: {}/{}, stack remaining: {})",
                 originalStack.getItem().getDescriptionId(), getResultId(),
-                resultMultiple, originalStackSize);
+                resultMultiple, actualConvertCount, originalStackSize, itemsRemaining);
     }
 
     // 对于物掉落物结果，计算所有的stack堆叠之和
@@ -98,7 +106,20 @@ public class ItemToItemConfig extends BaseConversionConfig{
 
     @Override
     public boolean isResultLimitExceeded(ItemEntity itemEntity) {
-        return this.countNearbyResult(itemEntity) >= this.getResultLimit() * 64;
+        return this.countNearbyResult(itemEntity) >= getResultLimit() * 64;
+    }
+
+    @Override
+    protected int getResultCapacityInStartItems(ItemEntity itemEntity) {
+        int current = countNearbyResult(itemEntity);
+        int limitTotal = getResultLimit() * 64;
+        int remaining = limitTotal - current;
+
+        if (remaining <= 0) {
+            return 0;
+        }
+
+        return remaining / Math.max(1, getResultMultiple());
     }
 
     // ========== 结果相关方法 ========== //

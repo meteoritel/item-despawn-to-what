@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.ui.Screen;
 
 import com.meteorite.itemdespawntowhat.config.ConfigType;
-import com.meteorite.itemdespawntowhat.config.ItemToBlockConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.ItemToBlockConfig;
 import com.meteorite.itemdespawntowhat.ui.widget.FormListPanel;
 import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.EditBox;

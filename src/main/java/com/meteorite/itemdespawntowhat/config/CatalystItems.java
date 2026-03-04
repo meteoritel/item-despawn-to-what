@@ -108,13 +108,10 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
         }
     }
 
-    // 获取最大能转化的数量
+    // 计算在消耗模式下，当前周围催化剂数量最多能支持转化多少个起始物品。
     public int getMaxConvertible(ItemEntity triggerEntity, int startCount) {
-        if (!hasAnyCatalyst()) {
-            return startCount;
-        }
-        if (!catalystConsume) {
-            // 不消耗模式下，只要通过检查，整个堆叠都可转化
+        if (!hasAnyCatalyst() || !catalystConsume) {
+            // 无催化剂或不消耗模式：整堆都可转化
             return startCount;
         }
         Map<Item, Integer> nearbyCounts = collectNearbyItemCounts(triggerEntity);
@@ -127,7 +124,7 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
                 max = possible;
             }
         }
-        return max;
+        return Math.max(0, max);
     }
 
     // 统计起始物品所在格子内（排除自己）各物品的总数量

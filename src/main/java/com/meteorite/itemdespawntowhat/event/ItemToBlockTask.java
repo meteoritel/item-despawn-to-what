@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.event;
 
-import com.meteorite.itemdespawntowhat.config.ItemToBlockConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.ItemToBlockConfig;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -27,11 +27,11 @@ public class ItemToBlockTask implements LevelDelayTask{
     private int placed = 0;
     private boolean finished = false;
 
-    public ItemToBlockTask(ItemEntity itemEntity,ItemToBlockConfig config){
+    public ItemToBlockTask(ItemEntity itemEntity,ItemToBlockConfig config, int maxBlocks){
         this.originalItem = itemEntity;
         this.center = itemEntity.blockPosition();
         this.block = config.getResultBlock();
-        this.maxBlocks = itemEntity.getItem().getCount();
+        this.maxBlocks = maxBlocks;
         this.maxRadius = config.getRadius();
     }
 
@@ -42,7 +42,7 @@ public class ItemToBlockTask implements LevelDelayTask{
 
     @Override
     public void onFinish(ServerLevel serverLevel) {
-        int remainBlocks = maxBlocks - placed;
+        int remainBlocks = originalItem.getItem().getCount() - placed;
         if (remainBlocks <= 0) {
             return;
         }
@@ -59,6 +59,7 @@ public class ItemToBlockTask implements LevelDelayTask{
         // 返还物品添加转化锁定的标签，防止重复转化
         returnItem.getPersistentData().putBoolean(ItemConversionEvent.CHECK_LOCK_TAG, true);
         serverLevel.addFreshEntity(returnItem);
+        LOGGER.debug("Returned {} unused items of {}", remainBlocks, originalItem.getName());
     }
 
     @Override
@@ -82,7 +83,6 @@ public class ItemToBlockTask implements LevelDelayTask{
 
     // 放置条件
     private static boolean canPlace(ServerLevel level, BlockPos pos, Block block) {
-
         if (!level.getBlockState(pos).canBeReplaced()) return false;
         return block.defaultBlockState().canSurvive(level, pos);
     }

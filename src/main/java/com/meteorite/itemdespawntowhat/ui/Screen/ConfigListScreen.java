@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.ui.Screen;
 
-import com.meteorite.itemdespawntowhat.config.BaseConversionConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.ui.BaseConfigEditHandler;
 import com.meteorite.itemdespawntowhat.ui.ListScreenCallback;
 import com.meteorite.itemdespawntowhat.ui.widget.ConfigListPanel;

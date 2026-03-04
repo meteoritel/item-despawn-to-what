@@ -34,8 +34,8 @@ public class SurroundingBlocksConditionChecker extends AbstractConditionChecker 
 
     @Override
     public AbstractConditionChecker parse(Map<String, String> conditions) {
-        SurroundingBlocks sb = new SurroundingBlocks().fromConditionMap(conditions, getConditionKey());
-        return from(sb);
+        SurroundingBlocks parsed = new SurroundingBlocks().fromConditionMap(conditions, getConditionKey());
+        return from(parsed);
     }
 
     @Override

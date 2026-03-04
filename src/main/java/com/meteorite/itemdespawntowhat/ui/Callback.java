@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.ui;
 
-import com.meteorite.itemdespawntowhat.config.BaseConversionConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 
 // Screen 回调接口，用于后端操作完成后通知 UI 层
 public interface Callback<T extends BaseConversionConfig> {

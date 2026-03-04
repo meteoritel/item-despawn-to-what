@@ -1,5 +1,10 @@
 package com.meteorite.itemdespawntowhat.config;
 
+import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.ItemToBlockConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.ItemToEntityConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.ItemToItemConfig;
+
 import java.util.List;
 
 public enum ConfigType {

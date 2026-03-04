@@ -1,6 +1,7 @@
-package com.meteorite.itemdespawntowhat.config;
+package com.meteorite.itemdespawntowhat.config.conversion;
 
 import com.google.gson.annotations.SerializedName;
+import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.event.ItemToBlockTask;
 import com.meteorite.itemdespawntowhat.event.LevelTaskManager;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -51,12 +52,17 @@ public class ItemToBlockConfig extends BaseConversionConfig{
     @Override
     public void performConversion(ItemEntity itemEntity, ServerLevel serverLevel) {
         int originalStackSize = itemEntity.getItem().getCount();
+        int actualConvertCount = computeActualConvertCount(itemEntity, originalStackSize);
+        if (actualConvertCount <= 0) {
+            LOGGER.debug("No items can be converted to block for {} (catalysts exhausted)", getResultId());
+            return;
+        }
         // 物品下一tick消失
         itemEntity.makeFakeItem();
         // 根据条件决定是否消耗催化剂
-        consumeCatalysts(itemEntity, originalStackSize);
+        consumeCatalysts(itemEntity, actualConvertCount);
         // 下一tick开始执行延迟放置方块的任务
-        LevelTaskManager.addTask(serverLevel, new ItemToBlockTask(itemEntity, this));
+        LevelTaskManager.addTask(serverLevel, new ItemToBlockTask(itemEntity, this, actualConvertCount));
     }
 
     // 这个类不会用到这个方法

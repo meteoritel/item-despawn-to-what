@@ -1,10 +1,16 @@
-package com.meteorite.itemdespawntowhat.config;
+package com.meteorite.itemdespawntowhat.config.conversion;
 
 import com.google.gson.annotations.SerializedName;
 import com.meteorite.itemdespawntowhat.condition.ConditionChecker;
 import com.meteorite.itemdespawntowhat.condition.ConditionCheckerUtil;
 import com.meteorite.itemdespawntowhat.condition.ConditionContext;
+import com.meteorite.itemdespawntowhat.config.CatalystItems;
+import com.meteorite.itemdespawntowhat.config.ConfigType;
+import com.meteorite.itemdespawntowhat.config.InnerFluid;
+import com.meteorite.itemdespawntowhat.config.SurroundingBlocks;
+import com.meteorite.itemdespawntowhat.event.ItemConversionEvent;
 import com.meteorite.itemdespawntowhat.util.JsonOrder;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -34,41 +40,37 @@ public abstract class BaseConversionConfig {
     @JsonOrder(1)
     @SerializedName("item")
     protected ResourceLocation itemId;
-
     // 消失的方式 - 自然消失 timeout， 岩浆烧毁 lava，暂时没有作用，未来再添加
     // @JsonOrder(2)
     // @SerializedName("disappear_cause")
     protected String disappearCause;
-
     // 所处维度
     @JsonOrder(2)
     @SerializedName("dimension")
     protected String dimension;
-
     // 是否需要露天
     @JsonOrder(2)
     @SerializedName("need_outdoor")
     protected boolean needOutdoor;
-
     // 六个方向的方块
     @JsonOrder(2)
     @SerializedName("surrounding_blocks")
     protected SurroundingBlocks surroundingBlocks;
-
+    // 催化剂物品
     @JsonOrder(2)
     @SerializedName("catalyst_items")
     protected CatalystItems catalystItems;
-
+    @JsonOrder(2)
+    @SerializedName("inner_fluid")
+    protected InnerFluid innerFluid;
     // 生成结果注册名
     @JsonOrder(3)
     @SerializedName("result")
     protected ResourceLocation resultId;
-
     // 转化的时间，单位为秒
     @JsonOrder(3)
     @SerializedName("conversion_time")
     protected int conversionTime;
-
     //生成的倍率
     @JsonOrder(3)
     @SerializedName("result_multiple")
@@ -109,9 +111,22 @@ public abstract class BaseConversionConfig {
             return false;
         }
 
+        // 催化剂不能与起始物品相同
+        if (catalystItems.hasAnyCatalyst()) {
+            return catalystItems.getCatalystList().stream().noneMatch(
+                    entry -> entry.getItemId().equals(itemId));
+        }
+
         // 确保内部ID存在
         if (this.getInternalId() == null || this.getInternalId().isEmpty()) {
             this.setInternalId(UUID.randomUUID().toString());
+        }
+
+        if (innerFluid != null && innerFluid.hasInnerFluid()) {
+            if (!isValidResourceLocation(innerFluid.getFluidId())) {
+                LOGGER.warn("Invalid fluid id in fluid condition: {}", innerFluid.getFluidId());
+                return false;
+            }
         }
 
         return true;
@@ -123,16 +138,75 @@ public abstract class BaseConversionConfig {
             return null;
         }
 
-        ConditionContext ctx = new ConditionContext(getDimension(), isNeedOutdoor(), getSurroundingBlocks(), getCatalystItems());
+        ConditionContext ctx = new ConditionContext(getDimension(),
+                isNeedOutdoor(),
+                getSurroundingBlocks(),
+                getCatalystItems(),
+                getInnerFluid());
         return ConditionCheckerUtil.buildCombinedChecker(ctx);
     }
 
+    // 给子类用的方法
+    protected void consumeAllOthers(ItemEntity itemEntity, int startItemCount) {
+        consumeCatalysts(itemEntity, startItemCount);
+        consumeFluid(itemEntity);
+    }
+
     // 消耗催化剂的方法
-    public void consumeCatalysts(ItemEntity itemEntity, int startItemCount) {
-        if (catalystItems == null || catalystItems.hasAnyCatalyst()) {
+    protected void consumeCatalysts(ItemEntity itemEntity, int startItemCount) {
+        if (catalystItems == null || !catalystItems.hasAnyCatalyst()) {
             return;
         }
         catalystItems.consumeFromLevel(itemEntity, startItemCount);
+    }
+
+    // 消耗流体的方法
+    protected void consumeFluid(ItemEntity itemEntity) {
+        if (innerFluid == null || !innerFluid.hasInnerFluid()) {
+            return;
+        }
+        innerFluid.consumeFluidFromLevel(itemEntity);
+    }
+
+    // ========== 辅助方法 ========== //
+    // 计算本次实际能转化的起始物品数量，考虑催化剂数量上限、结果数量上限
+    protected int computeActualConvertCount(ItemEntity itemEntity, int originalStackSize) {
+        // 催化剂的限制
+        int catalystLimit = (catalystItems != null)
+                ? catalystItems.getMaxConvertible(itemEntity, originalStackSize)
+                : originalStackSize;
+
+        // 上限的限制
+        int resultLimit = getResultCapacityInStartItems(itemEntity);
+
+        // 取最小值，并确保不超过原始堆叠数
+        int actual = Math.min(catalystLimit, resultLimit);
+        actual = Math.min(actual, originalStackSize);
+        return Math.max(0, actual);
+    }
+
+    // 将结果容量折算为起始物品数量，默认返回起始物品的最大支持堆叠数，由子类重写
+    protected int getResultCapacityInStartItems(ItemEntity itemEntity) {
+        return itemEntity.getItem().getMaxStackSize();
+    }
+
+    // 返还剩余物品
+    protected void addRemainingItems(ItemEntity itemEntity, ServerLevel serverLevel, int itemsRemaining) {
+        if (itemsRemaining <= 0) {
+            return;
+        }
+        ItemStack returnStack = itemEntity.getItem().copy();
+        BlockPos pos = itemEntity.blockPosition();
+        returnStack.setCount(itemsRemaining);
+
+        ItemEntity returnItem = new ItemEntity(
+                serverLevel,
+                pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5,
+                returnStack
+        );
+        returnItem.getPersistentData().putBoolean(ItemConversionEvent.CHECK_LOCK_TAG, true);
+        serverLevel.addFreshEntity(returnItem);
+        LOGGER.debug("Returned {} unused items of {}", itemsRemaining, getItemId());
     }
 
     public Item getStartItem() {
@@ -239,6 +313,14 @@ public abstract class BaseConversionConfig {
 
     public void setCatalystItems(CatalystItems catalystItems) {
         this.catalystItems = catalystItems;
+    }
+
+    public InnerFluid getInnerFluid() {
+        return innerFluid;
+    }
+
+    public void setInnerFluid(InnerFluid innerFluid) {
+        this.innerFluid = innerFluid;
     }
 
     // config类型只能获取不能设置

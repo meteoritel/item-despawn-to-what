@@ -24,8 +24,18 @@
   "gui.itemdespawntowhat.edit.result_age": "结果年龄(小动物:-2400)",
   "gui.itemdespawntowhat.edit.radius_limit": "最大放置半径",
   "gui.itemdespawntowhat.edit.block_of_item": "使用物品对应方块",
+  "gui.itemdespawntowhat.edit.inner_fluid": "浸泡流体",
   "gui.itemdespawntowhat.edit.on": "开",
   "gui.itemdespawntowhat.edit.off": "关",
+
+  "gui.itemdespawntowhat.edit.catalyst.item_label": "辅助物品ID",
+  "gui.itemdespawntowhat.edit.catalyst.count_label": "数量",
+  "gui.itemdespawntowhat.edit.catalyst.tip": "注：多个物品请使用英文逗号分隔",
+  "gui.itemdespawntowhat.edit.catalyst.consume_button": "消耗辅助物品",
+
+  "gui.itemdespawntowhat.edit.inner_fluid.source_label": "源头方块",
+  "gui.itemdespawntowhat.edit.inner_fluid.fluid_label": "流体ID",
+  "gui.itemdespawntowhat.edit.inner_fluid.consume_label": "消耗流体",
 
   "gui.itemdespawntowhat.edit.list.edit": "重新编辑",
   "gui.itemdespawntowhat.edit.list.delete": "删除",

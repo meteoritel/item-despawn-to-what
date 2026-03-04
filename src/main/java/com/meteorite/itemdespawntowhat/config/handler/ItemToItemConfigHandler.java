@@ -3,7 +3,7 @@ package com.meteorite.itemdespawntowhat.config.handler;
 import com.google.gson.reflect.TypeToken;
 import com.meteorite.itemdespawntowhat.config.ConfigDirection;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
-import com.meteorite.itemdespawntowhat.config.ItemToItemConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.ItemToItemConfig;
 import com.meteorite.itemdespawntowhat.config.SurroundingBlocks;
 import net.minecraft.resources.ResourceLocation;
 

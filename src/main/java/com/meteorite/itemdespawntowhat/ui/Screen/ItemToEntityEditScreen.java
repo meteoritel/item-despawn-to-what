@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.ui.Screen;
 
 import com.meteorite.itemdespawntowhat.config.ConfigType;
-import com.meteorite.itemdespawntowhat.config.ItemToEntityConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.ItemToEntityConfig;
 import com.meteorite.itemdespawntowhat.ui.widget.FormListPanel;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.core.registries.BuiltInRegistries;

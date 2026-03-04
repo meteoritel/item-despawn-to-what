@@ -26,11 +26,21 @@
   "gui.itemdespawntowhat.edit.block_of_item": "Block of item",
   "gui.itemdespawntowhat.edit.on": "ON",
   "gui.itemdespawntowhat.edit.off": "OFF",
+  "gui.itemdespawntowhat.edit.inner_fluid": "Inner fluid",
 
   "gui.itemdespawntowhat.edit.list.edit": "Reedit",
   "gui.itemdespawntowhat.edit.list.delete": "Delete",
   "gui.itemdespawntowhat.edit.list.delete.title": "Confirm Delete",
   "gui.itemdespawntowhat.edit.list.delete.body": "This action cannot be undone！",
+
+  "gui.itemdespawntowhat.edit.catalyst.item_label": "Item ID",
+  "gui.itemdespawntowhat.edit.catalyst.count_label": "Count",
+  "gui.itemdespawntowhat.edit.catalyst.tip": "Tip: Use commas to separate multiple inputs",
+  "gui.itemdespawntowhat.edit.catalyst.consume_button": "Consume catalyst",
+
+  "gui.itemdespawntowhat.edit.inner_fluid.source_label": "Require source",
+  "gui.itemdespawntowhat.edit.inner_fluid.fluid_label": "Fluid ID",
+  "gui.itemdespawntowhat.edit.inner_fluid.consume_label": "Consume fluid",
 
   "key.category.itemdespawntowhat.general": "Item Depsawn To What",
   "key.itemdespawntowhat.open_gui": "Open editing GUI"
