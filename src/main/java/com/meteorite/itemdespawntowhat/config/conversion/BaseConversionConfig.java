@@ -17,11 +17,9 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Optional;
 import java.util.UUID;
 
 public abstract class BaseConversionConfig {
@@ -146,7 +144,7 @@ public abstract class BaseConversionConfig {
         // 催化剂不能与起始物品相同
         if (catalystItems.hasAnyCatalyst()) {
             boolean conflict = getCatalystItems().getCatalystList().stream()
-                    .anyMatch(entry -> entry.getItemId().equals(itemId));
+                    .anyMatch(entry -> entry.itemId().equals(itemId));
             if (conflict) {
                 LOGGER.warn("Catalyst item conflicts with source item: {}", itemId);
                 return false;

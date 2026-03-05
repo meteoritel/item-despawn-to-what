@@ -24,7 +24,7 @@ public class SurroundingBlocksConditionChecker extends AbstractConditionChecker 
 
     @Override
     public boolean shouldApply(ConditionContext ctx) {
-        return ctx.surroundingBlocks() != null;
+        return ctx.surroundingBlocks() != null && ctx.surroundingBlocks().hasAnySurroundBlock();
     }
 
     @Override

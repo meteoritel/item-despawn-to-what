@@ -181,8 +181,8 @@ public class CatalystItemsWidget extends AbstractCompositeWidget {
                 countSb.append(",");
             }
 
-            itemSb.append(entry.getItemId());
-            countSb.append(Math.max(1, entry.getCount()));
+            itemSb.append(entry.itemId());
+            countSb.append(Math.max(1, entry.count()));
         }
 
         itemBox.setValue(itemSb.toString());

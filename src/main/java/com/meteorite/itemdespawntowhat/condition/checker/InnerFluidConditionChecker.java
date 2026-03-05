@@ -34,7 +34,7 @@ public class InnerFluidConditionChecker extends AbstractConditionChecker{
 
     @Override
     public boolean shouldApply(ConditionContext ctx) {
-        return ctx.innerFluid() != null;
+        return ctx.innerFluid() != null && ctx.innerFluid().hasInnerFluid();
     }
 
     @Override

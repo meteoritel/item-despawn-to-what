@@ -130,15 +130,18 @@ public class JsonOrderTypeAdapterFactory implements TypeAdapterFactory {
 
     @SuppressWarnings("unchecked")
     record FieldInfo(String jsonName, Field field, Type fieldType) {
-
-        void write(Gson gson, JsonWriter out, Object value){
-                try {
-                    TypeAdapter<Object> adapter = (TypeAdapter<Object>) gson.getAdapter(TypeToken.get(fieldType));
-                    adapter.write(out, value);
-                } catch (Exception e) {
-                    JsonElement element = gson.toJsonTree(value);
-                    gson.toJson(element, out);
-                }
+        void write(Gson gson, JsonWriter out, Object value) throws IOException {
+            TypeAdapter<Object> adapter;
+            try {
+                @SuppressWarnings("unchecked")
+                TypeAdapter<Object> a = (TypeAdapter<Object>) gson.getAdapter(TypeToken.get(fieldType));
+                adapter = a;
+            } catch (Exception e) {
+                JsonElement element = gson.toJsonTree(value);
+                gson.toJson(element, out);
+                return;
+            }
+            adapter.write(out, value);
         }
     }
 }
