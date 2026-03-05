@@ -43,9 +43,4 @@ public class ItemToEntityConfigHandler extends BaseConfigHandler<ItemToEntityCon
         // 明确指定具体类型，避免泛型擦除问题
         return new TypeToken<List<ItemToEntityConfig>>(){}.getType();
     }
-
-    @Override
-    public List<ItemToEntityConfig> loadConfig() {
-        return super.loadConfig();
-    }
 }

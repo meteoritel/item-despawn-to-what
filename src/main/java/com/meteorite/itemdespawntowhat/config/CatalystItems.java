@@ -30,8 +30,6 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
     private boolean catalystConsume;
 
     public CatalystItems() {
-        this.catalystList = new ArrayList<>();
-        this.catalystConsume = true;
     }
 
     // ========== 接口实现 ========== //
@@ -130,7 +128,7 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
     // 统计起始物品所在格子内（排除自己）各物品的总数量
     public static Map<Item, Integer> collectNearbyItemCounts(ItemEntity triggerEntity) {
         BlockPos pos = triggerEntity.blockPosition();
-        AABB searchBox = new AABB(pos);
+        AABB searchBox = AABB.unitCubeFromLowerCorner(Vec3.atLowerCornerOf(pos));
 
         Map<Item, Integer> counts = new HashMap<>();
         triggerEntity.level().getEntitiesOfClass(
@@ -173,10 +171,6 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
         private ResourceLocation itemId;
         @SerializedName("count")
         private int count;
-
-        public CatalystEntry() {
-            this.count = 1;
-        }
 
         public CatalystEntry(ResourceLocation itemId, int count) {
             this.itemId = itemId;

@@ -26,15 +26,21 @@ import java.util.UUID;
 
 public abstract class BaseConversionConfig {
     protected static final Logger LOGGER = LogManager.getLogger();
+
     // 内部标识符，不会进行序列化
     protected transient String internalId;
     protected transient ConfigType configType;
+
+    // ========== 缓存字段 ========== //
+    // 缓存的起始物品实例
+    protected transient Item cachedStartItem;
+    // 缓存是否已初始化
+    private transient boolean cacheInitialized = false;
+
     // 基础限制实体数量，没有规定实体数量的时候返回这个值
     protected static final int DEFAULT_RESULT_LIMIT = 30;
     // 检查限制的范围
     protected static final int MAX_RADIUS = 6;
-    // 默认转化时间300秒
-    protected static final int DEFAULT_CONVERSION_TIME = 300;
 
     // 物品注册名
     @JsonOrder(1)
@@ -47,54 +53,80 @@ public abstract class BaseConversionConfig {
     // 所处维度
     @JsonOrder(2)
     @SerializedName("dimension")
-    protected String dimension;
+    protected String dimension = "";
     // 是否需要露天
     @JsonOrder(2)
     @SerializedName("need_outdoor")
-    protected boolean needOutdoor;
+    protected boolean needOutdoor = false;
     // 六个方向的方块
     @JsonOrder(2)
     @SerializedName("surrounding_blocks")
-    protected SurroundingBlocks surroundingBlocks;
+    protected SurroundingBlocks surroundingBlocks = new SurroundingBlocks();
     // 催化剂物品
     @JsonOrder(2)
     @SerializedName("catalyst_items")
-    protected CatalystItems catalystItems;
+    protected CatalystItems catalystItems = new CatalystItems();
     @JsonOrder(2)
     @SerializedName("inner_fluid")
-    protected InnerFluid innerFluid;
+    protected InnerFluid innerFluid = new InnerFluid();
     // 生成结果注册名
     @JsonOrder(3)
     @SerializedName("result")
     protected ResourceLocation resultId;
-    // 转化的时间，单位为秒
+    // 转化的时间，单位为秒，默认300s
     @JsonOrder(3)
     @SerializedName("conversion_time")
-    protected int conversionTime;
-    //生成的倍率
+    protected int conversionTime = 300;
+    //生成的倍率，默认为1
     @JsonOrder(3)
     @SerializedName("result_multiple")
-    protected int resultMultiple;
+    protected int resultMultiple = 1;
 
+    // 用来存储配置的空构造方法
     public BaseConversionConfig() {
         this.internalId = UUID.randomUUID().toString();
     }
 
+    // 用来生成示例配置用的构造方法
     public BaseConversionConfig(ResourceLocation item, ResourceLocation result) {
         this();
         this.itemId = item;
-        //this.disappearCause = "timeout";
-        this.dimension = "";
-        this.needOutdoor = false;
-        this.surroundingBlocks = new SurroundingBlocks();
-        this.catalystItems = new CatalystItems();
         this.resultId = result;
         this.conversionTime = 5;
         this.resultMultiple = 1;
     }
 
-    // 限制条件，子类可覆盖，不符合条件的配置不会被读取
-    public boolean shouldProcess() {
+    // ========== 缓存初始化 ========== //
+    public final void initCache() {
+        if (cacheInitialized) {
+            return;
+        }
+        // 缓存起始物品
+        cachedStartItem = BuiltInRegistries.ITEM.get(itemId);
+
+        // 确保 internalId 存在
+        if (this.internalId == null || this.internalId.isEmpty()) {
+            this.internalId = UUID.randomUUID().toString();
+        }
+
+        // 子类缓存各自的结果对象
+        initResultCache();
+
+        cacheInitialized = true;
+        LOGGER.debug("Cache initialized for config: item = {}, internalId = {}", itemId, internalId);
+    }
+
+    protected void initResultCache() {
+        // 默认空实现，子类按需重写
+    }
+
+    // 是否已经缓存
+    public boolean isCacheInitialized() {
+        return cacheInitialized;
+    }
+
+    // ========== 限制条件，不符合条件的配置不会被读取 ========== //
+    public final boolean shouldProcess() {
         if (!isValidResourceLocation(itemId)
                 ||!isValidResourceLocation(resultId)) {
             LOGGER.warn("invalid resource location, itemId is {} or resultId is {}",itemId, resultId);
@@ -113,13 +145,12 @@ public abstract class BaseConversionConfig {
 
         // 催化剂不能与起始物品相同
         if (catalystItems.hasAnyCatalyst()) {
-            return catalystItems.getCatalystList().stream().noneMatch(
-                    entry -> entry.getItemId().equals(itemId));
-        }
-
-        // 确保内部ID存在
-        if (this.getInternalId() == null || this.getInternalId().isEmpty()) {
-            this.setInternalId(UUID.randomUUID().toString());
+            boolean conflict = getCatalystItems().getCatalystList().stream()
+                    .anyMatch(entry -> entry.getItemId().equals(itemId));
+            if (conflict) {
+                LOGGER.warn("Catalyst item conflicts with source item: {}", itemId);
+                return false;
+            }
         }
 
         if (innerFluid != null && innerFluid.hasInnerFluid()) {
@@ -129,15 +160,17 @@ public abstract class BaseConversionConfig {
             }
         }
 
+        return additionalCheck();
+    }
+
+    // 由子类重写，假如子类有新增的检验
+    protected boolean additionalCheck() {
         return true;
     }
 
+    // ========== 条件检查器 ========== //
     // 构建条件检查器
     public ConditionChecker buildConditionChecker() {
-        if (!this.shouldProcess()) {
-            return null;
-        }
-
         ConditionContext ctx = new ConditionContext(getDimension(),
                 isNeedOutdoor(),
                 getSurroundingBlocks(),
@@ -146,7 +179,8 @@ public abstract class BaseConversionConfig {
         return ConditionCheckerUtil.buildCombinedChecker(ctx);
     }
 
-    // 给子类用的方法
+    // ========== 消耗相关逻辑 ========== //
+    // 所有的额外消耗的方法
     protected void consumeAllOthers(ItemEntity itemEntity, int startItemCount) {
         consumeCatalysts(itemEntity, startItemCount);
         consumeFluid(itemEntity);
@@ -154,7 +188,7 @@ public abstract class BaseConversionConfig {
 
     // 消耗催化剂的方法
     protected void consumeCatalysts(ItemEntity itemEntity, int startItemCount) {
-        if (catalystItems == null || !catalystItems.hasAnyCatalyst()) {
+        if (catalystItems == null || !catalystItems.hasAnyCatalyst() || !catalystItems.isCatalystConsume()) {
             return;
         }
         catalystItems.consumeFromLevel(itemEntity, startItemCount);
@@ -172,7 +206,7 @@ public abstract class BaseConversionConfig {
     // 计算本次实际能转化的起始物品数量，考虑催化剂数量上限、结果数量上限
     protected int computeActualConvertCount(ItemEntity itemEntity, int originalStackSize) {
         // 催化剂的限制
-        int catalystLimit = (catalystItems != null)
+        int catalystLimit = (catalystItems != null && catalystItems.hasAnyCatalyst())
                 ? catalystItems.getMaxConvertible(itemEntity, originalStackSize)
                 : originalStackSize;
 
@@ -210,6 +244,9 @@ public abstract class BaseConversionConfig {
     }
 
     public Item getStartItem() {
+        if (cacheInitialized) {
+            return cachedStartItem;
+        }
         return BuiltInRegistries.ITEM.get(itemId);
     }
 
@@ -218,8 +255,7 @@ public abstract class BaseConversionConfig {
     }
 
     public ItemStack getStartItemIcon() {
-        return BuiltInRegistries.ITEM.getOptional(itemId)
-                .map(ItemStack::new).orElseGet(() -> new ItemStack(Items.BARRIER));
+        return getStartItem().getDefaultInstance();
     }
 
     // ========== 子类方法 ========== //
@@ -228,16 +264,14 @@ public abstract class BaseConversionConfig {
     public abstract String getResultDescriptionId();
     public abstract ItemStack getResultIcon();
     public abstract void performConversion(ItemEntity itemEntity, ServerLevel serverLevel);
-
     // ========== setter 和 getter ========== //
-    // 转化时间限制在1-300
     public int getConversionTime() {
-        return (conversionTime <= 0 || conversionTime > DEFAULT_CONVERSION_TIME) ? DEFAULT_CONVERSION_TIME : conversionTime;
+        return conversionTime;
     }
 
     // 转化倍率最小为1
     public int getResultMultiple() {
-        return Math.max(1, resultMultiple);
+        return resultMultiple;
     }
 
     public String getInternalId() {
@@ -253,7 +287,7 @@ public abstract class BaseConversionConfig {
     }
 
     public String getDimension() {
-        return Optional.ofNullable(dimension).orElse("");
+        return dimension;
     }
 
     public void setDimension(String dimension) {
@@ -297,9 +331,6 @@ public abstract class BaseConversionConfig {
     }
 
     public SurroundingBlocks getSurroundingBlocks() {
-        if (surroundingBlocks == null) {
-            return new SurroundingBlocks();
-        }
         return surroundingBlocks;
     }
 

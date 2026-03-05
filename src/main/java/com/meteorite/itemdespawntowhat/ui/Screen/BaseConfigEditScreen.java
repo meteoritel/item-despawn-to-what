@@ -200,7 +200,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
     @Override
     public void onListScreenClosed() {
-        if (!listEditPerformed && draftConfig != null && draftConfig.shouldProcess()) {
+        if (!listEditPerformed && draftConfig != null ) {// && draftConfig.shouldProcess()
             onRefillFields(draftConfig);
         }
         // 重置标志和草稿，避免下次误用

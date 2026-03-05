@@ -18,10 +18,13 @@ public class ItemToEntityConfig extends BaseConversionConfig{
 
     // 生成数量限制
     @SerializedName("result_limit")
-    private int resultLimit;
+    private int resultLimit = 30;
     // 生成实体的age（如果需要）
     @SerializedName("entity_age")
-    protected int entityAge;
+    protected int entityAge = -2400;
+
+    // 缓存的结果实体类型
+    private transient EntityType<?> cachedResultEntityType;
 
     public ItemToEntityConfig() {
         super();
@@ -30,26 +33,38 @@ public class ItemToEntityConfig extends BaseConversionConfig{
 
     public ItemToEntityConfig(ResourceLocation item, ResourceLocation resultEntity) {
         super(item, resultEntity);
-        this.resultLimit = DEFAULT_RESULT_LIMIT;
-        this.entityAge = 0;
         this.configType = ConfigType.ITEM_TO_ENTITY;
+    }
+
+    // ========== 缓存与校验 ========== //
+    @Override
+    protected void initResultCache() {
+        cachedResultEntityType = BuiltInRegistries.ENTITY_TYPE.get(resultId);
     }
 
     // 确保实体不为空，名字没有拼写错
     @Override
-    public boolean shouldProcess() {
-        return super.shouldProcess() && this.getResultEntityType() != null;
-    }
+    protected boolean additionalCheck() {
+        boolean valid = BuiltInRegistries.ENTITY_TYPE.containsKey(resultId);
+        if (!valid) {
+            LOGGER.warn("Unknown entity type: resultId='{}'", resultId);
+            return false;
+        }
 
+        if (resultLimit <= 0) {
+            LOGGER.warn("ResultLimit should not be less than 0, current is: {}", resultLimit);
+            return false;
+        }
+        return true;
+    }
     // ========== 转化逻辑 ========== //
     @Override
     public void performConversion(ItemEntity itemEntity, ServerLevel serverLevel) {
-        ResourceLocation resultEntityId = getResultId();
         EntityType<?> entityType = getResultEntityType();
         BlockPos pos = itemEntity.blockPosition();
 
         if (entityType == null) {
-            LOGGER.warn("Unknown entity type: {}", resultEntityId);
+            LOGGER.warn("Unknown entity type: {}", resultId);
             return;
         }
 
@@ -59,14 +74,14 @@ public class ItemToEntityConfig extends BaseConversionConfig{
 
         int actualConvertCount = computeActualConvertCount(itemEntity, originalStackSize);
         if (actualConvertCount <= 0) {
-            LOGGER.debug("No capacity for entity conversion of {}", resultEntityId);
+            LOGGER.debug("No capacity for entity conversion of {}", resultId);
             return;
         }
 
         // 计算本次可以生成的实体数量和需要返还的物品数量
         int actualEntitiesToSpawn = actualConvertCount * resultMultiple;
         LOGGER.debug("Converting to entity: {} -> {} ({} entities from {} items, {} items remaining)",
-                originalStack.getItem().getDescriptionId(), resultEntityId,
+                originalStack.getItem().getDescriptionId(), resultId,
                 actualEntitiesToSpawn, actualConvertCount, originalStackSize - actualConvertCount);
 
         // 物品实体下一tick消失
@@ -74,14 +89,12 @@ public class ItemToEntityConfig extends BaseConversionConfig{
         // 根据条件消耗催化剂与流体
         consumeAllOthers(itemEntity, actualConvertCount);
 
-        // 生成实体
+        // 生成实体, 稍微分散位置，避免重叠
         for (int i = 0; i < actualEntitiesToSpawn; i++) {
             Entity resultEntity = entityType.create(serverLevel);
             if (resultEntity != null) {
-                // 稍微分散位置，避免重叠
                 double offsetX = (serverLevel.random.nextDouble() - 0.5) * 0.5;
                 double offsetZ = (serverLevel.random.nextDouble() - 0.5) * 0.5;
-
                 resultEntity.moveTo(pos.getX() + 0.5 + offsetX, pos.getY(), pos.getZ() + 0.5 + offsetZ, 0, 0);
 
                 // 设置实体年龄（如果需要）
@@ -106,13 +119,13 @@ public class ItemToEntityConfig extends BaseConversionConfig{
                 itemEntity.getX() - MAX_RADIUS, itemEntity.getY() - MAX_RADIUS, itemEntity.getZ() - MAX_RADIUS,
                 itemEntity.getX() + MAX_RADIUS, itemEntity.getY() + MAX_RADIUS, itemEntity.getZ() + MAX_RADIUS);
 
-        return serverLevel.getEntitiesOfClass(this.getResultEntityType().getBaseClass(), box, Entity::isAlive)
+        return serverLevel.getEntitiesOfClass(getResultEntityType().getBaseClass(), box, Entity::isAlive)
                 .size();
     }
 
     @Override
     public boolean isResultLimitExceeded(ItemEntity itemEntity) {
-        return this.countNearbyResult(itemEntity) >= this.getResultLimit();
+        return this.countNearbyResult(itemEntity) >= getResultLimit();
     }
 
     @Override
@@ -127,6 +140,9 @@ public class ItemToEntityConfig extends BaseConversionConfig{
 
     // ========== 结果相关方法 ========== //
     public EntityType<?> getResultEntityType() {
+        if (isCacheInitialized()) {
+            return cachedResultEntityType;
+        }
         return BuiltInRegistries.ENTITY_TYPE.get(resultId);
     }
 
@@ -145,12 +161,14 @@ public class ItemToEntityConfig extends BaseConversionConfig{
     public int getEntityAge() {
         return entityAge;
     }
+
     public void setEntityAge(int entityAge) {
         this.entityAge = entityAge;
     }
     public int getResultLimit() {
-        return resultLimit <= 0 ? DEFAULT_RESULT_LIMIT : resultLimit;
+        return resultLimit;
     }
+
     public void setResultLimit(int resultLimit) {
         this.resultLimit = resultLimit;
     }

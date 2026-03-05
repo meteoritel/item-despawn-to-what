@@ -38,9 +38,4 @@ public class ItemToBlockConfigHandler extends BaseConfigHandler<ItemToBlockConfi
     protected Type createListType() {
         return new TypeToken<List<ItemToBlockConfig>>(){}.getType();
     }
-
-    @Override
-    public List<ItemToBlockConfig> loadConfig() {
-        return super.loadConfig();
-    }
 }

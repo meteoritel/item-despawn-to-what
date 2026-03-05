@@ -16,7 +16,12 @@ import net.minecraft.world.phys.AABB;
 public class ItemToItemConfig extends BaseConversionConfig{
 
     @SerializedName("result_limit")
-    private int resultLimit;
+    private int resultLimit = 30;
+
+    // 缓存的结果物品实例
+    private transient Item cachedResultItem;
+    // 缓存结果物品的最大堆叠数，避免重复查找
+    private transient int cachedResultMaxStackSize;
 
     public ItemToItemConfig() {
         super();
@@ -25,16 +30,36 @@ public class ItemToItemConfig extends BaseConversionConfig{
 
     public ItemToItemConfig(ResourceLocation item, ResourceLocation resultItem) {
         super(item, resultItem);
-        this.resultLimit = DEFAULT_RESULT_LIMIT;
         this.configType = ConfigType.ITEM_TO_ITEM;
+    }
+
+    // ========== 初始化缓存与校验 ========== //
+    @Override
+    protected void initResultCache() {
+        cachedResultItem = BuiltInRegistries.ITEM.get(resultId);
+        if (cachedResultItem == Items.AIR) {
+            LOGGER.warn("Could not find item for resultId='{}', config will be rejected", resultId);
+            cachedResultItem = null;
+            cachedResultMaxStackSize = 1;
+        } else {
+            cachedResultMaxStackSize = cachedResultItem.getDefaultMaxStackSize();
+        }
     }
 
     // 物品转化需要保证转化前后结果不同，防止循环转化
     @Override
-    public boolean shouldProcess() {
-        return super.shouldProcess() && !this.itemId.equals(resultId);
-    }
+    protected boolean additionalCheck() {
+        if (itemId.equals(resultId)) {
+            LOGGER.warn("Source and result item are the same: {}, this would cause infinite conversion", itemId);
+            return false;
+        }
 
+        if (resultLimit <= 0) {
+            LOGGER.warn("ResultLimit should not be less than 0, current is: {}", resultLimit);
+            return false;
+        }
+        return true;
+    }
     // ========== 转化逻辑 ========== //
     @Override
     public void performConversion(ItemEntity itemEntity, ServerLevel serverLevel) {
@@ -58,7 +83,6 @@ public class ItemToItemConfig extends BaseConversionConfig{
 
         // 根据条件消耗催化剂与流体
         consumeAllOthers(itemEntity, actualConvertCount);
-
         ItemStack resultStack = new ItemStack(resultItem, actualConvertCount);
         // 生成结果物品实体（每个起始物品产出 resultMultiple 堆，每堆数量为 actualConvertCount）
         for (int i = 0; i < resultMultiple; i++) {
@@ -106,15 +130,12 @@ public class ItemToItemConfig extends BaseConversionConfig{
 
     @Override
     public boolean isResultLimitExceeded(ItemEntity itemEntity) {
-        return this.countNearbyResult(itemEntity) >= getResultLimit() * 64;
+        return this.countNearbyResult(itemEntity) >= getResultLimitInItems();
     }
 
     @Override
     protected int getResultCapacityInStartItems(ItemEntity itemEntity) {
-        int current = countNearbyResult(itemEntity);
-        int limitTotal = getResultLimit() * 64;
-        int remaining = limitTotal - current;
-
+        int remaining = getResultLimitInItems() - countNearbyResult(itemEntity);
         if (remaining <= 0) {
             return 0;
         }
@@ -122,22 +143,31 @@ public class ItemToItemConfig extends BaseConversionConfig{
         return remaining / Math.max(1, getResultMultiple());
     }
 
+    private int getResultLimitInItems() {
+        return getResultLimit() * cachedResultMaxStackSize;
+    }
+
     // ========== 结果相关方法 ========== //
     public Item getResultItem() {
+        if (isCacheInitialized()) {
+            return cachedResultItem;
+        }
         return BuiltInRegistries.ITEM.get(resultId);
     }
+
     @Override
     public String getResultDescriptionId() {
         return getResultItem().getDescriptionId();
     }
+
     @Override
     public ItemStack getResultIcon() {
-        return BuiltInRegistries.ITEM.getOptional(resultId)
-                .map(ItemStack::new).orElseGet(() -> new ItemStack(Items.BARRIER));
+        return getResultItem().getDefaultInstance();
     }
     public int getResultLimit() {
-        return resultLimit <= 0 ? DEFAULT_RESULT_LIMIT : resultLimit;
+        return resultLimit;
     }
+
     public void setResultLimit(int resultLimit) {
         this.resultLimit = resultLimit;
     }

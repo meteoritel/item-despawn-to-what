@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat;
 
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
+import com.meteorite.itemdespawntowhat.config.conversion.ItemToBlockConfig;
 import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
 import com.meteorite.itemdespawntowhat.condition.ConditionChecker;
 import net.minecraft.resources.ResourceLocation;
@@ -94,8 +95,18 @@ public class ConfigExtractorManager {
 
     private static void processConfigs(List<? extends BaseConversionConfig> configs) {
         for (BaseConversionConfig config : configs) {
-            if (!isValidConfig(config)) {
-                LOGGER.warn("Skipping invalid config for item: {}", config.getItemId());
+            if (config == null || !config.shouldProcess()) {
+                LOGGER.warn("Skipping invalid config for item: {}",
+                        config != null ? config.getItemId() : "null");
+                continue;
+            }
+
+            // 初始化配置缓存
+            config.initCache();
+
+            if (!isResultCacheValid(config)) {
+                LOGGER.warn("Skipping config with invalid result cache: item={}, result={}",
+                        config.getItemId(), config.getResultId());
                 continue;
             }
 
@@ -103,9 +114,9 @@ public class ConfigExtractorManager {
             String internalId = config.getInternalId();
 
             // 添加到主缓存
-            List<BaseConversionConfig> itemConfigs = ITEM_CONFIGS_CACHE
-                    .computeIfAbsent(itemId, k -> new ArrayList<>());
-            itemConfigs.add(config);
+            ITEM_CONFIGS_CACHE
+                    .computeIfAbsent(itemId, k -> new ArrayList<>())
+                    .add(config);
 
             // 添加到内部ID缓存
             INTERNAL_ID_CACHE.put(internalId, config);
@@ -116,10 +127,6 @@ public class ConfigExtractorManager {
                 CONDITION_CHECKER_CACHE.put(internalId, checker);
             }
         }
-    }
-
-    private static boolean isValidConfig(BaseConversionConfig config) {
-        return config != null && config.shouldProcess();
     }
 
     // ========== 查询方法，用于其他类调用缓存 ========== //
@@ -169,10 +176,9 @@ public class ConfigExtractorManager {
                 : Collections.unmodifiableList(result);
     }
 
-    // ========== 辅助方法 ========== //
-
+    // ========== 生命周期管理 ========== //
     // 清除所有缓存
-    public static synchronized void clearAllCaches() {
+    public static void clearAllCaches() {
         ITEM_CONFIGS_CACHE.clear();
         INTERNAL_ID_CACHE.clear();
         CONDITION_CHECKER_CACHE.clear();
@@ -186,7 +192,7 @@ public class ConfigExtractorManager {
     }
 
     // 重新加载所有配置，用于热重载
-    public static synchronized void reloadAllConfigs() {
+    public static void reloadAllConfigs() {
         if (!initialized) {
             initialize();
             return;
@@ -195,14 +201,27 @@ public class ConfigExtractorManager {
         try {
             // 清除现有缓存
             clearAllCaches();
-            initialized = false;
-
             // 重新加载配置
             initialize();
 
             LOGGER.info("All configs reloaded successfully");
         } catch (Exception e) {
             LOGGER.error("Failed to reload configs", e);
+        }
+    }
+
+    // ========== 辅助方法 ========== //
+
+    private static boolean isResultCacheValid(BaseConversionConfig config) {
+        if (config instanceof ItemToBlockConfig blockConfig) {
+            return blockConfig.isResultCacheValid();
+        }
+        return true;
+    }
+
+    private static void checkInitialized() {
+        if (!initialized) {
+            throw new IllegalStateException("ConfigExtractorManager not initialized. Call initialize() first.");
         }
     }
 
@@ -229,12 +248,6 @@ public class ConfigExtractorManager {
         return stats;
     }
 
-    private static void checkInitialized() {
-        if (!initialized) {
-            throw new IllegalStateException("ConfigExtractorManager not initialized. Call initialize() first.");
-        }
-    }
-
     // 加载统计信息，用于日志调试
     private static void logCacheStats() {
         Map<String, Object> stats = getCacheStats();
@@ -248,5 +261,4 @@ public class ConfigExtractorManager {
         typeStats.forEach((type, count) ->
                 LOGGER.info("  {}: {} configs", type, count));
     }
-
 }

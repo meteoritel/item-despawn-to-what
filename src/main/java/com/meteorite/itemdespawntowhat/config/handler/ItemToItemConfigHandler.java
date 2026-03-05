@@ -40,9 +40,4 @@ public class ItemToItemConfigHandler extends BaseConfigHandler<ItemToItemConfig>
         // 明确指定具体类型，避免泛型擦除问题
         return new TypeToken<List<ItemToItemConfig>>(){}.getType();
     }
-
-    @Override
-    public List<ItemToItemConfig> loadConfig() {
-        return super.loadConfig();
-    }
 }

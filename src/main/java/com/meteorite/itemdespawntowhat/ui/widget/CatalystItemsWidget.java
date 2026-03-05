@@ -160,6 +160,7 @@ public class CatalystItemsWidget extends AbstractCompositeWidget {
             list.add(new CatalystItems.CatalystEntry(id, count));
         }
         result.setCatalystList(list);
+        result.setCatalystConsume(consumeButton.getValue());
         return result.hasAnyCatalyst() ? result : new CatalystItems();
     }
 
@@ -186,6 +187,7 @@ public class CatalystItemsWidget extends AbstractCompositeWidget {
 
         itemBox.setValue(itemSb.toString());
         countBox.setValue(countSb.toString());
+        consumeButton.setValue(items.isCatalystConsume());
     }
 
     // 同步数量文本框数量
@@ -235,6 +237,7 @@ public class CatalystItemsWidget extends AbstractCompositeWidget {
     public void clear() {
         itemBox.setValue("");
         countBox.setValue("");
+        consumeButton.setValue(false);
     }
 
     public EditBox getItemBox() {

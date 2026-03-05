@@ -42,7 +42,6 @@ public class NetworkEvent {
                     context.enqueueWork(() -> handleSaveConfig(payload, context));
                 }
         );
-
     }
 
     // 处理客户端发起的配置保存请求

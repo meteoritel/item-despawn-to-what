@@ -12,14 +12,17 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 
 public class ItemToBlockConfig extends BaseConversionConfig{
-
     // 最大检测半径的限制，默认为6
     @SerializedName("radius_limit")
-    private int radius;
+    private int radius = 6;
     @SerializedName("block_of_item")
-    private boolean enableItemBlock;
+    private boolean enableItemBlock = false;
+
+    // 缓存的结果方块实例，不参与序列化
+    private transient Block cachedResultBlock;
 
     public ItemToBlockConfig() {
         super();
@@ -28,24 +31,43 @@ public class ItemToBlockConfig extends BaseConversionConfig{
 
     public ItemToBlockConfig(ResourceLocation item, ResourceLocation resultBlock) {
         super(item, resultBlock);
-        this.radius = MAX_RADIUS;
-        this.enableItemBlock = false;
         this.configType = ConfigType.ITEM_TO_BLOCK;
     }
 
-    // 确保方块形式存在
+    // ========== 缓存与校验 ========== //
     @Override
-    public boolean shouldProcess() {
+    protected void initResultCache() {
         if (enableItemBlock) {
-            return isValidResourceLocation(itemId)
-                    && conversionTime > 0
-                    && conversionTime <= 300
-                    && resultMultiple > 0
-                    && radius >= 0
-                    && this.getResultBlock() != null;
+            if (cachedStartItem instanceof BlockItem blockItem) {
+                Block block = blockItem.getBlock();
+                // 将真实的 resultId 回写
+                this.resultId = BuiltInRegistries.BLOCK.getKey(block);
+                this.cachedResultBlock = block;
+                LOGGER.debug("enableItemBlock: resolved resultId={} for item={}", resultId, itemId);
+            } else {
+                LOGGER.warn("enableItemBlock=true but item '{}' is not a BlockItem, config will be rejected", itemId);
+            }
         } else {
-            return super.shouldProcess() && this.getResultBlock() != null && radius >= 0;
+            // 直接按 resultId 查找
+            Block block = BuiltInRegistries.BLOCK.get(resultId);
+            this.cachedResultBlock = (block != Blocks.AIR) ? block : null;
+            if (cachedResultBlock == null) {
+                LOGGER.warn("Could not find block for resultId='{}', config will be rejected", resultId);
+            }
         }
+    }
+
+    @Override
+    protected boolean additionalCheck() {
+        if (radius < 0) {
+            LOGGER.warn("radius_limit must be >= 0, current={}", radius);
+            return false;
+        }
+        return true;
+    }
+
+    public boolean isResultCacheValid() {
+        return cachedResultBlock != null;
     }
 
     // ========== 转化逻辑 ========== //
@@ -79,7 +101,10 @@ public class ItemToBlockConfig extends BaseConversionConfig{
     // ========== 结果相关方法 ========== //
     // 当开启了使用物品对应方块，且物品是方块物品，就直接使用对应的方块
     public Block getResultBlock() {
-        return BuiltInRegistries.BLOCK.get(this.getResultId());
+        if (isCacheInitialized()) {
+            return cachedResultBlock;
+        }
+        return BuiltInRegistries.BLOCK.get(resultId);
     }
 
     @Override
@@ -97,9 +122,9 @@ public class ItemToBlockConfig extends BaseConversionConfig{
                 ? new ItemStack(Items.BARRIER)
                 : new ItemStack(block.asItem());
     }
-    // 最小检测半径为0
+
     public int getRadius() {
-        return Math.max(0,radius);
+        return radius;
     }
     public void setRadius(int radius) {
         this.radius = radius;
@@ -109,14 +134,5 @@ public class ItemToBlockConfig extends BaseConversionConfig{
     }
     public void setEnableItemBlock(boolean enableItemBlock) {
         this.enableItemBlock = enableItemBlock;
-    }
-
-    @Override
-    public ResourceLocation getResultId() {
-        if (enableItemBlock && getStartItem() instanceof BlockItem blockItem) {
-            return BuiltInRegistries.BLOCK.getKey(blockItem.getBlock());
-        } else {
-            return resultId;
-        }
     }
 }

@@ -13,11 +13,14 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.FluidState;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
 
 public class InnerFluid implements ConditionSerializable<InnerFluid> {
     private static final Gson GSON = new Gson();
+    private static final Logger LOGGER = LogManager.getLogger();
 
     @SerializedName("inner_fluid")
     private final ResourceLocation fluidId;
@@ -100,8 +103,9 @@ public class InnerFluid implements ConditionSerializable<InnerFluid> {
             }
         }
 
-        // 当无法识别时，强制设置为空气
-        level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+        // 当无法识别时，跳过
+        LOGGER.warn("Could not consume fluid {} at {}: unrecognized block type {}",
+                fluidId, pos, block.getDescriptionId());
     }
 
     // ========== getter ========== //
