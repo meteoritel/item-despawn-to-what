@@ -34,9 +34,6 @@ public abstract class BaseConversionConfig {
     protected transient Item cachedStartItem;
     // 缓存是否已初始化
     private transient boolean cacheInitialized = false;
-
-    // 基础限制实体数量，没有规定实体数量的时候返回这个值
-    protected static final int DEFAULT_RESULT_LIMIT = 30;
     // 检查限制的范围
     protected static final int MAX_RADIUS = 6;
 
@@ -161,11 +158,6 @@ public abstract class BaseConversionConfig {
         return additionalCheck();
     }
 
-    // 由子类重写，假如子类有新增的检验
-    protected boolean additionalCheck() {
-        return true;
-    }
-
     // ========== 条件检查器 ========== //
     // 构建条件检查器
     public ConditionChecker buildConditionChecker() {
@@ -262,98 +254,77 @@ public abstract class BaseConversionConfig {
     public abstract String getResultDescriptionId();
     public abstract ItemStack getResultIcon();
     public abstract void performConversion(ItemEntity itemEntity, ServerLevel serverLevel);
+    protected boolean additionalCheck() {
+        return true;
+    }
+
     // ========== setter 和 getter ========== //
     public int getConversionTime() {
         return conversionTime;
     }
-
-    // 转化倍率最小为1
     public int getResultMultiple() {
         return resultMultiple;
     }
-
-    public String getInternalId() {
-        return internalId;
-    }
-
-    public void setInternalId(String internalId) {
-        this.internalId = internalId;
-    }
-
     public void setConversionTime(int conversionTime) {
         this.conversionTime = conversionTime;
     }
-
     public String getDimension() {
         return dimension;
     }
-
     public void setDimension(String dimension) {
         this.dimension = dimension;
     }
-
     public String getDisappearCause() {
         return disappearCause;
     }
-
     public void setDisappearCause(String disappearCause) {
         this.disappearCause = disappearCause;
     }
-
     public void setResultMultiple(int resultMultiple) {
         this.resultMultiple = resultMultiple;
     }
-
     public boolean isNeedOutdoor() {
         return needOutdoor;
     }
-
     public void setNeedOutdoor(boolean needOutdoor) {
         this.needOutdoor = needOutdoor;
     }
-
     public ResourceLocation getItemId() {
         return itemId;
     }
-
     public void setItemId(ResourceLocation itemId) {
         this.itemId = itemId;
     }
-
     public ResourceLocation getResultId() {
         return resultId;
     }
-
     public void setResultId(ResourceLocation resultId) {
         this.resultId = resultId;
     }
-
     public SurroundingBlocks getSurroundingBlocks() {
         return surroundingBlocks;
     }
-
     public void setSurroundingBlocks(SurroundingBlocks surroundingBlocks) {
         this.surroundingBlocks = surroundingBlocks;
     }
-
     public CatalystItems getCatalystItems() {
         return catalystItems;
     }
-
     public void setCatalystItems(CatalystItems catalystItems) {
         this.catalystItems = catalystItems;
     }
-
     public InnerFluid getInnerFluid() {
         return innerFluid;
     }
-
     public void setInnerFluid(InnerFluid innerFluid) {
         this.innerFluid = innerFluid;
     }
 
-    // config类型只能获取不能设置
+    // config类型、uuid只能获取不能设置
     public ConfigType getConfigType() {
         return configType;
+    }
+    public String getInternalId() {
+        return internalId;
     }
 }
