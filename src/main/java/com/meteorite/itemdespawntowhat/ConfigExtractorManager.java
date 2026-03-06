@@ -4,7 +4,7 @@ import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToBlockConfig;
 import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
-import com.meteorite.itemdespawntowhat.condition.ConditionChecker;
+import com.meteorite.itemdespawntowhat.condition.checker.ConditionChecker;
 import net.minecraft.resources.ResourceLocation;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

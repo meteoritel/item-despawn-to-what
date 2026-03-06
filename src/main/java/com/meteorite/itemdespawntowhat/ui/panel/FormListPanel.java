@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.ui.panel;
 
-import com.meteorite.itemdespawntowhat.ui.Screen.BaseConfigEditScreen;
+import com.meteorite.itemdespawntowhat.ui.screen.BaseConfigEditScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -31,7 +31,7 @@ public class FormListPanel extends ContainerObjectSelectionList<FormListPanel.En
         addEntry(new Entry(minecraft.font, label, widget));
     }
 
-    // 调整滑条的位置
+    // 调整面板的宽度（后端处理宽度）
     @Override
     public int getRowWidth() {
         return 340;
@@ -127,18 +127,24 @@ public class FormListPanel extends ContainerObjectSelectionList<FormListPanel.En
             }
         }
         // 拖拽的时候还有问题，之后再解决，现在直接不让拖拽滑条了
-        return false;
+        return isScrollBarVisible() && isScrolling(mouseX, mouseY);
     }
 
-//    private boolean isScrolling(double mouseX, double mouseY) {
-//        int scrollBarX = this.getX() + this.getRowWidth() - 6;
-//        return mouseX >= scrollBarX && mouseX <= scrollBarX + 6
-//                && mouseY >= this.getY() && mouseY <= this.getBottom();
-//    }
-//
-//    private boolean isScrollBarVisible() {
-//        return this.getMaxScroll() > 0;
-//    }
+    private boolean isScrolling(double mouseX, double mouseY) {
+        int scrollBarX = getScrollbarPosition();
+        return mouseX >= scrollBarX && mouseX <= scrollBarX + 6
+                && mouseY >= this.getY() && mouseY <= this.getBottom();
+    }
+
+    private boolean isScrollBarVisible() {
+        return this.getMaxScroll() > 0;
+    }
+
+    // 直接用面板右边缘 - 滑条宽度(6) 来定位滑条
+    @Override
+    protected int getScrollbarPosition() {
+        return this.getX() + this.width - 6;
+    }
 
     // ===============================================================================
     public class Entry extends ContainerObjectSelectionList.Entry<Entry> {

@@ -9,6 +9,6 @@ public interface ListScreenCallback<T extends BaseConversionConfig> {
     void onEditRequested(ConfigListPanel.EntrySource source, int indexInSource);
     // 用户删除了某条配置
     void onDeleteRequested(ConfigListPanel.EntrySource source, int indexInSource);
-    // 列表 Screen 关闭后通知父 Screen 刷新自身按钮文字
+    // 列表 screen 关闭后通知父 screen 刷新自身按钮文字
     void onListScreenClosed();
 }

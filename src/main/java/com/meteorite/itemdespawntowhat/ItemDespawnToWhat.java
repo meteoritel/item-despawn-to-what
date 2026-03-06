@@ -33,9 +33,6 @@ public class ItemDespawnToWhat {
         NeoForge.EVENT_BUS.register(ItemConversionEvent.class);
         NeoForge.EVENT_BUS.register(ClientInputEvents.class);
 
-        // 调试用的事件类，后续会删掉
-        // NeoForge.EVENT_BUS.register(DebugClientModEvents.class);
-
         LOGGER.info("{} mod initialized", MOD_ID);
     }
 

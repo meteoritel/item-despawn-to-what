@@ -1,7 +1,8 @@
-package com.meteorite.itemdespawntowhat.ui.Screen;
+package com.meteorite.itemdespawntowhat.ui.screen;
 
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToBlockConfig;
+import com.meteorite.itemdespawntowhat.ui.SuggestionProvider;
 import com.meteorite.itemdespawntowhat.ui.panel.FormListPanel;
 import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.EditBox;
@@ -57,6 +58,7 @@ public class ItemToBlockEditScreen extends BaseConfigEditScreen<ItemToBlockConfi
 
     @Override
     protected void addCustomSuggestion() {
-        registerSuggestion(resultIdInput, BuiltInRegistries.BLOCK);
+        registerSuggestion(resultIdInput,
+                SuggestionProvider.ofRegistry(BuiltInRegistries.BLOCK));
     }
 }

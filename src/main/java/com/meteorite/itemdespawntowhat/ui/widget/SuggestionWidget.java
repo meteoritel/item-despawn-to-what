@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.ui.widget;
 
-
+import com.meteorite.itemdespawntowhat.ui.SuggestionProvider;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
@@ -14,39 +14,40 @@ import java.util.stream.Collectors;
 /*
  * 物品ID输入建议组件
  * 支持逗号分隔，Tab补全，上下键选择
- * 逗号分隔似乎没用了，输入改成列表好麻烦
- * 现在又有用了，拿来废物利用下
  */
 public class SuggestionWidget {
-    private static final int MAX_FETCH = 100;       // 最多匹配条数
-    private static final int MAX_VISIBLE = 10;      // 下拉框最多可见条数
+    private static final int MAX_FETCH = 100; // 最多匹配条数
+    private static final int MAX_VISIBLE = 10; // 下拉框最多可见条数
     private static final int ENTRY_HEIGHT = 12;
     private static final int PADDING = 3;
 
     private final Font font;
     private final EditBox attachedBox;
-    private final List<String> candidateIds;
+    private SuggestionProvider provider;
+
     // 当前的建议列表
     private List<String> suggestions = new ArrayList<>();
     // 当前的建议列表索引，-1 代表未选中
     private int selectedIndex = -1;
-    // 下拉框可见区域的起始偏移（scroll offset）
+    // 下拉框可见区域的起始偏移
     private int scrollOffset = 0;
     private boolean visible = false;
 
-    public SuggestionWidget(Font font, EditBox attachedBox, Registry<?> registry) {
+    public SuggestionWidget(Font font, EditBox attachedBox, SuggestionProvider provider) {
         this.font = font;
         this.attachedBox = attachedBox;
-        this.candidateIds = registry.keySet()
-                .stream()
-                .map(ResourceLocation::toString)
-                .sorted()
-                .collect(Collectors.toList());
+        this.provider = provider;
     }
 
+    // 支持运行时切换建议来源
+    public void setProvider(SuggestionProvider provider) {
+        this.provider = provider;
+        hide();
+    }
+
+    // 每次输入框内容变化时调用
     public void updateSuggestions() {
-        String fullText = attachedBox.getValue();
-        String currentSegment = getCurrentSegment(fullText);
+        String currentSegment = getCurrentSegment(attachedBox.getValue());
 
         // 只有输入了至少一个字符才显示
         if (currentSegment.isEmpty()) {
@@ -54,41 +55,16 @@ public class SuggestionWidget {
             return;
         }
 
-        List<String> matched = new ArrayList<>();
-        String lowerSegment = currentSegment.toLowerCase();
-
-        for (String id : candidateIds) {
-            if (matched.size() >= MAX_FETCH) break;
-            // 匹配完整注册名 或 只匹配 path 部分
-            if (id.startsWith(lowerSegment) || pathOf(id).startsWith(lowerSegment)) {
-                matched.add(id);
-            }
-        }
-
-        if (matched.isEmpty()) {
+        List<String> matched = provider.getSuggestions(currentSegment);
+        if (matched == null || matched.isEmpty()) {
             hide();
             return;
         }
 
-        suggestions = matched;
+        suggestions = new ArrayList<>(matched);;
         selectedIndex = -1;
         scrollOffset = 0;
         visible = true;
-    }
-
-    // 从完整文本中提取当前正在编辑的段，从最后一个逗号开始提取
-    private String getCurrentSegment(String fullText) {
-        int lastComma = fullText.lastIndexOf(',');
-        if (lastComma < 0) {
-            return fullText.trim();
-        }
-        return fullText.substring(lastComma + 1).trim();
-    }
-
-    // 从 "namespace:path" 中提取 path
-    private static String pathOf(String id) {
-        int colon = id.indexOf(':');
-        return colon >= 0 ? id.substring(colon + 1) : id;
     }
 
     // =========== 键盘事件 ========== //
@@ -149,12 +125,6 @@ public class SuggestionWidget {
                     return true;
                 }
             }
-
-            // Esc：隐藏建议，不消费事件（让 Screen 也能处理关闭）
-            case GLFW.GLFW_KEY_ESCAPE -> {
-                hide();
-                return false;
-            }
         }
 
         return false;
@@ -178,7 +148,7 @@ public class SuggestionWidget {
     }
 
     // =========== 鼠标事件 =========== //
-    public boolean mouseClicked(double mouseX, double mouseY, double scrollDelta) {
+    public boolean mouseClicked(double mouseX, double mouseY) {
         if (!visible || suggestions.isEmpty()) return false;
         if (!isMouseOverDropdown(mouseX, mouseY)) return false;
 
@@ -202,11 +172,8 @@ public class SuggestionWidget {
 
         // 让已选中项跟随可见区域
         if (selectedIndex >= 0) {
-            if (selectedIndex < scrollOffset) {
-                selectedIndex = scrollOffset;
-            } else if (selectedIndex >= scrollOffset + MAX_VISIBLE) {
-                selectedIndex = scrollOffset + MAX_VISIBLE - 1;
-            }
+            selectedIndex = Math.max(scrollOffset,
+                    Math.min(selectedIndex, scrollOffset + MAX_VISIBLE - 1));
         }
         return true;
     }
@@ -294,6 +261,15 @@ public class SuggestionWidget {
         return Math.max(0, Math.min(offset, maxOffset));
     }
 
+    // 从完整文本中提取当前正在编辑的段，从最后一个逗号开始提取
+    private String getCurrentSegment(String fullText) {
+        int lastComma = fullText.lastIndexOf(',');
+        if (lastComma < 0) {
+            return fullText.trim();
+        }
+        return fullText.substring(lastComma + 1).trim();
+    }
+
     // ========== 当前状态 =========== //
     public void hide() {
         visible = false;
@@ -308,6 +284,10 @@ public class SuggestionWidget {
     // 绑定的文本框
     public EditBox getAttachedBox() {
         return attachedBox;
+    }
+
+    public SuggestionProvider getProvider() {
+        return provider;
     }
 
 }

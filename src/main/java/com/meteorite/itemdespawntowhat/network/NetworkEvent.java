@@ -4,7 +4,7 @@ import com.meteorite.itemdespawntowhat.ConfigManager;
 import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
-import com.meteorite.itemdespawntowhat.ui.Screen.ConfigSelectionScreen;
+import com.meteorite.itemdespawntowhat.ui.screen.ConfigSelectionScreen;
 import net.minecraft.client.Minecraft;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;

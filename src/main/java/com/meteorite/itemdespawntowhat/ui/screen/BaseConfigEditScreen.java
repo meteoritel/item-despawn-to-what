@@ -1,10 +1,11 @@
-package com.meteorite.itemdespawntowhat.ui.Screen;
+package com.meteorite.itemdespawntowhat.ui.screen;
 
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.ui.BaseConfigEditHandler;
 import com.meteorite.itemdespawntowhat.ui.Callback;
 import com.meteorite.itemdespawntowhat.ui.ListScreenCallback;
+import com.meteorite.itemdespawntowhat.ui.SuggestionProvider;
 import com.meteorite.itemdespawntowhat.ui.panel.ConfigListPanel;
 import com.meteorite.itemdespawntowhat.ui.panel.FormListPanel;
 import com.meteorite.itemdespawntowhat.ui.widget.*;
@@ -14,8 +15,8 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.*;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import org.apache.logging.log4j.LogManager;
@@ -105,13 +106,15 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         addCustomEntries(formList);
 
         // 注册下拉建议框组件，在所有列表组件添加完成之后再添加，并添加文本监听
-        registerSuggestion(itemIdInput, BuiltInRegistries.ITEM);
+        registerSuggestion(itemIdInput, SuggestionProvider.ofRegistry(BuiltInRegistries.ITEM));
         for (EditBox box : surroundingWidget.getBoxes().values()) {
-            registerSuggestion(box, BuiltInRegistries.BLOCK);
+            registerSuggestion(box, SuggestionProvider.combine(
+                    SuggestionProvider.ofRegistry(BuiltInRegistries.BLOCK),
+                    SuggestionProvider.ofTags(Registries.BLOCK)));
         }
-
-        registerSuggestion(catalystWidget.getItemBox(), BuiltInRegistries.ITEM);
-        registerSuggestion(innerFluidWidget.getFluidBox(), BuiltInRegistries.FLUID);
+        registerSuggestion(dimensionInput, SuggestionProvider.ofDimensions());
+        registerSuggestion(catalystWidget.getItemBox(), SuggestionProvider.ofRegistry(BuiltInRegistries.ITEM));
+        registerSuggestion(innerFluidWidget.getFluidBox(), SuggestionProvider.ofRegistry(BuiltInRegistries.FLUID));
 
         // 添加子类下拉建议框监听
         addCustomSuggestion();
@@ -397,7 +400,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         // 优先让建议下拉框处理点击
         for (SuggestionWidget widget : suggestionWidgets) {
-            if (widget.isVisible() && widget.mouseClicked(mouseX, mouseY, button)) {
+            if (widget.isVisible() && widget.mouseClicked(mouseX, mouseY)) {
                 return true;
             }
         }
@@ -477,8 +480,8 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     // ========== 建议下拉框方法 ========== //
 
     // 创建并注册一个建议组件，并添加监听
-    protected void registerSuggestion(EditBox editBox, Registry<?> registry) {
-        SuggestionWidget widget = new SuggestionWidget(font, editBox, registry);
+    protected void registerSuggestion(EditBox editBox, SuggestionProvider sProvider) {
+        SuggestionWidget widget = new SuggestionWidget(font, editBox, sProvider);
         suggestionWidgets.add(widget);
         editBox.setResponder(text -> widget.updateSuggestions());
     }

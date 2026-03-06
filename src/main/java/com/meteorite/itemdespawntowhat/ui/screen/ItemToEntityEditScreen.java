@@ -1,7 +1,8 @@
-package com.meteorite.itemdespawntowhat.ui.Screen;
+package com.meteorite.itemdespawntowhat.ui.screen;
 
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToEntityConfig;
+import com.meteorite.itemdespawntowhat.ui.SuggestionProvider;
 import com.meteorite.itemdespawntowhat.ui.panel.FormListPanel;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -52,7 +53,7 @@ public class ItemToEntityEditScreen extends BaseConfigEditScreen<ItemToEntityCon
 
     @Override
     protected void addCustomSuggestion() {
-        registerSuggestion(resultIdInput, BuiltInRegistries.ENTITY_TYPE);
+        registerSuggestion(resultIdInput,
+                SuggestionProvider.ofRegistry(BuiltInRegistries.ENTITY_TYPE));
     }
-
 }

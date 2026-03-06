@@ -228,7 +228,6 @@ public class CatalystItemsWidget extends AbstractCompositeWidget {
             } else {
                 // 未找到（新增项）：补默认值 "1"
                 newCounts.add("1");
-                // searchFrom 不变，继续从同一位置向后匹配后续新项
             }
         }
         countBox.setValue(String.join(",", newCounts));

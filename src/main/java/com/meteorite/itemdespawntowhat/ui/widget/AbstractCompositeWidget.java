@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.ui.widget;
 
-import com.meteorite.itemdespawntowhat.ui.Screen.BaseConfigEditScreen;
+import com.meteorite.itemdespawntowhat.ui.screen.BaseConfigEditScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.EditBox;
