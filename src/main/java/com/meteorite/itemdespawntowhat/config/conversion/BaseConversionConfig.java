@@ -44,7 +44,7 @@ public abstract class BaseConversionConfig {
     // 消失的方式 - 自然消失 timeout， 岩浆烧毁 lava，暂时没有作用，未来再添加
     // @JsonOrder(2)
     // @SerializedName("disappear_cause")
-    protected String disappearCause;
+    // protected String disappearCause;
     // 所处维度
     @JsonOrder(2)
     @SerializedName("dimension")
@@ -115,6 +115,10 @@ public abstract class BaseConversionConfig {
         // 默认空实现，子类按需重写
     }
 
+    protected boolean isResultIdRequired() {
+        return true;
+    }
+
     // 是否已经缓存
     public boolean isCacheInitialized() {
         return cacheInitialized;
@@ -122,9 +126,13 @@ public abstract class BaseConversionConfig {
 
     // ========== 限制条件，不符合条件的配置不会被读取 ========== //
     public final boolean shouldProcess() {
-        if (!isValidResourceLocation(itemId)
-                ||!isValidResourceLocation(resultId)) {
-            LOGGER.warn("invalid resource location, itemId is {} or resultId is {}",itemId, resultId);
+        if (!isValidResourceLocation(itemId)) {
+            LOGGER.warn("invalid resource location: {} ",itemId);
+            return false;
+        }
+
+        if (isResultIdRequired() && !isValidResourceLocation(resultId)) {
+            LOGGER.warn("invalid result resource location: {}", resultId);
             return false;
         }
 
@@ -135,6 +143,11 @@ public abstract class BaseConversionConfig {
 
         if (resultMultiple <= 0) {
             LOGGER.warn("resultMultiple should be at least 1, current is {}", resultMultiple);
+            return false;
+        }
+
+        if (!surroundingBlocks.isValid()) {
+            LOGGER.warn("there is invalid blockId in surround blocks");
             return false;
         }
 
@@ -273,12 +286,6 @@ public abstract class BaseConversionConfig {
     }
     public void setDimension(String dimension) {
         this.dimension = dimension;
-    }
-    public String getDisappearCause() {
-        return disappearCause;
-    }
-    public void setDisappearCause(String disappearCause) {
-        this.disappearCause = disappearCause;
     }
     public void setResultMultiple(int resultMultiple) {
         this.resultMultiple = resultMultiple;

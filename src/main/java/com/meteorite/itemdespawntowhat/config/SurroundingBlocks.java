@@ -3,6 +3,8 @@ package com.meteorite.itemdespawntowhat.config;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.meteorite.itemdespawntowhat.condition.ConditionSerializable;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 
 import java.util.Map;
 
@@ -49,6 +51,29 @@ public class SurroundingBlocks implements ConditionSerializable<SurroundingBlock
     public boolean hasAnySurroundBlock() {
         return !(north.isEmpty() && south.isEmpty() && east.isEmpty() &&
                 west.isEmpty() && up.isEmpty() && down.isEmpty());
+    }
+
+    public boolean isValid() {
+        for (ConfigDirection dir : ConfigDirection.values()) {
+            String value = get(dir);
+            if (value == null || value.isEmpty()) {
+                continue; // 空值表示该方向无要求，合法
+            }
+            if (value.startsWith("#")) {
+                // 标签：校验格式
+                ResourceLocation tagId = ResourceLocation.tryParse(value.substring(1));
+                if (tagId == null) {
+                    return false;
+                }
+            } else {
+                // 普通方块：校验格式 + 注册表存在性
+                ResourceLocation blockId = ResourceLocation.tryParse(value);
+                if (blockId == null || !BuiltInRegistries.BLOCK.containsKey(blockId)) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     public String get(ConfigDirection dir) {

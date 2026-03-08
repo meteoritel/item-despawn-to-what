@@ -28,6 +28,8 @@
   "gui.itemdespawntowhat.edit.on": "开",
   "gui.itemdespawntowhat.edit.off": "关",
 
+  "gui.itemdespawntowhat.edit.save_error": "非法的配置，请检查填写的字段",
+
   "gui.itemdespawntowhat.edit.catalyst.item_label": "辅助物品ID",
   "gui.itemdespawntowhat.edit.catalyst.count_label": "数量",
   "gui.itemdespawntowhat.edit.catalyst.tip": "注：多个物品请使用英文逗号分隔",

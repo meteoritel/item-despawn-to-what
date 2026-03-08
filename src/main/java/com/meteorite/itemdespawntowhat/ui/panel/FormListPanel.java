@@ -126,7 +126,6 @@ public class FormListPanel extends ContainerObjectSelectionList<FormListPanel.En
                 return true;
             }
         }
-        // 拖拽的时候还有问题，之后再解决，现在直接不让拖拽滑条了
         return isScrollBarVisible() && isScrolling(mouseX, mouseY);
     }
 

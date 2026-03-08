@@ -66,6 +66,11 @@ public class ItemToBlockConfig extends BaseConversionConfig{
         return true;
     }
 
+    @Override
+    protected boolean isResultIdRequired() {
+        return !enableItemBlock;
+    }
+
     public boolean isResultCacheValid() {
         return cachedResultBlock != null;
     }

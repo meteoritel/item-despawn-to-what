@@ -86,12 +86,13 @@ public class BaseConfigEditHandler<T extends BaseConversionConfig> {
         T config = callback.buildConfigFromFields();
         if (config != null && config.shouldProcess()) {
             pendingConfigs.add(config);
+            callback.onClearFields();
+            callback.onListChanged();
             LOGGER.debug("Saved to cache: {}", config);
         } else {
+            callback.onSaveError();
             LOGGER.warn("Invalid config, this won't be saved, config is {}",config);
         }
-        callback.onClearFields();
-        callback.onListChanged();
     }
 
     // 将缓存写入文件或发包至服务端，对应"Apply to File"按钮

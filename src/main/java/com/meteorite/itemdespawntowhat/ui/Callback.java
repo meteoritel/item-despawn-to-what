@@ -14,4 +14,5 @@ public interface Callback<T extends BaseConversionConfig> {
     void onRefillFields(T config);
     // 通知 UI 列表数据已变化，需要刷新 ConfigListPanel
     void onListChanged();
+    default void onSaveError() {}
 }

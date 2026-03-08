@@ -17,7 +17,7 @@ displayName="Item Despawn to What" #mandatory
 # A text field displayed in the mod UI
 #credits="" #optional
 
-authors="github me_teorite"
+authors="github meteoritel"
 description='''
 Customize the transformation of item drops after they disappear through configuration files.
 '''

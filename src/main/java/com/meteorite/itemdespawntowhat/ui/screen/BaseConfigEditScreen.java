@@ -58,6 +58,11 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     // 右上角配置列表按钮
     private Button configListButton;
 
+    // 错误提示
+    private Component errorMessage = null;
+    private int errorDisplayTicks = 0;
+    private static final int ERROR_DISPLAY_DURATION = 120; // 显示6秒
+
     public BaseConfigEditScreen(ConfigType configType) {
         super(Component.translatable("gui.itemdespawntowhat.edit.title", configType.getFileName()));
         this.editHandler = new BaseConfigEditHandler<>(configType);
@@ -189,6 +194,13 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         }
     }
 
+    @Override
+    public void onSaveError() {
+        errorMessage = Component.translatable("gui.itemdespawntowhat.edit.save_error")
+                .withStyle(ChatFormatting.RED);
+        errorDisplayTicks = ERROR_DISPLAY_DURATION;
+    }
+
     // ========== ListScreenCallback 实现 ========== //
     @Override
     public void onEditRequested(ConfigListPanel.EntrySource source, int indexInSource) {
@@ -212,7 +224,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         refreshConfigListButton();
     }
 
-// ============================
+    // ============================
     // 按钮文本构建方法
     private Component buildConfigListButtonLabel() {
         int total = editHandler.getOriginalConfigs().size()
@@ -267,7 +279,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     // 填充通用字段到给定的配置对象
     protected void populateCommonFields(T config) {
         config.setItemId(parseResourceLocation(itemIdInput.getValue()));
-        config.setDimension(dimensionInput.getValue().isEmpty() ? null : dimensionInput.getValue());
+        config.setDimension(dimensionInput.getValue());
         config.setNeedOutdoor(needOutdoorButton.getValue());
         config.setSurroundingBlocks(surroundingWidget.getValue());
         config.setCatalystItems(catalystWidget.getValue());
@@ -330,8 +342,6 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     }
 
     // ========== 渲染 ========== //
-
-    // 绘制所有标签
     @Override
     public void render(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         super.render(guiGraphics, mouseX, mouseY, partialTick);
@@ -341,6 +351,14 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         String modeText = editHandler.getModeLabelText();
         guiGraphics.drawString(font, modeText, 10, 12, 0x808080);
 
+        // 渲染错误提示
+        if (errorMessage != null && errorDisplayTicks > 0) {
+            guiGraphics.drawCenteredString(font, errorMessage, width / 2, 24, 0xFFFFFF);
+            errorDisplayTicks--;
+            if (errorDisplayTicks <= 0) {
+                errorMessage = null;
+            }
+        }
         // 因为文本的按钮文本开启了深度测试，所以需要把z值拉高
         guiGraphics.pose().pushPose();
         guiGraphics.pose().translate(0, 0, 300);
@@ -354,7 +372,6 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     }
 
     // ========== 统一焦点管理 ========== //
-
     public void setFocusedWidget(@Nullable AbstractWidget widget) {
         if (focusedWidget == widget) return;
 
@@ -511,6 +528,4 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     protected abstract void refillCustomFields(T config);
     // 添加子类下拉框组件
     protected abstract void addCustomSuggestion();
-
-
 }

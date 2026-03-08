@@ -28,6 +28,8 @@
   "gui.itemdespawntowhat.edit.off": "OFF",
   "gui.itemdespawntowhat.edit.inner_fluid": "Inner fluid",
 
+  "gui.itemdespawntowhat.edit.save_error": "Invalid config, please check your inputs.",
+
   "gui.itemdespawntowhat.edit.list.edit": "Reedit",
   "gui.itemdespawntowhat.edit.list.delete": "Delete",
   "gui.itemdespawntowhat.edit.list.delete.title": "Confirm Delete",
