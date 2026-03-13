@@ -5,7 +5,7 @@
   "gui.itemdespawntowhat.edit.stat": "总计：%d  缓存：%d",
 
   "gui.itemdespawntowhat.save_to_cache": "添加到缓存",
-  "gui.itemdespawntowhat.apply_to_file": "执行修改",
+  "gui.itemdespawntowhat.apply_to_file": "应用到文件",
 
   "gui.itemdespawntowhat.config_selection.title": "选择要编辑的配置类型",
   "gui.itemdespawntowhat.config_type.item_to_item": "转化为掉落物",

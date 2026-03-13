@@ -31,11 +31,9 @@ public class ConditionCheckerUtil {
         return combineAll(checkers);
     }
 
-    // 便捷重载：接受强类型参数，各配置对象通过 toConditionMap() 自行写入 Map，再走统一解析路径
     public static ConditionChecker buildCombinedChecker(ConditionContext ctx) {
         Map<String, String> conditions = new HashMap<>();
 
-        // 每种 Checker 自行声明键名，复合对象自行序列化
         for (var factory : ConditionCheckerRegistry.getFactories()) {
             AbstractConditionChecker checker = factory.get();
             if (checker.shouldApply(ctx)) {

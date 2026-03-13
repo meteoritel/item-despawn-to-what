@@ -17,21 +17,19 @@ public class ItemToItemConfigHandler extends BaseConfigHandler<ItemToItemConfig>
         super(ConfigType.ITEM_TO_ITEM);
     }
 
-    // 默认有一个腐肉变皮革的实例
     @Override
     protected List<ItemToItemConfig> createDefaultEntries() {
         List<ItemToItemConfig> entries = new ArrayList<>();
 
-        ItemToItemConfig leatherEntry = new ItemToItemConfig(
-                ResourceLocation.parse("minecraft:rotten_flesh"),
-                ResourceLocation.parse("minecraft:leather")
+        ItemToItemConfig entry = new ItemToItemConfig(
+                ResourceLocation.parse("minecraft:chicken"),
+                ResourceLocation.parse("minecraft:rotten_flesh")
         );
+        SurroundingBlocks sbs = new SurroundingBlocks();
+        sbs.set(ConfigDirection.DOWN, "minecraft:magma_block");
 
-        SurroundingBlocks blocks = new SurroundingBlocks();
-        blocks.set(ConfigDirection.DOWN,"minecraft:magma_block");
-        leatherEntry.setSurroundingBlocks(blocks);
-
-        entries.add(leatherEntry);
+        entry.setConversionTime(200);
+        entries.add(entry);
 
         return entries;
     }

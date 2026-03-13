@@ -61,7 +61,7 @@ public class ItemConversionEvent {
             itemEntity.getPersistentData().putBoolean(CHECK_TAG, true);
             // 初始化计时器为0
             itemEntity.getPersistentData().putInt(TIMER_TAG, 0);
-            LOGGER.debug("Marked item {} for condition checking, tag", itemId);
+            // LOGGER.debug("Marked item {} for condition checking, tag", itemId);
         }
     }
 
@@ -144,7 +144,7 @@ public class ItemConversionEvent {
         itemEntity.getPersistentData().putInt(TIMER_TAG, newTimer);
 
         int maxChecks = selectedConfig.getConversionTime();
-        LOGGER.debug("Condition check passed for item {} (timer: {}/{})", itemId, newTimer, maxChecks);
+        // LOGGER.debug("Condition check passed for item {} (timer: {}/{})", itemId, newTimer, maxChecks);
 
         // 判断是否到达转化时机：计时达标，或物品即将在下一检查周期消失
         boolean timerReached = newTimer >= maxChecks;
