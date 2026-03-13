@@ -270,7 +270,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     // 数字输入框
     protected EditBox numericBox() {
         EditBox box = textBox();
-        box.setFilter(s -> s.matches("\\d*")); // 仅允许数字
+        box.setFilter(s -> s.matches("-?\\d*")); // 仅允许数字
         return box;
     }
 

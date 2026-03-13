@@ -21,7 +21,7 @@
   "gui.itemdespawntowhat.edit.conversion_time": "转化时间 (单位:秒)",
   "gui.itemdespawntowhat.edit.result_multiple": "结果倍率",
   "gui.itemdespawntowhat.edit.result_limit": "结果上限",
-  "gui.itemdespawntowhat.edit.result_age": "结果年龄(小动物:-2400)",
+  "gui.itemdespawntowhat.edit.result_age": "结果年龄",
   "gui.itemdespawntowhat.edit.radius_limit": "最大放置半径",
   "gui.itemdespawntowhat.edit.block_of_item": "使用物品对应方块",
   "gui.itemdespawntowhat.edit.inner_fluid": "浸泡流体",

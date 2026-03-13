@@ -21,7 +21,7 @@ public class ItemToEntityConfig extends BaseConversionConfig{
     private int resultLimit = 30;
     // 生成实体的age（如果需要）
     @SerializedName("entity_age")
-    protected int entityAge = -2400;
+    protected int entityAge = -24000;
 
     // 缓存的结果实体类型
     private transient EntityType<?> cachedResultEntityType;
@@ -118,9 +118,9 @@ public class ItemToEntityConfig extends BaseConversionConfig{
         AABB box = new AABB(
                 itemEntity.getX() - MAX_RADIUS, itemEntity.getY() - MAX_RADIUS, itemEntity.getZ() - MAX_RADIUS,
                 itemEntity.getX() + MAX_RADIUS, itemEntity.getY() + MAX_RADIUS, itemEntity.getZ() + MAX_RADIUS);
+        EntityType<?> targetType = getResultEntityType();
 
-        return serverLevel.getEntitiesOfClass(getResultEntityType().getBaseClass(), box, Entity::isAlive)
-                .size();
+        return serverLevel.getEntities(targetType, box, Entity::isAlive).size();
     }
 
     @Override
@@ -132,6 +132,7 @@ public class ItemToEntityConfig extends BaseConversionConfig{
     protected int getResultCapacityInStartItems(ItemEntity itemEntity) {
         int current = countNearbyResult(itemEntity);
         int remaining = getResultLimit() - current;
+        LOGGER.debug("current entity = {}, remain = {}", current, remaining);
         if (remaining <= 0) {
             return 0;
         }

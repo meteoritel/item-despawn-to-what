@@ -68,7 +68,7 @@ public abstract class BaseConversionConfig {
     @JsonOrder(3)
     @SerializedName("result")
     protected ResourceLocation resultId;
-    // 转化的时间，单位为秒，默认300s
+    // 转化的时间，单位为秒，默认原版300s
     @JsonOrder(3)
     @SerializedName("conversion_time")
     protected int conversionTime = 300;

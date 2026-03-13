@@ -30,7 +30,7 @@ public class ItemToEntityConfigHandler extends BaseConfigHandler<ItemToEntityCon
 
         SurroundingBlocks blocks = new SurroundingBlocks();
         blocks.set(ConfigDirection.DOWN,"minecraft:hay_block");
-        eggEntry.setEntityAge(-2400);
+        eggEntry.setEntityAge(-24000);
         eggEntry.setSurroundingBlocks(blocks);
 
         entries.add(eggEntry);

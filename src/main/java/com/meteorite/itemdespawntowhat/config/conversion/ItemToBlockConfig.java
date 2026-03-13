@@ -43,7 +43,7 @@ public class ItemToBlockConfig extends BaseConversionConfig{
                 // 将真实的 resultId 回写
                 this.resultId = BuiltInRegistries.BLOCK.getKey(block);
                 this.cachedResultBlock = block;
-                LOGGER.debug("enableItemBlock: resolved resultId={} for item={}", resultId, itemId);
+                // LOGGER.debug("enableItemBlock: resolved resultId={} for item={}", resultId, itemId);
             } else {
                 LOGGER.warn("enableItemBlock=true but item '{}' is not a BlockItem, config will be rejected", itemId);
             }
@@ -86,10 +86,11 @@ public class ItemToBlockConfig extends BaseConversionConfig{
         }
         // 物品下一tick消失
         itemEntity.makeFakeItem();
-        // 根据条件决定是否消耗催化剂
-        consumeCatalysts(itemEntity, actualConvertCount);
+        consumeAllOthers(itemEntity, actualConvertCount);
         // 下一tick开始执行延迟放置方块的任务
-        LevelTaskManager.addTask(serverLevel, new ItemToBlockTask(itemEntity, this, actualConvertCount));
+        // 消耗流体就直接从中心的位置放，不消耗流体就跳过中心的点
+        LevelTaskManager.addTask(serverLevel, new ItemToBlockTask(
+                itemEntity, this, actualConvertCount, innerFluid.isConsumeFluid()));
     }
 
     // 这个类不会用到这个方法

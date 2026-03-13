@@ -62,8 +62,8 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
         for (CatalystEntry entry : catalystList) {
             int available = snapshot.getOrDefault(entry.getItem(), 0);
             if (available < entry.count()) {
-                LOGGER.debug("Catalyst check failed: {} needs {} but has {}",
-                        entry.itemId, entry.count(), available);
+//                LOGGER.debug("Catalyst check failed: {} needs {} but has {}",
+//                        entry.itemId, entry.count(), available);
                 return false;
             }
         }
@@ -131,11 +131,11 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
                 if (available <= remaining) {
                     remaining -= available;
                     candidate.discard();
-                    LOGGER.debug("Consumed entire catalyst entity: {} x{}", entry.itemId(), available);
+                    // LOGGER.debug("Consumed entire catalyst entity: {} x{}", entry.itemId(), available);
                 } else {
                     candidate.getItem().shrink(remaining);
-                    LOGGER.debug("Consumed partial catalyst: {} x{} (entity has {} remaining)",
-                            entry.itemId(), remaining, candidate.getItem().getCount());
+                    // LOGGER.debug("Consumed partial catalyst: {} x{} (entity has {} remaining)",
+                    //        entry.itemId(), remaining, candidate.getItem().getCount());
                     remaining = 0;
                 }
             }

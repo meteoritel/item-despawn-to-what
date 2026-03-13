@@ -13,5 +13,4 @@ public class ClientModEvents {
     public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
         event.register(ModKeyBindings.openGuiKey);
     }
-
 }

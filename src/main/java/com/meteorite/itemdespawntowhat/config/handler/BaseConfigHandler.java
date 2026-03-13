@@ -130,8 +130,10 @@ public abstract class BaseConfigHandler<T extends BaseConversionConfig> {
         return entry != null && entry.shouldProcess();
     }
 
-    // 子类中创建默认的json内容
-    protected abstract List<T> createDefaultEntries();
+    // 子类重写以创建默认的json内容
+    protected List<T> createDefaultEntries() {
+        return new ArrayList<>();
+    }
     // 子类中指定具体类型，避免泛型擦除
     protected abstract Type createListType();
 

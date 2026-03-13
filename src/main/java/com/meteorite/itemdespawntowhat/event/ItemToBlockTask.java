@@ -22,17 +22,19 @@ public class ItemToBlockTask implements LevelDelayTask{
     private final int maxBlocks;
     private final Block block;
     private final int maxRadius;
+    private final boolean consumeFluid;
 
     private int radius = 0;
     private int placed = 0;
     private boolean finished = false;
 
-    public ItemToBlockTask(ItemEntity itemEntity,ItemToBlockConfig config, int maxBlocks){
+    public ItemToBlockTask(ItemEntity itemEntity,ItemToBlockConfig config, int maxBlocks, boolean consumeFluid){
         this.originalItem = itemEntity;
         this.center = itemEntity.blockPosition();
         this.block = config.getResultBlock();
         this.maxBlocks = maxBlocks;
         this.maxRadius = config.getRadius();
+        this.consumeFluid = consumeFluid;
     }
 
     @Override
@@ -67,6 +69,11 @@ public class ItemToBlockTask implements LevelDelayTask{
         if (finished) return;
         if (radius > maxRadius || placed >= maxBlocks) {
             finished = true;
+            return;
+        }
+
+        if (radius == 0 && !consumeFluid) {
+            radius++;
             return;
         }
 

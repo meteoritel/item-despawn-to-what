@@ -115,7 +115,7 @@ public class ConfigExtractorManager {
 
             // 添加到主缓存
             ITEM_CONFIGS_CACHE
-                    .computeIfAbsent(itemId, k -> new ArrayList<>())
+                    .computeIfAbsent(itemId, rl -> new ArrayList<>())
                     .add(config);
 
             // 添加到内部ID缓存

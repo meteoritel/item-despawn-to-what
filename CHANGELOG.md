@@ -50,7 +50,27 @@
 ## [1.1.1]
 
 ### 新增
+- 新增 **辅助物品（Catalyst Item）** 与 **浸润流体（Inner Fluid）** 两个配置字段，现在可以实现更多带条件的世界转化。
+- 为 GUI 中的多个字段增加了自动补全功能，现在 **维度（Dimension）** 与 **标签（Tag）** 也支持自动补全。
+- 将游戏内打开 GUI 的快捷键默认设置为 **未绑定**。由于该功能在游戏中使用频率较低，此调整可以避免误触或按键冲突。您仍然可以通过指令 `/conversion_config edit` 打开配置编辑 GUI。
+- 优化了整体性能。
 
+> 注意：维度和标签支持通过数据包进行扩展。在服务端启动之前，系统无法获取完整的数据用于自动补全。如果您需要使用完整的补全功能，请在进入世界后再进行编辑。编辑完成后，请不要忘记使用 `/conversion_config reload` 重新加载规则，否则新配置不会生效。
 
 ### 修复
-- 修复了多个维度同时进行转化出现异常的bug
+- 修复了在多个维度同时进行转化时无法正常执行的 Bug。
+- 修复数字文本框无法输入负数的 Bug。
+- 修复实体上限不正确的 Bug
+
+### Added
+- Added two new configuration fields: **Catalyst Item** and **Inner Fluid**, enabling conditional world conversions.
+- Added auto-completion for more fields in the GUI. **Dimensions** and **Tags** are now also supported in the auto-complete system.
+- The in-game keybinding for opening the GUI is now **unbound by default**. Since this feature is rarely used during gameplay, this change helps prevent accidental triggers or key conflicts. You can still open the configuration editor GUI using the command `/conversion_config edit`.
+- Improved overall performance.
+
+> Note: Dimensions and tags can be extended via **datapacks**. Before the server starts, the game cannot retrieve the full set of data required for auto-completion. If you want to use the complete auto-completion feature, please edit the configuration after entering a world. After editing, remember to run `/conversion_config reload` to apply the new rules.
+
+### Fixed
+- Fixed the bug where conversions failed to run correctly when multiple dimensions were being processed simultaneously.
+- Fixed the bug where negative numbers couldn't be entered in the numeric text box.
+- Fixed the bug where the entity upper limit was incorrect.

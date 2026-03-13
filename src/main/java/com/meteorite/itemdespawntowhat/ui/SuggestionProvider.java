@@ -1,11 +1,14 @@
 package com.meteorite.itemdespawntowhat.ui;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.TagKey;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
 import java.util.ArrayList;
@@ -14,6 +17,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.stream.Collectors;
 
+@OnlyIn(Dist.CLIENT)
 @FunctionalInterface
 public interface SuggestionProvider {
     int DEFAULT_MAX_FETCH = 100;
@@ -90,8 +94,7 @@ public interface SuggestionProvider {
             String effectiveSegment = segment.startsWith("#") ? segment.substring(1) : segment;
             String lower = effectiveSegment.toLowerCase();
 
-            @SuppressWarnings("unchecked")
-            Registry<T> registry = (Registry<T>) BuiltInRegistries.REGISTRY.get(registryKey.location());
+            Registry<T> registry = getRegistry(registryKey);
             if (registry == null) {
                 return List.of();
             }
@@ -106,6 +109,22 @@ public interface SuggestionProvider {
                     .collect(Collectors.toList());
         };
     }
+
+    @SuppressWarnings("unchecked")
+    private static <T> Registry<T> getRegistry(ResourceKey<? extends Registry<T>> registryKey) {
+        var serve = ServerLifecycleHooks.getCurrentServer();
+        if (serve != null) {
+            return serve.registryAccess().registry(registryKey).orElse(null);
+        }
+
+        var mc = Minecraft.getInstance();
+        if (mc.getConnection() != null) {
+            return mc.getConnection().registryAccess().registry(registryKey).orElse(null);
+        }
+
+        return (Registry<T>) BuiltInRegistries.REGISTRY.get(registryKey.location());
+    }
+
 
     // 从固定字符串列表中匹配
     static SuggestionProvider ofList(String... candidates) {
