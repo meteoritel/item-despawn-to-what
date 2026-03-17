@@ -10,7 +10,7 @@ import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
 import com.meteorite.itemdespawntowhat.config.handler.ItemToBlockConfigHandler;
-import com.meteorite.itemdespawntowhat.config.handler.ItemToEntityConfigHandler;
+import com.meteorite.itemdespawntowhat.config.handler.ItemToMobConfigHandler;
 import com.meteorite.itemdespawntowhat.config.handler.ItemToItemConfigHandler;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -41,7 +41,7 @@ public class ConfigManager {
     // 注册所有配置处理器
     private void registerDefaultHandlers() {
         registerHandler(new ItemToItemConfigHandler());
-        registerHandler(new ItemToEntityConfigHandler());
+        registerHandler(new ItemToMobConfigHandler());
         registerHandler(new ItemToBlockConfigHandler());
         LOGGER.debug("Default configuration handlers registered");
     }

@@ -80,6 +80,7 @@ public abstract class BaseConversionConfig {
     // 用来存储配置的空构造方法
     public BaseConversionConfig() {
         this.internalId = UUID.randomUUID().toString();
+        this.configType = resolveType();
     }
 
     // 用来生成示例配置用的构造方法
@@ -88,7 +89,17 @@ public abstract class BaseConversionConfig {
         this.itemId = item;
         this.resultId = result;
         this.conversionTime = 5;
-        this.resultMultiple = 1;
+    }
+
+    protected ConfigType resolveType() {
+        Class<?> clazz = this.getClass();
+        for (ConfigType type : ConfigType.values()) {
+            if (type.getConfigClass().equals(clazz)) {
+                return type;
+            }
+        }
+
+        throw new IllegalStateException("No ConfigType found for class: " + clazz.getName());
     }
 
     // ========== 缓存初始化 ========== //
@@ -136,8 +147,8 @@ public abstract class BaseConversionConfig {
             return false;
         }
 
-        if (conversionTime <= 0 || conversionTime> 300) {
-            LOGGER.warn("conversionTime should limit in 1-300, current is {}", conversionTime);
+        if (conversionTime <= 0) {
+            LOGGER.warn("conversionTime should be at list 1, current is {}", conversionTime);
             return false;
         }
 

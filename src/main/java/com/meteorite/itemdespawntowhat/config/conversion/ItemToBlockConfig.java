@@ -1,7 +1,6 @@
 package com.meteorite.itemdespawntowhat.config.conversion;
 
 import com.google.gson.annotations.SerializedName;
-import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.event.ItemToBlockTask;
 import com.meteorite.itemdespawntowhat.event.LevelTaskManager;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -25,13 +24,10 @@ public class ItemToBlockConfig extends BaseConversionConfig{
     private transient Block cachedResultBlock;
 
     public ItemToBlockConfig() {
-        super();
-        this.configType = ConfigType.ITEM_TO_BLOCK;
     }
 
-    public ItemToBlockConfig(ResourceLocation item, ResourceLocation resultBlock) {
-        super(item, resultBlock);
-        this.configType = ConfigType.ITEM_TO_BLOCK;
+    public ItemToBlockConfig(ResourceLocation item, ResourceLocation result) {
+        super(item, result);
     }
 
     // ========== 缓存与校验 ========== //

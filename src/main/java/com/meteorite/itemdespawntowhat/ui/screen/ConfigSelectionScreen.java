@@ -30,7 +30,7 @@ public class ConfigSelectionScreen extends Screen {
     private void openConfigList(ConfigType type) {
         Screen screen = switch (type) {
             case ITEM_TO_ITEM -> new ItemToItemEditScreen();
-            case ITEM_TO_ENTITY -> new ItemToEntityEditScreen();
+            case ITEM_TO_MOB -> new ItemToMobEditScreen();
             case ITEM_TO_BLOCK -> new ItemToBlockEditScreen();
         };
         if (minecraft != null) {

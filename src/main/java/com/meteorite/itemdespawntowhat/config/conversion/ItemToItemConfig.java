@@ -24,13 +24,10 @@ public class ItemToItemConfig extends BaseConversionConfig{
     private transient int cachedResultMaxStackSize;
 
     public ItemToItemConfig() {
-        super();
-        this.configType = ConfigType.ITEM_TO_ITEM;
     }
 
-    public ItemToItemConfig(ResourceLocation item, ResourceLocation resultItem) {
-        super(item, resultItem);
-        this.configType = ConfigType.ITEM_TO_ITEM;
+    public ItemToItemConfig(ResourceLocation item, ResourceLocation result) {
+        super(item, result);
     }
 
     // ========== 初始化缓存与校验 ========== //

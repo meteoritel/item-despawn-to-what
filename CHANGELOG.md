@@ -74,3 +74,7 @@
 - Fixed the bug where conversions failed to run correctly when multiple dimensions were being processed simultaneously.
 - Fixed the bug where negative numbers couldn't be entered in the numeric text box.
 - Fixed the bug where the entity upper limit was incorrect.
+
+## [1.1.2]
+### 计划
+- 修改转化实体配置类，为实体添加分支（）

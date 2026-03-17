@@ -2,14 +2,14 @@ package com.meteorite.itemdespawntowhat.config;
 
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToBlockConfig;
-import com.meteorite.itemdespawntowhat.config.conversion.ItemToEntityConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.ItemToMobConfig;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToItemConfig;
 
 import java.util.List;
 
 public enum ConfigType {
     ITEM_TO_ITEM("item_to_item.json", ItemToItemConfig.class),
-    ITEM_TO_ENTITY("item_to_entity.json", ItemToEntityConfig.class),
+    ITEM_TO_MOB("item_to_mob.json", ItemToMobConfig.class),
     ITEM_TO_BLOCK("item_to_block.json", ItemToBlockConfig.class);
 
     private final String fileName;

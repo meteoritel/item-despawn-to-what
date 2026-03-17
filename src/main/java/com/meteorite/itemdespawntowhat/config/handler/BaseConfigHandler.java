@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.config.handler;
 
+import com.google.common.reflect.TypeToken;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
@@ -134,8 +135,10 @@ public abstract class BaseConfigHandler<T extends BaseConversionConfig> {
     protected List<T> createDefaultEntries() {
         return new ArrayList<>();
     }
-    // 子类中指定具体类型，避免泛型擦除
-    protected abstract Type createListType();
+    // 指定类型
+    protected Type createListType() {
+        return new TypeToken<List<T>>(){}.getType();
+    }
 
     public ConfigType getConfigType() {
         return configType;

@@ -1,13 +1,11 @@
 package com.meteorite.itemdespawntowhat.config.handler;
 
-import com.google.gson.reflect.TypeToken;
 import com.meteorite.itemdespawntowhat.config.ConfigDirection;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToItemConfig;
 import com.meteorite.itemdespawntowhat.config.SurroundingBlocks;
 import net.minecraft.resources.ResourceLocation;
 
-import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -33,9 +31,5 @@ public class ItemToItemConfigHandler extends BaseConfigHandler<ItemToItemConfig>
 
         return entries;
     }
-    @Override
-    protected Type createListType() {
-        // 明确指定具体类型，避免泛型擦除问题
-        return new TypeToken<List<ItemToItemConfig>>(){}.getType();
-    }
+
 }

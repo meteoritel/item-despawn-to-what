@@ -14,26 +14,23 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.AABB;
 
-public class ItemToEntityConfig extends BaseConversionConfig{
+public class ItemToMobConfig extends BaseConversionConfig{
 
     // 生成数量限制
     @SerializedName("result_limit")
     private int resultLimit = 30;
     // 生成实体的age（如果需要）
     @SerializedName("entity_age")
-    protected int entityAge = -24000;
+    private int entityAge = -24000;
 
     // 缓存的结果实体类型
     private transient EntityType<?> cachedResultEntityType;
 
-    public ItemToEntityConfig() {
-        super();
-        this.configType = ConfigType.ITEM_TO_ENTITY;
+    public ItemToMobConfig() {
     }
 
-    public ItemToEntityConfig(ResourceLocation item, ResourceLocation resultEntity) {
-        super(item, resultEntity);
-        this.configType = ConfigType.ITEM_TO_ENTITY;
+    public ItemToMobConfig(ResourceLocation item, ResourceLocation result) {
+        super(item, result);
     }
 
     // ========== 缓存与校验 ========== //

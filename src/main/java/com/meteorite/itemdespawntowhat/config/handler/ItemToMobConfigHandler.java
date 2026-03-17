@@ -1,29 +1,26 @@
 package com.meteorite.itemdespawntowhat.config.handler;
 
-import com.google.gson.reflect.TypeToken;
 import com.meteorite.itemdespawntowhat.config.ConfigDirection;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
-import com.meteorite.itemdespawntowhat.config.conversion.ItemToEntityConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.ItemToMobConfig;
 import com.meteorite.itemdespawntowhat.config.SurroundingBlocks;
 import net.minecraft.resources.ResourceLocation;
 
-import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
 
-public class ItemToEntityConfigHandler extends BaseConfigHandler<ItemToEntityConfig> {
+public class ItemToMobConfigHandler extends BaseConfigHandler<ItemToMobConfig> {
 
-
-    public ItemToEntityConfigHandler() {
-        super(ConfigType.ITEM_TO_ENTITY);
+    public ItemToMobConfigHandler() {
+        super(ConfigType.ITEM_TO_MOB);
     }
 
     // 默认有一个鸡蛋变成小鸡的示例
     @Override
-    protected List<ItemToEntityConfig> createDefaultEntries() {
-        List<ItemToEntityConfig> entries = new ArrayList<>();
+    protected List<ItemToMobConfig> createDefaultEntries() {
+        List<ItemToMobConfig> entries = new ArrayList<>();
 
-        ItemToEntityConfig eggEntry = new ItemToEntityConfig(
+        ItemToMobConfig eggEntry = new ItemToMobConfig(
                 ResourceLocation.parse("minecraft:egg"),
                 ResourceLocation.parse("minecraft:chicken")
         );
@@ -38,9 +35,4 @@ public class ItemToEntityConfigHandler extends BaseConfigHandler<ItemToEntityCon
         return entries;
     }
 
-    @Override
-    protected Type createListType() {
-        // 明确指定具体类型，避免泛型擦除问题
-        return new TypeToken<List<ItemToEntityConfig>>(){}.getType();
-    }
 }

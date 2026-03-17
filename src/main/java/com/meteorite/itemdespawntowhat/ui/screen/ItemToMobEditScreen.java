@@ -1,19 +1,19 @@
 package com.meteorite.itemdespawntowhat.ui.screen;
 
 import com.meteorite.itemdespawntowhat.config.ConfigType;
-import com.meteorite.itemdespawntowhat.config.conversion.ItemToEntityConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.ItemToMobConfig;
 import com.meteorite.itemdespawntowhat.ui.SuggestionProvider;
 import com.meteorite.itemdespawntowhat.ui.panel.FormListPanel;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 
-public class ItemToEntityEditScreen extends BaseConfigEditScreen<ItemToEntityConfig> {
+public class ItemToMobEditScreen extends BaseConfigEditScreen<ItemToMobConfig> {
     private EditBox resultLimitInput;
     private EditBox entityAgeInput;
 
-    public ItemToEntityEditScreen() {
-        super(ConfigType.ITEM_TO_ENTITY);
+    public ItemToMobEditScreen() {
+        super(ConfigType.ITEM_TO_MOB);
     }
 
     @Override
@@ -26,15 +26,15 @@ public class ItemToEntityEditScreen extends BaseConfigEditScreen<ItemToEntityCon
     }
 
     @Override
-    protected ItemToEntityConfig createConfigFromFields() {
-        ItemToEntityConfig config = new ItemToEntityConfig();
+    protected ItemToMobConfig createConfigFromFields() {
+        ItemToMobConfig config = new ItemToMobConfig();
         populateCommonFields(config);
         populateCustomFields(config);
         return config;
     }
 
     @Override
-    protected void populateCustomFields(ItemToEntityConfig config) {
+    protected void populateCustomFields(ItemToMobConfig config) {
         config.setResultLimit(parseInt(resultLimitInput.getValue(), 30));
         config.setEntityAge(parseInt(entityAgeInput.getValue(), 0));
     }
@@ -46,7 +46,7 @@ public class ItemToEntityEditScreen extends BaseConfigEditScreen<ItemToEntityCon
     }
 
     @Override
-    protected void refillCustomFields(ItemToEntityConfig config) {
+    protected void refillCustomFields(ItemToMobConfig config) {
         resultLimitInput.setValue(String.valueOf(config.getResultLimit()));
         entityAgeInput.setValue(String.valueOf(config.getEntityAge()));
     }
