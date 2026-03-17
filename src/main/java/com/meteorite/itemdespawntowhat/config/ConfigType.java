@@ -11,6 +11,7 @@ public enum ConfigType {
     ITEM_TO_ITEM("item_to_item.json", ItemToItemConfig.class),
     ITEM_TO_MOB("item_to_mob.json", ItemToMobConfig.class),
     ITEM_TO_BLOCK("item_to_block.json", ItemToBlockConfig.class);
+    // ITEM_TO_XP_ORB("item_to_XpOrb.json", );
 
     private final String fileName;
     private final Class<? extends BaseConversionConfig> configClass;

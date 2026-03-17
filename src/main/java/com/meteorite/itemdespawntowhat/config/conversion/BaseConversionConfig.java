@@ -278,9 +278,7 @@ public abstract class BaseConversionConfig {
     public abstract String getResultDescriptionId();
     public abstract ItemStack getResultIcon();
     public abstract void performConversion(ItemEntity itemEntity, ServerLevel serverLevel);
-    protected boolean additionalCheck() {
-        return true;
-    }
+    protected boolean additionalCheck() {return true;}
 
     // ========== setter 和 getter ========== //
     public int getConversionTime() {

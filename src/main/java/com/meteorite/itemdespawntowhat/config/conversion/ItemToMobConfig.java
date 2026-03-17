@@ -1,7 +1,6 @@
 package com.meteorite.itemdespawntowhat.config.conversion;
 
 import com.google.gson.annotations.SerializedName;
-import com.meteorite.itemdespawntowhat.config.ConfigType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -14,11 +13,8 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.AABB;
 
-public class ItemToMobConfig extends BaseConversionConfig{
+public class ItemToMobConfig extends BaseItemToEntityConfig{
 
-    // 生成数量限制
-    @SerializedName("result_limit")
-    private int resultLimit = 30;
     // 生成实体的age（如果需要）
     @SerializedName("entity_age")
     private int entityAge = -24000;
@@ -125,17 +121,6 @@ public class ItemToMobConfig extends BaseConversionConfig{
         return this.countNearbyResult(itemEntity) >= getResultLimit();
     }
 
-    @Override
-    protected int getResultCapacityInStartItems(ItemEntity itemEntity) {
-        int current = countNearbyResult(itemEntity);
-        int remaining = getResultLimit() - current;
-        LOGGER.debug("current entity = {}, remain = {}", current, remaining);
-        if (remaining <= 0) {
-            return 0;
-        }
-        return remaining / Math.max(1, getResultMultiple());
-    }
-
     // ========== 结果相关方法 ========== //
     public EntityType<?> getResultEntityType() {
         if (isCacheInitialized()) {
@@ -162,12 +147,5 @@ public class ItemToMobConfig extends BaseConversionConfig{
 
     public void setEntityAge(int entityAge) {
         this.entityAge = entityAge;
-    }
-    public int getResultLimit() {
-        return resultLimit;
-    }
-
-    public void setResultLimit(int resultLimit) {
-        this.resultLimit = resultLimit;
     }
 }

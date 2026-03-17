@@ -23,5 +23,7 @@ run
 runs
 run-data
 .git
+.qoder
+.vscode
 
 repo
