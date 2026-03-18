@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.config.conversion;
 
 import com.google.gson.annotations.SerializedName;
+import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
 import com.meteorite.itemdespawntowhat.condition.checker.ConditionChecker;
 import com.meteorite.itemdespawntowhat.condition.ConditionCheckerUtil;
 import com.meteorite.itemdespawntowhat.condition.ConditionContext;
@@ -80,7 +81,7 @@ public abstract class BaseConversionConfig {
     // 用来存储配置的空构造方法
     public BaseConversionConfig() {
         this.internalId = UUID.randomUUID().toString();
-        this.configType = resolveType();
+        this.configType = ConfigType.fromClass(this.getClass());
     }
 
     // 用来生成示例配置用的构造方法
@@ -89,17 +90,6 @@ public abstract class BaseConversionConfig {
         this.itemId = item;
         this.resultId = result;
         this.conversionTime = 5;
-    }
-
-    protected ConfigType resolveType() {
-        Class<?> clazz = this.getClass();
-        for (ConfigType type : ConfigType.values()) {
-            if (type.getConfigClass().equals(clazz)) {
-                return type;
-            }
-        }
-
-        throw new IllegalStateException("No ConfigType found for class: " + clazz.getName());
     }
 
     // ========== 缓存初始化 ========== //
@@ -273,8 +263,13 @@ public abstract class BaseConversionConfig {
     }
 
     // ========== 子类方法 ========== //
-    public abstract int countNearbyResult(ItemEntity itemEntity);
-    public abstract boolean isResultLimitExceeded(ItemEntity itemEntity);
+    public int countNearbyResult(ItemEntity itemEntity) {
+        return 0;
+    }
+    public boolean isResultLimitExceeded(ItemEntity itemEntity) {
+        return false;
+    }
+
     public abstract String getResultDescriptionId();
     public abstract ItemStack getResultIcon();
     public abstract void performConversion(ItemEntity itemEntity, ServerLevel serverLevel);

@@ -1,17 +1,19 @@
 package com.meteorite.itemdespawntowhat.config.conversion;
 
 import com.google.gson.annotations.SerializedName;
+import com.meteorite.itemdespawntowhat.ConfigExtractorManager;
+import com.meteorite.itemdespawntowhat.event.ItemConversionEvent;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.AgeableMob;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.AABB;
+import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
 public class ItemToMobConfig extends BaseItemToEntityConfig{
 
@@ -38,8 +40,7 @@ public class ItemToMobConfig extends BaseItemToEntityConfig{
     // 确保实体不为空，名字没有拼写错
     @Override
     protected boolean additionalCheck() {
-        boolean valid = BuiltInRegistries.ENTITY_TYPE.containsKey(resultId);
-        if (!valid) {
+        if (!BuiltInRegistries.ENTITY_TYPE.containsKey(resultId)) {
             LOGGER.warn("Unknown entity type: resultId='{}'", resultId);
             return false;
         }
@@ -50,6 +51,7 @@ public class ItemToMobConfig extends BaseItemToEntityConfig{
         }
         return true;
     }
+
     // ========== 转化逻辑 ========== //
     @Override
     public void performConversion(ItemEntity itemEntity, ServerLevel serverLevel) {
@@ -58,6 +60,23 @@ public class ItemToMobConfig extends BaseItemToEntityConfig{
 
         if (entityType == null) {
             LOGGER.warn("Unknown entity type: {}", resultId);
+            return;
+        }
+
+        Entity testEntity = entityType.create(serverLevel);
+        if (testEntity == null) {
+            LOGGER.warn("EntityType '{}' returned null on create(), skipping conversion.", resultId);
+            return;
+        }
+        if (!(testEntity instanceof Mob)) {
+            LOGGER.warn(
+                    "Entity type '{}' (class: {}) is not a Mob subclass. " +
+                            "Marking item as invalid for this config to prevent future attempts.",
+                    resultId, testEntity.getClass().getSimpleName()
+            );
+            testEntity.discard();
+            // 直接移除出缓存
+            ConfigExtractorManager.removeConfigByInternalId(getInternalId());
             return;
         }
 
@@ -101,24 +120,10 @@ public class ItemToMobConfig extends BaseItemToEntityConfig{
         addRemainingItems(itemEntity, serverLevel, itemsRemaining);
     }
 
-    // 实体直接按照数量计数
+    // 生物实体按照数量计数
     @Override
-    public int countNearbyResult(ItemEntity itemEntity) {
-        if (!(itemEntity.level() instanceof ServerLevel serverLevel)) {
-            return 0;
-        }
-
-        AABB box = new AABB(
-                itemEntity.getX() - MAX_RADIUS, itemEntity.getY() - MAX_RADIUS, itemEntity.getZ() - MAX_RADIUS,
-                itemEntity.getX() + MAX_RADIUS, itemEntity.getY() + MAX_RADIUS, itemEntity.getZ() + MAX_RADIUS);
-        EntityType<?> targetType = getResultEntityType();
-
-        return serverLevel.getEntities(targetType, box, Entity::isAlive).size();
-    }
-
-    @Override
-    public boolean isResultLimitExceeded(ItemEntity itemEntity) {
-        return this.countNearbyResult(itemEntity) >= getResultLimit();
+    protected int countNearbyResult(ServerLevel level, BlockPos pos) {
+        return level.getEntities(getResultEntityType(), buildSearchBox(pos), Entity::isAlive).size();
     }
 
     // ========== 结果相关方法 ========== //

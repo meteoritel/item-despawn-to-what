@@ -1,7 +1,5 @@
 package com.meteorite.itemdespawntowhat.config.conversion;
 
-import com.google.gson.annotations.SerializedName;
-import com.meteorite.itemdespawntowhat.config.ConfigType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -11,12 +9,8 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.phys.AABB;
 
-public class ItemToItemConfig extends BaseConversionConfig{
-
-    @SerializedName("result_limit")
-    private int resultLimit = 30;
+public class ItemToItemConfig extends BaseItemToEntityConfig{
 
     // 缓存的结果物品实例
     private transient Item cachedResultItem;
@@ -81,7 +75,7 @@ public class ItemToItemConfig extends BaseConversionConfig{
         // 根据条件消耗催化剂与流体
         consumeAllOthers(itemEntity, actualConvertCount);
         ItemStack resultStack = new ItemStack(resultItem, actualConvertCount);
-        // 生成结果物品实体（每个起始物品产出 resultMultiple 堆，每堆数量为 actualConvertCount）
+        // 生成结果物品实体（每个起始物品实体产出 resultMultiple 堆，每堆数量为 actualConvertCount）
         for (int i = 0; i < resultMultiple; i++) {
             ItemEntity resultItemEntity = new ItemEntity(
                     serverLevel,
@@ -109,39 +103,13 @@ public class ItemToItemConfig extends BaseConversionConfig{
 
     // 对于物掉落物结果，计算所有的stack堆叠之和
     @Override
-    public int countNearbyResult(ItemEntity itemEntity) {
-        if (!(itemEntity.level() instanceof ServerLevel serverLevel)) {
-            return 0;
-        }
-        AABB box = new AABB(
-                itemEntity.getX() - MAX_RADIUS, itemEntity.getY() - MAX_RADIUS, itemEntity.getZ() - MAX_RADIUS,
-                itemEntity.getX() + MAX_RADIUS, itemEntity.getY() + MAX_RADIUS, itemEntity.getZ() + MAX_RADIUS);
-
-        return serverLevel.getEntitiesOfClass(ItemEntity.class, box, Entity::isAlive)
+    protected int countNearbyResult(ServerLevel level, BlockPos pos) {
+        return level.getEntitiesOfClass(ItemEntity.class, buildSearchBox(pos), Entity::isAlive)
                 .stream()
                 .map(ItemEntity::getItem)
                 .filter(itemStack -> BuiltInRegistries.ITEM.getKey(itemStack.getItem()).equals(resultId))
                 .mapToInt(ItemStack::getCount)
                 .sum();
-    }
-
-    @Override
-    public boolean isResultLimitExceeded(ItemEntity itemEntity) {
-        return this.countNearbyResult(itemEntity) >= getResultLimitInItems();
-    }
-
-    @Override
-    protected int getResultCapacityInStartItems(ItemEntity itemEntity) {
-        int remaining = getResultLimitInItems() - countNearbyResult(itemEntity);
-        if (remaining <= 0) {
-            return 0;
-        }
-
-        return remaining / Math.max(1, getResultMultiple());
-    }
-
-    private int getResultLimitInItems() {
-        return getResultLimit() * cachedResultMaxStackSize;
     }
 
     // ========== 结果相关方法 ========== //
@@ -153,6 +121,11 @@ public class ItemToItemConfig extends BaseConversionConfig{
     }
 
     @Override
+    protected int getRawResultLimit() {
+        return resultLimit * cachedResultMaxStackSize;
+    }
+
+    @Override
     public String getResultDescriptionId() {
         return getResultItem().getDescriptionId();
     }
@@ -161,11 +134,5 @@ public class ItemToItemConfig extends BaseConversionConfig{
     public ItemStack getResultIcon() {
         return getResultItem().getDefaultInstance();
     }
-    public int getResultLimit() {
-        return resultLimit;
-    }
 
-    public void setResultLimit(int resultLimit) {
-        this.resultLimit = resultLimit;
-    }
 }

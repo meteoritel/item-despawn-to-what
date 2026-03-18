@@ -8,31 +8,28 @@ import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 public class ItemToExpOrbConfig extends BaseItemToEntityConfig{
     /*
-     * 每个经验球携带的经验值。
-     * 原版单球上限为 2477（对应一颗 Large 经验球）；
-     * 默认单球设置为1点经验
+     * 每个经验球携带的经验值
+     * 提前计算好会转化为的经验值，然后生成自己拆分再生成经验球
+     * 默认单个物品转化设置为1点经验
      */
-    @SerializedName("xp_per_orb")
-    private int xpPerOrb = 1;
+    private static final ResourceLocation XP_ORB_ID =
+            ResourceLocation.withDefaultNamespace("experience_orb");
+
+    @SerializedName("xp_per_item")
+    private int xpPerItem = 1;
 
     public ItemToExpOrbConfig() {
-        // 经验球允许更多数量
-        this.resultLimit = 100;
+        this.resultId = XP_ORB_ID;
+        // 经验球实体数量限制为一个大值，用来限制极端情况
+        this.resultLimit = 1000;
     }
 
-    public ItemToExpOrbConfig(ResourceLocation item, ResourceLocation result) {
-        super(item, result);
-        this.resultLimit = 100;
-    }
-
-    //经验球无需从注册表查找 EntityType，无额外缓存。
-    @Override
-    protected void initResultCache() {
-        // no-op
+    public ItemToExpOrbConfig(ResourceLocation item) {
+        super(item, XP_ORB_ID);
     }
 
     // 允许结果字段为空，因为经验球没有变体
@@ -43,15 +40,11 @@ public class ItemToExpOrbConfig extends BaseItemToEntityConfig{
 
     @Override
     protected boolean additionalCheck() {
-        if (xpPerOrb <= 0) {
-            LOGGER.warn("xpPerOrb must be at least 1, current is: {}", xpPerOrb);
+        if (xpPerItem <= 0) {
+            LOGGER.warn("xpPerOrb must be at least 1, current is: {}", xpPerItem);
             return false;
         }
-        if (xpPerOrb > 2477) {
-            LOGGER.warn("xpPerOrb exceeds vanilla single-orb cap (2477), current is: {}. " +
-                    "Consider splitting into multiple orbs via resultMultiple.", xpPerOrb);
-            // 仅警告，允许自定义模组扩展上限
-        }
+
         if (resultLimit <= 0) {
             LOGGER.warn("resultLimit must be greater than 0, current is: {}", resultLimit);
             return false;
@@ -73,40 +66,30 @@ public class ItemToExpOrbConfig extends BaseItemToEntityConfig{
             return;
         }
 
-        int orbsToSpawn = actualConvertCount * resultMultiple;
+        int totalXp = actualConvertCount * resultMultiple * xpPerItem;
 
         // 物品实体下一tick消失
         itemEntity.makeFakeItem();
         // 根据条件消耗催化剂与流体
         consumeAllOthers(itemEntity, actualConvertCount);
 
-        for (int i = 0; i < orbsToSpawn; i++) {
-            double offsetX = (serverLevel.random.nextDouble() - 0.5) * 0.5;
-            double offsetZ = (serverLevel.random.nextDouble() - 0.5) * 0.5;
-            ExperienceOrb orb = new ExperienceOrb(
-                    serverLevel,
-                    pos.getX() + 0.5 + offsetX,
-                    pos.getY() + 0.2,
-                    pos.getZ() + 0.5 + offsetZ,
-                    xpPerOrb);
-            serverLevel.addFreshEntity(orb);
-        }
+        // 生成经验球，使用原版方法自动拆分，避免出现超大经验球
+        double offsetX = (serverLevel.random.nextDouble() - 0.5) * 0.5;
+        double offsetZ = (serverLevel.random.nextDouble() - 0.5) * 0.5;
+        ExperienceOrb.award(serverLevel,
+                new Vec3(pos.getX() + 0.5 + offsetX,
+                        pos.getY() + 0.2,
+                        pos.getZ() + 0.5 + offsetZ),
+                totalXp);
 
         int itemsRemaining = originalStackSize - actualConvertCount;
         addRemainingItems(itemEntity, serverLevel, itemsRemaining);
     }
 
-    // 附近数量统计
+    // 附近经验球数量统计
     @Override
-    public int countNearbyResult(ItemEntity itemEntity) {
-        if (!(itemEntity.level() instanceof ServerLevel serverLevel)) return 0;
-
-        AABB box = new AABB(
-                itemEntity.getX() - MAX_RADIUS, itemEntity.getY() - MAX_RADIUS, itemEntity.getZ() - MAX_RADIUS,
-                itemEntity.getX() + MAX_RADIUS, itemEntity.getY() + MAX_RADIUS, itemEntity.getZ() + MAX_RADIUS);
-
-        // ExperienceOrb 没有专用的 EntityType 过滤器重载，使用 getEntitiesOfClass
-        return serverLevel.getEntitiesOfClass(ExperienceOrb.class, box, ExperienceOrb::isAlive).size();
+    protected int countNearbyResult(ServerLevel level, BlockPos pos) {
+        return level.getEntitiesOfClass(ExperienceOrb.class, buildSearchBox(pos), ExperienceOrb::isAlive).size();
     }
 
     @Override
@@ -121,11 +104,11 @@ public class ItemToExpOrbConfig extends BaseItemToEntityConfig{
         return new ItemStack(Items.EXPERIENCE_BOTTLE);
     }
 
-    public int getXpPerOrb() {
-        return xpPerOrb;
+    public int getXpPerItem() {
+        return xpPerItem;
     }
 
-    public void setXpPerOrb(int xpPerOrb) {
-        this.xpPerOrb = xpPerOrb;
+    public void setXpPerItem(int xpPerItem) {
+        this.xpPerItem = xpPerItem;
     }
 }

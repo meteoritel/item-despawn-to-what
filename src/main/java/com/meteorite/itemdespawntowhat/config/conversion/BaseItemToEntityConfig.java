@@ -1,17 +1,16 @@
 package com.meteorite.itemdespawntowhat.config.conversion;
 
 import com.google.gson.annotations.SerializedName;
+import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.entity.EntityType;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.phys.AABB;
 
 public abstract class BaseItemToEntityConfig extends BaseConversionConfig{
 
-    // 附近实体数量限制，所有实体类型共用，子类在无参构造器中修改
     @SerializedName("result_limit")
     protected int resultLimit = 30;
-    // 缓存的结果实体类型
-    //protected transient EntityType<?> cachedResultEntityType;
 
     public BaseItemToEntityConfig() {
     }
@@ -20,18 +19,24 @@ public abstract class BaseItemToEntityConfig extends BaseConversionConfig{
         super(item, result);
     }
 
-    public int getResultLimit() {
-        return resultLimit;
+    @Override
+    public final int countNearbyResult(ItemEntity itemEntity) {
+        if (!(itemEntity.level() instanceof ServerLevel level)) return 0;
+        return countNearbyResult(level, itemEntity.blockPosition());
     }
 
-    public void setResultLimit(int resultLimit) {
-        this.resultLimit = resultLimit;
+    // 统一构建检测 AABB
+    protected AABB buildSearchBox(BlockPos pos) {
+        return new AABB(
+                pos.getX() - MAX_RADIUS, pos.getY() - MAX_RADIUS, pos.getZ() - MAX_RADIUS,
+                pos.getX() + MAX_RADIUS, pos.getY() + MAX_RADIUS, pos.getZ() + MAX_RADIUS
+        );
     }
 
     @Override
     protected int getResultCapacityInStartItems(ItemEntity itemEntity) {
         int current = countNearbyResult(itemEntity);
-        int remaining = getResultLimit() - current;
+        int remaining = getRawResultLimit() - current;
         LOGGER.debug("current entity size = {}, remain = {}", current, remaining);
         if (remaining <= 0) {
             return 0;
@@ -41,7 +46,25 @@ public abstract class BaseItemToEntityConfig extends BaseConversionConfig{
 
     @Override
     public boolean isResultLimitExceeded(ItemEntity itemEntity) {
-        return this.countNearbyResult(itemEntity) >= getResultLimit();
+        return this.countNearbyResult(itemEntity) >= getRawResultLimit();
+    }
+
+    // 子类方法
+    // 子类实现具体的实体/物品计数逻辑
+    protected abstract int countNearbyResult(ServerLevel level, BlockPos pos);
+
+    // ========== setter & getter ========== //
+
+    public int getResultLimit() {
+        return resultLimit;
+    }
+
+    protected int getRawResultLimit() {
+        return resultLimit;
+    }
+
+    public void setResultLimit(int resultLimit) {
+        this.resultLimit = resultLimit;
     }
 
 }

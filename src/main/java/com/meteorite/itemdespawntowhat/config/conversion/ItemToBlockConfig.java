@@ -89,17 +89,6 @@ public class ItemToBlockConfig extends BaseConversionConfig{
                 itemEntity, this, actualConvertCount, innerFluid.isConsumeFluid()));
     }
 
-    // 这个类不会用到这个方法
-    @Override
-    public int countNearbyResult(ItemEntity itemEntity) {
-        return 0;
-    }
-    // 这个类不会用到这个方法，无条件通过
-    @Override
-    public boolean isResultLimitExceeded(ItemEntity itemEntity) {
-        return false;
-    }
-
     // ========== 结果相关方法 ========== //
     // 当开启了使用物品对应方块，且物品是方块物品，就直接使用对应的方块
     public Block getResultBlock() {

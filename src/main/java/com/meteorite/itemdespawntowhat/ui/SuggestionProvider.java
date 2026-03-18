@@ -7,6 +7,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.TagKey;
+import net.minecraft.world.entity.Entity;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
@@ -35,6 +36,61 @@ public interface SuggestionProvider {
         List<String> allIds = registry.keySet()
                 .stream()
                 .map(ResourceLocation::toString)
+                .sorted()
+                .toList();
+
+        return (segment, maxResults) -> {
+            if (segment.isEmpty()) return List.of();
+            String lower = segment.toLowerCase();
+            List<String> result = new ArrayList<>();
+            for (String id : allIds) {
+                if (result.size() >= maxResults) break;
+                if (id.startsWith(lower) || pathOf(id).startsWith(lower)) {
+                    result.add(id);
+                }
+            }
+            return result;
+        };
+    }
+
+    static <T> SuggestionProvider ofRegistry(Registry<T> registry, Class<?> baseClass) {
+        List<String> allIds = registry.entrySet()
+                .stream()
+                .filter(entry -> baseClass.isInstance(entry.getValue()))
+                .map(entry -> entry.getKey().location().toString())
+                .sorted()
+                .toList();
+
+        return (segment, maxResults) -> {
+            if (segment.isEmpty()) return List.of();
+            String lower = segment.toLowerCase();
+            List<String> result = new ArrayList<>();
+            for (String id : allIds) {
+                if (result.size() >= maxResults) break;
+                if (id.startsWith(lower) || pathOf(id).startsWith(lower)) {
+                    result.add(id);
+                }
+            }
+            return result;
+        };
+    }
+
+    // 专用于 ENTITY_TYPE 注册表，按实体运行时类筛选
+    static SuggestionProvider ofEntityTypeRegistry(ServerLevel level, Class<?> baseClass) {
+        List<String> allIds = BuiltInRegistries.ENTITY_TYPE.entrySet()
+                .stream()
+                .filter(entry -> {
+                    try {
+                        Entity testEntity = entry.getValue().create(level);
+                        if (testEntity == null) return false;
+                        boolean matches = baseClass.isInstance(testEntity);
+                        testEntity.discard();
+                        return matches;
+                    } catch (Exception e) {
+                        return false;
+                    }
+                })
+                .map(entry -> entry.getKey().location().toString())
                 .sorted()
                 .toList();
 
@@ -160,7 +216,6 @@ public interface SuggestionProvider {
     }
 
     // ========== 内部工具方法 ========== //
-    // 从 "namespace:path" 提取 path 部分
     private static String pathOf(String id) {
         int colon = id.indexOf(':');
         return colon >= 0 ? id.substring(colon + 1) : id;
