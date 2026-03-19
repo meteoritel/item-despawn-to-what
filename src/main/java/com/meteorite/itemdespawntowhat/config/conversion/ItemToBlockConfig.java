@@ -1,8 +1,8 @@
 package com.meteorite.itemdespawntowhat.config.conversion;
 
 import com.google.gson.annotations.SerializedName;
-import com.meteorite.itemdespawntowhat.event.ItemToBlockTask;
-import com.meteorite.itemdespawntowhat.event.LevelTaskManager;
+import com.meteorite.itemdespawntowhat.event.task.PlaceBlockTask;
+import com.meteorite.itemdespawntowhat.event.task.LevelTaskManager;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -14,7 +14,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 
 public class ItemToBlockConfig extends BaseConversionConfig{
-    // 最大检测半径的限制，默认为6
+    // 最大放置半径的限制，默认为6
     @SerializedName("radius_limit")
     private int radius = 6;
     @SerializedName("block_of_item")
@@ -85,7 +85,7 @@ public class ItemToBlockConfig extends BaseConversionConfig{
         consumeAllOthers(itemEntity, actualConvertCount);
         // 下一tick开始执行延迟放置方块的任务
         // 消耗流体就直接从中心的位置放，不消耗流体就跳过中心的点
-        LevelTaskManager.addTask(serverLevel, new ItemToBlockTask(
+        LevelTaskManager.addTask(serverLevel, new PlaceBlockTask(
                 itemEntity, this, actualConvertCount, innerFluid.isConsumeFluid()));
     }
 

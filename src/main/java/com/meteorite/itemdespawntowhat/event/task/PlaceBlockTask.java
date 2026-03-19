@@ -1,6 +1,7 @@
-package com.meteorite.itemdespawntowhat.event;
+package com.meteorite.itemdespawntowhat.event.task;
 
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToBlockConfig;
+import com.meteorite.itemdespawntowhat.event.ItemConversionEvent;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -12,7 +13,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 
-public class ItemToBlockTask implements LevelDelayTask{
+public class PlaceBlockTask implements LevelDelayTask{
 
     private static final Logger LOGGER = LogManager.getLogger();
 
@@ -28,7 +29,7 @@ public class ItemToBlockTask implements LevelDelayTask{
     private int placed = 0;
     private boolean finished = false;
 
-    public ItemToBlockTask(ItemEntity itemEntity,ItemToBlockConfig config, int maxBlocks, boolean consumeFluid){
+    public PlaceBlockTask(ItemEntity itemEntity, ItemToBlockConfig config, int maxBlocks, boolean consumeFluid){
         this.originalItem = itemEntity;
         this.center = itemEntity.blockPosition();
         this.block = config.getResultBlock();

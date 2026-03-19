@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.event;
+package com.meteorite.itemdespawntowhat.event.task;
 
 import net.minecraft.server.level.ServerLevel;
 

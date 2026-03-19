@@ -229,22 +229,37 @@ public abstract class BaseConversionConfig {
     }
 
     // 返还剩余物品
-    protected void addRemainingItems(ItemEntity itemEntity, ServerLevel serverLevel, int itemsRemaining) {
+    public void addRemainingItems(ItemEntity itemEntity, ServerLevel serverLevel, int itemsRemaining) {
         if (itemsRemaining <= 0) {
             return;
         }
+        addRemainingItems(itemEntity, serverLevel, itemsRemaining, 0, 0, 0);
+    }
+
+    public void addRemainingItems(ItemEntity itemEntity, ServerLevel serverLevel, int itemsRemaining,
+                                  double offsetX, double offsetY, double offsetZ) {
+        if (itemsRemaining <= 0) {
+            return;
+        }
+
         ItemStack returnStack = itemEntity.getItem().copy();
-        BlockPos pos = itemEntity.blockPosition();
         returnStack.setCount(itemsRemaining);
+
+        BlockPos pos = itemEntity.blockPosition();
 
         ItemEntity returnItem = new ItemEntity(
                 serverLevel,
-                pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5,
+                pos.getX() + 0.5 + offsetX,
+                pos.getY() + offsetY,
+                pos.getZ() + 0.5 + offsetZ,
                 returnStack
         );
+
         returnItem.getPersistentData().putBoolean(ItemConversionEvent.CHECK_LOCK_TAG, true);
         serverLevel.addFreshEntity(returnItem);
-        LOGGER.debug("Returned {} unused items of {}", itemsRemaining, getItemId());
+
+        LOGGER.debug("Returned {} unused items of {} with offset ({}, {}, {})",
+                itemsRemaining, getItemId(), offsetX, offsetY, offsetZ);
     }
 
     public Item getStartItem() {
@@ -268,6 +283,10 @@ public abstract class BaseConversionConfig {
     }
     public boolean isResultLimitExceeded(ItemEntity itemEntity) {
         return false;
+    }
+
+    public boolean hasResult() {
+        return true;
     }
 
     public abstract String getResultDescriptionId();
