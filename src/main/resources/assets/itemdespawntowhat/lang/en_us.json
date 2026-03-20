@@ -11,6 +11,14 @@
   "gui.itemdespawntowhat.config_type.item_to_item": "Item to item",
   "gui.itemdespawntowhat.config_type.item_to_mob": "Item to mob",
   "gui.itemdespawntowhat.config_type.item_to_block": "Item to block",
+  "gui.itemdespawntowhat.config_type.item_to_xp_orb": "Item to xp orb",
+  "gui.itemdespawntowhat.config_type.item_to_world_effect": "Item to world effect",
+
+  "gui.itemdespawntowhat.config_type.item_to_item.tooltip": "Convert a despawning item into another item.",
+  "gui.itemdespawntowhat.config_type.item_to_mob.tooltip": "Spawn a mob when a specific item despawns.",
+  "gui.itemdespawntowhat.config_type.item_to_block.tooltip": "Place blocks.",
+  "gui.itemdespawntowhat.config_type.item_to_xp_orb.tooltip": "Spawn experience orbs.",
+  "gui.itemdespawntowhat.config_type.item_to_world_effect.tooltip": "Trigger a world effect (lightning, explosion, arrow rain, weather change) when a specific item despawns.",
 
   "gui.itemdespawntowhat.edit.item_id": "Item ID",
   "gui.itemdespawntowhat.edit.dimension": "Dimension",

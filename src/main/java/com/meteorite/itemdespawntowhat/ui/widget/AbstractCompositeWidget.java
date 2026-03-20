@@ -43,6 +43,7 @@ public abstract class AbstractCompositeWidget extends AbstractWidget
     // 子类返回所有可交互的 EditBox，供 mouseClicked 遍历使用。
     protected abstract Iterable<EditBox> getEditBoxes();
 
+    // 焦点统一管理
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         EditBox clicked = null;

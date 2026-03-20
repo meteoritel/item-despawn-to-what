@@ -1,8 +1,8 @@
 package com.meteorite.itemdespawntowhat.condition;
 
-import com.meteorite.itemdespawntowhat.config.CatalystItems;
-import com.meteorite.itemdespawntowhat.config.InnerFluid;
-import com.meteorite.itemdespawntowhat.config.SurroundingBlocks;
+import com.meteorite.itemdespawntowhat.config.catalogue.CatalystItems;
+import com.meteorite.itemdespawntowhat.config.catalogue.InnerFluid;
+import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;
 
 // 记录所有需要解析的条件
 public record ConditionContext(

@@ -3,7 +3,7 @@ package com.meteorite.itemdespawntowhat.config.handler;
 import com.meteorite.itemdespawntowhat.config.ConfigDirection;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToMobConfig;
-import com.meteorite.itemdespawntowhat.config.SurroundingBlocks;
+import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;

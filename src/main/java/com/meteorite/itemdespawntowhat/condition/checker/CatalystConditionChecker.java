@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.condition.checker;
 
 import com.meteorite.itemdespawntowhat.condition.ConditionContext;
-import com.meteorite.itemdespawntowhat.config.CatalystItems;
+import com.meteorite.itemdespawntowhat.config.catalogue.CatalystItems;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Item;

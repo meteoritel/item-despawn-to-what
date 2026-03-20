@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.condition.checker;
 
 import com.meteorite.itemdespawntowhat.condition.ConditionContext;
-import com.meteorite.itemdespawntowhat.config.InnerFluid;
+import com.meteorite.itemdespawntowhat.config.catalogue.InnerFluid;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;

@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.config;
+package com.meteorite.itemdespawntowhat.config.catalogue;
 
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;

@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.ui.widget;
 
 import com.meteorite.itemdespawntowhat.config.ConfigDirection;
-import com.meteorite.itemdespawntowhat.config.SurroundingBlocks;
+import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;

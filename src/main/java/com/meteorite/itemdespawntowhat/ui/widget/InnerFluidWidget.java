@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.ui.widget;
 
-import com.meteorite.itemdespawntowhat.config.InnerFluid;
+import com.meteorite.itemdespawntowhat.config.catalogue.InnerFluid;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.CycleButton;

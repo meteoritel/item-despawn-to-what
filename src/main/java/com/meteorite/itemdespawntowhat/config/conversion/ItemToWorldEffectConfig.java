@@ -1,8 +1,8 @@
 package com.meteorite.itemdespawntowhat.config.conversion;
 
 import com.google.gson.annotations.SerializedName;
-import com.meteorite.itemdespawntowhat.config.PotionEffect;
-import com.meteorite.itemdespawntowhat.config.SideEffectType;
+import com.meteorite.itemdespawntowhat.config.catalogue.PotionEffect;
+import com.meteorite.itemdespawntowhat.config.WorldEffectType;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -13,10 +13,10 @@ import net.minecraft.world.item.Items;
 import java.util.ArrayList;
 import java.util.List;
 
-public class ItemToSideEffectConfig extends BaseConversionConfig implements SideEffectType.SideEffectConfig {
+public class ItemToWorldEffectConfig extends BaseConversionConfig implements WorldEffectType.SideEffectConfig {
 
     @SerializedName("side_effect")
-    private SideEffectType sideEffect;
+    private WorldEffectType worldEffect;
 
     // ========== 现象参数 ========== //
     // 闪电字段
@@ -44,7 +44,7 @@ public class ItemToSideEffectConfig extends BaseConversionConfig implements Side
     @SerializedName("arrow_potion_effects")
     private List<PotionEffect> arrowPotionEffects = new ArrayList<>();
 
-    public ItemToSideEffectConfig() {
+    public ItemToWorldEffectConfig() {
     }
 
     // ========== 校验 ========== //
@@ -53,15 +53,9 @@ public class ItemToSideEffectConfig extends BaseConversionConfig implements Side
         return false;
     }
 
-    // 用来给GUI校验用
-    @Override
-    public boolean hasResult() {
-        return false;
-    }
-
     @Override
     protected boolean additionalCheck() {
-        if (sideEffect == null) {
+        if (worldEffect == null) {
             LOGGER.warn("side_effect field is required for ItemToSideEffectConfig, item={}", itemId);
             return false;
         }
@@ -86,7 +80,7 @@ public class ItemToSideEffectConfig extends BaseConversionConfig implements Side
     // ========== 转化逻辑 ========== //
     @Override
     public void performConversion(ItemEntity itemEntity, ServerLevel serverLevel) {
-        if (sideEffect == null) return;
+        if (worldEffect == null) return;
         int originalStackSize = itemEntity.getItem().getCount();
 
         // 天气类：只消耗1个物品（由 executor 内部再判断当前天气条件）
@@ -95,7 +89,7 @@ public class ItemToSideEffectConfig extends BaseConversionConfig implements Side
                 : computeActualConvertCount(itemEntity, originalStackSize);
 
         if (actualConvertCount <= 0) {
-            LOGGER.warn("No items can be converted for side effect {} (count=0)", sideEffect);
+            LOGGER.warn("No items can be converted for side effect {} (count=0)", worldEffect);
             return;
         }
 
@@ -107,12 +101,12 @@ public class ItemToSideEffectConfig extends BaseConversionConfig implements Side
         Runnable onFinishCallback = () ->
                 addRemainingItems(itemEntity, serverLevel, originalStackSize - actualConvertCount);
         // 执行对应的转化
-        sideEffect.getExecutor().execute(itemEntity, serverLevel, this, actualConvertCount, onFinishCallback);
+        worldEffect.getExecutor().execute(itemEntity, serverLevel, this, actualConvertCount, onFinishCallback);
     }
 
     // ========== 辅助方法 ========== //
     private boolean isWeatherType() {
-        return sideEffect == SideEffectType.RAIN || sideEffect == SideEffectType.CLEAR;
+        return worldEffect == WorldEffectType.RAIN || worldEffect == WorldEffectType.CLEAR;
     }
 
     private Arrow.Pickup parseArrowPickupStatus() {
@@ -127,13 +121,13 @@ public class ItemToSideEffectConfig extends BaseConversionConfig implements Side
     // ========== GUI图标 ========== //
     @Override
     public String getResultDescriptionId() {
-        return sideEffect != null ? sideEffect.getDescriptionId() : "effect.unknown";
+        return worldEffect != null ? worldEffect.getDescriptionId() : "effect.unknown";
     }
 
     @Override
     public ItemStack getResultIcon() {
-        if (sideEffect == null) return new ItemStack(Items.BARRIER);
-        return sideEffect.getIconSupplier().get();
+        if (worldEffect == null) return new ItemStack(Items.BARRIER);
+        return worldEffect.getIconSupplier().get();
     }
 
     // ========== 接口实现 ========== //
@@ -202,12 +196,12 @@ public class ItemToSideEffectConfig extends BaseConversionConfig implements Side
         this.explosionPower = explosionPower;
     }
 
-    public SideEffectType getSideEffect() {
-        return sideEffect;
+    public WorldEffectType getWorldEffect() {
+        return worldEffect;
     }
 
-    public void setSideEffect(SideEffectType sideEffect) {
-        this.sideEffect = sideEffect;
+    public void setWorldEffect(WorldEffectType worldEffect) {
+        this.worldEffect = worldEffect;
     }
 
     public void setThundering(boolean thundering) {

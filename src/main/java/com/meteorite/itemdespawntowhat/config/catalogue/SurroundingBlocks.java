@@ -1,8 +1,9 @@
-package com.meteorite.itemdespawntowhat.config;
+package com.meteorite.itemdespawntowhat.config.catalogue;
 
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.meteorite.itemdespawntowhat.condition.ConditionSerializable;
+import com.meteorite.itemdespawntowhat.config.ConfigDirection;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 

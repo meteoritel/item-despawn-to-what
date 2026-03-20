@@ -51,10 +51,7 @@ public class FormListPanel extends ContainerObjectSelectionList<FormListPanel.En
         return Math.max(entry.widget.getHeight(), minecraft.font.lineHeight) + ITEM_PADDING * 2;
     }
 
-    /*
-     * 重写：返回所有 Entry 的总高度，父类用它计算 getMaxScroll()。
-     * 父类实现是 itemHeight * getItemCount()，这里改为累加各自真实高度。
-     */
+    // 返回累加所有 Entry 的总高度
     @Override
     protected int getMaxPosition() {
         int total = 0;
@@ -64,11 +61,7 @@ public class FormListPanel extends ContainerObjectSelectionList<FormListPanel.En
         return total;
     }
 
-    /*
-     * 重写：返回第 index 个 Entry 的顶部 Y 坐标（含滚动偏移）。
-     * 父类实现是 top + 4 - scrollAmount + index * itemHeight，
-     * 这里改为累加前面所有 Entry 的真实高度。
-     */
+    // 返回第 index 个 Entry 的顶部 Y 坐标，累加前面所有 Entry 的真实高度
     @Override
     protected int getRowTop(int index) {
         int y = this.getY() + 4 - (int) this.getScrollAmount();

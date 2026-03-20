@@ -1,14 +1,13 @@
 package com.meteorite.itemdespawntowhat.config.conversion;
 
 import com.google.gson.annotations.SerializedName;
-import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
 import com.meteorite.itemdespawntowhat.condition.checker.ConditionChecker;
 import com.meteorite.itemdespawntowhat.condition.ConditionCheckerUtil;
 import com.meteorite.itemdespawntowhat.condition.ConditionContext;
-import com.meteorite.itemdespawntowhat.config.CatalystItems;
+import com.meteorite.itemdespawntowhat.config.catalogue.CatalystItems;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
-import com.meteorite.itemdespawntowhat.config.InnerFluid;
-import com.meteorite.itemdespawntowhat.config.SurroundingBlocks;
+import com.meteorite.itemdespawntowhat.config.catalogue.InnerFluid;
+import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;
 import com.meteorite.itemdespawntowhat.event.ItemConversionEvent;
 import com.meteorite.itemdespawntowhat.util.JsonOrder;
 import net.minecraft.core.BlockPos;
@@ -283,10 +282,6 @@ public abstract class BaseConversionConfig {
     }
     public boolean isResultLimitExceeded(ItemEntity itemEntity) {
         return false;
-    }
-
-    public boolean hasResult() {
-        return true;
     }
 
     public abstract String getResultDescriptionId();

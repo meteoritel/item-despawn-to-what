@@ -15,7 +15,7 @@ import net.minecraft.world.item.Items;
 import java.util.List;
 
 // 一些杂乱的现象，使用这个枚举来管理
-public enum SideEffectType {
+public enum WorldEffectType {
     // 当前维度天气调整为下雨或雷雨
     RAIN(
             "effect.minecraft.rain",
@@ -93,7 +93,7 @@ public enum SideEffectType {
     private final IconSupplier iconSupplier;
     private final SideEffectExecutor executor;
 
-    SideEffectType(String descriptionId, IconSupplier iconSupplier ,SideEffectExecutor executor) {
+    WorldEffectType(String descriptionId, IconSupplier iconSupplier , SideEffectExecutor executor) {
         this.descriptionId = descriptionId;
         this.iconSupplier = iconSupplier;
         this.executor = executor;

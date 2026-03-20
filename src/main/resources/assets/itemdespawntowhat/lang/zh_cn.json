@@ -11,6 +11,14 @@
   "gui.itemdespawntowhat.config_type.item_to_item": "转化为掉落物",
   "gui.itemdespawntowhat.config_type.item_to_mob": "转化为生物",
   "gui.itemdespawntowhat.config_type.item_to_block": "转化为方块",
+  "gui.itemdespawntowhat.config_type.item_to_xp_orb": "转化为经验球",
+  "gui.itemdespawntowhat.config_type.item_to_world_effect": "转化为世界效果",
+
+  "gui.itemdespawntowhat.config_type.item_to_item.tooltip": "将消失的物品转化为另一种物品。",
+  "gui.itemdespawntowhat.config_type.item_to_mob.tooltip": "当特定物品消失时，在原地生成生物。",
+  "gui.itemdespawntowhat.config_type.item_to_block.tooltip": "当特定物品消失时，在原地放置方块。",
+  "gui.itemdespawntowhat.config_type.item_to_xp_orb.tooltip": "当特定物品消失时，生成经验球。",
+  "gui.itemdespawntowhat.config_type.item_to_world_effect.tooltip": "当特定物品消失时，触发世界现象（闪电、爆炸、箭雨、天气变化）。",
 
   "gui.itemdespawntowhat.edit.item_id": "物品ID",
   "gui.itemdespawntowhat.edit.dimension": "生效维度",

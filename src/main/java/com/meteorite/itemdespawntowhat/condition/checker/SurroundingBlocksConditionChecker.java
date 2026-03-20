@@ -2,7 +2,7 @@ package com.meteorite.itemdespawntowhat.condition.checker;
 
 import com.meteorite.itemdespawntowhat.condition.ConditionContext;
 import com.meteorite.itemdespawntowhat.config.ConfigDirection;
-import com.meteorite.itemdespawntowhat.config.SurroundingBlocks;
+import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;
 import com.mojang.datafixers.util.Either;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
