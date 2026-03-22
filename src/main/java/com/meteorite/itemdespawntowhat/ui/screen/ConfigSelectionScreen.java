@@ -32,7 +32,7 @@ public class ConfigSelectionScreen extends Screen {
             case ITEM_TO_ITEM -> new ItemToItemEditScreen();
             case ITEM_TO_MOB -> new ItemToMobEditScreen();
             case ITEM_TO_BLOCK -> new ItemToBlockEditScreen();
-            case ITEM_TO_XP_ORB -> null;
+            case ITEM_TO_XP_ORB -> new ItemToExpOrbEditScreen();
             case ITEM_TO_WORLD_EFFECT -> null;
         };
         if (minecraft != null) {

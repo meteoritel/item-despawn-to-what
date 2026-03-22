@@ -11,14 +11,10 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.Vec3;
 
 public class ItemToExpOrbConfig extends BaseItemToEntityConfig{
-    /*
-     * 每个经验球携带的经验值
-     * 提前计算好会转化为的经验值，然后生成自己拆分再生成经验球
-     * 默认单个物品转化设置为1点经验
-     */
     private static final ResourceLocation XP_ORB_ID =
             ResourceLocation.withDefaultNamespace("experience_orb");
 
+    // 每个物品转化为几点经验值
     @SerializedName("xp_per_item")
     private int xpPerItem = 1;
 
@@ -86,10 +82,10 @@ public class ItemToExpOrbConfig extends BaseItemToEntityConfig{
         addRemainingItems(itemEntity, serverLevel, itemsRemaining);
     }
 
-    // 附近经验球数量统计
+    // 附近经验球数量统计，直接返回0,
     @Override
     protected int countNearbyResult(ServerLevel level, BlockPos pos) {
-        return level.getEntitiesOfClass(ExperienceOrb.class, buildSearchBox(pos), ExperienceOrb::isAlive).size();
+        return 0;
     }
 
     @Override

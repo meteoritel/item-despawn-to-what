@@ -11,7 +11,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
 public class ItemToItemConfig extends BaseItemToEntityConfig{
-
     // 缓存的结果物品实例
     private transient Item cachedResultItem;
     // 缓存结果物品的最大堆叠数，避免重复查找

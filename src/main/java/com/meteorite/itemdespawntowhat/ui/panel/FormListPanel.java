@@ -28,7 +28,17 @@ public class FormListPanel extends ContainerObjectSelectionList<FormListPanel.En
     }
 
     public void add(Component label, AbstractWidget widget) {
-        addEntry(new Entry(minecraft.font, label, widget));
+        addEntry(new Entry(minecraft.font, label, widget, false));
+    }
+
+    // 添加条件行
+    public void addConditional(Component label, AbstractWidget widget) {
+        addEntry(new Entry(minecraft.font, label, widget, true));
+    }
+
+    // 移除所有条件行
+    public void removeConditionalEntries() {
+        children().removeIf(entry -> entry.conditional);
     }
 
     // 调整面板的宽度（后端处理宽度）
@@ -143,13 +153,15 @@ public class FormListPanel extends ContainerObjectSelectionList<FormListPanel.En
         private final Font font;
         private final Component label;
         private final AbstractWidget widget;
+        final boolean conditional;
 
-
-        public Entry(Font font, Component label, AbstractWidget widget) {
+        public Entry(Font font, Component label, AbstractWidget widget, boolean conditional) {
             this.font = font;
             this.label = label;
             this.widget = widget;
+            this.conditional = conditional;
         }
+
         @Override
         public void render(GuiGraphics g, int index, int y, int x, int width, int height,
                            int mx, int my, boolean hovered, float pt) {

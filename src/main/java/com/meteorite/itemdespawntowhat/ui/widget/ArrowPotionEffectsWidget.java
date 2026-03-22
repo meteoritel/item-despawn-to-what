@@ -34,9 +34,11 @@ public class ArrowPotionEffectsWidget extends AbstractCompositeWidget{
     private static final int V_GAP = 3;
 
     // 列宽：effect_id 框最宽，其余两框等宽
-    private static final int DURATION_WIDTH  = 60;
-    private static final int AMPLIFIER_WIDTH = 50;
-    private static final int EFFECT_WIDTH  = TOTAL_WIDTH - DURATION_WIDTH - AMPLIFIER_WIDTH - H_GAP * 2;
+    // 第一行：effect_id 占满整行
+    private static final int EFFECT_WIDTH = TOTAL_WIDTH;
+    private static final int DURATION_WIDTH = (TOTAL_WIDTH - H_GAP) / 2;
+    private static final int AMPLIFIER_WIDTH = (TOTAL_WIDTH - H_GAP) / 2;
+    private static final int AMPLIFIER_X_OFFSET = DURATION_WIDTH + H_GAP;
 
     private final Font font;
     private final LinkedBoxGroup linkedBoxGroup;
@@ -57,50 +59,54 @@ public class ArrowPotionEffectsWidget extends AbstractCompositeWidget{
 
         this.linkedBoxGroup = LinkedBoxGroup
                 .builder(font, EFFECT_WIDTH, 512)
-                .follow(durationBox,  () -> DEFAULT_DURATION)
+                .follow(durationBox, () -> DEFAULT_DURATION)
                 .follow(amplifierBox, () -> DEFAULT_AMPLIFIER)
                 .build();
     }
 
     public static int getTotalHeight() {
-        return LABEL_HEIGHT + V_GAP
-                + BOX_HEIGHT + V_GAP
+        return LABEL_HEIGHT + V_GAP + BOX_HEIGHT + V_GAP
+                + LABEL_HEIGHT + V_GAP + BOX_HEIGHT + V_GAP
                 + TIP_HEIGHT;
     }
 
     // ========== 渲染 ========== //
-
     @Override
     protected void renderWidget(@NotNull GuiGraphics gfx, int mouseX, int mouseY, float partialTick) {
         int x = getX();
         int y = getY();
 
-        // 第一行：列标签
-        gfx.drawString(font, Component.translatable(KEY_EFFECT_LABEL),    x,                                               y, 0xAAAAAA, false);
-        gfx.drawString(font, Component.translatable(KEY_DURATION_LABEL),  x + EFFECT_WIDTH + H_GAP,                        y, 0xAAAAAA, false);
-        gfx.drawString(font, Component.translatable(KEY_AMPLIFIER_LABEL), x + EFFECT_WIDTH + H_GAP + DURATION_WIDTH + H_GAP, y, 0xAAAAAA, false);
-
-        // 第二行：文本框
-        int boxY = y + LABEL_HEIGHT + V_GAP;
-
         EditBox effectBox    = linkedBoxGroup.getPrimaryBox();
         EditBox durationBox  = linkedBoxGroup.getFollower(0);
         EditBox amplifierBox = linkedBoxGroup.getFollower(1);
 
+        // 第一行：effect_id 标签 + 文本框
+        gfx.drawString(font, Component.translatable(KEY_EFFECT_LABEL), x, y, 0xAAAAAA, false);
+        int effectBoxY = y + LABEL_HEIGHT + V_GAP;
+
         effectBox.setX(x);
-        effectBox.setY(boxY);
+        effectBox.setY(effectBoxY);
+        effectBox.setWidth(EFFECT_WIDTH);
         effectBox.render(gfx, mouseX, mouseY, partialTick);
 
-        durationBox.setX(x + EFFECT_WIDTH + H_GAP);
-        durationBox.setY(boxY);
+        // 第二行：duration / amplifier 各标签 + 各文本框
+        int row2LabelY = effectBoxY + BOX_HEIGHT + V_GAP;
+        gfx.drawString(font, Component.translatable(KEY_DURATION_LABEL), x, row2LabelY, 0xAAAAAA, false);
+        gfx.drawString(font, Component.translatable(KEY_AMPLIFIER_LABEL), x + AMPLIFIER_X_OFFSET, row2LabelY, 0xAAAAAA, false);
+
+        int row2BoxY = row2LabelY + LABEL_HEIGHT + V_GAP;
+        durationBox.setX(x);
+        durationBox.setY(row2BoxY);
+        durationBox.setWidth(DURATION_WIDTH);
         durationBox.render(gfx, mouseX, mouseY, partialTick);
 
-        amplifierBox.setX(x + EFFECT_WIDTH + H_GAP + DURATION_WIDTH + H_GAP);
-        amplifierBox.setY(boxY);
+        amplifierBox.setX(x + AMPLIFIER_X_OFFSET);
+        amplifierBox.setY(row2BoxY);
+        amplifierBox.setWidth(AMPLIFIER_WIDTH);
         amplifierBox.render(gfx, mouseX, mouseY, partialTick);
 
-        // 第三行：提示文字
-        gfx.drawString(font, Component.translatable(KEY_TIP), x, boxY + BOX_HEIGHT + V_GAP, 0xAAAAAA, false);
+        // 第三行：提示文字 ──
+        gfx.drawString(font, Component.translatable(KEY_TIP), x, row2BoxY + BOX_HEIGHT + V_GAP, 0xAAAAAA, false);
     }
 
     // ========== 事件路由 ========== //
@@ -134,7 +140,7 @@ public class ArrowPotionEffectsWidget extends AbstractCompositeWidget{
             return;
         }
 
-        StringBuilder effectSb    = new StringBuilder();
+        StringBuilder effectSb = new StringBuilder();
         StringBuilder durationSb  = new StringBuilder();
         StringBuilder amplifierSb = new StringBuilder();
 

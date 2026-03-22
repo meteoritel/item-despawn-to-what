@@ -104,7 +104,11 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         formList.add(Component.translatable(LABEL_PREFIX + "surrounding_blocks"), surroundingWidget);
         formList.add(Component.translatable(LABEL_PREFIX + "catalyst_items"), catalystWidget);
         formList.add(Component.translatable(LABEL_PREFIX + "inner_fluid"), innerFluidWidget);
-        formList.add(Component.translatable(LABEL_PREFIX + "result_id"), resultIdInput);
+
+        if (shouldShowResultId()) {
+            formList.add(Component.translatable(LABEL_PREFIX + "result_id"), resultIdInput);
+        }
+
         formList.add(Component.translatable(LABEL_PREFIX + "conversion_time"), conversionTimeInput);
         formList.add(Component.translatable(LABEL_PREFIX + "result_multiple"), resultMultipleInput);
         // 将子类字段加入列表
@@ -271,6 +275,13 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     protected EditBox numericBox() {
         EditBox box = textBox();
         box.setFilter(s -> s.matches("-?\\d*")); // 仅允许数字
+        return box;
+    }
+
+    // 小数输入框
+    protected EditBox decimalBox() {
+        EditBox box = textBox();
+        box.setFilter(s -> s.matches("-?\\d*\\.?\\d*")); // 仅允许小数
         return box;
     }
 
@@ -520,12 +531,19 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     }
 
     // ========== 子类方法 ========== //
+    // 控制是否在表单中显示 result_id 输入框，由子类重写
+    protected boolean shouldShowResultId() {
+        return true;
+    }
+
+    // 添加子类下拉框组件，子类重写
+    protected void addCustomSuggestion(){
+    }
+
     protected abstract void addCustomEntries(FormListPanel fromList);
-    // 构建配置对象
     protected abstract T createConfigFromFields();
     protected abstract void populateCustomFields(T config);
     protected abstract void clearCustomFields();
     protected abstract void refillCustomFields(T config);
-    // 添加子类下拉框组件
-    protected abstract void addCustomSuggestion();
+
 }

@@ -1,11 +1,13 @@
 package com.meteorite.itemdespawntowhat.config.handler;
 
+import com.google.common.reflect.TypeToken;
 import com.meteorite.itemdespawntowhat.config.ConfigDirection;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToMobConfig;
 import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;
 import net.minecraft.resources.ResourceLocation;
 
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -34,5 +36,8 @@ public class ItemToMobConfigHandler extends BaseConfigHandler<ItemToMobConfig> {
 
         return entries;
     }
-
+    @Override
+    protected Type createListType() {
+        return new TypeToken<List<ItemToMobConfig>>(){}.getType();
+    }
 }

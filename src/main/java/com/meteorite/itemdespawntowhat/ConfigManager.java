@@ -8,10 +8,7 @@ import java.util.concurrent.ConcurrentMap;
 
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
-import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
-import com.meteorite.itemdespawntowhat.config.handler.ItemToBlockConfigHandler;
-import com.meteorite.itemdespawntowhat.config.handler.ItemToMobConfigHandler;
-import com.meteorite.itemdespawntowhat.config.handler.ItemToItemConfigHandler;
+import com.meteorite.itemdespawntowhat.config.handler.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -43,6 +40,7 @@ public class ConfigManager {
         registerHandler(new ItemToItemConfigHandler());
         registerHandler(new ItemToMobConfigHandler());
         registerHandler(new ItemToBlockConfigHandler());
+        registerHandler(new ItemToXpConfigHandler());
         LOGGER.debug("Default configuration handlers registered");
     }
 
