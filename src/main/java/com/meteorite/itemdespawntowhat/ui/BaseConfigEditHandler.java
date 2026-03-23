@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.ui;
 
 import com.meteorite.itemdespawntowhat.ConfigExtractorManager;
-import com.meteorite.itemdespawntowhat.ConfigManager;
+import com.meteorite.itemdespawntowhat.ConfigHandlerManager;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
@@ -30,7 +30,7 @@ public class BaseConfigEditHandler<T extends BaseConversionConfig> {
         this.mc = Minecraft.getInstance();
         this.configType = configType;
 
-        this.handler = ConfigManager.getInstance().getHandler(configType);
+        this.handler = ConfigHandlerManager.getInstance().getHandler(configType);
         if (handler == null) {
             throw new IllegalStateException("No handler registered for " + configType);
         }

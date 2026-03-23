@@ -37,6 +37,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     protected static final Logger LOGGER = LogManager.getLogger();
     protected static final String LABEL_PREFIX = "gui.itemdespawntowhat.edit.";
     protected static final int BOX_WIDTH = 240;
+    protected static final int BUTTON_HEIGHT = 18;
     // 后端处理器
     protected final BaseConfigEditHandler<T> editHandler;
     // UI 组件
@@ -89,7 +90,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
                         Component.translatable(LABEL_PREFIX + "on"),
                         Component.translatable(LABEL_PREFIX + "off")
                 ).withInitialValue(false)
-                .create(0, 0, BOX_WIDTH, 18, Component.translatable(LABEL_PREFIX + "need_outdoor"));
+                .create(0, 0, BOX_WIDTH, BUTTON_HEIGHT, Component.translatable(LABEL_PREFIX + "need_outdoor"));
         surroundingWidget = new SurroundingBlocksWidget(font, 0, 0);
         catalystWidget = new CatalystItemsWidget(font, 0, 0);
         innerFluidWidget = new InnerFluidWidget(font, 0, 0);
@@ -352,6 +353,14 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         return value == null || value.isEmpty() ? null : ResourceLocation.tryParse(value);
     }
 
+    protected float parseFloat(String boxInput, float def) {
+        try {
+            return Float.parseFloat(boxInput);
+        } catch (Exception e) {
+            return def;
+        }
+    }
+
     // ========== 渲染 ========== //
     @Override
     public void render(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
@@ -512,16 +521,6 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         SuggestionWidget widget = new SuggestionWidget(font, editBox, sProvider);
         suggestionWidgets.add(widget);
         editBox.setResponder(text -> widget.updateSuggestions());
-    }
-
-    // 添加建议组件的文本监听
-    @Deprecated
-    protected void addSuggestionListener(EditBox editBox, SuggestionWidget suggestionWidget) {
-        editBox.setResponder(text -> {
-            if (suggestionWidget != null) {
-                suggestionWidget.updateSuggestions();
-            }
-        });
     }
 
     // 辅助方法：判断鼠标是否在某个输入框区域内

@@ -14,9 +14,9 @@
   "gui.itemdespawntowhat.config_type.item_to_xp_orb": "转化为经验球",
   "gui.itemdespawntowhat.config_type.item_to_world_effect": "转化为世界效果",
 
-  "gui.itemdespawntowhat.config_type.item_to_item.tooltip": "将消失的物品转化为另一种物品。",
+  "gui.itemdespawntowhat.config_type.item_to_item.tooltip": "当特定物品消失时，在原地生成其他物品",
   "gui.itemdespawntowhat.config_type.item_to_mob.tooltip": "当特定物品消失时，在原地生成生物。",
-  "gui.itemdespawntowhat.config_type.item_to_block.tooltip": "当特定物品消失时，在原地放置方块。",
+  "gui.itemdespawntowhat.config_type.item_to_block.tooltip": "当特定物品消失时，以原地为中心依次放置方块。",
   "gui.itemdespawntowhat.config_type.item_to_xp_orb.tooltip": "当特定物品消失时，生成经验球。",
   "gui.itemdespawntowhat.config_type.item_to_world_effect.tooltip": "当特定物品消失时，触发世界现象（闪电、爆炸、箭雨、天气变化）。",
 
@@ -36,6 +36,24 @@
   "gui.itemdespawntowhat.edit.on": "开",
   "gui.itemdespawntowhat.edit.off": "关",
 
+  "gui.itemdespawntowhat.edit.world_effect_type": "世界现象",
+
+  "gui.itemdespawntowhat.edit.weather_duration_ticks": "天气持续时间(tick)",
+  "gui.itemdespawntowhat.edit.is_thundering": "雷雨天",
+  "gui.itemdespawntowhat.edit.explosion_fire": "爆炸起火",
+  "gui.itemdespawntowhat.edit.explosion_power": "爆炸强度",
+  "gui.itemdespawntowhat.edit.visual_only": "仅视觉效果",
+  "gui.itemdespawntowhat.edit.arrow_pickup_status": "箭矢捡起状态",
+  "gui.itemdespawntowhat.edit.arrow_pickup_status.disallowed": "不允许",
+  "gui.itemdespawntowhat.edit.arrow_pickup_status.allowed": "允许",
+  "gui.itemdespawntowhat.edit.arrow_pickup_status.creative_only": "仅创造允许",
+  "gui.itemdespawntowhat.edit.arrow_potion_effects": "箭矢附加药水效果",
+
+  "gui.itemdespawntowhat.edit.world_effect.effect_label": "药水效果ID",
+  "gui.itemdespawntowhat.edit.world_effect.duration_label": "效果持续时间(tick)",
+  "gui.itemdespawntowhat.edit.world_effect.amplifier_label": "效果倍率",
+  "gui.itemdespawntowhat.edit.world_effect.potion.tip": "注：多个效果请使用英文逗号分隔",
+
   "gui.itemdespawntowhat.edit.save_error": "非法的配置，请检查填写的字段",
 
   "gui.itemdespawntowhat.edit.catalyst.item_label": "辅助物品ID",
@@ -50,5 +68,14 @@
   "gui.itemdespawntowhat.edit.list.edit": "重新编辑",
   "gui.itemdespawntowhat.edit.list.delete": "删除",
   "gui.itemdespawntowhat.edit.list.delete.title": "执行删除",
-  "gui.itemdespawntowhat.edit.list.delete.body": "此操作将不可取消！"
+  "gui.itemdespawntowhat.edit.list.delete.body": "此操作将不可取消！",
+
+  "key.category.itemdespawntowhat.general": "掉落物转化",
+  "key.itemdespawntowhat.open_gui": "打开配置编辑GUI",
+
+  "effect.itemdespawntowhat.world_effect_type.rain": "天气设为雨天",
+  "effect.itemdespawntowhat.world_effect_type.clear": "天气设为晴天",
+  "effect.itemdespawntowhat.world_effect_type.lightning_bolt": "召唤闪电",
+  "effect.itemdespawntowhat.world_effect_type.explosion": "引发爆炸",
+  "effect.itemdespawntowhat.world_effect_type.arrow": "箭雨"
 }

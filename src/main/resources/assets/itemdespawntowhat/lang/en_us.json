@@ -36,6 +36,26 @@
   "gui.itemdespawntowhat.edit.off": "OFF",
   "gui.itemdespawntowhat.edit.inner_fluid": "Inner fluid",
 
+  "gui.itemdespawntowhat.edit.xp_pre_item": "Xp pre item",
+
+  "gui.itemdespawntowhat.edit.world_effect_type": "World effects",
+
+  "gui.itemdespawntowhat.edit.weather_duration_ticks": "Weather duration(tick)",
+  "gui.itemdespawntowhat.edit.is_thundering": "Thundering",
+  "gui.itemdespawntowhat.edit.explosion_fire": "Explosion fire",
+  "gui.itemdespawntowhat.edit.explosion_power": "Explosion power",
+  "gui.itemdespawntowhat.edit.visual_only": "Visual only",
+  "gui.itemdespawntowhat.edit.arrow_pickup_status": "Arrow pickup status",
+  "gui.itemdespawntowhat.edit.arrow_pickup_status.disallowed": "Disallowed",
+  "gui.itemdespawntowhat.edit.arrow_pickup_status.allowed": "Allowed",
+  "gui.itemdespawntowhat.edit.arrow_pickup_status.creative_only": "Creative only",
+  "gui.itemdespawntowhat.edit.arrow_potion_effects": "Arrow potion effects",
+
+  "gui.itemdespawntowhat.edit.world_effect.effect_label": "Effect Id",
+  "gui.itemdespawntowhat.edit.world_effect.duration_label": "Duration(tick)",
+  "gui.itemdespawntowhat.edit.world_effect.amplifier_label": "Amplifier",
+  "gui.itemdespawntowhat.edit.world_effect.potion.tip": "Tip: Use commas to separate multiple inputs",
+
   "gui.itemdespawntowhat.edit.save_error": "Invalid config, please check your inputs.",
 
   "gui.itemdespawntowhat.edit.list.edit": "Reedit",
@@ -53,5 +73,11 @@
   "gui.itemdespawntowhat.edit.inner_fluid.consume_label": "Consume fluid",
 
   "key.category.itemdespawntowhat.general": "Item Depsawn To What",
-  "key.itemdespawntowhat.open_gui": "Open editing GUI"
+  "key.itemdespawntowhat.open_gui": "Open editing GUI",
+
+  "effect.itemdespawntowhat.world_effect_type.rain": "Weather rain",
+  "effect.itemdespawntowhat.world_effect_type.clear": "Weather clear",
+  "effect.itemdespawntowhat.world_effect_type.lightning_bolt": "Lighting bolt",
+  "effect.itemdespawntowhat.world_effect_type.explosion": "Explosion",
+  "effect.itemdespawntowhat.world_effect_type.arrow": "Arrow rain"
 }

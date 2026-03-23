@@ -6,7 +6,7 @@ import com.meteorite.itemdespawntowhat.config.WorldEffectType;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.entity.projectile.Arrow;
+import net.minecraft.world.entity.projectile.AbstractArrow;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
@@ -39,7 +39,7 @@ public class ItemToWorldEffectConfig extends BaseConversionConfig implements Wor
 
     // 箭雨参数
     @SerializedName("arrow_pickup_status")
-    private String arrowPickupStatusString = "DISALLOWED";
+    private AbstractArrow.Pickup arrowPickupStatus = AbstractArrow.Pickup.DISALLOWED;
 
     @SerializedName("arrow_potion_effects")
     private List<PotionEffect> arrowPotionEffects = new ArrayList<>();
@@ -68,9 +68,8 @@ public class ItemToWorldEffectConfig extends BaseConversionConfig implements Wor
             return false;
         }
 
-        if (parseArrowPickupStatus() == null) {
-            LOGGER.warn("arrow_pickup_status must be one of ALLOWED / DISALLOWED / CREATIVE_ONLY, current={}",
-                    arrowPickupStatusString);
+        if (arrowPickupStatus == null) {
+            LOGGER.warn("arrow_pickup_status must be one of ALLOWED / DISALLOWED / CREATIVE_ONLY");
             return false;
         }
 
@@ -109,15 +108,6 @@ public class ItemToWorldEffectConfig extends BaseConversionConfig implements Wor
         return worldEffect == WorldEffectType.RAIN || worldEffect == WorldEffectType.CLEAR;
     }
 
-    private Arrow.Pickup parseArrowPickupStatus() {
-        if (arrowPickupStatusString == null) return Arrow.Pickup.DISALLOWED;
-        return switch (arrowPickupStatusString.toUpperCase()) {
-            case "ALLOWED" -> Arrow.Pickup.ALLOWED;
-            case "DISALLOWED" -> Arrow.Pickup.DISALLOWED;
-            case "CREATIVE_ONLY" -> Arrow.Pickup.CREATIVE_ONLY;
-            default -> null;
-        };
-    }
     // ========== GUI图标 ========== //
     @Override
     public String getResultDescriptionId() {
@@ -157,9 +147,8 @@ public class ItemToWorldEffectConfig extends BaseConversionConfig implements Wor
     }
 
     @Override
-    public Arrow.Pickup getArrowPickupStatus() {
-        Arrow.Pickup parsed = parseArrowPickupStatus();
-        return parsed != null ? parsed : Arrow.Pickup.DISALLOWED;
+    public AbstractArrow.Pickup getArrowPickupStatus() {
+        return arrowPickupStatus;
     }
 
     @Override
@@ -175,13 +164,12 @@ public class ItemToWorldEffectConfig extends BaseConversionConfig implements Wor
     }
 
     // ========== getter & setter ========== //
-
-    public String getArrowPickupStatusString() {
-        return arrowPickupStatusString;
+    public void setArrowPickupStatus(AbstractArrow.Pickup arrowPickupStatus) {
+        this.arrowPickupStatus = arrowPickupStatus;
     }
 
-    public void setArrowPickupStatusString(String arrowPickupStatusString) {
-        this.arrowPickupStatusString = arrowPickupStatusString;
+    public List<PotionEffect> getRawArrowPotionEffects() {
+        return arrowPotionEffects;
     }
 
     public void setArrowPotionEffects(List<PotionEffect> arrowPotionEffects) {

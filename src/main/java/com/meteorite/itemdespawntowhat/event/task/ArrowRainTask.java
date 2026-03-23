@@ -9,19 +9,15 @@ import net.minecraft.world.entity.projectile.Arrow;
 import java.util.Collections;
 import java.util.List;
 
-/*
- * 延迟生成箭雨的任务。
- * 箭矢从 Y=255 高处生成，位置在 origin 水平方向随机散开，
- * 箭矢方向竖直向下，形成箭雨效果。
- */
 public class ArrowRainTask implements LevelDelayTask{
 
-    // 箭矢生成的固定 Y 高度
-    private static final int SPAWN_Y = 255;
-    // 水平最大散布半径（格
+    private static final int SPAWN_HEIGHT_ABOVE_GROUND = 80;
+    // 水平最大散布半径
     private static final double MAX_SPREAD = 5.0;
     // 箭矢速度
-    private static final float ARROW_SPEED = 3.0f;
+    private static final float ARROW_SPEED = 3.5f;
+    // 箭矢水平随机抖动最大值
+    private static final float HORIZONTAL_JITTER = 0.08f;
 
     private final BlockPos origin;
     private final int delayTicks;
@@ -69,8 +65,11 @@ public class ArrowRainTask implements LevelDelayTask{
 
     private void spawnArrow(ServerLevel serverLevel) {
         // 水平随机散布
-        double offsetX = (serverLevel.random.nextDouble() * 2 - 1) * MAX_SPREAD;
-        double offsetZ = (serverLevel.random.nextDouble() * 2 - 1) * MAX_SPREAD;
+        double angle = serverLevel.random.nextDouble() * 2 * Math.PI;
+        double radius = Math.sqrt(serverLevel.random.nextDouble()) * MAX_SPREAD;
+
+        double offsetX = Math.cos(angle) * radius;
+        double offsetZ = Math.sin(angle) * radius;
 
         double spawnX = origin.getX() + 0.5 + offsetX;
         double spawnZ = origin.getZ() + 0.5 + offsetZ;
@@ -78,9 +77,12 @@ public class ArrowRainTask implements LevelDelayTask{
         Arrow arrow = EntityType.ARROW.create(serverLevel);
         if (arrow == null) return;
 
-        arrow.moveTo(spawnX, SPAWN_Y, spawnZ, 0, 90);
-        // 竖直向下射出
-        arrow.shoot(0, -1, 0, ARROW_SPEED, 0f);
+        arrow.moveTo(spawnX, origin.getY() + SPAWN_HEIGHT_ABOVE_GROUND, spawnZ, 0, 90);
+
+        // 主方向竖直向下，附加轻微水平随机抖动
+        float jitterX = (serverLevel.random.nextFloat() * 2 - 1) * HORIZONTAL_JITTER;
+        float jitterZ = (serverLevel.random.nextFloat() * 2 - 1) * HORIZONTAL_JITTER;
+        arrow.shoot(jitterX, -1, jitterZ, ARROW_SPEED, 0f);
         arrow.setOwner(null);
         arrow.pickup = pickupStatus;
 

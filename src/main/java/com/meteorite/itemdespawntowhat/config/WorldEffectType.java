@@ -14,11 +14,11 @@ import net.minecraft.world.item.Items;
 
 import java.util.List;
 
-// 一些杂乱的现象，使用这个枚举来管理
+// 一些杂乱的世界现象，使用这个枚举来管理
 public enum WorldEffectType {
     // 当前维度天气调整为下雨或雷雨
     RAIN(
-            "effect.minecraft.rain",
+            "effect.itemdespawntowhat.world_effect_type.rain",
             () -> new ItemStack(Items.WATER_BUCKET),
             (itemEntity, level, config, count, onFinishCallback) -> {
                 // 前置条件：仅主世界，且当前不在下雨（含雷雨）才执行
@@ -31,7 +31,7 @@ public enum WorldEffectType {
 
     // 调整天气为晴天
     CLEAR(
-            "effect.minecraft.clear",
+            "effect.itemdespawntowhat.world_effect_type.clear",
             () -> new ItemStack(Items.SUNFLOWER),
             (itemEntity, level, config, count, onFinishCallback) -> {
                 if (!level.dimensionType().hasSkyLight()) return;
@@ -42,7 +42,7 @@ public enum WorldEffectType {
     ),
 
     // 召唤闪电
-    LIGHTNING("entity.minecraft.lightning_bolt",
+    LIGHTNING("effect.itemdespawntowhat.world_effect_type.lightning_bolt",
             () -> new ItemStack(Items.LIGHTNING_ROD),
             (itemEntity, level, config, count, onFinishCallback) -> {
                 BlockPos pos = itemEntity.blockPosition();
@@ -57,7 +57,7 @@ public enum WorldEffectType {
 
     // 召唤爆炸
     EXPLOSION(
-            "effect.explosion",
+            "effect.itemdespawntowhat.world_effect_type.explosion",
             () -> new ItemStack(Items.TNT),
             (itemEntity, level, config, count, onFinishCallback) -> {
                 BlockPos pos = itemEntity.blockPosition();
@@ -75,7 +75,7 @@ public enum WorldEffectType {
 
     // 召唤箭雨
     ARROW_RAIN(
-            "entity.minecraft.arrow",
+            "effect.itemdespawntowhat.world_effect_type.arrow",
             () -> new ItemStack(Items.ARROW),
             (itemEntity, level, config, count, onFinishCallback) -> {
                 BlockPos pos = itemEntity.blockPosition();
@@ -93,7 +93,7 @@ public enum WorldEffectType {
     private final IconSupplier iconSupplier;
     private final SideEffectExecutor executor;
 
-    WorldEffectType(String descriptionId, IconSupplier iconSupplier , SideEffectExecutor executor) {
+    WorldEffectType(String descriptionId, IconSupplier iconSupplier, SideEffectExecutor executor) {
         this.descriptionId = descriptionId;
         this.iconSupplier = iconSupplier;
         this.executor = executor;
@@ -148,8 +148,8 @@ public enum WorldEffectType {
         default Arrow.Pickup getArrowPickupStatus() { return Arrow.Pickup.DISALLOWED; }
 
         // ========== 间隔时间不重写 ========== //
-        // 闪电每次之间的间隔 tick 数（默认 10t = 0.5s）
-        default int getLightningIntervalTicks() { return 10; }
+        // 闪电每次之间的间隔 tick 数（默认 8t = 0.4s）
+        default int getLightningIntervalTicks() { return 8; }
         // 爆炸每次之间的间隔 tick 数（默认 5t）
         default int getExplosionIntervalTicks() { return 5; }
         // 箭矢每支之间的间隔 tick 数（默认 2t）

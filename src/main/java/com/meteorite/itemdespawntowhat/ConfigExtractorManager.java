@@ -60,7 +60,7 @@ public class ConfigExtractorManager {
 
     // 加载所有配置文件的内容
     public static void loadAllConfigs() {
-        ConfigManager configManager = ConfigManager.getInstance();
+        ConfigHandlerManager configManager = ConfigHandlerManager.getInstance();
 
         if (!configManager.isLoaded()) {
             configManager.generateDefaultConfig();

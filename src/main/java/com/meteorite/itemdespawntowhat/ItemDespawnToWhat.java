@@ -40,7 +40,7 @@ public class ItemDespawnToWhat {
     private void commonSetup(FMLCommonSetupEvent event) {
         LOGGER.info("Starting common setup for {}", MOD_ID);
         event.enqueueWork(() -> {
-            ConfigManager.initialize();
+            ConfigHandlerManager.initialize();
             LOGGER.debug("Configurations loaded during common setup");
 
         });

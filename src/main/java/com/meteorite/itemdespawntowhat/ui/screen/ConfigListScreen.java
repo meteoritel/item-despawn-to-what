@@ -16,7 +16,7 @@ public class ConfigListScreen<T extends BaseConversionConfig> extends Screen {
     private final ListScreenCallback<T> listCallback;
     private final Screen parentScreen;
 
-    //** 列表面板 */
+    // 列表面板
     private ConfigListPanel<T> listPanel;
 
     public ConfigListScreen(

@@ -53,27 +53,17 @@ public class PotionEffect {
         );
     }
 
+    public boolean hasPotionEffect() {
+        return effectId != null && !effectId.isBlank();
+    }
+
     public int getAmplifier() {
         return amplifier;
     }
-
-    public void setAmplifier(int amplifier) {
-        this.amplifier = amplifier;
-    }
-
     public int getDuration() {
         return duration;
     }
-
-    public void setDuration(int duration) {
-        this.duration = duration;
-    }
-
     public String getEffectId() {
         return effectId;
-    }
-
-    public void setEffectId(String effectId) {
-        this.effectId = effectId;
     }
 }

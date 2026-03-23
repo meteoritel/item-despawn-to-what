@@ -135,11 +135,8 @@ public abstract class BaseConfigHandler<T extends BaseConversionConfig> {
     protected List<T> createDefaultEntries() {
         return new ArrayList<>();
     }
-    // 指定类型
-    protected Type createListType() {
-        return new TypeToken<List<T>>(){}.getType();
-    }
-
+    // 子类指定类型
+    protected abstract Type createListType();
     public ConfigType getConfigType() {
         return configType;
     }

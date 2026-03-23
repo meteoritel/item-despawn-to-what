@@ -12,20 +12,19 @@ import com.meteorite.itemdespawntowhat.config.handler.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-
-public class ConfigManager {
+public class ConfigHandlerManager {
     private static final Logger LOGGER = LogManager.getLogger();
-    private static final ConfigManager INSTANCE = new ConfigManager();
+    private static final ConfigHandlerManager INSTANCE = new ConfigHandlerManager();
 
     // 注册表，配置类型 -> 配置处理器实例
     private final ConcurrentMap<ConfigType, BaseConfigHandler<?>> handlerRegistry = new ConcurrentHashMap<>();
     private volatile boolean loaded = false;
 
-    private ConfigManager() {
+    private ConfigHandlerManager() {
         registerDefaultHandlers();
     }
 
-    public static ConfigManager getInstance() {
+    public static ConfigHandlerManager getInstance() {
         return INSTANCE;
     }
 
@@ -41,6 +40,7 @@ public class ConfigManager {
         registerHandler(new ItemToMobConfigHandler());
         registerHandler(new ItemToBlockConfigHandler());
         registerHandler(new ItemToXpConfigHandler());
+        registerHandler(new ItemToWorldEffectConfigHandler());
         LOGGER.debug("Default configuration handlers registered");
     }
 

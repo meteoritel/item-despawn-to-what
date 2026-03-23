@@ -76,8 +76,8 @@ public class ArrowPotionEffectsWidget extends AbstractCompositeWidget{
         int x = getX();
         int y = getY();
 
-        EditBox effectBox    = linkedBoxGroup.getPrimaryBox();
-        EditBox durationBox  = linkedBoxGroup.getFollower(0);
+        EditBox effectBox = linkedBoxGroup.getPrimaryBox();
+        EditBox durationBox = linkedBoxGroup.getFollower(0);
         EditBox amplifierBox = linkedBoxGroup.getFollower(1);
 
         // 第一行：effect_id 标签 + 文本框
@@ -117,8 +117,8 @@ public class ArrowPotionEffectsWidget extends AbstractCompositeWidget{
 
     // ========== 值绑定 ========== //
     public List<PotionEffect> getValue() {
-        List<String> effectIds  = LinkedBoxGroup.splitTokens(linkedBoxGroup.getPrimaryBox().getValue());
-        List<String> durations  = LinkedBoxGroup.splitValues(linkedBoxGroup.getFollower(0).getValue());
+        List<String> effectIds = LinkedBoxGroup.splitTokens(linkedBoxGroup.getPrimaryBox().getValue());
+        List<String> durations = LinkedBoxGroup.splitValues(linkedBoxGroup.getFollower(0).getValue());
         List<String> amplifiers = LinkedBoxGroup.splitValues(linkedBoxGroup.getFollower(1).getValue());
 
         List<PotionEffect> result = new ArrayList<>();
@@ -126,7 +126,7 @@ public class ArrowPotionEffectsWidget extends AbstractCompositeWidget{
             String effectId = effectIds.get(i);
             if (effectId.isBlank()) continue;
 
-            int duration  = parseIntSafe(i < durations.size()  ? durations.get(i)  : null, 100);
+            int duration = parseIntSafe(i < durations.size()  ? durations.get(i)  : null, 100);
             int amplifier = parseIntSafe(i < amplifiers.size() ? amplifiers.get(i) : null, 0);
 
             result.add(new PotionEffect(effectId, duration, amplifier));
@@ -145,7 +145,7 @@ public class ArrowPotionEffectsWidget extends AbstractCompositeWidget{
         StringBuilder amplifierSb = new StringBuilder();
 
         for (PotionEffect e : entries) {
-            if (e == null || e.getEffectId() == null || e.getEffectId().isBlank()) continue;
+            if (e == null || !e.hasPotionEffect()) continue;
             if (!effectSb.isEmpty()) {
                 effectSb.append(",");
                 durationSb.append(",");

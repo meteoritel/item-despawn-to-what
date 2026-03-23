@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.network;
 
-import com.meteorite.itemdespawntowhat.ConfigManager;
+import com.meteorite.itemdespawntowhat.ConfigHandlerManager;
 import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
@@ -48,7 +48,7 @@ public class NetworkEvent {
     private static void handleSaveConfig(SaveConfigPayload payload, IPayloadContext context) {
 
         try {
-            BaseConfigHandler<?> handler = ConfigManager.getInstance().getHandler(payload.configType());
+            BaseConfigHandler<?> handler = ConfigHandlerManager.getInstance().getHandler(payload.configType());
 
             if (handler == null) {
                 LOGGER.error("No handler found for config type: {}", payload.configType());
