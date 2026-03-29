@@ -4,8 +4,6 @@ import com.meteorite.itemdespawntowhat.ConfigHandlerManager;
 import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
-import com.meteorite.itemdespawntowhat.ui.screen.ConfigSelectionScreen;
-import net.minecraft.client.Minecraft;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
@@ -24,14 +22,6 @@ public class NetworkEvent {
     @SubscribeEvent
     public static void registerPayloads(RegisterPayloadHandlersEvent event) {
         PayloadRegistrar registrar = event.registrar("1");
-        registrar.playToClient(
-                OpenGuiPayload.TYPE,
-                OpenGuiPayload.STREAM_CODEC,
-                (payload, context) -> {
-                    // 安排到客户端线程
-                    context.enqueueWork(() -> Minecraft.getInstance().setScreen(new ConfigSelectionScreen()));
-                }
-        );
 
         // 客户端发包到服务端，服务端保存配置
         registrar.playToServer(

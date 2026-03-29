@@ -1,8 +1,6 @@
 package com.meteorite.itemdespawntowhat;
 
-import com.meteorite.itemdespawntowhat.client.clientevent.ClientInputEvents;
 import com.meteorite.itemdespawntowhat.command.ConversionConfigCommand;
-import com.meteorite.itemdespawntowhat.event.ItemConversionEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import org.slf4j.Logger;
@@ -22,16 +20,11 @@ public class ItemDespawnToWhat {
     public static final String MOD_ID = "itemdespawntowhat";
     public static final Logger LOGGER = LogUtils.getLogger();
 
-    private static ItemDespawnToWhat instance;
-
     public ItemDespawnToWhat(IEventBus modEventBus) {
-        instance = this;
         modEventBus.addListener(this::commonSetup);
 
         // 注册事件管理器
         NeoForge.EVENT_BUS.register(this);
-        NeoForge.EVENT_BUS.register(ItemConversionEvent.class);
-        NeoForge.EVENT_BUS.register(ClientInputEvents.class);
 
         LOGGER.info("{} mod initialized", MOD_ID);
     }
@@ -41,7 +34,7 @@ public class ItemDespawnToWhat {
         LOGGER.info("Starting common setup for {}", MOD_ID);
         event.enqueueWork(() -> {
             ConfigHandlerManager.initialize();
-            LOGGER.debug("Configurations loaded during common setup");
+            LOGGER.info("Configurations loaded during common setup");
 
         });
     }
@@ -70,9 +63,4 @@ public class ItemDespawnToWhat {
                 event.getDispatcher()
         );
     }
-
-    public static ItemDespawnToWhat getInstance() {
-        return instance;
-    }
-
 }

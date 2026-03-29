@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.client.clientevent;
+package com.meteorite.itemdespawntowhat.client.event;
 
 import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
 import com.meteorite.itemdespawntowhat.client.key.ModKeyBindings;
@@ -9,12 +9,13 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.network.chat.Component;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.api.distmarker.Dist;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.InputEvent;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 
 // 客户端输入事件类：按键注册，按钮注册
-@EventBusSubscriber(modid = ItemDespawnToWhat.MOD_ID)
+@EventBusSubscriber(modid = ItemDespawnToWhat.MOD_ID, value = Dist.CLIENT)
 public class ClientInputEvents {
     @SubscribeEvent
     public static void onKeyInput(InputEvent.Key event) {

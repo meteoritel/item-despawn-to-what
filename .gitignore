@@ -25,5 +25,8 @@ run-data
 .git
 .qoder
 .vscode
+.claude
+TASK_LOG.md
+CLAUDE.md
 
 repo
