@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.ui.ConfigScreenRegistry;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -28,15 +29,8 @@ public class ConfigSelectionScreen extends Screen {
     }
 
     private void openConfigList(ConfigType type) {
-        Screen screen = switch (type) {
-            case ITEM_TO_ITEM -> new ItemToItemEditScreen();
-            case ITEM_TO_MOB -> new ItemToMobEditScreen();
-            case ITEM_TO_BLOCK -> new ItemToBlockEditScreen();
-            case ITEM_TO_XP_ORB -> new ItemToExpOrbEditScreen();
-            case ITEM_TO_WORLD_EFFECT -> new ItemToWorldEffectEditScreen();
-        };
         if (minecraft != null) {
-            minecraft.setScreen(screen);
+            minecraft.setScreen(ConfigScreenRegistry.create(type));
         }
     }
 
