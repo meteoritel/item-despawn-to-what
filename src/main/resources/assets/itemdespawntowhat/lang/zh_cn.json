@@ -65,6 +65,17 @@
   "gui.itemdespawntowhat.edit.inner_fluid.fluid_label": "流体ID",
   "gui.itemdespawntowhat.edit.inner_fluid.consume_label": "消耗流体",
 
+  "gui.itemdespawntowhat.tooltip.conversion_time": "转化时间: %d 秒",
+  "gui.itemdespawntowhat.tooltip.dimension": "维度: %s",
+  "gui.itemdespawntowhat.tooltip.need_outdoor": "需要露天",
+  "gui.itemdespawntowhat.tooltip.surrounding_block": "  %s: %s",
+  "gui.itemdespawntowhat.tooltip.surrounding_blocks_header": "六面方块条件:",
+  "gui.itemdespawntowhat.tooltip.catalyst_header": "辅助物品条件:",
+  "gui.itemdespawntowhat.tooltip.catalyst": "  %s x%d",
+  "gui.itemdespawntowhat.tooltip.inner_fluid": "浸泡流体: %s",
+  "gui.itemdespawntowhat.tooltip.inner_fluid_source": "  需要源头方块",
+  "gui.itemdespawntowhat.tooltip.inner_fluid_consume": "  消耗流体",
+
   "gui.itemdespawntowhat.edit.list.edit": "重新编辑",
   "gui.itemdespawntowhat.edit.list.delete": "删除",
   "gui.itemdespawntowhat.edit.list.delete.title": "执行删除",

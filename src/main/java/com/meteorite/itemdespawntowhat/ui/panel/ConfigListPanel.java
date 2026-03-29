@@ -1,11 +1,17 @@
 package com.meteorite.itemdespawntowhat.ui.panel;
 
+import com.meteorite.itemdespawntowhat.config.ConfigDirection;
+import com.meteorite.itemdespawntowhat.config.catalogue.CatalystItems;
+import com.meteorite.itemdespawntowhat.config.catalogue.InnerFluid;
+import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ObjectSelectionList;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -278,6 +284,74 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
 
             editButton.render(guiGraphics, mouseX, mouseY, partialTick);
             deleteButton.render(guiGraphics, mouseX, mouseY, partialTick);
+
+            if (hovered && mc.screen instanceof Screen screen) {
+                screen.setTooltipForNextRenderPass(buildTooltip(config));
+            }
+        }
+
+        // ========== Tooltip 构建 ========== //
+        private Component buildTooltip(T config) {
+            MutableComponent tooltip = Component.translatable(
+                    "gui.itemdespawntowhat.tooltip.conversion_time", config.getConversionTime());
+
+            // 维度
+            String dim = config.getDimension();
+            if (dim != null && !dim.isEmpty()) {
+                tooltip = tooltip.append(Component.literal("\n"))
+                        .append(Component.translatable("gui.itemdespawntowhat.tooltip.dimension", dim));
+            }
+
+            // 需要露天
+            if (config.isNeedOutdoor()) {
+                tooltip = tooltip.append(Component.literal("\n"))
+                        .append(Component.translatable("gui.itemdespawntowhat.tooltip.need_outdoor"));
+            }
+
+            // 六面方块
+            SurroundingBlocks sb = config.getSurroundingBlocks();
+            if (sb != null && sb.hasAnySurroundBlock()) {
+                tooltip = tooltip.append(Component.literal("\n"))
+                        .append(Component.translatable("gui.itemdespawntowhat.tooltip.surrounding_blocks_header"));
+                for (ConfigDirection dir : ConfigDirection.values()) {
+                    String val = sb.get(dir);
+                    if (val != null && !val.isEmpty()) {
+                        tooltip = tooltip.append(Component.literal("\n"))
+                                .append(Component.translatable("gui.itemdespawntowhat.tooltip.surrounding_block",
+                                        dir.name().toLowerCase(), val));
+                    }
+                }
+            }
+
+            // 辅助物品
+            CatalystItems ci = config.getCatalystItems();
+            if (ci != null && ci.hasAnyCatalyst()) {
+                tooltip = tooltip.append(Component.literal("\n"))
+                        .append(Component.translatable("gui.itemdespawntowhat.tooltip.catalyst_header"));
+                for (CatalystItems.CatalystEntry entry : ci.getCatalystList()) {
+                    tooltip = tooltip.append(Component.literal("\n"))
+                            .append(Component.translatable("gui.itemdespawntowhat.tooltip.catalyst",
+                                    entry.itemId().toString(), entry.count()));
+                }
+            }
+
+            // 浸泡流体
+            InnerFluid fluid = config.getInnerFluid();
+            if (fluid != null && fluid.hasInnerFluid()) {
+                tooltip = tooltip.append(Component.literal("\n"))
+                        .append(Component.translatable("gui.itemdespawntowhat.tooltip.inner_fluid",
+                                fluid.getFluidId().toString()));
+                if (fluid.isRequireSource()) {
+                    tooltip = tooltip.append(Component.literal("\n"))
+                            .append(Component.translatable("gui.itemdespawntowhat.tooltip.inner_fluid_source"));
+                }
+                if (fluid.isConsumeFluid()) {
+                    tooltip = tooltip.append(Component.literal("\n"))
+                            .append(Component.translatable("gui.itemdespawntowhat.tooltip.inner_fluid_consume"));
+                }
+            }
+
+            return tooltip;
         }
 
         // ========== 排列辅助方法 ========== //

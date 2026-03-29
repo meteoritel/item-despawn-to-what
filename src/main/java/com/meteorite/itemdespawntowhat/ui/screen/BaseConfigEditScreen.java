@@ -24,8 +24,15 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import com.meteorite.itemdespawntowhat.ui.FieldValidator;
+import com.meteorite.itemdespawntowhat.ui.validator.ResourceLocationValidator;
+
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> extends Screen
         implements Callback<T>, ListScreenCallback<T> {
@@ -63,6 +70,10 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     private Component errorMessage = null;
     private int errorDisplayTicks = 0;
     private static final int ERROR_DISPLAY_DURATION = 120; // 显示6秒
+
+    // 字段校验
+    private final Map<EditBox, List<FieldValidator>> validatedFields = new HashMap<>();
+    private final Set<EditBox> invalidFields = new HashSet<>();
 
     public BaseConfigEditScreen(ConfigType configType) {
         super(Component.translatable("gui.itemdespawntowhat.edit.title", configType.getFileName()));
@@ -136,6 +147,37 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
             onRefillFields(resizeBackup);
             resizeBackup = null;
         }
+
+        // 注册公共字段校验器
+        registerValidator(itemIdInput, ResourceLocationValidator.get());
+        if (shouldShowResultId()) {
+            registerValidator(resultIdInput, ResourceLocationValidator.get());
+        }
+        initValidators();
+    }
+
+    // 子类可覆盖此方法注册额外的字段校验器
+    protected void initValidators() {}
+
+    // 注册字段校验器
+    protected void registerValidator(EditBox box, FieldValidator... validators) {
+        validatedFields.computeIfAbsent(box, k -> new ArrayList<>()).addAll(List.of(validators));
+    }
+
+    // 校验所有已注册字段，返回 true 表示全部合法；失败的字段记入 invalidFields
+    protected boolean validateAllFields() {
+        invalidFields.clear();
+        for (Map.Entry<EditBox, List<FieldValidator>> entry : validatedFields.entrySet()) {
+            EditBox box = entry.getKey();
+            String value = box.getValue();
+            for (FieldValidator validator : entry.getValue()) {
+                if (!validator.validate(value)) {
+                    invalidFields.add(box);
+                    break;
+                }
+            }
+        }
+        return invalidFields.isEmpty();
     }
 
     private void initButtons() {
@@ -144,12 +186,12 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
         addRenderableWidget(Button.builder(
                 Component.translatable("gui.itemdespawntowhat.save_to_cache"),
-                b -> editHandler.saveCurrentToCache(this)
+                b -> { if (validateAllFields()) editHandler.saveCurrentToCache(this); else onSaveError(); }
         ).bounds(centerX - 160, y, 100, 20).build());
 
         addRenderableWidget(Button.builder(
                 Component.translatable("gui.itemdespawntowhat.apply_to_file"),
-                b -> editHandler.applyToFile(this)
+                b -> { if (validateAllFields()) editHandler.applyToFile(this); else onSaveError(); }
         ).bounds(centerX - 50, y, 100, 20).build());
 
         addRenderableWidget(Button.builder(
@@ -314,6 +356,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
         clearCustomFields();
         clearAllSuggestions();
+        invalidFields.clear();
     }
 
     protected void clearAllSuggestions() {
@@ -377,8 +420,19 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
             errorDisplayTicks--;
             if (errorDisplayTicks <= 0) {
                 errorMessage = null;
+                invalidFields.clear();
             }
         }
+        // 红框标记校验失败的输入框（仅在 formList 可视区域内的输入框显示）
+        for (EditBox box : invalidFields) {
+            int bx = box.getX();
+            int by = box.getY();
+            if (bx <= 0 && by <= 0) continue; // 尚未经过 FormListPanel 定位
+            if (by < formList.getY() || by + box.getHeight() > formList.getBottom()) continue;
+            guiGraphics.renderOutline(bx - 1, by - 1,
+                    box.getWidth() + 2, box.getHeight() + 2, 0xFFFF4444);
+        }
+
         // 因为文本的按钮文本开启了深度测试，所以需要把z值拉高
         guiGraphics.pose().pushPose();
         guiGraphics.pose().translate(0, 0, 300);

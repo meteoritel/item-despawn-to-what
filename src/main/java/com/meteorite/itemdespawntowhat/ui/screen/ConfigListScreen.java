@@ -33,7 +33,7 @@ public class ConfigListScreen<T extends BaseConversionConfig> extends Screen {
 
     @Override
     protected void init() {
-        // 列表面板：从顶部 36px 开始，底部留 80px 给按钮
+        // 列表面板：从顶部 36px 开始，底部留 32px 给按钮区（按钮高20 + 上间距8 + 余量4）
         listPanel = new ConfigListPanel<>(
                 minecraft,
                 width,

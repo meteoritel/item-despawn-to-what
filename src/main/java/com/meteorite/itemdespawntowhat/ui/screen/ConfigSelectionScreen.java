@@ -4,6 +4,7 @@ import com.meteorite.itemdespawntowhat.client.ui.ConfigScreenRegistry;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.NotNull;
@@ -23,6 +24,8 @@ public class ConfigSelectionScreen extends Screen {
                             Component.translatable("gui.itemdespawntowhat.config_type." + type.name().toLowerCase()),
                             btn -> openConfigList(type))
                     .bounds(width / 2 - 100, y, 200, 20).build();
+            button.setTooltip(Tooltip.create(
+                    Component.translatable("gui.itemdespawntowhat.config_type." + type.name().toLowerCase() + ".tooltip")));
             addRenderableWidget(button);
             y += 25;
         }
