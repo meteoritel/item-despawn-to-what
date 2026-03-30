@@ -52,8 +52,7 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
             return null;
         }
 
-        parsed.getCatalystList().removeIf(entry -> !entry.isValid());
-        return parsed.hasAnyCatalyst() ? parsed : null;
+        return parsed;
     }
 
     // ========== 条件检测方法 ========== //
@@ -192,7 +191,11 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
     // ========== 工具方法 ========== //
 
     public boolean hasAnyCatalyst() {
-        return catalystList != null && !catalystList.isEmpty();
+        return catalystList != null && !catalystList.isEmpty() && isAllEntryValid();
+    }
+
+    public boolean isAllEntryValid() {
+        return catalystList.stream().allMatch(CatalystEntry::isValid);
     }
 
     public List<CatalystEntry> getCatalystList() {

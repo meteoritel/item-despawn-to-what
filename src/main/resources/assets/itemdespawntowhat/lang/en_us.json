@@ -28,6 +28,7 @@
   "gui.itemdespawntowhat.edit.result_id": "Result ID",
   "gui.itemdespawntowhat.edit.conversion_time": "Conversion Time (s)",
   "gui.itemdespawntowhat.edit.result_multiple": "Result Multiple",
+  "gui.itemdespawntowhat.edit.source_multiple": "Source Multiple",
   "gui.itemdespawntowhat.edit.result_limit": "Result Limit",
   "gui.itemdespawntowhat.edit.result_age": "Result Age",
   "gui.itemdespawntowhat.edit.radius_limit": "Radius Limit",

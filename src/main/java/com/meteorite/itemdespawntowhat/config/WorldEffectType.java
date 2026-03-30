@@ -21,7 +21,7 @@ public enum WorldEffectType {
             "effect.itemdespawntowhat.world_effect_type.rain",
             () -> new ItemStack(Items.WATER_BUCKET),
             (itemEntity, level, config, count, onFinishCallback) -> {
-                // 前置条件：仅主世界，且当前不在下雨（含雷雨）才执行
+                // 前置条件：仅能下雨的维度，且当前不在下雨（含雷雨）才执行
                 if (!level.dimensionType().hasSkyLight()) return;
                 if (level.isRaining()) return;
                 level.setWeatherParameters(0, config.getWeatherDurationTicks(), true, config.isThundering());
@@ -147,12 +147,22 @@ public enum WorldEffectType {
         // 箭矢捡起状态（默认不可捡起）
         default Arrow.Pickup getArrowPickupStatus() { return Arrow.Pickup.DISALLOWED; }
 
-        // ========== 间隔时间不重写 ========== //
-        // 闪电每次之间的间隔 tick 数（默认 8t = 0.4s）
-        default int getLightningIntervalTicks() { return 8; }
-        // 爆炸每次之间的间隔 tick 数（默认 5t）
-        default int getExplosionIntervalTicks() { return 5; }
-        // 箭矢每支之间的间隔 tick 数（默认 2t）
-        default int getArrowIntervalTicks() { return 2; }
+        // ========== 间隔时间不重写，这里统一设置 ========== //
+        // 有一个默认的时间间隔，不想写专门的时间间隔就调用这个
+        default int getDefaultIntervalTicks() {
+            return 4;
+        }
+        // 闪电每次之间的间隔
+        default int getLightningIntervalTicks() {
+            return 8;
+        }
+        // 爆炸每次之间的间隔
+        default int getExplosionIntervalTicks() {
+            return 5;
+        }
+        // 箭矢每支之间的间隔
+        default int getArrowIntervalTicks() {
+            return 2;
+        }
     }
 }

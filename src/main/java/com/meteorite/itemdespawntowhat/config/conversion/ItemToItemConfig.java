@@ -69,13 +69,16 @@ public class ItemToItemConfig extends BaseItemToEntityConfig{
             return;
         }
 
+        // 本次实际转化轮数
+        int rounds = actualConvertCount / getSourceMultiple();
+
         // 物品实体下一tick消失
         itemEntity.makeFakeItem();
 
         // 根据条件消耗催化剂与流体
         consumeAllOthers(itemEntity, actualConvertCount);
-        ItemStack resultStack = new ItemStack(resultItem, actualConvertCount);
-        // 生成结果物品实体（每个起始物品实体产出 resultMultiple 堆，每堆数量为 actualConvertCount）
+        ItemStack resultStack = new ItemStack(resultItem, rounds);
+        // 生成结果物品实体（每轮产出 resultMultiple 堆，每堆数量为 rounds）
         for (int i = 0; i < resultMultiple; i++) {
             ItemEntity resultItemEntity = new ItemEntity(
                     serverLevel,
@@ -96,9 +99,9 @@ public class ItemToItemConfig extends BaseItemToEntityConfig{
         int itemsRemaining = originalStackSize - actualConvertCount;
         // 添加未转转化完成的返还物品
         addRemainingItems(itemEntity, serverLevel, itemsRemaining);
-        LOGGER.debug("Converted to item: {} -> {} ({}x, converted: {}/{}, stack remaining: {})",
+        LOGGER.debug("Converted to item: {} -> {} ({}x, rounds: {}, consumed: {}/{}, stack remaining: {})",
                 originalStack.getItem().getDescriptionId(), getResultId(),
-                resultMultiple, actualConvertCount, originalStackSize, itemsRemaining);
+                resultMultiple, rounds, actualConvertCount, originalStackSize, itemsRemaining);
     }
 
     // 对于物掉落物结果，计算所有的stack堆叠之和

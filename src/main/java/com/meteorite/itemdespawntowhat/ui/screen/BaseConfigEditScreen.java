@@ -57,6 +57,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     protected EditBox resultIdInput;
     protected EditBox conversionTimeInput;
     protected EditBox resultMultipleInput;
+    protected EditBox sourceMultipleInput;
     // UI 组件列表
     protected FormListPanel formList;
     // 存储所有建议下拉框的列表
@@ -108,6 +109,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         resultIdInput = textBox();
         conversionTimeInput = numericBox();
         resultMultipleInput = numericBox();
+        sourceMultipleInput = numericBox();
 
         // 将组件加入列表
         formList.add(Component.translatable(LABEL_PREFIX + "item_id"), itemIdInput);
@@ -123,6 +125,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
         formList.add(Component.translatable(LABEL_PREFIX + "conversion_time"), conversionTimeInput);
         formList.add(Component.translatable(LABEL_PREFIX + "result_multiple"), resultMultipleInput);
+        formList.add(Component.translatable(LABEL_PREFIX + "source_multiple"), sourceMultipleInput);
         // 将子类字段加入列表
         addCustomEntries(formList);
 
@@ -341,6 +344,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         config.setResultId(nullToEmpty(resultIdInput.getValue()));
         config.setConversionTime(parseInt(conversionTimeInput.getValue(),300));
         config.setResultMultiple(parseInt(resultMultipleInput.getValue(), 1));
+        config.setSourceMultiple(parseInt(sourceMultipleInput.getValue(), 1));
     }
 
     protected void clearFields() {
@@ -350,6 +354,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         resultIdInput.setValue("");
         conversionTimeInput.setValue("");
         resultMultipleInput.setValue("");
+        sourceMultipleInput.setValue("");
         surroundingWidget.clear();
         catalystWidget.clear();
         innerFluidWidget.clear();
@@ -370,6 +375,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         resultIdInput.setValue(config.getResultId() != null ? config.getResultId() : "");
         conversionTimeInput.setValue(String.valueOf(config.getConversionTime()));
         resultMultipleInput.setValue(String.valueOf(config.getResultMultiple()));
+        sourceMultipleInput.setValue(String.valueOf(config.getSourceMultiple()));
         surroundingWidget.setValue(config.getSurroundingBlocks());
         catalystWidget.setValue(config.getCatalystItems());
         innerFluidWidget.setValue(config.getInnerFluid());

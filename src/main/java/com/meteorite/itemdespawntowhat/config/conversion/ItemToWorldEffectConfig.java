@@ -92,6 +92,13 @@ public class ItemToWorldEffectConfig extends BaseConversionConfig implements Wor
             return;
         }
 
+        // 天气类 sourceMultiple > 1 时，需要凑够 sourceMultiple 个才能触发
+        if (isWeatherType() && actualConvertCount < getSourceMultiple()) {
+            return;
+        }
+
+        int rounds = isWeatherType() ? 1 : actualConvertCount / getSourceMultiple();
+
         // 物品实体下一tick消失
         itemEntity.makeFakeItem();
         // 消耗催化剂与流体
@@ -100,7 +107,7 @@ public class ItemToWorldEffectConfig extends BaseConversionConfig implements Wor
         Runnable onFinishCallback = () ->
                 addRemainingItems(itemEntity, serverLevel, originalStackSize - actualConvertCount);
         // 执行对应的转化
-        worldEffect.getExecutor().execute(itemEntity, serverLevel, this, actualConvertCount, onFinishCallback);
+        worldEffect.getExecutor().execute(itemEntity, serverLevel, this, rounds, onFinishCallback);
     }
 
     // ========== 辅助方法 ========== //

@@ -40,7 +40,8 @@ public abstract class BaseItemToEntityConfig extends BaseConversionConfig{
         if (remaining <= 0) {
             return 0;
         }
-        return remaining / Math.max(1, getResultMultiple());
+        int rounds = remaining / Math.max(1, getResultMultiple());
+        return rounds * getSourceMultiple();
     }
 
     @Override

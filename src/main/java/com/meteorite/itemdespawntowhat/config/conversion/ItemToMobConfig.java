@@ -95,10 +95,11 @@ public class ItemToMobConfig extends BaseItemToEntityConfig{
         }
 
         // 计算本次可以生成的实体数量和需要返还的物品数量
-        int actualEntitiesToSpawn = actualConvertCount * resultMultiple;
-        LOGGER.debug("Converting to entity: {} -> {} ({} entities from {} items, {} items remaining)",
+        int rounds = actualConvertCount / getSourceMultiple();
+        int actualEntitiesToSpawn = rounds * resultMultiple;
+        LOGGER.debug("Converting to entity: {} -> {} ({} entities from {} items ({}x{}), {} items remaining)",
                 originalStack.getItem().getDescriptionId(), resultId,
-                actualEntitiesToSpawn, actualConvertCount, originalStackSize - actualConvertCount);
+                actualEntitiesToSpawn, actualConvertCount, rounds, resultMultiple, originalStackSize - actualConvertCount);
 
         // 物品实体下一tick消失
         itemEntity.makeFakeItem();

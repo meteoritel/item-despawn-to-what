@@ -86,8 +86,9 @@ public class ItemToBlockConfig extends BaseConversionConfig{
         consumeAllOthers(itemEntity, actualConvertCount);
         // 下一tick开始执行延迟放置方块的任务
         // 消耗流体就直接从中心的位置放，不消耗流体就跳过中心的点
+        int rounds = actualConvertCount / getSourceMultiple();
         LevelTaskManager.addTask(serverLevel, new PlaceBlockTask(
-                itemEntity, this, actualConvertCount, innerFluid.isConsumeFluid()));
+                itemEntity, this, rounds * getResultMultiple(), innerFluid.isConsumeFluid()));
     }
 
     // ========== 结果相关方法 ========== //

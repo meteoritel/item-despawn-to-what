@@ -60,7 +60,8 @@ public class ItemToExpOrbConfig extends BaseItemToEntityConfig{
             return;
         }
 
-        int totalXp = actualConvertCount * resultMultiple * xpPerItem;
+        int rounds = actualConvertCount / getSourceMultiple();
+        int totalXp = rounds * resultMultiple * xpPerItem;
 
         // 物品实体下一tick消失
         itemEntity.makeFakeItem();

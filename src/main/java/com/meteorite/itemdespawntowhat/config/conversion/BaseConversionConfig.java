@@ -50,6 +50,10 @@ public abstract class BaseConversionConfig {
     @JsonOrder(1)
     @SerializedName("item")
     protected String itemId;
+    // 每轮转化消耗的起始物品数量，默认为1
+    @JsonOrder(1)
+    @SerializedName("source_multiple")
+    protected int sourceMultiple = 1;
     // 消失的方式 - 自然消失 timeout， 岩浆烧毁 lava，暂时没有作用，未来再添加
     // @JsonOrder(2)
     // @SerializedName("disappear_cause")
@@ -85,6 +89,7 @@ public abstract class BaseConversionConfig {
     @JsonOrder(3)
     @SerializedName("result_multiple")
     protected int resultMultiple = 1;
+
 
     // 用来存储配置的空构造方法
     public BaseConversionConfig() {
@@ -177,6 +182,11 @@ public abstract class BaseConversionConfig {
             return false;
         }
 
+        if (sourceMultiple <= 0) {
+            LOGGER.warn("sourceMultiple should be at least 1, current is {}", sourceMultiple);
+            return false;
+        }
+
         if (!surroundingBlocks.isValid()) {
             LOGGER.warn("there is invalid blockId in surround blocks");
             return false;
@@ -250,6 +260,10 @@ public abstract class BaseConversionConfig {
         // 取最小值，并确保不超过原始堆叠数
         int actual = Math.min(catalystLimit, resultLimit);
         actual = Math.min(actual, originalStackSize);
+        // 向下取整到 sourceMultiple 的整数倍，确保整轮转化
+        if (sourceMultiple > 1) {
+            actual = (actual / sourceMultiple) * sourceMultiple;
+        }
         return Math.max(0, actual);
     }
 
@@ -325,6 +339,9 @@ public abstract class BaseConversionConfig {
     public int getResultMultiple() {
         return resultMultiple;
     }
+    public int getSourceMultiple() {
+        return sourceMultiple;
+    }
     public void setConversionTime(int conversionTime) {
         this.conversionTime = conversionTime;
     }
@@ -336,6 +353,9 @@ public abstract class BaseConversionConfig {
     }
     public void setResultMultiple(int resultMultiple) {
         this.resultMultiple = resultMultiple;
+    }
+    public void setSourceMultiple(int sourceMultiple) {
+        this.sourceMultiple = sourceMultiple;
     }
     public boolean isNeedOutdoor() {
         return needOutdoor;
