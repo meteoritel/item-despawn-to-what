@@ -53,15 +53,15 @@ public interface SuggestionProvider {
         };
     }
 
-    // 同时匹配注册表物品 ID 和 #tag 标签（用于 itemId 输入框）
+    // 同时匹配注册表 ID 和 #tag 标签
     static <T> SuggestionProvider ofRegistryWithTags(Registry<T> registry, ResourceKey<? extends Registry<T>> registryKey) {
-        SuggestionProvider items = ofRegistry(registry);
+        SuggestionProvider entries = ofRegistry(registry);
         SuggestionProvider tags = ofTags(registryKey);
         return (segment, maxResults) -> {
             if (segment.startsWith("#")) {
                 return tags.getSuggestions(segment, maxResults);
             }
-            return items.getSuggestions(segment, maxResults);
+            return entries.getSuggestions(segment, maxResults);
         };
     }
 

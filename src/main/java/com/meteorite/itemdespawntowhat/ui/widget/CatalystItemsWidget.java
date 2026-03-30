@@ -6,7 +6,6 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -122,8 +121,8 @@ public class CatalystItemsWidget extends AbstractCompositeWidget {
         List<CatalystItems.CatalystEntry> list = new ArrayList<>();
 
         for (int i = 0; i < items.size(); i++) {
-            ResourceLocation id = ResourceLocation.tryParse(items.get(i));
-            if (id == null || id.getPath().isEmpty()) continue;
+            String id = items.get(i);
+            if (!com.meteorite.itemdespawntowhat.util.IdValidator.isValidItemId(id)) continue;
 
             int count = 1;
             if (i < counts.size()) {

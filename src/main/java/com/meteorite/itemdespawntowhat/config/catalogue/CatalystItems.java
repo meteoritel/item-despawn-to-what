@@ -6,7 +6,9 @@ import com.meteorite.itemdespawntowhat.condition.ConditionSerializable;
 import com.meteorite.itemdespawntowhat.util.IdValidator;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -61,10 +63,15 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
             return true;
         }
         for (CatalystEntry entry : catalystList) {
-            int available = snapshot.getOrDefault(entry.getItem(), 0);
+            int available;
+            if (entry.isTagEntry()) {
+                available = entry.getTagItems().stream()
+                        .mapToInt(item -> snapshot.getOrDefault(item, 0))
+                        .sum();
+            } else {
+                available = snapshot.getOrDefault(entry.getItem(), 0);
+            }
             if (available < entry.count()) {
-//                LOGGER.debug("Catalyst check failed: {} needs {} but has {}",
-//                        entry.itemId, entry.count(), available);
                 return false;
             }
         }
@@ -105,47 +112,49 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
         }
 
         // 查找范围：起始物品所在格子的 1×1×1 AABB
-        BlockPos blockPos = triggerEntity.blockPosition();
-        AABB searchBox = AABB.unitCubeFromLowerCorner(Vec3.atLowerCornerOf(blockPos));
+        BlockPos pos = triggerEntity.blockPosition();
+        AABB searchBox = AABB.unitCubeFromLowerCorner(Vec3.atLowerCornerOf(pos));
 
         for (CatalystEntry entry : getCatalystList()) {
             if (!entry.isValid()) continue;
 
-            // 需要消耗的总数量 = 催化剂倍率 × 起始物品堆叠数
-            Item targetItem = BuiltInRegistries.ITEM.get(entry.itemId());
             int remaining = entry.getRequiredCount(startItemCount);
-
-            List<ItemEntity> candidates = triggerEntity.level().getEntitiesOfClass(ItemEntity.class, searchBox,
-                    entity -> entity != triggerEntity
-                            && entity.isAlive()
-                            && entity.getItem().getItem() == targetItem
-            );
-            candidates.sort(Comparator.comparingInt(entity -> entity.getItem().getCount()));
-
-            for (ItemEntity candidate : candidates) {
-                if (remaining <= 0) {
-                    break;
+            if (entry.isTagEntry()) {
+                // 标签条目：按展开顺序依次消耗，不够再换下一种
+                for (Item tagItem : entry.getTagItems()) {
+                    if (remaining <= 0) break;
+                    remaining = consumeItem(triggerEntity, searchBox, tagItem, remaining);
                 }
-
-                // 按顺序消耗周围的物品实体
-                int available = candidate.getItem().getCount();
-                if (available <= remaining) {
-                    remaining -= available;
-                    candidate.discard();
-                    // LOGGER.debug("Consumed entire catalyst entity: {} x{}", entry.itemId(), available);
-                } else {
-                    candidate.getItem().shrink(remaining);
-                    // LOGGER.debug("Consumed partial catalyst: {} x{} (entity has {} remaining)",
-                    //        entry.itemId(), remaining, candidate.getItem().getCount());
-                    remaining = 0;
-                }
+            } else {
+                remaining = consumeItem(triggerEntity, searchBox, entry.getItem(), remaining);
             }
             if (remaining > 0) {
-                // 理论上不应发生，记录警告
                 LOGGER.warn("Catalyst consumption incomplete for {}: still need {} more",
                         entry.itemId(), remaining);
             }
         }
+    }
+
+    private int consumeItem(ItemEntity triggerEntity, AABB searchBox, Item targetItem, int remaining) {
+        List<ItemEntity> candidates = triggerEntity.level().getEntitiesOfClass(ItemEntity.class, searchBox,
+                entity -> entity != triggerEntity
+                        && entity.isAlive()
+                        && entity.getItem().getItem() == targetItem
+        );
+        candidates.sort(Comparator.comparingInt(entity -> entity.getItem().getCount()));
+
+        for (ItemEntity candidate : candidates) {
+            if (remaining <= 0) break;
+            int available = candidate.getItem().getCount();
+            if (available <= remaining) {
+                remaining -= available;
+                candidate.discard();
+            } else {
+                candidate.getItem().shrink(remaining);
+                remaining = 0;
+            }
+        }
+        return remaining;
     }
 
     // 计算在消耗模式下，当前周围催化剂数量最多能支持转化多少个起始物品。
@@ -156,7 +165,14 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
 
         int max = startCount;
         for (CatalystEntry entry : catalystList) {
-            int available = snapshot.getOrDefault(entry.getItem(), 0);
+            int available;
+            if (entry.isTagEntry()) {
+                available = entry.getTagItems().stream()
+                        .mapToInt(item -> snapshot.getOrDefault(item, 0))
+                        .sum();
+            } else {
+                available = snapshot.getOrDefault(entry.getItem(), 0);
+            }
             // 每个起始物品需要 entry.count() 个催化剂，向下取整
             int possible = available / entry.count();
             if (possible < max) {
@@ -199,20 +215,22 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
     // 当起始物品为1时需要的催化剂物品的种类和数量
     public static final class CatalystEntry {
         @SerializedName("item")
-        private final ResourceLocation itemId;
+        private final String itemId;
 
         @SerializedName("count")
         private final int count;
 
-        // 缓存催化剂物品，避免每次都查注册表
+        // 缓存催化剂物品，避免每次都查注册表（仅普通条目使用）
         private transient Item cachedItem;
+        // 缓存标签展开的物品列表（仅标签条目使用）
+        private transient List<Item> cachedTagItems;
 
-        public CatalystEntry(ResourceLocation itemId, int count) {
+        public CatalystEntry(String itemId, int count) {
             this.itemId = itemId;
             this.count = Math.max(1, count);
         }
 
-        public ResourceLocation itemId() {
+        public String itemId() {
             return itemId;
         }
 
@@ -224,15 +242,36 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
             return count() * Math.max(1, startItemCount);
         }
 
+        public boolean isTagEntry() {
+            return itemId != null && itemId.startsWith("#");
+        }
+
         public boolean isValid() {
-            return IdValidator.isValidResourceLocation(itemId) && count >= 1;
+            return IdValidator.isValidItemId(itemId) && count >= 1;
         }
 
         public Item getItem() {
-            if (cachedItem == null) {
-                cachedItem = BuiltInRegistries.ITEM.get(itemId);
+            if (cachedItem == null && !isTagEntry()) {
+                ResourceLocation rl = ResourceLocation.tryParse(itemId != null ? itemId : "");
+                cachedItem = rl != null ? BuiltInRegistries.ITEM.get(rl) : null;
             }
             return cachedItem;
+        }
+
+        public List<Item> getTagItems() {
+            if (cachedTagItems == null && isTagEntry()) {
+                ResourceLocation tagRl = ResourceLocation.tryParse(itemId.substring(1));
+                if (tagRl == null) {
+                    cachedTagItems = Collections.emptyList();
+                } else {
+                    TagKey<Item> tagKey = TagKey.create(Registries.ITEM, tagRl);
+                    List<Item> expanded = new ArrayList<>();
+                    BuiltInRegistries.ITEM.getTag(tagKey).ifPresent(holders ->
+                            holders.forEach(h -> expanded.add(h.value())));
+                    cachedTagItems = Collections.unmodifiableList(expanded);
+                }
+            }
+            return cachedTagItems != null ? cachedTagItems : Collections.emptyList();
         }
     }
 }

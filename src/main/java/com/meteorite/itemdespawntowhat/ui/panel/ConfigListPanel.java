@@ -331,7 +331,7 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
                 for (CatalystItems.CatalystEntry entry : ci.getCatalystList()) {
                     tooltip = tooltip.append(Component.literal("\n"))
                             .append(Component.translatable("gui.itemdespawntowhat.tooltip.catalyst",
-                                    entry.itemId().toString(), entry.count()));
+                                    entry.itemId(), entry.count()));
                 }
             }
 

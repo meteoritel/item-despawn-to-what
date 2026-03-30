@@ -185,7 +185,7 @@ public abstract class BaseConversionConfig {
         // 催化剂不能与起始物品相同
         if (catalystItems.hasAnyCatalyst()) {
             boolean conflict = getCatalystItems().getCatalystList().stream()
-                    .anyMatch(entry -> entry.itemId().toString().equals(itemId));
+                    .anyMatch(entry -> entry.itemId().equals(itemId));
             if (conflict) {
                 LOGGER.warn("Catalyst item conflicts with source item: {}", itemId);
                 return false;

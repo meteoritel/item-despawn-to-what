@@ -127,14 +127,14 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         addCustomEntries(formList);
 
         // 注册下拉建议框组件，在所有列表组件添加完成之后再添加，并添加文本监听
-        registerSuggestion(itemIdInput, SuggestionProvider.ofRegistryWithTags(BuiltInRegistries.ITEM, net.minecraft.core.registries.Registries.ITEM));
+        registerSuggestion(itemIdInput, SuggestionProvider.ofRegistryWithTags(BuiltInRegistries.ITEM, Registries.ITEM));
         for (EditBox box : surroundingWidget.getBoxes().values()) {
             registerSuggestion(box, SuggestionProvider.combine(
                     SuggestionProvider.ofRegistry(BuiltInRegistries.BLOCK),
                     SuggestionProvider.ofTags(Registries.BLOCK)));
         }
         registerSuggestion(dimensionInput, SuggestionProvider.ofDimensions());
-        registerSuggestion(catalystWidget.getItemBox(), SuggestionProvider.ofRegistry(BuiltInRegistries.ITEM));
+        registerSuggestion(catalystWidget.getItemBox(), SuggestionProvider.ofRegistryWithTags(BuiltInRegistries.ITEM, Registries.ITEM));
         registerSuggestion(innerFluidWidget.getFluidBox(), SuggestionProvider.ofRegistry(BuiltInRegistries.FLUID));
 
         // 添加子类下拉建议框监听
