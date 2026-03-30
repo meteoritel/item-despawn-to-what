@@ -26,7 +26,7 @@ public class ItemToBlockConfig extends BaseConversionConfig{
     public ItemToBlockConfig() {
     }
 
-    public ItemToBlockConfig(ResourceLocation item, ResourceLocation result) {
+    public ItemToBlockConfig(String item, String result) {
         super(item, result);
     }
 
@@ -37,7 +37,7 @@ public class ItemToBlockConfig extends BaseConversionConfig{
             if (cachedStartItem instanceof BlockItem blockItem) {
                 Block block = blockItem.getBlock();
                 // 将真实的 resultId 回写
-                this.resultId = BuiltInRegistries.BLOCK.getKey(block);
+                this.resultId = BuiltInRegistries.BLOCK.getKey(block).toString();
                 this.cachedResultBlock = block;
                 // LOGGER.debug("enableItemBlock: resolved resultId={} for item={}", resultId, itemId);
             } else {
@@ -45,7 +45,8 @@ public class ItemToBlockConfig extends BaseConversionConfig{
             }
         } else {
             // 直接按 resultId 查找
-            Block block = BuiltInRegistries.BLOCK.get(resultId);
+            ResourceLocation resultRl = ResourceLocation.tryParse(resultId != null ? resultId : "");
+            Block block = resultRl != null ? BuiltInRegistries.BLOCK.get(resultRl) : Blocks.AIR;
             this.cachedResultBlock = (block != Blocks.AIR) ? block : null;
             if (cachedResultBlock == null) {
                 LOGGER.warn("Could not find block for resultId='{}', config will be rejected", resultId);
@@ -95,7 +96,8 @@ public class ItemToBlockConfig extends BaseConversionConfig{
         if (isCacheInitialized()) {
             return cachedResultBlock;
         }
-        return BuiltInRegistries.BLOCK.get(resultId);
+        ResourceLocation rl = ResourceLocation.tryParse(resultId != null ? resultId : "");
+        return rl != null ? BuiltInRegistries.BLOCK.get(rl) : Blocks.AIR;
     }
 
     @Override

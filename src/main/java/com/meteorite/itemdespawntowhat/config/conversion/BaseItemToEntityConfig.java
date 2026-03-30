@@ -2,7 +2,6 @@ package com.meteorite.itemdespawntowhat.config.conversion;
 
 import com.google.gson.annotations.SerializedName;
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.phys.AABB;
@@ -15,7 +14,7 @@ public abstract class BaseItemToEntityConfig extends BaseConversionConfig{
     public BaseItemToEntityConfig() {
     }
 
-    public BaseItemToEntityConfig(ResourceLocation item, ResourceLocation result) {
+    public BaseItemToEntityConfig(String item, String result) {
         super(item, result);
     }
 

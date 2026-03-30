@@ -27,20 +27,24 @@ public class ItemToMobConfig extends BaseItemToEntityConfig{
     public ItemToMobConfig() {
     }
 
-    public ItemToMobConfig(ResourceLocation item, ResourceLocation result) {
+    public ItemToMobConfig(String item, String result) {
         super(item, result);
+    }
+
+    private ResourceLocation resultRl() {
+        return ResourceLocation.tryParse(resultId != null ? resultId : "");
     }
 
     // ========== 缓存与校验 ========== //
     @Override
     protected void initResultCache() {
-        cachedResultEntityType = BuiltInRegistries.ENTITY_TYPE.get(resultId);
+        cachedResultEntityType = BuiltInRegistries.ENTITY_TYPE.get(resultRl());
     }
 
     // 确保实体不为空，名字没有拼写错
     @Override
     protected boolean additionalCheck() {
-        if (!BuiltInRegistries.ENTITY_TYPE.containsKey(resultId)) {
+        if (!BuiltInRegistries.ENTITY_TYPE.containsKey(resultRl())) {
             LOGGER.warn("Unknown entity type: resultId='{}'", resultId);
             return false;
         }
@@ -131,7 +135,7 @@ public class ItemToMobConfig extends BaseItemToEntityConfig{
         if (isCacheInitialized()) {
             return cachedResultEntityType;
         }
-        return BuiltInRegistries.ENTITY_TYPE.get(resultId);
+        return BuiltInRegistries.ENTITY_TYPE.get(resultRl());
     }
 
     @Override
@@ -142,8 +146,10 @@ public class ItemToMobConfig extends BaseItemToEntityConfig{
     // 实体的图标还在考虑中，暂时用物品代替
     @Override
     public ItemStack getResultIcon() {
-        return BuiltInRegistries.ITEM.getOptional(resultId)
-                .map(ItemStack::new).orElseGet(() -> new ItemStack(Items.BARRIER));
+        ResourceLocation rl = resultRl();
+        return rl != null ? BuiltInRegistries.ITEM.getOptional(rl)
+                .map(ItemStack::new).orElseGet(() -> new ItemStack(Items.BARRIER))
+                : new ItemStack(Items.BARRIER);
     }
 
     public int getEntityAge() {

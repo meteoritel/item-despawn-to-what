@@ -5,7 +5,6 @@ import com.meteorite.itemdespawntowhat.config.ConfigDirection;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToBlockConfig;
 import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;
-import net.minecraft.resources.ResourceLocation;
 
 import java.lang.reflect.Type;
 import java.util.ArrayList;
@@ -22,8 +21,8 @@ public class ItemToBlockConfigHandler extends BaseConfigHandler<ItemToBlockConfi
         List<ItemToBlockConfig> entries = new ArrayList<>();
 
         ItemToBlockConfig saplingEntry = new ItemToBlockConfig(
-                ResourceLocation.parse("minecraft:oak_sapling"),
-                ResourceLocation.parse("minecraft:oak_sapling")
+                "minecraft:oak_sapling",
+                "minecraft:oak_sapling"
         );
         SurroundingBlocks blocks = new SurroundingBlocks();
         blocks.set(ConfigDirection.DOWN, "#minecraft:dirt");

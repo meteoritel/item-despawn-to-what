@@ -5,7 +5,7 @@ import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.server.MinecraftServer;
 
 // 获得玩家当前的各种状态的实用方法
-public class PlayerStateChecker {
+public final class PlayerStateChecker {
 
     // 如果客户端世界未加载，游戏应处于开始界面，此时isSinglePlayerMode是false，因为世界加载前不会为其赋值
     public static boolean isClientWorldLoaded(Minecraft minecraft) {

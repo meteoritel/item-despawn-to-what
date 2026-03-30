@@ -1,10 +1,10 @@
 package com.meteorite.itemdespawntowhat.ui.validator;
 
 import com.meteorite.itemdespawntowhat.ui.FieldValidator;
+import com.meteorite.itemdespawntowhat.util.IdValidator;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 
-// 校验值为合法的非空 ResourceLocation（如 minecraft:stone）
+// 校验 itemId：支持 #tag:id 格式，排除 minecraft:air
 public class ResourceLocationValidator implements FieldValidator {
     private static final ResourceLocationValidator INSTANCE = new ResourceLocationValidator();
 
@@ -14,8 +14,7 @@ public class ResourceLocationValidator implements FieldValidator {
 
     @Override
     public boolean validate(String value) {
-        if (value == null || value.isEmpty()) return false;
-        return ResourceLocation.tryParse(value) != null;
+        return IdValidator.isValidItemId(value);
     }
 
     @Override

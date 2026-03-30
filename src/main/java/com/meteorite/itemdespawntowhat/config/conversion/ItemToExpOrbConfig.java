@@ -2,7 +2,6 @@ package com.meteorite.itemdespawntowhat.config.conversion;
 
 import com.google.gson.annotations.SerializedName;
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -11,8 +10,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.Vec3;
 
 public class ItemToExpOrbConfig extends BaseItemToEntityConfig{
-    private static final ResourceLocation XP_ORB_ID =
-            ResourceLocation.withDefaultNamespace("experience_orb");
+    private static final String XP_ORB_ID = "minecraft:experience_orb";
 
     // 每个物品转化为几点经验值
     @SerializedName("xp_per_item")
@@ -24,7 +22,7 @@ public class ItemToExpOrbConfig extends BaseItemToEntityConfig{
         this.resultLimit = 1000;
     }
 
-    public ItemToExpOrbConfig(ResourceLocation item) {
+    public ItemToExpOrbConfig(String item) {
         super(item, XP_ORB_ID);
     }
 

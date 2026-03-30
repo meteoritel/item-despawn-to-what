@@ -19,14 +19,15 @@ public class ItemToItemConfig extends BaseItemToEntityConfig{
     public ItemToItemConfig() {
     }
 
-    public ItemToItemConfig(ResourceLocation item, ResourceLocation result) {
+    public ItemToItemConfig(String item, String result) {
         super(item, result);
     }
 
     // ========== 初始化缓存与校验 ========== //
     @Override
     protected void initResultCache() {
-        cachedResultItem = BuiltInRegistries.ITEM.get(resultId);
+        ResourceLocation resultRl = ResourceLocation.tryParse(resultId != null ? resultId : "");
+        cachedResultItem = resultRl != null ? BuiltInRegistries.ITEM.get(resultRl) : Items.AIR;
         if (cachedResultItem == Items.AIR) {
             LOGGER.warn("Could not find item for resultId='{}', config will be rejected", resultId);
             cachedResultItem = null;
@@ -106,7 +107,7 @@ public class ItemToItemConfig extends BaseItemToEntityConfig{
         return level.getEntitiesOfClass(ItemEntity.class, buildSearchBox(pos), Entity::isAlive)
                 .stream()
                 .map(ItemEntity::getItem)
-                .filter(itemStack -> BuiltInRegistries.ITEM.getKey(itemStack.getItem()).equals(resultId))
+                .filter(itemStack -> BuiltInRegistries.ITEM.getKey(itemStack.getItem()).toString().equals(resultId))
                 .mapToInt(ItemStack::getCount)
                 .sum();
     }
@@ -116,7 +117,8 @@ public class ItemToItemConfig extends BaseItemToEntityConfig{
         if (isCacheInitialized()) {
             return cachedResultItem;
         }
-        return BuiltInRegistries.ITEM.get(resultId);
+        ResourceLocation resultRl = ResourceLocation.tryParse(resultId != null ? resultId : "");
+        return resultRl != null ? BuiltInRegistries.ITEM.get(resultRl) : Items.AIR;
     }
 
     @Override

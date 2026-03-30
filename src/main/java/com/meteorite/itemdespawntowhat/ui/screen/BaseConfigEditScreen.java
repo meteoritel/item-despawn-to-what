@@ -127,7 +127,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         addCustomEntries(formList);
 
         // 注册下拉建议框组件，在所有列表组件添加完成之后再添加，并添加文本监听
-        registerSuggestion(itemIdInput, SuggestionProvider.ofRegistry(BuiltInRegistries.ITEM));
+        registerSuggestion(itemIdInput, SuggestionProvider.ofRegistryWithTags(BuiltInRegistries.ITEM, net.minecraft.core.registries.Registries.ITEM));
         for (EditBox box : surroundingWidget.getBoxes().values()) {
             registerSuggestion(box, SuggestionProvider.combine(
                     SuggestionProvider.ofRegistry(BuiltInRegistries.BLOCK),
@@ -332,13 +332,13 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
     // 填充通用字段到给定的配置对象
     protected void populateCommonFields(T config) {
-        config.setItemId(parseResourceLocation(itemIdInput.getValue()));
+        config.setItemId(nullToEmpty(itemIdInput.getValue()));
         config.setDimension(dimensionInput.getValue());
         config.setNeedOutdoor(needOutdoorButton.getValue());
         config.setSurroundingBlocks(surroundingWidget.getValue());
         config.setCatalystItems(catalystWidget.getValue());
         config.setInnerFluid(innerFluidWidget.getValue());
-        config.setResultId(parseResourceLocation(resultIdInput.getValue()));
+        config.setResultId(nullToEmpty(resultIdInput.getValue()));
         config.setConversionTime(parseInt(conversionTimeInput.getValue(),300));
         config.setResultMultiple(parseInt(resultMultipleInput.getValue(), 1));
     }
@@ -364,10 +364,10 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     }
 
     protected void refillCommonFields(T config) {
-        itemIdInput.setValue(rlToString(config.getItemId()));
+        itemIdInput.setValue(config.getItemId() != null ? config.getItemId() : "");
         dimensionInput.setValue(config.getDimension());
         needOutdoorButton.setValue(config.isNeedOutdoor());
-        resultIdInput.setValue(rlToString(config.getResultId()));
+        resultIdInput.setValue(config.getResultId() != null ? config.getResultId() : "");
         conversionTimeInput.setValue(String.valueOf(config.getConversionTime()));
         resultMultipleInput.setValue(String.valueOf(config.getResultMultiple()));
         surroundingWidget.setValue(config.getSurroundingBlocks());
@@ -384,14 +384,11 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         }
     }
 
-    protected String rlToString(ResourceLocation rl) {
-        if (rl == null) {
-            return "";
-        }
-        return rl.toString();
+    private static String nullToEmpty(String value) {
+        return value != null ? value : "";
     }
 
-    // 解析 ResourceLocation，字符串为空时返回 null
+    // 解析 ResourceLocation，字符串为空时返回 null（供子类或外部工具方法使用）
     public static ResourceLocation parseResourceLocation(String value) {
         return value == null || value.isEmpty() ? null : ResourceLocation.tryParse(value);
     }

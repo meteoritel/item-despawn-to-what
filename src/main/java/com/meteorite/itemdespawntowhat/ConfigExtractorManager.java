@@ -21,6 +21,9 @@ public class ConfigExtractorManager {
     // 主缓存：物品ID -> 该物品的所有配置实例
     private static final ConcurrentMap<ResourceLocation, List<BaseConversionConfig>> ITEM_CONFIGS_CACHE = new ConcurrentHashMap<>();
 
+    // 待展开的标签配置（itemId 以 # 开头），在 expandTagConfigs() 中处理
+    private static final List<BaseConversionConfig> TAG_PENDING_CONFIGS = new ArrayList<>();
+
     // 内部ID映射：内部ID -> 配置实例
     private static final ConcurrentMap<String, BaseConversionConfig> INTERNAL_ID_CACHE = new ConcurrentHashMap<>();
 
@@ -110,21 +113,32 @@ public class ConfigExtractorManager {
                 continue;
             }
 
-            ResourceLocation itemId = config.getItemId();
+            String itemIdStr = config.getItemId();
             String internalId = config.getInternalId();
 
-            // 添加到主缓存
-            ITEM_CONFIGS_CACHE
-                    .computeIfAbsent(itemId, rl -> new ArrayList<>())
-                    .add(config);
+            if (config.isTagMode()) {
+                // 标签配置暂存，等服务端启动后由 expandTagConfigs() 展开
+                TAG_PENDING_CONFIGS.add(config);
+                INTERNAL_ID_CACHE.put(internalId, config);
+            } else {
+                ResourceLocation itemId = ResourceLocation.tryParse(itemIdStr);
+                if (itemId == null) {
+                    LOGGER.warn("Skipping config with unparseable itemId: {}", itemIdStr);
+                    continue;
+                }
+                // 添加到主缓存
+                ITEM_CONFIGS_CACHE
+                        .computeIfAbsent(itemId, rl -> new ArrayList<>())
+                        .add(config);
 
-            // 添加到内部ID缓存
-            INTERNAL_ID_CACHE.put(internalId, config);
+                // 添加到内部ID缓存
+                INTERNAL_ID_CACHE.put(internalId, config);
 
-            // 构建并缓存条件检查器
-            ConditionChecker checker = config.buildConditionChecker();
-            if (checker != null) {
-                CONDITION_CHECKER_CACHE.put(internalId, checker);
+                // 构建并缓存条件检查器
+                ConditionChecker checker = config.buildConditionChecker();
+                if (checker != null) {
+                    CONDITION_CHECKER_CACHE.put(internalId, checker);
+                }
             }
         }
     }
@@ -182,9 +196,35 @@ public class ConfigExtractorManager {
         ITEM_CONFIGS_CACHE.clear();
         INTERNAL_ID_CACHE.clear();
         CONDITION_CHECKER_CACHE.clear();
+        TAG_PENDING_CONFIGS.clear();
         initialized = false;
 
         LOGGER.info("All caches cleared");
+    }
+
+    // 服务端启动后调用，将标签配置展开为具体物品并插入主缓存
+    public static synchronized void expandTagConfigs() {
+        if (TAG_PENDING_CONFIGS.isEmpty()) return;
+        for (BaseConversionConfig config : TAG_PENDING_CONFIGS) {
+            config.expandTagItems();
+            List<net.minecraft.world.item.Item> items = config.getTagItems();
+            if (items.isEmpty()) {
+                LOGGER.warn("Tag '{}' resolved to no items, config will be skipped", config.getItemId());
+                continue;
+            }
+            String internalId = config.getInternalId();
+            for (net.minecraft.world.item.Item item : items) {
+                ResourceLocation key = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(item);
+                ITEM_CONFIGS_CACHE.computeIfAbsent(key, k -> new ArrayList<>()).add(config);
+            }
+            ConditionChecker checker = config.buildConditionChecker();
+            if (checker != null) {
+                CONDITION_CHECKER_CACHE.put(internalId, checker);
+            }
+            LOGGER.debug("Expanded tag config '{}' to {} items", config.getItemId(), items.size());
+        }
+        TAG_PENDING_CONFIGS.clear();
+        LOGGER.info("Tag configs expanded, total items with configs: {}", ITEM_CONFIGS_CACHE.size());
     }
 
     // 清除特定uuid的缓存
@@ -200,11 +240,22 @@ public class ConfigExtractorManager {
         CONDITION_CHECKER_CACHE.remove(internalId);
 
         // 从主缓存中移除
-        ITEM_CONFIGS_CACHE.computeIfPresent(config.getItemId(), (itemId, list) -> {
-            list.remove(config);
-            return list.isEmpty() ? null : list;
-        });
-
+        if (config.isTagMode()) {
+            // 标签配置可能展开到多个物品 key
+            for (net.minecraft.world.item.Item item : config.getTagItems()) {
+                ResourceLocation key = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(item);
+                ITEM_CONFIGS_CACHE.computeIfPresent(key, (k, list) -> {
+                    list.remove(config);
+                    return list.isEmpty() ? null : list;
+                });
+            }
+        } else {
+            ResourceLocation itemKey = ResourceLocation.tryParse(config.getItemId() != null ? config.getItemId() : "");
+            if (itemKey != null) ITEM_CONFIGS_CACHE.computeIfPresent(itemKey, (k, list) -> {
+                list.remove(config);
+                return list.isEmpty() ? null : list;
+            });
+        }
         LOGGER.info("Removed invalid config: internalId={}, item={}, type={}",
                 internalId, config.getItemId(), config.getConfigType());
         return true;

@@ -5,7 +5,6 @@ import com.meteorite.itemdespawntowhat.config.ConfigDirection;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToItemConfig;
 import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;
-import net.minecraft.resources.ResourceLocation;
 
 import java.lang.reflect.Type;
 import java.util.ArrayList;
@@ -22,8 +21,8 @@ public class ItemToItemConfigHandler extends BaseConfigHandler<ItemToItemConfig>
         List<ItemToItemConfig> entries = new ArrayList<>();
 
         ItemToItemConfig entry = new ItemToItemConfig(
-                ResourceLocation.parse("minecraft:chicken"),
-                ResourceLocation.parse("minecraft:rotten_flesh")
+                "minecraft:chicken",
+                "minecraft:rotten_flesh"
         );
         SurroundingBlocks sbs = new SurroundingBlocks();
         sbs.set(ConfigDirection.DOWN, "minecraft:magma_block");

@@ -5,7 +5,6 @@ import com.meteorite.itemdespawntowhat.config.ConfigDirection;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToMobConfig;
 import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;
-import net.minecraft.resources.ResourceLocation;
 
 import java.lang.reflect.Type;
 import java.util.ArrayList;
@@ -23,8 +22,8 @@ public class ItemToMobConfigHandler extends BaseConfigHandler<ItemToMobConfig> {
         List<ItemToMobConfig> entries = new ArrayList<>();
 
         ItemToMobConfig eggEntry = new ItemToMobConfig(
-                ResourceLocation.parse("minecraft:egg"),
-                ResourceLocation.parse("minecraft:chicken")
+                "minecraft:egg",
+                "minecraft:chicken"
         );
 
         SurroundingBlocks blocks = new SurroundingBlocks();

@@ -9,6 +9,7 @@ import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.catalogue.InnerFluid;
 import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;
 import com.meteorite.itemdespawntowhat.event.ItemConversionEvent;
+import com.meteorite.itemdespawntowhat.util.IdValidator;
 import com.meteorite.itemdespawntowhat.util.JsonOrder;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -17,9 +18,13 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 
 public abstract class BaseConversionConfig {
@@ -30,17 +35,21 @@ public abstract class BaseConversionConfig {
     protected transient ConfigType configType;
 
     // ========== 缓存字段 ========== //
-    // 缓存的起始物品实例
+    // 缓存的起始物品实例（非标签模式）
     protected transient Item cachedStartItem;
+    // 标签模式下展开的物品列表
+    private transient List<Item> cachedTagItems;
+    // 是否为标签模式（itemId 以 # 开头）
+    private transient boolean isTagMode;
     // 缓存是否已初始化
     private transient boolean cacheInitialized = false;
     // 检查限制的范围
     protected static final int MAX_RADIUS = 6;
 
-    // 物品注册名
+    // 物品注册名（支持 #tag:id 格式）
     @JsonOrder(1)
     @SerializedName("item")
-    protected ResourceLocation itemId;
+    protected String itemId;
     // 消失的方式 - 自然消失 timeout， 岩浆烧毁 lava，暂时没有作用，未来再添加
     // @JsonOrder(2)
     // @SerializedName("disappear_cause")
@@ -67,7 +76,7 @@ public abstract class BaseConversionConfig {
     // 生成结果注册名
     @JsonOrder(3)
     @SerializedName("result")
-    protected ResourceLocation resultId;
+    protected String resultId;
     // 转化的时间，单位为秒，默认原版300s
     @JsonOrder(3)
     @SerializedName("conversion_time")
@@ -84,7 +93,7 @@ public abstract class BaseConversionConfig {
     }
 
     // 用来生成示例配置用的构造方法
-    public BaseConversionConfig(ResourceLocation item, ResourceLocation result) {
+    public BaseConversionConfig(String item, String result) {
         this();
         this.itemId = item;
         this.resultId = result;
@@ -96,12 +105,21 @@ public abstract class BaseConversionConfig {
         if (cacheInitialized) {
             return;
         }
-        // 缓存起始物品
-        cachedStartItem = BuiltInRegistries.ITEM.get(itemId);
 
         // 确保 internalId 存在
         if (this.internalId == null || this.internalId.isEmpty()) {
             this.internalId = UUID.randomUUID().toString();
+        }
+
+        // 缓存起始物品（标签模式下 cachedStartItem 在 expandTagItems 中填充）
+        if (itemId != null && itemId.startsWith("#")) {
+            isTagMode = true;
+            cachedStartItem = Items.AIR; // 标签展开前占位，expandTagItems() 后更新
+            cachedTagItems = new ArrayList<>();
+        } else {
+            isTagMode = false;
+            ResourceLocation rl = ResourceLocation.tryParse(itemId != null ? itemId : "");
+            cachedStartItem = (rl != null) ? BuiltInRegistries.ITEM.get(rl) : Items.AIR;
         }
 
         // 子类缓存各自的结果对象
@@ -109,6 +127,19 @@ public abstract class BaseConversionConfig {
 
         cacheInitialized = true;
         LOGGER.debug("Cache initialized for config: item = {}, internalId = {}", itemId, internalId);
+    }
+
+    // 服务端启动后由 ConfigExtractorManager 调用，展开标签到具体物品列表
+    public void expandTagItems() {
+        if (!isTagMode || itemId == null) return;
+        ResourceLocation tagRl = ResourceLocation.tryParse(itemId.substring(1));
+        if (tagRl == null) return;
+        var tagKey = net.minecraft.tags.TagKey.create(net.minecraft.core.registries.Registries.ITEM, tagRl);
+        List<Item> expanded = new ArrayList<>();
+        BuiltInRegistries.ITEM.getTag(tagKey).ifPresent(holders ->
+                holders.forEach(h -> expanded.add(h.value())));
+        cachedTagItems = Collections.unmodifiableList(expanded);
+        cachedStartItem = expanded.isEmpty() ? Items.AIR : expanded.getFirst();
     }
 
     protected void initResultCache() {
@@ -126,12 +157,12 @@ public abstract class BaseConversionConfig {
 
     // ========== 限制条件，不符合条件的配置不会被读取 ========== //
     public final boolean shouldProcess() {
-        if (!isValidResourceLocation(itemId)) {
-            LOGGER.warn("invalid resource location: {} ",itemId);
+        if (!IdValidator.isValidItemId(itemId)) {
+            LOGGER.warn("invalid item id: {} ", itemId);
             return false;
         }
 
-        if (isResultIdRequired() && !isValidResourceLocation(resultId)) {
+        if (isResultIdRequired() && !IdValidator.isValidResultId(resultId)) {
             LOGGER.warn("invalid result resource location: {}", resultId);
             return false;
         }
@@ -154,7 +185,7 @@ public abstract class BaseConversionConfig {
         // 催化剂不能与起始物品相同
         if (catalystItems.hasAnyCatalyst()) {
             boolean conflict = getCatalystItems().getCatalystList().stream()
-                    .anyMatch(entry -> entry.itemId().equals(itemId));
+                    .anyMatch(entry -> entry.itemId().toString().equals(itemId));
             if (conflict) {
                 LOGGER.warn("Catalyst item conflicts with source item: {}", itemId);
                 return false;
@@ -162,7 +193,7 @@ public abstract class BaseConversionConfig {
         }
 
         if (innerFluid != null && innerFluid.hasInnerFluid()) {
-            if (!isValidResourceLocation(innerFluid.getFluidId())) {
+            if (!IdValidator.isValidResourceLocation(innerFluid.getFluidId())) {
                 LOGGER.warn("Invalid fluid id in fluid condition: {}", innerFluid.getFluidId());
                 return false;
             }
@@ -265,11 +296,8 @@ public abstract class BaseConversionConfig {
         if (cacheInitialized) {
             return cachedStartItem;
         }
-        return BuiltInRegistries.ITEM.get(itemId);
-    }
-
-    protected boolean isValidResourceLocation(ResourceLocation rl) {
-        return rl != null && !rl.getPath().isEmpty();
+        ResourceLocation rl = ResourceLocation.tryParse(itemId != null ? itemId : "");
+        return rl != null ? BuiltInRegistries.ITEM.get(rl) : Items.AIR;
     }
 
     public ItemStack getStartItemIcon() {
@@ -314,17 +342,26 @@ public abstract class BaseConversionConfig {
     public void setNeedOutdoor(boolean needOutdoor) {
         this.needOutdoor = needOutdoor;
     }
-    public ResourceLocation getItemId() {
+    public String getItemId() {
         return itemId;
     }
-    public void setItemId(ResourceLocation itemId) {
+    public void setItemId(String itemId) {
         this.itemId = itemId;
     }
-    public ResourceLocation getResultId() {
+    public String getResultId() {
         return resultId;
     }
-    public void setResultId(ResourceLocation resultId) {
+    public void setResultId(String resultId) {
         this.resultId = resultId;
+    }
+
+    public boolean isTagMode() {
+        return isTagMode;
+    }
+
+    // 标签模式下展开的物品列表（服务端 expandTagItems() 后有效）
+    public List<Item> getTagItems() {
+        return cachedTagItems != null ? cachedTagItems : Collections.emptyList();
     }
     public SurroundingBlocks getSurroundingBlocks() {
         return surroundingBlocks;
