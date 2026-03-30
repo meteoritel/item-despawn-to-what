@@ -25,7 +25,7 @@ public class ItemDespawnToWhat {
     public ItemDespawnToWhat(IEventBus modEventBus, ModContainer modContainer) {
         modEventBus.addListener(this::commonSetup);
 
-        modContainer.registerConfig(ModConfig.Type.SERVER, ModConfigValues.SPEC);
+        modContainer.registerConfig(ModConfig.Type.COMMON, ModConfigValues.SPEC);
 
         // 注册事件管理器
         NeoForge.EVENT_BUS.register(this);
