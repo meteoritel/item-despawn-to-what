@@ -39,7 +39,6 @@ public class ItemToBlockConfig extends BaseConversionConfig{
                 // 将真实的 resultId 回写
                 this.resultId = BuiltInRegistries.BLOCK.getKey(block).toString();
                 this.cachedResultBlock = block;
-                // LOGGER.debug("enableItemBlock: resolved resultId={} for item={}", resultId, itemId);
             } else {
                 LOGGER.warn("enableItemBlock=true but item '{}' is not a BlockItem, config will be rejected", itemId);
             }
@@ -68,7 +67,8 @@ public class ItemToBlockConfig extends BaseConversionConfig{
         return !enableItemBlock;
     }
 
-    public boolean isResultCacheValid() {
+    @Override
+    public boolean isCacheValid() {
         return cachedResultBlock != null;
     }
 

@@ -2,7 +2,6 @@ package com.meteorite.itemdespawntowhat;
 
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
-import com.meteorite.itemdespawntowhat.config.conversion.ItemToBlockConfig;
 import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
 import com.meteorite.itemdespawntowhat.condition.checker.ConditionChecker;
 import net.minecraft.resources.ResourceLocation;
@@ -47,11 +46,14 @@ public class ConfigExtractorManager {
         try {
             // 初始化提取器缓存
             loadAllConfigs();
+
+            // 展开标签配置并插入主缓存
+            expandTagConfigs();
+
             initialized = true;
             LOGGER.info("ConfigExtractorManager initialized successfully");
             LOGGER.info("Total items with configs: {}, Total configs: {}",
                     ITEM_CONFIGS_CACHE.size(), INTERNAL_ID_CACHE.size());
-
             // 输出缓存统计
             logCacheStats();
         } catch (Exception e) {
@@ -107,7 +109,7 @@ public class ConfigExtractorManager {
             // 初始化配置缓存
             config.initCache();
 
-            if (!isResultCacheValid(config)) {
+            if (!config.isCacheValid()) {
                 LOGGER.warn("Skipping config with invalid result cache: item={}, result={}",
                         config.getItemId(), config.getResultId());
                 continue;
@@ -117,15 +119,11 @@ public class ConfigExtractorManager {
             String internalId = config.getInternalId();
 
             if (config.isTagMode()) {
-                // 标签配置暂存，等服务端启动后由 expandTagConfigs() 展开
+                // 标签配置暂存，由 expandTagConfigs() 统一展开
                 TAG_PENDING_CONFIGS.add(config);
                 INTERNAL_ID_CACHE.put(internalId, config);
             } else {
                 ResourceLocation itemId = ResourceLocation.tryParse(itemIdStr);
-                if (itemId == null) {
-                    LOGGER.warn("Skipping config with unparseable itemId: {}", itemIdStr);
-                    continue;
-                }
                 // 添加到主缓存
                 ITEM_CONFIGS_CACHE
                         .computeIfAbsent(itemId, rl -> new ArrayList<>())
@@ -286,12 +284,6 @@ public class ConfigExtractorManager {
 
     // ========== 辅助方法 ========== //
 
-    private static boolean isResultCacheValid(BaseConversionConfig config) {
-        if (config instanceof ItemToBlockConfig blockConfig) {
-            return blockConfig.isResultCacheValid();
-        }
-        return true;
-    }
 
     private static void checkInitialized() {
         if (!initialized) {

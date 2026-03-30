@@ -316,6 +316,7 @@ public abstract class BaseConversionConfig {
     public abstract ItemStack getResultIcon();
     public abstract void performConversion(ItemEntity itemEntity, ServerLevel serverLevel);
     protected boolean additionalCheck() {return true;}
+    public boolean isCacheValid() {return true;}
 
     // ========== setter 和 getter ========== //
     public int getConversionTime() {

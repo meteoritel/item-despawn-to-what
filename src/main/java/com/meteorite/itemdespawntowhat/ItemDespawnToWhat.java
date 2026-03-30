@@ -49,7 +49,6 @@ public class ItemDespawnToWhat {
         } else {
             LOGGER.info("Caches already initialized, skipping...");
         }
-        ConfigExtractorManager.expandTagConfigs();
     }
 
     @SubscribeEvent
