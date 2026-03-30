@@ -126,7 +126,7 @@ public class PlaceBlockTask implements LevelDelayTask{
                 }
             }
         } else {
-            // SQUARE：切比雪夫距离圆圈（原有逻辑）
+            // SQUARE：切比雪夫距离圆圈
             for (int dx = -radius; dx <= radius; dx++) {
                 result.add(new BlockPos(cx + dx, cy, cz + radius));
                 result.add(new BlockPos(cx + dx, cy, cz - radius));
