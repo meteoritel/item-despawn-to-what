@@ -148,21 +148,17 @@ public enum WorldEffectType {
         default Arrow.Pickup getArrowPickupStatus() { return Arrow.Pickup.DISALLOWED; }
 
         // ========== 间隔时间不重写，这里统一设置 ========== //
-        // 有一个默认的时间间隔，不想写专门的时间间隔就调用这个
-        default int getDefaultIntervalTicks() {
-            return 4;
-        }
         // 闪电每次之间的间隔
         default int getLightningIntervalTicks() {
-            return 8;
+            return com.meteorite.itemdespawntowhat.ModConfigValues.LIGHTNING_INTERVAL_TICKS.get();
         }
         // 爆炸每次之间的间隔
         default int getExplosionIntervalTicks() {
-            return 5;
+            return com.meteorite.itemdespawntowhat.ModConfigValues.EXPLOSION_INTERVAL_TICKS.get();
         }
         // 箭矢每支之间的间隔
         default int getArrowIntervalTicks() {
-            return 2;
+            return com.meteorite.itemdespawntowhat.ModConfigValues.ARROW_INTERVAL_TICKS.get();
         }
     }
 }

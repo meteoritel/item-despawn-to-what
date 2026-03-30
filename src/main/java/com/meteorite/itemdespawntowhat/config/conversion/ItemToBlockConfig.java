@@ -82,12 +82,15 @@ public class ItemToBlockConfig extends BaseConversionConfig{
             return;
         }
         int actualConvertCount = rounds * getSourceMultiple();
+        int remaining = originalStackSize - actualConvertCount;
         // 物品下一tick消失
         itemEntity.makeFakeItem();
         consumeAllOthers(itemEntity, actualConvertCount);
         // 下一tick开始执行延迟放置方块的任务
         LevelTaskManager.addTask(serverLevel, new PlaceBlockTask(
-                itemEntity, this, rounds * getResultMultiple(), innerFluid.isConsumeFluid()));
+                itemEntity.blockPosition(), getResultBlock(), getRadius(), innerFluid.isConsumeFluid(),
+                rounds * getResultMultiple(),
+                () -> addRemainingItems(itemEntity, serverLevel, remaining, 0.5, 1, 0.5)));
     }
 
     // ========== 结果相关方法 ========== //

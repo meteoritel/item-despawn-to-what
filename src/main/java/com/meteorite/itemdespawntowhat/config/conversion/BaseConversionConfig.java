@@ -267,7 +267,7 @@ public abstract class BaseConversionConfig {
         if (itemsRemaining <= 0) {
             return;
         }
-        addRemainingItems(itemEntity, serverLevel, itemsRemaining, 0, 0, 0);
+        addRemainingItems(itemEntity, serverLevel, itemsRemaining, 0.5, 0, 0.5);
     }
 
     // 返还剩余物品，偏移位置

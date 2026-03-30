@@ -1,5 +1,24 @@
 # 更新日志 Change log
 
+## [开发中]
+### 新增
+- **NeoForge TOML 服务端配置**：新增 `ModConfigValues`，通过 `itemdespawntowhat-server.toml` 可调整以下参数：
+  - `side_effects.lightning_interval_ticks`（默认 8）：闪电每次之间的间隔 tick 数
+  - `side_effects.explosion_interval_ticks`（默认 5）：爆炸每次之间的间隔 tick 数
+  - `side_effects.arrow_interval_ticks`（默认 2）：箭矢每支之间的间隔 tick 数
+  - `block_placement.block_place_interval_ticks`（默认 1）：方块放置任务每圈之间的间隔 tick 数
+  - `block_placement.block_place_circle_shape`（默认 `SQUARE`）：方块放置圆圈形状，`SQUARE`（正方形圈）或 `CIRCLE`（圆形圈）
+- **`PlaceBlockTask` 重构**：不再持有原始物品实体引用，改用 callback 模式；支持可配置 tick 间隔与圆圈形状
+
+### New Features
+- **NeoForge TOML Server Config**: Added `ModConfigValues`, configurable via `itemdespawntowhat-server.toml`:
+  - `side_effects.lightning_interval_ticks` (default 8): ticks between each lightning strike
+  - `side_effects.explosion_interval_ticks` (default 5): ticks between each explosion
+  - `side_effects.arrow_interval_ticks` (default 2): ticks between each arrow spawn
+  - `block_placement.block_place_interval_ticks` (default 1): ticks between each ring of block placements
+  - `block_placement.block_place_circle_shape` (default `SQUARE`): shape of placement rings, `SQUARE` or `CIRCLE`
+- **`PlaceBlockTask` refactor**: no longer holds a reference to the original item entity; uses callback pattern; supports configurable tick interval and circle shape
+
 ## [1.0.4] 
 ### 新增 New Features
 - 新增了可视化编辑配置文件的GUI，可以在游戏开始页面右上角找到入口
