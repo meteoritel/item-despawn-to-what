@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.config.catalogue;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.meteorite.itemdespawntowhat.condition.ConditionSerializable;
+import com.meteorite.itemdespawntowhat.util.IdValidator;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -224,7 +225,7 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
         }
 
         public boolean isValid() {
-            return itemId != null && !itemId.getPath().isEmpty() && count >= 1;
+            return IdValidator.isValidResourceLocation(itemId) && count >= 1;
         }
 
         public Item getItem() {

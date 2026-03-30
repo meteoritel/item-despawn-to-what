@@ -193,7 +193,7 @@ public abstract class BaseConversionConfig {
         }
 
         if (innerFluid != null && innerFluid.hasInnerFluid()) {
-            if (!IdValidator.isValidResourceLocation(innerFluid.getFluidId())) {
+            if (!innerFluid.isValid()) {
                 LOGGER.warn("Invalid fluid id in fluid condition: {}", innerFluid.getFluidId());
                 return false;
             }

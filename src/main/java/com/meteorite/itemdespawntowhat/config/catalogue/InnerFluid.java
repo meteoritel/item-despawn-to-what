@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.config.catalogue;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.meteorite.itemdespawntowhat.condition.ConditionSerializable;
+import com.meteorite.itemdespawntowhat.util.IdValidator;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -111,6 +112,10 @@ public class InnerFluid implements ConditionSerializable<InnerFluid> {
     // ========== getter ========== //
     public boolean hasInnerFluid() {
         return fluidId != null && !fluidId.getPath().isEmpty();
+    }
+
+    public boolean isValid() {
+        return IdValidator.isValidResourceLocation(fluidId);
     }
 
     public ResourceLocation getFluidId() {
