@@ -82,22 +82,23 @@ public class ItemToWorldEffectConfig extends BaseConversionConfig implements Wor
         if (worldEffect == null) return;
         int originalStackSize = itemEntity.getItem().getCount();
 
-        // 天气类：只消耗1个物品（由 executor 内部再判断当前天气条件）
-        int actualConvertCount = isWeatherType()
-                ? Math.min(1, originalStackSize)
-                : computeActualConvertCount(itemEntity, originalStackSize);
-
-        if (actualConvertCount <= 0) {
-            LOGGER.warn("No items can be converted for side effect {} (count=0)", worldEffect);
-            return;
+        int rounds;
+        int actualConvertCount;
+        if (isWeatherType()) {
+            // 天气类固定1轮，需要 sourceMultiple 个物品才能触发
+            if (originalStackSize < getSourceMultiple()) {
+                return;
+            }
+            rounds = 1;
+            actualConvertCount = getSourceMultiple();
+        } else {
+            rounds = computeActualRounds(itemEntity, originalStackSize);
+            if (rounds <= 0) {
+                LOGGER.warn("No items can be converted for side effect {} (count=0)", worldEffect);
+                return;
+            }
+            actualConvertCount = rounds * getSourceMultiple();
         }
-
-        // 天气类 sourceMultiple > 1 时，需要凑够 sourceMultiple 个才能触发
-        if (isWeatherType() && actualConvertCount < getSourceMultiple()) {
-            return;
-        }
-
-        int rounds = isWeatherType() ? 1 : actualConvertCount / getSourceMultiple();
 
         // 物品实体下一tick消失
         itemEntity.makeFakeItem();

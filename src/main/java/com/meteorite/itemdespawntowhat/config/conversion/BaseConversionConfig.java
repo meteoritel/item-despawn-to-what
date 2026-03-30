@@ -50,14 +50,6 @@ public abstract class BaseConversionConfig {
     @JsonOrder(1)
     @SerializedName("item")
     protected String itemId;
-    // 每轮转化消耗的起始物品数量，默认为1
-    @JsonOrder(1)
-    @SerializedName("source_multiple")
-    protected int sourceMultiple = 1;
-    // 消失的方式 - 自然消失 timeout， 岩浆烧毁 lava，暂时没有作用，未来再添加
-    // @JsonOrder(2)
-    // @SerializedName("disappear_cause")
-    // protected String disappearCause;
     // 所处维度
     @JsonOrder(2)
     @SerializedName("dimension")
@@ -85,11 +77,14 @@ public abstract class BaseConversionConfig {
     @JsonOrder(3)
     @SerializedName("conversion_time")
     protected int conversionTime = 300;
+    // 每轮转化消耗的起始物品数量，默认为1
+    @JsonOrder(3)
+    @SerializedName("source_multiple")
+    protected int sourceMultiple = 1;
     //生成的倍率，默认为1
     @JsonOrder(3)
     @SerializedName("result_multiple")
     protected int resultMultiple = 1;
-
 
     // 用来存储配置的空构造方法
     public BaseConversionConfig() {
@@ -225,17 +220,17 @@ public abstract class BaseConversionConfig {
 
     // ========== 消耗相关逻辑 ========== //
     // 所有的额外消耗的方法
-    protected void consumeAllOthers(ItemEntity itemEntity, int startItemCount) {
-        consumeCatalysts(itemEntity, startItemCount);
+    protected void consumeAllOthers(ItemEntity itemEntity, int actualConvertCount) {
+        consumeCatalysts(itemEntity, actualConvertCount);
         consumeFluid(itemEntity);
     }
 
     // 消耗催化剂的方法
-    protected void consumeCatalysts(ItemEntity itemEntity, int startItemCount) {
+    protected void consumeCatalysts(ItemEntity itemEntity, int actualConvertCount) {
         if (catalystItems == null || !catalystItems.hasAnyCatalyst() || !catalystItems.isCatalystConsume()) {
             return;
         }
-        catalystItems.consumeFromLevel(itemEntity, startItemCount);
+        catalystItems.consumeFromLevel(itemEntity, actualConvertCount);
     }
 
     // 消耗流体的方法
@@ -246,33 +241,28 @@ public abstract class BaseConversionConfig {
         innerFluid.consumeFluidFromLevel(itemEntity);
     }
 
-    // ========== 辅助方法 ========== //
-    // 计算本次实际能转化的起始物品数量，考虑催化剂数量上限、结果数量上限
-    protected int computeActualConvertCount(ItemEntity itemEntity, int originalStackSize) {
-        // 催化剂的限制
-        int catalystLimit = (catalystItems != null && catalystItems.hasAnyCatalyst())
-                ? catalystItems.getMaxConvertible(itemEntity, originalStackSize)
-                : originalStackSize;
+    // ========== 辅助计算方法 ========== //
+    // 计算本次实际能转化的轮数：min(起始物品轮数, 催化剂轮数, 结果容量轮数)
+    protected int computeActualRounds(ItemEntity itemEntity, int originalStackSize) {
+        int sm = Math.max(1, sourceMultiple);
+        // 起始物品能支持的最大轮数
+        int startRounds = originalStackSize / sm;
+        // 催化剂限制的最大轮数
+        int catalystRounds = (catalystItems != null && catalystItems.hasAnyCatalyst() && catalystItems.isCatalystConsume())
+                ? catalystItems.getMaxConvertibleRounds(itemEntity)
+                : Integer.MAX_VALUE;
+        // 结果容量限制的最大轮数
+        int resultRounds = getResultCapacityInRounds(itemEntity);
 
-        // 上限的限制
-        int resultLimit = getResultCapacityInStartItems(itemEntity);
-
-        // 取最小值，并确保不超过原始堆叠数
-        int actual = Math.min(catalystLimit, resultLimit);
-        actual = Math.min(actual, originalStackSize);
-        // 向下取整到 sourceMultiple 的整数倍，确保整轮转化
-        if (sourceMultiple > 1) {
-            actual = (actual / sourceMultiple) * sourceMultiple;
-        }
-        return Math.max(0, actual);
+        return Math.max(0, Math.min(startRounds, Math.min(catalystRounds, resultRounds)));
     }
 
-    // 将结果容量折算为起始物品数量，默认返回起始物品的最大支持堆叠数，由子类重写
-    protected int getResultCapacityInStartItems(ItemEntity itemEntity) {
-        return itemEntity.getItem().getMaxStackSize();
+    // 结果容量对应的最大转化轮数，默认不限制，由子类重写
+    protected int getResultCapacityInRounds(ItemEntity itemEntity) {
+        return Integer.MAX_VALUE;
     }
 
-    // 返还剩余物品
+    // 返还剩余物品，原位置的快捷重载
     public void addRemainingItems(ItemEntity itemEntity, ServerLevel serverLevel, int itemsRemaining) {
         if (itemsRemaining <= 0) {
             return;
@@ -280,6 +270,7 @@ public abstract class BaseConversionConfig {
         addRemainingItems(itemEntity, serverLevel, itemsRemaining, 0, 0, 0);
     }
 
+    // 返还剩余物品，偏移位置
     public void addRemainingItems(ItemEntity itemEntity, ServerLevel serverLevel, int itemsRemaining,
                                   double offsetX, double offsetY, double offsetZ) {
         if (itemsRemaining <= 0) {
@@ -327,9 +318,13 @@ public abstract class BaseConversionConfig {
     }
 
     public abstract String getResultDescriptionId();
+
     public abstract ItemStack getResultIcon();
+
     public abstract void performConversion(ItemEntity itemEntity, ServerLevel serverLevel);
+
     protected boolean additionalCheck() {return true;}
+
     public boolean isCacheValid() {return true;}
 
     // ========== setter 和 getter ========== //

@@ -105,7 +105,7 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
 
     // =========== 催化剂消耗 ========== //
     // 在世界上消耗催化剂物品
-    public void consumeFromLevel(ItemEntity triggerEntity, int startItemCount) {
+    public void consumeFromLevel(ItemEntity triggerEntity, int consumeStartItem) {
         if (!catalystConsume || !hasAnyCatalyst()) {
             return;
         }
@@ -117,7 +117,7 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
         for (CatalystEntry entry : getCatalystList()) {
             if (!entry.isValid()) continue;
 
-            int remaining = entry.getRequiredCount(startItemCount);
+            int remaining = entry.getRequiredCount(consumeStartItem);
             if (entry.isTagEntry()) {
                 // 标签条目：按展开顺序依次消耗，不够再换下一种
                 for (Item tagItem : entry.getTagItems()) {
@@ -156,13 +156,13 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
         return remaining;
     }
 
-    // 计算在消耗模式下，当前周围催化剂数量最多能支持转化多少个起始物品。
-    public int getMaxConvertible(Map<Item, Integer> snapshot, int startCount) {
+    // 计算催化剂能支持的最大转化轮数（消耗模式下每轮每条目需要 entry.count() 个）
+    public int getMaxConvertibleRounds(ItemEntity triggerEntity) {
         if (!hasAnyCatalyst() || !catalystConsume) {
-            return startCount;
+            return Integer.MAX_VALUE;
         }
-
-        int max = startCount;
+        Map<Item, Integer> snapshot = collectNearbyItemCounts(triggerEntity);
+        int maxRounds = Integer.MAX_VALUE;
         for (CatalystEntry entry : catalystList) {
             int available;
             if (entry.isTagEntry()) {
@@ -172,20 +172,12 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
             } else {
                 available = snapshot.getOrDefault(entry.getItem(), 0);
             }
-            // 每个起始物品需要 entry.count() 个催化剂，向下取整
             int possible = available / entry.count();
-            if (possible < max) {
-                max = possible;
+            if (possible < maxRounds) {
+                maxRounds = possible;
             }
         }
-        return Math.max(0, max);
-    }
-
-    public int getMaxConvertible(ItemEntity triggerEntity, int startCount) {
-        if (!hasAnyCatalyst() || !catalystConsume) {
-            return startCount;
-        }
-        return getMaxConvertible(collectNearbyItemCounts(triggerEntity), startCount);
+        return Math.max(0, maxRounds);
     }
 
     // ========== 工具方法 ========== //

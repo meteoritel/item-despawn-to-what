@@ -33,15 +33,14 @@ public abstract class BaseItemToEntityConfig extends BaseConversionConfig{
     }
 
     @Override
-    protected int getResultCapacityInStartItems(ItemEntity itemEntity) {
+    protected int getResultCapacityInRounds(ItemEntity itemEntity) {
         int current = countNearbyResult(itemEntity);
         int remaining = getRawResultLimit() - current;
         LOGGER.debug("current entity size = {}, remain = {}", current, remaining);
         if (remaining <= 0) {
             return 0;
         }
-        int rounds = remaining / Math.max(1, getResultMultiple());
-        return rounds * getSourceMultiple();
+        return remaining / Math.max(1, getResultMultiple());
     }
 
     @Override

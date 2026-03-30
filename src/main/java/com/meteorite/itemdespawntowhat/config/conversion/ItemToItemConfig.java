@@ -62,15 +62,14 @@ public class ItemToItemConfig extends BaseItemToEntityConfig{
         int originalStackSize = originalStack.getCount();
         int resultMultiple = getResultMultiple();
 
-        // 综合催化剂和结果上限，计算实际能转化的起始物品数量
-        int actualConvertCount = computeActualConvertCount(itemEntity, originalStackSize);
-        if (actualConvertCount <= 0) {
+        // 综合催化剂和结果上限，计算实际转化轮数
+        int rounds = computeActualRounds(itemEntity, originalStackSize);
+        if (rounds <= 0) {
             LOGGER.debug("No items can be converted for {} (catalysts or limit exhausted)", getResultId());
             return;
         }
 
-        // 本次实际转化轮数
-        int rounds = actualConvertCount / getSourceMultiple();
+        int actualConvertCount = rounds * getSourceMultiple();
 
         // 物品实体下一tick消失
         itemEntity.makeFakeItem();

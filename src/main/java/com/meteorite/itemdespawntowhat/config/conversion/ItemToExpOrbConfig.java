@@ -53,14 +53,14 @@ public class ItemToExpOrbConfig extends BaseItemToEntityConfig{
         ItemStack originalStack = itemEntity.getItem();
         int originalStackSize = originalStack.getCount();
         int resultMultiple = getResultMultiple();
-        int actualConvertCount = computeActualConvertCount(itemEntity, originalStackSize);
+        int rounds = computeActualRounds(itemEntity, originalStackSize);
 
-        if (actualConvertCount <= 0) {
+        if (rounds <= 0) {
             LOGGER.debug("No capacity for entity conversion of {}", resultId);
             return;
         }
 
-        int rounds = actualConvertCount / getSourceMultiple();
+        int actualConvertCount = rounds * getSourceMultiple();
         int totalXp = rounds * resultMultiple * xpPerItem;
 
         // 物品实体下一tick消失

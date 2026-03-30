@@ -76,17 +76,16 @@ public class ItemToBlockConfig extends BaseConversionConfig{
     @Override
     public void performConversion(ItemEntity itemEntity, ServerLevel serverLevel) {
         int originalStackSize = itemEntity.getItem().getCount();
-        int actualConvertCount = computeActualConvertCount(itemEntity, originalStackSize);
-        if (actualConvertCount <= 0) {
+        int rounds = computeActualRounds(itemEntity, originalStackSize);
+        if (rounds <= 0) {
             LOGGER.debug("No items can be converted to block for {} (catalysts exhausted)", getResultId());
             return;
         }
+        int actualConvertCount = rounds * getSourceMultiple();
         // 物品下一tick消失
         itemEntity.makeFakeItem();
         consumeAllOthers(itemEntity, actualConvertCount);
         // 下一tick开始执行延迟放置方块的任务
-        // 消耗流体就直接从中心的位置放，不消耗流体就跳过中心的点
-        int rounds = actualConvertCount / getSourceMultiple();
         LevelTaskManager.addTask(serverLevel, new PlaceBlockTask(
                 itemEntity, this, rounds * getResultMultiple(), innerFluid.isConsumeFluid()));
     }
@@ -120,12 +119,15 @@ public class ItemToBlockConfig extends BaseConversionConfig{
     public int getRadius() {
         return radius;
     }
+
     public void setRadius(int radius) {
         this.radius = radius;
     }
+
     public boolean isEnableItemBlock() {
         return enableItemBlock;
     }
+
     public void setEnableItemBlock(boolean enableItemBlock) {
         this.enableItemBlock = enableItemBlock;
     }

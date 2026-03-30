@@ -88,14 +88,14 @@ public class ItemToMobConfig extends BaseItemToEntityConfig{
         int originalStackSize = originalStack.getCount();
         int resultMultiple = getResultMultiple();
 
-        int actualConvertCount = computeActualConvertCount(itemEntity, originalStackSize);
-        if (actualConvertCount <= 0) {
+        int rounds = computeActualRounds(itemEntity, originalStackSize);
+        if (rounds <= 0) {
             LOGGER.debug("No capacity for entity conversion of {}", resultId);
             return;
         }
 
+        int actualConvertCount = rounds * getSourceMultiple();
         // 计算本次可以生成的实体数量和需要返还的物品数量
-        int rounds = actualConvertCount / getSourceMultiple();
         int actualEntitiesToSpawn = rounds * resultMultiple;
         LOGGER.debug("Converting to entity: {} -> {} ({} entities from {} items ({}x{}), {} items remaining)",
                 originalStack.getItem().getDescriptionId(), resultId,

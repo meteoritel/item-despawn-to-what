@@ -124,8 +124,9 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         }
 
         formList.add(Component.translatable(LABEL_PREFIX + "conversion_time"), conversionTimeInput);
-        formList.add(Component.translatable(LABEL_PREFIX + "result_multiple"), resultMultipleInput);
         formList.add(Component.translatable(LABEL_PREFIX + "source_multiple"), sourceMultipleInput);
+        formList.add(Component.translatable(LABEL_PREFIX + "result_multiple"), resultMultipleInput);
+
         // 将子类字段加入列表
         addCustomEntries(formList);
 
