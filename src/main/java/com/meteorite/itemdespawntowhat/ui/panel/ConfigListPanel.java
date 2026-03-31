@@ -185,7 +185,12 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             cancelButton .mouseClicked(mouseX, mouseY, button);
             return true; // 吞掉事件，不传递给列表
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        boolean result = super.mouseClicked(mouseX, mouseY, button);
+        // 点击列表内但未命中任何条目时，清除选中状态
+        if (isMouseOver(mouseX, mouseY) && getEntryAtPosition(mouseX, mouseY) == null) {
+            setSelected(null);
+        }
+        return result;
     }
     @Override
     public void setSelected(@Nullable ConfigEntry<T> entry) {

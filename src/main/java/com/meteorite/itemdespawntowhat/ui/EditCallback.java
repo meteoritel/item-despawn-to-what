@@ -3,7 +3,7 @@ package com.meteorite.itemdespawntowhat.ui;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 
 // screen 回调接口，用于后端操作完成后通知 UI 层
-public interface Callback<T extends BaseConversionConfig> {
+public interface EditCallback<T extends BaseConversionConfig> {
     // 操作完成后清空表单字段
     void onClearFields();
     // 操作完成后关闭界面

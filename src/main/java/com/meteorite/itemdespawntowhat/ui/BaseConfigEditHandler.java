@@ -82,7 +82,7 @@ public class BaseConfigEditHandler<T extends BaseConversionConfig> {
     // ========== 配置操作 ========== //
 
     // 将当前表单内容写入缓存，对应"Save to Cache"按钮
-    public void saveCurrentToCache(Callback<T> callback) {
+    public void saveCurrentToCache(EditCallback<T> callback) {
         T config = callback.buildConfigFromFields();
         if (config != null && config.shouldProcess()) {
             pendingConfigs.add(config);
@@ -96,7 +96,7 @@ public class BaseConfigEditHandler<T extends BaseConversionConfig> {
     }
 
     // 将缓存写入文件或发包至服务端，对应"Apply to File"按钮
-    public void applyToFile(Callback<T> callback) {
+    public void applyToFile(EditCallback<T> callback) {
         // 先尝试把当前表单内容追加进缓存
         T currentConfig = callback.buildConfigFromFields();
         if (currentConfig != null && currentConfig.shouldProcess()) {
@@ -113,7 +113,7 @@ public class BaseConfigEditHandler<T extends BaseConversionConfig> {
     }
 
     // ========== 内部保存逻辑 ========== //
-    private void applyToLocalFile(Callback<T> callback) {
+    private void applyToLocalFile(EditCallback<T> callback) {
         try {
             List<T> allConfigs = getAllConfigs();
             handler.saveConfig(allConfigs);
@@ -128,7 +128,7 @@ public class BaseConfigEditHandler<T extends BaseConversionConfig> {
         }
     }
 
-    private void applyToServer(Callback<T> callback) {
+    private void applyToServer(EditCallback<T> callback) {
         try {
             List<T> allConfigs = getAllConfigs();
             String jsonData = handler.serializeToJson(allConfigs);
@@ -147,7 +147,7 @@ public class BaseConfigEditHandler<T extends BaseConversionConfig> {
     }
 
     // ========== 选择进行编辑/删除 ========== //
-    public void startEditConfig(ConfigListPanel.EntrySource source, int index, Callback<T> callback) {
+    public void startEditConfig(ConfigListPanel.EntrySource source, int index, EditCallback<T> callback) {
         List<T> targetList = resolveList(source);
         if (index < 0 || index >= targetList.size()) {
             LOGGER.warn("startEditConfig: index {} out of bounds for source {}", index, source);
@@ -162,7 +162,7 @@ public class BaseConfigEditHandler<T extends BaseConversionConfig> {
         callback.onListChanged();
     }
 
-    public void deleteConfig(ConfigListPanel.EntrySource source, int indexInSource, Callback<T> callback) {
+    public void deleteConfig(ConfigListPanel.EntrySource source, int indexInSource, EditCallback<T> callback) {
         List<T> targetList = resolveList(source);
         if (indexInSource < 0 || indexInSource >= targetList.size()) {
             LOGGER.warn("deleteConfig: index {} out of bounds for source {}", indexInSource, source);

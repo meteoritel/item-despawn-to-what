@@ -3,7 +3,7 @@ package com.meteorite.itemdespawntowhat.ui.screen;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.ui.BaseConfigEditHandler;
-import com.meteorite.itemdespawntowhat.ui.Callback;
+import com.meteorite.itemdespawntowhat.ui.EditCallback;
 import com.meteorite.itemdespawntowhat.ui.ListScreenCallback;
 import com.meteorite.itemdespawntowhat.ui.SuggestionProvider;
 import com.meteorite.itemdespawntowhat.ui.panel.ConfigListPanel;
@@ -25,7 +25,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import com.meteorite.itemdespawntowhat.ui.FieldValidator;
-import com.meteorite.itemdespawntowhat.ui.validator.ResourceLocationValidator;
+import com.meteorite.itemdespawntowhat.util.IdValidator;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -35,7 +35,7 @@ import java.util.Map;
 import java.util.Set;
 
 public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> extends Screen
-        implements Callback<T>, ListScreenCallback<T> {
+        implements EditCallback<T>, ListScreenCallback<T> {
 
     protected T draftConfig;
     protected T resizeBackup; // 用于窗口调整时的临时备份
@@ -85,6 +85,8 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     protected void init() {
         super.init();
         focusedWidget = null;
+        validatedFields.clear();
+        invalidFields.clear();
 
         formList = new FormListPanel(
                 minecraft,
@@ -134,13 +136,14 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         // ---------- 注册下拉建议框组件 ---------- //
         registerSuggestion(itemIdInput, SuggestionProvider.ofRegistryWithTags(BuiltInRegistries.ITEM, Registries.ITEM));
         for (EditBox box : surroundingWidget.getBoxes().values()) {
-            registerSuggestion(box, SuggestionProvider.combine(
-                    SuggestionProvider.ofRegistry(BuiltInRegistries.BLOCK),
-                    SuggestionProvider.ofTags(Registries.BLOCK)));
+            registerSuggestion(box,
+                    SuggestionProvider.ofRegistryWithTags(BuiltInRegistries.BLOCK, Registries.BLOCK));
         }
         registerSuggestion(dimensionInput, SuggestionProvider.ofDimensions());
-        registerSuggestion(catalystWidget.getItemBox(), SuggestionProvider.ofRegistryWithTags(BuiltInRegistries.ITEM, Registries.ITEM));
-        registerSuggestion(innerFluidWidget.getFluidBox(), SuggestionProvider.ofRegistry(BuiltInRegistries.FLUID));
+        registerSuggestion(catalystWidget.getItemBox(),
+                SuggestionProvider.ofRegistryWithTags(BuiltInRegistries.ITEM, Registries.ITEM));
+        registerSuggestion(innerFluidWidget.getFluidBox(),
+                SuggestionProvider.ofRegistry(BuiltInRegistries.FLUID));
 
         // 添加子类下拉建议框监听
         addCustomSuggestion();
@@ -154,10 +157,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         }
 
         // 注册公共字段校验器
-        registerValidator(itemIdInput, ResourceLocationValidator.get());
-        if (shouldShowResultId()) {
-            registerValidator(resultIdInput, ResourceLocationValidator.get());
-        }
+        registerValidator(itemIdInput, IdValidator::isValidItemId);
         initValidators();
     }
 
@@ -191,12 +191,18 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
         addRenderableWidget(Button.builder(
                 Component.translatable("gui.itemdespawntowhat.save_to_cache"),
-                b -> { if (validateAllFields()) editHandler.saveCurrentToCache(this); else onSaveError(); }
+                b -> {
+                    if (validateAllFields()) {
+                        editHandler.saveCurrentToCache(this);
+                    } else {
+                        onSaveError();
+                    }
+                }
         ).bounds(centerX - 160, y, 100, 20).build());
 
         addRenderableWidget(Button.builder(
                 Component.translatable("gui.itemdespawntowhat.apply_to_file"),
-                b -> { if (validateAllFields()) editHandler.applyToFile(this); else onSaveError(); }
+                b -> editHandler.applyToFile(this)
         ).bounds(centerX - 50, y, 100, 20).build());
 
         addRenderableWidget(Button.builder(
@@ -404,11 +410,6 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
     private static String nullToEmpty(String value) {
         return value != null ? value : "";
-    }
-
-    // 解析 ResourceLocation，字符串为空时返回 null（供子类或外部工具方法使用）
-    public static ResourceLocation parseResourceLocation(String value) {
-        return value == null || value.isEmpty() ? null : ResourceLocation.tryParse(value);
     }
 
     protected float parseFloat(String boxInput, float def) {

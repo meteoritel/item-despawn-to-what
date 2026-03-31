@@ -4,6 +4,7 @@ import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToItemConfig;
 import com.meteorite.itemdespawntowhat.ui.SuggestionProvider;
 import com.meteorite.itemdespawntowhat.ui.panel.FormListPanel;
+import com.meteorite.itemdespawntowhat.util.IdValidator;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -42,6 +43,11 @@ public class ItemToItemEditScreen extends BaseConfigEditScreen<ItemToItemConfig>
     @Override
     protected void refillCustomFields(ItemToItemConfig config) {
         resultLimitInput.setValue(String.valueOf(config.getResultLimit()));
+    }
+
+    @Override
+    protected void initValidators() {
+        registerValidator(resultIdInput, IdValidator::isValidResultId);
     }
 
     @Override

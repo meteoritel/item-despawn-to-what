@@ -4,6 +4,7 @@ import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToBlockConfig;
 import com.meteorite.itemdespawntowhat.ui.SuggestionProvider;
 import com.meteorite.itemdespawntowhat.ui.panel.FormListPanel;
+import com.meteorite.itemdespawntowhat.util.IdValidator;
 import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -54,6 +55,11 @@ public class ItemToBlockEditScreen extends BaseConfigEditScreen<ItemToBlockConfi
     protected void refillCustomFields(ItemToBlockConfig config) {
         radiusLimitInput.setValue(String.valueOf(config.getRadius()));
         enableItemBlockButton.setValue(config.isEnableItemBlock());
+    }
+
+    @Override
+    protected void initValidators() {
+        registerValidator(resultIdInput, IdValidator::isValidBlockId);
     }
 
     @Override

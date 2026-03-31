@@ -4,6 +4,7 @@ import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToMobConfig;
 import com.meteorite.itemdespawntowhat.ui.SuggestionProvider;
 import com.meteorite.itemdespawntowhat.ui.panel.FormListPanel;
+import com.meteorite.itemdespawntowhat.util.IdValidator;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -49,6 +50,11 @@ public class ItemToMobEditScreen extends BaseConfigEditScreen<ItemToMobConfig> {
     protected void refillCustomFields(ItemToMobConfig config) {
         resultLimitInput.setValue(String.valueOf(config.getResultLimit()));
         entityAgeInput.setValue(String.valueOf(config.getEntityAge()));
+    }
+
+    @Override
+    protected void initValidators() {
+        registerValidator(resultIdInput, IdValidator::isValidEntityId);
     }
 
     @Override

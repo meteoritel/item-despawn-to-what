@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.util;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Blocks;
 
 public final class IdValidator {
     private IdValidator() {}
@@ -39,5 +40,30 @@ public final class IdValidator {
     // resultId 校验（纯格式，不查注册表，不排除 air，不支持 tag）
     public static boolean isValidResultId(String s) {
         return isValidString(s) && ResourceLocation.tryParse(s) != null;
+    }
+
+    // blockId 校验：格式合法 + 注册表中存在（排除 minecraft:air）
+    public static boolean isValidBlockId(String s) {
+        if (!isValidString(s)) return false;
+        ResourceLocation rl = ResourceLocation.tryParse(s);
+        if (rl == null) return false;
+        return BuiltInRegistries.BLOCK.get(rl) != Blocks.AIR;
+    }
+
+    // entityId 校验：格式合法 + 注册表中存在
+    public static boolean isValidEntityId(String s) {
+        if (!isValidString(s)) return false;
+        ResourceLocation rl = ResourceLocation.tryParse(s);
+        if (rl == null) return false;
+        return BuiltInRegistries.ENTITY_TYPE.containsKey(rl);
+    }
+
+    // fluidId 校验：格式合法 + 注册表中存在（排除 minecraft:empty）
+    public static boolean isValidFluidId(String s) {
+        if (!isValidString(s)) return false;
+        ResourceLocation rl = ResourceLocation.tryParse(s);
+        if (rl == null) return false;
+        ResourceLocation emptyFluid = ResourceLocation.tryParse("minecraft:empty");
+        return !rl.equals(emptyFluid) && BuiltInRegistries.FLUID.containsKey(rl);
     }
 }
