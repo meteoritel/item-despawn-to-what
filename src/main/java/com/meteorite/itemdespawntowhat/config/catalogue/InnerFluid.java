@@ -24,7 +24,7 @@ public class InnerFluid implements ConditionSerializable<InnerFluid> {
     private static final Logger LOGGER = LogManager.getLogger();
 
     @SerializedName("inner_fluid")
-    private final ResourceLocation fluidId;
+    private final String fluidId;
     @SerializedName("require_source")
     private final boolean requireSource;
     @SerializedName("consume_fluid")
@@ -36,7 +36,7 @@ public class InnerFluid implements ConditionSerializable<InnerFluid> {
         this.consumeFluid = false;
     }
 
-    public InnerFluid(ResourceLocation fluidId, boolean requireSource, boolean consumeFluid) {
+    public InnerFluid(String fluidId, boolean requireSource, boolean consumeFluid) {
         this.fluidId = fluidId;
         this.requireSource = requireSource;
         this.consumeFluid = consumeFluid;
@@ -79,7 +79,7 @@ public class InnerFluid implements ConditionSerializable<InnerFluid> {
             return;
         }
 
-        Fluid targetFluid = BuiltInRegistries.FLUID.get(fluidId);
+        Fluid targetFluid = BuiltInRegistries.FLUID.get(ResourceLocation.tryParse(fluidId));
         if (!fluidState.getType().isSame(targetFluid)) {
             return;
         }
@@ -111,14 +111,14 @@ public class InnerFluid implements ConditionSerializable<InnerFluid> {
 
     // ========== getter ========== //
     public boolean hasInnerFluid() {
-        return fluidId != null && !fluidId.getPath().isEmpty();
+        return fluidId != null && !fluidId.isEmpty();
     }
 
     public boolean isValid() {
-        return IdValidator.isValidResourceLocation(fluidId);
+        return IdValidator.isValidFluidId(fluidId);
     }
 
-    public ResourceLocation getFluidId() {
+    public String getFluidId() {
         return fluidId;
     }
 

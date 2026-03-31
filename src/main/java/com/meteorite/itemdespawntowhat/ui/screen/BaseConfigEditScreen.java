@@ -158,6 +158,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
         // 注册公共字段校验器
         registerValidator(itemIdInput, IdValidator::isValidItemId);
+        registerValidator(innerFluidWidget.getFluidBox(), IdValidator::isValidFluidId);
         initValidators();
     }
 

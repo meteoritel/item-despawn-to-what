@@ -33,7 +33,8 @@ public final class IdValidator {
         if (s.startsWith("#")) return isValidTagId(s);
         if (!isValidString(s)) return false;
         ResourceLocation rl = ResourceLocation.tryParse(s);
-        if (rl == null) return false;
+        if (!isValidResourceLocation(rl)) return false;
+
         return BuiltInRegistries.ITEM.get(rl) != Items.AIR;
     }
 
@@ -46,7 +47,8 @@ public final class IdValidator {
     public static boolean isValidBlockId(String s) {
         if (!isValidString(s)) return false;
         ResourceLocation rl = ResourceLocation.tryParse(s);
-        if (rl == null) return false;
+        if (!isValidResourceLocation(rl)) return false;
+
         return BuiltInRegistries.BLOCK.get(rl) != Blocks.AIR;
     }
 
@@ -54,7 +56,8 @@ public final class IdValidator {
     public static boolean isValidEntityId(String s) {
         if (!isValidString(s)) return false;
         ResourceLocation rl = ResourceLocation.tryParse(s);
-        if (rl == null) return false;
+        if (!isValidResourceLocation(rl)) return false;
+
         return BuiltInRegistries.ENTITY_TYPE.containsKey(rl);
     }
 
@@ -62,7 +65,8 @@ public final class IdValidator {
     public static boolean isValidFluidId(String s) {
         if (!isValidString(s)) return false;
         ResourceLocation rl = ResourceLocation.tryParse(s);
-        if (rl == null) return false;
+        if (!isValidResourceLocation(rl)) return false;
+
         ResourceLocation emptyFluid = ResourceLocation.tryParse("minecraft:empty");
         return !rl.equals(emptyFluid) && BuiltInRegistries.FLUID.containsKey(rl);
     }

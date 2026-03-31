@@ -6,7 +6,6 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -113,12 +112,7 @@ public class InnerFluidWidget extends AbstractCompositeWidget{
             return null;
         }
 
-        ResourceLocation id = ResourceLocation.tryParse(raw);
-        if (id == null || id.getPath().isEmpty()) {
-            return null;
-        }
-
-        return new InnerFluid(id, sourceButton.getValue(), consumeFluidButton.getValue());
+        return new InnerFluid(raw, sourceButton.getValue(), consumeFluidButton.getValue());
     }
 
     public void setValue(@Nullable InnerFluid innerFluid) {
@@ -126,7 +120,7 @@ public class InnerFluidWidget extends AbstractCompositeWidget{
             clear();
             return;
         }
-        fluidBox.setValue(innerFluid.getFluidId().toString());
+        fluidBox.setValue(innerFluid.getFluidId());
         sourceButton.setValue(innerFluid.isRequireSource());
         consumeFluidButton.setValue(innerFluid.isConsumeFluid());
     }
