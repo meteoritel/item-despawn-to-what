@@ -111,26 +111,27 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         resultMultipleInput = numericBox();
         sourceMultipleInput = numericBox();
 
-        // 将组件加入列表
+        // ---------- 将组件加入列表 ---------- //
+        // 转化基本信息（起始物品、结果、转化比值、转化时间）
         formList.add(Component.translatable(LABEL_PREFIX + "item_id"), itemIdInput);
+        if (shouldShowResultId()) {
+            formList.add(Component.translatable(LABEL_PREFIX + "result_id"), resultIdInput);
+        }
+        formList.add(Component.translatable(LABEL_PREFIX + "source_multiple"), sourceMultipleInput);
+        formList.add(Component.translatable(LABEL_PREFIX + "result_multiple"), resultMultipleInput);
+        formList.add(Component.translatable(LABEL_PREFIX + "conversion_time"), conversionTimeInput);
+
+        // 检验条件
         formList.add(Component.translatable(LABEL_PREFIX + "dimension"), dimensionInput);
         formList.add(Component.translatable(LABEL_PREFIX + "need_outdoor"), needOutdoorButton);
         formList.add(Component.translatable(LABEL_PREFIX + "surrounding_blocks"), surroundingWidget);
         formList.add(Component.translatable(LABEL_PREFIX + "catalyst_items"), catalystWidget);
         formList.add(Component.translatable(LABEL_PREFIX + "inner_fluid"), innerFluidWidget);
 
-        if (shouldShowResultId()) {
-            formList.add(Component.translatable(LABEL_PREFIX + "result_id"), resultIdInput);
-        }
-
-        formList.add(Component.translatable(LABEL_PREFIX + "conversion_time"), conversionTimeInput);
-        formList.add(Component.translatable(LABEL_PREFIX + "source_multiple"), sourceMultipleInput);
-        formList.add(Component.translatable(LABEL_PREFIX + "result_multiple"), resultMultipleInput);
-
         // 将子类字段加入列表
         addCustomEntries(formList);
 
-        // 注册下拉建议框组件，在所有列表组件添加完成之后再添加，并添加文本监听
+        // ---------- 注册下拉建议框组件 ---------- //
         registerSuggestion(itemIdInput, SuggestionProvider.ofRegistryWithTags(BuiltInRegistries.ITEM, Registries.ITEM));
         for (EditBox box : surroundingWidget.getBoxes().values()) {
             registerSuggestion(box, SuggestionProvider.combine(
@@ -262,6 +263,16 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     @Override
     public void onDeleteRequested(ConfigListPanel.EntrySource source, int indexInSource) {
         editHandler.deleteConfig(source, indexInSource, this);
+    }
+
+    @Override
+    public void onCopyRequested(ConfigListPanel.EntrySource source, int indexInSource) {
+        List<T> list = (source == ConfigListPanel.EntrySource.ORIGINAL)
+                ? editHandler.getOriginalConfigs()
+                : editHandler.getPendingConfigs();
+        if (indexInSource >= 0 && indexInSource < list.size()) {
+            onRefillFields(list.get(indexInSource));
+        }
     }
 
     @Override

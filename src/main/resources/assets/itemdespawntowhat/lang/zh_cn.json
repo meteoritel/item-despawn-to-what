@@ -79,6 +79,7 @@
 
   "gui.itemdespawntowhat.edit.list.edit": "重新编辑",
   "gui.itemdespawntowhat.edit.list.delete": "删除",
+  "gui.itemdespawntowhat.edit.list.copy": "复制",
   "gui.itemdespawntowhat.edit.list.delete.title": "执行删除",
   "gui.itemdespawntowhat.edit.list.delete.body": "此操作将不可取消！",
 

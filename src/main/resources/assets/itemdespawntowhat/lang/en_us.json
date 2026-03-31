@@ -72,6 +72,7 @@
 
   "gui.itemdespawntowhat.edit.list.edit": "Reedit",
   "gui.itemdespawntowhat.edit.list.delete": "Delete",
+  "gui.itemdespawntowhat.edit.list.copy": "Copy",
   "gui.itemdespawntowhat.edit.list.delete.title": "Confirm Delete",
   "gui.itemdespawntowhat.edit.list.delete.body": "This action cannot be undone！",
 

@@ -46,7 +46,7 @@ public class ItemDespawnToWhat {
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
         LOGGER.info("Server starting - initializing caches");
-
+        // 服务端启动时，载入规则缓存
         if (!ConfigExtractorManager.isInitialized()) {
             ConfigExtractorManager.initialize();
             LOGGER.info("Caches initialized via ConfigExtractorManager");

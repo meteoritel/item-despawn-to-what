@@ -19,6 +19,11 @@ public class ConfigListScreen<T extends BaseConversionConfig> extends Screen {
     // 列表面板
     private ConfigListPanel<T> listPanel;
 
+    // 底部操作按钮（依赖选中项）
+    private Button editButton;
+    private Button deleteButton;
+    private Button copyButton;
+
     public ConfigListScreen(
             Screen parentScreen,
             BaseConfigEditHandler<T> editHandler,
@@ -33,7 +38,6 @@ public class ConfigListScreen<T extends BaseConversionConfig> extends Screen {
 
     @Override
     protected void init() {
-        // 列表面板：从顶部 36px 开始，底部留 32px 给按钮区（按钮高20 + 上间距8 + 余量4）
         listPanel = new ConfigListPanel<>(
                 minecraft,
                 width,
@@ -42,20 +46,64 @@ public class ConfigListScreen<T extends BaseConversionConfig> extends Screen {
                 36,
                 editHandler.getOriginalConfigs(),
                 editHandler.getPendingConfigs(),
-                this::handleEdit,
-                this::handleDelete
+                (cfg, src, idx) -> handleEdit(src, idx),
+                (cfg, src, idx) -> handleDelete(src, idx)
         );
         addRenderableWidget(listPanel);
 
-        // 底部"关闭"按钮
+        // 底部按钮区，居中排列：Edit | Delete | Copy | Back
+        int btnW = 80;
+        int btnH = 20;
+        int gap = 6;
+        int totalW = btnW * 4 + gap * 3;
+        int startX = (width - totalW) / 2;
+        int btnY = height - 28;
+
+        editButton = addRenderableWidget(Button.builder(
+                Component.translatable("gui.itemdespawntowhat.edit.list.edit"),
+                b -> {
+                    ConfigListPanel.ConfigEntry<T> sel = listPanel.getSelectedEntry();
+                    if (sel != null) handleEdit(sel.getSource(), sel.getIndexInSource());
+                }
+        ).bounds(startX, btnY, btnW, btnH).build());
+
+        deleteButton = addRenderableWidget(Button.builder(
+                Component.translatable("gui.itemdespawntowhat.edit.list.delete"),
+                b -> {
+                    ConfigListPanel.ConfigEntry<T> sel = listPanel.getSelectedEntry();
+                    if (sel != null) handleDelete(sel.getSource(), sel.getIndexInSource());
+                }
+        ).bounds(startX + btnW + gap, btnY, btnW, btnH).build());
+
+        copyButton = addRenderableWidget(Button.builder(
+                Component.translatable("gui.itemdespawntowhat.edit.list.copy"),
+                b -> {
+                    ConfigListPanel.ConfigEntry<T> sel = listPanel.getSelectedEntry();
+                    if (sel != null) handleCopy(sel.getSource(), sel.getIndexInSource());
+                }
+        ).bounds(startX + (btnW + gap) * 2, btnY, btnW, btnH).build());
+
         addRenderableWidget(Button.builder(
                 Component.translatable("gui.back"),
                 b -> onClose()
-        ).bounds(width / 2 - 50, height - 28, 100, 20).build());
+        ).bounds(startX + (btnW + gap) * 3, btnY, btnW, btnH).build());
+
+        editButton.active = false;
+        deleteButton.active = false;
+        copyButton.active = false;
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+        boolean hasSelection = listPanel != null && listPanel.getSelectedEntry() != null;
+        editButton.active = hasSelection;
+        deleteButton.active = hasSelection;
+        copyButton.active = hasSelection;
     }
 
     // ========== 列表事件处理 ========== //
-    private void handleEdit(T config, ConfigListPanel.EntrySource source, int indexInSource) {
+    private void handleEdit(ConfigListPanel.EntrySource source, int indexInSource) {
         if (minecraft != null) {
             minecraft.tell(() -> {
                 minecraft.setScreen(parentScreen);
@@ -64,10 +112,15 @@ public class ConfigListScreen<T extends BaseConversionConfig> extends Screen {
         }
     }
 
-    private void handleDelete(T config, ConfigListPanel.EntrySource source, int indexInSource) {
+    private void handleDelete(ConfigListPanel.EntrySource source, int indexInSource) {
         listCallback.onDeleteRequested(source, indexInSource);
         // 刷新列表面板
         listPanel.rebuild(editHandler.getOriginalConfigs(), editHandler.getPendingConfigs());
+    }
+
+    private void handleCopy(ConfigListPanel.EntrySource source, int indexInSource) {
+        listCallback.onCopyRequested(source, indexInSource);
+        onClose();
     }
 
     @Override

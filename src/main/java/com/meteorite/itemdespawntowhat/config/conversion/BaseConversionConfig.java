@@ -50,41 +50,42 @@ public abstract class BaseConversionConfig {
     @JsonOrder(1)
     @SerializedName("item")
     protected String itemId;
-    // 所处维度
-    @JsonOrder(2)
-    @SerializedName("dimension")
-    protected String dimension = "";
-    // 是否需要露天
-    @JsonOrder(2)
-    @SerializedName("need_outdoor")
-    protected boolean needOutdoor = false;
-    // 六个方向的方块
-    @JsonOrder(2)
-    @SerializedName("surrounding_blocks")
-    protected SurroundingBlocks surroundingBlocks = new SurroundingBlocks();
-    // 催化剂物品
-    @JsonOrder(2)
-    @SerializedName("catalyst_items")
-    protected CatalystItems catalystItems = new CatalystItems();
-    @JsonOrder(2)
-    @SerializedName("inner_fluid")
-    protected InnerFluid innerFluid = new InnerFluid();
     // 生成结果注册名
-    @JsonOrder(3)
+    @JsonOrder(1)
     @SerializedName("result")
     protected String resultId;
-    // 转化的时间，单位为秒，默认原版300s
-    @JsonOrder(3)
-    @SerializedName("conversion_time")
-    protected int conversionTime = 300;
     // 每轮转化消耗的起始物品数量，默认为1
-    @JsonOrder(3)
+    @JsonOrder(2)
     @SerializedName("source_multiple")
     protected int sourceMultiple = 1;
     //生成的倍率，默认为1
-    @JsonOrder(3)
+    @JsonOrder(2)
     @SerializedName("result_multiple")
     protected int resultMultiple = 1;
+    // 转化的时间，单位为秒，默认原版300s
+    @JsonOrder(2)
+    @SerializedName("conversion_time")
+    protected int conversionTime = 300;
+    // 所处维度
+    @JsonOrder(3)
+    @SerializedName("dimension")
+    protected String dimension = "";
+    // 是否需要露天
+    @JsonOrder(3)
+    @SerializedName("need_outdoor")
+    protected boolean needOutdoor = false;
+    // 六个方向的方块
+    @JsonOrder(3)
+    @SerializedName("surrounding_blocks")
+    protected SurroundingBlocks surroundingBlocks = new SurroundingBlocks();
+    // 催化剂物品
+    @JsonOrder(3)
+    @SerializedName("catalyst_items")
+    protected CatalystItems catalystItems = new CatalystItems();
+    // 浸润流体信息
+    @JsonOrder(3)
+    @SerializedName("inner_fluid")
+    protected InnerFluid innerFluid = new InnerFluid();
 
     // 用来存储配置的空构造方法
     public BaseConversionConfig() {

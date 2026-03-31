@@ -18,8 +18,8 @@ public class ItemToExpOrbConfig extends BaseItemToEntityConfig{
 
     public ItemToExpOrbConfig() {
         this.resultId = XP_ORB_ID;
-        // 经验球实体数量限制为一个大值，用来限制极端情况
-        this.resultLimit = 1000;
+        // 经验球实体数量设为一个大值，限制极端结果倍率
+        this.resultLimit = 99999;
     }
 
     public ItemToExpOrbConfig(String item) {
@@ -39,10 +39,6 @@ public class ItemToExpOrbConfig extends BaseItemToEntityConfig{
             return false;
         }
 
-        if (resultLimit <= 0) {
-            LOGGER.warn("resultLimit must be greater than 0, current is: {}", resultLimit);
-            return false;
-        }
         return true;
     }
 
@@ -65,7 +61,6 @@ public class ItemToExpOrbConfig extends BaseItemToEntityConfig{
 
         // 物品实体下一tick消失
         itemEntity.makeFakeItem();
-        // 根据条件消耗催化剂与流体
         consumeAllOthers(itemEntity, actualConvertCount);
 
         // 生成经验球，使用原版方法自动拆分，避免出现超大经验球
@@ -81,7 +76,7 @@ public class ItemToExpOrbConfig extends BaseItemToEntityConfig{
         addRemainingItems(itemEntity, serverLevel, itemsRemaining);
     }
 
-    // 附近经验球数量统计，直接返回0,
+    // 附近经验球数量统计，暂时无意义，直接返回0,
     @Override
     protected int countNearbyResult(ServerLevel level, BlockPos pos) {
         return 0;

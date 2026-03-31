@@ -36,9 +36,6 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
     // ========== 布局常量 ========== //
     private static final int ENTRY_HEIGHT = 26;
     private static final int ICON_SIZE = 16;
-    private static final int BUTTON_WIDTH = 46;
-    private static final int BUTTON_HEIGHT = 16;
-    private static final int BUTTON_GAP = 4;
 
     // 固定列布局
     private static final int COL_TAG_W = 3;
@@ -192,7 +189,12 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
     }
     @Override
     public void setSelected(@Nullable ConfigEntry<T> entry) {
-        // 这个列表不需要焦点，直接全部取消
+        super.setSelected(entry);
+    }
+
+    @Nullable
+    public ConfigEntry<T> getSelectedEntry() {
+        return getSelected();
     }
 
     // ========== 内部记录：待确认删除项 ========== //
@@ -201,11 +203,10 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
     public static class ConfigEntry<T extends BaseConversionConfig>
             extends ObjectSelectionList.Entry<ConfigEntry<T>> {
 
+        private final ConfigListPanel<T> parent;
         private final T config;
         private final EntrySource source;
-
-        private final Button editButton;
-        private final Button deleteButton;
+        private final int indexInSource;
 
         // 缓存图标 ItemStack
         private final ItemStack itemIcon;
@@ -215,23 +216,19 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
         private final long createdAt = System.currentTimeMillis();
 
         ConfigEntry(ConfigListPanel<T> parent, T config, EntrySource source, int indexInSource) {
+            this.parent = parent;
             this.config = config;
             this.source = source;
+            this.indexInSource = indexInSource;
 
             // 预解析图标
             this.itemIcon = config.getStartItemIcon();
             this.resultIcon = config.getResultIcon();
-
-            this.editButton = Button.builder(
-                    Component.translatable("gui.itemdespawntowhat.edit.list.edit"),
-                    b -> parent.fireEdit(config, source, indexInSource)
-            ).size(BUTTON_WIDTH, BUTTON_HEIGHT).build();
-
-            this.deleteButton = Button.builder(
-                    Component.translatable("gui.itemdespawntowhat.edit.list.delete"),
-                    b -> parent.requestDelete(config, source, indexInSource)
-            ).size(BUTTON_WIDTH, BUTTON_HEIGHT).build();
         }
+
+        public T getConfig() { return config; }
+        public EntrySource getSource() { return source; }
+        public int getIndexInSource() { return indexInSource; }
 
         @Override
         public void render(@NotNull GuiGraphics guiGraphics,
@@ -259,8 +256,7 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
 
             // 第一列itemId 文字，超出范围自动滚动
             String itemStr = config.getStartItem().getDescriptionId();
-            int rightReserve = BUTTON_WIDTH * 2 + BUTTON_GAP + 8;
-            int col2Right = left + width - rightReserve;
+            int col2Right = left + width - 8;
             int col2TextMaxW = col2Right - (left + COL_TEXT2_X);
             drawScrollableText(guiGraphics, mc, Component.translatable(itemStr), left + COL_TEXT1_X, textY, TEXT_COL_W, 0xFFFFFF);
 
@@ -274,16 +270,6 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             int textColor = (source == EntrySource.PENDING) ? 0xFFFF88 : 0xFFFFFF;
             int safeCol2W = Math.max(10, col2TextMaxW);
             drawScrollableText(guiGraphics, mc, Component.translatable(resultStr), left + COL_TEXT2_X, textY, safeCol2W, textColor);
-
-            // 右侧按钮
-            int btnAreaRight = left + width - 4;
-            int btnY = top + (height - BUTTON_HEIGHT) / 2;
-
-            deleteButton.setPosition(btnAreaRight - BUTTON_WIDTH, btnY);
-            editButton.setPosition(btnAreaRight - BUTTON_WIDTH * 2 - BUTTON_GAP, btnY);
-
-            editButton.render(guiGraphics, mouseX, mouseY, partialTick);
-            deleteButton.render(guiGraphics, mouseX, mouseY, partialTick);
 
             if (hovered && mc.screen instanceof Screen screen) {
                 screen.setTooltipForNextRenderPass(buildTooltip(config));
@@ -404,10 +390,8 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
 
         @Override
         public boolean mouseClicked(double mouseX, double mouseY, int button) {
-            if (editButton.mouseClicked(mouseX, mouseY, button))   {
-                return true;
-            }
-            return deleteButton.mouseClicked(mouseX, mouseY, button);
+            parent.setSelected(this);
+            return true;
         }
     }
 }
