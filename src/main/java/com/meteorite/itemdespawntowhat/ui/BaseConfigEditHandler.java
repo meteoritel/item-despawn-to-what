@@ -174,7 +174,7 @@ public class BaseConfigEditHandler<T extends BaseConversionConfig> {
         callback.onListChanged();
     }
 
-    //** 根据来源标记返回对应列表 */
+    // 根据来源标记返回对应列表
     private List<T> resolveList(ConfigListPanel.EntrySource source) {
         return (source == ConfigListPanel.EntrySource.ORIGINAL) ? originalConfigs : pendingConfigs;
     }

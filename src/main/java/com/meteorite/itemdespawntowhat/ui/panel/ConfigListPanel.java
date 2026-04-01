@@ -243,7 +243,7 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
         private final ItemStack itemIcon;
         private final ItemStack resultIcon;
         // 实体图标（仅 mob 类型非 null）
-        @Nullable private final LivingEntity entityIcon;
+        @Nullable private LivingEntity entityIcon;
 
         // 条目创建的时间，用于计算滚动偏移
         private final long createdAt = System.currentTimeMillis();
@@ -309,13 +309,20 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             guiGraphics.drawString(mc.font, "->", left + COL_ARROW_X, textY, 0x888888, false);
 
             // 第二列 resultId 图标
+            if (entityIcon == null && config instanceof ItemToMobConfig mobConfig) {
+                Level level = mc.level;
+                EntityType<?> type = mobConfig.getResultEntityType();
+                if (level != null && type != null) {
+                    entityIcon = getOrCreateEntityIcon(type, level);
+                }
+            }
             if (entityIcon != null) {
                 ResourceLocation entityId = ResourceLocation.tryParse(config.getResultId());
-                int scale = (entityId != null) ? ModConfigValues.getEntityScale(entityId, 8) : 8;
+                int scale = (entityId != null) ? ModConfigValues.getEntityScale(entityId, 6) : 6;
                 float cx = left + COL_ICON2_X + ICON_SIZE / 2.0f;
-                float cy = iconY + ICON_SIZE;
+                float cy = iconY + ICON_SIZE - 1.0f;
                 float bbHeight = entityIcon.getBbHeight();
-                Vector3f translate = new Vector3f(0.0f, bbHeight / 2.0f * scale / (float) scale, 0.0f);
+                Vector3f translate = new Vector3f(0.0f, bbHeight * 0.45f, 0.0f);
                 Quaternionf pose = new Quaternionf().rotateY((float) Math.PI);
                 InventoryScreen.renderEntityInInventory(guiGraphics, cx, cy, scale, translate, pose, null, entityIcon);
             } else {

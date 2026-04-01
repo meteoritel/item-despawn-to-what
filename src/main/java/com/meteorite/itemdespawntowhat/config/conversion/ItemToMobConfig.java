@@ -12,6 +12,7 @@ import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.SpawnEggItem;
 import net.minecraft.world.phys.AABB;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
@@ -144,13 +145,15 @@ public class ItemToMobConfig extends BaseItemToEntityConfig{
         return getResultEntityType().getDescriptionId();
     }
 
-    // 实体的图标还在考虑中，暂时用物品代替
+    // 实体图标 fallback：优先刷怪蛋，找不到则 barrier
     @Override
     public ItemStack getResultIcon() {
-        ResourceLocation rl = resultRl();
-        return rl != null ? BuiltInRegistries.ITEM.getOptional(rl)
-                .map(ItemStack::new).orElseGet(() -> new ItemStack(Items.BARRIER))
-                : new ItemStack(Items.BARRIER);
+        EntityType<?> type = getResultEntityType();
+        if (type == null) {
+            return new ItemStack(Items.BARRIER);
+        }
+        SpawnEggItem spawnEgg = SpawnEggItem.byId(type);
+        return spawnEgg != null ? new ItemStack(spawnEgg) : new ItemStack(Items.BARRIER);
     }
 
     public int getEntityAge() {

@@ -33,6 +33,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 
 public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> extends Screen
         implements EditCallback<T>, ListScreenCallback<T> {
@@ -40,6 +41,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     protected T draftConfig;
     protected T resizeBackup; // 用于窗口调整时的临时备份
     protected boolean listEditPerformed;
+    protected boolean suppressDraftRestoreOnce;
 
     protected static final Logger LOGGER = LogManager.getLogger();
     protected static final String LABEL_PREFIX = "gui.itemdespawntowhat.edit.";
@@ -73,7 +75,8 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     private static final int ERROR_DISPLAY_DURATION = 120; // 显示6秒
 
     // 字段校验
-    private final Map<EditBox, List<FieldValidator>> validatedFields = new HashMap<>();
+    private record ConditionalFieldValidator(FieldValidator validator, BooleanSupplier shouldValidate) {}
+    private final Map<EditBox, List<ConditionalFieldValidator>> validatedFields = new HashMap<>();
     private final Set<EditBox> invalidFields = new HashSet<>();
 
     public BaseConfigEditScreen(ConfigType configType) {
@@ -158,26 +161,43 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
         // 注册公共字段校验器
         registerValidator(itemIdInput, IdValidator::isValidItemId);
-        registerValidator(innerFluidWidget.getFluidBox(), IdValidator::isValidFluidId);
+        registerValidator(innerFluidWidget.getFluidBox(),
+                () -> {
+                    var fluid = innerFluidWidget.getValue();
+                    return fluid != null && fluid.hasInnerFluid();
+                },
+                IdValidator::isValidFluidId);
         initValidators();
     }
 
     // 子类可覆盖此方法注册额外的字段校验器
     protected void initValidators() {}
 
-    // 注册字段校验器
+    // 注册字段校验器（无前置条件）
     protected void registerValidator(EditBox box, FieldValidator... validators) {
-        validatedFields.computeIfAbsent(box, k -> new ArrayList<>()).addAll(List.of(validators));
+        registerValidator(box, () -> true, validators);
+    }
+
+    // 注册字段校验器（带前置条件，前置条件为 false 时跳过该字段校验）
+    protected void registerValidator(EditBox box, BooleanSupplier shouldValidate, FieldValidator... validators) {
+        List<ConditionalFieldValidator> validatorList =
+                validatedFields.computeIfAbsent(box, k -> new ArrayList<>());
+        for (FieldValidator validator : validators) {
+            validatorList.add(new ConditionalFieldValidator(validator, shouldValidate));
+        }
     }
 
     // 校验所有已注册字段，返回 true 表示全部合法；失败的字段记入 invalidFields
     protected boolean validateAllFields() {
         invalidFields.clear();
-        for (Map.Entry<EditBox, List<FieldValidator>> entry : validatedFields.entrySet()) {
+        for (Map.Entry<EditBox, List<ConditionalFieldValidator>> entry : validatedFields.entrySet()) {
             EditBox box = entry.getKey();
             String value = box.getValue();
-            for (FieldValidator validator : entry.getValue()) {
-                if (!validator.validate(value)) {
+            for (ConditionalFieldValidator conditional : entry.getValue()) {
+                if (!conditional.shouldValidate().getAsBoolean()) {
+                    continue;
+                }
+                if (!conditional.validator().validate(value)) {
                     invalidFields.add(box);
                     break;
                 }
@@ -279,17 +299,19 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
                 ? editHandler.getOriginalConfigs()
                 : editHandler.getPendingConfigs();
         if (indexInSource >= 0 && indexInSource < list.size()) {
+            suppressDraftRestoreOnce = true;
             onRefillFields(list.get(indexInSource));
         }
     }
 
     @Override
     public void onListScreenClosed() {
-        if (!listEditPerformed && draftConfig != null ) {// && draftConfig.shouldProcess()
+        if (!suppressDraftRestoreOnce && !listEditPerformed && draftConfig != null ) {// && draftConfig.shouldProcess()
             onRefillFields(draftConfig);
         }
         // 重置标志和草稿，避免下次误用
         listEditPerformed = false;
+        suppressDraftRestoreOnce = false;
         draftConfig = null;
         refreshConfigListButton();
     }
@@ -323,6 +345,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     private void openConfigListScreen() {
         draftConfig = buildConfigFromFields();
         listEditPerformed = false;
+        suppressDraftRestoreOnce = false;
         if (minecraft != null) {
             minecraft.setScreen(new ConfigListScreen<>(this, editHandler, this));
         }
