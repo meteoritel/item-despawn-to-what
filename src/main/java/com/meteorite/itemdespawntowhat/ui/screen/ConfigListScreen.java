@@ -46,8 +46,8 @@ public class ConfigListScreen<T extends BaseConversionConfig> extends Screen {
                 36,
                 editHandler.getOriginalConfigs(),
                 editHandler.getPendingConfigs(),
-                (cfg, src, idx) -> handleEdit(src, idx),
-                (cfg, src, idx) -> handleDelete(src, idx)
+                (cfg, src, idx) -> performEditConfirmed(src, idx),
+                (cfg, src, idx) -> performDeleteConfirmed(src, idx)
         );
         addRenderableWidget(listPanel);
 
@@ -104,18 +104,19 @@ public class ConfigListScreen<T extends BaseConversionConfig> extends Screen {
 
     // ========== 列表事件处理 ========== //
     private void handleEdit(ConfigListPanel.EntrySource source, int indexInSource) {
-        if (minecraft != null) {
-            minecraft.tell(() -> {
-                minecraft.setScreen(parentScreen);
-                minecraft.tell(() -> listCallback.onEditRequested(source, indexInSource));
-            });
-        }
+        var list = (source == ConfigListPanel.EntrySource.ORIGINAL)
+                ? editHandler.getOriginalConfigs()
+                : editHandler.getPendingConfigs();
+        if (indexInSource < 0 || indexInSource >= list.size()) return;
+        listPanel.requestEdit(list.get(indexInSource), source, indexInSource);
     }
 
     private void handleDelete(ConfigListPanel.EntrySource source, int indexInSource) {
-        listCallback.onDeleteRequested(source, indexInSource);
-        // 刷新列表面板
-        listPanel.rebuild(editHandler.getOriginalConfigs(), editHandler.getPendingConfigs());
+        var list = (source == ConfigListPanel.EntrySource.ORIGINAL)
+                ? editHandler.getOriginalConfigs()
+                : editHandler.getPendingConfigs();
+        if (indexInSource < 0 || indexInSource >= list.size()) return;
+        listPanel.requestDelete(list.get(indexInSource), source, indexInSource);
     }
 
     private void handleCopy(ConfigListPanel.EntrySource source, int indexInSource) {
@@ -128,6 +129,20 @@ public class ConfigListScreen<T extends BaseConversionConfig> extends Screen {
                 });
             });
         }
+    }
+
+    private void performEditConfirmed(ConfigListPanel.EntrySource source, int indexInSource) {
+        if (minecraft != null) {
+            minecraft.tell(() -> {
+                minecraft.setScreen(parentScreen);
+                minecraft.tell(() -> listCallback.onEditRequested(source, indexInSource));
+            });
+        }
+    }
+
+    private void performDeleteConfirmed(ConfigListPanel.EntrySource source, int indexInSource) {
+        listCallback.onDeleteRequested(source, indexInSource);
+        listPanel.rebuild(editHandler.getOriginalConfigs(), editHandler.getPendingConfigs());
     }
 
     @Override

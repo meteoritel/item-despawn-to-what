@@ -284,8 +284,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     // ========== ListScreenCallback 实现 ========== //
     @Override
     public void onEditRequested(ConfigListPanel.EntrySource source, int indexInSource) {
-        listEditPerformed = true;
-        editHandler.startEditConfig(source, indexInSource, this);
+        loadSelectedFromList(source, indexInSource, true);
     }
 
     @Override
@@ -295,12 +294,25 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
     @Override
     public void onCopyRequested(ConfigListPanel.EntrySource source, int indexInSource) {
+        loadSelectedFromList(source, indexInSource, false);
+    }
+
+    private void loadSelectedFromList(ConfigListPanel.EntrySource source, int indexInSource, boolean removeFromList) {
         List<T> list = (source == ConfigListPanel.EntrySource.ORIGINAL)
                 ? editHandler.getOriginalConfigs()
                 : editHandler.getPendingConfigs();
-        if (indexInSource >= 0 && indexInSource < list.size()) {
-            suppressDraftRestoreOnce = true;
-            onRefillFields(list.get(indexInSource));
+        if (indexInSource < 0 || indexInSource >= list.size()) {
+            return;
+        }
+
+        suppressDraftRestoreOnce = true;
+        T selected = removeFromList ? list.remove(indexInSource) : list.get(indexInSource);
+        onClearFields();
+        onRefillFields(selected);
+
+        if (removeFromList) {
+            listEditPerformed = true;
+            onListChanged();
         }
     }
 

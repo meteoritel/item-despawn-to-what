@@ -88,8 +88,8 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
     private static final int DIALOG_BTN_W = 60;
     private static final int DIALOG_BTN_H = 16;
 
-    // 待确认删除项，null 表示弹窗关闭
-    private @Nullable PendingDelete<T> pendingDelete = null;
+    // 待确认动作，null 表示弹窗关闭
+    private @Nullable PendingAction<T> pendingAction = null;
 
     // 弹窗的确认与取消按钮
     private final Button confirmButton;
@@ -114,11 +114,11 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
 
         this.confirmButton = Button.builder(
                 Component.translatable("gui.itemdespawntowhat.edit.list.delete"),
-                b -> commitDelete()
+                b -> commitPendingAction()
         ).size(DIALOG_BTN_W, DIALOG_BTN_H).build();
         this.cancelButton = Button.builder(
                 Component.translatable("gui.cancel"),
-                b -> pendingDelete = null
+                b -> pendingAction = null
         ).size(DIALOG_BTN_W, DIALOG_BTN_H).build();
 
         rebuild(originalConfigs, pendingConfigs);
@@ -145,16 +145,29 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
     }
 
     // 触发 delete 回调
-    void requestDelete(T config, EntrySource source, int idx) {
-        pendingDelete = new PendingDelete<>(config, source, idx);
+    public void requestDelete(T config, EntrySource source, int idx) {
+        requestConfirmation(config, source, idx, () -> {
+            if (deleteCallback != null) {
+                deleteCallback.onDelete(config, source, idx);
+            }
+        });
     }
 
-    // 真正执行delete
-    private void commitDelete() {
-        if (pendingDelete != null && deleteCallback != null) {
-            deleteCallback.onDelete(pendingDelete.config, pendingDelete.source, pendingDelete.index);
+    // 触发 edit 回调确认
+    public void requestEdit(T config, EntrySource source, int idx) {
+        requestConfirmation(config, source, idx, () -> fireEdit(config, source, idx));
+    }
+
+    private void requestConfirmation(T config, EntrySource source, int idx, Runnable onConfirm) {
+        pendingAction = new PendingAction<>(config, source, idx, onConfirm);
+    }
+
+    // 真正执行确认动作
+    private void commitPendingAction() {
+        if (pendingAction != null) {
+            pendingAction.onConfirm.run();
         }
-        pendingDelete = null;
+        pendingAction = null;
     }
 
     @Override
@@ -162,7 +175,7 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
         // 先渲染列表本体
         super.renderWidget(guiGraphics, mouseX, mouseY, partialTick);
 
-        if (pendingDelete == null) return;
+        if (pendingAction == null) return;
 
         Minecraft mc = Minecraft.getInstance();
 
@@ -207,7 +220,7 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
     // 弹窗打开时拦截所有鼠标点击，仅转发给弹窗按钮，防止穿透到列表条目
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (pendingDelete != null) {
+        if (pendingAction != null) {
             confirmButton.mouseClicked(mouseX, mouseY, button);
             cancelButton .mouseClicked(mouseX, mouseY, button);
             return true; // 吞掉事件，不传递给列表
@@ -229,8 +242,8 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
         return getSelected();
     }
 
-    // ========== 内部记录：待确认删除项 ========== //
-    private record PendingDelete<T>(T config, EntrySource source, int index) {}
+    // ========== 内部记录：待确认动作 ========== //
+    private record PendingAction<T>(T config, EntrySource source, int index, Runnable onConfirm) {}
     // ========== 列表条目 ========== //
     public static class ConfigEntry<T extends BaseConversionConfig>
             extends ObjectSelectionList.Entry<ConfigEntry<T>> {
