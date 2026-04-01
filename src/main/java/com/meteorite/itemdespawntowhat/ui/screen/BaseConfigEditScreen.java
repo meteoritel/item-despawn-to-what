@@ -248,6 +248,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         if (!pending.isEmpty()) {
             LOGGER.info("Discarding {} unsaved configs", pending.size());
         }
+        ConfigListPanel.clearEntityCache();
         if (minecraft != null) {
             minecraft.setScreen(new ConfigSelectionScreen());
         }

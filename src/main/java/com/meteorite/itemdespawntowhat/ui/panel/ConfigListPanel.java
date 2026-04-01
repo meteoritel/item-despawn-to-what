@@ -4,19 +4,30 @@ import com.meteorite.itemdespawntowhat.config.ConfigDirection;
 import com.meteorite.itemdespawntowhat.config.catalogue.CatalystItems;
 import com.meteorite.itemdespawntowhat.config.catalogue.InnerFluid;
 import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;
+import com.meteorite.itemdespawntowhat.ModConfigValues;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.ItemToMobConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ObjectSelectionList;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.joml.Quaternionf;
+import org.joml.Vector3f;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelectionList<ConfigListPanel.ConfigEntry<T>> {
 
@@ -31,6 +42,21 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
     // 当用户点击 Delete 时的回调
     public interface DeleteCallback<T> {
         void onDelete(T config, EntrySource source, int indexInSource);
+    }
+
+    // ========== 实体图标缓存（跟随 GUI 生命周期） ========== //
+    private static final Map<EntityType<?>, LivingEntity> ENTITY_ICON_CACHE = new HashMap<>();
+
+    @Nullable
+    public static LivingEntity getOrCreateEntityIcon(EntityType<?> type, Level level) {
+        return ENTITY_ICON_CACHE.computeIfAbsent(type, t -> {
+            var e = t.create(level);
+            return (e instanceof LivingEntity le) ? le : null;
+        });
+    }
+
+    public static void clearEntityCache() {
+        ENTITY_ICON_CACHE.clear();
     }
 
     // ========== 布局常量 ========== //
@@ -216,6 +242,8 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
         // 缓存图标 ItemStack
         private final ItemStack itemIcon;
         private final ItemStack resultIcon;
+        // 实体图标（仅 mob 类型非 null）
+        @Nullable private final LivingEntity entityIcon;
 
         // 条目创建的时间，用于计算滚动偏移
         private final long createdAt = System.currentTimeMillis();
@@ -229,6 +257,18 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             // 预解析图标
             this.itemIcon = config.getStartItemIcon();
             this.resultIcon = config.getResultIcon();
+
+            // 若为 mob 类型，从缓存取实体图标
+            if (config instanceof ItemToMobConfig mobConfig) {
+                Minecraft mc = Minecraft.getInstance();
+                Level level = mc.level;
+                EntityType<?> type = mobConfig.getResultEntityType();
+                this.entityIcon = (level != null && type != null)
+                        ? getOrCreateEntityIcon(type, level)
+                        : null;
+            } else {
+                this.entityIcon = null;
+            }
         }
 
         public T getConfig() { return config; }
@@ -269,7 +309,18 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             guiGraphics.drawString(mc.font, "->", left + COL_ARROW_X, textY, 0x888888, false);
 
             // 第二列 resultId 图标
-            guiGraphics.renderItem(resultIcon, left + COL_ICON2_X, iconY);
+            if (entityIcon != null) {
+                ResourceLocation entityId = ResourceLocation.tryParse(config.getResultId());
+                int scale = (entityId != null) ? ModConfigValues.getEntityScale(entityId, 8) : 8;
+                float cx = left + COL_ICON2_X + ICON_SIZE / 2.0f;
+                float cy = iconY + ICON_SIZE;
+                float bbHeight = entityIcon.getBbHeight();
+                Vector3f translate = new Vector3f(0.0f, bbHeight / 2.0f * scale / (float) scale, 0.0f);
+                Quaternionf pose = new Quaternionf().rotateY((float) Math.PI);
+                InventoryScreen.renderEntityInInventory(guiGraphics, cx, cy, scale, translate, pose, null, entityIcon);
+            } else {
+                guiGraphics.renderItem(resultIcon, left + COL_ICON2_X, iconY);
+            }
             // 第二列 resultId 文字
             String resultStr = config.getResultDescriptionId();
             int textColor = (source == EntrySource.PENDING) ? 0xFFFF88 : 0xFFFFFF;
@@ -331,7 +382,7 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             if (fluid != null && fluid.hasInnerFluid()) {
                 tooltip = tooltip.append(Component.literal("\n"))
                         .append(Component.translatable("gui.itemdespawntowhat.tooltip.inner_fluid",
-                                fluid.getFluidId().toString()));
+                                fluid.getFluidId()));
                 if (fluid.isRequireSource()) {
                     tooltip = tooltip.append(Component.literal("\n"))
                             .append(Component.translatable("gui.itemdespawntowhat.tooltip.inner_fluid_source"));

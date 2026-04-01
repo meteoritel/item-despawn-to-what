@@ -1,6 +1,9 @@
 package com.meteorite.itemdespawntowhat;
 
+import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.common.ModConfigSpec;
+
+import java.util.List;
 
 public class ModConfigValues {
 
@@ -11,6 +14,7 @@ public class ModConfigValues {
     public static final ModConfigSpec.IntValue ARROW_INTERVAL_TICKS;
     public static final ModConfigSpec.IntValue BLOCK_PLACE_INTERVAL_TICKS;
     public static final ModConfigSpec.EnumValue<CircleShape> BLOCK_PLACE_CIRCLE_SHAPE;
+    public static final ModConfigSpec.ConfigValue<List<? extends String>> ENTITY_SCALE_OVERRIDES;
 
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -43,7 +47,27 @@ public class ModConfigValues {
 
         builder.pop();
 
+        builder.comment("Mob icon display settings").push("mob_icon");
+
+        ENTITY_SCALE_OVERRIDES = builder
+                .comment("Custom icon scale per entity type. Format: \"namespace:entity_id=scale\", e.g. \"minecraft:ender_dragon=3\"")
+                .defineList("entity_scale_overrides", List.of(), () -> "", e -> e instanceof String s && s.contains("="));
+
+        builder.pop();
+
         SPEC = builder.build();
+    }
+
+    public static int getEntityScale(ResourceLocation id, int defaultScale) {
+        String prefix = id.toString() + "=";
+        for (String entry : ENTITY_SCALE_OVERRIDES.get()) {
+            if (entry.startsWith(prefix)) {
+                try {
+                    return Integer.parseInt(entry.substring(prefix.length()).trim());
+                } catch (NumberFormatException ignored) {}
+            }
+        }
+        return defaultScale;
     }
 
     public enum CircleShape {
