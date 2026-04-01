@@ -46,6 +46,7 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
 
     // ========== 实体图标缓存（跟随 GUI 生命周期） ========== //
     private static final Map<EntityType<?>, LivingEntity> ENTITY_ICON_CACHE = new HashMap<>();
+    private static final float DEFAULT_MOB_SCALE = 13.0f;
 
     @Nullable
     public static LivingEntity getOrCreateEntityIcon(EntityType<?> type, Level level) {
@@ -316,14 +317,18 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
                     entityIcon = getOrCreateEntityIcon(type, level);
                 }
             }
+
+            // 渲染实体图标
             if (entityIcon != null) {
                 ResourceLocation entityId = ResourceLocation.tryParse(config.getResultId());
-                int scale = (entityId != null) ? ModConfigValues.getEntityScale(entityId, 6) : 6;
+                float scale = (entityId != null) ? ModConfigValues.getEntityScale(entityId, DEFAULT_MOB_SCALE) : DEFAULT_MOB_SCALE;
                 float cx = left + COL_ICON2_X + ICON_SIZE / 2.0f;
-                float cy = iconY + ICON_SIZE - 1.0f;
+                float cy = iconY + ICON_SIZE / 2.0f;
                 float bbHeight = entityIcon.getBbHeight();
-                Vector3f translate = new Vector3f(0.0f, bbHeight * 0.45f, 0.0f);
-                Quaternionf pose = new Quaternionf().rotateY((float) Math.PI);
+                Vector3f translate = new Vector3f(0.0f, bbHeight / 2.0f, 0.0f);
+                Quaternionf pose = new Quaternionf()
+                        .rotateZ((float) Math.PI)
+                        .rotateY((float) (7 * Math.PI / 8.0));
                 InventoryScreen.renderEntityInInventory(guiGraphics, cx, cy, scale, translate, pose, null, entityIcon);
             } else {
                 guiGraphics.renderItem(resultIcon, left + COL_ICON2_X, iconY);

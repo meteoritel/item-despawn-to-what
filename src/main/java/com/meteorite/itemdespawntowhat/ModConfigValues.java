@@ -50,20 +50,32 @@ public class ModConfigValues {
         builder.comment("Mob icon display settings").push("mob_icon");
 
         ENTITY_SCALE_OVERRIDES = builder
-                .comment("Custom icon scale per entity type. Format: \"namespace:entity_id=scale\", e.g. \"minecraft:ender_dragon=3\"")
-                .defineList("entity_scale_overrides", List.of(), () -> "", e -> e instanceof String s && s.contains("="));
+                .comment("Custom icon scale per entity type. Format: \"namespace:entity_id=scale\", e.g. \"minecraft:ender_dragon=1.5\"")
+                .defineList(
+                        "entity_scale_overrides",
+                        List.of(
+                                "minecraft:ghast=2.0",
+                                "minecraft:ender_dragon=2.0",
+                                "minecraft:iron_golem=3.0",
+                                "minecraft:wither=3.0"
+                        ),
+                        () -> "",
+                        e -> e instanceof String s && s.contains("=")
+                );
 
         builder.pop();
 
         SPEC = builder.build();
     }
 
-    public static int getEntityScale(ResourceLocation id, int defaultScale) {
+    public static float getEntityScale(ResourceLocation id, float defaultScale) {
         String prefix = id.toString() + "=";
         for (String entry : ENTITY_SCALE_OVERRIDES.get()) {
-            if (entry.startsWith(prefix)) {
+            // 去除所有空格
+            String cleanEntry = entry.replaceAll("\\s+", "");
+            if (cleanEntry.startsWith(prefix)) {
                 try {
-                    return Integer.parseInt(entry.substring(prefix.length()).trim());
+                    return Float.parseFloat(cleanEntry.substring(prefix.length()).trim());
                 } catch (NumberFormatException ignored) {}
             }
         }

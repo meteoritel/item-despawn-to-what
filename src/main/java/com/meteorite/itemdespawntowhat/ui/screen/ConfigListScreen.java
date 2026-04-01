@@ -119,8 +119,15 @@ public class ConfigListScreen<T extends BaseConversionConfig> extends Screen {
     }
 
     private void handleCopy(ConfigListPanel.EntrySource source, int indexInSource) {
-        listCallback.onCopyRequested(source, indexInSource);
-        onClose();
+        if (minecraft != null) {
+            minecraft.tell(() -> {
+                minecraft.setScreen(parentScreen);
+                minecraft.tell(() -> {
+                    listCallback.onCopyRequested(source, indexInSource);
+                    listCallback.onListScreenClosed();
+                });
+            });
+        }
     }
 
     @Override
