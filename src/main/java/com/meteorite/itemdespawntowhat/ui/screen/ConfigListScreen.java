@@ -12,6 +12,10 @@ import org.jetbrains.annotations.NotNull;
 
 public class ConfigListScreen<T extends BaseConversionConfig> extends Screen {
 
+    private enum BottomAction {
+        EDIT, DELETE, COPY
+    }
+
     private final BaseConfigEditHandler<T> editHandler;
     private final ListScreenCallback<T> listCallback;
     private final Screen parentScreen;
@@ -46,8 +50,8 @@ public class ConfigListScreen<T extends BaseConversionConfig> extends Screen {
                 36,
                 editHandler.getOriginalConfigs(),
                 editHandler.getPendingConfigs(),
-                (cfg, src, idx) -> performEditConfirmed(src, idx),
-                (cfg, src, idx) -> performDeleteConfirmed(src, idx)
+                this::performEditConfirmed,
+                this::performDeleteConfirmed
         );
         addRenderableWidget(listPanel);
 
@@ -61,26 +65,17 @@ public class ConfigListScreen<T extends BaseConversionConfig> extends Screen {
 
         editButton = addRenderableWidget(Button.builder(
                 Component.translatable("gui.itemdespawntowhat.edit.list.edit"),
-                b -> {
-                    ConfigListPanel.ConfigEntry<T> sel = listPanel.getSelectedEntry();
-                    if (sel != null) handleEdit(sel.getSource(), sel.getIndexInSource());
-                }
+                b -> invokeBottomAction(BottomAction.EDIT)
         ).bounds(startX, btnY, btnW, btnH).build());
 
         deleteButton = addRenderableWidget(Button.builder(
                 Component.translatable("gui.itemdespawntowhat.edit.list.delete"),
-                b -> {
-                    ConfigListPanel.ConfigEntry<T> sel = listPanel.getSelectedEntry();
-                    if (sel != null) handleDelete(sel.getSource(), sel.getIndexInSource());
-                }
+                b -> invokeBottomAction(BottomAction.DELETE)
         ).bounds(startX + btnW + gap, btnY, btnW, btnH).build());
 
         copyButton = addRenderableWidget(Button.builder(
                 Component.translatable("gui.itemdespawntowhat.edit.list.copy"),
-                b -> {
-                    ConfigListPanel.ConfigEntry<T> sel = listPanel.getSelectedEntry();
-                    if (sel != null) handleCopy(sel.getSource(), sel.getIndexInSource());
-                }
+                b -> invokeBottomAction(BottomAction.COPY)
         ).bounds(startX + (btnW + gap) * 2, btnY, btnW, btnH).build());
 
         addRenderableWidget(Button.builder(
@@ -103,20 +98,17 @@ public class ConfigListScreen<T extends BaseConversionConfig> extends Screen {
     }
 
     // ========== 列表事件处理 ========== //
-    private void handleEdit(ConfigListPanel.EntrySource source, int indexInSource) {
-        var list = (source == ConfigListPanel.EntrySource.ORIGINAL)
-                ? editHandler.getOriginalConfigs()
-                : editHandler.getPendingConfigs();
-        if (indexInSource < 0 || indexInSource >= list.size()) return;
-        listPanel.requestEdit(list.get(indexInSource), source, indexInSource);
-    }
+    private void invokeBottomAction(BottomAction action) {
+        ConfigListPanel.ConfigEntry<T> sel = listPanel.getSelectedEntry();
+        if (sel == null) {
+            return;
+        }
 
-    private void handleDelete(ConfigListPanel.EntrySource source, int indexInSource) {
-        var list = (source == ConfigListPanel.EntrySource.ORIGINAL)
-                ? editHandler.getOriginalConfigs()
-                : editHandler.getPendingConfigs();
-        if (indexInSource < 0 || indexInSource >= list.size()) return;
-        listPanel.requestDelete(list.get(indexInSource), source, indexInSource);
+        switch (action) {
+            case EDIT -> listPanel.requestEditSelected();
+            case DELETE -> listPanel.requestDeleteSelected();
+            case COPY -> handleCopy(sel.getSource(), sel.getIndexInSource());
+        }
     }
 
     private void handleCopy(ConfigListPanel.EntrySource source, int indexInSource) {
@@ -154,7 +146,6 @@ public class ConfigListScreen<T extends BaseConversionConfig> extends Screen {
     }
 
     // ========== 渲染 ========== //
-
     @Override
     public void render(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         super.render(guiGraphics, mouseX, mouseY, partialTick);

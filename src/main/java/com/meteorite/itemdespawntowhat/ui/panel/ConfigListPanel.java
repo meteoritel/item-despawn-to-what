@@ -34,17 +34,17 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
     // 条目来源标记
     public enum EntrySource { ORIGINAL, PENDING }
 
-    // 当用户点击 Edit 时的回调，携带配置对象与其来源
-    public interface EditCallback<T> {
-        void onEdit(T config, EntrySource source, int indexInSource);
+    // 当用户点击 Edit 时的回调
+    public interface EditCallback {
+        void onEdit(EntrySource source, int indexInSource);
     }
 
     // 当用户点击 Delete 时的回调
-    public interface DeleteCallback<T> {
-        void onDelete(T config, EntrySource source, int indexInSource);
+    public interface DeleteCallback {
+        void onDelete(EntrySource source, int indexInSource);
     }
 
-    // ========== 实体图标缓存（跟随 GUI 生命周期） ========== //
+    // ========== 实体图标缓存 ========== //
     private static final Map<EntityType<?>, LivingEntity> ENTITY_ICON_CACHE = new HashMap<>();
     private static final float DEFAULT_MOB_SCALE = 13.0f;
 
@@ -89,15 +89,15 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
     private static final int DIALOG_BTN_H = 16;
 
     // 待确认动作，null 表示弹窗关闭
-    private @Nullable PendingAction<T> pendingAction = null;
+    private @Nullable PendingAction pendingAction = null;
 
     // 弹窗的确认与取消按钮
     private final Button confirmButton;
     private final Button cancelButton;
 
     // ========== 回调接口 ========== //
-    private final EditCallback<T> editCallback;
-    private final DeleteCallback<T> deleteCallback;
+    private final EditCallback editCallback;
+    private final DeleteCallback deleteCallback;
 
     public ConfigListPanel(
             Minecraft mc,
@@ -105,8 +105,8 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             int bottom, int top,
             List<T> originalConfigs,
             List<T> pendingConfigs,
-            EditCallback<T> editCallback,
-            DeleteCallback<T> deleteCallback
+            EditCallback editCallback,
+            DeleteCallback deleteCallback
     ) {
         super(mc, width, height - bottom, top, ENTRY_HEIGHT);
         this.editCallback = editCallback;
@@ -140,26 +140,30 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
     }
 
     // 触发 edit 回调
-    void fireEdit(T config, EntrySource source, int idx) {
-        if (editCallback != null) editCallback.onEdit(config, source, idx);
+    public void fireEdit(EntrySource source, int idx) {
+        if (editCallback != null) editCallback.onEdit(source, idx);
     }
 
-    // 触发 delete 回调
-    public void requestDelete(T config, EntrySource source, int idx) {
-        requestConfirmation(config, source, idx, () -> {
+    // 请求对当前选中项执行 delete 确认
+    public void requestDeleteSelected() {
+        ConfigEntry<T> sel = getSelectedEntry();
+        if (sel == null) return;
+        requestConfirmation(sel.getSource(), sel.getIndexInSource(), () -> {
             if (deleteCallback != null) {
-                deleteCallback.onDelete(config, source, idx);
+                deleteCallback.onDelete(sel.getSource(), sel.getIndexInSource());
             }
         });
     }
 
-    // 触发 edit 回调确认
-    public void requestEdit(T config, EntrySource source, int idx) {
-        requestConfirmation(config, source, idx, () -> fireEdit(config, source, idx));
+    // 请求对当前选中项执行 edit 确认
+    public void requestEditSelected() {
+        ConfigEntry<T> sel = getSelectedEntry();
+        if (sel == null) return;
+        requestConfirmation(sel.getSource(), sel.getIndexInSource(), () -> fireEdit(sel.getSource(), sel.getIndexInSource()));
     }
 
-    private void requestConfirmation(T config, EntrySource source, int idx, Runnable onConfirm) {
-        pendingAction = new PendingAction<>(config, source, idx, onConfirm);
+    private void requestConfirmation(EntrySource source, int idx, Runnable onConfirm) {
+        pendingAction = new PendingAction(source, idx, onConfirm);
     }
 
     // 真正执行确认动作
@@ -243,7 +247,7 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
     }
 
     // ========== 内部记录：待确认动作 ========== //
-    private record PendingAction<T>(T config, EntrySource source, int index, Runnable onConfirm) {}
+    private record PendingAction(EntrySource source, int index, Runnable onConfirm) {}
     // ========== 列表条目 ========== //
     public static class ConfigEntry<T extends BaseConversionConfig>
             extends ObjectSelectionList.Entry<ConfigEntry<T>> {
@@ -285,9 +289,17 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             }
         }
 
-        public T getConfig() { return config; }
-        public EntrySource getSource() { return source; }
-        public int getIndexInSource() { return indexInSource; }
+        public T getConfig() {
+            return config;
+        }
+
+        public EntrySource getSource() {
+            return source;
+        }
+
+        public int getIndexInSource() {
+            return indexInSource;
+        }
 
         @Override
         public void render(@NotNull GuiGraphics guiGraphics,

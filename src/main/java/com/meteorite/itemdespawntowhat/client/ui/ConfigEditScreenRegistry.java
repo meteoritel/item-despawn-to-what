@@ -7,7 +7,7 @@ import java.util.EnumMap;
 import java.util.Map;
 import java.util.function.Supplier;
 
-public class ConfigScreenRegistry {
+public class ConfigEditScreenRegistry {
     private static final Map<ConfigType, Supplier<Screen>> SCREENS = new EnumMap<>(ConfigType.class);
 
     public static void register(ConfigType type, Supplier<Screen> factory) {

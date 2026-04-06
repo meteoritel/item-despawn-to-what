@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.ui.screen;
 
-import com.meteorite.itemdespawntowhat.client.ui.ConfigScreenRegistry;
+import com.meteorite.itemdespawntowhat.client.ui.ConfigEditScreenRegistry;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -33,7 +33,7 @@ public class ConfigSelectionScreen extends Screen {
 
     private void openConfigList(ConfigType type) {
         if (minecraft != null) {
-            minecraft.setScreen(ConfigScreenRegistry.create(type));
+            minecraft.setScreen(ConfigEditScreenRegistry.create(type));
         }
     }
 
