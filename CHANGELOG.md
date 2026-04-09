@@ -94,7 +94,7 @@
 - Fixed the bug where negative numbers couldn't be entered in the numeric text box.
 - Fixed the bug where the entity upper limit was incorrect.
 
-## [1.1.2]
+## [1.2.0]
 ### 计划
 - 修改转化实体配置类，为实体添加分支（）
 - 添加转化为经验球
@@ -104,3 +104,4 @@
 - itemId支持标签，催化剂物品支持标签
 - 防止方块新增切比雪夫距离（圆形）
 - 现在可以在toml配置中更改一些全局配置
+- 去除主页面按钮入口，保证GUI一定在服务端启用后调用

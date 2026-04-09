@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.ui.screen;
 
-import com.meteorite.itemdespawntowhat.client.ui.ConfigEditScreenRegistry;
+import com.meteorite.itemdespawntowhat.client.register.ConfigEditScreenRegistry;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;

@@ -1,8 +1,7 @@
-package com.meteorite.itemdespawntowhat.client.event;
+package com.meteorite.itemdespawntowhat.client.register;
 
 import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
 import com.meteorite.itemdespawntowhat.client.key.ModKeyBindings;
-import com.meteorite.itemdespawntowhat.client.ui.ConfigEditScreenRegistry;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.ui.screen.*;
 import net.neoforged.api.distmarker.Dist;

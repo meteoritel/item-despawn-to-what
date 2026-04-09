@@ -10,6 +10,8 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.List;
+
 public class ConfigListScreen<T extends BaseConversionConfig> extends Screen {
 
     private enum BottomAction {
@@ -133,8 +135,20 @@ public class ConfigListScreen<T extends BaseConversionConfig> extends Screen {
     }
 
     private void performDeleteConfirmed(ConfigListPanel.EntrySource source, int indexInSource) {
-        listCallback.onDeleteRequested(source, indexInSource);
+        List<T> targetList = resolveListBySource(source);
+        if (indexInSource < 0 || indexInSource >= targetList.size()) {
+            return;
+        }
+
+        targetList.remove(indexInSource);
         listPanel.rebuild(editHandler.getOriginalConfigs(), editHandler.getPendingConfigs());
+        listCallback.onListDataChanged();
+    }
+
+    private List<T> resolveListBySource(ConfigListPanel.EntrySource source) {
+        return source == ConfigListPanel.EntrySource.ORIGINAL
+                ? editHandler.getOriginalConfigs()
+                : editHandler.getPendingConfigs();
     }
 
     @Override

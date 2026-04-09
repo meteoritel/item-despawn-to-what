@@ -18,7 +18,6 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -288,13 +287,13 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     }
 
     @Override
-    public void onDeleteRequested(ConfigListPanel.EntrySource source, int indexInSource) {
-        editHandler.deleteConfig(source, indexInSource, this);
+    public void onCopyRequested(ConfigListPanel.EntrySource source, int indexInSource) {
+        loadSelectedFromList(source, indexInSource, false);
     }
 
     @Override
-    public void onCopyRequested(ConfigListPanel.EntrySource source, int indexInSource) {
-        loadSelectedFromList(source, indexInSource, false);
+    public void onListDataChanged() {
+        refreshConfigListButton();
     }
 
     private void loadSelectedFromList(ConfigListPanel.EntrySource source, int indexInSource, boolean removeFromList) {

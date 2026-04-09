@@ -6,7 +6,6 @@ import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
 import com.meteorite.itemdespawntowhat.network.SaveConfigPayload;
-import com.meteorite.itemdespawntowhat.ui.panel.ConfigListPanel;
 import com.meteorite.itemdespawntowhat.util.PlayerStateChecker;
 import net.minecraft.client.Minecraft;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -43,9 +42,8 @@ public class BaseConfigEditHandler<T extends BaseConversionConfig> {
             configs = ConfigExtractorManager.getConfigByType(configType);
             LOGGER.debug("Read cache from {}, count = {}", configType.name(), configs.size());
         } else {
-            // 主菜单或缓存未就绪，从本地文件加载
-            configs = handler.loadConfig();
-            LOGGER.debug("Loaded from local file: {}, count = {}", configType.getFileName(), configs.size());
+            configs = List.of();
+            LOGGER.warn("ConfigEditHandler initialized before server-ready state for {}", configType.name());
         }
 
         this.originalConfigs = new ArrayList<>(configs);
@@ -70,8 +68,7 @@ public class BaseConfigEditHandler<T extends BaseConversionConfig> {
 
     // 判断当前运行模式文本（供 UI 渲染使用）
     public String getModeLabelText() {
-        if (!PlayerStateChecker.isClientWorldLoaded(mc)
-                || PlayerStateChecker.isSinglePlayerServerReady(mc)) {
+        if (PlayerStateChecker.isSinglePlayerServerReady(mc)) {
             return "Local Mode";
         } else if (PlayerStateChecker.isMultiPlayerServerConnected(mc)) {
             return "Server Mode";
@@ -104,11 +101,13 @@ public class BaseConfigEditHandler<T extends BaseConversionConfig> {
             LOGGER.debug("Added current form to cache before applying");
         }
 
-        if (!PlayerStateChecker.isClientWorldLoaded(mc)
-                || PlayerStateChecker.isSinglePlayerServerReady(mc)) {
+        if (PlayerStateChecker.isSinglePlayerServerReady(mc)) {
             applyToLocalFile(callback);
         } else if (PlayerStateChecker.isMultiPlayerServerConnected(mc)) {
             applyToServer(callback);
+        } else {
+            LOGGER.warn("applyToFile ignored because server is not ready, type = {}", configType.name());
+            callback.onSaveError();
         }
     }
 
@@ -146,37 +145,5 @@ public class BaseConfigEditHandler<T extends BaseConversionConfig> {
         }
     }
 
-    // ========== 选择进行编辑/删除 ========== //
-    public void startEditConfig(ConfigListPanel.EntrySource source, int index, EditCallback<T> callback) {
-        List<T> targetList = resolveList(source);
-        if (index < 0 || index >= targetList.size()) {
-            LOGGER.warn("startEditConfig: index {} out of bounds for source {}", index, source);
-            return;
-        }
-
-        T config = targetList.remove(index);
-        LOGGER.debug("Editing config from {}: {}", source, config);
-        // 先清空表单，再回填数据
-        callback.onClearFields();
-        callback.onRefillFields(config);
-        callback.onListChanged();
-    }
-
-    public void deleteConfig(ConfigListPanel.EntrySource source, int indexInSource, EditCallback<T> callback) {
-        List<T> targetList = resolveList(source);
-        if (indexInSource < 0 || indexInSource >= targetList.size()) {
-            LOGGER.warn("deleteConfig: index {} out of bounds for source {}", indexInSource, source);
-            return;
-        }
-
-        T removed = targetList.remove(indexInSource);
-        LOGGER.info("Deleted config from {}: {}", source, removed);
-        callback.onListChanged();
-    }
-
-    // 根据来源标记返回对应列表
-    private List<T> resolveList(ConfigListPanel.EntrySource source) {
-        return (source == ConfigListPanel.EntrySource.ORIGINAL) ? originalConfigs : pendingConfigs;
-    }
 
 }

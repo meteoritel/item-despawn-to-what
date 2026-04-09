@@ -5,18 +5,14 @@ import com.meteorite.itemdespawntowhat.client.key.ModKeyBindings;
 import com.meteorite.itemdespawntowhat.ui.screen.ConfigSelectionScreen;
 import com.meteorite.itemdespawntowhat.util.PlayerStateChecker;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.screens.TitleScreen;
-import net.minecraft.network.chat.Component;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.InputEvent;
-import net.neoforged.neoforge.client.event.ScreenEvent;
 
 // 客户端输入事件类：按键注册，按钮注册
 @EventBusSubscriber(modid = ItemDespawnToWhat.MOD_ID, value = Dist.CLIENT)
-public class ClientInputEvents {
+public class InputEvents {
     @SubscribeEvent
     public static void onKeyInput(InputEvent.Key event) {
         // 快捷键只在单人模式下起作用
@@ -26,19 +22,5 @@ public class ClientInputEvents {
         }
     }
 
-    // 游戏开始页面入口的按钮
-    @SubscribeEvent
-    public static void onScreenInit(ScreenEvent.Init.Post event) {
-        if (event.getScreen() instanceof TitleScreen) {
-            // 按钮位置：右上角，距右5px，距顶5px
-            int x = event.getScreen().width - 25;
-            int y = 5;
-            Button button = Button.builder(
-                    Component.empty(),
-                    btn -> Minecraft.getInstance().setScreen(new ConfigSelectionScreen())
-            ).bounds(x, y, 20, 20).build();
-            event.addListener(button);
-        }
-    }
 
 }

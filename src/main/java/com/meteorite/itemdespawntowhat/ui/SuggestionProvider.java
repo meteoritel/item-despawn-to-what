@@ -120,30 +120,20 @@ public interface SuggestionProvider {
         };
     }
 
-    // 服务端未加载时的返回原版维度兜底列表
-    List<String> VANILLA_DIMENSIONS = List.of(
-            "minecraft:overworld",
-            "minecraft:the_nether",
-            "minecraft:the_end"
-    );
-
     // 匹配维度
     static SuggestionProvider ofDimensions() {
         return (segment, maxResults) -> {
             var server = ServerLifecycleHooks.getCurrentServer();
-            String lower = segment.toLowerCase();
-
-            // 收集候选列表：服务端在线则读实际维度，否则回退原版三维度
-            List<String> candidates;
-            if (server != null) {
-                candidates = new ArrayList<>();
-                for (ServerLevel level : server.getAllLevels()) {
-                    candidates.add(level.dimension().location().toString());
-                }
-                candidates.sort(null);
-            } else {
-                candidates = VANILLA_DIMENSIONS;
+            if (server == null) {
+                return List.of();
             }
+
+            String lower = segment.toLowerCase();
+            List<String> candidates = new ArrayList<>();
+            for (ServerLevel level : server.getAllLevels()) {
+                candidates.add(level.dimension().location().toString());
+            }
+            candidates.sort(null);
 
             List<String> result = new ArrayList<>();
             for (String id : candidates) {
@@ -190,7 +180,7 @@ public interface SuggestionProvider {
             return mc.getConnection().registryAccess().registry(registryKey).orElse(null);
         }
 
-        return (Registry<T>) BuiltInRegistries.REGISTRY.get(registryKey.location());
+        return null;
     }
 
 

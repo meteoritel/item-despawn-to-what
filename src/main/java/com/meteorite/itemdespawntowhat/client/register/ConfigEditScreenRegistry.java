@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.client.ui;
+package com.meteorite.itemdespawntowhat.client.register;
 
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import net.minecraft.client.gui.screens.Screen;
