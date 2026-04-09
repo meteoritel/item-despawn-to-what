@@ -59,6 +59,9 @@
 
   "gui.itemdespawntowhat.edit.save_error": "Invalid config, please check your inputs.",
 
+  "gui.itemdespawntowhat.edit.mode.local_mode": "Local mode",
+  "gui.itemdespawntowhat.edit.mode.server_mode": "Server mode",
+
   "gui.itemdespawntowhat.tooltip.conversion_time": "Conversion time: %d s",
   "gui.itemdespawntowhat.tooltip.dimension": "Dimension: %s",
   "gui.itemdespawntowhat.tooltip.need_outdoor": "Requires outdoor",

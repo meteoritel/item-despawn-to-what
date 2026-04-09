@@ -8,6 +8,7 @@ import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
 import com.meteorite.itemdespawntowhat.network.SaveConfigPayload;
 import com.meteorite.itemdespawntowhat.util.PlayerStateChecker;
 import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -18,6 +19,8 @@ import java.util.List;
 
 public class BaseConfigEditHandler<T extends BaseConversionConfig> {
     private static final Logger LOGGER = LogManager.getLogger();
+    private static final String LOCAL_MODE_KEY = "gui.itemdespawntowhat.edit.mode.local_mode";
+    private static final String SERVER_MODE_KEY = "gui.itemdespawntowhat.edit.mode.server_mode";
 
     private final ConfigType configType;
     private final BaseConfigHandler<T> handler;
@@ -47,33 +50,6 @@ public class BaseConfigEditHandler<T extends BaseConversionConfig> {
         }
 
         this.originalConfigs = new ArrayList<>(configs);
-    }
-
-    // ========== 公开查询方法 ========== //
-
-    public ConfigType getConfigType() {
-        return configType;
-    }
-    public List<T> getPendingConfigs() {
-        return pendingConfigs;
-    }
-    public List<T> getOriginalConfigs() {
-        return originalConfigs;
-    }
-    public List<T> getAllConfigs() {
-        List<T> all = new ArrayList<>(originalConfigs);
-        all.addAll(pendingConfigs);
-        return all;
-    }
-
-    // 判断当前运行模式文本（供 UI 渲染使用）
-    public String getModeLabelText() {
-        if (PlayerStateChecker.isSinglePlayerServerReady(mc)) {
-            return "Local Mode";
-        } else if (PlayerStateChecker.isMultiPlayerServerConnected(mc)) {
-            return "Server Mode";
-        }
-        return "";
     }
 
     // ========== 配置操作 ========== //
@@ -145,5 +121,32 @@ public class BaseConfigEditHandler<T extends BaseConversionConfig> {
         }
     }
 
+    // ========== getter ========== //
+    public ConfigType getConfigType() {
+        return configType;
+    }
 
+    public List<T> getPendingConfigs() {
+        return pendingConfigs;
+    }
+
+    public List<T> getOriginalConfigs() {
+        return originalConfigs;
+    }
+
+    public List<T> getAllConfigs() {
+        List<T> all = new ArrayList<>(originalConfigs);
+        all.addAll(pendingConfigs);
+        return all;
+    }
+
+    // 判断当前运行模式文本（供 UI 渲染使用）
+    public Component getModeLabelText() {
+        if (PlayerStateChecker.isSinglePlayerServerReady(mc)) {
+            return Component.translatable(LOCAL_MODE_KEY);
+        } else if (PlayerStateChecker.isMultiPlayerServerConnected(mc)) {
+            return Component.translatable(SERVER_MODE_KEY);
+        }
+        return Component.empty();
+    }
 }

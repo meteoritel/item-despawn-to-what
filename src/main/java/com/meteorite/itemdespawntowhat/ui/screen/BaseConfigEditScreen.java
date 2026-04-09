@@ -463,8 +463,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         guiGraphics.drawCenteredString(font, title, width / 2, 12, 0xFFFFFF);
 
         // 显示当前模式
-        String modeText = editHandler.getModeLabelText();
-        guiGraphics.drawString(font, modeText, 10, 12, 0x808080);
+        guiGraphics.drawString(font, editHandler.getModeLabelText(), 10, 12, 0x808080);
 
         // 渲染错误提示
         if (errorMessage != null && errorDisplayTicks > 0) {
