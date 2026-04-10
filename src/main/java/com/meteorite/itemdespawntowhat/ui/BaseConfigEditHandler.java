@@ -53,7 +53,6 @@ public class BaseConfigEditHandler<T extends BaseConversionConfig> {
     }
 
     // ========== 配置操作 ========== //
-
     // 将当前表单内容写入缓存，对应"Save to Cache"按钮
     public void saveCurrentToCache(EditCallback<T> callback) {
         T config = callback.buildConfigFromFields();

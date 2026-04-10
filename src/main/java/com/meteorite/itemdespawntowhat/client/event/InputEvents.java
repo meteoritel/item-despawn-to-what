@@ -21,6 +21,4 @@ public class InputEvents {
             Minecraft.getInstance().setScreen(new ConfigSelectionScreen());
         }
     }
-
-
 }

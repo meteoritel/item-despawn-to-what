@@ -133,9 +133,12 @@ public abstract class BaseConversionConfig {
     // 服务端启动后由 ConfigExtractorManager 调用，展开标签到具体物品列表
     public void expandTagItems() {
         if (!isTagMode || itemId == null) return;
+
         ResourceLocation tagRl = ResourceLocation.tryParse(itemId.substring(1));
+
         if (tagRl == null) return;
         var tagKey = net.minecraft.tags.TagKey.create(net.minecraft.core.registries.Registries.ITEM, tagRl);
+
         List<Item> expanded = new ArrayList<>();
         BuiltInRegistries.ITEM.getTag(tagKey).ifPresent(holders ->
                 holders.forEach(h -> expanded.add(h.value())));
@@ -143,10 +146,12 @@ public abstract class BaseConversionConfig {
         cachedStartItem = expanded.isEmpty() ? Items.AIR : expanded.getFirst();
     }
 
+    // 提前缓存结果实例，默认空实现，子类按需重写
     protected void initResultCache() {
-        // 默认空实现，子类按需重写
+
     }
 
+    // 结果ID是否允许为空，子类按需重写
     protected boolean isResultIdRequired() {
         return true;
     }

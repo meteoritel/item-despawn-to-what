@@ -34,10 +34,6 @@ public enum ConfigType {
         return fileName;
     }
 
-    public Class<? extends BaseConversionConfig> getConfigClass() {
-        return configClass;
-    }
-
     public static ConfigType fromClass(Class<? extends BaseConversionConfig> clazz) {
         ConfigType type = CLASS_MAP.get(clazz);
 
@@ -46,19 +42,4 @@ public enum ConfigType {
         }
         return type;
     }
-
-    public String getTooltipKey() {
-        return "gui.itemdespawntowhat.config_type." + name().toLowerCase() + ".tooltip";
-    }
-
-    /**
-     * 返回用于渲染悬停说明框的 Component 列表。
-     * tooltip 内容可在语言文件中自由换行（通过多个 key 后缀区分行，或使用 \n 分隔）。
-     */
-    // 返回用于渲染悬停说明框的 Component 列表
-    public List<Component> getTooltipLines() {
-        return List.of(Component.translatable(getTooltipKey()));
-    }
-
-
 }

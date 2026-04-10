@@ -1,10 +1,10 @@
 package com.meteorite.itemdespawntowhat.ui.panel;
 
+import com.meteorite.itemdespawntowhat.ModConfigValues;
 import com.meteorite.itemdespawntowhat.config.ConfigDirection;
 import com.meteorite.itemdespawntowhat.config.catalogue.CatalystItems;
 import com.meteorite.itemdespawntowhat.config.catalogue.InnerFluid;
 import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;
-import com.meteorite.itemdespawntowhat.ModConfigValues;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToMobConfig;
 import net.minecraft.client.Minecraft;
@@ -64,15 +64,12 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
     private static final int ENTRY_HEIGHT = 26;
     private static final int ICON_SIZE = 16;
 
-    // 固定列布局
+    // 基础可变布局间距
     private static final int COL_TAG_W = 3;
-    private static final int COL_ICON1_X = COL_TAG_W + 4;
-    private static final int COL_TEXT1_X = COL_ICON1_X + ICON_SIZE + 3;
-    private static final int TEXT_COL_W = 90;  // 每列文本宽度
-    private static final int COL_ARROW_X = COL_TEXT1_X + TEXT_COL_W + 4;
-    private static final int ARROW_W = 12;
-    private static final int COL_ICON2_X = COL_ARROW_X + ARROW_W + 4;
-    private static final int COL_TEXT2_X = COL_ICON2_X + ICON_SIZE + 3;
+    private static final int CONTENT_PAD = 4;
+    private static final int ICON_TEXT_GAP = 3;
+    private static final int TEXT_SUFFIX_GAP = 2;
+    private static final int QTY_GAP = 1;
 
     // 文本超出自动滚动
     // 文本滚动速度：像素/ms
@@ -236,6 +233,7 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
         }
         return result;
     }
+
     @Override
     public void setSelected(@Nullable ConfigEntry<T> entry) {
         super.setSelected(entry);
@@ -322,19 +320,39 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             int iconY = top + (height - ICON_SIZE) / 2;
             int textY = top + (height - mc.font.lineHeight) / 2;
 
-            // 第一列itemId 图标
-            guiGraphics.renderItem(itemIcon, left + COL_ICON1_X, iconY);
+            int arrowCenterX = left + width / 2;
+            int arrowWidth = mc.font.width("->");
+            int arrowHalfW = arrowWidth / 2;
 
-            // 第一列itemId 文字，超出范围自动滚动
-            String itemStr = config.getStartItem().getDescriptionId();
-            int col2Right = left + width - 8;
-            int col2TextMaxW = col2Right - (left + COL_TEXT2_X);
-            drawScrollableText(guiGraphics, mc, Component.translatable(itemStr), left + COL_TEXT1_X, textY, TEXT_COL_W, 0xFFFFFF);
+            int sourceSectionLeft = left + COL_TAG_W + CONTENT_PAD;
+            int sourceSectionRight = Math.max(sourceSectionLeft, arrowCenterX - arrowHalfW - CONTENT_PAD);
+            int resultSectionLeft = arrowCenterX + arrowHalfW + CONTENT_PAD;
+            int resultSectionRight = left + width - CONTENT_PAD;
 
-            // 箭头
-            guiGraphics.drawString(mc.font, "->", left + COL_ARROW_X, textY, 0x888888, false);
+            // 箭头居中在整行内
+            guiGraphics.drawCenteredString(mc.font, Component.literal("->"), arrowCenterX, textY, 0x888888);
 
-            // 第二列 resultId 图标
+            Component sourceText = Component.translatable(config.getStartItem().getDescriptionId());
+            int sourceMultiple = config.getSourceMultiple();
+            boolean showSourceMultiple = sourceMultiple > 1;
+            String sourceMultipleStr = Integer.toString(sourceMultiple);
+            int sourceSuffixW = showSourceMultiple
+                    ? TEXT_SUFFIX_GAP + mc.font.width("x") + QTY_GAP + mc.font.width(sourceMultipleStr)
+                    : 0;
+            int sourceTextX = sourceSectionLeft + ICON_SIZE + ICON_TEXT_GAP;
+            int sourceTextMaxW = Math.max(1, sourceSectionRight - sourceTextX - sourceSuffixW);
+            int sourceTextShownW = Math.min(mc.font.width(sourceText), sourceTextMaxW);
+
+            // 第一则左对齐，源图标 + 名称 + x + 数目
+            guiGraphics.renderItem(itemIcon, sourceSectionLeft, iconY);
+            drawScrollableText(guiGraphics, mc, sourceText, sourceTextX, textY, sourceTextMaxW, 0xFFFFFF);
+            if (showSourceMultiple) {
+                int qtyX = sourceTextX + sourceTextShownW + TEXT_SUFFIX_GAP;
+                guiGraphics.drawString(mc.font, "x", qtyX, textY, 0xFFFFFF, false);
+                guiGraphics.drawString(mc.font, sourceMultipleStr, qtyX + mc.font.width("x") + QTY_GAP, textY, 0xFFFFFF, false);
+            }
+
+            // 第二则 resultId 图标
             if (entityIcon == null && config instanceof ItemToMobConfig mobConfig) {
                 Level level = mc.level;
                 EntityType<?> type = mobConfig.getResultEntityType();
@@ -343,11 +361,25 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
                 }
             }
 
+            Component resultText = Component.translatable(config.getResultDescriptionId());
+            int resultMultiple = config.getResultMultiple();
+            boolean showResultMultiple = resultMultiple > 1;
+            String resultMultipleStr = Integer.toString(resultMultiple);
+            int textColor = (source == EntrySource.PENDING) ? 0xFFFF88 : 0xFFFFFF;
+            int resultSuffixW = showResultMultiple
+                    ? TEXT_SUFFIX_GAP + mc.font.width("x") + QTY_GAP + mc.font.width(resultMultipleStr)
+                    : 0;
+            int resultTextMaxW = Math.max(1, resultSectionRight - resultSectionLeft - ICON_SIZE - ICON_TEXT_GAP - resultSuffixW);
+            int resultTextShownW = Math.min(mc.font.width(resultText), resultTextMaxW);
+            int resultGroupW = ICON_SIZE + ICON_TEXT_GAP + resultTextShownW + resultSuffixW;
+            int resultIconX = resultSectionRight - resultGroupW;
+            int resultTextX = resultIconX + ICON_SIZE + ICON_TEXT_GAP;
+
             // 渲染实体图标
             if (entityIcon != null) {
                 ResourceLocation entityId = ResourceLocation.tryParse(config.getResultId());
                 float scale = (entityId != null) ? ModConfigValues.getEntityScale(entityId, DEFAULT_MOB_SCALE) : DEFAULT_MOB_SCALE;
-                float cx = left + COL_ICON2_X + ICON_SIZE / 2.0f;
+                float cx = resultIconX + ICON_SIZE / 2.0f;
                 float cy = iconY + ICON_SIZE / 2.0f;
                 float bbHeight = entityIcon.getBbHeight();
                 Vector3f translate = new Vector3f(0.0f, bbHeight / 2.0f, 0.0f);
@@ -356,13 +388,16 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
                         .rotateY((float) (7 * Math.PI / 8.0));
                 InventoryScreen.renderEntityInInventory(guiGraphics, cx, cy, scale, translate, pose, null, entityIcon);
             } else {
-                guiGraphics.renderItem(resultIcon, left + COL_ICON2_X, iconY);
+                guiGraphics.renderItem(resultIcon, resultIconX, iconY);
             }
-            // 第二列 resultId 文字
-            String resultStr = config.getResultDescriptionId();
-            int textColor = (source == EntrySource.PENDING) ? 0xFFFF88 : 0xFFFFFF;
-            int safeCol2W = Math.max(10, col2TextMaxW);
-            drawScrollableText(guiGraphics, mc, Component.translatable(resultStr), left + COL_TEXT2_X, textY, safeCol2W, textColor);
+
+            // 第二则 resultId 文字
+            drawScrollableText(guiGraphics, mc, resultText, resultTextX, textY, resultTextMaxW, textColor);
+            if (showResultMultiple) {
+                int qtyX = resultTextX + resultTextShownW + TEXT_SUFFIX_GAP;
+                guiGraphics.drawString(mc.font, "x", qtyX, textY, textColor, false);
+                guiGraphics.drawString(mc.font, resultMultipleStr, qtyX + mc.font.width("x") + QTY_GAP, textY, textColor, false);
+            }
 
             if (hovered && mc.screen instanceof Screen screen) {
                 screen.setTooltipForNextRenderPass(buildTooltip(config));

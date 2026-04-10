@@ -24,6 +24,8 @@ public class ConfigSelectionScreen extends Screen {
                             Component.translatable("gui.itemdespawntowhat.config_type." + type.name().toLowerCase()),
                             btn -> openConfigList(type))
                     .bounds(width / 2 - 100, y, 200, 20).build();
+
+            // 添加按钮tooltip
             button.setTooltip(Tooltip.create(
                     Component.translatable("gui.itemdespawntowhat.config_type." + type.name().toLowerCase() + ".tooltip")));
             addRenderableWidget(button);
