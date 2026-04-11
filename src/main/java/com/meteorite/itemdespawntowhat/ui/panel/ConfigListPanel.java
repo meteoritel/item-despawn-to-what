@@ -64,12 +64,18 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
     private static final int ENTRY_HEIGHT = 26;
     private static final int ICON_SIZE = 16;
 
-    // 基础可变布局间距
+    // 固定列布局
     private static final int COL_TAG_W = 3;
-    private static final int CONTENT_PAD = 4;
-    private static final int ICON_TEXT_GAP = 3;
-    private static final int TEXT_SUFFIX_GAP = 2;
-    private static final int QTY_GAP = 1;
+    private static final int EDGE_PAD = 4;
+    //催化剂先不加了
+    private static final int CATALYST_W = 0;
+    private static final int COLUMN_GAP = 4;
+    private static final int TEXT_COL_WIDTH = 70;
+    private static final int QTY_COL_WIDTH = 20;
+    private static final int MULTIPLY_COL_WIDTH = 6;
+    private static final int ARROW_CENTER_SHIFT = 24;
+    private static final int ROW_WIDTH = 340;
+    private static final Component MULTIPLY_MARK = Component.literal("x");
 
     // 文本超出自动滚动
     // 文本滚动速度：像素/ms
@@ -133,7 +139,7 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
 
     @Override
     public int getRowWidth() {
-        return 340;
+        return ROW_WIDTH;
     }
 
     // 触发 edit 回调
@@ -316,41 +322,39 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             int tagColor = (source == EntrySource.PENDING) ? 0xFF_FFA500 : 0xFF_44AA44;
             guiGraphics.fill(left, top + 1, left + COL_TAG_W, top + height - 1, tagColor);
 
-            // 图标 + 文字区域布局
+            // 固定列布局：来源侧
+            int sourceColumnLeft = left + COL_TAG_W + EDGE_PAD;
+            int sourceQtyColX = sourceColumnLeft + CATALYST_W + COLUMN_GAP;
+            int sourceMultiplyColX = sourceQtyColX + QTY_COL_WIDTH + COLUMN_GAP;
+            int sourceIconX = sourceMultiplyColX + MULTIPLY_COL_WIDTH + COLUMN_GAP;
+            int sourceTextX = sourceIconX + ICON_SIZE + COLUMN_GAP;
+
+            // 固定列布局：结果侧，锚点相对整行中心右移 24px
+            int arrowCenterX = left + width / 2 + ARROW_CENTER_SHIFT;
+            int arrowWidth = mc.font.width("->");
+            int arrowX = arrowCenterX - arrowWidth / 2;
+            int resultQtyColX = arrowX + arrowWidth + EDGE_PAD;
+            int resultMultiplyColX = resultQtyColX + QTY_COL_WIDTH + COLUMN_GAP;
+            int resultIconX = resultMultiplyColX + MULTIPLY_COL_WIDTH + COLUMN_GAP;
+            int resultTextX = resultIconX + ICON_SIZE + COLUMN_GAP;
+
             int iconY = top + (height - ICON_SIZE) / 2;
             int textY = top + (height - mc.font.lineHeight) / 2;
-
-            int arrowCenterX = left + width / 2;
-            int arrowWidth = mc.font.width("->");
-            int arrowHalfW = arrowWidth / 2;
-
-            int sourceSectionLeft = left + COL_TAG_W + CONTENT_PAD;
-            int sourceSectionRight = Math.max(sourceSectionLeft, arrowCenterX - arrowHalfW - CONTENT_PAD);
-            int resultSectionLeft = arrowCenterX + arrowHalfW + CONTENT_PAD;
-            int resultSectionRight = left + width - CONTENT_PAD;
 
             // 箭头居中在整行内
             guiGraphics.drawCenteredString(mc.font, Component.literal("->"), arrowCenterX, textY, 0x888888);
 
             Component sourceText = Component.translatable(config.getStartItem().getDescriptionId());
             int sourceMultiple = config.getSourceMultiple();
-            boolean showSourceMultiple = sourceMultiple > 1;
             String sourceMultipleStr = Integer.toString(sourceMultiple);
-            int sourceSuffixW = showSourceMultiple
-                    ? TEXT_SUFFIX_GAP + mc.font.width("x") + QTY_GAP + mc.font.width(sourceMultipleStr)
-                    : 0;
-            int sourceTextX = sourceSectionLeft + ICON_SIZE + ICON_TEXT_GAP;
-            int sourceTextMaxW = Math.max(1, sourceSectionRight - sourceTextX - sourceSuffixW);
-            int sourceTextShownW = Math.min(mc.font.width(sourceText), sourceTextMaxW);
 
-            // 第一则左对齐，源图标 + 名称 + x + 数目
-            guiGraphics.renderItem(itemIcon, sourceSectionLeft, iconY);
-            drawScrollableText(guiGraphics, mc, sourceText, sourceTextX, textY, sourceTextMaxW, 0xFFFFFF);
-            if (showSourceMultiple) {
-                int qtyX = sourceTextX + sourceTextShownW + TEXT_SUFFIX_GAP;
-                guiGraphics.drawString(mc.font, "x", qtyX, textY, 0xFFFFFF, false);
-                guiGraphics.drawString(mc.font, sourceMultipleStr, qtyX + mc.font.width("x") + QTY_GAP, textY, 0xFFFFFF, false);
-            }
+            // 第一则左对齐：数量 + * + 图标 + 名称
+            int sourceQtyX = sourceQtyColX + Math.max(0, QTY_COL_WIDTH - mc.font.width(sourceMultipleStr));
+            int sourceMultiplyX = sourceMultiplyColX + Math.max(0, (MULTIPLY_COL_WIDTH - mc.font.width("*")) / 2);
+            guiGraphics.drawString(mc.font, sourceMultipleStr, sourceQtyX, textY, 0xFFFFFF, false);
+            guiGraphics.drawString(mc.font, MULTIPLY_MARK, sourceMultiplyX, textY, 0xFFFFFF, false);
+            guiGraphics.renderItem(itemIcon, sourceIconX, iconY);
+            drawScrollableText(guiGraphics, mc, sourceText, sourceTextX, textY, TEXT_COL_WIDTH, 0xFFFFFF);
 
             // 第二则 resultId 图标
             if (entityIcon == null && config instanceof ItemToMobConfig mobConfig) {
@@ -363,17 +367,8 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
 
             Component resultText = Component.translatable(config.getResultDescriptionId());
             int resultMultiple = config.getResultMultiple();
-            boolean showResultMultiple = resultMultiple > 1;
             String resultMultipleStr = Integer.toString(resultMultiple);
             int textColor = (source == EntrySource.PENDING) ? 0xFFFF88 : 0xFFFFFF;
-            int resultSuffixW = showResultMultiple
-                    ? TEXT_SUFFIX_GAP + mc.font.width("x") + QTY_GAP + mc.font.width(resultMultipleStr)
-                    : 0;
-            int resultTextMaxW = Math.max(1, resultSectionRight - resultSectionLeft - ICON_SIZE - ICON_TEXT_GAP - resultSuffixW);
-            int resultTextShownW = Math.min(mc.font.width(resultText), resultTextMaxW);
-            int resultGroupW = ICON_SIZE + ICON_TEXT_GAP + resultTextShownW + resultSuffixW;
-            int resultIconX = resultSectionRight - resultGroupW;
-            int resultTextX = resultIconX + ICON_SIZE + ICON_TEXT_GAP;
 
             // 渲染实体图标
             if (entityIcon != null) {
@@ -391,13 +386,12 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
                 guiGraphics.renderItem(resultIcon, resultIconX, iconY);
             }
 
-            // 第二则 resultId 文字
-            drawScrollableText(guiGraphics, mc, resultText, resultTextX, textY, resultTextMaxW, textColor);
-            if (showResultMultiple) {
-                int qtyX = resultTextX + resultTextShownW + TEXT_SUFFIX_GAP;
-                guiGraphics.drawString(mc.font, "x", qtyX, textY, textColor, false);
-                guiGraphics.drawString(mc.font, resultMultipleStr, qtyX + mc.font.width("x") + QTY_GAP, textY, textColor, false);
-            }
+            // 第二则：数量 + * + 图标 + 名称
+            int resultQtyX = resultQtyColX + Math.max(0, QTY_COL_WIDTH - mc.font.width(resultMultipleStr));
+            int resultMultiplyX = resultMultiplyColX + Math.max(0, (MULTIPLY_COL_WIDTH - mc.font.width("*")) / 2);
+            guiGraphics.drawString(mc.font, resultMultipleStr, resultQtyX, textY, textColor, false);
+            guiGraphics.drawString(mc.font, MULTIPLY_MARK, resultMultiplyX, textY, textColor, false);
+            drawScrollableText(guiGraphics, mc, resultText, resultTextX, textY, TEXT_COL_WIDTH, textColor);
 
             if (hovered && mc.screen instanceof Screen screen) {
                 screen.setTooltipForNextRenderPass(buildTooltip(config));
