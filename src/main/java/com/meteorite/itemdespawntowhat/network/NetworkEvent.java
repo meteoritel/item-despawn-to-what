@@ -1,10 +1,11 @@
 package com.meteorite.itemdespawntowhat.network;
 
+import com.meteorite.itemdespawntowhat.ConfigExtractorManager;
 import com.meteorite.itemdespawntowhat.ConfigHandlerManager;
 import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
-import com.meteorite.itemdespawntowhat.ConfigExtractorManager;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -33,6 +34,13 @@ public class NetworkEvent {
                 (payload, context) -> context.enqueueWork(() -> handleConfigSnapshotRequest(payload, context))
         );
 
+        // 客户端关闭编辑会话时释放服务端锁。
+        registrar.playToServer(
+                ReleaseEditSessionPayload.TYPE,
+                ReleaseEditSessionPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> handleReleaseEditSession(context))
+        );
+
         // 客户端发包到服务端，服务端保存配置并刷新缓存。
         registrar.playToServer(
                 SaveConfigPayload.TYPE,
@@ -54,22 +62,38 @@ public class NetworkEvent {
                 return;
             }
 
+            if (!(context.player() instanceof ServerPlayer serverPlayer)) {
+                return;
+            }
+
+            if (!EditSessionLockManager.tryAcquire(serverPlayer)) {
+                serverPlayer.sendSystemMessage(Component.translatable("gui.itemdespawntowhat.edit.locked"));
+                return;
+            }
+
             List<? extends BaseConversionConfig> configs = ConfigExtractorManager.getConfigByType(payload.configType());
             String jsonData = handler.serializeToJsonUnchecked(configs);
-            if (context.player() instanceof ServerPlayer serverPlayer) {
-                net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(
-                        serverPlayer,
-                        new ConfigSnapshotPayload(payload.configType(), jsonData)
-                );
-            }
+            net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(
+                    serverPlayer,
+                    new ConfigSnapshotPayload(payload.configType(), jsonData)
+            );
         } catch (Exception e) {
+            if (context.player() instanceof ServerPlayer serverPlayer) {
+                EditSessionLockManager.release(serverPlayer);
+            }
             LOGGER.error("Failed to handle config snapshot request for type {}", payload.configType(), e);
+        }
+    }
+
+    private static void handleReleaseEditSession(IPayloadContext context) {
+        if (context.player() instanceof ServerPlayer serverPlayer) {
+            EditSessionLockManager.release(serverPlayer);
         }
     }
 
     // 处理客户端发起的配置保存请求：写盘后立即刷新服务端缓存，避免下一次打开看到旧数据。
     private static void handleSaveConfig(SaveConfigPayload payload, IPayloadContext context) {
-
+        ServerPlayer serverPlayer = context.player() instanceof ServerPlayer player ? player : null;
         try {
             BaseConfigHandler<?> handler = ConfigHandlerManager.getInstance().getHandler(payload.configType());
 
@@ -87,16 +111,27 @@ public class NetworkEvent {
             handler.saveConfigUnchecked(newConfigs);
             ConfigExtractorManager.reloadAllConfigs();
 
-            LOGGER.info("Successfully saved {} configs of type {} from player {}",
-                    newConfigs.size(),
-                    payload.configType().getFileName(),
-                    context.player().getName().getString()
-            );
+            if (serverPlayer != null) {
+                LOGGER.info("Successfully saved {} configs of type {} from player {}",
+                        newConfigs.size(),
+                        payload.configType().getFileName(),
+                        serverPlayer.getName().getString()
+                );
+            } else {
+                LOGGER.info("Successfully saved {} configs of type {}",
+                        newConfigs.size(),
+                        payload.configType().getFileName()
+                );
+            }
         } catch (IOException e) {
             LOGGER.error("Failed to persist config save request for type {}", payload.configType().getFileName(), e);
         } catch (Exception e) {
             LOGGER.error("Unexpected error while processing save config request for type {}",
                     payload.configType().getFileName(), e);
+        } finally {
+            if (serverPlayer != null) {
+                EditSessionLockManager.release(serverPlayer);
+            }
         }
     }
 }

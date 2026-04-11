@@ -6,6 +6,9 @@
 
   "gui.itemdespawntowhat.save_to_cache": "添加到缓存",
   "gui.itemdespawntowhat.apply_to_file": "应用到文件",
+  "gui.itemdespawntowhat.keybind.disabled.multiplayer": "服务器环境下快捷键已禁用",
+  "gui.itemdespawntowhat.edit.locked": "已有其他玩家正在编辑",
+  "gui.itemdespawntowhat.command.reload.success": "配置已重新加载",
 
   "gui.itemdespawntowhat.config_selection.title": "选择要编辑的配置类型",
   "gui.itemdespawntowhat.config_type.item_to_item": "转化为掉落物",

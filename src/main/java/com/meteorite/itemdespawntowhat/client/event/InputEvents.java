@@ -5,8 +5,9 @@ import com.meteorite.itemdespawntowhat.client.key.ModKeyBindings;
 import com.meteorite.itemdespawntowhat.ui.screen.ConfigSelectionScreen;
 import com.meteorite.itemdespawntowhat.util.PlayerStateChecker;
 import net.minecraft.client.Minecraft;
-import net.neoforged.bus.api.SubscribeEvent;
+import net.minecraft.network.chat.Component;
 import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.InputEvent;
 
@@ -15,10 +16,19 @@ import net.neoforged.neoforge.client.event.InputEvent;
 public class InputEvents {
     @SubscribeEvent
     public static void onKeyInput(InputEvent.Key event) {
-        // 快捷键只在单人模式下起作用
-        if (PlayerStateChecker.isSinglePlayerServerReady(Minecraft.getInstance())
-                && ModKeyBindings.openGuiKey.consumeClick()) {
-            Minecraft.getInstance().setScreen(new ConfigSelectionScreen());
+        if (!ModKeyBindings.openGuiKey.consumeClick()) {
+            return;
+        }
+
+        Minecraft minecraft = Minecraft.getInstance();
+        // 单人模式继续打开编辑入口，联机环境只给本地提示，不再发起编辑请求。
+        if (PlayerStateChecker.isSinglePlayerServerReady(minecraft)) {
+            minecraft.setScreen(new ConfigSelectionScreen());
+            return;
+        }
+
+        if (PlayerStateChecker.isMultiPlayerServerConnected(minecraft) && minecraft.player != null) {
+            minecraft.player.sendSystemMessage(Component.translatable("gui.itemdespawntowhat.keybind.disabled.multiplayer"));
         }
     }
 }

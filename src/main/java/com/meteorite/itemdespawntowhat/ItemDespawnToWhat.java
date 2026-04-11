@@ -1,10 +1,14 @@
 package com.meteorite.itemdespawntowhat;
 
 import com.meteorite.itemdespawntowhat.command.ConversionConfigCommand;
-import net.neoforged.neoforge.event.RegisterCommandsEvent;
-import net.neoforged.neoforge.event.server.ServerStoppedEvent;
+import com.meteorite.itemdespawntowhat.network.EditSessionLockManager;
+import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.server.ServerStoppedEvent;
+import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
@@ -38,6 +42,18 @@ public class ItemDespawnToWhat {
         } else {
             LOGGER.info("Caches already initialized, skipping...");
         }
+    }
+
+    @SubscribeEvent
+    public void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
+        if (event.getEntity() instanceof ServerPlayer serverPlayer) {
+            EditSessionLockManager.release(serverPlayer);
+        }
+    }
+
+    @SubscribeEvent
+    public void onServerStopping(ServerStoppingEvent event) {
+        EditSessionLockManager.clear();
     }
 
     @SubscribeEvent

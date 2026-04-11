@@ -7,9 +7,12 @@ import com.meteorite.itemdespawntowhat.ui.EditCallback;
 import com.meteorite.itemdespawntowhat.ui.ListScreenCallback;
 import com.meteorite.itemdespawntowhat.ui.SuggestionProvider;
 import com.meteorite.itemdespawntowhat.ui.panel.ConfigListPanel;
+import com.meteorite.itemdespawntowhat.network.ReleaseEditSessionPayload;
 import com.meteorite.itemdespawntowhat.ui.panel.FormListPanel;
 import com.meteorite.itemdespawntowhat.ui.widget.*;
+import com.meteorite.itemdespawntowhat.util.PlayerStateChecker;
 import net.minecraft.ChatFormatting;
+import net.neoforged.neoforge.network.PacketDistributor;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.*;
@@ -269,6 +272,11 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         }
         ConfigListPanel.clearEntityCache();
         if (minecraft != null) {
+            if ((PlayerStateChecker.isSinglePlayerServerReady(minecraft)
+                    || PlayerStateChecker.isMultiPlayerServerConnected(minecraft))
+                    && minecraft.player != null) {
+                PacketDistributor.sendToServer(new ReleaseEditSessionPayload());
+            }
             minecraft.setScreen(new ConfigSelectionScreen());
         }
     }

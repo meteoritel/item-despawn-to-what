@@ -21,11 +21,16 @@ public class ConversionConfigCommand {
                         })
                         .then(Commands.literal("reload")
                                 .executes(context -> {
-                                    ConfigExtractorManager.reloadAllConfigs();
-                                    context.getSource().sendSuccess(
-                                            () -> Component.literal("Conversion configs reloaded."),
-                                            true
-                                    );
+                                    CommandSourceStack source = context.getSource();
+                                    if (!ConfigExtractorManager.reloadAllConfigs()) {
+                                        return 0;
+                                    }
+
+                                    Component message = Component.translatable("gui.itemdespawntowhat.command.reload.success");
+                                    source.getServer().getPlayerList().broadcastSystemMessage(message, true);
+                                    if (!(source.getEntity() instanceof ServerPlayer)) {
+                                        source.sendSuccess(() -> message, true);
+                                    }
                                     return 1;
                                 })
                         )

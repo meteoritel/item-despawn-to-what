@@ -264,21 +264,23 @@ public class ConfigExtractorManager {
     }
 
     // 重新加载所有配置，用于热重载
-    public static void reloadAllConfigs() {
-        if (!initialized) {
-            initialize();
-            return;
-        }
-
+    public static boolean reloadAllConfigs() {
         try {
+            if (!initialized) {
+                initialize();
+                return true;
+            }
+
             // 清除现有缓存
             clearAllCaches();
             // 重新加载配置
             initialize();
 
             LOGGER.info("All configs reloaded successfully");
+            return true;
         } catch (Exception e) {
             LOGGER.error("Failed to reload configs", e);
+            return false;
         }
     }
 
