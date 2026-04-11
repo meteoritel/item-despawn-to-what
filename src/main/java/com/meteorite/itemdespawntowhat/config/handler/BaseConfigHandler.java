@@ -1,6 +1,5 @@
 package com.meteorite.itemdespawntowhat.config.handler;
 
-import com.google.common.reflect.TypeToken;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
@@ -101,6 +100,11 @@ public abstract class BaseConfigHandler<T extends BaseConversionConfig> {
         }
     }
 
+    // 将任意子类配置列表序列化为 JSON，供网络快照等无泛型上下文场景使用
+    public String serializeToJsonUnchecked(List<? extends BaseConversionConfig> configs) {
+        return GSON.toJson(configs);
+    }
+
     // 配置文件是否存在
     public boolean isConfigFileExists() {
         return Files.exists(getConfigPath());
@@ -137,6 +141,7 @@ public abstract class BaseConfigHandler<T extends BaseConversionConfig> {
     }
     // 子类指定类型
     protected abstract Type createListType();
+
     public ConfigType getConfigType() {
         return configType;
     }

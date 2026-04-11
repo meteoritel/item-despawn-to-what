@@ -1,10 +1,10 @@
 package com.meteorite.itemdespawntowhat.ui;
 
-import com.meteorite.itemdespawntowhat.ConfigExtractorManager;
 import com.meteorite.itemdespawntowhat.ConfigHandlerManager;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
+import com.meteorite.itemdespawntowhat.client.network.ClientConfigSnapshotManager;
 import com.meteorite.itemdespawntowhat.network.SaveConfigPayload;
 import com.meteorite.itemdespawntowhat.util.PlayerStateChecker;
 import net.minecraft.client.Minecraft;
@@ -13,7 +13,6 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -24,7 +23,9 @@ public class BaseConfigEditHandler<T extends BaseConversionConfig> {
 
     private final ConfigType configType;
     private final BaseConfigHandler<T> handler;
+    // 当前会话开始时，从服务端快照拿到的原始配置
     private final List<T> originalConfigs;
+    // 当前会话中新建但尚未提交到服务端的条目
     private final List<T> pendingConfigs = new ArrayList<>();
     private final Minecraft mc;
 
@@ -37,16 +38,12 @@ public class BaseConfigEditHandler<T extends BaseConversionConfig> {
             throw new IllegalStateException("No handler registered for " + configType);
         }
 
-        List<T> configs;
-
-        if (PlayerStateChecker.isSinglePlayerServerReady(mc)
-                || PlayerStateChecker.isMultiPlayerServerConnected(mc)) {
-            // 服务端已经加载，直接读取缓存
-            configs = ConfigExtractorManager.getConfigByType(configType);
-            LOGGER.debug("Read cache from {}, count = {}", configType.name(), configs.size());
+        // 编辑界面只消费服务端下发的一次性快照，不再回读客户端本地文件。
+        List<T> configs = ClientConfigSnapshotManager.consumeSnapshot(configType, handler);
+        if (configs.isEmpty()) {
+            LOGGER.warn("No client snapshot available for {}, using empty initial list", configType.name());
         } else {
-            configs = List.of();
-            LOGGER.warn("ConfigEditHandler initialized before server-ready state for {}", configType.name());
+            LOGGER.debug("Loaded client snapshot for {}, count = {}", configType.name(), configs.size());
         }
 
         this.originalConfigs = new ArrayList<>(configs);
@@ -55,30 +52,35 @@ public class BaseConfigEditHandler<T extends BaseConversionConfig> {
     // ========== 配置操作 ========== //
     // 将当前表单内容写入缓存，对应"Save to Cache"按钮
     public void saveCurrentToCache(EditCallback<T> callback) {
-        T config = callback.buildConfigFromFields();
-        if (config != null && config.shouldProcess()) {
-            pendingConfigs.add(config);
-            callback.onClearFields();
-            callback.onListChanged();
-            LOGGER.debug("Saved to cache: {}", config);
-        } else {
+        T draft = callback.buildConfigFromFields();
+        if (draft == null || !draft.shouldProcess()) {
             callback.onSaveError();
-            LOGGER.warn("Invalid config, this won't be saved, config is {}",config);
+            LOGGER.warn("Invalid config, this won't be saved");
+            return;
         }
+
+        pendingConfigs.add(draft);
+        callback.onClearFields();
+        callback.onListChanged();
+        LOGGER.debug("Saved to cache: {}", draft);
     }
 
-    // 将缓存写入文件或发包至服务端，对应"Apply to File"按钮
+    // 将缓存写回服务端，对应 "Apply to File" 按钮
     public void applyToFile(EditCallback<T> callback) {
-        // 先尝试把当前表单内容追加进缓存
-        T currentConfig = callback.buildConfigFromFields();
-        if (currentConfig != null && currentConfig.shouldProcess()) {
-            pendingConfigs.add(currentConfig);
-            LOGGER.debug("Added current form to cache before applying");
+        // Apply 前先把表单里最后一次修改收进待提交列表，避免漏掉用户刚输入的内容。
+        T draft = callback.buildConfigFromFields();
+        if (draft != null) {
+            if (!draft.shouldProcess()) {
+                callback.onSaveError();
+                LOGGER.warn("Invalid config detected before applying {}, aborting save", configType.name());
+                return;
+            }
+            pendingConfigs.add(draft);
+            LOGGER.debug("Added current form to pending list before applying");
         }
 
-        if (PlayerStateChecker.isSinglePlayerServerReady(mc)) {
-            applyToLocalFile(callback);
-        } else if (PlayerStateChecker.isMultiPlayerServerConnected(mc)) {
+        if (PlayerStateChecker.isSinglePlayerServerReady(mc)
+                || PlayerStateChecker.isMultiPlayerServerConnected(mc)) {
             applyToServer(callback);
         } else {
             LOGGER.warn("applyToFile ignored because server is not ready, type = {}", configType.name());
@@ -86,25 +88,10 @@ public class BaseConfigEditHandler<T extends BaseConversionConfig> {
         }
     }
 
-    // ========== 内部保存逻辑 ========== //
-    private void applyToLocalFile(EditCallback<T> callback) {
-        try {
-            List<T> allConfigs = getAllConfigs();
-            handler.saveConfig(allConfigs);
-            LOGGER.info("Applied {} configs to local file: {}",
-                    allConfigs.size(), configType.getFileName());
-
-            originalConfigs.clear();
-            pendingConfigs.clear();
-            callback.onClose();
-        } catch (IOException e) {
-            LOGGER.error("Failed to save config file: {}", configType.getFileName(), e);
-        }
-    }
-
     private void applyToServer(EditCallback<T> callback) {
         try {
             List<T> allConfigs = getAllConfigs();
+            // 只把最终 JSON 发给服务端，由服务端负责落盘和缓存刷新。
             String jsonData = handler.serializeToJson(allConfigs);
             SaveConfigPayload payload = new SaveConfigPayload(configType, jsonData);
             PacketDistributor.sendToServer(payload);

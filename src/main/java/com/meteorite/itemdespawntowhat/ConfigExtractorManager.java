@@ -65,18 +65,18 @@ public class ConfigExtractorManager {
 
     // 加载所有配置文件的内容
     public static void loadAllConfigs() {
-        ConfigHandlerManager configManager = ConfigHandlerManager.getInstance();
+        ConfigHandlerManager handlerManager = ConfigHandlerManager.getInstance();
 
-        if (!configManager.isLoaded()) {
-            configManager.generateDefaultConfig();
+        if (!handlerManager.isLoaded()) {
+            handlerManager.generateDefaultConfig();
         }
 
         // 获取所有已注册的配置处理器类型
-        Set<ConfigType> handlerTypes = configManager.getRegisteredHandlerTypes();
+        Set<ConfigType> handlerTypes = handlerManager.getRegisteredHandlerTypes();
 
         for (ConfigType configType : handlerTypes) {
             try {
-                BaseConfigHandler<?> handler = configManager.getHandler(configType);
+                BaseConfigHandler<?> handler = handlerManager.getHandler(configType);
                 if (handler == null) {
                     LOGGER.warn("No handler found for config type: {}", configType);
                     continue;

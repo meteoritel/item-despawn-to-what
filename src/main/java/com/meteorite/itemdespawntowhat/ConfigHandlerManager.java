@@ -12,6 +12,7 @@ import com.meteorite.itemdespawntowhat.config.handler.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+// 服务端启动才会第一次生辰json文件
 public class ConfigHandlerManager {
     private static final Logger LOGGER = LogManager.getLogger();
     private static final ConfigHandlerManager INSTANCE = new ConfigHandlerManager();
@@ -26,12 +27,6 @@ public class ConfigHandlerManager {
 
     public static ConfigHandlerManager getInstance() {
         return INSTANCE;
-    }
-
-    public static void initialize() {
-        // 生成默认配置文件
-        INSTANCE.generateDefaultConfig();
-        LOGGER.info("ConfigManager initialized and default configs generated");
     }
 
     // 注册所有配置处理器
@@ -60,7 +55,7 @@ public class ConfigHandlerManager {
         LOGGER.debug("Registered configuration handler: {}", configType.name());
     }
 
-    // ---------- 生成所有的默认配置文件 ----------//
+    // ========== 生成所有的默认配置文件 ========== //
     public synchronized void generateDefaultConfig() {
         if (loaded) {
             LOGGER.debug("Default configs already generated");

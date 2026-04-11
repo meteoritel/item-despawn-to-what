@@ -3,44 +3,29 @@ package com.meteorite.itemdespawntowhat;
 import com.meteorite.itemdespawntowhat.command.ConversionConfigCommand;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
-import org.slf4j.Logger;
-
-import com.mojang.logging.LogUtils;
-
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
-import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 @Mod(ItemDespawnToWhat.MOD_ID)
 public class ItemDespawnToWhat {
 
     public static final String MOD_ID = "itemdespawntowhat";
-    public static final Logger LOGGER = LogUtils.getLogger();
+    public static final Logger LOGGER = LogManager.getLogger();
 
     public ItemDespawnToWhat(IEventBus modEventBus, ModContainer modContainer) {
-        modEventBus.addListener(this::commonSetup);
-
         modContainer.registerConfig(ModConfig.Type.COMMON, ModConfigValues.SPEC);
 
         // 注册事件管理器
         NeoForge.EVENT_BUS.register(this);
 
         LOGGER.info("{} mod initialized", MOD_ID);
-    }
-
-    // 游戏启动时，生成默认配置文件
-    private void commonSetup(FMLCommonSetupEvent event) {
-        LOGGER.info("Starting common setup for {}", MOD_ID);
-        event.enqueueWork(() -> {
-            ConfigHandlerManager.initialize();
-            LOGGER.info("Configurations loaded during common setup");
-
-        });
     }
 
     @SubscribeEvent

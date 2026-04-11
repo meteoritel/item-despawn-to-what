@@ -1,12 +1,13 @@
 package com.meteorite.itemdespawntowhat.ui.screen;
 
-import com.meteorite.itemdespawntowhat.client.register.ConfigEditScreenRegistry;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
+import com.meteorite.itemdespawntowhat.network.RequestConfigSnapshotPayload;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.neoforged.neoforge.network.PacketDistributor;
 import org.jetbrains.annotations.NotNull;
 
 // 配置选择UI
@@ -22,7 +23,7 @@ public class ConfigSelectionScreen extends Screen {
         for (ConfigType type : ConfigType.values()) {
             Button button = Button.builder(
                             Component.translatable("gui.itemdespawntowhat.config_type." + type.name().toLowerCase()),
-                            btn -> openConfigList(type))
+                            btn -> requestConfigSnapshot(type))
                     .bounds(width / 2 - 100, y, 200, 20).build();
 
             // 添加按钮tooltip
@@ -33,9 +34,10 @@ public class ConfigSelectionScreen extends Screen {
         }
     }
 
-    private void openConfigList(ConfigType type) {
+    // 这里只负责向服务端申请快照，不直接构建编辑界面。
+    private void requestConfigSnapshot(ConfigType type) {
         if (minecraft != null) {
-            minecraft.setScreen(ConfigEditScreenRegistry.create(type));
+            PacketDistributor.sendToServer(new RequestConfigSnapshotPayload(type));
         }
     }
 
