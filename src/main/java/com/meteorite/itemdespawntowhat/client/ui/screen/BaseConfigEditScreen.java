@@ -2,7 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
-import com.meteorite.itemdespawntowhat.client.ui.BaseConfigEditHandler;
+import com.meteorite.itemdespawntowhat.client.configedit.BaseConfigEditHandler;
 import com.meteorite.itemdespawntowhat.client.ui.EditCallback;
 import com.meteorite.itemdespawntowhat.client.ui.ListScreenCallback;
 import com.meteorite.itemdespawntowhat.client.ui.SuggestionProvider;

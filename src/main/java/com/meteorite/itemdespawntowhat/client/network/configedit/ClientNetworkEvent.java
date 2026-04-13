@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.client.network;
+package com.meteorite.itemdespawntowhat.client.network.configedit;
 
 import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
 import com.meteorite.itemdespawntowhat.network.configedit.s2c.ConfigSnapshotPayload;

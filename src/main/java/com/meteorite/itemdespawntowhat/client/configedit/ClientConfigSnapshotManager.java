@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.client.network;
+package com.meteorite.itemdespawntowhat.client.configedit;
 
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;

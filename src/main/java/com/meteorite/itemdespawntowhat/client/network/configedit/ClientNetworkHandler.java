@@ -1,8 +1,9 @@
-package com.meteorite.itemdespawntowhat.client.network;
+package com.meteorite.itemdespawntowhat.client.network.configedit;
 
+import com.meteorite.itemdespawntowhat.client.configedit.ClientConfigSnapshotManager;
 import com.meteorite.itemdespawntowhat.client.register.ConfigEditScreenRegistry;
-import com.meteorite.itemdespawntowhat.network.configedit.s2c.ConfigSnapshotPayload;
 import com.meteorite.itemdespawntowhat.client.ui.screen.ConfigSelectionScreen;
+import com.meteorite.itemdespawntowhat.network.configedit.s2c.ConfigSnapshotPayload;
 import net.minecraft.client.Minecraft;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 

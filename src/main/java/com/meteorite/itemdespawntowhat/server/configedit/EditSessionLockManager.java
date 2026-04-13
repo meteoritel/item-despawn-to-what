@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.network;
+package com.meteorite.itemdespawntowhat.server.configedit;
 
 import net.minecraft.server.level.ServerPlayer;
 
