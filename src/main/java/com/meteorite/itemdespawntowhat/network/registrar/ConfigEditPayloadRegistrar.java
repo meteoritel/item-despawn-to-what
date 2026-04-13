@@ -12,6 +12,7 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
 // 注册客户端向服务端打开GUI的发包
 @EventBusSubscriber(modid = ItemDespawnToWhat.MOD_ID)
+// 服务端侧网络注册入口：只负责注册 C2S 配置编辑相关 payload。
 public class ConfigEditPayloadRegistrar {
     private static final String PROTOCOL_VERSION = "1";
 

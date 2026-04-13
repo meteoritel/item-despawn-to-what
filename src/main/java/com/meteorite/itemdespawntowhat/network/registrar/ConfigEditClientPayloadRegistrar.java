@@ -10,7 +10,7 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
-// 注册客户端接收服务端的发包
+// 客户端侧网络注册入口：只负责注册 S2C 配置编辑相关 payload。
 @EventBusSubscriber(modid = ItemDespawnToWhat.MOD_ID, value = Dist.CLIENT)
 public class ConfigEditClientPayloadRegistrar {
     private static final String PROTOCOL_VERSION = "1";

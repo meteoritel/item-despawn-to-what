@@ -7,6 +7,6 @@ public interface LevelDelayTask {
 
     boolean isFinished();
 
-    default void onFinish(ServerLevel serverLevel) {};
+    default void onFinish(ServerLevel serverLevel) {}
 
 }

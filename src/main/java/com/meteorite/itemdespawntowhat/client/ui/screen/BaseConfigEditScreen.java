@@ -37,6 +37,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
 
+// 配置编辑主界面：负责表单渲染、输入校验、建议框和列表交互。
 public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> extends Screen
         implements EditCallback<T>, ListScreenCallback<T> {
 

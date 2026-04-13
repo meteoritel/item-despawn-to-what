@@ -12,6 +12,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 
+// 配置列表子界面：查看并操作当前会话中的原始配置和待提交配置。
 public class ConfigListScreen<T extends BaseConversionConfig> extends Screen {
 
     private enum BottomAction {

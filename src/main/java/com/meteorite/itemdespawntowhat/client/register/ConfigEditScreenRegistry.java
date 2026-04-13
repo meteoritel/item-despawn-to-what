@@ -7,6 +7,7 @@ import java.util.EnumMap;
 import java.util.Map;
 import java.util.function.Supplier;
 
+// 配置类型到编辑界面的工厂注册表。
 public class ConfigEditScreenRegistry {
     private static final Map<ConfigType, Supplier<Screen>> SCREENS = new EnumMap<>(ConfigType.class);
 

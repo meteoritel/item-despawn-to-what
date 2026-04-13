@@ -17,7 +17,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 
-// config edit GUI的后端处理类
+// 客户端编辑会话控制器：管理草稿、待提交列表和配置提交流程。
 public class ConfigEditSessionHandler<T extends BaseConversionConfig> {
     private static final Logger LOGGER = LogManager.getLogger();
     private static final String LOCAL_MODE_KEY = "gui.itemdespawntowhat.edit.mode.local_mode";
@@ -67,7 +67,7 @@ public class ConfigEditSessionHandler<T extends BaseConversionConfig> {
         LOGGER.debug("Saved to cache: {}", draft);
     }
 
-    // 将缓存写回服务端，对应 "Apply to File" 按钮
+    // 将当前会话内容统一提交给服务端，由服务端负责落盘和缓存刷新。
     public void applyToFile(EditCallback<T> callback) {
         // Apply 前先把表单里最后一次修改收进待提交列表，避免漏掉用户刚输入的内容。
         T draft = callback.buildConfigFromFields();
@@ -81,13 +81,7 @@ public class ConfigEditSessionHandler<T extends BaseConversionConfig> {
             LOGGER.debug("Added current form to pending list before applying");
         }
 
-        if (PlayerStateChecker.isSinglePlayerServerReady(mc)
-                || PlayerStateChecker.isMultiPlayerServerConnected(mc)) {
-            applyToServer(callback);
-        } else {
-            LOGGER.warn("applyToFile ignored because server is not ready, type = {}", configType.name());
-            callback.onSaveError();
-        }
+        applyToServer(callback);
     }
 
     private void applyToServer(EditCallback<T> callback) {
@@ -106,6 +100,7 @@ public class ConfigEditSessionHandler<T extends BaseConversionConfig> {
             callback.onClose();
         } catch (Exception e) {
             LOGGER.error("Failed to send config packet to server", e);
+            callback.onSaveError();
         }
     }
 

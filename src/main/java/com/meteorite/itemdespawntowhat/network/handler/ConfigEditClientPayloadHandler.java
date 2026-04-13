@@ -7,7 +7,7 @@ import com.meteorite.itemdespawntowhat.network.payload.s2c.ConfigSnapshotPayload
 import net.minecraft.client.Minecraft;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
-// 客户端接收到服务端发包后的处理
+// 客户端 payload 处理器：负责打开界面并接收服务端下发的配置快照。
 public class ConfigEditClientPayloadHandler {
 
     public static void handleOpenGui(IPayloadContext context) {

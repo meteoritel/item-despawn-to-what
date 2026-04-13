@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.util.List;
 
 // 服务端接收客户端打开GUI 的发包后续处理
+// 服务端 payload 处理器：负责配置快照请求、保存配置和会话释放。
 public final class ConfigEditServerPayloadHandler {
     private static final Logger LOGGER = LogManager.getLogger();
 

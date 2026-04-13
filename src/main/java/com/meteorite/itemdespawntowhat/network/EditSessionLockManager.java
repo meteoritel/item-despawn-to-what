@@ -4,7 +4,7 @@ import net.minecraft.server.level.ServerPlayer;
 
 import java.util.UUID;
 
-// 当服务端有人在编辑时开启全局锁
+// 服务端编辑锁：控制同一时间只允许一个玩家占用配置编辑会话。
 public final class EditSessionLockManager {
     private static UUID currentEditor;
 

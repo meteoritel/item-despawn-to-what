@@ -10,7 +10,7 @@ import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.jetbrains.annotations.NotNull;
 
-// 配置选择UI
+// 配置类型选择界面：进入具体编辑器前选择要编辑的配置类型。
 public class ConfigTypeSelectionScreen extends Screen {
 
     public ConfigTypeSelectionScreen() {

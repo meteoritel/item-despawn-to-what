@@ -9,7 +9,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
-// 客户端临时快照缓存类
+// 客户端临时快照缓存：保存服务端下发的配置 JSON，供编辑界面一次性消费。
 public final class ConfigEditSnapshotManager {
     private static final Map<ConfigType, String> SNAPSHOT_JSONS = new EnumMap<>(ConfigType.class);
 

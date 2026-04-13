@@ -9,6 +9,7 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 
+// C2S：客户端提交最终配置 JSON，由服务端负责校验、落盘和刷新缓存。
 public record SaveConfigPayload(ConfigType configType, String configData) implements CustomPacketPayload {
 
     public static final Type<SaveConfigPayload> TYPE = new Type<>(

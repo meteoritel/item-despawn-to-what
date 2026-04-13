@@ -9,6 +9,7 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 
+// S2C：服务端下发配置快照 JSON，供客户端构建编辑界面。
 public record ConfigSnapshotPayload(ConfigType configType, String configJson) implements CustomPacketPayload {
     public static final Type<ConfigSnapshotPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(ItemDespawnToWhat.MOD_ID, "config_snapshot")
