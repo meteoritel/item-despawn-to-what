@@ -2,12 +2,14 @@ package com.meteorite.itemdespawntowhat.network.handler;
 
 import com.meteorite.itemdespawntowhat.ConfigExtractorManager;
 import com.meteorite.itemdespawntowhat.ConfigHandlerManager;
+import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
+import com.meteorite.itemdespawntowhat.network.EditSessionLockManager;
 import com.meteorite.itemdespawntowhat.network.payload.c2s.RequestConfigSnapshotPayload;
+import com.meteorite.itemdespawntowhat.network.payload.c2s.SaveConfigChunkPayload;
 import com.meteorite.itemdespawntowhat.network.payload.c2s.SaveConfigPayload;
 import com.meteorite.itemdespawntowhat.network.payload.s2c.ConfigSnapshotPayload;
-import com.meteorite.itemdespawntowhat.network.EditSessionLockManager;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -66,21 +68,51 @@ public final class ConfigEditServerPayloadHandler {
     public static void handleReleaseEditSession(IPayloadContext context) {
         if (context.player() instanceof ServerPlayer serverPlayer) {
             EditSessionLockManager.release(serverPlayer);
+            SaveConfigChunkAccumulator.clear(serverPlayer);
         }
     }
 
     // 处理客户端发起的配置保存请求：写盘后立即刷新服务端缓存，避免下一次打开看到旧数据。
     public static void handleSaveConfig(SaveConfigPayload payload, IPayloadContext context) {
-        ServerPlayer serverPlayer = context.player() instanceof ServerPlayer player ? player : null;
+        if (!(context.player() instanceof ServerPlayer serverPlayer)) {
+            return;
+        }
+
         try {
-            BaseConfigHandler<?> handler = ConfigHandlerManager.getInstance().getHandler(payload.configType());
+            saveConfigData(serverPlayer, payload.configType(), payload.configData());
+        } finally {
+            EditSessionLockManager.release(serverPlayer);
+        }
+    }
+
+    // 处理客户端发起的分包保存请求：收齐后复用同一条保存逻辑。
+    public static void handleSaveConfigChunk(SaveConfigChunkPayload payload, IPayloadContext context) {
+        if (!(context.player() instanceof ServerPlayer serverPlayer)) {
+            return;
+        }
+
+        String jsonData = SaveConfigChunkAccumulator.acceptChunk(serverPlayer, payload);
+        if (jsonData == null) {
+            return;
+        }
+
+        try {
+            saveConfigData(serverPlayer, payload.configType(), jsonData);
+        } finally {
+            EditSessionLockManager.release(serverPlayer);
+        }
+    }
+
+    private static void saveConfigData(ServerPlayer serverPlayer, ConfigType configType, String configData) {
+        try {
+            BaseConfigHandler<?> handler = ConfigHandlerManager.getInstance().getHandler(configType);
 
             if (handler == null) {
-                LOGGER.error("[SaveConfigPayload] No handler found for config type: {}", payload.configType());
+                LOGGER.error("[SaveConfigPayload] No handler found for config type: {}", configType);
                 return;
             }
 
-            List<? extends BaseConversionConfig> newConfigs = handler.deserializeFromJson(payload.configData());
+            List<? extends BaseConversionConfig> newConfigs = handler.deserializeFromJson(configData);
             if (newConfigs == null || newConfigs.isEmpty()) {
                 LOGGER.warn("Received empty or invalid config data from client");
                 return;
@@ -89,27 +121,16 @@ public final class ConfigEditServerPayloadHandler {
             handler.saveConfigUnchecked(newConfigs);
             ConfigExtractorManager.reloadAllConfigs();
 
-            if (serverPlayer != null) {
-                LOGGER.info("Successfully saved {} configs of type {} from player {}",
-                        newConfigs.size(),
-                        payload.configType().getFileName(),
-                        serverPlayer.getName().getString()
-                );
-            } else {
-                LOGGER.info("Successfully saved {} configs of type {}",
-                        newConfigs.size(),
-                        payload.configType().getFileName()
-                );
-            }
+            LOGGER.info("Successfully saved {} configs of type {} from player {}",
+                    newConfigs.size(),
+                    configType.getFileName(),
+                    serverPlayer.getName().getString()
+            );
         } catch (IOException e) {
-            LOGGER.error("Failed to persist config save request for type {}", payload.configType().getFileName(), e);
+            LOGGER.error("Failed to persist config save request for type {}", configType.getFileName(), e);
         } catch (Exception e) {
             LOGGER.error("Unexpected error while processing save config request for type {}",
-                    payload.configType().getFileName(), e);
-        } finally {
-            if (serverPlayer != null) {
-                EditSessionLockManager.release(serverPlayer);
-            }
+                    configType.getFileName(), e);
         }
     }
 }

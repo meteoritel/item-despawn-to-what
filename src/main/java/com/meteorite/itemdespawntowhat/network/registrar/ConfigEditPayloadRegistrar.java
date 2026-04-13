@@ -4,6 +4,7 @@ import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
 import com.meteorite.itemdespawntowhat.network.handler.ConfigEditServerPayloadHandler;
 import com.meteorite.itemdespawntowhat.network.payload.c2s.ReleaseEditSessionPayload;
 import com.meteorite.itemdespawntowhat.network.payload.c2s.RequestConfigSnapshotPayload;
+import com.meteorite.itemdespawntowhat.network.payload.c2s.SaveConfigChunkPayload;
 import com.meteorite.itemdespawntowhat.network.payload.c2s.SaveConfigPayload;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -39,6 +40,13 @@ public class ConfigEditPayloadRegistrar {
                 SaveConfigPayload.TYPE,
                 SaveConfigPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> ConfigEditServerPayloadHandler.handleSaveConfig(payload, context))
+        );
+
+        // 超长 JSON 走分包保存，服务端按 transferId 重组后复用同一保存流程。
+        registrar.playToServer(
+                SaveConfigChunkPayload.TYPE,
+                SaveConfigChunkPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> ConfigEditServerPayloadHandler.handleSaveConfigChunk(payload, context))
         );
     }
 }

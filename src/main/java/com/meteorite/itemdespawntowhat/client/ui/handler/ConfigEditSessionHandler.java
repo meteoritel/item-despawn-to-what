@@ -6,11 +6,9 @@ import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
 import com.meteorite.itemdespawntowhat.client.ui.EditCallback;
 import com.meteorite.itemdespawntowhat.network.ConfigEditSnapshotManager;
-import com.meteorite.itemdespawntowhat.network.payload.c2s.SaveConfigPayload;
 import com.meteorite.itemdespawntowhat.util.PlayerStateChecker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
-import net.neoforged.neoforge.network.PacketDistributor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -89,11 +87,16 @@ public class ConfigEditSessionHandler<T extends BaseConversionConfig> {
             List<T> allConfigs = getAllConfigs();
             // 只把最终 JSON 发给服务端，由服务端负责落盘和缓存刷新。
             String jsonData = handler.serializeToJson(allConfigs);
-            SaveConfigPayload payload = new SaveConfigPayload(configType, jsonData);
-            PacketDistributor.sendToServer(payload);
 
-            LOGGER.info("Sent {} configs to server for type: {}",
-                    allConfigs.size(), configType.getFileName());
+            if (SaveConfigChunker.requiresChunking(jsonData)) {
+                int chunkCount = SaveConfigChunker.sendChunks(configType, jsonData);
+                LOGGER.info("Sent {} configs to server for type: {} in {} chunks",
+                        allConfigs.size(), configType.getFileName(), chunkCount);
+            } else {
+                SaveConfigChunker.sendSingle(configType, jsonData);
+                LOGGER.info("Sent {} configs to server for type: {}",
+                        allConfigs.size(), configType.getFileName());
+            }
 
             originalConfigs.clear();
             pendingConfigs.clear();

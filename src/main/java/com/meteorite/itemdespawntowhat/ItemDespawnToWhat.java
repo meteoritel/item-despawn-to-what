@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat;
 
 import com.meteorite.itemdespawntowhat.command.ConversionConfigCommand;
 import com.meteorite.itemdespawntowhat.network.EditSessionLockManager;
+import com.meteorite.itemdespawntowhat.network.handler.SaveConfigChunkAccumulator;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -48,17 +49,20 @@ public class ItemDespawnToWhat {
     public void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer serverPlayer) {
             EditSessionLockManager.release(serverPlayer);
+            SaveConfigChunkAccumulator.clear(serverPlayer);
         }
     }
 
     @SubscribeEvent
     public void onServerStopping(ServerStoppingEvent event) {
         EditSessionLockManager.clear();
+        SaveConfigChunkAccumulator.clearAll();
     }
 
     @SubscribeEvent
     public void onServerStopped(ServerStoppedEvent event) {
         LOGGER.info("Server stopped - clearing caches");
+        SaveConfigChunkAccumulator.clearAll();
         ConfigExtractorManager.clearAllCaches();
     }
 
