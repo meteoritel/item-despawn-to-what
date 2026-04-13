@@ -3,7 +3,7 @@ package com.meteorite.itemdespawntowhat.client.register;
 import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
 import com.meteorite.itemdespawntowhat.client.key.ModKeyBindings;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
-import com.meteorite.itemdespawntowhat.ui.screen.*;
+import com.meteorite.itemdespawntowhat.client.ui.screen.*;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;

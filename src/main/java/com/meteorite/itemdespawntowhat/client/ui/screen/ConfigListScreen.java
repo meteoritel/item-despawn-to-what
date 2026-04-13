@@ -1,9 +1,9 @@
-package com.meteorite.itemdespawntowhat.ui.screen;
+package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
-import com.meteorite.itemdespawntowhat.ui.BaseConfigEditHandler;
-import com.meteorite.itemdespawntowhat.ui.ListScreenCallback;
-import com.meteorite.itemdespawntowhat.ui.panel.ConfigListPanel;
+import com.meteorite.itemdespawntowhat.client.ui.BaseConfigEditHandler;
+import com.meteorite.itemdespawntowhat.client.ui.ListScreenCallback;
+import com.meteorite.itemdespawntowhat.client.ui.panel.ConfigListPanel;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;

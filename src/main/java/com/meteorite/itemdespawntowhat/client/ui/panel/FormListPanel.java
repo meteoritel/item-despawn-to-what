@@ -1,6 +1,6 @@
-package com.meteorite.itemdespawntowhat.ui.panel;
+package com.meteorite.itemdespawntowhat.client.ui.panel;
 
-import com.meteorite.itemdespawntowhat.ui.screen.BaseConfigEditScreen;
+import com.meteorite.itemdespawntowhat.client.ui.screen.BaseConfigEditScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;

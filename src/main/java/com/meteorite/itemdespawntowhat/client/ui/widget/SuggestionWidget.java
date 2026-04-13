@@ -1,15 +1,12 @@
-package com.meteorite.itemdespawntowhat.ui.widget;
+package com.meteorite.itemdespawntowhat.client.ui.widget;
 
-import com.meteorite.itemdespawntowhat.ui.SuggestionProvider;
+import com.meteorite.itemdespawntowhat.client.ui.SuggestionProvider;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.core.Registry;
-import net.minecraft.resources.ResourceLocation;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 /*
  * 物品ID输入建议组件

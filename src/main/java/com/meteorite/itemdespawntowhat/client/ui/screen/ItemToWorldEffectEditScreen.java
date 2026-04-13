@@ -1,11 +1,11 @@
-package com.meteorite.itemdespawntowhat.ui.screen;
+package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.WorldEffectType;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToWorldEffectConfig;
-import com.meteorite.itemdespawntowhat.ui.SuggestionProvider;
-import com.meteorite.itemdespawntowhat.ui.panel.FormListPanel;
-import com.meteorite.itemdespawntowhat.ui.widget.ArrowPotionEffectsWidget;
+import com.meteorite.itemdespawntowhat.client.ui.SuggestionProvider;
+import com.meteorite.itemdespawntowhat.client.ui.panel.FormListPanel;
+import com.meteorite.itemdespawntowhat.client.ui.widget.ArrowPotionEffectsWidget;
 import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.core.registries.BuiltInRegistries;

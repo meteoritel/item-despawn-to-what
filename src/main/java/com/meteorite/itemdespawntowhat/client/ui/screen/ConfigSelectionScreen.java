@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.ui.screen;
+package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.network.RequestConfigSnapshotPayload;

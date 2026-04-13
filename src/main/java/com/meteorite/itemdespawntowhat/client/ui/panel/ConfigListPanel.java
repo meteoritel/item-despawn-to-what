@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.ui.panel;
+package com.meteorite.itemdespawntowhat.client.ui.panel;
 
 import com.meteorite.itemdespawntowhat.ModConfigValues;
 import com.meteorite.itemdespawntowhat.config.ConfigDirection;

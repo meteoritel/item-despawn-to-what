@@ -1,8 +1,8 @@
-package com.meteorite.itemdespawntowhat.ui.screen;
+package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToExpOrbConfig;
-import com.meteorite.itemdespawntowhat.ui.panel.FormListPanel;
+import com.meteorite.itemdespawntowhat.client.ui.panel.FormListPanel;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
 

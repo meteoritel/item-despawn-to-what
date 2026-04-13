@@ -2,7 +2,7 @@ package com.meteorite.itemdespawntowhat.client.event;
 
 import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
 import com.meteorite.itemdespawntowhat.client.key.ModKeyBindings;
-import com.meteorite.itemdespawntowhat.ui.screen.ConfigSelectionScreen;
+import com.meteorite.itemdespawntowhat.client.ui.screen.ConfigSelectionScreen;
 import com.meteorite.itemdespawntowhat.util.PlayerStateChecker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;

@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.ui.widget;
+package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import com.meteorite.itemdespawntowhat.config.ConfigDirection;
 import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;

@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.ui;
+package com.meteorite.itemdespawntowhat.client.ui;
 
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 

@@ -1,15 +1,15 @@
-package com.meteorite.itemdespawntowhat.ui.screen;
+package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
-import com.meteorite.itemdespawntowhat.ui.BaseConfigEditHandler;
-import com.meteorite.itemdespawntowhat.ui.EditCallback;
-import com.meteorite.itemdespawntowhat.ui.ListScreenCallback;
-import com.meteorite.itemdespawntowhat.ui.SuggestionProvider;
-import com.meteorite.itemdespawntowhat.ui.panel.ConfigListPanel;
+import com.meteorite.itemdespawntowhat.client.ui.BaseConfigEditHandler;
+import com.meteorite.itemdespawntowhat.client.ui.EditCallback;
+import com.meteorite.itemdespawntowhat.client.ui.ListScreenCallback;
+import com.meteorite.itemdespawntowhat.client.ui.SuggestionProvider;
+import com.meteorite.itemdespawntowhat.client.ui.panel.ConfigListPanel;
 import com.meteorite.itemdespawntowhat.network.ReleaseEditSessionPayload;
-import com.meteorite.itemdespawntowhat.ui.panel.FormListPanel;
-import com.meteorite.itemdespawntowhat.ui.widget.*;
+import com.meteorite.itemdespawntowhat.client.ui.panel.FormListPanel;
+import com.meteorite.itemdespawntowhat.client.ui.widget.*;
 import com.meteorite.itemdespawntowhat.util.PlayerStateChecker;
 import net.minecraft.ChatFormatting;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -26,7 +26,7 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import com.meteorite.itemdespawntowhat.ui.FieldValidator;
+import com.meteorite.itemdespawntowhat.client.ui.FieldValidator;
 import com.meteorite.itemdespawntowhat.util.IdValidator;
 
 import java.util.ArrayList;

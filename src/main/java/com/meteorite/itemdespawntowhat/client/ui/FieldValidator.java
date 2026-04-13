@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.ui;
+package com.meteorite.itemdespawntowhat.client.ui;
 
 // 字段校验器函数式接口，用于对表单输入框的值进行合法性校验
 @FunctionalInterface

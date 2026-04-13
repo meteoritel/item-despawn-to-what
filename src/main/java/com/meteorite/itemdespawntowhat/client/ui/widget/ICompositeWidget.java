@@ -1,9 +1,7 @@
-package com.meteorite.itemdespawntowhat.ui.widget;
+package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import net.minecraft.client.gui.components.EditBox;
 import org.jetbrains.annotations.Nullable;
-
-import java.util.Collection;
 
 // 复合组件统一管理接口
 public interface ICompositeWidget {
