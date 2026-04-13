@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.function.Supplier;
 
 public class LinkedBoxGroup {
-    /** 主框快照（失焦前保存，用于 diff）*/
+    // 主框快照（失焦前保存，用于 diff）
     private List<String> primarySnapshot = List.of();
 
     private final FocusAwareEditBox primaryBox;

@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.command;
 
 import com.meteorite.itemdespawntowhat.ConfigExtractorManager;
-import com.meteorite.itemdespawntowhat.network.OpenGuiPayload;
+import com.meteorite.itemdespawntowhat.network.configedit.s2c.OpenGuiPayload;
 import com.mojang.brigadier.CommandDispatcher;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;

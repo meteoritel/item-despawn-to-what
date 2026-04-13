@@ -58,7 +58,7 @@ public class SuggestionWidget {
             return;
         }
 
-        suggestions = new ArrayList<>(matched);;
+        suggestions = new ArrayList<>(matched);
         selectedIndex = -1;
         scrollOffset = 0;
         visible = true;

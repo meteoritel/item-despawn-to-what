@@ -1,8 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.network;
 
 import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
-import com.meteorite.itemdespawntowhat.network.ConfigSnapshotPayload;
-import com.meteorite.itemdespawntowhat.network.OpenGuiPayload;
+import com.meteorite.itemdespawntowhat.network.configedit.s2c.ConfigSnapshotPayload;
+import com.meteorite.itemdespawntowhat.network.configedit.s2c.OpenGuiPayload;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;

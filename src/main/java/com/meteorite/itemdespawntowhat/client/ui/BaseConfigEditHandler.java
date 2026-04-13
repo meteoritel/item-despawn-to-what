@@ -5,7 +5,7 @@ import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
 import com.meteorite.itemdespawntowhat.client.network.ClientConfigSnapshotManager;
-import com.meteorite.itemdespawntowhat.network.SaveConfigPayload;
+import com.meteorite.itemdespawntowhat.network.configedit.c2s.SaveConfigPayload;
 import com.meteorite.itemdespawntowhat.util.PlayerStateChecker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;

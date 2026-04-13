@@ -7,7 +7,7 @@ import com.meteorite.itemdespawntowhat.client.ui.EditCallback;
 import com.meteorite.itemdespawntowhat.client.ui.ListScreenCallback;
 import com.meteorite.itemdespawntowhat.client.ui.SuggestionProvider;
 import com.meteorite.itemdespawntowhat.client.ui.panel.ConfigListPanel;
-import com.meteorite.itemdespawntowhat.network.ReleaseEditSessionPayload;
+import com.meteorite.itemdespawntowhat.network.configedit.c2s.ReleaseEditSessionPayload;
 import com.meteorite.itemdespawntowhat.client.ui.panel.FormListPanel;
 import com.meteorite.itemdespawntowhat.client.ui.widget.*;
 import com.meteorite.itemdespawntowhat.util.PlayerStateChecker;

@@ -168,7 +168,6 @@ public interface SuggestionProvider {
         };
     }
 
-    @SuppressWarnings("unchecked")
     private static <T> Registry<T> getRegistry(ResourceKey<? extends Registry<T>> registryKey) {
         var serve = ServerLifecycleHooks.getCurrentServer();
         if (serve != null) {
