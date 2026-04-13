@@ -36,7 +36,7 @@ public abstract class BaseConversionConfig {
 
     // ========== 缓存字段 ========== //
     // 缓存的起始物品实例（非标签模式）
-    protected transient Item cachedStartItem;
+    private transient Item cachedStartItem;
     // 标签模式下展开的物品列表
     private transient List<Item> cachedTagItems;
     // 是否为标签模式（itemId 以 # 开头）
@@ -148,7 +148,6 @@ public abstract class BaseConversionConfig {
 
     // 提前缓存结果实例，默认空实现，子类按需重写
     protected void initResultCache() {
-
     }
 
     // 结果ID是否允许为空，子类按需重写
