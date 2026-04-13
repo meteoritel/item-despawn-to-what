@@ -1,8 +1,8 @@
 package com.meteorite.itemdespawntowhat.config.conversion;
 
 import com.google.gson.annotations.SerializedName;
-import com.meteorite.itemdespawntowhat.event.task.PlaceBlockTask;
-import com.meteorite.itemdespawntowhat.event.task.LevelTaskManager;
+import com.meteorite.itemdespawntowhat.server.task.PlaceBlockTask;
+import com.meteorite.itemdespawntowhat.server.task.LevelTaskManager;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;

@@ -1,13 +1,13 @@
-package com.meteorite.itemdespawntowhat.server.configedit;
+package com.meteorite.itemdespawntowhat.network.handler;
 
 import com.meteorite.itemdespawntowhat.ConfigExtractorManager;
 import com.meteorite.itemdespawntowhat.ConfigHandlerManager;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
-import com.meteorite.itemdespawntowhat.network.configedit.c2s.ReleaseEditSessionPayload;
-import com.meteorite.itemdespawntowhat.network.configedit.c2s.RequestConfigSnapshotPayload;
-import com.meteorite.itemdespawntowhat.network.configedit.c2s.SaveConfigPayload;
-import com.meteorite.itemdespawntowhat.network.configedit.s2c.ConfigSnapshotPayload;
+import com.meteorite.itemdespawntowhat.network.payload.c2s.RequestConfigSnapshotPayload;
+import com.meteorite.itemdespawntowhat.network.payload.c2s.SaveConfigPayload;
+import com.meteorite.itemdespawntowhat.network.payload.s2c.ConfigSnapshotPayload;
+import com.meteorite.itemdespawntowhat.network.EditSessionLockManager;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -18,10 +18,11 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.util.List;
 
-public final class ConfigEditServerHandler {
+// 服务端接收客户端打开GUI 的发包后续处理
+public final class ConfigEditServerPayloadHandler {
     private static final Logger LOGGER = LogManager.getLogger();
 
-    private ConfigEditServerHandler() {
+    private ConfigEditServerPayloadHandler() {
         throw new UnsupportedOperationException("Utility class");
     }
 

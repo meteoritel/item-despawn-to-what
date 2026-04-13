@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.network.configedit.c2s;
+package com.meteorite.itemdespawntowhat.network.payload.c2s;
 
 import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
 import net.minecraft.network.FriendlyByteBuf;

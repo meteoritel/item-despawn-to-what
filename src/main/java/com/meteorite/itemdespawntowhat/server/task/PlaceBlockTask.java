@@ -1,7 +1,7 @@
-package com.meteorite.itemdespawntowhat.event.task;
+package com.meteorite.itemdespawntowhat.server.task;
 
 import com.meteorite.itemdespawntowhat.ModConfigValues;
-import com.meteorite.itemdespawntowhat.event.ItemConversionEvent;
+import com.meteorite.itemdespawntowhat.server.event.ItemConversionEvent;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;

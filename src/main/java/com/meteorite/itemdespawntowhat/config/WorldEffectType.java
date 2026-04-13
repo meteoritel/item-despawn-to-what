@@ -1,9 +1,9 @@
 package com.meteorite.itemdespawntowhat.config;
 
-import com.meteorite.itemdespawntowhat.event.task.ArrowRainTask;
-import com.meteorite.itemdespawntowhat.event.task.ExplosionTask;
-import com.meteorite.itemdespawntowhat.event.task.LevelTaskManager;
-import com.meteorite.itemdespawntowhat.event.task.LightningTask;
+import com.meteorite.itemdespawntowhat.server.task.ArrowRainTask;
+import com.meteorite.itemdespawntowhat.server.task.ExplosionTask;
+import com.meteorite.itemdespawntowhat.server.task.LevelTaskManager;
+import com.meteorite.itemdespawntowhat.server.task.LightningTask;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffectInstance;

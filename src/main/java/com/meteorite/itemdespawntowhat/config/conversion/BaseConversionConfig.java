@@ -8,7 +8,7 @@ import com.meteorite.itemdespawntowhat.config.catalogue.CatalystItems;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.catalogue.InnerFluid;
 import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;
-import com.meteorite.itemdespawntowhat.event.ItemConversionEvent;
+import com.meteorite.itemdespawntowhat.server.event.ItemConversionEvent;
 import com.meteorite.itemdespawntowhat.util.IdValidator;
 import com.meteorite.itemdespawntowhat.util.JsonOrder;
 import net.minecraft.core.BlockPos;

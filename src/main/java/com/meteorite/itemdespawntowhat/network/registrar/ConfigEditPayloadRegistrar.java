@@ -1,0 +1,43 @@
+package com.meteorite.itemdespawntowhat.network.registrar;
+
+import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
+import com.meteorite.itemdespawntowhat.network.handler.ConfigEditServerPayloadHandler;
+import com.meteorite.itemdespawntowhat.network.payload.c2s.ReleaseEditSessionPayload;
+import com.meteorite.itemdespawntowhat.network.payload.c2s.RequestConfigSnapshotPayload;
+import com.meteorite.itemdespawntowhat.network.payload.c2s.SaveConfigPayload;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
+import net.neoforged.neoforge.network.registration.PayloadRegistrar;
+
+// 注册客户端向服务端打开GUI的发包
+@EventBusSubscriber(modid = ItemDespawnToWhat.MOD_ID)
+public class ConfigEditPayloadRegistrar {
+    private static final String PROTOCOL_VERSION = "1";
+
+    @SubscribeEvent
+    public static void registerPayloads(RegisterPayloadHandlersEvent event) {
+        PayloadRegistrar registrar = event.registrar(PROTOCOL_VERSION);
+
+        // 客户端请求服务端下发当前配置快照，服务端按自己的缓存返回结果。
+        registrar.playToServer(
+                RequestConfigSnapshotPayload.TYPE,
+                RequestConfigSnapshotPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> ConfigEditServerPayloadHandler.handleConfigSnapshotRequest(payload, context))
+        );
+
+        // 客户端关闭编辑会话时释放服务端锁。
+        registrar.playToServer(
+                ReleaseEditSessionPayload.TYPE,
+                ReleaseEditSessionPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> ConfigEditServerPayloadHandler.handleReleaseEditSession(context))
+        );
+
+        // 客户端发包到服务端，服务端保存配置并刷新缓存。
+        registrar.playToServer(
+                SaveConfigPayload.TYPE,
+                SaveConfigPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> ConfigEditServerPayloadHandler.handleSaveConfig(payload, context))
+        );
+    }
+}

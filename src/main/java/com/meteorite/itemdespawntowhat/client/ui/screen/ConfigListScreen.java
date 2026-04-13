@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
-import com.meteorite.itemdespawntowhat.client.configedit.BaseConfigEditHandler;
+import com.meteorite.itemdespawntowhat.client.ui.handler.ConfigEditSessionHandler;
 import com.meteorite.itemdespawntowhat.client.ui.ListScreenCallback;
 import com.meteorite.itemdespawntowhat.client.ui.panel.ConfigListPanel;
 import net.minecraft.client.gui.GuiGraphics;
@@ -18,7 +18,7 @@ public class ConfigListScreen<T extends BaseConversionConfig> extends Screen {
         EDIT, DELETE, COPY
     }
 
-    private final BaseConfigEditHandler<T> editHandler;
+    private final ConfigEditSessionHandler<T> editHandler;
     private final ListScreenCallback<T> listCallback;
     private final Screen parentScreen;
 
@@ -32,7 +32,7 @@ public class ConfigListScreen<T extends BaseConversionConfig> extends Screen {
 
     public ConfigListScreen(
             Screen parentScreen,
-            BaseConfigEditHandler<T> editHandler,
+            ConfigEditSessionHandler<T> editHandler,
             ListScreenCallback<T> listCallback
     ) {
         super(Component.translatable("gui.itemdespawntowhat.edit.title",

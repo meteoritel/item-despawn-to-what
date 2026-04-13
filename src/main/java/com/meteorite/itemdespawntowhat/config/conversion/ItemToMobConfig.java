@@ -2,19 +2,15 @@ package com.meteorite.itemdespawntowhat.config.conversion;
 
 import com.google.gson.annotations.SerializedName;
 import com.meteorite.itemdespawntowhat.ConfigExtractorManager;
-import com.meteorite.itemdespawntowhat.event.ItemConversionEvent;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.SpawnEggItem;
-import net.minecraft.world.phys.AABB;
-import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
 public class ItemToMobConfig extends BaseItemToEntityConfig{
 

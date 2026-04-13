@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat;
 
 import com.meteorite.itemdespawntowhat.command.ConversionConfigCommand;
-import com.meteorite.itemdespawntowhat.server.configedit.EditSessionLockManager;
+import com.meteorite.itemdespawntowhat.network.EditSessionLockManager;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;

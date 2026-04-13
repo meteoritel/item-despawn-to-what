@@ -1,16 +1,18 @@
-package com.meteorite.itemdespawntowhat.client.network.configedit;
+package com.meteorite.itemdespawntowhat.network.registrar;
 
 import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
-import com.meteorite.itemdespawntowhat.network.configedit.s2c.ConfigSnapshotPayload;
-import com.meteorite.itemdespawntowhat.network.configedit.s2c.OpenGuiPayload;
+import com.meteorite.itemdespawntowhat.network.handler.ConfigEditClientPayloadHandler;
+import com.meteorite.itemdespawntowhat.network.payload.s2c.ConfigSnapshotPayload;
+import com.meteorite.itemdespawntowhat.network.payload.s2c.OpenGuiPayload;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
+// 注册客户端接收服务端的发包
 @EventBusSubscriber(modid = ItemDespawnToWhat.MOD_ID, value = Dist.CLIENT)
-public class ClientNetworkEvent {
+public class ConfigEditClientPayloadRegistrar {
     private static final String PROTOCOL_VERSION = "1";
 
     @SubscribeEvent
@@ -21,12 +23,12 @@ public class ClientNetworkEvent {
         registrar.playToClient(
                 OpenGuiPayload.TYPE,
                 OpenGuiPayload.STREAM_CODEC,
-                (payload, context) -> ClientNetworkHandler.handleOpenGui(context)
+                (payload, context) -> ConfigEditClientPayloadHandler.handleOpenGui(context)
         );
         registrar.playToClient(
                 ConfigSnapshotPayload.TYPE,
                 ConfigSnapshotPayload.STREAM_CODEC,
-                ClientNetworkHandler::handleConfigSnapshot
+                ConfigEditClientPayloadHandler::handleConfigSnapshot
         );
     }
 }

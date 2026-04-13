@@ -2,12 +2,12 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
-import com.meteorite.itemdespawntowhat.client.configedit.BaseConfigEditHandler;
+import com.meteorite.itemdespawntowhat.client.ui.handler.ConfigEditSessionHandler;
 import com.meteorite.itemdespawntowhat.client.ui.EditCallback;
 import com.meteorite.itemdespawntowhat.client.ui.ListScreenCallback;
 import com.meteorite.itemdespawntowhat.client.ui.SuggestionProvider;
 import com.meteorite.itemdespawntowhat.client.ui.panel.ConfigListPanel;
-import com.meteorite.itemdespawntowhat.network.configedit.c2s.ReleaseEditSessionPayload;
+import com.meteorite.itemdespawntowhat.network.payload.c2s.ReleaseEditSessionPayload;
 import com.meteorite.itemdespawntowhat.client.ui.panel.FormListPanel;
 import com.meteorite.itemdespawntowhat.client.ui.widget.*;
 import com.meteorite.itemdespawntowhat.util.PlayerStateChecker;
@@ -50,7 +50,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     protected static final int BOX_WIDTH = 240;
     protected static final int BUTTON_HEIGHT = 18;
     // 后端处理器
-    protected final BaseConfigEditHandler<T> editHandler;
+    protected final ConfigEditSessionHandler<T> editHandler;
     // UI 组件
     protected EditBox itemIdInput;
     protected EditBox dimensionInput;
@@ -83,7 +83,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
     public BaseConfigEditScreen(ConfigType configType) {
         super(Component.translatable("gui.itemdespawntowhat.edit.title", configType.getFileName()));
-        this.editHandler = new BaseConfigEditHandler<>(configType);
+        this.editHandler = new ConfigEditSessionHandler<>(configType);
     }
 
     @Override
@@ -277,7 +277,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
                     && minecraft.player != null) {
                 PacketDistributor.sendToServer(new ReleaseEditSessionPayload());
             }
-            minecraft.setScreen(new ConfigSelectionScreen());
+            minecraft.setScreen(new ConfigTypeSelectionScreen());
         }
     }
 

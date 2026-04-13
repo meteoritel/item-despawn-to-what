@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.client.configedit;
+package com.meteorite.itemdespawntowhat.network;
 
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
@@ -9,10 +9,11 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
-public final class ClientConfigSnapshotManager {
+// 客户端临时快照缓存类
+public final class ConfigEditSnapshotManager {
     private static final Map<ConfigType, String> SNAPSHOT_JSONS = new EnumMap<>(ConfigType.class);
 
-    private ClientConfigSnapshotManager() {
+    private ConfigEditSnapshotManager() {
         throw new UnsupportedOperationException("Utility class");
     }
 

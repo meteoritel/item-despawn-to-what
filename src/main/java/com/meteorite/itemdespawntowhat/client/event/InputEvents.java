@@ -2,7 +2,7 @@ package com.meteorite.itemdespawntowhat.client.event;
 
 import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
 import com.meteorite.itemdespawntowhat.client.key.ModKeyBindings;
-import com.meteorite.itemdespawntowhat.client.ui.screen.ConfigSelectionScreen;
+import com.meteorite.itemdespawntowhat.client.ui.screen.ConfigTypeSelectionScreen;
 import com.meteorite.itemdespawntowhat.util.PlayerStateChecker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
@@ -23,7 +23,7 @@ public class InputEvents {
         Minecraft minecraft = Minecraft.getInstance();
         // 单人模式继续打开编辑入口，联机环境只给本地提示，不再发起编辑请求。
         if (PlayerStateChecker.isSinglePlayerServerReady(minecraft)) {
-            minecraft.setScreen(new ConfigSelectionScreen());
+            minecraft.setScreen(new ConfigTypeSelectionScreen());
             return;
         }
 

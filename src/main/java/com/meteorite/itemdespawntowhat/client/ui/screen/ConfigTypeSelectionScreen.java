@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.config.ConfigType;
-import com.meteorite.itemdespawntowhat.network.configedit.c2s.RequestConfigSnapshotPayload;
+import com.meteorite.itemdespawntowhat.network.payload.c2s.RequestConfigSnapshotPayload;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
@@ -11,9 +11,9 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import org.jetbrains.annotations.NotNull;
 
 // 配置选择UI
-public class ConfigSelectionScreen extends Screen {
+public class ConfigTypeSelectionScreen extends Screen {
 
-    public ConfigSelectionScreen() {
+    public ConfigTypeSelectionScreen() {
         super(Component.translatable("gui.itemdespawntowhat.config_selection.title"));
     }
 

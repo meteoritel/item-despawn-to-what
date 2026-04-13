@@ -1,12 +1,12 @@
-package com.meteorite.itemdespawntowhat.client.configedit;
+package com.meteorite.itemdespawntowhat.client.ui.handler;
 
 import com.meteorite.itemdespawntowhat.ConfigHandlerManager;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
 import com.meteorite.itemdespawntowhat.client.ui.EditCallback;
-import com.meteorite.itemdespawntowhat.client.configedit.ClientConfigSnapshotManager;
-import com.meteorite.itemdespawntowhat.network.configedit.c2s.SaveConfigPayload;
+import com.meteorite.itemdespawntowhat.network.ConfigEditSnapshotManager;
+import com.meteorite.itemdespawntowhat.network.payload.c2s.SaveConfigPayload;
 import com.meteorite.itemdespawntowhat.util.PlayerStateChecker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
@@ -17,7 +17,8 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 
-public class BaseConfigEditHandler<T extends BaseConversionConfig> {
+// config edit GUI的后端处理类
+public class ConfigEditSessionHandler<T extends BaseConversionConfig> {
     private static final Logger LOGGER = LogManager.getLogger();
     private static final String LOCAL_MODE_KEY = "gui.itemdespawntowhat.edit.mode.local_mode";
     private static final String SERVER_MODE_KEY = "gui.itemdespawntowhat.edit.mode.server_mode";
@@ -30,7 +31,7 @@ public class BaseConfigEditHandler<T extends BaseConversionConfig> {
     private final List<T> pendingConfigs = new ArrayList<>();
     private final Minecraft mc;
 
-    public BaseConfigEditHandler(ConfigType configType) {
+    public ConfigEditSessionHandler(ConfigType configType) {
         this.mc = Minecraft.getInstance();
         this.configType = configType;
 
@@ -40,7 +41,7 @@ public class BaseConfigEditHandler<T extends BaseConversionConfig> {
         }
 
         // 编辑界面只消费服务端下发的一次性快照，不再回读客户端本地文件。
-        List<T> configs = ClientConfigSnapshotManager.consumeSnapshot(configType, handler);
+        List<T> configs = ConfigEditSnapshotManager.consumeSnapshot(configType, handler);
         if (configs.isEmpty()) {
             LOGGER.warn("No client snapshot available for {}, using empty initial list", configType.name());
         } else {

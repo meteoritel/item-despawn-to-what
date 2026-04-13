@@ -1,9 +1,9 @@
-package com.meteorite.itemdespawntowhat.event;
+package com.meteorite.itemdespawntowhat.server.event;
 
 import com.meteorite.itemdespawntowhat.ConfigExtractorManager;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.condition.checker.ConditionChecker;
-import com.meteorite.itemdespawntowhat.event.task.LevelTaskManager;
+import com.meteorite.itemdespawntowhat.server.task.LevelTaskManager;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
