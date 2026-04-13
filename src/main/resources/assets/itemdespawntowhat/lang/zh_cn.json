@@ -40,6 +40,7 @@
   "gui.itemdespawntowhat.edit.on": "开",
   "gui.itemdespawntowhat.edit.off": "关",
 
+  "gui.itemdespawntowhat.edit.xp_pre_item": "单个物品的经验",
   "gui.itemdespawntowhat.edit.world_effect_type": "世界现象",
 
   "gui.itemdespawntowhat.edit.weather_duration_ticks": "天气持续时间(tick)",

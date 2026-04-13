@@ -22,6 +22,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -284,7 +285,7 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             this.config = config;
             this.source = source;
             this.indexInSource = indexInSource;
-            this.sourceIsTag = config.isTagMode();
+            this.sourceIsTag = isTagItemId(config.getItemId()) || config.isTagMode();
             this.sourceTagItems = sourceIsTag ? resolveTagItems(config) : List.of();
 
             // 若为 mob 类型，从缓存取实体图标
@@ -300,6 +301,14 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             }
         }
 
+        private boolean isTagItemId(@Nullable String itemId) {
+            return itemId != null && itemId.startsWith("#");
+        }
+
+        private boolean isTagSource() {
+            return isTagItemId(config.getItemId()) || config.isTagMode();
+        }
+
         private List<Item> resolveTagItems(T config) {
             List<Item> cachedTagItems = config.getTagItems();
             if (!cachedTagItems.isEmpty()) {
@@ -307,7 +316,7 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             }
 
             String itemId = config.getItemId();
-            if (itemId == null || !itemId.startsWith("#")) {
+            if (!isTagItemId(itemId)) {
                 return List.of();
             }
 
@@ -317,25 +326,37 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             }
 
             TagKey<Item> tagKey = TagKey.create(Registries.ITEM, tagRl);
+            var mc = Minecraft.getInstance();
+            var registryAccess = mc.level != null
+                    ? mc.level.registryAccess()
+                    : (mc.getConnection() != null ? mc.getConnection().registryAccess() : null);
+            net.minecraft.core.Registry<Item> registry = registryAccess != null
+                    ? registryAccess.registry(Registries.ITEM).orElse(null)
+                    : null;
+            if (registry == null) {
+                registry = BuiltInRegistries.ITEM;
+            }
+
             List<Item> resolved = new ArrayList<>();
-            BuiltInRegistries.ITEM.getTag(tagKey).ifPresent(holders ->
+            registry.getTag(tagKey).ifPresent(holders ->
                     holders.forEach(holder -> resolved.add(holder.value())));
             return resolved.isEmpty() ? List.of() : List.copyOf(resolved);
         }
 
-        private @Nullable Item pickRotatingTagItem() {
-            if (sourceTagItems.isEmpty()) {
+        private @Nullable Item pickRotatingTagItem(List<Item> tagItems) {
+            if (tagItems.isEmpty()) {
                 return null;
             }
 
             long rotationTick = System.currentTimeMillis() / TAG_ICON_SWITCH_MS;
-            int index = (int) (rotationTick % sourceTagItems.size());
-            return sourceTagItems.get(index);
+            int index = (int) (rotationTick % tagItems.size());
+            return tagItems.get(index);
         }
 
         private ItemStack getSourceIconStack() {
-            if (sourceIsTag) {
-                Item item = pickRotatingTagItem();
+            if (isTagSource()) {
+                List<Item> tagItems = sourceTagItems.isEmpty() ? resolveTagItems(config) : sourceTagItems;
+                Item item = pickRotatingTagItem(tagItems);
                 if (item != null) {
                     return item.getDefaultInstance();
                 }
@@ -351,12 +372,27 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             return config.getResultIcon();
         }
 
-        private Component getSourceText() {
-            if (sourceIsTag) {
-                String itemId = config.getItemId();
-                return Component.literal(itemId != null ? itemId : "");
+        private Component getDisplayNameForStack(ItemStack stack) {
+            if (!stack.isEmpty() && stack.getItem() instanceof BlockItem blockItem) {
+                return Component.translatable(blockItem.getBlock().getDescriptionId());
+            }
+            return stack.isEmpty()
+                    ? Component.empty()
+                    : Component.translatable(stack.getDescriptionId());
+        }
+
+        private Component getSourceText(ItemStack sourceIconStack) {
+            if (isTagSource()) {
+                return getDisplayNameForStack(sourceIconStack);
             }
             return Component.translatable(config.getStartItem().getDescriptionId());
+        }
+
+        private Component getResultText(ItemStack resultIconStack) {
+            if (config instanceof ItemToBlockConfig blockConfig && blockConfig.isEnableItemBlock()) {
+                return getDisplayNameForStack(resultIconStack);
+            }
+            return Component.translatable(config.getResultDescriptionId());
         }
 
         public T getConfig() {
@@ -369,6 +405,10 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
 
         public int getIndexInSource() {
             return indexInSource;
+        }
+
+        public boolean isSourceIsTag() {
+            return sourceIsTag;
         }
 
         @Override
@@ -410,8 +450,8 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             // 箭头居中在整行内
             guiGraphics.drawCenteredString(mc.font, Component.literal("->"), arrowCenterX, textY, 0x888888);
 
-            Component sourceText = getSourceText();
             ItemStack sourceIcon = getSourceIconStack();
+            Component sourceText = getSourceText(sourceIcon);
             int sourceMultiple = config.getSourceMultiple();
             String sourceMultipleStr = Integer.toString(sourceMultiple);
 
@@ -432,10 +472,8 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
                 }
             }
 
-            Component resultText = (config instanceof ItemToBlockConfig blockConfig && blockConfig.isEnableItemBlock())
-                    ? sourceText
-                    : Component.translatable(config.getResultDescriptionId());
             ItemStack resultIcon = getResultIconStack(sourceIcon);
+            Component resultText = getResultText(resultIcon);
             int resultMultiple = config.getResultMultiple();
             String resultMultipleStr = Integer.toString(resultMultiple);
             int textColor = (source == EntrySource.PENDING) ? 0xFFFF88 : 0xFFFFFF;

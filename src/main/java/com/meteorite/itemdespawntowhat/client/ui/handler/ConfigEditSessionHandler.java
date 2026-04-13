@@ -75,6 +75,7 @@ public class ConfigEditSessionHandler<T extends BaseConversionConfig> {
             return;
         }
 
+        prepareDraftForSession(draft);
         pendingConfigs.add(draft);
         callback.onClearFields();
         callback.onListChanged();
@@ -86,11 +87,19 @@ public class ConfigEditSessionHandler<T extends BaseConversionConfig> {
         // Apply 前先把表单里最后一次修改收进待提交列表，避免漏掉用户刚输入的内容。
         T draft = callback.buildConfigFromFields();
         if (draft != null && draft.shouldProcess()) {
+            prepareDraftForSession(draft);
             pendingConfigs.add(draft);
             LOGGER.debug("Added current form to pending list before applying");
         }
 
         applyToServer(callback);
+    }
+
+    private void prepareDraftForSession(T draft) {
+        draft.initCache();
+        if (draft.isTagMode()) {
+            draft.expandTagItems();
+        }
     }
 
     private void applyToServer(EditCallback<T> callback) {
