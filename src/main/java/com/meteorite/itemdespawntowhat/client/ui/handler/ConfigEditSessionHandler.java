@@ -1,14 +1,16 @@
 package com.meteorite.itemdespawntowhat.client.ui.handler;
 
+import com.meteorite.itemdespawntowhat.ConfigExtractorManager;
 import com.meteorite.itemdespawntowhat.ConfigHandlerManager;
-import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
-import com.meteorite.itemdespawntowhat.config.ConfigType;
-import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
 import com.meteorite.itemdespawntowhat.client.ui.EditCallback;
 import com.meteorite.itemdespawntowhat.network.ConfigEditSnapshotManager;
+import com.meteorite.itemdespawntowhat.config.ConfigType;
+import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
+import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
 import com.meteorite.itemdespawntowhat.util.PlayerStateChecker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
+import net.neoforged.neoforge.server.ServerLifecycleHooks;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -38,15 +40,29 @@ public class ConfigEditSessionHandler<T extends BaseConversionConfig> {
             throw new IllegalStateException("No handler registered for " + configType);
         }
 
-        // 编辑界面只消费服务端下发的一次性快照，不再回读客户端本地文件。
+        this.originalConfigs = new ArrayList<>(loadOriginalConfigs());
+    }
+
+    private List<T> loadOriginalConfigs() {
+        var server = ServerLifecycleHooks.getCurrentServer();
+        if (server != null) {
+            try {
+                List<T> configs = ConfigExtractorManager.getConfigByType(configType);
+                LOGGER.debug("Loaded server cache for {}, count = {}", configType.name(), configs.size());
+                return configs;
+            } catch (IllegalStateException e) {
+                LOGGER.warn("Server cache not ready for {}, falling back to snapshot", configType.name(), e);
+            }
+        }
+
+        // 远程服务器场景仍然走快照，保持双端兼容。
         List<T> configs = ConfigEditSnapshotManager.consumeSnapshot(configType, handler);
         if (configs.isEmpty()) {
             LOGGER.warn("No client snapshot available for {}, using empty initial list", configType.name());
         } else {
             LOGGER.debug("Loaded client snapshot for {}, count = {}", configType.name(), configs.size());
         }
-
-        this.originalConfigs = new ArrayList<>(configs);
+        return configs;
     }
 
     // ========== 配置操作 ========== //
@@ -65,16 +81,11 @@ public class ConfigEditSessionHandler<T extends BaseConversionConfig> {
         LOGGER.debug("Saved to cache: {}", draft);
     }
 
-    // 将当前会话内容统一提交给服务端，由服务端负责落盘和缓存刷新。
+    // 将当前会话内容统一提交给服务端，由服务端负责落盘和缓存刷新，对应 apply to file按钮
     public void applyToFile(EditCallback<T> callback) {
         // Apply 前先把表单里最后一次修改收进待提交列表，避免漏掉用户刚输入的内容。
         T draft = callback.buildConfigFromFields();
-        if (draft != null) {
-            if (!draft.shouldProcess()) {
-                callback.onSaveError();
-                LOGGER.warn("Invalid config detected before applying {}, aborting save", configType.name());
-                return;
-            }
+        if (draft != null && draft.shouldProcess()) {
             pendingConfigs.add(draft);
             LOGGER.debug("Added current form to pending list before applying");
         }
@@ -88,6 +99,7 @@ public class ConfigEditSessionHandler<T extends BaseConversionConfig> {
             // 只把最终 JSON 发给服务端，由服务端负责落盘和缓存刷新。
             String jsonData = handler.serializeToJson(allConfigs);
 
+            // 判断json是否过大，是否需要分包
             if (SaveConfigChunker.requiresChunking(jsonData)) {
                 int chunkCount = SaveConfigChunker.sendChunks(configType, jsonData);
                 LOGGER.info("Sent {} configs to server for type: {} in {} chunks",

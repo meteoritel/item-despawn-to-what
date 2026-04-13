@@ -6,6 +6,7 @@ import com.meteorite.itemdespawntowhat.config.catalogue.CatalystItems;
 import com.meteorite.itemdespawntowhat.config.catalogue.InnerFluid;
 import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.ItemToBlockConfig;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToMobConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -13,18 +14,24 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ObjectSelectionList;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -67,8 +74,10 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
     // 固定列布局
     private static final int COL_TAG_W = 3;
     private static final int EDGE_PAD = 4;
-    //催化剂先不加了
+
+    //催化剂先不加了//
     private static final int CATALYST_W = 0;
+
     private static final int COLUMN_GAP = 4;
     private static final int TEXT_COL_WIDTH = 70;
     private static final int QTY_COL_WIDTH = 20;
@@ -77,11 +86,12 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
     private static final int ROW_WIDTH = 340;
     private static final Component MULTIPLY_MARK = Component.literal("x");
 
-    // 文本超出自动滚动
     // 文本滚动速度：像素/ms
     private static final float SCROLL_SPEED_PX_MS = 0.025f;
     // 滚动前静止时长（ms）
     private static final long SCROLL_PAUSE_MS = 1500L;
+    // 标签图标轮询间隔（ms）
+    private static final long TAG_ICON_SWITCH_MS = 1500L;
     // 文字与裁剪区右边缘的最小间距
     private static final int SCROLL_PADDING = 6;
 
@@ -199,7 +209,7 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
         guiGraphics.fill(dlgX, dlgY, dlgX + DIALOG_W, dlgY + DIALOG_H, 0xFF_2B2B2B);
         guiGraphics.renderOutline(dlgX, dlgY, DIALOG_W, DIALOG_H, 0xFF_AAAAAA);
 
-        // 警告标题（红色）
+        // 警告标题（红色)
         int titleY = dlgY + 8;
         guiGraphics.drawCenteredString(mc.font,
                 Component.translatable("gui.itemdespawntowhat.edit.list.delete.title"),
@@ -229,7 +239,7 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (pendingAction != null) {
             confirmButton.mouseClicked(mouseX, mouseY, button);
-            cancelButton .mouseClicked(mouseX, mouseY, button);
+            cancelButton.mouseClicked(mouseX, mouseY, button);
             return true; // 吞掉事件，不传递给列表
         }
         boolean result = super.mouseClicked(mouseX, mouseY, button);
@@ -261,24 +271,21 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
         private final EntrySource source;
         private final int indexInSource;
 
-        // 缓存图标 ItemStack
-        private final ItemStack itemIcon;
-        private final ItemStack resultIcon;
-        // 实体图标（仅 mob 类型非 null）
-        @Nullable private LivingEntity entityIcon;
+        private final boolean sourceIsTag;
+        private final List<Item> sourceTagItems;
 
         // 条目创建的时间，用于计算滚动偏移
         private final long createdAt = System.currentTimeMillis();
+        // 实体图标（仅 mob 类型非 null）
+        @Nullable private LivingEntity entityIcon;
 
         ConfigEntry(ConfigListPanel<T> parent, T config, EntrySource source, int indexInSource) {
             this.parent = parent;
             this.config = config;
             this.source = source;
             this.indexInSource = indexInSource;
-
-            // 预解析图标
-            this.itemIcon = config.getStartItemIcon();
-            this.resultIcon = config.getResultIcon();
+            this.sourceIsTag = config.isTagMode();
+            this.sourceTagItems = sourceIsTag ? resolveTagItems(config) : List.of();
 
             // 若为 mob 类型，从缓存取实体图标
             if (config instanceof ItemToMobConfig mobConfig) {
@@ -291,6 +298,65 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             } else {
                 this.entityIcon = null;
             }
+        }
+
+        private List<Item> resolveTagItems(T config) {
+            List<Item> cachedTagItems = config.getTagItems();
+            if (!cachedTagItems.isEmpty()) {
+                return cachedTagItems;
+            }
+
+            String itemId = config.getItemId();
+            if (itemId == null || !itemId.startsWith("#")) {
+                return List.of();
+            }
+
+            ResourceLocation tagRl = ResourceLocation.tryParse(itemId.substring(1));
+            if (tagRl == null) {
+                return List.of();
+            }
+
+            TagKey<Item> tagKey = TagKey.create(Registries.ITEM, tagRl);
+            List<Item> resolved = new ArrayList<>();
+            BuiltInRegistries.ITEM.getTag(tagKey).ifPresent(holders ->
+                    holders.forEach(holder -> resolved.add(holder.value())));
+            return resolved.isEmpty() ? List.of() : List.copyOf(resolved);
+        }
+
+        private @Nullable Item pickRotatingTagItem() {
+            if (sourceTagItems.isEmpty()) {
+                return null;
+            }
+
+            long rotationTick = System.currentTimeMillis() / TAG_ICON_SWITCH_MS;
+            int index = (int) (rotationTick % sourceTagItems.size());
+            return sourceTagItems.get(index);
+        }
+
+        private ItemStack getSourceIconStack() {
+            if (sourceIsTag) {
+                Item item = pickRotatingTagItem();
+                if (item != null) {
+                    return item.getDefaultInstance();
+                }
+                return new ItemStack(Items.BARRIER);
+            }
+            return config.getStartItemIcon();
+        }
+
+        private ItemStack getResultIconStack(ItemStack sourceIconStack) {
+            if (config instanceof ItemToBlockConfig blockConfig && blockConfig.isEnableItemBlock()) {
+                return sourceIconStack;
+            }
+            return config.getResultIcon();
+        }
+
+        private Component getSourceText() {
+            if (sourceIsTag) {
+                String itemId = config.getItemId();
+                return Component.literal(itemId != null ? itemId : "");
+            }
+            return Component.translatable(config.getStartItem().getDescriptionId());
         }
 
         public T getConfig() {
@@ -344,7 +410,8 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             // 箭头居中在整行内
             guiGraphics.drawCenteredString(mc.font, Component.literal("->"), arrowCenterX, textY, 0x888888);
 
-            Component sourceText = Component.translatable(config.getStartItem().getDescriptionId());
+            Component sourceText = getSourceText();
+            ItemStack sourceIcon = getSourceIconStack();
             int sourceMultiple = config.getSourceMultiple();
             String sourceMultipleStr = Integer.toString(sourceMultiple);
 
@@ -353,7 +420,7 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             int sourceMultiplyX = sourceMultiplyColX + Math.max(0, (MULTIPLY_COL_WIDTH - mc.font.width("*")) / 2);
             guiGraphics.drawString(mc.font, sourceMultipleStr, sourceQtyX, textY, 0xFFFFFF, false);
             guiGraphics.drawString(mc.font, MULTIPLY_MARK, sourceMultiplyX, textY, 0xFFFFFF, false);
-            guiGraphics.renderItem(itemIcon, sourceIconX, iconY);
+            guiGraphics.renderItem(sourceIcon, sourceIconX, iconY);
             drawScrollableText(guiGraphics, mc, sourceText, sourceTextX, textY, TEXT_COL_WIDTH, 0xFFFFFF);
 
             // 第二则 resultId 图标
@@ -365,7 +432,10 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
                 }
             }
 
-            Component resultText = Component.translatable(config.getResultDescriptionId());
+            Component resultText = (config instanceof ItemToBlockConfig blockConfig && blockConfig.isEnableItemBlock())
+                    ? sourceText
+                    : Component.translatable(config.getResultDescriptionId());
+            ItemStack resultIcon = getResultIconStack(sourceIcon);
             int resultMultiple = config.getResultMultiple();
             String resultMultipleStr = Integer.toString(resultMultiple);
             int textColor = (source == EntrySource.PENDING) ? 0xFFFF88 : 0xFFFFFF;

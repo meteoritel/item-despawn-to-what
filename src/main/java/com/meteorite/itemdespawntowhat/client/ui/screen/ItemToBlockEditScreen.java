@@ -20,15 +20,36 @@ public class ItemToBlockEditScreen extends BaseConfigEditScreen<ItemToBlockConfi
     }
 
     @Override
+    protected boolean shouldShowResultId() {
+        return false;
+    }
+
+    @Override
     protected void addCustomEntries(FormListPanel fromList) {
         radiusLimitInput = numericBox();
         enableItemBlockButton = CycleButton.booleanBuilder(
                         Component.translatable(LABEL_PREFIX + "on"),
                         Component.translatable(LABEL_PREFIX + "off")
                 ).withInitialValue(false)
-                .create(0, 0, BOX_WIDTH, 18, Component.translatable(LABEL_PREFIX + "block_of_item"));
+                .create(0, 0, BOX_WIDTH, 18, Component.translatable(LABEL_PREFIX + "block_of_item"),
+                        (button, value) -> rebuildConditionalEntries());
         fromList.add(Component.translatable(LABEL_PREFIX + "radius_limit"), radiusLimitInput);
-        fromList.add(Component.translatable(LABEL_PREFIX + "block_of_item") ,enableItemBlockButton);
+        fromList.add(Component.translatable(LABEL_PREFIX + "block_of_item"), enableItemBlockButton);
+        rebuildConditionalEntries();
+    }
+
+    private void rebuildConditionalEntries() {
+        if (formList == null || enableItemBlockButton == null) {
+            return;
+        }
+
+        formList.removeConditionalEntries();
+        if (!enableItemBlockButton.getValue()) {
+            formList.addConditional(Component.translatable(LABEL_PREFIX + "result_id"), resultIdInput);
+        } else {
+            resultIdInput.setValue("");
+        }
+        clearAllSuggestions();
     }
 
     @Override
@@ -43,23 +64,30 @@ public class ItemToBlockEditScreen extends BaseConfigEditScreen<ItemToBlockConfi
     protected void populateCustomFields(ItemToBlockConfig config) {
         config.setRadius(parseInt(radiusLimitInput.getValue(), 6));
         config.setEnableItemBlock(enableItemBlockButton.getValue());
+        if (enableItemBlockButton.getValue()) {
+            config.setResultId(null);
+        }
     }
 
     @Override
     protected void clearCustomFields() {
         radiusLimitInput.setValue("");
         enableItemBlockButton.setValue(false);
+        resultIdInput.setValue("");
+        rebuildConditionalEntries();
     }
 
     @Override
     protected void refillCustomFields(ItemToBlockConfig config) {
         radiusLimitInput.setValue(String.valueOf(config.getRadius()));
         enableItemBlockButton.setValue(config.isEnableItemBlock());
+        resultIdInput.setValue(config.getResultId() != null ? config.getResultId() : "");
+        rebuildConditionalEntries();
     }
 
     @Override
     protected void initValidators() {
-        registerValidator(resultIdInput, IdValidator::isValidBlockId);
+        registerValidator(resultIdInput, () -> !enableItemBlockButton.getValue(), IdValidator::isValidBlockId);
     }
 
     @Override

@@ -12,7 +12,7 @@ import java.util.UUID;
 
 // 客户端保存分包工具：负责把超长 JSON 拆成安全大小的分片并按序发送。
 public final class SaveConfigChunker {
-    private static final int MAX_DIRECT_PACKET_LENGTH = 32767;
+    private static final int MAX_DIRECT_PACKET_LENGTH = 32766;
     private static final int CHUNK_LENGTH = 30000;
 
     private SaveConfigChunker() {

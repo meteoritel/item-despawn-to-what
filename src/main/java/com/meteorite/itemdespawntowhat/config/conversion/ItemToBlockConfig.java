@@ -8,6 +8,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
@@ -34,22 +35,17 @@ public class ItemToBlockConfig extends BaseConversionConfig{
     @Override
     protected void initResultCache() {
         if (enableItemBlock) {
-            if (cachedStartItem instanceof BlockItem blockItem) {
-                Block block = blockItem.getBlock();
-                // 将真实的 resultId 回写
-                this.resultId = BuiltInRegistries.BLOCK.getKey(block).toString();
-                this.cachedResultBlock = block;
-            } else {
-                LOGGER.warn("enableItemBlock=true but item '{}' is not a BlockItem, config will be rejected", itemId);
-            }
-        } else {
-            // 直接按 resultId 查找
-            ResourceLocation resultRl = ResourceLocation.tryParse(resultId != null ? resultId : "");
-            Block block = resultRl != null ? BuiltInRegistries.BLOCK.get(resultRl) : Blocks.AIR;
-            this.cachedResultBlock = (block != Blocks.AIR) ? block : null;
-            if (cachedResultBlock == null) {
-                LOGGER.warn("Could not find block for resultId='{}', config will be rejected", resultId);
-            }
+            this.resultId = null;
+            this.cachedResultBlock = null;
+            return;
+        }
+
+        // 直接按 resultId 查找
+        ResourceLocation resultRl = ResourceLocation.tryParse(resultId != null ? resultId : "");
+        Block block = resultRl != null ? BuiltInRegistries.BLOCK.get(resultRl) : Blocks.AIR;
+        this.cachedResultBlock = (block != Blocks.AIR) ? block : null;
+        if (cachedResultBlock == null) {
+            LOGGER.warn("Could not find block for resultId='{}', config will be rejected", resultId);
         }
     }
 
@@ -69,7 +65,7 @@ public class ItemToBlockConfig extends BaseConversionConfig{
 
     @Override
     public boolean isCacheValid() {
-        return cachedResultBlock != null;
+        return enableItemBlock || cachedResultBlock != null;
     }
 
     // ========== 转化逻辑 ========== //
@@ -81,6 +77,14 @@ public class ItemToBlockConfig extends BaseConversionConfig{
             LOGGER.debug("No items can be converted to block for {} (catalysts exhausted)", getResultId());
             return;
         }
+
+        Block resultBlock = getResultBlock(itemEntity);
+        if (resultBlock == Blocks.AIR) {
+            LOGGER.warn("Could not resolve result block for item '{}' when enableItemBlock={}, config will be skipped",
+                    itemEntity.getItem().getItem(), enableItemBlock);
+            return;
+        }
+
         int actualConvertCount = rounds * getSourceMultiple();
         int remaining = originalStackSize - actualConvertCount;
         // 物品下一tick消失
@@ -88,7 +92,7 @@ public class ItemToBlockConfig extends BaseConversionConfig{
         consumeAllOthers(itemEntity, actualConvertCount);
         // 下一tick开始执行延迟放置方块的任务
         LevelTaskManager.addTask(serverLevel, new PlaceBlockTask(
-                itemEntity.blockPosition(), getResultBlock(), getRadius(), innerFluid.isConsumeFluid(),
+                itemEntity.blockPosition(), resultBlock, getRadius(), innerFluid.isConsumeFluid(),
                 rounds * getResultMultiple(),
                 () -> addRemainingItems(itemEntity, serverLevel, remaining, 0.5, 1, 0.5)));
     }
@@ -96,11 +100,32 @@ public class ItemToBlockConfig extends BaseConversionConfig{
     // ========== 结果相关方法 ========== //
     // 当开启了使用物品对应方块，且物品是方块物品，就直接使用对应的方块
     public Block getResultBlock() {
-        if (isCacheInitialized()) {
+        if (enableItemBlock) {
+            Item startItem = getStartItem();
+            if (startItem instanceof BlockItem blockItem) {
+                return blockItem.getBlock();
+            }
+            return Blocks.AIR;
+        }
+
+        if (isCacheInitialized() && cachedResultBlock != null) {
             return cachedResultBlock;
         }
         ResourceLocation rl = ResourceLocation.tryParse(resultId != null ? resultId : "");
         return rl != null ? BuiltInRegistries.BLOCK.get(rl) : Blocks.AIR;
+    }
+
+    public Block getResultBlock(ItemEntity itemEntity) {
+        if (!enableItemBlock) {
+            return getResultBlock();
+        }
+
+        Item startItem = itemEntity != null ? itemEntity.getItem().getItem() : null;
+        if (startItem instanceof BlockItem blockItem) {
+            return blockItem.getBlock();
+        }
+
+        return Blocks.AIR;
     }
 
     @Override
@@ -110,6 +135,10 @@ public class ItemToBlockConfig extends BaseConversionConfig{
 
     @Override
     public ItemStack getResultIcon() {
+        if (enableItemBlock) {
+            return getStartItemIcon();
+        }
+
         Block block = getResultBlock();
         if (block == null) {
             return new ItemStack(Items.BARRIER);

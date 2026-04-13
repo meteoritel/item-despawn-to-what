@@ -8,10 +8,10 @@ import net.minecraft.server.MinecraftServer;
 // 获得玩家当前的各种状态的实用方法
 public final class PlayerStateChecker {
 
-    // 如果客户端世界未加载，游戏应处于开始界面，此时是纯客户端判断
-    public static boolean isClientWorldLoaded(Minecraft minecraft) {
-        return minecraft.level != null && minecraft.player != null;
-    }
+//    // 如果客户端世界未加载，游戏应处于开始界面，此时是纯客户端判断
+//    public static boolean isClientWorldLoaded(Minecraft minecraft) {
+//        return minecraft.level != null && minecraft.player != null;
+//    }
 
     // 单人模式：本地聚合服务端已经加载并在运行
     public static boolean isSinglePlayerMode(Minecraft minecraft) {

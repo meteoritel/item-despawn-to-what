@@ -11,9 +11,8 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
-// 注册客户端向服务端打开GUI的发包
+// 服务端侧网络注册入口：只负责注册 C2S 配置编辑相关 payload
 @EventBusSubscriber(modid = ItemDespawnToWhat.MOD_ID)
-// 服务端侧网络注册入口：只负责注册 C2S 配置编辑相关 payload。
 public class ConfigEditPayloadRegistrar {
     private static final String PROTOCOL_VERSION = "1";
 
@@ -25,28 +24,32 @@ public class ConfigEditPayloadRegistrar {
         registrar.playToServer(
                 RequestConfigSnapshotPayload.TYPE,
                 RequestConfigSnapshotPayload.STREAM_CODEC,
-                (payload, context) -> context.enqueueWork(() -> ConfigEditServerPayloadHandler.handleConfigSnapshotRequest(payload, context))
+                (payload, context) ->
+                        context.enqueueWork(() -> ConfigEditServerPayloadHandler.handleConfigSnapshotRequest(payload, context))
         );
 
         // 客户端关闭编辑会话时释放服务端锁。
         registrar.playToServer(
                 ReleaseEditSessionPayload.TYPE,
                 ReleaseEditSessionPayload.STREAM_CODEC,
-                (payload, context) -> context.enqueueWork(() -> ConfigEditServerPayloadHandler.handleReleaseEditSession(context))
+                (payload, context) ->
+                        context.enqueueWork(() -> ConfigEditServerPayloadHandler.handleReleaseEditSession(context))
         );
 
         // 客户端发包到服务端，服务端保存配置并刷新缓存。
         registrar.playToServer(
                 SaveConfigPayload.TYPE,
                 SaveConfigPayload.STREAM_CODEC,
-                (payload, context) -> context.enqueueWork(() -> ConfigEditServerPayloadHandler.handleSaveConfig(payload, context))
+                (payload, context) ->
+                        context.enqueueWork(() -> ConfigEditServerPayloadHandler.handleSaveConfig(payload, context))
         );
 
         // 超长 JSON 走分包保存，服务端按 transferId 重组后复用同一保存流程。
         registrar.playToServer(
                 SaveConfigChunkPayload.TYPE,
                 SaveConfigChunkPayload.STREAM_CODEC,
-                (payload, context) -> context.enqueueWork(() -> ConfigEditServerPayloadHandler.handleSaveConfigChunk(payload, context))
+                (payload, context) ->
+                        context.enqueueWork(() -> ConfigEditServerPayloadHandler.handleSaveConfigChunk(payload, context))
         );
     }
 }

@@ -142,7 +142,6 @@ public class ConfigExtractorManager {
     }
 
     // ========== 查询方法，用于其他类调用缓存 ========== //
-
     // 获取物品的所有配置实例
     public static List<BaseConversionConfig> getAllConfigsForItem(ResourceLocation itemId) {
         checkInitialized();
