@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.condition.checker;
 import com.meteorite.itemdespawntowhat.condition.ConditionContext;
 import com.meteorite.itemdespawntowhat.config.ConfigDirection;
 import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;
+import com.meteorite.itemdespawntowhat.util.TagResolver;
 import com.mojang.datafixers.util.Either;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -89,13 +90,11 @@ public class SurroundingBlocksConditionChecker extends AbstractConditionChecker 
             return null;
         }
 
-        // 标签检测
-        if (conditionStr.startsWith("#")) {
-            ResourceLocation tagLocation = ResourceLocation.parse(conditionStr.substring(1));
-            return Either.right(TagKey.create(Registries.BLOCK, tagLocation));
-        } else {
-            return Either.left(ResourceLocation.parse(conditionStr));
+        Either<ResourceLocation, TagKey<Block>> parsed = TagResolver.parseRegistryEntry(conditionStr, Registries.BLOCK);
+        if (parsed == null) {
+            return null;
         }
+        return parsed;
     }
 
     private static boolean checkBlockCondition(BlockState blockState,

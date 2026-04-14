@@ -8,6 +8,7 @@ import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToBlockConfig;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToMobConfig;
+import com.meteorite.itemdespawntowhat.util.TagResolver;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -19,7 +20,6 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.BlockItem;
@@ -302,7 +302,7 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
         }
 
         private boolean isTagItemId(@Nullable String itemId) {
-            return itemId != null && itemId.startsWith("#");
+            return TagResolver.isTagId(itemId);
         }
 
         private boolean isTagSource() {
@@ -315,32 +315,11 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
                 return cachedTagItems;
             }
 
-            String itemId = config.getItemId();
-            if (!isTagItemId(itemId)) {
-                return List.of();
-            }
-
-            ResourceLocation tagRl = ResourceLocation.tryParse(itemId.substring(1));
-            if (tagRl == null) {
-                return List.of();
-            }
-
-            TagKey<Item> tagKey = TagKey.create(Registries.ITEM, tagRl);
             var mc = Minecraft.getInstance();
             var registryAccess = mc.level != null
                     ? mc.level.registryAccess()
                     : (mc.getConnection() != null ? mc.getConnection().registryAccess() : null);
-            net.minecraft.core.Registry<Item> registry = registryAccess != null
-                    ? registryAccess.registry(Registries.ITEM).orElse(null)
-                    : null;
-            if (registry == null) {
-                registry = BuiltInRegistries.ITEM;
-            }
-
-            List<Item> resolved = new ArrayList<>();
-            registry.getTag(tagKey).ifPresent(holders ->
-                    holders.forEach(holder -> resolved.add(holder.value())));
-            return resolved.isEmpty() ? List.of() : List.copyOf(resolved);
+            return TagResolver.resolveTagItems(registryAccess, Registries.ITEM, BuiltInRegistries.ITEM, config.getItemId());
         }
 
         private @Nullable Item pickRotatingTagItem(List<Item> tagItems) {

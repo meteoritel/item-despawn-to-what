@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui;
 
+import com.meteorite.itemdespawntowhat.util.TagResolver;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -58,7 +59,7 @@ public interface SuggestionProvider {
         SuggestionProvider entries = ofRegistry(registry);
         SuggestionProvider tags = ofTags(registryKey);
         return (segment, maxResults) -> {
-            if (segment.startsWith("#")) {
+            if (TagResolver.isTagId(segment)) {
                 return tags.getSuggestions(segment, maxResults);
             }
             return entries.getSuggestions(segment, maxResults);
@@ -149,8 +150,8 @@ public interface SuggestionProvider {
     // 匹配tag
     static <T> SuggestionProvider ofTags(ResourceKey<? extends Registry<T>> registryKey) {
         return (segment, maxResults) -> {
-            String effectiveSegment = segment.startsWith("#") ? segment.substring(1) : segment;
-            String lower = effectiveSegment.toLowerCase();
+            String effectiveSegment = TagResolver.stripTagPrefix(segment);
+            String lower = effectiveSegment != null ? effectiveSegment.toLowerCase() : "";
 
             Registry<T> registry = getRegistry(registryKey);
             if (registry == null) {

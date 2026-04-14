@@ -5,6 +5,7 @@ import com.google.gson.annotations.SerializedName;
 import com.meteorite.itemdespawntowhat.condition.ConditionSerializable;
 import com.meteorite.itemdespawntowhat.config.ConfigDirection;
 import com.meteorite.itemdespawntowhat.util.IdValidator;
+import com.meteorite.itemdespawntowhat.util.TagResolver;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 
@@ -61,7 +62,7 @@ public class SurroundingBlocks implements ConditionSerializable<SurroundingBlock
             if (value == null || value.isEmpty()) {
                 continue; // 空值表示该方向无要求，合法
             }
-            if (value.startsWith("#")) {
+            if (TagResolver.isTagId(value)) {
                 // 标签：校验格式
                 if (!IdValidator.isValidTagId(value)) {
                     return false;

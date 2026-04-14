@@ -11,8 +11,10 @@ import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;
 import com.meteorite.itemdespawntowhat.server.event.ItemConversionEvent;
 import com.meteorite.itemdespawntowhat.util.IdValidator;
 import com.meteorite.itemdespawntowhat.util.JsonOrder;
+import com.meteorite.itemdespawntowhat.util.TagResolver;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -22,8 +24,6 @@ import net.minecraft.world.item.Items;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
@@ -113,10 +113,10 @@ public abstract class BaseConversionConfig {
         }
 
         // 缓存起始物品（标签模式下 cachedStartItem 在 expandTagItems 中填充）
-        if (itemId != null && itemId.startsWith("#")) {
+        if (TagResolver.isTagId(itemId)) {
             isTagMode = true;
             cachedStartItem = Items.AIR; // 标签展开前占位，expandTagItems() 后更新
-            cachedTagItems = new ArrayList<>();
+            cachedTagItems = List.of();
         } else {
             isTagMode = false;
             ResourceLocation rl = ResourceLocation.tryParse(itemId != null ? itemId : "");
@@ -134,16 +134,8 @@ public abstract class BaseConversionConfig {
     public void expandTagItems() {
         if (!isTagMode || itemId == null) return;
 
-        ResourceLocation tagRl = ResourceLocation.tryParse(itemId.substring(1));
-
-        if (tagRl == null) return;
-        var tagKey = net.minecraft.tags.TagKey.create(net.minecraft.core.registries.Registries.ITEM, tagRl);
-
-        List<Item> expanded = new ArrayList<>();
-        BuiltInRegistries.ITEM.getTag(tagKey).ifPresent(holders ->
-                holders.forEach(h -> expanded.add(h.value())));
-        cachedTagItems = Collections.unmodifiableList(expanded);
-        cachedStartItem = expanded.isEmpty() ? Items.AIR : expanded.getFirst();
+        cachedTagItems = TagResolver.resolveTagItems(BuiltInRegistries.ITEM, Registries.ITEM, itemId);
+        cachedStartItem = cachedTagItems.isEmpty() ? Items.AIR : cachedTagItems.getFirst();
     }
 
     // 提前缓存结果实例，默认空实现，子类按需重写
@@ -382,7 +374,7 @@ public abstract class BaseConversionConfig {
 
     // 标签模式下展开的物品列表（服务端 expandTagItems() 后有效）
     public List<Item> getTagItems() {
-        return cachedTagItems != null ? cachedTagItems : Collections.emptyList();
+        return cachedTagItems != null ? cachedTagItems : List.of();
     }
     public SurroundingBlocks getSurroundingBlocks() {
         return surroundingBlocks;

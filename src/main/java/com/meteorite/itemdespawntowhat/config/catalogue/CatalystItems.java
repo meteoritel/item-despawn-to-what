@@ -4,11 +4,11 @@ import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.meteorite.itemdespawntowhat.condition.ConditionSerializable;
 import com.meteorite.itemdespawntowhat.util.IdValidator;
+import com.meteorite.itemdespawntowhat.util.TagResolver;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -238,7 +238,7 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
         }
 
         public boolean isTagEntry() {
-            return itemId != null && itemId.startsWith("#");
+            return TagResolver.isTagId(itemId);
         }
 
         public boolean isValid() {
@@ -255,18 +255,9 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
 
         public List<Item> getTagItems() {
             if (cachedTagItems == null && isTagEntry()) {
-                ResourceLocation tagRl = ResourceLocation.tryParse(itemId.substring(1));
-                if (tagRl == null) {
-                    cachedTagItems = Collections.emptyList();
-                } else {
-                    TagKey<Item> tagKey = TagKey.create(Registries.ITEM, tagRl);
-                    List<Item> expanded = new ArrayList<>();
-                    BuiltInRegistries.ITEM.getTag(tagKey).ifPresent(holders ->
-                            holders.forEach(h -> expanded.add(h.value())));
-                    cachedTagItems = Collections.unmodifiableList(expanded);
-                }
+                cachedTagItems = TagResolver.resolveTagItems(BuiltInRegistries.ITEM, Registries.ITEM, itemId);
             }
-            return cachedTagItems != null ? cachedTagItems : Collections.emptyList();
+            return cachedTagItems != null ? cachedTagItems : List.of();
         }
     }
 }
