@@ -6,7 +6,6 @@ import com.meteorite.itemdespawntowhat.condition.ConditionSerializable;
 import com.meteorite.itemdespawntowhat.config.ConfigDirection;
 import com.meteorite.itemdespawntowhat.util.IdValidator;
 import com.meteorite.itemdespawntowhat.util.TagResolver;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.Map;

@@ -90,11 +90,7 @@ public class SurroundingBlocksConditionChecker extends AbstractConditionChecker 
             return null;
         }
 
-        Either<ResourceLocation, TagKey<Block>> parsed = TagResolver.parseRegistryEntry(conditionStr, Registries.BLOCK);
-        if (parsed == null) {
-            return null;
-        }
-        return parsed;
+        return TagResolver.parseRegistryEntry(conditionStr, Registries.BLOCK);
     }
 
     private static boolean checkBlockCondition(BlockState blockState,

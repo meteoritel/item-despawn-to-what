@@ -9,6 +9,8 @@ import com.meteorite.itemdespawntowhat.client.ui.SuggestionProvider;
 import com.meteorite.itemdespawntowhat.client.ui.panel.ConfigListPanel;
 import com.meteorite.itemdespawntowhat.network.payload.c2s.ReleaseEditSessionPayload;
 import com.meteorite.itemdespawntowhat.client.ui.panel.FormListPanel;
+import com.meteorite.itemdespawntowhat.client.ui.screen.support.BaseConfigEditScreenFocusController;
+import com.meteorite.itemdespawntowhat.client.ui.screen.support.BaseConfigEditScreenSuggestionController;
 import com.meteorite.itemdespawntowhat.client.ui.widget.*;
 import com.meteorite.itemdespawntowhat.util.PlayerStateChecker;
 import net.minecraft.ChatFormatting;
@@ -65,12 +67,10 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     protected EditBox sourceMultipleInput;
     // UI 组件列表
     protected FormListPanel formList;
-    // 存储所有建议下拉框的列表
-    protected final List<SuggestionWidget> suggestionWidgets = new ArrayList<>();
-    // 聚焦的组件
-    protected AbstractWidget focusedWidget;
     // 右上角配置列表按钮
     private Button configListButton;
+    private final BaseConfigEditScreenSuggestionController suggestionController = new BaseConfigEditScreenSuggestionController();
+    private final BaseConfigEditScreenFocusController focusController = new BaseConfigEditScreenFocusController();
 
     // 错误提示
     private Component errorMessage = null;
@@ -90,10 +90,23 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     @Override
     protected void init() {
         super.init();
-        focusedWidget = null;
+        suggestionController.clear();
+        clearAllFocus();
         validatedFields.clear();
         invalidFields.clear();
 
+        initFormPanel();
+        initCommonWidgets();
+        initFormEntries();
+        initSuggestions();
+        addCustomSuggestion();
+        initValidators();
+        initButtons();
+        clearFields();
+        restoreResizeBackup();
+    }
+
+    private void initFormPanel() {
         formList = new FormListPanel(
                 minecraft,
                 width,
@@ -102,8 +115,9 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
                 height - 215
         );
         addRenderableWidget(formList);
+    }
 
-        // 创造字段对应实例
+    private void initCommonWidgets() {
         itemIdInput = textBox();
         dimensionInput = textBox();
         needOutdoorButton = CycleButton.booleanBuilder(
@@ -118,8 +132,9 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         conversionTimeInput = numericBox();
         resultMultipleInput = numericBox();
         sourceMultipleInput = numericBox();
+    }
 
-        // ---------- 将组件加入列表 ---------- //
+    private void initFormEntries() {
         // 转化基本信息（起始物品、结果、转化比值、转化时间）
         formList.add(Component.translatable(LABEL_PREFIX + "item_id"), itemIdInput);
         if (shouldShowResultId()) {
@@ -136,33 +151,29 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         formList.add(Component.translatable(LABEL_PREFIX + "catalyst_items"), catalystWidget);
         formList.add(Component.translatable(LABEL_PREFIX + "inner_fluid"), innerFluidWidget);
 
-        // 将子类字段加入列表
         addCustomEntries(formList);
+    }
 
-        // ---------- 注册下拉建议框组件 ---------- //
+    private void initSuggestions() {
         registerSuggestion(itemIdInput, SuggestionProvider.ofRegistryWithTags(BuiltInRegistries.ITEM, Registries.ITEM));
         for (EditBox box : surroundingWidget.getBoxes().values()) {
-            registerSuggestion(box,
-                    SuggestionProvider.ofRegistryWithTags(BuiltInRegistries.BLOCK, Registries.BLOCK));
+            registerSuggestion(box, SuggestionProvider.ofRegistryWithTags(BuiltInRegistries.BLOCK, Registries.BLOCK));
         }
         registerSuggestion(dimensionInput, SuggestionProvider.ofDimensions());
         registerSuggestion(catalystWidget.getItemBox(),
                 SuggestionProvider.ofRegistryWithTags(BuiltInRegistries.ITEM, Registries.ITEM));
-        registerSuggestion(innerFluidWidget.getFluidBox(),
-                SuggestionProvider.ofRegistry(BuiltInRegistries.FLUID));
+        registerSuggestion(innerFluidWidget.getFluidBox(), SuggestionProvider.ofRegistry(BuiltInRegistries.FLUID));
+    }
 
-        // 添加子类下拉建议框监听
-        addCustomSuggestion();
-
-        initButtons();
-        clearFields();
-
+    private void restoreResizeBackup() {
         if (resizeBackup != null) {
             onRefillFields(resizeBackup);
             resizeBackup = null;
         }
+    }
 
-        // 注册公共字段校验器
+    // 子类可覆盖此方法注册额外的字段校验器
+    protected void initValidators() {
         registerValidator(itemIdInput, IdValidator::isValidItemId);
         registerValidator(innerFluidWidget.getFluidBox(),
                 () -> {
@@ -170,11 +181,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
                     return fluid != null && fluid.hasInnerFluid();
                 },
                 IdValidator::isValidFluidId);
-        initValidators();
     }
-
-    // 子类可覆盖此方法注册额外的字段校验器
-    protected void initValidators() {}
 
     // 注册字段校验器（无前置条件）
     protected void registerValidator(EditBox box, FieldValidator... validators) {
@@ -428,7 +435,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     }
 
     protected void clearAllSuggestions() {
-        suggestionWidgets.forEach((SuggestionWidget::hide));
+        suggestionController.hideAll();
     }
 
     protected void refillCommonFields(T config) {
@@ -469,12 +476,17 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     @Override
     public void render(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         super.render(guiGraphics, mouseX, mouseY, partialTick);
+        renderHeaderAndMode(guiGraphics);
+        renderValidationOverlay(guiGraphics);
+        renderSuggestionOverlay(guiGraphics, mouseX, mouseY);
+    }
+
+    private void renderHeaderAndMode(GuiGraphics guiGraphics) {
         guiGraphics.drawCenteredString(font, title, width / 2, 12, 0xFFFFFF);
-
-        // 显示当前模式
         guiGraphics.drawString(font, editHandler.getModeLabelText(), 10, 12, 0x808080);
+    }
 
-        // 渲染错误提示
+    private void renderValidationOverlay(GuiGraphics guiGraphics) {
         if (errorMessage != null && errorDisplayTicks > 0) {
             guiGraphics.drawCenteredString(font, errorMessage, width / 2, 24, 0xFFFFFF);
             errorDisplayTicks--;
@@ -483,6 +495,11 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
                 invalidFields.clear();
             }
         }
+
+        if (formList == null) {
+            return;
+        }
+
         // 红框标记校验失败的输入框（仅在 formList 可视区域内的输入框显示）
         for (EditBox box : invalidFields) {
             int bx = box.getX();
@@ -492,48 +509,28 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
             guiGraphics.renderOutline(bx - 1, by - 1,
                     box.getWidth() + 2, box.getHeight() + 2, 0xFFFF4444);
         }
+    }
 
-        // 因为文本的按钮文本开启了深度测试，所以需要把z值拉高
+    private void renderSuggestionOverlay(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         guiGraphics.pose().pushPose();
         guiGraphics.pose().translate(0, 0, 300);
-        // 建议下拉框要最后渲染
-        for (SuggestionWidget widget : suggestionWidgets) {
-            if (widget.isVisible()) {
-                widget.render(guiGraphics, mouseX, mouseY);
-            }
-        }
+        suggestionController.render(guiGraphics, mouseX, mouseY);
         guiGraphics.pose().popPose();
     }
 
     // ========== 统一焦点管理 ========== //
     public void setFocusedWidget(@Nullable AbstractWidget widget) {
-        if (focusedWidget == widget) return;
-
-        // 旧焦点失效
-        if (focusedWidget != null) {
-            focusedWidget.setFocused(false);
-            if (focusedWidget instanceof ICompositeWidget comp) {
-                comp.clearInternalFocus();
-            }
-        }
-
-        focusedWidget = widget;
-
-        // 新焦点生效
-        if (widget != null) {
-            widget.setFocused(true);
-        }
+        focusController.setFocusedWidget(widget);
     }
 
     // 将按钮等不需要焦点的排除出统一焦点管理
     public boolean shouldTakeFocus(AbstractWidget widget) {
-        return !(widget instanceof Button)
-                && !(widget instanceof CycleButton);
+        return focusController.shouldTakeFocus(widget);
     }
 
     // 清除所有焦点
     protected void clearAllFocus() {
-        setFocusedWidget(null);
+        focusController.clearAllFocus();
     }
 
     // ========== 输入相关 ========== //
@@ -549,50 +546,28 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        // 优先让建议下拉框处理点击
-        for (SuggestionWidget widget : suggestionWidgets) {
-            if (widget.isVisible() && widget.mouseClicked(mouseX, mouseY)) {
-                return true;
-            }
+        if (suggestionController.mouseClicked(mouseX, mouseY)) {
+            return true;
         }
 
         clearAllFocus();
-
-        // 隐藏那些鼠标不在其关联输入框上的建议组件
-        for (SuggestionWidget widget : suggestionWidgets) {
-            EditBox box = widget.getAttachedBox();
-            if (box != null && !isMouseOverBox(box, mouseX, mouseY)) {
-                widget.hide();
-            }
-        }
-
+        suggestionController.hideSuggestionsNotUnderMouse(mouseX, mouseY);
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        for (SuggestionWidget sw : suggestionWidgets) {
-            if (sw.isVisible() && sw.mouseScrolled(mouseX, mouseY, scrollY)) {
-                return true;
-            }
+        if (suggestionController.mouseScrolled(mouseX, mouseY, scrollY)) {
+            return true;
         }
         return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        // 优先让建议组件处理建议下拉框中的按键
-        if (focusedWidget instanceof EditBox editBox ) {
-            // 查找与该输入框关联的建议组件
-            if (suggestionKeyPressed(keyCode, editBox)){
-                return true;
-            }
-        } else if (focusedWidget instanceof ICompositeWidget comp) {
-            // 复合组件需要单独处理
-            EditBox active = comp.getInternalFocused();
-            if (suggestionKeyPressed(keyCode, active)) {
-                return true;
-            }
+        AbstractWidget focusedWidget = focusController.getFocusedWidget();
+        if (suggestionController.keyPressed(keyCode, focusedWidget)) {
+            return true;
         }
 
         if (focusedWidget != null && focusedWidget.keyPressed(keyCode, scanCode, modifiers)) {
@@ -601,20 +576,9 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
-    private boolean suggestionKeyPressed(int keyCode, EditBox editBox) {
-        for (SuggestionWidget sw : suggestionWidgets) {
-            if (sw.getAttachedBox() == editBox && sw.isVisible()) {
-                if (sw.keyPressed(keyCode)) {
-                    return true;
-                }
-                break;
-            }
-        }
-        return false;
-    }
-
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
+        AbstractWidget focusedWidget = focusController.getFocusedWidget();
         if (focusedWidget != null && focusedWidget.charTyped(codePoint, modifiers)) {
             return true;
         }
@@ -632,15 +596,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
     // 创建并注册一个建议组件，并添加监听
     protected void registerSuggestion(EditBox editBox, SuggestionProvider sProvider) {
-        SuggestionWidget widget = new SuggestionWidget(font, editBox, sProvider);
-        suggestionWidgets.add(widget);
-        editBox.setResponder(text -> widget.updateSuggestions());
-    }
-
-    // 辅助方法：判断鼠标是否在某个输入框区域内
-    private boolean isMouseOverBox(EditBox box, double mouseX, double mouseY) {
-        return mouseX >= box.getX() && mouseX <= box.getX() + box.getWidth()
-                && mouseY >= box.getY() && mouseY <= box.getY() + box.getHeight();
+        suggestionController.registerSuggestion(font, editBox, sProvider);
     }
 
     // ========== 子类方法 ========== //

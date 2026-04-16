@@ -151,7 +151,7 @@ public interface SuggestionProvider {
     static <T> SuggestionProvider ofTags(ResourceKey<? extends Registry<T>> registryKey) {
         return (segment, maxResults) -> {
             String effectiveSegment = TagResolver.stripTagPrefix(segment);
-            String lower = effectiveSegment != null ? effectiveSegment.toLowerCase() : "";
+            String lower = effectiveSegment.toLowerCase();
 
             Registry<T> registry = getRegistry(registryKey);
             if (registry == null) {
@@ -182,7 +182,6 @@ public interface SuggestionProvider {
 
         return null;
     }
-
 
     // 从固定字符串列表中匹配
     static SuggestionProvider ofList(String... candidates) {
