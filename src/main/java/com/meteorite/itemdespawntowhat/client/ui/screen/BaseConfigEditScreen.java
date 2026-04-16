@@ -12,7 +12,6 @@ import com.meteorite.itemdespawntowhat.client.ui.panel.FormListPanel;
 import com.meteorite.itemdespawntowhat.client.ui.support.BaseConfigEditScreenFocusController;
 import com.meteorite.itemdespawntowhat.client.ui.support.BaseConfigEditScreenSuggestionController;
 import com.meteorite.itemdespawntowhat.client.ui.widget.*;
-import com.meteorite.itemdespawntowhat.util.PlayerStateChecker;
 import net.minecraft.ChatFormatting;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.minecraft.client.Minecraft;
@@ -280,9 +279,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         }
         ConfigListPanel.clearEntityCache();
         if (minecraft != null) {
-            if ((PlayerStateChecker.isSinglePlayerServerReady(minecraft)
-                    || PlayerStateChecker.isMultiPlayerServerConnected(minecraft))
-                    && minecraft.player != null) {
+            if (minecraft.player != null) {
                 PacketDistributor.sendToServer(new ReleaseEditSessionPayload());
             }
             minecraft.setScreen(new ConfigTypeSelectionScreen());

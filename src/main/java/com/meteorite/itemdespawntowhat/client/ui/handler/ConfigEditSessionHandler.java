@@ -149,9 +149,9 @@ public class ConfigEditSessionHandler<T extends BaseConversionConfig> {
 
     // 判断当前运行模式文本（供 UI 渲染使用）
     public Component getModeLabelText() {
-        if (PlayerStateChecker.isSinglePlayerServerReady(mc)) {
+        if (PlayerStateChecker.isSinglePlayerMode(mc)) {
             return Component.translatable(LOCAL_MODE_KEY);
-        } else if (PlayerStateChecker.isMultiPlayerServerConnected(mc)) {
+        } else if (PlayerStateChecker.isMultiPlayerMode(mc)) {
             return Component.translatable(SERVER_MODE_KEY);
         }
         return Component.empty();

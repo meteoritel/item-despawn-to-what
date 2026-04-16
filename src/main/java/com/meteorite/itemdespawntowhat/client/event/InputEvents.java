@@ -22,12 +22,12 @@ public class InputEvents {
 
         Minecraft minecraft = Minecraft.getInstance();
         // 单人模式继续打开编辑入口，联机环境只给本地提示，不再发起编辑请求。
-        if (PlayerStateChecker.isSinglePlayerServerReady(minecraft)) {
+        if (PlayerStateChecker.isSinglePlayerMode(minecraft)) {
             minecraft.setScreen(new ConfigTypeSelectionScreen());
             return;
         }
 
-        if (PlayerStateChecker.isMultiPlayerServerConnected(minecraft) && minecraft.player != null) {
+        if (PlayerStateChecker.isMultiPlayerMode(minecraft) && minecraft.player != null) {
             minecraft.player.sendSystemMessage(Component.translatable("gui.itemdespawntowhat.keybind.disabled.multiplayer"));
         }
     }

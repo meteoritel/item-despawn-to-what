@@ -8,7 +8,10 @@ import net.minecraft.client.Minecraft;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 // 客户端 payload 处理器：负责打开界面并接收服务端下发的配置快照。
-public class ConfigEditClientPayloadHandler {
+public final class ConfigEditClientPayloadHandler {
+    private ConfigEditClientPayloadHandler() {
+        throw new UnsupportedOperationException("Utility class");
+    }
 
     public static void handleOpenGui(IPayloadContext context) {
         context.enqueueWork(() -> {
