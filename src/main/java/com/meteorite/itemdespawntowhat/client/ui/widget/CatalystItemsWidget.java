@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import com.meteorite.itemdespawntowhat.config.catalogue.CatalystItems;
+import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.CycleButton;
@@ -126,10 +127,8 @@ public class CatalystItemsWidget extends AbstractCompositeWidget {
 
             int count = 1;
             if (i < counts.size()) {
-                try {
-                    int parsed = Integer.parseInt(counts.get(i));
-                    if (parsed >= 1) count = parsed;
-                } catch (NumberFormatException ignored) {}
+                int parsed = SafeParseUtil.parseInt(counts.get(i), 1);
+                if (parsed >= 1) count = parsed;
             }
             list.add(new CatalystItems.CatalystEntry(id, count));
         }

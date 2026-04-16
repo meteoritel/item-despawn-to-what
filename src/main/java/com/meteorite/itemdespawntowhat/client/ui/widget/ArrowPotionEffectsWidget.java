@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import com.meteorite.itemdespawntowhat.config.catalogue.PotionEffect;
+import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
@@ -175,10 +176,6 @@ public class ArrowPotionEffectsWidget extends AbstractCompositeWidget{
     // ========== 工具方法 ========== //
     private static int parseIntSafe(@Nullable String s, int def) {
         if (s == null || s.isBlank()) return def;
-        try {
-            return Integer.parseInt(s.trim());
-        } catch (NumberFormatException e) {
-            return def;
-        }
+        return SafeParseUtil.parseInt(s.trim(), def);
     }
 }

@@ -34,7 +34,7 @@ public final class TagResolver {
             return List.of();
         }
 
-        ResourceLocation tagLocation = ResourceLocation.tryParse(stripTagPrefix(value));
+        ResourceLocation tagLocation = SafeParseUtil.parseResourceLocation(stripTagPrefix(value));
         if (tagLocation == null) {
             return List.of();
         }
@@ -73,14 +73,14 @@ public final class TagResolver {
         }
 
         if (isTagId(value)) {
-            ResourceLocation tagLocation = ResourceLocation.tryParse(stripTagPrefix(value));
+            ResourceLocation tagLocation = SafeParseUtil.parseResourceLocation(stripTagPrefix(value));
             if (tagLocation == null) {
                 return null;
             }
             return Either.right(TagKey.create(registryKey, tagLocation));
         }
 
-        ResourceLocation location = ResourceLocation.tryParse(value);
+        ResourceLocation location = SafeParseUtil.parseResourceLocation(value);
         if (location == null) {
             return null;
         }

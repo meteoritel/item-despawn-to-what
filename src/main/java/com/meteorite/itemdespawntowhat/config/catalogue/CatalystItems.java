@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.meteorite.itemdespawntowhat.condition.ConditionSerializable;
 import com.meteorite.itemdespawntowhat.util.IdValidator;
+import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import com.meteorite.itemdespawntowhat.util.TagResolver;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -245,9 +246,13 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
             return IdValidator.isValidItemId(itemId) && count >= 1;
         }
 
+        private ResourceLocation parseItemRl() {
+            return SafeParseUtil.parseResourceLocation(itemId);
+        }
+
         public Item getItem() {
             if (cachedItem == null && !isTagEntry()) {
-                ResourceLocation rl = ResourceLocation.tryParse(itemId != null ? itemId : "");
+                ResourceLocation rl = parseItemRl();
                 cachedItem = rl != null ? BuiltInRegistries.ITEM.get(rl) : null;
             }
             return cachedItem;

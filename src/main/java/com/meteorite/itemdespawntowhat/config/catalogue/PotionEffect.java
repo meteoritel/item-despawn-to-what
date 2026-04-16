@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.config.catalogue;
 
 import com.google.gson.annotations.SerializedName;
+import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.effect.MobEffect;
@@ -36,8 +37,8 @@ public class PotionEffect {
             LOGGER.warn("PotionEffectEntry: effect id is null or blank, skipping");
             return null;
         }
-        ResourceLocation id = ResourceLocation.tryParse(effectId);
-        if (id == null || id.getPath().isEmpty()) {
+        ResourceLocation id = SafeParseUtil.parseResourceLocation(effectId);
+        if (id == null) {
             LOGGER.warn("PotionEffectEntry: invalid effect id '{}', skipping", effectId);
             return null;
         }

@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.config.conversion;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
+import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
@@ -23,10 +24,14 @@ public class ItemToItemConfig extends BaseItemToEntityConfig{
         super(item, result);
     }
 
+    private ResourceLocation parseResultRl() {
+        return SafeParseUtil.parseResourceLocation(resultId);
+    }
+
     // ========== 初始化缓存与校验 ========== //
     @Override
     protected void initResultCache() {
-        ResourceLocation resultRl = ResourceLocation.tryParse(resultId != null ? resultId : "");
+        ResourceLocation resultRl = parseResultRl();
         cachedResultItem = resultRl != null ? BuiltInRegistries.ITEM.get(resultRl) : Items.AIR;
         if (cachedResultItem == Items.AIR) {
             LOGGER.warn("Could not find item for resultId='{}', config will be rejected", resultId);
@@ -119,7 +124,7 @@ public class ItemToItemConfig extends BaseItemToEntityConfig{
         if (isCacheInitialized()) {
             return cachedResultItem;
         }
-        ResourceLocation resultRl = ResourceLocation.tryParse(resultId != null ? resultId : "");
+        ResourceLocation resultRl = parseResultRl();
         return resultRl != null ? BuiltInRegistries.ITEM.get(resultRl) : Items.AIR;
     }
 

@@ -11,6 +11,7 @@ import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;
 import com.meteorite.itemdespawntowhat.server.event.ItemConversionEvent;
 import com.meteorite.itemdespawntowhat.util.IdValidator;
 import com.meteorite.itemdespawntowhat.util.JsonOrder;
+import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import com.meteorite.itemdespawntowhat.util.TagResolver;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -101,6 +102,10 @@ public abstract class BaseConversionConfig {
         this.conversionTime = 5;
     }
 
+    private ResourceLocation parseItemRl() {
+        return SafeParseUtil.parseResourceLocation(itemId);
+    }
+
     // ========== 缓存初始化 ========== //
     public final void initCache() {
         if (cacheInitialized) {
@@ -119,7 +124,7 @@ public abstract class BaseConversionConfig {
             cachedTagItems = List.of();
         } else {
             isTagMode = false;
-            ResourceLocation rl = ResourceLocation.tryParse(itemId != null ? itemId : "");
+            ResourceLocation rl = parseItemRl();
             cachedStartItem = (rl != null) ? BuiltInRegistries.ITEM.get(rl) : Items.AIR;
         }
 
@@ -298,7 +303,7 @@ public abstract class BaseConversionConfig {
         if (cacheInitialized) {
             return cachedStartItem;
         }
-        ResourceLocation rl = ResourceLocation.tryParse(itemId != null ? itemId : "");
+        ResourceLocation rl = parseItemRl();
         return rl != null ? BuiltInRegistries.ITEM.get(rl) : Items.AIR;
     }
 

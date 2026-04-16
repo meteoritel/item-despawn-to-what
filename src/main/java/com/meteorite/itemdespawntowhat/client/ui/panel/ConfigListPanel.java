@@ -8,6 +8,7 @@ import com.meteorite.itemdespawntowhat.client.ui.panel.configlist.TagPreviewReso
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToBlockConfig;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToMobConfig;
+import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import com.meteorite.itemdespawntowhat.util.TagResolver;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -409,7 +410,7 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
 
             // 渲染实体图标
             if (entityIcon != null) {
-                ResourceLocation entityId = ResourceLocation.tryParse(config.getResultId());
+                ResourceLocation entityId = SafeParseUtil.parseResourceLocation(config.getResultId());
                 float scale = (entityId != null) ? ModConfigValues.getEntityScale(entityId, DEFAULT_MOB_SCALE) : DEFAULT_MOB_SCALE;
                 float cx = resultIconX + ICON_SIZE / 2.0f;
                 float cy = iconY + ICON_SIZE / 2.0f;

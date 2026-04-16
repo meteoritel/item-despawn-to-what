@@ -4,6 +4,7 @@ import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
 import com.meteorite.itemdespawntowhat.condition.checker.ConditionChecker;
+import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import net.minecraft.resources.ResourceLocation;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -123,7 +124,7 @@ public class ConfigExtractorManager {
                 TAG_PENDING_CONFIGS.add(config);
                 INTERNAL_ID_CACHE.put(internalId, config);
             } else {
-                ResourceLocation itemId = ResourceLocation.tryParse(itemIdStr);
+                ResourceLocation itemId = SafeParseUtil.parseResourceLocation(itemIdStr);
                 // 添加到主缓存
                 ITEM_CONFIGS_CACHE
                         .computeIfAbsent(itemId, rl -> new ArrayList<>())
@@ -247,7 +248,7 @@ public class ConfigExtractorManager {
                 });
             }
         } else {
-            ResourceLocation itemKey = ResourceLocation.tryParse(config.getItemId() != null ? config.getItemId() : "");
+            ResourceLocation itemKey = SafeParseUtil.parseResourceLocation(config.getItemId());
             if (itemKey != null) ITEM_CONFIGS_CACHE.computeIfPresent(itemKey, (k, list) -> {
                 list.remove(config);
                 return list.isEmpty() ? null : list;

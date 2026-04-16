@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.condition.checker;
 
 import com.meteorite.itemdespawntowhat.condition.ConditionContext;
 import com.meteorite.itemdespawntowhat.config.catalogue.InnerFluid;
+import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -61,7 +62,7 @@ public class InnerFluidConditionChecker extends AbstractConditionChecker{
             return true;
         }
 
-        ResourceLocation targetFluidId = ResourceLocation.tryParse(innerFluid.getFluidId());
+        ResourceLocation targetFluidId = SafeParseUtil.parseResourceLocation(innerFluid.getFluidId());
         if (targetFluidId == null) {
             return false;
         }

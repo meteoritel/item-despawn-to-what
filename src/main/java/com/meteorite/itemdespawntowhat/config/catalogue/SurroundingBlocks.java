@@ -5,6 +5,7 @@ import com.google.gson.annotations.SerializedName;
 import com.meteorite.itemdespawntowhat.condition.ConditionSerializable;
 import com.meteorite.itemdespawntowhat.config.ConfigDirection;
 import com.meteorite.itemdespawntowhat.util.IdValidator;
+import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import com.meteorite.itemdespawntowhat.util.TagResolver;
 import net.minecraft.resources.ResourceLocation;
 
@@ -68,7 +69,7 @@ public class SurroundingBlocks implements ConditionSerializable<SurroundingBlock
                 }
             } else {
                 // 普通方块：校验格式
-                if (!IdValidator.isValidString(value) || ResourceLocation.tryParse(value) == null) {
+                if (!IdValidator.isValidString(value) || SafeParseUtil.parseResourceLocation(value) == null) {
                     return false;
                 }
             }

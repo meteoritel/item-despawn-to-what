@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.config.conversion;
 
 import com.google.gson.annotations.SerializedName;
 import com.meteorite.itemdespawntowhat.ConfigExtractorManager;
+import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -29,7 +30,7 @@ public class ItemToMobConfig extends BaseItemToEntityConfig{
     }
 
     private ResourceLocation resultRl() {
-        return ResourceLocation.tryParse(resultId != null ? resultId : "");
+        return SafeParseUtil.parseResourceLocation(resultId);
     }
 
     // ========== 缓存与校验 ========== //

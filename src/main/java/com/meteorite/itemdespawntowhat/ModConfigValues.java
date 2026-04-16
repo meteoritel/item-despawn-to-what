@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat;
 
 import net.minecraft.resources.ResourceLocation;
+import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
 import java.util.List;
@@ -74,9 +75,7 @@ public class ModConfigValues {
             // 去除所有空格
             String cleanEntry = entry.replaceAll("\\s+", "");
             if (cleanEntry.startsWith(prefix)) {
-                try {
-                    return Float.parseFloat(cleanEntry.substring(prefix.length()).trim());
-                } catch (NumberFormatException ignored) {}
+                return SafeParseUtil.parseFloat(cleanEntry.substring(prefix.length()).trim(), defaultScale);
             }
         }
         return defaultScale;

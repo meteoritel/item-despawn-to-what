@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.meteorite.itemdespawntowhat.condition.ConditionSerializable;
 import com.meteorite.itemdespawntowhat.util.IdValidator;
+import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -79,7 +80,11 @@ public class InnerFluid implements ConditionSerializable<InnerFluid> {
             return;
         }
 
-        Fluid targetFluid = BuiltInRegistries.FLUID.get(ResourceLocation.tryParse(fluidId));
+        ResourceLocation fluidRl = SafeParseUtil.parseResourceLocation(fluidId);
+        if (fluidRl == null) {
+            return;
+        }
+        Fluid targetFluid = BuiltInRegistries.FLUID.get(fluidRl);
         if (!fluidState.getType().isSame(targetFluid)) {
             return;
         }

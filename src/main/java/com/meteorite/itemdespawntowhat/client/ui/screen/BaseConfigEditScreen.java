@@ -12,6 +12,7 @@ import com.meteorite.itemdespawntowhat.client.ui.panel.FormListPanel;
 import com.meteorite.itemdespawntowhat.client.ui.support.BaseConfigEditScreenFocusController;
 import com.meteorite.itemdespawntowhat.client.ui.support.BaseConfigEditScreenSuggestionController;
 import com.meteorite.itemdespawntowhat.client.ui.widget.*;
+import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import net.minecraft.ChatFormatting;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.minecraft.client.Minecraft;
@@ -450,11 +451,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
     // 安全解析字符串到数字
     protected int parseInt(String boxInput, int def) {
-        try {
-            return Integer.parseInt(boxInput);
-        } catch (Exception e) {
-            return def;
-        }
+        return SafeParseUtil.parseInt(boxInput, def);
     }
 
     private static String nullToEmpty(String value) {
@@ -462,11 +459,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     }
 
     protected float parseFloat(String boxInput, float def) {
-        try {
-            return Float.parseFloat(boxInput);
-        } catch (Exception e) {
-            return def;
-        }
+        return SafeParseUtil.parseFloat(boxInput, def);
     }
 
     // ========== 渲染 ========== //

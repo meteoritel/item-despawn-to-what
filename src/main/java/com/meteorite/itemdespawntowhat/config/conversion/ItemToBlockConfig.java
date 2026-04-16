@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.config.conversion;
 
 import com.google.gson.annotations.SerializedName;
 import com.meteorite.itemdespawntowhat.server.task.PlaceBlockTask;
+import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import com.meteorite.itemdespawntowhat.server.task.LevelTaskManager;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -31,6 +32,10 @@ public class ItemToBlockConfig extends BaseConversionConfig{
         super(item, result);
     }
 
+    private ResourceLocation parseResultRl() {
+        return SafeParseUtil.parseResourceLocation(resultId);
+    }
+
     // ========== 缓存与校验 ========== //
     @Override
     protected void initResultCache() {
@@ -41,7 +46,7 @@ public class ItemToBlockConfig extends BaseConversionConfig{
         }
 
         // 直接按 resultId 查找
-        ResourceLocation resultRl = ResourceLocation.tryParse(resultId != null ? resultId : "");
+        ResourceLocation resultRl = parseResultRl();
         Block block = resultRl != null ? BuiltInRegistries.BLOCK.get(resultRl) : Blocks.AIR;
         this.cachedResultBlock = (block != Blocks.AIR) ? block : null;
         if (cachedResultBlock == null) {
@@ -111,7 +116,7 @@ public class ItemToBlockConfig extends BaseConversionConfig{
         if (isCacheInitialized() && cachedResultBlock != null) {
             return cachedResultBlock;
         }
-        ResourceLocation rl = ResourceLocation.tryParse(resultId != null ? resultId : "");
+        ResourceLocation rl = SafeParseUtil.parseResourceLocation(resultId);
         return rl != null ? BuiltInRegistries.BLOCK.get(rl) : Blocks.AIR;
     }
 
