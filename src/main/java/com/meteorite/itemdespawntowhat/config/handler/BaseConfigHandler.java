@@ -6,8 +6,6 @@ import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.util.JsonOrderTypeAdapterFactory;
-import com.meteorite.itemdespawntowhat.util.ResourceLocationAdapter;
-import net.minecraft.resources.ResourceLocation;
 import net.neoforged.fml.loading.FMLPaths;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -25,7 +23,6 @@ public abstract class BaseConfigHandler<T extends BaseConversionConfig> {
     protected static final Logger LOGGER = LogManager.getLogger();
     protected static final Gson GSON = new GsonBuilder()
             .setPrettyPrinting()
-            .registerTypeAdapter(ResourceLocation.class,new ResourceLocationAdapter())
             .registerTypeAdapterFactory(new JsonOrderTypeAdapterFactory())
             .create();
 

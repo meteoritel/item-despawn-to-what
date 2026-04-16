@@ -1,10 +1,10 @@
 package com.meteorite.itemdespawntowhat.client.ui.panel;
 
 import com.meteorite.itemdespawntowhat.ModConfigValues;
-import com.meteorite.itemdespawntowhat.config.ConfigDirection;
-import com.meteorite.itemdespawntowhat.config.catalogue.CatalystItems;
-import com.meteorite.itemdespawntowhat.config.catalogue.InnerFluid;
-import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;
+import com.meteorite.itemdespawntowhat.client.ui.panel.configlist.ConfigTooltipBuilder;
+import com.meteorite.itemdespawntowhat.client.ui.panel.configlist.EntityIconCache;
+import com.meteorite.itemdespawntowhat.client.ui.panel.configlist.ScrollableTextRenderer;
+import com.meteorite.itemdespawntowhat.client.ui.panel.configlist.TagPreviewResolver;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToBlockConfig;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToMobConfig;
@@ -15,10 +15,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ObjectSelectionList;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -32,9 +29,7 @@ import org.jetbrains.annotations.Nullable;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelectionList<ConfigListPanel.ConfigEntry<T>> {
 
@@ -52,19 +47,15 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
     }
 
     // ========== 实体图标缓存 ========== //
-    private static final Map<EntityType<?>, LivingEntity> ENTITY_ICON_CACHE = new HashMap<>();
     private static final float DEFAULT_MOB_SCALE = 13.0f;
 
     @Nullable
     public static LivingEntity getOrCreateEntityIcon(EntityType<?> type, Level level) {
-        return ENTITY_ICON_CACHE.computeIfAbsent(type, t -> {
-            var e = t.create(level);
-            return (e instanceof LivingEntity le) ? le : null;
-        });
+        return EntityIconCache.getOrCreateEntityIcon(type, level);
     }
 
     public static void clearEntityCache() {
-        ENTITY_ICON_CACHE.clear();
+        EntityIconCache.clear();
     }
 
     // ========== 布局常量 ========== //
@@ -85,15 +76,6 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
     private static final int ARROW_CENTER_SHIFT = 24;
     private static final int ROW_WIDTH = 340;
     private static final Component MULTIPLY_MARK = Component.literal("x");
-
-    // 文本滚动速度：像素/ms
-    private static final float SCROLL_SPEED_PX_MS = 0.025f;
-    // 滚动前静止时长（ms）
-    private static final long SCROLL_PAUSE_MS = 1500L;
-    // 标签图标轮询间隔（ms）
-    private static final long TAG_ICON_SWITCH_MS = 1500L;
-    // 文字与裁剪区右边缘的最小间距
-    private static final int SCROLL_PADDING = 6;
 
     // 确认弹窗常量
     private static final int DIALOG_W = 160;
@@ -202,7 +184,7 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
         guiGraphics.fill(getX(), getY(), getX() + this.width, getY() + this.height, 0xAA_000000);
 
         // 弹窗居中于列表区域
-        int dlgX = getX() + (this.width  - DIALOG_W) / 2;
+        int dlgX = getX() + (this.width - DIALOG_W) / 2;
         int dlgY = getY() + (this.height - DIALOG_H) / 2;
 
         // 弹窗背景 + 边框
@@ -284,8 +266,8 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             this.config = config;
             this.source = source;
             this.indexInSource = indexInSource;
-            this.sourceIsTag = isTagItemId(config.getItemId()) || config.isTagMode();
-            this.sourceTagItems = sourceIsTag ? resolveTagItems(config) : List.of();
+            this.sourceIsTag = TagResolver.isTagId(config.getItemId()) || config.isTagMode();
+            this.sourceTagItems = sourceIsTag ? TagPreviewResolver.resolveTagItems(config) : List.of();
 
             // 若为 mob 类型，从缓存取实体图标
             if (config instanceof ItemToMobConfig mobConfig) {
@@ -293,48 +275,17 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
                 Level level = mc.level;
                 EntityType<?> type = mobConfig.getResultEntityType();
                 this.entityIcon = (level != null && type != null)
-                        ? getOrCreateEntityIcon(type, level)
+                        ? ConfigListPanel.getOrCreateEntityIcon(type, level)
                         : null;
             } else {
                 this.entityIcon = null;
             }
         }
 
-        private boolean isTagItemId(@Nullable String itemId) {
-            return TagResolver.isTagId(itemId);
-        }
-
-        private boolean isTagSource() {
-            return isTagItemId(config.getItemId()) || config.isTagMode();
-        }
-
-        private List<Item> resolveTagItems(T config) {
-            List<Item> cachedTagItems = config.getTagItems();
-            if (!cachedTagItems.isEmpty()) {
-                return cachedTagItems;
-            }
-
-            var mc = Minecraft.getInstance();
-            var registryAccess = mc.level != null
-                    ? mc.level.registryAccess()
-                    : (mc.getConnection() != null ? mc.getConnection().registryAccess() : null);
-            return TagResolver.resolveTagItems(registryAccess, Registries.ITEM, BuiltInRegistries.ITEM, config.getItemId());
-        }
-
-        private @Nullable Item pickRotatingTagItem(List<Item> tagItems) {
-            if (tagItems.isEmpty()) {
-                return null;
-            }
-
-            long rotationTick = System.currentTimeMillis() / TAG_ICON_SWITCH_MS;
-            int index = (int) (rotationTick % tagItems.size());
-            return tagItems.get(index);
-        }
-
         private ItemStack getSourceIconStack() {
-            if (isTagSource()) {
-                List<Item> tagItems = sourceTagItems.isEmpty() ? resolveTagItems(config) : sourceTagItems;
-                Item item = pickRotatingTagItem(tagItems);
+            if (sourceIsTag) {
+                List<Item> tagItems = sourceTagItems.isEmpty() ? TagPreviewResolver.resolveTagItems(config) : sourceTagItems;
+                Item item = TagPreviewResolver.pickRotatingTagItem(tagItems);
                 if (item != null) {
                     return item.getDefaultInstance();
                 }
@@ -360,7 +311,7 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
         }
 
         private Component getSourceText(ItemStack sourceIconStack) {
-            if (isTagSource()) {
+            if (sourceIsTag) {
                 return getDisplayNameForStack(sourceIconStack);
             }
             return Component.translatable(config.getStartItem().getDescriptionId());
@@ -439,14 +390,14 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             guiGraphics.drawString(mc.font, sourceMultipleStr, sourceQtyX, textY, 0xFFFFFF, false);
             guiGraphics.drawString(mc.font, MULTIPLY_MARK, sourceMultiplyX, textY, 0xFFFFFF, false);
             guiGraphics.renderItem(sourceIcon, sourceIconX, iconY);
-            drawScrollableText(guiGraphics, mc, sourceText, sourceTextX, textY, TEXT_COL_WIDTH, 0xFFFFFF);
+            ScrollableTextRenderer.drawScrollableText(guiGraphics, mc.font, sourceText, sourceTextX, textY, TEXT_COL_WIDTH, 0xFFFFFF, createdAt);
 
             // 第二则 resultId 图标
             if (entityIcon == null && config instanceof ItemToMobConfig mobConfig) {
                 Level level = mc.level;
                 EntityType<?> type = mobConfig.getResultEntityType();
                 if (level != null && type != null) {
-                    entityIcon = getOrCreateEntityIcon(type, level);
+                    entityIcon = ConfigListPanel.getOrCreateEntityIcon(type, level);
                 }
             }
 
@@ -477,118 +428,11 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             int resultMultiplyX = resultMultiplyColX + Math.max(0, (MULTIPLY_COL_WIDTH - mc.font.width("*")) / 2);
             guiGraphics.drawString(mc.font, resultMultipleStr, resultQtyX, textY, textColor, false);
             guiGraphics.drawString(mc.font, MULTIPLY_MARK, resultMultiplyX, textY, textColor, false);
-            drawScrollableText(guiGraphics, mc, resultText, resultTextX, textY, TEXT_COL_WIDTH, textColor);
+            ScrollableTextRenderer.drawScrollableText(guiGraphics, mc.font, resultText, resultTextX, textY, TEXT_COL_WIDTH, textColor, createdAt);
 
             if (hovered && mc.screen instanceof Screen screen) {
-                screen.setTooltipForNextRenderPass(buildTooltip(config));
+                screen.setTooltipForNextRenderPass(ConfigTooltipBuilder.build(config));
             }
-        }
-
-        // ========== Tooltip 构建 ========== //
-        private Component buildTooltip(T config) {
-            MutableComponent tooltip = Component.translatable(
-                    "gui.itemdespawntowhat.tooltip.conversion_time", config.getConversionTime());
-
-            // 维度
-            String dim = config.getDimension();
-            if (dim != null && !dim.isEmpty()) {
-                tooltip = tooltip.append(Component.literal("\n"))
-                        .append(Component.translatable("gui.itemdespawntowhat.tooltip.dimension", dim));
-            }
-
-            // 需要露天
-            if (config.isNeedOutdoor()) {
-                tooltip = tooltip.append(Component.literal("\n"))
-                        .append(Component.translatable("gui.itemdespawntowhat.tooltip.need_outdoor"));
-            }
-
-            // 六面方块
-            SurroundingBlocks sb = config.getSurroundingBlocks();
-            if (sb != null && sb.hasAnySurroundBlock()) {
-                tooltip = tooltip.append(Component.literal("\n"))
-                        .append(Component.translatable("gui.itemdespawntowhat.tooltip.surrounding_blocks_header"));
-                for (ConfigDirection dir : ConfigDirection.values()) {
-                    String val = sb.get(dir);
-                    if (val != null && !val.isEmpty()) {
-                        tooltip = tooltip.append(Component.literal("\n"))
-                                .append(Component.translatable("gui.itemdespawntowhat.tooltip.surrounding_block",
-                                        dir.name().toLowerCase(), val));
-                    }
-                }
-            }
-
-            // 辅助物品
-            CatalystItems ci = config.getCatalystItems();
-            if (ci != null && ci.hasAnyCatalyst()) {
-                tooltip = tooltip.append(Component.literal("\n"))
-                        .append(Component.translatable("gui.itemdespawntowhat.tooltip.catalyst_header"));
-                for (CatalystItems.CatalystEntry entry : ci.getCatalystList()) {
-                    tooltip = tooltip.append(Component.literal("\n"))
-                            .append(Component.translatable("gui.itemdespawntowhat.tooltip.catalyst",
-                                    entry.itemId(), entry.count()));
-                }
-            }
-
-            // 浸泡流体
-            InnerFluid fluid = config.getInnerFluid();
-            if (fluid != null && fluid.hasInnerFluid()) {
-                tooltip = tooltip.append(Component.literal("\n"))
-                        .append(Component.translatable("gui.itemdespawntowhat.tooltip.inner_fluid",
-                                fluid.getFluidId()));
-                if (fluid.isRequireSource()) {
-                    tooltip = tooltip.append(Component.literal("\n"))
-                            .append(Component.translatable("gui.itemdespawntowhat.tooltip.inner_fluid_source"));
-                }
-                if (fluid.isConsumeFluid()) {
-                    tooltip = tooltip.append(Component.literal("\n"))
-                            .append(Component.translatable("gui.itemdespawntowhat.tooltip.inner_fluid_consume"));
-                }
-            }
-
-            return tooltip;
-        }
-
-        // ========== 排列辅助方法 ========== //
-
-        // 计算当前的文本x偏移量
-        private int calcScrollOffset(int textWidth, int maxWidth) {
-            if (textWidth <= maxWidth) return 0;
-
-            long elapsed = System.currentTimeMillis() - createdAt;
-            // 超出宽度
-            int overflow = textWidth - maxWidth + SCROLL_PADDING;
-            // 一次完整来回时长 = pause + scroll_to_end + pause + scroll_back
-            long scrollDuration = (long) (overflow / SCROLL_SPEED_PX_MS);
-            long cycleDuration = SCROLL_PAUSE_MS * 2 + scrollDuration * 2;
-            long t = elapsed % cycleDuration;
-
-            if (t < SCROLL_PAUSE_MS) {
-                // 初始静止
-                return 0;
-            } else if (t < SCROLL_PAUSE_MS + scrollDuration) {
-                // 向左滚动
-                return -(int) ((t - SCROLL_PAUSE_MS) * SCROLL_SPEED_PX_MS);
-            } else if (t < SCROLL_PAUSE_MS * 2 + scrollDuration) {
-                // 末尾静止
-                return -overflow;
-            } else {
-                // 向右滚回
-                long phase = t - SCROLL_PAUSE_MS * 2 - scrollDuration;
-                return -(overflow - (int) (phase * SCROLL_SPEED_PX_MS));
-            }
-        }
-
-        // 在固定宽度内绘制可滚动文本
-        private void drawScrollableText(GuiGraphics guiGraphics, Minecraft mc,
-                                        Component text, int x, int y,
-                                        int maxWidth, int color) {
-            int textWidth = mc.font.width(text);
-            int offset = calcScrollOffset(textWidth, maxWidth);
-
-            // scissor 裁剪区（屏幕坐标，需要乘以 guiScale）
-            guiGraphics.enableScissor(x, y - 1, x + maxWidth, y + mc.font.lineHeight + 1);
-            guiGraphics.drawString(mc.font, text, x + offset, y, color, false);
-            guiGraphics.disableScissor();
         }
 
         @Override

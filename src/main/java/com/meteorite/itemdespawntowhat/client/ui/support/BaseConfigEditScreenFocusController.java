@@ -1,10 +1,8 @@
-package com.meteorite.itemdespawntowhat.client.ui.screen.support;
+package com.meteorite.itemdespawntowhat.client.ui.support;
 
 import com.meteorite.itemdespawntowhat.client.ui.widget.ICompositeWidget;
 import net.minecraft.client.gui.components.AbstractButton;
 import net.minecraft.client.gui.components.AbstractWidget;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.CycleButton;
 import org.jetbrains.annotations.Nullable;
 
 public final class BaseConfigEditScreenFocusController {

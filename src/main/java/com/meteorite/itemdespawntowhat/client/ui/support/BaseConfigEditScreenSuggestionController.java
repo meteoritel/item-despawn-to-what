@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.client.ui.screen.support;
+package com.meteorite.itemdespawntowhat.client.ui.support;
 
 import com.meteorite.itemdespawntowhat.client.ui.SuggestionProvider;
 import com.meteorite.itemdespawntowhat.client.ui.widget.ICompositeWidget;
