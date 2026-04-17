@@ -116,7 +116,7 @@ public class CatalystItemsWidget extends AbstractCompositeWidget {
     }
 
     // ========== 值绑定 ========== //
-    public CatalystItems getValue() {
+    public @Nullable CatalystItems getValue() {
         List<String> items  = LinkedBoxGroup.splitTokens(linkedBoxGroup.getPrimaryBox().getValue());
         List<String> counts = LinkedBoxGroup.splitValues(linkedBoxGroup.getFollower(0).getValue());
 
@@ -124,6 +124,7 @@ public class CatalystItemsWidget extends AbstractCompositeWidget {
 
         for (int i = 0; i < items.size(); i++) {
             String id = items.get(i);
+
             if (!IdValidator.isValidItemId(id)) continue;
 
             int count = 1;
@@ -137,7 +138,7 @@ public class CatalystItemsWidget extends AbstractCompositeWidget {
         CatalystItems result = new CatalystItems();
         result.setCatalystList(list);
         result.setCatalystConsume(consumeButton.getValue());
-        return result.hasAnyCatalyst() ? result : new CatalystItems();
+        return result;
     }
 
     public void setValue(@Nullable CatalystItems items) {

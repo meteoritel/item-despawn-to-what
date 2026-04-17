@@ -226,13 +226,13 @@ public class ConfigExtractorManager {
     }
 
     // 清除特定uuid的缓存
-    public static boolean removeConfigByInternalId(String internalId) {
-        if (internalId == null || internalId.isEmpty()) return false;
+    public static void removeConfigByInternalId(String internalId) {
+        if (internalId == null || internalId.isEmpty()) return;
         BaseConversionConfig config = INTERNAL_ID_CACHE.remove(internalId);
 
         if (config == null) {
             LOGGER.debug("removeConfigByInternalId: no config found for id={}", internalId);
-            return false;
+            return;
         }
 
         CONDITION_CHECKER_CACHE.remove(internalId);
@@ -256,7 +256,6 @@ public class ConfigExtractorManager {
         }
         LOGGER.info("Removed invalid config: internalId={}, item={}, type={}",
                 internalId, config.getItemId(), config.getConfigType());
-        return true;
     }
 
     public static boolean isInitialized() {

@@ -6,7 +6,6 @@ import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.projectile.Arrow;
 
-import java.util.Collections;
 import java.util.List;
 
 public class ArrowRainTask implements LevelDelayTask{

@@ -9,6 +9,7 @@ import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import com.meteorite.itemdespawntowhat.util.TagResolver;
 
 import java.util.Map;
+import java.util.stream.Stream;
 
 public class SurroundingBlocks implements ConditionSerializable<SurroundingBlocks> {
     private static final Gson GSON = new Gson();
@@ -26,7 +27,6 @@ public class SurroundingBlocks implements ConditionSerializable<SurroundingBlock
     private String down;
 
     public SurroundingBlocks() {
-        setAll("");
     }
 
     // ========== 接口实现 ========== //
@@ -51,8 +51,8 @@ public class SurroundingBlocks implements ConditionSerializable<SurroundingBlock
 
     // 检查是否存在周围方块设置的需求
     public boolean hasAnySurroundBlock() {
-        return !(north.isEmpty() && south.isEmpty() && east.isEmpty() &&
-                west.isEmpty() && up.isEmpty() && down.isEmpty());
+        return Stream.of(north, south, east, west, down, up)
+                .anyMatch(s ->s != null && !s.isBlank());
     }
 
     public boolean isValid() {
@@ -96,9 +96,5 @@ public class SurroundingBlocks implements ConditionSerializable<SurroundingBlock
             case UP -> up = value;
             case DOWN -> down = value;
         }
-    }
-
-    public void setAll(String value) {
-        north = south = east = west = up = down = value;
     }
 }

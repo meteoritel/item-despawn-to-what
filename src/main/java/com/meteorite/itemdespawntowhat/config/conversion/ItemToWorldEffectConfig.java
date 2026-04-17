@@ -43,7 +43,7 @@ public class ItemToWorldEffectConfig extends BaseConversionConfig implements Wor
     private AbstractArrow.Pickup arrowPickupStatus = AbstractArrow.Pickup.DISALLOWED;
 
     @SerializedName("arrow_potion_effects")
-    private @Nullable List<PotionEffect> arrowPotionEffects;
+    private @Nullable List<PotionEffect> arrowPotionEffects = new ArrayList<>();
 
     public ItemToWorldEffectConfig() {
     }

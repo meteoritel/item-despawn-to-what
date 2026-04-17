@@ -22,6 +22,10 @@ public enum ConfigDirection {
         return direction;
     }
 
+    public String getKey() {
+        return key;
+    }
+
     public static ConfigDirection fromString (String key) {
         for (ConfigDirection dir : values()) {
             if (dir.key.equals(key.toLowerCase())) {

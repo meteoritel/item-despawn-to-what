@@ -1,12 +1,12 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.function.Supplier;
 
@@ -124,22 +124,12 @@ public class LinkedBoxGroup {
 
     // 将逗号分隔字符串拆分为 token 列表，去除首尾空格，过滤空串
     public static List<String> splitTokens(String raw) {
-        if (raw == null || raw.isBlank()) return List.of();
-        return Arrays.stream(raw.replace(" ", "").split(",", -1))
-                .filter(s -> !s.isEmpty())
-                .toList();
+        return SafeParseUtil.splitCommaSeparated(raw);
     }
 
     // 将逗号分隔字符串拆分为值列表，保留尾部空串，以便下标对齐
     public static List<String> splitValues(String raw) {
-        if (raw == null || raw.isBlank()) return new ArrayList<>();
-        String[] parts = raw.replace(" ", "").split(",", -1);
-        List<String> list = new ArrayList<>(Arrays.asList(parts));
-        // 去掉末尾空串（不去中间空串，保留占位）
-        while (!list.isEmpty() && list.getLast().isEmpty()) {
-            list.removeLast();
-        }
-        return list;
+        return SafeParseUtil.splitCommaSeparatedValues(raw);
     }
 
     // ========== 构造主框与从框方法 ========== //

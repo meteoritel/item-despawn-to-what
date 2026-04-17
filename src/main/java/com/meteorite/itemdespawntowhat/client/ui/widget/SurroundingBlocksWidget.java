@@ -37,10 +37,6 @@ public class SurroundingBlocksWidget extends AbstractCompositeWidget {
         }
     }
 
-    public static int getTotalWidth() {
-        return TOTAL_WIDTH;
-    }
-
     public static int getTotalHeight() {
         return 3 * (LABEL_HEIGHT + V_GAP + BOX_HEIGHT)
                 + (3 - 1) * V_GAP;
@@ -93,7 +89,11 @@ public class SurroundingBlocksWidget extends AbstractCompositeWidget {
         return sbs.hasAnySurroundBlock() ? sbs : null;
     }
 
-    public void setValue(@NotNull SurroundingBlocks sbs) {
+    public void setValue(@Nullable SurroundingBlocks sbs) {
+        if (sbs == null || !sbs.hasAnySurroundBlock()) {
+            clear();
+            return;
+        }
         boxes.forEach((dir, box) -> {
             String value = sbs.get(dir);
             box.setValue(value != null ? value : "");
