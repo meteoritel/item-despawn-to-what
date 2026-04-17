@@ -178,7 +178,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         registerValidator(innerFluidWidget.getFluidBox(),
                 () -> {
                     var fluid = innerFluidWidget.getValue();
-                    return fluid != null && fluid.hasInnerFluid();
+                    return fluid != null;
                 },
                 IdValidator::isValidFluidId);
     }
@@ -279,6 +279,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
             LOGGER.info("Discarding {} unsaved configs", pending.size());
         }
         ConfigListPanel.clearEntityCache();
+
         if (minecraft != null) {
             if (minecraft.player != null) {
                 PacketDistributor.sendToServer(new ReleaseEditSessionPayload());
@@ -458,8 +459,8 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         return value != null ? value : "";
     }
 
-    protected float parseFloat(String boxInput, float def) {
-        return SafeParseUtil.parseFloat(boxInput, def);
+    protected float parseFloat(String boxInput) {
+        return SafeParseUtil.parseFloat(boxInput, (float) 1.0);
     }
 
     // ========== 渲染 ========== //
@@ -581,8 +582,6 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         this.resizeBackup = buildConfigFromFields();
         super.resize(minecraft, width, height);
     }
-
-    // ========== 建议下拉框方法 ========== //
 
     // 创建并注册一个建议组件，并添加监听
     protected void registerSuggestion(EditBox editBox, SuggestionProvider sProvider) {

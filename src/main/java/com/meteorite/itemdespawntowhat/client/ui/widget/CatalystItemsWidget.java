@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import com.meteorite.itemdespawntowhat.config.catalogue.CatalystItems;
+import com.meteorite.itemdespawntowhat.util.IdValidator;
 import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -123,7 +124,7 @@ public class CatalystItemsWidget extends AbstractCompositeWidget {
 
         for (int i = 0; i < items.size(); i++) {
             String id = items.get(i);
-            if (!com.meteorite.itemdespawntowhat.util.IdValidator.isValidItemId(id)) continue;
+            if (!IdValidator.isValidItemId(id)) continue;
 
             int count = 1;
             if (i < counts.size()) {

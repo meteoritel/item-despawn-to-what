@@ -22,10 +22,6 @@ public class ItemToExpOrbConfig extends BaseItemToEntityConfig{
         this.resultLimit = 99999;
     }
 
-    public ItemToExpOrbConfig(String item) {
-        super(item, XP_ORB_ID);
-    }
-
     // 允许结果字段为空，因为经验球没有变体
     @Override
     protected boolean isResultIdRequired() {

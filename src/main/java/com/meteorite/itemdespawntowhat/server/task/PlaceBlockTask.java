@@ -50,15 +50,16 @@ public class PlaceBlockTask implements LevelDelayTask{
 
     @Override
     public void onFinish(ServerLevel serverLevel) {
+        // 返还应该放置但是被挡住了没能放置的方块
         int unplaced = maxBlocks - placed;
         if (unplaced > 0) {
             ItemStack returnStack = new ItemStack(block.asItem(), unplaced);
-            // 因为放置了方块，所以在上方一格创造返还物品
+
             ItemEntity returnItem = new ItemEntity(serverLevel,
                     center.getX() + 0.5,
                     center.getY() + 1,
                     center.getZ() + 0.5, returnStack);
-            // 返还物品添加转化锁定的标签，防止重复转化
+
             returnItem.getPersistentData().putBoolean(ItemConversionEvent.CHECK_LOCK_TAG, true);
             serverLevel.addFreshEntity(returnItem);
             LOGGER.debug("Returned {} unplaced result blocks", unplaced);

@@ -80,5 +80,4 @@ public abstract class AbstractCompositeWidget extends AbstractWidget
 
     @Override
     protected void updateWidgetNarration(@NotNull NarrationElementOutput narration) {}
-
 }

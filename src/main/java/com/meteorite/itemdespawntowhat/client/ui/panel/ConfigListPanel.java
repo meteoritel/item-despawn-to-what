@@ -267,7 +267,7 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             this.config = config;
             this.source = source;
             this.indexInSource = indexInSource;
-            this.sourceIsTag = TagResolver.isTagId(config.getItemId()) || config.isTagMode();
+            this.sourceIsTag = config.isTagMode();
             this.sourceTagItems = sourceIsTag ? TagPreviewResolver.resolveTagItems(config) : List.of();
 
             // 若为 mob 类型，从缓存取实体图标
@@ -335,10 +335,6 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
 
         public int getIndexInSource() {
             return indexInSource;
-        }
-
-        public boolean isSourceIsTag() {
-            return sourceIsTag;
         }
 
         @Override

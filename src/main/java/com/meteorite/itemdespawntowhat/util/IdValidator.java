@@ -10,7 +10,7 @@ public final class IdValidator {
 
     // 纯字符串格式校验：非空、含 ':' 分隔符、':' 两侧均非空
     public static boolean isValidString(String s) {
-        if (s == null || s.isEmpty()) return false;
+        if (s == null || s.isBlank()) return false;
         int colon = s.indexOf(':');
         return colon > 0 && colon < s.length() - 1;
     }
@@ -22,16 +22,22 @@ public final class IdValidator {
 
     // tag 字符串校验（以 # 开头）：去掉 # 后做格式校验 + tryParse
     public static boolean isValidTagId(String s) {
-        if (s == null || !s.startsWith("#")) return false;
+        if (s == null || !s.startsWith("#")) {
+            return false;
+        }
         String inner = s.substring(1);
         return isValidString(inner) && SafeParseUtil.parseResourceLocation(inner) != null;
     }
 
     // itemId 完整校验：支持 #tag 格式，普通 id 需格式合法且不为 minecraft:air
     public static boolean isValidItemId(String s) {
-        if (s == null || s.isEmpty()) return false;
-        if (s.startsWith("#")) return isValidTagId(s);
-        if (!isValidString(s)) return false;
+        if (!isValidString(s)) {
+            return false;
+        }
+        if (s.startsWith("#")) {
+            return isValidTagId(s);
+        }
+
         ResourceLocation rl = SafeParseUtil.parseResourceLocation(s);
         if (!isValidResourceLocation(rl)) return false;
 

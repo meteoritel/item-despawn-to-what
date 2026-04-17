@@ -88,7 +88,7 @@ public class SurroundingBlocksWidget extends AbstractCompositeWidget {
     public SurroundingBlocks getValue() {
         SurroundingBlocks sbs = new SurroundingBlocks();
         boxes.forEach((dir, box) -> sbs.set(dir, box.getValue()));
-        return sbs;
+        return sbs.hasAnySurroundBlock() ? sbs : null;
     }
 
     public void setValue(@NotNull SurroundingBlocks sbs) {

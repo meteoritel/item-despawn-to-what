@@ -32,10 +32,6 @@ public class ItemToBlockConfig extends BaseConversionConfig{
         super(item, result);
     }
 
-    private ResourceLocation parseResultRl() {
-        return SafeParseUtil.parseResourceLocation(resultId);
-    }
-
     // ========== 缓存与校验 ========== //
     @Override
     protected void initResultCache() {
@@ -46,7 +42,7 @@ public class ItemToBlockConfig extends BaseConversionConfig{
         }
 
         // 直接按 resultId 查找
-        ResourceLocation resultRl = parseResultRl();
+        ResourceLocation resultRl = SafeParseUtil.parseResourceLocation(resultId);
         Block block = resultRl != null ? BuiltInRegistries.BLOCK.get(resultRl) : Blocks.AIR;
         this.cachedResultBlock = (block != Blocks.AIR) ? block : null;
         if (cachedResultBlock == null) {

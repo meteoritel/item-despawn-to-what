@@ -148,7 +148,7 @@ public class ItemToWorldEffectEditScreen extends BaseConfigEditScreen<ItemToWorl
             case LIGHTNING ->
                     config.setVisualOnly(visualOnlyButton.getValue());
             case EXPLOSION -> {
-                config.setExplosionPower(parseFloat(explosionPowerInput.getValue(), (float) 1.0));
+                config.setExplosionPower(parseFloat(explosionPowerInput.getValue()));
                 config.setExplosionFire(explosionFireButton.getValue());
             }
             case ARROW_RAIN -> {

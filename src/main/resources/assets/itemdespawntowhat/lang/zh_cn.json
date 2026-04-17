@@ -73,17 +73,6 @@
   "gui.itemdespawntowhat.edit.mode.local_mode": "本地模式",
   "gui.itemdespawntowhat.edit.mode.server_mode": "服务器模式",
 
-  "gui.itemdespawntowhat.tooltip.conversion_time": "转化时间: %d 秒",
-  "gui.itemdespawntowhat.tooltip.dimension": "维度: %s",
-  "gui.itemdespawntowhat.tooltip.need_outdoor": "需要露天",
-  "gui.itemdespawntowhat.tooltip.surrounding_block": "  %s: %s",
-  "gui.itemdespawntowhat.tooltip.surrounding_blocks_header": "六面方块条件:",
-  "gui.itemdespawntowhat.tooltip.catalyst_header": "辅助物品条件:",
-  "gui.itemdespawntowhat.tooltip.catalyst": "  %s x%d",
-  "gui.itemdespawntowhat.tooltip.inner_fluid": "浸泡流体: %s",
-  "gui.itemdespawntowhat.tooltip.inner_fluid_source": "  需要源头方块",
-  "gui.itemdespawntowhat.tooltip.inner_fluid_consume": "  消耗流体",
-
   "gui.itemdespawntowhat.edit.list.edit": "重新编辑",
   "gui.itemdespawntowhat.edit.list.delete": "删除",
   "gui.itemdespawntowhat.edit.list.copy": "复制",
@@ -97,5 +86,16 @@
   "effect.itemdespawntowhat.world_effect_type.clear": "天气设为晴天",
   "effect.itemdespawntowhat.world_effect_type.lightning_bolt": "召唤闪电",
   "effect.itemdespawntowhat.world_effect_type.explosion": "引发爆炸",
-  "effect.itemdespawntowhat.world_effect_type.arrow": "箭雨"
+  "effect.itemdespawntowhat.world_effect_type.arrow": "箭雨",
+
+  "gui.itemdespawntowhat.tooltip.conversion_time": "转化时间: %d 秒",
+  "gui.itemdespawntowhat.tooltip.dimension": "维度: %s",
+  "gui.itemdespawntowhat.tooltip.need_outdoor": "需要露天",
+  "gui.itemdespawntowhat.tooltip.surrounding_block": "  %s: %s",
+  "gui.itemdespawntowhat.tooltip.surrounding_blocks_header": "六面方块条件:",
+  "gui.itemdespawntowhat.tooltip.catalyst_header": "辅助物品条件:",
+  "gui.itemdespawntowhat.tooltip.catalyst": "  %s x%d",
+  "gui.itemdespawntowhat.tooltip.inner_fluid": "浸泡流体: %s",
+  "gui.itemdespawntowhat.tooltip.inner_fluid_source": "  需要源头方块",
+  "gui.itemdespawntowhat.tooltip.inner_fluid_consume": "  消耗流体"
 }

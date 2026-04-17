@@ -78,15 +78,15 @@ public abstract class BaseConversionConfig {
     // 六个方向的方块
     @JsonOrder(3)
     @SerializedName("surrounding_blocks")
-    protected SurroundingBlocks surroundingBlocks = new SurroundingBlocks();
+    protected SurroundingBlocks surroundingBlocks;
     // 催化剂物品
     @JsonOrder(3)
     @SerializedName("catalyst_items")
-    protected CatalystItems catalystItems = new CatalystItems();
+    protected CatalystItems catalystItems;
     // 浸润流体信息
     @JsonOrder(3)
     @SerializedName("inner_fluid")
-    protected InnerFluid innerFluid = new InnerFluid();
+    protected InnerFluid innerFluid;
 
     // 用来存储配置的空构造方法
     public BaseConversionConfig() {
@@ -169,6 +169,7 @@ public abstract class BaseConversionConfig {
             return false;
         }
 
+        // 并没有限制转化时间小于300s，兼容修改时间上限的模组
         if (conversionTime <= 0) {
             LOGGER.warn("conversionTime should be at list 1, current is {}", conversionTime);
             return false;
@@ -184,13 +185,13 @@ public abstract class BaseConversionConfig {
             return false;
         }
 
-        if (!surroundingBlocks.isValid()) {
-            LOGGER.warn("there is invalid blockId in surround blocks");
+        if (surroundingBlocks != null && surroundingBlocks.hasAnySurroundBlock() && !surroundingBlocks.isValid()) {
+            LOGGER.warn("Invalid blockId in surround blocks：");
             return false;
         }
 
-        // 催化剂不能与起始物品相同
-        if (catalystItems.hasAnyCatalyst()) {
+        // 催化剂不能与起始物品相同，非法字符判断已经放在hasAnyCatalyst()中
+        if (catalystItems != null && catalystItems.hasAnyCatalyst()) {
             boolean conflict = getCatalystItems().getCatalystList().stream()
                     .anyMatch(entry -> entry.itemId().equals(itemId));
             if (conflict) {
@@ -199,11 +200,9 @@ public abstract class BaseConversionConfig {
             }
         }
 
-        if (innerFluid != null && innerFluid.hasInnerFluid()) {
-            if (!innerFluid.isValid()) {
-                LOGGER.warn("Invalid fluid id in fluid condition: {}", innerFluid.getFluidId());
-                return false;
-            }
+        if (innerFluid != null && innerFluid.hasInnerFluid() && !innerFluid.isValid()) {
+            LOGGER.warn("Invalid fluid id in fluid condition: {}", innerFluid.getFluidId());
+            return false;
         }
 
         return additionalCheck();

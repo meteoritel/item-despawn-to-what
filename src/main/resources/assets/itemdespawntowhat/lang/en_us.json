@@ -64,17 +64,6 @@
   "gui.itemdespawntowhat.edit.mode.local_mode": "Local mode",
   "gui.itemdespawntowhat.edit.mode.server_mode": "Server mode",
 
-  "gui.itemdespawntowhat.tooltip.conversion_time": "Conversion time: %d s",
-  "gui.itemdespawntowhat.tooltip.dimension": "Dimension: %s",
-  "gui.itemdespawntowhat.tooltip.need_outdoor": "Requires outdoor",
-  "gui.itemdespawntowhat.tooltip.surrounding_block": "  %s: %s",
-  "gui.itemdespawntowhat.tooltip.surrounding_blocks_header": "Surrounding blocks:",
-  "gui.itemdespawntowhat.tooltip.catalyst_header": "Catalyst items:",
-  "gui.itemdespawntowhat.tooltip.catalyst": "  %s x%d",
-  "gui.itemdespawntowhat.tooltip.inner_fluid": "Inner fluid: %s",
-  "gui.itemdespawntowhat.tooltip.inner_fluid_source": "  Requires source block",
-  "gui.itemdespawntowhat.tooltip.inner_fluid_consume": "  Consumes fluid",
-
   "gui.itemdespawntowhat.edit.list.edit": "Reedit",
   "gui.itemdespawntowhat.edit.list.delete": "Delete",
   "gui.itemdespawntowhat.edit.list.copy": "Copy",
@@ -97,5 +86,16 @@
   "effect.itemdespawntowhat.world_effect_type.clear": "Weather clear",
   "effect.itemdespawntowhat.world_effect_type.lightning_bolt": "Lighting bolt",
   "effect.itemdespawntowhat.world_effect_type.explosion": "Explosion",
-  "effect.itemdespawntowhat.world_effect_type.arrow": "Arrow rain"
+  "effect.itemdespawntowhat.world_effect_type.arrow": "Arrow rain",
+
+  "gui.itemdespawntowhat.tooltip.conversion_time": "Conversion time: %d s",
+  "gui.itemdespawntowhat.tooltip.dimension": "Dimension: %s",
+  "gui.itemdespawntowhat.tooltip.need_outdoor": "Requires outdoor",
+  "gui.itemdespawntowhat.tooltip.surrounding_block": "  %s: %s",
+  "gui.itemdespawntowhat.tooltip.surrounding_blocks_header": "Surrounding blocks:",
+  "gui.itemdespawntowhat.tooltip.catalyst_header": "Catalyst items:",
+  "gui.itemdespawntowhat.tooltip.catalyst": "  %s x%d",
+  "gui.itemdespawntowhat.tooltip.inner_fluid": "Inner fluid: %s",
+  "gui.itemdespawntowhat.tooltip.inner_fluid_source": "  Requires source block",
+  "gui.itemdespawntowhat.tooltip.inner_fluid_consume": "  Consumes fluid"
 }

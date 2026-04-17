@@ -107,12 +107,8 @@ public class InnerFluidWidget extends AbstractCompositeWidget{
     // ========== 值绑定 ========== //
     @Nullable
     public InnerFluid getValue() {
-        String raw = fluidBox.getValue().trim();
-        if (raw.isEmpty()) {
-            return null;
-        }
-
-        return new InnerFluid(raw, sourceButton.getValue(), consumeFluidButton.getValue());
+        InnerFluid value = new InnerFluid(fluidBox.getValue().trim(), sourceButton.getValue(), consumeFluidButton.getValue());
+        return value.hasInnerFluid() ? value : null;
     }
 
     public void setValue(@Nullable InnerFluid innerFluid) {

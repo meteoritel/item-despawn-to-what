@@ -63,7 +63,7 @@ public class InnerFluid implements ConditionSerializable<InnerFluid> {
 
     // 在世界上消耗流体
     public void consumeFluidFromLevel(ItemEntity itemEntity) {
-        if (!consumeFluid || !hasInnerFluid()) {
+        if (!isConsumeFluid()) {
             return;
         }
 
@@ -114,9 +114,13 @@ public class InnerFluid implements ConditionSerializable<InnerFluid> {
                 fluidId, pos, block.getDescriptionId());
     }
 
-    // ========== getter ========== //
+
     public boolean hasInnerFluid() {
-        return fluidId != null && !fluidId.isEmpty();
+        return fluidId != null && !fluidId.isBlank();
+    }
+
+    public boolean isConsumeFluid() {
+        return hasInnerFluid() && consumeFluid;
     }
 
     public boolean isValid() {
@@ -129,9 +133,5 @@ public class InnerFluid implements ConditionSerializable<InnerFluid> {
 
     public boolean isRequireSource() {
         return requireSource;
-    }
-
-    public boolean isConsumeFluid() {
-        return consumeFluid;
     }
 }
