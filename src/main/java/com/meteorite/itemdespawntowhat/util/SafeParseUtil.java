@@ -13,7 +13,7 @@ public final class SafeParseUtil {
             return defaultValue;
         }
         try {
-            return Integer.parseInt(value);
+            return Integer.parseInt(value.trim());
         } catch (NumberFormatException e) {
             return defaultValue;
         }
@@ -24,7 +24,7 @@ public final class SafeParseUtil {
             return defaultValue;
         }
         try {
-            return Float.parseFloat(value);
+            return Float.parseFloat(value.trim());
         } catch (NumberFormatException e) {
             return defaultValue;
         }
@@ -34,7 +34,7 @@ public final class SafeParseUtil {
         if (value == null || value.isBlank()) {
             return null;
         }
-        ResourceLocation location = ResourceLocation.tryParse(value);
+        ResourceLocation location = ResourceLocation.tryParse(value.trim());
         if (location == null || location.getPath().isEmpty()) {
             return null;
         }

@@ -119,7 +119,7 @@ public class ItemToWorldEffectEditScreen extends BaseConfigEditScreen<ItemToWorl
                 formList.addConditional(
                         Component.translatable(LABEL_PREFIX + "arrow_pickup_status"), arrowPickupButton);
                 formList.addConditional(
-                        Component.translatable(LABEL_PREFIX + "arrow_potion_effects"),arrowPotionEffectsInput);
+                        Component.translatable(LABEL_PREFIX + "arrow_potion_effects"), arrowPotionEffectsInput);
             }
         }
     }

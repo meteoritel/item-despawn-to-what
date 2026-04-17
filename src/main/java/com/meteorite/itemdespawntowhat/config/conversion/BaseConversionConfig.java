@@ -24,6 +24,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 import java.util.UUID;
@@ -78,15 +79,15 @@ public abstract class BaseConversionConfig {
     // 六个方向的方块
     @JsonOrder(3)
     @SerializedName("surrounding_blocks")
-    protected SurroundingBlocks surroundingBlocks;
+    protected @Nullable SurroundingBlocks surroundingBlocks;
     // 催化剂物品
     @JsonOrder(3)
     @SerializedName("catalyst_items")
-    protected CatalystItems catalystItems;
+    protected @Nullable CatalystItems catalystItems;
     // 浸润流体信息
     @JsonOrder(3)
     @SerializedName("inner_fluid")
-    protected InnerFluid innerFluid;
+    protected @Nullable InnerFluid innerFluid;
 
     // 用来存储配置的空构造方法
     public BaseConversionConfig() {
@@ -192,7 +193,7 @@ public abstract class BaseConversionConfig {
 
         // 催化剂不能与起始物品相同，非法字符判断已经放在hasAnyCatalyst()中
         if (catalystItems != null && catalystItems.hasAnyCatalyst()) {
-            boolean conflict = getCatalystItems().getCatalystList().stream()
+            boolean conflict = catalystItems.getCatalystList().stream()
                     .anyMatch(entry -> entry.itemId().equals(itemId));
             if (conflict) {
                 LOGGER.warn("Catalyst item conflicts with source item: {}", itemId);
@@ -380,22 +381,28 @@ public abstract class BaseConversionConfig {
     public List<Item> getTagItems() {
         return cachedTagItems != null ? cachedTagItems : List.of();
     }
-    public SurroundingBlocks getSurroundingBlocks() {
+
+    public @Nullable SurroundingBlocks getSurroundingBlocks() {
         return surroundingBlocks;
     }
-    public void setSurroundingBlocks(SurroundingBlocks surroundingBlocks) {
+
+    public void setSurroundingBlocks(@Nullable SurroundingBlocks surroundingBlocks) {
         this.surroundingBlocks = surroundingBlocks;
     }
-    public CatalystItems getCatalystItems() {
+
+    public @Nullable CatalystItems getCatalystItems() {
         return catalystItems;
     }
-    public void setCatalystItems(CatalystItems catalystItems) {
+
+    public void setCatalystItems(@Nullable CatalystItems catalystItems) {
         this.catalystItems = catalystItems;
     }
-    public InnerFluid getInnerFluid() {
+
+    public @Nullable InnerFluid getInnerFluid() {
         return innerFluid;
     }
-    public void setInnerFluid(InnerFluid innerFluid) {
+
+    public void setInnerFluid(@Nullable InnerFluid innerFluid) {
         this.innerFluid = innerFluid;
     }
 
@@ -403,6 +410,7 @@ public abstract class BaseConversionConfig {
     public ConfigType getConfigType() {
         return configType;
     }
+
     public String getInternalId() {
         return internalId;
     }

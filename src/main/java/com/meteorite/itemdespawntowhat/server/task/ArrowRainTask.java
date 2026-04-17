@@ -36,14 +36,9 @@ public class ArrowRainTask implements LevelDelayTask{
         this.origin = origin;
         this.delayTicks = Math.max(1, delayTicks);
         this.count = Math.max(1, count);
-        this.potionEffects = (potionEffects != null) ? potionEffects : Collections.emptyList();
+        this.potionEffects = (potionEffects != null) ? potionEffects : List.of();
         this.pickupStatus = (pickupStatus != null) ? pickupStatus : Arrow.Pickup.DISALLOWED;
         this.onFinishCallback = onFinishCallback;
-    }
-
-    // 简化构造器（无药水效果，箭矢不可捡起）
-    public ArrowRainTask(BlockPos origin, int delayTicks, int count, Runnable onFinishCallback) {
-        this(origin, delayTicks, count, null, Arrow.Pickup.DISALLOWED,onFinishCallback);
     }
 
     @Override

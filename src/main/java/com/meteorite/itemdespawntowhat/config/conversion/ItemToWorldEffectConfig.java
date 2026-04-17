@@ -9,6 +9,7 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.projectile.AbstractArrow;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -42,7 +43,7 @@ public class ItemToWorldEffectConfig extends BaseConversionConfig implements Wor
     private AbstractArrow.Pickup arrowPickupStatus = AbstractArrow.Pickup.DISALLOWED;
 
     @SerializedName("arrow_potion_effects")
-    private List<PotionEffect> arrowPotionEffects = new ArrayList<>();
+    private @Nullable List<PotionEffect> arrowPotionEffects;
 
     public ItemToWorldEffectConfig() {
     }
@@ -160,13 +161,17 @@ public class ItemToWorldEffectConfig extends BaseConversionConfig implements Wor
     }
 
     @Override
-    public List<MobEffectInstance> getArrowPotionEffects() {
-        if (arrowPotionEffects == null || arrowPotionEffects.isEmpty()) return List.of();
+    public @Nullable List<MobEffectInstance> getArrowPotionEffects() {
+        if (arrowPotionEffects == null || arrowPotionEffects.isEmpty()) {
+            return List.of();
+        }
 
         List<MobEffectInstance> result = new ArrayList<>();
         for (PotionEffect entry : arrowPotionEffects) {
             MobEffectInstance instance = entry.toInstance();
-            if (instance != null) result.add(instance);
+            if (instance != null) {
+                result.add(instance);
+            }
         }
         return result;
     }
@@ -180,7 +185,7 @@ public class ItemToWorldEffectConfig extends BaseConversionConfig implements Wor
         return arrowPotionEffects;
     }
 
-    public void setArrowPotionEffects(List<PotionEffect> arrowPotionEffects) {
+    public void setArrowPotionEffects(@Nullable List<PotionEffect> arrowPotionEffects) {
         this.arrowPotionEffects = arrowPotionEffects;
     }
 

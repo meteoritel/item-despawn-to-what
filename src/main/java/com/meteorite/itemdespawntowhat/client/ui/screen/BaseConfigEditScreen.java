@@ -176,10 +176,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     protected void initValidators() {
         registerValidator(itemIdInput, IdValidator::isValidItemId);
         registerValidator(innerFluidWidget.getFluidBox(),
-                () -> {
-                    var fluid = innerFluidWidget.getValue();
-                    return fluid != null;
-                },
+                () -> innerFluidWidget.getValue() != null,
                 IdValidator::isValidFluidId);
     }
 

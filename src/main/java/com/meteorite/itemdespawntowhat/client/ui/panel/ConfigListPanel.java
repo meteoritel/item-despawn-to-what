@@ -9,7 +9,6 @@ import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToBlockConfig;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToMobConfig;
 import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
-import com.meteorite.itemdespawntowhat.util.TagResolver;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;

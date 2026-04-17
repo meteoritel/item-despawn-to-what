@@ -7,6 +7,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.EnumMap;
 
@@ -85,6 +86,7 @@ public class SurroundingBlocksWidget extends AbstractCompositeWidget {
     }
 
     // ========== 值绑定 ========== //
+    @Nullable
     public SurroundingBlocks getValue() {
         SurroundingBlocks sbs = new SurroundingBlocks();
         boxes.forEach((dir, box) -> sbs.set(dir, box.getValue()));

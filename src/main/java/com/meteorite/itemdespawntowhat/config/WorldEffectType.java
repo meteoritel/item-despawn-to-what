@@ -11,6 +11,7 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.projectile.Arrow;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
@@ -142,7 +143,7 @@ public enum WorldEffectType {
         default boolean isExplosionFire() { return false; }
 
         // 箭矢附加的药水效果列表（默认无效果）
-        default List<MobEffectInstance> getArrowPotionEffects() { return List.of(); }
+        default @Nullable List<MobEffectInstance> getArrowPotionEffects() { return List.of(); }
 
         // 箭矢捡起状态（默认不可捡起）
         default Arrow.Pickup getArrowPickupStatus() { return Arrow.Pickup.DISALLOWED; }

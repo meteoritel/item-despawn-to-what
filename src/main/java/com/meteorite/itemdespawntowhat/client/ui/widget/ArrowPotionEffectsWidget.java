@@ -117,7 +117,7 @@ public class ArrowPotionEffectsWidget extends AbstractCompositeWidget{
     }
 
     // ========== 值绑定 ========== //
-    public List<PotionEffect> getValue() {
+    public @Nullable List<PotionEffect> getValue() {
         List<String> effectIds = LinkedBoxGroup.splitTokens(linkedBoxGroup.getPrimaryBox().getValue());
         List<String> durations = LinkedBoxGroup.splitValues(linkedBoxGroup.getFollower(0).getValue());
         List<String> amplifiers = LinkedBoxGroup.splitValues(linkedBoxGroup.getFollower(1).getValue());
@@ -175,7 +175,6 @@ public class ArrowPotionEffectsWidget extends AbstractCompositeWidget{
 
     // ========== 工具方法 ========== //
     private static int parseIntSafe(@Nullable String s, int def) {
-        if (s == null || s.isBlank()) return def;
-        return SafeParseUtil.parseInt(s.trim(), def);
+        return SafeParseUtil.parseInt(s, def);
     }
 }

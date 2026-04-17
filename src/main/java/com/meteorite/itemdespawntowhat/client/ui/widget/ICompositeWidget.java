@@ -11,5 +11,4 @@ public interface ICompositeWidget {
     // 清除内部焦点
     void clearInternalFocus();
 
-
 }
