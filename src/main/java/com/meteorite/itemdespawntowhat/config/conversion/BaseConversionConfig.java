@@ -8,8 +8,8 @@ import com.meteorite.itemdespawntowhat.config.catalogue.CatalystItems;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.catalogue.InnerFluid;
 import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;
-import com.meteorite.itemdespawntowhat.server.event.ItemConversionEvent;
 import com.meteorite.itemdespawntowhat.util.IdValidator;
+import com.meteorite.itemdespawntowhat.util.ItemReturnUtil;
 import com.meteorite.itemdespawntowhat.util.JsonOrder;
 import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import com.meteorite.itemdespawntowhat.util.TagResolver;
@@ -266,10 +266,7 @@ public abstract class BaseConversionConfig {
 
     // 返还剩余物品，原位置的快捷重载
     public void addRemainingItems(ItemEntity itemEntity, ServerLevel serverLevel, int itemsRemaining) {
-        if (itemsRemaining <= 0) {
-            return;
-        }
-        addRemainingItems(itemEntity, serverLevel, itemsRemaining, 0.5, 0, 0.5);
+        addRemainingItems(itemEntity, serverLevel, itemsRemaining, 0.5, 0.5, 0.5);
     }
 
     // 返还剩余物品，偏移位置
@@ -284,16 +281,13 @@ public abstract class BaseConversionConfig {
 
         BlockPos pos = itemEntity.blockPosition();
 
-        ItemEntity returnItem = new ItemEntity(
+        ItemReturnUtil.spawnLockedItem(
                 serverLevel,
+                returnStack,
                 pos.getX() + 0.5 + offsetX,
-                pos.getY() + offsetY,
-                pos.getZ() + 0.5 + offsetZ,
-                returnStack
+                pos.getY() + 0.5 + offsetY,
+                pos.getZ() + 0.5 + offsetZ
         );
-
-        returnItem.getPersistentData().putBoolean(ItemConversionEvent.CHECK_LOCK_TAG, true);
-        serverLevel.addFreshEntity(returnItem);
 
         LOGGER.debug("Returned {} unused items of {} with offset ({}, {}, {})",
                 itemsRemaining, getItemId(), offsetX, offsetY, offsetZ);

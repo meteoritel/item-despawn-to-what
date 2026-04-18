@@ -58,6 +58,12 @@
   "gui.itemdespawntowhat.edit.world_effect.duration_label": "效果持续时间(tick)",
   "gui.itemdespawntowhat.edit.world_effect.amplifier_label": "效果倍率",
   "gui.itemdespawntowhat.edit.world_effect.potion.tip": "注：多个效果请使用英文逗号分隔",
+  "gui.itemdespawntowhat.direction.north": "北",
+  "gui.itemdespawntowhat.direction.south": "南",
+  "gui.itemdespawntowhat.direction.east": "东",
+  "gui.itemdespawntowhat.direction.west": "西",
+  "gui.itemdespawntowhat.direction.up": "上",
+  "gui.itemdespawntowhat.direction.down": "下",
 
   "gui.itemdespawntowhat.edit.catalyst.item_label": "辅助物品ID",
   "gui.itemdespawntowhat.edit.catalyst.count_label": "数量",

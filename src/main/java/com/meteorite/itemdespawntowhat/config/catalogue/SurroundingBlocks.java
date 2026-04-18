@@ -58,7 +58,7 @@ public class SurroundingBlocks implements ConditionSerializable<SurroundingBlock
     public boolean isValid() {
         for (ConfigDirection dir : ConfigDirection.values()) {
             String value = get(dir);
-            if (value == null || value.isEmpty()) {
+            if (value == null || value.isBlank()) {
                 continue; // 空值表示该方向无要求，合法
             }
             if (TagResolver.isTagId(value)) {

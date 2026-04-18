@@ -1,39 +1,33 @@
 package com.meteorite.itemdespawntowhat.config;
 
 import net.minecraft.core.Direction;
+import net.minecraft.network.chat.Component;
 
 public enum ConfigDirection {
-    NORTH("north", Direction.NORTH),
-    SOUTH("south", Direction.SOUTH),
-    EAST("east", Direction.EAST),
-    WEST("west", Direction.WEST),
-    UP("up", Direction.UP),
-    DOWN("down", Direction.DOWN);
+    NORTH(Direction.NORTH, "gui.itemdespawntowhat.direction.north"),
+    SOUTH(Direction.SOUTH, "gui.itemdespawntowhat.direction.south"),
+    EAST(Direction.EAST, "gui.itemdespawntowhat.direction.east"),
+    WEST(Direction.WEST, "gui.itemdespawntowhat.direction.west"),
+    UP(Direction.UP, "gui.itemdespawntowhat.direction.up"),
+    DOWN(Direction.DOWN, "gui.itemdespawntowhat.direction.down");
 
-    private final String key;
     private final Direction direction;
+    private final String translationKey;
 
-    ConfigDirection(String key, Direction direction) {
-        this.key = key;
+    ConfigDirection(Direction direction, String translationKey) {
         this.direction = direction;
+        this.translationKey = translationKey;
     }
 
     public Direction getDirection() {
         return direction;
     }
 
-    public String getKey() {
-        return key;
+    public Component getDisplayName() {
+        return Component.translatable(translationKey);
     }
 
-    public static ConfigDirection fromString (String key) {
-        for (ConfigDirection dir : values()) {
-            if (dir.key.equals(key.toLowerCase())) {
-                return dir;
-            }
-        }
-        return null;
+    public String getTranslationKey() {
+        return translationKey;
     }
-
-
 }

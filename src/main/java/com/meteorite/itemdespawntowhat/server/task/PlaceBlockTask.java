@@ -1,10 +1,9 @@
 package com.meteorite.itemdespawntowhat.server.task;
 
 import com.meteorite.itemdespawntowhat.ModConfigValues;
-import com.meteorite.itemdespawntowhat.server.event.ItemConversionEvent;
+import com.meteorite.itemdespawntowhat.util.ItemReturnUtil;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import org.apache.logging.log4j.LogManager;
@@ -54,14 +53,11 @@ public class PlaceBlockTask implements LevelDelayTask{
         int unplaced = maxBlocks - placed;
         if (unplaced > 0) {
             ItemStack returnStack = new ItemStack(block.asItem(), unplaced);
-
-            ItemEntity returnItem = new ItemEntity(serverLevel,
+            ItemReturnUtil.spawnLockedItem(serverLevel,
+                    returnStack,
                     center.getX() + 0.5,
-                    center.getY() + 1,
-                    center.getZ() + 0.5, returnStack);
-
-            returnItem.getPersistentData().putBoolean(ItemConversionEvent.CHECK_LOCK_TAG, true);
-            serverLevel.addFreshEntity(returnItem);
+                    center.getY() + 1.5,
+                    center.getZ() + 0.5);
             LOGGER.debug("Returned {} unplaced result blocks", unplaced);
         }
         if (onFinishCallback != null) {

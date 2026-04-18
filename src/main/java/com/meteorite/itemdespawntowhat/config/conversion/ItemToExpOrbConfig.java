@@ -19,7 +19,7 @@ public class ItemToExpOrbConfig extends BaseItemToEntityConfig{
     public ItemToExpOrbConfig() {
         this.resultId = XP_ORB_ID;
         // 经验球实体数量设为一个大值，限制极端结果倍率
-        this.resultLimit = 99999;
+        this.resultLimit = 9999;
     }
 
     // 允许结果字段为空，因为经验球没有变体
@@ -70,12 +70,6 @@ public class ItemToExpOrbConfig extends BaseItemToEntityConfig{
 
         int itemsRemaining = originalStackSize - actualConvertCount;
         addRemainingItems(itemEntity, serverLevel, itemsRemaining);
-    }
-
-    // 附近经验球数量统计，暂时无意义，直接返回0,
-    @Override
-    protected int countNearbyResult(ServerLevel level, BlockPos pos) {
-        return 0;
     }
 
     @Override

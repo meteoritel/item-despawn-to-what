@@ -37,7 +37,7 @@ public final class ConfigTooltipBuilder {
                 if (val != null && !val.isEmpty()) {
                     tooltip = tooltip.append(Component.literal("\n"))
                             .append(Component.translatable("gui.itemdespawntowhat.tooltip.surrounding_block",
-                                    dir.name().toLowerCase(), val));
+                                    dir.getDisplayName(), val));
                 }
             }
         }

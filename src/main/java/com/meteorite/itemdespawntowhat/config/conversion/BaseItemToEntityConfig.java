@@ -48,9 +48,10 @@ public abstract class BaseItemToEntityConfig extends BaseConversionConfig{
         return this.countNearbyResult(itemEntity) >= getRawResultLimit();
     }
 
-    // 子类方法
-    // 子类实现具体的实体/物品计数逻辑
-    protected abstract int countNearbyResult(ServerLevel level, BlockPos pos);
+    // 子类重写实现具体的实体/物品计数逻辑
+    protected int countNearbyResult(ServerLevel level, BlockPos pos){
+        return 0;
+    }
 
     // ========== setter & getter ========== //
 

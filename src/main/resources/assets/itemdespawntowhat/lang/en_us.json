@@ -58,6 +58,12 @@
   "gui.itemdespawntowhat.edit.world_effect.duration_label": "Duration(tick)",
   "gui.itemdespawntowhat.edit.world_effect.amplifier_label": "Amplifier",
   "gui.itemdespawntowhat.edit.world_effect.potion.tip": "Tip: Use commas to separate multiple inputs",
+  "gui.itemdespawntowhat.direction.north": "North",
+  "gui.itemdespawntowhat.direction.south": "South",
+  "gui.itemdespawntowhat.direction.east": "East",
+  "gui.itemdespawntowhat.direction.west": "West",
+  "gui.itemdespawntowhat.direction.up": "Up",
+  "gui.itemdespawntowhat.direction.down": "Down",
 
   "gui.itemdespawntowhat.edit.save_error": "Invalid config, please check your inputs.",
 

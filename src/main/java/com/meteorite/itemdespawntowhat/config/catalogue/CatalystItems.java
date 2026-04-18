@@ -188,7 +188,7 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
     }
 
     public boolean isAllEntryValid() {
-        return catalystList.stream().allMatch(CatalystEntry::isValid);
+        return catalystList != null && catalystList.stream().allMatch(CatalystEntry::isValid);
     }
 
     public List<CatalystEntry> getCatalystList() {

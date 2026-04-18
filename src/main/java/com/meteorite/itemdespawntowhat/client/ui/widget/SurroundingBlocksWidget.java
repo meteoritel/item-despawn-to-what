@@ -57,7 +57,7 @@ public class SurroundingBlocksWidget extends AbstractCompositeWidget {
             int y = startY + row * (LABEL_HEIGHT + V_GAP + BOX_HEIGHT + V_GAP);
 
             // 先渲染方向标签
-            String label = entry.getKey().name().substring(0, 1);
+            Component label = entry.getKey().getDisplayName();
             gfx.drawString(
                     font,
                     label,

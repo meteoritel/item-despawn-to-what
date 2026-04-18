@@ -92,8 +92,9 @@ public class ItemToBlockConfig extends BaseConversionConfig{
         itemEntity.makeFakeItem();
         consumeAllOthers(itemEntity, actualConvertCount);
         // 下一tick开始执行延迟放置方块的任务
+        boolean consumeFluid = innerFluid == null || !innerFluid.hasInnerFluid() || innerFluid.isConsumeFluid();
         LevelTaskManager.addTask(serverLevel, new PlaceBlockTask(
-                itemEntity.blockPosition(), resultBlock, getRadius(), innerFluid.isConsumeFluid(),
+                itemEntity.blockPosition(), resultBlock, getRadius(), consumeFluid,
                 rounds * getResultMultiple(),
                 () -> addRemainingItems(itemEntity, serverLevel, remaining, 0.5, 1, 0.5)));
     }
