@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.config.conversion;
 import com.google.gson.annotations.SerializedName;
 import com.meteorite.itemdespawntowhat.config.catalogue.PotionEffect;
 import com.meteorite.itemdespawntowhat.config.WorldEffectType;
+import com.meteorite.itemdespawntowhat.server.task.ExplosionTask;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -38,6 +39,9 @@ public class ItemToWorldEffectConfig extends BaseConversionConfig implements Wor
     @SerializedName("explosion_fire")
     private boolean explosionFire = false;
 
+    @SerializedName("explosion_direction_type")
+    private ExplosionTask.DirectionType explosionDirectionType = ExplosionTask.DirectionType.FLAT;
+
     // 箭雨参数
     @SerializedName("arrow_pickup_status")
     private AbstractArrow.Pickup arrowPickupStatus = AbstractArrow.Pickup.DISALLOWED;
@@ -71,6 +75,10 @@ public class ItemToWorldEffectConfig extends BaseConversionConfig implements Wor
 
         if (arrowPickupStatus == null) {
             LOGGER.warn("arrow_pickup_status must be one of ALLOWED / DISALLOWED / CREATIVE_ONLY");
+            return false;
+        }
+        if (explosionDirectionType == null) {
+            LOGGER.warn("explosion_direction_type is required for ItemToWorldEffectConfig");
             return false;
         }
 
@@ -188,6 +196,14 @@ public class ItemToWorldEffectConfig extends BaseConversionConfig implements Wor
 
     public void setExplosionFire(boolean explosionFire) {
         this.explosionFire = explosionFire;
+    }
+
+    public ExplosionTask.DirectionType getExplosionDirectionType() {
+        return explosionDirectionType;
+    }
+
+    public void setExplosionDirectionType(ExplosionTask.DirectionType explosionDirectionType) {
+        this.explosionDirectionType = explosionDirectionType;
     }
 
     public void setExplosionPower(float explosionPower) {

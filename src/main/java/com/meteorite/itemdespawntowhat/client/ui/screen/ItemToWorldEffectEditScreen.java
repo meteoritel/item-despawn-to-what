@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.WorldEffectType;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToWorldEffectConfig;
+import com.meteorite.itemdespawntowhat.server.task.ExplosionTask;
 import com.meteorite.itemdespawntowhat.client.ui.SuggestionProvider;
 import com.meteorite.itemdespawntowhat.client.ui.panel.FormListPanel;
 import com.meteorite.itemdespawntowhat.client.ui.widget.ArrowPotionEffectsWidget;
@@ -24,6 +25,7 @@ public class ItemToWorldEffectEditScreen extends BaseConfigEditScreen<ItemToWorl
     // 爆炸组件
     private EditBox explosionPowerInput;
     private CycleButton<Boolean> explosionFireButton;
+    private CycleButton<ExplosionTask.DirectionType> explosionDirectionButton;
     // 箭雨组件
     private CycleButton<AbstractArrow.Pickup> arrowPickupButton;
     private ArrowPotionEffectsWidget arrowPotionEffectsInput;
@@ -76,6 +78,13 @@ public class ItemToWorldEffectEditScreen extends BaseConfigEditScreen<ItemToWorl
                 .create(0, 0, BOX_WIDTH, BUTTON_HEIGHT,
                         Component.translatable(LABEL_PREFIX + "explosion_fire"));
 
+        explosionDirectionButton = CycleButton.<ExplosionTask.DirectionType>builder(
+                        type -> Component.translatable(type.getDescriptionId()))
+                .withValues(ExplosionTask.DirectionType.values())
+                .withInitialValue(ExplosionTask.DirectionType.FLAT)
+                .create(0, 0, BOX_WIDTH, BUTTON_HEIGHT,
+                        Component.translatable(LABEL_PREFIX + "explosion_direction_type"));
+
         arrowPickupButton = CycleButton.<AbstractArrow.Pickup>builder(
                 type -> Component.translatable(LABEL_PREFIX + "arrow_pickup_status." + type.name().toLowerCase()))
                 .withValues(AbstractArrow.Pickup.values())
@@ -110,6 +119,8 @@ public class ItemToWorldEffectEditScreen extends BaseConfigEditScreen<ItemToWorl
                         Component.translatable(LABEL_PREFIX + "explosion_power"), explosionPowerInput);
                 formList.addConditional(
                         Component.translatable(LABEL_PREFIX + "explosion_fire"), explosionFireButton);
+                formList.addConditional(
+                        Component.translatable(LABEL_PREFIX + "explosion_direction_type"), explosionDirectionButton);
             }
 
             case LIGHTNING -> formList.addConditional(
@@ -150,6 +161,7 @@ public class ItemToWorldEffectEditScreen extends BaseConfigEditScreen<ItemToWorl
             case EXPLOSION -> {
                 config.setExplosionPower(parseFloat(explosionPowerInput.getValue()));
                 config.setExplosionFire(explosionFireButton.getValue());
+                config.setExplosionDirectionType(explosionDirectionButton.getValue());
             }
             case ARROW_RAIN -> {
                 config.setArrowPickupStatus(arrowPickupButton.getValue());
@@ -166,6 +178,7 @@ public class ItemToWorldEffectEditScreen extends BaseConfigEditScreen<ItemToWorl
         visualOnlyButton.setValue(false);
         explosionPowerInput.setValue("1.0");
         explosionFireButton.setValue(false);
+        explosionDirectionButton.setValue(ExplosionTask.DirectionType.FLAT);
         arrowPickupButton.setValue(AbstractArrow.Pickup.DISALLOWED);
         arrowPotionEffectsInput.clear();
         rebuildConditionalEntries();
@@ -185,6 +198,7 @@ public class ItemToWorldEffectEditScreen extends BaseConfigEditScreen<ItemToWorl
         visualOnlyButton.setValue(config.isVisualOnly());
         explosionPowerInput.setValue(String.valueOf(config.getExplosionPower()));
         explosionFireButton.setValue(config.isExplosionFire());
+        explosionDirectionButton.setValue(config.getExplosionDirectionType());
         arrowPickupButton.setValue(config.getArrowPickupStatus());
         arrowPotionEffectsInput.setValue(config.getRawArrowPotionEffects());
 

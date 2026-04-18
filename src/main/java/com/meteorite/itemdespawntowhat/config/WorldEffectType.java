@@ -78,6 +78,7 @@ public enum WorldEffectType {
                             config.isExplosionFire(),
                             config.getExplosionIntervalTicks(),
                             count,
+                            config.getExplosionDirectionType(),
                             onFinishCallback
                     ));
                 }
@@ -150,6 +151,9 @@ public enum WorldEffectType {
 
         // 爆炸是否点火
         default boolean isExplosionFire() { return false; }
+
+        // 爆炸方向
+        default ExplosionTask.DirectionType getExplosionDirectionType() { return ExplosionTask.DirectionType.FLAT; }
 
         // 箭矢附加的药水效果列表（默认无效果）
         default @Nullable List<MobEffectInstance> getArrowPotionEffects() { return List.of(); }
