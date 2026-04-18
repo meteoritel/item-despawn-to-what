@@ -24,7 +24,7 @@ public class ItemDespawnToWhat {
     public static final String MOD_ID = "itemdespawntowhat";
     public static final Logger LOGGER = LogManager.getLogger();
 
-    public ItemDespawnToWhat(IEventBus modEventBus, ModContainer modContainer) {
+    public ItemDespawnToWhat(ModContainer modContainer) {
         modContainer.registerConfig(ModConfig.Type.SERVER, ModConfigValues.SPEC);
 
         // 注册事件管理器
