@@ -73,6 +73,7 @@ public class ItemToBlockConfig extends BaseConversionConfig{
     @Override
     public void performConversion(ItemEntity itemEntity, ServerLevel serverLevel) {
         int originalStackSize = itemEntity.getItem().getCount();
+
         int rounds = computeActualRounds(itemEntity, originalStackSize);
         if (rounds <= 0) {
             LOGGER.debug("No items can be converted to block for {} (catalysts exhausted)", getResultId());

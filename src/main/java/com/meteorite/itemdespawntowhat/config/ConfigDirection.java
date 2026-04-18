@@ -26,8 +26,4 @@ public enum ConfigDirection {
     public Component getDisplayName() {
         return Component.translatable(translationKey);
     }
-
-    public String getTranslationKey() {
-        return translationKey;
-    }
 }

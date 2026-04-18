@@ -25,7 +25,7 @@ public class ItemDespawnToWhat {
     public static final Logger LOGGER = LogManager.getLogger();
 
     public ItemDespawnToWhat(IEventBus modEventBus, ModContainer modContainer) {
-        modContainer.registerConfig(ModConfig.Type.COMMON, ModConfigValues.SPEC);
+        modContainer.registerConfig(ModConfig.Type.SERVER, ModConfigValues.SPEC);
 
         // 注册事件管理器
         NeoForge.EVENT_BUS.register(this);

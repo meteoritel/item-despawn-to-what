@@ -86,19 +86,16 @@ public class ItemToWorldEffectConfig extends BaseConversionConfig implements Wor
         int rounds;
         int actualConvertCount;
         if (isWeatherType()) {
-            // 天气类固定1轮，需要 sourceMultiple 个物品才能触发
-            if (originalStackSize < getSourceMultiple()) {
-                return;
-            }
+            // 天气类固定1轮
             rounds = 1;
-            actualConvertCount = getSourceMultiple();
+            actualConvertCount = sourceMultiple;
         } else {
             rounds = computeActualRounds(itemEntity, originalStackSize);
             if (rounds <= 0) {
                 LOGGER.warn("No items can be converted for side effect {} (count=0)", worldEffect);
                 return;
             }
-            actualConvertCount = rounds * getSourceMultiple();
+            actualConvertCount = rounds * sourceMultiple;
         }
 
         // 物品实体下一tick消失

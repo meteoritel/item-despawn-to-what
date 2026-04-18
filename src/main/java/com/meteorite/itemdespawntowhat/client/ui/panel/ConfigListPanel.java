@@ -108,7 +108,7 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
         this.deleteCallback = deleteCallback;
 
         this.confirmButton = Button.builder(
-                Component.translatable("gui.itemdespawntowhat.edit.list.delete"),
+                Component.translatable("gui.itemdespawntowhat.edit.list.apply"),
                 b -> commitPendingAction()
         ).size(DIALOG_BTN_W, DIALOG_BTN_H).build();
         this.cancelButton = Button.builder(

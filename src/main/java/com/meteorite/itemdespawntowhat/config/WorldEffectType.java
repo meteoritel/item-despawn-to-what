@@ -23,8 +23,12 @@ public enum WorldEffectType {
             () -> new ItemStack(Items.WATER_BUCKET),
             (itemEntity, level, config, count, onFinishCallback) -> {
                 // 前置条件：仅能下雨的维度，且当前不在下雨（含雷雨）才执行
-                if (!level.dimensionType().hasSkyLight()) return;
-                if (level.isRaining()) return;
+                if (!level.dimensionType().hasSkyLight()) {
+                    return;
+                }
+                if (level.isRaining()) {
+                    return;
+                }
                 level.setWeatherParameters(0, config.getWeatherDurationTicks(), true, config.isThundering());
                 onFinishCallback.run();
             }
@@ -35,8 +39,13 @@ public enum WorldEffectType {
             "effect.itemdespawntowhat.world_effect_type.clear",
             () -> new ItemStack(Items.SUNFLOWER),
             (itemEntity, level, config, count, onFinishCallback) -> {
-                if (!level.dimensionType().hasSkyLight()) return;
-                if (!level.isRaining() && !level.isThundering()) return;
+                // 前置条件：仅能下雨的维度，且当前必须在下雨
+                if (!level.dimensionType().hasSkyLight()) {
+                    return;
+                }
+                if (!level.isRaining() && !level.isThundering()) {
+                    return;
+                }
                 level.setWeatherParameters(config.getWeatherDurationTicks(), 0, false, false);
                 onFinishCallback.run();
             }

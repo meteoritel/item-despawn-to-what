@@ -125,6 +125,11 @@ public class ItemConversionEvent {
             itemEntity.getPersistentData().putString(SELECTED_CONFIG_TAG, selectedConfigId);
         }
 
+        // 当前物品实体的数量至少满足最低转化需要的数量
+        if (itemEntity.getItem().getCount() < selectedConfig.getSourceMultiple()) {
+            return;
+        }
+
         // 获取条件检查器并验证
         ConditionChecker checker = ConfigExtractorManager.getConditionCheckerForConfig(selectedConfigId);
         if (checker == null) {

@@ -4,7 +4,6 @@
 
 鸡肉放久了会变腐肉？鸡蛋孵出鸡？树苗自己种下去？——全都可以自定义。
 
-[conversions.png](docs/readme/conversions.png)
 
 ---
 
@@ -15,7 +14,6 @@
 
 你可以通过配置文件或 GUI 自定义各种转化规则，并为转化添加条件限制。
 
-[egg_hatch.gif](docs/readme/egg_hatch.gif "1秒的鸡蛋孵化（展示用）")
 
 ---
 
@@ -52,9 +50,6 @@
 
 本模组提供了简单易用的**规则编辑 GUI**，无需手写 JSON。
 
-[gui_2.png](docs/readme/gui_2.png)
-
-[gui_3.png](docs/readme/gui_3.png)
 
 **打开方式：**
 

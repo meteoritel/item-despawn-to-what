@@ -28,7 +28,7 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
     private List<CatalystEntry> catalystList;
 
     @SerializedName("consume_catalyst")
-    private boolean catalystConsume;
+    private boolean catalystConsume = true;
 
     public CatalystItems() {
     }

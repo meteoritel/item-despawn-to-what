@@ -204,6 +204,11 @@ public class FormListPanel extends ContainerObjectSelectionList<FormListPanel.En
         }
 
         @Override
+        public @Nullable GuiEventListener getFocused() {
+            return widget;
+        }
+
+        @Override
         public @NotNull List<? extends GuiEventListener> children() {
             return List.of(widget);
         }
