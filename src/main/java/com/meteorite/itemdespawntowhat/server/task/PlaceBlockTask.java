@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.server.task;
 
 import com.meteorite.itemdespawntowhat.ModConfigValues;
+import com.meteorite.itemdespawntowhat.util.DistanceUtil;
 import com.meteorite.itemdespawntowhat.util.ItemReturnUtil;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -23,23 +24,23 @@ public class PlaceBlockTask implements LevelDelayTask{
     private final boolean consumeFluid;
     private final Runnable onFinishCallback;
     private final int tickInterval;
-    private final ModConfigValues.CircleShape circleShape;
+    private final BlockPlaceShape blockPlaceShape;
 
     private int radius = 0;
     private int placed = 0;
     private int ticksElapsed = 0;
     private boolean finished = false;
 
-    public PlaceBlockTask(BlockPos center, Block block, int maxRadius, boolean consumeFluid,
-                          int maxBlocks, Runnable onFinishCallback) {
+    public PlaceBlockTask(BlockPos center, Block block, int maxRadius, BlockPlaceShape blockPlaceShape,
+                          boolean consumeFluid, int maxBlocks, Runnable onFinishCallback) {
         this.center = center;
         this.block = block;
         this.maxRadius = maxRadius;
+        this.blockPlaceShape = blockPlaceShape != null ? blockPlaceShape : BlockPlaceShape.SQUARE;
         this.consumeFluid = consumeFluid;
         this.maxBlocks = maxBlocks;
         this.onFinishCallback = onFinishCallback;
         this.tickInterval = ModConfigValues.BLOCK_PLACE_INTERVAL_TICKS.get();
-        this.circleShape = ModConfigValues.BLOCK_PLACE_CIRCLE_SHAPE.get();
     }
 
     @Override
@@ -82,7 +83,7 @@ public class PlaceBlockTask implements LevelDelayTask{
             return;
         }
 
-        for (BlockPos pos : getRingPositions(center, radius, circleShape)) {
+        for (BlockPos pos : getLayerPositions(center, radius, blockPlaceShape)) {
             if (placed >= maxBlocks) break;
 
             if (!canPlace(serverLevel, pos, block)) continue;
@@ -99,41 +100,81 @@ public class PlaceBlockTask implements LevelDelayTask{
         return block.defaultBlockState().canSurvive(level, pos);
     }
 
-    // 圈圈位置辅助方法
-    private static List<BlockPos> getRingPositions(BlockPos center, int radius, ModConfigValues.CircleShape shape) {
+    // 逐层位置辅助方法
+    private static List<BlockPos> getLayerPositions(BlockPos center, int radius, BlockPlaceShape shape) {
         List<BlockPos> result = new ArrayList<>();
-
-        int cx = center.getX();
-        int cy = center.getY();
-        int cz = center.getZ();
 
         if (radius == 0) {
             result.add(center);
             return result;
         }
 
-        if (shape == ModConfigValues.CircleShape.CIRCLE) {
-            // 欧几里得距离圆圈：floor(dist) == radius 的格子
-            for (int dx = -radius; dx <= radius; dx++) {
+        int cx = center.getX();
+        int cy = center.getY();
+        int cz = center.getZ();
+        int minY = shape.isThreeDimensional() ? -radius : 0;
+        int maxY = shape.isThreeDimensional() ? radius : 0;
+
+        for (int dx = -radius; dx <= radius; dx++) {
+            for (int dy = minY; dy <= maxY; dy++) {
                 for (int dz = -radius; dz <= radius; dz++) {
-                    int dist = (int) Math.floor(Math.sqrt(dx * dx + dz * dz));
-                    if (dist == radius) {
-                        result.add(new BlockPos(cx + dx, cy, cz + dz));
+                    if (!isOnBoundary(shape, dx, dy, dz, radius)) {
+                        continue;
                     }
+                    result.add(new BlockPos(cx + dx, cy + dy, cz + dz));
                 }
-            }
-        } else {
-            // SQUARE：切比雪夫距离圆圈
-            for (int dx = -radius; dx <= radius; dx++) {
-                result.add(new BlockPos(cx + dx, cy, cz + radius));
-                result.add(new BlockPos(cx + dx, cy, cz - radius));
-            }
-            for (int dz = -radius + 1; dz <= radius - 1; dz++) {
-                result.add(new BlockPos(cx + radius, cy, cz + dz));
-                result.add(new BlockPos(cx - radius, cy, cz + dz));
             }
         }
 
         return result;
+    }
+
+    private static boolean isOnBoundary(BlockPlaceShape shape, int dx, int dy, int dz, int radius) {
+        return shape.usesEuclideanDistance()
+                ? isOnEuclideanBoundary(shape.isThreeDimensional(), dx, dy, dz, radius)
+                : isOnChebyshevBoundary(shape.isThreeDimensional(), dx, dy, dz, radius);
+    }
+
+    private static boolean isOnEuclideanBoundary(boolean threeDimensional, int dx, int dy, int dz, int radius) {
+        double distance = threeDimensional
+                ? DistanceUtil.euclideanDistance(dx, dy, dz)
+                : DistanceUtil.euclideanDistance(dx, dz);
+        return distance >= radius && distance < radius + 1;
+    }
+
+    private static boolean isOnChebyshevBoundary(boolean threeDimensional, int dx, int dy, int dz, int radius) {
+        int distance = threeDimensional
+                ? DistanceUtil.chebyshevDistance(dx, dy, dz)
+                : DistanceUtil.chebyshevDistance(dx, dz);
+        return distance == radius;
+    }
+
+    public enum BlockPlaceShape {
+        SQUARE(false, false, "gui.itemdespawntowhat.block_place_shape.square"),
+        CIRCLE(false, true, "gui.itemdespawntowhat.block_place_shape.circle"),
+        CUBE(true, false, "gui.itemdespawntowhat.block_place_shape.cube"),
+        SPHERE(true, true, "gui.itemdespawntowhat.block_place_shape.sphere");
+
+        private final boolean threeDimensional;
+        private final boolean euclidean;
+        private final String descriptionId;
+
+        BlockPlaceShape(boolean threeDimensional, boolean euclidean, String descriptionId) {
+            this.threeDimensional = threeDimensional;
+            this.euclidean = euclidean;
+            this.descriptionId = descriptionId;
+        }
+
+        public boolean isThreeDimensional() {
+            return threeDimensional;
+        }
+
+        public boolean usesEuclideanDistance() {
+            return euclidean;
+        }
+
+        public String getDescriptionId() {
+            return descriptionId;
+        }
     }
 }

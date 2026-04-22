@@ -1,9 +1,10 @@
 package com.meteorite.itemdespawntowhat.config.conversion;
 
 import com.google.gson.annotations.SerializedName;
-import com.meteorite.itemdespawntowhat.server.task.PlaceBlockTask;
-import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import com.meteorite.itemdespawntowhat.server.task.LevelTaskManager;
+import com.meteorite.itemdespawntowhat.server.task.PlaceBlockTask;
+import com.meteorite.itemdespawntowhat.server.task.PlaceBlockTask.BlockPlaceShape;
+import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -21,6 +22,8 @@ public class ItemToBlockConfig extends BaseConversionConfig{
     private int radius = 6;
     @SerializedName("block_of_item")
     private boolean enableItemBlock = false;
+    @SerializedName("block_place_shape")
+    private BlockPlaceShape blockPlaceShape = BlockPlaceShape.SQUARE;
 
     // 缓存的结果方块实例，不参与序列化
     private transient Block cachedResultBlock;
@@ -54,6 +57,10 @@ public class ItemToBlockConfig extends BaseConversionConfig{
     protected boolean additionalCheck() {
         if (radius < 0) {
             LOGGER.warn("radius_limit must be >= 0, current={}", radius);
+            return false;
+        }
+        if (blockPlaceShape == null) {
+            LOGGER.warn("block_place_shape must not be null");
             return false;
         }
         return true;
@@ -95,9 +102,9 @@ public class ItemToBlockConfig extends BaseConversionConfig{
         // 下一tick开始执行延迟放置方块的任务
         boolean consumeFluid = innerFluid == null || !innerFluid.hasInnerFluid() || innerFluid.isConsumeFluid();
         LevelTaskManager.addTask(serverLevel, new PlaceBlockTask(
-                itemEntity.blockPosition(), resultBlock, getRadius(), consumeFluid,
+                itemEntity.blockPosition(), resultBlock, getRadius(), getBlockPlaceShape(), consumeFluid,
                 rounds * getResultMultiple(),
-                () -> addRemainingItems(itemEntity, serverLevel, remaining, 0.5, 1, 0.5)));
+                () -> addRemainingItems(itemEntity, serverLevel, remaining, 0, 1, 0)));
     }
 
     // ========== 结果相关方法 ========== //
@@ -165,5 +172,13 @@ public class ItemToBlockConfig extends BaseConversionConfig{
 
     public void setEnableItemBlock(boolean enableItemBlock) {
         this.enableItemBlock = enableItemBlock;
+    }
+
+    public BlockPlaceShape getBlockPlaceShape() {
+        return blockPlaceShape != null ? blockPlaceShape : BlockPlaceShape.SQUARE;
+    }
+
+    public void setBlockPlaceShape(BlockPlaceShape blockPlaceShape) {
+        this.blockPlaceShape = blockPlaceShape != null ? blockPlaceShape : BlockPlaceShape.SQUARE;
     }
 }

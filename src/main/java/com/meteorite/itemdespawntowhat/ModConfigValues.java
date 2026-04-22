@@ -14,7 +14,6 @@ public class ModConfigValues {
     public static final ModConfigSpec.IntValue EXPLOSION_INTERVAL_TICKS;
     public static final ModConfigSpec.IntValue ARROW_INTERVAL_TICKS;
     public static final ModConfigSpec.IntValue BLOCK_PLACE_INTERVAL_TICKS;
-    public static final ModConfigSpec.EnumValue<CircleShape> BLOCK_PLACE_CIRCLE_SHAPE;
     public static final ModConfigSpec.ConfigValue<List<? extends String>> ENTITY_SCALE_OVERRIDES;
 
     static {
@@ -41,10 +40,6 @@ public class ModConfigValues {
         BLOCK_PLACE_INTERVAL_TICKS = builder
                 .comment("Ticks between placing each ring of blocks (default: 1)")
                 .defineInRange("block_place_interval_ticks", 1, 1, 100);
-
-        BLOCK_PLACE_CIRCLE_SHAPE = builder
-                .comment("Shape of each placement ring: SQUARE (Chebyshev distance) or CIRCLE (Euclidean distance)")
-                .defineEnum("block_place_circle_shape", CircleShape.SQUARE);
 
         builder.pop();
 
@@ -81,8 +76,4 @@ public class ModConfigValues {
         return defaultScale;
     }
 
-    public enum CircleShape {
-        SQUARE,
-        CIRCLE
-    }
 }
