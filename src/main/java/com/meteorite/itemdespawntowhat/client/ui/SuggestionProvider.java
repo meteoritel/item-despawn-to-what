@@ -3,20 +3,19 @@ package com.meteorite.itemdespawntowhat.client.ui;
 import com.meteorite.itemdespawntowhat.util.TagResolver;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.Registry;
-import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.TagKey;
-import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.MobCategory;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 @OnlyIn(Dist.CLIENT)
@@ -30,29 +29,53 @@ public interface SuggestionProvider {
         return getSuggestions(segment, DEFAULT_MAX_FETCH);
     }
 
+    // 这是客户端缓存，或许需要
+    Map<String, List<String>> CACHE = new ConcurrentHashMap<>();
+
     // ========== 内置工厂方法 ========== //
     // 匹配注册表（物品、方块、实体）
     static <T> SuggestionProvider ofRegistry(Registry<T> registry) {
-        // 预先排好序，查询时直接遍历
-        List<String> allIds = registry.keySet()
-                .stream()
-                .map(ResourceLocation::toString)
-                .sorted()
-                .toList();
-
-        return (segment, maxResults) -> {
-            if (segment.isEmpty()) return List.of();
-            String lower = segment.toLowerCase();
-            List<String> result = new ArrayList<>();
-            for (String id : allIds) {
-                if (result.size() >= maxResults) break;
-                if (id.startsWith(lower) || pathOf(id).startsWith(lower)) {
-                    result.add(id);
-                }
-            }
-            return result;
-        };
+        return ofRegistry(registry, entry -> true);
     }
+
+    // 带过滤的注册表
+    private static <T> SuggestionProvider ofRegistry(Registry<T> registry, Predicate<T> filter) {
+        // 预先排好序，查询时直接遍历
+        String cacheKey = "registry_" + System.identityHashCode(registry) + "_" + filter.hashCode();
+
+        List<String> ids = CACHE.computeIfAbsent(
+                cacheKey,
+                k -> registry.keySet().stream()
+                        .filter(id -> registry.getOptional(id).filter(filter).isPresent())
+                        .map(ResourceLocation::toString)
+                        .sorted()
+                        .toList()
+        );
+
+        return matcher(ids);
+    }
+
+    // 匹配mob实体
+    static SuggestionProvider ofMobEntityTypes() {
+        var server = ServerLifecycleHooks.getCurrentServer();
+        if (server == null) {
+            return empty();
+        }
+
+        var registry = server.registryAccess().registryOrThrow(Registries.ENTITY_TYPE);
+
+        List<String> ids = CACHE.computeIfAbsent("mob_entities",
+                k -> registry.keySet()
+                        .stream()
+                        .filter(id -> registry.getOptional(id)
+                                .map(entityType -> entityType.getCategory() != MobCategory.MISC)
+                                .orElse(false))
+                        .map(ResourceLocation::toString)
+                        .sorted()
+                        .toList());
+        return matcher(ids);
+    }
+
 
     // 同时匹配注册表 ID 和 #tag 标签
     static <T> SuggestionProvider ofRegistryWithTags(Registry<T> registry, ResourceKey<? extends Registry<T>> registryKey) {
@@ -66,61 +89,6 @@ public interface SuggestionProvider {
         };
     }
 
-    static <T> SuggestionProvider ofRegistry(Registry<T> registry, Class<?> baseClass) {
-        List<String> allIds = registry.entrySet()
-                .stream()
-                .filter(entry -> baseClass.isInstance(entry.getValue()))
-                .map(entry -> entry.getKey().location().toString())
-                .sorted()
-                .toList();
-
-        return (segment, maxResults) -> {
-            if (segment.isEmpty()) return List.of();
-            String lower = segment.toLowerCase();
-            List<String> result = new ArrayList<>();
-            for (String id : allIds) {
-                if (result.size() >= maxResults) break;
-                if (id.startsWith(lower) || pathOf(id).startsWith(lower)) {
-                    result.add(id);
-                }
-            }
-            return result;
-        };
-    }
-
-    // 专用于 ENTITY_TYPE 注册表，按实体运行时类筛选
-    static SuggestionProvider ofEntityTypeRegistry(ServerLevel level, Class<?> baseClass) {
-        List<String> allIds = BuiltInRegistries.ENTITY_TYPE.entrySet()
-                .stream()
-                .filter(entry -> {
-                    try {
-                        Entity testEntity = entry.getValue().create(level);
-                        if (testEntity == null) return false;
-                        boolean matches = baseClass.isInstance(testEntity);
-                        testEntity.discard();
-                        return matches;
-                    } catch (Exception e) {
-                        return false;
-                    }
-                })
-                .map(entry -> entry.getKey().location().toString())
-                .sorted()
-                .toList();
-
-        return (segment, maxResults) -> {
-            if (segment.isEmpty()) return List.of();
-            String lower = segment.toLowerCase();
-            List<String> result = new ArrayList<>();
-            for (String id : allIds) {
-                if (result.size() >= maxResults) break;
-                if (id.startsWith(lower) || pathOf(id).startsWith(lower)) {
-                    result.add(id);
-                }
-            }
-            return result;
-        };
-    }
-
     // 匹配维度
     static SuggestionProvider ofDimensions() {
         return (segment, maxResults) -> {
@@ -129,39 +97,33 @@ public interface SuggestionProvider {
                 return List.of();
             }
 
-            String lower = segment.toLowerCase();
-            List<String> candidates = new ArrayList<>();
+            List<String> ids = new ArrayList<>();
             for (ServerLevel level : server.getAllLevels()) {
-                candidates.add(level.dimension().location().toString());
+                ids.add(level.dimension().location().toString());
             }
-            candidates.sort(null);
 
-            List<String> result = new ArrayList<>();
-            for (String id : candidates) {
-                if (result.size() >= maxResults) break;
-                if (id.startsWith(lower) || pathOf(id).startsWith(lower)) {
-                    result.add(id);
-                }
-            }
-            return result;
+            ids.sort(Comparator.naturalOrder());
+            return filter(ids, segment, maxResults);
         };
     }
 
     // 匹配tag
     static <T> SuggestionProvider ofTags(ResourceKey<? extends Registry<T>> registryKey) {
         return (segment, maxResults) -> {
-            String effectiveSegment = TagResolver.stripTagPrefix(segment);
-            String lower = effectiveSegment.toLowerCase();
-
             Registry<T> registry = getRegistry(registryKey);
             if (registry == null) {
                 return List.of();
             }
 
+            String effectiveSegment = TagResolver.stripTagPrefix(segment);
+            String lower = effectiveSegment.toLowerCase(Locale.ROOT);
+
             return registry.getTagNames()
                     .map(TagKey::location)
                     .map(ResourceLocation::toString)
-                    .filter(id -> id.startsWith(lower) || pathOf(id).startsWith(lower))
+                    .filter(id ->
+                            startsWithIgnoreCase(id, lower) ||
+                                    startsWithIgnoreCase(pathOf(id), lower))
                     .sorted()
                     .limit(maxResults)
                     .map(id -> "#" + id)
@@ -169,6 +131,7 @@ public interface SuggestionProvider {
         };
     }
 
+    // 获取注册键（数据包）
     private static <T> Registry<T> getRegistry(ResourceKey<? extends Registry<T>> registryKey) {
         var serve = ServerLifecycleHooks.getCurrentServer();
         if (serve != null) {
@@ -183,42 +146,64 @@ public interface SuggestionProvider {
         return null;
     }
 
-    // 从固定字符串列表中匹配
-    static SuggestionProvider ofList(String... candidates) {
-        return ofList(Arrays.asList(candidates));
+    // ========== 通用匹配方案 ========== //
+    static SuggestionProvider matcher(List<String> ids) {
+        return (segment, maxResults) -> filter(ids, segment, maxResults);
     }
 
-    // 从固定字符串集合中匹配
-    static SuggestionProvider ofList(Collection<String> candidates) {
-        List<String> sorted = candidates.stream().sorted().toList();
-        return (segment, maxResults) -> {
-            if (segment.isEmpty()) return List.of();
-            String lower = segment.toLowerCase();
-            return sorted.stream()
-                    .filter(s -> s.toLowerCase().startsWith(lower))
-                    .limit(maxResults)
-                    .collect(Collectors.toList());
-        };
-    }
+    static List<String> filter(List<String> ids, String segment, int maxResults) {
+        if (segment == null || segment.isEmpty()) {
+            return List.of();
+        }
 
-    // 将多个建议合并为一个，按顺序查询并去重
-    static SuggestionProvider combine(SuggestionProvider... providers) {
-        return (segment, maxResults) -> {
-            List<String> result = new ArrayList<>();
-            for (SuggestionProvider provider : providers) {
-                if (result.size() >= maxResults) break;
-                int remaining = maxResults - result.size();
-                provider.getSuggestions(segment, remaining).stream()
-                        .filter(s -> !result.contains(s))
-                        .forEach(result::add);
+        String lower = segment.toLowerCase(Locale.ROOT);
+        List<String> result = new ArrayList<>(Math.min(maxResults, 32));
+
+        // 第一轮：前缀匹配（优先）
+        for (String id : ids) {
+            if (result.size() >= maxResults) {
+                return result;
             }
-            return result;
-        };
+
+            if (startsWithIgnoreCase(id, lower)
+                    || startsWithIgnoreCase(pathOf(id), lower)) {
+                result.add(id);
+            }
+        }
+
+        // 第二轮：contains 模糊匹配
+        for (String id : ids) {
+            if (result.size() >= maxResults) {
+                break;
+            }
+
+            if (result.contains(id)) {
+                continue;
+            }
+
+            String path = pathOf(id).toLowerCase(Locale.ROOT);
+            String full = id.toLowerCase(Locale.ROOT);
+
+            if (path.contains(lower) || full.contains(lower)) {
+                result.add(id);
+            }
+        }
+
+        return result;
     }
 
-    // ========== 内部工具方法 ========== //
+    static SuggestionProvider empty() {
+        return (segment, maxResults) -> List.of();
+    }
+
+    // ========== 工具方法 ========== //
     private static String pathOf(String id) {
         int colon = id.indexOf(':');
         return colon >= 0 ? id.substring(colon + 1) : id;
     }
+
+    static boolean startsWithIgnoreCase(String text, String prefix) {
+        return text.toLowerCase(Locale.ROOT).startsWith(prefix);
+    }
+
 }

@@ -1,12 +1,11 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.meteorite.itemdespawntowhat.config.ConfigType;
-import com.meteorite.itemdespawntowhat.config.conversion.ItemToMobConfig;
 import com.meteorite.itemdespawntowhat.client.ui.SuggestionProvider;
 import com.meteorite.itemdespawntowhat.client.ui.panel.FormListPanel;
+import com.meteorite.itemdespawntowhat.config.ConfigType;
+import com.meteorite.itemdespawntowhat.config.conversion.ItemToMobConfig;
 import com.meteorite.itemdespawntowhat.util.IdValidator;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 
 public class ItemToMobEditScreen extends BaseConfigEditScreen<ItemToMobConfig> {
@@ -60,6 +59,6 @@ public class ItemToMobEditScreen extends BaseConfigEditScreen<ItemToMobConfig> {
     @Override
     protected void addCustomSuggestion() {
         registerSuggestion(resultIdInput,
-                SuggestionProvider.ofRegistry(BuiltInRegistries.ENTITY_TYPE));
+                SuggestionProvider.ofMobEntityTypes());
     }
 }

@@ -244,6 +244,7 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
 
     // ========== 内部记录：待确认动作 ========== //
     private record PendingAction(EntrySource source, int index, Runnable onConfirm) {}
+
     // ========== 列表条目 ========== //
     public static class ConfigEntry<T extends BaseConversionConfig>
             extends ObjectSelectionList.Entry<ConfigEntry<T>> {
@@ -260,6 +261,7 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
         private final long createdAt = System.currentTimeMillis();
         // 实体图标（仅 mob 类型非 null）
         @Nullable private LivingEntity entityIcon;
+        private static final long ENTITY_ICON_ROTATION_PERIOD_MS = 8000L;
 
         ConfigEntry(ConfigListPanel<T> parent, T config, EntrySource source, int indexInSource) {
             this.parent = parent;
@@ -343,24 +345,15 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
                            int mouseX, int mouseY,
                            boolean hovered, float partialTick) {
             Minecraft mc = Minecraft.getInstance();
+            renderRowBackground(guiGraphics, left, top, width, height, hovered);
+            renderSourceMarker(guiGraphics, left, top, height);
 
-            // 悬停背景
-            if (hovered) {
-                guiGraphics.fill(left, top, left + width, top + height, 0x22_FFFFFF);
-            }
-
-            // 来源标签（左侧色块）
-            int tagColor = (source == EntrySource.PENDING) ? 0xFF_FFA500 : 0xFF_44AA44;
-            guiGraphics.fill(left, top + 1, left + COL_TAG_W, top + height - 1, tagColor);
-
-            // 固定列布局：来源侧
             int sourceColumnLeft = left + COL_TAG_W + EDGE_PAD;
             int sourceQtyColX = sourceColumnLeft + CATALYST_W + COLUMN_GAP;
             int sourceMultiplyColX = sourceQtyColX + QTY_COL_WIDTH + COLUMN_GAP;
             int sourceIconX = sourceMultiplyColX + MULTIPLY_COL_WIDTH + COLUMN_GAP;
             int sourceTextX = sourceIconX + ICON_SIZE + COLUMN_GAP;
 
-            // 固定列布局：结果侧，锚点相对整行中心右移 24px
             int arrowCenterX = left + width / 2 + ARROW_CENTER_SHIFT;
             int arrowWidth = mc.font.width("->");
             int arrowX = arrowCenterX - arrowWidth / 2;
@@ -372,23 +365,13 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             int iconY = top + (height - ICON_SIZE) / 2;
             int textY = top + (height - mc.font.lineHeight) / 2;
 
-            // 箭头居中在整行内
             guiGraphics.drawCenteredString(mc.font, Component.literal("->"), arrowCenterX, textY, 0x888888);
 
             ItemStack sourceIcon = getSourceIconStack();
             Component sourceText = getSourceText(sourceIcon);
-            int sourceMultiple = config.getSourceMultiple();
-            String sourceMultipleStr = Integer.toString(sourceMultiple);
+            renderSourceColumn(guiGraphics, mc, sourceQtyColX, sourceMultiplyColX, sourceIconX, sourceTextX,
+                    iconY, textY, sourceIcon, sourceText);
 
-            // 第一则左对齐：数量 + * + 图标 + 名称
-            int sourceQtyX = sourceQtyColX + Math.max(0, QTY_COL_WIDTH - mc.font.width(sourceMultipleStr));
-            int sourceMultiplyX = sourceMultiplyColX + Math.max(0, (MULTIPLY_COL_WIDTH - mc.font.width("*")) / 2);
-            guiGraphics.drawString(mc.font, sourceMultipleStr, sourceQtyX, textY, 0xFFFFFF, false);
-            guiGraphics.drawString(mc.font, MULTIPLY_MARK, sourceMultiplyX, textY, 0xFFFFFF, false);
-            guiGraphics.renderItem(sourceIcon, sourceIconX, iconY);
-            ScrollableTextRenderer.drawScrollableText(guiGraphics, mc.font, sourceText, sourceTextX, textY, TEXT_COL_WIDTH, 0xFFFFFF, createdAt);
-
-            // 第二则 resultId 图标
             if (entityIcon == null && config instanceof ItemToMobConfig mobConfig) {
                 Level level = mc.level;
                 EntityType<?> type = mobConfig.getResultEntityType();
@@ -403,32 +386,71 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             String resultMultipleStr = Integer.toString(resultMultiple);
             int textColor = (source == EntrySource.PENDING) ? 0xFFFF88 : 0xFFFFFF;
 
-            // 渲染实体图标
-            if (entityIcon != null) {
-                ResourceLocation entityId = SafeParseUtil.parseResourceLocation(config.getResultId());
-                float scale = (entityId != null) ? ModConfigValues.getEntityScale(entityId, DEFAULT_MOB_SCALE) : DEFAULT_MOB_SCALE;
-                float cx = resultIconX + ICON_SIZE / 2.0f;
-                float cy = iconY + ICON_SIZE / 2.0f;
-                float bbHeight = entityIcon.getBbHeight();
-                Vector3f translate = new Vector3f(0.0f, bbHeight / 2.0f, 0.0f);
-                Quaternionf pose = new Quaternionf()
-                        .rotateZ((float) Math.PI)
-                        .rotateY((float) (7 * Math.PI / 8.0));
-                InventoryScreen.renderEntityInInventory(guiGraphics, cx, cy, scale, translate, pose, null, entityIcon);
-            } else {
+            renderResultIcon(guiGraphics, resultIconX, iconY, resultIcon);
+            renderResultColumn(guiGraphics, mc, resultQtyColX, resultMultiplyColX, resultTextX,
+                    textY, resultMultipleStr, resultText, textColor);
+
+            if (hovered && mc.screen instanceof Screen screen) {
+                screen.setTooltipForNextRenderPass(ConfigTooltipBuilder.build(config));
+            }
+        }
+
+        private void renderRowBackground(GuiGraphics guiGraphics, int left, int top, int width, int height, boolean hovered) {
+            if (hovered) {
+                guiGraphics.fill(left, top, left + width, top + height, 0x22_FFFFFF);
+            }
+        }
+
+        private void renderSourceMarker(GuiGraphics guiGraphics, int left, int top, int height) {
+            int tagColor = (source == EntrySource.PENDING) ? 0xFF_FFA500 : 0xFF_44AA44;
+            guiGraphics.fill(left, top + 1, left + COL_TAG_W, top + height - 1, tagColor);
+        }
+
+        private void renderSourceColumn(GuiGraphics guiGraphics, Minecraft mc,
+                                        int sourceQtyColX, int sourceMultiplyColX, int sourceIconX, int sourceTextX,
+                                        int iconY, int textY, ItemStack sourceIcon, Component sourceText) {
+            int sourceMultiple = config.getSourceMultiple();
+            String sourceMultipleStr = Integer.toString(sourceMultiple);
+            int sourceQtyX = sourceQtyColX + Math.max(0, QTY_COL_WIDTH - mc.font.width(sourceMultipleStr));
+            int sourceMultiplyX = sourceMultiplyColX + Math.max(0, (MULTIPLY_COL_WIDTH - mc.font.width("*")) / 2);
+            guiGraphics.drawString(mc.font, sourceMultipleStr, sourceQtyX, textY, 0xFFFFFF, false);
+            guiGraphics.drawString(mc.font, MULTIPLY_MARK, sourceMultiplyX, textY, 0xFFFFFF, false);
+            guiGraphics.renderItem(sourceIcon, sourceIconX, iconY);
+            ScrollableTextRenderer.drawScrollableText(guiGraphics, mc.font, sourceText, sourceTextX, textY, TEXT_COL_WIDTH, 0xFFFFFF, createdAt);
+        }
+
+        private void renderResultIcon(GuiGraphics guiGraphics, int resultIconX, int iconY, ItemStack resultIcon) {
+            if (entityIcon == null) {
                 guiGraphics.renderItem(resultIcon, resultIconX, iconY);
+                return;
             }
 
-            // 第二则：数量 + * + 图标 + 名称
+            ResourceLocation entityId = SafeParseUtil.parseResourceLocation(config.getResultId());
+            float scale = (entityId != null) ? ModConfigValues.getEntityScale(entityId, DEFAULT_MOB_SCALE) : DEFAULT_MOB_SCALE;
+            float cx = resultIconX + ICON_SIZE / 2.0f;
+            float cy = iconY + ICON_SIZE / 2.0f;
+            float bbHeight = entityIcon.getBbHeight();
+            Vector3f translate = new Vector3f(0.0f, bbHeight / 2.0f, 0.0f);
+            Quaternionf pose = createRotatingEntityPose();
+            InventoryScreen.renderEntityInInventory(guiGraphics, cx, cy, scale, translate, pose, null, entityIcon);
+        }
+
+        private Quaternionf createRotatingEntityPose() {
+            float progress = (System.currentTimeMillis() % ENTITY_ICON_ROTATION_PERIOD_MS) / (float) ENTITY_ICON_ROTATION_PERIOD_MS;
+            float rotation = (float) (progress * Math.PI * 2.0);
+            return new Quaternionf()
+                    .rotateZ((float) Math.PI)
+                    .rotateY((float) (7 * Math.PI / 8.0) - rotation);
+        }
+
+        private void renderResultColumn(GuiGraphics guiGraphics, Minecraft mc,
+                                        int resultQtyColX, int resultMultiplyColX, int resultTextX,
+                                        int textY, String resultMultipleStr, Component resultText, int textColor) {
             int resultQtyX = resultQtyColX + Math.max(0, QTY_COL_WIDTH - mc.font.width(resultMultipleStr));
             int resultMultiplyX = resultMultiplyColX + Math.max(0, (MULTIPLY_COL_WIDTH - mc.font.width("*")) / 2);
             guiGraphics.drawString(mc.font, resultMultipleStr, resultQtyX, textY, textColor, false);
             guiGraphics.drawString(mc.font, MULTIPLY_MARK, resultMultiplyX, textY, textColor, false);
             ScrollableTextRenderer.drawScrollableText(guiGraphics, mc.font, resultText, resultTextX, textY, TEXT_COL_WIDTH, textColor, createdAt);
-
-            if (hovered && mc.screen instanceof Screen screen) {
-                screen.setTooltipForNextRenderPass(ConfigTooltipBuilder.build(config));
-            }
         }
 
         @Override
