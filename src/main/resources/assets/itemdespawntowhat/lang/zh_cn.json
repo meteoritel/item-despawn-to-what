@@ -114,5 +114,7 @@
   "gui.itemdespawntowhat.tooltip.catalyst": "  %s x%d",
   "gui.itemdespawntowhat.tooltip.inner_fluid": "浸泡流体: %s",
   "gui.itemdespawntowhat.tooltip.inner_fluid_source": "  需要源头方块",
-  "gui.itemdespawntowhat.tooltip.inner_fluid_consume": "  消耗流体"
+  "gui.itemdespawntowhat.tooltip.inner_fluid_consume": "  消耗流体",
+  "gui.itemdespawntowhat.tooltip.block_place_shape": "放置形状: %s",
+  "gui.itemdespawntowhat.tooltip.explosion_direction": "爆炸方向: %s"
 }

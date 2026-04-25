@@ -52,7 +52,7 @@ public class ItemToMobEditScreen extends BaseConfigEditScreen<ItemToMobConfig> {
     }
 
     @Override
-    protected void initValidators() {
+    protected void initCustomValidators() {
         registerValidator(resultIdInput, IdValidator::isValidEntityId);
     }
 

@@ -27,7 +27,7 @@ public class ModConfigValues {
 
         EXPLOSION_INTERVAL_TICKS = builder
                 .comment("Ticks between each explosion (default: 5)")
-                .defineInRange("explosion_interval_ticks", 5, 1, 100);
+                .defineInRange("explosion_interval_ticks", 8, 1, 100);
 
         ARROW_INTERVAL_TICKS = builder
                 .comment("Ticks between each arrow spawn (default: 2)")

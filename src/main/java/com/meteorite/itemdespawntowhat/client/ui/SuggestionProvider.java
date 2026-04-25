@@ -29,8 +29,13 @@ public interface SuggestionProvider {
         return getSuggestions(segment, DEFAULT_MAX_FETCH);
     }
 
-    // 这是客户端缓存，或许需要
+    // 当前是客户端缓存，或许需要修改
     Map<String, List<String>> CACHE = new ConcurrentHashMap<>();
+
+    // 清空所有客户端缓存
+    static void clearCache() {
+        CACHE.clear();
+    }
 
     // ========== 内置工厂方法 ========== //
     // 匹配注册表（物品、方块、实体）
@@ -39,7 +44,7 @@ public interface SuggestionProvider {
     }
 
     // 带过滤的注册表
-    private static <T> SuggestionProvider ofRegistry(Registry<T> registry, Predicate<T> filter) {
+    static <T> SuggestionProvider ofRegistry(Registry<T> registry, Predicate<T> filter) {
         // 预先排好序，查询时直接遍历
         String cacheKey = "registry_" + System.identityHashCode(registry) + "_" + filter.hashCode();
 

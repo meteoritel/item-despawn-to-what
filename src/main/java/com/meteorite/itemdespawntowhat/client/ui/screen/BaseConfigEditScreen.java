@@ -23,6 +23,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -162,7 +163,8 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         registerSuggestion(dimensionInput, SuggestionProvider.ofDimensions());
         registerSuggestion(catalystWidget.getItemBox(),
                 SuggestionProvider.ofRegistryWithTags(BuiltInRegistries.ITEM, Registries.ITEM));
-        registerSuggestion(innerFluidWidget.getFluidBox(), SuggestionProvider.ofRegistry(BuiltInRegistries.FLUID));
+        registerSuggestion(innerFluidWidget.getFluidBox(), SuggestionProvider.ofRegistry(BuiltInRegistries.FLUID,
+                fluid -> !BuiltInRegistries.FLUID.getKey(fluid).equals(ResourceLocation.parse("empty"))));
     }
 
     private void restoreResizeBackup() {
@@ -172,12 +174,19 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         }
     }
 
-    // 子类可覆盖此方法注册额外的字段校验器
-    protected void initValidators() {
+    // 注册字段校验器，用来决定添加红框
+    private void initValidators() {
         registerValidator(itemIdInput, IdValidator::isValidItemId);
         registerValidator(innerFluidWidget.getFluidBox(),
                 () -> innerFluidWidget.getValue() != null,
                 IdValidator::isValidFluidId);
+
+        initCustomValidators();
+    }
+
+    // 注册子类中独有的字段校验器，由子类重写，默认空实现
+    protected void initCustomValidators() {
+
     }
 
     // 注册字段校验器（无前置条件）

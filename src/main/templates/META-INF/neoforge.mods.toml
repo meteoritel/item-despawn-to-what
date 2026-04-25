@@ -17,7 +17,7 @@ Customize the transformation of item drops after they disappear through configur
 [[dependencies.itemdespawntowhat]]
 modId="neoforge"
 type="required"
-versionRange="[21.1.218,)"
+versionRange="[21.1.210,)"
 ordering="NONE"
 side="BOTH"
 

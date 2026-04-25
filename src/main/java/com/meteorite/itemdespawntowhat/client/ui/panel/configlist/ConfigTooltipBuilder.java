@@ -1,10 +1,15 @@
 package com.meteorite.itemdespawntowhat.client.ui.panel.configlist;
 
 import com.meteorite.itemdespawntowhat.config.ConfigDirection;
+import com.meteorite.itemdespawntowhat.config.WorldEffectType;
 import com.meteorite.itemdespawntowhat.config.catalogue.CatalystItems;
 import com.meteorite.itemdespawntowhat.config.catalogue.InnerFluid;
 import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.ItemToBlockConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.ItemToWorldEffectConfig;
+import com.meteorite.itemdespawntowhat.server.task.ExplosionTask;
+import com.meteorite.itemdespawntowhat.server.task.PlaceBlockTask.BlockPlaceShape;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 
@@ -66,6 +71,21 @@ public final class ConfigTooltipBuilder {
                 tooltip = tooltip.append(Component.literal("\n"))
                         .append(Component.translatable("gui.itemdespawntowhat.tooltip.inner_fluid_consume"));
             }
+        }
+
+        if (config instanceof ItemToBlockConfig blockConfig) {
+            BlockPlaceShape shape = blockConfig.getBlockPlaceShape();
+            tooltip = tooltip.append(Component.literal("\n"))
+                    .append(Component.translatable("gui.itemdespawntowhat.tooltip.block_place_shape",
+                            Component.translatable(shape.getDescriptionId())));
+        }
+
+        if (config instanceof ItemToWorldEffectConfig worldEffectConfig
+                && worldEffectConfig.getWorldEffect() == WorldEffectType.EXPLOSION) {
+            ExplosionTask.DirectionType dirType = worldEffectConfig.getExplosionDirectionType();
+            tooltip = tooltip.append(Component.literal("\n"))
+                    .append(Component.translatable("gui.itemdespawntowhat.tooltip.explosion_direction",
+                            Component.translatable(dirType.getDescriptionId())));
         }
 
         return tooltip;

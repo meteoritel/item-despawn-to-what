@@ -83,6 +83,7 @@ public class ExplosionTask implements LevelDelayTask {
                 double[] offset = downwardOffset(serverLevel);
                 if (downSwitchedToFlat) {
                     x += offset[0];
+                    y = -63;
                     z += offset[2];
                 } else {
                     x += offset[0];

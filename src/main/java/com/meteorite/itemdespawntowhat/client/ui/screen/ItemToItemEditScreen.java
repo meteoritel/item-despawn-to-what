@@ -46,7 +46,7 @@ public class ItemToItemEditScreen extends BaseConfigEditScreen<ItemToItemConfig>
     }
 
     @Override
-    protected void initValidators() {
+    protected void initCustomValidators() {
         registerValidator(resultIdInput, IdValidator::isValidResultId);
     }
 

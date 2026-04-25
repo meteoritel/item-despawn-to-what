@@ -98,7 +98,7 @@ public class ItemToBlockEditScreen extends BaseConfigEditScreen<ItemToBlockConfi
     }
 
     @Override
-    protected void initValidators() {
+    protected void initCustomValidators() {
         registerValidator(resultIdInput, () -> !enableItemBlockButton.getValue(), IdValidator::isValidBlockId);
     }
 
