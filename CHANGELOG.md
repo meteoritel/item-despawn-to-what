@@ -114,3 +114,24 @@
 
 ### 修复
 - 修复多人服务器上的一系列bug
+
+### New Features
+- **Convert to World effect**：Added world effects such as arrow rain, explosions, lightning, weather adjustments, etc.
+- **Convert to Experience Orb**：Items can now be converted into experience orbs.
+- **Tag Support**：`itemId` field now supports using item tags, and catalyst items now support tags as well.
+- **TOML Global Configuration**：Added a server-side TOML configuration file. The following parameters can now be adjusted:
+  - Tick interval between each lightning strike
+  - Tick interval between each explosion
+  - Tick interval between each arrow
+  - Tick interval between each loop of block placement tasks
+- **GUI Additions**：Added red border highlighting for invalid input fields, added tooltips to buttons, and optimized the GUI layout.
+- **Oversized JSON Packet Splitting**：Added a packet splitting strategy for saving oversized JSON strings when sending packets.
+
+### Changes
+- Removed the button entry on the main game page.The GUI must now be opened via the `/conversion_config` edit command or a shortcut key (singleplayer only), to avoid various issues caused by the server not being started.
+- Renamed `Convert to Entity` to `Convert to Mob`, now only supports mobs that inherit from the Mob class.
+- Conversions of the form `n * starting item -> m * result` are now supported.
+- Block placement now supports switching placement shapes (circles, squares; spheres, cubes).
+
+### Fixes
+- Fixed a series of bugs on multiplayer servers.

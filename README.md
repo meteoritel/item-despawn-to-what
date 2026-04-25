@@ -168,16 +168,16 @@
 ### 树苗 → 自动种下（在泥土类上，需露天）
 
 ```json
-{
-  "item": "minecraft:oak_sapling",
-  "result": "minecraft:oak_sapling",
-  "block_of_item": true,
-  "conversion_time": 30,
-  "need_outdoor": true,
+  {
+  "item": "#minecraft:saplings",
+  "conversion_time": 5,
   "surrounding_blocks": {
     "down": "#minecraft:dirt"
-  }
-}
+  },
+  "radius_limit": 6,
+  "block_of_item": true,
+  "block_place_shape": "SQUARE"
+},
 ```
 
 ### 钻石 → 经验球
@@ -185,7 +185,6 @@
 ```json
 {
   "item": "minecraft:diamond",
-  "result": "itemdespawntowhat:xp_orb",
   "conversion_time": 10,
   "xp_pre_item": 100
 }
@@ -196,9 +195,8 @@
 ```json
 {
   "item": "minecraft:ender_pearl",
-  "result": "itemdespawntowhat:world_effect",
   "conversion_time": 5,
-  "world_effect_type": "lightning_bolt"
+  "side_effect": "LIGHTNING"
 }
 ```
 
