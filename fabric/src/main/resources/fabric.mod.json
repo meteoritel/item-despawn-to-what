@@ -1,0 +1,32 @@
+{
+    "schemaVersion": 1,
+    "id": "${mod_id}",
+    "version": "${version}",
+    "name": "${mod_name}",
+    "description": "${description}",
+    "authors": [
+        "${mod_author}"
+    ],
+    "contact": {
+        "sources": "https://github.com/meteoritel/itemDespawnToWhat"
+    },
+    "license": "${license}",
+    "environment": "*",
+    "mixins": [
+        "itemdespawntowhat.mixins.json"
+    ],
+    "entrypoints": {
+        "main": [
+            "com.meteorite.itemdespawntowhat.ItemDespawnToWhat"
+        ],
+        "client": [
+            "com.meteorite.itemdespawntowhat.client.ItemDespawnToWhatClient"
+        ]
+    },
+    "depends": {
+        "fabricloader": ">=${fabric_loader_version}",
+        "fabric-api": "*",
+        "minecraft": ">=${minecraft_version}",
+        "java": ">=${java_version}"
+    }
+}

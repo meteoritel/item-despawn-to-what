@@ -1,0 +1,106 @@
+package com.meteorite.itemdespawntowhat.util;
+
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Blocks;
+
+public final class IdValidator {
+    private IdValidator() {}
+
+    // 纯字符串格式校验：非空、含 ':' 分隔符、':' 两侧均非空
+    public static boolean isValidString(String s) {
+        if (s == null || s.isBlank()) return false;
+        int colon = s.indexOf(':');
+        return colon > 0 && colon < s.length() - 1;
+    }
+
+    // ResourceLocation 实例校验：非 null、path 非空
+    public static boolean isValidResourceLocation(ResourceLocation rl) {
+        return rl != null && !rl.getPath().isEmpty();
+    }
+
+    // tag 字符串校验（以 # 开头）：去掉 # 后做格式校验 + tryParse
+    public static boolean isValidTagId(String s) {
+        if (s == null || !s.startsWith("#")) {
+            return false;
+        }
+        String inner = s.substring(1);
+        return isValidString(inner) && SafeParseUtil.parseResourceLocation(inner) != null;
+    }
+
+    // itemId 完整校验：支持 #tag 格式，普通 id 需格式合法且不为 minecraft:air
+    public static boolean isValidItemId(String s) {
+        if (!isValidString(s)) {
+            return false;
+        }
+        if (s.startsWith("#")) {
+            return isValidTagId(s);
+        }
+
+        ResourceLocation rl = SafeParseUtil.parseResourceLocation(s);
+        if (!isValidResourceLocation(rl)) return false;
+
+        return BuiltInRegistries.ITEM.get(rl) != Items.AIR;
+    }
+
+    // resultId 校验（纯格式，不查注册表，不排除 air，不支持 tag）
+    public static boolean isValidResultId(String s) {
+        return isValidString(s) && SafeParseUtil.parseResourceLocation(s) != null;
+    }
+
+    // blockId 校验：支持 #tag 格式，普通 id 需格式合法 + 注册表中存在（排除 minecraft:air）
+    public static boolean isValidBlockId(String s) {
+        if (!isValidString(s)) return false;
+
+        if (s.startsWith("#")) {
+            return isValidTagId(s);
+        }
+
+        ResourceLocation rl = SafeParseUtil.parseResourceLocation(s);
+        if (!isValidResourceLocation(rl)) return false;
+
+        return BuiltInRegistries.BLOCK.get(rl) != Blocks.AIR;
+    }
+
+    // entityId 校验：格式合法 + 注册表中存在
+    public static boolean isValidEntityId(String s) {
+        if (!isValidString(s)) return false;
+        ResourceLocation rl = SafeParseUtil.parseResourceLocation(s);
+        if (!isValidResourceLocation(rl)) return false;
+
+        return BuiltInRegistries.ENTITY_TYPE.containsKey(rl);
+    }
+
+    // fluidId 校验：格式合法 + 注册表中存在（排除 minecraft:empty）
+    public static boolean isValidFluidId(String s) {
+        if (!isValidString(s)) return false;
+        ResourceLocation rl = SafeParseUtil.parseResourceLocation(s);
+        if (!isValidResourceLocation(rl)) return false;
+
+        ResourceLocation emptyFluid = SafeParseUtil.parseResourceLocation("minecraft:empty");
+        return !rl.equals(emptyFluid) && BuiltInRegistries.FLUID.containsKey(rl);
+    }
+
+    // 逗号分隔 itemId 校验 — 用于催化剂物品输入框
+    public static boolean isValidCommaSeparatedItemId(String s) {
+        if (s == null || s.isBlank()) return false;
+        for (String part : s.split(",")) {
+            if (!isValidItemId(part.trim())) return false;
+        }
+        return true;
+    }
+
+    // 逗号分隔 mobEffectId 校验 — 用于箭雨药水效果输入框
+    public static boolean isValidCommaSeparatedMobEffectId(String s) {
+        if (s == null || s.isBlank()) return false;
+        for (String part : s.split(",")) {
+            String trimmed = part.trim();
+            if (trimmed.isEmpty()) return false;
+            ResourceLocation rl = SafeParseUtil.parseResourceLocation(trimmed);
+            if (rl == null) return false;
+            if (!BuiltInRegistries.MOB_EFFECT.containsKey(rl)) return false;
+        }
+        return true;
+    }
+}

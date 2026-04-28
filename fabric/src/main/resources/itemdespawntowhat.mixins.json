@@ -1,0 +1,13 @@
+{
+    "required": true,
+    "package": "com.meteorite.itemdespawntowhat.mixin",
+    "compatibilityLevel": "JAVA_21",
+    "mixins": [
+        "LivingEntityMixin",
+        "EntityMixin",
+        "ItemEntityMixin"
+    ],
+    "injectors": {
+        "defaultRequire": 1
+    }
+}
