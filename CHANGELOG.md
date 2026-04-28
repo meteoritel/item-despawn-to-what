@@ -135,3 +135,9 @@
 
 ### Fixes
 - Fixed a series of bugs on multiplayer servers.
+
+## [1.2.1]
+
+### 修改
+- GUI优化：完善文本框校验红框
+- fabric版本迁移

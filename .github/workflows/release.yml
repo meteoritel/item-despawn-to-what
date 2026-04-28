@@ -53,10 +53,26 @@ jobs:
           echo "Changelog extracted:"
           cat RELEASE_CHANGELOG.md
 
+      - name: Collect release jars
+        id: release_jars
+        run: |
+          mapfile -t jars < <(find fabric/build/libs neoforge/build/libs -type f -name '*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' | sort)
+
+          if [ ${#jars[@]} -eq 0 ]; then
+            echo "❌ No release jars found"
+            exit 1
+          fi
+
+          {
+            echo 'files<<EOF'
+            printf '%s\n' "${jars[@]}"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: build/libs/*.jar
+          files: ${{ steps.release_jars.outputs.files }}
           body_path: RELEASE_CHANGELOG.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

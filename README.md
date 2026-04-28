@@ -1,32 +1,237 @@
-# MultiLoader Template
+# ItemDespawnToWhat
 
-This project provides a Gradle project template that can compile Minecraft mods for multiple modloaders using a common project for the sources. This project does not require any third party libraries or dependencies. If you have any questions or want to discuss the project, please join our [Discord](https://discord.myceliummod.network).
+> 让**即将消失的掉落物**，在消失前悄悄变成别的东西。
 
-## Getting Started
+鸡肉放久了会变腐肉？鸡蛋孵出鸡？树苗自己种下去？——全都可以自定义。
 
-### IntelliJ IDEA
-This guide will show how to import the MultiLoader Template into IntelliJ IDEA. The setup process is roughly equivalent to setting up the modloaders independently and should be very familiar to anyone who has worked with their MDKs.
 
-1. Clone or download this repository to your computer.
-2. Configure the project by setting the properties in the `gradle.properties` file. You will also need to change the `rootProject.name`  property in `settings.gradle`, this should match the folder name of your project, or else IDEA may complain.
-3. Open the template's root folder as a new project in IDEA. This is the folder that contains this README.md file and the gradlew executable.
-4. If your default JVM/JDK is not Java 21 you will encounter an error when opening the project. This error is fixed by going to `File > Settings > Build, Execution, Deployment > Build Tools > Gradle > Gradle JVM` and changing the value to a valid Java 21 JVM. You will also need to set the Project SDK to Java 21. This can be done by going to `File > Project Structure > Project SDK`. Once both have been set open the Gradle tab in IDEA and click the refresh button to reload the project.
-5. Open your Run/Debug Configurations. Under the `Application` category there should now be options to run Fabric and NeoForge projects. Select one of the client options and try to run it.
-6. Assuming you were able to run the game in step 5 your workspace should now be set up.
+---
 
-### Eclipse
-While it is possible to use this template in Eclipse it is not recommended. During the development of this template multiple critical bugs and quirks related to Eclipse were found at nearly every level of the required build tools. While we continue to work with these tools to report and resolve issues support for projects like these are not there yet. For now Eclipse is considered unsupported by this project. The development cycle for build tools is notoriously slow so there are no ETAs available.
+## 模组功能
 
-## Development Guide
-When using this template the majority of your mod should be developed in the `common` project. The `common` project is compiled against the vanilla game and is used to hold code that is shared between the different loader-specific versions of your mod. The `common` project has no knowledge or access to ModLoader specific code, apis, or concepts. Code that requires something from a specific loader must be done through the project that is specific to that loader, such as the `fabric` or `neoforge` projects.
+在原版 Minecraft 中，掉落物在地面停留一段时间后会自然消失。  
+本模组允许玩家自定义物品在消失前**转化为其他内容**。
 
-Loader specific projects such as the `fabric` and `neoforge` project are used to load the `common` project into the game. These projects also define code that is specific to that loader. Loader specific projects can access all the code in the `common` project. It is important to remember that the `common` project can not access code from loader specific projects.
+你可以通过配置文件或 GUI 自定义各种转化规则，并为转化添加条件限制。
 
-## Removing Platforms and Loaders
-While this template has support for many modloaders, new loaders may appear in the future, and existing loaders may become less relevant.
 
-Removing loader specific projects is as easy as deleting the folder, and removing the `include("projectname")` line from the `settings.gradle` file.
-For example if you wanted to remove support for `forge` you would follow the following steps:
+---
 
-1. Delete the subproject folder. For example, delete `MultiLoader-Template/forge`.
-2. Remove the project from `settings.gradle`. For example, remove `include("forge")`. 
+## 五种转化类型
+
+| 类型        | 说明                  | 示例         |
+|-----------|---------------------|------------|
+| 物品 → 物品   | 掉落物消失时生成新的物品掉落物     | 鸡肉 → 腐肉    |
+| 物品 → 实体   | 掉落物消失时生成实体（生物）      | 鸡蛋 → 小鸡    |
+| 物品 → 方块   | 掉落物消失时在周围放置方块       | 树苗 → 自动种植  |
+| 物品 → 经验球  | 掉落物消失时生成经验球         | 钻石 → 100经验 |
+| 物品 → 世界效果 | 掉落物消失时触发天气/爆炸/闪电/箭雨 | 末影珍珠 → 雷击  |
+
+---
+
+## 可组合的触发条件
+
+所有条件均为**可选**，留空表示无限制。多个条件同时填写时需**全部满足**才会触发转化。
+
+| 条件       | 说明                                 |
+|----------|------------------------------------|
+| **维度**   | 仅在指定维度内触发，如主世界、下界、末地，或模组维度         |
+| **露天**   | 物品头顶到最高点之间不能有不透明方块遮挡               |
+| **周围方块** | 检测上下左右前后六个方向，支持方块 ID 或方块标签（`#` 前缀） |
+| **辅助物品** | 需要有指定物品掉落物与其处于同一格，可配置是否消耗          |
+| **浸润流体** | 物品所在格需含有指定流体（支持含水方块），可配置是否消耗       |
+| **数量上限** | 限制周围一定范围内已存在的转化结果数量（实体或方块），防止无限堆积  |
+
+---
+
+## 快速上手
+
+### 可视化配置 GUI
+
+本模组提供了简单易用的**规则编辑 GUI**，无需手写 JSON。
+
+规则全局存档共用，建议在创造档中通过GUI写规则，在生存档中使用。
+
+**打开方式：**
+
+- **快捷键**：默认未绑定，可在「选项 → 控制」中搜索 `ItemDespawnToWhat` 自行设置
+- **命令**：`/conversion_config edit`（需要 OP 权限或单人模式）
+- **主菜单按钮**：游戏主界面右上角
+
+> 如果你更熟悉 JSON，配置文件位于 `.minecraft/config/itemdespawntowhat/` 目录下，可直接手动编辑。
+
+### 使用步骤
+
+1. 打开 GUI（快捷键或命令）
+2. 选择转化类型（物品→物品/实体/方块/经验球/世界效果）
+3. 填写源物品 ID、结果 ID、转化时间（秒）
+4. 根据需要添加条件（维度、露天、周围方块、辅助物品、流体等）
+5. 点击「添加到缓存」继续添加更多规则，或点击「应用到文件」保存
+6. 执行 `/conversion_config reload` 热重载配置，无需重启服务器
+
+---
+
+## 配置详解
+
+### 通用字段
+
+| 字段                   | 说明              | 默认值     | 限制        |
+|----------------------|-----------------|---------|-----------|
+| `item`               | 触发转化的源物品 ID     | —       | 必填        |
+| `result`             | 转化结果的注册 ID      | —       | 必填        |
+| `conversion_time`    | 物品在世界停留多少秒后触发转化 | `300`   | 1 ~ 300 秒 |
+| `result_multiple`    | 每次转化的结果倍率       | `1`     | 至少为 1     |
+| `dimension`          | 限制触发的维度         | 留空不限制   | —         |
+| `need_outdoor`       | 是否要求露天环境        | `false` | —         |
+| `surrounding_blocks` | 六个方向的周围方块条件     | 留空不限制   | 支持标签      |
+| `catalyst_items`     | 辅助物品条件          | 留空不限制   | —         |
+| `inner_fluid`        | 浸润流体条件          | 留空不限制   | —         |
+
+### 物品 → 实体 专属字段
+
+| 字段             | 说明                   | 默认值      |
+|----------------|----------------------|----------|
+| `result_limit` | 周围范围内同类实体数量上限，超出则不触发 | `30`     |
+| `entity_age`   | 生成实体的年龄（负数为幼体）       | `-24000` |
+
+### 物品 → 方块 专属字段
+
+| 字段              | 说明                             | 默认值     |
+|-----------------|--------------------------------|---------|
+| `radius_limit`  | 向外扩散放置方块的最大半径                  | `6`     |
+| `block_of_item` | 开启后自动使用源物品对应的方块作为结果（源物品须为方块物品） | `false` |
+
+### 物品 → 经验球 专属字段
+
+| 字段            | 说明         | 默认值 |
+|---------------|------------|-----|
+| `xp_pre_item` | 每个物品转化的经验值 | `1` |
+
+### 物品 → 世界效果 专属字段
+
+| 字段                       | 说明        | 可选值                                                     |
+|--------------------------|-----------|---------------------------------------------------------|
+| `world_effect_type`      | 效果类型      | `rain`, `clear`, `lightning_bolt`, `explosion`, `arrow` |
+| `weather_duration_ticks` | 天气持续时间（刻） | 整数                                                      |
+| `is_thundering`          | 雷暴天气      | `true`/`false`                                          |
+| `explosion_fire`         | 爆炸是否产生火焰  | `true`/`false`                                          |
+| `explosion_power`        | 爆炸威力      | 数值                                                      |
+| `visual_only`            | 爆炸是否仅视觉效果 | `true`/`false`                                          |
+| `arrow_pickup_status`    | 箭雨是否可拾取   | `disallowed`/`allowed`/`creative_only`                  |
+| `arrow_potion_effects`   | 箭雨附加药水效果  | 药水效果列表                                                  |
+
+---
+
+## 保存与重载
+
+在 GUI 中：
+
+- 点击 **添加到缓存** 继续添加规则
+- 点击 **应用到文件** 保存已缓存的配置
+
+然后在游戏中执行：
+
+```
+/conversion_config reload
+```
+
+即可**热重载配置**，无需重启服务器。
+
+---
+
+## 配置示例（仅供参考）
+
+### 鸡肉 → 腐肉（200 秒，无条件）
+
+```json
+{
+  "item": "minecraft:chicken",
+  "result": "minecraft:rotten_flesh",
+  "conversion_time": 200
+}
+```
+
+### 鸡蛋 → 鸡（在主世界，干草块上）
+
+```json
+{
+  "item": "minecraft:egg",
+  "result": "minecraft:chicken",
+  "conversion_time": 5,
+  "dimension": "minecraft:overworld",
+  "surrounding_blocks": {
+    "down": "minecraft:hay_block"
+  },
+  "result_limit": 30
+}
+```
+
+### 树苗 → 自动种下（在泥土类上）
+
+```json
+  {
+  "item": "#minecraft:saplings",
+  "conversion_time": 5,
+  "surrounding_blocks": {
+    "down": "#minecraft:dirt"
+  },
+  "radius_limit": 6,
+  "block_of_item": true,
+  "block_place_shape": "SQUARE"
+}
+```
+
+### 钻石 → 经验球
+
+```json
+{
+  "item": "minecraft:diamond",
+  "conversion_time": 10,
+  "xp_pre_item": 100
+}
+```
+
+### 末影珍珠 → 雷击
+
+```json
+{
+  "item": "minecraft:ender_pearl",
+  "conversion_time": 5,
+  "side_effect": "LIGHTNING"
+}
+```
+
+---
+
+## 注意事项
+
+- **转化时间上限**：本模组不修改掉落物的自然消失时间，但也未设置上限，如需调整请搭配 `Custom Item Despawn Duration` 等模组使用。
+
+- **返还物品与死亡掉落物不参与转化检测**：未能完成转化而返还的掉落物、以及玩家死亡后的背包掉落物，拾取后重新丢出才会再次进入判定流程。
+
+- **辅助物品不能与源物品相同**：否则配置会被拒绝加载。例如**物品 → 物品**转化中，源物品与结果物品不能相同，防止无限循环转化。
+
+- **物品 ID 查看方法**：按 `F3 + H` 开启高级提示，鼠标悬停物品时，信息框最下方会显示注册名。
+
+---
+
+## 多人游戏
+
+- 配置文件存放于服务端，客户端连接时会自动同步规则。
+- 热重载命令需要 OP 权限。
+- 配置 GUI 和快捷键仅在**单人模式**或**本地服务端**下可用（OP 玩家可通过命令打开）。
+
+---
+
+## 命令列表
+
+| 命令                          | 权限      | 说明         |
+|-----------------------------|---------|------------|
+| `/conversion_config edit`   | OP / 单人 | 打开配置编辑 GUI |
+| `/conversion_config reload` | OP      | 热重载配置文件    |
+
+---
+
+## 开源许可
+
+本项目基于 MIT 许可证开源，欢迎自由使用。
