@@ -1,6 +1,5 @@
 package com.meteorite.itemdespawntowhat;
 
-import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.command.ConversionConfigCommand;
 import com.meteorite.itemdespawntowhat.network.EditSessionLockManager;
 import com.meteorite.itemdespawntowhat.network.handler.SaveConfigChunkAccumulator;

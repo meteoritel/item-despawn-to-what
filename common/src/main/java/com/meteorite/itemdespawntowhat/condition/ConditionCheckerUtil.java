@@ -2,14 +2,10 @@ package com.meteorite.itemdespawntowhat.condition;
 
 import com.meteorite.itemdespawntowhat.condition.checker.*;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
 import java.util.*;
 
 // 此类用来统一管理所有的条件检查器
 public class ConditionCheckerUtil {
-    private static final Logger LOGGER = LogManager.getLogger();
 
     // 核心方法：从通用条件 Map 构建组合条件检查器（配置文件加载场景）
     public static ConditionChecker buildCombinedChecker (Map<String, String> conditions) {

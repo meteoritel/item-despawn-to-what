@@ -15,12 +15,12 @@ public class ConfigEditClientPayloadRegistrar {
         PayloadTypeRegistry.playS2C().register(ForceCloseEditorPayload.TYPE, ForceCloseEditorPayload.STREAM_CODEC);
 
         ClientPlayNetworking.registerGlobalReceiver(OpenGuiPayload.TYPE,
-                ConfigEditClientPayloadHandler::handleOpenGui);
+                (payload, context) -> ConfigEditClientPayloadHandler.handleOpenGui());
 
         ClientPlayNetworking.registerGlobalReceiver(ConfigSnapshotPayload.TYPE,
-                ConfigEditClientPayloadHandler::handleConfigSnapshot);
+                (payload, context) -> ConfigEditClientPayloadHandler.handleConfigSnapshot(payload));
 
         ClientPlayNetworking.registerGlobalReceiver(ForceCloseEditorPayload.TYPE,
-                ConfigEditClientPayloadHandler::handleForceCloseEditor);
+                (payload, context) -> ConfigEditClientPayloadHandler.handleForceCloseEditor());
     }
 }

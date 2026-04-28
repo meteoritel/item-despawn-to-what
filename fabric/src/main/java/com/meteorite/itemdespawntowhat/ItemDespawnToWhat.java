@@ -58,9 +58,8 @@ public class ItemDespawnToWhat implements ModInitializer {
             }
         });
 
-        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
-            ConversionConfigCommand.register(dispatcher);
-        });
+        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
+                ConversionConfigCommand.register(dispatcher));
 
         ItemConversionEvent.register();
         ConfigEditPayloadRegistrar.register();
