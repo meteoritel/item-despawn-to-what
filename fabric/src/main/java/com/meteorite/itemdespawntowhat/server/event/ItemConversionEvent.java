@@ -28,12 +28,14 @@ public class ItemConversionEvent {
 
     private static boolean registered;
 
+    // 转化的逻辑写在物品实体自己的tick中，世界tick仅用来打标记
     public static void register() {
         if (registered) {
             return;
         }
         registered = true;
 
+        // 实体加入世界事件
         ServerEntityEvents.ENTITY_LOAD.register((entity, world) -> {
             if (world.isClientSide() || !(entity instanceof ItemEntity itemEntity)) {
                 return;
@@ -60,6 +62,7 @@ public class ItemConversionEvent {
             LOGGER.debug(LOG_MARKER, "已标记物品待条件检查: {}", itemId);
         });
 
+        // 当前tick结束执行延迟事件tick
         ServerTickEvents.END_WORLD_TICK.register(world -> {
             if (world instanceof ServerLevel serverLevel) {
                 LevelTaskManager.tick(serverLevel);

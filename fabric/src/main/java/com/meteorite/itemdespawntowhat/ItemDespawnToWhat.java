@@ -27,11 +27,14 @@ public class ItemDespawnToWhat implements ModInitializer {
         ServerLifecycleEvents.SERVER_STARTING.register(server -> {
             LOGGER.info("Server starting - loading config and initializing caches");
             FabricModConfig.load();
+
+            // 加载可配置内容
             Constants.lightningIntervalTicks = FabricModConfig.getLightningIntervalTicks();
             Constants.explosionIntervalTicks = FabricModConfig.getExplosionIntervalTicks();
             Constants.arrowIntervalTicks = FabricModConfig.getArrowIntervalTicks();
             Constants.blockPlaceIntervalTicks = FabricModConfig.getBlockPlaceIntervalTicks();
             Constants.entityScaleOverrides = java.util.List.copyOf(FabricModConfig.getEntityScaleOverrides());
+
             if (!ConfigExtractorManager.isInitialized()) {
                 ConfigExtractorManager.initialize(Services.PLATFORM.getConfigDir());
                 LOGGER.info("Caches initialized via ConfigExtractorManager");
@@ -61,6 +64,7 @@ public class ItemDespawnToWhat implements ModInitializer {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
                 ConversionConfigCommand.register(dispatcher));
 
+        // 注册事件监听
         ItemConversionEvent.register();
         ConfigEditPayloadRegistrar.register();
         EditSessionTimeoutHandler.register();

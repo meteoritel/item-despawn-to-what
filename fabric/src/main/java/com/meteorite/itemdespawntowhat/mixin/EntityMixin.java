@@ -18,7 +18,6 @@ public abstract class EntityMixin {
     )
     private boolean itemdespawntowhat$lockDeathDrop(Level level, Entity entity) {
         if (this instanceof DeathLootState deathLootState && deathLootState.itemdespawntowhat$isDeathLootActive() && entity instanceof ItemEntity itemEntity) {
-            // Death drops stay locked for their whole lifetime.
             itemEntity.addTag(Constants.CHECK_LOCK_TAG);
         }
         return level.addFreshEntity(entity);
