@@ -16,8 +16,6 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.FluidState;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
 
@@ -25,7 +23,6 @@ public class InnerFluid implements ConditionSerializable<InnerFluid> {
     private static final Gson GSON = new GsonBuilder()
             .disableHtmlEscaping()
             .create();
-    private static final Logger LOGGER = LogManager.getLogger();
 
     @SerializedName("inner_fluid")
     private final String fluidId;
