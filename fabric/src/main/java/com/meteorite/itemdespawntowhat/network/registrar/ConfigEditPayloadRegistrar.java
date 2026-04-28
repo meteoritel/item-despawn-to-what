@@ -22,7 +22,7 @@ public class ConfigEditPayloadRegistrar {
 
         ServerPlayNetworking.registerGlobalReceiver(ReleaseEditSessionPayload.TYPE,
                 (payload, context) -> context.server().execute(() ->
-                        ConfigEditServerPayloadHandler.handleReleaseEditSession(payload, context)));
+                        ConfigEditServerPayloadHandler.handleReleaseEditSession(context)));
 
         ServerPlayNetworking.registerGlobalReceiver(SaveConfigPayload.TYPE,
                 (payload, context) -> context.server().execute(() ->

@@ -25,15 +25,15 @@ public abstract class AbstractConditionChecker implements ConditionChecker {
     @Override
     public abstract boolean checkCondition(ItemEntity itemEntity, ServerLevel level);
 
-    protected String getConditionValue(Map<String, String> conditions, String defaultValue) {
+    protected String getConditionValue(Map<String, String> conditions) {
         String value = conditions.get(getConditionKey());
-        return value != null ? value : defaultValue;
+        return value != null ? value : "";
     }
 
-    protected boolean getConditionBoolean(Map<String, String> conditions, boolean defaultValue) {
+    protected boolean getConditionBoolean(Map<String, String> conditions) {
         String value = conditions.get(getConditionKey());
         if (value == null || value.isEmpty()) {
-            return defaultValue;
+            return false;
         }
         return Boolean.parseBoolean(value);
     }

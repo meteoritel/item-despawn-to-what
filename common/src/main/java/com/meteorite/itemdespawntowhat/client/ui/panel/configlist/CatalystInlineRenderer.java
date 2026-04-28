@@ -192,12 +192,11 @@ public final class CatalystInlineRenderer {
         List<CatalystItems.CatalystEntry> entries = getCatalystEntries(config);
         int dropdownWidth = getDropdownWidth(mc, config);
         int dropdownHeight = entries.size() * DROPDOWN_ENTRY_HEIGHT + DROPDOWN_PADDING * 2;
-        int dropdownX = catalystIconX;
         int dropdownY = catalystIconY + ICON_SIZE + 2;
         if (dropdownY + dropdownHeight > parentBottom) {
             dropdownY = Math.max(parentBottom - dropdownHeight, parentY);
         }
-        return mouseX >= dropdownX && mouseX <= dropdownX + dropdownWidth
+        return mouseX >= catalystIconX && mouseX <= catalystIconX + dropdownWidth
                 && mouseY >= dropdownY && mouseY <= dropdownY + dropdownHeight;
     }
 }

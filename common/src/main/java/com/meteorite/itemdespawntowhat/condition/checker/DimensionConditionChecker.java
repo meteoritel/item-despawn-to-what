@@ -21,7 +21,7 @@ public class DimensionConditionChecker extends AbstractConditionChecker {
 
     @Override
     public AbstractConditionChecker parse(Map<String, String> conditions) {
-        String dimensionStr = getConditionValue(conditions, "");
+        String dimensionStr = getConditionValue(conditions);
 
         if (dimensionStr.isBlank()) {
             dimensionKey = null;

@@ -60,7 +60,7 @@ public final class ConfigEditServerPayloadHandler {
         }
     }
 
-    public static void handleReleaseEditSession(Object payload, ServerPlayNetworking.Context context) {
+    public static void handleReleaseEditSession(ServerPlayNetworking.Context context) {
         if (context.player() instanceof ServerPlayer serverPlayer) {
             EditSessionLockManager.release(serverPlayer);
             SaveConfigChunkAccumulator.clear(serverPlayer);

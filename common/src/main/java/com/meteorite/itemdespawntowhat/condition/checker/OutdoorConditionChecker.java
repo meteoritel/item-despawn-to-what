@@ -30,7 +30,7 @@ public class OutdoorConditionChecker extends AbstractConditionChecker{
     @Override
     public AbstractConditionChecker parse(Map<String, String> conditions) {
         // 如果不需要露天检查，返回null表示跳过此条件
-        if (!getConditionBoolean(conditions, false)) {
+        if (!getConditionBoolean(conditions)) {
             return null;
         }
         return this;

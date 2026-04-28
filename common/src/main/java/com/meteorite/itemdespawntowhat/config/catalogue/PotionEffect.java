@@ -18,13 +18,11 @@ public class PotionEffect {
 
     // 持续时间，默认 100t = 5s
     @SerializedName("duration")
-    private int duration = 100;
+    private int duration;
 
     // 效果等级（0 = I 级），默认 0
     @SerializedName("amplifier")
-    private int amplifier = 0;
-
-    public PotionEffect() {}
+    private int amplifier;
 
     public PotionEffect(String effectId, int duration, int amplifier) {
         this.effectId = effectId;

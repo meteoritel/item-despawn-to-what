@@ -92,10 +92,6 @@ public final class ConfigEditScreenSuggestionController {
         guiGraphics.pose().popPose();
     }
 
-    public List<SuggestionWidget> getWidgets() {
-        return suggestionWidgets;
-    }
-
     private boolean isMouseOverBox(EditBox box, double mouseX, double mouseY) {
         return mouseX >= box.getX() && mouseX <= box.getX() + box.getWidth()
                 && mouseY >= box.getY() && mouseY <= box.getY() + box.getHeight();
