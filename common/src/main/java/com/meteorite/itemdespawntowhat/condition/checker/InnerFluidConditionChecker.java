@@ -77,21 +77,27 @@ public class InnerFluidConditionChecker extends AbstractConditionChecker{
             return false;
         }
 
-        // 比对流体类型
         Fluid fluid = fluidState.getType();
         ResourceLocation fluidId = BuiltInRegistries.FLUID.getKey(fluid);
 
-        if (!targetFluidId.equals(fluidId)) {
-            LOGGER.debug("InnerFluid check failed at {}: expected {} but found {}",
-                    pos, targetFluidId, fluidId);
-            return false;
-        }
-
-        // 要求必须是流体源头，额外校验
-        if (requireSource && !fluidState.isSource()) {
-            LOGGER.debug("InnerFluid check failed at {}: fluid {} is flowing, source required",
-                    pos, fluidId);
-            return false;
+        if (requireSource) {
+            if (!fluidState.isSource()) {
+                LOGGER.debug("InnerFluid check failed at {}: fluid {} is flowing, source required",
+                        pos, fluidId);
+                return false;
+            }
+            if (!targetFluidId.equals(fluidId)) {
+                LOGGER.debug("InnerFluid check failed at {}: expected source fluid {} but found {}",
+                        pos, targetFluidId, fluidId);
+                return false;
+            }
+        } else {
+            Fluid targetFluid = BuiltInRegistries.FLUID.get(targetFluidId);
+            if (!fluid.isSame(targetFluid)) {
+                LOGGER.debug("InnerFluid check failed at {}: expected fluid family {} but found {}",
+                        pos, targetFluidId, fluidId);
+                return false;
+            }
         }
 
         LOGGER.debug("InnerFluid check passed at {}: fluid={}, isSource={}",

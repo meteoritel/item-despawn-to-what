@@ -76,9 +76,7 @@ public class InnerFluid implements ConditionSerializable<InnerFluid> {
         }
 
         BlockPos pos = itemEntity.blockPosition();
-        BlockState blockState = level.getBlockState(pos);
-        FluidState fluidState = blockState.getFluidState();
-
+        FluidState fluidState = level.getFluidState(pos);
         if (fluidState.isEmpty()) {
             return;
         }
@@ -87,34 +85,31 @@ public class InnerFluid implements ConditionSerializable<InnerFluid> {
         if (fluidRl == null) {
             return;
         }
+
         Fluid targetFluid = BuiltInRegistries.FLUID.get(fluidRl);
         if (!fluidState.getType().isSame(targetFluid)) {
             return;
         }
-
-        Block block = blockState.getBlock();
-
-        // 普通流体方块，直接置空
-        if (block instanceof LiquidBlock) {
-            // 直接替换为空气，只影响当前这一格
-            level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+        if (requireSource && !fluidState.isSource()) {
             return;
         }
 
-        // 含水方块，取走流体
-        if (block instanceof LiquidBlockContainer) {
-            if (blockState.hasProperty(BlockStateProperties.WATERLOGGED)) {
-                level.setBlock(pos,
-                        blockState.setValue(BlockStateProperties.WATERLOGGED, false),
-                        Block.UPDATE_ALL
-                );
-                return;
-            }
+        BlockState blockState = level.getBlockState(pos);
+
+        // 含水方块：移除含水状态，保留方块本身
+        if (blockState.hasProperty(BlockStateProperties.WATERLOGGED) && blockState.getValue(BlockStateProperties.WATERLOGGED)) {
+            level.setBlock(pos,
+                    blockState.setValue(BlockStateProperties.WATERLOGGED, false),
+                    Block.UPDATE_ALL
+            );
+            return;
         }
 
-        // 当无法识别时，跳过
-        LOGGER.warn("Could not consume fluid {} at {}: unrecognized block type {}",
-                fluidId, pos, block.getDescriptionId());
+        // 流体方块（水/熔岩源头或流动）：直接设为空气
+        // 非流体方块但包含流体（气泡柱、海带等依赖流体存在的方块）：
+        // 流体状态非空，但方块本身既不是 LiquidBlock 也没有含水属性，
+        // 移除整个方块
+        level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
     }
 
 
