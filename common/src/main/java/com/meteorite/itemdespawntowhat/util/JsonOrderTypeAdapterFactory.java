@@ -35,7 +35,7 @@ public class JsonOrderTypeAdapterFactory implements TypeAdapterFactory {
         // 获取默认适配器，用于反序列化
         TypeAdapter<T> defaultAdapter = gson.getDelegateAdapter(this, type);
 
-        return new TypeAdapter<T>() {
+        return new TypeAdapter<>() {
             @Override
             public void write(JsonWriter out, T value) throws IOException {
                 if (value == null) {

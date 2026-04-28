@@ -34,10 +34,6 @@ public class ItemToBlockConfig extends BaseConversionConfig{
         super(ConfigType.ITEM_TO_BLOCK);
     }
 
-    public ItemToBlockConfig(String item, String result) {
-        super(ConfigType.ITEM_TO_BLOCK, item, result);
-    }
-
     // ========== 缓存与校验 ========== //
     @Override
     protected void initResultCache() {

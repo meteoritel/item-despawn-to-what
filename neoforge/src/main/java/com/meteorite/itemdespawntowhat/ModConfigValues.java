@@ -1,7 +1,5 @@
 package com.meteorite.itemdespawntowhat;
 
-import net.minecraft.resources.ResourceLocation;
-import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
 import java.util.List;
@@ -63,17 +61,4 @@ public class ModConfigValues {
 
         SPEC = builder.build();
     }
-
-    public static float getEntityScale(ResourceLocation id, float defaultScale) {
-        String prefix = id.toString() + "=";
-        for (String entry : ENTITY_SCALE_OVERRIDES.get()) {
-            // 去除所有空格
-            String cleanEntry = entry.replaceAll("\\s+", "");
-            if (cleanEntry.startsWith(prefix)) {
-                return SafeParseUtil.parseFloat(cleanEntry.substring(prefix.length()).trim(), defaultScale);
-            }
-        }
-        return defaultScale;
-    }
-
 }
