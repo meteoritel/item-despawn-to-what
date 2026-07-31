@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.network.registrar;
 
 import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
-import com.meteorite.itemdespawntowhat.network.handler.ConfigEditClientPayloadHandler;
+import com.meteorite.itemdespawntowhat.client.network.ConfigEditClientPayloadHandler;
 import com.meteorite.itemdespawntowhat.network.payload.s2c.ConfigSnapshotPayload;
 import com.meteorite.itemdespawntowhat.network.payload.s2c.ForceCloseEditorPayload;
 import com.meteorite.itemdespawntowhat.network.payload.s2c.OpenGuiPayload;
@@ -24,17 +24,17 @@ public class ConfigEditClientPayloadRegistrar {
         registrar.playToClient(
                 OpenGuiPayload.TYPE,
                 OpenGuiPayload.STREAM_CODEC,
-                (payload, context) -> ConfigEditClientPayloadHandler.handleOpenGui(context)
+                (payload, context) -> ConfigEditClientPayloadHandler.handleOpenGui()
         );
         registrar.playToClient(
                 ConfigSnapshotPayload.TYPE,
                 ConfigSnapshotPayload.STREAM_CODEC,
-                ConfigEditClientPayloadHandler::handleConfigSnapshot
+                (payload, context) -> ConfigEditClientPayloadHandler.handleConfigSnapshot(payload)
         );
         registrar.playToClient(
                 ForceCloseEditorPayload.TYPE,
                 ForceCloseEditorPayload.STREAM_CODEC,
-                (payload, context) -> ConfigEditClientPayloadHandler.handleForceCloseEditor(context)
+                (payload, context) -> ConfigEditClientPayloadHandler.handleForceCloseEditor()
         );
     }
 }

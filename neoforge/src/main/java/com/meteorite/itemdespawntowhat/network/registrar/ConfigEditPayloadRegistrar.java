@@ -25,7 +25,7 @@ public class ConfigEditPayloadRegistrar {
                 RequestConfigSnapshotPayload.TYPE,
                 RequestConfigSnapshotPayload.STREAM_CODEC,
                 (payload, context) ->
-                        context.enqueueWork(() -> ConfigEditServerPayloadHandler.handleConfigSnapshotRequest(payload, context))
+                        context.enqueueWork(() -> ConfigEditServerPayloadHandler.handleConfigSnapshotRequest(payload, context.player()))
         );
 
         // 客户端关闭编辑会话时释放服务端锁。
@@ -33,7 +33,7 @@ public class ConfigEditPayloadRegistrar {
                 ReleaseEditSessionPayload.TYPE,
                 ReleaseEditSessionPayload.STREAM_CODEC,
                 (payload, context) ->
-                        context.enqueueWork(() -> ConfigEditServerPayloadHandler.handleReleaseEditSession(context))
+                        context.enqueueWork(() -> ConfigEditServerPayloadHandler.handleReleaseEditSession(context.player()))
         );
 
         // 客户端发包到服务端，服务端保存配置并刷新缓存。
@@ -41,7 +41,7 @@ public class ConfigEditPayloadRegistrar {
                 SaveConfigPayload.TYPE,
                 SaveConfigPayload.STREAM_CODEC,
                 (payload, context) ->
-                        context.enqueueWork(() -> ConfigEditServerPayloadHandler.handleSaveConfig(payload, context))
+                        context.enqueueWork(() -> ConfigEditServerPayloadHandler.handleSaveConfig(payload, context.player()))
         );
 
         // 超长 JSON 走分包保存，服务端按 transferId 重组后复用同一保存流程。
@@ -49,7 +49,7 @@ public class ConfigEditPayloadRegistrar {
                 SaveConfigChunkPayload.TYPE,
                 SaveConfigChunkPayload.STREAM_CODEC,
                 (payload, context) ->
-                        context.enqueueWork(() -> ConfigEditServerPayloadHandler.handleSaveConfigChunk(payload, context))
+                        context.enqueueWork(() -> ConfigEditServerPayloadHandler.handleSaveConfigChunk(payload, context.player()))
         );
     }
 }

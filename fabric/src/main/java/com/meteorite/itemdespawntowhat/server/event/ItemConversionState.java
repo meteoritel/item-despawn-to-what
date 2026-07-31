@@ -1,5 +1,8 @@
 package com.meteorite.itemdespawntowhat.server.event;
 
+/**
+ * Fabric ItemEntity Mixin 持有的转换状态。
+ */
 public interface ItemConversionState {
 
     boolean itemdespawntowhat$isTracked();
@@ -17,15 +20,4 @@ public interface ItemConversionState {
     boolean itemdespawntowhat$isConversionLocked();
 
     void itemdespawntowhat$setConversionLocked(boolean locked);
-
-    default void itemdespawntowhat$resetProgress() {
-        itemdespawntowhat$setCheckTimer(0);
-        itemdespawntowhat$setSelectedConfigId("");
-        itemdespawntowhat$setConversionLocked(false);
-    }
-
-    default void itemdespawntowhat$clearConversionState() {
-        itemdespawntowhat$setTracked(false);
-        itemdespawntowhat$resetProgress();
-    }
 }

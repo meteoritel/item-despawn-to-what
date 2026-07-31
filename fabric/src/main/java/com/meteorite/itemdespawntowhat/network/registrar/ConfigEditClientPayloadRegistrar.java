@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.network.registrar;
 
-import com.meteorite.itemdespawntowhat.network.handler.ConfigEditClientPayloadHandler;
+import com.meteorite.itemdespawntowhat.client.network.ConfigEditClientPayloadHandler;
 import com.meteorite.itemdespawntowhat.network.payload.s2c.ConfigSnapshotPayload;
 import com.meteorite.itemdespawntowhat.network.payload.s2c.ForceCloseEditorPayload;
 import com.meteorite.itemdespawntowhat.network.payload.s2c.OpenGuiPayload;

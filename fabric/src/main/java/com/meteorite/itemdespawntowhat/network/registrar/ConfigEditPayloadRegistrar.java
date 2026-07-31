@@ -18,18 +18,18 @@ public class ConfigEditPayloadRegistrar {
 
         ServerPlayNetworking.registerGlobalReceiver(RequestConfigSnapshotPayload.TYPE,
                 (payload, context) -> context.server().execute(() ->
-                        ConfigEditServerPayloadHandler.handleConfigSnapshotRequest(payload, context)));
+                        ConfigEditServerPayloadHandler.handleConfigSnapshotRequest(payload, context.player())));
 
         ServerPlayNetworking.registerGlobalReceiver(ReleaseEditSessionPayload.TYPE,
                 (payload, context) -> context.server().execute(() ->
-                        ConfigEditServerPayloadHandler.handleReleaseEditSession(context)));
+                        ConfigEditServerPayloadHandler.handleReleaseEditSession(context.player())));
 
         ServerPlayNetworking.registerGlobalReceiver(SaveConfigPayload.TYPE,
                 (payload, context) -> context.server().execute(() ->
-                        ConfigEditServerPayloadHandler.handleSaveConfig(payload, context)));
+                        ConfigEditServerPayloadHandler.handleSaveConfig(payload, context.player())));
 
         ServerPlayNetworking.registerGlobalReceiver(SaveConfigChunkPayload.TYPE,
                 (payload, context) -> context.server().execute(() ->
-                        ConfigEditServerPayloadHandler.handleSaveConfigChunk(payload, context)));
+                        ConfigEditServerPayloadHandler.handleSaveConfigChunk(payload, context.player())));
     }
 }
