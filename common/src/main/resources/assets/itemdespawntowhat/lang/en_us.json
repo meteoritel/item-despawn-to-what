@@ -8,6 +8,9 @@
   "gui.itemdespawntowhat.apply_to_file": "Apply to file",
   "gui.itemdespawntowhat.keybind.disabled.multiplayer": "The shortcut is disabled on servers.",
   "gui.itemdespawntowhat.edit.locked": "Another player is already editing.",
+  "gui.itemdespawntowhat.edit.permission_denied": "You do not have permission to edit server configs.",
+  "gui.itemdespawntowhat.edit.session_invalid": "Your config edit session is no longer valid.",
+  "gui.itemdespawntowhat.edit.payload_too_large": "The config data is too large to save.",
   "gui.itemdespawntowhat.command.reload.success": "Conversion configs reloaded.",
 
   "gui.itemdespawntowhat.config_selection.title": "Config selection",

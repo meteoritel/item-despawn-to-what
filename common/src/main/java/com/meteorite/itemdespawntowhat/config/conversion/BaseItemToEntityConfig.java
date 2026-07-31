@@ -1,12 +1,16 @@
 package com.meteorite.itemdespawntowhat.config.conversion;
 
 import com.google.gson.annotations.SerializedName;
+import com.meteorite.itemdespawntowhat.config.ConversionLimits;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.phys.AABB;
 
+/**
+ * 带附近结果数量限制的实体类转换配置基类。
+ */
 public abstract class BaseItemToEntityConfig extends BaseConversionConfig{
 
     @SerializedName("result_limit")
@@ -53,6 +57,16 @@ public abstract class BaseItemToEntityConfig extends BaseConversionConfig{
     // 子类重写实现具体的实体/物品计数逻辑
     protected int countNearbyResult(ServerLevel level, BlockPos pos){
         return 0;
+    }
+
+    @Override
+    protected boolean additionalCheck() {
+        if (resultLimit <= 0 || resultLimit > ConversionLimits.MAX_RESULT_LIMIT) {
+            LOGGER.warn("resultLimit should be in range [1, {}], current is {}",
+                    ConversionLimits.MAX_RESULT_LIMIT, resultLimit);
+            return false;
+        }
+        return true;
     }
 
     // ========== setter & getter ========== //

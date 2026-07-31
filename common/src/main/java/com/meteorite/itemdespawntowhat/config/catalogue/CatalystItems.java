@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.annotations.SerializedName;
 import com.meteorite.itemdespawntowhat.condition.ConditionSerializable;
+import com.meteorite.itemdespawntowhat.config.ConversionLimits;
 import com.meteorite.itemdespawntowhat.util.IdValidator;
 import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import com.meteorite.itemdespawntowhat.util.TagResolver;
@@ -21,6 +22,9 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.*;
 
+/**
+ * 催化剂条件、轮数计算与世界物品消耗逻辑。
+ */
 public class CatalystItems implements ConditionSerializable<CatalystItems> {
     private static final Gson GSON = new GsonBuilder()
             .disableHtmlEscaping()
@@ -61,24 +65,11 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
 
     // ========== 条件检测方法 ========== //
     // 检查是否存在完整的一套催化剂。
-    public boolean checkCondition(Map<Item, Integer> snapshot) {
+    public boolean checkCondition(Map<Item, Integer> snapshot, int sourceMultiple) {
         if (!hasAnyCatalyst()) {
             return true;
         }
-        for (CatalystEntry entry : catalystList) {
-            int available;
-            if (entry.isTagEntry()) {
-                available = entry.getTagItems().stream()
-                        .mapToInt(item -> snapshot.getOrDefault(item, 0))
-                        .sum();
-            } else {
-                available = snapshot.getOrDefault(entry.getItem(), 0);
-            }
-            if (available < entry.count()) {
-                return false;
-            }
-        }
-        return true;
+        return canAllocateRounds(snapshot, 1, Math.max(1, sourceMultiple));
     }
 
     // 统计起始物品所在格子内（排除自己）各物品的总数量
@@ -101,7 +92,7 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
         for (ItemEntity e : nearby) {
             ItemStack stack = e.getItem();
             if (!stack.isEmpty()) {
-                counts.merge(stack.getItem(), stack.getCount(), Integer::sum);
+                counts.merge(stack.getItem(), stack.getCount(), CatalystItems::saturatedAdd);
             }
         }
         return counts;
@@ -160,28 +151,83 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
         return remaining;
     }
 
-    // 计算催化剂能支持的最大转化轮数（消耗模式下每轮每条目需要 entry.count() 个）
-    public int getMaxConvertibleRounds(ItemEntity triggerEntity) {
+    // 计算催化剂能支持的最大转化轮数，每轮会消耗 sourceMultiple 个源物品
+    public int getMaxConvertibleRounds(ItemEntity triggerEntity, int sourceMultiple) {
         if (!hasAnyCatalyst() || !catalystConsume) {
             return Integer.MAX_VALUE;
         }
         Map<Item, Integer> snapshot = collectNearbyItemCounts(triggerEntity);
+        int normalizedSourceMultiple = Math.max(1, sourceMultiple);
         int maxRounds = Integer.MAX_VALUE;
         for (CatalystEntry entry : catalystList) {
-            int available;
-            if (entry.isTagEntry()) {
-                available = entry.getTagItems().stream()
-                        .mapToInt(item -> snapshot.getOrDefault(item, 0))
-                        .sum();
-            } else {
-                available = snapshot.getOrDefault(entry.getItem(), 0);
-            }
-            int possible = available / entry.count();
+            int available = getAvailableCount(entry, snapshot);
+            int requiredPerRound = entry.count() * normalizedSourceMultiple;
+            int possible = available / requiredPerRound;
             if (possible < maxRounds) {
                 maxRounds = possible;
             }
         }
-        return Math.max(0, maxRounds);
+
+        int low = 0;
+        int high = Math.max(0, maxRounds);
+        while (low < high) {
+            int middle = low + (high - low + 1) / 2;
+            if (canAllocateRounds(snapshot, middle, normalizedSourceMultiple)) {
+                low = middle;
+            } else {
+                high = middle - 1;
+            }
+        }
+        return low;
+    }
+
+    private boolean canAllocateRounds(Map<Item, Integer> snapshot, int rounds, int sourceMultiple) {
+        Map<Item, Integer> remainingCounts = new HashMap<>(snapshot);
+        for (CatalystEntry entry : catalystList) {
+            long requiredLong = (long) entry.count() * sourceMultiple * rounds;
+            if (requiredLong > Integer.MAX_VALUE) {
+                return false;
+            }
+            int required = (int) requiredLong;
+            if (entry.isTagEntry()) {
+                for (Item item : entry.getTagItems()) {
+                    int available = remainingCounts.getOrDefault(item, 0);
+                    int consumed = Math.min(available, required);
+                    required -= consumed;
+                    remainingCounts.put(item, available - consumed);
+                    if (required == 0) {
+                        break;
+                    }
+                }
+            } else {
+                Item item = entry.getItem();
+                int available = remainingCounts.getOrDefault(item, 0);
+                int consumed = Math.min(available, required);
+                required -= consumed;
+                remainingCounts.put(item, available - consumed);
+            }
+            if (required > 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static int getAvailableCount(CatalystEntry entry, Map<Item, Integer> snapshot) {
+        if (!entry.isTagEntry()) {
+            return snapshot.getOrDefault(entry.getItem(), 0);
+        }
+
+        int available = 0;
+        for (Item item : entry.getTagItems()) {
+            available = saturatedAdd(available, snapshot.getOrDefault(item, 0));
+        }
+        return available;
+    }
+
+    private static int saturatedAdd(int left, int right) {
+        long sum = (long) left + right;
+        return sum >= Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) sum;
     }
 
     // ========== 工具方法 ========== //
@@ -211,7 +257,9 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
     }
 
     // ========== 内部条目类 ========== //
-    // 当起始物品为1时需要的催化剂物品的种类和数量
+    /**
+     * 单种催化剂物品或物品标签及其单位源物品需求量。
+     */
     public static final class CatalystEntry {
         @SerializedName("item")
         private final String itemId;
@@ -238,7 +286,8 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
         }
 
         public int getRequiredCount(int startItemCount) {
-            return count() * Math.max(1, startItemCount);
+            long required = (long) count() * Math.max(1, startItemCount);
+            return required >= Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) required;
         }
 
         public boolean isTagEntry() {
@@ -246,7 +295,9 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
         }
 
         public boolean isValid() {
-            return IdValidator.isValidItemId(itemId) && count >= 1;
+            return IdValidator.isValidItemId(itemId)
+                    && count >= 1
+                    && count <= ConversionLimits.MAX_CATALYST_ENTRY_COUNT;
         }
 
         private ResourceLocation parseItemRl() {

@@ -24,6 +24,9 @@ import java.util.*;
 
 import static com.meteorite.itemdespawntowhat.ItemDespawnToWhat.MOD_ID;
 
+/**
+ * NeoForge 服务端物品转换事件与周期检查入口。
+ */
 @EventBusSubscriber(modid = MOD_ID)
 public class ItemConversionEvent {
     private static final Logger LOGGER = LogManager.getLogger();
@@ -116,14 +119,35 @@ public class ItemConversionEvent {
                 ? null
                 : ConfigExtractorManager.getConfigByInternalId(selectedConfigId);
 
-        // 如果没有选定配置，尝试选择第一个匹配的配置
         if (selectedConfig == null) {
-            selectedConfig = selectFirstMatchingConfig(itemEntity, serverLevel, itemId);
+            // 没有选定配置，选择复杂度最高的匹配配置
+            selectedConfig = selectBestMatchingConfig(itemEntity, serverLevel, itemId);
             if (selectedConfig == null) {
                 return;
             }
             selectedConfigId = selectedConfig.getInternalId();
             itemEntity.getPersistentData().putString(SELECTED_CONFIG_TAG, selectedConfigId);
+        } else {
+            // 已有选中配置，检查是否可能被更高复杂度配置替代
+            int maxComplexity = ConfigExtractorManager.getMaxComplexityForItem(itemId);
+            if (selectedConfig.computeComplexity() < maxComplexity) {
+                // 未达到最高复杂度，每次循环重新扫描以发现更优配置
+                BaseConversionConfig bestConfig = selectBestMatchingConfig(itemEntity, serverLevel, itemId);
+                if (bestConfig == null) {
+                    itemEntity.getPersistentData().putInt(TIMER_TAG, 0);
+                    itemEntity.getPersistentData().remove(SELECTED_CONFIG_TAG);
+                    return;
+                }
+                if (!bestConfig.getInternalId().equals(selectedConfigId)) {
+                    // 切换到更高复杂度配置，重置计时器
+                    selectedConfig = bestConfig;
+                    selectedConfigId = bestConfig.getInternalId();
+                    itemEntity.getPersistentData().putString(SELECTED_CONFIG_TAG, selectedConfigId);
+                    itemEntity.getPersistentData().putInt(TIMER_TAG, 0);
+                    LOGGER.debug("Switched to higher complexity config {} for item {}", selectedConfigId, itemId);
+                }
+            }
+            // 复杂度已达上限，锁定模式：仅依赖下方的条件检查
         }
 
         // 当前物品实体的数量至少满足最低转化需要的数量
@@ -166,46 +190,51 @@ public class ItemConversionEvent {
             return;
         }
 
-        // 执行转化
-        performConversion(itemEntity, selectedConfig, serverLevel);
-
-        // 清除检查标记
-        itemEntity.getPersistentData().remove(CHECK_TAG);
-        itemEntity.getPersistentData().remove(TIMER_TAG);
-        itemEntity.getPersistentData().remove(SELECTED_CONFIG_TAG);
+        // 只有实际完成转化后才清除检查标记
+        if (performConversion(itemEntity, selectedConfig, serverLevel)) {
+            itemEntity.getPersistentData().remove(CHECK_TAG);
+            itemEntity.getPersistentData().remove(TIMER_TAG);
+            itemEntity.getPersistentData().remove(SELECTED_CONFIG_TAG);
+        }
     }
 
-    // 当物品查找到满足的第一个条件时，便不会再检测其他条件，直到该条件不再满足
-    private static BaseConversionConfig selectFirstMatchingConfig(ItemEntity itemEntity, ServerLevel serverLevel, ResourceLocation itemId) {
+    // 选择当前满足条件的配置中复杂度最高的那个
+    private static BaseConversionConfig selectBestMatchingConfig(ItemEntity itemEntity, ServerLevel serverLevel, ResourceLocation itemId) {
         List<BaseConversionConfig> configs = ConfigExtractorManager.getAllConfigsForItem(itemId);
         if (configs.isEmpty()) {
             return null;
         }
 
-        // 查找第一个满足条件的配置
-        for (BaseConversionConfig config : configs) {
-            String configId = config.getInternalId();
-            ConditionChecker checker = config.getConditionChecker();
+        BaseConversionConfig bestConfig = null;
+        int bestComplexity = -1;
 
-            // 所选择的配置不应已经超过上限，并且条件检查器不为空且条件符合
+        for (BaseConversionConfig config : configs) {
+            ConditionChecker checker = config.getConditionChecker();
             if (!config.isResultLimitExceeded(itemEntity) &&
                     checker != null &&
                     checker.checkCondition(itemEntity, serverLevel)) {
-                LOGGER.debug("Selected config {} for item {}", configId, itemId);
-                return config;
+                int complexity = config.computeComplexity();
+                if (complexity > bestComplexity) {
+                    bestComplexity = complexity;
+                    bestConfig = config;
+                }
             }
         }
-        return null;
+
+        if (bestConfig != null) {
+            LOGGER.debug("Selected best config {} (complexity {}) for item {}", bestConfig.getInternalId(), bestComplexity, itemId);
+        }
+        return bestConfig;
     }
 
     // 转化主逻辑，添加锁，防止同一物品被多次转化。使用父类构造多态，用来兼容未来更多配置
-    private static void performConversion(ItemEntity itemEntity, BaseConversionConfig config, ServerLevel serverLevel) {
+    private static boolean performConversion(ItemEntity itemEntity, BaseConversionConfig config, ServerLevel serverLevel) {
         UUID itemUuid = itemEntity.getUUID();
 
         if (itemEntity.getPersistentData().getBoolean(CONVERSION_LOCK_TAG) ||
                 CONVERSION_IN_PROGRESS.contains(itemUuid)) {
             LOGGER.debug("Conversion already in progress for item: {}", itemUuid);
-            return;
+            return false;
         }
 
         try {
@@ -214,7 +243,7 @@ public class ItemConversionEvent {
             CONVERSION_IN_PROGRESS.add(itemUuid);
 
             // 转化逻辑在各个配置子类中
-            config.performConversion(itemEntity, serverLevel);
+            return config.performConversion(itemEntity, serverLevel);
         } finally {
             itemEntity.getPersistentData().remove(CONVERSION_LOCK_TAG);
             CONVERSION_IN_PROGRESS.remove(itemUuid);

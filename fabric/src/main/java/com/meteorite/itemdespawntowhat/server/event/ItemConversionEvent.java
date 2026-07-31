@@ -18,6 +18,9 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.Marker;
 import org.apache.logging.log4j.MarkerManager;
 
+/**
+ * Fabric 服务端物品转换事件与周期检查入口。
+ */
 public class ItemConversionEvent {
 
     private static final Logger LOGGER = LogManager.getLogger();
@@ -97,11 +100,32 @@ public class ItemConversionEvent {
                 : ConfigExtractorManager.getConfigByInternalId(selectedConfigId);
 
         if (selectedConfig == null) {
-            selectedConfig = selectFirstMatchingConfig(itemEntity, serverLevel, itemId);
+            // 没有选定配置，选择复杂度最高的匹配配置
+            selectedConfig = selectBestMatchingConfig(itemEntity, serverLevel, itemId);
             if (selectedConfig == null) {
                 return;
             }
             state.itemdespawntowhat$setSelectedConfigId(selectedConfig.getInternalId());
+        } else {
+            // 已有选中配置，检查是否可能被更高复杂度配置替代
+            int maxComplexity = ConfigExtractorManager.getMaxComplexityForItem(itemId);
+            if (selectedConfig.computeComplexity() < maxComplexity) {
+                // 未达到最高复杂度，每次循环重新扫描以发现更优配置
+                BaseConversionConfig bestConfig = selectBestMatchingConfig(itemEntity, serverLevel, itemId);
+                if (bestConfig == null) {
+                    state.itemdespawntowhat$setCheckTimer(0);
+                    state.itemdespawntowhat$setSelectedConfigId("");
+                    return;
+                }
+                if (!bestConfig.getInternalId().equals(selectedConfigId)) {
+                    // 切换到更高复杂度配置，重置计时器
+                    selectedConfig = bestConfig;
+                    state.itemdespawntowhat$setSelectedConfigId(selectedConfig.getInternalId());
+                    state.itemdespawntowhat$setCheckTimer(0);
+                    LOGGER.debug(LOG_MARKER, "切换到更高复杂度配置 {} (物品: {})", selectedConfig.getInternalId(), itemId);
+                }
+            }
+            // 复杂度已达上限，锁定模式：仅依赖下方的条件检查
         }
 
         if (itemStack.getCount() < selectedConfig.getSourceMultiple()) {
@@ -145,20 +169,30 @@ public class ItemConversionEvent {
         }
     }
 
-    private static BaseConversionConfig selectFirstMatchingConfig(ItemEntity itemEntity, ServerLevel serverLevel, ResourceLocation itemId) {
+    private static BaseConversionConfig selectBestMatchingConfig(ItemEntity itemEntity, ServerLevel serverLevel, ResourceLocation itemId) {
         java.util.List<BaseConversionConfig> configs = ConfigExtractorManager.getAllConfigsForItem(itemId);
         if (configs.isEmpty()) {
             return null;
         }
 
+        BaseConversionConfig bestConfig = null;
+        int bestComplexity = -1;
+
         for (BaseConversionConfig config : configs) {
             ConditionChecker checker = config.getConditionChecker();
             if (!config.isResultLimitExceeded(itemEntity) && checker != null && checker.checkCondition(itemEntity, serverLevel)) {
-                LOGGER.debug(LOG_MARKER, "已为物品 {} 选定配置: {}", itemId, config.getInternalId());
-                return config;
+                int complexity = config.computeComplexity();
+                if (complexity > bestComplexity) {
+                    bestComplexity = complexity;
+                    bestConfig = config;
+                }
             }
         }
-        return null;
+
+        if (bestConfig != null) {
+            LOGGER.debug(LOG_MARKER, "已为物品 {} 选定最佳配置: {} (复杂度: {})", itemId, bestConfig.getInternalId(), bestComplexity);
+        }
+        return bestConfig;
     }
 
     private static boolean performConversion(ItemEntity itemEntity, BaseConversionConfig config, ServerLevel serverLevel, ItemConversionState state) {
@@ -169,8 +203,7 @@ public class ItemConversionEvent {
 
         try {
             state.itemdespawntowhat$setConversionLocked(true);
-            config.performConversion(itemEntity, serverLevel);
-            return true;
+            return config.performConversion(itemEntity, serverLevel);
         } finally {
             state.itemdespawntowhat$setConversionLocked(false);
         }

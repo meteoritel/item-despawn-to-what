@@ -4,6 +4,7 @@ import com.google.gson.annotations.SerializedName;
 import com.meteorite.itemdespawntowhat.condition.checker.ConditionChecker;
 import com.meteorite.itemdespawntowhat.condition.ConditionCheckerUtil;
 import com.meteorite.itemdespawntowhat.condition.ConditionContext;
+import com.meteorite.itemdespawntowhat.config.ConversionLimits;
 import com.meteorite.itemdespawntowhat.config.catalogue.CatalystItems;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.catalogue.InnerFluid;
@@ -29,6 +30,9 @@ import org.jetbrains.annotations.Nullable;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * 所有物品转换规则共享的条件、缓存、消耗与轮数计算基类。
+ */
 public abstract class BaseConversionConfig {
     protected static final Logger LOGGER = LogManager.getLogger();
 
@@ -176,13 +180,15 @@ public abstract class BaseConversionConfig {
             return false;
         }
 
-        if (resultMultiple <= 0) {
-            LOGGER.warn("resultMultiple should be at least 1, current is {}", resultMultiple);
+        if (resultMultiple <= 0 || resultMultiple > ConversionLimits.MAX_RESULT_MULTIPLE) {
+            LOGGER.warn("resultMultiple should be in range [1, {}], current is {}",
+                    ConversionLimits.MAX_RESULT_MULTIPLE, resultMultiple);
             return false;
         }
 
-        if (sourceMultiple <= 0) {
-            LOGGER.warn("sourceMultiple should be at least 1, current is {}", sourceMultiple);
+        if (sourceMultiple <= 0 || sourceMultiple > ConversionLimits.MAX_SOURCE_MULTIPLE) {
+            LOGGER.warn("sourceMultiple should be in range [1, {}], current is {}",
+                    ConversionLimits.MAX_SOURCE_MULTIPLE, sourceMultiple);
             return false;
         }
 
@@ -191,8 +197,12 @@ public abstract class BaseConversionConfig {
             return false;
         }
 
-        // 催化剂不能与起始物品相同，非法字符判断已经放在hasAnyCatalyst()中
-        if (catalystItems != null && catalystItems.hasAnyCatalyst()) {
+        // 催化剂不能与起始物品相同，且列表中的每个条目都必须有效
+        if (catalystItems != null && !catalystItems.getCatalystList().isEmpty()) {
+            if (!catalystItems.isAllEntryValid()) {
+                LOGGER.warn("Invalid catalyst item list for source item: {}", itemId);
+                return false;
+            }
             boolean conflict = catalystItems.getCatalystList().stream()
                     .anyMatch(entry -> entry.itemId().equals(itemId));
             if (conflict) {
@@ -209,6 +219,18 @@ public abstract class BaseConversionConfig {
         return additionalCheck();
     }
 
+    // ========== 配置复杂度 ========== //
+    // 根据条件字段的非空/非false状态计算复杂度，用于多配置优先级选择
+    public int computeComplexity() {
+        int complexity = 0;
+        if (dimension != null) complexity++;
+        if (needOutdoor) complexity++;
+        if (surroundingBlocks != null) complexity++;
+        if (catalystItems != null) complexity++;
+        if (innerFluid != null) complexity++;
+        return complexity;
+    }
+
     // ========== 条件检查器 ========== //
     private transient ConditionChecker cachedConditionChecker;
 
@@ -219,6 +241,7 @@ public abstract class BaseConversionConfig {
                     isNeedOutdoor(),
                     getSurroundingBlocks(),
                     getCatalystItems(),
+                    getSourceMultiple(),
                     getInnerFluid());
             cachedConditionChecker = ConditionCheckerUtil.buildCombinedChecker(ctx);
         }
@@ -256,7 +279,7 @@ public abstract class BaseConversionConfig {
         int startRounds = originalStackSize / sm;
         // 催化剂限制的最大轮数
         int catalystRounds = (catalystItems != null && catalystItems.hasAnyCatalyst() && catalystItems.isCatalystConsume())
-                ? catalystItems.getMaxConvertibleRounds(itemEntity)
+                ? catalystItems.getMaxConvertibleRounds(itemEntity, sm)
                 : Integer.MAX_VALUE;
         // 结果容量限制的最大轮数
         int resultRounds = getResultCapacityInRounds(itemEntity);
@@ -322,7 +345,7 @@ public abstract class BaseConversionConfig {
 
     public abstract ItemStack getResultIcon();
 
-    public abstract void performConversion(ItemEntity itemEntity, ServerLevel serverLevel);
+    public abstract boolean performConversion(ItemEntity itemEntity, ServerLevel serverLevel);
 
     protected boolean additionalCheck() {return true;}
 

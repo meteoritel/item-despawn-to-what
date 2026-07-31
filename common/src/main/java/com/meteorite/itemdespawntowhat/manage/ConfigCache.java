@@ -11,6 +11,9 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+/**
+ * 转换配置的运行时索引缓存。
+ */
 public class ConfigCache {
     private static final Logger LOGGER = LogManager.getLogger();
 
@@ -19,6 +22,9 @@ public class ConfigCache {
 
     // 内部ID映射：内部ID -> 配置实例
     private static final ConcurrentMap<String, BaseConversionConfig> INTERNAL_ID_CACHE = new ConcurrentHashMap<>();
+
+    // 物品最高复杂度缓存：物品ID -> 该物品所有配置中的最高复杂度值
+    private static final ConcurrentMap<ResourceLocation, Integer> ITEM_MAX_COMPLEXITY = new ConcurrentHashMap<>();
 
     // 是否已初始化标志
     private static volatile boolean initialized = false;
@@ -45,6 +51,21 @@ public class ConfigCache {
         checkInitialized();
         List<BaseConversionConfig> configs = ITEM_CONFIGS_CACHE.get(itemId);
         return configs != null && !configs.isEmpty();
+    }
+
+    // 获取某个物品所有配置的最高复杂度（惰性计算并缓存）
+    public static int getMaxComplexityForItem(ResourceLocation itemId) {
+        checkInitialized();
+        return ITEM_MAX_COMPLEXITY.computeIfAbsent(itemId, key -> {
+            List<BaseConversionConfig> configs = ITEM_CONFIGS_CACHE.get(key);
+            if (configs == null || configs.isEmpty()) {
+                return 0;
+            }
+            return configs.stream()
+                    .mapToInt(BaseConversionConfig::computeComplexity)
+                    .max()
+                    .orElse(0);
+        });
     }
 
     @SuppressWarnings("unchecked")
@@ -93,6 +114,7 @@ public class ConfigCache {
         ITEM_CONFIGS_CACHE
                 .computeIfAbsent(key, rl -> new ArrayList<>())
                 .add(config);
+        ITEM_MAX_COMPLEXITY.remove(key);
     }
 
     static void addToInternalIdCache(String internalId, BaseConversionConfig config) {
@@ -108,6 +130,7 @@ public class ConfigCache {
             list.remove(config);
             return list.isEmpty() ? null : list;
         });
+        ITEM_MAX_COMPLEXITY.remove(key);
     }
 
     static Set<Map.Entry<String, BaseConversionConfig>> internalIdCacheEntries() {
@@ -117,10 +140,28 @@ public class ConfigCache {
     static void clearAll() {
         ITEM_CONFIGS_CACHE.clear();
         INTERNAL_ID_CACHE.clear();
+        ITEM_MAX_COMPLEXITY.clear();
     }
 
     static void setInitialized(boolean value) {
         initialized = value;
+    }
+
+    static Snapshot createSnapshot() {
+        return new Snapshot(
+                copyItemConfigs(ITEM_CONFIGS_CACHE),
+                new HashMap<>(INTERNAL_ID_CACHE),
+                new HashMap<>(ITEM_MAX_COMPLEXITY),
+                initialized
+        );
+    }
+
+    static void restoreSnapshot(Snapshot snapshot) {
+        clearAll();
+        ITEM_CONFIGS_CACHE.putAll(copyItemConfigs(snapshot.itemConfigs));
+        INTERNAL_ID_CACHE.putAll(snapshot.internalIds);
+        ITEM_MAX_COMPLEXITY.putAll(snapshot.itemMaxComplexity);
+        initialized = snapshot.initialized;
     }
 
     static void logCacheStats() {
@@ -138,6 +179,33 @@ public class ConfigCache {
     private static void checkInitialized() {
         if (!initialized) {
             throw new IllegalStateException("ConfigExtractorManager not initialized. Call initialize() first.");
+        }
+    }
+
+    private static Map<ResourceLocation, List<BaseConversionConfig>> copyItemConfigs(
+            Map<ResourceLocation, List<BaseConversionConfig>> source
+    ) {
+        Map<ResourceLocation, List<BaseConversionConfig>> copy = new HashMap<>();
+        source.forEach((key, configs) -> copy.put(key, new ArrayList<>(configs)));
+        return copy;
+    }
+
+    static final class Snapshot {
+        private final Map<ResourceLocation, List<BaseConversionConfig>> itemConfigs;
+        private final Map<String, BaseConversionConfig> internalIds;
+        private final Map<ResourceLocation, Integer> itemMaxComplexity;
+        private final boolean initialized;
+
+        private Snapshot(
+                Map<ResourceLocation, List<BaseConversionConfig>> itemConfigs,
+                Map<String, BaseConversionConfig> internalIds,
+                Map<ResourceLocation, Integer> itemMaxComplexity,
+                boolean initialized
+        ) {
+            this.itemConfigs = itemConfigs;
+            this.internalIds = internalIds;
+            this.itemMaxComplexity = itemMaxComplexity;
+            this.initialized = initialized;
         }
     }
 }

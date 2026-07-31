@@ -4,7 +4,9 @@ import net.minecraft.server.level.ServerPlayer;
 
 import java.util.UUID;
 
-// 服务端编辑锁：控制同一时间只允许一个玩家占用配置编辑会话。
+/**
+ * 服务端配置编辑会话的独占锁。
+ */
 public final class EditSessionLockManager {
     private static UUID currentEditor;
     private static volatile long lastActivityTime;
@@ -37,9 +39,9 @@ public final class EditSessionLockManager {
         currentEditor = null;
     }
 
-    // 刷新最后一次活动时间，每次有编辑相关操作时调用
-    public static void touch() {
-        if (currentEditor != null) {
+    // 仅允许当前编辑者刷新活动时间，避免其他玩家延长不属于自己的会话
+    public static synchronized void touch(ServerPlayer player) {
+        if (isOwnedBy(player)) {
             lastActivityTime = System.currentTimeMillis();
         }
     }

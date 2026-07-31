@@ -14,6 +14,9 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.SpawnEggItem;
 
+/**
+ * 将源物品转换为生物实体的配置与执行逻辑。
+ */
 public class ItemToMobConfig extends BaseItemToEntityConfig{
 
     // 生成实体的age（如果需要）
@@ -49,28 +52,24 @@ public class ItemToMobConfig extends BaseItemToEntityConfig{
             return false;
         }
 
-        if (resultLimit <= 0) {
-            LOGGER.warn("ResultLimit should not be less than 0, current is: {}", resultLimit);
-            return false;
-        }
-        return true;
+        return super.additionalCheck();
     }
 
     // ========== 转化逻辑 ========== //
     @Override
-    public void performConversion(ItemEntity itemEntity, ServerLevel serverLevel) {
+    public boolean performConversion(ItemEntity itemEntity, ServerLevel serverLevel) {
         EntityType<?> entityType = getResultEntityType();
         BlockPos pos = itemEntity.blockPosition();
 
         if (entityType == null) {
             LOGGER.warn("Unknown entity type: {}", resultId);
-            return;
+            return false;
         }
 
         Entity testEntity = entityType.create(serverLevel);
         if (testEntity == null) {
             LOGGER.warn("EntityType '{}' returned null on create(), skipping conversion.", resultId);
-            return;
+            return false;
         }
         if (!(testEntity instanceof Mob)) {
             LOGGER.warn(
@@ -81,7 +80,7 @@ public class ItemToMobConfig extends BaseItemToEntityConfig{
             testEntity.discard();
             // 直接移除出缓存
             ConfigExtractorManager.removeConfigByInternalId(getInternalId());
-            return;
+            return false;
         }
 
         ItemStack originalStack = itemEntity.getItem();
@@ -91,7 +90,7 @@ public class ItemToMobConfig extends BaseItemToEntityConfig{
         int rounds = computeActualRounds(itemEntity, originalStackSize);
         if (rounds <= 0) {
             LOGGER.debug("No capacity for entity conversion of {}", resultId);
-            return;
+            return false;
         }
 
         int actualConvertCount = rounds * getSourceMultiple();
@@ -123,6 +122,7 @@ public class ItemToMobConfig extends BaseItemToEntityConfig{
         }
         int itemsRemaining = originalStackSize - actualConvertCount;
         addRemainingItems(itemEntity, serverLevel, itemsRemaining);
+        return true;
     }
 
     // 生物实体按照数量计数

@@ -1,31 +1,31 @@
 package com.meteorite.itemdespawntowhat.client.ui.handler;
 
 import com.meteorite.itemdespawntowhat.config.ConfigType;
+import com.meteorite.itemdespawntowhat.network.ConfigEditLimits;
 import com.meteorite.itemdespawntowhat.network.payload.c2s.SaveConfigChunkPayload;
 import com.meteorite.itemdespawntowhat.network.payload.c2s.SaveConfigPayload;
 import com.meteorite.itemdespawntowhat.platform.Services;
 
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-// 客户端保存分包工具：负责把超长 JSON 拆成安全大小的分片并按序发送。
+/**
+ * 客户端配置保存分包工具。
+ */
 public final class SaveConfigChunker {
-    private static final int MAX_DIRECT_PACKET_LENGTH = 32766;
-    private static final int CHUNK_LENGTH = 30000;
-
     private SaveConfigChunker() {
         throw new UnsupportedOperationException("Utility class");
     }
 
     // 判断当前 JSON 是否必须拆包发送。
     public static boolean requiresChunking(String jsonData) {
-        return encodedLength(jsonData) > MAX_DIRECT_PACKET_LENGTH;
+        return ConfigEditLimits.encodedLength(jsonData) > ConfigEditLimits.MAX_DIRECT_PACKET_BYTES;
     }
 
     // 发送分包保存请求，返回实际发送的分片数量。
     public static int sendChunks(ConfigType configType, String jsonData) {
+        validateConfigSize(jsonData);
         String transferId = UUID.randomUUID().toString();
         List<String> chunks = splitIntoChunks(jsonData);
         int chunkCount = chunks.size();
@@ -45,6 +45,7 @@ public final class SaveConfigChunker {
 
     // 小 JSON 仍然走单包快速通道。
     public static void sendSingle(ConfigType configType, String jsonData) {
+        validateConfigSize(jsonData);
         Services.PLATFORM.sendToServer(new SaveConfigPayload(configType, jsonData));
     }
 
@@ -58,7 +59,7 @@ public final class SaveConfigChunker {
             int codePointBytes = utf8Length(codePoint);
             int codePointChars = Character.charCount(codePoint);
 
-            if (currentBytes > 0 && currentBytes + codePointBytes > CHUNK_LENGTH) {
+            if (currentBytes > 0 && currentBytes + codePointBytes > ConfigEditLimits.MAX_CHUNK_BYTES) {
                 chunks.add(currentChunk.toString());
                 currentChunk.setLength(0);
                 currentBytes = 0;
@@ -76,8 +77,10 @@ public final class SaveConfigChunker {
         return chunks;
     }
 
-    private static int encodedLength(String value) {
-        return value.getBytes(StandardCharsets.UTF_8).length;
+    private static void validateConfigSize(String jsonData) {
+        if (!ConfigEditLimits.isConfigSizeValid(jsonData)) {
+            throw new IllegalArgumentException("Config payload exceeds the maximum allowed size");
+        }
     }
 
     private static int utf8Length(int codePoint) {

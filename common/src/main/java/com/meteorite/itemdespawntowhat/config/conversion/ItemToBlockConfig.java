@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.config.conversion;
 
 import com.google.gson.annotations.SerializedName;
 import com.meteorite.itemdespawntowhat.Constants;
+import com.meteorite.itemdespawntowhat.config.ConversionLimits;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.server.task.LevelTaskManager;
 import com.meteorite.itemdespawntowhat.server.task.PlaceBlockTask;
@@ -18,6 +19,9 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 
+/**
+ * 将源物品转换为方块放置任务的配置与执行逻辑。
+ */
 public class ItemToBlockConfig extends BaseConversionConfig{
     // 最大放置半径的限制，默认为6
     @SerializedName("radius_limit")
@@ -54,8 +58,9 @@ public class ItemToBlockConfig extends BaseConversionConfig{
 
     @Override
     protected boolean additionalCheck() {
-        if (radius < 0) {
-            LOGGER.warn("radius_limit must be >= 0, current={}", radius);
+        if (radius < 0 || radius > ConversionLimits.MAX_BLOCK_RADIUS) {
+            LOGGER.warn("radius_limit should be in range [0, {}], current={}",
+                    ConversionLimits.MAX_BLOCK_RADIUS, radius);
             return false;
         }
         if (blockPlaceShape == null) {
@@ -77,20 +82,20 @@ public class ItemToBlockConfig extends BaseConversionConfig{
 
     // ========== 转化逻辑 ========== //
     @Override
-    public void performConversion(ItemEntity itemEntity, ServerLevel serverLevel) {
+    public boolean performConversion(ItemEntity itemEntity, ServerLevel serverLevel) {
         int originalStackSize = itemEntity.getItem().getCount();
 
         int rounds = computeActualRounds(itemEntity, originalStackSize);
         if (rounds <= 0) {
             LOGGER.debug("No items can be converted to block for {} (catalysts exhausted)", getResultId());
-            return;
+            return false;
         }
 
         Block resultBlock = getResultBlock(itemEntity);
         if (resultBlock == Blocks.AIR) {
             LOGGER.warn("Could not resolve result block for item '{}' when enableItemBlock={}, config will be skipped",
                     itemEntity.getItem().getItem(), enableItemBlock);
-            return;
+            return false;
         }
 
         int actualConvertCount = rounds * getSourceMultiple();
@@ -104,6 +109,12 @@ public class ItemToBlockConfig extends BaseConversionConfig{
                 itemEntity.blockPosition(), resultBlock, getRadius(), getBlockPlaceShape(), consumeFluid,
                 rounds * getResultMultiple(), Constants.blockPlaceIntervalTicks,
                 () -> addRemainingItems(itemEntity, serverLevel, remaining, 0, 1, 0)));
+        return true;
+    }
+
+    @Override
+    protected int getResultCapacityInRounds(ItemEntity itemEntity) {
+        return ConversionLimits.MAX_BLOCK_PLACEMENTS / Math.max(1, getResultMultiple());
     }
 
     // ========== 结果相关方法 ========== //

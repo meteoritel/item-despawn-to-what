@@ -6,12 +6,14 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
+/**
+ * 将源物品转换为掉落物实体的配置与执行逻辑。
+ */
 public class ItemToItemConfig extends BaseItemToEntityConfig{
     // 缓存的结果物品实例
     private transient Item cachedResultItem;
@@ -52,15 +54,11 @@ public class ItemToItemConfig extends BaseItemToEntityConfig{
             return false;
         }
 
-        if (resultLimit <= 0) {
-            LOGGER.warn("ResultLimit should not be less than 0, current is: {}", resultLimit);
-            return false;
-        }
-        return true;
+        return super.additionalCheck();
     }
     // ========== 转化逻辑 ========== //
     @Override
-    public void performConversion(ItemEntity itemEntity, ServerLevel serverLevel) {
+    public boolean performConversion(ItemEntity itemEntity, ServerLevel serverLevel) {
         Item resultItem = getResultItem();
         BlockPos pos = itemEntity.blockPosition();
 
@@ -73,7 +71,7 @@ public class ItemToItemConfig extends BaseItemToEntityConfig{
         int rounds = computeActualRounds(itemEntity, originalStackSize);
         if (rounds <= 0) {
             LOGGER.debug("No items can be converted for {} (catalysts or limit exhausted)", getResultId());
-            return;
+            return false;
         }
 
         int actualConvertCount = rounds * getSourceMultiple();
@@ -108,17 +106,21 @@ public class ItemToItemConfig extends BaseItemToEntityConfig{
         LOGGER.debug("Converted to item: {} -> {} ({}x, rounds: {}, consumed: {}/{}, stack remaining: {})",
                 originalStack.getItem().getDescriptionId(), getResultId(),
                 resultMultiple, rounds, actualConvertCount, originalStackSize, itemsRemaining);
+        return true;
     }
 
     // 对于物掉落物结果，计算所有的stack堆叠之和
     @Override
     protected int countNearbyResult(ServerLevel level, BlockPos pos) {
-        return level.getEntitiesOfClass(ItemEntity.class, buildSearchBox(pos), Entity::isAlive)
-                .stream()
-                .map(ItemEntity::getItem)
-                .filter(itemStack -> BuiltInRegistries.ITEM.getKey(itemStack.getItem()).toString().equals(resultId))
-                .mapToInt(ItemStack::getCount)
-                .sum();
+        int total = 0;
+        for (ItemEntity entity : level.getEntitiesOfClass(ItemEntity.class, buildSearchBox(pos), ItemEntity::isAlive)) {
+            ItemStack stack = entity.getItem();
+            if (BuiltInRegistries.ITEM.getKey(stack.getItem()).toString().equals(resultId)) {
+                long updated = (long) total + stack.getCount();
+                total = updated >= Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) updated;
+            }
+        }
+        return total;
     }
 
     // ========== 结果相关方法 ========== //

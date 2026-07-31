@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.config.conversion;
 
 import com.google.gson.annotations.SerializedName;
 import com.meteorite.itemdespawntowhat.Constants;
+import com.meteorite.itemdespawntowhat.config.ConversionLimits;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.catalogue.PotionEffect;
 import com.meteorite.itemdespawntowhat.config.WorldEffectType;
@@ -17,6 +18,9 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * 将源物品转换为天气、闪电、爆炸或箭雨效果的配置与执行逻辑。
+ */
 public class ItemToWorldEffectConfig extends BaseConversionConfig implements WorldEffectType.SideEffectConfig {
 
     @SerializedName("side_effect")
@@ -67,12 +71,17 @@ public class ItemToWorldEffectConfig extends BaseConversionConfig implements Wor
             LOGGER.warn("side_effect field is required for ItemToSideEffectConfig, item={}", itemId);
             return false;
         }
-        if (explosionPower < 0) {
-            LOGGER.warn("explosion_power must be >= 0, current={}", explosionPower);
+        if (!Float.isFinite(explosionPower)
+                || explosionPower < 0
+                || explosionPower > ConversionLimits.MAX_EXPLOSION_POWER) {
+            LOGGER.warn("explosion_power should be in range [0, {}], current={}",
+                    ConversionLimits.MAX_EXPLOSION_POWER, explosionPower);
             return false;
         }
-        if (weatherDurationTicks <= 0) {
-            LOGGER.warn("weather_duration_ticks must be > 0, current={}", weatherDurationTicks);
+        if (weatherDurationTicks <= 0
+                || weatherDurationTicks > ConversionLimits.MAX_WEATHER_DURATION_TICKS) {
+            LOGGER.warn("weather_duration_ticks should be in range [1, {}], current={}",
+                    ConversionLimits.MAX_WEATHER_DURATION_TICKS, weatherDurationTicks);
             return false;
         }
 
@@ -90,23 +99,33 @@ public class ItemToWorldEffectConfig extends BaseConversionConfig implements Wor
 
     // ========== 转化逻辑 ========== //
     @Override
-    public void performConversion(ItemEntity itemEntity, ServerLevel serverLevel) {
-        if (worldEffect == null) return;
+    public boolean performConversion(ItemEntity itemEntity, ServerLevel serverLevel) {
+        if (worldEffect == null || !worldEffect.canExecute(serverLevel)) {
+            return false;
+        }
         int originalStackSize = itemEntity.getItem().getCount();
 
         int rounds;
         int actualConvertCount;
+        int executionCount;
         if (isWeatherType()) {
             // 天气类固定1轮
-            rounds = 1;
+            rounds = Math.min(1, computeActualRounds(itemEntity, originalStackSize));
+            if (rounds <= 0) {
+                return false;
+            }
             actualConvertCount = sourceMultiple;
+            executionCount = 1;
         } else {
-            rounds = computeActualRounds(itemEntity, originalStackSize);
+            int maxRoundsByExecutionCount = ConversionLimits.MAX_WORLD_EFFECT_EXECUTIONS
+                    / Math.max(1, resultMultiple);
+            rounds = Math.min(computeActualRounds(itemEntity, originalStackSize), maxRoundsByExecutionCount);
             if (rounds <= 0) {
                 LOGGER.warn("No items can be converted for side effect {} (count=0)", worldEffect);
-                return;
+                return false;
             }
             actualConvertCount = rounds * sourceMultiple;
+            executionCount = rounds * resultMultiple;
         }
 
         // 物品实体下一tick消失
@@ -117,7 +136,8 @@ public class ItemToWorldEffectConfig extends BaseConversionConfig implements Wor
         Runnable onFinishCallback = () ->
                 addRemainingItems(itemEntity, serverLevel, originalStackSize - actualConvertCount);
         // 执行对应的转化
-        worldEffect.getExecutor().execute(itemEntity, serverLevel, this, rounds, onFinishCallback);
+        worldEffect.getExecutor().execute(itemEntity, serverLevel, this, executionCount, onFinishCallback);
+        return true;
     }
 
     // ========== 辅助方法 ========== //

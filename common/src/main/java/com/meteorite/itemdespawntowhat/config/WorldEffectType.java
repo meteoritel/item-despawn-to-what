@@ -15,20 +15,15 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
-// 一些杂乱的世界现象，使用这个枚举来管理
+/**
+ * 世界效果类型及其服务端任务执行器。
+ */
 public enum WorldEffectType {
     // 当前维度天气调整为下雨或雷雨
     RAIN(
             "effect.itemdespawntowhat.world_effect_type.rain",
             () -> new ItemStack(Items.WATER_BUCKET),
             (itemEntity, level, config, count, onFinishCallback) -> {
-                // 前置条件：仅能下雨的维度，且当前不在下雨（含雷雨）才执行
-                if (!level.dimensionType().hasSkyLight()) {
-                    return;
-                }
-                if (level.isRaining()) {
-                    return;
-                }
                 level.setWeatherParameters(0, config.getWeatherDurationTicks(), true, config.isThundering());
                 onFinishCallback.run();
             }
@@ -39,13 +34,6 @@ public enum WorldEffectType {
             "effect.itemdespawntowhat.world_effect_type.clear",
             () -> new ItemStack(Items.SUNFLOWER),
             (itemEntity, level, config, count, onFinishCallback) -> {
-                // 前置条件：仅能下雨的维度，且当前必须在下雨
-                if (!level.dimensionType().hasSkyLight()) {
-                    return;
-                }
-                if (!level.isRaining() && !level.isThundering()) {
-                    return;
-                }
                 level.setWeatherParameters(config.getWeatherDurationTicks(), 0, false, false);
                 onFinishCallback.run();
             }
@@ -71,17 +59,15 @@ public enum WorldEffectType {
             () -> new ItemStack(Items.TNT),
             (itemEntity, level, config, count, onFinishCallback) -> {
                 BlockPos pos = itemEntity.blockPosition();
-                for (int i = 0; i < count; i++) {
-                    LevelTaskManager.addTask(level, new ExplosionTask(
-                            pos,
-                            config.getExplosionPower(),
-                            config.isExplosionFire(),
-                            config.getExplosionIntervalTicks(),
-                            count,
-                            config.getExplosionDirectionType(),
-                            onFinishCallback
-                    ));
-                }
+                LevelTaskManager.addTask(level, new ExplosionTask(
+                        pos,
+                        config.getExplosionPower(),
+                        config.isExplosionFire(),
+                        config.getExplosionIntervalTicks(),
+                        count,
+                        config.getExplosionDirectionType(),
+                        onFinishCallback
+                ));
             }),
 
     // 召唤箭雨
@@ -120,6 +106,16 @@ public enum WorldEffectType {
 
     public IconSupplier getIconSupplier() {
         return iconSupplier;
+    }
+
+    // 在消耗源物品前判断当前世界是否允许执行该效果
+    public boolean canExecute(ServerLevel level) {
+        return switch (this) {
+            case RAIN -> level.dimensionType().hasSkyLight() && !level.isRaining();
+            case CLEAR -> level.dimensionType().hasSkyLight()
+                    && (level.isRaining() || level.isThundering());
+            default -> true;
+        };
     }
 
     // ========== 现象执行器接口 ========== //

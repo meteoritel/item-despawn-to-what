@@ -10,6 +10,9 @@ import org.jetbrains.annotations.Nullable;
 import java.nio.file.Path;
 import java.util.List;
 
+/**
+ * 对外提供配置生命周期与缓存查询能力的统一入口。
+ */
 public class ConfigExtractorManager {
 
     private ConfigExtractorManager() {
@@ -26,8 +29,8 @@ public class ConfigExtractorManager {
         return ConfigBootstrap.reloadAllConfigs(configDir);
     }
 
-    public static void reloadConfigsForType(Path configDir, ConfigType configType) {
-        ConfigBootstrap.reloadConfigsForType(configDir, configType);
+    public static boolean reloadConfigsForType(Path configDir, ConfigType configType) {
+        return ConfigBootstrap.reloadConfigsForType(configDir, configType);
     }
 
     public static void clearAllCaches() {
@@ -47,6 +50,11 @@ public class ConfigExtractorManager {
 
     public static boolean hasAnyConfigs(ResourceLocation itemId) {
         return ConfigCache.hasAnyConfigs(itemId);
+    }
+
+    // 获取某个物品所有配置的最高复杂度
+    public static int getMaxComplexityForItem(ResourceLocation itemId) {
+        return ConfigCache.getMaxComplexityForItem(itemId);
     }
 
     public static <T extends BaseConversionConfig> List<T> getConfigByType(ConfigType configType) {

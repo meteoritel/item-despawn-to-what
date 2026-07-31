@@ -14,6 +14,9 @@ import org.apache.logging.log4j.Logger;
 import java.nio.file.Path;
 import java.util.*;
 
+/**
+ * 配置缓存的初始化、全量重载和按类型重载入口。
+ */
 public class ConfigBootstrap {
     private static final Logger LOGGER = LogManager.getLogger();
 
@@ -46,29 +49,31 @@ public class ConfigBootstrap {
         } catch (Exception e) {
             LOGGER.error("ConfigExtractorManager initialization partially failed, continuing with loaded configs", e);
             // 保留已成功加载的配置，不因单个类型失败而丢弃全部缓存
+            TAG_PENDING_CONFIGS.clear();
             ConfigCache.setInitialized(true);
         }
     }
 
-    public static boolean reloadAllConfigs(Path configDir) {
+    public static synchronized boolean reloadAllConfigs(Path configDir) {
+        ConfigCache.Snapshot snapshot = ConfigCache.createSnapshot();
         try {
-            if (!ConfigCache.isInitialized()) {
-                initialize(configDir);
-                return true;
-            }
-
             clearAllCaches();
-            initialize(configDir);
+            loadAllConfigsStrict(configDir);
+            expandTagConfigs();
+            ConfigCache.setInitialized(true);
 
             LOGGER.info("All configs reloaded successfully");
             return true;
         } catch (Exception e) {
+            TAG_PENDING_CONFIGS.clear();
+            ConfigCache.restoreSnapshot(snapshot);
             LOGGER.error("Failed to reload configs", e);
             return false;
         }
     }
 
-    public static void reloadConfigsForType(Path configDir, ConfigType configType) {
+    public static synchronized boolean reloadConfigsForType(Path configDir, ConfigType configType) {
+        ConfigCache.Snapshot snapshot = ConfigCache.createSnapshot();
         try {
             removeConfigsOfType(configType);
 
@@ -76,14 +81,15 @@ public class ConfigBootstrap {
             BaseConfigHandler<?> handler = handlerManager.getHandler(configType);
             if (handler == null) {
                 LOGGER.error("No handler found for config type: {}", configType);
-                return;
+                ConfigCache.restoreSnapshot(snapshot);
+                return false;
             }
 
             if (!handler.isConfigFileExists()) {
                 handler.generateDefaultConfig();
             }
 
-            List<? extends BaseConversionConfig> configs = handler.loadConfig();
+            List<? extends BaseConversionConfig> configs = handler.loadConfigStrict();
             if (configs != null && !configs.isEmpty()) {
                 processConfigs(configs);
             }
@@ -91,8 +97,12 @@ public class ConfigBootstrap {
             expandTagConfigs();
 
             LOGGER.info("Configs reloaded for type: {}", configType);
+            return true;
         } catch (Exception e) {
+            TAG_PENDING_CONFIGS.clear();
+            ConfigCache.restoreSnapshot(snapshot);
             LOGGER.error("Failed to reload configs for type: {}", configType, e);
+            return false;
         }
     }
 
@@ -175,6 +185,30 @@ public class ConfigBootstrap {
 
             } catch (Exception e) {
                 LOGGER.error("Failed to load configs for type: {}", configType, e);
+            }
+        }
+    }
+
+    static void loadAllConfigsStrict(Path configDir) throws Exception {
+        ConfigHandlerManager handlerManager = ConfigHandlerManager.getInstance(configDir);
+
+        if (!handlerManager.isLoaded()) {
+            handlerManager.generateDefaultConfig();
+        }
+
+        for (ConfigType configType : handlerManager.getRegisteredHandlerTypes()) {
+            BaseConfigHandler<?> handler = handlerManager.getHandler(configType);
+            if (handler == null) {
+                throw new IllegalStateException("No handler found for config type: " + configType);
+            }
+
+            if (!handler.isConfigFileExists()) {
+                handler.generateDefaultConfig();
+            }
+
+            List<? extends BaseConversionConfig> configs = handler.loadConfigStrict();
+            if (!configs.isEmpty()) {
+                processConfigs(configs);
             }
         }
     }
