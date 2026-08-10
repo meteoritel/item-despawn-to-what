@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
-import com.meteorite.itemdespawntowhat.config.ConfigType;
+import com.meteorite.itemdespawntowhat.config.type.ConversionType;
 import com.meteorite.itemdespawntowhat.client.ui.handler.ConfigEditSessionHandler;
 import com.meteorite.itemdespawntowhat.client.ui.form.ConfigFormContext;
 import com.meteorite.itemdespawntowhat.client.ui.form.ConfigFormSection;
@@ -93,7 +93,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     private final Map<EditBox, List<ConditionalFieldValidator>> validatedFields = new HashMap<>();
     private final Set<EditBox> invalidFields = new HashSet<>();
 
-    public BaseConfigEditScreen(ConfigType configType, Supplier<T> configFactory, ConfigFormSection<T> customSection) {
+    public BaseConfigEditScreen(ConversionType configType, Supplier<T> configFactory, ConfigFormSection<T> customSection) {
         super(Component.translatable("gui.itemdespawntowhat.edit.title", configType.getFileName()));
         this.editHandler = new ConfigEditSessionHandler<>(configType);
         this.configFactory = configFactory;

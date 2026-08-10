@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.handler;
 
-import com.meteorite.itemdespawntowhat.config.ConfigType;
+import com.meteorite.itemdespawntowhat.config.type.ConversionType;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.io.ConfigJsonCodec;
 
@@ -15,7 +15,7 @@ public final class ConfigNetworkSender {
     }
 
     public static <T extends BaseConversionConfig> void sendToServer(
-            ConfigType configType, List<T> configs, ConfigJsonCodec<T> codec) {
+            ConversionType configType, List<T> configs, ConfigJsonCodec<T> codec) {
         String jsonData = codec.serialize(configs);
         if (SaveConfigChunker.requiresChunking(jsonData)) {
             SaveConfigChunker.sendChunks(configType, jsonData);

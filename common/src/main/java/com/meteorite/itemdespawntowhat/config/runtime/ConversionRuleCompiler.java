@@ -3,6 +3,8 @@ package com.meteorite.itemdespawntowhat.config.runtime;
 import com.meteorite.itemdespawntowhat.condition.ConditionCheckerUtil;
 import com.meteorite.itemdespawntowhat.condition.ConditionContext;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
+import com.meteorite.itemdespawntowhat.config.type.ConversionType;
+import com.meteorite.itemdespawntowhat.config.type.ConversionTypeRegistry;
 import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -20,11 +22,11 @@ public final class ConversionRuleCompiler {
     private static final Logger LOGGER = LogManager.getLogger();
 
     public CompiledRuleResult compile(BaseConversionConfig config) {
-        if (config == null || !config.shouldProcess()) {
+        if (config == null || !config.validate()) {
             return CompiledRuleResult.invalid();
         }
 
-        config.initCache();
+        config.resolve();
         if (!config.isCacheValid()) {
             LOGGER.warn("Skipping config with invalid result cache: item={}, result={}",
                     config.getItemId(), config.getResultId());
@@ -43,9 +45,14 @@ public final class ConversionRuleCompiler {
                 config.getCatalystItems(),
                 config.getSourceMultiple(),
                 config.getInnerFluid());
-        CompiledConversionRule rule = new CompiledConversionRule(
-                config,
-                ConditionCheckerUtil.buildCombinedChecker(context));
+        ConversionType type = config.getConversionType();
+        if (type == null) {
+            LOGGER.warn("Skipping config without registered conversion type: {}", config.getInternalId());
+            return CompiledRuleResult.invalid();
+        }
+        CompiledConversionRule rule = new CompiledConversionRule(config,
+                ConditionCheckerUtil.buildCombinedChecker(context),
+                ConversionTypeRegistry.get(type).executor());
         return new CompiledRuleResult(rule, sourceItemIds);
     }
 

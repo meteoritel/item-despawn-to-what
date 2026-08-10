@@ -1,21 +1,14 @@
 package com.meteorite.itemdespawntowhat.config.conversion;
 
 import com.google.gson.annotations.SerializedName;
-import com.meteorite.itemdespawntowhat.ConfigExtractorManager;
-import com.meteorite.itemdespawntowhat.config.ConfigType;
+import com.meteorite.itemdespawntowhat.config.type.BuiltinConversionTypes;
 import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
-import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.*;
-import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.item.SpawnEggItem;
+import net.minecraft.world.entity.EntityType;
 
 /**
- * 将源物品转换为生物实体的配置与执行逻辑。
+ * 物品到生物实体转换的配置数据。
  */
 public class ItemToMobConfig extends BaseItemToEntityConfig{
 
@@ -27,11 +20,11 @@ public class ItemToMobConfig extends BaseItemToEntityConfig{
     private transient EntityType<?> cachedResultEntityType;
 
     public ItemToMobConfig() {
-        super(ConfigType.ITEM_TO_MOB);
+        super(BuiltinConversionTypes.ITEM_TO_MOB);
     }
 
     public ItemToMobConfig(String item, String result) {
-        super(ConfigType.ITEM_TO_MOB, item, result);
+        super(BuiltinConversionTypes.ITEM_TO_MOB, item, result);
     }
 
     private ResourceLocation resultRl() {
@@ -53,82 +46,6 @@ public class ItemToMobConfig extends BaseItemToEntityConfig{
         }
 
         return super.additionalCheck();
-    }
-
-    // ========== 转化逻辑 ========== //
-    @Override
-    public boolean performConversion(ItemEntity itemEntity, ServerLevel serverLevel) {
-        EntityType<?> entityType = getResultEntityType();
-        BlockPos pos = itemEntity.blockPosition();
-
-        if (entityType == null) {
-            LOGGER.warn("Unknown entity type: {}", resultId);
-            return false;
-        }
-
-        Entity testEntity = entityType.create(serverLevel);
-        if (testEntity == null) {
-            LOGGER.warn("EntityType '{}' returned null on create(), skipping conversion.", resultId);
-            return false;
-        }
-        if (!(testEntity instanceof Mob)) {
-            LOGGER.warn(
-                    "Entity type '{}' (class: {}) is not a Mob subclass. " +
-                            "Marking item as invalid for this config to prevent future attempts.",
-                    resultId, testEntity.getClass().getSimpleName()
-            );
-            testEntity.discard();
-            // 直接移除出缓存
-            ConfigExtractorManager.removeConfigByInternalId(getInternalId());
-            return false;
-        }
-
-        ItemStack originalStack = itemEntity.getItem();
-        int originalStackSize = originalStack.getCount();
-        int resultMultiple = getResultMultiple();
-
-        int rounds = computeActualRounds(itemEntity, originalStackSize);
-        if (rounds <= 0) {
-            LOGGER.debug("No capacity for entity conversion of {}", resultId);
-            return false;
-        }
-
-        int actualConvertCount = rounds * getSourceMultiple();
-        // 计算本次可以生成的实体数量和需要返还的物品数量
-        int actualEntitiesToSpawn = rounds * resultMultiple;
-        LOGGER.debug("Converting to entity: {} -> {} ({} entities from {} items ({}x{}), {} items remaining)",
-                originalStack.getItem().getDescriptionId(), resultId,
-                actualEntitiesToSpawn, actualConvertCount, rounds, resultMultiple, originalStackSize - actualConvertCount);
-
-        // 物品实体下一tick消失
-        itemEntity.makeFakeItem();
-        // 根据条件消耗催化剂与流体
-        consumeAllOthers(itemEntity, actualConvertCount);
-
-        // 生成实体, 稍微分散位置，避免重叠
-        for (int i = 0; i < actualEntitiesToSpawn; i++) {
-            Entity resultEntity = entityType.create(serverLevel);
-            if (resultEntity != null) {
-                double offsetX = (serverLevel.random.nextDouble() - 0.5) * 0.5;
-                double offsetZ = (serverLevel.random.nextDouble() - 0.5) * 0.5;
-                resultEntity.moveTo(pos.getX() + 0.5 + offsetX, pos.getY(), pos.getZ() + 0.5 + offsetZ, 0, 0);
-
-                // 设置实体年龄（如果需要）
-                if (resultEntity instanceof AgeableMob ageable) {
-                    ageable.setAge(getEntityAge());
-                }
-                serverLevel.addFreshEntity(resultEntity);
-            }
-        }
-        int itemsRemaining = originalStackSize - actualConvertCount;
-        addRemainingItems(itemEntity, serverLevel, itemsRemaining);
-        return true;
-    }
-
-    // 生物实体按照数量计数
-    @Override
-    protected int countNearbyResult(ServerLevel level, BlockPos pos) {
-        return level.getEntities(getResultEntityType(), buildSearchBox(pos), Entity::isAlive).size();
     }
 
     // ========== 结果相关方法 ========== //

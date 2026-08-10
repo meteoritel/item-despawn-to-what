@@ -1,9 +1,6 @@
 package com.meteorite.itemdespawntowhat.config.catalogue;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import com.google.gson.annotations.SerializedName;
-import com.meteorite.itemdespawntowhat.condition.ConditionSerializable;
 import com.meteorite.itemdespawntowhat.config.ConversionLimits;
 import com.meteorite.itemdespawntowhat.util.IdValidator;
 import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
@@ -25,10 +22,7 @@ import java.util.*;
 /**
  * 催化剂条件、轮数计算与世界物品消耗逻辑。
  */
-public class CatalystItems implements ConditionSerializable<CatalystItems> {
-    private static final Gson GSON = new GsonBuilder()
-            .disableHtmlEscaping()
-            .create();
+public class CatalystItems {
     private static final Logger LOGGER = LogManager.getLogger();
 
     @SerializedName("catalyst_items")
@@ -38,29 +32,6 @@ public class CatalystItems implements ConditionSerializable<CatalystItems> {
     private boolean catalystConsume = true;
 
     public CatalystItems() {
-    }
-
-    // ========== 接口实现 ========== //
-    @Override
-    public void toConditionMap(Map<String, String> out, String conditionKey) {
-        if (hasAnyCatalyst()) {
-            out.put(conditionKey, GSON.toJson(this));
-        }
-    }
-
-    @Override
-    public CatalystItems fromConditionMap(Map<String, String> conditions, String conditionKey) {
-        String json = conditions.get(conditionKey);
-        if (json == null || json.isEmpty()) {
-            return null;
-        }
-
-        CatalystItems parsed = GSON.fromJson(json, CatalystItems.class);
-        if (parsed == null || !parsed.hasAnyCatalyst()) {
-            return null;
-        }
-
-        return parsed;
     }
 
     // ========== 条件检测方法 ========== //

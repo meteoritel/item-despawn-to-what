@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.network.handler;
 
-import com.meteorite.itemdespawntowhat.config.ConfigType;
+import com.meteorite.itemdespawntowhat.config.type.ConversionType;
 import com.meteorite.itemdespawntowhat.network.ConfigEditLimits;
 import com.meteorite.itemdespawntowhat.network.payload.c2s.SaveConfigChunkPayload;
 import net.minecraft.server.level.ServerPlayer;
@@ -137,22 +137,22 @@ public final class SaveConfigChunkAccumulator {
     }
 
     private static final class ChunkSession {
-        private final ConfigType configType;
+        private final ConversionType configType;
         private final int chunkCount;
         private final String[] chunks;
         private int receivedCount;
         private int receivedBytes;
         private long lastActivityTime;
 
-        private ChunkSession(ConfigType configType, int chunkCount) {
+        private ChunkSession(ConversionType configType, int chunkCount) {
             this.configType = configType;
             this.chunkCount = chunkCount;
             this.chunks = new String[chunkCount];
             this.lastActivityTime = System.currentTimeMillis();
         }
 
-        private boolean matches(ConfigType configType, int chunkCount) {
-            return this.configType == configType && this.chunkCount == chunkCount;
+        private boolean matches(ConversionType configType, int chunkCount) {
+            return this.configType.equals(configType) && this.chunkCount == chunkCount;
         }
 
         private boolean addChunk(int chunkIndex, String chunkData, int chunkBytes) {

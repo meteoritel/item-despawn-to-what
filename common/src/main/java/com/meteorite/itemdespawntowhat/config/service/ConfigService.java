@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.config.service;
 
-import com.meteorite.itemdespawntowhat.config.ConfigType;
+import com.meteorite.itemdespawntowhat.config.type.ConversionType;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.io.JsonConfigRepository;
 import com.meteorite.itemdespawntowhat.config.runtime.CompiledConversionRule;
@@ -38,7 +38,8 @@ public final class ConfigService {
         }
 
         RuntimeConfigSnapshotBuilder builder = new RuntimeConfigSnapshotBuilder();
-        for (ConversionTypeDefinition<?> definition : ConversionTypeRegistry.all()) {
+        for (ConversionType type : ConversionTypeRegistry.all()) {
+            ConversionTypeDefinition<?> definition = ConversionTypeRegistry.get(type);
             try {
                 JsonConfigRepository<?> repository = definition.repository(configDir);
                 repository.generateDefaultIfMissing();
@@ -53,7 +54,8 @@ public final class ConfigService {
     public synchronized boolean reloadAll() {
         try {
             RuntimeConfigSnapshotBuilder builder = new RuntimeConfigSnapshotBuilder();
-            for (ConversionTypeDefinition<?> definition : ConversionTypeRegistry.all()) {
+            for (ConversionType type : ConversionTypeRegistry.all()) {
+                ConversionTypeDefinition<?> definition = ConversionTypeRegistry.get(type);
                 JsonConfigRepository<?> repository = definition.repository(configDir);
                 repository.generateDefaultIfMissing();
                 builder.addAll(repository.loadStrict());
@@ -66,7 +68,7 @@ public final class ConfigService {
         }
     }
 
-    public synchronized boolean reloadType(ConfigType type) {
+    public synchronized boolean reloadType(ConversionType type) {
         try {
             ConversionTypeDefinition<?> definition = ConversionTypeRegistry.get(type);
             JsonConfigRepository<?> repository = definition.repository(configDir);
@@ -74,8 +76,8 @@ public final class ConfigService {
             List<? extends BaseConversionConfig> replacements = repository.loadStrict();
 
             RuntimeConfigSnapshotBuilder builder = new RuntimeConfigSnapshotBuilder();
-            for (ConfigType currentType : ConfigType.values()) {
-                builder.addAll(currentType == type
+            for (ConversionType currentType : ConversionTypeRegistry.all()) {
+                builder.addAll(currentType.equals(type)
                         ? replacements
                         : snapshot.get().getConfigsByType(currentType));
             }
@@ -97,7 +99,7 @@ public final class ConfigService {
         }
 
         RuntimeConfigSnapshotBuilder builder = new RuntimeConfigSnapshotBuilder();
-        for (ConfigType type : ConfigType.values()) {
+        for (ConversionType type : ConversionTypeRegistry.all()) {
             builder.addAll(current.<BaseConversionConfig>getConfigsByType(type).stream()
                     .filter(config -> !internalId.equals(config.getInternalId()))
                     .toList());
@@ -145,7 +147,7 @@ public final class ConfigService {
         return snapshot.get().getMaxComplexity(itemId);
     }
 
-    public <T extends BaseConversionConfig> List<T> getConfigsByType(ConfigType type) {
+    public <T extends BaseConversionConfig> List<T> getConfigsByType(ConversionType type) {
         checkInitialized();
         return snapshot.get().getConfigsByType(type);
     }

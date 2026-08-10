@@ -11,32 +11,18 @@ import net.minecraft.world.level.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Map;
-
+/**
+ * 检查物品实体所在维度。
+ */
 public class DimensionConditionChecker extends AbstractConditionChecker {
     private static final Logger LOGGER = LogManager.getLogger();
-    private static final String KEY = "dimension";
-
     private ResourceKey<Level> dimensionKey;
 
     @Override
-    public AbstractConditionChecker parse(Map<String, String> conditions) {
-        String dimensionStr = getConditionValue(conditions);
-
-        if (dimensionStr.isBlank()) {
-            dimensionKey = null;
-            return null;
-        }
-
-        ResourceKey<Level> parsed = parseDimensionKey(dimensionStr);
-        if (parsed == null) {
-            dimensionKey = null;
-            LOGGER.warn("Invalid dimension key: {}", dimensionStr);
-            return null;
-        }
-
-        this.dimensionKey = parsed;
-        return this;
+    public AbstractConditionChecker createChecker(ConditionContext ctx) {
+        DimensionConditionChecker checker = new DimensionConditionChecker();
+        checker.dimensionKey = checker.parseDimensionKey(ctx.dimension());
+        return checker.dimensionKey == null ? null : checker;
     }
 
     @Override
@@ -48,21 +34,8 @@ public class DimensionConditionChecker extends AbstractConditionChecker {
     }
 
     @Override
-    public String getConditionKey() {
-        return KEY;
-    }
-
-    @Override
     public boolean shouldApply(ConditionContext ctx) {
         return ctx.dimension() != null && !ctx.dimension().isBlank();
-    }
-
-    @Override
-    public void applyCondition(Map<String, String> conditions, ConditionContext ctx) {
-        if (ctx.dimension() == null || ctx.dimension().isBlank()) {
-            return;
-        }
-        conditions.put(getConditionKey(), ctx.dimension());
     }
 
     private ResourceKey<Level> parseDimensionKey(String dimensionStr) {

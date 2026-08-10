@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.config.io;
 import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.type.ConversionTypeDefinition;
+import com.meteorite.itemdespawntowhat.config.type.BuiltinConversionTypes;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -27,7 +28,12 @@ public final class JsonConfigRepository<T extends BaseConversionConfig> {
     public JsonConfigRepository(Path configDir, ConversionTypeDefinition<T> definition) {
         this.definition = definition;
         this.configPath = configDir.resolve(Constants.MOD_ID).resolve(definition.type().getFileName());
+        this.legacyPath = BuiltinConversionTypes.isBuiltin(definition.type())
+                ? configDir.resolve(Constants.MOD_ID).resolve(definition.type().id().getPath() + ".json")
+                : null;
     }
+
+    private final Path legacyPath;
 
     public Path getConfigPath() {
         return configPath;
@@ -38,6 +44,7 @@ public final class JsonConfigRepository<T extends BaseConversionConfig> {
     }
 
     public void generateDefaultIfMissing() throws IOException {
+        migrateLegacyIfNeeded();
         if (exists()) {
             return;
         }
@@ -82,6 +89,7 @@ public final class JsonConfigRepository<T extends BaseConversionConfig> {
     }
 
     private List<T> readEntries() throws IOException {
+        migrateLegacyIfNeeded();
         try {
             String json = Files.readString(configPath, StandardCharsets.UTF_8);
             return definition.codec().deserializeStrict(json);
@@ -90,6 +98,16 @@ public final class JsonConfigRepository<T extends BaseConversionConfig> {
         } catch (Exception e) {
             throw new IOException("Failed to parse configuration file: " + configPath, e);
         }
+    }
+
+    private void migrateLegacyIfNeeded() throws IOException {
+        if (legacyPath == null || Files.exists(configPath) || !Files.exists(legacyPath)) {
+            return;
+        }
+        Files.createDirectories(configPath.getParent());
+        Files.copy(legacyPath, configPath, StandardCopyOption.REPLACE_EXISTING);
+        Files.deleteIfExists(legacyPath);
+        LOGGER.info("Migrated legacy configuration file {} to {}", legacyPath, configPath);
     }
 
     private void writeBytesAtomically(byte[] content) throws IOException {

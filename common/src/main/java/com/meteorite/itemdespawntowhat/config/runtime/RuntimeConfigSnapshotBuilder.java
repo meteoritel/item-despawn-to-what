@@ -1,11 +1,11 @@
 package com.meteorite.itemdespawntowhat.config.runtime;
 
-import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
+import com.meteorite.itemdespawntowhat.config.type.ConversionType;
+import com.meteorite.itemdespawntowhat.config.type.ConversionTypeRegistry;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
-import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -17,7 +17,7 @@ public final class RuntimeConfigSnapshotBuilder {
     private final ConversionRuleCompiler compiler = new ConversionRuleCompiler();
     private final Map<ResourceLocation, List<CompiledConversionRule>> rulesByItem = new HashMap<>();
     private final Map<String, CompiledConversionRule> rulesByInternalId = new HashMap<>();
-    private final Map<ConfigType, List<BaseConversionConfig>> configsByType = new EnumMap<>(ConfigType.class);
+    private final Map<ConversionType, List<BaseConversionConfig>> configsByType = new HashMap<>();
 
     public void addAll(List<? extends BaseConversionConfig> configs) {
         for (BaseConversionConfig config : configs) {
@@ -27,7 +27,7 @@ public final class RuntimeConfigSnapshotBuilder {
 
     public RuntimeConfigSnapshot build() {
         Map<ResourceLocation, List<CompiledConversionRule>> immutableByItem = immutableRuleLists(rulesByItem);
-        Map<ConfigType, List<BaseConversionConfig>> immutableByType = immutableLists(configsByType);
+        Map<ConversionType, List<BaseConversionConfig>> immutableByType = immutableLists(configsByType);
         Map<ResourceLocation, Integer> maxComplexity = new HashMap<>();
         immutableByItem.forEach((itemId, rules) -> maxComplexity.put(itemId, rules.stream()
                 .mapToInt(CompiledConversionRule::complexity)
@@ -53,7 +53,10 @@ public final class RuntimeConfigSnapshotBuilder {
         }
 
         rulesByInternalId.put(rule.internalId(), rule);
-        configsByType.computeIfAbsent(config.getConfigType(), ignored -> new ArrayList<>()).add(config);
+        ConversionType type = config.getConversionType();
+        if (type != null) {
+            configsByType.computeIfAbsent(type, ignored -> new ArrayList<>()).add(config);
+        }
     }
 
     private static <K> Map<K, List<BaseConversionConfig>> immutableLists(

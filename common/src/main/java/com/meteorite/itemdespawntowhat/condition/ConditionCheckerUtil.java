@@ -2,41 +2,29 @@ package com.meteorite.itemdespawntowhat.condition;
 
 import com.meteorite.itemdespawntowhat.condition.checker.*;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
-// 此类用来统一管理所有的条件检查器
-public class ConditionCheckerUtil {
+/**
+ * 根据配置上下文构建组合条件检查器。
+ */
+public final class ConditionCheckerUtil {
 
-    // 核心方法：从通用条件 Map 构建组合条件检查器（配置文件加载场景）
-    public static ConditionChecker buildCombinedChecker (Map<String, String> conditions) {
-
-        if (conditions == null || conditions.isEmpty()) {
-            return (itemEntity, level) -> true;
-        }
-
-        List<ConditionChecker> checkers = new ArrayList<>();
-
-        for (var factory : ConditionCheckerRegistry.getFactories()) {
-            AbstractConditionChecker checker = factory.get();
-
-            AbstractConditionChecker parsed = checker.parse(conditions);
-            if (parsed != null) {
-                checkers.add(parsed);
-            }
-        }
-        return combineAll(checkers);
+    private ConditionCheckerUtil() {
     }
 
     public static ConditionChecker buildCombinedChecker(ConditionContext ctx) {
-        Map<String, String> conditions = new HashMap<>();
-
+        List<ConditionChecker> checkers = new ArrayList<>();
         for (var factory : ConditionCheckerRegistry.getFactories()) {
             AbstractConditionChecker checker = factory.get();
             if (checker.shouldApply(ctx)) {
-                checker.applyCondition(conditions,ctx);
+                AbstractConditionChecker created = checker.createChecker(ctx);
+                if (created != null) {
+                    checkers.add(created);
+                }
             }
         }
-        return buildCombinedChecker(conditions);
+        return combineAll(checkers);
     }
 
     public static ConditionChecker combineAll(List<ConditionChecker> checkers) {

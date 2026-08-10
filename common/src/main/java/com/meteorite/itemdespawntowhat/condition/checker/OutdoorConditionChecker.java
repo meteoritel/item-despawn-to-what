@@ -6,34 +6,19 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.level.block.state.BlockState;
 
-import java.util.Map;
-
+/**
+ * 检查物品实体上方是否露天。
+ */
 public class OutdoorConditionChecker extends AbstractConditionChecker{
 
-    public static final String KEY = "need_outdoor";
-
     @Override
-    public String getConditionKey() {
-        return KEY;
+    public AbstractConditionChecker createChecker(ConditionContext ctx) {
+        return ctx.needOutdoor() ? new OutdoorConditionChecker() : null;
     }
 
     @Override
     public boolean shouldApply(ConditionContext ctx) {
         return ctx.needOutdoor();
-    }
-
-    @Override
-    public void applyCondition(Map<String, String> conditions, ConditionContext ctx) {
-        conditions.put(getConditionKey(),String.valueOf(ctx.needOutdoor()));
-    }
-
-    @Override
-    public AbstractConditionChecker parse(Map<String, String> conditions) {
-        // 如果不需要露天检查，返回null表示跳过此条件
-        if (!getConditionBoolean(conditions)) {
-            return null;
-        }
-        return this;
     }
 
     @Override

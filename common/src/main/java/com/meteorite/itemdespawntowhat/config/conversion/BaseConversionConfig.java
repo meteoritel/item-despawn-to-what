@@ -3,22 +3,17 @@ package com.meteorite.itemdespawntowhat.config.conversion;
 import com.google.gson.annotations.SerializedName;
 import com.meteorite.itemdespawntowhat.config.ConversionLimits;
 import com.meteorite.itemdespawntowhat.config.catalogue.CatalystItems;
-import com.meteorite.itemdespawntowhat.config.ConfigType;
+import com.meteorite.itemdespawntowhat.config.type.ConversionType;
 import com.meteorite.itemdespawntowhat.config.catalogue.InnerFluid;
 import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;
 import com.meteorite.itemdespawntowhat.util.IdValidator;
-import com.meteorite.itemdespawntowhat.util.ItemReturnUtil;
 import com.meteorite.itemdespawntowhat.util.JsonOrder;
 import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import com.meteorite.itemdespawntowhat.util.TagResolver;
-import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -28,14 +23,14 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * 所有物品转换规则共享的条件、缓存、消耗与轮数计算基类。
+ * 所有物品转换规则共享的数据、校验与引用解析基类。
  */
-public abstract class BaseConversionConfig {
+public abstract class BaseConversionConfig extends ConversionConfig {
     protected static final Logger LOGGER = LogManager.getLogger();
 
     // 内部标识符，不会进行序列化
     protected transient String internalId;
-    protected transient ConfigType configType;
+    protected transient ConversionType conversionType;
 
     // ========== 缓存字段 ========== //
     // 缓存的起始物品实例（非标签模式）
@@ -91,17 +86,32 @@ public abstract class BaseConversionConfig {
     protected @Nullable InnerFluid innerFluid;
 
     // 用来存储配置的空构造方法
-    public BaseConversionConfig(ConfigType configType) {
+    protected BaseConversionConfig(ConversionType conversionType) {
         this.internalId = UUID.randomUUID().toString();
-        this.configType = configType;
+        this.conversionType = conversionType;
     }
 
     // 用来生成示例配置用的构造方法
-    public BaseConversionConfig(ConfigType configType, String item, String result) {
-        this(configType);
+    protected BaseConversionConfig(ConversionType type, String item, String result) {
+        this(type);
         this.itemId = item;
         this.resultId = result;
         this.conversionTime = 5;
+    }
+
+    @Override
+    public final boolean validate() {
+        return shouldProcess();
+    }
+
+    @Override
+    public final int complexity() {
+        return computeComplexity();
+    }
+
+    @Override
+    public final void resolve() {
+        initCache();
     }
 
     private ResourceLocation parseItemRl() {
@@ -228,79 +238,6 @@ public abstract class BaseConversionConfig {
         return complexity;
     }
 
-    // ========== 消耗相关逻辑 ========== //
-    // 所有的额外消耗的方法
-    protected void consumeAllOthers(ItemEntity itemEntity, int actualConvertCount) {
-        consumeCatalysts(itemEntity, actualConvertCount);
-        consumeFluid(itemEntity);
-    }
-
-    // 消耗催化剂的方法
-    protected void consumeCatalysts(ItemEntity itemEntity, int actualConvertCount) {
-        if (catalystItems == null || !catalystItems.hasAnyCatalyst() || !catalystItems.isCatalystConsume()) {
-            return;
-        }
-        catalystItems.consumeFromLevel(itemEntity, actualConvertCount);
-    }
-
-    // 消耗流体的方法
-    protected void consumeFluid(ItemEntity itemEntity) {
-        if (innerFluid == null || !innerFluid.hasInnerFluid()) {
-            return;
-        }
-        innerFluid.consumeFluidFromLevel(itemEntity);
-    }
-
-    // ========== 辅助计算方法 ========== //
-    // 计算本次实际能转化的轮数：min(起始物品轮数, 催化剂轮数, 结果容量轮数)
-    protected int computeActualRounds(ItemEntity itemEntity, int originalStackSize) {
-        int sm = Math.max(1, sourceMultiple);
-        // 起始物品能支持的最大轮数
-        int startRounds = originalStackSize / sm;
-        // 催化剂限制的最大轮数
-        int catalystRounds = (catalystItems != null && catalystItems.hasAnyCatalyst() && catalystItems.isCatalystConsume())
-                ? catalystItems.getMaxConvertibleRounds(itemEntity, sm)
-                : Integer.MAX_VALUE;
-        // 结果容量限制的最大轮数
-        int resultRounds = getResultCapacityInRounds(itemEntity);
-
-        return Math.max(0, Math.min(startRounds, Math.min(catalystRounds, resultRounds)));
-    }
-
-    // 结果容量对应的最大转化轮数，默认不限制，由子类重写
-    protected int getResultCapacityInRounds(ItemEntity itemEntity) {
-        return Integer.MAX_VALUE;
-    }
-
-    // 返还剩余物品，原位置的快捷重载
-    public void addRemainingItems(ItemEntity itemEntity, ServerLevel serverLevel, int itemsRemaining) {
-        addRemainingItems(itemEntity, serverLevel, itemsRemaining, 0.5, 0.5, 0.5);
-    }
-
-    // 返还剩余物品，偏移位置
-    public void addRemainingItems(ItemEntity itemEntity, ServerLevel serverLevel, int itemsRemaining,
-                                  double offsetX, double offsetY, double offsetZ) {
-        if (itemsRemaining <= 0) {
-            return;
-        }
-
-        ItemStack returnStack = itemEntity.getItem().copy();
-        returnStack.setCount(itemsRemaining);
-
-        BlockPos pos = itemEntity.blockPosition();
-
-        ItemReturnUtil.spawnLockedItem(
-                serverLevel,
-                returnStack,
-                pos.getX() + 0.5 + offsetX,
-                pos.getY() + 0.5 + offsetY,
-                pos.getZ() + 0.5 + offsetZ
-        );
-
-        LOGGER.debug("Returned {} unused items of {} with offset ({}, {}, {})",
-                itemsRemaining, getItemId(), offsetX, offsetY, offsetZ);
-    }
-
     public Item getStartItem() {
         if (cacheInitialized) {
             return cachedStartItem;
@@ -308,16 +245,6 @@ public abstract class BaseConversionConfig {
         ResourceLocation rl = parseItemRl();
         return rl != null ? BuiltInRegistries.ITEM.get(rl) : Items.AIR;
     }
-
-    // ========== 子类方法 ========== //
-    public int countNearbyResult(ItemEntity itemEntity) {
-        return 0;
-    }
-    public boolean isResultLimitExceeded(ItemEntity itemEntity) {
-        return false;
-    }
-
-    public abstract boolean performConversion(ItemEntity itemEntity, ServerLevel serverLevel);
 
     protected boolean additionalCheck() {return true;}
 
@@ -401,8 +328,8 @@ public abstract class BaseConversionConfig {
     }
 
     // config类型、uuid只能获取不能设置
-    public ConfigType getConfigType() {
-        return configType;
+    public ConversionType getConversionType() {
+        return conversionType;
     }
 
     public String getInternalId() {

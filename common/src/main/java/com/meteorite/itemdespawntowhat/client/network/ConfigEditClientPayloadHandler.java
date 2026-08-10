@@ -24,6 +24,9 @@ public final class ConfigEditClientPayloadHandler {
     }
 
     public static void handleConfigSnapshot(ConfigSnapshotPayload payload) {
+        if (payload.configType() == null) {
+            return;
+        }
         Minecraft client = Minecraft.getInstance();
         client.execute(() -> {
             ConfigEditSnapshotManager.putSnapshot(payload.configType(), payload.configJson());

@@ -14,12 +14,17 @@ import net.minecraft.world.level.material.FluidState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Map;
-
+/**
+ * 检查物品实体所在位置的流体状态。
+ */
 public class InnerFluidConditionChecker extends AbstractConditionChecker{
     private static final Logger LOGGER = LogManager.getLogger();
-    private static final String KEY = "inner_fluid";
     private InnerFluid innerFluid;
+
+    @Override
+    public AbstractConditionChecker createChecker(ConditionContext ctx) {
+        return new InnerFluidConditionChecker(ctx.innerFluid());
+    }
 
     public InnerFluidConditionChecker() {}
 
@@ -29,29 +34,8 @@ public class InnerFluidConditionChecker extends AbstractConditionChecker{
 
     // ========== 父类抽象方法实现 ========== //
     @Override
-    public String getConditionKey() {
-        return KEY;
-    }
-
-    @Override
     public boolean shouldApply(ConditionContext ctx) {
         return ctx.innerFluid() != null && ctx.innerFluid().hasInnerFluid();
-    }
-
-    @Override
-    public void applyCondition(Map<String, String> conditions, ConditionContext ctx) {
-        ctx.innerFluid().toConditionMap(conditions, getConditionKey());
-    }
-
-    @Override
-    public AbstractConditionChecker parse(Map<String, String> conditions) {
-        try {
-            InnerFluid parsed = new InnerFluid().fromConditionMap(conditions, getConditionKey());
-            return parsed != null ? new InnerFluidConditionChecker(parsed) : null;
-        } catch (Exception e) {
-            LOGGER.warn("Failed to parse InnerFluid from condition map: {}", e.getMessage());
-            return null;
-        }
     }
 
     // ========== 核心检测逻辑 ========== //

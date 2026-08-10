@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.network;
 
-import com.meteorite.itemdespawntowhat.config.ConfigType;
+import com.meteorite.itemdespawntowhat.config.type.ConversionType;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.io.ConfigJsonCodec;
 
@@ -13,13 +13,13 @@ import java.util.concurrent.ConcurrentHashMap;
  * 暂存客户端尚未被编辑界面消费的服务端配置快照。
  */
 public final class ConfigEditSnapshotManager {
-    private static final Map<ConfigType, String> SNAPSHOT_JSONS = new ConcurrentHashMap<>();
+    private static final Map<ConversionType, String> SNAPSHOT_JSONS = new ConcurrentHashMap<>();
 
     private ConfigEditSnapshotManager() {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    public static void putSnapshot(ConfigType configType, String jsonData) {
+    public static void putSnapshot(ConversionType configType, String jsonData) {
         if (configType == null) {
             return;
         }
@@ -31,7 +31,7 @@ public final class ConfigEditSnapshotManager {
     }
 
     public static <T extends BaseConversionConfig> List<T> consumeSnapshot(
-            ConfigType configType,
+            ConversionType configType,
             ConfigJsonCodec<T> codec
     ) {
         if (configType == null || codec == null) {

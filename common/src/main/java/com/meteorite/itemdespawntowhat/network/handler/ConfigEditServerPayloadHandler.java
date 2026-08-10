@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.network.handler;
 
 import com.meteorite.itemdespawntowhat.ConfigExtractorManager;
-import com.meteorite.itemdespawntowhat.config.ConfigType;
+import com.meteorite.itemdespawntowhat.config.type.ConversionType;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.io.JsonConfigRepository;
 import com.meteorite.itemdespawntowhat.config.type.ConversionTypeDefinition;
@@ -35,6 +35,9 @@ public final class ConfigEditServerPayloadHandler {
 
     public static void handleConfigSnapshotRequest(RequestConfigSnapshotPayload payload, Player player) {
         if (!(player instanceof ServerPlayer serverPlayer) || !hasEditPermission(serverPlayer)) {
+            return;
+        }
+        if (payload.configType() == null) {
             return;
         }
 
@@ -74,6 +77,10 @@ public final class ConfigEditServerPayloadHandler {
             return;
         }
         EditSessionLockManager.touch(serverPlayer);
+        if (payload.configType() == null) {
+            EditSessionLockManager.release(serverPlayer);
+            return;
+        }
 
         try {
             saveConfigData(serverPlayer, payload.configType(), payload.configData());
@@ -84,6 +91,11 @@ public final class ConfigEditServerPayloadHandler {
 
     public static void handleSaveConfigChunk(SaveConfigChunkPayload payload, Player player) {
         if (!(player instanceof ServerPlayer serverPlayer) || !hasOwnedEditSession(serverPlayer)) {
+            return;
+        }
+        if (payload.configType() == null) {
+            EditSessionLockManager.release(serverPlayer);
+            SaveConfigChunkAccumulator.clear(serverPlayer);
             return;
         }
         EditSessionLockManager.touch(serverPlayer);
@@ -100,7 +112,7 @@ public final class ConfigEditServerPayloadHandler {
         }
     }
 
-    private static void saveConfigData(ServerPlayer serverPlayer, ConfigType configType, String configData) {
+    private static void saveConfigData(ServerPlayer serverPlayer, ConversionType configType, String configData) {
         try {
             if (!ConfigEditLimits.isConfigSizeValid(configData)) {
                 serverPlayer.sendSystemMessage(Component.translatable("gui.itemdespawntowhat.edit.payload_too_large"));

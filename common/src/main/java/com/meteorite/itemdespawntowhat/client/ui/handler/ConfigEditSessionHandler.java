@@ -3,7 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.handler;
 import com.meteorite.itemdespawntowhat.ConfigExtractorManager;
 import com.meteorite.itemdespawntowhat.client.ui.support.EditCallback;
 import com.meteorite.itemdespawntowhat.network.ConfigEditSnapshotManager;
-import com.meteorite.itemdespawntowhat.config.ConfigType;
+import com.meteorite.itemdespawntowhat.config.type.ConversionType;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.io.ConfigJsonCodec;
 import com.meteorite.itemdespawntowhat.config.type.ConversionTypeRegistry;
@@ -20,12 +20,12 @@ import java.util.List;
  */
 public class ConfigEditSessionHandler<T extends BaseConversionConfig> {
     private static final Logger LOGGER = LogManager.getLogger();
-    private final ConfigType configType;
+    private final ConversionType configType;
     private final ConfigJsonCodec<T> codec;
     private final List<T> originalConfigs;
     private final List<T> pendingConfigs = new ArrayList<>();
 
-    public ConfigEditSessionHandler(ConfigType configType) {
+    public ConfigEditSessionHandler(ConversionType configType) {
         this.configType = configType;
 
         this.codec = ConversionTypeRegistry.<T>get(configType).codec();
@@ -38,18 +38,18 @@ public class ConfigEditSessionHandler<T extends BaseConversionConfig> {
         if (server != null) {
             try {
                 List<T> configs = ConfigExtractorManager.getConfigByType(configType);
-                LOGGER.debug("Loaded server cache for {}, count = {}", configType.name(), configs.size());
+                LOGGER.debug("Loaded server cache for {}, count = {}", configType.id(), configs.size());
                 return configs;
             } catch (IllegalStateException e) {
-                LOGGER.warn("Server cache not ready for {}, falling back to snapshot", configType.name(), e);
+                LOGGER.warn("Server cache not ready for {}, falling back to snapshot", configType.id(), e);
             }
         }
 
         List<T> configs = ConfigEditSnapshotManager.consumeSnapshot(configType, codec);
         if (configs.isEmpty()) {
-            LOGGER.warn("No client snapshot available for {}, using empty initial list", configType.name());
+            LOGGER.warn("No client snapshot available for {}, using empty initial list", configType.id());
         } else {
-            LOGGER.debug("Loaded client snapshot for {}, count = {}", configType.name(), configs.size());
+            LOGGER.debug("Loaded client snapshot for {}, count = {}", configType.id(), configs.size());
         }
         return configs;
     }
@@ -111,7 +111,7 @@ public class ConfigEditSessionHandler<T extends BaseConversionConfig> {
     }
 
     // ========== getters ========== //
-    public ConfigType getConfigType() {
+    public ConversionType getConfigType() {
         return configType;
     }
 

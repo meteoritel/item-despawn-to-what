@@ -305,7 +305,7 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
         ConfigEntry(ConfigListPanel<T> parent, T config, EntrySource source, int indexInSource) {
             this.parent = parent;
             this.config = config;
-            this.presenter = ConfigPresenterRegistry.get(config.getConfigType());
+            this.presenter = ConfigPresenterRegistry.get(config.getConversionType());
             this.source = source;
             this.indexInSource = indexInSource;
             this.sourceIsTag = TagResolver.isTagId(config.getItemId());
@@ -334,9 +334,6 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
         }
 
         private Component getSourceText(ItemStack sourceIconStack) {
-            if (sourceIsTag) {
-                return ConfigPresenterRegistry.displayName(sourceIconStack);
-            }
             return ConfigPresenterRegistry.displayName(sourceIconStack);
         }
 

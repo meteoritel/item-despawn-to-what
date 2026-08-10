@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.presentation;
 
-import com.meteorite.itemdespawntowhat.config.ConfigType;
+import com.meteorite.itemdespawntowhat.config.type.BuiltinConversionTypes;
+import com.meteorite.itemdespawntowhat.config.type.ConversionType;
 import com.meteorite.itemdespawntowhat.config.WorldEffectType;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToBlockConfig;
@@ -21,21 +22,21 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 
 import java.util.Collections;
-import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
  * 保存各配置类型对应的客户端展示策略。
  */
 public final class ConfigPresenterRegistry {
-    private static final Map<ConfigType, ConfigPresenter<?>> PRESENTERS = createPresenters();
+    private static final Map<ConversionType, ConfigPresenter<?>> PRESENTERS = createPresenters();
 
     private ConfigPresenterRegistry() {
         throw new UnsupportedOperationException("Utility class");
     }
 
     @SuppressWarnings("unchecked")
-    public static <T extends BaseConversionConfig> ConfigPresenter<T> get(ConfigType type) {
+    public static <T extends BaseConversionConfig> ConfigPresenter<T> get(ConversionType type) {
         ConfigPresenter<?> presenter = PRESENTERS.get(type);
         if (presenter == null) {
             throw new IllegalArgumentException("No presenter registered for config type: " + type);
@@ -43,19 +44,19 @@ public final class ConfigPresenterRegistry {
         return (ConfigPresenter<T>) presenter;
     }
 
-    private static Map<ConfigType, ConfigPresenter<?>> createPresenters() {
-        Map<ConfigType, ConfigPresenter<?>> presenters = new EnumMap<>(ConfigType.class);
-        register(presenters, ConfigType.ITEM_TO_ITEM, ConfigPresenterRegistry::presentItem);
-        register(presenters, ConfigType.ITEM_TO_MOB, ConfigPresenterRegistry::presentMob);
-        register(presenters, ConfigType.ITEM_TO_BLOCK, ConfigPresenterRegistry::presentBlock);
-        register(presenters, ConfigType.ITEM_TO_XP_ORB, ConfigPresenterRegistry::presentExperience);
-        register(presenters, ConfigType.ITEM_TO_WORLD_EFFECT, ConfigPresenterRegistry::presentWorldEffect);
+    private static Map<ConversionType, ConfigPresenter<?>> createPresenters() {
+        Map<ConversionType, ConfigPresenter<?>> presenters = new HashMap<>();
+        register(presenters, BuiltinConversionTypes.ITEM_TO_ITEM, ConfigPresenterRegistry::presentItem);
+        register(presenters, BuiltinConversionTypes.ITEM_TO_MOB, ConfigPresenterRegistry::presentMob);
+        register(presenters, BuiltinConversionTypes.ITEM_TO_BLOCK, ConfigPresenterRegistry::presentBlock);
+        register(presenters, BuiltinConversionTypes.ITEM_TO_XP_ORB, ConfigPresenterRegistry::presentExperience);
+        register(presenters, BuiltinConversionTypes.ITEM_TO_WORLD_EFFECT, ConfigPresenterRegistry::presentWorldEffect);
         return Collections.unmodifiableMap(presenters);
     }
 
     private static <T extends BaseConversionConfig> void register(
-            Map<ConfigType, ConfigPresenter<?>> presenters,
-            ConfigType type,
+            Map<ConversionType, ConfigPresenter<?>> presenters,
+            ConversionType type,
             ConfigPresenter<T> presenter
     ) {
         presenters.put(type, presenter);

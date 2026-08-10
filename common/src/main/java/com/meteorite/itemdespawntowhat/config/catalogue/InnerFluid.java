@@ -1,9 +1,6 @@
 package com.meteorite.itemdespawntowhat.config.catalogue;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import com.google.gson.annotations.SerializedName;
-import com.meteorite.itemdespawntowhat.condition.ConditionSerializable;
 import com.meteorite.itemdespawntowhat.util.IdValidator;
 import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import net.minecraft.core.BlockPos;
@@ -17,12 +14,10 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.FluidState;
 
-import java.util.Map;
-
-public class InnerFluid implements ConditionSerializable<InnerFluid> {
-    private static final Gson GSON = new GsonBuilder()
-            .disableHtmlEscaping()
-            .create();
+/**
+ * 物品所在位置的流体条件数据。
+ */
+public class InnerFluid {
 
     @SerializedName("inner_fluid")
     private final String fluidId;
@@ -41,24 +36,6 @@ public class InnerFluid implements ConditionSerializable<InnerFluid> {
         this.fluidId = fluidId;
         this.requireSource = requireSource;
         this.consumeFluid = consumeFluid;
-    }
-
-    @Override
-    public InnerFluid fromConditionMap(Map<String, String> conditions, String conditionKey) {
-        String json = conditions.get(conditionKey);
-        if (json == null || json.isEmpty()) {
-            return null;
-        }
-
-        InnerFluid parsed = GSON.fromJson(json, InnerFluid.class);
-        return (parsed != null && parsed.hasInnerFluid()) ? parsed : null;
-    }
-
-    @Override
-    public void toConditionMap(Map<String, String> out, String conditionKey) {
-        if (hasInnerFluid()) {
-            out.put(conditionKey, GSON.toJson(this));
-        }
     }
 
     // 在世界上消耗流体

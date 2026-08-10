@@ -1,18 +1,14 @@
 package com.meteorite.itemdespawntowhat.config.conversion;
 
-import com.meteorite.itemdespawntowhat.config.ConfigType;
-import net.minecraft.core.BlockPos;
+import com.meteorite.itemdespawntowhat.config.type.BuiltinConversionTypes;
 import net.minecraft.core.registries.BuiltInRegistries;
 import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
 /**
- * 将源物品转换为掉落物实体的配置与执行逻辑。
+ * 物品到掉落物转换的配置数据。
  */
 public class ItemToItemConfig extends BaseItemToEntityConfig{
     // 缓存的结果物品实例
@@ -21,11 +17,11 @@ public class ItemToItemConfig extends BaseItemToEntityConfig{
     private transient int cachedResultMaxStackSize;
 
     public ItemToItemConfig() {
-        super(ConfigType.ITEM_TO_ITEM);
+        super(BuiltinConversionTypes.ITEM_TO_ITEM);
     }
 
     public ItemToItemConfig(String item, String result) {
-        super(ConfigType.ITEM_TO_ITEM, item, result);
+        super(BuiltinConversionTypes.ITEM_TO_ITEM, item, result);
     }
 
     private ResourceLocation parseResultRl() {
@@ -56,73 +52,6 @@ public class ItemToItemConfig extends BaseItemToEntityConfig{
 
         return super.additionalCheck();
     }
-    // ========== 转化逻辑 ========== //
-    @Override
-    public boolean performConversion(ItemEntity itemEntity, ServerLevel serverLevel) {
-        Item resultItem = getResultItem();
-        BlockPos pos = itemEntity.blockPosition();
-
-        // 获取当前物品堆叠
-        ItemStack originalStack = itemEntity.getItem();
-        int originalStackSize = originalStack.getCount();
-        int resultMultiple = getResultMultiple();
-
-        // 综合催化剂和结果上限，计算实际转化轮数
-        int rounds = computeActualRounds(itemEntity, originalStackSize);
-        if (rounds <= 0) {
-            LOGGER.debug("No items can be converted for {} (catalysts or limit exhausted)", getResultId());
-            return false;
-        }
-
-        int actualConvertCount = rounds * getSourceMultiple();
-
-        // 物品实体下一tick消失
-        itemEntity.makeFakeItem();
-
-        // 根据条件消耗催化剂与流体
-        consumeAllOthers(itemEntity, actualConvertCount);
-        ItemStack resultStack = new ItemStack(resultItem, rounds);
-        // 生成结果物品实体（每轮产出 resultMultiple 堆，每堆数量为 rounds）
-        for (int i = 0; i < resultMultiple; i++) {
-            ItemEntity resultItemEntity = new ItemEntity(
-                    serverLevel,
-                    pos.getX() + 0.5 + (serverLevel.random.nextDouble() - 0.5) * 0.3,
-                    pos.getY() + 0.1,
-                    pos.getZ() + 0.5 + (serverLevel.random.nextDouble() - 0.5) * 0.3,
-                    resultStack.copy()
-            );
-            // 设置一些随机速度，让物品生成时飞起来
-            resultItemEntity.setDeltaMovement(
-                    (serverLevel.random.nextDouble() - 0.5) * 0.1,
-                    0.2,
-                    (serverLevel.random.nextDouble() - 0.5) * 0.1
-            );
-            serverLevel.addFreshEntity(resultItemEntity);
-        }
-
-        int itemsRemaining = originalStackSize - actualConvertCount;
-        // 添加未转转化完成的返还物品
-        addRemainingItems(itemEntity, serverLevel, itemsRemaining);
-        LOGGER.debug("Converted to item: {} -> {} ({}x, rounds: {}, consumed: {}/{}, stack remaining: {})",
-                originalStack.getItem().getDescriptionId(), getResultId(),
-                resultMultiple, rounds, actualConvertCount, originalStackSize, itemsRemaining);
-        return true;
-    }
-
-    // 对于物掉落物结果，计算所有的stack堆叠之和
-    @Override
-    protected int countNearbyResult(ServerLevel level, BlockPos pos) {
-        int total = 0;
-        for (ItemEntity entity : level.getEntitiesOfClass(ItemEntity.class, buildSearchBox(pos), ItemEntity::isAlive)) {
-            ItemStack stack = entity.getItem();
-            if (BuiltInRegistries.ITEM.getKey(stack.getItem()).toString().equals(resultId)) {
-                long updated = (long) total + stack.getCount();
-                total = updated >= Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) updated;
-            }
-        }
-        return total;
-    }
-
     // ========== 结果相关方法 ========== //
     public Item getResultItem() {
         if (isCacheInitialized()) {
@@ -132,9 +61,8 @@ public class ItemToItemConfig extends BaseItemToEntityConfig{
         return resultRl != null ? BuiltInRegistries.ITEM.get(resultRl) : Items.AIR;
     }
 
-    @Override
-    protected int getRawResultLimit() {
-        return resultLimit * cachedResultMaxStackSize;
+    public int getResultMaxStackSize() {
+        return Math.max(1, cachedResultMaxStackSize);
     }
 
 }

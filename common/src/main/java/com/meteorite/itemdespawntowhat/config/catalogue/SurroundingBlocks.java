@@ -1,19 +1,15 @@
 package com.meteorite.itemdespawntowhat.config.catalogue;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import com.google.gson.annotations.SerializedName;
-import com.meteorite.itemdespawntowhat.condition.ConditionSerializable;
 import com.meteorite.itemdespawntowhat.config.ConfigDirection;
 import com.meteorite.itemdespawntowhat.util.IdValidator;
 
-import java.util.Map;
 import java.util.stream.Stream;
 
-public class SurroundingBlocks implements ConditionSerializable<SurroundingBlocks> {
-    private static final Gson GSON = new GsonBuilder()
-            .disableHtmlEscaping()
-            .create();
+/**
+ * 六个方向的相邻方块条件数据。
+ */
+public class SurroundingBlocks {
     @SerializedName("north")
     private String north;
     @SerializedName("south")
@@ -28,26 +24,6 @@ public class SurroundingBlocks implements ConditionSerializable<SurroundingBlock
     private String down;
 
     public SurroundingBlocks() {
-    }
-
-    // ========== 接口实现 ========== //
-    // 将非空的六面配置以 conditionKey.<direction> 为键写入 。
-    @Override
-    public void toConditionMap(Map<String, String> out, String conditionKey) {
-        if (hasAnySurroundBlock()) {
-            out.put(conditionKey, GSON.toJson(this));
-        }
-    }
-
-    @Override
-    public SurroundingBlocks fromConditionMap(Map<String, String> conditions, String conditionKey) {
-        String json = conditions.get(conditionKey);
-        if (json == null || json.isEmpty()) {
-            return null;
-        }
-
-        SurroundingBlocks parsed = GSON.fromJson(json, SurroundingBlocks.class);
-        return (parsed != null && parsed.hasAnySurroundBlock()) ? parsed : null;
     }
 
     // 检查是否存在周围方块设置的需求

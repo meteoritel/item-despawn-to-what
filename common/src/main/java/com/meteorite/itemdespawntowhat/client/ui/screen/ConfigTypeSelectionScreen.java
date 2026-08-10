@@ -1,6 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.meteorite.itemdespawntowhat.config.ConfigType;
+import com.meteorite.itemdespawntowhat.client.register.ConfigEditScreenRegistry;
+import com.meteorite.itemdespawntowhat.config.type.ConversionType;
+import com.meteorite.itemdespawntowhat.config.type.ConversionTypeRegistry;
 import com.meteorite.itemdespawntowhat.network.payload.c2s.RequestConfigSnapshotPayload;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -19,23 +21,27 @@ public class ConfigTypeSelectionScreen extends Screen {
 
     @Override
     protected void init() {
-        int y = height / 2 - (ConfigType.values().length * 25) / 2;
-        for (ConfigType type : ConfigType.values()) {
+        var types = ConversionTypeRegistry.all().stream()
+                .filter(ConfigEditScreenRegistry::contains)
+                .toList();
+        int y = height / 2 - (types.size() * 25) / 2;
+        for (ConversionType type : types) {
+            String path = type.id().getPath();
             Button button = Button.builder(
-                            Component.translatable("gui.itemdespawntowhat.config_type." + type.name().toLowerCase()),
+                            Component.translatable("gui.itemdespawntowhat.config_type." + path),
                             btn -> requestConfigSnapshot(type))
                     .bounds(width / 2 - 100, y, 200, 20).build();
 
             // 添加按钮tooltip
             button.setTooltip(Tooltip.create(
-                    Component.translatable("gui.itemdespawntowhat.config_type." + type.name().toLowerCase() + ".tooltip")));
+                    Component.translatable("gui.itemdespawntowhat.config_type." + path + ".tooltip")));
             addRenderableWidget(button);
             y += 25;
         }
     }
 
     // 这里只负责向服务端申请快照，不直接构建编辑界面。
-    private void requestConfigSnapshot(ConfigType type) {
+    private void requestConfigSnapshot(ConversionType type) {
         if (minecraft != null) {
             Services.PLATFORM.sendToServer(new RequestConfigSnapshotPayload(type));
         }

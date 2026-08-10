@@ -1,8 +1,8 @@
 package com.meteorite.itemdespawntowhat.network.payload.c2s;
 
 import com.meteorite.itemdespawntowhat.Constants;
-import com.meteorite.itemdespawntowhat.config.ConfigType;
-import com.meteorite.itemdespawntowhat.network.codec.ConfigTypeStreamCodec;
+import com.meteorite.itemdespawntowhat.config.type.ConversionType;
+import com.meteorite.itemdespawntowhat.network.codec.ConversionTypeStreamCodec;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
@@ -11,14 +11,14 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 
 // C2S：客户端提交最终配置 JSON，由服务端负责校验、落盘和刷新缓存。
-public record SaveConfigPayload(ConfigType configType, String configData) implements CustomPacketPayload {
+public record SaveConfigPayload(ConversionType configType, String configData) implements CustomPacketPayload {
 
     public static final Type<SaveConfigPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "save_config")
     );
 
     public static final StreamCodec<ByteBuf, SaveConfigPayload> STREAM_CODEC = StreamCodec.composite(
-            ConfigTypeStreamCodec.INSTANCE,
+            ConversionTypeStreamCodec.INSTANCE,
             SaveConfigPayload::configType,
             ByteBufCodecs.STRING_UTF8,
             SaveConfigPayload::configData,

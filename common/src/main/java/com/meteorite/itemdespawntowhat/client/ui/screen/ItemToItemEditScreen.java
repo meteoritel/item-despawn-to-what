@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.ui.form.section.ItemToItemFormSection;
-import com.meteorite.itemdespawntowhat.config.ConfigType;
+import com.meteorite.itemdespawntowhat.config.type.BuiltinConversionTypes;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToItemConfig;
 
 /**
@@ -9,6 +9,6 @@ import com.meteorite.itemdespawntowhat.config.conversion.ItemToItemConfig;
  */
 public final class ItemToItemEditScreen extends BaseConfigEditScreen<ItemToItemConfig> {
     public ItemToItemEditScreen() {
-        super(ConfigType.ITEM_TO_ITEM, ItemToItemConfig::new, new ItemToItemFormSection());
+        super(BuiltinConversionTypes.ITEM_TO_ITEM, ItemToItemConfig::new, new ItemToItemFormSection());
     }
 }

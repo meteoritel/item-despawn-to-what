@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.ui.form.section.ItemToBlockFormSection;
-import com.meteorite.itemdespawntowhat.config.ConfigType;
+import com.meteorite.itemdespawntowhat.config.type.BuiltinConversionTypes;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToBlockConfig;
 
 /**
@@ -9,6 +9,6 @@ import com.meteorite.itemdespawntowhat.config.conversion.ItemToBlockConfig;
  */
 public final class ItemToBlockEditScreen extends BaseConfigEditScreen<ItemToBlockConfig> {
     public ItemToBlockEditScreen() {
-        super(ConfigType.ITEM_TO_BLOCK, ItemToBlockConfig::new, new ItemToBlockFormSection());
+        super(BuiltinConversionTypes.ITEM_TO_BLOCK, ItemToBlockConfig::new, new ItemToBlockFormSection());
     }
 }

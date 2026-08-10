@@ -1,7 +1,8 @@
 package com.meteorite.itemdespawntowhat.config.runtime;
 
-import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
+import com.meteorite.itemdespawntowhat.config.type.ConversionType;
+import com.meteorite.itemdespawntowhat.config.type.ConversionTypeRegistry;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
@@ -17,13 +18,13 @@ public final class RuntimeConfigSnapshot {
     private final Map<ResourceLocation, List<CompiledConversionRule>> rulesByItem;
     private final Map<String, CompiledConversionRule> rulesByInternalId;
     private final Map<ResourceLocation, Integer> maxComplexityByItem;
-    private final Map<ConfigType, List<BaseConversionConfig>> configsByType;
+    private final Map<ConversionType, List<BaseConversionConfig>> configsByType;
 
     RuntimeConfigSnapshot(
             Map<ResourceLocation, List<CompiledConversionRule>> rulesByItem,
             Map<String, CompiledConversionRule> rulesByInternalId,
             Map<ResourceLocation, Integer> maxComplexityByItem,
-            Map<ConfigType, List<BaseConversionConfig>> configsByType
+            Map<ConversionType, List<BaseConversionConfig>> configsByType
     ) {
         this.rulesByItem = rulesByItem;
         this.rulesByInternalId = rulesByInternalId;
@@ -53,7 +54,7 @@ public final class RuntimeConfigSnapshot {
     }
 
     @SuppressWarnings("unchecked")
-    public <T extends BaseConversionConfig> List<T> getConfigsByType(ConfigType type) {
+    public <T extends BaseConversionConfig> List<T> getConfigsByType(ConversionType type) {
         return (List<T>) configsByType.getOrDefault(type, List.of());
     }
 

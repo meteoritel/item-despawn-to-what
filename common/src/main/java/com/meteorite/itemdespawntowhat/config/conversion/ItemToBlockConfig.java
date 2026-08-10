@@ -1,26 +1,20 @@
 package com.meteorite.itemdespawntowhat.config.conversion;
 
 import com.google.gson.annotations.SerializedName;
-import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.config.ConversionLimits;
-import com.meteorite.itemdespawntowhat.config.ConfigType;
-import com.meteorite.itemdespawntowhat.server.task.LevelTaskManager;
-import com.meteorite.itemdespawntowhat.server.task.PlaceBlockTask;
+import com.meteorite.itemdespawntowhat.config.type.BuiltinConversionTypes;
 import com.meteorite.itemdespawntowhat.server.task.PlaceBlockTask.BlockPlaceShape;
 import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 
 /**
- * 将源物品转换为方块放置任务的配置与执行逻辑。
+ * 物品到方块转换的配置数据。
  */
 public class ItemToBlockConfig extends BaseConversionConfig{
     // 最大放置半径的限制，默认为6
@@ -35,7 +29,7 @@ public class ItemToBlockConfig extends BaseConversionConfig{
     private transient Block cachedResultBlock;
 
     public ItemToBlockConfig() {
-        super(ConfigType.ITEM_TO_BLOCK);
+        super(BuiltinConversionTypes.ITEM_TO_BLOCK);
     }
 
     // ========== 缓存与校验 ========== //
@@ -78,43 +72,6 @@ public class ItemToBlockConfig extends BaseConversionConfig{
     @Override
     public boolean isCacheValid() {
         return enableItemBlock || cachedResultBlock != null;
-    }
-
-    // ========== 转化逻辑 ========== //
-    @Override
-    public boolean performConversion(ItemEntity itemEntity, ServerLevel serverLevel) {
-        int originalStackSize = itemEntity.getItem().getCount();
-
-        int rounds = computeActualRounds(itemEntity, originalStackSize);
-        if (rounds <= 0) {
-            LOGGER.debug("No items can be converted to block for {} (catalysts exhausted)", getResultId());
-            return false;
-        }
-
-        Block resultBlock = getResultBlock(itemEntity);
-        if (resultBlock == Blocks.AIR) {
-            LOGGER.warn("Could not resolve result block for item '{}' when enableItemBlock={}, config will be skipped",
-                    itemEntity.getItem().getItem(), enableItemBlock);
-            return false;
-        }
-
-        int actualConvertCount = rounds * getSourceMultiple();
-        int remaining = originalStackSize - actualConvertCount;
-        // 物品下一tick消失
-        itemEntity.makeFakeItem();
-        consumeAllOthers(itemEntity, actualConvertCount);
-        // 下一tick开始执行延迟放置方块的任务
-        boolean consumeFluid = innerFluid == null || !innerFluid.hasInnerFluid() || innerFluid.isConsumeFluid();
-        LevelTaskManager.addTask(serverLevel, new PlaceBlockTask(
-                itemEntity.blockPosition(), resultBlock, getRadius(), getBlockPlaceShape(), consumeFluid,
-                rounds * getResultMultiple(), Constants.blockPlaceIntervalTicks,
-                () -> addRemainingItems(itemEntity, serverLevel, remaining, 0, 1, 0)));
-        return true;
-    }
-
-    @Override
-    protected int getResultCapacityInRounds(ItemEntity itemEntity) {
-        return ConversionLimits.MAX_BLOCK_PLACEMENTS / Math.max(1, getResultMultiple());
     }
 
     // ========== 结果相关方法 ========== //

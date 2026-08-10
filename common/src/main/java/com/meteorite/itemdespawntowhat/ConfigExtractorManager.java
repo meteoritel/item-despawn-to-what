@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat;
 
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
-import com.meteorite.itemdespawntowhat.config.ConfigType;
+import com.meteorite.itemdespawntowhat.config.type.ConversionType;
 import com.meteorite.itemdespawntowhat.config.service.ConfigService;
 import com.meteorite.itemdespawntowhat.config.runtime.CompiledConversionRule;
 import net.minecraft.resources.ResourceLocation;
@@ -33,7 +33,7 @@ public class ConfigExtractorManager {
         return getOrCreateService(configDir).reloadAll();
     }
 
-    public static synchronized boolean reloadConfigsForType(Path configDir, ConfigType configType) {
+    public static synchronized boolean reloadConfigsForType(Path configDir, ConversionType configType) {
         return getOrCreateService(configDir).reloadType(configType);
     }
 
@@ -73,7 +73,7 @@ public class ConfigExtractorManager {
         return getService().getMaxComplexity(itemId);
     }
 
-    public static <T extends BaseConversionConfig> List<T> getConfigByType(ConfigType configType) {
+    public static <T extends BaseConversionConfig> List<T> getConfigByType(ConversionType configType) {
         return getService().getConfigsByType(configType);
     }
 

@@ -18,25 +18,21 @@ import net.minecraft.world.level.block.state.BlockState;
 import java.util.EnumMap;
 import java.util.Map;
 
+/**
+ * 检查物品实体周围六个方向的方块条件。
+ */
 public class SurroundingBlocksConditionChecker extends AbstractConditionChecker {
 
-    public static final String KEY = "surrounding_blocks";
     private Map<ConfigDirection, Either<ResourceLocation, TagKey<Block>>> directionConditions;
+
+    @Override
+    public AbstractConditionChecker createChecker(ConditionContext ctx) {
+        return from(ctx.surroundingBlocks());
+    }
 
     @Override
     public boolean shouldApply(ConditionContext ctx) {
         return ctx.surroundingBlocks() != null && ctx.surroundingBlocks().hasAnySurroundBlock();
-    }
-
-    @Override
-    public void applyCondition(Map<String, String> conditions, ConditionContext ctx) {
-        ctx.surroundingBlocks().toConditionMap(conditions, getConditionKey());
-    }
-
-    @Override
-    public AbstractConditionChecker parse(Map<String, String> conditions) {
-        SurroundingBlocks parsed = new SurroundingBlocks().fromConditionMap(conditions, getConditionKey());
-        return from(parsed);
     }
 
     @Override
@@ -53,11 +49,6 @@ public class SurroundingBlocksConditionChecker extends AbstractConditionChecker 
             }
         }
         return true;
-    }
-
-    @Override
-    public String getConditionKey() {
-        return KEY;
     }
 
     // 解析六面的方块

@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.ui.form.section.ItemToExperienceFormSection;
-import com.meteorite.itemdespawntowhat.config.ConfigType;
+import com.meteorite.itemdespawntowhat.config.type.BuiltinConversionTypes;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToExpOrbConfig;
 
 /**
@@ -9,6 +9,6 @@ import com.meteorite.itemdespawntowhat.config.conversion.ItemToExpOrbConfig;
  */
 public final class ItemToExpOrbEditScreen extends BaseConfigEditScreen<ItemToExpOrbConfig> {
     public ItemToExpOrbEditScreen() {
-        super(ConfigType.ITEM_TO_XP_ORB, ItemToExpOrbConfig::new, new ItemToExperienceFormSection());
+        super(BuiltinConversionTypes.ITEM_TO_XP_ORB, ItemToExpOrbConfig::new, new ItemToExperienceFormSection());
     }
 }

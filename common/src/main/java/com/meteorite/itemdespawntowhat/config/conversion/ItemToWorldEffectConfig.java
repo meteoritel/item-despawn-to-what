@@ -3,13 +3,11 @@ package com.meteorite.itemdespawntowhat.config.conversion;
 import com.google.gson.annotations.SerializedName;
 import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.config.ConversionLimits;
-import com.meteorite.itemdespawntowhat.config.ConfigType;
+import com.meteorite.itemdespawntowhat.config.type.BuiltinConversionTypes;
 import com.meteorite.itemdespawntowhat.config.catalogue.PotionEffect;
 import com.meteorite.itemdespawntowhat.config.WorldEffectType;
 import com.meteorite.itemdespawntowhat.server.task.ExplosionTask;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffectInstance;
-import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.projectile.AbstractArrow;
 import org.jetbrains.annotations.Nullable;
 
@@ -17,7 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 将源物品转换为天气、闪电、爆炸或箭雨效果的配置与执行逻辑。
+ * 物品到天气、闪电、爆炸或箭雨效果的配置数据。
  */
 public class ItemToWorldEffectConfig extends BaseConversionConfig implements WorldEffectType.SideEffectConfig {
 
@@ -54,7 +52,7 @@ public class ItemToWorldEffectConfig extends BaseConversionConfig implements Wor
     private @Nullable List<PotionEffect> arrowPotionEffects = new ArrayList<>();
 
     public ItemToWorldEffectConfig() {
-        super(ConfigType.ITEM_TO_WORLD_EFFECT);
+        super(BuiltinConversionTypes.ITEM_TO_WORLD_EFFECT);
     }
 
     // ========== 校验 ========== //
@@ -93,54 +91,6 @@ public class ItemToWorldEffectConfig extends BaseConversionConfig implements Wor
         }
 
         return true;
-    }
-
-    // ========== 转化逻辑 ========== //
-    @Override
-    public boolean performConversion(ItemEntity itemEntity, ServerLevel serverLevel) {
-        if (worldEffect == null || !worldEffect.canExecute(serverLevel)) {
-            return false;
-        }
-        int originalStackSize = itemEntity.getItem().getCount();
-
-        int rounds;
-        int actualConvertCount;
-        int executionCount;
-        if (isWeatherType()) {
-            // 天气类固定1轮
-            rounds = Math.min(1, computeActualRounds(itemEntity, originalStackSize));
-            if (rounds <= 0) {
-                return false;
-            }
-            actualConvertCount = sourceMultiple;
-            executionCount = 1;
-        } else {
-            int maxRoundsByExecutionCount = ConversionLimits.MAX_WORLD_EFFECT_EXECUTIONS
-                    / Math.max(1, resultMultiple);
-            rounds = Math.min(computeActualRounds(itemEntity, originalStackSize), maxRoundsByExecutionCount);
-            if (rounds <= 0) {
-                LOGGER.warn("No items can be converted for side effect {} (count=0)", worldEffect);
-                return false;
-            }
-            actualConvertCount = rounds * sourceMultiple;
-            executionCount = rounds * resultMultiple;
-        }
-
-        // 物品实体下一tick消失
-        itemEntity.makeFakeItem();
-        // 消耗催化剂与流体
-        consumeAllOthers(itemEntity, actualConvertCount);
-        // 剩余未转化的物品
-        Runnable onFinishCallback = () ->
-                addRemainingItems(itemEntity, serverLevel, originalStackSize - actualConvertCount);
-        // 执行对应的转化
-        worldEffect.getExecutor().execute(itemEntity, serverLevel, this, executionCount, onFinishCallback);
-        return true;
-    }
-
-    // ========== 辅助方法 ========== //
-    private boolean isWeatherType() {
-        return worldEffect == WorldEffectType.RAIN || worldEffect == WorldEffectType.CLEAR;
     }
 
     // ========== 接口实现 ========== //

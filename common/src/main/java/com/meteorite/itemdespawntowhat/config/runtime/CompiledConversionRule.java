@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.config.runtime;
 
 import com.meteorite.itemdespawntowhat.condition.checker.ConditionChecker;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
+import com.meteorite.itemdespawntowhat.config.execution.ConversionExecutor;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
 
@@ -12,11 +13,15 @@ public final class CompiledConversionRule {
     private final BaseConversionConfig definition;
     private final ConditionChecker conditionChecker;
     private final int complexity;
+    private final ConversionExecutor<BaseConversionConfig> executor;
 
-    CompiledConversionRule(BaseConversionConfig definition, ConditionChecker conditionChecker) {
+    @SuppressWarnings("unchecked")
+    CompiledConversionRule(BaseConversionConfig definition, ConditionChecker conditionChecker,
+                           ConversionExecutor<? super BaseConversionConfig> executor) {
         this.definition = definition;
         this.conditionChecker = conditionChecker;
         this.complexity = definition.computeComplexity();
+        this.executor = (ConversionExecutor<BaseConversionConfig>) executor;
     }
 
     public BaseConversionConfig definition() {
@@ -44,10 +49,10 @@ public final class CompiledConversionRule {
     }
 
     public boolean isResultLimitExceeded(ItemEntity itemEntity) {
-        return definition.isResultLimitExceeded(itemEntity);
+        return executor.isResultLimitExceeded(definition, itemEntity);
     }
 
     public boolean performConversion(ItemEntity itemEntity, ServerLevel level) {
-        return definition.performConversion(itemEntity, level);
+        return executor.performConversion(definition, itemEntity, level);
     }
 }
