@@ -32,6 +32,13 @@ public final class ConditionLeaf {
         this.negated = negated;
     }
 
+    /** 从原始标识和参数创建条件叶，供客户端未知类型回退使用。 */
+    public ConditionLeaf(ResourceLocation typeId, JsonObject params, boolean negated) {
+        this.type = Objects.requireNonNull(typeId, "typeId").toString();
+        this.params = params == null ? new JsonObject() : params.deepCopy();
+        this.negated = negated;
+    }
+
     public ResourceLocation typeId() {
         ResourceLocation parsed = ResourceLocation.tryParse(type);
         if (parsed == null) {
@@ -40,8 +47,24 @@ public final class ConditionLeaf {
         return parsed;
     }
 
+    public String rawTypeId() {
+        return type;
+    }
+
+    public void setTypeId(ResourceLocation typeId) {
+        this.type = Objects.requireNonNull(typeId, "typeId").toString();
+    }
+
     public JsonObject params() {
         return params == null ? new JsonObject() : params;
+    }
+
+    public void setParams(JsonObject params) {
+        this.params = params == null ? new JsonObject() : params.deepCopy();
+    }
+
+    public void setNegated(boolean negated) {
+        this.negated = negated;
     }
 
     public <P> P parametersAs(Class<P> parameterType) {

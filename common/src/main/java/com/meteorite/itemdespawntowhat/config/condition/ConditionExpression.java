@@ -2,9 +2,7 @@ package com.meteorite.itemdespawntowhat.config.condition;
 
 import com.google.gson.annotations.SerializedName;
 import com.meteorite.itemdespawntowhat.config.condition.type.ConditionType;
-import com.meteorite.itemdespawntowhat.config.condition.type.ConditionTypeRegistry;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
-import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -38,52 +36,10 @@ public final class ConditionExpression {
         return ConditionExpressionEvaluator.compile(this, config);
     }
 
-    public @Nullable ConditionLeaf firstGroupLeaf(ConditionType type) {
-        if (groups().isEmpty()) {
-            return null;
-        }
-        return groups().getFirst().conditions().stream()
-                .filter(leaf -> leaf.typeId().equals(type.id()))
-                .findFirst()
-                .orElse(null);
-    }
-
-    public void setFirstGroupLeaf(ConditionType type, @Nullable Object parameters) {
-        ConditionGroup group = ensureFirstGroup();
-        group.conditions().removeIf(leaf -> leaf.typeId().equals(type.id()));
-        if (parameters != null) {
-            group.conditions().add(new ConditionLeaf(type, parameters, false));
-        }
-        removeEmptyLeadingGroup();
-    }
-
     public boolean containsType(ConditionType type) {
         return groups().stream()
                 .flatMap(group -> group.conditions().stream())
                 .anyMatch(leaf -> leaf.typeId().equals(type.id()));
     }
 
-    public boolean supportsLegacyEditor() {
-        if (groups().size() > 1) {
-            return false;
-        }
-        return groups().stream()
-                .flatMap(group -> group.conditions().stream())
-                .allMatch(leaf -> !leaf.negated()
-                        && ConditionTypeRegistry.byId(leaf.typeId()) != null
-                        && leaf.typeId().getNamespace().equals(com.meteorite.itemdespawntowhat.Constants.MOD_ID));
-    }
-
-    private ConditionGroup ensureFirstGroup() {
-        if (groups().isEmpty()) {
-            groups().add(new ConditionGroup());
-        }
-        return groups().getFirst();
-    }
-
-    private void removeEmptyLeadingGroup() {
-        if (groups().size() == 1 && groups().getFirst().conditions().isEmpty()) {
-            groups().clear();
-        }
-    }
 }

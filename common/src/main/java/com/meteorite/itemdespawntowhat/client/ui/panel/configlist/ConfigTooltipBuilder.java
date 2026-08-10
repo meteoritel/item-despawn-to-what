@@ -1,11 +1,10 @@
 package com.meteorite.itemdespawntowhat.client.ui.panel.configlist;
 
-import com.meteorite.itemdespawntowhat.config.ConfigDirection;
 import com.meteorite.itemdespawntowhat.client.register.ClientConversionTypeRegistry;
-import com.meteorite.itemdespawntowhat.config.catalogue.InnerFluid;
-import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.client.ui.presentation.ConfigPresentation;
+import com.meteorite.itemdespawntowhat.client.ui.presentation.ConditionExpressionPresenter;
+import com.meteorite.itemdespawntowhat.client.ui.presentation.ConsumptionPresenter;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 
@@ -23,44 +22,24 @@ public final class ConfigTooltipBuilder {
                 .append(Component.translatable(
                         "gui.itemdespawntowhat.tooltip.conversion_time", config.getConversionTime()));
 
-        String dim = config.getDimension();
-        if (dim != null && !dim.isEmpty()) {
-            tooltip = tooltip.append(Component.literal("\n"))
-                    .append(Component.translatable("gui.itemdespawntowhat.tooltip.dimension", dim));
-        }
+        tooltip = tooltip.append(Component.literal("\n"))
+                .append(Component.translatable("gui.itemdespawntowhat.tooltip.conditions"))
+                .append(Component.literal(" "))
+                .append(ConditionExpressionPresenter.summary(config.getConditionExpression()));
 
-        if (config.isNeedOutdoor()) {
-            tooltip = tooltip.append(Component.literal("\n"))
-                    .append(Component.translatable("gui.itemdespawntowhat.tooltip.need_outdoor"));
+        Component consumption = ConsumptionPresenter.summary(config.getConsumptionDirective());
+        if (!consumption.getString().isEmpty()) {
+            tooltip = tooltip.append(Component.literal("\n")).append(consumption);
         }
-
-        SurroundingBlocks sb = config.getSurroundingBlocks();
-        if (sb != null && sb.hasAnySurroundBlock()) {
+        tooltip = tooltip.append(Component.literal("\n"))
+                .append(Component.translatable("gui.itemdespawntowhat.tooltip.priority", config.getPriority()));
+        if (!config.isEnabled()) {
             tooltip = tooltip.append(Component.literal("\n"))
-                    .append(Component.translatable("gui.itemdespawntowhat.tooltip.surrounding_blocks_header"));
-            for (ConfigDirection dir : ConfigDirection.values()) {
-                String val = sb.get(dir);
-                if (val != null && !val.isEmpty()) {
-                    tooltip = tooltip.append(Component.literal("\n"))
-                            .append(Component.translatable("gui.itemdespawntowhat.tooltip.surrounding_block",
-                                    dir.getDisplayName(), val));
-                }
-            }
+                    .append(Component.translatable("gui.itemdespawntowhat.tooltip.disabled"));
         }
-
-        InnerFluid fluid = config.getInnerFluid();
-        if (fluid != null && fluid.hasInnerFluid()) {
+        if (config.getNotes() != null) {
             tooltip = tooltip.append(Component.literal("\n"))
-                    .append(Component.translatable("gui.itemdespawntowhat.tooltip.inner_fluid",
-                            fluid.fluidId()));
-            if (fluid.requireSource()) {
-                tooltip = tooltip.append(Component.literal("\n"))
-                        .append(Component.translatable("gui.itemdespawntowhat.tooltip.inner_fluid_source"));
-            }
-            if (fluid.consumeFluid()) {
-                tooltip = tooltip.append(Component.literal("\n"))
-                        .append(Component.translatable("gui.itemdespawntowhat.tooltip.inner_fluid_consume"));
-            }
+                    .append(Component.translatable("gui.itemdespawntowhat.tooltip.notes", config.getNotes()));
         }
 
         if (ClientConversionTypeRegistry.contains(config.getConversionType().id())) {

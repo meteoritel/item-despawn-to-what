@@ -339,6 +339,9 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
         }
 
         private Component getResultText(ConfigPresentation presentation) {
+            if (!config.isEnabled()) {
+                return Component.translatable("gui.itemdespawntowhat.list.disabled", presentation.name());
+            }
             return presentation.name();
         }
 
@@ -403,7 +406,8 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             Component resultText = getResultText(presentation);
             int resultMultiple = config.getResultMultiple();
             String resultMultipleStr = Integer.toString(resultMultiple);
-            int textColor = (source == EntrySource.PENDING) ? 0xFFFF88 : 0xFFFFFF;
+            int textColor = !config.isEnabled() ? 0x888888
+                    : (source == EntrySource.PENDING) ? 0xFFFF88 : 0xFFFFFF;
 
             renderResultIcon(guiGraphics, resultIconX, iconY, resultIcon);
             renderResultColumn(guiGraphics, mc, resultQtyColX, resultMultiplyColX, resultTextX,
@@ -452,6 +456,9 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
         }
 
         private void renderRowBackground(GuiGraphics guiGraphics, int left, int top, int width, int height, boolean hovered) {
+            if (!config.isEnabled()) {
+                guiGraphics.fill(left, top, left + width, top + height, 0x33_777777);
+            }
             if (hovered) {
                 guiGraphics.fill(left, top, left + width, top + height, 0x22_FFFFFF);
             }

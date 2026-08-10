@@ -10,6 +10,13 @@ import com.meteorite.itemdespawntowhat.config.type.BuiltinConversionTypes;
 public class ItemToExpOrbConfig extends BaseConversionConfig{
     private static final String XP_ORB_ID = "minecraft:experience_orb";
 
+    /**
+     * 兼容阶段 4 之前由 BaseItemToEntityConfig 写出的字段；XP 新运行时不再使用它。
+     */
+    @Deprecated
+    @SerializedName("result_limit")
+    private Integer legacyResultLimit;
+
     // 每个物品转化为几点经验值
     @SerializedName("xp_per_item")
     private int xpPerItem = 1;

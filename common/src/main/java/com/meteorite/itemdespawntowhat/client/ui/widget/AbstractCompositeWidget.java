@@ -65,6 +65,14 @@ public abstract class AbstractCompositeWidget extends AbstractWidget
         }
     }
 
+    @Override
+    public void setFocused(boolean focused) {
+        super.setFocused(focused);
+        if (!focused) {
+            clearInternalFocus();
+        }
+    }
+
     // 子类返回所有可交互的 EditBox，供 mouseClicked 遍历使用。
     protected abstract Iterable<EditBox> getEditBoxes();
 

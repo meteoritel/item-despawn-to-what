@@ -4,6 +4,10 @@ import com.google.common.reflect.TypeToken;
 import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.config.ConfigDirection;
 import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;
+import com.meteorite.itemdespawntowhat.config.condition.ConditionGroup;
+import com.meteorite.itemdespawntowhat.config.condition.ConditionLeaf;
+import com.meteorite.itemdespawntowhat.config.condition.type.BuiltinConditionParameters;
+import com.meteorite.itemdespawntowhat.config.condition.type.BuiltinConditionTypes;
 import com.meteorite.itemdespawntowhat.config.conversion.*;
 import com.meteorite.itemdespawntowhat.config.execution.*;
 import net.minecraft.resources.ResourceLocation;
@@ -123,7 +127,7 @@ public final class ConversionTypeRegistry {
         SurroundingBlocks blocks = new SurroundingBlocks();
         blocks.set(ConfigDirection.DOWN, "minecraft:hay_block");
         entry.setEntityAge(-24000);
-        entry.setSurroundingBlocks(blocks);
+        addSurroundingBlocksCondition(entry, blocks);
         return new ArrayList<>(List.of(entry));
     }
 
@@ -133,7 +137,13 @@ public final class ConversionTypeRegistry {
         entry.setEnableItemBlock(true);
         SurroundingBlocks blocks = new SurroundingBlocks();
         blocks.set(ConfigDirection.DOWN, "#minecraft:dirt");
-        entry.setSurroundingBlocks(blocks);
+        addSurroundingBlocksCondition(entry, blocks);
         return new ArrayList<>(List.of(entry));
+    }
+
+    private static void addSurroundingBlocksCondition(BaseConversionConfig entry, SurroundingBlocks blocks) {
+        entry.getConditionExpression().groups().add(new ConditionGroup(List.of(
+                new ConditionLeaf(BuiltinConditionTypes.SURROUNDING_BLOCKS,
+                        new BuiltinConditionParameters.SurroundingBlocksParameter(blocks), false))));
     }
 }

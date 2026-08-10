@@ -2,12 +2,9 @@ package com.meteorite.itemdespawntowhat.client.ui.form;
 
 import com.meteorite.itemdespawntowhat.client.ui.support.SuggestionProvider;
 import com.meteorite.itemdespawntowhat.client.ui.widget.ArrowPotionEffectsWidget;
-import com.meteorite.itemdespawntowhat.client.ui.widget.CatalystItemsWidget;
-import com.meteorite.itemdespawntowhat.client.ui.widget.InnerFluidWidget;
-import com.meteorite.itemdespawntowhat.client.ui.widget.SurroundingBlocksWidget;
+import com.meteorite.itemdespawntowhat.client.ui.widget.ConsumptionDirectiveField;
 import com.meteorite.itemdespawntowhat.config.ConversionLimits;
 import com.meteorite.itemdespawntowhat.config.conversion.*;
-import com.meteorite.itemdespawntowhat.config.condition.type.BuiltinConditionParameters;
 import com.meteorite.itemdespawntowhat.server.task.ExplosionTask;
 import com.meteorite.itemdespawntowhat.server.task.PlaceBlockTask.BlockPlaceShape;
 import com.meteorite.itemdespawntowhat.util.IdValidator;
@@ -231,23 +228,11 @@ public final class BuiltinFormDefinitions {
                 .suggestWith(itemBox, SuggestionProvider.ofRegistryWithTags(BuiltInRegistries.ITEM, Registries.ITEM))
                 .build());
 
-        EditBox biomeBox = context.textBox();
-        builder.add(FormField.<T, String>builder(
-                        "biome", context.label("biome"), FormFieldInputs.text(biomeBox),
-                        config -> nullToEmpty(config.getBiome()),
-                        (config, value) -> config.setBiome(emptyToNull(value)))
-                .suggestWith(biomeBox, SuggestionProvider.ofDynamicRegistryWithTags(Registries.BIOME))
-                .build());
-
-        CycleButton<BuiltinConditionParameters.WeatherMode> weatherButton = context.enumButton(
-                "weather", List.of(BuiltinConditionParameters.WeatherMode.values()),
-                BuiltinConditionParameters.WeatherMode.ANY,
-                mode -> Component.translatable(mode.getDescriptionId()));
-        builder.add(FormField.<T, BuiltinConditionParameters.WeatherMode>builder(
-                        "weather", context.label("weather"),
-                        FormFieldInputs.cycle(weatherButton, BuiltinConditionParameters.WeatherMode.ANY),
-                        BaseConversionConfig::getConditionWeatherMode,
-                        BaseConversionConfig::setConditionWeatherMode)
+        ConditionSummaryField conditionField = new ConditionSummaryField();
+        builder.add(FormField.<T, com.meteorite.itemdespawntowhat.config.condition.ConditionExpression>builder(
+                        "conditions", context.label("conditions"), conditionField,
+                        BaseConversionConfig::getConditionExpression,
+                        BaseConversionConfig::setConditionExpression)
                 .build());
 
         CycleButton<Boolean> enabledButton = context.booleanButton("enabled");
@@ -281,75 +266,11 @@ public final class BuiltinFormDefinitions {
                 .validateWith(value -> validInteger(value) ? null : invalid(context.label("priority")))
                 .build());
 
-        EditBox dimensionBox = context.textBox();
-        builder.add(FormField.<T, String>builder(
-                        "dimension", context.label("dimension"), FormFieldInputs.text(dimensionBox),
-                        config -> nullToEmpty(config.getDimension()),
-                        (config, value) -> config.setDimension(emptyToNull(value)))
-                .suggestWith(dimensionBox, SuggestionProvider.ofDimensions())
-                .build());
-
-        CycleButton<Boolean> outdoorButton = context.booleanButton("need_outdoor");
-        builder.add(FormField.<T, Boolean>builder(
-                        "need_outdoor", context.label("need_outdoor"),
-                        FormFieldInputs.cycle(outdoorButton, false),
-                        BaseConversionConfig::isNeedOutdoor, BaseConversionConfig::setNeedOutdoor)
-                .build());
-
-        addSurroundingBlocks(builder, context);
-        addCatalystItems(builder, context);
-        addInnerFluid(builder, context);
-    }
-
-    private static <T extends BaseConversionConfig> void addSurroundingBlocks(
-            FormDefinition.Builder<T> builder, FormFieldContext context) {
-        SurroundingBlocksWidget widget = new SurroundingBlocksWidget(context.font(), 0, 0);
-        FormField.Builder<T, com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks> field =
-                FormField.<T, com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks>builder(
-                                "surrounding_blocks", context.label("surrounding_blocks"),
-                                FormFieldInputs.composite(widget, widget::getValue, widget::setValue, widget::clear),
-                                BaseConversionConfig::getSurroundingBlocks,
-                                BaseConversionConfig::setSurroundingBlocks)
-                        .validateWith(value -> widget.getBoxes().values().stream()
-                                .map(EditBox::getValue)
-                                .filter(text -> !text.isBlank())
-                                .allMatch(IdValidator::isValidBlockId)
-                                ? null : invalid(context.label("surrounding_blocks")));
-        widget.getBoxes().values().forEach(box -> field.suggestWith(box,
-                SuggestionProvider.ofRegistryWithTags(BuiltInRegistries.BLOCK, Registries.BLOCK)));
-        builder.add(field.build());
-    }
-
-    private static <T extends BaseConversionConfig> void addCatalystItems(
-            FormDefinition.Builder<T> builder, FormFieldContext context) {
-        CatalystItemsWidget widget = new CatalystItemsWidget(context.font(), 0, 0);
-        EditBox itemBox = widget.getItemBox();
-        builder.add(FormField.<T, com.meteorite.itemdespawntowhat.config.catalogue.CatalystItems>builder(
-                        "catalyst_items", context.label("catalyst_items"),
-                        FormFieldInputs.composite(widget, widget::getValue, widget::setValue, widget::clear),
-                        BaseConversionConfig::getCatalystItems, BaseConversionConfig::setCatalystItems)
-                .validateWith(value -> itemBox.getValue().isBlank()
-                        || IdValidator.isValidCommaSeparatedItemId(itemBox.getValue())
-                        ? null : invalid(context.label("catalyst_items")))
-                .suggestWith(itemBox,
-                        SuggestionProvider.ofRegistryWithTags(BuiltInRegistries.ITEM, Registries.ITEM), true)
-                .build());
-    }
-
-    private static <T extends BaseConversionConfig> void addInnerFluid(
-            FormDefinition.Builder<T> builder, FormFieldContext context) {
-        InnerFluidWidget widget = new InnerFluidWidget(context.font(), 0, 0);
-        EditBox fluidBox = widget.getFluidBox();
-        builder.add(FormField.<T, com.meteorite.itemdespawntowhat.config.catalogue.InnerFluid>builder(
-                        "inner_fluid", context.label("inner_fluid"),
-                        FormFieldInputs.composite(widget, widget::getValue, widget::setValue, widget::clear),
-                        BaseConversionConfig::getInnerFluid, BaseConversionConfig::setInnerFluid)
-                .validateWith(value -> fluidBox.getValue().isBlank()
-                        || IdValidator.isValidFluidId(fluidBox.getValue())
-                        ? null : invalid(context.label("inner_fluid")))
-                .suggestWith(fluidBox, SuggestionProvider.ofRegistry(BuiltInRegistries.FLUID,
-                        fluid -> !BuiltInRegistries.FLUID.getKey(fluid)
-                                .equals(ResourceLocation.withDefaultNamespace("empty"))))
+        ConsumptionDirectiveField consumptionField = new ConsumptionDirectiveField(context.font());
+        builder.add(FormField.<T, com.meteorite.itemdespawntowhat.config.consumption.ConsumptionDirective>builder(
+                        "consumption", context.label("consumption"), consumptionField,
+                        BaseConversionConfig::getConsumptionDirective,
+                        BaseConversionConfig::setConsumptionDirective)
                 .build());
     }
 

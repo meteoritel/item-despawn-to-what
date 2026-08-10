@@ -2,6 +2,8 @@ package com.meteorite.itemdespawntowhat.client.ui.panel.configlist;
 
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.catalogue.CatalystItems;
+import com.meteorite.itemdespawntowhat.config.condition.type.BuiltinConditionParameters;
+import com.meteorite.itemdespawntowhat.config.condition.type.BuiltinConditionTypes;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -28,14 +30,22 @@ public final class CatalystInlineRenderer {
     // ========== 查询方法 ========== //
 
     public static boolean hasCatalyst(BaseConversionConfig config) {
-        CatalystItems ci = config.getCatalystItems();
-        return ci != null && ci.hasAnyCatalyst();
+        return !getCatalystEntries(config).isEmpty();
     }
 
     public static List<CatalystItems.CatalystEntry> getCatalystEntries(BaseConversionConfig config) {
-        CatalystItems ci = config.getCatalystItems();
-        if (ci == null) return List.of();
-        return ci.getCatalystList();
+        List<CatalystItems.CatalystEntry> conditionEntries = config.getConditionExpression().groups().stream()
+                .flatMap(group -> group.conditions().stream())
+                .filter(leaf -> !leaf.negated() && leaf.typeId().equals(BuiltinConditionTypes.CATALYST_PRESENT.id()))
+                .map(leaf -> leaf.parametersAs(BuiltinConditionParameters.CatalystPresent.class))
+                .filter(parameters -> parameters != null && parameters.items() != null)
+                .flatMap(parameters -> parameters.items().stream())
+                .toList();
+        if (!conditionEntries.isEmpty()) {
+            return conditionEntries;
+        }
+        return config.getConsumptionDirective() == null
+                ? List.of() : config.getConsumptionDirective().catalystItems();
     }
 
     public static ItemStack getCatalystIconStack(BaseConversionConfig config) {

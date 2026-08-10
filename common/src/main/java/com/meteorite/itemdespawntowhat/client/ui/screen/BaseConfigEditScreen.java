@@ -10,6 +10,7 @@ import com.meteorite.itemdespawntowhat.client.ui.panel.FormListPanel;
 import com.meteorite.itemdespawntowhat.client.ui.support.EditCallback;
 import com.meteorite.itemdespawntowhat.client.ui.support.ListScreenCallback;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
+import com.meteorite.itemdespawntowhat.config.condition.ConditionExpression;
 import com.meteorite.itemdespawntowhat.network.payload.c2s.ReleaseEditSessionPayload;
 import com.meteorite.itemdespawntowhat.platform.Services;
 import com.meteorite.itemdespawntowhat.util.PlayerStateChecker;
@@ -208,6 +209,19 @@ public class BaseConfigEditScreen<T extends BaseConversionConfig> extends Screen
         if (minecraft != null) {
             minecraft.setScreen(new ConfigListScreen<>(this, editHandler, this));
         }
+    }
+
+    // 子屏打开前保存完整表单，父屏重新初始化后据此恢复。
+    public void preserveNestedScreenDraft() {
+        resizeBackup = buildConfigFromFields();
+    }
+
+    // 条件子屏完成后更新保存中的草稿，避免父屏重建时覆盖编辑结果。
+    public void updateNestedConditionDraft(ConditionExpression expression) {
+        if (resizeBackup == null) {
+            resizeBackup = buildConfigFromFields();
+        }
+        resizeBackup.setConditionExpression(expression);
     }
 
     protected void clearFields() {
