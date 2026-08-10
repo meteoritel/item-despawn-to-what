@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.config.runtime;
 
-import com.meteorite.itemdespawntowhat.condition.checker.CombinedConditionChecker;
 import com.meteorite.itemdespawntowhat.condition.checker.ConditionDebugResult;
+import com.meteorite.itemdespawntowhat.config.condition.ConditionExpressionEvaluator;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.execution.ConversionExecutor;
 import net.minecraft.server.level.ServerLevel;
@@ -14,15 +14,15 @@ import java.util.List;
  */
 public final class CompiledConversionRule {
     private final BaseConversionConfig definition;
-    private final CombinedConditionChecker conditionChecker;
+    private final ConditionExpressionEvaluator conditionEvaluator;
     private final int complexity;
     private final ConversionExecutor<BaseConversionConfig> executor;
 
     @SuppressWarnings("unchecked")
-    CompiledConversionRule(BaseConversionConfig definition, CombinedConditionChecker conditionChecker,
+    CompiledConversionRule(BaseConversionConfig definition, ConditionExpressionEvaluator conditionEvaluator,
                            ConversionExecutor<? super BaseConversionConfig> executor) {
         this.definition = definition;
-        this.conditionChecker = conditionChecker;
+        this.conditionEvaluator = conditionEvaluator;
         this.complexity = definition.computeComplexity();
         this.executor = (ConversionExecutor<BaseConversionConfig>) executor;
     }
@@ -39,6 +39,10 @@ public final class CompiledConversionRule {
         return complexity;
     }
 
+    public int priority() {
+        return definition.getPriority();
+    }
+
     public int sourceMultiple() {
         return definition.getSourceMultiple();
     }
@@ -48,11 +52,11 @@ public final class CompiledConversionRule {
     }
 
     public boolean matches(ItemEntity itemEntity, ServerLevel level) {
-        return conditionChecker.checkCondition(itemEntity, level);
+        return conditionEvaluator.matches(itemEntity, level);
     }
 
     public List<ConditionDebugResult> debugConditions(ItemEntity itemEntity, ServerLevel level) {
-        return conditionChecker.debug(itemEntity, level);
+        return conditionEvaluator.debug(itemEntity, level);
     }
 
     public boolean isResultLimitExceeded(ItemEntity itemEntity) {

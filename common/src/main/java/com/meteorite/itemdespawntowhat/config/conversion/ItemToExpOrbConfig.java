@@ -7,7 +7,7 @@ import com.meteorite.itemdespawntowhat.config.type.BuiltinConversionTypes;
 /**
  * 物品到经验值转换的配置数据。
  */
-public class ItemToExpOrbConfig extends BaseItemToEntityConfig{
+public class ItemToExpOrbConfig extends BaseConversionConfig{
     private static final String XP_ORB_ID = "minecraft:experience_orb";
 
     // 每个物品转化为几点经验值
@@ -17,8 +17,6 @@ public class ItemToExpOrbConfig extends BaseItemToEntityConfig{
     public ItemToExpOrbConfig() {
         super(BuiltinConversionTypes.ITEM_TO_XP_ORB);
         this.resultId = XP_ORB_ID;
-        // 经验转换仍使用统一结果上限，避免一次生成过多经验球
-        this.resultLimit = ConversionLimits.MAX_RESULT_LIMIT;
     }
 
     // 允许结果字段为空，因为经验球没有变体
@@ -34,8 +32,14 @@ public class ItemToExpOrbConfig extends BaseItemToEntityConfig{
                     ConversionLimits.MAX_XP_PER_ITEM, xpPerItem);
             return false;
         }
+        long unitsPerRound = (long) xpPerItem * getResultMultiple();
+        if (unitsPerRound > ConversionLimits.MAX_RESULT_UNITS) {
+            LOGGER.warn("xp result units per round exceed {}, current={}",
+                    ConversionLimits.MAX_RESULT_UNITS, unitsPerRound);
+            return false;
+        }
 
-        return super.additionalCheck();
+        return true;
     }
 
     public int getXpPerItem() {

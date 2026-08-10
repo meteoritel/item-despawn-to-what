@@ -27,16 +27,16 @@ public final class RuntimeConfigSnapshotBuilder {
     public RuntimeConfigSnapshot build() {
         Map<ResourceLocation, List<CompiledConversionRule>> immutableByItem = immutableRuleLists(rulesByItem);
         Map<ConversionType, List<BaseConversionConfig>> immutableByType = immutableLists(configsByType);
-        Map<ResourceLocation, Integer> maxComplexity = new HashMap<>();
-        immutableByItem.forEach((itemId, rules) -> maxComplexity.put(itemId, rules.stream()
-                .mapToInt(CompiledConversionRule::complexity)
+        Map<ResourceLocation, Integer> maxPriority = new HashMap<>();
+        immutableByItem.forEach((itemId, rules) -> maxPriority.put(itemId, rules.stream()
+                .mapToInt(CompiledConversionRule::priority)
                 .max()
                 .orElse(0)));
 
         return new RuntimeConfigSnapshot(
                 Map.copyOf(immutableByItem),
                 Map.copyOf(rulesByInternalId),
-                Map.copyOf(maxComplexity),
+                Map.copyOf(maxPriority),
                 Map.copyOf(immutableByType));
     }
 
@@ -71,7 +71,11 @@ public final class RuntimeConfigSnapshotBuilder {
     ) {
         Map<ResourceLocation, List<CompiledConversionRule>> result = new HashMap<>();
         source.forEach((key, rules) -> result.put(key, rules.stream()
-                .sorted((left, right) -> Integer.compare(right.complexity(), left.complexity()))
+                .sorted((left, right) -> {
+                    int priority = Integer.compare(right.priority(), left.priority());
+                    return priority != 0 ? priority
+                            : Integer.compare(right.complexity(), left.complexity());
+                })
                 .toList()));
         return result;
     }

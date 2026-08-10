@@ -1,7 +1,5 @@
 package com.meteorite.itemdespawntowhat.config.runtime;
 
-import com.meteorite.itemdespawntowhat.condition.ConditionCheckerUtil;
-import com.meteorite.itemdespawntowhat.condition.ConditionContext;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.type.ConversionType;
 import com.meteorite.itemdespawntowhat.config.type.ConversionTypeRegistry;
@@ -22,7 +20,7 @@ public final class ConversionRuleCompiler {
     private static final Logger LOGGER = LogManager.getLogger();
 
     public CompiledRuleResult compile(BaseConversionConfig config) {
-        if (config == null || !config.validate()) {
+        if (config == null || !config.validate() || !config.isEnabled()) {
             return CompiledRuleResult.invalid();
         }
 
@@ -38,20 +36,13 @@ public final class ConversionRuleCompiler {
             return CompiledRuleResult.invalid();
         }
 
-        ConditionContext context = new ConditionContext(
-                config.getDimension(),
-                config.isNeedOutdoor(),
-                config.getSurroundingBlocks(),
-                config.getCatalystItems(),
-                config.getSourceMultiple(),
-                config.getInnerFluid());
         ConversionType type = config.getConversionType();
         if (type == null) {
             LOGGER.warn("Skipping config without registered conversion type: {}", config.getInternalId());
             return CompiledRuleResult.invalid();
         }
         CompiledConversionRule rule = new CompiledConversionRule(config,
-                ConditionCheckerUtil.buildCombinedChecker(context),
+                config.getConditionExpression().compile(config),
                 ConversionTypeRegistry.get(type).executor());
         return new CompiledRuleResult(rule, sourceItemIds);
     }

@@ -6,8 +6,8 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.CatalystItemsWidget;
 import com.meteorite.itemdespawntowhat.client.ui.widget.InnerFluidWidget;
 import com.meteorite.itemdespawntowhat.client.ui.widget.SurroundingBlocksWidget;
 import com.meteorite.itemdespawntowhat.config.ConversionLimits;
-import com.meteorite.itemdespawntowhat.config.WorldEffectType;
 import com.meteorite.itemdespawntowhat.config.conversion.*;
+import com.meteorite.itemdespawntowhat.config.condition.type.BuiltinConditionParameters;
 import com.meteorite.itemdespawntowhat.server.task.ExplosionTask;
 import com.meteorite.itemdespawntowhat.server.task.PlaceBlockTask.BlockPlaceShape;
 import com.meteorite.itemdespawntowhat.util.IdValidator;
@@ -33,19 +33,25 @@ public final class BuiltinFormDefinitions {
 
     public static FormDefinition<ItemToItemConfig> itemToItem(FormFieldContext context) {
         FormDefinition.Builder<ItemToItemConfig> builder = FormDefinition.builder();
-        addCommonFields(builder, context, resultField(context, IdValidator::isValidResultId,
-                SuggestionProvider.ofRegistry(BuiltInRegistries.ITEM)));
+        addCommonFields(builder, context, resultField(context,
+                value -> IdValidator.isValidResultId(value) || IdValidator.isValidTagId(value),
+                SuggestionProvider.ofRegistryWithTags(BuiltInRegistries.ITEM, Registries.ITEM)));
         addPositiveInteger(builder, context, "result_limit", ItemToItemConfig::getResultLimit,
-                BaseItemToEntityConfig::setResultLimit, 30, ConversionLimits.MAX_RESULT_LIMIT);
+                BaseLimitedConversionConfig::setResultLimit, 30, ConversionLimits.MAX_RESULT_UNITS);
+        addNonNegativeInteger(builder, context, "search_radius", ItemToItemConfig::getSearchRadius,
+                BaseLimitedConversionConfig::setSearchRadius, 6, ConversionLimits.MAX_SEARCH_RADIUS);
         return builder.build();
     }
 
     public static FormDefinition<ItemToMobConfig> itemToMob(FormFieldContext context) {
         FormDefinition.Builder<ItemToMobConfig> builder = FormDefinition.builder();
-        addCommonFields(builder, context, resultField(context, IdValidator::isValidEntityId,
-                SuggestionProvider.ofMobEntityTypes()));
+        addCommonFields(builder, context, resultField(context,
+                value -> IdValidator.isValidEntityId(value) || IdValidator.isValidTagId(value),
+                SuggestionProvider.ofRegistryWithTags(BuiltInRegistries.ENTITY_TYPE, Registries.ENTITY_TYPE)));
         addPositiveInteger(builder, context, "result_limit", ItemToMobConfig::getResultLimit,
-                BaseItemToEntityConfig::setResultLimit, 30, ConversionLimits.MAX_RESULT_LIMIT);
+                BaseLimitedConversionConfig::setResultLimit, 30, ConversionLimits.MAX_RESULT_UNITS);
+        addNonNegativeInteger(builder, context, "search_radius", ItemToMobConfig::getSearchRadius,
+                BaseLimitedConversionConfig::setSearchRadius, 6, ConversionLimits.MAX_SEARCH_RADIUS);
 
         EditBox ageBox = context.integerBox();
         builder.add(FormField.<ItemToMobConfig, String>builder(
@@ -67,9 +73,13 @@ public final class BuiltinFormDefinitions {
     public static FormDefinition<ItemToBlockConfig> itemToBlock(FormFieldContext context) {
         FormDefinition.Builder<ItemToBlockConfig> builder = FormDefinition.builder();
         FormField<ItemToBlockConfig> result = resultField(context, IdValidator::isValidBlockId,
-                SuggestionProvider.ofRegistry(BuiltInRegistries.BLOCK),
+                SuggestionProvider.ofRegistryWithTags(BuiltInRegistries.BLOCK, Registries.BLOCK),
                 definition -> !definition.<Boolean>value("block_of_item"), true);
         addCommonFields(builder, context, result);
+        addPositiveInteger(builder, context, "result_limit", ItemToBlockConfig::getResultLimit,
+                BaseLimitedConversionConfig::setResultLimit, 30, ConversionLimits.MAX_RESULT_UNITS);
+        addNonNegativeInteger(builder, context, "search_radius", ItemToBlockConfig::getSearchRadius,
+                BaseLimitedConversionConfig::setSearchRadius, 6, ConversionLimits.MAX_SEARCH_RADIUS);
         addPositiveInteger(builder, context, "radius_limit", ItemToBlockConfig::getRadius,
                 ItemToBlockConfig::setRadius, 6, ConversionLimits.MAX_BLOCK_RADIUS);
 
@@ -91,94 +101,122 @@ public final class BuiltinFormDefinitions {
         return builder.build();
     }
 
-    public static FormDefinition<ItemToWorldEffectConfig> itemToWorldEffect(FormFieldContext context) {
-        FormDefinition.Builder<ItemToWorldEffectConfig> builder = FormDefinition.builder();
+    public static FormDefinition<ItemToLightningConfig> itemToLightning(FormFieldContext context) {
+        FormDefinition.Builder<ItemToLightningConfig> builder = FormDefinition.builder();
         addCommonFields(builder, context, null);
-
-        CycleButton<WorldEffectType> effectButton = context.enumButton(
-                "world_effect_type", List.of(WorldEffectType.values()), WorldEffectType.RAIN,
-                type -> Component.translatable(type.getDescriptionId()));
-        builder.add(FormField.<ItemToWorldEffectConfig, WorldEffectType>builder(
-                        "world_effect_type", context.label("world_effect_type"),
-                        FormFieldInputs.cycle(effectButton, WorldEffectType.RAIN),
-                        config -> config.getWorldEffect() == null ? WorldEffectType.RAIN : config.getWorldEffect(),
-                        ItemToWorldEffectConfig::setWorldEffect)
+        CycleButton<Boolean> visualOnlyButton = context.booleanButton("visual_only");
+        builder.add(FormField.<ItemToLightningConfig, Boolean>builder(
+                        "visual_only", context.label("visual_only"),
+                        FormFieldInputs.cycle(visualOnlyButton, false),
+                        ItemToLightningConfig::isVisualOnly, ItemToLightningConfig::setVisualOnly)
                 .build());
-
-        addWorldEffectFields(builder, context);
         return builder.build();
     }
 
-    private static void addWorldEffectFields(
-            FormDefinition.Builder<ItemToWorldEffectConfig> builder,
-            FormFieldContext context) {
-        EditBox weatherBox = context.positiveIntegerBox();
-        builder.add(FormField.<ItemToWorldEffectConfig, String>builder(
-                        "weather_duration_ticks", context.label("weather_duration_ticks"),
-                        FormFieldInputs.text(weatherBox),
-                        config -> Integer.toString(config.getWeatherDurationTicks()),
-                        (config, value) -> config.setWeatherDurationTicks(SafeParseUtil.parseInt(value, 6000)))
-                .validateWith(value -> positiveIntegerError(value,
-                        ConversionLimits.MAX_WEATHER_DURATION_TICKS, context.label("weather_duration_ticks")))
-                .visibleWhen(effectIs(WorldEffectType.RAIN, WorldEffectType.CLEAR))
-                .build());
-
-        addBoolean(builder, context, "is_thundering", ItemToWorldEffectConfig::isThundering,
-                ItemToWorldEffectConfig::setThundering, effectIs(WorldEffectType.RAIN));
-        addBoolean(builder, context, "visual_only", ItemToWorldEffectConfig::isVisualOnly,
-                ItemToWorldEffectConfig::setVisualOnly, effectIs(WorldEffectType.LIGHTNING));
-
+    public static FormDefinition<ItemToExplosionConfig> itemToExplosion(FormFieldContext context) {
+        FormDefinition.Builder<ItemToExplosionConfig> builder = FormDefinition.builder();
+        addCommonFields(builder, context, null);
         EditBox explosionPowerBox = context.positiveDecimalBox();
-        builder.add(FormField.<ItemToWorldEffectConfig, String>builder(
+        builder.add(FormField.<ItemToExplosionConfig, String>builder(
                         "explosion_power", context.label("explosion_power"),
                         FormFieldInputs.text(explosionPowerBox),
                         config -> Float.toString(config.getExplosionPower()),
                         (config, value) -> config.setExplosionPower(SafeParseUtil.parseFloat(value, 1.0f)))
                 .validateWith(value -> decimalRangeError(value, 0, ConversionLimits.MAX_EXPLOSION_POWER,
                         context.label("explosion_power")))
-                .visibleWhen(effectIs(WorldEffectType.EXPLOSION))
                 .build());
-        addBoolean(builder, context, "explosion_fire", ItemToWorldEffectConfig::isExplosionFire,
-                ItemToWorldEffectConfig::setExplosionFire, effectIs(WorldEffectType.EXPLOSION));
+        CycleButton<Boolean> fireButton = context.booleanButton("explosion_fire");
+        builder.add(FormField.<ItemToExplosionConfig, Boolean>builder(
+                        "explosion_fire", context.label("explosion_fire"),
+                        FormFieldInputs.cycle(fireButton, false),
+                        ItemToExplosionConfig::isExplosionFire, ItemToExplosionConfig::setExplosionFire)
+                .build());
 
         CycleButton<ExplosionTask.DirectionType> directionButton = context.enumButton(
                 "explosion_direction_type", List.of(ExplosionTask.DirectionType.values()),
                 ExplosionTask.DirectionType.FLAT,
                 direction -> Component.translatable(direction.getDescriptionId()));
-        builder.add(FormField.<ItemToWorldEffectConfig, ExplosionTask.DirectionType>builder(
+        builder.add(FormField.<ItemToExplosionConfig, ExplosionTask.DirectionType>builder(
                         "explosion_direction_type", context.label("explosion_direction_type"),
                         FormFieldInputs.cycle(directionButton, ExplosionTask.DirectionType.FLAT),
-                        ItemToWorldEffectConfig::getExplosionDirectionType,
-                        ItemToWorldEffectConfig::setExplosionDirectionType)
-                .visibleWhen(effectIs(WorldEffectType.EXPLOSION))
+                        ItemToExplosionConfig::getExplosionDirectionType,
+                        ItemToExplosionConfig::setExplosionDirectionType)
                 .build());
+        return builder.build();
+    }
 
+    public static FormDefinition<ItemToArrowRainConfig> itemToArrowRain(FormFieldContext context) {
+        FormDefinition.Builder<ItemToArrowRainConfig> builder = FormDefinition.builder();
+        addCommonFields(builder, context, null);
         CycleButton<AbstractArrow.Pickup> pickupButton = context.enumButton(
                 "arrow_pickup_status", List.of(AbstractArrow.Pickup.values()),
                 AbstractArrow.Pickup.DISALLOWED,
                 pickup -> context.label("arrow_pickup_status." + pickup.name().toLowerCase()));
-        builder.add(FormField.<ItemToWorldEffectConfig, AbstractArrow.Pickup>builder(
+        builder.add(FormField.<ItemToArrowRainConfig, AbstractArrow.Pickup>builder(
                         "arrow_pickup_status", context.label("arrow_pickup_status"),
                         FormFieldInputs.cycle(pickupButton, AbstractArrow.Pickup.DISALLOWED),
-                        ItemToWorldEffectConfig::getArrowPickupStatus,
-                        ItemToWorldEffectConfig::setArrowPickupStatus)
-                .visibleWhen(effectIs(WorldEffectType.ARROW_RAIN))
+                        ItemToArrowRainConfig::getArrowPickupStatus,
+                        ItemToArrowRainConfig::setArrowPickupStatus)
                 .build());
 
         ArrowPotionEffectsWidget potionWidget = new ArrowPotionEffectsWidget(context.font(), 0, 0);
         EditBox effectIdBox = potionWidget.getEffectBox();
-        builder.add(FormField.<ItemToWorldEffectConfig, List<com.meteorite.itemdespawntowhat.config.catalogue.PotionEffect>>builder(
+        builder.add(FormField.<ItemToArrowRainConfig, List<com.meteorite.itemdespawntowhat.config.catalogue.PotionEffect>>builder(
                         "arrow_potion_effects", context.label("arrow_potion_effects"),
                         FormFieldInputs.composite(potionWidget, potionWidget::getValue,
                                 potionWidget::setValue, potionWidget::clear),
-                        ItemToWorldEffectConfig::getRawArrowPotionEffects,
-                        ItemToWorldEffectConfig::setArrowPotionEffects)
+                        ItemToArrowRainConfig::getRawArrowPotionEffects,
+                        ItemToArrowRainConfig::setArrowPotionEffects)
                 .validateWith(value -> effectIdBox.getValue().isBlank()
                         || IdValidator.isValidCommaSeparatedMobEffectId(effectIdBox.getValue())
                         ? null : invalid(context.label("arrow_potion_effects")))
                 .suggestWith(effectIdBox, SuggestionProvider.ofRegistry(BuiltInRegistries.MOB_EFFECT), true)
-                .visibleWhen(effectIs(WorldEffectType.ARROW_RAIN))
                 .build());
+        return builder.build();
+    }
+
+    public static FormDefinition<ItemToWeatherConfig> itemToWeather(FormFieldContext context) {
+        FormDefinition.Builder<ItemToWeatherConfig> builder = FormDefinition.builder();
+        addCommonFields(builder, context, null);
+        CycleButton<ItemToWeatherConfig.WeatherMode> modeButton = context.enumButton(
+                "weather_mode", List.of(ItemToWeatherConfig.WeatherMode.values()),
+                ItemToWeatherConfig.WeatherMode.RAIN,
+                mode -> Component.translatable(mode.getDescriptionId()));
+        builder.add(FormField.<ItemToWeatherConfig, ItemToWeatherConfig.WeatherMode>builder(
+                        "weather_mode", context.label("weather_mode"),
+                        FormFieldInputs.cycle(modeButton, ItemToWeatherConfig.WeatherMode.RAIN),
+                        ItemToWeatherConfig::getWeatherMode, ItemToWeatherConfig::setWeatherMode)
+                .build());
+        addPositiveInteger(builder, context, "weather_duration_ticks",
+                ItemToWeatherConfig::getWeatherDurationTicks, ItemToWeatherConfig::setWeatherDurationTicks,
+                6000, ConversionLimits.MAX_WEATHER_DURATION_TICKS);
+        CycleButton<Boolean> thunderingButton = context.booleanButton("is_thundering");
+        builder.add(FormField.<ItemToWeatherConfig, Boolean>builder(
+                        "is_thundering", context.label("is_thundering"),
+                        FormFieldInputs.cycle(thunderingButton, false),
+                        ItemToWeatherConfig::isThundering, ItemToWeatherConfig::setThundering)
+                .build());
+        return builder.build();
+    }
+
+    public static FormDefinition<ItemToLootConfig> itemToLoot(FormFieldContext context) {
+        FormDefinition.Builder<ItemToLootConfig> builder = FormDefinition.builder();
+        addCommonFields(builder, context, resultField(context, IdValidator::isValidResultId,
+                SuggestionProvider.ofLootTables()));
+        addPositiveInteger(builder, context, "result_limit", ItemToLootConfig::getResultLimit,
+                BaseLimitedConversionConfig::setResultLimit, 30, ConversionLimits.MAX_RESULT_UNITS);
+        addNonNegativeInteger(builder, context, "search_radius", ItemToLootConfig::getSearchRadius,
+                BaseLimitedConversionConfig::setSearchRadius, 6, ConversionLimits.MAX_SEARCH_RADIUS);
+        EditBox luckBox = context.integerBox();
+        luckBox.setFilter(value -> value.matches("-?\\d*\\.?\\d*"));
+        builder.add(FormField.<ItemToLootConfig, String>builder(
+                        "luck", context.label("luck"), FormFieldInputs.text(luckBox),
+                        config -> Float.toString(config.getLuck()),
+                        (config, value) -> config.setLuck(SafeParseUtil.parseFloat(value, 0)))
+                .validateWith(value -> Float.isFinite(SafeParseUtil.parseFloat(value, Float.NaN))
+                        ? null : invalid(context.label("luck")))
+                .build());
+        return builder.build();
     }
 
     private static <T extends BaseConversionConfig> void addCommonFields(
@@ -193,6 +231,37 @@ public final class BuiltinFormDefinitions {
                 .suggestWith(itemBox, SuggestionProvider.ofRegistryWithTags(BuiltInRegistries.ITEM, Registries.ITEM))
                 .build());
 
+        EditBox biomeBox = context.textBox();
+        builder.add(FormField.<T, String>builder(
+                        "biome", context.label("biome"), FormFieldInputs.text(biomeBox),
+                        config -> nullToEmpty(config.getBiome()),
+                        (config, value) -> config.setBiome(emptyToNull(value)))
+                .suggestWith(biomeBox, SuggestionProvider.ofDynamicRegistryWithTags(Registries.BIOME))
+                .build());
+
+        CycleButton<BuiltinConditionParameters.WeatherMode> weatherButton = context.enumButton(
+                "weather", List.of(BuiltinConditionParameters.WeatherMode.values()),
+                BuiltinConditionParameters.WeatherMode.ANY,
+                mode -> Component.translatable(mode.getDescriptionId()));
+        builder.add(FormField.<T, BuiltinConditionParameters.WeatherMode>builder(
+                        "weather", context.label("weather"),
+                        FormFieldInputs.cycle(weatherButton, BuiltinConditionParameters.WeatherMode.ANY),
+                        BaseConversionConfig::getConditionWeatherMode,
+                        BaseConversionConfig::setConditionWeatherMode)
+                .build());
+
+        CycleButton<Boolean> enabledButton = context.booleanButton("enabled");
+        builder.add(FormField.<T, Boolean>builder(
+                        "enabled", context.label("enabled"), FormFieldInputs.cycle(enabledButton, true),
+                        BaseConversionConfig::isEnabled, BaseConversionConfig::setEnabled)
+                .build());
+
+        EditBox notesBox = context.textBox();
+        builder.add(FormField.<T, String>builder(
+                        "notes", context.label("notes"), FormFieldInputs.text(notesBox),
+                        config -> nullToEmpty(config.getNotes()), BaseConversionConfig::setNotes)
+                .build());
+
         if (resultField != null) {
             builder.add(resultField);
         }
@@ -203,6 +272,14 @@ public final class BuiltinFormDefinitions {
                 BaseConversionConfig::setResultMultiple, 1, ConversionLimits.MAX_RESULT_MULTIPLE);
         addPositiveInteger(builder, context, "conversion_time", BaseConversionConfig::getConversionTime,
                 BaseConversionConfig::setConversionTime, 300, Integer.MAX_VALUE);
+
+        EditBox priorityBox = context.integerBox();
+        builder.add(FormField.<T, String>builder(
+                        "priority", context.label("priority"), FormFieldInputs.text(priorityBox),
+                        config -> Integer.toString(config.getPriority()),
+                        (config, value) -> config.setPriority(SafeParseUtil.parseInt(value, 0)))
+                .validateWith(value -> validInteger(value) ? null : invalid(context.label("priority")))
+                .build());
 
         EditBox dimensionBox = context.textBox();
         builder.add(FormField.<T, String>builder(
@@ -319,24 +396,24 @@ public final class BuiltinFormDefinitions {
                 .build());
     }
 
-    private static void addBoolean(
-            FormDefinition.Builder<ItemToWorldEffectConfig> builder,
+    private static <T extends BaseConversionConfig> void addNonNegativeInteger(
+            FormDefinition.Builder<T> builder,
             FormFieldContext context,
             String key,
-            Predicate<ItemToWorldEffectConfig> getter,
-            java.util.function.BiConsumer<ItemToWorldEffectConfig, Boolean> setter,
-            Predicate<FormDefinition<ItemToWorldEffectConfig>> visibility) {
-        CycleButton<Boolean> button = context.booleanButton(key);
-        builder.add(FormField.<ItemToWorldEffectConfig, Boolean>builder(
-                        key, context.label(key), FormFieldInputs.cycle(button, false),
-                        getter::test, setter)
-                .visibleWhen(visibility)
+            java.util.function.ToIntFunction<T> getter,
+            java.util.function.ObjIntConsumer<T> setter,
+            int defaultValue,
+            int maximum) {
+        EditBox box = context.positiveIntegerBox();
+        builder.add(FormField.<T, String>builder(
+                        key, context.label(key), FormFieldInputs.text(box),
+                        config -> Integer.toString(getter.applyAsInt(config)),
+                        (config, value) -> setter.accept(config, SafeParseUtil.parseInt(value, defaultValue)))
+                .validateWith(value -> {
+                    int parsed = SafeParseUtil.parseInt(value, -1);
+                    return parsed >= 0 && parsed <= maximum ? null : invalid(context.label(key));
+                })
                 .build());
-    }
-
-    private static Predicate<FormDefinition<ItemToWorldEffectConfig>> effectIs(WorldEffectType... types) {
-        List<WorldEffectType> accepted = List.of(types);
-        return definition -> accepted.contains(definition.<WorldEffectType>value("world_effect_type"));
     }
 
     private static @Nullable Component positiveIntegerError(String value, int maximum, Component label) {
@@ -348,6 +425,15 @@ public final class BuiltinFormDefinitions {
             String value, float minimum, float maximum, Component label) {
         float parsed = SafeParseUtil.parseFloat(value, Float.NaN);
         return Float.isFinite(parsed) && parsed >= minimum && parsed <= maximum ? null : invalid(label);
+    }
+
+    private static boolean validInteger(String value) {
+        try {
+            Integer.parseInt(value);
+            return true;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     private static Component invalid(Component label) {

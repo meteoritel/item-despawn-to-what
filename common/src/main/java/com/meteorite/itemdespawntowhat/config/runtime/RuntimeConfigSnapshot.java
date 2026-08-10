@@ -16,18 +16,18 @@ public final class RuntimeConfigSnapshot {
 
     private final Map<ResourceLocation, List<CompiledConversionRule>> rulesByItem;
     private final Map<String, CompiledConversionRule> rulesByInternalId;
-    private final Map<ResourceLocation, Integer> maxComplexityByItem;
+    private final Map<ResourceLocation, Integer> maxPriorityByItem;
     private final Map<ConversionType, List<BaseConversionConfig>> configsByType;
 
     RuntimeConfigSnapshot(
             Map<ResourceLocation, List<CompiledConversionRule>> rulesByItem,
             Map<String, CompiledConversionRule> rulesByInternalId,
-            Map<ResourceLocation, Integer> maxComplexityByItem,
+            Map<ResourceLocation, Integer> maxPriorityByItem,
             Map<ConversionType, List<BaseConversionConfig>> configsByType
     ) {
         this.rulesByItem = rulesByItem;
         this.rulesByInternalId = rulesByInternalId;
-        this.maxComplexityByItem = maxComplexityByItem;
+        this.maxPriorityByItem = maxPriorityByItem;
         this.configsByType = configsByType;
     }
 
@@ -48,8 +48,8 @@ public final class RuntimeConfigSnapshot {
         return rulesByItem.containsKey(itemId);
     }
 
-    public int getMaxComplexity(ResourceLocation itemId) {
-        return maxComplexityByItem.getOrDefault(itemId, 0);
+    public int getMaxPriority(ResourceLocation itemId) {
+        return maxPriorityByItem.getOrDefault(itemId, 0);
     }
 
     @SuppressWarnings("unchecked")

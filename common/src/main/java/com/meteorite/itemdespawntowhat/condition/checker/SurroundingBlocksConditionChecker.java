@@ -1,6 +1,5 @@
 package com.meteorite.itemdespawntowhat.condition.checker;
 
-import com.meteorite.itemdespawntowhat.condition.ConditionContext;
 import com.meteorite.itemdespawntowhat.config.ConfigDirection;
 import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;
 import com.meteorite.itemdespawntowhat.util.TagResolver;
@@ -20,23 +19,13 @@ import java.util.Map;
 /**
  * 检查物品实体周围六个方向的方块条件。
  */
-public class SurroundingBlocksConditionChecker extends PositionCachedConditionChecker {
+public final class SurroundingBlocksConditionChecker extends PositionCachedConditionChecker {
 
     private Map<ConfigDirection, Either<ResourceLocation, TagKey<Block>>> directionConditions;
 
     @Override
     public String debugName() {
         return "surrounding_blocks";
-    }
-
-    @Override
-    public AbstractConditionChecker createChecker(ConditionContext ctx) {
-        return from(ctx.surroundingBlocks());
-    }
-
-    @Override
-    public boolean shouldApply(ConditionContext ctx) {
-        return ctx.surroundingBlocks() != null && ctx.surroundingBlocks().hasAnySurroundBlock();
     }
 
     @Override

@@ -100,6 +100,37 @@ public interface SuggestionProvider {
         };
     }
 
+    static SuggestionProvider ofLootTables() {
+        var server = Minecraft.getInstance().getSingleplayerServer();
+        if (server == null) {
+            return empty();
+        }
+        List<String> ids = CACHE.computeIfAbsent("loot_tables",
+                key -> server.reloadableRegistries().getKeys(Registries.LOOT_TABLE)
+                        .stream()
+                        .map(ResourceLocation::toString)
+                        .sorted()
+                        .toList());
+        return matcher(ids);
+    }
+
+    static <T> SuggestionProvider ofDynamicRegistryWithTags(ResourceKey<? extends Registry<T>> registryKey) {
+        return (segment, maxResults) -> {
+            Registry<T> registry = getRegistry(registryKey);
+            if (registry == null) {
+                return List.of();
+            }
+            if (TagResolver.isTagId(segment)) {
+                return ofTags(registryKey).getSuggestions(segment, maxResults);
+            }
+            List<String> ids = registry.keySet().stream()
+                    .map(ResourceLocation::toString)
+                    .sorted()
+                    .toList();
+            return filter(ids, segment, maxResults);
+        };
+    }
+
     static <T> SuggestionProvider ofTags(ResourceKey<? extends Registry<T>> registryKey) {
         return (segment, maxResults) -> {
             Registry<T> registry = getRegistry(registryKey);

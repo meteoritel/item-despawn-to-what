@@ -66,10 +66,11 @@ public final class JsonConfigRepository<T extends BaseConversionConfig> {
     public List<T> loadStrict() throws IOException {
         List<T> entries = readEntries();
         for (T entry : entries) {
-            if (entry == null || !entry.shouldProcess()) {
+            if (entry == null || !entry.validate()) {
                 throw new IOException("Configuration contains an invalid entry: " + configPath);
             }
         }
+        entries.removeIf(entry -> !entry.isEnabled());
         return entries;
     }
 
@@ -92,11 +93,25 @@ public final class JsonConfigRepository<T extends BaseConversionConfig> {
         migrateLegacyIfNeeded();
         try {
             String json = Files.readString(configPath, StandardCharsets.UTF_8);
-            return definition.codec().deserializeStrict(json);
+            ConfigJsonCodec.DecodeResult<T> result = definition.codec().deserializeWithMigration(json);
+            if (result.migrated()) {
+                backupBeforeSchemaMigration();
+                writeBytesAtomically(result.migratedJson().getBytes(StandardCharsets.UTF_8));
+                LOGGER.info("Migrated configuration schema to v{}: {}",
+                        ConfigMigrator.CURRENT_SCHEMA_VERSION, configPath);
+            }
+            return result.entries();
         } catch (IOException e) {
             throw e;
         } catch (Exception e) {
             throw new IOException("Failed to parse configuration file: " + configPath, e);
+        }
+    }
+
+    private void backupBeforeSchemaMigration() throws IOException {
+        Path backupPath = configPath.resolveSibling(configPath.getFileName() + ".v1.bak");
+        if (!Files.exists(backupPath)) {
+            Files.copy(configPath, backupPath);
         }
     }
 

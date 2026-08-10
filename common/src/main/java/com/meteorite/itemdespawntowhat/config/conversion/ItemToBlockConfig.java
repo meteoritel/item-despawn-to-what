@@ -3,20 +3,26 @@ package com.meteorite.itemdespawntowhat.config.conversion;
 import com.google.gson.annotations.SerializedName;
 import com.meteorite.itemdespawntowhat.config.ConversionLimits;
 import com.meteorite.itemdespawntowhat.config.type.BuiltinConversionTypes;
+import com.meteorite.itemdespawntowhat.util.IdValidator;
+import com.meteorite.itemdespawntowhat.util.TagResolver;
 import com.meteorite.itemdespawntowhat.server.task.PlaceBlockTask.BlockPlaceShape;
 import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 
+import java.util.List;
+
 /**
  * 物品到方块转换的配置数据。
  */
-public class ItemToBlockConfig extends BaseConversionConfig{
+public class ItemToBlockConfig extends BaseLimitedConversionConfig{
     // 最大放置半径的限制，默认为6
     @SerializedName("radius_limit")
     private int radius = 6;
@@ -27,6 +33,7 @@ public class ItemToBlockConfig extends BaseConversionConfig{
 
     // 缓存的结果方块实例，不参与序列化
     private transient Block cachedResultBlock;
+    private transient List<Block> cachedResultBlocks = List.of();
 
     public ItemToBlockConfig() {
         super(BuiltinConversionTypes.ITEM_TO_BLOCK);
@@ -41,6 +48,13 @@ public class ItemToBlockConfig extends BaseConversionConfig{
             return;
         }
 
+        if (TagResolver.isTagId(resultId)) {
+            cachedResultBlocks = TagResolver.resolveTagItems(
+                    BuiltInRegistries.BLOCK, Registries.BLOCK, resultId);
+            cachedResultBlock = cachedResultBlocks.isEmpty() ? null : cachedResultBlocks.getFirst();
+            return;
+        }
+
         // 直接按 resultId 查找
         ResourceLocation resultRl = SafeParseUtil.parseResourceLocation(resultId);
         Block block = resultRl != null ? BuiltInRegistries.BLOCK.get(resultRl) : Blocks.AIR;
@@ -52,6 +66,9 @@ public class ItemToBlockConfig extends BaseConversionConfig{
 
     @Override
     protected boolean additionalCheck() {
+        if (!super.additionalCheck()) {
+            return false;
+        }
         if (radius < 0 || radius > ConversionLimits.MAX_BLOCK_RADIUS) {
             LOGGER.warn("radius_limit should be in range [0, {}], current={}",
                     ConversionLimits.MAX_BLOCK_RADIUS, radius);
@@ -67,6 +84,13 @@ public class ItemToBlockConfig extends BaseConversionConfig{
     @Override
     protected boolean isResultIdRequired() {
         return !enableItemBlock;
+    }
+
+    @Override
+    protected boolean isResultIdValid() {
+        return TagResolver.isTagId(resultId)
+                ? IdValidator.isValidTagId(resultId)
+                : super.isResultIdValid();
     }
 
     @Override
@@ -103,6 +127,20 @@ public class ItemToBlockConfig extends BaseConversionConfig{
         }
 
         return Blocks.AIR;
+    }
+
+    public Block getResultBlock(ItemEntity itemEntity, RandomSource random) {
+        if (!enableItemBlock && !cachedResultBlocks.isEmpty()) {
+            return cachedResultBlocks.get(random.nextInt(cachedResultBlocks.size()));
+        }
+        return getResultBlock(itemEntity);
+    }
+
+    public boolean matchesResultBlock(Block block, ItemEntity itemEntity) {
+        if (enableItemBlock) {
+            return block == getResultBlock(itemEntity);
+        }
+        return cachedResultBlocks.isEmpty() ? block == cachedResultBlock : cachedResultBlocks.contains(block);
     }
 
     public int getRadius() {

@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.config.service;
 import com.meteorite.itemdespawntowhat.config.type.ConversionType;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.io.JsonConfigRepository;
+import com.meteorite.itemdespawntowhat.config.io.WorldEffectConfigMigrator;
 import com.meteorite.itemdespawntowhat.config.runtime.CompiledConversionRule;
 import com.meteorite.itemdespawntowhat.config.runtime.RuntimeConfigSnapshot;
 import com.meteorite.itemdespawntowhat.config.runtime.RuntimeConfigSnapshotBuilder;
@@ -14,6 +15,7 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.Nullable;
 
 import java.nio.file.Path;
+import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -38,6 +40,11 @@ public final class ConfigService {
         }
 
         RuntimeConfigSnapshotBuilder builder = new RuntimeConfigSnapshotBuilder();
+        try {
+            migrateWorldEffectConfigs();
+        } catch (IOException e) {
+            LOGGER.error("Failed to split legacy world effect configuration", e);
+        }
         for (ConversionType type : ConversionTypeRegistry.all()) {
             ConversionTypeDefinition<?> definition = ConversionTypeRegistry.get(type);
             try {
@@ -54,6 +61,7 @@ public final class ConfigService {
     public synchronized boolean reloadAll() {
         try {
             RuntimeConfigSnapshotBuilder builder = new RuntimeConfigSnapshotBuilder();
+            migrateWorldEffectConfigs();
             for (ConversionType type : ConversionTypeRegistry.all()) {
                 ConversionTypeDefinition<?> definition = ConversionTypeRegistry.get(type);
                 JsonConfigRepository<?> repository = definition.repository(configDir);
@@ -142,9 +150,9 @@ public final class ConfigService {
         return snapshot.get().hasConfigsForItem(itemId);
     }
 
-    public int getMaxComplexity(ResourceLocation itemId) {
+    public int getMaxPriority(ResourceLocation itemId) {
         checkInitialized();
-        return snapshot.get().getMaxComplexity(itemId);
+        return snapshot.get().getMaxPriority(itemId);
     }
 
     public <T extends BaseConversionConfig> List<T> getConfigsByType(ConversionType type) {
@@ -161,6 +169,10 @@ public final class ConfigService {
         initialized = true;
         LOGGER.info("Published config snapshot: {} items, {} configs",
                 nextSnapshot.itemCount(), nextSnapshot.configCount());
+    }
+
+    private void migrateWorldEffectConfigs() throws IOException {
+        WorldEffectConfigMigrator.migrate(configDir);
     }
 
     private void checkInitialized() {

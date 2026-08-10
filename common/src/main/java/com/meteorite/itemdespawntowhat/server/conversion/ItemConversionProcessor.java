@@ -61,19 +61,19 @@ public final class ItemConversionProcessor {
             if (!selectedConfigId.isEmpty()) {
                 state.resetProgress();
             }
-            selectedRule = selectBestMatchingRule(itemEntity, serverLevel, itemId, Integer.MIN_VALUE);
+            selectedRule = selectBestMatchingRule(itemEntity, serverLevel, itemId);
             if (selectedRule == null) {
                 return false;
             }
             state.setSelectedConfigId(selectedRule.internalId());
-        } else if (selectedRule.complexity() < ConfigExtractorManager.getMaxComplexityForItem(itemId)) {
-            CompiledConversionRule bestRule = selectBestMatchingRule(
-                    itemEntity, serverLevel, itemId, selectedRule.complexity());
+        } else if (hasHigherRankedRule(itemId, selectedRule)) {
+            CompiledConversionRule bestRule = selectHigherMatchingRule(
+                    itemEntity, serverLevel, itemId, selectedRule);
             if (bestRule != null) {
                 selectedRule = bestRule;
                 state.setSelectedConfigId(selectedRule.internalId());
                 state.setCheckTimer(0);
-                LOGGER.debug("Switched item {} to higher-complexity config {}",
+                LOGGER.debug("Switched item {} to higher-priority config {}",
                         itemId, selectedRule.internalId());
             }
         }
@@ -115,20 +115,38 @@ public final class ItemConversionProcessor {
     private static CompiledConversionRule selectBestMatchingRule(
             ItemEntity itemEntity,
             ServerLevel serverLevel,
-            ResourceLocation itemId,
-            int minimumComplexityExclusive
+            ResourceLocation itemId
     ) {
         List<CompiledConversionRule> rules = ConfigExtractorManager.getRulesForItem(itemId);
         for (CompiledConversionRule rule : rules) {
-            if (rule.complexity() <= minimumComplexityExclusive) {
-                break;
-            }
             if (rule.isResultLimitExceeded(itemEntity) || !rule.matches(itemEntity, serverLevel)) {
                 continue;
             }
-            LOGGER.debug("Selected config {} with complexity {} for item {}",
-                    rule.internalId(), rule.complexity(), itemId);
+            LOGGER.debug("Selected config {} with priority {} and complexity {} for item {}",
+                    rule.internalId(), rule.priority(), rule.complexity(), itemId);
             return rule;
+        }
+        return null;
+    }
+
+    private static boolean hasHigherRankedRule(ResourceLocation itemId, CompiledConversionRule selectedRule) {
+        List<CompiledConversionRule> rules = ConfigExtractorManager.getRulesForItem(itemId);
+        return !rules.isEmpty() && rules.getFirst() != selectedRule;
+    }
+
+    private static CompiledConversionRule selectHigherMatchingRule(
+            ItemEntity itemEntity,
+            ServerLevel serverLevel,
+            ResourceLocation itemId,
+            CompiledConversionRule selectedRule
+    ) {
+        for (CompiledConversionRule rule : ConfigExtractorManager.getRulesForItem(itemId)) {
+            if (rule == selectedRule) {
+                break;
+            }
+            if (!rule.isResultLimitExceeded(itemEntity) && rule.matches(itemEntity, serverLevel)) {
+                return rule;
+            }
         }
         return null;
     }

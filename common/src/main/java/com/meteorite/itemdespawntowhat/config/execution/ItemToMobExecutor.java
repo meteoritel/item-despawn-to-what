@@ -12,7 +12,7 @@ import net.minecraft.world.phys.AABB;
 /** 物品到生物转换执行器。 */
 public final class ItemToMobExecutor extends AbstractConversionExecutor<ItemToMobConfig> {
     @Override public boolean performConversion(ItemToMobConfig config, ItemEntity entity, ServerLevel level) {
-        EntityType<?> type = config.getResultEntityType();
+        EntityType<?> type = config.getResultEntityType(level.random);
         if (type == null) return false;
         Entity test = type.create(level);
         if (!(test instanceof Mob)) {
@@ -44,8 +44,13 @@ public final class ItemToMobExecutor extends AbstractConversionExecutor<ItemToMo
     }
 
     @Override public int countNearbyResult(ItemToMobConfig config, ItemEntity entity) {
-        if (!(entity.level() instanceof ServerLevel level) || config.getResultEntityType() == null) return 0;
-        return level.getEntities(config.getResultEntityType(), searchBox(entity.blockPosition()), Entity::isAlive).size();
+        if (!(entity.level() instanceof ServerLevel level)) return 0;
+        int total = 0;
+        for (EntityType<?> type : config.getResultEntityTypes()) {
+            total += level.getEntities(type,
+                    searchBox(entity.blockPosition(), config.getSearchRadius()), Entity::isAlive).size();
+        }
+        return total;
     }
 
     @Override public boolean isResultLimitExceeded(ItemToMobConfig config, ItemEntity entity) {
@@ -60,9 +65,4 @@ public final class ItemToMobExecutor extends AbstractConversionExecutor<ItemToMo
         return resultCapacityInRounds(countNearbyResult(config, entity), config.getResultLimit(), config.getResultMultiple());
     }
 
-    private AABB searchBox(BlockPos pos) {
-        int r = 6;
-        return new AABB(pos.getX() - r, pos.getY() - r, pos.getZ() - r,
-                pos.getX() + r, pos.getY() + r, pos.getZ() + r);
-    }
 }

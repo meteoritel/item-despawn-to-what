@@ -1,6 +1,5 @@
 package com.meteorite.itemdespawntowhat.condition.checker;
 
-import com.meteorite.itemdespawntowhat.condition.ConditionContext;
 import com.meteorite.itemdespawntowhat.config.catalogue.CatalystItems;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -10,29 +9,18 @@ import java.util.Map;
 /**
  * 校验附近催化剂是否足以支持至少一轮转换。
  */
-public class CatalystConditionChecker extends AbstractConditionChecker {
-    private CatalystItems catalystItems;
-    private int sourceMultiple = 1;
+public final class CatalystConditionChecker implements ConditionChecker {
+    private final CatalystItems catalystItems;
+    private final int sourceMultiple;
 
     @Override
     public String debugName() {
         return "catalyst";
     }
 
-    @Override
-    public AbstractConditionChecker createChecker(ConditionContext ctx) {
-        return new CatalystConditionChecker(ctx.catalystItems(), ctx.sourceMultiple());
-    }
-
-    public CatalystConditionChecker() {}
     public CatalystConditionChecker(CatalystItems catalystItems, int sourceMultiple) {
         this.catalystItems = catalystItems;
         this.sourceMultiple = Math.max(1, sourceMultiple);
-    }
-
-    @Override
-    public boolean shouldApply(ConditionContext ctx) {
-        return ctx.catalystItems() != null && ctx.catalystItems().hasAnyCatalyst();
     }
 
     @Override

@@ -59,9 +59,9 @@ public class ConfigExtractorManager {
         return getService().hasConfigsForItem(itemId);
     }
 
-    // 获取某个物品所有配置的最高复杂度
-    public static int getMaxComplexityForItem(ResourceLocation itemId) {
-        return getService().getMaxComplexity(itemId);
+    // 获取某个物品所有配置的最高显式优先级
+    public static int getMaxPriorityForItem(ResourceLocation itemId) {
+        return getService().getMaxPriority(itemId);
     }
 
     public static <T extends BaseConversionConfig> List<T> getConfigByType(ConversionType configType) {

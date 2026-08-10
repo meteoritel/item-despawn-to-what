@@ -30,8 +30,16 @@ public final class ConversionTypeRegistry {
                 new TypeToken<List<ItemToBlockConfig>>() { }.getType(), ConversionTypeRegistry::createItemToBlockDefaults);
         registerBuiltin("item_to_xp_orb",
                 new TypeToken<List<ItemToExpOrbConfig>>() { }.getType(), Collections::emptyList);
-        registerBuiltin("item_to_world_effect",
-                new TypeToken<List<ItemToWorldEffectConfig>>() { }.getType(), Collections::emptyList);
+        registerBuiltin("item_to_lightning",
+                new TypeToken<List<ItemToLightningConfig>>() { }.getType(), Collections::emptyList);
+        registerBuiltin("item_to_explosion",
+                new TypeToken<List<ItemToExplosionConfig>>() { }.getType(), Collections::emptyList);
+        registerBuiltin("item_to_arrow_rain",
+                new TypeToken<List<ItemToArrowRainConfig>>() { }.getType(), Collections::emptyList);
+        registerBuiltin("item_to_weather",
+                new TypeToken<List<ItemToWeatherConfig>>() { }.getType(), Collections::emptyList);
+        registerBuiltin("item_to_loot",
+                new TypeToken<List<ItemToLootConfig>>() { }.getType(), Collections::emptyList);
     }
 
     private ConversionTypeRegistry() {
@@ -52,7 +60,11 @@ public final class ConversionTypeRegistry {
                 case "item_to_mob" -> (ConversionExecutor) new ItemToMobExecutor();
                 case "item_to_block" -> (ConversionExecutor) new ItemToBlockExecutor();
                 case "item_to_xp_orb" -> (ConversionExecutor) new ItemToExpOrbExecutor();
-                case "item_to_world_effect" -> (ConversionExecutor) new ItemToWorldEffectExecutor();
+                case "item_to_lightning" -> (ConversionExecutor) new ItemToLightningExecutor();
+                case "item_to_explosion" -> (ConversionExecutor) new ItemToExplosionExecutor();
+                case "item_to_arrow_rain" -> (ConversionExecutor) new ItemToArrowRainExecutor();
+                case "item_to_weather" -> (ConversionExecutor) new ItemToWeatherExecutor();
+                case "item_to_loot" -> (ConversionExecutor) new ItemToLootExecutor();
                 default -> throw new IllegalArgumentException("Unknown builtin conversion type: " + path);
             };
         }

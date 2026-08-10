@@ -1,6 +1,5 @@
 package com.meteorite.itemdespawntowhat.condition.checker;
 
-import com.meteorite.itemdespawntowhat.condition.ConditionContext;
 import com.meteorite.itemdespawntowhat.config.catalogue.InnerFluid;
 import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import net.minecraft.core.BlockPos;
@@ -17,30 +16,17 @@ import org.apache.logging.log4j.Logger;
 /**
  * 检查物品实体所在位置的流体状态。
  */
-public class InnerFluidConditionChecker extends AbstractConditionChecker{
+public final class InnerFluidConditionChecker implements ConditionChecker {
     private static final Logger LOGGER = LogManager.getLogger();
-    private InnerFluid innerFluid;
+    private final InnerFluid innerFluid;
 
     @Override
     public String debugName() {
         return "inner_fluid";
     }
 
-    @Override
-    public AbstractConditionChecker createChecker(ConditionContext ctx) {
-        return new InnerFluidConditionChecker(ctx.innerFluid());
-    }
-
-    public InnerFluidConditionChecker() {}
-
     public InnerFluidConditionChecker(InnerFluid innerFluid) {
         this.innerFluid = innerFluid;
-    }
-
-    // ========== 父类抽象方法实现 ========== //
-    @Override
-    public boolean shouldApply(ConditionContext ctx) {
-        return ctx.innerFluid() != null && ctx.innerFluid().hasInnerFluid();
     }
 
     // ========== 核心检测逻辑 ========== //

@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.config.execution;
 
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToExpOrbConfig;
+import com.meteorite.itemdespawntowhat.config.ConversionLimits;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -29,6 +30,7 @@ public final class ItemToExpOrbExecutor extends AbstractConversionExecutor<ItemT
     }
 
     private int resultCapacityInRounds(ItemToExpOrbConfig config, ItemEntity entity) {
-        return resultCapacityInRounds(0, config.getResultLimit(), config.getResultMultiple());
+        int unitsPerRound = config.getResultMultiple() * config.getXpPerItem();
+        return ConversionLimits.MAX_RESULT_UNITS / Math.max(1, unitsPerRound);
     }
 }

@@ -13,7 +13,11 @@ import com.meteorite.itemdespawntowhat.config.conversion.ItemToBlockConfig;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToExpOrbConfig;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToItemConfig;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToMobConfig;
-import com.meteorite.itemdespawntowhat.config.conversion.ItemToWorldEffectConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.ItemToArrowRainConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.ItemToExplosionConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.ItemToLightningConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.ItemToLootConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.ItemToWeatherConfig;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
@@ -45,9 +49,21 @@ public final class ClientConversionTypeRegistry {
         registerBuiltin(id("item_to_xp_orb"), new TypeToken<List<ItemToExpOrbConfig>>() { }.getType(),
                 ItemToExpOrbConfig::new, BuiltinFormDefinitions::itemToExperience,
                 BuiltinConfigPresentations::experience, BuiltinConfigPresentations::noExtraTooltip);
-        registerBuiltin(id("item_to_world_effect"), new TypeToken<List<ItemToWorldEffectConfig>>() { }.getType(),
-                ItemToWorldEffectConfig::new, BuiltinFormDefinitions::itemToWorldEffect,
-                BuiltinConfigPresentations::worldEffect, BuiltinConfigPresentations::appendWorldEffectTooltip);
+        registerBuiltin(id("item_to_lightning"), new TypeToken<List<ItemToLightningConfig>>() { }.getType(),
+                ItemToLightningConfig::new, BuiltinFormDefinitions::itemToLightning,
+                BuiltinConfigPresentations::lightning, BuiltinConfigPresentations::noExtraTooltip);
+        registerBuiltin(id("item_to_explosion"), new TypeToken<List<ItemToExplosionConfig>>() { }.getType(),
+                ItemToExplosionConfig::new, BuiltinFormDefinitions::itemToExplosion,
+                BuiltinConfigPresentations::explosion, BuiltinConfigPresentations::appendExplosionTooltip);
+        registerBuiltin(id("item_to_arrow_rain"), new TypeToken<List<ItemToArrowRainConfig>>() { }.getType(),
+                ItemToArrowRainConfig::new, BuiltinFormDefinitions::itemToArrowRain,
+                BuiltinConfigPresentations::arrowRain, BuiltinConfigPresentations::noExtraTooltip);
+        registerBuiltin(id("item_to_weather"), new TypeToken<List<ItemToWeatherConfig>>() { }.getType(),
+                ItemToWeatherConfig::new, BuiltinFormDefinitions::itemToWeather,
+                BuiltinConfigPresentations::weather, BuiltinConfigPresentations::noExtraTooltip);
+        registerBuiltin(id("item_to_loot"), new TypeToken<List<ItemToLootConfig>>() { }.getType(),
+                ItemToLootConfig::new, BuiltinFormDefinitions::itemToLoot,
+                BuiltinConfigPresentations::loot, BuiltinConfigPresentations::noExtraTooltip);
     }
 
     private ClientConversionTypeRegistry() {

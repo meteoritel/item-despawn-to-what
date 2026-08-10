@@ -10,7 +10,7 @@ import java.util.WeakHashMap;
 /**
  * 为只依赖物品方块位置的条件提供位置缓存。
  */
-public abstract class PositionCachedConditionChecker extends AbstractConditionChecker {
+public abstract class PositionCachedConditionChecker implements ConditionChecker {
     private final Map<ItemEntity, CachedResult> cachedResults = new WeakHashMap<>();
 
     @Override

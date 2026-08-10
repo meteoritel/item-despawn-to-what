@@ -3,6 +3,12 @@ package com.meteorite.itemdespawntowhat.config.conversion;
 import com.google.gson.annotations.SerializedName;
 import com.meteorite.itemdespawntowhat.config.ConversionLimits;
 import com.meteorite.itemdespawntowhat.config.catalogue.CatalystItems;
+import com.meteorite.itemdespawntowhat.config.condition.ConditionExpression;
+import com.meteorite.itemdespawntowhat.config.condition.ConditionLeaf;
+import com.meteorite.itemdespawntowhat.config.condition.type.BuiltinConditionParameters;
+import com.meteorite.itemdespawntowhat.config.condition.type.BuiltinConditionTypes;
+import com.meteorite.itemdespawntowhat.config.consumption.ConsumptionDirective;
+import com.meteorite.itemdespawntowhat.config.io.ConfigMigrator;
 import com.meteorite.itemdespawntowhat.config.type.ConversionType;
 import com.meteorite.itemdespawntowhat.config.catalogue.InnerFluid;
 import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;
@@ -43,6 +49,10 @@ public abstract class BaseConversionConfig extends ConversionConfig {
     private transient boolean cacheInitialized = false;
 
     // 物品注册名（支持 #tag:id 格式）
+    @JsonOrder(0)
+    @SerializedName("schema_version")
+    protected int schemaVersion = ConfigMigrator.CURRENT_SCHEMA_VERSION;
+
     @JsonOrder(1)
     @SerializedName("item")
     protected String itemId;
@@ -62,26 +72,27 @@ public abstract class BaseConversionConfig extends ConversionConfig {
     @JsonOrder(2)
     @SerializedName("conversion_time")
     protected int conversionTime = 300;
-    // 是否需要露天
+
+    // DNF 条件表达式，空表达式表示恒真
     @JsonOrder(3)
-    @SerializedName("need_outdoor")
-    protected boolean needOutdoor = false;
-    // 所处维度
-    @JsonOrder(3)
-    @SerializedName("dimension")
-    protected @Nullable String dimension;
-    // 六个方向的方块
-    @JsonOrder(3)
-    @SerializedName("surrounding_blocks")
-    protected @Nullable SurroundingBlocks surroundingBlocks;
-    // 催化剂物品
-    @JsonOrder(3)
-    @SerializedName("catalyst_items")
-    protected @Nullable CatalystItems catalystItems;
-    // 浸润流体信息
-    @JsonOrder(3)
-    @SerializedName("inner_fluid")
-    protected @Nullable InnerFluid innerFluid;
+    @SerializedName("conditions")
+    protected ConditionExpression conditionExpression = new ConditionExpression();
+
+    @JsonOrder(4)
+    @SerializedName("consumption")
+    protected @Nullable ConsumptionDirective consumptionDirective;
+
+    @JsonOrder(2)
+    @SerializedName("priority")
+    protected int priority;
+
+    @JsonOrder(2)
+    @SerializedName("enabled")
+    protected boolean enabled = true;
+
+    @JsonOrder(2)
+    @SerializedName("notes")
+    protected @Nullable String notes;
 
     // 用来存储配置的空构造方法
     protected BaseConversionConfig(ConversionType conversionType) {
@@ -99,7 +110,7 @@ public abstract class BaseConversionConfig extends ConversionConfig {
 
     @Override
     public final boolean validate() {
-        return shouldProcess();
+        return validateDefinition();
     }
 
     @Override
@@ -169,12 +180,16 @@ public abstract class BaseConversionConfig extends ConversionConfig {
 
     // ========== 限制条件，不符合条件的配置不会被读取 ========== //
     public final boolean shouldProcess() {
+        return enabled && validateDefinition();
+    }
+
+    private boolean validateDefinition() {
         if (!IdValidator.isValidItemId(itemId)) {
             LOGGER.warn("invalid item id: {} ", itemId);
             return false;
         }
 
-        if (isResultIdRequired() && !IdValidator.isValidResultId(resultId)) {
+        if (isResultIdRequired() && !isResultIdValid()) {
             LOGGER.warn("invalid result resource location: {}", resultId);
             return false;
         }
@@ -197,12 +212,14 @@ public abstract class BaseConversionConfig extends ConversionConfig {
             return false;
         }
 
+        SurroundingBlocks surroundingBlocks = getSurroundingBlocks();
         if (surroundingBlocks != null && surroundingBlocks.hasAnySurroundBlock() && !surroundingBlocks.isValid()) {
             LOGGER.warn("Invalid blockId in surround blocks：");
             return false;
         }
 
         // 催化剂不能与起始物品相同，且列表中的每个条目都必须有效
+        CatalystItems catalystItems = getCatalystItems();
         if (catalystItems != null && !catalystItems.getCatalystList().isEmpty()) {
             if (!catalystItems.isAllEntryValid()) {
                 LOGGER.warn("Invalid catalyst item list for source item: {}", itemId);
@@ -216,8 +233,21 @@ public abstract class BaseConversionConfig extends ConversionConfig {
             }
         }
 
+        InnerFluid innerFluid = getInnerFluid();
         if (innerFluid != null && innerFluid.hasInnerFluid() && !innerFluid.isValid()) {
             LOGGER.warn("Invalid fluid id in fluid condition: {}", innerFluid.fluidId());
+            return false;
+        }
+
+        try {
+            getConditionExpression().compile(this);
+        } catch (RuntimeException e) {
+            LOGGER.warn("Invalid condition expression for source item: {}", itemId, e);
+            return false;
+        }
+
+        if (consumptionDirective != null && !consumptionDirective.isValid(itemId)) {
+            LOGGER.warn("Invalid consumption directive for source item: {}", itemId);
             return false;
         }
 
@@ -225,15 +255,9 @@ public abstract class BaseConversionConfig extends ConversionConfig {
     }
 
     // ========== 配置复杂度 ========== //
-    // 根据条件字段的非空/非false状态计算复杂度，用于多配置优先级选择
+    // 条件叶总数仅作为相同显式优先级下的特异性兜底
     public int computeComplexity() {
-        int complexity = 0;
-        if (dimension != null) complexity++;
-        if (needOutdoor) complexity++;
-        if (surroundingBlocks != null) complexity++;
-        if (catalystItems != null) complexity++;
-        if (innerFluid != null) complexity++;
-        return complexity;
+        return getConditionExpression().leafCount();
     }
 
     public Item getStartItem() {
@@ -245,6 +269,10 @@ public abstract class BaseConversionConfig extends ConversionConfig {
     }
 
     protected boolean additionalCheck() {return true;}
+
+    protected boolean isResultIdValid() {
+        return IdValidator.isValidResultId(resultId);
+    }
 
     public boolean isCacheValid() {return true;}
 
@@ -262,10 +290,59 @@ public abstract class BaseConversionConfig extends ConversionConfig {
         this.conversionTime = conversionTime;
     }
     public @Nullable String getDimension() {
-        return dimension;
+        ConditionLeaf leaf = getConditionExpression().firstGroupLeaf(BuiltinConditionTypes.DIMENSION);
+        if (leaf == null || leaf.negated()) {
+            return null;
+        }
+        BuiltinConditionParameters.Dimension parameters =
+                leaf.parametersAs(BuiltinConditionParameters.Dimension.class);
+        return parameters == null ? null : parameters.dimension();
     }
     public void setDimension(@Nullable String dimension) {
-        this.dimension = dimension;
+        if (!getConditionExpression().supportsLegacyEditor()) {
+            return;
+        }
+        getConditionExpression().setFirstGroupLeaf(BuiltinConditionTypes.DIMENSION,
+                dimension == null || dimension.isBlank()
+                        ? null : new BuiltinConditionParameters.Dimension(dimension));
+    }
+
+    public @Nullable String getBiome() {
+        ConditionLeaf leaf = getConditionExpression().firstGroupLeaf(BuiltinConditionTypes.BIOME);
+        if (leaf == null || leaf.negated()) {
+            return null;
+        }
+        BuiltinConditionParameters.Biome parameters =
+                leaf.parametersAs(BuiltinConditionParameters.Biome.class);
+        return parameters == null ? null : parameters.biome();
+    }
+
+    public void setBiome(@Nullable String biome) {
+        if (!getConditionExpression().supportsLegacyEditor()) {
+            return;
+        }
+        getConditionExpression().setFirstGroupLeaf(BuiltinConditionTypes.BIOME,
+                biome == null || biome.isBlank() ? null : new BuiltinConditionParameters.Biome(biome));
+    }
+
+    public BuiltinConditionParameters.WeatherMode getConditionWeatherMode() {
+        ConditionLeaf leaf = getConditionExpression().firstGroupLeaf(BuiltinConditionTypes.WEATHER);
+        if (leaf == null || leaf.negated()) {
+            return BuiltinConditionParameters.WeatherMode.ANY;
+        }
+        BuiltinConditionParameters.Weather parameters =
+                leaf.parametersAs(BuiltinConditionParameters.Weather.class);
+        return parameters == null || parameters.weather() == null
+                ? BuiltinConditionParameters.WeatherMode.ANY : parameters.weather();
+    }
+
+    public void setConditionWeatherMode(BuiltinConditionParameters.WeatherMode weather) {
+        if (!getConditionExpression().supportsLegacyEditor()) {
+            return;
+        }
+        getConditionExpression().setFirstGroupLeaf(BuiltinConditionTypes.WEATHER,
+                weather == null || weather == BuiltinConditionParameters.WeatherMode.ANY
+                        ? null : new BuiltinConditionParameters.Weather(weather));
     }
     public void setResultMultiple(int resultMultiple) {
         this.resultMultiple = resultMultiple;
@@ -274,10 +351,15 @@ public abstract class BaseConversionConfig extends ConversionConfig {
         this.sourceMultiple = sourceMultiple;
     }
     public boolean isNeedOutdoor() {
-        return needOutdoor;
+        ConditionLeaf leaf = getConditionExpression().firstGroupLeaf(BuiltinConditionTypes.OUTDOOR);
+        return leaf != null && !leaf.negated();
     }
     public void setNeedOutdoor(boolean needOutdoor) {
-        this.needOutdoor = needOutdoor;
+        if (!getConditionExpression().supportsLegacyEditor()) {
+            return;
+        }
+        getConditionExpression().setFirstGroupLeaf(BuiltinConditionTypes.OUTDOOR,
+                needOutdoor ? new BuiltinConditionParameters.Outdoor() : null);
     }
     public String getItemId() {
         return itemId;
@@ -302,27 +384,166 @@ public abstract class BaseConversionConfig extends ConversionConfig {
     }
 
     public @Nullable SurroundingBlocks getSurroundingBlocks() {
-        return surroundingBlocks;
+        ConditionLeaf leaf = getConditionExpression().firstGroupLeaf(BuiltinConditionTypes.SURROUNDING_BLOCKS);
+        if (leaf == null || leaf.negated()) {
+            return null;
+        }
+        BuiltinConditionParameters.SurroundingBlocksParameter parameters =
+                leaf.parametersAs(BuiltinConditionParameters.SurroundingBlocksParameter.class);
+        return parameters == null ? null : parameters.blocks();
     }
 
     public void setSurroundingBlocks(@Nullable SurroundingBlocks surroundingBlocks) {
-        this.surroundingBlocks = surroundingBlocks;
+        if (!getConditionExpression().supportsLegacyEditor()) {
+            return;
+        }
+        getConditionExpression().setFirstGroupLeaf(BuiltinConditionTypes.SURROUNDING_BLOCKS,
+                surroundingBlocks == null || !surroundingBlocks.hasAnySurroundBlock()
+                        ? null : new BuiltinConditionParameters.SurroundingBlocksParameter(surroundingBlocks));
     }
 
     public @Nullable CatalystItems getCatalystItems() {
+        ConditionLeaf leaf = getConditionExpression().firstGroupLeaf(BuiltinConditionTypes.CATALYST_PRESENT);
+        List<CatalystItems.CatalystEntry> entries = List.of();
+        if (leaf != null && !leaf.negated()) {
+            BuiltinConditionParameters.CatalystPresent parameters =
+                    leaf.parametersAs(BuiltinConditionParameters.CatalystPresent.class);
+            if (parameters != null && parameters.items() != null) {
+                entries = parameters.items();
+            }
+        }
+        if (entries.isEmpty() && consumptionDirective != null) {
+            entries = consumptionDirective.catalystItems();
+        }
+        if (entries.isEmpty()) {
+            return null;
+        }
+        CatalystItems catalystItems = new CatalystItems();
+        catalystItems.setCatalystList(entries);
+        catalystItems.setCatalystConsume(consumptionDirective != null
+                && !consumptionDirective.catalystItems().isEmpty());
         return catalystItems;
     }
 
     public void setCatalystItems(@Nullable CatalystItems catalystItems) {
-        this.catalystItems = catalystItems;
+        if (!getConditionExpression().supportsLegacyEditor()) {
+            return;
+        }
+        List<CatalystItems.CatalystEntry> entries = catalystItems == null
+                ? List.of() : catalystItems.getCatalystList();
+        getConditionExpression().setFirstGroupLeaf(BuiltinConditionTypes.CATALYST_PRESENT,
+                entries.isEmpty() ? null : new BuiltinConditionParameters.CatalystPresent(entries));
+        ConsumptionDirective directive = ensureConsumptionDirective();
+        directive.setCatalystItems(catalystItems != null && catalystItems.isCatalystConsume()
+                ? entries : null);
+        clearEmptyConsumptionDirective();
     }
 
     public @Nullable InnerFluid getInnerFluid() {
-        return innerFluid;
+        ConditionLeaf leaf = getConditionExpression().firstGroupLeaf(BuiltinConditionTypes.FLUID_PRESENT);
+        String fluidId = null;
+        boolean requireSource = true;
+        if (leaf != null && !leaf.negated()) {
+            BuiltinConditionParameters.FluidPresent parameters =
+                    leaf.parametersAs(BuiltinConditionParameters.FluidPresent.class);
+            if (parameters != null) {
+                fluidId = parameters.fluid();
+                requireSource = parameters.requireSource();
+            }
+        }
+        ConsumptionDirective.FluidConsumption fluidConsumption = consumptionDirective == null
+                ? null : consumptionDirective.innerFluid();
+        if ((fluidId == null || fluidId.isBlank()) && fluidConsumption != null) {
+            fluidId = fluidConsumption.fluid();
+            requireSource = fluidConsumption.requireSource();
+        }
+        return fluidId == null || fluidId.isBlank() ? null
+                : new InnerFluid(fluidId, requireSource, fluidConsumption != null);
     }
 
     public void setInnerFluid(@Nullable InnerFluid innerFluid) {
-        this.innerFluid = innerFluid;
+        if (!getConditionExpression().supportsLegacyEditor()) {
+            return;
+        }
+        getConditionExpression().setFirstGroupLeaf(BuiltinConditionTypes.FLUID_PRESENT,
+                innerFluid == null || !innerFluid.hasInnerFluid() ? null
+                        : new BuiltinConditionParameters.FluidPresent(
+                                innerFluid.fluidId(), innerFluid.requireSource()));
+        ConsumptionDirective directive = ensureConsumptionDirective();
+        directive.setInnerFluid(innerFluid != null && innerFluid.consumeFluid()
+                ? new ConsumptionDirective.FluidConsumption(
+                        innerFluid.fluidId(), innerFluid.requireSource()) : null);
+        clearEmptyConsumptionDirective();
+    }
+
+    public int getSchemaVersion() {
+        return schemaVersion;
+    }
+
+    public ConditionExpression getConditionExpression() {
+        if (conditionExpression == null) {
+            conditionExpression = new ConditionExpression();
+        }
+        return conditionExpression;
+    }
+
+    public void setConditionExpression(@Nullable ConditionExpression conditionExpression) {
+        this.conditionExpression = conditionExpression == null
+                ? new ConditionExpression() : conditionExpression;
+    }
+
+    public @Nullable ConsumptionDirective getConsumptionDirective() {
+        return consumptionDirective;
+    }
+
+    public void setConsumptionDirective(@Nullable ConsumptionDirective consumptionDirective) {
+        this.consumptionDirective = consumptionDirective;
+        clearEmptyConsumptionDirective();
+    }
+
+    public int getPriority() {
+        return priority;
+    }
+
+    public boolean hasFluidCondition() {
+        return getConditionExpression().containsType(BuiltinConditionTypes.FLUID_PRESENT);
+    }
+
+    public boolean consumesFluid() {
+        return consumptionDirective != null && consumptionDirective.innerFluid() != null;
+    }
+
+    public void setPriority(int priority) {
+        this.priority = priority;
+    }
+
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    public @Nullable String getNotes() {
+        return notes;
+    }
+
+    public void setNotes(@Nullable String notes) {
+        this.notes = notes == null || notes.isBlank() ? null : notes;
+    }
+
+    private ConsumptionDirective ensureConsumptionDirective() {
+        if (consumptionDirective == null) {
+            consumptionDirective = new ConsumptionDirective();
+        }
+        return consumptionDirective;
+    }
+
+    private void clearEmptyConsumptionDirective() {
+        if (consumptionDirective != null && consumptionDirective.isEmpty()) {
+            consumptionDirective = null;
+        }
     }
 
     // config类型、uuid只能获取不能设置

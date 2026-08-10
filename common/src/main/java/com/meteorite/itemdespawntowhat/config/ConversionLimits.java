@@ -8,7 +8,11 @@ public final class ConversionLimits {
     public static final int MAX_SOURCE_MULTIPLE = 64;
     public static final int MAX_RESULT_MULTIPLE = 64;
     public static final int MAX_CATALYST_ENTRY_COUNT = 64;
-    public static final int MAX_RESULT_LIMIT = 1_024;
+    public static final int MAX_RESULT_UNITS = 1_024;
+    /** @deprecated use MAX_RESULT_UNITS. */
+    @Deprecated
+    public static final int MAX_RESULT_LIMIT = MAX_RESULT_UNITS;
+    public static final int MAX_SEARCH_RADIUS = 16;
     public static final int MAX_BLOCK_RADIUS = 6;
     public static final int MAX_BLOCK_PLACEMENTS = 2_197;
     public static final int MAX_XP_PER_ITEM = 10_000;

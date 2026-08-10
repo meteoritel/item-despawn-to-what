@@ -1,15 +1,20 @@
 package com.meteorite.itemdespawntowhat.client.ui.presentation;
 
-import com.meteorite.itemdespawntowhat.config.WorldEffectType;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.ItemToArrowRainConfig;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToBlockConfig;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToExpOrbConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.ItemToExplosionConfig;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToItemConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.ItemToLightningConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.ItemToLootConfig;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToMobConfig;
-import com.meteorite.itemdespawntowhat.config.conversion.ItemToWorldEffectConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.ItemToWeatherConfig;
 import com.meteorite.itemdespawntowhat.server.task.ExplosionTask;
 import com.meteorite.itemdespawntowhat.server.task.PlaceBlockTask.BlockPlaceShape;
 import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
+import com.meteorite.itemdespawntowhat.util.TagResolver;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -71,19 +76,35 @@ public final class BuiltinConfigPresentations {
         return new ConfigPresentation(new ItemStack(Items.EXPERIENCE_BOTTLE), resultName, null, summary);
     }
 
-    public static ConfigPresentation worldEffect(ItemToWorldEffectConfig config, ItemStack sourceIcon) {
-        WorldEffectType effect = config.getWorldEffect();
-        if (effect == null) {
-            return barrier(config, sourceIcon);
-        }
-        Item iconItem = switch (effect) {
-            case RAIN -> Items.WATER_BUCKET;
-            case CLEAR -> Items.SUNFLOWER;
-            case LIGHTNING -> Items.LIGHTNING_ROD;
-            case EXPLOSION -> Items.TNT;
-            case ARROW_RAIN -> Items.ARROW;
-        };
-        Component resultName = Component.translatable(effect.getDescriptionId());
+    public static ConfigPresentation lightning(ItemToLightningConfig config, ItemStack sourceIcon) {
+        return worldEffect(config, sourceIcon, Items.LIGHTNING_ROD,
+                Component.translatable("effect.itemdespawntowhat.world_effect_type.lightning_bolt"));
+    }
+
+    public static ConfigPresentation explosion(ItemToExplosionConfig config, ItemStack sourceIcon) {
+        return worldEffect(config, sourceIcon, Items.TNT,
+                Component.translatable("effect.itemdespawntowhat.world_effect_type.explosion"));
+    }
+
+    public static ConfigPresentation arrowRain(ItemToArrowRainConfig config, ItemStack sourceIcon) {
+        return worldEffect(config, sourceIcon, Items.ARROW,
+                Component.translatable("effect.itemdespawntowhat.world_effect_type.arrow"));
+    }
+
+    public static ConfigPresentation weather(ItemToWeatherConfig config, ItemStack sourceIcon) {
+        boolean rain = config.getWeatherMode() == ItemToWeatherConfig.WeatherMode.RAIN;
+        return worldEffect(config, sourceIcon, rain ? Items.WATER_BUCKET : Items.SUNFLOWER,
+                Component.translatable(config.getWeatherMode().getDescriptionId()));
+    }
+
+    public static ConfigPresentation loot(ItemToLootConfig config, ItemStack sourceIcon) {
+        Component resultName = Component.literal(config.getResultId());
+        return new ConfigPresentation(Items.CHEST.getDefaultInstance(), resultName, null,
+                summary(config, sourceIcon, resultName));
+    }
+
+    private static ConfigPresentation worldEffect(
+            BaseConversionConfig config, ItemStack sourceIcon, Item iconItem, Component resultName) {
         Component summary = Component.translatable("gui.itemdespawntowhat.summary.world_effect",
                 displayName(sourceIcon), config.getSourceMultiple(), resultName);
         return new ConfigPresentation(iconItem.getDefaultInstance(), resultName, null, summary);
@@ -99,13 +120,11 @@ public final class BuiltinConfigPresentations {
                         Component.translatable(shape.getDescriptionId())));
     }
 
-    public static void appendWorldEffectTooltip(ItemToWorldEffectConfig config, MutableComponent tooltip) {
-        if (config.getWorldEffect() == WorldEffectType.EXPLOSION) {
-            ExplosionTask.DirectionType direction = config.getExplosionDirectionType();
-            tooltip.append(Component.literal("\n"))
-                    .append(Component.translatable("gui.itemdespawntowhat.tooltip.explosion_direction",
-                            Component.translatable(direction.getDescriptionId())));
-        }
+    public static void appendExplosionTooltip(ItemToExplosionConfig config, MutableComponent tooltip) {
+        ExplosionTask.DirectionType direction = config.getExplosionDirectionType();
+        tooltip.append(Component.literal("\n"))
+                .append(Component.translatable("gui.itemdespawntowhat.tooltip.explosion_direction",
+                        Component.translatable(direction.getDescriptionId())));
     }
 
     public static Component displayName(ItemStack stack) {
@@ -118,16 +137,28 @@ public final class BuiltinConfigPresentations {
     }
 
     private static Item findItem(String id) {
+        if (TagResolver.isTagId(id)) {
+            return TagResolver.resolveTagItems(BuiltInRegistries.ITEM, Registries.ITEM, id)
+                    .stream().findFirst().orElse(Items.AIR);
+        }
         ResourceLocation location = SafeParseUtil.parseResourceLocation(id);
         return location == null ? Items.AIR : BuiltInRegistries.ITEM.get(location);
     }
 
     private static Block findBlock(String id) {
+        if (TagResolver.isTagId(id)) {
+            return TagResolver.resolveTagItems(BuiltInRegistries.BLOCK, Registries.BLOCK, id)
+                    .stream().findFirst().orElse(Blocks.AIR);
+        }
         ResourceLocation location = SafeParseUtil.parseResourceLocation(id);
         return location == null ? Blocks.AIR : BuiltInRegistries.BLOCK.get(location);
     }
 
     private static EntityType<?> findEntityType(String id) {
+        if (TagResolver.isTagId(id)) {
+            return TagResolver.resolveTagItems(BuiltInRegistries.ENTITY_TYPE, Registries.ENTITY_TYPE, id)
+                    .stream().findFirst().orElse(null);
+        }
         ResourceLocation location = SafeParseUtil.parseResourceLocation(id);
         return location == null ? null : BuiltInRegistries.ENTITY_TYPE.get(location);
     }
