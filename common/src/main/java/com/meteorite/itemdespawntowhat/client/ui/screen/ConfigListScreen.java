@@ -37,7 +37,7 @@ public class ConfigListScreen<T extends BaseConversionConfig> extends Screen {
             ListScreenCallback listCallback
     ) {
         super(Component.translatable("gui.itemdespawntowhat.edit.title",
-                editHandler.getConfigType().getFileName()));
+                editHandler.getFileName()));
         this.parentScreen = parentScreen;
         this.editHandler = editHandler;
         this.listCallback = listCallback;

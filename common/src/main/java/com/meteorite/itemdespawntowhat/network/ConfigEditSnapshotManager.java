@@ -1,8 +1,8 @@
 package com.meteorite.itemdespawntowhat.network;
 
-import com.meteorite.itemdespawntowhat.config.type.ConversionType;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.io.ConfigJsonCodec;
+import net.minecraft.resources.ResourceLocation;
 
 import java.util.Collections;
 import java.util.List;
@@ -13,32 +13,32 @@ import java.util.concurrent.ConcurrentHashMap;
  * 暂存客户端尚未被编辑界面消费的服务端配置快照。
  */
 public final class ConfigEditSnapshotManager {
-    private static final Map<ConversionType, String> SNAPSHOT_JSONS = new ConcurrentHashMap<>();
+    private static final Map<ResourceLocation, String> SNAPSHOT_JSONS = new ConcurrentHashMap<>();
 
     private ConfigEditSnapshotManager() {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    public static void putSnapshot(ConversionType configType, String jsonData) {
-        if (configType == null) {
+    public static void putSnapshot(ResourceLocation typeId, String jsonData) {
+        if (typeId == null) {
             return;
         }
         if (jsonData == null) {
-            SNAPSHOT_JSONS.remove(configType);
+            SNAPSHOT_JSONS.remove(typeId);
         } else {
-            SNAPSHOT_JSONS.put(configType, jsonData);
+            SNAPSHOT_JSONS.put(typeId, jsonData);
         }
     }
 
     public static <T extends BaseConversionConfig> List<T> consumeSnapshot(
-            ConversionType configType,
+            ResourceLocation typeId,
             ConfigJsonCodec<T> codec
     ) {
-        if (configType == null || codec == null) {
+        if (typeId == null || codec == null) {
             return Collections.emptyList();
         }
 
-        String jsonData = SNAPSHOT_JSONS.remove(configType);
+        String jsonData = SNAPSHOT_JSONS.remove(typeId);
         if (jsonData == null || jsonData.isEmpty()) {
             return Collections.emptyList();
         }

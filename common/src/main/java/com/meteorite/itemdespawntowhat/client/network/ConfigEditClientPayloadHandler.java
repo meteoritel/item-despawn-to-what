@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.network;
 
-import com.meteorite.itemdespawntowhat.client.register.ConfigEditScreenRegistry;
+import com.meteorite.itemdespawntowhat.client.register.ClientConversionTypeRegistry;
 import com.meteorite.itemdespawntowhat.client.ui.screen.ConfigTypeSelectionScreen;
 import com.meteorite.itemdespawntowhat.network.ConfigEditSnapshotManager;
 import com.meteorite.itemdespawntowhat.network.payload.s2c.ConfigSnapshotPayload;
@@ -24,13 +24,13 @@ public final class ConfigEditClientPayloadHandler {
     }
 
     public static void handleConfigSnapshot(ConfigSnapshotPayload payload) {
-        if (payload.configType() == null) {
+        if (payload.typeId() == null || !ClientConversionTypeRegistry.contains(payload.typeId())) {
             return;
         }
         Minecraft client = Minecraft.getInstance();
         client.execute(() -> {
-            ConfigEditSnapshotManager.putSnapshot(payload.configType(), payload.configJson());
-            client.setScreen(ConfigEditScreenRegistry.create(payload.configType()));
+            ConfigEditSnapshotManager.putSnapshot(payload.typeId(), payload.configJson());
+            client.setScreen(ClientConversionTypeRegistry.createScreen(payload.typeId()));
         });
     }
 

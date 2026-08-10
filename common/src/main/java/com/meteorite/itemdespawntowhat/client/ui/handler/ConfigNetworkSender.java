@@ -1,8 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.handler;
 
-import com.meteorite.itemdespawntowhat.config.type.ConversionType;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.io.ConfigJsonCodec;
+import net.minecraft.resources.ResourceLocation;
 
 import java.util.List;
 
@@ -15,12 +15,12 @@ public final class ConfigNetworkSender {
     }
 
     public static <T extends BaseConversionConfig> void sendToServer(
-            ConversionType configType, List<T> configs, ConfigJsonCodec<T> codec) {
+            ResourceLocation typeId, List<T> configs, ConfigJsonCodec<T> codec) {
         String jsonData = codec.serialize(configs);
         if (SaveConfigChunker.requiresChunking(jsonData)) {
-            SaveConfigChunker.sendChunks(configType, jsonData);
+            SaveConfigChunker.sendChunks(typeId, jsonData);
         } else {
-            SaveConfigChunker.sendSingle(configType, jsonData);
+            SaveConfigChunker.sendSingle(typeId, jsonData);
         }
     }
 }

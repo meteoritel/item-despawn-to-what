@@ -1,8 +1,7 @@
 package com.meteorite.itemdespawntowhat.network.payload.s2c;
 
 import com.meteorite.itemdespawntowhat.Constants;
-import com.meteorite.itemdespawntowhat.config.type.ConversionType;
-import com.meteorite.itemdespawntowhat.network.codec.ConversionTypeStreamCodec;
+import com.meteorite.itemdespawntowhat.network.codec.ResourceLocationStreamCodec;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
@@ -10,15 +9,17 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 
-// S2C：服务端下发配置快照 JSON，供客户端构建编辑界面。
-public record ConfigSnapshotPayload(ConversionType configType, String configJson) implements CustomPacketPayload {
+/**
+ * 服务端下发指定类型的配置快照 JSON。
+ */
+public record ConfigSnapshotPayload(ResourceLocation typeId, String configJson) implements CustomPacketPayload {
     public static final Type<ConfigSnapshotPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "config_snapshot")
     );
 
     public static final StreamCodec<ByteBuf, ConfigSnapshotPayload> STREAM_CODEC = StreamCodec.composite(
-            ConversionTypeStreamCodec.INSTANCE,
-            ConfigSnapshotPayload::configType,
+            ResourceLocationStreamCodec.INSTANCE,
+            ConfigSnapshotPayload::typeId,
             ByteBufCodecs.STRING_UTF8,
             ConfigSnapshotPayload::configJson,
             ConfigSnapshotPayload::new

@@ -8,7 +8,7 @@ import com.meteorite.itemdespawntowhat.client.ui.panel.configlist.ScrollableText
 import com.meteorite.itemdespawntowhat.client.ui.panel.configlist.TagPreviewResolver;
 import com.meteorite.itemdespawntowhat.client.ui.presentation.ConfigPresentation;
 import com.meteorite.itemdespawntowhat.client.ui.presentation.ConfigPresenter;
-import com.meteorite.itemdespawntowhat.client.ui.presentation.ConfigPresenterRegistry;
+import com.meteorite.itemdespawntowhat.client.register.ClientConversionTypeRegistry;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import com.meteorite.itemdespawntowhat.util.TagResolver;
@@ -305,7 +305,7 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
         ConfigEntry(ConfigListPanel<T> parent, T config, EntrySource source, int indexInSource) {
             this.parent = parent;
             this.config = config;
-            this.presenter = ConfigPresenterRegistry.get(config.getConversionType());
+            this.presenter = ClientConversionTypeRegistry.presenter(config.getConversionType().id());
             this.source = source;
             this.indexInSource = indexInSource;
             this.sourceIsTag = TagResolver.isTagId(config.getItemId());
@@ -334,7 +334,7 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
         }
 
         private Component getSourceText(ItemStack sourceIconStack) {
-            return ConfigPresenterRegistry.displayName(sourceIconStack);
+            return ClientConversionTypeRegistry.displayName(sourceIconStack);
         }
 
         private Component getResultText(ConfigPresentation presentation) {

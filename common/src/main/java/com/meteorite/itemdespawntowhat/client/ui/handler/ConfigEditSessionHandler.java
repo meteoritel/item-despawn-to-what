@@ -7,6 +7,7 @@ import com.meteorite.itemdespawntowhat.config.type.ConversionType;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.io.ConfigJsonCodec;
 import com.meteorite.itemdespawntowhat.config.type.ConversionTypeRegistry;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import org.apache.logging.log4j.LogManager;
@@ -20,15 +21,14 @@ import java.util.List;
  */
 public class ConfigEditSessionHandler<T extends BaseConversionConfig> {
     private static final Logger LOGGER = LogManager.getLogger();
-    private final ConversionType configType;
+    private final ResourceLocation typeId;
     private final ConfigJsonCodec<T> codec;
     private final List<T> originalConfigs;
     private final List<T> pendingConfigs = new ArrayList<>();
 
-    public ConfigEditSessionHandler(ConversionType configType) {
-        this.configType = configType;
-
-        this.codec = ConversionTypeRegistry.<T>get(configType).codec();
+    public ConfigEditSessionHandler(ResourceLocation typeId, ConfigJsonCodec<T> codec) {
+        this.typeId = typeId;
+        this.codec = codec;
 
         this.originalConfigs = new ArrayList<>(loadOriginalConfigs());
     }
@@ -37,19 +37,22 @@ public class ConfigEditSessionHandler<T extends BaseConversionConfig> {
         var server = Minecraft.getInstance().getSingleplayerServer();
         if (server != null) {
             try {
-                List<T> configs = ConfigExtractorManager.getConfigByType(configType);
-                LOGGER.debug("Loaded server cache for {}, count = {}", configType.id(), configs.size());
-                return configs;
+                ConversionType configType = ConversionTypeRegistry.byId(typeId);
+                if (configType != null) {
+                    List<T> configs = ConfigExtractorManager.getConfigByType(configType);
+                    LOGGER.debug("Loaded server cache for {}, count = {}", typeId, configs.size());
+                    return configs;
+                }
             } catch (IllegalStateException e) {
-                LOGGER.warn("Server cache not ready for {}, falling back to snapshot", configType.id(), e);
+                LOGGER.warn("Server cache not ready for {}, falling back to snapshot", typeId, e);
             }
         }
 
-        List<T> configs = ConfigEditSnapshotManager.consumeSnapshot(configType, codec);
+        List<T> configs = ConfigEditSnapshotManager.consumeSnapshot(typeId, codec);
         if (configs.isEmpty()) {
-            LOGGER.warn("No client snapshot available for {}, using empty initial list", configType.id());
+            LOGGER.warn("No client snapshot available for {}, using empty initial list", typeId);
         } else {
-            LOGGER.debug("Loaded client snapshot for {}, count = {}", configType.id(), configs.size());
+            LOGGER.debug("Loaded client snapshot for {}, count = {}", typeId, configs.size());
         }
         return configs;
     }
@@ -98,9 +101,9 @@ public class ConfigEditSessionHandler<T extends BaseConversionConfig> {
     private void applyToServer(EditCallback<T> callback) {
         try {
             List<T> allConfigs = getAllConfigs();
-            ConfigNetworkSender.sendToServer(configType, allConfigs, codec);
+            ConfigNetworkSender.sendToServer(typeId, allConfigs, codec);
             LOGGER.info("Sent {} configs to server for type: {}",
-                    allConfigs.size(), configType.getFileName());
+                    allConfigs.size(), typeId);
             originalConfigs.clear();
             pendingConfigs.clear();
             callback.onClose();
@@ -111,8 +114,12 @@ public class ConfigEditSessionHandler<T extends BaseConversionConfig> {
     }
 
     // ========== getters ========== //
-    public ConversionType getConfigType() {
-        return configType;
+    public ResourceLocation getTypeId() {
+        return typeId;
+    }
+
+    public String getFileName() {
+        return typeId.getNamespace() + "/" + typeId.getPath() + ".json";
     }
 
     public List<T> getPendingConfigs() {

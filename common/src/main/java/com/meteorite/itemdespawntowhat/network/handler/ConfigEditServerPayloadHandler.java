@@ -37,7 +37,9 @@ public final class ConfigEditServerPayloadHandler {
         if (!(player instanceof ServerPlayer serverPlayer) || !hasEditPermission(serverPlayer)) {
             return;
         }
-        if (payload.configType() == null) {
+        ConversionType configType = ConversionTypeRegistry.byId(payload.typeId());
+        if (configType == null) {
+            LOGGER.warn("Rejected config snapshot request for unknown type {}", payload.typeId());
             return;
         }
 
@@ -46,22 +48,22 @@ public final class ConfigEditServerPayloadHandler {
         }
 
         try {
-            ConversionTypeDefinition<?> definition = ConversionTypeRegistry.get(payload.configType());
+            ConversionTypeDefinition<?> definition = ConversionTypeRegistry.get(configType);
 
             if (!EditSessionLockManager.tryAcquire(serverPlayer)) {
                 serverPlayer.sendSystemMessage(Component.translatable("gui.itemdespawntowhat.edit.locked"));
                 return;
             }
 
-            List<? extends BaseConversionConfig> configs = ConfigExtractorManager.getConfigByType(payload.configType());
+            List<? extends BaseConversionConfig> configs = ConfigExtractorManager.getConfigByType(configType);
             String jsonData = definition.codec().serialize(configs);
             Services.PLATFORM.sendToPlayer(
                     serverPlayer,
-                    new ConfigSnapshotPayload(payload.configType(), jsonData)
+                    new ConfigSnapshotPayload(configType.id(), jsonData)
             );
         } catch (Exception e) {
             EditSessionLockManager.release(serverPlayer);
-            LOGGER.error("Failed to handle config snapshot request for type {}", payload.configType(), e);
+            LOGGER.error("Failed to handle config snapshot request for type {}", payload.typeId(), e);
         }
     }
 
@@ -77,13 +79,14 @@ public final class ConfigEditServerPayloadHandler {
             return;
         }
         EditSessionLockManager.touch(serverPlayer);
-        if (payload.configType() == null) {
+        ConversionType configType = ConversionTypeRegistry.byId(payload.typeId());
+        if (configType == null) {
             EditSessionLockManager.release(serverPlayer);
             return;
         }
 
         try {
-            saveConfigData(serverPlayer, payload.configType(), payload.configData());
+            saveConfigData(serverPlayer, configType, payload.configData());
         } finally {
             EditSessionLockManager.release(serverPlayer);
         }
@@ -93,7 +96,8 @@ public final class ConfigEditServerPayloadHandler {
         if (!(player instanceof ServerPlayer serverPlayer) || !hasOwnedEditSession(serverPlayer)) {
             return;
         }
-        if (payload.configType() == null) {
+        ConversionType configType = ConversionTypeRegistry.byId(payload.typeId());
+        if (configType == null) {
             EditSessionLockManager.release(serverPlayer);
             SaveConfigChunkAccumulator.clear(serverPlayer);
             return;
@@ -106,7 +110,7 @@ public final class ConfigEditServerPayloadHandler {
         }
 
         try {
-            saveConfigData(serverPlayer, payload.configType(), jsonData);
+            saveConfigData(serverPlayer, configType, jsonData);
         } finally {
             EditSessionLockManager.release(serverPlayer);
         }

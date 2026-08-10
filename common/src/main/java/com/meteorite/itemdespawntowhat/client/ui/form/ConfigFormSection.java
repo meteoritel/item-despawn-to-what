@@ -26,4 +26,7 @@ public interface ConfigFormSection<T extends BaseConversionConfig> {
 
     default void registerFocus(ConfigFormContext context) {
     }
+
+    default void refresh() {
+    }
 }

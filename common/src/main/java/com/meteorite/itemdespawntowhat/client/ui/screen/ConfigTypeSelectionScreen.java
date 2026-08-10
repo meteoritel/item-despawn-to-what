@@ -1,18 +1,20 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.meteorite.itemdespawntowhat.client.register.ConfigEditScreenRegistry;
-import com.meteorite.itemdespawntowhat.config.type.ConversionType;
-import com.meteorite.itemdespawntowhat.config.type.ConversionTypeRegistry;
+import com.meteorite.itemdespawntowhat.client.register.ClientConversionTypeDefinition;
+import com.meteorite.itemdespawntowhat.client.register.ClientConversionTypeRegistry;
 import com.meteorite.itemdespawntowhat.network.payload.c2s.RequestConfigSnapshotPayload;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import com.meteorite.itemdespawntowhat.platform.Services;
 import org.jetbrains.annotations.NotNull;
 
-// 配置类型选择界面：进入具体编辑器前选择要编辑的配置类型。
+/**
+ * 进入具体编辑器前的配置类型选择界面。
+ */
 public class ConfigTypeSelectionScreen extends Screen {
 
     public ConfigTypeSelectionScreen() {
@@ -21,15 +23,13 @@ public class ConfigTypeSelectionScreen extends Screen {
 
     @Override
     protected void init() {
-        var types = ConversionTypeRegistry.all().stream()
-                .filter(ConfigEditScreenRegistry::contains)
-                .toList();
+        var types = ClientConversionTypeRegistry.all();
         int y = height / 2 - (types.size() * 25) / 2;
-        for (ConversionType type : types) {
+        for (ClientConversionTypeDefinition<?> type : types) {
             String path = type.id().getPath();
             Button button = Button.builder(
                             Component.translatable("gui.itemdespawntowhat.config_type." + path),
-                            btn -> requestConfigSnapshot(type))
+                    btn -> requestConfigSnapshot(type.id()))
                     .bounds(width / 2 - 100, y, 200, 20).build();
 
             // 添加按钮tooltip
@@ -41,9 +41,9 @@ public class ConfigTypeSelectionScreen extends Screen {
     }
 
     // 这里只负责向服务端申请快照，不直接构建编辑界面。
-    private void requestConfigSnapshot(ConversionType type) {
+    private void requestConfigSnapshot(ResourceLocation typeId) {
         if (minecraft != null) {
-            Services.PLATFORM.sendToServer(new RequestConfigSnapshotPayload(type));
+            Services.PLATFORM.sendToServer(new RequestConfigSnapshotPayload(typeId));
         }
     }
 

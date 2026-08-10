@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
-import com.meteorite.itemdespawntowhat.config.type.ConversionType;
+import com.meteorite.itemdespawntowhat.client.register.ClientConversionTypeDefinition;
 import com.meteorite.itemdespawntowhat.client.ui.handler.ConfigEditSessionHandler;
 import com.meteorite.itemdespawntowhat.client.ui.form.ConfigFormContext;
 import com.meteorite.itemdespawntowhat.client.ui.form.ConfigFormSection;
@@ -48,7 +48,7 @@ import java.util.function.Supplier;
 /**
  * 配置编辑主界面，负责通用表单布局、导航和输入交互。
  */
-public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> extends Screen
+public class BaseConfigEditScreen<T extends BaseConversionConfig> extends Screen
         implements EditCallback<T>, ListScreenCallback {
 
     protected T draftConfig;
@@ -93,11 +93,11 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     private final Map<EditBox, List<ConditionalFieldValidator>> validatedFields = new HashMap<>();
     private final Set<EditBox> invalidFields = new HashSet<>();
 
-    public BaseConfigEditScreen(ConversionType configType, Supplier<T> configFactory, ConfigFormSection<T> customSection) {
-        super(Component.translatable("gui.itemdespawntowhat.edit.title", configType.getFileName()));
-        this.editHandler = new ConfigEditSessionHandler<>(configType);
-        this.configFactory = configFactory;
-        this.customSection = customSection;
+    public BaseConfigEditScreen(ClientConversionTypeDefinition<T> definition) {
+        super(Component.translatable("gui.itemdespawntowhat.edit.title", definition.fileName()));
+        this.editHandler = new ConfigEditSessionHandler<>(definition.id(), definition.codec());
+        this.configFactory = definition.configFactory();
+        this.customSection = definition.createFormSection();
     }
 
     @Override
@@ -662,6 +662,12 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
     public EditBox createTextBox() {
         return textBox();
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+        customSection.refresh();
     }
 
     public EditBox createNumericBox() {

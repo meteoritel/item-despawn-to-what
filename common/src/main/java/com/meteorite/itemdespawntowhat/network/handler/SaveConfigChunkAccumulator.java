@@ -1,9 +1,9 @@
 package com.meteorite.itemdespawntowhat.network.handler;
 
-import com.meteorite.itemdespawntowhat.config.type.ConversionType;
 import com.meteorite.itemdespawntowhat.network.ConfigEditLimits;
 import com.meteorite.itemdespawntowhat.network.payload.c2s.SaveConfigChunkPayload;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.resources.ResourceLocation;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -28,7 +28,7 @@ public final class SaveConfigChunkAccumulator {
             return null;
         }
 
-        if (payload.configType() == null
+        if (payload.typeId() == null
                 || payload.chunkCount() <= 0
                 || payload.chunkCount() > ConfigEditLimits.MAX_CHUNK_COUNT) {
             LOGGER.warn("[SaveConfigChunkAccumulator] Invalid chunk count {} from player {}",
@@ -75,9 +75,9 @@ public final class SaveConfigChunkAccumulator {
                 LOGGER.warn("[SaveConfigChunkAccumulator] Too many active transfers from player {}", playerId);
                 return null;
             }
-            session = new ChunkSession(payload.configType(), payload.chunkCount());
+            session = new ChunkSession(payload.typeId(), payload.chunkCount());
             playerSessions.put(transferId, session);
-        } else if (!session.matches(payload.configType(), payload.chunkCount())) {
+        } else if (!session.matches(payload.typeId(), payload.chunkCount())) {
             LOGGER.warn("[SaveConfigChunkAccumulator] Transfer metadata mismatch for player {}, transferId={}",
                     playerId, transferId);
             playerSessions.remove(transferId);
@@ -137,22 +137,22 @@ public final class SaveConfigChunkAccumulator {
     }
 
     private static final class ChunkSession {
-        private final ConversionType configType;
+        private final ResourceLocation typeId;
         private final int chunkCount;
         private final String[] chunks;
         private int receivedCount;
         private int receivedBytes;
         private long lastActivityTime;
 
-        private ChunkSession(ConversionType configType, int chunkCount) {
-            this.configType = configType;
+        private ChunkSession(ResourceLocation typeId, int chunkCount) {
+            this.typeId = typeId;
             this.chunkCount = chunkCount;
             this.chunks = new String[chunkCount];
             this.lastActivityTime = System.currentTimeMillis();
         }
 
-        private boolean matches(ConversionType configType, int chunkCount) {
-            return this.configType.equals(configType) && this.chunkCount == chunkCount;
+        private boolean matches(ResourceLocation typeId, int chunkCount) {
+            return this.typeId.equals(typeId) && this.chunkCount == chunkCount;
         }
 
         private boolean addChunk(int chunkIndex, String chunkData, int chunkBytes) {

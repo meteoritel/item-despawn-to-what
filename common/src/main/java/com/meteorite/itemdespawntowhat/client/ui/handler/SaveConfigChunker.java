@@ -1,10 +1,10 @@
 package com.meteorite.itemdespawntowhat.client.ui.handler;
 
-import com.meteorite.itemdespawntowhat.config.type.ConversionType;
 import com.meteorite.itemdespawntowhat.network.ConfigEditLimits;
 import com.meteorite.itemdespawntowhat.network.payload.c2s.SaveConfigChunkPayload;
 import com.meteorite.itemdespawntowhat.network.payload.c2s.SaveConfigPayload;
 import com.meteorite.itemdespawntowhat.platform.Services;
+import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,7 +24,7 @@ public final class SaveConfigChunker {
     }
 
     // 发送分包保存请求，返回实际发送的分片数量。
-    public static int sendChunks(ConversionType configType, String jsonData) {
+    public static int sendChunks(ResourceLocation typeId, String jsonData) {
         validateConfigSize(jsonData);
         String transferId = UUID.randomUUID().toString();
         List<String> chunks = splitIntoChunks(jsonData);
@@ -32,7 +32,7 @@ public final class SaveConfigChunker {
 
         for (int chunkIndex = 0; chunkIndex < chunkCount; chunkIndex++) {
             Services.PLATFORM.sendToServer(new SaveConfigChunkPayload(
-                    configType,
+                    typeId,
                     transferId,
                     chunkIndex,
                     chunkCount,
@@ -44,9 +44,9 @@ public final class SaveConfigChunker {
     }
 
     // 小 JSON 仍然走单包快速通道。
-    public static void sendSingle(ConversionType configType, String jsonData) {
+    public static void sendSingle(ResourceLocation typeId, String jsonData) {
         validateConfigSize(jsonData);
-        Services.PLATFORM.sendToServer(new SaveConfigPayload(configType, jsonData));
+        Services.PLATFORM.sendToServer(new SaveConfigPayload(typeId, jsonData));
     }
 
     private static List<String> splitIntoChunks(String jsonData) {
