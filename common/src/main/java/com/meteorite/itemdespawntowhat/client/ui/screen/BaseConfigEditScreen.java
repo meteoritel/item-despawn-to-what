@@ -33,9 +33,6 @@ import java.util.function.Supplier;
  */
 public class BaseConfigEditScreen<T extends BaseConversionConfig> extends Screen
         implements EditCallback<T>, ListScreenCallback {
-    public static final String LABEL_PREFIX = FormFieldContext.LABEL_PREFIX;
-    public static final int BOX_WIDTH = FormFieldContext.BOX_WIDTH;
-    public static final int BUTTON_HEIGHT = FormFieldContext.BUTTON_HEIGHT;
     protected static final Logger LOGGER = LogManager.getLogger();
 
     protected T draftConfig;

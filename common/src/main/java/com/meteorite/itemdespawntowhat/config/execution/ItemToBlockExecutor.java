@@ -3,10 +3,8 @@ package com.meteorite.itemdespawntowhat.config.execution;
 import com.meteorite.itemdespawntowhat.config.conversion.ItemToBlockConfig;
 import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.config.ConversionLimits;
-import com.meteorite.itemdespawntowhat.config.catalogue.InnerFluid;
 import com.meteorite.itemdespawntowhat.server.task.LevelTaskManager;
 import com.meteorite.itemdespawntowhat.server.task.PlaceBlockTask;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.server.level.ServerLevel;
@@ -25,7 +23,7 @@ public final class ItemToBlockExecutor extends AbstractConversionExecutor<ItemTo
         entity.makeFakeItem();
         consumeAllOthers(config, entity, consumed);
         boolean consumeFluid = config.getInnerFluid() == null || !config.getInnerFluid().hasInnerFluid()
-                || config.getInnerFluid().isConsumeFluid();
+                || config.getInnerFluid().consumeFluid();
         int remaining = size - consumed;
         LevelTaskManager.addTask(level, new PlaceBlockTask(entity.blockPosition(), result, config.getRadius(),
                 config.getBlockPlaceShape(), consumeFluid, rounds * config.getResultMultiple(),

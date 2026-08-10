@@ -56,10 +56,6 @@ public final class ClientConversionTypeDefinition<T extends BaseConversionConfig
         return screenFactory.apply(this);
     }
 
-    public T createConfig() {
-        return configFactory.get();
-    }
-
     public Supplier<T> configFactory() {
         return configFactory;
     }

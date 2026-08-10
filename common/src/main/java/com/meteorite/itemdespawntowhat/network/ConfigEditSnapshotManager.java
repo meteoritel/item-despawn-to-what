@@ -43,8 +43,7 @@ public final class ConfigEditSnapshotManager {
             return Collections.emptyList();
         }
 
-        List<T> configs = codec.deserialize(jsonData);
-        return configs != null ? configs : Collections.emptyList();
+        return codec.deserialize(jsonData);
     }
 
     public static void clearAll() {

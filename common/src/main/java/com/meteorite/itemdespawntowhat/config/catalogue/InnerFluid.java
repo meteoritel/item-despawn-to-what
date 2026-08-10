@@ -17,30 +17,17 @@ import net.minecraft.world.level.material.FluidState;
 /**
  * 物品所在位置的流体条件数据。
  */
-public class InnerFluid {
-
-    @SerializedName("inner_fluid")
-    private final String fluidId;
-    @SerializedName("require_source")
-    private final boolean requireSource;
-    @SerializedName("consume_fluid")
-    private final boolean consumeFluid;
+public record InnerFluid(@SerializedName("inner_fluid") String fluidId,
+                         @SerializedName("require_source") boolean requireSource,
+                         @SerializedName("consume_fluid") boolean consumeFluid) {
 
     public InnerFluid() {
-        this.fluidId = null;
-        this.requireSource = true;
-        this.consumeFluid = false;
-    }
-
-    public InnerFluid(String fluidId, boolean requireSource, boolean consumeFluid) {
-        this.fluidId = fluidId;
-        this.requireSource = requireSource;
-        this.consumeFluid = consumeFluid;
+        this(null, true, false);
     }
 
     // 在世界上消耗流体
     public void consumeFluidFromLevel(ItemEntity itemEntity) {
-        if (!isConsumeFluid()) {
+        if (!consumeFluid()) {
             return;
         }
 
@@ -91,7 +78,8 @@ public class InnerFluid {
         return fluidId != null && !fluidId.isBlank();
     }
 
-    public boolean isConsumeFluid() {
+    @Override
+    public boolean consumeFluid() {
         return hasInnerFluid() && consumeFluid;
     }
 
@@ -99,11 +87,13 @@ public class InnerFluid {
         return IdValidator.isValidFluidId(fluidId);
     }
 
-    public String getFluidId() {
+    @Override
+    public String fluidId() {
         return fluidId;
     }
 
-    public boolean isRequireSource() {
+    @Override
+    public boolean requireSource() {
         return requireSource;
     }
 }

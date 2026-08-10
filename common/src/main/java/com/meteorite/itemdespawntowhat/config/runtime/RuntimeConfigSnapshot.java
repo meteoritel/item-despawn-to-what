@@ -2,7 +2,6 @@ package com.meteorite.itemdespawntowhat.config.runtime;
 
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.type.ConversionType;
-import com.meteorite.itemdespawntowhat.config.type.ConversionTypeRegistry;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 

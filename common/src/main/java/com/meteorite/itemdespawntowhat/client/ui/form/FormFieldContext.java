@@ -11,20 +11,10 @@ import java.util.function.Function;
 /**
  * 向表单定义工厂提供统一尺寸、文本与基础控件构造能力。
  */
-public final class FormFieldContext {
+public record FormFieldContext(Font font) {
     public static final String LABEL_PREFIX = "gui.itemdespawntowhat.edit.";
     public static final int BOX_WIDTH = 240;
     public static final int BUTTON_HEIGHT = 18;
-
-    private final Font font;
-
-    public FormFieldContext(Font font) {
-        this.font = font;
-    }
-
-    public Font font() {
-        return font;
-    }
 
     public Component label(String suffix) {
         return Component.translatable(LABEL_PREFIX + suffix);

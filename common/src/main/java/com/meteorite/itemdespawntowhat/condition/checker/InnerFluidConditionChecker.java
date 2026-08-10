@@ -51,11 +51,11 @@ public class InnerFluidConditionChecker extends AbstractConditionChecker{
             return true;
         }
 
-        ResourceLocation targetFluidId = SafeParseUtil.parseResourceLocation(innerFluid.getFluidId());
+        ResourceLocation targetFluidId = SafeParseUtil.parseResourceLocation(innerFluid.fluidId());
         if (targetFluidId == null) {
             return false;
         }
-        boolean requireSource = innerFluid.isRequireSource();
+        boolean requireSource = innerFluid.requireSource();
 
         BlockPos pos = itemEntity.blockPosition();
         BlockState blockState = level.getBlockState(pos);

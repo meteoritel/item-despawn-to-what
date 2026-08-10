@@ -41,8 +41,6 @@ public abstract class BaseConversionConfig extends ConversionConfig {
     private transient boolean isTagMode;
     // 缓存是否已初始化
     private transient boolean cacheInitialized = false;
-    // 检查限制的范围
-    protected static final int MAX_RADIUS = 6;
 
     // 物品注册名（支持 #tag:id 格式）
     @JsonOrder(1)
@@ -219,7 +217,7 @@ public abstract class BaseConversionConfig extends ConversionConfig {
         }
 
         if (innerFluid != null && innerFluid.hasInnerFluid() && !innerFluid.isValid()) {
-            LOGGER.warn("Invalid fluid id in fluid condition: {}", innerFluid.getFluidId());
+            LOGGER.warn("Invalid fluid id in fluid condition: {}", innerFluid.fluidId());
             return false;
         }
 

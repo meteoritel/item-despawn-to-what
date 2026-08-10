@@ -3,7 +3,6 @@ package com.meteorite.itemdespawntowhat.condition.checker;
 import com.meteorite.itemdespawntowhat.condition.ConditionContext;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.level.levelgen.Heightmap;
 
 /**

@@ -116,9 +116,9 @@ public class InnerFluidWidget extends AbstractCompositeWidget{
             clear();
             return;
         }
-        fluidBox.setValue(innerFluid.getFluidId());
-        sourceButton.setValue(innerFluid.isRequireSource());
-        consumeFluidButton.setValue(innerFluid.isConsumeFluid());
+        fluidBox.setValue(innerFluid.fluidId());
+        sourceButton.setValue(innerFluid.requireSource());
+        consumeFluidButton.setValue(innerFluid.consumeFluid());
     }
 
     public void clear() {

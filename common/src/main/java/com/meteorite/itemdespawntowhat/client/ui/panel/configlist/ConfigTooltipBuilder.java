@@ -52,12 +52,12 @@ public final class ConfigTooltipBuilder {
         if (fluid != null && fluid.hasInnerFluid()) {
             tooltip = tooltip.append(Component.literal("\n"))
                     .append(Component.translatable("gui.itemdespawntowhat.tooltip.inner_fluid",
-                            fluid.getFluidId()));
-            if (fluid.isRequireSource()) {
+                            fluid.fluidId()));
+            if (fluid.requireSource()) {
                 tooltip = tooltip.append(Component.literal("\n"))
                         .append(Component.translatable("gui.itemdespawntowhat.tooltip.inner_fluid_source"));
             }
-            if (fluid.isConsumeFluid()) {
+            if (fluid.consumeFluid()) {
                 tooltip = tooltip.append(Component.literal("\n"))
                         .append(Component.translatable("gui.itemdespawntowhat.tooltip.inner_fluid_consume"));
             }

@@ -7,12 +7,7 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.InnerFluidWidget;
 import com.meteorite.itemdespawntowhat.client.ui.widget.SurroundingBlocksWidget;
 import com.meteorite.itemdespawntowhat.config.ConversionLimits;
 import com.meteorite.itemdespawntowhat.config.WorldEffectType;
-import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
-import com.meteorite.itemdespawntowhat.config.conversion.ItemToBlockConfig;
-import com.meteorite.itemdespawntowhat.config.conversion.ItemToExpOrbConfig;
-import com.meteorite.itemdespawntowhat.config.conversion.ItemToItemConfig;
-import com.meteorite.itemdespawntowhat.config.conversion.ItemToMobConfig;
-import com.meteorite.itemdespawntowhat.config.conversion.ItemToWorldEffectConfig;
+import com.meteorite.itemdespawntowhat.config.conversion.*;
 import com.meteorite.itemdespawntowhat.server.task.ExplosionTask;
 import com.meteorite.itemdespawntowhat.server.task.PlaceBlockTask.BlockPlaceShape;
 import com.meteorite.itemdespawntowhat.util.IdValidator;
@@ -41,7 +36,7 @@ public final class BuiltinFormDefinitions {
         addCommonFields(builder, context, resultField(context, IdValidator::isValidResultId,
                 SuggestionProvider.ofRegistry(BuiltInRegistries.ITEM)));
         addPositiveInteger(builder, context, "result_limit", ItemToItemConfig::getResultLimit,
-                (config, value) -> config.setResultLimit(value), 30, ConversionLimits.MAX_RESULT_LIMIT);
+                BaseItemToEntityConfig::setResultLimit, 30, ConversionLimits.MAX_RESULT_LIMIT);
         return builder.build();
     }
 
@@ -50,7 +45,7 @@ public final class BuiltinFormDefinitions {
         addCommonFields(builder, context, resultField(context, IdValidator::isValidEntityId,
                 SuggestionProvider.ofMobEntityTypes()));
         addPositiveInteger(builder, context, "result_limit", ItemToMobConfig::getResultLimit,
-                (config, value) -> config.setResultLimit(value), 30, ConversionLimits.MAX_RESULT_LIMIT);
+                BaseItemToEntityConfig::setResultLimit, 30, ConversionLimits.MAX_RESULT_LIMIT);
 
         EditBox ageBox = context.integerBox();
         builder.add(FormField.<ItemToMobConfig, String>builder(
@@ -65,7 +60,7 @@ public final class BuiltinFormDefinitions {
         FormDefinition.Builder<ItemToExpOrbConfig> builder = FormDefinition.builder();
         addCommonFields(builder, context, null);
         addPositiveInteger(builder, context, "xp_per_item", ItemToExpOrbConfig::getXpPerItem,
-                (config, value) -> config.setXpPerItem(value), 1, ConversionLimits.MAX_XP_PER_ITEM);
+                ItemToExpOrbConfig::setXpPerItem, 1, ConversionLimits.MAX_XP_PER_ITEM);
         return builder.build();
     }
 
@@ -76,7 +71,7 @@ public final class BuiltinFormDefinitions {
                 definition -> !definition.<Boolean>value("block_of_item"), true);
         addCommonFields(builder, context, result);
         addPositiveInteger(builder, context, "radius_limit", ItemToBlockConfig::getRadius,
-                (config, value) -> config.setRadius(value), 6, ConversionLimits.MAX_BLOCK_RADIUS);
+                ItemToBlockConfig::setRadius, 6, ConversionLimits.MAX_BLOCK_RADIUS);
 
         CycleButton<BlockPlaceShape> shapeButton = context.enumButton(
                 "block_place_shape", List.of(BlockPlaceShape.values()), BlockPlaceShape.SQUARE,

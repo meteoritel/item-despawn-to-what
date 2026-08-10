@@ -18,10 +18,6 @@ public final class ConfigEditScreenSuggestionController {
         suggestionWidgets.clear();
     }
 
-    public void registerSuggestion(Font font, EditBox editBox, SuggestionProvider provider) {
-        registerSuggestion(font, editBox, provider, false);
-    }
-
     public void registerSuggestion(Font font, EditBox editBox, SuggestionProvider provider, boolean commaSeparated) {
         SuggestionWidget widget = new SuggestionWidget(font, editBox, provider, commaSeparated);
         suggestionWidgets.add(widget);

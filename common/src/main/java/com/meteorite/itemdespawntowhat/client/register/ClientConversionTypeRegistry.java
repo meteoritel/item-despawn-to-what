@@ -61,7 +61,7 @@ public final class ClientConversionTypeRegistry {
             ConfigPresenter<T> presenter,
             ConfigTooltipProvider<T> tooltipProvider) {
         register(id, listType, configFactory, formDefinitionFactory,
-                definition -> new BaseConfigEditScreen<>(definition), presenter, tooltipProvider);
+                BaseConfigEditScreen::new, presenter, tooltipProvider);
     }
 
     public static synchronized <T extends BaseConversionConfig> void register(

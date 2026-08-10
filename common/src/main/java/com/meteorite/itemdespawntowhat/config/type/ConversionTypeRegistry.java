@@ -45,7 +45,7 @@ public final class ConversionTypeRegistry {
     }
 
     private static final class ConversionExecutorSelector {
-        @SuppressWarnings({"unchecked", "rawtypes"})
+        @SuppressWarnings({"rawtypes"})
         <T extends BaseConversionConfig> ConversionExecutor<? super T> executor(String path) {
             return switch (path) {
                 case "item_to_item" -> (ConversionExecutor) new ItemToItemExecutor();

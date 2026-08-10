@@ -46,15 +46,6 @@ public class ConfigExtractorManager {
 
     // ========== 查询 ========== //
 
-    public static List<BaseConversionConfig> getAllConfigsForItem(ResourceLocation itemId) {
-        return getService().getConfigsForItem(itemId);
-    }
-
-    @Nullable
-    public static BaseConversionConfig getConfigByInternalId(String internalId) {
-        return getService().getConfigByInternalId(internalId);
-    }
-
     public static List<CompiledConversionRule> getRulesForItem(ResourceLocation itemId) {
         return getService().getRulesForItem(itemId);
     }
