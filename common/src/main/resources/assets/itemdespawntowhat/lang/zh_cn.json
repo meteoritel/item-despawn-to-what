@@ -121,5 +121,27 @@
   "gui.itemdespawntowhat.tooltip.inner_fluid_source": "  需要源头方块",
   "gui.itemdespawntowhat.tooltip.inner_fluid_consume": "  消耗流体",
   "gui.itemdespawntowhat.tooltip.block_place_shape": "放置形状: %s",
-  "gui.itemdespawntowhat.tooltip.explosion_direction": "爆炸方向: %s"
+  "gui.itemdespawntowhat.tooltip.explosion_direction": "爆炸方向: %s",
+
+  "command.itemdespawntowhat.inspect.player_only": "该命令只能由玩家执行",
+  "command.itemdespawntowhat.inspect.no_target": "请正对 8 格内的掉落物",
+  "command.itemdespawntowhat.inspect.target": "目标：%s，UUID：%s，数量：%s",
+  "command.itemdespawntowhat.inspect.tracked.yes": "追踪状态：已追踪",
+  "command.itemdespawntowhat.inspect.tracked.no": "追踪状态：未追踪",
+  "command.itemdespawntowhat.inspect.reason.locked": "原因：该物品已被排除在转化检查之外",
+  "command.itemdespawntowhat.inspect.reason.no_config": "原因：没有以该物品为来源的转化规则",
+  "command.itemdespawntowhat.inspect.reason.not_registered": "原因：物品符合条件，但尚未进入追踪集",
+  "command.itemdespawntowhat.inspect.rule": "选中规则：%s，类型：%s",
+  "command.itemdespawntowhat.inspect.rule.none": "选中规则：无",
+  "command.itemdespawntowhat.inspect.progress": "进度：%s / %s 次检查",
+  "command.itemdespawntowhat.inspect.progress.na": "进度：N/A",
+  "command.itemdespawntowhat.inspect.condition": "  %s：%s",
+  "command.itemdespawntowhat.inspect.condition.dimension": "维度",
+  "command.itemdespawntowhat.inspect.condition.outdoor": "露天",
+  "command.itemdespawntowhat.inspect.condition.surrounding_blocks": "周围方块",
+  "command.itemdespawntowhat.inspect.condition.catalyst": "催化剂",
+  "command.itemdespawntowhat.inspect.condition.inner_fluid": "内部流体",
+  "command.itemdespawntowhat.inspect.status.pass": "通过",
+  "command.itemdespawntowhat.inspect.status.fail": "失败",
+  "command.itemdespawntowhat.inspect.status.na": "N/A"
 }

@@ -14,7 +14,7 @@ public final class ConfigEditAccessControl {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    // 与 conversion_config 命令保持相同的权限规则
+    // 与 idtw 命令保持相同的权限规则
     public static boolean canEdit(ServerPlayer player) {
         if (player == null) {
             return false;

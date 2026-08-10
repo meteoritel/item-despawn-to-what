@@ -1,10 +1,9 @@
 package com.meteorite.itemdespawntowhat.server.event;
 
 import com.meteorite.itemdespawntowhat.Constants;
-import com.meteorite.itemdespawntowhat.server.conversion.ItemConversionProcessor;
+import com.meteorite.itemdespawntowhat.server.conversion.ConversionTracker;
 import com.meteorite.itemdespawntowhat.server.task.LevelTaskManager;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -13,9 +12,6 @@ import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import static com.meteorite.itemdespawntowhat.ItemDespawnToWhat.MOD_ID;
 
 /**
@@ -23,8 +19,6 @@ import static com.meteorite.itemdespawntowhat.ItemDespawnToWhat.MOD_ID;
  */
 @EventBusSubscriber(modid = MOD_ID)
 public final class ItemConversionEvent {
-    private static final NeoForgeItemConversionStateAccess STATE = NeoForgeItemConversionStateAccess.INSTANCE;
-
     private ItemConversionEvent() {
         throw new UnsupportedOperationException("Utility class");
     }
@@ -32,7 +26,7 @@ public final class ItemConversionEvent {
     @SubscribeEvent
     public static void onItemSpawn(EntityJoinLevelEvent event) {
         if (!event.getLevel().isClientSide() && event.getEntity() instanceof ItemEntity itemEntity) {
-            ItemConversionProcessor.trackIfEligible(itemEntity, STATE);
+            ConversionTracker.trackIfEligible(itemEntity);
         }
     }
 
@@ -56,25 +50,7 @@ public final class ItemConversionEvent {
         }
 
         LevelTaskManager.tick(serverLevel);
-        if (!ItemConversionProcessor.shouldCheck(serverLevel)) {
-            return;
-        }
-
-        for (ItemEntity itemEntity : collectTrackedItemEntities(serverLevel)) {
-            int entityLifespan = itemEntity.getItem().getEntityLifespan(serverLevel);
-            ItemConversionProcessor.tickTrackedItem(itemEntity, STATE, entityLifespan);
-        }
-    }
-
-    private static List<ItemEntity> collectTrackedItemEntities(ServerLevel level) {
-        List<ItemEntity> result = new ArrayList<>();
-        level.getEntities(EntityType.ITEM,
-                itemEntity -> itemEntity.isAlive()
-                        && level.isLoaded(itemEntity.blockPosition())
-                        && STATE.isTracked(itemEntity)
-                        && !itemEntity.getTags().contains(Constants.CHECK_LOCK_TAG)
-                        && itemEntity.getAge() < itemEntity.getItem().getEntityLifespan(level),
-                result);
-        return result;
+        ConversionTracker.tick(serverLevel,
+                (itemEntity, level) -> itemEntity.getItem().getEntityLifespan(level));
     }
 }

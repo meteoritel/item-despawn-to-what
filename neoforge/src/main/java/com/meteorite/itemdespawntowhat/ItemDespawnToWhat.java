@@ -4,6 +4,7 @@ import com.meteorite.itemdespawntowhat.command.ConversionConfigCommand;
 import com.meteorite.itemdespawntowhat.network.EditSessionLockManager;
 import com.meteorite.itemdespawntowhat.network.handler.SaveConfigChunkAccumulator;
 import com.meteorite.itemdespawntowhat.platform.Services;
+import com.meteorite.itemdespawntowhat.server.conversion.ConversionTracker;
 import java.util.List;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -67,6 +68,7 @@ public class ItemDespawnToWhat {
     public void onServerStopping(ServerStoppingEvent event) {
         EditSessionLockManager.clear();
         SaveConfigChunkAccumulator.clearAll();
+        ConversionTracker.clearAll();
     }
 
     @SubscribeEvent

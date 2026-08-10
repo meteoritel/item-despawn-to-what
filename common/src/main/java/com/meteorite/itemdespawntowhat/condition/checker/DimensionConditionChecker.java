@@ -19,6 +19,11 @@ public class DimensionConditionChecker extends AbstractConditionChecker {
     private ResourceKey<Level> dimensionKey;
 
     @Override
+    public String debugName() {
+        return "dimension";
+    }
+
+    @Override
     public AbstractConditionChecker createChecker(ConditionContext ctx) {
         DimensionConditionChecker checker = new DimensionConditionChecker();
         checker.dimensionKey = checker.parseDimensionKey(ctx.dimension());

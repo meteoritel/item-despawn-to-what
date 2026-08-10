@@ -12,7 +12,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
- * 跨平台配置重载与编辑命令注册入口。
+ * 跨平台 idtw 管理命令注册入口。
  */
 public final class ConversionConfigCommand {
 
@@ -22,13 +22,14 @@ public final class ConversionConfigCommand {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(
-                Commands.literal("conversion_config")
+                Commands.literal("idtw")
                         .requires(source -> {
                             MinecraftServer server = source.getServer();
                             return server.isSingleplayer() || source.hasPermission(2);
                         })
                         .then(buildReloadCommand())
                         .then(buildEditCommand())
+                        .then(buildInspectCommand())
         );
     }
 
@@ -58,5 +59,10 @@ public final class ConversionConfigCommand {
                     Services.PLATFORM.sendToPlayer(serverPlayer, new OpenGuiPayload());
                     return 1;
                 });
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> buildInspectCommand() {
+        return Commands.literal("inspect")
+                .executes(context -> ConversionInspectCommand.execute(context.getSource()));
     }
 }

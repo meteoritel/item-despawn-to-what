@@ -15,6 +15,11 @@ public class CatalystConditionChecker extends AbstractConditionChecker {
     private int sourceMultiple = 1;
 
     @Override
+    public String debugName() {
+        return "catalyst";
+    }
+
+    @Override
     public AbstractConditionChecker createChecker(ConditionContext ctx) {
         return new CatalystConditionChecker(ctx.catalystItems(), ctx.sourceMultiple());
     }

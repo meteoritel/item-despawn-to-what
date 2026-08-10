@@ -58,7 +58,7 @@
 **打开方式：**
 
 - **快捷键**：默认未绑定，可在「选项 → 控制」中搜索 `ItemDespawnToWhat` 自行设置
-- **命令**：`/conversion_config edit`（需要 OP 权限或单人模式）
+- **命令**：`/idtw edit`（需要 OP 权限或单人模式）
 - **主菜单按钮**：游戏主界面右上角
 
 > 如果你更熟悉 JSON，配置文件位于 `.minecraft/config/itemdespawntowhat/` 目录下，可直接手动编辑。
@@ -70,7 +70,7 @@
 3. 填写源物品 ID、结果 ID、转化时间（秒）
 4. 根据需要添加条件（维度、露天、周围方块、辅助物品、流体等）
 5. 点击「添加到缓存」继续添加更多规则，或点击「应用到文件」保存
-6. 执行 `/conversion_config reload` 热重载配置，无需重启服务器
+6. 执行 `/idtw reload` 热重载配置，无需重启服务器
 
 ---
 
@@ -135,7 +135,7 @@
 然后在游戏中执行：
 
 ```
-/conversion_config reload
+/idtw reload
 ```
 
 即可**热重载配置**，无需重启服务器。
@@ -230,8 +230,9 @@
 
 | 命令                          | 权限      | 说明         |
 |-----------------------------|---------|------------|
-| `/conversion_config edit`   | OP / 单人 | 打开配置编辑 GUI |
-| `/conversion_config reload` | OP      | 热重载配置文件    |
+| `/idtw edit`    | OP / 单人 | 打开配置编辑 GUI |
+| `/idtw reload`  | OP      | 热重载配置文件    |
+| `/idtw inspect` | OP / 单人 | 检查视线中的掉落物追踪状态 |
 
 ---
 

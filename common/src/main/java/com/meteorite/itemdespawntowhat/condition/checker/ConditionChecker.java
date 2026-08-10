@@ -6,7 +6,10 @@ import net.minecraft.world.entity.item.ItemEntity;
 /**
  * 运行时条件检查接口。
  */
-@FunctionalInterface
 public interface ConditionChecker {
+    default String debugName() {
+        return getClass().getSimpleName();
+    }
+
     boolean checkCondition(ItemEntity itemEntity, ServerLevel level);
 }

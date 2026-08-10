@@ -21,9 +21,14 @@ import java.util.Map;
 /**
  * 检查物品实体周围六个方向的方块条件。
  */
-public class SurroundingBlocksConditionChecker extends AbstractConditionChecker {
+public class SurroundingBlocksConditionChecker extends PositionCachedConditionChecker {
 
     private Map<ConfigDirection, Either<ResourceLocation, TagKey<Block>>> directionConditions;
+
+    @Override
+    public String debugName() {
+        return "surrounding_blocks";
+    }
 
     @Override
     public AbstractConditionChecker createChecker(ConditionContext ctx) {
@@ -36,9 +41,7 @@ public class SurroundingBlocksConditionChecker extends AbstractConditionChecker 
     }
 
     @Override
-    public boolean checkCondition(ItemEntity itemEntity, ServerLevel level) {
-        BlockPos centerPos = itemEntity.blockPosition();
-
+    protected boolean checkAtPosition(BlockPos centerPos, ServerLevel level) {
         // 检查6个面的方块是否符合要求
         for (Map.Entry<ConfigDirection, Either<ResourceLocation, TagKey<Block>>> entry : directionConditions.entrySet()) {
             BlockPos checkPos = centerPos.relative(entry.getKey().getDirection());

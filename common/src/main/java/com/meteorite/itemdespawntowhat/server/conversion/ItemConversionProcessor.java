@@ -1,9 +1,9 @@
 package com.meteorite.itemdespawntowhat.server.conversion;
 
 import com.meteorite.itemdespawntowhat.ConfigExtractorManager;
-import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.config.runtime.CompiledConversionRule;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -25,96 +25,71 @@ public final class ItemConversionProcessor {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    public static void trackIfEligible(ItemEntity itemEntity, ItemConversionStateAccess state) {
-        if (itemEntity.getTags().contains(Constants.CHECK_LOCK_TAG)) {
-            state.clearConversionState(itemEntity);
-            return;
-        }
-        if (state.isTracked(itemEntity)) {
-            return;
-        }
-
-        ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(itemEntity.getItem().getItem());
-        if (!ConfigExtractorManager.hasAnyConfigs(itemId)) {
-            return;
-        }
-
-        state.setTracked(itemEntity, true);
-        state.resetProgress(itemEntity);
-        LOGGER.debug("Marked item {} for conversion checks", itemId);
-    }
-
     public static boolean shouldCheck(ServerLevel level) {
         return level.getGameTime() % CHECK_INTERVAL_TICKS == 0;
     }
 
-    public static void tickTrackedItem(
+    public static boolean tickTrackedItem(
             ItemEntity itemEntity,
-            ItemConversionStateAccess state,
+            ConversionTracker.ConversionState state,
             int entityLifespan
     ) {
         if (!(itemEntity.level() instanceof ServerLevel serverLevel)) {
-            return;
-        }
-        if (!state.isTracked(itemEntity) || itemEntity.getTags().contains(Constants.CHECK_LOCK_TAG)) {
-            return;
-        }
-        if (!shouldCheck(serverLevel)) {
-            return;
+            return true;
         }
 
-        processItemEntity(itemEntity, serverLevel, state, entityLifespan);
+        return processItemEntity(itemEntity, serverLevel, state, entityLifespan);
     }
 
-    private static void processItemEntity(
+    private static boolean processItemEntity(
             ItemEntity itemEntity,
             ServerLevel serverLevel,
-            ItemConversionStateAccess state,
+            ConversionTracker.ConversionState state,
             int entityLifespan
     ) {
         ItemStack itemStack = itemEntity.getItem();
         ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(itemStack.getItem());
-        String selectedConfigId = state.getSelectedConfigId(itemEntity);
+        if (!ConfigExtractorManager.hasAnyConfigs(itemId)) {
+            return true;
+        }
+        String selectedConfigId = state.selectedConfigId();
         CompiledConversionRule selectedRule = selectedConfigId.isEmpty()
                 ? null
                 : ConfigExtractorManager.getRuleByInternalId(selectedConfigId);
 
         if (selectedRule == null) {
             if (!selectedConfigId.isEmpty()) {
-                state.resetProgress(itemEntity);
+                state.resetProgress();
             }
-            selectedRule = selectBestMatchingRule(itemEntity, serverLevel, itemId);
+            selectedRule = selectBestMatchingRule(itemEntity, serverLevel, itemId, Integer.MIN_VALUE);
             if (selectedRule == null) {
-                return;
+                return false;
             }
-            state.setSelectedConfigId(itemEntity, selectedRule.internalId());
+            state.setSelectedConfigId(selectedRule.internalId());
         } else if (selectedRule.complexity() < ConfigExtractorManager.getMaxComplexityForItem(itemId)) {
-            CompiledConversionRule bestRule = selectBestMatchingRule(itemEntity, serverLevel, itemId);
-            if (bestRule == null) {
-                state.resetProgress(itemEntity);
-                return;
-            }
-            if (!bestRule.internalId().equals(selectedConfigId)) {
+            CompiledConversionRule bestRule = selectBestMatchingRule(
+                    itemEntity, serverLevel, itemId, selectedRule.complexity());
+            if (bestRule != null) {
                 selectedRule = bestRule;
-                state.setSelectedConfigId(itemEntity, selectedRule.internalId());
-                state.setCheckTimer(itemEntity, 0);
+                state.setSelectedConfigId(selectedRule.internalId());
+                state.setCheckTimer(0);
                 LOGGER.debug("Switched item {} to higher-complexity config {}",
                         itemId, selectedRule.internalId());
             }
         }
 
         if (itemStack.getCount() < selectedRule.sourceMultiple()) {
-            return;
+            return false;
         }
 
         if (!selectedRule.matches(itemEntity, serverLevel)) {
-            state.resetProgress(itemEntity);
-            return;
+            state.resetProgress();
+            return false;
         }
 
-        int currentTimer = state.getCheckTimer(itemEntity);
+        int currentTimer = state.checkTimer();
         int newTimer = currentTimer == Integer.MAX_VALUE ? Integer.MAX_VALUE : currentTimer + 1;
-        state.setCheckTimer(itemEntity, newTimer);
+        state.setCheckTimer(newTimer);
         LOGGER.debug("Item {} passed conversion check ({}/{})",
                 itemId, newTimer, selectedRule.conversionTime());
 
@@ -122,64 +97,65 @@ public final class ItemConversionProcessor {
         boolean timerReached = newTimer >= selectedRule.conversionTime();
         boolean aboutToExpire = itemEntity.getAge() > safeLifespan - CHECK_INTERVAL_TICKS;
         if (!timerReached && !aboutToExpire) {
-            return;
+            return false;
         }
 
         if (selectedRule.isResultLimitExceeded(itemEntity)) {
-            state.resetProgress(itemEntity);
+            state.resetProgress();
             LOGGER.debug("Conversion result limit reached for item {}", itemId);
-            return;
+            return false;
         }
 
         if (performConversion(itemEntity, selectedRule, serverLevel, state)) {
-            state.clearConversionState(itemEntity);
+            return true;
         }
+        return false;
     }
 
     private static CompiledConversionRule selectBestMatchingRule(
             ItemEntity itemEntity,
             ServerLevel serverLevel,
-            ResourceLocation itemId
+            ResourceLocation itemId,
+            int minimumComplexityExclusive
     ) {
         List<CompiledConversionRule> rules = ConfigExtractorManager.getRulesForItem(itemId);
-        CompiledConversionRule bestRule = null;
-        int bestComplexity = -1;
-
         for (CompiledConversionRule rule : rules) {
+            if (rule.complexity() <= minimumComplexityExclusive) {
+                break;
+            }
             if (rule.isResultLimitExceeded(itemEntity) || !rule.matches(itemEntity, serverLevel)) {
                 continue;
             }
-
-            int complexity = rule.complexity();
-            if (complexity > bestComplexity) {
-                bestComplexity = complexity;
-                bestRule = rule;
-            }
-        }
-
-        if (bestRule != null) {
             LOGGER.debug("Selected config {} with complexity {} for item {}",
-                    bestRule.internalId(), bestComplexity, itemId);
+                    rule.internalId(), rule.complexity(), itemId);
+            return rule;
         }
-        return bestRule;
+        return null;
     }
 
     private static boolean performConversion(
             ItemEntity itemEntity,
             CompiledConversionRule rule,
             ServerLevel serverLevel,
-            ItemConversionStateAccess state
+            ConversionTracker.ConversionState state
     ) {
-        if (state.isConversionLocked(itemEntity)) {
+        if (state.conversionLocked()) {
             LOGGER.debug("Conversion already in progress for item {}", itemEntity.getUUID());
             return false;
         }
 
         try {
-            state.setConversionLocked(itemEntity, true);
-            return rule.performConversion(itemEntity, serverLevel);
+            state.setConversionLocked(true);
+            boolean converted = rule.performConversion(itemEntity, serverLevel);
+            if (converted) {
+                serverLevel.sendParticles(
+                        ParticleTypes.HAPPY_VILLAGER,
+                        itemEntity.getX(), itemEntity.getY() + 0.25, itemEntity.getZ(),
+                        8, 0.25, 0.2, 0.25, 0.02);
+            }
+            return converted;
         } finally {
-            state.setConversionLocked(itemEntity, false);
+            state.setConversionLocked(false);
         }
     }
 }

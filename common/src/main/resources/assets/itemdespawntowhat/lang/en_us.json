@@ -121,5 +121,27 @@
   "gui.itemdespawntowhat.tooltip.inner_fluid_source": "  Requires source block",
   "gui.itemdespawntowhat.tooltip.inner_fluid_consume": "  Consumes fluid",
   "gui.itemdespawntowhat.tooltip.block_place_shape": "Placement shape: %s",
-  "gui.itemdespawntowhat.tooltip.explosion_direction": "Explosion direction: %s"
+  "gui.itemdespawntowhat.tooltip.explosion_direction": "Explosion direction: %s",
+
+  "command.itemdespawntowhat.inspect.player_only": "This command can only be used by a player.",
+  "command.itemdespawntowhat.inspect.no_target": "Look directly at a dropped item within 8 blocks.",
+  "command.itemdespawntowhat.inspect.target": "Target: %s, UUID: %s, count: %s",
+  "command.itemdespawntowhat.inspect.tracked.yes": "Tracking: yes",
+  "command.itemdespawntowhat.inspect.tracked.no": "Tracking: no",
+  "command.itemdespawntowhat.inspect.reason.locked": "Reason: this item is excluded from conversion.",
+  "command.itemdespawntowhat.inspect.reason.no_config": "Reason: no conversion rules use this source item.",
+  "command.itemdespawntowhat.inspect.reason.not_registered": "Reason: the item is eligible but has not entered the tracker.",
+  "command.itemdespawntowhat.inspect.rule": "Selected rule: %s, type: %s",
+  "command.itemdespawntowhat.inspect.rule.none": "Selected rule: none",
+  "command.itemdespawntowhat.inspect.progress": "Progress: %s / %s checks",
+  "command.itemdespawntowhat.inspect.progress.na": "Progress: N/A",
+  "command.itemdespawntowhat.inspect.condition": "  %s: %s",
+  "command.itemdespawntowhat.inspect.condition.dimension": "Dimension",
+  "command.itemdespawntowhat.inspect.condition.outdoor": "Outdoor",
+  "command.itemdespawntowhat.inspect.condition.surrounding_blocks": "Surrounding blocks",
+  "command.itemdespawntowhat.inspect.condition.catalyst": "Catalyst items",
+  "command.itemdespawntowhat.inspect.condition.inner_fluid": "Inner fluid",
+  "command.itemdespawntowhat.inspect.status.pass": "PASS",
+  "command.itemdespawntowhat.inspect.status.fail": "FAIL",
+  "command.itemdespawntowhat.inspect.status.na": "N/A"
 }

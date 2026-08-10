@@ -71,7 +71,9 @@ public final class RuntimeConfigSnapshotBuilder {
             Map<ResourceLocation, List<CompiledConversionRule>> source
     ) {
         Map<ResourceLocation, List<CompiledConversionRule>> result = new HashMap<>();
-        source.forEach((key, rules) -> result.put(key, List.copyOf(rules)));
+        source.forEach((key, rules) -> result.put(key, rules.stream()
+                .sorted((left, right) -> Integer.compare(right.complexity(), left.complexity()))
+                .toList()));
         return result;
     }
 }

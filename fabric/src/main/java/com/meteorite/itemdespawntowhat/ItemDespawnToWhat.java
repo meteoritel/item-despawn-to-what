@@ -7,6 +7,7 @@ import com.meteorite.itemdespawntowhat.network.handler.SaveConfigChunkAccumulato
 import com.meteorite.itemdespawntowhat.network.registrar.ConfigEditPayloadRegistrar;
 import com.meteorite.itemdespawntowhat.platform.Services;
 import com.meteorite.itemdespawntowhat.server.event.ItemConversionEvent;
+import com.meteorite.itemdespawntowhat.server.conversion.ConversionTracker;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -46,6 +47,7 @@ public class ItemDespawnToWhat implements ModInitializer {
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
             EditSessionLockManager.clear();
             SaveConfigChunkAccumulator.clearAll();
+            ConversionTracker.clearAll();
         });
 
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> {

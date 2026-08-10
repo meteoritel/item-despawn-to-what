@@ -22,6 +22,11 @@ public class InnerFluidConditionChecker extends AbstractConditionChecker{
     private InnerFluid innerFluid;
 
     @Override
+    public String debugName() {
+        return "inner_fluid";
+    }
+
+    @Override
     public AbstractConditionChecker createChecker(ConditionContext ctx) {
         return new InnerFluidConditionChecker(ctx.innerFluid());
     }

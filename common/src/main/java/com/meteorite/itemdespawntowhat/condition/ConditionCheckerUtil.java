@@ -13,7 +13,7 @@ public final class ConditionCheckerUtil {
     private ConditionCheckerUtil() {
     }
 
-    public static ConditionChecker buildCombinedChecker(ConditionContext ctx) {
+    public static CombinedConditionChecker buildCombinedChecker(ConditionContext ctx) {
         List<ConditionChecker> checkers = new ArrayList<>();
         for (var factory : ConditionCheckerRegistry.getFactories()) {
             AbstractConditionChecker checker = factory.get();
@@ -27,19 +27,7 @@ public final class ConditionCheckerUtil {
         return combineAll(checkers);
     }
 
-    public static ConditionChecker combineAll(List<ConditionChecker> checkers) {
-        if (checkers.isEmpty()) {
-            return (itemEntity, level) -> true;
-        }
-
-        // 任何一项条件检查器没有通过就不通过
-        return (itemEntity, level) -> {
-            for (ConditionChecker checker : checkers) {
-                if (!checker.checkCondition(itemEntity,level)) {
-                    return false;
-                }
-            }
-            return true;
-        };
+    public static CombinedConditionChecker combineAll(List<ConditionChecker> checkers) {
+        return new CombinedConditionChecker(checkers);
     }
 }
