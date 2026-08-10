@@ -15,6 +15,9 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
+/**
+ * 按字段实际高度排列标签与输入控件的滚动表单列表。
+ */
 public class FormListPanel extends ContainerObjectSelectionList<FormListPanel.Entry> {
     private static final int BASE_X = 20;
     private static final int LABEL_WIDTH = 80;
@@ -35,17 +38,12 @@ public class FormListPanel extends ContainerObjectSelectionList<FormListPanel.En
     }
 
     public void add(Component label, AbstractWidget widget) {
-        addEntry(new Entry(minecraft.font, label, widget, false));
+        addEntry(new Entry(minecraft.font, label, widget));
     }
 
-    // 添加条件行
-    public void addConditional(Component label, AbstractWidget widget) {
-        addEntry(new Entry(minecraft.font, label, widget, true));
-    }
-
-    // 移除所有条件行
-    public void removeConditionalEntries() {
-        children().removeIf(entry -> entry.conditional);
+    // 条件可见性变化后由 FormRenderer 重新填充当前字段。
+    public void clearFormEntries() {
+        clearEntries();
     }
 
     // 调整面板的宽度（后端处理宽度）
@@ -160,13 +158,11 @@ public class FormListPanel extends ContainerObjectSelectionList<FormListPanel.En
         private final Font font;
         private final Component label;
         private final AbstractWidget widget;
-        final boolean conditional;
 
-        public Entry(Font font, Component label, AbstractWidget widget, boolean conditional) {
+        public Entry(Font font, Component label, AbstractWidget widget) {
             this.font = font;
             this.label = label;
             this.widget = widget;
-            this.conditional = conditional;
         }
 
         @Override

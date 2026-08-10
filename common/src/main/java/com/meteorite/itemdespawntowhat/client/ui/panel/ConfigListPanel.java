@@ -7,6 +7,7 @@ import com.meteorite.itemdespawntowhat.client.ui.panel.configlist.EntityIconCach
 import com.meteorite.itemdespawntowhat.client.ui.panel.configlist.ScrollableTextRenderer;
 import com.meteorite.itemdespawntowhat.client.ui.panel.configlist.TagPreviewResolver;
 import com.meteorite.itemdespawntowhat.client.ui.presentation.ConfigPresentation;
+import com.meteorite.itemdespawntowhat.client.ui.presentation.BuiltinConfigPresentations;
 import com.meteorite.itemdespawntowhat.client.ui.presentation.ConfigPresenter;
 import com.meteorite.itemdespawntowhat.client.register.ClientConversionTypeRegistry;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
@@ -334,7 +335,7 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
         }
 
         private Component getSourceText(ItemStack sourceIconStack) {
-            return ClientConversionTypeRegistry.displayName(sourceIconStack);
+            return BuiltinConfigPresentations.displayName(sourceIconStack);
         }
 
         private Component getResultText(ConfigPresentation presentation) {
@@ -412,7 +413,7 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             renderCatalystDropdown(guiGraphics, mc, mouseX, mouseY);
 
             if (hovered && mc.screen instanceof Screen screen) {
-                screen.setTooltipForNextRenderPass(ConfigTooltipBuilder.build(config));
+                screen.setTooltipForNextRenderPass(ConfigTooltipBuilder.build(config, presentation));
             }
         }
 

@@ -8,6 +8,12 @@ import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * 为包含多个文本框的复合控件提供事件路由和焦点管理。
+ */
 public abstract class AbstractCompositeWidget extends AbstractWidget
         implements ICompositeWidget {
     @Nullable
@@ -43,6 +49,20 @@ public abstract class AbstractCompositeWidget extends AbstractWidget
     @Nullable
     public EditBox getInternalFocused() {
         return internalFocused;
+    }
+
+    @Override
+    public List<EditBox> getInternalEditBoxes() {
+        List<EditBox> boxes = new ArrayList<>();
+        getEditBoxes().forEach(boxes::add);
+        return List.copyOf(boxes);
+    }
+
+    @Override
+    public void focusInternal(EditBox editBox) {
+        if (getInternalEditBoxes().contains(editBox)) {
+            setInternalFocused(editBox);
+        }
     }
 
     // 子类返回所有可交互的 EditBox，供 mouseClicked 遍历使用。

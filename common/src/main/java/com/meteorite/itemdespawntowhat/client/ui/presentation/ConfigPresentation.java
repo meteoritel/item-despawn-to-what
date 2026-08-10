@@ -11,6 +11,7 @@ import org.jetbrains.annotations.Nullable;
 public record ConfigPresentation(
         ItemStack icon,
         Component name,
-        @Nullable EntityType<?> entityType
+        @Nullable EntityType<?> entityType,
+        Component summary
 ) {
 }

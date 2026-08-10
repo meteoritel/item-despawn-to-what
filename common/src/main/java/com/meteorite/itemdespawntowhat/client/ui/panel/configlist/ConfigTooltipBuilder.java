@@ -5,6 +5,7 @@ import com.meteorite.itemdespawntowhat.client.register.ClientConversionTypeRegis
 import com.meteorite.itemdespawntowhat.config.catalogue.InnerFluid;
 import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
+import com.meteorite.itemdespawntowhat.client.ui.presentation.ConfigPresentation;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 
@@ -16,9 +17,11 @@ public final class ConfigTooltipBuilder {
     private ConfigTooltipBuilder() {
     }
 
-    public static Component build(BaseConversionConfig config) {
-        MutableComponent tooltip = Component.translatable(
-                "gui.itemdespawntowhat.tooltip.conversion_time", config.getConversionTime());
+    public static Component build(BaseConversionConfig config, ConfigPresentation presentation) {
+        MutableComponent tooltip = presentation.summary().copy()
+                .append(Component.literal("\n"))
+                .append(Component.translatable(
+                        "gui.itemdespawntowhat.tooltip.conversion_time", config.getConversionTime()));
 
         String dim = config.getDimension();
         if (dim != null && !dim.isEmpty()) {

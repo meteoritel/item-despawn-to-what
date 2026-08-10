@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.config.io;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonParseException;
+import com.google.gson.JsonElement;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.util.JsonOrderTypeAdapterFactory;
 
@@ -28,6 +29,10 @@ public final class ConfigJsonCodec<T extends BaseConversionConfig> {
 
     public String serialize(List<? extends BaseConversionConfig> configs) {
         return GSON.toJson(configs);
+    }
+
+    public JsonElement toJsonTree(BaseConversionConfig config) {
+        return GSON.toJsonTree(config);
     }
 
     public List<T> deserialize(String json) {

@@ -1,295 +1,100 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.client.register.ClientConversionTypeDefinition;
+import com.meteorite.itemdespawntowhat.client.ui.form.FormDefinition;
+import com.meteorite.itemdespawntowhat.client.ui.form.FormFieldContext;
+import com.meteorite.itemdespawntowhat.client.ui.form.FormRenderer;
 import com.meteorite.itemdespawntowhat.client.ui.handler.ConfigEditSessionHandler;
-import com.meteorite.itemdespawntowhat.client.ui.form.ConfigFormContext;
-import com.meteorite.itemdespawntowhat.client.ui.form.ConfigFormSection;
+import com.meteorite.itemdespawntowhat.client.ui.panel.ConfigListPanel;
+import com.meteorite.itemdespawntowhat.client.ui.panel.FormListPanel;
 import com.meteorite.itemdespawntowhat.client.ui.support.EditCallback;
 import com.meteorite.itemdespawntowhat.client.ui.support.ListScreenCallback;
-import com.meteorite.itemdespawntowhat.client.ui.support.SuggestionProvider;
-import com.meteorite.itemdespawntowhat.client.ui.panel.ConfigListPanel;
+import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.network.payload.c2s.ReleaseEditSessionPayload;
-import com.meteorite.itemdespawntowhat.client.ui.panel.FormListPanel;
-import com.meteorite.itemdespawntowhat.client.ui.support.ConfigEditScreenFocusController;
-import com.meteorite.itemdespawntowhat.client.ui.support.ConfigEditScreenSuggestionController;
-import com.meteorite.itemdespawntowhat.client.ui.widget.*;
-import com.meteorite.itemdespawntowhat.util.PlayerStateChecker;
-import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
-import net.minecraft.ChatFormatting;
 import com.meteorite.itemdespawntowhat.platform.Services;
+import com.meteorite.itemdespawntowhat.util.PlayerStateChecker;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.*;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import org.jetbrains.annotations.NotNull;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
-import com.meteorite.itemdespawntowhat.client.ui.support.FieldValidator;
-import com.meteorite.itemdespawntowhat.util.IdValidator;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 /**
- * 配置编辑主界面，负责通用表单布局、导航和输入交互。
+ * 配置编辑界面薄壳，负责会话、列表生命周期和 Screen 事件委托。
  */
 public class BaseConfigEditScreen<T extends BaseConversionConfig> extends Screen
         implements EditCallback<T>, ListScreenCallback {
+    public static final String LABEL_PREFIX = FormFieldContext.LABEL_PREFIX;
+    public static final int BOX_WIDTH = FormFieldContext.BOX_WIDTH;
+    public static final int BUTTON_HEIGHT = FormFieldContext.BUTTON_HEIGHT;
+    protected static final Logger LOGGER = LogManager.getLogger();
 
     protected T draftConfig;
-    protected T resizeBackup; // 用于窗口调整时的临时备份
+    protected T resizeBackup;
     protected boolean listEditPerformed;
     protected boolean suppressDraftRestoreOnce;
 
-    protected static final Logger LOGGER = LogManager.getLogger();
-    public static final String LABEL_PREFIX = "gui.itemdespawntowhat.edit.";
-    public static final int BOX_WIDTH = 240;
-    public static final int BUTTON_HEIGHT = 18;
-    // 后端处理器
     protected final ConfigEditSessionHandler<T> editHandler;
     private final Supplier<T> configFactory;
-    private final ConfigFormSection<T> customSection;
-    private ConfigFormContext formContext;
-    // UI 组件
-    protected EditBox itemIdInput;
-    protected EditBox dimensionInput;
-    protected CycleButton<Boolean> needOutdoorButton;
-    protected SurroundingBlocksWidget surroundingWidget;
-    protected CatalystItemsWidget catalystWidget;
-    protected InnerFluidWidget innerFluidWidget;
-    protected EditBox resultIdInput;
-    protected EditBox conversionTimeInput;
-    protected EditBox resultMultipleInput;
-    protected EditBox sourceMultipleInput;
-    // UI 组件列表
-    protected FormListPanel formList;
-    // 右上角配置列表按钮
+    private final ClientConversionTypeDefinition<T> definition;
+    private FormDefinition<T> formDefinition;
+    private FormRenderer<T> formRenderer;
     private Button configListButton;
-    private final ConfigEditScreenSuggestionController suggestionController = new ConfigEditScreenSuggestionController();
-    private final ConfigEditScreenFocusController focusController = new ConfigEditScreenFocusController();
+    private Component errorMessage;
+    private int errorDisplayTicks;
+    private static final int ERROR_DISPLAY_DURATION = 120;
 
-    // 错误提示
-    private Component errorMessage = null;
-    private int errorDisplayTicks = 0;
-    private static final int ERROR_DISPLAY_DURATION = 120; // 显示6秒
-
-    // 字段校验
-    private record ConditionalFieldValidator(FieldValidator validator, BooleanSupplier shouldValidate) {}
-    private final Map<EditBox, List<ConditionalFieldValidator>> validatedFields = new HashMap<>();
-    private final Set<EditBox> invalidFields = new HashSet<>();
+    protected FormListPanel formList;
 
     public BaseConfigEditScreen(ClientConversionTypeDefinition<T> definition) {
         super(Component.translatable("gui.itemdespawntowhat.edit.title", definition.fileName()));
+        this.definition = definition;
         this.editHandler = new ConfigEditSessionHandler<>(definition.id(), definition.codec());
         this.configFactory = definition.configFactory();
-        this.customSection = definition.createFormSection();
     }
 
     @Override
     protected void init() {
         super.init();
-        suggestionController.clear();
-        clearAllFocus();
-        validatedFields.clear();
-        invalidFields.clear();
-
-        initFormPanel();
-        initCommonWidgets();
-        formContext = new ConfigFormContext(this, formList, resultIdInput);
-        initFormEntries();
-        initSuggestions();
-        customSection.registerSuggestions(formContext);
-        initFocusDelegates();
-        initValidators();
+        formList = new FormListPanel(minecraft, width, height - 80, 36, height - 215);
+        addRenderableWidget(formList);
+        formDefinition = definition.createFormDefinition(font);
+        formRenderer = new FormRenderer<>(font, formList, formDefinition);
+        formRenderer.initialize();
         initButtons();
         clearFields();
         restoreResizeBackup();
     }
 
-    private void initFormPanel() {
-        formList = new FormListPanel(
-                minecraft,
-                width,
-                height - 80,
-                36,
-                height - 215
-        );
-        addRenderableWidget(formList);
-    }
-
-    private void initCommonWidgets() {
-        itemIdInput = textBox();
-        dimensionInput = textBox();
-        needOutdoorButton = CycleButton.booleanBuilder(
-                        Component.translatable(LABEL_PREFIX + "on"),
-                        Component.translatable(LABEL_PREFIX + "off")
-                ).withInitialValue(false)
-                .create(0, 0, BOX_WIDTH, BUTTON_HEIGHT, Component.translatable(LABEL_PREFIX + "need_outdoor"));
-        surroundingWidget = new SurroundingBlocksWidget(font, 0, 0);
-        catalystWidget = new CatalystItemsWidget(font, 0, 0);
-        innerFluidWidget = new InnerFluidWidget(font, 0, 0);
-        resultIdInput = textBox();
-        conversionTimeInput = positiveIntBox();
-        resultMultipleInput = positiveIntBox();
-        sourceMultipleInput = positiveIntBox();
-    }
-
-    private void initFormEntries() {
-        // 转化基本信息（起始物品、结果、转化比值、转化时间）
-        formList.add(Component.translatable(LABEL_PREFIX + "item_id"), itemIdInput);
-        if (customSection.showsResultId()) {
-            formList.add(Component.translatable(LABEL_PREFIX + "result_id"), resultIdInput);
-        }
-        formList.add(Component.translatable(LABEL_PREFIX + "source_multiple"), sourceMultipleInput);
-        formList.add(Component.translatable(LABEL_PREFIX + "result_multiple"), resultMultipleInput);
-        formList.add(Component.translatable(LABEL_PREFIX + "conversion_time"), conversionTimeInput);
-
-        // 检验条件
-        formList.add(Component.translatable(LABEL_PREFIX + "dimension"), dimensionInput);
-        formList.add(Component.translatable(LABEL_PREFIX + "need_outdoor"), needOutdoorButton);
-        formList.add(Component.translatable(LABEL_PREFIX + "surrounding_blocks"), surroundingWidget);
-        formList.add(Component.translatable(LABEL_PREFIX + "catalyst_items"), catalystWidget);
-        formList.add(Component.translatable(LABEL_PREFIX + "inner_fluid"), innerFluidWidget);
-
-        customSection.initialize(formContext);
-    }
-
-    private void initSuggestions() {
-        registerSuggestion(itemIdInput, SuggestionProvider.ofRegistryWithTags(BuiltInRegistries.ITEM, Registries.ITEM));
-        for (EditBox box : surroundingWidget.getBoxes().values()) {
-            registerSuggestion(box, SuggestionProvider.ofRegistryWithTags(BuiltInRegistries.BLOCK, Registries.BLOCK));
-        }
-        registerSuggestion(dimensionInput, SuggestionProvider.ofDimensions());
-        registerCommaSeparatedSuggestion(catalystWidget.getItemBox(),
-                SuggestionProvider.ofRegistryWithTags(BuiltInRegistries.ITEM, Registries.ITEM));
-        registerSuggestion(innerFluidWidget.getFluidBox(), SuggestionProvider.ofRegistry(BuiltInRegistries.FLUID,
-                fluid -> !BuiltInRegistries.FLUID.getKey(fluid).equals(ResourceLocation.parse("empty"))));
-    }
-
-    private void restoreResizeBackup() {
-        if (resizeBackup != null) {
-            onRefillFields(resizeBackup);
-            resizeBackup = null;
-        }
-    }
-
-    // 注入焦点委托，解耦组件与具体 Screen 类的直接依赖
-    private void initFocusDelegates() {
-        // FormListPanel: 包装 shouldTakeFocus 检查
-        formList.setFocusDelegate(widget -> {
-            if (focusController.shouldTakeFocus(widget)) {
-                setFocusedWidget(widget);
-            }
-        });
-
-        // AbstractCompositeWidget 子类：始终允许获取焦点
-        surroundingWidget.setFocusDelegate(this::setFocusedWidget);
-        catalystWidget.setFocusDelegate(this::setFocusedWidget);
-        innerFluidWidget.setFocusDelegate(this::setFocusedWidget);
-
-        customSection.registerFocus(formContext);
-    }
-
-    // 注册字段校验器，用来决定添加红框
-    private void initValidators() {
-        registerValidator(itemIdInput, IdValidator::isValidItemId);
-        registerValidator(innerFluidWidget.getFluidBox(),
-                () -> innerFluidWidget.getValue() != null,
-                IdValidator::isValidFluidId);
-        for (EditBox box : surroundingWidget.getBoxes().values()) {
-            registerValidator(box,
-                    () -> !box.getValue().isBlank(),
-                    IdValidator::isValidBlockId);
-        }
-        registerValidator(catalystWidget.getItemBox(),
-                () -> !catalystWidget.getItemBox().getValue().isBlank(),
-                IdValidator::isValidCommaSeparatedItemId);
-
-        customSection.registerValidators(formContext);
-    }
-
-    // 注册字段校验器（无前置条件）
-    protected void registerValidator(EditBox box, FieldValidator... validators) {
-        registerValidator(box, () -> true, validators);
-    }
-
-    // 注册字段校验器（带前置条件，前置条件为 false 时跳过该字段校验）
-    protected void registerValidator(EditBox box, BooleanSupplier shouldValidate, FieldValidator... validators) {
-        List<ConditionalFieldValidator> validatorList =
-                validatedFields.computeIfAbsent(box, k -> new ArrayList<>());
-        for (FieldValidator validator : validators) {
-            validatorList.add(new ConditionalFieldValidator(validator, shouldValidate));
-        }
-    }
-
-    // 校验所有已注册字段，返回 true 表示全部合法；失败的字段记入 invalidFields
-    protected boolean validateAllFields() {
-        invalidFields.clear();
-        for (Map.Entry<EditBox, List<ConditionalFieldValidator>> entry : validatedFields.entrySet()) {
-            EditBox box = entry.getKey();
-            String value = box.getValue();
-            for (ConditionalFieldValidator conditional : entry.getValue()) {
-                if (!conditional.shouldValidate().getAsBoolean()) {
-                    continue;
-                }
-                if (!conditional.validator().validate(value)) {
-                    invalidFields.add(box);
-                    break;
-                }
-            }
-        }
-        return invalidFields.isEmpty();
-    }
-
     private void initButtons() {
         int centerX = width / 2;
         int y = height - 28;
+        addRenderableWidget(Button.builder(Component.translatable("gui.itemdespawntowhat.save_to_cache"), button -> {
+            if (validateAllFields()) {
+                editHandler.saveCurrentToCache(this);
+            } else {
+                onSaveError();
+            }
+        }).bounds(centerX - 160, y, 100, 20).build());
+        addRenderableWidget(Button.builder(Component.translatable("gui.itemdespawntowhat.apply_to_file"),
+                button -> editHandler.applyToFile(this)).bounds(centerX - 50, y, 100, 20).build());
+        addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), button -> onClose())
+                .bounds(centerX + 60, y, 100, 20).build());
 
-        addRenderableWidget(Button.builder(
-                Component.translatable("gui.itemdespawntowhat.save_to_cache"),
-                b -> {
-                    if (validateAllFields()) {
-                        editHandler.saveCurrentToCache(this);
-                    } else {
-                        onSaveError();
-                    }
-                }
-        ).bounds(centerX - 160, y, 100, 20).build());
-
-        addRenderableWidget(Button.builder(
-                Component.translatable("gui.itemdespawntowhat.apply_to_file"),
-                b -> editHandler.applyToFile(this)
-        ).bounds(centerX - 50, y, 100, 20).build());
-
-        addRenderableWidget(Button.builder(
-                Component.translatable("gui.cancel"),
-                b -> onClose()
-        ).bounds(centerX + 60, y, 100, 20).build());
-
-        // 右上角配置列表按钮
-        configListButton = Button.builder(
-                buildConfigListButtonLabel(),
-                b -> openConfigListScreen()
-        ).bounds(width - 110, 6, 100, 16).build();
+        configListButton = Button.builder(buildConfigListButtonLabel(), button -> openConfigListScreen())
+                .bounds(width - 110, 6, 100, 16).build();
         addRenderableWidget(configListButton);
     }
 
-    // ========== Callback 接口实现 =========== //
     @Override
     public void onClearFields() {
         clearFields();
@@ -298,15 +103,13 @@ public class BaseConfigEditScreen<T extends BaseConversionConfig> extends Screen
     @Override
     public T buildConfigFromFields() {
         T config = configFactory.get();
-        populateCommonFields(config);
-        customSection.writeTo(config);
+        formRenderer.writeTo(config);
         return config;
     }
 
     @Override
     public void onRefillFields(T config) {
-        refillCommonFields(config);
-        customSection.readFrom(config);
+        formRenderer.readFrom(config);
         clearAllSuggestions();
     }
 
@@ -322,7 +125,6 @@ public class BaseConfigEditScreen<T extends BaseConversionConfig> extends Screen
             LOGGER.info("Discarding {} unsaved configs", pending.size());
         }
         ConfigListPanel.clearEntityCache();
-
         if (minecraft != null) {
             if (minecraft.player != null) {
                 Services.PLATFORM.sendToServer(new ReleaseEditSessionPayload());
@@ -342,7 +144,6 @@ public class BaseConfigEditScreen<T extends BaseConversionConfig> extends Screen
         errorDisplayTicks = ERROR_DISPLAY_DURATION;
     }
 
-    // ========== ListScreenCallback 实现 ========== //
     @Override
     public void onEditRequested(ConfigListPanel.EntrySource source, int indexInSource) {
         loadSelectedFromList(source, indexInSource, true);
@@ -359,18 +160,15 @@ public class BaseConfigEditScreen<T extends BaseConversionConfig> extends Screen
     }
 
     private void loadSelectedFromList(ConfigListPanel.EntrySource source, int indexInSource, boolean removeFromList) {
-        List<T> list = (source == ConfigListPanel.EntrySource.ORIGINAL)
-                ? editHandler.getOriginalConfigs()
-                : editHandler.getPendingConfigs();
+        List<T> list = source == ConfigListPanel.EntrySource.ORIGINAL
+                ? editHandler.getOriginalConfigs() : editHandler.getPendingConfigs();
         if (indexInSource < 0 || indexInSource >= list.size()) {
             return;
         }
-
         suppressDraftRestoreOnce = true;
         T selected = removeFromList ? list.remove(indexInSource) : list.get(indexInSource);
         onClearFields();
         onRefillFields(selected);
-
         if (removeFromList) {
             listEditPerformed = true;
             onListChanged();
@@ -379,42 +177,33 @@ public class BaseConfigEditScreen<T extends BaseConversionConfig> extends Screen
 
     @Override
     public void onListScreenClosed() {
-        if (!suppressDraftRestoreOnce && !listEditPerformed && draftConfig != null ) {// && draftConfig.shouldProcess()
+        if (!suppressDraftRestoreOnce && !listEditPerformed && draftConfig != null) {
             onRefillFields(draftConfig);
         }
-        // 重置标志和草稿，避免下次误用
         listEditPerformed = false;
         suppressDraftRestoreOnce = false;
         draftConfig = null;
         refreshConfigListButton();
     }
 
-    // ============================
-    // 按钮文本构建方法
     private Component buildConfigListButtonLabel() {
-        int total = editHandler.getOriginalConfigs().size()
-                + editHandler.getPendingConfigs().size();
+        int total = editHandler.getOriginalConfigs().size() + editHandler.getPendingConfigs().size();
         int pending = editHandler.getPendingConfigs().size();
-
         if (pending > 0) {
-            // 星号标注待定条目
             return Component.translatable("gui.itemdespawntowhat.edit.config_stat_2",
                     Component.literal(String.valueOf(total)).withStyle(ChatFormatting.GREEN),
                     Component.literal(String.valueOf(total - pending)).withStyle(ChatFormatting.GREEN),
                     Component.literal(String.valueOf(pending)).withStyle(ChatFormatting.YELLOW));
-        } else {
-            return Component.translatable("gui.itemdespawntowhat.edit.config_stat_1",total);
         }
+        return Component.translatable("gui.itemdespawntowhat.edit.config_stat_1", total);
     }
 
-    // 刷新右上角按钮文字，每次列表变化后调用
     private void refreshConfigListButton() {
         if (configListButton != null) {
             configListButton.setMessage(buildConfigListButtonLabel());
         }
     }
 
-    // 打开配置列表screen
     private void openConfigListScreen() {
         draftConfig = buildConfigFromFields();
         listEditPerformed = false;
@@ -424,171 +213,50 @@ public class BaseConfigEditScreen<T extends BaseConversionConfig> extends Screen
         }
     }
 
-    // ========== 辅助布局方法 ========== //
-
-    // 普通的文本输入框
-    protected EditBox textBox() {
-        EditBox box = new EditBox(font, 0, 0, BOX_WIDTH, 18, Component.empty());
-        box.setMaxLength(256);
-        return box;
-    }
-
-    // 数字输入框
-    protected EditBox numericBox() {
-        EditBox box = textBox();
-        box.setFilter(s -> s.matches("-?\\d*")); // 仅允许数字
-        return box;
-    }
-
-    // 正整数输入框（禁止负号）
-    protected EditBox positiveIntBox() {
-        EditBox box = textBox();
-        box.setFilter(s -> s.matches("\\d*"));
-        return box;
-    }
-
-    // 正浮点数输入框（禁止负号）
-    protected EditBox positiveDecimalBox() {
-        EditBox box = textBox();
-        box.setFilter(s -> s.matches("\\d*\\.?\\d*"));
-        return box;
-    }
-
-    // ========== 字段处理 ========== //
-
-    // 填充通用字段到给定的配置对象
-    protected void populateCommonFields(T config) {
-        config.setItemId(nullToEmpty(itemIdInput.getValue()));
-        config.setDimension(emptyToNull(dimensionInput.getValue()));
-        config.setNeedOutdoor(needOutdoorButton.getValue());
-        config.setSurroundingBlocks(surroundingWidget.getValue());
-        config.setCatalystItems(catalystWidget.getValue());
-        config.setInnerFluid(innerFluidWidget.getValue());
-        config.setResultId(nullToEmpty(resultIdInput.getValue()));
-        config.setConversionTime(parseInt(conversionTimeInput.getValue(),300));
-        config.setResultMultiple(parseInt(resultMultipleInput.getValue(), 1));
-        config.setSourceMultiple(parseInt(sourceMultipleInput.getValue(), 1));
-    }
-
     protected void clearFields() {
-        itemIdInput.setValue("");
-        dimensionInput.setValue("");
-        needOutdoorButton.setValue(false);
-        resultIdInput.setValue("");
-        conversionTimeInput.setValue("");
-        resultMultipleInput.setValue("");
-        sourceMultipleInput.setValue("");
-        surroundingWidget.clear();
-        catalystWidget.clear();
-        innerFluidWidget.clear();
+        formRenderer.clear();
+    }
 
-        customSection.clear();
-        clearAllSuggestions();
-        invalidFields.clear();
+    protected boolean validateAllFields() {
+        return formRenderer.validateAll();
     }
 
     protected void clearAllSuggestions() {
-        suggestionController.hideAll();
+        formRenderer.clearSuggestions();
     }
 
-    protected void refillCommonFields(T config) {
-        itemIdInput.setValue(nullToEmpty(config.getItemId()));
-        dimensionInput.setValue(nullToEmpty(config.getDimension()));
-        needOutdoorButton.setValue(config.isNeedOutdoor());
-        resultIdInput.setValue(nullToEmpty(config.getResultId()));
-        conversionTimeInput.setValue(String.valueOf(config.getConversionTime()));
-        resultMultipleInput.setValue(String.valueOf(config.getResultMultiple()));
-        sourceMultipleInput.setValue(String.valueOf(config.getSourceMultiple()));
-        surroundingWidget.setValue(config.getSurroundingBlocks());
-        catalystWidget.setValue(config.getCatalystItems());
-        innerFluidWidget.setValue(config.getInnerFluid());
-    }
-
-    // 安全解析字符串到数字
-    protected int parseInt(String boxInput, int def) {
-        return SafeParseUtil.parseInt(boxInput, def);
-    }
-
-    private static String nullToEmpty(String value) {
-        return value != null ? value : "";
-    }
-
-    private static @Nullable String emptyToNull(String value) {
-        return value == null || value.isBlank() ? null : value;
-    }
-
-    protected float parseFloat(String boxInput) {
-        return SafeParseUtil.parseFloat(boxInput, (float) 1.0);
-    }
-
-    // ========== 渲染 ========== //
-    @Override
-    public void render(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        super.render(guiGraphics, mouseX, mouseY, partialTick);
-        renderHeaderAndMode(guiGraphics);
-        renderValidationOverlay(guiGraphics);
-        renderSuggestionOverlay(guiGraphics, mouseX, mouseY);
-    }
-
-    private Component getModeLabelText() {
-        if (minecraft != null && PlayerStateChecker.isSinglePlayerMode(minecraft)) {
-            return Component.translatable("gui.itemdespawntowhat.edit.mode.local_mode");
+    private void restoreResizeBackup() {
+        if (resizeBackup != null) {
+            onRefillFields(resizeBackup);
+            resizeBackup = null;
         }
-        return Component.translatable("gui.itemdespawntowhat.edit.mode.server_mode");
     }
 
-    private void renderHeaderAndMode(GuiGraphics guiGraphics) {
-        guiGraphics.drawCenteredString(font, title, width / 2, 12, 0xFFFFFF);
-        guiGraphics.drawString(font, getModeLabelText(), 10, 12, 0x808080);
-    }
-
-    private void renderValidationOverlay(GuiGraphics guiGraphics) {
+    @Override
+    public void render(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        super.render(graphics, mouseX, mouseY, partialTick);
+        graphics.drawCenteredString(font, title, width / 2, 12, 0xFFFFFF);
+        Component mode = minecraft != null && PlayerStateChecker.isSinglePlayerMode(minecraft)
+                ? Component.translatable("gui.itemdespawntowhat.edit.mode.local_mode")
+                : Component.translatable("gui.itemdespawntowhat.edit.mode.server_mode");
+        graphics.drawString(font, mode, 10, 12, 0x808080, false);
         if (errorMessage != null && errorDisplayTicks > 0) {
-            guiGraphics.drawCenteredString(font, errorMessage, width / 2, 24, 0xFFFFFF);
+            graphics.drawCenteredString(font, errorMessage, width / 2, 24, 0xFFFFFF);
             errorDisplayTicks--;
             if (errorDisplayTicks <= 0) {
                 errorMessage = null;
-                invalidFields.clear();
             }
         }
-
-        if (formList == null) {
-            return;
-        }
-
-        // 红框标记校验失败的输入框（仅在 formList 可视区域内的输入框显示）
-        for (EditBox box : invalidFields) {
-            int bx = box.getX();
-            int by = box.getY();
-            if (bx <= 0 && by <= 0) continue; // 尚未经过 FormListPanel 定位
-            if (by < formList.getY() || by + box.getHeight() > formList.getBottom()) continue;
-            guiGraphics.renderOutline(bx - 1, by - 1,
-                    box.getWidth() + 2, box.getHeight() + 2, 0xFFFF4444);
-        }
+        formRenderer.render(graphics, mouseX, mouseY);
     }
 
-    private void renderSuggestionOverlay(GuiGraphics guiGraphics, int mouseX, int mouseY) {
-        guiGraphics.pose().pushPose();
-        guiGraphics.pose().translate(0, 0, 300);
-        suggestionController.render(guiGraphics, mouseX, mouseY);
-        guiGraphics.pose().popPose();
-    }
-
-    // ========== 统一焦点管理 ========== //
-    public void setFocusedWidget(@Nullable AbstractWidget widget) {
-        focusController.setFocusedWidget(widget);
-    }
-
-    // 清除所有焦点
     protected void clearAllFocus() {
-        focusController.clearAllFocus();
+        formRenderer.clearFocus();
     }
 
-    // ========== 输入相关 ========== //
     @Override
     public void setFocused(GuiEventListener focused) {
         if (focused instanceof Button || focused instanceof CycleButton) {
-            // 不允许非输入组件持有Screen焦点
             super.setFocused(null);
         } else {
             super.setFocused(focused);
@@ -597,18 +265,15 @@ public class BaseConfigEditScreen<T extends BaseConversionConfig> extends Screen
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (suggestionController.mouseClicked(mouseX, mouseY)) {
+        if (formRenderer.mouseClicked(mouseX, mouseY)) {
             return true;
         }
-
-        clearAllFocus();
-        suggestionController.hideSuggestionsNotUnderMouse(mouseX, mouseY);
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        if (suggestionController.mouseScrolled(mouseX, mouseY, scrollY)) {
+        if (formRenderer.mouseScrolled(mouseX, mouseY, scrollY)) {
             return true;
         }
         return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
@@ -616,101 +281,25 @@ public class BaseConfigEditScreen<T extends BaseConversionConfig> extends Screen
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        AbstractWidget focusedWidget = focusController.getFocusedWidget();
-        if (suggestionController.keyPressed(keyCode, focusedWidget)) {
-            return true;
-        }
-
-        if (focusedWidget != null && focusedWidget.keyPressed(keyCode, scanCode, modifiers)) {
-            return true;
-        }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return formRenderer.keyPressed(keyCode, scanCode, modifiers)
+                || super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
-        AbstractWidget focusedWidget = focusController.getFocusedWidget();
-        if (focusedWidget != null && focusedWidget.charTyped(codePoint, modifiers)) {
-            return true;
-        }
-        return super.charTyped(codePoint, modifiers);
+        return formRenderer.charTyped(codePoint, modifiers) || super.charTyped(codePoint, modifiers);
     }
 
-    // 备份当前表单内容, 用来调整大小时恢复
     @Override
     public void resize(@NotNull Minecraft minecraft, int width, int height) {
-        this.resizeBackup = buildConfigFromFields();
+        resizeBackup = buildConfigFromFields();
         super.resize(minecraft, width, height);
-    }
-
-    // 创建并注册一个建议组件，并添加监听，默认不支持逗号分隔
-    protected void registerSuggestion(EditBox editBox, SuggestionProvider sProvider) {
-        suggestionController.registerSuggestion(font, editBox, sProvider);
-    }
-
-    protected void registerCommaSeparatedSuggestion(EditBox editBox, SuggestionProvider sProvider) {
-        suggestionController.registerSuggestion(font, editBox, sProvider, true);
-    }
-
-    // ========== 条件行辅助 ========== //
-    protected void rebuildConditional(Runnable populate) {
-        if (formList == null) return;
-        formList.removeConditionalEntries();
-        populate.run();
-        clearAllSuggestions();
-    }
-
-    public EditBox createTextBox() {
-        return textBox();
     }
 
     @Override
     public void tick() {
         super.tick();
-        customSection.refresh();
+        formRenderer.refreshVisibility();
     }
 
-    public EditBox createNumericBox() {
-        return numericBox();
-    }
-
-    public EditBox createPositiveIntBox() {
-        return positiveIntBox();
-    }
-
-    public EditBox createPositiveDecimalBox() {
-        return positiveDecimalBox();
-    }
-
-    public Font getScreenFont() {
-        return font;
-    }
-
-    public void rebuildConditionalEntries(Runnable populate) {
-        rebuildConditional(populate);
-    }
-
-    public void registerSectionValidator(EditBox box, FieldValidator... validators) {
-        registerValidator(box, validators);
-    }
-
-    public void registerSectionValidator(EditBox box, BooleanSupplier condition, FieldValidator... validators) {
-        registerValidator(box, condition, validators);
-    }
-
-    public void registerSectionSuggestion(EditBox box, SuggestionProvider provider) {
-        registerSuggestion(box, provider);
-    }
-
-    public void registerSectionCommaSeparatedSuggestion(EditBox box, SuggestionProvider provider) {
-        registerCommaSeparatedSuggestion(box, provider);
-    }
-
-    public int parseSectionInt(String value, int defaultValue) {
-        return parseInt(value, defaultValue);
-    }
-
-    public float parseSectionFloat(String value) {
-        return parseFloat(value);
-    }
 }

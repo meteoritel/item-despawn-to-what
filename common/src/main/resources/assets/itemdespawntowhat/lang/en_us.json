@@ -48,7 +48,7 @@
   "gui.itemdespawntowhat.edit.off": "OFF",
   "gui.itemdespawntowhat.edit.inner_fluid": "Inner fluid",
 
-  "gui.itemdespawntowhat.edit.xp_pre_item": "Xp pre item",
+  "gui.itemdespawntowhat.edit.xp_per_item": "XP per item",
   "gui.itemdespawntowhat.edit.world_effect_type": "World effects",
 
   "gui.itemdespawntowhat.edit.weather_duration_ticks": "Weather duration(tick)",
@@ -79,6 +79,7 @@
   "gui.itemdespawntowhat.direction.down": "Down",
 
   "gui.itemdespawntowhat.edit.save_error": "Invalid config, please check your inputs.",
+  "gui.itemdespawntowhat.edit.validation.invalid": "Invalid value for %s",
   "gui.itemdespawntowhat.edit.duplicate": "This config already exists.",
   "gui.itemdespawntowhat.edit.idle_timeout": "Edit session timed out, editor closed.",
 
@@ -122,6 +123,9 @@
   "gui.itemdespawntowhat.tooltip.inner_fluid_consume": "  Consumes fluid",
   "gui.itemdespawntowhat.tooltip.block_place_shape": "Placement shape: %s",
   "gui.itemdespawntowhat.tooltip.explosion_direction": "Explosion direction: %s",
+  "gui.itemdespawntowhat.summary.conversion": "%s x%d -> %s x%d",
+  "gui.itemdespawntowhat.summary.experience": "%s x%d -> %d XP per item",
+  "gui.itemdespawntowhat.summary.world_effect": "%s x%d -> %s",
 
   "command.itemdespawntowhat.inspect.player_only": "This command can only be used by a player.",
   "command.itemdespawntowhat.inspect.no_target": "Look directly at a dropped item within 8 blocks.",

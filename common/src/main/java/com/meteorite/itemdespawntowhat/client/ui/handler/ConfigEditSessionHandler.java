@@ -15,6 +15,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
+import com.google.gson.JsonElement;
 
 /**
  * 协调客户端编辑草稿、服务端快照与保存请求。
@@ -79,13 +80,10 @@ public class ConfigEditSessionHandler<T extends BaseConversionConfig> {
     }
 
     private boolean isDuplicate(T draft) {
-        List<T> all = getAllConfigs();
-        for (T existing : all) {
-            if (codec.serialize(List.of(existing)).equals(codec.serialize(List.of(draft)))) {
-                return true;
-            }
-        }
-        return false;
+        JsonElement draftTree = codec.toJsonTree(draft);
+        return getAllConfigs().stream()
+                .map(codec::toJsonTree)
+                .anyMatch(draftTree::equals);
     }
 
     public void applyToFile(EditCallback<T> callback) {

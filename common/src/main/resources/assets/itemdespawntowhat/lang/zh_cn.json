@@ -48,7 +48,7 @@
   "gui.itemdespawntowhat.edit.on": "开",
   "gui.itemdespawntowhat.edit.off": "关",
 
-  "gui.itemdespawntowhat.edit.xp_pre_item": "单个物品的经验",
+  "gui.itemdespawntowhat.edit.xp_per_item": "单个物品的经验",
   "gui.itemdespawntowhat.edit.world_effect_type": "世界现象",
 
   "gui.itemdespawntowhat.edit.weather_duration_ticks": "天气持续时间(tick)",
@@ -88,6 +88,7 @@
   "gui.itemdespawntowhat.edit.inner_fluid.consume_label": "消耗流体",
 
   "gui.itemdespawntowhat.edit.save_error": "非法的配置，请检查填写的字段",
+  "gui.itemdespawntowhat.edit.validation.invalid": "%s 的值无效",
   "gui.itemdespawntowhat.edit.duplicate": "该配置已存在，请勿重复添加",
   "gui.itemdespawntowhat.edit.idle_timeout": "编辑会话已超时，已自动关闭编辑器",
 
@@ -122,6 +123,9 @@
   "gui.itemdespawntowhat.tooltip.inner_fluid_consume": "  消耗流体",
   "gui.itemdespawntowhat.tooltip.block_place_shape": "放置形状: %s",
   "gui.itemdespawntowhat.tooltip.explosion_direction": "爆炸方向: %s",
+  "gui.itemdespawntowhat.summary.conversion": "%s x%d → %s x%d",
+  "gui.itemdespawntowhat.summary.experience": "%s x%d → 每个物品 %d 点经验",
+  "gui.itemdespawntowhat.summary.world_effect": "%s x%d → %s",
 
   "command.itemdespawntowhat.inspect.player_only": "该命令只能由玩家执行",
   "command.itemdespawntowhat.inspect.no_target": "请正对 8 格内的掉落物",
