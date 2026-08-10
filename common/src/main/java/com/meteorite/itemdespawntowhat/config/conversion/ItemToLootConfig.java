@@ -15,12 +15,12 @@ public final class ItemToLootConfig extends BaseItemToEntityConfig {
     }
 
     @Override
-    protected boolean additionalCheck() {
+    protected boolean validateTypeSpecificFields() {
         if (!Float.isFinite(luck)) {
             LOGGER.warn("luck must be finite, current={}", luck);
             return false;
         }
-        return super.additionalCheck();
+        return super.validateTypeSpecificFields();
     }
 
     public float getLuck() {

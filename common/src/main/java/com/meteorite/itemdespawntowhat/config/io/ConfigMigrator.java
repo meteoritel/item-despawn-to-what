@@ -48,8 +48,19 @@ public final class ConfigMigrator {
             return 1;
         }
         try {
-            return version.getAsInt();
+            if (!version.isJsonPrimitive() || !version.getAsJsonPrimitive().isNumber()) {
+                throw new JsonParseException("schema_version must be an integer");
+            }
+            double value = version.getAsDouble();
+            if (!Double.isFinite(value) || value != Math.rint(value)
+                    || value < Integer.MIN_VALUE || value > Integer.MAX_VALUE) {
+                throw new JsonParseException("schema_version must be an integer");
+            }
+            return (int) value;
         } catch (RuntimeException e) {
+            if (e instanceof JsonParseException parseException) {
+                throw parseException;
+            }
             throw new JsonParseException("schema_version must be an integer", e);
         }
     }

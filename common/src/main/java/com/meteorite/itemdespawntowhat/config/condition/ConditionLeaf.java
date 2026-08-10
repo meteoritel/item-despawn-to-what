@@ -51,6 +51,11 @@ public final class ConditionLeaf {
         return type;
     }
 
+    // 条件类型和参数对象必须保持可解析的 JSON 形状。
+    public boolean isStructurallyValid() {
+        return params != null && ResourceLocation.tryParse(type) != null;
+    }
+
     public void setTypeId(ResourceLocation typeId) {
         this.type = Objects.requireNonNull(typeId, "typeId").toString();
     }

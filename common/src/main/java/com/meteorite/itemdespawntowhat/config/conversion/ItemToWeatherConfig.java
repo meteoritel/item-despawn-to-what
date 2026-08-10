@@ -22,7 +22,7 @@ public final class ItemToWeatherConfig extends BaseWorldEffectConfig {
     }
 
     @Override
-    protected boolean additionalCheck() {
+    protected boolean validateTypeSpecificFields() {
         if (weatherMode == null) {
             LOGGER.warn("weather_mode is required");
             return false;

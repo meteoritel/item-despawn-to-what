@@ -23,7 +23,7 @@ public final class ItemToExplosionConfig extends BaseWorldEffectConfig {
     }
 
     @Override
-    protected boolean additionalCheck() {
+    protected boolean validateTypeSpecificFields() {
         if (!Float.isFinite(explosionPower) || explosionPower < 0
                 || explosionPower > ConversionLimits.MAX_EXPLOSION_POWER) {
             LOGGER.warn("explosion_power should be in range [0, {}], current={}",

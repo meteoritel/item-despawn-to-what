@@ -106,10 +106,7 @@ public final class ItemConversionProcessor {
             return false;
         }
 
-        if (performConversion(itemEntity, selectedRule, serverLevel, state)) {
-            return true;
-        }
-        return false;
+        return performConversion(itemEntity, selectedRule, serverLevel, state);
     }
 
     private static CompiledConversionRule selectBestMatchingRule(

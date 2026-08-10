@@ -97,10 +97,14 @@ public final class IdValidator {
         for (String part : s.split(",")) {
             String trimmed = part.trim();
             if (trimmed.isEmpty()) return false;
-            ResourceLocation rl = SafeParseUtil.parseResourceLocation(trimmed);
-            if (rl == null) return false;
-            if (!BuiltInRegistries.MOB_EFFECT.containsKey(rl)) return false;
+            if (!isValidMobEffectId(trimmed)) return false;
         }
         return true;
+    }
+
+    public static boolean isValidMobEffectId(String s) {
+        if (!isValidString(s)) return false;
+        ResourceLocation rl = SafeParseUtil.parseResourceLocation(s);
+        return rl != null && BuiltInRegistries.MOB_EFFECT.containsKey(rl);
     }
 }

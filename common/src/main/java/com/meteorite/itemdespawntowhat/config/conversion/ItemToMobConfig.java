@@ -42,6 +42,8 @@ public class ItemToMobConfig extends BaseItemToEntityConfig{
     // ========== 缓存与校验 ========== //
     @Override
     protected void initResultCache() {
+        cachedResultEntityType = null;
+        cachedResultEntityTypes = List.of();
         if (TagResolver.isTagId(resultId)) {
             cachedResultEntityTypes = TagResolver.resolveTagItems(
                             BuiltInRegistries.ENTITY_TYPE, Registries.ENTITY_TYPE, resultId).stream()
@@ -56,13 +58,13 @@ public class ItemToMobConfig extends BaseItemToEntityConfig{
 
     // 确保实体不为空，名字没有拼写错
     @Override
-    protected boolean additionalCheck() {
+    protected boolean validateTypeSpecificFields() {
         if (!TagResolver.isTagId(resultId) && !BuiltInRegistries.ENTITY_TYPE.containsKey(resultRl())) {
             LOGGER.warn("Unknown entity type: resultId='{}'", resultId);
             return false;
         }
 
-        return super.additionalCheck();
+        return super.validateTypeSpecificFields();
     }
 
     @Override

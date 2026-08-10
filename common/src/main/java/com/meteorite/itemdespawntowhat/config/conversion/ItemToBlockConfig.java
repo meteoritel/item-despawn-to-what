@@ -42,6 +42,8 @@ public class ItemToBlockConfig extends BaseLimitedConversionConfig{
     // ========== 缓存与校验 ========== //
     @Override
     protected void initResultCache() {
+        cachedResultBlock = null;
+        cachedResultBlocks = List.of();
         if (enableItemBlock) {
             this.resultId = null;
             this.cachedResultBlock = null;
@@ -65,8 +67,8 @@ public class ItemToBlockConfig extends BaseLimitedConversionConfig{
     }
 
     @Override
-    protected boolean additionalCheck() {
-        if (!super.additionalCheck()) {
+    protected boolean validateTypeSpecificFields() {
+        if (!super.validateTypeSpecificFields()) {
             return false;
         }
         if (radius < 0 || radius > ConversionLimits.MAX_BLOCK_RADIUS) {
@@ -157,6 +159,7 @@ public class ItemToBlockConfig extends BaseLimitedConversionConfig{
 
     public void setEnableItemBlock(boolean enableItemBlock) {
         this.enableItemBlock = enableItemBlock;
+        invalidateCache();
     }
 
     public BlockPlaceShape getBlockPlaceShape() {

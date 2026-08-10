@@ -15,9 +15,4 @@ public abstract class BaseItemToEntityConfig extends BaseLimitedConversionConfig
         super(type, item, result);
     }
 
-    @Override
-    protected boolean additionalCheck() {
-        return super.additionalCheck();
-    }
-
 }

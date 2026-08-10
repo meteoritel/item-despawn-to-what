@@ -84,12 +84,11 @@ public class ExplosionTask implements LevelDelayTask {
                 if (downSwitchedToFlat) {
                     x += offset[0];
                     y = -63;
-                    z += offset[2];
                 } else {
                     x += offset[0];
                     y += offset[1];
-                    z += offset[2];
                 }
+                z += offset[2];
             }
             case FLAT -> {
                 double[] offset = flatOffset(serverLevel, executedCount);

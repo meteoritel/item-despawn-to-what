@@ -33,7 +33,7 @@ public class ItemToExpOrbConfig extends BaseConversionConfig{
     }
 
     @Override
-    protected boolean additionalCheck() {
+    protected boolean validateTypeSpecificFields() {
         if (xpPerItem <= 0 || xpPerItem > ConversionLimits.MAX_XP_PER_ITEM) {
             LOGGER.warn("xpPerItem should be in range [1, {}], current is {}",
                     ConversionLimits.MAX_XP_PER_ITEM, xpPerItem);

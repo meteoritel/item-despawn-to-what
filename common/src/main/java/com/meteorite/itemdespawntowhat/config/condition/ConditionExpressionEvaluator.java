@@ -76,7 +76,7 @@ public final class ConditionExpressionEvaluator {
     private record CompiledLeaf(String name, ConditionChecker checker, boolean negated) {
         private boolean matches(ItemEntity itemEntity, ServerLevel level) {
             boolean matched = checker.checkCondition(itemEntity, level);
-            return negated ? !matched : matched;
+            return negated != matched;
         }
     }
 }

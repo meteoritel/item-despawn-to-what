@@ -2,15 +2,11 @@ package com.meteorite.itemdespawntowhat.config.conversion;
 
 import com.google.gson.annotations.SerializedName;
 import com.meteorite.itemdespawntowhat.config.ConversionLimits;
-import com.meteorite.itemdespawntowhat.config.catalogue.CatalystItems;
 import com.meteorite.itemdespawntowhat.config.condition.ConditionExpression;
-import com.meteorite.itemdespawntowhat.config.condition.ConditionLeaf;
-import com.meteorite.itemdespawntowhat.config.condition.type.BuiltinConditionParameters;
 import com.meteorite.itemdespawntowhat.config.condition.type.BuiltinConditionTypes;
 import com.meteorite.itemdespawntowhat.config.consumption.ConsumptionDirective;
 import com.meteorite.itemdespawntowhat.config.io.ConfigMigrator;
 import com.meteorite.itemdespawntowhat.config.type.ConversionType;
-import com.meteorite.itemdespawntowhat.config.catalogue.SurroundingBlocks;
 import com.meteorite.itemdespawntowhat.util.IdValidator;
 import com.meteorite.itemdespawntowhat.util.JsonOrder;
 import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
@@ -109,7 +105,12 @@ public abstract class BaseConversionConfig extends ConversionConfig {
 
     @Override
     public final boolean validate() {
-        return validateDefinition();
+        try {
+            return validateDefinition();
+        } catch (RuntimeException e) {
+            LOGGER.warn("Invalid config entry for source item: {}", itemId, e);
+            return false;
+        }
     }
 
     @Override
@@ -144,6 +145,7 @@ public abstract class BaseConversionConfig extends ConversionConfig {
             cachedTagItems = List.of();
         } else {
             isTagMode = false;
+            cachedTagItems = List.of();
             ResourceLocation rl = parseItemRl();
             cachedStartItem = (rl != null) ? BuiltInRegistries.ITEM.get(rl) : Items.AIR;
         }
@@ -157,6 +159,9 @@ public abstract class BaseConversionConfig extends ConversionConfig {
 
     // 服务端启动后由 ConfigExtractorManager 调用，展开标签到具体物品列表
     public void expandTagItems() {
+        if (!cacheInitialized) {
+            initCache();
+        }
         if (!isTagMode || itemId == null) return;
 
         cachedTagItems = TagResolver.resolveTagItems(BuiltInRegistries.ITEM, Registries.ITEM, itemId);
@@ -179,10 +184,16 @@ public abstract class BaseConversionConfig extends ConversionConfig {
 
     // ========== 限制条件，不符合条件的配置不会被读取 ========== //
     public final boolean shouldProcess() {
-        return enabled && validateDefinition();
+        return enabled && validate();
     }
 
     private boolean validateDefinition() {
+        if (schemaVersion != ConfigMigrator.CURRENT_SCHEMA_VERSION) {
+            LOGGER.warn("schema_version must be {}, current is {}",
+                    ConfigMigrator.CURRENT_SCHEMA_VERSION, schemaVersion);
+            return false;
+        }
+
         if (!IdValidator.isValidItemId(itemId)) {
             LOGGER.warn("invalid item id: {} ", itemId);
             return false;
@@ -211,7 +222,8 @@ public abstract class BaseConversionConfig extends ConversionConfig {
             return false;
         }
 
-        if (!validateBuiltinConditionParameters()) {
+        if (conditionExpression == null || !conditionExpression.isStructurallyValid()) {
+            LOGGER.warn("Invalid condition expression structure for source item: {}", itemId);
             return false;
         }
 
@@ -227,29 +239,7 @@ public abstract class BaseConversionConfig extends ConversionConfig {
             return false;
         }
 
-        return additionalCheck();
-    }
-
-    private boolean validateBuiltinConditionParameters() {
-        for (var group : getConditionExpression().groups()) {
-            for (ConditionLeaf leaf : group.conditions()) {
-                if (leaf.typeId().equals(BuiltinConditionTypes.SURROUNDING_BLOCKS.id())) {
-                    var parameters = leaf.parametersAs(BuiltinConditionParameters.SurroundingBlocksParameter.class);
-                    SurroundingBlocks blocks = parameters == null ? null : parameters.blocks();
-                    if (blocks != null && blocks.hasAnySurroundBlock() && !blocks.isValid()) return false;
-                } else if (leaf.typeId().equals(BuiltinConditionTypes.CATALYST_PRESENT.id())) {
-                    var parameters = leaf.parametersAs(BuiltinConditionParameters.CatalystPresent.class);
-                    List<CatalystItems.CatalystEntry> entries = parameters == null || parameters.items() == null
-                            ? List.of() : parameters.items();
-                    if (entries.stream().anyMatch(entry -> entry == null || !entry.isValid()
-                            || entry.itemId().equals(itemId))) return false;
-                } else if (leaf.typeId().equals(BuiltinConditionTypes.FLUID_PRESENT.id())) {
-                    var parameters = leaf.parametersAs(BuiltinConditionParameters.FluidPresent.class);
-                    if (parameters == null || !IdValidator.isValidFluidId(parameters.fluid())) return false;
-                }
-            }
-        }
-        return true;
+        return validateTypeSpecificFields();
     }
 
     // ========== 配置复杂度 ========== //
@@ -266,7 +256,7 @@ public abstract class BaseConversionConfig extends ConversionConfig {
         return rl != null ? BuiltInRegistries.ITEM.get(rl) : Items.AIR;
     }
 
-    protected boolean additionalCheck() {return true;}
+    protected boolean validateTypeSpecificFields() {return true;}
 
     protected boolean isResultIdValid() {
         return IdValidator.isValidResultId(resultId);
@@ -298,12 +288,14 @@ public abstract class BaseConversionConfig extends ConversionConfig {
     }
     public void setItemId(String itemId) {
         this.itemId = itemId;
+        invalidateCache();
     }
     public String getResultId() {
         return resultId;
     }
     public void setResultId(String resultId) {
         this.resultId = resultId;
+        invalidateCache();
     }
 
     public boolean isTagMode() {
@@ -385,5 +377,12 @@ public abstract class BaseConversionConfig extends ConversionConfig {
 
     public String getInternalId() {
         return internalId;
+    }
+
+    protected final void invalidateCache() {
+        cacheInitialized = false;
+        cachedStartItem = null;
+        cachedTagItems = null;
+        isTagMode = false;
     }
 }

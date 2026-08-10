@@ -20,31 +20,36 @@ public final class ConversionRuleCompiler {
     private static final Logger LOGGER = LogManager.getLogger();
 
     public CompiledRuleResult compile(BaseConversionConfig config) {
-        if (config == null || !config.validate() || !config.isEnabled()) {
-            return CompiledRuleResult.invalid();
-        }
+        try {
+            if (config == null || !config.validate() || !config.isEnabled()) {
+                return CompiledRuleResult.invalid();
+            }
 
-        config.resolve();
-        if (!config.isCacheValid()) {
-            LOGGER.warn("Skipping config with invalid result cache: item={}, result={}",
-                    config.getItemId(), config.getResultId());
-            return CompiledRuleResult.invalid();
-        }
+            config.resolve();
+            List<ResourceLocation> sourceItemIds = resolveSourceItems(config);
+            if (sourceItemIds.isEmpty()) {
+                return CompiledRuleResult.invalid();
+            }
+            if (!config.isCacheValid()) {
+                LOGGER.warn("Skipping config with invalid result cache: item={}, result={}",
+                        config.getItemId(), config.getResultId());
+                return CompiledRuleResult.invalid();
+            }
 
-        List<ResourceLocation> sourceItemIds = resolveSourceItems(config);
-        if (sourceItemIds.isEmpty()) {
+            ConversionType type = config.getConversionType();
+            if (type == null) {
+                LOGGER.warn("Skipping config without registered conversion type: {}", config.getInternalId());
+                return CompiledRuleResult.invalid();
+            }
+            CompiledConversionRule rule = new CompiledConversionRule(config,
+                    config.getConditionExpression().compile(config),
+                    ConversionTypeRegistry.get(type).executor());
+            return new CompiledRuleResult(rule, sourceItemIds);
+        } catch (RuntimeException e) {
+            LOGGER.warn("Skipping config that failed runtime compilation: item={}, result={}",
+                    config == null ? null : config.getItemId(), config == null ? null : config.getResultId(), e);
             return CompiledRuleResult.invalid();
         }
-
-        ConversionType type = config.getConversionType();
-        if (type == null) {
-            LOGGER.warn("Skipping config without registered conversion type: {}", config.getInternalId());
-            return CompiledRuleResult.invalid();
-        }
-        CompiledConversionRule rule = new CompiledConversionRule(config,
-                config.getConditionExpression().compile(config),
-                ConversionTypeRegistry.get(type).executor());
-        return new CompiledRuleResult(rule, sourceItemIds);
     }
 
     private List<ResourceLocation> resolveSourceItems(BaseConversionConfig config) {

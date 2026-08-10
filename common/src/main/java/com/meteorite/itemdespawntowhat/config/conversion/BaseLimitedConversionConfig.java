@@ -23,7 +23,7 @@ public abstract class BaseLimitedConversionConfig extends BaseConversionConfig {
     }
 
     @Override
-    protected boolean additionalCheck() {
+    protected boolean validateTypeSpecificFields() {
         if (resultLimit <= 0 || resultLimit > ConversionLimits.MAX_RESULT_UNITS) {
             LOGGER.warn("result_limit should be in range [1, {}], current={}",
                     ConversionLimits.MAX_RESULT_UNITS, resultLimit);

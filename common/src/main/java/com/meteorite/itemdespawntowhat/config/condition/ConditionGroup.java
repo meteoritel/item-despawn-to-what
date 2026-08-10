@@ -25,4 +25,10 @@ public final class ConditionGroup {
         }
         return conditions;
     }
+
+    // 显式的 null 列表或叶节点属于非法配置。
+    public boolean isStructurallyValid() {
+        return conditions != null && conditions.stream()
+                .allMatch(leaf -> leaf != null && leaf.isStructurallyValid());
+    }
 }

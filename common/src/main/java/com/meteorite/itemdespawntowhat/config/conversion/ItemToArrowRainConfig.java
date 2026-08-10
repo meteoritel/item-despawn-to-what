@@ -25,9 +25,13 @@ public final class ItemToArrowRainConfig extends BaseWorldEffectConfig {
     }
 
     @Override
-    protected boolean additionalCheck() {
+    protected boolean validateTypeSpecificFields() {
         if (arrowPickupStatus == null) {
             LOGGER.warn("arrow_pickup_status must be a valid pickup mode");
+            return false;
+        }
+        if (getRawArrowPotionEffects().stream().anyMatch(entry -> entry == null || !entry.isValid())) {
+            LOGGER.warn("arrow_potion_effects contains an invalid entry");
             return false;
         }
         return true;
@@ -46,7 +50,7 @@ public final class ItemToArrowRainConfig extends BaseWorldEffectConfig {
     }
 
     public void setArrowPotionEffects(@Nullable List<PotionEffect> arrowPotionEffects) {
-        this.arrowPotionEffects = arrowPotionEffects;
+        this.arrowPotionEffects = arrowPotionEffects == null ? null : new ArrayList<>(arrowPotionEffects);
     }
 
     public List<MobEffectInstance> getArrowPotionEffects() {
@@ -55,6 +59,9 @@ public final class ItemToArrowRainConfig extends BaseWorldEffectConfig {
         }
         List<MobEffectInstance> result = new ArrayList<>();
         for (PotionEffect entry : arrowPotionEffects) {
+            if (entry == null || !entry.isValid()) {
+                continue;
+            }
             MobEffectInstance instance = entry.toInstance();
             if (instance != null) {
                 result.add(instance);

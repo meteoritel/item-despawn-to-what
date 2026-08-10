@@ -2,7 +2,6 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.register.ClientConversionTypeDefinition;
 import com.meteorite.itemdespawntowhat.client.ui.form.FormDefinition;
-import com.meteorite.itemdespawntowhat.client.ui.form.FormFieldContext;
 import com.meteorite.itemdespawntowhat.client.ui.form.FormRenderer;
 import com.meteorite.itemdespawntowhat.client.ui.handler.ConfigEditSessionHandler;
 import com.meteorite.itemdespawntowhat.client.ui.panel.ConfigListPanel;

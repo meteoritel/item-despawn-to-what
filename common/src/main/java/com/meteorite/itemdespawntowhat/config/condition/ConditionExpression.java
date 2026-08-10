@@ -28,6 +28,12 @@ public final class ConditionExpression {
         return groups;
     }
 
+    // 显式的 null 结构属于非法配置，不能按空条件静默放行。
+    public boolean isStructurallyValid() {
+        return groups != null && groups.stream()
+                .allMatch(group -> group != null && group.isStructurallyValid());
+    }
+
     public int leafCount() {
         return groups().stream().mapToInt(group -> group.conditions().size()).sum();
     }

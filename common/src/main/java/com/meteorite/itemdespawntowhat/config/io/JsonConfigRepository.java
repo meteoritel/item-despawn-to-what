@@ -75,6 +75,11 @@ public final class JsonConfigRepository<T extends BaseConversionConfig> {
     }
 
     public void save(List<? extends BaseConversionConfig> entries) throws IOException {
+        if (entries == null || entries.stream().anyMatch(entry -> entry == null
+                || entry.getConversionType() != definition.type()
+                || !entry.validate())) {
+            throw new IOException("Configuration contains an invalid entry: " + configPath);
+        }
         writeBytesAtomically(definition.codec().serialize(entries).getBytes(StandardCharsets.UTF_8));
     }
 

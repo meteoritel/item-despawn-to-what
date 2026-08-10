@@ -61,7 +61,7 @@ public class ConfigEditSessionHandler<T extends BaseConversionConfig> {
     // ========== Config operations ========== //
     public void saveCurrentToCache(EditCallback<T> callback) {
         T draft = callback.buildConfigFromFields();
-        if (draft == null || !draft.shouldProcess()) {
+        if (draft == null || !draft.validate()) {
             callback.onSaveError();
             LOGGER.warn("Invalid config, this won't be saved");
             return;
@@ -88,7 +88,7 @@ public class ConfigEditSessionHandler<T extends BaseConversionConfig> {
 
     public void applyToFile(EditCallback<T> callback) {
         T draft = callback.buildConfigFromFields();
-        if (draft != null && draft.shouldProcess()) {
+        if (draft != null && draft.validate()) {
             pendingConfigs.add(draft);
             LOGGER.debug("Added current form to pending list before applying");
         }

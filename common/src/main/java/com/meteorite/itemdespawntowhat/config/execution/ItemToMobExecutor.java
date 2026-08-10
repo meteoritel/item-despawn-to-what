@@ -7,7 +7,6 @@ import net.minecraft.world.entity.*;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.phys.AABB;
 
 /** 物品到生物转换执行器。 */
 public final class ItemToMobExecutor extends AbstractConversionExecutor<ItemToMobConfig> {

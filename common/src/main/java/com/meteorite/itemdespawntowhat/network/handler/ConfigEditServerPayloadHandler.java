@@ -129,7 +129,7 @@ public final class ConfigEditServerPayloadHandler {
             JsonConfigRepository<?> repository = definition.repository(Services.PLATFORM.getConfigDir());
 
             List<? extends BaseConversionConfig> newConfigs = definition.codec().deserializeStrict(configData);
-            if (newConfigs.stream().anyMatch(config -> config == null || !config.shouldProcess())) {
+            if (newConfigs.stream().anyMatch(config -> config == null || !config.validate())) {
                 serverPlayer.sendSystemMessage(Component.translatable("gui.itemdespawntowhat.edit.save_error"));
                 LOGGER.warn("Rejected invalid config data from player {} ({})",
                         serverPlayer.getName().getString(), serverPlayer.getUUID());

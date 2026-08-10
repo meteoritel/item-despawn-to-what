@@ -36,6 +36,8 @@ public class ItemToItemConfig extends BaseItemToEntityConfig{
     // ========== 初始化缓存与校验 ========== //
     @Override
     protected void initResultCache() {
+        cachedResultItem = null;
+        cachedResultItems = List.of();
         if (TagResolver.isTagId(resultId)) {
             cachedResultItems = TagResolver.resolveTagItems(
                     BuiltInRegistries.ITEM, Registries.ITEM, resultId);
@@ -52,13 +54,13 @@ public class ItemToItemConfig extends BaseItemToEntityConfig{
 
     // 物品转化需要保证转化前后结果不同，防止循环转化
     @Override
-    protected boolean additionalCheck() {
+    protected boolean validateTypeSpecificFields() {
         if (itemId.equals(resultId)) {
             LOGGER.warn("Source and result item are the same: {}, this would cause infinite conversion", itemId);
             return false;
         }
 
-        return super.additionalCheck();
+        return super.validateTypeSpecificFields();
     }
 
     @Override
@@ -70,7 +72,13 @@ public class ItemToItemConfig extends BaseItemToEntityConfig{
 
     @Override
     public boolean isCacheValid() {
-        return cachedResultItem != null;
+        if (cachedResultItem == null) {
+            return false;
+        }
+        if (isTagMode()) {
+            return getTagItems().stream().noneMatch(this::matchesResultItem);
+        }
+        return !matchesResultItem(getStartItem());
     }
     // ========== 结果相关方法 ========== //
     public Item getResultItem() {

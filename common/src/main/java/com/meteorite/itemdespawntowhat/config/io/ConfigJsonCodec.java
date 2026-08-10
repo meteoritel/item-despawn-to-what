@@ -6,14 +6,11 @@ import com.google.gson.JsonParseException;
 import com.google.gson.JsonElement;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.util.JsonOrderTypeAdapterFactory;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -22,7 +19,6 @@ import java.util.Set;
  * 负责单一配置类型列表的 JSON 编解码。
  */
 public final class ConfigJsonCodec<T extends BaseConversionConfig> {
-    private static final Logger LOGGER = LogManager.getLogger();
     private static final Gson GSON = new GsonBuilder()
             .setPrettyPrinting()
             .disableHtmlEscaping()
@@ -46,12 +42,7 @@ public final class ConfigJsonCodec<T extends BaseConversionConfig> {
     }
 
     public List<T> deserialize(String json) {
-        try {
-            return deserializeStrict(json);
-        } catch (Exception e) {
-            LOGGER.warn("Failed to deserialize conversion config", e);
-            return new ArrayList<>();
-        }
+        return deserializeStrict(json);
     }
 
     public List<T> deserializeStrict(String json) {

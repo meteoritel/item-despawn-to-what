@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.config.catalogue;
 
 import com.google.gson.annotations.SerializedName;
+import com.meteorite.itemdespawntowhat.util.IdValidator;
 import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -9,6 +10,9 @@ import net.minecraft.world.effect.MobEffectInstance;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+/**
+ * 描述箭矢携带的一项药水效果。
+ */
 public class PotionEffect {
     private static final Logger LOGGER = LogManager.getLogger();
 
@@ -31,20 +35,13 @@ public class PotionEffect {
     }
 
     public MobEffectInstance toInstance() {
-        if (effectId == null || effectId.isBlank()) {
-            LOGGER.warn("PotionEffectEntry: effect id is null or blank, skipping");
+        if (!isValid()) {
+            LOGGER.warn("Invalid potion effect entry: effect={}, duration={}, amplifier={}",
+                    effectId, duration, amplifier);
             return null;
         }
         ResourceLocation id = SafeParseUtil.parseResourceLocation(effectId);
-        if (id == null) {
-            LOGGER.warn("PotionEffectEntry: invalid effect id '{}', skipping", effectId);
-            return null;
-        }
         MobEffect effect = BuiltInRegistries.MOB_EFFECT.get(id);
-        if (effect == null) {
-            LOGGER.warn("PotionEffectEntry: effect '{}' not found in registry, skipping", effectId);
-            return null;
-        }
         return new MobEffectInstance(
                 BuiltInRegistries.MOB_EFFECT.wrapAsHolder(effect),
                 duration,
@@ -54,6 +51,13 @@ public class PotionEffect {
 
     public boolean hasPotionEffect() {
         return effectId != null && !effectId.isBlank();
+    }
+
+    public boolean isValid() {
+        if (!IdValidator.isValidMobEffectId(effectId) || duration <= 0 || amplifier < 0) {
+            return false;
+        }
+        return true;
     }
 
     public int getAmplifier() {
