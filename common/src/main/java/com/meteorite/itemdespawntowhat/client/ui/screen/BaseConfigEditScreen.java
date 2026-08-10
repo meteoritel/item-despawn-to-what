@@ -3,6 +3,8 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.client.ui.handler.ConfigEditSessionHandler;
+import com.meteorite.itemdespawntowhat.client.ui.form.ConfigFormContext;
+import com.meteorite.itemdespawntowhat.client.ui.form.ConfigFormSection;
 import com.meteorite.itemdespawntowhat.client.ui.support.EditCallback;
 import com.meteorite.itemdespawntowhat.client.ui.support.ListScreenCallback;
 import com.meteorite.itemdespawntowhat.client.ui.support.SuggestionProvider;
@@ -17,6 +19,7 @@ import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
 import net.minecraft.ChatFormatting;
 import com.meteorite.itemdespawntowhat.platform.Services;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.*;
 import net.minecraft.client.gui.components.events.GuiEventListener;
@@ -40,8 +43,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
+import java.util.function.Supplier;
 
-// 配置编辑主界面：负责表单渲染、输入校验、建议框和列表交互。
+/**
+ * 配置编辑主界面，负责通用表单布局、导航和输入交互。
+ */
 public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> extends Screen
         implements EditCallback<T>, ListScreenCallback {
 
@@ -51,11 +57,14 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     protected boolean suppressDraftRestoreOnce;
 
     protected static final Logger LOGGER = LogManager.getLogger();
-    protected static final String LABEL_PREFIX = "gui.itemdespawntowhat.edit.";
-    protected static final int BOX_WIDTH = 240;
-    protected static final int BUTTON_HEIGHT = 18;
+    public static final String LABEL_PREFIX = "gui.itemdespawntowhat.edit.";
+    public static final int BOX_WIDTH = 240;
+    public static final int BUTTON_HEIGHT = 18;
     // 后端处理器
     protected final ConfigEditSessionHandler<T> editHandler;
+    private final Supplier<T> configFactory;
+    private final ConfigFormSection<T> customSection;
+    private ConfigFormContext formContext;
     // UI 组件
     protected EditBox itemIdInput;
     protected EditBox dimensionInput;
@@ -84,9 +93,11 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     private final Map<EditBox, List<ConditionalFieldValidator>> validatedFields = new HashMap<>();
     private final Set<EditBox> invalidFields = new HashSet<>();
 
-    public BaseConfigEditScreen(ConfigType configType) {
+    public BaseConfigEditScreen(ConfigType configType, Supplier<T> configFactory, ConfigFormSection<T> customSection) {
         super(Component.translatable("gui.itemdespawntowhat.edit.title", configType.getFileName()));
         this.editHandler = new ConfigEditSessionHandler<>(configType);
+        this.configFactory = configFactory;
+        this.customSection = customSection;
     }
 
     @Override
@@ -99,9 +110,10 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
         initFormPanel();
         initCommonWidgets();
+        formContext = new ConfigFormContext(this, formList, resultIdInput);
         initFormEntries();
         initSuggestions();
-        addCustomSuggestion();
+        customSection.registerSuggestions(formContext);
         initFocusDelegates();
         initValidators();
         initButtons();
@@ -140,7 +152,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
     private void initFormEntries() {
         // 转化基本信息（起始物品、结果、转化比值、转化时间）
         formList.add(Component.translatable(LABEL_PREFIX + "item_id"), itemIdInput);
-        if (shouldShowResultId()) {
+        if (customSection.showsResultId()) {
             formList.add(Component.translatable(LABEL_PREFIX + "result_id"), resultIdInput);
         }
         formList.add(Component.translatable(LABEL_PREFIX + "source_multiple"), sourceMultipleInput);
@@ -154,7 +166,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         formList.add(Component.translatable(LABEL_PREFIX + "catalyst_items"), catalystWidget);
         formList.add(Component.translatable(LABEL_PREFIX + "inner_fluid"), innerFluidWidget);
 
-        addCustomEntries(formList);
+        customSection.initialize(formContext);
     }
 
     private void initSuggestions() {
@@ -190,11 +202,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         catalystWidget.setFocusDelegate(this::setFocusedWidget);
         innerFluidWidget.setFocusDelegate(this::setFocusedWidget);
 
-        initCustomFocusDelegates();
-    }
-
-    // 供子类重写，为子类独有的 AbstractCompositeWidget 注入焦点委托
-    protected void initCustomFocusDelegates() {
+        customSection.registerFocus(formContext);
     }
 
     // 注册字段校验器，用来决定添加红框
@@ -212,12 +220,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
                 () -> !catalystWidget.getItemBox().getValue().isBlank(),
                 IdValidator::isValidCommaSeparatedItemId);
 
-        initCustomValidators();
-    }
-
-    // 注册子类中独有的字段校验器，由子类重写，默认空实现
-    protected void initCustomValidators() {
-
+        customSection.registerValidators(formContext);
     }
 
     // 注册字段校验器（无前置条件）
@@ -294,13 +297,16 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
 
     @Override
     public T buildConfigFromFields() {
-        return createConfigFromFields();
+        T config = configFactory.get();
+        populateCommonFields(config);
+        customSection.writeTo(config);
+        return config;
     }
 
     @Override
     public void onRefillFields(T config) {
         refillCommonFields(config);
-        refillCustomFields(config);
+        customSection.readFrom(config);
         clearAllSuggestions();
     }
 
@@ -476,7 +482,7 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         catalystWidget.clear();
         innerFluidWidget.clear();
 
-        clearCustomFields();
+        customSection.clear();
         clearAllSuggestions();
         invalidFields.clear();
     }
@@ -654,19 +660,51 @@ public abstract class BaseConfigEditScreen<T extends BaseConversionConfig> exten
         clearAllSuggestions();
     }
 
-    // ========== 子类方法 ========== //
-    // 控制是否在表单中显示 result_id 输入框，由子类重写
-    protected boolean shouldShowResultId() {
-        return true;
+    public EditBox createTextBox() {
+        return textBox();
     }
 
-    // 添加子类下拉框组件，子类重写
-    protected void addCustomSuggestion(){
+    public EditBox createNumericBox() {
+        return numericBox();
     }
 
-    protected abstract void addCustomEntries(FormListPanel fromList);
-    protected abstract T createConfigFromFields();
-    protected abstract void populateCustomFields(T config);
-    protected abstract void clearCustomFields();
-    protected abstract void refillCustomFields(T config);
+    public EditBox createPositiveIntBox() {
+        return positiveIntBox();
+    }
+
+    public EditBox createPositiveDecimalBox() {
+        return positiveDecimalBox();
+    }
+
+    public Font getScreenFont() {
+        return font;
+    }
+
+    public void rebuildConditionalEntries(Runnable populate) {
+        rebuildConditional(populate);
+    }
+
+    public void registerSectionValidator(EditBox box, FieldValidator... validators) {
+        registerValidator(box, validators);
+    }
+
+    public void registerSectionValidator(EditBox box, BooleanSupplier condition, FieldValidator... validators) {
+        registerValidator(box, condition, validators);
+    }
+
+    public void registerSectionSuggestion(EditBox box, SuggestionProvider provider) {
+        registerSuggestion(box, provider);
+    }
+
+    public void registerSectionCommaSeparatedSuggestion(EditBox box, SuggestionProvider provider) {
+        registerCommaSeparatedSuggestion(box, provider);
+    }
+
+    public int parseSectionInt(String value, int defaultValue) {
+        return parseInt(value, defaultValue);
+    }
+
+    public float parseSectionFloat(String value) {
+        return parseFloat(value);
+    }
 }

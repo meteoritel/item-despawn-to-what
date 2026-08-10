@@ -2,13 +2,16 @@ package com.meteorite.itemdespawntowhat.network;
 
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
-import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
+import com.meteorite.itemdespawntowhat.config.io.ConfigJsonCodec;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * 暂存客户端尚未被编辑界面消费的服务端配置快照。
+ */
 public final class ConfigEditSnapshotManager {
     private static final Map<ConfigType, String> SNAPSHOT_JSONS = new ConcurrentHashMap<>();
 
@@ -29,9 +32,9 @@ public final class ConfigEditSnapshotManager {
 
     public static <T extends BaseConversionConfig> List<T> consumeSnapshot(
             ConfigType configType,
-            BaseConfigHandler<T> handler
+            ConfigJsonCodec<T> codec
     ) {
-        if (configType == null || handler == null) {
+        if (configType == null || codec == null) {
             return Collections.emptyList();
         }
 
@@ -40,7 +43,7 @@ public final class ConfigEditSnapshotManager {
             return Collections.emptyList();
         }
 
-        List<T> configs = handler.deserializeFromJson(jsonData);
+        List<T> configs = codec.deserialize(jsonData);
         return configs != null ? configs : Collections.emptyList();
     }
 

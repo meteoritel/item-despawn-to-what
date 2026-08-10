@@ -148,26 +148,6 @@ public class ItemToBlockConfig extends BaseConversionConfig{
         return Blocks.AIR;
     }
 
-    @Override
-    public String getResultDescriptionId() {
-        return getResultBlock().getDescriptionId();
-    }
-
-    @Override
-    public ItemStack getResultIcon() {
-        if (enableItemBlock) {
-            return getStartItemIcon();
-        }
-
-        Block block = getResultBlock();
-        if (block == null) {
-            return new ItemStack(Items.BARRIER);
-        }
-        return block.asItem() == Items.AIR
-                ? new ItemStack(Items.BARRIER)
-                : new ItemStack(block.asItem());
-    }
-
     public int getRadius() {
         return radius;
     }

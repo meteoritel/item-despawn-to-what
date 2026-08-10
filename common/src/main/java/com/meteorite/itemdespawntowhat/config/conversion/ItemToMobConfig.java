@@ -139,22 +139,6 @@ public class ItemToMobConfig extends BaseItemToEntityConfig{
         return BuiltInRegistries.ENTITY_TYPE.get(resultRl());
     }
 
-    @Override
-    public String getResultDescriptionId() {
-        return getResultEntityType().getDescriptionId();
-    }
-
-    // 实体图标 fallback：优先刷怪蛋，找不到则 barrier
-    @Override
-    public ItemStack getResultIcon() {
-        EntityType<?> type = getResultEntityType();
-        if (type == null) {
-            return new ItemStack(Items.BARRIER);
-        }
-        SpawnEggItem spawnEgg = SpawnEggItem.byId(type);
-        return spawnEgg != null ? new ItemStack(spawnEgg) : new ItemStack(Items.BARRIER);
-    }
-
     public int getEntityAge() {
         return entityAge;
     }

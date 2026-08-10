@@ -80,18 +80,6 @@ public class ItemToExpOrbConfig extends BaseItemToEntityConfig{
         return true;
     }
 
-    @Override
-    public String getResultDescriptionId() {
-        // 经验球在原版中的翻译键
-        return "entity.minecraft.experience_orb";
-    }
-
-    @Override
-    public ItemStack getResultIcon() {
-        // 经验球无对应物品，用经验瓶代替
-        return new ItemStack(Items.EXPERIENCE_BOTTLE);
-    }
-
     public int getXpPerItem() {
         return xpPerItem;
     }

@@ -1,35 +1,34 @@
 package com.meteorite.itemdespawntowhat.client.ui.handler;
 
 import com.meteorite.itemdespawntowhat.ConfigExtractorManager;
-import com.meteorite.itemdespawntowhat.ConfigHandlerManager;
 import com.meteorite.itemdespawntowhat.client.ui.support.EditCallback;
 import com.meteorite.itemdespawntowhat.network.ConfigEditSnapshotManager;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
-import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
+import com.meteorite.itemdespawntowhat.config.io.ConfigJsonCodec;
+import com.meteorite.itemdespawntowhat.config.type.ConversionTypeRegistry;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
-import com.meteorite.itemdespawntowhat.platform.Services;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * 协调客户端编辑草稿、服务端快照与保存请求。
+ */
 public class ConfigEditSessionHandler<T extends BaseConversionConfig> {
     private static final Logger LOGGER = LogManager.getLogger();
     private final ConfigType configType;
-    private final BaseConfigHandler<T> handler;
+    private final ConfigJsonCodec<T> codec;
     private final List<T> originalConfigs;
     private final List<T> pendingConfigs = new ArrayList<>();
 
     public ConfigEditSessionHandler(ConfigType configType) {
         this.configType = configType;
 
-        this.handler = ConfigHandlerManager.getInstance(Services.PLATFORM.getConfigDir()).getHandler(configType);
-        if (handler == null) {
-            throw new IllegalStateException("No handler registered for " + configType);
-        }
+        this.codec = ConversionTypeRegistry.<T>get(configType).codec();
 
         this.originalConfigs = new ArrayList<>(loadOriginalConfigs());
     }
@@ -46,7 +45,7 @@ public class ConfigEditSessionHandler<T extends BaseConversionConfig> {
             }
         }
 
-        List<T> configs = ConfigEditSnapshotManager.consumeSnapshot(configType, handler);
+        List<T> configs = ConfigEditSnapshotManager.consumeSnapshot(configType, codec);
         if (configs.isEmpty()) {
             LOGGER.warn("No client snapshot available for {}, using empty initial list", configType.name());
         } else {
@@ -64,8 +63,6 @@ public class ConfigEditSessionHandler<T extends BaseConversionConfig> {
             return;
         }
 
-        prepareDraftForSession(draft);
-
         if (isDuplicate(draft)) {
             callback.onDisplayError(Component.translatable("gui.itemdespawntowhat.edit.duplicate"));
             LOGGER.warn("Duplicate config detected, not adding to cache: {}", draft);
@@ -81,7 +78,7 @@ public class ConfigEditSessionHandler<T extends BaseConversionConfig> {
     private boolean isDuplicate(T draft) {
         List<T> all = getAllConfigs();
         for (T existing : all) {
-            if (handler.getGson().toJson(existing).equals(handler.getGson().toJson(draft))) {
+            if (codec.serialize(List.of(existing)).equals(codec.serialize(List.of(draft)))) {
                 return true;
             }
         }
@@ -91,7 +88,6 @@ public class ConfigEditSessionHandler<T extends BaseConversionConfig> {
     public void applyToFile(EditCallback<T> callback) {
         T draft = callback.buildConfigFromFields();
         if (draft != null && draft.shouldProcess()) {
-            prepareDraftForSession(draft);
             pendingConfigs.add(draft);
             LOGGER.debug("Added current form to pending list before applying");
         }
@@ -99,17 +95,10 @@ public class ConfigEditSessionHandler<T extends BaseConversionConfig> {
         applyToServer(callback);
     }
 
-    private void prepareDraftForSession(T draft) {
-        draft.initCache();
-        if (draft.isTagMode()) {
-            draft.expandTagItems();
-        }
-    }
-
     private void applyToServer(EditCallback<T> callback) {
         try {
             List<T> allConfigs = getAllConfigs();
-            ConfigNetworkSender.sendToServer(configType, allConfigs, handler);
+            ConfigNetworkSender.sendToServer(configType, allConfigs, codec);
             LOGGER.info("Sent {} configs to server for type: {}",
                     allConfigs.size(), configType.getFileName());
             originalConfigs.clear();

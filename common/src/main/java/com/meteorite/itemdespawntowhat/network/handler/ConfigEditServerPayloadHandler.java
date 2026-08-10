@@ -1,10 +1,11 @@
 package com.meteorite.itemdespawntowhat.network.handler;
 
 import com.meteorite.itemdespawntowhat.ConfigExtractorManager;
-import com.meteorite.itemdespawntowhat.ConfigHandlerManager;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
-import com.meteorite.itemdespawntowhat.config.handler.BaseConfigHandler;
+import com.meteorite.itemdespawntowhat.config.io.JsonConfigRepository;
+import com.meteorite.itemdespawntowhat.config.type.ConversionTypeDefinition;
+import com.meteorite.itemdespawntowhat.config.type.ConversionTypeRegistry;
 import com.meteorite.itemdespawntowhat.network.ConfigEditAccessControl;
 import com.meteorite.itemdespawntowhat.network.ConfigEditLimits;
 import com.meteorite.itemdespawntowhat.network.EditSessionLockManager;
@@ -42,12 +43,7 @@ public final class ConfigEditServerPayloadHandler {
         }
 
         try {
-            BaseConfigHandler<?> handler = ConfigHandlerManager.getInstance(Services.PLATFORM.getConfigDir())
-                    .getHandler(payload.configType());
-            if (handler == null) {
-                LOGGER.error("[RequestConfigSnapshotPayload] No handler found for config type: {}", payload.configType());
-                return;
-            }
+            ConversionTypeDefinition<?> definition = ConversionTypeRegistry.get(payload.configType());
 
             if (!EditSessionLockManager.tryAcquire(serverPlayer)) {
                 serverPlayer.sendSystemMessage(Component.translatable("gui.itemdespawntowhat.edit.locked"));
@@ -55,7 +51,7 @@ public final class ConfigEditServerPayloadHandler {
             }
 
             List<? extends BaseConversionConfig> configs = ConfigExtractorManager.getConfigByType(payload.configType());
-            String jsonData = handler.serializeToJson(configs);
+            String jsonData = definition.codec().serialize(configs);
             Services.PLATFORM.sendToPlayer(
                     serverPlayer,
                     new ConfigSnapshotPayload(payload.configType(), jsonData)
@@ -113,14 +109,10 @@ public final class ConfigEditServerPayloadHandler {
                 return;
             }
 
-            BaseConfigHandler<?> handler = ConfigHandlerManager.getInstance(Services.PLATFORM.getConfigDir())
-                    .getHandler(configType);
-            if (handler == null) {
-                LOGGER.error("[SaveConfigPayload] No handler found for config type: {}", configType);
-                return;
-            }
+            ConversionTypeDefinition<?> definition = ConversionTypeRegistry.get(configType);
+            JsonConfigRepository<?> repository = definition.repository(Services.PLATFORM.getConfigDir());
 
-            List<? extends BaseConversionConfig> newConfigs = handler.deserializeFromJsonStrict(configData);
+            List<? extends BaseConversionConfig> newConfigs = definition.codec().deserializeStrict(configData);
             if (newConfigs.stream().anyMatch(config -> config == null || !config.shouldProcess())) {
                 serverPlayer.sendSystemMessage(Component.translatable("gui.itemdespawntowhat.edit.save_error"));
                 LOGGER.warn("Rejected invalid config data from player {} ({})",
@@ -128,10 +120,10 @@ public final class ConfigEditServerPayloadHandler {
                 return;
             }
 
-            byte[] previousConfig = handler.readConfigBytes();
-            handler.saveConfig(newConfigs);
+            byte[] previousConfig = repository.readBytes();
+            repository.save(newConfigs);
             if (!ConfigExtractorManager.reloadConfigsForType(Services.PLATFORM.getConfigDir(), configType)) {
-                handler.restoreConfigBytes(previousConfig);
+                repository.restoreBytes(previousConfig);
                 serverPlayer.sendSystemMessage(Component.translatable("gui.itemdespawntowhat.edit.save_error"));
                 LOGGER.error("Failed to reload type {}; previous config file and runtime cache were restored",
                         configType.getFileName());

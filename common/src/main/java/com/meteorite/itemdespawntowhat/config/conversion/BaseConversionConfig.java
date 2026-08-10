@@ -1,9 +1,6 @@
 package com.meteorite.itemdespawntowhat.config.conversion;
 
 import com.google.gson.annotations.SerializedName;
-import com.meteorite.itemdespawntowhat.condition.checker.ConditionChecker;
-import com.meteorite.itemdespawntowhat.condition.ConditionCheckerUtil;
-import com.meteorite.itemdespawntowhat.condition.ConditionContext;
 import com.meteorite.itemdespawntowhat.config.ConversionLimits;
 import com.meteorite.itemdespawntowhat.config.catalogue.CatalystItems;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
@@ -231,23 +228,6 @@ public abstract class BaseConversionConfig {
         return complexity;
     }
 
-    // ========== 条件检查器 ========== //
-    private transient ConditionChecker cachedConditionChecker;
-
-    // 获取条件检查器（惰性构建并缓存）
-    public ConditionChecker getConditionChecker() {
-        if (cachedConditionChecker == null) {
-            ConditionContext ctx = new ConditionContext(getDimension(),
-                    isNeedOutdoor(),
-                    getSurroundingBlocks(),
-                    getCatalystItems(),
-                    getSourceMultiple(),
-                    getInnerFluid());
-            cachedConditionChecker = ConditionCheckerUtil.buildCombinedChecker(ctx);
-        }
-        return cachedConditionChecker;
-    }
-
     // ========== 消耗相关逻辑 ========== //
     // 所有的额外消耗的方法
     protected void consumeAllOthers(ItemEntity itemEntity, int actualConvertCount) {
@@ -329,10 +309,6 @@ public abstract class BaseConversionConfig {
         return rl != null ? BuiltInRegistries.ITEM.get(rl) : Items.AIR;
     }
 
-    public ItemStack getStartItemIcon() {
-        return getStartItem().getDefaultInstance();
-    }
-
     // ========== 子类方法 ========== //
     public int countNearbyResult(ItemEntity itemEntity) {
         return 0;
@@ -340,10 +316,6 @@ public abstract class BaseConversionConfig {
     public boolean isResultLimitExceeded(ItemEntity itemEntity) {
         return false;
     }
-
-    public abstract String getResultDescriptionId();
-
-    public abstract ItemStack getResultIcon();
 
     public abstract boolean performConversion(ItemEntity itemEntity, ServerLevel serverLevel);
 

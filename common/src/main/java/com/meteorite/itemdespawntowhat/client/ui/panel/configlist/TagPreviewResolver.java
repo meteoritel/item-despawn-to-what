@@ -10,6 +10,9 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
+/**
+ * 解析并轮换显示物品标签中的客户端预览物品。
+ */
 public final class TagPreviewResolver {
 
     private static final long TAG_ICON_SWITCH_MS = 1500L;
@@ -18,11 +21,6 @@ public final class TagPreviewResolver {
     }
 
     public static List<Item> resolveTagItems(BaseConversionConfig config) {
-        List<Item> cachedTagItems = config.getTagItems();
-        if (!cachedTagItems.isEmpty()) {
-            return cachedTagItems;
-        }
-
         Minecraft mc = Minecraft.getInstance();
         var registryAccess = mc.level != null
                 ? mc.level.registryAccess()

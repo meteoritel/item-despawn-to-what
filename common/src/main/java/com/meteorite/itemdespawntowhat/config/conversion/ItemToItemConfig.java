@@ -137,14 +137,4 @@ public class ItemToItemConfig extends BaseItemToEntityConfig{
         return resultLimit * cachedResultMaxStackSize;
     }
 
-    @Override
-    public String getResultDescriptionId() {
-        return getResultItem().getDescriptionId();
-    }
-
-    @Override
-    public ItemStack getResultIcon() {
-        return getResultItem().getDefaultInstance();
-    }
-
 }

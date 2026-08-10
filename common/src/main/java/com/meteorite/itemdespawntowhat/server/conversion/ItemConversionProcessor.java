@@ -2,8 +2,7 @@ package com.meteorite.itemdespawntowhat.server.conversion;
 
 import com.meteorite.itemdespawntowhat.ConfigExtractorManager;
 import com.meteorite.itemdespawntowhat.Constants;
-import com.meteorite.itemdespawntowhat.condition.checker.ConditionChecker;
-import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
+import com.meteorite.itemdespawntowhat.config.runtime.CompiledConversionRule;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -76,45 +75,39 @@ public final class ItemConversionProcessor {
         ItemStack itemStack = itemEntity.getItem();
         ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(itemStack.getItem());
         String selectedConfigId = state.getSelectedConfigId(itemEntity);
-        BaseConversionConfig selectedConfig = selectedConfigId.isEmpty()
+        CompiledConversionRule selectedRule = selectedConfigId.isEmpty()
                 ? null
-                : ConfigExtractorManager.getConfigByInternalId(selectedConfigId);
+                : ConfigExtractorManager.getRuleByInternalId(selectedConfigId);
 
-        if (selectedConfig == null) {
+        if (selectedRule == null) {
             if (!selectedConfigId.isEmpty()) {
                 state.resetProgress(itemEntity);
             }
-            selectedConfig = selectBestMatchingConfig(itemEntity, serverLevel, itemId);
-            if (selectedConfig == null) {
+            selectedRule = selectBestMatchingRule(itemEntity, serverLevel, itemId);
+            if (selectedRule == null) {
                 return;
             }
-            state.setSelectedConfigId(itemEntity, selectedConfig.getInternalId());
-        } else if (selectedConfig.computeComplexity() < ConfigExtractorManager.getMaxComplexityForItem(itemId)) {
-            BaseConversionConfig bestConfig = selectBestMatchingConfig(itemEntity, serverLevel, itemId);
-            if (bestConfig == null) {
+            state.setSelectedConfigId(itemEntity, selectedRule.internalId());
+        } else if (selectedRule.complexity() < ConfigExtractorManager.getMaxComplexityForItem(itemId)) {
+            CompiledConversionRule bestRule = selectBestMatchingRule(itemEntity, serverLevel, itemId);
+            if (bestRule == null) {
                 state.resetProgress(itemEntity);
                 return;
             }
-            if (!bestConfig.getInternalId().equals(selectedConfigId)) {
-                selectedConfig = bestConfig;
-                state.setSelectedConfigId(itemEntity, selectedConfig.getInternalId());
+            if (!bestRule.internalId().equals(selectedConfigId)) {
+                selectedRule = bestRule;
+                state.setSelectedConfigId(itemEntity, selectedRule.internalId());
                 state.setCheckTimer(itemEntity, 0);
                 LOGGER.debug("Switched item {} to higher-complexity config {}",
-                        itemId, selectedConfig.getInternalId());
+                        itemId, selectedRule.internalId());
             }
         }
 
-        if (itemStack.getCount() < selectedConfig.getSourceMultiple()) {
+        if (itemStack.getCount() < selectedRule.sourceMultiple()) {
             return;
         }
 
-        ConditionChecker checker = selectedConfig.getConditionChecker();
-        if (checker == null) {
-            LOGGER.warn("No condition checker found for config {}", selectedConfig.getInternalId());
-            state.resetProgress(itemEntity);
-            return;
-        }
-        if (!checker.checkCondition(itemEntity, serverLevel)) {
+        if (!selectedRule.matches(itemEntity, serverLevel)) {
             state.resetProgress(itemEntity);
             return;
         }
@@ -123,60 +116,57 @@ public final class ItemConversionProcessor {
         int newTimer = currentTimer == Integer.MAX_VALUE ? Integer.MAX_VALUE : currentTimer + 1;
         state.setCheckTimer(itemEntity, newTimer);
         LOGGER.debug("Item {} passed conversion check ({}/{})",
-                itemId, newTimer, selectedConfig.getConversionTime());
+                itemId, newTimer, selectedRule.conversionTime());
 
         int safeLifespan = Math.max(CHECK_INTERVAL_TICKS, entityLifespan);
-        boolean timerReached = newTimer >= selectedConfig.getConversionTime();
+        boolean timerReached = newTimer >= selectedRule.conversionTime();
         boolean aboutToExpire = itemEntity.getAge() > safeLifespan - CHECK_INTERVAL_TICKS;
         if (!timerReached && !aboutToExpire) {
             return;
         }
 
-        if (selectedConfig.isResultLimitExceeded(itemEntity)) {
+        if (selectedRule.isResultLimitExceeded(itemEntity)) {
             state.resetProgress(itemEntity);
             LOGGER.debug("Conversion result limit reached for item {}", itemId);
             return;
         }
 
-        if (performConversion(itemEntity, selectedConfig, serverLevel, state)) {
+        if (performConversion(itemEntity, selectedRule, serverLevel, state)) {
             state.clearConversionState(itemEntity);
         }
     }
 
-    private static BaseConversionConfig selectBestMatchingConfig(
+    private static CompiledConversionRule selectBestMatchingRule(
             ItemEntity itemEntity,
             ServerLevel serverLevel,
             ResourceLocation itemId
     ) {
-        List<BaseConversionConfig> configs = ConfigExtractorManager.getAllConfigsForItem(itemId);
-        BaseConversionConfig bestConfig = null;
+        List<CompiledConversionRule> rules = ConfigExtractorManager.getRulesForItem(itemId);
+        CompiledConversionRule bestRule = null;
         int bestComplexity = -1;
 
-        for (BaseConversionConfig config : configs) {
-            ConditionChecker checker = config.getConditionChecker();
-            if (config.isResultLimitExceeded(itemEntity)
-                    || checker == null
-                    || !checker.checkCondition(itemEntity, serverLevel)) {
+        for (CompiledConversionRule rule : rules) {
+            if (rule.isResultLimitExceeded(itemEntity) || !rule.matches(itemEntity, serverLevel)) {
                 continue;
             }
 
-            int complexity = config.computeComplexity();
+            int complexity = rule.complexity();
             if (complexity > bestComplexity) {
                 bestComplexity = complexity;
-                bestConfig = config;
+                bestRule = rule;
             }
         }
 
-        if (bestConfig != null) {
+        if (bestRule != null) {
             LOGGER.debug("Selected config {} with complexity {} for item {}",
-                    bestConfig.getInternalId(), bestComplexity, itemId);
+                    bestRule.internalId(), bestComplexity, itemId);
         }
-        return bestConfig;
+        return bestRule;
     }
 
     private static boolean performConversion(
             ItemEntity itemEntity,
-            BaseConversionConfig config,
+            CompiledConversionRule rule,
             ServerLevel serverLevel,
             ItemConversionStateAccess state
     ) {
@@ -187,7 +177,7 @@ public final class ItemConversionProcessor {
 
         try {
             state.setConversionLocked(itemEntity, true);
-            return config.performConversion(itemEntity, serverLevel);
+            return rule.performConversion(itemEntity, serverLevel);
         } finally {
             state.setConversionLocked(itemEntity, false);
         }

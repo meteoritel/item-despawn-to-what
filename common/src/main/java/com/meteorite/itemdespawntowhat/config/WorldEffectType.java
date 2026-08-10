@@ -9,8 +9,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.projectile.Arrow;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
@@ -22,7 +20,6 @@ public enum WorldEffectType {
     // 当前维度天气调整为下雨或雷雨
     RAIN(
             "effect.itemdespawntowhat.world_effect_type.rain",
-            () -> new ItemStack(Items.WATER_BUCKET),
             (itemEntity, level, config, count, onFinishCallback) -> {
                 level.setWeatherParameters(0, config.getWeatherDurationTicks(), true, config.isThundering());
                 onFinishCallback.run();
@@ -32,7 +29,6 @@ public enum WorldEffectType {
     // 调整天气为晴天
     CLEAR(
             "effect.itemdespawntowhat.world_effect_type.clear",
-            () -> new ItemStack(Items.SUNFLOWER),
             (itemEntity, level, config, count, onFinishCallback) -> {
                 level.setWeatherParameters(config.getWeatherDurationTicks(), 0, false, false);
                 onFinishCallback.run();
@@ -41,7 +37,6 @@ public enum WorldEffectType {
 
     // 召唤闪电
     LIGHTNING("effect.itemdespawntowhat.world_effect_type.lightning_bolt",
-            () -> new ItemStack(Items.LIGHTNING_ROD),
             (itemEntity, level, config, count, onFinishCallback) -> {
                 BlockPos pos = itemEntity.blockPosition();
                 LevelTaskManager.addTask(level, new LightningTask(
@@ -56,7 +51,6 @@ public enum WorldEffectType {
     // 召唤爆炸
     EXPLOSION(
             "effect.itemdespawntowhat.world_effect_type.explosion",
-            () -> new ItemStack(Items.TNT),
             (itemEntity, level, config, count, onFinishCallback) -> {
                 BlockPos pos = itemEntity.blockPosition();
                 LevelTaskManager.addTask(level, new ExplosionTask(
@@ -73,7 +67,6 @@ public enum WorldEffectType {
     // 召唤箭雨
     ARROW_RAIN(
             "effect.itemdespawntowhat.world_effect_type.arrow",
-            () -> new ItemStack(Items.ARROW),
             (itemEntity, level, config, count, onFinishCallback) -> {
                 BlockPos pos = itemEntity.blockPosition();
                 LevelTaskManager.addTask(level, new ArrowRainTask(
@@ -87,12 +80,10 @@ public enum WorldEffectType {
             });
 
     private final String descriptionId;
-    private final IconSupplier iconSupplier;
     private final SideEffectExecutor executor;
 
-    WorldEffectType(String descriptionId, IconSupplier iconSupplier, SideEffectExecutor executor) {
+    WorldEffectType(String descriptionId, SideEffectExecutor executor) {
         this.descriptionId = descriptionId;
-        this.iconSupplier = iconSupplier;
         this.executor = executor;
     }
 
@@ -102,10 +93,6 @@ public enum WorldEffectType {
 
     public SideEffectExecutor getExecutor() {
         return executor;
-    }
-
-    public IconSupplier getIconSupplier() {
-        return iconSupplier;
     }
 
     // 在消耗源物品前判断当前世界是否允许执行该效果
@@ -123,12 +110,6 @@ public enum WorldEffectType {
     public interface SideEffectExecutor {
         void execute(ItemEntity itemEntity, ServerLevel level, SideEffectConfig config,
                      int count, Runnable onFinishCallback);
-    }
-
-    // ========== 图标供应接口 ========== //
-    @FunctionalInterface
-    public interface IconSupplier {
-        ItemStack get();
     }
 
     // ========== 现象参数载体接口 ========== //

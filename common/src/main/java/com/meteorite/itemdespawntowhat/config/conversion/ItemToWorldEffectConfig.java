@@ -11,8 +11,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.projectile.AbstractArrow;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -143,18 +141,6 @@ public class ItemToWorldEffectConfig extends BaseConversionConfig implements Wor
     // ========== 辅助方法 ========== //
     private boolean isWeatherType() {
         return worldEffect == WorldEffectType.RAIN || worldEffect == WorldEffectType.CLEAR;
-    }
-
-    // ========== GUI图标 ========== //
-    @Override
-    public String getResultDescriptionId() {
-        return worldEffect != null ? worldEffect.getDescriptionId() : "effect.unknown";
-    }
-
-    @Override
-    public ItemStack getResultIcon() {
-        if (worldEffect == null) return new ItemStack(Items.BARRIER);
-        return worldEffect.getIconSupplier().get();
     }
 
     // ========== 接口实现 ========== //

@@ -2,8 +2,8 @@ package com.meteorite.itemdespawntowhat;
 
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
-import com.meteorite.itemdespawntowhat.manage.ConfigCache;
-import com.meteorite.itemdespawntowhat.manage.ConfigBootstrap;
+import com.meteorite.itemdespawntowhat.config.service.ConfigService;
+import com.meteorite.itemdespawntowhat.config.runtime.CompiledConversionRule;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
@@ -14,6 +14,7 @@ import java.util.List;
  * 对外提供配置生命周期与缓存查询能力的统一入口。
  */
 public class ConfigExtractorManager {
+    private static volatile ConfigService service;
 
     private ConfigExtractorManager() {
         throw new UnsupportedOperationException("Utility class");
@@ -22,51 +23,83 @@ public class ConfigExtractorManager {
     // ========== 生命周期 ========== //
 
     public static synchronized void initialize(Path configDir) {
-        ConfigBootstrap.initialize(configDir);
+        if (service == null) {
+            service = new ConfigService(configDir);
+        }
+        service.initialize();
     }
 
-    public static boolean reloadAllConfigs(Path configDir) {
-        return ConfigBootstrap.reloadAllConfigs(configDir);
+    public static synchronized boolean reloadAllConfigs(Path configDir) {
+        return getOrCreateService(configDir).reloadAll();
     }
 
-    public static boolean reloadConfigsForType(Path configDir, ConfigType configType) {
-        return ConfigBootstrap.reloadConfigsForType(configDir, configType);
+    public static synchronized boolean reloadConfigsForType(Path configDir, ConfigType configType) {
+        return getOrCreateService(configDir).reloadType(configType);
     }
 
-    public static void clearAllCaches() {
-        ConfigBootstrap.clearAllCaches();
+    public static synchronized void clearAllCaches() {
+        if (service != null) {
+            service.clear();
+            service = null;
+        }
     }
 
     // ========== 查询 ========== //
 
     public static List<BaseConversionConfig> getAllConfigsForItem(ResourceLocation itemId) {
-        return ConfigCache.getAllConfigsForItem(itemId);
+        return getService().getConfigsForItem(itemId);
     }
 
     @Nullable
     public static BaseConversionConfig getConfigByInternalId(String internalId) {
-        return ConfigCache.getConfigByInternalId(internalId);
+        return getService().getConfigByInternalId(internalId);
+    }
+
+    public static List<CompiledConversionRule> getRulesForItem(ResourceLocation itemId) {
+        return getService().getRulesForItem(itemId);
+    }
+
+    @Nullable
+    public static CompiledConversionRule getRuleByInternalId(String internalId) {
+        return getService().getRuleByInternalId(internalId);
     }
 
     public static boolean hasAnyConfigs(ResourceLocation itemId) {
-        return ConfigCache.hasAnyConfigs(itemId);
+        return getService().hasConfigsForItem(itemId);
     }
 
     // 获取某个物品所有配置的最高复杂度
     public static int getMaxComplexityForItem(ResourceLocation itemId) {
-        return ConfigCache.getMaxComplexityForItem(itemId);
+        return getService().getMaxComplexity(itemId);
     }
 
     public static <T extends BaseConversionConfig> List<T> getConfigByType(ConfigType configType) {
-        return ConfigCache.getConfigByType(configType);
+        return getService().getConfigsByType(configType);
     }
 
     // ========== 缓存维护 ========== //
     public static void removeConfigByInternalId(String internalId) {
-        ConfigBootstrap.removeConfigByInternalId(internalId);
+        getService().removeByInternalId(internalId);
     }
 
     public static boolean isInitialized() {
-        return ConfigCache.isInitialized();
+        ConfigService current = service;
+        return current != null && current.isInitialized();
+    }
+
+    private static ConfigService getOrCreateService(Path configDir) {
+        if (service == null) {
+            service = new ConfigService(configDir);
+            service.initialize();
+        }
+        return service;
+    }
+
+    private static ConfigService getService() {
+        ConfigService current = service;
+        if (current == null) {
+            throw new IllegalStateException("Config service is not initialized");
+        }
+        return current;
     }
 }

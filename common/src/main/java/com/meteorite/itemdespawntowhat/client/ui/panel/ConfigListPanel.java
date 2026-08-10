@@ -6,21 +6,23 @@ import com.meteorite.itemdespawntowhat.client.ui.panel.configlist.ConfigTooltipB
 import com.meteorite.itemdespawntowhat.client.ui.panel.configlist.EntityIconCache;
 import com.meteorite.itemdespawntowhat.client.ui.panel.configlist.ScrollableTextRenderer;
 import com.meteorite.itemdespawntowhat.client.ui.panel.configlist.TagPreviewResolver;
+import com.meteorite.itemdespawntowhat.client.ui.presentation.ConfigPresentation;
+import com.meteorite.itemdespawntowhat.client.ui.presentation.ConfigPresenter;
+import com.meteorite.itemdespawntowhat.client.ui.presentation.ConfigPresenterRegistry;
 import com.meteorite.itemdespawntowhat.config.conversion.BaseConversionConfig;
-import com.meteorite.itemdespawntowhat.config.conversion.ItemToBlockConfig;
-import com.meteorite.itemdespawntowhat.config.conversion.ItemToMobConfig;
 import com.meteorite.itemdespawntowhat.util.SafeParseUtil;
+import com.meteorite.itemdespawntowhat.util.TagResolver;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ObjectSelectionList;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -32,6 +34,9 @@ import org.joml.Vector3f;
 
 import java.util.List;
 
+/**
+ * 显示原始与待保存配置的可编辑列表。
+ */
 public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelectionList<ConfigListPanel.ConfigEntry<T>> {
 
     // 条目来源标记
@@ -271,11 +276,15 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
     private record PendingAction(EntrySource source, int index, Runnable onConfirm) {}
 
     // ========== 列表条目 ========== //
+    /**
+     * 列表中的单条配置展示项。
+     */
     public static class ConfigEntry<T extends BaseConversionConfig>
             extends ObjectSelectionList.Entry<ConfigEntry<T>> {
 
         private final ConfigListPanel<T> parent;
         private final T config;
+        private final ConfigPresenter<T> presenter;
         private final EntrySource source;
         private final int indexInSource;
 
@@ -296,22 +305,12 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
         ConfigEntry(ConfigListPanel<T> parent, T config, EntrySource source, int indexInSource) {
             this.parent = parent;
             this.config = config;
+            this.presenter = ConfigPresenterRegistry.get(config.getConfigType());
             this.source = source;
             this.indexInSource = indexInSource;
-            this.sourceIsTag = config.isTagMode();
+            this.sourceIsTag = TagResolver.isTagId(config.getItemId());
             this.sourceTagItems = sourceIsTag ? TagPreviewResolver.resolveTagItems(config) : List.of();
-
-            // 若为 mob 类型，从缓存取实体图标
-            if (config instanceof ItemToMobConfig mobConfig) {
-                Minecraft mc = Minecraft.getInstance();
-                Level level = mc.level;
-                EntityType<?> type = mobConfig.getResultEntityType();
-                this.entityIcon = (level != null && type != null)
-                        ? ConfigListPanel.getOrCreateEntityIcon(type, level)
-                        : null;
-            } else {
-                this.entityIcon = null;
-            }
+            this.entityIcon = null;
         }
 
         private ItemStack getSourceIconStack() {
@@ -322,23 +321,10 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
                 }
                 return new ItemStack(Items.BARRIER);
             }
-            return config.getStartItemIcon();
-        }
-
-        private ItemStack getResultIconStack(ItemStack sourceIconStack) {
-            if (config instanceof ItemToBlockConfig blockConfig && blockConfig.isEnableItemBlock()) {
-                return sourceIconStack;
-            }
-            return config.getResultIcon();
-        }
-
-        private Component getDisplayNameForStack(ItemStack stack) {
-            if (!stack.isEmpty() && stack.getItem() instanceof BlockItem blockItem) {
-                return Component.translatable(blockItem.getBlock().getDescriptionId());
-            }
-            return stack.isEmpty()
-                    ? Component.empty()
-                    : Component.translatable(stack.getDescriptionId());
+            ResourceLocation itemId = SafeParseUtil.parseResourceLocation(config.getItemId());
+            Item item = itemId == null ? Items.AIR : BuiltInRegistries.ITEM.get(itemId);
+            ItemStack icon = item.getDefaultInstance();
+            return icon.isEmpty() ? new ItemStack(Items.BARRIER) : icon;
         }
 
         // ========== 催化剂内联显示 ========== //
@@ -349,16 +335,13 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
 
         private Component getSourceText(ItemStack sourceIconStack) {
             if (sourceIsTag) {
-                return getDisplayNameForStack(sourceIconStack);
+                return ConfigPresenterRegistry.displayName(sourceIconStack);
             }
-            return Component.translatable(config.getStartItem().getDescriptionId());
+            return ConfigPresenterRegistry.displayName(sourceIconStack);
         }
 
-        private Component getResultText(ItemStack resultIconStack) {
-            if (config instanceof ItemToBlockConfig blockConfig && blockConfig.isEnableItemBlock()) {
-                return getDisplayNameForStack(resultIconStack);
-            }
-            return Component.translatable(config.getResultDescriptionId());
+        private Component getResultText(ConfigPresentation presentation) {
+            return presentation.name();
         }
 
         public T getConfig() {
@@ -410,16 +393,16 @@ public class ConfigListPanel<T extends BaseConversionConfig> extends ObjectSelec
             // 催化剂内联图标
             renderCatalystInline(guiGraphics, mc, sourceTextX, arrowX, iconY, textY);
 
-            if (entityIcon == null && config instanceof ItemToMobConfig mobConfig) {
+            ConfigPresentation presentation = presenter.present(config, sourceIcon);
+            if (entityIcon == null && presentation.entityType() != null) {
                 Level level = mc.level;
-                EntityType<?> type = mobConfig.getResultEntityType();
-                if (level != null && type != null) {
-                    entityIcon = ConfigListPanel.getOrCreateEntityIcon(type, level);
+                if (level != null) {
+                    entityIcon = ConfigListPanel.getOrCreateEntityIcon(presentation.entityType(), level);
                 }
             }
 
-            ItemStack resultIcon = getResultIconStack(sourceIcon);
-            Component resultText = getResultText(resultIcon);
+            ItemStack resultIcon = presentation.icon();
+            Component resultText = getResultText(presentation);
             int resultMultiple = config.getResultMultiple();
             String resultMultipleStr = Integer.toString(resultMultiple);
             int textColor = (source == EntrySource.PENDING) ? 0xFFFF88 : 0xFFFFFF;

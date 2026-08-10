@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.network.payload.c2s;
 
 import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.config.ConfigType;
+import com.meteorite.itemdespawntowhat.network.codec.ConfigTypeStreamCodec;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
@@ -23,10 +24,7 @@ public record SaveConfigChunkPayload(
     );
 
     public static final StreamCodec<ByteBuf, SaveConfigChunkPayload> STREAM_CODEC = StreamCodec.composite(
-            ByteBufCodecs.VAR_INT.map(
-                    ordinal -> ConfigType.values()[ordinal],
-                    ConfigType::ordinal
-            ),
+            ConfigTypeStreamCodec.INSTANCE,
             SaveConfigChunkPayload::configType,
             ByteBufCodecs.STRING_UTF8,
             SaveConfigChunkPayload::transferId,
