@@ -42,7 +42,9 @@ public final class RuleLoadingService {
         RuleLoadResult<Rule> loaded = load(context);
         List<LoadedRule<Rule>> valid = new ArrayList<>(loaded.rules().size());
         for (LoadedRule<Rule> entry : loaded.rules()) {
-            if (RuleValidation.validate(entry.value(), loaded.issues(), entry.origin().display())) {
+            // 必须使用注册表感知重载：否则未注册引用、区间/结构类非法参数会在装配层被静默放行
+            if (RuleValidation.validate(entry.value(), context.effectTypes(), context.conditionTypes(),
+                    loaded.issues(), entry.origin().display())) {
                 valid.add(entry);
             }
         }

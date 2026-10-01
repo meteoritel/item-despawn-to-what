@@ -296,7 +296,42 @@ Effect（通用字段）
 
 **已知未验证项**：Fabric/NeoForge 真实数据包 id 与 `PackLayerResolver.byPackIdToken` 启发式未实机验证（阶段③ 用 reload 日志或 `/idtw config list` 复核）；性能指标未测；IDEA 检查在本会话不可用，以「独立 javac 编译 + 仓库外行为探针 + 全量 gradle 构建」替代。
 
-### 阶段 ② 注册体系与内置类型
+### 阶段 ② 注册体系与内置类型 ✅（2026-10-02 收口）
+
+**已落地**（`core/type/` 26 个文件 + `core/service/BuiltinTypeRegistries.java`）：
+
+| 内容 | 说明 |
+|---|---|
+| 生效效果 9 个 | spawn_item / spawn_entity / place_block / spawn_xp / loot_table / lightning / explosion / arrow_rain / weather |
+| 消耗效果 3 个 | consume_source / consume_catalyst / consume_fluid |
+| 条件 10 个 | dimension / biome（exact + climate 双模式）/ weather / outdoor / surrounding_blocks / catalyst_present / fluid_present / time_of_day / y_level / light_level |
+| 共用助手 | `core/type/EnumCodecs`（小写下划线枚举编解码）、`core/type/RefChecks`（TaggedId 引用存在性校验） |
+| 装配点 | `BuiltinTypeRegistries.create()`：条件类型 → 表达式 codec → 效果类型（无环） |
+
+**阶段② 期间确定的实现约定**：
+
+1. **静态工厂不得叫 type()**：`Condition#type()` / `Effect#type()` 是无参实例方法，同签名的静态方法在 Java 中非法。约定为 `conditionType()` 与 `effectType(expressionCodec)`。
+2. **所有物品/方块/实体/流体引用统一用 `TaggedId`**（支持 `#tag`）；`loot_table.loot_table` 与 `dimension.dimensions` 用纯 `ResourceLocation`（无 tag 语义）。
+3. **引用存在性校验**：非标签引用未命中 → ERROR；标签引用仅在「标签数据确已绑定」时校验，未命中记 WARN。判据为「注册表存在任一非空标签」（`getTags().anyMatch(size>0)`），因为数据包未加载时 `getTagNames()` 里全是 bootstrap 期创建的空壳标签。
+4. **参数校验钩子**：`TypeDefinition#validateParams` 默认通过，内置类型各自重写；`RuleValidation` 的注册表感知重载逐效果、逐条件叶调用它，问题带 `effects[i]` / `conditions[g][l]` 路径。
+
+**阶段② 独立复核后的修复（task-13 发现）**：
+
+| 编号 | 问题 | 处置 |
+|---|---|---|
+| F-1（严重） | `RuleLoadingService.loadAndValidate` 仍调用 3 参结构校验，注册表感知的 5 参重载**全仓库零调用**，导致未注册引用/区间结构类非法参数在端到端装载路径被静默放行 | 已修：装配层改用 5 参重载 |
+| F-2（中等） | `RuleValidation` 的补来源逻辑**追加**带 origin 的副本而非替换，且索引空间不一致（用 ERROR 计数索引整个列表），同一问题重复 2~7 条 | 已修：改为局部收集 + 一次性补来源合并 |
+| F-4（轻微） | biome climate 模式 `{"temperature":{}}` 空区间被当作有效填写 | 已修：区间至少一端有界才算有效约束 |
+| F-3（中等，部分） | codec 级错误（区间越界、类型不符）不带字段名，经 loader 后 fieldPath 为空 | 已部分修：类型分发统一前缀类型 id（"类型 xx 参数错误: ..."）；**逐字段名**需各类型给 codec 包一层命名包装，记入阶段⑤ 与 `/idtw config validate` 一并处理 |
+| F-5（轻微） | `radius` 默认值不统一；`loot_table` 未声明 limit/radius | 记录为有意差异：Q26 的"统一"指**命名与取值区间**（radius 1..32、limit 1..4096），默认值按类型语义决定（place_block 默认 6 用于扩散放置，spawn_item/spawn_entity 默认不限制）；loot_table 产出为一批随机物品，邻近累积检测意义有限，暂不声明 |
+
+**阶段② 明确未做（已记录，留给后续阶段）**：
+
+- **biome / dimension 的引用存在性未校验**：1.21.1 没有 `BuiltInRegistries.BIOME`（群系是数据包动态注册表），维度同理，`validateParams` 拿不到 `RegistryAccess`。留待阶段③ 的 `/idtw config validate`、`debug why` 用服务端 `RegistryAccess` 复核。
+- **类型参数级未知字段检测仍未实现**：需要 `TypeDefinition` 暴露字段集合（各类型已备好 `*_FIELD` 常量），属阶段④ 与 GUI/校验命令一并处理，阶段① 只承诺顶层未知字段 WARN。
+- **效果执行器与条件求值器全部未实现**：本阶段只交付参数模型、Codec 与参数校验，运行时在阶段③。
+
+### 阶段 ③ 运行时
 
 - `EffectType` / `ConditionType` 注册表、内置 12 个效果与 10 个条件（含 biome 双模式）。
 - 效果级 `delay_ticks` / `chance` / `conditions` 通用能力。

@@ -14,4 +14,9 @@ public interface TypeDefinition<P> {
 
     // 该类型专属参数的编解码器（扁平字段，与规则/效果通用字段处在同一对象中）
     MapCodec<P> codec();
+
+    // 校验类型专属参数的语义合法性；默认通过，具体类型按需重写
+    default boolean validateParams(P params, IssueCollector issues, String fieldPath) {
+        return true;
+    }
 }

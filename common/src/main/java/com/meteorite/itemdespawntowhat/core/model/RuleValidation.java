@@ -1,18 +1,25 @@
 package com.meteorite.itemdespawntowhat.core.model;
 
+import com.meteorite.itemdespawntowhat.core.api.Issue;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import com.meteorite.itemdespawntowhat.core.api.TypeDefinition;
+import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 /**
  * 规则语义校验。
  * 统一严格策略：语义非法即由调用方拒载该条规则，其余条目照常加载；所有问题进入 IssueCollector。
+ * 两档入口：
+ * - validate(rule, issues, origin)：只做结构校验（不依赖注册表）；
+ * - validate(rule, effectTypes, conditionTypes, issues, origin)：结构校验 + 类型专属参数校验。
  */
 public final class RuleValidation {
 
@@ -20,7 +27,7 @@ public final class RuleValidation {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    // 校验单条规则；origin 用于问题定位（文件路径或数据包标识）
+    // 校验单条规则（结构维度）；origin 用于问题定位（文件路径或数据包标识）
     public static boolean validate(Rule rule, IssueCollector issues, @Nullable String origin) {
         int before = issues.errors().size();
         String rulePath = rule.id() == null ? "<无 id>" : rule.id().toString();
@@ -47,6 +54,80 @@ public final class RuleValidation {
         }
         validateConsumptionEffects(rule, issues, origin);
         return issues.errors().size() == before;
+    }
+
+    // 校验单条规则（结构 + 类型专属参数）；参数非法同样按「该条拒载」处理
+    public static boolean validate(Rule rule,
+                                   TypeRegistry<EffectType<?>> effectTypes,
+                                   TypeRegistry<ConditionType<?>> conditionTypes,
+                                   IssueCollector issues,
+                                   @Nullable String origin) {
+        int before = issues.errors().size();
+        validate(rule, issues, origin);
+        validateConditionParams(rule.conditions(), conditionTypes, issues, origin, RuleFields.CONDITIONS);
+        for (int index = 0; index < rule.effects().size(); index++) {
+            Effect effect = rule.effects().get(index);
+            String path = RuleFields.EFFECTS + "[" + index + "]";
+            validateEffectParams(effect, effectTypes, issues, origin, path);
+            ConditionExpression conditions = effect.conditions();
+            if (conditions != null) {
+                validateConditionParams(conditions, conditionTypes, issues, origin, path + "." + RuleFields.CONDITIONS);
+            }
+        }
+        return issues.errors().size() == before;
+    }
+
+    // 效果类型专属参数校验：类型未注册时给出可读错误
+    private static void validateEffectParams(Effect effect, TypeRegistry<EffectType<?>> effectTypes,
+                                             IssueCollector issues, @Nullable String origin, String path) {
+        if (effect.type() == null) {
+            return;
+        }
+        EffectType<?> definition = effectTypes.getOrNull(effect.type());
+        if (definition == null) {
+            issues.error("未注册的效果类型: " + effect.type(), origin, path);
+            return;
+        }
+        validateTypeParams(definition, effect, issues, origin, path);
+    }
+
+    // 条件叶类型专属参数校验：逐组逐叶，路径形如 conditions[g][l]
+    private static void validateConditionParams(ConditionExpression expression,
+                                                TypeRegistry<ConditionType<?>> conditionTypes,
+                                                IssueCollector issues, @Nullable String origin, String basePath) {
+        for (int groupIndex = 0; groupIndex < expression.groups().size(); groupIndex++) {
+            ConditionGroup group = expression.groups().get(groupIndex);
+            for (int leafIndex = 0; leafIndex < group.conditions().size(); leafIndex++) {
+                Condition condition = group.conditions().get(leafIndex);
+                String path = basePath + "[" + groupIndex + "][" + leafIndex + "]";
+                ConditionType<?> definition = conditionTypes.getOrNull(condition.type());
+                if (definition == null) {
+                    issues.error("未注册的条件类型: " + condition.type(), origin, path);
+                    continue;
+                }
+                validateTypeParams(definition, condition, issues, origin, path);
+            }
+        }
+    }
+
+    // 泛型桥接：参数对象即类型定义所声明的 P，运行时安全（validateParams 只读参数）
+    @SuppressWarnings("unchecked")
+    private static <P> void validateTypeParams(TypeDefinition<P> definition, Object params,
+                                               IssueCollector issues, @Nullable String origin, String path) {
+        if (params == null) {
+            return;
+        }
+        // 先收进局部收集器，补好来源后一次性并入；避免边遍历边追加导致重复 Issue
+        IssueCollector local = new IssueCollector();
+        boolean valid = definition.validateParams((P) params, local, path);
+        // 若实现只返回 false 而未写入问题，补一条兜底错误，避免错误静默
+        if (!valid && local.errors().isEmpty()) {
+            local.error("类型 " + definition.id() + " 的参数非法", null, path);
+        }
+        for (Issue issue : local.issues()) {
+            issues.add(new Issue(issue.severity(), issue.message(),
+                    issue.origin() == null ? origin : issue.origin(), issue.fieldPath()));
+        }
     }
 
     // 消耗类效果重复检测：同一规则内同一消耗效果类型只允许出现一次
@@ -79,7 +160,7 @@ public final class RuleValidation {
         }
     }
 
-    // 效果通用字段校验；类型专属参数由各效果类型自行校验（阶段②）
+    // 效果通用字段校验；类型专属参数由注册表感知入口负责
     private static void validateEffect(Effect effect, int index, IssueCollector issues,
                                        @Nullable String origin, String rulePath) {
         String path = RuleFields.EFFECTS + "[" + index + "]";
@@ -97,10 +178,9 @@ public final class RuleValidation {
         if (conditions != null && !conditions.isStructurallyValid()) {
             issues.error("效果级 conditions 中存在空条件组", origin, path + "." + RuleFields.CONDITIONS);
         }
-        // 单个效果的字段校验到此为止；消耗类效果是否重复在 validate 末尾统一统计
     }
 
-    // 便捷入口：无来源信息的校验
+    // 便捷入口：无来源信息的结构校验
     public static boolean validate(Rule rule, IssueCollector issues) {
         return validate(rule, issues, null);
     }

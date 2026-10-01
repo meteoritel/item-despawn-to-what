@@ -38,7 +38,10 @@ public final class TypeDispatch {
                         .flatMap(definition -> {
                             @SuppressWarnings("unchecked")
                             MapCodec<A> codec = (MapCodec<A>) definition.codec();
-                            return codec.decode(ops, input);
+                            // 参数 codec 的错误默认不含字段名（DFU 的 intRange/doubleRange 只报范围），
+                            // 这里统一前缀类型 id，便于定位到"哪个类型的哪个参数"
+                            return codec.decode(ops, input)
+                                    .mapError(message -> "类型 " + definition.id() + " 参数错误: " + message);
                         });
             }
 
