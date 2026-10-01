@@ -6,6 +6,7 @@ import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleConditionType;
+import com.meteorite.itemdespawntowhat.core.type.condition.eval.LightLevelEvaluator;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
@@ -16,7 +17,7 @@ import java.util.Optional;
 /**
  * 条件类型 light_level：按掉落物所在位置的光照等级（0..15）区间匹配。
  * 参数 min / max 均可空（null = 该端不限制），取值域 [0,15]，且 min 不得大于 max。
- * 说明：取哪种光照（天空光 / 方块光 / 两者取大）属阶段③ 的求值器语义，本阶段只做参数模型与校验。
+ * 光照口径：LevelReader#getMaxLocalRawBrightness（天空光按时间衰减后与方块光取较大值），见 LightLevelEvaluator。
  * JSON 示例：{ "type": "itemdespawntowhat:light_level", "max": 7 }
  */
 public record LightLevelCondition(boolean negated, Integer min, Integer max) implements Condition {
@@ -47,7 +48,7 @@ public record LightLevelCondition(boolean negated, Integer min, Integer max) imp
 
     // 条件类型定义，供注册表登记；静态工厂不能叫 type()（与 Condition#type 实例方法签名冲突）
     public static ConditionType<LightLevelCondition> conditionType() {
-        return new SimpleConditionType<>(ID, CODEC, LightLevelCondition::validateParams);
+        return new SimpleConditionType<>(ID, CODEC, LightLevelCondition::validateParams, LightLevelEvaluator::test);
     }
 
     // 参数语义校验：两端取值域 + 区间有序

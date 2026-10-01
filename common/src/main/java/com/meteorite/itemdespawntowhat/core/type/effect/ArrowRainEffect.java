@@ -10,6 +10,7 @@ import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleEffectType;
 import com.meteorite.itemdespawntowhat.core.type.RefChecks;
 import com.meteorite.itemdespawntowhat.core.type.EnumCodecs;
+import com.meteorite.itemdespawntowhat.core.type.effect.exec.ArrowRainExecutor;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
@@ -126,9 +127,9 @@ public record ArrowRainEffect(
                         conditions.orElse(null))));
     }
 
-    // 效果类型定义：id + 参数编解码器 + 参数校验器
+    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器
     public static EffectType<ArrowRainEffect> effectType(Codec<ConditionExpression> expressionCodec) {
-        return new SimpleEffectType<>(ID, codec(expressionCodec), ArrowRainEffect::validateParams);
+        return new SimpleEffectType<>(ID, codec(expressionCodec), ArrowRainEffect::validateParams, ArrowRainExecutor::execute);
     }
 
     // 参数语义校验；问题写入 issues，不抛异常

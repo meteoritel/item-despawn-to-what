@@ -10,6 +10,7 @@ import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleEffectType;
 import com.meteorite.itemdespawntowhat.core.type.RefChecks;
 import com.meteorite.itemdespawntowhat.core.type.EnumCodecs;
+import com.meteorite.itemdespawntowhat.core.type.effect.exec.PlaceBlockExecutor;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
@@ -91,9 +92,9 @@ public record PlaceBlockEffect(
                         limit.orElse(null), delayTicks, chance, conditions.orElse(null))));
     }
 
-    // 效果类型定义：id + 参数编解码器 + 参数校验器
+    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器
     public static EffectType<PlaceBlockEffect> effectType(Codec<ConditionExpression> expressionCodec) {
-        return new SimpleEffectType<>(ID, codec(expressionCodec), PlaceBlockEffect::validateParams);
+        return new SimpleEffectType<>(ID, codec(expressionCodec), PlaceBlockEffect::validateParams, PlaceBlockExecutor::execute);
     }
 
     // 参数语义校验；问题写入 issues，不抛异常

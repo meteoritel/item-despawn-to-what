@@ -8,6 +8,7 @@ import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleConditionType;
 import com.meteorite.itemdespawntowhat.core.type.RefChecks;
+import com.meteorite.itemdespawntowhat.core.type.condition.eval.FluidPresentEvaluator;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
@@ -19,7 +20,7 @@ import java.util.Optional;
 /**
  * 条件类型 fluid_present：判断掉落物所在位置（或相邻位置）的流体类型。
  * 参数 fluid 可空：null 表示「任意流体」；非空时为流体引用，支持 fluid id 或 #tag。
- * 参数 require_source 默认 true，表示只匹配流体源方块（不匹配流动中的流体）。
+ * 参数 require_source 默认 true，表示只匹配流体源方块；判定见 FluidPresentEvaluator（非源模式下额外接受同一流体族的流动变体）。
  * JSON 示例：{ "type": "itemdespawntowhat:fluid_present", "fluid": "#minecraft:water" }
  */
 public record FluidPresentCondition(boolean negated, TaggedId fluid, boolean requireSource) implements Condition {
@@ -53,7 +54,7 @@ public record FluidPresentCondition(boolean negated, TaggedId fluid, boolean req
 
     // 条件类型定义，供注册表登记；静态工厂不能叫 type()（与 Condition#type 实例方法签名冲突）
     public static ConditionType<FluidPresentCondition> conditionType() {
-        return new SimpleConditionType<>(ID, CODEC, FluidPresentCondition::validateParams);
+        return new SimpleConditionType<>(ID, CODEC, FluidPresentCondition::validateParams, FluidPresentEvaluator::test);
     }
 
     // 参数语义校验：fluid 为空表示任意流体（合法）；非空时做注册表存在性校验并提示 empty 的无效用法

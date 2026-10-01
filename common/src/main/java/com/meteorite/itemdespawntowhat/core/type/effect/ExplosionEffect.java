@@ -7,6 +7,7 @@ import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleEffectType;
+import com.meteorite.itemdespawntowhat.core.type.effect.exec.ExplosionExecutor;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
@@ -56,9 +57,9 @@ public record ExplosionEffect(
                 new ExplosionEffect(power, fire, visualOnly, delayTicks, chance, conditions.orElse(null))));
     }
 
-    // 效果类型定义：id + 参数编解码器 + 参数校验器
+    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器
     public static EffectType<ExplosionEffect> effectType(Codec<ConditionExpression> expressionCodec) {
-        return new SimpleEffectType<>(ID, codec(expressionCodec), ExplosionEffect::validateParams);
+        return new SimpleEffectType<>(ID, codec(expressionCodec), ExplosionEffect::validateParams, ExplosionExecutor::execute);
     }
 
     // 参数语义校验；问题写入 issues，不抛异常

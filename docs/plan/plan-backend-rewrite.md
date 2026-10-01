@@ -331,13 +331,51 @@ Effect（通用字段）
 - **类型参数级未知字段检测仍未实现**：需要 `TypeDefinition` 暴露字段集合（各类型已备好 `*_FIELD` 常量），属阶段④ 与 GUI/校验命令一并处理，阶段① 只承诺顶层未知字段 WARN。
 - **效果执行器与条件求值器全部未实现**：本阶段只交付参数模型、Codec 与参数校验，运行时在阶段③。
 
-### 阶段 ③ 运行时
-
 - `EffectType` / `ConditionType` 注册表、内置 12 个效果与 10 个条件（含 biome 双模式）。
 - 效果级 `delay_ticks` / `chance` / `conditions` 通用能力。
 - **验收**：build 通过；新增一个 dummy 类型只需改 1~3 处（目标的量化验证）；`/idtw config validate` 能报出非法参数。
 
-### 阶段 ③ 运行时
+### 阶段 ③ 运行时 ✅（2026-10-02 收口）
+
+**落地结果**
+
+| 位置 | 内容 |
+|---|---|
+| `core/runtime/`（9 文件） | TickScheduler（分桶 + 每 tick 预算 + 异常隔离）、RuleIndex（优先级排序 + tag 懒展开缓存）、ExpressionEvaluator（DNF 短路求值）、RuntimeTagLookup / RuntimeClimateSampler（按位置/标签缓存）、RuntimeConditionContext / RuntimeEffectContext、LifespanProvider、ConversionRuntime |
+| `core/config/` | ServerConfig（server.json：检查间隔/退避上限/每 tick 上限/覆盖层目录/Fabric 寿命兜底/调试开关，缺失即落盘） |
+| `core/type/effect/exec/`（13 文件） | 12 个效果执行器 + EffectTargets 助手 |
+| `core/type/condition/eval/`（10 文件） | 10 个条件求值器 |
+| `fabric/…/runtime/`、`neoforge/…/runtime/`（各 2 文件） | RuleRuntimeHost / RuleRuntimeEvents：服务端引导、事件接入、数据包重载回扫 |
+
+**阶段③ 实现约定**：
+
+1. 运行时按**维度 key** 组织状态，**不持有 ServerLevel 引用**（A4 内存泄漏闭环）：维度卸载 `clear`、服务端停止 `shutdown`。
+2. 触发时刻 = `min(trigger_after_seconds×20, lifespan-1)`，经调度器在到期 tick 执行；条件不满足按 1s→2s→4s→封顶**退避重试**，到自然消失前一刻停止（A2 计时单位、A3 热重载回扫闭环）。
+3. 效果派发由运行时统一处理 `delay_ticks` / `chance` / 效果级 `conditions`；执行器只做世界操作；单效果异常捕获记录后**继续执行后续效果**；规则选择仅用「优先级 + 条件成立」，彻底移除引用身份比较（A7 闭环）。
+4. 同一掉落物只执行优先级最高的一条命中规则；转化完成后终止追踪。
+5. 标签查询与气候采样由维度级缓存实例提供，缓存随索引重建（reload）一并丢弃；`byPackIdToken` 之外的标签解析全部懒展开。
+6. 平台层只做入口（引导/事件/重载钩子），业务全在 `core/**`；`server.json` 缺失即落盘由 core 负责，平台层不重复处理。
+
+**阶段③ 独立复核后的修复（task-19 发现）**：
+
+| 编号 | 问题 | 处置 |
+|---|---|---|
+| S1（严重） | 规划书 3.1-4/Q8 的"规则默认隐式消耗源物品"**未实现**：`Rule#usesImplicitSourceConsumption()` 全仓库零调用，只写 `[spawn_item]` 的规则不会消耗源物品 | 已修：`ConversionRuntime.performConversion` 在派发声明效果前，若规则未声明任何 `consume_*` 则先隐式执行一次 `consume_source`（count=1）；实例由 `BuiltinTypeRegistries.implicitSourceConsumption()` 提供，运行时只依赖 `Effect` 接口 |
+| M1（中等） | `RuleIndex.candidates` 在"直接命中 vs 标签命中"并列时丢失定义序，与 3.1-1 冲突 | 已修：改为先求命中集合，再按全局有序表过滤，第三条排序键恢复有效 |
+| M2（中等） | `replaceRules` 未重置 `LevelState.tags/climate`，标签与气候缓存不随 reload 失效 | 已修：重建索引时一并置空两个缓存 |
+| L1 | `TickScheduler` 只捕 RuntimeException，Error 逃逸会丢弃同桶剩余任务 | 已修：VM 级错误上抛，其余 Throwable 隔离并继续 |
+| L2 | 退避序列固定 2^3 上限，间隔较小时不收敛到 `backoff_max_ticks` | 已修：`base << n` 后按上限封顶，封顶成为真正的收敛值 |
+| L3 | 未注册条件类型 + 叶级取反会求值为 true | 已修：未注册直接判否且不参与取反 |
+| L4 | 文档写 runtime 10 文件，实为 9 | 已修 |
+| 观察 | `RuntimeClimateSampler` 位置缓存无上限（长赛季内存风险） | 记入阶段⑥ 清理项：按区块失效或加容量上限 |
+
+**阶段③ 结束时的已知限制**：
+
+- **新旧链路并行**：同一物品若同时命中旧 `config/itemdespawntowhat/<type>.json` 与新 `rules/**`，会被两条链路各转化一次 → 对照测试必须只保留一侧配置；阶段⑥ 删除旧链路后消失。
+- `PackLayerResolver.byPackIdToken` 的包 id 启发式与 `listResources("idtw/rules")` 路径前缀**未实机验证**（当前仓库无内置数据包，启动只走 config 覆盖层）。
+- Fabric 端 lifespan 为常量（server.json 兜底值），不反映第三方模组改动；NeoForge 端走 `getEntityLifespan`。
+- 世界写入路径（setBlock / explode / 天气 / 生成实体与掉落物）只经静态检查与原版 API 契约核对，**未实机验证**。
+- 阶段③ 未接入 `/idtw` 命令（属阶段⑤），手工重载走原版 `/reload`。
 
 - per-level 索引 + 分桶到期调度器 + 退避重试 + reload 回扫 + 弱引用/显式清理。
 - 到期触发拦截（原版 discard 之前）、延迟任务（维度+位置绑定）、单条最高优先级命中、效果异常隔离。

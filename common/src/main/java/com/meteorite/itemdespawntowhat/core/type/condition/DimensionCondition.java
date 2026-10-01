@@ -6,6 +6,7 @@ import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleConditionType;
+import com.meteorite.itemdespawntowhat.core.type.condition.eval.DimensionEvaluator;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.resources.ResourceLocation;
@@ -47,7 +48,7 @@ public record DimensionCondition(boolean negated, List<ResourceLocation> dimensi
 
     // 条件类型定义，供注册表登记；静态工厂不能叫 type()（与 Condition#type 实例方法签名冲突）
     public static ConditionType<DimensionCondition> conditionType() {
-        return new SimpleConditionType<>(ID, CODEC, DimensionCondition::validateParams);
+        return new SimpleConditionType<>(ID, CODEC, DimensionCondition::validateParams, DimensionEvaluator::test);
     }
 
     // 参数语义校验：维度列表必填

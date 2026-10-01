@@ -6,6 +6,7 @@ import com.meteorite.itemdespawntowhat.network.EditSessionTimeoutHandler;
 import com.meteorite.itemdespawntowhat.network.handler.SaveConfigChunkAccumulator;
 import com.meteorite.itemdespawntowhat.network.registrar.ConfigEditPayloadRegistrar;
 import com.meteorite.itemdespawntowhat.platform.Services;
+import com.meteorite.itemdespawntowhat.runtime.RuleRuntimeEvents;
 import com.meteorite.itemdespawntowhat.server.event.ItemConversionEvent;
 import com.meteorite.itemdespawntowhat.server.conversion.ConversionTracker;
 import net.fabricmc.api.ModInitializer;
@@ -68,6 +69,8 @@ public class ItemDespawnToWhat implements ModInitializer {
 
         // 注册事件监听
         ItemConversionEvent.register();
+        // 新链路（core/runtime）事件入口：与旧链路并列运行，便于对照测试
+        RuleRuntimeEvents.register();
         ConfigEditPayloadRegistrar.register();
         EditSessionTimeoutHandler.register();
     }

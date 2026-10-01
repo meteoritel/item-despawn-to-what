@@ -9,6 +9,7 @@ import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleEffectType;
 import com.meteorite.itemdespawntowhat.core.type.RefChecks;
+import com.meteorite.itemdespawntowhat.core.type.effect.exec.ConsumeFluidExecutor;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
@@ -56,9 +57,9 @@ public record ConsumeFluidEffect(
                         conditions.orElse(null))));
     }
 
-    // 效果类型定义：id + 参数编解码器 + 参数校验器
+    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器
     public static EffectType<ConsumeFluidEffect> effectType(Codec<ConditionExpression> expressionCodec) {
-        return new SimpleEffectType<>(ID, codec(expressionCodec), ConsumeFluidEffect::validateParams);
+        return new SimpleEffectType<>(ID, codec(expressionCodec), ConsumeFluidEffect::validateParams, ConsumeFluidExecutor::execute);
     }
 
     // 参数语义校验；fluid 为 null 表示任意流体，不做存在性判定

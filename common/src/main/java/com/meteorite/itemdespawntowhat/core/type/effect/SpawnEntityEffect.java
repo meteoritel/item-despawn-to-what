@@ -9,6 +9,7 @@ import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleEffectType;
 import com.meteorite.itemdespawntowhat.core.type.RefChecks;
+import com.meteorite.itemdespawntowhat.core.type.effect.exec.SpawnEntityExecutor;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
@@ -72,9 +73,9 @@ public record SpawnEntityEffect(
                         delayTicks, chance, conditions.orElse(null))));
     }
 
-    // 效果类型定义：id + 参数编解码器 + 参数校验器
+    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器
     public static EffectType<SpawnEntityEffect> effectType(Codec<ConditionExpression> expressionCodec) {
-        return new SimpleEffectType<>(ID, codec(expressionCodec), SpawnEntityEffect::validateParams);
+        return new SimpleEffectType<>(ID, codec(expressionCodec), SpawnEntityEffect::validateParams, SpawnEntityExecutor::execute);
     }
 
     // 参数语义校验；age 不做区间限制（负数即幼体，其余取值由实体自身语义决定）

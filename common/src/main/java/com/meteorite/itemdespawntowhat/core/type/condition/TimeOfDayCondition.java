@@ -6,6 +6,7 @@ import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleConditionType;
+import com.meteorite.itemdespawntowhat.core.type.condition.eval.TimeOfDayEvaluator;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
@@ -14,7 +15,7 @@ import net.minecraft.resources.ResourceLocation;
 /**
  * 条件类型 time_of_day：按世界时间（0..23999 刻）区间匹配。
  * 参数 from / to 必填且均在 [0,23999]；跨零点用 from > to 表达（如 22000 → 2000），不视为错误。
- * 说明：世界时间的读取属阶段③ 的求值器，本阶段只做参数模型与校验。
+ * 世界时间读取与区间判定见 TimeOfDayEvaluator（把 dayTime 取模到一天之内）。
  * JSON 示例：{ "type": "itemdespawntowhat:time_of_day", "from": 13000, "to": 23000 }
  */
 public record TimeOfDayCondition(boolean negated, int from, int to) implements Condition {
@@ -45,7 +46,7 @@ public record TimeOfDayCondition(boolean negated, int from, int to) implements C
 
     // 条件类型定义，供注册表登记；静态工厂不能叫 type()（与 Condition#type 实例方法签名冲突）
     public static ConditionType<TimeOfDayCondition> conditionType() {
-        return new SimpleConditionType<>(ID, CODEC, TimeOfDayCondition::validateParams);
+        return new SimpleConditionType<>(ID, CODEC, TimeOfDayCondition::validateParams, TimeOfDayEvaluator::test);
     }
 
     // 参数语义校验：两端都必须落在 [0,23999]；from > to 表示跨零点，合法

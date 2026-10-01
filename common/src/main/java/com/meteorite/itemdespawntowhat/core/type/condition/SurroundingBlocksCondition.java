@@ -8,6 +8,7 @@ import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleConditionType;
 import com.meteorite.itemdespawntowhat.core.type.RefChecks;
+import com.meteorite.itemdespawntowhat.core.type.condition.eval.SurroundingBlocksEvaluator;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -64,7 +65,7 @@ public record SurroundingBlocksCondition(
 
     // 条件类型定义，供注册表登记；静态工厂不能叫 type()（与 Condition#type 实例方法签名冲突）
     public static ConditionType<SurroundingBlocksCondition> conditionType() {
-        return new SimpleConditionType<>(ID, CODEC, SurroundingBlocksCondition::validateParams);
+        return new SimpleConditionType<>(ID, CODEC, SurroundingBlocksCondition::validateParams, SurroundingBlocksEvaluator::test);
     }
 
     // 参数语义校验：六个方向不能全空；非空方向做注册表存在性校验

@@ -7,15 +7,15 @@ import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleConditionType;
+import com.meteorite.itemdespawntowhat.core.type.EnumCodecs;
+import com.meteorite.itemdespawntowhat.core.type.condition.eval.BiomeEvaluator;
 import com.mojang.serialization.Codec;
-import com.mojang.serialization.DataResult;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 
 /**
@@ -23,10 +23,10 @@ import java.util.Optional;
  * - exact：按群系注册名或标签匹配，biomes 至少一项；
  * - climate：按原版 6 个气候参数（temperature / humidity / continentalness / erosion / depth / weirdness）
  *   的可选区间匹配，取值域 [-1,1]，两端可空表示该端不限制，至少需要给出一个区间。
- * 运行时采样入口（求值属阶段③）：ServerChunkCache.randomState().sampler()，
- * 采样点为掉落物所在方块位置，采样结果由求值层按位置缓存。
+ * 运行时判定见 BiomeEvaluator：exact 取当前位置群系逐个引用比对，climate 经 ClimateSampler 取 6 参数后逐区间比对；
+ * 采样入口为 ServerChunkCache.randomState().sampler()，采样点为掉落物所在方块位置，采样结果按位置缓存。
  * 生物群系属于动态注册表（不在 BuiltInRegistries 中），validateParams 只做语法与模式相关校验，
- * 群系 id / tag 的存在性复核留给阶段③ 的运行时/命令层（那里能拿到 RegistryAccess）。
+ * 群系 id / tag 的存在性复核留给运行时/命令层（那里能拿到 RegistryAccess）。
  * JSON 示例（exact）：{ "type": "itemdespawntowhat:biome", "mode": "exact", "biomes": ["#minecraft:is_forest"] }
  * JSON 示例（climate）：{ "type": "itemdespawntowhat:biome", "mode": "climate", "temperature": { "min": 0.2 } }
  */
@@ -62,7 +62,7 @@ public record BiomeCondition(
     // 参数编解码器：mode 必填，其余字段缺省为空，哪部分必填由 validateParams 判定
     public static final MapCodec<BiomeCondition> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
             CommonFields.negated(BiomeCondition::negated),
-            Mode.CODEC.fieldOf(FIELD_MODE).forGetter(BiomeCondition::mode),
+            EnumCodecs.lowerCase(Mode.class).fieldOf(FIELD_MODE).forGetter(BiomeCondition::mode),
             TaggedId.CODEC.listOf().optionalFieldOf(FIELD_BIOMES, List.of()).forGetter(BiomeCondition::biomes),
             ClimateRange.CODEC.optionalFieldOf(FIELD_TEMPERATURE)
                     .forGetter(value -> Optional.ofNullable(value.temperature())),
@@ -93,7 +93,7 @@ public record BiomeCondition(
 
     // 条件类型定义，供注册表登记；静态工厂不能叫 type()（与 Condition#type 实例方法签名冲突）
     public static ConditionType<BiomeCondition> conditionType() {
-        return new SimpleConditionType<>(ID, CODEC, BiomeCondition::validateParams);
+        return new SimpleConditionType<>(ID, CODEC, BiomeCondition::validateParams, BiomeEvaluator::test);
     }
 
     // 参数语义校验：mode 决定哪部分必填，未参与匹配的那部分给出告警而非错误
@@ -161,64 +161,14 @@ public record BiomeCondition(
     }
 
     /**
-     * 群系匹配子模式。
+     * 群系匹配子模式；JSON 取值由 core/type/EnumCodecs 统一为小写下划线且解析大小写不敏感。
      */
     public enum Mode {
 
         // 按群系注册名或标签精确匹配
-        EXACT("exact"),
+        EXACT,
         // 按原版气候参数区间匹配
-        CLIMATE("climate");
-
-        // JSON 取值（小写下划线）
-        private final String serializedName;
-
-        Mode(String serializedName) {
-            this.serializedName = serializedName;
-        }
-
-        // 字符串编解码：解析失败给出可读错误
-        public static final Codec<Mode> CODEC = Codec.STRING.comapFlatMap(Mode::parse, Mode::serializedName);
-
-        // JSON 取值
-        public String serializedName() {
-            return serializedName;
-        }
-
-        // 大小写不敏感解析；非法取值返回空
-        public static Optional<Mode> byName(String raw) {
-            if (raw == null) {
-                return Optional.empty();
-            }
-            String normalized = raw.trim().toLowerCase(Locale.ROOT);
-            for (Mode mode : values()) {
-                if (mode.serializedName.equals(normalized)) {
-                    return Optional.of(mode);
-                }
-            }
-            return Optional.empty();
-        }
-
-        // 解析入口：错误信息列出全部合法取值
-        private static DataResult<Mode> parse(String raw) {
-            Optional<Mode> parsed = byName(raw);
-            if (parsed.isPresent()) {
-                return DataResult.success(parsed.get());
-            }
-            return DataResult.error(() -> "未知的 biome mode: " + raw + "，可选: " + names());
-        }
-
-        // 合法取值文本
-        private static String names() {
-            StringBuilder builder = new StringBuilder();
-            for (Mode mode : values()) {
-                if (!builder.isEmpty()) {
-                    builder.append(", ");
-                }
-                builder.append(mode.serializedName);
-            }
-            return builder.toString();
-        }
+        CLIMATE
     }
 
     /**

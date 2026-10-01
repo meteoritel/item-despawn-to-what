@@ -8,6 +8,7 @@ import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleConditionType;
 import com.meteorite.itemdespawntowhat.core.type.RefChecks;
+import com.meteorite.itemdespawntowhat.core.type.condition.eval.CatalystPresentEvaluator;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
@@ -19,7 +20,7 @@ import java.util.List;
 /**
  * 条件类型 catalyst_present：判断掉落物附近是否存在指定的催化剂物品。
  * 参数 items 为候选物品引用（item id 或 #tag，至少一项），count 为需要的最少数量（1..64，默认 1）。
- * 说明：本阶段只做参数模型与校验，附近扫描属阶段③ 的求值器（需按半径与缓存策略实现）。
+ * 附近扫描范围见 CatalystPresentEvaluator：物品所在方块格的 1×1×1 范围，排除源物品自身与已死亡实体。
  * JSON 示例：{ "type": "itemdespawntowhat:catalyst_present", "items": ["minecraft:blaze_powder"], "count": 3 }
  */
 public record CatalystPresentCondition(boolean negated, List<TaggedId> items, int count) implements Condition {
@@ -56,7 +57,7 @@ public record CatalystPresentCondition(boolean negated, List<TaggedId> items, in
 
     // 条件类型定义，供注册表登记；静态工厂不能叫 type()（与 Condition#type 实例方法签名冲突）
     public static ConditionType<CatalystPresentCondition> conditionType() {
-        return new SimpleConditionType<>(ID, CODEC, CatalystPresentCondition::validateParams);
+        return new SimpleConditionType<>(ID, CODEC, CatalystPresentCondition::validateParams, CatalystPresentEvaluator::test);
     }
 
     // 参数语义校验：items 必填且逐项做注册表存在性校验，count 需落在 [1,64]

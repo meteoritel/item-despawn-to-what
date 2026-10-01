@@ -5,6 +5,7 @@ import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleConditionType;
+import com.meteorite.itemdespawntowhat.core.type.condition.eval.OutdoorEvaluator;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.resources.ResourceLocation;
@@ -32,7 +33,7 @@ public record OutdoorCondition(boolean negated) implements Condition {
 
     // 条件类型定义，供注册表登记；静态工厂不能叫 type()（与 Condition#type 实例方法签名冲突）
     public static ConditionType<OutdoorCondition> conditionType() {
-        return new SimpleConditionType<>(ID, CODEC, OutdoorCondition::validateParams);
+        return new SimpleConditionType<>(ID, CODEC, OutdoorCondition::validateParams, OutdoorEvaluator::test);
     }
 
     // 无类型专属参数，参数恒合法

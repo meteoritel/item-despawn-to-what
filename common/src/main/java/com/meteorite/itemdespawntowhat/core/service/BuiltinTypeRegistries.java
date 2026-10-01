@@ -4,7 +4,9 @@ import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
+import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
+import com.meteorite.itemdespawntowhat.core.type.effect.ConsumeSourceEffect;
 import com.meteorite.itemdespawntowhat.core.type.BuiltinConditionTypes;
 import com.meteorite.itemdespawntowhat.core.type.BuiltinEffectTypes;
 import com.mojang.serialization.Codec;
@@ -19,6 +21,11 @@ public record BuiltinTypeRegistries(
         TypeRegistry<EffectType<?>> effectTypes,
         Codec<ConditionExpression> conditionExpressionCodec
 ) {
+
+    // 规则的默认隐式消耗效果（Q8：规则未声明任何 consume_* 时隐式消耗 1 个源物品）
+    public Effect implicitSourceConsumption() {
+        return new ConsumeSourceEffect(1, 0, 1.0D, null);
+    }
 
     // 构建并冻结全部内置类型注册表
     public static BuiltinTypeRegistries create() {
