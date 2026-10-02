@@ -1,6 +1,9 @@
 package com.meteorite.itemdespawntowhat.core.service;
 
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
+import com.meteorite.itemdespawntowhat.core.extension.RuleTypeProvider;
+import java.util.ServiceLoader;
+import java.util.Comparator;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
@@ -49,9 +52,16 @@ public record BuiltinTypeRegistries(
 
     // 构建并冻结全部内置类型注册表
     public static BuiltinTypeRegistries create() {
-        TypeRegistry<ConditionType<?>> conditionTypes = BuiltinConditionTypes.create();
+        var providers = ServiceLoader.load(RuleTypeProvider.class).stream()
+                .sorted(Comparator.comparing(provider -> provider.type().getName()))
+                .map(ServiceLoader.Provider::get).toList();
+        var conditionTypes = BuiltinConditionTypes.createMutable();
+        providers.forEach(provider -> provider.registerConditions(conditionTypes));
+        conditionTypes.freeze();
         Codec<ConditionExpression> expressionCodec = RuleCodecs.conditionExpressionCodec(conditionTypes);
-        TypeRegistry<EffectType<?>> effectTypes = BuiltinEffectTypes.create(expressionCodec);
+        var effectTypes = BuiltinEffectTypes.createMutable(expressionCodec);
+        providers.forEach(provider -> provider.registerEffects(effectTypes, expressionCodec));
+        effectTypes.freeze();
         return new BuiltinTypeRegistries(conditionTypes, effectTypes, expressionCodec);
     }
 }

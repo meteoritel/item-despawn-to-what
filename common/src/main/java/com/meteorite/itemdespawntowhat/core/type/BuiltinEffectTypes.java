@@ -31,6 +31,13 @@ public final class BuiltinEffectTypes {
 
     // 构建并冻结内置效果类型注册表
     public static TypeRegistry<EffectType<?>> create(Codec<ConditionExpression> expressionCodec) {
+        SimpleTypeRegistry<EffectType<?>> registry = createMutable(expressionCodec);
+        registry.freeze();
+        return registry;
+    }
+
+    // 装配器在第三方 SPI 注册结束后统一冻结。
+    public static SimpleTypeRegistry<EffectType<?>> createMutable(Codec<ConditionExpression> expressionCodec) {
         SimpleTypeRegistry<EffectType<?>> registry = new SimpleTypeRegistry<>();
         registry.register(SpawnItemEffect.effectType(expressionCodec));
         registry.register(SpawnEntityEffect.effectType(expressionCodec));
@@ -44,7 +51,6 @@ public final class BuiltinEffectTypes {
         registry.register(ConsumeSourceEffect.effectType(expressionCodec));
         registry.register(ConsumeCatalystEffect.effectType(expressionCodec));
         registry.register(ConsumeFluidEffect.effectType(expressionCodec));
-        registry.freeze();
         return registry;
     }
 }

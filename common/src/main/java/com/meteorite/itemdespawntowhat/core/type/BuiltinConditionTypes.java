@@ -29,6 +29,13 @@ public final class BuiltinConditionTypes {
 
     // 构建并冻结内置条件类型注册表
     public static TypeRegistry<ConditionType<?>> create() {
+        SimpleTypeRegistry<ConditionType<?>> registry = createMutable();
+        registry.freeze();
+        return registry;
+    }
+
+    // 装配器在第三方 SPI 注册结束后统一冻结。
+    public static SimpleTypeRegistry<ConditionType<?>> createMutable() {
         SimpleTypeRegistry<ConditionType<?>> registry = new SimpleTypeRegistry<>();
         registry.register(DimensionCondition.conditionType());
         registry.register(BiomeCondition.conditionType());
@@ -40,7 +47,6 @@ public final class BuiltinConditionTypes {
         registry.register(TimeOfDayCondition.conditionType());
         registry.register(YLevelCondition.conditionType());
         registry.register(LightLevelCondition.conditionType());
-        registry.freeze();
         return registry;
     }
 }
