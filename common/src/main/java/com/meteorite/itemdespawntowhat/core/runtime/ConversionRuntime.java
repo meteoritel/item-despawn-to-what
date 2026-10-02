@@ -63,6 +63,12 @@ public final class ConversionRuntime {
     private static final class TrackedState {
         private int failureCount;
         private boolean locked;
+        // 下次到期判定的游戏刻（仅用于 debug 输出，-1 表示未排期）
+        private long nextCheckTick = -1L;
+    }
+
+    // 掉落物追踪状态快照，供 /idtw debug inspect|why 只读使用
+    public record TrackedItemInfo(boolean tracked, int failureCount, boolean locked, long nextCheckTick) {
     }
 
     public ConversionRuntime(ServerConfig config, BuiltinTypeRegistries types) {
@@ -171,6 +177,21 @@ public final class ConversionRuntime {
         return state == null ? 0 : state.tracked.size();
     }
 
+    // 单个掉落物的追踪状态（命令层只读）
+    public TrackedItemInfo debugInfo(ServerLevel level, ItemEntity entity) {
+        LevelState state = levels.get(level.dimension());
+        TrackedState tracked = state == null ? null : state.tracked.get(entity.getUUID());
+        if (tracked == null) {
+            return new TrackedItemInfo(false, 0, false, -1L);
+        }
+        return new TrackedItemInfo(true, tracked.failureCount, tracked.locked, tracked.nextCheckTick);
+    }
+
+    // 某个掉落物的候选规则（已按优先级 → 条件叶数 → 定义序排序），供 /idtw debug why 使用
+    public List<Rule> candidatesFor(ItemEntity entity) {
+        return index.candidates(itemIdOf(entity));
+    }
+
     public int pendingTasks(ServerLevel level) {
         LevelState state = levels.get(level.dimension());
         return state == null ? 0 : state.scheduler.pending();
@@ -196,12 +217,14 @@ public final class ConversionRuntime {
         }
         int dueAge = Math.min(earliestTrigger, lifespan - 1);
         long delay = Math.max(0, (long) dueAge - entity.getAge());
+        tracked.nextCheckTick = level.getGameTime() + delay;
         state.scheduler.schedule(level.getGameTime(), (int) Math.min(delay, Integer.MAX_VALUE),
                 () -> attempt(level, entity.getUUID()));
     }
 
     // 退避重试：条件不满足时不放弃，按退避序列重试直到自然消失
     private void reschedule(ServerLevel level, LevelState state, ItemEntity entity, TrackedState tracked, int delayTicks) {
+        tracked.nextCheckTick = level.getGameTime() + delayTicks;
         state.scheduler.schedule(level.getGameTime(), delayTicks, () -> attempt(level, entity.getUUID()));
         if (config.debugLogging()) {
             LOGGER.info("掉落物 {} 条件未满足，{} tick 后重试（第 {} 次失败）",
@@ -268,7 +291,15 @@ public final class ConversionRuntime {
                                    TrackedState tracked, Rule rule) {
         tracked.locked = true;
         try {
-            EffectContext base = effectContext(level, item, rule.id());
+            // 预先算好整堆能支持多少轮：rounds = 堆叠数 / 每轮源物品消耗量
+            // （不消耗源物品的规则固定 1 轮），随后一次性扣减 rounds×消耗 并产出 rounds×结果
+            int perRound = types.perRoundSourceConsumption(rule);
+            int available = item.getItem().getCount();
+            int rounds = perRound > 0 ? Math.max(1, available / perRound) : 1;
+            // 实际覆盖的源物品数：必须按 available 收敛（堆叠不足一轮时只算实际可扣的数量），
+            // 否则 spawn_xp 的 per_source_item 会多给经验；不消耗源物品的规则按 1 计
+            int covered = perRound > 0 ? Math.min(rounds * perRound, available) : 1;
+            EffectContext base = effectContext(level, item, rule.id(), rounds, covered);
             // 规则未声明任何 consume_* 时，按默认语义先隐式消耗 1 个源物品（Q8 / 规划书 3.1-4）
             if (rule.usesImplicitSourceConsumption()) {
                 dispatchEffect(level, item, base, types.implicitSourceConsumption());
@@ -277,7 +308,8 @@ public final class ConversionRuntime {
                 dispatchEffect(level, item, base, effect);
             }
             if (config.debugLogging()) {
-                LOGGER.info("掉落物 {} 已按规则 {} 转化（{} 个效果）", item.getUUID(), rule.id(), rule.effects().size());
+                LOGGER.info("掉落物 {} 已按规则 {} 转化（{} 轮 × {} 个效果）",
+                        item.getUUID(), rule.id(), rounds, rule.effects().size());
             }
         } finally {
             tracked.locked = false;
@@ -341,9 +373,11 @@ public final class ConversionRuntime {
         return new RuntimeConditionContext(level, item, pos, level.random, state.tags, state.climate);
     }
 
-    private EffectContext effectContext(ServerLevel level, ItemEntity item, ResourceLocation ruleId) {
+    private EffectContext effectContext(ServerLevel level, ItemEntity item, ResourceLocation ruleId,
+                                       int rounds, int coveredSourceItems) {
         LevelState state = stateOf(level);
-        return new RuntimeEffectContext(level, item, item.position(), ruleId, state.scheduler);
+        return new RuntimeEffectContext(level, item, item.position(), ruleId, state.scheduler,
+                rounds, coveredSourceItems);
     }
 
     // 清理：实体已消失 / 已不在本维度 / 已无候选规则的追踪项

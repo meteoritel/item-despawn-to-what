@@ -10,13 +10,18 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /**
  * spawn_item 执行器：在触发位置生成物品，并按 limit/radius 做邻近累积检测。
+ * rounds 语义：产出/消耗按 context.rounds() 缩放，并受既有 limit/radius 与可扣数量收敛。
  * 约定：delay_ticks / chance / 效果级 conditions 由运行时统一处理，本类不再判断；
  * 异常不吞、不捕获，由运行时统一捕获并记录（规则 id + 效果类型 + 位置）。
  */
 public final class SpawnItemExecutor {
+
+    private static final Logger LOGGER = LogManager.getLogger();
 
     // 配置了 limit 但未配置 radius 时使用的邻近检测半径
     public static final int DEFAULT_SEARCH_RADIUS = 6;
@@ -28,7 +33,12 @@ public final class SpawnItemExecutor {
     public static void execute(SpawnItemEffect effect, EffectContext context) {
         Item item = EffectTargets.resolveOrThrow(effect.item(), BuiltInRegistries.ITEM, context.random(),
                 SpawnItemEffect.ITEM_FIELD);
-        int count = allowedCount(effect, context, item);
+        // 整堆一次性转化：产出量 = count × rounds
+        int requested = EffectTargets.saturatedMultiply(effect.count(), context.rounds());
+        int count = allowedCount(effect, context, item, requested);
+        if (count < requested) {
+            LOGGER.debug("spawn_item 产出被邻近上限收敛：规则={} 期望={} 实际={}", context.ruleId(), requested, count);
+        }
         if (count <= 0) {
             return;
         }
@@ -36,13 +46,13 @@ public final class SpawnItemExecutor {
     }
 
     // 结合 limit/radius 计算本次实际可产出的物品数量；limit 为空表示不限制
-    private static int allowedCount(SpawnItemEffect effect, EffectContext context, Item item) {
+    private static int allowedCount(SpawnItemEffect effect, EffectContext context, Item item, int requested) {
         if (effect.limit() == null) {
-            return effect.count();
+            return requested;
         }
         int radius = effect.radius() == null ? DEFAULT_SEARCH_RADIUS : effect.radius();
         int existing = countNearby(context, item, radius, effect.limit());
-        return Math.max(0, Math.min(effect.count(), effect.limit() - existing));
+        return Math.max(0, Math.min(requested, effect.limit() - existing));
     }
 
     // 统计半径内同类产物总量；达到 limit 立即返回，避免无谓遍历

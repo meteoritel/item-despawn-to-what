@@ -19,14 +19,29 @@ public final class RuntimeEffectContext implements EffectContext {
     private final Vec3 position;
     private final ResourceLocation ruleId;
     private final TickScheduler scheduler;
+    private final int rounds;
+    private final int coveredSourceItems;
 
     public RuntimeEffectContext(ServerLevel level, ItemEntity source, Vec3 position,
-                               ResourceLocation ruleId, TickScheduler scheduler) {
+                               ResourceLocation ruleId, TickScheduler scheduler,
+                               int rounds, int coveredSourceItems) {
         this.level = level;
         this.source = source;
         this.position = position;
         this.ruleId = ruleId;
         this.scheduler = scheduler;
+        this.rounds = Math.max(1, rounds);
+        this.coveredSourceItems = Math.max(1, coveredSourceItems);
+    }
+
+    @Override
+    public int rounds() {
+        return rounds;
+    }
+
+    @Override
+    public int coveredSourceItems() {
+        return coveredSourceItems;
     }
 
     @Override

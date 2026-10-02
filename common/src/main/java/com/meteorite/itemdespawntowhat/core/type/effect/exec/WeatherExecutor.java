@@ -7,6 +7,7 @@ import net.minecraft.server.level.ServerLevel;
 /**
  * weather 执行器：切换触发维度的天气与持续时长。
  * 无天空光的维度不适用天气；已处于目标天气时不重复设置，避免打断正在进行的天气。
+ * rounds 语义：一次性世界效果，不随 rounds 缩放（不是「每个物品一份」的结果）。
  * 约定：delay_ticks / chance / 效果级 conditions 由运行时统一处理，本类不再判断；
  * 异常不吞、不捕获，由运行时统一捕获并记录（规则 id + 效果类型 + 位置）。
  */

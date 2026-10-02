@@ -13,16 +13,21 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Comparator;
 import java.util.List;
 
 /**
- * consume_catalyst 执行器：在 radius 范围内由近及远消耗 items 命中的催化剂物品，总量不超过 count。
+ * consume_catalyst 执行器：在 radius 范围内由近及远消耗 items 命中的催化剂物品，总量不超过 count × rounds。
+ * rounds 语义：产出/消耗按 context.rounds() 缩放，并受既有 limit/radius 与可扣数量收敛。
  * 约定：delay_ticks / chance / 效果级 conditions 由运行时统一处理，本类不再判断；
  * 异常不吞、不捕获，由运行时统一捕获并记录（规则 id + 效果类型 + 位置）。
  */
 public final class ConsumeCatalystExecutor {
+
+    private static final Logger LOGGER = LogManager.getLogger();
 
     private ConsumeCatalystExecutor() {
         throw new UnsupportedOperationException("Utility class");
@@ -36,26 +41,29 @@ public final class ConsumeCatalystExecutor {
         AABB box = EffectTargets.blockBox(center, effect.radius());
         List<ItemEntity> candidates = level.getEntitiesOfClass(ItemEntity.class, box,
                 entity -> entity != source && entity.isAlive() && !entity.getItem().isEmpty());
-        if (candidates.isEmpty()) {
-            return;
+        // 整堆一次性转化：期望消耗总量 = count × rounds
+        int remaining = EffectTargets.saturatedMultiply(effect.count(), context.rounds());
+        if (!candidates.isEmpty()) {
+            // 由近及远消耗，使结果不依赖实体遍历顺序
+            candidates.sort(Comparator.comparingDouble((ItemEntity entity) -> entity.distanceToSqr(position)));
+            for (ItemEntity candidate : candidates) {
+                if (remaining <= 0) {
+                    break;
+                }
+                ItemStack stack = candidate.getItem();
+                if (!matchesAny(effect.items(), stack)) {
+                    continue;
+                }
+                int take = Math.min(remaining, stack.getCount());
+                stack.shrink(take);
+                remaining -= take;
+                if (stack.isEmpty()) {
+                    candidate.discard();
+                }
+            }
         }
-        // 由近及远消耗，使结果不依赖实体遍历顺序
-        candidates.sort(Comparator.comparingDouble((ItemEntity entity) -> entity.distanceToSqr(position)));
-        int remaining = effect.count();
-        for (ItemEntity candidate : candidates) {
-            if (remaining <= 0) {
-                break;
-            }
-            ItemStack stack = candidate.getItem();
-            if (!matchesAny(effect.items(), stack)) {
-                continue;
-            }
-            int take = Math.min(remaining, stack.getCount());
-            stack.shrink(take);
-            remaining -= take;
-            if (stack.isEmpty()) {
-                candidate.discard();
-            }
+        if (remaining > 0) {
+            LOGGER.debug("consume_catalyst 催化剂不足，剩余未消耗 {} 个：规则={}", remaining, context.ruleId());
         }
     }
 

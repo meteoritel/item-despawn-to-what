@@ -11,6 +11,7 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * lightning 执行器：第一道闪电精确落在触发位置，后续按间隔在附近散布，均落到地面高度。
+ * rounds 语义：一次性世界效果，不随 rounds 缩放（不是「每个物品一份」的结果）。
  * 约定：delay_ticks / chance / 效果级 conditions 由运行时统一处理，本类不再判断；
  * 异常不吞、不捕获，由运行时统一捕获并记录（规则 id + 效果类型 + 位置）。
  */

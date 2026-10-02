@@ -7,7 +7,9 @@ import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * spawn_xp 执行器：在触发位置生成经验球；per_source_item 为真时按源堆叠数量倍增。
+ * spawn_xp 执行器：在触发位置生成经验球。
+ * rounds 语义：amount 按 rounds 缩放；per_source_item 表示"每个源物品一份"，
+ * 倍率改用 coveredSourceItems()（= rounds × 每轮源物品消耗量的精确值）而不是叠加快照，二者不叠加。
  * 约定：delay_ticks / chance / 效果级 conditions 由运行时统一处理，本类不再判断；
  * 异常不吞、不捕获，由运行时统一捕获并记录（规则 id + 效果类型 + 位置）。
  */
@@ -18,10 +20,9 @@ public final class SpawnXpExecutor {
     }
 
     public static void execute(SpawnXpEffect effect, EffectContext context) {
-        int amount = effect.amount();
-        if (effect.perSourceItem()) {
-            amount = EffectTargets.saturatedMultiply(amount, Math.max(1, context.sourceStack().getCount()));
-        }
+        // 整堆一次性转化：默认按 rounds 倍率；per_source_item 按实际覆盖的源物品数（精确值，含每轮消耗量）
+        int multiplier = effect.perSourceItem() ? context.coveredSourceItems() : context.rounds();
+        int amount = EffectTargets.saturatedMultiply(effect.amount(), multiplier);
         if (amount <= 0) {
             return;
         }

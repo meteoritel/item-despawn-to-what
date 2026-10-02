@@ -9,6 +9,8 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,10 +18,13 @@ import java.util.List;
 /**
  * place_block 执行器：由触发位置向外逐层放置方块，形状与数量由参数决定。
  * 未配置 block 时按 use_source_block 取源物品对应的方块。
+ * rounds 语义：产出/消耗按 context.rounds() 缩放，并受既有 limit/radius 与可扣数量收敛。
  * 约定：delay_ticks / chance / 效果级 conditions 由运行时统一处理，本类不再判断；
  * 异常不吞、不捕获，由运行时统一捕获并记录（规则 id + 效果类型 + 位置）。
  */
 public final class PlaceBlockExecutor {
+
+    private static final Logger LOGGER = LogManager.getLogger();
 
     private PlaceBlockExecutor() {
         throw new UnsupportedOperationException("Utility class");
@@ -28,7 +33,9 @@ public final class PlaceBlockExecutor {
     public static void execute(PlaceBlockEffect effect, EffectContext context) {
         ServerLevel level = context.level();
         Block block = resolveBlock(effect, context);
-        int target = allowedCount(effect, context, block);
+        // 整堆一次性转化：目标数量 = count × rounds，再按 limit 与半径内可放置空间收敛
+        int requested = EffectTargets.saturatedMultiply(effect.count(), context.rounds());
+        int target = allowedCount(effect, context, block, requested);
         if (target <= 0) {
             return;
         }
@@ -47,6 +54,9 @@ public final class PlaceBlockExecutor {
                 level.setBlock(pos, state, Block.UPDATE_ALL);
                 placed++;
             }
+        }
+        if (placed < target) {
+            LOGGER.debug("place_block 可放置位置不足：规则={} 期望={} 实际={}", context.ruleId(), target, placed);
         }
     }
 
@@ -69,13 +79,13 @@ public final class PlaceBlockExecutor {
     }
 
     // 结合 limit 与放置半径计算本次实际可放置的方块数量；limit 为空表示不限制
-    private static int allowedCount(PlaceBlockEffect effect, EffectContext context, Block block) {
+    private static int allowedCount(PlaceBlockEffect effect, EffectContext context, Block block, int requested) {
         if (effect.limit() == null) {
-            return effect.count();
+            return requested;
         }
         int existing = countNearby(BlockPos.containing(context.position().x, context.position().y,
                 context.position().z), effect.radius(), effect.limit(), context.level(), block);
-        return Math.max(0, Math.min(effect.count(), effect.limit() - existing));
+        return Math.max(0, Math.min(requested, effect.limit() - existing));
     }
 
     // 统计半径内同类方块数量；达到 limit 立即返回

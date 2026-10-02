@@ -11,6 +11,7 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * explosion 执行器：产生一次爆炸；visual_only 为真时只播放粒子与音效，不破坏方块、不伤害实体。
+ * rounds 语义：一次性世界效果，不随 rounds 缩放（不是「每个物品一份」的结果）。
  * 约定：delay_ticks / chance / 效果级 conditions 由运行时统一处理，本类不再判断；
  * 异常不吞、不捕获，由运行时统一捕获并记录（规则 id + 效果类型 + 位置）。
  */

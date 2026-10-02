@@ -31,6 +31,20 @@ public interface EffectContext {
     // 触发本条规则的规则 id（用于日志与调试定位）
     ResourceLocation ruleId();
 
+    /**
+     * 本次转化一次性应用的轮数（≥1）。
+     * 运行时按"整堆能支持多少轮"预先算好：rounds = 堆叠数 / 每轮源物品消耗量。
+     * 产出类与消耗类效果应把自己的 count 乘以本值（并按邻域上限 clamp）；
+     * 一次性世界效果（闪电/爆炸/箭雨/天气）不乘。
+     */
+    int rounds();
+
+    /**
+     * 本次转化实际覆盖的源物品数量 = rounds × 每轮源物品消耗量（不消耗源物品时为 1）。
+     * 需要"按源物品逐个计算"的效果（如 spawn_xp 的 per_source_item）应使用本值而不是 rounds。
+     */
+    int coveredSourceItems();
+
     // 登记一个延迟任务：delayTicks 为 0 时立即执行
     void schedule(int delayTicks, Runnable task);
 }

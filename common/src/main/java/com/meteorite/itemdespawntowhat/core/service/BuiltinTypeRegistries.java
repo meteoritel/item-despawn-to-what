@@ -5,6 +5,7 @@ import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
+import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
 import com.meteorite.itemdespawntowhat.core.type.effect.ConsumeSourceEffect;
 import com.meteorite.itemdespawntowhat.core.type.BuiltinConditionTypes;
@@ -21,6 +22,25 @@ public record BuiltinTypeRegistries(
         TypeRegistry<EffectType<?>> effectTypes,
         Codec<ConditionExpression> conditionExpressionCodec
 ) {
+
+    /**
+     * 该规则每轮消耗的源物品数量：
+     * - 未声明任何 consume_* 效果 → 隐式消耗 1（Q8）；
+     * - 显式声明 consume_source → 取其 count（多条时累加，加载期已禁止同类型重复）；
+     * - 只声明了其它消耗效果（如 consume_fluid）→ 0，表示不按堆叠轮次展开。
+     */
+    public int perRoundSourceConsumption(Rule rule) {
+        if (rule.usesImplicitSourceConsumption()) {
+            return 1;
+        }
+        int declared = 0;
+        for (Effect effect : rule.effects()) {
+            if (effect instanceof ConsumeSourceEffect consume) {
+                declared += Math.max(0, consume.count());
+            }
+        }
+        return declared;
+    }
 
     // 规则的默认隐式消耗效果（Q8：规则未声明任何 consume_* 时隐式消耗 1 个源物品）
     public Effect implicitSourceConsumption() {
