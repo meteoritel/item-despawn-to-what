@@ -1,174 +1,182 @@
 package com.meteorite.itemdespawntowhat.core.network.transport;
 
 import net.minecraft.world.entity.player.Player;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 /**
- * 服务端变更集分片重组器（新链路独立实现，不引用旧 network 包）。
- * 限额与超时口径见 {@link RuleEditLimits}：单片 ≤ 30 KB、总量 ≤ 4 MiB、
- * 单次传输空闲 60s 过期、每玩家最多 2 个并发传输；过期与去重都在接收时顺带清理。
+ * 大变更集分片重组器（契约 §3.3）：按玩家 + transferId 分组，收齐后返回完整变更集文本。
+ * 时钟一律用服务端活动 tick（20 tick = 1 秒），暂停时不推进；同一玩家最多 2 个在途传输。
  */
 public final class RuleEditChunkAccumulator {
 
-    private static final Logger LOGGER = LogManager.getLogger();
-    // 玩家 → (transferId → 分片会话)
+    // 玩家 UUID -> (transferId -> 传输会话)
     private static final Map<UUID, Map<String, ChunkSession>> SESSIONS = new HashMap<>();
 
     private RuleEditChunkAccumulator() {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    // 接收一个分片；收齐时返回完整 JSON 文本，未收齐或非法时返回 null
-    public static synchronized @Nullable String accept(Player player, SaveRuleChangeSetChunkPayload payload) {
+    /***
+     * 分片重组结果：收齐时 complete=true 且 json 非空；收齐后超过变更集总量上限时 rejected=true；
+     * 其余情况（未收齐、形状非法）两者皆为 false。调用方据此决定"等待"还是回 INVALID_REQUEST。
+     */
+    public record AcceptResult(boolean complete, boolean rejected, String json) {
+
+        // 未收齐（含形状非法，形状校验由调用方先行判定）
+        private static final AcceptResult PENDING = new AcceptResult(false, false, "");
+        // 收齐但超过契约总量上限
+        private static final AcceptResult REJECTED = new AcceptResult(false, true, "");
+    }
+
+    // 接收一片；收齐返回 complete=true 的结果，超量返回 rejected=true
+    public static synchronized AcceptResult accept(Player player, SaveRuleChangeSetChunkPayload payload, long tick) {
         if (player == null || payload == null) {
-            return null;
+            return AcceptResult.PENDING;
         }
-        if (payload.chunkCount() <= 0 || payload.chunkCount() > RuleEditLimits.MAX_CHUNK_COUNT) {
-            LOGGER.warn("拒绝分片：片数 {} 非法（玩家 {}）", payload.chunkCount(), player.getUUID());
-            return null;
+        if (!isShapeValid(payload)) {
+            return AcceptResult.PENDING;
         }
         String transferId = payload.transferId();
-        if (transferId == null || transferId.isBlank()
-                || transferId.length() > RuleEditLimits.MAX_TRANSFER_ID_LENGTH) {
-            LOGGER.warn("拒绝分片：transferId 非法（玩家 {}）", player.getUUID());
-            return null;
-        }
-        String chunkData = payload.chunkData();
-        if (chunkData == null) {
-            return null;
-        }
-        int chunkBytes = RuleEditLimits.encodedLength(chunkData);
-        if (chunkBytes > RuleEditLimits.MAX_CHUNK_BYTES) {
-            LOGGER.warn("拒绝分片：单片 {} 字节超过上限（玩家 {}）", chunkBytes, player.getUUID());
-            return null;
-        }
-        if (payload.chunkIndex() < 0 || payload.chunkIndex() >= payload.chunkCount()) {
-            LOGGER.warn("拒绝分片：下标 {}/{} 非法（玩家 {}）",
-                    payload.chunkIndex(), payload.chunkCount(), player.getUUID());
-            return null;
-        }
-
-        long now = System.currentTimeMillis();
+        int count = payload.count();
+        int index = payload.index();
+        String chunk = payload.chunk();
         UUID playerId = player.getUUID();
-        Map<String, ChunkSession> sessions = SESSIONS.get(playerId);
-        if (sessions != null) {
-            // 过期会话在接收路径上顺带清理，避免依赖额外的定时任务
-            sessions.values().removeIf(session -> session.isExpired(now));
-        }
-
-        ChunkSession session = sessions == null ? null : sessions.get(transferId);
+        Map<String, ChunkSession> byTransfer = SESSIONS.computeIfAbsent(playerId, key -> new HashMap<>());
+        ChunkSession session = byTransfer.get(transferId);
         if (session == null) {
-            if (sessions == null) {
-                sessions = new HashMap<>();
-                SESSIONS.put(playerId, sessions);
+            if (byTransfer.size() >= RuleEditLimits.MAX_TRANSFERS_PER_PLAYER) {
+                // 在途传输过多：丢弃最早的一个，避免单玩家占用过多内存
+                Iterator<String> iterator = byTransfer.keySet().iterator();
+                if (iterator.hasNext()) {
+                    iterator.next();
+                    iterator.remove();
+                }
             }
-            if (sessions.size() >= RuleEditLimits.MAX_TRANSFERS_PER_PLAYER) {
-                LOGGER.warn("拒绝分片：玩家 {} 并发传输已达上限", playerId);
-                return null;
-            }
-            session = new ChunkSession(payload.chunkCount());
-            sessions.put(transferId, session);
-        } else if (session.chunkCount != payload.chunkCount()) {
-            LOGGER.warn("拒绝分片：transferId {} 的片数不一致（玩家 {}）", transferId, playerId);
-            sessions.remove(transferId);
-            cleanup(playerId, sessions);
-            return null;
+            session = new ChunkSession(payload.sessionId(), payload.operationId(), count, tick);
+            byTransfer.put(transferId, session);
+        } else if (!session.matches(payload.sessionId(), payload.operationId(), count)) {
+            // 同一 transferId 换了会话或操作：视为新传输，重置以避免串包
+            session = new ChunkSession(payload.sessionId(), payload.operationId(), count, tick);
+            byTransfer.put(transferId, session);
         }
-
-        if (!session.addChunk(payload.chunkIndex(), chunkData, chunkBytes)) {
-            LOGGER.warn("拒绝分片：transferId {} 累计超过大小上限（玩家 {}）", transferId, playerId);
-            sessions.remove(transferId);
-            cleanup(playerId, sessions);
-            return null;
+        session.touch(tick);
+        String complete = session.offer(index, chunk);
+        if (complete == null) {
+            return AcceptResult.PENDING;
         }
-        if (!session.isComplete()) {
-            return null;
+        byTransfer.remove(transferId);
+        if (byTransfer.isEmpty()) {
+            SESSIONS.remove(playerId);
         }
-
-        String joined = session.join();
-        sessions.remove(transferId);
-        cleanup(playerId, sessions);
-        if (RuleEditLimits.encodedLength(joined) > RuleEditLimits.MAX_CHANGE_SET_BYTES) {
-            LOGGER.warn("拒绝分片：重组后超过变更集大小上限（玩家 {}）", playerId);
-            return null;
+        if (RuleEditLimits.encodedLength(complete) > RuleEditLimits.MAX_CHANGE_SET_BYTES) {
+            return AcceptResult.REJECTED;
         }
-        return joined;
+        return new AcceptResult(true, false, complete);
     }
 
-    // 定期释放空闲分片，避免只发送部分数据的在线玩家长期持有缓存。
-    public static synchronized void expireIdle(long now) {
-        SESSIONS.values().forEach(sessions -> sessions.values().removeIf(session -> session.isExpired(now)));
-        SESSIONS.values().removeIf(Map::isEmpty);
+    // 分片形状校验：transferId/序号/总数/单片长度任一非法即拒绝
+    public static boolean isShapeValid(SaveRuleChangeSetChunkPayload payload) {
+        if (payload == null) {
+            return false;
+        }
+        String transferId = payload.transferId();
+        int count = payload.count();
+        int index = payload.index();
+        if (transferId == null || transferId.isEmpty()
+                || transferId.length() > RuleEditLimits.MAX_TRANSFER_ID_LENGTH
+                || count <= 0 || count > RuleEditLimits.MAX_CHUNK_COUNT
+                || index < 0 || index >= count) {
+            return false;
+        }
+        String chunk = payload.chunk();
+        return chunk != null && RuleEditLimits.encodedLength(chunk) <= RuleEditLimits.MAX_CHUNK_BYTES;
     }
 
-    // 清理某个玩家的全部未完成传输（玩家断开时调用）
+    // 清理超过空闲阈值的分片传输（按活动 tick 计）
+    public static synchronized void expireIdle(long tick) {
+        Iterator<Map.Entry<UUID, Map<String, ChunkSession>>> players = SESSIONS.entrySet().iterator();
+        while (players.hasNext()) {
+            Map<String, ChunkSession> byTransfer = players.next().getValue();
+            byTransfer.entrySet().removeIf(entry -> tick - entry.getValue().lastTick > RuleEditLimits.TRANSFER_TIMEOUT_TICKS);
+            if (byTransfer.isEmpty()) {
+                players.remove();
+            }
+        }
+    }
+
+    // 清理某玩家的全部在途传输
     public static synchronized void clear(UUID playerId) {
         if (playerId != null) {
             SESSIONS.remove(playerId);
         }
     }
 
-    // 清理全部未完成传输（服务端停止时调用）
+    // 清空全部在途传输（停服时调用）
     public static synchronized void clearAll() {
         SESSIONS.clear();
     }
 
-    // 会话清空后移除玩家条目，避免空 Map 常驻
-    private static void cleanup(UUID playerId, Map<String, ChunkSession> sessions) {
-        if (sessions.isEmpty()) {
-            SESSIONS.remove(playerId);
-        }
-    }
-
-    // 单次分片传输的接收状态
+    /***
+     * 单个分片传输的接收状态。
+     */
     private static final class ChunkSession {
 
-        private final int chunkCount;
+        private final String sessionId;
+        private final String operationId;
+        private final int count;
         private final String[] chunks;
-        private int receivedCount;
+        private int received;
         private int receivedBytes;
-        private long lastActivityTime;
+        private long lastTick;
 
-        private ChunkSession(int chunkCount) {
-            this.chunkCount = chunkCount;
-            this.chunks = new String[chunkCount];
-            this.lastActivityTime = System.currentTimeMillis();
+        private ChunkSession(String sessionId, String operationId, int count, long tick) {
+            this.sessionId = sessionId == null ? "" : sessionId;
+            this.operationId = operationId == null ? "" : operationId;
+            this.count = count;
+            this.chunks = new String[count];
+            this.received = 0;
+            this.receivedBytes = 0;
+            this.lastTick = tick;
         }
 
-        // 记录一片；重复下标按首片为准，累计超限返回 false
-        private boolean addChunk(int index, String data, int bytes) {
-            lastActivityTime = System.currentTimeMillis();
+        // 判断分片是否属于同一逻辑传输
+        private boolean matches(String sessionId, String operationId, int count) {
+            return this.count == count
+                    && this.sessionId.equals(sessionId == null ? "" : sessionId)
+                    && this.operationId.equals(operationId == null ? "" : operationId);
+        }
+
+        // 刷新活动时间
+        private void touch(long tick) {
+            this.lastTick = tick;
+        }
+
+        // 写入一片；已存在的下标按首片为准，收齐返回拼接结果，否则返回 null
+        private String offer(int index, String chunk) {
             if (chunks[index] == null) {
-                if (receivedBytes + bytes > RuleEditLimits.MAX_CHANGE_SET_BYTES) {
-                    return false;
-                }
-                chunks[index] = data;
-                receivedCount++;
-                receivedBytes += bytes;
+                chunks[index] = chunk;
+                received++;
+                receivedBytes += RuleEditLimits.encodedLength(chunk);
             }
-            return true;
-        }
-
-        private boolean isComplete() {
-            return receivedCount >= chunkCount;
-        }
-
-        private boolean isExpired(long now) {
-            return now - lastActivityTime > RuleEditLimits.TRANSFER_TIMEOUT_MILLIS;
-        }
-
-        private String join() {
-            StringBuilder builder = new StringBuilder(receivedBytes);
-            for (String chunk : chunks) {
-                if (chunk != null) {
-                    builder.append(chunk);
+            if (received < count) {
+                return null;
+            }
+            StringBuilder builder = new StringBuilder(Math.max(receivedBytes, 64));
+            List<String> ordered = new ArrayList<>(count);
+            for (String part : chunks) {
+                if (part == null) {
+                    return null;
                 }
+                ordered.add(part);
+            }
+            for (String part : ordered) {
+                builder.append(part);
             }
             return builder.toString();
         }

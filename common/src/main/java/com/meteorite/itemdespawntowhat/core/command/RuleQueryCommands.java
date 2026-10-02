@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoadResult;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshot;
+import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshotEntry;
 import com.meteorite.itemdespawntowhat.core.service.RuleSnapshotAssembler;
 import com.mojang.brigadier.arguments.ArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
@@ -110,11 +111,12 @@ final class RuleQueryCommands {
                 registries.effectTypes(),
                 registries.conditionTypes(),
                 RuleCommandText.issueTexts(merged));
-        for (JsonObject entry : snapshot.rules()) {
-            if (!entry.has(RuleSnapshotAssembler.RULE_KEY) || !entry.get(RuleSnapshotAssembler.RULE_KEY).isJsonObject()) {
+        for (RuleSnapshotEntry entry : snapshot.entries()) {
+            // effective 为"当前生效视图"：覆盖层条目即文件原文，数据包条目为模型编码结果
+            JsonObject rule = entry.effective();
+            if (rule == null) {
                 continue;
             }
-            JsonObject rule = entry.getAsJsonObject(RuleSnapshotAssembler.RULE_KEY);
             if (rule.has("id") && id.toString().equals(rule.get("id").getAsString())) {
                 return rule;
             }

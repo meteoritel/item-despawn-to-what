@@ -1,10 +1,15 @@
 package com.meteorite.itemdespawntowhat.core.service;
 
+import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.RuleDecoder;
+import com.meteorite.itemdespawntowhat.core.load.DatapackRuleReader;
 import com.meteorite.itemdespawntowhat.core.load.LoadedRule;
+import com.meteorite.itemdespawntowhat.core.load.OverlayRuleReader;
+import com.meteorite.itemdespawntowhat.core.load.RawRuleEntry;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoadRequest;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoadResult;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoader;
+import com.meteorite.itemdespawntowhat.core.load.RuleSourceIndex;
 import com.meteorite.itemdespawntowhat.core.load.RuleSourceLayer;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
@@ -51,6 +56,19 @@ public final class RuleLoadingService {
             }
         }
         return new RuleLoadResult<>(List.copyOf(valid), loaded.issues());
+    }
+
+    // 重建来源分层索引：数据包层原始条目在前、覆盖层原始条目在后（层优先级升序）
+    // 保留被覆盖/停用/屏蔽的原始基底，供快照装配（RuleSnapshotAssembler）与编辑判定使用
+    public static RuleSourceIndex sourceIndex(RuleLoadContext context, IssueCollector issues) {
+        List<RawRuleEntry> raw = new ArrayList<>();
+        if (context.resourceManager() != null && context.layerResolver() != null) {
+            raw.addAll(DatapackRuleReader.read(context.resourceManager(), context.layerResolver(), issues));
+        }
+        if (context.overlayRoot() != null) {
+            raw.addAll(OverlayRuleReader.read(context.overlayRoot(), context.overlayNamespace(), issues));
+        }
+        return RuleSourceIndex.build(List.copyOf(raw));
     }
 
     // 按来源层统计规则条数，供 /idtw config list 与 /idtw debug stats 输出

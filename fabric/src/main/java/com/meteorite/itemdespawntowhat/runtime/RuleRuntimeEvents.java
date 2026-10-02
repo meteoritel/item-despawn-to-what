@@ -64,7 +64,8 @@ public final class RuleRuntimeEvents {
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             DebugSessionManager.tick(server, RuleRuntimeHost.commandContext());
             if (server.getTickCount() % 20 == 0) {
-                com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler.expireIdle();
+                com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler
+                        .expireIdle(server, RuleRuntimeHost.editContext());
             }
         });
 

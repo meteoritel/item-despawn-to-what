@@ -66,14 +66,6 @@ public final class RuleRuntimeHost {
         return EDIT_CONTEXT;
     }
 
-    // 网络保存后的重建入口：与数据包重载共用同一 apply 路径，必须由服务端线程调用（纯新增，不改变既有重载语义）
-    public static void reload(MinecraftServer server) {
-        if (server == null) {
-            return;
-        }
-        applyReload(server.getResourceManager(), server.registryAccess());
-    }
-
     // 命令层入口：以窄接口暴露运行时、模组级配置与编辑层统计（阶段⑤ /idtw 命令树）
     public static RuleCommandContext commandContext() {
         return COMMAND_CONTEXT;
@@ -154,7 +146,10 @@ public final class RuleRuntimeHost {
 
         @Override
         public void rebuildAndRescan(MinecraftServer server) {
-            reload(server);
+            // 与 Fabric 侧行为一致：重载失败必须抛异常，让保存流程回 SAVED_NOT_RELOADED（已写盘但未重载）
+            if (applyReload(server.getResourceManager(), server.registryAccess()) == null) {
+                throw new IllegalStateException("保存后的运行时重载失败");
+            }
         }
     };
 

@@ -99,7 +99,8 @@ public final class RuleRuntimeEvents {
     public static void onServerTick(net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) {
         DebugSessionManager.tick(event.getServer(), RuleRuntimeHost.commandContext());
         if (event.getServer().getTickCount() % 20 == 0) {
-            com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler.expireIdle();
+            com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler
+                    .expireIdle(event.getServer(), RuleRuntimeHost.editContext());
         }
     }
 

@@ -23,11 +23,12 @@ public final class RuleCommandTree {
 
     // 把新链路命令树注册到调度器；平台初始化时调用一次
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher, RuleCommandContext context) {
+        // 根节点不再统一鉴权：契约 §3.7 要求 edit-lock status 任何玩家可用，
+        // 权限下放到各子分支（config 的写操作与 rule/debug 全部保留 hasAccess）
         var root = Commands.literal(ROOT)
-                .requires(RuleCommandTree::hasAccess)
                 .then(RuleConfigCommands.build(context))
                 .then(RuleQueryCommands.build(context));
-        if (DebugMode.ENABLED) { root.then(RuleDebugCommands.build(context)); }
+        if (DebugMode.ENABLED) { root.then(RuleDebugCommands.build(context).requires(RuleCommandTree::hasAccess)); }
         dispatcher.register(root);
     }
 

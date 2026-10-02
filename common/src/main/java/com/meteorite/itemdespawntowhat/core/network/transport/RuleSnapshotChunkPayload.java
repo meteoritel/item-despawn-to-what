@@ -7,30 +7,32 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * C2S：大变更集的分片（契约 §3.3）。transferId 标识一次传输，index 从 0 递增，count 为总分片数。
- * 服务端按 transferId 重组（{@link RuleEditChunkAccumulator}），收齐后走与直发完全相同的保存流程。
+ * S2C：大快照的分片（契约 §3.3 的分片规则 + Lead 批准的新增载荷）。
+ * 快照序列化后不超过 {@link RuleEditLimits#MAX_SNAPSHOT_BYTES} 时仍走整包 {@link RuleSnapshotPayload}；
+ * 超限时改发 N 片：同一 transferId、index 从 0 到 count-1，客户端收齐按顺序拼接后走 RuleSnapshot.parse。
+ * 服务端在途上限与"60 秒无进展即丢弃"沿用契约 §3.3 的规定。
  */
-public record SaveRuleChangeSetChunkPayload(String sessionId, String operationId, String transferId,
-                                            int index, int count, String chunk) implements CustomPacketPayload {
+public record RuleSnapshotChunkPayload(String sessionId, String requestId, String transferId,
+                                       int index, int count, String chunk) implements CustomPacketPayload {
 
-    public static final Type<SaveRuleChangeSetChunkPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(RuleEditLimits.NAMESPACE, "save_rule_change_set_chunk")
+    public static final Type<RuleSnapshotChunkPayload> TYPE = new Type<>(
+            ResourceLocation.fromNamespaceAndPath(RuleEditLimits.NAMESPACE, "rule_snapshot_chunk")
     );
 
-    public static final StreamCodec<FriendlyByteBuf, SaveRuleChangeSetChunkPayload> STREAM_CODEC =
-            StreamCodec.of(SaveRuleChangeSetChunkPayload::encode, SaveRuleChangeSetChunkPayload::decode);
+    public static final StreamCodec<FriendlyByteBuf, RuleSnapshotChunkPayload> STREAM_CODEC =
+            StreamCodec.of(RuleSnapshotChunkPayload::encode, RuleSnapshotChunkPayload::decode);
 
-    public SaveRuleChangeSetChunkPayload {
+    public RuleSnapshotChunkPayload {
         sessionId = sessionId == null ? "" : sessionId;
-        operationId = operationId == null ? "" : operationId;
+        requestId = requestId == null ? "" : requestId;
         transferId = transferId == null ? "" : transferId;
         chunk = chunk == null ? "" : chunk;
     }
 
     // 编码
-    private static void encode(FriendlyByteBuf buffer, SaveRuleChangeSetChunkPayload payload) {
+    private static void encode(FriendlyByteBuf buffer, RuleSnapshotChunkPayload payload) {
         buffer.writeUtf(payload.sessionId(), RuleEditLimits.MAX_ID_CHARS);
-        buffer.writeUtf(payload.operationId(), RuleEditLimits.MAX_ID_CHARS);
+        buffer.writeUtf(payload.requestId(), RuleEditLimits.MAX_ID_CHARS);
         buffer.writeUtf(payload.transferId(), RuleEditLimits.MAX_TRANSFER_ID_LENGTH + RuleEditLimits.PACKET_SLACK_BYTES);
         buffer.writeVarInt(payload.index());
         buffer.writeVarInt(payload.count());
@@ -38,8 +40,8 @@ public record SaveRuleChangeSetChunkPayload(String sessionId, String operationId
     }
 
     // 解码
-    private static SaveRuleChangeSetChunkPayload decode(FriendlyByteBuf buffer) {
-        return new SaveRuleChangeSetChunkPayload(
+    private static RuleSnapshotChunkPayload decode(FriendlyByteBuf buffer) {
+        return new RuleSnapshotChunkPayload(
                 buffer.readUtf(RuleEditLimits.MAX_ID_CHARS),
                 buffer.readUtf(RuleEditLimits.MAX_ID_CHARS),
                 buffer.readUtf(RuleEditLimits.MAX_TRANSFER_ID_LENGTH + RuleEditLimits.PACKET_SLACK_BYTES),
