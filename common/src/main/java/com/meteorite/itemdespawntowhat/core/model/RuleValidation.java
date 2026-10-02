@@ -43,13 +43,27 @@ public final class RuleValidation {
         if (rule.effects().isEmpty()) {
             issues.error("effects 不能为空", origin, RuleFields.EFFECTS);
         }
+        if (rule.displayName() != null
+                && rule.displayName().codePointCount(0, rule.displayName().length()) > ConditionLimits.MAX_DISPLAY_NAME_CODEPOINTS) {
+            issues.error("display_name 超过 " + ConditionLimits.MAX_DISPLAY_NAME_CODEPOINTS + " 个码点",
+                    origin, RuleFields.DISPLAY_NAME);
+        }
         if (!rule.conditions().isStructurallyValid()) {
-            issues.error("conditions 中存在空条件组（空组合取恒真，视为非法）", origin, RuleFields.CONDITIONS);
+            issues.error("conditions 结构非法：all_of / any_of 的 terms 不能为空、inverted 必须有 term，"
+                    + "且条件叶<=" + ConditionLimits.MAX_LEAVES + "、节点<=" + ConditionLimits.MAX_NODES
+                    + "、深度<=" + ConditionLimits.MAX_DEPTH + "（空条件组请直接省略 conditions 字段）",
+                    origin, RuleFields.CONDITIONS);
         }
 
-        if (rule.effects().size() > 32 || rule.conditions().leafCount() > 128
-                || rule.source().entries().size() + rule.source().exclude().size() > 256) {
-            issues.error("规则超出工作量上限：effects<=32、条件叶<=128、source 项<=256", origin, null);
+        if (rule.effects().size() > ConditionLimits.MAX_EFFECTS
+                || rule.conditions().leafCount() > ConditionLimits.MAX_LEAVES
+                || rule.conditions().nodeCount() > ConditionLimits.MAX_NODES
+                || rule.conditions().depth() > ConditionLimits.MAX_DEPTH
+                || rule.source().entries().size() + rule.source().exclude().size() > ConditionLimits.MAX_SOURCE_ENTRIES) {
+            issues.error("规则超出工作量上限：effects<=" + ConditionLimits.MAX_EFFECTS
+                    + "、条件叶<=" + ConditionLimits.MAX_LEAVES + "、条件节点<=" + ConditionLimits.MAX_NODES
+                    + "、条件深度<=" + ConditionLimits.MAX_DEPTH
+                    + "、source 项<=" + ConditionLimits.MAX_SOURCE_ENTRIES, origin, null);
         }
         validateSourceEntries(rule.source(), issues, origin);
         for (int index = 0; index < rule.effects().size(); index++) {
@@ -94,23 +108,22 @@ public final class RuleValidation {
         validateTypeParams(definition, effect, issues, origin, path);
     }
 
-    // 条件叶类型专属参数校验：逐组逐叶，路径形如 conditions[g][l]
+    // 条件叶类型专属参数校验：沿条件树逐叶展开，路径与 JSON 形状一致（如 conditions.terms[0].condition）
     private static void validateConditionParams(ConditionExpression expression,
                                                 TypeRegistry<ConditionType<?>> conditionTypes,
                                                 IssueCollector issues, @Nullable String origin, String basePath) {
-        for (int groupIndex = 0; groupIndex < expression.groups().size(); groupIndex++) {
-            ConditionGroup group = expression.groups().get(groupIndex);
-            for (int leafIndex = 0; leafIndex < group.conditions().size(); leafIndex++) {
-                Condition condition = group.conditions().get(leafIndex);
-                String path = basePath + "[" + groupIndex + "][" + leafIndex + "]";
-                ConditionType<?> definition = conditionTypes.getOrNull(condition.type());
-                if (definition == null) {
-                    issues.error("未注册的条件类型: " + condition.type(), origin, path);
-                    continue;
-                }
-                validateTypeParams(definition, condition, issues, origin, path);
+        ConditionTrees.forEachLeaf(expression.root(), basePath, (path, condition) -> {
+            if (condition == null || condition.type() == null) {
+                issues.error("条件叶缺少条件对象或 type", origin, path);
+                return;
             }
-        }
+            ConditionType<?> definition = conditionTypes.getOrNull(condition.type());
+            if (definition == null) {
+                issues.error("未注册的条件类型: " + condition.type(), origin, path);
+                return;
+            }
+            validateTypeParams(definition, condition, issues, origin, path);
+        });
     }
 
     // 泛型桥接：参数对象即类型定义所声明的 P，运行时安全（validateParams 只读参数）
@@ -187,11 +200,15 @@ public final class RuleValidation {
             issues.error("chance 必须在 [0,1] 内: " + effect.chance(), origin, path + "." + RuleFields.CHANCE);
         }
         ConditionExpression conditions = effect.conditions();
-        if (conditions != null && conditions.leafCount() > 128) {
-            issues.error("效果级条件叶数不得超过 128", origin, path + ".conditions");
+        if (conditions != null && (conditions.leafCount() > ConditionLimits.MAX_LEAVES
+                || conditions.nodeCount() > ConditionLimits.MAX_NODES
+                || conditions.depth() > ConditionLimits.MAX_DEPTH)) {
+            issues.error("效果级条件超出上限：叶<=" + ConditionLimits.MAX_LEAVES + "、节点<=" + ConditionLimits.MAX_NODES
+                    + "、深度<=" + ConditionLimits.MAX_DEPTH, origin, path + "." + RuleFields.CONDITIONS);
         }
         if (conditions != null && !conditions.isStructurallyValid()) {
-            issues.error("效果级 conditions 中存在空条件组", origin, path + "." + RuleFields.CONDITIONS);
+            issues.error("效果级 conditions 结构非法：all_of / any_of 的 terms 不能为空、inverted 必须有 term",
+                    origin, path + "." + RuleFields.CONDITIONS);
         }
     }
 

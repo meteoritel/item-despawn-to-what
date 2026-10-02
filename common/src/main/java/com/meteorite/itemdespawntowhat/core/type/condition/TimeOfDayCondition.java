@@ -2,7 +2,6 @@ package com.meteorite.itemdespawntowhat.core.type.condition;
 
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
-import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleConditionType;
@@ -18,7 +17,7 @@ import net.minecraft.resources.ResourceLocation;
  * 世界时间读取与区间判定见 TimeOfDayEvaluator（把 dayTime 取模到一天之内）。
  * JSON 示例：{ "type": "itemdespawntowhat:time_of_day", "from": 13000, "to": 23000 }
  */
-public record TimeOfDayCondition(boolean negated, int from, int to) implements Condition {
+public record TimeOfDayCondition(int from, int to) implements Condition {
 
     // 类型 id，同时是 JSON 中 type 字段的取值
     public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("itemdespawntowhat", "time_of_day");
@@ -33,7 +32,6 @@ public record TimeOfDayCondition(boolean negated, int from, int to) implements C
 
     // 参数编解码器：from / to 均必填
     public static final MapCodec<TimeOfDayCondition> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-            CommonFields.negated(TimeOfDayCondition::negated),
             Codec.INT.fieldOf(FIELD_FROM).forGetter(TimeOfDayCondition::from),
             Codec.INT.fieldOf(FIELD_TO).forGetter(TimeOfDayCondition::to)
     ).apply(instance, TimeOfDayCondition::new));

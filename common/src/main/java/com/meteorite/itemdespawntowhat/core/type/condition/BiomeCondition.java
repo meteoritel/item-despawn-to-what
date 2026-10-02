@@ -3,7 +3,6 @@ package com.meteorite.itemdespawntowhat.core.type.condition;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
-import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleConditionType;
@@ -31,7 +30,6 @@ import java.util.Optional;
  * JSON 示例（climate）：{ "type": "itemdespawntowhat:biome", "mode": "climate", "temperature": { "min": 0.2 } }
  */
 public record BiomeCondition(
-        boolean negated,
         Mode mode,
         List<TaggedId> biomes,
         ClimateRange temperature,
@@ -61,7 +59,6 @@ public record BiomeCondition(
 
     // 参数编解码器：mode 必填，其余字段缺省为空，哪部分必填由 validateParams 判定
     public static final MapCodec<BiomeCondition> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-            CommonFields.negated(BiomeCondition::negated),
             EnumCodecs.lowerCase(Mode.class).fieldOf(FIELD_MODE).forGetter(BiomeCondition::mode),
             TaggedId.CODEC.listOf().optionalFieldOf(FIELD_BIOMES, List.of()).forGetter(BiomeCondition::biomes),
             ClimateRange.CODEC.optionalFieldOf(FIELD_TEMPERATURE)
@@ -76,8 +73,8 @@ public record BiomeCondition(
                     .forGetter(value -> Optional.ofNullable(value.depth())),
             ClimateRange.CODEC.optionalFieldOf(FIELD_WEIRDNESS)
                     .forGetter(value -> Optional.ofNullable(value.weirdness()))
-    ).apply(instance, (negated, mode, biomes, temperature, humidity, continentalness, erosion, depth, weirdness) ->
-            new BiomeCondition(negated, mode, biomes, temperature.orElse(null), humidity.orElse(null),
+    ).apply(instance, (mode, biomes, temperature, humidity, continentalness, erosion, depth, weirdness) ->
+            new BiomeCondition(mode, biomes, temperature.orElse(null), humidity.orElse(null),
                     continentalness.orElse(null), erosion.orElse(null), depth.orElse(null), weirdness.orElse(null))));
 
     // 参数列表不可变

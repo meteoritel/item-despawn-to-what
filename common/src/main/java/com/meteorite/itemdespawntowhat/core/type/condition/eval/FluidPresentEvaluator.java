@@ -11,7 +11,7 @@ import net.minecraft.world.level.material.FluidState;
  * fluid_present 条件的求值器：判定掉落物所在方块位置的流体。
  * 语义与旧实现一致：位置无流体直接不成立；require_source 为真时要求流体源方块；
  * fluid 为 null 表示任意流体，非空时按 id 或标签匹配，非源模式下额外接受同一流体族的流动变体。
- * 纯谓词：只读取上下文，不修改世界；不处理 negated（叶级取反由运行时统一应用）。
+ * 纯谓词：只读取上下文，不修改世界；不处理取反（取反由条件树的 inverted 节点承担）。
  */
 public final class FluidPresentEvaluator {
 

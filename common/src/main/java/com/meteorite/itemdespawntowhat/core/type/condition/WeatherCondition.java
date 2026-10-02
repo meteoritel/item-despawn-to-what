@@ -2,7 +2,6 @@ package com.meteorite.itemdespawntowhat.core.type.condition;
 
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
-import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleConditionType;
@@ -18,7 +17,7 @@ import net.minecraft.resources.ResourceLocation;
  * 实际天气判定见 WeatherEvaluator（语义与旧实现一致：clear 需无雨无雷、rain 需有雨无雷、thunder 只看雷暴）。
  * JSON 示例：{ "type": "itemdespawntowhat:weather", "weather": "thunder" }
  */
-public record WeatherCondition(boolean negated, Kind weather) implements Condition {
+public record WeatherCondition(Kind weather) implements Condition {
 
     // 类型 id，同时是 JSON 中 type 字段的取值
     public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("itemdespawntowhat", "weather");
@@ -28,7 +27,6 @@ public record WeatherCondition(boolean negated, Kind weather) implements Conditi
 
     // 参数编解码器：weather 必填
     public static final MapCodec<WeatherCondition> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-            CommonFields.negated(WeatherCondition::negated),
             EnumCodecs.lowerCase(Kind.class).fieldOf(FIELD_WEATHER).forGetter(WeatherCondition::weather)
     ).apply(instance, WeatherCondition::new));
 

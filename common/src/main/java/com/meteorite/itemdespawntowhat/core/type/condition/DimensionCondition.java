@@ -2,7 +2,6 @@ package com.meteorite.itemdespawntowhat.core.type.condition;
 
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
-import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleConditionType;
@@ -20,7 +19,7 @@ import java.util.List;
  * 存在性复核留给阶段③ 的运行时/命令层（那里能拿到 RegistryAccess）。
  * JSON 示例：{ "type": "itemdespawntowhat:dimension", "dimensions": ["minecraft:overworld"] }
  */
-public record DimensionCondition(boolean negated, List<ResourceLocation> dimensions) implements Condition {
+public record DimensionCondition(List<ResourceLocation> dimensions) implements Condition {
 
     // 类型 id，同时是 JSON 中 type 字段的取值
     public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("itemdespawntowhat", "dimension");
@@ -28,9 +27,8 @@ public record DimensionCondition(boolean negated, List<ResourceLocation> dimensi
     // 参数 JSON 字段名
     private static final String FIELD_DIMENSIONS = "dimensions";
 
-    // 参数编解码器：取反字段复用通用片段；列表缺省为空，缺失由 validateParams 给出可读错误
+    // 参数编解码器：叶级取反已删除（改用条件树的 inverted 节点）；列表缺省为空，缺失由 validateParams 给出可读错误
     public static final MapCodec<DimensionCondition> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-            CommonFields.negated(DimensionCondition::negated),
             ResourceLocation.CODEC.listOf().optionalFieldOf(FIELD_DIMENSIONS, List.of())
                     .forGetter(DimensionCondition::dimensions)
     ).apply(instance, DimensionCondition::new));

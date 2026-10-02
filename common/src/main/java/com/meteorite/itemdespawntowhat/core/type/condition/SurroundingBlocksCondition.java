@@ -2,11 +2,12 @@ package com.meteorite.itemdespawntowhat.core.type.condition;
 
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
+import com.meteorite.itemdespawntowhat.core.api.Evaluability;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
-import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleConditionType;
+import com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks;
 import com.meteorite.itemdespawntowhat.core.type.RefChecks;
 import com.meteorite.itemdespawntowhat.core.type.condition.eval.SurroundingBlocksEvaluator;
 import com.mojang.serialization.MapCodec;
@@ -24,7 +25,6 @@ import java.util.Optional;
  * JSON 示例：{ "type": "itemdespawntowhat:surrounding_blocks", "down": "#minecraft:logs" }
  */
 public record SurroundingBlocksCondition(
-        boolean negated,
         TaggedId up,
         TaggedId down,
         TaggedId north,
@@ -46,15 +46,14 @@ public record SurroundingBlocksCondition(
 
     // 参数编解码器：六个方向均可选，缺省为 null
     public static final MapCodec<SurroundingBlocksCondition> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-            CommonFields.negated(SurroundingBlocksCondition::negated),
             TaggedId.CODEC.optionalFieldOf(FIELD_UP).forGetter(value -> Optional.ofNullable(value.up())),
             TaggedId.CODEC.optionalFieldOf(FIELD_DOWN).forGetter(value -> Optional.ofNullable(value.down())),
             TaggedId.CODEC.optionalFieldOf(FIELD_NORTH).forGetter(value -> Optional.ofNullable(value.north())),
             TaggedId.CODEC.optionalFieldOf(FIELD_SOUTH).forGetter(value -> Optional.ofNullable(value.south())),
             TaggedId.CODEC.optionalFieldOf(FIELD_EAST).forGetter(value -> Optional.ofNullable(value.east())),
             TaggedId.CODEC.optionalFieldOf(FIELD_WEST).forGetter(value -> Optional.ofNullable(value.west()))
-    ).apply(instance, (negated, up, down, north, south, east, west) -> new SurroundingBlocksCondition(
-            negated, up.orElse(null), down.orElse(null), north.orElse(null),
+    ).apply(instance, (up, down, north, south, east, west) -> new SurroundingBlocksCondition(
+            up.orElse(null), down.orElse(null), north.orElse(null),
             south.orElse(null), east.orElse(null), west.orElse(null))));
 
     // 条件类型 id
@@ -64,8 +63,11 @@ public record SurroundingBlocksCondition(
     }
 
     // 条件类型定义，供注册表登记；静态工厂不能叫 type()（与 Condition#type 实例方法签名冲突）
+    // 周围区块未全部加载时无法判定，通过可求值性门禁返回 UNAVAILABLE，而不是把「判不了」当成「不成立」
     public static ConditionType<SurroundingBlocksCondition> conditionType() {
-        return new SimpleConditionType<>(ID, CODEC, SurroundingBlocksCondition::validateParams, SurroundingBlocksEvaluator::test);
+        return new SimpleConditionType<>(ID, CODEC, SurroundingBlocksCondition::validateParams, SurroundingBlocksEvaluator::test,
+                (params, context) -> LoadedChunks.containsArea(context.level(), context.pos(), 1)
+                        ? Evaluability.AVAILABLE : Evaluability.UNAVAILABLE);
     }
 
     // 参数语义校验：六个方向不能全空；非空方向做注册表存在性校验

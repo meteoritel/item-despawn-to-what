@@ -12,7 +12,7 @@ import java.util.Optional;
 
 /**
  * biome 条件的求值器：exact 模式按群系注册名/标签匹配，climate 模式按 6 个气候参数区间匹配。
- * 纯谓词：只读取上下文，不修改世界；不处理 negated（叶级取反由运行时统一应用）。
+ * 纯谓词：只读取上下文，不修改世界；不处理取反（取反由条件树的 inverted 节点承担）。
  * 标签判定走 TagLookup（带缓存），气候采样走 ClimateSampler（按位置缓存）。
  */
 public final class BiomeEvaluator {

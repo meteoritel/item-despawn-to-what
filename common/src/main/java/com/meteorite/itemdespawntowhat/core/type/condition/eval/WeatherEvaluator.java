@@ -6,7 +6,7 @@ import com.meteorite.itemdespawntowhat.core.type.condition.WeatherCondition;
 /**
  * weather 条件的求值器：判定掉落物所在维度当前的天气。
  * 语义与旧实现一致：clear 要求既不降雨也不雷暴；rain 要求降雨且非雷暴；thunder 只要求雷暴。
- * 纯谓词：只读取上下文，不修改世界；不处理 negated（叶级取反由运行时统一应用）。
+ * 纯谓词：只读取上下文，不修改世界；不处理取反（取反由条件树的 inverted 节点承担）。
  */
 public final class WeatherEvaluator {
 

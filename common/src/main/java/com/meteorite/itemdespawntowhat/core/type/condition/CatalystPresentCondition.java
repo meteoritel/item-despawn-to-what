@@ -3,7 +3,6 @@ package com.meteorite.itemdespawntowhat.core.type.condition;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
-import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleConditionType;
@@ -23,7 +22,7 @@ import java.util.List;
  * 附近扫描范围见 CatalystPresentEvaluator：物品所在方块格的 1×1×1 范围，排除源物品自身与已死亡实体。
  * JSON 示例：{ "type": "itemdespawntowhat:catalyst_present", "items": ["minecraft:blaze_powder"], "count": 3 }
  */
-public record CatalystPresentCondition(boolean negated, List<TaggedId> items, int count) implements Condition {
+public record CatalystPresentCondition(List<TaggedId> items, int count) implements Condition {
 
     // 类型 id，同时是 JSON 中 type 字段的取值
     public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("itemdespawntowhat", "catalyst_present");
@@ -39,7 +38,6 @@ public record CatalystPresentCondition(boolean negated, List<TaggedId> items, in
 
     // 参数编解码器：items 缺省为空、count 缺省为 1，缺失与越界由 validateParams 给出可读错误
     public static final MapCodec<CatalystPresentCondition> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-            CommonFields.negated(CatalystPresentCondition::negated),
             TaggedId.CODEC.listOf().optionalFieldOf(FIELD_ITEMS, List.of()).forGetter(CatalystPresentCondition::items),
             Codec.INT.optionalFieldOf(FIELD_COUNT, DEFAULT_COUNT).forGetter(CatalystPresentCondition::count)
     ).apply(instance, CatalystPresentCondition::new));

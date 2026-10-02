@@ -5,7 +5,7 @@ import com.meteorite.itemdespawntowhat.core.type.condition.DimensionCondition;
 
 /**
  * dimension 条件的求值器：判定掉落物所在维度是否命中候选列表。
- * 纯谓词：只读取上下文，不修改世界；不处理 negated（叶级取反由运行时统一应用）。
+ * 纯谓词：只读取上下文，不修改世界；不处理取反（取反由条件树的 inverted 节点承担）。
  */
 public final class DimensionEvaluator {
 

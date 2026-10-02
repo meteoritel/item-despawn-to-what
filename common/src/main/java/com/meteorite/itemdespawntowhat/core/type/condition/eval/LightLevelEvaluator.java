@@ -7,7 +7,7 @@ import com.meteorite.itemdespawntowhat.core.type.condition.LightLevelCondition;
  * light_level 条件的求值器：判定掉落物所在位置的实际光照等级是否落在区间内。
  * 光照取值采用 LevelReader#getMaxLocalRawBrightness：天空光经时间衰减后与方块光取较大值，
  * 与实体/刷怪所使用的"光照等级"口径一致；两端可空表示该端不限制。
- * 纯谓词：只读取上下文，不修改世界；不处理 negated（叶级取反由运行时统一应用）。
+ * 纯谓词：只读取上下文，不修改世界；不处理取反（取反由条件树的 inverted 节点承担）。
  */
 public final class LightLevelEvaluator {
 

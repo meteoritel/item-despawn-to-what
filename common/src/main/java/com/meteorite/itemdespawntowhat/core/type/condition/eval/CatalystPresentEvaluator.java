@@ -17,7 +17,7 @@ import java.util.Optional;
  * catalyst_present 条件的求值器：统计掉落物所在方块格内的催化剂数量。
  * 范围与旧实现一致：物品所在方块位置的 1×1×1 立方体，排除源物品自身与已死亡实体；
  * 命中任意候选引用的堆叠数量累加，达到 count 即成立。标签判定走 TagLookup（带缓存）。
- * 纯谓词：只读取上下文，不修改世界（消耗由 consume_catalyst 效果承担）；不处理 negated。
+ * 纯谓词：只读取上下文，不修改世界（消耗由 consume_catalyst 效果承担）；不处理取反（取反由条件树的 inverted 节点承担）。
  */
 public final class CatalystPresentEvaluator {
 

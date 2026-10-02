@@ -14,7 +14,7 @@ import java.util.Optional;
 /**
  * surrounding_blocks 条件的求值器：逐方向比对掉落物相邻方块。
  * 只检查已填写的方向，全部满足才成立；标签判定走 TagLookup（带缓存）。
- * 纯谓词：只读取上下文，不修改世界；不处理 negated（叶级取反由运行时统一应用）。
+ * 纯谓词：只读取上下文，不修改世界；不处理取反（取反由条件树的 inverted 节点承担）。
  */
 public final class SurroundingBlocksEvaluator {
 

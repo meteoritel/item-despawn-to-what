@@ -53,15 +53,14 @@ final class DebugScenarioDefinition {
         }
         if (name.equals("priority")) { raw.add(rule("priority_later", 8, 100, 0)); }
         if (name.equals("retry")) {
+            // 条件树：取反改用 inverted 节点，叶级 negated 已删除
             JsonObject condition = new JsonObject();
             condition.addProperty("type", "itemdespawntowhat:y_level");
-            condition.addProperty("negated", false);
             condition.addProperty("min", y + 3);
-            JsonArray group = new JsonArray();
-            group.add(condition);
-            JsonArray expression = new JsonArray();
-            expression.add(group);
-            raw.getFirst().add("conditions", expression);
+            JsonObject leaf = new JsonObject();
+            leaf.addProperty("op", "leaf");
+            leaf.add("condition", condition);
+            raw.getFirst().add("conditions", leaf);
         }
         var codec = RuleCodecs.codec(types.effectTypes(), types.conditionTypes());
         var ops = RegistryOps.create(JsonOps.INSTANCE, server.registryAccess());
@@ -94,14 +93,12 @@ final class DebugScenarioDefinition {
         source.add("items", items);
         source.add("exclude", new JsonArray());
         rule.add("source", source);
-        rule.add("conditions", new JsonArray());
         JsonObject effect = new JsonObject();
         effect.addProperty("type", "itemdespawntowhat:spawn_item");
         effect.addProperty("item", name.equals("priority_later") ? "minecraft:gold_nugget" : "minecraft:prismarine_shard");
         effect.addProperty("count", 1);
         effect.addProperty("delay_ticks", delay);
         effect.addProperty("chance", 1.0);
-        effect.add("conditions", new JsonArray());
         JsonArray effects = new JsonArray();
         effects.add(effect);
         rule.add("effects", effects);

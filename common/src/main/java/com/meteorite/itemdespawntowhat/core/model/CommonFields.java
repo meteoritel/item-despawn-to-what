@@ -21,8 +21,6 @@ public final class CommonFields {
     public static final int DEFAULT_DELAY_TICKS = 0;
     // 效果概率默认值：1.0（必定执行）
     public static final double DEFAULT_CHANCE = 1.0D;
-    // 条件叶取反默认值：false
-    public static final boolean DEFAULT_NEGATED = false;
 
     private CommonFields() {
         throw new UnsupportedOperationException("Utility class");
@@ -45,10 +43,5 @@ public final class CommonFields {
     ) {
         return expressionCodec.optionalFieldOf(RuleFields.CONDITIONS)
                 .forGetter(value -> Optional.ofNullable(getter.apply(value)));
-    }
-
-    // 条件叶取反字段
-    public static <O> RecordCodecBuilder<O, Boolean> negated(Function<O, Boolean> getter) {
-        return Codec.BOOL.optionalFieldOf(RuleFields.NEGATED, DEFAULT_NEGATED).forGetter(getter);
     }
 }

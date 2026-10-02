@@ -2,7 +2,6 @@ package com.meteorite.itemdespawntowhat.core.type.condition;
 
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
-import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleConditionType;
@@ -20,7 +19,7 @@ import java.util.Optional;
  * 光照口径：LevelReader#getMaxLocalRawBrightness（天空光按时间衰减后与方块光取较大值），见 LightLevelEvaluator。
  * JSON 示例：{ "type": "itemdespawntowhat:light_level", "max": 7 }
  */
-public record LightLevelCondition(boolean negated, Integer min, Integer max) implements Condition {
+public record LightLevelCondition(Integer min, Integer max) implements Condition {
 
     // 类型 id，同时是 JSON 中 type 字段的取值
     public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("itemdespawntowhat", "light_level");
@@ -35,10 +34,9 @@ public record LightLevelCondition(boolean negated, Integer min, Integer max) imp
 
     // 参数编解码器：两端均可选，缺省为 null
     public static final MapCodec<LightLevelCondition> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-            CommonFields.negated(LightLevelCondition::negated),
             Codec.INT.optionalFieldOf(FIELD_MIN).forGetter(value -> Optional.ofNullable(value.min())),
             Codec.INT.optionalFieldOf(FIELD_MAX).forGetter(value -> Optional.ofNullable(value.max()))
-    ).apply(instance, (negated, min, max) -> new LightLevelCondition(negated, min.orElse(null), max.orElse(null))));
+    ).apply(instance, (min, max) -> new LightLevelCondition(min.orElse(null), max.orElse(null))));
 
     // 条件类型 id
     @Override

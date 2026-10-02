@@ -3,7 +3,6 @@ package com.meteorite.itemdespawntowhat.core.type.condition;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
-import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleConditionType;
@@ -23,7 +22,7 @@ import java.util.Optional;
  * 参数 require_source 默认 true，表示只匹配流体源方块；判定见 FluidPresentEvaluator（非源模式下额外接受同一流体族的流动变体）。
  * JSON 示例：{ "type": "itemdespawntowhat:fluid_present", "fluid": "#minecraft:water" }
  */
-public record FluidPresentCondition(boolean negated, TaggedId fluid, boolean requireSource) implements Condition {
+public record FluidPresentCondition(TaggedId fluid, boolean requireSource) implements Condition {
 
     // 类型 id，同时是 JSON 中 type 字段的取值
     public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("itemdespawntowhat", "fluid_present");
@@ -40,11 +39,10 @@ public record FluidPresentCondition(boolean negated, TaggedId fluid, boolean req
 
     // 参数编解码器：fluid 缺省为 null（任意流体），require_source 缺省为 true
     public static final MapCodec<FluidPresentCondition> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-            CommonFields.negated(FluidPresentCondition::negated),
             TaggedId.CODEC.optionalFieldOf(FIELD_FLUID).forGetter(value -> Optional.ofNullable(value.fluid())),
             Codec.BOOL.optionalFieldOf(FIELD_REQUIRE_SOURCE, DEFAULT_REQUIRE_SOURCE)
                     .forGetter(FluidPresentCondition::requireSource)
-    ).apply(instance, (negated, fluid, requireSource) -> new FluidPresentCondition(negated, fluid.orElse(null), requireSource)));
+    ).apply(instance, (fluid, requireSource) -> new FluidPresentCondition(fluid.orElse(null), requireSource)));
 
     // 条件类型 id
     @Override

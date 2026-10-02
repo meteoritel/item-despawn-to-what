@@ -1,39 +1,75 @@
 package com.meteorite.itemdespawntowhat.core.model;
 
-import java.util.List;
+import org.jetbrains.annotations.Nullable;
 
 /**
- * 条件表达式：析取范式（DNF）。
- * 组间为 OR，组内为 AND；空表达式（无任何组）表示恒真。
- * JSON 形状为二维数组：外层数组是"组的析取"，内层数组是"叶的合取"。
+ * 条件表达式：整棵条件树只有一个根节点，root 为 null 表示无条件。
+ * 旧版「组 × 叶」二维数组结构已废弃（见 docs/plan/plan-frontend-rewrite-contract.md §2），
+ * 空表达式、空 all_of / any_of 都允许构造与序列化（编辑器中间态），非空性只在 isStructurallyValid() 与解码期强制。
  */
-public record ConditionExpression(List<ConditionGroup> groups) {
+public record ConditionExpression(@Nullable ConditionNode root) {
 
-    // 恒真表达式，用于无条件规则与缺省值
-    public static final ConditionExpression EMPTY = new ConditionExpression(List.of());
+    // 无条件：序列化时上层直接省略 conditions 字段，不得输出 null
+    public static final ConditionExpression EMPTY = new ConditionExpression(null);
 
-    public ConditionExpression {
-        groups = List.copyOf(groups);
-    }
-
-    // 是否为空表达式（等价于恒真）
+    // 是否无条件
     public boolean isEmpty() {
-        return groups.isEmpty();
+        return root == null;
     }
 
-    // 条件叶总数，用于同优先级下的特异性兜底排序
+    // 叶节点数量
     public int leafCount() {
-        int total = 0;
-        for (ConditionGroup group : groups) {
-            total += group.leafCount();
-        }
-        return total;
+        return ConditionTrees.leafCount(root);
     }
 
-    // 结构合法性：不允许出现空条件组（空组合取恒真，会掩盖配置意图）
+    // 节点总数（组合节点与叶都计入）
+    public int nodeCount() {
+        return ConditionTrees.nodeCount(root);
+    }
+
+    // 树深度：根为 1，空表达式为 0
+    public int depth() {
+        return ConditionTrees.depth(root);
+    }
+
+    /**
+     * 结构是否合法：空表达式合法；all_of / any_of 的 terms 至少 1 项；inverted 必须有 term；
+     * 叶必须携带条件；叶数、节点数、深度都在 ConditionLimits 限额内。
+     */
     public boolean isStructurallyValid() {
-        for (ConditionGroup group : groups) {
-            if (group.isEmpty()) {
+        if (root == null) {
+            return true;
+        }
+        return hasLegalShape(root)
+                && leafCount() <= ConditionLimits.MAX_LEAVES
+                && nodeCount() <= ConditionLimits.MAX_NODES
+                && depth() <= ConditionLimits.MAX_DEPTH;
+    }
+
+    // 递归检查组合节点的形状（不检查规模，规模由调用方统一比对）
+    private static boolean hasLegalShape(ConditionNode node) {
+        if (node instanceof ConditionNode.Leaf leaf) {
+            return leaf.condition() != null;
+        }
+        if (node instanceof ConditionNode.Inverted inverted) {
+            return inverted.term() != null && hasLegalShape(inverted.term());
+        }
+        if (node instanceof ConditionNode.AllOf allOf) {
+            return hasLegalTerms(allOf.terms());
+        }
+        if (node instanceof ConditionNode.AnyOf anyOf) {
+            return hasLegalTerms(anyOf.terms());
+        }
+        return false;
+    }
+
+    // 组合节点：terms 非空且每个子节点形状合法
+    private static boolean hasLegalTerms(java.util.List<ConditionNode> terms) {
+        if (terms.isEmpty()) {
+            return false;
+        }
+        for (ConditionNode term : terms) {
+            if (!hasLegalShape(term)) {
                 return false;
             }
         }

@@ -2,7 +2,6 @@ package com.meteorite.itemdespawntowhat.core.type.condition;
 
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
-import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleConditionType;
@@ -19,7 +18,7 @@ import java.util.Optional;
  * 参数 min / max 均可空（null = 该端不限制），取值域 [-2048,2048]，且 min 不得大于 max。
  * JSON 示例：{ "type": "itemdespawntowhat:y_level", "min": 60 }
  */
-public record YLevelCondition(boolean negated, Integer min, Integer max) implements Condition {
+public record YLevelCondition(Integer min, Integer max) implements Condition {
 
     // 类型 id，同时是 JSON 中 type 字段的取值
     public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("itemdespawntowhat", "y_level");
@@ -34,10 +33,9 @@ public record YLevelCondition(boolean negated, Integer min, Integer max) impleme
 
     // 参数编解码器：两端均可选，缺省为 null
     public static final MapCodec<YLevelCondition> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-            CommonFields.negated(YLevelCondition::negated),
             Codec.INT.optionalFieldOf(FIELD_MIN).forGetter(value -> Optional.ofNullable(value.min())),
             Codec.INT.optionalFieldOf(FIELD_MAX).forGetter(value -> Optional.ofNullable(value.max()))
-    ).apply(instance, (negated, min, max) -> new YLevelCondition(negated, min.orElse(null), max.orElse(null))));
+    ).apply(instance, (min, max) -> new YLevelCondition(min.orElse(null), max.orElse(null))));
 
     // 条件类型 id
     @Override

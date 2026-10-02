@@ -48,7 +48,7 @@ public final class RuleLoader {
         return new RuleLoadResult<>(List.copyOf(rules), issues);
     }
 
-    // 只做读取与合并，不做模型解码（供 /idtw config list、convert 等只关心原始条目的场景使用）
+    // 只做读取与合并，不做模型解码（供 /idtw config list 等只关心原始条目的场景使用）
     public static List<RawRuleEntry> loadRaw(RuleLoadRequest<?> request, IssueCollector issues) {
         List<RawRuleEntry> raw = new ArrayList<>();
         if (request.resourceManager() != null) {
