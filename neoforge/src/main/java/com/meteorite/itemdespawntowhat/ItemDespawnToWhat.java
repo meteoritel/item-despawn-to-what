@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat;
 
 import com.meteorite.itemdespawntowhat.command.ConversionConfigCommand;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler;
 import com.meteorite.itemdespawntowhat.network.EditSessionLockManager;
 import com.meteorite.itemdespawntowhat.network.handler.SaveConfigChunkAccumulator;
 import com.meteorite.itemdespawntowhat.platform.Services;
@@ -69,6 +70,8 @@ public class ItemDespawnToWhat {
         EditSessionLockManager.clear();
         SaveConfigChunkAccumulator.clearAll();
         ConversionTracker.clearAll();
+        // 新链路：清空未完成的变更集分片与会话缓存
+        RuleEditServerHandler.reset();
     }
 
     @SubscribeEvent
