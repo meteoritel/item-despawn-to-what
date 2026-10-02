@@ -1,19 +1,20 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.meteorite.itemdespawntowhat.client.register.ClientConversionTypeDefinition;
-import com.meteorite.itemdespawntowhat.client.register.ClientConversionTypeRegistry;
-import com.meteorite.itemdespawntowhat.network.payload.c2s.RequestConfigSnapshotPayload;
+import com.meteorite.itemdespawntowhat.client.ui.view.RuleEditorSession;
+import com.meteorite.itemdespawntowhat.client.ui.view.RuleTemplate;
+import com.meteorite.itemdespawntowhat.client.ui.view.RuleTemplates;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
-import com.meteorite.itemdespawntowhat.platform.Services;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.List;
+
 /**
- * 进入具体编辑器前的配置类型选择界面。
+ * 进入具体编辑器前的模板选择界面（视图模型版）。
+ * 保留原第一屏的 9 个模板入口与布局，点击模板 = 新建一条只含对应效果的规则。
  */
 public class ConfigTypeSelectionScreen extends Screen {
 
@@ -23,28 +24,26 @@ public class ConfigTypeSelectionScreen extends Screen {
 
     @Override
     protected void init() {
-        var types = ClientConversionTypeRegistry.all();
-        int y = height / 2 - (types.size() * 25) / 2;
-        for (ClientConversionTypeDefinition<?> type : types) {
-            String path = type.id().getPath();
+        List<RuleTemplate> templates = RuleTemplates.all();
+        int y = height / 2 - (templates.size() * 25) / 2;
+        for (RuleTemplate template : templates) {
             Button button = Button.builder(
-                            Component.translatable("gui.itemdespawntowhat.config_type." + path),
-                    btn -> requestConfigSnapshot(type.id()))
+                            Component.translatable(template.labelKey()),
+                            btn -> openTemplate(template))
                     .bounds(width / 2 - 100, y, 200, 20).build();
-
-            // 添加按钮tooltip
-            button.setTooltip(Tooltip.create(
-                    Component.translatable("gui.itemdespawntowhat.config_type." + path + ".tooltip")));
+            button.setTooltip(Tooltip.create(Component.translatable(template.tooltipKey())));
             addRenderableWidget(button);
             y += 25;
         }
     }
 
-    // 这里只负责向服务端申请快照，不直接构建编辑界面。
-    private void requestConfigSnapshot(ResourceLocation typeId) {
-        if (minecraft != null) {
-            Services.PLATFORM.sendToServer(new RequestConfigSnapshotPayload(typeId));
+    // 先刷新覆盖层快照（规则列表屏需要），再以模板新建一条规则进入编辑器。
+    private void openTemplate(RuleTemplate template) {
+        if (minecraft == null) {
+            return;
         }
+        RuleEditorSession.get().requestSnapshot();
+        minecraft.setScreen(new RuleEditScreen(this, template, null));
     }
 
     @Override
