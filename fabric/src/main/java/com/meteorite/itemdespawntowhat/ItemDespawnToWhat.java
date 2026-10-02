@@ -8,6 +8,7 @@ import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHand
 import com.meteorite.itemdespawntowhat.network.registrar.ConfigEditPayloadRegistrar;
 import com.meteorite.itemdespawntowhat.network.registrar.RuleEditPayloadRegistrar;
 import com.meteorite.itemdespawntowhat.platform.Services;
+import com.meteorite.itemdespawntowhat.runtime.FabricRuleCommandRegistrar;
 import com.meteorite.itemdespawntowhat.runtime.RuleRuntimeEvents;
 import com.meteorite.itemdespawntowhat.server.event.ItemConversionEvent;
 import com.meteorite.itemdespawntowhat.server.conversion.ConversionTracker;
@@ -79,5 +80,7 @@ public class ItemDespawnToWhat implements ModInitializer {
         EditSessionTimeoutHandler.register();
         // 新链路（core/network/transport）网络入口：与旧链路并列注册
         RuleEditPayloadRegistrar.register();
+        // 新链路命令树（/idtw config|rule|debug）：与旧命令并列注册，Brigadier 合并同名子节点
+        FabricRuleCommandRegistrar.register();
     }
 }

@@ -4,6 +4,7 @@ import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.Issue;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.IssueSeverity;
+import com.meteorite.itemdespawntowhat.core.command.RuleCommandContext;
 import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
 import com.meteorite.itemdespawntowhat.core.load.PackLayerResolver;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoadResult;
@@ -55,6 +56,8 @@ public final class RuleRuntimeHost {
 
     // 当前服务端引用：数据包重载监听器需要用它枚举维度，服务端停止后置空
     private static volatile MinecraftServer currentServer;
+    // 当前模组级配置（server.json）；未引导或已停止时为 null
+    private static volatile ServerConfig serverConfig;
     // 当前内置类型注册表（数据包重载时复用，避免重复构表）
     private static volatile BuiltinTypeRegistries typeRegistries;
     // 覆盖层根目录（config/<overlay_directory>）
@@ -78,6 +81,51 @@ public final class RuleRuntimeHost {
         }
         applyReload(server.getResourceManager(), server.registryAccess());
     }
+
+    // 命令层入口：以窄接口暴露运行时、模组级配置与编辑层统计（阶段⑤ /idtw 命令树）
+    public static RuleCommandContext commandContext() {
+        return COMMAND_CONTEXT;
+    }
+
+    // 命令层能力适配器：字段都是 volatile 静态状态，调用时实时读取
+    private static final RuleCommandContext COMMAND_CONTEXT = new RuleCommandContext() {
+        @Override
+        public ConversionRuntime runtime() {
+            return runtime;
+        }
+
+        @Override
+        public ServerConfig serverConfig() {
+            return serverConfig;
+        }
+
+        @Override
+        public RuleEditServerContext editContext() {
+            return EDIT_CONTEXT;
+        }
+
+        @Override
+        public String overlayNamespace() {
+            return MOD_NAMESPACE;
+        }
+
+        @Override
+        public int overlayVersion() {
+            EditSessionManager sessions = RuleEditServerHandler.sessionManager(EDIT_CONTEXT);
+            return sessions == null ? -1 : sessions.version();
+        }
+
+        @Override
+        public int activeSessionCount() {
+            EditSessionManager sessions = RuleEditServerHandler.sessionManager(EDIT_CONTEXT);
+            return sessions == null ? 0 : sessions.activeSessionCount();
+        }
+
+        @Override
+        public RuleLoadResult<Rule> reloadRules(MinecraftServer server) {
+            return reload(server, server.getResourceManager());
+        }
+    };
 
     // 运行时能力适配器：字段都是 volatile 静态状态，调用时实时读取
     private static final RuleEditServerContext EDIT_CONTEXT = new RuleEditServerContext() {
@@ -145,6 +193,7 @@ public final class RuleRuntimeHost {
         logLoadResult("服务端启动", result);
 
         currentServer = server;
+        serverConfig = config;
         typeRegistries = registries;
         overlayRoot = overlay;
         runtime = newRuntime;
@@ -155,6 +204,14 @@ public final class RuleRuntimeHost {
             levelCount++;
         }
         LOGGER.info("新链路运行时已就绪：覆盖层 {}，已回扫维度 {} 个", overlay, levelCount);
+    }
+
+    // 命令层重载入口：按当前服务端资源管理器重建索引；未就绪或失败时返回 null 供命令层提示
+    public static RuleLoadResult<Rule> reload(MinecraftServer server, ResourceManager resourceManager) {
+        if (server == null) {
+            return null;
+        }
+        return applyReload(resourceManager, server.registryAccess());
     }
 
     // 数据包重载（apply 阶段，服务端线程）：重建规则索引并回扫全部已加载维度，使已存在掉落物立即重选（A3）
@@ -195,6 +252,7 @@ public final class RuleRuntimeHost {
         runtime = null;
         typeRegistries = null;
         overlayRoot = null;
+        serverConfig = null;
         currentServer = null;
     }
 

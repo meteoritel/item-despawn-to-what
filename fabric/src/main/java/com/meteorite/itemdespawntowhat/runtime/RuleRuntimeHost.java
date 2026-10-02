@@ -4,6 +4,7 @@ import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.Issue;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.IssueSeverity;
+import com.meteorite.itemdespawntowhat.core.command.RuleCommandContext;
 import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
 import com.meteorite.itemdespawntowhat.core.load.PackLayerResolver;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoadResult;
@@ -49,6 +50,8 @@ public final class RuleRuntimeHost {
     // 模组级配置文件名（固定位于 config/itemdespawntowhat/ 下）
     private static final String SERVER_CONFIG_FILE = "server.json";
 
+    // 当前模组级配置（server.json）；未引导或已停止时为 null
+    private static volatile ServerConfig serverConfig;
     // 当前内置类型注册表（数据包重载时复用，避免重复构表）
     private static volatile BuiltinTypeRegistries typeRegistries;
     // 覆盖层根目录（config/<overlay_directory>）
@@ -65,6 +68,51 @@ public final class RuleRuntimeHost {
     public static RuleEditServerContext editContext() {
         return EDIT_CONTEXT;
     }
+
+    // 命令层入口：以窄接口暴露运行时、模组级配置与编辑层统计（阶段⑤ /idtw 命令树）
+    public static RuleCommandContext commandContext() {
+        return COMMAND_CONTEXT;
+    }
+
+    // 命令层能力适配器：字段都是 volatile 静态状态，调用时实时读取
+    private static final RuleCommandContext COMMAND_CONTEXT = new RuleCommandContext() {
+        @Override
+        public ConversionRuntime runtime() {
+            return runtime;
+        }
+
+        @Override
+        public ServerConfig serverConfig() {
+            return serverConfig;
+        }
+
+        @Override
+        public RuleEditServerContext editContext() {
+            return EDIT_CONTEXT;
+        }
+
+        @Override
+        public String overlayNamespace() {
+            return MOD_NAMESPACE;
+        }
+
+        @Override
+        public int overlayVersion() {
+            EditSessionManager sessions = RuleEditServerHandler.sessionManager(EDIT_CONTEXT);
+            return sessions == null ? -1 : sessions.version();
+        }
+
+        @Override
+        public int activeSessionCount() {
+            EditSessionManager sessions = RuleEditServerHandler.sessionManager(EDIT_CONTEXT);
+            return sessions == null ? 0 : sessions.activeSessionCount();
+        }
+
+        @Override
+        public RuleLoadResult<Rule> reloadRules(MinecraftServer server) {
+            return reload(server, server.getResourceManager());
+        }
+    };
 
     // 运行时能力适配器：字段都是 volatile 静态状态，调用时实时读取
     private static final RuleEditServerContext EDIT_CONTEXT = new RuleEditServerContext() {
@@ -132,6 +180,7 @@ public final class RuleRuntimeHost {
         newRuntime.replaceRules(result.rules(), result.issues());
         logLoadResult("服务端启动", result);
 
+        serverConfig = config;
         typeRegistries = registries;
         overlayRoot = overlay;
         runtime = newRuntime;
@@ -181,6 +230,7 @@ public final class RuleRuntimeHost {
         runtime = null;
         typeRegistries = null;
         overlayRoot = null;
+        serverConfig = null;
     }
 
     // 掉落物进入世界：仅当存在候选规则时才纳入追踪
