@@ -1,0 +1,14 @@
+{
+  "id": "itemdespawntowhat:builtin_item_to_entity",
+  "enabled": false,
+  "notes": "内置示例（默认停用）：鸡蛋在主世界露天环境下 300 秒后孵化出幼年鸡。条件写在同一组内即 AND。",
+  "trigger_after_seconds": 300,
+  "source": { "items": ["minecraft:egg"] },
+  "conditions": [
+    [
+      { "type": "itemdespawntowhat:outdoor" },
+      { "type": "itemdespawntowhat:dimension", "dimensions": ["minecraft:overworld"] }
+    ]
+  ],
+  "effects": [ { "type": "itemdespawntowhat:spawn_entity", "entity": "minecraft:chicken", "count": 1, "age": -24000 } ]
+}

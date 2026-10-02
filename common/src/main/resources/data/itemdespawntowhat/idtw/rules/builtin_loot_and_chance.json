@@ -1,0 +1,10 @@
+{
+  "id": "itemdespawntowhat:builtin_loot_and_chance",
+  "enabled": false,
+  "notes": "内置示例（默认停用）：战利品表结果 + 效果级概率（50%）。未命中概率时不产出，但源物品仍按隐式消耗被扣减。",
+  "trigger_after_seconds": 300,
+  "source": { "items": ["minecraft:gold_nugget"] },
+  "effects": [
+    { "type": "itemdespawntowhat:loot_table", "loot_table": "minecraft:chests/simple_dungeon", "luck": 0.0, "chance": 0.5 }
+  ]
+}

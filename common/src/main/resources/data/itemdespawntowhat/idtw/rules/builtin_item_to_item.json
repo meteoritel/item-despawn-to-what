@@ -1,0 +1,8 @@
+{
+  "id": "itemdespawntowhat:builtin_item_to_item",
+  "enabled": false,
+  "notes": "内置示例（默认停用）：鸡肉 300 秒后变腐肉。未声明任何 consume_* 效果时，按默认语义消耗 1 个源物品。",
+  "trigger_after_seconds": 300,
+  "source": { "items": ["minecraft:chicken"] },
+  "effects": [ { "type": "itemdespawntowhat:spawn_item", "item": "minecraft:rotten_flesh", "count": 1 } ]
+}

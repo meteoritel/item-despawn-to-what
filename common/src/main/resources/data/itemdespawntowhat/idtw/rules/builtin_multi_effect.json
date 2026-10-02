@@ -1,0 +1,12 @@
+{
+  "id": "itemdespawntowhat:builtin_multi_effect",
+  "enabled": false,
+  "notes": "内置示例（默认停用）：一条规则多个效果 + 效果延迟 + 显式消耗。显式声明 consume_source 后隐式消耗被抑制。",
+  "trigger_after_seconds": 300,
+  "source": { "items": ["minecraft:diamond"] },
+  "effects": [
+    { "type": "itemdespawntowhat:spawn_xp", "amount": 100 },
+    { "type": "itemdespawntowhat:consume_source", "count": 1 },
+    { "type": "itemdespawntowhat:lightning", "count": 1, "delay_ticks": 20 }
+  ]
+}
