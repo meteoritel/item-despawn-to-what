@@ -4,7 +4,9 @@ import com.meteorite.itemdespawntowhat.command.ConversionConfigCommand;
 import com.meteorite.itemdespawntowhat.network.EditSessionLockManager;
 import com.meteorite.itemdespawntowhat.network.EditSessionTimeoutHandler;
 import com.meteorite.itemdespawntowhat.network.handler.SaveConfigChunkAccumulator;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler;
 import com.meteorite.itemdespawntowhat.network.registrar.ConfigEditPayloadRegistrar;
+import com.meteorite.itemdespawntowhat.network.registrar.RuleEditPayloadRegistrar;
 import com.meteorite.itemdespawntowhat.platform.Services;
 import com.meteorite.itemdespawntowhat.runtime.RuleRuntimeEvents;
 import com.meteorite.itemdespawntowhat.server.event.ItemConversionEvent;
@@ -49,6 +51,8 @@ public class ItemDespawnToWhat implements ModInitializer {
             EditSessionLockManager.clear();
             SaveConfigChunkAccumulator.clearAll();
             ConversionTracker.clearAll();
+            // 新链路：清空未完成的变更集分片与会话缓存
+            RuleEditServerHandler.reset();
         });
 
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
@@ -73,5 +77,7 @@ public class ItemDespawnToWhat implements ModInitializer {
         RuleRuntimeEvents.register();
         ConfigEditPayloadRegistrar.register();
         EditSessionTimeoutHandler.register();
+        // 新链路（core/network/transport）网络入口：与旧链路并列注册
+        RuleEditPayloadRegistrar.register();
     }
 }

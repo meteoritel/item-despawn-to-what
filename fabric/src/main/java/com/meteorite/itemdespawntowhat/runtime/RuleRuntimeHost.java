@@ -8,6 +8,9 @@ import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
 import com.meteorite.itemdespawntowhat.core.load.PackLayerResolver;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoadResult;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerContext;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler;
+import com.meteorite.itemdespawntowhat.core.service.EditSessionManager;
 import com.meteorite.itemdespawntowhat.core.runtime.ConversionRuntime;
 import com.meteorite.itemdespawntowhat.core.runtime.LifespanProvider;
 import com.meteorite.itemdespawntowhat.core.service.BuiltinTypeRegistries;
@@ -16,7 +19,9 @@ import com.meteorite.itemdespawntowhat.core.service.RuleLoadingService;
 import com.meteorite.itemdespawntowhat.platform.Services;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.world.entity.item.ItemEntity;
 import org.apache.logging.log4j.LogManager;
@@ -55,6 +60,59 @@ public final class RuleRuntimeHost {
         throw new UnsupportedOperationException("Utility class");
     }
 
+    // 网络编辑层入口：以窄接口暴露运行时的覆盖层路径与重建能力（阶段④）
+    // 放在这里而不是 core，是为了让 core/network/transport 不反向依赖平台运行时
+    public static RuleEditServerContext editContext() {
+        return EDIT_CONTEXT;
+    }
+
+    // 运行时能力适配器：字段都是 volatile 静态状态，调用时实时读取
+    private static final RuleEditServerContext EDIT_CONTEXT = new RuleEditServerContext() {
+        @Override
+        public Path overlayRoot() {
+            return overlayRoot;
+        }
+
+        @Override
+        public String overlayNamespace() {
+            return MOD_NAMESPACE;
+        }
+
+        @Override
+        public BuiltinTypeRegistries typeRegistries() {
+            return typeRegistries;
+        }
+
+        @Override
+        public void sendTo(ServerPlayer player, CustomPacketPayload payload) {
+            // 发包方式由平台层提供（Fabric: ServerPlayNetworking / NeoForge: PacketDistributor）
+            Services.PLATFORM.sendToPlayer(player, payload);
+        }
+
+        @Override
+        public RuleLoadResult<Rule> loadMerged(MinecraftServer server) {
+            Path overlay = overlayRoot;
+            BuiltinTypeRegistries registries = typeRegistries;
+            if (overlay == null || registries == null) {
+                return emptyResult();
+            }
+            return loadRules(context(server.getResourceManager(), server.registryAccess(), overlay, registries), "编辑快照");
+        }
+
+        @Override
+        public void rebuildAndRescan(MinecraftServer server) {
+            // 与数据包重载共用同一条 apply 路径（重建索引 + 全维度回扫）
+            reload(server, server.getResourceManager());
+        }
+    };
+
+    // 运行时就绪前的空加载结果，保证网络层拿到非 null 对象
+    private static RuleLoadResult<Rule> emptyResult() {
+        IssueCollector issues = new IssueCollector();
+        issues.warn("新链路运行时尚未就绪，本次按空规则集处理", null, null);
+        return new RuleLoadResult<>(List.of(), issues);
+    }
+
     // 服务端就绪：读配置 → 建注册表 → 加载规则 → 建运行时 → 对全部已加载维度回扫
     // 必须等到 ServerStarted（全部维度已创建）才能回扫，否则会漏掉启动期已存在的掉落物
     public static void start(MinecraftServer server) {
@@ -88,13 +146,14 @@ public final class RuleRuntimeHost {
 
     // 数据包重载：重建规则索引并回扫全部已加载维度，使已存在的掉落物立即按新规则重选（A3）
     // 调用点必须位于服务端线程（Fabric 的 END_DATA_PACK_RELOAD 已由 handleAsync(server) 保证）
-    public static void reload(MinecraftServer server, ResourceManager resourceManager) {
+    // 返回本次加载结果供命令层回显；运行时未就绪或重载失败时返回 null
+    public static RuleLoadResult<Rule> reload(MinecraftServer server, ResourceManager resourceManager) {
         ConversionRuntime current = runtime;
         BuiltinTypeRegistries registries = typeRegistries;
         Path overlay = overlayRoot;
         if (current == null || registries == null || overlay == null) {
             // 启动前的首次数据包加载：那时维度尚未创建，统一交给 start 处理
-            return;
+            return null;
         }
         try {
             RuleLoadResult<Rule> result = loadRules(
@@ -105,9 +164,11 @@ public final class RuleRuntimeHost {
                 current.rescan(level);
             }
             LOGGER.info("数据包重载完成：规则索引已重建并完成回扫");
+            return result;
         } catch (RuntimeException e) {
             // 重载失败必须保留旧索引继续服务，不能让异常逃逸到事件回调
             LOGGER.error("数据包重载处理失败，保留上一版规则索引", e);
+            return null;
         }
     }
 

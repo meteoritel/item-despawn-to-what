@@ -8,6 +8,9 @@ import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
 import com.meteorite.itemdespawntowhat.core.load.PackLayerResolver;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoadResult;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerContext;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler;
+import com.meteorite.itemdespawntowhat.core.service.EditSessionManager;
 import com.meteorite.itemdespawntowhat.core.runtime.ConversionRuntime;
 import com.meteorite.itemdespawntowhat.core.runtime.LifespanProvider;
 import com.meteorite.itemdespawntowhat.core.service.BuiltinTypeRegistries;
@@ -16,7 +19,9 @@ import com.meteorite.itemdespawntowhat.core.service.RuleLoadingService;
 import com.meteorite.itemdespawntowhat.platform.Services;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.packs.resources.PreparableReloadListener;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.util.profiling.ProfilerFiller;
@@ -61,6 +66,65 @@ public final class RuleRuntimeHost {
         throw new UnsupportedOperationException("Utility class");
     }
 
+    // 网络编辑层入口：以窄接口暴露运行时的覆盖层路径与重建能力（阶段④）
+    public static RuleEditServerContext editContext() {
+        return EDIT_CONTEXT;
+    }
+
+    // 网络保存后的重建入口：与数据包重载共用同一 apply 路径，必须由服务端线程调用（纯新增，不改变既有重载语义）
+    public static void reload(MinecraftServer server) {
+        if (server == null) {
+            return;
+        }
+        applyReload(server.getResourceManager(), server.registryAccess());
+    }
+
+    // 运行时能力适配器：字段都是 volatile 静态状态，调用时实时读取
+    private static final RuleEditServerContext EDIT_CONTEXT = new RuleEditServerContext() {
+        @Override
+        public Path overlayRoot() {
+            return overlayRoot;
+        }
+
+        @Override
+        public String overlayNamespace() {
+            return MOD_NAMESPACE;
+        }
+
+        @Override
+        public BuiltinTypeRegistries typeRegistries() {
+            return typeRegistries;
+        }
+
+        @Override
+        public void sendTo(ServerPlayer player, CustomPacketPayload payload) {
+            // 发包方式由平台层提供（Fabric: ServerPlayNetworking / NeoForge: PacketDistributor）
+            Services.PLATFORM.sendToPlayer(player, payload);
+        }
+
+        @Override
+        public RuleLoadResult<Rule> loadMerged(MinecraftServer server) {
+            Path overlay = overlayRoot;
+            BuiltinTypeRegistries registries = typeRegistries;
+            if (overlay == null || registries == null) {
+                return emptyResult();
+            }
+            return loadRules(context(server.getResourceManager(), server.registryAccess(), overlay, registries), "编辑快照");
+        }
+
+        @Override
+        public void rebuildAndRescan(MinecraftServer server) {
+            reload(server);
+        }
+    };
+
+    // 运行时就绪前的空加载结果，保证网络层拿到非 null 对象
+    private static RuleLoadResult<Rule> emptyResult() {
+        IssueCollector issues = new IssueCollector();
+        issues.warn("新链路运行时尚未就绪，本次按空规则集处理", null, null);
+        return new RuleLoadResult<>(List.of(), issues);
+    }
+
     // 服务端就绪：读配置 → 建注册表 → 加载规则 → 建运行时 → 对全部已加载维度回扫
     // 必须等到 ServerStarted（全部维度已创建）才能回扫，否则会漏掉启动期已存在的掉落物
     public static void start(MinecraftServer server) {
@@ -94,14 +158,15 @@ public final class RuleRuntimeHost {
     }
 
     // 数据包重载（apply 阶段，服务端线程）：重建规则索引并回扫全部已加载维度，使已存在掉落物立即重选（A3）
-    private static void applyReload(ResourceManager resourceManager, RegistryAccess registryAccess) {
+    // 返回本次加载结果；运行时未就绪（启动前首次数据包加载）或重载失败时返回 null
+    private static RuleLoadResult<Rule> applyReload(ResourceManager resourceManager, RegistryAccess registryAccess) {
         ConversionRuntime current = runtime;
         BuiltinTypeRegistries registries = typeRegistries;
         Path overlay = overlayRoot;
         MinecraftServer server = currentServer;
         if (current == null || registries == null || overlay == null || server == null) {
             // 启动前的首次数据包加载：那时维度尚未创建，统一交给 start 处理
-            return;
+            return null;
         }
         try {
             // 使用本次重载传入的资源管理器与注册表访问器，而不是 server 上尚未切换的旧实例
@@ -113,9 +178,11 @@ public final class RuleRuntimeHost {
                 current.rescan(level);
             }
             LOGGER.info("数据包重载完成：规则索引已重建并完成回扫");
+            return result;
         } catch (RuntimeException e) {
             // 重载失败必须保留旧索引继续服务，且不能让异常导致整次 /reload 失败
             LOGGER.error("数据包重载处理失败，保留上一版规则索引", e);
+            return null;
         }
     }
 
