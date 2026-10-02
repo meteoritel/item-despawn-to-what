@@ -1,6 +1,6 @@
 # 纵向系统：编辑保存协议
 
-> 从"打开编辑器"到"规则落盘并重建索引"的端到端流程。当前前端为占位页，协议保留供下一轮前端使用。
+> 从"打开编辑器"到"规则落盘并重建索引"的端到端流程。客户端编辑器已落地，本流程为现行链路。
 > 类职责见 [edit-protocol.md](../modules/edit-protocol.md)、[issue-validation.md](../systems/issue-validation.md)。决策：[ADR-0016](../../../adr/0016-edit-protocol-changeset-version-stamp.md)。
 
 ## 1. 打开编辑器
@@ -56,7 +56,7 @@ SaveRuleChangeSetPayload / SaveRuleChangeSetChunkPayload* (C2S)
 
 ## 5. 版本戳推进时机
 
-`成功 reload / save 推进上下文修订号（bumpVersion）`。保存后 reload 失败时：仍 `bumpVersion()` 并回 `SAVED_NOT_RELOADED`（`writtenToDisk=true, reloaded=false`），同时**保留上一版索引**（规则已落盘，下次启动/重载生效）。`/idtw config convert` 已随 P8 结论退役（命令与 `RuleConvertService` 已删除），不再推进修订号；旧 v1.2.1 配置不再加载，需用 `/idtw config edit` 手工重建，见 [更新说明](../../guide/update-notes.md)。
+`成功 reload / save 推进上下文修订号（bumpVersion）`。保存后 reload 失败时：仍 `bumpVersion()` 并回 `SAVED_NOT_RELOADED`（`writtenToDisk=true, reloaded=false`），同时**保留上一版索引**（规则已落盘，下次启动/重载生效）。`/idtw config convert` 已随 P8 结论退役（命令与 `RuleConvertService` 已删除），不再推进修订号；旧 v1.2.1 配置不再加载，需用 `/idtw config edit` 手工重建，见 [更新说明](../../../guide/update-notes.md)。
 
 ## 6. 相关
 

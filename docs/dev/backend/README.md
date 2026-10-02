@@ -1,7 +1,7 @@
 # 后端开发者文档地图
 
 > 范围：**Minecraft 1.21.1 / Fabric + NeoForge 的后端**——`common` 的 `core/**` 与两端平台接入层。
-> 不含前端编辑 UI（当前为占位页，下一轮重构）。
+> 不含前端编辑 UI（编辑器已落地，界面契约见 [plan-frontend-rewrite-contract.md](../../plan/plan-frontend-rewrite-contract.md)，扩展点见 [client-editor-spi.md](../../guide/client-editor-spi.md)）。
 > 目的：**知道技术路线、能找到类、知道改哪里**。所有结论都能在仓库中逐个核对。
 
 ## 1. 三层视图：同一个后端，三种问题
@@ -14,7 +14,7 @@
 | **横向系统** | [systems/](systems/) | 跨模块的机制怎么运作（注册、校验、调度、缓存、平台、配置） | 改机制、理解某条铁律为什么存在 |
 | **纵向系统** | [flows/](flows/) | 端到端链路怎么走（一次加载/一次转化/一次保存） | 追调用链、排查跨层问题 |
 
-包的定位：`core` 是**唯一的规则执行链路**（旧链路已删除，见 [归档索引](../../archive-index.md)）。`client` 只有占位页与快捷键，不在此范围内。
+包的定位：`core` 是**唯一的规则执行链路**（旧链路已删除）。`client` 侧为规则编辑器与快捷键，不在此范围内。
 
 ## 2. 目录
 
@@ -22,12 +22,12 @@
 
 | 文档 | 覆盖的包 / 类 | 一句话 |
 |---|---|---|
-| [rule-model.md](modules/rule-model.md) | `core/api`、`core/model` | 契约层与规则模型：Rule / 源匹配 / DNF 条件 / 效果 + Codec 与校验入口 |
+| [rule-model.md](modules/rule-model.md) | `core/api`、`core/model` | 契约层与规则模型：Rule / 源匹配 / 条件树 / 效果 + Codec 与校验入口 |
 | [type-system.md](modules/type-system.md) | `core/registry`、`core/extension`、`core/type` | 类型注册表、第三方 SPI，以及 12 个内置效果 + 10 个内置条件 |
 | [rule-loading.md](modules/rule-loading.md) | `core/load`、`core/service`（装配部分） | 三层来源读取 → 合并 → 解码 → 校验 → 索引 |
 | [conversion-runtime.md](modules/conversion-runtime.md) | `core/runtime` | 追踪、排期、条件求值、效果派发、双队列调度 |
 | [edit-protocol.md](modules/edit-protocol.md) | `core/network`、`core/service`（写入/会话） | 编辑快照、变更集、版本戳、权威落盘 |
-| [command.md](modules/command.md) | `core/command` | `/idtw` 命令树与旧配置转换服务 |
+| [command.md](modules/command.md) | `core/command` | `/idtw` 命令树（config / rule / debug）与权限口径 |
 | [debug.md](modules/debug.md) | `core/debug` | 开发场景、真实后端观测、性能窗口 |
 | [platform.md](modules/platform.md) | `core/config`、`platform`、`fabric`、`neoforge` | 引导与生命周期、事件入口、Mixin、两端差异 |
 

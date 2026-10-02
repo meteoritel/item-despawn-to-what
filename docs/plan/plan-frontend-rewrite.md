@@ -1,6 +1,6 @@
 # 新前端与编辑后端重构计划
 
-> 状态：grilling 共识已确认，待分阶段实施。
+> 状态：P1–P8 代码已落盘（2026-10-03），构建与静态复核通过；P7 双平台游戏内手动验收待执行。下文 P0–P8 分阶段清单保留实施记录；界面契约以 [plan-frontend-rewrite-contract.md](plan-frontend-rewrite-contract.md) 与 [plan-frontend-rewrite-forms.md](plan-frontend-rewrite-forms.md) 为准。
 > 确认日期：2026-10-02。
 > 环境：Minecraft 1.21.1，Fabric + NeoForge，Java 21，Mojang 官方映射。
 > 本文件是实施计划，不表示其中的新模型、协议或界面已经存在。文中的新增类名是建议职责名称，实施时可按项目命名习惯调整。

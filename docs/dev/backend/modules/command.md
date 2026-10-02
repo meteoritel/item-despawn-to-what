@@ -2,7 +2,7 @@
 
 > 事实来源：`core/command/**`（5 个文件）。
 > `/idtw` 的唯一命令入口；配置与查询在 `command`，诊断入口在 `core/debug`。
-> **convert 子命令已退役（2026-10-03，P8 结论）**：`/idtw config convert` 与 `RuleConvertService` 已从代码中删除，旧 v1.2.1 配置不再加载，改用 `/idtw config edit` 重建。见 [更新说明](../../guide/update-notes.md) 与 [迁移评估 §5](../plan/v1.2.1-migration-evaluation.md)。下文相关行与第 4 节保留为历史记录。
+> **convert 子命令已退役（2026-10-03，P8 结论）**：`/idtw config convert` 与 `RuleConvertService` 已从代码中删除，旧 v1.2.1 配置不再加载，改用 `/idtw config edit` 重建。见 [更新说明](../../../guide/update-notes.md) 与 [迁移评估 §5](../../../plan/v1.2.1-migration-evaluation.md)。下文相关行与第 4 节保留为历史记录。
 
 ## 1. 类清单
 
@@ -42,7 +42,7 @@
 
 ## 4. 旧配置转换（`RuleConvertService`）【历史记录，2026-10-03 起失效】
 
-> **本章描述的实现已被删除（P8 结论）**：不要再据此排查或使用转换入口；当前迁移路径见 [更新说明](../../guide/update-notes.md)。以下内容仅作为历史记录保留。
+> **本章描述的实现已被删除（P8 结论）**：不要再据此排查或使用转换入口；当前迁移路径见 [更新说明](../../../guide/update-notes.md)。以下内容仅作为历史记录保留。
 
 | 项 | 行为 |
 |---|---|

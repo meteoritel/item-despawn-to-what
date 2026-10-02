@@ -1,6 +1,6 @@
 # ItemDespawnToWhat 配置领域
 
-> 当前状态（2026-10-03）：后端条件树（P2）、独占编辑协议 v2（P3）、客户端 UI kit 与编辑数据结构（P4a）、八类选择目录数据源（P4b）已落地；P5 编辑界面与选择器进行中，界面仍是占位实现。
+> 当前状态（2026-10-03）：后端条件树、独占编辑协议 v2、客户端 UI kit 与编辑数据结构、选择目录数据源、规则编辑器界面与表单引擎、草稿持久化与撤销均已落地（P1–P8 代码落盘，构建与静态复核通过）；双平台游戏内手动验收待执行，见 [manual-acceptance.md](docs/guide/manual-acceptance.md)。
 > 权威契约：[plan-frontend-rewrite-contract.md](docs/plan/plan-frontend-rewrite-contract.md)（冻结形状）与 [plan-frontend-rewrite-forms.md](docs/plan/plan-frontend-rewrite-forms.md)（逐字段取值域）；本轮决策见 [docs/adr/](docs/adr/) 的 0018–0022。
 
 掉落物在自然消失前，按数据包 / config 覆盖层中的规则转化为其他内容（物品、实体、方块、经验、世界效果等）。本词汇表覆盖新链路（`core/**`）的配置与运行时词汇；已退役的历史术语标注为「旧链路」。
@@ -65,7 +65,7 @@
 | `gui.itemdespawntowhat.edit.*` | **界面文本**：标题、按钮、字段标签、枚举值、类型显示名 | `gui.itemdespawntowhat.edit.field.y_level.min` |
 | `itemdespawntowhat.edit.*` | **协议回执与校验问题的 messageCode**（服务端生成、客户端翻译） | `itemdespawntowhat.edit.status.lock_busy` |
 
-字段标签 `gui.itemdespawntowhat.edit.field.<类型 path>.<字段>`、枚举值 `gui.itemdespawntowhat.edit.enum.<组>.<值>`、类型显示名 `gui.itemdespawntowhat.edit.<condition|effect>.<类型>`。`en_us.json` 与 `zh_cn.json` 的键集合必须完全一致（当前各 362 个键）。协议键与消息码细节见 [docs/guide/message-codes.md](docs/guide/message-codes.md)。
+字段标签 `gui.itemdespawntowhat.edit.field.<类型 path>.<字段>`、枚举值 `gui.itemdespawntowhat.edit.enum.<组>.<值>`、类型显示名 `gui.itemdespawntowhat.edit.<condition|effect>.<类型>`。`en_us.json` 与 `zh_cn.json` 的键集合必须完全一致（当前各 630 个键）。协议键与消息码细节见 [docs/guide/message-codes.md](docs/guide/message-codes.md)。
 
 ## 语言
 

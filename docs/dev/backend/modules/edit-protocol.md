@@ -1,7 +1,7 @@
 # 功能模块：编辑协议与持久化（`core/network` + `core/service` 写入/会话）
 
 > 事实来源：`core/network/protocol/**`、`core/network/transport/**`、`core/service/{RuleOverlayWriter, RuleSubmissionValidator, RuleSnapshotAssembler, EditSessionManager}.java`。
-> 当前前端是占位页，**协议保留供下一轮前端使用**。决策：[ADR-0016](../../../adr/0016-edit-protocol-changeset-version-stamp.md)。
+> 客户端编辑器已落地，本协议为现行客户端编辑通道。决策：[ADR-0016](../../../adr/0016-edit-protocol-changeset-version-stamp.md)、[ADR-0019](../../../adr/0019-exclusive-edit-session-and-target-lock.md)。
 
 ## 1. 类清单
 
