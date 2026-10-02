@@ -48,7 +48,7 @@
 
 Debug由加载器的开发环境判断自动启用，IDEA Run/Debug均可使用，发布环境不注册debug指令。执行 `/idtw debug run convert` 即可生成测试源并走真实后端；在 IDEA 控制台过滤 `[IDTW_DEBUG]` 或回执的 `run=<编号>`，校对 START 参数、过程事件、FRAME 和 END 的预期/实际。无需手写测试配置或开启 `debug_logging`。功能场景、性能对比流程和AI反馈模板见 [Debug 实机验证与反馈指南](docs/dev/debug-validation-guide.md)。
 
-旧 JSON 保留在原目录，但运行时不再加载。迁移前请备份配置与存档，并阅读[迁移指南](docs/dev/migration-guide.md)。
+旧 JSON 保留在原目录，但运行时不再加载。迁移前请备份配置与存档；迁移用 `/idtw config convert`，字段与运行边界见[后端开发者文档地图](docs/dev/backend/README.md)。
 
 ## 开发与验收
 
@@ -56,9 +56,7 @@ Debug由加载器的开发环境判断自动启用，IDEA Run/Debug均可使用�
 .\gradlew.bat build
 ```
 
-- [配置字段与运行边界](docs/dev/config-reference.md)
-- [架构与数据流](docs/dev/architecture.md)
-- [新增效果、条件与第三方 SPI](docs/dev/extension-guide.md)
+- [后端开发者文档地图](docs/dev/backend/README.md)（功能模块 / 横向系统 / 纵向系统）
 - [Debug 实机验证与反馈指南](docs/dev/debug-validation-guide.md)
 - [后端收尾记录与游戏验收步骤](docs/review/backend-rewrite-closeout-2026-10-02.md)
 - [重构规划与历史阶段记录](docs/plan/plan-backend-rewrite.md)

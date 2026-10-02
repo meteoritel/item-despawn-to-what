@@ -1,6 +1,6 @@
 # 用 DFU Codec 统一序列化，并按扁平字段做类型分发
 
-> 实施补充：本文的最新调度、区块生命周期、保存与前端边界以 [ADR-0017](0017-backend-cutover-and-budgeted-effects.md) 和 [当前架构](../dev/architecture.md) 为准。
+> 实施补充：本文的最新调度、区块生命周期、保存与前端边界以 [ADR-0017](0017-backend-cutover-and-budgeted-effects.md) 和 [当前架构](../dev/backend/README.md) 为准。
 
 ## 背景
 旧链路用 Gson + `@SerializedName` 手写序列化：61 个文件、两处独立 Gson 实例、三套并存的校验策略（未知字段拒整文件 / 启动逐条丢弃 / reload 一条非法即整体失败），并且 Gson 默认静默忽略未知字段，配置错误会"静默退化"而不是报错。同时效果与条件是多态类型，需要一个能按 `type` 查注册表的解码入口。
