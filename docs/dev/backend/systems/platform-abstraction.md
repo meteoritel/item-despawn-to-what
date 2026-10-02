@@ -34,8 +34,8 @@ S2C 的"打开编辑界面 / 收到快照 / 收到回执"需要触达客户端�
 
 | sink | 安装方 | 分发 |
 |---|---|---|
-| `OpenRuleEditorPayload.installOpenEditorSink(Runnable)` | 客户端 | `dispatchOpenEditor()` |
-| `RuleEditPayloadRouter.installSnapshotSink / installResultSink` | 客户端门面 | `dispatchSnapshot` / `dispatchResult` |
+| `OpenRuleEditorPayload.installOpenEditorPayloadSink(Consumer<OpenRuleEditorPayload>)` | 客户端（`RuleEditClientWorkspace` 装配期安装） | `dispatchOpenEditor(payload)` |
+| `RuleEditPayloadRouter.installSnapshotPayloadSink / installChunkSink / installResultPayloadSink / installCatalogSink` | 客户端（`RuleEditClientWorkspace`） | `dispatchSnapshot` / `dispatchSnapshotChunk` / `dispatchResult` / `dispatchCatalog` |
 
 平台接收器**只调 router**；专用服务端未安装 sink 时静默丢弃。
 

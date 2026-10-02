@@ -1,7 +1,8 @@
 # 功能模块：命令系统（`core/command`）
 
-> 事实来源：`core/command/**`（6 个文件）。
+> 事实来源：`core/command/**`（5 个文件）。
 > `/idtw` 的唯一命令入口；配置与查询在 `command`，诊断入口在 `core/debug`。
+> **convert 子命令已退役（2026-10-03，P8 结论）**：`/idtw config convert` 与 `RuleConvertService` 已从代码中删除，旧 v1.2.1 配置不再加载，改用 `/idtw config edit` 重建。见 [更新说明](../../guide/update-notes.md) 与 [迁移评估 §5](../plan/v1.2.1-migration-evaluation.md)。下文相关行与第 4 节保留为历史记录。
 
 ## 1. 类清单
 
@@ -10,15 +11,15 @@
 | `RuleCommandTree` | `/idtw` 唯一入口：权限门、反馈出口、子分支装配 | `ROOT="idtw"`、`register(dispatcher, context)`、`hasAccess(source)`、`reply` / `replyAll` / `replyFailure` / `notReady` |
 | `RuleCommandContext` | 窄接口：向命令层暴露运行时能力（由两端 `RuleRuntimeHost` 实现） | `runtime()`、`serverConfig()`、`editContext()`、`overlayNamespace()`、`overlayVersion()`、`activeSessionCount()`、`reloadRules(server)` |
 | `RuleCommandText` | i18n 反馈组件构造器（**唯一出口，禁止中文字面量**） | 各命令文案 key |
-| `RuleConfigCommands` | `config` 分支：reload / edit / validate / list / convert | `build(context)` |
+| `RuleConfigCommands` | `config` 分支：reload / edit / validate / list（`convert` 已于 2026-10-03 退役） | `build(context)` |
 | `RuleQueryCommands` | `rule` 分支：list / show | `build(context)` |
-| `RuleConvertService` | 旧链路 JSON → 新覆盖层规则一次性转换（备份 + 映射 + 校验 + 落盘） | `convert(...)`、映射表 `TYPE_TO_EFFECT`、`CONDITIONS` |
+| ~~`RuleConvertService`~~【已删除，2026-10-03】 | 旧链路 JSON → 新覆盖层规则一次性转换（备份 + 映射 + 校验 + 落盘）；P8 结论后整类删除 | 历史成员 `convert(...)`、映射表 `TYPE_TO_EFFECT`、`CONDITIONS` |
 
 ## 2. 命令树与权限
 
 ```text
 /idtw (requires hasAccess)
-├── config  → reload | edit | validate | list | convert
+├── config  → reload | edit | validate | list
 ├── rule    → list | show <id>
 └── debug   → 仅 DebugMode.ENABLED 时挂载（见 debug.md）
 ```
@@ -35,11 +36,13 @@
 | `/idtw config edit` | `RuleConfigCommands.edit` | `context.editContext().sendTo(player, new OpenRuleEditorPayload())` |
 | `/idtw config validate` | `RuleConfigCommands.validate` | `context.editContext().loadMerged(server)`（只读，不重建索引） |
 | `/idtw config list` | `RuleConfigCommands.list` | `loadMerged`；逐条列出 id/layer/priority/trigger/effects/enabled/origin |
-| `/idtw config convert` | `RuleConfigCommands.convert` | `RuleConvertService.convert(...)`；成功条数 >0 时再 `reloadRules(server)` |
+| `/idtw config convert`【已退役，2026-10-03】 | 历史：`RuleConfigCommands.convert`（分支已删除） | 历史：`RuleConvertService.convert(...)`（已整类删除）；成功条数 >0 时再 `reloadRules(server)` |
 | `/idtw rule list` | `RuleQueryCommands.list` | `loadMerged` |
 | `/idtw rule show <id>` | `RuleQueryCommands.show` | `loadMerged` + `RuleSnapshotAssembler.assemble(...)` 取原始 JSON |
 
-## 4. 旧配置转换（`RuleConvertService`）
+## 4. 旧配置转换（`RuleConvertService`）【历史记录，2026-10-03 起失效】
+
+> **本章描述的实现已被删除（P8 结论）**：不要再据此排查或使用转换入口；当前迁移路径见 [更新说明](../../guide/update-notes.md)。以下内容仅作为历史记录保留。
 
 | 项 | 行为 |
 |---|---|

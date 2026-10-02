@@ -1,0 +1,347 @@
+# 双平台手动验收清单（Fabric / NeoForge）
+
+> 读者：**不需要懂 JSON** 的验收人（含最终审阅者）与开发回归者。
+> 权威依据：[plan-frontend-rewrite-contract.md](../plan/plan-frontend-rewrite-contract.md) §3/§5/§7、[plan-frontend-rewrite-forms.md](../plan/plan-frontend-rewrite-forms.md)（逐字段取值域）、[ADR-0018](../adr/0018-condition-tree-contract.md)–[0022](../adr/0022-client-ui-kit-adoption.md)。
+> 记录日期：2026-10-03。
+
+## 0. 状态标记与当前可验收范围（先读）
+
+每一步都带一个标记：
+
+| 标记 | 含义 |
+|---|---|
+| 【现在可验收】 | 当前代码已具备（P1–P8 全部落盘，2026-10-03 终验通过：clean build exit=0、IDE 无错误无警告），按步骤即可看到预期结果 |
+| 【开发者】 | 需要调试器或改代码才能稳定复现，普通玩家可跳过 |
+
+> 说明：清单中曾用于区分「P5 后（需要编辑界面）」「P6 后（需要草稿/撤销）」的标记已统一为【现在可验收】——这两批能力均已落盘并接线。
+
+**当前关键事实（2026-10-03，验收前务必确认）**：
+
+1. **编辑界面已接线**（2026-10-03 复核）：`RuleEditorOpener.bootstrap()` 已在 Fabric `fabric/src/main/java/com/meteorite/itemdespawntowhat/client/ItemDespawnToWhatClient.java:21` 与 NeoForge `neoforge/src/main/java/com/meteorite/itemdespawntowhat/client/register/RegisterEvent.java:24` 的客户端初始化中调用，内部执行 `EditorScreenHooks.setOpener(...)` 注册单例；`/idtw config edit` 取锁成功后会经 `RuleEditClientWorkspace.onOpen` → `EditorScreenHooks.open(request)` 弹出编辑器。`EditorScreenHooks` 的「未注册」日志分支只在 bootstrap 未被调用的环境（如脱离客户端初始化的调试运行）才可能出现。
+2. 快捷键（`common/src/main/java/com/meteorite/itemdespawntowhat/client/key/ModKeyBindings.java`，默认未绑定）由 `common/src/main/java/com/meteorite/itemdespawntowhat/client/key/EditorShortcut.java` 处理：**已有会话**且 `EditorScreenHooks.opener()` 已注册时**只重开界面**（不重复请求授权）；**没有会话时只提示** `gui.itemdespawntowhat.edit.hint.use_command`（"使用 /idtw config edit 开始编辑"），**绝不自行发起会话**；开发环境（`DebugMode.ENABLED`）下无会话时改开 `UiPrototypeScreen` 原型屏（发布环境不存在该分支，不构成绕过锁的入口）。两平台入口：Fabric `fabric/src/main/java/com/meteorite/itemdespawntowhat/client/event/InputEvents.java`、NeoForge `neoforge/src/main/java/com/meteorite/itemdespawntowhat/client/event/InputEvents.java`。旧占位屏 `RuleEditorPlaceholderScreen` **已删除**，全仓零引用。
+3. 因此：**第 2 节主链、第 4.2 节界面路径、第 6 节界面检查项现已可执行**（界面已接线；快捷键仍需在 选项 → 控制 手动绑定，见 8.5）。第 1 节（构建/启动）、第 3 节（独占锁与命令，含 3.6 写盘失败与 3.7 重载失败）、第 4.1/4.3 节（数据包规则与文件层、内置样本的游戏内效果）、第 5 节（条件/效果最小用例）、第 7 节（双平台一致性）照旧可完整验收。
+4. 完整缺口清单见第 8 节；界面已接线，若按第 2 节验收时界面未弹出，先确认客户端是否完成了平台初始化（bootstrap 调用点见第 1 条），以及是否误走了未绑定的快捷键。
+
+## 1. 前置准备【现在可验收】
+
+### 1.1 构建
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/dsh-build.ps1 -Tasks "build"
+```
+
+- 期望：`BUILD SUCCESSFUL`，退出码 0；耗时约 40 秒（脚本内部有命名互斥体，多个构建会排队）。
+- **不要裸跑 `gradlew.bat`**：其他任务/agent 可能正在并行构建，直接跑会绕过互斥体。
+- 需要 Java 21。产物在每个加载器工程的 `build/libs/` 下（具体文件名以 Gradle 输出为准）。
+
+### 1.2 在 IDEA 里跑客户端
+
+新通知无关：Gradle 工具窗 → `itemDespawnToWhat` → `Tasks` → 对应加载器 → `runClient`，或在 `Run/Debug Configurations` 里加两条 Gradle 配置：
+
+| 平台 | 任务 | 说明 |
+|---|---|---|
+| Fabric | `:fabric:runClient` | 首次启动需下载依赖，可能数分钟 |
+| NeoForge | `:neoforge:runClient` | 同上 |
+
+- 专用服务器（验证服务端权威行为、租约到期时推荐）：`:fabric:runServer` / `:neoforge:runServer`；控制台执行 `op <玩家名>` 授予权限。
+- 单人世界：新建创造世界即可；**内置示例规则来自模组自带数据包**，不需要额外装数据包。
+- 游戏目录：开发环境各加载器的工作目录（`run/` 下）；覆盖层规则位于 `<游戏目录>/config/itemdespawntowhat/rules/`。
+
+### 1.3 权限与就绪
+
+| 情形 | 行为 |
+|---|---|
+| 单人存档 | `/idtw config edit` **直接放行**，不需要 op（`RuleEditServerHandler.canEdit`：`server.isSingleplayer() || 权限等级 ≥ 2`） |
+| 专用服务器 | 需要权限等级 2：控制台 `op <玩家名>` |
+| `/idtw config edit-lock status` | **任何玩家**都可用（无需权限） |
+| `/idtw config edit-lock release` | 需要权限等级 2 |
+| 运行时未就绪 | 提示 `itemdespawntowhat.edit.runtime_not_ready`（正常开局不会出现） |
+
+### 1.4 观察点
+
+- 客户端日志（`logs/latest.log`）：logger `itemdespawntowhat-client-net` 打印开屏/未注册信息；服务端日志打印规则加载与重载结论。
+- 当前"界面未接线"的证据日志就是第 0 节第 1 条那句；它**恰好证明锁已取到、载荷已送达客户端**。
+
+## 2. 操作主链（【现在可验收】）
+
+每步都写"操作 → 预期"，验收时逐条打勾。
+
+### 2.1 打开与关闭
+
+| # | 操作 | 预期 |
+|---|---|---|
+| 2.1.1 | 聊天栏输入 `/idtw config edit` | 聊天栏回显"已向 %1$s 发送编辑入口。"；编辑器界面打开；服务端无异常日志 |
+| 2.1.2 | 再输入一次 `/idtw config edit`（自己已持有） | 仍是同一会话（不报"被他人锁定"），界面正常 |
+| 2.1.3 | 按 Esc 关闭界面 | 会话立即释放（见 3.4）；重新 `/idtw config edit` 立刻成功 |
+| 2.1.4 | 界面内存在未应用的改动时按 Esc | 应提示"有未应用的草稿"并允许取消（【现在可验收】） |
+
+### 2.2 规则列表
+
+| # | 操作 | 预期 |
+|---|---|---|
+| 2.2.1 | 打开界面看列表 | 列出全部规则；每行显示 显示名（未设置则 id）、id、来源（`overlay` / `datapack` / `mixed`）、状态（`active` / `disabled` / `masked` / `invalid`）、可编辑标记 |
+| 2.2.2 | 观察内置示例规则 | 8 个内置规则条目可见（清单见 4.1）；来源为数据包；显示名为中英对照（如"鸡肉腐化 / Chicken to Rotten Flesh"） |
+| 2.2.3 | 搜索框输入"鸡肉" | 命中 `builtin_item_to_item` |
+| 2.2.4 | 搜索框输入 "chicken" | 命中同一条（按技术 id 搜索） |
+| 2.2.5 | 搜索框输入 "itemdespawntowhat:" | 命中全部本模组规则（按命名空间搜索） |
+| 2.2.6 | 刷新/重新打开列表 | 列表内容与状态保持一致，不出现重复条目 |
+
+### 2.3 新建 / 复制 / 编辑 / 停用 / 删除 / 恢复
+
+| # | 操作 | 预期 |
+|---|---|---|
+| 2.3.1 | 新建：选模板（12 种效果各一个入口） | 新建一条只含该效果的规则草稿，未填必填项时有明确提示 |
+| 2.3.2 | 填规则 id、源物品（用**选择器按名字挑**，不手输 id）、效果参数 → 应用 | 回执成功；列表出现新规则；来源 `overlay` |
+| 2.3.3 | 复制一条既有规则 | 生成新的草稿（id 需改），原规则不变 |
+| 2.3.4 | 编辑：改 `display_name` 与优先级 → 应用 | 列表显示名与排序（优先级 desc）随之变化；id 不变 |
+| 2.3.5 | 停用：`enabled=false` → 应用 | 列表状态变 `disabled`，内容仍可见可编辑；游戏内该规则不触发 |
+| 2.3.6 | 删除覆盖层规则 → 应用 | 条目从列表消失；覆盖层文件被删除 |
+| 2.3.7 | 对**数据包规则**删除/覆盖后再"恢复原始" | 恢复后列表回到数据包原规则，覆盖条目消失（详见 4.2） |
+
+### 2.4 页签与条件树
+
+| # | 操作 | 预期 |
+|---|---|---|
+| 2.4.1 | 切换 基本信息 / 源物品 / 触发条件 / 效果 页签 | 切换不丢改动；脏标记保留（【现在可验收】显示撤销/重做按钮状态） |
+| 2.4.2 | 条件树：添加 `all_of` / `any_of` / `inverted` / 条件叶 | 树按层级缩进显示，可折叠/展开；每层有明确的"全部/任一/非"文字标签（不能只靠颜色或图标） |
+| 2.4.3 | 删除某个节点 | 删除后父节点结构仍然合法可显示；空 `all_of`/`any_of` 允许短暂存在（编辑中间态）并显示"未完成"提示 |
+| 2.4.4 | 尝试在叶子上找"取反"勾选框 | **不存在**。取反只能用 `inverted` 节点（界面文案"非/NOT"）；草稿 JSON 中不得出现 `negated` 字段 |
+| 2.4.5 | 深度超过 6 层 | 显示"层级较深"提示（不阻止编辑） |
+| 2.4.6 | 制造未完成的空 `all_of` 并点应用 | 本地拦截，提示定位到该节点（不是笼统失败） |
+| 2.4.7 | 制造超限（>128 叶 / >256 节点 / 深度 >16） | 本地拦截并给出字段路径；上限**按逐表达式**计（规则级与每个效果级各自独立） |
+
+### 2.5 效果列表
+
+| # | 操作 | 预期 |
+|---|---|---|
+| 2.5.1 | 添加/删除/上移/下移效果 | 顺序即执行顺序；界面即时反映 |
+| 2.5.2 | 设置 `delay_ticks` = 0 | 显示"立即"；可输入 0..72000 |
+| 2.5.3 | 设置 `chance` | 以百分比呈现（0%..100%）；未命中概率时仍按隐式消耗扣源物品（见 5.2 说明） |
+| 2.5.4 | 给单个效果加"附加条件" | 该效果级条件树独立成树，不与其他效果或规则级条件混用 |
+| 2.5.5 | 依次打开 12 种效果表单 | 每种都有可填字段，无空白表单、无异常 |
+
+### 2.6 应用与错误定位
+
+| # | 操作 | 预期 |
+|---|---|---|
+| 2.6.1 | 点"应用" | 提交变更集；成功后回执为成功（文案来自 messageCode，客户端不解析文案） |
+| 2.6.2 | 故意留一个未完成节点再应用 | 校验失败回执 + 问题列表：每条含 规则 id、字段路径（如 `conditions.terms[0].condition.min`）、可读说明；点击问题应跳到对应字段/节点 |
+| 2.6.3 | 制造版本冲突（见 3.5 的技巧） | 回执"版本冲突"，提示刷新后重试，**不落盘** |
+| 2.6.4 | 制造写盘失败（见 3.6） | 回执区分"写盘失败"；界面提示可重试；列表仍可刷新 |
+| 2.6.5 | 制造重载失败（见 3.7，需先做一次 Windows ACL 操作） | 回执"已写盘但未重载"；运行时继续用旧规则；界面明确提示"规则已保存但未生效" |
+| 2.6.6 | 应用成功后刷新列表 | 改动生效、脏标记清除；【现在可验收】草稿与撤销历史清空 |
+
+## 3. 独占编辑会话（锁）【现在可验收】
+
+### 3.1 两个客户端互斥
+
+准备：单人世界 + "对局域网开放"，或用专用服务器；两个客户端各自连入（第二个客户端需要 op 才能执行 `/idtw config edit`）。
+
+| # | 操作 | 预期 |
+|---|---|---|
+| 3.1.1 | 客户端 A 执行 `/idtw config edit` | A 看到"已向 A 发送编辑入口。"；服务端日志无异常 |
+| 3.1.2 | 客户端 B 执行 `/idtw config edit` | B 看到"规则编辑器已被 A 锁定，可用 `/idtw config edit-lock status` 查看。"；【现在可验收】B 不弹出编辑器（或弹出被占用提示） |
+| 3.1.3 | A 关闭界面（【现在可验收】按 Esc）后 B 再执行 | B 立刻成功（锁已释放，见 3.4） |
+
+### 3.2 `edit-lock status` 的预期输出
+
+| 执行者 | 预期回显 |
+|---|---|
+| 持有者 A | "你正持有规则编辑器：状态=%1$s，会话号=%2$s。"（状态为 `opening` / `active` / `applying`） |
+| 无权限的 B | "规则编辑器当前被其他玩家持有。"（**不泄露**会话号） |
+| 有权限（op）的 B | "%1$s 正持有规则编辑器：状态=%2$s。" |
+| 任何人（空闲时） | "规则编辑器空闲，当前无人持有编辑锁。" |
+
+### 3.3 `edit-lock release`
+
+| # | 操作 | 预期 |
+|---|---|---|
+| 3.3.1 | op 执行 `/idtw config edit-lock release` | "已强制释放 A 持有的规则编辑器锁。"；A 立刻收到"会话失效"回执（【现在可验收】界面自动关闭并提示） |
+| 3.3.2 | 空闲时执行 release | "规则编辑器本来就是空闲的。" |
+| 3.3.3 | 无权限玩家执行 release | 命令不可用/被拒（需要权限等级 2） |
+
+### 3.4 释放时机
+
+| # | 情形 | 预期 |
+|---|---|---|
+| 3.4.1 | 【现在可验收】关闭编辑界面 | 客户端发关闭载荷，服务端**立即**把会话置为空闲（`RuleEditService.close` → `sessions.release()`，回执 SUCCESS）；**不需要等 60 秒** |
+| 3.4.2 | 客户端断线（杀进程/拔网线） | 客户端工作区重置；服务端在**租约 60 秒**内无心跳即释放（按服务端活动 tick 计） |
+| 3.4.3 | 客户端打开界面后 15 秒内没有确认握手 | 会话在 OPENING 窗口（15 秒）后自动释放 |
+| 3.4.4 | 单人世界打开暂停菜单 | 服务端 tick 不推进 ⇒ **租约不流逝**（这是设计行为，不是 bug）；要测到期请用专用服务器 |
+
+### 3.5 版本冲突（【现在可验收】）
+
+让两个客户端先后写入：A 取锁改一条规则但**不提交**；B 用 op 执行 `release` 后取锁并成功保存一条；A 再提交 ⇒ 预期回执"版本冲突"、整批不落盘、收到最新快照。
+
+### 3.6 写盘失败（【现在可验收】的开发者路径）
+
+用另一个进程独占锁定覆盖层里将被写入的文件（Windows 资源管理器预览/文本编辑器打开并保持写锁，或 `handle.exe`），再通过界面/命令触发保存。
+预期：回执"写盘失败"（`WRITE_FAILED`），运行时索引不变，列表仍可刷新。
+
+### 3.7 重载失败（"已写盘但未重载"）——【现在可验收，需先做一次 Windows ACL 操作】
+
+**先看一条纠正（2026-10-03 实测代码路径）**：**把已存在的覆盖层 JSON 写坏不会**造成"已写盘但未重载"。JSON 解析失败只产生一条问题记录（`common/src/main/java/com/meteorite/itemdespawntowhat/core/load/RuleFileParser.java:39-40`：`JSON 解析失败: ...`），加载照常成功，保存回执仍是成功；单个文件读取失败同样只记问题（`OverlayRuleReader.java:65-71`）。
+
+`SAVED_NOT_RELOADED` 只在**重载过程抛异常**时出现（两个平台行为现已一致）：
+
+- `fabric/src/main/java/com/meteorite/itemdespawntowhat/runtime/RuleRuntimeHost.java:147-152` 与 `neoforge/src/main/java/com/meteorite/itemdespawntowhat/runtime/RuleRuntimeHost.java:149-151`：`rebuildAndRescan` 在 `applyReload(...) == null` 时抛 `IllegalStateException("保存后的运行时重载失败")`；
+- 两侧 `reload`/`applyReload` 仅在捕获 `RuntimeException` 时返回 null（此时**保留上一版索引**继续服务）；
+- **不需要改代码的诱因**：覆盖层目录无法列举 —— `common/src/main/java/com/meteorite/itemdespawntowhat/core/load/OverlayRuleReader.java:47-48` 抛 `UncheckedIOException("列举覆盖层规则文件失败，保留现有规则")`。
+
+可操作做法（任选其一）：
+
+| 方式 | 步骤 | 预期 |
+|---|---|---|
+| **目录 ACL 拒绝列举（推荐，不改代码）** | 保存**前**在 Windows 对 `config/itemdespawntowhat/rules/` 下的一个**子目录**执行 `icacls "<子目录>" /deny %USERNAME%:(RD)`（确保即将写入的文件不在该子目录内；RD = 拒绝列出目录），然后通过命令/界面触发保存 | 回执"已写盘但未重载"（`SAVED_NOT_RELOADED`，`writtenToDisk=true, reloaded=false`，`RuleEditService.java:370-371`）；运行时继续用旧规则；【现在可验收】界面提示"已保存但未生效"，列表可刷新（回执附带新快照）；验收后 `icacls "<子目录>" /remove:d %USERNAME%` 还原 |
+| 调试器注入 | 在 `RuleRuntimeHost` 的 `loadRules(...)` 调用处设断点，命中一次后抛 `new IllegalStateException(...)`（或 `Force Return null`） | 同上 |
+
+无论哪种方式，验收要求：① 回执状态为"已写盘但未重载"；② **不**把这次保存当成完全成功；③ 运行时行为仍是旧规则；④ 列表仍可刷新；⑤ 下一次成功重载/重启后新规则生效。
+
+> 常规玩家流程里不会自然遇到该分支（见 8.9）；本条属**故障注入验收**，按上表操作即可完成。
+
+## 4. 数据包规则与文件层
+
+### 4.1 内置示例规则（第 5 节的最小用例直接引用它们）
+
+全部位于模组自带数据包 `data/itemdespawntowhat/idtw/rules/` 下，**每个文件是"顶层规则数组"（多规则一文件，只读）**，`trigger_after_seconds` 均为 300 秒：
+
+| 文件 | 规则 id | 源物品 | 内容 | 默认启用 |
+|---|---|---|---|---|
+| builtin_item_to_item.json | `itemdespawntowhat:builtin_item_to_item` | `minecraft:chicken` | 无 `conditions`（恒真）→ `spawn_item`（腐肉）；隐式消耗 1 | ✅ |
+| builtin_item_to_entity.json | `itemdespawntowhat:builtin_item_to_entity` | `minecraft:egg` | `outdoor` + `dimension`(主世界) → `spawn_entity`（幼年鸡） | ✅ |
+| builtin_item_to_block.json | `itemdespawntowhat:builtin_item_to_block` | `#minecraft:saplings`（排除 `minecraft:oak_sapling`） | `surrounding_blocks`(下=`#minecraft:dirt`) + `outdoor` → `place_block` | ❌（默认停用） |
+| builtin_multi_effect.json | `itemdespawntowhat:builtin_multi_effect` | `minecraft:diamond` | `inverted`(y_level) 条件 → `spawn_xp` + `consume_source` + `lightning`（带效果延迟） | ✅ |
+| builtin_loot_and_chance.json | `itemdespawntowhat:builtin_loot_and_chance` | `minecraft:gold_nugget` | `loot_table` + 50% `chance` | ✅ |
+| builtin_conditions.json | `itemdespawntowhat:builtin_catalyst_and_fluid` | `minecraft:redstone` | `fluid_present`(流动水) + `catalyst_present`(骨粉) → `spawn_item` + `consume_catalyst` | ✅ |
+| builtin_conditions.json | `itemdespawntowhat:builtin_biome_or_time` | `minecraft:apple` | `any_of`[ `biome`(forest), `time_of_day` ] → `spawn_item` | ❌ |
+| builtin_weather_and_light.json | `itemdespawntowhat:builtin_thunder_condensation` | `minecraft:wet_sponge` | `weather`(thunder) + `y_level`(60..320) → `weather`(rain,6000t,雷) + `consume_fluid`(水源) | ✅ |
+| builtin_weather_and_light.json | `itemdespawntowhat:builtin_dark_blast` | `minecraft:gunpowder` | `any_of`[ `light_level`(0..7), `inverted`(`weather` clear) ] → `explosion`(power 2, 起火) | ❌ |
+| builtin_arrow_rain.json | `itemdespawntowhat:builtin_arrow_rain` | `minecraft:arrow` | `dimension`(主世界) + `weather` → `arrow_rain` | ❌ |
+
+覆盖完整性：以上样本合计覆盖**全部 10 个条件**（dimension / biome / weather / outdoor / surrounding_blocks / catalyst_present / fluid_present / time_of_day / y_level / light_level）与**全部 12 个效果**（spawn_item / spawn_entity / place_block / spawn_xp / loot_table / lightning / arrow_rain / weather / explosion / consume_source / consume_catalyst / consume_fluid）。
+
+**加速技巧**：`trigger_after_seconds=300` 与掉落物 5 分钟生命周期几乎重合，肉眼验证要等 5 分钟。建议复制一条规则到覆盖层并把 `trigger_after_seconds` 改成 5（【现在可验收】用界面；【现在】用文本编辑器写覆盖层并 `/idtw config reload`）。
+
+### 4.2 覆盖 / 停用 / 屏蔽 / 恢复（【现在可验收】走界面；命令路径现在可用）
+
+以 `itemdespawntowhat:builtin_item_to_item` 为例：
+
+| # | 操作 | 预期 |
+|---|---|---|
+| 4.2.1 | 对数据包规则点"自定义覆盖" | 生成覆盖层文件 `config/itemdespawntowhat/rules/itemdespawntowhat_builtin_item_to_item.json`（文件名由 id 派生：`:` 与 `/` 换成 `_`，追加 `.json`）；列表中该条来源变 `overlay`/`mixed` |
+| 4.2.2 | 改内容后应用 | 覆盖层生效；数据包原文件**不被修改** |
+| 4.2.3 | 把 `enabled` 关掉并应用 | 列表状态 `disabled`；游戏内该规则不触发 |
+| 4.2.4 | 用"屏蔽/删除覆盖条目"（delete 覆盖） | 覆盖文件只含控制条目（`id` + `delete: true`）；列表状态 `masked`；数据包规则完全不生效 |
+| 4.2.5 | 删除该覆盖条目 / 点"恢复原始" | 覆盖条目消失，列表回到数据包原规则（来源 `datapack`，状态 `active`） |
+| 4.2.6 | 【现在可验收】尝试直接改纯数据包规则的字段 | 不得修改数据包文件：界面应引导「先创建覆盖条目」再编辑；未注册编辑器描述的类型回退为只读 JSON 摘要，且**原样保留**未识别字段 |
+
+**`editable` 语义（Lead 裁决，契约 §3.6）**：`editable = 该条目存在规则内容（base 或 overlay 非空）`。因此**纯数据包规则同样 `editable=true`**（可以基于它生成覆盖）；只有"仅控制条目、无实体内容"（覆盖文件只有 `id` + `delete: true`/`enabled: false`）才是 `editable=false`。`editable` **不表示"能否表单编辑"**，`status=invalid`（解码失败）的条目也可以是 true，客户端按 `status`/`issues` 自行决定是否只读展示。
+
+**结论**：4.2 这一节的「覆盖 → 停用 → 屏蔽 → 恢复原始」**现在就能验收**——用文本编辑器改覆盖层文件并 `/idtw config reload`，或在命令路径可用时走命令；不依赖 P5 编辑界面。
+
+### 4.3 文件层与服务端命令【现在可验收】
+
+| # | 命令/操作 | 预期 |
+|---|---|---|
+| 4.3.1 | `/idtw config validate` | 离线体检全部来源，输出问题清单（含来源与字段路径）与统计；无问题时为 0 条 |
+| 4.3.2 | `/idtw config list` | 逐条输出 `id &#124; 来源层= &#124; 优先级= &#124; 触发= 秒 &#124; 效果= &#124; 启用= &#124; 出处=` |
+| 4.3.3 | `/idtw config reload` | 重建索引 + 全维度回扫，输出条数与问题数 |
+| 4.3.4 | 覆盖层目录 | `config/itemdespawntowhat/rules/`；**一文件一规则**，保存形态是**顶层对象**（数组只可能是只读的原始/手写文件）；`.edit_version` 在上一层目录，不会被当作规则读取 |
+| 4.3.5 | 旧格式必须报错（零兼容） | 手写 `"conditions": [ { "conditions": [ ... ] } ]`（旧数组）或叶子里的 `negated`，然后 `/idtw config reload`：应出现**明确报错**（列出允许的 op、提示改用 inverted），该文件不生效，**不静默兼容、不崩溃** |
+| 4.3.6 | 空组合节点 | 文件里 `{"op":"all_of","terms":[]}` 解码期即报错（`terms` 至少 1 项）；编辑器中间态允许存在并由保存前校验拦截 |
+| 4.3.7 | 超限 | 深度 17 层 / 129 叶 / 257 节点 / `display_name` 超 128 码点的规则被校验拦下并给出字段路径 |
+| 4.3.8 | 坏 JSON 文件 | 只产生问题记录，**不删除文件**；其它规则照常生效 |
+
+### 4.4 旧链路转换（已退役）
+
+`/idtw config convert` 已按 P8 结论**退役**（命令与 `RuleConvertService` 已删除），旧 v1.2.1 配置不再加载，需用 `/idtw config edit` 手工重建；见 `docs/guide/update-notes.md` 与 `docs/plan/v1.2.1-migration-evaluation.md`（第 8 节 8.6 同口径）。
+
+## 5. 10 个条件 + 12 个效果的最小用例
+
+每条都能用 4.1 的样本规则直接验收（把 `trigger_after_seconds` 改小即可）。"肉眼判据"是**不需要看 JSON** 也能判断的现象。
+
+### 5.1 条件（10 个）
+
+| 条件 | 最小设置 | 肉眼判据 | 样本 |
+|---|---|---|---|
+| `dimension` | 主世界 | 同样的物品丢到**下界**不触发 | builtin_item_to_entity |
+| `biome` | 精准匹配 `#minecraft:is_forest` | 森林触发，草原不触发 | builtin_biome_or_time |
+| `weather` | `thunder` | 用 `/weather thunder` 后触发，`/weather clear` 后不触发 | builtin_thunder_condensation |
+| `outdoor` | 无参数 | 露天触发；在 2 格高封顶的室内不触发 | builtin_item_to_entity |
+| `surrounding_blocks` | 下方 `#minecraft:dirt` | 下方是泥土触发，换成石头不触发；周围区块未全加载时**不触发**（UNAVAILABLE，而不是判定为"不满足"） | builtin_item_to_block |
+| `catalyst_present` | 骨粉，count=1 | 半径内没有骨粉时不触发；有则触发 | builtin_catalyst_and_fluid |
+| `fluid_present` | `minecraft:water`，require_source=false | 流动水也算；require_source=true 时必须有水源 | builtin_catalyst_and_fluid |
+| `time_of_day` | 0..11999 | `/time set day` 触发，`/time set midnight` 不触发 | builtin_biome_or_time |
+| `y_level` | 60..320 | 地面（y≥60）触发；挖到 y=30 丢同样的物品不触发；用 `inverted` 可表示"不在该区间" | builtin_thunder_condensation / builtin_multi_effect |
+| `light_level` | 0..7 | 暗处触发；插火把后不触发 | builtin_dark_blast |
+
+### 5.2 效果（12 个）
+
+| 效果 | 最小设置 | 肉眼判据 | 样本 |
+|---|---|---|---|
+| `spawn_item` | 腐肉 ×1 | 原地出现腐肉 | builtin_item_to_item |
+| `spawn_entity` | 幼年鸡 ×1（age=-24000 或预设"幼年"） | 出现幼年鸡实体 | builtin_item_to_entity |
+| `place_block` | 留空（由源物品决定），方形 | 原地出现对应方块 | builtin_item_to_block |
+| `spawn_xp` | 5 点 | 出现经验球/玩家获得经验 | builtin_multi_effect |
+| `loot_table` | `minecraft:chests/simple_dungeon` | 按战利品表随机产出 | builtin_loot_and_chance |
+| `lightning` | count=1 | 命中位置落雷 + 雷声 | builtin_multi_effect |
+| `arrow_rain` | count=10，pickup=allowed | 天降箭并可拾取 | builtin_arrow_rain |
+| `weather` | rain / 6000 tick / 雷电开 | 天气变雨或雷暴 | builtin_thunder_condensation |
+| `explosion` | power=2，起火开，仅视觉关 | 爆炸粒子 + 方块破坏 | builtin_dark_blast |
+| `consume_source` | count=1 | 源物品被扣减（不再转化出别的） | builtin_multi_effect |
+| `consume_catalyst` | 骨粉 ×1，半径 2 | 附近骨粉被消耗 | builtin_catalyst_and_fluid |
+| `consume_fluid` | 水源，require_source=true | 附近水源被消耗 | builtin_thunder_condensation |
+
+补充验收（放在任一效果上）：把 `delay_ticks` 设成 20（1 秒）→ 效果应在触发后约 1 秒出现；把 `chance` 设成 50% → 多次触发约半数产出，**未命中概率时源物品仍被隐式消耗**（样本 `builtin_loot_and_chance` 的注释即此语义）；给效果加一个 `light_level` 附加条件 → 条件下不满足时该效果不执行，规则内其它效果不受影响。
+
+## 6. 显示与可访问性（【现在可验收】）
+
+| # | 检查项 | 预期 |
+|---|---|---|
+| 6.1 | 窗口缩到 320×240 | 界面自动缩放，关键控件仍可点击，无重叠 |
+| 6.2 | GUI 缩放 1x / 2x / 3x | 均无重叠、无越界；列表可滚动 |
+| 6.3 | 中文 ↔ English 切换（含长文本，如 "Thunder Condensation"） | 无缺失键（不显示原始 key）、无截断导致语义不清；过长时用省略号且有 tooltip |
+| 6.4 | 键盘：Tab / Shift+Tab | 焦点按视觉顺序移动，焦点有清晰描边 |
+| 6.5 | Enter / Esc | Enter 激活当前控件；Esc 返回上级或关闭（【现在可验收】有关闭前的草稿提示） |
+| 6.6 | 滚轮 | 列表/树/表单滚动，不越界滚动 |
+| 6.7 | 禁用态 | 只读或不可用的控件有明确禁用样式 + tooltip 说明原因 |
+| 6.8 | tooltip 不越界 | 鼠标停在最右/最下控件上，tooltip 自动换边，不出屏 |
+| 6.9 | 颜色不是唯一信息 | 启用/停用/只读/错误状态都同时有文字或图标 |
+| 6.10 | 无会话时 | 提示用 `/idtw config edit` 打开（不静默失败） |
+
+## 7. 双平台一致性
+
+Fabric 与 NeoForge **各跑一遍**，结果应一致：
+
+| # | 检查项 | Fabric | NeoForge |
+|---|---|---|---|
+| 7.1 | 构建成功、客户端可启动 | ☐ | ☐ |
+| 7.2 | `/idtw config edit` / `edit-lock status` / `release` 行为一致 | ☐ | ☐ |
+| 7.3 | `validate` / `list` / `reload` 输出一致 | ☐ | ☐ |
+| 7.4 | 覆盖层写入路径一致（`config/itemdespawntowhat/rules/`） | ☐ | ☐ |
+| 7.5 | 保存后立即重载生效（两者都不得静默把"重载失败"当成功） | ☐ | ☐ |
+| 7.6 | 客户端心跳/tick 装配（Fabric 侧已确认 `ItemDespawnToWhatClient.java:17-18` 与 `InputEvents.java:19`，NeoForge 侧同项核对） | ☐ | ☐ |
+| 7.7 | 编辑器界面（【现在可验收】）开屏与关闭释放锁 | ☐ | ☐ |
+
+## 8. 已知缺口表（照实写，2026-10-03）
+
+| # | 缺口 | 现状/证据 | 用户可见影响 | 归属 |
+|---|---|---|---|---|
+| 8.1 | ~~**编辑界面未接线**~~ **已解决**（2026-10-03 复核） | `RuleEditorOpener.bootstrap()` → `EditorScreenHooks.setOpener(...)` 已在 `fabric/src/main/java/com/meteorite/itemdespawntowhat/client/ItemDespawnToWhatClient.java:21` 与 `neoforge/src/main/java/com/meteorite/itemdespawntowhat/client/register/RegisterEvent.java:24` 调用（旧占位屏已删除） | 无（第 2 节主链、4.2 界面路径、第 6 节现已可执行） | P5 已完成 |
+| 8.2 | ~~语言文件缺 43 个界面键~~ **已解决**（2026-10-03 收口） | 两个语言文件各 **631 键**、键集合完全一致、无空值无重复；源码字面量 key 全命中（含 `…edit.list.*`、`…edit.preset.*`、`…edit.undo.*` 13 个、`…edit.enum.*` 13 个、`…edit.field.*`） | 无 | P5 已完成 |
+| 8.3 | ~~`client/ui` 未读取 `EditorField.enumGroup()`~~ **不成立**（2026-10-03 复核） | `client/ui/screen/form/FormControl.java:596` 读取 `field.enumGroup()` 并拼 `gui.itemdespawntowhat.edit.enum.<组>.<值>`（组名为空才回退 `field.name()`）；5 组 group 定义在 `client/edit/BuiltinEditorDescriptors.java`（`biome_mode` / `weather_kind` / `place_block_shape` / `arrow_rain_pickup` / `weather_effect_mode`） | 无 | P5 已完成 |
+| 8.4 | ~~**P6 未实现**~~ **已解决**（task-9 落盘 + task-17 收口） | 草稿落 `config/itemdespawntowhat/client/editor-drafts/`（临时文件 + 原子改名、写盘失败自动重排）、跨界面/断线/重启恢复、撤销重做上限 100（含删除标记与「恢复原始版本」）、多规则统一变更集、整条规则三态冲突（`TARGET_MISSING` / `TARGET_EXISTS` / `REMOTE_CHANGED`）与冲突弹窗 | 无（2.1.4 / 2.6.6 / 6.5 的草稿预期可验收）；主线程同步写盘见 8.10 | P6 已完成 |
+| 8.5 | 快捷键**默认未绑定** | `client/key/ModKeyBindings.java:11-15`：`InputConstants.UNKNOWN`；处理逻辑在 `client/key/EditorShortcut.java`（有会话才重开界面，无会话提示 `gui.itemdespawntowhat.edit.hint.use_command`，开发环境开原型屏）。界面接线已完成（见 8.1） | 需在 选项 → 控制 手动绑定；无会话时不会弹编辑器（符合契约 §5.3，不是缺陷） | 发布说明需注明默认按键 |
+| 8.6 | **旧配置无迁移路径** | **【已定案：破坏性更新】**`/idtw config convert` 与 `RuleConvertService` 已删除（P8 结论，见 `docs/plan/v1.2.1-migration-evaluation.md`）；旧 v1.2.1 配置不再加载 | 旧链路配置用户需用 `/idtw config edit` 手工重建（发布说明见 `docs/guide/update-notes.md`） | P8 已定案 |
+| 8.7 | ~~状态效果（`mob_effect`）不在选择目录里~~ **已解决**（2026-10-03，task-13） | 枚举末尾已追加 `MOB_EFFECT`（`core/network/protocol/RuleCatalogType.java:20`）；数据源 `core/catalog/RuleCatalogSources.java:154-162` 的 `mobEffects(server)` 取 `BuiltInRegistries.MOB_EFFECT.keySet()`，label 用 `MobEffect.getDescriptionId()`（形如 `effect.minecraft.poison`），icon 空串；不改协议版本（双端同包） | 无（服务端数据源 + 客户端选择器映射 task-13/14 均已完成） | P5 增量已完成 |
+| 8.8 | ~~客户端尚无 messageCode 解析~~ **已解决** | `client/net/RuleEditClientWorkspace.java:254` 归一 `messageArgs`/`fallbackMessage`，`client/edit/LiveEditorWorkspace.java:125` 暴露 `lastMessageArgs()`；`client/ui/screen/RuleEditorScreen.java:1939-1944` 用 `RuleSaveStatus.messageKey()` + 参数渲染回执（SUCCESS 绿 / SAVED_NOT_RELOADED 黄 / 其余红并带参数） | 无 | P5/P6 已完成 |
+| 8.9 | "已写盘但未重载"在常规玩家流程里不会自然出现 | 见 3.7：JSON 写坏只会产生问题记录；需目录列举失败（`OverlayRuleReader.java:47-48`）或调试器注入 | 无自然诱因；可按 3.7 的 `icacls` 拒绝列举步骤做故障注入验收 | 验收限制（非代码缺陷） |
+| 8.10 | 草稿写盘在**主线程同步**执行，草稿数量大时的帧时间未实测 | `client/edit/draft/DraftStore.java` 的 `save` 由界面线程直接写文件；写盘有 2 秒节流（`DraftJournal.SAVE_DELAY_MS`）、临时文件 + 原子改名落地，失败会自动重排重试并给出界面提示 | 极端情况下（大量脏草稿同时到期）可能出现一次掉帧；属已知限制，规划书 §15 未要求本版优化 | P6（已知限制，不修） |
+
+## 9. 验收记录模板
+
+| 日期 | 平台 | 步骤号 | 结果（通过/失败） | 现象/截图 | 备注 |
+|---|---|---|---|---|---|
+|  |  |  |  |  |  |
+
+判定口径：任何"界面显示原始 key"、"保存后未生效却回报成功"、"两个客户端能同时编辑"、"条件下不满足却触发了效果"都是**失败**，需记录复现步骤与日志片段。

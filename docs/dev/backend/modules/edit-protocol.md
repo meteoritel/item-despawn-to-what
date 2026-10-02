@@ -22,7 +22,7 @@
 | `SaveRuleChangeSetChunkPayload` | C2S | `transferId`(≤64) / `chunkIndex` / `chunkCount` / `chunkData`(≤ MAX_CHUNK_CHARS) |
 | `RuleSnapshotPayload` | S2C | `snapshotJson`（≤ MAX_SNAPSHOT_CHARS） |
 | `RuleSaveResultPayload` | S2C | `text`：成功回执 / 冲突 / 无权限等人类可读文本 |
-| `OpenRuleEditorPayload` | S2C | 无字段（打开编辑界面信号）；`installOpenEditorSink(Runnable)` 只在客户端注册回调 |
+| `OpenRuleEditorPayload` | S2C | `sessionId` / `targetId` / `protocolVersion` / `contextRevision` / `statusCode`(RuleSaveStatus) / `messageArgs` / `fallbackMessage`；取锁失败时同样下发（`statusCode=LOCK_BUSY` 且 `sessionId` 为空）。唯一开屏路径：客户端 `RuleEditClientWorkspace` 用 `installOpenEditorPayloadSink(Consumer<OpenRuleEditorPayload>)` 注册，成功后 `EditorScreenHooks.open(request)` |
 | `RuleEditLimits` | — | 全部限额常量与 UTF-8 字节计算 |
 | `RuleEditChunkAccumulator` | — | 分片接收：逐项校验、重复下标以首片为准、收齐后 `join()` |
 | `RuleEditPayloadRouter` | — | 入站文本分发点（静态 `snapshotSink`/`resultSink`） |
@@ -43,14 +43,15 @@
 | `RuleOverlayWriter` | 覆盖层逐 id 写入：预备 → 备份 → 原子提交 → 失败回滚 | `apply(changes, issues) → ApplyResult{writtenFiles, conflicts}` |
 | `RuleSubmissionValidator` | 写入前唯一校验闸门（解码 + 语义 + 动态引用） | `validate(changeSet, server, types, issues)` |
 | `RuleSnapshotAssembler` | 当前生效规则全集 → 下发客户端快照 | `assemble(merged, overlayRoot, ns, version, effectTypes, conditionTypes, issues)` |
-| `EditSessionManager` | per-player 会话 + `.edit_version` 版本戳 + 磁盘修订指纹 | `version` / `open` / `isActive` / `close` / `versionMatches` / `bumpVersion` / `synchronizeDiskRevision` / `activeSessionCount` |
+| `EditSessionManager` | 全局目标级独占编辑会话（FREE/OPENING/ACTIVE/APPLYING）+ `.edit_version` 上下文修订 | `acquire` / `confirm` / `heartbeat` / `beginApply` / `finishApply` / `release` / `expire` / `version` / `bumpVersion` / `isOwner` / `owns` |
 
 ## 2. 快照形状
 
-条目形状固定为 `{ rule, origin, editable }`：
+条目形状为 `RuleSnapshotEntry(id, origin, status, editable, effective, base, overlay, issues)`：
 
-- **覆盖层规则**用**文件原始 JSON**（不做模型往返，**不丢未识别字段**）且 `editable=true`，下发前强制注入最终 id；
-- **内置/世界数据包规则**由模型编码、`editable=false`。
+- **`editable` 语义（Lead 裁决，契约 §3.6）**：`editable = base != null || overlay != null`，即该条目存在规则内容。**纯数据包规则同样为 `true`**（可以基于它生成覆盖层条目）；`editable` **不表示「能否表单编辑」**——`status = invalid`（解码失败）的条目同样可以为 true，是否只读展示由客户端按 `status` / `issues` 决定。
+- **内容来源**：覆盖层规则用**文件原始 JSON**（不做模型往返，**不丢未识别字段**），下发前强制注入最终 id；内置/世界数据包规则由模型编码下发。
+- `RuleSourceIndex.Entry.writable()` 已删除（无调用方，且语义与本节冲突）；`RuleSourceLayer.writable()`（仅 OVERLAY 为 true）保留。
 
 > 控制条目判定必须**判取值而非存在性**：`"disabled": false` 是普通规则。`RuleSnapshotAssembler` 的 `isTrueFlag` 与加载层 `readFlag` 都遵守该约定；用 `has()` 会把普通规则误当控制条目。
 
