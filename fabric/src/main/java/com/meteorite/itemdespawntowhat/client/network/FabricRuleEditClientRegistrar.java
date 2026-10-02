@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.network;
 
-import com.meteorite.itemdespawntowhat.client.ui.screen.ConfigTypeSelectionScreen;
+import com.meteorite.itemdespawntowhat.client.ui.screen.RuleEditorPlaceholderScreen;
 import com.meteorite.itemdespawntowhat.core.network.transport.OpenRuleEditorPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditPayloadRouter;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveResultPayload;
@@ -29,7 +29,7 @@ public final class FabricRuleEditClientRegistrar {
 
         // 阶段⑤ 编辑入口：接收器只把信号切到客户端线程，真正的开屏动作由下面安装的回调执行
         OpenRuleEditorPayload.installOpenEditorSink(
-                () -> Minecraft.getInstance().setScreen(new ConfigTypeSelectionScreen()));
+                () -> Minecraft.getInstance().setScreen(new RuleEditorPlaceholderScreen()));
         ClientPlayNetworking.registerGlobalReceiver(OpenRuleEditorPayload.TYPE,
                 (payload, context) -> context.client().execute(OpenRuleEditorPayload::dispatchOpenEditor));
     }

@@ -3,7 +3,6 @@
   "gui.itemdespawntowhat.edit.config_stat_1": "☰ 配置数：%d",
   "gui.itemdespawntowhat.edit.config_stat_2": "★ 配置数：%s (%s + %s)",
   "gui.itemdespawntowhat.edit.stat": "总计：%d  缓存：%d",
-
   "gui.itemdespawntowhat.save_to_cache": "添加到缓存",
   "gui.itemdespawntowhat.apply_to_file": "应用到文件",
   "gui.itemdespawntowhat.keybind.disabled.multiplayer": "服务器环境下快捷键已禁用",
@@ -12,7 +11,6 @@
   "gui.itemdespawntowhat.edit.session_invalid": "你的配置编辑会话已失效",
   "gui.itemdespawntowhat.edit.payload_too_large": "配置数据过大，无法保存",
   "gui.itemdespawntowhat.command.reload.success": "配置已重新加载",
-
   "gui.itemdespawntowhat.config_selection.title": "选择要编辑的配置类型",
   "gui.itemdespawntowhat.config_type.item_to_item": "转化为掉落物",
   "gui.itemdespawntowhat.config_type.item_to_mob": "转化为生物",
@@ -23,7 +21,6 @@
   "gui.itemdespawntowhat.config_type.item_to_arrow_rain": "转化为箭雨",
   "gui.itemdespawntowhat.config_type.item_to_weather": "改变天气",
   "gui.itemdespawntowhat.config_type.item_to_loot": "抽取战利品表",
-
   "gui.itemdespawntowhat.config_type.item_to_item.tooltip": "当特定物品消失时，在原地生成其他物品",
   "gui.itemdespawntowhat.config_type.item_to_mob.tooltip": "当特定物品消失时，在原地生成生物。",
   "gui.itemdespawntowhat.config_type.item_to_block.tooltip": "当特定物品消失时，以原地为中心依次放置方块。",
@@ -33,7 +30,6 @@
   "gui.itemdespawntowhat.config_type.item_to_arrow_rain.tooltip": "当特定物品消失时，在原地生成箭雨。",
   "gui.itemdespawntowhat.config_type.item_to_weather.tooltip": "当特定物品消失时，改变当前维度的天气。",
   "gui.itemdespawntowhat.config_type.item_to_loot.tooltip": "当特定物品消失时，从战利品表生成物品。",
-
   "gui.itemdespawntowhat.edit.item_id": "物品ID",
   "gui.itemdespawntowhat.edit.conditions": "触发条件",
   "gui.itemdespawntowhat.edit.consumption": "消耗指令",
@@ -78,12 +74,10 @@
   "gui.itemdespawntowhat.edit.inner_fluid": "浸泡流体",
   "gui.itemdespawntowhat.edit.on": "开",
   "gui.itemdespawntowhat.edit.off": "关",
-
   "gui.itemdespawntowhat.edit.xp_per_item": "单个物品的经验",
   "gui.itemdespawntowhat.edit.world_effect_type": "世界现象",
   "gui.itemdespawntowhat.edit.weather_mode": "天气模式",
   "gui.itemdespawntowhat.edit.luck": "战利品幸运值",
-
   "gui.itemdespawntowhat.edit.weather_duration_ticks": "天气持续时间(tick)",
   "gui.itemdespawntowhat.edit.is_thundering": "雷雨天",
   "gui.itemdespawntowhat.edit.explosion_fire": "爆炸起火",
@@ -99,7 +93,6 @@
   "gui.itemdespawntowhat.edit.arrow_pickup_status.allowed": "允许",
   "gui.itemdespawntowhat.edit.arrow_pickup_status.creative_only": "仅创造允许",
   "gui.itemdespawntowhat.edit.arrow_potion_effects": "箭矢附加药水效果",
-
   "gui.itemdespawntowhat.edit.world_effect.effect_label": "药水效果ID",
   "gui.itemdespawntowhat.edit.world_effect.duration_label": "效果持续时间(tick)",
   "gui.itemdespawntowhat.edit.world_effect.amplifier_label": "效果倍率",
@@ -110,34 +103,27 @@
   "gui.itemdespawntowhat.direction.west": "西",
   "gui.itemdespawntowhat.direction.up": "上",
   "gui.itemdespawntowhat.direction.down": "下",
-
   "gui.itemdespawntowhat.edit.catalyst.item_label": "辅助物品ID",
   "gui.itemdespawntowhat.edit.catalyst.count_label": "数量",
   "gui.itemdespawntowhat.edit.catalyst.tip": "注：多个物品请使用英文逗号分隔",
   "gui.itemdespawntowhat.edit.catalyst.consume_button": "消耗辅助物品",
-
   "gui.itemdespawntowhat.edit.inner_fluid.source_label": "源头方块",
   "gui.itemdespawntowhat.edit.inner_fluid.fluid_label": "流体ID",
   "gui.itemdespawntowhat.edit.inner_fluid.consume_label": "消耗流体",
-
   "gui.itemdespawntowhat.edit.save_error": "非法的配置，请检查填写的字段",
   "gui.itemdespawntowhat.edit.validation.invalid": "%s 的值无效",
   "gui.itemdespawntowhat.edit.duplicate": "该配置已存在，请勿重复添加",
   "gui.itemdespawntowhat.edit.idle_timeout": "编辑会话已超时，已自动关闭编辑器",
-
   "gui.itemdespawntowhat.edit.mode.local_mode": "本地模式",
   "gui.itemdespawntowhat.edit.mode.server_mode": "服务器模式",
-
   "gui.itemdespawntowhat.edit.list.edit": "重新编辑",
   "gui.itemdespawntowhat.edit.list.delete": "删除",
   "gui.itemdespawntowhat.edit.list.copy": "复制",
   "gui.itemdespawntowhat.edit.list.apply": "应用",
   "gui.itemdespawntowhat.edit.list.delete.title": "执行删除",
   "gui.itemdespawntowhat.edit.list.delete.body": "此操作将不可取消！",
-
   "key.category.itemdespawntowhat.general": "掉落物转化",
   "key.itemdespawntowhat.open_gui": "打开配置编辑GUI",
-
   "effect.itemdespawntowhat.world_effect_type.rain": "天气设为雨天",
   "effect.itemdespawntowhat.world_effect_type.clear": "天气设为晴天",
   "effect.itemdespawntowhat.world_effect_type.lightning_bolt": "召唤闪电",
@@ -163,7 +149,6 @@
   "gui.itemdespawntowhat.condition.not": "非 ",
   "gui.itemdespawntowhat.condition.normal": "正常",
   "gui.itemdespawntowhat.list.disabled": "[已禁用] %s",
-
   "gui.itemdespawntowhat.tooltip.conversion_time": "转化时间: %d 秒",
   "gui.itemdespawntowhat.tooltip.conditions": "条件:",
   "gui.itemdespawntowhat.tooltip.consumption": "消耗:",
@@ -184,7 +169,6 @@
   "gui.itemdespawntowhat.summary.conversion": "%s x%d → %s x%d",
   "gui.itemdespawntowhat.summary.experience": "%s x%d → 每个物品 %d 点经验",
   "gui.itemdespawntowhat.summary.world_effect": "%s x%d → %s",
-
   "command.itemdespawntowhat.inspect.player_only": "该命令只能由玩家执行",
   "command.itemdespawntowhat.inspect.no_target": "请正对 8 格内的掉落物",
   "command.itemdespawntowhat.inspect.target": "目标：%s，UUID：%s，数量：%s",
@@ -284,5 +268,13 @@
   "itemdespawntowhat.command.debug.why.none_matched": "所有候选规则的条件都不成立，运行时会按退避重试。",
   "itemdespawntowhat.command.debug.biome.header": "%1$s @ %2$s 群系：%3$s",
   "itemdespawntowhat.command.debug.biome.no_climate": "该维度不是多噪声群系源，没有气候参数。",
-  "itemdespawntowhat.command.debug.biome.climate": "气候参数：temperature=%1$s，humidity=%2$s，continentalness=%3$s，erosion=%4$s，depth=%5$s，weirdness=%6$s"
+  "itemdespawntowhat.command.debug.biome.climate": "气候参数：temperature=%1$s，humidity=%2$s，continentalness=%3$s，erosion=%4$s，depth=%5$s，weirdness=%6$s",
+  "gui.itemdespawntowhat.placeholder.title": "规则编辑器（待前端重构）",
+  "gui.itemdespawntowhat.placeholder.message": "后端已切换，当前请通过 JSON 管理规则。",
+  "gui.itemdespawntowhat.placeholder.commands": "/idtw config validate | reload | convert",
+  "itemdespawntowhat.edit.validation_failed": "规则校验失败：%s",
+  "itemdespawntowhat.edit.save_failed": "保存失败：%s",
+  "itemdespawntowhat.edit.saved_reload_failed": "文件已保存，但运行时重载失败，请查看服务端日志。",
+  "itemdespawntowhat.command.debug.stats.queue": "队列=%1$s 待处理=%2$s 峰值=%3$s 访问数=%4$s 本刻=%5$s 微秒 最大=%6$s 微秒 最老延期=%7$s 刻",
+  "itemdespawntowhat.edit.snapshot_failed": "无法读取规则快照：%s"
 }

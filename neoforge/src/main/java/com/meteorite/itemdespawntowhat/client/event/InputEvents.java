@@ -2,16 +2,14 @@ package com.meteorite.itemdespawntowhat.client.event;
 
 import com.meteorite.itemdespawntowhat.ItemDespawnToWhat;
 import com.meteorite.itemdespawntowhat.client.key.ModKeyBindings;
-import com.meteorite.itemdespawntowhat.client.ui.screen.ConfigTypeSelectionScreen;
-import com.meteorite.itemdespawntowhat.util.PlayerStateChecker;
+import com.meteorite.itemdespawntowhat.client.ui.screen.RuleEditorPlaceholderScreen;
 import net.minecraft.client.Minecraft;
-import net.minecraft.network.chat.Component;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.InputEvent;
 
-// 客户端输入事件类：按键注册，按钮注册
+/** 客户端按键入口，打开规则编辑占位屏幕。 */
 @EventBusSubscriber(modid = ItemDespawnToWhat.MOD_ID, value = Dist.CLIENT)
 public class InputEvents {
     @SubscribeEvent
@@ -21,14 +19,11 @@ public class InputEvents {
         }
 
         Minecraft minecraft = Minecraft.getInstance();
-        // 单人模式继续打开编辑入口，联机环境只给本地提示，不再发起编辑请求。
-        if (PlayerStateChecker.isSinglePlayerMode(minecraft)) {
-            minecraft.setScreen(new ConfigTypeSelectionScreen());
+        // 占位入口只显示本地说明，不发起编辑会话。
+        if (minecraft.level != null) {
+            minecraft.setScreen(new RuleEditorPlaceholderScreen());
             return;
         }
 
-        if (PlayerStateChecker.isMultiPlayerMode(minecraft) && minecraft.player != null) {
-            minecraft.player.sendSystemMessage(Component.translatable("gui.itemdespawntowhat.keybind.disabled.multiplayer"));
-        }
     }
 }
