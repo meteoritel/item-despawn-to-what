@@ -372,7 +372,7 @@ Effect（通用字段）
 **阶段③ 结束时的已知限制**：
 
 - **新旧链路并行**：同一物品若同时命中旧 `config/itemdespawntowhat/<type>.json` 与新 `rules/**`，会被两条链路各转化一次 → 对照测试必须只保留一侧配置；阶段⑥ 删除旧链路后消失。
-- `PackLayerResolver.byPackIdToken` 的包 id 启发式与 `listResources("idtw/rules")` 路径前缀**未实机验证**（当前仓库无内置数据包，启动只走 config 覆盖层）。
+- `PackLayerResolver.byPackIdToken` 的包 id 启发式与 `listResources("idtw/rules")` 路径前缀**未实机验证**（阶段③ 当时仓库无内置数据包，启动只走 config 覆盖层；内置数据包已在阶段⑤ 落地，验证条件已具备）。
 - Fabric 端 lifespan 为常量（server.json 兜底值），不反映第三方模组改动；NeoForge 端走 `getEntityLifespan`。
 - 世界写入路径（setBlock / explode / 天气 / 生成实体与掉落物）只经静态检查与原版 API 契约核对，**未实机验证**。
 - 阶段③ 未接入 `/idtw` 命令（属阶段⑤），手工重载走原版 `/reload`。
@@ -382,18 +382,89 @@ Effect（通用字段）
 - 模组级配置 `server.json` 接入。
 - **验收**：build 通过；A2/A3/A4/A7 四类缺陷在实现层闭环；TPS 指标由用户实测。
 
-### 阶段 ④ 网络与 GUI 视图模型
+### 阶段 ④ 网络与 GUI 视图模型 ✅（2026-10-02 收口）
+
+**落地结果**
+
+| 位置 | 内容 |
+|---|---|
+| `core/network/protocol/`（3 文件） | RuleEdit / RuleEditChangeSet / RuleSnapshot：协议 JSON 文本，网络只传字符串 |
+| `core/network/transport/`（10 文件） | 5 个 payload（请求快照 / 变更集 / 分片 / 快照 / 结果）+ RuleEditPayloadRouter + RuleEditChunkAccumulator + RuleEditLimits + RuleEditServerContext + RuleEditServerHandler |
+| `core/service/`（3 文件） | RuleOverlayWriter（权威落盘）、EditSessionManager（per-player 会话 + 版本戳）、RuleSnapshotAssembler |
+| `client/network/`（1 文件） | RuleEditorClient：冻结的客户端门面（requestSnapshot / sendChangeSet / lastSnapshot / setSnapshotListener / setResultListener） |
+| `client/ui/view/`（16）+ `screen/`（3）+ 改写 ConfigTypeSelectionScreen | 视图模型层 + 最小 GUI（9 模板入口 / 单效果编辑 / 条件子屏 / 保存删除 / 多效果只读） |
+| `fabric/`、`neoforge/` | 两端 payload registrar + 客户端接收器 + RuleRuntimeHost.editContext()（NeoForge 另加 public reload） |
+
+**阶段④ 实现约定**：
+
+1. **保存协议（服务端权威）**：客户端提交变更集（upsert/delete + expectedVersion）→ 服务端校验版本 → `RuleOverlayWriter` 按 id 落盘 → `bumpVersion` → 重建索引 + 全维度 rescan → 回执 + 新快照；**版本冲突不落盘**。
+2. **A1 闭环**：写回依据是磁盘文件内容而不是运行时快照，逐 id 应用增删改；未涉及的规则、disabled 规则、非法 JSON 文件都不会被保存动作删除（已用无头探针 18/18 验证）。
+3. **编辑会话**：per-player（不再是全局单 UUID 锁），并发保护改由版本戳承担。
+4. **快照条目形状** `{ "rule": {...}, "origin": "...", "editable": true|false }`：覆盖层规则用**文件原始 JSON**（不丢未识别字段）且可编辑；其它来源由模型编码、只读。
+5. **网络只传字符串**：payload 记录与服务端编排全在 common（`CustomPacketPayload`/`StreamCodec` 都是原版 common 类），两端 registrar 只做薄注册；服务端包对 client 包引用为 0。
+6. **视图模型只认协议 JSON**（不引用 core/model）；旧 GUI 类保留但新入口不再可达。
+
+**阶段④ 独立复核后的修复（task-24 发现）**：
+
+| 编号 | 问题 | 处置 |
+|---|---|---|
+| F-1（中等） | 单条覆盖层文件省略 id 时，快照下发的 rule JSON **不含 id** → GUI 视图 id 为空、保存得到错误 id `minecraft:`，而运行时权威 id 是 `<ns>:<path>` | 已修：装配时把推导出的 id 注入下发 JSON，与 `RuleLoader` 解码前注入的行为对齐 |
+| F-2（轻微） | `disabled`/`delete` 控制条目被当作可编辑规则下发，列表里出现无 source/effects 的"规则" | 已修：装配时跳过控制条目（它们不是规则，只表达对基底规则的停用/删除意图） |
+| F-3（轻微） | `RuleOverlayWriter` 每次保存都重复报告磁盘上早已存在的坏 JSON，回执长期携带旧错误 | 已修：写入路径只跳过坏文件，报错交由加载链路（OverlayRuleReader）负责 |
+| F-4（中等·架构） | `core/network/transport` 反向依赖 `common/platform/Services`，与同类中 `RuleEditServerContext` 的去耦目标矛盾 | 已修：`RuleEditServerContext` 新增 `sendTo(player, payload)`，发包由两端平台实现委派；core 对 `Services` 引用归零 |
+
+**阶段④ 已知限制**：
+
+- **legacy GUI 及其旧 DTO 绑定仍在仓库中**（BaseConfigEditScreen / ConfigListScreen / ConfigListPanel / form/BuiltinFormDefinitions / presentation / handler、client/register/ClientConversionTypeRegistry、client/network/ConfigEditClientPayloadHandler）：新入口不可达，但代码未删 → 阶段⑥ 一并清理。
+- 编辑结果回执是服务端**诊断字符串**，未走 i18n key → 阶段⑤ 统一引入 `key|参数` 编码并在客户端门面本地化。
+- **专用服务端连接协商未实机验证**（两端 S2C 注册口径按 NetworkRegistry/PayloadTypeRegistry 语义推得）。
+- 快照 >1MB 时只提示手改 JSON，不做 S2C 分片。
+- 编辑屏字段相对旧 GUI **必然变化**（Q3 全字段重设计）；"视觉冻结"指入口、布局风格与文案 key 一致，不指字段逐一相同。
+- consume_* 效果无模板入口、多效果规则只读（Q35 最小实现边界）。
+- 新规则 id 由模板名 + 序号生成，跨会话可能与既有 id 撞车（表单内可手改）。
 
 - S2C 合并快照包 + 服务端权威变更集保存协议 + per-player 会话。
 - client 视图模型层 + GUI 最小实现（模板新建 / 单效果编辑 / 条件子屏 / 保存删除 / 多效果只读）。
 - **验收**：build 通过；GUI 交互与视觉与现状一致；保存不再删除 disabled 规则（A1 闭环）。
 
-### 阶段 ⑤ 命令、内置数据包与文档
+### 阶段 ⑤ 命令、内置数据包与文档 ✅（2026-10-02 收口）
+
+**实机首测反馈修复（U-1）**
+
+| 编号 | 问题 | 处置 |
+|---|---|---|
+| R-1（复核发现） | 堆叠不足一轮（available < perRound）时 `coveredSourceItems` 虚报为 rounds×perRound，导致 `spawn_xp.per_source_item` 多给经验 | 已修：`covered = min(rounds × perRound, available)`，与实际扣减数量一致 |
+| U-1 | 用户实测：一组物品扔出去**只转化一个**，与最初设计意图不符 | 已修：恢复旧链路 `computeActualRounds` 的语义——运行时**预先**算出整堆能支持多少轮 `rounds = 堆叠数 / 每轮源物品消耗量`（不消耗源物品的规则为 1），然后**一次性**扣减 `rounds×消耗`、产出 `rounds×结果`。`EffectContext` 新增 `rounds()` 与 `coveredSourceItems()`（= rounds × 每轮消耗，供 per_source_item 类效果精确取用）；8 个效果执行器乘 rounds、4 个一次性世界效果（闪电/爆炸/箭雨/天气）不乘；消耗一律按实际可扣数量收敛并记 debug 日志 |
+
+**阶段⑤ 已知限制**：
+
+- **Q3 口径补充**：新增效果类型 = 3 处（类型文件 + 执行器文件 + 容器一行）；新增**可 GUI 编辑**的条件类型 = 4 处（再加 `client/ui/view/RuleConditionInputs`）；不提供 GUI 参数编辑时条件仍为 3 处且可正常加载求值。
+- **Q25 承诺的第三方 Java 扩展 SPI 未交付**：内置注册表构建后立即 freeze，没有对外插入点；扩展指南已如实标注，留阶段⑥ 补。
+- `/idtw config convert` 的字段级损失与整条拒载情形见迁移指南（explosion 方向/result_multiple、lightning visual_only、loot_table 掷取次数与 limit/radius、place_block search_radius 等）。
+- 命令反馈中的布尔值仍渲染为 `true/false`（未本地化为"是/否"）。
+- 内置数据包 6 个示例全部 `enabled: false`（Q31：作文档与 GUI 模板来源，不默认改变世界行为）。
 
 - 命令树（`config` / `rule` / `debug` 三组）+ 自检命令。
 - 内置数据包（示例规则默认 disabled，作 GUI 模板默认参数来源）。
 - `docs/dev` 四篇 + `CONTEXT.md` 术语更新 + ADR 归档与新 ADR。
 - **验收**：build 通过；`/idtw config validate` 在内置数据包上零告警。
+
+#### 阶段 ⑤ 进度
+
+| 交付项 | 状态 | 产出 |
+|---|---|---|
+| `docs/dev` 四篇 | ✅ | `architecture.md`（架构与数据流）/ `extension-guide.md`（注册效果与条件类型）/ `config-reference.md`（字段全表）/ `migration-guide.md`（旧→新 + convert 用法） |
+| `CONTEXT.md` 术语更新 | ✅ | `ConversionType` 退役为 UI 概念「模板」；新增 规则 / 效果 / 效果类型 / 条件叶（语义更新）/ 覆盖层 / 到期事件 / 变更集 / 版本戳 / 视图模型 等 |
+| ADR 归档与新 ADR | ✅ | 0004、0008 移入 `docs/archive/`（该目录已加入 `.gitignore`）；新增 0012（规则模型与效果列表）、0013（DFU Codec 与扁平分发）、0014（三层作用域与覆盖合并）、0015（运行时调度与追踪）、0016（编辑协议） |
+| 命令树 + 平台注册 | 🚧 | task-27：`core/command/`（config/rule/debug 三组 + `RuleConvertService`）与两端注册已落地，收尾中 |
+| i18n：命令与编辑回执统一 `key\|参数` | 🚧 | 随命令树交付 |
+| 内置数据包 | 🚧 | 6 个示例规则已落地（`data/itemdespawntowhat/idtw/rules/`，全部 `enabled: false`），待验收 |
+| 类型参数级未知字段检测（阶段② F-3 遗留） | ⏳ | 需各类型暴露字段集合，随 `/idtw config validate` 处理 |
+
+**文档整理期间如实记录的现状（不改任何技术决策）**：
+
+1. `/idtw config convert` 已随命令树落地（`core/command/RuleConvertService`）：输入旧 `config/itemdespawntowhat/<ns>/<type>.json`，转换前备份到 `_old_chain_backup/`，输出新覆盖层 `rules/**`，无法无歧义映射的条目报告为 `unmapped`、字段级损失报告为 `notes`。迁移指南按该实现逐条核对；另记录一处**未提示**的字段损失：`item_to_block` 的 `search_radius` 既不映射也不提示（新 `place_block` 无独立的上限统计半径），已列入待复核。
+2. 第三方 Java 扩展 SPI 尚未交付。Q25 承诺"Java API 可注册新的效果类型与条件类型"，目前只有仓库内注册路径（`BuiltinEffectTypes` / `BuiltinConditionTypes` 构建后立即 `freeze()`），扩展指南已如实标注为未交付能力。
 
 ### 阶段 ⑥ 切换与清场
 
@@ -401,6 +472,20 @@ Effect（通用字段）
 - 前端机械适配收尾；平台入口迁移；`/idtw config convert` 交付。
 - 归档过期 ADR 到 `docs/archive/`（gitignore），补新 ADR。
 - **验收**：build 通过（common + Fabric + NeoForge）；无旧类残留引用；端隔离与服务端→客户端引用仍为 0。
+
+#### 阶段 ⑥ 待办清单（前序阶段遗留，逐条可勾）
+
+| # | 待办 | 来源 |
+|---|---|---|
+| 1 | 删除旧链路：`config/**`（旧模型与旧 IO）、旧注册表/执行器、旧网络（`network/**`）、旧 GUI（`client/ui/form`、`client/ui/presentation`、`client/ui/panel`、`BaseConfigEditScreen` 等）与 `ConfigExtractorManager` | 阶段④ 已知限制 |
+| 2 | 删除旧命令 `ConversionConfigCommand` 与旧平台入口/事件（`ItemConversionEvent`、`ConversionTracker`、旧 payload registrar） | 阶段⑤ 切换 |
+| 3 | 旧配置目录 `config/itemdespawntowhat/<ns>/<type>.json` 清场（`/idtw config convert` 已交付并备份到 `_old_chain_backup/`） | 阶段⑤ |
+| 4 | 内置数据包复核与验收（6 个示例已落地，默认 `enabled: false`；随 jar 交付已验证） | 阶段⑤ 交付中 |
+| 5 | 类型参数级未知字段检测（阶段② F-3 遗留）：各类型暴露字段集合并接入校验 | 阶段② 遗留 |
+| 6 | 编辑回执 i18n 化（服务端诊断字符串 → `key\|参数`） | 阶段④ 已知限制 |
+| 7 | `RuntimeClimateSampler` 位置缓存加容量上限或按区块失效 | 阶段③ 观察项 |
+| 8 | `PackLayerResolver.byPackIdToken` 与数据包路径前缀实机验证；世界写入路径实机验证；1 万掉落物性能指标实测 | 阶段③ 已知限制 |
+| 9 | README / 既有 docs 与新链路对齐；`docs/plan` 归档；`docs/dev` 索引补齐 | 阶段⑥ |
 
 ---
 
