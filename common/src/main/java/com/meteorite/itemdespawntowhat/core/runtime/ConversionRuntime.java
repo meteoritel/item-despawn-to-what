@@ -241,7 +241,7 @@ public final class ConversionRuntime {
         int lifespan = Math.max(1, lifespanProvider.lifespanTicks(level, entity));
         long earliestTrigger = Long.MAX_VALUE;
         for (Rule rule : candidates) {
-            earliestTrigger = Math.min(earliestTrigger, Math.max(0L, (long) rule.triggerAfterSeconds() * TICKS_PER_SECOND));
+            earliestTrigger = Math.clamp((long) rule.triggerAfterSeconds() * TICKS_PER_SECOND, 0L, earliestTrigger);
         }
         long dueAge = Math.min(earliestTrigger, lifespan - 1L);
         long delay = Math.max(0, dueAge - entity.getAge());
