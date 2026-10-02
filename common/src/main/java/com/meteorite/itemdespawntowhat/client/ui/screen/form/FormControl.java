@@ -1,0 +1,1382 @@
+package com.meteorite.itemdespawntowhat.client.ui.screen.form;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
+import com.meteorite.itemdespawntowhat.client.edit.EditSession;
+import com.meteorite.itemdespawntowhat.client.edit.EditorField;
+import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
+import com.meteorite.itemdespawntowhat.client.edit.EditorPreset;
+import com.meteorite.itemdespawntowhat.client.edit.JsonSummary;
+import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
+import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiCheckBox;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionTreeEditor;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiListEditor;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiSegmentedControl;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
+import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
+import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Predicate;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.network.chat.Component;
+import org.jetbrains.annotations.Nullable;
+
+/**
+ * 表单控件基类：一个字段对应一行控件。
+ * <p>负责「JSON 值 &lt;-&gt; 控件值」的双向搬运与本地校验；
+ * 写入草稿由 FormView 统一经由 EditSession 完成，控件本身不碰草稿。
+ */
+abstract class FormControl {
+
+    // 行默认高度（与主题行高一致）
+    static final int DEFAULT_HEIGHT = UiTheme.ROW_HEIGHT;
+
+    // 校验问题所用的本地化 key 前缀
+    static final String ISSUE_PREFIX = "gui.itemdespawntowhat.edit.issue.";
+
+    // 控件所描述的字段
+    final EditorField field;
+
+    FormControl(EditorField field) {
+        this.field = field;
+    }
+
+    // 字段标签
+    Component label() {
+        return Component.translatable(field.labelKey());
+    }
+
+    // 字段提示（工具提示），没有则返回 null
+    @Nullable Component hint() {
+        String key = field.hintKey();
+        return key == null || key.isBlank() ? null : Component.translatable(key);
+    }
+
+    // 该行需要的高度
+    abstract int height();
+
+    // 设置控件矩形（高度按 height() 决定）
+    abstract void setBounds(int x, int y, int width);
+
+    // 绘制控件
+    abstract void render(GuiGraphics graphics, Font font, int mouseX, int mouseY);
+
+    // 把 JSON 值装载进控件
+    abstract void load(@Nullable JsonElement value);
+
+    // 把控件值写回 JSON，返回 null 表示删除该字段
+    abstract @Nullable JsonElement store();
+
+    // 该控件最近一次改动对应的撤销操作 key（撤销按钮据此显示真实操作名，子类可覆写）
+    String undoOpKey() {
+        return EditSession.OP_SET_FIELD;
+    }
+
+    // 是否占用左侧标签列（说明行不占用）
+    boolean usesLabelColumn() {
+        return true;
+    }
+
+    // 是否正在编辑文本（编辑中不落盘，失焦后由 FormView 统一提交）
+    boolean isEditing() {
+        return false;
+    }
+
+    boolean isVisible() {
+        return true;
+    }
+
+    // 本地校验问题清单
+    List<FormIssue> issues(String path) {
+        return List.of();
+    }
+
+    // 需要先知道宽度才能算出高度的控件（子列表）覆写
+    void measure(int width) {
+    }
+
+    // 应用候选值（输入建议选择框回调）
+    void setValueFromSuggestion(String value) {
+    }
+
+    boolean mouseClicked(double mouseX, double mouseY, int button) {
+        return false;
+    }
+
+    boolean mouseReleased(double mouseX, double mouseY, int button) {
+        return false;
+    }
+
+    boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        return false;
+    }
+
+    boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        return false;
+    }
+
+    boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        return false;
+    }
+
+    boolean charTyped(char codePoint, int modifiers) {
+        return false;
+    }
+
+    void addFocusTargets(List<UiFocusTarget> out) {
+    }
+
+    void setEnabled(boolean enabled) {
+    }
+
+    // ---- 工厂：按字段类型挑选控件 ----
+
+    static FormControl create(Font font, FormView owner, EditorField field, Runnable onChanged) {
+        switch (field.type()) {
+            case TEXT:
+            case LONG_TEXT:
+                return new TextControl(font, field, textFilter(field),
+                        FormControl::literalValue, FormControl::textOf, onChanged, ISSUE_PREFIX + "invalid_text");
+            case RESOURCE_LOCATION:
+                return new TextControl(font, field, FormControl::idChars,
+                        FormControl::literalValue, FormControl::textOf, onChanged, ISSUE_PREFIX + "invalid_id");
+            case REGISTRY_ID:
+                return new TextControl(font, field, FormControl::idChars,
+                        FormControl::literalValue, FormControl::textOf, onChanged, ISSUE_PREFIX + "invalid_id");
+            case TAG:
+                return new TextControl(font, field, FormControl::tagChars,
+                        FormControl::literalValue, FormControl::textOf, onChanged, ISSUE_PREFIX + "invalid_id");
+            case INTEGER: {
+                int min = field.intMin(Integer.MIN_VALUE);
+                int max = field.intMax(Integer.MAX_VALUE);
+                return new TextControl(font, field, FormControl::integerChars,
+                        text -> boundedInt(text, min, max), FormControl::intOf, onChanged,
+                        ISSUE_PREFIX + "invalid_number");
+            }
+            case TICKS: {
+                int min = field.intMin(0);
+                int max = field.intMax(72000);
+                return new TextControl(font, field, FormControl::integerChars,
+                        text -> boundedInt(text, min, max), FormControl::intOf, onChanged,
+                        ISSUE_PREFIX + "invalid_number");
+            }
+            case DECIMAL: {
+                double min = field.doubleMin(-Double.MAX_VALUE);
+                double max = field.doubleMax(Double.MAX_VALUE);
+                return new TextControl(font, field, FormControl::decimalChars,
+                        text -> boundedDouble(text, min, max), FormControl::decimalOf, onChanged,
+                        ISSUE_PREFIX + "invalid_number");
+            }
+            case PERCENT:
+                return new TextControl(font, field, FormControl::decimalChars,
+                        FormControl::percentValue, FormControl::percentText, onChanged,
+                        ISSUE_PREFIX + "invalid_number");
+            case AMPLIFIER:
+                return new TextControl(font, field, FormControl::integerChars,
+                        FormControl::amplifierValue, FormControl::amplifierText, onChanged,
+                        ISSUE_PREFIX + "invalid_number");
+            case BOOLEAN:
+                return new BoolControl(font, field, onChanged);
+            case ENUM:
+                return new EnumControl(font, field, onChanged);
+            case TAG_LIST:
+            case RL_LIST:
+            case STRING_LIST:
+                return new ListControl(font, field, onChanged);
+            case CLIMATE_RANGE:
+                return new ClimateControl(font, field, onChanged);
+            case CONDITION_TREE:
+                return new ConditionTreeControl(font, field, owner.conditionSupport(), onChanged);
+            case SUBLIST:
+                return new SublistControl(font, owner, field, onChanged);
+            case RAW_JSON:
+                return new RawJsonControl(field);
+            case NOTE:
+                return new NoteControl(field);
+            default:
+                return new RawJsonControl(field);
+        }
+    }
+
+    // ---- 文本过滤器与解析工具 ----
+
+    static Predicate<String> textFilter(EditorField field) {
+        int limit = field.type() == EditorFieldType.LONG_TEXT ? 1024 : 128;
+        return text -> text == null || text.length() <= limit;
+    }
+
+    // id 字符集（不含标签前缀）
+    static boolean idChars(String text) {
+        return allowedIdChars(text, false);
+    }
+
+    // 允许 # 前缀的 id 字符集
+    static boolean tagChars(String text) {
+        return allowedIdChars(text, true);
+    }
+
+    private static boolean allowedIdChars(String text, boolean allowTag) {
+        if (text == null) {
+            return true;
+        }
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            boolean ok = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '.' || c == ':' || c == '/'
+                    || c == '-' || c == '*';
+            if (allowTag && c == '#') {
+                ok = true;
+            }
+            if (!ok) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static boolean integerChars(String text) {
+        if (text == null || text.isEmpty()) {
+            return true;
+        }
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            boolean ok = Character.isDigit(c) || (c == '-' && i == 0);
+            if (!ok) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static boolean decimalChars(String text) {
+        if (text == null || text.isEmpty()) {
+            return true;
+        }
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            boolean ok = Character.isDigit(c) || c == '.' || (c == '-' && i == 0);
+            if (!ok) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static JsonElement literalValue(String text) {
+        return new JsonPrimitive(text);
+    }
+
+    static String textOf(JsonElement element) {
+        return element.getAsString();
+    }
+
+    static @Nullable JsonElement boundedInt(String text, int min, int max) {
+        try {
+            int value = Integer.parseInt(text.trim());
+            return value < min || value > max ? null : new JsonPrimitive(value);
+        } catch (NumberFormatException exception) {
+            return null;
+        }
+    }
+
+    static String intOf(JsonElement element) {
+        return Integer.toString(element.getAsInt());
+    }
+
+    static @Nullable JsonElement boundedDouble(String text, double min, double max) {
+        Double value = parseDouble(text);
+        if (value == null || value < min || value > max) {
+            return null;
+        }
+        return new JsonPrimitive(value.doubleValue());
+    }
+
+    // 界面百分比（0..100）写回 JSON 小数（0..1）
+    static @Nullable JsonElement percentValue(String text) {
+        Double value = parseDouble(text);
+        if (value == null || value < 0.0D || value > 100.0D) {
+            return null;
+        }
+        return new JsonPrimitive(value.doubleValue() / 100.0D);
+    }
+
+    static String percentText(JsonElement element) {
+        double value = element.getAsDouble() * 100.0D;
+        return String.format(Locale.ROOT, "%.1f", value);
+    }
+
+    // 界面等级（1 起）写回后端 amplifier（0 起）
+    static @Nullable JsonElement amplifierValue(String text) {
+        try {
+            int level = Integer.parseInt(text.trim());
+            return level < 1 || level > 255 ? null : new JsonPrimitive(level - 1);
+        } catch (NumberFormatException exception) {
+            return null;
+        }
+    }
+
+    static String amplifierText(JsonElement element) {
+        return Integer.toString(element.getAsInt() + 1);
+    }
+
+    static String decimalOf(JsonElement element) {
+        return trimDouble(element.getAsDouble());
+    }
+
+    static @Nullable Double parseDouble(String text) {
+        if (text == null) {
+            return null;
+        }
+        String trimmed = text.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        try {
+            double value = Double.parseDouble(trimmed);
+            return Double.isFinite(value) ? Double.valueOf(value) : null;
+        } catch (NumberFormatException exception) {
+            return null;
+        }
+    }
+
+    // 去掉多余的小数尾零
+    static String trimDouble(double value) {
+        if (value == Math.rint(value) && Math.abs(value) < 1.0E9D) {
+            return Long.toString((long) value);
+        }
+        String text = String.format(Locale.ROOT, "%.4f", value);
+        while (text.endsWith("0")) {
+            text = text.substring(0, text.length() - 1);
+        }
+        if (text.endsWith(".")) {
+            text = text.substring(0, text.length() - 1);
+        }
+        return text;
+    }
+
+    // ---- 单行文本控件（含数值、id、百分比等全部文本型字段） ----
+
+    static final class TextControl extends FormControl {
+
+        private final Font font;
+        private final UiTextInput input;
+        private final List<UiButton> presetButtons = new ArrayList<>();
+        private final Function<String, JsonElement> parse;
+        private final Function<JsonElement, String> format;
+        private final String invalidKey;
+        private @Nullable JsonElement loaded;
+
+        TextControl(Font font, EditorField field, Predicate<String> filter,
+                Function<String, JsonElement> parse, Function<JsonElement, String> format,
+                Runnable onChanged, String invalidKey) {
+            super(field);
+            this.font = font;
+            this.parse = parse;
+            this.format = format;
+            this.invalidKey = invalidKey;
+            Component hint = hint();
+            this.input = new UiTextInput(font, hint == null ? Component.empty() : hint);
+            this.input.setFilter(filter);
+            this.input.setOnCommit(text -> onChanged.run());
+            for (EditorPreset preset : field.presets()) {
+                UiButton button = new UiButton(font, Component.translatable(preset.labelKey()), UiButtonVariant.SECONDARY,
+                        () -> {
+                            input.setValue(preset.value());
+                            onChanged.run();
+                        });
+                presetButtons.add(button);
+            }
+        }
+
+        @Override
+        int height() {
+            return DEFAULT_HEIGHT;
+        }
+
+        @Override
+        void setBounds(int x, int y, int width) {
+            int reserved = 0;
+            for (UiButton button : presetButtons) {
+                reserved += buttonWidth(button) + 2;
+            }
+            int inputWidth = Math.max(16, width - reserved);
+            input.setBounds(x, y, inputWidth, DEFAULT_HEIGHT);
+            int cursor = x + inputWidth + 2;
+            for (UiButton button : presetButtons) {
+                int buttonWidth = buttonWidth(button);
+                button.setBounds(cursor, y, buttonWidth, DEFAULT_HEIGHT);
+                cursor += buttonWidth + 2;
+            }
+        }
+
+        // 预设按钮宽度：文本宽度 + 内边距
+        private int buttonWidth(UiButton button) {
+            return Math.max(16, font.width(button.label()) + 8);
+        }
+
+        @Override
+        void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+            input.render(graphics, font, mouseX, mouseY);
+            for (UiButton button : presetButtons) {
+                button.render(graphics, font, mouseX, mouseY);
+            }
+        }
+
+        @Override
+        boolean mouseClicked(double mouseX, double mouseY, int button) {
+            for (UiButton preset : presetButtons) {
+                if (preset.mouseClicked(mouseX, mouseY, button)) {
+                    return true;
+                }
+            }
+            return input.mouseClicked(mouseX, mouseY, button);
+        }
+
+        @Override
+        boolean mouseReleased(double mouseX, double mouseY, int button) {
+            return input.mouseReleased(mouseX, mouseY, button);
+        }
+
+        @Override
+        boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+            return input.keyPressed(keyCode, scanCode, modifiers);
+        }
+
+        @Override
+        boolean charTyped(char codePoint, int modifiers) {
+            return input.charTyped(codePoint, modifiers);
+        }
+
+        @Override
+        void addFocusTargets(List<UiFocusTarget> out) {
+            out.add(input);
+        }
+
+        @Override
+        void setEnabled(boolean enabled) {
+            input.setEditable(enabled);
+            for (UiButton preset : presetButtons) {
+                preset.setEnabled(enabled);
+            }
+        }
+
+        @Override
+        boolean isEditing() {
+            return input.isFocused();
+        }
+
+        @Override
+        boolean isVisible() {
+            return input.isVisible();
+        }
+
+        @Override
+        void load(@Nullable JsonElement value) {
+            this.loaded = value == null || value.isJsonNull() ? null : value.deepCopy();
+            input.setValue(loaded == null ? "" : format.apply(loaded));
+        }
+
+        @Override
+        @Nullable JsonElement store() {
+            String text = input.value() == null ? "" : input.value().trim();
+            if (text.isEmpty()) {
+                return null;
+            }
+            JsonElement parsed = parse.apply(text);
+            // 输入非法时保留原值，交由 issues() 提示玩家修正
+            return parsed != null ? parsed : loaded;
+        }
+
+        @Override
+        List<FormIssue> issues(String path) {
+            String text = input.value() == null ? "" : input.value().trim();
+            if (text.isEmpty()) {
+                if (field.required()) {
+                    return List.of(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "required")));
+                }
+                return List.of();
+            }
+            if (parse.apply(text) == null) {
+                return List.of(FormIssue.error(path, label(), Component.translatable(invalidKey)));
+            }
+            return List.of();
+        }
+
+        @Override
+        void setValueFromSuggestion(String value) {
+            input.setValue(value);
+        }
+    }
+
+    // ---- 布尔开关 ----
+
+    static final class BoolControl extends FormControl {
+
+        private final UiCheckBox checkBox;
+
+        BoolControl(Font font, EditorField field, Runnable onChanged) {
+            super(field);
+            this.checkBox = new UiCheckBox(font, label(), false);
+            this.checkBox.setOnChanged(checked -> onChanged.run());
+        }
+
+        @Override
+        int height() {
+            return DEFAULT_HEIGHT;
+        }
+
+        @Override
+        void setBounds(int x, int y, int width) {
+            checkBox.setBounds(x, y, width, DEFAULT_HEIGHT);
+        }
+
+        @Override
+        void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+            checkBox.render(graphics, font, mouseX, mouseY);
+        }
+
+        @Override
+        boolean mouseClicked(double mouseX, double mouseY, int button) {
+            return checkBox.mouseClicked(mouseX, mouseY, button);
+        }
+
+        @Override
+        boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+            return checkBox.keyPressed(keyCode, scanCode, modifiers);
+        }
+
+        @Override
+        void addFocusTargets(List<UiFocusTarget> out) {
+            out.add(checkBox);
+        }
+
+        @Override
+        void setEnabled(boolean enabled) {
+            checkBox.setEnabled(enabled);
+        }
+
+        @Override
+        boolean isVisible() {
+            return checkBox.isVisible();
+        }
+
+        @Override
+        void load(@Nullable JsonElement value) {
+            boolean checked = value != null && value.isJsonPrimitive() && value.getAsJsonPrimitive().isBoolean()
+                    && value.getAsBoolean();
+            checkBox.setChecked(checked);
+        }
+
+        @Override
+        @Nullable JsonElement store() {
+            return new JsonPrimitive(checkBox.isChecked());
+        }
+    }
+
+    // ---- 枚举分段选择 ----
+
+    static final class EnumControl extends FormControl {
+
+        private final UiSegmentedControl segments;
+
+        EnumControl(Font font, EditorField field, Runnable onChanged) {
+            super(field);
+            String group = field.enumGroup() == null || field.enumGroup().isBlank() ? field.name() : field.enumGroup();
+            List<UiSegmentedControl.Option> options = new ArrayList<>();
+            for (String value : field.enumValues()) {
+                options.add(new UiSegmentedControl.Option(value,
+                        Component.translatable("gui.itemdespawntowhat.edit.enum." + group + "." + value)));
+            }
+            this.segments = new UiSegmentedControl(font, options);
+            this.segments.setOnChanged(value -> onChanged.run());
+        }
+
+        @Override
+        int height() {
+            return DEFAULT_HEIGHT;
+        }
+
+        @Override
+        void setBounds(int x, int y, int width) {
+            segments.setBounds(x, y, width, DEFAULT_HEIGHT);
+        }
+
+        @Override
+        void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+            segments.render(graphics, font, mouseX, mouseY);
+        }
+
+        @Override
+        boolean mouseClicked(double mouseX, double mouseY, int button) {
+            return segments.mouseClicked(mouseX, mouseY, button);
+        }
+
+        @Override
+        boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+            return segments.keyPressed(keyCode, scanCode, modifiers);
+        }
+
+        @Override
+        void addFocusTargets(List<UiFocusTarget> out) {
+            out.add(segments);
+        }
+
+        @Override
+        void setEnabled(boolean enabled) {
+            segments.setEnabled(enabled);
+        }
+
+        @Override
+        boolean isVisible() {
+            return segments.isVisible();
+        }
+
+        @Override
+        void load(@Nullable JsonElement value) {
+            segments.setSelected(value != null && value.isJsonPrimitive() ? value.getAsString() : null);
+        }
+
+        @Override
+        @Nullable JsonElement store() {
+            String selected = segments.selected();
+            return selected == null ? null : new JsonPrimitive(selected);
+        }
+
+        @Override
+        List<FormIssue> issues(String path) {
+            if (field.required() && segments.selected() == null) {
+                return List.of(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "required")));
+            }
+            return List.of();
+        }
+    }
+
+    // ---- 字符串 / id 列表 ----
+
+    static final class ListControl extends FormControl {
+
+        private final UiListEditor editor;
+
+        ListControl(Font font, EditorField field, Runnable onChanged) {
+            super(field);
+            UiListEditor.Mode mode;
+            switch (field.type()) {
+                case TAG_LIST:
+                    mode = UiListEditor.Mode.TAG;
+                    break;
+                case STRING_LIST:
+                    mode = UiListEditor.Mode.TEXT;
+                    break;
+                default:
+                    mode = UiListEditor.Mode.ID;
+                    break;
+            }
+            this.editor = new UiListEditor(font, mode, field.registry());
+            this.editor.setOnChanged(items -> onChanged.run());
+        }
+
+        @Override
+        int height() {
+            return UiListEditor.preferredHeight(4);
+        }
+
+        @Override
+        void setBounds(int x, int y, int width) {
+            editor.setBounds(x, y, width, height());
+        }
+
+        @Override
+        void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+            editor.render(graphics, font, mouseX, mouseY);
+        }
+
+        @Override
+        boolean mouseClicked(double mouseX, double mouseY, int button) {
+            return editor.mouseClicked(mouseX, mouseY, button);
+        }
+
+        @Override
+        boolean mouseReleased(double mouseX, double mouseY, int button) {
+            return editor.mouseReleased(mouseX, mouseY, button);
+        }
+
+        @Override
+        boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+            return editor.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+        }
+
+        @Override
+        boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+            return editor.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        }
+
+        @Override
+        boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+            return editor.keyPressed(keyCode, scanCode, modifiers);
+        }
+
+        @Override
+        boolean charTyped(char codePoint, int modifiers) {
+            return editor.charTyped(codePoint, modifiers);
+        }
+
+        @Override
+        void addFocusTargets(List<UiFocusTarget> out) {
+            out.add(editor);
+            out.add(editor.input());
+        }
+
+        @Override
+        void setEnabled(boolean enabled) {
+            editor.setEnabled(enabled);
+        }
+
+        @Override
+        boolean isEditing() {
+            return editor.input().isFocused();
+        }
+
+        @Override
+        boolean isVisible() {
+            return editor.isVisible();
+        }
+
+        @Override
+        void load(@Nullable JsonElement value) {
+            List<String> items = new ArrayList<>();
+            if (value != null && value.isJsonArray()) {
+                for (JsonElement element : value.getAsJsonArray()) {
+                    if (element != null && !element.isJsonNull()) {
+                        items.add(element.getAsString());
+                    }
+                }
+            }
+            editor.setItems(items);
+        }
+
+        @Override
+        @Nullable JsonElement store() {
+            if (editor.size() == 0) {
+                return field.nullable() ? null : new JsonArray();
+            }
+            JsonArray array = new JsonArray();
+            for (String item : editor.items()) {
+                array.add(item);
+            }
+            return array;
+        }
+
+        @Override
+        List<FormIssue> issues(String path) {
+            List<FormIssue> list = new ArrayList<>();
+            if (field.required() && editor.size() == 0) {
+                list.add(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "required")));
+            }
+            List<String> seen = new ArrayList<>();
+            for (String item : editor.items()) {
+                if (seen.contains(item)) {
+                    list.add(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "duplicate")));
+                    break;
+                }
+                seen.add(item);
+            }
+            return list;
+        }
+
+        @Override
+        void setValueFromSuggestion(String value) {
+            editor.addItem(value);
+        }
+    }
+
+    // ---- 气候区间（-1..1，两端可空） ----
+
+    static final class ClimateControl extends FormControl {
+
+        private final UiTextInput minInput;
+        private final UiTextInput maxInput;
+
+        ClimateControl(Font font, EditorField field, Runnable onChanged) {
+            super(field);
+            this.minInput = new UiTextInput(font,
+                    Component.translatable("gui.itemdespawntowhat.edit.field.climate.min"));
+            this.maxInput = new UiTextInput(font,
+                    Component.translatable("gui.itemdespawntowhat.edit.field.climate.max"));
+            this.minInput.setFilter(FormControl::decimalChars);
+            this.maxInput.setFilter(FormControl::decimalChars);
+            this.minInput.setOnCommit(text -> onChanged.run());
+            this.maxInput.setOnCommit(text -> onChanged.run());
+        }
+
+        @Override
+        int height() {
+            return DEFAULT_HEIGHT;
+        }
+
+        @Override
+        void setBounds(int x, int y, int width) {
+            int half = Math.max(16, (width - 4) / 2);
+            minInput.setBounds(x, y, half, DEFAULT_HEIGHT);
+            maxInput.setBounds(x + half + 4, y, Math.max(16, width - half - 4), DEFAULT_HEIGHT);
+        }
+
+        @Override
+        void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+            minInput.render(graphics, font, mouseX, mouseY);
+            maxInput.render(graphics, font, mouseX, mouseY);
+        }
+
+        @Override
+        boolean mouseClicked(double mouseX, double mouseY, int button) {
+            return minInput.mouseClicked(mouseX, mouseY, button) || maxInput.mouseClicked(mouseX, mouseY, button);
+        }
+
+        @Override
+        boolean mouseReleased(double mouseX, double mouseY, int button) {
+            return minInput.mouseReleased(mouseX, mouseY, button) || maxInput.mouseReleased(mouseX, mouseY, button);
+        }
+
+        @Override
+        boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+            return minInput.keyPressed(keyCode, scanCode, modifiers) || maxInput.keyPressed(keyCode, scanCode, modifiers);
+        }
+
+        @Override
+        boolean charTyped(char codePoint, int modifiers) {
+            return minInput.charTyped(codePoint, modifiers) || maxInput.charTyped(codePoint, modifiers);
+        }
+
+        @Override
+        void addFocusTargets(List<UiFocusTarget> out) {
+            out.add(minInput);
+            out.add(maxInput);
+        }
+
+        @Override
+        void setEnabled(boolean enabled) {
+            minInput.setEditable(enabled);
+            maxInput.setEditable(enabled);
+        }
+
+        @Override
+        boolean isEditing() {
+            return minInput.isFocused() || maxInput.isFocused();
+        }
+
+        @Override
+        boolean isVisible() {
+            return minInput.isVisible();
+        }
+
+        @Override
+        void load(@Nullable JsonElement value) {
+            Double min = null;
+            Double max = null;
+            if (value != null && value.isJsonObject()) {
+                JsonObject object = value.getAsJsonObject();
+                if (object.has("min") && object.get("min").isJsonPrimitive() && object.get("min").getAsJsonPrimitive().isNumber()) {
+                    min = Double.valueOf(object.get("min").getAsDouble());
+                }
+                if (object.has("max") && object.get("max").isJsonPrimitive() && object.get("max").getAsJsonPrimitive().isNumber()) {
+                    max = Double.valueOf(object.get("max").getAsDouble());
+                }
+            }
+            minInput.setValue(min == null ? "" : trimDouble(min.doubleValue()));
+            maxInput.setValue(max == null ? "" : trimDouble(max.doubleValue()));
+        }
+
+        @Override
+        @Nullable JsonElement store() {
+            JsonObject object = new JsonObject();
+            Double min = parseDouble(minInput.value());
+            Double max = parseDouble(maxInput.value());
+            if (min != null) {
+                object.addProperty("min", min.doubleValue());
+            }
+            if (max != null) {
+                object.addProperty("max", max.doubleValue());
+            }
+            return object.size() == 0 ? null : object;
+        }
+
+        @Override
+        List<FormIssue> issues(String path) {
+            Double min = parseDouble(minInput.value());
+            Double max = parseDouble(maxInput.value());
+            if (min != null && max != null && min.doubleValue() > max.doubleValue()) {
+                return List.of(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "range_order")));
+            }
+            return List.of();
+        }
+    }
+
+    // ---- 条件树（条件编辑器与效果编辑器共用） ----
+
+    static final class ConditionTreeControl extends FormControl {
+
+        // 条件树区域固定高度
+        static final int TREE_HEIGHT = 150;
+
+        private final UiConditionTreeEditor editor;
+        private final @Nullable ConditionSupport support;
+        private @Nullable JsonElement fallbackRaw;
+
+        ConditionTreeControl(Font font, EditorField field, @Nullable ConditionSupport support, Runnable onChanged) {
+            super(field);
+            this.support = support;
+            this.editor = new UiConditionTreeEditor(font);
+            this.editor.setTypeOptions(support == null ? List.of() : support.typeOptions());
+            if (support != null) {
+                this.editor.setLeafFactory(support.leafFactory());
+                this.editor.setOnEditLeaf(leaf -> support.onEditLeaf().accept(leaf));
+            }
+            this.editor.setListener(expression -> onChanged.run());
+            this.editor.setEmptyMessage(Component.translatable("gui.itemdespawntowhat.edit.tree.empty"));
+        }
+
+        @Override
+        int height() {
+            return TREE_HEIGHT;
+        }
+
+        @Override
+        void setBounds(int x, int y, int width) {
+            editor.setBounds(x, y, width, TREE_HEIGHT);
+        }
+
+        @Override
+        void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+            if (fallbackRaw != null) {
+                UiTheme.drawInset(graphics, editor.bounds());
+                String text = TextScroll.trimToWidth(font,
+                        Component.translatable("gui.itemdespawntowhat.edit.json.read_only").getString(),
+                        Math.max(8, editor.bounds().width() - 4));
+                graphics.drawString(font, text, editor.bounds().x() + 2, editor.bounds().y() + 2,
+                        UiPalette.TEXT_SECONDARY, false);
+                String json = JsonSummary.compact(fallbackRaw, Math.max(4, editor.bounds().width() - 6));
+                graphics.drawString(font, json, editor.bounds().x() + 3, editor.bounds().y() + 14,
+                        UiPalette.TEXT_PRIMARY, false);
+                return;
+            }
+            editor.render(graphics, font, mouseX, mouseY);
+        }
+
+        @Override
+        boolean mouseClicked(double mouseX, double mouseY, int button) {
+            return fallbackRaw == null && editor.mouseClicked(mouseX, mouseY, button);
+        }
+
+        @Override
+        boolean mouseReleased(double mouseX, double mouseY, int button) {
+            return fallbackRaw == null && editor.mouseReleased(mouseX, mouseY, button);
+        }
+
+        @Override
+        boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+            return fallbackRaw == null && editor.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+        }
+
+        @Override
+        boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+            return fallbackRaw == null && editor.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        }
+
+        @Override
+        boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+            return fallbackRaw == null && editor.keyPressed(keyCode, scanCode, modifiers);
+        }
+
+        @Override
+        void addFocusTargets(List<UiFocusTarget> out) {
+            if (fallbackRaw == null) {
+                out.add(editor);
+            }
+        }
+
+        @Override
+        void setEnabled(boolean enabled) {
+            editor.setVisible(enabled);
+        }
+
+        @Override
+        boolean isVisible() {
+            return true;
+        }
+
+        @Override
+        void load(@Nullable JsonElement value) {
+            if (support == null) {
+                this.fallbackRaw = value == null || value.isJsonNull() ? null : value.deepCopy();
+                editor.setExpression(ConditionExpression.EMPTY);
+                return;
+            }
+            ConditionExpression expression = RuleDraft.decodeConditions(value, support.registry());
+            if (expression == null) {
+                this.fallbackRaw = value == null || value.isJsonNull() ? null : value.deepCopy();
+                editor.setExpression(ConditionExpression.EMPTY);
+            } else {
+                this.fallbackRaw = null;
+                editor.setExpression(expression);
+            }
+        }
+
+        @Override
+        @Nullable JsonElement store() {
+            if (fallbackRaw != null) {
+                return fallbackRaw;
+            }
+            if (support == null) {
+                return null;
+            }
+            return RuleDraft.encodeConditions(editor.expression(), support.registry());
+        }
+
+        @Override
+        List<FormIssue> issues(String path) {
+            if (fallbackRaw != null) {
+                // 未注册 / 第三方类型或参数读不出来：原数据整体保留，只提醒不阻塞（服务端才是权威校验方）
+                return List.of(FormIssue.warning(path, label(),
+                        Component.translatable(ISSUE_PREFIX + "unparsable")));
+            }
+            if (editor.isValid()) {
+                return List.of();
+            }
+            List<FormIssue> list = new ArrayList<>();
+            for (UiConditionTreeEditor.Issue issue : editor.issues()) {
+                String issuePath = issue.path() == null || issue.path().isEmpty() ? path : issue.path();
+                String key = ISSUE_PREFIX + issue.kind().name().toLowerCase(Locale.ROOT);
+                list.add(FormIssue.error(issuePath, label(), Component.translatable(key)));
+            }
+            if (list.isEmpty()) {
+                list.add(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "incomplete_group")));
+            }
+            return list;
+        }
+
+        @Override
+        String undoOpKey() {
+            return editor.undoOpKey();
+        }
+
+        @Override
+        boolean isEditing() {
+            return fallbackRaw == null && editor.isFocused();
+        }
+    }
+
+    // ---- 只读原始 JSON（第三方未注册类型回退，原样保留） ----
+
+    static final class RawJsonControl extends FormControl {
+
+        private @Nullable JsonElement raw;
+
+        RawJsonControl(EditorField field) {
+            super(field);
+        }
+
+        @Override
+        int height() {
+            return DEFAULT_HEIGHT;
+        }
+
+        @Override
+        void setBounds(int x, int y, int width) {
+        }
+
+        @Override
+        void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        }
+
+        @Override
+        void load(@Nullable JsonElement value) {
+            this.raw = value == null || value.isJsonNull() ? null : value.deepCopy();
+        }
+
+        @Override
+        @Nullable JsonElement store() {
+            // 原样返回，保证未识别字段不丢失
+            return raw;
+        }
+
+        // 该控件把 JSON 摘要画在标签右侧，由 FormView 调用
+        String summary(int maxWidth) {
+            return raw == null ? "" : JsonSummary.compact(raw, Math.max(4, maxWidth));
+        }
+    }
+
+    // ---- 只读说明行（不写入 JSON） ----
+
+    static final class NoteControl extends FormControl {
+
+        NoteControl(EditorField field) {
+            super(field);
+        }
+
+        @Override
+        int height() {
+            return DEFAULT_HEIGHT;
+        }
+
+        @Override
+        void setBounds(int x, int y, int width) {
+        }
+
+        @Override
+        void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        }
+
+        @Override
+        void load(@Nullable JsonElement value) {
+        }
+
+        @Override
+        @Nullable JsonElement store() {
+            return null;
+        }
+
+        @Override
+        boolean usesLabelColumn() {
+            return false;
+        }
+
+        // 说明文本就是 labelKey 本身
+        Component note() {
+            return Component.translatable(field.labelKey());
+        }
+    }
+
+    // ---- 子列表（对象数组，例如 arrow_rain.potion_effects） ----
+
+    static final class SublistControl extends FormControl {
+
+        private final Font font;
+        private final FormView owner;
+        private final List<EditorField> subFields;
+        private final List<FormView> children = new ArrayList<>();
+        private final List<UiButton> removeButtons = new ArrayList<>();
+        private final UiButton addButton;
+        private int measuredHeight = DEFAULT_HEIGHT;
+
+        SublistControl(Font font, FormView owner, EditorField field, Runnable onChanged) {
+            super(field);
+            this.font = font;
+            this.owner = owner;
+            this.subFields = field.subFields();
+            this.addButton = new UiButton(font, Component.translatable("gui.itemdespawntowhat.edit.list.add"),
+                    UiButtonVariant.SECONDARY, () -> {
+                        appendChild(null);
+                        onChanged.run();
+                    });
+        }
+
+        // 追加一个子表单
+        private void appendChild(@Nullable JsonElement value) {
+            FormView child = owner.newChildForm(childPath(children.size()), subFields);
+            if (value != null && value.isJsonObject()) {
+                child.reloadWith(value.getAsJsonObject());
+            }
+            children.add(child);
+            removeButtons.add(createRemoveButton(child));
+        }
+
+        // 每个子项右侧的删除按钮
+        private UiButton createRemoveButton(FormView child) {
+            return new UiButton(font, Component.translatable("gui.itemdespawntowhat.edit.list.remove"),
+                    UiButtonVariant.DANGER, () -> {
+                        int index = children.indexOf(child);
+                        if (index >= 0) {
+                            children.remove(index);
+                            removeButtons.remove(index);
+                            owner.notifyChanged();
+                        }
+                    });
+        }
+
+        // 子项相对路径：字段名[下标]
+        private String childPath(int index) {
+            return field.name() + "[" + index + "]";
+        }
+
+        @Override
+        int height() {
+            return measuredHeight;
+        }
+
+        @Override
+        void measure(int width) {
+            layoutAt(0, 0, width);
+        }
+
+        @Override
+        void setBounds(int x, int y, int width) {
+            layoutAt(x, y, width);
+        }
+
+        // 依次排列「添加按钮 + 每个子表单（含删除按钮）」，同时算出总高度
+        private void layoutAt(int x, int y, int width) {
+            int cursor = y;
+            addButton.setBounds(x, cursor, Math.max(40, addButton.preferredWidth(6)), DEFAULT_HEIGHT);
+            cursor += DEFAULT_HEIGHT + 2;
+            for (int i = 0; i < children.size(); i++) {
+                UiButton remove = removeButtons.get(i);
+                int removeWidth = Math.max(28, remove.preferredWidth(4));
+                remove.setBounds(x + Math.max(0, width - removeWidth), cursor, removeWidth, DEFAULT_HEIGHT);
+                cursor += DEFAULT_HEIGHT + 2;
+                int used = children.get(i).layoutUnbounded(x + 4, cursor, Math.max(16, width - 8));
+                cursor += used + 2;
+            }
+            this.measuredHeight = Math.max(DEFAULT_HEIGHT, cursor - y);
+        }
+
+        @Override
+        void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+            addButton.render(graphics, font, mouseX, mouseY);
+            for (int i = 0; i < children.size(); i++) {
+                removeButtons.get(i).render(graphics, font, mouseX, mouseY);
+                children.get(i).render(graphics, font, mouseX, mouseY);
+            }
+        }
+
+        @Override
+        boolean mouseClicked(double mouseX, double mouseY, int button) {
+            if (addButton.mouseClicked(mouseX, mouseY, button)) {
+                return true;
+            }
+            for (int i = 0; i < children.size(); i++) {
+                if (removeButtons.get(i).mouseClicked(mouseX, mouseY, button)) {
+                    return true;
+                }
+                if (children.get(i).mouseClicked(mouseX, mouseY, button)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        @Override
+        boolean mouseReleased(double mouseX, double mouseY, int button) {
+            boolean consumed = addButton.mouseReleased(mouseX, mouseY, button);
+            for (int i = 0; i < children.size(); i++) {
+                consumed |= removeButtons.get(i).mouseReleased(mouseX, mouseY, button);
+                consumed |= children.get(i).mouseReleased(mouseX, mouseY, button);
+            }
+            return consumed;
+        }
+
+        @Override
+        boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+            boolean consumed = false;
+            for (FormView child : children) {
+                consumed |= child.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+            }
+            return consumed;
+        }
+
+        @Override
+        boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+            boolean consumed = false;
+            for (FormView child : children) {
+                consumed |= child.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+            }
+            return consumed;
+        }
+
+        @Override
+        boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+            boolean consumed = false;
+            for (FormView child : children) {
+                consumed |= child.keyPressed(keyCode, scanCode, modifiers);
+            }
+            return consumed;
+        }
+
+        @Override
+        boolean charTyped(char codePoint, int modifiers) {
+            boolean consumed = false;
+            for (FormView child : children) {
+                consumed |= child.charTyped(codePoint, modifiers);
+            }
+            return consumed;
+        }
+
+        @Override
+        void addFocusTargets(List<UiFocusTarget> out) {
+            out.add(addButton);
+            for (FormView child : children) {
+                child.addFocusTargets(out);
+            }
+        }
+
+        @Override
+        void setEnabled(boolean enabled) {
+            addButton.setEnabled(enabled);
+            for (UiButton remove : removeButtons) {
+                remove.setEnabled(enabled);
+            }
+            for (FormView child : children) {
+                child.setEnabled(enabled);
+            }
+        }
+
+        @Override
+        boolean isVisible() {
+            return true;
+        }
+
+        @Override
+        void load(@Nullable JsonElement value) {
+            children.clear();
+            removeButtons.clear();
+            if (value != null && value.isJsonArray()) {
+                for (JsonElement element : value.getAsJsonArray()) {
+                    appendChild(element);
+                }
+            }
+            layoutAt(0, 0, 1);
+        }
+
+        @Override
+        @Nullable JsonElement store() {
+            JsonArray array = new JsonArray();
+            for (FormView child : children) {
+                child.applyToDraft();
+                JsonObject object = child.storeObject();
+                if (object != null) {
+                    array.add(object);
+                }
+            }
+            return array;
+        }
+
+        @Override
+        List<FormIssue> issues(String path) {
+            List<FormIssue> list = new ArrayList<>();
+            for (int i = 0; i < children.size(); i++) {
+                list.addAll(children.get(i).issues());
+            }
+            return list;
+        }
+
+        @Override
+        boolean isEditing() {
+            for (FormView child : children) {
+                if (child.isEditing()) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+}
