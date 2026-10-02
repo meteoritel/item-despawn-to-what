@@ -1,0 +1,41 @@
+{
+  "id": "itemdespawntowhat:builtin_arrow_rain",
+  "enabled": false,
+  "display_name": "雨中箭雨 / Arrow Rain in Rain",
+  "notes": "内置示例（默认停用）：主世界 + 下雨时降下箭雨；演示 arrow_rain 效果与 dimension/weather 条件的组合。",
+  "trigger_after_seconds": 300,
+  "source": {
+    "items": [
+      "minecraft:arrow"
+    ]
+  },
+  "conditions": {
+    "op": "all_of",
+    "terms": [
+      {
+        "op": "leaf",
+        "condition": {
+          "type": "itemdespawntowhat:dimension",
+          "dimensions": [
+            "minecraft:overworld"
+          ]
+        }
+      },
+      {
+        "op": "leaf",
+        "condition": {
+          "type": "itemdespawntowhat:weather",
+          "weather": "rain"
+        }
+      }
+    ]
+  },
+  "effects": [
+    {
+      "type": "itemdespawntowhat:arrow_rain",
+      "count": 32,
+      "pickup": "allowed",
+      "delay_ticks": 10
+    }
+  ]
+}

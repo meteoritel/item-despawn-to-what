@@ -1,0 +1,42 @@
+{
+  "id": "itemdespawntowhat:builtin_item_to_block",
+  "enabled": false,
+  "display_name": "树苗落地 / Sapling Planting",
+  "notes": "内置示例（默认停用）：树苗（不含橡树苗）落在泥土类方块上时自动种下，结果方块由源物品决定。surrounding_blocks 在周围区块未全部加载时返回 UNAVAILABLE（不触发效果），而不是被判为不成立。",
+  "trigger_after_seconds": 300,
+  "source": {
+    "items": [
+      "#minecraft:saplings"
+    ],
+    "exclude": [
+      "minecraft:oak_sapling"
+    ]
+  },
+  "conditions": {
+    "op": "all_of",
+    "terms": [
+      {
+        "op": "leaf",
+        "condition": {
+          "type": "itemdespawntowhat:surrounding_blocks",
+          "down": "#minecraft:dirt"
+        }
+      },
+      {
+        "op": "leaf",
+        "condition": {
+          "type": "itemdespawntowhat:outdoor"
+        }
+      }
+    ]
+  },
+  "effects": [
+    {
+      "type": "itemdespawntowhat:place_block",
+      "use_source_block": true,
+      "shape": "square",
+      "count": 1,
+      "radius": 1
+    }
+  ]
+}

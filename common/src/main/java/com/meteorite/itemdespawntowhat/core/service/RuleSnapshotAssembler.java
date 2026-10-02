@@ -26,6 +26,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -75,7 +76,6 @@ public final class RuleSnapshotAssembler {
         }
 
         Map<ResourceLocation, RuleSnapshotEntry> entries = new LinkedHashMap<>();
-        Set<ResourceLocation> claimed = new LinkedHashSet<>();
 
         // 1) 分层索引条目：唯一能给出 base/overlay/masked/disabled 完整语义的来源
         if (index != null) {
@@ -96,7 +96,6 @@ public final class RuleSnapshotAssembler {
                 }
                 entries.put(source.id(), new RuleSnapshotEntry(source.id(), origin(source), status,
                         source.hasBody(), effective, base, overlay, entryIssues));
-                claimed.add(source.id());
             }
         }
 
@@ -112,7 +111,6 @@ public final class RuleSnapshotAssembler {
                     overlayLayer ? RuleSnapshotEntry.ORIGIN_OVERLAY : RuleSnapshotEntry.ORIGIN_DATAPACK,
                     RuleSnapshotEntry.STATUS_ACTIVE, true,
                     encoded, encoded.deepCopy(), overlayLayer ? encoded.deepCopy() : null, List.of()));
-            claimed.add(leftover.getKey());
         }
 
         return new RuleSnapshot(version, contextRevision, List.copyOf(entries.values()),
@@ -151,9 +149,6 @@ public final class RuleSnapshotAssembler {
         if (source.disabled()) {
             return RuleSnapshotEntry.STATUS_DISABLED;
         }
-        if (!source.hasBody()) {
-            return decoded ? RuleSnapshotEntry.STATUS_ACTIVE : RuleSnapshotEntry.STATUS_INVALID;
-        }
         return decoded ? RuleSnapshotEntry.STATUS_ACTIVE : RuleSnapshotEntry.STATUS_INVALID;
     }
 
@@ -175,7 +170,8 @@ public final class RuleSnapshotAssembler {
         }
         Set<String> origins = new LinkedHashSet<>();
         Set<String> paths = new LinkedHashSet<>();
-        for (RawRuleEntry raw : List.of(source.base(), source.overlay(), source.control())) {
+        // 用 Arrays.asList 而非 List.of：base/overlay/control 允许为 null，List.of 会抛 NPE
+        for (RawRuleEntry raw : Arrays.asList(source.base(), source.overlay(), source.control())) {
             if (raw == null) {
                 continue;
             }
@@ -218,7 +214,8 @@ public final class RuleSnapshotAssembler {
         for (RuleSourceIndex.Entry source : index.entries()) {
             Set<String> origins = new LinkedHashSet<>();
             Set<String> paths = new LinkedHashSet<>();
-            for (RawRuleEntry raw : List.of(source.base(), source.overlay(), source.control())) {
+            // 用 Arrays.asList 而非 List.of：base/overlay/control 允许为 null，List.of 会抛 NPE
+        for (RawRuleEntry raw : Arrays.asList(source.base(), source.overlay(), source.control())) {
                 if (raw == null) {
                     continue;
                 }

@@ -1,0 +1,94 @@
+[
+  {
+    "id": "itemdespawntowhat:builtin_catalyst_and_fluid",
+    "enabled": true,
+    "display_name": "水与骨粉 / Water and Bone Meal",
+    "notes": "内置示例：同一条 all_of 内同时需要流动水条件与催化剂条件；require_source=false 允许流动水。",
+    "trigger_after_seconds": 300,
+    "source": {
+      "items": [
+        "minecraft:redstone"
+      ]
+    },
+    "conditions": {
+      "op": "all_of",
+      "terms": [
+        {
+          "op": "leaf",
+          "condition": {
+            "type": "itemdespawntowhat:fluid_present",
+            "fluid": "minecraft:water",
+            "require_source": false
+          }
+        },
+        {
+          "op": "leaf",
+          "condition": {
+            "type": "itemdespawntowhat:catalyst_present",
+            "items": [
+              "minecraft:bone_meal"
+            ],
+            "count": 1
+          }
+        }
+      ]
+    },
+    "effects": [
+      {
+        "type": "itemdespawntowhat:spawn_item",
+        "item": "minecraft:glowstone_dust",
+        "count": 1
+      },
+      {
+        "type": "itemdespawntowhat:consume_catalyst",
+        "items": [
+          "minecraft:bone_meal"
+        ],
+        "count": 1,
+        "radius": 1
+      }
+    ]
+  },
+  {
+    "id": "itemdespawntowhat:builtin_biome_or_time",
+    "enabled": false,
+    "display_name": "森林或白天 / Forest or Daytime",
+    "notes": "内置示例（默认停用）：any_of 表示组内 OR（原来的「多个条件组之间 OR」）；群系精准匹配 + 时段条件。",
+    "trigger_after_seconds": 300,
+    "source": {
+      "items": [
+        "minecraft:apple"
+      ]
+    },
+    "conditions": {
+      "op": "any_of",
+      "terms": [
+        {
+          "op": "leaf",
+          "condition": {
+            "type": "itemdespawntowhat:biome",
+            "mode": "exact",
+            "biomes": [
+              "#minecraft:is_forest"
+            ]
+          }
+        },
+        {
+          "op": "leaf",
+          "condition": {
+            "type": "itemdespawntowhat:time_of_day",
+            "from": 0,
+            "to": 12000
+          }
+        }
+      ]
+    },
+    "effects": [
+      {
+        "type": "itemdespawntowhat:spawn_item",
+        "item": "minecraft:golden_apple",
+        "count": 1
+      }
+    ]
+  }
+]

@@ -144,10 +144,6 @@ public final class RuleEditorScreen extends Screen {
     private UiRect pickerRect = new UiRect(0, 0, 0, 0);
     private final List<TypeEditorDescriptor> pickerTypes = new ArrayList<>();
 
-    // ---- 叶子参数弹窗 ----
-    private @Nullable UiModal leafModal;
-    private @Nullable FormView leafForm;
-
     // ---- P6：草稿落盘与冲突 ----
     // 「应用全部」按钮（无改动或会话冻结时禁用）
     private @Nullable UiButton applyButton;
@@ -202,11 +198,11 @@ public final class RuleEditorScreen extends Screen {
         ruleList.setEmptyMessage(Component.translatable(UI + "list.empty"));
         ruleList.setOnActivate(this::openEditor);
         tabControl = new UiSegmentedControl(font, tabOptions());
-        tabControl.setOnChanged(value -> switchTab(value));
+        tabControl.setOnChanged(this::switchTab);
         effectList = new UiListView<>(font, this::renderEffectRow);
         effectList.setRowHeight(ROW_H);
         effectList.setEmptyMessage(Component.translatable(UI + "effect.empty"));
-        effectList.setOnSelectionChanged(index -> selectEffect(index));
+        effectList.setOnSelectionChanged(this::selectEffect);
         buildListButtons();
         buildFooterButtons();
         buildEffectButtons();
@@ -317,7 +313,7 @@ public final class RuleEditorScreen extends Screen {
         drawHeaderText(graphics);
         int y = HEADER_H + 2;
         if (mode == Mode.EDIT && tabControl != null) {
-            tabControl.setBounds(PAD, y, Math.min(Math.max(0, w - PAD * 2), 240), TAB_H);
+            tabControl.setBounds(PAD, y, Math.clamp(w - PAD * 2, 0, 240), TAB_H);
             tabControl.render(graphics, font, mouseX, mouseY);
             y += TAB_H + 2;
         }
@@ -338,13 +334,13 @@ public final class RuleEditorScreen extends Screen {
         drawNotice(graphics, noticeY, w);
         int footerY = h - PAD - FOOTER_H;
         if (mode == Mode.LIST) {
-            listBar.layout(PAD, footerY, Math.max(0, w - PAD * 2), FOOTER_H);
+            listBar.layout(PAD, footerY, Math.max(0, w - PAD * 2));
             listBar.render(graphics, font, mouseX, mouseY);
         } else {
             if (!footerButtons.isEmpty()) {
-                footerButtons.get(0).setEnabled(workspace.active());
+                footerButtons.getFirst().setEnabled(workspace.active());
             }
-            footerBar.layout(PAD, footerY, Math.max(0, w - PAD * 2), FOOTER_H);
+            footerBar.layout(PAD, footerY, Math.max(0, w - PAD * 2));
             footerBar.render(graphics, font, mouseX, mouseY);
         }
         modals.render(graphics, font, mouseX, mouseY);
@@ -406,7 +402,7 @@ public final class RuleEditorScreen extends Screen {
         Component text = tab == Tab.EFFECTS
                 ? ConsumptionSummary.hint(session.draft().view().get(RuleFields.EFFECTS))
                 : NaturalSummary.rule(session.draft().view());
-        if (text == null || text.getString().isEmpty()) {
+        if (text.getString().isEmpty()) {
             return;
         }
         String trimmed = TextScroll.trimToWidth(font, text.getString(), Math.max(0, w - PAD * 2));
@@ -433,7 +429,7 @@ public final class RuleEditorScreen extends Screen {
             ruleList.setBounds(area.x(), listY, area.width(), listHeight);
             ruleList.render(graphics, font, mouseX, mouseY);
         }
-        listBar.layout(area.x(), listY + listHeight + 2, area.width(), barHeight);
+        listBar.layout(area.x(), listY + listHeight + 2, area.width());
     }
 
     // 编辑页布局：效果页签宽屏为左列表 + 右表单，窄屏上下堆叠；其余页签表单独占
@@ -441,14 +437,14 @@ public final class RuleEditorScreen extends Screen {
         int w = contentArea.width();
         int h = contentArea.height();
         if (tab == Tab.EFFECTS) {
-            boolean wide = w >= NARROW_WIDTH && w - Math.min(150, w / 3) - 6 >= 200;
+            boolean wide = w >= NARROW_WIDTH;
             int listWidth = wide ? Math.min(150, w / 3) : w;
-            int listHeight = wide ? Math.max(0, h - FOOTER_H - 2) : Math.min(Math.max(0, h / 3), 60);
+            int listHeight = wide ? Math.max(0, h - FOOTER_H - 2) : Math.clamp(h / 3, 0, 60);
             if (effectList != null) {
                 effectList.setBounds(contentArea.x(), contentArea.y(), listWidth, listHeight);
                 effectList.render(graphics, font, mouseX, mouseY);
             }
-            effectBar.layout(contentArea.x(), contentArea.y() + listHeight + 2, listWidth, FOOTER_H);
+            effectBar.layout(contentArea.x(), contentArea.y() + listHeight + 2, listWidth);
             effectBar.render(graphics, font, mouseX, mouseY);
             if (effectForm != null) {
                 int formX = wide ? contentArea.x() + listWidth + 4 : contentArea.x();
@@ -570,7 +566,10 @@ public final class RuleEditorScreen extends Screen {
     // 效果类型选择浮层
     private void renderPicker(GuiGraphics graphics, int mouseX, int mouseY) {
         int rows = pickerRows();
-        int width = Math.min(Math.max(160, this.width / 2), Math.max(120, this.width - PAD * 2));
+        // 宽度取屏幕一半，下限 160；屏幕过窄时上限退到 120 并收缩到可用宽度，保证 clamp 上下界合法
+        int available = this.width - PAD * 2;
+        int upper = Math.max(120, available);
+        int width = Math.clamp(this.width / 2, Math.min(160, upper), upper);
         int height = PICKER_HEADER + rows * ROW_H + PICKER_FOOTER;
         int x = Math.max(0, (this.width - width) / 2);
         int y = Math.max(0, (this.height - height) / 2);
@@ -603,7 +602,7 @@ public final class RuleEditorScreen extends Screen {
     }
 
     private int pickerRows() {
-        return Math.max(1, Math.min(pickerTypes.size(), PICKER_MAX_ROWS));
+        return Math.clamp(pickerTypes.size(), 1, PICKER_MAX_ROWS);
     }
 
     private UiRect pickerListRect() {
@@ -621,14 +620,14 @@ public final class RuleEditorScreen extends Screen {
             closePicker();
             return;
         }
-        int index = Math.max(0, Math.min(pickerIndex, pickerTypes.size() - 1));
+        int index = Math.clamp(pickerIndex, 0, Math.max(0, pickerTypes.size() - 1));
         ResourceLocation typeId = pickerTypes.get(index).id();
         closePicker();
         addEffect(typeId);
     }
 
     // 浮层点击：列表项确认、外部关闭
-    private boolean handlePickerClick(double mouseX, double mouseY) {
+    private void handlePickerClick(double mouseX, double mouseY) {
         UiRect list = pickerListRect();
         if (list.contains(mouseX, mouseY)) {
             int row = (int) ((mouseY - list.y()) / ROW_H);
@@ -637,16 +636,15 @@ public final class RuleEditorScreen extends Screen {
                 pickerIndex = itemIndex;
                 confirmPicker();
             }
-            return true;
+            return;
         }
         if (!pickerRect.contains(mouseX, mouseY)) {
             closePicker();
         }
-        return true;
     }
 
     // 浮层键盘
-    private boolean handlePickerKey(int keyCode) {
+    private void handlePickerKey(int keyCode) {
         int rows = pickerRows();
         switch (keyCode) {
             case GLFW.GLFW_KEY_UP -> pickerIndex = Math.max(0, pickerIndex - 1);
@@ -657,18 +655,17 @@ public final class RuleEditorScreen extends Screen {
             case GLFW.GLFW_KEY_END -> pickerIndex = Math.max(0, pickerTypes.size() - 1);
             case GLFW.GLFW_KEY_ENTER, GLFW.GLFW_KEY_KP_ENTER -> {
                 confirmPicker();
-                return true;
+                return;
             }
             case GLFW.GLFW_KEY_ESCAPE -> {
                 closePicker();
-                return true;
+                return;
             }
             default -> {
-                return true;
+                return;
             }
         }
         scrollPickerIntoView(rows);
-        return true;
     }
 
     private void scrollPickerIntoView(int rows) {
@@ -677,7 +674,7 @@ public final class RuleEditorScreen extends Screen {
         } else if (pickerIndex >= pickerOffset + rows) {
             pickerOffset = pickerIndex - rows + 1;
         }
-        pickerOffset = Math.max(0, Math.min(pickerOffset, Math.max(0, pickerTypes.size() - rows)));
+        pickerOffset = Math.clamp(pickerOffset, 0, Math.max(0, pickerTypes.size() - rows));
     }
 
     // ---- 列表维护 ----
@@ -924,7 +921,7 @@ public final class RuleEditorScreen extends Screen {
     // ---- 模式切换 ----
 
     private void openEditor(String id) {
-        if (!canEdit()) {
+        if (rejectWhenFrozen()) {
             return;
         }
         if (id == null) {
@@ -965,15 +962,15 @@ public final class RuleEditorScreen extends Screen {
     }
 
     private void promptNewRule(@Nullable String templateId) {
-        if (!canEdit()) {
+        if (rejectWhenFrozen()) {
             return;
         }
-        promptText(UI + "prompt.new_title", UI + "prompt.id_hint", "itemdespawntowhat:new_rule",
+        promptText(UI + "prompt.new_title", "itemdespawntowhat:new_rule",
                 value -> createRule(value, templateId));
     }
 
     private void createRule(String value, @Nullable String templateId) {
-        if (!canEdit()) {
+        if (rejectWhenFrozen()) {
             return;
         }
         ResourceLocation id = normalizeId(value);
@@ -996,6 +993,8 @@ public final class RuleEditorScreen extends Screen {
                 return;
             }
             body = BuiltinEditorDefaults.copyOf(key, loaded);
+            // 模板里的 enabled=false 只用于样本演示，从模板新建的规则一律启用
+            body.addProperty(RuleFields.ENABLED, true);
         }
         model.createSession(key, body);
         refreshList();
@@ -1004,7 +1003,7 @@ public final class RuleEditorScreen extends Screen {
     }
 
     private void promptDuplicate() {
-        if (!canEdit()) {
+        if (rejectWhenFrozen()) {
             return;
         }
         String sourceId = selectedRuleId();
@@ -1024,9 +1023,9 @@ public final class RuleEditorScreen extends Screen {
             candidate = sourceId + "_copy" + suffix;
             suffix++;
         }
-        promptText(UI + "prompt.duplicate_title", UI + "prompt.id_hint", candidate, value -> {
+        promptText(UI + "prompt.duplicate_title", candidate, value -> {
             // 弹窗期间可能已被冻结（应用在途 / 会话结束），提交前再确认一次
-            if (!canEdit()) {
+            if (rejectWhenFrozen()) {
                 return;
             }
             ResourceLocation id = normalizeId(value);
@@ -1048,7 +1047,7 @@ public final class RuleEditorScreen extends Screen {
 
     // 从内置模板新建
     private void openTemplatePicker() {
-        if (!canEdit()) {
+        if (rejectWhenFrozen()) {
             return;
         }
         List<Suggestion> templates = RuleTemplateHooks.list();
@@ -1066,7 +1065,7 @@ public final class RuleEditorScreen extends Screen {
             modals.closeTop();
             promptNewRule(suggestion.value());
         });
-        int height = Math.min(140, Math.max(ROW_H, templates.size() * ROW_H));
+        int height = Math.clamp((long) templates.size() * ROW_H, ROW_H, 140);
         modal.contentWidget(view, height);
         modal.cancel(Component.translatable(UI + "button.cancel"));
         modal.layoutCentered(this.width, this.height);
@@ -1080,7 +1079,7 @@ public final class RuleEditorScreen extends Screen {
     }
 
     private void toggleSelectedEnabled() {
-        if (!canEdit()) {
+        if (rejectWhenFrozen()) {
             return;
         }
         String id = selectedRuleId();
@@ -1101,7 +1100,7 @@ public final class RuleEditorScreen extends Screen {
     }
 
     private void maskSelected() {
-        if (!canEdit()) {
+        if (rejectWhenFrozen()) {
             return;
         }
         String id = selectedRuleId();
@@ -1122,7 +1121,7 @@ public final class RuleEditorScreen extends Screen {
     }
 
     private void restoreSelected() {
-        if (!canEdit()) {
+        if (rejectWhenFrozen()) {
             return;
         }
         String id = selectedRuleId();
@@ -1142,7 +1141,7 @@ public final class RuleEditorScreen extends Screen {
     }
 
     private void deleteSelected() {
-        if (!canEdit()) {
+        if (rejectWhenFrozen()) {
             return;
         }
         String id = selectedRuleId();
@@ -1152,7 +1151,7 @@ public final class RuleEditorScreen extends Screen {
         }
         if (model.isCreated(id)) {
             confirm(UI + "confirm.delete_title", UI + "confirm.delete_draft_message", () -> {
-                if (!canEdit()) {
+                if (rejectWhenFrozen()) {
                     return;
                 }
                 model.dropSession(id);
@@ -1162,7 +1161,7 @@ public final class RuleEditorScreen extends Screen {
             return;
         }
         confirm(UI + "confirm.delete_title", UI + "confirm.delete_message", () -> {
-            if (!canEdit()) {
+            if (rejectWhenFrozen()) {
                 return;
             }
             model.openSession(id);
@@ -1175,7 +1174,7 @@ public final class RuleEditorScreen extends Screen {
     // ---- 效果动作 ----
 
     private void openEffectPicker() {
-        if (!canEdit()) {
+        if (rejectWhenFrozen()) {
             return;
         }
         if (editingSession() == null) {
@@ -1187,13 +1186,13 @@ public final class RuleEditorScreen extends Screen {
         if (pickerTypes.isEmpty()) {
             return;
         }
-        pickerIndex = Math.max(0, Math.min(pickerIndex, pickerTypes.size() - 1));
+        pickerIndex = Math.clamp(pickerIndex, 0, Math.max(0, pickerTypes.size() - 1));
         pickerOffset = 0;
         pickerOpen = true;
     }
 
     private void addEffect(ResourceLocation type) {
-        if (!canEdit()) {
+        if (rejectWhenFrozen()) {
             return;
         }
         EditSession session = editingSession();
@@ -1213,7 +1212,7 @@ public final class RuleEditorScreen extends Screen {
     }
 
     private void removeEffect() {
-        if (!canEdit()) {
+        if (rejectWhenFrozen()) {
             return;
         }
         EditSession session = editingSession();
@@ -1231,7 +1230,7 @@ public final class RuleEditorScreen extends Screen {
     }
 
     private void moveEffect(int delta) {
-        if (!canEdit()) {
+        if (rejectWhenFrozen()) {
             return;
         }
         EditSession session = editingSession();
@@ -1270,7 +1269,7 @@ public final class RuleEditorScreen extends Screen {
         form.reload();
         UiModal modal = UiModal.create(font);
         modal.title(descriptor.label());
-        modal.contentWidget(form, Math.min(170, Math.max(36, descriptor.fields().size() * ROW_H + 8)));
+        modal.contentWidget(form, Math.clamp((long) descriptor.fields().size() * ROW_H + 8, 36, 170));
         modal.confirm(Component.translatable(UI + "button.confirm"), () -> {
             form.applyToDraft();
             owner.reload();
@@ -1279,8 +1278,6 @@ public final class RuleEditorScreen extends Screen {
         modal.cancel(Component.translatable(UI + "button.cancel"));
         modal.layoutCentered(this.width, this.height);
         modals.push(modal);
-        leafModal = modal;
-        leafForm = form;
     }
 
     private @Nullable UiConditionTreeEditor findTree(FormView owner, ConditionNode.Leaf leaf) {
@@ -1389,7 +1386,7 @@ public final class RuleEditorScreen extends Screen {
             setNotice(Component.translatable(UI + "notice.applying"), UiPalette.TEXT_SECONDARY);
             if (!issues.isEmpty()) {
                 // 提醒项不阻塞保存，但把玩家带到第一条上（例如未注册的第三方条件类型）
-                revealIssue(issues.get(0));
+                revealIssue(issues.getFirst());
             }
         } else {
             setNotice(Component.translatable(UI + "notice.save_rejected"), UiPalette.DANGER);
@@ -1397,7 +1394,7 @@ public final class RuleEditorScreen extends Screen {
     }
 
     private void undo() {
-        if (!canEdit()) {
+        if (rejectWhenFrozen()) {
             return;
         }
         EditSession session = editingSession();
@@ -1409,7 +1406,7 @@ public final class RuleEditorScreen extends Screen {
     }
 
     private void redo() {
-        if (!canEdit()) {
+        if (rejectWhenFrozen()) {
             return;
         }
         EditSession session = editingSession();
@@ -1614,7 +1611,8 @@ public final class RuleEditorScreen extends Screen {
             return modals.mouseClicked(mouseX, mouseY, button);
         }
         if (pickerOpen) {
-            return handlePickerClick(mouseX, mouseY);
+            handlePickerClick(mouseX, mouseY);
+            return true;
         }
         if (mode == Mode.LIST) {
             if (searchField != null && searchField.mouseClicked(mouseX, mouseY, button)) {
@@ -1690,7 +1688,8 @@ public final class RuleEditorScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (pickerOpen) {
-            pickerIndex = Math.max(0, Math.min(pickerTypes.size() - 1, pickerIndex - (int) Math.signum(scrollY)));
+            pickerIndex = Math.clamp(pickerIndex - (int) Math.signum(scrollY), 0,
+                    Math.max(0, pickerTypes.size() - 1));
             scrollPickerIntoView(pickerRows());
             return true;
         }
@@ -1720,7 +1719,8 @@ public final class RuleEditorScreen extends Screen {
             return modals.keyPressed(keyCode, scanCode, modifiers);
         }
         if (pickerOpen) {
-            return handlePickerKey(keyCode);
+            handlePickerKey(keyCode);
+            return true;
         }
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
             if (mode == Mode.EDIT) {
@@ -1827,14 +1827,14 @@ public final class RuleEditorScreen extends Screen {
         boolean canRedo = editable && session != null && session.canRedo();
         if (undoButton != null) {
             undoButton.setEnabled(canUndo);
-            String opKey = canUndo && session != null ? session.undoOpKey() : null;
+            String opKey = canUndo ? session.undoOpKey() : null;
             undoButton.setLabel(opKey == null
                     ? Component.translatable(UI + "button.undo")
                     : Component.translatable(UI + "button.undo_named", Component.translatable(opKey)));
         }
         if (redoButton != null) {
             redoButton.setEnabled(canRedo);
-            String opKey = canRedo && session != null ? session.redoOpKey() : null;
+            String opKey = canRedo ? session.redoOpKey() : null;
             redoButton.setLabel(opKey == null
                     ? Component.translatable(UI + "button.redo")
                     : Component.translatable(UI + "button.redo_named", Component.translatable(opKey)));
@@ -1852,7 +1852,7 @@ public final class RuleEditorScreen extends Screen {
 
     // 立即同步四个表单的使能状态（表单是新建出来的，默认可用，必须显式同步一次）
     private void applyEditableStateNow(boolean editable) {
-        for (FormView form : List.of(infoForm, sourceForm, conditionsForm, effectForm)) {
+        for (FormView form : new FormView[] {infoForm, sourceForm, conditionsForm, effectForm}) {
             if (form != null) {
                 form.setEnabled(editable);
             }
@@ -1872,13 +1872,13 @@ public final class RuleEditorScreen extends Screen {
         }
     }
 
-    // 冻结（APPLYING / 非 ACTIVE）时禁止一切会改动草稿的入口，并给出明确提示而不是静默丢弃
-    private boolean canEdit() {
+    // 冻结（APPLYING / 非 ACTIVE）时禁止一切会改动草稿的入口，并给出明确提示而不是静默丢弃；返回 true 表示已被冻结阻断
+    private boolean rejectWhenFrozen() {
         if (workspace.active()) {
-            return true;
+            return false;
         }
         setNotice(Component.translatable(UI + "notice.frozen"), UiPalette.WARNING);
-        return false;
+        return true;
     }
 
     // 有冲突就弹窗（一次弹一个，已提示过的不重复弹）
@@ -2003,8 +2003,8 @@ public final class RuleEditorScreen extends Screen {
     }
 
     // 文本输入弹窗
-    private void promptText(String titleKey, String hintKey, String initial, Consumer<String> onValue) {
-        UiTextInput input = new UiTextInput(font, Component.translatable(hintKey));
+    private void promptText(String titleKey, String initial, Consumer<String> onValue) {
+        UiTextInput input = new UiTextInput(font, Component.translatable(UI + "prompt.id_hint"));
         input.setMaxLength(128);
         input.setValue(initial);
         UiModal modal = UiModal.create(font);
@@ -2029,7 +2029,7 @@ public final class RuleEditorScreen extends Screen {
     }
 
     // 底排按钮：自动换行、左对齐
-    private final class ButtonBar {
+    private static final class ButtonBar {
         private static final int BUTTON_H = 16;
         private static final int GAP = 2;
 
@@ -2068,18 +2068,21 @@ public final class RuleEditorScreen extends Screen {
             return (int) Math.ceil(buttons.size() / (double) perRow);
         }
 
-        private void layout(int x, int y, int width, int height) {
+        private void layout(int x, int y, int width) {
             if (buttons.isEmpty()) {
                 return;
             }
             int rows = Math.max(1, rows(width));
+            // 按钮宽度下限 24，但不得超过可用宽度（窄屏退化到列宽），保证 clamp 上下界合法
+            int limit = Math.max(1, width);
+            int minWidth = Math.min(24, limit);
             int cursor = 0;
             for (int rowIndex = 0; rowIndex < rows && cursor < buttons.size(); rowIndex++) {
                 int rowY = y + rowIndex * (BUTTON_H + GAP);
                 int cursorX = x;
                 while (cursor < buttons.size()) {
                     UiButton button = buttons.get(cursor);
-                    int buttonWidth = Math.min(Math.max(24, button.preferredWidth(6)), Math.max(1, width));
+                    int buttonWidth = Math.clamp(button.preferredWidth(6), minWidth, limit);
                     if (cursorX > x && cursorX + buttonWidth > x + width) {
                         break;
                     }

@@ -1,5 +1,5 @@
 {
-  "gui.itemdespawntowhat.edit.title": "当前编辑文件：%s",
+  "gui.itemdespawntowhat.edit.title": "当前编辑文件",
   "gui.itemdespawntowhat.edit.config_stat_1": "☰ 配置数：%d",
   "gui.itemdespawntowhat.edit.config_stat_2": "★ 配置数：%s (%s + %s)",
   "gui.itemdespawntowhat.edit.stat": "总计：%d  缓存：%d",
@@ -111,7 +111,6 @@
   "gui.itemdespawntowhat.edit.inner_fluid.fluid_label": "流体ID",
   "gui.itemdespawntowhat.edit.inner_fluid.consume_label": "消耗流体",
   "gui.itemdespawntowhat.edit.save_error": "非法的配置，请检查填写的字段",
-  "gui.itemdespawntowhat.edit.validation.invalid": "%s 的值无效",
   "gui.itemdespawntowhat.edit.duplicate": "该配置已存在，请勿重复添加",
   "gui.itemdespawntowhat.edit.idle_timeout": "编辑会话已超时，已自动关闭编辑器",
   "gui.itemdespawntowhat.edit.mode.local_mode": "本地模式",

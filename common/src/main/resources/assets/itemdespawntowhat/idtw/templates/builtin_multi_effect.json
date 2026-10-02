@@ -1,0 +1,38 @@
+{
+  "id": "itemdespawntowhat:builtin_multi_effect",
+  "enabled": true,
+  "display_name": "钻石雷鸣 / Diamond Thunder",
+  "notes": "内置示例：一条规则多个效果 + 效果延迟 + 显式消耗；显式声明 consume_source 后隐式消耗被抑制。条件用 inverted 包一个叶（y_level）表示「不在该高度区间内」，叶级 negated 已删除。",
+  "trigger_after_seconds": 300,
+  "source": {
+    "items": [
+      "minecraft:diamond"
+    ]
+  },
+  "conditions": {
+    "op": "inverted",
+    "term": {
+      "op": "leaf",
+      "condition": {
+        "type": "itemdespawntowhat:y_level",
+        "min": -64,
+        "max": 40
+      }
+    }
+  },
+  "effects": [
+    {
+      "type": "itemdespawntowhat:spawn_xp",
+      "amount": 100
+    },
+    {
+      "type": "itemdespawntowhat:consume_source",
+      "count": 1
+    },
+    {
+      "type": "itemdespawntowhat:lightning",
+      "count": 1,
+      "delay_ticks": 20
+    }
+  ]
+}

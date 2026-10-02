@@ -1,0 +1,90 @@
+[
+  {
+    "id": "itemdespawntowhat:builtin_thunder_condensation",
+    "enabled": true,
+    "display_name": "雷暴凝水 / Thunder Condensation",
+    "notes": "内置示例：weather 条件与 y_level 条件同处 all_of；效果演示 weather（改天气）与 consume_fluid（消耗流体）。",
+    "trigger_after_seconds": 300,
+    "source": {
+      "items": [
+        "minecraft:wet_sponge"
+      ]
+    },
+    "conditions": {
+      "op": "all_of",
+      "terms": [
+        {
+          "op": "leaf",
+          "condition": {
+            "type": "itemdespawntowhat:weather",
+            "weather": "thunder"
+          }
+        },
+        {
+          "op": "leaf",
+          "condition": {
+            "type": "itemdespawntowhat:y_level",
+            "min": 60,
+            "max": 320
+          }
+        }
+      ]
+    },
+    "effects": [
+      {
+        "type": "itemdespawntowhat:weather",
+        "mode": "rain",
+        "duration_ticks": 6000,
+        "thundering": true
+      },
+      {
+        "type": "itemdespawntowhat:consume_fluid",
+        "fluid": "minecraft:water",
+        "require_source": true
+      }
+    ]
+  },
+  {
+    "id": "itemdespawntowhat:builtin_dark_blast",
+    "enabled": false,
+    "display_name": "暗处爆破 / Dark Blast",
+    "notes": "内置示例（默认停用）：any_of 内混用叶节点与 inverted 节点（「非晴朗」）；效果演示 explosion。",
+    "trigger_after_seconds": 300,
+    "source": {
+      "items": [
+        "minecraft:gunpowder"
+      ]
+    },
+    "conditions": {
+      "op": "any_of",
+      "terms": [
+        {
+          "op": "leaf",
+          "condition": {
+            "type": "itemdespawntowhat:light_level",
+            "min": 0,
+            "max": 7
+          }
+        },
+        {
+          "op": "inverted",
+          "term": {
+            "op": "leaf",
+            "condition": {
+              "type": "itemdespawntowhat:weather",
+              "weather": "clear"
+            }
+          }
+        }
+      ]
+    },
+    "effects": [
+      {
+        "type": "itemdespawntowhat:explosion",
+        "power": 2,
+        "fire": true,
+        "visual_only": false
+      }
+    ]
+  }
+]

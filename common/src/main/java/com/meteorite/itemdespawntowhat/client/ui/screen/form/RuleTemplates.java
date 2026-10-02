@@ -16,8 +16,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /***
- * 内置规则模板：从资源包 data/itemdespawntowhat/idtw/rules/ 下读取 8 个内置样本规则，
+ * 内置规则模板：从客户端资源包 assets/itemdespawntowhat/idtw/templates/ 下读取 8 个内置模板规则，
  * 供「模板创建」入口列出候选并读取模板内容。
+ * <p>模板内容是 data/itemdespawntowhat/idtw/rules/ 下内置样本的副本：客户端资源管理器只暴露 assets/ 下的资源，
+ * 而内置样本属于服务端数据包，因此这里必须使用 assets 下的同一份副本（两处需一起更新）。
  * <p>只读，不写任何文件；资源缺失、解析失败一律跳过，不向界面抛异常。
  * <p>形状与 {@link RuleTemplateHooks.Provider} 一致，可由接线方注册为模板来源。
  */
@@ -26,8 +28,8 @@ public final class RuleTemplates {
     // 本模组命名空间
     private static final String NAMESPACE = "itemdespawntowhat";
 
-    // 内置模板所在目录
-    private static final String DIRECTORY = "idtw/rules";
+    // 内置模板所在目录（客户端 assets 下的模板副本；原始样本在 data/itemdespawntowhat/idtw/rules/）
+    private static final String DIRECTORY = "idtw/templates";
 
     // 模板标签键前缀
     private static final String LABEL_PREFIX = "gui.itemdespawntowhat.edit.template.";
@@ -85,7 +87,19 @@ public final class RuleTemplates {
         }
         try (BufferedReader reader = resource.openAsReader()) {
             JsonElement element = JsonParser.parseReader(reader);
-            return element != null && element.isJsonObject() ? element.getAsJsonObject() : null;
+            if (element == null) {
+                return null;
+            }
+            // 样本允许顶层数组：模板取数组里的第一条规则
+            if (element.isJsonArray()) {
+                for (JsonElement item : element.getAsJsonArray()) {
+                    if (item != null && item.isJsonObject()) {
+                        return item.getAsJsonObject();
+                    }
+                }
+                return null;
+            }
+            return element.isJsonObject() ? element.getAsJsonObject() : null;
         } catch (Exception exception) {
             Constants.LOG.warn("读取内置规则模板失败: {}", id, exception);
             return null;

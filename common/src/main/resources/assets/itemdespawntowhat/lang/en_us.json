@@ -1,5 +1,5 @@
 {
-  "gui.itemdespawntowhat.edit.title": "Edit file: %s",
+  "gui.itemdespawntowhat.edit.title": "Edit file",
   "gui.itemdespawntowhat.edit.config_stat_1": "☰ Configs: %d",
   "gui.itemdespawntowhat.edit.config_stat_2": "★ Configs: %s (%s + %s)",
   "gui.itemdespawntowhat.edit.stat": "Total : %d  Pending : %d",
@@ -104,7 +104,6 @@
   "gui.itemdespawntowhat.direction.up": "Up",
   "gui.itemdespawntowhat.direction.down": "Down",
   "gui.itemdespawntowhat.edit.save_error": "Invalid config, please check your inputs.",
-  "gui.itemdespawntowhat.edit.validation.invalid": "Invalid value for %s",
   "gui.itemdespawntowhat.edit.duplicate": "This config already exists.",
   "gui.itemdespawntowhat.edit.idle_timeout": "Edit session timed out, editor closed.",
   "gui.itemdespawntowhat.edit.mode.local_mode": "Local mode",

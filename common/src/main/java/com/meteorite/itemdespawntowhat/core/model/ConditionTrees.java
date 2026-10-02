@@ -31,79 +31,48 @@ public final class ConditionTrees {
 
     // 带 JSON 路径的叶遍历：路径与 JSON 形状一致，如 conditions.terms[0].condition，供校验期定位字段
     public static void forEachLeaf(@Nullable ConditionNode node, String basePath, BiConsumer<String, Condition> visitor) {
-        if (node == null) {
-            return;
-        }
-        if (node instanceof ConditionNode.Leaf leaf) {
-            visitor.accept(basePath + "." + RuleFields.CONDITION, leaf.condition());
-            return;
-        }
-        if (node instanceof ConditionNode.Inverted inverted) {
-            forEachLeaf(inverted.term(), basePath + "." + RuleFields.TERM, visitor);
-            return;
-        }
-        if (node instanceof ConditionNode.AllOf allOf) {
-            forEachTerms(allOf.terms(), basePath, visitor);
-            return;
-        }
-        if (node instanceof ConditionNode.AnyOf anyOf) {
-            forEachTerms(anyOf.terms(), basePath, visitor);
+        switch (node) {
+            case null -> { }
+            case ConditionNode.Leaf(Condition condition) ->
+                    visitor.accept(basePath + "." + RuleFields.CONDITION, condition);
+            case ConditionNode.Inverted(ConditionNode term) ->
+                    forEachLeaf(term, basePath + "." + RuleFields.TERM, visitor);
+            case ConditionNode.AllOf(List<ConditionNode> terms) -> forEachTerms(terms, basePath, visitor);
+            case ConditionNode.AnyOf(List<ConditionNode> terms) -> forEachTerms(terms, basePath, visitor);
         }
     }
 
     // 叶数：叶节点计 1，组合节点取子节点之和
     public static int leafCount(@Nullable ConditionNode node) {
-        if (node == null) {
-            return 0;
-        }
-        if (node instanceof ConditionNode.Leaf) {
-            return 1;
-        }
-        if (node instanceof ConditionNode.Inverted inverted) {
-            return leafCount(inverted.term());
-        }
-        if (node instanceof ConditionNode.AllOf allOf) {
-            return sumLeaves(allOf.terms());
-        }
-        if (node instanceof ConditionNode.AnyOf anyOf) {
-            return sumLeaves(anyOf.terms());
-        }
-        return 0;
+        return switch (node) {
+            case null -> 0;
+            case ConditionNode.Leaf ignored -> 1;
+            case ConditionNode.Inverted(ConditionNode term) -> leafCount(term);
+            case ConditionNode.AllOf(List<ConditionNode> terms) -> sumLeaves(terms);
+            case ConditionNode.AnyOf(List<ConditionNode> terms) -> sumLeaves(terms);
+        };
     }
 
     // 节点数：所有节点（含组合节点与叶）都计入
     public static int nodeCount(@Nullable ConditionNode node) {
-        if (node == null) {
-            return 0;
-        }
-        int total = 1;
-        if (node instanceof ConditionNode.Inverted inverted) {
-            return total + nodeCount(inverted.term());
-        }
-        if (node instanceof ConditionNode.AllOf allOf) {
-            return total + sumNodes(allOf.terms());
-        }
-        if (node instanceof ConditionNode.AnyOf anyOf) {
-            return total + sumNodes(anyOf.terms());
-        }
-        return total;
+        return switch (node) {
+            case null -> 0;
+            case ConditionNode.Inverted(ConditionNode term) -> 1 + nodeCount(term);
+            case ConditionNode.AllOf(List<ConditionNode> terms) -> 1 + sumNodes(terms);
+            case ConditionNode.AnyOf(List<ConditionNode> terms) -> 1 + sumNodes(terms);
+            case ConditionNode.Leaf ignored -> 1;
+        };
     }
 
     // 深度：根节点为 1，空树为 0，组合节点取子节点最大深度加一
     public static int depth(@Nullable ConditionNode node) {
-        if (node == null) {
-            return 0;
-        }
-        if (node instanceof ConditionNode.Inverted inverted) {
-            return 1 + depth(inverted.term());
-        }
-        if (node instanceof ConditionNode.AllOf allOf) {
-            return 1 + maxDepth(allOf.terms());
-        }
-        if (node instanceof ConditionNode.AnyOf anyOf) {
-            return 1 + maxDepth(anyOf.terms());
-        }
-        return 1;
+        return switch (node) {
+            case null -> 0;
+            case ConditionNode.Inverted(ConditionNode term) -> 1 + depth(term);
+            case ConditionNode.AllOf(List<ConditionNode> terms) -> 1 + maxDepth(terms);
+            case ConditionNode.AnyOf(List<ConditionNode> terms) -> 1 + maxDepth(terms);
+            case ConditionNode.Leaf ignored -> 1;
+        };
     }
 
     // 按路径替换指定节点，返回新树（纯函数：不修改入参，未触及的兄弟节点保持原引用，结构共享）
@@ -141,16 +110,24 @@ public final class ConditionTrees {
             return root;
         }
         ConditionNode target = nodeAt(root, path);
-        if (target == null) {
-            warnInvalidPath("updateTermsAt", path, "路径越界或类型不符");
-            return root;
+        switch (target) {
+            case null -> {
+                warnInvalidPath("updateTermsAt", path, "路径越界或类型不符");
+                return root;
+            }
+            case ConditionNode.Leaf ignored -> {
+                warnInvalidPath("updateTermsAt", path, "叶节点没有 terms");
+                return root;
+            }
+            // 文档语义是「Inverted 传入只含唯一 term 的单元素列表」，term 为 null 时无法成立，按类型不符失败
+            case ConditionNode.Inverted(ConditionNode term) when term == null -> {
+                warnInvalidPath("updateTermsAt", path, "inverted 节点的 term 为 null（结构非法）");
+                return root;
+            }
+            default -> { }
         }
-        if (target instanceof ConditionNode.Leaf) {
-            warnInvalidPath("updateTermsAt", path, "叶节点没有 terms");
-            return root;
-        }
-        List<ConditionNode> current = target instanceof ConditionNode.Inverted inverted
-                ? List.of(inverted.term()) : childrenOf(target);
+        List<ConditionNode> current = target instanceof ConditionNode.Inverted(ConditionNode term)
+                ? List.of(term) : childrenOf(target);
         List<ConditionNode> updated;
         try {
             updated = operator.apply(List.copyOf(current));
@@ -174,7 +151,7 @@ public final class ConditionTrees {
                 warnInvalidPath("updateTermsAt", path, "inverted 必须恰好 1 个子节点");
                 return root;
             }
-            newTarget = new ConditionNode.Inverted(updated.get(0));
+            newTarget = new ConditionNode.Inverted(updated.getFirst());
         } else {
             newTarget = withChildren(target, updated);
         }
@@ -240,16 +217,14 @@ public final class ConditionTrees {
 
     // 子节点列表：AllOf / AnyOf 取 terms，Inverted 取只含唯一 term 的单元素列表，Leaf 没有子节点
     private static List<ConditionNode> childrenOf(ConditionNode node) {
-        if (node instanceof ConditionNode.AllOf allOf) {
-            return allOf.terms();
-        }
-        if (node instanceof ConditionNode.AnyOf anyOf) {
-            return anyOf.terms();
-        }
-        if (node instanceof ConditionNode.Inverted inverted) {
-            return List.of(inverted.term());
-        }
-        return List.of();
+        return switch (node) {
+            case ConditionNode.AllOf(List<ConditionNode> terms) -> terms;
+            case ConditionNode.AnyOf(List<ConditionNode> terms) -> terms;
+            // term 为 null 属结构非法（ConditionExpression#isStructurallyValid 已判不合法）；
+            // 这里返回空列表而不是 List.of(null)，否则 List.of 本身会抛 NPE 把上层逻辑炸掉
+            case ConditionNode.Inverted(ConditionNode term) -> term == null ? List.of() : List.of(term);
+            case ConditionNode.Leaf ignored -> List.of();
+        };
     }
 
     // 用新的子节点列表重建同类型节点（record 紧凑构造器会再做一次不可变拷贝）
@@ -261,7 +236,7 @@ public final class ConditionTrees {
             return new ConditionNode.AnyOf(children);
         }
         if (node instanceof ConditionNode.Inverted) {
-            return new ConditionNode.Inverted(children.get(0));
+            return new ConditionNode.Inverted(children.getFirst());
         }
         return node;
     }
