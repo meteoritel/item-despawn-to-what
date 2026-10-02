@@ -336,7 +336,7 @@
 | `max_checks_per_tick` | 整数 | `512` | `1..100000` | 每维度、每类队列的任务访问数上限，超限保留队列等待后续 tick |
 | `overlay_directory` | 字符串 | `"itemdespawntowhat"` | — | 覆盖层目录名（相对 config/） |
 | `fabric_lifespan_fallback_ticks` | 整数（刻） | `6000` | `1..72000` | Fabric 端 lifespan 兜底值（NeoForge 读取实体当前 `lifespan`） |
-| `debug_logging` | 布尔 | `false` | — | 调试日志开关 |
+| `debug_logging` | 布尔 | `false` | — | 常规运行日志开关；开发场景由加载器development环境启用，不依赖此项 |
 
 退避序列：`base << n` 后按 `backoff_max_ticks` 封顶，`base = max(1, check_interval_ticks)`。
 
@@ -404,4 +404,4 @@
 - 自然寿命到期但最后判定仍在队列时暂缓 discard；队列最终决定转化或自然移除，数量/时间预算仍生效。
 - reload 保留已提交效果，只重建检查、索引及标签/气候缓存。未加载目标区块等待，维度卸载或服务器停止清除该维度任务；任务不持久化。
 - source 直接物品、动态 biome/dimension、战利品表存在性均校验；效果和条件顶层未知参数拒载，规则顶层未知字段告警。规则最多 32 个效果、128 个条件叶、256 个源项；每个效果级表达式最多 128 个条件叶。
-- `debug stats` 分队列显示待处理量、峰值、访问任务数（含已取消条目）、本刻/最大耗时及最老就绪任务延期。毫秒/P95/P99/TPS 需实机压测。
+- 开发环境的 `debug run` / `debug bench` 直接创建真实后端场景，自动在IDEA输出当前参数、实际事件与预期校对；FRAME显示队列积压与本刻耗时，END分队列给出窗口访问数、均值、P50/P95/P99、峰值和延期。TPS与窗口统计仍需用户实机运行场景，详见[开发场景指南](debug-validation-guide.md)。

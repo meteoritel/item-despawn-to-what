@@ -8,6 +8,7 @@ import java.util.TreeMap;
 
 /** 到期任务队列：预算耗尽时保留队列游标，不复制积压任务；跳过的游戏刻也能补执行。 */
 public final class TickScheduler {
+    public static final long SOFT_BUDGET_NANOS = 2_000_000L;
     private static final Logger LOGGER = LogManager.getLogger();
     private final TreeMap<Long, ArrayDeque<Task>> buckets = new TreeMap<>();
     private final ArrayDeque<ArrayDeque<Task>> ready = new ArrayDeque<>();
@@ -57,7 +58,7 @@ public final class TickScheduler {
         int visited = 0;
         lastTick = now;
         long started = System.nanoTime();
-        long deadline = started + 2_000_000L;
+        long deadline = started + SOFT_BUDGET_NANOS;
         while (visited < maxTasksPerTick && System.nanoTime() < deadline) {
             Map.Entry<Long, ArrayDeque<Task>> entry;
             while ((entry = buckets.firstEntry()) != null && entry.getKey() <= now) {

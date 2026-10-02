@@ -1,6 +1,8 @@
 package com.meteorite.itemdespawntowhat.core.type.effect.exec;
 
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
+import com.meteorite.itemdespawntowhat.core.debug.DebugMode;
+import com.meteorite.itemdespawntowhat.core.debug.DebugScenarioManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
@@ -57,8 +59,12 @@ final class EffectTargets {
     static void addEntity(EffectContext context, net.minecraft.world.entity.Entity entity) {
         if (!com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks.contains(context.level(), entity.blockPosition())) {
             context.schedule(20, () -> addEntity(context, entity));
-        } else if (!context.level().addFreshEntity(entity)) {
-            throw new IllegalStateException("实体生成被拒绝：规则=" + context.ruleId() + " 类型=" + entity.getType());
+        } else {
+            if (DebugMode.ENABLED) { DebugScenarioManager.prepareOutput(context, entity); }
+            if (!context.level().addFreshEntity(entity)) {
+                throw new IllegalStateException("实体生成被拒绝：规则=" + context.ruleId() + " 类型=" + entity.getType());
+            }
+            if (DebugMode.ENABLED) { DebugScenarioManager.outputAdded(context, entity); }
         }
     }
 

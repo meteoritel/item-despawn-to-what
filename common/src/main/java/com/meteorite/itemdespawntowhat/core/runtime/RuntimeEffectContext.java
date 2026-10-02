@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.runtime;
 
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
+import com.meteorite.itemdespawntowhat.core.debug.DebugScenarioManager;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
@@ -78,7 +79,7 @@ public final class RuntimeEffectContext implements EffectContext {
 
     @Override
     public void schedule(int delayTicks, Runnable task) {
-        scheduler.schedule(level.getGameTime(), delayTicks, () -> runWhenLoaded(task));
+        DebugScenarioManager.schedule(source, scheduler, level.getGameTime(), delayTicks, () -> runWhenLoaded(task));
     }
 
     // 延迟效果等待目标区块加载，不读取或生成未加载区块。

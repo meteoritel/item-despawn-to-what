@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.runtime;
 
+import com.meteorite.itemdespawntowhat.core.debug.DebugSessionManager;
+
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
@@ -32,7 +34,10 @@ public final class RuleRuntimeEvents {
         ServerLifecycleEvents.SERVER_STARTED.register(RuleRuntimeHost::start);
 
         // 服务端停止：释放全部维度的追踪状态与到期任务
-        ServerLifecycleEvents.SERVER_STOPPING.register(server -> RuleRuntimeHost.shutdown());
+        ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
+            DebugSessionManager.shutdown(server, RuleRuntimeHost.commandContext());
+            RuleRuntimeHost.shutdown();
+        });
 
         // 数据包重载：该回调在服务端线程（handleAsync(server)）触发，成功后重建索引并回扫
         ServerLifecycleEvents.END_DATA_PACK_RELOAD.register((server, resourceManager, success) -> {
@@ -57,6 +62,7 @@ public final class RuleRuntimeEvents {
         // 维度 tick 结束：执行有预算的检查与效果
         ServerTickEvents.END_WORLD_TICK.register(RuleRuntimeHost::tickLevel);
         ServerTickEvents.END_SERVER_TICK.register(server -> {
+            DebugSessionManager.tick(server, RuleRuntimeHost.commandContext());
             if (server.getTickCount() % 20 == 0) {
                 com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler.expireIdle();
             }

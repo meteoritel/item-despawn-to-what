@@ -41,7 +41,12 @@
 | `/idtw config convert` | 备份并显式转换旧配置，报告无法映射的条目 |
 | `/idtw config edit` | 打开前端占位页 |
 | `/idtw rule list`、`/idtw rule show <id>` | 查询规则 |
-| `/idtw debug inspect`、`why`、`biome`、`stats` | 检查掉落物、条件与队列积压 |
+| `/idtw debug run <场景>` | 开发环境自动准备真实后端功能场景，过程与校对结果实时输出到 IDEA |
+| `/idtw debug bench baseline [秒数]` | 开发环境采集当前世界的无新增负载基线 |
+| `/idtw debug bench convert\|retry [实体数] [秒数]` | 开发环境自动创建转化/失败重试负载，默认1000实体、60秒 |
+| `/idtw debug mark <现象>`、`status`、`stop` | 标记肉眼观察、查看场景进度、停止并清理本轮负载 |
+
+Debug由加载器的开发环境判断自动启用，IDEA Run/Debug均可使用，发布环境不注册debug指令。执行 `/idtw debug run convert` 即可生成测试源并走真实后端；在 IDEA 控制台过滤 `[IDTW_DEBUG]` 或回执的 `run=<编号>`，校对 START 参数、过程事件、FRAME 和 END 的预期/实际。无需手写测试配置或开启 `debug_logging`。功能场景、性能对比流程和AI反馈模板见 [Debug 实机验证与反馈指南](docs/dev/debug-validation-guide.md)。
 
 旧 JSON 保留在原目录，但运行时不再加载。迁移前请备份配置与存档，并阅读[迁移指南](docs/dev/migration-guide.md)。
 
@@ -54,6 +59,7 @@
 - [配置字段与运行边界](docs/dev/config-reference.md)
 - [架构与数据流](docs/dev/architecture.md)
 - [新增效果、条件与第三方 SPI](docs/dev/extension-guide.md)
+- [Debug 实机验证与反馈指南](docs/dev/debug-validation-guide.md)
 - [后端收尾记录与游戏验收步骤](docs/review/backend-rewrite-closeout-2026-10-02.md)
 - [重构规划与历史阶段记录](docs/plan/plan-backend-rewrite.md)
 

@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.runtime;
 
+import com.meteorite.itemdespawntowhat.core.debug.DebugSessionManager;
+
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -38,6 +40,7 @@ public final class RuleRuntimeEvents {
     // 服务端停止：释放全部维度的追踪状态与到期任务
     @SubscribeEvent
     public static void onServerStopping(ServerStoppingEvent event) {
+        DebugSessionManager.shutdown(event.getServer(), RuleRuntimeHost.commandContext());
         RuleRuntimeHost.shutdown();
     }
 
@@ -94,6 +97,7 @@ public final class RuleRuntimeEvents {
 
     @SubscribeEvent
     public static void onServerTick(net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) {
+        DebugSessionManager.tick(event.getServer(), RuleRuntimeHost.commandContext());
         if (event.getServer().getTickCount() % 20 == 0) {
             com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler.expireIdle();
         }

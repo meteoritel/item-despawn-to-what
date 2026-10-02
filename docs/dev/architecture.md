@@ -16,6 +16,7 @@
 | `core/type` | 12 个内置效果、10 个条件及其执行器/求值器 |
 | `core/service` | 加载装配、动态引用校验、写盘、快照与版本管理 |
 | `core/runtime` | 候选索引、检查/效果双队列、追踪与有界缓存 |
+| `core/debug` | 开发场景、实际后端事件观测、性能窗口及按场景编号关联的实时日志 |
 | `core/config` | `server.json` 性能与运维参数 |
 | `core/network` | 原版 payload、编辑变更集、分片与服务端处理流程 |
 | `client` | 快捷键和 `RuleEditorPlaceholderScreen` 占位页 |
@@ -96,7 +97,17 @@ Fabric：原生实体加入/卸载、维度与服务端事件；三个 Mixin 分
 
 NeoForge：原生实体加入/离开、LivingDropsEvent、ItemExpireEvent、维度与服务端事件，无新增 Mixin。lifespan 使用实体当前 `lifespan`；Fabric 使用配置兜底值，并以实际自然 discard 入口保证最终检查。
 
-## 8. 相关文档
+## 8. 开发场景与性能观测
+
+加载器development环境自动启用DebugMode，发布环境不注册debug子命令。`/idtw debug run <场景>`直接创建功能场景；`bench baseline|convert|retry`创建基线或受控性能负载。事件日志使用INFO，可在IDEA实时按`[IDTW_DEBUG]`和`run=<UUID>`校对，命令不读取日志或导出文件。
+
+DebugScenarioDefinition复用真实RuleCodecs、RuleValidation和RuleIndex，场景索引仅绑定本轮实体UUID。ConversionRuntime查询候选时对本轮源使用场景索引，普通实体使用全局索引；其余排期、年龄门槛、条件、退避和效果路径一致。测试产物也在加入前登记，避免进入用户的普通规则链。所有诊断业务位于debug包，runtime/求值器/共享实体生成入口只调用观测和任务绑定入口。
+
+真实条件结果、提交和成功加入世界的产物分别记录，不重新求值模拟游戏结果。准备后预热20个世界tick，性能场景关闭逐实体日志，分别采集服务器总耗时和场景维度检查/效果队列的窗口统计。队列成本包含诊断计数与任务管理成本；前后对比须使用相同诊断版本。
+
+本轮每个任务使用现有TickScheduler句柄登记，执行后释放，场景停止时精确取消本轮任务并清理源与产物，不清空普通队列。正常停服与维度卸载结束场景。测试实体的唯一custom_data防合并、关闭重力和拾取，用于保持可比较实体数量，不替代自然掉落/合并工况验证。完整命令和边界见[开发场景指南](debug-validation-guide.md)。
+
+## 9. 相关文档
 
 - [配置参考](config-reference.md)、[迁移指南](migration-guide.md)、[扩展 SPI](extension-guide.md)
 - [当前切换契约 ADR-0017](../adr/0017-backend-cutover-and-budgeted-effects.md)

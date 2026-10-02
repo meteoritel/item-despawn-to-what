@@ -1,6 +1,8 @@
 package com.meteorite.itemdespawntowhat.core.runtime;
 
 import com.meteorite.itemdespawntowhat.core.api.ConditionContext;
+import com.meteorite.itemdespawntowhat.core.debug.DebugMode;
+import com.meteorite.itemdespawntowhat.core.debug.DebugScenarioManager;
 import com.meteorite.itemdespawntowhat.core.api.ConditionEvaluator;
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
@@ -39,10 +41,13 @@ public final class ExpressionEvaluator {
                         value = evaluatorOf(definition).test(leaf, context);
                         if (leaf.negated()) { value = !value; }
                     } catch (RuntimeException failure) {
+                        if (DebugMode.ENABLED) { DebugScenarioManager.observe(context.source(), "ERROR", "condition", leaf.type(), "error", failure.toString()); }
                         org.apache.logging.log4j.LogManager.getLogger().error("条件求值失败：类型={} 位置={}", leaf.type(), context.pos(), failure);
                         value = false;
                     }
                 }
+                if (DebugMode.ENABLED) { DebugScenarioManager.observe(context.source(), value ? "CONDITION_TRUE" : "CONDITION_FALSE",
+                        "condition", leaf.type(), "negated", leaf.negated(), "evaluated_position", context.pos()); }
                 if (!value) {
                     matched = false;
                     break;

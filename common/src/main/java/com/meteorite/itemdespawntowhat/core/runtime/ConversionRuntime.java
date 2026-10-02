@@ -1,6 +1,8 @@
 package com.meteorite.itemdespawntowhat.core.runtime;
 
 import com.meteorite.itemdespawntowhat.Constants;
+import com.meteorite.itemdespawntowhat.core.debug.DebugMode;
+import com.meteorite.itemdespawntowhat.core.debug.DebugScenarioManager;
 import com.meteorite.itemdespawntowhat.core.api.ConditionContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecutor;
@@ -72,7 +74,7 @@ public final class ConversionRuntime {
         private long nextCheckTick = -1L;
     }
 
-    // 掉落物追踪状态快照，供 /idtw debug inspect|why 只读使用
+    // 掉落物追踪状态快照，供开发场景实时日志只读使用
     public record TrackedItemInfo(boolean tracked, int failureCount, boolean locked, long nextCheckTick) {
     }
 
@@ -111,10 +113,13 @@ public final class ConversionRuntime {
 
     // 掉落物进入世界：仅当存在候选规则时纳入追踪
     public void onItemAdded(ServerLevel level, ItemEntity entity) {
-        if (index.isEmpty() || excluded(entity)) {
+        if (index.isEmpty() && DebugScenarioManager.inactive(level.getServer())) { return; }
+        if (excluded(entity)) {
+            if (DebugMode.ENABLED) { DebugScenarioManager.observe(entity, "EXCLUDED", "death_locked",
+                    entity.getTags().contains(Constants.CHECK_LOCK_TAG), "unlimited_lifetime", entity.getAge() == -32768); }
             return;
         }
-        List<Rule> candidates = index.candidates(itemIdOf(entity));
+        List<Rule> candidates = candidatesFor(entity);
         if (candidates.isEmpty()) {
             return;
         }
@@ -126,6 +131,8 @@ public final class ConversionRuntime {
         TrackedState tracked = new TrackedState();
         state.tracked.put(entity.getUUID(), tracked);
         scheduleInitial(level, state, entity, tracked, candidates);
+        if (DebugMode.ENABLED) { DebugScenarioManager.observe(entity, "TRACKED", "next_check_tick", tracked.nextCheckTick,
+                "candidates", candidates.size(), "lifespan_ticks", lifespanTicks(level, entity)); }
     }
 
     // 每 tick：检查与效果分别按预算推进；实体失效由离开事件及时清理。
@@ -141,7 +148,7 @@ public final class ConversionRuntime {
         LevelState state = stateOf(level);
         state.tracked.clear();
         state.scheduler.clear();
-        if (index.isEmpty()) {
+        if (index.isEmpty() && DebugScenarioManager.inactive(level.getServer())) {
             return;
         }
         for (Entity entity : level.getAllEntities()) {
@@ -175,7 +182,7 @@ public final class ConversionRuntime {
         index = RuleIndex.empty();
     }
 
-    // ========== 统计（供 /idtw debug stats 使用） ==========
+    // ========== 统计（供开发场景实时日志与性能窗口使用） ==========
 
     public int trackedCount(ServerLevel level) {
         LevelState state = levels.get(level.dimension());
@@ -194,12 +201,21 @@ public final class ConversionRuntime {
 
     // 某个掉落物的候选规则（已按优先级 → 条件叶数 → 定义序排序），供 /idtw debug why 使用
     public List<Rule> candidatesFor(ItemEntity entity) {
+        if (DebugMode.ENABLED) {
+            List<Rule> scene = DebugScenarioManager.candidates(entity);
+            if (scene != null) { return scene; }
+        }
         return index.candidates(itemIdOf(entity));
     }
 
     public int pendingTasks(ServerLevel level) {
         LevelState state = levels.get(level.dimension());
         return state == null ? 0 : state.scheduler.pending() + state.effects.pending();
+    }
+
+    // 诊断复用实际平台寿命提供器，不能用通用兜底值冒充 NeoForge 当前寿命。
+    public int lifespanTicks(ServerLevel level, ItemEntity item) {
+        return Math.max(1, lifespanProvider.lifespanTicks(level, item));
     }
 
     // 两类队列单独观测，压测时可定位是条件检查还是世界操作形成积压。
@@ -231,7 +247,7 @@ public final class ConversionRuntime {
         long delay = Math.max(0, dueAge - entity.getAge());
         tracked.nextCheckTick = level.getGameTime() + delay;
         UUID uuid = entity.getUUID();
-        tracked.task = state.scheduler.schedule(level.getGameTime(), (int) Math.min(delay, Integer.MAX_VALUE),
+        tracked.task = DebugScenarioManager.schedule(entity, state.scheduler, level.getGameTime(), (int) Math.min(delay, Integer.MAX_VALUE),
                 () -> attempt(level, uuid));
     }
 
@@ -241,8 +257,10 @@ public final class ConversionRuntime {
         delayTicks = Math.min(delayTicks, remaining);
         tracked.nextCheckTick = level.getGameTime() + delayTicks;
         UUID uuid = entity.getUUID();
-        tracked.task = state.scheduler.schedule(level.getGameTime(), delayTicks, () -> attempt(level, uuid));
-        if (config.debugLogging()) {
+        tracked.task = DebugScenarioManager.schedule(entity, state.scheduler, level.getGameTime(), delayTicks, () -> attempt(level, uuid));
+        if (DebugMode.ENABLED) { DebugScenarioManager.observe(entity, "RETRY", "delay_ticks", delayTicks,
+                "failure_count", tracked.failureCount, "next_check_tick", tracked.nextCheckTick); }
+        if (config.debugLogging() && DebugScenarioManager.allowsRuntimeLogging(entity)) {
             LOGGER.info("掉落物 {} 条件未满足，{} tick 后重试（第 {} 次失败）",
                     entity.getUUID(), delayTicks, tracked.failureCount);
         }
@@ -271,7 +289,7 @@ public final class ConversionRuntime {
             reschedule(level, state, item, tracked, 1);
             return;
         }
-        List<Rule> candidates = index.candidates(itemIdOf(item));
+        List<Rule> candidates = candidatesFor(item);
         if (candidates.isEmpty()) {
             state.tracked.remove(uuid);
             return;
@@ -311,8 +329,14 @@ public final class ConversionRuntime {
     private Rule select(ServerLevel level, ItemEntity item, List<Rule> candidates, boolean expiring) {
         ConditionContext context = conditionContext(level, item);
         for (Rule rule : candidates) {
-            if (!expiring && !isEligible(level, item, rule)) { continue; }
-            if (ExpressionEvaluator.matches(rule.conditions(), context, types.conditionTypes())) {
+            if (!expiring && !isEligible(level, item, rule)) {
+                if (DebugMode.ENABLED) { DebugScenarioManager.observe(item, "AGE_NOT_READY", "rule", rule.id(),
+                        "due_age_ticks", dueAge(level, item, rule)); }
+                continue;
+            }
+            boolean matched = ExpressionEvaluator.matches(rule.conditions(), context, types.conditionTypes());
+            if (DebugMode.ENABLED) { DebugScenarioManager.observe(item, "CANDIDATE", "rule", rule.id(), "matched", matched); }
+            if (matched) {
                 return rule;
             }
         }
@@ -340,6 +364,7 @@ public final class ConversionRuntime {
             int perRound = types.perRoundSourceConsumption(rule);
             int available = item.getItem().getCount();
             int rounds = perRound > 0 ? Math.max(1, available / perRound) : 1;
+            if (DebugMode.ENABLED) { DebugScenarioManager.converted(item, rule, rounds); }
             // 实际覆盖的源物品数：必须按 available 收敛（堆叠不足一轮时只算实际可扣的数量），
             // 否则 spawn_xp 的 per_source_item 会多给经验；不消耗源物品的规则按 1 计
             int covered = perRound > 0 ? Math.min(rounds * perRound, available) : 1;
@@ -351,7 +376,7 @@ public final class ConversionRuntime {
             for (Effect effect : rule.effects()) {
                 dispatchEffect(level, item, base, effect);
             }
-            if (config.debugLogging()) {
+            if (config.debugLogging() && DebugScenarioManager.allowsRuntimeLogging(item)) {
                 LOGGER.info("掉落物 {} 已按规则 {} 转化（{} 轮 × {} 个效果）",
                         item.getUUID(), rule.id(), rounds, rule.effects().size());
             }
@@ -364,6 +389,8 @@ public final class ConversionRuntime {
     // 效果派发：延迟交给调度器，条件与概率在此统一判定
     private void dispatchEffect(ServerLevel level, ItemEntity item, EffectContext base, Effect effect) {
         int delay = Math.max(0, effect.delayTicks());
+        if (DebugMode.ENABLED) { DebugScenarioManager.observe(item, "EFFECT_SCHEDULED", "effect", effect.type(),
+                "delay_ticks", delay, "chance", effect.chance()); }
         base.schedule(delay, () -> runEffect(level, item, base, effect));
     }
 
@@ -373,20 +400,26 @@ public final class ConversionRuntime {
         if (conditions != null && !conditions.isEmpty()) {
             ConditionContext context = conditionContext(level, item, BlockPos.containing(base.position()));
             if (!ExpressionEvaluator.matches(conditions, context, types.conditionTypes())) {
+                if (DebugMode.ENABLED) { DebugScenarioManager.observe(item, "EFFECT_CONDITION_SKIPPED", "effect", effect.type()); }
                 return;
             }
         }
         if (effect.chance() < 1.0D && base.random().nextDouble() >= effect.chance()) {
+            if (DebugMode.ENABLED) { DebugScenarioManager.observe(item, "EFFECT_CHANCE_SKIPPED", "effect", effect.type(), "chance", effect.chance()); }
             return;
         }
         EffectType<?> definition = types.effectTypes().getOrNull(effect.type());
         if (definition == null) {
+            if (DebugMode.ENABLED) { DebugScenarioManager.observe(item, "ERROR", "effect", effect.type(), "reason", "type_not_registered"); }
             LOGGER.error("规则 {} 引用了未注册的效果类型 {}", base.ruleId(), effect.type());
             return;
         }
         try {
+            if (DebugMode.ENABLED) { DebugScenarioManager.observe(item, "EFFECT_BEGIN", "effect", effect.type()); }
             executorOf(definition).execute(effect, base);
+            if (DebugMode.ENABLED) { DebugScenarioManager.observe(item, "EFFECT_EXECUTOR_RETURNED", "effect", effect.type()); }
         } catch (RuntimeException e) {
+            if (DebugMode.ENABLED) { DebugScenarioManager.observe(item, "ERROR", "effect", effect.type(), "error", e.toString()); }
             LOGGER.error("效果执行失败：规则={} 效果={} 位置={}", base.ruleId(), effect.type(), base.position(), e);
         }
     }
@@ -430,6 +463,7 @@ public final class ConversionRuntime {
 
     // 离开维度或区块卸载时立即取消检查，释放任务捕获对象。
     public void onItemRemoved(ServerLevel level, ItemEntity item) {
+        if (DebugMode.ENABLED) { DebugScenarioManager.observe(item, "REMOVED", "reason", item.getRemovalReason()); }
         LevelState state = levels.get(level.dimension());
         if (state == null) { return; }
         TrackedState tracked = state.tracked.remove(item.getUUID());
@@ -444,11 +478,12 @@ public final class ConversionRuntime {
         TrackedState tracked = state.tracked.get(item.getUUID());
         if (tracked == null) { return false; }
         if (!tracked.expiryPending) {
+            if (DebugMode.ENABLED) { DebugScenarioManager.observe(item, "NATURAL_EXPIRY_DEFERRED"); }
             tracked.expiryPending = true;
             if (tracked.task != null) { tracked.task.cancel(); }
             UUID uuid = item.getUUID();
             tracked.nextCheckTick = level.getGameTime();
-            tracked.task = state.scheduler.schedule(level.getGameTime(), 0, () -> attempt(level, uuid));
+            tracked.task = DebugScenarioManager.schedule(item, state.scheduler, level.getGameTime(), 0, () -> attempt(level, uuid));
         }
         return true;
     }
