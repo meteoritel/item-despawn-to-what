@@ -27,18 +27,23 @@ public final class LightningExecutor {
     }
 
     public static void execute(LightningEffect effect, EffectContext context) {
+        if (!com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks.containsArea(context.level(),
+                net.minecraft.core.BlockPos.containing(context.position()), 6)) {
+            context.schedule(20, () -> execute(effect, context));
+            return;
+        }
         ServerLevel level = context.level();
         Vec3 origin = context.position();
         for (int i = 0; i < effect.count(); i++) {
             int delay = i * INTERVAL_TICKS;
             boolean exact = i == 0;
             // 延迟任务绑定维度与位置，不依赖源实体存活
-            context.schedule(delay, () -> strike(level, origin, exact));
+            context.schedule(delay, () -> strike(context, level, origin, exact));
         }
     }
 
     // 在指定水平坐标的地面高度召唤一道闪电
-    private static void strike(ServerLevel level, Vec3 origin, boolean exact) {
+    private static void strike(EffectContext context, ServerLevel level, Vec3 origin, boolean exact) {
         double strikeX;
         double strikeZ;
         if (exact) {
@@ -50,6 +55,10 @@ public final class LightningExecutor {
             strikeX = origin.x + Math.cos(angle) * spread;
             strikeZ = origin.z + Math.sin(angle) * spread;
         }
+        if (!com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks.contains(level, BlockPos.containing(strikeX, origin.y, strikeZ))) {
+            context.schedule(20, () -> strike(context, level, origin, exact));
+            return;
+        }
         BlockPos groundPos = level.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING,
                 BlockPos.containing(strikeX, origin.y, strikeZ));
         LightningBolt bolt = EntityType.LIGHTNING_BOLT.create(level);
@@ -57,6 +66,6 @@ public final class LightningExecutor {
             throw new IllegalStateException("无法创建闪电实体");
         }
         bolt.moveTo(strikeX, groundPos.getY(), strikeZ);
-        level.addFreshEntity(bolt);
+        EffectTargets.addEntity(context, bolt);
     }
 }

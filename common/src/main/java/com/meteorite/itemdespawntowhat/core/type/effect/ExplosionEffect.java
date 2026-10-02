@@ -38,7 +38,7 @@ public record ExplosionEffect(
     // 参数默认值与取值区间
     public static final float DEFAULT_POWER = 3.0F;
     public static final float MIN_POWER = 0.0F;
-    public static final float MAX_POWER = 64.0F;
+    public static final float MAX_POWER = 16.0F;
     public static final boolean DEFAULT_FIRE = false;
     public static final boolean DEFAULT_VISUAL_ONLY = false;
 

@@ -20,7 +20,7 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
 /**
  * 新链路（core/network/transport）配置编辑 payload 的 NeoForge 注册入口。
- * 与旧链路 ConfigEditPayloadRegistrar 完全独立（通道命名空间 idtw），互不改写。
+ * 当前唯一编辑协议，通道命名空间 idtw。
  * C2S 与 S2C 都在公共 mod 事件注册：NeoForge 的连接协商是双向匹配的，专用服务端若缺少 S2C 注册会协商失败；
  * S2C 的处理器只经 RuleEditPayloadRouter 分发，不引用任何客户端类，因此在专用服务端上注册同样安全（该分支永不执行）。
  */

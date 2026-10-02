@@ -40,6 +40,14 @@ public final class TypeDispatch {
                             MapCodec<A> codec = (MapCodec<A>) definition.codec();
                             // 参数 codec 的错误默认不含字段名（DFU 的 intRange/doubleRange 只报范围），
                             // 这里统一前缀类型 id，便于定位到"哪个类型的哪个参数"
+                            java.util.Set<T> allowed = codec.keys(ops).collect(java.util.stream.Collectors.toSet());
+                            allowed.add(ops.createString(RuleFields.TYPE));
+                            var unknown = input.entries().map(Pair -> Pair.getFirst())
+                                    .filter(key -> !allowed.contains(key)).findFirst();
+                            if (unknown.isPresent()) {
+                                return DataResult.error(() -> "类型 " + definition.id() + " 存在未知字段: "
+                                        + ops.getStringValue(unknown.get()).result().orElse("<非字符串>"));
+                            }
                             return codec.decode(ops, input)
                                     .mapError(message -> "类型 " + definition.id() + " 参数错误: " + message);
                         });

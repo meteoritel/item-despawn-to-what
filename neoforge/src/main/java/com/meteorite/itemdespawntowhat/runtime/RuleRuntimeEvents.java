@@ -4,8 +4,13 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.event.AddReloadListenerEvent;
+import net.neoforged.neoforge.event.OnDatapackSyncEvent;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
+import net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent;
+import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
+import net.neoforged.neoforge.event.entity.item.ItemExpireEvent;
+import net.minecraft.world.entity.player.Player;
+import com.meteorite.itemdespawntowhat.Constants;
 import net.neoforged.neoforge.event.level.LevelEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
@@ -16,7 +21,6 @@ import static com.meteorite.itemdespawntowhat.ItemDespawnToWhat.MOD_ID;
 /**
  * 新链路（core/runtime）在 NeoForge 端的事件入口。
  * 本类只做事件到 RuleRuntimeHost 的转发，不含业务逻辑（规划书 3.12：平台层只做入口）。
- * 与旧链路 server.event.ItemConversionEvent 并列注册，两者互不读写对方状态。
  */
 @EventBusSubscriber(modid = MOD_ID)
 public final class RuleRuntimeEvents {
@@ -37,10 +41,13 @@ public final class RuleRuntimeEvents {
         RuleRuntimeHost.shutdown();
     }
 
-    // 数据包重载：登记监听器，apply 阶段在服务端线程重建索引并回扫
+    // PlayerList.reloadResources 在新资源与标签切换后发布事件；登录同步不需要重建索引。
     @SubscribeEvent
-    public static void onAddReloadListener(AddReloadListenerEvent event) {
-        event.addListener(new RuleRuntimeHost.ReloadListener(event.getRegistryAccess()));
+    public static void onDatapackSync(OnDatapackSyncEvent event) {
+        if (event.getPlayer() == null) {
+            var server = event.getPlayerList().getServer();
+            RuleRuntimeHost.reload(server, server.getResourceManager());
+        }
     }
 
     // 掉落物进入世界（含从磁盘加载的实体）：纳入追踪
@@ -51,11 +58,44 @@ public final class RuleRuntimeEvents {
         }
     }
 
+    // 原生事件保证死亡背包物品入世界前带有排除标记。
+    @SubscribeEvent
+    public static void onDeathDrops(LivingDropsEvent event) {
+        if (event.getEntity() instanceof Player) {
+            event.getDrops().forEach(item -> item.addTag(Constants.CHECK_LOCK_TAG));
+        }
+    }
+
+    @SubscribeEvent
+    public static void onEntityLeave(EntityLeaveLevelEvent event) {
+        if (event.getLevel() instanceof ServerLevel level && event.getEntity() instanceof ItemEntity item) {
+            RuleRuntimeHost.onItemRemoved(level, item);
+        }
+    }
+
+    // 原生自然消失事件：让预算队列完成最后判定后再释放实体。
+    @SubscribeEvent
+    public static void onItemExpire(ItemExpireEvent event) {
+        ItemEntity item = event.getEntity();
+        if (item.level() instanceof ServerLevel level && RuleRuntimeHost.deferNaturalExpiry(level, item)) {
+            // NeoForge 将寿命钳制为 32766；达到边界时短暂重置年龄，队列仍按 expiryPending 判定并最终 discard。
+            if (item.getAge() >= 32765) { item.setExtendedLifetime(); }
+            event.addExtraLife(1);
+        }
+    }
+
     // 维度 tick 结束：执行到期任务与周期性失效清理
     @SubscribeEvent
     public static void onLevelTick(LevelTickEvent.Post event) {
         if (event.getLevel() instanceof ServerLevel level) {
             RuleRuntimeHost.tickLevel(level);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onServerTick(net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) {
+        if (event.getServer().getTickCount() % 20 == 0) {
+            com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler.expireIdle();
         }
     }
 

@@ -84,6 +84,14 @@ final class RuleDebugCommands {
                     .kv("tracked", runtime.trackedCount(level))
                     .kv("pending", runtime.pendingTasks(level))
                     .build());
+            for (boolean effects : new boolean[]{false, true}) {
+                var stats = runtime.queueStats(level, effects);
+                lines.add(RuleCommandText.of("itemdespawntowhat.command.debug.stats.queue")
+                        .kv("queue", effects ? "effects" : "checks").kv("pending", stats.pending())
+                        .kv("peak", stats.peakPending()).kv("visited", stats.totalVisited())
+                        .kv("last_us", stats.lastMicros()).kv("max_us", stats.maxMicros())
+                        .kv("oldest_ticks", stats.oldestDelay()).build());
+            }
         }
         return RuleCommandTree.replyAll(ctx, lines);
     }
@@ -158,7 +166,7 @@ final class RuleDebugCommands {
                 new RuntimeTagLookup(level), new RuntimeClimateSampler(level));
         boolean chosen = false;
         for (Rule rule : candidates) {
-            boolean matched = ExpressionEvaluator.matches(
+            boolean matched = runtime.isEligible(level, item, rule) && ExpressionEvaluator.matches(
                     rule.conditions(), conditionContext, registries.conditionTypes());
             lines.add(RuleCommandText.of("itemdespawntowhat.command.debug.why.candidate")
                     .kv("id", rule.id())

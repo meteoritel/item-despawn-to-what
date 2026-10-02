@@ -16,6 +16,7 @@ public final class RuntimeEffectContext implements EffectContext {
 
     private final ServerLevel level;
     private final ItemEntity source;
+    private final ItemStack sourceSnapshot;
     private final Vec3 position;
     private final ResourceLocation ruleId;
     private final TickScheduler scheduler;
@@ -27,6 +28,7 @@ public final class RuntimeEffectContext implements EffectContext {
                                int rounds, int coveredSourceItems) {
         this.level = level;
         this.source = source;
+        this.sourceSnapshot = source.getItem().copy();
         this.position = position;
         this.ruleId = ruleId;
         this.scheduler = scheduler;
@@ -56,7 +58,7 @@ public final class RuntimeEffectContext implements EffectContext {
 
     @Override
     public ItemStack sourceStack() {
-        return source.isRemoved() ? ItemStack.EMPTY : source.getItem().copy();
+        return sourceSnapshot.copy();
     }
 
     @Override
@@ -76,6 +78,15 @@ public final class RuntimeEffectContext implements EffectContext {
 
     @Override
     public void schedule(int delayTicks, Runnable task) {
-        scheduler.schedule(level.getGameTime(), delayTicks, task);
+        scheduler.schedule(level.getGameTime(), delayTicks, () -> runWhenLoaded(task));
+    }
+
+    // 延迟效果等待目标区块加载，不读取或生成未加载区块。
+    private void runWhenLoaded(Runnable task) {
+        if (!LoadedChunks.contains(level, net.minecraft.core.BlockPos.containing(position))) {
+            schedule(20, task);
+            return;
+        }
+        task.run();
     }
 }

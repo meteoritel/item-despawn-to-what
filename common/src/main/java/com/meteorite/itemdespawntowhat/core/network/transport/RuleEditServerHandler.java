@@ -8,6 +8,7 @@ import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEditChangeSet;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshot;
 import com.meteorite.itemdespawntowhat.core.service.EditSessionManager;
 import com.meteorite.itemdespawntowhat.core.service.RuleOverlayWriter;
+import com.meteorite.itemdespawntowhat.core.service.RuleSubmissionValidator;
 import com.meteorite.itemdespawntowhat.core.service.RuleSnapshotAssembler;
 import com.mojang.serialization.DataResult;
 import net.minecraft.server.MinecraftServer;
@@ -60,6 +61,7 @@ public final class RuleEditServerHandler {
             return;
         }
         EditSessionManager sessions = sessions(context);
+        if (!synchronizeRevision(context, serverPlayer, sessions)) { return; }
         sessions.open(serverPlayer.getUUID(), System.currentTimeMillis());
         sendSnapshot(server, serverPlayer, context, sessions);
     }
@@ -75,7 +77,7 @@ public final class RuleEditServerHandler {
             return;
         }
         if (!canEdit(serverPlayer)) {
-            sendResult(context, serverPlayer, "没有配置编辑权限：需要 OP（权限等级 ≥ 2）或单人模式");
+            sendResult(context, serverPlayer, "itemdespawntowhat.edit.no_permission");
             return;
         }
         if (!isReady(context)) {
@@ -102,6 +104,7 @@ public final class RuleEditServerHandler {
             sendResult(context, serverPlayer, "itemdespawntowhat.edit.nothing_to_save");
             return;
         }
+        if (!synchronizeRevision(context, serverPlayer, sessions)) { return; }
         if (!sessions.versionMatches(changeSet.expectedVersion())) {
             // 服务端权威：版本不一致时整批拒绝，回传冲突说明与最新快照
             sendResult(context, serverPlayer, "itemdespawntowhat.edit.version_conflict|" + sessions.version()
@@ -112,16 +115,30 @@ public final class RuleEditServerHandler {
 
         // 落盘依据是磁盘上的文件内容（A1 闭环），不基于运行时快照整文件覆盖
         IssueCollector issues = new IssueCollector();
+        if (!RuleSubmissionValidator.validate(changeSet, server, java.util.Objects.requireNonNull(context.typeRegistries()), issues)) {
+            sendResult(context, serverPlayer, "itemdespawntowhat.edit.validation_failed|" + issues.errors().getFirst().format());
+            return;
+        }
         RuleOverlayWriter.ApplyResult applied = new RuleOverlayWriter(
-                context.overlayRoot(), context.overlayNamespace()).apply(changeSet, issues);
-        sessions.bumpVersion();
+                java.util.Objects.requireNonNull(context.overlayRoot()), context.overlayNamespace()).apply(changeSet, issues);
+        if (!applied.conflicts().isEmpty() || !issues.errors().isEmpty()) {
+            sendResult(context, serverPlayer, "itemdespawntowhat.edit.save_failed|" + String.join("; ", applied.conflicts()));
+            return;
+        }
+        if (applied.writtenFiles() == 0) {
+            sendResult(context, serverPlayer, "itemdespawntowhat.edit.nothing_to_save");
+            return;
+        }
         sessions.open(serverPlayer.getUUID(), System.currentTimeMillis());
 
         // 索引重建 + 全维度 rescan：已存在的掉落物立即按新规则重选（A3 闭环）
         try {
             context.rebuildAndRescan(server);
         } catch (RuntimeException e) {
+            sessions.bumpVersion();
             LOGGER.error("保存后重建规则索引失败（覆盖层已写入，保留上一版索引）", e);
+            sendResult(context, serverPlayer, "itemdespawntowhat.edit.saved_reload_failed");
+            return;
         }
 
         sendResult(context, serverPlayer, buildSuccessText(changeSet, applied, issues));
@@ -136,7 +153,7 @@ public final class RuleEditServerHandler {
             return;
         }
         if (!canEdit(serverPlayer)) {
-            sendResult(context, serverPlayer, "没有配置编辑权限：需要 OP（权限等级 ≥ 2）或单人模式");
+            sendResult(context, serverPlayer, "itemdespawntowhat.edit.no_permission");
             return;
         }
         String joined = RuleEditChunkAccumulator.accept(serverPlayer, payload);
@@ -145,6 +162,13 @@ public final class RuleEditServerHandler {
             return;
         }
         handleChangeSet(serverPlayer, context, joined);
+    }
+
+    // 每秒调用一次，清理会话与未完成的分片，不扫描世界实体。
+    public static synchronized void expireIdle() {
+        long now = System.currentTimeMillis();
+        RuleEditChunkAccumulator.expireIdle(now);
+        if (sessionManager != null) { sessionManager.expireIdle(now); }
     }
 
     // 玩家断开：释放会话与未完成的分片传输
@@ -165,30 +189,44 @@ public final class RuleEditServerHandler {
         sessionOverlayRoot = null;
     }
 
+    // 磁盘无法核对时拒绝读写请求，不能把未知修订当作仍然匹配。
+    private static boolean synchronizeRevision(RuleEditServerContext context, ServerPlayer player, EditSessionManager sessions) {
+        try { sessions.synchronizeDiskRevision(); return true; }
+        catch (RuntimeException failure) {
+            LOGGER.error("规则修订核对失败", failure);
+            sendResult(context, player, "itemdespawntowhat.edit.save_failed|" + failure.getMessage());
+            return false;
+        }
+    }
+
     // 组装并下发快照：合并结果 + 覆盖层原始 JSON 由 core/service 的装配器统一负责
     private static void sendSnapshot(MinecraftServer server, ServerPlayer player,
                                      RuleEditServerContext context, EditSessionManager sessions) {
-        RuleLoadResult<Rule> merged = context.loadMerged(server);
-        RuleSnapshot snapshot = RuleSnapshotAssembler.assemble(
-                merged.rules(),
-                context.overlayRoot(),
-                context.overlayNamespace(),
-                sessions.version(),
-                context.typeRegistries().effectTypes(),
-                context.typeRegistries().conditionTypes(),
-                issueTexts(merged));
-        String text = snapshot.serialize();
-        if (RuleEditLimits.encodedLength(text) > RuleEditLimits.MAX_SNAPSHOT_BYTES) {
-            sendResult(context, player, "itemdespawntowhat.edit.snapshot_too_large");
-            return;
+        try {
+            RuleLoadResult<Rule> merged = context.loadMerged(server);
+            RuleSnapshot snapshot = RuleSnapshotAssembler.assemble(
+                    merged.rules(),
+                    context.overlayRoot(),
+                    context.overlayNamespace(),
+                    sessions.version(),
+                    java.util.Objects.requireNonNull(context.typeRegistries()).effectTypes(),
+                    java.util.Objects.requireNonNull(context.typeRegistries()).conditionTypes(),
+                    issueTexts(merged));
+            String text = snapshot.serialize();
+            if (RuleEditLimits.encodedLength(text) > RuleEditLimits.MAX_SNAPSHOT_BYTES) {
+                sendResult(context, player, "itemdespawntowhat.edit.snapshot_too_large");
+                return;
+            }
+            context.sendTo(player, new RuleSnapshotPayload(text));
+        } catch (RuntimeException failure) {
+            LOGGER.error("生成规则快照失败", failure);
+            sendResult(context, player, "itemdespawntowhat.edit.snapshot_failed|" + failure.getMessage());
         }
-        context.sendTo(player, new RuleSnapshotPayload(text));
     }
 
     // 保存回执文本：条数、写入文件数、跳过项与校验问题一并回报
     private static String buildSuccessText(RuleEditChangeSet changeSet,
-                                           RuleOverlayWriter.ApplyResult applied,
-                                           IssueCollector issues) {
+                                           RuleOverlayWriter.ApplyResult applied, IssueCollector issues) {
         StringBuilder text = new StringBuilder();
         text.append("itemdespawntowhat.edit.save_success|")
                 .append(changeSet.edits().size()).append('|')
@@ -233,7 +271,7 @@ public final class RuleEditServerHandler {
 
     // 会话管理器按覆盖层根目录缓存；单人世界切换存档后目录不变则沿用
     private static synchronized EditSessionManager sessions(RuleEditServerContext context) {
-        Path root = context.overlayRoot();
+        Path root = java.util.Objects.requireNonNull(context.overlayRoot());
         if (sessionManager == null || !root.equals(sessionOverlayRoot)) {
             sessionManager = new EditSessionManager(root);
             sessionOverlayRoot = root;

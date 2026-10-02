@@ -6,11 +6,11 @@ import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.api.TypeDefinition;
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.core.registries.BuiltInRegistries;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -30,7 +30,6 @@ public final class RuleValidation {
     // 校验单条规则（结构维度）；origin 用于问题定位（文件路径或数据包标识）
     public static boolean validate(Rule rule, IssueCollector issues, @Nullable String origin) {
         int before = issues.errors().size();
-        String rulePath = rule.id() == null ? "<无 id>" : rule.id().toString();
 
         if (rule.id() == null) {
             issues.error("规则缺少 id", origin, RuleFields.ID);
@@ -48,9 +47,13 @@ public final class RuleValidation {
             issues.error("conditions 中存在空条件组（空组合取恒真，视为非法）", origin, RuleFields.CONDITIONS);
         }
 
+        if (rule.effects().size() > 32 || rule.conditions().leafCount() > 128
+                || rule.source().entries().size() + rule.source().exclude().size() > 256) {
+            issues.error("规则超出工作量上限：effects<=32、条件叶<=128、source 项<=256", origin, null);
+        }
         validateSourceEntries(rule.source(), issues, origin);
         for (int index = 0; index < rule.effects().size(); index++) {
-            validateEffect(rule.effects().get(index), index, issues, origin, rulePath);
+            validateEffect(rule.effects().get(index), index, issues, origin);
         }
         validateConsumptionEffects(rule, issues, origin);
         return issues.errors().size() == before;
@@ -149,20 +152,29 @@ public final class RuleValidation {
     private static void validateSourceEntries(SourceMatcher source, IssueCollector issues, @Nullable String origin) {
         Set<String> entries = new HashSet<>();
         for (SourceEntry entry : source.entries()) {
+            validateSourceReference(entry, issues, origin, SourceMatcher.ITEMS_FIELD);
             if (!entries.add(entry.serialized())) {
                 issues.error("source.items 中存在重复项: " + entry.serialized(), origin, SourceMatcher.fieldPath(SourceMatcher.ITEMS_FIELD));
             }
         }
         for (SourceEntry entry : source.exclude()) {
+            validateSourceReference(entry, issues, origin, SourceMatcher.EXCLUDE_FIELD);
             if (entries.contains(entry.serialized())) {
                 issues.error("source 中同一项既匹配又排除: " + entry.serialized(), origin, SourceMatcher.fieldPath(SourceMatcher.EXCLUDE_FIELD));
             }
         }
     }
 
+    // 静态物品引用必须存在，标签可为空但不能把拼错物品静默装入索引。
+    private static void validateSourceReference(SourceEntry entry, IssueCollector issues, String origin, String field) {
+        if (!entry.tag() && !BuiltInRegistries.ITEM.containsKey(entry.id())) {
+            issues.error("未知源物品: " + entry.id(), origin, SourceMatcher.fieldPath(field));
+        }
+    }
+
     // 效果通用字段校验；类型专属参数由注册表感知入口负责
     private static void validateEffect(Effect effect, int index, IssueCollector issues,
-                                       @Nullable String origin, String rulePath) {
+                                       @Nullable String origin) {
         String path = RuleFields.EFFECTS + "[" + index + "]";
         if (effect.type() == null) {
             issues.error("效果缺少 type", origin, path);
@@ -171,10 +183,13 @@ public final class RuleValidation {
         if (effect.delayTicks() < 0) {
             issues.error("delay_ticks 不能为负数: " + effect.delayTicks(), origin, path + "." + RuleFields.DELAY_TICKS);
         }
-        if (effect.chance() < 0.0D || effect.chance() > 1.0D) {
+        if (!Double.isFinite(effect.chance()) || effect.chance() < 0.0D || effect.chance() > 1.0D) {
             issues.error("chance 必须在 [0,1] 内: " + effect.chance(), origin, path + "." + RuleFields.CHANCE);
         }
         ConditionExpression conditions = effect.conditions();
+        if (conditions != null && conditions.leafCount() > 128) {
+            issues.error("效果级条件叶数不得超过 128", origin, path + ".conditions");
+        }
         if (conditions != null && !conditions.isStructurallyValid()) {
             issues.error("效果级 conditions 中存在空条件组", origin, path + "." + RuleFields.CONDITIONS);
         }

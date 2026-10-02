@@ -45,8 +45,7 @@ public final class OverlayRuleReader {
                     .sorted(Comparator.comparing(path -> path.toAbsolutePath().toString()))
                     .toList();
         } catch (IOException e) {
-            issues.error("列举覆盖层规则文件失败: " + e.getMessage(), rulesDirectory.toString(), "");
-            return List.of();
+            throw new java.io.UncheckedIOException("列举覆盖层规则文件失败，保留现有规则", e);
         }
 
         List<RawRuleEntry> entries = new ArrayList<>();

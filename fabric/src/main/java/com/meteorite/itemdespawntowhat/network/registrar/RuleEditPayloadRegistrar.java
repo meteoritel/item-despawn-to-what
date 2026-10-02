@@ -14,7 +14,7 @@ import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 
 /**
  * 新链路（core/network/transport）配置编辑 payload 的 Fabric 注册入口。
- * 与旧链路 ConfigEditPayloadRegistrar 完全独立（通道命名空间 idtw），互不改写。
+ * 当前唯一编辑协议，通道命名空间 idtw。
  * C2S 与 S2C 的**类型**都在公共初始化注册：专用服务端也必须能编码 S2C，否则连接协商会判定通道缺失；
  * S2C 的接收器在客户端初始化注册（见 client.network.FabricRuleEditClientRegistrar），服务端不注册接收器。
  */

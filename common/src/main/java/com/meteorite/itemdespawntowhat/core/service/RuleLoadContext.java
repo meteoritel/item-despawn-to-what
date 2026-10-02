@@ -22,7 +22,8 @@ public record RuleLoadContext(
         RegistryAccess registryAccess,
         TypeRegistry<EffectType<?>> effectTypes,
         TypeRegistry<ConditionType<?>> conditionTypes,
-        PackLayerResolver layerResolver
+        PackLayerResolver layerResolver,
+        @Nullable net.minecraft.server.MinecraftServer server
 ) {
 
     public RuleLoadContext {
@@ -31,6 +32,12 @@ public record RuleLoadContext(
         Objects.requireNonNull(effectTypes, "effectTypes");
         Objects.requireNonNull(conditionTypes, "conditionTypes");
         Objects.requireNonNull(layerResolver, "layerResolver");
+    }
+
+    // 平台运行时附加当前服务端，动态引用以实际已加载内容为准。
+    public RuleLoadContext withServer(net.minecraft.server.MinecraftServer currentServer) {
+        return new RuleLoadContext(resourceManager, overlayRoot, overlayNamespace, registryAccess,
+                effectTypes, conditionTypes, layerResolver, currentServer);
     }
 
     // 同时加载内置/世界数据包与 config 覆盖层
@@ -42,7 +49,7 @@ public record RuleLoadContext(
                                        TypeRegistry<ConditionType<?>> conditionTypes,
                                        PackLayerResolver layerResolver) {
         return new RuleLoadContext(resourceManager, overlayRoot, overlayNamespace,
-                registryAccess, effectTypes, conditionTypes, layerResolver);
+                registryAccess, effectTypes, conditionTypes, layerResolver, null);
     }
 
     // 只加载 config 覆盖层（单人本地调试与命令校验使用）
@@ -52,6 +59,6 @@ public record RuleLoadContext(
                                               TypeRegistry<EffectType<?>> effectTypes,
                                               TypeRegistry<ConditionType<?>> conditionTypes) {
         return new RuleLoadContext(null, overlayRoot, overlayNamespace,
-                registryAccess, effectTypes, conditionTypes, PackLayerResolver.allWorld());
+                registryAccess, effectTypes, conditionTypes, PackLayerResolver.allWorld(), null);
     }
 }

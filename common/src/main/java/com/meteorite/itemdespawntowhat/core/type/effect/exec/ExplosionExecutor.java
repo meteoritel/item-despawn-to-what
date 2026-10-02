@@ -22,6 +22,11 @@ public final class ExplosionExecutor {
     }
 
     public static void execute(ExplosionEffect effect, EffectContext context) {
+        if (!com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks.containsArea(context.level(),
+                net.minecraft.core.BlockPos.containing(context.position()), (int) Math.ceil(effect.power() * 2) + 1)) {
+            context.schedule(20, () -> execute(effect, context));
+            return;
+        }
         ServerLevel level = context.level();
         Vec3 position = context.position();
         if (effect.visualOnly()) {

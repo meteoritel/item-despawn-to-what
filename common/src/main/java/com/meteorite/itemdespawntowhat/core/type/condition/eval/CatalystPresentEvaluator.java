@@ -11,7 +11,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.List;
 import java.util.Optional;
 
 /**
@@ -33,20 +32,16 @@ public final class CatalystPresentEvaluator {
             return false;
         }
         AABB searchBox = AABB.unitCubeFromLowerCorner(Vec3.atLowerCornerOf(context.pos()));
-        List<ItemEntity> nearby = context.level().getEntitiesOfClass(ItemEntity.class, searchBox,
-                entity -> entity != context.source() && entity.isAlive());
-        long total = 0L;
-        for (ItemEntity entity : nearby) {
-            ItemStack stack = entity.getItem();
-            if (stack.isEmpty() || !matchesAny(stack, condition, context)) {
-                continue;
-            }
-            total += stack.getCount();
-            if (total >= condition.count()) {
-                return true;
-            }
-        }
-        return total >= condition.count();
+        long[] total = {0};
+        context.level().getEntities(net.minecraft.world.level.entity.EntityTypeTest.forClass(ItemEntity.class), searchBox,
+                entity -> {
+                    if (entity != context.source() && entity.isAlive() && !entity.getItem().isEmpty()
+                            && matchesAny(entity.getItem(), condition, context)) {
+                        total[0] += entity.getItem().getCount();
+                    }
+                    return total[0] >= condition.count();
+                }, new java.util.ArrayList<ItemEntity>(1), 1);
+        return total[0] >= condition.count();
     }
 
     // 物品是否命中候选引用中的任意一项

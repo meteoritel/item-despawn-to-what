@@ -42,17 +42,22 @@ public final class ArrowRainExecutor {
     public static void execute(ArrowRainEffect effect, EffectContext context) {
         AbstractArrow.Pickup pickup = toVanillaPickup(effect.pickup());
         List<MobEffectInstance> potionEffects = resolvePotionEffects(effect.potionEffects(), context.random());
+        if (!com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks.containsArea(context.level(),
+                net.minecraft.core.BlockPos.containing(context.position()), 6)) {
+            context.schedule(20, () -> execute(effect, context));
+            return;
+        }
         ServerLevel level = context.level();
         Vec3 origin = context.position();
         for (int i = 0; i < effect.count(); i++) {
             int delay = i * INTERVAL_TICKS;
             // 延迟任务绑定维度与位置，不依赖源实体存活
-            context.schedule(delay, () -> spawnArrow(level, origin, pickup, potionEffects));
+            context.schedule(delay, () -> spawnArrow(context, level, origin, pickup, potionEffects));
         }
     }
 
     // 生成单支向下坠落的箭矢
-    private static void spawnArrow(ServerLevel level, Vec3 origin, AbstractArrow.Pickup pickup,
+    private static void spawnArrow(EffectContext context, ServerLevel level, Vec3 origin, AbstractArrow.Pickup pickup,
                                    List<MobEffectInstance> potionEffects) {
         RandomSource random = level.random;
         Arrow arrow = EntityType.ARROW.create(level);
@@ -73,7 +78,7 @@ public final class ArrowRainExecutor {
         for (MobEffectInstance potionEffect : potionEffects) {
             arrow.addEffect(new MobEffectInstance(potionEffect));
         }
-        level.addFreshEntity(arrow);
+        EffectTargets.addEntity(context, arrow);
     }
 
     // 参数枚举到原版拾取模式的映射

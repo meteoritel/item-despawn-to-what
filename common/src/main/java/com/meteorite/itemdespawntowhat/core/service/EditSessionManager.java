@@ -25,6 +25,7 @@ public final class EditSessionManager {
     private final long timeoutMillis;
     private final Map<UUID, Long> activeSessions = new HashMap<>();
     private int version;
+    private byte[] diskRevision;
 
     public EditSessionManager(Path overlayRoot) {
         this(overlayRoot, DEFAULT_TIMEOUT_MILLIS);
@@ -34,6 +35,7 @@ public final class EditSessionManager {
         this.versionFile = overlayRoot.resolve(VERSION_FILE_NAME);
         this.timeoutMillis = Math.max(1_000L, timeoutMillis);
         this.version = readVersion();
+        refreshDiskRevision();
     }
 
     // 当前覆盖层版本戳
@@ -75,7 +77,47 @@ public final class EditSessionManager {
     public synchronized int bumpVersion() {
         version = version + 1;
         persistVersion();
+        refreshDiskRevision();
         return version;
+    }
+
+    // 在快照和保存前同步磁盘修订，手工编辑尚未 reload 也不能被旧客户端视图覆盖。
+    public synchronized void synchronizeDiskRevision() {
+        byte[] current;
+        try { current = fingerprint(); }
+        catch (IOException failure) { throw new java.io.UncheckedIOException("无法核对规则目录修订", failure); }
+        if (!java.util.Arrays.equals(current, diskRevision)) {
+            version++;
+            persistVersion();
+            diskRevision = current;
+        }
+    }
+
+    private void refreshDiskRevision() {
+        try { diskRevision = fingerprint(); }
+        catch (IOException failure) {
+            diskRevision = null;
+            org.apache.logging.log4j.LogManager.getLogger().warn("无法读取规则目录修订，后续保存将重新核对", failure);
+        }
+    }
+
+    // 只读所有规则文件；坏 JSON 的原始字节同样参与修订，不解析、不写回。
+    private byte[] fingerprint() throws IOException {
+        java.security.MessageDigest digest;
+        try { digest = java.security.MessageDigest.getInstance("SHA-256"); }
+        catch (java.security.NoSuchAlgorithmException impossible) { throw new IllegalStateException(impossible); }
+        Path root = versionFile.getParent().resolve(com.meteorite.itemdespawntowhat.core.load.RulePaths.OVERLAY_RULES_DIRECTORY);
+        if (!Files.isDirectory(root)) { return digest.digest(); }
+        try (var walk = Files.walk(root)) {
+            for (Path file : walk.filter(Files::isRegularFile).filter(path -> path.toString().endsWith(".json")).sorted().toList()) {
+                byte[] name = root.relativize(file).toString().getBytes(StandardCharsets.UTF_8);
+                byte[] content = Files.readAllBytes(file);
+                digest.update(java.nio.ByteBuffer.allocate(8).putInt(name.length).putInt(content.length).array());
+                digest.update(name);
+                digest.update(content);
+            }
+        }
+        return digest.digest();
     }
 
     // 当前活跃会话数（供调试与命令输出）

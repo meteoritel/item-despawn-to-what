@@ -28,9 +28,10 @@ public final class SpawnXpExecutor {
         }
         ServerLevel level = context.level();
         Vec3 position = context.position();
-        ExperienceOrb.award(level, new Vec3(
+        int batches = (int) (((long) amount + 4095) / 4096);
+        EffectTargets.forEachStep(context, batches, 1, index -> ExperienceOrb.award(level, new Vec3(
                 position.x + (level.random.nextDouble() - 0.5) * 0.5,
                 position.y + 0.2,
-                position.z + (level.random.nextDouble() - 0.5) * 0.5), amount);
+                position.z + (level.random.nextDouble() - 0.5) * 0.5), (int) Math.min((long) amount - (long) index * 4096, 4096)));
     }
 }

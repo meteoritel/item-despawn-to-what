@@ -44,7 +44,7 @@ public final class SpawnEntityExecutor {
         }
         ServerLevel level = context.level();
         Vec3 position = context.position();
-        for (int i = 0; i < count; i++) {
+        EffectTargets.forEachStep(context, count, 8, remaining -> allowedCount(effect, context, type, remaining), index -> {
             Entity spawned = type.create(level);
             if (spawned == null) {
                 throw new IllegalStateException(effect.entity().serialized() + " 在该维度无法创建实体");
@@ -56,8 +56,8 @@ public final class SpawnEntityExecutor {
             if (spawned instanceof AgeableMob ageableMob) {
                 ageableMob.setAge(effect.age());
             }
-            level.addFreshEntity(spawned);
-        }
+            EffectTargets.addEntity(context, spawned);
+        });
     }
 
     // 结合 limit/radius 计算本次实际可产出的实体数量；limit 为空表示不限制
@@ -68,7 +68,9 @@ public final class SpawnEntityExecutor {
         int radius = effect.radius() == null ? DEFAULT_SEARCH_RADIUS : effect.radius();
         Vec3 position = context.position();
         AABB box = EffectTargets.blockBox(BlockPos.containing(position.x, position.y, position.z), radius);
-        int existing = Math.min(effect.limit(), context.level().getEntities(type, box, Entity::isAlive).size());
+        java.util.List<Entity> nearby = new java.util.ArrayList<>();
+        context.level().getEntities(type, box, Entity::isAlive, nearby, effect.limit());
+        int existing = nearby.size();
         return Math.max(0, Math.min(requested, effect.limit() - existing));
     }
 }

@@ -9,6 +9,10 @@ import com.meteorite.itemdespawntowhat.core.load.RulePaths;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEdit;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEditChangeSet;
 import com.meteorite.itemdespawntowhat.core.service.RuleOverlayWriter;
+import com.meteorite.itemdespawntowhat.core.service.RuleSubmissionValidator;
+import com.meteorite.itemdespawntowhat.core.service.BuiltinTypeRegistries;
+import com.meteorite.itemdespawntowhat.core.load.OverlayRuleReader;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
@@ -18,7 +22,6 @@ import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
-import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -80,26 +83,44 @@ public final class RuleConvertService {
     // 执行一次转换：扫描旧文件 → 逐条映射 → 备份 → 写覆盖层
     // overlayRoot 即 config/itemdespawntowhat：旧文件与新的 rules/ 覆盖层同处这一层
     public static Report convert(Path overlayRoot, String namespace,
-                                 int expectedVersion, IssueCollector issues) {
+                                 int expectedVersion, IssueCollector issues, MinecraftServer server, BuiltinTypeRegistries types) {
         Path rulesDir = overlayRoot.resolve(RulePaths.OVERLAY_RULES_DIRECTORY);
         List<String> unmapped = new ArrayList<>();
         List<String> notes = new ArrayList<>();
         List<RuleEdit> edits = new ArrayList<>();
         List<OldFile> oldFiles = scanOldFiles(overlayRoot, unmapped);
 
+        int backedUp = 0;
+        var existing = OverlayRuleReader.read(overlayRoot, namespace, new IssueCollector()).stream()
+                .map(entry -> entry.id()).collect(java.util.stream.Collectors.toSet());
         for (OldFile oldFile : oldFiles) {
-            backup(overlayRoot, oldFile, issues);
+            if (!backup(overlayRoot, oldFile, issues)) {
+                unmapped.add(oldFile.relative() + ": 备份失败，未进行转换");
+                continue;
+            }
+            backedUp++;
             int index = 0;
             for (JsonObject entry : oldFile.entries()) {
                 String type = oldFile.type();
                 try {
                     JsonObject rule = mapRule(type, entry, index, namespace, notes);
-                    ResourceLocation id = ResourceLocation.tryParse(namespace + ":" + type + "_" + index);
+                    ResourceLocation id = ResourceLocation.tryParse(namespace + ":legacy/" + stripExtension(oldFile.relative()) + "_" + index);
                     if (id == null) {
                         unmapped.add(oldFile.relative() + "#" + index + ": 推导出的规则 id 非法");
                     } else {
                         rule.addProperty("id", id.toString());
-                        edits.add(new RuleEdit(id, RuleEdit.Action.UPSERT, rule));
+                        if (existing.contains(id)) {
+                            notes.add("已有迁移规则，保留当前编辑内容: " + id);
+                        } else {
+                            RuleEdit edit = new RuleEdit(id, RuleEdit.Action.UPSERT, rule);
+                            IssueCollector validation = new IssueCollector();
+                            if (RuleSubmissionValidator.validate(new RuleEditChangeSet(expectedVersion, List.of(edit)),
+                                    server, types, validation)) {
+                                edits.add(edit);
+                            } else {
+                                for (var issue : validation.issues()) { unmapped.add(oldFile.relative() + "#" + index + ": " + issue.format()); }
+                            }
+                        }
                     }
                 } catch (Unmappable e) {
                     unmapped.add(oldFile.relative() + "#" + index + ": " + e.getMessage());
@@ -120,7 +141,7 @@ public final class RuleConvertService {
         if (Files.isDirectory(rulesDir)) {
             notes.add("覆盖层规则目录: " + rulesDir);
         }
-        return new Report(edits.size(), oldFiles.size(), written, unmapped, notes);
+        return new Report(written > 0 ? edits.size() : 0, backedUp, written, unmapped, notes);
     }
 
     // ========== 旧文件扫描 ==========
@@ -207,8 +228,8 @@ public final class RuleConvertService {
         return entries;
     }
 
-    // 备份旧文件到 <覆盖层>/_old_chain_backup/<相对路径>；失败只记问题，不阻断转换
-    private static void backup(Path overlayRoot, OldFile oldFile, IssueCollector issues) {
+    // 备份旧文件到 <覆盖层>/_old_chain_backup/<相对路径>；保留首次备份，失败则拒绝该文件转换
+    private static boolean backup(Path overlayRoot, OldFile oldFile, IssueCollector issues) {
         Path source = overlayRoot.resolve(oldFile.relative());
         Path target = overlayRoot.resolve(BACKUP_DIRECTORY).resolve(oldFile.relative());
         try {
@@ -216,10 +237,12 @@ public final class RuleConvertService {
             if (parent != null) {
                 Files.createDirectories(parent);
             }
-            Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+            if (!Files.exists(target)) { Files.copy(source, target); }
+            return true;
         } catch (IOException e) {
             issues.warn("备份旧配置失败: " + oldFile.relative() + " (" + e.getMessage() + ")",
                     source.toString(), null);
+            return false;
         }
     }
 
@@ -227,6 +250,9 @@ public final class RuleConvertService {
 
     // 把一条旧配置映射为新规则 JSON；无法无歧义映射时抛 Unmappable
     private static JsonObject mapRule(String type, JsonObject old, int index, String namespace, List<String> notes) {
+        for (String field : List.of("dimension", "need_outdoor", "surrounding_blocks", "catalyst_items", "consume_catalyst", "inner_fluid", "consume_fluid")) {
+            if (old.has(field)) { throw new Unmappable("检测到 v1 扁平字段 " + field + "，请按迁移指南手动映射，避免丢失限制条件"); }
+        }
         JsonObject rule = new JsonObject();
         rule.addProperty("enabled", optBoolean(old, "enabled", true));
         rule.addProperty("priority", optInt(old, "priority", 0));
@@ -308,7 +334,6 @@ public final class RuleConvertService {
             throw new Unmappable("未知的旧转化类型: " + type);
         }
         JsonObject effect = effect(namespace, effectPath);
-        String result = optString(old, "result", null);
         int resultLimit = optInt(old, "result_limit", 30);
         int searchRadius = optInt(old, "search_radius", 6);
         switch (type) {
@@ -415,28 +440,25 @@ public final class RuleConvertService {
 
     // 旧 DNF 对象 {groups:[{conditions:[{type,params,negated}]}]} → 新二维数组 [[{...扁平...}]]
     private static @Nullable JsonArray mapConditions(JsonElement element, String namespace) {
-        if (element == null || !element.isJsonObject()) {
-            return null;
-        }
+        if (element == null || element.isJsonNull()) { return null; }
+        if (!element.isJsonObject()) { throw new Unmappable("conditions 必须为对象"); }
         JsonObject expression = element.getAsJsonObject();
         if (!expression.has("groups") || !expression.get("groups").isJsonArray()) {
-            return null;
+            throw new Unmappable("conditions 缺少合法 groups 数组");
         }
         JsonArray groups = new JsonArray();
         for (JsonElement groupElement : expression.getAsJsonArray("groups")) {
-            if (!groupElement.isJsonObject()) {
-                continue;
-            }
-            JsonObject group = groupElement.getAsJsonObject();
+            JsonArray oldLeaves;
+            if (groupElement.isJsonArray()) { oldLeaves = groupElement.getAsJsonArray(); }
+            else if (groupElement.isJsonObject() && groupElement.getAsJsonObject().has("conditions")
+                    && groupElement.getAsJsonObject().get("conditions").isJsonArray()) {
+                oldLeaves = groupElement.getAsJsonObject().getAsJsonArray("conditions");
+            } else { throw new Unmappable("条件组缺少合法叶数组"); }
             JsonArray leaves = new JsonArray();
-            if (group.has("conditions") && group.get("conditions").isJsonArray()) {
-                for (JsonElement leafElement : group.getAsJsonArray("conditions")) {
+            for (JsonElement leafElement : oldLeaves) {
                     JsonObject leaf = mapLeaf(leafElement, namespace);
                     // ANY 天气等价于恒真：丢弃该叶；若整组因此为空则无法表达（新模型拒载空组）
-                    if (leaf != null) {
-                        leaves.add(leaf);
-                    }
-                }
+                if (leaf != null) { leaves.add(leaf); }
             }
             if (leaves.isEmpty()) {
                 throw new Unmappable("条件组在转换后为空（旧条件恒真或全部无法映射），新模型不接受空条件组");
@@ -448,14 +470,15 @@ public final class RuleConvertService {
 
     // 单个条件叶映射；返回 null 表示该叶恒真（可安全丢弃）
     private static @Nullable JsonObject mapLeaf(JsonElement element, String namespace) {
-        if (!element.isJsonObject()) {
-            return null;
-        }
+        if (!element.isJsonObject()) { throw new Unmappable("条件叶不是对象"); }
         JsonObject old = element.getAsJsonObject();
         String rawType = requireString(old, "type", "条件叶缺少 type");
         ResourceLocation parsed = ResourceLocation.tryParse(rawType);
         if (parsed == null) {
             throw new Unmappable("条件叶 type 非法: " + rawType);
+        }
+        if (!parsed.getNamespace().equals(com.meteorite.itemdespawntowhat.Constants.MOD_ID)) {
+            throw new Unmappable("第三方条件类型不能仅按名称映射: " + rawType);
         }
         String path = parsed.getPath();
         String mapped = CONDITIONS.get(path);
@@ -538,7 +561,9 @@ public final class RuleConvertService {
                 String normalized = weather.trim().toUpperCase(java.util.Locale.ROOT);
                 switch (normalized) {
                     case "ANY" -> {
-                        // 恒真：丢弃该叶，由调用方判断组是否为空
+                        if (optBoolean(old, "negated", false)) {
+                            throw new Unmappable("取反的 ANY 天气恒假，不能删除该叶改变条件语义");
+                        }
                         return null;
                     }
                     case "CLEAR" -> leaf.addProperty("weather", "clear");

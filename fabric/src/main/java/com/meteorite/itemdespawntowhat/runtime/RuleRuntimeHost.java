@@ -6,7 +6,6 @@ import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.IssueSeverity;
 import com.meteorite.itemdespawntowhat.core.command.RuleCommandContext;
 import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
-import com.meteorite.itemdespawntowhat.core.load.PackLayerResolver;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoadResult;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerContext;
@@ -28,8 +27,6 @@ import net.minecraft.world.entity.item.ItemEntity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -39,8 +36,7 @@ import java.util.List;
  * - 引导：读 config/itemdespawntowhat/server.json → 建内置类型注册表 → 加载三层规则 → 建 ConversionRuntime → 回扫全部已加载维度；
  * - 事件：掉落物进入世界、维度 tick 结束、维度加载/卸载、数据包重载、服务端停止；
  * - 平台差异：Fabric 没有加载器提供的物品寿命 API，寿命使用 server.json 的兜底刻数。
- * 与旧链路（ConfigExtractorManager / ConversionTracker）完全并行：只读写 server.json 与 rules 覆盖层，
- * 不触碰旧链路的任何静态状态，便于两套实现对照测试。
+ * 当前唯一转化链路；旧 JSON 仅供显式迁移命令读取。
  */
 public final class RuleRuntimeHost {
 
@@ -144,13 +140,15 @@ public final class RuleRuntimeHost {
             if (overlay == null || registries == null) {
                 return emptyResult();
             }
-            return loadRules(context(server.getResourceManager(), server.registryAccess(), overlay, registries), "编辑快照");
+            return loadRules(context(server.getResourceManager(), server.registryAccess(), overlay, registries, server), "编辑快照");
         }
 
         @Override
         public void rebuildAndRescan(MinecraftServer server) {
             // 与数据包重载共用同一条 apply 路径（重建索引 + 全维度回扫）
-            reload(server, server.getResourceManager());
+            if (reload(server, server.getResourceManager()) == null) {
+                throw new IllegalStateException("保存后的运行时重载失败");
+            }
         }
     };
 
@@ -176,7 +174,7 @@ public final class RuleRuntimeHost {
         ConversionRuntime newRuntime = new ConversionRuntime(config, registries, fabricLifespan(config));
 
         RuleLoadResult<Rule> result = loadRules(
-                context(server.getResourceManager(), server.registryAccess(), overlay, registries), "服务端启动");
+                context(server.getResourceManager(), server.registryAccess(), overlay, registries, server), "服务端启动");
         newRuntime.replaceRules(result.rules(), result.issues());
         logLoadResult("服务端启动", result);
 
@@ -206,12 +204,13 @@ public final class RuleRuntimeHost {
         }
         try {
             RuleLoadResult<Rule> result = loadRules(
-                    context(resourceManager, server.registryAccess(), overlay, registries), "数据包重载");
+                    context(resourceManager, server.registryAccess(), overlay, registries, server), "数据包重载");
             current.replaceRules(result.rules(), result.issues());
             logLoadResult("数据包重载", result);
             for (ServerLevel level : server.getAllLevels()) {
                 current.rescan(level);
             }
+            java.util.Objects.requireNonNull(RuleEditServerHandler.sessionManager(EDIT_CONTEXT)).bumpVersion();
             LOGGER.info("数据包重载完成：规则索引已重建并完成回扫");
             return result;
         } catch (RuntimeException e) {
@@ -227,6 +226,7 @@ public final class RuleRuntimeHost {
         if (current != null) {
             current.shutdown();
         }
+        RuleEditServerHandler.reset();
         runtime = null;
         typeRegistries = null;
         overlayRoot = null;
@@ -239,6 +239,17 @@ public final class RuleRuntimeHost {
         if (current != null) {
             current.onItemAdded(level, entity);
         }
+    }
+
+    // 实体卸载与自然消失入口由平台事件或最小 Mixin 转发。
+    public static void onItemRemoved(ServerLevel level, ItemEntity item) {
+        ConversionRuntime current = runtime;
+        if (current != null) { current.onItemRemoved(level, item); }
+    }
+
+    public static boolean deferNaturalExpiry(ServerLevel level, ItemEntity item) {
+        ConversionRuntime current = runtime;
+        return current != null && current.deferNaturalExpiry(level, item);
     }
 
     // 维度 tick 结束：先执行到期任务，再按检查间隔做失效清理
@@ -287,22 +298,18 @@ public final class RuleRuntimeHost {
     private static RuleLoadContext context(ResourceManager resourceManager,
                                            RegistryAccess registryAccess,
                                            Path overlay,
-                                           BuiltinTypeRegistries registries) {
+                                           BuiltinTypeRegistries registries, MinecraftServer server) {
         return RuleLoadContext.full(resourceManager, overlay, MOD_NAMESPACE, registryAccess,
                 registries.effectTypes(), registries.conditionTypes(),
-                PackLayerResolver.byPackIdToken(MOD_NAMESPACE));
+                packId -> net.fabricmc.loader.api.FabricLoader.getInstance().getAllMods().stream()
+                        .anyMatch(mod -> mod.getMetadata().getId().equals(packId))
+                        ? com.meteorite.itemdespawntowhat.core.load.RuleSourceLayer.BUILTIN
+                        : com.meteorite.itemdespawntowhat.core.load.RuleSourceLayer.WORLD).withServer(server);
     }
 
     // 执行一次加载 + 语义校验；异常被转为 ERROR 级问题，避免坏配置拖垮服务端启动或重载
     private static RuleLoadResult<Rule> loadRules(RuleLoadContext context, String stage) {
-        try {
-            return RuleLoadingService.loadAndValidate(context);
-        } catch (RuntimeException e) {
-            LOGGER.error("{}：规则加载抛出异常，本次以空规则集继续", stage, e);
-            IssueCollector issues = new IssueCollector();
-            issues.error("规则加载抛出异常: " + e.getClass().getName(), null, null);
-            return new RuleLoadResult<>(List.of(), issues);
-        }
+        return RuleLoadingService.loadAndValidate(context);
     }
 
     // 汇总一条加载结果：先打统计行，再逐条输出问题（错误与告警分级）

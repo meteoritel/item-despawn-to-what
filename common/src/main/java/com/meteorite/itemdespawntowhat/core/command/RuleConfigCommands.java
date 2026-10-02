@@ -107,7 +107,8 @@ final class RuleConfigCommands {
         }
         IssueCollector issues = new IssueCollector();
         RuleConvertService.Report report = RuleConvertService.convert(
-                overlayRoot, context.overlayNamespace(), context.overlayVersion(), issues);
+                overlayRoot, context.overlayNamespace(), context.overlayVersion(), issues,
+                ctx.getSource().getServer(), context.editContext().typeRegistries());
 
         List<Component> lines = new ArrayList<>();
         lines.add(RuleCommandText.of("itemdespawntowhat.command.config.convert.summary")

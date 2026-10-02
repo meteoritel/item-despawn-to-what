@@ -19,7 +19,7 @@ public interface EffectContext {
     // 触发本次转化的源掉落物（执行期间仍有效，但不保证后续 tick 仍存在）
     ItemEntity source();
 
-    // 源掉落物的当前物品栈快照
+    // 触发时的物品栈快照，后续消耗和实体移除不会改变它。
     ItemStack sourceStack();
 
     // 效果作用位置（默认为源掉落物位置）
@@ -45,6 +45,6 @@ public interface EffectContext {
      */
     int coveredSourceItems();
 
-    // 登记一个延迟任务：delayTicks 为 0 时立即执行
+    // 登记延迟任务：0 表示本刻就绪，受预算约束时可顺延。
     void schedule(int delayTicks, Runnable task);
 }

@@ -9,7 +9,6 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -39,10 +38,10 @@ public final class ConsumeCatalystExecutor {
         Vec3 position = context.position();
         BlockPos center = BlockPos.containing(position.x, position.y, position.z);
         AABB box = EffectTargets.blockBox(center, effect.radius());
-        List<ItemEntity> candidates = level.getEntitiesOfClass(ItemEntity.class, box,
-                entity -> entity != source && entity.isAlive() && !entity.getItem().isEmpty());
-        // 整堆一次性转化：期望消耗总量 = count × rounds
         int remaining = EffectTargets.saturatedMultiply(effect.count(), context.rounds());
+        List<ItemEntity> candidates = level.getEntitiesOfClass(ItemEntity.class, box,
+                entity -> entity != source && entity.isAlive() && !entity.getItem().isEmpty()
+                        && matchesAny(effect.items(), entity.getItem()));
         if (!candidates.isEmpty()) {
             // 由近及远消耗，使结果不依赖实体遍历顺序
             candidates.sort(Comparator.comparingDouble((ItemEntity entity) -> entity.distanceToSqr(position)));

@@ -30,13 +30,17 @@ public final class ExpressionEvaluator {
             for (Condition leaf : group.conditions()) {
                 ConditionType<?> definition = conditionTypes.getOrNull(leaf.type());
                 boolean value;
-                if (definition == null) {
+                if (definition == null || leaf instanceof com.meteorite.itemdespawntowhat.core.type.condition.SurroundingBlocksCondition
+                        && !LoadedChunks.containsArea(context.level(), context.pos(), 1)) {
                     // 未注册类型：直接判否且不参与取反（加载期已拒载，这里是防御路径）
                     value = false;
                 } else {
-                    value = evaluatorOf(definition).test(leaf, context);
-                    if (leaf.negated()) {
-                        value = !value;
+                    try {
+                        value = evaluatorOf(definition).test(leaf, context);
+                        if (leaf.negated()) { value = !value; }
+                    } catch (RuntimeException failure) {
+                        org.apache.logging.log4j.LogManager.getLogger().error("条件求值失败：类型={} 位置={}", leaf.type(), context.pos(), failure);
+                        value = false;
                     }
                 }
                 if (!value) {

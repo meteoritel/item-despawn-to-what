@@ -101,6 +101,12 @@ public final class RuleEditChunkAccumulator {
         return joined;
     }
 
+    // 定期释放空闲分片，避免只发送部分数据的在线玩家长期持有缓存。
+    public static synchronized void expireIdle(long now) {
+        SESSIONS.values().forEach(sessions -> sessions.values().removeIf(session -> session.isExpired(now)));
+        SESSIONS.values().removeIf(Map::isEmpty);
+    }
+
     // 清理某个玩家的全部未完成传输（玩家断开时调用）
     public static synchronized void clear(UUID playerId) {
         if (playerId != null) {

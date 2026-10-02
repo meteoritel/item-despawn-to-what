@@ -5,6 +5,7 @@ import com.meteorite.itemdespawntowhat.platform.services.IPlatformHelper;
 
 import java.util.ServiceLoader;
 
+/** 平台服务的 ServiceLoader 装配入口。 */
 public class Services {
 
     public static final IPlatformHelper PLATFORM = load(IPlatformHelper.class);

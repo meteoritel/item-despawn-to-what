@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.runtime;
 
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.ConditionContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecutor;
@@ -31,7 +32,7 @@ import java.util.UUID;
  * 设计要点（对应规划书 Q12/Q13/Q22/Q38/Q39）：
  * - 触发时刻 = min(trigger_after_seconds, 自然消失时刻)，在自然 discard 之前判定；
  * - 计时按**绝对存活时间**，条件不满足则退避重试（1s→2s→4s→封顶）；
- * - 状态只存内存且**不持有 ServerLevel 引用**（按维度 key 索引），维度卸载即整体释放；
+ * - 状态按维度 key 索引；任务上下文持有维度对象，维度卸载即整体释放；
  * - 同一掉落物只执行优先级最高的一条命中规则，效果列表顺序全执行、异常隔离；
  * - delay_ticks / chance / 效果级 conditions 由本层统一处理，执行器只做"做什么"。
  */
@@ -47,21 +48,25 @@ public final class ConversionRuntime {
     private final Map<ResourceKey<Level>, LevelState> levels = new HashMap<>();
     private volatile RuleIndex index = RuleIndex.empty();
 
-    // 单个维度的运行时状态；只保存调度器、缓存与追踪表，不保存维度对象
+    // 单个维度的运行时状态；只保存调度器、缓存与追踪表，任务上下文按维度卸载释放
     private static final class LevelState {
         private final TickScheduler scheduler;
+        private final TickScheduler effects;
         private final Map<UUID, TrackedState> tracked = new HashMap<>();
         private RuntimeTagLookup tags;
         private RuntimeClimateSampler climate;
 
         LevelState(int maxChecksPerTick) {
             this.scheduler = new TickScheduler(maxChecksPerTick);
+            this.effects = new TickScheduler(maxChecksPerTick);
         }
     }
 
     // 单个掉落物的追踪状态
     private static final class TrackedState {
         private int failureCount;
+        private boolean expiryPending;
+        private TickScheduler.Task task;
         private boolean locked;
         // 下次到期判定的游戏刻（仅用于 debug 输出，-1 表示未排期）
         private long nextCheckTick = -1L;
@@ -106,7 +111,7 @@ public final class ConversionRuntime {
 
     // 掉落物进入世界：仅当存在候选规则时纳入追踪
     public void onItemAdded(ServerLevel level, ItemEntity entity) {
-        if (index.isEmpty()) {
+        if (index.isEmpty() || excluded(entity)) {
             return;
         }
         List<Rule> candidates = index.candidates(itemIdOf(entity));
@@ -123,14 +128,12 @@ public final class ConversionRuntime {
         scheduleInitial(level, state, entity, tracked, candidates);
     }
 
-    // 每 tick：先跑到期任务，再按检查间隔做一次失效清理
+    // 每 tick：检查与效果分别按预算推进；实体失效由离开事件及时清理。
     public void onLevelTick(ServerLevel level) {
         LevelState state = stateOf(level);
         long now = level.getGameTime();
         state.scheduler.runDue(now);
-        if (now % Math.max(1, config.checkIntervalTicks()) == 0) {
-            prune(level, state);
-        }
+        state.effects.runDue(now);
     }
 
     // reload 后回扫已加载实体重建追踪（修复热重载对已存在掉落物无效）
@@ -156,6 +159,7 @@ public final class ConversionRuntime {
         LevelState removed = levels.remove(level.dimension());
         if (removed != null) {
             removed.scheduler.clear();
+            removed.effects.clear();
             removed.tracked.clear();
         }
     }
@@ -164,6 +168,7 @@ public final class ConversionRuntime {
     public void shutdown() {
         for (LevelState state : levels.values()) {
             state.scheduler.clear();
+            state.effects.clear();
             state.tracked.clear();
         }
         levels.clear();
@@ -194,7 +199,14 @@ public final class ConversionRuntime {
 
     public int pendingTasks(ServerLevel level) {
         LevelState state = levels.get(level.dimension());
-        return state == null ? 0 : state.scheduler.pending();
+        return state == null ? 0 : state.scheduler.pending() + state.effects.pending();
+    }
+
+    // 两类队列单独观测，压测时可定位是条件检查还是世界操作形成积压。
+    public TickScheduler.Stats queueStats(ServerLevel level, boolean effects) {
+        LevelState state = levels.get(level.dimension());
+        return state == null ? new TickScheduler.Stats(0, 0, 0, 0, 0, 0)
+                : (effects ? state.effects : state.scheduler).stats();
     }
 
     // ========== 内部实现 ==========
@@ -211,21 +223,25 @@ public final class ConversionRuntime {
     private void scheduleInitial(ServerLevel level, LevelState state, ItemEntity entity,
                                  TrackedState tracked, List<Rule> candidates) {
         int lifespan = Math.max(1, lifespanProvider.lifespanTicks(level, entity));
-        int earliestTrigger = Integer.MAX_VALUE;
+        long earliestTrigger = Long.MAX_VALUE;
         for (Rule rule : candidates) {
-            earliestTrigger = Math.min(earliestTrigger, Math.max(1, rule.triggerAfterSeconds() * TICKS_PER_SECOND));
+            earliestTrigger = Math.min(earliestTrigger, Math.max(0L, (long) rule.triggerAfterSeconds() * TICKS_PER_SECOND));
         }
-        int dueAge = Math.min(earliestTrigger, lifespan - 1);
-        long delay = Math.max(0, (long) dueAge - entity.getAge());
+        long dueAge = Math.min(earliestTrigger, lifespan - 1L);
+        long delay = Math.max(0, dueAge - entity.getAge());
         tracked.nextCheckTick = level.getGameTime() + delay;
-        state.scheduler.schedule(level.getGameTime(), (int) Math.min(delay, Integer.MAX_VALUE),
-                () -> attempt(level, entity.getUUID()));
+        UUID uuid = entity.getUUID();
+        tracked.task = state.scheduler.schedule(level.getGameTime(), (int) Math.min(delay, Integer.MAX_VALUE),
+                () -> attempt(level, uuid));
     }
 
     // 退避重试：条件不满足时不放弃，按退避序列重试直到自然消失
     private void reschedule(ServerLevel level, LevelState state, ItemEntity entity, TrackedState tracked, int delayTicks) {
+        int remaining = Math.max(1, lifespanProvider.lifespanTicks(level, entity) - entity.getAge() - 1);
+        delayTicks = Math.min(delayTicks, remaining);
         tracked.nextCheckTick = level.getGameTime() + delayTicks;
-        state.scheduler.schedule(level.getGameTime(), delayTicks, () -> attempt(level, entity.getUUID()));
+        UUID uuid = entity.getUUID();
+        tracked.task = state.scheduler.schedule(level.getGameTime(), delayTicks, () -> attempt(level, uuid));
         if (config.debugLogging()) {
             LOGGER.info("掉落物 {} 条件未满足，{} tick 后重试（第 {} 次失败）",
                     entity.getUUID(), delayTicks, tracked.failureCount);
@@ -243,8 +259,12 @@ public final class ConversionRuntime {
             return;
         }
         Entity entity = level.getEntity(uuid);
-        if (!(entity instanceof ItemEntity item) || item.isRemoved()) {
+        if (!(entity instanceof ItemEntity item) || excluded(item)) {
             state.tracked.remove(uuid);
+            return;
+        }
+        if (!level.isPositionEntityTicking(item.blockPosition())) {
+            reschedule(level, state, item, tracked, config.checkIntervalTicks());
             return;
         }
         if (tracked.locked) {
@@ -256,17 +276,29 @@ public final class ConversionRuntime {
             state.tracked.remove(uuid);
             return;
         }
-        Rule chosen = select(level, item, candidates);
+        Rule chosen = select(level, item, candidates, tracked.expiryPending);
         if (chosen == null) {
             tracked.failureCount++;
-            if (pastExpiry(level, item)) {
+            if (tracked.expiryPending || pastExpiry(level, item)) {
                 state.tracked.remove(uuid);
+                if (tracked.expiryPending) { item.discard(); }
             } else {
-                reschedule(level, state, item, tracked, config.backoffTicks(tracked.failureCount));
+                int delay = config.backoffTicks(tracked.failureCount);
+                long nextAge = Long.MAX_VALUE;
+                boolean eligible = false;
+                for (Rule rule : candidates) {
+                    long due = dueAge(level, item, rule);
+                    if (item.getAge() >= due) { eligible = true; }
+                    else { nextAge = Math.min(nextAge, due - item.getAge()); }
+                }
+                if (!eligible) { tracked.failureCount--; delay = (int) Math.min(nextAge, Integer.MAX_VALUE); }
+                else if (nextAge != Long.MAX_VALUE) { delay = (int) Math.min(delay, nextAge); }
+                reschedule(level, state, item, tracked, Math.max(1, delay));
             }
             return;
         }
         performConversion(level, state, item, tracked, chosen);
+        if (tracked.expiryPending && !item.isRemoved()) { item.discard(); }
     }
 
     // 是否已到自然消失前一刻（到点后不再重试，交给原版机制）
@@ -276,9 +308,10 @@ public final class ConversionRuntime {
     }
 
     // 规则选择：候选已按优先级排序，取第一条条件成立者（同一掉落物只执行一条）
-    private Rule select(ServerLevel level, ItemEntity item, List<Rule> candidates) {
+    private Rule select(ServerLevel level, ItemEntity item, List<Rule> candidates, boolean expiring) {
         ConditionContext context = conditionContext(level, item);
         for (Rule rule : candidates) {
+            if (!expiring && !isEligible(level, item, rule)) { continue; }
             if (ExpressionEvaluator.matches(rule.conditions(), context, types.conditionTypes())) {
                 return rule;
             }
@@ -286,10 +319,21 @@ public final class ConversionRuntime {
         return null;
     }
 
+    // 调试命令复用实际年龄门槛，避免条件成立却尚未到期时显示为命中。
+    public boolean isEligible(ServerLevel level, ItemEntity item, Rule rule) {
+        return !excluded(item) && item.getAge() >= dueAge(level, item, rule);
+    }
+
+    private long dueAge(ServerLevel level, ItemEntity item, Rule rule) {
+        return Math.min((long) rule.triggerAfterSeconds() * TICKS_PER_SECOND,
+                Math.max(1, lifespanProvider.lifespanTicks(level, item)) - 1L);
+    }
+
     // 执行一条规则的全部效果；结束后该掉落物的追踪即终止
     private void performConversion(ServerLevel level, LevelState state, ItemEntity item,
                                    TrackedState tracked, Rule rule) {
         tracked.locked = true;
+        item.addTag(Constants.CONVERTED_TAG);
         try {
             // 预先算好整堆能支持多少轮：rounds = 堆叠数 / 每轮源物品消耗量
             // （不消耗源物品的规则固定 1 轮），随后一次性扣减 rounds×消耗 并产出 rounds×结果
@@ -302,7 +346,7 @@ public final class ConversionRuntime {
             EffectContext base = effectContext(level, item, rule.id(), rounds, covered);
             // 规则未声明任何 consume_* 时，按默认语义先隐式消耗 1 个源物品（Q8 / 规划书 3.1-4）
             if (rule.usesImplicitSourceConsumption()) {
-                dispatchEffect(level, item, base, types.implicitSourceConsumption());
+                runEffect(level, item, base, types.implicitSourceConsumption());
             }
             for (Effect effect : rule.effects()) {
                 dispatchEffect(level, item, base, effect);
@@ -320,18 +364,15 @@ public final class ConversionRuntime {
     // 效果派发：延迟交给调度器，条件与概率在此统一判定
     private void dispatchEffect(ServerLevel level, ItemEntity item, EffectContext base, Effect effect) {
         int delay = Math.max(0, effect.delayTicks());
-        if (delay == 0) {
-            runEffect(level, item, base, effect);
-            return;
-        }
         base.schedule(delay, () -> runEffect(level, item, base, effect));
     }
 
     // 单效果执行：效果级条件 → 概率 → 执行器；异常被隔离，不影响后续效果
     private void runEffect(ServerLevel level, ItemEntity item, EffectContext base, Effect effect) {
-        if (effect.conditions() != null && !effect.conditions().isEmpty()) {
+        var conditions = effect.conditions();
+        if (conditions != null && !conditions.isEmpty()) {
             ConditionContext context = conditionContext(level, item, BlockPos.containing(base.position()));
-            if (!ExpressionEvaluator.matches(effect.conditions(), context, types.conditionTypes())) {
+            if (!ExpressionEvaluator.matches(conditions, context, types.conditionTypes())) {
                 return;
             }
         }
@@ -376,26 +417,39 @@ public final class ConversionRuntime {
     private EffectContext effectContext(ServerLevel level, ItemEntity item, ResourceLocation ruleId,
                                        int rounds, int coveredSourceItems) {
         LevelState state = stateOf(level);
-        return new RuntimeEffectContext(level, item, item.position(), ruleId, state.scheduler,
+        return new RuntimeEffectContext(level, item, item.position(), ruleId, state.effects,
                 rounds, coveredSourceItems);
     }
 
-    // 清理：实体已消失 / 已不在本维度 / 已无候选规则的追踪项
-    private void prune(ServerLevel level, LevelState state) {
-        if (state.tracked.isEmpty()) {
-            return;
+    // 排除死亡掉落、已提交转化的实体和原版无限寿命物品。
+    private static boolean excluded(ItemEntity item) {
+        return item.isRemoved() || item.getItem().isEmpty() || item.getAge() == -32768
+                || item.getTags().contains(Constants.CHECK_LOCK_TAG)
+                || item.getTags().contains(Constants.CONVERTED_TAG);
+    }
+
+    // 离开维度或区块卸载时立即取消检查，释放任务捕获对象。
+    public void onItemRemoved(ServerLevel level, ItemEntity item) {
+        LevelState state = levels.get(level.dimension());
+        if (state == null) { return; }
+        TrackedState tracked = state.tracked.remove(item.getUUID());
+        if (tracked != null && tracked.task != null) { tracked.task.cancel(); }
+    }
+
+    // 自然消失入口只预留最后一次有预算的检查，不在实体 tick 内执行昂贵效果。
+    public boolean deferNaturalExpiry(ServerLevel level, ItemEntity item) {
+        if (excluded(item)) { return false; }
+        LevelState state = levels.get(level.dimension());
+        if (state == null) { return false; }
+        TrackedState tracked = state.tracked.get(item.getUUID());
+        if (tracked == null) { return false; }
+        if (!tracked.expiryPending) {
+            tracked.expiryPending = true;
+            if (tracked.task != null) { tracked.task.cancel(); }
+            UUID uuid = item.getUUID();
+            tracked.nextCheckTick = level.getGameTime();
+            tracked.task = state.scheduler.schedule(level.getGameTime(), 0, () -> attempt(level, uuid));
         }
-        var iterator = state.tracked.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<UUID, TrackedState> entry = iterator.next();
-            Entity entity = level.getEntity(entry.getKey());
-            if (!(entity instanceof ItemEntity item) || item.isRemoved()) {
-                iterator.remove();
-                continue;
-            }
-            if (index.candidates(itemIdOf(item)).isEmpty()) {
-                iterator.remove();
-            }
-        }
+        return true;
     }
 }

@@ -10,234 +10,214 @@ import com.meteorite.itemdespawntowhat.core.load.RulePaths;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEdit;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEditChangeSet;
 import net.minecraft.resources.ResourceLocation;
-import org.jetbrains.annotations.Nullable;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Stream;
 
-/**
- * 覆盖层权威落盘器（服务端权威保存协议的写侧）。
- * 关键语义（A1 闭环）：写回依据是**磁盘上的文件内容**，逐 id 应用 upsert/delete，
- * 不基于运行时快照整文件覆盖，因此 disabled / 编译失败 / 未命中标签的规则不会被保存动作删除。
- * 文件形状保持不变：原文件是单条对象就写单条，是数组就写数组；新增规则落到 rules/<ns>/<path>.json。
- */
+/** 覆盖层逐 id 写入：保留未编辑 JSON，整批预备、备份、提交；失败时回滚已经写入的文件。 */
 public final class RuleOverlayWriter {
-
-    // 一次应用的结果：写入文件数 + 被跳过的冲突说明
+    /** 写入结果；零文件或存在冲突均不能解释为保存成功。 */
     public record ApplyResult(int writtenFiles, List<String> conflicts) {
-        public ApplyResult {
-            conflicts = List.copyOf(conflicts);
-        }
+        public ApplyResult { conflicts = List.copyOf(conflicts); }
     }
-
-    // 磁盘上的一个规则文件及其规则列表
+    /** 文件原始形状与完整条目，非对象条目也必须原样保留。 */
     private static final class RuleFile {
         private final Path path;
-        private final boolean wasArray;
-        private final List<JsonObject> rules = new ArrayList<>();
-
-        RuleFile(Path path, boolean wasArray) {
-            this.path = path;
-            this.wasArray = wasArray;
+        private final boolean array;
+        private final byte[] original;
+        private final List<JsonElement> entries = new ArrayList<>();
+        private RuleFile(Path path, boolean array, byte[] original) {
+            this.path = path; this.array = array; this.original = original;
+        }
+        private JsonElement content() {
+            if (!array && entries.size() == 1) { return entries.getFirst(); }
+            JsonArray result = new JsonArray();
+            entries.forEach(result::add);
+            return result;
         }
     }
-
-    // 规则 id → 所在文件与下标
-    private record RuleLocation(Path file, int index) {
-    }
-
-    private final Path overlayRoot;
-    private final String defaultNamespace;
-
+    /** 规则所在文件及条目下标。 */
+    private record Location(RuleFile file, int index) {}
+    private final Path root;
+    private final String namespace;
     public RuleOverlayWriter(Path overlayRoot, String defaultNamespace) {
-        this.overlayRoot = overlayRoot;
-        this.defaultNamespace = defaultNamespace;
+        root = overlayRoot.toAbsolutePath().normalize().resolve(RulePaths.OVERLAY_RULES_DIRECTORY);
+        namespace = defaultNamespace;
     }
 
-    // 应用变更集；单条编辑失败只记录问题并跳过，不影响其余编辑
-    public ApplyResult apply(RuleEditChangeSet changeSet, IssueCollector issues) {
-        Path rulesDir = overlayRoot.resolve(RulePaths.OVERLAY_RULES_DIRECTORY);
+    // 拒绝路径穿越、符号链接、重复编辑和文件占用；任何预备错误均不写入。
+    public ApplyResult apply(RuleEditChangeSet changes, IssueCollector issues) {
         Map<Path, RuleFile> files = new LinkedHashMap<>();
-        Map<ResourceLocation, RuleLocation> index = new HashMap<>();
-        try {
-            loadAll(rulesDir, files, index, issues);
-        } catch (IOException e) {
-            issues.error("读取覆盖层目录失败: " + e.getMessage(), rulesDir.toString(), null);
-            return new ApplyResult(0, List.of());
-        }
-
+        Set<Path> dirty = new LinkedHashSet<>();
         List<String> conflicts = new ArrayList<>();
-        Set<ResourceLocation> seen = new HashSet<>();
-        Set<Path> dirty = new HashSet<>();
-
-        for (RuleEdit edit : changeSet.edits()) {
-            ResourceLocation id = edit.id();
-            if (!seen.add(id)) {
-                conflicts.add("同一变更集中重复出现规则 " + id + "，已跳过后者");
-                continue;
-            }
-            RuleLocation location = index.get(id);
-            if (edit.action() == RuleEdit.Action.DELETE) {
-                if (location == null) {
-                    // 删除不存在的规则是幂等操作
-                    continue;
-                }
-                RuleFile file = files.get(location.file());
-                if (file != null && location.index() < file.rules.size()) {
-                    file.rules.remove(location.index());
-                    dirty.add(file.path);
-                    reindex(rulesDir, file, index);
-                }
-                continue;
-            }
-            // UPSERT
-            JsonObject rule = edit.rule() == null ? new JsonObject() : edit.rule().deepCopy();
-            rule.addProperty(RuleFields.ID, id.toString());
-            if (location != null) {
-                RuleFile file = files.get(location.file());
-                if (file != null && location.index() < file.rules.size()) {
-                    file.rules.set(location.index(), rule);
-                    dirty.add(file.path);
-                }
-                continue;
-            }
-            // 新规则：落到 rules/<ns>/<path>.json
-            Path target = rulesDir.resolve(id.getNamespace()).resolve(id.getPath() + RulePaths.RULE_FILE_EXTENSION);
-            RuleFile file = files.computeIfAbsent(target, key -> new RuleFile(key, false));
-            file.rules.add(rule);
-            dirty.add(target);
-            index.put(id, new RuleLocation(target, file.rules.size() - 1));
-        }
-
-        int written = 0;
-        for (Path path : dirty) {
-            RuleFile file = files.get(path);
-            if (file == null) {
-                continue;
-            }
-            try {
-                if (file.rules.isEmpty() && !file.wasArray) {
-                    // 单条文件的唯一条目被删除：写成空数组而不是删文件，避免旧链路/人工编辑误判
-                    writeFile(file, new JsonArray(), issues);
-                } else {
-                    writeFile(file, toContent(file), issues);
-                }
-                written++;
-            } catch (IOException e) {
-                issues.error("写入规则文件失败: " + e.getMessage(), path.toString(), null);
-            }
-        }
-        return new ApplyResult(written, conflicts);
-    }
-
-    // 读取覆盖层全部规则文件，建立 id → 位置索引
-    private void loadAll(Path rulesDir, Map<Path, RuleFile> files,
-                         Map<ResourceLocation, RuleLocation> index, IssueCollector issues) throws IOException {
-        if (!Files.isDirectory(rulesDir)) {
-            return;
-        }
-        try (Stream<Path> walk = Files.walk(rulesDir)) {
-            List<Path> candidates = walk.filter(Files::isRegularFile)
-                    .filter(path -> path.getFileName().toString().endsWith(RulePaths.RULE_FILE_EXTENSION))
-                    .sorted()
-                    .toList();
-            for (Path path : candidates) {
-                String text = Files.readString(path, StandardCharsets.UTF_8);
-                JsonElement element;
-                try {
-                    element = JsonParser.parseString(text);
-                } catch (RuntimeException e) {
-                    // 坏文件只跳过、不在此处报错：加载链路（OverlayRuleReader）已负责报告，
-                    // 否则每次保存的回执都会重复携带磁盘上早已存在的问题
-                    continue;
-                }
-                if (element.isJsonArray()) {
-                    RuleFile file = new RuleFile(path, true);
-                    for (JsonElement entry : element.getAsJsonArray()) {
-                        if (entry.isJsonObject()) {
-                            file.rules.add(entry.getAsJsonObject());
-                        }
-                    }
-                    files.put(path, file);
-                } else if (element.isJsonObject()) {
-                    RuleFile file = new RuleFile(path, false);
-                    file.rules.add(element.getAsJsonObject());
-                    files.put(path, file);
-                } else {
-                    // 同上：非对象/数组的文件不参与编辑，也不在写入路径重复报错
-                    continue;
-                }
-                reindex(rulesDir, files.get(path), index);
-            }
-        }
-    }
-
-    // 重建某个文件内规则的 id 索引
-    private void reindex(Path rulesDir, RuleFile file, Map<ResourceLocation, RuleLocation> index) {
-        for (int i = 0; i < file.rules.size(); i++) {
-            ResourceLocation id = resolveId(rulesDir, file, file.rules.get(i));
-            if (id != null) {
-                index.put(id, new RuleLocation(file.path, i));
-            }
-        }
-    }
-
-    // 取规则 id：优先字段，缺省由文件相对路径推导（仅单条文件允许推导）
-    private @Nullable ResourceLocation resolveId(Path rulesDir, RuleFile file, JsonObject rule) {
-        if (rule.has(RuleFields.ID) && rule.get(RuleFields.ID).isJsonPrimitive()) {
-            return ResourceLocation.tryParse(rule.get(RuleFields.ID).getAsString());
-        }
-        if (file.rules.size() != 1) {
-            return null;
-        }
-        String relative = rulesDir.relativize(file.path).toString().replace('\\', '/');
-        return ResourceLocation.tryParse(defaultNamespace + ":" + RulePaths.stripExtension(relative));
-    }
-
-    // 决定写回的形状：原数组或规则数不为 1 时写数组，否则写单条对象
-    private JsonElement toContent(RuleFile file) {
-        if (file.wasArray || file.rules.size() != 1) {
-            JsonArray array = new JsonArray();
-            for (JsonObject rule : file.rules) {
-                array.add(rule);
-            }
-            return array;
-        }
-        return file.rules.get(0);
-    }
-
-    // 原子写入：先备份原文件（同名 .bak），再临时文件 + 移动
-    private void writeFile(RuleFile file, JsonElement content, IssueCollector issues) throws IOException {
-        Path parent = file.path.getParent();
-        if (parent != null) {
-            Files.createDirectories(parent);
-        }
-        if (Files.exists(file.path)) {
-            Files.copy(file.path, backupPath(file.path), StandardCopyOption.REPLACE_EXISTING);
-        }
-        Path temp = Files.createTempFile(parent, file.path.getFileName().toString(), ".tmp");
-        Files.writeString(temp, content.toString(), StandardCharsets.UTF_8);
         try {
-            Files.move(temp, file.path, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-        } catch (AtomicMoveNotSupportedException e) {
-            Files.move(temp, file.path, StandardCopyOption.REPLACE_EXISTING);
+            safePath(root);
+            load(files);
+            Set<ResourceLocation> seen = new HashSet<>();
+            for (RuleEdit change : changes.edits()) {
+                if (!seen.add(change.id())) { throw new IOException("重复编辑规则: " + change.id()); }
+                Path target = target(change.id());
+                Location location = locate(files, change.id());
+                if (change.action() == RuleEdit.Action.DELETE) {
+                    if (location != null) {
+                        location.file.entries.remove(location.index);
+                        dirty.add(location.file.path);
+                    }
+                    continue;
+                }
+                JsonObject body = Objects.requireNonNull(change.rule(), "upsert 缺少 rule").deepCopy();
+                body.addProperty(RuleFields.ID, change.id().toString());
+                if (location != null) {
+                    location.file.entries.set(location.index, body);
+                    dirty.add(location.file.path);
+                } else {
+                    // 包括损坏 JSON 在内的任何现存文件都不能被新规则覆盖。
+                    if (Files.exists(target, LinkOption.NOFOLLOW_LINKS) || files.containsKey(target)) {
+                        throw new IOException("新增规则目标文件已被占用: " + target);
+                    }
+                    RuleFile file = new RuleFile(target, false, null);
+                    file.entries.add(body);
+                    files.put(target, file);
+                    dirty.add(target);
+                }
+            }
+            commit(dirty.stream().map(files::get).toList());
+            return new ApplyResult(dirty.size(), List.of());
+        } catch (IOException | RuntimeException failure) {
+            org.apache.logging.log4j.LogManager.getLogger().error("覆盖层整批保存失败", failure);
+            String message = "覆盖层整批保存失败: " + failure.getMessage();
+            if (failure.getSuppressed().length > 0) { message += "；部分文件回滚失败，请用 .bak 恢复并检查日志"; }
+            issues.error(message, root.toString(), null);
+            conflicts.add(message);
+            return new ApplyResult(0, conflicts);
         }
     }
 
-    // 备份路径：同目录同名加 .bak（不会被规则读取器扫描）
-    private static Path backupPath(Path file) {
-        return file.resolveSibling(file.getFileName().toString() + ".bak");
+    // 对任意 id 执行同样的目录边界校验，不允许 . 或 .. 路径段。
+    private Path target(ResourceLocation id) throws IOException {
+        for (String segment : id.getPath().split("/", -1)) {
+            if (segment.isEmpty() || segment.equals(".") || segment.equals("..")) {
+                throw new IOException("规则 id 含非法路径段: " + id);
+            }
+        }
+        Path target = root.resolve(id.getNamespace()).resolve(id.getPath() + RulePaths.RULE_FILE_EXTENSION).normalize();
+        if (!target.startsWith(root)) { throw new IOException("规则路径越过 rules 目录: " + id); }
+        safePath(target);
+        safePath(target.resolveSibling(target.getFileName() + ".bak"));
+        return target;
+    }
+
+    // 不跟随任何现存祖先链接，避免通过 rules 或备份链接越界写文件。
+    private static void safePath(Path path) throws IOException {
+        for (Path cursor = path; cursor != null; cursor = cursor.getParent()) {
+            if (Files.isSymbolicLink(cursor)) { throw new IOException("不允许写入符号链接路径: " + cursor); }
+        }
+    }
+
+    private void load(Map<Path, RuleFile> files) throws IOException {
+        if (!Files.isDirectory(root)) { return; }
+        try (Stream<Path> walk = Files.walk(root)) {
+            for (Path path : walk.filter(p -> Files.isRegularFile(p, LinkOption.NOFOLLOW_LINKS))
+                    .filter(p -> p.toString().endsWith(RulePaths.RULE_FILE_EXTENSION)).sorted().toList()) {
+                safePath(path);
+                byte[] original = Files.readAllBytes(path);
+                JsonElement json;
+                try { json = JsonParser.parseString(new String(original, StandardCharsets.UTF_8)); }
+                catch (RuntimeException invalid) { continue; }
+                if (!json.isJsonObject() && !json.isJsonArray()) { continue; }
+                RuleFile file = new RuleFile(path, json.isJsonArray(), original);
+                if (file.array) { json.getAsJsonArray().forEach(file.entries::add); }
+                else { file.entries.add(json); }
+                files.put(path, file);
+            }
+        }
+    }
+
+    private Location locate(Map<Path, RuleFile> files, ResourceLocation id) throws IOException {
+        Location found = null;
+        for (RuleFile file : files.values()) {
+            for (int i = 0; i < file.entries.size(); i++) {
+                JsonElement element = file.entries.get(i);
+                if (!element.isJsonObject()) { continue; }
+                JsonObject body = element.getAsJsonObject();
+                ResourceLocation candidate = null;
+                try {
+                    if (body.has(RuleFields.ID)) { candidate = ResourceLocation.tryParse(body.get(RuleFields.ID).getAsString()); }
+                    else if (file.entries.size() == 1) {
+                        candidate = ResourceLocation.tryParse(namespace + ":" + RulePaths.stripExtension(root.relativize(file.path).toString().replace('\\', '/')));
+                    }
+                } catch (RuntimeException invalid) { /* 未编辑的坏条目原样保留。 */ }
+                if (id.equals(candidate)) {
+                    if (found != null) { throw new IOException("覆盖层同 id 多处定义，需先手动消歧: " + id); }
+                    found = new Location(file, i);
+                }
+            }
+        }
+        return found;
+    }
+
+    // 所有临时文件与备份准备成功后才替换；普通 I/O 失败时恢复整批原内容。
+    private static void commit(List<RuleFile> files) throws IOException {
+        Map<RuleFile, Path> temporary = new LinkedHashMap<>();
+        List<RuleFile> committed = new ArrayList<>();
+        try {
+            for (RuleFile file : files) {
+                safePath(file.path);
+                Files.createDirectories(file.path.getParent());
+                Path temp = Files.createTempFile(file.path.getParent(), ".idtw-", ".tmp");
+                temporary.put(file, temp);
+                Files.writeString(temp, file.content().toString(), StandardCharsets.UTF_8);
+                verifyUnchanged(file);
+                if (file.original != null) {
+                    Path backup = file.path.resolveSibling(file.path.getFileName() + ".bak");
+                    safePath(backup);
+                    Files.copy(file.path, backup, StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
+            for (RuleFile file : files) {
+                verifyUnchanged(file);
+                move(temporary.get(file), file.path);
+                committed.add(file);
+            }
+        } catch (IOException failure) {
+            Collections.reverse(committed);
+            for (RuleFile file : committed) {
+                try {
+                    if (file.original == null) { Files.deleteIfExists(file.path); }
+                    else {
+                        Path restore = Files.createTempFile(file.path.getParent(), ".idtw-restore-", ".tmp");
+                        try { Files.write(restore, file.original); move(restore, file.path); }
+                        finally { Files.deleteIfExists(restore); }
+                    }
+                } catch (IOException rollbackFailure) { failure.addSuppressed(rollbackFailure); }
+            }
+            throw failure;
+        } finally {
+            for (Path temp : temporary.values()) {
+                try { Files.deleteIfExists(temp); }
+                catch (IOException cleanupFailure) {
+                    // 清理暂存文件失败不改变已经完成的提交结果。
+                    org.apache.logging.log4j.LogManager.getLogger().warn("暂存文件清理失败: {}", temp, cleanupFailure);
+                }
+            }
+        }
+    }
+
+    private static void verifyUnchanged(RuleFile file) throws IOException {
+        boolean exists = Files.exists(file.path, LinkOption.NOFOLLOW_LINKS);
+        if (file.original == null ? exists : !exists || !Arrays.equals(file.original, Files.readAllBytes(file.path))) {
+            throw new IOException("准备保存时文件已被外部修改: " + file.path);
+        }
+    }
+
+    private static void move(Path from, Path to) throws IOException {
+        try { Files.move(from, to, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING); }
+        catch (AtomicMoveNotSupportedException unsupported) { Files.move(from, to, StandardCopyOption.REPLACE_EXISTING); }
     }
 }

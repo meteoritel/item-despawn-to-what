@@ -65,8 +65,9 @@ public final class RuleLoader {
         IssueCollector local = new IssueCollector();
         Optional<T> decoded;
         try {
-            decoded = decoder.decode(decodeBody(entry), local)
-                    .resultOrPartial(message -> local.error(message, null, null));
+            var result = decoder.decode(decodeBody(entry), local);
+            result.error().ifPresent(error -> local.error(error.message(), null, null));
+            decoded = result.result();
         } catch (RuntimeException e) {
             // 完整堆栈进日志，Issue 里保留类名与首个栈帧，避免异常被折叠成不可定位的字符串
             LOGGER.error("解码规则 {} 时发生异常，来源: {}", entry.id(), entry.origin().display(), e);

@@ -9,6 +9,9 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
+import com.meteorite.itemdespawntowhat.core.api.EffectContext;
+import java.util.function.IntConsumer;
+import java.util.function.IntUnaryOperator;
 
 /**
  * 效果执行器共享的引用解析与空间查询助手。
@@ -50,6 +53,15 @@ final class EffectTargets {
         return AABB.unitCubeFromLowerCorner(Vec3.atLowerCornerOf(center)).inflate(radius);
     }
 
+    // 实际生成位置可能越过源区块边界；保留实体等区块加载后再加入。
+    static void addEntity(EffectContext context, net.minecraft.world.entity.Entity entity) {
+        if (!com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks.contains(context.level(), entity.blockPosition())) {
+            context.schedule(20, () -> addEntity(context, entity));
+        } else if (!context.level().addFreshEntity(entity)) {
+            throw new IllegalStateException("实体生成被拒绝：规则=" + context.ruleId() + " 类型=" + entity.getType());
+        }
+    }
+
     // 饱和加法：避免计数溢出为负数
     static int saturatedAdd(int left, int right) {
         long sum = (long) left + right;
@@ -60,5 +72,38 @@ final class EffectTargets {
     static int saturatedMultiply(int left, int right) {
         long product = (long) left * right;
         return product >= Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) product;
+    }
+
+    // 大量产出拆为小批次；保留游标继续执行，不因每刻预算丢弃剩余数量。
+    static void forEachStep(EffectContext context, int count, int batchSize, IntConsumer operation) {
+        forEachStep(context, count, batchSize, remaining -> remaining, operation);
+    }
+
+    static void forEachStep(EffectContext context, int count, int batchSize, IntUnaryOperator capacity, IntConsumer operation) {
+        new StepBatch(context, count, batchSize, capacity, operation).run();
+    }
+
+    /** 分批世界操作的游标；仅由服务端线程访问。 */
+    private static final class StepBatch implements Runnable {
+        private final EffectContext context;
+        private final int count;
+        private final int batchSize;
+        private final IntConsumer operation;
+        private final IntUnaryOperator capacity;
+        private int cursor;
+        private StepBatch(EffectContext context, int count, int batchSize, IntUnaryOperator capacity, IntConsumer operation) {
+            this.context = context; this.count = count; this.batchSize = batchSize; this.operation = operation; this.capacity = capacity;
+        }
+        @Override
+        public void run() {
+            if (!com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks.containsArea(context.level(), BlockPos.containing(context.position()), 1)) {
+                context.schedule(20, this); return;
+            }
+            int available = Math.max(0, capacity.applyAsInt(count - cursor));
+            int end = (int) Math.min(count, (long) cursor + Math.min(batchSize, available));
+            if (end == cursor) { return; }
+            while (cursor < end) { operation.accept(cursor++); }
+            if (cursor < count) { context.schedule(1, this); }
+        }
     }
 }

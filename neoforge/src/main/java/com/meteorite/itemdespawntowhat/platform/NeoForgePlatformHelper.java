@@ -10,6 +10,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.nio.file.Path;
 
+/** 平台环境与服务端发包适配器；客户端发送在客户端注册器中处理。 */
 public class NeoForgePlatformHelper implements IPlatformHelper {
 
     @Override
@@ -30,11 +31,6 @@ public class NeoForgePlatformHelper implements IPlatformHelper {
     @Override
     public Path getConfigDir() {
         return FMLPaths.CONFIGDIR.get();
-    }
-
-    @Override
-    public void sendToServer(CustomPacketPayload payload) {
-        PacketDistributor.sendToServer(payload);
     }
 
     @Override

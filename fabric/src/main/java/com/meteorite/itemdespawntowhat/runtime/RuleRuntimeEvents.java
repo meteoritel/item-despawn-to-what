@@ -11,7 +11,6 @@ import org.apache.logging.log4j.Logger;
 /**
  * 新链路（core/runtime）在 Fabric 端的事件入口。
  * 本类只做事件到 RuleRuntimeHost 的转发，不含业务逻辑（规划书 3.12：平台层只做入口）。
- * 与旧链路 server.event.ItemConversionEvent 并列注册，两者互不读写对方状态。
  */
 public final class RuleRuntimeEvents {
 
@@ -51,8 +50,17 @@ public final class RuleRuntimeEvents {
             }
         });
 
-        // 维度 tick 结束：执行到期任务与周期性失效清理
+        ServerEntityEvents.ENTITY_UNLOAD.register((entity, world) -> {
+            if (entity instanceof ItemEntity item) { RuleRuntimeHost.onItemRemoved(world, item); }
+        });
+
+        // 维度 tick 结束：执行有预算的检查与效果
         ServerTickEvents.END_WORLD_TICK.register(RuleRuntimeHost::tickLevel);
+        ServerTickEvents.END_SERVER_TICK.register(server -> {
+            if (server.getTickCount() % 20 == 0) {
+                com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler.expireIdle();
+            }
+        });
 
         // 维度加载：对后加载的维度补一次回扫
         ServerWorldEvents.LOAD.register((server, world) -> RuleRuntimeHost.levelLoaded(world));

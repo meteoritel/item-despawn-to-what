@@ -3,7 +3,8 @@
     "package": "com.meteorite.itemdespawntowhat.mixin",
     "compatibilityLevel": "JAVA_21",
     "mixins": [
-        "LivingEntityMixin",
+        "PlayerMixin",
+        "ItemEntityMixin",
         "EntityMixin"
     ],
     "injectors": {

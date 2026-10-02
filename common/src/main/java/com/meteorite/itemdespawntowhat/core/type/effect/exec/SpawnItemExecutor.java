@@ -42,7 +42,7 @@ public final class SpawnItemExecutor {
         if (count <= 0) {
             return;
         }
-        spawnItems(context, item, count);
+        spawnItems(effect, context, item, count);
     }
 
     // 结合 limit/radius 计算本次实际可产出的物品数量；limit 为空表示不限制
@@ -59,36 +59,53 @@ public final class SpawnItemExecutor {
     private static int countNearby(EffectContext context, Item item, int radius, int limit) {
         Vec3 position = context.position();
         AABB box = EffectTargets.blockBox(BlockPos.containing(position.x, position.y, position.z), radius);
-        int total = 0;
-        for (ItemEntity nearby : context.level().getEntitiesOfClass(ItemEntity.class, box, ItemEntity::isAlive)) {
-            if (!nearby.getItem().is(item)) {
-                continue;
-            }
-            total = EffectTargets.saturatedAdd(total, nearby.getItem().getCount());
-            if (total >= limit) {
-                return total;
-            }
-        }
-        return total;
+        int[] total = {0};
+        context.level().getEntities(net.minecraft.world.level.entity.EntityTypeTest.forClass(ItemEntity.class), box,
+                nearby -> {
+                    if (nearby.isAlive() && nearby.getItem().is(item)) {
+                        total[0] = EffectTargets.saturatedAdd(total[0], nearby.getItem().getCount());
+                    }
+                    return total[0] >= limit;
+                }, new java.util.ArrayList<ItemEntity>(1), 1);
+        return total[0];
     }
 
-    // 按物品最大堆叠数拆分为若干掉落物实体
-    private static void spawnItems(EffectContext context, Item item, int count) {
-        ServerLevel level = context.level();
-        Vec3 position = context.position();
-        int maxStackSize = Math.max(1, item.getDefaultMaxStackSize());
-        int remaining = count;
-        while (remaining > 0) {
-            int size = Math.min(remaining, maxStackSize);
-            ItemEntity entity = new ItemEntity(level,
-                    position.x + (level.random.nextDouble() - 0.5) * 0.3,
-                    position.y + 0.1,
-                    position.z + (level.random.nextDouble() - 0.5) * 0.3,
-                    new ItemStack(item, size));
-            entity.setDeltaMovement((level.random.nextDouble() - 0.5) * 0.1, 0.2,
-                    (level.random.nextDouble() - 0.5) * 0.1);
-            level.addFreshEntity(entity);
-            remaining -= size;
+    // 每批重新计算邻近余量，多个转化任务交错时仍受 limit 收敛。
+    private static void spawnItems(SpawnItemEffect effect, EffectContext context, Item item, int count) {
+        new ItemBatch(effect, context, item, count).run();
+    }
+
+    /** 分批生成掉落物，仅保留剩余物品数，每批最多生成 16 个实体。 */
+    private static final class ItemBatch implements Runnable {
+        private final SpawnItemEffect effect;
+        private final EffectContext context;
+        private final Item item;
+        private int remaining;
+        private ItemBatch(SpawnItemEffect effect, EffectContext context, Item item, int count) {
+            this.effect = effect; this.context = context; this.item = item; this.remaining = count;
+        }
+        @Override
+        public void run() {
+            ServerLevel level = context.level();
+            Vec3 position = context.position();
+            if (!com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks.containsArea(level, BlockPos.containing(position), 1)) {
+                context.schedule(20, this); return;
+            }
+            int capacity = allowedCount(effect, context, item, remaining);
+            if (capacity <= 0) { return; }
+            int maxStack = Math.max(1, item.getDefaultMaxStackSize());
+            for (int i = 0; i < 16 && capacity > 0; i++) {
+                int size = Math.min(capacity, maxStack);
+                ItemEntity entity = new ItemEntity(level,
+                        position.x + (level.random.nextDouble() - 0.5) * 0.3, position.y + 0.1,
+                        position.z + (level.random.nextDouble() - 0.5) * 0.3, new ItemStack(item, size));
+                entity.setDeltaMovement((level.random.nextDouble() - 0.5) * 0.1, 0.2,
+                        (level.random.nextDouble() - 0.5) * 0.1);
+                EffectTargets.addEntity(context, entity);
+                capacity -= size;
+                remaining -= size;
+            }
+            if (remaining > 0) { context.schedule(1, this); }
         }
     }
 }

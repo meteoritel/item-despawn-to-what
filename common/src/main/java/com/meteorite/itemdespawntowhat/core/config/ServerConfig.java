@@ -108,7 +108,7 @@ public record ServerConfig(
     public int backoffTicks(int failureCount) {
         int base = Math.max(1, checkIntervalTicks);
         // 指数退避并以 backoffMaxTicks 封顶：间隔较小时也会收敛到上限
-        int shift = Math.min(Math.max(0, failureCount), 20);
+        int shift = Math.min(Math.max(0, failureCount - 1), 20);
         long ticks = (long) base << shift;
         return (int) Math.min(ticks, backoffMaxTicks);
     }

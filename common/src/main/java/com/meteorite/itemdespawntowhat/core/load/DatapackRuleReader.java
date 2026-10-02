@@ -41,8 +41,7 @@ public final class DatapackRuleReader {
             locations = resourceManager.listResources(RulePaths.DATAPACK_RULES_DIRECTORY,
                     location -> location.getPath().endsWith(RulePaths.RULE_FILE_EXTENSION));
         } catch (RuntimeException e) {
-            issues.error("列举数据包规则文件失败: " + e, null, RulePaths.DATAPACK_RULES_DIRECTORY);
-            return List.of();
+            throw new IllegalStateException("列举数据包规则文件失败，保留现有规则", e);
         }
 
         Map<PackResources, Integer> packRanks = packRanks(resourceManager, issues);
@@ -70,7 +69,7 @@ public final class DatapackRuleReader {
                 Integer rank = packRanks.get(resource.source());
                 if (rank == null) {
                     // 身份不一致或 listPacks 失败：按最低包优先级参与排序，并如实告警（每个包只报一次）
-                    rank = Integer.MAX_VALUE;
+                    rank = -1;
                     if (unrankedPacks.add(packId)) {
                         issues.warn("数据包未出现在 listPacks() 中，其规则按最低包优先级参与排序: " + packId,
                                 origin.display(), location.getPath());
@@ -84,7 +83,7 @@ public final class DatapackRuleReader {
         }
 
         Comparator<ScoredEntry> byLayer = Comparator.comparingInt(entry -> entry.layer().priority());
-        Comparator<ScoredEntry> byPackRankDesc = Comparator.comparingInt(ScoredEntry::packRank).reversed();
+        Comparator<ScoredEntry> byPackRankDesc = Comparator.comparingInt(ScoredEntry::packRank);
         Comparator<ScoredEntry> byFilePath = Comparator.comparing(ScoredEntry::filePath);
         Comparator<ScoredEntry> byIndex = Comparator.comparingInt(ScoredEntry::index);
         scored.sort(byLayer.thenComparing(byPackRankDesc).thenComparing(byFilePath).thenComparing(byIndex));
@@ -96,7 +95,7 @@ public final class DatapackRuleReader {
         return result;
     }
 
-    // 包优先级表：listPacks 的顺序即包优先级从高到低，序号越小越优先
+    // 包优先级表：listPacks 的顺序为包优先级从低到高，序号越大越优先
     // 取表失败时排序会退化为文件路径，因此必须产出 WARN 而不是静默降级；未登记的资源按最低包优先级处理并逐个包告警一次
     private static Map<PackResources, Integer> packRanks(ResourceManager resourceManager, IssueCollector issues) {
         Map<PackResources, Integer> ranks = new IdentityHashMap<>();

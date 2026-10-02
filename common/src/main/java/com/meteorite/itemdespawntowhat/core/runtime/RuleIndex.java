@@ -101,7 +101,8 @@ public final class RuleIndex {
             return cached;
         }
         if (tagRules.isEmpty()) {
-            List<Rule> directOnly = List.copyOf(directIndex.getOrDefault(itemId, List.of()));
+            List<Rule> directOnly = directIndex.getOrDefault(itemId, List.of()).stream()
+                    .filter(rule -> rule.source().matches(itemId, this::expandItemTag)).toList();
             queryCache.put(itemId, directOnly);
             return directOnly;
         }
@@ -115,7 +116,7 @@ public final class RuleIndex {
         }
         List<Rule> result = new ArrayList<>(hits.size());
         for (LoadedRule<Rule> entry : ordered) {
-            if (hits.contains(entry.value())) {
+            if (hits.contains(entry.value()) && entry.value().source().matches(itemId, this::expandItemTag)) {
                 result.add(entry.value());
             }
         }
