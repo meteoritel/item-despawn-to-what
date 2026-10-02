@@ -1,5 +1,7 @@
 # 后端重构规划书（ItemDespawnToWhat 1.21.1）
 
+> **当前状态更新（2026-10-02）**：后端实现已收尾，旧链路已删除；用户明确将前端改为占位页，完整前端下一轮重构，因此原 Q2/Q29/Q35 与视觉冻结验收由 [ADR-0017](../adr/0017-backend-cutover-and-budgeted-effects.md) 替代。下文原架构与①～⑤为历史规划/阶段记录，不代表当前残留代码。当前实现见 [架构说明](../dev/architecture.md)，修复与实机验收见 [收尾记录](../review/backend-rewrite-closeout-2026-10-02.md)。
+
 > 本文档来自一次 grilling 会话（47 个决策点，台账见附录 A），回答三件事：**现状是什么、计划要达到什么目标、走哪条技术路线**。
 > 执行期的更细粒度规划（每个效果的字段表、每个阶段的逐步清单）在实施时按阶段另行细分，本文档只锁定架构契约与阶段边界。
 > 目标读者：项目维护者。
@@ -466,26 +468,22 @@ Effect（通用字段）
 1. `/idtw config convert` 已随命令树落地（`core/command/RuleConvertService`）：输入旧 `config/itemdespawntowhat/<ns>/<type>.json`，转换前备份到 `_old_chain_backup/`，输出新覆盖层 `rules/**`，无法无歧义映射的条目报告为 `unmapped`、字段级损失报告为 `notes`。迁移指南按该实现逐条核对；另记录一处**未提示**的字段损失：`item_to_block` 的 `search_radius` 既不映射也不提示（新 `place_block` 无独立的上限统计半径），已列入待复核。
 2. 第三方 Java 扩展 SPI 尚未交付。Q25 承诺"Java API 可注册新的效果类型与条件类型"，目前只有仓库内注册路径（`BuiltinEffectTypes` / `BuiltinConditionTypes` 构建后立即 `freeze()`），扩展指南已如实标注为未交付能力。
 
-### 阶段 ⑥ 切换与清场
+### 阶段 ⑥ 切换与清场 ✅（实现收尾，实机验收待用户执行）
 
-- 切换到新链路，删除旧 `config/**`（旧模型）、旧注册表、旧执行器、旧网络与旧 GUI DTO 绑定。
-- 前端机械适配收尾；平台入口迁移；`/idtw config convert` 交付。
-- 归档过期 ADR 到 `docs/archive/`（gitignore），补新 ADR。
-- **验收**：build 通过（common + Fabric + NeoForge）；无旧类残留引用；端隔离与服务端→客户端引用仍为 0。
+| 交付项 | 当前状态 |
+|---|---|
+| 旧模型/IO/注册表/执行器/网络/命令/平台事件 | 已删除，唯一入口为新 RuleRuntimeHost 与命令树 |
+| 旧 GUI、新最小编辑器与 DTO 绑定 | 已删除，改为本地化占位页；后端协议保留 |
+| 用户磁盘旧 JSON | 原样保留且不执行，convert 成功备份才迁移，不擅自删除 |
+| B01～B17 | 实现修复见收尾报告；性能指标和世界行为不以构建替代验收 |
+| 类型未知字段与动态引用校验 | Codec keys 检测 + 服务端维度/群系/已加载战利品检查 |
+| 第三方 SPI | RuleTypeProvider + ServiceLoader，冻结前分阶段注册 |
+| 性能与生命周期 | 双队列预算、取消任务、分批、气候 4096 项、重载保留效果、卸载清理 |
+| 文档、迁移、i18n、6 个停用示例文件 | 已同步；最终静态/构建/打包结果见收尾记录 |
+| 原 Q22 性能目标 | 保留，等待用户 1 万掉落物游戏压测 |
+| 双平台自然消失/死亡锁/区块边界/世界效果 | 等待用户游戏验收 |
 
-#### 阶段 ⑥ 待办清单（前序阶段遗留，逐条可勾）
-
-| # | 待办 | 来源 |
-|---|---|---|
-| 1 | 删除旧链路：`config/**`（旧模型与旧 IO）、旧注册表/执行器、旧网络（`network/**`）、旧 GUI（`client/ui/form`、`client/ui/presentation`、`client/ui/panel`、`BaseConfigEditScreen` 等）与 `ConfigExtractorManager` | 阶段④ 已知限制 |
-| 2 | 删除旧命令 `ConversionConfigCommand` 与旧平台入口/事件（`ItemConversionEvent`、`ConversionTracker`、旧 payload registrar） | 阶段⑤ 切换 |
-| 3 | 旧配置目录 `config/itemdespawntowhat/<ns>/<type>.json` 清场（`/idtw config convert` 已交付并备份到 `_old_chain_backup/`） | 阶段⑤ |
-| 4 | 内置数据包复核与验收（6 个示例已落地，默认 `enabled: false`；随 jar 交付已验证） | 阶段⑤ 交付中 |
-| 5 | 类型参数级未知字段检测（阶段② F-3 遗留）：各类型暴露字段集合并接入校验 | 阶段② 遗留 |
-| 6 | 编辑回执 i18n 化（服务端诊断字符串 → `key\|参数`） | 阶段④ 已知限制 |
-| 7 | `RuntimeClimateSampler` 位置缓存加容量上限或按区块失效 | 阶段③ 观察项 |
-| 8 | `PackLayerResolver.byPackIdToken` 与数据包路径前缀实机验证；世界写入路径实机验证；1 万掉落物性能指标实测 | 阶段③ 已知限制 |
-| 9 | README / 既有 docs 与新链路对齐；`docs/plan` 归档；`docs/dev` 索引补齐 | 阶段⑥ |
+本阶段不保留旧链路回退入口，不删除用户游戏配置，不提交 Git。前端完整重构作为下一项独立工作。
 
 ---
 

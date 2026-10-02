@@ -1,5 +1,7 @@
 # 服务端追踪集驱动的转化入口与内存状态
 
+> 历史记录：本文绑定的旧实现已退役；当前后端契约与前端占位决定以 [ADR-0017](0017-backend-cutover-and-budgeted-effects.md) 和 [当前架构](../dev/architecture.md) 为准。
+
 核心玩法的转化检查入口从“两平台分叉（Fabric 在 `ItemEntity.tick` 注入 mixin、NeoForge 每 20 tick 全量扫描所有掉落物）+ 状态持久化进实体 NBT”改为：服务端按维度维护一个只含被追踪掉落物的集合，每 20 tick 只遍历该集合（O(T) 而非 O(N)）；追踪状态（计时器 / 选中规则 / 锁）存服务端内存 Map，不持久化。
 
 ## Considered Options

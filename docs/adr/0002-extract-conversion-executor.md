@@ -1,5 +1,7 @@
 # 转化行为从 config 数据类抽离为 ConversionExecutor 策略
 
+> 历史记录：本文绑定的旧实现已退役；当前后端契约与前端占位决定以 [ADR-0017](0017-backend-cutover-and-budgeted-effects.md) 和 [当前架构](../dev/architecture.md) 为准。
+
 ## 背景
 `BaseConversionConfig` 长期作为 god class，同时承担序列化数据、缓存、校验、复杂度、消耗逻辑与执行（`performConversion` / `countNearbyResult` / `isResultLimitExceeded`）。5 个子类各自把 `performConversion` 焊死在数据类上。唯一例外 `WorldEffectType` 已验证"数据接口(`SideEffectConfig`) + 行为策略(`SideEffectExecutor`)"的分离模式，但仅用于世界效果。为支持第三方提供新转化类型，需要一套干净、可独立实现的执行 SPI。
 

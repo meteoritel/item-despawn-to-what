@@ -1,5 +1,7 @@
 # 条件表达式改为 DNF + 可扩展条件类型注册表 + 谓词/消耗拆分 + 显式优先级
 
+> 历史记录：本文绑定的旧实现已退役；当前后端契约与前端占位决定以 [ADR-0017](0017-backend-cutover-and-budgeted-effects.md) 和 [当前架构](../dev/architecture.md) 为准。
+
 ## 背景
 当前触发条件为扁平纯 AND（`ConditionContext` 5 字段，`CombinedConditionChecker` 短路合取），不支持 OR / NOT / 嵌套；且 `selectBestMatchingRule` 每周期只选中首条匹配规则，导致"写两条规则模拟 OR"也会被首条遮蔽（除非复杂度更高，那就成了特化回退而非 OR）。复杂度 = 非空条件计数，等复杂度按文件插入序决定，无显式优先级。催化剂 / 浸润流体既当触发谓词又当消耗对象，职责耦合。
 

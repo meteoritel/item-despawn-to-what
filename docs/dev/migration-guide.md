@@ -1,9 +1,9 @@
 # 迁移指南：旧 JSON → 新覆盖层规则
 
-> **状态**：`/idtw config convert` 已在阶段⑤ 落地（实现见 `core/command/RuleConvertService.java`，命令树仍在收尾）。
-> 本文的字段映射与命令行为都按该实现逐条核对过；命令不可用时可按 §8 手工迁移，映射关系完全一致。
->
-> 本文只讲"旧配置怎么映射到新规则"。新字段的完整定义见 [config-reference.md](config-reference.md)。
+> **当前状态（2026-10-02）**：旧执行链路已移除，迁移命令可用；先备份存档和配置，再执行 `/idtw config convert`，检查 `unmapped` 后运行 `validate` 与 `list`。
+> 转换仅处理所选覆盖层根目录中的旧 JSON，原文件保留且不再被运行时加载。新增 id 为 `itemdespawntowhat:legacy/<旧文件相对路径去扩展名>_<原对象序号>`；不同命名空间目录不会冲突，重复执行保留已有迁移规则。
+> 每个文件备份成功后才转换，已有首次备份不覆盖；提交前走完整 Codec、语义和动态引用校验，写入失败不会报告成功条数。v1 扁平条件明确拒绝自动转换，请按本文手动映射。
+> 新后端的效果为有序非事务操作：产物受 limit 收敛时不会回滚源物品消耗；不足一轮仍按实际可扣量执行一轮。大批量产出可跨刻完成。
 
 ## 1. 旧格式是什么样
 
@@ -50,7 +50,7 @@ config/itemdespawntowhat/itemdespawntowhat/item_to_mob.json
 | v2 | `conditions.groups`（叶带 `params` 子对象）+ `consumption` 指令 | ADR-0007 起；**本文主要对照的形状** |
 | 带 `schema_version` | 旧加载器按缺省推断 v1、迁移到 v2，并在**加载时写回** | 正是新链路要消灭的"读时写回"（ADR-0008，已归档） |
 
-**v1 文件**：旧加载器读取时会先规范化成 v2（ADR-0007/0008）。转换命令直接读磁盘原始文本，因此**面对 v1 需要先让旧链路读过一次**，或按 §5 的"v1 附加映射"手工处理。
+**v1 文件**：旧加载器已移除。转换命令明确报告 v1 扁平字段，需按 §5 的“v1 附加映射”手工处理，避免自动丢失触发限制。
 
 ## 2. 迁移前后对照（总览）
 
@@ -181,11 +181,11 @@ config/itemdespawntowhat/itemdespawntowhat/item_to_mob.json
 | 权限 | OP（权限等级 ≥ 2） |
 | 输入 | `config/itemdespawntowhat` 下的 `*.json`（**跳过** `rules/`、`_old_chain_backup/`、`server.json`）；按文件名识别旧类型，只处理 9 个内置类型 |
 | 输出 | 新覆盖层 `config/itemdespawntowhat/rules/**`（经 `RuleOverlayWriter` 按 id upsert） |
-| 规则 id | `<namespace>:<旧类型名>_<文件内序号>`，如 `itemdespawntowhat:item_to_item_0` |
-| 备份 | 转换前把命中的旧文件复制到 `config/itemdespawntowhat/_old_chain_backup/<相对路径>`（保留目录结构） |
+| 规则 id | `<namespace>:legacy/<旧文件相对路径去扩展名>_<对象序号>`，如 `itemdespawntowhat:legacy/itemdespawntowhat/item_to_item_0` |
+| 备份 | 转换前把命中的旧文件复制到 `config/itemdespawntowhat/_old_chain_backup/<相对路径>`（保留目录结构，保留首次备份；备份失败跳过该文件） |
 | 报告 | `converted`（转换条数）/ `backedUp`（备份文件数）/ `writtenFiles`（写入文件数）/ `unmapped`（无法映射条目）/ `notes`（字段级损失提示） |
 | 判定原则 | **能无歧义映射就转换，否则显式报告**，绝不静默丢弃（Q4/Q19） |
-| 幂等性 | 走 `RuleOverlayWriter` 按 id upsert，重复执行不会重复追加；旧文件本身**不会被删除**（清场留给阶段⑥） |
+| 幂等性 | 已存在同 id 的迁移规则跳过，保留用户后续编辑；旧文件本身**不会被删除**且不再被运行时读取 |
 
 **为什么不做自动迁移**：Q46 明确"旧配置的**自动**迁移"是非目标；旧链路的读时写回（`schema_version`）正是被淘汰的做法——它让"读配置"产生副作用，并依靠运行时快照写回，会删掉 disabled / 编译失败的规则（A1）。
 
@@ -193,11 +193,11 @@ config/itemdespawntowhat/itemdespawntowhat/item_to_mob.json
 
 1. **备份**：把 `config/itemdespawntowhat/` 整个复制一份。
 2. **逐文件读旧 JSON**，按 §3～§6 改写；建议一个旧文件对应一个新文件，如 `rules/mypack/item_to_item.json`。
-3. **给每条规则补 `id`**（命令会生成 `<ns>:<type>_<index>`；手工迁移时建议显式声明，避免依赖文件名推导）。
+3. **给每条规则补 `id`**（命令生成 `<ns>:legacy/<旧相对路径去扩展名>_<对象序号>`；手工迁移时建议显式声明，避免依赖文件名推导）。
 4. **条件改写**：删掉 `groups` / `conditions` / `params` 三层壳，参数平铺到叶对象；单值字段变数组（`dimension`、`biome`）。
 5. **消耗改写**：按 §6 拆成 `consume_*` 效果与 `*_present` 条件，分别写进 `effects` / `conditions`。
-6. **对照验证**：用 `/idtw config list` / `/idtw config validate` 确认规则被加载且无 ERROR；对照测试期间**只保留一侧配置**，否则同一物品会被新旧两条链路各转化一次。
-7. **切换**：确认行为符合预期后，把旧文件移出 `config/itemdespawntowhat/<ns>/`（阶段⑥ 正式删除旧链路）。
+6. **对照验证**：用 `/idtw config list` / `/idtw config validate` 确认规则被加载且无 ERROR；旧链路已删除，旧配置保留也不会执行；转换后的规则需逐项检查再用于正式存档。
+7. **切换**：确认行为符合预期后，把旧文件移出 `config/itemdespawntowhat/<ns>/`（仅手动归档旧 JSON，后端旧代码已删除）。
 
 ### 迁移示例
 

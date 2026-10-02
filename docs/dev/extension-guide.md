@@ -1,22 +1,22 @@
 # 扩展指南：注册效果类型与条件类型
 
 > 目标读者：想新增一种效果或一种条件的开发者（含第三方模组作者）。
+> 当前 GUI 是占位屏；以下仅说明服务端类型扩展。前端表单与视图模型将在下一轮重新设计。
 > 本文以真实的内置实现为模板，字段名与调用方式都可在仓库中逐个核对。
 
 ## 1. 改动点速览
 
-新增**一种效果类型**（core 侧最少 2 处 + 客户端 1 处）：
+新增**一种效果类型**（后端 3 处）：
 
 | # | 位置 | 内容 |
 |---|---|---|
 | 1 | `core/type/effect/<Xxx>Effect.java` | 参数记录 + 字段常量 + `codec` + `validateParams` + `effectType` |
 | 2 | `core/type/effect/exec/<Xxx>Executor.java` | 执行器（实现 `EffectExecutor`） |
 | 3 | `core/type/BuiltinEffectTypes.java` | 一行 `registry.register(XxxEffect.effectType(expressionCodec))` |
-| 4 | `client/ui/view/EffectParams.java`（可选） | 登记声明式表单规格；不登记则 GUI 不提供该类型的编辑表单 |
 
-新增**一种条件类型**：把上面的 1/2 换成 `core/type/condition/<Xxx>Condition.java` 与 `core/type/condition/eval/<Xxx>Evaluator.java`，第 3 步改为 `core/type/BuiltinConditionTypes.java`，第 4 步改为 `client/ui/view/RuleConditionInputs.java`。
+新增**一种条件类型**：把上面的 1/2 换成 `core/type/condition/<Xxx>Condition.java` 与 `core/type/condition/eval/<Xxx>Evaluator.java`，第 3 步改为 `core/type/BuiltinConditionTypes.java`。
 
-**框架代码无需改动**：分发、校验调度、注册表、GUI 表单渲染都由既有抽象承担。
+**框架代码无需改动**：分发、校验调度、注册表都由既有抽象承担。
 
 ## 2. 前置概念
 
@@ -130,18 +130,9 @@ registry.register(MyEffect.effectType(expressionCodec));
 
 注册表在 `create()` 末尾 `freeze()`，之后 `register` 抛 `RegistryFrozenException`；重复 id 抛 `DuplicateTypeException`。
 
-### 3.4 客户端表单（可选）
+### 3.4 前端接入
 
-`client/ui/view/EffectParams.java` 的 `SPECS` 中登记声明式规格：
-
-```java
-id("my_effect"), List.of(
-        ParamSpec.integer("amount", EDIT + "effect.amount", "1")),
-```
-
-`ParamSpec` 的控件种类：`TEXT / INTEGER / DECIMAL / BOOLEAN / ENUM / LIST`；`labelKey` 是 i18n key（需同步 `en_us.json` 与 `zh_cn.json`）。表单由 `RuleFormBuilder` + `FormRenderer` 自动渲染，不需要写界面代码。
-
-**不登记规格的后果**：GUI 仍能只读展示该类型的规则（多效果规则只读），但不提供该效果的参数编辑表单——这是有意的最小实现边界（Q35）。
+当前只有占位页，没有参数表单 API。下一轮前端通过规则协议设计编辑能力；新增文案仍必须同步 `en_us.json` 与 `zh_cn.json`。
 
 ## 4. 新增条件类型（完整步骤）
 
@@ -226,9 +217,9 @@ registry.register(MyCondition.conditionType());
 
 **注册顺序固定**：条件类型 → 条件表达式编解码器 → 效果类型（效果记录带有效果级 `conditions` 字段）。装配点 `core/service/BuiltinTypeRegistries.create()` 已固化这个顺序，不要打乱。
 
-### 4.4 客户端参数编辑器（可选）
+### 4.4 前端接入
 
-`client/ui/view/RuleConditionInputs.java` 的 `ORDER` 中加入类型 id，并在其登记表中给出参数编辑实现；复杂嵌套参数可直接退化为 `ConditionJsonEditor`（biome 的气候区间就是这样处理的）。
+与效果相同，表单设计推迟到前端重构；后端条件类型不依赖 client 包。
 
 ## 5. 校验与错误约定
 
@@ -249,14 +240,39 @@ registry.register(MyCondition.conditionType());
 5. **枚举取值** → 用 `core/type/EnumCodecs.lowerCase(...)`，JSON 统一小写下划线且解析大小写不敏感。
 6. **列表字段可变** → 记录紧凑构造器里做 `List.copyOf` 防御性拷贝（内置类型均如此）。
 
-## 7. 第三方扩展现状（重要）
+## 7. 第三方 Java 扩展 SPI
 
-Q25 承诺"Java API 可注册新的效果类型与条件类型"，但**当前新链路还没有对外的注册 SPI**：`BuiltinEffectTypes.create()` / `BuiltinConditionTypes.create()` 构建后立即 `freeze()`，没有"冻结前插入第三方注册"的引导钩子（旧链路的 `IPlatformHelper.registerConversionType` 只服务旧模型）。
+实现 `com.meteorite.itemdespawntowhat.core.extension.RuleTypeProvider`，并在第三方 jar 的资源文件中登记：
 
-因此现状是：
+```text
+META-INF/services/com.meteorite.itemdespawntowhat.core.extension.RuleTypeProvider
+```
 
-- **仓库内扩展**（本模组自己加类型）：按本文步骤直接改 `BuiltinEffectTypes` / `BuiltinConditionTypes`，可用。
-- **第三方模组扩展**：暂不可用，属未交付能力；数据包侧也不应写未注册的 `type`。
+文件内容为 provider 实现类全名（一行一个，无参构造）。例如：
+
+```java
+/** 本扩展的类型登记入口。 */
+public final class MyRuleTypes implements RuleTypeProvider {
+    // 在条件注册表冻结之前登记。
+    @Override
+    public void registerConditions(TypeRegistry<ConditionType<?>> registry) {
+        registry.register(MyCondition.conditionType());
+    }
+
+    // 表达式 Codec 已包含全部 provider 注册的条件。
+    @Override
+    public void registerEffects(TypeRegistry<EffectType<?>> registry,
+                                Codec<ConditionExpression> expressionCodec) {
+        registry.register(MyEffect.effectType(expressionCodec));
+    }
+}
+```
+
+`BuiltinTypeRegistries.create()` 用 ServiceLoader 按 provider 类名排序：内置条件 → provider 条件 → 冻结 → 条件表达式 Codec → 内置效果 → provider 效果 → 冻结。任一重复 id、provider 构造或登记异常使启动失败，不静默忽略。效果与条件不得注册到其它阶段。
+
+类型 id 使用自己的命名空间；Codec 必须暴露完整 `keys(ops)` 字段集合，类型专属未知字段会拒绝。校验器将问题写入 IssueCollector；执行器只在服务端线程操作已加载区块，大数量操作用 `context.schedule()` 分批。第三方提供的动态引用需在自己的校验器处理，内置动态引用校验只认识内置类型。
+
+扩展 jar 必须在服务端安装并满足其 loader 依赖声明。SPI 编译入口已交付，实际 Fabric/NeoForge 第三方 jar 服务发现仍需在游戏验收；未安装类型不能由纯数据包创造。
 
 ## 8. 相关文档
 

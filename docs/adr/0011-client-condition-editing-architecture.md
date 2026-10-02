@@ -1,5 +1,7 @@
 # 客户端条件编辑采用独立子屏 + 客户端条件类型注册表，退役扁平条件垫片
 
+> 历史记录：本文绑定的旧实现已退役；当前后端契约与前端占位决定以 [ADR-0017](0017-backend-cutover-and-budgeted-effects.md) 和 [当前架构](../dev/architecture.md) 为准。
+
 ## 背景
 
 配置重构（ADR-0007）已将触发条件升级为 DNF 条件表达式 + 谓词/消耗解耦，服务端数据模型完备。但客户端编辑 UI 仍停留在旧扁平模型：`BuiltinFormDefinitions.addCommonFields` 为每个转化类型绑定 7 个扁平条件字段（`dimension`/`need_outdoor`/`surrounding_blocks`/`catalyst_items`/`inner_fluid`/`biome`/`weather`），经由 `BaseConversionConfig` 上保留的旧扁平 getter/setter 垫片读写"第一组、非取反、内置类型"的条件叶。当表达式出现多组 / 取反 / 第三方类型时 `supportsLegacyEditor()` 返回 false，这些 setter 全部静默 no-op--UI 既读不出（字段空白）也写不进（编辑丢失），存在数据完整性隐患，且无法表达 OR/NOT/嵌套组。

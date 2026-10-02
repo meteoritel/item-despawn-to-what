@@ -1,5 +1,7 @@
 # 三层配置作用域与按 id 覆盖合并
 
+> 实施补充：本文的最新调度、区块生命周期、保存与前端边界以 [ADR-0017](0017-backend-cutover-and-budgeted-effects.md) 和 [当前架构](../dev/architecture.md) 为准。
+
 ## 背景
 旧链路把配置放在 `config/itemdespawntowhat/<ns>/<type>.json`：既是唯一来源，又是 GUI 的写入目标；"数据包只能改配置目录"导致整合包作者无法用数据包分发默认规则，而 GUI 一保存又整文件覆盖，把 disabled / 编译失败 / 未命中标签的规则直接删掉（A1）。
 

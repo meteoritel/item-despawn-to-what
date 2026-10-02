@@ -1,5 +1,7 @@
 # ConversionType 由封闭枚举改为统一 ResourceLocation 注册表
 
+> 历史记录：本文绑定的旧实现已退役；当前后端契约与前端占位决定以 [ADR-0017](0017-backend-cutover-and-budgeted-effects.md) 和 [当前架构](../dev/architecture.md) 为准。
+
 ## 背景
 为支持第三方模组注册新的物品转化类型，`ConfigType` 不能继续作为封闭 enum 存在——enum 常量无法在运行时由第三方追加。上一轮重构虽已为 `ConfigType` 增加稳定 `ResourceLocation` id，但身份仍是枚举，id 未作为注册键使用。
 

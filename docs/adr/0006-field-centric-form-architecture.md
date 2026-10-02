@@ -1,5 +1,7 @@
 # 客户端编辑表单统一为字段中心 FormField + FormRenderer 架构
 
+> 历史记录：本文绑定的旧实现已退役；当前后端契约与前端占位决定以 [ADR-0017](0017-backend-cutover-and-budgeted-effects.md) 和 [当前架构](../dev/architecture.md) 为准。
+
 ## 背景
 ADR-0003 确立"声明式 schema + 手写逃逸"的混合脚手架，已落地：3 个简单类型走 `ConfigFieldSchema`，2 个复杂类型手写 `ConfigFormSection`。但两条路径在横切关注点（校验 / 焦点 / 建议 / 条件可见性）上各自维护一套机制：
 

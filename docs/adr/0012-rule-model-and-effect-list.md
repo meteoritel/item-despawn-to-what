@@ -1,5 +1,7 @@
 # 规则模型与效果列表
 
+> 实施补充：本文的最新调度、区块生命周期、保存与前端边界以 [ADR-0017](0017-backend-cutover-and-budgeted-effects.md) 和 [当前架构](../dev/architecture.md) 为准。
+
 ## 背景
 旧链路是"一个转化类型 = 一个 Config 子类 = 一个 Executor = 一个结果"：9 个类型要维护 9 套 DTO、9 个校验入口与 2N 个类，新增一种效果要改约 8 处（注册表 / Config 子类 / Executor / 客户端 FormDefinition / Presenter / i18n / 文档 / 示例），且"结果"与"消耗"被拆在配置与执行两侧，无法表达"一次触发做多件事"。
 
