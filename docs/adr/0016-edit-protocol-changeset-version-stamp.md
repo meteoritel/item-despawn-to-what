@@ -1,13 +1,14 @@
 # 编辑协议：服务端权威变更集 + 版本戳
 
 > 实施补充：本文的最新调度、区块生命周期、保存与前端边界以 [ADR-0017](0017-backend-cutover-and-budgeted-effects.md) 和 [当前架构](../dev/backend/README.md) 为准。
+> **部分已被取代（2026-10-03）**：本文的 per-player 编辑会话与旧快照形状已由 [ADR-0019](0019-exclusive-edit-session-and-target-lock.md) 与契约 §3.6 取代——编辑会话现为**全局目标级独占锁**（`TARGET_ID = itemdespawntowhat:rules`），快照条目为 `RuleSnapshotEntry(..., editable, ...)`，且 `editable = base != null || overlay != null`（**纯数据包规则同样为 `true`**，`editable` 不再表示「能否表单编辑」）；协议版本为 `RuleEditProtocol.VERSION = 2`。当前描述以 [edit-protocol.md](../dev/backend/modules/edit-protocol.md) 为准。
 
 ## 背景
 旧编辑链路把"整份配置快照"作为 S2C 下发、把"整包配置"作为 C2S 保存，并用**全局单 UUID 锁**串行化编辑：一个玩家编辑时所有人被锁；保存又基于运行时快照整文件覆盖，会删掉 disabled / 编译失败 / 未命中标签的规则（A1）；网络上限 4 MiB 且 C2S 分片 / S2C 整包不对称。
 
 ## 决策
 1. **基底不用自研同步**：数据包层（内置 + 世界包）由原版资源包机制同步；mod 只为 config 覆盖层维护一个 S2C 合并快照。
-2. **S2C 快照**：`RuleSnapshot`（`version` + 条目 + 加载期问题文本）；条目形状 `{ rule, origin, editable }`——覆盖层规则用**文件原始 JSON**（不做模型往返，不丢未识别字段）且可编辑，其它来源由模型编码且只读。
+2. **S2C 快照**：`RuleSnapshot`（`version` + 条目 + 加载期问题文本）；条目形状 `{ rule, origin, editable }`——覆盖层规则用**文件原始 JSON**（不做模型往返，不丢未识别字段）且可编辑，其它来源由模型编码。（**已修正**：见上方取代说明与契约 §3.6，`editable` 现为 `base != null || overlay != null`，纯数据包规则同样为 `true`，不再等同于「可编辑/只读」二分。）
 3. **C2S 变更集**：`RuleEditChangeSet` = `expected_version` + 若干 `RuleEdit`（`upsert` 带完整规则 JSON / `delete` 只带 id）；直发或分片（单片 30 000 字节，整批上限 4 MiB，每玩家最多 2 个在途传输，60s 空闲超时）。
 4. **服务端权威**：权限（OP，等级 ≥2）→ per-player 会话 → **版本戳校验** → 写覆盖层 → 推进版本 → 重建索引 + 全维度回扫 → 回执 + 新快照；**版本不一致时整批拒绝且不落盘**，回冲突说明与最新快照。
 5. **权威落盘**：`RuleOverlayWriter` 的写回依据是**磁盘上的文件内容**，按 id 逐条 upsert/delete（原子写 + `.bak` 备份），保持原文件形状；删除单条文件的唯一条目时写成空数组而不是删文件。

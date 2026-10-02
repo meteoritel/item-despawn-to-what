@@ -1,6 +1,8 @@
 # 后端重构规划书（ItemDespawnToWhat 1.21.1）
 
 > **当前状态更新（2026-10-02）**：后端实现已收尾，旧链路已删除；用户明确将前端改为占位页，完整前端下一轮重构，因此原 Q2/Q29/Q35 与视觉冻结验收由 [ADR-0017](../adr/0017-backend-cutover-and-budgeted-effects.md) 替代。下文原架构与①～⑤为历史规划/阶段记录，不代表当前残留代码。当前实现见 [架构说明](../dev/backend/README.md)，修复与实机验收见 [收尾记录](../review/backend-rewrite-closeout-2026-10-02.md)。
+>
+> **convert 相关章节已被取代（2026-10-03，P8 结论）**：下文凡涉及 `/idtw config convert` 的规划与进度记录（§2.2、§3.2、§3.3、§3.10、阶段 ⑤ / ⑥、§5 与附录 A 的 Q4 / Q19 / Q34）均已被 [v1.2.1 迁移评估](v1.2.1-migration-evaluation.md) §5 与 [plan-frontend-rewrite.md](plan-frontend-rewrite.md) §13.3 取代——转换命令与 `core/command/RuleConvertService.java` 已**整体退役**，迁移策略改为**破坏性更新**：旧 JSON 原样保留、不删除、不改写，由玩家用 `/idtw config edit` 在编辑器里手工重建（见 [更新说明](../guide/update-notes.md)）。带「已被 P8 取代」行内标记的原文保留为历史决策记录，不再代表当前实现。
 
 > 本文档来自一次 grilling 会话（47 个决策点，台账见附录 A），回答三件事：**现状是什么、计划要达到什么目标、走哪条技术路线**。
 > 执行期的更细粒度规划（每个效果的字段表、每个阶段的逐步清单）在实施时按阶段另行细分，本文档只锁定架构契约与阶段边界。
@@ -91,7 +93,7 @@ AbstractConversionExecutor 子类 → LevelTaskManager / 延迟任务 / 直接�
 - 脚本化扩展（KubeJS / JS 内联脚本）。
 - 多 MC 版本支持与多版本抽象层。
 - 自动化测试工程（JUnit / GameTest）；测试仍交用户，改用游戏内自检命令。
-- 旧配置的**自动**迁移；只保留显式 `/idtw config convert`。
+- 旧配置的**自动**迁移；只保留显式 `/idtw config convert`。 〔已被 P8 取代，见文首〕
 - 掉落物消失以外的生命周期事件（拾取、合并、合成、熔炼、死亡掉落参与转化）。
 
 ### 2.3 硬约束
@@ -149,7 +151,7 @@ Effect（通用字段）
 - 规则文件：一个文件可放**单条规则对象或规则数组**；`id` 优先取字段，缺省由文件名推导。
 - 合并：**按 id 逐条覆盖**（同 id 后者胜）；覆盖层可声明 `disabled: true` 停用或 `delete: true` 删除基底规则；不同 id 的规则叠加。
 - 规则索引在每次 reload 后完整重建；**源 tag 采用懒展开**（首次匹配到该 tag 时展开并缓存，缓存随 reload 失效，Q45）。
-- 旧格式兼容：**不做加载期隐式迁移**；提供 `/idtw config convert` 显式转换（转换前自动备份，并报告无法映射条目）。
+- 旧格式兼容：**不做加载期隐式迁移**；提供 `/idtw config convert` 显式转换（转换前自动备份，并报告无法映射条目）。 〔已被 P8 取代，见文首〕
 
 ### 3.3 序列化与 Codec（Q5/Q19/Q27）
 
@@ -159,7 +161,7 @@ Effect（通用字段）
   - 文件解析失败 → **整个文件拒载**并报错，错误信息含来源包 + 路径 + 字段；
   - 单条规则语义非法 → **该条拒载**并报错，其余照常；
   - 启动与 `/idtw config reload` 行为一致；
-  - 不做任何隐式写回，不产生 `.bak`（转换命令除外）。
+  - 不做任何隐式写回，不产生 `.bak`（转换命令除外）。 〔已被 P8 取代，见文首〕
 
 ### 3.4 字段与命名规范（Q27）
 
@@ -225,7 +227,7 @@ Effect（通用字段）
 | `/idtw config edit` | 打开配置编辑 GUI |
 | `/idtw config validate` | 离线体检全部来源，输出违规条目与原因 |
 | `/idtw config list` | 列出规则及其来源层（内置/世界包/覆盖层）与生效状态 |
-| `/idtw config convert` | 旧 config 格式一次性转换为新覆盖层格式（转换前备份，报告不可映射条目） |
+| `/idtw config convert` | 旧 config 格式一次性转换为新覆盖层格式（转换前备份，报告不可映射条目） | 〔已被 P8 取代，见文首〕
 | `/idtw rule list` / `/idtw rule show <id>` | 查询规则详情与来源文件 |
 | `/idtw debug inspect` | 检查视线中掉落物的追踪与匹配状态 |
 | `/idtw debug why` | 输出"为什么没转化"：规则候选、条件求值逐项结果、计时/退避状态 |
@@ -442,7 +444,7 @@ Effect（通用字段）
 
 - **Q3 口径补充**：新增效果类型 = 3 处（类型文件 + 执行器文件 + 容器一行）；新增**可 GUI 编辑**的条件类型 = 4 处（再加 `client/ui/view/RuleConditionInputs`）；不提供 GUI 参数编辑时条件仍为 3 处且可正常加载求值。
 - **Q25 承诺的第三方 Java 扩展 SPI 未交付**：内置注册表构建后立即 freeze，没有对外插入点；扩展指南已如实标注，留阶段⑥ 补。
-- `/idtw config convert` 的字段级损失与整条拒载情形见迁移指南（explosion 方向/result_multiple、lightning visual_only、loot_table 掷取次数与 limit/radius、place_block search_radius 等）。
+- `/idtw config convert` 的字段级损失与整条拒载情形见迁移指南（explosion 方向/result_multiple、lightning visual_only、loot_table 掷取次数与 limit/radius、place_block search_radius 等）。 〔已被 P8 取代，见文首〕
 - 命令反馈中的布尔值仍渲染为 `true/false`（未本地化为"是/否"）。
 - 内置数据包 6 个示例全部 `enabled: false`（Q31：作文档与 GUI 模板来源，不默认改变世界行为）。
 
@@ -465,7 +467,7 @@ Effect（通用字段）
 
 **文档整理期间如实记录的现状（不改任何技术决策）**：
 
-1. `/idtw config convert` 已随命令树落地（`core/command/RuleConvertService`）：输入旧 `config/itemdespawntowhat/<ns>/<type>.json`，转换前备份到 `_old_chain_backup/`，输出新覆盖层 `rules/**`，无法无歧义映射的条目报告为 `unmapped`、字段级损失报告为 `notes`。迁移指南按该实现逐条核对；另记录一处**未提示**的字段损失：`item_to_block` 的 `search_radius` 既不映射也不提示（新 `place_block` 无独立的上限统计半径），已列入待复核。
+1. `/idtw config convert` 已随命令树落地（`core/command/RuleConvertService`）：输入旧 `config/itemdespawntowhat/<ns>/<type>.json`，转换前备份到 `_old_chain_backup/`，输出新覆盖层 `rules/**`，无法无歧义映射的条目报告为 `unmapped`、字段级损失报告为 `notes`。迁移指南按该实现逐条核对；另记录一处**未提示**的字段损失：`item_to_block` 的 `search_radius` 既不映射也不提示（新 `place_block` 无独立的上限统计半径），已列入待复核。 〔已被 P8 取代，见文首〕
 2. 第三方 Java 扩展 SPI 尚未交付。Q25 承诺"Java API 可注册新的效果类型与条件类型"，目前只有仓库内注册路径（`BuiltinEffectTypes` / `BuiltinConditionTypes` 构建后立即 `freeze()`），扩展指南已如实标注为未交付能力。
 
 ### 阶段 ⑥ 切换与清场 ✅（实现收尾，实机验收待用户执行）
@@ -474,7 +476,7 @@ Effect（通用字段）
 |---|---|
 | 旧模型/IO/注册表/执行器/网络/命令/平台事件 | 已删除，唯一入口为新 RuleRuntimeHost 与命令树 |
 | 旧 GUI、新最小编辑器与 DTO 绑定 | 已删除，改为本地化占位页；后端协议保留 |
-| 用户磁盘旧 JSON | 原样保留且不执行，convert 成功备份才迁移，不擅自删除 |
+| 用户磁盘旧 JSON | 原样保留且不执行，convert 成功备份才迁移，不擅自删除 | 〔已被 P8 取代，见文首〕
 | B01～B17 | 实现修复见收尾报告；性能指标和世界行为不以构建替代验收 |
 | 类型未知字段与动态引用校验 | Codec keys 检测 + 服务端维度/群系/已加载战利品检查 |
 | 第三方 SPI | RuleTypeProvider + ServiceLoader，冻结前分阶段注册 |
@@ -498,9 +500,9 @@ Effect（通用字段）
 | `priority` / `enabled` / `notes` | 同名保留 |
 | 9 个转化类型文件 | 单一规则文件布局（按目录/命名空间组织） |
 | `result_limit` / `search_radius` | 产物类效果各自的 `limit` / `radius` |
-| `schema_version` + 迁移器 + 加载期写回 | 删除；改用 `/idtw config convert` 显式转换 |
+| `schema_version` + 迁移器 + 加载期写回 | 删除；改用 `/idtw config convert` 显式转换 | 〔已被 P8 取代，见文首〕
 
-转换命令的判定原则（Q4/Q19）：**能无歧义映射就转换，否则显式拒载并报告**，绝不静默丢弃。
+转换命令的判定原则（Q4/Q19）：**能无歧义映射就转换，否则显式拒载并报告**，绝不静默丢弃。 〔已被 P8 取代，见文首〕
 
 ---
 
@@ -540,7 +542,7 @@ Effect（通用字段）
 | Q1 | 到期触发；时刻 = min(规则计时, 自然消失时刻)；效果自带消耗语义 |
 | Q2 | 前端冻结行为与视觉，允许机械适配 + client 视图模型层 |
 | Q3 | 动因：扩展成本 + 结构性腐化 + 正确性缺陷 + 网络复杂度 + 运行时模型；旧字段全部重设计 |
-| Q4 | 保留领域概念、重写全部实现；旧 JSON 能映射则转换，否则拒载 |
+| Q4 | 保留领域概念、重写全部实现；旧 JSON 能映射则转换，否则拒载 | 〔已被 P8 取代，见文首〕
 | Q5 | 数据包只读基底 + config 可写覆盖层 + 同一 Codec |
 | Q6 | 仅 1.21.1，Fabric/NeoForge 双端，不做多版本抽象 |
 | Q7 | 规则 = 源匹配 + 条件 + 有序效果列表 |
@@ -555,7 +557,7 @@ Effect（通用字段）
 | Q16 | 9 生效效果 + 3 消耗效果；无脚本逃生舱 |
 | Q17 | 重设计现有 7 个条件并新增 |
 | Q18 | 源 = 多 item/tag 列表 + 排除列表；不做组件级匹配 |
-| Q19 | 统一严格校验；显式 `/idtw config convert` |
+| Q19 | 统一严格校验；显式 `/idtw config convert` | 〔已被 P8 取代，见文首〕
 | Q20 | 以 `/idtw` 为根按功能类群分子命令；仅 OP |
 | Q21 | Fabric 保留 2 个 Mixin 仅作入口；两端统一语义；lifespan 平台 helper |
 | Q22 | 按 tick 分桶调度；退避 1s→2s→4s→5s 封顶；TPS ≥19.5 或 <0.5ms/tick |
@@ -570,7 +572,7 @@ Effect（通用字段）
 | Q31 | 内置 builtin 数据包，示例默认 disabled |
 | Q32 | biome `exact|climate`；6 参数区间；`debug biome` 命令 |
 | Q33 | 效果级通用 `chance` |
-| Q34 | `/idtw config convert` |
+| Q34 | `/idtw config convert` | 〔已被 P8 取代，见文首〕
 | Q35 | GUI 最小实现边界：单效果编辑 + 多效果只读 |
 | Q36 | docs/dev 四篇清单 |
 | Q37 | 六阶段骨架 |

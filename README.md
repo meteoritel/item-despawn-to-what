@@ -38,7 +38,7 @@
 | `/idtw config validate` | 校验所有来源、类型参数与当前服务端引用 |
 | `/idtw config reload` | 重载规则并回扫已加载掉落物 |
 | `/idtw config list` | 查看规则来源与启用状态 |
-| `/idtw config convert` | 备份并显式转换旧配置，报告无法映射的条目 |
+| ~~`/idtw config convert`~~（已退役 2026-10-03） | 旧 v1.2.1 配置不再自动迁移；用 `/idtw config edit` 手工重建，见 [破坏性更新说明](docs/guide/update-notes.md) |
 | `/idtw config edit` | 打开前端占位页 |
 | `/idtw rule list`、`/idtw rule show <id>` | 查询规则 |
 | `/idtw debug run <场景>` | 开发环境自动准备真实后端功能场景，过程与校对结果实时输出到 IDEA |
@@ -48,7 +48,7 @@
 
 Debug由加载器的开发环境判断自动启用，IDEA Run/Debug均可使用，发布环境不注册debug指令。执行 `/idtw debug run convert` 即可生成测试源并走真实后端；在 IDEA 控制台过滤 `[IDTW_DEBUG]` 或回执的 `run=<编号>`，校对 START 参数、过程事件、FRAME 和 END 的预期/实际。无需手写测试配置或开启 `debug_logging`。功能场景、性能对比流程和AI反馈模板见 [Debug 实机验证与反馈指南](docs/dev/debug-validation-guide.md)。
 
-旧 JSON 保留在原目录，但运行时不再加载。迁移前请备份配置与存档；迁移用 `/idtw config convert`，字段与运行边界见[后端开发者文档地图](docs/dev/backend/README.md)。
+旧 JSON 保留在原目录，但运行时不再加载。旧 v1.2.1 配置**不再自动迁移**（`/idtw config convert` 已于 2026-10-03 按 P8 结论退役），迁移前请备份配置与存档，改用 `/idtw config edit` 手工重建，见[破坏性更新说明](docs/guide/update-notes.md)；字段与运行边界见[后端开发者文档地图](docs/dev/backend/README.md)。
 
 ## 开发与验收
 
