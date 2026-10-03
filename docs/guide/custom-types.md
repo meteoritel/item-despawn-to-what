@@ -141,11 +141,15 @@ public record SoundEffect(ResourceLocation sound, int delayTicks, double chance,
         return ParamChecks.required(params.sound(), "sound", issues, ParamChecks.child(fieldPath, "sound"));
     }
 
-    public static void execute(SoundEffect effect, EffectContext context) {
+    // 执行器返回真实回执（不再是 void）；结算层只按回执记账
+    public static EffectResult execute(SoundEffect effect, EffectContext context) {
         // 只负责"做什么"；延迟、概率、条件命中与异常隔离由运行时负责
+        return EffectResult.applied(1);
     }
 }
 `@
+
+`EffectExecutor.execute(...)` 的返回类型是 `EffectResult`（`outcome ∈ {APPLIED, DEFERRED, SKIPPED, FAILED}` + `appliedUnits` / `pendingUnits`）。同步完成用 `EffectResult.applied(units)`；分批或延迟生成先返回 `EffectResult.deferred(units)`，随后经 `EffectContext.reportProgress(units)` 把受理量收敛为完成量；条件/概率/容量不足等「正常未执行」返回 `EffectResult.skipped(reason)`，异常抛出让运行时记 `failed`。**不要用计划数量冒充成功量**；一次性世界效果（闪电/爆炸/箭雨/天气）在 `new SimpleEffectType<>(...)` 第 5 个参数传 `oneShot=true`。
 
 注意 `optionalConditions` 的返回值是 `Optional<ConditionExpression>`，必须在 `apply` 里 `orElse(null)`——直接把 `Optional` 存进字段或让 codec 产出 null 都会在解码期抛 NPE。
 

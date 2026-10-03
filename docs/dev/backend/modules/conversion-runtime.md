@@ -1,115 +1,130 @@
 # 功能模块：转化运行时（`core/runtime`）
 
-> 事实来源：`core/runtime/**`（11 个文件）。
-> 追踪、排期、条件求值、效果派发与双队列调度的引擎；**世界操作只在服务端主线程执行**。
-> 决策：[ADR-0015](../../../adr/0015-runtime-scheduling-and-tracking.md)。
+> 事实来源：`core/runtime/`（17 类）+ `core/state/`（3 类）；调度器实现 `core/runtime/scheduler/`（16 类）见 [scheduling-budget.md](../systems/scheduling-budget.md)，本文不复述其类清单。
+> 追踪、触发、条件求值、候选选择、完整组结算与返还、效果派发的引擎；**世界操作只在服务端主线程执行**。
+> 决策：[ADR-0015](../../../adr/0015-runtime-scheduling-and-tracking.md)（排期与追踪基线）、[ADR-0017](../../../adr/0017-backend-cutover-and-budgeted-effects.md)（core 唯一执行链路）；完整组结算、固定成本与候选择一的契约见 [round-2 决策 0001](../../../archive/backend-round-2/docs/adr/0001-conversion-commitment.md)（完整底稿 [PLAN.md](../../../archive/backend-round-2/PLAN.md)）。
 
 ## 1. 类清单
 
 | 类 | 职责 | 关键成员 |
 |---|---|---|
-| `ConversionRuntime` | 总控：规则索引 + 维度级追踪 + 双队列调度 + 转化编排 | `onItemAdded`、`attempt`、`select`、`performConversion`、`runEffect`、`deferNaturalExpiry`、`replaceRules`、`rescan`、`clear`、`shutdown`、`queueStats` |
-| `TickScheduler` | 分桶到期任务队列（每 tick 预算 + 异常隔离） | `schedule(delay, task)`、`runDue(now)`；`SOFT_BUDGET_NANOS = 2_000_000` |
-| `RuleIndex` | "物品 id → 候选规则"查询结构：直接物品建索引、标签懒展开 | `build(...)`、`candidates(itemId)` |
-| `ExpressionEvaluator` | DNF 条件求值（组内 AND / 组间 OR / 叶级 NOT，全短路） | `matches(expression, context, conditionTypes)` |
+| `ConversionRuntime` | 总控：规则索引 + 维度级追踪 + 触发请求 + 排期/退避 + 结算派发 | `onItemAdded`、`requestEnvironmentalConversion`、`requestConversion`、`onServerTick`、`attempt`、`select`、`performConversion`、`deferNaturalExpiry`、`replaceRules`、`rescan`、`clear`、`shutdown`、`schedulerStats`、`budgetSnapshot` |
+| `ConversionSettlement` | 一次转化的结算任务（计划 → 派发 → 交付），固定成本、完整组、真实账目 | `step`、`plan`、`dispatch`、`deliver`、`abort`、`account`、`groupsFor`、`capacityGroups` |
+| `CatalystReservations` | 运行期催化剂预留表（按维度 + 任务），预留 → 支付三态，不落盘 | `available`、`tryReserve`、`payGroup`、`releaseOwner`、`clear` |
+| `SettlementLedger` | 主世界 `SavedData` 结算账本（进行中 + 已完成记录，带上限裁剪） | `get`、`put`、`find`、`unsettled`、`pendingDeliveryTotal`、`prune` |
+| `SettlementRecord` | 单次结算记录：计划量、已开始组、真实完成量、返还交付进度；可持久化 | `plan`、`groupStarted`、`addProgress`、`delivered`、`syncPendingDelivery`、`complete`、`interrupt`、`needsRecovery`、`save`/`load` |
+| `SettlementRecovery` | 重启 / 维度加载后的待返还交付任务（`REBATE`） | `step`、`onCancelled`、`finish` |
+| `RoundRobinCursors` | 主世界 `SavedData` 轮询游标（规则 id + 维度，持久化） | `get`、`cursor`、`moveTo` |
+| `RuleIndex` | "物品 id → 候选规则"查询结构：直接物品建索引、标签懒展开 | `build`、`candidates`、`ordered` |
+| `ExpressionEvaluator` | 条件求值入口（`matches` = `evaluate` == MATCH） | `matches`、`evaluate` |
+| `ExpressionTreeEvaluator` | 条件树递归求值，四态（MATCH / NO_MATCH / UNAVAILABLE / ERROR） | `evaluate`、`evaluateNode` |
 | `RuntimeConditionContext` | `ConditionContext` 的服务端 record 实现（纯参数聚合） | 注入按维度复用的 `RuntimeTagLookup` / `RuntimeClimateSampler` |
-| `RuntimeEffectContext` | `EffectContext` 实现：持有源快照、rounds、covered、效果调度器 | `schedule(...)`、`runWhenLoaded(...)` |
-| `RuntimeTagLookup` | 标签成员查询，按 `kind:tagId` 缓存（不存在缓存空集） | `members(...)` |
-| `RuntimeClimateSampler` | 气候采样，按 quart 坐标缓存，上限 4096，超限淘汰最旧 | `sample(pos)` |
+| `RuntimeEffectContext` | `EffectContext` 实现：**按转化组**构造，持有源快照、组信息与调度器 | `schedule`、`runWhenLoaded`、`reportProgress` |
+| `RuntimeTagLookup` | 标签成员查询，按 `kind:tagId` 缓存（不存在缓存空集） | `itemInTag` … `members` |
+| `RuntimeClimateSampler` | 气候采样，按 quart 坐标缓存，上限 4096、超限淘汰最旧 | `sample` |
 | `LoadedChunks` | 无副作用区块存在性查询（**禁止为执行规则生成区块**） | `contains`、`containsArea` |
 | `LifespanProvider` | 平台差异收敛点：掉落物自然寿命刻数 | `lifespanTicks(level, entity)`、`vanillaDefault()`（6000） |
-| `PlayerDeathDrops` | 玩家死亡掉落排除策略（供 Fabric 最小入口复用） | `mark(entity, item)` |
+| `PlayerDeathDrops` | 玩家死亡掉落排除策略（入世界前打 `check_lock`） | `mark(entity, item)` |
+| `DropState` | 掉落物实体层状态：临时保护/冷却、永久保护/禁转，绝对值游戏刻计时 | `isProtected`、`cooldownRemaining`、`blocksConversion`、`withTemporary`、`withPermanentReturn`、`permanentFlagsMatch`、`unionTemporary` |
+| `DropStateStore` | 实体状态读写门面（经 `IPlatformHelper`），保护/冷却时长注入 | `configure`、`get`/`set`/`clear`、`blocksEnvironmentalDamage`、`grantNewProduct`、`grantPermanentReturn` |
+| `DamageClassification` | 环境销毁的伤害归因常量表（火 / 岩浆 / 仙人掌），common 内唯一来源 | `classify`、`isEnvironmental` |
 
-`ConversionRuntime` 每维度持有一个 `LevelState { scheduler(检查), effects(效果), tracked, tags, climate }`；追踪状态按维度 key 索引，**任务上下文持有维度对象，维度卸载即整体释放**，避免强引用。
+`ConversionRuntime` 每维度持有一个 `LevelState { tracked, tags, climate }`；追踪状态按 `ResourceKey<Level>` 索引，**任务本体归公共调度器所有**，`LevelState` 不持有维度对象，维度卸载即整体释放。`core/state` 是与 `core/runtime` 并列的包：状态数据在 common，持久化落到平台实现。
 
-## 2. 转化生命周期
+## 2. 追踪与触发契约
 
-### 2.1 进入追踪（`onItemAdded`）
+### 2.1 进入追踪与排除
 
-1. **快速短路**：规则索引为空且无活动调试场景 → 直接返回。
-2. **排除判定** `excluded()`：`isRemoved` / 空物品 / `age == -32768`（原版无限寿命）/ 带 `itemdespawntowhat:check_lock`（死亡锁）/ 带 `itemdespawntowhat:converted`（已提交）任一即排除。
-3. `index.candidates(itemId)` 为空则返回（**没有候选规则就不追踪**）。
-4. UUID 去重（`ENTITY_LOAD` 在区块重追踪时会重复触发）；建 `TrackedState` 并 `scheduleInitial`。
+`onItemAdded` 快速短路（索引空且无活动调试场景）后按 `excluded()` 排除：`isRemoved` / 空物品 / `age == -32768`（原版无限寿命）/ 带 `itemdespawntowhat:check_lock`（死亡掉落锁）/ 带 `itemdespawntowhat:converted`（已提交转化）任一即排除。`index.candidates(itemId)` 为空则不追踪（**没有候选规则就不追踪**）。已 tracked 的 UUID 直接返回（`ENTITY_JOIN` 在区块重追踪时会重复触发）。
+
+> 永久禁转（返还物）**不在** `excluded()`；它在 `attempt` 中经 `DropState.permanentConversionBan` 判定，命中即移除追踪（见 §5）。
 
 ### 2.2 首次排期
 
 ```text
 lifespan        = max(1, lifespanProvider.lifespanTicks(level, entity))
-earliestTrigger = min over 候选规则 ( max(0, rule.triggerAfterSeconds * 20) )
+earliestTrigger = clamp(min over 候选规则(rule.triggerAfterSeconds × 20), 0, ∞)
 dueAge          = min(earliestTrigger, lifespan - 1)
 delay           = max(0, dueAge - entity.getAge())
-nextCheckTick   = level.getGameTime() + delay
 ```
 
-即**触发时刻 = min(候选规则秒数×20, lifespan−1) − 当前年龄**。
+即**触发时刻 = min(候选规则秒数×20, lifespan−1) − 当前年龄**，以 `CONDITION_CHECK` 任务入公共调度器。
 
-### 2.3 到期判定（`attempt` → `select`）
+### 2.3 触发路径（同一请求路径）
 
-`attempt` 依次：实体失效/被排除 → 移除追踪；**区块门禁** `isPositionEntityTicking` 不满足 → 退避 `checkIntervalTicks`；**转化锁** `locked` → 退避 1 tick；候选为空 → 移除；否则 `select`。
+| 消失方式 | 平台入口 | 运行时动作 |
+|---|---|---|
+| 自然消失 | 原版 discard 前拦截 → `deferNaturalExpiry` | 置 `expiryPending`、取消旧任务、以 `delay=0` 排一次 `attempt(kind=NATURAL)`；返回 `true` 表示已接管本次 discard |
+| 火 / 岩浆 / 仙人掌 | 真实致死分支 → `requestEnvironmentalConversion` | `DamageClassification.classify` 归类后调 `requestConversion(kind)`；`kind` 不属于三类则忽略 |
 
-`select` 对候选（已排序）逐条：
+`requestConversion` 是自然与三类环境销毁的**公共入口**：`item`/`kind` 为空或 `excluded` → 返回；未 tracked → 先 `onItemAdded` 补齐；`locked` → 忽略（同一死亡多份伤害调用的去重）；否则 `attempt`。环境致死请求在 `hurt` 调用栈内**同步**执行「条件检查 + 规则选择」（单实体一次、量小），效果一律经调度器排队在共享预算内执行。规则未声明该消失方式时不参与（`rule.effectiveTriggers()`，未声明按 `natural`）。
 
-- 非 expiryPending 时先过**年龄门槛** `isEligible`（未到龄记 `AGE_NOT_READY` 并 continue）；
-- `ExpressionEvaluator.matches(rule.conditions(), ctx, conditionTypes)` 命中即返回该条。
+### 2.4 到期判定（`attempt` → `select`）
 
-**同一掉落物只执行优先级最高的一条命中规则**。候选排序（`RuleIndex`）：`优先级 desc → 条件叶数 desc → 定义序`。
+`attempt` 依次：实体失效/被排除 → 移除追踪；区块实体 ticking 门禁不满足 → 退避 `checkIntervalTicks`；`locked` → 退避 1 tick；**永久禁转** → 移除追踪；**转化冷却未到期** → 退避剩余冷却；候选为空 → 移除；否则 `select`。
 
-### 2.4 未命中退避
+`select` 遍历已排序候选，跳过未声明 `kind` 的规则；**年龄门槛只对 `natural` 且非 expiryPending 生效**（环境致死在当前刻立即判定，与存活时长无关）；`ExpressionEvaluator.matches` 命中即取该条。**同一掉落物只执行优先级最高的一条命中规则**，候选排序（`RuleIndex`）：`优先级 desc → 条件叶数 desc → 定义序`。
 
-```text
-failureCount++
-若 expiryPending 或已过寿命 → 移除追踪（expiryPending 时 discard）
-否则 delay = config.backoffTicks(failureCount)         # 见 systems/config.md
-  年龄门槛修正：若当前无一规则到龄，则 failureCount-- 并把 delay 提前到最近一条规则达龄时刻
-  reschedule(min(delay, lifespan - age - 1))
-```
+### 2.5 未命中退避
 
-### 2.5 命中提交（`performConversion`）
+`failureCount++` → 若 `expiryPending` 或已过寿命则移除追踪（`expiryPending` 时 `discard`）；否则 `delay = config.backoffTicks(failureCount)`，再做年龄门槛修正（当前无一规则到龄则 `failureCount--` 并把 delay 提前到最近达龄时刻；否则 `delay = min(delay, nextAge)`），最终 `reschedule` 与剩余寿命取 min。退避算法细节见 [scheduling-budget.md](../systems/scheduling-budget.md)、[config.md](../systems/config.md)。
 
-1. `tracked.locked = true`；给实体加 `converted` 标签（**持久化标记**，防止重载/区块重进重复提交）。
-2. 轮次：`perRound = BuiltinTypeRegistries.perRoundSourceConsumption(rule)`；`available = 源堆叠数`；`rounds = perRound>0 ? max(1, available/perRound) : 1`。
-3. `covered = perRound>0 ? min(rounds*perRound, available) : 1`——按实际可扣数量收敛，避免 `spawn_xp.per_source_item` 多给经验。
-4. 构造效果上下文（**源物品快照** `source.getItem().copy()`）。
-5. 隐式消耗：`rule.usesImplicitSourceConsumption()` 为真 → 先执行一次 `consume_source(count=1)`。
-6. 按定义序 `dispatchEffect` 每条效果。
-7. `finally`：解锁、移除追踪。
+## 3. 完整组结算与数量账目（`ConversionSettlement`）
 
-### 2.6 自然消失挂钩（`deferNaturalExpiry`）
+命中后 `performConversion` 把**整堆源物品转入结算库存**：`held = source.copy()`、`source.setCount(0)`、给实体打持久化 `converted` 标签，写一条 `SettlementRecord` 到账本，并把 `ConversionSettlement` 作为 `EFFECT` 任务立即入队。结算任务三阶段：计划 → 派发 → 交付。
 
-返回 `true` 表示**已拦截原版 discard** 并改由队列处理：置 `expiryPending=true`、取消旧任务、以 `delay=0` 立即排一次 `attempt`。到龄后即使条件不满足也会在 `attempt` 中被移除并 `discard`。原版没有"消失后"回调，因此拦截点在 discard **之前**。
+- **每组固定源成本** `c = perRoundSourceConsumption(rule)`：显式 `source_cost` 优先（必须正数），其次隐式 1（未声明任何 `consume_*`），再次所有 `consume_source` 的 `count` 之和。`source_cost` 与 `consume_source` 由 `RuleValidation` 拒绝同时声明。
+- **组数** `g = min(held / c, 候选最小完整容量)`，其中容量由候选内 `spawn_item` / `spawn_entity` 的 `limit` 共同约束（`room / per`），**任一为一次性类型时封顶 1**。
+- **候选选择**：每个转化组只选**一个**候选结果。`ROUND_ROBIN`（默认）从游标处依次尝试，`PRIORITY` 取第一个可用候选；容量不足或催化剂不足的候选跳过，**全部候选都无法完成一组时整堆返还、不支付任何成本**。不能把组合模式实现成"全部结果执行、只调先后顺序"。
+- **催化剂固定成本**（`rule.catalystCost()`）：一组结算需要 `count` 个催化剂；计划期登记预留（`CatalystReservations.tryReserve`，全有或全无、绝不半预留），**开组时先支付再开组**（`payGroup`：PAID / RETRY / SHORT）；不足则截断组数、释放预留，剩余源走返还（**绝不"少扣照常产出"**）。催化剂单独计数，不进源物品守恒式。
+- **数量账目守恒**：设整堆源初始 `N`，每组源成本 `c`，实际开始组数 `g`，则
 
-### 2.7 清理与重载
+  ```text
+  C = c × g                         # 已消费源（只对已开始的组收费）
+  N = C + 已交付返还 + 待交付返还    # 结算守恒
+  ```
 
-- `onItemRemoved`：离开世界/区块卸载时移除追踪并取消任务。
-- `clear(level)`：维度卸载整体释放；`shutdown()`：释放全部（停服）。
-- `replaceRules(...)`：重建索引、清空各维度 `tracked`/`scheduler`，并把 `tags`/`climate` 置 null（**防止读到旧数据包标签**）。
-- `rescan(level)`：reload 后回扫 `level.getAllEntities()` 重建追踪。
+  概率落空、效果条件不满足、执行途中部分失败都**仍属已支付组**（不免费重试、不返还成本）；真实完成量只来自执行器回执（`EffectResult.appliedUnits` + `reportProgress`），**计划量不冒充成功量**。不足一组不强制产出。
 
-## 3. 调度与性能
+- **一次性效果**（`EffectType.oneShot()`，如闪电/爆炸/箭雨/天气）不参与容量；仅含一次性效果的候选对同一源最多一组，其余含可重复产出者可多组但其中一次性效果仍只尝试一次。
+- **轮询游标**按 `规则 id + 维度` 共享并持久化（`RoundRobinCursors`）；候选结构版本（候选 id、开关、效果顺序与参数的 SHA-256 摘要）变化时游标归零，避免旧位置指向新结构。
 
-- **双队列**：`LevelState` 持 `scheduler`（条件检查）与 `effects`（世界操作/延迟效果）两个独立 `TickScheduler`；`onLevelTick` 每 tick 依次 `runDue` 两者，分别可观测（`queueStats`）。
-- **每 tick 预算**：两个上限同时生效——`visited < maxTasksPerTick`（来自 `ServerConfig.maxChecksPerTick`，默认 512）**且** 未超过 2ms 软预算。注释明确：时间预算只能在任务之间检查，**单次原版原子操作不可被抢占**。
-- **分桶与游标**：`buckets: TreeMap<Long, ArrayDeque<Task>>` 按到期刻分桶；`ready` 暂存已到期桶，**不复制积压任务**；零延迟任务也入队（防递归调度绕过预算）；跳过的刻在下一次 `runDue` 一并补执行。
-- **有界缓存**：气候按 quart 坐标缓存上限 4096；标签按 `kind:tagId` 缓存；`RuleIndex` 的 `tagCache`/`queryCache` 懒展开；方块偏移在 `PlaceBlockExecutor` 静态预计算。全部随 `replaceRules` **整体失效重建**，不做单独失效。
+## 4. 持久化与恢复
 
-## 4. 效果执行细节
+- `SettlementLedger` 存于**主世界** `SavedData`（`itemdespawntowhat_settlements`），维度卸载/停服都不丢记录；已完成且交付完毕的旧记录按 tick 过期（保留 6000 tick）并按条数上限兜底裁剪，**未结清记录一条不裁**。
+- 中断（`onCancelled`）与异常（`step` 的 catch）走同一条 `abort` 顺序：置 `cancelled`、以 `held.getCount()` 同步待返还、记 `INTERRUPTED`/`FAILED`、释放未支付催化剂预留、写盘。**本路径不做任何世界写入**（维度卸载/停服时加入世界不安全）。
+- 恢复：`onServerTick` 首次服务端 tick 后全局扫描一次，`rescan`（维度加载/重载）补扫该维度；未加载维度的记录保持在账本等待。`SettlementRecovery` 只交付记录里的 `pendingDelivery`，**不恢复旧效果队列、不重放已开始的组**；`needsRecovery()` 只看待返还库存（`pendingDelivery > 0 && !source.isEmpty()`），绝不把"已派发未回执"的 `pendingUnits` 当成待返还库存。`activeRecoveries` 幂等位保证同一记录同一时刻只允许一个交付任务。
 
-- **顺序启动**：效果列表按定义序 `dispatchEffect`；`dispatchEffect` 只把效果登记到 `effects` 队列（`delay = max(0, effect.delayTicks())`，**相对规则触发时刻**）。
-- **求值时机**：`runEffect` 在任务**实际到期时**才依序判定：① 效果级 `conditions`（不成立跳过）；② `chance`（`random().nextDouble() >= chance` 跳过）；③ 类型未注册 → 记 ERROR 并返回；④ 调执行器。
-- **异常隔离**：`runEffect` 捕获 `RuntimeException`，记录"规则 id + 效果类型 + 位置"后吞掉，**不影响后续效果**；`TickScheduler.runDue` 另有兜底（`VirtualMachineError` 重抛，其余记日志）。执行器约定：**不捕获、不吞异常**。
-- **区块门禁**：通用入口 `RuntimeEffectContext.schedule` → `runWhenLoaded`：目标位置区块未加载则 `schedule(20, task)` 重试，**不主动加载区块**。多个执行器内部另有门禁（生成实体检查实际落点、闪电/爆炸/箭雨/放置各有半径检查）。
-- **快照 vs 实时**：`sourceStack()` 是触发时刻 `copy()` 快照（只读用途，如 `place_block.use_source_block`）；`consume_source` 必须用**实时堆叠**。
+## 5. 实体状态（`core/state`）
 
-## 5. 扩展点
+| 对象 | 环境保护 | 转化状态 |
+|---|---|---|
+| 新产物掉落物 | 默认 2 秒（`new_product_protection_seconds`），仅防火 / 岩浆 / 仙人掌伤害 | 默认 5 秒转化冷却（`conversion_cooldown_seconds`） |
+| 未消耗源物品的返还掉落物 | 本实体生命周期内永久防上述三种伤害 | 本实体生命周期内永久禁转 |
 
-- **改排期/退避语义**：改 `ConversionRuntime.scheduleInitial` / `attempt` 与 `ServerConfig.backoffTicks`。
-- **改规则选择排序**：改 `RuleIndex.build` 的比较键。
-- **改条件求值**：改 `ExpressionEvaluator`（保持全短路；`surrounding_blocks` 的未加载区块门禁在其中）。
+状态只挂在实体上、不进 `ItemStack`：拾取后实体消亡，重丢得到的是普通掉落物。计时用绝对值服务端游戏刻（`ServerLevel#getGameTime()`）：卸载不暂停、重启后继续。时长由 `DropStateStore.configure` 在平台引导时注入，`0` 表示不授予。保护仅豁免三类环境伤害（`DropStateStore.blocksEnvironmentalDamage` 经 `DamageClassification` 判定，先于原版扣血）；合并时永久标志不一致禁止合并，临时状态取较晚到期刻。授予入口唯一：`ReturnItemSpawner.applyGrant`（转化产物 → `grantNewProduct`，返还物 → `grantPermanentReturn`）。
+
+## 6. 效果回执与上下文
+
+- `RuntimeEffectContext` **按转化组**构造（每组一个实例）：`rounds()` 恒为 1（一轮 = 一组），`coveredSourceItems()` 是本组实扣源数量，`outcomeId` / `groupIndex` / `groupCount` / `groupSourceCost` 描述本组；`reportProgress(units)` 把"已受理"收敛为"已完成"；`safeSpawn()` / `fillOrigin()` / `positionSearchChecksPerTick()` 是候选级位置策略。
+- `schedule(delay, task)` 经公共调度器以 `EFFECT` 任务登记，经 `runWhenLoaded` 在目标区块未加载时 `schedule(20, task)` 重试，**不主动加载区块**。
+- `runEffect`：先判效果级 `conditions`（不成立 → `SKIPPED`），再判 `chance`（落空 → `SKIPPED`），类型未注册 → `FAILED`，否则调执行器；`RuntimeException` 被捕获记失败，不影响后续效果。结算层 `account()` 分类计数：`APPLIED` → `addApplied`，`DEFERRED` → `addApplied` + `addPending`，`SKIPPED` → `effectSkipped`，`FAILED` → `effectFailed`。
+
+## 7. 扩展点
+
+- **改排期/退避语义**：改 `ConversionRuntime.scheduleInitial` / `attempt` / `reschedule` 与 `ServerConfig.backoffTicks`。
+- **改规则选择排序**：改 `RuleIndex.RULE_ORDER` 比较键。
+- **改条件求值**：改 `ExpressionTreeEvaluator`（保持四态；`inverted` 只互换 MATCH/NO_MATCH）。
+- **改候选组合/容量语义**：改 `ConversionSettlement.plan` / `capacityGroups` / `dispatch`。
+- **改数量账目或恢复**：改 `SettlementRecord` 字段与 `SettlementLedger` / `SettlementRecovery`。
+- **改实体状态策略**：改 `DropState` / `DropStateStore`（时长字段见 [config.md](../systems/config.md)）；平台存取落在 `IPlatformHelper`。
 - **新增上下文能力**：改 `core/api/EffectContext` / `ConditionContext` 与两个 `Runtime*Context` 实现。
 
-## 6. 相关
+## 8. 相关
 
 - 端到端链路：[../flows/conversion-lifecycle.md](../flows/conversion-lifecycle.md)
 - 调度预算与缓存：[../systems/scheduling-budget.md](../systems/scheduling-budget.md)、[../systems/caching-indexing.md](../systems/caching-indexing.md)
 - 类型与消耗语义：[type-system.md](type-system.md)、[rule-model.md](rule-model.md)
-- 决策：[ADR-0015](../../../adr/0015-runtime-scheduling-and-tracking.md)
+- 平台触发入口与 Mixin：[platform.md](platform.md)
+- 配置字段：[../systems/config.md](../systems/config.md)
+- 决策：[ADR-0015](../../../adr/0015-runtime-scheduling-and-tracking.md)、[ADR-0017](../../../adr/0017-backend-cutover-and-budgeted-effects.md)、[round-2 决策 0001](../../../archive/backend-round-2/docs/adr/0001-conversion-commitment.md)

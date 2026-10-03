@@ -1,7 +1,7 @@
 # ItemDespawnToWhat 配置领域
 
-> 当前状态（2026-10-03）：后端条件树、独占编辑协议 v2、客户端 UI kit 与编辑数据结构、选择目录数据源、规则编辑器界面与表单引擎、草稿持久化与撤销均已落地（P1–P8 代码落盘，构建与静态复核通过）；双平台游戏内手动验收待执行，见 [manual-acceptance.md](docs/guide/manual-acceptance.md)。
-> 权威契约：[plan-frontend-rewrite-contract.md](docs/plan/plan-frontend-rewrite-contract.md)（冻结形状）与 [plan-frontend-rewrite-forms.md](docs/plan/plan-frontend-rewrite-forms.md)（逐字段取值域）；本轮决策见 [docs/adr/](docs/adr/) 的 0018–0022。
+> 当前状态（2026-10-03）：后端条件树、独占编辑协议 v2、客户端 UI kit 与编辑数据结构、选择目录数据源、规则编辑器界面与表单引擎、草稿持久化与撤销均已落地（P1–P8 代码落盘，构建与静态复核通过）；第二轮后端改造（消失方式触发、固定成本、候选结果、共享调度器、掉落物状态、结算返还）已实现并归档，双平台游戏内手动验收待执行，见 [manual-acceptance.md](docs/guide/manual-acceptance.md)。
+> 权威契约：[plan-frontend-rewrite-contract.md](docs/plan/plan-frontend-rewrite-contract.md)（冻结形状）与 [plan-frontend-rewrite-forms.md](docs/plan/plan-frontend-rewrite-forms.md)（逐字段取值域）；前端决策见 [docs/adr/](docs/adr/) 的 0018–0022，第二轮后端决策见 0023–0024 与归档底稿 [docs/archive/backend-round-2/PLAN.md](docs/archive/backend-round-2/PLAN.md)（§2 行为契约）。
 
 掉落物在自然消失前，按数据包 / config 覆盖层中的规则转化为其他内容（物品、实体、方块、经验、世界效果等）。本词汇表覆盖新链路（`core/**`）的配置与运行时词汇；已退役的历史术语标注为「旧链路」。
 
@@ -14,7 +14,7 @@
 | `common/src/main/resources/` | 内置数据包（`data/itemdespawntowhat/idtw/**`）、语言文件、`META-INF/services` |
 | `fabric/**`、`neoforge/**` | 平台接入：loader 事件、平台实现、网络收发落地 |
 
-后端分层（均位于 `core/` 下）：`api`（对外接口与常量）、`model`（规则模型与 Codec）、`type`（内置条件/效果类型）、`registry`（类型注册表）、`runtime`（求值、调度、执行）、`service`（加载/校验/保存/编辑会话）、`network`（协议 DTO 与传输）、`catalog`（选择目录）、`command`、`load`、`debug`、`extension`（`RuleTypeProvider` SPI）。
+后端分层（均位于 `core/` 下）：`api`（对外接口与常量）、`model`（规则模型与 Codec）、`type`（内置条件/效果类型）、`registry`（类型注册表）、`runtime`（求值、调度、执行）、`state`（掉落物保护/冷却/禁转状态）、`service`（加载/校验/保存/编辑会话）、`network`（协议 DTO 与传输）、`catalog`（选择目录）、`command`、`load`、`debug`、`extension`（`RuleTypeProvider` SPI）。
 
 硬性隔离规则：
 
@@ -38,8 +38,14 @@
 | `notes` | 否 | 备注（界面上限 1024 码点） |
 | `conditions` | 否 | 规则级**条件树**；无条件的规则**省略该字段**（不得输出 `null`） |
 | `source` | 是 | `{ "items": [...], "exclude": [...] }`，项为物品 id 或 `#tag` |
-| `trigger_after_seconds` | 否 | 触发年龄门槛（秒） |
-| `effects` | 是 | 有序效果列表；每个效果也可带自己的 `conditions`（同一条件树形状） |
+| `trigger_after_seconds` | 否 | 触发年龄门槛（秒），缺省 300 |
+| `triggers` | 否 | 消失方式集合，取值 `natural` / `fire` / `lava` / `cactus`；缺省仅 `natural` |
+| `source_cost` | 否 | 固定源成本（正整数）；缺省时按隐式消耗 1 或显式 `consume_source` 之和推算 |
+| `catalyst_cost` | 否 | 催化剂固定成本**对象** `{ "items": [...], "count": 1, "radius": 1 }`（整数写法已废弃） |
+| `combination` | 否 | 候选结果组合模式，`round_robin`（默认）/ `priority` |
+| `outcomes` | 否 | 候选结果数组，元素为 `{ "id", "effects", "safe_spawn", "fill_origin" }`；与顶层 `effects` **二选一** |
+| `effects` | 否 | 平铺效果列表；每个效果也可带自己的 `conditions`（同一条件树形状）。`effects` 与 `outcomes` **至少声明一个、且不得同时声明** |
+| `schema_version` | 否 | 规则契约结构版本（正整数）；当前仅支持 `1`，其它值校验拒绝 |
 
 覆盖控制条目只声明 `id` 加一个开关：`{ "id": "...", "disabled": true }` 停用同 id 基底规则，`{ "id": "...", "delete": true }` 删除同 id 基底规则。
 
@@ -65,7 +71,7 @@
 | `gui.itemdespawntowhat.edit.*` | **界面文本**：标题、按钮、字段标签、枚举值、类型显示名 | `gui.itemdespawntowhat.edit.field.y_level.min` |
 | `itemdespawntowhat.edit.*` | **协议回执与校验问题的 messageCode**（服务端生成、客户端翻译） | `itemdespawntowhat.edit.status.lock_busy` |
 
-字段标签 `gui.itemdespawntowhat.edit.field.<类型 path>.<字段>`、枚举值 `gui.itemdespawntowhat.edit.enum.<组>.<值>`、类型显示名 `gui.itemdespawntowhat.edit.<condition|effect>.<类型>`。`en_us.json` 与 `zh_cn.json` 的键集合必须完全一致（当前各 630 个键）。协议键与消息码细节见 [docs/guide/message-codes.md](docs/guide/message-codes.md)。
+字段标签 `gui.itemdespawntowhat.edit.field.<类型 path>.<字段>`、枚举值 `gui.itemdespawntowhat.edit.enum.<组>.<值>`、类型显示名 `gui.itemdespawntowhat.edit.<condition|effect>.<类型>`。`en_us.json` 与 `zh_cn.json` 的键集合必须完全一致（当前各 698 个键）。协议键与消息码细节见 [docs/guide/message-codes.md](docs/guide/message-codes.md)。
 
 ## 语言
 
@@ -78,7 +84,7 @@ GUI 入口卡片：一个模板对应一种效果类型，点击模板 = 新建�
 _Avoid_: 转化类型（后端已退役）、config category
 
 **规则 (Rule)**:
-后端**唯一的配置单元**：`id` + 源匹配 + 条件树 + 有序效果列表（外加 `enabled` / `priority` / `display_name` / `notes` / `trigger_after_seconds`）。同一掉落物只会执行**优先级最高的一条**命中规则，"一次多效果"由规则内的效果列表表达。`id` 是唯一身份，`display_name` 只影响显示、不参与排序。
+后端**唯一的配置单元**：`id` + 源匹配 + 消失方式集合 + 条件树 + 固定成本 + 候选结果集合与组合模式（外加 `enabled` / `priority` / `display_name` / `notes` / `trigger_after_seconds` / `schema_version`）。同一掉落物只会执行**优先级最高的一条**命中规则，"一次多效果"由规则内的效果列表（顶层 `effects` 或候选结果 `outcomes` 内的效果）表达。`id` 是唯一身份，`display_name` 只影响显示、不参与排序。
 _Avoid_: 转化规则（旧链路叫法）、配置项（口语可接受）
 
 **规则 id (Rule Id)**:
@@ -98,7 +104,7 @@ _Avoid_: 结果（旧链路叫法）、动作（口语可接受）
 _Avoid_: 转化类型、效果种类
 
 **消耗效果 (Consumption Effect)**:
-`consume_source` / `consume_catalyst` / `consume_fluid` 三个效果类型：消耗是**效果**而不是条件的副作用。规则未声明任何 `consume_*` 时每轮隐式消耗 1 个源物品，按整堆展开轮次。
+`consume_source` / `consume_catalyst` / `consume_fluid` 三个效果类型：消耗是**效果**而不是条件的副作用。每组源成本 = 显式 `source_cost`；未声明时按隐式消耗 1 个源物品（未声明任何 `consume_*`）或显式 `consume_source.count` 之和推算；`consume_fluid` 只作实时存在条件，不换算份数。
 _Avoid_: 消耗指令（旧链路叫法）
 
 **条件 (Condition)**:
@@ -234,7 +240,7 @@ _Avoid_: i18n key 拼接散落在界面代码
 ## 选择目录
 
 **选择目录 (Rule Catalog)**:
-供编辑器"按名字挑 ID"的服务端目录，共 8 类 `RuleCatalogType`：ITEM / BLOCK / ENTITY / FLUID / LOOT_TABLE / BIOME / DIMENSION / TAG。数据来源：静态注册表（前四类）、服务端可重载数据（战利品表、标签）、维度/群系注册表（`registryAccess()`）。客户端按名字挑 ID **只能走本目录**，不允许手输注册表 id。
+供编辑器"按名字挑 ID"的服务端目录，共 9 类 `RuleCatalogType`：ITEM / BLOCK / ENTITY / FLUID / MOB_EFFECT / LOOT_TABLE / BIOME / DIMENSION / TAG。数据来源：静态注册表（物品、方块、实体、流体、状态效果）、服务端可重载数据（战利品表）、动态注册表（群系）、已加载维度键（维度）、五注册表标签合并（标签）。客户端按名字挑 ID **只能走本目录**，不允许手输注册表 id。
 _Avoid_: 注册表浏览（口语可接受）
 
 **目录条目 (Catalog Entry)**:
@@ -251,12 +257,48 @@ _Avoid_: 错误文本（服务端不下发成品文案）
 
 ## 核心玩法（运行时）
 
+**消失方式 (Trigger Kind)**:
+物品被销毁（消失）的途径类别，取值 `natural` / `fire` / `lava` / `cactus`，一条规则可声明多种；未声明时按仅自然消失。自然消失沿用年龄门槛；三类环境销毁无等待、在销毁当刻判定，不额外设置转化倒计时。
+_Avoid_: 转化条件（消失方式与其他匹配条件分别描述）
+
+**固定成本 (Fixed Cost)**:
+每组转化固定消耗的源物品数量：显式 `source_cost`（正整数）优先，否则按隐式 1 或显式 `consume_source.count` 之和推算。一组按固定成本整体结算、不按比例拆成半组；输入不足一组成本时不强行执行。
+_Avoid_: 概率成本（源与催化剂是固定成本，不配概率/条件/延迟）
+
+**催化剂固定成本 (Catalyst Cost)**:
+规则级 `catalyst_cost` 对象 `{ items, count, radius }`，字段语义与 `consume_catalyst` 效果一致；必须足量支付，不能少扣却照常产出。与同名消耗效果互斥。
+_Avoid_: 催化剂条件（判定用 `catalyst_present`，成本另指）
+
+**转化组 (Conversion Group)**:
+按固定成本消耗源物品并执行**一个候选结果**的一组转化，是结算的基本单位；组数由可用源物品与每组成本决定，同一候选内的多个产出效果共同限制完整组数。
+_Avoid_: 执行批（调度分批不是结算单位）
+
+**候选结果 (Outcome Candidate)**:
+一个转化组可选的结果，形如 `{ "id", "effects", "safe_spawn", "fill_origin" }`；候选标识在规则内唯一。未声明 `outcomes` 时由顶层 `effects` 隐式映射为唯一候选 `default`。
+_Avoid_: 效果（候选与其中的单个效果不是同一层级）
+
+**组合模式 (Combination Mode)**:
+从多个候选结果中选一个的方式：`round_robin`（默认，按声明顺序轮询）与 `priority`（取第一个可完成一组的候选）。每个转化组只选一个候选，容量不足的候选跳过。
+_Avoid_: 效果排序（组合模式决定选哪个结果）
+
+**结算与返还 (Settlement & Return)**:
+规则命中后整堆源物品转入结算库存，按组支付成本并交付产物；已开始组不重放、不补做，失败只记录真实成功量。未开始部分对应的源物品返还，找不到落点时保存为待返还记录，重启且目标维度加载后交付。
+_Avoid_: 事务回滚（结算不做整批回滚）
+
+**新产物状态 (Drop State)**:
+实体层的转化状态（`core/state`，不进 `ItemStack`）：新产物默认 2 秒环境伤害保护 + 5 秒转化冷却；返还物在本实体生命周期内永久保护且永久禁转。拾取后重丢得到普通掉落物，不继承任何状态。
+_Avoid_: 物品 NBT（状态挂在实体层）
+
+**一次性效果 (One-shot Effect)**:
+对同一源最多尝试一次的世界效果（`lightning` / `explosion` / `arrow_rain` / `weather`）：不乘组数、不参与容量计算。
+_Avoid_: 无上限效果（容量上限与尝试次数是两个概念）
+
 **转化锁 (Conversion Lock)**:
 一个掉落物同一时刻只允许一次转化流程在跑；进入执行前加锁，结束后释放，避免同一实体被重复转化。
 _Avoid_: 互斥锁（口语可接受）
 
 **隐式消耗 (Implicit Consumption)**:
-规则未声明任何 consume_* 时，每轮先隐式消耗 1 个源物品，按整堆展开轮次；显式消耗按效果顺序启动。源快照在消费前保存，后续效果使用它。
+规则未声明任何 `consume_*` 时，每组先隐式消耗 1 个源物品，按整堆展开组数；显式消耗按固定成本统一支付。源快照在消耗前保存，后续效果使用它。
 _Avoid_: 默认消耗（口语可接受）
 
 **结果上限 (Limit)**:
@@ -284,7 +326,7 @@ _Avoid_: 检测距离
 | 编辑会话锁 (Edit Session Lock) | 由**全局目标级**「独占编辑会话」取代（早期曾短暂改为 per-player 会话 + 版本戳，已废弃） |
 | 视图模型 (RuleView / EffectView / ConditionView / SourceView) | 实现已删除；客户端改为 `RuleDraft`（JsonObject 事实来源）+ 描述符驱动表单 |
 | 声明式参数规格 (ParamSpec / RuleFormBuilder / FormRenderer) | 已删除；改为「类型编辑器描述符」+ `EditorField` |
-| schema 版本 (schema_version) | 删除；旧配置的一次性转换入口 `/idtw config convert` 已于 2026-10-03 随 P8 结论**退役**（命令与 `RuleConvertService` 已删除），旧 JSON 原样保留但不再加载，改用 `/idtw config edit` 重建，见[破坏性更新说明](docs/guide/update-notes.md) |
+| 转换指令 (`/idtw config convert`) | 命令与 `RuleConvertService` 已删除（2026-10-03 随 P8 结论退役）；旧 v1.2.1 配置不再加载，改用 `/idtw config edit` 重建，见[破坏性更新说明](docs/guide/update-notes.md)。注意：`schema_version` 已于第二轮**重新引入**为现行规则字段（见上文「规则 JSON 顶层形态」） |
 | 字段中心 schema (`ConfigFieldSchema`) | 由「类型编辑器描述符」取代 |
 
 ## 扩展点一览

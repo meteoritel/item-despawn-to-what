@@ -10,7 +10,7 @@
 
 ## 决策
 
-1. **Rule 增加可选展示名**：`public record Rule(ResourceLocation id, boolean enabled, int priority, @Nullable String displayName, @Nullable String notes, SourceMatcher source, ConditionExpression conditions, int triggerAfterSeconds, List<Effect> effects)` —— `displayName` 紧跟在 `priority` 之后、`notes` 之前（字段顺序冻结，见契约 §2.7）。
+1. **Rule 增加可选展示名**：当前 `public record Rule(ResourceLocation id, boolean enabled, int priority, @Nullable String displayName, @Nullable String notes, SourceMatcher source, ConditionExpression conditions, int triggerAfterSeconds, List<Effect> effects, Set<TriggerKind> triggers, @Nullable Integer sourceCost, @Nullable CatalystCost catalystCost, CombinationMode combination, List<OutcomeCandidate> outcomes, int schemaVersion)` —— `displayName` 紧跟在 `priority` 之后、`notes` 之前（此处字段顺序冻结，见契约 §2.7）；`effects` 之后的字段为 2026-10-03 第二轮后端追加（见 [ADR-0023](0023-triggers-fixed-cost-and-complete-group-settlement.md)），不影响 `displayName` 的位置与语义。
 2. **JSON 字段名 `display_name`**（`RuleFields.DISPLAY_NAME`），加入 `KNOWN_RULE_FIELDS`，因此未知字段检查不会把它当成噪声。
 3. **规范化**：`trim` 后为空串 → 视为未命名（`null`）；长度按 **Unicode code point** 计，超过 `ConditionLimits.MAX_DISPLAY_NAME_CODEPOINTS`（128）即校验失败（`RuleValidation`）。
 4. **技术 id 仍是唯一身份**：覆盖、删除、索引、命令、日志与覆盖文件名一律按 id 匹配；`display_name` **不参与**任何身份判定，也不影响规则排序（排序键为优先级 desc → 条件叶数 desc → 定义序）。

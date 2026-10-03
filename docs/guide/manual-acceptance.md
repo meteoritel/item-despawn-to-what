@@ -80,7 +80,7 @@ powershell -ExecutionPolicy Bypass -File tools/dsh-build.ps1 -Tasks "build"
 | # | 操作 | 预期 |
 |---|---|---|
 | 2.2.1 | 打开界面看列表 | 列出全部规则；每行显示 显示名（未设置则 id）、id、来源（`overlay` / `datapack` / `mixed`）、状态（`active` / `disabled` / `masked` / `invalid`）、可编辑标记 |
-| 2.2.2 | 观察内置示例规则 | 8 个内置规则条目可见（清单见 4.1）；来源为数据包；显示名为中英对照（如"鸡肉腐化 / Chicken to Rotten Flesh"） |
+| 2.2.2 | 观察内置示例规则 | 10 个内置规则条目可见（清单见 4.1）；来源为数据包；显示名为中英对照（如"鸡肉腐化 / Chicken to Rotten Flesh"） |
 | 2.2.3 | 搜索框输入"鸡肉" | 命中 `builtin_item_to_item` |
 | 2.2.4 | 搜索框输入 "chicken" | 命中同一条（按技术 id 搜索） |
 | 2.2.5 | 搜索框输入 "itemdespawntowhat:" | 命中全部本模组规则（按命名空间搜索） |
@@ -203,7 +203,7 @@ powershell -ExecutionPolicy Bypass -File tools/dsh-build.ps1 -Tasks "build"
 
 ### 4.1 内置示例规则（第 5 节的最小用例直接引用它们）
 
-全部位于模组自带数据包 `data/itemdespawntowhat/idtw/rules/` 下，**每个文件是"顶层规则数组"（多规则一文件，只读）**，`trigger_after_seconds` 均为 300 秒：
+全部位于模组自带数据包 `data/itemdespawntowhat/idtw/rules/` 下，**文件为只读的顶层规则对象或规则数组**（8 个文件共 10 条规则；多规则文件用数组），`trigger_after_seconds` 均为 300 秒：
 
 | 文件 | 规则 id | 源物品 | 内容 | 默认启用 |
 |---|---|---|---|---|
@@ -328,7 +328,7 @@ Fabric 与 NeoForge **各跑一遍**，结果应一致：
 | # | 缺口 | 现状/证据 | 用户可见影响 | 归属 |
 |---|---|---|---|---|
 | 8.1 | ~~**编辑界面未接线**~~ **已解决**（2026-10-03 复核） | `RuleEditorOpener.bootstrap()` → `EditorScreenHooks.setOpener(...)` 已在 `fabric/src/main/java/com/meteorite/itemdespawntowhat/client/ItemDespawnToWhatClient.java:21` 与 `neoforge/src/main/java/com/meteorite/itemdespawntowhat/client/register/RegisterEvent.java:24` 调用（旧占位屏已删除） | 无（第 2 节主链、4.2 界面路径、第 6 节现已可执行） | P5 已完成 |
-| 8.2 | ~~语言文件缺 43 个界面键~~ **已解决**（2026-10-03 收口） | 两个语言文件各 **631 键**、键集合完全一致、无空值无重复；源码字面量 key 全命中（含 `…edit.list.*`、`…edit.preset.*`、`…edit.undo.*` 13 个、`…edit.enum.*` 13 个、`…edit.field.*`） | 无 | P5 已完成 |
+| 8.2 | ~~语言文件缺 43 个界面键~~ **已解决**（2026-10-03 收口） | 两个语言文件各 **698 键**、键集合完全一致、无空值无重复；源码字面量 key 全命中（含 `…edit.list.*`、`…edit.preset.*`、`…edit.undo.*` 15 个、`…edit.enum.*` 13 个、`…edit.field.*`） | 无 | P5 已完成 |
 | 8.3 | ~~`client/ui` 未读取 `EditorField.enumGroup()`~~ **不成立**（2026-10-03 复核） | `client/ui/screen/form/FormControl.java:596` 读取 `field.enumGroup()` 并拼 `gui.itemdespawntowhat.edit.enum.<组>.<值>`（组名为空才回退 `field.name()`）；5 组 group 定义在 `client/edit/BuiltinEditorDescriptors.java`（`biome_mode` / `weather_kind` / `place_block_shape` / `arrow_rain_pickup` / `weather_effect_mode`） | 无 | P5 已完成 |
 | 8.4 | ~~**P6 未实现**~~ **已解决**（task-9 落盘 + task-17 收口） | 草稿落 `config/itemdespawntowhat/client/editor-drafts/`（临时文件 + 原子改名、写盘失败自动重排）、跨界面/断线/重启恢复、撤销重做上限 100（含删除标记与「恢复原始版本」）、多规则统一变更集、整条规则三态冲突（`TARGET_MISSING` / `TARGET_EXISTS` / `REMOTE_CHANGED`）与冲突弹窗 | 无（2.1.4 / 2.6.6 / 6.5 的草稿预期可验收）；主线程同步写盘见 8.10 | P6 已完成 |
 | 8.5 | 快捷键**默认未绑定** | `client/key/ModKeyBindings.java:11-15`：`InputConstants.UNKNOWN`；处理逻辑在 `client/key/EditorShortcut.java`（有会话才重开界面，无会话提示 `gui.itemdespawntowhat.edit.hint.use_command`，开发环境开原型屏）。界面接线已完成（见 8.1） | 需在 选项 → 控制 手动绑定；无会话时不会弹编辑器（符合契约 §5.3，不是缺陷） | 发布说明需注明默认按键 |

@@ -79,7 +79,7 @@ public record RuleIssue(String severity, @Nullable String ruleId, String origin,
 
 ## 5. 新增一个消息码
 
-1. 在 `en_us.json` 与 `zh_cn.json` **同时**添加同名键——两个文件的键集合必须完全一致（当前各 362 个键）；
+1. 在 `en_us.json` 与 `zh_cn.json` **同时**添加同名键——两个文件的键集合必须完全一致（当前各 698 个键）；
 2. 命名：回执状态用 `status.<小写下划线>`，问题用 `issue.<类别>`，其余用动词短语（`save_failed` 等）；
 3. 参数用 `%s`（或 `%1$s`），顺序必须与 `messageArgs` 一致；
 4. 服务端生成时必须同时给出 `fallbackMessage`（英文），不要只在客户端拼字符串；
@@ -90,16 +90,18 @@ public record RuleIssue(String severity, @Nullable String ruleId, String origin,
 
 12 个 `status.*`（见第 2 节） + 第 3 节 16 个。
 
-## 7. 已知缺口（记录于 2026-10-03）
+## 7. 界面/资源键缺口（已收口，2026-10-03 复核）
 
-以下键被代码引用但语言文件尚未落盘，属于界面/资源侧待补项（非协议键）：
+曾记录的四类「界面/资源侧待补键」（非协议键）**均已落盘**；两个语言文件各 698 键、键集合完全一致，源码字面量 key 全命中：
 
-| 缺失键 | 引用点 |
+| 曾缺失键 | 现状 |
 |---|---|
-| `gui.itemdespawntowhat.edit.list.empty` / `.input_hint` / `.accessible_name` | `client/ui/widget/UiListEditor.java` |
-| `gui.itemdespawntowhat.edit.preset.baby` / `.adult` | `client/edit/BuiltinEditorDescriptors.java` |
-| `gui.itemdespawntowhat.edit.undo.*`（13 个，`EditSession.OP_*`） | `client/edit/EditSession.java` |
-| `gui.itemdespawntowhat.edit.enum.<组>.<值>`（5 组共 13 个） | `BuiltinEditorDescriptors` 的 `enumIn(...)`；且当前 `client/ui` 尚未读取 `EditorField.enumGroup()` |
+| `gui.itemdespawntowhat.edit.list.*`（含 `.empty` / `.input_hint` / `.accessible_name`） | 已补（12+ 个 `.list.*` 键，`client/ui/widget/UiListEditor.java` 引用全部命中） |
+| `gui.itemdespawntowhat.edit.preset.baby` / `.adult` | 已补 |
+| `gui.itemdespawntowhat.edit.undo.*`（15 个，`EditSession.OP_*`） | 已补 |
+| `gui.itemdespawntowhat.edit.enum.<组>.<值>`（5 组共 13 个） | 已补；`client/ui/screen/form/FormControl.java` 读取 `EditorField.enumGroup()` 拼键 |
+
+见 [manual-acceptance.md](manual-acceptance.md) 第 8 节 8.2 / 8.3。
 
 ## 8. 相关
 

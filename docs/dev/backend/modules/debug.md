@@ -32,7 +32,7 @@
 - `expiry` 场景用**真实**寿命提供器 `runtime.lifespanTicks(...)`，直接设原版 NBT `Age`。
 - 测量窗口只在准备 + 20 tick 预热后开始；服务端 tick 耗时直接读 `server.getTickTimesNanos()`。
 
-计数键（`DebugScenarioRun`）：`TRACKED` / `AGE_NOT_READY` / `CONDITION_FALSE` / `CONDITION_TRUE` / `RETRY` / `CONVERT` / `OUTPUT_ITEMS` / `NATURAL_EXPIRY_DEFERRED` / `EXCLUDED` / `ERROR` / `DUPLICATE_CONVERSION` / `UNEXPECTED_OUTPUT`。
+计数键（`DebugScenarioRun`）：`TRACKED` / `AGE_NOT_READY` / `CONDITION_FALSE` / `CONDITION_TRUE` / `RETRY` / `CONVERT` / `OUTPUT_ITEMS` / `NATURAL_EXPIRY_DEFERRED` / `EXCLUDED` / `ERROR` / `DUPLICATE_CONVERSION` / `EARLY_CONVERSION` / `UNEXPECTED_OUTPUT`。
 
 ## 3. 命令
 
@@ -41,6 +41,7 @@
 | 命令 | 用途 |
 |---|---|
 | `/idtw debug` / `help` | 帮助（i18n） |
+| `/idtw debug examples` | 列出全部功能与性能场景命令及预期（i18n） |
 | `/idtw debug run <场景>` | 功能场景；目录注册18个，输入由声明提供，默认12秒 |
 | `/idtw debug bench baseline [秒数 10..300]` | 无新增负载基线（默认 60 秒） |
 | `/idtw debug bench convert\|retry [实体数 1..1000] [秒数]` | 转化 / 失败重试负载（默认 1000 / 60） |
@@ -48,7 +49,7 @@
 | `/idtw debug pipeline p0\|p1\|p2 [间隔秒]` | 环境基线、4轮冒烟、其余14轮功能 |
 | `/idtw debug pipeline p3 [最高实体数] [间隔秒]` | 逐级100/250/500/1000，默认最高1000 |
 | `/idtw debug pipeline p4 [实体数] [间隔秒]` | 固定档3组重复，默认100源 |
-| `/idtw debug pipeline status\|stop` | 阶段状态或中止后续计划 |
+| `/idtw debug pipeline` / `help` / `status` / `stop` | 阶段帮助、进度状态或中止后续计划 |
 | `/idtw debug status` | 场景或活动阶段进度 |
 | `/idtw debug mark <描述>` | 记录肉眼观察（每轮封顶 64 条，单条 ≤160 UTF-16） |
 | `/idtw debug stop` | 停止本轮；活动流水线同时取消后续计划（INCOMPLETE） |

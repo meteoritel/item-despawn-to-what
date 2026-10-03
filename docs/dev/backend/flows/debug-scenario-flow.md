@@ -12,20 +12,20 @@
   → DebugScenarioDefinition 用真实 Codec/校验/RuleIndex 建内存场景规则 + 预期
   → DebugScenarioRun 状态机：SETUP → WARMUP(20 tick) → MEASURE → CLEANUP
   → ConversionRuntime 在真实链路回调 observe/converted/schedule/prepareOutput/outputAdded
-  → DebugLog 输出 START/过程事件/FRAME/END；verify() 判定 PASS/FAIL/INCOMPLETE
+  → DebugLog 输出 START/过程事件/FRAME/END；`finish()` 汇总 expected/checks/actual 并判定 PASS/FAIL/INCOMPLETE
 ```
 
 ## 2. 分步
 
 | 阶段 | 动作 | 关键点 |
 |---|---|---|
-| 命令 | `RuleDebugCommands.build` | 仅在 development 环境挂载；带宽 `help` / `run` / `bench` / `status` / `mark` / `stop` |
+| 命令 | `RuleDebugCommands.build` | 仅在 development 环境挂载；命令树 `help` / `examples` / `run` / `bench` / `pipeline` / `status` / `mark` / `stop` |
 | 登记 | `DebugScenarioManager` | 每服务器同时只允许一轮；UUID → (run, source) 绑定 |
-| 场景规则 | `DebugScenarioDefinition` | 用**真实** `RuleCodecs` / `RuleValidation` / `RuleIndex`；origin=`development-memory`；FUNCTIONAL 场景名集合 |
+| 场景规则 | `DebugScenarioDefinition` | 用**真实** `RuleCodecs` / `RuleValidation` / `RuleIndex`；origin=`development-memory`；规则与场景名来自 `idtw-debug/scenarios/manifest.json`，非硬编码列表 |
 | 准备 SETUP | 生成测试源 | 自动分批（每 tick ≤128 源、2ms 软预算）；不强制加载区块；实体带 `idtw_debug_fixture` + 唯一 `custom_data`，关闭重力与拾取 |
 | 预热 WARMUP | 20 世界 tick | 生成/预热成本不混入测量窗口 |
 | 测量 MEASURE | 采集窗口 | `DebugPerformanceWindow` 采服务端 tick 耗时 + checks/effects 两队列分位；`DebugMeasurements` 有界样本（≤12000） |
-| 校对 | `DebugScenarioRun.verify()` | 依据实际计数键（TRACKED/CONVERT/OUTPUT_ITEMS/…）判 PASS/FAIL |
+| 校对 | `DebugScenarioRun.finish()` → `DebugScenarioProbe.checks()` | 依据实际计数键（TRACKED/CONVERT/OUTPUT_ITEMS/…）与实物数量判 PASS/FAIL |
 | 清理 CLEANUP | 取消本轮任务、清理源与产物 | 精确取消本轮任务，**不清空普通队列**；不清理用户规则链 |
 
 ## 3. 隔离机制（关键）

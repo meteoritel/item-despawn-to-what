@@ -1,6 +1,7 @@
 # 运行时：到期事件 + 分桶调度 + per-level 追踪状态
 
 > 实施补充：本文的最新调度、区块生命周期、保存与前端边界以 [ADR-0017](0017-backend-cutover-and-budgeted-effects.md) 和 [当前架构](../dev/backend/README.md) 为准。
+> **部分已被取代（2026-10-03，第二轮后端）**：决策 3 的「每 tick `max_checks_per_tick` 分桶」已由公共共享预算调度器取代（[ADR-0024](0024-shared-server-tick-budget-scheduler.md)）；执行结算从「按堆叠预估 rounds」改为**完整转化组 + 守恒账目**（[ADR-0023](0023-triggers-fixed-cost-and-complete-group-settlement.md)）。追踪与规则选择语义仍现行。
 
 ## 背景
 旧运行时每 20 tick 全量遍历追踪集合，用"通过条件的检查次数"计时（`conversion_time` 标称秒、实为检查次数），热重载对已存在的掉落物无效，追踪表是静态 `Map<ServerLevel, ...>` 强引用维度对象且从不清理（内存泄漏）。规则选择还依赖引用身份比较，重载后语义未定义。

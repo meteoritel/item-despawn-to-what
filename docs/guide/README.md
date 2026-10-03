@@ -9,7 +9,7 @@
 | [custom-types.md](custom-types.md) | 注册自定义条件类型与效果类型（common 侧 SPI） |
 | [client-editor-spi.md](client-editor-spi.md) | 为自定义类型提供客户端表单描述，以及未注册类型的只读回退 |
 | [message-codes.md](message-codes.md) | 消息码（messageCode）命名、本地化前缀与新增流程 |
-| [update-notes.md](update-notes.md) | 破坏性更新说明：旧 v1.2.1 config 不再加载、重建入口与「无法保留」清单 |
+| [update-notes.md](update-notes.md) | 破坏性更新说明：旧 v1.2.1 config 不再加载、第二轮规则契约变更（触发方式/固定成本/候选结果/条件树）、重建入口与「无法保留」清单 |
 | [manual-acceptance.md](manual-acceptance.md) | 双平台手动验收清单（含已知缺口表），供回归与最终审阅 |
 
 后端模块的源码地图见 [../dev/backend/README.md](../dev/backend/README.md)。

@@ -2,6 +2,7 @@
 
 > 实施补充：本文的最新调度、区块生命周期、保存与前端边界以 [ADR-0017](0017-backend-cutover-and-budgeted-effects.md) 和 [当前架构](../dev/backend/README.md) 为准。
 > **局部已被取代（2026-10-03，P8 结论）**：本文「后果」中「迁移走 `/idtw config convert`」已失效——该转换入口与 `RuleConvertService` 已**整类删除**，旧 v1.2.1 配置不再加载、也不再提供自动或显式转换。见 [迁移评估 §5](../plan/v1.2.1-migration-evaluation.md) 与 [更新说明](../guide/update-notes.md)。本文其余结论不受影响。
+> **已扩展（2026-10-03，第二轮后端）**：决策 1 的 Rule 字段集已扩展——新增 `display_name`（见 [ADR-0021](0021-display-name-and-stable-ids.md)）与 `triggers` / `source_cost` / `catalyst_cost` / `combination` / `outcomes` / `schema_version`（见 [ADR-0023](0023-triggers-fixed-cost-and-complete-group-settlement.md)）；`conditions` 已从「DNF 表达式」改为**递归条件树**（见 [ADR-0018](0018-condition-tree-contract.md)）。「规则 + 效果两个领域概念」与扩展性结论仍现行。
 
 ## 背景
 旧链路是"一个转化类型 = 一个 Config 子类 = 一个 Executor = 一个结果"：9 个类型要维护 9 套 DTO、9 个校验入口与 2N 个类，新增一种效果要改约 8 处（注册表 / Config 子类 / Executor / 客户端 FormDefinition / Presenter / i18n / 文档 / 示例），且"结果"与"消耗"被拆在配置与执行两侧，无法表达"一次触发做多件事"。

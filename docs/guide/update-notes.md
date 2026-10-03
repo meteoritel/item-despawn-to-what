@@ -89,3 +89,19 @@ P8 评估的结论是**破坏性更新**：旧五类配置与最终模型之间�
 ## 7. 转换指令已退役
 
 `/idtw config convert` 及其实现（`core/command/RuleConvertService.java`）已删除，配置子命令现有 `reload / edit / validate / list / edit-lock status|release`。若你的脚本或说明文档里调用过 convert，请改用本说明第 3 节的手工重建流程。
+
+## 8. 第二轮规则契约变更（在同一新链路内，破坏性）
+
+第二轮后端改造（提交 `63eea8b`）在新链路内部再次调整了规则 JSON 契约。旧格式**一律明确报错、不做静默兼容**；命中下列字段的既有规则需按新写法改写（见 [manual-acceptance.md](manual-acceptance.md) 4.3.5）。
+
+| # | 变更 | 旧写法 → 新写法 |
+| --- | --- | --- |
+| 1 | 消失方式触发 | 新增 `triggers`（`natural` / `fire` / `lava` / `cactus` 数组）；**缺省仍仅自然消失**，声明环境方式后可在火/岩浆/仙人掌销毁时触发 |
+| 2 | 固定源成本 | 新增 `source_cost`（**必须为正整数**）；取消「源成本为 0 关闭消耗」的行为——只想消耗催化剂/流体的输入应作为催化剂，不作为源物品。`source_cost` 与 `consume_source` 效果互斥 |
+| 3 | 催化剂固定成本写法 | `catalyst_cost` 由**整数**改为**对象** `{ "items": [...], "count": 1, "radius": 1 }`；整数写法解码即报错。与 `consume_catalyst` 效果互斥 |
+| 4 | 候选结果 | 新增 `outcomes`（元素为 `{ "id", "effects", "safe_spawn", "fill_origin" }`）与 `combination`（`round_robin` 默认 / `priority`）。`effects` 与 `outcomes` **至少声明一个、且不得同时声明**；未声明 `outcomes` 时顶层 `effects` 隐式映射为唯一候选 `default`（旧规则行为不变） |
+| 5 | 契约版本 | 新增 `schema_version`（正整数，**当前仅支持 `1`**），声明其它值校验拒绝 |
+| 6 | 条件表达式形状 | 由「外层 OR / 内层 AND」的 **DNF 二维数组**改为**递归条件树**：`{"op":"all_of","terms":[...]}` / `{"op":"any_of","terms":[...]}` / `{"op":"inverted","term":{...}}` / `{"op":"leaf","condition":{...}}`。旧数组格式、`conditions.groups`、叶级 `negated` 一律解码报错；取反只能用 `inverted` 节点 |
+| 7 | 旧转换入口 | `/idtw config convert` 与 `RuleConvertService` 继续不可用（见第 7 节） |
+
+说明：第 6 条的条件树形状在更早的前端重写（ADR-0018）中已落地，此处一并列出以保证破坏性清单完整。内置数据包样本已同步更新为上述新写法，可作为改写参照（见第 6 节）。

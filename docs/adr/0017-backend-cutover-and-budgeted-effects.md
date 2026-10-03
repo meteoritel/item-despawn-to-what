@@ -5,6 +5,7 @@
 - 替代范围：旧链路实现与前端冻结约束；补充 ADR-0012～0016 的调度、生命周期和保存细节。
 
 > **前端部分已取代（2026-10-03）**：决策 2 的「前端占位屏」已被 P1–P8 前端重构取代——占位屏已删除，规则编辑器落地；前端决策见 [ADR-0018～0022](0018-condition-tree-contract.md) 与 [plan-frontend-rewrite-contract.md](../plan/plan-frontend-rewrite-contract.md)。本文其余后端决策仍现行。
+> **部分已被取代（2026-10-03，第二轮后端）**：决策 4 的「检查与效果各自独立的分桶队列」已由公共共享预算调度器取代（[ADR-0024](0024-shared-server-tick-budget-scheduler.md)）；新增消失方式触发、固定成本、候选结果组合与实体状态见 [ADR-0023](0023-triggers-fixed-cost-and-complete-group-settlement.md)。
 
 ## 决策
 

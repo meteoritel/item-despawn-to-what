@@ -2,7 +2,7 @@
 
 - 状态：已实施（P2，2026-10-02）；实现见 `core/model/ConditionNode.java`、`core/model/ConditionExpression.java`、`core/model/ConditionTrees.java`、`core/model/ConditionLimits.java`、`core/runtime/ExpressionTreeEvaluator.java`。
 - 依据：[实施契约 §2](../plan/plan-frontend-rewrite-contract.md)（P2 冻结）、[规划书 §5](../plan/plan-frontend-rewrite.md)（§5.1 新模型与规范格式、§5.2 求值与异常、§5.3 校验与限额）。
-- 替代范围：取代 [ADR-0007](0007-condition-expression-dnf.md) 的析取范式（DNF 二维数组）与叶级 `negated` 设计。
+- 替代范围：取代 ADR-0007（析取范式 DNF 二维数组与叶级 `negated` 设计；该 ADR 已退役归档，本地副本在 `docs/archive/`，不纳入版本控制）。
 
 > **局部已被取代（2026-10-03，P8 结论）**：第 10 条决策与「后果」中关于 `RuleConvertService`「暂停」的表述已失效——旧格式转换链路已**整类删除**（退役 `/idtw config convert`），不再计划按新格式重写映射逻辑。见 [迁移评估 §5](../plan/v1.2.1-migration-evaluation.md) 与 [更新说明](../guide/update-notes.md)。本文其余结论不受影响。
 
