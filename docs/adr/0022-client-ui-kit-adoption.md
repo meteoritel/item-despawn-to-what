@@ -1,6 +1,7 @@
 # ADR-0022：客户端 UI kit 的同源引入与来源记录
 
 - 状态：已实施（P1，2026-10-02）；来源声明见 [NOTICE-kit.md](../../NOTICE-kit.md)，契约见 [实施契约 §4](../plan/plan-frontend-rewrite-contract.md)。
+- 后续决策（2026-10-03）：[ADR-0025](0025-reusable-client-ui-kit-boundary.md)已接受、待实施，将机械改写/冻结副本方向替换为记录差异的维护副本；本 ADR 仍保留原引入记录，其它来源与隔离约束继续成立。
 - 依据：[契约 §4](../plan/plan-frontend-rewrite-contract.md)（kit 引入契约）、[契约 §5](../plan/plan-frontend-rewrite-contract.md)（客户端 UI 契约）、[规划书 §3.1](../plan/plan-frontend-rewrite.md)（kit 来源）、[规划书 §9.4](../plan/plan-frontend-rewrite.md)（kit 扩展边界与视觉验收）。
 
 ## 背景

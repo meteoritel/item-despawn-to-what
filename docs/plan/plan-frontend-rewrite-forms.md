@@ -1,5 +1,7 @@
 # P2 条件与效果表单规格（P5 客户端编辑器实现依据）
 
+> 后续规格（2026-10-03）：新 GUI 的字段域、单位与控件映射以已冻结的 [新字段规格](plan-gui-rule-update-fields.md)为准；本文保留原实施基线，现行条件树与扩展约束继续按新主计划指定范围沿用。
+>
 > 生成者：tree-dev（P2 条件系统重构负责人），生成日期：2026-10-02。
 > 事实来源：`common/src/main/java/com/meteorite/itemdespawntowhat/core/type/{condition,effect}/**` 的 record 组件与 RecordCodecBuilder 字段名，以及 `core/model/CommonFields.java`、`core/api/RuleFields.java`、`core/model/ConditionLimits.java`、`core/model/RuleValidation.java`、`core/runtime/ExpressionTreeEvaluator.java`。
 > 冻结契约：`docs/plan/plan-frontend-rewrite-contract.md` 第 2 节（条件树）、第 5 节（客户端 UI）。本文件只做表单规格，不改任何 Java / JSON 资源。
@@ -526,4 +528,3 @@ JSON 里的枚举值一律小写；编辑器不要输出大写或本地化文本
 ---
 
 生成者备注：本文件由 P2（task-2）负责人在完成条件树重构后产出，字段名与取值范围均逐一核对过 `core/type/**` 的 record 组件与 codec；第 10 节原为待核查项，已于 2026-10-02 由 lead 全部裁决并同步进契约 §5.1 / §5.2，本文件已按裁决更新。
-

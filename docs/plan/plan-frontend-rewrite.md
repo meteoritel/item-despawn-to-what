@@ -1,5 +1,7 @@
 # 新前端与编辑后端重构计划
 
+> 后续规划（2026-10-03）：[后端规则更新后的 GUI 计划](plan-gui-rule-update.md)已确认冻结、待实施；下文保留前一轮实施记录，后续 GUI 改造以新计划及其配套规格为准。
+>
 > 状态：P1–P8 代码已落盘（2026-10-03），构建与静态复核通过；P7 双平台游戏内手动验收待执行。下文 P0–P8 分阶段清单保留实施记录；界面契约以 [plan-frontend-rewrite-contract.md](plan-frontend-rewrite-contract.md) 与 [plan-frontend-rewrite-forms.md](plan-frontend-rewrite-forms.md) 为准。
 > 确认日期：2026-10-02。
 > 环境：Minecraft 1.21.1，Fabric + NeoForge，Java 21，Mojang 官方映射。

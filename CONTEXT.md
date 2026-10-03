@@ -1,7 +1,7 @@
 # ItemDespawnToWhat 配置领域
 
 > 当前状态（2026-10-03）：后端条件树、独占编辑协议 v2、客户端 UI kit 与编辑数据结构、选择目录数据源、规则编辑器界面与表单引擎、草稿持久化与撤销均已落地（P1–P8 代码落盘，构建与静态复核通过）；第二轮后端改造（消失方式触发、固定成本、候选结果、共享调度器、掉落物状态、结算返还）已实现并归档，双平台游戏内手动验收待执行，见 [manual-acceptance.md](docs/guide/manual-acceptance.md)。
-> 权威契约：[plan-frontend-rewrite-contract.md](docs/plan/plan-frontend-rewrite-contract.md)（冻结形状）与 [plan-frontend-rewrite-forms.md](docs/plan/plan-frontend-rewrite-forms.md)（逐字段取值域）；前端决策见 [docs/adr/](docs/adr/) 的 0018–0022，第二轮后端决策见 0023–0024 与归档底稿 [docs/archive/backend-round-2/PLAN.md](docs/archive/backend-round-2/PLAN.md)（§2 行为契约）。
+> 方案入口：[plan-gui-rule-update.md](docs/plan/plan-gui-rule-update.md)及其字段/kit 规格已确认冻结、待实施，页面形状、数值域、自动命名与 kit 维护方向以此为准；[旧实施契约](docs/plan/plan-frontend-rewrite-contract.md)与[旧字段规格](docs/plan/plan-frontend-rewrite-forms.md)保留原实现记录及未被替代约束。前端决策见 [docs/adr/](docs/adr/) 的 0018–0022 与 0025，第二轮后端决策见 0023–0024 与归档底稿 [docs/archive/backend-round-2/PLAN.md](docs/archive/backend-round-2/PLAN.md)（§2 行为契约）；新计划 B1/B2 明确记录待修正的运行时差异。
 
 掉落物在自然消失前，按数据包 / config 覆盖层中的规则转化为其他内容（物品、实体、方块、经验、世界效果等）。本词汇表覆盖新链路（`core/**`）的配置与运行时词汇；已退役的历史术语标注为「旧链路」。
 
@@ -90,6 +90,14 @@ _Avoid_: 转化规则（旧链路叫法）、配置项（口语可接受）
 **规则 id (Rule Id)**:
 规则的稳定标识（`ResourceLocation`，如 `mypack:stone_to_diamond`），是被覆盖、被删除、被日志与命令引用的依据；文件里可省略，由文件路径推导，覆盖层文件名由它派生。
 _Avoid_: 内部 id、UUID
+
+**规则展示名（别名） (Rule Display Name)**:
+玩家为规则设置的人类可读名称，不改变规则身份；与说明规则用途的备注分别表达。
+_Avoid_: 规则 id、备注名
+
+**自动展示标题 (Automatic Display Title)**:
+根据规则输入与结果内容生成的人类可读标题，随内容与语言变化；规则未设人工别名时使用，候选结果也以此辨认。标题可以重复，不承担稳定身份。
+_Avoid_: 自动 id、自动别名、备注名
 
 **源匹配 (Source Matcher)**:
 规则中的 `source`：`items`（物品 id 或 `#tag` 列表）与 `exclude`（排除列表，优先于匹配）。不做组件级匹配。
