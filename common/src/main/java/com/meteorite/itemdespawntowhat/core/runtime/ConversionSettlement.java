@@ -213,7 +213,7 @@ final class ConversionSettlement implements ServerTask {
                 // 容量搜索未完成（预算耗尽）：本刻不落任何决定
                 return StepResult.yield(1, 1);
             }
-            if (groups <= 0) {
+            if (groups == 0) {
                 continue;
             }
             // 催化剂固定成本上界（D31）：-1 = 预算耗尽本刻不落决定；0 = 可用件数不足则跳过该候选
@@ -222,7 +222,7 @@ final class ConversionSettlement implements ServerTask {
                 return StepResult.yield(1, 1);
             }
             groups = Math.min(groups, catalystLimit);
-            if (groups <= 0) {
+            if (groups == 0) {
                 continue;
             }
             CatalystCost catalyst = rule.catalystCost();
@@ -357,7 +357,8 @@ final class ConversionSettlement implements ServerTask {
     // 派发：逐组支付成本并派发候选内效果；每刻派发量受 dispatch_batch_size 限制
     private StepResult dispatch(ServerTickBudget budget) {
         int batch = scheduler.config().dispatchBatchSize();
-        while (groupsStarted < groupCount) {
+        // 最后一组已开组也必须继续派发剩余效果，预算让出后保留同一组游标。
+        while (groupOpen || groupsStarted < groupCount) {
             if (!groupOpen) {
                 // 催化剂固定成本支付（D33）：先支付再开组；不足则截断组数并释放预留，绝不半支付
                 int perGroup = record.catalystCostPerGroup();
@@ -426,7 +427,7 @@ final class ConversionSettlement implements ServerTask {
             if (budget.exhausted()) {
                 return StepResult.yield(1, 1);
             }
-            int size = Math.min(held.getCount(), Math.max(1, held.getMaxStackSize()));
+            int size = Math.clamp(held.getCount(), 1, Math.max(1, held.getMaxStackSize()));
             ItemStack stack = held.copyWithCount(size);
             ReturnItemSpawner.Outcome outcome = deliverStack(stack, budget);
             if (outcome == ReturnItemSpawner.Outcome.CHUNK_UNLOADED) {
