@@ -30,10 +30,8 @@ public final class ServerScheduler {
     private long released;
     private long failed;
     private long drained;
-    private final long dropped = 0L;
     private long exhaustedByTime;
     private long exhaustedByWorkUnits;
-    private int pending;
     private int peakPending;
     private long maxReadyDelayTicks;
     // 阶段7 观测：本 tick 的服务器级最大就绪延迟，以及到期搬运是否被平滑窗口铺开
@@ -59,14 +57,17 @@ public final class ServerScheduler {
     }
 
     // 最近一次推进的游戏刻；调度器尚未推进时返回 0（与旧实现启动时的 level.getGameTime() 一致）。
+    @SuppressWarnings("unused") // 公共诊断接口，允许外部开发工具读取。
     public long currentTick() {
         return lastGameTime;
     }
 
+    @SuppressWarnings("unused") // 公共诊断接口，允许外部开发工具读取。
     public int realmCount() {
         return realms.size();
     }
 
+    @SuppressWarnings("unused") // 公共诊断接口，允许外部开发工具读取。
     public boolean hasRealm(Object realmKey) {
         return realms.containsKey(realmKey);
     }
@@ -157,7 +158,7 @@ public final class ServerScheduler {
         int window = config.checkSpreadWindowTicks();
         int due = lane.countDue(gameTime, Math.max(batch, batch * window));
         int spread = (due + window - 1) / window;
-        return Math.min(batch, Math.max(1, spread));
+        return Math.clamp(spread, 1, batch);
     }
 
     // 执行一个任务步骤：异常不中断整轮推进，预算耗尽不是业务失败。
@@ -242,7 +243,6 @@ public final class ServerScheduler {
             workRemaining |= realm.hasWork(gameTime);
             realm.finishTick();
         }
-        pending = pendingNow;
         peakPending = Math.max(peakPending, pendingNow);
         maxReadyDelayTicks = Math.max(maxReadyDelayTicks, maxDelay);
         lastMaxReadyDelayTicks = maxDelay;
@@ -327,6 +327,7 @@ public final class ServerScheduler {
         return lastSnapshot;
     }
 
+    // pending按当前车道计数汇总，取消后立即可见；耗时等字段仍是最近已结束tick的快照。
     public SchedulerStats stats() {
         EnumMap<ServerTaskKind, KindStats> perKind = new EnumMap<>(ServerTaskKind.class);
         for (ServerTaskKind kind : ServerTaskKind.values()) {
@@ -349,8 +350,8 @@ public final class ServerScheduler {
         for (long value : cancelledByReason.values()) {
             cancelledTotal += value;
         }
-        return new SchedulerStats(ticks, steps, released, failed, drained, cancelledTotal, dropped, exhaustedByTime,
-                exhaustedByWorkUnits, pending, peakPending, realms.size(), maxReadyDelayTicks, lastBacklogClearTicks,
+        return new SchedulerStats(ticks, steps, released, failed, drained, cancelledTotal, 0L, exhaustedByTime,
+                exhaustedByWorkUnits, pendingCount(), peakPending, realms.size(), maxReadyDelayTicks, lastBacklogClearTicks,
                 lastMaxReadyDelayTicks, lastDrainedTasks, drainedTicks, maxDrainedInTick,
                 Map.copyOf(cancelledByReason), Map.copyOf(perKind));
     }

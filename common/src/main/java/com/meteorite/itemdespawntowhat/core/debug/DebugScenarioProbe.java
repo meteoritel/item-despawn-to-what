@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.core.debug;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ScheduledTask;
+import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTaskKind;
 import com.meteorite.itemdespawntowhat.core.state.DropStateStore;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -111,7 +112,10 @@ final class DebugScenarioProbe {
     JsonArray checks(JsonObject metrics) {
         captureReturns();
         run.tasks.removeIf(ScheduledTask::terminal);
-        metrics.addProperty("pending_scene_effects", run.tasks.size());
+        long pendingEffects = run.tasks.stream().filter(task -> task.kind() != ServerTaskKind.CONDITION_CHECK).count();
+        long pendingChecks = run.tasks.size() - pendingEffects;
+        metrics.addProperty("pending_scene_effects", pendingEffects);
+        metrics.addProperty("pending_scene_checks", pendingChecks);
         for (String key : List.of("groups", "consumed_sources", "returned", "pending_units", "pending_delivery",
                 "settlements_completed", "chance_skipped", "failed_effects")) {
             metrics.addProperty(key, totals.getOrDefault(key, 0L));
@@ -140,7 +144,7 @@ final class DebugScenarioProbe {
         checks.equal("errors", 0, run.count("ERROR"));
         checks.equal("duplicate_conversions", 0, run.count("DUPLICATE_CONVERSION"));
         checks.equal("early_conversions", 0, run.count("EARLY_CONVERSION"));
-        checks.equal("pending_scene_effects", 0, run.tasks.size());
+        checks.equal("pending_scene_effects", 0, pendingEffects);
         checks.equal("failed_effects", 0, totals.getOrDefault("failed_effects", 0L));
         checks.metrics(expectedMetrics);
         checks.counts("output", expected.getAsJsonObject("outputs"), itemCounts(outputs));
