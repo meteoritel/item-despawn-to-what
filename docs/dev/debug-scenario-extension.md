@@ -78,7 +78,7 @@ JSON 字符串值支持固定数值变量，实例化后变成 JSON 数字：
 
 `expected.outputs` 按物品 ID 声明件数；同时检查实际生成累计量和最终留存量，未声明产物按零预期校对。可选的 `expected.candidates` 声明各候选被选择的次数，区别于一个候选执行的组数。
 
-框架始终检查准备数量、测量窗口、运行错误、重复或提前提交、效果失败及未完成效果任务。每份资源必须声明提交次数、剩余源与产出。pending_units 保留为结算完成事件当时的账目快照，延迟效果可能尚未执行，不自动作为最终产出断言。
+框架始终检查准备数量、测量窗口、运行错误、重复或提前提交、效果失败及未完成效果任务。pending_scene_effects仅统计非CONDITION_CHECK的场景句柄；pending_scene_checks单列正常条件检查，允许retry负载继续等待。全部句柄仍在清理时精确取消。每份资源必须声明提交次数、剩余源与产出。pending_units 保留为结算完成事件当时的账目快照，延迟效果可能尚未执行，不自动作为最终产出断言。
 
 ## 性能及生命周期边界
 
@@ -114,6 +114,6 @@ reload 是真实全局重载，会取消运行时队列，影响普通实体的�
 
 `quantity=none`：不接受数量参数，default_entities=0；`fixed`：接受1～1000数量，性能步骤可用 "$entities"；`ceiling`：接受100～1000上限，仅执行entities不超过上限的预设步骤，不使用变量。功能步骤数量必须等于场景声明的源数量。
 
-rounds 为1～3，对整个steps列表重复；展开后最多64步。seconds 为10～300秒，默认冷却5秒，命令可改为3～30秒。performance_gate=true额外检查TPS、tick p95、完整窗口、样本截断及索引变化，失败即停止。它不修改单场景的功能PASS定义。
+rounds 为1～3，对整个steps列表重复；展开后最多64步。seconds 为10～300秒，默认冷却5秒，命令可改为3～30秒。performance_gate=true额外检查TPS、tick p95、完整窗口、样本截断、索引变化及计时完整性，失败即停止。它不修改单场景的功能PASS定义。v3按同tick原版成本与IDTW运行时成本相加后统计tick分位数，不直接相加两种p95。
 
 按阶段执行与压力门槛见 [实机测试流水线](debug-test-pipeline.md)，场景操作见 [结算示例](debug-settlement-examples.md) 和 [基础及性能验证](debug-validation-guide.md)。

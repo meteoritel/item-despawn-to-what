@@ -92,7 +92,9 @@ END窗口含本轮实际准备数量、开始测量前已发生的提交/产出�
 
 | END字段 | 解释与用途 |
 | --- | --- |
-| window.server_tick_cost | 服务端总tick耗时（微秒），含世界与其它模组工作 |
+| window.server_tick_cost | v3：同tick原版成本＋IDTW运行时成本（微秒）；按每tick相加后统计分位数 |
+| window.vanilla_tick_cost / idtw_runtime_cost | 原版tick数组成本 / IDTW结束事件运行时成本；开发场景推进与其它结束事件监听器不计入合计范围 |
+| window.tick_cost_scope / tick_timing_complete | 计量范围标识与计时完整性；性能阶段要求tick_timing_missing_ticks=0 |
 | window.checks / window.effects | 场景维度检查/效果队列的 mean_us、p95_us、p99_us 等 |
 | window.observed_ticks_per_second | 实测完整服务端tick数/墙钟窗口 |
 | window.world_ticks_advanced | 场景维度实际推进刻数 |

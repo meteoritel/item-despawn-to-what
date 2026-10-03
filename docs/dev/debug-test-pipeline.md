@@ -24,7 +24,7 @@
 - 只允许一个活动阶段或场景，冷却时也拒绝插队。阶段起点固定，玩家须留在原维度和测试区域；离线、切换维度、改变tick rate会中止阶段。性能场景会固定视角，勿暂停世界。
 - 场景 FAIL/INCOMPLETE、清理异常或性能门槛失败会停止后续步骤，已完成结果仍保留。下一阶段由你决定是否启动。
 
-P0/P3/P4 自动检查 TPS≥19.5、tick p95≤50000µs、测量完整、无样本截断、索引未变化；功能 PASS 与性能判定分别记录。P1/P2 以功能断言为准。CPU占用、客户端FPS、视觉异常和队列延迟趋势仍需人工观察。
+P0/P3/P4 自动检查 TPS≥19.5、tick p95≤50000µs、测量完整、无样本截断、索引未变化及计时无缺失；功能 PASS 与性能判定分别记录。P1/P2 以功能断言为准。tick p95按同tick的原版成本＋IDTW运行时成本统计，分项分别在vanilla_tick_cost和idtw_runtime_cost中，后续开发场景推进与其它结束事件监听器不计入该范围。CPU占用、客户端FPS、视觉异常和队列延迟趋势仍需人工观察。
 
 控制台事件 `PIPELINE_START → PIPELINE_STEP_START → 场景START/END → PIPELINE_STEP_END → PIPELINE_COOLDOWN → … → PIPELINE_END` 带阶段UUID及各场景run编号。阶段汇总的 `results` 包含轮次、数量、功能结论、性能门槛和TPS/p95。不要将不同平台或不同配置的数据混在一起比较。
 
@@ -152,6 +152,7 @@ P1、P2 自动执行合计约5分30秒，已含默认5秒冷却，不含人工�
 - window.observed_ticks_per_second ≥19.5。
 - window.server_tick_cost.p95_us ≤50000（50ms，即20 TPS的单tick时间预算）。
 - window.sample_limit_reached=false，sampled_seconds ≥请求时长，window.index_changes=0。
+- window.tick_timing_complete=true，tick_timing_missing_ticks=0。当前日志format为idtw-scene-v3；旧v2的tick耗时只含原版成本，不能与新口径混比。
 - FRAME 的就绪延迟没有连续多秒增长，结束后没有本轮遗留产物或持续卡顿。
 
 最旧就绪延迟和队列深度应结合场景判断：retry 的检查队列会持续保留任务，不能要求测量结束前全部队列为0。清理后全局队列也可能含普通世界任务，不用全局 pending=0 作为通用断言。
@@ -174,6 +175,14 @@ P3 最多17轮、每轮20秒，含预热和5秒轮间等待约7～8分钟。若�
 ```
 
 这部分约12分钟测量，加预热与轮间等待约13分钟；仅在需要正式性能结论时执行。每类负载报告3轮均值和范围，保留每轮日志，不只挑最快结果，不将两个p95直接相减当成纯模组分位数。
+
+## 离线日志解析
+
+实机运行后可执行 `python tools/analyze-debug-log.py`，默认解析NeoForge最新日志，导出阶段结果、场景TPS/tick指标、功能与性能失败项和队列信息。每次结果保存到Git忽略的 `.local/debug/reports/<时间>/`，包含report.md、report.json和scenes.csv，终端显示实际路径。
+
+指定其它日志及独立输出目录：`python tools/analyze-debug-log.py fabric/runs/client/logs/latest.log --out .local/debug/reports/fabric-debug`。仅用Python标准库，也支持.gz轮转日志；显式指定同一输出目录时会覆盖旧结果。
+
+开发分析记录放在 `.local/debug/analysis/`，日志快照放在 `.local/debug/logs/`，只保留本地。首次实测的历史分析和修复记录均位于该目录；仓库仅保留解析工具与通用测试说明。
 
 ## 记录和失败分流
 

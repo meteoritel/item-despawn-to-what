@@ -8,7 +8,7 @@
 | 类 | 职责 | 关键成员 |
 |---|---|---|
 | `DebugMode` | 环境判定 | `ENABLED = Services.PLATFORM.isDevelopmentEnvironment()` |
-| `DebugSessionManager` | 两端已有事件的开发诊断入口 | 首 tick 打 READY、推进场景与流水线；停服先中止流水线再清场景 |
+| `DebugSessionManager` | 两端已有事件的开发诊断入口 | beginRuntimeTick与tick配对计时；首tick打READY；停服释放计时及场景状态 |
 | `DebugScenarioManager` | 每服务器一轮场景的编排/登记/观察/调度/收尾；UUID → (run, source) 绑定 | `schedule`、`observe`、`converted`、`outputAdded`、`prepareOutput`、`allowsRuntimeLogging` |
 | `DebugScenarioDefinition` | 用**真实** Codec / 校验 / `RuleIndex` 构建场景规则与预期量 | 读取 `DebugScenarioSpec`；规则 origin 标为 `development-memory` |
 | `DebugScenarioRun` | 单轮有界负载状态机与校对（SETUP / WARMUP / MEASURE / CLEANUP） | `finish()`、统一断言和已完成报告 |
@@ -20,7 +20,7 @@
 | `DebugPipelineManager` / `DebugPipelineRun` | 串行阶段、清理回调、双时钟冷却、失败停止 | PIPELINE_START / STEP_END / COOLDOWN / END |
 | `DebugDistribution` | 有界非耗时整数样本分位数 | 就绪延迟、预算比例与搬运分布 |
 | `DebugMeasurements` | 有界原始微秒样本，结束时 nearest-rank 分位 | `MAX_SAMPLES = 12000` |
-| `DebugPerformanceWindow` | 测量窗口：服务端 tick 耗时 + checks/effects 两条队列分别计量 | 采集 `server.getTickTimesNanos()` |
+| `DebugPerformanceWindow` | 测量窗口：同tick原版＋IDTW运行时成本、分项及队列分别计量 | server_tick_cost、vanilla_tick_cost、idtw_runtime_cost；计时缺失显式标记 |
 | `DebugLog` | IDEA 控制台稳定单行日志（INFO，`IDTW.Debug`，`[IDTW_DEBUG]` 前缀） | — |
 | `RuleDebugCommands` | `/idtw debug` 命令树 | `build(context)` |
 
@@ -55,7 +55,7 @@
 
 ## 4. 生命周期与清理
 
-- 两端在 `END_SERVER_TICK`/`ServerTickEvent.Post` 调 `DebugSessionManager.tick`，并每 20 tick 调 `RuleEditServerHandler.expireIdle()`。
+- 两端在 `END_SERVER_TICK`/`ServerTickEvent.Post` 中先beginRuntimeTick，再推进RuleRuntimeHost.tickServer，最后DebugSessionManager.tick封存运行时成本并推进场景；每20 tick调用expireIdle。
 - 停服时**先** `DebugSessionManager.shutdown` **再** `RuleRuntimeHost.shutdown`，保证先取消本轮延迟任务。
 - 每服务器同时只允许一轮场景（重复启动拒绝）；场景停止时精确取消本轮任务并清理源与产物，**不清空普通队列**。发起者离线后结果仍写入控制台。
 - 流水线等待真实 END、清理及解绑回调后默认冷却5秒（可调3～30秒），墙钟与世界时间均满足才继续；最后一轮同样冷却并检查已加载测试残留。冷却期间锁住场景入口；失败停止后续计划，离线、切维度、tick rate变化或停服记INCOMPLETE。
@@ -67,6 +67,8 @@
 
 - 场景/性能日志用 INFO，**不依赖** `server.json.debug_logging`；性能场景关闭逐实体过程日志（即使用户把 `debug_logging` 设为 true）。
 - 样本有界：`DebugMeasurements.MAX_SAMPLES=12000`，满则停止，不伪造更长窗口。
+- v3的server_tick_cost按每tick原版数组成本与IDTW运行时实测成本相加后求分位数，排除后续开发场景推进及其它结束事件监听器；缺失计时不能通过阶段性能门槛。旧v2口径不可直接混比。
+- pending_scene_effects排除正常CONDITION_CHECK，pending_scene_checks独立记录；清理取消全部句柄，scheduler pending按实时车道汇总，避免上一tick快照误报。
 - `expiry` 场景要求实际寿命 ≤32767，否则明确拒绝该场景。
 - 诊断必须复用**真实平台寿命提供器**，不能用通用兜底冒充 NeoForge 当前寿命。
 - 队列成本包含诊断计数与任务管理开销；性能前后对比须使用**相同诊断版本**，不能直接相减 p95/p99 推断纯模组分位。
