@@ -12,18 +12,23 @@ import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTaskKind;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTickBudgetSnapshot;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.EnumMap;
 import java.util.Locale;
 
 /**
- * 从准备和预热之后统计窗口；服务端总成本、场景维度各任务种类队列与共享预算分别计量。
+ * 从准备和预热之后统计窗口；原版tick加IDTW运行时成本、维度队列与共享预算分别计量。
  * 级别约定：以 server_ 前缀或写在 server_* 段内的字段是跨维度合并的服务器级口径；
  * checks/effects/level_kinds 是绑定单个 ServerLevel 的本维度切片。
  * 不做 (维度×种类) 二维分位数：每个组合的样本量不足以支撑分位数结论，按种类在服务器级聚合即可。
  */
 final class DebugPerformanceWindow {
     private final DebugMeasurements serverTimes = new DebugMeasurements();
+    private final DebugMeasurements vanillaTimes = new DebugMeasurements();
+    private final DebugMeasurements runtimeTimes = new DebugMeasurements();
+    private long sampledTicks;
+    private long missingTimingTicks;
     private final QueueWindow checks;
     private final QueueWindow effects;
     // 阶段7：本维度按任务种类的队列切片（level 级），把阶段2 的 checks/effects 两类口径扩到全部种类
@@ -122,13 +127,20 @@ final class DebugPerformanceWindow {
         lastObservedBacklogClear = schedulerBaseline.lastBacklogClearTicks();
     }
 
-    // 两端 EndServerTick 均在原版耗时数组写入后派发，读取当前完整 tick。
+    // 原版数组已写入，但不含结束事件中的IDTW运行时；同tick按原始纳秒相加后再统计分位数。
     void sample(MinecraftServer server, ServerLevel level, ConversionRuntime runtime) {
         long now = System.nanoTime();
         maxInterval = Math.max(maxInterval, now - lastSample);
         lastSample = now;
         long[] times = server.getTickTimesNanos();
-        serverTimes.add(times[Math.floorMod(server.getTickCount(), times.length)] / 1000);
+        long vanillaNanos = times[Math.floorMod(server.getTickCount(), times.length)];
+        long runtimeNanos = DebugSessionManager.runtimeTickNanos(server);
+        sampledTicks++;
+        vanillaTimes.add(vanillaNanos / 1000);
+        if (runtimeNanos >= 0) {
+            runtimeTimes.add(runtimeNanos / 1000);
+            serverTimes.add((vanillaNanos + runtimeNanos) / 1000);
+        } else { missingTimingTicks++; }
         if (index != runtime.index()) { indexChanges++; index = runtime.index(); }
         lastSchedulerStats = runtime.schedulerStats();
         ServerTickBudgetSnapshot budget = runtime.budgetSnapshot();
@@ -185,21 +197,26 @@ final class DebugPerformanceWindow {
     double elapsedSeconds() { return (lastSample - started) / 1_000_000_000D; }
 
     // 有界原始数组达到上限后必须停止，不对更长窗口伪造完整统计。
-    boolean full() { return serverTimes.size() >= DebugMeasurements.MAX_SAMPLES; }
+    boolean full() { return sampledTicks >= DebugMeasurements.MAX_SAMPLES; }
 
     // 最终统计清楚标注口径；队列属于场景维度，可能包括普通实体的后台工作。
     JsonObject summary(ServerLevel level) {
         JsonObject data = new JsonObject();
         double seconds = elapsedSeconds();
         data.addProperty("sampled_seconds", seconds);
-        data.addProperty("sampled_ticks", serverTimes.size());
+        data.addProperty("sampled_ticks", sampledTicks);
         data.addProperty("world_ticks_advanced", lastWorldTick - initialWorldTick);
-        data.addProperty("observed_ticks_per_second", seconds == 0 ? 0 : serverTimes.size() / seconds);
+        data.addProperty("observed_ticks_per_second", seconds == 0 ? 0 : sampledTicks / seconds);
         data.addProperty("max_tick_interval_ms", maxInterval / 1_000_000D);
         data.addProperty("sample_limit_reached", full());
         data.addProperty("index_changes", indexChanges);
         data.addProperty("queue_scope_dimension", level.dimension().location().toString());
         data.add("server_tick_cost", serverTimes.summary());
+        data.add("vanilla_tick_cost", vanillaTimes.summary());
+        data.add("idtw_runtime_cost", runtimeTimes.summary());
+        data.addProperty("tick_cost_scope", "vanilla_tick_plus_idtw_runtime");
+        data.addProperty("tick_timing_complete", missingTimingTicks == 0);
+        data.addProperty("tick_timing_missing_ticks", missingTimingTicks);
         // 本维度（level 级）切片：旧字段保持不变，便于和阶段0 基线逐字段对照
         data.add("checks", checks.summary());
         data.add("effects", effects.summary());
@@ -292,22 +309,26 @@ final class DebugPerformanceWindow {
         for (ServerTaskKind kind : ServerTaskKind.values()) {
             KindStats current = now.perKind().get(kind);
             if (current == null) { continue; }
-            KindStats base = schedulerBaseline.perKind().get(kind);
-            JsonObject entry = new JsonObject();
-            entry.addProperty("pending", current.pending());
-            entry.addProperty("deferred", current.deferred());
-            entry.addProperty("steps", base == null ? current.steps() : delta(current.steps(), base.steps()));
-            entry.addProperty("failed", base == null ? current.failed() : delta(current.failed(), base.failed()));
-            entry.addProperty("requeued", base == null ? current.requeued() : delta(current.requeued(), base.requeued()));
-            entry.addProperty("done", base == null ? current.done() : delta(current.done(), base.done()));
-            entry.addProperty("yielded", base == null ? current.yielded() : delta(current.yielded(), base.yielded()));
-            entry.addProperty("retried", base == null ? current.retried() : delta(current.retried(), base.retried()));
-            entry.addProperty("work_units", base == null ? current.workUnits() : delta(current.workUnits(), base.workUnits()));
-            entry.addProperty("last_micros", current.lastMicros());
-            perKind.add(kind.name().toLowerCase(Locale.ROOT), entry);
+            perKind.add(kind.name().toLowerCase(Locale.ROOT), kindSummary(current, schedulerBaseline.perKind().get(kind)));
         }
         data.add("per_kind", perKind);
         return data;
+    }
+
+    // 单种任务的当前积压和窗口差值分开组装，保持与服务器汇总相同口径。
+    private static JsonObject kindSummary(KindStats current, @Nullable KindStats base) {
+        JsonObject entry = new JsonObject();
+        entry.addProperty("pending", current.pending());
+        entry.addProperty("deferred", current.deferred());
+        entry.addProperty("steps", base == null ? current.steps() : delta(current.steps(), base.steps()));
+        entry.addProperty("failed", base == null ? current.failed() : delta(current.failed(), base.failed()));
+        entry.addProperty("requeued", base == null ? current.requeued() : delta(current.requeued(), base.requeued()));
+        entry.addProperty("done", base == null ? current.done() : delta(current.done(), base.done()));
+        entry.addProperty("yielded", base == null ? current.yielded() : delta(current.yielded(), base.yielded()));
+        entry.addProperty("retried", base == null ? current.retried() : delta(current.retried(), base.retried()));
+        entry.addProperty("work_units", base == null ? current.workUnits() : delta(current.workUnits(), base.workUnits()));
+        entry.addProperty("last_micros", current.lastMicros());
+        return entry;
     }
 
     // 计数器只会单调增长，出现回退时按新值处理，避免负差值污染窗口。

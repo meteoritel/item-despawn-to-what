@@ -77,7 +77,8 @@ public final class DebugScenarioManager {
             var run = new DebugScenarioRun(name, benchmark, player.serverLevel(), player.getUUID(), origin, seconds, definition, pipelineId);
             ACTIVE.put(source.getServer(), run);
             JsonObject data = DebugLog.config(context.serverConfig());
-            data.addProperty("format", "idtw-scene-v2");
+            data.addProperty("format", "idtw-scene-v3");
+            data.addProperty("tick_cost_scope", "vanilla_tick_plus_idtw_runtime");
             if (pipelineId != null) { data.addProperty("pipeline", pipelineId); }
             data.addProperty("rule_source", "development-memory");
             data.addProperty("builtin_datapack", false);

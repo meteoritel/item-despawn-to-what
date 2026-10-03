@@ -79,6 +79,9 @@ final class DebugPipelineRun {
         if (window != null) {
             data.addProperty("tps", window.get("observed_ticks_per_second").getAsDouble());
             data.addProperty("tick_p95_us", window.getAsJsonObject("server_tick_cost").get("p95_us").getAsLong());
+            data.addProperty("tick_cost_scope", window.get("tick_cost_scope").getAsString());
+            data.addProperty("vanilla_tick_p95_us", window.getAsJsonObject("vanilla_tick_cost").get("p95_us").getAsLong());
+            data.addProperty("idtw_runtime_p95_us", window.getAsJsonObject("idtw_runtime_cost").get("p95_us").getAsLong());
             data.addProperty("checks_p95_us", window.getAsJsonObject("checks").get("p95_us").getAsLong());
             data.addProperty("effects_p95_us", window.getAsJsonObject("effects").get("p95_us").getAsLong());
         }
@@ -91,6 +94,8 @@ final class DebugPipelineRun {
                     window == null ? 0 : window.get("sampled_seconds").getAsDouble(), true);
             threshold(performance, "sample_limit_reached", 0, window == null || window.get("sample_limit_reached").getAsBoolean() ? 1 : 0, false);
             threshold(performance, "index_changes", 0, window == null ? 1 : window.get("index_changes").getAsInt(), false);
+            threshold(performance, "tick_timing_missing_ticks", 0,
+                    window == null ? 1 : window.get("tick_timing_missing_ticks").getAsLong(), false);
         }
         boolean passed = verdict.equals("PASS");
         for (var check : performance) { if (!check.getAsJsonObject().get("pass").getAsBoolean()) { passed = false; } }

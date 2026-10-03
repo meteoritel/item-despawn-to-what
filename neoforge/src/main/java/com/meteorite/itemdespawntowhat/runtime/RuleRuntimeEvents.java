@@ -105,6 +105,7 @@ public final class RuleRuntimeEvents {
     // 服务器 tick 结束：统一推进一次公共预算（所有维度共享，ADR-0002），再跑开发场景与周期性失效清理
     @SubscribeEvent
     public static void onServerTick(net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) {
+        DebugSessionManager.beginRuntimeTick(event.getServer());
         RuleRuntimeHost.tickServer(event.getServer());
         DebugSessionManager.tick(event.getServer(), RuleRuntimeHost.commandContext());
         if (event.getServer().getTickCount() % 20 == 0) {
