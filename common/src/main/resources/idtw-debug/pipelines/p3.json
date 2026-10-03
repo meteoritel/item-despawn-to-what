@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "quantity": "ceiling",
+  "default_entities": 1000,
+  "rounds": 1,
+  "performance_gate": true,
+  "steps": [
+    {
+      "scenario": "bench/baseline",
+      "entities": 0,
+      "seconds": 20
+    },
+    {
+      "scenario": "bench/normal",
+      "entities": 100,
+      "seconds": 20
+    },
+    {
+      "scenario": "bench/converted",
+      "entities": 100,
+      "seconds": 20
+    },
+    {
+      "scenario": "bench/convert",
+      "entities": 100,
+      "seconds": 20
+    },
+    {
+      "scenario": "bench/retry",
+      "entities": 100,
+      "seconds": 20
+    },
+    {
+      "scenario": "bench/normal",
+      "entities": 250,
+      "seconds": 20
+    },
+    {
+      "scenario": "bench/converted",
+      "entities": 250,
+      "seconds": 20
+    },
+    {
+      "scenario": "bench/convert",
+      "entities": 250,
+      "seconds": 20
+    },
+    {
+      "scenario": "bench/retry",
+      "entities": 250,
+      "seconds": 20
+    },
+    {
+      "scenario": "bench/normal",
+      "entities": 500,
+      "seconds": 20
+    },
+    {
+      "scenario": "bench/converted",
+      "entities": 500,
+      "seconds": 20
+    },
+    {
+      "scenario": "bench/convert",
+      "entities": 500,
+      "seconds": 20
+    },
+    {
+      "scenario": "bench/retry",
+      "entities": 500,
+      "seconds": 20
+    },
+    {
+      "scenario": "bench/normal",
+      "entities": 1000,
+      "seconds": 20
+    },
+    {
+      "scenario": "bench/converted",
+      "entities": 1000,
+      "seconds": 20
+    },
+    {
+      "scenario": "bench/convert",
+      "entities": 1000,
+      "seconds": 20
+    },
+    {
+      "scenario": "bench/retry",
+      "entities": 1000,
+      "seconds": 20
+    }
+  ]
+}

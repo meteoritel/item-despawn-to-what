@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "inputs": {
+    "sources": 0,
+    "stack_size": 1,
+    "catalyst_count": 0,
+    "source_item": "minecraft:paper",
+    "catalyst_item": "minecraft:emerald"
+  },
+  "seconds": 60,
+  "setup": "none",
+  "actions": [],
+  "expected": {
+    "metrics": {
+      "conversions": 0,
+      "remaining_source_items": "$source_items",
+      "groups": 0,
+      "consumed_sources": 0,
+      "returned": 0,
+      "pending_delivery": 0,
+      "settlements_completed": 0,
+      "chance_skipped": 0,
+      "live_returned_source_items": 0,
+      "protected_returned_source_items": 0,
+      "remaining_catalyst": 0
+    },
+    "outputs": {
+      "minecraft:prismarine_shard": 0
+    },
+    "candidates": {}
+  },
+  "rules": []
+}

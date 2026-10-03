@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.debug;
 
 import com.google.gson.JsonObject;
-import com.meteorite.itemdespawntowhat.Constants;
+import com.google.gson.JsonArray;
 import com.meteorite.itemdespawntowhat.core.command.RuleCommandContext;
 import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
 import com.meteorite.itemdespawntowhat.core.runtime.ConversionRuntime;
@@ -19,9 +19,9 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.phys.Vec3;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -35,6 +35,8 @@ import java.util.UUID;
 final class DebugScenarioRun {
     final String id = UUID.randomUUID().toString();
     final String name;
+    final @Nullable String pipelineId;
+    @Nullable JsonObject completedReport;
     final boolean benchmark;
     final ServerLevel level;
     final UUID initiator;
@@ -42,9 +44,10 @@ final class DebugScenarioRun {
     final List<ItemEntity> sources = new ArrayList<>();
     final List<ItemEntity> outputs = new ArrayList<>();
     final Set<ScheduledTask> tasks = new HashSet<>();
+    final DebugScenarioProbe probe;
+    private final DebugScenarioActions actions;
     private final Vec3 origin;
     private final int seconds;
-    private final long startedWorldTick;
     private final long startedNanos = System.nanoTime();
     private final Map<String, Long> counters = new HashMap<>();
     private final Set<UUID> committed = new HashSet<>();
@@ -55,12 +58,10 @@ final class DebugScenarioRun {
     private long firstConversionTick = -1;
     private long firstOutputTick = -1;
     private int firstConversionAge = -1;
-    private int expiryLifespan;
     private long minimumDueAge;
     private String firstRule = "";
     private long conversionsAtWindowStart;
     private long outputAtWindowStart;
-    private boolean actionDone;
     private int marks;
     private boolean viewSnapshotted;
     private double viewX;
@@ -71,15 +72,17 @@ final class DebugScenarioRun {
 
     // 固定场景参数，测试源使用独立规则索引，不替换用户运行时索引。
     DebugScenarioRun(String name, boolean benchmark, ServerLevel level, UUID initiator,
-                     Vec3 origin, int seconds, DebugScenarioDefinition definition) {
+                     Vec3 origin, int seconds, DebugScenarioDefinition definition, @Nullable String pipelineId) {
         this.name = name;
+        this.pipelineId = pipelineId;
         this.benchmark = benchmark;
         this.level = level;
         this.initiator = initiator;
         this.origin = origin;
         this.seconds = seconds;
         this.definition = definition;
-        startedWorldTick = level.getGameTime();
+        probe = new DebugScenarioProbe(this);
+        actions = new DebugScenarioActions(this);
     }
 
     // 每秒输出计数和当前队列，不重复计算分位数或扫描世界实体。
@@ -112,7 +115,7 @@ final class DebugScenarioRun {
             return false;
         }
         window.sample(level.getServer(), level, runtime);
-        actions(context);
+        actions.tick(context);
         if (benchmark) { lockInitiatorView(); }
         long now = System.nanoTime();
         if (now - lastFrameNanos >= 1_000_000_000L) {
@@ -163,6 +166,11 @@ final class DebugScenarioRun {
     // 每 tick 的源数量与准备软预算改由 server.json 提供（debug_scenario_prepare_batch_size / debug_scenario_prepare_budget_us）；准备耗时不混入测量窗口。
     private void prepare(RuleCommandContext context) {
         ConversionRuntime runtime = java.util.Objects.requireNonNull(context.runtime());
+        if (definition.spec.catalystCount() > 0 && (!LoadedChunks.containsArea(level, BlockPos.containing(origin), 1)
+                || !level.isPositionEntityTicking(BlockPos.containing(origin)))) {
+            throw new IllegalStateException("场景区域需要已加载且正在推进的区块：" + origin);
+        }
+        probe.prepare(origin);
         ServerConfig config = context.serverConfig();
         if (config == null) {
             config = ServerConfig.DEFAULT;
@@ -177,18 +185,14 @@ final class DebugScenarioRun {
                     || !level.isPositionEntityTicking(BlockPos.containing(position))) {
                 throw new IllegalStateException("场景区域需要已加载且正在推进的区块：" + position);
             }
-            ItemEntity item = new ItemEntity(level, position.x, position.y, position.z, new ItemStack(Items.PAPER, definition.stackSize));
+            ItemEntity item = new ItemEntity(level, position.x, position.y, position.z, new ItemStack(definition.sourceItem, definition.stackSize));
             decorate(item);
             if (number == 0) {
                 long earliest = definition.index.ordered().stream().mapToLong(entry ->
                         (long) entry.value().triggerAfterSeconds() * 20).min().orElse(0);
                 minimumDueAge = Math.min(earliest, runtime.lifespanTicks(level, item) - 1L);
             }
-            if (name.equals("expiry")) { setExpiryAge(runtime, item); }
-            if (name.equals("excluded")) {
-                if (number == 0) { item.addTag(Constants.CHECK_LOCK_TAG); }
-                else { item.setUnlimitedLifetime(); }
-            }
+            actions.prepareSource(runtime, item, number);
             sources.add(item);
             DebugScenarioManager.bind(this, item, true);
             if (!level.addFreshEntity(item)) { throw new IllegalStateException("测试源实体加入世界被拒绝"); }
@@ -205,15 +209,6 @@ final class DebugScenarioRun {
                 (row - (width - 1) / 2D) * 0.25);
     }
 
-    // 通过原版实体NBT设置年龄，下一次实体tick真实进入自然消失入口。
-    private void setExpiryAge(ConversionRuntime runtime, ItemEntity item) {
-        expiryLifespan = runtime.lifespanTicks(level, item);
-        if (expiryLifespan > 32767) { throw new IllegalStateException("expiry场景年龄超出原版NBT short范围：" + expiryLifespan); }
-        CompoundTag saved = item.saveWithoutId(new CompoundTag());
-        saved.putShort("Age", (short) (expiryLifespan - 1));
-        item.load(saved);
-    }
-
     // 防捡取与合并，不改地形、天气和时间；额外组件只附在本轮实体上。
     void decorate(ItemEntity item) {
         CompoundTag marker = new CompoundTag();
@@ -224,23 +219,6 @@ final class DebugScenarioRun {
         item.setNeverPickUp();
         item.setNoGravity(true);
         item.setDeltaMovement(Vec3.ZERO);
-    }
-
-    // 功能场景主动操作世界中的测试实体，随后仍由原调度与求值链路决定结果。
-    private void actions(RuleCommandContext context) {
-        if (benchmark || actionDone || count("RETRY") == 0 && !name.equals("reload")) { return; }
-        if (name.equals("retry") && level.getGameTime() - startedWorldTick >= 100) {
-            ItemEntity source = sources.getFirst();
-            source.setPos(source.getX(), origin.y + 3, source.getZ());
-            actionDone = true;
-            trace("ACTION", source, "action", "move_source_to_matching_y");
-        } else if (name.equals("reload") && count("CONVERT") > 0) {
-            if (context.reloadRules(level.getServer()) == null) { throw new IllegalStateException("场景中的规则重载失败"); }
-            actionDone = true;
-            JsonObject data = state();
-            data.addProperty("overlay_version", context.overlayVersion());
-            log("ACTION_RELOAD", data);
-        }
     }
 
     // 测量期锁定发起者视角：仅在偏离快照阈值时用服务端传送纠正并发包，静止时零开销。
@@ -292,6 +270,7 @@ final class DebugScenarioRun {
     void observe(String event, ItemEntity item, Object... fields) {
         if (phase.equals("CLEANUP")) { return; }
         increment(event, 1);
+        probe.observe(event, fields);
         trace(event, item, fields);
     }
 
@@ -312,6 +291,7 @@ final class DebugScenarioRun {
     // 提交与产出分别计数，不能用执行器返回来宣称所有产物已经生成。
     void converted(ItemEntity item, String rule, int rounds) {
         if (!committed.add(item.getUUID())) { increment("DUPLICATE_CONVERSION", 1); }
+        if (item.getAge() < minimumDueAge) { increment("EARLY_CONVERSION", 1); }
         if (firstConversionTick < 0) {
             firstConversionTick = level.getGameTime();
             firstConversionAge = item.getAge();
@@ -324,7 +304,7 @@ final class DebugScenarioRun {
     void outputAdded(ItemEntity item) {
         if (firstOutputTick < 0) { firstOutputTick = level.getGameTime(); }
         increment("OUTPUT_ITEMS", item.getItem().getCount());
-        if (!item.getItem().is(Items.PRISMARINE_SHARD)) { increment("UNEXPECTED_OUTPUT", item.getItem().getCount()); }
+        probe.outputAdded(item, firstConversionTick);
         observe("OUTPUT_ADDED", item, "actual_items", item.getItem().getCount());
     }
 
@@ -363,7 +343,7 @@ final class DebugScenarioRun {
     String finish(RuleCommandContext context, String reason) {
         JsonObject end = state();
         end.addProperty("stop_reason", reason);
-        end.add("expected", expected());
+        end.add("expected", definition.expected);
         long liveOutput = outputs.stream().filter(Entity::isAlive).mapToLong(item -> item.getItem().getCount()).sum();
         long remainingSource = sources.stream().filter(Entity::isAlive).mapToLong(item -> item.getItem().getCount()).sum();
         end.addProperty("remaining_source_items_at_end", remainingSource);
@@ -378,11 +358,34 @@ final class DebugScenarioRun {
             end.addProperty("conversions_in_window", count("CONVERT") - conversionsAtWindowStart);
             end.addProperty("output_items_in_window", count("OUTPUT_ITEMS") - outputAtWindowStart);
         }
-        String verdict = reason.equals("completed") ? verify(liveOutput, remainingSource) ? "PASS" : "FAIL" : "INCOMPLETE";
+        String verdict = "INCOMPLETE";
+        try {
+            JsonObject metrics = metrics(liveOutput, remainingSource);
+            JsonArray checks = probe.checks(metrics);
+            boolean passed = true;
+            for (var check : checks) {
+                if (!check.getAsJsonObject().get("pass").getAsBoolean()) {
+                    passed = false;
+                    log("CHECK_FAILED", check.getAsJsonObject());
+                }
+            }
+            end.add("actual", metrics);
+            end.add("checks", checks);
+            end.add("settlement_snapshot", probe.settlementSnapshot());
+            if (reason.equals("completed")) { verdict = passed ? "PASS" : "FAIL"; }
+        } catch (RuntimeException failure) {
+            end.addProperty("evaluation_error", failure.toString());
+            log("EVALUATION_ERROR", end);
+        }
         end.addProperty("verdict", verdict);
         if (benchmark) { releaseInitiator(); }
         phase = "CLEANUP";
         try { cleanup(context.runtime()); }
+        catch (RuntimeException failure) {
+            end.addProperty("verdict", "INCOMPLETE");
+            end.addProperty("cleanup_error", failure.toString());
+            throw failure;
+        }
         finally {
             end.addProperty("remaining_scene_tasks", tasks.size());
             var runtime = context.runtime();
@@ -394,45 +397,28 @@ final class DebugScenarioRun {
                 end.addProperty("scheduler_dropped_total", runtime.schedulerStats().dropped());
             }
             DebugScenarioManager.unbind(this);
+            completedReport = end;
             log("END", end);
         }
         return verdict;
     }
 
-    // 预期字段全部显式输出，包括应当为零的量。
-    private JsonObject expected() {
+    // 运行阶段的实际指标只组装一次，全部场景交给同一断言器消费。
+    private JsonObject metrics(long liveOutput, long remainingSource) {
         JsonObject data = new JsonObject();
-        data.addProperty("conversions", definition.expectedConversions);
-        data.addProperty("output_items", definition.expectedOutput);
-        data.addProperty("output_item", "minecraft:prismarine_shard");
-        data.addProperty("delay_ticks", name.equals("delay") || name.equals("reload") ? 100 : 0);
+        data.addProperty("created_sources", sources.size());
+        data.addProperty("window_present", window == null ? 0 : 1);
+        data.addProperty("conversions", count("CONVERT"));
+        data.addProperty("output_items", count("OUTPUT_ITEMS"));
+        data.addProperty("remaining_source_items", remainingSource);
+        data.addProperty("live_output_items", liveOutput);
+        data.addProperty("first_conversion_age", firstConversionAge);
         data.addProperty("minimum_due_age_ticks", minimumDueAge);
-        data.addProperty("remaining_source_items", expectedSourceItems());
+        data.addProperty("expiry_due_age", actions.expiryDueAge());
+        data.addProperty("first_rule", firstRule);
+        data.addProperty("first_output_delay_ticks", firstOutputTick < 0 || firstConversionTick < 0 ? -1 : firstOutputTick - firstConversionTick);
+        data.addProperty("action_count", actions.completedCount());
         return data;
-    }
-
-    // 转化场景应消耗源；排除和持续失败负载应保留原有源数量。
-    private long expectedSourceItems() {
-        return definition.expectedConversions == 0 ? (long) definition.sources * definition.stackSize : 0;
-    }
-
-    // 校对真实次数与留存产物；额外场景约束由真实事件证据决定。
-    private boolean verify(long liveOutput, long remainingSource) {
-        if (sources.size() != definition.sources || window == null || count("ERROR") != 0
-                || count("DUPLICATE_CONVERSION") != 0 || count("UNEXPECTED_OUTPUT") != 0
-                || count("CONVERT") != definition.expectedConversions
-                || count("OUTPUT_ITEMS") != definition.expectedOutput || liveOutput != definition.expectedOutput) { return false; }
-        if (remainingSource != expectedSourceItems()) { return false; }
-        if (definition.expectedConversions > 0 && firstConversionAge < minimumDueAge) { return false; }
-        return switch (name) {
-            case "retry" -> count("CONDITION_FALSE") > 0 && count("RETRY") > 0 && (benchmark || actionDone);
-            case "delay" -> firstOutputTick - firstConversionTick >= 100;
-            case "reload" -> actionDone && firstOutputTick - firstConversionTick >= 100;
-            case "expiry" -> count("NATURAL_EXPIRY_DEFERRED") > 0 && firstConversionAge >= expiryLifespan - 1;
-            case "priority" -> firstRule.equals("itemdespawntowhat:debug/priority") && count("AGE_NOT_READY") > 0;
-            case "excluded" -> count("EXCLUDED") == 2 && sources.stream().allMatch(Entity::isAlive);
-            default -> true;
-        };
     }
 
     // 已完成任务已从集合释放，停止时仅取消本轮尚在队列中的效果。
@@ -444,6 +430,7 @@ final class DebugScenarioRun {
             discardLoaded(source);
         }
         for (ItemEntity output : outputs) { discardLoaded(output); }
+        probe.fixtures.forEach(this::discardLoaded);
     }
 
     // 不加载区块；若实体已重新加载，按UUID移除当前实例。
@@ -462,5 +449,5 @@ final class DebugScenarioRun {
     private void increment(String event, long amount) { counters.merge(event, amount, Long::sum); }
 
     // 不存在的事件视为零，避免缺失字段被误读为已发生。
-    private long count(String event) { return counters.getOrDefault(event, 0L); }
+    long count(String event) { return counters.getOrDefault(event, 0L); }
 }

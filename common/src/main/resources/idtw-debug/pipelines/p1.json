@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "quantity": "none",
+  "default_entities": 0,
+  "rounds": 1,
+  "performance_gate": false,
+  "steps": [
+    {
+      "scenario": "run/convert",
+      "entities": 1,
+      "seconds": 12
+    },
+    {
+      "scenario": "run/stack",
+      "entities": 1,
+      "seconds": 12
+    },
+    {
+      "scenario": "run/delay",
+      "entities": 1,
+      "seconds": 12
+    },
+    {
+      "scenario": "run/expiry",
+      "entities": 1,
+      "seconds": 12
+    }
+  ]
+}

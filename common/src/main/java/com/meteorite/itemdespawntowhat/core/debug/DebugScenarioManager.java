@@ -16,6 +16,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.phys.Vec3;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.Nullable;
@@ -42,18 +43,46 @@ public final class DebugScenarioManager {
     // 开发指令直接创建场景，不读取历史日志，也不写入用户配置。
     public static int start(CommandSourceStack source, RuleCommandContext context, String name,
                             boolean benchmark, int entities, int seconds) {
+        if (DebugPipelineManager.active(source.getServer())) { return failure(source, "pipeline_busy"); }
+        return startScene(source, context, name, benchmark, entities, seconds, null, null);
+    }
+
+    // 流水线仅覆盖起点和关联编号，仍使用同一个场景生命周期。
+    static int startPipeline(CommandSourceStack source, RuleCommandContext context, String name,
+                             boolean benchmark, int entities, int seconds, Vec3 origin, String pipelineId) {
+        return startScene(source, context, name, benchmark, entities, seconds, origin, pipelineId);
+    }
+
+    // 流水线读取本轮编号，不暴露或修改业务运行时状态。
+    static @Nullable DebugScenarioRun activeRun(MinecraftServer server) { return ACTIVE.get(server); }
+
+    // 中止流水线拥有的场景，防止误结束独立手动场景。
+    static void stopPipelineScene(MinecraftServer server, RuleCommandContext context, String reason) {
+        var run = ACTIVE.get(server);
+        if (run != null && run.pipelineId != null) { finish(server, context, reason); }
+    }
+
+    // 所有场景共用开发环境、数量、准备与启动失败处理。
+    private static int startScene(CommandSourceStack source, RuleCommandContext context, String name,
+                                  boolean benchmark, int entities, int seconds, @Nullable Vec3 fixedOrigin,
+                                  @Nullable String pipelineId) {
         if (!DebugMode.ENABLED) { return failure(source, "development_only"); }
         if (!(source.getEntity() instanceof ServerPlayer player)) { return failure(source, "player_only"); }
         if (context.runtime() == null || context.editContext().typeRegistries() == null) { return failure(source, "not_ready"); }
         if (ACTIVE.containsKey(source.getServer())) { return failure(source, "busy"); }
         try {
-            var origin = source.getPosition().add(player.getLookAngle().x * 3, 1, player.getLookAngle().z * 3);
+            var origin = fixedOrigin == null ? source.getPosition().add(player.getLookAngle().x * 3, 1, player.getLookAngle().z * 3) : fixedOrigin;
             var definition = DebugScenarioDefinition.create(source.getServer(), context.editContext().typeRegistries(),
                     name, benchmark, entities, BlockPos.containing(origin).getY());
-            var run = new DebugScenarioRun(name, benchmark, player.serverLevel(), player.getUUID(), origin, seconds, definition);
+            var run = new DebugScenarioRun(name, benchmark, player.serverLevel(), player.getUUID(), origin, seconds, definition, pipelineId);
             ACTIVE.put(source.getServer(), run);
             JsonObject data = DebugLog.config(context.serverConfig());
-            data.addProperty("format", "idtw-scene-v1");
+            data.addProperty("format", "idtw-scene-v2");
+            if (pipelineId != null) { data.addProperty("pipeline", pipelineId); }
+            data.addProperty("rule_source", "development-memory");
+            data.addProperty("builtin_datapack", false);
+            data.addProperty("scenario_resource", DebugScenarioCatalog.ROOT + definition.spec.key() + ".json");
+            data.add("expected", definition.expected);
             data.addProperty("platform", com.meteorite.itemdespawntowhat.platform.Services.PLATFORM.getPlatformName());
             data.addProperty("minecraft_version", source.getServer().getServerVersion());
             data.addProperty("java_version", System.getProperty("java.version"));
@@ -63,6 +92,7 @@ public final class DebugScenarioManager {
             data.addProperty("benchmark", benchmark);
             data.addProperty("per_entity_logging", !benchmark);
             data.addProperty("entities", definition.sources);
+            data.addProperty("source_entity_limit", benchmark ? DebugScenarioSpec.MAX_BENCHMARK_SOURCES : DebugScenarioSpec.MAX_FUNCTIONAL_SOURCES);
             data.addProperty("stack_size", definition.stackSize);
             data.addProperty("requested_measurement_seconds", seconds);
             data.addProperty("warmup_world_ticks", 20);
@@ -77,6 +107,7 @@ public final class DebugScenarioManager {
             data.add("scenario_rules", definition.parameters);
             run.log("START", data);
             source.sendSuccess(() -> Component.translatable(PREFIX + "started", name, run.id, definition.sources), false);
+            source.sendSuccess(() -> Component.translatable(definition.spec.descriptionKey()), false);
             return 1;
         } catch (RuntimeException failure) {
             if (ACTIVE.containsKey(source.getServer())) { finish(source.getServer(), context, "start_error"); }
@@ -110,6 +141,7 @@ public final class DebugScenarioManager {
     static void unbind(DebugScenarioRun run) {
         run.sources.forEach(item -> ENTITIES.remove(item.getUUID()));
         run.outputs.forEach(item -> ENTITIES.remove(item.getUUID()));
+        run.probe.fixtures.forEach(item -> ENTITIES.remove(item.getUUID()));
     }
 
     // 后端观察入口只做有界计数；只有功能场景构建过程日志。
@@ -178,12 +210,14 @@ public final class DebugScenarioManager {
 
     // 手动停止只结束本轮负载，提前停止的结果明确为INCOMPLETE。
     public static int stop(CommandSourceStack source, RuleCommandContext context) {
+        if (DebugPipelineManager.active(source.getServer())) { return DebugPipelineManager.stop(source, context); }
         if (!ACTIVE.containsKey(source.getServer())) { return failure(source, "not_running"); }
         return finish(source.getServer(), context, "manual_stop");
     }
 
     // 查询仅返回活动场景的操作状态，不触发读取日志或新一轮采样。
     public static int status(CommandSourceStack source) {
+        if (DebugPipelineManager.active(source.getServer())) { return DebugPipelineManager.status(source); }
         DebugScenarioRun run = ACTIVE.get(source.getServer());
         if (run == null) { return failure(source, "not_running"); }
         source.sendSuccess(() -> Component.translatable(PREFIX + "status", run.name, run.id,
@@ -210,17 +244,22 @@ public final class DebugScenarioManager {
     private static int finish(MinecraftServer server, RuleCommandContext context, String reason) {
         DebugScenarioRun run = ACTIVE.remove(server);
         if (run == null) { return 0; }
+        String verdict = "INCOMPLETE";
         try {
-            String verdict = run.finish(context, reason);
+            verdict = run.finish(context, reason);
+            String displayVerdict = verdict;
             var player = server.getPlayerList().getPlayer(run.initiator);
             var recipient = player == null ? server.createCommandSourceStack() : player.createCommandSourceStack();
             recipient.sendSuccess(() -> Component.translatable(PREFIX + "finished", run.name, run.id,
-                    Component.translatable(PREFIX + "verdict." + verdict)), false);
+                    Component.translatable(PREFIX + "verdict." + displayVerdict)), false);
             return 1;
         } catch (RuntimeException failure) {
             LOGGER.error("[IDTW_DEBUG] run={} 场景清理失败", run.id, failure);
             return 0;
-        } finally { unbind(run); }
+        } finally {
+            unbind(run);
+            DebugPipelineManager.sceneFinished(server, run, verdict);
+        }
     }
 
     // 错误反馈保持本地化。

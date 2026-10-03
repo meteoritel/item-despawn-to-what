@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "quantity": "fixed",
+  "default_entities": 100,
+  "rounds": 3,
+  "performance_gate": true,
+  "steps": [
+    {
+      "scenario": "bench/baseline",
+      "entities": 0,
+      "seconds": 60
+    },
+    {
+      "scenario": "bench/normal",
+      "entities": "$entities",
+      "seconds": 60
+    },
+    {
+      "scenario": "bench/converted",
+      "entities": "$entities",
+      "seconds": 60
+    },
+    {
+      "scenario": "bench/retry",
+      "entities": "$entities",
+      "seconds": 60
+    }
+  ]
+}

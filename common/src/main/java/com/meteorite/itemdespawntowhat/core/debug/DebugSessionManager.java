@@ -19,12 +19,16 @@ public final class DebugSessionManager {
         if (!DebugMode.ENABLED) { return; }
         if (context.runtime() != null && READY.add(server)) { DebugLog.ready(server, context); }
         DebugScenarioManager.tick(server, context);
+        DebugPipelineManager.tick(server, context);
     }
 
     // 场景清理必须先于平台运行时关闭，才能取消本轮延迟任务。
     public static void shutdown(MinecraftServer server, RuleCommandContext context) {
         if (!DebugMode.ENABLED) { return; }
-        try { DebugScenarioManager.shutdown(server, context); }
+        try {
+            DebugPipelineManager.shutdown(server, context);
+            DebugScenarioManager.shutdown(server, context);
+        }
         finally { READY.remove(server); }
     }
 }

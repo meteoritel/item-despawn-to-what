@@ -5,6 +5,7 @@ import com.meteorite.itemdespawntowhat.core.command.RuleCommandContext;
 import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
 import com.meteorite.itemdespawntowhat.platform.Services;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.item.ItemEntity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -61,6 +62,7 @@ final class DebugLog {
     static JsonObject item(ItemEntity item) {
         JsonObject data = new JsonObject();
         data.addProperty("entity", item.getUUID().toString());
+        data.addProperty("item", BuiltInRegistries.ITEM.getKey(item.getItem().getItem()).toString());
         data.addProperty("age_ticks", item.getAge());
         data.addProperty("count", item.getItem().getCount());
         data.addProperty("world_tick", item.level().getGameTime());

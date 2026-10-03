@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "quantity": "none",
+  "default_entities": 0,
+  "rounds": 1,
+  "performance_gate": false,
+  "steps": [
+    {
+      "scenario": "run/retry",
+      "entities": 1,
+      "seconds": 12
+    },
+    {
+      "scenario": "run/priority",
+      "entities": 1,
+      "seconds": 12
+    },
+    {
+      "scenario": "run/excluded",
+      "entities": 2,
+      "seconds": 12
+    },
+    {
+      "scenario": "run/source_cost",
+      "entities": 1,
+      "seconds": 12
+    },
+    {
+      "scenario": "run/rebate",
+      "entities": 1,
+      "seconds": 12
+    },
+    {
+      "scenario": "run/insufficient",
+      "entities": 1,
+      "seconds": 12
+    },
+    {
+      "scenario": "run/outcome_priority",
+      "entities": 1,
+      "seconds": 12
+    },
+    {
+      "scenario": "run/round_robin",
+      "entities": 4,
+      "seconds": 12
+    },
+    {
+      "scenario": "run/multi_effect",
+      "entities": 1,
+      "seconds": 12
+    },
+    {
+      "scenario": "run/chance_skip",
+      "entities": 1,
+      "seconds": 12
+    },
+    {
+      "scenario": "run/condition_tree",
+      "entities": 1,
+      "seconds": 12
+    },
+    {
+      "scenario": "run/catalyst",
+      "entities": 1,
+      "seconds": 12
+    },
+    {
+      "scenario": "run/catalyst_limited",
+      "entities": 1,
+      "seconds": 12
+    },
+    {
+      "scenario": "run/reload",
+      "entities": 1,
+      "seconds": 12
+    }
+  ]
+}

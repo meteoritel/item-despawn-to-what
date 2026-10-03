@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "quantity": "none",
+  "default_entities": 0,
+  "rounds": 1,
+  "performance_gate": true,
+  "steps": [
+    {
+      "scenario": "bench/baseline",
+      "entities": 0,
+      "seconds": 20
+    }
+  ]
+}

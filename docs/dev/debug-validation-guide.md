@@ -1,6 +1,8 @@
 # 开发场景与后端性能验证
 
-Debug用于实测真实后端线路和为性能优化提供可比较数据。游戏指令直接创建场景，开发环境实时输出日志；实现集中在 `core/debug/`。
+Debug用于实测真实后端线路和为性能优化提供可比较数据。游戏指令直接创建场景，开发环境实时输出日志；实现集中在 `core/debug/`。可用 `/idtw debug pipeline p0`～`p4` 一键运行阶段，自动串行、清理后冷却5秒及失败停止；参数和完整验收顺序见 [实机测试流水线](debug-test-pipeline.md)，本机压力场景源实体上限为1000。
+
+全部功能与性能场景共用开发目录与断言器。结算示例见 [后端结算示例](debug-settlement-examples.md)，运行 `/idtw debug examples` 可查看全部命令；扩展方式见 [统一技术路线](debug-scenario-extension.md)。
 
 ## 1. 在 IDEA 中开始
 
@@ -25,7 +27,7 @@ Debug用于实测真实后端线路和为性能优化提供可比较数据。游
 | `/idtw debug run stack` | 源实体包含16张纸，整堆提交一次并生成16个海晶碎片 | CONVERT=1，rounds=16，OUTPUT_ITEMS及留存产物均为16 |
 | `/idtw debug run priority` | 同一源有2秒低优先级和8秒高优先级规则；2秒时只应选已到期的低优先级规则 | 高优先级AGE_NOT_READY；first_rule为debug/priority；不得产出高规则的金粒 |
 | `/idtw debug run excluded` | 2个源分别添加死亡锁标签和无限寿命，均不进入追踪 | EXCLUDED=2，提交与产出均为0，两个源存活 |
-| `/idtw debug run reload` | 提交100 tick延迟产出后调用真实规则reload并回扫；已提交效果继续完成 | ACTION_RELOAD，index_changes>0，延迟产出1次，没有重复提交 |
+| `/idtw debug run reload` | 100 tick延迟效果入队后调用真实全局reload，取消结算与效果 | ACTION_RELOAD，SETTLEMENT_CANCELLED=1，产出为0，无剩余场景效果任务 |
 
 “游戏秒”按20个世界tick计算；测量时长按墙钟计算，低TPS时不能用肉眼秒数直接判定年龄逻辑。expiry目前使用原版NBT short设置年龄，实际寿命超过32767时明确拒绝该场景。
 
@@ -38,9 +40,9 @@ Debug用于实测真实后端线路和为性能优化提供可比较数据。游
 ```
 
 - 每个服务器最多一轮场景，重复启动会拒绝；场景名固定，Tab可补全。
-- status只反馈准备、预热、测量阶段与实体生成进度；mark记录用户观察，区别于真实后端事件。
-- stop立即停止本轮负载，结果为INCOMPLETE；不能把手动提前停止当作PASS。正常结束也会自动清理本轮源、产物及尚在队列中的场景任务。
-- 再启动一轮delay，在源提交后立刻stop：应出现INCOMPLETE、remaining_scene_tasks=0，后续不再生成本轮延迟产物。普通实体、普通规则的延迟任务不会被清空。
+- 独立场景status反馈准备、预热、测量阶段与实体生成进度；流水线活动时status反馈阶段步骤及冷却。mark记录用户观察，区别于真实后端事件。
+- stop立即停止本轮负载，流水线活动时同时取消所有后续步骤，冷却期间也有效；结果为INCOMPLETE。正常结束也会自动清理本轮源、产物及尚在队列中的场景任务。
+- 可在 delay 的延迟效果已入队后执行 stop：应出现 INCOMPLETE，并取消已登记的场景效果。后端结算/恢复任务独立登记，remaining_scene_tasks=0不证明全部后端任务已结束；提前停止后若有待返还残留，请重建测试存档。普通任务不会因 stop 被整体清空。
 - 测完一轮后等待数秒确认没有再次产物，再运行下一轮。正常退出世界或维度卸载会结束场景并释放引用；发起者离线后结果仍写入控制台。
 - 本轮实体带`idtw_debug_fixture`标签和唯一custom_data，禁止拾取、关闭重力与合并。停止前可直接看见结果，不要手工改变测试实体。自动清理后产物不会留在背包中。
 
@@ -68,59 +70,39 @@ END窗口含本轮实际准备数量、开始测量前已发生的提交/产出�
 
 ## 5. 性能优化前后的对比方案
 
-先完成全部功能场景，再开始性能测量。保持同一平台、JVM参数、堆大小、地图位置、模拟距离、实体数、规则参数与tick_rate。默认20 TPS；不得用提高刻率或跳tick来宣称达到20 TPS目标。
+先通过全部功能场景，再按 [实机测试流水线](debug-test-pipeline.md) 的100→250→500→1000档位逐级测试。当前档功能或性能不达标即停止加量；1000是硬上限，不是本机必须达到的目标。
 
-在开阔约30×30格且区块已加载的位置逐轮执行，等上一轮END与清理结束后再执行下一条：
-
-```mcfunction
-/idtw debug bench baseline 60
-/idtw debug bench convert 1000 60
-/idtw debug bench retry 1000 60
-/idtw debug bench convert 10000 60
-/idtw debug bench retry 10000 60
-```
-
-baseline不添加实体，测量当前世界背景成本；convert生成真实年龄10游戏秒后到期的转化负载；retry生成相同数量、年龄10游戏秒到期、条件始终不满足的负载，持续测试退避和检查成本。
-
-### 5.1 10000 实体对照：normal 对比 converted
-
-用于隔离“模组对掉落物的处理开销”。两组都在生成高峰之后测连续10秒窗口（沿用准备→预热20tick→测量相位，生成耗时不混入窗口）。
+快速对照示例（逐条执行，上一轮END后至少等待5秒）：
 
 ```mcfunction
-/idtw debug bench normal 10000 10
-/idtw debug bench converted 10000 10
+/idtw debug bench baseline 20
+/idtw debug bench normal 100 20
+/idtw debug bench converted 100 20
+/idtw debug bench convert 100 20
+/idtw debug bench retry 100 20
 ```
 
-- `normal`生成10000个纸源但**不绑定任何规则**，实体不被追踪，只承担原版实体tick成本，作为对照组。
-- `converted`生成10000个纸源并绑定转化规则（trigger为5游戏秒，比默认10秒更早到期，为10秒窗口留足完成裕度），被追踪并在窗口内完成转化与产物生成，作为转化组。
-- 两组默认10000实体、10秒；可用 `[实体数] [秒数]` 覆盖（实体1～10000，秒数10～300）。原 `convert`/`retry`/`baseline` 语义不变。
-- 测量窗口内发起者视角被固定（位置与朝向都会纠正），并在动作栏显示剩余秒数倒计时，结束时自动清除。玩家持续移动鼠标/按键时每tick会收到纠正包，`server_tick_cost` 会略含这部分开销；玩家静止时该开销为零。
-- 完成判定沿用 `verify()`：`converted` 要求窗口内10000次转化全部完成且留存产物10000，`normal` 要求0次转化、10000源全部存活。若实测TPS过低（约低于12），10秒墙钟对应的世界tick不足，转化未全部完成会使END判FAIL，此时应延长窗口或降低实体数。
-- 对比口径：同平台、同JVM/堆/视距/位置/规则参数下各跑≥3轮，比较 `server_tick_cost` 与 checks/effects 队列的均值与分位数，以及 `observed_ticks_per_second`；两组之间只差“是否被模组追踪并转化”，不要把单轮极值当作稳定工况。
-
-- 实体数1～10000，测量10～300墙钟秒。默认1000实体和60秒；基线默认60秒。推荐60秒，短窗口/严重低TPS可能在结束前尚未全部到期，END会按实际判定FAIL。
-- 持续失败负载仍遵循真实自然寿命；默认寿命300游戏秒下，测量300秒再加准备/预热可能使部分源自然消失、固定负载校对FAIL。使用60秒或在寿命范围内选时长，并对照remaining_source_items_at_end。
-- 自动分批准备，每tick最多128个源且有2ms软预算；准备后预热20个世界tick再采样，准备与清理成本不混入窗口。准备或预热异常明确ERROR；准备不会强制加载区块。
-- 生成固定0.25格间距的网格，单个源count=1，以唯一组件防止合并。10000实体约25×25格；关闭重力以固定位置。若要测正常落地/合并成本，应另外设计负载，不能将当前受控密度结果视为所有自然场景。
-- benchmark关闭逐实体过程日志，仅保留每秒FRAME和最后END；期间不要mark、reload或运行其他会扫描配置的指令。END仍记录mark数量与index_changes，避免把变更配置前后的数据当作稳定工况。
-- 优化前、优化后至少各跑3轮上述基线和负载，保留每轮run及构建/commit标识，不只挑最快一轮。先比功能结果，再比相同负载下的窗口均值、p95/p99、最大耗时、积压和延期。
+- normal 无规则，验证原版掉落物实体成本；converted 在5游戏秒后转化；convert 在10游戏秒后转化；retry 持续条件失败，验证检查和退避。
+- 非空性能场景默认1000源实体。normal/converted默认10秒，convert/retry默认60秒；baseline默认0实体/60秒。实体数允许1～1000，时长10～300墙钟秒。
+- 所有场景通过统一 checks 校验。转化负载要求实际提交与留存产物均为请求数量，normal/retry要求零提交且源全部保留；PASS不自动表示性能达标。
+- 保持同一平台、JVM/堆、位置、视距、模拟距离、规则参数及20 TPS。性能窗口锁定发起者视角，保持静止以避免额外纠正包；不在测量中mark、reload或改配置。
+- 准备按配置分批（默认每tick最多128个源、2ms软预算），预热20个世界tick；准备与清理不混入测量窗口。固定0.25格网格，1000源约8×8格，唯一组件防合并，关闭重力。
+- 短窗口和低TPS可能导致未完成转化；可以降低数量并用60秒确认机制。延长窗口不会消除CPU过载。
+- 优化前后在相同、已达标档位各测至少3轮，保留全部run及构建标识，比较均值、分位数、积压和延期；不挑最快一轮，不直接相减p95/p99推断纯模组分位。
 
 | END字段 | 解释与用途 |
-|---|---|
-| window.server_tick_cost | 原版已完成tick的总体耗时，微秒；包含世界、玩家等工作，不等于模组耗时 |
-| window.checks / window.effects | 场景维度实际检查/效果队列的耗时，含普通实体工作；samples、mean_us、max_us、p50/p95/p99_us |
-| visited_in_window | 窗口内任务访问次数，包含取消任务的访问，不是成功转化数 |
-| max/mean_pending_at_tick_end | 本窗口tick末队列深度，不是tick内瞬时峰值或生命周期峰值 |
-| max_oldest_ready_delay_ticks | 就绪任务最大观测延期，协助判断预算是否形成积压 |
-| observed_ticks_per_second | 完整服务端tick数/单调墙钟窗口；不是纯模组吞吐，暂停、GC、其他模组都会影响 |
-| world_ticks_advanced | 场景维度实际推进刻数；冻结时不重复采集同一个世界tick的队列耗时 |
-| conversions/output_items_in_window | 测量窗口内实际提交次数与实际产出数量；另列开始测量前计数 |
-| checks/effects_pending_after_cleanup | 清理后的维度队列深度；若还有普通实体任务不要求为0 |
-| remaining_scene_tasks | 本轮待执行任务的清理结果，正常结束应为0 |
+| --- | --- |
+| window.server_tick_cost | 服务端总tick耗时（微秒），含世界与其它模组工作 |
+| window.checks / window.effects | 场景维度检查/效果队列的 mean_us、p95_us、p99_us 等 |
+| window.observed_ticks_per_second | 实测完整服务端tick数/墙钟窗口 |
+| window.world_ticks_advanced | 场景维度实际推进刻数 |
+| window.index_changes | 测量期全局规则索引变更次数，性能测试应为0 |
+| window.sample_limit_reached | 样本上限是否提前结束窗口 |
+| conversions/output_items_in_window | 窗口内真实提交与产出，另有窗口开始前计数 |
+| remaining_scene_tasks | 本轮登记任务清理结果，不包括全部后端结算/恢复任务 |
+| checks/effects_pending_after_cleanup | 清理后的全局维度队列，可包含普通任务 |
 
-分位数来自有界原始样本、按nearest-rank计算，仅在结束时排序；最多12000个服务端样本，达到上限会结束并标注。空窗口samples=0，没有统计意义。
-
-TPS≥19.5或检查开销<0.5ms/tick的目标需由实测窗口支持；2ms软预算不能证明达标。READY、FRAME与结束日志在EndServerTick之后输出，不属于当前原版tick数组记录，但会影响墙钟间隔；队列耗时包含开发计数和场景任务管理开销。优化前后使用相同诊断版本，基线不能消除所有观测开销，也不要直接相减p95/p99来推断纯模组分位数。
+分位数使用有界真实样本和nearest-rank计算，最多12000个tick样本；空窗口没有统计意义。队列成本含开发观测开销，前后对比需使用相同诊断版本。完整性能门槛与失败分流以流水线文档为准。
 
 ## 6. AI反馈模板
 
@@ -143,20 +125,11 @@ run编号：
 - 性能窗口的队列范围为场景维度，服务端总体耗时范围为整个服务器；其他普通实体和模组仍可能污染基线。受控纸张转海晶碎片负载不代表爆炸、战利品、催化剂等复杂效果性能。
 - 正常停止、停服与维度卸载会清理；进程强杀不能保证清理。若测试世界重启后有残留fixture，可在该测试世界执行 `/kill @e[type=minecraft:item,tag=idtw_debug_fixture]`，不会匹配普通未标记掉落物。
 - 清理只查询已加载实体，不强制加载区块或修改卸载区块的实体存档；若测试期间离开使区块卸载，回来后按fixture标签清理残留。为保持受控工况，整轮留在生成区域。
-- 单场景最多10000源实体、64条mark；mark最多160个UTF-16单元并保留完整代理对。IDEA没有实时推进游戏时不会虚构成功结果。
+- 压力场景最多1000源实体、64条mark；mark最多160个UTF-16单元并保留完整代理对。IDEA没有实时推进游戏时不会虚构成功结果。
 - 本轮游戏验证交由用户完成；本页“预期”是验收条件，不是已经观测到的游戏结果。
 
-## 8. 本轮开发验证记录
+## 8. 开发验证与反馈标识
 
-- IDEA MCP工作区检查：Java与JSON无错误，debug包无告警。其余5条提示涉及已有冗余判断、Math.clamp建议、返回值使用、框架持有的ServerLevel资源以及固定参数；没有关闭框架持有的世界。
-- 按IDEA检查后构建的顺序执行 `./gradlew build`（Windows命令为 `.\gradlew.bat build`）：`BUILD SUCCESSFUL in 25s`，退出码0，两端编译和打包通过。没有新增test文件，也没有启动游戏代替实机验收。
-- 已检查语言JSON合法性、双语场景key与占位符一致性、平台/客户端依赖隔离和 `git diff --check`。
-- 已核对Fabric与NeoForge主jar：均包含新的debug场景类和双语文本，不含旧报告/导出类或旧command包的RuleDebugCommands。
-- 后续新增压力对比场景 `normal`/`converted` 及测量期锁视角、动作栏倒计时；改动后重新执行 `.\gradlew.bat build` 通过，下表哈希为本次最终产物。
+验证顺序为 IDEA MCP 工作区检查，再执行 `powershell -ExecutionPolicy Bypass -File tools/dsh-build.ps1 -Tasks "build"`，不直接运行Gradle。游戏内验收交由用户，本页预期不代表已经实测通过。
 
-本轮生成产物的SHA-256可用于反馈时标识发布jar；IDEA运行源码时仍应附当前commit及未提交改动信息：
-
-| 产物 | SHA-256 |
-|---|---|
-| `fabric/build/libs/itemdespawntowhat-fabric-1.21.1-1.2.1.jar` | `59849cd96e94014bf4228e0879bf99a540c287a91fdec3541bc91555c3820322` |
-| `neoforge/build/libs/itemdespawntowhat-neoforge-1.21.1-1.2.1.jar` | `fbf98258f099138729bbed3e9680cd04e8e8e9916da215243de34f4f630e9138` |
+反馈时附当前源码commit、未提交改动和同run的START～END日志。jar哈希如需使用，应从本次实际构建产物计算，不复用历史构建哈希。
