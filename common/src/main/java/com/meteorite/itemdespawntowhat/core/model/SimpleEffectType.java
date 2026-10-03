@@ -13,8 +13,15 @@ public record SimpleEffectType<P extends Effect>(
         ResourceLocation id,
         MapCodec<P> codec,
         Validator<P> validator,
-        EffectExecutor<P> executor
+        EffectExecutor<P> executor,
+        boolean oneShot
 ) implements EffectType<P> {
+
+    // 兼容既有四参构造：默认按一次性效果之外的普通效果处理
+    public SimpleEffectType(ResourceLocation id, MapCodec<P> codec, Validator<P> validator,
+                            EffectExecutor<P> executor) {
+        this(id, codec, validator, executor, false);
+    }
 
     @Override
     public boolean validateParams(P params, IssueCollector issues, String fieldPath) {

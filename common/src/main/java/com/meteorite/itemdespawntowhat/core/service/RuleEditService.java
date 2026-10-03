@@ -28,7 +28,6 @@ import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerCont
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveResultPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotChunker;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.SaveRuleChangeSetChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.SaveRuleChangeSetPayload;
 import com.mojang.serialization.DataResult;
@@ -274,7 +273,7 @@ public final class RuleEditService {
         DataResult<RuleEditChangeSet> parsed = RuleEditChangeSet.parse(body);
         RuleEditChangeSet changeSet = parsed.result().orElse(null);
         if (changeSet == null) {
-            String detail = parsed.error().map(error -> error.message()).orElse("unknown");
+            String detail = parsed.error().map(DataResult.Error::message).orElse("unknown");
             RuleSaveResultPayload failed = result(sessionId, operationId, RuleSaveStatus.INVALID_REQUEST,
                     "itemdespawntowhat.edit.parse_failed", args(detail), List.of(), false, false);
             remember(failed);
@@ -455,7 +454,7 @@ public final class RuleEditService {
             String text = snapshot.serialize();
             List<CustomPacketPayload> packets = RuleSnapshotChunker.split(
                     sessionId == null ? "" : sessionId, requestId == null ? "" : requestId, text);
-            if (!packets.isEmpty() && packets.get(0) instanceof RuleSnapshotChunkPayload) {
+            if (!packets.isEmpty() && packets.getFirst() instanceof RuleSnapshotChunkPayload) {
                 LOGGER.info("规则快照超过单包上限，已分片下发: bytes={} chunks={}",
                         RuleEditLimits.encodedLength(text), packets.size());
             }

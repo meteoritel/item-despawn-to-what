@@ -57,8 +57,6 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
         }
     }
 
-    // 字体
-    private final Font font;
     // 行渲染器
     private final NodeRenderer<T> nodeRenderer;
     // 滚动与裁剪
@@ -73,8 +71,6 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
     private int rowHeight = DEFAULT_ROW_HEIGHT;
     // 选中节点
     private UiTreeNode<T> selectedNode;
-    // 悬停行下标，-1 表示无悬停
-    private int hoveredIndex = -1;
     // 一屏可见行数
     private int visibleRowCount = 1;
     // 空树提示
@@ -91,8 +87,8 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
     private long lastClickTime;
     private int lastClickIndex = -1;
 
-    public UiTreeView(Font font, NodeRenderer<T> nodeRenderer) {
-        this.font = font;
+    // 字体由 render 接收；保留构造参数以兼容现有组件 API。
+    public UiTreeView(@SuppressWarnings("unused") Font font, NodeRenderer<T> nodeRenderer) {
         this.nodeRenderer = nodeRenderer;
     }
 
@@ -288,7 +284,7 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
                     viewport.y() + Math.max(0, viewport.height() / 2 - 4), UiPalette.TEXT_SECONDARY);
             return;
         }
-        hoveredIndex = indexAt(mouseX, mouseY);
+        int hoveredIndex = indexAt(mouseX, mouseY);
         int rowWidth = contentWidth();
         int baseX = UiTheme.SELECT_MARKER_WIDTH;
         scrollView.push(graphics);
@@ -407,11 +403,11 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_HOME) {
-            setSelectedNode(visibleRows.get(0).node);
+            setSelectedNode(visibleRows.getFirst().node);
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_END) {
-            setSelectedNode(visibleRows.get(visibleRows.size() - 1).node);
+            setSelectedNode(visibleRows.getLast().node);
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_LEFT) {

@@ -2,15 +2,19 @@ package com.meteorite.itemdespawntowhat.core.model;
 
 import com.meteorite.itemdespawntowhat.core.api.Issue;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
+import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.api.TypeDefinition;
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
+import com.meteorite.itemdespawntowhat.core.type.RefChecks;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.core.registries.BuiltInRegistries;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -40,8 +44,35 @@ public final class RuleValidation {
         if (rule.source().isEmpty()) {
             issues.error("source.items 至少需要一个物品或标签", origin, SourceMatcher.fieldPath(SourceMatcher.ITEMS_FIELD));
         }
-        if (rule.effects().isEmpty()) {
-            issues.error("effects 不能为空", origin, RuleFields.EFFECTS);
+        boolean hasFlatEffects = !rule.effects().isEmpty();
+        boolean hasOutcomes = !rule.outcomes().isEmpty();
+        if (!hasFlatEffects && !hasOutcomes) {
+            issues.error("effects 与 outcomes 至少需要一个", origin, RuleFields.EFFECTS);
+        }
+        if (hasFlatEffects && hasOutcomes) {
+            issues.error("effects 与 outcomes 不能同时声明（二选一）", origin, RuleFields.OUTCOMES);
+        }
+        if (!hasFlatEffects && hasOutcomes) {
+            issues.warn("仅声明 outcomes 的规则在当前版本不会执行（候选执行落地前请保留顶层 effects）",
+                    origin, RuleFields.OUTCOMES);
+        }
+        if (rule.schemaVersion() != RuleCodecs.DEFAULT_SCHEMA_VERSION) {
+            issues.error("不支持的 schema_version: " + rule.schemaVersion()
+                    + "（当前支持 " + RuleCodecs.DEFAULT_SCHEMA_VERSION + "）", origin, RuleFields.SCHEMA_VERSION);
+        }
+        // 固定成本契约：source_cost 必须为正数；catalyst_cost 必须是合法对象
+        // （items 非空且引用存在、count 1..64、radius 1..8）；两者与同名消耗效果互斥，避免重复记账
+        if (rule.sourceCost() != null && rule.sourceCost() <= 0) {
+            issues.error("source_cost 必须为正数: " + rule.sourceCost(), origin, RuleFields.SOURCE_COST);
+        }
+        if (rule.catalystCost() != null) {
+            validateCatalystCost(rule.catalystCost(), issues);
+        }
+        if (rule.sourceCost() != null && rule.declaresSourceConsumption()) {
+            issues.error("source_cost 与 consume_source 效果不能同时声明（避免重复记账）", origin, RuleFields.SOURCE_COST);
+        }
+        if (rule.catalystCost() != null && rule.declaresConsumption(ConsumptionDefaults.CONSUME_CATALYST_ID)) {
+            issues.error("catalyst_cost 与 consume_catalyst 效果不能同时声明（避免重复记账）", origin, RuleFields.CATALYST_COST);
         }
         if (rule.displayName() != null
                 && rule.displayName().codePointCount(0, rule.displayName().length()) > ConditionLimits.MAX_DISPLAY_NAME_CODEPOINTS) {
@@ -55,7 +86,8 @@ public final class RuleValidation {
                     origin, RuleFields.CONDITIONS);
         }
 
-        if (rule.effects().size() > ConditionLimits.MAX_EFFECTS
+        List<EffectSlot> slots = effectSlots(rule);
+        if (slots.size() > ConditionLimits.MAX_EFFECTS
                 || rule.conditions().leafCount() > ConditionLimits.MAX_LEAVES
                 || rule.conditions().nodeCount() > ConditionLimits.MAX_NODES
                 || rule.conditions().depth() > ConditionLimits.MAX_DEPTH
@@ -66,10 +98,11 @@ public final class RuleValidation {
                     + "、source 项<=" + ConditionLimits.MAX_SOURCE_ENTRIES, origin, null);
         }
         validateSourceEntries(rule.source(), issues, origin);
-        for (int index = 0; index < rule.effects().size(); index++) {
-            validateEffect(rule.effects().get(index), index, issues, origin);
+        for (EffectSlot slot : slots) {
+            validateEffect(slot.effect(), slot.path(), issues, origin);
         }
-        validateConsumptionEffects(rule, issues, origin);
+        validateOutcomes(rule, issues, origin);
+        validateConsumptionEffects(slots, issues, origin);
         return issues.errors().size() == before;
     }
 
@@ -82,9 +115,10 @@ public final class RuleValidation {
         int before = issues.errors().size();
         validate(rule, issues, origin);
         validateConditionParams(rule.conditions(), conditionTypes, issues, origin, RuleFields.CONDITIONS);
-        for (int index = 0; index < rule.effects().size(); index++) {
-            Effect effect = rule.effects().get(index);
-            String path = RuleFields.EFFECTS + "[" + index + "]";
+        // 类型专属参数校验覆盖顶层 effects 与候选结果内 effects，路径与 JSON 形状一致
+        for (EffectSlot slot : effectSlots(rule)) {
+            Effect effect = slot.effect();
+            String path = slot.path();
             validateEffectParams(effect, effectTypes, issues, origin, path);
             ConditionExpression conditions = effect.conditions();
             if (conditions != null) {
@@ -146,19 +180,64 @@ public final class RuleValidation {
         }
     }
 
-    // 消耗类效果重复检测：同一规则内同一消耗效果类型只允许出现一次
-    private static void validateConsumptionEffects(Rule rule, IssueCollector issues, @Nullable String origin) {
+    // 消耗类效果重复检测：同一规则内同一消耗效果类型只允许出现一次（跨候选与顶层合并计数）
+    private static void validateConsumptionEffects(List<EffectSlot> slots, IssueCollector issues, @Nullable String origin) {
         Map<ResourceLocation, Integer> counts = new HashMap<>();
-        for (Effect effect : rule.effects()) {
+        Map<ResourceLocation, String> firstPath = new HashMap<>();
+        for (EffectSlot slot : slots) {
+            Effect effect = slot.effect();
             if (ConsumptionDefaults.isConsumption(effect.type())) {
                 counts.merge(effect.type(), 1, Integer::sum);
+                firstPath.putIfAbsent(effect.type(), slot.path());
             }
         }
         counts.forEach((type, count) -> {
             if (count > 1) {
-                issues.error("同一规则内重复声明消耗效果 " + type + " 共 " + count + " 次", origin, RuleFields.EFFECTS);
+                issues.error("同一规则内重复声明消耗效果 " + type + " 共 " + count + " 次", origin, firstPath.get(type));
             }
         });
+    }
+
+    // 效果槽位：把顶层 effects 与候选结果内 effects 统一成「路径 + 效果」，供所有校验遍历
+    private record EffectSlot(String path, Effect effect) {
+    }
+
+    // 展开规则声明的全部效果槽位：顶层 effects[i] 在前，候选 outcomes[i].effects[j] 在后
+    private static List<EffectSlot> effectSlots(Rule rule) {
+        List<EffectSlot> slots = new ArrayList<>(rule.effects().size());
+        for (int index = 0; index < rule.effects().size(); index++) {
+            slots.add(new EffectSlot(RuleFields.EFFECTS + "[" + index + "]", rule.effects().get(index)));
+        }
+        for (int candidate = 0; candidate < rule.outcomes().size(); candidate++) {
+            OutcomeCandidate outcome = rule.outcomes().get(candidate);
+            for (int index = 0; index < outcome.effects().size(); index++) {
+                slots.add(new EffectSlot(
+                        RuleFields.OUTCOMES + "[" + candidate + "]." + RuleFields.CANDIDATE_EFFECTS + "[" + index + "]",
+                        outcome.effects().get(index)));
+            }
+        }
+        return List.copyOf(slots);
+    }
+
+    // 候选结果的结构校验：标识非空且唯一、效果列表非空、候选数量不超过效果上限
+    private static void validateOutcomes(Rule rule, IssueCollector issues, @Nullable String origin) {
+        Set<String> ids = new HashSet<>();
+        for (int index = 0; index < rule.outcomes().size(); index++) {
+            OutcomeCandidate candidate = rule.outcomes().get(index);
+            String path = RuleFields.OUTCOMES + "[" + index + "]";
+            if (candidate.id().isEmpty()) {
+                issues.error("候选结果缺少 id", origin, path);
+            } else if (!ids.add(candidate.id())) {
+                issues.error("候选结果 id 重复: " + candidate.id(), origin, path + "." + RuleFields.CANDIDATE_ID);
+            }
+            if (candidate.effects().isEmpty()) {
+                issues.error("候选结果 effects 不能为空", origin, path + "." + RuleFields.CANDIDATE_EFFECTS);
+            }
+        }
+        if (rule.outcomes().size() > ConditionLimits.MAX_EFFECTS) {
+            issues.error("候选结果数量超过上限: " + rule.outcomes().size() + " > " + ConditionLimits.MAX_EFFECTS,
+                    origin, RuleFields.OUTCOMES);
+        }
     }
 
     // 源匹配项校验：同一项不得同时出现在匹配与排除中，且不得重复
@@ -185,10 +264,22 @@ public final class RuleValidation {
         }
     }
 
+    // 规则级催化剂固定成本校验：items 必填非空且逐个引用存在（复用效果侧 RefChecks 语义，
+    // 非标签引用未注册即 ERROR、标签缺失只 WARN），count / radius 取值域与 consume_catalyst 一致。
+    // 说明：这里复用 ParamChecks / RefChecks，问题条目的 origin 为 null（与效果参数校验一致）。
+    private static void validateCatalystCost(CatalystCost cost, IssueCollector issues) {
+        String itemsPath = ParamChecks.child(RuleFields.CATALYST_COST, RuleFields.CATALYST_ITEMS);
+        ParamChecks.notEmpty(cost.items(), RuleFields.CATALYST_ITEMS, issues, itemsPath);
+        RefChecks.checkAll(cost.items(), BuiltInRegistries.ITEM, RuleFields.CATALYST_ITEMS, issues, itemsPath);
+        ParamChecks.inRange(cost.count(), CatalystCost.MIN_COUNT, CatalystCost.MAX_COUNT, RuleFields.CATALYST_COUNT,
+                issues, ParamChecks.child(RuleFields.CATALYST_COST, RuleFields.CATALYST_COUNT));
+        ParamChecks.inRange(cost.radius(), CatalystCost.MIN_RADIUS, CatalystCost.MAX_RADIUS,
+                RuleFields.CATALYST_RADIUS, issues, ParamChecks.child(RuleFields.CATALYST_COST, RuleFields.CATALYST_RADIUS));
+    }
+
     // 效果通用字段校验；类型专属参数由注册表感知入口负责
-    private static void validateEffect(Effect effect, int index, IssueCollector issues,
+    private static void validateEffect(Effect effect, String path, IssueCollector issues,
                                        @Nullable String origin) {
-        String path = RuleFields.EFFECTS + "[" + index + "]";
         if (effect.type() == null) {
             issues.error("效果缺少 type", origin, path);
             return;

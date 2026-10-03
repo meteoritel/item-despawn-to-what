@@ -5,14 +5,12 @@ import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotChunkP
 
 /***
  * 快照分片的客户端重组缓冲：同一 transferId 的分片收齐后按 index 顺序拼接为完整 JSON。
- * 同一时刻只保留最近一批分片；会话/请求切换、重复下标、超过 60 秒无进展都会重置缓冲。
+ * 同一时刻只保留最近一批分片；会话切换、重复下标、超过 60 秒无进展都会重置缓冲。
  */
 final class RuleSnapshotChunkBuffer {
 
     // 当前批次的会话 id
     private String sessionId = "";
-    // 当前批次的请求 id
-    private String requestId = "";
     // 当前批次的传输 id
     private String transferId = "";
     // 本批次分片总数
@@ -55,7 +53,6 @@ final class RuleSnapshotChunkBuffer {
     // 清空缓冲
     synchronized void clear() {
         sessionId = "";
-        requestId = "";
         transferId = "";
         count = 0;
         chunks = new String[0];
@@ -66,7 +63,6 @@ final class RuleSnapshotChunkBuffer {
     // 开启新批次
     private void start(RuleSnapshotChunkPayload payload, long tick) {
         sessionId = payload.sessionId();
-        requestId = payload.requestId();
         transferId = payload.transferId();
         count = payload.count();
         chunks = new String[count];

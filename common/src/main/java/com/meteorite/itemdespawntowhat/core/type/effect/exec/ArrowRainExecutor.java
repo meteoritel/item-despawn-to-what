@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.type.effect.exec;
 
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
+import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.type.effect.ArrowRainEffect;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -18,7 +19,9 @@ import java.util.List;
 
 /**
  * arrow_rain 执行器：按间隔在触发位置上方分波生成箭矢，可携带药水效果。
- * rounds 语义：一次性世界效果，不随 rounds 缩放（不是「每个物品一份」的结果）。
+ * rounds 语义：一次性世界效果，不随 rounds 缩放（不是「每个物品一份」的结果），
+ * 也不参与容量计算与组数限制（ADR-0001 阶段 4）。
+ * 阶段 4 起每支箭矢通过 context.reportProgress(1) 回执真实完成量。
  * 约定：delay_ticks / chance / 效果级 conditions 由运行时统一处理，本类不再判断；
  * 异常不吞、不捕获，由运行时统一捕获并记录（规则 id + 效果类型 + 位置）。
  */
@@ -39,13 +42,16 @@ public final class ArrowRainExecutor {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    public static void execute(ArrowRainEffect effect, EffectContext context) {
+    // 此处借用 Minecraft 管理的实例，生命周期由游戏负责，不能在此关闭。
+    @SuppressWarnings("resource")
+    public static EffectResult execute(ArrowRainEffect effect, EffectContext context) {
         AbstractArrow.Pickup pickup = toVanillaPickup(effect.pickup());
         List<MobEffectInstance> potionEffects = resolvePotionEffects(effect.potionEffects(), context.random());
         if (!com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks.containsArea(context.level(),
                 net.minecraft.core.BlockPos.containing(context.position()), 6)) {
             context.schedule(20, () -> execute(effect, context));
-            return;
+            // 等待区块加载：本次不计入账目，真实结果由后续调用回执
+            return EffectResult.deferred(0, "awaiting_chunk");
         }
         ServerLevel level = context.level();
         Vec3 origin = context.position();
@@ -54,6 +60,7 @@ public final class ArrowRainExecutor {
             // 延迟任务绑定维度与位置，不依赖源实体存活
             context.schedule(delay, () -> spawnArrow(context, level, origin, pickup, potionEffects));
         }
+        return EffectResult.deferred(effect.count(), "arrow_series").asOneShot();
     }
 
     // 生成单支向下坠落的箭矢
@@ -79,6 +86,8 @@ public final class ArrowRainExecutor {
             arrow.addEffect(new MobEffectInstance(potionEffect));
         }
         EffectTargets.addEntity(context, arrow);
+        // 真实完成量回执：每支箭矢计 1
+        context.reportProgress(1);
     }
 
     // 参数枚举到原版拾取模式的映射

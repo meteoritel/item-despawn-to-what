@@ -60,7 +60,7 @@ public final class UiModalStack implements UiWidget {
 
     // 最上层弹窗
     public UiModal top() {
-        return modals.isEmpty() ? null : modals.get(modals.size() - 1);
+        return modals.isEmpty() ? null : modals.getLast();
     }
 
     // 全部弹窗（只读，底到顶）
@@ -88,7 +88,7 @@ public final class UiModalStack implements UiWidget {
         if (modals.isEmpty()) {
             return false;
         }
-        modals.remove(modals.size() - 1);
+        modals.removeLast();
         relayout();
         refreshFocus();
         return true;

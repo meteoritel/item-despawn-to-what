@@ -59,9 +59,9 @@ public final class RuleRuntimeEvents {
             if (entity instanceof ItemEntity item) { RuleRuntimeHost.onItemRemoved(world, item); }
         });
 
-        // 维度 tick 结束：执行有预算的检查与效果
-        ServerTickEvents.END_WORLD_TICK.register(RuleRuntimeHost::tickLevel);
+        // 服务器 tick 结束：只推进一次公共预算（所有维度共享，ADR-0002）
         ServerTickEvents.END_SERVER_TICK.register(server -> {
+            RuleRuntimeHost.tickServer(server);
             DebugSessionManager.tick(server, RuleRuntimeHost.commandContext());
             if (server.getTickCount() % 20 == 0) {
                 com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler

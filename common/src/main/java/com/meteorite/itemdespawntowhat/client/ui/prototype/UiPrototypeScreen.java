@@ -14,6 +14,8 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTreeNode;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTreeView;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
+import org.jetbrains.annotations.NotNull;
+
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.client.gui.GuiGraphics;
@@ -117,7 +119,7 @@ public final class UiPrototypeScreen extends Screen {
         for (int i = 1; i <= 12; i++) {
             rules.add(Component.translatable("gui.itemdespawntowhat.prototype.list.item", i));
         }
-        this.ruleList = new UiListView<Component>(this.font,
+        this.ruleList = new UiListView<>(this.font,
                 (graphics, font, item, index, row, selected, hovered, focused) -> graphics.drawString(font, item,
                         row.x(), row.y() + UiTheme.TEXT_OFFSET, UiTheme.textColor(selected), false));
         this.ruleList.setEmptyMessage(Component.translatable("gui.itemdespawntowhat.prototype.list.empty"));
@@ -128,7 +130,7 @@ public final class UiPrototypeScreen extends Screen {
 
     // 构建条件树示例
     private void buildTree() {
-        this.conditionTree = new UiTreeView<String>(this.font,
+        this.conditionTree = new UiTreeView<>(this.font,
                 (graphics, font, node, row, depth, selected, hovered, focused) -> graphics.drawString(font, node.label(),
                         row.x(), row.y() + UiTheme.TEXT_OFFSET, UiTheme.textColor(selected), false));
         this.conditionTree.setEmptyMessage(Component.translatable("gui.itemdespawntowhat.prototype.tree.empty"));
@@ -230,7 +232,7 @@ public final class UiPrototypeScreen extends Screen {
     // ---- 渲染 ----
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void render(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         this.renderBackground(graphics, mouseX, mouseY, partialTick);
         UiTheme.drawWindow(graphics, new UiRect(0, 0, this.width, this.height));
         UiRect header = new UiRect(pad(), pad(), Math.max(0, this.width - pad() * 2), UiTheme.HEADER_HEIGHT);

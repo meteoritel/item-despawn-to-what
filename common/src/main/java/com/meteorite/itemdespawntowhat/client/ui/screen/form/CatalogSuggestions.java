@@ -165,6 +165,6 @@ public final class CatalogSuggestions implements SuggestionProvider {
 
     // 形如 item.minecraft.chicken / biome.minecraft.plains 的键直接走翻译；含空格或命名空间分隔符的按原文
     private static boolean looksLikeTranslationKey(String label) {
-        return label.indexOf((int) ' ') < 0 && label.indexOf((int) ':') < 0 && label.indexOf((int) '.') > 0;
+        return label.indexOf(' ') < 0 && label.indexOf(':') < 0 && label.indexOf('.') > 0;
     }
 }

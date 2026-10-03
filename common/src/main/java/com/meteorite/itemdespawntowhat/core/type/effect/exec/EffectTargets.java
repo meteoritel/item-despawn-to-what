@@ -6,12 +6,16 @@ import com.meteorite.itemdespawntowhat.core.debug.DebugScenarioManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.tags.TagKey;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
+import java.util.List;
 import java.util.function.IntConsumer;
 import java.util.function.IntUnaryOperator;
 
@@ -19,7 +23,7 @@ import java.util.function.IntUnaryOperator;
  * 效果执行器共享的引用解析与空间查询助手。
  * 约定：执行器不捕获、不吞异常；引用无法解析等硬错误直接抛出，由运行时统一捕获并记录。
  */
-final class EffectTargets {
+public final class EffectTargets {
 
     private EffectTargets() {
         throw new UnsupportedOperationException("Utility class");
@@ -50,12 +54,38 @@ final class EffectTargets {
         return value;
     }
 
-    // 以方块位置为中心、边长 2*radius+1 格的立方搜索盒
-    static AABB blockBox(BlockPos center, int radius) {
+    // 以方块位置为中心、边长 2*radius+1 格的立方搜索盒；
+    // 效果式消耗与催化剂固定成本（core/runtime）共用本方法，禁止在调用方复刻同一口径
+    public static AABB blockBox(BlockPos center, int radius) {
         return AABB.unitCubeFromLowerCorner(Vec3.atLowerCornerOf(center)).inflate(radius);
     }
 
+    // 物品栈是否命中 items 中的任一引用（非 tag 比物品，tag 比标签）；未注册的物品 id 与不存在的标签都不算命中
+    // 催化剂固定成本与效果式消耗共用同一口径：本方法任何改动同时影响两处，禁止在调用方复刻
+    public static boolean matchesAny(List<TaggedId> items, ItemStack stack) {
+        for (TaggedId reference : items) {
+            if (reference == null) {
+                continue;
+            }
+            if (reference.tag()) {
+                if (stack.is(TagKey.create(Registries.ITEM, reference.id()))) {
+                    return true;
+                }
+                continue;
+            }
+            if (!BuiltInRegistries.ITEM.containsKey(reference.id())) {
+                continue;
+            }
+            if (stack.is(BuiltInRegistries.ITEM.get(reference.id()))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // 实际生成位置可能越过源区块边界；保留实体等区块加载后再加入。
+    // 此处借用 Minecraft 管理的实例，生命周期由游戏负责，不能在此关闭。
+    @SuppressWarnings("resource")
     static void addEntity(EffectContext context, net.minecraft.world.entity.Entity entity) {
         if (!com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks.contains(context.level(), entity.blockPosition())) {
             context.schedule(20, () -> addEntity(context, entity));
@@ -66,6 +96,13 @@ final class EffectTargets {
             }
             if (DebugMode.ENABLED) { DebugScenarioManager.outputAdded(context, entity); }
         }
+    }
+
+    // 转化产物加入世界：显式区别于其它实体来源，只在这里授予新产物临时保护与冷却（D18）；
+    // 授予动作与返还物共用 ReturnItemSpawner.applyGrant，避免两处状态语义漂移（阶段 5）
+    static void addConversionProduct(EffectContext context, net.minecraft.world.entity.item.ItemEntity product) {
+        ReturnItemSpawner.applyGrant(product, ReturnItemSpawner.Kind.CONVERSION_PRODUCT);
+        addEntity(context, product);
     }
 
     // 饱和加法：避免计数溢出为负数

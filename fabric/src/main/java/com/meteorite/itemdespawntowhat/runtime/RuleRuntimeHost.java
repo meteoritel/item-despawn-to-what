@@ -16,6 +16,7 @@ import com.meteorite.itemdespawntowhat.core.runtime.LifespanProvider;
 import com.meteorite.itemdespawntowhat.core.service.BuiltinTypeRegistries;
 import com.meteorite.itemdespawntowhat.core.service.RuleLoadContext;
 import com.meteorite.itemdespawntowhat.core.service.RuleLoadingService;
+import com.meteorite.itemdespawntowhat.core.state.DropStateStore;
 import com.meteorite.itemdespawntowhat.platform.Services;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.server.MinecraftServer;
@@ -23,6 +24,7 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.item.ItemEntity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -140,7 +142,7 @@ public final class RuleRuntimeHost {
             if (overlay == null || registries == null) {
                 return emptyResult();
             }
-            return loadRules(context(server.getResourceManager(), server.registryAccess(), overlay, registries, server), "编辑快照");
+            return loadRules(context(server.getResourceManager(), server.registryAccess(), overlay, registries, server));
         }
 
         @Override
@@ -174,7 +176,7 @@ public final class RuleRuntimeHost {
         ConversionRuntime newRuntime = new ConversionRuntime(config, registries, fabricLifespan(config));
 
         RuleLoadResult<Rule> result = loadRules(
-                context(server.getResourceManager(), server.registryAccess(), overlay, registries, server), "服务端启动");
+                context(server.getResourceManager(), server.registryAccess(), overlay, registries, server));
         newRuntime.replaceRules(result.rules(), result.issues());
         logLoadResult("服务端启动", result);
 
@@ -182,6 +184,8 @@ public final class RuleRuntimeHost {
         typeRegistries = registries;
         overlayRoot = overlay;
         runtime = newRuntime;
+        // 实体状态持续时间取自本次配置：新产物保护与转化冷却各自可为 0（D18，0 表示不授予）
+        DropStateStore.configure(config.newProductProtectionTicks(), config.conversionCooldownTicks());
 
         int levelCount = 0;
         for (ServerLevel level : server.getAllLevels()) {
@@ -204,7 +208,7 @@ public final class RuleRuntimeHost {
         }
         try {
             RuleLoadResult<Rule> result = loadRules(
-                    context(resourceManager, server.registryAccess(), overlay, registries, server), "数据包重载");
+                    context(resourceManager, server.registryAccess(), overlay, registries, server));
             current.replaceRules(result.rules(), result.issues());
             logLoadResult("数据包重载", result);
             for (ServerLevel level : server.getAllLevels()) {
@@ -227,6 +231,8 @@ public final class RuleRuntimeHost {
             current.shutdown();
         }
         RuleEditServerHandler.reset();
+        // 停服后复位实体状态时长，避免同一进程内下一个服务端实例沿用上一轮配置
+        DropStateStore.configure(0, 0);
         runtime = null;
         typeRegistries = null;
         overlayRoot = null;
@@ -247,16 +253,24 @@ public final class RuleRuntimeHost {
         if (current != null) { current.onItemRemoved(level, item); }
     }
 
+    // 环境致死请求入口：平台层只在真实致死分支调用（Fabric 由 ItemEntityMixin 注入 onDestroyed 转发）
+    public static void requestEnvironmentalConversion(ServerLevel level, ItemEntity item, DamageSource source) {
+        ConversionRuntime current = runtime;
+        if (current != null) {
+            current.requestEnvironmentalConversion(level, item, source);
+        }
+    }
+
     public static boolean deferNaturalExpiry(ServerLevel level, ItemEntity item) {
         ConversionRuntime current = runtime;
         return current != null && current.deferNaturalExpiry(level, item);
     }
 
-    // 维度 tick 结束：先执行到期任务，再按检查间隔做失效清理
-    public static void tickLevel(ServerLevel level) {
+    // 服务器 tick 结束：推进唯一的公共预算；所有维度、所有任务种类共享同一份额度（ADR-0002）
+    public static void tickServer(MinecraftServer server) {
         ConversionRuntime current = runtime;
         if (current != null) {
-            current.onLevelTick(level);
+            current.onServerTick(server);
         }
     }
 
@@ -308,7 +322,7 @@ public final class RuleRuntimeHost {
     }
 
     // 执行一次加载 + 语义校验；异常被转为 ERROR 级问题，避免坏配置拖垮服务端启动或重载
-    private static RuleLoadResult<Rule> loadRules(RuleLoadContext context, String stage) {
+    private static RuleLoadResult<Rule> loadRules(RuleLoadContext context) {
         return RuleLoadingService.loadAndValidate(context);
     }
 

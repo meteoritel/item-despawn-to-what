@@ -33,38 +33,38 @@ public final class RuntimeTagLookup implements TagLookup {
 
     @Override
     public boolean itemInTag(ResourceLocation tagId, ResourceLocation itemId) {
-        return members("item", BuiltInRegistries.ITEM, Registries.ITEM, tagId, item -> BuiltInRegistries.ITEM.getKey(item))
+        return members("item", BuiltInRegistries.ITEM, Registries.ITEM, tagId, BuiltInRegistries.ITEM::getKey)
                 .contains(itemId);
     }
 
     @Override
     public boolean blockInTag(ResourceLocation tagId, ResourceLocation blockId) {
-        return members("block", BuiltInRegistries.BLOCK, Registries.BLOCK, tagId, block -> BuiltInRegistries.BLOCK.getKey(block))
+        return members("block", BuiltInRegistries.BLOCK, Registries.BLOCK, tagId, BuiltInRegistries.BLOCK::getKey)
                 .contains(blockId);
     }
 
     @Override
     public boolean entityInTag(ResourceLocation tagId, ResourceLocation entityTypeId) {
         return members("entity", BuiltInRegistries.ENTITY_TYPE, Registries.ENTITY_TYPE, tagId,
-                type -> BuiltInRegistries.ENTITY_TYPE.getKey(type)).contains(entityTypeId);
+                BuiltInRegistries.ENTITY_TYPE::getKey).contains(entityTypeId);
     }
 
     @Override
     public boolean biomeInTag(ResourceLocation tagId, ResourceLocation biomeId) {
         Registry<Biome> biomes = level.registryAccess().registryOrThrow(Registries.BIOME);
-        return members("biome", biomes, Registries.BIOME, tagId, biome -> biomes.getKey(biome)).contains(biomeId);
+        return members("biome", biomes, Registries.BIOME, tagId, biomes::getKey).contains(biomeId);
     }
 
     @Override
     public boolean fluidInTag(ResourceLocation tagId, ResourceLocation fluidId) {
-        return members("fluid", BuiltInRegistries.FLUID, Registries.FLUID, tagId, fluid -> BuiltInRegistries.FLUID.getKey(fluid))
+        return members("fluid", BuiltInRegistries.FLUID, Registries.FLUID, tagId, BuiltInRegistries.FLUID::getKey)
                 .contains(fluidId);
     }
 
     @Override
     public boolean mobEffectInTag(ResourceLocation tagId, ResourceLocation effectId) {
         return members("mob_effect", BuiltInRegistries.MOB_EFFECT, Registries.MOB_EFFECT, tagId,
-                effect -> BuiltInRegistries.MOB_EFFECT.getKey(effect)).contains(effectId);
+                BuiltInRegistries.MOB_EFFECT::getKey).contains(effectId);
     }
 
     // 展开标签成员并缓存；标签不存在时缓存空集合

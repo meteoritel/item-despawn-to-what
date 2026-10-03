@@ -392,13 +392,13 @@ public final class RuleEditClientWorkspace {
     // 当前客户端 tick；未进入世界时返回 0
     private long currentTick() {
         Minecraft client = Minecraft.getInstance();
-        return client == null || client.level == null ? 0L : client.level.getGameTime();
+        return client.level == null ? 0L : client.level.getGameTime();
     }
 
     // 是否已连接到服务器：未连接时任何上行报文都必须丢弃，否则平台发送器会抛异常
     private boolean connected() {
         Minecraft client = Minecraft.getInstance();
-        return client != null && client.getConnection() != null;
+        return client.getConnection() != null;
     }
 
     // 发送单个上行载荷；未注入发送器时只记日志

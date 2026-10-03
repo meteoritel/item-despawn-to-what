@@ -65,7 +65,7 @@ public final class UiSegmentedControl implements UiWidget, UiFocusTarget {
             }
         }
         if (!present) {
-            this.selected = this.options.isEmpty() ? "" : this.options.get(0).value();
+            this.selected = this.options.isEmpty() ? "" : this.options.getFirst().value();
         }
         return this;
     }

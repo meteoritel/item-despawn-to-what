@@ -22,11 +22,9 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiListEditor;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiSegmentedControl;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
-import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import net.minecraft.client.gui.Font;
@@ -300,7 +298,7 @@ abstract class FormControl {
         if (value == null || value < min || value > max) {
             return null;
         }
-        return new JsonPrimitive(value.doubleValue());
+        return new JsonPrimitive(value);
     }
 
     // 界面百分比（0..100）写回 JSON 小数（0..1）
@@ -309,7 +307,7 @@ abstract class FormControl {
         if (value == null || value < 0.0D || value > 100.0D) {
             return null;
         }
-        return new JsonPrimitive(value.doubleValue() / 100.0D);
+        return new JsonPrimitive(value / 100.0D);
     }
 
     static String percentText(JsonElement element) {
@@ -345,7 +343,7 @@ abstract class FormControl {
         }
         try {
             double value = Double.parseDouble(trimmed);
-            return Double.isFinite(value) ? Double.valueOf(value) : null;
+            return Double.isFinite(value) ? value : null;
         } catch (NumberFormatException exception) {
             return null;
         }
@@ -490,7 +488,7 @@ abstract class FormControl {
 
         @Override
         @Nullable JsonElement store() {
-            String text = input.value() == null ? "" : input.value().trim();
+            String text = input.value().trim();
             if (text.isEmpty()) {
                 return null;
             }
@@ -501,7 +499,7 @@ abstract class FormControl {
 
         @Override
         List<FormIssue> issues(String path) {
-            String text = input.value() == null ? "" : input.value().trim();
+            String text = input.value().trim();
             if (text.isEmpty()) {
                 if (field.required()) {
                     return List.of(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "required")));
@@ -580,7 +578,7 @@ abstract class FormControl {
         }
 
         @Override
-        @Nullable JsonElement store() {
+        JsonElement store() {
             return new JsonPrimitive(checkBox.isChecked());
         }
     }
@@ -887,14 +885,14 @@ abstract class FormControl {
             if (value != null && value.isJsonObject()) {
                 JsonObject object = value.getAsJsonObject();
                 if (object.has("min") && object.get("min").isJsonPrimitive() && object.get("min").getAsJsonPrimitive().isNumber()) {
-                    min = Double.valueOf(object.get("min").getAsDouble());
+                    min = object.get("min").getAsDouble();
                 }
                 if (object.has("max") && object.get("max").isJsonPrimitive() && object.get("max").getAsJsonPrimitive().isNumber()) {
-                    max = Double.valueOf(object.get("max").getAsDouble());
+                    max = object.get("max").getAsDouble();
                 }
             }
-            minInput.setValue(min == null ? "" : trimDouble(min.doubleValue()));
-            maxInput.setValue(max == null ? "" : trimDouble(max.doubleValue()));
+            minInput.setValue(min == null ? "" : trimDouble(min));
+            maxInput.setValue(max == null ? "" : trimDouble(max));
         }
 
         @Override
@@ -903,19 +901,19 @@ abstract class FormControl {
             Double min = parseDouble(minInput.value());
             Double max = parseDouble(maxInput.value());
             if (min != null) {
-                object.addProperty("min", min.doubleValue());
+                object.addProperty("min", min);
             }
             if (max != null) {
-                object.addProperty("max", max.doubleValue());
+                object.addProperty("max", max);
             }
-            return object.size() == 0 ? null : object;
+            return object.isEmpty() ? null : object;
         }
 
         @Override
         List<FormIssue> issues(String path) {
             Double min = parseDouble(minInput.value());
             Double max = parseDouble(maxInput.value());
-            if (min != null && max != null && min.doubleValue() > max.doubleValue()) {
+            if (min != null && max != null && min > max) {
                 return List.of(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "range_order")));
             }
             return List.of();
@@ -1008,11 +1006,6 @@ abstract class FormControl {
         @Override
         void setEnabled(boolean enabled) {
             editor.setVisible(enabled);
-        }
-
-        @Override
-        boolean isVisible() {
-            return true;
         }
 
         @Override
@@ -1331,11 +1324,6 @@ abstract class FormControl {
         }
 
         @Override
-        boolean isVisible() {
-            return true;
-        }
-
-        @Override
         void load(@Nullable JsonElement value) {
             children.clear();
             removeButtons.clear();
@@ -1348,14 +1336,12 @@ abstract class FormControl {
         }
 
         @Override
-        @Nullable JsonElement store() {
+        JsonElement store() {
             JsonArray array = new JsonArray();
             for (FormView child : children) {
                 child.applyToDraft();
                 JsonObject object = child.storeObject();
-                if (object != null) {
-                    array.add(object);
-                }
+                array.add(object);
             }
             return array;
         }
@@ -1363,8 +1349,8 @@ abstract class FormControl {
         @Override
         List<FormIssue> issues(String path) {
             List<FormIssue> list = new ArrayList<>();
-            for (int i = 0; i < children.size(); i++) {
-                list.addAll(children.get(i).issues());
+            for (FormView child : children) {
+                list.addAll(child.issues());
             }
             return list;
         }

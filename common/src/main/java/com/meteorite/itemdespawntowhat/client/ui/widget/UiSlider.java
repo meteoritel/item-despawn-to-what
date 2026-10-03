@@ -25,7 +25,6 @@ public final class UiSlider implements UiWidget, UiFocusTarget {
     // 滑块宽度
     public static final int THUMB_WIDTH = 3;
 
-    private final Font font;
     private double min;
     private double max;
     private double step;
@@ -40,7 +39,7 @@ public final class UiSlider implements UiWidget, UiFocusTarget {
     private @Nullable Function<Double, Component> formatter;
 
     public UiSlider(Font font, double min, double max, double step) {
-        this.font = Objects.requireNonNull(font, "font");
+        Objects.requireNonNull(font, "font");
         setRange(min, max, step);
     }
 
@@ -152,7 +151,7 @@ public final class UiSlider implements UiWidget, UiFocusTarget {
     // 由鼠标横坐标更新取值
     private void valueFromMouse(double mouseX) {
         double t = (mouseX - trackLeft()) / (double) trackWidth();
-        t = Math.max(0.0D, Math.min(1.0D, t));
+        t = Math.clamp(t, 0.0D, 1.0D);
         double next = snap(min + t * (max - min));
         if (Math.abs(next - value) < 1.0E-9D) {
             return;

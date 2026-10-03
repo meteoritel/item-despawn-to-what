@@ -628,5 +628,15 @@
   "gui.itemdespawntowhat.edit.conflict.later": "稍后决定",
   "gui.itemdespawntowhat.edit.notice.issue": "%s：%s",
   "gui.itemdespawntowhat.edit.issue.conditions_unregistered": "该条件类型未在本客户端注册，原数据已保留，交由服务端校验",
-  "gui.itemdespawntowhat.edit.notice.draft_save_failed": "草稿写盘失败，稍后将自动重试"
+  "gui.itemdespawntowhat.edit.notice.draft_save_failed": "草稿写盘失败，稍后将自动重试",
+  "gui.itemdespawntowhat.edit.issue.outcomes_conflict": "effects 与 outcomes 不能同时声明",
+  "gui.itemdespawntowhat.edit.issue.source_cost_not_positive": "source_cost 必须为正整数",
+  "gui.itemdespawntowhat.edit.issue.catalyst_cost_not_object": "catalyst_cost 必须是对象 {items, count?, radius?}（整数写法已废弃）",
+  "gui.itemdespawntowhat.edit.issue.catalyst_cost_items_empty": "catalyst_cost.items 不能为空",
+  "gui.itemdespawntowhat.edit.issue.catalyst_cost_count_out_of_range": "catalyst_cost.count 必须在 1 到 64 之间",
+  "gui.itemdespawntowhat.edit.issue.catalyst_cost_radius_out_of_range": "catalyst_cost.radius 必须在 1 到 8 之间",
+  "gui.itemdespawntowhat.edit.issue.double_bookkeeping": "固定成本与同名消耗效果不能同时声明",
+  "gui.itemdespawntowhat.edit.issue.candidate_id_invalid": "候选结果 id 必须非空且唯一",
+  "gui.itemdespawntowhat.edit.issue.candidate_effects_empty": "候选结果 effects 不能为空",
+  "gui.itemdespawntowhat.edit.issue.schema_version_unsupported": "不支持的 schema_version（当前仅支持 1）"
 }

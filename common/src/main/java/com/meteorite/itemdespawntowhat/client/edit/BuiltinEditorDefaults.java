@@ -3,8 +3,10 @@ package com.meteorite.itemdespawntowhat.client.edit;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import com.meteorite.itemdespawntowhat.core.model.CombinationMode;
+import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
+import com.meteorite.itemdespawntowhat.core.model.TriggerKind;
 import net.minecraft.resources.ResourceLocation;
-import org.jetbrains.annotations.Nullable;
 
 /***
  * 内置类型的新建默认参数（对齐 docs/plan/plan-frontend-rewrite-forms.md §5/§6）。
@@ -28,6 +30,13 @@ public final class BuiltinEditorDefaults {
         source.add(RuleFields.SOURCE_ITEMS, new JsonArray());
         body.add(RuleFields.SOURCE, source);
         body.addProperty(RuleFields.TRIGGER_AFTER_SECONDS, 300);
+        // 阶段1 契约字段：默认仅自然消失、每组固定消耗 1 个源物品、轮询组合、结构版本 1
+        JsonArray triggers = new JsonArray();
+        triggers.add(TriggerKind.NATURAL.key());
+        body.add(RuleFields.TRIGGERS, triggers);
+        body.addProperty(RuleFields.SOURCE_COST, 1);
+        body.addProperty(RuleFields.COMBINATION, CombinationMode.ROUND_ROBIN.key());
+        body.addProperty(RuleFields.SCHEMA_VERSION, RuleCodecs.DEFAULT_SCHEMA_VERSION);
         body.add(RuleFields.EFFECTS, new JsonArray());
         return body;
     }
@@ -44,16 +53,16 @@ public final class BuiltinEditorDefaults {
         JsonObject body = new JsonObject();
         body.addProperty(RuleFields.TYPE, type.toString());
         applyEffectDefaults(body, type.getPath());
-        fillDescriptorDefaults(body, EffectEditorRegistry.descriptorFor(type), RuleFields.TYPE);
+        fillDescriptorDefaults(body, EffectEditorRegistry.descriptorFor(type));
         return body;
     }
 
     // 新建条件叶的默认节点（含 op=leaf 外壳，可直接交给条件表达式编解码器）
-    public static @Nullable JsonObject conditionLeafJson(ResourceLocation type) {
+    public static JsonObject conditionLeafJson(ResourceLocation type) {
         JsonObject condition = new JsonObject();
         condition.addProperty(RuleFields.TYPE, type.toString());
         applyConditionDefaults(condition, type.getPath());
-        fillDescriptorDefaults(condition, ConditionEditorRegistry.descriptorFor(type), RuleFields.TYPE);
+        fillDescriptorDefaults(condition, ConditionEditorRegistry.descriptorFor(type));
         JsonObject leaf = new JsonObject();
         leaf.addProperty(RuleFields.OP, RuleFields.OP_LEAF);
         leaf.add(RuleFields.CONDITION, condition);
@@ -140,12 +149,12 @@ public final class BuiltinEditorDefaults {
     }
 
     // 用描述符补齐仍然缺失的「必填且可推导」字段：枚举取首值、布尔取假、数值取下界
-    private static void fillDescriptorDefaults(JsonObject body, TypeEditorDescriptor descriptor, String typeField) {
+    private static void fillDescriptorDefaults(JsonObject body, TypeEditorDescriptor descriptor) {
         if (descriptor == null || descriptor.readOnly()) {
             return;
         }
         for (EditorField field : descriptor.fields()) {
-            if (typeField.equals(field.name()) || body.has(field.name()) || !field.required()) {
+            if (RuleFields.TYPE.equals(field.name()) || body.has(field.name()) || !field.required()) {
                 continue;
             }
             switch (field.type()) {
@@ -153,7 +162,7 @@ public final class BuiltinEditorDefaults {
                 case ENUM -> {
                     var values = field.enumValues();
                     if (!values.isEmpty()) {
-                        body.addProperty(field.name(), values.get(0));
+                        body.addProperty(field.name(), values.getFirst());
                     }
                 }
                 case INTEGER, TICKS, AMPLIFIER -> body.addProperty(field.name(), field.intMin(0));

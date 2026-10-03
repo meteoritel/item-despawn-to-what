@@ -54,11 +54,6 @@ public final class BuiltinEditorDescriptors {
         return ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, path);
     }
 
-    // 条件字段标签
-    private static String conditionKey(String type, String field) {
-        return FIELD + type + "." + field;
-    }
-
     // ---- 条件 ----
 
     private static void registerConditions() {

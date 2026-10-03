@@ -85,7 +85,7 @@ final class RuleQueryCommands {
                 .kv("effects", found.effects().size())
                 .kv("enabled", found.enabled())
                 .build());
-        JsonObject raw = rawJson(ctx, context, merged, id);
+        JsonObject raw = rawJson(context, merged, id);
         if (raw != null) {
             lines.add(RuleCommandText.of("itemdespawntowhat.command.rule.show.json")
                     .kv("json", raw.toString()).build());
@@ -97,7 +97,7 @@ final class RuleQueryCommands {
     }
 
     // 经 RuleSnapshotAssembler 取该规则的原始 JSON（覆盖层原文 / 数据包规则的编码结果）
-    private static JsonObject rawJson(CommandContext<CommandSourceStack> ctx, RuleCommandContext context,
+    private static JsonObject rawJson(RuleCommandContext context,
                                       RuleLoadResult<Rule> merged, ResourceLocation id) {
         var registries = context.editContext().typeRegistries();
         if (registries == null) {

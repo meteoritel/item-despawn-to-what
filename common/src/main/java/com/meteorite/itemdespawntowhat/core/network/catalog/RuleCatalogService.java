@@ -52,7 +52,7 @@ public final class RuleCatalogService {
         List<RuleCatalogEntry> matched = applyFilter(cached.entries(), filter);
         int total = matched.size();
         int lastPageIndex = total == 0 ? 0 : (total - 1) / size;
-        int safePage = Math.min(Math.max(page, 0), lastPageIndex);
+        int safePage = Math.clamp(page, 0, lastPageIndex);
         int from = safePage * size;
         int to = Math.min(from + size, total);
         List<RuleCatalogEntry> pageEntries = from >= to ? List.of() : List.copyOf(matched.subList(from, to));

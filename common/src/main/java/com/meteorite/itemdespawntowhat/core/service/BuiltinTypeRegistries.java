@@ -27,17 +27,21 @@ public record BuiltinTypeRegistries(
 ) {
 
     /**
-     * 该规则每轮消耗的源物品数量：
-     * - 未声明任何 consume_* 效果 → 隐式消耗 1（Q8）；
-     * - 显式声明 consume_source → 取其 count（多条时累加，加载期已禁止同类型重复）；
+     * 该规则每轮消耗的源物品数量（固定成本优先）：
+     * - 显式声明 source_cost → 取其值（加载期已保证为正数）；
+     * - 未声明 source_cost 且未声明任何 consume_* 效果 → 隐式消耗 1（Q8）；
+     * - 未声明 source_cost 但显式声明 consume_source → 取其 count（多条时累加，加载期已禁止同类型重复）；
      * - 只声明了其它消耗效果（如 consume_fluid）→ 0，表示不按堆叠轮次展开。
      */
     public int perRoundSourceConsumption(Rule rule) {
+        if (rule.sourceCost() != null) {
+            return Math.max(0, rule.sourceCost());
+        }
         if (rule.usesImplicitSourceConsumption()) {
             return 1;
         }
         int declared = 0;
-        for (Effect effect : rule.effects()) {
+        for (Effect effect : rule.allEffects()) {
             if (effect instanceof ConsumeSourceEffect consume) {
                 declared += Math.max(0, consume.count());
             }

@@ -171,7 +171,7 @@ public final class DraftStore {
                     || character == '.' || character == '_' || character == '-';
             builder.append(keep ? character : '_');
         }
-        if (builder.length() == 0) {
+        if (builder.isEmpty()) {
             builder.append("_");
         }
         return builder.toString();

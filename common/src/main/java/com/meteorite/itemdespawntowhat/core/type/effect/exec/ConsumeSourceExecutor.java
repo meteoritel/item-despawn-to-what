@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.type.effect.exec;
 
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
+import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.type.effect.ConsumeSourceEffect;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
@@ -10,6 +11,8 @@ import org.apache.logging.log4j.Logger;
 /**
  * consume_source 执行器：按 count × rounds 扣减源掉落物的物品堆叠，扣空后移除该掉落物。
  * rounds 语义：产出/消耗按 context.rounds() 缩放，并受既有 limit/radius 与可扣数量收敛。
+ * 阶段 4 起该效果同时是「每组源成本」的声明：结算任务按规则成本统一扣减源库存，
+ * 若仍被派发则以本执行器的真实扣减量为准，避免与结算层重复记账。
  * 约定：delay_ticks / chance / 效果级 conditions 由运行时统一处理，本类不再判断；
  * 异常不吞、不捕获，由运行时统一捕获并记录（规则 id + 效果类型 + 位置）。
  */
@@ -21,10 +24,10 @@ public final class ConsumeSourceExecutor {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    public static void execute(ConsumeSourceEffect effect, EffectContext context) {
+    public static EffectResult execute(ConsumeSourceEffect effect, EffectContext context) {
         ItemEntity source = context.source();
         if (source == null || !source.isAlive()) {
-            return;
+            return EffectResult.skipped("source_absent");
         }
         // 使用实体上的实时堆叠，sourceStack() 只是触发时刻的快照
         ItemStack stack = source.getItem();
@@ -38,6 +41,7 @@ public final class ConsumeSourceExecutor {
         if (consumed > 0 && stack.isEmpty()) {
             source.discard();
         }
+        return EffectResult.applied(consumed, consumed < requested ? "short_of_source" : "");
     }
 
     // 从堆叠中扣减期望数量并返回实际扣减量；期望超过剩余数量时按实际收敛

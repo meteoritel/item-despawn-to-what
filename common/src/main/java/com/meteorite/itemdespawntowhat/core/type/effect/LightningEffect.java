@@ -50,7 +50,7 @@ public record LightningEffect(
 
     // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器
     public static EffectType<LightningEffect> effectType(Codec<ConditionExpression> expressionCodec) {
-        return new SimpleEffectType<>(ID, codec(expressionCodec), LightningEffect::validateParams, LightningExecutor::execute);
+        return new SimpleEffectType<>(ID, codec(expressionCodec), LightningEffect::validateParams, LightningExecutor::execute, true);
     }
 
     // 参数语义校验；问题写入 issues，不抛异常

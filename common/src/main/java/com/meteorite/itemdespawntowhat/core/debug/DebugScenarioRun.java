@@ -3,9 +3,13 @@ package com.meteorite.itemdespawntowhat.core.debug;
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.command.RuleCommandContext;
+import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
 import com.meteorite.itemdespawntowhat.core.runtime.ConversionRuntime;
 import com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks;
-import com.meteorite.itemdespawntowhat.core.runtime.TickScheduler;
+import com.meteorite.itemdespawntowhat.core.runtime.scheduler.CancelReason;
+import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ScheduledTask;
+import com.meteorite.itemdespawntowhat.core.runtime.scheduler.SchedulerStats;
+import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTickBudgetSnapshot;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
@@ -37,7 +41,7 @@ final class DebugScenarioRun {
     final DebugScenarioDefinition definition;
     final List<ItemEntity> sources = new ArrayList<>();
     final List<ItemEntity> outputs = new ArrayList<>();
-    final Set<TickScheduler.Task> tasks = new HashSet<>();
+    final Set<ScheduledTask> tasks = new HashSet<>();
     private final Vec3 origin;
     private final int seconds;
     private final long startedWorldTick;
@@ -82,7 +86,7 @@ final class DebugScenarioRun {
     boolean tick(RuleCommandContext context) {
         ConversionRuntime runtime = java.util.Objects.requireNonNull(context.runtime());
         if (phase.equals("SETUP")) {
-            prepare(runtime);
+            prepare(context);
             if (sources.size() == definition.sources) {
                 preparedTick = level.getGameTime();
                 phase = "WARMUP";
@@ -120,6 +124,25 @@ final class DebugScenarioRun {
             frame.addProperty("effects_pending", runtime.queueStats(level, true).pending());
             frame.addProperty("checks_last_us", runtime.queueStats(level, false).lastMicros());
             frame.addProperty("effects_last_us", runtime.queueStats(level, true).lastMicros());
+            SchedulerStats merged = runtime.schedulerStats();
+            ServerTickBudgetSnapshot budget = runtime.budgetSnapshot();
+            // 预算与计数都是服务器级，看的是所有维度共享后的剩余额度
+            frame.addProperty("scheduler_pending_server_wide", merged.pending());
+            frame.addProperty("scheduler_steps_server_wide", merged.steps());
+            frame.addProperty("scheduler_cancelled_server_wide", merged.cancelled());
+            frame.addProperty("scheduler_dropped_server_wide", merged.dropped());
+            frame.addProperty("scheduler_max_ready_delay_ticks", merged.maxReadyDelayTicks());
+            // 阶段7：本 tick 的服务器级就绪延迟与到期搬运量，用于逐 tick 观察平滑窗口是否铺开
+            frame.addProperty("scheduler_last_max_ready_delay_ticks", merged.lastMaxReadyDelayTicks());
+            frame.addProperty("scheduler_drained_in_tick", merged.lastDrainedTasks());
+            if (budget != null) {
+                frame.addProperty("budget_used_us", budget.usedNanos() / 1000);
+                frame.addProperty("budget_usage_ratio", budget.usageRatio());
+                frame.addProperty("budget_work_units_used", budget.usedWorkUnits());
+                frame.addProperty("budget_exhaustion_reason", budget.exhaustionReason());
+                frame.addProperty("budget_drained_tasks", budget.drainedTasks());
+                frame.addProperty("budget_work_remaining", budget.workRemaining());
+            }
             if (!benchmark && !sources.isEmpty()) {
                 var current = level.getEntity(sources.getFirst().getUUID());
                 frame.addProperty("source_available", current instanceof ItemEntity);
@@ -137,10 +160,17 @@ final class DebugScenarioRun {
         return window.elapsedSeconds() >= seconds || window.full();
     }
 
-    // 每 tick 最多128个源，且准备有2ms软预算；准备耗时不混入测量窗口。
-    private void prepare(ConversionRuntime runtime) {
-        long deadline = System.nanoTime() + 2_000_000L;
-        for (int batch = 0; batch < 128 && sources.size() < definition.sources && System.nanoTime() < deadline; batch++) {
+    // 每 tick 的源数量与准备软预算改由 server.json 提供（debug_scenario_prepare_batch_size / debug_scenario_prepare_budget_us）；准备耗时不混入测量窗口。
+    private void prepare(RuleCommandContext context) {
+        ConversionRuntime runtime = java.util.Objects.requireNonNull(context.runtime());
+        ServerConfig config = context.serverConfig();
+        if (config == null) {
+            config = ServerConfig.DEFAULT;
+        }
+        // 默认 128 与 2000us 与原硬编码 128 / 2_000_000L 逐位等价；这两键只影响场景准备，不参与 server_budget_us
+        int batchSize = config.debugScenarioPrepareBatchSize();
+        long deadline = System.nanoTime() + (long) config.debugScenarioPrepareBudgetUs() * 1000L;
+        for (int batch = 0; batch < batchSize && sources.size() < definition.sources && System.nanoTime() < deadline; batch++) {
             int number = sources.size();
             Vec3 position = position(number);
             if (!LoadedChunks.containsArea(level, BlockPos.containing(position), 1)
@@ -359,6 +389,9 @@ final class DebugScenarioRun {
             if (runtime != null) {
                 end.addProperty("checks_pending_after_cleanup", runtime.queueStats(level, false).pending());
                 end.addProperty("effects_pending_after_cleanup", runtime.queueStats(level, true).pending());
+                // 清理后仍遗留的服务器级任务数：用于证明延后任务没被静默丢弃
+                end.addProperty("scheduler_pending_after_cleanup", runtime.schedulerStats().pending());
+                end.addProperty("scheduler_dropped_total", runtime.schedulerStats().dropped());
             }
             DebugScenarioManager.unbind(this);
             log("END", end);
@@ -404,7 +437,7 @@ final class DebugScenarioRun {
 
     // 已完成任务已从集合释放，停止时仅取消本轮尚在队列中的效果。
     private void cleanup(ConversionRuntime runtime) {
-        tasks.forEach(TickScheduler.Task::cancel);
+        tasks.forEach(task -> task.cancel(CancelReason.SCENARIO_STOP));
         tasks.clear();
         for (ItemEntity source : sources) {
             if (runtime != null) { runtime.onItemRemoved(level, source); }

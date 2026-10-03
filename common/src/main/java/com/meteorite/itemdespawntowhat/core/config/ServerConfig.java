@@ -27,7 +27,17 @@ public record ServerConfig(
         int maxChecksPerTick,
         String overlayDirectory,
         int fabricLifespanFallbackTicks,
-        boolean debugLogging
+        boolean debugLogging,
+        int serverBudgetUs,
+        Optional<Integer> maxWorkUnitsPerTick,
+        int effectsWorkUnitsPerTick,
+        int checkSpreadWindowTicks,
+        int dispatchBatchSize,
+        int newProductProtectionSeconds,
+        int conversionCooldownSeconds,
+        int positionSearchChecksPerTick,
+        int debugScenarioPrepareBatchSize,
+        int debugScenarioPrepareBudgetUs
 ) {
 
     private static final Logger LOGGER = LogManager.getLogger();
@@ -40,14 +50,42 @@ public record ServerConfig(
     public static final int DEFAULT_FABRIC_LIFESPAN_FALLBACK_TICKS = 6000;
     public static final boolean DEFAULT_DEBUG_LOGGING = false;
 
-    // 默认配置，也是缺失字段时的兜底
+    // 公共调度预算默认值：2 ms 软预算、512 全局工作量、效果类 64、平滑窗口 20 tick、每 lane 每 tick 最多搬运 64
+    public static final int DEFAULT_SERVER_BUDGET_US = 2000;
+    public static final int DEFAULT_MAX_WORK_UNITS_PER_TICK = 512;
+    public static final int DEFAULT_EFFECTS_WORK_UNITS_PER_TICK = 64;
+    public static final int DEFAULT_CHECK_SPREAD_WINDOW_TICKS = 20;
+    public static final int DEFAULT_DISPATCH_BATCH_SIZE = 64;
+
+    // 实体状态默认值：新产物保护 2 秒、转化冷却 5 秒；0 表示不授予（允许显式关闭）
+    public static final int DEFAULT_NEW_PRODUCT_PROTECTION_SECONDS = 2;
+    public static final int DEFAULT_CONVERSION_COOLDOWN_SECONDS = 5;
+
+    // 位置搜索默认值：每刻最多检查 16 个候选位置（阶段 5 安全生成与返还位置搜索共用）
+    public static final int DEFAULT_POSITION_SEARCH_CHECKS_PER_TICK = 16;
+
+    // 阶段7 调试场景准备参数：每 tick 最多准备 128 个源、准备软预算 2000us（与原硬编码 128 / 2_000_000L 逐位等价）
+    public static final int DEFAULT_DEBUG_SCENARIO_PREPARE_BATCH_SIZE = 128;
+    public static final int DEFAULT_DEBUG_SCENARIO_PREPARE_BUDGET_US = 2000;
+
+    // 默认配置，也是缺失字段时的兜底；max_work_units_per_tick 缺省为空表示回退到 max_checks_per_tick
     public static final ServerConfig DEFAULT = new ServerConfig(
             DEFAULT_CHECK_INTERVAL_TICKS,
             DEFAULT_BACKOFF_MAX_TICKS,
             DEFAULT_MAX_CHECKS_PER_TICK,
             DEFAULT_OVERLAY_DIRECTORY,
             DEFAULT_FABRIC_LIFESPAN_FALLBACK_TICKS,
-            DEFAULT_DEBUG_LOGGING
+            DEFAULT_DEBUG_LOGGING,
+            DEFAULT_SERVER_BUDGET_US,
+            Optional.empty(),
+            DEFAULT_EFFECTS_WORK_UNITS_PER_TICK,
+            DEFAULT_CHECK_SPREAD_WINDOW_TICKS,
+            DEFAULT_DISPATCH_BATCH_SIZE,
+            DEFAULT_NEW_PRODUCT_PROTECTION_SECONDS,
+            DEFAULT_CONVERSION_COOLDOWN_SECONDS,
+            DEFAULT_POSITION_SEARCH_CHECKS_PER_TICK,
+            DEFAULT_DEBUG_SCENARIO_PREPARE_BATCH_SIZE,
+            DEFAULT_DEBUG_SCENARIO_PREPARE_BUDGET_US
     );
 
     public static final Codec<ServerConfig> CODEC = RecordCodecBuilder.create(instance -> instance.group(
@@ -62,8 +100,53 @@ public record ServerConfig(
             Codec.intRange(1, 72000).optionalFieldOf("fabric_lifespan_fallback_ticks", DEFAULT_FABRIC_LIFESPAN_FALLBACK_TICKS)
                     .forGetter(ServerConfig::fabricLifespanFallbackTicks),
             Codec.BOOL.optionalFieldOf("debug_logging", DEFAULT_DEBUG_LOGGING)
-                    .forGetter(ServerConfig::debugLogging)
+                    .forGetter(ServerConfig::debugLogging),
+            Codec.intRange(100, 100000).optionalFieldOf("server_budget_us", DEFAULT_SERVER_BUDGET_US)
+                    .forGetter(ServerConfig::serverBudgetUs),
+            // 可选键：缺失时回退到 max_checks_per_tick，避免旧配置被无条件压低预算
+            Codec.intRange(1, 100000).optionalFieldOf("max_work_units_per_tick")
+                    .forGetter(ServerConfig::maxWorkUnitsPerTick),
+            Codec.intRange(1, 100000).optionalFieldOf("effects_work_units_per_tick", DEFAULT_EFFECTS_WORK_UNITS_PER_TICK)
+                    .forGetter(ServerConfig::effectsWorkUnitsPerTick),
+            Codec.intRange(1, 1200).optionalFieldOf("check_spread_window_ticks", DEFAULT_CHECK_SPREAD_WINDOW_TICKS)
+                    .forGetter(ServerConfig::checkSpreadWindowTicks),
+            Codec.intRange(1, 100000).optionalFieldOf("dispatch_batch_size", DEFAULT_DISPATCH_BATCH_SIZE)
+                    .forGetter(ServerConfig::dispatchBatchSize),
+            // 实体状态：允许 0 表示不授予保护/冷却，所以下限为 0（其余键下限均为 1）
+            Codec.intRange(0, 3600).optionalFieldOf("new_product_protection_seconds", DEFAULT_NEW_PRODUCT_PROTECTION_SECONDS)
+                    .forGetter(ServerConfig::newProductProtectionSeconds),
+            Codec.intRange(0, 3600).optionalFieldOf("conversion_cooldown_seconds", DEFAULT_CONVERSION_COOLDOWN_SECONDS)
+                    .forGetter(ServerConfig::conversionCooldownSeconds),
+            // 位置搜索每刻候选检查上限：0 会让搜索停摆，故下限为 1
+            Codec.intRange(1, 4096).optionalFieldOf("position_search_checks_per_tick", DEFAULT_POSITION_SEARCH_CHECKS_PER_TICK)
+                    .forGetter(ServerConfig::positionSearchChecksPerTick),
+            // 阶段7：只影响 debug 场景的准备阶段（每 tick 源数量上限、准备软预算），不参与 server_budget_us
+            Codec.intRange(1, 100000).optionalFieldOf("debug_scenario_prepare_batch_size", DEFAULT_DEBUG_SCENARIO_PREPARE_BATCH_SIZE)
+                    .forGetter(ServerConfig::debugScenarioPrepareBatchSize),
+            // 单位微秒：2000us 即原硬编码的 2_000_000L 纳秒
+            Codec.intRange(1, 100000).optionalFieldOf("debug_scenario_prepare_budget_us", DEFAULT_DEBUG_SCENARIO_PREPARE_BUDGET_US)
+                    .forGetter(ServerConfig::debugScenarioPrepareBudgetUs)
     ).apply(instance, ServerConfig::new));
+
+    // 全局工作量上限：未显式配置时回退到旧的 max_checks_per_tick，保证旧配置意图不丢失
+    public int effectiveMaxWorkUnitsPerTick() {
+        return maxWorkUnitsPerTick.orElse(maxChecksPerTick);
+    }
+
+    // 公共调度器的软预算纳秒值
+    public long serverBudgetNanos() {
+        return Math.max(1L, serverBudgetUs) * 1000L;
+    }
+
+    // 新产物临时保护刻数（20 刻/秒，允许 0）
+    public int newProductProtectionTicks() {
+        return Math.max(0, newProductProtectionSeconds) * 20;
+    }
+
+    // 转化冷却刻数（20 刻/秒，允许 0）
+    public int conversionCooldownTicks() {
+        return Math.max(0, conversionCooldownSeconds) * 20;
+    }
 
     // 从文件读取；文件不存在时写出默认配置并返回默认值，解析失败时记录问题并返回默认值
     public static ServerConfig loadOrCreate(Path file, IssueCollector issues) {
@@ -108,7 +191,7 @@ public record ServerConfig(
     public int backoffTicks(int failureCount) {
         int base = Math.max(1, checkIntervalTicks);
         // 指数退避并以 backoffMaxTicks 封顶：间隔较小时也会收敛到上限
-        int shift = Math.min(Math.max(0, failureCount - 1), 20);
+        int shift = Math.clamp(failureCount - 1, 0, 20);
         long ticks = (long) base << shift;
         return (int) Math.min(ticks, backoffMaxTicks);
     }

@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.api;
 
 import com.mojang.serialization.Codec;
+import com.mojang.datafixers.util.Pair;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.DynamicOps;
 import com.mojang.serialization.MapCodec;
@@ -42,7 +43,7 @@ public final class TypeDispatch {
                             // 这里统一前缀类型 id，便于定位到"哪个类型的哪个参数"
                             java.util.Set<T> allowed = codec.keys(ops).collect(java.util.stream.Collectors.toSet());
                             allowed.add(ops.createString(RuleFields.TYPE));
-                            var unknown = input.entries().map(Pair -> Pair.getFirst())
+                            var unknown = input.entries().map(Pair::getFirst)
                                     .filter(key -> !allowed.contains(key)).findFirst();
                             if (unknown.isPresent()) {
                                 return DataResult.error(() -> "类型 " + definition.id() + " 存在未知字段: "

@@ -46,6 +46,8 @@ public final class RuleCatalogSources {
     }
 
     // 服务端内置候选数据源
+    // 此处借用 Minecraft 管理的实例，生命周期由游戏负责，不能在此关闭。
+    @SuppressWarnings("resource")
     public static List<RuleCatalogSource> builtin(MinecraftServer server) {
         if (server == null) {
             return List.of();
@@ -80,7 +82,7 @@ public final class RuleCatalogSources {
                 s -> BuiltInRegistries.ITEM.keySet(),
                 id -> {
                     Item item = BuiltInRegistries.ITEM.get(id);
-                    return registered(id, item == null ? id.toString() : item.getDescriptionId(), id.toString());
+                    return registered(id, item.getDescriptionId(), id.toString());
                 });
     }
 
@@ -90,7 +92,7 @@ public final class RuleCatalogSources {
                 s -> BuiltInRegistries.BLOCK.keySet(),
                 id -> {
                     Block block = BuiltInRegistries.BLOCK.get(id);
-                    return registered(id, block == null ? id.toString() : block.getDescriptionId(), id.toString());
+                    return registered(id, block.getDescriptionId(), id.toString());
                 });
     }
 
@@ -100,7 +102,7 @@ public final class RuleCatalogSources {
                 s -> BuiltInRegistries.ENTITY_TYPE.keySet(),
                 id -> {
                     EntityType<?> type = BuiltInRegistries.ENTITY_TYPE.get(id);
-                    return registered(id, type == null ? id.toString() : type.getDescriptionId(), "");
+                    return registered(id, type.getDescriptionId(), "");
                 });
     }
 
@@ -146,7 +148,7 @@ public final class RuleCatalogSources {
                 s -> BuiltInRegistries.FLUID.keySet(),
                 id -> {
                     Fluid fluid = BuiltInRegistries.FLUID.get(id);
-                    Block block = fluid == null ? Blocks.AIR : fluid.defaultFluidState().createLegacyBlock().getBlock();
+                    Block block = fluid.defaultFluidState().createLegacyBlock().getBlock();
                     return registered(id, block == Blocks.AIR ? id.toString() : block.getDescriptionId(), "");
                 });
     }

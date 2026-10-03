@@ -41,7 +41,6 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
     // 单条最大长度
     public static final int MAX_ENTRY_LENGTH = 128;
 
-    private final Font font;
     private final Mode mode;
     private final @Nullable String registryHint;
     private final UiTextInput input;
@@ -55,7 +54,7 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
     private @Nullable Consumer<List<String>> onChanged;
 
     public UiListEditor(Font font, Mode mode, @Nullable String registryHint) {
-        this.font = Objects.requireNonNull(font, "font");
+        Objects.requireNonNull(font, "font");
         this.mode = mode == null ? Mode.ID : mode;
         this.registryHint = registryHint;
         this.input = new UiTextInput(font, Component.translatable("gui.itemdespawntowhat.edit.list.input_hint"));
@@ -66,7 +65,7 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
 
     // 建议高度：rows 行列表 + 输入行 + 边框
     public static int preferredHeight(int rows) {
-        int visible = Math.max(1, Math.min(VISIBLE_ROWS, rows));
+        int visible = Math.clamp(rows, 1, VISIBLE_ROWS);
         return visible * ROW_HEIGHT + INPUT_HEIGHT + 2;
     }
 
@@ -98,7 +97,7 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
             }
         }
         this.items = copy;
-        this.selected = copy.isEmpty() ? -1 : Math.min(Math.max(selected, 0), copy.size() - 1);
+        this.selected = copy.isEmpty() ? -1 : Math.clamp(selected, 0, copy.size() - 1);
         this.offset = 0;
     }
 
@@ -178,7 +177,7 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
 
     // 输入内容提交：追加或覆盖选中项
     private void commitInput() {
-        String text = input.value() == null ? "" : input.value().trim();
+        String text = input.value().trim();
         if (text.isEmpty()) {
             return;
         }
@@ -269,7 +268,7 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
                 offset = selected - visibleRows + 1;
             }
         }
-        offset = Math.max(0, Math.min(maxOffset, offset));
+        offset = Math.clamp(offset, 0, maxOffset);
     }
 
     @Override
@@ -409,9 +408,8 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
         if (items.isEmpty()) {
             return false;
         }
-        int from = selected < 0 ? 0 : selected;
-        int target = Math.max(0, Math.min(items.size() - 1, from + delta));
-        selected = target;
+        int from = Math.max(0, selected);
+        selected = Math.max(0, Math.min(items.size() - 1, from + delta));
         return true;
     }
 
@@ -455,7 +453,7 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
     }
 
     @Override
-    public @Nullable Component accessibleName() {
+    public Component accessibleName() {
         return Component.translatable("gui.itemdespawntowhat.edit.list.accessible_name");
     }
 }

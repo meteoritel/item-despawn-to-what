@@ -20,6 +20,8 @@ public final class FabricRuleEditClientRegistrar {
     }
 
     // 注册 S2C 接收器；重复调用安全
+    // 网络回调借用游戏客户端；这里只调度任务，不负责关闭 Minecraft 实例。
+    @SuppressWarnings("resource")
     public static void register() {
         ClientPlayNetworking.registerGlobalReceiver(RuleSnapshotPayload.TYPE,
                 (payload, context) -> context.client().execute(() -> RuleEditPayloadRouter.dispatchSnapshot(payload)));

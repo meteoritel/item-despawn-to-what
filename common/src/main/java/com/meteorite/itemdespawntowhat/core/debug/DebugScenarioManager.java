@@ -4,7 +4,10 @@ import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.command.RuleCommandContext;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
-import com.meteorite.itemdespawntowhat.core.runtime.TickScheduler;
+import com.meteorite.itemdespawntowhat.core.runtime.scheduler.RunnableTask;
+import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ScheduledTask;
+import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerScheduler;
+import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTaskKind;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -124,14 +127,17 @@ public final class DebugScenarioManager {
     }
 
     // 为实际队列任务保留本轮句柄，完成时释放，停止时可精确取消而不清空普通队列。
-    public static TickScheduler.Task schedule(ItemEntity source, TickScheduler scheduler, long now, int delay, Runnable action) {
+    public static ScheduledTask schedule(ItemEntity source, ServerScheduler scheduler, Object realmKey,
+                                         ServerTaskKind kind, long dueTick, String name, Runnable action) {
         Binding binding = DebugMode.ENABLED ? ENTITIES.get(source.getUUID()) : null;
-        if (binding == null || !binding.source) { return scheduler.schedule(now, delay, action); }
-        TickScheduler.Task[] holder = new TickScheduler.Task[1];
-        holder[0] = scheduler.schedule(now, delay, () -> {
+        if (binding == null || !binding.source) {
+            return scheduler.scheduleAt(realmKey, new RunnableTask(kind, name, action), dueTick);
+        }
+        ScheduledTask[] holder = new ScheduledTask[1];
+        holder[0] = scheduler.scheduleAt(realmKey, new RunnableTask(kind, name, () -> {
             binding.run.tasks.remove(holder[0]);
             action.run();
-        });
+        }), dueTick);
         binding.run.tasks.add(holder[0]);
         return holder[0];
     }

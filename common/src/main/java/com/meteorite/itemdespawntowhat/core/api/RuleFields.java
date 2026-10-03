@@ -16,6 +16,36 @@ public final class RuleFields {
     public static final String CONDITIONS = "conditions";
     public static final String EFFECTS = "effects";
     public static final String TRIGGER_AFTER_SECONDS = "trigger_after_seconds";
+    // 消失方式集合（数组）；缺省表示仅自然消失
+    public static final String TRIGGERS = "triggers";
+    // 规则级固定源成本（正整数）；缺省表示未声明，沿用效果式/隐式消耗语义
+    public static final String SOURCE_COST = "source_cost";
+    // 规则级催化剂固定成本（对象 {items, count, radius}）；缺省表示未声明。
+    // 整数写法已废弃：由 RuleCodecs 的解码前检查明确报错，不做静默兼容
+    public static final String CATALYST_COST = "catalyst_cost";
+    // 候选结果组合模式：round_robin（默认） / priority
+    public static final String COMBINATION = "combination";
+    // 候选结果集合（数组）；缺省表示由顶层 effects 隐式映射为唯一候选
+    public static final String OUTCOMES = "outcomes";
+    // 规则契约结构版本（正整数）；当前仅支持 1
+    public static final String SCHEMA_VERSION = "schema_version";
+
+    // ===== 候选结果（outcomes 数组元素内部） ===== //
+    // 候选标识：规则内唯一
+    public static final String CANDIDATE_ID = "id";
+    // 候选包含的效果列表（与顶层 effects 同形）
+    public static final String CANDIDATE_EFFECTS = "effects";
+    // 安全生成位置开关（水平 5x5、上下各 2 格）；默认关闭
+    public static final String SAFE_SPAWN = "safe_spawn";
+    // 起点填充开关；默认开启
+    public static final String FILL_ORIGIN = "fill_origin";
+
+    // ===== 催化剂固定成本（catalyst_cost 对象内部） ===== //
+    // 与 ConsumeCatalystEffect.ITEMS_FIELD / COUNT_FIELD / RADIUS_FIELD 同名同义；
+    // 常量在此独立声明，避免 core/api 反向依赖 core/type
+    public static final String CATALYST_ITEMS = "items";
+    public static final String CATALYST_COUNT = "count";
+    public static final String CATALYST_RADIUS = "radius";
 
     // ===== 源匹配（source 对象内部） ===== //
     public static final String SOURCE_ITEMS = "items";

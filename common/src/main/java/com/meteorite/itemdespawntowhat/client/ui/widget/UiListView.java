@@ -38,8 +38,6 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     // 滚动条预留宽度（与 kit 的滚动条宽度保持一致）
     private static final int SCROLLBAR_RESERVE = 4;
 
-    // 字体
-    private final Font font;
     // 行渲染器
     private final RowRenderer<T> rowRenderer;
     // 滚动与裁剪
@@ -52,8 +50,6 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     private int rowHeight = DEFAULT_ROW_HEIGHT;
     // 选中行下标，-1 表示无选中
     private int selectedIndex = -1;
-    // 悬停行下标，-1 表示无悬停
-    private int hoveredIndex = -1;
     // 一屏可见行数
     private int visibleRowCount = 1;
     // 空列表提示
@@ -70,8 +66,8 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     private long lastClickTime;
     private int lastClickIndex = -1;
 
-    public UiListView(Font font, RowRenderer<T> rowRenderer) {
-        this.font = font;
+    // 字体由 render 接收；保留构造参数以兼容现有组件 API。
+    public UiListView(@SuppressWarnings("unused") Font font, RowRenderer<T> rowRenderer) {
         this.rowRenderer = rowRenderer;
     }
 
@@ -225,7 +221,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
                     viewport.y() + Math.max(0, viewport.height() / 2 - 4), UiPalette.TEXT_SECONDARY);
             return;
         }
-        hoveredIndex = indexAt(mouseX, mouseY);
+        int hoveredIndex = indexAt(mouseX, mouseY);
         int rowWidth = contentWidth();
         scrollView.push(graphics);
         for (int i = 0; i < items.size(); i++) {

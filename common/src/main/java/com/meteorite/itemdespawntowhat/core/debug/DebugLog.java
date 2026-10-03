@@ -44,7 +44,16 @@ final class DebugLog {
         data.addProperty("overlay_directory", config.overlayDirectory());
         data.addProperty("fabric_lifespan_fallback_ticks", config.fabricLifespanFallbackTicks());
         data.addProperty("debug_logging_on_disk_setting", config.debugLogging());
-        data.addProperty("queue_soft_budget_us", com.meteorite.itemdespawntowhat.core.runtime.TickScheduler.SOFT_BUDGET_NANOS / 1000);
+        data.addProperty("server_budget_us", config.serverBudgetUs());
+        data.addProperty("max_work_units_per_tick", config.effectiveMaxWorkUnitsPerTick());
+        data.addProperty("effects_work_units_per_tick", config.effectsWorkUnitsPerTick());
+        data.addProperty("check_spread_window_ticks", config.checkSpreadWindowTicks());
+        data.addProperty("dispatch_batch_size", config.dispatchBatchSize());
+        data.addProperty("position_search_checks_per_tick", config.positionSearchChecksPerTick());
+        data.addProperty("debug_scenario_prepare_batch_size", config.debugScenarioPrepareBatchSize());
+        data.addProperty("debug_scenario_prepare_budget_us", config.debugScenarioPrepareBudgetUs());
+        // 兼容旧日志字段名：公共预算即原来的队列软预算
+        data.addProperty("queue_soft_budget_us", config.serverBudgetUs());
         return data;
     }
 

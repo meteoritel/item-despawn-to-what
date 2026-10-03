@@ -166,7 +166,7 @@ public final class RuleEditorModel {
         }
         EditSession session = new EditSession(id, RuleDraft.of(body));
         this.sessions.put(id, session);
-        this.captureBaseline(id, entry == null ? null : entry.effective());
+        this.captureBaseline(id, entry.effective());
         this.bindSession(id, session);
         return session;
     }

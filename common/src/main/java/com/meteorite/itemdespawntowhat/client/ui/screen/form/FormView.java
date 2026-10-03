@@ -14,8 +14,6 @@ import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
-import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
-import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -194,7 +192,7 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
     }
 
     // 组装当前控件的对象形态（子列表用）
-    @Nullable JsonObject storeObject() {
+    JsonObject storeObject() {
         JsonObject object = new JsonObject();
         for (Row row : rows) {
             if (row.field.type() == EditorFieldType.NOTE || row.field.type() == EditorFieldType.RAW_JSON) {
@@ -351,15 +349,12 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
             }
             row.contentY = cursor;
             cursor += row.contentHeight + ROW_GAP;
-            if (narrow) {
-                cursor += 0;
-            }
         }
         return Math.max(0, cursor - (rows.isEmpty() ? 0 : ROW_GAP));
     }
 
     private void clampScroll() {
-        this.scrollOffset = Math.max(0, Math.min(scrollOffset, maxScroll()));
+        this.scrollOffset = Math.clamp(scrollOffset, 0, maxScroll());
     }
 
     private int maxScroll() {
@@ -503,10 +498,9 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
             }
             List<FormIssue> list = row.control.issues(row.path);
             if (!list.isEmpty()) {
-                return list.get(0).message();
+                return list.getFirst().message();
             }
-            Component hint = row.control.hint();
-            return hint != null ? hint : null;
+            return row.control.hint();
         }
         return null;
     }
@@ -519,7 +513,7 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         if (suggestions == null || suggestions.isEmpty()) {
             return;
         }
-        this.picker = new Picker(field, suggestions, onPicked);
+        this.picker = new Picker(suggestions, onPicked);
     }
 
     public boolean isPickerOpen() {
@@ -657,7 +651,6 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
     // 候选值选择框：过滤输入框 + 可选列表
     private final class Picker {
 
-        private final EditorField field;
         private final List<Suggestion> all;
         private final List<Suggestion> filtered = new ArrayList<>();
         private final UiTextInput filterInput;
@@ -667,8 +660,7 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         private UiRect rect = new UiRect(0, 0, 0, 0);
         private UiRect listRect = new UiRect(0, 0, 0, 0);
 
-        Picker(EditorField field, List<Suggestion> suggestions, Consumer<String> onPicked) {
-            this.field = field;
+        Picker(List<Suggestion> suggestions, Consumer<String> onPicked) {
             this.all = suggestions;
             this.onPicked = onPicked;
             this.filterInput = new UiTextInput(font,
@@ -697,11 +689,11 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         }
 
         private int width() {
-            return Math.min(Math.max(120, viewportWidth - 8), 240);
+            return Math.clamp(viewportWidth - 8, 120, 240);
         }
 
         private int height() {
-            int rows = Math.min(PICKER_ROWS, Math.max(1, filtered.size()));
+            int rows = Math.clamp(filtered.size(), 1, PICKER_ROWS);
             return PICKER_HEADER + PICKER_INPUT + rows * UiTheme.ROW_HEIGHT + PICKER_FOOTER;
         }
 

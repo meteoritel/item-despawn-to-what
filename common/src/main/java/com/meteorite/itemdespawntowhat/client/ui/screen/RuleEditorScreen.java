@@ -41,12 +41,16 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiSegmentedControl;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
+import com.meteorite.itemdespawntowhat.core.model.CatalystCost;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionLimits;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
+import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveStatus;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshotEntry;
+import org.jetbrains.annotations.NotNull;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -303,7 +307,7 @@ public final class RuleEditorScreen extends Screen {
 
     // 每帧重算布局并绘制
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void render(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         this.renderBackground(graphics, mouseX, mouseY, partialTick);
         int w = this.width;
         int h = this.height;
@@ -1447,18 +1451,19 @@ public final class RuleEditorScreen extends Screen {
         return issues;
     }
 
-    // 本地保存前拦截（forms.md §9 的可本地判定项）
+    // 本地保存前拦截（forms.md §9 的可本地判定项；服务端仍是权威校验方）
     private List<FormIssue> localIssues(RuleDraft draft) {
         List<FormIssue> issues = new ArrayList<>();
-        JsonArray effects = new JsonArray();
-        JsonElement rawEffects = draft.view().get(RuleFields.EFFECTS);
-        if (rawEffects != null && rawEffects.isJsonArray()) {
-            effects = rawEffects.getAsJsonArray();
-        }
-        if (effects.isEmpty()) {
+        JsonArray effects = jsonArray(draft.view().get(RuleFields.EFFECTS));
+        JsonArray outcomes = jsonArray(draft.view().get(RuleFields.OUTCOMES));
+        if (effects.isEmpty() && outcomes.isEmpty()) {
             issues.add(issue(RuleFields.EFFECTS, UI + "issue.effects_empty"));
         } else if (effects.size() > 32) {
             issues.add(issue(RuleFields.EFFECTS, UI + "issue.effects_limit"));
+        }
+        // effects 与 outcomes 二选一：同时声明会被服务端拒绝，本地先拦
+        if (!effects.isEmpty() && !outcomes.isEmpty()) {
+            issues.add(issue(RuleFields.OUTCOMES, UI + "issue.outcomes_conflict"));
         }
         // 规则级条件树
         validateConditionTree(draft, "", RuleFields.CONDITIONS, issues);
@@ -1472,6 +1477,35 @@ public final class RuleEditorScreen extends Screen {
             String path = RuleFields.EFFECTS + "[" + i + "]." + RuleFields.CONDITIONS;
             validateConditionTree(draft, path, path, issues);
         }
+        // 候选结果：id 非空且唯一、effects 非空；候选内效果级条件树同样本地校验
+        Set<String> candidateIds = new LinkedHashSet<>();
+        for (int i = 0; i < outcomes.size(); i++) {
+            JsonElement element = outcomes.get(i);
+            String candidatePath = RuleFields.OUTCOMES + "[" + i + "]";
+            if (!element.isJsonObject()) {
+                issues.add(issue(candidatePath, UI + "issue.candidate_id_invalid"));
+                continue;
+            }
+            JsonObject candidate = element.getAsJsonObject();
+            JsonElement idElement = candidate.get(RuleFields.CANDIDATE_ID);
+            if (idElement == null || !idElement.isJsonPrimitive() || idElement.getAsString().isBlank()
+                    || !candidateIds.add(idElement.getAsString())) {
+                issues.add(issue(candidatePath + "." + RuleFields.CANDIDATE_ID, UI + "issue.candidate_id_invalid"));
+            }
+            JsonArray candidateEffects = jsonArray(candidate.get(RuleFields.CANDIDATE_EFFECTS));
+            if (candidateEffects.isEmpty()) {
+                issues.add(issue(candidatePath + "." + RuleFields.CANDIDATE_EFFECTS, UI + "issue.candidate_effects_empty"));
+                continue;
+            }
+            for (int j = 0; j < candidateEffects.size(); j++) {
+                if (!candidateEffects.get(j).isJsonObject()) {
+                    continue;
+                }
+                String conditionsPath = candidatePath + "." + RuleFields.CANDIDATE_EFFECTS + "[" + j + "]."
+                        + RuleFields.CONDITIONS;
+                validateConditionTree(draft, conditionsPath, conditionsPath, issues);
+            }
+        }
         JsonElement name = draft.view().get(RuleFields.DISPLAY_NAME);
         if (name != null && name.isJsonPrimitive()
                 && name.getAsString().codePointCount(0, name.getAsString().length()) > 128) {
@@ -1482,7 +1516,68 @@ public final class RuleEditorScreen extends Screen {
                 && seconds.getAsInt() < 0) {
             issues.add(issue(RuleFields.TRIGGER_AFTER_SECONDS, UI + "issue.trigger_negative"));
         }
+        // 固定成本契约（与服务端 RuleValidation 对齐）：source_cost 必须为正数、catalyst_cost 不得为负数
+        JsonElement sourceCost = draft.view().get(RuleFields.SOURCE_COST);
+        if (isInteger(sourceCost) && sourceCost.getAsInt() <= 0) {
+            issues.add(issue(RuleFields.SOURCE_COST, UI + "issue.source_cost_not_positive"));
+        }
+        // catalyst_cost 契约（与服务端 RuleValidation / RuleCodecs 对齐）：必须是对象 {items, count?, radius?}，
+        // 整数写法已废弃；items 不能为空、count / radius 只在显式写出时做区间拦截
+        JsonElement catalystCost = draft.view().get(RuleFields.CATALYST_COST);
+        boolean hasCatalystCost = catalystCost != null && !catalystCost.isJsonNull();
+        if (hasCatalystCost) {
+            if (!catalystCost.isJsonObject()) {
+                issues.add(issue(RuleFields.CATALYST_COST, UI + "issue.catalyst_cost_not_object"));
+            } else {
+                JsonObject cost = catalystCost.getAsJsonObject();
+                if (jsonArray(cost.get(RuleFields.CATALYST_ITEMS)).isEmpty()) {
+                    issues.add(issue(RuleFields.CATALYST_COST + "." + RuleFields.CATALYST_ITEMS,
+                            UI + "issue.catalyst_cost_items_empty"));
+                }
+                JsonElement countElement = cost.get(RuleFields.CATALYST_COUNT);
+                if (isInteger(countElement) && (countElement.getAsInt() < CatalystCost.MIN_COUNT
+                        || countElement.getAsInt() > CatalystCost.MAX_COUNT)) {
+                    issues.add(issue(RuleFields.CATALYST_COST + "." + RuleFields.CATALYST_COUNT,
+                            UI + "issue.catalyst_cost_count_out_of_range"));
+                }
+                JsonElement radiusElement = cost.get(RuleFields.CATALYST_RADIUS);
+                if (isInteger(radiusElement) && (radiusElement.getAsInt() < CatalystCost.MIN_RADIUS
+                        || radiusElement.getAsInt() > CatalystCost.MAX_RADIUS)) {
+                    issues.add(issue(RuleFields.CATALYST_COST + "." + RuleFields.CATALYST_RADIUS,
+                            UI + "issue.catalyst_cost_radius_out_of_range"));
+                }
+            }
+        }
+        // 结构版本：当前只支持 RuleCodecs.DEFAULT_SCHEMA_VERSION
+        JsonElement schemaVersion = draft.view().get(RuleFields.SCHEMA_VERSION);
+        if (isInteger(schemaVersion) && schemaVersion.getAsInt() != RuleCodecs.DEFAULT_SCHEMA_VERSION) {
+            issues.add(issue(RuleFields.SCHEMA_VERSION, UI + "issue.schema_version_unsupported"));
+        }
+        // 消耗效果统计覆盖顶层 effects 与候选结果内 effects
         Map<String, Integer> consumption = new LinkedHashMap<>();
+        countConsumption(effects, consumption);
+        for (JsonElement element : outcomes) {
+            if (element.isJsonObject()) {
+                countConsumption(jsonArray(element.getAsJsonObject().get(RuleFields.CANDIDATE_EFFECTS)), consumption);
+            }
+        }
+        for (Integer count : consumption.values()) {
+            if (count != null && count > 1) {
+                issues.add(issue(RuleFields.EFFECTS, UI + "issue.duplicate_consumption"));
+            }
+        }
+        // 固定成本与同名消耗效果互斥（重复记账）
+        if (isInteger(sourceCost) && consumption.containsKey(TypeLabels.OWN_NAMESPACE + ":consume_source")) {
+            issues.add(issue(RuleFields.SOURCE_COST, UI + "issue.double_bookkeeping"));
+        }
+        if (hasCatalystCost && consumption.containsKey(TypeLabels.OWN_NAMESPACE + ":consume_catalyst")) {
+            issues.add(issue(RuleFields.CATALYST_COST, UI + "issue.double_bookkeeping"));
+        }
+        return issues;
+    }
+
+    // 统计一组效果里的消耗类型（同一消耗效果在规则内只允许出现一次）
+    private static void countConsumption(JsonArray effects, Map<String, Integer> consumption) {
         for (JsonElement element : effects) {
             if (!element.isJsonObject()) {
                 continue;
@@ -1496,12 +1591,16 @@ public final class RuleEditorScreen extends Screen {
                 consumption.merge(type, 1, Integer::sum);
             }
         }
-        for (Integer count : consumption.values()) {
-            if (count != null && count > 1) {
-                issues.add(issue(RuleFields.EFFECTS, UI + "issue.duplicate_consumption"));
-            }
-        }
-        return issues;
+    }
+
+    // 读取草稿中的数组字段：非数组统一按空数组处理
+    private static JsonArray jsonArray(@Nullable JsonElement raw) {
+        return raw != null && raw.isJsonArray() ? raw.getAsJsonArray() : new JsonArray();
+    }
+
+    // 是否为数值 JSON：成本与结构版本的本地拦截只处理显式写出的数值
+    private static boolean isInteger(@Nullable JsonElement raw) {
+        return raw != null && raw.isJsonPrimitive() && raw.getAsJsonPrimitive().isNumber();
     }
 
     // 校验某条路径下的条件树（规则级传 ""，效果级传 "effects[i]"），问题路径指向 conditions 字段
@@ -2094,7 +2193,7 @@ public final class RuleEditorScreen extends Screen {
             }
         }
 
-        private void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
+        private void render(@NotNull GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
             for (UiButton button : buttons) {
                 if (button.isVisible()) {
                     button.render(graphics, renderFont, mouseX, mouseY);

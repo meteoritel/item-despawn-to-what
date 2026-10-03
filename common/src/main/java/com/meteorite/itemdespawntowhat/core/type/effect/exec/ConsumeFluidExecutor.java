@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.type.effect.exec;
 
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
+import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.type.effect.ConsumeFluidEffect;
 import net.minecraft.core.BlockPos;
@@ -24,6 +25,7 @@ import org.apache.logging.log4j.Logger;
  * rounds 语义：按「每轮消耗 1 格」实现，最多尝试 rounds 次；
  * 同一位置在同一 tick 内只能被消耗一次（消耗后流体状态立即变空），
  * 因此实际通常只消耗 1 格，未消耗的轮次被剔除并记录，不会静默截断。
+ * 流体只作为实时存在条件，不参与组数与份数预留（ADR-0001）。
  * 约定：delay_ticks / chance / 效果级 conditions 由运行时统一处理，本类不再判断；
  * 异常不吞、不捕获，由运行时统一捕获并记录（规则 id + 效果类型 + 位置）。
  */
@@ -35,7 +37,7 @@ public final class ConsumeFluidExecutor {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    public static void execute(ConsumeFluidEffect effect, EffectContext context) {
+    public static EffectResult execute(ConsumeFluidEffect effect, EffectContext context) {
         ServerLevel level = context.level();
         Vec3 position = context.position();
         BlockPos pos = BlockPos.containing(position.x, position.y, position.z);
@@ -49,6 +51,10 @@ public final class ConsumeFluidExecutor {
             LOGGER.debug("consume_fluid 未能消耗足够轮次：规则={} 期望={} 实际={} 位置={}",
                     context.ruleId(), rounds, consumed, pos);
         }
+        if (consumed <= 0) {
+            return EffectResult.skipped("fluid_absent");
+        }
+        return EffectResult.applied(consumed, consumed < rounds ? "short_of_fluid" : "");
     }
 
     // 消耗触发位置的一格匹配流体；该位置已无匹配流体时返回 false

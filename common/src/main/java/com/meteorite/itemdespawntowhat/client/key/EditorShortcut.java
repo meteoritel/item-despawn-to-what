@@ -29,7 +29,7 @@ public final class EditorShortcut {
     // 处理一次快捷键：已有会话且界面实现已注册则重开界面，否则提示（开发环境先开原型屏）
     public static void activate() {
         Minecraft client = Minecraft.getInstance();
-        if (client == null || client.level == null || client.player == null) {
+        if (client.level == null || client.player == null) {
             return;
         }
         RuleEditClientWorkspace workspace = RuleEditClientWorkspace.instance();

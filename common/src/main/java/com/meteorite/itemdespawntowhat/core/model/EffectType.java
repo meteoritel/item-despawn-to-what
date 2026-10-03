@@ -12,4 +12,9 @@ public interface EffectType<P extends Effect> extends TypeDefinition<P> {
 
     // 该效果类型的服务端执行器
     EffectExecutor<P> executor();
+
+    // 是否属于「一次性效果」（天气 / 闪电 / 爆炸等）：不参与数量上限，仅含一次性效果的候选每源最多一组
+    default boolean oneShot() {
+        return false;
+    }
 }

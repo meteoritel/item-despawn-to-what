@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.type.effect.exec;
 
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
+import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.type.effect.LightningEffect;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -11,7 +12,9 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * lightning 执行器：第一道闪电精确落在触发位置，后续按间隔在附近散布，均落到地面高度。
- * rounds 语义：一次性世界效果，不随 rounds 缩放（不是「每个物品一份」的结果）。
+ * rounds 语义：一次性世界效果，不随 rounds 缩放（不是「每个物品一份」的结果），
+ * 也不参与容量计算与组数限制（ADR-0001 阶段 4）。
+ * 阶段 4 起每道闪电通过 context.reportProgress(1) 回执真实完成量。
  * 约定：delay_ticks / chance / 效果级 conditions 由运行时统一处理，本类不再判断；
  * 异常不吞、不捕获，由运行时统一捕获并记录（规则 id + 效果类型 + 位置）。
  */
@@ -26,11 +29,14 @@ public final class LightningExecutor {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    public static void execute(LightningEffect effect, EffectContext context) {
+    // 此处借用 Minecraft 管理的实例，生命周期由游戏负责，不能在此关闭。
+    @SuppressWarnings("resource")
+    public static EffectResult execute(LightningEffect effect, EffectContext context) {
         if (!com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks.containsArea(context.level(),
                 net.minecraft.core.BlockPos.containing(context.position()), 6)) {
             context.schedule(20, () -> execute(effect, context));
-            return;
+            // 等待区块加载：本次不计入账目，真实结果由后续调用回执
+            return EffectResult.deferred(0, "awaiting_chunk");
         }
         ServerLevel level = context.level();
         Vec3 origin = context.position();
@@ -40,6 +46,7 @@ public final class LightningExecutor {
             // 延迟任务绑定维度与位置，不依赖源实体存活
             context.schedule(delay, () -> strike(context, level, origin, exact));
         }
+        return EffectResult.deferred(effect.count(), "strike_series").asOneShot();
     }
 
     // 在指定水平坐标的地面高度召唤一道闪电
@@ -67,5 +74,7 @@ public final class LightningExecutor {
         }
         bolt.moveTo(strikeX, groundPos.getY(), strikeZ);
         EffectTargets.addEntity(context, bolt);
+        // 真实完成量回执：每道闪电计 1
+        context.reportProgress(1);
     }
 }

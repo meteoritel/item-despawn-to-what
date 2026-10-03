@@ -479,7 +479,7 @@ public final class RuleDraft {
         if (!parent.isJsonObject()) {
             return false;
         }
-        Segment last = segments.get(segments.size() - 1);
+        Segment last = segments.getLast();
         if (last.index() < 0) {
             return parent.getAsJsonObject().remove(last.name()) != null;
         }

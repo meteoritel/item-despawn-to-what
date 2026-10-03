@@ -3,7 +3,6 @@
   "enabled": false,
   "display_name": "树苗落地 / Sapling Planting",
   "notes": "内置示例（默认停用）：树苗（不含橡树苗）落在泥土类方块上时自动种下，结果方块由源物品决定。surrounding_blocks 在周围区块未全部加载时返回 UNAVAILABLE（不触发效果），而不是被判为不成立。",
-  "trigger_after_seconds": 300,
   "source": {
     "items": [
       "#minecraft:saplings"
@@ -30,6 +29,13 @@
       }
     ]
   },
+  "trigger_after_seconds": 300,
+  "triggers": [
+    "natural"
+  ],
+  "source_cost": 1,
+  "combination": "round_robin",
+  "schema_version": 1,
   "effects": [
     {
       "type": "itemdespawntowhat:place_block",

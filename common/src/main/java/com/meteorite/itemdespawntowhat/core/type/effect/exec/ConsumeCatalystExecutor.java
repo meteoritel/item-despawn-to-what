@@ -1,13 +1,11 @@
 package com.meteorite.itemdespawntowhat.core.type.effect.exec;
 
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
+import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.type.effect.ConsumeCatalystEffect;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
@@ -32,13 +30,16 @@ public final class ConsumeCatalystExecutor {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    public static void execute(ConsumeCatalystEffect effect, EffectContext context) {
+    // 此处借用 Minecraft 管理的实例，生命周期由游戏负责，不能在此关闭。
+    @SuppressWarnings("resource")
+    public static EffectResult execute(ConsumeCatalystEffect effect, EffectContext context) {
         ServerLevel level = context.level();
         ItemEntity source = context.source();
         Vec3 position = context.position();
         BlockPos center = BlockPos.containing(position.x, position.y, position.z);
         AABB box = EffectTargets.blockBox(center, effect.radius());
         int remaining = EffectTargets.saturatedMultiply(effect.count(), context.rounds());
+        int requested = remaining;
         List<ItemEntity> candidates = level.getEntitiesOfClass(ItemEntity.class, box,
                 entity -> entity != source && entity.isAlive() && !entity.getItem().isEmpty()
                         && matchesAny(effect.items(), entity.getItem()));
@@ -64,27 +65,15 @@ public final class ConsumeCatalystExecutor {
         if (remaining > 0) {
             LOGGER.debug("consume_catalyst 催化剂不足，剩余未消耗 {} 个：规则={}", remaining, context.ruleId());
         }
+        int consumed = requested - remaining;
+        if (consumed <= 0) {
+            return EffectResult.skipped("catalyst_absent");
+        }
+        return EffectResult.applied(consumed, remaining > 0 ? "short_of_catalyst" : "");
     }
 
-    // 物品栈是否命中 items 中的任一引用（非 tag 比物品，tag 比标签）
+    // 物品/标签匹配统一委托 EffectTargets.matchesAny：催化剂固定成本与效果式消耗必须同口径，禁止在此复刻逻辑
     private static boolean matchesAny(List<TaggedId> references, ItemStack stack) {
-        for (TaggedId reference : references) {
-            if (reference == null) {
-                continue;
-            }
-            if (reference.tag()) {
-                if (stack.is(TagKey.create(Registries.ITEM, reference.id()))) {
-                    return true;
-                }
-                continue;
-            }
-            if (!BuiltInRegistries.ITEM.containsKey(reference.id())) {
-                continue;
-            }
-            if (stack.is(BuiltInRegistries.ITEM.get(reference.id()))) {
-                return true;
-            }
-        }
-        return false;
+        return EffectTargets.matchesAny(references, stack);
     }
 }

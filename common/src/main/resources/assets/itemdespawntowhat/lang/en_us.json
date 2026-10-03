@@ -628,5 +628,15 @@
   "gui.itemdespawntowhat.edit.conflict.later": "Decide later",
   "gui.itemdespawntowhat.edit.notice.issue": "%s: %s",
   "gui.itemdespawntowhat.edit.issue.conditions_unregistered": "Unknown condition type (not registered on this client) - original data kept, the server will validate it",
-  "gui.itemdespawntowhat.edit.notice.draft_save_failed": "Failed to save the draft to disk; it will be retried"
+  "gui.itemdespawntowhat.edit.notice.draft_save_failed": "Failed to save the draft to disk; it will be retried",
+  "gui.itemdespawntowhat.edit.issue.outcomes_conflict": "effects and outcomes cannot be declared together",
+  "gui.itemdespawntowhat.edit.issue.source_cost_not_positive": "source_cost must be a positive integer",
+  "gui.itemdespawntowhat.edit.issue.catalyst_cost_not_object": "catalyst_cost must be an object {items, count?, radius?} (the integer form is removed)",
+  "gui.itemdespawntowhat.edit.issue.catalyst_cost_items_empty": "catalyst_cost.items cannot be empty",
+  "gui.itemdespawntowhat.edit.issue.catalyst_cost_count_out_of_range": "catalyst_cost.count must be between 1 and 64",
+  "gui.itemdespawntowhat.edit.issue.catalyst_cost_radius_out_of_range": "catalyst_cost.radius must be between 1 and 8",
+  "gui.itemdespawntowhat.edit.issue.double_bookkeeping": "A fixed cost and the matching consume effect cannot be declared together",
+  "gui.itemdespawntowhat.edit.issue.candidate_id_invalid": "Outcome id must be non-empty and unique",
+  "gui.itemdespawntowhat.edit.issue.candidate_effects_empty": "Outcome effects cannot be empty",
+  "gui.itemdespawntowhat.edit.issue.schema_version_unsupported": "Unsupported schema_version (only 1 is supported)"
 }

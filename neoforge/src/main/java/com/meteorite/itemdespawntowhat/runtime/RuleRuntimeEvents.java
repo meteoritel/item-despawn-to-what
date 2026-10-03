@@ -6,7 +6,9 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import com.meteorite.itemdespawntowhat.core.state.DropStateStore;
 import net.neoforged.neoforge.event.OnDatapackSyncEvent;
+import net.neoforged.neoforge.event.entity.EntityInvulnerabilityCheckEvent;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
@@ -16,7 +18,6 @@ import com.meteorite.itemdespawntowhat.Constants;
 import net.neoforged.neoforge.event.level.LevelEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
-import net.neoforged.neoforge.event.tick.LevelTickEvent;
 
 import static com.meteorite.itemdespawntowhat.ItemDespawnToWhat.MOD_ID;
 
@@ -87,16 +88,24 @@ public final class RuleRuntimeEvents {
         }
     }
 
-    // 维度 tick 结束：执行到期任务与周期性失效清理
+    // 三类环境伤害保护（D2/D4）：原版 Entity#isInvulnerableTo 调用时触发，
+    // 只豁免 in_fire/on_fire/lava/cactus（D1），且仅在保护期内；其余伤害原样放行。
     @SubscribeEvent
-    public static void onLevelTick(LevelTickEvent.Post event) {
-        if (event.getLevel() instanceof ServerLevel level) {
-            RuleRuntimeHost.tickLevel(level);
+    public static void onInvulnerabilityCheck(EntityInvulnerabilityCheckEvent event) {
+        // 只处理掉落物：避免为其它实体创建持久数据，也避免无谓的状态读取
+        if (!(event.getEntity() instanceof ItemEntity item)) {
+            return;
+        }
+        if (item.level() instanceof ServerLevel level
+                && DropStateStore.blocksEnvironmentalDamage(item, event.getSource(), level.getGameTime())) {
+            event.setInvulnerable(true);
         }
     }
 
+    // 服务器 tick 结束：统一推进一次公共预算（所有维度共享，ADR-0002），再跑开发场景与周期性失效清理
     @SubscribeEvent
     public static void onServerTick(net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) {
+        RuleRuntimeHost.tickServer(event.getServer());
         DebugSessionManager.tick(event.getServer(), RuleRuntimeHost.commandContext());
         if (event.getServer().getTickCount() % 20 == 0) {
             com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler

@@ -90,7 +90,7 @@ public final class RuleEditChunkAccumulator {
         int index = payload.index();
         if (transferId == null || transferId.isEmpty()
                 || transferId.length() > RuleEditLimits.MAX_TRANSFER_ID_LENGTH
-                || count <= 0 || count > RuleEditLimits.MAX_CHUNK_COUNT
+                || count > RuleEditLimits.MAX_CHUNK_COUNT
                 || index < 0 || index >= count) {
             return false;
         }

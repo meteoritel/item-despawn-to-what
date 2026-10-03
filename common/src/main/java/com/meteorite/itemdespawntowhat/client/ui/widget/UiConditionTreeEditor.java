@@ -100,8 +100,6 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
                        boolean overflow, boolean deep, int leafOrdinal) {
     }
 
-    // 字体
-    private final Font font;
     // 滚动与裁剪
     private final UiScrollView scrollView = new UiScrollView();
     // 当前条件表达式
@@ -148,8 +146,8 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
     // 最近一次结构改动对应的撤销操作 key（宿主据此显示真实的撤销操作名）
     private String lastOpKey = EditSession.OP_EDIT_CONDITIONS;
 
-    public UiConditionTreeEditor(Font font) {
-        this.font = font;
+    // 字体由 render 接收；保留构造参数以兼容现有组件 API。
+    public UiConditionTreeEditor(@SuppressWarnings("unused") Font font) {
     }
 
     // 最近一次改动的撤销操作 key
@@ -320,7 +318,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
             return false;
         }
         lastOpKey = EditSession.OP_WRAP_NOT;
-        applyAt(row.path(), node -> new ConditionNode.Inverted(node));
+        applyAt(row.path(), ConditionNode.Inverted::new);
         return true;
     }
 
@@ -436,7 +434,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
             append(root, ROOT_PATH, 0, -1, counters);
         }
         if (selectedPath != null && indexOfPath(selectedPath) < 0) {
-            selectedPath = rows.isEmpty() ? null : rows.get(Math.min(rows.size() - 1, Math.max(0, hoveredIndex))).path();
+            selectedPath = rows.isEmpty() ? null : rows.get(Math.clamp(hoveredIndex, 0, rows.size() - 1)).path();
         }
         if (hoveredIndex >= rows.size()) {
             hoveredIndex = -1;
@@ -467,7 +465,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
             issues.add(new Issue(IssueKind.INCOMPLETE_GROUP, path,
                     Component.translatable("gui.itemdespawntowhat.edit.issue.incomplete_group")));
         }
-        if (node instanceof ConditionNode.Leaf leaf && leaf.condition() == null) {
+        if (node instanceof ConditionNode.Leaf(var leafCondition) && leafCondition == null) {
             issues.add(new Issue(IssueKind.MISSING_CONDITION, path,
                     Component.translatable("gui.itemdespawntowhat.edit.issue.missing_condition")));
         }
@@ -486,16 +484,16 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
         if (collapsed.contains(path)) {
             return;
         }
-        if (node instanceof ConditionNode.AllOf all) {
-            for (int i = 0; i < all.terms().size(); i++) {
-                append(all.terms().get(i), path + ".terms[" + i + "]", depth + 1, index, counters);
+        if (node instanceof ConditionNode.AllOf(var allTerms)) {
+            for (int i = 0; i < allTerms.size(); i++) {
+                append(allTerms.get(i), path + ".terms[" + i + "]", depth + 1, index, counters);
             }
-        } else if (node instanceof ConditionNode.AnyOf any) {
-            for (int i = 0; i < any.terms().size(); i++) {
-                append(any.terms().get(i), path + ".terms[" + i + "]", depth + 1, index, counters);
+        } else if (node instanceof ConditionNode.AnyOf(var anyTerms)) {
+            for (int i = 0; i < anyTerms.size(); i++) {
+                append(anyTerms.get(i), path + ".terms[" + i + "]", depth + 1, index, counters);
             }
-        } else if (node instanceof ConditionNode.Inverted inverted) {
-            append(inverted.term(), path + "." + RuleFields.TERM, depth + 1, index, counters);
+        } else if (node instanceof ConditionNode.Inverted(var invertedTerm)) {
+            append(invertedTerm, path + "." + RuleFields.TERM, depth + 1, index, counters);
         }
     }
 
@@ -607,14 +605,14 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
         if (nodePath.equals(targetPath)) {
             return transform.apply(node);
         }
-        if (node instanceof ConditionNode.AllOf all) {
-            return new ConditionNode.AllOf(transformChildren(all.terms(), nodePath, targetPath, transform));
+        if (node instanceof ConditionNode.AllOf(var allTerms)) {
+            return new ConditionNode.AllOf(transformChildren(allTerms, nodePath, targetPath, transform));
         }
-        if (node instanceof ConditionNode.AnyOf any) {
-            return new ConditionNode.AnyOf(transformChildren(any.terms(), nodePath, targetPath, transform));
+        if (node instanceof ConditionNode.AnyOf(var anyTerms)) {
+            return new ConditionNode.AnyOf(transformChildren(anyTerms, nodePath, targetPath, transform));
         }
-        if (node instanceof ConditionNode.Inverted inverted) {
-            ConditionNode term = transformByPath(inverted.term(), nodePath + "." + RuleFields.TERM, targetPath, transform);
+        if (node instanceof ConditionNode.Inverted(var invertedTerm)) {
+            ConditionNode term = transformByPath(invertedTerm, nodePath + "." + RuleFields.TERM, targetPath, transform);
             return term == null ? null : new ConditionNode.Inverted(term);
         }
         return node;
@@ -635,13 +633,13 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
 
     // 向分组追加子项；不是分组时原样返回
     private static ConditionNode appendTerm(ConditionNode node, ConditionNode child) {
-        if (node instanceof ConditionNode.AllOf all) {
-            List<ConditionNode> terms = new ArrayList<>(all.terms());
+        if (node instanceof ConditionNode.AllOf(var allTerms)) {
+            List<ConditionNode> terms = new ArrayList<>(allTerms);
             terms.add(child);
             return new ConditionNode.AllOf(terms);
         }
-        if (node instanceof ConditionNode.AnyOf any) {
-            List<ConditionNode> terms = new ArrayList<>(any.terms());
+        if (node instanceof ConditionNode.AnyOf(var anyTerms)) {
+            List<ConditionNode> terms = new ArrayList<>(anyTerms);
             terms.add(child);
             return new ConditionNode.AnyOf(terms);
         }
@@ -662,22 +660,22 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
 
     // 取分组子项，非分组返回 null
     private static @Nullable List<ConditionNode> termsOf(ConditionNode node) {
-        if (node instanceof ConditionNode.AllOf all) {
-            return all.terms();
+        if (node instanceof ConditionNode.AllOf(var allTerms)) {
+            return allTerms;
         }
-        if (node instanceof ConditionNode.AnyOf any) {
-            return any.terms();
+        if (node instanceof ConditionNode.AnyOf(var anyTerms)) {
+            return anyTerms;
         }
         return null;
     }
 
     // ALL 与 ANY 互转
     private static ConditionNode toggleKind(ConditionNode node) {
-        if (node instanceof ConditionNode.AllOf all) {
-            return new ConditionNode.AnyOf(all.terms());
+        if (node instanceof ConditionNode.AllOf(var allTerms)) {
+            return new ConditionNode.AnyOf(allTerms);
         }
-        if (node instanceof ConditionNode.AnyOf any) {
-            return new ConditionNode.AllOf(any.terms());
+        if (node instanceof ConditionNode.AnyOf(var anyTerms)) {
+            return new ConditionNode.AllOf(anyTerms);
         }
         return node;
     }
@@ -696,7 +694,8 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
             selectPath(ROOT_PATH + ".terms[1]");
             return true;
         }
-        int size = termsOf(findNode(groupPath)) == null ? 0 : termsOf(findNode(groupPath)).size();
+        List<ConditionNode> terms = termsOf(findNode(groupPath));
+        int size = terms == null ? 0 : terms.size();
         applyAt(groupPath, node -> appendTerm(node, newNode));
         selectPath(groupPath + ".terms[" + size + "]");
         return true;
@@ -832,10 +831,10 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
                     Component.translatable("gui.itemdespawntowhat.edit.tree.node.any"), any.terms().size());
         } else if (node instanceof ConditionNode.Inverted) {
             label = Component.translatable("gui.itemdespawntowhat.edit.tree.node.not");
-        } else if (node instanceof ConditionNode.Leaf leaf) {
-            label = leaf.condition() == null
+        } else if (node instanceof ConditionNode.Leaf(var leafCondition)) {
+            label = leafCondition == null
                     ? Component.translatable("gui.itemdespawntowhat.edit.tree.leaf_missing")
-                    : typeLabel(leaf.condition().type());
+                    : typeLabel(leafCondition.type());
         } else {
             label = Component.empty();
         }
@@ -867,13 +866,13 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
     // 绘制类型选择框
     private void renderPicker(GuiGraphics graphics, Font renderFont) {
         graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), UiPalette.MODAL_DIM);
-        int width = Math.min(Math.max(96, bounds.width() - 8), 220);
+        int width = Math.clamp(bounds.width() - 8, 96, 220);
         int maxRows = Math.max(1, (bounds.height() - PICKER_HEADER - PICKER_FOOTER - 4) / Math.max(1, rowHeight));
         int visibleRows = Math.min(Math.min(PICKER_MAX_ROWS, maxRows), Math.max(1, typeOptions.size()));
         int height = PICKER_HEADER + visibleRows * rowHeight + PICKER_FOOTER;
         int x = bounds.x() + Math.max(0, (bounds.width() - width) / 2);
         int y = bounds.y() + Math.max(0, (bounds.height() - height) / 2);
-        if (width <= 4 || height <= 4 || y + height > bounds.bottom() || x + width > bounds.right()) {
+        if (height <= 4 || y + height > bounds.bottom() || x + width > bounds.right()) {
             closePicker();
             return;
         }
@@ -889,7 +888,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
                             Component.translatable("gui.itemdespawntowhat.edit.picker.empty").getString(), width - 6),
                     x + 3, pickerListRect.y() + UiTheme.TEXT_OFFSET, UiPalette.TEXT_SECONDARY, false);
         } else {
-            pickerOffset = Math.max(0, Math.min(pickerOffset, Math.max(0, typeOptions.size() - visibleRows)));
+            pickerOffset = Math.clamp(pickerOffset, 0, Math.max(0, typeOptions.size() - visibleRows));
             for (int i = 0; i < visibleRows; i++) {
                 int optionIndex = pickerOffset + i;
                 if (optionIndex >= typeOptions.size()) {
@@ -1020,7 +1019,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
             if (typeOptions.size() > 1) {
                 pickerIndex = Math.max(0, Math.min(typeOptions.size() - 1,
                         pickerIndex + (scrollY > 0.0D ? -1 : 1)));
-                pickerOffset = Math.max(0, Math.min(pickerOffset, Math.max(0, typeOptions.size() - PICKER_MAX_ROWS)));
+                pickerOffset = Math.clamp(pickerOffset, 0, Math.max(0, typeOptions.size() - PICKER_MAX_ROWS));
                 return true;
             }
             return true;

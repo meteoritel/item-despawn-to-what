@@ -13,7 +13,6 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * 标签候选数据源：合并物品、方块、实体、流体、群系标签，条目 id 与标签引用写法一致（{@code #命名空间:路径}），

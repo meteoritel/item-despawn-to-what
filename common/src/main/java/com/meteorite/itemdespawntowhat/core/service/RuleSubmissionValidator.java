@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.service;
 
+import com.mojang.serialization.DataResult;
+
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
@@ -30,7 +32,7 @@ public final class RuleSubmissionValidator {
                 var decoded = RuleCodecs.decoder(server.registryAccess(), types.effectTypes(), types.conditionTypes()).decode(body, issues);
                 Rule rule = decoded.result().orElse(null);
                 if (rule == null) {
-                    issues.error(decoded.error().map(error -> error.message()).orElse("规则解码失败"), edit.id().toString(), null);
+                    issues.error(decoded.error().map(DataResult.Error::message).orElse("规则解码失败"), edit.id().toString(), null);
                 } else {
                     RuleValidation.validate(rule, types.effectTypes(), types.conditionTypes(), issues, edit.id().toString());
                     RuleReferenceValidator.validate(rule, server, issues, edit.id().toString());

@@ -4,7 +4,6 @@
     "enabled": true,
     "display_name": "水与骨粉 / Water and Bone Meal",
     "notes": "内置示例：同一条 all_of 内同时需要流动水条件与催化剂条件；require_source=false 允许流动水。",
-    "trigger_after_seconds": 300,
     "source": {
       "items": [
         "minecraft:redstone"
@@ -33,6 +32,12 @@
         }
       ]
     },
+    "trigger_after_seconds": 300,
+    "triggers": [
+      "natural"
+    ],
+    "combination": "round_robin",
+    "schema_version": 1,
     "effects": [
       {
         "type": "itemdespawntowhat:spawn_item",
@@ -54,7 +59,6 @@
     "enabled": false,
     "display_name": "森林或白天 / Forest or Daytime",
     "notes": "内置示例（默认停用）：any_of 表示组内 OR（原来的「多个条件组之间 OR」）；群系精准匹配 + 时段条件。",
-    "trigger_after_seconds": 300,
     "source": {
       "items": [
         "minecraft:apple"
@@ -83,6 +87,13 @@
         }
       ]
     },
+    "trigger_after_seconds": 300,
+    "triggers": [
+      "natural"
+    ],
+    "source_cost": 1,
+    "combination": "round_robin",
+    "schema_version": 1,
     "effects": [
       {
         "type": "itemdespawntowhat:spawn_item",

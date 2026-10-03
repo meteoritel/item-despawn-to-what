@@ -134,7 +134,7 @@ final class RuleConfigCommands {
     private static int editLockRelease(CommandContext<CommandSourceStack> ctx, RuleCommandContext context) {
         RuleEditServerContext editContext = context.editContext();
         EditSessionManager sessions = RuleEditServerHandler.sessionManager(editContext);
-        if (sessions == null || editContext == null) {
+        if (sessions == null) {
             return RuleCommandTree.notReady(ctx);
         }
         EditSessionManager.SessionInfo released = sessions.release();
@@ -145,7 +145,7 @@ final class RuleConfigCommands {
 
         // 原持有者若在线，立刻收到 SESSION_EXPIRED，客户端据此关闭编辑界面并回到未持有状态
         MinecraftServer server = ctx.getSource().getServer();
-        if (server != null && released.ownerUuid() != null) {
+        if (released.ownerUuid() != null) {
             ServerPlayer owner = server.getPlayerList().getPlayer(released.ownerUuid());
             if (owner != null) {
                 editContext.sendTo(owner, RuleSaveResultPayload.of(released.sessionId(), "",

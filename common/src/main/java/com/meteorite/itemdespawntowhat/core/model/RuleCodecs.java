@@ -21,6 +21,7 @@ import net.minecraft.resources.RegistryOps;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -40,6 +41,9 @@ public final class RuleCodecs {
     // 触发时间默认值：对齐原版掉落物 300 秒的消失直觉
     public static final int DEFAULT_TRIGGER_AFTER_SECONDS = 300;
 
+    // 当前规则契约结构版本；声明其它值一律拒绝
+    public static final int DEFAULT_SCHEMA_VERSION = 1;
+
     // 规则文件允许出现的顶层字段（含覆盖层控制字段）
     public static final Set<String> KNOWN_RULE_FIELDS = Set.of(
             RuleFields.ID,
@@ -51,8 +55,29 @@ public final class RuleCodecs {
             RuleFields.CONDITIONS,
             RuleFields.TRIGGER_AFTER_SECONDS,
             RuleFields.EFFECTS,
+            RuleFields.TRIGGERS,
+            RuleFields.SOURCE_COST,
+            RuleFields.CATALYST_COST,
+            RuleFields.COMBINATION,
+            RuleFields.OUTCOMES,
+            RuleFields.SCHEMA_VERSION,
             RuleFields.DISABLED,
             RuleFields.DELETE
+    );
+
+    // 候选结果对象允许出现的字段（未知字段与效果类型一致，采用错误级严格检查）
+    private static final Set<String> OUTCOME_FIELDS = Set.of(
+            RuleFields.CANDIDATE_ID,
+            RuleFields.CANDIDATE_EFFECTS,
+            RuleFields.SAFE_SPAWN,
+            RuleFields.FILL_ORIGIN
+    );
+
+    // 催化剂固定成本对象允许出现的字段；未知字段（含 chance / conditions / delay_ticks）按错误级拒绝
+    private static final Set<String> CATALYST_COST_FIELDS = Set.of(
+            RuleFields.CATALYST_ITEMS,
+            RuleFields.CATALYST_COUNT,
+            RuleFields.CATALYST_RADIUS
     );
 
     // 旧版二维数组条件的分组字段名：仅用于识别旧格式并报错
@@ -112,6 +137,7 @@ public final class RuleCodecs {
                                     TypeRegistry<ConditionType<?>> conditionTypes) {
         Codec<ConditionExpression> expressionCodec = conditionExpressionCodec(conditionTypes);
         Codec<Effect> effectCodec = effectCodec(effectTypes);
+        Codec<OutcomeCandidate> outcomeCodec = OutcomeCandidate.codec(effectCodec);
         return RecordCodecBuilder.create(instance -> instance.group(
                 ResourceLocation.CODEC.fieldOf(RuleFields.ID).forGetter(Rule::id),
                 Codec.BOOL.optionalFieldOf(RuleFields.ENABLED, Boolean.TRUE).forGetter(Rule::enabled),
@@ -125,10 +151,24 @@ public final class RuleCodecs {
                         .forGetter(Rule::conditions),
                 Codec.INT.optionalFieldOf(RuleFields.TRIGGER_AFTER_SECONDS, DEFAULT_TRIGGER_AFTER_SECONDS)
                         .forGetter(Rule::triggerAfterSeconds),
-                effectCodec.listOf().fieldOf(RuleFields.EFFECTS).forGetter(Rule::effects)
-        ).apply(instance, (id, enabled, priority, displayName, notes, source, conditions, triggerAfterSeconds, effects) ->
+                TriggerKind.CODEC.listOf().optionalFieldOf(RuleFields.TRIGGERS, List.of())
+                        .forGetter(rule -> List.copyOf(rule.triggers())),
+                Codec.INT.optionalFieldOf(RuleFields.SOURCE_COST)
+                        .forGetter(rule -> Optional.ofNullable(rule.sourceCost())),
+                CatalystCost.CODEC.optionalFieldOf(RuleFields.CATALYST_COST)
+                        .forGetter(rule -> Optional.ofNullable(rule.catalystCost())),
+                CombinationMode.CODEC.optionalFieldOf(RuleFields.COMBINATION, CombinationMode.ROUND_ROBIN)
+                        .forGetter(Rule::combination),
+                outcomeCodec.listOf().optionalFieldOf(RuleFields.OUTCOMES, List.of())
+                        .forGetter(Rule::outcomes),
+                effectCodec.listOf().optionalFieldOf(RuleFields.EFFECTS, List.of()).forGetter(Rule::effects),
+                Codec.INT.optionalFieldOf(RuleFields.SCHEMA_VERSION, DEFAULT_SCHEMA_VERSION)
+                        .forGetter(Rule::schemaVersion)
+        ).apply(instance, (id, enabled, priority, displayName, notes, source, conditions, triggerAfterSeconds,
+                           triggers, sourceCost, catalystCost, combination, outcomes, effects, schemaVersion) ->
                 new Rule(id, enabled, priority, displayName.orElse(null), notes.orElse(null), source, conditions,
-                        triggerAfterSeconds, effects)));
+                        triggerAfterSeconds, effects, new LinkedHashSet<>(triggers), sourceCost.orElse(null),
+                        catalystCost.orElse(null), combination, outcomes, schemaVersion)));
     }
 
     // 构造加载层可用的解码器；未知顶层字段不阻断加载，但会作为 WARN 进入 IssueCollector
@@ -139,6 +179,8 @@ public final class RuleCodecs {
         DynamicOps<JsonElement> ops = RegistryOps.create(JsonOps.INSTANCE, registryAccess);
         return (body, issues) -> {
             warnUnknownFields(body, issues);
+            checkOutcomeFields(body, issues);
+            checkCatalystCostFields(body, issues);
             return ruleCodec.decode(ops, body).map(Pair::getFirst);
         };
     }
@@ -152,6 +194,45 @@ public final class RuleCodecs {
         }
     }
 
+    // 候选结果对象的未知字段：与效果类型一致采用错误级严格检查
+    private static void checkOutcomeFields(JsonObject body, IssueCollector issues) {
+        JsonElement raw = body.get(RuleFields.OUTCOMES);
+        if (raw == null || !raw.isJsonArray()) {
+            return;
+        }
+        int index = 0;
+        for (JsonElement element : raw.getAsJsonArray()) {
+            if (element.isJsonObject()) {
+                for (String key : element.getAsJsonObject().keySet()) {
+                    if (!OUTCOME_FIELDS.contains(key)) {
+                        issues.error("候选结果存在未知字段: " + key, null,
+                                RuleFields.OUTCOMES + "[" + index + "]." + key);
+                    }
+                }
+            }
+            index++;
+        }
+    }
+
+    // 催化剂固定成本：整数写法与对象内未知字段都按错误级拒绝（不做静默兼容）
+    private static void checkCatalystCostFields(JsonObject body, IssueCollector issues) {
+        JsonElement raw = body.get(RuleFields.CATALYST_COST);
+        if (raw == null) {
+            return;
+        }
+        if (!raw.isJsonObject()) {
+            issues.error("catalyst_cost 必须是对象 {\"" + RuleFields.CATALYST_ITEMS + "\":[...],\""
+                    + RuleFields.CATALYST_COUNT + "\":1,\"" + RuleFields.CATALYST_RADIUS + "\":1}，"
+                    + "整数写法已废弃", null, RuleFields.CATALYST_COST);
+            return;
+        }
+        for (String key : raw.getAsJsonObject().keySet()) {
+            if (!CATALYST_COST_FIELDS.contains(key)) {
+                issues.error("catalyst_cost 存在未知字段: " + key, null, RuleFields.CATALYST_COST + "." + key);
+            }
+        }
+    }
+
     // 表达式编码：空表达式写成恒真的空 all_of，保证编码结果始终可回读且不产出 null
     private static <T> RecordBuilder<T> encodeExpression(@Nullable ConditionExpression expression,
                                                          DynamicOps<T> ops,
@@ -159,7 +240,7 @@ public final class RuleCodecs {
                                                          MapCodec<ConditionNode> nodeCodec) {
         if (expression == null || expression.isEmpty()) {
             return prefix.add(RuleFields.OP, ops.createString(RuleFields.OP_ALL_OF))
-                    .add(RuleFields.TERMS, List.<ConditionNode>of(), nodeCodec.codec().listOf());
+                    .add(RuleFields.TERMS, List.of(), nodeCodec.codec().listOf());
         }
         return nodeCodec.encode(expression.root(), ops, prefix);
     }
@@ -184,21 +265,21 @@ public final class RuleCodecs {
 
             @Override
             public <T> RecordBuilder<T> encode(@Nullable ConditionNode input, DynamicOps<T> ops, RecordBuilder<T> prefix) {
-                if (input instanceof ConditionNode.AllOf allOf) {
+                if (input instanceof ConditionNode.AllOf(var allOfTerms)) {
                     return prefix.add(RuleFields.OP, ops.createString(RuleFields.OP_ALL_OF))
-                            .add(RuleFields.TERMS, allOf.terms(), holder.ref.listOf());
+                            .add(RuleFields.TERMS, allOfTerms, holder.ref.listOf());
                 }
-                if (input instanceof ConditionNode.AnyOf anyOf) {
+                if (input instanceof ConditionNode.AnyOf(var anyOfTerms)) {
                     return prefix.add(RuleFields.OP, ops.createString(RuleFields.OP_ANY_OF))
-                            .add(RuleFields.TERMS, anyOf.terms(), holder.ref.listOf());
+                            .add(RuleFields.TERMS, anyOfTerms, holder.ref.listOf());
                 }
-                if (input instanceof ConditionNode.Inverted inverted) {
+                if (input instanceof ConditionNode.Inverted(var invertedTerm)) {
                     return prefix.add(RuleFields.OP, ops.createString(RuleFields.OP_INVERTED))
-                            .add(RuleFields.TERM, inverted.term(), holder.ref);
+                            .add(RuleFields.TERM, invertedTerm, holder.ref);
                 }
-                if (input instanceof ConditionNode.Leaf leaf) {
+                if (input instanceof ConditionNode.Leaf(var leafCondition)) {
                     return prefix.add(RuleFields.OP, ops.createString(RuleFields.OP_LEAF))
-                            .add(RuleFields.CONDITION, leaf.condition(), leafCodec);
+                            .add(RuleFields.CONDITION, leafCondition, leafCodec);
                 }
                 // 未知节点实现属于编程错误：静默半写会产出无法回读的 JSON
                 throw new IllegalStateException("编码失败：未知的条件节点类型 " + input);
@@ -228,7 +309,7 @@ public final class RuleCodecs {
             if (terms.isEmpty()) {
                 return DataResult.error(() -> "op=" + op + " 的 terms 不能为空：空条件组请直接省略 conditions 字段");
             }
-            return DataResult.success((ConditionNode) (allOf ? new ConditionNode.AllOf(terms) : new ConditionNode.AnyOf(terms)));
+            return DataResult.success(allOf ? new ConditionNode.AllOf(terms) : new ConditionNode.AnyOf(terms));
         });
     }
 
@@ -243,7 +324,7 @@ public final class RuleCodecs {
         if (rawTerm == null) {
             return DataResult.error(() -> "op=inverted 缺少 term 字段（应为单个子节点）");
         }
-        return nodeCodec.parse(ops, rawTerm).map(term -> (ConditionNode) new ConditionNode.Inverted(term));
+        return nodeCodec.parse(ops, rawTerm).map(ConditionNode.Inverted::new);
     }
 
     // leaf：condition 字段内是扁平的「type + 类型专属字段」对象
@@ -263,7 +344,7 @@ public final class RuleCodecs {
         if (ops.get(rawCondition, RuleFields.NEGATED).result().isPresent()) {
             return DataResult.error(() -> INVERT_HINT);
         }
-        return leafCodec.parse(ops, rawCondition).map(condition -> (ConditionNode) new ConditionNode.Leaf(condition));
+        return leafCodec.parse(ops, rawCondition).map(ConditionNode.Leaf::new);
     }
 
     // 缺少 op 时的分类报错：区分旧格式（groups / 直接内联的叶）与书写遗漏

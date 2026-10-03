@@ -11,6 +11,7 @@ import net.minecraft.resources.ResourceLocation;
 public final class RegistryFrozenException extends IllegalStateException {
 
     // 固定的序列化版本号：异常不承载跨进程语义，版本变化无需兼容
+    @java.io.Serial
     private static final long serialVersionUID = 1L;
 
     // 被拒绝注册的类型 id 文本（不持有 ResourceLocation，避免异常序列化时携带不可序列化字段）

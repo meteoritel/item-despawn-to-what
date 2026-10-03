@@ -34,9 +34,7 @@ final class RuleEditTextChunks {
             bytes += codePointBytes;
             index += Character.charCount(codePoint);
         }
-        if (start < text.length()) {
-            chunks.add(text.substring(start));
-        }
+        chunks.add(text.substring(start));
         return chunks;
     }
 

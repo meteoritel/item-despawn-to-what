@@ -97,7 +97,7 @@ public record BiomeCondition(
     public static boolean validateParams(BiomeCondition params, IssueCollector issues, String fieldPath) {
         boolean valid = ParamChecks.required(params.mode(), FIELD_MODE, issues, ParamChecks.child(fieldPath, FIELD_MODE));
         if (params.mode() == Mode.EXACT) {
-            valid &= ParamChecks.notEmpty(params.biomes(), FIELD_BIOMES, issues, ParamChecks.child(fieldPath, FIELD_BIOMES));
+            valid = ParamChecks.notEmpty(params.biomes(), FIELD_BIOMES, issues, ParamChecks.child(fieldPath, FIELD_BIOMES));
             if (hasClimateRange(params)) {
                 issues.warn("mode=exact 时气候参数区间不参与匹配，已忽略", null, fieldPath);
             }

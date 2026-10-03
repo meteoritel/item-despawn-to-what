@@ -3,7 +3,6 @@
   "enabled": true,
   "display_name": "鸡蛋孵化 / Egg to Chicken",
   "notes": "内置示例：鸡蛋在主世界露天环境下孵化出幼年鸡。all_of 表示组内 AND（原来的同一条件组）；取反请使用 inverted 节点。",
-  "trigger_after_seconds": 300,
   "source": {
     "items": [
       "minecraft:egg"
@@ -29,6 +28,13 @@
       }
     ]
   },
+  "trigger_after_seconds": 300,
+  "triggers": [
+    "natural"
+  ],
+  "source_cost": 1,
+  "combination": "round_robin",
+  "schema_version": 1,
   "effects": [
     {
       "type": "itemdespawntowhat:spawn_entity",

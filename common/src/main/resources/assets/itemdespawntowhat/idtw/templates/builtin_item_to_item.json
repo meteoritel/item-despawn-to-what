@@ -3,12 +3,18 @@
   "enabled": true,
   "display_name": "鸡肉腐化 / Chicken to Rotten Flesh",
   "notes": "内置示例：鸡肉 300 秒后变腐肉。省略 conditions 字段表示恒真（空条件组不是合法 JSON；编辑中间态请直接省略该字段）。未声明任何 consume_* 效果时按默认语义消耗 1 个源物品。",
-  "trigger_after_seconds": 300,
   "source": {
     "items": [
       "minecraft:chicken"
     ]
   },
+  "trigger_after_seconds": 300,
+  "triggers": [
+    "natural"
+  ],
+  "source_cost": 1,
+  "combination": "round_robin",
+  "schema_version": 1,
   "effects": [
     {
       "type": "itemdespawntowhat:spawn_item",

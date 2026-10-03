@@ -4,7 +4,6 @@
     "enabled": true,
     "display_name": "雷暴凝水 / Thunder Condensation",
     "notes": "内置示例：weather 条件与 y_level 条件同处 all_of；效果演示 weather（改天气）与 consume_fluid（消耗流体）。",
-    "trigger_after_seconds": 300,
     "source": {
       "items": [
         "minecraft:wet_sponge"
@@ -30,6 +29,12 @@
         }
       ]
     },
+    "trigger_after_seconds": 300,
+    "triggers": [
+      "natural"
+    ],
+    "combination": "round_robin",
+    "schema_version": 1,
     "effects": [
       {
         "type": "itemdespawntowhat:weather",
@@ -49,7 +54,6 @@
     "enabled": false,
     "display_name": "暗处爆破 / Dark Blast",
     "notes": "内置示例（默认停用）：any_of 内混用叶节点与 inverted 节点（「非晴朗」）；效果演示 explosion。",
-    "trigger_after_seconds": 300,
     "source": {
       "items": [
         "minecraft:gunpowder"
@@ -78,6 +82,13 @@
         }
       ]
     },
+    "trigger_after_seconds": 300,
+    "triggers": [
+      "natural"
+    ],
+    "source_cost": 1,
+    "combination": "round_robin",
+    "schema_version": 1,
     "effects": [
       {
         "type": "itemdespawntowhat:explosion",

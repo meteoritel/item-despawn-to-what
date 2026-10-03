@@ -35,7 +35,7 @@ public final class RuleCommandTree {
     // 权限口径与 core/network 的编辑会话一致：单人世界放行，否则要求权限等级 ≥2（规划书 3.10）
     public static boolean hasAccess(CommandSourceStack source) {
         MinecraftServer server = source.getServer();
-        return server != null && (server.isSingleplayer() || source.hasPermission(2));
+        return server.isSingleplayer() || source.hasPermission(2);
     }
 
     // 统一反馈出口：下发可翻译组件，由客户端按玩家语言渲染（阶段⑤ i18n 约定）

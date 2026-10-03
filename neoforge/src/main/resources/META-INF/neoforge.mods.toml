@@ -12,6 +12,10 @@ displayName="${mod_name}" #mandatory
 authors="${mod_author}"
 description='''${description}'''
 
+# Mixin 配置：环境致死请求转化与实体状态合并兼容（阶段 3）
+[[mixins]]
+config="${mod_id}.mixins.json"
+
 [[dependencies.${mod_id}]]
 modId="neoforge"
 type="required"

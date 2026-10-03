@@ -48,17 +48,17 @@ public record ConditionExpression(@Nullable ConditionNode root) {
 
     // 递归检查组合节点的形状（不检查规模，规模由调用方统一比对）
     private static boolean hasLegalShape(ConditionNode node) {
-        if (node instanceof ConditionNode.Leaf leaf) {
-            return leaf.condition() != null;
+        if (node instanceof ConditionNode.Leaf(var leafCondition)) {
+            return leafCondition != null;
         }
-        if (node instanceof ConditionNode.Inverted inverted) {
-            return inverted.term() != null && hasLegalShape(inverted.term());
+        if (node instanceof ConditionNode.Inverted(var invertedTerm)) {
+            return invertedTerm != null && hasLegalShape(invertedTerm);
         }
-        if (node instanceof ConditionNode.AllOf allOf) {
-            return hasLegalTerms(allOf.terms());
+        if (node instanceof ConditionNode.AllOf(var allOfTerms)) {
+            return hasLegalTerms(allOfTerms);
         }
-        if (node instanceof ConditionNode.AnyOf anyOf) {
-            return hasLegalTerms(anyOf.terms());
+        if (node instanceof ConditionNode.AnyOf(var anyOfTerms)) {
+            return hasLegalTerms(anyOfTerms);
         }
         return false;
     }

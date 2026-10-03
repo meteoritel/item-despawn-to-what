@@ -132,7 +132,7 @@ public final class NaturalSummary {
         boolean condition = "condition".equals(kind);
         var descriptor = condition ? ConditionEditorRegistry.descriptorFor(type) : EffectEditorRegistry.descriptorFor(type);
         List<Component> parts = new ArrayList<>();
-        if (descriptor != null && !descriptor.readOnly()) {
+        if (!descriptor.readOnly()) {
             for (EditorField field : descriptor.fields()) {
                 if (RuleFields.TYPE.equals(field.name()) || !object.has(field.name())) {
                     continue;
@@ -146,7 +146,7 @@ public final class NaturalSummary {
             if (RuleFields.TYPE.equals(entry.getKey())) {
                 continue;
             }
-            boolean known = descriptor != null && descriptor.hasField(entry.getKey());
+            boolean known = descriptor.hasField(entry.getKey());
             if (!known) {
                 parts.add(Component.translatable(PREFIX + "field",
                         Component.literal(entry.getKey()), value(entry.getValue())));

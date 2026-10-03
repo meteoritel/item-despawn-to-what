@@ -40,7 +40,7 @@ public final class CatalystPresentEvaluator {
                         total[0] += entity.getItem().getCount();
                     }
                     return total[0] >= condition.count();
-                }, new java.util.ArrayList<ItemEntity>(1), 1);
+                }, new java.util.ArrayList<>(1), 1);
         return total[0] >= condition.count();
     }
 

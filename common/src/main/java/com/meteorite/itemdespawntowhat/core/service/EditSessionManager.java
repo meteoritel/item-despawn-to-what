@@ -197,7 +197,7 @@ public final class EditSessionManager {
     // 断线处理：契约要求会话在租约到期后释放，因此此处只保留会话，由 expire 负责回收
 
     private boolean matches(String sessionId) {
-        return sessionId != null && this.sessionId != null && this.sessionId.equals(sessionId);
+        return this.sessionId != null && this.sessionId.equals(sessionId);
     }
 
     private SessionInfo snapshotInfo() {
