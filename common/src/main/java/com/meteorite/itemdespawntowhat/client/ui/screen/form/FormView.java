@@ -9,6 +9,7 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
@@ -394,13 +395,41 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
 
     public FormView setVisible(boolean newVisible) {
         this.visible = newVisible;
+        if (!newVisible) {
+            endInteractions(UiInputCapture.EndReason.HIDDEN);
+        }
         return this;
     }
 
     public void setEnabled(boolean newEnabled) {
         this.enabled = newEnabled;
+        if (!newEnabled) {
+            endInteractions(UiInputCapture.EndReason.DISABLED);
+        }
         for (Row row : rows) {
             row.control.setEnabled(newEnabled);
+        }
+    }
+
+    // 焦点作用域切换（打开模态、切页）：先结束进行中的捕获再换焦点
+    public void onFocusScopeChanged() {
+        endInteractions(UiInputCapture.EndReason.FOCUS_SCOPE_CHANGED);
+    }
+
+    // 表单从界面卸载
+    public void unmount() {
+        endInteractions(UiInputCapture.EndReason.UNMOUNTED);
+    }
+
+    // 宿主屏幕关闭
+    public void onHostClosed() {
+        endInteractions(UiInputCapture.EndReason.HOST_CLOSED);
+    }
+
+    // 统一结束入口：把「未提交的预览」按原因回退或提交，交由各控件实现
+    void endInteractions(UiInputCapture.EndReason reason) {
+        for (Row row : rows) {
+            row.control.endInteractions(reason);
         }
     }
 
@@ -586,6 +615,12 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         if (picker != null) {
             return picker.keyPressed(keyCode, scanCode, modifiers);
         }
+        // 顺序：聚焦控件优先；方向键与 PageUp/PageDown 都不允许同时改值和滚动
+        for (Row row : rows) {
+            if (handlesInput(row.control) && row.control.keyPressed(keyCode, scanCode, modifiers)) {
+                return true;
+            }
+        }
         if (keyCode == GLFW.GLFW_KEY_PAGE_UP) {
             this.scrollOffset = Math.max(0, scrollOffset - viewportHeight);
             return true;
@@ -594,8 +629,13 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
             this.scrollOffset = Math.min(maxScroll(), scrollOffset + viewportHeight);
             return true;
         }
+        return false;
+    }
+
+    // 按键抬起：交给聚焦控件收尾（方向键重复在抬起时合并为一次提交）
+    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
         for (Row row : rows) {
-            if (handlesInput(row.control) && row.control.keyPressed(keyCode, scanCode, modifiers)) {
+            if (handlesInput(row.control) && row.control.keyReleased(keyCode, scanCode, modifiers)) {
                 return true;
             }
         }

@@ -1,6 +1,7 @@
 # GUI 通用 kit API 规划规格
 
 > 状态：已确认、已冻结、待实施；用户于 2026-10-03 随主计划确认职责、边界与操作契约，不代表代码已实现或独立库已发布。
+> 实施状态（2026-10-03，P5 文档同步）：P1 的输入 / 捕获 / 数值策略 / 滑块核心与 16 个新增 kit 文件已落盘，并被宿主适配层（`client/ui/widget`、`client/ui/theme`）使用；**P4 之后 kit 目录本身未再改动**。已知限制：`UiInputRouter` 目前没有宿主落点（规格 §8.5 要求接入或延后，本期记为已知限制）；独立 kit 库**本期未发布**。见 [NOTICE-kit.md](../../NOTICE-kit.md)「P4 之后」与 [manual-acceptance.md](../guide/manual-acceptance.md) §12。
 > 对应：[主计划](plan-gui-rule-update.md) · [字段规格](plan-gui-rule-update-fields.md) · [ADR-0025](../adr/0025-reusable-client-ui-kit-boundary.md)。
 > 源码基线：`12a4a9a929ca564211522ee1f602ca286f300364`，2026-10-03。
 

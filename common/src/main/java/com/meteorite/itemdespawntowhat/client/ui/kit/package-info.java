@@ -15,6 +15,22 @@
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiControlGroup}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiLinearLayout}</li>
+ *   <li>输入与捕获：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext}、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiInputTarget}、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiInputRouter}（路由顺序：顶层 modal 作用域 →
+ *       捕获目标 → 聚焦控件 → 容器导航，事件只消费一次）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture}（捕获与统一结束原因）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiValueInteraction}（begin / preview / commit / cancel）</li>
+ *   <li>数值策略：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiNumberPolicy}（合法数值域、粗细档与吸附）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderWindow}（轨道显示窗口，可与数值域不同）</li>
+ *   <li>滑块：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiScalarSlider}、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeSlider}、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeValue}、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeEnd}、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiCyclicRange}；
+ *       样式由宿主注入：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderStyle}、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderPainter}、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.PixelSliderPainter}</li>
  *   <li>焦点：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager}</li>
  *   <li>导航：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiNavigationHistory}（泛型快照、有界历史与有效性过滤）</li>
@@ -34,13 +50,16 @@
  *
  * <p><b>依赖方向</b>：本包只依赖 Minecraft 客户端通用类型、Java 标准库、JOML、LWJGL（按键常量）与
  * JetBrains annotations——不 import 任何项目包、不 import 两端 loader API、不引用 {@code Constants.MOD_ID}；
- * {@code client/} 以外的代码不得引用本包。该约束由 {@code scripts/check-ui-kit-boundaries.ps1} 检查：
- * 规则 1–4 是黑名单，规则 5 是 import 白名单（只允许 {@code java.*} / {@code net.minecraft.*} /
- * {@code org.jetbrains.*} / {@code org.joml.*} / {@code org.lwjgl.*}）。</p>
+ * {@code client/} 以外的代码不得引用本包。该约束由 {@code tools/check-ui-kit-boundaries.ps1} 检查，
+ * 运行方式：{@code powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1}
+ * （退出码 0 通过、1 有违规、2 配置错误）。脚本扫描本目录全部 {@code .java} 的 import 与全限定引用：
+ * import 白名单为 {@code java.*} / {@code javax.*} / {@code net.minecraft.*} / {@code org.jetbrains.*} /
+ * {@code org.joml.*} / {@code org.lwjgl.*}，同一 kit 包内互相引用允许；本模组其它包与
+ * {@code net.fabricmc.*} / {@code net.neoforged.*} / {@code com.google.gson.*} 一律禁用。</p>
  *
- * <p><b>宿主适配层</b>：{@code client/ui/overlay/}（模态与 `OverlayLayer` 适配、
- * {@code LightboxOverlay}）与 {@code client/ui/sample/}（开发用示例页）属于宿主/示例层，
- * 允许依赖项目常量与平台服务；它们依赖 kit，而不是反过来。</p>
+ * <p><b>宿主适配层</b>：{@code client/ui/theme/}（把主题色映射成 {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderStyle} 等 kit 样式后注入）、
+ * {@code client/ui/widget/}（把既有控件委托给 kit 核心并保持公开 API 兼容）与 {@code client/ui/prototype/} 属于宿主层，
+ * 允许依赖项目常量与平台服务；它们依赖 kit，而不是反过来。kit 自身不 import {@code theme} 或 {@code widget}。</p>
  *
  * <p><b>公开行为约定</b>：几何入口对负尺寸一律**钳制**而不是抛异常——{@code UiControl.setBounds} 与
  * {@code UiDocument.setViewport} 钳到 ≥0，{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView}
@@ -52,7 +71,14 @@
  * 其 {@code Labels} 新增 default 方法 {@code zoomReadout(int)}，既有实现无需改动。
  * {@link com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll} 另有非交互工具方法
  * {@code trimToWidth(Font, String, int)}（超宽时截断并补 ASCII 省略号），与悬停滚动入口并存。
- * 条目与兼容说明见 {@code docs/dev/internals/ui-kit-api.md}。</p>
+ * 依赖边界、输入路由顺序、捕获与操作生命周期、数值策略、滑块接入示例与 style 注入方式见
+ * {@code docs/dev/internals/ui-kit-api.md}。</p>
+ *
+ * <p><b>调用示例</b>：无规则语义的装配示例见 {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderExamples}——
+ * {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderExamples#scalarSlider}（普通小数滑块：精确回填、
+ * Shift 细调、方向键合并提交、Esc 取消回退）、
+ * {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderExamples#rangeSlider}（双端区间：端点选择、可选端点、单端精确编辑）、
+ * {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderExamples#cyclicRange}（周期区间：宿主注入周期/刻度/标记）。</p>
  *
  * <p><b>尚未完成</b>：独立 Gradle 模块与发布脚本，需要另立拆包任务；当前只冻结边界与检查方式。
  * 子包拆分（{@code api/} 与 {@code internal/}）已评估并决定不做，理由见

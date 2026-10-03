@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.theme;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlStyle;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderStyle;
 import net.minecraft.client.gui.GuiGraphics;
 
 /***
@@ -83,9 +84,22 @@ public final class UiTheme {
         return DISABLED_STYLE;
     }
 
+    // 滑块样式：把主题色调色板映射成 kit 的不可变样式（kit 不反向依赖主题，只能由宿主注入）
+    // 尺寸沿用 widget/UiSlider 的 TRACK_HEIGHT=4、THUMB_WIDTH=3、手柄上下各溢出 2 像素
+    private static final UiSliderStyle SLIDER_STYLE = new UiSliderStyle(
+            UiPalette.SCROLL_TRACK, UiPalette.ACCENT, UiPalette.CONTROL_FILL, UiPalette.CONTROL_HOVER,
+            UiPalette.CONTROL_DISABLED, UiPalette.FOCUS_OUTLINE, UiPalette.DANGER, UiPalette.WARNING,
+            UiPalette.TRANSPARENT, UiPalette.TEXT_PRIMARY, UiPalette.TEXT_PRIMARY, UiPalette.TEXT_DISABLED,
+            UiPalette.DANGER, 4, 3, 2);
+
     // 纯标签样式（透明底）
     public static UiControlStyle labelStyle() {
         return LABEL_STYLE;
+    }
+
+    // 滑块与区间滑块的主题样式（宿主注入给 kit 控件用）
+    public static UiSliderStyle sliderStyle() {
+        return SLIDER_STYLE;
     }
 
     // ---- 绘制：窗口与面板 ----

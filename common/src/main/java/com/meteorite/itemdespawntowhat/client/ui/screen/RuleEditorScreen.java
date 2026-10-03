@@ -8,9 +8,7 @@ import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDescriptors;
 import com.meteorite.itemdespawntowhat.client.edit.ClientTypeRegistries;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionEditorRegistry;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
-import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
-import com.meteorite.itemdespawntowhat.client.edit.EffectEditorRegistry;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
@@ -37,6 +35,7 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionTreeEditor;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiListView;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModalStack;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiNarration;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiSegmentedControl;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
@@ -47,6 +46,7 @@ import com.meteorite.itemdespawntowhat.core.model.ConditionLimits;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
+import com.meteorite.itemdespawntowhat.core.network.protocol.RuleIssue;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveStatus;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshotEntry;
 import org.jetbrains.annotations.NotNull;
@@ -84,12 +84,6 @@ public final class RuleEditorScreen extends Screen {
     private static final int FOOTER_H = 16;
     private static final int ROW_H = 12;
     private static final int NOTICE_H = 10;
-    // 小尺寸（320x240）单列阈值
-    private static final int NARROW_WIDTH = 430;
-    // 效果类型选择浮层
-    private static final int PICKER_HEADER = 14;
-    private static final int PICKER_FOOTER = 12;
-    private static final int PICKER_MAX_ROWS = 8;
     // 自然语言摘要 / 消耗语义提示行高
     private static final int SUMMARY_H = 10;
     // i18n 前缀
@@ -99,8 +93,7 @@ public final class RuleEditorScreen extends Screen {
     // 模式
     private enum Mode { LIST, EDIT }
 
-    // 编辑页签
-    private enum Tab { INFO, SOURCE, CONDITIONS, EFFECTS }
+    // 编辑页签（取值与 RuleEditorEditPages.Page 对应，标签键为 tab.<value>）
 
     private final EditorWorkspaceView workspace;
     private final RuleEditorModel model;
@@ -109,7 +102,7 @@ public final class RuleEditorScreen extends Screen {
 
     // 当前模式与页签
     private Mode mode = Mode.LIST;
-    private Tab tab = Tab.INFO;
+    private RuleEditorEditPages.Page tab = RuleEditorEditPages.Page.INFO;
     // 状态提示（保存回执/校验失败等）
     private @Nullable Component notice;
     private int noticeColor = UiPalette.TEXT_SECONDARY;
@@ -128,25 +121,77 @@ public final class RuleEditorScreen extends Screen {
 
     // ---- 编辑页 ----
     private @Nullable String editingId;
-    private @Nullable FormView infoForm;
-    private @Nullable FormView sourceForm;
-    private @Nullable FormView conditionsForm;
-    private @Nullable FormView effectForm;
-    private @Nullable UiListView<Integer> effectList;
+    // 四页编辑流程（基本信息 / 输入与成本 / 触发与条件 / 结果）
+    private @Nullable RuleEditorEditPages pages;
     private @Nullable UiSegmentedControl tabControl;
-    private final List<Integer> effectIndexes = new ArrayList<>();
-    private int effectSelection = -1;
     private final List<UiButton> footerButtons = new ArrayList<>();
     private final ButtonBar footerBar = new ButtonBar();
-    private final List<UiButton> effectButtons = new ArrayList<>();
-    private final ButtonBar effectBar = new ButtonBar();
+    // 编辑内容区（每帧重算；切页与问题定位复用同一份布局）
+    private UiRect lastEditArea = new UiRect(0, 0, 0, 0);
 
-    // ---- 效果类型选择浮层 ----
-    private boolean pickerOpen;
-    private int pickerIndex;
-    private int pickerOffset;
-    private UiRect pickerRect = new UiRect(0, 0, 0, 0);
-    private final List<TypeEditorDescriptor> pickerTypes = new ArrayList<>();
+    // 页面宿主适配：把屏幕能力（会话 / 焦点 / 弹窗 / 提示 / 冻结 / 尺寸）暴露给四页编辑流程
+    private final RuleEditorEditPages.Host pagesHost = new RuleEditorEditPages.Host() {
+
+        @Override
+        public Font font() {
+            return RuleEditorScreen.this.font;
+        }
+
+        @Override
+        public @Nullable EditSession session() {
+            return editingSession();
+        }
+
+        @Override
+        public UiFocusManager focus() {
+            return focus;
+        }
+
+        @Override
+        public UiModalStack modals() {
+            return modals;
+        }
+
+        @Override
+        public void onDraftChanged() {
+            RuleEditorScreen.this.onDraftChanged();
+        }
+
+        @Override
+        public void notice(Component message, int color) {
+            setNotice(message, color);
+        }
+
+        @Override
+        public SuggestionProvider suggestions() {
+            return suggestionProvider();
+        }
+
+        @Override
+        public ConditionSupport conditionSupport() {
+            return pageConditionSupport();
+        }
+
+        @Override
+        public EditorWorkspaceView workspace() {
+            return RuleEditorScreen.this.workspace;
+        }
+
+        @Override
+        public boolean rejectWhenFrozen() {
+            return RuleEditorScreen.this.rejectWhenFrozen();
+        }
+
+        @Override
+        public int screenWidth() {
+            return RuleEditorScreen.this.width;
+        }
+
+        @Override
+        public int screenHeight() {
+            return RuleEditorScreen.this.height;
+        }
+    };
 
     // ---- P6：草稿落盘与冲突 ----
     // 「应用全部」按钮（无改动或会话冻结时禁用）
@@ -175,6 +220,8 @@ public final class RuleEditorScreen extends Screen {
         BuiltinEditorDescriptors.bootstrap();
         this.workspace = Objects.requireNonNull(workspace, "workspace");
         this.model = new RuleEditorModel(workspace);
+        // 焦点变化时播报控件的可读名称（未开启朗读时 GameNarrator 内部会静默）
+        focus.setListener((previous, next) -> UiNarration.focus(next));
         this.seenResultSeq = workspace.resultSeq();
         this.model.refresh();
     }
@@ -203,13 +250,8 @@ public final class RuleEditorScreen extends Screen {
         ruleList.setOnActivate(this::openEditor);
         tabControl = new UiSegmentedControl(font, tabOptions());
         tabControl.setOnChanged(this::switchTab);
-        effectList = new UiListView<>(font, this::renderEffectRow);
-        effectList.setRowHeight(ROW_H);
-        effectList.setEmptyMessage(Component.translatable(UI + "effect.empty"));
-        effectList.setOnSelectionChanged(this::selectEffect);
         buildListButtons();
         buildFooterButtons();
-        buildEffectButtons();
         refreshList();
         rebuildEdit();
         rebuildFocus();
@@ -234,26 +276,27 @@ public final class RuleEditorScreen extends Screen {
 
     private List<UiSegmentedControl.Option> tabOptions() {
         List<UiSegmentedControl.Option> options = new ArrayList<>();
-        for (Tab value : Tab.values()) {
-            options.add(new UiSegmentedControl.Option(value.name().toLowerCase(Locale.ROOT),
-                    Component.translatable(UI + "tab." + value.name().toLowerCase(Locale.ROOT))));
+        for (RuleEditorEditPages.Page value : RuleEditorEditPages.Page.values()) {
+            options.add(new UiSegmentedControl.Option(value.value(),
+                    Component.translatable(UI + "tab." + value.value())));
         }
         return options;
     }
 
+    // 切页：先结束进行中的预览并提交有效编辑，再重建目标页
     private void switchTab(String value) {
-        Tab target = tab;
-        for (Tab candidate : Tab.values()) {
-            if (candidate.name().equalsIgnoreCase(value)) {
-                target = candidate;
-            }
-        }
+        RuleEditorEditPages.Page target = RuleEditorEditPages.Page.of(value);
         if (target == tab) {
             return;
         }
-        applyAllForms();
+        if (pages != null) {
+            pages.endInteractions();
+            if (pages.applyToDraft()) {
+                listNeedsRefresh = true;
+            }
+            pages.setPage(target);
+        }
         tab = target;
-        rebuildEdit();
         rebuildFocus();
     }
 
@@ -288,15 +331,6 @@ public final class RuleEditorScreen extends Screen {
         footerButtons.add(this.redoButton);
         footerButtons.add(button(UI + "button.back", UiButtonVariant.SECONDARY, this::backToList));
         footerBar.set(footerButtons);
-    }
-
-    private void buildEffectButtons() {
-        effectButtons.clear();
-        effectButtons.add(button(UI + "button.effect_add", UiButtonVariant.PRIMARY, this::openEffectPicker));
-        effectButtons.add(button(UI + "button.effect_remove", UiButtonVariant.DANGER, this::removeEffect));
-        effectButtons.add(button(UI + "button.effect_up", UiButtonVariant.SECONDARY, () -> moveEffect(-1)));
-        effectButtons.add(button(UI + "button.effect_down", UiButtonVariant.SECONDARY, () -> moveEffect(1)));
-        effectBar.set(effectButtons);
     }
 
     private UiButton button(String labelKey, UiButtonVariant variant, Runnable action) {
@@ -348,31 +382,13 @@ public final class RuleEditorScreen extends Screen {
             footerBar.render(graphics, font, mouseX, mouseY);
         }
         modals.render(graphics, font, mouseX, mouseY);
-        if (pickerOpen) {
-            renderPicker(graphics, mouseX, mouseY);
-        }
-        // 字段说明提示：没有弹窗或选择器时才显示，避免盖住上层内容
-        if (modals.isEmpty() && !pickerOpen && mode == Mode.EDIT) {
-            Component tip = activeFormTooltip(mouseX, mouseY);
+        // 字段说明提示：没有弹窗时才显示，避免盖住上层内容
+        if (modals.isEmpty() && mode == Mode.EDIT && pages != null) {
+            Component tip = pages.tooltipAt(mouseX, mouseY);
             if (tip != null) {
                 graphics.renderTooltip(font, tip, mouseX, mouseY);
             }
         }
-    }
-
-    // 当前可见表单中鼠标所指字段的说明（无则返回 null）
-    private @Nullable Component activeFormTooltip(double mouseX, double mouseY) {
-        FormView[] candidates = {infoForm, sourceForm, conditionsForm, effectForm};
-        for (FormView candidate : candidates) {
-            if (candidate == null || !candidate.isVisible()) {
-                continue;
-            }
-            Component tip = candidate.tooltipAt(mouseX, mouseY);
-            if (tip != null) {
-                return tip;
-            }
-        }
-        return null;
     }
 
     // 顶部标题与状态
@@ -397,15 +413,22 @@ public final class RuleEditorScreen extends Screen {
         graphics.drawString(font, text, PAD, y + 1, noticeColor, false);
     }
 
-    // 自然语言摘要（条件/效果页签的一行摘要）与消耗语义提示（效果页签）
+    // 摘要行：结果页显示消耗语义提示（顶层 effects 或候选效果合并），其余页显示自然语言摘要
     private void drawSummary(GuiGraphics graphics, int y, int w) {
         EditSession session = editingSession();
         if (session == null) {
             return;
         }
-        Component text = tab == Tab.EFFECTS
-                ? ConsumptionSummary.hint(session.draft().view().get(RuleFields.EFFECTS))
-                : NaturalSummary.rule(session.draft().view());
+        Component text;
+        if (tab == RuleEditorEditPages.Page.RESULTS) {
+            JsonElement element = pages == null ? null : pages.summaryElement();
+            if (element == null) {
+                return;
+            }
+            text = ConsumptionSummary.hint(element);
+        } else {
+            text = NaturalSummary.rule(session.draft().view());
+        }
         if (text.getString().isEmpty()) {
             return;
         }
@@ -436,45 +459,14 @@ public final class RuleEditorScreen extends Screen {
         listBar.layout(area.x(), listY + listHeight + 2, area.width());
     }
 
-    // 编辑页布局：效果页签宽屏为左列表 + 右表单，窄屏上下堆叠；其余页签表单独占
+    // 编辑页布局：四个页签各自在内容区里排布控件（含窄屏分层）
     private void renderEditMode(GuiGraphics graphics, int mouseX, int mouseY) {
-        int w = contentArea.width();
-        int h = contentArea.height();
-        if (tab == Tab.EFFECTS) {
-            boolean wide = w >= NARROW_WIDTH;
-            int listWidth = wide ? Math.min(150, w / 3) : w;
-            int listHeight = wide ? Math.max(0, h - FOOTER_H - 2) : Math.clamp(h / 3, 0, 60);
-            if (effectList != null) {
-                effectList.setBounds(contentArea.x(), contentArea.y(), listWidth, listHeight);
-                effectList.render(graphics, font, mouseX, mouseY);
-            }
-            effectBar.layout(contentArea.x(), contentArea.y() + listHeight + 2, listWidth);
-            effectBar.render(graphics, font, mouseX, mouseY);
-            if (effectForm != null) {
-                int formX = wide ? contentArea.x() + listWidth + 4 : contentArea.x();
-                int formY = wide ? contentArea.y() : contentArea.y() + listHeight + FOOTER_H + 5;
-                int formWidth = wide ? Math.max(0, w - listWidth - 4) : w;
-                int formHeight = Math.max(0, contentArea.y() + h - formY);
-                effectForm.setBounds(formX, formY, formWidth, formHeight);
-                effectForm.render(graphics, font, mouseX, mouseY);
-            }
-        } else {
-            FormView form = activeForm();
-            if (form != null) {
-                form.setBounds(contentArea.x(), contentArea.y(), w, h);
-                form.render(graphics, font, mouseX, mouseY);
-            }
+        lastEditArea = new UiRect(contentArea.x(), contentArea.y(), contentArea.width(), contentArea.height());
+        if (pages == null) {
+            return;
         }
-    }
-
-    // 当前页签对应的表单
-    private @Nullable FormView activeForm() {
-        return switch (tab) {
-            case INFO -> infoForm;
-            case SOURCE -> sourceForm;
-            case CONDITIONS -> conditionsForm;
-            case EFFECTS -> effectForm;
-        };
+        pages.layout(lastEditArea);
+        pages.render(graphics, font, mouseX, mouseY);
     }
 
     // 规则列表行
@@ -525,162 +517,6 @@ public final class RuleEditorScreen extends Screen {
     }
 
     // 效果列表行
-    private void renderEffectRow(GuiGraphics graphics, Font rowFont, Integer effectIndex, int index, UiRect row,
-            boolean selected, boolean hovered, boolean focused) {
-        int position = effectIndexes.indexOf(effectIndex);
-        String prefix = (position >= 0 ? position + 1 : index + 1) + ". ";
-        JsonObject effect = draftEffect(effectIndex);
-        Component typeLabel = Component.translatable(UI + "effect.unknown");
-        String extra = "";
-        if (effect != null) {
-            JsonElement typeElement = effect.get(RuleFields.TYPE);
-            if (typeElement != null && typeElement.isJsonPrimitive()) {
-                ResourceLocation typeId = ResourceLocation.tryParse(typeElement.getAsString());
-                typeLabel = typeId == null
-                        ? Component.literal(typeElement.getAsString())
-                        : TypeLabels.effectLabel(typeId);
-            }
-            extra = effectSummary(effect);
-        }
-        String text = TextScroll.trimToWidth(rowFont, prefix + typeLabel.getString() + extra,
-                Math.max(0, row.width() - 4));
-        graphics.drawString(rowFont, text, row.x() + 2, row.y() + 2, UiPalette.TEXT_PRIMARY, false);
-    }
-
-    // 效果摘要：非 100% 概率与延迟
-    private String effectSummary(JsonObject effect) {
-        StringBuilder builder = new StringBuilder();
-        JsonElement chance = effect.get(RuleFields.CHANCE);
-        if (chance != null && chance.isJsonPrimitive() && chance.getAsJsonPrimitive().isNumber()) {
-            double value = chance.getAsDouble();
-            if (Math.abs(value - 1.0D) > 1.0E-6D) {
-                builder.append("  ").append(String.format(Locale.ROOT, "%.0f%%", value * 100.0D));
-            }
-        }
-        JsonElement delay = effect.get(RuleFields.DELAY_TICKS);
-        if (delay != null && delay.isJsonPrimitive() && delay.getAsJsonPrimitive().isNumber()) {
-            int ticks = delay.getAsInt();
-            if (ticks > 0) {
-                builder.append("  ").append(Component.translatable(UI + "effect.delay_summary", ticks).getString());
-            }
-        }
-        return builder.toString();
-    }
-
-    // 效果类型选择浮层
-    private void renderPicker(GuiGraphics graphics, int mouseX, int mouseY) {
-        int rows = pickerRows();
-        // 宽度取屏幕一半，下限 160；屏幕过窄时上限退到 120 并收缩到可用宽度，保证 clamp 上下界合法
-        int available = this.width - PAD * 2;
-        int upper = Math.max(120, available);
-        int width = Math.clamp(this.width / 2, Math.min(160, upper), upper);
-        int height = PICKER_HEADER + rows * ROW_H + PICKER_FOOTER;
-        int x = Math.max(0, (this.width - width) / 2);
-        int y = Math.max(0, (this.height - height) / 2);
-        pickerRect = new UiRect(x, y, width, height);
-        graphics.fill(0, 0, this.width, this.height, UiPalette.MODAL_DIM);
-        UiTheme.drawWindow(graphics, pickerRect);
-        UiTheme.drawDivider(graphics, x + 1, y + PICKER_HEADER - 1, width - 2);
-        String title = Component.translatable(UI + "pick.type_title").getString();
-        graphics.drawString(font, TextScroll.trimToWidth(font, title, width - PAD * 2), x + PAD, y + 2,
-                UiPalette.TEXT_PRIMARY, false);
-        UiRect list = pickerListRect();
-        for (int i = 0; i < rows; i++) {
-            int itemIndex = pickerOffset + i;
-            if (itemIndex >= pickerTypes.size()) {
-                break;
-            }
-            UiRect row = new UiRect(list.x(), list.y() + i * ROW_H, list.width(), ROW_H);
-            if (itemIndex == pickerIndex) {
-                UiTheme.drawSelection(graphics, row);
-            } else if (row.contains(mouseX, mouseY)) {
-                graphics.fill(row.x(), row.y(), row.right(), row.bottom(), UiPalette.CONTROL_HOVER);
-            }
-            String label = TextScroll.trimToWidth(font, pickerTypes.get(itemIndex).label().getString(),
-                    Math.max(0, row.width() - 4));
-            graphics.drawString(font, label, row.x() + 2, row.y() + 2, UiPalette.TEXT_PRIMARY, false);
-        }
-        String hint = Component.translatable(UI + "pick.type_hint").getString();
-        graphics.drawString(font, TextScroll.trimToWidth(font, hint, width - PAD * 2), x + PAD,
-                y + height - PICKER_FOOTER + 1, UiPalette.TEXT_SECONDARY, false);
-    }
-
-    private int pickerRows() {
-        return Math.clamp(pickerTypes.size(), 1, PICKER_MAX_ROWS);
-    }
-
-    private UiRect pickerListRect() {
-        return new UiRect(pickerRect.x() + 2, pickerRect.y() + PICKER_HEADER, Math.max(0, pickerRect.width() - 4),
-                pickerRows() * ROW_H);
-    }
-
-    private void closePicker() {
-        pickerOpen = false;
-        pickerOffset = 0;
-    }
-
-    private void confirmPicker() {
-        if (!pickerOpen || pickerTypes.isEmpty()) {
-            closePicker();
-            return;
-        }
-        int index = Math.clamp(pickerIndex, 0, Math.max(0, pickerTypes.size() - 1));
-        ResourceLocation typeId = pickerTypes.get(index).id();
-        closePicker();
-        addEffect(typeId);
-    }
-
-    // 浮层点击：列表项确认、外部关闭
-    private void handlePickerClick(double mouseX, double mouseY) {
-        UiRect list = pickerListRect();
-        if (list.contains(mouseX, mouseY)) {
-            int row = (int) ((mouseY - list.y()) / ROW_H);
-            int itemIndex = pickerOffset + row;
-            if (itemIndex >= 0 && itemIndex < pickerTypes.size()) {
-                pickerIndex = itemIndex;
-                confirmPicker();
-            }
-            return;
-        }
-        if (!pickerRect.contains(mouseX, mouseY)) {
-            closePicker();
-        }
-    }
-
-    // 浮层键盘
-    private void handlePickerKey(int keyCode) {
-        int rows = pickerRows();
-        switch (keyCode) {
-            case GLFW.GLFW_KEY_UP -> pickerIndex = Math.max(0, pickerIndex - 1);
-            case GLFW.GLFW_KEY_DOWN -> pickerIndex = Math.min(pickerTypes.size() - 1, pickerIndex + 1);
-            case GLFW.GLFW_KEY_PAGE_UP -> pickerIndex = Math.max(0, pickerIndex - rows);
-            case GLFW.GLFW_KEY_PAGE_DOWN -> pickerIndex = Math.min(pickerTypes.size() - 1, pickerIndex + rows);
-            case GLFW.GLFW_KEY_HOME -> pickerIndex = 0;
-            case GLFW.GLFW_KEY_END -> pickerIndex = Math.max(0, pickerTypes.size() - 1);
-            case GLFW.GLFW_KEY_ENTER, GLFW.GLFW_KEY_KP_ENTER -> {
-                confirmPicker();
-                return;
-            }
-            case GLFW.GLFW_KEY_ESCAPE -> {
-                closePicker();
-                return;
-            }
-            default -> {
-                return;
-            }
-        }
-        scrollPickerIntoView(rows);
-    }
-
-    private void scrollPickerIntoView(int rows) {
-        if (pickerIndex < pickerOffset) {
-            pickerOffset = pickerIndex;
-        } else if (pickerIndex >= pickerOffset + rows) {
-            pickerOffset = pickerIndex - rows + 1;
-        }
-        pickerOffset = Math.clamp(pickerOffset, 0, Math.max(0, pickerTypes.size() - rows));
-    }
-
     // ---- 列表维护 ----
 
     private void refreshList() {
@@ -754,126 +590,29 @@ public final class RuleEditorScreen extends Screen {
         return editingId == null ? null : model.session(editingId);
     }
 
-    private @Nullable JsonObject draftEffect(int index) {
-        EditSession session = editingSession();
-        if (session == null) {
-            return null;
-        }
-        List<JsonObject> effects = session.draft().effects();
-        if (index < 0 || index >= effects.size()) {
-            return null;
-        }
-        return effects.get(index);
-    }
-
     private void rebuildEdit() {
         EditSession session = editingSession();
         if (mode != Mode.EDIT || session == null) {
-            infoForm = null;
-            sourceForm = null;
-            conditionsForm = null;
-            effectForm = null;
-            effectIndexes.clear();
-            effectSelection = -1;
+            pages = null;
             return;
         }
-        infoForm = new FormView(font, session, "");
-        infoForm.setDescriptor(BuiltinEditorDescriptors.ruleDescriptor());
-        infoForm.setOnChanged(this::onDraftChanged);
-        infoForm.reload();
-        sourceForm = new FormView(font, session, RuleFields.SOURCE);
-        sourceForm.setDescriptor(BuiltinEditorDescriptors.sourceDescriptor());
-        sourceForm.setSuggestionProvider(suggestionProvider());
-        sourceForm.setOnChanged(this::onDraftChanged);
-        sourceForm.reload();
-        conditionsForm = new FormView(font, session, "");
-        conditionsForm.setDescriptor(conditionDescriptor());
-        conditionsForm.setSuggestionProvider(suggestionProvider());
-        conditionsForm.setConditionSupport(pageConditionSupport());
-        conditionsForm.setOnChanged(this::onDraftChanged);
-        conditionsForm.reload();
-        refreshEffectList();
-        selectEffect(effectSelection >= 0 ? effectSelection : (effectIndexes.isEmpty() ? -1 : 0));
-        // 表单是刚重建的，按当前工作区状态同步一次使能（APPLYING 期间必须冻结）
+        if (pages == null) {
+            pages = new RuleEditorEditPages(pagesHost);
+        }
+        pages.setPage(tab);
+        pages.rebuild();
+        if (lastEditArea.width() > 0) {
+            pages.layout(lastEditArea);
+        }
+        // 页面控件是刚重建的，按当前工作区状态同步一次使能（APPLYING 期间必须冻结）
         lastEditable = workspace.active();
         applyEditableStateNow(lastEditable);
     }
 
-    // 只含条件树一个字段的页签描述符
-    private TypeEditorDescriptor conditionDescriptor() {
-        return TypeEditorDescriptor.of(ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "conditions_page"),
-                Component.translatable(UI + "tab.conditions"),
-                List.of(EditorField.conditionTree(RuleFields.CONDITIONS, UI + "rule.conditions")));
-    }
-
-    private void refreshEffectList() {
-        EditSession session = editingSession();
-        effectIndexes.clear();
-        if (session != null) {
-            int count = session.draft().effectCount();
-            for (int i = 0; i < count; i++) {
-                effectIndexes.add(i);
-            }
-        }
-        if (effectSelection >= effectIndexes.size()) {
-            effectSelection = effectIndexes.size() - 1;
-        }
-        if (effectList != null) {
-            effectList.setItems(new ArrayList<>(effectIndexes));
-            if (effectList.size() > 0) {
-                effectList.setSelectedIndex(Math.max(0, effectSelection));
-            }
-        }
-    }
-
-    // 选中某个效果并为其构建表单（含未注册类型的只读回退）
-    private void selectEffect(int index) {
-        effectSelection = index;
-        EditSession session = editingSession();
-        if (session == null || index < 0) {
-            effectForm = null;
-            return;
-        }
-        String type = effectType(session.draft(), index);
-        if (type == null) {
-            effectForm = null;
-            return;
-        }
-        ResourceLocation typeId = ResourceLocation.tryParse(type);
-        if (typeId == null) {
-            typeId = ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "unknown");
-        }
-        TypeEditorDescriptor descriptor = EffectEditorRegistry.descriptorFor(typeId);
-        FormView form = new FormView(font, session, "effects[" + index + "]");
-        form.setDescriptor(descriptor);
-        form.setSuggestionProvider(suggestionProvider());
-        form.setConditionSupport(pageConditionSupport());
-        form.setOnChanged(this::onDraftChanged);
-        form.reload();
-        effectForm = form;
-    }
-
-    private @Nullable String effectType(RuleDraft draft, int index) {
-        List<JsonObject> effects = draft.effects();
-        if (index < 0 || index >= effects.size()) {
-            return null;
-        }
-        JsonElement element = effects.get(index).get(RuleFields.TYPE);
-        return element != null && element.isJsonPrimitive() ? element.getAsString() : null;
-    }
-
+    // 提交当前页所有可见表单的待写字段（切页 / 返回 / 应用 / 关屏前调用）
     private void applyAllForms() {
-        if (infoForm != null) {
-            infoForm.applyToDraft();
-        }
-        if (sourceForm != null) {
-            sourceForm.applyToDraft();
-        }
-        if (conditionsForm != null) {
-            conditionsForm.applyToDraft();
-        }
-        if (effectForm != null) {
-            effectForm.applyToDraft();
+        if (pages != null) {
+            pages.applyToDraft();
         }
     }
 
@@ -912,7 +651,12 @@ public final class RuleEditorScreen extends Screen {
 
             @Override
             public Consumer<ConditionNode.Leaf> onEditLeaf() {
-                return RuleEditorScreen.this::openLeafEditor;
+                // 叶参数编辑由四页编辑流程自己实现（它知道发起编辑的那个表单实例）
+                return leaf -> {
+                    if (pages != null) {
+                        pages.editConditionLeaf(leaf);
+                    }
+                };
             }
 
             @Override
@@ -934,27 +678,25 @@ public final class RuleEditorScreen extends Screen {
         applyAllForms();
         editingId = id;
         mode = Mode.EDIT;
-        tab = Tab.INFO;
-        effectSelection = -1;
-        closePicker();
+        tab = RuleEditorEditPages.Page.INFO;
+        // 换规则时重建页面状态（候选与效果选择归零）
+        pages = null;
         if (tabControl != null) {
-            tabControl.setSelected("info");
+            tabControl.setSelected(tab.value());
         }
         rebuildEdit();
         rebuildFocus();
     }
 
+    // 返回管理页：先结束交互并卸载页面，再刷新列表
     private void backToList() {
-        applyAllForms();
+        if (pages != null) {
+            pages.applyToDraft();
+            pages.unmount();
+        }
+        pages = null;
         mode = Mode.LIST;
         editingId = null;
-        infoForm = null;
-        sourceForm = null;
-        conditionsForm = null;
-        effectForm = null;
-        effectIndexes.clear();
-        effectSelection = -1;
-        closePicker();
         refreshList();
         rebuildFocus();
     }
@@ -1177,182 +919,6 @@ public final class RuleEditorScreen extends Screen {
 
     // ---- 效果动作 ----
 
-    private void openEffectPicker() {
-        if (rejectWhenFrozen()) {
-            return;
-        }
-        if (editingSession() == null) {
-            return;
-        }
-        applyAllForms();
-        pickerTypes.clear();
-        pickerTypes.addAll(EffectEditorRegistry.all());
-        if (pickerTypes.isEmpty()) {
-            return;
-        }
-        pickerIndex = Math.clamp(pickerIndex, 0, Math.max(0, pickerTypes.size() - 1));
-        pickerOffset = 0;
-        pickerOpen = true;
-    }
-
-    private void addEffect(ResourceLocation type) {
-        if (rejectWhenFrozen()) {
-            return;
-        }
-        EditSession session = editingSession();
-        if (session == null) {
-            return;
-        }
-        RuleDraft draft = session.draft();
-        JsonObject body = BuiltinEditorDefaults.effectBody(type);
-        session.apply(EditSession.OP_ADD_EFFECT, () -> draft.addEffect(body));
-        effectSelection = draft.effectCount() - 1;
-        refreshEffectList();
-        if (effectList != null && effectSelection >= 0) {
-            effectList.ensureVisible(effectSelection);
-        }
-        selectEffect(effectSelection);
-        onDraftChanged();
-    }
-
-    private void removeEffect() {
-        if (rejectWhenFrozen()) {
-            return;
-        }
-        EditSession session = editingSession();
-        if (session == null || effectSelection < 0) {
-            setNotice(Component.translatable(UI + "notice.no_effect"), UiPalette.WARNING);
-            return;
-        }
-        int index = effectSelection;
-        RuleDraft draft = session.draft();
-        session.apply(EditSession.OP_REMOVE_EFFECT, () -> draft.removeEffect(index));
-        effectSelection = Math.min(index, draft.effectCount() - 1);
-        refreshEffectList();
-        selectEffect(effectSelection);
-        onDraftChanged();
-    }
-
-    private void moveEffect(int delta) {
-        if (rejectWhenFrozen()) {
-            return;
-        }
-        EditSession session = editingSession();
-        if (session == null || effectSelection < 0) {
-            return;
-        }
-        int from = effectSelection;
-        int to = from + delta;
-        RuleDraft draft = session.draft();
-        if (to < 0 || to >= draft.effectCount()) {
-            return;
-        }
-        session.apply(EditSession.OP_MOVE_EFFECT, () -> draft.moveEffect(from, to));
-        effectSelection = to;
-        refreshEffectList();
-        selectEffect(to);
-        onDraftChanged();
-    }
-
-    // ---- 条件叶参数弹窗 ----
-
-    private void openLeafEditor(ConditionNode.Leaf leaf) {
-        EditSession session = editingSession();
-        FormView owner = activeForm();
-        if (session == null || owner == null) {
-            return;
-        }
-        UiConditionTreeEditor tree = findTree(owner, leaf);
-        String base = tree != null && tree.selectedPath() != null ? tree.selectedPath() : RuleFields.CONDITIONS;
-        String path = base.endsWith("." + RuleFields.CONDITION) ? base : base + "." + RuleFields.CONDITION;
-        TypeEditorDescriptor descriptor = ConditionEditorRegistry.descriptorFor(leaf.condition().type());
-        FormView form = new FormView(font, session, path);
-        form.setDescriptor(descriptor);
-        form.setSuggestionProvider(suggestionProvider());
-        form.setOnChanged(this::onDraftChanged);
-        form.reload();
-        UiModal modal = UiModal.create(font);
-        modal.title(descriptor.label());
-        modal.contentWidget(form, Math.clamp((long) descriptor.fields().size() * ROW_H + 8, 36, 170));
-        modal.confirm(Component.translatable(UI + "button.confirm"), () -> {
-            form.applyToDraft();
-            owner.reload();
-            onDraftChanged();
-        });
-        modal.cancel(Component.translatable(UI + "button.cancel"));
-        modal.layoutCentered(this.width, this.height);
-        modals.push(modal);
-    }
-
-    private @Nullable UiConditionTreeEditor findTree(FormView owner, ConditionNode.Leaf leaf) {
-        for (UiFocusTarget target : owner.focusTargets()) {
-            if (target instanceof UiConditionTreeEditor tree && tree.selectedNode() == leaf) {
-                return tree;
-            }
-        }
-        for (UiFocusTarget target : owner.focusTargets()) {
-            if (target instanceof UiConditionTreeEditor tree) {
-                return tree;
-            }
-        }
-        return null;
-    }
-
-    // 把第一条问题对应的字段切到正确页签、滚到可见并聚焦
-    private void revealIssue(FormIssue issue) {
-        String path = issue.path();
-        if (path == null || path.isBlank()) {
-            return;
-        }
-        FormView target;
-        if (path.startsWith(RuleFields.EFFECTS)) {
-            tab = Tab.EFFECTS;
-            rebuildEdit();
-            int index = effectIndexFromPath(path);
-            if (index >= 0) {
-                selectEffect(index);
-            }
-            target = effectForm;
-        } else if (path.startsWith(RuleFields.SOURCE)) {
-            tab = Tab.SOURCE;
-            rebuildEdit();
-            target = sourceForm;
-        } else if (path.startsWith(RuleFields.CONDITIONS)) {
-            tab = Tab.CONDITIONS;
-            rebuildEdit();
-            target = conditionsForm;
-        } else {
-            tab = Tab.INFO;
-            rebuildEdit();
-            target = infoForm;
-        }
-        if (tabControl != null) {
-            tabControl.setSelected(tab.name().toLowerCase(Locale.ROOT));
-        }
-        rebuildFocus();
-        if (target == null) {
-            return;
-        }
-        UiFocusTarget focusTarget = target.revealPath(path);
-        if (focusTarget != null) {
-            focus.focusOn(focusTarget);
-        }
-    }
-
-    // 从 effects[i].xxx 路径解析效果下标；解析失败返回 -1
-    private static int effectIndexFromPath(String path) {
-        int open = path.indexOf('[');
-        int close = path.indexOf(']', open + 1);
-        if (open < 0 || close < 0) {
-            return -1;
-        }
-        try {
-            return Integer.parseInt(path.substring(open + 1, close));
-        } catch (NumberFormatException invalid) {
-            return -1;
-        }
-    }
-
     // ---- 保存 / 撤销 ----
 
     private void save() {
@@ -1436,17 +1002,8 @@ public final class RuleEditorScreen extends Screen {
                 issues.addAll(localIssues(other.draft()));
             }
         }
-        if (infoForm != null) {
-            issues.addAll(infoForm.issues());
-        }
-        if (sourceForm != null) {
-            issues.addAll(sourceForm.issues());
-        }
-        if (conditionsForm != null) {
-            issues.addAll(conditionsForm.issues());
-        }
-        if (effectForm != null) {
-            issues.addAll(effectForm.issues());
+        if (pages != null) {
+            issues.addAll(pages.issues());
         }
         return issues;
     }
@@ -1658,6 +1215,25 @@ public final class RuleEditorScreen extends Screen {
         return op == null || !op.isJsonPrimitive();
     }
 
+    // 校验失败定位：先结束交互并提交当前页待写字段，再按路径切页并聚焦到具体字段
+    // （规则 → 页签 → 候选 → 效果 → 条件 → 字段；路径到当前下标的映射由页面负责）
+    private void revealIssue(FormIssue issue) {
+        if (pages == null || issue == null) {
+            return;
+        }
+        pages.endInteractions();
+        applyAllForms();
+        UiFocusTarget target = pages.reveal(issue.path());
+        tab = pages.page();
+        if (tabControl != null) {
+            tabControl.setSelected(tab.value());
+        }
+        rebuildFocus();
+        if (target != null) {
+            focus.focusOn(target);
+        }
+    }
+
     // ---- 焦点 / 事件 / 生命周期 ----
 
     private void rebuildFocus() {
@@ -1680,17 +1256,8 @@ public final class RuleEditorScreen extends Screen {
             if (tabControl != null) {
                 focus.add(tabControl);
             }
-            if (tab == Tab.EFFECTS) {
-                if (effectList != null) {
-                    focus.add(effectList);
-                }
-                for (UiButton button : effectButtons) {
-                    focus.add(button);
-                }
-            }
-            FormView form = activeForm();
-            if (form != null) {
-                for (UiFocusTarget target : form.focusTargets()) {
+            if (pages != null) {
+                for (UiFocusTarget target : pages.focusTargets()) {
                     focus.add(target);
                 }
             }
@@ -1709,10 +1276,6 @@ public final class RuleEditorScreen extends Screen {
         if (modals.isVisible()) {
             return modals.mouseClicked(mouseX, mouseY, button);
         }
-        if (pickerOpen) {
-            handlePickerClick(mouseX, mouseY);
-            return true;
-        }
         if (mode == Mode.LIST) {
             if (searchField != null && searchField.mouseClicked(mouseX, mouseY, button)) {
                 return true;
@@ -1728,15 +1291,7 @@ public final class RuleEditorScreen extends Screen {
         if (tabControl != null && tabControl.mouseClicked(mouseX, mouseY, button)) {
             return true;
         }
-        if (tab == Tab.EFFECTS) {
-            if (effectList != null && effectList.mouseClicked(mouseX, mouseY, button)) {
-                return true;
-            }
-            if (effectBar.mouseClicked(mouseX, mouseY, button)) {
-                return true;
-            }
-        }
-        if (effectForm != null && effectForm.mouseClicked(mouseX, mouseY, button)) {
+        if (pages != null && pages.mouseClicked(mouseX, mouseY, button)) {
             return true;
         }
         if (footerBar.mouseClicked(mouseX, mouseY, button)) {
@@ -1750,21 +1305,8 @@ public final class RuleEditorScreen extends Screen {
         if (modals.isVisible()) {
             return modals.mouseReleased(mouseX, mouseY, button);
         }
-        boolean consumed = false;
-        if (infoForm != null) {
-            consumed |= infoForm.mouseReleased(mouseX, mouseY, button);
-        }
-        if (sourceForm != null) {
-            consumed |= sourceForm.mouseReleased(mouseX, mouseY, button);
-        }
-        if (conditionsForm != null) {
-            consumed |= conditionsForm.mouseReleased(mouseX, mouseY, button);
-        }
-        if (effectForm != null) {
-            consumed |= effectForm.mouseReleased(mouseX, mouseY, button);
-        }
+        boolean consumed = pages != null && pages.mouseReleased(mouseX, mouseY, button);
         consumed |= listBar.mouseReleased(mouseX, mouseY, button);
-        consumed |= effectBar.mouseReleased(mouseX, mouseY, button);
         consumed |= footerBar.mouseReleased(mouseX, mouseY, button);
         return consumed || super.mouseReleased(mouseX, mouseY, button);
     }
@@ -1774,11 +1316,11 @@ public final class RuleEditorScreen extends Screen {
         if (modals.isVisible()) {
             return modals.mouseDragged(mouseX, mouseY, button, dragX, dragY);
         }
-        FormView form = activeForm();
-        if (form != null && form.mouseDragged(mouseX, mouseY, button, dragX, dragY)) {
+        if (pages != null && pages.mouseDragged(mouseX, mouseY, button, dragX, dragY)) {
             return true;
         }
-        if (ruleList != null && ruleList.mouseDragged(mouseX, mouseY, button, dragX, dragY)) {
+        if (mode == Mode.LIST && ruleList != null
+                && ruleList.mouseDragged(mouseX, mouseY, button, dragX, dragY)) {
             return true;
         }
         return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
@@ -1786,12 +1328,6 @@ public final class RuleEditorScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        if (pickerOpen) {
-            pickerIndex = Math.clamp(pickerIndex - (int) Math.signum(scrollY), 0,
-                    Math.max(0, pickerTypes.size() - 1));
-            scrollPickerIntoView(pickerRows());
-            return true;
-        }
         if (modals.isVisible()) {
             return modals.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
         }
@@ -1799,15 +1335,8 @@ public final class RuleEditorScreen extends Screen {
             if (ruleList != null && ruleList.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
                 return true;
             }
-        } else {
-            if (tab == Tab.EFFECTS && effectList != null
-                    && effectList.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
-                return true;
-            }
-            FormView form = activeForm();
-            if (form != null && form.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
-                return true;
-            }
+        } else if (pages != null && pages.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
+            return true;
         }
         return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
@@ -1817,11 +1346,15 @@ public final class RuleEditorScreen extends Screen {
         if (modals.isVisible()) {
             return modals.keyPressed(keyCode, scanCode, modifiers);
         }
-        if (pickerOpen) {
-            handlePickerKey(keyCode);
-            return true;
-        }
+        // Esc 先交给正在捕获输入的控件：行内精确输入回退缓冲、拖动中的数值取消预览；
+        // 均未消费时才逐级取消（编辑页返回列表，列表页关闭屏幕）
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            if (focus.keyPressed(keyCode, scanCode, modifiers)) {
+                return true;
+            }
+            if (mode == Mode.EDIT && pages != null && pages.keyPressed(keyCode, scanCode, modifiers)) {
+                return true;
+            }
             if (mode == Mode.EDIT) {
                 backToList();
             } else {
@@ -1841,17 +1374,19 @@ public final class RuleEditorScreen extends Screen {
             if (ruleList != null && ruleList.isFocused() && ruleList.keyPressed(keyCode, scanCode, modifiers)) {
                 return true;
             }
-        } else {
-            FormView form = activeForm();
-            if (form != null && form.keyPressed(keyCode, scanCode, modifiers)) {
-                return true;
-            }
-            if (tab == Tab.EFFECTS && effectList != null && effectList.isFocused()
-                    && effectList.keyPressed(keyCode, scanCode, modifiers)) {
-                return true;
-            }
+        } else if (pages != null && pages.keyPressed(keyCode, scanCode, modifiers)) {
+            return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    // 键盘抬起：把滑杆方向键的按住过程合并为一次提交
+    @Override
+    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
+        if (mode == Mode.EDIT && pages != null && pages.keyReleased(keyCode, scanCode, modifiers)) {
+            return true;
+        }
+        return super.keyReleased(keyCode, scanCode, modifiers);
     }
 
     @Override
@@ -1859,15 +1394,11 @@ public final class RuleEditorScreen extends Screen {
         if (modals.isVisible()) {
             return modals.charTyped(codePoint, modifiers);
         }
-        if (pickerOpen) {
-            return false;
-        }
         if (searchField != null && searchField.isFocused() && searchField.charTyped(codePoint, modifiers)) {
             syncSearch();
             return true;
         }
-        FormView form = activeForm();
-        if (form != null && form.charTyped(codePoint, modifiers)) {
+        if (mode == Mode.EDIT && pages != null && pages.charTyped(codePoint, modifiers)) {
             return true;
         }
         return super.charTyped(codePoint, modifiers);
@@ -1887,11 +1418,8 @@ public final class RuleEditorScreen extends Screen {
             listNeedsRefresh = false;
             refreshList();
         }
-        if (mode == Mode.EDIT) {
-            FormView form = activeForm();
-            if (form != null) {
-                form.tick();
-            }
+        if (mode == Mode.EDIT && pages != null) {
+            pages.tick();
         }
         pollWorkspace();
         // P6：节流落盘、恢复提示、按钮状态、冲突弹窗与冻结
@@ -1949,26 +1477,18 @@ public final class RuleEditorScreen extends Screen {
         applyEditableStateNow(editable);
     }
 
-    // 立即同步四个表单的使能状态（表单是新建出来的，默认可用，必须显式同步一次）
+    // 立即同步页面的使能状态（页面控件是新建出来的，默认可用，必须显式同步一次）
     private void applyEditableStateNow(boolean editable) {
-        for (FormView form : new FormView[] {infoForm, sourceForm, conditionsForm, effectForm}) {
-            if (form != null) {
-                form.setEnabled(editable);
-            }
+        if (pages != null) {
+            pages.setEnabled(editable);
         }
-        // 列表页与效果条的动作按钮同属可编辑面：冻结时一并禁用，避免「点了没反应」
+        // 列表页动作按钮同属可编辑面：冻结时一并禁用，避免「点了没反应」
         // （返回按钮不禁用，保证冻结期间玩家仍能退出屏幕）
         for (UiButton button : this.listButtons) {
             button.setEnabled(editable);
         }
-        for (UiButton button : this.effectButtons) {
-            button.setEnabled(editable);
-        }
         // 应用/撤销/重做再按脏标记与历史精确修正
         updateActionButtons();
-        if (!editable) {
-            closePicker();
-        }
     }
 
     // 冻结（APPLYING / 非 ACTIVE）时禁止一切会改动草稿的入口，并给出明确提示而不是静默丢弃；返回 true 表示已被冻结阻断
@@ -2039,6 +1559,15 @@ public final class RuleEditorScreen extends Screen {
             } else if (status == RuleSaveStatus.SAVED_NOT_RELOADED) {
                 model.acceptSaved();
                 setNotice(Component.translatable(status.messageKey()), UiPalette.WARNING);
+            } else if (isSessionLost(status)) {
+                // 失权/断线：取消未完成预览、停用写入、保留草稿；不从 GUI 重开会话，也不写盘
+                cancelPreviews();
+                Component reason = status == null ? Component.empty() : Component.translatable(status.messageKey());
+                setNotice(reason.copy().append(" ").append(Component.translatable(UI + "notice.session_reopen")),
+                        UiPalette.DANGER);
+            } else if (status == RuleSaveStatus.VALIDATION_FAILED) {
+                setNotice(Component.translatable(status.messageKey()), UiPalette.DANGER);
+                locateValidationIssues();
             } else if (status != null) {
                 setNotice(Component.translatable(status.messageKey(), workspace.lastMessageArgs().toArray()),
                         UiPalette.DANGER);
@@ -2052,17 +1581,60 @@ public final class RuleEditorScreen extends Screen {
         }
     }
 
+    // 会话失效状态码：取消预览、停用写入、保留草稿（失权或断线不写盘）
+    private static boolean isSessionLost(@Nullable RuleSaveStatus status) {
+        return status == RuleSaveStatus.NO_PERMISSION || status == RuleSaveStatus.LOCK_NOT_OWNED
+                || status == RuleSaveStatus.LOCK_BUSY || status == RuleSaveStatus.SESSION_EXPIRED;
+    }
+
+    // 取消未完成交互：关闭弹窗并结束页面的活动捕获（旧草稿保留）
+    private void cancelPreviews() {
+        while (!modals.isEmpty()) {
+            modals.closeTop();
+        }
+        if (pages != null) {
+            pages.endInteractions();
+        }
+    }
+
+    // 服务端 VALIDATION_FAILED 定位：规则 → 页签 → 候选 → 效果 → 条件 → 字段
+    private void locateValidationIssues() {
+        if (pages == null) {
+            return;
+        }
+        for (RuleIssue issue : workspace.lastIssues()) {
+            if (issue == null || !RuleIssue.SEVERITY_ERROR.equals(issue.severity())) {
+                continue;
+            }
+            if (issue.ruleId() != null && editingId != null && !issue.ruleId().equals(editingId)) {
+                continue;
+            }
+            String path = issue.fieldPath();
+            if (path == null || path.isBlank()) {
+                continue;
+            }
+            Component message = issue.messageCode().isBlank()
+                    ? Component.literal(issue.fallbackMessage())
+                    : Component.translatable(issue.messageCode(), issue.messageArgs().toArray());
+            revealIssue(FormIssue.error(path, message, message));
+            setNotice(Component.translatable(UI + "notice.validation_located", message), UiPalette.DANGER);
+            return;
+        }
+    }
+
     // 用户主动关闭：有未保存改动先确认
     private void closeByUser() {
         if (model.hasDirty()) {
             confirm(UI + "confirm.discard_title", UI + "confirm.discard_message", () -> {
                 // 玩家确认放弃：连落盘草稿一起删掉，避免下次打开又「恢复」回来
                 model.discardAllDrafts();
+                closePages();
                 workspace.close("screen_closed");
                 this.onClose();
             });
             return;
         }
+        closePages();
         workspace.close("screen_closed");
         this.onClose();
     }
@@ -2071,9 +1643,20 @@ public final class RuleEditorScreen extends Screen {
     @Override
     public void onClose() {
         applyAllForms();
+        closePages();
         // P6：关屏前把未应用草稿写盘（断线 / 关游戏 / 关界面都能恢复）
         model.persistNow();
         super.onClose();
+    }
+
+    // 关屏 / 会话失效：结束页面交互并让表单释放捕获与输入状态
+    private void closePages() {
+        if (pages == null) {
+            return;
+        }
+        pages.endInteractions();
+        pages.onHostClosed();
+        pages = null;
     }
 
     // ---- 小工具 ----

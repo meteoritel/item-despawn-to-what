@@ -3,9 +3,6 @@ package com.meteorite.itemdespawntowhat.client.edit;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
-import com.meteorite.itemdespawntowhat.core.model.CombinationMode;
-import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
-import com.meteorite.itemdespawntowhat.core.model.TriggerKind;
 import net.minecraft.resources.ResourceLocation;
 
 /***
@@ -20,32 +17,16 @@ public final class BuiltinEditorDefaults {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    // 新建规则的默认体（source.items 与 effects 留空，由校验提示补全）
+    // 新建规则的默认体：与空白/模板共用 {@link EditorFactories} 的候选工厂
+    // 只写稳定 id、空的源列表、固定源成本 1、当前结构版本与一个初始候选；
+    // 其余字段（enabled/priority/triggers/combination 等）依赖后端默认，保持省略。
     public static JsonObject ruleBody(String ruleId) {
-        JsonObject body = new JsonObject();
-        body.addProperty(RuleFields.ID, ruleId);
-        body.addProperty(RuleFields.ENABLED, true);
-        body.addProperty(RuleFields.PRIORITY, 0);
-        JsonObject source = new JsonObject();
-        source.add(RuleFields.SOURCE_ITEMS, new JsonArray());
-        body.add(RuleFields.SOURCE, source);
-        body.addProperty(RuleFields.TRIGGER_AFTER_SECONDS, 300);
-        // 阶段1 契约字段：默认仅自然消失、每组固定消耗 1 个源物品、轮询组合、结构版本 1
-        JsonArray triggers = new JsonArray();
-        triggers.add(TriggerKind.NATURAL.key());
-        body.add(RuleFields.TRIGGERS, triggers);
-        body.addProperty(RuleFields.SOURCE_COST, 1);
-        body.addProperty(RuleFields.COMBINATION, CombinationMode.ROUND_ROBIN.key());
-        body.addProperty(RuleFields.SCHEMA_VERSION, RuleCodecs.DEFAULT_SCHEMA_VERSION);
-        body.add(RuleFields.EFFECTS, new JsonArray());
-        return body;
+        return EditorFactories.blankRule(ruleId);
     }
 
-    // 复制/另存为：深拷贝规则体并换 id
+    // 复制/另存为：深拷贝规则体并换 id；候选同时分配新身份
     public static JsonObject copyOf(String newRuleId, JsonObject source) {
-        JsonObject body = source.deepCopy();
-        body.addProperty(RuleFields.ID, newRuleId);
-        return body;
+        return EditorFactories.copyRule(newRuleId, source);
     }
 
     // 新建效果的默认体
@@ -98,18 +79,16 @@ public final class BuiltinEditorDefaults {
     // 效果类型的文档默认值（forms.md §6）
     private static void applyEffectDefaults(JsonObject body, String path) {
         switch (path) {
-            case "spawn_item" -> {
-                body.addProperty("count", 1);
-                body.addProperty("radius", 6);
-            }
+            // spawn_item 的 radius 可省略：运行期有 limit 时的有效默认不写入 JSON
+            // （界面展示不等于用户已编辑）；consume_source 只有 count 一个默认值
+            case "spawn_item", "consume_source" -> body.addProperty("count", 1);
             case "spawn_entity" -> {
                 body.addProperty("count", 1);
                 body.addProperty("age", 0);
-                body.addProperty("radius", 6);
             }
             case "place_block" -> {
-                // block 与 use_source_block 至少要有一个：默认用「放置来源方块」保证新建即可用
-                body.addProperty("use_source_block", true);
+                // block 与 use_source_block 至少要有一个：use_source_block 后端默认 false，保持缺省语义
+                body.addProperty("use_source_block", false);
                 body.addProperty("shape", "square");
                 body.addProperty("count", 1);
                 body.addProperty("radius", 6);
@@ -130,7 +109,6 @@ public final class BuiltinEditorDefaults {
                 body.addProperty("duration_ticks", 6000);
                 body.addProperty("thundering", false);
             }
-            case "consume_source" -> body.addProperty("count", 1);
             case "consume_catalyst" -> {
                 body.add("items", new JsonArray());
                 body.addProperty("count", 1);

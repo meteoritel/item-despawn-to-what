@@ -1,6 +1,7 @@
 # 新 GUI 字段、数值与控件规格
 
 > 状态：已确认、已冻结、待实施；用户于 2026-10-03 随主计划确认字段与控件规格，不代表代码已实现。
+> 实施状态（2026-10-03，P5 文档同步）：§2/§3/§4/§5 的域、可选性与单位已落盘到 `client/edit` 描述符——priority / trigger_after_seconds 等 21 处「后端有默认值」字段改为可省略、5 处后端 `fieldOf` / 校验 `notEmpty` 字段对齐为必填（task-10）；delay_ticks / spawn_entity.age 使用后端完整域；药水 duration_ticks / amplifier 可省略；概率原始精度与 amplifier 255↔等级 256 的显示往返由 `client/ui/screen/form` 承接（P3-B）。游戏内域边界、精度与省略状态往返**待用户执行**（见 [manual-acceptance.md](../guide/manual-acceptance.md) §10.4.2/§10.5）。本文件冻结正文不变。
 > 对应主计划：[plan-gui-rule-update.md](plan-gui-rule-update.md)。
 > 基线：`12a4a9a929ca564211522ee1f602ca286f300364`，2026-10-03。
 > `INT_MIN=-2147483648`，`INT_MAX=2147483647`；C 表示任意条件叶的 condition 对象，E 表示 outcomes[i].effects[j]，兼容结构中为顶层 effects[j]。

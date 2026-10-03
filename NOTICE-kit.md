@@ -59,4 +59,54 @@
 
 ## 已知差异
 
-无。目标目录文件与源文件内容等价（仅包名重定位）。
+来源版本仍为 `625747e1f34ea957841d7136be4635469687c227`（见上文 23 文件清单，该清单**未**改写为「全部来自新提交」）。
+本目录按 ADR-0025 作为「记录来源与差异的维护副本」继续演进，因此下表逐条记录与来源版本的差异、差异原因、
+公开接口变化与可回流状态；在回流评估完成前，不得再把本目录描述为「与来源等价」。
+
+### P1 差异：输入 / 捕获 / 数值策略 / 滑块核心（2026-10-03）
+
+新增文件（16 个，来源版本中不存在，均可回流；回流前需按来源项目的包名与目录结构重定位）：
+
+| 文件 | 作用 |
+| --- | --- |
+| `UiInputContext.java` | 指针坐标、按钮与 Shift/Ctrl/Alt 显式快照 |
+| `UiInputTarget.java` | 指针 / 拖动 / 释放 / 滚轮 / 键盘 / 字符输入的 default 接收接口 |
+| `UiInputRouter.java` | 路由顺序：顶层 modal 作用域 → 捕获目标 → 聚焦控件 → 容器导航，事件只消费一次 |
+| `UiInputCapture.java` | 捕获登记与统一结束原因（释放 / 取消 / 隐藏 / 禁用 / 卸载 / 焦点范围切换 / 宿主关闭） |
+| `UiValueInteraction.java` | begin / preview / commit / cancel 与起始值、当前值；无变化不提交 |
+| `UiNumberPolicy.java` | 合法数值域、粗细档、整数策略、吸附与拖动灵敏度 |
+| `UiSliderWindow.java` | 轨道显示窗口（可与合法数值域不同，不用窗口边界拒绝域内值） |
+| `UiSliderStyle.java` | 不可变滑块样式（轨道、已填充段、手柄、焦点、禁用、错误、文字槽） |
+| `UiSliderPainter.java` | 画法接口与绘制帧 |
+| `PixelSliderPainter.java` | 纯色像素画法（不引入贴图资源） |
+| `UiScalarSlider.java` | 标量滑块核心（精确回填、用户操作吸附、Shift 细调、键盘合并提交、Esc 回退） |
+| `UiRangeEnd.java`、`UiRangeValue.java`、`UiRangeSlider.java` | 双端区间核心（端点身份不交换、可选端点独立于 0、重叠端点可切换） |
+| `UiCyclicRange.java` | 周期区间核心（宿主注入周期 / 刻度 / 标记，不读取世界时间） |
+| `UiSliderExamples.java` | 无规则语义调用示例（规格 §7） |
+
+上述 23 个来源文件里，仅 `package-info.java` 有更新（新增输入 / 数值 / 滑块的公开入口与调用示例段落，并把宿主适配层改为指向目标项目实际存在的 `client/ui/theme/`、`client/ui/widget/`、`client/ui/prototype/`）；其余 22 个来源文件未改动，无公开接口变化。
+
+### P1 差异：宿主适配层（不在 kit 目录内，但属于 kit 的接入面）
+
+| 文件 | 差异 | 原因 | 公开接口变化 |
+| --- | --- | --- | --- |
+| `common/.../client/ui/widget/UiWidget.java` | 新增 `default boolean keyReleased(int, int, int)` | 让按住的方向键重复能在抬起时合并为一次提交 | 仅新增 default 方法，既有实现无需改动 |
+| `common/.../client/ui/widget/UiSlider.java` | 改为委托 `UiScalarSlider` 的适配层 | 控件逻辑上移到 kit，宿主只做主题 / 快照注入 | 保留全部旧公开签名的返回值形状；新增 `core()`、`trySetValue`、`isBackfillInvalid`、`setError`、`isDragging`、`endInteraction`、`unmount`、`onFocusScopeChanged`、`onHostClosed`；`setValue` 不再按步长吸附（只钳制），`setRange` 不再吸附当前值 |
+| `common/.../client/ui/theme/UiTheme.java` | 新增 `public static UiSliderStyle sliderStyle()` | 宿主把主题色调色板注入 kit 样式，kit 不反向依赖主题 | 仅新增静态方法 |
+
+### 可回流状态
+
+- 16 个 kit 新增文件（含 `UiSliderExamples`）与 `package-info.java` 的更新：逻辑与来源项目无关，可直接回流，回流时只做包名重定位与示例标签替换。
+- 宿主适配层（`widget/UiSlider.java`、`theme/UiTheme.java`）依赖本模组的调色板与 `Screen` 按键快照，回流前需要按来源项目的主题层改写。
+- 尚未回流到来源项目：来源仓库本次未被修改。
+
+### P4 之后：kit 目录本身未再改动（2026-10-03）
+
+- P4（目录图标面板、区间 / 时间条、结构图解、会话恢复、键盘与朗读）与后续 P5-a/P5-c 的改动**全部落在宿主层**（`client/ui/screen/`、`client/ui/widget/`、`client/ui/theme/`）与 `client/edit/`、语言文件；`client/ui/kit/` 内的 16 个新增文件自 P1 之后**未再改动**。`package-info.java` 在 P5-e 仅更新说明文字（把引用的依赖检查脚本与 API 文档指向真实存在的文件），公开 API 与已有差异记录未变（上表 P1 差异仍是最新差异记录）。
+- 静态核对（2026-10-03）：kit 目录 112 条 `import` 全部落在声明的白名单内（`java.*` / `net.minecraft.*` / `org.jetbrains.*` / `org.joml.*` / `org.lwjgl.*` / `com.mojang.*`），无任何项目内包与两端 loader API 引用；`UiRect` 构造期对负宽高抛 `IllegalArgumentException`，`UiControl.setBounds` 钳到 ≥0，与 `package-info.java` 的「公开行为约定」一致。
+
+### 已知限制
+
+- **`UiInputRouter` 未接入**：kit 规格 §8.5 要求「没有真实使用到的抽象要么接入、要么延后」。全仓引用仅出现在 `UiInputRouter.java` 自身、`package-info.java` 的公开入口列表与 `UiSliderExamples` 的说明注释中；宿主控件（`client/ui/widget/`）仍各自分发事件。本期记为已知限制，未删除该类，也未声称其已接入。
+- **文档引用已落地（P5-e 修复）**：`client/ui/kit/package-info.java` 原引用的 `docs/dev/internals/ui-kit-api.md` 与 `scripts/check-ui-kit-boundaries.ps1` 曾不存在，已在 P5-e 落地为真实文件——新建 [docs/dev/internals/ui-kit-api.md](docs/dev/internals/ui-kit-api.md)（246 行：依赖边界、输入路由、生命周期、数值策略、接入示例与 style 注入）与 [tools/check-ui-kit-boundaries.ps1](tools/check-ui-kit-boundaries.ps1)（137 行：扫描 kit 目录的 import 与全限定引用，违规 exit 1、通过 exit 0），并让 `package-info.java` 指向真实脚本。验证：该脚本对当前 kit 实跑输出「扫描 39 个文件、112 条 import、0 处违规」并 exit 0；对临时构造的违规样本输出 5 处违规并 exit 1（样本已删除）。kit 规格 §8「不能调用不存在的脚本」由此满足。
+- 独立 kit 库**本期未发布**：仍只冻结公开边界与依赖检查方式，独立 Gradle 模块与发布脚本需另立拆包任务。

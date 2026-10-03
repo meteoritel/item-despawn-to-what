@@ -48,16 +48,23 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.IntConsumer;
 
 /**
  * 一次转化的结算任务：固定成本、完整组与真实账目。
  * 三个阶段：
- * 1) 计划——按「最小完整容量」选定候选与组数 g（含一次性效果的候选最多一组）；
- * 2) 派发——逐组从结算库存扣除固定源成本，并把候选内各效果派发一次（延迟交给调度器）；
+ * 1) 计划——按「源库存可支撑组数 × 催化剂上界」定出组数上界，并为第一组选定候选；
+ * 2) 派发——每开始一组时独立选候选：轮询从共享游标依次搜索能完成一组的候选，
+ *    确定该组并开组后才推进游标；容量不足的候选跳过，全部候选都开不出一组时停止并返还剩余库存；
+ *    逐组从结算库存扣除固定源成本，并把候选内各效果派发一次（延迟交给调度器）；
  * 3) 交付——剩余库存作为返还掉落物分批交还世界，全部交付后才算完成。
+ * 一次性效果（EffectType.oneShot）：不参与候选数量上限；仅含一次性效果的候选最多一组；
+ * 同一源请求内每个一次性效果槽（候选 id + 槽序号）只尝试一次，概率落空或条件不满足也算已尝试，续跑不重试。
  * 真实账目只来自执行器回执（EffectResult 与 reportProgress），计划量不冒充成功量；
  * 取消（规则重载/维度卸载/停服）只落一条待返还记录，不在不安全时刻做世界写入，交给阶段 6 恢复。
  */
@@ -66,6 +73,12 @@ final class ConversionSettlement implements ServerTask {
     private static final Logger LOGGER = LogManager.getLogger();
     // 候选容量判定中每次世界查询计入的预算单位
     private static final int CAPACITY_QUERY_UNITS = 2;
+    // 候选剩余容量哨兵：该候选在本结算内尚未查询过世界
+    private static final int CAPACITY_UNKNOWN = -1;
+    // 容量或选组搜索遇到预算耗尽：本刻不落任何决定，下刻重试（不写入容量缓存）
+    private static final int CAPACITY_PENDING = -2;
+    // 选组搜索结束：所有候选都开不出一组
+    private static final int SELECT_EXHAUSTED = -3;
 
     // 结算阶段
     private enum Phase { PLANNING, DISPATCHING, DELIVERING, DONE }
@@ -89,6 +102,16 @@ final class ConversionSettlement implements ServerTask {
 
     private Phase phase = Phase.PLANNING;
     private OutcomeCandidate candidate;
+    // 已选定但尚未开组的候选：预算让出点跨刻保留选择，不重进 tick 重新选择
+    private OutcomeCandidate pendingCandidate;
+    private int pendingCandidateIndex = -1;
+    // 轮询扫描起点：-1 = 本结算尚未读取共享游标；确定一组并开组后推进到该候选的下一位
+    private int rotationIndex = -1;
+    // 各候选剩余可开始组数（下标与 candidates 对齐）：CAPACITY_UNKNOWN = 未查询；
+    // Integer.MAX_VALUE = 无限，不递减
+    private final int[] remainingCapacity;
+    // 同一源请求内已尝试过的一次性效果槽（键 = 候选 id + "#" + 槽序号）
+    private final Set<String> attemptedOneShots = new HashSet<>();
     private EffectContext groupContext;
     private int groupCount;
     private int groupsStarted;
@@ -114,6 +137,8 @@ final class ConversionSettlement implements ServerTask {
         this.candidates = rule.effectiveOutcomes();
         this.structureVersion = structureVersion(candidates);
         this.rotation = rule.combination() == CombinationMode.ROUND_ROBIN && candidates.size() > 1;
+        this.remainingCapacity = new int[candidates.size()];
+        Arrays.fill(this.remainingCapacity, CAPACITY_UNKNOWN);
     }
 
     @Override
@@ -193,7 +218,7 @@ final class ConversionSettlement implements ServerTask {
         return true;
     }
 
-    // 计划：选候选 → 定组数；预算耗尽时本刻不落决定，保持 PLANNING 下刻重试
+    // 计划：定组数上界 → 为第一组选候选 → 预留催化剂；预算耗尽时本刻不落决定，保持 PLANNING 下刻重试
     private StepResult plan(ServerTickBudget budget) {
         budget.charge(1);
         record.markStarted(level.getGameTime());
@@ -203,76 +228,98 @@ final class ConversionSettlement implements ServerTask {
             phase = Phase.DELIVERING;
             return StepResult.yield(1, 1);
         }
-        int size = candidates.size();
-        int start = rotation ? cursors.cursor(cursorKey(), structureVersion, size) : 0;
-        for (int offset = 0; offset < size; offset++) {
-            int index = rotation ? (start + offset) % size : offset;
-            OutcomeCandidate selected = candidates.get(index);
-            int groups = groupsFor(selected, budget);
-            if (groups < 0) {
-                // 容量搜索未完成（预算耗尽）：本刻不落任何决定
-                return StepResult.yield(1, 1);
-            }
-            if (groups == 0) {
-                continue;
-            }
-            // 催化剂固定成本上界（D31）：-1 = 预算耗尽本刻不落决定；0 = 可用件数不足则跳过该候选
-            int catalystLimit = catalystGroupLimit(budget);
-            if (catalystLimit < 0) {
-                return StepResult.yield(1, 1);
-            }
-            groups = Math.min(groups, catalystLimit);
-            if (groups == 0) {
-                continue;
-            }
-            CatalystCost catalyst = rule.catalystCost();
-            if (catalyst != null
-                    && reservations().tryReserve(record.id(), level, catalystPicks, groups * catalyst.count()) == null) {
-                // 防御：扫描所得可用量与预留结果不一致时跳过候选，绝不半预留
-                continue;
-            }
-            this.candidate = selected;
-            this.groupCount = groups;
-            // 组数定稿后先登记催化剂成本再落计划；预留已在候选条件（上方 tryReserve）里完成，两者之间没有 yield 点
-            record.catalystPlan(catalyst == null ? 0 : catalyst.count());
-            record.plan(selected.id(), groups);
-            if (DebugMode.ENABLED && catalyst != null) {
-                DebugScenarioManager.observe(source, "CATALYST_PLANNED", "record", record.id(), "rule", rule.id(),
-                        "per_group", catalyst.count(), "groups", groups, "reserved", groups * catalyst.count());
-            }
-            if (rotation) {
-                cursors.moveTo(cursorKey(), structureVersion, size, index + 1);
-            }
-            if (DebugMode.ENABLED) {
-                DebugScenarioManager.observe(source, "OUTCOME_PLANNED", "rule", rule.id(), "candidate", selected.id(),
-                        "groups", groups, "source_cost_per_group", record.sourceCostPerGroup(), "available", held.getCount(),
-                        "structure_version", structureVersion, "cursor_start", start, "candidates", size);
-            }
-            phase = Phase.DISPATCHING;
+        int costPerGroup = record.sourceCostPerGroup();
+        int sourceGroups = costPerGroup > 0 ? held.getCount() / costPerGroup : 1;
+        // 催化剂固定成本上界（D31）：-1 = 预算耗尽本刻不落决定
+        int catalystLimit = catalystGroupLimit(budget);
+        if (catalystLimit < 0) {
             return StepResult.yield(1, 1);
         }
-        // 全部候选容量不足：整堆返还，不支付任何成本（阶段 4 验收⑤）
-        groupCount = 0;
-        record.plan("", 0);
-        if (DebugMode.ENABLED) {
-            DebugScenarioManager.observe(source, "OUTCOME_SKIPPED", "rule", rule.id(), "candidates", size);
+        int planned = Math.min(sourceGroups, catalystLimit);
+        // 本结算第一组的候选（B1）：计划期只落「第一组」的选择，后续组在派发期逐组重选
+        int pick = SELECT_EXHAUSTED;
+        if (planned > 0) {
+            pick = selectCandidateForGroup(budget);
         }
-        phase = Phase.DELIVERING;
+        if (pick == CAPACITY_PENDING) {
+            // 容量搜索未完成（预算耗尽）：本刻不落任何决定
+            return StepResult.yield(1, 1);
+        }
+        if (pick == SELECT_EXHAUSTED) {
+            return abandonAll();
+        }
+        pendingCandidate = candidates.get(pick);
+        pendingCandidateIndex = pick;
+        groupCount = planned;
+        CatalystCost catalyst = rule.catalystCost();
+        if (catalyst != null
+                && reservations().tryReserve(record.id(), level, catalystPicks, groupCount * catalyst.count()) == null) {
+            // 防御：扫描所得可用量与预留结果不一致时整批返还，绝不半预留
+            return abandonAll();
+        }
+        // 组数定稿后先登记催化剂成本再落计划；预留已完成，两者之间没有 yield 点
+        record.catalystPlan(catalyst == null ? 0 : catalyst.count());
+        record.plan(pendingCandidate.id(), groupCount);
+        if (DebugMode.ENABLED && catalyst != null) {
+            DebugScenarioManager.observe(source, "CATALYST_PLANNED", "record", record.id(), "rule", rule.id(),
+                    "per_group", catalyst.count(), "groups", groupCount, "reserved", groupCount * catalyst.count());
+        }
+        if (DebugMode.ENABLED) {
+            // 每次结算只观测一条 OUTCOME_PLANNED（candidate = 本结算第一组所选候选，groups = 组数上界）；
+            // 多组结算的逐组候选切换由每组的 EFFECT_SCHEDULED / EFFECT_ONESHOT_SKIPPED 观测体现
+            DebugScenarioManager.observe(source, "OUTCOME_PLANNED", "rule", rule.id(), "candidate", pendingCandidate.id(),
+                    "groups", groupCount, "source_cost_per_group", record.sourceCostPerGroup(), "available", held.getCount(),
+                    "structure_version", structureVersion, "cursor_start", rotationStart(), "candidates", candidates.size());
+        }
+        phase = Phase.DISPATCHING;
         return StepResult.yield(1, 1);
     }
 
-    // 组数 = min(源库存能支撑的组数, 候选最小完整容量, 一次性效果上限 1)；-1 表示预算不足需重试
-    private int groupsFor(OutcomeCandidate selected, ServerTickBudget budget) {
-        int costPerGroup = record.sourceCostPerGroup();
-        int groups = costPerGroup > 0 ? held.getCount() / costPerGroup : 1;
-        if (groups <= 0) {
+    // 为本组选候选（B1）：轮询从扫描起点依次找剩余容量 >= 1 的候选（首次取共享游标），优先模式从列表首项找；
+    // 容量按候选缓存并逐组递减，同一候选只查一次世界。CAPACITY_PENDING = 预算耗尽需重试，
+    // SELECT_EXHAUSTED = 所有候选都开不出一组
+    private int selectCandidateForGroup(ServerTickBudget budget) {
+        int size = candidates.size();
+        int scan = rotationStart();
+        for (int offset = 0; offset < size; offset++) {
+            int index = Math.floorMod(scan + offset, size);
+            OutcomeCandidate selected = candidates.get(index);
+            int remaining = remainingCapacity[index];
+            if (remaining == CAPACITY_UNKNOWN) {
+                remaining = capacityGroups(selected, budget);
+                if (remaining == CAPACITY_PENDING) {
+                    // 容量搜索未完成：本刻不落任何决定，下刻从同一游标重算
+                    return CAPACITY_PENDING;
+                }
+                remainingCapacity[index] = remaining;
+            }
+            if (remaining <= 0) {
+                continue;
+            }
+            return index;
+        }
+        return SELECT_EXHAUSTED;
+    }
+
+    // 轮询扫描起点：未推进过时读取共享游标（跨结算接续），推进过则用本结算内的位置；优先模式恒为 0
+    private int rotationStart() {
+        if (!rotation) {
             return 0;
         }
-        int capacity = capacityGroups(selected, budget);
-        if (capacity < 0) {
-            return -1;
+        return rotationIndex >= 0 ? rotationIndex : cursors.cursor(cursorKey(), structureVersion, candidates.size());
+    }
+
+    // 无法开出任何一组：整堆返还，不支付任何成本（阶段 4 验收⑤）
+    private StepResult abandonAll() {
+        pendingCandidate = null;
+        pendingCandidateIndex = -1;
+        groupCount = 0;
+        record.plan("", 0);
+        if (DebugMode.ENABLED) {
+            DebugScenarioManager.observe(source, "OUTCOME_SKIPPED", "rule", rule.id(), "candidates", candidates.size());
         }
-        return Math.min(groups, capacity);
+        phase = Phase.DELIVERING;
+        return StepResult.yield(1, 1);
     }
 
     // 计划期催化剂上界：未声明 catalyst_cost 直接返回 Integer.MAX_VALUE（不查世界、不预留，纯零开销）；
@@ -317,25 +364,28 @@ final class ConversionSettlement implements ServerTask {
     }
 
     // 候选内多个产出效果用「最小完整容量」共同限制组数（阶段 4 验收②）；
-    // 只由 spawn_item / spawn_entity 的 limit 决定（其余效果不参与容量），
-    // 任一效果为一次性类型时组数封顶 1（阶段 4 验收⑤）
+    // 可重复效果里只由 spawn_item / spawn_entity 的 limit 决定容量（其余效果不参与），
+    // 一次性效果不参与数量上限；仅含一次性效果的候选最多一组（阶段 4 验收⑤、B2）；
+    // CAPACITY_PENDING = 预算耗尽需下刻重试
     private int capacityGroups(OutcomeCandidate selected, ServerTickBudget budget) {
         int groups = Integer.MAX_VALUE;
-        boolean oneShot = false;
+        boolean hasOneShot = false;
+        boolean hasRepeatable = false;
         for (Effect effect : selected.effects()) {
             if (budget.exhausted()) {
-                return -1;
+                return CAPACITY_PENDING;
             }
             budget.charge(1);
             EffectType<?> definition = runtime.effectDefinition(effect.type());
             if (definition == null) {
-                // 未注册类型由执行阶段记录错误，这里不参与容量
+                // 未注册类型由执行阶段记录错误，这里不参与容量，也不视为可重复产出
                 continue;
             }
             if (definition.oneShot()) {
-                oneShot = true;
+                hasOneShot = true;
                 continue;
             }
+            hasRepeatable = true;
             if (effect instanceof SpawnItemEffect itemEffect && itemEffect.limit() != null) {
                 budget.charge(CAPACITY_QUERY_UNITS);
                 int per = Math.max(1, itemEffect.count());
@@ -348,8 +398,9 @@ final class ConversionSettlement implements ServerTask {
                 groups = Math.min(groups, room / per);
             }
         }
-        if (oneShot) {
-            groups = Math.min(groups, 1);
+        if (hasOneShot && !hasRepeatable) {
+            // 纯一次性候选：没有可重复效果参与容量，上界恒为 1
+            groups = 1;
         }
         return groups;
     }
@@ -360,6 +411,30 @@ final class ConversionSettlement implements ServerTask {
         // 最后一组已开组也必须继续派发剩余效果，预算让出后保留同一组游标。
         while (groupOpen || groupsStarted < groupCount) {
             if (!groupOpen) {
+                if (pendingCandidate == null) {
+                    // 每组独立选候选（B1）：轮询从共享游标搜索能完成一组的候选，容量不足的候选跳过
+                    int pick = selectCandidateForGroup(budget);
+                    if (pick == CAPACITY_PENDING) {
+                        // 容量搜索未完成（预算耗尽）：本刻不开组，不落任何决定，下刻从同一游标重算
+                        return StepResult.yield(1, 1);
+                    }
+                    if (pick == SELECT_EXHAUSTED) {
+                        // 所有候选都开不出一组：组数截断为已开始组数，剩余源库存走返还路径
+                        int stoppedGroups = groupCount - groupsStarted;
+                        groupCount = groupsStarted;
+                        record.plan(record.candidateId(), groupCount);
+                        reservations().releaseOwner(record.id());
+                        ledger.put(record);
+                        if (DebugMode.ENABLED) {
+                            DebugScenarioManager.observe(source, "OUTCOME_SKIPPED", "record", record.id(), "rule", rule.id(),
+                                    "candidates", candidates.size(), "groups_started", groupsStarted,
+                                    "stopped_groups", stoppedGroups, "reason", "capacity");
+                        }
+                        break;
+                    }
+                    pendingCandidate = candidates.get(pick);
+                    pendingCandidateIndex = pick;
+                }
                 // 催化剂固定成本支付（D33）：先支付再开组；不足则截断组数并释放预留，绝不半支付
                 int perGroup = record.catalystCostPerGroup();
                 int paidCatalyst = 0;
@@ -399,6 +474,17 @@ final class ConversionSettlement implements ServerTask {
                 groupsStarted++;
                 groupOpen = true;
                 effectCursor = 0;
+                // 本组候选定稿：容量递减 + 轮询游标推进（确定该组并开组后才推进，被跳过的候选不推进）
+                candidate = pendingCandidate;
+                pendingCandidate = null;
+                if (remainingCapacity[pendingCandidateIndex] != Integer.MAX_VALUE) {
+                    remainingCapacity[pendingCandidateIndex]--;
+                }
+                if (rotation) {
+                    rotationIndex = Math.floorMod(pendingCandidateIndex + 1, candidates.size());
+                    cursors.moveTo(cursorKey(), structureVersion, candidates.size(), pendingCandidateIndex + 1);
+                }
+                pendingCandidateIndex = -1;
                 groupContext = contextForGroup(groupsStarted);
             }
             if (budget.exhausted() || dispatchedThisStep >= batch) {
@@ -409,7 +495,16 @@ final class ConversionSettlement implements ServerTask {
                 groupOpen = false;
                 continue;
             }
-            Effect effect = effects.get(effectCursor++);
+            int slot = effectCursor++;
+            Effect effect = effects.get(slot);
+            if (isOneShotAttempted(candidate.id(), slot, effect)) {
+                // 同一源请求内一次性效果只尝试一次（B2）：后续组跳过该槽，不重试也不重复计费
+                if (DebugMode.ENABLED) {
+                    DebugScenarioManager.observe(source, "EFFECT_ONESHOT_SKIPPED", "effect", effect.type(),
+                            "outcome", candidate.id(), "slot", slot, "group", groupsStarted);
+                }
+                continue;
+            }
             dispatchEffect(effect, groupContext);
             budget.charge(1);
             dispatchedThisStep++;
@@ -417,6 +512,16 @@ final class ConversionSettlement implements ServerTask {
         record.syncPendingDelivery(held.getCount());
         phase = Phase.DELIVERING;
         return StepResult.yield(1, 1);
+    }
+
+    // 一次性效果是否已在同一源请求（本次结算）内尝试过：首次尝试时登记并返回 false；
+    // 概率落空、条件不满足、执行失败都算已尝试，续跑不重试（B2）；未注册类型不参与
+    private boolean isOneShotAttempted(String candidateId, int slot, Effect effect) {
+        EffectType<?> definition = runtime.effectDefinition(effect.type());
+        if (definition == null || !definition.oneShot()) {
+            return false;
+        }
+        return !attemptedOneShots.add(candidateId + "#" + slot);
     }
 
     // 交付：剩余库存作为返还掉落物分批加入世界；失败/未加载区块时保留待返还并重试

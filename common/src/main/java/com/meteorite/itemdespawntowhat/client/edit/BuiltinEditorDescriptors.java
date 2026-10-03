@@ -63,6 +63,7 @@ public final class BuiltinEditorDescriptors {
         ResourceLocation dimension = id("dimension");
         ConditionEditorRegistry.register(new TypeEditorDescriptor(dimension, TypeLabels.conditionLabel(dimension), List.of(
                 EditorField.rlList("dimensions", h + "dimension.dimensions", "minecraft:dimension")
+                    .asRequired()
         ), false));
 
         // biome：exact 用 biomes；climate 用 6 个气候区间
@@ -107,8 +108,8 @@ public final class BuiltinEditorDescriptors {
         // catalyst_present：催化剂物品与数量
         ResourceLocation catalyst = id("catalyst_present");
         ConditionEditorRegistry.register(new TypeEditorDescriptor(catalyst, TypeLabels.conditionLabel(catalyst), List.of(
-                EditorField.tagList("items", h + "catalyst_present.items", "minecraft:item"),
-                EditorField.integer("count", h + "catalyst_present.count", 1, 64)
+                EditorField.tagList("items", h + "catalyst_present.items", "minecraft:item").asRequired(),
+                EditorField.integer("count", h + "catalyst_present.count", 1, 64).optional()
         ), false));
 
         // fluid_present：留空 = 任意流体
@@ -153,7 +154,7 @@ public final class BuiltinEditorDescriptors {
         ResourceLocation spawnItem = id("spawn_item");
         registerEffect(spawnItem, List.of(
                 EditorField.tag("item", h + "spawn_item.item", "minecraft:item"),
-                EditorField.integer("count", h + "spawn_item.count", 1, 64),
+                EditorField.integer("count", h + "spawn_item.count", 1, 64).optional(),
                 EditorField.optionalInteger("limit", h + "spawn_item.limit", 1, 4096),
                 EditorField.optionalInteger("radius", h + "spawn_item.radius", 1, 32)
         ));
@@ -162,8 +163,8 @@ public final class BuiltinEditorDescriptors {
         ResourceLocation spawnEntity = id("spawn_entity");
         registerEffect(spawnEntity, List.of(
                 EditorField.tag("entity", h + "spawn_entity.entity", "minecraft:entity_type"),
-                EditorField.integer("count", h + "spawn_entity.count", 1, 64),
-                EditorField.integer("age", h + "spawn_entity.age", -24000, 24000).withPresets(
+                EditorField.integer("count", h + "spawn_entity.count", 1, 64).optional(),
+                EditorField.integerSlider("age", h + "spawn_entity.age", Integer.MIN_VALUE, Integer.MAX_VALUE, -24000, 24000).optional().withPresets(
                         new EditorPreset("-24000", "gui.itemdespawntowhat.edit.preset.baby"),
                         new EditorPreset("0", "gui.itemdespawntowhat.edit.preset.adult")),
                 EditorField.optionalInteger("limit", h + "spawn_entity.limit", 1, 4096),
@@ -175,9 +176,9 @@ public final class BuiltinEditorDescriptors {
         registerEffect(placeBlock, List.of(
                 EditorField.optionalTag("block", h + "place_block.block", "minecraft:block"),
                 EditorField.bool("use_source_block", h + "place_block.use_source_block"),
-                EditorField.enumIn("shape", h + "place_block.shape", "place_block_shape", "square", "circle", "cross"),
-                EditorField.integer("count", h + "place_block.count", 1, 64),
-                EditorField.integer("radius", h + "place_block.radius", 1, 32),
+                EditorField.enumIn("shape", h + "place_block.shape", "place_block_shape", "square", "circle", "cross").optional(),
+                EditorField.integer("count", h + "place_block.count", 1, 64).optional(),
+                EditorField.integer("radius", h + "place_block.radius", 1, 32).optional(),
                 EditorField.optionalInteger("limit", h + "place_block.limit", 1, 4096),
                 EditorField.note(h + "place_block.note")
         ));
@@ -185,7 +186,7 @@ public final class BuiltinEditorDescriptors {
         // spawn_xp
         ResourceLocation spawnXp = id("spawn_xp");
         registerEffect(spawnXp, List.of(
-                EditorField.integer("amount", h + "spawn_xp.amount", 1, 65536),
+                EditorField.integer("amount", h + "spawn_xp.amount", 1, 65536).optional(),
                 EditorField.bool("per_source_item", h + "spawn_xp.per_source_item")
         ));
 
@@ -193,19 +194,19 @@ public final class BuiltinEditorDescriptors {
         ResourceLocation lootTable = id("loot_table");
         registerEffect(lootTable, List.of(
                 EditorField.resourceLocation("loot_table", h + "loot_table.loot_table"),
-                EditorField.decimal("luck", h + "loot_table.luck", -100.0D, 100.0D)
+                EditorField.decimal("luck", h + "loot_table.luck", -100.0D, 100.0D).optional()
         ));
 
         // lightning
         ResourceLocation lightning = id("lightning");
         registerEffect(lightning, List.of(
-                EditorField.integer("count", h + "lightning.count", 1, 16)
+                EditorField.integer("count", h + "lightning.count", 1, 16).optional()
         ));
 
         // explosion
         ResourceLocation explosion = id("explosion");
         registerEffect(explosion, List.of(
-                EditorField.decimal("power", h + "explosion.power", 0.0D, 16.0D),
+                EditorField.decimal("power", h + "explosion.power", 0.0D, 16.0D).optional(),
                 EditorField.bool("fire", h + "explosion.fire"),
                 EditorField.bool("visual_only", h + "explosion.visual_only")
         ));
@@ -213,12 +214,12 @@ public final class BuiltinEditorDescriptors {
         // arrow_rain：药水效果子列表
         ResourceLocation arrowRain = id("arrow_rain");
         registerEffect(arrowRain, List.of(
-                EditorField.integer("count", h + "arrow_rain.count", 1, 256),
-                EditorField.enumIn("pickup", h + "arrow_rain.pickup", "arrow_rain_pickup", "disallowed", "allowed", "creative_only"),
+                EditorField.integer("count", h + "arrow_rain.count", 1, 256).optional(),
+                EditorField.enumIn("pickup", h + "arrow_rain.pickup", "arrow_rain_pickup", "disallowed", "allowed", "creative_only").optional(),
                 EditorField.subList("potion_effects", h + "arrow_rain.potion_effects",
                         EditorField.tag("effect", h + "arrow_rain.effect", "minecraft:mob_effect"),
-                        EditorField.integer("duration_ticks", h + "arrow_rain.duration_ticks", 1, 1000000),
-                        EditorField.amplifier("amplifier", h + "arrow_rain.amplifier"))
+                        EditorField.integer("duration_ticks", h + "arrow_rain.duration_ticks", 1, 1000000).optional(),
+                        EditorField.amplifier("amplifier", h + "arrow_rain.amplifier").optional())
                         .withHint(h + "arrow_rain.potion_effects.hint")
         ));
 
@@ -226,7 +227,7 @@ public final class BuiltinEditorDescriptors {
         ResourceLocation weatherEffect = id("weather");
         registerEffect(weatherEffect, List.of(
                 EditorField.enumIn("mode", h + "weather.mode", "weather_effect_mode", "rain", "clear"),
-                EditorField.integer("duration_ticks", h + "weather.duration_ticks", 1, 24000),
+                EditorField.integer("duration_ticks", h + "weather.duration_ticks", 1, 24000).optional(),
                 EditorField.bool("thundering", h + "weather.thundering"),
                 EditorField.note(h + "weather.note")
         ));
@@ -234,15 +235,15 @@ public final class BuiltinEditorDescriptors {
         // consume_source
         ResourceLocation consumeSource = id("consume_source");
         registerEffect(consumeSource, List.of(
-                EditorField.integer("count", h + "consume_source.count", 1, 64)
+                EditorField.integer("count", h + "consume_source.count", 1, 64).optional()
         ));
 
         // consume_catalyst
         ResourceLocation consumeCatalyst = id("consume_catalyst");
         registerEffect(consumeCatalyst, List.of(
-                EditorField.tagList("items", h + "consume_catalyst.items", "minecraft:item"),
-                EditorField.integer("count", h + "consume_catalyst.count", 1, 64),
-                EditorField.integer("radius", h + "consume_catalyst.radius", 1, 8)
+                EditorField.tagList("items", h + "consume_catalyst.items", "minecraft:item").asRequired(),
+                EditorField.integer("count", h + "consume_catalyst.count", 1, 64).optional(),
+                EditorField.integer("radius", h + "consume_catalyst.radius", 1, 8).optional()
         ));
 
         // consume_fluid
@@ -257,9 +258,11 @@ public final class BuiltinEditorDescriptors {
     // 效果描述符 = 专属字段 + 公共字段（delay_ticks / chance / conditions）
     private static void registerEffect(ResourceLocation typeId, List<EditorField> ownFields) {
         List<EditorField> fields = new ArrayList<>(ownFields);
-        fields.add(EditorField.ticks("delay_ticks", COMMON + "delay_ticks", 0, 72000)
+        fields.add(EditorField.ticks("delay_ticks", COMMON + "delay_ticks", 0, Integer.MAX_VALUE)
+                .optional()
+                .withNumbers(NumericDomain.integers(0, Integer.MAX_VALUE, 0, 1200))
                 .withHint(COMMON + "delay_ticks.hint"));
-        fields.add(EditorField.percent("chance", COMMON + "chance"));
+        fields.add(EditorField.percent("chance", COMMON + "chance").optional());
         fields.add(EditorField.conditionTree("conditions", COMMON + "conditions"));
         EffectEditorRegistry.register(new TypeEditorDescriptor(typeId, TypeLabels.effectLabel(typeId), fields, false));
     }
@@ -271,10 +274,39 @@ public final class BuiltinEditorDescriptors {
         String r = "gui.itemdespawntowhat.edit.rule.";
         return new TypeEditorDescriptor(RULE_DESCRIPTOR, Component.translatable(r + "info"), List.of(
                 EditorField.bool(RuleFields.ENABLED, r + "enabled"),
-                EditorField.integer(RuleFields.PRIORITY, r + "priority", -10000, 10000),
+                EditorField.integerSlider(RuleFields.PRIORITY, r + "priority", Integer.MIN_VALUE, Integer.MAX_VALUE, -100, 100)
+                        .optional(),
                 EditorField.optionalText(RuleFields.DISPLAY_NAME, r + "display_name"),
                 EditorField.longText(RuleFields.NOTES, r + "notes"),
-                EditorField.ticks("trigger_after_seconds", r + "trigger_after_seconds", 0, 2147483)
+                EditorField.integerSlider("trigger_after_seconds", r + "trigger_after_seconds", 0, Integer.MAX_VALUE, 0, 600)
+                        .optional()
+        ), false);
+    }
+
+    // ---- 规则级固定成本（可省略字段，界面按需取用） ----
+
+    // 源成本字段描述符 id（仅界面按名取用）
+    public static final ResourceLocation SOURCE_COST_DESCRIPTOR = id("source_cost");
+
+    // 催化剂成本对象描述符 id（仅界面按名取用）
+    public static final ResourceLocation CATALYST_COST_DESCRIPTOR = id("catalyst_cost");
+
+    // 源固定成本字段：可省略（省略时后端推导）；合法域 1..INT_MAX，常用窗口 1..64
+    public static TypeEditorDescriptor sourceCostDescriptor() {
+        String r = "gui.itemdespawntowhat.edit.rule.";
+        return new TypeEditorDescriptor(SOURCE_COST_DESCRIPTOR, Component.translatable(r + "source_cost"), List.of(
+                EditorField.integerSlider(RuleFields.SOURCE_COST, r + "source_cost", 1, Integer.MAX_VALUE, 1, 64)
+                        .optional()
+        ), false);
+    }
+
+    // 催化剂固定成本对象：items 必填（支持标签），count/radius 可省略
+    public static TypeEditorDescriptor catalystCostDescriptor() {
+        String r = "gui.itemdespawntowhat.edit.rule.";
+        return new TypeEditorDescriptor(CATALYST_COST_DESCRIPTOR, Component.translatable(r + "catalyst_cost"), List.of(
+                EditorField.tagList(RuleFields.CATALYST_ITEMS, r + "catalyst_cost.items", "minecraft:item").asRequired(),
+                EditorField.optionalInteger(RuleFields.CATALYST_COUNT, r + "catalyst_cost.count", 1, 64),
+                EditorField.optionalInteger(RuleFields.CATALYST_RADIUS, r + "catalyst_cost.radius", 1, 8)
         ), false);
     }
 
@@ -283,6 +315,7 @@ public final class BuiltinEditorDescriptors {
         String r = "gui.itemdespawntowhat.edit.rule.";
         return new TypeEditorDescriptor(SOURCE_DESCRIPTOR, Component.translatable(r + "source"), List.of(
                 EditorField.tagList("items", r + "source.items", "minecraft:item")
+                        .asRequired()
                         .withHint(r + "source.items.hint"),
                 EditorField.tagList("exclude", r + "source.exclude", "minecraft:item")
                         .withHint(r + "source.exclude.hint")

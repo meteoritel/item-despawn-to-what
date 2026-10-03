@@ -39,6 +39,12 @@ public final class EditSession {
     public static final String OP_CREATE_RULE = "gui.itemdespawntowhat.edit.undo.create_rule";
     public static final String OP_EDIT_CONDITIONS = "gui.itemdespawntowhat.edit.undo.edit_conditions";
     public static final String OP_DELETE_RULE = "gui.itemdespawntowhat.edit.undo.delete_rule";
+    // P2：候选结果与结构互斥转换的操作标签
+    public static final String OP_ADD_CANDIDATE = "gui.itemdespawntowhat.edit.undo.add_candidate";
+    public static final String OP_REMOVE_CANDIDATE = "gui.itemdespawntowhat.edit.undo.remove_candidate";
+    public static final String OP_MOVE_CANDIDATE = "gui.itemdespawntowhat.edit.undo.move_candidate";
+    public static final String OP_EDIT_CANDIDATE = "gui.itemdespawntowhat.edit.undo.edit_candidate";
+    public static final String OP_CONVERT_STRUCTURE = "gui.itemdespawntowhat.edit.undo.convert_structure";
 
     // 编辑目标 id（规则 id 或新建规则的目标 id）
     private final String targetId;

@@ -1,15 +1,21 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumberPolicy;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiScalarSlider;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderWindow;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiValueInteraction;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
 import java.util.Objects;
 import java.util.function.DoubleConsumer;
 import java.util.function.Function;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
@@ -17,279 +23,261 @@ import org.lwjgl.glfw.GLFW;
 /***
  * 数值滑杆：左侧标签，右侧当前值，中间像素轨道与滑块。
  * <p>数值一律同时显示为文本，颜色不是唯一线索。
+ * <p>本类是宿主适配层：数值域、窗口、吸附、捕获、preview/commit/cancel 全部委托给 kit 的
+ * {@link UiScalarSlider}，公开方法签名与旧版保持一致（fluent setter 返回自身）。
+ * <p>{@link #setOnChanged(DoubleConsumer)} 保留旧的「每次变化都回调」语义，桥接到 kit 的
+ * preview 回调；需要在提交时才落盘的调用方请直接用 kit 的交互回调或 {@link #core()}。
  */
-public final class UiSlider implements UiWidget, UiFocusTarget {
+public final class UiSlider implements UiWidget, UiFocusTarget, UiInputTarget {
 
     // 轨道高度
     public static final int TRACK_HEIGHT = 4;
     // 滑块宽度
     public static final int THUMB_WIDTH = 3;
 
+    private final UiScalarSlider core;
     private double min;
     private double max;
     private double step;
-    private double value;
-    private Component label = Component.empty();
-    private UiRect bounds = new UiRect(0, 0, 0, 0);
-    private boolean enabled = true;
-    private boolean visible = true;
-    private boolean focused;
-    private boolean dragging;
-    private @Nullable DoubleConsumer onChanged;
-    private @Nullable Function<Double, Component> formatter;
 
     public UiSlider(Font font, double min, double max, double step) {
         Objects.requireNonNull(font, "font");
-        setRange(min, max, step);
+        this.min = sanitizeMin(min);
+        this.max = sanitizeMax(this.min, max);
+        this.step = sanitizeStep(step);
+        this.core = new UiScalarSlider(buildPolicy(), new UiSliderWindow(this.min, this.max));
+        this.core.setStyle(UiTheme.sliderStyle());
     }
 
-    // 设置取值域与步长（自动钳制当前值）
+    // kit 核心，供需要窗口/样式/提交回调等新能力的调用方直接使用
+    public UiScalarSlider core() {
+        return this.core;
+    }
+
+    // 设置取值域与步长（保留旧行为：把当前值钳制回新取值域，不按档吸附）
     public UiSlider setRange(double nextMin, double nextMax, double nextStep) {
-        this.min = nextMin;
-        this.max = nextMax > nextMin ? nextMax : nextMin + 1.0D;
-        this.step = nextStep;
-        setValue(this.value);
+        this.min = sanitizeMin(nextMin);
+        this.max = sanitizeMax(this.min, nextMax);
+        this.step = sanitizeStep(nextStep);
+        this.core.setPolicy(buildPolicy());
+        this.core.setWindow(new UiSliderWindow(this.min, this.max));
+        setValue(this.core.value());
         return this;
     }
 
     public double value() {
-        return value;
+        return this.core.value();
     }
 
     public double min() {
-        return min;
+        return this.min;
     }
 
     public double max() {
-        return max;
+        return this.max;
     }
 
     public double step() {
-        return step;
+        return this.step;
     }
 
-    // 直接设置取值（吸附到步长并钳制，不回调），用于从草稿回填
+    // 回填当前值：不吸附、不回调、不产生历史；越界与非法值按取值域钳制后写入
     public UiSlider setValue(double next) {
-        this.value = snap(next);
+        double finite = Double.isFinite(next) ? next : this.min;
+        this.core.setValue(Math.clamp(finite, this.min, this.max));
         return this;
     }
 
+    // 精确回填：越界或非有限时返回 false 并保留原值（不吸附、不回调）
+    public boolean trySetValue(double next) {
+        return this.core.setValue(next);
+    }
+
+    // 上一次精确回填是否越出取值域
+    public boolean isBackfillInvalid() {
+        return this.core.isBackfillInvalid();
+    }
+
     public UiSlider setLabel(Component next) {
-        this.label = next == null ? Component.empty() : next;
+        this.core.setLabel(next == null ? Component.empty() : next);
         return this;
     }
 
     public UiSlider setFormatter(@Nullable Function<Double, Component> next) {
-        this.formatter = next;
+        this.core.setFormatter(next);
         return this;
     }
 
+    // 旧的逐次回调语义：值每变化一次就回调一次（桥接到 kit 的 preview 回调）
     public UiSlider setOnChanged(@Nullable DoubleConsumer listener) {
-        this.onChanged = listener;
+        this.core.setInteractionListener(listener == null ? null : new UiValueInteraction.Listener() {
+            @Override
+            public void previewed(double startValue, double currentValue) {
+                listener.accept(currentValue);
+            }
+        });
         return this;
     }
 
     public UiSlider setEnabled(boolean next) {
-        this.enabled = next;
+        this.core.setEnabled(next);
         return this;
     }
 
     public boolean isEnabled() {
-        return enabled;
+        return this.core.isEnabled();
     }
 
     public UiSlider setVisible(boolean next) {
-        this.visible = next;
+        this.core.setVisible(next);
         return this;
+    }
+
+    public UiSlider setError(boolean next) {
+        this.core.setError(next);
+        return this;
+    }
+
+    // 是否正在拖动
+    public boolean isDragging() {
+        return this.core.isDragging();
+    }
+
+    // 统一结束入口：宿主隐藏/禁用/卸载/失焦作用域切换/关闭时调用，会回退未提交的预览
+    public void endInteraction(UiInputCapture.EndReason reason) {
+        this.core.endInteraction(reason);
+    }
+
+    // 控件从界面卸载
+    public void unmount() {
+        this.core.unmount();
+    }
+
+    // 焦点作用域切换（模态打开、页面切换）
+    public void onFocusScopeChanged() {
+        this.core.onFocusScopeChanged();
+    }
+
+    // 宿主关闭
+    public void onHostClosed() {
+        this.core.onHostClosed();
     }
 
     // 当前值的显示文本
     public Component formatValue() {
-        if (formatter != null) {
-            Component custom = formatter.apply(value);
-            if (custom != null) {
-                return custom;
-            }
-        }
-        if (Math.abs(value - Math.rint(value)) < 1.0E-6D) {
-            return Component.literal(Long.toString(Math.round(value)));
-        }
-        return Component.literal(String.format(java.util.Locale.ROOT, "%.2f", value));
-    }
-
-    // 吸附到步长并钳制到取值域
-    private double snap(double raw) {
-        double clamped = Math.max(min, Math.min(max, raw));
-        if (step > 0.0D) {
-            double steps = Math.round((clamped - min) / step);
-            clamped = Math.max(min, Math.min(max, min + steps * step));
-        }
-        return clamped;
-    }
-
-    private int trackLeft() {
-        return bounds.x() + THUMB_WIDTH;
-    }
-
-    private int trackRight() {
-        return Math.max(trackLeft() + 1, bounds.right() - THUMB_WIDTH);
-    }
-
-    private int trackWidth() {
-        return Math.max(1, trackRight() - trackLeft());
-    }
-
-    private double fraction() {
-        return max > min ? (value - min) / (max - min) : 0.0D;
-    }
-
-    private int thumbX() {
-        int x = trackLeft() + (int) Math.round(fraction() * trackWidth()) - THUMB_WIDTH / 2;
-        return Math.max(bounds.x(), Math.min(bounds.right() - THUMB_WIDTH, x));
-    }
-
-    // 由鼠标横坐标更新取值
-    private void valueFromMouse(double mouseX) {
-        double t = (mouseX - trackLeft()) / (double) trackWidth();
-        t = Math.clamp(t, 0.0D, 1.0D);
-        double next = snap(min + t * (max - min));
-        if (Math.abs(next - value) < 1.0E-9D) {
-            return;
-        }
-        value = next;
-        if (onChanged != null) {
-            onChanged.accept(value);
-        }
+        return this.core.formatValue();
     }
 
     @Override
     public boolean isVisible() {
-        return visible;
+        return this.core.isVisible();
     }
 
     @Override
     public UiRect bounds() {
-        return bounds;
+        return this.core.bounds();
     }
 
     @Override
     public void setBounds(int x, int y, int width, int height) {
-        this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
+        this.core.setBounds(x, y, width, height);
     }
 
     @Override
     public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
-        if (!visible) {
+        if (!this.core.isVisible()) {
             return;
         }
-        int textY = bounds.y() + Math.max(0, (bounds.height() - renderFont.lineHeight) / 2);
-        String labelText = TextScroll.trimToWidth(renderFont, label.getString(), Math.max(0, bounds.width() / 2));
-        if (!labelText.isEmpty()) {
-            graphics.drawString(renderFont, labelText, bounds.x(), textY,
-                    enabled ? UiPalette.TEXT_PRIMARY : UiPalette.TEXT_DISABLED, false);
-        }
-        int trackY = bounds.y() + Math.max(0, (bounds.height() - TRACK_HEIGHT) / 2);
-        graphics.fill(trackLeft(), trackY, trackRight(), trackY + TRACK_HEIGHT, UiPalette.SCROLL_TRACK);
-        int filled = trackLeft() + (int) Math.round(fraction() * trackWidth());
-        graphics.fill(trackLeft(), trackY, filled, trackY + TRACK_HEIGHT,
-                enabled ? UiPalette.ACCENT : UiPalette.CONTROL_DISABLED);
-        int thumbX = thumbX();
-        graphics.fill(thumbX, trackY - 2, thumbX + THUMB_WIDTH, trackY + TRACK_HEIGHT + 2,
-                enabled ? UiPalette.CONTROL_FILL : UiPalette.CONTROL_DISABLED);
-        String valueText = formatValue().getString();
-        int valueWidth = renderFont.width(valueText);
-        int valueX = Math.max(bounds.x(), bounds.right() - valueWidth);
-        graphics.drawString(renderFont, valueText, valueX, textY,
-                enabled ? UiPalette.TEXT_PRIMARY : UiPalette.TEXT_DISABLED, false);
-        if (focused) {
-            UiTheme.drawFocusOutline(graphics, bounds);
-        }
+        this.core.render(graphics, renderFont, pointer(mouseX, mouseY, -1));
     }
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (!visible || !enabled || button != 0 || !bounds.contains(mouseX, mouseY)) {
-            return false;
-        }
-        dragging = true;
-        valueFromMouse(mouseX);
-        return true;
+        return this.core.mousePressed(pointer(mouseX, mouseY, button));
     }
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        if (!dragging) {
-            return false;
-        }
-        valueFromMouse(mouseX);
-        return true;
+        return this.core.mouseDragged(pointer(mouseX, mouseY, button));
     }
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (!dragging) {
-            return false;
-        }
-        dragging = false;
-        return true;
+        return this.core.mouseReleased(pointer(mouseX, mouseY, button));
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!visible || !enabled) {
-            return false;
-        }
-        double stepSize = step > 0.0D ? step : Math.max(1.0E-4D, (max - min) / 100.0D);
-        return switch (keyCode) {
-            case GLFW.GLFW_KEY_LEFT, GLFW.GLFW_KEY_DOWN -> nudge(-stepSize);
-            case GLFW.GLFW_KEY_RIGHT, GLFW.GLFW_KEY_UP -> nudge(stepSize);
-            case GLFW.GLFW_KEY_PAGE_DOWN -> nudge(-stepSize * 10.0D);
-            case GLFW.GLFW_KEY_PAGE_UP -> nudge(stepSize * 10.0D);
-            case GLFW.GLFW_KEY_HOME -> setFromUser(min);
-            case GLFW.GLFW_KEY_END -> setFromUser(max);
-            default -> false;
-        };
-    }
-
-    private boolean nudge(double delta) {
-        return setFromUser(value + delta);
-    }
-
-    // 用户操作的统一落点：吸附、比较、写值与回调
-    private boolean setFromUser(double raw) {
-        double next = snap(raw);
-        if (Math.abs(next - value) < 1.0E-9D) {
-            return true;
-        }
-        value = next;
-        if (onChanged != null) {
-            onChanged.accept(value);
-        }
-        return true;
+        return this.core.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
-    public boolean canFocus() {
-        return visible && enabled;
+    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
+        return this.core.keyReleased(keyCode, scanCode, modifiers);
     }
 
+    // UiWidget 与 UiInputTarget 都带默认实现，这里显式覆盖以消除「不相关默认值」冲突
     @Override
-    public void setFocused(boolean next) {
-        this.focused = next;
-    }
-
-    @Override
-    public boolean isFocused() {
-        return focused;
-    }
-
-    @Override
-    public boolean activate() {
+    public boolean charTyped(char codePoint, int modifiers) {
         return false;
     }
 
     @Override
-    public @Nullable Component accessibleName() {
-        return label;
+    public boolean canFocus() {
+        return this.core.canFocus();
     }
+
+    @Override
+    public void setFocused(boolean next) {
+        this.core.setFocused(next);
+    }
+
+    @Override
+    public boolean isFocused() {
+        return this.core.isFocused();
+    }
+
+    @Override
+    public boolean activate() {
+        return this.core.activate();
+    }
+
+    @Override
+    public @Nullable Component accessibleName() {
+        return this.core.accessibleName();
+    }
+
+    // 旧签名没有修饰键参数，这里按当前键盘状态补齐 Shift/Ctrl/Alt 快照
+    private static UiInputContext pointer(double mouseX, double mouseY, int button) {
+        int modifiers = 0;
+        if (Screen.hasShiftDown()) {
+            modifiers |= GLFW.GLFW_MOD_SHIFT;
+        }
+        if (Screen.hasControlDown()) {
+            modifiers |= GLFW.GLFW_MOD_CONTROL;
+        }
+        if (Screen.hasAltDown()) {
+            modifiers |= GLFW.GLFW_MOD_ALT;
+        }
+        return UiInputContext.pointer(mouseX, mouseY, button, modifiers);
+    }
+
+    // 用当前取值域与步长构造 kit 数值策略；step<=0 时沿用旧版键盘回退档
+    private UiNumberPolicy buildPolicy() {
+        double coarse = this.step > 0.0D ? this.step : Math.max(1.0E-4D, (this.max - this.min) / 100.0D);
+        return UiNumberPolicy.of(this.min, this.max, coarse);
+    }
+
+    private static double sanitizeMin(double nextMin) {
+        return Double.isFinite(nextMin) ? nextMin : 0.0D;
+    }
+
+    private static double sanitizeMax(double safeMin, double nextMax) {
+        return Double.isFinite(nextMax) && nextMax > safeMin ? nextMax : safeMin + 1.0D;
+    }
+
+    private static double sanitizeStep(double nextStep) {
+        return Double.isFinite(nextStep) && nextStep > 0.0D ? nextStep : 0.0D;
+    }
+
 }

@@ -4,6 +4,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.EffectEditorRegistry;
+import com.meteorite.itemdespawntowhat.client.edit.FieldNumbers;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionEditorRegistry;
 import com.meteorite.itemdespawntowhat.client.edit.JsonSummary;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
@@ -181,11 +182,10 @@ public final class NaturalSummary {
         return ResourceLocation.tryParse(object.get(RuleFields.TYPE).getAsString());
     }
 
-    // 概率显示为百分比（JSON 存 0..1）
+    // 概率显示为百分比（JSON 存 0..1）：与字段显示共用同一纯函数，不做 %.1f 舍入
     private static String percentText(JsonElement chance) {
         try {
-            double value = chance.getAsDouble();
-            return String.format(java.util.Locale.ROOT, "%.1f%%", value * 100.0D);
+            return FieldNumbers.percentText(chance.getAsDouble());
         } catch (RuntimeException exception) {
             return chance.getAsString();
         }

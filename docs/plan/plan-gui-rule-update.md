@@ -1,6 +1,7 @@
 # 后端规则更新后的 GUI 详细实施计划
 
 > 状态：已确认、已冻结、待实施；用户于 2026-10-03 确认完整方案，本次交付文档。本文件不代表代码已实现。
+> 实施状态（2026-10-03，P5 文档同步）：文档所述 B1/B2/B3、P1 kit、P2 client/edit 数据层、P3 四页、P3-B 表单控件、P4 目录/区间/时间条/图解/会话/朗读**均已代码落盘**，并通过 IDEA 静态检查与串行构建（`tools/dsh-build.ps1 -Tasks "build"` exit=0）；**双平台游戏内人工验收待用户执行**，清单见 [manual-acceptance.md](../guide/manual-acceptance.md) §10–§12（含已知限制）。本文件冻结正文与决策内容不变。
 > 日期：2026-10-03；查证基线：`12a4a9a929ca564211522ee1f602ca286f300364`。
 > 本轮只交付 Markdown；不修改 Java、语言 JSON 或来源项目，不迁移数据、提交或发布。
 > 配套：[字段与控件规格](plan-gui-rule-update-fields.md) · [kit API 规格](plan-gui-rule-update-kit.md) · [ADR-0025](../adr/0025-reusable-client-ui-kit-boundary.md)。

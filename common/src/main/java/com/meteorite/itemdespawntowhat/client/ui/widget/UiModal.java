@@ -395,11 +395,12 @@ public final class UiModal implements UiWidget {
         if (!visible) {
             return false;
         }
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            doCancel();
+        // 逐级取消：先给内容控件（聚焦控件/活跃捕获）机会，未消费才关闭模态
+        if (contentWidget != null && contentWidget.keyPressed(keyCode, scanCode, modifiers)) {
             return true;
         }
-        if (contentWidget != null && contentWidget.keyPressed(keyCode, scanCode, modifiers)) {
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            doCancel();
             return true;
         }
         return false;

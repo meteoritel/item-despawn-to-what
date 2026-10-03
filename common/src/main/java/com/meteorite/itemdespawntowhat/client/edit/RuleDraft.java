@@ -11,8 +11,10 @@ import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
 import com.mojang.serialization.JsonOps;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.jetbrains.annotations.Nullable;
 
 /***
@@ -272,13 +274,47 @@ public final class RuleDraft {
         this.working = source == null ? new JsonObject() : source.deepCopy();
     }
 
-    // ---- 效果列表 ----
+    // ---- 效果列表（顶层 effects 与候选内 effects 共用同一套操作） ----
 
-    // 效果列表（深拷贝）
+    // 效果列表（深拷贝）：默认取顶层 effects
     public List<JsonObject> effects() {
+        return effectsAt(RuleFields.EFFECTS);
+    }
+
+    // 效果数量：默认取顶层 effects
+    public int effectCount() {
+        return effectCountAt(RuleFields.EFFECTS);
+    }
+
+    // 整体替换效果列表：默认写顶层 effects
+    public void setEffects(List<JsonObject> effects) {
+        setEffectsAt(RuleFields.EFFECTS, effects);
+    }
+
+    // 追加效果：默认追加到顶层 effects
+    public void addEffect(JsonObject effect) {
+        addEffectAt(RuleFields.EFFECTS, effect);
+    }
+
+    // 删除效果，返回被删除的对象（越界返回 null）
+    public @Nullable JsonObject removeEffect(int index) {
+        return removeEffectAt(RuleFields.EFFECTS, index);
+    }
+
+    // 移动效果位置（数组重排）
+    public boolean moveEffect(int from, int to) {
+        return moveInList(RuleFields.EFFECTS, from, to);
+    }
+
+    // 候选结果内效果列表的路径
+    public static String candidateEffectsPath(int candidateIndex) {
+        return RuleFields.OUTCOMES + "[" + candidateIndex + "]." + RuleFields.CANDIDATE_EFFECTS;
+    }
+
+    // 任意位置效果列表（深拷贝）；listPath 为 "effects" 或 "outcomes[i].effects"
+    public List<JsonObject> effectsAt(String listPath) {
         List<JsonObject> out = new ArrayList<>();
-        JsonElement raw = working.get(RuleFields.EFFECTS);
-        if (raw instanceof JsonArray array) {
+        if (getAt(listPath) instanceof JsonArray array) {
             for (JsonElement element : array) {
                 if (element.isJsonObject()) {
                     out.add(element.getAsJsonObject().deepCopy());
@@ -288,43 +324,50 @@ public final class RuleDraft {
         return out;
     }
 
-    // 效果数量
-    public int effectCount() {
-        JsonElement raw = working.get(RuleFields.EFFECTS);
-        return raw instanceof JsonArray array ? array.size() : 0;
+    // 任意位置效果数量（按原始数组长度计数，畸变元素同样占位，保证下标与 JSON 一致）
+    public int effectCountAt(String listPath) {
+        return getAt(listPath) instanceof JsonArray array ? array.size() : 0;
     }
 
-    // 整体替换效果列表
-    public void setEffects(List<JsonObject> effects) {
+    // 整体替换任意位置的效果列表
+    public boolean setEffectsAt(String listPath, List<JsonObject> effects) {
         JsonArray array = new JsonArray();
         for (JsonObject effect : effects) {
             array.add(effect.deepCopy());
         }
-        working.add(RuleFields.EFFECTS, array);
+        return setAt(listPath, array);
     }
 
-    // 追加效果
-    public void addEffect(JsonObject effect) {
-        effectArrayOrCreate().add(effect.deepCopy());
+    // 追加效果到任意位置的效果列表（列表缺失时按 listPath 创建）
+    public boolean addEffectAt(String listPath, JsonObject effect) {
+        JsonElement raw = getAt(listPath);
+        JsonArray array = raw instanceof JsonArray existing ? existing : new JsonArray();
+        if (!(raw instanceof JsonArray)) {
+            setAt(listPath, array);
+        }
+        array.add(effect.deepCopy());
+        return true;
     }
 
-    // 删除效果，返回被删除的对象（越界返回 null）
-    public @Nullable JsonObject removeEffect(int index) {
-        JsonElement raw = working.get(RuleFields.EFFECTS);
-        if (!(raw instanceof JsonArray array) || index < 0 || index >= array.size()) {
+    // 删除任意位置效果列表中的一项，返回被删除的对象（越界返回 null）
+    public @Nullable JsonObject removeEffectAt(String listPath, int index) {
+        if (!(getAt(listPath) instanceof JsonArray array) || index < 0 || index >= array.size()) {
             return null;
         }
         JsonElement removed = array.remove(index);
         return removed != null && removed.isJsonObject() ? removed.getAsJsonObject() : null;
     }
 
-    // 移动效果位置（数组重排）
-    public boolean moveEffect(int from, int to) {
-        JsonElement raw = working.get(RuleFields.EFFECTS);
+    // 任意列表路径的重排（effects / outcomes / outcomes[i].effects / conditions.terms 共用）
+    public boolean moveInList(String listPath, int from, int to) {
+        if (from == to) {
+            return false;
+        }
+        JsonElement raw = getAt(listPath);
         if (!(raw instanceof JsonArray array)) {
             return false;
         }
-        if (from < 0 || from >= array.size() || to < 0 || to >= array.size() || from == to) {
+        if (from < 0 || from >= array.size() || to < 0 || to >= array.size()) {
             return false;
         }
         JsonElement element = array.remove(from);
@@ -340,155 +383,151 @@ public final class RuleDraft {
         return true;
     }
 
-    // 取 effects 数组，没有则创建
-    private JsonArray effectArrayOrCreate() {
-        JsonElement raw = working.get(RuleFields.EFFECTS);
+    // ---- 候选结果（outcomes） ----
+
+    // 是否声明了顶层 effects
+    public boolean hasFlatEffects() {
+        return effectCount() > 0;
+    }
+
+    // 是否声明了候选结果
+    public boolean hasOutcomes() {
+        return outcomeCount() > 0;
+    }
+
+    // 结构互斥：effects 与 outcomes 是否同时声明（该形状服务端按错误拒绝）
+    public boolean hasConflictingStructures() {
+        return hasFlatEffects() && hasOutcomes();
+    }
+
+    // 候选列表（深拷贝；非对象元素不进入结果，但仍占住数组下标）
+    public List<JsonObject> outcomes() {
+        List<JsonObject> out = new ArrayList<>();
+        JsonElement raw = working.get(RuleFields.OUTCOMES);
+        if (raw instanceof JsonArray array) {
+            for (JsonElement element : array) {
+                if (element.isJsonObject()) {
+                    out.add(element.getAsJsonObject().deepCopy());
+                }
+            }
+        }
+        return out;
+    }
+
+    // 候选数量（按原始数组长度计数）
+    public int outcomeCount() {
+        JsonElement raw = working.get(RuleFields.OUTCOMES);
+        return raw instanceof JsonArray array ? array.size() : 0;
+    }
+
+    // 取第 index 个候选（越界或不是对象返回 null）
+    public @Nullable JsonObject outcomeAt(int index) {
+        JsonElement raw = working.get(RuleFields.OUTCOMES);
+        if (!(raw instanceof JsonArray array) || index < 0 || index >= array.size()) {
+            return null;
+        }
+        JsonElement element = array.get(index);
+        return element != null && element.isJsonObject() ? element.getAsJsonObject().deepCopy() : null;
+    }
+
+    // 整体替换候选列表
+    public void setOutcomes(List<JsonObject> outcomes) {
+        JsonArray array = new JsonArray();
+        for (JsonObject candidate : outcomes) {
+            array.add(candidate.deepCopy());
+        }
+        working.add(RuleFields.OUTCOMES, array);
+    }
+
+    // 追加候选
+    public void addOutcome(JsonObject candidate) {
+        outcomeArrayOrCreate().add(candidate.deepCopy());
+    }
+
+    // 删除候选，返回被删除的对象（越界返回 null）
+    public @Nullable JsonObject removeOutcome(int index) {
+        JsonElement raw = working.get(RuleFields.OUTCOMES);
+        if (!(raw instanceof JsonArray array) || index < 0 || index >= array.size()) {
+            return null;
+        }
+        JsonElement removed = array.remove(index);
+        return removed != null && removed.isJsonObject() ? removed.getAsJsonObject() : null;
+    }
+
+    // 移动候选位置（数组重排）
+    public boolean moveOutcome(int from, int to) {
+        return moveInList(RuleFields.OUTCOMES, from, to);
+    }
+
+    // 已声明的候选 id 集合（非字符串 id 不入集合）
+    public Set<String> candidateIds() {
+        Set<String> ids = new LinkedHashSet<>();
+        for (JsonObject candidate : outcomes()) {
+            JsonElement id = candidate.get(RuleFields.CANDIDATE_ID);
+            if (id != null && id.isJsonPrimitive() && id.getAsJsonPrimitive().isString()) {
+                ids.add(id.getAsString());
+            }
+        }
+        return ids;
+    }
+
+    // 候选 id 是否已被占用（同一规则内候选 id 必须唯一）
+    public boolean candidateIdExists(String candidateId) {
+        return candidateId != null && !candidateId.isBlank() && candidateIds().contains(candidateId);
+    }
+
+    // 取 outcomes 数组，没有则创建
+    private JsonArray outcomeArrayOrCreate() {
+        JsonElement raw = working.get(RuleFields.OUTCOMES);
         if (raw instanceof JsonArray array) {
             return array;
         }
         JsonArray array = new JsonArray();
-        working.add(RuleFields.EFFECTS, array);
+        working.add(RuleFields.OUTCOMES, array);
         return array;
     }
 
-    // ---- 路径解析与读写 ----
+    // ---- 结构互斥的原子转换 ----
 
-    // 路径段：字段名与可选数组下标（-1 表示没有下标）
-    private record Segment(String name, int index) {}
+    // 顶层 effects → outcomes：一次操作内删除 effects、写入只含一个候选的 outcomes，
+    // 原效果对象逐字保留（由 EditSession.apply 包成一条撤销记录）；
+    // 已经声明 outcomes 时返回 false，避免覆盖既有候选。
+    public boolean convertToOutcomes(String candidateId) {
+        if (hasOutcomes() || candidateId == null || candidateId.isBlank()) {
+            return false;
+        }
+        JsonElement raw = working.get(RuleFields.EFFECTS);
+        JsonArray effects = raw instanceof JsonArray array ? array : new JsonArray();
+        JsonObject candidate = new JsonObject();
+        candidate.addProperty(RuleFields.CANDIDATE_ID, candidateId);
+        candidate.add(RuleFields.CANDIDATE_EFFECTS, effects);
+        JsonArray outcomes = new JsonArray();
+        outcomes.add(candidate);
+        working.remove(RuleFields.EFFECTS);
+        working.add(RuleFields.OUTCOMES, outcomes);
+        return true;
+    }
+
+    // ---- 路径解析与读写（实现见 DraftPaths，条件树与效果路径共用同一套语法） ----
 
     // 解析路径：字段名 + 可选一个数组下标
-    private static List<Segment> parsePath(String path) {
-        List<Segment> segments = new ArrayList<>();
-        if (path == null || path.isEmpty()) {
-            return segments;
-        }
-        for (String part : path.split("\\.")) {
-            if (part.isEmpty()) {
-                continue;
-            }
-            int open = part.indexOf('[');
-            if (open < 0) {
-                segments.add(new Segment(part, -1));
-                continue;
-            }
-            int close = part.indexOf(']', open);
-            String name = part.substring(0, open);
-            String digits = close < 0 ? part.substring(open + 1) : part.substring(open + 1, close);
-            int index;
-            try {
-                index = Integer.parseInt(digits.trim());
-            } catch (NumberFormatException ignored) {
-                index = -1;
-            }
-            segments.add(new Segment(name, index));
-        }
-        return segments;
+    private static List<DraftPaths.Segment> parsePath(@Nullable String path) {
+        return DraftPaths.parse(path);
     }
 
     // 按路径读取
-    private static @Nullable JsonElement read(JsonElement root, List<Segment> segments) {
-        JsonElement current = root;
-        for (Segment segment : segments) {
-            current = readStep(current, segment);
-            if (current == null) {
-                return null;
-            }
-        }
-        return current;
-    }
-
-    // 单步下降：先取字段名，再取数组下标
-    private static @Nullable JsonElement readStep(@Nullable JsonElement current, Segment segment) {
-        if (current == null) {
-            return null;
-        }
-        if (!segment.name().isEmpty()) {
-            if (!current.isJsonObject()) {
-                return null;
-            }
-            current = current.getAsJsonObject().get(segment.name());
-            if (current == null) {
-                return null;
-            }
-        }
-        if (segment.index() >= 0) {
-            if (!current.isJsonArray()) {
-                return null;
-            }
-            JsonArray array = current.getAsJsonArray();
-            if (segment.index() >= array.size()) {
-                return null;
-            }
-            current = array.get(segment.index());
-        }
-        return current;
+    private static @Nullable JsonElement read(@Nullable JsonElement root, List<DraftPaths.Segment> segments) {
+        return DraftPaths.read(root, segments);
     }
 
     // 按路径写入，必要时创建中间容器
-    private static boolean write(JsonObject root, List<Segment> segments, JsonElement value) {
-        if (segments.isEmpty()) {
-            return false;
-        }
-        JsonObject object = root;
-        for (int i = 0; i < segments.size(); i++) {
-            Segment segment = segments.get(i);
-            boolean last = i == segments.size() - 1;
-            if (segment.index() < 0) {
-                if (last) {
-                    object.add(segment.name(), value);
-                    return true;
-                }
-                JsonElement member = object.get(segment.name());
-                JsonObject next = member != null && member.isJsonObject() ? member.getAsJsonObject() : new JsonObject();
-                object.add(segment.name(), next);
-                object = next;
-                continue;
-            }
-            JsonElement member = object.get(segment.name());
-            JsonArray array = member instanceof JsonArray existing ? existing : new JsonArray();
-            object.add(segment.name(), array);
-            while (array.size() <= segment.index()) {
-                array.add(new JsonObject());
-            }
-            if (last) {
-                array.set(segment.index(), value);
-                return true;
-            }
-            JsonElement slot = array.get(segment.index());
-            if (!slot.isJsonObject()) {
-                slot = new JsonObject();
-                array.set(segment.index(), slot);
-            }
-            object = slot.getAsJsonObject();
-        }
-        return false;
+    private static boolean write(JsonObject root, List<DraftPaths.Segment> segments, JsonElement value) {
+        return DraftPaths.write(root, segments, value);
     }
 
     // 按路径删除
-    private static boolean remove(JsonObject root, List<Segment> segments) {
-        if (segments.isEmpty()) {
-            return false;
-        }
-        JsonElement parent = root;
-        for (int i = 0; i < segments.size() - 1; i++) {
-            parent = readStep(parent, segments.get(i));
-            if (parent == null) {
-                return false;
-            }
-        }
-        if (!parent.isJsonObject()) {
-            return false;
-        }
-        Segment last = segments.getLast();
-        if (last.index() < 0) {
-            return parent.getAsJsonObject().remove(last.name()) != null;
-        }
-        JsonElement member = parent.getAsJsonObject().get(last.name());
-        if (!(member instanceof JsonArray array) || last.index() >= array.size()) {
-            return false;
-        }
-        array.remove(last.index());
-        return true;
+    private static boolean remove(JsonObject root, List<DraftPaths.Segment> segments) {
+        return DraftPaths.remove(root, segments);
     }
 
     // 便于测试与外部构造基本类型：不做模型校验，仅保证 JSON 合法

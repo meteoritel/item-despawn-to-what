@@ -1,7 +1,7 @@
 # ItemDespawnToWhat 配置领域
 
-> 当前状态（2026-10-03）：后端条件树、独占编辑协议 v2、客户端 UI kit 与编辑数据结构、选择目录数据源、规则编辑器界面与表单引擎、草稿持久化与撤销均已落地（P1–P8 代码落盘，构建与静态复核通过）；第二轮后端改造（消失方式触发、固定成本、候选结果、共享调度器、掉落物状态、结算返还）已实现并归档，双平台游戏内手动验收待执行，见 [manual-acceptance.md](docs/guide/manual-acceptance.md)。
-> 方案入口：[plan-gui-rule-update.md](docs/plan/plan-gui-rule-update.md)及其字段/kit 规格已确认冻结、待实施，页面形状、数值域、自动命名与 kit 维护方向以此为准；[旧实施契约](docs/plan/plan-frontend-rewrite-contract.md)与[旧字段规格](docs/plan/plan-frontend-rewrite-forms.md)保留原实现记录及未被替代约束。前端决策见 [docs/adr/](docs/adr/) 的 0018–0022 与 0025，第二轮后端决策见 0023–0024 与归档底稿 [docs/archive/backend-round-2/PLAN.md](docs/archive/backend-round-2/PLAN.md)（§2 行为契约）；新计划 B1/B2 明确记录待修正的运行时差异。
+> 当前状态（2026-10-03）：**本轮 GUI 与后端前置改造已代码落盘**——后端 B1（逐组候选选择与轮询）、B2（混合一次性效果与一次性尝试）、B3（RuleValidation 过时告警与描述符域/可选性修正）、P1（可复用客户端 UI kit）、P2（`client/edit` 数据路径/字段域/工厂/自动命名/错误定位）、P3（四页编辑流程与候选、成本区）、P3-B（表单控件数值精度、等级往返与焦点路由）、P4（目录图标面板、区间/时间条、结构图解、会话恢复、键盘与朗读）均已实现，并通过 IDEA 静态检查与串行构建（`tools/dsh-build.ps1 -Tasks "build"` exit=0）；旧链路 P1–P8 能力（条件树、独占编辑协议 v2、草稿持久化与撤销、选择目录）继续有效。**双平台游戏内人工验收尚未执行**，新 GUI 与后端前置清单见 [manual-acceptance.md](docs/guide/manual-acceptance.md) §10–§12，已知限制见其 §12。
+> 方案入口：[plan-gui-rule-update.md](docs/plan/plan-gui-rule-update.md)及其字段/kit 规格已确认冻结，冻结正文保持不变、实施状态见各文件头部状态行；页面形状、数值域、自动命名与 kit 维护方向以此为准；[旧实施契约](docs/plan/plan-frontend-rewrite-contract.md)与[旧字段规格](docs/plan/plan-frontend-rewrite-forms.md)保留原实现记录及未被替代约束。前端决策见 [docs/adr/](docs/adr/) 的 0018–0022 与 0025，第二轮后端决策见 0023–0024 与归档底稿 [docs/archive/backend-round-2/PLAN.md](docs/archive/backend-round-2/PLAN.md)（§2 行为契约）；新计划 B1/B2 明确记录待修正的运行时差异。
 
 掉落物在自然消失前，按数据包 / config 覆盖层中的规则转化为其他内容（物品、实体、方块、经验、世界效果等）。本词汇表覆盖新链路（`core/**`）的配置与运行时词汇；已退役的历史术语标注为「旧链路」。
 

@@ -55,6 +55,8 @@ public final class RuleEditClientWorkspace {
 
     // 最近一次收到的目录页，按类型缓存
     private final Map<RuleCatalogType, RuleCatalog> catalogs = new EnumMap<>(RuleCatalogType.class);
+    // 每种目录最近一次请求的 requestId：用于丢弃过时响应
+    private final Map<RuleCatalogType, String> catalogRequestIds = new EnumMap<>(RuleCatalogType.class);
 
     // 上行发送器；未注入时所有上行报文丢弃并记日志
     private @Nullable PacketSender sender;
@@ -170,8 +172,13 @@ public final class RuleEditClientWorkspace {
         if (sessionId.isEmpty() || type == null || !connected()) {
             return false;
         }
-        return send(new RequestRuleCatalogPayload(sessionId, UUID.randomUUID().toString(),
-                type.id(), filter == null ? "" : filter, page, pageSize));
+        String requestId = UUID.randomUUID().toString();
+        if (!send(new RequestRuleCatalogPayload(sessionId, requestId, type.id(), filter == null ? "" : filter, page,
+                pageSize))) {
+            return false;
+        }
+        catalogRequestIds.put(type, requestId);
+        return true;
     }
 
     // 提交变更集：超过直发上限时自动分片；返回是否已发出
@@ -275,6 +282,7 @@ public final class RuleEditClientWorkspace {
         openFailure = null;
         snapshot = null;
         catalogs.clear();
+        catalogRequestIds.clear();
         lastResult = null;
         lastHeartbeatTick = currentTick();
         state = RuleEditClientState.OPENING;
@@ -358,6 +366,16 @@ public final class RuleEditClientWorkspace {
             LOGGER.warn("规则目录解析失败: type={} bytes={}", payload.catalogType(), payload.json().length());
             return;
         }
+        // 过时响应直接丢弃：只接受与本类型最近一次请求 requestId 相符的响应；
+        // requestId 缺失（旧路径/兼容）时退回仅按 sessionId 接受
+        String latestRequestId = catalogRequestIds.get(type);
+        String responseRequestId = payload.requestId();
+        if (latestRequestId != null && responseRequestId != null && !responseRequestId.isEmpty()
+                && !latestRequestId.equals(responseRequestId)) {
+            LOGGER.debug("忽略过时目录响应: type={} requestId={} latest={}", payload.catalogType(), responseRequestId,
+                    latestRequestId);
+            return;
+        }
         catalogs.put(type, parsed);
     }
 
@@ -379,6 +397,7 @@ public final class RuleEditClientWorkspace {
             contextRevision = 0;
             snapshot = null;
             catalogs.clear();
+            catalogRequestIds.clear();
             chunkBuffer.clear();
             lastHeartbeatTick = 0L;
             if (hadSession) {

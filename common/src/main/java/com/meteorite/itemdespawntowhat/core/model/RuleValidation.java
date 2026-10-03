@@ -52,10 +52,6 @@ public final class RuleValidation {
         if (hasFlatEffects && hasOutcomes) {
             issues.error("effects 与 outcomes 不能同时声明（二选一）", origin, RuleFields.OUTCOMES);
         }
-        if (!hasFlatEffects && hasOutcomes) {
-            issues.warn("仅声明 outcomes 的规则在当前版本不会执行（候选执行落地前请保留顶层 effects）",
-                    origin, RuleFields.OUTCOMES);
-        }
         if (rule.schemaVersion() != RuleCodecs.DEFAULT_SCHEMA_VERSION) {
             issues.error("不支持的 schema_version: " + rule.schemaVersion()
                     + "（当前支持 " + RuleCodecs.DEFAULT_SCHEMA_VERSION + "）", origin, RuleFields.SCHEMA_VERSION);

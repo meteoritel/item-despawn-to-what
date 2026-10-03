@@ -8,10 +8,12 @@ import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.EditorPreset;
+import com.meteorite.itemdespawntowhat.client.edit.FieldNumbers;
 import com.meteorite.itemdespawntowhat.client.edit.JsonSummary;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
@@ -48,8 +50,36 @@ abstract class FormControl {
     // 控件所描述的字段
     final EditorField field;
 
+    // 装载时的原始 JSON 元素（键缺失记为 null）；未编辑时原样回写，applyToDraft 因此完全跳过该字段
+    private @Nullable JsonElement loadedElement;
+    // 用户是否真正交互过（点击/切换/提交/增删改）；程序化回填不置位
+    private boolean edited;
+
     FormControl(EditorField field) {
         this.field = field;
+    }
+
+    // 由 load() 调用：记录原始元素并清除编辑标记
+    final void rememberLoaded(@Nullable JsonElement value) {
+        // 键缺失（null 引用）与显式 JsonNull 必须区分：前者保持 null，后者要原样保留，
+        // 否则未编辑时 store() 返回 null，applyToDraft 会把显式 null 字段 removeAt 掉
+        this.loadedElement = value == null ? null : value.deepCopy();
+        this.edited = false;
+    }
+
+    // 由用户交互路径调用：标记该字段已被明确编辑
+    final void markEdited() {
+        this.edited = true;
+    }
+
+    // 用户是否明确编辑过该字段
+    final boolean isEdited() {
+        return edited;
+    }
+
+    // 装载原始元素的副本；键缺失返回 null
+    final @Nullable JsonElement originalElement() {
+        return loadedElement == null ? null : loadedElement.deepCopy();
     }
 
     // 字段标签
@@ -130,6 +160,11 @@ abstract class FormControl {
         return false;
     }
 
+    // 按键抬起：方向键重复在抬起时合并为一次提交
+    boolean keyReleased(int keyCode, int scanCode, int modifiers) {
+        return false;
+    }
+
     boolean charTyped(char codePoint, int modifiers) {
         return false;
     }
@@ -140,9 +175,20 @@ abstract class FormControl {
     void setEnabled(boolean enabled) {
     }
 
+    // 统一结束入口：宿主隐藏/禁用/卸载/失焦作用域切换/关闭时回退未提交的交互
+    void endInteractions(UiInputCapture.EndReason reason) {
+    }
+
     // ---- 工厂：按字段类型挑选控件 ----
 
     static FormControl create(Font font, FormView owner, EditorField field, Runnable onChanged) {
+        // 数值字段优先走「滑杆 + 行内精确输入」，域元数据不足时仍回退文本控件
+        if (isNumericType(field.type())) {
+            NumberControl numeric = NumberControl.create(font, field, onChanged);
+            if (numeric != null) {
+                return numeric;
+            }
+        }
         switch (field.type()) {
             case TEXT:
             case LONG_TEXT:
@@ -165,8 +211,9 @@ abstract class FormControl {
                         ISSUE_PREFIX + "invalid_number");
             }
             case TICKS: {
+                // 刻数与字段规格 §4 一致：0..INT_MAX，旧 72000 只是 UI 人为上限，不得充当后端合法域
                 int min = field.intMin(0);
-                int max = field.intMax(72000);
+                int max = field.intMax(Integer.MAX_VALUE);
                 return new TextControl(font, field, FormControl::integerChars,
                         text -> boundedInt(text, min, max), FormControl::intOf, onChanged,
                         ISSUE_PREFIX + "invalid_number");
@@ -301,32 +348,34 @@ abstract class FormControl {
         return new JsonPrimitive(value);
     }
 
-    // 界面百分比（0..100）写回 JSON 小数（0..1）
+    // 是否数值型字段（滑杆 + 行内精确输入）
+    static boolean isNumericType(EditorFieldType type) {
+        return type == EditorFieldType.INTEGER || type == EditorFieldType.TICKS
+                || type == EditorFieldType.DECIMAL || type == EditorFieldType.PERCENT
+                || type == EditorFieldType.AMPLIFIER;
+    }
+
+    // 界面百分比文本写回 JSON 小数（0..1）：十进制解析，保留原始精度
     static @Nullable JsonElement percentValue(String text) {
-        Double value = parseDouble(text);
-        if (value == null || value < 0.0D || value > 100.0D) {
+        Double value = FieldNumbers.parsePercent(text);
+        if (value == null || value < 0.0D || value > 1.0D) {
             return null;
         }
-        return new JsonPrimitive(value / 100.0D);
+        return new JsonPrimitive(value);
     }
 
     static String percentText(JsonElement element) {
-        double value = element.getAsDouble() * 100.0D;
-        return String.format(Locale.ROOT, "%.1f", value);
+        return FieldNumbers.percentText(element.getAsDouble());
     }
 
-    // 界面等级（1 起）写回后端 amplifier（0 起）
+    // 界面等级（1 起，1..256）写回后端 amplifier（0 起，0..255）
     static @Nullable JsonElement amplifierValue(String text) {
-        try {
-            int level = Integer.parseInt(text.trim());
-            return level < 1 || level > 255 ? null : new JsonPrimitive(level - 1);
-        } catch (NumberFormatException exception) {
-            return null;
-        }
+        Integer amplifier = FieldNumbers.amplifierOf(text);
+        return amplifier == null ? null : new JsonPrimitive(amplifier);
     }
 
     static String amplifierText(JsonElement element) {
-        return Integer.toString(element.getAsInt() + 1);
+        return Integer.toString(FieldNumbers.levelOf(element.getAsInt()));
     }
 
     static String decimalOf(JsonElement element) {
@@ -375,6 +424,8 @@ abstract class FormControl {
         private final Function<JsonElement, String> format;
         private final String invalidKey;
         private @Nullable JsonElement loaded;
+        // 装载时写入输入框的文本；用户未改动且未提交时视为「未编辑」
+        private String loadedText = "";
 
         TextControl(Font font, EditorField field, Predicate<String> filter,
                 Function<String, JsonElement> parse, Function<JsonElement, String> format,
@@ -387,10 +438,14 @@ abstract class FormControl {
             Component hint = hint();
             this.input = new UiTextInput(font, hint == null ? Component.empty() : hint);
             this.input.setFilter(filter);
-            this.input.setOnCommit(text -> onChanged.run());
+            this.input.setOnCommit(text -> {
+                markEdited();
+                onChanged.run();
+            });
             for (EditorPreset preset : field.presets()) {
                 UiButton button = new UiButton(font, Component.translatable(preset.labelKey()), UiButtonVariant.SECONDARY,
                         () -> {
+                            markEdited();
                             input.setValue(preset.value());
                             onChanged.run();
                         });
@@ -482,15 +537,23 @@ abstract class FormControl {
 
         @Override
         void load(@Nullable JsonElement value) {
+            rememberLoaded(value);
             this.loaded = value == null || value.isJsonNull() ? null : value.deepCopy();
-            input.setValue(loaded == null ? "" : format.apply(loaded));
+            this.loadedText = loaded == null ? "" : format.apply(loaded);
+            input.setValue(loadedText);
         }
 
         @Override
         @Nullable JsonElement store() {
             String text = input.value().trim();
+            // 未编辑且文本仍等于装载基线：原样回写原始元素（缺失即 null），applyToDraft 跳过该字段
+            if (!isEdited() && text.equals(loadedText.trim())) {
+                return originalElement();
+            }
             if (text.isEmpty()) {
-                return null;
+                // 必填/不可空字段清空时不删除既有值，交由 issues() 提示（阻止应用）
+                boolean keepExisting = loaded != null && (field.required() || !field.nullable());
+                return keepExisting ? loaded : null;
             }
             JsonElement parsed = parse.apply(text);
             // 输入非法时保留原值，交由 issues() 提示玩家修正
@@ -514,6 +577,7 @@ abstract class FormControl {
 
         @Override
         void setValueFromSuggestion(String value) {
+            markEdited();
             input.setValue(value);
         }
     }
@@ -527,7 +591,10 @@ abstract class FormControl {
         BoolControl(Font font, EditorField field, Runnable onChanged) {
             super(field);
             this.checkBox = new UiCheckBox(font, label(), false);
-            this.checkBox.setOnChanged(checked -> onChanged.run());
+            this.checkBox.setOnChanged(checked -> {
+                markEdited();
+                onChanged.run();
+            });
         }
 
         @Override
@@ -572,13 +639,18 @@ abstract class FormControl {
 
         @Override
         void load(@Nullable JsonElement value) {
+            rememberLoaded(value);
             boolean checked = value != null && value.isJsonPrimitive() && value.getAsJsonPrimitive().isBoolean()
                     && value.getAsBoolean();
             checkBox.setChecked(checked);
         }
 
         @Override
-        JsonElement store() {
+        @Nullable JsonElement store() {
+            // 用户没点过开关：保持 JSON 原样（省略 enabled 的后端默认 true 不会被写成 false）
+            if (!isEdited()) {
+                return originalElement();
+            }
             return new JsonPrimitive(checkBox.isChecked());
         }
     }
@@ -598,7 +670,10 @@ abstract class FormControl {
                         Component.translatable("gui.itemdespawntowhat.edit.enum." + group + "." + value)));
             }
             this.segments = new UiSegmentedControl(font, options);
-            this.segments.setOnChanged(value -> onChanged.run());
+            this.segments.setOnChanged(value -> {
+                markEdited();
+                onChanged.run();
+            });
         }
 
         @Override
@@ -643,13 +718,18 @@ abstract class FormControl {
 
         @Override
         void load(@Nullable JsonElement value) {
+            rememberLoaded(value);
             segments.setSelected(value != null && value.isJsonPrimitive() ? value.getAsString() : null);
         }
 
         @Override
         @Nullable JsonElement store() {
+            // 用户没点过分段：保持 JSON 原样（省略 shape/pickup 时不会写入或写成空串）
+            if (!isEdited()) {
+                return originalElement();
+            }
             String selected = segments.selected();
-            return selected == null ? null : new JsonPrimitive(selected);
+            return selected == null || selected.isEmpty() ? null : new JsonPrimitive(selected);
         }
 
         @Override
@@ -666,6 +746,8 @@ abstract class FormControl {
     static final class ListControl extends FormControl {
 
         private final UiListEditor editor;
+        // 装载时的条目基线；用户未改动且条目未变时视为「未编辑」
+        private List<String> loadedItems = List.of();
 
         ListControl(Font font, EditorField field, Runnable onChanged) {
             super(field);
@@ -682,7 +764,10 @@ abstract class FormControl {
                     break;
             }
             this.editor = new UiListEditor(font, mode, field.registry());
-            this.editor.setOnChanged(items -> onChanged.run());
+            this.editor.setOnChanged(items -> {
+                markEdited();
+                onChanged.run();
+            });
         }
 
         @Override
@@ -753,6 +838,7 @@ abstract class FormControl {
 
         @Override
         void load(@Nullable JsonElement value) {
+            rememberLoaded(value);
             List<String> items = new ArrayList<>();
             if (value != null && value.isJsonArray()) {
                 for (JsonElement element : value.getAsJsonArray()) {
@@ -762,10 +848,15 @@ abstract class FormControl {
                 }
             }
             editor.setItems(items);
+            this.loadedItems = List.copyOf(editor.items());
         }
 
         @Override
         @Nullable JsonElement store() {
+            // 未编辑且条目未变：保持 JSON 原样（缺失键不会变成空数组）
+            if (!isEdited() && editor.items().equals(loadedItems)) {
+                return originalElement();
+            }
             if (editor.size() == 0) {
                 return field.nullable() ? null : new JsonArray();
             }
@@ -795,6 +886,7 @@ abstract class FormControl {
 
         @Override
         void setValueFromSuggestion(String value) {
+            markEdited();
             editor.addItem(value);
         }
     }
@@ -805,6 +897,9 @@ abstract class FormControl {
 
         private final UiTextInput minInput;
         private final UiTextInput maxInput;
+        // 装载时写入两个端点的文本基线
+        private String loadedMin = "";
+        private String loadedMax = "";
 
         ClimateControl(Font font, EditorField field, Runnable onChanged) {
             super(field);
@@ -814,8 +909,14 @@ abstract class FormControl {
                     Component.translatable("gui.itemdespawntowhat.edit.field.climate.max"));
             this.minInput.setFilter(FormControl::decimalChars);
             this.maxInput.setFilter(FormControl::decimalChars);
-            this.minInput.setOnCommit(text -> onChanged.run());
-            this.maxInput.setOnCommit(text -> onChanged.run());
+            this.minInput.setOnCommit(text -> {
+                markEdited();
+                onChanged.run();
+            });
+            this.maxInput.setOnCommit(text -> {
+                markEdited();
+                onChanged.run();
+            });
         }
 
         @Override
@@ -880,6 +981,7 @@ abstract class FormControl {
 
         @Override
         void load(@Nullable JsonElement value) {
+            rememberLoaded(value);
             Double min = null;
             Double max = null;
             if (value != null && value.isJsonObject()) {
@@ -891,12 +993,19 @@ abstract class FormControl {
                     max = object.get("max").getAsDouble();
                 }
             }
-            minInput.setValue(min == null ? "" : trimDouble(min));
-            maxInput.setValue(max == null ? "" : trimDouble(max));
+            this.loadedMin = min == null ? "" : trimDouble(min);
+            this.loadedMax = max == null ? "" : trimDouble(max);
+            minInput.setValue(loadedMin);
+            maxInput.setValue(loadedMax);
         }
 
         @Override
         @Nullable JsonElement store() {
+            // 未编辑且两端文本未变：保持 JSON 原样（缺失键不会变成空对象）
+            if (!isEdited() && minInput.value().trim().equals(loadedMin.trim())
+                    && maxInput.value().trim().equals(loadedMax.trim())) {
+                return originalElement();
+            }
             JsonObject object = new JsonObject();
             Double min = parseDouble(minInput.value());
             Double max = parseDouble(maxInput.value());
@@ -940,7 +1049,10 @@ abstract class FormControl {
                 this.editor.setLeafFactory(support.leafFactory());
                 this.editor.setOnEditLeaf(leaf -> support.onEditLeaf().accept(leaf));
             }
-            this.editor.setListener(expression -> onChanged.run());
+            this.editor.setListener(expression -> {
+                markEdited();
+                onChanged.run();
+            });
             this.editor.setEmptyMessage(Component.translatable("gui.itemdespawntowhat.edit.tree.empty"));
         }
 
@@ -1010,6 +1122,7 @@ abstract class FormControl {
 
         @Override
         void load(@Nullable JsonElement value) {
+            rememberLoaded(value);
             if (support == null) {
                 this.fallbackRaw = value == null || value.isJsonNull() ? null : value.deepCopy();
                 editor.setExpression(ConditionExpression.EMPTY);
@@ -1027,6 +1140,10 @@ abstract class FormControl {
 
         @Override
         @Nullable JsonElement store() {
+            // 用户没改过条件树：原样返回装载元素，避免重编码把原 JSON 规范化成新值
+            if (!isEdited()) {
+                return originalElement();
+            }
             if (fallbackRaw != null) {
                 return fallbackRaw;
             }
@@ -1094,18 +1211,23 @@ abstract class FormControl {
 
         @Override
         void load(@Nullable JsonElement value) {
-            this.raw = value == null || value.isJsonNull() ? null : value.deepCopy();
+            rememberLoaded(value);
+            this.raw = value == null ? null : value.deepCopy();
         }
 
         @Override
         @Nullable JsonElement store() {
+            // 只读控件：未编辑时原样返回装载元素（显式 JsonNull 也必须保留），避免被 applyToDraft 误删
+            if (!isEdited()) {
+                return originalElement();
+            }
             // 原样返回，保证未识别字段不丢失
             return raw;
         }
 
         // 该控件把 JSON 摘要画在标签右侧，由 FormView 调用
         String summary(int maxWidth) {
-            return raw == null ? "" : JsonSummary.compact(raw, Math.max(4, maxWidth));
+            return raw == null || raw.isJsonNull() ? "" : JsonSummary.compact(raw, Math.max(4, maxWidth));
         }
     }
 
@@ -1169,6 +1291,7 @@ abstract class FormControl {
             this.subFields = field.subFields();
             this.addButton = new UiButton(font, Component.translatable("gui.itemdespawntowhat.edit.list.add"),
                     UiButtonVariant.SECONDARY, () -> {
+                        markEdited();
                         appendChild(null);
                         onChanged.run();
                     });
@@ -1180,6 +1303,11 @@ abstract class FormControl {
             if (value != null && value.isJsonObject()) {
                 child.reloadWith(value.getAsJsonObject());
             }
+            // 子表单里任何用户改动都要把整个子列表标记为已编辑
+            child.setOnChanged(() -> {
+                markEdited();
+                owner.notifyChanged();
+            });
             children.add(child);
             removeButtons.add(createRemoveButton(child));
         }
@@ -1190,6 +1318,7 @@ abstract class FormControl {
                     UiButtonVariant.DANGER, () -> {
                         int index = children.indexOf(child);
                         if (index >= 0) {
+                            markEdited();
                             children.remove(index);
                             removeButtons.remove(index);
                             owner.notifyChanged();
@@ -1325,6 +1454,7 @@ abstract class FormControl {
 
         @Override
         void load(@Nullable JsonElement value) {
+            rememberLoaded(value);
             children.clear();
             removeButtons.clear();
             if (value != null && value.isJsonArray()) {
@@ -1337,6 +1467,10 @@ abstract class FormControl {
 
         @Override
         JsonElement store() {
+            // 未编辑（含未增删子项、子表单未改动）：原样返回装载数组
+            if (!isEdited()) {
+                return originalElement();
+            }
             JsonArray array = new JsonArray();
             for (FormView child : children) {
                 child.applyToDraft();

@@ -51,6 +51,11 @@ public interface UiWidget {
         return false;
     }
 
+    // 键盘抬起（用于把按住的方向键重复合并成一次提交）
+    default boolean keyReleased(int keyCode, int scanCode, int modifiers) {
+        return false;
+    }
+
     // 字符输入
     default boolean charTyped(char codePoint, int modifiers) {
         return false;
