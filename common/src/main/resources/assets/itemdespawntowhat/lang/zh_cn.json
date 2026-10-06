@@ -806,5 +806,22 @@
   "gui.itemdespawntowhat.edit.notice.session_reopen": "会话已失效，请用指令重新打开。",
   "gui.itemdespawntowhat.edit.notice.validation_located": "服务端校验失败：%s",
   "gui.itemdespawntowhat.edit.effect.readonly_note": "该效果类型没有编辑器：原样只读保留，不猜测其字段。",
-  "gui.itemdespawntowhat.edit.effect.readonly_note_unknown": "该效果缺少可识别的 type：原样只读保留。"
+  "gui.itemdespawntowhat.edit.effect.readonly_note_unknown": "该效果缺少可识别的 type：原样只读保留。",
+  "gui.itemdespawntowhat.edit.tree.unrestricted": "不限制条件；可添加条件",
+  "gui.itemdespawntowhat.edit.tree.button.add": "添加条件",
+  "gui.itemdespawntowhat.edit.tree.button.all": "全部满足",
+  "gui.itemdespawntowhat.edit.tree.button.any": "任一满足",
+  "gui.itemdespawntowhat.edit.tree.button.not": "取反",
+  "gui.itemdespawntowhat.edit.tree.button.edit": "编辑",
+  "gui.itemdespawntowhat.edit.tree.button.remove": "删除",
+  "gui.itemdespawntowhat.edit.tree.button.up": "上移",
+  "gui.itemdespawntowhat.edit.tree.button.down": "下移",
+  "gui.itemdespawntowhat.edit.notice.rule_unavailable": "没有可查看的规则内容，请刷新工作区后重试。",
+  "gui.itemdespawntowhat.edit.detail.rule": "规则详情：%s",
+  "gui.itemdespawntowhat.edit.detail.invalid": "规则存在错误，下方可查看原始内容与问题。",
+  "gui.itemdespawntowhat.edit.button.close": "关闭",
+  "gui.itemdespawntowhat.edit.button.apply_changes": "应用更改（%s 条）",
+  "gui.itemdespawntowhat.edit.summary.candidate": "结果 %s：%s",
+  "gui.itemdespawntowhat.edit.consumption.hint.fixed": "每组消耗 %s 个源物品",
+  "gui.itemdespawntowhat.edit.detail.unavailable": "没有可编辑的规则内容，下方展示原始视图。"
 }

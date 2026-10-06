@@ -440,6 +440,11 @@ final class NumberControl extends FormControl {
     }
 
     @Override
+    boolean hasPendingInput() {
+        return !input.value().equals(loadedText);
+    }
+
+    @Override
     boolean isEditing() {
         return input.isFocused();
     }

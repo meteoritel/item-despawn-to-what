@@ -110,6 +110,11 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         return basePath.isEmpty() ? relative : basePath + "." + relative;
     }
 
+    // 条件树返回相对路径，宿主编辑叶参数时需定位到本表单所在的规则或效果。
+    public String draftPath(String relative) {
+        return childPath(relative);
+    }
+
     public FormView setSuggestionProvider(@Nullable SuggestionProvider provider) {
         this.suggestionProvider = provider;
         return this;
@@ -310,6 +315,26 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
     // 子表单布局：高度不限，返回内容高度（子列表用）
     int layoutUnbounded(int x, int y, int width) {
         return layout(x, y, width, Integer.MAX_VALUE / 4);
+    }
+
+    // 页面按实际内容分配空间，避免固定空白与表单互相挤占。
+    public int preferredHeight(int width) {
+        return layoutRows(Math.max(0, width));
+    }
+
+    // 只有用户修改过的非法输入才阻止离开，不阻止未完成草稿切换页签。
+    public @Nullable FormIssue pendingInputIssue() {
+        for (Row row : rows) {
+            row.control.finishInput();
+            if (row.control.hasPendingInput()) {
+                for (FormIssue issue : row.control.issues(row.path)) {
+                    if (issue.blocking()) {
+                        return issue;
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     // 布局：返回内容总高度
@@ -516,6 +541,9 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
 
     // 鼠标位置下的提示：优先显示该字段的校验问题，其次显示字段提示
     public @Nullable Component tooltipAt(double mouseX, double mouseY) {
+        if (!visible || !bounds().contains(mouseX, mouseY)) {
+            return null;
+        }
         for (Row row : rows) {
             if (row.field.type() == EditorFieldType.NOTE) {
                 continue;
@@ -528,6 +556,13 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
             List<FormIssue> list = row.control.issues(row.path);
             if (!list.isEmpty()) {
                 return list.getFirst().message();
+            }
+            Component full = row.control.fullText();
+            if (full != null && font.width(full) > row.controlWidth - 6) {
+                return full;
+            }
+            if (font.width(row.control.label()) > (row.narrow ? row.controlWidth : row.labelWidth)) {
+                return row.control.label();
             }
             return row.control.hint();
         }
@@ -561,7 +596,7 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         if (picker != null) {
             return picker.mouseClicked(mouseX, mouseY, button);
         }
-        if (!enabled) {
+        if (!enabled || !bounds().contains(mouseX, mouseY)) {
             return false;
         }
         syncBounds();
@@ -602,7 +637,15 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         if (picker != null) {
             return picker.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
         }
-        if (maxScroll() <= 0 || !bounds().contains(mouseX, mouseY)) {
+        if (!visible || !bounds().contains(mouseX, mouseY)) {
+            return false;
+        }
+        for (Row row : rows) {
+            if (row.control.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
+                return true;
+            }
+        }
+        if (maxScroll() <= 0) {
             return false;
         }
         int delta = (int) Math.round(scrollY * SCROLL_STEP);

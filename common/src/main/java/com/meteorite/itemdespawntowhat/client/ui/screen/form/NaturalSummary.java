@@ -9,6 +9,8 @@ import com.meteorite.itemdespawntowhat.client.edit.ConditionEditorRegistry;
 import com.meteorite.itemdespawntowhat.client.edit.JsonSummary;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
+import com.meteorite.itemdespawntowhat.client.ui.screen.RuleDisplayLabels;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
@@ -33,12 +35,23 @@ public final class NaturalSummary {
 
     // 规则级摘要：显示名（或 id）：条件 → 效果
     public static Component rule(JsonObject rule) {
-        String id = rule.has(RuleFields.ID) && rule.get(RuleFields.ID).isJsonPrimitive()
-                ? rule.get(RuleFields.ID).getAsString() : "?";
-        String name = rule.has(RuleFields.DISPLAY_NAME) && rule.get(RuleFields.DISPLAY_NAME).isJsonPrimitive()
-                ? rule.get(RuleFields.DISPLAY_NAME).getAsString() : id;
-        return Component.translatable(PREFIX + "rule", name,
-                conditions(rule.get(RuleFields.CONDITIONS)), effects(rule.get(RuleFields.EFFECTS)));
+        return Component.translatable(PREFIX + "rule", RuleNaming.ruleTitle(rule, RuleDisplayLabels::label),
+                conditions(rule.get(RuleFields.CONDITIONS)), results(rule));
+    }
+
+    // 候选结果保留边界，不能把每个候选误报成“没有效果”。
+    private static Component results(JsonObject rule) {
+        JsonElement outcomes = rule.get(RuleFields.OUTCOMES);
+        if (outcomes == null || !outcomes.isJsonArray() || outcomes.getAsJsonArray().isEmpty()) {
+            return effects(rule.get(RuleFields.EFFECTS));
+        }
+        List<Component> candidates = new ArrayList<>();
+        int ordinal = 1;
+        for (JsonElement candidate : outcomes.getAsJsonArray()) {
+            JsonElement body = candidate.isJsonObject() ? candidate.getAsJsonObject().get(RuleFields.CANDIDATE_EFFECTS) : null;
+            candidates.add(Component.translatable(PREFIX + "candidate", ordinal++, effects(body)));
+        }
+        return join(candidates);
     }
 
     // 条件树摘要

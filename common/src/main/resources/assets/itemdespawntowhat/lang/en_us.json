@@ -806,5 +806,22 @@
   "gui.itemdespawntowhat.edit.notice.session_reopen": "Session lost; reopen from the command.",
   "gui.itemdespawntowhat.edit.notice.validation_located": "Server validation failed: %s",
   "gui.itemdespawntowhat.edit.effect.readonly_note": "This effect type has no editor: kept read-only as-is; its fields are never guessed.",
-  "gui.itemdespawntowhat.edit.effect.readonly_note_unknown": "This effect has no readable type: kept read-only as-is."
+  "gui.itemdespawntowhat.edit.effect.readonly_note_unknown": "This effect has no readable type: kept read-only as-is.",
+  "gui.itemdespawntowhat.edit.tree.unrestricted": "No conditions — add a condition to restrict this rule",
+  "gui.itemdespawntowhat.edit.tree.button.add": "Add condition",
+  "gui.itemdespawntowhat.edit.tree.button.all": "All",
+  "gui.itemdespawntowhat.edit.tree.button.any": "Any",
+  "gui.itemdespawntowhat.edit.tree.button.not": "Invert",
+  "gui.itemdespawntowhat.edit.tree.button.edit": "Edit",
+  "gui.itemdespawntowhat.edit.tree.button.remove": "Remove",
+  "gui.itemdespawntowhat.edit.tree.button.up": "Up",
+  "gui.itemdespawntowhat.edit.tree.button.down": "Down",
+  "gui.itemdespawntowhat.edit.notice.rule_unavailable": "No rule content is available. Refresh the workspace and try again.",
+  "gui.itemdespawntowhat.edit.detail.rule": "Rule details: %s",
+  "gui.itemdespawntowhat.edit.detail.invalid": "This rule has errors. Review its original content and reported issues below.",
+  "gui.itemdespawntowhat.edit.button.close": "Close",
+  "gui.itemdespawntowhat.edit.button.apply_changes": "Apply changes (%s rules)",
+  "gui.itemdespawntowhat.edit.summary.candidate": "Result %s: %s",
+  "gui.itemdespawntowhat.edit.consumption.hint.fixed": "Consumes %s source items per group",
+  "gui.itemdespawntowhat.edit.detail.unavailable": "No editable rule content is available. The original views are shown below."
 }

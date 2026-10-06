@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
@@ -68,6 +69,43 @@ public final class ConsumptionSummary {
             case EXPLICIT -> Component.translatable("gui.itemdespawntowhat.edit.consumption.hint.explicit");
             case DUPLICATE -> Component.translatable("gui.itemdespawntowhat.edit.consumption.hint.duplicate");
         };
+    }
+
+    // 固定源成本优先；重复消耗只在各效果列表内部判断，不把不同候选混为重复。
+    public static Component hintRule(JsonObject rule) {
+        JsonElement cost = rule.get(RuleFields.SOURCE_COST);
+        if (cost != null && cost.isJsonPrimitive() && cost.getAsJsonPrimitive().isNumber()) {
+            return Component.translatable("gui.itemdespawntowhat.edit.consumption.hint.fixed", cost.getAsString());
+        }
+        JsonArray all = new JsonArray();
+        JsonElement flat = rule.get(RuleFields.EFFECTS);
+        if (flat != null && flat.isJsonArray()) {
+            all.addAll(flat.getAsJsonArray());
+            if (isDuplicate(flat)) {
+                return hint(flat);
+            }
+        }
+        JsonElement outcomes = rule.get(RuleFields.OUTCOMES);
+        if (outcomes != null && outcomes.isJsonArray()) {
+            for (JsonElement candidate : outcomes.getAsJsonArray()) {
+                JsonElement effects = candidate.isJsonObject() ? candidate.getAsJsonObject().get(RuleFields.CANDIDATE_EFFECTS) : null;
+                if (effects != null && effects.isJsonArray()) {
+                    if (isDuplicate(effects)) {
+                        return hint(effects);
+                    }
+                    all.addAll(effects.getAsJsonArray());
+                }
+            }
+        }
+        boolean source = false;
+        boolean explicit = false;
+        for (JsonElement effect : all) {
+            String type = typeOf(effect);
+            source |= CONSUME_SOURCE.equals(type);
+            explicit |= CONSUME_SOURCE.equals(type) || CONSUME_CATALYST.equals(type) || CONSUME_FLUID.equals(type);
+        }
+        String key = source ? "explicit_source" : explicit ? "explicit" : "implicit";
+        return Component.translatable("gui.itemdespawntowhat.edit.consumption.hint." + key);
     }
 
     // 是否重复声明（保存前拦截用）

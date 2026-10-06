@@ -15,6 +15,7 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
+import org.jetbrains.annotations.Nullable;
 
 /***
  * 可滚动列表控件。
@@ -200,6 +201,32 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         int contentY = (int) (mouseY - viewport.y()) + scrollView.offset();
         int index = contentY / Math.max(1, rowHeight);
         return index >= 0 && index < items.size() ? index : -1;
+    }
+
+    // 命中数据行时排除滚动条，空白区域返回无条目。
+    public int itemIndexAt(double mouseX, double mouseY) {
+        return scrollView.hitScrollbar(mouseX, mouseY) ? -1 : indexAt(mouseX, mouseY);
+    }
+
+    // 供宿主绘制行级覆盖层；返回与实际视口相交的可见矩形。
+    public @Nullable UiRect visibleRowBounds(int index) {
+        if (index < 0 || index >= items.size()) {
+            return null;
+        }
+        UiRect viewport = scrollView.viewport();
+        int top = viewport.y() + index * rowHeight - scrollView.offset();
+        int start = Math.max(top, viewport.y());
+        int end = Math.min(top + rowHeight, viewport.bottom());
+        return end > start ? new UiRect(viewport.x(), start, contentWidth(), end - start) : null;
+    }
+
+    // 拖动排序使用视口偏移；指针越出列表时钳制到首尾条目。
+    public int dragIndexAt(double mouseY) {
+        if (items.isEmpty()) {
+            return -1;
+        }
+        int contentY = (int) Math.floor(mouseY - scrollView.viewport().y()) + scrollView.offset();
+        return Math.clamp(Math.floorDiv(contentY, Math.max(1, rowHeight)), 0, items.size() - 1);
     }
 
     // ---- 渲染 ----

@@ -802,6 +802,20 @@ public final class RuleEditorP4Panels {
 
         @Override
         public boolean mouseClicked(double mouseX, double mouseY, int button) {
+            if (!enabled || !bounds.contains(mouseX, mouseY)) {
+                return false;
+            }
+            List<UiFocusTarget> targets = focusTargets();
+            if (button == 0) {
+                for (int index = 0; index < targets.size(); index++) {
+                    UiFocusTarget target = targets.get(index);
+                    boolean hit = target.canFocus() && target.bounds().contains(mouseX, mouseY);
+                    target.setFocused(hit);
+                    if (hit) {
+                        focusIndex = index;
+                    }
+                }
+            }
             for (UiButton candidate : buttons) {
                 if (candidate.isVisible() && candidate.mouseClicked(mouseX, mouseY, button)) {
                     return true;
@@ -880,6 +894,19 @@ public final class RuleEditorP4Panels {
                 }
             }
             return form.charTyped(codePoint, modifiers);
+        }
+
+        // 参数校验失败时，内部焦点与字段滚动保持一致。
+        public void focusField(String path) {
+            UiFocusTarget target = form.revealPath(path);
+            List<UiFocusTarget> targets = focusTargets();
+            for (int index = 0; index < targets.size(); index++) {
+                boolean selected = targets.get(index) == target;
+                targets.get(index).setFocused(selected);
+                if (selected) {
+                    focusIndex = index;
+                }
+            }
         }
 
         private void moveFocus(int delta) {

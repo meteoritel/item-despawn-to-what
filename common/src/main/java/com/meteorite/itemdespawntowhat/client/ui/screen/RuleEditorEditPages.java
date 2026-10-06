@@ -21,6 +21,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiAction;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionSupport;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormIssue;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
@@ -46,6 +47,7 @@ import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -122,6 +124,9 @@ public final class RuleEditorEditPages {
         // 草稿已变更（屏幕据此刷新列表）
         void onDraftChanged();
 
+        // 控件重建后同步宿主的焦点目标。
+        void onControlsChanged();
+
         // 提示条
         void notice(Component message, int color);
 
@@ -149,7 +154,6 @@ public final class RuleEditorEditPages {
     private static final int BUTTON_H = 16;
     private static final int BUTTON_GAP = 2;
     private static final int LINE_H = 10;
-    private static final int MIN_SECTION_H = 28;
     private static final int LIST_ROWS = 4;
     private static final int NARROW_WIDTH = 430;
 
@@ -189,14 +193,10 @@ public final class RuleEditorEditPages {
     }
 
     // 名称来源：注册表标签优先，缺失回落 id 文本（由 RuleNaming 兜底）
-    private final RuleNaming.NameSource nameSource = id -> {
-        @Nullable TypeEditorDescriptor descriptor = ConditionEditorRegistry.find(id);
-        if (descriptor == null) {
-            descriptor = EffectEditorRegistry.find(id);
-        }
-        return descriptor == null ? null : descriptor.label();
-    };
+    private final RuleNaming.NameSource nameSource = RuleDisplayLabels::label;
 
+    private final UiScrollView pageScroll = new UiScrollView();
+    private final EnumMap<Page, Integer> scrollOffsets = new EnumMap<>(Page.class);
     private Page page = Page.INFO;
     private boolean enabled = true;
     private boolean pendingRebuild;
@@ -229,7 +229,6 @@ public final class RuleEditorEditPages {
     private final List<UiCheckBox> triggerBoxes = new ArrayList<>();
     private @Nullable UiRect triggerNoteRect;
     private @Nullable FormView delayForm;
-    private @Nullable UiRect delayLabelRect;
     private @Nullable UiRect delayHintRect;
     private @Nullable FormView conditionsForm;
 
@@ -270,10 +269,15 @@ public final class RuleEditorEditPages {
         if (target == page) {
             return;
         }
+        scrollOffsets.put(page, pageScroll.offset());
         endInteractions();
         page = target;
         effectIndex = 0;
         rebuild();
+        pageScroll.setOffset(scrollOffsets.getOrDefault(page, 0));
+        if (lastArea != null) {
+            layout(lastArea);
+        }
     }
 
     // 重建当前页的全部控件（草稿结构或选择变化后调用）
@@ -293,6 +297,7 @@ public final class RuleEditorEditPages {
         if (lastArea != null) {
             layout(lastArea);
         }
+        host.onControlsChanged();
     }
 
     // 清空当前页控件
@@ -307,6 +312,7 @@ public final class RuleEditorEditPages {
         autoNameRect = null;
         advancedRect = null;
         sourceForm = null;
+        sourceCatalogButton = null;
         sourceCostMode = null;
         sourceCostForm = null;
         catalystForm = null;
@@ -319,7 +325,6 @@ public final class RuleEditorEditPages {
         triggerBoxes.clear();
         triggerNoteRect = null;
         delayForm = null;
-        delayLabelRect = null;
         delayHintRect = null;
         conditionsForm = null;
         candidateList = null;
@@ -341,9 +346,10 @@ public final class RuleEditorEditPages {
     // 表单工厂
     private FormView newForm(EditSession session, String basePath, TypeEditorDescriptor descriptor) {
         FormView form = new FormView(font, session, basePath);
-        form.setDescriptor(descriptor);
+        form.setConditionSupport(pageConditionSupport(form));
         form.setSuggestionProvider(host.suggestions());
         form.setOnChanged(host::onDraftChanged);
+        form.setDescriptor(descriptor);
         form.reload();
         return form;
     }
@@ -373,7 +379,9 @@ public final class RuleEditorEditPages {
             return;
         }
         RuleDraft draft = session.draft();
-        apply(EditSession.OP_SET_FIELD, () -> draft.remove(RuleFields.DISPLAY_NAME));
+        if (!apply(EditSession.OP_SET_FIELD, () -> draft.remove(RuleFields.DISPLAY_NAME))) {
+            return;
+        }
         host.notice(Component.translatable(UI + "notice.name_restored"), UiPalette.TEXT_SECONDARY);
     }
 
@@ -499,7 +507,6 @@ public final class RuleEditorEditPages {
         TypeEditorDescriptor conditions = TypeEditorDescriptor.of(CONDITIONS_PAGE, Component.translatable(UI + "tab.trigger"), List.of(
                 EditorField.conditionTree(RuleFields.CONDITIONS, UI + "rule.conditions")));
         conditionsForm = newForm(session, "", conditions);
-        conditionsForm.setConditionSupport(pageConditionSupport(conditionsForm));
         conditionsForm.setLabelWidth(90);
         liveForms.add(conditionsForm);
         liveWidgets.add(conditionsForm);
@@ -570,12 +577,15 @@ public final class RuleEditorEditPages {
         }
         UiConditionTreeEditor tree = findTree(owner, leaf);
         String base = tree != null && tree.selectedPath() != null ? tree.selectedPath() : RuleFields.CONDITIONS;
-        String path = base.endsWith("." + RuleFields.CONDITION) ? base : base + "." + RuleFields.CONDITION;
+        String path = owner.draftPath(base.endsWith("." + RuleFields.CONDITION) ? base : base + "." + RuleFields.CONDITION);
+        // 先写入新建的树节点，叶参数表单才有可读取的草稿路径。
+        owner.applyToDraft();
         TypeEditorDescriptor descriptor = ConditionEditorRegistry.descriptorFor(leaf.condition().type());
         FormView form = new FormView(font, session, path);
-        form.setDescriptor(descriptor);
+        form.setConditionSupport(pageConditionSupport(form));
         form.setSuggestionProvider(host.suggestions());
         form.setOnChanged(host::onDraftChanged);
+        form.setDescriptor(descriptor);
         form.reload();
         UiModal modal = UiModal.create(font);
         modal.title(descriptor.label());
@@ -590,10 +600,21 @@ public final class RuleEditorEditPages {
         int contentHeight = Math.clamp(Math.max(fieldHeight, panel.contentHeight() + 8), 36, 220);
         modal.contentWidget(panel, contentHeight);
         leafPanels.add(new LeafEntry(modal, panel));
+        modal.retainOnConfirm(true);
         modal.confirm(Component.translatable(UI + "button.confirm"), () -> {
+            form.pendingInputIssue();
+            FormIssue issue = form.issues().stream().filter(FormIssue::blocking).findFirst().orElse(null);
+            if (issue != null) {
+                Component message = Component.translatable(UI + "notice.issue", issue.label(), issue.message());
+                modal.message(message);
+                modal.layoutCentered(host.screenWidth(), host.screenHeight());
+                panel.focusField(issue.path());
+                return;
+            }
             form.applyToDraft();
             owner.reload();
             host.onDraftChanged();
+            host.modals().closeTop();
         });
         modal.cancel(Component.translatable(UI + "button.cancel"));
         modal.layoutCentered(host.screenWidth(), host.screenHeight());
@@ -640,6 +661,14 @@ public final class RuleEditorEditPages {
             if (rebuilding) {
                 return;
             }
+            if (blockNavigation()) {
+                rebuilding = true;
+                if (candidateList != null) {
+                    candidateList.setSelectedIndex(candidateIndex);
+                }
+                rebuilding = false;
+                return;
+            }
             candidateIndex = Math.max(0, index);
             effectIndex = 0;
             requestRebuild();
@@ -679,6 +708,14 @@ public final class RuleEditorEditPages {
         rebuilding = false;
         effectList.setOnSelectionChanged(index -> {
             if (rebuilding) {
+                return;
+            }
+            if (blockNavigation()) {
+                rebuilding = true;
+                if (effectList != null) {
+                    effectList.setSelectedIndex(effectIndex);
+                }
+                rebuilding = false;
                 return;
             }
             effectIndex = Math.max(0, index);
@@ -727,13 +764,13 @@ public final class RuleEditorEditPages {
         RuleDraft draft = session.draft();
         boolean convert = !draft.hasOutcomes();
         int index = Math.max(0, candidateIndex);
-        apply(convert ? EditSession.OP_CONVERT_STRUCTURE : EditSession.OP_EDIT_CANDIDATE, () -> {
+        boolean applied = apply(convert ? EditSession.OP_CONVERT_STRUCTURE : EditSession.OP_EDIT_CANDIDATE, () -> {
             if (convert) {
                 draft.convertToOutcomes(EditorFactories.uniqueCandidateId(Set.of()));
             }
             draft.setAt(RuleFields.OUTCOMES + "[" + index + "]." + field, new JsonPrimitive(value));
         });
-        if (convert) {
+        if (applied && convert) {
             host.notice(Component.translatable(UI + "notice.converted"), UiPalette.TEXT_SECONDARY);
         }
     }
@@ -771,7 +808,7 @@ public final class RuleEditorEditPages {
             return;
         }
         boolean convert = !draft.hasOutcomes();
-        apply(EditSession.OP_ADD_CANDIDATE, () -> {
+        if (!apply(EditSession.OP_ADD_CANDIDATE, () -> {
             if (convert) {
                 draft.convertToOutcomes(EditorFactories.uniqueCandidateId(Set.of()));
             }
@@ -779,7 +816,9 @@ public final class RuleEditorEditPages {
             body.addProperty(RuleFields.CANDIDATE_ID, EditorFactories.uniqueCandidateId(draft.candidateIds()));
             body.add(RuleFields.CANDIDATE_EFFECTS, new JsonArray());
             draft.addOutcome(body);
-        });
+        })) {
+            return;
+        }
         candidateIndex = Math.max(0, ResultStructure.candidateCount(draft.view()) - 1);
         effectIndex = 0;
         host.notice(Component.translatable(UI + (convert ? "notice.converted" : "notice.candidate_added")), UiPalette.TEXT_SECONDARY);
@@ -787,6 +826,9 @@ public final class RuleEditorEditPages {
 
     // 复制候选（含策略与效果，换新 id）
     private void duplicateCandidate() {
+        if (blockNavigation()) {
+            return;
+        }
         EditSession session = host.session();
         if (session == null) {
             return;
@@ -798,7 +840,7 @@ public final class RuleEditorEditPages {
         }
         boolean convert = !draft.hasOutcomes();
         int index = Math.max(0, candidateIndex);
-        apply(EditSession.OP_ADD_CANDIDATE, () -> {
+        if (!apply(EditSession.OP_ADD_CANDIDATE, () -> {
             if (convert) {
                 draft.convertToOutcomes(EditorFactories.uniqueCandidateId(Set.of()));
             }
@@ -810,7 +852,9 @@ public final class RuleEditorEditPages {
             }
             body.addProperty(RuleFields.CANDIDATE_ID, EditorFactories.uniqueCandidateId(draft.candidateIds()));
             draft.addOutcome(body);
-        });
+        })) {
+            return;
+        }
         candidateIndex = Math.max(0, ResultStructure.candidateCount(draft.view()) - 1);
         effectIndex = 0;
         host.notice(Component.translatable(UI + "notice.candidate_added"), UiPalette.TEXT_SECONDARY);
@@ -828,7 +872,9 @@ public final class RuleEditorEditPages {
             return;
         }
         int index = Math.max(0, candidateIndex);
-        apply(EditSession.OP_REMOVE_CANDIDATE, () -> draft.removeOutcome(index));
+        if (!apply(EditSession.OP_REMOVE_CANDIDATE, () -> draft.removeOutcome(index))) {
+            return;
+        }
         candidateIndex = Math.max(0, index - 1);
         effectIndex = 0;
         host.notice(Component.translatable(UI + "notice.candidate_removed"), UiPalette.TEXT_SECONDARY);
@@ -857,13 +903,18 @@ public final class RuleEditorEditPages {
             return;
         }
         RuleDraft draft = session.draft();
-        apply(EditSession.OP_MOVE_CANDIDATE, () -> draft.moveOutcome(from, to));
+        if (!apply(EditSession.OP_MOVE_CANDIDATE, () -> draft.moveOutcome(from, to))) {
+            return;
+        }
         candidateIndex = to;
         effectIndex = 0;
     }
 
     // 效果选择器：隐藏消耗类效果（它们由成本区表达）
     private void openEffectPicker() {
+        if (blockNavigation()) {
+            return;
+        }
         List<ResourceLocation> types = new ArrayList<>();
         for (TypeEditorDescriptor descriptor : EffectEditorRegistry.all()) {
             if (CONSUME_SOURCE_ID.equals(descriptor.id()) || CONSUME_CATALYST_ID.equals(descriptor.id())) {
@@ -913,12 +964,17 @@ public final class RuleEditorEditPages {
         }
         String listPath = ResultStructure.listPath(draft.view(), candidateIndex);
         JsonObject body = BuiltinEditorDefaults.effectBody(type);
-        apply(EditSession.OP_ADD_EFFECT, () -> draft.addEffectAt(listPath, body));
+        if (!apply(EditSession.OP_ADD_EFFECT, () -> draft.addEffectAt(listPath, body))) {
+            return;
+        }
         effectIndex = Math.max(0, draft.effectCountAt(listPath) - 1);
     }
 
     // 复制选中效果
     private void duplicateEffect() {
+        if (blockNavigation()) {
+            return;
+        }
         EditSession session = host.session();
         if (session == null) {
             return;
@@ -934,7 +990,9 @@ public final class RuleEditorEditPages {
             return;
         }
         JsonObject copy = effects.get(effectIndex);
-        apply(EditSession.OP_ADD_EFFECT, () -> draft.addEffectAt(listPath, copy));
+        if (!apply(EditSession.OP_ADD_EFFECT, () -> draft.addEffectAt(listPath, copy))) {
+            return;
+        }
         effectIndex = Math.max(0, draft.effectCountAt(listPath) - 1);
     }
 
@@ -950,7 +1008,9 @@ public final class RuleEditorEditPages {
         if (index < 0 || index >= draft.effectCountAt(listPath)) {
             return;
         }
-        apply(EditSession.OP_REMOVE_EFFECT, () -> draft.removeEffectAt(listPath, index));
+        if (!apply(EditSession.OP_REMOVE_EFFECT, () -> draft.removeEffectAt(listPath, index))) {
+            return;
+        }
         effectIndex = Math.max(0, index - 1);
     }
 
@@ -979,7 +1039,9 @@ public final class RuleEditorEditPages {
         }
         RuleDraft draft = session.draft();
         String listPath = ResultStructure.listPath(draft.view(), candidateIndex);
-        apply(EditSession.OP_MOVE_EFFECT, () -> draft.moveInList(listPath, from, to));
+        if (!apply(EditSession.OP_MOVE_EFFECT, () -> draft.moveInList(listPath, from, to))) {
+            return;
+        }
         effectIndex = to;
     }
 
@@ -1021,17 +1083,41 @@ public final class RuleEditorEditPages {
 
     // ---- 布局 ----
 
+    // 外层滚动与控件命中使用同一份绝对坐标，不把表单撑进底栏。
     public void layout(UiRect area) {
         lastArea = area;
-        switch (page) {
+        pageScroll.setViewport(area.x(), area.y(), area.width(), area.height());
+        pageScroll.setStep(24);
+        int used = layoutPage(area) - area.y();
+        int width = area.width();
+        if (used > area.height()) {
+            width = Math.max(0, width - UiScrollView.SCROLLBAR_WIDTH - 2);
+            used = layoutPage(new UiRect(area.x(), area.y(), width, area.height())) - area.y();
+        }
+        pageScroll.setContentHeight(used);
+        pageScroll.setScrollbarVisible(used > area.height());
+        layoutPage(new UiRect(area.x(), area.y() - pageScroll.offset(), width, area.height()));
+    }
+
+    private int layoutPage(UiRect area) {
+        return switch (page) {
             case INFO -> layoutInfo(area);
             case INPUT -> layoutInput(area);
             case TRIGGER -> layoutTrigger(area);
             case RESULTS -> layoutResults(area);
-        }
+        };
     }
 
-    private void layoutInfo(UiRect area) {
+    private int layoutForm(@Nullable FormView form, int x, int y, int width) {
+        if (form == null) {
+            return y;
+        }
+        int height = form.preferredHeight(width);
+        form.layout(x, y, width, height);
+        return y + height + PAD;
+    }
+
+    private int layoutInfo(UiRect area) {
         int x = area.x();
         int y = area.y();
         autoNameRect = new UiRect(x, y, area.width(), LINE_H);
@@ -1041,116 +1127,87 @@ public final class RuleEditorEditPages {
             restoreNameButton.setBounds(x, y, width, BUTTON_H);
             y += BUTTON_H + PAD;
         }
-        int advancedHeight = LINE_H * 3 + PAD;
-        int formHeight = Math.max(MIN_SECTION_H, area.bottom() - y - advancedHeight);
-        if (infoForm != null) {
-            infoForm.layout(x, y, area.width(), formHeight);
-        }
-        y += formHeight + PAD;
+        y = layoutForm(infoForm, x, y, area.width());
         advancedRect = new UiRect(x, y, area.width(), LINE_H * 3);
+        return advancedRect.bottom();
     }
 
-    private void layoutInput(UiRect area) {
+    private int layoutInput(UiRect area) {
         int x = area.x();
-        int y = area.y();
-        int notes = (costNote == null ? 0 : LINE_H) + (catalystNote == null ? 0 : LINE_H);
-        int fixed = LINE_H + ROW_H + notes + PAD * 4 + BUTTON_H + BUTTON_GAP;
-        int section = Math.max(MIN_SECTION_H, (area.height() - fixed) / 2);
-        if (sourceForm != null) {
-            sourceForm.layout(x, y, area.width(), section);
-        }
-        y += section + PAD;
+        int y = layoutForm(sourceForm, x, area.y(), area.width());
         if (sourceCatalogButton != null) {
-            int catalogWidth = fitWidth(sourceCatalogButton.preferredWidth(PAD), 80, area.width());
-            sourceCatalogButton.setBounds(x, y, catalogWidth, BUTTON_H);
+            int width = fitWidth(sourceCatalogButton.preferredWidth(PAD), 80, area.width());
+            sourceCatalogButton.setBounds(x, y, width, BUTTON_H);
+            y += BUTTON_H + PAD;
         }
-        costModeRect = new UiRect(x, y + BUTTON_H + BUTTON_GAP, area.width(), LINE_H);
-        y += BUTTON_H + BUTTON_GAP + LINE_H + 2;
+        costModeRect = new UiRect(x, y, area.width(), LINE_H);
+        y += LINE_H + 2;
+        if (sourceCostMode != null) {
+            sourceCostMode.setBounds(x, y, fitWidth(sourceCostMode.preferredWidth(PAD), 100, area.width()), ROW_H);
+            y += ROW_H + PAD;
+        }
         if (costNote != null) {
             costNoteRect = new UiRect(x, y, area.width(), LINE_H);
-            y += LINE_H;
+            y += LINE_H + PAD;
         }
-        int costHeight = Math.max(MIN_SECTION_H, section - LINE_H);
-        if (sourceCostForm != null) {
-            sourceCostForm.layout(x, y, area.width(), costHeight);
-        }
-        y += costHeight + PAD;
+        y = layoutForm(sourceCostForm, x, y, area.width());
         if (catalystToggle != null) {
             catalystToggle.setBounds(x, y, area.width(), ROW_H);
+            y += ROW_H + PAD;
         }
-        y += ROW_H;
         if (catalystNote != null) {
             catalystNoteRect = new UiRect(x, y, area.width(), LINE_H);
-            y += LINE_H;
+            y += LINE_H + PAD;
         }
-        if (catalystForm != null) {
-            catalystForm.layout(x, y, area.width(), Math.max(MIN_SECTION_H, area.bottom() - y));
-        }
+        return layoutForm(catalystForm, x, y, area.width());
     }
 
-    private void layoutTrigger(UiRect area) {
+    private int layoutTrigger(UiRect area) {
         int x = area.x();
         int y = area.y();
         for (UiCheckBox box : triggerBoxes) {
             box.setBounds(x, y, area.width(), ROW_H);
             y += ROW_H;
         }
-        y += 2;
+        y += PAD;
         triggerNoteRect = new UiRect(x, y, area.width(), LINE_H);
-        y += LINE_H + 2;
+        y += LINE_H + PAD;
+        y = layoutForm(delayForm, x, y, area.width());
         if (delayForm != null) {
-            delayLabelRect = new UiRect(x, y, area.width(), LINE_H);
-            y += LINE_H;
-            int height = Math.clamp(delayForm.contentHeight() + 4, 24, MIN_SECTION_H);
-            delayForm.layout(x, y, area.width(), height);
-            y += height;
             delayHintRect = new UiRect(x, y, area.width(), LINE_H);
-            y += LINE_H;
+            y += LINE_H + PAD;
         }
-        if (conditionsForm != null) {
-            conditionsForm.layout(x, y, area.width(), Math.max(MIN_SECTION_H, area.bottom() - y));
-        }
+        return layoutForm(conditionsForm, x, y, area.width());
     }
 
-    private void layoutResults(UiRect area) {
+    private int layoutResults(UiRect area) {
         int x = area.x();
         int y = area.y();
-        int bottom = area.bottom();
-        boolean wide = area.width() >= NARROW_WIDTH;
-        if (wide) {
-            int leftWidth = Math.clamp(area.width() / 3, 80, 140);
-            int candidateButtonsHeight = buttonGroupHeight(candidateButtons, leftWidth);
-            int listHeight = Math.max(ROW_H, bottom - y - candidateButtonsHeight - LINE_H - PAD);
-            if (candidateList != null) {
-                candidateList.setBounds(x, y, leftWidth, listHeight);
-            }
-            int buttonY = y + listHeight + BUTTON_GAP;
-            layoutButtonGroup(candidateButtons, x, buttonY, leftWidth);
-            flatNoteRect = new UiRect(x, bottom - LINE_H, leftWidth, LINE_H);
-            int rightX = x + leftWidth + PAD;
-            int rightWidth = Math.max(60, area.right() - rightX);
-            layoutResultsDetail(rightX, y, rightWidth, bottom);
-            return;
-        }
-        int listHeight = Math.clamp(area.height() / 4, ROW_H, ROW_H * LIST_ROWS);
+        int leftWidth = area.width() >= NARROW_WIDTH ? Math.clamp(area.width() / 3, 80, 140) : area.width();
+        int listHeight = Math.clamp(candidateList == null ? 1 : candidateList.size(), 1, LIST_ROWS) * ROW_H + 2;
         if (candidateList != null) {
-            candidateList.setBounds(x, y, area.width(), listHeight);
+            candidateList.setBounds(x, y, leftWidth, listHeight);
         }
-        y += listHeight + BUTTON_GAP;
-        y += layoutButtonGroup(candidateButtons, x, y, area.width()) + BUTTON_GAP;
-        flatNoteRect = new UiRect(x, y, area.width(), LINE_H);
-        y += LINE_H + BUTTON_GAP;
-        layoutResultsDetail(x, y, area.width(), bottom);
+        int nextY = y + listHeight + BUTTON_GAP;
+        nextY += layoutButtonGroup(candidateButtons, x, nextY, leftWidth) + PAD;
+        if (!ResultStructure.hasOutcomes(currentView())) {
+            flatNoteRect = new UiRect(x, nextY, leftWidth, LINE_H);
+            nextY += LINE_H + PAD;
+        }
+        if (area.width() >= NARROW_WIDTH) {
+            int rightX = x + leftWidth + PAD;
+            return Math.max(nextY, layoutResultsDetail(rightX, y, Math.max(0, area.right() - rightX)));
+        }
+        return layoutResultsDetail(x, nextY, area.width());
     }
 
-    private void layoutResultsDetail(int x, int y, int width, int bottom) {
+    private int layoutResultsDetail(int x, int y, int width) {
         combinationLabelRect = new UiRect(x, y, width, LINE_H);
         y += LINE_H;
         if (combinationControl != null) {
-            int comboWidth = fitWidth(combinationControl.preferredWidth(PAD), 80, width);
-            combinationControl.setBounds(x, y, comboWidth, ROW_H);
+            combinationControl.setBounds(x, y, fitWidth(combinationControl.preferredWidth(PAD), 100, width), ROW_H);
         }
-        y += ROW_H + 2;
+        y += ROW_H + PAD;
         if (safeSpawnBox != null) {
             safeSpawnBox.setBounds(x, y, width, ROW_H);
             y += ROW_H;
@@ -1159,20 +1216,24 @@ public final class RuleEditorEditPages {
             fillOriginBox.setBounds(x, y, width, ROW_H);
             y += ROW_H;
         }
-        y += BUTTON_GAP;
-        int listHeight = Math.clamp((bottom - y) / 3, ROW_H, ROW_H * LIST_ROWS);
+        y += PAD;
+        int listHeight = Math.clamp(effectList == null ? 1 : effectList.size(), 1, LIST_ROWS) * ROW_H + 2;
         if (effectList != null) {
             effectList.setBounds(x, y, width, listHeight);
         }
         y += listHeight + BUTTON_GAP;
-        y += layoutButtonGroup(effectButtons, x, y, width) + BUTTON_GAP;
-        effectNoteRect = new UiRect(x, y, width, LINE_H);
-        y += LINE_H;
-        convertHintRect = new UiRect(x, Math.max(y, bottom - LINE_H), width, LINE_H);
-        if (effectForm != null) {
-            int formBottom = Math.max(y + MIN_SECTION_H, bottom - LINE_H);
-            effectForm.layout(x, y, width, Math.max(MIN_SECTION_H, formBottom - y));
+        y += layoutButtonGroup(effectButtons, x, y, width) + PAD;
+        JsonObject view = currentView();
+        if (view != null && readonlyEffectNote(view) != null) {
+            effectNoteRect = new UiRect(x, y, width, LINE_H);
+            y += LINE_H + PAD;
         }
+        y = layoutForm(effectForm, x, y, width);
+        if (!ResultStructure.hasOutcomes(view)) {
+            convertHintRect = new UiRect(x, y, width, LINE_H);
+            y += LINE_H;
+        }
+        return y;
     }
 
     // 控件宽度：先满足最小宽度，再压进可用宽度（可用宽度可能小于最小值，不能用 Math.clamp）
@@ -1183,6 +1244,9 @@ public final class RuleEditorEditPages {
 
     // 按钮组横向排布（超宽换行），返回占用高度
     private int layoutButtonGroup(List<UiButton> group, int x, int y, int width) {
+        if (group.isEmpty()) {
+            return 0;
+        }
         int cursorX = x;
         int cursorY = y;
         for (UiButton button : group) {
@@ -1197,25 +1261,13 @@ public final class RuleEditorEditPages {
         return cursorY - y + BUTTON_H;
     }
 
-    // 预估按钮组高度
-    private int buttonGroupHeight(List<UiButton> group, int width) {
-        int rows = 1;
-        int cursorX = 0;
-        for (UiButton button : group) {
-            int buttonWidth = fitWidth(button.preferredWidth(PAD), 24, width);
-            if (cursorX > 0 && cursorX + buttonWidth > width) {
-                rows++;
-                cursorX = 0;
-            }
-            cursorX += buttonWidth + BUTTON_GAP;
-        }
-        return rows * (BUTTON_H + BUTTON_GAP);
-    }
-
     // ---- 目录面板与结构图解（P4） ----
 
     // 源物品目录选择：多选后把新 id 追加进 source.items（已有项不重复）
     private void openSourceCatalog() {
+        if (blockNavigation()) {
+            return;
+        }
         EditSession session = host.session();
         if (session == null || host.rejectWhenFrozen()) {
             return;
@@ -1247,8 +1299,10 @@ public final class RuleEditorEditPages {
         for (String id : merged) {
             next.add(id);
         }
-        apply(EditSession.OP_SET_FIELD,
-                () -> draft.setAt(RuleFields.SOURCE + "." + RuleFields.SOURCE_ITEMS, next));
+        if (!apply(EditSession.OP_SET_FIELD,
+                () -> draft.setAt(RuleFields.SOURCE + "." + RuleFields.SOURCE_ITEMS, next))) {
+            return;
+        }
         if (sourceForm != null) {
             sourceForm.reload();
         }
@@ -1256,6 +1310,9 @@ public final class RuleEditorEditPages {
 
     // 结构图解：只表达槽位与连接，节点点击导航到对应页/候选/效果
     private void openDiagram() {
+        if (blockNavigation()) {
+            return;
+        }
         EditSession session = host.session();
         if (session == null) {
             return;
@@ -1310,20 +1367,29 @@ public final class RuleEditorEditPages {
     // ---- 渲染 ----
 
     public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
-        switch (page) {
-            case INFO -> renderInfo(graphics);
-            case INPUT -> renderInput(graphics);
-            case TRIGGER -> renderTrigger(graphics);
-            case RESULTS -> renderResults(graphics);
+        if (lastArea == null || lastArea.height() == 0) {
+            return;
         }
-        for (UiWidget widget : liveWidgets) {
-            if (widget.isVisible()) {
-                widget.render(graphics, renderFont, mouseX, mouseY);
+        graphics.enableScissor(lastArea.x(), lastArea.y(), lastArea.right(), lastArea.bottom());
+        try {
+            switch (page) {
+                case INFO -> renderInfo(graphics);
+                case INPUT -> renderInput(graphics);
+                case TRIGGER -> renderTrigger(graphics);
+                case RESULTS -> renderResults(graphics);
             }
+            for (UiWidget widget : liveWidgets) {
+                if (widget.isVisible()) {
+                    widget.render(graphics, renderFont, mouseX, mouseY);
+                }
+            }
+            if (dragActive) {
+                drawDragPreview(graphics);
+            }
+        } finally {
+            graphics.disableScissor();
         }
-        if (dragActive) {
-            drawDragPreview(graphics);
-        }
+        pageScroll.renderScrollbar(graphics, UiTheme.secondaryStyle());
     }
 
     private void renderInfo(GuiGraphics graphics) {
@@ -1354,7 +1420,6 @@ public final class RuleEditorEditPages {
 
     private void renderTrigger(GuiGraphics graphics) {
         drawText(graphics, triggerNoteRect, Component.translatable(UI + "trigger.note"), UiPalette.TEXT_DISABLED);
-        drawText(graphics, delayLabelRect, Component.translatable(UI + "rule.trigger_after_seconds"), UiPalette.TEXT_SECONDARY);
         drawText(graphics, delayHintRect, Component.translatable(UI + "trigger.delay_hint"), UiPalette.TEXT_DISABLED);
     }
 
@@ -1393,17 +1458,11 @@ public final class RuleEditorEditPages {
 
     // 拖动预览：高亮目标行
     private void drawDragPreview(GuiGraphics graphics) {
-        UiRect rect = dragKind == DragKind.CANDIDATE
-                ? (candidateList == null ? null : candidateList.bounds())
-                : (effectList == null ? null : effectList.bounds());
-        if (rect == null || dragTo < 0) {
-            return;
+        UiListView<?> list = dragKind == DragKind.CANDIDATE ? candidateList : effectList;
+        UiRect rect = list == null ? null : list.visibleRowBounds(dragTo);
+        if (rect != null) {
+            UiTheme.drawSelection(graphics, rect);
         }
-        int rowY = rect.y() + dragTo * ROW_H;
-        if (rowY + ROW_H > rect.bottom()) {
-            return;
-        }
-        UiTheme.drawSelection(graphics, new UiRect(rect.x(), rowY, rect.width(), ROW_H));
     }
 
     private void drawText(GuiGraphics graphics, @Nullable UiRect rect, Component text, int color) {
@@ -1418,6 +1477,9 @@ public final class RuleEditorEditPages {
 
     // 提交所有可见表单的待写字段；返回是否有改动
     public boolean applyToDraft() {
+        if (!enabled) {
+            return false;
+        }
         boolean changed = false;
         for (FormView form : liveForms) {
             if (form.isVisible() && form.applyToDraft()) {
@@ -1551,6 +1613,23 @@ public final class RuleEditorEditPages {
     }
 
     private void applyEnabled() {
+        JsonObject view = currentView();
+        if (sourceCostMode != null) {
+            sourceCostMode.setEnabled(enabled && RuleCostBinding.consumeSource(view) == null);
+        }
+        if (catalystToggle != null) {
+            catalystToggle.setEnabled(enabled && RuleCostBinding.consumeCatalyst(view) == null);
+        }
+        triggerBoxes.forEach(box -> box.setEnabled(enabled));
+        if (combinationControl != null) {
+            combinationControl.setEnabled(enabled && ResultStructure.hasOutcomes(view));
+        }
+        if (safeSpawnBox != null) {
+            safeSpawnBox.setEnabled(enabled);
+        }
+        if (fillOriginBox != null) {
+            fillOriginBox.setEnabled(enabled);
+        }
         for (FormView form : liveForms) {
             form.setEnabled(enabled);
         }
@@ -1589,6 +1668,9 @@ public final class RuleEditorEditPages {
     }
 
     public @Nullable Component tooltipAt(double mouseX, double mouseY) {
+        if (!pageScroll.contains(mouseX, mouseY)) {
+            return null;
+        }
         for (FormView form : liveForms) {
             if (!form.isVisible()) {
                 continue;
@@ -1601,29 +1683,6 @@ public final class RuleEditorEditPages {
         return null;
     }
 
-    // 供屏幕摘要行使用：结果页返回顶层 effects 或合并后的候选效果
-    public @Nullable JsonElement summaryElement() {
-        EditSession session = host.session();
-        if (session == null || page != Page.RESULTS) {
-            return null;
-        }
-        JsonObject view = session.draft().view();
-        if (!ResultStructure.hasOutcomes(view)) {
-            return view.get(RuleFields.EFFECTS);
-        }
-        JsonArray merged = new JsonArray();
-        for (int i = 0; i < ResultStructure.candidateCount(view); i++) {
-            JsonArray effects = ResultStructure.effectsAt(view, i);
-            if (effects == null) {
-                continue;
-            }
-            for (JsonElement element : effects) {
-                merged.add(element);
-            }
-        }
-        return merged;
-    }
-
     /**
      * 按草稿路径切到对应页签、选中候选与效果，并返回应当聚焦的字段控件。
      * <p>用于本地校验与服务器问题定位（规则 → 页签 → 候选 → 效果 → 条件 → 字段）。
@@ -1631,6 +1690,13 @@ public final class RuleEditorEditPages {
     public @Nullable UiFocusTarget reveal(@Nullable String path) {
         if (path == null || path.isBlank()) {
             return null;
+        }
+        for (FormView form : liveForms) {
+            UiFocusTarget target = form.revealPath(path);
+            if (target != null) {
+                ensureVisible(target);
+                return target;
+            }
         }
         if (path.startsWith(RuleFields.OUTCOMES) || path.startsWith(RuleFields.EFFECTS)) {
             page = Page.RESULTS;
@@ -1670,7 +1736,8 @@ public final class RuleEditorEditPages {
         if (path.startsWith(RuleFields.SOURCE) || path.startsWith(RuleFields.CATALYST_COST)) {
             page = Page.INPUT;
             rebuild();
-            FormView target = path.startsWith(RuleFields.CATALYST_COST) ? catalystForm : sourceForm;
+            FormView target = path.startsWith(RuleFields.CATALYST_COST) ? catalystForm
+                    : path.startsWith(RuleFields.SOURCE_COST) ? sourceCostForm : sourceForm;
             return target == null ? null : target.revealPath(path);
         }
         page = Page.INFO;
@@ -1681,6 +1748,12 @@ public final class RuleEditorEditPages {
     // ---- 输入事件 ----
 
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (!pageScroll.contains(mouseX, mouseY)) {
+            return false;
+        }
+        if (pageScroll.mousePressed(mouseX, mouseY, button)) {
+            return true;
+        }
         boolean handled = false;
         for (UiWidget widget : liveWidgets) {
             if (widget.isVisible() && widget.mouseClicked(mouseX, mouseY, button)) {
@@ -1688,12 +1761,25 @@ public final class RuleEditorEditPages {
                 break;
             }
         }
-        captureDrag(mouseX, mouseY);
+        if (lastArea != null) {
+            layout(lastArea);
+        }
+        for (UiFocusTarget target : focusTargets()) {
+            if (target instanceof UiConditionTreeEditor tree && tree.isPickerOpen()) {
+                host.focus().focusOn(tree);
+                ensureVisible(tree);
+                break;
+            }
+        }
+        if (button == 0 && !pendingRebuild) {
+            captureDrag(mouseX, mouseY);
+        }
         flushRebuild();
         return handled;
     }
 
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        pageScroll.mouseReleased();
         if (dragKind != DragKind.NONE) {
             DragKind kind = dragKind;
             int from = dragFrom;
@@ -1725,6 +1811,13 @@ public final class RuleEditorEditPages {
     }
 
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (pageScroll.isDragging()) {
+            pageScroll.mouseDragged(mouseY);
+            if (lastArea != null) {
+                layout(lastArea);
+            }
+            return true;
+        }
         if (dragKind != DragKind.NONE) {
             if (Math.abs(mouseY - dragStartY) >= 3) {
                 dragActive = true;
@@ -1743,16 +1836,26 @@ public final class RuleEditorEditPages {
     }
 
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (!pageScroll.contains(mouseX, mouseY)) {
+            return false;
+        }
         for (UiWidget widget : liveWidgets) {
             if (widget.isVisible() && widget.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
                 return true;
             }
         }
-        return false;
+        boolean changed = pageScroll.scrollBy(scrollY);
+        if (changed && lastArea != null) {
+            layout(lastArea);
+        }
+        return changed;
     }
 
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         for (UiWidget widget : liveWidgets) {
+            if (widget instanceof UiFocusTarget target && !target.isFocused()) {
+                continue;
+            }
             if (widget.isVisible() && widget.keyPressed(keyCode, scanCode, modifiers)) {
                 flushRebuild();
                 return true;
@@ -1790,7 +1893,7 @@ public final class RuleEditorEditPages {
             list = effectList;
             kind = DragKind.EFFECT;
         }
-        if (list == null) {
+        if (list == null || list.itemIndexAt(mouseX, mouseY) < 0) {
             return;
         }
         dragKind = kind;
@@ -1804,12 +1907,42 @@ public final class RuleEditorEditPages {
         if (list == null || list.size() == 0) {
             return -1;
         }
-        int index = (int) Math.floor((mouseY - list.bounds().y()) / ROW_H);
-        if (index < 0) {
-            return 0;
+        return list.dragIndexAt(mouseY);
+    }
+
+    // 切换或结构修改前先校验文本缓冲，再提交旧表单，避免重建丢失输入。
+    public boolean blockNavigation() {
+        if (!enabled) {
+            return false;
         }
-        int last = list.size() - 1;
-        return Math.min(index, last);
+        for (FormView form : liveForms) {
+            FormIssue issue = form.pendingInputIssue();
+            if (issue != null) {
+                host.notice(Component.translatable(UI + "notice.issue", issue.label(), issue.message()), UiPalette.DANGER);
+                UiFocusTarget target = form.revealPath(issue.path());
+                if (target != null) {
+                    host.focus().focusOn(target);
+                    ensureVisible(target);
+                }
+                return true;
+            }
+        }
+        endInteractions();
+        if (enabled && applyToDraft()) {
+            host.onDraftChanged();
+        }
+        return false;
+    }
+
+    // Tab 和问题定位都需把焦点滚进外层页面视口。
+    public void ensureVisible(UiFocusTarget target) {
+        if (lastArea == null || !focusTargets().contains(target)) {
+            return;
+        }
+        UiRect rect = target.bounds();
+        pageScroll.ensureVisible(new UiRect(rect.x() - lastArea.x(),
+                rect.y() - lastArea.y() + pageScroll.offset(), rect.width(), rect.height()));
+        layout(lastArea);
     }
 
     private void requestRebuild() {
@@ -1823,14 +1956,45 @@ public final class RuleEditorEditPages {
         }
     }
 
-    private void apply(String opKey, Runnable change) {
+    private boolean apply(String opKey, Runnable change) {
         EditSession session = host.session();
-        if (session == null || host.rejectWhenFrozen()) {
-            return;
+        if (session == null || host.rejectWhenFrozen() || blockNavigation()) {
+            restoreSwitches();
+            return false;
         }
         session.apply(opKey, change);
         host.onDraftChanged();
         requestRebuild();
+        return true;
+    }
+
+    // 无效文本阻止结构操作时，仅恢复开关显示，不重建输入控件。
+    private void restoreSwitches() {
+        JsonObject view = currentView();
+        if (view == null) {
+            return;
+        }
+        if (sourceCostMode != null) {
+            sourceCostMode.setSelected(view.has(RuleFields.SOURCE_COST) || RuleCostBinding.consumeSource(view) != null
+                    ? COST_EXPLICIT : COST_DERIVED);
+        }
+        if (catalystToggle != null) {
+            catalystToggle.setChecked(view.has(RuleFields.CATALYST_COST) || RuleCostBinding.consumeCatalyst(view) != null);
+        }
+        List<String> triggers = RuleTriggers.effective(view);
+        for (int index = 0; index < triggerBoxes.size(); index++) {
+            triggerBoxes.get(index).setChecked(triggers.contains(RuleTriggers.known().get(index)));
+        }
+        if (combinationControl != null) {
+            combinationControl.setSelected(combinationOf(view));
+        }
+        JsonObject candidate = ResultStructure.candidateAt(view, candidateIndex);
+        if (safeSpawnBox != null) {
+            safeSpawnBox.setChecked(boolOf(candidate, RuleFields.SAFE_SPAWN, false));
+        }
+        if (fillOriginBox != null) {
+            fillOriginBox.setChecked(boolOf(candidate, RuleFields.FILL_ORIGIN, true));
+        }
     }
 
     private void addCandidateButton(String labelKey, UiAction action) {

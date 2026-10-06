@@ -175,6 +175,13 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
         return true;
     }
 
+    // 页面切换前使用同一提交入口保留正在输入的条目。
+    public void commitPendingInput() {
+        if (enabled) {
+            commitInput();
+        }
+    }
+
     // 输入内容提交：追加或覆盖选中项
     private void commitInput() {
         String text = input.value().trim();

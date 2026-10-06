@@ -225,6 +225,7 @@ public final class UiModalStack implements UiWidget {
         if (modal.keyPressed(keyCode, scanCode, modifiers)) {
             return true;
         }
+        focusManager.setSpaceActivates(focusManager.focused() instanceof UiButton);
         return focusManager.keyPressed(keyCode, scanCode, modifiers);
     }
 

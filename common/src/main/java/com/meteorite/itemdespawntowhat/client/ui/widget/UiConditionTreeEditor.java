@@ -132,6 +132,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
     private boolean focused;
     // 是否可见
     private boolean visible = true;
+    private boolean enabled = true;
     // 上次点击时间与下标（双击判定）
     private long lastClickTime;
     private int lastClickIndex = -1;
@@ -232,6 +233,15 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
     }
 
     // 设置是否可见
+    // 禁用编辑时仍显示条件内容并允许滚动查看。
+    public void setEnabled(boolean next) {
+        enabled = next;
+        if (!next) {
+            focused = false;
+            closePicker();
+        }
+    }
+
     public UiConditionTreeEditor setVisible(boolean newVisible) {
         this.visible = newVisible;
         return this;
@@ -287,6 +297,9 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
 
     // 打开条件类型选择框，向当前目标分组追加一个条件
     public boolean beginAddCondition() {
+        if (!enabled) {
+            return false;
+        }
         String groupPath = targetGroupPath();
         if (expression.root() == null) {
             groupPath = null;
@@ -300,6 +313,9 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
 
     // 追加一个分组（allOf 为 true 表示 ALL，否则 ANY）
     public boolean addGroup(boolean allOf) {
+        if (!enabled) {
+            return false;
+        }
         ConditionNode group = allOf ? new ConditionNode.AllOf(List.of()) : new ConditionNode.AnyOf(List.of());
         boolean added = addNode(group);
         if (added) {
@@ -310,6 +326,9 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
 
     // 给选中节点包一层 NOT
     public boolean wrapSelectedInNot() {
+        if (!enabled) {
+            return false;
+        }
         Row row = selectedRow();
         if (row == null) {
             return false;
@@ -324,6 +343,9 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
 
     // 删除选中节点（根节点被删除后表达式变为空）
     public boolean deleteSelected() {
+        if (!enabled) {
+            return false;
+        }
         Row row = selectedRow();
         if (row == null) {
             return false;
@@ -344,6 +366,9 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
 
     // 在父分组内上移/下移选中节点
     public boolean moveSelected(int delta) {
+        if (!enabled) {
+            return false;
+        }
         if (delta == 0) {
             return false;
         }
@@ -369,6 +394,9 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
 
     // 切换选中分组的 ALL / ANY
     public boolean toggleSelectedGroupKind() {
+        if (!enabled) {
+            return false;
+        }
         Row row = selectedRow();
         if (row == null) {
             return false;
@@ -383,6 +411,9 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
 
     // 编辑选中叶节点的参数
     public boolean editSelectedLeaf() {
+        if (!enabled) {
+            return false;
+        }
         Row row = selectedRow();
         if (row == null || !(row.node() instanceof ConditionNode.Leaf leaf)) {
             return false;
@@ -866,7 +897,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
     // 绘制类型选择框
     private void renderPicker(GuiGraphics graphics, Font renderFont) {
         graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), UiPalette.MODAL_DIM);
-        int width = Math.clamp(bounds.width() - 8, 96, 220);
+        int width = Math.clamp(bounds.width() - 8, 0, 220);
         int maxRows = Math.max(1, (bounds.height() - PICKER_HEADER - PICKER_FOOTER - 4) / Math.max(1, rowHeight));
         int visibleRows = Math.min(Math.min(PICKER_MAX_ROWS, maxRows), Math.max(1, typeOptions.size()));
         int height = PICKER_HEADER + visibleRows * rowHeight + PICKER_FOOTER;
@@ -915,7 +946,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (!visible || !bounds.contains(mouseX, mouseY)) {
+        if (!visible || !enabled || !bounds.contains(mouseX, mouseY)) {
             return false;
         }
         if (pickerOpen) {
@@ -990,9 +1021,8 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
         if (leaf == null) {
             return;
         }
-        if (addNode(leaf)) {
-            lastOpKey = EditSession.OP_ADD_CONDITION;
-        }
+        lastOpKey = EditSession.OP_ADD_CONDITION;
+        addNode(leaf);
     }
 
     @Override
@@ -1029,7 +1059,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!visible) {
+        if (!visible || !enabled) {
             return false;
         }
         if (pickerOpen) {
@@ -1187,7 +1217,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
 
     @Override
     public boolean canFocus() {
-        return visible;
+        return visible && enabled;
     }
 
     @Override
@@ -1202,6 +1232,9 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
 
     @Override
     public boolean activate() {
+        if (!enabled) {
+            return false;
+        }
         Row row = selectedRow();
         if (row == null) {
             return beginAddCondition();

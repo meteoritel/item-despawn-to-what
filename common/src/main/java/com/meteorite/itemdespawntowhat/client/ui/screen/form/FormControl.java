@@ -127,6 +127,20 @@ abstract class FormControl {
         return true;
     }
 
+    // 列表等复合控件先结束尚未提交的条目输入。
+    void finishInput() {
+    }
+
+    // 尚未写入草稿的非法文本不能在切换或重建时静默丢弃。
+    boolean hasPendingInput() {
+        return false;
+    }
+
+    // 长文本悬停时显示完整内容。
+    @Nullable Component fullText() {
+        return null;
+    }
+
     // 本地校验问题清单
     List<FormIssue> issues(String path) {
         return List.of();
@@ -192,7 +206,7 @@ abstract class FormControl {
         switch (field.type()) {
             case TEXT:
             case LONG_TEXT:
-                return new TextControl(font, field, textFilter(field),
+                return new TextControl(font, field, textFilter(),
                         FormControl::literalValue, FormControl::textOf, onChanged, ISSUE_PREFIX + "invalid_text");
             case RESOURCE_LOCATION:
                 return new TextControl(font, field, FormControl::idChars,
@@ -258,9 +272,9 @@ abstract class FormControl {
 
     // ---- 文本过滤器与解析工具 ----
 
-    static Predicate<String> textFilter(EditorField field) {
-        int limit = field.type() == EditorFieldType.LONG_TEXT ? 1024 : 128;
-        return text -> text == null || text.length() <= limit;
+    static Predicate<String> textFilter() {
+        // 长度由输入框管理，过滤器不拒绝已有长值的程序化回填。
+        return text -> true;
     }
 
     // id 字符集（不含标签前缀）
@@ -437,6 +451,7 @@ abstract class FormControl {
             this.invalidKey = invalidKey;
             Component hint = hint();
             this.input = new UiTextInput(font, hint == null ? Component.empty() : hint);
+            this.input.setMaxLength(textLimit());
             this.input.setFilter(filter);
             this.input.setOnCommit(text -> {
                 markEdited();
@@ -526,6 +541,16 @@ abstract class FormControl {
         }
 
         @Override
+        boolean hasPendingInput() {
+            return !input.value().equals(loadedText);
+        }
+
+        @Override
+        @Nullable Component fullText() {
+            return input.value().isEmpty() ? null : Component.literal(input.value());
+        }
+
+        @Override
         boolean isEditing() {
             return input.isFocused();
         }
@@ -540,14 +565,26 @@ abstract class FormControl {
             rememberLoaded(value);
             this.loaded = value == null || value.isJsonNull() ? null : value.deepCopy();
             this.loadedText = loaded == null ? "" : format.apply(loaded);
+            // 原值超长也必须完整回填，浏览或修改其他字段不能截短它。
+            input.setMaxLength(Math.max(textLimit(), loadedText.length()));
             input.setValue(loadedText);
+        }
+
+        // 普通文本和备注分别使用声明的编辑长度，资源 ID 沿用原输入范围。
+        private int textLimit() {
+            return field.type() == EditorFieldType.LONG_TEXT ? 1024
+                    : field.type() == EditorFieldType.TEXT ? 128 : 256;
         }
 
         @Override
         @Nullable JsonElement store() {
-            String text = input.value().trim();
+            String value = input.value();
+            if (value.equals(loadedText)) {
+                return originalElement();
+            }
+            String text = field.type() == EditorFieldType.LONG_TEXT ? value : value.trim();
             // 未编辑且文本仍等于装载基线：原样回写原始元素（缺失即 null），applyToDraft 跳过该字段
-            if (!isEdited() && text.equals(loadedText.trim())) {
+            if (field.type() != EditorFieldType.LONG_TEXT && !isEdited() && text.equals(loadedText.trim())) {
                 return originalElement();
             }
             if (text.isEmpty()) {
@@ -771,8 +808,18 @@ abstract class FormControl {
         }
 
         @Override
+        void finishInput() {
+            editor.commitPendingInput();
+        }
+
+        @Override
+        boolean hasPendingInput() {
+            return !editor.items().equals(loadedItems);
+        }
+
+        @Override
         int height() {
-            return UiListEditor.preferredHeight(4);
+            return UiListEditor.preferredHeight(Math.max(1, editor.items().size()));
         }
 
         @Override
@@ -970,6 +1017,11 @@ abstract class FormControl {
         }
 
         @Override
+        boolean hasPendingInput() {
+            return !minInput.value().equals(loadedMin) || !maxInput.value().equals(loadedMax);
+        }
+
+        @Override
         boolean isEditing() {
             return minInput.isFocused() || maxInput.isFocused();
         }
@@ -1022,6 +1074,9 @@ abstract class FormControl {
         List<FormIssue> issues(String path) {
             Double min = parseDouble(minInput.value());
             Double max = parseDouble(maxInput.value());
+            if ((!minInput.value().isBlank() && min == null) || (!maxInput.value().isBlank() && max == null)) {
+                return List.of(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "invalid_number")));
+            }
             if (min != null && max != null && min > max) {
                 return List.of(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "range_order")));
             }
@@ -1033,8 +1088,12 @@ abstract class FormControl {
 
     static final class ConditionTreeControl extends FormControl {
 
-        // 条件树区域固定高度
-        static final int TREE_HEIGHT = 150;
+        // 工具栏自动换行，树高度随内容增长
+        private static final int BUTTON_HEIGHT = 14;
+        private final List<UiButton> toolbar = new ArrayList<>();
+        private final Font font;
+        private int toolbarHeight;
+        private boolean enabled = true;
 
         private final UiConditionTreeEditor editor;
         private final @Nullable ConditionSupport support;
@@ -1043,6 +1102,7 @@ abstract class FormControl {
         ConditionTreeControl(Font font, EditorField field, @Nullable ConditionSupport support, Runnable onChanged) {
             super(field);
             this.support = support;
+            this.font = font;
             this.editor = new UiConditionTreeEditor(font);
             this.editor.setTypeOptions(support == null ? List.of() : support.typeOptions());
             if (support != null) {
@@ -1053,17 +1113,63 @@ abstract class FormControl {
                 markEdited();
                 onChanged.run();
             });
-            this.editor.setEmptyMessage(Component.translatable("gui.itemdespawntowhat.edit.tree.empty"));
+            this.editor.setEmptyMessage(Component.translatable("gui.itemdespawntowhat.edit.tree.unrestricted"));
+            if (support != null) {
+                addButton("add", editor::beginAddCondition);
+                addButton("all", () -> editor.addGroup(true));
+                addButton("any", () -> editor.addGroup(false));
+                addButton("not", editor::wrapSelectedInNot);
+                addButton("edit", editor::editSelectedLeaf);
+                addButton("remove", editor::deleteSelected);
+                addButton("up", () -> editor.moveSelected(-1));
+                addButton("down", () -> editor.moveSelected(1));
+            }
+        }
+
+        // 鼠标按钮和原有快捷键共用条件树操作。
+        private void addButton(String name, Runnable action) {
+            toolbar.add(new UiButton(font, Component.translatable("gui.itemdespawntowhat.edit.tree.button." + name),
+                    UiButtonVariant.SECONDARY, action::run));
+        }
+
+        private int treeHeight() {
+            return editor.isPickerOpen() ? 140 : Math.clamp((long) (editor.rowCount() + 1) * 12, 28, 96);
         }
 
         @Override
         int height() {
-            return TREE_HEIGHT;
+            return treeHeight() + toolbarHeight;
+        }
+
+        @Override
+        void measure(int width) {
+            toolbarHeight = layoutToolbar(0, 0, width);
+        }
+
+        private int layoutToolbar(int x, int y, int width) {
+            if (toolbar.isEmpty() || fallbackRaw != null) {
+                return 0;
+            }
+            int cursorX = x;
+            int cursorY = y;
+            for (UiButton button : toolbar) {
+                int limit = Math.max(1, width);
+                int buttonWidth = Math.clamp(button.preferredWidth(4), Math.min(24, limit), limit);
+                if (cursorX > x && cursorX + buttonWidth > x + width) {
+                    cursorX = x;
+                    cursorY += BUTTON_HEIGHT + 2;
+                }
+                button.setBounds(cursorX, cursorY, buttonWidth, BUTTON_HEIGHT);
+                button.setEnabled(enabled);
+                cursorX += buttonWidth + 2;
+            }
+            return cursorY - y + BUTTON_HEIGHT + 2;
         }
 
         @Override
         void setBounds(int x, int y, int width) {
-            editor.setBounds(x, y, width, TREE_HEIGHT);
+            toolbarHeight = layoutToolbar(x, y, width);
+            editor.setBounds(x, y + toolbarHeight, width, treeHeight());
         }
 
         @Override
@@ -1080,17 +1186,32 @@ abstract class FormControl {
                         UiPalette.TEXT_PRIMARY, false);
                 return;
             }
+            for (UiButton button : toolbar) {
+                button.render(graphics, font, mouseX, mouseY);
+            }
             editor.render(graphics, font, mouseX, mouseY);
         }
 
         @Override
         boolean mouseClicked(double mouseX, double mouseY, int button) {
-            return fallbackRaw == null && editor.mouseClicked(mouseX, mouseY, button);
+            if (!enabled || fallbackRaw != null) {
+                return false;
+            }
+            for (UiButton target : toolbar) {
+                if (target.mouseClicked(mouseX, mouseY, button)) {
+                    return true;
+                }
+            }
+            return editor.mouseClicked(mouseX, mouseY, button);
         }
 
         @Override
         boolean mouseReleased(double mouseX, double mouseY, int button) {
-            return fallbackRaw == null && editor.mouseReleased(mouseX, mouseY, button);
+            boolean consumed = false;
+            for (UiButton target : toolbar) {
+                consumed |= target.mouseReleased(mouseX, mouseY, button);
+            }
+            return consumed | (fallbackRaw == null && editor.mouseReleased(mouseX, mouseY, button));
         }
 
         @Override
@@ -1110,14 +1231,17 @@ abstract class FormControl {
 
         @Override
         void addFocusTargets(List<UiFocusTarget> out) {
-            if (fallbackRaw == null) {
+            if (fallbackRaw == null && enabled) {
+                out.addAll(toolbar);
                 out.add(editor);
             }
         }
 
         @Override
         void setEnabled(boolean enabled) {
-            editor.setVisible(enabled);
+            this.enabled = enabled;
+            editor.setEnabled(enabled);
+            toolbar.forEach(button -> button.setEnabled(enabled));
         }
 
         @Override
@@ -1165,7 +1289,9 @@ abstract class FormControl {
             }
             List<FormIssue> list = new ArrayList<>();
             for (UiConditionTreeEditor.Issue issue : editor.issues()) {
-                String issuePath = issue.path() == null || issue.path().isEmpty() ? path : issue.path();
+                String relative = issue.path();
+                String issuePath = relative == null || !relative.startsWith(UiConditionTreeEditor.ROOT_PATH) ? path
+                        : path + relative.substring(UiConditionTreeEditor.ROOT_PATH.length());
                 String key = ISSUE_PREFIX + issue.kind().name().toLowerCase(Locale.ROOT);
                 list.add(FormIssue.error(issuePath, label(), Component.translatable(key)));
             }

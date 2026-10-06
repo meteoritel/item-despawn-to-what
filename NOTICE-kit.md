@@ -110,3 +110,17 @@
 - **`UiInputRouter` 未接入**：kit 规格 §8.5 要求「没有真实使用到的抽象要么接入、要么延后」。全仓引用仅出现在 `UiInputRouter.java` 自身、`package-info.java` 的公开入口列表与 `UiSliderExamples` 的说明注释中；宿主控件（`client/ui/widget/`）仍各自分发事件。本期记为已知限制，未删除该类，也未声称其已接入。
 - **文档引用已落地（P5-e 修复）**：`client/ui/kit/package-info.java` 原引用的 `docs/dev/internals/ui-kit-api.md` 与 `scripts/check-ui-kit-boundaries.ps1` 曾不存在，已在 P5-e 落地为真实文件——新建 [docs/dev/internals/ui-kit-api.md](docs/dev/internals/ui-kit-api.md)（246 行：依赖边界、输入路由、生命周期、数值策略、接入示例与 style 注入）与 [tools/check-ui-kit-boundaries.ps1](tools/check-ui-kit-boundaries.ps1)（137 行：扫描 kit 目录的 import 与全限定引用，违规 exit 1、通过 exit 0），并让 `package-info.java` 指向真实脚本。验证：该脚本对当前 kit 实跑输出「扫描 39 个文件、112 条 import、0 处违规」并 exit 0；对临时构造的违规样本输出 5 处违规并 exit 1（样本已删除）。kit 规格 §8「不能调用不存在的脚本」由此满足。
 - 独立 kit 库**本期未发布**：仍只冻结公开边界与依赖检查方式，独立 Gradle 模块与发布脚本需另立拆包任务。
+
+
+### GUI 功能修复：宿主接入差异（2026-10-03）
+
+本次未修改 `client/ui/kit/` 或来源仓库，改动仍位于宿主层：
+
+| 文件 | 差异 | 原因 | 回流状态 |
+|---|---|---|---|
+| `widget/UiListView.java` | 新增 `dragIndexAt(double)`、`itemIndexAt(double, double)` 与 `visibleRowBounds(int)`；统一视口偏移、滚动条排除和可见行矩形 | 滚动后拖动排序不能使用可见行号替代实际数据下标 | 通用几何能力；尚未回流 |
+| `widget/UiListEditor.java` | 新增 `commitPendingInput()`，复用已有条目提交逻辑 | 切页前保留输入中的列表条目 | 通用输入生命周期能力；尚未回流 |
+| `widget/UiConditionTreeEditor.java` | 新增使能状态；收窄类型选择框宽度以适应实际列宽 | 冻结后仍展示树内容，禁止修改；小列宽不自动关闭选择框 | 条件 JSON 属于宿主业务，不提入 kit；尚未回流 |
+| `widget/UiModalStack.java` | Space 的通用激活仅交给按钮，其余先由内容控件处理 | 叶参数与文本输入中的空格不能误触提交 | 宿主焦点适配；尚未回流 |
+
+规则页面、可滚动原始详情、本地化与名称解析属于 `screen/` 与 `screen/form/` 业务层，不新增 kit 依赖。依赖边界脚本本次核验通过：39 个文件、112 条 import、0 处违规。

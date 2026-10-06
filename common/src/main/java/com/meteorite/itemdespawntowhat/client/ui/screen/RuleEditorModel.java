@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.google.gson.JsonObject;
+import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDefaults;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorChangeSet;
@@ -92,11 +93,12 @@ public final class RuleEditorModel {
                 continue;
             }
             RuleSnapshotEntry entry = this.entries.get(current.getKey());
-            if (entry == null || entry.effective() == null) {
+            JsonObject body = ruleBody(entry);
+            if (body == null) {
                 iterator.remove();
                 continue;
             }
-            current.getValue().load(RuleDraft.of(entry.effective()));
+            current.getValue().load(RuleDraft.of(body));
             current.getValue().clearHistory();
         }
         this.createdIds.removeIf(id -> !this.sessions.containsKey(id));
@@ -153,14 +155,7 @@ public final class RuleEditorModel {
             return existing;
         }
         RuleSnapshotEntry entry = this.entries.get(id);
-        JsonObject body = null;
-        if (entry != null) {
-            if (entry.effective() != null) {
-                body = entry.effective().deepCopy();
-            } else if (entry.base() != null) {
-                body = entry.base().deepCopy();
-            }
-        }
+        JsonObject body = ruleBody(entry);
         if (body == null) {
             return null;
         }
@@ -169,6 +164,35 @@ public final class RuleEditorModel {
         this.captureBaseline(id, entry.effective());
         this.bindSession(id, session);
         return session;
+    }
+
+    // 显示和筛选优先读取草稿，不为浏览列表额外创建会话。
+    public @Nullable JsonObject displayBody(String id) {
+        EditSession session = sessions.get(id);
+        return session == null ? ruleBody(entries.get(id)) : session.draft().view();
+    }
+
+    // 被屏蔽、停用或失效的条目仍可保留规则体；纯控制条目回落到基底。
+    private static @Nullable JsonObject ruleBody(@Nullable RuleSnapshotEntry entry) {
+        if (entry == null) {
+            return null;
+        }
+        JsonObject effective = entry.effective();
+        if (hasRuleBody(effective)) {
+            return effective;
+        }
+        JsonObject overlay = entry.overlay();
+        if (hasRuleBody(overlay)) {
+            return overlay;
+        }
+        return hasRuleBody(entry.base()) ? entry.base() : null;
+    }
+
+    // delete/enabled 控制条目不是完整规则体，不能当作空规则交给表单。
+    private static boolean hasRuleBody(@Nullable JsonObject body) {
+        return body != null && (body.has(RuleFields.SOURCE)
+                || body.has(RuleFields.EFFECTS)
+                || body.has(RuleFields.OUTCOMES));
     }
 
     // 新建一条规则草稿
