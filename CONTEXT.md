@@ -1,7 +1,7 @@
 # ItemDespawnToWhat 配置领域
 
-> 当前状态（2026-10-03）：**本轮 GUI 与后端前置改造已代码落盘**——后端 B1（逐组候选选择与轮询）、B2（混合一次性效果与一次性尝试）、B3（RuleValidation 过时告警与描述符域/可选性修正）、P1（可复用客户端 UI kit）、P2（`client/edit` 数据路径/字段域/工厂/自动命名/错误定位）、P3（四页编辑流程与候选、成本区）、P3-B（表单控件数值精度、等级往返与焦点路由）、P4（目录图标面板、区间/时间条、结构图解、会话恢复、键盘与朗读）均已实现，并通过 IDEA 静态检查与串行构建（`tools/dsh-build.ps1 -Tasks "build"` exit=0）；旧链路 P1–P8 能力（条件树、独占编辑协议 v2、草稿持久化与撤销、选择目录）继续有效。**双平台游戏内人工验收尚未执行**，新 GUI 与后端前置清单见 [manual-acceptance.md](docs/guide/manual-acceptance.md) §10–§12，已知限制见其 §12。
-> 方案入口：[plan-gui-rule-update.md](docs/plan/plan-gui-rule-update.md)及其字段/kit 规格已确认冻结，冻结正文保持不变、实施状态见各文件头部状态行；页面形状、数值域、自动命名与 kit 维护方向以此为准；[旧实施契约](docs/plan/plan-frontend-rewrite-contract.md)与[旧字段规格](docs/plan/plan-frontend-rewrite-forms.md)保留原实现记录及未被替代约束。前端决策见 [docs/adr/](docs/adr/) 的 0018–0022 与 0025，第二轮后端决策见 0023–0024 与归档底稿 [docs/archive/backend-round-2/PLAN.md](docs/archive/backend-round-2/PLAN.md)（§2 行为契约）；新计划 B1/B2 明确记录待修正的运行时差异。
+> 当前状态（2026-10-07）：Q1–Q22 设计已确认，三个实施阶段均已落盘：统一 `spawn_entity` 与 item/entity/experience 子类、服务端共用邻近开组阈值及原版经验拆分、虚拟分类树与四页编辑重排、全目录中文搜索和 Kit 通用 3D 预览。最终版本已通过 IDEA 检查（无错误）、Kit 边界检查（0 违规）和双平台串行构建（exit=0）；验证记录见 [实施记录](docs/plan/plan-ui-alignment-implementation-2026-10-07.md)。**双平台游戏内人工验收尚未执行**，本轮清单见 [manual-acceptance.md](docs/guide/manual-acceptance.md) §13。旧生成 JSON 不迁移，项目样例已重写。
+> 方案入口：[plan-gui-rule-update.md](docs/plan/plan-gui-rule-update.md)及其字段/kit 规格已确认冻结，冻结正文保持不变、实施状态见各文件头部状态行；数值域、自动命名与 kit 维护约束继续有效；2026-10-07 的页面形状和实体统一由 [本轮实施记录](docs/plan/plan-ui-alignment-implementation-2026-10-07.md) / [ADR-0026](docs/adr/0026-unified-entity-spawn-effect.md) 替代对应旧内容；[旧实施契约](docs/plan/plan-frontend-rewrite-contract.md)与[旧字段规格](docs/plan/plan-frontend-rewrite-forms.md)保留原实现记录及未被替代约束。前端决策见 [docs/adr/](docs/adr/) 的 0018–0022、0025–0026，第二轮后端决策见 0023–0024 与归档底稿 [docs/archive/backend-round-2/PLAN.md](docs/archive/backend-round-2/PLAN.md)（§2 行为契约）；旧计划 B1/B2 的运行时差异已修正，仍保留调查记录。
 
 掉落物在自然消失前，按数据包 / config 覆盖层中的规则转化为其他内容（物品、实体、方块、经验、世界效果等）。本词汇表覆盖新链路（`core/**`）的配置与运行时词汇；已退役的历史术语标注为「旧链路」。
 
@@ -105,11 +105,44 @@ _Avoid_: 过滤器、条件（条件另有所指）
 
 **效果 (Effect)**:
 规则被触发后要执行的一个动作，位于规则的 `effects` 有序列表中：`type` + 类型专属参数 + 通用字段 `delay_ticks` / `chance` / `conditions`。命中规则内的效果**按顺序启动、分批完成**，不做事务回滚；单个效果抛异常只记录 ERROR 并继续后续效果。
-_Avoid_: 结果（旧链路叫法）、动作（口语可接受）
+本轮已确认的 UI 用语为“执行动作”，短称“动作”；领域与代码仍称 Effect，界面已使用此别名。
+_Avoid_: 结果（旧链路叫法）、结果方案（方案包含动作）
 
 **效果类型 (EffectType)**:
-一种已注册的效果类别，自带参数 Codec、参数校验器与服务端执行器（`{ id, codec, validator, executor }`）。内置 12 个：`spawn_item` / `spawn_entity` / `place_block` / `spawn_xp` / `loot_table` / `lightning` / `arrow_rain` / `weather` / `explosion` + 消耗类 `consume_source` / `consume_catalyst` / `consume_fluid`。
+一种已注册的效果类别，自带参数 Codec、参数校验器与服务端执行器（`{ id, codec, validator, executor }`）。当前内置有 10 个：`spawn_entity`（item/entity/experience 三子类） / `place_block` / `loot_table` / `lightning` / `arrow_rain` / `weather` / `explosion` + 消耗类 `consume_source` / `consume_catalyst` / `consume_fluid`。
 _Avoid_: 转化类型、效果种类
+
+**实体产物 (Entity Product)**:
+效果在世界中生成的实体对象，例如生物、掉落物和经验球；候选结果可以包含多个效果，因此候选结果本身不等同于实体产物。
+_Avoid_: 候选结果、实体类型（类型与生成的对象不同）
+
+**实体生成效果 (Entity Spawn Effect)**:
+统一描述实体生成行为的一种效果，通过产出子类区分不同实体产物及其专用参数。
+_Avoid_: 生物生成（范围更窄）、候选结果
+
+**产出子类 (Product Variant)**:
+实体生成效果中区分产物生成语义的类别；它描述产物所需的参数，不能仅以最终实体的类型名称替代。
+_Avoid_: 候选结果、实体类型（一个类别可以涵盖多个具体实体类型）
+
+**通用实体产出 (Generic Entity Product)**:
+按具体实体类型描述生成对象的产出子类，涵盖生物及其他实体；生物只是其中一部分。
+_Avoid_: 生物产出（范围更窄）
+
+**经验产出 (Experience Product)**:
+以经验点数计量、通过经验球承载的产出；经验球的实体数量不等同于交付的经验点数。
+_Avoid_: 经验球个数（不能代替经验点数）
+
+**经验球存量上限 (Experience Orb Population Limit)**:
+根据附近经验球实体数量判断转化组能否启动的共用阈值；已开始的组可完成产出并超过阈值，不因该阈值中断。
+_Avoid_: 经验点数上限、每批生成数量、硬实体总数上限
+
+**产物邻近上限 (Nearby Product Limit)**:
+根据附近产物数量判断转化组能否启动的共用阈值，各产出子类按自身计量方式检查；组开始后不因邻近数量变化截断产出。
+_Avoid_: 生成数量、源成本、硬存量上限
+
+**规则分类组 (Rule Category)**:
+按产出用途组织规则的虚拟分组，不对应实际文件目录；分组不改变规则身份和运行优先级。
+_Avoid_: 文件夹、数据包目录
 
 **消耗效果 (Consumption Effect)**:
 `consume_source` / `consume_catalyst` / `consume_fluid` 三个效果类型：消耗是**效果**而不是条件的副作用。每组源成本 = 显式 `source_cost`；未声明时按隐式消耗 1 个源物品（未声明任何 `consume_*`）或显式 `consume_source.count` 之和推算；`consume_fluid` 只作实时存在条件，不换算份数。
@@ -117,7 +150,7 @@ _Avoid_: 消耗指令（旧链路叫法）
 
 **条件 (Condition)**:
 条件树叶子里的原子谓词（一个条件类型 + 参数），只负责判定"是否满足"，**不承担消耗**。叶级取反已删除，取反只能由 `inverted` 节点表达。
-_Avoid_: 限制（"限制"另指效果的 `limit`）
+_Avoid_: 限制（容易与产物数量上限混淆）
 
 **条件叶 (Condition Leaf)**:
 条件树中的原子谓词，JSON 形状为**扁平对象**：`{"op":"leaf","condition":{"type":"itemdespawntowhat:y_level","min":0}}`——类型专属字段与 `type` 同层，没有 `params` 子对象，也**不允许 `negated` 字段**（出现即解码报错）。
@@ -283,6 +316,7 @@ _Avoid_: 执行批（调度分批不是结算单位）
 
 **候选结果 (Outcome Candidate)**:
 一个转化组可选的结果，形如 `{ "id", "effects", "safe_spawn", "fill_origin" }`；候选标识在规则内唯一。未声明 `outcomes` 时由顶层 `effects` 隐式映射为唯一候选 `default`。
+本轮已确认的 UI 用语为“结果方案”，短称“方案”；一个方案包含多个执行动作，每个转化组只选择一个方案，界面已实施。
 _Avoid_: 效果（候选与其中的单个效果不是同一层级）
 
 **组合模式 (Combination Mode)**:

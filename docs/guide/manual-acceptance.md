@@ -12,7 +12,7 @@
 |---|---|
 | 【现在可验收】 | 当前代码已具备（P1–P8 全部落盘，2026-10-03 终验通过：clean build exit=0、IDE 无错误无警告），按步骤即可看到预期结果 |
 | 【开发者】 | 需要调试器或改代码才能稳定复现，普通玩家可跳过 |
-| 【待用户执行】 | 代码已落盘并通过 IDEA 静态检查与串行构建（`tools/dsh-build.ps1 -Tasks "build"` exit=0），但**游戏内行为本次未执行**；第 10–12 节属于此类，需用户按步骤验收 |
+| 【待用户执行】 | 代码已落盘并通过 IDEA 静态检查与串行构建（`tools/dsh-build.ps1 -Tasks "build"` exit=0），但**游戏内行为本次未执行**；第 10–13 节属于此类，需用户按步骤验收 |
 
 > 说明：清单中曾用于区分「P5 后（需要编辑界面）」「P6 后（需要草稿/撤销）」的标记已统一为【现在可验收】——这两批能力均已落盘并接线。
 
@@ -91,7 +91,7 @@ powershell -ExecutionPolicy Bypass -File tools/dsh-build.ps1 -Tasks "build"
 
 | # | 操作 | 预期 |
 |---|---|---|
-| 2.3.1 | 新建：选模板（12 种效果各一个入口） | 新建一条只含该效果的规则草稿，未填必填项时有明确提示 |
+| 2.3.1 | 新建：选模板（10 种内置效果及实体三子类的入口） | 新建一条只含该效果的规则草稿，未填必填项时有明确提示 |
 | 2.3.2 | 填规则 id、源物品（用**选择器按名字挑**，不手输 id）、效果参数 → 应用 | 回执成功；列表出现新规则；来源 `overlay` |
 | 2.3.3 | 复制一条既有规则 | 生成新的草稿（id 需改），原规则不变 |
 | 2.3.4 | 编辑：改 `display_name` 与优先级 → 应用 | 列表显示名与排序（优先级 desc）随之变化；id 不变 |
@@ -119,7 +119,7 @@ powershell -ExecutionPolicy Bypass -File tools/dsh-build.ps1 -Tasks "build"
 | 2.5.2 | 设置 `delay_ticks` = 0 | 显示"立即"；可输入 0..72000 |
 | 2.5.3 | 设置 `chance` | 以百分比呈现（0%..100%）；未命中概率时仍按隐式消耗扣源物品（见 5.2 说明） |
 | 2.5.4 | 给单个效果加"附加条件" | 该效果级条件树独立成树，不与其他效果或规则级条件混用 |
-| 2.5.5 | 依次打开 12 种效果表单 | 每种都有可填字段，无空白表单、无异常 |
+| 2.5.5 | 依次打开 10 种内置效果及实体三子类表单 | 每种都有可填字段，无空白表单、无异常 |
 
 ### 2.6 应用与错误定位
 
@@ -208,18 +208,18 @@ powershell -ExecutionPolicy Bypass -File tools/dsh-build.ps1 -Tasks "build"
 
 | 文件 | 规则 id | 源物品 | 内容 | 默认启用 |
 |---|---|---|---|---|
-| builtin_item_to_item.json | `itemdespawntowhat:builtin_item_to_item` | `minecraft:chicken` | 无 `conditions`（恒真）→ `spawn_item`（腐肉）；隐式消耗 1 | ✅ |
+| builtin_item_to_item.json | `itemdespawntowhat:builtin_item_to_item` | `minecraft:chicken` | 无 `conditions`（恒真）→ `spawn_entity / item`（腐肉）；隐式消耗 1 | ✅ |
 | builtin_item_to_entity.json | `itemdespawntowhat:builtin_item_to_entity` | `minecraft:egg` | `outdoor` + `dimension`(主世界) → `spawn_entity`（幼年鸡） | ✅ |
 | builtin_item_to_block.json | `itemdespawntowhat:builtin_item_to_block` | `#minecraft:saplings`（排除 `minecraft:oak_sapling`） | `surrounding_blocks`(下=`#minecraft:dirt`) + `outdoor` → `place_block` | ❌（默认停用） |
-| builtin_multi_effect.json | `itemdespawntowhat:builtin_multi_effect` | `minecraft:diamond` | `inverted`(y_level) 条件 → `spawn_xp` + `consume_source` + `lightning`（带效果延迟） | ✅ |
+| builtin_multi_effect.json | `itemdespawntowhat:builtin_multi_effect` | `minecraft:diamond` | `inverted`(y_level) 条件 → `spawn_entity / experience` + `consume_source` + `lightning`（带效果延迟） | ✅ |
 | builtin_loot_and_chance.json | `itemdespawntowhat:builtin_loot_and_chance` | `minecraft:gold_nugget` | `loot_table` + 50% `chance` | ✅ |
-| builtin_conditions.json | `itemdespawntowhat:builtin_catalyst_and_fluid` | `minecraft:redstone` | `fluid_present`(流动水) + `catalyst_present`(骨粉) → `spawn_item` + `consume_catalyst` | ✅ |
-| builtin_conditions.json | `itemdespawntowhat:builtin_biome_or_time` | `minecraft:apple` | `any_of`[ `biome`(forest), `time_of_day` ] → `spawn_item` | ❌ |
+| builtin_conditions.json | `itemdespawntowhat:builtin_catalyst_and_fluid` | `minecraft:redstone` | `fluid_present`(流动水) + `catalyst_present`(骨粉) → `spawn_entity / item` + `consume_catalyst` | ✅ |
+| builtin_conditions.json | `itemdespawntowhat:builtin_biome_or_time` | `minecraft:apple` | `any_of`[ `biome`(forest), `time_of_day` ] → `spawn_entity / item` | ❌ |
 | builtin_weather_and_light.json | `itemdespawntowhat:builtin_thunder_condensation` | `minecraft:wet_sponge` | `weather`(thunder) + `y_level`(60..320) → `weather`(rain,6000t,雷) + `consume_fluid`(水源) | ✅ |
 | builtin_weather_and_light.json | `itemdespawntowhat:builtin_dark_blast` | `minecraft:gunpowder` | `any_of`[ `light_level`(0..7), `inverted`(`weather` clear) ] → `explosion`(power 2, 起火) | ❌ |
 | builtin_arrow_rain.json | `itemdespawntowhat:builtin_arrow_rain` | `minecraft:arrow` | `dimension`(主世界) + `weather` → `arrow_rain` | ❌ |
 
-覆盖完整性：以上样本合计覆盖**全部 10 个条件**（dimension / biome / weather / outdoor / surrounding_blocks / catalyst_present / fluid_present / time_of_day / y_level / light_level）与**全部 12 个效果**（spawn_item / spawn_entity / place_block / spawn_xp / loot_table / lightning / arrow_rain / weather / explosion / consume_source / consume_catalyst / consume_fluid）。
+覆盖完整性：以上样本合计覆盖**全部 10 个条件**（dimension / biome / weather / outdoor / surrounding_blocks / catalyst_present / fluid_present / time_of_day / y_level / light_level）与**全部 10 个内置效果**（spawn_entity〔三子类〕 / place_block / loot_table / lightning / arrow_rain / weather / explosion / consume_source / consume_catalyst / consume_fluid）。
 
 **加速技巧**：`trigger_after_seconds=300` 与掉落物 5 分钟生命周期几乎重合，肉眼验证要等 5 分钟。建议复制一条规则到覆盖层并把 `trigger_after_seconds` 改成 5（【现在可验收】用界面；【现在】用文本编辑器写覆盖层并 `/idtw config reload`）。
 
@@ -257,7 +257,7 @@ powershell -ExecutionPolicy Bypass -File tools/dsh-build.ps1 -Tasks "build"
 
 `/idtw config convert` 已按 P8 结论**退役**（命令与 `RuleConvertService` 已删除），旧 v1.2.1 配置不再加载，需用 `/idtw config edit` 手工重建；见 `docs/guide/update-notes.md` 与 `docs/plan/v1.2.1-migration-evaluation.md`（第 8 节 8.6 同口径）。
 
-## 5. 10 个条件 + 12 个效果的最小用例
+## 5. 10 个条件 + 10 个内置效果的最小用例
 
 每条都能用 4.1 的样本规则直接验收（把 `trigger_after_seconds` 改小即可）。"肉眼判据"是**不需要看 JSON** 也能判断的现象。
 
@@ -276,14 +276,14 @@ powershell -ExecutionPolicy Bypass -File tools/dsh-build.ps1 -Tasks "build"
 | `y_level` | 60..320 | 地面（y≥60）触发；挖到 y=30 丢同样的物品不触发；用 `inverted` 可表示"不在该区间" | builtin_thunder_condensation / builtin_multi_effect |
 | `light_level` | 0..7 | 暗处触发；插火把后不触发 | builtin_dark_blast |
 
-### 5.2 效果（12 个）
+### 5.2 效果（10 个内置类型，实体三子类分行验收）
 
 | 效果 | 最小设置 | 肉眼判据 | 样本 |
 |---|---|---|---|
-| `spawn_item` | 腐肉 ×1 | 原地出现腐肉 | builtin_item_to_item |
-| `spawn_entity` | 幼年鸡 ×1（age=-24000 或预设"幼年"） | 出现幼年鸡实体 | builtin_item_to_entity |
+| `spawn_entity / item` | 腐肉 ×1 | 原地出现腐肉 | builtin_item_to_item |
+| `spawn_entity / entity` | 幼年鸡 ×1（age=-24000 或预设"幼年"） | 出现幼年鸡实体 | builtin_item_to_entity |
 | `place_block` | 留空（由源物品决定），方形 | 原地出现对应方块 | builtin_item_to_block |
-| `spawn_xp` | 5 点 | 出现经验球/玩家获得经验 | builtin_multi_effect |
+| `spawn_entity / experience` | 5 点 | 出现经验球/玩家获得经验 | builtin_multi_effect |
 | `loot_table` | `minecraft:chests/simple_dungeon` | 按战利品表随机产出 | builtin_loot_and_chance |
 | `lightning` | count=1 | 命中位置落雷 + 雷声 | builtin_multi_effect |
 | `arrow_rain` | count=10，pickup=allowed | 天降箭并可拾取 | builtin_arrow_rain |
@@ -439,5 +439,29 @@ Fabric 与 NeoForge **各跑一遍**，结果应一致：
 | 12.4 | 静态结构图不知道实时容量 / 位置 / 游标 | 图解只描述配置结构，不读取运行时状态 | 图解不代表实际结算结果 | 设计限制 |
 | 12.5 | 候选**无人工别名字段** | 候选只有自动命名（结果 N：…），JSON 不写 `display_name` / `notes` | 无法给候选起人工别名 | 冻结方案决定 |
 | 12.6 | 独立 kit 库**本期未发布** | 只冻结公开边界与依赖检查方式；独立 Gradle 模块与发布脚本需另立拆包任务 | 第三方暂不能以独立依赖方式使用 kit | P1 范围外 |
-| 12.7 | 语言文件键集合 | `en_us.json` 与 `zh_cn.json` 各 **808** 键、键集合完全一致、无空值（2026-10-03 在 task-12 收尾后复核；其中 `gui.itemdespawntowhat.edit.*` 508 键） | 无（不一致会导致显示原始 key） | P5 文档同步 |
+| 12.7 | 语言文件键集合 | `en_us.json` 与 `zh_cn.json` 各 **869** 键、键集合完全一致、无空值（2026-10-07 静态校验；其中 `gui.itemdespawntowhat.edit.*` 569 键） | 无（不一致会导致显示原始 key） | P5 文档同步 |
 | 12.8 | ~~文档引用与仓库现状的偏差~~ **已解决（P5-e）** | `docs/dev/internals/ui-kit-api.md` 与 `tools/check-ui-kit-boundaries.ps1` 已建为真实文件，`package-info.java` 已指向后者；脚本对当前 kit 实跑 0 违规/exit 0，对违规样本 exit 1 | 无（遗留至修复前的读者困惑已消除） | 已修复：P5-e（task-14） |
+
+## 13. 本轮 UI 与实体统一验收（2026-10-07，待用户执行）
+
+**当前没有任何游戏实测通过结论。** NeoForge、Fabric 各执行一轮，在中文/英文和常用 GUI Scale 下记录截图、操作顺序、预期/实际及频率。最低目标为 320×240 GUI 逻辑尺寸；原第 10 节中被本轮重排替代的页面形状以本节为准。
+
+| # | 操作 | 预期 |
+|---|---|---|
+| 13.1 | 管理页展开各组，搜索规则名/ID，再清空搜索 | 每条规则只出现一次；组合产出分类正确；搜索命中展开，清空恢复折叠与稳定选中 |
+| 13.2 | 宽屏选规则，再切 320×240 并打开/关闭“详情” | 宽屏树与预览并排；窄屏详情占正文，可滚动且切回树；操作和底栏可到达 |
+| 13.3 | 新建空白规则，点缺失项，选择源物品/排除项/催化剂/标签 | 优先输入页，缺失提示能定位；每个目录写入目标正确；连续添加不覆盖前项 |
+| 13.4 | 省略 enabled、chance、delay_ticks、count、trigger_after_seconds 后只打开查看 | 有效默认值与默认标记正确（enabled=true、chance=100%、等待=300秒等）；不产生脏草稿 |
+| 13.5 | 三种实体子类填参数，切换再撤销 | 共同字段保留，专用字段重置；一次撤销恢复切换前状态；数量单位清楚 |
+| 13.6 | 单方案→多方案、多动作，再在窄屏逐层进入/返回 | 方案/动作层级清楚，单方案隐藏多方案策略；参数、高级、安全/填原点只在适用时出现 |
+| 13.7 | 目录用中文名称及 ID 搜索；首次加载、失败重试、切语言/重载/切服 | 搜索完整缓存，加载未完明确可能缺项；追逐点阵与文本可见，失败可重试，生命周期失效有效 |
+| 13.8 | 同名物品/方块标签及通用实体标签选择 | 标签按字段真实注册表归属过滤；通用入口不提供 item/xp 或包含它们的标签 |
+| 13.9 | 查看鸡/幼体/经验球/箭、龙/恶魂/鱿鱼及模组实体完整旋转 | 可见项 3D 竖直旋转、整圈尺度稳定；检查裁剪及滚动帧率，无逐帧实例创建 |
+| 13.10 | marker/interaction/空 display 等不可预览类型 | 屏障物品+“预览不可用”，名称完整、仍可选；后续物品/文字绘制无污染 |
+| 13.11 | 多条规则修改、查看改动、应用、放弃；英文长正文/按钮弹窗 | 改动清单有名称/ID/类别；明确应用所有脏草稿；正文可滚动、按钮不越界，撤销与只读/冲突仍有效 |
+| 13.12 | 分别验证 item/entity/experience JSON，故意填别的子类字段、旧类型和规则邻近 limit/radius | 合法三子类被接受；不兼容字段/旧生成格式被明确拒绝；place_block 自身范围仍可编辑 |
+| 13.13 | 测试经验每组成本 3、amount 5、per_source_item true/false | true 每组 15 点，false 每组 5 点；实际拾取总点数准确，原版拆分/合并保留 |
+| 13.14 | 重启服务端使用低共享阈值；容量不足/刚好/已开始组中途新增邻近产物 | 不足不开组不付成本；已开始组完成允许超额，之后新组继续检查；源物品守恒 |
+| 13.15 | 大量源物品、延迟动作与跨区块/重启返还，随后恢复正常配置 | 预算/中断/返还契约不回退；记录实体数和帧率，不把软阈值当硬性能保证 |
+
+已知限制：默认阈值未压测；碰撞尺寸不能精确代表任意模组可视模型，第三方静默无几何 renderer 可能无法自动识别；目录 revision 不覆盖所有资源内容变更；重叠不同 tag 不形成硬存量保证。假设：TAG 的接口归属缺失暂由客户端已同步注册表处理，后端结构调整仍需另行讨论。

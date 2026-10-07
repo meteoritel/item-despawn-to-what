@@ -35,7 +35,7 @@ P8 评估的结论是**破坏性更新**：旧五类配置与最终模型之间�
 1. 服务端执行 `/idtw config edit`（需要权限等级 2；单人存档直接放行），打开规则编辑界面。
 2. 界面分四个页签：**基本信息 / 源物品 / 触发条件 / 效果**。
 3. 源物品、条件与效果的多数资源引用（物品 / 方块 / 实体 / 流体 / 战利品表 / 群系 / 维度 / 标签 / 状态效果）都能**按名字搜索挑选**，不必记技术 id，也不必拼 JSON。
-4. 条件支持任意嵌套的 与（all_of）/ 或（any_of）/ 非（inverted），覆盖全部 10 种条件；效果覆盖全部 12 种效果。
+4. 条件支持任意嵌套的 与（all_of）/ 或（any_of）/ 非（inverted），覆盖全部 10 种条件；效果覆盖全部 10 种内置效果（实体生成含三子类）。
 5. 保存后规则立即重建索引并对已加载区块回扫，与 `/idtw config reload` 等效。
 6. 想从现成配置起步时，可以从内置样本（见第 5 节）或编辑器模板创建新规则再改。
 
@@ -49,7 +49,7 @@ P8 评估的结论是**破坏性更新**：旧五类配置与最终模型之间�
 | 2 | 闪电的「纯视觉」用法（`side_effect=lightning` + `visual_only=true`） | 新闪电总是真实落雷（可能伤害实体、点燃方块）；只想看效果请用爆炸的「纯视觉」或箭雨 |
 | 3 | 现象间隔（`lightningInterval` / `explosionInterval` / `arrowInterval`）与爆炸的「次数」（旧实现 = 轮数） | 新实现固定节奏：闪电每 8 刻一次、箭雨每 2 刻一次、爆炸只炸一次；需要多份请调效果自身的 `count` |
 | 4 | 方块形状 `CUBE` / `SPHERE` | 新 `place_block` 只有 `SQUARE`（方形）、`CIRCLE`（圆形）、`CROSS`（十字） |
-| 5 | 经验球的倍率组合（轮数 × `result_multiple` × `xp_per_item`） | 新 `spawn_xp` 只有一个`经验量`参数，按 `per_source_item` 决定「每轮」还是「每个源物品」 |
+| 5 | 经验球的倍率组合（轮数 × `result_multiple` × `xp_per_item`） | 新 `spawn_entity` 的 experience 子类 只有一个`经验量`参数，按 `per_source_item` 决定「每轮」还是「每个源物品」 |
 | 6 | 催化剂「逐条目规定数量、各自都要满足、按量守恒消耗」 | 新 `catalyst_present` 判定为「命中任意条目的**合计数量** ≥ count」，`consume_catalyst` 按总量由近及远扣除 |
 | 7 | 旧轮数压缩（催化剂存量与结果容量会压缩源物品的总消耗） | 新的轮数只由源物品的每轮消耗量决定（`堆叠数 / 每轮消耗`） |
 
@@ -59,8 +59,8 @@ P8 评估的结论是**破坏性更新**：旧五类配置与最终模型之间�
 | --- | --- |
 | `item` / `result`（支持 `#标签`） | 规则`源物品`与产物效果的条目参数 |
 | `source_multiple` | `consume_source` 的 `count` |
-| `result_multiple` | `spawn_item` / `spawn_entity` / `place_block` 的 `count` |
-| `result_limit` / `radius_limit` | 对应效果的 `limit` / `radius` |
+| `result_multiple` | `spawn_entity` 的 item/entity 子类及 `place_block` 的 `count` |
+| `result_limit` / `radius_limit` | 实体产物使用 server.json 的 nearby_products；place_block 保留规则 limit/radius |
 | `conversion_time`（秒） | 规则的 `trigger_after_seconds` |
 | `need_outdoor` / `dimension` / `surrounding_blocks` / `catalyst_items` / `inner_fluid` | 条件树中的 `outdoor` / `dimension` / `surrounding_blocks` / `catalyst_present` / `fluid_present` 条件 |
 | `consume_catalyst` / `consume_fluid` / `require_source` | `consume_catalyst` / `consume_fluid` 效果与 `fluid_present.require_source` |
@@ -78,7 +78,7 @@ P8 评估的结论是**破坏性更新**：旧五类配置与最终模型之间�
 - `builtin_multi_effect.json`、`builtin_loot_and_chance.json`、`builtin_conditions.json`
 - `builtin_weather_and_light.json`、`builtin_arrow_rain.json`
 
-这些样本合起来覆盖全部 10 种条件与 12 种效果，并已启用若干条便于直接观察效果。
+这些样本合起来覆盖全部 10 种条件与 10 种内置效果，并已启用若干条便于直接观察效果。
 
 其他参考：
 
@@ -105,3 +105,7 @@ P8 评估的结论是**破坏性更新**：旧五类配置与最终模型之间�
 | 7 | 旧转换入口 | `/idtw config convert` 与 `RuleConvertService` 继续不可用（见第 7 节） |
 
 说明：第 6 条的条件树形状在更早的前端重写（ADR-0018）中已落地，此处一并列出以保证破坏性清单完整。内置数据包样本已同步更新为上述新写法，可作为改写参照（见第 6 节）。
+
+## 9. 开发期统一实体生成（2026-10-07，破坏性）
+
+`spawn_item` / `spawn_xp` 被移除，`spawn_entity` 必须声明 variant 为 item/entity/experience，参数保持扁平；旧格式不自动迁移、不静默接受。生成邻近 limit/radius 移到所有规则共用的 server.json/nearby_products，方块玩法范围保留在规则中。项目内置、模板和调试样例已经重写。新格式、数量单位、完整组准入与 UI 编辑见 [entity-products.md](entity-products.md)。

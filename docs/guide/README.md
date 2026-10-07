@@ -10,13 +10,14 @@
 | [client-editor-spi.md](client-editor-spi.md) | 为自定义类型提供客户端表单描述，以及未注册类型的只读回退 |
 | [message-codes.md](message-codes.md) | 消息码（messageCode）命名、本地化前缀与新增流程 |
 | [update-notes.md](update-notes.md) | 破坏性更新说明：旧 v1.2.1 config 不再加载、第二轮规则契约变更（触发方式/固定成本/候选结果/条件树）、重建入口与「无法保留」清单 |
+| [entity-products.md](entity-products.md) | 统一实体产物 JSON、子类编辑与所有规则共用的生成阈值 |
 | [manual-acceptance.md](manual-acceptance.md) | 双平台手动验收清单（含已知缺口表），供回归与最终审阅 |
 
 后端模块的源码地图见 [../dev/backend/README.md](../dev/backend/README.md)。
 
 ## 权威来源
 
-本目录是导读，遇到冲突时按以下优先级判定：
+本目录是导读。2026-10-07 的统一实体生成与 UI 决策以 [ADR-0026](../adr/0026-unified-entity-spawn-effect.md)、[本轮实施记录](../plan/plan-ui-alignment-implementation-2026-10-07.md) 和当前源码为准，它们替代旧契约中对应的三个生成类型及平铺页面；其余未被替代约束按以下来源核对：
 
 1. [../plan/plan-frontend-rewrite-contract.md](../plan/plan-frontend-rewrite-contract.md)：冻结契约（Java 类型名、JSON 形状、求值规则、协议）。
 2. [../plan/plan-frontend-rewrite-forms.md](../plan/plan-frontend-rewrite-forms.md)：表单取值域、i18n 前缀与产品裁决。
