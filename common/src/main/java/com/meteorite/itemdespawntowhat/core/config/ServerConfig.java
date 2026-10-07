@@ -5,6 +5,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.JsonOps;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
@@ -38,6 +39,8 @@ public record ServerConfig(
         int positionSearchChecksPerTick,
         int debugScenarioPrepareBatchSize,
         int debugScenarioPrepareBudgetUs
+,
+        NearbyProductLimits nearbyProducts
 ) {
 
     private static final Logger LOGGER = LogManager.getLogger();
@@ -52,6 +55,7 @@ public record ServerConfig(
 
     // 公共调度预算默认值：2 ms 软预算、512 全局工作量、效果类 64、平滑窗口 20 tick、每 lane 每 tick 最多搬运 64
     public static final int DEFAULT_SERVER_BUDGET_US = 2000;
+    @SuppressWarnings("unused")
     public static final int DEFAULT_MAX_WORK_UNITS_PER_TICK = 512;
     public static final int DEFAULT_EFFECTS_WORK_UNITS_PER_TICK = 64;
     public static final int DEFAULT_CHECK_SPREAD_WINDOW_TICKS = 20;
@@ -88,7 +92,7 @@ public record ServerConfig(
             DEFAULT_DEBUG_SCENARIO_PREPARE_BUDGET_US
     );
 
-    public static final Codec<ServerConfig> CODEC = RecordCodecBuilder.create(instance -> instance.group(
+    private static final MapCodec<ServerConfig> BASE_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
             Codec.intRange(1, 1200).optionalFieldOf("check_interval_ticks", DEFAULT_CHECK_INTERVAL_TICKS)
                     .forGetter(ServerConfig::checkIntervalTicks),
             Codec.intRange(1, 72000).optionalFieldOf("backoff_max_ticks", DEFAULT_BACKOFF_MAX_TICKS)
@@ -127,6 +131,18 @@ public record ServerConfig(
             Codec.intRange(1, 100000).optionalFieldOf("debug_scenario_prepare_budget_us", DEFAULT_DEBUG_SCENARIO_PREPARE_BUDGET_US)
                     .forGetter(ServerConfig::debugScenarioPrepareBudgetUs)
     ).apply(instance, ServerConfig::new));
+
+    // 旧调用点沿用原参数列表，邻近阈值采用服务器统一默认。
+    @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
+    public ServerConfig(int checkIntervalTicks, int backoffMaxTicks, int maxChecksPerTick, String overlayDirectory, int fabricLifespanFallbackTicks, boolean debugLogging, int serverBudgetUs, Optional<Integer> maxWorkUnitsPerTick, int effectsWorkUnitsPerTick, int checkSpreadWindowTicks, int dispatchBatchSize, int newProductProtectionSeconds, int conversionCooldownSeconds, int positionSearchChecksPerTick, int debugScenarioPrepareBatchSize, int debugScenarioPrepareBudgetUs) {
+        this(checkIntervalTicks, backoffMaxTicks, maxChecksPerTick, overlayDirectory, fabricLifespanFallbackTicks, debugLogging, serverBudgetUs, maxWorkUnitsPerTick, effectsWorkUnitsPerTick, checkSpreadWindowTicks, dispatchBatchSize, newProductProtectionSeconds, conversionCooldownSeconds, positionSearchChecksPerTick, debugScenarioPrepareBatchSize, debugScenarioPrepareBudgetUs, NearbyProductLimits.DEFAULT);
+    }
+
+    public static final Codec<ServerConfig> CODEC = RecordCodecBuilder.create(instance -> instance.group(
+            BASE_CODEC.forGetter(value -> value),
+            NearbyProductLimits.CODEC.optionalFieldOf("nearby_products", NearbyProductLimits.DEFAULT)
+                    .forGetter(ServerConfig::nearbyProducts)
+    ).apply(instance, (base, limits) -> new ServerConfig(base.checkIntervalTicks(), base.backoffMaxTicks(), base.maxChecksPerTick(), base.overlayDirectory(), base.fabricLifespanFallbackTicks(), base.debugLogging(), base.serverBudgetUs(), base.maxWorkUnitsPerTick(), base.effectsWorkUnitsPerTick(), base.checkSpreadWindowTicks(), base.dispatchBatchSize(), base.newProductProtectionSeconds(), base.conversionCooldownSeconds(), base.positionSearchChecksPerTick(), base.debugScenarioPrepareBatchSize(), base.debugScenarioPrepareBudgetUs(), limits)));
 
     // 全局工作量上限：未显式配置时回退到旧的 max_checks_per_tick，保证旧配置意图不丢失
     public int effectiveMaxWorkUnitsPerTick() {

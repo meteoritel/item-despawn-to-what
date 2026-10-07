@@ -68,7 +68,7 @@
 
 ### 2.6 计划 → 派发 → 交付（`ConversionSettlement`）
 
-1. **计划**：`g = min(held / c, 候选最小完整容量)`；候选按组合模式逐个尝试，容量（`spawn_item`/`spawn_entity` 的 `limit`）不足或催化剂不足的候选跳过，选**一个**候选；全部不可用 → 组数 0、整堆返还；任一为一次性类型 → 组数封顶 1。容量/催化剂搜索受预算分片，未完成则本刻不落决定，下刻重试。
+1. **计划**：`g = min(held / c, 候选最小完整容量)`；候选按组合模式逐个尝试，容量（统一 `spawn_entity` 各子类的 server.json/nearby_products 开组阈值）不足或催化剂不足的候选跳过，选**一个**候选；全部不可用 → 组数 0、整堆返还；仅含一次性类型的候选 → 对同一源封顶一组；混合可重复产出者仍可多组，世界一次性动作只尝试一次。容量/催化剂搜索受预算分片，未完成则本刻不落决定，下刻重试。
 2. **派发**：逐组进行——先支付催化剂（`payGroup`，不足则截断组数并释放预留）、再扣固定源成本 `held -= c`、`record.groupStarted(c)` 写盘，开组后按定义序派发候选内效果（每个效果的 `delay_ticks` 经调度器顺延）；每刻派发量受 `dispatch_batch_size` 限制。
 3. **效果回执**：执行器经 `EffectResult` / `reportProgress` 回执真实完成量，结算层 `account()` 分 `APPLIED`/`DEFERRED`/`SKIPPED`/`FAILED` 计数，**计划量不冒充成功量**。
 4. **交付**：剩余库存 `held` 作为返还物分批加入世界（`ReturnItemSpawner`，位置搜索"起点附近 → 向上扫描 → 限高以上"分步推进）；交付一份才从待交付量里扣除，全部交付后 `record.complete`。
@@ -96,7 +96,7 @@ N = C + 已交付返还 + 待交付返还     # N 为整堆源初始数，C = �
 | 到龄 | `attempt` → `select`：年龄门槛通过、条件树恒 MATCH → 命中 |
 | 提交 | `c = 1`；`held = source.copy()`、源清空、打 `converted`；写记录、入队结算 |
 | 计划 | `g = min(held/1, 容量) = 1`；选唯一候选 `default` |
-| 派发 | 扣成本 `held = 0`、`groupStarted(1)`；派发 `spawn_item(count=1)` |
+| 派发 | 扣成本 `held = 0`、`groupStarted(1)`；派发 `spawn_entity(variant=item,count=1)` |
 | 交付 | `held = 0` → 无返还；`record.complete`；账目 `N = 1 = C(1) + 0 + 0` |
 
 （这正是 `/idtw debug run convert` 的场景，见 [debug-scenario-flow.md](debug-scenario-flow.md)。）

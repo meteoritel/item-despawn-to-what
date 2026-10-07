@@ -40,7 +40,8 @@
       "type": "itemdespawntowhat:spawn_entity",
       "entity": "minecraft:chicken",
       "count": 1,
-      "age": -24000
+      "age": -24000,
+      "variant": "entity"
     }
   ]
 }

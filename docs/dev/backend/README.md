@@ -23,7 +23,7 @@
 | 文档 | 覆盖的包 / 类 | 一句话 |
 |---|---|---|
 | [rule-model.md](modules/rule-model.md) | `core/api`、`core/model` | 契约层与规则模型：Rule（消失方式 / 固定成本 / 候选结果）/ 源匹配 / 条件树 / 效果 + Codec 与校验入口 |
-| [type-system.md](modules/type-system.md) | `core/registry`、`core/extension`、`core/type` | 类型注册表、第三方 SPI，以及 12 个内置效果 + 10 个内置条件 |
+| [type-system.md](modules/type-system.md) | `core/registry`、`core/extension`、`core/type` | 类型注册表、第三方 SPI，以及 10 个内置效果（实体生成含三子类） + 10 个内置条件 |
 | [rule-loading.md](modules/rule-loading.md) | `core/load`、`core/service`（装配部分） | 三层来源读取 → 合并 → 解码 → 校验 → 来源索引 |
 | [conversion-runtime.md](modules/conversion-runtime.md) | `core/runtime`（含 `scheduler`）、`core/state` | 追踪、共享预算调度、预检查、完整组结算与返还、产物/返还物实体状态 |
 | [edit-protocol.md](modules/edit-protocol.md) | `core/network`、`core/service`（写入/会话） | 编辑快照、变更集、版本戳、独占会话、权威落盘 |

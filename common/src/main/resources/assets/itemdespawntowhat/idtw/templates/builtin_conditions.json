@@ -40,9 +40,10 @@
     "schema_version": 1,
     "effects": [
       {
-        "type": "itemdespawntowhat:spawn_item",
+        "type": "itemdespawntowhat:spawn_entity",
         "item": "minecraft:glowstone_dust",
-        "count": 1
+        "count": 1,
+        "variant": "item"
       },
       {
         "type": "itemdespawntowhat:consume_catalyst",
@@ -96,9 +97,10 @@
     "schema_version": 1,
     "effects": [
       {
-        "type": "itemdespawntowhat:spawn_item",
+        "type": "itemdespawntowhat:spawn_entity",
         "item": "minecraft:golden_apple",
-        "count": 1
+        "count": 1,
+        "variant": "item"
       }
     ]
   }

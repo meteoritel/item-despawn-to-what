@@ -15,7 +15,7 @@
 
 Codec 用 `optionalFieldOf`：**未知键忽略、缺失键取默认**。因此新增键必须同时加 record 分量、`CODEC` 的 `optionalFieldOf` 与 `DEFAULT`——只改 Java 会解码失败并整体回退默认。
 
-## 2. 字段（16 键）
+## 2. 字段（17 个顶层键）
 
 | JSON key | 字段 | 类型 | 默认 | 区间 | 含义 |
 |---|---|---|---|---|---|
@@ -44,6 +44,21 @@ Codec 用 `optionalFieldOf`：**未知键忽略、缺失键取默认**。因此�
 - **检查与寿命组**：`check_interval_ticks`、`backoff_max_ticks`、`fabric_lifespan_fallback_ticks`（语义见 [scheduling-budget.md](scheduling-budget.md)、[conversion-runtime.md](../modules/conversion-runtime.md)）。
 - **实体状态组**：`new_product_protection_seconds`、`conversion_cooldown_seconds`（`start` 时经 `DropStateStore.configure` 注入）。
 - **调试组**：`debug_logging`、`debug_scenario_prepare_batch_size`、`debug_scenario_prepare_budget_us`（只影响 debug 场景准备，**不参与** `server_budget_us`）。
+
+## 2.1 所有规则共用的 `nearby_products`
+
+第 17 个顶层键是对象 `nearby_products`（缺省使用下表默认值），对应 `NearbyProductLimits`。修改此文件后重启服务端；规则 reload 不重新读取服务器配置。
+
+| 子键 | 默认 | 区间 | 单位 / 统计范围 |
+|---|---|---|---|
+| `item_limit` | 1024 | 0..1000000 | 同类物品件数，0 关闭此检查 |
+| `item_radius` | 6 | 1..32 | 物品统计半径（方块） |
+| `entity_limit` | 128 | 0..1000000 | 同类实体个数，0 关闭此检查 |
+| `entity_radius` | 6 | 1..32 | 通用实体统计半径（方块） |
+| `experience_orb_limit` | 64 | 0..1000000 | 邻域经验球实体数，0 关闭此检查 |
+| `experience_radius` | 6 | 1..32 | 经验球统计半径（方块） |
+
+以上阈值只决定完整转化组是否可启动；开组前不足则不支付该组成本并保留/返还源物品。已开始组不因阈值截断，允许完成后超额。不同规则共用配置，但物品/通用实体按指定 ID 或 tag 的命中集合统计；经验统计全部邻近经验球。经验需求使用原版拆分的逻辑球数量保守估计，真实合并可能减少实体数。预算、区块与异常中断机制仍有效；这里不是硬存量上限，也不是性能保证。`place_block` 的玩法半径/数量约束保留在规则中。
 
 ## 3. 派生换算
 

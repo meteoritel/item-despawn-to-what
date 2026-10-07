@@ -20,11 +20,11 @@ import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTaskKind;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTickBudget;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.StepResult;
 import com.meteorite.itemdespawntowhat.core.type.effect.SpawnEntityEffect;
-import com.meteorite.itemdespawntowhat.core.type.effect.SpawnItemEffect;
+import com.meteorite.itemdespawntowhat.core.type.effect.EntityProduct;
+import com.meteorite.itemdespawntowhat.core.config.NearbyProductLimits;
 import com.meteorite.itemdespawntowhat.core.type.effect.exec.EffectTargets;
+import com.meteorite.itemdespawntowhat.core.type.effect.exec.SpawnXpExecutor;
 import com.meteorite.itemdespawntowhat.core.type.effect.exec.ReturnItemSpawner;
-import com.meteorite.itemdespawntowhat.core.type.effect.exec.SpawnEntityExecutor;
-import com.meteorite.itemdespawntowhat.core.type.effect.exec.SpawnItemExecutor;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DynamicOps;
 import com.mojang.serialization.JsonOps;
@@ -52,6 +52,9 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.LinkedHashMap;
+import net.minecraft.world.entity.ExperienceOrb;
 import java.util.Set;
 import java.util.function.IntConsumer;
 
@@ -276,7 +279,7 @@ final class ConversionSettlement implements ServerTask {
     }
 
     // 为本组选候选（B1）：轮询从扫描起点依次找剩余容量 >= 1 的候选（首次取共享游标），优先模式从列表首项找；
-    // 容量按候选缓存并逐组递减，同一候选只查一次世界。CAPACITY_PENDING = 预算耗尽需重试，
+    // 缓存记录本地预留，开组前仍复核世界存量。CAPACITY_PENDING = 预算耗尽需重试，
     // SELECT_EXHAUSTED = 所有候选都开不出一组
     private int selectCandidateForGroup(ServerTickBudget budget) {
         int size = candidates.size();
@@ -284,15 +287,12 @@ final class ConversionSettlement implements ServerTask {
         for (int offset = 0; offset < size; offset++) {
             int index = Math.floorMod(scan + offset, size);
             OutcomeCandidate selected = candidates.get(index);
-            int remaining = remainingCapacity[index];
-            if (remaining == CAPACITY_UNKNOWN) {
-                remaining = capacityGroups(selected, budget);
-                if (remaining == CAPACITY_PENDING) {
-                    // 容量搜索未完成：本刻不落任何决定，下刻从同一游标重算
-                    return CAPACITY_PENDING;
-                }
-                remainingCapacity[index] = remaining;
-            }
+            int cached = remainingCapacity[index];
+            int remaining = capacityGroups(selected, budget);
+            if (remaining == CAPACITY_PENDING) { return CAPACITY_PENDING; }
+            // 保留本结算对待生成组的本地预留，同时复核已经变化的世界存量。
+            if (cached != CAPACITY_UNKNOWN) { remaining = Math.min(remaining, cached); }
+            remainingCapacity[index] = remaining;
             if (remaining <= 0) {
                 continue;
             }
@@ -363,46 +363,62 @@ final class ConversionSettlement implements ServerTask {
         return runtime.catalystReservations();
     }
 
-    // 候选内多个产出效果用「最小完整容量」共同限制组数（阶段 4 验收②）；
-    // 可重复效果里只由 spawn_item / spawn_entity 的 limit 决定容量（其余效果不参与），
-    // 一次性效果不参与数量上限；仅含一次性效果的候选最多一组（阶段 4 验收⑤、B2）；
-    // CAPACITY_PENDING = 预算耗尽需下刻重试
+    // 聚合同一产物的组内需求，用共用阈值检查完整组；经验采用合并前的保守逻辑球数。
     private int capacityGroups(OutcomeCandidate selected, ServerTickBudget budget) {
-        int groups = Integer.MAX_VALUE;
         boolean hasOneShot = false;
         boolean hasRepeatable = false;
+        Map<TaggedId, Integer> items = new LinkedHashMap<>();
+        Map<TaggedId, Integer> entities = new LinkedHashMap<>();
+        int orbs = 0;
         for (Effect effect : selected.effects()) {
-            if (budget.exhausted()) {
-                return CAPACITY_PENDING;
-            }
-            budget.charge(1);
             EffectType<?> definition = runtime.effectDefinition(effect.type());
-            if (definition == null) {
-                // 未注册类型由执行阶段记录错误，这里不参与容量，也不视为可重复产出
-                continue;
-            }
-            if (definition.oneShot()) {
-                hasOneShot = true;
-                continue;
-            }
+            if (definition == null) { continue; }
+            if (definition.oneShot()) { hasOneShot = true; continue; }
             hasRepeatable = true;
-            if (effect instanceof SpawnItemEffect itemEffect && itemEffect.limit() != null) {
-                budget.charge(CAPACITY_QUERY_UNITS);
-                int per = Math.max(1, itemEffect.count());
-                int room = Math.max(0, itemEffect.limit() - countNearbyItems(itemEffect, itemEffect.limit()));
-                groups = Math.min(groups, room / per);
-            } else if (effect instanceof SpawnEntityEffect entityEffect && entityEffect.limit() != null) {
-                budget.charge(CAPACITY_QUERY_UNITS);
-                int per = Math.max(1, entityEffect.count());
-                int room = Math.max(0, entityEffect.limit() - countNearbyEntities(entityEffect, entityEffect.limit()));
-                groups = Math.min(groups, room / per);
+            if (effect instanceof SpawnEntityEffect spawn) {
+                switch (spawn.product()) {
+                    case EntityProduct.Item item -> items.merge(item.item(), item.count(), ConversionSettlement::saturatedAdd);
+                    case EntityProduct.Generic entity -> entities.merge(entity.entity(), entity.count(), ConversionSettlement::saturatedAdd);
+                    case EntityProduct.Experience xp -> {
+                        int multiplier = xp.perSourceItem() ? Math.max(1, record.sourceCostPerGroup()) : 1;
+                        int points = (int) Math.min(Integer.MAX_VALUE, (long) xp.amount() * multiplier);
+                        orbs = saturatedAdd(orbs, SpawnXpExecutor.orbCount(points));
+                    }
+                }
             }
         }
-        if (hasOneShot && !hasRepeatable) {
-            // 纯一次性候选：没有可重复效果参与容量，上界恒为 1
-            groups = 1;
+        int groups = Integer.MAX_VALUE;
+        NearbyProductLimits limits = runtime.nearbyProducts();
+        if (limits.itemLimit() > 0) {
+            for (var demand : items.entrySet()) {
+                if (budget.exhausted()) { return CAPACITY_PENDING; }
+                budget.charge(CAPACITY_QUERY_UNITS);
+                int room = Math.max(0, limits.itemLimit() - countNearbyItems(demand.getKey(), limits.itemLimit(), limits.itemRadius()));
+                groups = Math.min(groups, room / demand.getValue());
+            }
         }
-        return groups;
+        if (limits.entityLimit() > 0) {
+            for (var demand : entities.entrySet()) {
+                if (budget.exhausted()) { return CAPACITY_PENDING; }
+                budget.charge(CAPACITY_QUERY_UNITS);
+                int room = Math.max(0, limits.entityLimit() - countNearbyEntities(demand.getKey(), limits.entityLimit(), limits.entityRadius()));
+                groups = Math.min(groups, room / demand.getValue());
+            }
+        }
+        if (orbs > 0 && limits.experienceOrbLimit() > 0) {
+            if (budget.exhausted()) { return CAPACITY_PENDING; }
+            budget.charge(CAPACITY_QUERY_UNITS);
+            List<ExperienceOrb> nearby = new ArrayList<>();
+            level.getEntities(EntityTypeTest.forClass(ExperienceOrb.class), searchBox(limits.experienceRadius()),
+                    Entity::isAlive, nearby, limits.experienceOrbLimit());
+            groups = Math.min(groups, Math.max(0, limits.experienceOrbLimit() - nearby.size()) / orbs);
+        }
+        return hasOneShot && !hasRepeatable ? 1 : groups;
+    }
+
+    // 组内需求累加采用饱和值，不允许溢出后绕过阈值。
+    private static int saturatedAdd(int left, int right) {
+        return (int) Math.min(Integer.MAX_VALUE, (long) left + right);
     }
 
     // 派发：逐组支付成本并派发候选内效果；每刻派发量受 dispatch_batch_size 限制
@@ -411,6 +427,16 @@ final class ConversionSettlement implements ServerTask {
         // 最后一组已开组也必须继续派发剩余效果，预算让出后保留同一组游标。
         while (groupOpen || groupsStarted < groupCount) {
             if (!groupOpen) {
+                // 已选但尚未支付成本的候选可能跨刻等待，开组前再次核对邻近存量。
+                if (pendingCandidate != null) {
+                    int capacity = capacityGroups(pendingCandidate, budget);
+                    if (capacity == CAPACITY_PENDING) { return StepResult.yield(1, 1); }
+                    remainingCapacity[pendingCandidateIndex] = Math.min(remainingCapacity[pendingCandidateIndex], capacity);
+                    if (remainingCapacity[pendingCandidateIndex] <= 0) {
+                        pendingCandidate = null;
+                        pendingCandidateIndex = -1;
+                    }
+                }
                 if (pendingCandidate == null) {
                     // 每组独立选候选（B1）：轮询从共享游标搜索能完成一组的候选，容量不足的候选跳过
                     int pick = selectCandidateForGroup(budget);
@@ -661,13 +687,12 @@ final class ConversionSettlement implements ServerTask {
         }
     }
 
-    // 邻近物品总量：与 spawn_item 执行器同一判定（具体物品比注册表对象，标签比 TagKey）
-    private int countNearbyItems(SpawnItemEffect effect, int limit) {
-        int radius = effect.radius() == null ? SpawnItemExecutor.DEFAULT_SEARCH_RADIUS : effect.radius();
+    // 邻近物品总量：与实体产出掉落物子类同一判定（具体物品比注册表对象，标签比 TagKey）
+    private int countNearbyItems(TaggedId reference, int limit, int radius) {
         AABB box = searchBox(radius);
         int[] total = {0};
         level.getEntities(EntityTypeTest.forClass(ItemEntity.class), box, nearby -> {
-            if (nearby.isAlive() && matchesItem(effect.item(), nearby.getItem())) {
+            if (nearby.isAlive() && matchesItem(reference, nearby.getItem())) {
                 total[0] = (int) Math.min(Integer.MAX_VALUE, (long) total[0] + nearby.getItem().getCount());
             }
             return total[0] >= limit;
@@ -676,10 +701,8 @@ final class ConversionSettlement implements ServerTask {
     }
 
     // 邻近实体总量：与 spawn_entity 执行器同一判定（支持具体类型与标签）
-    private int countNearbyEntities(SpawnEntityEffect effect, int limit) {
-        int radius = effect.radius() == null ? SpawnEntityExecutor.DEFAULT_SEARCH_RADIUS : effect.radius();
+    private int countNearbyEntities(TaggedId reference, int limit, int radius) {
         AABB box = searchBox(radius);
-        TaggedId reference = effect.entity();
         if (reference == null) {
             return 0;
         }
@@ -692,8 +715,9 @@ final class ConversionSettlement implements ServerTask {
             level.getEntities(type, box, Entity::isAlive, nearby, limit);
             return nearby.size();
         }
-        List<Entity> nearby = level.getEntitiesOfClass(Entity.class, box,
-                entity -> entity.isAlive() && matchesEntityType(reference, entity));
+        List<Entity> nearby = new ArrayList<>();
+        level.getEntities(EntityTypeTest.forClass(Entity.class), box,
+                entity -> entity.isAlive() && matchesEntityType(reference, entity), nearby, limit);
         return nearby.size();
     }
 

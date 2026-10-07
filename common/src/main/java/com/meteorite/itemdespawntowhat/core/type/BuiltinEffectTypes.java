@@ -4,10 +4,8 @@ import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.registry.SimpleTypeRegistry;
-import com.meteorite.itemdespawntowhat.core.type.effect.SpawnItemEffect;
 import com.meteorite.itemdespawntowhat.core.type.effect.SpawnEntityEffect;
 import com.meteorite.itemdespawntowhat.core.type.effect.PlaceBlockEffect;
-import com.meteorite.itemdespawntowhat.core.type.effect.SpawnXpEffect;
 import com.meteorite.itemdespawntowhat.core.type.effect.LootTableEffect;
 import com.meteorite.itemdespawntowhat.core.type.effect.LightningEffect;
 import com.meteorite.itemdespawntowhat.core.type.effect.ExplosionEffect;
@@ -39,10 +37,8 @@ public final class BuiltinEffectTypes {
     // 装配器在第三方 SPI 注册结束后统一冻结。
     public static SimpleTypeRegistry<EffectType<?>> createMutable(Codec<ConditionExpression> expressionCodec) {
         SimpleTypeRegistry<EffectType<?>> registry = new SimpleTypeRegistry<>();
-        registry.register(SpawnItemEffect.effectType(expressionCodec));
         registry.register(SpawnEntityEffect.effectType(expressionCodec));
         registry.register(PlaceBlockEffect.effectType(expressionCodec));
-        registry.register(SpawnXpEffect.effectType(expressionCodec));
         registry.register(LootTableEffect.effectType(expressionCodec));
         registry.register(LightningEffect.effectType(expressionCodec));
         registry.register(ExplosionEffect.effectType(expressionCodec));

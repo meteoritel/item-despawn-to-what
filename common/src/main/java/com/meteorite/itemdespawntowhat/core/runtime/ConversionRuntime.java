@@ -9,6 +9,7 @@ import com.meteorite.itemdespawntowhat.core.api.EffectExecutor;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
+import com.meteorite.itemdespawntowhat.core.config.NearbyProductLimits;
 import com.meteorite.itemdespawntowhat.core.load.LoadedRule;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
@@ -58,6 +59,11 @@ import java.util.UUID;
  * - delay_ticks / chance / 效果级 conditions 由本层统一处理，执行器只做"做什么"。
  */
 public final class ConversionRuntime {
+
+    // 所有结算共用启动时读取的服务端产物准入配置。
+    NearbyProductLimits nearbyProducts() {
+        return config.nearbyProducts();
+    }
 
     private static final Logger LOGGER = LogManager.getLogger();
     // 每秒刻数：trigger_after_seconds 与 tick 的换算

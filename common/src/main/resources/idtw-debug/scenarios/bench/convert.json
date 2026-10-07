@@ -45,11 +45,12 @@
       },
       "effects": [
         {
-          "type": "itemdespawntowhat:spawn_item",
+          "type": "itemdespawntowhat:spawn_entity",
           "item": "minecraft:prismarine_shard",
           "count": 1,
           "delay_ticks": 0,
-          "chance": 1
+          "chance": 1,
+          "variant": "item"
         }
       ]
     }

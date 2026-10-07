@@ -35,9 +35,9 @@
 
 ```json
 // 采用（扁平）
-{ "type": "itemdespawntowhat:spawn_item", "item": "minecraft:stone", "count": 2, "delay_ticks": 20 }
+{ "type": "itemdespawntowhat:spawn_entity", "variant": "item", "item": "minecraft:stone", "count": 2, "delay_ticks": 20 }
 // 拒绝（DFU 默认 dispatch）
-{ "type": "...:spawn_item", "value": { "item": "minecraft:stone", "count": 2, "delay_ticks": 20 } }
+{ "type": "...:spawn_entity", "value": { "variant": "item", "item": "minecraft:stone", "count": 2, "delay_ticks": 20 } }
 ```
 
 - **decode**：读 `type` 字段（`RuleFields.TYPE`）→ 查注册表（非法 id / 未注册返回可读 `DataResult.error`）→ 取该定义 `codec()` 强转 `MapCodec<A>`；
