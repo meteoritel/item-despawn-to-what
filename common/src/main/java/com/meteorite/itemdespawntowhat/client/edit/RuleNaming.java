@@ -138,13 +138,16 @@ public final class RuleNaming {
         if (type == null) {
             return rawType.isBlank() ? Component.translatable(PREFIX + "unfinished_no_result") : Component.literal(rawType);
         }
+        if (!TypeLabels.OWN_NAMESPACE.equals(type.getNamespace())) return TypeLabels.effectLabel(type);
         return switch (type.getPath()) {
-            case "spawn_item" -> withLabel(PREFIX + "effect.spawn_item", effect, "item", source, type);
-            case "spawn_entity" -> withLabel(PREFIX + "effect.spawn_entity", effect, "entity", source, type);
+            case "spawn_entity" -> switch (string(effect, "variant", "")) {
+                case "item" -> withLabel(PREFIX + "effect.spawn_item", effect, "item", source, type);
+                case "experience" -> Component.translatable(PREFIX + "effect.spawn_xp");
+                default -> withLabel(PREFIX + "effect.spawn_entity", effect, "entity", source, type);
+            };
             case "place_block" -> booleanOf(effect, "use_source_block", false)
                     ? Component.translatable(PREFIX + "effect.place_block_source")
                     : withLabel(PREFIX + "effect.place_block", effect, "block", source, type);
-            case "spawn_xp" -> Component.translatable(PREFIX + "effect.spawn_xp");
             case "loot_table" -> Component.translatable(PREFIX + "effect.loot_table");
             case "lightning" -> Component.translatable(PREFIX + "effect.lightning");
             case "arrow_rain" -> Component.translatable(PREFIX + "effect.arrow_rain");

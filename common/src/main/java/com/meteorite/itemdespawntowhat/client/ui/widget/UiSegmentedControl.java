@@ -89,7 +89,8 @@ public final class UiSegmentedControl implements UiWidget, UiFocusTarget {
     }
 
     // 直接设置选中值（不回调），用于从草稿回填
-    public UiSegmentedControl setSelected(String value) {
+    public UiSegmentedControl setSelected(@Nullable String value) {
+        this.selected = "";
         if (value == null) {
             return this;
         }

@@ -42,6 +42,7 @@ if ([string]::IsNullOrEmpty($ProjectRoot)) {
 $kitPackage = 'com.meteorite.itemdespawntowhat.client.ui.kit'
 # import 白名单前缀
 $allowedPrefixes = @('java.', 'javax.', 'net.minecraft.', 'org.jetbrains.', 'org.joml.', 'org.lwjgl.')
+$allowedClasses = @('com.mojang.blaze3d.platform.Lighting')
 # 明确禁用前缀（即使落在白名单里也禁用）
 $forbiddenPrefixes = @('net.fabricmc.', 'net.neoforged.', 'com.google.gson.')
 
@@ -62,7 +63,7 @@ if ($files.Count -eq 0) {
 }
 
 $importPattern = '^\s*import\s+(?:static\s+)?([A-Za-z_][A-Za-z0-9_\.]*)\s*;'
-$fqPattern = '\b(?:com\.meteorite|net\.fabricmc|net\.neoforged|com\.google\.gson)\.[A-Za-z_][A-Za-z0-9_\.]*'
+$fqPattern = '\b(?:com\.meteorite|com\.mojang\.blaze3d|net\.fabricmc|net\.neoforged|com\.google\.gson)\.[A-Za-z_][A-Za-z0-9_\.]*'
 $violations = New-Object System.Collections.Generic.List[string]
 $scannedFiles = 0
 $scannedImports = 0
@@ -90,7 +91,7 @@ foreach ($file in $files) {
                 $reason = '本模组非 kit 包'
             }
             if ($null -eq $reason) {
-                $allowed = $false
+                $allowed = $allowedClasses -contains $target
                 foreach ($prefix in $allowedPrefixes) {
                     if ($target.StartsWith($prefix)) { $allowed = $true; break }
                 }
@@ -108,6 +109,7 @@ foreach ($file in $files) {
             if ($fq -eq $kitPackage -or $fq.StartsWith($kitPackage + '.')) {
                 continue
             }
+            if ($allowedClasses -contains $fq) { continue }
             if ($fq.StartsWith('com.meteorite.')) {
                 $violations.Add(('{0}:{1} [本模组非 kit 包的全限定引用] {2}' -f $relative, $lineNo, $fq))
             } else {

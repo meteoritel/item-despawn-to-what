@@ -86,6 +86,9 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget {
     private boolean visible = true;
     private boolean focused;
     private boolean loading;
+    private boolean explicitLoading;
+    private @Nullable Runnable onRetry;
+    private java.util.function.Function<String, Component> tooltipSuffix = ignored -> null;
     private boolean searchActive;
     private @Nullable Component error;
     private int page;
@@ -168,6 +171,10 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget {
         this.error = error;
         return this;
     }
+
+    public UiCatalogGrid setLoading(boolean loading) { explicitLoading = loading; return this; }
+    public UiCatalogGrid setOnRetry(Runnable retry) { onRetry = retry; return this; }
+    public UiCatalogGrid setTooltipSuffix(java.util.function.Function<String, Component> suffix) { tooltipSuffix = suffix; return this; }
 
     // 页码状态：page 从 0 开始
     // 页码状态：page 从 0 开始；pageCount <= 0 表示未知（只显示当前页号）
@@ -318,6 +325,8 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget {
         drawStatus(graphics);
         drawGrid(graphics);
         drawPager(graphics, mouseX, mouseY);
+        Component tooltip = tooltipAt(mouseX, mouseY);
+        if (tooltip != null) graphics.renderTooltip(font, tooltip, mouseX, mouseY);
     }
 
     private void drawStatus(GuiGraphics graphics) {
@@ -326,7 +335,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget {
         if (error != null) {
             text = texts.error().copy().append(" ").append(error);
             color = UiPalette.DANGER;
-        } else if (loading) {
+        } else if (loading || explicitLoading) {
             text = texts.loading();
         } else if (entries.isEmpty()) {
             text = texts.empty();
@@ -337,7 +346,9 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget {
                     .append("  " + texts.selection() + " " + selection.size());
         }
         String trimmed = TextScroll.trimToWidth(font, text.getString(), Math.max(1, statusRect.width()));
-        graphics.drawString(font, trimmed, statusRect.x(), statusRect.y(), color, false);
+        int offset = (loading || explicitLoading) && error == null ? 14 : 0;
+        if (offset > 0) com.meteorite.itemdespawntowhat.client.ui.kit.UiSpinner.render(graphics, statusRect.x(), statusRect.y(), net.minecraft.Util.getMillis(), color);
+        graphics.drawString(font, TextScroll.trimToWidth(font, trimmed, Math.max(1, statusRect.width() - offset)), statusRect.x() + offset, statusRect.y(), color, false);
     }
 
     private void drawGrid(GuiGraphics graphics) {
@@ -365,7 +376,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget {
                     icon.render(graphics, cell.x() + Math.max(0, (CELL_WIDTH - icon.width()) / 2),
                             cell.y() + Math.max(0, (CELL_HEIGHT - icon.height()) / 2));
                 } else {
-                    String initial = entry.label() == null ? "?" : TextScroll.trimToWidth(font, entry.label().getString(), 1);
+                    String initial = entry.label() == null ? "?" : TextScroll.trimToWidth(font, entry.label().getString(), CELL_WIDTH - 4);
                     graphics.drawString(font, initial, cell.x() + 7, cell.y() + 8, UiPalette.TEXT_PRIMARY, false);
                 }
                 if (index == cursor && focused) {
@@ -400,6 +411,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget {
         if (!visible || !enabled || button != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
             return false;
         }
+        if (error != null && statusRect.contains(mouseX, mouseY) && onRetry != null) { onRetry.run(); return true; }
         if (searchRect.contains(mouseX, mouseY) || search.isFocused()) {
             searchActive = true;
             search.setFocused(true);
@@ -595,6 +607,8 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget {
         }
         Entry entry = entries.get(index);
         Component label = entry.label() == null ? Component.literal(entry.id()) : entry.label();
+        Component suffix = tooltipSuffix.apply(entry.id());
+        if (suffix != null) label = label.copy().append("\n").append(suffix);
         return entry.subLabel() == null ? label : label.copy().append(" ").append(entry.subLabel());
     }
 }

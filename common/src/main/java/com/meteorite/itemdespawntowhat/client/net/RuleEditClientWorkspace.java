@@ -154,6 +154,75 @@ public final class RuleEditClientWorkspace {
         return type == null ? null : catalogs.get(type);
     }
 
+    // 全目录按类型懒加载，单个类型一次只发送一个 200 条请求。
+    private final Map<RuleCatalogType, DirectoryLoad> directories = new EnumMap<>(RuleCatalogType.class);
+
+    /*** 保存合并条目和正在等待的页，失败不丢弃已到达的部分。 */
+    private static final class DirectoryLoad {
+        final java.util.LinkedHashMap<String, com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogEntry> entries = new java.util.LinkedHashMap<>();
+        int page;
+        int revision = -1;
+        boolean waiting;
+        boolean failed;
+        boolean complete;
+        boolean validating;
+        long deadline;
+        RuleCatalog snapshot;
+    }
+
+    public synchronized @Nullable RuleCatalog directory(RuleCatalogType type) {
+        if (type == null || sessionId.isEmpty()) return null;
+        DirectoryLoad load = directories.computeIfAbsent(type, ignored -> new DirectoryLoad());
+        if (load.waiting && System.currentTimeMillis() > load.deadline) { load.failed = true; load.waiting = false; }
+        if (!load.waiting && !load.failed && !load.complete && state == RuleEditClientState.ACTIVE) requestDirectory(type, load);
+        return load.snapshot;
+    }
+
+    // 重新打开目录时只探测第一页修订号；未变化则继续复用完整缓存。
+    public synchronized void refreshDirectory(RuleCatalogType type) {
+        DirectoryLoad load = directories.get(type);
+        if (load == null || !load.complete || load.waiting) { directory(type); return; }
+        load.validating = true; load.page = 0;
+        requestDirectory(type, load);
+    }
+
+    public synchronized boolean directoryFailed(RuleCatalogType type) {
+        DirectoryLoad load = directories.get(type);
+        return load != null && load.failed;
+    }
+
+    public synchronized void retryDirectory(RuleCatalogType type) {
+        DirectoryLoad load = directories.get(type);
+        if (load != null) { load.failed = false; load.waiting = false; requestDirectory(type, load); }
+        else directory(type);
+    }
+
+    public synchronized void invalidateDirectories() { directories.clear(); }
+
+    private void requestDirectory(RuleCatalogType type, DirectoryLoad load) {
+        load.waiting = requestCatalog(type, "", load.page, 200);
+        load.failed = !load.waiting;
+        load.deadline = System.currentTimeMillis() + 15000;
+    }
+
+    private void acceptDirectory(RuleCatalogType type, RuleCatalog catalog) {
+        DirectoryLoad load = directories.get(type);
+        if (load == null || !load.waiting) return;
+        load.waiting = false;
+        if (load.validating && load.revision == catalog.revision()) { load.validating = false; return; }
+        load.validating = false;
+        if (load.revision >= 0 && load.revision != catalog.revision()) {
+            load.entries.clear(); load.page = 0; load.revision = -1; load.snapshot = null; load.complete = false;
+            requestDirectory(type, load); return;
+        }
+        load.revision = catalog.revision();
+        catalog.entries().forEach(entry -> load.entries.putIfAbsent(entry.id(), entry));
+        load.complete = catalog.lastPage();
+        load.snapshot = new RuleCatalog(type, load.revision, List.copyOf(load.entries.values()), load.complete);
+        load.page++;
+        if (!load.complete && state == RuleEditClientState.ACTIVE) requestDirectory(type, load);
+    }
+
     // 生成新的操作 id（服务端据此做幂等）
     public static String newOperationId() {
         return UUID.randomUUID().toString();
@@ -282,6 +351,7 @@ public final class RuleEditClientWorkspace {
         openFailure = null;
         snapshot = null;
         catalogs.clear();
+        directories.clear();
         catalogRequestIds.clear();
         lastResult = null;
         lastHeartbeatTick = currentTick();
@@ -377,6 +447,7 @@ public final class RuleEditClientWorkspace {
             return;
         }
         catalogs.put(type, parsed);
+        acceptDirectory(type, parsed);
     }
 
     // 保存回执后是否需要客户端补拉快照：成功与无变化没有随回执附带的快照
@@ -397,6 +468,7 @@ public final class RuleEditClientWorkspace {
             contextRevision = 0;
             snapshot = null;
             catalogs.clear();
+        directories.clear();
             catalogRequestIds.clear();
             chunkBuffer.clear();
             lastHeartbeatTick = 0L;

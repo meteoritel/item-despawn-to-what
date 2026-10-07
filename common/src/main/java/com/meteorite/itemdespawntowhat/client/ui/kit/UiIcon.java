@@ -7,10 +7,27 @@ import net.minecraft.world.item.ItemStack;
 import java.util.Objects;
 
 /** 可测量的原版物品或贴图图块；纹理尺寸显式提供，避免隐含 256 像素图集。 */
-public sealed interface UiIcon permits UiIcon.Item, UiIcon.Sprite {
+public sealed interface UiIcon permits UiIcon.Item, UiIcon.Sprite, UiIcon.Rendered {
     int width();
     int height();
     void render(GuiGraphics graphics, int x, int y);
+
+    /*** 固定测量尺寸的受控自定义绘制入口，生命周期与失败处理由宿主负责。 */
+    record Rendered(int width, int height, Painter painter) implements UiIcon {
+        public Rendered {
+            if (width <= 0 || height <= 0) throw new IllegalArgumentException("Invalid icon size");
+            Objects.requireNonNull(painter);
+        }
+        @Override public void render(GuiGraphics graphics, int x, int y) {
+            painter.render(graphics, new UiRect(x, y, width, height));
+        }
+    }
+
+    /*** 绘制器仅接收已有绘制上下文与布局框。 */
+    @FunctionalInterface
+    interface Painter {
+        void render(GuiGraphics graphics, UiRect bounds);
+    }
 
     /** 在内容构建时复制物品，避免调用方修改数量或组件而破坏缓存。 */
     final class Item implements UiIcon {

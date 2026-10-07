@@ -239,9 +239,16 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
         return index >= 0 && index < visibleRows.size() ? index : -1;
     }
 
+    // 宿主的行提示使用与控件点击相同的命中结果。
+    public UiTreeNode<T> nodeAt(double mouseX, double mouseY) {
+        int index = indexAt(mouseX, mouseY);
+        return index < 0 ? null : visibleRows.get(index).node;
+    }
+
     // 选中节点在可见行中的下标，未选中时为 -1
     private int selectedIndex() {
-        return selectedNode == null ? -1 : visibleRows.indexOf(new VisibleRow<>(selectedNode, 0));
+        for (int i = 0; i < visibleRows.size(); i++) if (visibleRows.get(i).node == selectedNode) return i;
+        return -1;
     }
 
     // 滚动到指定可见行

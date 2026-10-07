@@ -40,6 +40,13 @@ public interface EditorWorkspaceView {
     // 指定类型的目录页
     @Nullable RuleCatalog catalog(RuleCatalogType type);
 
+    // 懒加载的完整目录：lastPage=false 时展示为部分结果。
+    @Nullable RuleCatalog directory(RuleCatalogType type);
+    void refreshDirectory(RuleCatalogType type);
+    boolean directoryFailed(RuleCatalogType type);
+    void retryDirectory(RuleCatalogType type);
+    void invalidateDirectories();
+
     // 请求目录页
     boolean requestCatalog(RuleCatalogType type, @Nullable String filter, int page, int pageSize);
 

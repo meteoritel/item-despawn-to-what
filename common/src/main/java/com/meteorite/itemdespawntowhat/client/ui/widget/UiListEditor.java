@@ -46,6 +46,8 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
     private final UiTextInput input;
     private List<String> items = new ArrayList<>();
     private int selected = -1;
+    // 只有显式进入编辑才覆盖；普通输入始终追加。
+    private int editingIndex = -1;
     private int offset;
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     private boolean enabled = true;
@@ -97,6 +99,8 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
             }
         }
         this.items = copy;
+        this.editingIndex = -1;
+        this.input.clear();
         this.selected = copy.isEmpty() ? -1 : Math.clamp(selected, 0, copy.size() - 1);
         this.offset = 0;
     }
@@ -148,6 +152,7 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
 
     // 删除当前选中条目
     public boolean removeSelected() {
+        editingIndex = -1;
         if (selected < 0 || selected >= items.size()) {
             return false;
         }
@@ -171,6 +176,7 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
         String value = next.remove(selected);
         next.add(target, value);
         selected = target;
+        if (editingIndex >= 0) editingIndex = target;
         applyItems(next);
         return true;
     }
@@ -189,12 +195,14 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
             return;
         }
         List<String> next = new ArrayList<>(items);
-        if (selected >= 0 && selected < next.size()) {
-            if (text.equals(next.get(selected))) {
+        if (editingIndex >= 0 && editingIndex < next.size()) {
+            if (text.equals(next.get(editingIndex))) {
                 input.clear();
+                editingIndex = -1;
                 return;
             }
-            next.set(selected, text);
+            if (next.contains(text) && !text.equals(next.get(editingIndex))) return;
+            next.set(editingIndex, text);
         } else {
             if (next.contains(text)) {
                 return;
@@ -203,6 +211,7 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
             selected = next.size() - 1;
         }
         input.clear();
+        editingIndex = -1;
         applyItems(next);
     }
 
@@ -327,6 +336,7 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
             return false;
         }
         if (input.bounds().contains(mouseX, mouseY)) {
+            if (input.value().isBlank()) editingIndex = -1;
             input.setFocused(true);
             input.mouseClicked(mouseX, mouseY, button);
             return true;
@@ -399,6 +409,7 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
             case GLFW.GLFW_KEY_ENTER, GLFW.GLFW_KEY_KP_ENTER -> {
                 String current = selectedItem();
                 if (current != null) {
+                    editingIndex = selected;
                     input.setValue(current);
                     input.setFocused(true);
                     input.selectAll();

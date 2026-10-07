@@ -20,7 +20,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCatalogGrid;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCyclicTimeBar;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
@@ -149,6 +148,7 @@ public final class RuleEditorP4Panels {
         if (key == null) {
             return null;
         }
+        if (type == RuleCatalogType.ENTITY && !id.startsWith("#")) return EntityPreviewIcons.icon(key.toString(), 0);
         ItemStack stack = switch (type) {
             case ITEM -> stackOf(BuiltInRegistries.ITEM.getOptional(key).orElse(null));
             case BLOCK -> BuiltInRegistries.BLOCK.getOptional(key).map(block -> stackOf(block.asItem()))
@@ -220,13 +220,22 @@ public final class RuleEditorP4Panels {
     public static UiModal catalogModal(Font font, EditorWorkspaceView workspace, RuleCatalogType type,
                                        boolean multiSelect, Component title, int screenWidth, int screenHeight,
                                        Consumer<List<String>> onPicked) {
+        return catalogModal(font, workspace, type, multiSelect, title, screenWidth, screenHeight, onPicked, null);
+    }
+
+    // 带字段上下文的入口：标签归属和实体产出禁用类型由宿主静态检查。
+    public static UiModal catalogModal(Font font, EditorWorkspaceView workspace, RuleCatalogType type,
+                                       boolean multiSelect, Component title, int screenWidth, int screenHeight,
+                                       Consumer<List<String>> onPicked, @Nullable EditorField field) {
+        workspace.refreshDirectory(type);
         CatalogMapper mapper = new CatalogMapper();
+        mapper.field = field;
         UiCatalogGrid grid = new UiCatalogGrid(font, multiSelect, catalogTexts(), new UiCatalogGrid.Listener() {
             @Override
             public void onSearch(String filter) {
                 mapper.page = 0;
                 mapper.filter = filter == null ? "" : filter;
-                workspace.requestCatalog(type, mapper.filter, 0, UiCatalogGrid.PAGE_SIZE);
+                
             }
 
             @Override
@@ -238,7 +247,7 @@ public final class RuleEditorP4Panels {
                     return;
                 }
                 mapper.page = Math.max(0, mapper.page + delta);
-                workspace.requestCatalog(type, mapper.filter, mapper.page, UiCatalogGrid.PAGE_SIZE);
+                
             }
         });
         grid.setEntrySource(() -> {
@@ -250,8 +259,13 @@ public final class RuleEditorP4Panels {
             List<UiCatalogGrid.Entry> mapped = mapper.map(workspace, type);
             grid.setPage(mapper.page, mapper.pageCount);
             grid.setPageLimits(mapper.page > 0, mapper.hasNext);
+            grid.setLoading(mapper.cached == null || !mapper.cached.lastPage());
+            grid.setError(workspace.directoryFailed(type) ? Component.translatable(UI + "pick.retry_hint") : null);
             return mapped;
         });
+        grid.setOnRetry(() -> workspace.retryDirectory(type));
+        grid.setTooltipSuffix(id -> type == RuleCatalogType.ENTITY && EntityPreviewIcons.unavailable(id, 0)
+                ? Component.translatable(UI + "preview.unavailable") : null);
         if (!workspace.active()) {
             grid.setEnabled(false);
             grid.setError(Component.translatable(UI + "pick.frozen"));
@@ -270,6 +284,7 @@ public final class RuleEditorP4Panels {
     private static final class CatalogMapper {
 
         private RuleCatalog cached;
+        private @Nullable EditorField field;
         private @Nullable List<UiCatalogGrid.Entry> entries;
         private boolean active = true;
         private int page;
@@ -277,30 +292,50 @@ public final class RuleEditorP4Panels {
         private boolean hasNext;
         private String filter = "";
 
+        private Object language;
+        private Object resources;
+        private String mappedFilter = "";
+        private int mappedPage = -1;
+        private List<UiCatalogGrid.Entry> full = List.of();
+
         @Nullable
         List<UiCatalogGrid.Entry> map(EditorWorkspaceView workspace, RuleCatalogType type) {
-            RuleCatalog catalog = workspace.catalog(type);
-            if (catalog == cached) {
-                return entries;
+            Object nextResources = EntityPreviewIcons.generation();
+            Object nextLanguage = net.minecraft.locale.Language.getInstance();
+            if (resources != null && (resources != nextResources || language != nextLanguage)) {
+                workspace.invalidateDirectories(); cached = null;
             }
-            cached = catalog;
-            if (catalog == null) {
-                entries = null;
-                hasNext = false;
-                pageCount = 0;
-                return null;
+            resources = nextResources; language = nextLanguage;
+            RuleCatalog catalog = workspace.directory(type);
+            boolean changed = catalog != cached;
+            if (changed) {
+                cached = catalog;
+                if (catalog == null) { entries = null; hasNext = false; pageCount = 0; return null; }
+                List<UiCatalogGrid.Entry> mapped = new ArrayList<>();
+                java.util.Set<String> validTags = field != null && type == RuleCatalogType.TAG ? FieldCatalogChoices.tags(field) : null;
+                for (RuleCatalogEntry entry : catalog.entries()) {
+                    if (validTags != null && !validTags.contains(entry.id())) continue;
+                    if (type == RuleCatalogType.ENTITY && field != null && FieldCatalogChoices.isGenericProduct(field)
+                            && (entry.id().equals("minecraft:item") || entry.id().equals("minecraft:experience_orb"))) continue;
+                    String sub = validTags == null ? entry.subLabel() : Component.translatable(field.labelKey()).getString();
+                    mapped.add(new UiCatalogGrid.Entry(entry.id(), catalogLabel(entry.label()),
+                            sub == null || sub.isBlank() ? null : catalogLabel(sub), iconFor(type, entry.id())));
+                }
+                full = List.copyOf(mapped);
             }
-            List<UiCatalogGrid.Entry> mapped = new ArrayList<>(catalog.entries().size());
-            for (RuleCatalogEntry entry : catalog.entries()) {
-                String sub = entry.subLabel();
-                mapped.add(new UiCatalogGrid.Entry(entry.id(), catalogLabel(entry.label()),
-                        sub == null || sub.isBlank() ? null : catalogLabel(sub), iconFor(type, entry.id())));
+            if (changed || mappedPage != page || !mappedFilter.equals(filter)) {
+                String needle = filter.toLowerCase(Locale.ROOT).trim();
+                List<UiCatalogGrid.Entry> filtered = full.stream().filter(entry -> entry.id().toLowerCase(Locale.ROOT).contains(needle)
+                        || entry.label().getString().toLowerCase(Locale.ROOT).contains(needle)
+                        || entry.subLabel() != null && entry.subLabel().getString().toLowerCase(Locale.ROOT).contains(needle)).toList();
+                pageCount = Math.max(1, (filtered.size() + UiCatalogGrid.PAGE_SIZE - 1) / UiCatalogGrid.PAGE_SIZE);
+                page = Math.clamp(page, 0, pageCount - 1);
+                int from = page * UiCatalogGrid.PAGE_SIZE;
+                entries = List.copyOf(filtered.subList(from, Math.min(filtered.size(), from + UiCatalogGrid.PAGE_SIZE)));
+                hasNext = page + 1 < pageCount;
+                mappedPage = page; mappedFilter = filter;
             }
-            // 末页判定：服务端 lastPage，或用「返回条数 < 每页上限」保守判定，避免翻进空页
-            hasNext = !catalog.lastPage() && catalog.entries().size() >= UiCatalogGrid.PAGE_SIZE;
-            pageCount = catalog.lastPage() ? page + 1 : 0;
-            entries = mapped;
-            return mapped;
+            return entries;
         }
     }
 
@@ -484,24 +519,9 @@ public final class RuleEditorP4Panels {
         if (min != null && max != null && isIntegerLike(min) && isIntegerLike(max)) {
             extras.add(intRangeBar(font, draft, min, max, basePath, applyChange, onChange));
         }
-        for (EditorField field : fields) {
-            RuleCatalogType catalogType = catalogTypeOf(field);
-            if (catalogType == null || field.type() == EditorFieldType.NOTE) {
-                continue;
-            }
-            boolean multi = isListField(field);
-            buttons.add(new UiButton(font, Component.translatable(UI + "pick.field",
-                    Component.translatable(field.labelKey())), UiButtonVariant.SECONDARY,
-                    () -> pushModal.accept(catalogModal(font, workspace, catalogType, multi,
-                            Component.translatable(field.labelKey()), screenWidth, screenHeight, ids -> {
-                                if (ids.isEmpty()) {
-                                    return;
-                                }
-                                applyChange.accept(() -> draft.setAt(join(basePath, field.name()),
-                                        multi ? toArray(ids) : new JsonPrimitive(ids.getFirst())));
-                                onChange.run();
-                            }))));
-        }
+        form.setCatalogOpener((field, tags, picked) -> pushModal.accept(catalogModal(font, workspace,
+                tags ? RuleCatalogType.TAG : catalogTypeOf(field), isListField(field),
+                Component.translatable(field.labelKey()), screenWidth, screenHeight, picked, field)));
         return new LeafPanel(form, extras, buttons);
     }
 
@@ -639,13 +659,6 @@ public final class RuleEditorP4Panels {
         }
     }
 
-    private static JsonArray toArray(List<String> ids) {
-        JsonArray array = new JsonArray();
-        for (String id : ids) {
-            array.add(id);
-        }
-        return array;
-    }
 
     /**
      * 叶子面板：附加区间控件 + 目录按钮 + 表单，纵向排列。

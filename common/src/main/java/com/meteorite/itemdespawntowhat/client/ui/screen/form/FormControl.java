@@ -756,7 +756,7 @@ abstract class FormControl {
         @Override
         void load(@Nullable JsonElement value) {
             rememberLoaded(value);
-            segments.setSelected(value != null && value.isJsonPrimitive() ? value.getAsString() : null);
+            segments.setSelected(value != null && value.isJsonPrimitive() ? value.getAsString() : field.enumValues().isEmpty() ? "" : field.enumValues().getFirst());
         }
 
         @Override
@@ -771,7 +771,7 @@ abstract class FormControl {
 
         @Override
         List<FormIssue> issues(String path) {
-            if (field.required() && segments.selected() == null) {
+            if (field.required() && segments.selected().isBlank()) {
                 return List.of(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "required")));
             }
             return List.of();
@@ -1094,6 +1094,7 @@ abstract class FormControl {
         private final Font font;
         private int toolbarHeight;
         private boolean enabled = true;
+        private boolean advancedTools;
 
         private final UiConditionTreeEditor editor;
         private final @Nullable ConditionSupport support;
@@ -1123,6 +1124,7 @@ abstract class FormControl {
                 addButton("remove", editor::deleteSelected);
                 addButton("up", () -> editor.moveSelected(-1));
                 addButton("down", () -> editor.moveSelected(1));
+                addButton("advanced", () -> advancedTools = !advancedTools);
             }
         }
 
@@ -1150,9 +1152,17 @@ abstract class FormControl {
             if (toolbar.isEmpty() || fallbackRaw != null) {
                 return 0;
             }
+            boolean any = editor.rowCount() > 0;
+            for (int i = 0; i < toolbar.size(); i++) {
+                boolean show = i == 0 || any && (i == 8 || i == 5 && editor.selectedNode() != null
+                        || i == 4 && editor.selectedNode() instanceof com.meteorite.itemdespawntowhat.core.model.ConditionNode.Leaf
+                        || advancedTools && i <= 7);
+                toolbar.get(i).setVisible(show);
+            }
             int cursorX = x;
             int cursorY = y;
             for (UiButton button : toolbar) {
+                if (!button.isVisible()) continue;
                 int limit = Math.max(1, width);
                 int buttonWidth = Math.clamp(button.preferredWidth(4), Math.min(24, limit), limit);
                 if (cursorX > x && cursorX + buttonWidth > x + width) {

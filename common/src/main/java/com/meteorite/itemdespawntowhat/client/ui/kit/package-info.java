@@ -1,4 +1,4 @@
-/**
+/***
  * UI kit：Java 声明式客户端 UI 组件集（阶段 E 记录的**公开边界**，尚未拆包发布）。
  *
  * <p><b>公开入口</b>（第三方宿主可直接依赖，签名变更按兼容策略走变更记录）：</p>
@@ -37,6 +37,9 @@
  *   <li>灯箱：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiLightbox}（含 Content / Gallery / Labels）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiImageView}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.LightboxImage}</li>
+ *   <li>实体与加载预览：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiEntityPreview}、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon.Rendered}、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSpinner}；实体创建、缓存和兜底由宿主负责</li>
  *   <li>命中与几何：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiRect}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTarget}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiAction}、
@@ -49,12 +52,12 @@
  * 它们可以随实现改动而不进变更记录。</p>
  *
  * <p><b>依赖方向</b>：本包只依赖 Minecraft 客户端通用类型、Java 标准库、JOML、LWJGL（按键常量）与
- * JetBrains annotations——不 import 任何项目包、不 import 两端 loader API、不引用 {@code Constants.MOD_ID}；
+ * JetBrains annotations，并精确允许 {@code com.mojang.blaze3d.platform.Lighting}——不 import 任何项目包、不 import 两端 loader API、不引用 {@code Constants.MOD_ID}；
  * {@code client/} 以外的代码不得引用本包。该约束由 {@code tools/check-ui-kit-boundaries.ps1} 检查，
  * 运行方式：{@code powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1}
  * （退出码 0 通过、1 有违规、2 配置错误）。脚本扫描本目录全部 {@code .java} 的 import 与全限定引用：
  * import 白名单为 {@code java.*} / {@code javax.*} / {@code net.minecraft.*} / {@code org.jetbrains.*} /
- * {@code org.joml.*} / {@code org.lwjgl.*}，同一 kit 包内互相引用允许；本模组其它包与
+ * {@code org.joml.*} / {@code org.lwjgl.*}，另精确允许 {@code com.mojang.blaze3d.platform.Lighting}，不放开其父包；同一 kit 包内互相引用允许；本模组其它包与
  * {@code net.fabricmc.*} / {@code net.neoforged.*} / {@code com.google.gson.*} 一律禁用。</p>
  *
  * <p><b>宿主适配层</b>：{@code client/ui/theme/}（把主题色映射成 {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderStyle} 等 kit 样式后注入）、

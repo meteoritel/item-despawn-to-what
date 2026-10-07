@@ -7,7 +7,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
 /***
- * 内置条件/效果编辑器描述符表：10 个条件 + 12 个效果各注册一条描述符。
+ * 内置条件/效果编辑器描述符表：10 个条件 + 10 个效果各注册一条描述符。
  * <p>字段名与 {@code docs/plan/plan-frontend-rewrite-forms.md} 的 JSON 字段名逐字一致，
  * 取值域与契约 §5.2 一致；界面通过通用表单引擎按描述符渲染，不写 22 个手写表单类。
  * <p>未在此注册的第三方类型由 {@link ConditionEditorRegistry}/{@link EffectEditorRegistry}
@@ -150,26 +150,8 @@ public final class BuiltinEditorDescriptors {
     private static void registerEffects() {
         String h = "gui.itemdespawntowhat.edit.field.";
 
-        // spawn_item
-        ResourceLocation spawnItem = id("spawn_item");
-        registerEffect(spawnItem, List.of(
-                EditorField.tag("item", h + "spawn_item.item", "minecraft:item"),
-                EditorField.integer("count", h + "spawn_item.count", 1, 64).optional(),
-                EditorField.optionalInteger("limit", h + "spawn_item.limit", 1, 4096),
-                EditorField.optionalInteger("radius", h + "spawn_item.radius", 1, 32)
-        ));
-
-        // spawn_entity：age 提供幼年/成年预设
-        ResourceLocation spawnEntity = id("spawn_entity");
-        registerEffect(spawnEntity, List.of(
-                EditorField.tag("entity", h + "spawn_entity.entity", "minecraft:entity_type"),
-                EditorField.integer("count", h + "spawn_entity.count", 1, 64).optional(),
-                EditorField.integerSlider("age", h + "spawn_entity.age", Integer.MIN_VALUE, Integer.MAX_VALUE, -24000, 24000).optional().withPresets(
-                        new EditorPreset("-24000", "gui.itemdespawntowhat.edit.preset.baby"),
-                        new EditorPreset("0", "gui.itemdespawntowhat.edit.preset.adult")),
-                EditorField.optionalInteger("limit", h + "spawn_entity.limit", 1, 4096),
-                EditorField.optionalInteger("radius", h + "spawn_entity.radius", 1, 32)
-        ));
+        // 统一实体产出；实际参数表单按子类型生成，不展示不相容字段。
+        registerEffect(id("spawn_entity"), entityFields("item"));
 
         // place_block：block 与 use_source_block 至少一个
         ResourceLocation placeBlock = id("place_block");
@@ -181,13 +163,6 @@ public final class BuiltinEditorDescriptors {
                 EditorField.integer("radius", h + "place_block.radius", 1, 32).optional(),
                 EditorField.optionalInteger("limit", h + "place_block.limit", 1, 4096),
                 EditorField.note(h + "place_block.note")
-        ));
-
-        // spawn_xp
-        ResourceLocation spawnXp = id("spawn_xp");
-        registerEffect(spawnXp, List.of(
-                EditorField.integer("amount", h + "spawn_xp.amount", 1, 65536).optional(),
-                EditorField.bool("per_source_item", h + "spawn_xp.per_source_item")
         ));
 
         // loot_table：战利品表不支持标签
@@ -253,6 +228,31 @@ public final class BuiltinEditorDescriptors {
                         .withHint(h + "consume_fluid.fluid.hint"),
                 EditorField.bool("require_source", h + "consume_fluid.require_source")
         ));
+    }
+
+    // 生成选中子类型的参数描述符；公共字段沿用注册表，第三方类型不受影响。
+    public static TypeEditorDescriptor entityDescriptor(String variant) {
+        TypeEditorDescriptor base = EffectEditorRegistry.descriptorFor(id("spawn_entity"));
+        List<EditorField> fields = new ArrayList<>(entityFields(variant));
+        base.fields().stream().filter(field -> List.of("delay_ticks", "chance", "conditions").contains(field.name()))
+                .forEach(fields::add);
+        return new TypeEditorDescriptor(base.id(), base.label(), fields, false);
+    }
+
+    private static List<EditorField> entityFields(String variant) {
+        return switch (variant) {
+            case "entity" -> List.of(
+                    EditorField.tag("entity", FIELD + "spawn_entity.entity", "minecraft:entity_type"),
+                    EditorField.integer("count", FIELD + "spawn_entity.count", 1, 64).optional(),
+                    EditorField.integerSlider("age", FIELD + "spawn_entity.age", Integer.MIN_VALUE, Integer.MAX_VALUE, -24000, 24000)
+                            .optional().withPresets(new EditorPreset("-24000", "gui.itemdespawntowhat.edit.preset.baby"),
+                                    new EditorPreset("0", "gui.itemdespawntowhat.edit.preset.adult")));
+            case "experience" -> List.of(
+                    EditorField.integer("amount", FIELD + "spawn_xp.amount", 1, 65536).optional(),
+                    EditorField.bool("per_source_item", FIELD + "spawn_xp.per_source_item"));
+            default -> List.of(EditorField.tag("item", FIELD + "spawn_item.item", "minecraft:item"),
+                    EditorField.integer("count", FIELD + "spawn_item.count", 1, 64).optional());
+        };
     }
 
     // 效果描述符 = 专属字段 + 公共字段（delay_ticks / chance / conditions）

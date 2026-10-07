@@ -1,6 +1,6 @@
 # 客户端 UI kit API 与宿主接入
 
-> 状态：P5-e 实施记录（2026-10-03）。面向宿主接入者，描述 `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/` 的公开面、输入与生命周期契约、样式注入方式与宿主要求。
+> 状态：当前实现（2026-10-07，含实体预览扩展）。面向宿主接入者，描述 `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/` 的公开面、输入与生命周期契约、样式注入方式与宿主要求。
 > 相关：[ADR-0022](../../adr/0022-client-ui-kit-adoption.md)（同源引入与来源记录）、[ADR-0025](../../adr/0025-reusable-client-ui-kit-boundary.md)（维护副本与依赖边界）、[kit API 规格](../../plan/plan-gui-rule-update-kit.md)、[NOTICE-kit.md](../../../NOTICE-kit.md)（来源与差异）。
 > 本文只描述当前源码事实；类名与方法名按源码核对，未实现的能力明确标注。
 
@@ -11,7 +11,8 @@ kit 是「记录来源与差异的维护副本」（ADR-0025）：宿主可以�
 允许依赖：
 
 - Minecraft 客户端通用类型（如 `net.minecraft.client.gui.Font`、`GuiGraphics`、`net.minecraft.network.chat.Component`）；
-- Java 标准库、JOML、LWJGL（按键常量）、JetBrains annotations。
+- Java 标准库、JOML、LWJGL（按键常量）、JetBrains annotations；
+- 精确允许 `com.mojang.blaze3d.platform.Lighting`，不允许整个 blaze3d 包。
 
 禁止依赖：
 
@@ -26,7 +27,7 @@ powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1
 ```
 
 - 退出码 0 = 通过；1 = 存在违规；2 = 目录缺失或没有 `.java`（配置错误）。
-- 规则：`import` 白名单为 `java.` / `javax.` / `net.minecraft.` / `org.jetbrains.` / `org.joml.` / `org.lwjgl.`；`com.meteorite.` 只允许 kit 自身包；`net.fabricmc.` / `net.neoforged.` / `com.google.gson.` 一律禁用；不在 `import` 行上的全限定引用同样扫描（含 javadoc 里的 FQ 名）。
+- 规则：`import` 白名单为 `java.` / `javax.` / `net.minecraft.` / `org.jetbrains.` / `org.joml.` / `org.lwjgl.`；另精确允许 `com.mojang.blaze3d.platform.Lighting`；`com.meteorite.` 只允许 kit 自身包；`net.fabricmc.` / `net.neoforged.` / `com.google.gson.` 一律禁用；不在 `import` 行上的全限定引用同样扫描（含 javadoc 里的 FQ 名）。
 - 可用 `-KitPath` 指向其它目录做自测：`powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1 -KitPath <目录>`。
 
 ## 2. 公开入口分组
@@ -35,6 +36,7 @@ powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1
 | --- | --- |
 | 内容排版 | `UiDocument`、`UiNode`、`UiIcon`、`UiTransform`、`UiMetrics`、`TextMeasurer`、`TextScroll` |
 | 控件与交互 | `UiControl`、`UiControlStyle`、`UiControlGroup`、`UiScrollView`、`UiLinearLayout` |
+| 实体与加载预览 | `UiEntityPreview`、`UiIcon.Rendered`、`UiSpinner` |
 | 输入与捕获 | `UiInputContext`、`UiInputTarget`、`UiInputRouter`、`UiInputCapture`、`UiValueInteraction` |
 | 数值策略 | `UiNumberPolicy`、`UiSliderWindow` |
 | 滑块 | `UiScalarSlider`、`UiRangeSlider`、`UiRangeValue`、`UiRangeEnd`、`UiCyclicRange` |
@@ -244,3 +246,24 @@ UiCyclicRange  UiSliderExamples.cyclicRange(Component label, UiRect bounds, doub
 - 区间与周期的高亮/时间条渲染留到 P4；P1 只交付逻辑与几何。
 - 不在 kit 内保证 1.21.1 以外的 Minecraft 版本兼容。
 - 来源、23 文件原始清单与本次新增/修改差异见 [NOTICE-kit.md](../../../NOTICE-kit.md)。
+
+## 2026-10-07：通用实体预览 API
+
+```java
+boolean drawn = UiEntityPreview.render(graphics, box, preparedEntity,
+        angleRadians, visualWidth, visualHeight, centerY);
+UiIcon icon = new UiIcon.Rendered(18, 18, (g, target) -> {
+    if (!UiEntityPreview.render(g, target, preparedEntity, angleRadians,
+            visualWidth, visualHeight, centerY)) {
+        // 宿主绘制兜底，并提供自己的本地化提示。
+    }
+});
+```
+
+在客户端渲染线程调用。宿主准备实体、参数、单调时间角度和生命周期；Kit 不创建实体、不运行 tick、不加入世界、不保留业务缓存。尺寸是宿主估计的可视范围，正数且有限；box 太小或无效参数返回 false。固定全周尺度、局部矩阵与裁剪保证常规 renderer 的等比适框，模型实际边界超出估计时仍可能被裁剪。渲染异常/缺 renderer 返回 false；静默无几何的第三方 renderer 没有通用检测保证。
+
+Kit 提交缓冲、恢复 pose/camera/裁剪，并回到普通 GUI 的 3D 物品光照基线；不保存任意先前光照状态、不更改 dispatcher 的阴影/命中框开关，也不保证恢复第三方 renderer 私自修改的所有全局状态。宿主应在 false 时画替代物品图标及说明，缓存失败避免每帧重试。
+
+`UiIcon.Rendered(width,height,Painter)` 是受控回调适配，不修改 UiImageView 的纹理契约；回调不得泄漏矩阵/裁剪状态。sealed UiIcon 新增子类可能要求外部穷尽 switch 更新。`UiSpinner.render(GuiGraphics,int x,int y,long milliseconds,int color)` 提供环形追逐点阵，时间与颜色由宿主传入；宿主仍负责加载/失败/完成状态文本。
+
+本项目四类展示点均通过 host `EntityPreviewIcons` / `RulePreviewIcons` 使用此 API。缓存 256 个预览，资源/语言/世界变化失效，退出屏幕释放；已知原版龙、恶魂、鱿鱼有尺寸修正。不可预览显示屏障物品及“预览不可用”，不因此禁止选择。Kit 不依赖规则 JSON、网络、loader 或宿主主题。

@@ -124,3 +124,9 @@
 | `widget/UiModalStack.java` | Space 的通用激活仅交给按钮，其余先由内容控件处理 | 叶参数与文本输入中的空格不能误触提交 | 宿主焦点适配；尚未回流 |
 
 规则页面、可滚动原始详情、本地化与名称解析属于 `screen/` 与 `screen/form/` 业务层，不新增 kit 依赖。依赖边界脚本本次核验通过：39 个文件、112 条 import、0 处违规。
+
+## 2026-10-07：本项目实体预览扩展
+
+新增 `UiEntityPreview` 和 `UiSpinner` 为本项目编写的通用绘制能力，不改写上文同源引入 23 文件的来源提交。`UiIcon` 新增受控 `Rendered` 子类；宿主承担实体创建、缓存/失效、尺寸修正和屏障/本地化兜底。精确放行 `com.mojang.blaze3d.platform.Lighting`，已同步 package-info、API 文档与边界脚本；禁止业务、Gson 和 loader 依赖仍有效。
+
+新增 sealed 子类型可能影响外部穷尽 switch。此轮没有独立模块、版本或库发布；当前维护副本仍在本项目内使用，来源与历史差异记录保持有效。

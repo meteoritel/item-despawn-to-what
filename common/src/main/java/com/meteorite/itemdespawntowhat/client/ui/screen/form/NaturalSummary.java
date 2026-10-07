@@ -145,6 +145,8 @@ public final class NaturalSummary {
     private static @Nullable Component fields(JsonObject object, ResourceLocation type, String kind) {
         boolean condition = "condition".equals(kind);
         var descriptor = condition ? ConditionEditorRegistry.descriptorFor(type) : EffectEditorRegistry.descriptorFor(type);
+        if (!condition && type.equals(ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "spawn_entity")) && object.has("variant"))
+            descriptor = com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDescriptors.entityDescriptor(object.get("variant").getAsString());
         List<Component> parts = new ArrayList<>();
         if (!descriptor.readOnly()) {
             for (EditorField field : descriptor.fields()) {
@@ -157,7 +159,7 @@ public final class NaturalSummary {
         }
         // 描述符未覆盖的字段（第三方类型）按原始键名展示，保证信息不丢
         for (Map.Entry<String, JsonElement> entry : object.entrySet()) {
-            if (RuleFields.TYPE.equals(entry.getKey())) {
+            if (RuleFields.TYPE.equals(entry.getKey()) || "variant".equals(entry.getKey())) {
                 continue;
             }
             boolean known = descriptor.hasField(entry.getKey());

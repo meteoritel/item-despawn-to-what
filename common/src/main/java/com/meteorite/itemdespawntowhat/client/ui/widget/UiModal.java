@@ -63,6 +63,7 @@ public final class UiModal implements UiWidget {
     private UiRect contentRect = new UiRect(0, 0, 0, 0);
     // 期望宽度
     private int preferredWidth = DEFAULT_WIDTH;
+    private int messageOffset;
     // 点击遮罩是否关闭
     private boolean closeOnBackdrop;
     // 确认后是否保留弹窗
@@ -210,7 +211,7 @@ public final class UiModal implements UiWidget {
     // 弹窗期望高度
     public int preferredHeight() {
         return UiTheme.HEADER_HEIGHT + UiTheme.PADDING + bodyHeight() + UiTheme.PADDING
-                + BUTTON_HEIGHT + UiTheme.PADDING;
+                + footerHeight(preferredWidth) + UiTheme.PADDING;
     }
 
     // 内容区高度
@@ -218,7 +219,7 @@ public final class UiModal implements UiWidget {
         if (contentWidget != null || contentRenderer != null) {
             return contentHeight;
         }
-        return messageLines(Math.max(1, preferredWidth - UiTheme.PADDING * 2)).size() * (font.lineHeight + 2);
+        return messageLines(Math.max(1, preferredWidth - UiTheme.PADDING * 4)).size() * (font.lineHeight + 2) + UiTheme.PADDING * 2;
     }
 
     // 按可用宽度换行后的消息行
@@ -231,8 +232,9 @@ public final class UiModal implements UiWidget {
 
     // 在给定屏幕区域内居中布局
     public UiModal layoutCentered(int screenWidth, int screenHeight) {
-        int width = Math.max(MIN_WIDTH, preferredWidth);
-        int height = preferredHeight();
+        int width = Math.min(Math.max(MIN_WIDTH, preferredWidth), Math.max(1, screenWidth - 8));
+        preferredWidth = width;
+        int height = Math.min(preferredHeight(), Math.max(1, screenHeight - 8));
         return setBoundsInternal((screenWidth - width) / 2, (screenHeight - height) / 2, width, height);
     }
 
@@ -247,10 +249,10 @@ public final class UiModal implements UiWidget {
     }
 
     private UiModal setBoundsInternal(int x, int y, int width, int height) {
-        this.bounds = new UiRect(Math.max(0, x), Math.max(0, y), Math.max(MIN_WIDTH, width), Math.max(BUTTON_HEIGHT, height));
+        this.bounds = new UiRect(Math.max(0, x), Math.max(0, y), Math.max(1, width), Math.max(BUTTON_HEIGHT, height));
         this.contentRect = new UiRect(bounds.x() + UiTheme.PADDING, bounds.y() + UiTheme.HEADER_HEIGHT + UiTheme.PADDING,
                 Math.max(0, bounds.width() - UiTheme.PADDING * 2),
-                Math.max(0, bounds.height() - UiTheme.HEADER_HEIGHT - UiTheme.PADDING * 3 - BUTTON_HEIGHT));
+                Math.max(0, bounds.height() - UiTheme.HEADER_HEIGHT - UiTheme.PADDING * 3 - footerHeight(bounds.width())));
         if (contentWidget != null) {
             contentWidget.setBounds(contentRect.x(), contentRect.y(), contentRect.width(), contentRect.height());
         }
@@ -258,36 +260,48 @@ public final class UiModal implements UiWidget {
         return this;
     }
 
-    // 按钮在底部右对齐排列
-    private void layoutButtons() {
-        int visibleCount = 0;
+    // 长标签按实际宽度换行，正文为按钮预留全部行高。
+    private int footerHeight(int width) {
+        int available = Math.max(1, width - UiTheme.PADDING * 2);
+        int used = 0;
+        int rows = 0;
         for (UiButton button : buttons) {
-            if (button.isVisible()) {
-                visibleCount++;
-            }
+            if (!button.isVisible()) continue;
+            int next = Math.min(available, Math.max(BUTTON_MIN_WIDTH, button.preferredWidth(UiTheme.PADDING)));
+            if (rows == 0) rows = 1;
+            if (used > 0 && used + BUTTON_SPACING + next > available) { rows++; used = 0; }
+            used += (used == 0 ? 0 : BUTTON_SPACING) + next;
         }
-        if (visibleCount == 0) {
-            return;
-        }
-        int[] widths = new int[buttons.size()];
-        int total = BUTTON_SPACING * (visibleCount - 1);
-        for (int i = 0; i < buttons.size(); i++) {
-            UiButton button = buttons.get(i);
-            if (!button.isVisible()) {
-                continue;
+        return rows == 0 ? 0 : rows * BUTTON_HEIGHT + (rows - 1) * BUTTON_SPACING;
+    }
+
+    // 每行右对齐，按钮不越过弹窗边缘。
+    private void layoutButtons() {
+        int available = Math.max(1, bounds.width() - UiTheme.PADDING * 2);
+        List<List<UiButton>> rows = new ArrayList<>();
+        List<UiButton> row = new ArrayList<>();
+        int used = 0;
+        for (UiButton button : buttons) {
+            if (!button.isVisible()) continue;
+            int next = Math.min(available, Math.max(BUTTON_MIN_WIDTH, button.preferredWidth(UiTheme.PADDING)));
+            if (!row.isEmpty() && used + BUTTON_SPACING + next > available) {
+                rows.add(row); row = new ArrayList<>(); used = 0;
             }
-            widths[i] = Math.max(BUTTON_MIN_WIDTH, button.preferredWidth(UiTheme.PADDING));
-            total += widths[i];
+            used += (row.isEmpty() ? 0 : BUTTON_SPACING) + next;
+            row.add(button);
         }
-        int x = bounds.right() - UiTheme.PADDING - total;
-        int y = bounds.bottom() - UiTheme.PADDING - BUTTON_HEIGHT;
-        for (int i = 0; i < buttons.size(); i++) {
-            UiButton button = buttons.get(i);
-            if (!button.isVisible()) {
-                continue;
+        if (!row.isEmpty()) rows.add(row);
+        int y = bounds.bottom() - UiTheme.PADDING - footerHeight(bounds.width());
+        for (List<UiButton> line : rows) {
+            int total = (line.size() - 1) * BUTTON_SPACING;
+            for (UiButton button : line) total += Math.min(available, Math.max(BUTTON_MIN_WIDTH, button.preferredWidth(UiTheme.PADDING)));
+            int x = bounds.right() - UiTheme.PADDING - total;
+            for (UiButton button : line) {
+                int buttonWidth = Math.min(available, Math.max(BUTTON_MIN_WIDTH, button.preferredWidth(UiTheme.PADDING)));
+                button.setBounds(x, y, buttonWidth, BUTTON_HEIGHT);
+                x += buttonWidth + BUTTON_SPACING;
             }
-            button.setBounds(x, y, widths[i], BUTTON_HEIGHT);
-            x += widths[i] + BUTTON_SPACING;
+            y += BUTTON_HEIGHT + BUTTON_SPACING;
         }
     }
 
@@ -325,11 +339,13 @@ public final class UiModal implements UiWidget {
         } else {
             UiTheme.drawInset(graphics, contentRect);
             List<FormattedCharSequence> lines = messageLines(contentRect.width() - UiTheme.PADDING * 2);
-            int textY = contentRect.y() + UiTheme.PADDING;
+            int textY = contentRect.y() + UiTheme.PADDING - messageOffset;
+            graphics.enableScissor(contentRect.x(), contentRect.y(), contentRect.right(), contentRect.bottom());
             for (FormattedCharSequence line : lines) {
                 graphics.drawString(font, line, contentRect.x() + UiTheme.PADDING, textY, UiPalette.TEXT_PRIMARY, false);
                 textY += font.lineHeight + 2;
             }
+            graphics.disableScissor();
         }
         for (UiButton button : buttons) {
             if (button.isVisible()) {
@@ -386,6 +402,10 @@ public final class UiModal implements UiWidget {
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (contentWidget != null) {
             contentWidget.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        } else if (contentRect.contains(mouseX, mouseY)) {
+            int maximum = Math.max(0, messageLines(contentRect.width() - UiTheme.PADDING * 2).size()
+                    * (font.lineHeight + 2) + UiTheme.PADDING * 2 - contentRect.height());
+            messageOffset = Math.clamp(messageOffset - (int) (scrollY * 20), 0, maximum);
         }
         return true;
     }

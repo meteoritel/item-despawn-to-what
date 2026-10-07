@@ -48,7 +48,6 @@ import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import java.util.ArrayList;
 import java.util.EnumMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -214,7 +213,6 @@ public final class RuleEditorEditPages {
     // 输入与成本
     private @Nullable FormView sourceForm;
     // 源物品的目录选择入口（图标网格面板）
-    private @Nullable UiButton sourceCatalogButton;
     private @Nullable UiSegmentedControl sourceCostMode;
     private @Nullable FormView sourceCostForm;
     private @Nullable FormView catalystForm;
@@ -240,6 +238,14 @@ public final class RuleEditorEditPages {
     private @Nullable UiRect combinationLabelRect;
     private @Nullable UiListView<Integer> effectList;
     private @Nullable FormView effectForm;
+    private @Nullable UiSegmentedControl variantControl;
+    private @Nullable FormView advancedEffectForm;
+    private @Nullable UiButton advancedButton;
+    private @Nullable UiButton resultBack;
+    private boolean showAdvancedEffects;
+    private int resultStage;
+    private @Nullable UiRect productPreviewRect;
+    private @Nullable JsonObject selectedAction;
     private @Nullable UiRect flatNoteRect;
     private @Nullable UiRect convertHintRect;
     // 未注册效果类型的只读说明行
@@ -312,7 +318,6 @@ public final class RuleEditorEditPages {
         autoNameRect = null;
         advancedRect = null;
         sourceForm = null;
-        sourceCatalogButton = null;
         sourceCostMode = null;
         sourceCostForm = null;
         catalystForm = null;
@@ -334,6 +339,12 @@ public final class RuleEditorEditPages {
         combinationLabelRect = null;
         effectList = null;
         effectForm = null;
+        variantControl = null;
+        advancedEffectForm = null;
+        advancedButton = null;
+        resultBack = null;
+        productPreviewRect = null;
+        selectedAction = null;
         flatNoteRect = null;
         convertHintRect = null;
         effectNoteRect = null;
@@ -349,6 +360,14 @@ public final class RuleEditorEditPages {
         form.setConditionSupport(pageConditionSupport(form));
         form.setSuggestionProvider(host.suggestions());
         form.setOnChanged(host::onDraftChanged);
+        form.setCatalogOpener((field, tags, onPicked) -> {
+            RuleCatalogType type = tags ? RuleCatalogType.TAG : RuleEditorP4Panels.catalogTypeOf(field);
+            if (type == null || host.rejectWhenFrozen()) return;
+            boolean multi = field.type() == com.meteorite.itemdespawntowhat.client.edit.EditorFieldType.TAG_LIST
+                    || field.type() == com.meteorite.itemdespawntowhat.client.edit.EditorFieldType.RL_LIST;
+            host.modals().push(RuleEditorP4Panels.catalogModal(font, host.workspace(), type, multi,
+                    Component.translatable(field.labelKey()), host.screenWidth(), host.screenHeight(), onPicked, field));
+        });
         form.setDescriptor(descriptor);
         form.reload();
         return form;
@@ -392,9 +411,6 @@ public final class RuleEditorEditPages {
         sourceForm = newForm(session, RuleFields.SOURCE, BuiltinEditorDescriptors.sourceDescriptor());
         liveForms.add(sourceForm);
         liveWidgets.add(sourceForm);
-        sourceCatalogButton = new UiButton(font, Component.translatable(UI + "button.catalog_source"),
-                UiButtonVariant.SECONDARY, this::openSourceCatalog);
-        liveWidgets.add(sourceCatalogButton);
 
         RuleCostBinding.Ref sourceRef = RuleCostBinding.consumeSource(rule);
         sourceCostMode = new UiSegmentedControl(font, costModeOptions());
@@ -585,6 +601,14 @@ public final class RuleEditorEditPages {
         form.setConditionSupport(pageConditionSupport(form));
         form.setSuggestionProvider(host.suggestions());
         form.setOnChanged(host::onDraftChanged);
+        form.setCatalogOpener((field, tags, onPicked) -> {
+            RuleCatalogType type = tags ? RuleCatalogType.TAG : RuleEditorP4Panels.catalogTypeOf(field);
+            if (type == null || host.rejectWhenFrozen()) return;
+            boolean multi = field.type() == com.meteorite.itemdespawntowhat.client.edit.EditorFieldType.TAG_LIST
+                    || field.type() == com.meteorite.itemdespawntowhat.client.edit.EditorFieldType.RL_LIST;
+            host.modals().push(RuleEditorP4Panels.catalogModal(font, host.workspace(), type, multi,
+                    Component.translatable(field.labelKey()), host.screenWidth(), host.screenHeight(), onPicked, field));
+        });
         form.setDescriptor(descriptor);
         form.reload();
         UiModal modal = UiModal.create(font);
@@ -644,7 +668,7 @@ public final class RuleEditorEditPages {
         int candidates = Math.max(1, ResultStructure.candidateCount(rule));
         candidateIndex = Math.clamp(candidateIndex, 0, candidates - 1);
 
-        addCandidateButton("button.diagram", this::openDiagram);
+
 
         candidateList = new UiListView<>(font, this::renderCandidateRow);
         candidateList.setRowHeight(ROW_H);
@@ -673,30 +697,42 @@ public final class RuleEditorEditPages {
             effectIndex = 0;
             requestRebuild();
         });
+        candidateList.setOnActivate(index -> enterResultStage(1));
         liveWidgets.add(candidateList);
+        resultBack = new UiButton(font, Component.translatable(UI + "button.result_plans"), UiButtonVariant.SECONDARY,
+                () -> enterResultStage(resultStage == 2 ? 1 : 0));
+        liveWidgets.add(resultBack);
+        buttons.add(resultBack);
+        if (host.screenWidth() < NARROW_WIDTH) addCandidateButton("button.candidate_edit", () -> enterResultStage(1));
 
         JsonObject candidate = ResultStructure.candidateAt(rule, candidateIndex);
-        safeSpawnBox = new UiCheckBox(font, Component.translatable(UI + "candidate.safe_spawn"), boolOf(candidate, RuleFields.SAFE_SPAWN, false));
-        safeSpawnBox.setOnChanged(checked -> setCandidateStrategy(RuleFields.SAFE_SPAWN, checked));
-        fillOriginBox = new UiCheckBox(font, Component.translatable(UI + "candidate.fill_origin"), boolOf(candidate, RuleFields.FILL_ORIGIN, true));
-        fillOriginBox.setOnChanged(checked -> setCandidateStrategy(RuleFields.FILL_ORIGIN, checked));
-        liveWidgets.add(safeSpawnBox);
-        liveWidgets.add(fillOriginBox);
-
-        boolean hasOutcomes = draft.hasOutcomes();
-        combinationControl = new UiSegmentedControl(font, List.of(
-                new UiSegmentedControl.Option(CombinationMode.ROUND_ROBIN.key(), Component.translatable(UI + "combination.round_robin")),
-                new UiSegmentedControl.Option(CombinationMode.PRIORITY.key(), Component.translatable(UI + "combination.priority"))));
-        combinationControl.setSelected(combinationOf(rule));
-        combinationControl.setEnabled(hasOutcomes);
-        combinationControl.setOnChanged(this::onCombinationChanged);
-        liveWidgets.add(combinationControl);
+        JsonArray actions = ResultStructure.effectsAt(rule, candidateIndex);
+        boolean generic = containsAction(actions, "spawn_entity", "entity");
+        boolean blocks = containsAction(actions, "place_block", null);
+        if (generic) {
+            safeSpawnBox = new UiCheckBox(font, Component.translatable(UI + "candidate.safe_spawn"), boolOf(candidate, RuleFields.SAFE_SPAWN, false));
+            safeSpawnBox.setOnChanged(checked -> setCandidateStrategy(RuleFields.SAFE_SPAWN, checked));
+            liveWidgets.add(safeSpawnBox);
+        }
+        if (blocks) {
+            fillOriginBox = new UiCheckBox(font, Component.translatable(UI + "candidate.fill_origin"), boolOf(candidate, RuleFields.FILL_ORIGIN, true));
+            fillOriginBox.setOnChanged(checked -> setCandidateStrategy(RuleFields.FILL_ORIGIN, checked));
+            liveWidgets.add(fillOriginBox);
+        }
+        if (candidates > 1) {
+            combinationControl = new UiSegmentedControl(font, List.of(
+                    new UiSegmentedControl.Option(CombinationMode.ROUND_ROBIN.key(), Component.translatable(UI + "combination.round_robin")),
+                    new UiSegmentedControl.Option(CombinationMode.PRIORITY.key(), Component.translatable(UI + "combination.priority"))));
+            combinationControl.setSelected(combinationOf(rule));
+            combinationControl.setOnChanged(this::onCombinationChanged);
+            liveWidgets.add(combinationControl);
+        }
 
         String listPath = ResultStructure.listPath(rule, candidateIndex);
         int effectCount = ResultStructure.effectCount(rule, candidateIndex);
         effectIndex = Math.clamp(effectIndex, 0, Math.max(0, effectCount - 1));
         effectList = new UiListView<>(font, this::renderEffectRow);
-        effectList.setRowHeight(ROW_H);
+        effectList.setRowHeight(24);
         effectList.setEmptyMessage(Component.translatable(UI + "summary.no_effect"));
         List<Integer> effects = new ArrayList<>();
         for (int i = 0; i < effectCount; i++) {
@@ -721,7 +757,9 @@ public final class RuleEditorEditPages {
             effectIndex = Math.max(0, index);
             requestRebuild();
         });
+        effectList.setOnActivate(index -> enterResultStage(2));
         liveWidgets.add(effectList);
+        if (host.screenWidth() < NARROW_WIDTH && effectCount > 0) addEffectButton("button.effect_edit", () -> enterResultStage(2));
 
         JsonArray array = ResultStructure.effectsAt(rule, candidateIndex);
         if (array != null && effectIndex >= 0 && effectIndex < array.size()) {
@@ -729,30 +767,71 @@ public final class RuleEditorEditPages {
             String type = RuleCostBinding.typeOf(element);
             ResourceLocation typeId = type == null ? null : ResourceLocation.tryParse(type);
             if (typeId != null) {
-                effectForm = newForm(session, listPath + "[" + effectIndex + "]", EffectEditorRegistry.descriptorFor(typeId));
+                String actionPath = listPath + "[" + effectIndex + "]";
+                TypeEditorDescriptor descriptor = EffectEditorRegistry.descriptorFor(typeId);
+                if (typeId.equals(ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "spawn_entity"))
+                        && element.isJsonObject()) {
+                    JsonObject action = element.getAsJsonObject();
+                    String variant = action.has("variant") ? action.get("variant").getAsString() : "item";
+                    descriptor = BuiltinEditorDescriptors.entityDescriptor(variant);
+                    variantControl = new UiSegmentedControl(font, List.of(
+                            new UiSegmentedControl.Option("item", Component.translatable(UI + "product.item")),
+                            new UiSegmentedControl.Option("entity", Component.translatable(UI + "product.entity")),
+                            new UiSegmentedControl.Option("experience", Component.translatable(UI + "product.experience"))));
+                    variantControl.setSelected(variant);
+                    variantControl.setOnChanged(value -> switchProduct(actionPath, value));
+                    liveWidgets.add(variantControl);
+                }
+                selectedAction = element.isJsonObject() ? element.getAsJsonObject() : null;
+                List<EditorField> primary = descriptor.fields().stream().filter(field -> !isCommonActionField(field)).toList();
+                List<EditorField> advanced = descriptor.fields().stream().filter(RuleEditorEditPages::isCommonActionField).toList();
+                effectForm = newForm(session, actionPath, new TypeEditorDescriptor(descriptor.id(), descriptor.label(), primary, descriptor.readOnly()));
                 liveForms.add(effectForm);
                 liveWidgets.add(effectForm);
+                if (!advanced.isEmpty()) {
+                    advancedEffectForm = newForm(session, actionPath, new TypeEditorDescriptor(descriptor.id(), descriptor.label(), advanced, false));
+                    liveForms.add(advancedEffectForm); liveWidgets.add(advancedEffectForm);
+                    advancedButton = new UiButton(font, Component.translatable(UI + "button.advanced"), UiButtonVariant.SECONDARY, () -> {
+                        if (blockNavigation()) return;
+                        showAdvancedEffects = !showAdvancedEffects; requestRebuild();
+                    });
+                    liveWidgets.add(advancedButton); buttons.add(advancedButton);
+                }
             }
         }
 
-        if (candidates > 1) {
-            addCandidateButton("button.candidate_up", () -> moveCandidateBy(-1));
-            addCandidateButton("button.candidate_down", () -> moveCandidateBy(1));
-        }
         addCandidateButton("button.candidate_add", this::addCandidate);
-        addCandidateButton("button.candidate_duplicate", this::duplicateCandidate);
-        if (hasOutcomes) {
-            addCandidateButton("button.candidate_remove", this::removeCandidate);
-        }
-        if (effectCount > 0) {
-            addEffectButton("button.effect_up", () -> moveEffectBy(-1));
-            addEffectButton("button.effect_down", () -> moveEffectBy(1));
-        }
+        addCandidateButton("button.more", () -> openResultMore(true));
         addEffectButton("button.effect_add", this::openEffectPicker);
-        if (effectCount > 0) {
-            addEffectButton("button.effect_duplicate", this::duplicateEffect);
-            addEffectButton("button.effect_remove", this::removeEffect);
+        if (effectCount > 0) addEffectButton("button.more", () -> openResultMore(false));
+    }
+
+    /*** 操作菜单只保存显示文本和调用入口，不承载规则数据。 */
+    private record MenuAction(Component label, Runnable action) { }
+
+    private void openResultMore(boolean candidate) {
+        if (blockNavigation()) return;
+        List<MenuAction> actions = new ArrayList<>();
+        if (candidate) {
+            actions.add(new MenuAction(Component.translatable(UI + "button.diagram"), this::openDiagram));
+            actions.add(new MenuAction(Component.translatable(UI + "button.candidate_duplicate"), this::duplicateCandidate));
+            actions.add(new MenuAction(Component.translatable(UI + "button.candidate_up"), () -> moveCandidateBy(-1)));
+            actions.add(new MenuAction(Component.translatable(UI + "button.candidate_down"), () -> moveCandidateBy(1)));
+            if (ResultStructure.hasOutcomes(currentView())) actions.add(new MenuAction(Component.translatable(UI + "button.candidate_remove"), this::removeCandidate));
+        } else {
+            actions.add(new MenuAction(Component.translatable(UI + "button.effect_duplicate"), this::duplicateEffect));
+            actions.add(new MenuAction(Component.translatable(UI + "button.effect_up"), () -> moveEffectBy(-1)));
+            actions.add(new MenuAction(Component.translatable(UI + "button.effect_down"), () -> moveEffectBy(1)));
+            actions.add(new MenuAction(Component.translatable(UI + "button.effect_remove"), this::removeEffect));
         }
+        UiListView<MenuAction> list = new UiListView<>(font, (graphics, rowFont, item, index, row, selected, hovered, focused) ->
+                graphics.drawString(rowFont, item.label(), row.x() + 2, row.y() + 2, UiPalette.TEXT_PRIMARY, false));
+        list.setItems(actions);
+        list.setActivateOnSingleClick(true);
+        UiModal modal = UiModal.create(font).title(Component.translatable(UI + "button.more"));
+        list.setOnActivate(item -> { host.modals().close(modal); item.action().run(); flushRebuild(); });
+        modal.contentWidget(list, actions.size() * 12 + 4).cancel(Component.translatable(UI + "button.cancel"));
+        host.modals().push(modal.layoutCentered(host.screenWidth(), host.screenHeight()));
     }
 
     // 候选专属策略：顶层 effects 结构下先原子转换为 outcomes，再写字段（一次撤销）
@@ -1070,13 +1149,16 @@ public final class RuleEditorEditPages {
         JsonObject effect = element != null && element.isJsonObject() ? element.getAsJsonObject() : null;
         Component title = RuleNaming.effectTitle(effect, nameSource);
         String text = (item + 1) + ". " + title.getString();
-        String trimmed = TextScroll.trimToWidth(font, text, Math.max(1, row.width() - 4));
-        graphics.drawString(font, trimmed, row.x() + 2, row.y() + 2, UiPalette.TEXT_PRIMARY, false);
+        var icon = RulePreviewIcons.action(effect);
+        int inset = icon == null ? 2 : 24;
+        if (icon != null) icon.render(graphics, row.x() + 2, row.y() + 2);
+        String trimmed = TextScroll.trimToWidth(font, text, Math.max(1, row.width() - inset - 2));
+        graphics.drawString(font, trimmed, row.x() + inset, row.y() + 2, UiPalette.TEXT_PRIMARY, false);
         if (element != null) {
-            int summaryWidth = row.width() - 6 - font.width(trimmed);
+            int summaryWidth = row.width() - inset - 4;
             if (summaryWidth > 12) {
                 String summary = TextScroll.trimToWidth(font, NaturalSummary.effect(element).getString(), summaryWidth);
-                graphics.drawString(font, summary, row.x() + row.width() - 2 - font.width(summary), row.y() + 2, UiPalette.TEXT_SECONDARY, false);
+                graphics.drawString(font, summary, row.x() + inset, row.y() + 13, UiPalette.TEXT_SECONDARY, false);
             }
         }
     }
@@ -1135,11 +1217,6 @@ public final class RuleEditorEditPages {
     private int layoutInput(UiRect area) {
         int x = area.x();
         int y = layoutForm(sourceForm, x, area.y(), area.width());
-        if (sourceCatalogButton != null) {
-            int width = fitWidth(sourceCatalogButton.preferredWidth(PAD), 80, area.width());
-            sourceCatalogButton.setBounds(x, y, width, BUTTON_H);
-            y += BUTTON_H + PAD;
-        }
         costModeRect = new UiRect(x, y, area.width(), LINE_H);
         y += LINE_H + 2;
         if (sourceCostMode != null) {
@@ -1180,59 +1257,117 @@ public final class RuleEditorEditPages {
         return layoutForm(conditionsForm, x, y, area.width());
     }
 
-    private int layoutResults(UiRect area) {
-        int x = area.x();
-        int y = area.y();
-        int leftWidth = area.width() >= NARROW_WIDTH ? Math.clamp(area.width() / 3, 80, 140) : area.width();
-        int listHeight = Math.clamp(candidateList == null ? 1 : candidateList.size(), 1, LIST_ROWS) * ROW_H + 2;
-        if (candidateList != null) {
-            candidateList.setBounds(x, y, leftWidth, listHeight);
+    // 同一方案的上下文控制只对相关产出显示。
+    private static boolean containsAction(@Nullable JsonArray actions, String type, @Nullable String variant) {
+        if (actions == null) return false;
+        for (JsonElement entry : actions) {
+            if (!entry.isJsonObject()) continue;
+            JsonObject action = entry.getAsJsonObject();
+            if (!(TypeLabels.OWN_NAMESPACE + ":" + type).equals(RuleCostBinding.typeOf(action))) continue;
+            if (variant == null || action.has("variant") && variant.equals(action.get("variant").getAsString())) return true;
         }
-        int nextY = y + listHeight + BUTTON_GAP;
-        nextY += layoutButtonGroup(candidateButtons, x, nextY, leftWidth) + PAD;
-        if (!ResultStructure.hasOutcomes(currentView())) {
-            flatNoteRect = new UiRect(x, nextY, leftWidth, LINE_H);
-            nextY += LINE_H + PAD;
-        }
-        if (area.width() >= NARROW_WIDTH) {
-            int rightX = x + leftWidth + PAD;
-            return Math.max(nextY, layoutResultsDetail(rightX, y, Math.max(0, area.right() - rightX)));
-        }
-        return layoutResultsDetail(x, nextY, area.width());
+        return false;
     }
 
-    private int layoutResultsDetail(int x, int y, int width) {
-        combinationLabelRect = new UiRect(x, y, width, LINE_H);
-        y += LINE_H;
+    // 切换子类保留公共执行参数，重置专属参数，仅写入一次撤销记录。
+    private void switchProduct(String path, String variant) {
+        EditSession session = host.session();
+        if (session == null || blockNavigation()) return;
+        JsonElement old = session.draft().getAt(path);
+        if (old == null || !old.isJsonObject()) return;
+        JsonObject next = old.getAsJsonObject().deepCopy();
+        for (String field : List.of("item", "entity", "count", "age", "amount", "per_source_item")) next.remove(field);
+        next.addProperty("variant", variant);
+        if ("experience".equals(variant)) {
+            next.addProperty("amount", 1);
+            next.addProperty("per_source_item", false);
+        } else {
+            next.addProperty("count", 1);
+            if ("entity".equals(variant)) next.addProperty("age", 0);
+        }
+        if (apply(EditSession.OP_SET_FIELD, () -> session.draft().setAt(path, next))) requestRebuild();
+    }
+
+    private static boolean isCommonActionField(EditorField field) {
+        return List.of("chance", "delay_ticks", "conditions").contains(field.name());
+    }
+
+    private void enterResultStage(int stage) {
+        if (blockNavigation()) return;
+        resultStage = stage;
+        pageScroll.setOffset(0);
+        requestRebuild();
+    }
+
+    private static void show(@Nullable UiWidget widget, boolean visible) {
+        if (widget instanceof UiButton button) button.setVisible(visible);
+        else if (widget instanceof UiListView<?> list) list.setVisible(visible);
+        else if (widget instanceof FormView form) form.setVisible(visible);
+        else if (widget instanceof UiSegmentedControl segments) segments.setVisible(visible);
+        else if (widget instanceof UiCheckBox box) box.setVisible(visible);
+    }
+
+    private int layoutResults(UiRect area) {
+        boolean wide = area.width() >= NARROW_WIDTH;
+        boolean plans = wide || resultStage == 0;
+        boolean actions = wide || resultStage == 1;
+        boolean detail = wide || resultStage == 2;
+        show(candidateList, plans);
+        candidateButtons.forEach(button -> show(button, plans));
+        show(combinationControl, plans);
+        show(effectList, actions);
+        effectButtons.forEach(button -> show(button, actions));
+        show(safeSpawnBox, detail && showAdvancedEffects); show(fillOriginBox, detail && showAdvancedEffects);
+        show(effectForm, detail); show(variantControl, detail); show(advancedButton, detail);
+        show(advancedEffectForm, detail && showAdvancedEffects);
+        show(resultBack, !wide && resultStage > 0);
+        combinationLabelRect = null; flatNoteRect = null; convertHintRect = null; productPreviewRect = null; effectNoteRect = null;
+        int x = area.x(), y = area.y();
+        if (!wide && resultStage > 0 && resultBack != null) {
+            resultBack.setLabel(Component.translatable(UI + (resultStage == 2 ? "button.result_actions" : "button.result_plans")));
+            resultBack.setBounds(x, y, area.width(), BUTTON_H); y += BUTTON_H + PAD;
+        }
+        if (!wide) {
+            if (resultStage == 0) return layoutPlans(x, y, area.width());
+            if (resultStage == 1) return layoutActions(x, y, area.width());
+            return layoutActionDetail(x, y, area.width());
+        }
+        int navigationWidth = Math.clamp(area.width() * 36L / 100, 120, 200);
+        int navY = layoutPlans(x, y, navigationWidth) + PAD;
+        navY = layoutActions(x, navY, navigationWidth);
+        int detailX = x + navigationWidth + PAD;
+        return Math.max(navY, layoutActionDetail(detailX, y, area.right() - detailX));
+    }
+
+    private int layoutPlans(int x, int y, int width) {
         if (combinationControl != null) {
-            combinationControl.setBounds(x, y, fitWidth(combinationControl.preferredWidth(PAD), 100, width), ROW_H);
+            combinationLabelRect = new UiRect(x, y, width, LINE_H); y += LINE_H;
+            combinationControl.setBounds(x, y, width, ROW_H); y += ROW_H + PAD;
         }
-        y += ROW_H + PAD;
-        if (safeSpawnBox != null) {
-            safeSpawnBox.setBounds(x, y, width, ROW_H);
-            y += ROW_H;
-        }
-        if (fillOriginBox != null) {
-            fillOriginBox.setBounds(x, y, width, ROW_H);
-            y += ROW_H;
-        }
-        y += PAD;
-        int listHeight = Math.clamp(effectList == null ? 1 : effectList.size(), 1, LIST_ROWS) * ROW_H + 2;
-        if (effectList != null) {
-            effectList.setBounds(x, y, width, listHeight);
-        }
+        int listHeight = Math.clamp(candidateList == null ? 1 : candidateList.size(), 1, LIST_ROWS) * ROW_H + 2;
+        if (candidateList != null) candidateList.setBounds(x, y, width, listHeight);
         y += listHeight + BUTTON_GAP;
-        y += layoutButtonGroup(effectButtons, x, y, width) + PAD;
-        JsonObject view = currentView();
-        if (view != null && readonlyEffectNote(view) != null) {
-            effectNoteRect = new UiRect(x, y, width, LINE_H);
-            y += LINE_H + PAD;
+        return y + layoutButtonGroup(candidateButtons, x, y, width);
+    }
+
+    private int layoutActions(int x, int y, int width) {
+        int listHeight = Math.clamp(effectList == null ? 1 : effectList.size(), 1, LIST_ROWS) * 24 + 2;
+        if (effectList != null) effectList.setBounds(x, y, width, listHeight);
+        y += listHeight + BUTTON_GAP;
+        return y + layoutButtonGroup(effectButtons, x, y, width);
+    }
+
+    private int layoutActionDetail(int x, int y, int width) {
+        if (variantControl != null) { variantControl.setBounds(x, y, width, ROW_H); y += ROW_H + PAD; }
+        if (selectedAction != null && RulePreviewIcons.action(selectedAction) != null) {
+            productPreviewRect = new UiRect(x, y, Math.min(72, width), 60); y += 64;
         }
+        if (currentView() != null && readonlyEffectNote(currentView()) != null) { effectNoteRect = new UiRect(x, y, width, LINE_H); y += LINE_H + PAD; }
         y = layoutForm(effectForm, x, y, width);
-        if (!ResultStructure.hasOutcomes(view)) {
-            convertHintRect = new UiRect(x, y, width, LINE_H);
-            y += LINE_H;
-        }
+        if (showAdvancedEffects && safeSpawnBox != null) { safeSpawnBox.setBounds(x, y, width, ROW_H); y += ROW_H + PAD; }
+        if (showAdvancedEffects && fillOriginBox != null) { fillOriginBox.setBounds(x, y, width, ROW_H); y += ROW_H + PAD; }
+        if (advancedButton != null) { advancedButton.setBounds(x, y, width, BUTTON_H); y += BUTTON_H + PAD; }
+        if (showAdvancedEffects) y = layoutForm(advancedEffectForm, x, y, width);
         return y;
     }
 
@@ -1262,51 +1397,6 @@ public final class RuleEditorEditPages {
     }
 
     // ---- 目录面板与结构图解（P4） ----
-
-    // 源物品目录选择：多选后把新 id 追加进 source.items（已有项不重复）
-    private void openSourceCatalog() {
-        if (blockNavigation()) {
-            return;
-        }
-        EditSession session = host.session();
-        if (session == null || host.rejectWhenFrozen()) {
-            return;
-        }
-        host.modals().push(RuleEditorP4Panels.catalogModal(font, host.workspace(), RuleCatalogType.ITEM, true,
-                Component.translatable(UI + "button.catalog_source"), host.screenWidth(), host.screenHeight(),
-                ids -> {
-                    if (!ids.isEmpty()) {
-                        appendSourceItems(session, ids);
-                    }
-                }));
-    }
-
-    private void appendSourceItems(EditSession session, List<String> ids) {
-        RuleDraft draft = session.draft();
-        JsonObject view = draft.view();
-        JsonObject source = view.has(RuleFields.SOURCE) && view.get(RuleFields.SOURCE).isJsonObject()
-                ? view.getAsJsonObject(RuleFields.SOURCE) : new JsonObject();
-        JsonArray existing = source.has(RuleFields.SOURCE_ITEMS) && source.get(RuleFields.SOURCE_ITEMS).isJsonArray()
-                ? source.getAsJsonArray(RuleFields.SOURCE_ITEMS) : new JsonArray();
-        LinkedHashSet<String> merged = new LinkedHashSet<>();
-        for (JsonElement element : existing) {
-            if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isString()) {
-                merged.add(element.getAsString());
-            }
-        }
-        merged.addAll(ids);
-        JsonArray next = new JsonArray();
-        for (String id : merged) {
-            next.add(id);
-        }
-        if (!apply(EditSession.OP_SET_FIELD,
-                () -> draft.setAt(RuleFields.SOURCE + "." + RuleFields.SOURCE_ITEMS, next))) {
-            return;
-        }
-        if (sourceForm != null) {
-            sourceForm.reload();
-        }
-    }
 
     // 结构图解：只表达槽位与连接，节点点击导航到对应页/候选/效果
     private void openDiagram() {
@@ -1424,6 +1514,20 @@ public final class RuleEditorEditPages {
     }
 
     private void renderResults(GuiGraphics graphics) {
+        if (productPreviewRect != null && selectedAction != null && lastArea != null) {
+            UiTheme.drawInset(graphics, productPreviewRect);
+            var icon = RulePreviewIcons.action(selectedAction);
+            if (icon instanceof com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon.Rendered rendered) {
+                rendered.painter().render(graphics, productPreviewRect);
+            } else if (icon != null) icon.render(graphics, productPreviewRect.x() + (productPreviewRect.width() - 16) / 2, productPreviewRect.y() + 20);
+            if (selectedAction.has("entity")) {
+                String id = selectedAction.get("entity").getAsString();
+                int age = selectedAction.has("age") ? selectedAction.get("age").getAsInt() : 0;
+                if (EntityPreviewIcons.unavailable(id, age)) drawText(graphics,
+                        new UiRect(productPreviewRect.right() + PAD, productPreviewRect.y(), Math.max(0, lastArea.right() - productPreviewRect.right() - PAD), 20),
+                        Component.translatable(UI + "preview.unavailable"), UiPalette.TEXT_SECONDARY);
+            }
+        }
         drawText(graphics, combinationLabelRect, Component.translatable(UI + "rule.combination"), UiPalette.TEXT_SECONDARY);
         JsonObject view = currentView();
         if (view == null) {
@@ -1597,6 +1701,7 @@ public final class RuleEditorEditPages {
     public List<UiFocusTarget> focusTargets() {
         List<UiFocusTarget> targets = new ArrayList<>();
         for (UiWidget widget : liveWidgets) {
+            if (!widget.isVisible()) continue;
             if (widget instanceof FormView form) {
                 targets.addAll(form.focusTargets());
             } else if (widget instanceof UiFocusTarget target && target.canFocus()) {
@@ -1621,6 +1726,7 @@ public final class RuleEditorEditPages {
             catalystToggle.setEnabled(enabled && RuleCostBinding.consumeCatalyst(view) == null);
         }
         triggerBoxes.forEach(box -> box.setEnabled(enabled));
+        if (variantControl != null) variantControl.setEnabled(enabled);
         if (combinationControl != null) {
             combinationControl.setEnabled(enabled && ResultStructure.hasOutcomes(view));
         }
@@ -1692,6 +1798,7 @@ public final class RuleEditorEditPages {
             return null;
         }
         for (FormView form : liveForms) {
+            if (!form.isVisible()) continue;
             UiFocusTarget target = form.revealPath(path);
             if (target != null) {
                 ensureVisible(target);
@@ -1700,6 +1807,8 @@ public final class RuleEditorEditPages {
         }
         if (path.startsWith(RuleFields.OUTCOMES) || path.startsWith(RuleFields.EFFECTS)) {
             page = Page.RESULTS;
+            resultStage = path.contains("[") ? 2 : 1;
+            showAdvancedEffects = path.contains("chance") || path.contains("delay_ticks") || path.contains("conditions");
             int candidate = indexIn(path, RuleFields.OUTCOMES);
             if (candidate >= 0) {
                 candidateIndex = candidate;
@@ -1710,7 +1819,8 @@ public final class RuleEditorEditPages {
             }
             rebuild();
             if (effectForm != null) {
-                return effectForm.revealPath(path);
+                UiFocusTarget target = effectForm.revealPath(path);
+                return target != null ? target : advancedEffectForm == null ? null : advancedEffectForm.revealPath(path);
             }
             return null;
         }

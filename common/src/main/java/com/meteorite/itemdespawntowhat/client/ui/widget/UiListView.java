@@ -59,6 +59,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     private IntConsumer onSelectionChanged;
     // 激活回调
     private Consumer<T> onActivate;
+    private boolean activateOnSingleClick;
     // 是否持有键盘焦点
     private boolean focused;
     // 是否可见
@@ -139,6 +140,9 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         this.onSelectionChanged = callback;
         return this;
     }
+
+    // 导航清单与菜单可显式使用单击激活，普通可编辑列表仍保持双击。
+    public void setActivateOnSingleClick(boolean enabled) { activateOnSingleClick = enabled; }
 
     // 设置激活回调
     public UiListView<T> setOnActivate(Consumer<T> callback) {
@@ -293,7 +297,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         lastClickIndex = index;
         lastClickTime = now;
         setSelectedIndex(index);
-        if (doubleClick && onActivate != null) {
+        if ((activateOnSingleClick || doubleClick) && onActivate != null) {
             onActivate.accept(items.get(index));
         }
         return true;

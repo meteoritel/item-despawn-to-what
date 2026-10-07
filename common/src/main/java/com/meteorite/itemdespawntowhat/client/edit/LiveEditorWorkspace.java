@@ -81,6 +81,12 @@ public final class LiveEditorWorkspace implements EditorWorkspaceView {
         return this.workspace().catalog(type);
     }
 
+    @Override public @Nullable RuleCatalog directory(RuleCatalogType type) { return workspace().directory(type); }
+    @Override public void refreshDirectory(RuleCatalogType type) { workspace().refreshDirectory(type); }
+    @Override public boolean directoryFailed(RuleCatalogType type) { return workspace().directoryFailed(type); }
+    @Override public void retryDirectory(RuleCatalogType type) { workspace().retryDirectory(type); }
+    @Override public void invalidateDirectories() { workspace().invalidateDirectories(); }
+
     @Override
     public boolean requestCatalog(RuleCatalogType type, @Nullable String filter, int page, int pageSize) {
         return this.workspace().requestCatalog(type, filter, page, pageSize);

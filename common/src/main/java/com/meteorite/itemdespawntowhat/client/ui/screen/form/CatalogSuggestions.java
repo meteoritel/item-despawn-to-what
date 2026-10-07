@@ -2,7 +2,6 @@ package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
-import com.meteorite.itemdespawntowhat.client.net.RuleEditClientState;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalog;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogEntry;
@@ -11,12 +10,10 @@ import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 
 /***
  * 目录候选提供器：把表单字段（注册表提示串 / 字段名 / 字段类型）映射到服务端来源目录，
@@ -28,13 +25,11 @@ import java.util.Set;
 public final class CatalogSuggestions implements SuggestionProvider {
 
     // 首次请求的页大小
-    private static final int FIRST_PAGE_SIZE = 64;
 
     // 单个字段最多返回的候选数（界面仍会按输入过滤）
     private static final int MAX_SUGGESTIONS = 256;
 
     // 已发起过首次请求的目录类型，避免每帧重复请求
-    private final Set<RuleCatalogType> requested = EnumSet.noneOf(RuleCatalogType.class);
 
     // 无状态构造：候选按需从工作区缓存读取
     public CatalogSuggestions() {
@@ -61,39 +56,30 @@ public final class CatalogSuggestions implements SuggestionProvider {
         }
         Map<String, Suggestion> candidates = new LinkedHashMap<>();
         for (RuleCatalogType type : types) {
+            java.util.Set<String> validTags = type == RuleCatalogType.TAG ? com.meteorite.itemdespawntowhat.client.ui.screen.FieldCatalogChoices.tags(field) : null;
             for (RuleCatalogEntry entry : entriesOf(type)) {
+                if (validTags != null && !validTags.contains(entry.id())) continue;
                 if (candidates.size() >= MAX_SUGGESTIONS) {
                     break;
                 }
-                add(candidates, entry.id(), entry.label(), tagField);
+                add(candidates, entry.id(), entry.label());
             }
         }
         return List.copyOf(candidates.values());
     }
 
     // 加入候选：标签字段同时给出带 # 与不带 # 的两种写法，按 value 去重
-    private static void add(Map<String, Suggestion> candidates, @Nullable String id, @Nullable String label, boolean tagField) {
+    private static void add(Map<String, Suggestion> candidates, @Nullable String id, @Nullable String label) {
         if (id == null || id.isBlank()) {
             return;
         }
         candidates.putIfAbsent(id, new Suggestion(id, labelOf(id, label)));
-        if (!tagField) {
-            return;
-        }
-        String tagged = id.startsWith("#") ? id.substring(1) : "#" + id;
-        if (!tagged.isBlank()) {
-            candidates.putIfAbsent(tagged, new Suggestion(tagged, labelOf(tagged, label)));
-        }
     }
 
     // 取某类型的目录页；首次查询且会话 ACTIVE 时按需请求第一页，返回当前已缓存内容（可能为空）
     private List<RuleCatalogEntry> entriesOf(RuleCatalogType type) {
         RuleEditClientWorkspace workspace = RuleEditClientWorkspace.instance();
-        RuleCatalog catalog = workspace.catalog(type);
-        if (catalog == null && requested.add(type) && workspace.state() == RuleEditClientState.ACTIVE) {
-            workspace.requestCatalog(type, null, 0, FIRST_PAGE_SIZE);
-            catalog = workspace.catalog(type);
-        }
+        RuleCatalog catalog = workspace.directory(type);
         return catalog == null ? List.of() : catalog.entries();
     }
 

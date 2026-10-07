@@ -59,6 +59,19 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
     private final String basePath;
     private final List<Row> rows = new ArrayList<>();
     private @Nullable SuggestionProvider suggestionProvider;
+    private @Nullable CatalogOpener catalogOpener;
+
+    /*** 字段目录入口由页面提供，表单不访问网络。 */
+    @FunctionalInterface
+    public interface CatalogOpener {
+        void open(EditorField field, boolean tags, Consumer<List<String>> onPicked);
+    }
+
+    public FormView setCatalogOpener(@Nullable CatalogOpener opener) {
+        catalogOpener = opener;
+        for (Row row : rows) { row.pickers.clear(); addPickers(row); }
+        return this;
+    }
     private @Nullable ConditionSupport conditionSupport;
     private @Nullable Runnable changeListener;
     private @Nullable Picker picker;
@@ -93,8 +106,43 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
 
     // 追加一个字段
     public FormView addField(EditorField field) {
-        rows.add(new Row(field, pathFor(field), FormControl.create(font, this, field, this::notifyChanged)));
+        Row row = new Row(field, pathFor(field), FormControl.create(font, this, field, this::notifyChanged));
+        addPickers(row);
+        rows.add(row);
         return this;
+    }
+
+    // 支持叶子面板在描述符载入后挂接目录入口。
+    private void addPickers(Row row) {
+        if (catalogOpener != null && com.meteorite.itemdespawntowhat.client.ui.screen.RuleEditorP4Panels.catalogTypeOf(row.field) != null
+                && switch (row.field.type()) { case TAG, TAG_LIST, RESOURCE_LOCATION, RL_LIST -> true; default -> false; }) {
+            row.pickers.add(new com.meteorite.itemdespawntowhat.client.ui.widget.UiButton(font,
+                    Component.translatable("gui.itemdespawntowhat.edit.pick.open"),
+                    com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant.SECONDARY, () -> pick(row, false)));
+            if (row.field.type() == EditorFieldType.TAG || row.field.type() == EditorFieldType.TAG_LIST) row.pickers.add(
+                    new com.meteorite.itemdespawntowhat.client.ui.widget.UiButton(font,
+                            Component.translatable("gui.itemdespawntowhat.edit.pick.tags"),
+                            com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant.SECONDARY, () -> pick(row, true)));
+        }
+    }
+
+    private void pick(Row row, boolean tags) {
+        if (!enabled || catalogOpener == null || pendingInputIssue() != null) return;
+        applyToDraft();
+        catalogOpener.open(row.field, tags, ids -> {
+            if (ids.isEmpty() || !enabled) return;
+            JsonElement value;
+            if (row.field.type() == EditorFieldType.TAG_LIST || row.field.type() == EditorFieldType.RL_LIST) {
+                java.util.LinkedHashSet<String> merged = new java.util.LinkedHashSet<>();
+                JsonElement existing = session.draft().getAt(row.path);
+                if (existing instanceof com.google.gson.JsonArray array) for (JsonElement element : array)
+                    if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isString()) merged.add(element.getAsString());
+                merged.addAll(ids);
+                com.google.gson.JsonArray array = new com.google.gson.JsonArray(); merged.forEach(array::add); value = array;
+            } else value = new com.google.gson.JsonPrimitive(ids.getFirst());
+            session.apply(EditSession.OP_SET_FIELD, () -> session.draft().setAt(row.path, value));
+            reload(); notifyChanged();
+        });
     }
 
     // 字段在草稿中的路径：原始 JSON 行与说明行指向所在对象本身
@@ -151,7 +199,13 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
     public void reload() {
         RuleDraft draft = session.draft();
         for (Row row : rows) {
-            row.control.load(draft.getAt(row.path));
+            JsonElement original = draft.getAt(row.path);
+            JsonElement container = basePath.isEmpty() ? draft.view() : draft.getAt(basePath);
+            JsonElement effective = original == null && container != null && container.isJsonObject()
+                    ? com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDefaults.effectiveValue(container.getAsJsonObject(), row.field.name()) : null;
+            row.defaultDisplayed = original == null && effective != null;
+            row.control.load(row.defaultDisplayed ? effective : original);
+            row.control.rememberLoaded(original);
         }
     }
 
@@ -217,6 +271,7 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         FormView child = new FormView(font, session, childPath(relativePath));
         child.setSuggestionProvider(suggestionProvider);
         child.setConditionSupport(conditionSupport);
+        child.setCatalogOpener(catalogOpener);
         child.setLabelWidth(labelWidth);
         child.setOnChanged(this::notifyChanged);
         for (EditorField field : fields) {
@@ -288,6 +343,7 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
     void addFocusTargets(List<UiFocusTarget> out) {
         for (Row row : rows) {
             row.control.addFocusTargets(out);
+            out.addAll(row.pickers);
         }
     }
 
@@ -362,13 +418,13 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         for (Row row : rows) {
             row.narrow = narrow;
             row.labelWidth = effectiveLabelWidth;
-            row.controlWidth = controlWidth;
+            row.controlWidth = Math.max(16, controlWidth - row.pickers.size() * 32);
             row.controlRelX = narrow ? 0 : effectiveLabelWidth + LABEL_GAP;
             if (row.field.type() == EditorFieldType.NOTE) {
                 row.controlRelY = 0;
                 row.contentHeight = row.control.height();
             } else {
-                row.control.measure(controlWidth);
+                row.control.measure(row.controlWidth);
                 int controlHeight = row.control.height();
                 row.controlRelY = narrow ? LABEL_LINE_HEIGHT : Math.max(0, (Math.max(controlHeight, LABEL_LINE_HEIGHT) - controlHeight) / 2);
                 row.contentHeight = Math.max(controlHeight + row.controlRelY, LABEL_LINE_HEIGHT);
@@ -392,6 +448,8 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         for (Row row : rows) {
             int screenY = rowScreenY(row);
             row.control.setBounds(viewportX + row.controlRelX, screenY + row.controlRelY, row.controlWidth);
+            for (int i = 0; i < row.pickers.size(); i++) row.pickers.get(i).setBounds(
+                    viewportX + row.controlRelX + row.controlWidth + i * 32 + 2, screenY + row.controlRelY, 30, 12);
         }
     }
 
@@ -433,6 +491,7 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         }
         for (Row row : rows) {
             row.control.setEnabled(newEnabled);
+            row.pickers.forEach(button -> button.setEnabled(newEnabled));
         }
     }
 
@@ -487,6 +546,7 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
                     continue;
                 }
                 row.control.render(graphics, renderFont, mouseX, mouseY);
+                for (var pickerButton : row.pickers) pickerButton.render(graphics, renderFont, mouseX, mouseY);
             }
             if (highlightTicks > 0 && highlightPath != null) {
                 for (Row row : rows) {
@@ -513,6 +573,7 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
     private void drawLabel(GuiGraphics graphics, Font renderFont, Row row, int screenY) {
         int width = row.narrow ? row.controlWidth : row.labelWidth;
         String text = row.control.label().getString();
+        if (row.defaultDisplayed && !row.control.isEdited()) text = Component.translatable("gui.itemdespawntowhat.edit.default_marker").getString() + text;
         if (row.field.required()) {
             text = text + " *";
         }
@@ -601,6 +662,7 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         }
         syncBounds();
         for (Row row : rows) {
+            for (var pickerButton : row.pickers) if (pickerButton.mouseClicked(mouseX, mouseY, button)) return true;
             if (row.control.mouseClicked(mouseX, mouseY, button)) {
                 return true;
             }
@@ -615,6 +677,7 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         }
         boolean consumed = false;
         for (Row row : rows) {
+            for (var pickerButton : row.pickers) consumed |= pickerButton.mouseReleased(mouseX, mouseY, button);
             consumed |= row.control.mouseReleased(mouseX, mouseY, button);
         }
         return consumed;
@@ -712,6 +775,8 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
 
     // 选中框内的一行
     private static final class Row {
+        private boolean defaultDisplayed;
+        private final List<com.meteorite.itemdespawntowhat.client.ui.widget.UiButton> pickers = new ArrayList<>();
 
         final EditorField field;
         final String path;

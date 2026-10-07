@@ -38,6 +38,30 @@ public final class BuiltinEditorDefaults {
         return body;
     }
 
+    // 仅用于展示省略字段的有效默认值，不写入草稿。
+    public static com.google.gson.JsonElement effectiveValue(JsonObject object, String field) {
+        if (object != null && object.has(RuleFields.TYPE)) {
+            ResourceLocation type = ResourceLocation.tryParse(object.get(RuleFields.TYPE).getAsString());
+            if (type != null && TypeLabels.OWN_NAMESPACE.equals(type.getNamespace())) {
+                if ("chance".equals(field)) return new com.google.gson.JsonPrimitive(1.0);
+                if ("delay_ticks".equals(field)) return new com.google.gson.JsonPrimitive(0);
+                JsonObject defaults = effectBody(type);
+                if ("spawn_entity".equals(type.getPath())) {
+                    if ("amount".equals(field)) return new com.google.gson.JsonPrimitive(1);
+                    if ("age".equals(field)) return new com.google.gson.JsonPrimitive(0);
+                    if ("per_source_item".equals(field)) return new com.google.gson.JsonPrimitive(false);
+                }
+                return defaults.get(field);
+            }
+        }
+        return switch (field) {
+            case "enabled" -> new com.google.gson.JsonPrimitive(true);
+            case "priority" -> new com.google.gson.JsonPrimitive(0);
+            case "trigger_after_seconds" -> new com.google.gson.JsonPrimitive(com.meteorite.itemdespawntowhat.core.model.RuleCodecs.DEFAULT_TRIGGER_AFTER_SECONDS);
+            default -> null;
+        };
+    }
+
     // 新建条件叶的默认节点（含 op=leaf 外壳，可直接交给条件表达式编解码器）
     public static JsonObject conditionLeafJson(ResourceLocation type) {
         JsonObject condition = new JsonObject();
@@ -79,12 +103,11 @@ public final class BuiltinEditorDefaults {
     // 效果类型的文档默认值（forms.md §6）
     private static void applyEffectDefaults(JsonObject body, String path) {
         switch (path) {
-            // spawn_item 的 radius 可省略：运行期有 limit 时的有效默认不写入 JSON
-            // （界面展示不等于用户已编辑）；consume_source 只有 count 一个默认值
-            case "spawn_item", "consume_source" -> body.addProperty("count", 1);
+            // 消耗源物品沿用固定成本默认值。
+            case "consume_source" -> body.addProperty("count", 1);
             case "spawn_entity" -> {
+                body.addProperty("variant", "item");
                 body.addProperty("count", 1);
-                body.addProperty("age", 0);
             }
             case "place_block" -> {
                 // block 与 use_source_block 至少要有一个：use_source_block 后端默认 false，保持缺省语义
@@ -92,10 +115,6 @@ public final class BuiltinEditorDefaults {
                 body.addProperty("shape", "square");
                 body.addProperty("count", 1);
                 body.addProperty("radius", 6);
-            }
-            case "spawn_xp" -> {
-                body.addProperty("amount", 1);
-                body.addProperty("per_source_item", false);
             }
             case "loot_table" -> body.addProperty("luck", 0.0F);
             case "lightning" -> body.addProperty("count", 1);
