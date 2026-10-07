@@ -27,11 +27,13 @@ public final class UiBlockPreview {
         try {
             float scale = bounds.scale(box, PITCH);
             graphics.pose().translate(box.x() + box.width() / 2.0F, box.y() + box.height() / 2.0F, UiRenderLayers.ICON);
-            graphics.pose().scale(scale, -scale, scale * 0.1F);
+            // GUI 层级只压缩顶点深度，法线保留真实模型朝向，避免光照被非等比缩放扭曲。
+            graphics.pose().last().pose().scale(1, 1, 0.1F);
+            graphics.pose().scale(scale, -scale, scale);
             graphics.pose().mulPose(new Quaternionf().rotationX(PITCH));
             graphics.pose().mulPose(new Quaternionf().rotationY(angle));
             graphics.pose().translate(-bounds.centerX(), -bounds.centerY(), -bounds.centerZ());
-            Lighting.setupForFlatItems();
+            Lighting.setupFor3DItems();
             Minecraft.getInstance().getBlockRenderer().renderSingleBlock(state, graphics.pose(), graphics.bufferSource(),
                     15728880, OverlayTexture.NO_OVERLAY);
             graphics.flush();

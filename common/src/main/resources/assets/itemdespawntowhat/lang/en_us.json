@@ -902,6 +902,5 @@
   "gui.itemdespawntowhat.edit.tag.supports.entities": "Accepts any entity with the tag %s",
   "gui.itemdespawntowhat.edit.tag.expand": "Click to browse all %s matching entries",
   "gui.itemdespawntowhat.edit.tag.empty": "This tag has no previewable entries",
-  "gui.itemdespawntowhat.edit.tag.previous": "Previous",
-  "gui.itemdespawntowhat.edit.tag.next": "Next"
+  "gui.itemdespawntowhat.edit.tag.title": "Tag: %s"
 }

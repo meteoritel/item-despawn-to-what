@@ -288,6 +288,8 @@ Kit 提交缓冲、恢复 pose/camera/裁剪，并回到普通 GUI 的 3D 物品
 
 `UiRenderLayers.draw` 以当前 pose 为基础，相对提升并在进出时提交缓冲、恢复矩阵。模型绘制压缩 z 比例，让较大预览仍处于图标层附近。受控 Rendered 回调须遵循该层级规则。层级负责视觉遮挡；输入隔离仍必须同时实施。
 
+方块预览只在顶点位置矩阵中压缩 z，法线矩阵保持等比缩放后的真实朝向；使用 GUI 3D 物品打光，避免非等比深度缩放和平面物品打光造成灰暗。满亮、无世界环境遮蔽和落地阴影的约定保持有效。
+
 宿主在绘制底层控件前调用 `UiPointer.gated(modals.isEmpty(), mouseX, mouseY)`，只把结果坐标交给底层 renderer；顶层模态继续使用真实坐标，其余模态也使用 gated。打开模态时通过 `UiModalStack.setOnScopeChanged` 结束底层捕获。模态栈消费鼠标点击、拖动、释放和滚轮，仅将事件交给顶层；关闭后底层不残留拖动状态。
 
 滚动容器的条目高亮、tooltip 和行内入口应统一通过 `UiScrollView.canHoverContent(x,y)`：滚动条轨道和拖动期间返回 false，即使指针已拖出轨道。UiTreeView 与 UiListView 已接入；页面外层滚动条拖动时也给子组件屏蔽坐标。实际选择态不因屏蔽 hover 而清除。

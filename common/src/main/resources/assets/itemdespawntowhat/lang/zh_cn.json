@@ -902,6 +902,5 @@
   "gui.itemdespawntowhat.edit.tag.supports.entities": "支持所有带有 %s 标签的实体",
   "gui.itemdespawntowhat.edit.tag.expand": "点击展开浏览全部 %s 个匹配对象",
   "gui.itemdespawntowhat.edit.tag.empty": "此标签没有可预览的成员",
-  "gui.itemdespawntowhat.edit.tag.previous": "上一项",
-  "gui.itemdespawntowhat.edit.tag.next": "下一项"
+  "gui.itemdespawntowhat.edit.tag.title": "标签：%s"
 }

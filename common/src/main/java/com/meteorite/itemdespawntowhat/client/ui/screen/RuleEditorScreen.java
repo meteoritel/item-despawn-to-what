@@ -1561,7 +1561,7 @@ public final class RuleEditorScreen extends Screen {
         if (button == 0 && mode == Mode.LIST) {
             var tag = tagAt(mouseX, mouseY);
             if (tag != null) {
-                modals.push(UiModal.create(font).title(tag.label())
+                modals.push(UiModal.create(font).title(Component.translatable(UI + "tag.title", tag.id()))
                         .contentWidget(new TagCarouselView(font, tag), Math.clamp(height - 70, 110, 220))
                         .preferredWidth(280).cancel(Component.translatable(UI + "button.close"))
                         .layoutCentered(width, height));
