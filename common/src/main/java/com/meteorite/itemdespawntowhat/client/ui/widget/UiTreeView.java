@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.ToIntFunction;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -19,17 +20,17 @@ import org.lwjgl.glfw.GLFW;
  * <p>由展平后的可见行承载渲染与命中：只有展开节点的后代才会出现在可见行中，
  * 因此键盘上下移动、Home/End、PgUp/PgDn 与鼠标命中都按可见行计算。
  * <ul>
- *   <li>鼠标：单击选中，点击展开标记（节点左侧的 +/- 区）切换展开状态，双击激活。</li>
- *   <li>键盘：↑/↓ 移动，← 折叠或跳到父节点，→ 展开或进入子节点，Enter/Space 激活。</li>
+ *   <li>鼠标：单击选中，三角单击或目录双击切换展开，叶子双击激活。</li>
+ *   <li>键盘：↑/↓ 移动，← 折叠或跳到父节点，→ 展开或进入子节点，Enter 激活。</li>
  * </ul>
- * 行内容由调用方通过 {@link NodeRenderer} 决定；节点文本缩进与连线由本控件绘制。
+ * 行内容和高度由调用方决定；缩进与展开三角由本控件绘制，渲染和命中共用累计行高。
  */
 public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
 
     // 行渲染回调
     @FunctionalInterface
     public interface NodeRenderer<T> {
-        // 渲染一行；row 已扣除选中标记与缩进，可直接绘制节点文本
+        // 渲染一行；row 已扣除展开标记与缩进，可直接绘制节点文本
         void renderNode(GuiGraphics graphics, Font font, UiTreeNode<T> node, UiRect row, int depth, boolean selected, boolean hovered, boolean focused);
     }
 
@@ -44,16 +45,20 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
     // 双击判定间隔（毫秒）
     private static final long DOUBLE_CLICK_MS = 250L;
 
-    // 展平后的可见行
+    /*** 展平后的可见行及其实际内容坐标，供渲染、命中和滚动共同使用。 */
     private static final class VisibleRow<N> {
         // 节点
         final UiTreeNode<N> node;
         // 缩进深度（根为 0）
         final int depth;
+        final int top;
+        final int height;
 
-        VisibleRow(UiTreeNode<N> node, int depth) {
+        VisibleRow(UiTreeNode<N> node, int depth, int top, int height) {
             this.node = node;
             this.depth = depth;
+            this.top = top;
+            this.height = height;
         }
     }
 
@@ -69,10 +74,9 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     // 行高
     private int rowHeight = DEFAULT_ROW_HEIGHT;
+    private ToIntFunction<UiTreeNode<T>> rowHeightProvider;
     // 选中节点
     private UiTreeNode<T> selectedNode;
-    // 一屏可见行数
-    private int visibleRowCount = 1;
     // 空树提示
     private Component emptyMessage = Component.empty();
     // 选中变化回调
@@ -83,9 +87,9 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
     private boolean focused;
     // 是否可见
     private boolean visible = true;
-    // 上次点击时间与下标（双击判定）
+    // 按节点身份判定双击，展开后行下标变化不会误激活其它节点。
     private long lastClickTime;
-    private int lastClickIndex = -1;
+    private UiTreeNode<T> lastClickNode;
 
     // 字体由 render 接收；保留构造参数以兼容现有组件 API。
     public UiTreeView(@SuppressWarnings("unused") Font font, NodeRenderer<T> nodeRenderer) {
@@ -99,6 +103,7 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
         roots.clear();
         roots.addAll(newRoots);
         selectedNode = null;
+        lastClickNode = null;
         rebuild();
         return this;
     }
@@ -122,6 +127,16 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
         rebuild();
         return this;
     }
+
+    // 可按节点内容计算行高；未提供时沿用统一行高。
+    public void setRowHeightProvider(ToIntFunction<UiTreeNode<T>> provider) {
+        rowHeightProvider = provider;
+        rebuild();
+    }
+
+    // 数据刷新时由宿主保存并恢复滚动位置；尺寸变小时由视口正常钳制。
+    public int scrollOffset() { return scrollView.offset(); }
+    public void setScrollOffset(int offset) { scrollView.setOffset(offset); }
 
     // 设置空树提示
     public UiTreeView<T> setEmptyMessage(Component message) {
@@ -194,7 +209,7 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
         this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
         scrollView.setViewport(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
         scrollView.setStep(Math.max(1, rowHeight * 2));
-        rebuild();
+        syncScrollRange();
     }
 
     // 重新展平可见行并同步滚动范围
@@ -203,15 +218,22 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
         for (UiTreeNode<T> root : roots) {
             append(root, 0);
         }
-        scrollView.setContentHeight(visibleRows.size() * rowHeight);
+        syncScrollRange();
+    }
+
+    // 几何变化只更新视口，不重建节点或选择。
+    private void syncScrollRange() {
+        int contentHeight = visibleRows.isEmpty() ? 0 : visibleRows.getLast().top + visibleRows.getLast().height;
+        scrollView.setContentHeight(contentHeight);
         int viewportHeight = scrollView.viewport().height();
-        visibleRowCount = Math.max(1, viewportHeight / Math.max(1, rowHeight));
-        scrollView.setScrollbarVisible(visibleRows.size() * rowHeight > viewportHeight);
+        scrollView.setScrollbarVisible(contentHeight > viewportHeight);
     }
 
     // 递归展平
     private void append(UiTreeNode<T> node, int depth) {
-        visibleRows.add(new VisibleRow<>(node, depth));
+        int top = visibleRows.isEmpty() ? 0 : visibleRows.getLast().top + visibleRows.getLast().height;
+        int height = rowHeightProvider == null ? rowHeight : Math.max(9, rowHeightProvider.applyAsInt(node));
+        visibleRows.add(new VisibleRow<>(node, depth, top, height));
         if (!node.isLeaf() && node.isExpanded()) {
             for (UiTreeNode<T> child : node.children()) {
                 append(child, depth + 1);
@@ -235,8 +257,20 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
             return -1;
         }
         int contentY = (int) (mouseY - viewport.y()) + scrollView.offset();
-        int index = contentY / Math.max(1, rowHeight);
-        return index >= 0 && index < visibleRows.size() ? index : -1;
+        return indexAtContentY(contentY);
+    }
+
+    // 非等高行按累计位置二分查找，鼠标与翻页不再按固定行高猜测。
+    private int indexAtContentY(int contentY) {
+        int low = 0, high = visibleRows.size() - 1;
+        while (low <= high) {
+            int middle = (low + high) >>> 1;
+            VisibleRow<T> row = visibleRows.get(middle);
+            if (contentY < row.top) high = middle - 1;
+            else if (contentY >= row.top + row.height) low = middle + 1;
+            else return middle;
+        }
+        return -1;
     }
 
     // 宿主的行提示使用与控件点击相同的命中结果。
@@ -256,7 +290,8 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
         if (index < 0 || index >= visibleRows.size()) {
             return;
         }
-        scrollView.ensureVisible(new UiRect(0, index * rowHeight, Math.max(0, scrollView.viewport().width()), rowHeight));
+        VisibleRow<T> row = visibleRows.get(index);
+        scrollView.ensureVisible(new UiRect(0, row.top, Math.max(0, scrollView.viewport().width()), row.height));
     }
 
     // 滚动到指定节点
@@ -293,31 +328,22 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
         }
         int hoveredIndex = indexAt(mouseX, mouseY);
         int rowWidth = contentWidth();
-        int baseX = UiTheme.SELECT_MARKER_WIDTH;
         scrollView.push(graphics);
-        for (int i = 0; i < visibleRows.size(); i++) {
-            int rowY = i * rowHeight;
-            if (rowY + rowHeight < scrollView.offset() || rowY > scrollView.offset() + viewport.height()) {
-                continue;
-            }
+        int firstIndex = Math.max(0, indexAtContentY(scrollView.offset()));
+        for (int i = firstIndex; i < visibleRows.size(); i++) {
             VisibleRow<T> visibleRow = visibleRows.get(i);
-            UiRect row = new UiRect(0, rowY, rowWidth, rowHeight);
+            if (visibleRow.top >= scrollView.offset() + viewport.height()) break;
+            UiRect row = new UiRect(0, visibleRow.top, rowWidth, visibleRow.height);
             boolean selected = visibleRow.node == selectedNode;
             if (selected) {
                 UiTheme.drawSelection(graphics, row);
-                UiTheme.drawSelectMarker(graphics, row);
             } else if (i == hoveredIndex) {
                 graphics.fill(row.x(), row.y(), row.right(), row.bottom(), UiPalette.CONTROL_HOVER);
             }
-            int markerX = baseX + visibleRow.depth * INDENT_WIDTH;
-            // 非根节点画一小段横向连线，帮助区分层级
-            if (visibleRow.depth > 0) {
-                graphics.fill(markerX - 5, row.y() + row.height() / 2, markerX - 2, row.y() + row.height() / 2 + 1, UiPalette.TEXT_SECONDARY);
-            }
-            // TODO 美术资源：展开标记暂用 ASCII +/-，后续可替换为像素贴图
+            int markerX = visibleRow.depth * INDENT_WIDTH;
             if (!visibleRow.node.isLeaf()) {
-                String mark = visibleRow.node.isExpanded() ? "-" : "+";
-                graphics.drawString(font, mark, markerX + 2, row.y() + UiTheme.TEXT_OFFSET, UiPalette.TEXT_PRIMARY, false);
+                drawTriangle(graphics, markerX + 1, row.y() + row.height() / 2,
+                        visibleRow.node.isExpanded());
             }
             UiRect textRow = new UiRect(markerX + MARKER_WIDTH, row.y(),
                     Math.max(0, row.width() - markerX - MARKER_WIDTH), row.height());
@@ -332,9 +358,22 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
 
     // ---- 输入 ----
 
+    // 像素三角不依赖字体字形；叶子只保留缩进，不绘制虚假的展开按钮。
+    private static void drawTriangle(GuiGraphics graphics, int x, int centerY, boolean expanded) {
+        for (int step = 0; step < 4; step++) {
+            if (expanded) {
+                graphics.fill(x + step, centerY - 2 + step, x + 7 - step, centerY - 1 + step,
+                        UiPalette.TEXT_PRIMARY);
+            } else {
+                graphics.fill(x + 1 + step, centerY - 3 + step, x + 2 + step, centerY + 4 - step,
+                        UiPalette.TEXT_PRIMARY);
+            }
+        }
+    }
+
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (!visible || !bounds.contains(mouseX, mouseY)) {
+        if (!visible || !bounds.contains(mouseX, mouseY) || button != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
             return false;
         }
         if (scrollView.mousePressed(mouseX, mouseY, button)) {
@@ -347,20 +386,20 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
         VisibleRow<T> visibleRow = visibleRows.get(index);
         UiRect viewport = scrollView.viewport();
         int contentX = (int) (mouseX - viewport.x());
-        int markerX = UiTheme.SELECT_MARKER_WIDTH + visibleRow.depth * INDENT_WIDTH;
+        int markerX = visibleRow.depth * INDENT_WIDTH;
         long now = net.minecraft.Util.getMillis();
-        boolean doubleClick = index == lastClickIndex && now - lastClickTime <= DOUBLE_CLICK_MS;
-        lastClickIndex = index;
+        boolean doubleClick = visibleRow.node == lastClickNode && now - lastClickTime <= DOUBLE_CLICK_MS;
+        lastClickNode = visibleRow.node;
         lastClickTime = now;
         setSelectedNode(visibleRow.node);
         if (contentX >= markerX && contentX <= markerX + MARKER_WIDTH && !visibleRow.node.isLeaf()) {
-            visibleRow.node.toggleExpanded();
-            rebuild();
-            ensureVisibleFor(visibleRow.node);
+            lastClickNode = null;
+            toggleExpanded(visibleRow.node);
             return true;
         }
-        if (doubleClick && onActivate != null) {
-            onActivate.accept(visibleRow.node);
+        if (doubleClick) {
+            lastClickNode = null;
+            activate();
         }
         return true;
     }
@@ -402,11 +441,11 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_PAGE_UP) {
-            moveSelection(-visibleRowCount);
+            movePage(-1);
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_PAGE_DOWN) {
-            moveSelection(visibleRowCount);
+            movePage(1);
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_HOME) {
@@ -433,8 +472,24 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
     private void moveSelection(int delta) {
         int index = selectedIndex();
         int base = index < 0 ? (delta > 0 ? -1 : visibleRows.size()) : index;
-        int target = Math.max(0, Math.min(visibleRows.size() - 1, base + delta));
+        int target = Math.clamp(base + delta, 0, visibleRows.size() - 1);
         setSelectedNode(visibleRows.get(target).node);
+    }
+
+    // 按一屏实际高度翻页，目录行与规则行混排时仍能稳定定位。
+    private void movePage(int direction) {
+        int index = selectedIndex();
+        if (index < 0) { moveSelection(direction); return; }
+        int contentY = visibleRows.get(index).top + direction * Math.max(1, scrollView.viewport().height());
+        int lastY = visibleRows.getLast().top;
+        int target = indexAtContentY(Math.clamp(contentY, 0, lastY));
+        setSelectedNode(visibleRows.get(target).node);
+    }
+
+    private void toggleExpanded(UiTreeNode<T> node) {
+        node.toggleExpanded();
+        rebuild();
+        ensureVisibleFor(node);
     }
 
     // 左方向键：优先折叠，已折叠则跳到父节点
@@ -500,9 +555,14 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
 
     @Override
     public boolean activate() {
-        if (!visible || selectedNode == null || onActivate == null) {
+        if (!visible || selectedNode == null) {
             return false;
         }
+        if (!selectedNode.isLeaf()) {
+            toggleExpanded(selectedNode);
+            return true;
+        }
+        if (onActivate == null) return false;
         onActivate.accept(selectedNode);
         return true;
     }

@@ -148,7 +148,7 @@ public final class UiSegmentedControl implements UiWidget, UiFocusTarget {
     // 第 index 段的矩形（等分，最后一段吃掉余数）
     private UiRect segmentRect(int index) {
         int count = options.size();
-        if (count <= 0) {
+        if (count == 0) {
             return new UiRect(bounds.x(), bounds.y(), 0, 0);
         }
         int left = bounds.x() + (int) ((long) bounds.width() * index / count);

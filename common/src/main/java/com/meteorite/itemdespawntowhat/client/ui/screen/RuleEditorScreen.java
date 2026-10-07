@@ -122,7 +122,8 @@ public final class RuleEditorScreen extends Screen {
     private final ButtonBar listBar = new ButtonBar();
     private final ButtonBar globalBar = new ButtonBar();
     private final ButtonBar selectedBar = new ButtonBar();
-    private final Set<String> collapsedCategories = new LinkedHashSet<>();
+    private final Set<String> expandedCategories = new LinkedHashSet<>();
+    private final java.util.Map<String, RuleRecipeView> recipeViews = new java.util.LinkedHashMap<>();
     private boolean narrowDetails;
     private @Nullable UiButton detailsButton;
     private UiRect previewArea = new UiRect(0, 0, 0, 0);
@@ -261,8 +262,12 @@ public final class RuleEditorScreen extends Screen {
 
     @Override
     protected void init() {
-        boolean preserveInputs = pages != null && pages.blockNavigation();
         super.init();
+        // resize 会再次调用 init；保留控件、输入缓冲、选择与滚动，仅在渲染时更新几何。
+        if (ruleList != null) {
+            modals.setBounds(0, 0, width, height);
+            return;
+        }
         searchField = new UiTextInput(font, Component.translatable(UI + "list.search"));
         searchField.setMaxLength(128);
         searchField.setValue(lastQuery);
@@ -275,10 +280,11 @@ public final class RuleEditorScreen extends Screen {
         ruleList = new UiTreeView<>(font, (graphics, rowFont, node, row, depth, selected, hovered, focused) -> {
             if (node.value().startsWith("@")) {
                 graphics.drawString(rowFont, TextScroll.trimToWidth(rowFont, node.label().getString(), row.width() - 4),
-                        row.x() + 2, row.y() + 7, UiPalette.TEXT_SECONDARY, false);
-            } else renderRuleRow(graphics, rowFont, node.value(), row);
+                        row.x() + 2, row.y() + (row.height() - rowFont.lineHeight) / 2, UiPalette.TEXT_SECONDARY, false);
+            } else renderRuleRow(graphics, rowFont, node.value(), row, hovered);
         });
-        ruleList.setRowHeight(24);
+        ruleList.setRowHeightProvider(node -> font.lineHeight + 4
+                + (node.value().startsWith("@") ? 0 : RuleRecipeView.CONTENT_HEIGHT + 1));
         ruleList.setEmptyMessage(Component.translatable(UI + "list.empty"));
         ruleList.setOnActivate(node -> { if (!node.value().startsWith("@")) openEditor(node.value()); });
         tabControl = new UiSegmentedControl(font, tabOptions());
@@ -288,9 +294,7 @@ public final class RuleEditorScreen extends Screen {
         buildFooterButtons();
         requiredButton = button(UI + "button.required", UiButtonVariant.SECONDARY, this::showMissing);
         refreshList();
-        if (!preserveInputs) {
-            rebuildEdit();
-        }
+        rebuildEdit();
         rebuildFocus();
     }
 
@@ -406,7 +410,7 @@ public final class RuleEditorScreen extends Screen {
             String kind = model.isRestoring(id) ? "restore" : model.isCreated(id) ? "create"
                     : session != null && session.draft().isDeleted() ? "remove" : "modify";
             body = body.copy().append("\n").append(Component.translatable(UI + "changes." + kind))
-                    .append(": ").append(labelText(id)).append("\n  ").append(id);
+                    .append(": ").append(labelText(id));
         }
         modals.push(UiModal.create(font).title(Component.translatable(UI + "button.changes"))
                 .message(body).preferredWidth(300).cancel(Component.translatable(UI + "button.cancel"))
@@ -490,29 +494,37 @@ public final class RuleEditorScreen extends Screen {
                 UiTreeNode<String> node = ruleList.nodeAt(mouseX, mouseY);
                 if (node != null && !node.value().startsWith("@")) {
                     String id = node.value();
-                    tip = Component.literal(labelText(id) + "\n" + id);
+                    RuleRecipeView recipe = recipeViews.get(id);
+                    tip = Component.literal(labelText(id)).append("\n").append(recipe == null ? Component.empty() : recipe.tooltip());
+                    Component state = ruleState(id);
+                    if (!state.getString().isBlank()) tip = tip.copy().append("\n").append(state);
                     if (RulePreviewIcons.unavailable(model.displayBody(id))) tip = tip.copy()
                             .append("\n").append(Component.translatable(UI + "preview.unavailable"));
                 }
             }
             if (tip != null) {
-                graphics.renderTooltip(font, tip, mouseX, mouseY);
+                renderTooltip(graphics, tip, mouseX, mouseY);
             }
         }
         // 字段说明提示：没有弹窗时才显示，避免盖住上层内容
         if (modals.isEmpty() && mode == Mode.EDIT && pages != null) {
             Component tip = pages.tooltipAt(mouseX, mouseY);
             if (tip != null) {
-                graphics.renderTooltip(font, tip, mouseX, mouseY);
+                renderTooltip(graphics, tip, mouseX, mouseY);
             }
         }
+    }
+
+    // Component 的单行 tooltip 重载不处理换行；先按窗口宽度拆行再交给原版定位。
+    private void renderTooltip(GuiGraphics graphics, Component tip, int mouseX, int mouseY) {
+        graphics.renderTooltip(font, font.split(tip, Math.clamp(width - 16, 1, 240)), mouseX, mouseY);
     }
 
     // 顶部标题与状态
     private void drawHeaderText(GuiGraphics graphics) {
         String title = this.getTitle().getString();
         if (mode == Mode.EDIT && editingId != null) {
-            title = title + " - " + editingId;
+            title = Component.translatable(UI + "recipe.editor_title", title, labelText(editingId)).getString();
         }
         title = TextScroll.trimToWidth(font, title, Math.max(0, this.width - 96));
         graphics.drawString(font, title, PAD, 3, UiPalette.HEADER_TEXT, false);
@@ -591,7 +603,8 @@ public final class RuleEditorScreen extends Screen {
         Component text = Component.translatable(UI + "preview.select");
         if (id != null) {
             JsonObject rule = model.displayBody(id);
-            text = Component.literal(labelText(id)).append("\n").append(id).append("\n\n")
+            text = Component.literal(labelText(id)).append("\n").append(recipeViews.containsKey(id)
+                            ? recipeViews.get(id).summary() : Component.empty()).append("\n\n")
                     .append(Component.translatable(UI + "preview.group", Component.translatable(UI + "category." + RuleCategories.category(rule))))
                     .append("\n").append(rule == null ? Component.empty() : NaturalSummary.rule(rule));
         }
@@ -624,54 +637,32 @@ public final class RuleEditorScreen extends Screen {
         pages.render(graphics, font, mouseX, mouseY);
     }
 
-    // 规则列表行
-    private void renderRuleRow(GuiGraphics graphics, Font rowFont, String id, UiRect row) {
+    // 名称和状态放第一行；原注册名位置改为图标配方，不显示内部规则 ID。
+    private void renderRuleRow(GuiGraphics graphics, Font rowFont, String id, UiRect row, boolean hovered) {
         RuleSnapshotEntry entry = model.entry(id);
-        EditSession session = model.session(id);
-        String marker = statusMark(entry);
-        if (session != null && (session.isDirty() || model.isRestoring(id))) {
-            marker = isRuleActive(id, entry) ? "[+] " : "[-] ";
-        }
-        int color = UiPalette.TEXT_PRIMARY;
-        if (entry != null) {
-            if (RuleSnapshotEntry.STATUS_DISABLED.equals(entry.status())
-                    || RuleSnapshotEntry.STATUS_MASKED.equals(entry.status())) {
-                color = UiPalette.TEXT_DISABLED;
-            } else if (!entry.editable()) {
-                color = UiPalette.TEXT_SECONDARY;
-            }
-        }
-        if (session != null && session.isDirty()) {
-            marker = marker + Component.translatable(UI + "list.dirty").getString();
-        }
-        String tag = model.hasError(id) ? Component.translatable(UI + "list.error").getString() : "";
-        var icon = RulePreviewIcons.rule(model.displayBody(id));
-        int inset = icon == null ? 2 : 22;
-        if (icon != null) icon.render(graphics, row.x() + 2, row.y() + 3);
-        int width = Math.max(0, row.width() - inset - 2 - (tag.isEmpty() ? 0 : rowFont.width(tag) + 4));
-        String label = labelText(id);
-        String text = TextScroll.trimToWidth(rowFont, marker + (label.isBlank() ? id : label), width);
-        graphics.drawString(rowFont, text, row.x() + inset, row.y() + 2, color, false);
-        graphics.drawString(rowFont, TextScroll.trimToWidth(rowFont, id, Math.max(0, row.width() - inset - 2)),
-                row.x() + inset, row.y() + 13, UiPalette.TEXT_SECONDARY, false);
-        if (!tag.isEmpty()) {
-            graphics.drawString(rowFont, tag, row.right() - 2 - rowFont.width(tag), row.y() + 2,
-                    UiPalette.DANGER, false);
-        }
+        int color = isRuleActive(id, entry) ? UiPalette.TEXT_PRIMARY : UiPalette.TEXT_DISABLED;
+        String state = ruleState(id).getString();
+        int stateWidth = rowFont.width(state);
+        graphics.drawString(rowFont, TextScroll.trimToWidth(rowFont, labelText(id),
+                Math.max(0, row.width() - stateWidth - 6)), row.x() + 2, row.y() + 2, color, false);
+        if (!state.isBlank()) graphics.drawString(rowFont, state, row.right() - stateWidth - 2, row.y() + 2,
+                model.hasError(id) ? UiPalette.DANGER : UiPalette.TEXT_SECONDARY, false);
+        RuleRecipeView recipe = recipeViews.get(id);
+        if (recipe != null) recipe.render(graphics, rowFont,
+                new UiRect(row.x() + 2, row.y() + rowFont.lineHeight + 3,
+                        Math.max(0, row.width() - 4), RuleRecipeView.CONTENT_HEIGHT), color, hovered);
     }
 
-    // 状态文字标记（颜色必须配文字）
-    private String statusMark(@Nullable RuleSnapshotEntry entry) {
-        if (entry == null) {
-            return "[*] ";
-        }
-        return switch (entry.status()) {
-            case RuleSnapshotEntry.STATUS_ACTIVE -> "[+] ";
-            case RuleSnapshotEntry.STATUS_DISABLED -> "[-] ";
-            case RuleSnapshotEntry.STATUS_MASKED -> "[x] ";
-            case RuleSnapshotEntry.STATUS_INVALID -> "[!] ";
-            default -> "[?] ";
-        };
+    // 状态用明确文字，正常启用不占用配方行；草稿标志与问题提示不再使用符号。
+    private Component ruleState(String id) {
+        if (model.hasError(id)) return Component.translatable(UI + "recipe.status.error");
+        EditSession session = model.session(id);
+        if (session != null && (session.isDirty() || model.isRestoring(id)))
+            return Component.translatable(UI + "recipe.status.pending");
+        RuleSnapshotEntry entry = model.entry(id);
+        if (entry != null && RuleSnapshotEntry.STATUS_MASKED.equals(entry.status()))
+            return Component.translatable(UI + "recipe.status.masked");
+        return isRuleActive(id, entry) ? Component.empty() : Component.translatable(UI + "recipe.status.disabled");
     }
 
     // 效果列表行
@@ -681,8 +672,10 @@ public final class RuleEditorScreen extends Screen {
         if (ruleList == null) {
             return;
         }
-        String selectedId = selectedRuleId();
+        String selectedValue = ruleList.selectedNode() == null ? null : ruleList.selectedNode().value();
+        int scrollOffset = ruleList.scrollOffset();
         visibleIds.clear();
+        recipeViews.clear();
         String query = lastQuery == null ? "" : lastQuery.toLowerCase(Locale.ROOT).trim();
         for (String id : model.ruleIds()) {
             RuleSnapshotEntry entry = model.entry(id);
@@ -696,6 +689,7 @@ public final class RuleEditorScreen extends Screen {
                 continue;
             }
             visibleIds.add(id);
+            recipeViews.put(id, new RuleRecipeView(model.displayBody(id)));
         }
         if (lastTreeQuery.isBlank()) rememberCategoryState(ruleList.roots());
         lastTreeQuery = lastQuery;
@@ -704,13 +698,11 @@ public final class RuleEditorScreen extends Screen {
         for (String category : List.of("entity.item", "entity.entity", "entity.experience", "entity.mixed")) entity.addChild(categoryNode(category));
         roots.add(entity);
         for (String category : List.of("block", "loot", "world", "mixed", "extension")) roots.add(categoryNode(category));
-        UiTreeNode<String> selected = null;
         for (String id : visibleIds) {
             String category = RuleCategories.category(model.displayBody(id));
             UiTreeNode<String> group = roots.stream().flatMap(root -> root == entity ? root.children().stream() : java.util.stream.Stream.of(root))
                     .filter(node -> node.value().equals("@" + category)).findFirst().orElseThrow();
-            UiTreeNode<String> node = group.addChild(id, Component.literal(labelText(id)));
-            if (id.equals(selectedId) || selected == null) selected = node;
+            group.addChild(id, Component.literal(labelText(id)));
         }
         List<UiTreeNode<String>> nonempty = new ArrayList<>();
         for (UiTreeNode<String> root : roots) {
@@ -721,7 +713,19 @@ public final class RuleEditorScreen extends Screen {
             } else if (!root.children().isEmpty()) nonempty.add(counted(root));
         }
         ruleList.setRoots(nonempty);
-        ruleList.setSelectedNode(selected);
+        ruleList.setSelectedNode(findNode(nonempty, selectedValue));
+        ruleList.setScrollOffset(scrollOffset);
+    }
+
+    // 刷新时按稳定值恢复目录或规则选择，不依赖重建前的节点实例。
+    private @Nullable UiTreeNode<String> findNode(List<UiTreeNode<String>> nodes, @Nullable String value) {
+        if (value == null) return null;
+        for (UiTreeNode<String> node : nodes) {
+            if (value.equals(node.value())) return node;
+            UiTreeNode<String> child = findNode(node.children(), value);
+            if (child != null) return child;
+        }
+        return null;
     }
 
     private UiTreeNode<String> counted(UiTreeNode<String> node) {
@@ -733,14 +737,14 @@ public final class RuleEditorScreen extends Screen {
 
     private UiTreeNode<String> categoryNode(String category) {
         return new UiTreeNode<>("@" + category, Component.translatable(UI + "category." + category))
-                .setExpanded(!lastQuery.isBlank() || !collapsedCategories.contains(category));
+                .setExpanded(!lastQuery.isBlank() || expandedCategories.contains(category));
     }
 
     private void rememberCategoryState(List<UiTreeNode<String>> nodes) {
         for (UiTreeNode<String> node : nodes) {
             if (!node.value().startsWith("@")) continue;
             String category = node.value().substring(1);
-            if (node.isExpanded()) collapsedCategories.remove(category); else collapsedCategories.add(category);
+            if (node.isExpanded()) expandedCategories.add(category); else expandedCategories.remove(category);
             rememberCategoryState(node.children());
         }
     }
@@ -772,7 +776,8 @@ public final class RuleEditorScreen extends Screen {
 
     private String labelText(String id) {
         JsonObject body = model.displayBody(id);
-        return body == null ? "" : RuleNaming.ruleTitle(body, RuleDisplayLabels::label).getString();
+        String label = body == null ? "" : RuleNaming.ruleTitle(body, RuleDisplayLabels::label).getString();
+        return label.isBlank() || label.equals(id) ? Component.translatable(UI + "recipe.unnamed").getString() : label;
     }
 
     private @Nullable String selectedRuleId() {
