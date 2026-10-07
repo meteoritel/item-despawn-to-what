@@ -239,6 +239,11 @@ public final class RuleEditorScreen extends Screen {
         BuiltinEditorDescriptors.bootstrap();
         this.workspace = Objects.requireNonNull(workspace, "workspace");
         this.model = new RuleEditorModel(workspace);
+        modals.setOnScopeChanged(() -> {
+            if (ruleList != null) ruleList.mouseReleased(-1, -1, 0);
+            previewScroll.mouseReleased();
+            if (pages != null) pages.endInteractions();
+        });
         // 焦点变化时播报控件的可读名称（未开启朗读时 GameNarrator 内部会静默）
         focus.setListener((previous, next) -> {
             UiNarration.focus(next);
@@ -439,6 +444,11 @@ public final class RuleEditorScreen extends Screen {
     @Override
     public void render(@NotNull GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         this.renderBackground(graphics, mouseX, mouseY, partialTick);
+        int actualMouseX = mouseX;
+        int actualMouseY = mouseY;
+        var pointer = com.meteorite.itemdespawntowhat.client.ui.kit.UiPointer.gated(modals.isEmpty(), mouseX, mouseY);
+        mouseX = pointer.x();
+        mouseY = pointer.y();
         int w = this.width;
         int h = this.height;
         modals.setBounds(0, 0, w, h);
@@ -479,6 +489,8 @@ public final class RuleEditorScreen extends Screen {
             footerBar.layout(footerY, Math.max(0, w - PAD * 2));
             footerBar.render(graphics, font, mouseX, mouseY);
         }
+        mouseX = actualMouseX;
+        mouseY = actualMouseY;
         modals.render(graphics, font, mouseX, mouseY);
         if (modals.isEmpty()) {
             Component tip = null;
@@ -495,7 +507,9 @@ public final class RuleEditorScreen extends Screen {
                 if (node != null && !node.value().startsWith("@")) {
                     String id = node.value();
                     RuleRecipeView recipe = recipeViews.get(id);
-                    tip = Component.literal(labelText(id)).append("\n").append(recipe == null ? Component.empty() : recipe.tooltip());
+                    var tag = tagAt(mouseX, mouseY);
+                    tip = tag == null ? Component.literal(labelText(id)).append("\n").append(recipe == null ? Component.empty() : recipe.tooltip())
+                            : tag.tooltip();
                     Component state = ruleState(id);
                     if (!state.getString().isBlank()) tip = tip.copy().append("\n").append(state);
                     if (RulePreviewIcons.unavailable(model.displayBody(id))) tip = tip.copy()
@@ -1544,6 +1558,16 @@ public final class RuleEditorScreen extends Screen {
         if (modals.isVisible()) {
             return modals.mouseClicked(mouseX, mouseY, button);
         }
+        if (button == 0 && mode == Mode.LIST) {
+            var tag = tagAt(mouseX, mouseY);
+            if (tag != null) {
+                modals.push(UiModal.create(font).title(tag.label())
+                        .contentWidget(new TagCarouselView(font, tag), Math.clamp(height - 70, 110, 220))
+                        .preferredWidth(280).cancel(Component.translatable(UI + "button.close"))
+                        .layoutCentered(width, height));
+                return true;
+            }
+        }
         if (button == 0) {
             focusClicked(mouseX, mouseY);
         }
@@ -1573,12 +1597,25 @@ public final class RuleEditorScreen extends Screen {
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
+    // 指针必须先通过树的内容门禁，再命中配方标签，滚动条拖动期间不会打开或提示。
+    private @Nullable TagPreviewIcons.Tag tagAt(double mouseX, double mouseY) {
+        if (ruleList == null) return null;
+        UiTreeNode<String> node = ruleList.nodeAt(mouseX, mouseY);
+        if (node == null) return null;
+        RuleRecipeView recipe = recipeViews.get(node.value());
+        if (recipe == null) return null;
+        UiRect row = ruleList.nodeContentBounds(node);
+        return recipe.tagAt(font, new UiRect(row.x() + 2, row.y() + font.lineHeight + 3,
+                Math.max(0, row.width() - 4), RuleRecipeView.CONTENT_HEIGHT), mouseX, mouseY);
+    }
+
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         if (modals.isVisible()) {
             return modals.mouseReleased(mouseX, mouseY, button);
         }
         boolean consumed = pages != null && pages.mouseReleased(mouseX, mouseY, button);
+        if (ruleList != null) consumed |= ruleList.mouseReleased(mouseX, mouseY, button);
         consumed |= globalBar.mouseReleased(mouseX, mouseY, button);
         consumed |= selectedBar.mouseReleased(mouseX, mouseY, button);
         consumed |= listBar.mouseReleased(mouseX, mouseY, button);
@@ -1944,7 +1981,7 @@ public final class RuleEditorScreen extends Screen {
 
     // 外部切屏或断线也会调用 removed，及时释放预览实体持有的客户端世界。
     @Override public void removed() {
-        EntityPreviewIcons.clear(); RulePreviewIcons.clear();
+        EntityPreviewIcons.clear(); RulePreviewIcons.clear(); BlockPreviewIcons.clear();
         super.removed();
     }
 
@@ -1952,6 +1989,7 @@ public final class RuleEditorScreen extends Screen {
     @Override
     public void onClose() {
         EntityPreviewIcons.clear();
+        BlockPreviewIcons.clear();
         applyAllForms();
         closePages();
         // P6：关屏前把未应用草稿写盘（断线 / 关游戏 / 关界面都能恢复）

@@ -253,7 +253,7 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
     // 屏幕坐标换算为内容坐标下的可见行下标
     private int indexAt(double mouseX, double mouseY) {
         UiRect viewport = scrollView.viewport();
-        if (!viewport.contains(mouseX, mouseY)) {
+        if (!scrollView.canHoverContent(mouseX, mouseY)) {
             return -1;
         }
         int contentY = (int) (mouseY - viewport.y()) + scrollView.offset();
@@ -277,6 +277,17 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
     public UiTreeNode<T> nodeAt(double mouseX, double mouseY) {
         int index = indexAt(mouseX, mouseY);
         return index < 0 ? null : visibleRows.get(index).node;
+    }
+
+    // 宿主行内控件使用与 renderer 相同的缩进和滚动坐标，不自行猜测行号。
+    public UiRect nodeContentBounds(UiTreeNode<T> node) {
+        for (VisibleRow<T> row : visibleRows) if (row.node == node) {
+            int inset = row.depth * INDENT_WIDTH + MARKER_WIDTH;
+            return new UiRect(scrollView.viewport().x() + inset,
+                    scrollView.viewport().y() + row.top - scrollView.offset(),
+                    Math.max(0, contentWidth() - inset), row.height);
+        }
+        return new UiRect(0, 0, 0, 0);
     }
 
     // 选中节点在可见行中的下标，未选中时为 -1

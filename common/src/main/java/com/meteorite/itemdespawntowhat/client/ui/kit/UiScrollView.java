@@ -127,6 +127,11 @@ public final class UiScrollView {
     /** 滑块拖动是否进行中：宿主据此在整个拖动期间消费输入，即使这一帧偏移没有变化。 */
     public boolean isDragging() { return dragging; }
 
+    // 所有内容命中（高亮、行 tooltip 等）共用此门禁；拖出轨道后仍保持独占。
+    public boolean canHoverContent(double x, double y) {
+        return !dragging && contains(x, y) && !hitScrollbar(x, y);
+    }
+
     public boolean mousePressed(double x, double y, int button) {
         if (button != 0 || !hitScrollbar(x, y)) return false;
         // 点在滑块之外（轨道空白）时先把滑块中心对到指针：否则拖动时滑块带着一个很大的抓取偏移，跟不上手。

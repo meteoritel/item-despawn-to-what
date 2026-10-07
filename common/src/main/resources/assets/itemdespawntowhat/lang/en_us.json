@@ -893,5 +893,15 @@
   "gui.itemdespawntowhat.edit.recipe.catalyst": "Catalyst: %s",
   "gui.itemdespawntowhat.edit.recipe.output": "Output: %s",
   "gui.itemdespawntowhat.edit.recipe.catalyst_help": "Conditions and plans determine required catalysts.",
-  "gui.itemdespawntowhat.edit.recipe.quantity_help": "/ separates quantities from different conditions or plans."
+  "gui.itemdespawntowhat.edit.recipe.quantity_help": "/ separates quantities from different conditions or plans.",
+  "gui.itemdespawntowhat.edit.tag.label.items": "Tagged items",
+  "gui.itemdespawntowhat.edit.tag.label.blocks": "Tagged blocks",
+  "gui.itemdespawntowhat.edit.tag.label.entities": "Tagged entities",
+  "gui.itemdespawntowhat.edit.tag.supports.items": "Accepts any item with the tag %s",
+  "gui.itemdespawntowhat.edit.tag.supports.blocks": "Accepts any block with the tag %s",
+  "gui.itemdespawntowhat.edit.tag.supports.entities": "Accepts any entity with the tag %s",
+  "gui.itemdespawntowhat.edit.tag.expand": "Click to browse all %s matching entries",
+  "gui.itemdespawntowhat.edit.tag.empty": "This tag has no previewable entries",
+  "gui.itemdespawntowhat.edit.tag.previous": "Previous",
+  "gui.itemdespawntowhat.edit.tag.next": "Next"
 }

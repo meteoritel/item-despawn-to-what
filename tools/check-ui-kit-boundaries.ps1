@@ -42,7 +42,7 @@ if ([string]::IsNullOrEmpty($ProjectRoot)) {
 $kitPackage = 'com.meteorite.itemdespawntowhat.client.ui.kit'
 # import 白名单前缀
 $allowedPrefixes = @('java.', 'javax.', 'net.minecraft.', 'org.jetbrains.', 'org.joml.', 'org.lwjgl.')
-$allowedClasses = @('com.mojang.blaze3d.platform.Lighting')
+$allowedClasses = @('com.mojang.blaze3d.platform.Lighting', 'com.mojang.blaze3d.vertex.PoseStack', 'com.mojang.blaze3d.vertex.VertexConsumer')
 # 明确禁用前缀（即使落在白名单里也禁用）
 $forbiddenPrefixes = @('net.fabricmc.', 'net.neoforged.', 'com.google.gson.')
 

@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
 import java.util.function.Consumer;
@@ -147,7 +148,8 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
         }
         UiTheme.drawInset(graphics, bounds);
         graphics.fill(bounds.x() + 1, bounds.y() + 1, bounds.right() - 1, bounds.bottom() - 1, UiPalette.SLOT_INNER);
-        editBox.renderWidget(graphics, mouseX, mouseY, 0.0F);
+        UiRenderLayers.draw(graphics, UiRenderLayers.FOREGROUND,
+                () -> editBox.renderWidget(graphics, mouseX, mouseY, 0.0F));
         if (editBox.isFocused()) {
             UiTheme.drawFocusOutline(graphics, bounds);
         }

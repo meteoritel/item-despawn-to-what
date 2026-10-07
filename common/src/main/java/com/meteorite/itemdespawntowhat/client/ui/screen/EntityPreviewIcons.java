@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiEntityPreview;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiModelBounds;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import net.minecraft.Util;
@@ -35,6 +36,7 @@ public final class EntityPreviewIcons {
         private float height;
         private float center;
         private boolean unavailable;
+        private @Nullable UiModelBounds bounds;
     }
 
     private EntityPreviewIcons() { }
@@ -93,6 +95,9 @@ public final class EntityPreviewIcons {
             if (id.equals("minecraft:ender_dragon")) { result.width = 16; result.height = 8; result.center = 2; }
             if (id.equals("minecraft:ghast")) { result.height = 6; result.center = 1; }
             if (id.equals("minecraft:squid") || id.equals("minecraft:glow_squid")) { result.height = 2; result.center = 0.2F; }
+            if (!result.unavailable) result.bounds = UiEntityPreview.measure(result.entity);
+            if (result.bounds == null) result.bounds = new UiModelBounds(0, result.center, 0,
+                    result.width * 1.5F, result.height * 1.5F, result.width * 1.5F);
         } catch (RuntimeException exception) { result.unavailable = true; result.entity = null; }
         return result;
     }
@@ -105,7 +110,7 @@ public final class EntityPreviewIcons {
         if (!preview.unavailable && preview.entity != null) {
             try {
                 float angle = (Util.getMillis() % 10000) / 10000.0F * (float) (Math.PI * 2);
-                if (UiEntityPreview.render(graphics, box, preview.entity, angle, preview.width, preview.height, preview.center)) return;
+                if (preview.bounds != null && UiEntityPreview.render(graphics, box, preview.entity, angle, preview.bounds)) return;
                 preview.unavailable = true;
             } catch (RuntimeException exception) { preview.unavailable = true; preview.entity = null; }
         }

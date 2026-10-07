@@ -130,3 +130,11 @@
 新增 `UiEntityPreview` 和 `UiSpinner` 为本项目编写的通用绘制能力，不改写上文同源引入 23 文件的来源提交。`UiIcon` 新增受控 `Rendered` 子类；宿主承担实体创建、缓存/失效、尺寸修正和屏障/本地化兜底。精确放行 `com.mojang.blaze3d.platform.Lighting`，已同步 package-info、API 文档与边界脚本；禁止业务、Gson 和 loader 依赖仍有效。
 
 新增 sealed 子类型可能影响外部穷尽 switch。此轮没有独立模块、版本或库发布；当前维护副本仍在本项目内使用，来源与历史差异记录保持有效。
+
+## 2026-10-07：UI 缺陷修复与模型适框
+
+本项目新增 `UiRenderLayers`、`UiPointer`、`UiCarousel`、`UiModelBounds` 和 `UiBlockPreview`，未修改来源仓库。`UiIcon.Item` 补偿原版 renderItem 的 150 深度，图标统一置于作用域的 20 层；文字/角标采用 40 层，模态作用域间隔 600。`UiScrollView` 增加 `canHoverContent`，鼠标位于滚动条或拖动期间统一阻止内容高亮与提示。宿主模态栈及管理页、原型页已接入作用域坐标门禁。
+
+`UiEntityPreview` 保留原签名，新增实际顶点测量与 `UiModelBounds` 绘制重载。宿主缓存真实可视范围，模型绕实际中心旋转、整圈固定缩放；测量失败的第三方实体 renderer 使用加留边的尺寸估计。方块复用同一适框几何，走原版方块 renderer、满亮和平面光照，无环境遮蔽或落地阴影。绘制深度压缩在图标层附近，防止较大预览穿过文字或面板。
+
+为实际几何测量精确放行 `PoseStack` 和 `VertexConsumer`，不扩大到整个父包。标签成员解析、展开弹窗、名称、tooltip、缓存与规则语义留在宿主；kit 不依赖本模组业务、loader 或 Gson。新增能力均已有真实调用，可回流但尚未回流；无独立库发布。

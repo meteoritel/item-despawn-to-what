@@ -244,8 +244,9 @@ public final class UiPrototypeScreen extends Screen {
         }
         graphics.drawString(this.font, Component.translatable("gui.itemdespawntowhat.prototype.section.list"), pad() + 2, this.listLabelY, UiPalette.TEXT_SECONDARY, false);
         graphics.drawString(this.font, Component.translatable("gui.itemdespawntowhat.prototype.section.tree"), (this.treeLabelY == this.listLabelY ? this.conditionTree.bounds().x() : pad()) + 2, this.treeLabelY, UiPalette.TEXT_SECONDARY, false);
-        int visibleMouseX = this.modalStack.isEmpty() ? mouseX : -1;
-        int visibleMouseY = this.modalStack.isEmpty() ? mouseY : -1;
+        var pointer = com.meteorite.itemdespawntowhat.client.ui.kit.UiPointer.gated(this.modalStack.isEmpty(), mouseX, mouseY);
+        int visibleMouseX = pointer.x();
+        int visibleMouseY = pointer.y();
         for (UiWidget widget : this.baseWidgets) {
             if (widget.isVisible()) {
                 widget.render(graphics, this.font, visibleMouseX, visibleMouseY);

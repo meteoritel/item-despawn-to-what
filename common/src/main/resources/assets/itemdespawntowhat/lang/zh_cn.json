@@ -893,5 +893,15 @@
   "gui.itemdespawntowhat.edit.recipe.catalyst": "催化剂：%s",
   "gui.itemdespawntowhat.edit.recipe.output": "产出：%s",
   "gui.itemdespawntowhat.edit.recipe.catalyst_help": "催化剂是否必需由条件与方案决定。",
-  "gui.itemdespawntowhat.edit.recipe.quantity_help": "/ 分隔不同条件或方案的数量。"
+  "gui.itemdespawntowhat.edit.recipe.quantity_help": "/ 分隔不同条件或方案的数量。",
+  "gui.itemdespawntowhat.edit.tag.label.items": "标签物品",
+  "gui.itemdespawntowhat.edit.tag.label.blocks": "标签方块",
+  "gui.itemdespawntowhat.edit.tag.label.entities": "标签实体",
+  "gui.itemdespawntowhat.edit.tag.supports.items": "支持所有带有 %s 标签的物品",
+  "gui.itemdespawntowhat.edit.tag.supports.blocks": "支持所有带有 %s 标签的方块",
+  "gui.itemdespawntowhat.edit.tag.supports.entities": "支持所有带有 %s 标签的实体",
+  "gui.itemdespawntowhat.edit.tag.expand": "点击展开浏览全部 %s 个匹配对象",
+  "gui.itemdespawntowhat.edit.tag.empty": "此标签没有可预览的成员",
+  "gui.itemdespawntowhat.edit.tag.previous": "上一项",
+  "gui.itemdespawntowhat.edit.tag.next": "下一项"
 }

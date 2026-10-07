@@ -6,6 +6,7 @@ import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import java.util.ArrayList;
@@ -32,7 +33,6 @@ public final class RuleRecipeView {
     static final int CONTENT_HEIGHT = 20;
     private static final int CONSUMED_COLOR = 0xFFFFA500;
     private static final UiIcon UNKNOWN = new UiIcon.Item(new ItemStack(Items.BARRIER));
-    private static final UiIcon TAG = new UiIcon.Item(new ItemStack(Items.NAME_TAG));
     private final List<Part> parts = new ArrayList<>();
     private final Component summary;
     private final Component tooltip;
@@ -48,6 +48,7 @@ public final class RuleRecipeView {
         private final LinkedHashSet<Integer> consumedQuantities = new LinkedHashSet<>();
         private boolean perSourceItem;
         private String quantityText = "";
+        private @Nullable TagPreviewIcons.Tag tag;
 
         private ObjectPart(Component name, @Nullable UiIcon icon, int quantity) {
             this.name = name;
@@ -114,8 +115,9 @@ public final class RuleRecipeView {
     private static void appendDetails(MutableComponent details, String role, List<ObjectPart> objects) {
         for (ObjectPart value : objects) {
             if (!details.getString().isEmpty()) details.append("\n");
-            Component item = value.quantities.isEmpty() ? value.name.copy()
-                    : Component.translatable(UI + "quantity", value.name, value.quantityText);
+            Component name = value.tag == null ? value.name : value.tag.tooltip();
+            Component item = value.quantities.isEmpty() ? name.copy()
+                    : Component.translatable(UI + "quantity", name, value.quantityText);
             if (!value.consumedQuantities.isEmpty()) item = item.copy().append(Component.translatable(UI + "consumption",
                     numbers(value.consumedQuantities)));
             details.append(Component.translatable(UI + role, item));
@@ -146,11 +148,18 @@ public final class RuleRecipeView {
                 if (part.object() == null) graphics.drawString(font, part.separator(), x, row.y() + 5, color, false);
                 else {
                     ObjectPart value = part.object();
+                    if (value.tag != null) {
+                        graphics.fill(x, row.y(), x + size - 2, row.bottom(), 0x224F7299);
+                        graphics.fill(x, row.bottom() - 1, x + size - 2, row.bottom(), 0xFF6688AA);
+                    }
                     value.icon.render(graphics, x, row.y() + 1);
                     if (!value.consumedQuantities.isEmpty()) consumedStar(graphics, x + ICON_SIZE - 7, row.y());
                     if (!value.quantities.isEmpty()) badge(graphics, font, value.quantityText,
                             x + ICON_SIZE, row.y() + 12);
                     if (names) graphics.drawString(font, value.name, x + ICON_SIZE + 3, row.y() + 5, color, false);
+                    if (value.tag != null) for (int step = 0; step < 3; step++)
+                        graphics.fill(x + size - 7 + step, row.y() + 7 + step,
+                                x + size - 6 + step, row.y() + 12 - step, color);
                 }
                 x += size;
             }
@@ -171,7 +180,22 @@ public final class RuleRecipeView {
 
     private int width(Font font, boolean names) { return parts.stream().mapToInt(part -> partWidth(font, part, names)).sum(); }
     private static int partWidth(Font font, Part part, boolean names) {
-        return part.object() == null ? font.width(part.separator()) : ICON_SIZE + 3 + (names ? font.width(part.object().name) : 0);
+        return part.object() == null ? font.width(part.separator()) : ICON_SIZE + 3
+                + (names ? font.width(part.object().name) : 0) + (part.object().tag == null ? 0 : 9);
+    }
+
+    // 命中与绘制共用名字省略和横向滚动口径；只展开实际可见的标签容器。
+    public @Nullable TagPreviewIcons.Tag tagAt(Font font, UiRect row, double mouseX, double mouseY) {
+        if (!row.contains(mouseX, mouseY)) return null;
+        boolean names = width(font, true) <= row.width();
+        int overflow = Math.max(0, width(font, names) - row.width());
+        int x = row.x() - horizontalShift(Util.getMillis(), overflow, true);
+        for (Part part : parts) {
+            int size = partWidth(font, part, names);
+            if (mouseX >= x && mouseX < x + size && part.object() != null) return part.object().tag;
+            x += size;
+        }
+        return null;
     }
 
     // 角标位于图标内部，矩阵独立恢复，后续物品和文字不受缩放影响。
@@ -180,7 +204,7 @@ public final class RuleRecipeView {
         int width = (int) Math.ceil(font.width(text) * scale);
         graphics.pose().pushPose();
         try {
-            graphics.pose().translate(right - width, y, 200);
+            graphics.pose().translate(right - width, y, UiRenderLayers.FOREGROUND);
             graphics.pose().translate(0, 1, 0);
             graphics.pose().scale(scale, scale, 1);
             graphics.drawString(font, text, 0, 0, 0xFFFFFFFF, true);
@@ -191,7 +215,7 @@ public final class RuleRecipeView {
     private static void consumedStar(GuiGraphics graphics, int x, int y) {
         graphics.pose().pushPose();
         try {
-            graphics.pose().translate(x, y, 200);
+            graphics.pose().translate(x, y, UiRenderLayers.FOREGROUND);
             graphics.fill(3, 0, 4, 2, CONSUMED_COLOR);
             graphics.fill(0, 2, 7, 3, CONSUMED_COLOR);
             graphics.fill(1, 3, 6, 4, CONSUMED_COLOR);
@@ -246,8 +270,12 @@ public final class RuleRecipeView {
         if ((OWN + "spawn_entity").equals(type)) {
             return switch (text(effect, "variant")) {
                 case "item" -> resource(text(effect, "item"), RuleCatalogType.ITEM, integer(effect, "count", 1));
-                case "entity" -> new ObjectPart(resource(text(effect, "entity"), RuleCatalogType.ENTITY, 0).name,
-                        RulePreviewIcons.action(effect), integer(effect, "count", 1));
+                case "entity" -> {
+                    ObjectPart part = resource(text(effect, "entity"), RuleCatalogType.ENTITY, integer(effect, "count", 1));
+                    if (!text(effect, "entity").startsWith("#")) part = new ObjectPart(part.name,
+                            RulePreviewIcons.action(effect), integer(effect, "count", 1));
+                    yield part;
+                }
                 case "experience" -> {
                     ObjectPart xp = new ObjectPart(Component.translatable(UI + "experience"), RulePreviewIcons.action(effect), integer(effect, "amount", 1));
                     xp.perSourceItem = bool(effect, "per_source_item");
@@ -257,22 +285,39 @@ public final class RuleRecipeView {
             };
         }
         if ((OWN + "place_block").equals(type)) {
-            if (bool(effect, "use_source_block")) return new ObjectPart(Component.translatable(UI + "source_block"),
-                    firstSourceIcon(rule), integer(effect, "count", 1));
+            if (bool(effect, "use_source_block")) {
+                ObjectPart part = new ObjectPart(Component.translatable(UI + "source_block"), firstSourceIcon(rule), integer(effect, "count", 1));
+                String source = firstSource(rule);
+                if (source.startsWith("#")) part.tag = TagPreviewIcons.sourceBlocks(source);
+                return part;
+            }
             return resource(text(effect, "block"), RuleCatalogType.BLOCK, integer(effect, "count", 1));
         }
         return new ObjectPart(RuleNaming.effectTitle(effect, RuleDisplayLabels::label), RulePreviewIcons.action(effect), integer(effect, "count", 0));
     }
 
-    private static @Nullable UiIcon firstSourceIcon(JsonObject rule) {
+    static String firstSource(JsonObject rule) {
         JsonArray entries = array(object(rule.get("source")).get("items"));
-        return entries.isEmpty() ? null : RuleEditorP4Panels.iconFor(RuleCatalogType.ITEM,
-                entries.get(0).isJsonPrimitive() ? entries.get(0).getAsString() : "");
+        return entries.isEmpty() || !entries.get(0).isJsonPrimitive() ? "" : entries.get(0).getAsString();
+    }
+
+    static @Nullable UiIcon firstSourceIcon(JsonObject rule) {
+        String raw = firstSource(rule);
+        if (raw.startsWith("#")) return TagPreviewIcons.sourceBlocks(raw).icon();
+        ResourceLocation id = ResourceLocation.tryParse(raw);
+        var item = id == null ? null : BuiltInRegistries.ITEM.getOptional(id).orElse(null);
+        return item instanceof net.minecraft.world.item.BlockItem blockItem
+                ? BlockPreviewIcons.icon(BuiltInRegistries.BLOCK.getKey(blockItem.getBlock()).toString()) : null;
     }
 
     // 标签不能伪装成同名普通物品；实体/方块名称只查对应注册表。
     private static ObjectPart resource(String raw, RuleCatalogType type, int quantity) {
-        if (raw.startsWith("#")) return new ObjectPart(Component.literal(raw), TAG, quantity);
+        if (raw.startsWith("#")) {
+            TagPreviewIcons.Tag tag = TagPreviewIcons.resolve(type, raw);
+            ObjectPart part = new ObjectPart(tag.label(), tag.icon(), quantity);
+            part.tag = tag;
+            return part;
+        }
         ResourceLocation id = ResourceLocation.tryParse(raw);
         Component name = id == null ? Component.translatable(UI + "object_missing") : switch (type) {
             case ITEM -> BuiltInRegistries.ITEM.getOptional(id).map(net.minecraft.world.item.Item::getDescription).orElse(Component.literal(raw));

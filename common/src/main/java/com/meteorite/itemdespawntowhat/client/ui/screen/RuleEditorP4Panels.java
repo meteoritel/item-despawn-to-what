@@ -142,6 +142,8 @@ public final class RuleEditorP4Panels {
         if (type == null || id == null || id.isBlank()) {
             return null;
         }
+        if (id.startsWith("#") && (type == RuleCatalogType.ITEM || type == RuleCatalogType.BLOCK || type == RuleCatalogType.ENTITY))
+            return TagPreviewIcons.resolve(type, id).icon();
         String normalized = id.startsWith("#") ? id.substring(1) : id;
         ResourceLocation key = ResourceLocation.tryParse(
                 normalized.indexOf(':') >= 0 ? normalized : "minecraft:" + normalized);
@@ -149,6 +151,7 @@ public final class RuleEditorP4Panels {
             return null;
         }
         if (type == RuleCatalogType.ENTITY && !id.startsWith("#")) return EntityPreviewIcons.icon(key.toString(), 0);
+        if (type == RuleCatalogType.BLOCK && !id.startsWith("#")) return BlockPreviewIcons.icon(key.toString());
         ItemStack stack = switch (type) {
             case ITEM -> stackOf(BuiltInRegistries.ITEM.getOptional(key).orElse(null));
             case BLOCK -> BuiltInRegistries.BLOCK.getOptional(key).map(block -> stackOf(block.asItem()))
@@ -264,8 +267,12 @@ public final class RuleEditorP4Panels {
             return mapped;
         });
         grid.setOnRetry(() -> workspace.retryDirectory(type));
-        grid.setTooltipSuffix(id -> type == RuleCatalogType.ENTITY && EntityPreviewIcons.unavailable(id, 0)
-                ? Component.translatable(UI + "preview.unavailable") : null);
+        grid.setTooltipSuffix(id -> {
+            var tag = mapper.tagPreviews.get(id);
+            if (tag != null) return tag.tooltip();
+            return type == RuleCatalogType.ENTITY && EntityPreviewIcons.unavailable(id, 0)
+                    ? Component.translatable(UI + "preview.unavailable") : null;
+        });
         if (!workspace.active()) {
             grid.setEnabled(false);
             grid.setError(Component.translatable(UI + "pick.frozen"));
@@ -297,6 +304,7 @@ public final class RuleEditorP4Panels {
         private String mappedFilter = "";
         private int mappedPage = -1;
         private List<UiCatalogGrid.Entry> full = List.of();
+        private final java.util.Map<String, TagPreviewIcons.Tag> tagPreviews = new java.util.HashMap<>();
 
         @Nullable
         List<UiCatalogGrid.Entry> map(EditorWorkspaceView workspace, RuleCatalogType type) {
@@ -309,6 +317,7 @@ public final class RuleEditorP4Panels {
             RuleCatalog catalog = workspace.directory(type);
             boolean changed = catalog != cached;
             if (changed) {
+                tagPreviews.clear();
                 cached = catalog;
                 if (catalog == null) { entries = null; hasNext = false; pageCount = 0; return null; }
                 List<UiCatalogGrid.Entry> mapped = new ArrayList<>();
@@ -318,7 +327,12 @@ public final class RuleEditorP4Panels {
                     if (type == RuleCatalogType.ENTITY && field != null && FieldCatalogChoices.isGenericProduct(field)
                             && (entry.id().equals("minecraft:item") || entry.id().equals("minecraft:experience_orb"))) continue;
                     String sub = validTags == null ? entry.subLabel() : Component.translatable(field.labelKey()).getString();
-                    mapped.add(new UiCatalogGrid.Entry(entry.id(), catalogLabel(entry.label()),
+                    if (type == RuleCatalogType.TAG) {
+                        RuleCatalogType memberType = field == null ? RuleCatalogType.ITEM : catalogTypeOf(field);
+                        var tag = TagPreviewIcons.resolve(memberType == null ? RuleCatalogType.ITEM : memberType, entry.id());
+                        tagPreviews.put(entry.id(), tag);
+                        mapped.add(new UiCatalogGrid.Entry(entry.id(), tag.label(), null, tag.icon()));
+                    } else mapped.add(new UiCatalogGrid.Entry(entry.id(), catalogLabel(entry.label()),
                             sub == null || sub.isBlank() ? null : catalogLabel(sub), iconFor(type, entry.id())));
                 }
                 full = List.copyOf(mapped);

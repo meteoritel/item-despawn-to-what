@@ -2,6 +2,8 @@ package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -30,6 +32,7 @@ public final class UiModalStack implements UiWidget {
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     // 剩余淡入帧数
     private int fadeTicks;
+    private Runnable onScopeChanged = () -> { };
 
     public UiModalStack() {
         focusManager.setEnterActivates(true);
@@ -75,12 +78,20 @@ public final class UiModalStack implements UiWidget {
 
     // 压入一个弹窗
     public UiModal push(UiModal modal) {
+        onScopeChanged.run();
+        UiModal previous = top();
+        if (previous != null) previous.mouseReleased(-1, -1, 0);
         modal.setCloseHandler(this::close);
         modals.add(modal);
         fadeTicks = FADE_TICKS;
         relayout();
         refreshFocus();
         return modal;
+    }
+
+    // 宿主在打开模态时结束底层的拖动捕获，避免释放只交给弹窗后残留拖动状态。
+    public void setOnScopeChanged(Runnable handler) {
+        onScopeChanged = handler;
     }
 
     // 关闭最上层弹窗
@@ -160,12 +171,15 @@ public final class UiModalStack implements UiWidget {
         int alpha = baseAlpha * (FADE_TICKS - fadeTicks) / FADE_TICKS;
         if (alpha > 0) {
             int dim = (alpha << 24) | (UiPalette.MODAL_DIM & 0x00FFFFFF);
-            graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), dim);
+            UiRenderLayers.draw(graphics, UiRenderLayers.MODAL_STEP,
+                    () -> graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), dim));
         }
         for (int i = 0; i < modals.size(); i++) {
             boolean isTop = i == modals.size() - 1;
             UiModal modal = modals.get(i);
-            modal.render(graphics, font, isTop ? mouseX : -1, isTop ? mouseY : -1);
+            UiPointer pointer = UiPointer.gated(isTop, mouseX, mouseY);
+            UiRenderLayers.draw(graphics, (i + 1) * UiRenderLayers.MODAL_STEP + 1,
+                    () -> modal.render(graphics, font, pointer.x(), pointer.y()));
         }
     }
 

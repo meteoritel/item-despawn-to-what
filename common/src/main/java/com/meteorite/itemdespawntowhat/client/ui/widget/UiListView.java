@@ -199,7 +199,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     // 屏幕坐标换算为内容坐标下的行下标
     private int indexAt(double mouseX, double mouseY) {
         UiRect viewport = scrollView.viewport();
-        if (!viewport.contains(mouseX, mouseY)) {
+        if (!scrollView.canHoverContent(mouseX, mouseY)) {
             return -1;
         }
         int contentY = (int) (mouseY - viewport.y()) + scrollView.offset();
@@ -211,6 +211,8 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     public int itemIndexAt(double mouseX, double mouseY) {
         return scrollView.hitScrollbar(mouseX, mouseY) ? -1 : indexAt(mouseX, mouseY);
     }
+
+    public boolean isDraggingScrollbar() { return scrollView.isDragging(); }
 
     // 供宿主绘制行级覆盖层；返回与实际视口相交的可见矩形。
     public @Nullable UiRect visibleRowBounds(int index) {

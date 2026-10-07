@@ -36,7 +36,9 @@ public sealed interface UiIcon permits UiIcon.Item, UiIcon.Sprite, UiIcon.Render
         public Item(ItemStack stack) { this.stack = Objects.requireNonNull(stack).copy(); }
         @Override public int width() { return 16; }
         @Override public int height() { return 16; }
-        @Override public void render(GuiGraphics graphics, int x, int y) { graphics.renderItem(stack, x, y); }
+        @Override public void render(GuiGraphics graphics, int x, int y) {
+            UiRenderLayers.item(graphics, () -> graphics.renderItem(stack, x, y));
+        }
     }
 
     /** 使用原生大小绘制的贴图区域，宽高同时作为布局尺寸。 */

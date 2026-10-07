@@ -32,7 +32,7 @@ public final class RulePreviewIcons {
         if (type.equals("itemdespawntowhat:spawn_entity")) {
             return switch (text(action, "variant")) {
                 case "item" -> RuleEditorP4Panels.iconFor(RuleCatalogType.ITEM, text(action, "item"));
-                case "entity" -> text(action, "entity").startsWith("#") ? new UiIcon.Item(new ItemStack(Items.NAME_TAG))
+                case "entity" -> text(action, "entity").startsWith("#") ? TagPreviewIcons.resolve(RuleCatalogType.ENTITY, text(action, "entity")).icon()
                         : EntityPreviewIcons.icon(text(action, "entity"), age(action));
                 case "experience" -> EntityPreviewIcons.icon("minecraft:experience_orb", 0);
                 default -> null;
@@ -50,17 +50,31 @@ public final class RulePreviewIcons {
 
     public static @Nullable UiIcon rule(@Nullable JsonObject rule) {
         if (rule == null) return null;
-        UiIcon icon = actions(rule.get("effects"));
+        UiIcon icon = actions(rule.get("effects"), rule);
         if (icon != null) return icon;
         if (rule.get("outcomes") instanceof JsonArray outcomes) for (JsonElement outcome : outcomes) {
-            if (outcome.isJsonObject()) { icon = actions(outcome.getAsJsonObject().get("effects")); if (icon != null) return icon; }
+            if (outcome.isJsonObject()) { icon = actions(outcome.getAsJsonObject().get("effects"), rule); if (icon != null) return icon; }
         }
         return null;
     }
 
-    private static @Nullable UiIcon actions(JsonElement value) {
+    private static @Nullable UiIcon actions(JsonElement value, JsonObject rule) {
         if (value instanceof JsonArray array) for (JsonElement entry : array) {
-            if (entry.isJsonObject()) { UiIcon icon = action(entry.getAsJsonObject()); if (icon != null) return icon; }
+            if (entry.isJsonObject()) {
+                JsonObject action = entry.getAsJsonObject();
+                if (text(action, "type").equals("itemdespawntowhat:place_block")
+                        && action.has("use_source_block") && action.get("use_source_block").isJsonPrimitive()
+                        && action.get("use_source_block").getAsBoolean()) {
+                    String key = "source-block/" + RuleRecipeView.firstSource(rule);
+                    if (!ICONS.containsKey(key)) {
+                        ICONS.put(key, RuleRecipeView.firstSourceIcon(rule));
+                        while (ICONS.size() > 256) ICONS.remove(ICONS.keySet().iterator().next());
+                    }
+                    return ICONS.get(key);
+                }
+                UiIcon icon = action(action);
+                if (icon != null) return icon;
+            }
         }
         return null;
     }

@@ -1460,6 +1460,9 @@ public final class RuleEditorEditPages {
         if (lastArea == null || lastArea.height() == 0) {
             return;
         }
+        var pointer = com.meteorite.itemdespawntowhat.client.ui.kit.UiPointer.gated(!pageScroll.isDragging(), mouseX, mouseY);
+        mouseX = pointer.x();
+        mouseY = pointer.y();
         graphics.enableScissor(lastArea.x(), lastArea.y(), lastArea.right(), lastArea.bottom());
         try {
             switch (page) {
@@ -1646,6 +1649,7 @@ public final class RuleEditorEditPages {
     // 结束进行中的数值/滑杆交互：提交有效预览、回退无效预览
     // （FormView.endInteractions 是包级方法，宿主只能走 onFocusScopeChanged 这个公开入口）
     public void endInteractions() {
+        pageScroll.mouseReleased();
         for (FormView form : liveForms) {
             if (form.isVisible()) {
                 form.onFocusScopeChanged();
@@ -1774,6 +1778,7 @@ public final class RuleEditorEditPages {
     }
 
     public @Nullable Component tooltipAt(double mouseX, double mouseY) {
+        if (pageScroll.isDragging()) return null;
         if (!pageScroll.contains(mouseX, mouseY)) {
             return null;
         }
