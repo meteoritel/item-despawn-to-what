@@ -1,11 +1,13 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.mojang.serialization.JsonOps;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDefaults;
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDescriptors;
+import com.meteorite.itemdespawntowhat.client.edit.ClientTypeRegistries;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionEditorRegistry;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorFactories;
@@ -40,21 +42,33 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiSegmentedControl;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiStructureDiagram;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
 import com.meteorite.itemdespawntowhat.core.model.CombinationMode;
+import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionLimits;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
+import com.meteorite.itemdespawntowhat.core.model.Effect;
+import com.meteorite.itemdespawntowhat.core.model.Rule;
+import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
+import com.meteorite.itemdespawntowhat.core.runtime.CatalystThresholdProjection;
+import com.meteorite.itemdespawntowhat.core.type.condition.CatalystPresentCondition;
+import com.meteorite.itemdespawntowhat.core.type.condition.FluidPresentCondition;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.FormattedCharSequence;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -165,6 +179,7 @@ public final class RuleEditorEditPages {
     private static final ResourceLocation CONDITIONS_PAGE = ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "conditions_page");
     private static final ResourceLocation CONSUME_SOURCE_ID = ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "consume_source");
     private static final ResourceLocation CONSUME_CATALYST_ID = ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "consume_catalyst");
+    private static final ResourceLocation CONSUME_FLUID_ID = ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "consume_fluid");
 
     // 源成本模式
     private static final String COST_DERIVED = "derived";
@@ -204,11 +219,61 @@ public final class RuleEditorEditPages {
     private int candidateIndex;
     private int effectIndex;
 
+    // 本次按下命中的页面控件：释放只派发给它，避免无关控件吞掉释放
+    private @Nullable UiWidget pressedWidget;
+
+    // 存在条件的类型 id：条件叶是催化剂 / 流体类型的唯一事实源
+    private static final ResourceLocation CATALYST_PRESENT_ID = CatalystPresentCondition.ID;
+    private static final ResourceLocation FLUID_PRESENT_ID = FluidPresentCondition.ID;
+
+    // 输入页的「添加催化剂 / 添加流体」开关：勾选状态由草稿规则级条件里是否存在该类型的叶决定
+    private @Nullable UiCheckBox catalystPresenceToggle;
+    private @Nullable UiCheckBox fluidPresenceToggle;
+    // 存在条件的类型表单行（含标题行矩形），逐项按确切叶路径绑定
+    private final List<PresenceRow> presenceRows = new ArrayList<>();
+
+    // 一个存在条件叶在草稿中的位置与作用域：输入页与触发页共用同一份扫描结果
+    private record PresenceLeaf(String path, String conditionPath, ResourceLocation type, int ordinal,
+                                Component scopeLabel, @Nullable String effectPath, int candidateIndex, int effectIndex) {
+
+        // 催化剂叶的类型字段是物品引用列表，流体叶是单个流体引用
+        boolean catalyst() {
+            return CATALYST_PRESENT_ID.equals(type);
+        }
+
+        // 类型字段名
+        String fieldName() {
+            return catalyst() ? RuleFields.CATALYST_ITEMS : "fluid";
+        }
+
+        // 类型字段的草稿路径
+        String fieldPath() {
+            return conditionPath + "." + fieldName();
+        }
+
+        // 规则级条件叶（非动作局部）
+        boolean ruleLevel() {
+            return effectPath == null;
+        }
+    }
+
+    // 输入页的一行存在条件：叶 + 只含类型字段的表单 + 标题行矩形
+    private static final class PresenceRow {
+        private final PresenceLeaf leaf;
+        private final FormView form;
+        private @Nullable UiRect headerRect;
+
+        PresenceRow(PresenceLeaf leaf, FormView form) {
+            this.leaf = leaf;
+            this.form = form;
+        }
+    }
+
     // 基本信息
     private @Nullable FormView infoForm;
     private @Nullable UiButton restoreNameButton;
-    private @Nullable UiRect autoNameRect;
-    private @Nullable UiRect advancedRect;
+    // 基本页第一行的只读规则 ID
+    private @Nullable UiRect infoIdRect;
 
     // 输入与成本
     private @Nullable FormView sourceForm;
@@ -243,11 +308,11 @@ public final class RuleEditorEditPages {
     private @Nullable UiButton advancedButton;
     private @Nullable UiButton resultBack;
     private boolean showAdvancedEffects;
+    // 单方案（顶层 effects）时结果页直达动作，不渲染方案选择层
+    private boolean singlePlan;
     private int resultStage;
     private @Nullable UiRect productPreviewRect;
     private @Nullable JsonObject selectedAction;
-    private @Nullable UiRect flatNoteRect;
-    private @Nullable UiRect convertHintRect;
     // 未注册效果类型的只读说明行
     private @Nullable UiRect effectNoteRect;
 
@@ -315,8 +380,7 @@ public final class RuleEditorEditPages {
         effectButtons.clear();
         infoForm = null;
         restoreNameButton = null;
-        autoNameRect = null;
-        advancedRect = null;
+        infoIdRect = null;
         sourceForm = null;
         sourceCostMode = null;
         sourceCostForm = null;
@@ -327,6 +391,9 @@ public final class RuleEditorEditPages {
         catalystToggle = null;
         catalystNoteRect = null;
         catalystNote = null;
+        catalystPresenceToggle = null;
+        fluidPresenceToggle = null;
+        presenceRows.clear();
         triggerBoxes.clear();
         triggerNoteRect = null;
         delayForm = null;
@@ -345,9 +412,8 @@ public final class RuleEditorEditPages {
         resultBack = null;
         productPreviewRect = null;
         selectedAction = null;
-        flatNoteRect = null;
-        convertHintRect = null;
         effectNoteRect = null;
+        singlePlan = false;
         dragKind = DragKind.NONE;
         dragActive = false;
         dragFrom = -1;
@@ -360,6 +426,8 @@ public final class RuleEditorEditPages {
         form.setConditionSupport(pageConditionSupport(form));
         form.setSuggestionProvider(host.suggestions());
         form.setOnChanged(host::onDraftChanged);
+        // 输入被长度上限拒绝时立刻显示一条可读提示（字段名：问题）
+        form.setOnRejectedNotice(message -> host.notice(message, UiPalette.DANGER));
         form.setCatalogOpener((field, tags, onPicked) -> {
             RuleCatalogType type = tags ? RuleCatalogType.TAG : RuleEditorP4Panels.catalogTypeOf(field);
             if (type == null || host.rejectWhenFrozen()) return;
@@ -375,32 +443,52 @@ public final class RuleEditorEditPages {
 
     // ---- 基本信息 ----
 
+    // 基本页优先级控件的加高行高（默认行高 12，spec 要求「加高的优先级控件」）
+    private static final int PRIORITY_ROW_HEIGHT = UiTheme.ROW_HEIGHT + 10;
+
     private void buildInfo(EditSession session) {
         JsonObject rule = session.draft().view();
+        // 自上而下：只读规则 ID、显示名与恢复按钮、启用、加高的优先级控件、多行备注；
+        // 页头只保留当前实际生效名称，页内不再重复说明文案
         TypeEditorDescriptor descriptor = TypeEditorDescriptor.of(INFO_PAGE, Component.translatable(UI + "tab.info"), List.of(
+                EditorField.optionalText(RuleFields.DISPLAY_NAME, UI + "rule.display_name").withHint(UI + "rule.display_name_hint"),
                 EditorField.bool(RuleFields.ENABLED, UI + "rule.enabled"),
                 EditorField.integerSlider(RuleFields.PRIORITY, UI + "rule.priority", Integer.MIN_VALUE, Integer.MAX_VALUE, -100, 100).optional(),
-                EditorField.optionalText(RuleFields.DISPLAY_NAME, UI + "rule.display_name"),
-                EditorField.longText(RuleFields.NOTES, UI + "rule.notes")));
+                EditorField.longText(RuleFields.NOTES, UI + "rule.notes").withHint(UI + "rule.notes_hint")));
         infoForm = newForm(session, "", descriptor);
+        // 显式加高优先级行：slider 与数字输入框一起变高；其它页字段保持默认高度
+        infoForm.setRowHeight(RuleFields.PRIORITY, PRIORITY_ROW_HEIGHT);
         restoreNameButton = new UiButton(font, Component.translatable(UI + "button.restore_name"), UiButtonVariant.SECONDARY, this::restoreAutoName);
         restoreNameButton.setEnabled(rule.has(RuleFields.DISPLAY_NAME));
+        // 恢复按钮挂在显示名行尾：与它作用的字段同排，且随表单一起禁用
+        infoForm.setRowAction(RuleFields.DISPLAY_NAME, restoreNameButton);
         liveForms.add(infoForm);
         liveWidgets.add(infoForm);
-        liveWidgets.add(restoreNameButton);
-        buttons.add(restoreNameButton);
     }
 
-    // 恢复自动命名：清空 display_name，一次撤销可还原
+    // 恢复自动命名：删除 display_name、刷新控件与标题、退出文本焦点并给出反馈；一次撤销可还原
     private void restoreAutoName() {
         EditSession session = host.session();
         if (session == null) {
             return;
         }
-        RuleDraft draft = session.draft();
-        if (!apply(EditSession.OP_SET_FIELD, () -> draft.remove(RuleFields.DISPLAY_NAME))) {
+        JsonObject view = session.draft().view();
+        if (!view.has(RuleFields.DISPLAY_NAME)) {
             return;
         }
+        RuleDraft draft = session.draft();
+        // 当前缓冲值可能尚未落盘；与删除放在同一个编辑步内，撤销一次即回到操作前的显示名
+        JsonElement pending = infoForm == null ? null : infoForm.pendingValue(RuleFields.DISPLAY_NAME);
+        if (!apply(EditSession.OP_SET_FIELD, () -> {
+            if (pending != null) {
+                draft.setAt(RuleFields.DISPLAY_NAME, pending.deepCopy());
+            }
+            draft.remove(RuleFields.DISPLAY_NAME);
+        })) {
+            return;
+        }
+        // 旧控件即将被重建，显式清空焦点，不让焦点轮廓停在已卸载的输入框上
+        host.focus().clearFocus();
         host.notice(Component.translatable(UI + "notice.name_restored"), UiPalette.TEXT_SECONDARY);
     }
 
@@ -448,6 +536,9 @@ public final class RuleEditorEditPages {
             liveForms.add(catalystForm);
             liveWidgets.add(catalystForm);
         }
+        // 存在条件：类型的唯一入口是条件叶，未勾选时不渲染类型字段
+        buildPresenceSection(session, CATALYST_PRESENT_ID, UI + "rule.presence.add_catalyst");
+        buildPresenceSection(session, FLUID_PRESENT_ID, UI + "rule.presence.add_fluid");
     }
 
     // 成本模式分段控件选项
@@ -485,7 +576,7 @@ public final class RuleEditorEditPages {
         });
     }
 
-    // 催化剂成本开关：开启写空 items 对象（count / radius 保持省略），关闭移除字段
+    // 催化剂成本开关：开启建空的固定成本（类型不写在这里，来自存在叶），关闭移除字段
     private void onCatalystToggle(boolean checked) {
         EditSession session = host.session();
         if (session == null) {
@@ -494,13 +585,651 @@ public final class RuleEditorEditPages {
         RuleDraft draft = session.draft();
         apply(EditSession.OP_SET_FIELD, () -> {
             if (checked) {
-                JsonObject body = new JsonObject();
-                body.add(RuleFields.CATALYST_ITEMS, new JsonArray());
-                draft.setAt(RuleFields.CATALYST_COST, body);
+                draft.setAt(RuleFields.CATALYST_COST, new JsonObject());
+                // 存在叶里已选的催化剂物品立刻同步到固定成本，避免出现「有成本没类型」的空档
+                retargetCatalystItems(draft, List.of(), ruleLevelCatalystItems(draft));
             } else {
                 draft.remove(RuleFields.CATALYST_COST);
             }
         });
+    }
+
+    // ---- 输入页的存在条件（催化剂 / 流体）与门槛提示 ----
+
+    // 追加一类存在条件的开关与类型表单：未勾选时不渲染类型编辑字段
+    private void buildPresenceSection(EditSession session, ResourceLocation type, String toggleKey) {
+        List<PresenceLeaf> ruleLevel = ruleLevelPresence(session.draft().view(), type);
+        UiCheckBox toggle = new UiCheckBox(font, Component.translatable(toggleKey), !ruleLevel.isEmpty());
+        toggle.setOnChanged(checked -> onPresenceToggle(type, checked));
+        liveWidgets.add(toggle);
+        if (CATALYST_PRESENT_ID.equals(type)) {
+            catalystPresenceToggle = toggle;
+        } else {
+            fluidPresenceToggle = toggle;
+        }
+        for (PresenceLeaf leaf : ruleLevel) {
+            FormView form = presenceForm(session, leaf);
+            presenceRows.add(new PresenceRow(leaf, form));
+            liveForms.add(form);
+            liveWidgets.add(form);
+        }
+    }
+
+    // 存在条件的类型表单：只含类型字段，绑定到对应条件叶的 condition 路径
+    private FormView presenceForm(EditSession session, PresenceLeaf leaf) {
+        FormView form = newForm(session, leaf.conditionPath(), presenceDescriptor(leaf));
+        // 类型改写立即落盘（类型 + 关联消耗配置重指向 = 同一次可撤销操作）；此处不重建页面，
+        // 目录选择可连续多次回调，重建会让后续选择写进已卸载的控件
+        form.setOnChanged(() -> {
+            EditSession current = host.session();
+            if (current == null || host.rejectWhenFrozen()) {
+                return;
+            }
+            if (flushPresenceType(current, leaf, form)) {
+                host.onDraftChanged();
+            }
+        });
+        // 逐项移除按钮挂在类型行尾：删除只作用于这一个叶，不影响独立消耗配置
+        form.setRowAction(leaf.fieldPath(), new UiButton(font, Component.translatable(UI + "rule.presence.remove"),
+                UiButtonVariant.SECONDARY, () -> removePresenceLeaf(leaf)));
+        return form;
+    }
+
+    // 输入页的类型描述符：催化剂只暴露 items，流体只暴露 fluid（存在判定与组合关系留在触发页）
+    private TypeEditorDescriptor presenceDescriptor(PresenceLeaf leaf) {
+        List<EditorField> fields = leaf.catalyst()
+                ? List.of(EditorField.tagList(RuleFields.CATALYST_ITEMS, UI + "field.catalyst_present.items", "minecraft:item")
+                        .asRequired())
+                : List.of(EditorField.optionalTag("fluid", UI + "field.fluid_present.fluid", "minecraft:fluid"));
+        return TypeEditorDescriptor.of(leaf.type(), TypeLabels.conditionLabel(leaf.type()), fields);
+    }
+
+    // 存在条件开关：勾选新增规则级条件叶，取消删除规则级叶；独立消耗配置始终不受影响
+    private void onPresenceToggle(ResourceLocation type, boolean checked) {
+        EditSession session = host.session();
+        if (session == null) {
+            return;
+        }
+        RuleDraft draft = session.draft();
+        apply(EditSession.OP_SET_FIELD, () -> {
+            if (checked) {
+                addRuleLevelPresence(draft, type);
+            } else {
+                removeRuleLevelPresence(draft, type);
+            }
+        });
+    }
+
+    // 逐项移除一个存在叶（父组变空顺手整理），一次撤销可整体还原
+    private void removePresenceLeaf(PresenceLeaf leaf) {
+        EditSession session = host.session();
+        if (session == null) {
+            return;
+        }
+        RuleDraft draft = session.draft();
+        apply(EditSession.OP_SET_FIELD, () -> removeLeafAt(draft, leaf.path()));
+    }
+
+    // 结构新增：空树直接加叶；已有根不是 all_of 时把完整旧根与新叶一起放进新的 all_of
+    private static void addRuleLevelPresence(RuleDraft draft, ResourceLocation type) {
+        JsonObject leaf = presenceLeafJson(type);
+        JsonElement current = draft.getAt(RuleFields.CONDITIONS);
+        if (current == null || current.isJsonNull()) {
+            draft.setAt(RuleFields.CONDITIONS, leaf);
+            return;
+        }
+        if (current.isJsonObject() && RuleFields.OP_ALL_OF.equals(stringField(current.getAsJsonObject(), RuleFields.OP))) {
+            JsonObject root = current.getAsJsonObject();
+            JsonElement terms = root.get(RuleFields.TERMS);
+            JsonArray array = terms != null && terms.isJsonArray() ? terms.getAsJsonArray() : new JsonArray();
+            array.add(leaf);
+            root.add(RuleFields.TERMS, array);
+            draft.setAt(RuleFields.CONDITIONS, root);
+            return;
+        }
+        // 保留旧根整体语义：包一层 all_of，而不是把叶插进当前选中的节点
+        JsonObject group = new JsonObject();
+        group.addProperty(RuleFields.OP, RuleFields.OP_ALL_OF);
+        JsonArray terms = new JsonArray();
+        terms.add(current.deepCopy());
+        terms.add(leaf);
+        group.add(RuleFields.TERMS, terms);
+        draft.setAt(RuleFields.CONDITIONS, group);
+    }
+
+    // 删除规则级条件里指定类型的全部存在叶（逐个删并整理空父组）
+    private static void removeRuleLevelPresence(RuleDraft draft, ResourceLocation type) {
+        while (true) {
+            PresenceLeaf target = null;
+            for (PresenceLeaf leaf : ruleLevelPresence(draft.view(), type)) {
+                target = leaf;
+                break;
+            }
+            if (target == null) {
+                return;
+            }
+            int remaining = ruleLevelPresence(draft.view(), type).size();
+            removeLeafAt(draft, target.path());
+            if (ruleLevelPresence(draft.view(), type).size() >= remaining) {
+                // 删除没有生效时停手，避免死循环
+                return;
+            }
+        }
+    }
+
+    // 删除一个节点并自下而上清理变空的父组；不改变 any_of / inverted 的结构语义
+    private static void removeLeafAt(RuleDraft draft, String path) {
+        String current = path;
+        while (current != null) {
+            draft.removeAt(current);
+            String parent = parentPath(current);
+            if (parent == null) {
+                return;
+            }
+            JsonElement parentNode = draft.getAt(parent);
+            if (parentNode == null || !parentNode.isJsonObject() || !isEmptyGroup(parentNode.getAsJsonObject())) {
+                return;
+            }
+            current = parent;
+        }
+    }
+
+    // 路径的父节点：conditions.terms[1] -> conditions；conditions.term -> conditions
+    private static @Nullable String parentPath(String path) {
+        int dot = path.lastIndexOf('.');
+        return dot < 0 ? null : path.substring(0, dot);
+    }
+
+    // 组合节点是否已经没有子项：all_of / any_of 看 terms，inverted 看唯一的 term
+    private static boolean isEmptyGroup(JsonObject node) {
+        String op = stringField(node, RuleFields.OP);
+        if (RuleFields.OP_INVERTED.equals(op)) {
+            JsonElement term = node.get(RuleFields.TERM);
+            return term == null || term.isJsonNull();
+        }
+        if (RuleFields.OP_ALL_OF.equals(op) || RuleFields.OP_ANY_OF.equals(op)) {
+            JsonElement terms = node.get(RuleFields.TERMS);
+            return terms == null || !terms.isJsonArray() || terms.getAsJsonArray().isEmpty();
+        }
+        return false;
+    }
+
+    // 新建存在条件叶的 JSON：催化剂保留 items 为空的待选状态，但不预写 count=1
+    private static JsonObject presenceLeafJson(ResourceLocation type) {
+        JsonObject condition = new JsonObject();
+        condition.addProperty(RuleFields.TYPE, type.toString());
+        if (CATALYST_PRESENT_ID.equals(type)) {
+            condition.add(RuleFields.CATALYST_ITEMS, new JsonArray());
+        }
+        JsonObject leaf = new JsonObject();
+        leaf.addProperty(RuleFields.OP, RuleFields.OP_LEAF);
+        leaf.add(RuleFields.CONDITION, condition);
+        return leaf;
+    }
+
+    // 按类型新建条件叶节点：通用工厂会给催化剂预写 count=1，这里改走同一份 JSON
+    private static @Nullable ConditionNode.Leaf presenceLeafNode(ResourceLocation type) {
+        ConditionExpression expression = RuleCodecs.conditionExpressionCodec(ClientTypeRegistries.conditions())
+                .parse(JsonOps.INSTANCE, presenceLeafJson(type))
+                .result()
+                .orElse(null);
+        return expression != null && expression.root() instanceof ConditionNode.Leaf leaf ? leaf : null;
+    }
+
+    // 扫描草稿中的全部存在条件叶（规则级 + 动作局部），按固定顺序编号
+    private static List<PresenceLeaf> scanPresenceLeaves(@Nullable JsonObject view) {
+        List<PresenceLeaf> leaves = new ArrayList<>();
+        if (view == null) {
+            return leaves;
+        }
+        Map<String, Integer> counters = new HashMap<>();
+        collectPresence(view.get(RuleFields.CONDITIONS), RuleFields.CONDITIONS,
+                Component.translatable(UI + "rule.presence.scope_rule"), null, -1, -1, leaves, counters);
+        JsonElement effects = view.get(RuleFields.EFFECTS);
+        if (effects != null && effects.isJsonArray()) {
+            JsonArray array = effects.getAsJsonArray();
+            for (int index = 0; index < array.size(); index++) {
+                if (!array.get(index).isJsonObject()) {
+                    continue;
+                }
+                String effectPath = RuleFields.EFFECTS + "[" + index + "]";
+                collectPresence(array.get(index).getAsJsonObject().get(RuleFields.CONDITIONS),
+                        effectPath + "." + RuleFields.CONDITIONS,
+                        Component.translatable(UI + "rule.presence.scope_action", index + 1), effectPath, -1, index,
+                        leaves, counters);
+            }
+        }
+        JsonElement outcomes = view.get(RuleFields.OUTCOMES);
+        if (outcomes != null && outcomes.isJsonArray()) {
+            JsonArray candidates = outcomes.getAsJsonArray();
+            for (int candidateIndex = 0; candidateIndex < candidates.size(); candidateIndex++) {
+                if (!candidates.get(candidateIndex).isJsonObject()) {
+                    continue;
+                }
+                JsonElement candidateEffects = candidates.get(candidateIndex).getAsJsonObject().get(RuleFields.EFFECTS);
+                if (candidateEffects == null || !candidateEffects.isJsonArray()) {
+                    continue;
+                }
+                JsonArray inner = candidateEffects.getAsJsonArray();
+                for (int effectIndex = 0; effectIndex < inner.size(); effectIndex++) {
+                    if (!inner.get(effectIndex).isJsonObject()) {
+                        continue;
+                    }
+                    String effectPath = RuleFields.OUTCOMES + "[" + candidateIndex + "]." + RuleFields.EFFECTS
+                            + "[" + effectIndex + "]";
+                    collectPresence(inner.get(effectIndex).getAsJsonObject().get(RuleFields.CONDITIONS),
+                            effectPath + "." + RuleFields.CONDITIONS,
+                            Component.translatable(UI + "rule.presence.scope_effect", candidateIndex + 1, effectIndex + 1),
+                            effectPath, candidateIndex, effectIndex, leaves, counters);
+                }
+            }
+        }
+        return leaves;
+    }
+
+    // 递归收集一棵条件树里的存在条件叶，路径语法与草稿一致（terms[i] / term / condition）
+    private static void collectPresence(@Nullable JsonElement node, String path, Component scope,
+                                        @Nullable String effectPath, int candidateIndex, int effectIndex,
+                                        List<PresenceLeaf> out, Map<String, Integer> counters) {
+        if (node == null || !node.isJsonObject()) {
+            return;
+        }
+        JsonObject object = node.getAsJsonObject();
+        if (RuleFields.OP_LEAF.equals(stringField(object, RuleFields.OP))) {
+            JsonElement condition = object.get(RuleFields.CONDITION);
+            if (condition == null || !condition.isJsonObject()) {
+                return;
+            }
+            ResourceLocation type = ResourceLocation.tryParse(stringField(condition.getAsJsonObject(), RuleFields.TYPE));
+            if (type == null || !isPresenceType(type)) {
+                return;
+            }
+            int ordinal = counters.merge(type.toString(), 1, Integer::sum);
+            out.add(new PresenceLeaf(path, path + "." + RuleFields.CONDITION, type, ordinal, scope,
+                    effectPath, candidateIndex, effectIndex));
+            return;
+        }
+        JsonElement terms = object.get(RuleFields.TERMS);
+        if (terms != null && terms.isJsonArray()) {
+            JsonArray array = terms.getAsJsonArray();
+            for (int index = 0; index < array.size(); index++) {
+                collectPresence(array.get(index), path + "." + RuleFields.TERMS + "[" + index + "]", scope,
+                        effectPath, candidateIndex, effectIndex, out, counters);
+            }
+        }
+        JsonElement term = object.get(RuleFields.TERM);
+        if (term != null && !term.isJsonNull()) {
+            collectPresence(term, path + "." + RuleFields.TERM, scope, effectPath, candidateIndex, effectIndex,
+                    out, counters);
+        }
+    }
+
+    // 规则级条件里指定类型的存在叶（输入页只呈现规则级叶）
+    private static List<PresenceLeaf> ruleLevelPresence(@Nullable JsonObject view, ResourceLocation type) {
+        List<PresenceLeaf> result = new ArrayList<>();
+        for (PresenceLeaf leaf : scanPresenceLeaves(view)) {
+            if (leaf.ruleLevel() && leaf.type().equals(type)) {
+                result.add(leaf);
+            }
+        }
+        return result;
+    }
+
+    // 开关状态：规则级条件里是否已有该类型的存在叶
+    private static boolean hasRuleLevelPresence(@Nullable JsonObject view, ResourceLocation type) {
+        return !ruleLevelPresence(view, type).isEmpty();
+    }
+
+    // 按确切叶路径取出扫描结果（编号、作用域与门槛作用域判定共用）
+    private @Nullable PresenceLeaf findPresenceLeaf(String conditionPath) {
+        for (PresenceLeaf leaf : scanPresenceLeaves(currentView())) {
+            if (leaf.conditionPath().equals(conditionPath)) {
+                return leaf;
+            }
+        }
+        return null;
+    }
+
+    // 规则级条件里第一个已选物品的催化剂叶引用（勾选固定成本时同步类型用）
+    private static List<String> ruleLevelCatalystItems(RuleDraft draft) {
+        for (PresenceLeaf leaf : ruleLevelPresence(draft.view(), CATALYST_PRESENT_ID)) {
+            List<String> items = stringList(draft.getAt(leaf.fieldPath()));
+            if (!items.isEmpty()) {
+                return items;
+            }
+        }
+        return List.of();
+    }
+
+    private static boolean isPresenceType(ResourceLocation type) {
+        return CATALYST_PRESENT_ID.equals(type) || FLUID_PRESENT_ID.equals(type);
+    }
+
+    // 存在条件的类型缓冲在切页 / 提交流程里也必须走「类型 + 关联重指向」这同一条路径
+    private boolean flushPresenceTypes() {
+        EditSession session = host.session();
+        if (session == null) {
+            return false;
+        }
+        boolean changed = false;
+        for (PresenceRow row : presenceRows) {
+            if (row.form.isVisible() && flushPresenceType(session, row.leaf, row.form)) {
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    // 把存在叶的类型缓冲写回草稿：类型改写与关联消耗配置重指向合并为一次可撤销操作
+    private static boolean flushPresenceType(EditSession session, PresenceLeaf leaf, FormView form) {
+        RuleDraft draft = session.draft();
+        // 叶可能已被条件树删除或改类型：路径不再指向同类叶时不写回，避免复活已删除的条件
+        JsonElement leafNode = draft.getAt(leaf.path());
+        if (!(leafNode instanceof JsonObject leafObject)) {
+            return false;
+        }
+        JsonElement leafCondition = leafObject.get(RuleFields.CONDITION);
+        if (!(leafCondition instanceof JsonObject condition)
+                || !leaf.type().toString().equals(stringField(condition, RuleFields.TYPE))) {
+            return false;
+        }
+        JsonElement pending = form.pendingValue(leaf.fieldPath());
+        if (pending == null) {
+            return false;
+        }
+        if (leaf.catalyst()) {
+            if (!pending.isJsonArray()) {
+                return false;
+            }
+            List<String> before = stringList(draft.getAt(leaf.fieldPath()));
+            List<String> after = stringList(pending);
+            if (before.equals(after)) {
+                return false;
+            }
+            session.apply(EditSession.OP_SET_FIELD, () -> {
+                draft.setAt(leaf.fieldPath(), pending.deepCopy());
+                retargetCatalystItems(draft, before, after);
+            });
+            return true;
+        }
+        // 流体存在叶的 fluid 是类型单一事实源：改写后让移除动作跟随（结果页不再重复提供流体字段）
+        String before = primitiveString(draft.getAt(leaf.fieldPath()));
+        String after = primitiveString(pending);
+        if (before.equals(after)) {
+            return false;
+        }
+        session.apply(EditSession.OP_SET_FIELD, () -> {
+            draft.setAt(leaf.fieldPath(), pending.deepCopy());
+            retargetFluidActions(draft, before, after);
+        });
+        return true;
+    }
+
+    // 流体类型改写后同步移除动作：fluid 与旧类型一致、或尚未指定类型的 consume_fluid 跟随新类型
+    private static void retargetFluidActions(RuleDraft draft, String before, String after) {
+        if (after.isEmpty()) {
+            // 类型被清空属于「任意流体」的中间态，不连带清空移除动作
+            return;
+        }
+        retargetFluidAction(draft.getAt(RuleFields.EFFECTS), before, after);
+        JsonElement outcomes = draft.getAt(RuleFields.OUTCOMES);
+        if (outcomes != null && outcomes.isJsonArray()) {
+            for (JsonElement candidate : outcomes.getAsJsonArray()) {
+                if (candidate.isJsonObject()) {
+                    retargetFluidAction(candidate.getAsJsonObject().get(RuleFields.EFFECTS), before, after);
+                }
+            }
+        }
+    }
+
+    private static void retargetFluidAction(@Nullable JsonElement list, String before, String after) {
+        if (list == null || !list.isJsonArray()) {
+            return;
+        }
+        for (JsonElement entry : list.getAsJsonArray()) {
+            if (!entry.isJsonObject()) {
+                continue;
+            }
+            JsonObject object = entry.getAsJsonObject();
+            if (!CONSUME_FLUID_ID.toString().equals(stringField(object, RuleFields.TYPE))) {
+                continue;
+            }
+            String existing = primitiveString(object.get("fluid"));
+            if (!existing.isEmpty() && !existing.equals(before)) {
+                continue;
+            }
+            object.addProperty("fluid", after);
+        }
+    }
+
+    // 字符串型 JSON 值（缺失或非字符串时返回空串）
+    private static String primitiveString(@Nullable JsonElement element) {
+        return element != null && element.isJsonPrimitive() ? element.getAsString() : "";
+    }
+
+    // 类型改写后同步关联消耗配置：items 与旧类型一致、或尚未指定类型的消耗配置跟随新类型
+    private static void retargetCatalystItems(RuleDraft draft, List<String> before, List<String> after) {
+        if (after.isEmpty()) {
+            // 类型被清空属于「待选物品」的中间态，不连带清空消耗配置
+            return;
+        }
+        retargetConsumptionObject(draft.getAt(RuleFields.CATALYST_COST), false, before, after);
+        retargetConsumptionList(draft.getAt(RuleFields.EFFECTS), before, after);
+        JsonElement outcomes = draft.getAt(RuleFields.OUTCOMES);
+        if (outcomes != null && outcomes.isJsonArray()) {
+            for (JsonElement candidate : outcomes.getAsJsonArray()) {
+                if (!candidate.isJsonObject()) {
+                    continue;
+                }
+                retargetConsumptionList(candidate.getAsJsonObject().get(RuleFields.EFFECTS), before, after);
+            }
+        }
+    }
+
+    private static void retargetConsumptionList(@Nullable JsonElement list, List<String> before, List<String> after) {
+        if (list == null || !list.isJsonArray()) {
+            return;
+        }
+        for (JsonElement entry : list.getAsJsonArray()) {
+            retargetConsumptionObject(entry, true, before, after);
+        }
+    }
+
+    // requireConsumeType：动作要先确认自己是消耗催化剂；规则级 catalyst_cost 本身就是该配置
+    private static void retargetConsumptionObject(@Nullable JsonElement element, boolean requireConsumeType,
+                                                 List<String> before, List<String> after) {
+        if (element == null || !element.isJsonObject()) {
+            return;
+        }
+        JsonObject object = element.getAsJsonObject();
+        if (requireConsumeType && !RuleCostBinding.CONSUME_CATALYST.equals(stringField(object, RuleFields.TYPE))) {
+            return;
+        }
+        List<String> existing = stringList(object.get(RuleFields.CATALYST_ITEMS));
+        if (!existing.isEmpty() && referencesDiffer(existing, before)) {
+            return;
+        }
+        JsonArray next = new JsonArray();
+        for (String reference : after) {
+            next.add(reference);
+        }
+        object.add(RuleFields.CATALYST_ITEMS, next);
+    }
+
+    // 引用列表是否不是同一组（集合语义、顺序无关）：任一侧为空都不算相同
+    private static boolean referencesDiffer(List<String> left, List<String> right) {
+        return left.isEmpty() || right.isEmpty() || !new HashSet<>(left).equals(new HashSet<>(right));
+    }
+
+    // 存在条件标题行：类型 + 同类型编号 + 作用域
+    private static Component presenceHeader(PresenceLeaf leaf) {
+        return Component.translatable(UI + "rule.presence.title", TypeLabels.conditionLabel(leaf.type()),
+                leaf.ordinal(), leaf.scopeLabel());
+    }
+
+    // 一类存在条件的版面：开关一行，随后每个规则级叶一个标题行 + 类型表单
+    private int layoutPresenceSection(ResourceLocation type, int x, int y, int width) {
+        int cursor = y;
+        UiCheckBox toggle = CATALYST_PRESENT_ID.equals(type) ? catalystPresenceToggle : fluidPresenceToggle;
+        if (toggle != null) {
+            toggle.setBounds(x, cursor, width, ROW_H);
+            cursor += ROW_H + PAD;
+        }
+        for (PresenceRow row : presenceRows) {
+            if (!row.leaf.ruleLevel() || !row.leaf.type().equals(type)) {
+                continue;
+            }
+            row.headerRect = new UiRect(x, cursor, width, LINE_H);
+            cursor += LINE_H;
+            cursor = layoutForm(row.form, x, cursor, width);
+        }
+        return cursor;
+    }
+
+    // 催化剂门槛字段对外统一称「最低触发数量」（原标签是「数量」）
+    private List<EditorField> relabelCatalystThreshold(List<EditorField> fields) {
+        List<EditorField> relabeled = new ArrayList<>();
+        for (EditorField field : fields) {
+            relabeled.add(RuleFields.CATALYST_COUNT.equals(field.name()) ? relabelCatalystCountField(field) : field);
+        }
+        return relabeled;
+    }
+
+    // 复制字段并替换标签 key（EditorField 没有 withLabelKey）
+    private static EditorField relabelCatalystCountField(EditorField field) {
+        return new EditorField(field.name(), UI + "rule.catalyst_min_count", field.type(), field.domain(),
+                field.nullable(), field.required(), field.registry(), field.enumGroup(), field.hintKey(),
+                field.subFields(), field.presets(), field.numbers(), field.displayPrecision());
+    }
+
+    // 门槛留空时给出「默认：N」；显式填写门槛后不再显示提示
+    private @Nullable Component thresholdNote(FormView form, String countPath, String conditionPath) {
+        JsonElement pending = form.pendingValue(countPath);
+        if (pending != null && !pending.isJsonNull()) {
+            return null;
+        }
+        return Component.translatable(UI + "rule.catalyst_min_count_effective", effectiveThreshold(conditionPath));
+    }
+
+    // 有效门槛：与运行期完全同源 —— 草稿解码成 Rule 后调用 core 的 resolveThreshold；
+    // 草稿还不完整（解码失败）时才退化为同作用域消耗配置的 count
+    private int effectiveThreshold(String conditionPath) {
+        JsonObject view = currentView();
+        if (view == null) {
+            return CatalystPresentCondition.DEFAULT_COUNT;
+        }
+        Rule rule = RuleCodecs.codec(ClientTypeRegistries.effects(), ClientTypeRegistries.conditions())
+                .parse(JsonOps.INSTANCE, view)
+                .result()
+                .orElse(null);
+        if (rule == null) {
+            return fallbackThreshold(conditionPath);
+        }
+        return CatalystThresholdProjection.resolveThreshold(rule, taggedItems(conditionPath),
+                scopeEffectOf(rule, conditionPath));
+    }
+
+    // 条件叶声明的候选物品引用（item id / #tag）
+    private List<TaggedId> taggedItems(String conditionPath) {
+        EditSession session = host.session();
+        List<TaggedId> items = new ArrayList<>();
+        if (session == null) {
+            return items;
+        }
+        for (String reference : stringList(session.draft().getAt(conditionPath + "." + RuleFields.CATALYST_ITEMS))) {
+            TaggedId.parse(reference).result().ifPresent(items::add);
+        }
+        return items;
+    }
+
+    // 承载条件叶的作用域对象路径：规则级叶对应固定成本，动作局部叶对应它所在的动作
+    private static String scopePathOf(String conditionPath) {
+        int marker = conditionPath.indexOf("." + RuleFields.CONDITIONS);
+        return marker < 0 ? RuleFields.CATALYST_COST : conditionPath.substring(0, marker);
+    }
+
+    // 条件叶所属的动作实例（null 表示规则级条件）
+    private static @Nullable Effect scopeEffectOf(Rule rule, String conditionPath) {
+        String scope = scopePathOf(conditionPath);
+        if (RuleFields.CATALYST_COST.equals(scope)) {
+            return null;
+        }
+        int effect = indexIn(scope, RuleFields.EFFECTS);
+        if (effect < 0) {
+            return null;
+        }
+        int candidate = indexIn(scope, RuleFields.OUTCOMES);
+        if (candidate < 0) {
+            return effect < rule.effects().size() ? rule.effects().get(effect) : null;
+        }
+        if (candidate >= rule.outcomes().size()) {
+            return null;
+        }
+        List<Effect> effects = rule.outcomes().get(candidate).effects();
+        return effect < effects.size() ? effects.get(effect) : null;
+    }
+
+    // 解码失败时的退路（规范允许）：同作用域消耗配置的 count，没有则用默认门槛
+    private int fallbackThreshold(String conditionPath) {
+        EditSession session = host.session();
+        if (session == null) {
+            return CatalystPresentCondition.DEFAULT_COUNT;
+        }
+        RuleDraft draft = session.draft();
+        List<String> items = stringList(draft.getAt(conditionPath + "." + RuleFields.CATALYST_ITEMS));
+        String scopePath = scopePathOf(conditionPath);
+        JsonElement scope = draft.getAt(scopePath);
+        if (scope == null || !scope.isJsonObject()) {
+            return CatalystPresentCondition.DEFAULT_COUNT;
+        }
+        JsonObject object = scope.getAsJsonObject();
+        boolean consumption = RuleFields.CATALYST_COST.equals(scopePath)
+                || RuleCostBinding.CONSUME_CATALYST.equals(stringField(object, RuleFields.TYPE));
+        if (!consumption) {
+            return CatalystPresentCondition.DEFAULT_COUNT;
+        }
+        List<String> scopeItems = stringList(object.get(RuleFields.CATALYST_ITEMS));
+        if (!scopeItems.isEmpty() && !items.isEmpty() && referencesDiffer(scopeItems, items)) {
+            return CatalystPresentCondition.DEFAULT_COUNT;
+        }
+        return Math.max(CatalystPresentCondition.DEFAULT_COUNT,
+                intAt(scopePath + "." + RuleFields.CATALYST_COUNT));
+    }
+
+    // 草稿路径上的整数（缺失或非数字时用兜底门槛）
+    private int intAt(String path) {
+        EditSession session = host.session();
+        if (session == null) {
+            return CatalystPresentCondition.DEFAULT_COUNT;
+        }
+        JsonElement value = session.draft().getAt(path);
+        if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()) {
+            return CatalystPresentCondition.DEFAULT_COUNT;
+        }
+        return value.getAsInt();
+    }
+
+    // 字符串数组字段（缺失或非数组时返回空列表）
+    private static List<String> stringList(@Nullable JsonElement element) {
+        List<String> values = new ArrayList<>();
+        if (element == null || !element.isJsonArray()) {
+            return values;
+        }
+        for (JsonElement entry : element.getAsJsonArray()) {
+            if (entry.isJsonPrimitive()) {
+                values.add(entry.getAsString());
+            }
+        }
+        return values;
+    }
+
+    // 对象字段的字符串值（缺失或非字符串时返回空串）
+    private static String stringField(@Nullable JsonObject object, String name) {
+        if (object == null) {
+            return "";
+        }
+        JsonElement value = object.get(name);
+        return value != null && value.isJsonPrimitive() ? value.getAsString() : "";
     }
 
     // ---- 触发与条件 ----
@@ -560,7 +1289,8 @@ public final class RuleEditorEditPages {
 
             @Override
             public UiConditionTreeEditor.LeafFactory leafFactory() {
-                return base.leafFactory();
+                // 新建催化剂存在条件不预写门槛：门槛留空才能显示「默认：N」
+                return type -> CATALYST_PRESENT_ID.equals(type) ? presenceLeafNode(type) : base.leafFactory().create(type);
             }
 
             @Override
@@ -597,10 +1327,19 @@ public final class RuleEditorEditPages {
         // 先写入新建的树节点，叶参数表单才有可读取的草稿路径。
         owner.applyToDraft();
         TypeEditorDescriptor descriptor = ConditionEditorRegistry.descriptorFor(leaf.condition().type());
+        boolean catalystLeaf = CATALYST_PRESENT_ID.equals(leaf.condition().type());
+        // 催化剂门槛字段对外统一称「最低触发数量」，留空时才给出「默认：N」
+        if (catalystLeaf) {
+            descriptor = new TypeEditorDescriptor(descriptor.id(), descriptor.label(),
+                    relabelCatalystThreshold(descriptor.fields()), descriptor.readOnly());
+        }
+        PresenceLeaf presence = catalystLeaf ? findPresenceLeaf(path) : null;
         FormView form = new FormView(font, session, path);
         form.setConditionSupport(pageConditionSupport(form));
         form.setSuggestionProvider(host.suggestions());
         form.setOnChanged(host::onDraftChanged);
+        // 输入被长度上限拒绝时立刻显示一条可读提示（字段名：问题）
+        form.setOnRejectedNotice(message -> host.notice(message, UiPalette.DANGER));
         form.setCatalogOpener((field, tags, onPicked) -> {
             RuleCatalogType type = tags ? RuleCatalogType.TAG : RuleEditorP4Panels.catalogTypeOf(field);
             if (type == null || host.rejectWhenFrozen()) return;
@@ -612,7 +1351,10 @@ public final class RuleEditorEditPages {
         form.setDescriptor(descriptor);
         form.reload();
         UiModal modal = UiModal.create(font);
-        modal.title(descriptor.label());
+        // 标题带同类型编号与作用域：多个同类条件叶也能确认自己在编辑哪一项
+        modal.title(presence == null ? descriptor.label()
+                : Component.translatable(UI + "rule.presence.title", descriptor.label(),
+                        presence.ordinal(), presence.scopeLabel()));
         // 已知条件类型附带区间条（气候/昼夜/高度光照）与注册表字段的目录按钮；
         // 面板自身负责子控件的事件转发与 Tab 顺序，普通数值字段仍由表单承载
         RuleEditorP4Panels.LeafPanel panel = RuleEditorP4Panels.leafPanel(font, form, session, descriptor.fields(),
@@ -620,6 +1362,11 @@ public final class RuleEditorEditPages {
                     form.reload();
                     host.onDraftChanged();
                 }, host.modals()::push, host.workspace(), host.screenWidth(), host.screenHeight());
+        // 门槛留空时在表单下方显示与运行期同源的「默认：N」；填了显式门槛就不再显示
+        if (catalystLeaf) {
+            String countPath = path + "." + RuleFields.CATALYST_COUNT;
+            panel.addNote(() -> thresholdNote(form, countPath, path));
+        }
         int fieldHeight = descriptor.fields().size() * ROW_H + 8;
         int contentHeight = Math.clamp(Math.max(fieldHeight, panel.contentHeight() + 8), 36, 220);
         modal.contentWidget(panel, contentHeight);
@@ -667,8 +1414,11 @@ public final class RuleEditorEditPages {
         JsonObject rule = draft.view();
         int candidates = Math.max(1, ResultStructure.candidateCount(rule));
         candidateIndex = Math.clamp(candidateIndex, 0, candidates - 1);
-
-
+        // 单方案（顶层 effects）：结果页直达动作与产出参数，不渲染方案选择层
+        singlePlan = candidates == 1;
+        if (singlePlan) {
+            resultStage = Math.max(1, resultStage);
+        }
 
         candidateList = new UiListView<>(font, this::renderCandidateRow);
         candidateList.setRowHeight(ROW_H);
@@ -698,12 +1448,15 @@ public final class RuleEditorEditPages {
             requestRebuild();
         });
         candidateList.setOnActivate(index -> enterResultStage(1));
-        liveWidgets.add(candidateList);
+        if (!singlePlan) {
+            // 单方案没有方案层：列表不登记为控件，不可见也不可聚焦
+            liveWidgets.add(candidateList);
+        }
         resultBack = new UiButton(font, Component.translatable(UI + "button.result_plans"), UiButtonVariant.SECONDARY,
                 () -> enterResultStage(resultStage == 2 ? 1 : 0));
         liveWidgets.add(resultBack);
         buttons.add(resultBack);
-        if (host.screenWidth() < NARROW_WIDTH) addCandidateButton("button.candidate_edit", () -> enterResultStage(1));
+        if (!singlePlan && host.screenWidth() < NARROW_WIDTH) addCandidateButton("button.candidate_edit", () -> enterResultStage(1));
 
         JsonObject candidate = ResultStructure.candidateAt(rule, candidateIndex);
         JsonArray actions = ResultStructure.effectsAt(rule, candidateIndex);
@@ -783,7 +1536,14 @@ public final class RuleEditorEditPages {
                     liveWidgets.add(variantControl);
                 }
                 selectedAction = element.isJsonObject() ? element.getAsJsonObject() : null;
-                List<EditorField> primary = descriptor.fields().stream().filter(field -> !isCommonActionField(field)).toList();
+                // 消耗参数的主编辑入口在输入页：结果页动作详情不重复提供类型/数量/半径
+                List<EditorField> primary = new ArrayList<>(descriptor.fields().stream()
+                        .filter(field -> !isCommonActionField(field))
+                        .filter(field -> !isInputOwnedConsumptionField(typeId, field))
+                        .toList());
+                if (isConsumptionAction(typeId)) {
+                    primary.addFirst(EditorField.note(UI + "effect.consume_params_on_input"));
+                }
                 List<EditorField> advanced = descriptor.fields().stream().filter(RuleEditorEditPages::isCommonActionField).toList();
                 effectForm = newForm(session, actionPath, new TypeEditorDescriptor(descriptor.id(), descriptor.label(), primary, descriptor.readOnly()));
                 liveForms.add(effectForm);
@@ -1132,9 +1892,8 @@ public final class RuleEditorEditPages {
         }
         JsonObject view = currentView();
         JsonObject candidate = ResultStructure.candidateAt(view, item);
-        Component title = candidate == null
-                ? Component.translatable(UI + "candidate.implicit")
-                : RuleNaming.candidateTitle(candidate, item + 1, nameSource);
+        // 方案标题统一走 RuleNaming（「方案 %s：%s」），不再出现「隐式结果」这类结构术语
+        Component title = RuleNaming.candidateTitle(candidate, item + 1, nameSource);
         String text = TextScroll.trimToWidth(font, title.getString(), Math.max(1, row.width() - 4));
         graphics.drawString(font, text, row.x() + 2, row.y() + 2, focused ? UiPalette.TEXT_PRIMARY : UiPalette.TEXT_SECONDARY, false);
     }
@@ -1200,18 +1959,17 @@ public final class RuleEditorEditPages {
     }
 
     private int layoutInfo(UiRect area) {
-        int x = area.x();
-        int y = area.y();
-        autoNameRect = new UiRect(x, y, area.width(), LINE_H);
-        y += LINE_H + 2;
-        if (restoreNameButton != null) {
-            int width = fitWidth(restoreNameButton.preferredWidth(PAD), 60, area.width());
-            restoreNameButton.setBounds(x, y, width, BUTTON_H);
-            y += BUTTON_H + PAD;
-        }
-        y = layoutForm(infoForm, x, y, area.width());
-        advancedRect = new UiRect(x, y, area.width(), LINE_H * 3);
-        return advancedRect.bottom();
+        // 页内自上而下：只读规则 ID、显示名与恢复按钮、启用、优先级、多行备注
+        int idLines = Math.max(1, idTextLines(area.width()).size());
+        infoIdRect = new UiRect(area.x(), area.y(), area.width(), idLines * (font.lineHeight + 1));
+        return layoutForm(infoForm, area.x(), infoIdRect.bottom() + 2, area.width());
+    }
+
+    // 只读规则 ID 行：按可用宽度折行，完整显示不截断
+    private List<FormattedCharSequence> idTextLines(int width) {
+        JsonObject view = currentView();
+        String id = view == null ? "" : stringOf(view);
+        return font.split(Component.translatable(UI + "info.rule_id").append(": ").append(id), Math.max(8, width));
     }
 
     private int layoutInput(UiRect area) {
@@ -1228,6 +1986,7 @@ public final class RuleEditorEditPages {
             y += LINE_H + PAD;
         }
         y = layoutForm(sourceCostForm, x, y, area.width());
+        y = layoutPresenceSection(CATALYST_PRESENT_ID, x, y, area.width());
         if (catalystToggle != null) {
             catalystToggle.setBounds(x, y, area.width(), ROW_H);
             y += ROW_H + PAD;
@@ -1236,7 +1995,8 @@ public final class RuleEditorEditPages {
             catalystNoteRect = new UiRect(x, y, area.width(), LINE_H);
             y += LINE_H + PAD;
         }
-        return layoutForm(catalystForm, x, y, area.width());
+        y = layoutForm(catalystForm, x, y, area.width());
+        return layoutPresenceSection(FLUID_PRESENT_ID, x, y, area.width());
     }
 
     private int layoutTrigger(UiRect area) {
@@ -1292,9 +2052,32 @@ public final class RuleEditorEditPages {
         return List.of("chance", "delay_ticks", "conditions").contains(field.name());
     }
 
+    // 消耗类动作：消耗参数主入口在输入页，结果页只保留概率 / 延迟 / 局部条件
+    private static boolean isConsumptionAction(ResourceLocation type) {
+        return CONSUME_SOURCE_ID.equals(type) || CONSUME_CATALYST_ID.equals(type) || CONSUME_FLUID_ID.equals(type);
+    }
+
+    // 结果页不重复提供的消耗参数字段：类型与数量/半径都归输入页
+    private static boolean isInputOwnedConsumptionField(ResourceLocation type, EditorField field) {
+        String name = field.name();
+        if (CONSUME_SOURCE_ID.equals(type)) {
+            return RuleFields.CATALYST_COUNT.equals(name);
+        }
+        if (CONSUME_CATALYST_ID.equals(type)) {
+            return RuleFields.CATALYST_ITEMS.equals(name) || RuleFields.CATALYST_COUNT.equals(name)
+                    || RuleFields.CATALYST_RADIUS.equals(name);
+        }
+        if (CONSUME_FLUID_ID.equals(type)) {
+            // 流体类型由输入页的存在叶声明；require_source 是移除动作自身的匹配行为，仍可在此编辑
+            return "fluid".equals(name);
+        }
+        return false;
+    }
+
     private void enterResultStage(int stage) {
         if (blockNavigation()) return;
-        resultStage = stage;
+        // 单方案没有方案层，最小层级是动作列表
+        resultStage = singlePlan ? Math.clamp(stage, 1, 2) : Math.clamp(stage, 0, 2);
         pageScroll.setOffset(0);
         requestRebuild();
     }
@@ -1309,32 +2092,37 @@ public final class RuleEditorEditPages {
 
     private int layoutResults(UiRect area) {
         boolean wide = area.width() >= NARROW_WIDTH;
-        boolean plans = wide || resultStage == 0;
+        // 单方案没有方案层：窄屏最低层级是动作列表，宽屏左列直接是动作列表
+        boolean plans = !singlePlan && (wide || resultStage == 0);
         boolean actions = wide || resultStage == 1;
         boolean detail = wide || resultStage == 2;
+        boolean backVisible = !wide && resultStage > (singlePlan ? 1 : 0);
         show(candidateList, plans);
-        candidateButtons.forEach(button -> show(button, plans));
+        candidateButtons.forEach(button -> show(button, plans || (singlePlan && actions)));
         show(combinationControl, plans);
         show(effectList, actions);
         effectButtons.forEach(button -> show(button, actions));
         show(safeSpawnBox, detail && showAdvancedEffects); show(fillOriginBox, detail && showAdvancedEffects);
         show(effectForm, detail); show(variantControl, detail); show(advancedButton, detail);
         show(advancedEffectForm, detail && showAdvancedEffects);
-        show(resultBack, !wide && resultStage > 0);
-        combinationLabelRect = null; flatNoteRect = null; convertHintRect = null; productPreviewRect = null; effectNoteRect = null;
+        show(resultBack, backVisible);
+        combinationLabelRect = null; productPreviewRect = null; effectNoteRect = null;
         int x = area.x(), y = area.y();
-        if (!wide && resultStage > 0 && resultBack != null) {
+        if (backVisible && resultBack != null) {
             resultBack.setLabel(Component.translatable(UI + (resultStage == 2 ? "button.result_actions" : "button.result_plans")));
             resultBack.setBounds(x, y, area.width(), BUTTON_H); y += BUTTON_H + PAD;
         }
         if (!wide) {
             if (resultStage == 0) return layoutPlans(x, y, area.width());
-            if (resultStage == 1) return layoutActions(x, y, area.width());
+            if (resultStage == 1) return layoutActions(x, y, area.width(), singlePlan);
             return layoutActionDetail(x, y, area.width());
         }
         int navigationWidth = Math.clamp(area.width() * 36L / 100, 120, 200);
-        int navY = layoutPlans(x, y, navigationWidth) + PAD;
-        navY = layoutActions(x, navY, navigationWidth);
+        int navY = y;
+        if (!singlePlan) {
+            navY = layoutPlans(x, navY, navigationWidth) + PAD;
+        }
+        navY = layoutActions(x, navY, navigationWidth, singlePlan);
         int detailX = x + navigationWidth + PAD;
         return Math.max(navY, layoutActionDetail(detailX, y, area.right() - detailX));
     }
@@ -1350,11 +2138,16 @@ public final class RuleEditorEditPages {
         return y + layoutButtonGroup(candidateButtons, x, y, width);
     }
 
-    private int layoutActions(int x, int y, int width) {
+    // 动作列表；单方案时「添加结果」等按钮与动作按钮同列（没有独立的方案层）
+    private int layoutActions(int x, int y, int width, boolean withCandidateButtons) {
         int listHeight = Math.clamp(effectList == null ? 1 : effectList.size(), 1, LIST_ROWS) * 24 + 2;
         if (effectList != null) effectList.setBounds(x, y, width, listHeight);
         y += listHeight + BUTTON_GAP;
-        return y + layoutButtonGroup(effectButtons, x, y, width);
+        y += layoutButtonGroup(effectButtons, x, y, width);
+        if (withCandidateButtons) {
+            y += layoutButtonGroup(candidateButtons, x, y, width) + BUTTON_GAP;
+        }
+        return y;
     }
 
     private int layoutActionDetail(int x, int y, int width) {
@@ -1485,19 +2278,15 @@ public final class RuleEditorEditPages {
         pageScroll.renderScrollbar(graphics, UiTheme.secondaryStyle());
     }
 
+    // 基本页第一行：只读规则 ID（完整显示，不截断）
     private void renderInfo(GuiGraphics graphics) {
-        JsonObject view = currentView();
-        if (view != null) {
-            Component title = RuleNaming.ruleTitle(view, nameSource);
-            drawText(graphics, autoNameRect, Component.translatable(UI + "info.auto_name", title), UiPalette.TEXT_SECONDARY);
+        if (infoIdRect == null || currentView() == null) {
+            return;
         }
-        if (advancedRect != null && view != null) {
-            drawText(graphics, new UiRect(advancedRect.x(), advancedRect.y(), advancedRect.width(), LINE_H),
-                    Component.translatable(UI + "info.advanced"), UiPalette.TEXT_DISABLED);
-            drawText(graphics, new UiRect(advancedRect.x(), advancedRect.y() + LINE_H, advancedRect.width(), LINE_H),
-                    Component.literal("id: " + stringOf(view)), UiPalette.TEXT_DISABLED);
-            drawText(graphics, new UiRect(advancedRect.x(), advancedRect.y() + LINE_H * 2, advancedRect.width(), LINE_H),
-                    Component.translatable(UI + "info.schema_version").append(": ").append(schemaVersionOf(view)), UiPalette.TEXT_DISABLED);
+        int lineY = infoIdRect.y();
+        for (FormattedCharSequence line : idTextLines(infoIdRect.width())) {
+            graphics.drawString(font, line, infoIdRect.x(), lineY, UiPalette.TEXT_PRIMARY, false);
+            lineY += font.lineHeight + 1;
         }
     }
 
@@ -1509,11 +2298,22 @@ public final class RuleEditorEditPages {
         if (catalystNote != null) {
             drawText(graphics, catalystNoteRect, catalystNote, UiPalette.TEXT_DISABLED);
         }
+        // 存在条件标题行：类型 + 同类型编号 + 作用域，多个同类叶也能逐项辨识
+        for (PresenceRow row : presenceRows) {
+            drawText(graphics, row.headerRect, presenceHeader(row.leaf), UiPalette.TEXT_SECONDARY);
+        }
     }
 
     private void renderTrigger(GuiGraphics graphics) {
-        drawText(graphics, triggerNoteRect, Component.translatable(UI + "trigger.note"), UiPalette.TEXT_DISABLED);
-        drawText(graphics, delayHintRect, Component.translatable(UI + "trigger.delay_hint"), UiPalette.TEXT_DISABLED);
+        JsonObject view = currentView();
+        // 提示只在「显式选择空触发」这一确实缺失的状态出现，有效触发不再恒显
+        if (RuleTriggers.isExplicitlyEmpty(view)) {
+            drawText(graphics, triggerNoteRect, Component.translatable(UI + "trigger.note"), UiPalette.TEXT_DISABLED);
+        }
+        // 等待时长只对自然触发生效，其他触发组合下不显示该说明
+        if (RuleTriggers.allowsDelay(view)) {
+            drawText(graphics, delayHintRect, Component.translatable(UI + "trigger.delay_hint"), UiPalette.TEXT_DISABLED);
+        }
     }
 
     private void renderResults(GuiGraphics graphics) {
@@ -1536,10 +2336,7 @@ public final class RuleEditorEditPages {
         if (view == null) {
             return;
         }
-        if (!ResultStructure.hasOutcomes(view)) {
-            drawText(graphics, flatNoteRect, Component.translatable(UI + "candidate.flat_note"), UiPalette.TEXT_DISABLED);
-            drawText(graphics, convertHintRect, Component.translatable(UI + "structure.convert_hint"), UiPalette.TEXT_DISABLED);
-        }
+        // 不再用「本规则使用顶层 effects」这类结构说明；单方案直接进入动作层
         Component readonlyNote = readonlyEffectNote(view);
         if (readonlyNote != null) {
             drawText(graphics, effectNoteRect, readonlyNote, UiPalette.WARNING);
@@ -1587,7 +2384,8 @@ public final class RuleEditorEditPages {
         if (!enabled) {
             return false;
         }
-        boolean changed = false;
+        // 存在条件的类型改写必须先落盘，才能与关联消耗配置的重指向合并为一次可撤销操作
+        boolean changed = flushPresenceTypes();
         for (FormView form : liveForms) {
             if (form.isVisible() && form.applyToDraft()) {
                 changed = true;
@@ -1729,6 +2527,12 @@ public final class RuleEditorEditPages {
         if (catalystToggle != null) {
             catalystToggle.setEnabled(enabled && RuleCostBinding.consumeCatalyst(view) == null);
         }
+        if (catalystPresenceToggle != null) {
+            catalystPresenceToggle.setEnabled(enabled);
+        }
+        if (fluidPresenceToggle != null) {
+            fluidPresenceToggle.setEnabled(enabled);
+        }
         triggerBoxes.forEach(box -> box.setEnabled(enabled));
         if (variantControl != null) variantControl.setEnabled(enabled);
         if (combinationControl != null) {
@@ -1745,6 +2549,10 @@ public final class RuleEditorEditPages {
         }
         for (UiButton button : buttons) {
             button.setEnabled(enabled);
+        }
+        // 恢复自动命名按钮同时受自身条件约束：没有显示名时恒为禁用
+        if (restoreNameButton != null) {
+            restoreNameButton.setEnabled(enabled && view != null && view.has(RuleFields.DISPLAY_NAME));
         }
         for (UiButton button : candidateButtons) {
             button.setEnabled(enabled);
@@ -1872,6 +2680,8 @@ public final class RuleEditorEditPages {
         boolean handled = false;
         for (UiWidget widget : liveWidgets) {
             if (widget.isVisible() && widget.mouseClicked(mouseX, mouseY, button)) {
+                // 记录按下归属：随后的释放与拖动只发给这个控件
+                pressedWidget = widget;
                 handled = true;
                 break;
             }
@@ -1914,13 +2724,10 @@ public final class RuleEditorEditPages {
                 return true;
             }
         }
-        boolean handled = false;
-        for (UiWidget widget : liveWidgets) {
-            if (widget.isVisible() && widget.mouseReleased(mouseX, mouseY, button)) {
-                handled = true;
-                break;
-            }
-        }
+        // 释放只派发给承接按下的控件；没有归属时不派发，避免残留按下态吞掉释放
+        UiWidget owner = pressedWidget;
+        pressedWidget = null;
+        boolean handled = owner != null && owner.isVisible() && owner.mouseReleased(mouseX, mouseY, button);
         flushRebuild();
         return handled;
     }
@@ -2096,6 +2903,12 @@ public final class RuleEditorEditPages {
         if (catalystToggle != null) {
             catalystToggle.setChecked(view.has(RuleFields.CATALYST_COST) || RuleCostBinding.consumeCatalyst(view) != null);
         }
+        if (catalystPresenceToggle != null) {
+            catalystPresenceToggle.setChecked(hasRuleLevelPresence(view, CATALYST_PRESENT_ID));
+        }
+        if (fluidPresenceToggle != null) {
+            fluidPresenceToggle.setChecked(hasRuleLevelPresence(view, FLUID_PRESENT_ID));
+        }
         List<String> triggers = RuleTriggers.effective(view);
         for (int index = 0; index < triggerBoxes.size(); index++) {
             triggerBoxes.get(index).setChecked(triggers.contains(RuleTriggers.known().get(index)));
@@ -2168,13 +2981,5 @@ public final class RuleEditorEditPages {
             return "";
         }
         return element.getAsString();
-    }
-
-    private static Component schemaVersionOf(JsonObject view) {
-        JsonElement element = view.get(RuleFields.SCHEMA_VERSION);
-        if (element == null || !element.isJsonPrimitive()) {
-            return Component.literal("-");
-        }
-        return Component.literal(element.getAsString());
     }
 }

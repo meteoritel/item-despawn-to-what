@@ -90,10 +90,8 @@ public final class BuiltinEditorDefaults {
                 body.addProperty("mode", "exact");
                 body.add("biomes", new JsonArray());
             }
-            case "catalyst_present" -> {
-                body.add("items", new JsonArray());
-                body.addProperty("count", 1);
-            }
+            // 新叶不预写门槛：count 缺失表示「未填写」，由运行投影按消耗配置解析默认值
+            case "catalyst_present" -> body.add("items", new JsonArray());
             default -> {
                 // 第三方条件类型：只给 type，其余交给只读回退或用户填写
             }

@@ -92,6 +92,8 @@ core/api  ←──────────── core/model ──────�
 | `SimpleConditionType<P>` | record | `(id, MapCodec<P>, Validator<P>, ConditionEvaluator<P>, EvaluabilityCheck<P>)` 一行式实现；四参构造可求值性恒 `AVAILABLE` |
 
 > 约定：**参数对象 `P` 同时实现 `Effect`/`Condition`**，分发解码后可直接当规则里的效果/条件叶使用。新增类型必须让参数 record 实现对应接口。
+>
+> `Effect` 接口除 `type()` / `delayTicks()` / `chance()` / `conditions()` 外，还要求实现 `withConditions(@Nullable ConditionExpression)`——返回仅替换效果级条件、其余参数原样保留的新实例。这是为运行期门槛投影扩展的公开 API：执行器按**具体效果类型**强转分发，不能用包装 record 顶替，故由实现类重建真实效果类型（10 个内置效果全部实现），见 [催化剂门槛运行投影](../systems/catalyst-threshold-projection.md)。
 
 ### 3.4 编解码与校验
 

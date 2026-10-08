@@ -13,6 +13,7 @@
 | [entity-products.md](entity-products.md) | 统一实体产物 JSON、子类编辑与所有规则共用的生成阈值 |
 | [manual-acceptance.md](manual-acceptance.md) | 双平台手动验收清单（含已知缺口表），供回归与最终审阅 |
 | [ui-defect-fixes-validation-2026-10-07.md](ui-defect-fixes-validation-2026-10-07.md) | 标签轮播、模型适框、组件层级与悬停穿透的游戏内验收 |
+| [editor-page-acceptance-2026-10-07.md](editor-page-acceptance-2026-10-07.md) | 规则编辑器四页职责、文本输入、输入-触发联动与催化剂门槛的玩家人工验收（双平台 / 双尺寸 / 双语言） |
 
 后端模块的源码地图见 [../dev/backend/README.md](../dev/backend/README.md)。
 

@@ -16,7 +16,7 @@ import java.util.Optional;
 /**
  * catalyst_present 条件的求值器：统计掉落物所在方块格内的催化剂数量。
  * 范围与旧实现一致：物品所在方块位置的 1×1×1 立方体，排除源物品自身与已死亡实体；
- * 命中任意候选引用的堆叠数量累加，达到 count 即成立。标签判定走 TagLookup（带缓存）。
+ * 命中任意候选引用的堆叠数量累加，达到门槛即成立。标签判定走 TagLookup（带缓存）。
  * 纯谓词：只读取上下文，不修改世界（消耗由 consume_catalyst 效果承担）；不处理取反（取反由条件树的 inverted 节点承担）。
  */
 public final class CatalystPresentEvaluator {
@@ -25,9 +25,12 @@ public final class CatalystPresentEvaluator {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    // 附近命中物品的总数达到 count 即成立
+    // 附近命中物品的总数达到门槛即成立
     public static boolean test(CatalystPresentCondition condition, ConditionContext context) {
-        if (condition.items().isEmpty() || condition.count() <= 0) {
+        // 正常运行必经规则索引投影（core/runtime/CatalystThresholdProjection）填入有效门槛；
+        // 这里对留空门槛按默认 1 兜底，避免绕过索引的调用路径出现拆箱异常或错误门槛。
+        int threshold = condition.count() == null ? CatalystPresentCondition.DEFAULT_COUNT : condition.count();
+        if (condition.items().isEmpty() || threshold <= 0) {
             // 非法配置（加载期已拒载），fail-closed
             return false;
         }
@@ -39,9 +42,9 @@ public final class CatalystPresentEvaluator {
                             && matchesAny(entity.getItem(), condition, context)) {
                         total[0] += entity.getItem().getCount();
                     }
-                    return total[0] >= condition.count();
+                    return total[0] >= threshold;
                 }, new java.util.ArrayList<>(1), 1);
-        return total[0] >= condition.count();
+        return total[0] >= threshold;
     }
 
     // 物品是否命中候选引用中的任意一项

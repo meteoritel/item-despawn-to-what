@@ -11,6 +11,7 @@ import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
+import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiCyclicRange;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
@@ -26,6 +27,7 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiNarration;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiRangeBar;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiStructureDiagram;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalog;
@@ -35,6 +37,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -536,7 +539,7 @@ public final class RuleEditorP4Panels {
         form.setCatalogOpener((field, tags, picked) -> pushModal.accept(catalogModal(font, workspace,
                 tags ? RuleCatalogType.TAG : catalogTypeOf(field), isListField(field),
                 Component.translatable(field.labelKey()), screenWidth, screenHeight, picked, field)));
-        return new LeafPanel(form, extras, buttons);
+        return new LeafPanel(font, form, extras, buttons);
     }
 
     private static boolean isIntegerLike(EditorField field) {
@@ -681,18 +684,32 @@ public final class RuleEditorP4Panels {
      */
     public static final class LeafPanel implements UiWidget, UiFocusTarget {
 
+        private final Font font;
         private final FormView form;
         private final List<UiWidget> extras;
         private final List<UiButton> buttons;
+        // 动态说明行（门槛留空时的「默认：N」等）：供应者返回 null 表示当前不画出该行
+        private final List<Supplier<Component>> notes = new ArrayList<>();
+        private final List<UiRect> noteRects = new ArrayList<>();
+        // 说明行行高：比正文字高多 1 像素，避免与表单末行贴死
+        private final int noteLineHeight;
         private UiRect bounds = new UiRect(0, 0, 0, 0);
         private boolean focused;
         private boolean enabled = true;
         private int focusIndex;
 
-        LeafPanel(FormView form, List<UiWidget> extras, List<UiButton> buttons) {
+        LeafPanel(Font font, FormView form, List<UiWidget> extras, List<UiButton> buttons) {
+            this.font = font;
+            this.noteLineHeight = font.lineHeight + 1;
             this.form = form;
             this.extras = extras;
             this.buttons = buttons;
+        }
+
+        // 追加一条动态说明行：高度在布局时预留，内容每帧重新求值
+        public LeafPanel addNote(Supplier<Component> note) {
+            notes.add(note);
+            return this;
         }
 
         // 面板内容总高（模态据此申请高度）
@@ -705,6 +722,7 @@ public final class RuleEditorP4Panels {
                 height += BUTTON_HEIGHT + BUTTON_GAP;
             }
             height += form.contentHeight();
+            height += notes.size() * noteLineHeight;
             return Math.max(24, height);
         }
 
@@ -733,7 +751,15 @@ public final class RuleEditorP4Panels {
                 cursorY += extraHeight + EXTRA_GAP;
             }
             cursorY = layoutButtons(cursorY);
-            form.setBounds(x, cursorY, width, Math.max(12, bounds.bottom() - cursorY));
+            int notesHeight = notes.size() * noteLineHeight;
+            form.setBounds(x, cursorY, width, Math.max(12, bounds.bottom() - cursorY - notesHeight));
+            // 说明行固定排在表单下方，供应者返回 null 时仅留白不画字
+            noteRects.clear();
+            int noteY = cursorY + Math.max(12, bounds.bottom() - cursorY - notesHeight);
+            for (int index = 0; index < notes.size(); index++) {
+                noteRects.add(new UiRect(x, noteY, width, noteLineHeight));
+                noteY += noteLineHeight;
+            }
         }
 
         private int layoutButtons(int cursorY) {
@@ -825,6 +851,15 @@ public final class RuleEditorP4Panels {
                 button.render(graphics, renderFont, mouseX, mouseY);
             }
             form.render(graphics, renderFont, mouseX, mouseY);
+            for (int index = 0; index < notes.size() && index < noteRects.size(); index++) {
+                Component note = notes.get(index).get();
+                if (note == null) {
+                    continue;
+                }
+                UiRect rect = noteRects.get(index);
+                String text = TextScroll.trimToWidth(font, note.getString(), Math.max(1, rect.width()));
+                graphics.drawString(font, text, rect.x(), rect.y(), UiPalette.TEXT_SECONDARY, false);
+            }
         }
 
         @Override

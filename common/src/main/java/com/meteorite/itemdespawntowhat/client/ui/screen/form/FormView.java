@@ -74,7 +74,12 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
     }
     private @Nullable ConditionSupport conditionSupport;
     private @Nullable Runnable changeListener;
+    // 输入被上限拒绝时的即时提示出口（页面显示 notice）
+    private @Nullable Consumer<Component> rejectedNoticeHandler;
     private @Nullable Picker picker;
+    // 本次按下命中的控件：释放与拖动只派发给它，避免无关控件吞掉释放或残留按下态
+    private @Nullable com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget pressedWidget;
+    private @Nullable FormControl pressedControl;
 
     private int labelWidth = 88;
     private int viewportX;
@@ -107,9 +112,57 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
     // 追加一个字段
     public FormView addField(EditorField field) {
         Row row = new Row(field, pathFor(field), FormControl.create(font, this, field, this::notifyChanged));
+        row.control.setRejectedNotice(message -> {
+            if (rejectedNoticeHandler != null) {
+                rejectedNoticeHandler.accept(message);
+            }
+        });
         addPickers(row);
         rows.add(row);
         return this;
+    }
+
+    // 读取某字段控件当前的未提交值（宿主把缓冲并入自己的编辑步时使用）；字段不存在返回 null
+    public @Nullable JsonElement pendingValue(String path) {
+        for (Row row : rows) {
+            if (row.path.equals(path)) {
+                return row.control.store();
+            }
+        }
+        return null;
+    }
+
+    // 给某个字段行挂行尾操作按钮（例如「恢复自动命名」）；宽度按文本自适应
+    public FormView setRowAction(String path, com.meteorite.itemdespawntowhat.client.ui.widget.UiButton button) {
+        for (Row row : rows) {
+            if (row.path.equals(path)) {
+                row.actions.clear();
+                row.actions.add(button);
+                break;
+            }
+        }
+        return this;
+    }
+
+    // 覆盖某字段行的控件高度（<=0 恢复默认）；例如基本页加高的优先级控件
+    public FormView setRowHeight(String path, int height) {
+        for (Row row : rows) {
+            if (row.path.equals(path)) {
+                row.control.setHeightOverride(height);
+            }
+        }
+        return this;
+    }
+
+    // 输入被上限拒绝时的即时提示出口
+    public FormView setOnRejectedNotice(@Nullable Consumer<Component> handler) {
+        this.rejectedNoticeHandler = handler;
+        return this;
+    }
+
+    // 行尾操作按钮宽度：文本宽度加内边距
+    private int actionWidth(com.meteorite.itemdespawntowhat.client.ui.widget.UiButton button) {
+        return Math.max(16, font.width(button.label()) + 8);
     }
 
     // 支持叶子面板在描述符载入后挂接目录入口。
@@ -344,6 +397,7 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         for (Row row : rows) {
             row.control.addFocusTargets(out);
             out.addAll(row.pickers);
+            out.addAll(row.actions);
         }
     }
 
@@ -418,14 +472,19 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         for (Row row : rows) {
             row.narrow = narrow;
             row.labelWidth = effectiveLabelWidth;
-            row.controlWidth = Math.max(16, controlWidth - row.pickers.size() * 32);
+            int reserved = row.pickers.size() * 32;
+            for (com.meteorite.itemdespawntowhat.client.ui.widget.UiButton action : row.actions) {
+                reserved += actionWidth(action) + 2;
+            }
+            row.controlWidth = Math.max(16, controlWidth - reserved);
             row.controlRelX = narrow ? 0 : effectiveLabelWidth + LABEL_GAP;
             if (row.field.type() == EditorFieldType.NOTE) {
                 row.controlRelY = 0;
                 row.contentHeight = row.control.height();
             } else {
                 row.control.measure(row.controlWidth);
-                int controlHeight = row.control.height();
+                // 布局高度：控件自然高度，或被 setRowHeight 显式覆盖（加高的优先级控件）
+                int controlHeight = row.control.layoutHeight();
                 row.controlRelY = narrow ? LABEL_LINE_HEIGHT : Math.max(0, (Math.max(controlHeight, LABEL_LINE_HEIGHT) - controlHeight) / 2);
                 row.contentHeight = Math.max(controlHeight + row.controlRelY, LABEL_LINE_HEIGHT);
             }
@@ -448,8 +507,15 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         for (Row row : rows) {
             int screenY = rowScreenY(row);
             row.control.setBounds(viewportX + row.controlRelX, screenY + row.controlRelY, row.controlWidth);
+            int cursor = viewportX + row.controlRelX + row.controlWidth;
             for (int i = 0; i < row.pickers.size(); i++) row.pickers.get(i).setBounds(
-                    viewportX + row.controlRelX + row.controlWidth + i * 32 + 2, screenY + row.controlRelY, 30, 12);
+                    cursor + i * 32 + 2, screenY + row.controlRelY, 30, 12);
+            int actionX = cursor + row.pickers.size() * 32 + 2;
+            for (com.meteorite.itemdespawntowhat.client.ui.widget.UiButton action : row.actions) {
+                int width = actionWidth(action);
+                action.setBounds(actionX, screenY + row.controlRelY, width, UiTheme.ROW_HEIGHT);
+                actionX += width + 2;
+            }
         }
     }
 
@@ -492,6 +558,7 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         for (Row row : rows) {
             row.control.setEnabled(newEnabled);
             row.pickers.forEach(button -> button.setEnabled(newEnabled));
+            row.actions.forEach(button -> button.setEnabled(newEnabled));
         }
     }
 
@@ -547,13 +614,14 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
                 }
                 row.control.render(graphics, renderFont, mouseX, mouseY);
                 for (var pickerButton : row.pickers) pickerButton.render(graphics, renderFont, mouseX, mouseY);
+                for (com.meteorite.itemdespawntowhat.client.ui.widget.UiButton action : row.actions) action.render(graphics, renderFont, mouseX, mouseY);
             }
             if (highlightTicks > 0 && highlightPath != null) {
                 for (Row row : rows) {
                     if (row.path.equals(highlightPath)) {
                         int screenY = rowScreenY(row);
                         UiTheme.drawFocusOutline(graphics, new UiRect(viewportX + row.controlRelX - 1,
-                                screenY + row.controlRelY - 1, row.controlWidth + 2, row.control.height() + 2));
+                                screenY + row.controlRelY - 1, row.controlWidth + 2, row.control.layoutHeight() + 2));
                         break;
                     }
                 }
@@ -578,7 +646,9 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
             text = text + " *";
         }
         String trimmed = TextScroll.trimToWidth(renderFont, text, Math.max(4, width));
-        graphics.drawString(renderFont, trimmed, viewportX, screenY + 1, UiPalette.TEXT_PRIMARY, false);
+        // 该行有本地校验问题（如输入超限被拒）时标签改用警示色，悬停可看到具体文案
+        int color = row.control.issues(row.path).isEmpty() ? UiPalette.TEXT_PRIMARY : UiPalette.DANGER;
+        graphics.drawString(renderFont, trimmed, viewportX, screenY + 1, color, false);
     }
 
     // 只读说明行
@@ -662,12 +732,34 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         }
         syncBounds();
         for (Row row : rows) {
-            for (var pickerButton : row.pickers) if (pickerButton.mouseClicked(mouseX, mouseY, button)) return true;
+            for (var pickerButton : row.pickers) {
+                if (pickerButton.mouseClicked(mouseX, mouseY, button)) {
+                    return rememberPress(pickerButton);
+                }
+            }
+            for (com.meteorite.itemdespawntowhat.client.ui.widget.UiButton action : row.actions) {
+                if (action.mouseClicked(mouseX, mouseY, button)) {
+                    return rememberPress(action);
+                }
+            }
             if (row.control.mouseClicked(mouseX, mouseY, button)) {
-                return true;
+                return rememberPress(row.control);
             }
         }
         return false;
+    }
+
+    // 记录本次按下的归属：只允许这个控件接收随后的释放与拖动
+    private boolean rememberPress(com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget widget) {
+        this.pressedWidget = widget;
+        this.pressedControl = null;
+        return true;
+    }
+
+    private boolean rememberPress(FormControl control) {
+        this.pressedWidget = null;
+        this.pressedControl = control;
+        return true;
     }
 
     @Override
@@ -675,12 +767,14 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         if (picker != null) {
             return picker.mouseReleased(mouseX, mouseY, button);
         }
-        boolean consumed = false;
-        for (Row row : rows) {
-            for (var pickerButton : row.pickers) consumed |= pickerButton.mouseReleased(mouseX, mouseY, button);
-            consumed |= row.control.mouseReleased(mouseX, mouseY, button);
+        com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget widget = pressedWidget;
+        FormControl control = pressedControl;
+        this.pressedWidget = null;
+        this.pressedControl = null;
+        if (widget != null) {
+            return widget.mouseReleased(mouseX, mouseY, button);
         }
-        return consumed;
+        return control != null && control.mouseReleased(mouseX, mouseY, button);
     }
 
     @Override
@@ -688,11 +782,10 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         if (picker != null) {
             return picker.mouseDragged(mouseX, mouseY, button, dragX, dragY);
         }
-        boolean consumed = false;
-        for (Row row : rows) {
-            consumed |= row.control.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+        if (pressedWidget != null) {
+            return pressedWidget.mouseDragged(mouseX, mouseY, button, dragX, dragY);
         }
-        return consumed;
+        return pressedControl != null && pressedControl.mouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
     @Override
@@ -777,6 +870,7 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
     private static final class Row {
         private boolean defaultDisplayed;
         private final List<com.meteorite.itemdespawntowhat.client.ui.widget.UiButton> pickers = new ArrayList<>();
+        private final List<com.meteorite.itemdespawntowhat.client.ui.widget.UiButton> actions = new ArrayList<>();
 
         final EditorField field;
         final String path;

@@ -274,6 +274,7 @@ final class NumberControl extends FormControl {
 
     // ---- FormControl ----
 
+    // 自然高度即默认行高；需要加高时由 FormControl 的行高覆盖（基本页优先级控件）生效
     @Override
     int height() {
         return DEFAULT_HEIGHT;
@@ -281,6 +282,8 @@ final class NumberControl extends FormControl {
 
     @Override
     void setBounds(int x, int y, int width) {
+        // 有效行高：默认 12；被 FormControl 行高覆盖时 slider 与数字输入框一起变高
+        int rowHeight = layoutHeight();
         int reserved = 0;
         for (UiButton button : presetButtons) {
             reserved += buttonWidth(button) + GAP;
@@ -288,12 +291,14 @@ final class NumberControl extends FormControl {
         int available = Math.max(24, width - reserved);
         int inputWidth = inputWidth(available);
         int sliderWidth = Math.max(12, available - inputWidth - GAP);
-        slider.setBounds(x, y, sliderWidth, DEFAULT_HEIGHT);
-        input.setBounds(x + sliderWidth + GAP, y, inputWidth, DEFAULT_HEIGHT);
+        slider.setBounds(x, y, sliderWidth, rowHeight);
+        input.setBounds(x + sliderWidth + GAP, y, inputWidth, rowHeight);
+        // 预设按钮保持默认高度，在加高的行里垂直居中，保证仍可点击
+        int buttonY = y + Math.max(0, (rowHeight - DEFAULT_HEIGHT) / 2);
         int cursor = x + available + GAP;
         for (UiButton button : presetButtons) {
             int buttonWidth = buttonWidth(button);
-            button.setBounds(cursor, y, buttonWidth, DEFAULT_HEIGHT);
+            button.setBounds(cursor, buttonY, buttonWidth, DEFAULT_HEIGHT);
             cursor += buttonWidth + GAP;
         }
     }

@@ -88,7 +88,7 @@
 | 3 | `weather` | `weather: clear\|rain\|thunder`（必填） | clear=无雨无雷；rain=有雨无雷；thunder=仅看雷暴 |
 | 4 | `outdoor` | 无 | `MOTION_BLOCKING_NO_LEAVES` 高度图 ≤ y+1 |
 | 5 | `surrounding_blocks` | `up/down/north/south/east/west: TaggedId`（可空，**六向不可全空**） | 逐方向比对相邻方块，已填方向须全命中 |
-| 6 | `catalyst_present` | `items: List<TaggedId>`（必填非空）；`count: int[1,64]`（默认 1） | 所在方块格 1×1×1 内命中物品堆叠数 ≥ count（排除源自身） |
+| 6 | `catalyst_present` | `items: List<TaggedId>`（必填非空）；`count: int[1,64]` **可留空** | 所在方块格 1×1×1 内命中物品堆叠数 ≥ **有效门槛**（排除源自身）；`count` 留空 = 门槛跟随同作用域催化剂消耗量，见 [催化剂门槛运行投影](../systems/catalyst-threshold-projection.md) |
 | 7 | `fluid_present` | `fluid: TaggedId`（可空=任意）；`require_source: bool`（默认 true） | 非源模式接受同族流动变体；`#minecraft:empty` 恒不命中 |
 | 8 | `time_of_day` | `from: int[0,23999]`、`to: int[0,23999]`（均必填） | `dayTime mod 24000` 区间；`from>to` 表示跨零点 |
 | 9 | `y_level` | `min/max: Integer[-2048,2048]`（可空=不限） | Y 坐标区间；min 不得大于 max |
@@ -96,6 +96,7 @@
 
 > `surrounding_blocks` 有一条**特殊门禁**：周围区块未全部加载时通过 `evaluability(...)` 返回 `Evaluability.UNAVAILABLE`（而非 `false`），由求值层映射为 `ConditionResult.UNAVAILABLE`，`inverted` 也不会把它当作「不成立」翻转。
 > `dimension`、`biome` 属动态注册表，`validateParams` 只做语法与数量校验，引用存在性复核留给运行时/命令层（那里能拿到 `RegistryAccess`）。
+> `catalyst_present` 的 `count` 是**可选声明**：留空合法且被原样保存（编码省略该字段），只有填写时才校验 1–64。运行期由 [催化剂门槛运行投影](../systems/catalyst-threshold-projection.md) 在规则索引构建时解析有效门槛（同作用域消耗配置 → 全规则唯一匹配 → 否则 1）；`DEFAULT_COUNT=1` 是兜底值而非解码默认值，派生值不写回声明。
 
 ## 5. 内置效果类型（10 个 = 7 生效 + 3 消耗）
 
@@ -133,7 +134,7 @@
 | # | type | 参数 | 语义 |
 |---|---|---|---|
 | 8 | `consume_source` | `count: int[1,64]`/1 | 从**实时**堆叠扣 `count×rounds`，扣空则 discard；同时是「每组源成本」的声明，结算层按规则成本统一扣减，本执行器按实际扣减量回执避免重复记账 |
-| 9 | `consume_catalyst` | `items: List<TaggedId>`（必填非空）；`count: int[1,64]`/1；`radius: int[1,8]`/1 | 半径内由近及远消耗命中催化剂，总量 ≤ `count×rounds` |
+| 9 | `consume_catalyst` | `items: List<TaggedId>`（必填非空）；`count: int[1,64]`/1；`radius: int[1,8]`/1 | 半径内由近及远消耗命中催化剂，总量 ≤ `count×rounds`；`items` 相同的 `catalyst_present` 门槛留空时，本效果（效果级条件）或 `catalyst_cost`（规则级条件）的 `count` 即其有效门槛，见 [催化剂门槛运行投影](../systems/catalyst-threshold-projection.md) |
 | 10 | `consume_fluid` | `fluid: TaggedId`/任意；`require_source: bool`/true | 每轮消耗 1 格（同 tick 同位置通常只消耗 1 格）；含水方块只去 waterlogged，否则整块置 AIR；只作实时存在条件，不参与份数预留 |
 
 同一条规则内**同一消耗类型只允许一次**，否则拒载。规则未声明任何 `consume_*` 时隐式消耗 1 个源物品（判定入口 `BuiltinTypeRegistries.perRoundSourceConsumption(Rule)`，详见 [conversion-runtime.md](conversion-runtime.md)）。

@@ -23,6 +23,9 @@ public interface Effect {
     @Nullable
     ConditionExpression conditions();
 
+    // 返回仅替换效果级条件、其余参数原样保留的新实例；运行期门槛投影据此重建真实效果类型
+    Effect withConditions(@Nullable ConditionExpression conditions);
+
     // 效果级条件的恒真替代，便于实现类在空值场景下直接复用
     default ConditionExpression effectiveConditions() {
         ConditionExpression conditions = conditions();

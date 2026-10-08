@@ -22,11 +22,14 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiCheckBox;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionTreeEditor;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiListEditor;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiSegmentedControl;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextArea;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
+import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import net.minecraft.client.gui.Font;
@@ -46,9 +49,16 @@ abstract class FormControl {
 
     // 校验问题所用的本地化 key 前缀
     static final String ISSUE_PREFIX = "gui.itemdespawntowhat.edit.issue.";
+    // 即时提示（notice）key：字段名 + 问题文案
+    static final String NOTICE_ISSUE = "gui.itemdespawntowhat.edit.notice.issue";
 
     // 控件所描述的字段
     final EditorField field;
+
+    // 行高覆盖值：>0 时生效（例如基本页的加高优先级控件），-1 表示用控件自然高度
+    private int heightOverride = -1;
+    // 输入被上限拒绝时的即时提示出口（由 FormView 转给界面）
+    private @Nullable Consumer<Component> rejectedNotice;
 
     // 装载时的原始 JSON 元素（键缺失记为 null）；未编辑时原样回写，applyToDraft 因此完全跳过该字段
     private @Nullable JsonElement loadedElement;
@@ -148,6 +158,28 @@ abstract class FormControl {
 
     // 需要先知道宽度才能算出高度的控件（子列表）覆写
     void measure(int width) {
+    }
+
+    // 覆盖本控件占用的行高（<=0 表示恢复自然高度）
+    final void setHeightOverride(int height) {
+        this.heightOverride = height;
+    }
+
+    // 布局实际使用的行高：有覆盖用覆盖值，否则等于控件自然高度
+    final int layoutHeight() {
+        return heightOverride > 0 ? heightOverride : height();
+    }
+
+    // 输入被上限拒绝时的即时提示出口
+    final void setRejectedNotice(@Nullable Consumer<Component> rejectedNotice) {
+        this.rejectedNotice = rejectedNotice;
+    }
+
+    // 上报一条「字段名：问题」的即时提示；没有专属文案时不提示
+    final void reportRejected(@Nullable String messageKey) {
+        if (rejectedNotice != null && messageKey != null) {
+            rejectedNotice.accept(Component.translatable(NOTICE_ISSUE, label(), Component.translatable(messageKey)));
+        }
     }
 
     // 应用候选值（输入建议选择框回调）
@@ -431,8 +463,13 @@ abstract class FormControl {
 
     static final class TextControl extends FormControl {
 
+        // 备注的行数：2–3 行内直接读完，不再依赖单行横向滚动
+        private static final int NOTES_ROWS = 3;
+
         private final Font font;
         private final UiTextInput input;
+        // 备注专用多行编辑框；单行字段为 null
+        private final @Nullable UiTextArea area;
         private final List<UiButton> presetButtons = new ArrayList<>();
         private final Function<String, JsonElement> parse;
         private final Function<JsonElement, String> format;
@@ -440,6 +477,8 @@ abstract class FormControl {
         private @Nullable JsonElement loaded;
         // 装载时写入输入框的文本；用户未改动且未提交时视为「未编辑」
         private String loadedText = "";
+        // 本次输入因超出码点上限被拒绝（下一次被接受的输入变化时清除）
+        private boolean rejectedOverflow;
 
         TextControl(Font font, EditorField field, Predicate<String> filter,
                 Function<String, JsonElement> parse, Function<JsonElement, String> format,
@@ -457,11 +496,28 @@ abstract class FormControl {
                 markEdited();
                 onChanged.run();
             });
+            this.input.setOnOverflow(this::notifyTooLong);
+            // 下一次被接受的输入变化即清除超限提示
+            this.input.setOnValueChanged(() -> this.rejectedOverflow = false);
+            if (field.type() == EditorFieldType.LONG_TEXT) {
+                // 备注使用真正的多行编辑框：支持换行、选择与滚动；单行输入框隐藏但保留装载基线
+                this.area = new UiTextArea(font, hint);
+                this.area.setRows(NOTES_ROWS);
+                this.area.setOnChanged(() -> {
+                    this.rejectedOverflow = false;
+                    markEdited();
+                    onChanged.run();
+                });
+                this.area.setOnOverflow(this::notifyTooLong);
+                this.input.setVisible(false);
+            } else {
+                this.area = null;
+            }
             for (EditorPreset preset : field.presets()) {
                 UiButton button = new UiButton(font, Component.translatable(preset.labelKey()), UiButtonVariant.SECONDARY,
                         () -> {
                             markEdited();
-                            input.setValue(preset.value());
+                            setText(preset.value());
                             onChanged.run();
                         });
                 presetButtons.add(button);
@@ -470,11 +526,16 @@ abstract class FormControl {
 
         @Override
         int height() {
-            return DEFAULT_HEIGHT;
+            return area != null ? area.height() : DEFAULT_HEIGHT;
         }
 
         @Override
         void setBounds(int x, int y, int width) {
+            if (area != null) {
+                // 多行备注不支持预设按钮：直接铺满整行（presetButtons 恒为空，加预设需另行布局）
+                area.setBounds(x, y, width, area.height());
+                return;
+            }
             int reserved = 0;
             for (UiButton button : presetButtons) {
                 reserved += buttonWidth(button) + 2;
@@ -496,6 +557,10 @@ abstract class FormControl {
 
         @Override
         void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+            if (area != null) {
+                area.render(graphics, font, mouseX, mouseY);
+                return;
+            }
             input.render(graphics, font, mouseX, mouseY);
             for (UiButton button : presetButtons) {
                 button.render(graphics, font, mouseX, mouseY);
@@ -509,31 +574,48 @@ abstract class FormControl {
                     return true;
                 }
             }
-            return input.mouseClicked(mouseX, mouseY, button);
+            return area != null ? area.mouseClicked(mouseX, mouseY, button) : input.mouseClicked(mouseX, mouseY, button);
         }
 
         @Override
         boolean mouseReleased(double mouseX, double mouseY, int button) {
-            return input.mouseReleased(mouseX, mouseY, button);
+            return area != null ? area.mouseReleased(mouseX, mouseY, button) : input.mouseReleased(mouseX, mouseY, button);
+        }
+
+        @Override
+        boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+            return area != null && area.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+        }
+
+        @Override
+        boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+            return area != null && area.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
         }
 
         @Override
         boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-            return input.keyPressed(keyCode, scanCode, modifiers);
+            return area != null ? area.keyPressed(keyCode, scanCode, modifiers) : input.keyPressed(keyCode, scanCode, modifiers);
         }
 
         @Override
         boolean charTyped(char codePoint, int modifiers) {
-            return input.charTyped(codePoint, modifiers);
+            return area != null ? area.charTyped(codePoint, modifiers) : input.charTyped(codePoint, modifiers);
         }
 
         @Override
         void addFocusTargets(List<UiFocusTarget> out) {
+            if (area != null) {
+                out.add(area);
+                return;
+            }
             out.add(input);
         }
 
         @Override
         void setEnabled(boolean enabled) {
+            if (area != null) {
+                area.setEditable(enabled);
+            }
             input.setEditable(enabled);
             for (UiButton preset : presetButtons) {
                 preset.setEnabled(enabled);
@@ -542,22 +624,36 @@ abstract class FormControl {
 
         @Override
         boolean hasPendingInput() {
-            return !input.value().equals(loadedText);
+            return !text().equals(loadedText);
         }
 
         @Override
         @Nullable Component fullText() {
-            return input.value().isEmpty() ? null : Component.literal(input.value());
+            return text().isEmpty() ? null : Component.literal(text());
         }
 
         @Override
         boolean isEditing() {
-            return input.isFocused();
+            return area != null ? area.isFocused() : input.isFocused();
         }
 
         @Override
         boolean isVisible() {
-            return input.isVisible();
+            return area != null ? area.isVisible() : input.isVisible();
+        }
+
+        // 当前文本：备注取自多行编辑框
+        private String text() {
+            return area != null ? area.value() : input.value();
+        }
+
+        // 程序化写入文本（预设值与建议值）
+        private void setText(String value) {
+            if (area != null) {
+                area.setValue(value);
+            } else {
+                input.setValue(value);
+            }
         }
 
         @Override
@@ -565,9 +661,20 @@ abstract class FormControl {
             rememberLoaded(value);
             this.loaded = value == null || value.isJsonNull() ? null : value.deepCopy();
             this.loadedText = loaded == null ? "" : format.apply(loaded);
-            // 原值超长也必须完整回填，浏览或修改其他字段不能截短它。
-            input.setMaxLength(Math.max(textLimit(), loadedText.length()));
+            this.rejectedOverflow = false;
+            if (area != null) {
+                // 原值超出编辑长度也必须完整回填；上限按码点，避免多字节字符被算成多个
+                area.setMaxLength(Math.max(textLimit(), loadedText.codePointCount(0, loadedText.length())));
+                area.setValue(loadedText);
+                // 回填后光标与滚动停在开头：先回填再按窄宽度布局也不会把显示推到末尾
+                area.moveCursorToStart();
+                return;
+            }
+            // 原值超长也必须完整回填，浏览或修改其他字段不能截短它；上限按码点抬高（既有超长原文只提示不改写）
+            input.setMaxLength(Math.max(textLimit(), loadedText.codePointCount(0, loadedText.length())));
             input.setValue(loadedText);
+            // 单行同样从开头展示，避免窄宽度下只看到末尾几个字符
+            input.moveCursorToStart();
         }
 
         // 普通文本和备注分别使用声明的编辑长度，资源 ID 沿用原输入范围。
@@ -578,7 +685,7 @@ abstract class FormControl {
 
         @Override
         @Nullable JsonElement store() {
-            String value = input.value();
+            String value = text();
             if (value.equals(loadedText)) {
                 return originalElement();
             }
@@ -599,7 +706,16 @@ abstract class FormControl {
 
         @Override
         List<FormIssue> issues(String path) {
-            String text = input.value().trim();
+            // 长度超限做行内提示（warning）：被拒时缓冲值本身仍在合法范围，
+            // 既有原文超限由规则级校验给出阻塞错误
+            String raw = text();
+            if (rejectedOverflow || raw.codePointCount(0, raw.length()) > textLimit()) {
+                String key = tooLongKey();
+                if (key != null) {
+                    return List.of(FormIssue.warning(path, label(), Component.translatable(key)));
+                }
+            }
+            String text = raw.trim();
             if (text.isEmpty()) {
                 if (field.required()) {
                     return List.of(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "required")));
@@ -612,10 +728,24 @@ abstract class FormControl {
             return List.of();
         }
 
+        // 超限提示 key：备注与显示名各有专属文案；其它文本字段没有专属文案，不提示
+        private @Nullable String tooLongKey() {
+            if (field.type() == EditorFieldType.LONG_TEXT) {
+                return ISSUE_PREFIX + "notes_too_long";
+            }
+            return RuleFields.DISPLAY_NAME.equals(field.name()) ? ISSUE_PREFIX + "display_name_too_long" : null;
+        }
+
+        // 输入超限被拒：置瞬时标记并给出一条即时提示
+        private void notifyTooLong() {
+            this.rejectedOverflow = true;
+            reportRejected(tooLongKey());
+        }
+
         @Override
         void setValueFromSuggestion(String value) {
             markEdited();
-            input.setValue(value);
+            setText(value);
         }
     }
 

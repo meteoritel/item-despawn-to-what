@@ -1,5 +1,7 @@
 # ItemDespawnToWhat 配置领域
 
+> 编辑器四页修正（2026-10-07）：Q1–Q11 和统一人工验收入口已确认，正式契约见 [spec](docs/spec/editor-page-responsibilities-2026-10-07.md)；三阶段（基本页 / 输入·触发页 / 结果页）**已全部实施**，core 侧催化剂门槛运行投影按 [ADR-0027](docs/adr/0027-catalyst-threshold-runtime-projection.md) 落地，均已通过双平台串行构建（exit=0）。实现契约见 [编辑器四页职责与输入↔触发联动契约](docs/dev/internals/editor-pages-contract.md) 与 [催化剂门槛运行投影](docs/dev/backend/systems/catalyst-threshold-projection.md)；**游戏内人工验收入口见 [editor-page-acceptance-2026-10-07.md](docs/guide/editor-page-acceptance-2026-10-07.md)**。以下“实施完成”状态描述此前 UI 对齐工作。
+
 > 当前状态（2026-10-07）：Q1–Q22 设计已确认，三个实施阶段均已落盘：统一 `spawn_entity` 与 item/entity/experience 子类、服务端共用邻近开组阈值及原版经验拆分、虚拟分类树与四页编辑重排、全目录中文搜索和 Kit 通用 3D 预览。最终版本已通过 IDEA 检查（无错误）、Kit 边界检查（0 违规）和双平台串行构建（exit=0）；验证记录见 [实施记录](docs/plan/plan-ui-alignment-implementation-2026-10-07.md)。**双平台游戏内人工验收尚未执行**，本轮清单见 [manual-acceptance.md](docs/guide/manual-acceptance.md) §13。旧生成 JSON 不迁移，项目样例已重写。
 > 方案入口：[plan-gui-rule-update.md](docs/plan/plan-gui-rule-update.md)及其字段/kit 规格已确认冻结，冻结正文保持不变、实施状态见各文件头部状态行；数值域、自动命名与 kit 维护约束继续有效；2026-10-07 的页面形状和实体统一由 [本轮实施记录](docs/plan/plan-ui-alignment-implementation-2026-10-07.md) / [ADR-0026](docs/adr/0026-unified-entity-spawn-effect.md) 替代对应旧内容；[旧实施契约](docs/plan/plan-frontend-rewrite-contract.md)与[旧字段规格](docs/plan/plan-frontend-rewrite-forms.md)保留原实现记录及未被替代约束。前端决策见 [docs/adr/](docs/adr/) 的 0018–0022、0025–0026，第二轮后端决策见 0023–0024 与归档底稿 [docs/archive/backend-round-2/PLAN.md](docs/archive/backend-round-2/PLAN.md)（§2 行为契约）；旧计划 B1/B2 的运行时差异已修正，仍保留调查记录。
 
@@ -75,6 +77,40 @@
 
 ## 语言
 
+### 编辑器页面
+
+**基本页 (Basic Page)**:
+识别和管理整条规则的页面，包含名称、启用状态、规则优先级和备注；名称与备注不改变规则身份或转化内容。
+_Avoid_: 输入设置、产出设置
+
+**输入页 (Input Page)**:
+确定源物品匹配、催化剂物品类型、流体类型和消耗设置的页面；可选类型勾选后才展开，定义的类型由触发页关联使用。
+_Avoid_: 触发条件（环境门槛另有所属）
+
+**触发页 (Trigger Page)**:
+确定转化途径、自然等待和整条规则成立条件的页面，使用输入页定义的催化剂和流体类型配置存在判定与组合；其条件不等同于单个动作的执行条件。
+_Avoid_: 动作延迟、产出设置
+
+**结果页 (Result Page)**:
+配置结果方案及执行动作的页面，每组转化只选择一个方案，一个方案可以包含多个动作；单动作的概率、延迟和条件属于该动作。
+_Avoid_: 实体设置（结果也涵盖方块和世界变化）
+
+**输入要求 (Input Requirement)**:
+转化所需的源物品、催化剂或流体及其存在、消耗要求的玩家可见统称；存在检查不会消耗对象，消耗是另一个实际执行行为。
+_Avoid_: 消耗条件（容易误解为检查时就扣除材料）
+
+**催化剂消耗数量 (Catalyst Consumption Quantity)**:
+每轮实际消耗的催化剂件数，由输入页设置；它是触发门槛未填写时的默认依据，不覆盖玩家明确填写的门槛。
+_Avoid_: 固定等同于最低存在数量、流体数量（流体不以数量计成本）
+
+**催化剂触发门槛 (Catalyst Presence Threshold)**:
+触发判定所需的最低催化剂数量，由触发页可选填写；未填写时跟随对应消耗数量，明确填写后独立于消耗数量。
+_Avoid_: 与消耗数量强制双向同步
+
+以上页面职责、类型关联、消耗数量与可选门槛、条件删除同步于 2026-10-07 经用户确认；共享数量方案已撤销。项目仍在开发、尚未 release，本轮不做数据迁移。默认门槛实现方案见[四页职责台账](docs/plan/grill-editor-page-responsibilities-2026-10-07.md)。
+
+### 规则与转化
+
 **转化 (Conversion)**:
 即将消失的掉落物在过期前转变为别的东西这一行为本身。
 _Avoid_: 变换、转换
@@ -145,7 +181,7 @@ _Avoid_: 生成数量、源成本、硬存量上限
 _Avoid_: 文件夹、数据包目录
 
 **消耗效果 (Consumption Effect)**:
-`consume_source` / `consume_catalyst` / `consume_fluid` 三个效果类型：消耗是**效果**而不是条件的副作用。每组源成本 = 显式 `source_cost`；未声明时按隐式消耗 1 个源物品（未声明任何 `consume_*`）或显式 `consume_source.count` 之和推算；`consume_fluid` 只作实时存在条件，不换算份数。
+`consume_source` / `consume_catalyst` / `consume_fluid` 三个效果类型：消耗是**效果**而不是条件的副作用。每组源成本 = 显式 `source_cost`；未声明时按隐式消耗 1 个源物品（未声明任何 `consume_*`）或显式 `consume_source.count` 之和推算；流体不按数量换算份数或预留，`consume_fluid` 执行时确实移除对应位置的流体。
 _Avoid_: 消耗指令（旧链路叫法）
 
 **条件 (Condition)**:

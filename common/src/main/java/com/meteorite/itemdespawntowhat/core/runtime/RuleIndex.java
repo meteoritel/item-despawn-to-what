@@ -48,13 +48,18 @@ public final class RuleIndex {
         this.tagRules = tagRules;
     }
 
-    // 构建索引：不可运行的规则（disabled / 无效果）被剔除
+    // 构建索引：不可运行的规则（disabled / 无效果）被剔除；
+    // 入索引前统一走催化剂门槛投影，把留空的门槛解析成当前消耗配置下的有效值（无留空时原样复用同一 Rule 实例）
     public static RuleIndex build(List<LoadedRule<Rule>> loaded, IssueCollector issues) {
         List<LoadedRule<Rule>> runnable = new ArrayList<>(loaded.size());
         for (LoadedRule<Rule> entry : loaded) {
-            if (entry.value().isRunnable()) {
-                runnable.add(entry);
+            if (!entry.value().isRunnable()) {
+                continue;
             }
+            Rule projected = CatalystThresholdProjection.project(entry.value());
+            runnable.add(projected == entry.value()
+                    ? entry
+                    : new LoadedRule<>(entry.id(), entry.origin(), projected));
         }
         runnable.sort(Comparator.comparing(entry -> entry.value(), RULE_ORDER));
 

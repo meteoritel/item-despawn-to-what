@@ -15,6 +15,8 @@
 
 **排序键**（`build`，稳定排序）：`优先级 desc → 条件叶数 desc → 定义序`。其中「条件叶数」= `Rule.complexity()` = `conditions.leafCount()`；`build` 会剔除不可运行规则（`Rule.isRunnable()` = `enabled` 且 `effectiveOutcomes()` 非空）。同优先级下的「条件叶数降序」是**特异性兜底**。
 
+**入索引前先做门槛投影**：`build` 对每条可运行规则调用 `CatalystThresholdProjection.project(...)`，把 `catalyst_present` **留空**的门槛解析成当前消耗配置下的有效值；没有留空门槛时原样复用同一 `Rule` 实例（零分配）。投影是索引构建的一部分，因此**没有独立缓存、也没有单独失效入口**——reload 重建索引即重算。普通运行与 debug 场景都经 `RuleIndex.build`，共用同一入口。详见 [catalyst-threshold-projection.md](catalyst-threshold-projection.md)。
+
 `ConversionRuntime.onItemAdded` 只对 `index.candidates(itemId)` 非空的掉落物建追踪——**没有候选规则的掉落物零成本**。
 
 ## 2. 缓存失效：整体重建，不做单点失效
@@ -71,6 +73,7 @@
 | 缓存 | 上限 | 失效时机 |
 |---|---|---|
 | `RuleIndex.tagCache` / `queryCache` | 随注册表大小 | reload（索引整体重建） |
+| `RuleIndex` 内的门槛投影结果 | 每条留空门槛一个替换节点 | reload（索引整体重建时重算） |
 | `RuntimeTagLookup` | 随标签数量 | reload（置 null） |
 | `RuntimeClimateSampler` | **4096**（淘汰最旧） | reload（置 null） |
 | `PlaceBlockExecutor.OFFSETS` | 随 (shape, radius, fillOrigin) 组合 | 进程内静态，不失效 |
@@ -84,6 +87,7 @@
 - 新增按物品 / 标签查询的结构 → 扩 `RuleIndex`（保持排序键与懒展开）。
 - 新增依赖数据包的缓存 → 必须在 `replaceRules` 中一并置空，否则 reload 后读到旧数据。
 - 新增候选类别 → 扩 `RuleCatalogType` + 在 `RuleCatalogSources.builtin` 增加一个数据源；分页 / 过滤复用 `RuleCatalogService`，不要在两处各写一份。
+- 新增**依赖数据包的运行期派生值**（如留空门槛的有效值）→ 扩 `CatalystThresholdProjection` 并挂在 `RuleIndex.build` 上，随索引整体重建失效；不要为它另建索引或运行期缓存。
 - 踩坑：缓存「整体重建」是刻意设计，不要为单条规则加局部失效路径；`revision()` 必须与顺序无关（用 `Set.hashCode`），否则每 tick 都会误判内容变化；`PlaceBlockExecutor.OFFSETS` 是进程内静态、跨 reload 保留。
 
 ## 9. 相关
@@ -91,3 +95,4 @@
 - 运行时总控：[../modules/conversion-runtime.md](../modules/conversion-runtime.md)
 - 加载后重建索引：[../modules/rule-loading.md](../modules/rule-loading.md)、[../flows/rule-loading-flow.md](../flows/rule-loading-flow.md)
 - 编辑协议与目录下发：[../modules/edit-protocol.md](../modules/edit-protocol.md)、[edit-save-protocol.md](../flows/edit-save-protocol.md)
+- 索引构建期的门槛投影：[catalyst-threshold-projection.md](catalyst-threshold-projection.md)

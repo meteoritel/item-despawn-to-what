@@ -1,6 +1,6 @@
 # 客户端 UI kit API 与宿主接入
 
-> 状态：当前实现（2026-10-07，含实体预览扩展）。面向宿主接入者，描述 `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/` 的公开面、输入与生命周期契约、样式注入方式与宿主要求。
+> 状态：当前实现（2026-10-07，含实体预览扩展；2026-10-08 增补公共文本输入鼠标释放归属与多行文本控件）。面向宿主接入者，描述 `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/` 的公开面、输入与生命周期契约、样式注入方式与宿主要求。
 > 相关：[ADR-0022](../../adr/0022-client-ui-kit-adoption.md)（同源引入与来源记录）、[ADR-0025](../../adr/0025-reusable-client-ui-kit-boundary.md)（维护副本与依赖边界）、[kit API 规格](../../plan/plan-gui-rule-update-kit.md)、[NOTICE-kit.md](../../../NOTICE-kit.md)（来源与差异）。
 > 本文只描述当前源码事实；类名与方法名按源码核对，未实现的能力明确标注。
 
@@ -65,6 +65,8 @@ powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1
 
 宿主侧现状（已对齐）：`client/ui/screen/form/FormView.keyPressed` 已改为「picker → 聚焦控件 → 未消费才滚动」，`PAGE_UP`/`PAGE_DOWN` 在聚焦控件之后才处理（客户端当前实现见 `FormView.java:613-633`）；`FormView.keyReleased` 也把 key-up 交给聚焦控件，宿主屏幕 `RuleEditorScreen.keyReleased` 再转发给它。kit 侧控件在未显式启用页步长（`setPageStep(n>0)`）时不消费这两个键，因此普通滑块不会与容器滚动冲突。
 事件只消费一次的约定由宿主保证：任何控件返回 true 后，容器与页面级处理都必须立即停止。
+
+本节只约定「一次事件由谁消费」；容器把释放与拖动派发给哪个控件另有一套**按下归属**规则，见下文《公共文本输入与复合表单的鼠标释放归属》。
 
 ## 4. 输入上下文、捕获与交互生命周期
 
@@ -224,6 +226,8 @@ UiCyclicRange  UiSliderExamples.cyclicRange(Component label, UiRect bounds, doub
 - 遵守第 3 节路由顺序，保证同一事件只被消费一次；容器键必须在聚焦控件之后询问。
 - 遵守第 4.4 节生命周期：回填不产生事件、单动作单提交、无变化无历史、取消要回退、销毁/隐藏/禁用/失焦范围切换/关闭要释放捕获。
 - 显示窗口（`UiSliderWindow`）只做几何，不得当作提交硬限额。
+- 遵守《公共文本输入与复合表单的鼠标释放归属》：容器记录本次按下命中的控件，`mouseReleased` / `mouseDragged` 只派发给该归属，**没有归属时不派发、不广播**；不要为单个按钮（如恢复自动命名）写事件特例。
+- 文本长度上限一律按 Unicode 码点判定（`String.codePointCount`）：超限输入整体拒绝、不截断，经 `onOverflow` 上报；程序回填必须完整，并在回填后从开头显示（`moveCursorToStart()`）。
 
 ## 9. 校验与拆包就绪门槛
 
@@ -297,3 +301,89 @@ Kit 提交缓冲、恢复 pose/camera/裁剪，并回到普通 GUI 的 3D 物品
 `UiCarousel` 接收宿主准备的图标列表，通过 `index(milliseconds)`、`select(index,milliseconds)`、`step(direction,milliseconds)` 和 `render(graphics,box,milliseconds)` 控制轮播。默认 1.5 秒切换，手动选择重新计时；空列表不绘制。标签注册表查询、显示范围、展开容器和本地化仍属于宿主。
 
 精确依赖白名单新增 `com.mojang.blaze3d.vertex.PoseStack` 与 `VertexConsumer`（和已有 Lighting），边界检查脚本同步维护，不放开整个父包。
+
+## 2026-10-08：公共文本输入与复合表单的鼠标释放归属
+
+**契约句**：只有真正承接对应按下/捕获的控件消费释放，按钮必须收到自己的释放事件；复合表单遵循同一规则，不为恢复命名按钮写事件绕过特例。
+
+### 归属模型
+
+容器级「按下归属」：容器在 `mouseClicked` 命中控件时记录归属（`pressedWidget` / `pressedControl`），`mouseReleased` / `mouseDragged` 只派发给该归属，**没有归属时不派发**；控件自身的 `pressed` 守卫只作控件级兜底。两者叠加的含义：
+
+| 情况 | 释放归属 | 结果 |
+|---|---|---|
+| 容器记录了归属，且控件这次确实承接了按下 | 该控件 | 恰好消费一次释放（指针拖出矩形后仍收到） |
+| 容器记录了归属，但控件未承接按下 | 该控件 | 控件级守卫返回 false，不误消费 |
+| 容器没有归属（按下发生在容器外等） | 无 | 不派发、不广播、不残留按下态 |
+
+### 现状实现（按源码核对）
+
+- `FormView`：字段 `pressedWidget` / `pressedControl`（`FormView.java:80-82`）。`mouseClicked` 依次询问 picker → 行内 picker 按钮 → 行尾 action 按钮（如「恢复自动命名」）→ 行控件，命中即 `rememberPress`（`:722-750`、`:752-763`）；`mouseReleased` 先取出并清空归属，再只派发一次（`:765-778`）；`mouseDragged` 同样只给归属（`:780-789`）；行内 picker 打开时按《弹出层所有者契约》处理（`:767-769`、`:782-784`）。
+- `RuleEditorEditPages`：字段 `pressedWidget`（`:209`）。`mouseClicked` 先给页面滚动条，再遍历 `liveWidgets` 记录归属（`:1898-1913`）；`mouseReleased` 只在归属仍 `isVisible()` 时派发一次并清空（`:1952-1957`）；无归属返回 false。
+- 控件级兜底：`UiTextArea.pressed`（`UiTextArea.java:72`、`:300`、`:307-325`）、`UiTextInput.pressed`（`UiTextInput.java:48`、`:233-249`）、`UiButton.mouseReleased` 的 `control.isPressed()` 检查（`UiButton.java:160-171`）。它们共同保证「容器派给我、但我这次没接住按下」时也不消费释放。
+- 复合表单（`FormControl.TextControl`）把同行多类输入合成一次命中：`mouseClicked` 先试预设按钮再给输入控件（`FormControl.java:570-578`），`mouseReleased` / `mouseDragged` 只转发给当前可见的那个（`:580-588`）；释放归属仍由外层容器记录，子控件不重复记账。
+
+### 弹出层所有者契约（行内 picker）
+
+**契约句**：当行内 picker 处于打开状态时，`FormView` 把 `mouseClicked` / `mouseReleased` / `mouseDragged` 直接交给该 picker，picker 即当前唯一事件所有者；关闭后恢复容器归属派发。**这是设计契约，不是例外**——弹出层在其存续期间是唯一所有者；「按钮必须收到自己的释放事件」只在本层未接管时适用。
+
+- 原因：下拉/选择层覆盖在表单之上，若仍按「按下归属」派发，释放会被下层控件抢走，选择项点不到；让弹出层独占本层事件是与归属模型一致的更强所有者语义。
+- 与之对应：picker 关闭时必须清掉归属状态，避免下一次释放沿用陈旧所有者。
+
+### 禁止与反例
+
+- 不得为某个按钮（尤其「恢复自动命名」）在 `mouseReleased` 里加特例绕过归属，也不得把释放广播给所有控件。
+- 不得在未记录归属时转发释放：否则后绘制的控件会吞掉释放，先绘制的按钮会停在按下态。
+- 与第 3 节的分工：`UiInputRouter` 决定「一次事件由谁消费」，容器归属决定「释放与拖动派给谁」；同一事件仍只能被消费一次。
+## 2026-10-08：多行文本控件 UiTextArea 与码点长度上限
+
+> `client/ui/widget/UiTextArea.java` 属于**宿主侧** widget 包（不是 kit 包），第 1 节的边界规则不变；本节记录它与 `UiTextInput` 的共同约定与宿主接线。
+
+### UiTextArea：真正的多行文本编辑
+
+```text
+public final class UiTextArea implements UiWidget, UiFocusTarget
+public UiTextArea(Font font, @Nullable Component hint)
+
+String value();                void setValue(String value);        int height();
+void setRows(int rows);        void setMaxLength(int maxLength);   // 默认 rows = 3、maxLength = 1024
+void setOnChanged(Runnable);   void setOnOverflow(Runnable);       void setOnCancel(Runnable);
+void setHint(Component);       void setAccessibleName(Component);  void setEditable(boolean);   void setVisible(boolean);
+void moveCursorToStart();      // 回填后调用：光标与垂直滚动都回到开头
+```
+
+- 文本模型用原版 `MultilineTextField`（换行、选择、剪贴板、光标行号），外观按 kit 主题自绘；换行宽度变化时按当前文本与光标重建模型（`UiTextArea.java:87-92`、`:450-470`）。
+- `activate()` **恒返回 false**（`:389-393`）：Enter 属于换行而不是激活，按键继续交给文本模型；宿主不要把 Enter 当提交。
+- 高度 = `rows × font.lineHeight + 2×2`（`:165-167`）；可见行数由 `setRows` 控制（默认 3 行，`:34`、`:143-145`）。
+- 垂直滚动是像素级 `scrollOffset`（`:53-54`）；`scrollToCursor` 保证光标所在行可见（`:438-448`），上限见 `maxScroll()`（`:491-493`）；内容超出可视高度时右侧画 3px 滚动条（`:282-293`），滚轮按 `font.lineHeight × 2` 步进（`:327-338`）。
+- 输入：`mouseClicked` 命中即置 `pressed` 并定位光标（`:295-305`）；`mouseReleased` / `mouseDragged` 需 `pressed`（`:307-325`）；`keyPressed` 先处理 Esc→`onCancel`，其余交给文本模型（`:340-357`）；`charTyped` 需聚焦且 `StringUtil.isAllowedChatCharacter`（`:359-369`）。
+- 程序化 `setValue` 期间不触发变化回调、不参与长度回退（`programmatic` 守卫，`:73-74`、`:100-110`）。
+
+### 长度上限一律按 Unicode 码点
+
+显示名 128 码点、备注 1024 码点；**不能把 UTF-16 单元当码点**（emoji 等补充平面字符算 1 个）。两个控件口径完全一致：
+
+- `UiTextArea.onTextChanged`：`text.codePointCount(0, text.length()) > maxLength` → 整段回退到 `lastAccepted`（光标钳在回退文本内）→ `reportOverflow()`；**整体拒绝、绝不截断半个代理对**（`UiTextArea.java:400-430`）。
+- `UiTextInput`：过滤器先判码点上限、再判业务 `filter`，超限整体拒绝并 `reportOverflow`（`UiTextInput.java:106-115`）；原版 `EditBox` 上限被设为 `maxLength × 2` 个 UTF-16 单元作冗余，保证码点上限先起作用（`:66-67`、`:92-97`）；`onValueAccepted` 还有一次兜底回退（`:117-128`）。
+- 宿主接线（`FormControl.TextControl`）：上限 `textLimit()` = 备注 1024 / 显示名 128 / 其它 TEXT 256（`FormControl.java:680-684`）；`setOnOverflow` → `notifyTooLong()` 置 `rejectedOverflow = true` 并立即提示（`:499`、`:511`、`:739-743`，提示经 `reportRejected` → `NOTICE_ISSUE` + 本地化 key，`:173-183`）；**下一次被接受的输入变化**清除该标记（`:501`、`:506-510`）。
+- 行内提示是 **warning 而不是阻塞错误**：`issues(path)` 在 `rejectedOverflow || 码点 > 上限` 时返回 `FormIssue.warning`（`:707-717`）；被拒时缓冲值本身仍在合法范围，既有原文超限由规则级校验给出阻塞错误（依据 `:708-711` 的注释事实）。
+- 提示 key 由 `tooLongKey()` 选择：备注 → `issue.notes_too_long`，显示名 → `issue.display_name_too_long`，其它文本字段**没有专属文案、不提示**（`:731-737`）。
+
+### 程序回填：完整不截断，并从开头显示
+
+- `FormControl.load` 先把上限抬到 `max(textLimit(), 装载文本码点数)` 再原样写入，随后调用 `moveCursorToStart()`；备注走 `UiTextArea`（`FormControl.java:660-671`），单行走 `UiTextInput`（`:672-677`）。这保证既有超长原文在浏览或编辑其它字段时不被截短，窄宽度下也不会只显示尾部。
+- `UiTextArea.moveCursorToStart()` 把光标 seek 到 0 并置 `scrollOffset = 0`（`UiTextArea.java:157-162`）；`setValue` 的注释明确「回填路径随后调用」（`:99`）。
+- `UiTextInput.moveCursorToStart()` = `moveCursorToStart(false)` + 清除选择（`UiTextInput.java:193-198`）。
+- 单行与多行**同一约定**：回填必须完整、首屏从开头可读；编辑期间宿主不要调用（会抢走用户光标）。
+- 备注默认 3 行：`NOTES_ROWS = 3`（`FormControl.java:467`、`:505`）；只有 `LONG_TEXT` 才创建多行控件，单行输入框隐藏但保留装载基线（`:502-515`）；多行备注不支持预设按钮（`:534-537`）。
+
+### 相关公开 API（宿主接入面）
+
+| API | 位置 | 说明 |
+|---|---|---|
+| `FormView.setRowAction(String path, UiButton)` | `FormView.java:136-145` | 给字段行挂行尾操作按钮（如「恢复自动命名」）；宽度按按钮文本自适应 |
+| `FormView.pendingValue(String path)` | `FormView.java:125-133` | 读取该字段尚未提交的缓冲值；字段不存在返回 null |
+| `FormView.setRowHeight(String path, int)` | `FormView.java:147-155` | 覆盖该行控件高度（<=0 恢复自然高度） |
+| `FormControl.setHeightOverride(int)` | `FormControl.java:163-166` | 覆盖值默认 `-1`（`:59`）；实际行高 = 覆盖值或自然高度，见 `layoutHeight()`（`:168-171`）与 `FormView.java:486-489` |
+
+- 实例：基本页优先级行用 `PRIORITY_ROW_HEIGHT = UiTheme.ROW_HEIGHT + 10`（= 22，`RuleEditorEditPages.java:384`、`:397`）；「恢复自动命名」按钮挂在显示名行尾并随表单禁用（`:398-401`）。

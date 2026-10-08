@@ -461,7 +461,7 @@ public final class RuleEditorScreen extends Screen {
             tabControl.render(graphics, font, mouseX, mouseY);
             y += TAB_H + 2;
         }
-        if (mode == Mode.EDIT && requiredButton != null) {
+        if (mode == Mode.EDIT && requiredButton != null && requiredButton.isVisible()) {
             requiredButton.setBounds(PAD, y, w - PAD * 2, 14);
             requiredButton.render(graphics, font, mouseX, mouseY);
             y += 16;
@@ -470,13 +470,15 @@ public final class RuleEditorScreen extends Screen {
         int footerHeight = (mode == Mode.LIST ? listBar : footerBar).preferredHeight(availableWidth);
         int footerY = h - PAD - footerHeight;
         int noticeY = footerY - 1 - NOTICE_H;
-        int summaryY = noticeY - (mode == Mode.EDIT ? SUMMARY_H : 0);
+        int summaryY = noticeY - (showsSummary() ? SUMMARY_H : 0);
         contentArea = new UiRect(PAD, y, availableWidth, Math.max(0, summaryY - y - 1));
         if (mode == Mode.LIST) {
             renderListMode(graphics, mouseX, mouseY);
         } else {
             renderEditMode(graphics, mouseX, mouseY);
-            drawSummary(graphics, summaryY, w);
+            if (showsSummary()) {
+                drawSummary(graphics, summaryY, w);
+            }
         }
         drawNotice(graphics, noticeY, w);
         if (mode == Mode.LIST) {
@@ -496,7 +498,7 @@ public final class RuleEditorScreen extends Screen {
             Component tip = null;
             if (notice != null && new UiRect(PAD, noticeY, availableWidth, NOTICE_H).contains(mouseX, mouseY)) {
                 tip = notice;
-            } else if (mode == Mode.EDIT && new UiRect(PAD, summaryY, availableWidth, SUMMARY_H).contains(mouseX, mouseY)) {
+            } else if (showsSummary() && new UiRect(PAD, summaryY, availableWidth, SUMMARY_H).contains(mouseX, mouseY)) {
                 EditSession session = editingSession();
                 if (session != null) {
                     tip = tab == RuleEditorEditPages.Page.RESULTS ? ConsumptionSummary.hintRule(session.draft().view())
@@ -538,7 +540,8 @@ public final class RuleEditorScreen extends Screen {
     private void drawHeaderText(GuiGraphics graphics) {
         String title = this.getTitle().getString();
         if (mode == Mode.EDIT && editingId != null) {
-            title = Component.translatable(UI + "recipe.editor_title", title, labelText(editingId)).getString();
+            // 页头只显示当前实际生效名称；规则 ID 由基本页第一行的只读行单独承担
+            title = labelText(editingId);
         }
         title = TextScroll.trimToWidth(font, title, Math.max(0, this.width - 96));
         graphics.drawString(font, title, PAD, 3, UiPalette.HEADER_TEXT, false);
@@ -554,6 +557,11 @@ public final class RuleEditorScreen extends Screen {
         }
         String text = TextScroll.trimToWidth(font, notice.getString(), Math.max(0, w - PAD * 2));
         graphics.drawString(font, text, PAD, y + 1, noticeColor, false);
+    }
+
+    // 基本页没有固定底部摘要；其他页保留，结果页显示消耗语义提示
+    private boolean showsSummary() {
+        return mode == Mode.EDIT && tab != RuleEditorEditPages.Page.INFO;
     }
 
     // 摘要行：结果页显示消耗语义提示（顶层 effects 或候选效果合并），其余页显示自然语言摘要
@@ -1348,6 +1356,12 @@ public final class RuleEditorScreen extends Screen {
                 && name.getAsString().codePointCount(0, name.getAsString().length()) > 128) {
             issues.add(issue(RuleFields.DISPLAY_NAME, UI + "issue.display_name_too_long"));
         }
+        // 备注上限按 Unicode 码点判定：多字节字符不应被 UTF-16 单元数提前算超
+        JsonElement notes = draft.view().get(RuleFields.NOTES);
+        if (notes != null && notes.isJsonPrimitive()
+                && notes.getAsString().codePointCount(0, notes.getAsString().length()) > 1024) {
+            issues.add(issue(RuleFields.NOTES, UI + "issue.notes_too_long"));
+        }
         JsonElement seconds = draft.view().get(RuleFields.TRIGGER_AFTER_SECONDS);
         if (seconds != null && seconds.isJsonPrimitive() && seconds.getAsJsonPrimitive().isNumber()
                 && seconds.getAsInt() < 0) {
@@ -1534,7 +1548,7 @@ public final class RuleEditorScreen extends Screen {
                 focus.add(button);
             }
         } else {
-            if (requiredButton != null) focus.add(requiredButton);
+            if (requiredButton != null && requiredButton.isVisible()) focus.add(requiredButton);
             if (tabControl != null) {
                 focus.add(tabControl);
             }
@@ -1785,8 +1799,12 @@ public final class RuleEditorScreen extends Screen {
             applyButton.setLabel(Component.translatable(UI + "button.apply_changes", model.dirtyRuleIds().size()));
         }
         EditSession session = editingSession();
-        if (requiredButton != null && session != null) requiredButton.setLabel(Component.translatable(UI + "required.count",
-                com.meteorite.itemdespawntowhat.client.edit.RuleRequirements.find(session.draft().view()).size()));
+        if (requiredButton != null && session != null) {
+            int missing = com.meteorite.itemdespawntowhat.client.edit.RuleRequirements.find(session.draft().view()).size();
+            // 没有缺失项时不再显示「待补充必填项：0」横幅
+            requiredButton.setVisible(missing > 0);
+            requiredButton.setLabel(Component.translatable(UI + "required.count", missing));
+        }
         boolean canUndo = editable && session != null && session.canUndo();
         boolean canRedo = editable && session != null && session.canRedo();
         if (undoButton != null) {

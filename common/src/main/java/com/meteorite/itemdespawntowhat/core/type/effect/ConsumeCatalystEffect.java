@@ -96,4 +96,10 @@ public record ConsumeCatalystEffect(
     public ResourceLocation type() {
         return ID;
     }
+
+    // 效果级条件替换：其余参数原样保留，供运行期门槛投影重建真实效果类型
+    @Override
+    public ConsumeCatalystEffect withConditions(@Nullable ConditionExpression conditions) {
+        return new ConsumeCatalystEffect(items, count, radius, delayTicks, chance, conditions);
+    }
 }

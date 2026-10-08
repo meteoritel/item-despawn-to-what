@@ -63,7 +63,7 @@ delay           = max(0, dueAge - entity.getAge())
 
 `attempt` 依次：实体失效/被排除 → 移除追踪；区块实体 ticking 门禁不满足 → 退避 `checkIntervalTicks`；`locked` → 退避 1 tick；**永久禁转** → 移除追踪；**转化冷却未到期** → 退避剩余冷却；候选为空 → 移除；否则 `select`。
 
-`select` 遍历已排序候选，跳过未声明 `kind` 的规则；**年龄门槛只对 `natural` 且非 expiryPending 生效**（环境致死在当前刻立即判定，与存活时长无关）；`ExpressionEvaluator.matches` 命中即取该条。**同一掉落物只执行优先级最高的一条命中规则**，候选排序（`RuleIndex`）：`优先级 desc → 条件叶数 desc → 定义序`。
+`select` 遍历已排序候选，跳过未声明 `kind` 的规则；**年龄门槛只对 `natural` 且非 expiryPending 生效**（环境致死在当前刻立即判定，与存活时长无关）；`ExpressionEvaluator.matches` 命中即取该条。**同一掉落物只执行优先级最高的一条命中规则**，候选排序（`RuleIndex`）：`优先级 desc → 条件叶数 desc → 定义序`。候选规则在进入索引前已做过催化剂门槛投影（留空门槛解析成当前消耗配置下的有效值），这里读到的已是投影后的条件树，见 [catalyst-threshold-projection.md](../systems/catalyst-threshold-projection.md)。
 
 ### 2.5 未命中退避
 

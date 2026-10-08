@@ -41,6 +41,7 @@
 | [caching-indexing.md](systems/caching-indexing.md) | 候选规则索引、标签/气候缓存、来源目录与方块偏移预计算 |
 | [platform-abstraction.md](systems/platform-abstraction.md) | `Services`/`IPlatformHelper`、窄接口与静态 sink、平台隔离铁律 |
 | [config.md](systems/config.md) | `server.json` 全字段、加载/落盘、退避算法与派生换算 |
+| [catalyst-threshold-projection.md](systems/catalyst-threshold-projection.md) | `catalyst_present` 留空门槛的声明语义、有效门槛解析（同作用域 → 全规则唯一匹配 → 1）与索引构建期投影、失效入口 |
 
 ### 纵向系统
 
@@ -61,7 +62,7 @@
 | `core/model` | [rule-model.md](modules/rule-model.md) |
 | `core/load` | [rule-loading.md](modules/rule-loading.md) |
 | `core/service` | [rule-loading.md](modules/rule-loading.md)（装配）+ [edit-protocol.md](modules/edit-protocol.md)（写入/会话） |
-| `core/runtime` | [conversion-runtime.md](modules/conversion-runtime.md) |
+| `core/runtime` | [conversion-runtime.md](modules/conversion-runtime.md) + [catalyst-threshold-projection.md](systems/catalyst-threshold-projection.md) |
 | `core/runtime/scheduler` | [conversion-runtime.md](modules/conversion-runtime.md) + [scheduling-budget.md](systems/scheduling-budget.md) |
 | `core/state` | [conversion-runtime.md](modules/conversion-runtime.md) + [platform.md](modules/platform.md)（接入适配） |
 | `core/catalog` | [caching-indexing.md](systems/caching-indexing.md) + [edit-protocol.md](modules/edit-protocol.md) |
@@ -98,6 +99,7 @@
 | 新增规则字段 / 消失方式 / 组合模式 | `core/api/RuleFields` + `core/model/RuleCodecs`（必要时 `RuleValidation`、枚举） | [rule-model.md](modules/rule-model.md) 字段表 |
 | 新增 `core` 子包 | 新包 + 装配点 | 新建 `modules/<新模块>.md` + 本文件 §2/§3 加一行 |
 | 新增跨模块机制 | 机制类 | 新建/扩写 `systems/*.md` 一篇 |
+| 新增依赖数据包的运行期派生值（不落盘） | 机制类 + 挂在 `RuleIndex.build` | 扩写 [catalyst-threshold-projection.md](systems/catalyst-threshold-projection.md) |
 | 新增端到端链路 | 链路实现 | 新建 `flows/*.md` 一篇 |
 | 做出一个架构决策 | 代码 | 写一篇 `docs/adr/NNNN-*.md`；模块文档只链接，不复述 |
 
