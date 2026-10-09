@@ -1559,7 +1559,15 @@ public final class RuleEditorEditPages {
             }
             panel.unmount();
         });
-        modal.onHistoryChanged(() -> {
+        modal.onHistoryChanged(shortcut -> {
+            String operation = shortcut == com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut.UNDO
+                    ? session.redoOpKey() : session.undoOpKey();
+            if (!EditSession.OP_SET_FIELD.equals(operation) && !EditSession.OP_SET_SOURCE.equals(operation)) {
+                // 结构恢复可能把同类型邻居放回原路径，关闭独立参数弹窗避免错误重绑。
+                modal.onClosed(panel::unmount);
+                host.modals().close(modal);
+                return;
+            }
             JsonElement current = session.draft().getAt(path);
             if (current instanceof JsonObject object
                     && leaf.condition().type().toString().equals(stringField(object, RuleFields.TYPE))) {
