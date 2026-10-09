@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
+import com.meteorite.itemdespawntowhat.client.edit.OpaqueCondition;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
@@ -433,15 +434,21 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
     }
 
     // 编辑选中叶节点的参数
+    public boolean canEditSelectedLeaf() {
+        return selectedNode() instanceof ConditionNode.Leaf(var condition)
+                && condition != null && !(condition instanceof OpaqueCondition);
+    }
+
+    // 未知叶保留结构操作，只禁止参数编辑。
     public boolean editSelectedLeaf() {
-        if (!enabled) {
+        if (!enabled || !canEditSelectedLeaf()) {
             return false;
         }
         Row row = selectedRow();
         if (row == null || !(row.node() instanceof ConditionNode.Leaf leaf)) {
             return false;
         }
-        if (leaf.condition() == null || onEditLeaf == null) {
+        if (onEditLeaf == null) {
             return false;
         }
         // 叶参数由表单层写入，这里只记录操作类别
@@ -941,6 +948,10 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
             label = leafCondition == null
                     ? Component.translatable("gui.itemdespawntowhat.edit.tree.leaf_missing")
                     : leafSummaries.getOrDefault(row.path(), typeLabel(leafCondition.type()));
+            if (leafCondition instanceof OpaqueCondition) {
+                label = label.copy().append(" ").append(Component.translatable(
+                        "gui.itemdespawntowhat.edit.tree.parameters_readonly"));
+            }
         } else {
             label = Component.empty();
         }

@@ -10,6 +10,7 @@ import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.EditorPreset;
 import com.meteorite.itemdespawntowhat.client.edit.FieldNumbers;
 import com.meteorite.itemdespawntowhat.client.edit.JsonSummary;
+import com.meteorite.itemdespawntowhat.client.edit.OpaqueCondition;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
@@ -1332,7 +1333,7 @@ abstract class FormControl {
             boolean any = editor.rowCount() > 0;
             for (int i = 0; i < toolbar.size(); i++) {
                 boolean show = i == 0 || any && (i == 8 || i == 5 && editor.selectedNode() != null
-                        || i == 4 && editor.selectedNode() instanceof com.meteorite.itemdespawntowhat.core.model.ConditionNode.Leaf
+                        || i == 4 && editor.canEditSelectedLeaf()
                         || advancedTools && i <= 7);
                 toolbar.get(i).setVisible(show);
             }
@@ -1348,7 +1349,7 @@ abstract class FormControl {
                     cursorY += buttonHeight + 2;
                 }
                 button.setBounds(cursorX, cursorY, buttonWidth, buttonHeight);
-                button.setEnabled(enabled);
+                button.setEnabled(enabled && (button != toolbar.get(4) || editor.canEditSelectedLeaf()));
                 cursorX += buttonWidth + 2;
             }
             return cursorY - y + buttonHeight + 2;
@@ -1498,7 +1499,8 @@ abstract class FormControl {
             if (fallbackRaw != null || !path.startsWith(basePath)) return null;
             editor.selectPath(UiConditionTreeEditor.ROOT_PATH + path.substring(basePath.length()));
             if (support != null && path.contains("." + RuleFields.CONDITION + ".")
-                    && editor.selectedNode() instanceof com.meteorite.itemdespawntowhat.core.model.ConditionNode.Leaf leaf) {
+                    && editor.selectedNode() instanceof com.meteorite.itemdespawntowhat.core.model.ConditionNode.Leaf leaf
+                    && !(leaf.condition() instanceof OpaqueCondition)) {
                 support.revealLeaf(leaf, path);
             }
             return editor;
