@@ -121,13 +121,10 @@ public final class RuleEditorScreen extends Screen {
     private final List<UiButton> listButtons = new ArrayList<>();
     private final ButtonBar listBar = new ButtonBar();
     private final ButtonBar globalBar = new ButtonBar();
-    private final ButtonBar selectedBar = new ButtonBar();
+    private final List<UiButton> selectedButtons = new ArrayList<>();
+    private @Nullable UiButton toggleButton;
     private final Set<String> expandedCategories = new LinkedHashSet<>();
     private final java.util.Map<String, RuleRecipeView> recipeViews = new java.util.LinkedHashMap<>();
-    private boolean narrowDetails;
-    private @Nullable UiButton detailsButton;
-    private UiRect previewArea = new UiRect(0, 0, 0, 0);
-    private final com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView previewScroll = new com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView();
     private String lastQuery = "";
     private String lastTreeQuery = "";
     private int filterIndex;
@@ -241,7 +238,6 @@ public final class RuleEditorScreen extends Screen {
         this.model = new RuleEditorModel(workspace);
         modals.setOnScopeChanged(() -> {
             if (ruleList != null) ruleList.mouseReleased(-1, -1, 0);
-            previewScroll.mouseReleased();
             if (pages != null) pages.endInteractions();
         });
         // 焦点变化时播报控件的可读名称（未开启朗读时 GameNarrator 内部会静默）
@@ -357,17 +353,17 @@ public final class RuleEditorScreen extends Screen {
         UiButton edit = button(UI + "button.edit", UiButtonVariant.PRIMARY, () -> {
             String id = selectedRuleId(); if (id != null) openEditor(id);
         });
-        UiButton toggle = button(UI + "button.toggle", UiButtonVariant.SECONDARY, this::toggleSelectedEnabled);
+        toggleButton = button(UI + "button.enable", UiButtonVariant.SECONDARY, this::toggleSelectedEnabled);
         UiButton copy = button(UI + "button.duplicate", UiButtonVariant.SECONDARY, this::promptDuplicate);
         UiButton more = button(UI + "button.more", UiButtonVariant.SECONDARY, this::openMore);
-        UiButton details = button(UI + "button.details", UiButtonVariant.SECONDARY, () -> { narrowDetails = !narrowDetails; rebuildFocus(); });
-        detailsButton = details;
+        UiButton delete = button(UI + "button.delete", UiButtonVariant.DANGER, this::deleteSelected);
         applyButton = button(UI + "button.apply", UiButtonVariant.PRIMARY, this::save);
         UiButton changes = button(UI + "button.changes", UiButtonVariant.SECONDARY, this::showChanges);
-        globalBar.set(List.of(create, templates, details));
-        selectedBar.set(List.of(edit, toggle, copy, more));
+        selectedButtons.clear();
+        selectedButtons.addAll(List.of(edit, toggleButton, copy, delete, more));
+        globalBar.set(List.of(create, templates, edit, toggleButton, copy, delete, more));
         listBar.set(List.of(applyButton, changes));
-        listButtons.addAll(List.of(create, templates, details, edit, toggle, copy, more, applyButton, changes));
+        listButtons.addAll(List.of(create, templates, edit, toggleButton, copy, delete, more, applyButton, changes));
     }
 
     /*** 纵向菜单项，避免窄屏和英文长按钮挤出弹窗。 */
@@ -379,12 +375,15 @@ public final class RuleEditorScreen extends Screen {
         UiListView<MenuAction> list = new UiListView<>(font,
                 (graphics, rowFont, item, index, row, selected, hovered, focused) -> graphics.drawString(rowFont,
                         Component.translatable(UI + item.key()), row.x() + 4, row.y() + 4, UiPalette.TEXT_PRIMARY, false));
-        list.setItems(List.of(new MenuAction("button.mask", this::maskSelected),
-                new MenuAction("button.restore", this::restoreSelected), new MenuAction("button.delete", this::deleteSelected)));
+        String id = selectedRuleId();
+        JsonObject body = id == null ? null : model.displayBody(id);
+        boolean masked = body != null && body.has(RuleFields.DELETE) && body.get(RuleFields.DELETE).getAsBoolean();
+        list.setItems(List.of(new MenuAction(masked ? "button.unmask" : "button.mask", this::maskSelected),
+                new MenuAction("button.restore", this::restoreSelected)));
         list.setRowHeight(20);
         list.setActivateOnSingleClick(true);
         list.setOnActivate(item -> { modals.close(modal); item.action().run(); });
-        modal.contentWidget(list, 64).cancel(Component.translatable(UI + "button.cancel"));
+        modal.contentWidget(list, 44).cancel(Component.translatable(UI + "button.cancel"));
         modal.preferredWidth(300).layoutCentered(width, height);
         modals.push(modal);
     }
@@ -566,8 +565,7 @@ public final class RuleEditorScreen extends Screen {
     // 管理页布局
     private void renderListMode(GuiGraphics graphics, int mouseX, int mouseY) {
         UiRect area = contentArea;
-        boolean wide = area.width() >= 430;
-        if (detailsButton != null) detailsButton.setVisible(!wide);
+        updateSelectedButtons();
         int headerHeight = globalBar.preferredHeight(area.width());
         globalBar.layout(area.y(), area.width());
         globalBar.render(graphics, font, mouseX, mouseY);
@@ -583,50 +581,23 @@ public final class RuleEditorScreen extends Screen {
         }
         int listY = searchY + ROW_H + PAD;
         int available = Math.max(0, area.bottom() - listY);
-        int treeWidth = wide ? area.width() * 45 / 100 : area.width();
-        int detailHeight = !wide && narrowDetails ? available : 0;
         if (ruleList != null) {
-            ruleList.setVisible(wide || !narrowDetails);
-            ruleList.setBounds(area.x(), listY, treeWidth, available - detailHeight);
+            ruleList.setBounds(area.x(), listY, area.width(), available);
             ruleList.render(graphics, font, mouseX, mouseY);
         }
-        previewArea = wide ? new UiRect(area.x() + treeWidth + PAD, listY, area.width() - treeWidth - PAD, available)
-                : new UiRect(area.x(), area.bottom() - detailHeight, area.width(), detailHeight);
-        selectedBar.buttons.forEach(button -> button.setVisible(wide || detailHeight > 0));
-        if (wide || detailHeight > 0) renderSelectedPreview(graphics, mouseX, mouseY);
     }
 
-    private void renderSelectedPreview(GuiGraphics graphics, int mouseX, int mouseY) {
-        UiTheme.drawInset(graphics, previewArea);
-        int barHeight = selectedBar.preferredHeight(previewArea.width());
-        selectedBar.layout(previewArea.x(), previewArea.y(), previewArea.width());
-        selectedBar.render(graphics, font, mouseX, mouseY);
+    // 条目操作随选中状态同步；切换按钮只显示下一步动作，布局按当前文案计算。
+    private void updateSelectedButtons() {
         String id = selectedRuleId();
-        Component text = Component.translatable(UI + "preview.select");
-        if (id != null) {
-            JsonObject rule = model.displayBody(id);
-            text = Component.literal(labelText(id)).append("\n").append(recipeViews.containsKey(id)
-                            ? recipeViews.get(id).summary() : Component.empty()).append("\n\n")
-                    .append(Component.translatable(UI + "preview.group", Component.translatable(UI + "category." + RuleCategories.category(rule))))
-                    .append("\n").append(rule == null ? Component.empty() : NaturalSummary.rule(rule));
+        for (UiButton button : selectedButtons) {
+            button.setEnabled(workspace.active() && id != null);
         }
-        if (id != null && RulePreviewIcons.unavailable(model.displayBody(id)))
-            text = text.copy().append("\n").append(Component.translatable(UI + "preview.unavailable"));
-        var lines = font.split(text, Math.max(1, previewArea.width() - 12));
-        previewScroll.setViewport(previewArea.x() + 4, previewArea.y() + barHeight + PAD,
-                Math.max(0, previewArea.width() - 8), Math.max(0, previewArea.height() - barHeight - 8));
-        var icon = id == null ? null : RulePreviewIcons.rule(model.displayBody(id));
-        int previewHeight = icon == null ? 0 : 64;
-        previewScroll.setContentHeight(lines.size() * 11 + previewHeight);
-        previewScroll.push(graphics);
-        if (icon != null && previewScroll.offset() < previewHeight) {
-            if (icon instanceof com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon.Rendered rendered)
-                rendered.painter().render(graphics, new UiRect(0, 0, Math.min(72, previewScroll.viewport().width()), 60));
-            else icon.render(graphics, 24, 20);
+        if (toggleButton != null) {
+            JsonObject body = id == null ? null : model.displayBody(id);
+            boolean enabled = body != null && (!body.has(RuleFields.ENABLED) || body.get(RuleFields.ENABLED).getAsBoolean());
+            toggleButton.setLabel(Component.translatable(UI + (enabled ? "button.disable" : "button.enable")));
         }
-        int y = previewHeight;
-        for (var line : lines) { graphics.drawString(font, line, 0, y, UiPalette.TEXT_PRIMARY, false); y += 11; }
-        previewScroll.pop(graphics);
     }
 
     // 编辑页布局：四个页签各自在内容区里排布控件（含窄屏分层）
@@ -1575,7 +1546,7 @@ public final class RuleEditorScreen extends Screen {
             if (ruleList != null && ruleList.mouseClicked(mouseX, mouseY, button)) {
                 return true;
             }
-            return globalBar.mouseClicked(mouseX, mouseY, button) || selectedBar.mouseClicked(mouseX, mouseY, button)
+            return globalBar.mouseClicked(mouseX, mouseY, button)
                     || listBar.mouseClicked(mouseX, mouseY, button);
         }
         if (requiredButton != null && requiredButton.mouseClicked(mouseX, mouseY, button)) return true;
@@ -1611,7 +1582,6 @@ public final class RuleEditorScreen extends Screen {
         boolean consumed = pages != null && pages.mouseReleased(mouseX, mouseY, button);
         if (ruleList != null) consumed |= ruleList.mouseReleased(mouseX, mouseY, button);
         consumed |= globalBar.mouseReleased(mouseX, mouseY, button);
-        consumed |= selectedBar.mouseReleased(mouseX, mouseY, button);
         consumed |= listBar.mouseReleased(mouseX, mouseY, button);
         if (requiredButton != null) consumed |= requiredButton.mouseReleased(mouseX, mouseY, button);
         consumed |= footerBar.mouseReleased(mouseX, mouseY, button);
@@ -1639,7 +1609,6 @@ public final class RuleEditorScreen extends Screen {
             return modals.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
         }
         if (mode == Mode.LIST) {
-            if (previewArea.contains(mouseX, mouseY) && previewScroll.scrollBy(scrollY * 20)) return true;
             if (ruleList != null && ruleList.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
                 return true;
             }
@@ -1769,6 +1738,7 @@ public final class RuleEditorScreen extends Screen {
     // 应用全部按钮与撤销/重做按钮的可用状态与标签
     private void updateActionButtons() {
         boolean editable = workspace.active();
+        updateSelectedButtons();
         if (applyButton != null) {
             applyButton.setEnabled(editable && model.hasDirty());
         }
