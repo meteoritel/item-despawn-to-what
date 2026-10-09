@@ -22,6 +22,11 @@ public interface ConditionSupport {
     // 打开叶子参数编辑页
     Consumer<ConditionNode.Leaf> onEditLeaf();
 
+    // 问题定位可附带完整草稿字段路径；宿主可打开参数页并聚焦该字段。
+    default void revealLeaf(ConditionNode.Leaf leaf, String fieldPath) {
+        onEditLeaf().accept(leaf);
+    }
+
     // 条件表达式解码所用的类型注册表
     TypeRegistry<ConditionType<?>> registry();
 }

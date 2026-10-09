@@ -1471,6 +1471,11 @@ public final class RuleEditorEditPages {
             }
 
             @Override
+            public void revealLeaf(ConditionNode.Leaf leaf, String fieldPath) {
+                openLeafEditor(owner, leaf, fieldPath);
+            }
+
+            @Override
             public TypeRegistry<ConditionType<?>> registry() {
                 return base.registry();
             }
@@ -1489,6 +1494,10 @@ public final class RuleEditorEditPages {
 
     // 条件叶参数弹窗：确认后把参数写回草稿并刷新发起编辑的表单
     private void openLeafEditor(FormView owner, ConditionNode.Leaf leaf) {
+        openLeafEditor(owner, leaf, null);
+    }
+
+    private void openLeafEditor(FormView owner, ConditionNode.Leaf leaf, @Nullable String fieldPath) {
         EditSession session = host.session();
         if (session == null) {
             return;
@@ -1561,6 +1570,7 @@ public final class RuleEditorEditPages {
         modal.cancel(Component.translatable(UI + "button.cancel"));
         modal.layoutCentered(host.screenWidth(), host.screenHeight());
         host.modals().push(modal);
+        if (fieldPath != null) panel.focusField(fieldPath);
     }
 
     // 找到发起编辑的条件树
