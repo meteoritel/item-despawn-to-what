@@ -163,9 +163,12 @@ public final class RuleEditorEditPages {
 
     // 布局常量
     private static final int PAD = 4;
-    private static final int ROW_H = 12;
-    private static final int BUTTON_H = 16;
-    private static final int BUTTON_GAP = 2;
+    private static final int ROW_H = 20;
+    private static final int BUTTON_H = 20;
+    private static final int BUTTON_GAP = 4;
+    private static final int CARD_PAD = 8;
+    private static final int CARD_GAP = 8;
+    private static final int CARD_HEADER_H = 20;
     private static final int LINE_H = 10;
     private static final int LIST_ROWS = 4;
     private static final int NARROW_WIDTH = 430;
@@ -216,6 +219,10 @@ public final class RuleEditorEditPages {
     private boolean pendingRebuild;
     private boolean rebuilding;
     private @Nullable UiRect lastArea;
+    private final List<PageCard> cards = new ArrayList<>();
+
+    /*** 页面分区的绘制数据，与控件共用滚动坐标。 */
+    private record PageCard(UiRect bounds, @Nullable Component title) { }
     private int candidateIndex;
     private int effectIndex;
 
@@ -423,28 +430,40 @@ public final class RuleEditorEditPages {
     // 表单工厂
     private FormView newForm(EditSession session, String basePath, TypeEditorDescriptor descriptor) {
         FormView form = new FormView(font, session, basePath);
+        if (page == Page.INPUT) form.useCatalogSelections();
         form.setConditionSupport(pageConditionSupport(form));
         form.setSuggestionProvider(host.suggestions());
         form.setOnChanged(host::onDraftChanged);
+        if (page == Page.INPUT) form.setOnChanged(() -> {
+            form.applyToDraft();
+            if (form == sourceForm) updateBlacklistVisibility();
+            host.onDraftChanged();
+        });
         // 输入被长度上限拒绝时立刻显示一条可读提示（字段名：问题）
         form.setOnRejectedNotice(message -> host.notice(message, UiPalette.DANGER));
         form.setCatalogOpener((field, tags, onPicked) -> {
+            if (page == Page.INPUT && RuleFields.SOURCE.equals(basePath) && RuleFields.SOURCE_EXCLUDE.equals(field.name())) {
+                if (!host.rejectWhenFrozen()) host.modals().push(SourceBlacklistPicker.modal(font, host.workspace(), session.draft().view(),
+                        host.screenWidth(), host.screenHeight(), onPicked));
+                return;
+            }
             RuleCatalogType type = tags ? RuleCatalogType.TAG : RuleEditorP4Panels.catalogTypeOf(field);
             if (type == null || host.rejectWhenFrozen()) return;
             boolean multi = field.type() == com.meteorite.itemdespawntowhat.client.edit.EditorFieldType.TAG_LIST
                     || field.type() == com.meteorite.itemdespawntowhat.client.edit.EditorFieldType.RL_LIST;
             host.modals().push(RuleEditorP4Panels.catalogModal(font, host.workspace(), type, multi,
-                    Component.translatable(field.labelKey()), host.screenWidth(), host.screenHeight(), onPicked, field));
+                    Component.translatable(field.labelKey()), host.screenWidth(), host.screenHeight(), onPicked, field, page == Page.INPUT));
         });
         form.setDescriptor(descriptor);
         form.reload();
+        form.useCardSpacing();
         return form;
     }
 
     // ---- 基本信息 ----
 
-    // 基本页优先级控件的加高行高（默认行高 12，spec 要求「加高的优先级控件」）
-    private static final int PRIORITY_ROW_HEIGHT = UiTheme.ROW_HEIGHT + 10;
+    // 基本页优先级与其它单行控件使用同一紧凑高度。
+    private static final int PRIORITY_ROW_HEIGHT = 18;
 
     private void buildInfo(EditSession session) {
         JsonObject rule = session.draft().view();
@@ -453,27 +472,40 @@ public final class RuleEditorEditPages {
         TypeEditorDescriptor descriptor = TypeEditorDescriptor.of(INFO_PAGE, Component.translatable(UI + "tab.info"), List.of(
                 EditorField.optionalText(RuleFields.DISPLAY_NAME, UI + "rule.display_name").withHint(UI + "rule.display_name_hint"),
                 EditorField.bool(RuleFields.ENABLED, UI + "rule.enabled"),
-                EditorField.integerSlider(RuleFields.PRIORITY, UI + "rule.priority", Integer.MIN_VALUE, Integer.MAX_VALUE, -100, 100).optional(),
+                EditorField.integerSlider(RuleFields.PRIORITY, UI + "rule.priority", Integer.MIN_VALUE, Integer.MAX_VALUE, -100, 100).optional().withHint(UI + "rule.priority.hint"),
                 EditorField.longText(RuleFields.NOTES, UI + "rule.notes").withHint(UI + "rule.notes_hint")));
         infoForm = newForm(session, "", descriptor);
-        // 显式加高优先级行：slider 与数字输入框一起变高；其它页字段保持默认高度
+        infoForm.useCompactSpacing();
+        // 滑条与数字输入同高，备注保留三行可见高度。
         infoForm.setRowHeight(RuleFields.PRIORITY, PRIORITY_ROW_HEIGHT);
+        infoForm.setRowHeight(RuleFields.NOTES, 36);
+        JsonObject automatic = rule.deepCopy();
+        automatic.remove(RuleFields.DISPLAY_NAME);
+        infoForm.setRowDefaultText(RuleFields.DISPLAY_NAME, RuleNaming.ruleTitle(automatic, nameSource));
+        infoForm.suppressRowTooltip(RuleFields.ENABLED);
         restoreNameButton = new UiButton(font, Component.translatable(UI + "button.restore_name"), UiButtonVariant.SECONDARY, this::restoreAutoName);
-        restoreNameButton.setEnabled(rule.has(RuleFields.DISPLAY_NAME));
+        restoreNameButton.setEnabled(canRestoreName(rule));
         // 恢复按钮挂在显示名行尾：与它作用的字段同排，且随表单一起禁用
         infoForm.setRowAction(RuleFields.DISPLAY_NAME, restoreNameButton);
         liveForms.add(infoForm);
         liveWidgets.add(infoForm);
     }
 
-    // 恢复自动命名：删除 display_name、刷新控件与标题、退出文本焦点并给出反馈；一次撤销可还原
+    // 自定义文本尚未提交时也允许恢复默认，默认展示基线仍不算自定义名称。
+    private boolean canRestoreName(@Nullable JsonObject rule) {
+        if (rule != null && rule.has(RuleFields.DISPLAY_NAME)) return true;
+        JsonElement pending = infoForm == null ? null : infoForm.pendingValue(RuleFields.DISPLAY_NAME);
+        return pending != null && pending.isJsonPrimitive() && pending.getAsJsonPrimitive().isString() && !pending.getAsString().isBlank();
+    }
+
+    // 恢复默认：删除 display_name、刷新实际默认名称并清空旧控件焦点；撤销可还原自定义名称。
     private void restoreAutoName() {
         EditSession session = host.session();
         if (session == null) {
             return;
         }
         JsonObject view = session.draft().view();
-        if (!view.has(RuleFields.DISPLAY_NAME)) {
+        if (!canRestoreName(view)) {
             return;
         }
         RuleDraft draft = session.draft();
@@ -494,9 +526,17 @@ public final class RuleEditorEditPages {
 
     // ---- 输入与成本 ----
 
+    // 无标签时隐藏黑名单入口；保留已有 JSON，避免仅浏览界面改写旧规则。
+    private void updateBlacklistVisibility() {
+        if (sourceForm != null) sourceForm.setRowVisible(RuleFields.SOURCE + "." + RuleFields.SOURCE_EXCLUDE,
+                !SourceBlacklistPicker.sourceTags(currentView()).isEmpty());
+    }
+
     private void buildInput(EditSession session) {
         JsonObject rule = session.draft().view();
         sourceForm = newForm(session, RuleFields.SOURCE, BuiltinEditorDescriptors.sourceDescriptor());
+        sourceForm.hideRowLabel(RuleFields.SOURCE + ".items");
+        updateBlacklistVisibility();
         liveForms.add(sourceForm);
         liveWidgets.add(sourceForm);
 
@@ -505,14 +545,18 @@ public final class RuleEditorEditPages {
         if (sourceRef != null) {
             sourceCostMode.setSelected(COST_EXPLICIT);
             sourceCostMode.setEnabled(false);
-            costNote = Component.translatable(UI + "cost.mode.from_effect").append(" ")
-                    .append(Component.translatable(UI + "cost.from_effect_path", Component.literal(sourceRef.path())));
+            costNote = Component.translatable(UI + "cost.mode.from_effect");
             sourceCostForm = newForm(session, sourceRef.path(), ownFieldsOnly(EffectEditorRegistry.descriptorFor(CONSUME_SOURCE_ID)));
         } else {
             boolean custom = rule.has(RuleFields.SOURCE_COST);
             sourceCostMode.setSelected(custom ? COST_EXPLICIT : COST_DERIVED);
             sourceCostMode.setOnChanged(this::onSourceCostMode);
             sourceCostForm = custom ? newForm(session, "", BuiltinEditorDescriptors.sourceCostDescriptor()) : null;
+            if (!custom) {
+                boolean consumesOther = RuleCostBinding.consumeCatalyst(rule) != null
+                        || RuleCostBinding.find(rule, TypeLabels.OWN_NAMESPACE + ":consume_fluid") != null;
+                costNote = Component.translatable(UI + (consumesOther ? "cost.auto.zero" : "cost.auto.one"));
+            }
         }
         liveWidgets.add(sourceCostMode);
         if (sourceCostForm != null) {
@@ -1941,6 +1985,7 @@ public final class RuleEditorEditPages {
     }
 
     private int layoutPage(UiRect area) {
+        cards.clear();
         return switch (page) {
             case INFO -> layoutInfo(area);
             case INPUT -> layoutInput(area);
@@ -1959,62 +2004,95 @@ public final class RuleEditorEditPages {
     }
 
     private int layoutInfo(UiRect area) {
-        // 页内自上而下：只读规则 ID、显示名与恢复按钮、启用、优先级、多行备注
-        int idLines = Math.max(1, idTextLines(area.width()).size());
-        infoIdRect = new UiRect(area.x(), area.y(), area.width(), idLines * (font.lineHeight + 1));
-        return layoutForm(infoForm, area.x(), infoIdRect.bottom() + 2, area.width());
+        int padding = 6;
+        int x = area.x() + padding;
+        int width = Math.max(0, area.width() - padding * 2);
+        int y = area.y() + padding;
+        int idLines = Math.max(1, idTextLines(width).size());
+        infoIdRect = new UiRect(x, y, width, (int) Math.ceil(idLines * (font.lineHeight + 1) * 0.8));
+        y = layoutForm(infoForm, x, infoIdRect.bottom() + 4, width);
+        int bottom = y + padding;
+        cards.add(new PageCard(new UiRect(area.x(), area.y(), area.width(), bottom - area.y()), null));
+        return bottom;
+    }
+
+    // 内容高度决定卡片高度，额外留白仅用于宽屏结果列表的对齐。
+    private int finishCard(int x, int top, int width, int contentBottom, String titleKey) {
+        int bottom = contentBottom + CARD_PAD;
+        cards.add(new PageCard(new UiRect(x, top, width, Math.max(CARD_HEADER_H + CARD_PAD * 2, bottom - top)),
+                Component.translatable(UI + titleKey)));
+        return bottom + CARD_GAP;
     }
 
     // 只读规则 ID 行：按可用宽度折行，完整显示不截断
     private List<FormattedCharSequence> idTextLines(int width) {
         JsonObject view = currentView();
         String id = view == null ? "" : stringOf(view);
-        return font.split(Component.translatable(UI + "info.rule_id").append(": ").append(id), Math.max(8, width));
+        return font.split(Component.literal(id), Math.max(8, (int) (width / 0.8)));
     }
 
     private int layoutInput(UiRect area) {
-        int x = area.x();
-        int y = layoutForm(sourceForm, x, area.y(), area.width());
-        costModeRect = new UiRect(x, y, area.width(), LINE_H);
+        int x = area.x() + CARD_PAD;
+        int width = Math.max(0, area.width() - CARD_PAD * 2);
+        int top = area.y();
+        int y = layoutForm(sourceForm, x, top + CARD_PAD + CARD_HEADER_H, width);
+        costModeRect = new UiRect(x, y, width, LINE_H);
         y += LINE_H + 2;
         if (sourceCostMode != null) {
-            sourceCostMode.setBounds(x, y, fitWidth(sourceCostMode.preferredWidth(PAD), 100, area.width()), ROW_H);
+            sourceCostMode.setBounds(x, y, width, ROW_H);
             y += ROW_H + PAD;
         }
         if (costNote != null) {
-            costNoteRect = new UiRect(x, y, area.width(), LINE_H);
+            costNoteRect = new UiRect(x, y, width, LINE_H);
             y += LINE_H + PAD;
         }
-        y = layoutForm(sourceCostForm, x, y, area.width());
-        y = layoutPresenceSection(CATALYST_PRESENT_ID, x, y, area.width());
+        y = layoutForm(sourceCostForm, x, y, width);
+        top = finishCard(area.x(), top, area.width(), y, "card.source");
+        y = layoutPresenceSection(CATALYST_PRESENT_ID, x, top + CARD_PAD + CARD_HEADER_H, width);
         if (catalystToggle != null) {
-            catalystToggle.setBounds(x, y, area.width(), ROW_H);
+            catalystToggle.setBounds(x, y, width, ROW_H);
             y += ROW_H + PAD;
         }
         if (catalystNote != null) {
-            catalystNoteRect = new UiRect(x, y, area.width(), LINE_H);
+            catalystNoteRect = new UiRect(x, y, width, LINE_H);
             y += LINE_H + PAD;
         }
-        y = layoutForm(catalystForm, x, y, area.width());
-        return layoutPresenceSection(FLUID_PRESENT_ID, x, y, area.width());
+        y = layoutForm(catalystForm, x, y, width);
+        top = finishCard(area.x(), top, area.width(), y, "card.catalyst");
+        y = layoutPresenceSection(FLUID_PRESENT_ID, x, top + CARD_PAD + CARD_HEADER_H, width);
+        return finishCard(area.x(), top, area.width(), y, "card.fluid");
     }
 
     private int layoutTrigger(UiRect area) {
-        int x = area.x();
-        int y = area.y();
+        int x = area.x() + CARD_PAD;
+        int width = Math.max(0, area.width() - CARD_PAD * 2);
+        int top = area.y();
+        int y = top + CARD_PAD + CARD_HEADER_H;
+        int cursorX = x;
         for (UiCheckBox box : triggerBoxes) {
-            box.setBounds(x, y, area.width(), ROW_H);
-            y += ROW_H;
+            int boxWidth = Math.min(width, box.preferredWidth(4));
+            if (cursorX > x && cursorX + boxWidth > x + width) {
+                cursorX = x;
+                y += ROW_H + PAD;
+            }
+            box.setBounds(cursorX, y, boxWidth, ROW_H);
+            cursorX += boxWidth + CARD_GAP;
         }
-        y += PAD;
-        triggerNoteRect = new UiRect(x, y, area.width(), LINE_H);
-        y += LINE_H + PAD;
-        y = layoutForm(delayForm, x, y, area.width());
-        if (delayForm != null) {
-            delayHintRect = new UiRect(x, y, area.width(), LINE_H);
+        y += ROW_H + PAD;
+        triggerNoteRect = null;
+        delayHintRect = null;
+        if (RuleTriggers.isExplicitlyEmpty(currentView())) {
+            triggerNoteRect = new UiRect(x, y, width, LINE_H);
             y += LINE_H + PAD;
         }
-        return layoutForm(conditionsForm, x, y, area.width());
+        y = layoutForm(delayForm, x, y, width);
+        if (delayForm != null) {
+            delayHintRect = new UiRect(x, y, width, LINE_H);
+            y += LINE_H + PAD;
+        }
+        top = finishCard(area.x(), top, area.width(), y, "card.trigger");
+        y = layoutForm(conditionsForm, x, top + CARD_PAD + CARD_HEADER_H, width);
+        return finishCard(area.x(), top, area.width(), y, "card.conditions");
     }
 
     // 同一方案的上下文控制只对相关产出显示。
@@ -2123,11 +2201,15 @@ public final class RuleEditorEditPages {
             navY = layoutPlans(x, navY, navigationWidth) + PAD;
         }
         navY = layoutActions(x, navY, navigationWidth, singlePlan);
-        int detailX = x + navigationWidth + PAD;
+        int detailX = x + navigationWidth + CARD_GAP;
         return Math.max(navY, layoutActionDetail(detailX, y, area.right() - detailX));
     }
 
     private int layoutPlans(int x, int y, int width) {
+        int cardX = x, top = y, cardWidth = width;
+        x += CARD_PAD;
+        y += CARD_PAD + CARD_HEADER_H;
+        width = Math.max(0, width - CARD_PAD * 2);
         if (combinationControl != null) {
             combinationLabelRect = new UiRect(x, y, width, LINE_H); y += LINE_H;
             combinationControl.setBounds(x, y, width, ROW_H); y += ROW_H + PAD;
@@ -2135,25 +2217,37 @@ public final class RuleEditorEditPages {
         int listHeight = Math.clamp(candidateList == null ? 1 : candidateList.size(), 1, LIST_ROWS) * ROW_H + 2;
         if (candidateList != null) candidateList.setBounds(x, y, width, listHeight);
         y += listHeight + BUTTON_GAP;
-        return y + layoutButtonGroup(candidateButtons, x, y, width);
+        y += layoutButtonGroup(candidateButtons, x, y, width);
+        return finishCard(cardX, top, cardWidth, y, "card.plans");
     }
 
     // 动作列表；单方案时「添加结果」等按钮与动作按钮同列（没有独立的方案层）
     private int layoutActions(int x, int y, int width, boolean withCandidateButtons) {
-        int listHeight = Math.clamp(effectList == null ? 1 : effectList.size(), 1, LIST_ROWS) * 24 + 2;
+        int cardX = x, top = y, cardWidth = width;
+        x += CARD_PAD;
+        y += CARD_PAD + CARD_HEADER_H;
+        width = Math.max(0, width - CARD_PAD * 2);
+        int listHeight = Math.max(74, Math.clamp(effectList == null ? 1 : effectList.size(), 1, LIST_ROWS) * 24 + 2);
         if (effectList != null) effectList.setBounds(x, y, width, listHeight);
         y += listHeight + BUTTON_GAP;
         y += layoutButtonGroup(effectButtons, x, y, width);
         if (withCandidateButtons) {
             y += layoutButtonGroup(candidateButtons, x, y, width) + BUTTON_GAP;
         }
-        return y;
+        return finishCard(cardX, top, cardWidth, y, "card.actions");
     }
 
     private int layoutActionDetail(int x, int y, int width) {
+        int cardX = x, top = y, cardWidth = width;
+        x += CARD_PAD;
+        y += CARD_PAD + CARD_HEADER_H;
+        width = Math.max(0, width - CARD_PAD * 2);
         if (variantControl != null) { variantControl.setBounds(x, y, width, ROW_H); y += ROW_H + PAD; }
         if (selectedAction != null && RulePreviewIcons.action(selectedAction) != null) {
-            productPreviewRect = new UiRect(x, y, Math.min(72, width), 60); y += 64;
+            boolean entityPreview = RulePreviewIcons.action(selectedAction) instanceof com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon.Rendered;
+            int previewHeight = entityPreview ? 60 : 24;
+            productPreviewRect = new UiRect(x, y, Math.min(entityPreview ? 72 : 24, width), previewHeight);
+            y += previewHeight + PAD;
         }
         if (currentView() != null && readonlyEffectNote(currentView()) != null) { effectNoteRect = new UiRect(x, y, width, LINE_H); y += LINE_H + PAD; }
         y = layoutForm(effectForm, x, y, width);
@@ -2161,13 +2255,7 @@ public final class RuleEditorEditPages {
         if (showAdvancedEffects && fillOriginBox != null) { fillOriginBox.setBounds(x, y, width, ROW_H); y += ROW_H + PAD; }
         if (advancedButton != null) { advancedButton.setBounds(x, y, width, BUTTON_H); y += BUTTON_H + PAD; }
         if (showAdvancedEffects) y = layoutForm(advancedEffectForm, x, y, width);
-        return y;
-    }
-
-    // 控件宽度：先满足最小宽度，再压进可用宽度（可用宽度可能小于最小值，不能用 Math.clamp）
-    private static int fitWidth(int preferred, int min, int available) {
-        int atLeastMin = Math.max(preferred, min);
-        return Math.min(atLeastMin, available);
+        return finishCard(cardX, top, cardWidth, y, "card.action_detail");
     }
 
     // 按钮组横向排布（超宽换行），返回占用高度
@@ -2178,7 +2266,7 @@ public final class RuleEditorEditPages {
         int cursorX = x;
         int cursorY = y;
         for (UiButton button : group) {
-            int buttonWidth = fitWidth(button.preferredWidth(PAD), 24, width);
+            int buttonWidth = Math.clamp(button.preferredWidth(PAD), Math.min(24, width), width);
             if (cursorX > x && cursorX + buttonWidth > x + width) {
                 cursorX = x;
                 cursorY += BUTTON_H + BUTTON_GAP;
@@ -2258,6 +2346,19 @@ public final class RuleEditorEditPages {
         mouseY = pointer.y();
         graphics.enableScissor(lastArea.x(), lastArea.y(), lastArea.right(), lastArea.bottom());
         try {
+            for (PageCard card : cards) {
+                UiTheme.drawCard(graphics, card.bounds());
+                UiRect rect = card.bounds();
+                if (card.title() == null) continue;
+                graphics.fill(rect.x() + CARD_PAD, rect.y() + CARD_PAD, rect.x() + CARD_PAD + 2,
+                        rect.y() + CARD_PAD + font.lineHeight, UiPalette.ACCENT);
+                var titleLines = font.split(card.title().copy().withStyle(net.minecraft.ChatFormatting.BOLD),
+                        Math.max(1, rect.width() - CARD_PAD * 2 - 6));
+                if (!titleLines.isEmpty()) graphics.drawString(font, titleLines.getFirst(),
+                        rect.x() + CARD_PAD + 6, rect.y() + CARD_PAD, UiPalette.TEXT_PRIMARY, false);
+                UiTheme.drawDivider(graphics, rect.x() + CARD_PAD, rect.y() + CARD_PAD + CARD_HEADER_H - 5,
+                        Math.max(0, rect.width() - CARD_PAD * 2));
+            }
             switch (page) {
                 case INFO -> renderInfo(graphics);
                 case INPUT -> renderInput(graphics);
@@ -2283,15 +2384,22 @@ public final class RuleEditorEditPages {
         if (infoIdRect == null || currentView() == null) {
             return;
         }
-        int lineY = infoIdRect.y();
-        for (FormattedCharSequence line : idTextLines(infoIdRect.width())) {
-            graphics.drawString(font, line, infoIdRect.x(), lineY, UiPalette.TEXT_PRIMARY, false);
-            lineY += font.lineHeight + 1;
+        graphics.pose().pushPose();
+        try {
+            graphics.pose().translate(infoIdRect.x(), infoIdRect.y(), 0);
+            graphics.pose().scale(0.8F, 0.8F, 1);
+            int lineY = 0;
+            for (FormattedCharSequence line : idTextLines(infoIdRect.width())) {
+                graphics.drawString(font, line, 0, lineY, UiPalette.TEXT_SECONDARY, false);
+                lineY += font.lineHeight + 1;
+            }
+        } finally {
+            graphics.pose().popPose();
         }
     }
 
     private void renderInput(GuiGraphics graphics) {
-        drawText(graphics, costModeRect, Component.translatable(UI + "rule.source_cost"), UiPalette.TEXT_SECONDARY);
+        drawText(graphics, costModeRect, Component.translatable(UI + "cost.source_title"), UiPalette.TEXT_SECONDARY);
         if (costNote != null) {
             drawText(graphics, costNoteRect, costNote, UiPalette.TEXT_DISABLED);
         }
@@ -2322,7 +2430,12 @@ public final class RuleEditorEditPages {
             var icon = RulePreviewIcons.action(selectedAction);
             if (icon instanceof com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon.Rendered rendered) {
                 rendered.painter().render(graphics, productPreviewRect);
-            } else if (icon != null) icon.render(graphics, productPreviewRect.x() + (productPreviewRect.width() - 16) / 2, productPreviewRect.y() + 20);
+            } else if (icon != null) icon.render(graphics, productPreviewRect.x() + (productPreviewRect.width() - 16) / 2,
+                    productPreviewRect.y() + (productPreviewRect.height() - 16) / 2);
+            int labelX = productPreviewRect.right() + PAD;
+            int labelWidth = Math.max(0, cards.getLast().bounds().right() - CARD_PAD - labelX);
+            drawText(graphics, new UiRect(labelX, productPreviewRect.y() + 4, labelWidth, LINE_H),
+                    RuleNaming.effectTitle(selectedAction, nameSource), UiPalette.TEXT_PRIMARY);
             if (selectedAction.has("entity")) {
                 String id = selectedAction.get("entity").getAsString();
                 int age = selectedAction.has("age") ? selectedAction.get("age").getAsInt() : 0;
@@ -2550,9 +2663,9 @@ public final class RuleEditorEditPages {
         for (UiButton button : buttons) {
             button.setEnabled(enabled);
         }
-        // 恢复自动命名按钮同时受自身条件约束：没有显示名时恒为禁用
+        // 恢复默认同时检查尚未提交的自定义名称。
         if (restoreNameButton != null) {
-            restoreNameButton.setEnabled(enabled && view != null && view.has(RuleFields.DISPLAY_NAME));
+            restoreNameButton.setEnabled(enabled && canRestoreName(view));
         }
         for (UiButton button : candidateButtons) {
             button.setEnabled(enabled);
@@ -2567,6 +2680,7 @@ public final class RuleEditorEditPages {
         for (FormView form : liveForms) {
             form.tick();
         }
+        if (restoreNameButton != null) restoreNameButton.setEnabled(enabled && canRestoreName(currentView()));
         flushRebuild();
     }
 

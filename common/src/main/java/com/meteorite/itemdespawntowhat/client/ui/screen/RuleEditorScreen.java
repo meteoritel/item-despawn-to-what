@@ -85,11 +85,11 @@ public final class RuleEditorScreen extends Screen {
     // 布局常量
     private static final int PAD = 4;
     private static final int HEADER_H = 14;
-    private static final int TAB_H = 14;
+    private static final int TAB_H = 22;
+    private static final int EDIT_HEADER_H = 24;
+    private static final int EDIT_PAD = 8;
     private static final int ROW_H = 12;
     private static final int NOTICE_H = 10;
-    // 自然语言摘要 / 消耗语义提示行高
-    private static final int SUMMARY_H = 10;
     // i18n 前缀
     private static final String UI = "gui.itemdespawntowhat.edit.";
     private static final String ISSUE = UI + "issue.";
@@ -138,7 +138,7 @@ public final class RuleEditorScreen extends Screen {
     private @Nullable RuleEditorEditPages pages;
     private @Nullable UiSegmentedControl tabControl;
     private final List<UiButton> footerButtons = new ArrayList<>();
-    private final ButtonBar footerBar = new ButtonBar();
+    private final ButtonBar footerBar = new ButtonBar(22, 4, true);
     // 编辑内容区（每帧重算；切页与问题定位复用同一份布局）
     private UiRect lastEditArea = new UiRect(0, 0, 0, 0);
 
@@ -453,42 +453,39 @@ public final class RuleEditorScreen extends Screen {
         int h = this.height;
         modals.setBounds(0, 0, w, h);
         UiTheme.drawWindow(graphics, new UiRect(0, 0, w, h));
-        UiTheme.drawDivider(graphics, 0, HEADER_H, w);
+        int headerHeight = mode == Mode.EDIT ? EDIT_HEADER_H : HEADER_H;
+        int pagePad = mode == Mode.EDIT ? EDIT_PAD : PAD;
+        UiTheme.drawDivider(graphics, 0, headerHeight, w);
         drawHeaderText(graphics);
-        int y = HEADER_H + 2;
+        int y = headerHeight + PAD;
         if (mode == Mode.EDIT && tabControl != null) {
-            tabControl.setBounds(PAD, y, Math.clamp(w - PAD * 2, 0, 240), TAB_H);
+            tabControl.setBounds(pagePad, y, Math.max(0, w - pagePad * 2), TAB_H);
             tabControl.render(graphics, font, mouseX, mouseY);
-            y += TAB_H + 2;
+            y += TAB_H + EDIT_PAD;
         }
         if (mode == Mode.EDIT && requiredButton != null && requiredButton.isVisible()) {
-            requiredButton.setBounds(PAD, y, w - PAD * 2, 14);
+            requiredButton.setBounds(pagePad, y, Math.max(0, w - pagePad * 2), 16);
             requiredButton.render(graphics, font, mouseX, mouseY);
-            y += 16;
+            y += 20;
         }
-        int availableWidth = Math.max(0, w - PAD * 2);
+        int availableWidth = Math.max(0, w - pagePad * 2);
         int footerHeight = (mode == Mode.LIST ? listBar : footerBar).preferredHeight(availableWidth);
-        int footerY = h - PAD - footerHeight;
-        int noticeY = footerY - 1 - NOTICE_H;
-        int summaryY = noticeY - (showsSummary() ? SUMMARY_H : 0);
-        contentArea = new UiRect(PAD, y, availableWidth, Math.max(0, summaryY - y - 1));
+        int footerY = h - pagePad - footerHeight;
+        int noticeY = footerY - PAD - (notice == null ? 0 : NOTICE_H);
+        contentArea = new UiRect(pagePad, y, availableWidth, Math.max(0, noticeY - y - EDIT_PAD));
         if (mode == Mode.LIST) {
             renderListMode(graphics, mouseX, mouseY);
         } else {
+            graphics.fill(pagePad - 2, y - 2, w - pagePad + 2, Math.max(y - 2, noticeY - PAD), UiPalette.PANEL_FILL);
             renderEditMode(graphics, mouseX, mouseY);
-            if (showsSummary()) {
-                drawSummary(graphics, summaryY, w);
-            }
         }
         drawNotice(graphics, noticeY, w);
         if (mode == Mode.LIST) {
             listBar.layout(footerY, Math.max(0, w - PAD * 2));
             listBar.render(graphics, font, mouseX, mouseY);
         } else {
-            if (!footerButtons.isEmpty()) {
-                footerButtons.getFirst().setEnabled(workspace.active());
-            }
-            footerBar.layout(footerY, Math.max(0, w - PAD * 2));
+            UiTheme.drawDivider(graphics, pagePad, footerY - PAD, availableWidth);
+            footerBar.layout(pagePad, footerY, availableWidth);
             footerBar.render(graphics, font, mouseX, mouseY);
         }
         mouseX = actualMouseX;
@@ -498,11 +495,11 @@ public final class RuleEditorScreen extends Screen {
             Component tip = null;
             if (notice != null && new UiRect(PAD, noticeY, availableWidth, NOTICE_H).contains(mouseX, mouseY)) {
                 tip = notice;
-            } else if (showsSummary() && new UiRect(PAD, summaryY, availableWidth, SUMMARY_H).contains(mouseX, mouseY)) {
+            } else if (mode == Mode.EDIT && mouseY < EDIT_HEADER_H) {
                 EditSession session = editingSession();
                 if (session != null) {
-                    tip = tab == RuleEditorEditPages.Page.RESULTS ? ConsumptionSummary.hintRule(session.draft().view())
-                            : NaturalSummary.rule(session.draft().view());
+                    tip = NaturalSummary.rule(session.draft().view()).copy().append("\n")
+                            .append(ConsumptionSummary.hintRule(session.draft().view()));
                 }
             } else if (mode == Mode.LIST && ruleList != null && ruleList.bounds().contains(mouseX, mouseY)) {
                 UiTreeNode<String> node = ruleList.nodeAt(mouseX, mouseY);
@@ -541,13 +538,20 @@ public final class RuleEditorScreen extends Screen {
         String title = this.getTitle().getString();
         if (mode == Mode.EDIT && editingId != null) {
             // 页头只显示当前实际生效名称；规则 ID 由基本页第一行的只读行单独承担
-            title = labelText(editingId);
+            title = Component.translatable(UI + "header.editing", labelText(editingId)).getString();
         }
-        title = TextScroll.trimToWidth(font, title, Math.max(0, this.width - 96));
-        graphics.drawString(font, title, PAD, 3, UiPalette.HEADER_TEXT, false);
-        String state = Component.translatable(workspace.active() ? UI + "state.active" : UI + "state.freezing")
+        String state = Component.translatable(!workspace.active() ? UI + "state.freezing"
+                : mode == Mode.EDIT ? UI + (model.dirtyRuleIds().isEmpty() ? "state.applied" : "state.unapplied") : UI + "state.active")
                 .getString();
-        graphics.drawString(font, state, this.width - PAD - font.width(state), 3, UiPalette.HEADER_TEXT, false);
+        int padding = mode == Mode.EDIT ? EDIT_PAD : PAD;
+        int textY = mode == Mode.EDIT ? (EDIT_HEADER_H - font.lineHeight) / 2 : 3;
+        int stateWidth = font.width(state) + 12;
+        title = TextScroll.trimToWidth(font, title, Math.max(0, this.width - padding * 2 - stateWidth - PAD));
+        graphics.drawString(font, title, padding, textY, UiPalette.HEADER_TEXT, false);
+        if (mode == Mode.EDIT) {
+            UiTheme.drawPanel(graphics, new UiRect(this.width - padding - stateWidth, 4, stateWidth, EDIT_HEADER_H - 8));
+        }
+        graphics.drawString(font, state, this.width - padding - font.width(state) - (mode == Mode.EDIT ? 6 : 0), textY, UiPalette.HEADER_TEXT, false);
     }
 
     // 底部状态提示
@@ -557,30 +561,6 @@ public final class RuleEditorScreen extends Screen {
         }
         String text = TextScroll.trimToWidth(font, notice.getString(), Math.max(0, w - PAD * 2));
         graphics.drawString(font, text, PAD, y + 1, noticeColor, false);
-    }
-
-    // 基本页没有固定底部摘要；其他页保留，结果页显示消耗语义提示
-    private boolean showsSummary() {
-        return mode == Mode.EDIT && tab != RuleEditorEditPages.Page.INFO;
-    }
-
-    // 摘要行：结果页显示消耗语义提示（顶层 effects 或候选效果合并），其余页显示自然语言摘要
-    private void drawSummary(GuiGraphics graphics, int y, int w) {
-        EditSession session = editingSession();
-        if (session == null) {
-            return;
-        }
-        Component text;
-        if (tab == RuleEditorEditPages.Page.RESULTS) {
-            text = ConsumptionSummary.hintRule(session.draft().view());
-        } else {
-            text = NaturalSummary.rule(session.draft().view());
-        }
-        if (text.getString().isEmpty()) {
-            return;
-        }
-        String trimmed = TextScroll.trimToWidth(font, text.getString(), Math.max(0, w - PAD * 2));
-        graphics.drawString(font, trimmed, PAD, y + 1, UiPalette.TEXT_SECONDARY, false);
     }
 
     // 管理页布局
@@ -2078,8 +2058,17 @@ public final class RuleEditorScreen extends Screen {
 
     // 底排按钮：自动换行、左对齐
     private static final class ButtonBar {
-        private static final int BUTTON_H = 16;
-        private static final int GAP = 2;
+        private final int buttonHeight;
+        private final int gap;
+        private final boolean fillRow;
+
+        private ButtonBar() { this(16, 2, false); }
+
+        private ButtonBar(int buttonHeight, int gap, boolean fillRow) {
+            this.buttonHeight = buttonHeight;
+            this.gap = gap;
+            this.fillRow = fillRow;
+        }
 
         private final List<UiButton> buttons = new ArrayList<>();
 
@@ -2090,7 +2079,7 @@ public final class RuleEditorScreen extends Screen {
 
         private int preferredHeight(int width) {
             int rows = rows(width);
-            return rows == 0 ? 0 : rows * BUTTON_H + (rows - 1) * GAP;
+            return rows == 0 ? 0 : rows * buttonHeight + (rows - 1) * gap;
         }
 
         private int rows(int width) {
@@ -2109,7 +2098,7 @@ public final class RuleEditorScreen extends Screen {
                     rows++;
                     used = 0;
                 }
-                used += buttonWidth + GAP;
+                used += buttonWidth + gap;
             }
             return rows;
         }
@@ -2120,15 +2109,26 @@ public final class RuleEditorScreen extends Screen {
             int limit = Math.max(1, width);
             int cursorX = x;
             int cursorY = y;
+            int extra = 0;
+            if (fillRow && rows(width) == 1) {
+                int count = 0;
+                int used = 0;
+                for (UiButton button : buttons) {
+                    if (!button.isVisible()) continue;
+                    used += Math.clamp(button.preferredWidth(6), Math.min(24, limit), limit);
+                    count++;
+                }
+                if (count > 0) extra = Math.max(0, (limit - used - (count - 1) * gap) / count);
+            }
             for (UiButton button : buttons) {
                 if (!button.isVisible()) continue;
-                int buttonWidth = Math.clamp(button.preferredWidth(6), Math.min(24, limit), limit);
+                int buttonWidth = Math.clamp(button.preferredWidth(6), Math.min(24, limit), limit) + extra;
                 if (cursorX > x && cursorX + buttonWidth > x + limit) {
                     cursorX = x;
-                    cursorY += BUTTON_H + GAP;
+                    cursorY += buttonHeight + gap;
                 }
-                button.setBounds(cursorX, cursorY, buttonWidth, BUTTON_H);
-                cursorX += buttonWidth + GAP;
+                button.setBounds(cursorX, cursorY, buttonWidth, buttonHeight);
+                cursorX += buttonWidth + gap;
             }
         }
 

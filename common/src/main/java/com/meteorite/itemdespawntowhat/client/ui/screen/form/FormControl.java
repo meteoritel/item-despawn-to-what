@@ -37,7 +37,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
-/**
+/***
  * 表单控件基类：一个字段对应一行控件。
  * <p>负责「JSON 值 &lt;-&gt; 控件值」的双向搬运与本地校验；
  * 写入草稿由 FormView 统一经由 EditSession 完成，控件本身不碰草稿。
@@ -57,6 +57,7 @@ abstract class FormControl {
 
     // 行高覆盖值：>0 时生效（例如基本页的加高优先级控件），-1 表示用控件自然高度
     private int heightOverride = -1;
+    private int minimumHeight;
     // 输入被上限拒绝时的即时提示出口（由 FormView 转给界面）
     private @Nullable Consumer<Component> rejectedNotice;
 
@@ -151,6 +152,9 @@ abstract class FormControl {
         return null;
     }
 
+    // 复合控件可按当前命中条目提供提示，注册名只在悬停时显示。
+    @Nullable Component tooltipAt(double x, double y) { return null; }
+
     // 本地校验问题清单
     List<FormIssue> issues(String path) {
         return List.of();
@@ -160,6 +164,9 @@ abstract class FormControl {
     void measure(int width) {
     }
 
+    // 普通控件使用整行宽度，复选框等可选择内容宽度。
+    int preferredWidth(int available) { return available; }
+
     // 覆盖本控件占用的行高（<=0 表示恢复自然高度）
     final void setHeightOverride(int height) {
         this.heightOverride = height;
@@ -167,8 +174,16 @@ abstract class FormControl {
 
     // 布局实际使用的行高：有覆盖用覆盖值，否则等于控件自然高度
     final int layoutHeight() {
-        return heightOverride > 0 ? heightOverride : height();
+        return Math.max(minimumHeight, heightOverride > 0 ? heightOverride : height());
     }
+
+    // 卡片表单加高单行控件，复合控件继续按自然内容测量。
+    final void setMinimumHeight(int height) {
+        minimumHeight = Math.max(0, height);
+    }
+
+    // 复合控件不能用自然高度判断密度：条件树在紧凑表单里也可能很高。
+    final boolean usesCardSpacing() { return minimumHeight >= 20; }
 
     // 输入被上限拒绝时的即时提示出口
     final void setRejectedNotice(@Nullable Consumer<Component> rejectedNotice) {
@@ -533,7 +548,7 @@ abstract class FormControl {
         void setBounds(int x, int y, int width) {
             if (area != null) {
                 // 多行备注不支持预设按钮：直接铺满整行（presetButtons 恒为空，加预设需另行布局）
-                area.setBounds(x, y, width, area.height());
+                area.setBounds(x, y, width, layoutHeight());
                 return;
             }
             int reserved = 0;
@@ -541,11 +556,11 @@ abstract class FormControl {
                 reserved += buttonWidth(button) + 2;
             }
             int inputWidth = Math.max(16, width - reserved);
-            input.setBounds(x, y, inputWidth, DEFAULT_HEIGHT);
+            input.setBounds(x, y, inputWidth, layoutHeight());
             int cursor = x + inputWidth + 2;
             for (UiButton button : presetButtons) {
                 int buttonWidth = buttonWidth(button);
-                button.setBounds(cursor, y, buttonWidth, DEFAULT_HEIGHT);
+                button.setBounds(cursor, y, buttonWidth, layoutHeight());
                 cursor += buttonWidth + 2;
             }
         }
@@ -656,6 +671,15 @@ abstract class FormControl {
             }
         }
 
+        // 默认名称作为可编辑的展示基线；未改动时仍返回原始元素，不将自动名写入 JSON。
+        void displayDefault(Component value) {
+            if (!loadedText.isBlank()) return;
+            loadedText = value.getString();
+            input.setMaxLength(Math.max(textLimit(), loadedText.codePointCount(0, loadedText.length())));
+            input.setValue(loadedText);
+            input.moveCursorToStart();
+        }
+
         @Override
         void load(@Nullable JsonElement value) {
             rememberLoaded(value);
@@ -753,6 +777,10 @@ abstract class FormControl {
 
     static final class BoolControl extends FormControl {
 
+        // 复选框自身携带标签，卡片表单不重复绘制左侧标签。
+        @Override
+        boolean usesLabelColumn() { return false; }
+
         private final UiCheckBox checkBox;
 
         BoolControl(Font font, EditorField field, Runnable onChanged) {
@@ -770,8 +798,11 @@ abstract class FormControl {
         }
 
         @Override
+        int preferredWidth(int available) { return Math.min(available, checkBox.preferredWidth(2)); }
+
+        @Override
         void setBounds(int x, int y, int width) {
-            checkBox.setBounds(x, y, width, DEFAULT_HEIGHT);
+            checkBox.setBounds(x, y, width, layoutHeight());
         }
 
         @Override
@@ -850,7 +881,7 @@ abstract class FormControl {
 
         @Override
         void setBounds(int x, int y, int width) {
-            segments.setBounds(x, y, width, DEFAULT_HEIGHT);
+            segments.setBounds(x, y, width, layoutHeight());
         }
 
         @Override
@@ -954,7 +985,7 @@ abstract class FormControl {
 
         @Override
         void setBounds(int x, int y, int width) {
-            editor.setBounds(x, y, width, height());
+            editor.setBounds(x, y, width, layoutHeight());
         }
 
         @Override
@@ -1104,8 +1135,8 @@ abstract class FormControl {
         @Override
         void setBounds(int x, int y, int width) {
             int half = Math.max(16, (width - 4) / 2);
-            minInput.setBounds(x, y, half, DEFAULT_HEIGHT);
-            maxInput.setBounds(x + half + 4, y, Math.max(16, width - half - 4), DEFAULT_HEIGHT);
+            minInput.setBounds(x, y, half, layoutHeight());
+            maxInput.setBounds(x + half + 4, y, Math.max(16, width - half - 4), layoutHeight());
         }
 
         @Override
@@ -1218,6 +1249,10 @@ abstract class FormControl {
 
     static final class ConditionTreeControl extends FormControl {
 
+        // 条件树包含自己的标题和工具栏，卡片内铺满宽度。
+        @Override
+        boolean usesLabelColumn() { return false; }
+
         // 工具栏自动换行，树高度随内容增长
         private static final int BUTTON_HEIGHT = 14;
         private final List<UiButton> toolbar = new ArrayList<>();
@@ -1291,19 +1326,20 @@ abstract class FormControl {
             }
             int cursorX = x;
             int cursorY = y;
+            int buttonHeight = usesCardSpacing() ? 20 : BUTTON_HEIGHT;
             for (UiButton button : toolbar) {
                 if (!button.isVisible()) continue;
                 int limit = Math.max(1, width);
                 int buttonWidth = Math.clamp(button.preferredWidth(4), Math.min(24, limit), limit);
                 if (cursorX > x && cursorX + buttonWidth > x + width) {
                     cursorX = x;
-                    cursorY += BUTTON_HEIGHT + 2;
+                    cursorY += buttonHeight + 2;
                 }
-                button.setBounds(cursorX, cursorY, buttonWidth, BUTTON_HEIGHT);
+                button.setBounds(cursorX, cursorY, buttonWidth, buttonHeight);
                 button.setEnabled(enabled);
                 cursorX += buttonWidth + 2;
             }
-            return cursorY - y + BUTTON_HEIGHT + 2;
+            return cursorY - y + buttonHeight + 2;
         }
 
         @Override

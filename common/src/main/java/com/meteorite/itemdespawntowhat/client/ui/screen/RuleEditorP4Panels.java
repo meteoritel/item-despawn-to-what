@@ -124,7 +124,11 @@ public final class RuleEditorP4Panels {
     // ---- 目录面板 ----
 
     public static UiCatalogGrid.Texts catalogTexts() {
-        return new UiCatalogGrid.Texts(Component.translatable(UI + "pick.search"),
+        return catalogTexts(false);
+    }
+
+    private static UiCatalogGrid.Texts catalogTexts(boolean combined) {
+        return new UiCatalogGrid.Texts(Component.translatable(UI + (combined ? "pick.search_combined" : "pick.search")),
                 Component.translatable(UI + "pick.empty"), Component.translatable(UI + "pick.loading"),
                 Component.translatable(UI + "pick.error"), Component.translatable(UI + "pick.prev"),
                 Component.translatable(UI + "pick.next"), Component.translatable(UI + "pick.page"),
@@ -233,10 +237,20 @@ public final class RuleEditorP4Panels {
     public static UiModal catalogModal(Font font, EditorWorkspaceView workspace, RuleCatalogType type,
                                        boolean multiSelect, Component title, int screenWidth, int screenHeight,
                                        Consumer<List<String>> onPicked, @Nullable EditorField field) {
+        return catalogModal(font, workspace, type, multiSelect, title, screenWidth, screenHeight, onPicked, field, false);
+    }
+
+    // 输入页合并普通目录与同字段所属注册表的标签，沿用既有目录缓存和协议。
+    public static UiModal catalogModal(Font font, EditorWorkspaceView workspace, RuleCatalogType type,
+                                       boolean multiSelect, Component title, int screenWidth, int screenHeight,
+                                       Consumer<List<String>> onPicked, @Nullable EditorField field, boolean combined) {
+        boolean includeTags = combined && field != null && (field.type() == EditorFieldType.TAG || field.type() == EditorFieldType.TAG_LIST);
         workspace.refreshDirectory(type);
+        if (includeTags) workspace.refreshDirectory(RuleCatalogType.TAG);
         CatalogMapper mapper = new CatalogMapper();
         mapper.field = field;
-        UiCatalogGrid grid = new UiCatalogGrid(font, multiSelect, catalogTexts(), new UiCatalogGrid.Listener() {
+        mapper.includeTags = includeTags;
+        UiCatalogGrid grid = new UiCatalogGrid(font, multiSelect, includeTags ? catalogTexts(true) : catalogTexts(), new UiCatalogGrid.Listener() {
             @Override
             public void onSearch(String filter) {
                 mapper.page = 0;
@@ -265,11 +279,16 @@ public final class RuleEditorP4Panels {
             List<UiCatalogGrid.Entry> mapped = mapper.map(workspace, type);
             grid.setPage(mapper.page, mapper.pageCount);
             grid.setPageLimits(mapper.page > 0, mapper.hasNext);
-            grid.setLoading(mapper.cached == null || !mapper.cached.lastPage());
-            grid.setError(workspace.directoryFailed(type) ? Component.translatable(UI + "pick.retry_hint") : null);
+            grid.setLoading(mapper.cached == null || !mapper.cached.lastPage()
+                    || includeTags && (mapper.cachedTags == null || !mapper.cachedTags.lastPage()));
+            grid.setError(workspace.directoryFailed(type) || includeTags && workspace.directoryFailed(RuleCatalogType.TAG)
+                    ? Component.translatable(UI + "pick.retry_hint") : null);
             return mapped;
         });
-        grid.setOnRetry(() -> workspace.retryDirectory(type));
+        grid.setOnRetry(() -> {
+            workspace.retryDirectory(type);
+            if (includeTags) workspace.retryDirectory(RuleCatalogType.TAG);
+        });
         grid.setTooltipSuffix(id -> {
             var tag = mapper.tagPreviews.get(id);
             if (tag != null) return tag.tooltip();
@@ -282,7 +301,7 @@ public final class RuleEditorP4Panels {
         }
         UiModal modal = UiModal.create(font);
         modal.title(title);
-        modal.preferredWidth(280);
+        modal.preferredWidth(combined ? 320 : 280);
         modal.contentWidget(grid, 150);
         modal.confirm(Component.translatable(UI + "button.confirm"), () -> onPicked.accept(grid.selection()));
         modal.cancel(Component.translatable(UI + "button.cancel"));
@@ -294,6 +313,8 @@ public final class RuleEditorP4Panels {
     private static final class CatalogMapper {
 
         private RuleCatalog cached;
+        private RuleCatalog cachedTags;
+        private boolean includeTags;
         private @Nullable EditorField field;
         private @Nullable List<UiCatalogGrid.Entry> entries;
         private boolean active = true;
@@ -318,10 +339,12 @@ public final class RuleEditorP4Panels {
             }
             resources = nextResources; language = nextLanguage;
             RuleCatalog catalog = workspace.directory(type);
-            boolean changed = catalog != cached;
+            RuleCatalog tags = includeTags ? workspace.directory(RuleCatalogType.TAG) : null;
+            boolean changed = catalog != cached || tags != cachedTags;
             if (changed) {
                 tagPreviews.clear();
                 cached = catalog;
+                cachedTags = tags;
                 if (catalog == null) { entries = null; hasNext = false; pageCount = 0; return null; }
                 List<UiCatalogGrid.Entry> mapped = new ArrayList<>();
                 java.util.Set<String> validTags = field != null && type == RuleCatalogType.TAG ? FieldCatalogChoices.tags(field) : null;
@@ -338,11 +361,23 @@ public final class RuleEditorP4Panels {
                     } else mapped.add(new UiCatalogGrid.Entry(entry.id(), catalogLabel(entry.label()),
                             sub == null || sub.isBlank() ? null : catalogLabel(sub), iconFor(type, entry.id())));
                 }
+                if (includeTags && tags != null && field != null) {
+                    java.util.Set<String> allowed = FieldCatalogChoices.tags(field);
+                    for (RuleCatalogEntry entry : tags.entries()) {
+                        if (!allowed.contains(entry.id())) continue;
+                        var tag = TagPreviewIcons.resolve(type, entry.id());
+                        tagPreviews.put(entry.id(), tag);
+                        mapped.add(new UiCatalogGrid.Entry(entry.id(), tag.label(), null, tag.icon()));
+                    }
+                }
                 full = List.copyOf(mapped);
             }
             if (changed || mappedPage != page || !mappedFilter.equals(filter)) {
-                String needle = filter.toLowerCase(Locale.ROOT).trim();
-                List<UiCatalogGrid.Entry> filtered = full.stream().filter(entry -> entry.id().toLowerCase(Locale.ROOT).contains(needle)
+                String query = filter.toLowerCase(Locale.ROOT).trim();
+                boolean tagsOnly = includeTags && query.startsWith("#");
+                String needle = tagsOnly ? query.substring(1) : query;
+                List<UiCatalogGrid.Entry> filtered = full.stream().filter(entry -> !tagsOnly || entry.id().startsWith("#"))
+                        .filter(entry -> entry.id().toLowerCase(Locale.ROOT).contains(needle)
                         || entry.label().getString().toLowerCase(Locale.ROOT).contains(needle)
                         || entry.subLabel() != null && entry.subLabel().getString().toLowerCase(Locale.ROOT).contains(needle)).toList();
                 pageCount = Math.max(1, (filtered.size() + UiCatalogGrid.PAGE_SIZE - 1) / UiCatalogGrid.PAGE_SIZE);

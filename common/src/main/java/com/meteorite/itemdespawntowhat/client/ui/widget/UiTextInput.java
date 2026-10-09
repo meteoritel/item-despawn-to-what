@@ -32,6 +32,7 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
 
     // 原版输入框
     private final EditBox editBox;
+    private final Font font;
     // 控件矩形
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     // 提交回调（Enter）
@@ -58,6 +59,7 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
     private @Nullable Runnable onValueChanged;
 
     public UiTextInput(Font font, Component hint) {
+        this.font = font;
         this.editBox = new EditBox(font, 0, 0, MIN_WIDTH, UiTheme.ROW_HEIGHT, Component.empty());
         this.editBox.setBordered(false);
         this.editBox.setHint(hint);
@@ -206,7 +208,7 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
     public void setBounds(int x, int y, int width, int height) {
         this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
         editBox.setX(bounds.x() + PADDING_X);
-        editBox.setY(bounds.y() + PADDING_Y);
+        editBox.setY(bounds.y() + Math.max(PADDING_Y, (bounds.height() - font.lineHeight) / 2));
         editBox.setWidth(Math.max(1, bounds.width() - PADDING_X * 2));
         editBox.setHeight(Math.max(1, bounds.height() - PADDING_Y * 2));
     }

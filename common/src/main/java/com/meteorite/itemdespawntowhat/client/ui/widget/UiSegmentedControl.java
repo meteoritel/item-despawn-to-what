@@ -1,7 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlStyle;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
@@ -176,28 +175,21 @@ public final class UiSegmentedControl implements UiWidget, UiFocusTarget {
         }
         int hovered = enabled ? indexAt(mouseX, mouseY) : -1;
         int chosen = selectedIndex();
-        UiControlStyle style = UiTheme.secondaryStyle();
         for (int i = 0; i < options.size(); i++) {
             UiRect segment = segmentRect(i);
-            UiControlStyle.State state;
-            if (!enabled) {
-                state = UiControlStyle.State.DISABLED;
-            } else if (i == chosen) {
-                state = UiControlStyle.State.SELECTED;
-            } else if (i == hovered) {
-                state = UiControlStyle.State.HOVER;
-            } else {
-                state = UiControlStyle.State.NORMAL;
-            }
-            graphics.fill(segment.x(), segment.y(), segment.right(), segment.bottom(), style.background(state));
-            int color = !enabled ? UiPalette.TEXT_DISABLED : UiPalette.TEXT_PRIMARY;
+            UiTheme.drawSegment(graphics, new UiRect(segment.x() + 1, segment.y(), Math.max(0, segment.width() - 2), segment.height()),
+                    enabled, i == chosen, i == hovered);
+            int color = !enabled ? UiPalette.TEXT_DISABLED : i == chosen ? UiPalette.TEXT_ON_DARK : UiPalette.TEXT_PRIMARY;
             String label = TextScroll.trimToWidth(renderFont, options.get(i).label().getString(),
                     Math.max(0, segment.width() - 4));
             graphics.drawString(renderFont, label, segment.x() + Math.max(0, (segment.width() - renderFont.width(label)) / 2),
                     segment.y() + Math.max(0, (segment.height() - renderFont.lineHeight) / 2), color, false);
         }
         if (focused) {
-            UiTheme.drawFocusOutline(graphics, bounds);
+            int index = Math.max(0, chosen);
+            UiRect segment = segmentRect(index);
+            graphics.fill(segment.x() + 5, segment.y() + segment.height() / 2 - 1,
+                    segment.x() + 7, segment.y() + segment.height() / 2 + 1, UiPalette.TEXT_ON_DARK);
         }
     }
 

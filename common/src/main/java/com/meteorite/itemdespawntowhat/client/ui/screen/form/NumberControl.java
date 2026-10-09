@@ -16,6 +16,7 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiSlider;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.client.gui.Font;
@@ -23,7 +24,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
-/**
+/***
  * 数值控件：kit 滑杆 + 行内精确输入框（字段规格 §1/§4）。
  * <p>滑杆使用字段的「常用交互窗口」，但提交始终按后端合法域校验：窗口不充当硬限额，
  * 窗口之外的既有合法值照原样显示与精确编辑，绝不在装载时被钳制。
@@ -61,26 +62,33 @@ final class NumberControl extends FormControl {
     private @Nullable JsonElement loaded;
     // 装载时写入输入框的文本基线；未编辑且文本未变时视为「未编辑」
     private String loadedText = "";
+    private boolean settingInput;
+    private boolean textPreviewing;
+    private double textStartValue;
+    private String textStartText = "";
+    private String previousAcceptedText = "";
 
     // 滑杆交互回调：预览只刷新控件，提交才回调宿主一次
     private final UiValueInteraction.Listener interactionListener = new UiValueInteraction.Listener() {
         @Override
+        public void began(double startValue) { textPreviewing = false; }
+        @Override
         public void previewed(double startValue, double currentValue) {
-            input.setValue(displayText(currentValue));
+            setInputValue(displayText(currentValue));
             slider.setError(false);
         }
 
         @Override
         public void committed(double startValue, double currentValue) {
             markEdited();
-            input.setValue(displayText(currentValue));
+            setInputValue(displayText(currentValue));
             slider.setError(false);
             onChanged.run();
         }
 
         @Override
         public void cancelled(double startValue, double restoredValue) {
-            input.setValue(displayText(restoredValue));
+            setInputValue(displayText(restoredValue));
             slider.setError(false);
         }
     };
@@ -125,6 +133,7 @@ final class NumberControl extends FormControl {
                 : FormControl::decimalChars);
         this.input.setOnCommit(this::commitText);
         this.input.setOnCancel(this::discardTextBuffer);
+        this.input.setOnValueChanged(this::previewText);
         for (EditorPreset preset : field.presets()) {
             UiButton button = new UiButton(font, Component.translatable(preset.labelKey()),
                     UiButtonVariant.SECONDARY, () -> applyPreset(preset.value()));
@@ -284,6 +293,9 @@ final class NumberControl extends FormControl {
     void setBounds(int x, int y, int width) {
         // 有效行高：默认 12；被 FormControl 行高覆盖时 slider 与数字输入框一起变高
         int rowHeight = layoutHeight();
+        slider.core().setStyle(rowHeight >= 18 ? UiTheme.cardSliderStyle() : UiTheme.sliderStyle());
+        slider.core().setPainter(rowHeight >= 18 ? UiTheme.cardSliderPainter()
+                : com.meteorite.itemdespawntowhat.client.ui.kit.PixelSliderPainter.INSTANCE);
         int reserved = 0;
         for (UiButton button : presetButtons) {
             reserved += buttonWidth(button) + GAP;
@@ -326,11 +338,12 @@ final class NumberControl extends FormControl {
 
     @Override
     void load(@Nullable JsonElement value) {
+        textPreviewing = false;
         rememberLoaded(value);
         this.loaded = value == null || value.isJsonNull() ? null : value.deepCopy();
         if (loaded == null) {
             this.loadedText = "";
-            input.setValue("");
+            setInputValue("");
             slider.core().setValue(neutralValue());
             slider.setError(false);
             return;
@@ -339,14 +352,14 @@ final class NumberControl extends FormControl {
         if (number == null) {
             // 非数值形态的既有值：原样显示并标错，提交时保留原值
             this.loadedText = rawText(loaded);
-            input.setValue(loadedText);
+            setInputValue(loadedText);
             slider.setError(true);
             return;
         }
         boolean accepted = slider.core().setValue(number);
         slider.setError(!accepted);
         this.loadedText = displayText(number);
-        input.setValue(loadedText);
+        setInputValue(loadedText);
     }
 
     @Override
@@ -359,9 +372,22 @@ final class NumberControl extends FormControl {
         if (text.isEmpty()) {
             // 必填/不可空字段清空时不删除既有值，交由 issues() 提示（阻止应用）
             boolean keepExisting = loaded != null && (field.required() || !field.nullable());
+            if (!keepExisting) {
+                textPreviewing = false;
+                markEdited();
+                loaded = null;
+                loadedText = "";
+            }
             return keepExisting ? loaded : null;
         }
         JsonElement parsed = parseText(text);
+        if (parsed != null) {
+            textPreviewing = false;
+            markEdited();
+            // 失焦提交也更新回退基线，后续非法输入不能回写成更早的装载值。
+            loaded = parsed.deepCopy();
+            loadedText = text;
+        }
         // 输入非法时保留原值，交由 issues() 提示玩家修正
         return parsed != null ? parsed : loaded;
     }
@@ -473,18 +499,47 @@ final class NumberControl extends FormControl {
         Double number = parsed == null ? null : parsed.getAsDouble();
         if (number == null) {
             slider.setError(true);
-            onChanged.run();
             return;
         }
+        textPreviewing = false;
         slider.setError(!slider.core().setValue(number));
-        input.setValue(displayText(number));
+        setInputValue(displayText(number));
         onChanged.run();
     }
 
     // Esc 回退缓冲：丢弃非法/未提交文本，重新显示滑杆当前值
     private void discardTextBuffer() {
-        input.setValue(displayText(slider.value()));
-        slider.setError(false);
+        if (textPreviewing) {
+            slider.core().setValue(textStartValue);
+            setInputValue(textStartText);
+            textPreviewing = false;
+        } else setInputValue(displayText(slider.value()));
+        slider.setError(!input.value().isBlank() && parseText(input.value()) == null);
+    }
+
+    // 程序回填不触发文本预览，避免拖动回写文本时反向重置滑条交互。
+    private void setInputValue(String text) {
+        settingInput = true;
+        try { input.setValue(text); previousAcceptedText = input.value(); }
+        finally { settingInput = false; }
+    }
+
+    // 每个合法输入立即预览滑条；非法或未完成的文本保留在输入框，不写入草稿。
+    private void previewText() {
+        if (settingInput || !input.isFocused()) return;
+        if (!textPreviewing) {
+            textStartValue = slider.value();
+            textStartText = previousAcceptedText;
+            textPreviewing = true;
+        }
+        JsonElement parsed = parseText(input.value());
+        if (parsed != null) {
+            slider.setError(!slider.core().setValue(parsed.getAsDouble()));
+        } else if (input.value().isBlank() && !field.required()) {
+            slider.core().setValue(neutralValue());
+            slider.setError(false);
+        } else slider.setError(true);
+        previousAcceptedText = input.value();
     }
 
     // 预设：按 JSON 单位解析后作为一次提交
@@ -500,7 +555,7 @@ final class NumberControl extends FormControl {
             return;
         }
         slider.setError(false);
-        input.setValue(displayText(number));
+        setInputValue(displayText(number));
         onChanged.run();
     }
 }

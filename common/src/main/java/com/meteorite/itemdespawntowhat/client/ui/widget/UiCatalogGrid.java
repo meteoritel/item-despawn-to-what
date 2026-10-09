@@ -16,7 +16,7 @@ import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
-/**
+/***
  * 目录图标网格面板（宿主侧通用控件，主计划 §8「kit、目录与视觉」）。
  * <p>面板不知道任何目录协议类型：条目、图标与全部本地化文本由宿主提供，
  * 面板只负责可见项绘制、指针/键盘导航、选择状态以及加载/空/错误/分页状态的展示。
@@ -29,7 +29,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget {
     @SuppressWarnings("unused")
     public interface Listener {
 
-        // 搜索意图（回车提交或清空时发出）
+        // 搜索意图（每次接受文本变化时发出；过滤缓存由宿主处理）
         default void onSearch(String filter) {
         }
 
@@ -97,6 +97,10 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget {
     private boolean canNext = true;
     private int scrollRow;
     private int cursor = -1;
+    private @Nullable Component pageLabel;
+
+    // 宿主可显示标签分组的页名，普通目录继续使用数字页码。
+    public void setPageLabel(@Nullable Component label) { pageLabel = label; }
 
     public UiCatalogGrid(Font font, boolean multiSelect, Texts texts, Listener listener) {
         this.font = Objects.requireNonNull(font, "font");
@@ -106,6 +110,11 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget {
         this.search = new UiTextInput(font, texts.searchHint());
         this.search.setMaxLength(128);
         this.search.setAccessibleName(texts.searchHint());
+        this.search.setOnValueChanged(() -> {
+            scrollRow = 0;
+            cursor = -1;
+            listener.onSearch(search.value().trim());
+        });
         this.search.setOnCommit(value -> {
             searchActive = false;
             search.setFocused(false);
@@ -337,13 +346,14 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget {
             color = UiPalette.DANGER;
         } else if (loading || explicitLoading) {
             text = texts.loading();
-        } else if (entries.isEmpty()) {
+        } else if (entries.isEmpty() && pageLabel == null) {
             text = texts.empty();
             color = UiPalette.TEXT_DISABLED;
         } else {
             String pages = (page + 1) + (pageCount > 0 ? "/" + pageCount : "");
-            text = Component.empty().append(texts.pageInfo()).append(" " + pages)
-                    .append("  " + texts.selection() + " " + selection.size());
+            text = pageLabel == null ? Component.empty().append(texts.pageInfo()).append(" " + pages) : pageLabel.copy();
+            text = text.copy().append("  ").append(texts.selection()).append(" " + selection.size());
+            if (entries.isEmpty()) text = text.copy().append("  ").append(texts.empty());
         }
         String trimmed = TextScroll.trimToWidth(font, text.getString(), Math.max(1, statusRect.width()));
         int offset = (loading || explicitLoading) && error == null ? 14 : 0;
@@ -381,6 +391,10 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget {
                 }
                 if (index == cursor && focused) {
                     UiTheme.drawFocusOutline(graphics, cell);
+                }
+                if (entry.id().startsWith("#")) {
+                    graphics.fill(cell.right() - 8, cell.y() + 1, cell.right() - 1, cell.y() + 10, UiPalette.ACCENT);
+                    graphics.drawString(font, "#", cell.right() - 7, cell.y() + 1, UiPalette.TEXT_ON_DARK, false);
                 }
             }
         }
@@ -421,17 +435,20 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget {
         }
         if (canPrev && prevRect.contains(mouseX, mouseY)) {
             searchActive = false;
+            search.setFocused(false);
             listener.onPageChange(-1);
             return true;
         }
         if (canNext && nextRect.contains(mouseX, mouseY)) {
             searchActive = false;
+            search.setFocused(false);
             listener.onPageChange(1);
             return true;
         }
         int index = indexAt(mouseX, mouseY);
         if (index >= 0) {
             searchActive = false;
+            search.setFocused(false);
             cursor = index;
             toggle(entries.get(index).id());
             return true;

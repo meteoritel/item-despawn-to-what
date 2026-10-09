@@ -3,13 +3,17 @@ package com.meteorite.itemdespawntowhat.client.ui.theme;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlStyle;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderStyle;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderPainter;
+import com.meteorite.itemdespawntowhat.client.ui.kit.PixelSliderPainter;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.resources.ResourceLocation;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiNineSlice;
 
 /***
  * 灰色像素主题。
  * <p>集中提供三样东西：控件样式（{@link UiControlStyle}）、像素边框绘制、文本颜色。
- * 主题层只使用纯色矩形与 1 像素描边，不依赖任何自定义贴图资源；
- * 将来接入美术资源时只需替换本类的绘制实现，调用方无需改动。
+ * 编辑卡片与分段按钮采用抗锯齿圆角底图，其余传统控件保留像素边框。
  */
 public final class UiTheme {
 
@@ -92,6 +96,23 @@ public final class UiTheme {
             UiPalette.TRANSPARENT, UiPalette.TEXT_PRIMARY, UiPalette.TEXT_PRIMARY, UiPalette.TEXT_DISABLED,
             UiPalette.DANGER, 4, 3, 2);
 
+    private static final UiSliderStyle CARD_SLIDER_STYLE = new UiSliderStyle(
+            UiPalette.SLOT_INNER, UiPalette.ACCENT, UiPalette.CONTROL_FILL, UiPalette.CONTROL_HOVER,
+            UiPalette.CONTROL_DISABLED, UiPalette.FOCUS_OUTLINE, UiPalette.DANGER, UiPalette.WARNING,
+            UiPalette.TRANSPARENT, UiPalette.TEXT_PRIMARY, UiPalette.TEXT_PRIMARY, UiPalette.TEXT_DISABLED,
+            UiPalette.DANGER, 6, 5, 4);
+
+    // 手柄补上明暗边和中央刻痕，灰底上也能看清当前位置。
+    private static final UiSliderPainter CARD_SLIDER_PAINTER = (graphics, frame) -> {
+        PixelSliderPainter.INSTANCE.paint(graphics, frame);
+        UiRect thumb = frame.thumb();
+        drawBevel(graphics, thumb, UiPalette.WINDOW_BORDER_LIGHT, UiPalette.PANEL_BORDER_DARK);
+        if (thumb.width() >= 5 && thumb.height() >= 6) {
+            int center = thumb.x() + thumb.width() / 2;
+            graphics.fill(center, thumb.y() + 3, center + 1, thumb.bottom() - 3, UiPalette.TEXT_SECONDARY);
+        }
+    };
+
     // 纯标签样式（透明底）
     public static UiControlStyle labelStyle() {
         return LABEL_STYLE;
@@ -101,6 +122,13 @@ public final class UiTheme {
     public static UiSliderStyle sliderStyle() {
         return SLIDER_STYLE;
     }
+
+    // 加高表单使用更宽的手柄与轨道，沿用相同数值和输入契约。
+    public static UiSliderStyle cardSliderStyle() {
+        return CARD_SLIDER_STYLE;
+    }
+
+    public static UiSliderPainter cardSliderPainter() { return CARD_SLIDER_PAINTER; }
 
     // ---- 绘制：窗口与面板 ----
 
@@ -121,6 +149,40 @@ public final class UiTheme {
         }
         graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), UiPalette.PANEL_FILL);
         drawBevel(graphics, rect, UiPalette.PANEL_BORDER_LIGHT, UiPalette.PANEL_BORDER_DARK);
+    }
+
+    private static final UiNineSlice CARD = surface("card");
+    private static final UiNineSlice CHIP = surface("chip");
+    private static final UiNineSlice CONTROL = surface("control");
+    private static final UiNineSlice HOVER = surface("hover");
+    private static final UiNineSlice SELECTED = surface("selected");
+    private static final UiNineSlice DISABLED = surface("disabled");
+
+    // 小尺寸底图只拉伸边与中心，圆角保持尺寸，不形成整条白色高光。
+    private static UiNineSlice surface(String name) {
+        return new UiNineSlice(ResourceLocation.fromNamespaceAndPath("itemdespawntowhat", "textures/gui/editor/" + name + ".png"), 32, 8);
+    }
+
+    private static void drawSurface(GuiGraphics graphics, UiRect rect, UiNineSlice surface) {
+        if (rect.width() < 4 || rect.height() < 4) return;
+        graphics.flush();
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        try { surface.render(graphics, rect); }
+        finally { graphics.flush(); RenderSystem.disableBlend(); }
+    }
+
+    // 浅灰底与柔和单层描边，圆角透明边缘与页面背景自然混合。
+    public static void drawCard(GuiGraphics graphics, UiRect rect) {
+        drawSurface(graphics, rect, CARD);
+    }
+
+    public static void drawChip(GuiGraphics graphics, UiRect rect, boolean selected, boolean hovered) {
+        drawSurface(graphics, rect, selected ? SELECTED : hovered ? HOVER : CHIP);
+    }
+
+    public static void drawSegment(GuiGraphics graphics, UiRect rect, boolean enabled, boolean selected, boolean hovered) {
+        drawSurface(graphics, rect, !enabled ? DISABLED : selected ? SELECTED : hovered ? HOVER : CONTROL);
     }
 
     // 绘制内凹区域（输入框、列表底、槽位）
