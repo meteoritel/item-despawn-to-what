@@ -45,6 +45,9 @@ public final class RuleFields {
     // 常量在此独立声明，避免 core/api 反向依赖 core/type
     public static final String CATALYST_ITEMS = "items";
     public static final String CATALYST_COUNT = "count";
+    public static final String ITEM_COUNTS = "counts";
+    public static final String FLUIDS = "fluids";
+    public static final String FLUID = "fluid";
     public static final String CATALYST_RADIUS = "radius";
 
     // ===== 源匹配（source 对象内部） ===== //

@@ -9,7 +9,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 /**
- * consume_source 执行器：按 count × rounds 扣减源掉落物的物品堆叠，扣空后移除该掉落物。
+ * consume_source 执行器：按上下文的每组源成本扣减堆叠，未提供源成本时采用 count，扣空后移除实体。
  * rounds 语义：产出/消耗按 context.rounds() 缩放，并受既有 limit/radius 与可扣数量收敛。
  * 阶段 4 起该效果同时是「每组源成本」的声明：结算任务按规则成本统一扣减源库存，
  * 若仍被派发则以本执行器的真实扣减量为准，避免与结算层重复记账。
@@ -31,8 +31,9 @@ public final class ConsumeSourceExecutor {
         }
         // 使用实体上的实时堆叠，sourceStack() 只是触发时刻的快照
         ItemStack stack = source.getItem();
-        // 整堆一次性转化：期望扣减 count × rounds，按实际可扣数量收敛（不足时不报错、只记录）
-        int requested = EffectTargets.saturatedMultiply(effect.count(), context.rounds());
+        // 上下文的组成本已按当前源物品解析 counts；源成本缺省时采用效果 count。
+        int perRound = context.groupSourceCost() > 0 ? context.groupSourceCost() : effect.count();
+        int requested = EffectTargets.saturatedMultiply(perRound, context.rounds());
         int consumed = consumeFromStack(stack, requested);
         if (consumed < requested) {
             LOGGER.debug("consume_source 可扣数量不足，按实际收敛：规则={} 期望={} 实际={}",

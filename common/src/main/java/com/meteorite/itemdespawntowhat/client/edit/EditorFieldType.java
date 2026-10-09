@@ -12,6 +12,8 @@ public enum EditorFieldType {
     LONG_TEXT,
     // 整数，取值域形如 "0..64"
     INTEGER,
+    // 物品引用到数量的对象，每个物品独立显示数值滑条
+    ITEM_COUNTS,
     // 小数，取值域形如 "0.0..1.0"
     DECIMAL,
     // 布尔开关

@@ -100,8 +100,12 @@ final class ConversionSettlement implements ServerTask {
     private final List<OutcomeCandidate> candidates;
     private final int structureVersion;
     private final boolean rotation;
-    // 计划期催化剂候选（由近及远），供同 tick 无 yield 点的预留使用；未声明 catalyst_cost 时恒为空
+    // 计划期催化剂候选（由近及远），供共享库存分配与预留使用；未声明 catalyst_cost 时恒为空
     private final List<ItemEntity> catalystPicks = new ArrayList<>();
+    private CatalystAllocation catalystAllocation;
+    private int[] catalystAvailable;
+    private int catalystScanCursor;
+    private boolean catalystCollected;
 
     private Phase phase = Phase.PLANNING;
     private OutcomeCandidate candidate;
@@ -256,16 +260,16 @@ final class ConversionSettlement implements ServerTask {
         groupCount = planned;
         CatalystCost catalyst = rule.catalystCost();
         if (catalyst != null
-                && reservations().tryReserve(record.id(), level, catalystPicks, groupCount * catalyst.count()) == null) {
+                && reservations().tryReserve(record.id(), level, catalystAllocation.paymentGroups(groupCount)) == null) {
             // 防御：扫描所得可用量与预留结果不一致时整批返还，绝不半预留
             return abandonAll();
         }
         // 组数定稿后先登记催化剂成本再落计划；预留已完成，两者之间没有 yield 点
-        record.catalystPlan(catalyst == null ? 0 : catalyst.count());
+        record.catalystPlan(catalyst == null ? 0 : catalyst.totalCount());
         record.plan(pendingCandidate.id(), groupCount);
         if (DebugMode.ENABLED && catalyst != null) {
             DebugScenarioManager.observe(source, "CATALYST_PLANNED", "record", record.id(), "rule", rule.id(),
-                    "per_group", catalyst.count(), "groups", groupCount, "reserved", groupCount * catalyst.count());
+                    "per_group", catalyst.totalCount(), "groups", groupCount, "reserved", groupCount * catalyst.totalCount());
         }
         if (DebugMode.ENABLED) {
             // 每次结算只观测一条 OUTCOME_PLANNED（candidate = 本结算第一组所选候选，groups = 组数上界）；
@@ -323,9 +327,8 @@ final class ConversionSettlement implements ServerTask {
     }
 
     // 计划期催化剂上界：未声明 catalyst_cost 直接返回 Integer.MAX_VALUE（不查世界、不预留，纯零开销）；
-    // -1 = 预算耗尽（本刻不落决定，下刻重试）；其余为「半径盒内可用件数 / 每组需求」的组数上界
+    // -1 = 预算耗尽（本刻不落决定，下刻重试）；其余为各引用共享库存分配所得的完整组数上界
     private int catalystGroupLimit(ServerTickBudget budget) {
-        catalystPicks.clear();
         CatalystCost catalyst = rule.catalystCost();
         if (catalyst == null) {
             return Integer.MAX_VALUE;
@@ -333,18 +336,25 @@ final class ConversionSettlement implements ServerTask {
         if (budget.exhausted()) {
             return -1;
         }
-        budget.charge(1);
-        List<ItemEntity> ordered = collectCatalystItems(catalyst);
-        int total = 0;
-        for (ItemEntity item : ordered) {
+        if (!catalystCollected) {
+            budget.charge(1);
+            catalystPicks.addAll(collectCatalystItems(catalyst));
+            catalystAvailable = new int[catalystPicks.size()];
+            catalystCollected = true;
+        }
+        while (catalystScanCursor < catalystPicks.size()) {
             if (budget.exhausted()) {
                 return -1;
             }
             budget.charge(1);
-            total += reservations().available(level, item);
+            catalystAvailable[catalystScanCursor] = reservations().available(level, catalystPicks.get(catalystScanCursor));
+            catalystScanCursor++;
         }
-        catalystPicks.addAll(ordered);
-        return total / Math.max(1, catalyst.count());
+        if (catalystAllocation == null) {
+            int sourceGroups = record.sourceCostPerGroup() > 0 ? held.getCount() / record.sourceCostPerGroup() : 1;
+            catalystAllocation = new CatalystAllocation(catalyst, catalystPicks, catalystAvailable, sourceGroups);
+        }
+        return catalystAllocation.advance(budget) ? catalystAllocation.groups() : -1;
     }
 
     // 触发位置 radius 盒内命中催化剂定义的掉落物，排除源实体；按到触发点距离由近及远排序，

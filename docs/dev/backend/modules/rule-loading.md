@@ -50,7 +50,7 @@ config 覆盖层     config/<overlay_directory>/rules/**/*.json
 | `RuleLoadContext` | 一次加载的全部外部依赖容器 | record(8 字段，含可选 `server`)；`withServer()`、`full()`、`overlayOnly()` |
 | `RuleLoadingService` | 装配层：加载、加载+语义校验、来源分层索引、统计/描述 | `load(ctx)`、`loadAndValidate(ctx)`、`sourceIndex(ctx, issues)`、`countByLayer()`、`describeRules()`、`summarize()` |
 | `RuleReferenceValidator` | 服务端**动态**引用校验（维度/群系/战利品表），覆盖顶层 effects 与 outcomes 内 effects | `validate(rule, server, issues, origin)` |
-| `BuiltinTypeRegistries` | 内置类型注册表 + 表达式 Codec 的**规范装配点** | `create()`、`perRoundSourceConsumption(Rule)`、`implicitSourceConsumption()` |
+| `BuiltinTypeRegistries` | 内置类型注册表 + 表达式 Codec 的**规范装配点** | `create()`、`perRoundSourceConsumption(Rule, ItemStack)`、`implicitSourceConsumption()` |
 
 ## 3. 三层作用域与合并语义
 
@@ -125,11 +125,11 @@ config 覆盖层     config/<overlay_directory>/rules/**/*.json
 
 ### 6.3 每轮源消耗
 
-`BuiltinTypeRegistries.perRoundSourceConsumption(Rule)` 决定每轮消耗量，**固定成本优先**：
+`BuiltinTypeRegistries.perRoundSourceConsumption(Rule, ItemStack)` 决定每轮消耗量，**固定成本优先**：
 
-1. 显式声明 `source_cost` → 取其值（加载期已保证为正数）；
+1. 显式声明 `source_cost` → 按当前源堆叠查引用数量，直接物品优先，再按源列表原序匹配配置数量的标签，缺省 1；
 2. 未声明 `source_cost` 且规则无任何 `consume_*` 效果 → 隐式消耗 1；
-3. 未声明 `source_cost` 但声明 `consume_source` → 累加其 `count`；
+3. 未声明 `source_cost` 但声明 `consume_source` → 按当前源堆叠查 `counts`，缺省采用效果的 `count`；
 4. 只声明其它消耗（如 `consume_fluid`）→ 0（不按堆叠轮次展开）。
 
 这是 `rounds` 语义的来源，见 [conversion-runtime.md](conversion-runtime.md)。

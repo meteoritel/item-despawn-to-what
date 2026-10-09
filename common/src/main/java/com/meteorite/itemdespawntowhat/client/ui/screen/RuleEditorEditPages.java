@@ -186,8 +186,6 @@ public final class RuleEditorEditPages {
     private static final ResourceLocation CONSUME_FLUID_ID = ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "consume_fluid");
 
     // 源成本模式
-    private static final String COST_DERIVED = "derived";
-    private static final String COST_EXPLICIT = "explicit";
 
     // 拖动目标
     private enum DragKind {
@@ -251,7 +249,7 @@ public final class RuleEditorEditPages {
 
         // 类型字段名
         String fieldName() {
-            return catalyst() ? RuleFields.CATALYST_ITEMS : "fluid";
+            return catalyst() ? RuleFields.CATALYST_ITEMS : RuleFields.FLUIDS;
         }
 
         // 类型字段的草稿路径
@@ -286,7 +284,7 @@ public final class RuleEditorEditPages {
     // 输入与成本
     private @Nullable FormView sourceForm;
     // 源物品的目录选择入口（图标网格面板）
-    private @Nullable UiSegmentedControl sourceCostMode;
+    private @Nullable UiButton sourceCostButton;
     private @Nullable FormView sourceCostForm;
     private @Nullable FormView catalystForm;
     private @Nullable UiRect costModeRect;
@@ -390,7 +388,7 @@ public final class RuleEditorEditPages {
         restoreNameButton = null;
         infoIdRect = null;
         sourceForm = null;
-        sourceCostMode = null;
+        sourceCostButton = null;
         sourceCostForm = null;
         catalystForm = null;
         costModeRect = null;
@@ -437,7 +435,10 @@ public final class RuleEditorEditPages {
         form.setOnChanged(host::onDraftChanged);
         if (page == Page.INPUT) form.setOnChanged(() -> {
             form.applyToDraft();
-            if (form == sourceForm) updateBlacklistVisibility();
+            if (form == sourceForm) {
+                updateBlacklistVisibility();
+                refreshQuantityReferences();
+            }
             if (form == catalystForm) {
                 for (PresenceRow row : presenceRows) if (row.leaf.catalyst()) row.form.reload();
             }
@@ -461,7 +462,76 @@ public final class RuleEditorEditPages {
         form.setDescriptor(descriptor);
         form.reload();
         form.useCardSpacing();
+        configureQuantityFields(form, session, basePath, descriptor);
         return form;
+    }
+
+    private void configureQuantityFields(FormView form, EditSession session, String basePath,
+                                         TypeEditorDescriptor descriptor) {
+        JsonElement element = basePath.isEmpty() ? session.draft().view() : session.draft().getAt(basePath);
+        JsonObject owner = element != null && element.isJsonObject() ? element.getAsJsonObject() : new JsonObject();
+        for (EditorField field : descriptor.fields()) {
+            if (field.type() != com.meteorite.itemdespawntowhat.client.edit.EditorFieldType.ITEM_COUNTS) continue;
+            boolean source = RuleFields.SOURCE_COST.equals(field.name())
+                    || CONSUME_SOURCE_ID.toString().equals(stringField(owner, RuleFields.TYPE));
+            String path = basePath.isEmpty() ? field.name() : basePath + "." + field.name();
+            List<String> references = source ? stringList(session.draft().getAt(RuleFields.SOURCE + "." + RuleFields.SOURCE_ITEMS))
+                    : stringList(owner.get(RuleFields.CATALYST_ITEMS));
+            form.setItemCountReferences(path, references);
+            form.setRowDefaultValue(path, () -> quantityDefaults(session, basePath, source));
+        }
+    }
+
+    private JsonObject quantityDefaults(EditSession session, String basePath, boolean source) {
+        JsonElement raw = basePath.isEmpty() ? session.draft().view() : session.draft().getAt(basePath);
+        JsonObject owner = raw instanceof JsonObject object ? object : new JsonObject();
+        List<String> references = source ? stringList(session.draft().getAt(RuleFields.SOURCE + "." + RuleFields.SOURCE_ITEMS))
+                : stringList(owner.get(RuleFields.CATALYST_ITEMS));
+        JsonObject values = defaultQuantities(owner, references);
+        if (!CATALYST_PRESENT_ID.toString().equals(stringField(owner, RuleFields.TYPE)) || owner.has(RuleFields.CATALYST_COUNT)) return values;
+        Rule rule = RuleCodecs.codec(ClientTypeRegistries.effects(), ClientTypeRegistries.conditions())
+                .parse(JsonOps.INSTANCE, session.draft().view()).result().orElse(null);
+        if (rule != null) {
+            List<TaggedId> items = taggedItems(basePath);
+            for (TaggedId item : items) values.addProperty(item.serialized(), CatalystThresholdProjection.resolveThreshold(
+                    rule, items, scopeEffectOf(rule, basePath), item));
+        }
+        return values;
+    }
+
+    private static JsonObject defaultQuantities(JsonObject owner, List<String> references) {
+        JsonObject values = new JsonObject();
+        JsonElement count = owner.get(RuleFields.CATALYST_COUNT);
+        int fallback = count != null && count.isJsonPrimitive() && count.getAsJsonPrimitive().isNumber()
+                ? count.getAsInt() : CatalystCost.DEFAULT_COUNT;
+        references.forEach(reference -> values.addProperty(reference, fallback));
+        return values;
+    }
+
+    private void refreshQuantityReferences() {
+        EditSession session = host.session();
+        if (session == null) return;
+        JsonObject rule = session.draft().view();
+        if (sourceCostForm != null) {
+            RuleCostBinding.Ref ref = RuleCostBinding.consumeSource(rule);
+            String path = ref == null ? RuleFields.SOURCE_COST : ref.path() + "." + RuleFields.ITEM_COUNTS;
+            sourceCostForm.setItemCountReferences(path,
+                    stringList(session.draft().getAt(RuleFields.SOURCE + "." + RuleFields.SOURCE_ITEMS)));
+            sourceCostForm.reload();
+        }
+        for (PresenceRow row : presenceRows) if (row.leaf.catalyst()) {
+            row.form.setItemCountReferences(row.leaf.conditionPath() + "." + RuleFields.ITEM_COUNTS,
+                    stringList(session.draft().getAt(row.leaf.fieldPath())));
+            row.form.reload();
+        }
+        if (catalystForm != null) {
+            RuleCostBinding.Ref ref = RuleCostBinding.consumeCatalyst(rule);
+            String base = ref == null ? RuleFields.CATALYST_COST : ref.path();
+            catalystForm.setItemCountReferences(base + "." + RuleFields.ITEM_COUNTS,
+                    stringList(session.draft().getAt(base + "." + RuleFields.CATALYST_ITEMS)));
+            catalystForm.reload();
+        }
+        host.onControlsChanged();
     }
 
     // ---- 基本信息 ----
@@ -540,21 +610,30 @@ public final class RuleEditorEditPages {
         JsonObject rule = session.draft().view();
         sourceForm = newForm(session, RuleFields.SOURCE, BuiltinEditorDescriptors.sourceDescriptor());
         sourceForm.hideRowLabel(RuleFields.SOURCE + ".items");
+        sourceForm.setOnFieldWritten((path, before) -> {
+            if (!path.equals(RuleFields.SOURCE + "." + RuleFields.SOURCE_ITEMS)) return;
+            List<String> references = stringList(session.draft().getAt(path));
+            JsonObject body = session.draft().view();
+            if (body.has(RuleFields.SOURCE_COST)) reconcileQuantities(body, RuleFields.SOURCE_COST, references, CatalystCost.DEFAULT_COUNT);
+            RuleCostBinding.Ref ref = RuleCostBinding.consumeSource(body);
+            if (ref != null && session.draft().getAt(ref.path()) instanceof JsonObject effect) {
+                reconcileQuantities(effect, RuleFields.ITEM_COUNTS, references, countField(effect));
+            }
+        });
         updateBlacklistVisibility();
         liveForms.add(sourceForm);
         liveWidgets.add(sourceForm);
 
         RuleCostBinding.Ref sourceRef = RuleCostBinding.consumeSource(rule);
-        sourceCostMode = new UiSegmentedControl(font, costModeOptions());
+        sourceCostButton = new UiButton(font, Component.translatable(UI + "cost.mode.custom"),
+                UiButtonVariant.SECONDARY, this::specifySourceCost);
         if (sourceRef != null) {
-            sourceCostMode.setSelected(COST_EXPLICIT);
-            sourceCostMode.setEnabled(false);
+            sourceCostButton.setEnabled(false);
             costNote = Component.translatable(UI + "cost.mode.from_effect");
             sourceCostForm = newForm(session, sourceRef.path(), ownFieldsOnly(EffectEditorRegistry.descriptorFor(CONSUME_SOURCE_ID)));
         } else {
             boolean custom = rule.has(RuleFields.SOURCE_COST);
-            sourceCostMode.setSelected(custom ? COST_EXPLICIT : COST_DERIVED);
-            sourceCostMode.setOnChanged(this::onSourceCostMode);
+            sourceCostButton.setVisible(!custom);
             sourceCostForm = custom ? newForm(session, "", BuiltinEditorDescriptors.sourceCostDescriptor()) : null;
             if (!custom) {
                 boolean consumesOther = RuleCostBinding.consumeCatalyst(rule) != null
@@ -562,7 +641,7 @@ public final class RuleEditorEditPages {
                 costNote = Component.translatable(UI + (consumesOther ? "cost.auto.zero" : "cost.auto.one"));
             }
         }
-        liveWidgets.add(sourceCostMode);
+        liveWidgets.add(sourceCostButton);
         if (sourceCostForm != null) {
             liveForms.add(sourceCostForm);
             liveWidgets.add(sourceCostForm);
@@ -592,20 +671,10 @@ public final class RuleEditorEditPages {
         }
         liveWidgets.add(catalystToggle);
         if (catalystForm != null) {
-            String costPath = catalystRef == null ? RuleFields.CATALYST_COST : catalystRef.path();
-            catalystForm.setRowDefaultValue(costPath + "." + RuleFields.CATALYST_COUNT,
-                    () -> new JsonPrimitive(CatalystCost.DEFAULT_COUNT));
             liveForms.add(catalystForm);
             liveWidgets.add(catalystForm);
         }
         buildPresenceSection(session, FLUID_PRESENT_ID, UI + "rule.presence.add_fluid");
-    }
-
-    // 成本模式分段控件选项
-    private List<UiSegmentedControl.Option> costModeOptions() {
-        return List.of(
-                new UiSegmentedControl.Option(COST_DERIVED, Component.translatable(UI + "cost.mode.derived")),
-                new UiSegmentedControl.Option(COST_EXPLICIT, Component.translatable(UI + "cost.mode.custom")));
     }
 
     // 只保留效果自身字段：成本区不重复暴露 delay_ticks / chance / 条件
@@ -620,20 +689,15 @@ public final class RuleEditorEditPages {
         return TypeEditorDescriptor.of(descriptor.id(), descriptor.label(), fields);
     }
 
-    // 切换「按规则推导 / 自定义」：推导移除 source_cost，自定义写新建默认 1
-    private void onSourceCostMode(String value) {
+    // 为每个已选源物品建立每轮消耗设置，初始数量为 1。
+    private void specifySourceCost() {
         EditSession session = host.session();
         if (session == null) {
             return;
         }
         RuleDraft draft = session.draft();
-        apply(EditSession.OP_SET_FIELD, () -> {
-            if (COST_DERIVED.equals(value)) {
-                draft.remove(RuleFields.SOURCE_COST);
-            } else {
-                draft.setInt(RuleFields.SOURCE_COST, 1);
-            }
-        });
+        apply(EditSession.OP_SET_FIELD, () -> draft.setAt(RuleFields.SOURCE_COST, defaultQuantities(new JsonObject(),
+                stringList(draft.getAt(RuleFields.SOURCE + "." + RuleFields.SOURCE_ITEMS)))));
     }
 
     // 开启消耗时用当前门槛初始化每轮成本；关闭同时移除既有消耗效果，避免残留扣除。
@@ -647,18 +711,24 @@ public final class RuleEditorEditPages {
             if (checked) {
                 PresenceLeaf leaf = selectedCatalystLeaf(draft);
                 if (leaf == null) return;
-                int count = catalystThreshold(leaf);
-                // 显式固定当前门槛，之后调整消耗量不会反向改变触发条件。
-                draft.setInt(leaf.conditionPath() + "." + RuleFields.CATALYST_COUNT, count);
-                JsonObject cost = new JsonObject();
-                cost.addProperty(RuleFields.CATALYST_COUNT, count);
-                draft.setAt(RuleFields.CATALYST_COST, cost);
-                retargetCatalystItems(draft, List.of(), ruleLevelCatalystItems(draft));
-            } else {
-                for (PresenceLeaf leaf : ruleLevelPresence(draft.view(), CATALYST_PRESENT_ID)) {
-                    String countPath = leaf.conditionPath() + "." + RuleFields.CATALYST_COUNT;
-                    if (draft.getAt(countPath) == null) draft.setInt(countPath, catalystThreshold(leaf));
+                List<String> items = ruleLevelCatalystItems(draft);
+                JsonObject counts = new JsonObject();
+                for (PresenceLeaf entry : ruleLevelPresence(draft.view(), CATALYST_PRESENT_ID)) {
+                    JsonObject condition = java.util.Objects.requireNonNull(draft.getAt(entry.conditionPath())).getAsJsonObject();
+                    reconcileQuantities(condition, RuleFields.ITEM_COUNTS,
+                            stringList(condition.get(RuleFields.CATALYST_ITEMS)), catalystThreshold(entry));
+                    for (var amount : condition.getAsJsonObject(RuleFields.ITEM_COUNTS).entrySet()) {
+                        int previous = counts.has(amount.getKey()) ? counts.get(amount.getKey()).getAsInt() : 0;
+                        counts.addProperty(amount.getKey(), Math.max(previous, amount.getValue().getAsInt()));
+                    }
                 }
+                JsonObject cost = new JsonObject();
+                JsonArray references = new JsonArray();
+                items.forEach(references::add);
+                cost.add(RuleFields.CATALYST_ITEMS, references);
+                cost.add(RuleFields.ITEM_COUNTS, counts);
+                draft.setAt(RuleFields.CATALYST_COST, cost);
+            } else {
                 removeCatalystConsumption(draft);
             }
         });
@@ -716,17 +786,18 @@ public final class RuleEditorEditPages {
         form.setOnFieldWritten((path, before) -> {
             if (!leaf.fieldPath().equals(path)) return;
             if (leaf.catalyst()) {
+                JsonObject condition = java.util.Objects.requireNonNull(session.draft().getAt(leaf.conditionPath())).getAsJsonObject();
+                reconcileQuantities(condition, RuleFields.ITEM_COUNTS, stringList(condition.get(RuleFields.CATALYST_ITEMS)),
+                        catalystThreshold(leaf));
                 retargetCatalystItems(session.draft(), stringList(before),
                         stringList(session.draft().getAt(path)));
             } else {
-                retargetFluidActions(session.draft(), primitiveString(before),
-                        primitiveString(session.draft().getAt(path)));
+                var selected = stringList(session.draft().getAt(path));
+                List<String> previous = stringList(before);
+                if (selected.size() == 1) retargetFluidActions(session.draft(),
+                        previous.size() == 1 ? previous.getFirst() : "", selected.getFirst());
             }
         });
-        if (leaf.catalyst()) {
-            form.setRowDefaultValue(leaf.conditionPath() + "." + RuleFields.CATALYST_COUNT,
-                    () -> new JsonPrimitive(effectiveThreshold(leaf.conditionPath())));
-        }
         // 类型改写立即落盘（类型 + 关联消耗配置重指向 = 同一次可撤销操作）；此处不重建页面，
         // 目录选择可连续多次回调，重建会让后续选择写进已卸载的控件
         form.setOnChanged(() -> {
@@ -734,8 +805,8 @@ public final class RuleEditorEditPages {
             if (current == null || host.rejectWhenFrozen()) {
                 return;
             }
-            flushPresenceType(current, leaf, form);
             form.applyToDraft();
+            refreshQuantityReferences();
             applyEnabled();
             // 目录选择已在同一次字段写入中提交，仍需通知宿主刷新规则摘要。
             host.onDraftChanged();
@@ -752,9 +823,11 @@ public final class RuleEditorEditPages {
     private TypeEditorDescriptor presenceDescriptor(PresenceLeaf leaf) {
         List<EditorField> fields = leaf.catalyst()
                 ? List.of(EditorField.tagList(RuleFields.CATALYST_ITEMS, UI + "field.catalyst_present.items", "minecraft:item")
-                        .asRequired(), EditorField.optionalInteger(RuleFields.CATALYST_COUNT,
-                        UI + "rule.catalyst_min_count", CatalystCost.MIN_COUNT, CatalystCost.MAX_COUNT))
-                : List.of(EditorField.optionalTag("fluid", UI + "field.fluid_present.fluid", "minecraft:fluid"));
+                        .asRequired(), EditorField.itemCounts(RuleFields.ITEM_COUNTS,
+                        UI + "rule.catalyst_min_count", CatalystCost.MIN_COUNT, CatalystCost.MAX_COUNT),
+                        EditorField.note(UI + "rule.catalyst_all_required"))
+                : List.of(EditorField.tagList(RuleFields.FLUIDS, UI + "field.fluid_present.fluid", "minecraft:fluid").optional(),
+                        EditorField.note(UI + "field.fluid_present.fluid.hint"));
         return TypeEditorDescriptor.of(leaf.type(), TypeLabels.conditionLabel(leaf.type()), fields);
     }
 
@@ -1011,13 +1084,11 @@ public final class RuleEditorEditPages {
 
     // 规则级条件里第一个已选物品的催化剂叶引用（勾选固定成本时同步类型用）
     private static List<String> ruleLevelCatalystItems(RuleDraft draft) {
+        java.util.LinkedHashSet<String> result = new java.util.LinkedHashSet<>();
         for (PresenceLeaf leaf : ruleLevelPresence(draft.view(), CATALYST_PRESENT_ID)) {
-            List<String> items = stringList(draft.getAt(leaf.fieldPath()));
-            if (!items.isEmpty()) {
-                return items;
-            }
+            result.addAll(stringList(draft.getAt(leaf.fieldPath())));
         }
-        return List.of();
+        return List.copyOf(result);
     }
 
     private static boolean isPresenceType(ResourceLocation type) {
@@ -1052,36 +1123,7 @@ public final class RuleEditorEditPages {
                 || !leaf.type().toString().equals(stringField(condition, RuleFields.TYPE))) {
             return false;
         }
-        JsonElement pending = form.pendingValue(leaf.fieldPath());
-        if (pending == null) {
-            return false;
-        }
-        if (leaf.catalyst()) {
-            if (!pending.isJsonArray()) {
-                return false;
-            }
-            List<String> before = stringList(draft.getAt(leaf.fieldPath()));
-            List<String> after = stringList(pending);
-            if (before.equals(after)) {
-                return false;
-            }
-            session.apply(EditSession.OP_SET_FIELD, () -> {
-                draft.setAt(leaf.fieldPath(), pending.deepCopy());
-                retargetCatalystItems(draft, before, after);
-            });
-            return true;
-        }
-        // 流体存在叶的 fluid 是类型单一事实源：改写后让移除动作跟随（结果页不再重复提供流体字段）
-        String before = primitiveString(draft.getAt(leaf.fieldPath()));
-        String after = primitiveString(pending);
-        if (before.equals(after)) {
-            return false;
-        }
-        session.apply(EditSession.OP_SET_FIELD, () -> {
-            draft.setAt(leaf.fieldPath(), pending.deepCopy());
-            retargetFluidActions(draft, before, after);
-        });
-        return true;
+        return form.applyToDraft();
     }
 
     // 流体类型改写后同步移除动作：fluid 与旧类型一致、或尚未指定类型的 consume_fluid 跟随新类型
@@ -1128,11 +1170,13 @@ public final class RuleEditorEditPages {
 
     // 类型改写后同步关联消耗配置：items 与旧类型一致、或尚未指定类型的消耗配置跟随新类型
     private static void retargetCatalystItems(RuleDraft draft, List<String> before, List<String> after) {
-        if (after.isEmpty()) {
-            // 类型被清空属于「待选物品」的中间态，不连带清空消耗配置
-            return;
+        if (draft.getAt(RuleFields.CATALYST_COST) instanceof JsonObject cost) {
+            List<String> references = ruleLevelCatalystItems(draft);
+            JsonArray items = new JsonArray();
+            references.forEach(items::add);
+            cost.add(RuleFields.CATALYST_ITEMS, items);
+            reconcileQuantities(cost, RuleFields.ITEM_COUNTS, references, CatalystCost.DEFAULT_COUNT);
         }
-        retargetConsumptionObject(draft.getAt(RuleFields.CATALYST_COST), false, before, after);
         retargetConsumptionList(draft.getAt(RuleFields.EFFECTS), before, after);
         JsonElement outcomes = draft.getAt(RuleFields.OUTCOMES);
         if (outcomes != null && outcomes.isJsonArray()) {
@@ -1150,18 +1194,18 @@ public final class RuleEditorEditPages {
             return;
         }
         for (JsonElement entry : list.getAsJsonArray()) {
-            retargetConsumptionObject(entry, true, before, after);
+            retargetConsumptionObject(entry, before, after);
         }
     }
 
     // requireConsumeType：动作要先确认自己是消耗催化剂；规则级 catalyst_cost 本身就是该配置
-    private static void retargetConsumptionObject(@Nullable JsonElement element, boolean requireConsumeType,
+    private static void retargetConsumptionObject(@Nullable JsonElement element,
                                                  List<String> before, List<String> after) {
         if (element == null || !element.isJsonObject()) {
             return;
         }
         JsonObject object = element.getAsJsonObject();
-        if (requireConsumeType && !RuleCostBinding.CONSUME_CATALYST.equals(stringField(object, RuleFields.TYPE))) {
+        if (!RuleCostBinding.CONSUME_CATALYST.equals(stringField(object, RuleFields.TYPE))) {
             return;
         }
         List<String> existing = stringList(object.get(RuleFields.CATALYST_ITEMS));
@@ -1173,6 +1217,23 @@ public final class RuleEditorEditPages {
             next.add(reference);
         }
         object.add(RuleFields.CATALYST_ITEMS, next);
+        reconcileQuantities(object, RuleFields.ITEM_COUNTS, after, countField(object));
+    }
+
+    private static void reconcileQuantities(JsonObject owner, String field, List<String> references, int fallback) {
+        JsonObject previous = owner.get(field) instanceof JsonObject object ? object : new JsonObject();
+        JsonObject next = new JsonObject();
+        for (String reference : references) {
+            next.add(reference, previous.has(reference) ? previous.get(reference).deepCopy()
+                    : new JsonPrimitive(Math.max(CatalystCost.DEFAULT_COUNT, fallback)));
+        }
+        owner.add(field, next);
+    }
+
+    private static int countField(JsonObject owner) {
+        JsonElement value = owner.get(RuleFields.CATALYST_COUNT);
+        return value != null && value.isJsonPrimitive() && value.getAsJsonPrimitive().isNumber()
+                ? value.getAsInt() : CatalystCost.DEFAULT_COUNT;
     }
 
     // 引用列表是否不是同一组（集合语义、顺序无关）：任一侧为空都不算相同
@@ -1210,7 +1271,7 @@ public final class RuleEditorEditPages {
     private List<EditorField> relabelCatalystThreshold(List<EditorField> fields) {
         List<EditorField> relabeled = new ArrayList<>();
         for (EditorField field : fields) {
-            relabeled.add(RuleFields.CATALYST_COUNT.equals(field.name()) ? relabelCatalystCountField(field) : field);
+            relabeled.add(RuleFields.ITEM_COUNTS.equals(field.name()) ? relabelCatalystCountField(field) : field);
         }
         return relabeled;
     }
@@ -1220,15 +1281,6 @@ public final class RuleEditorEditPages {
         return new EditorField(field.name(), UI + "rule.catalyst_min_count", field.type(), field.domain(),
                 field.nullable(), field.required(), field.registry(), field.enumGroup(), field.hintKey(),
                 field.subFields(), field.presets(), field.numbers(), field.displayPrecision());
-    }
-
-    // 门槛留空时给出「默认：N」；显式填写门槛后不再显示提示
-    private @Nullable Component thresholdNote(FormView form, String countPath, String conditionPath) {
-        JsonElement pending = form.pendingValue(countPath);
-        if (pending != null && !pending.isJsonNull()) {
-            return null;
-        }
-        return Component.translatable(UI + "rule.catalyst_min_count_effective", effectiveThreshold(conditionPath));
     }
 
     // 有效门槛：与运行期完全同源 —— 草稿解码成 Rule 后调用 core 的 resolveThreshold；
@@ -1470,6 +1522,7 @@ public final class RuleEditorEditPages {
         });
         form.setDescriptor(descriptor);
         form.reload();
+        configureQuantityFields(form, session, path, descriptor);
         UiModal modal = UiModal.create(font);
         // 标题带同类型编号与作用域：多个同类条件叶也能确认自己在编辑哪一项
         modal.title(presence == null ? descriptor.label()
@@ -1477,16 +1530,14 @@ public final class RuleEditorEditPages {
                         presence.ordinal(), presence.scopeLabel()));
         // 已知条件类型附带区间条（气候/昼夜/高度光照）与注册表字段的目录按钮；
         // 面板自身负责子控件的事件转发与 Tab 顺序，普通数值字段仍由表单承载
-        RuleEditorP4Panels.LeafPanel panel = RuleEditorP4Panels.leafPanel(font, form, session, descriptor.fields(),
+        RuleEditorP4Panels.LeafPanel content = RuleEditorP4Panels.leafPanel(font, form, session, descriptor.fields(),
                 path, change -> apply(EditSession.OP_SET_FIELD, change), () -> {
                     form.reload();
                     host.onDraftChanged();
                 }, host.modals()::push, host.workspace(), host.screenWidth(), host.screenHeight());
-        // 门槛留空时在表单下方显示与运行期同源的「默认：N」；填了显式门槛就不再显示
-        if (catalystLeaf) {
-            String countPath = path + "." + RuleFields.CATALYST_COUNT;
-            panel.addNote(() -> thresholdNote(form, countPath, path));
-        }
+        String noteKey = catalystLeaf ? UI + "rule.catalyst_all_required"
+                : FLUID_PRESENT_ID.equals(leaf.condition().type()) ? UI + "field.fluid_present.fluid.hint" : null;
+        RuleEditorP4Panels.LeafPanel panel = noteKey == null ? content : content.addNote(() -> Component.translatable(noteKey));
         int fieldHeight = descriptor.fields().size() * ROW_H + 8;
         int contentHeight = Math.clamp(Math.max(fieldHeight, panel.contentHeight() + 8), 36, 220);
         modal.contentWidget(panel, contentHeight);
@@ -2114,8 +2165,8 @@ public final class RuleEditorEditPages {
         int y = layoutForm(sourceForm, x, top + CARD_PAD + CARD_HEADER_H, width);
         costModeRect = new UiRect(x, y, width, LINE_H);
         y += LINE_H + 2;
-        if (sourceCostMode != null) {
-            sourceCostMode.setBounds(x, y, width, ROW_H);
+        if (sourceCostButton != null && sourceCostButton.isVisible()) {
+            sourceCostButton.setBounds(x, y, Math.min(width, sourceCostButton.preferredWidth(PAD)), ROW_H);
             y += ROW_H + PAD;
         }
         if (costNote != null) {
@@ -2215,15 +2266,15 @@ public final class RuleEditorEditPages {
     private static boolean isInputOwnedConsumptionField(ResourceLocation type, EditorField field) {
         String name = field.name();
         if (CONSUME_SOURCE_ID.equals(type)) {
-            return RuleFields.CATALYST_COUNT.equals(name);
+            return RuleFields.CATALYST_COUNT.equals(name) || RuleFields.ITEM_COUNTS.equals(name);
         }
         if (CONSUME_CATALYST_ID.equals(type)) {
             return RuleFields.CATALYST_ITEMS.equals(name) || RuleFields.CATALYST_COUNT.equals(name)
-                    || RuleFields.CATALYST_RADIUS.equals(name);
+                    || RuleFields.ITEM_COUNTS.equals(name) || RuleFields.CATALYST_RADIUS.equals(name);
         }
         if (CONSUME_FLUID_ID.equals(type)) {
             // 流体类型由输入页的存在叶声明；require_source 是移除动作自身的匹配行为，仍可在此编辑
-            return "fluid".equals(name);
+            return RuleFields.FLUID.equals(name);
         }
         return false;
     }
@@ -2710,8 +2761,8 @@ public final class RuleEditorEditPages {
 
     private void applyEnabled() {
         JsonObject view = currentView();
-        if (sourceCostMode != null) {
-            sourceCostMode.setEnabled(enabled && RuleCostBinding.consumeSource(view) == null);
+        if (sourceCostButton != null) {
+            sourceCostButton.setEnabled(enabled && RuleCostBinding.consumeSource(view) == null);
         }
         if (catalystToggle != null) {
             EditSession session = host.session();
@@ -3089,10 +3140,6 @@ public final class RuleEditorEditPages {
         JsonObject view = currentView();
         if (view == null) {
             return;
-        }
-        if (sourceCostMode != null) {
-            sourceCostMode.setSelected(view.has(RuleFields.SOURCE_COST) || RuleCostBinding.consumeSource(view) != null
-                    ? COST_EXPLICIT : COST_DERIVED);
         }
         if (catalystToggle != null) {
             catalystToggle.setChecked(view.has(RuleFields.CATALYST_COST) || RuleCostBinding.consumeCatalyst(view) != null);

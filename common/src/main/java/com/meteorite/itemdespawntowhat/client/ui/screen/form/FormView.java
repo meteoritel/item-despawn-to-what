@@ -15,6 +15,7 @@ import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import com.meteorite.itemdespawntowhat.core.model.CatalystCost;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -210,6 +211,13 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         reload();
     }
 
+    // 数量对象按引用身份展示；对象键无需进入草稿的点分路径语法。
+    public void setItemCountReferences(String path, List<String> references) {
+        for (Row row : rows) if (row.path.equals(path) && row.control instanceof ItemCountsControl counts) {
+            counts.setReferences(references);
+        }
+    }
+
     // 只由卡片编辑页启用，弹窗等其它宿主保留原有密度。
     public void useCardSpacing() {
         minimumControlHeight = 20;
@@ -329,14 +337,49 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         for (Row row : rows) {
             JsonElement original = draft.getAt(row.path);
             JsonElement container = basePath.isEmpty() ? draft.view() : draft.getAt(basePath);
+            if (row.control instanceof ItemCountsControl counts) {
+                JsonObject owner = container instanceof JsonObject object ? object : new JsonObject();
+                boolean source = RuleFields.SOURCE_COST.equals(row.field.name())
+                        || new com.google.gson.JsonPrimitive(com.meteorite.itemdespawntowhat.core.type.effect.ConsumeSourceEffect.ID.toString())
+                        .equals(owner.get(RuleFields.TYPE));
+                JsonElement references = source ? draft.getAt(RuleFields.SOURCE + "." + RuleFields.SOURCE_ITEMS)
+                        : owner.get(RuleFields.CATALYST_ITEMS);
+                List<String> ids = stringReferences(references);
+                int fallback = owner.has(RuleFields.CATALYST_COUNT) ? owner.get(RuleFields.CATALYST_COUNT).getAsInt() : CatalystCost.DEFAULT_COUNT;
+                counts.setDefaultCount(fallback);
+                counts.setReferences(ids);
+            }
             JsonElement effective = original == null && row.defaultValue != null ? row.defaultValue.get()
                     : original == null && container != null && container.isJsonObject()
-                    ? com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDefaults.effectiveValue(container.getAsJsonObject(), row.field.name()) : null;
+                    ? effectiveValue(container.getAsJsonObject(), row.field.name()) : null;
             row.defaultDisplayed = original == null && effective != null;
-            row.control.load(row.defaultDisplayed ? effective : original);
+            JsonElement displayed = row.defaultDisplayed ? effective : original;
+            if (row.control instanceof ItemCountsControl && row.defaultValue != null && original instanceof JsonObject amounts) {
+                JsonObject merged = row.defaultValue.get().getAsJsonObject().deepCopy();
+                amounts.entrySet().forEach(entry -> merged.add(entry.getKey(), entry.getValue().deepCopy()));
+                displayed = merged;
+            }
+            row.control.load(displayed);
             row.control.rememberLoaded(original);
             if (row.defaultText != null && row.control instanceof FormControl.TextControl text) text.displayDefault(row.defaultText);
         }
+    }
+
+    private static @Nullable JsonElement effectiveValue(JsonObject owner, String field) {
+        if (RuleFields.FLUIDS.equals(field) && owner.has(RuleFields.FLUID)) {
+            com.google.gson.JsonArray fluids = new com.google.gson.JsonArray();
+            fluids.add(owner.get(RuleFields.FLUID).deepCopy());
+            return fluids;
+        }
+        return com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDefaults.effectiveValue(owner, field);
+    }
+
+    private static List<String> stringReferences(@Nullable JsonElement raw) {
+        List<String> result = new ArrayList<>();
+        if (raw instanceof com.google.gson.JsonArray array) for (JsonElement value : array) {
+            if (value.isJsonPrimitive() && value.getAsJsonPrimitive().isString()) result.add(value.getAsString());
+        }
+        return result;
     }
 
     // 用给定对象装载控件（子列表新建子项时使用，不读草稿）
@@ -375,8 +418,29 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         session.apply(opKeyFor(row), () -> {
             if (next == null) draft.removeAt(row.path);
             else draft.setAt(row.path, next.deepCopy());
+            if (RuleFields.FLUIDS.equals(row.field.name())) draft.removeAt(childPath(RuleFields.FLUID));
+            if (RuleFields.CATALYST_ITEMS.equals(row.field.name())) {
+                JsonElement amounts = draft.getAt(childPath(RuleFields.ITEM_COUNTS));
+                if (amounts instanceof JsonObject object) {
+                    JsonObject selected = new JsonObject();
+                    for (String id : stringReferences(next)) if (object.has(id)) selected.add(id, object.get(id).deepCopy());
+                    draft.setAt(childPath(RuleFields.ITEM_COUNTS), selected);
+                }
+            }
             if (fieldWritten != null) fieldWritten.accept(row.path, before);
         });
+        if (RuleFields.CATALYST_ITEMS.equals(row.field.name())) {
+            // 只刷新数量行，保留其它字段尚未提交的输入。
+            JsonElement owner = basePath.isEmpty() ? draft.view() : draft.getAt(basePath);
+            for (Row quantity : rows) if (quantity.control instanceof ItemCountsControl counts) {
+                counts.setReferences(stringReferences(next));
+                int fallback = owner instanceof JsonObject object && object.has(RuleFields.CATALYST_COUNT)
+                        ? object.get(RuleFields.CATALYST_COUNT).getAsInt() : CatalystCost.DEFAULT_COUNT;
+                counts.setDefaultCount(fallback);
+                JsonElement amounts = draft.getAt(quantity.path);
+                counts.load(amounts);
+            }
+        }
     }
 
     // 撤销操作名：来源列表单独成项（契约 §5.2 的来源与排除标签），其余交给控件自报

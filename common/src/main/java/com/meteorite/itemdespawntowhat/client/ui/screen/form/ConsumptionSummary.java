@@ -74,8 +74,8 @@ public final class ConsumptionSummary {
     // 固定源成本优先；重复消耗只在各效果列表内部判断，不把不同候选混为重复。
     public static Component hintRule(JsonObject rule) {
         JsonElement cost = rule.get(RuleFields.SOURCE_COST);
-        if (cost != null && cost.isJsonPrimitive() && cost.getAsJsonPrimitive().isNumber()) {
-            return Component.translatable("gui.itemdespawntowhat.edit.consumption.hint.fixed", cost.getAsString());
+        if (cost != null && cost.isJsonObject()) {
+            return Component.translatable("gui.itemdespawntowhat.edit.consumption.hint.fixed");
         }
         JsonArray all = new JsonArray();
         JsonElement flat = rule.get(RuleFields.EFFECTS);

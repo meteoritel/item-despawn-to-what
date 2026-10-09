@@ -351,7 +351,7 @@ public final class RuleEditorP4Panels {
                 List<UiCatalogGrid.Entry> mapped = new ArrayList<>();
                 java.util.Set<String> validTags = field != null && type == RuleCatalogType.TAG ? FieldCatalogChoices.tags(field) : null;
                 for (RuleCatalogEntry entry : catalog.entries()) {
-                    if (type == RuleCatalogType.FLUID && FluidPreviewIcons.isEmpty(entry.id())) continue;
+                    if (type == RuleCatalogType.FLUID && FluidPreviewIcons.isExcluded(entry.id())) continue;
                     if (validTags != null && !validTags.contains(entry.id())) continue;
                     if (type == RuleCatalogType.ENTITY && field != null && FieldCatalogChoices.isGenericProduct(field)
                             && (entry.id().equals("minecraft:item") || entry.id().equals("minecraft:experience_orb"))) continue;

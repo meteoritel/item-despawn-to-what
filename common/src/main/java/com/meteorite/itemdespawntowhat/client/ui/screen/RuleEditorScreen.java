@@ -1341,12 +1341,13 @@ public final class RuleEditorScreen extends Screen {
                 && seconds.getAsInt() < 0) {
             issues.add(issue(RuleFields.TRIGGER_AFTER_SECONDS, UI + "issue.trigger_negative"));
         }
-        // 固定成本契约（与服务端 RuleValidation 对齐）：source_cost 必须为正数、catalyst_cost 不得为负数
+        // 固定成本按引用分别校验；数量必须为正整数，引用必须来自已选物品。
         JsonElement sourceCost = draft.view().get(RuleFields.SOURCE_COST);
-        if (isInteger(sourceCost) && sourceCost.getAsInt() <= 0) {
+        JsonArray sourceItems = jsonArray(draft.getAt(RuleFields.SOURCE + "." + RuleFields.SOURCE_ITEMS));
+        if (sourceCost != null && invalidItemCounts(sourceCost, sourceItems, Integer.MAX_VALUE)) {
             issues.add(issue(RuleFields.SOURCE_COST, UI + "issue.source_cost_not_positive"));
         }
-        // catalyst_cost 契约（与服务端 RuleValidation / RuleCodecs 对齐）：必须是对象 {items, count?, radius?}，
+        // catalyst_cost 契约（与服务端 RuleValidation / RuleCodecs 对齐）：必须是对象 {items, counts?, count?, radius?}，
         // 整数写法已废弃；items 不能为空、count / radius 只在显式写出时做区间拦截
         JsonElement catalystCost = draft.view().get(RuleFields.CATALYST_COST);
         boolean hasCatalystCost = catalystCost != null && !catalystCost.isJsonNull();
@@ -1355,6 +1356,11 @@ public final class RuleEditorScreen extends Screen {
                 issues.add(issue(RuleFields.CATALYST_COST, UI + "issue.catalyst_cost_not_object"));
             } else {
                 JsonObject cost = catalystCost.getAsJsonObject();
+                JsonElement counts = cost.get(RuleFields.ITEM_COUNTS);
+                if (counts != null && invalidItemCounts(counts, jsonArray(cost.get(RuleFields.CATALYST_ITEMS)), CatalystCost.MAX_COUNT)) {
+                    issues.add(issue(RuleFields.CATALYST_COST + "." + RuleFields.ITEM_COUNTS,
+                            UI + "issue.catalyst_cost_count_out_of_range"));
+                }
                 if (jsonArray(cost.get(RuleFields.CATALYST_ITEMS)).isEmpty()) {
                     issues.add(issue(RuleFields.CATALYST_COST + "." + RuleFields.CATALYST_ITEMS,
                             UI + "issue.catalyst_cost_items_empty"));
@@ -1392,13 +1398,28 @@ public final class RuleEditorScreen extends Screen {
             }
         }
         // 固定成本与同名消耗效果互斥（重复记账）
-        if (isInteger(sourceCost) && consumption.containsKey(TypeLabels.OWN_NAMESPACE + ":consume_source")) {
+        if (sourceCost != null && consumption.containsKey(TypeLabels.OWN_NAMESPACE + ":consume_source")) {
             issues.add(issue(RuleFields.SOURCE_COST, UI + "issue.double_bookkeeping"));
         }
         if (hasCatalystCost && consumption.containsKey(TypeLabels.OWN_NAMESPACE + ":consume_catalyst")) {
             issues.add(issue(RuleFields.CATALYST_COST, UI + "issue.double_bookkeeping"));
         }
         return issues;
+    }
+
+    private static boolean invalidItemCounts(JsonElement raw, JsonArray items, int maximum) {
+        if (!(raw instanceof JsonObject counts)) return true;
+        for (var entry : counts.entrySet()) {
+            JsonElement value = entry.getValue();
+            if (!items.contains(new com.google.gson.JsonPrimitive(entry.getKey())) || !isInteger(value)) return true;
+            try {
+                int count = value.getAsBigDecimal().intValueExact();
+                if (count < 1 || count > maximum) return true;
+            } catch (ArithmeticException | NumberFormatException invalid) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // 统计一组效果里的消耗类型（同一消耗效果在规则内只允许出现一次）

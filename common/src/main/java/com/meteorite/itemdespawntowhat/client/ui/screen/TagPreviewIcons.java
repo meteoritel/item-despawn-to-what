@@ -52,7 +52,8 @@ public final class TagPreviewIcons {
                             EntityPreviewIcons.icon(BuiltInRegistries.ENTITY_TYPE.getKey(holder.value()).toString(), 0))).toList())
                     .orElse(List.of());
             case FLUID -> BuiltInRegistries.FLUID.getTag(TagKey.create(Registries.FLUID, id))
-                    .map(set -> set.stream().filter(holder -> !holder.value().defaultFluidState().isEmpty())
+                    .map(set -> set.stream().filter(holder -> !holder.value().defaultFluidState().isEmpty()
+                                    && holder.value().defaultFluidState().isSource())
                             .map(holder -> new Member(FluidPreviewIcons.label(BuiltInRegistries.FLUID.getKey(holder.value())),
                                     FluidPreviewIcons.icon(BuiltInRegistries.FLUID.getKey(holder.value()).toString()))).toList())
                     .orElse(List.of());

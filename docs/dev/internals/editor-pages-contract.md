@@ -1,6 +1,6 @@
 # 编辑器四页职责与输入↔触发联动契约
 
-> 状态：当前实现（2026-10-09，已通过串行构建）。相关规格：`docs/spec/editor-page-responsibilities-2026-10-07.md`；覆盖 `client/ui/screen/RuleEditorEditPages.java`、`client/ui/screen/RuleEditorScreen.java`、`client/ui/screen/RuleEditorP4Panels.java` 与 core 侧 `CatalystPresentCondition` / `CatalystThresholdProjection`。面向改编辑器的人：说明四页各管什么、输入页与触发页如何按**确切叶路径**关联、以及撤销粒度。
+> 状态：当前实现。相关规格：`docs/spec/editor-page-responsibilities-2026-10-07.md`；覆盖 `client/ui/screen/RuleEditorEditPages.java`、`client/ui/screen/RuleEditorScreen.java`、`client/ui/screen/RuleEditorP4Panels.java` 与 core 侧 `CatalystPresentCondition` / `CatalystThresholdProjection`。面向改编辑器的人：说明四页各管什么、输入页与触发页如何按**确切叶路径**关联、以及撤销粒度。
 
 ## 1. 四页职责
 
@@ -13,7 +13,7 @@
 
 - 页枚举 `Page`（`:87`）、派发 `switch (page)`（`:360-364`）、版面 `:1878-1882`、渲染 `:2162-2166`；页面各自保存滚动偏移（`:212` `scrollOffsets`）。
 - 结果页分两层：**多方案**才有方案层（`singlePlan = candidates == 1`，`RuleEditorEditPages.java:1418`）；宽屏左列直接是动作列表（`:2122` `if (!singlePlan)` 跳过 `layoutPlans`）；窄屏单方案阶段夹取到 `[1,2]`（`:2080`），多方案仍为 `[0,2]`（stage0 方案层 / stage1 返回方案）；单方案不生成「打开方案」按钮（`:1459`），`candidateList` 创建但不注册进 `liveWidgets`（`:1451-1453`）；方案按钮可见性由 `:2101` 控制为 `plans || (singlePlan && actions)`；`combinationControl` 仅 `candidates>1` 创建。
-- 结果页**不重复**消耗参数：过滤链 `:1538-1547` 配合 `isInputOwnedConsumptionField`（`:2061-2075`，`consume_source`→`count`；`consume_catalyst`→`items`/`count`/`radius`；`consume_fluid`→`fluid`，**不过滤** `require_source`——输入页不管理它），并在首个消耗动作参数前插说明行 `effect.consume_params_on_input`（`:1545`）；`chance` / `delay_ticks` / `conditions` 仍在结果页编辑。
+- 结果页**不重复**消耗参数：过滤链 `:1538-1547` 配合 `isInputOwnedConsumptionField`（`:2061-2075`，`consume_source`→`count`/`counts`；`consume_catalyst`→`items`/`count`/`counts`/`radius`；`consume_fluid`→`fluid`，**不过滤** `require_source`——输入页不管理它），并在首个消耗动作参数前插说明行 `effect.consume_params_on_input`（`:1545`）；`chance` / `delay_ticks` / `conditions` 仍在结果页编辑。
 - 术语：一个 outcome 一律称「**方案**」（`button.candidate_*` / `notice.candidate_*` / `undo.*_candidate` / `issue.candidate_*` / `rule.combination` 等文案已统一，`effect.consume_params_on_input` 为新增），只有页签名仍是「结果」（`tab.results`）；`candidate.implicit` 与 `structure.convert_hint` 已删除。
 - 初始页：新建**空白**规则落在输入页（`RuleEditorScreen.createRule:1014`，`templateId == null` 时切到 `input`）；从模板新建或打开已有规则落在基本页（`openEditor:932` 置 `tab = INFO`，字段 `tab` 默认值见 `:109`）。
 - 切页前先提交有效编辑：`RuleEditorScreen.switchTab:333-349` 走 `pages.blockNavigation()` 门禁后 `pages.setPage(target)`；提交路径见第 5、7 节。
@@ -22,8 +22,8 @@
 
 - 两个开关：催化剂 / 流体，标签 `rule.presence.add_catalyst`（「启用催化剂」）/ `rule.presence.add_fluid`（「启用流体条件」）。催化剂卡片按「启用 → 物品选择与最低触发数量 → 消耗开关 → 每轮消耗数量」排列；物品与流体选择复用目录及卡片控件，卡片内可逐项移除引用。
 - 勾选 = 在**规则级条件**里新增一个存在条件叶（`addRuleLevelPresence` `:673-697`）：条件为空树时直接写入叶；根已是 `all_of` 时把叶追加进 `terms`；否则把**完整旧根**与新叶一起放进新的 `all_of(旧根, 叶)`——保留旧根整体语义，不把叶插进当前选中的节点。
-- 输入页启用催化剂创建 `{op: leaf, condition: {type: …, items: [], count: 1}}`，门槛从 1 开始且可独立编辑。触发页新建催化剂叶仍省略 `count`，保留运行期默认门槛语义；打开已有省略门槛的叶只显示有效值，不自动写回。
-- 存在条件类型字段的 basePath 就是该叶的 condition 路径：`newForm(session, leaf.conditionPath(), presenceDescriptor(leaf))`；字段路径 `fieldPath() = conditionPath + ".items"`（催化剂）或 `+ ".fluid"`（流体）。存在叶的物品选择同步关联的消耗配置，后者仍保留运行所需的 `items`。
+- 输入页启用催化剂创建 `{op: leaf, condition: {type: …, items: [], count: 1}}`，每个引用的门槛从 1 开始，由 `counts` 对象分别编辑。触发页新建催化剂叶仍省略 `count`，保留运行期默认门槛语义；打开已有省略门槛的叶只显示有效值，不自动写回。
+- 存在条件类型字段的 basePath 就是该叶的 condition 路径：`newForm(session, leaf.conditionPath(), presenceDescriptor(leaf))`；字段路径 `fieldPath() = conditionPath + ".items"`（催化剂）或 `+ ".fluids"`（流体列表，任一种命中即可）。存在叶的物品选择同步关联的消耗配置，后者仍保留运行所需的 `items`。
 - 未勾选时不渲染类型字段（`:539-541` 与 `buildPresenceSection` 行为）。
 - 单个催化剂或流体叶不重复显示编号、作用域与整叶移除按钮；多个同类型叶保留标题和整叶移除入口。卡片上的移除只删除该引用；整叶移除只删除对应的条件叶。流体引用留空时显示「任意非空流体」，沿用后端的任意流体语义。
 - 流体目录、选中卡片及标签成员共用 `FluidPreviewIcons`：从流体对应方块的模型图集取得静态材质和方块染色，绘制有明暗面的立体方块图标；流水等非源流体名称带「流动」标识。目录与文本候选过滤注册表中的空流体，流体标签预览也过滤空成员。材质每帧从当前图集读取，不保留资源重载前的 sprite。
@@ -53,27 +53,26 @@
 1. 输入页只呈现**规则级**叶（`ruleLevelPresence` 过滤 `leaf.ruleLevel()`）；动作局部叶不在此列出，只在触发页条件树里编辑。
 2. 触发页**不新增类型副本**：`buildTrigger`（`:1183-1204`）只建触发原因勾选框、延迟表单与条件树；叶结构未变，既有 `UiConditionTreeEditor` 直接呈现，叶的增删/取反/组合操作不变。
 3. 叶参数编辑入口：`pageConditionSupport(owner)`（`:1227-1244`）→ `openLeafEditor(owner, leaf)`（`:1264-1339`）。弹窗以**发起编辑的那个表单**为 owner：`editConditionLeaf` 在 `liveForms` 里用 `findTree(form, leaf)` 找到承载该叶的表单（`:1255-1262`），路径取该树的 `selectedPath()`（`:1270-1272`）。同名同类型的多个叶各绑各的路径，**不会误绑**。
-4. 弹窗标题带类型编号与作用域（`:1300-1303`）；只有催化剂叶额外加「默认：N」说明行（`:1311-1314`，见第 6 节）。
+4. 弹窗标题带类型编号与作用域（`:1300-1303`）；催化剂叶显示所有引用均需达标的说明，流体叶显示任一种即可匹配的说明。
 5. 确认时只写回该叶自己的路径：`form.applyToDraft()`（`:1331`）后 `owner.reload()` 刷新发起编辑的表单，再由 `host.onDraftChanged()` 通知宿主。逐项编辑**不改变组合结构**，也**不会把动作局部条件提升到规则级**。
 6. 实现细节：叶弹窗内的目录选择、区间条与事件转发由 `RuleEditorP4Panels.leafPanel(...)`（`RuleEditorP4Panels.java:516`，`basePath` 即叶参数在草稿中的路径，`:508`）承载；门槛说明行经 `LeafPanel.addNote`（`:710`）注入；校验失败时 `focusField(issue.path())`（`:962`）把焦点定位到问题字段。
 
-## 5. 类型改写与关联消耗配置重指向
+## 5. 物品与数量联动
 
-- 催化剂类型（items）改写立即写入草稿，且与关联消耗配置重指向合并为同一次可撤销操作。`FormView.setOnFieldWritten` 在字段写入的同一个 `EditSession.apply` 内通知宿主，目录添加也走此入口；缓冲提交仍由 `flushPresenceType` 校验确切叶路径后同步。
-- 重指向规则（`retargetCatalystItems` `:957-1003`）：只重写「items 为空」或「与旧集合相同」的 `catalyst_cost` 与动作内 `consume_catalyst`；集合语义、顺序无关（`referencesDiffer` `:1006-1008`）。类型被清空（`after` 为空）属中间态，**不连带清空消耗配置**（`:958-961`）。
-- 流体类型改写同步关联的 `consume_fluid.fluid`：目录添加走 `FormView.setOnFieldWritten`，缓冲提交走 `flushPresenceType`；类型写入和关联更新共用一条撤销记录。
-- 类型缓冲不会漏落盘：`applyToDraft()` 第一件事就是 `flushPresenceTypes()`（`:2287-2298`），否则类型改写会被普通提交流程拆成两条记录。
-- 类型表单**不在改类型后重建页面**（`:621-622` 注释）：目录选择可连续多次回调，重建会让后续选择写进已卸载的控件。
+- 字段写入统一走 `FormView.writeField`，引用改写、数量对象同步和关联消耗配置重指向共用一条撤销记录。存在叶缓冲提交先核对确切叶路径，再调用同一表单写入流程。
+- 源物品保留替代匹配语义。界面只提供「指定每轮消耗」按钮；开启后 `source_cost` 按当前引用写入数量 1，每个引用有独立滑条与精确输入。已有 `consume_source` 时编辑其 `counts`，避免同时生成固定成本。
+- 催化剂各引用均需满足各自门槛。`counts` 以引用为键，新增引用采用默认数量，移除引用同步移除对应数量，保留仍选中的值。固定催化剂成本使用规则级存在叶的引用并集；已有独立消耗动作只在 items 为空或与原集合相同时同步。
+- 开启「消耗催化剂」时，按引用复制当前门槛为每轮成本；同一引用存在多个规则级门槛时采用最大值。随后门槛和成本可各自调整；每轮全部引用付得起才扣除。
+- 流体列表多选采用或关系；写入 `fluids` 时移除旧的单值 `fluid`，清空列表表示任意流体。选成单个流体时，类型为空或等于原单值的 `consume_fluid` 跟随新单值；多选不自动选择某个移除目标。
+- 类型表单在连续目录回调期间保持实例，避免后续选择写进已卸载控件。数量行刷新不丢弃其它字段未提交的输入。
 
-## 6. 有效门槛与运行期同源
+## 6. 数量展示与运行期同源
 
-- 门槛字段对外统一叫「最低触发数量」（`rule.catalyst_min_count`）：叶弹窗里把原字段重新贴标签（`relabelCatalystThreshold` `:1036-1042`、`relabelCatalystCountField` `:1045-1049`）。
-- 输入页直接显示并编辑门槛；省略值通过 `FormView.setRowDefaultValue` 回填有效数量，未编辑时保留省略状态。消耗区省略数量时显示后端默认值 1，首次开启消耗则显式写入当前门槛数量。
-- 留空时才显示「默认：N」（`rule.catalyst_min_count_effective`）：`thresholdNote`（`:1052-1058`）仅当 `form.pendingValue(countPath)` 为空才返回文案；**显式填写后不再显示**。
-- N 与运行期**完全同源**：`effectiveThreshold`（`:1062-1076`）把整条草稿用 `RuleCodecs.codec(ClientTypeRegistries.effects(), ClientTypeRegistries.conditions())` 解码成 `Rule`，再调用 `core/runtime/CatalystThresholdProjection.resolveThreshold(rule, taggedItems(conditionPath), scopeEffectOf(rule, conditionPath))`。
-- 草稿尚不完整（解码失败）才退化：`fallbackThreshold`（`:1119-1143`）取同作用域消耗配置的 `count`（集合匹配时才采用），否则默认门槛 1（`CatalystPresentCondition.DEFAULT_COUNT`）。
-- 作用域对齐：`scopePathOf`（`:1092-1095`）从叶路径截出承载对象（规则级 → `catalyst_cost`；动作局部 → 该动作路径），`scopeEffectOf`（`:1098-1116`）据此在解码后的 `Rule` 里取出对应 `Effect`（含 `outcomes[j].effects[k]`）。
-- 运行期语义（可选声明、投影规则、失效入口）见 [催化剂门槛运行投影](<../backend/systems/catalyst-threshold-projection.md>)。
+- `ItemCountsControl` 复用 `NumberControl`，按引用显示物品名称、数量滑条与精确输入；输入页和条件叶弹窗共用该控件。
+- 催化剂门槛统一称「最低触发数量」，消耗区称「每轮消耗数量」；GUI 搜索半径使用默认 1，不提供自定义入口。
+- 显式 `counts` 优先，缺省引用采用显式 `count`；门槛均缺省时，`quantityDefaults` 解码完整草稿并调用 `CatalystThresholdProjection.resolveThreshold` 按引用展示有效门槛。未编辑时保留原字段缺失状态。
+- 草稿未能解码时展示显式 `count` 或默认 1；作用域按确切条件路径解析，不把不同候选结果或效果的消耗参数混用。
+- 运行期投影见 [催化剂门槛运行投影](../backend/systems/catalyst-threshold-projection.md)。
 
 ## 7. 撤销与保存语义
 
@@ -89,7 +88,7 @@
 - 条件树**叶行本身不显示编号**：编号只在输入页存在条件标题行与叶弹窗标题（`UiConditionTreeEditor` 内没有 presence / ordinal / scope 相关代码）。
 - 输入页只列**规则级**存在叶；动作局部存在叶只能在触发页的条件树里逐叶进入弹窗编辑。
 - 显示名/备注一次性粘贴超过「2×码点上限」的纯补充平面字符（如 emoji）时，可能被原版 `EditBox` 的 UTF-16 单元上限静默截断到恰好上限而不弹超限提示；逐字符键入与常规粘贴不受影响（上限判定本身仍按码点，见 [ui-kit-api](<ui-kit-api.md>)）。
-- 流体类型改写只重指向 `items`/`fluid` 为空或与旧集合相同的 `consume_fluid`（与催化剂同一规则，刻意不动不同的独立配置）。
+- 流体多选不会自动改写独立移除动作的目标；单选只重指向未指定类型或与原单值相同的动作。
 
 ## 9. 相关文档
 

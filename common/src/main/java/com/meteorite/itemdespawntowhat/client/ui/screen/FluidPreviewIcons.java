@@ -13,6 +13,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Quaternionf;
+import net.minecraft.tags.FluidTags;
 
 /*** 流体使用真实静态材质与方块染色绘制立体方块；水、岩浆不依赖不可见的方块模型。 */
 public final class FluidPreviewIcons {
@@ -21,6 +22,8 @@ public final class FluidPreviewIcons {
     private static final int COLOR_CHANNEL_MASK = 0xFF;
     private static final int RED_SHIFT = 16;
     private static final int GREEN_SHIFT = 8;
+    private static final int NO_TINT = -1;
+    private static final int DEFAULT_WATER_TINT = 0x3F76E4;
     private static final float PITCH = (float) Math.toRadians(22);
     private static final float YAW = (float) Math.toRadians(45);
     private static final float QUARTER_TURN = (float) (Math.PI / 2);
@@ -36,20 +39,18 @@ public final class FluidPreviewIcons {
 
     private FluidPreviewIcons() { }
 
-    // 未知引用仍由校验处理；选择目录只过滤实际注册的空流体。
-    public static boolean isEmpty(String id) {
+    // 未知引用仍由校验处理；选择目录过滤空流体与流动变体。
+    public static boolean isExcluded(String id) {
         ResourceLocation key = ResourceLocation.tryParse(id);
         return key != null && BuiltInRegistries.FLUID.getOptional(key)
-                .map(fluid -> fluid.defaultFluidState().isEmpty()).orElse(false);
+                .map(fluid -> fluid.defaultFluidState().isEmpty() || !fluid.defaultFluidState().isSource()).orElse(false);
     }
 
     public static @Nullable Component label(ResourceLocation id) {
         return BuiltInRegistries.FLUID.getOptional(id)
                 .map(fluid -> {
                     var state = fluid.defaultFluidState();
-                    Component name = state.createLegacyBlock().getBlock().getName();
-                    return state.isSource() ? name : Component.translatable(
-                            "gui.itemdespawntowhat.edit.fluid.flowing", name);
+                    return state.createLegacyBlock().getBlock().getName();
                 }).orElse(null);
     }
 
@@ -65,7 +66,9 @@ public final class FluidPreviewIcons {
     private static void render(GuiGraphics graphics, UiRect box, BlockState state) {
         Minecraft minecraft = Minecraft.getInstance();
         TextureAtlasSprite sprite = stillTexture(minecraft, state);
-        int tint = minecraft.getBlockColors().getColor(state, null, null, 0);
+        var pos = minecraft.player == null ? null : minecraft.player.blockPosition();
+        int blockTint = minecraft.getBlockColors().getColor(state, minecraft.level, pos, 0);
+        int tint = blockTint == NO_TINT && state.getFluidState().is(FluidTags.WATER) ? DEFAULT_WATER_TINT : blockTint;
         float scale = BOUNDS.scale(box, PITCH);
         UiRenderLayers.draw(graphics, UiRenderLayers.ICON, () -> {
             graphics.pose().translate(box.x() + box.width() / 2F, box.y() + box.height() / 2F, 0);

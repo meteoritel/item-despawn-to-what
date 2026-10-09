@@ -110,13 +110,13 @@ public final class BuiltinEditorDescriptors {
         ResourceLocation catalyst = id("catalyst_present");
         ConditionEditorRegistry.register(new TypeEditorDescriptor(catalyst, TypeLabels.conditionLabel(catalyst), List.of(
                 EditorField.tagList("items", h + "catalyst_present.items", "minecraft:item").asRequired(),
-                EditorField.integer("count", h + "catalyst_present.count", 1, 64).optional()
+                EditorField.itemCounts(RuleFields.ITEM_COUNTS, h + "catalyst_present.count", 1, 64)
         ), false));
 
         // fluid_present：留空 = 任意流体
         ResourceLocation fluid = id("fluid_present");
         ConditionEditorRegistry.register(new TypeEditorDescriptor(fluid, TypeLabels.conditionLabel(fluid), List.of(
-                EditorField.optionalTag("fluid", h + "fluid_present.fluid", "minecraft:fluid")
+                EditorField.tagList(RuleFields.FLUIDS, h + "fluid_present.fluid", "minecraft:fluid")
                         .withHint(h + "fluid_present.fluid.hint"),
                 EditorField.bool("require_source", h + "fluid_present.require_source")
         ), false));
@@ -211,14 +211,14 @@ public final class BuiltinEditorDescriptors {
         // consume_source
         ResourceLocation consumeSource = id("consume_source");
         registerEffect(consumeSource, List.of(
-                EditorField.integer("count", h + "consume_source.count", 1, 64).optional()
+                EditorField.itemCounts(RuleFields.ITEM_COUNTS, h + "consume_source.count", 1, 64)
         ));
 
         // consume_catalyst
         ResourceLocation consumeCatalyst = id("consume_catalyst");
         registerEffect(consumeCatalyst, List.of(
                 EditorField.tagList("items", h + "consume_catalyst.items", "minecraft:item").asRequired(),
-                EditorField.integer("count", h + "consume_catalyst.count", 1, 64).optional(),
+                EditorField.itemCounts(RuleFields.ITEM_COUNTS, h + "consume_catalyst.count", 1, 64),
                 EditorField.integer("radius", h + "consume_catalyst.radius", 1, 8).optional()
         ));
 
@@ -296,8 +296,7 @@ public final class BuiltinEditorDescriptors {
     public static TypeEditorDescriptor sourceCostDescriptor() {
         String r = "gui.itemdespawntowhat.edit.rule.";
         return new TypeEditorDescriptor(SOURCE_COST_DESCRIPTOR, Component.translatable(r + "source_cost"), List.of(
-                EditorField.integerSlider(RuleFields.SOURCE_COST, r + "source_cost", 1, Integer.MAX_VALUE, 1, 64)
-                        .optional()
+                EditorField.itemCounts(RuleFields.SOURCE_COST, r + "source_cost", 1, Integer.MAX_VALUE)
         ), false);
     }
 
@@ -305,7 +304,7 @@ public final class BuiltinEditorDescriptors {
     public static TypeEditorDescriptor catalystCostDescriptor() {
         String r = "gui.itemdespawntowhat.edit.rule.";
         return new TypeEditorDescriptor(CATALYST_COST_DESCRIPTOR, Component.translatable(r + "catalyst_cost"), List.of(
-                EditorField.integer(RuleFields.CATALYST_COUNT, r + "catalyst_cost.count",
+                EditorField.itemCounts(RuleFields.ITEM_COUNTS, r + "catalyst_cost.count",
                         CatalystCost.MIN_COUNT, CatalystCost.MAX_COUNT)
         ), false);
     }

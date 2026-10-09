@@ -6,6 +6,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.ArrayDeque;
+import net.minecraft.world.item.Item;
 
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
@@ -24,7 +26,7 @@ import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTickBudget;
 final class CatalystReservations {
 
     // 预留项：某维度内某个催化剂实体被某任务占用的件数
-    record Hold(UUID itemId, int count) {}
+    record Hold(UUID itemId, int count, Item expectedItem) {}
 
     // 支付三态：已支付 / 本刻预算不足需下刻重试 / 可用量不足（含实体已不存在或被扣减）
     enum PayOutcome { PAID, RETRY, SHORT }
@@ -36,7 +38,10 @@ final class CatalystReservations {
     }
 
     // 某任务持有的预留：维度 + 由近及远的预留项（顺序即支付顺序）
-    private record OwnerHolds(ResourceKey<Level> dimension, List<Hold> holds) {}
+    private record OwnerHolds(ResourceKey<Level> dimension, List<Hold> holds,
+                              ArrayDeque<List<Hold>> groups, PaymentProgress progress) {}
+
+    private static final class PaymentProgress { private int charged; }
 
     private final Map<ResourceKey<Level>, Map<UUID, Integer>> reservedByItem = new HashMap<>();
     private final Map<String, OwnerHolds> byOwner = new LinkedHashMap<>();
@@ -72,33 +77,28 @@ final class CatalystReservations {
         return total;
     }
 
-    // 在「由近及远、且互不重复」的候选实体里预留 needed 件：
+    // 合并逐轮支付清单中的实体数量，并整体预留：
     // 任一件数不足则整体不预留（绝不半预留），返回 null 表示可用量不足，由调用方跳过该候选
-    List<Hold> tryReserve(String owner, ServerLevel level, List<ItemEntity> ordered, int needed) {
-        if (needed <= 0) {
+    List<Hold> tryReserve(String owner, ServerLevel level, List<List<Hold>> groups) {
+        if (groups.isEmpty()) {
             return List.of();
         }
         // 同一任务已有预留：直接拒绝，绝不叠加第二次预留（调用方收到 null 后跳过该候选）
         if (byOwner.containsKey(owner)) {
             return null;
         }
-        List<Hold> picks = new ArrayList<>();
-        int remaining = needed;
-        for (ItemEntity item : ordered) {
-            if (remaining <= 0) {
-                break;
-            }
-            int take = Math.min(remaining, available(level, item));
-            if (take <= 0) {
-                continue;
-            }
-            picks.add(new Hold(item.getUUID(), take));
-            remaining -= take;
+        Map<UUID, Hold> combined = new LinkedHashMap<>();
+        for (List<Hold> group : groups) for (Hold hold : group) {
+            combined.merge(hold.itemId(), hold, (left, right) ->
+                    new Hold(left.itemId(), left.count() + right.count(), left.expectedItem()));
         }
-        if (remaining > 0) {
-            return null;
+        List<Hold> picks = new ArrayList<>(combined.values());
+        for (Hold pick : picks) {
+            ItemEntity item = resolve(level, pick.itemId());
+            if (item == null || item.getItem().getItem() != pick.expectedItem()
+                    || available(level, item) < pick.count()) return null;
         }
-        reserve(owner, level.dimension(), picks);
+        reserve(owner, level.dimension(), picks, groups);
         return picks;
     }
 
@@ -113,37 +113,28 @@ final class CatalystReservations {
             return PayResult.shortfall();
         }
         // 第一遍：只算出本组要从哪些实体各取多少件，不改动任何状态
-        List<Hold> plan = new ArrayList<>();
-        int remaining = perGroup;
-        for (Hold hold : ownerHolds.holds()) {
-            if (remaining <= 0) {
-                break;
-            }
-            int take = Math.min(remaining, hold.count());
-            plan.add(new Hold(hold.itemId(), take));
-            remaining -= take;
-        }
-        if (remaining > 0) {
+        List<Hold> plan = ownerHolds.groups().peekFirst();
+        if (plan == null || plan.stream().mapToInt(Hold::count).sum() != perGroup) {
             // 预留总量都不够：记账已损坏，按不足处理并要求调用方释放
             return PayResult.shortfall();
         }
-        // 第二遍：按 UUID 重读实体与件数，任何一件不足都整组不扣
+        // 逐实体计费跨 tick 保留进度，避免多物品支付计划反复从头消耗预算。
+        while (ownerHolds.progress().charged < plan.size()) {
+            if (budget.exhausted()) return PayResult.retry();
+            budget.charge(1);
+            ownerHolds.progress().charged++;
+        }
+        // 真正支付前按 UUID 重读全部实体与件数，任何一件不足都整组不扣。
         List<ItemEntity> resolved = new ArrayList<>(plan.size());
         for (Hold take : plan) {
             ItemEntity item = resolve(level, take.itemId());
-            if (item == null || item.getItem().getCount() < take.count()) {
+            if (item == null || item.getItem().getItem() != take.expectedItem()
+                    || item.getItem().getCount() < reservedCount(level.dimension(), take.itemId())) {
                 return PayResult.shortfall();
             }
             resolved.add(item);
         }
-        // 第三遍：每个实体记 1 个工作单位，预算耗尽则本刻一件不扣
-        for (int i = 0; i < resolved.size(); i++) {
-            if (budget.exhausted()) {
-                return PayResult.retry();
-            }
-            budget.charge(1);
-        }
-        // 第四遍：真实扣减；空栈实体按原版语义 discard
+        // 全部校验通过后真实扣减；空栈实体按原版语义 discard
         for (int i = 0; i < plan.size(); i++) {
             ItemStack stack = resolved.get(i).getItem();
             stack.shrink(plan.get(i).count());
@@ -152,6 +143,8 @@ final class CatalystReservations {
             }
         }
         consume(owner, ownerHolds.dimension(), plan);
+        ownerHolds.groups().removeFirst();
+        ownerHolds.progress().charged = 0;
         return PayResult.paid(perGroup);
     }
 
@@ -185,12 +178,12 @@ final class CatalystReservations {
     }
 
     // 建立预留：按维度累计件数，并登记到任务名下（顺序保留，支付时仍按由近及远）
-    private void reserve(String owner, ResourceKey<Level> dimension, List<Hold> picks) {
+    private void reserve(String owner, ResourceKey<Level> dimension, List<Hold> picks, List<List<Hold>> groups) {
         Map<UUID, Integer> table = reservedByItem.computeIfAbsent(dimension, key -> new HashMap<>());
         for (Hold pick : picks) {
             table.merge(pick.itemId(), pick.count(), Integer::sum);
         }
-        byOwner.put(owner, new OwnerHolds(dimension, new ArrayList<>(picks)));
+        byOwner.put(owner, new OwnerHolds(dimension, new ArrayList<>(picks), new ArrayDeque<>(groups), new PaymentProgress()));
     }
 
     // 支付成功后回写：从任务预留与维度表中同额扣减
@@ -205,7 +198,7 @@ final class CatalystReservations {
                     }
                     int left = holds.get(i).count() - take.count();
                     if (left > 0) {
-                        holds.set(i, new Hold(take.itemId(), left));
+                        holds.set(i, new Hold(take.itemId(), left, take.expectedItem()));
                     } else {
                         holds.remove(i);
                     }

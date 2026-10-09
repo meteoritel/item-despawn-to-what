@@ -77,6 +77,7 @@ public final class RuleCodecs {
     private static final Set<String> CATALYST_COST_FIELDS = Set.of(
             RuleFields.CATALYST_ITEMS,
             RuleFields.CATALYST_COUNT,
+            RuleFields.ITEM_COUNTS,
             RuleFields.CATALYST_RADIUS
     );
 
@@ -153,7 +154,7 @@ public final class RuleCodecs {
                         .forGetter(Rule::triggerAfterSeconds),
                 TriggerKind.CODEC.listOf().optionalFieldOf(RuleFields.TRIGGERS, List.of())
                         .forGetter(rule -> List.copyOf(rule.triggers())),
-                Codec.INT.optionalFieldOf(RuleFields.SOURCE_COST)
+                SourceCost.CODEC.optionalFieldOf(RuleFields.SOURCE_COST)
                         .forGetter(rule -> Optional.ofNullable(rule.sourceCost())),
                 CatalystCost.CODEC.optionalFieldOf(RuleFields.CATALYST_COST)
                         .forGetter(rule -> Optional.ofNullable(rule.catalystCost())),

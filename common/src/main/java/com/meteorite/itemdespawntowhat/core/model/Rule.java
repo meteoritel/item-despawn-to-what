@@ -29,7 +29,7 @@ public record Rule(
         int triggerAfterSeconds,
         List<Effect> effects,
         Set<TriggerKind> triggers,
-        @Nullable Integer sourceCost,
+        @Nullable SourceCost sourceCost,
         @Nullable CatalystCost catalystCost,
         CombinationMode combination,
         List<OutcomeCandidate> outcomes,

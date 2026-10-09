@@ -574,7 +574,7 @@ public final class ConversionRuntime {
             return;
         }
         // 每组固定源成本 c：显式 source_cost 优先，其次隐式 1 个，再次各 consume_source 之和（Q1 真实结算）
-        int costPerGroup = types.perRoundSourceConsumption(rule);
+        int costPerGroup = types.perRoundSourceConsumption(rule, source);
         tracked.locked = true;
         try {
             // 所有权转移：整堆进入结算库存，源实体本刻清空（与原实现「本刻即完成扣减」的时间点一致）

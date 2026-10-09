@@ -28,12 +28,19 @@ public final class FluidPresentEvaluator {
         if (condition.requireSource() && !fluidState.isSource()) {
             return false;
         }
-        TaggedId reference = condition.fluid();
-        if (reference == null) {
+        if (condition.references().isEmpty()) {
             // 未指定流体：任意流体（源模式约束已在上面生效）
             return true;
         }
         ResourceLocation fluidId = BuiltInRegistries.FLUID.getKey(fluidState.getType());
+        for (TaggedId reference : condition.references()) {
+            if (matches(reference, fluidId, fluidState, condition, context)) return true;
+        }
+        return false;
+    }
+
+    private static boolean matches(TaggedId reference, ResourceLocation fluidId, FluidState fluidState,
+                                   FluidPresentCondition condition, ConditionContext context) {
         if (reference.tag()) {
             return context.tags().fluidInTag(reference.id(), fluidId);
         }

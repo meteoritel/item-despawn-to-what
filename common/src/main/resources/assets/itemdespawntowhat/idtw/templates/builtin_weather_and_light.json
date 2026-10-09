@@ -86,7 +86,7 @@
     "triggers": [
       "natural"
     ],
-    "source_cost": 1,
+    "source_cost": {"minecraft:gunpowder": 1},
     "combination": "round_robin",
     "schema_version": 1,
     "effects": [

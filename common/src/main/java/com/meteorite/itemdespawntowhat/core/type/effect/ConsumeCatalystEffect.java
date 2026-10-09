@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.core.type.effect;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
+import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
@@ -18,6 +19,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * consume_catalyst：消耗触发位置附近作为触媒的物品（如祭坛上的献祭物）。
@@ -29,7 +31,8 @@ public record ConsumeCatalystEffect(
         int radius,
         int delayTicks,
         double chance,
-        @Nullable ConditionExpression conditions
+        @Nullable ConditionExpression conditions,
+        Map<TaggedId, Integer> counts
 ) implements Effect {
 
     // 效果类型 id，同时是 JSON 中 type 字段的取值
@@ -51,7 +54,10 @@ public record ConsumeCatalystEffect(
     // 紧凑构造器：列表字段做防御性拷贝，保持记录不可变
     public ConsumeCatalystEffect {
         items = items == null ? null : List.copyOf(items);
+        counts = Map.copyOf(counts);
     }
+
+    public int countFor(TaggedId item) { return counts.getOrDefault(item, count); }
 
     // 类型专属参数编解码器；通用字段复用 CommonFields 片段（codec 层不得产出 null）
     public static MapCodec<ConsumeCatalystEffect> codec(Codec<ConditionExpression> expressionCodec) {
@@ -63,9 +69,11 @@ public record ConsumeCatalystEffect(
                         .forGetter(ConsumeCatalystEffect::radius),
                 CommonFields.delayTicks(ConsumeCatalystEffect::delayTicks),
                 CommonFields.chance(ConsumeCatalystEffect::chance),
-                CommonFields.optionalConditions(ConsumeCatalystEffect::conditions, expressionCodec)
-        ).apply(instance, (items, count, radius, delayTicks, chance, conditions) ->
-                new ConsumeCatalystEffect(items, count, radius, delayTicks, chance, conditions.orElse(null))));
+                CommonFields.optionalConditions(ConsumeCatalystEffect::conditions, expressionCodec),
+                Codec.unboundedMap(TaggedId.CODEC, Codec.intRange(MIN_COUNT, MAX_COUNT))
+                        .optionalFieldOf(RuleFields.ITEM_COUNTS, Map.of()).forGetter(ConsumeCatalystEffect::counts)
+        ).apply(instance, (items, count, radius, delayTicks, chance, conditions, counts) ->
+                new ConsumeCatalystEffect(items, count, radius, delayTicks, chance, conditions.orElse(null), counts)));
     }
 
     // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器
@@ -89,6 +97,15 @@ public record ConsumeCatalystEffect(
                 ParamChecks.child(fieldPath, COUNT_FIELD));
         valid &= ParamChecks.inRange(params.radius(), MIN_RADIUS, MAX_RADIUS, RADIUS_FIELD, issues,
                 ParamChecks.child(fieldPath, RADIUS_FIELD));
+        for (var entry : params.counts().entrySet()) {
+            if (params.items() == null || !params.items().contains(entry.getKey())) {
+                issues.error("数量配置引用了未选择的催化剂: " + entry.getKey().serialized(), null,
+                        ParamChecks.child(fieldPath, RuleFields.ITEM_COUNTS));
+                valid = false;
+            }
+            valid &= ParamChecks.inRange(entry.getValue(), MIN_COUNT, MAX_COUNT, RuleFields.ITEM_COUNTS, issues,
+                    ParamChecks.child(fieldPath, RuleFields.ITEM_COUNTS));
+        }
         return valid;
     }
 
@@ -100,6 +117,6 @@ public record ConsumeCatalystEffect(
     // 效果级条件替换：其余参数原样保留，供运行期门槛投影重建真实效果类型
     @Override
     public ConsumeCatalystEffect withConditions(@Nullable ConditionExpression conditions) {
-        return new ConsumeCatalystEffect(items, count, radius, delayTicks, chance, conditions);
+        return new ConsumeCatalystEffect(items, count, radius, delayTicks, chance, conditions, counts);
     }
 }

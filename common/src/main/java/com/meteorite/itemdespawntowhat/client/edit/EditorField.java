@@ -81,6 +81,13 @@ public record EditorField(String name, String labelKey, EditorFieldType type, @N
                 null, null, NumericDomain.integers(min, max, windowMin, windowMax), -1);
     }
 
+    // 每个物品引用各自保存数量，滑条默认显示常用范围 1..64。
+    public static EditorField itemCounts(String name, String labelKey, int min, int max) {
+        return create(name, labelKey, EditorFieldType.ITEM_COUNTS, min + ".." + max,
+                true, false, "minecraft:item", null, null, null, null,
+                NumericDomain.integers(min, max, min, Math.min(max, 64)), -1);
+    }
+
     // 刻数：0 显示「立即」；界面允许按秒显示，但 JSON 仍是完整刻数
     public static EditorField ticks(String name, String labelKey, int min, int max) {
         return create(name, labelKey, EditorFieldType.TICKS, min + ".." + max, false, true, null, null, null,

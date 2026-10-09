@@ -67,7 +67,8 @@ core/api  ←──────────── core/model ──────�
 | `SourceEntry` | record | 源匹配项（物品 id 或物品标签），经 `TaggedId.CODEC.xmap` 复用形状 | `CODEC`、`fromTagged` / `toTagged` / `parse` / `serialized` |
 | `TriggerKind` | enum | 消失方式：`NATURAL` / `FIRE` / `LAVA` / `CACTUS` | `key()`（小写下划线）、`CODEC`（大小写不敏感，未知报错，无静默回退） |
 | `CombinationMode` | enum | 候选组合模式：`ROUND_ROBIN`（缺省）/ `PRIORITY` | `key()`、`CODEC`（大小写不敏感，未知报错） |
-| `CatalystCost` | record | 规则级催化剂固定成本 | `items`(必填非空 `List<TaggedId>`)、`count`(1..64，默认 1)、`radius`(1..8，默认 1)；`CODEC`；常量 `DEFAULT_COUNT` / `MIN_COUNT` / `MAX_COUNT` / `DEFAULT_RADIUS` / `MIN_RADIUS` / `MAX_RADIUS` |
+| `SourceCost` | record | 按源物品引用配置每轮消耗 | `counts: Map<TaggedId,Integer>`；`CODEC` 直接编码为数量对象；`forStack` 按当前堆叠取数量，直接物品优先，再按源列表匹配标签，缺省 1 |
+| `CatalystCost` | record | 规则级催化剂固定成本 | `items`(必填非空 `List<TaggedId>`)、`counts`(每引用 1..64)、`count`(缺省引用的数量，默认 1)、`radius`(1..8，默认 1)；`CODEC`；常量 `DEFAULT_COUNT` / `MIN_COUNT` / `MAX_COUNT` / `DEFAULT_RADIUS` / `MIN_RADIUS` / `MAX_RADIUS` |
 | `OutcomeCandidate` | record | 候选结果（内含多个共同执行的效果） | `id`（规则内唯一）、`effects`、`safeSpawn`(默认 false)、`fillOrigin`(默认 true)；`codec(Codec<Effect>)`；`IMPLICIT_ID="default"`；`implicit(...)`（把顶层 effects 映射为候选，不写回 JSON） |
 
 ### 3.2 条件树
@@ -122,13 +123,27 @@ core/api  ←──────────── core/model ──────�
 | `trigger_after_seconds` | int（秒） | 否 | `300` | 触发时刻 = min(该值×20 刻, lifespan−1) |
 | `effects` | 数组 | 否 | `[]` | 平铺效果；与 `outcomes` 二选一 |
 | `triggers` | 字符串数组 | 否 | `[]`（视为 `{natural}`） | `natural` / `fire` / `lava` / `cactus` |
-| `source_cost` | int | 否 | 无 | 规则级固定源成本，必须为正数 |
-| `catalyst_cost` | object | 否 | 无 | `{items, count, radius}`，整数写法已废弃（解码报错） |
+| `source_cost` | object | 否 | 无 | `{物品或 #tag 引用: 每轮数量}`；数量为正整数，引用必须属于 `source.items`，缺省引用为 1 |
+| `catalyst_cost` | object | 否 | 无 | `{items, counts?, count?, radius?}`，整数写法已废弃（解码报错） |
 | `combination` | 字符串 | 否 | `round_robin` | `round_robin` / `priority` |
 | `outcomes` | 数组 | 否 | `[]` | 候选结果；与顶层 `effects` 二选一 |
 | `schema_version` | int | 否 | `1` | 当前仅支持 1，其它值拒绝 |
 
 规则必须至少声明 `effects` 或 `outcomes` 之一，且**两者不得同时声明**（`RuleValidation` 拒载）。效果通用字段：`type`（必填）、`delay_ticks`（默认 0，相对规则触发时刻）、`chance`（默认 1.0，域 `[0,1]`）、`conditions`（可选条件树）。条件叶通用字段已无 `negated`（取反见 4.2）。
+
+源物品列表仍是替代匹配；催化剂列表中的每个引用都必须分别通过门槛并分别支付。示例：
+
+```json
+{
+  "source_cost": {"minecraft:egg": 2, "minecraft:acacia_door": 3},
+  "catalyst_cost": {
+    "items": ["minecraft:blaze_powder", "minecraft:redstone"],
+    "counts": {"minecraft:blaze_powder": 2, "minecraft:redstone": 4}
+  }
+}
+```
+
+`catalyst_present.counts` 用相同键分别设置门槛，数量范围为 1..64；未配置引用先采用显式 `count`，两者均未配置时由运行期门槛投影解析。`fluid_present.fluids` 是流体引用列表，命中任一种即通过，空列表回退到可选的 `fluid`，二者均空表示任意流体。
 
 ### 4.2 条件树 JSON 形状
 
@@ -156,7 +171,7 @@ core/api  ←──────────── core/model ──────�
 | 类型内（效果/条件叶） | 不在该类型 `keys()` 内 | **ERROR**（拒载该条） |
 | 条件树节点 | 不在 `op` / `terms` / `term` / `condition` 内 | **ERROR** |
 | `outcomes` 元素 | 不在 `OUTCOME_FIELDS` 内 | **ERROR** |
-| `catalyst_cost` 对象 | 不在 `{items,count,radius}` 内（含 `chance`/`conditions`/`delay_ticks`） | **ERROR** |
+| `catalyst_cost` 对象 | 不在 `{items,counts,count,radius}` 内（含 `chance`/`conditions`/`delay_ticks`） | **ERROR** |
 | 规则顶层 | 不在 `KNOWN_RULE_FIELDS` 内 | 仅 **WARN**，不阻断加载 |
 
 ### 4.4 不可变与 null 约束
@@ -166,20 +181,20 @@ core/api  ←──────────── core/model ──────�
 
 ### 4.5 固定成本与隐式消耗（语义链起点）
 
-`ConsumptionDefaults` 定义三个消耗效果 id（source / catalyst / fluid）。**规则未声明任何 `consume_*` 时按隐式语义消耗 1 个源物品**。`BuiltinTypeRegistries.perRoundSourceConsumption(Rule)` 给出该规则每轮的源消耗量，优先级链：
+`ConsumptionDefaults` 定义三个消耗效果 id（source / catalyst / fluid）。**规则未声明任何 `consume_*` 时按隐式语义消耗 1 个源物品**。`BuiltinTypeRegistries.perRoundSourceConsumption(Rule, ItemStack)` 给出该规则每轮的源消耗量，优先级链：
 
-1. 显式 `source_cost` → 取其值（加载期已保证为正数）；
+1. 显式 `source_cost` → 根据当前源堆叠查数量：直接物品优先，其次 `source.items` 原序首个命中且配置数量的标签，未配置时为 1；
 2. 未声明 `source_cost` 且未声明任何 `consume_*` → 隐式 `1`；
-3. 未声明 `source_cost` 但显式声明 `consume_source` → 取各 `consume_source` 的 `count` 之和；
+3. 未声明 `source_cost` 但显式声明 `consume_source` → 同样按当前源物品查 `counts`，未配置时采用该效果的 `count`；
 4. 只声明了其它消耗效果（如 `consume_fluid`）→ `0`（不按堆叠轮次展开）。
 
-判定入口：`Rule.usesImplicitSourceConsumption()` → `BuiltinTypeRegistries.perRoundSourceConsumption(Rule)` → `EffectContext`（`rounds()` / `groupSourceCost()` / `coveredSourceItems()`），详见 [conversion-runtime.md](conversion-runtime.md)。
+判定入口：`Rule.usesImplicitSourceConsumption()` → `BuiltinTypeRegistries.perRoundSourceConsumption(Rule, ItemStack)` → `EffectContext`（`rounds()` / `groupSourceCost()` / `coveredSourceItems()`），详见 [conversion-runtime.md](conversion-runtime.md)。
 
 ### 4.6 两档校验与工作量上限
 
 | 档 | 入口 | 是否需要注册表 | 内容 |
 |---|---|---|---|
-| 结构档 | `validate(rule, issues, origin)` | 否 | id 合法、`trigger_after_seconds≥0`、`schema_version` 受支持、source 非空、effects/outcomes 至少一个且互斥、`source_cost` 为正、`catalyst_cost` 合法、`display_name` 码点上限、条件树结构、消耗效果不重复、静态物品引用存在、候选 id 非空唯一且 effects 非空 |
+| 结构档 | `validate(rule, issues, origin)` | 否 | id 合法、`trigger_after_seconds≥0`、`schema_version` 受支持、source 非空、effects/outcomes 至少一个且互斥、`source_cost` 各数量为正且引用已选源物品、`catalyst_cost` 合法、`display_name` 码点上限、条件树结构、消耗效果不重复、静态物品引用存在、候选 id 非空唯一且 effects 非空 |
 | 参数档 | `validate(rule, effectTypes, conditionTypes, issues, origin)` | **是** | 在结构档之上，逐效果/逐叶做类型专属 `validateParams`，未注册类型报错 |
 
 上限集中在 `ConditionLimits`：`effects≤32`、规则级与每个效果级条件树各自 `叶≤128`、`节点≤256`、`深度≤16`、`source` 项（匹配+排除）`≤256`、`display_name≤128` 码点、候选数量 `≤32`。**装配层必须用带注册表的重载**，否则未注册类型与区间类非法参数会被静默放行（见 [rule-loading.md](rule-loading.md)）。

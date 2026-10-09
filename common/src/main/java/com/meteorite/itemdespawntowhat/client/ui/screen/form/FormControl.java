@@ -251,6 +251,8 @@ abstract class FormControl {
             }
         }
         switch (field.type()) {
+            case ITEM_COUNTS:
+                return new ItemCountsControl(font, field, onChanged);
             case TEXT:
             case LONG_TEXT:
                 return new TextControl(font, field, textFilter(),

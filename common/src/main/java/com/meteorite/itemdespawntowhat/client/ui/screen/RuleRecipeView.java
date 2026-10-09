@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -64,7 +66,12 @@ public final class RuleRecipeView {
         JsonObject body = object(rule);
         List<JsonObject> effects = effects(body);
         List<ObjectPart> sources = new ArrayList<>();
-        addItems(sources, object(body.get("source")).get("items"), sourceCost(body, effects));
+        for (JsonElement entry : array(object(body.get(RuleFields.SOURCE)).get(RuleFields.SOURCE_ITEMS))) {
+            if (entry.isJsonPrimitive() && entry.getAsJsonPrimitive().isString()) {
+                String reference = entry.getAsString();
+                sources.add(resource(reference, RuleCatalogType.ITEM, sourceCost(body, effects, reference)));
+            }
+        }
         if (sources.isEmpty()) sources.add(placeholder("source_missing"));
         addParts(sources, "sources");
 
@@ -236,17 +243,12 @@ public final class RuleRecipeView {
     private void separator(String key) { parts.add(new Part(null, Component.translatable(UI + key))); }
 
     private static ObjectPart placeholder(String key) { return new ObjectPart(Component.translatable(UI + key), UNKNOWN, 0); }
-    private static void addItems(List<ObjectPart> target, JsonElement items, int quantity) {
-        for (JsonElement entry : array(items)) if (entry.isJsonPrimitive() && entry.getAsJsonPrimitive().isString())
-            target.add(resource(entry.getAsString(), RuleCatalogType.ITEM, quantity));
-    }
-
     // 成本在前，条件按 terms 原序，随后依方案/动作原序；重名只合并角标，保留首次位置。
     private static void addCatalysts(Map<String, ObjectPart> target, JsonObject owner, boolean consumed) {
-        int count = integer(owner, "count", 1);
         for (JsonElement entry : array(owner.get("items"))) {
             if (!entry.isJsonPrimitive() || !entry.getAsJsonPrimitive().isString()) continue;
             String id = entry.getAsString();
+            int count = integer(object(owner.get(RuleFields.ITEM_COUNTS)), id, integer(owner, RuleFields.CATALYST_COUNT, 1));
             ObjectPart part = target.computeIfAbsent(id, ignored -> resource(id, RuleCatalogType.ITEM, 0));
             if (count > 0) {
                 part.quantities.add(count);
@@ -337,14 +339,15 @@ public final class RuleRecipeView {
     private static void appendEffects(List<JsonObject> target, JsonElement raw) {
         for (JsonElement entry : array(raw)) if (entry instanceof JsonObject effect) target.add(effect);
     }
-    private static int sourceCost(JsonObject rule, List<JsonObject> effects) {
-        if (rule.has("source_cost")) return integer(rule, "source_cost", 0);
+    private static int sourceCost(JsonObject rule, List<JsonObject> effects, String reference) {
+        if (rule.has(RuleFields.SOURCE_COST)) return integer(object(rule.get(RuleFields.SOURCE_COST)), reference, 1);
         int cost = 0;
         boolean consumption = false;
         for (JsonObject effect : effects) {
             String type = text(effect, "type");
             consumption |= List.of(OWN + "consume_source", OWN + "consume_catalyst", OWN + "consume_fluid").contains(type);
-            if ((OWN + "consume_source").equals(type)) cost = (int) Math.min(Integer.MAX_VALUE, (long) cost + integer(effect, "count", 1));
+            if ((OWN + "consume_source").equals(type)) cost = (int) Math.min(Integer.MAX_VALUE, (long) cost
+                    + integer(object(effect.get(RuleFields.ITEM_COUNTS)), reference, integer(effect, RuleFields.CATALYST_COUNT, 1)));
         }
         return consumption ? cost : 1;
     }

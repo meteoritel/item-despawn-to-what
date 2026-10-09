@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.core.model;
 import com.meteorite.itemdespawntowhat.core.api.Issue;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
+import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.api.TypeDefinition;
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
@@ -56,10 +57,15 @@ public final class RuleValidation {
             issues.error("不支持的 schema_version: " + rule.schemaVersion()
                     + "（当前支持 " + RuleCodecs.DEFAULT_SCHEMA_VERSION + "）", origin, RuleFields.SCHEMA_VERSION);
         }
-        // 固定成本契约：source_cost 必须为正数；catalyst_cost 必须是合法对象
+        // 固定成本契约：source_cost 按已选引用配置正整数；catalyst_cost 必须是合法对象
         // （items 非空且引用存在、count 1..64、radius 1..8）；两者与同名消耗效果互斥，避免重复记账
-        if (rule.sourceCost() != null && rule.sourceCost() <= 0) {
-            issues.error("source_cost 必须为正数: " + rule.sourceCost(), origin, RuleFields.SOURCE_COST);
+        if (rule.sourceCost() != null) {
+            for (var amount : rule.sourceCost().counts().entrySet()) {
+                if (amount.getValue() <= 0 || rule.source().entries().stream()
+                        .noneMatch(entry -> entry.toTagged().equals(amount.getKey()))) {
+                    issues.error("source_cost 必须引用已选择的源物品且数量为正数", origin, RuleFields.SOURCE_COST);
+                }
+            }
         }
         if (rule.catalystCost() != null) {
             validateCatalystCost(rule.catalystCost(), issues);
@@ -96,6 +102,14 @@ public final class RuleValidation {
         validateSourceEntries(rule.source(), issues, origin);
         for (EffectSlot slot : slots) {
             validateEffect(slot.effect(), slot.path(), issues, origin);
+            if (slot.effect() instanceof com.meteorite.itemdespawntowhat.core.type.effect.ConsumeSourceEffect consume) {
+                for (TaggedId reference : consume.counts().keySet()) {
+                    if (rule.source().entries().stream().noneMatch(entry -> entry.toTagged().equals(reference))) {
+                        issues.error("数量配置引用了未选择的源物品: " + reference.serialized(), origin,
+                                slot.path() + "." + RuleFields.ITEM_COUNTS);
+                    }
+                }
+            }
         }
         validateOutcomes(rule, issues, origin);
         validateConsumptionEffects(slots, issues, origin);
@@ -267,6 +281,12 @@ public final class RuleValidation {
         String itemsPath = ParamChecks.child(RuleFields.CATALYST_COST, RuleFields.CATALYST_ITEMS);
         ParamChecks.notEmpty(cost.items(), RuleFields.CATALYST_ITEMS, issues, itemsPath);
         RefChecks.checkAll(cost.items(), BuiltInRegistries.ITEM, RuleFields.CATALYST_ITEMS, issues, itemsPath);
+        for (TaggedId item : cost.counts().keySet()) {
+            if (!cost.items().contains(item)) {
+                issues.error("数量配置引用了未选择的催化剂: " + item.serialized(), null,
+                        ParamChecks.child(RuleFields.CATALYST_COST, RuleFields.ITEM_COUNTS));
+            }
+        }
         ParamChecks.inRange(cost.count(), CatalystCost.MIN_COUNT, CatalystCost.MAX_COUNT, RuleFields.CATALYST_COUNT,
                 issues, ParamChecks.child(RuleFields.CATALYST_COST, RuleFields.CATALYST_COUNT));
         ParamChecks.inRange(cost.radius(), CatalystCost.MIN_RADIUS, CatalystCost.MAX_RADIUS,

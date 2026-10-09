@@ -2,6 +2,8 @@ package com.meteorite.itemdespawntowhat.core.type.effect;
 
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
+import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
@@ -13,6 +15,7 @@ import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
+import java.util.Map;
 
 /**
  * consume_source：消耗来源掉落物的物品堆叠。
@@ -22,8 +25,13 @@ public record ConsumeSourceEffect(
         int count,
         int delayTicks,
         double chance,
-        @Nullable ConditionExpression conditions
+        @Nullable ConditionExpression conditions,
+        Map<TaggedId, Integer> counts
 ) implements Effect {
+
+    public ConsumeSourceEffect {
+        counts = Map.copyOf(counts);
+    }
 
     // 效果类型 id，同时是 JSON 中 type 字段的取值
     public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("itemdespawntowhat", "consume_source");
@@ -43,9 +51,11 @@ public record ConsumeSourceEffect(
                         .forGetter(ConsumeSourceEffect::count),
                 CommonFields.delayTicks(ConsumeSourceEffect::delayTicks),
                 CommonFields.chance(ConsumeSourceEffect::chance),
-                CommonFields.optionalConditions(ConsumeSourceEffect::conditions, expressionCodec)
-        ).apply(instance, (count, delayTicks, chance, conditions) ->
-                new ConsumeSourceEffect(count, delayTicks, chance, conditions.orElse(null))));
+                CommonFields.optionalConditions(ConsumeSourceEffect::conditions, expressionCodec),
+                Codec.unboundedMap(TaggedId.CODEC, Codec.intRange(MIN_COUNT, MAX_COUNT))
+                        .optionalFieldOf(RuleFields.ITEM_COUNTS, Map.of()).forGetter(ConsumeSourceEffect::counts)
+        ).apply(instance, (count, delayTicks, chance, conditions, counts) ->
+                new ConsumeSourceEffect(count, delayTicks, chance, conditions.orElse(null), counts)));
     }
 
     // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器
@@ -67,6 +77,6 @@ public record ConsumeSourceEffect(
     // 效果级条件替换：其余参数原样保留，供运行期门槛投影重建真实效果类型
     @Override
     public ConsumeSourceEffect withConditions(@Nullable ConditionExpression conditions) {
-        return new ConsumeSourceEffect(count, delayTicks, chance, conditions);
+        return new ConsumeSourceEffect(count, delayTicks, chance, conditions, counts);
     }
 }
