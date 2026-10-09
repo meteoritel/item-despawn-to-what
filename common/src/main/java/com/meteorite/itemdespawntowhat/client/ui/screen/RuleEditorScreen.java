@@ -16,6 +16,8 @@ import com.meteorite.itemdespawntowhat.client.edit.draft.DraftConflict;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryDispatcher;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientState;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.CatalogSuggestions;
@@ -237,6 +239,7 @@ public final class RuleEditorScreen extends Screen {
         BuiltinEditorDescriptors.bootstrap();
         this.workspace = Objects.requireNonNull(workspace, "workspace");
         this.model = new RuleEditorModel(workspace);
+        modals.setHistoryTarget(this::restoreHistory);
         modals.setOnScopeChanged(() -> {
             if (ruleList != null) ruleList.mouseReleased(-1, -1, 0);
             if (pages != null) pages.endInteractions();
@@ -407,6 +410,8 @@ public final class RuleEditorScreen extends Screen {
         footerButtons.add(button(UI + "button.save", UiButtonVariant.PRIMARY, this::save));
         this.undoButton = button(UI + "button.undo", UiButtonVariant.SECONDARY, this::undo);
         this.redoButton = button(UI + "button.redo", UiButtonVariant.SECONDARY, this::redo);
+        this.undoButton.setTooltip(Component.translatable(UI + "button.undo_shortcut"));
+        this.redoButton.setTooltip(Component.translatable(UI + "button.redo_shortcut"));
         footerButtons.add(this.undoButton);
         footerButtons.add(this.redoButton);
         footerButtons.add(button(UI + "button.changes", UiButtonVariant.SECONDARY, this::showChanges));
@@ -1210,6 +1215,11 @@ public final class RuleEditorScreen extends Screen {
         }
     }
 
+    private void restoreHistory(UiHistoryShortcut shortcut) {
+        if (mode != Mode.EDIT) return;
+        if (shortcut == UiHistoryShortcut.UNDO) undo(); else redo();
+    }
+
     private void undo() {
         if (rejectWhenFrozen()) {
             return;
@@ -1664,6 +1674,12 @@ public final class RuleEditorScreen extends Screen {
         if (modals.isVisible()) {
             return modals.keyPressed(keyCode, scanCode, modifiers);
         }
+        if (UiHistoryDispatcher.dispatch(keyCode, scanCode, modifiers, (key, scan, mods) -> {
+            if (mode == Mode.LIST && searchField != null && searchField.isFocused()
+                    && searchField.keyPressed(key, scan, mods)) return true;
+            if (mode == Mode.EDIT && pages != null && pages.keyPressed(key, scan, mods)) return true;
+            return focus.keyPressed(key, scan, mods);
+        }, this::restoreHistory)) return true;
         // Esc 先交给正在捕获输入的控件：行内精确输入回退缓冲、拖动中的数值取消预览；
         // 均未消费时才逐级取消（编辑页返回列表，列表页关闭屏幕）
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {

@@ -1,6 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryDispatcher;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
@@ -8,6 +10,8 @@ import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Consumer;
+import org.jetbrains.annotations.Nullable;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 
@@ -33,6 +37,11 @@ public final class UiModalStack implements UiWidget {
     // 剩余淡入帧数
     private int fadeTicks;
     private Runnable onScopeChanged = () -> { };
+    private @Nullable Consumer<UiHistoryShortcut> historyTarget;
+
+    public void setHistoryTarget(@Nullable Consumer<UiHistoryShortcut> target) {
+        historyTarget = target;
+    }
 
     public UiModalStack() {
         focusManager.setEnterActivates(true);
@@ -236,6 +245,12 @@ public final class UiModalStack implements UiWidget {
         if (modal == null) {
             return false;
         }
+        if (UiHistoryDispatcher.dispatch(keyCode, scanCode, modifiers, modal::keyPressed, shortcut -> {
+            if (historyTarget != null) {
+                historyTarget.accept(shortcut);
+                for (UiModal current : List.copyOf(modals)) current.historyChanged();
+            }
+        })) return true;
         if (modal.keyPressed(keyCode, scanCode, modifiers)) {
             return true;
         }

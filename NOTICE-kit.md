@@ -145,4 +145,6 @@
 
 本项目新增 `UiTextHistory` 与 `UiHistoryShortcut`：前者提供有界文本、光标和选择快照，后者根据事件修饰键识别撤销与重做组合。两者只依赖 Java 标准库、JetBrains annotations 和 GLFW，不持有宿主配置。宿主 `UiTextInput`、`UiTextArea` 已使用公开 API，实现当前输入优先的局部撤销，历史为空时也消费快捷键。程序回填不通知宿主或追加历史，装载不同文本重置局部历史。
 
+`UiHistoryDispatcher` 提供当前作用域优先的历史快捷键派发。宿主屏幕与模态栈提供局部按键处理和规则历史回调，Kit 不持有业务历史；原始上游快照中没有此接口。接口由本项目维护，未回流上游。
+
 新增能力未修改来源仓库，可按来源包名重定位后回流；尚未回流、未发布独立库。原版 Minecraft 1.21.1 的 `EditBox` 和 `MultilineTextField` 不提供撤销栈，这里由通用历史适配，不使用 Mixin。
