@@ -1,6 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextHistory;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
@@ -39,7 +41,8 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
 
     private final Font font;
     // 文本模型：宽度为 final，宽度变化时按当前值重建
-    private MultilineTextField textField;
+    private AccessibleTextField textField;
+    private final UiTextHistory textHistory = new UiTextHistory();
     // 控件矩形
     private UiRect bounds;
     // 已同步到文本模型的换行宽度
@@ -84,8 +87,8 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
     }
 
     // 建立文本模型并挂接回调
-    private MultilineTextField createField(int width) {
-        MultilineTextField field = new MultilineTextField(font, Math.max(8, width));
+    private AccessibleTextField createField(int width) {
+        AccessibleTextField field = new AccessibleTextField(font, Math.max(8, width));
         field.setValueListener(this::onTextChanged);
         field.setCursorListener(this::scrollToCursor);
         return field;
@@ -99,6 +102,7 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
     // 程序化设置文本：光标留在末尾，回填路径随后调用 moveCursorToStart()
     public void setValue(String value) {
         String next = value == null ? "" : value;
+        boolean changed = !next.equals(textField.value());
         programmatic = true;
         try {
             textField.setValue(next);
@@ -106,6 +110,9 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
             programmatic = false;
         }
         this.lastAccepted = textField.value();
+        if (changed) {
+            textHistory.clear();
+        }
         scrollToCursor();
     }
 
@@ -339,8 +346,13 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!visible || !editable) {
+        if (!visible || !editable || !focused) {
             return false;
+        }
+        UiHistoryShortcut shortcut = UiHistoryShortcut.fromKey(keyCode, modifiers);
+        if (shortcut != null) {
+            restore(shortcut == UiHistoryShortcut.UNDO ? textHistory.undo() : textHistory.redo());
+            return true;
         }
         if (keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE) {
             if (onCancel != null) {
@@ -349,11 +361,13 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
             }
             return false;
         }
-        if (textField.keyPressed(keyCode)) {
+        UiTextHistory.Snapshot before = snapshot();
+        boolean handled = textField.keyPressed(keyCode);
+        textHistory.record(before, snapshot());
+        if (handled) {
             scrollToCursor();
-            return true;
         }
-        return false;
+        return handled;
     }
 
     @Override
@@ -364,7 +378,9 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
         if (!StringUtil.isAllowedChatCharacter(codePoint)) {
             return false;
         }
+        UiTextHistory.Snapshot before = snapshot();
         textField.insertText(Character.toString(codePoint));
+        textHistory.record(before, snapshot());
         return true;
     }
 
@@ -399,7 +415,7 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
 
     // 文本变化：超限时整体回退，否则记录并上报
     private void onTextChanged(String text) {
-        if (programmatic) {
+        if (programmatic || text.equals(lastAccepted)) {
             return;
         }
         if (text.codePointCount(0, text.length()) > maxLength) {
@@ -419,6 +435,44 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
         scrollToCursor();
         if (onChanged != null) {
             onChanged.run();
+        }
+    }
+
+    private UiTextHistory.Snapshot snapshot() {
+        return new UiTextHistory.Snapshot(textField.value(), textField.cursor(), textField.anchor());
+    }
+
+    private void restore(@Nullable UiTextHistory.Snapshot snapshot) {
+        if (snapshot == null) {
+            return;
+        }
+        programmatic = true;
+        try {
+            textField.setValue(snapshot.text());
+            textField.setSelecting(false);
+            textField.seekCursor(Whence.ABSOLUTE, snapshot.anchor());
+            textField.setSelecting(true);
+            textField.seekCursor(Whence.ABSOLUTE, snapshot.cursor());
+            textField.setSelecting(false);
+        } finally {
+            programmatic = false;
+        }
+        lastAccepted = textField.value();
+        scrollToCursor();
+        if (onChanged != null) {
+            onChanged.run();
+        }
+    }
+
+    // 在子类中读取原版受保护的选择区间，准确保留选择方向。
+    private static final class AccessibleTextField extends MultilineTextField {
+        private AccessibleTextField(Font font, int width) {
+            super(font, width);
+        }
+
+        private int anchor() {
+            StringView selected = getSelected();
+            return cursor() == selected.beginIndex() ? selected.endIndex() : selected.beginIndex();
         }
     }
 
@@ -453,18 +507,20 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
         if (width == textWidth) {
             return;
         }
-        int cursor = textField.cursor();
-        String value = textField.value();
-        MultilineTextField next = createField(width);
+        UiTextHistory.Snapshot snapshot = snapshot();
+        AccessibleTextField next = createField(width);
         this.textWidth = width;
         programmatic = true;
         try {
-            next.setValue(value);
+            next.setValue(snapshot.text());
+            next.setSelecting(false);
+            next.seekCursor(Whence.ABSOLUTE, snapshot.anchor());
+            next.setSelecting(true);
+            next.seekCursor(Whence.ABSOLUTE, snapshot.cursor());
+            next.setSelecting(false);
         } finally {
             programmatic = false;
         }
-        next.setSelecting(false);
-        next.seekCursor(Whence.ABSOLUTE, Math.min(cursor, value.length()));
         this.textField = next;
         scrollToCursor();
     }

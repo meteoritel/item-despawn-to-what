@@ -1,6 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextHistory;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
@@ -10,7 +12,6 @@ import java.util.function.Predicate;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
@@ -31,7 +32,9 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
     private static final int MIN_WIDTH = 24;
 
     // 原版输入框
-    private final EditBox editBox;
+    private final TrackedEditBox editBox;
+    private final UiTextHistory textHistory = new UiTextHistory();
+    private boolean programmatic;
     private final Font font;
     // 控件矩形
     private UiRect bounds = new UiRect(0, 0, 0, 0);
@@ -60,13 +63,14 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
 
     public UiTextInput(Font font, Component hint) {
         this.font = font;
-        this.editBox = new EditBox(font, 0, 0, MIN_WIDTH, UiTheme.ROW_HEIGHT, Component.empty());
+        this.editBox = new TrackedEditBox(font);
         this.editBox.setBordered(false);
         this.editBox.setHint(hint);
         this.editBox.setTextColor(UiPalette.TEXT_ON_DARK);
         this.editBox.setTextColorUneditable(UiPalette.TEXT_DISABLED);
-        // 给 EditBox 留 2 倍 UTF-16 单元冗余，保证码点上限先起作用、补充平面字符不被单元数提前拒
-        this.editBox.setMaxLength(maxLength * 2);
+        // 长度由码点过滤器控制；程序回填不经过原版截断。
+        this.editBox.setMaxLength(Integer.MAX_VALUE);
+        installFilter();
         this.editBox.setCanLoseFocus(true);
         this.editBox.setResponder(text -> onValueAccepted());
         this.lastAccepted = editBox.getValue();
@@ -80,20 +84,19 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
 
     // 设置文本
     public UiTextInput setValue(String value) {
-        editBox.setValue(value);
+        backfill(value == null ? "" : value);
         return this;
     }
 
     // 清空文本
     public UiTextInput clear() {
-        editBox.setValue("");
+        backfill("");
         return this;
     }
 
     // 设置长度上限（Unicode 码点）：超出上限的输入整体被拒绝，不截断，并触发 onOverflow
     public UiTextInput setMaxLength(int maxLength) {
         this.maxLength = Math.max(1, maxLength);
-        editBox.setMaxLength(this.maxLength * 2);
         installFilter();
         return this;
     }
@@ -108,6 +111,9 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
     // 安装过滤器：先判码点上限（超限整体拒绝并上报），再判业务规则
     private void installFilter() {
         editBox.setFilter(candidate -> {
+            if (programmatic) {
+                return true;
+            }
             if (codePoints(candidate) > maxLength) {
                 reportOverflow();
                 return false;
@@ -119,6 +125,9 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
     // 文本被接受：更新回退基线并清除超限提示；超限兜底回退（正常已被过滤器拦住）
     private void onValueAccepted() {
         String value = editBox.getValue();
+        if (programmatic || value.equals(lastAccepted)) {
+            return;
+        }
         if (codePoints(value) > maxLength) {
             editBox.setValue(lastAccepted);
             return;
@@ -252,8 +261,13 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!visible) {
+        if (!visible || !editBox.isFocused()) {
             return false;
+        }
+        UiHistoryShortcut shortcut = UiHistoryShortcut.fromKey(keyCode, modifiers);
+        if (shortcut != null && editable) {
+            restore(shortcut == UiHistoryShortcut.UNDO ? textHistory.undo() : textHistory.redo());
+            return true;
         }
         if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
             if (onCommit != null) {
@@ -268,14 +282,9 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
             }
             return false;
         }
-        String before = editBox.getValue();
+        UiTextHistory.Snapshot snapshot = snapshot();
         boolean handled = editBox.keyPressed(keyCode, scanCode, modifiers);
-        // 已达上限时的粘贴同样被静默丢弃，给出与键入一致的超限提示
-        boolean paste = Screen.hasControlDown() && keyCode == GLFW.GLFW_KEY_V
-                || Screen.hasShiftDown() && keyCode == GLFW.GLFW_KEY_INSERT;
-        if (handled && editBox.getValue().equals(before) && paste && codePoints(before) >= maxLength) {
-            reportOverflow();
-        }
+        textHistory.record(snapshot, snapshot());
         return handled;
     }
 
@@ -284,13 +293,9 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
         if (!visible) {
             return false;
         }
-        String before = editBox.getValue();
+        UiTextHistory.Snapshot snapshot = snapshot();
         boolean handled = editBox.charTyped(codePoint, modifiers);
-        // 已达码点上限时 EditBox 单元上限会先耗尽、字符被静默丢弃（不经过过滤器），这里补一次提示
-        if (handled && editBox.getValue().equals(before)
-                && codePoints(before) + Character.charCount(codePoint) > maxLength) {
-            reportOverflow();
-        }
+        textHistory.record(snapshot, snapshot());
         return handled;
     }
 
@@ -321,6 +326,62 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
     @Override
     public Component accessibleName() {
         return accessibleName;
+    }
+
+    // 程序回填不通知宿主，不产生局部历史；不同内容成为新的装载基线。
+    private void backfill(String value) {
+        boolean changed = !value.equals(editBox.getValue());
+        programmatic = true;
+        try {
+            editBox.setValue(value);
+        } finally {
+            programmatic = false;
+        }
+        lastAccepted = editBox.getValue();
+        if (changed) {
+            textHistory.clear();
+        }
+    }
+
+    private UiTextHistory.Snapshot snapshot() {
+        return new UiTextHistory.Snapshot(editBox.getValue(), editBox.getCursorPosition(), editBox.anchor());
+    }
+
+    private void restore(@Nullable UiTextHistory.Snapshot snapshot) {
+        if (snapshot == null) {
+            return;
+        }
+        programmatic = true;
+        try {
+            editBox.setValue(snapshot.text());
+            editBox.setCursorPosition(snapshot.cursor());
+            editBox.setHighlightPos(snapshot.anchor());
+        } finally {
+            programmatic = false;
+        }
+        lastAccepted = editBox.getValue();
+        if (onValueChanged != null) {
+            onValueChanged.run();
+        }
+    }
+
+    // 原版未暴露选择锚点；记录公开设置入口，避免用重复文本猜测选择方向。
+    private static final class TrackedEditBox extends EditBox {
+        private int anchor;
+
+        private TrackedEditBox(Font font) {
+            super(font, 0, 0, MIN_WIDTH, UiTheme.ROW_HEIGHT, Component.empty());
+        }
+
+        @Override
+        public void setHighlightPos(int position) {
+            super.setHighlightPos(position);
+            anchor = Math.clamp(position, 0, getValue().length());
+        }
+
+        private int anchor() {
+            return anchor;
+        }
     }
 
     // 设置无障碍名称

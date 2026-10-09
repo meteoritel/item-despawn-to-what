@@ -366,7 +366,7 @@ void moveCursorToStart();      // 回填后调用：光标与垂直滚动都回�
 显示名 128 码点、备注 1024 码点；**不能把 UTF-16 单元当码点**（emoji 等补充平面字符算 1 个）。两个控件口径完全一致：
 
 - `UiTextArea#onTextChanged`：`text.codePointCount(0, text.length()) > maxLength` → 整段回退到 `lastAccepted`（光标钳在回退文本内）→ `reportOverflow()`；**整体拒绝、绝不截断半个代理对**。
-- `UiTextInput`：过滤器先判码点上限、再判业务 `filter`，超限整体拒绝并 `reportOverflow`；原版 `EditBox` 上限被设为 `maxLength × 2` 个 UTF-16 单元作冗余，保证码点上限先起作用；`onValueAccepted` 还有一次兜底回退。
+- `UiTextInput`：过滤器先判码点上限、再判业务 `filter`，超限整体拒绝并 `reportOverflow`；原版 `EditBox` 的单元上限设为 `Integer.MAX_VALUE`，用户输入由码点过滤器整体接受或拒绝，程序回填完整保留；`onValueAccepted` 还有一次兜底回退。
 - 宿主接线（`FormControl.TextControl`）：上限 `textLimit()` = 备注 1024 / 显示名 128 / 其它 TEXT 256；`setOnOverflow` → `notifyTooLong()` 置 `rejectedOverflow = true` 并立即提示（提示经 `reportRejected` → `NOTICE_ISSUE` + 本地化 key）；**下一次被接受的输入变化**清除该标记。
 - 行内提示是 **warning 而不是阻塞错误**：`issues(path)` 在 `rejectedOverflow || 码点 > 上限` 时返回 `FormIssue.warning`；被拒时缓冲值本身仍在合法范围，既有原文超限由规则级校验给出阻塞错误（该处注释即为此事实来源）。
 - 提示 key 由 `FormControl.TextControl#tooLongKey()` 选择：备注 → `issue.notes_too_long`，显示名 → `issue.display_name_too_long`，其它文本字段**没有专属文案、不提示**。
@@ -389,3 +389,13 @@ void moveCursorToStart();      // 回填后调用：光标与垂直滚动都回�
 | `FormControl.setHeightOverride(int)` | `FormControl` | 覆盖值默认 `-1`；实际行高 = 覆盖值或自然高度，见 `layoutHeight()` 与 `FormView` 的布局计算 |
 
 - 实例：基本页优先级行用 `RuleEditorEditPages` 的 `PRIORITY_ROW_HEIGHT` 常量（取值 18）覆盖行高；「恢复自动命名」按钮挂在显示名行尾并随表单禁用。
+
+## 文本局部历史与快捷键
+
+`UiHistoryShortcut.fromKey(int keyCode, int modifiers)` 使用事件修饰键识别 Ctrl+Z（UNDO）、Ctrl+Shift+Z 和 Ctrl+Y（REDO）；含 Alt/Super 的组合或其他按键返回 null，不读取全局输入状态。
+
+`UiTextHistory` 是控件局部历史，不持有规则草稿。默认容量 `DEFAULT_CAPACITY = 100`，也可通过构造参数指定正容量。`Snapshot(String text, int cursor, int anchor)` 使用 UTF-16 光标和选择锚点，与原版输入控件一致；位置钳在文本内。`record(before, after)` 只记录内容变化，超出容量丢弃最早记录，新输入清空重做；`undo()` / `redo()` 返回待回填快照，无记录返回 null。`canUndo()` / `canRedo()` 查询状态，`clear()` 清空历史。
+
+宿主 `UiTextInput` 与 `UiTextArea` 均已接入：被接受的键入、删除、剪切、粘贴和多行换行各记录局部快照；光标、选择和拒绝输入不记历史。撤销恢复文本、光标与选择，通知已有输入变化回调一次，不调用配置提交接口。可编辑且聚焦的输入始终消费撤销/重做快捷键，即使历史为空，容器不得继续撤销底层规则。
+
+`setValue` / 单行 `clear` 是程序回填，不触发变化回调、不追加历史；装载不同内容会清空局部历史。业务过滤和码点上限只限制用户新增输入，不截断回填或历史恢复。多行换行宽度变化时保留当前文本、选择与局部历史。局部历史不跨控件销毁保存；规则配置历史和完整字段编辑的提交粒度由宿主管理。

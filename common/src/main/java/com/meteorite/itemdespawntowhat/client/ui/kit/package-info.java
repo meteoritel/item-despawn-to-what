@@ -31,6 +31,8 @@
  *       样式由宿主注入：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderStyle}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderPainter}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.PixelSliderPainter}</li>
+ *   <li>文本局部历史：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTextHistory}（文本、光标与选择快照）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut}（事件修饰键识别撤销与重做）</li>
  *   <li>焦点：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager}</li>
  *   <li>导航：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiNavigationHistory}（泛型快照、有界历史与有效性过滤）</li>
