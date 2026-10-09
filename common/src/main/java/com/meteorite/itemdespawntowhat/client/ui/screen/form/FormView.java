@@ -507,6 +507,8 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         syncBounds();
         this.highlightPath = row.path;
         this.highlightTicks = HIGHLIGHT_TICKS;
+        UiFocusTarget nestedTarget = row.control.revealPath(path, row.path);
+        if (nestedTarget != null && nestedTarget.canFocus()) return nestedTarget;
         List<UiFocusTarget> targets = new ArrayList<>();
         row.control.addFocusTargets(targets);
         for (UiFocusTarget target : targets) {

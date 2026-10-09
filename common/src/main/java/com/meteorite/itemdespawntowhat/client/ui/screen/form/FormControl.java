@@ -160,6 +160,9 @@ abstract class FormControl {
         return List.of();
     }
 
+    // 复合控件可在字段行内部定位问题，并返回更准确的焦点目标。
+    @Nullable UiFocusTarget revealPath(String path, String basePath) { return null; }
+
     // 需要先知道宽度才能算出高度的控件（子列表）覆写
     void measure(int width) {
     }
@@ -1276,6 +1279,13 @@ abstract class FormControl {
             if (support != null) {
                 this.editor.setLeafFactory(support.leafFactory());
                 this.editor.setOnEditLeaf(leaf -> support.onEditLeaf().accept(leaf));
+                this.editor.setLeafSummary(leaf -> {
+                    JsonElement raw = RuleDraft.encodeConditions(new ConditionExpression(leaf), support.registry());
+                    if (raw instanceof JsonObject node && node.get(RuleFields.CONDITION) instanceof JsonObject condition) {
+                        return NaturalSummary.conditionLeaf(condition);
+                    }
+                    return com.meteorite.itemdespawntowhat.client.edit.TypeLabels.conditionLabel(leaf.condition().type());
+                });
             }
             this.editor.setListener(expression -> {
                 markEdited();
@@ -1470,8 +1480,7 @@ abstract class FormControl {
                 String relative = issue.path();
                 String issuePath = relative == null || !relative.startsWith(UiConditionTreeEditor.ROOT_PATH) ? path
                         : path + relative.substring(UiConditionTreeEditor.ROOT_PATH.length());
-                String key = ISSUE_PREFIX + issue.kind().name().toLowerCase(Locale.ROOT);
-                list.add(FormIssue.error(issuePath, label(), Component.translatable(key)));
+                list.add(FormIssue.error(issuePath, label(), issue.label()));
             }
             if (list.isEmpty()) {
                 list.add(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "incomplete_group")));
@@ -1482,6 +1491,22 @@ abstract class FormControl {
         @Override
         String undoOpKey() {
             return editor.undoOpKey();
+        }
+
+        @Override
+        @Nullable UiFocusTarget revealPath(String path, String basePath) {
+            if (fallbackRaw != null || !path.startsWith(basePath)) return null;
+            editor.selectPath(UiConditionTreeEditor.ROOT_PATH + path.substring(basePath.length()));
+            if (support != null && path.contains("." + RuleFields.CONDITION + ".")
+                    && editor.selectedNode() instanceof com.meteorite.itemdespawntowhat.core.model.ConditionNode.Leaf leaf) {
+                support.revealLeaf(leaf, path);
+            }
+            return editor;
+        }
+
+        @Override
+        @Nullable Component tooltipAt(double x, double y) {
+            return fallbackRaw == null ? editor.tooltipAt(x, y) : null;
         }
 
         @Override
