@@ -4,6 +4,9 @@ import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeNodes;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeEditor;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreePath;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeMoveInteraction;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
 import com.meteorite.itemdespawntowhat.client.edit.OpaqueCondition;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
@@ -34,9 +37,9 @@ import org.lwjgl.glfw.GLFW;
  * 条件树编辑控件：直接编辑 {@link ConditionExpression} / {@link ConditionNode}，不引入平行数据模型。
  * <p>节点标记：组合节点显示 ALL / ANY / NOT，叶节点显示条件类型标签；
  * 空组合节点显示「不完整」占位，超限节点显示「超限」标记，违规明细通过 {@link #issues()} 暴露给宿主
- * （控件本身不弹窗、不提交、不写入）。
+ * （控件不持有正式保存入口，候选修改通过绑定回调交给宿主）。
  * <ul>
- *   <li>鼠标：单击选中，点击 +/- 标记展开折叠，双击叶节点编辑参数，滚轮滚动。</li>
+ *   <li>鼠标：单击选中，拖拽移动，点击 +/- 标记展开折叠，双击叶节点编辑参数，滚轮滚动。</li>
  *   <li>键盘：↑/↓ 移动焦点，←/→ 展开折叠，Enter/Space 激活（叶编辑参数、组合折叠），
  *       Delete/Backspace 删除，A 添加子条件，G 添加分组（Shift+G 为 ANY），N 包一层 NOT，
  *       按住 Shift 用 ↑/↓ 上移下移，PgUp/PgDn/Home/End 快速移动，Esc 关闭类型选择框。</li>
@@ -60,6 +63,10 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
     private static final int SCROLLBAR_RESERVE = 6;
     // 双击判定间隔（毫秒）
     private static final long DOUBLE_CLICK_MS = 300L;
+    private static final int DRAG_START_DISTANCE = 4;
+    private static final int DROP_EDGE_DIVISOR = 4;
+    private static final int DROP_MARKER_HEIGHT = 2;
+    private static final int DRAG_GHOST_GAP = 6;
     // 类型选择框最多显示的行数
     private static final int PICKER_MAX_ROWS = 8;
     // 类型选择框标题栏高度
@@ -113,6 +120,14 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     // 通用节点操作和纯视图状态由 Kit 承载。
     private final UiTreeEditor<ConditionNode> tree;
+    private final UiTreeMoveInteraction<ConditionNode> move;
+    private @Nullable UiTreePath armedDrag;
+    private double pressX;
+    private double pressY;
+    private double dragX;
+    private double dragY;
+    private int dropRow = -1;
+    private @Nullable String dragLabel;
     private @Nullable UiTreeEditor.Change<ConditionNode> lastChange;
     private @Nullable Component operationError;
     // 展平后的可见行
@@ -167,9 +182,35 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
         }, this::validateCandidate,
                 Component.translatable("gui.itemdespawntowhat.edit.tree.invalid_path"),
                 Component.translatable("gui.itemdespawntowhat.edit.tree.invalid_parent"));
+        tree.setMoveErrors(new UiTreeEditor.MoveErrors(
+                Component.translatable("gui.itemdespawntowhat.edit.tree.move_cycle"),
+                Component.translatable("gui.itemdespawntowhat.edit.tree.move_root_sibling"),
+                Component.translatable("gui.itemdespawntowhat.edit.tree.move_leaf_parent"),
+                Component.translatable("gui.itemdespawntowhat.edit.tree.move_full_parent"),
+                Component.translatable("gui.itemdespawntowhat.edit.tree.move_stale")));
+        move = new UiTreeMoveInteraction<>(tree, result -> {
+            armedDrag = null;
+            dropRow = -1;
+            dragLabel = null;
+            accept(result);
+            if (result.changed() && tree.selected() != null) {
+                selectPath(ConditionTreeNodes.jsonPath(expression.root(), tree.selected(), ROOT_PATH));
+                rebuild();
+            }
+        });
     }
 
     public UiTreeEditor<ConditionNode> tree() { return tree; }
+    public boolean isDragging() { return move.isActive(); }
+
+    /** 宿主在切页、历史回填、卸载或关闭时取消手势；只有释放可提交移动。 */
+    public void endInteractions(UiInputCapture.EndReason reason) {
+        armedDrag = null;
+        dropRow = -1;
+        dragLabel = null;
+        move.end(reason);
+        scrollView.mouseReleased();
+    }
     public @Nullable UiTreeEditor.Change<ConditionNode> lastChange() { return lastChange; }
     public @Nullable Component operationError() { return operationError; }
     public void setBeforeEdit(Runnable handler) { tree.setBeforeEdit(handler); }
@@ -221,6 +262,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
 
     // 外部设置表达式：不触发变更回调，避免与宿主形成回环
     public void setExpression(ConditionExpression newExpression) {
+        endInteractions(UiInputCapture.EndReason.UNMOUNTED);
         this.expression = newExpression == null ? ConditionExpression.EMPTY : newExpression;
         rebuild();
     }
@@ -243,6 +285,11 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
 
     // 键盘提示文本，供宿主在状态栏展示
     public Component hint() {
+        UiTreeEditor.MovePreview<ConditionNode> preview = move.preview();
+        if (preview != null && preview.outcome().error() == null && dropRow >= 0 && dropRow < rows.size()) {
+            return Component.translatable("gui.itemdespawntowhat.edit.tree.drop_" + preview.position().name().toLowerCase(java.util.Locale.ROOT),
+                    rowLabel(rows.get(dropRow)));
+        }
         return Component.translatable("gui.itemdespawntowhat.edit.tree.hint");
     }
 
@@ -307,12 +354,14 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
     public void setEnabled(boolean next) {
         enabled = next;
         if (!next) {
+            endInteractions(UiInputCapture.EndReason.DISABLED);
             focused = false;
             closePicker();
         }
     }
 
     public UiConditionTreeEditor setVisible(boolean newVisible) {
+        if (!newVisible) endInteractions(UiInputCapture.EndReason.HIDDEN);
         this.visible = newVisible;
         return this;
     }
@@ -834,12 +883,14 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
                 }
                 drawRow(graphics, renderFont, rows.get(i), i, rowY, rowWidth);
             }
+            renderDropMarker(graphics);
             scrollView.pop(graphics);
         }
         if (focused && !pickerOpen) {
             UiTheme.drawFocusOutline(graphics, bounds);
         }
         scrollView.renderScrollbar(graphics, UiTheme.secondaryStyle());
+        if (isDragging()) renderDragGhost(graphics, renderFont);
         if (pickerOpen) {
             renderPicker(graphics, renderFont);
         }
@@ -874,7 +925,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
 
     // 完整行文案供宿主提示，窄树中截断的参数仍可读取。
     public @Nullable Component tooltipAt(double mouseX, double mouseY) {
-        if (pickerOpen || !scrollView.canHoverContent(mouseX, mouseY)) return null;
+        if (isDragging() || pickerOpen || !scrollView.canHoverContent(mouseX, mouseY)) return null;
         int index = indexAt(mouseX, mouseY);
         return index < 0 ? null : rowLabel(rows.get(index));
     }
@@ -984,6 +1035,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
         if (!visible || !enabled || !bounds.contains(mouseX, mouseY)) {
             return false;
         }
+        endInteractions(UiInputCapture.EndReason.CANCEL);
         if (pickerOpen) {
             return handlePickerClick(mouseX, mouseY);
         }
@@ -1019,6 +1071,10 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
         }
         if (doubleClick) {
             activate();
+        } else if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT && !ROOT_PATH.equals(row.path())) {
+            armedDrag = ConditionTreeNodes.path(row.path());
+            pressX = mouseX;
+            pressY = mouseY;
         }
         return true;
     }
@@ -1068,18 +1124,101 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
         if (scrollView.isDragging()) {
             scrollView.mouseDragged(mouseY);
             return true;
         }
-        return false;
+        if (button != GLFW.GLFW_MOUSE_BUTTON_LEFT) return false;
+        UiTreePath source = armedDrag;
+        if (!isDragging() && source != null && Math.hypot(mouseX - pressX, mouseY - pressY) >= DRAG_START_DISTANCE) {
+            Row sourceRow = allNodes.get(ConditionTreeNodes.jsonPath(expression.root(), source, ROOT_PATH));
+            String label = sourceRow == null ? "" : rowLabel(sourceRow).getString();
+            if (move.begin(source)) {
+                dragLabel = label;
+                lastClickIndex = -1;
+            }
+        }
+        if (!isDragging()) return source != null;
+        projectDrop(mouseX, mouseY);
+        return true;
+    }
+
+    private void projectDrop(double mouseX, double mouseY) {
+        dragX = mouseX;
+        dragY = mouseY;
+        int index = scrollView.canHoverContent(mouseX, mouseY) ? indexAt(mouseX, mouseY) : -1;
+        if (index < 0) {
+            dropRow = -1;
+            move.clearPreview();
+            operationError = null;
+            return;
+        }
+        Row row = rows.get(index);
+        UiTreeEditor.DropPosition position;
+        if (row.node() == null) {
+            if (row.parentIndex() < 0) return;
+            index = row.parentIndex();
+            row = rows.get(index);
+            position = UiTreeEditor.DropPosition.INSIDE;
+        } else {
+            double within = mouseY - scrollView.viewport().y() + scrollView.offset() - index * rowHeight;
+            int edge = Math.max(1, rowHeight / DROP_EDGE_DIVISOR);
+            position = within < edge ? UiTreeEditor.DropPosition.BEFORE
+                    : within >= rowHeight - edge ? UiTreeEditor.DropPosition.AFTER : UiTreeEditor.DropPosition.INSIDE;
+        }
+        UiTreePath target = ConditionTreeNodes.path(row.path());
+        if (target == null) return;
+        dropRow = index;
+        UiTreeEditor.MovePreview<ConditionNode> preview = move.preview(target, position);
+        operationError = preview == null ? null : preview.outcome().error();
+    }
+
+    private void renderDropMarker(GuiGraphics graphics) {
+        UiTreeEditor.MovePreview<ConditionNode> preview = move.preview();
+        if (preview == null || dropRow < 0 || dropRow >= rows.size()) return;
+        Row target = rows.get(dropRow);
+        int color = preview.outcome().error() == null ? UiPalette.ACCENT : UiPalette.DANGER;
+        if (preview.position() != UiTreeEditor.DropPosition.BEFORE) {
+            graphics.fill(0, dropRow * rowHeight, contentWidth(), dropRow * rowHeight + DROP_MARKER_HEIGHT, color);
+        }
+        int boundary = dropRow;
+        if (preview.position() != UiTreeEditor.DropPosition.BEFORE) {
+            boundary++;
+            boolean emptyInside = preview.position() == UiTreeEditor.DropPosition.INSIDE
+                    && target.node() != null && ConditionTreeNodes.INSTANCE.children(target.node()).isEmpty();
+            if (!emptyInside) {
+                while (boundary < rows.size() && rows.get(boundary).depth() > target.depth()) boundary++;
+            }
+        }
+        int depth = target.depth() + (preview.position() == UiTreeEditor.DropPosition.INSIDE ? 1 : 0);
+        int markerX = UiTheme.SELECT_MARKER_WIDTH + depth * INDENT_WIDTH;
+        graphics.fill(markerX, boundary * rowHeight - DROP_MARKER_HEIGHT / 2,
+                contentWidth(), boundary * rowHeight + DROP_MARKER_HEIGHT / 2, color);
+    }
+
+    private void renderDragGhost(GuiGraphics graphics, Font font) {
+        UiRect viewport = scrollView.viewport();
+        String label = TextScroll.trimToWidth(font, dragLabel == null ? "" : dragLabel,
+                Math.max(0, contentWidth() - DRAG_GHOST_GAP * 2));
+        int width = Math.min(contentWidth(), font.width(label) + DRAG_GHOST_GAP);
+        int x = Math.clamp((int) dragX + DRAG_GHOST_GAP, viewport.x(), Math.max(viewport.x(), viewport.right() - width));
+        int y = Math.clamp((int) dragY + DRAG_GHOST_GAP, viewport.y(), Math.max(viewport.y(), viewport.bottom() - rowHeight));
+        graphics.fill(x, y, x + width, y + rowHeight, UiPalette.CONTROL_SELECTED);
+        graphics.drawString(font, label, x + DROP_MARKER_HEIGHT, y + UiTheme.TEXT_OFFSET, UiPalette.TEXT_PRIMARY, false);
     }
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        boolean owned = armedDrag != null || scrollView.isDragging() || isDragging();
+        if (isDragging() && button == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+            projectDrop(mouseX, mouseY);
+            lastOpKey = EditSession.OP_MOVE_NODE;
+            move.end(UiInputCapture.EndReason.RELEASE);
+        }
+        armedDrag = null;
         scrollView.mouseReleased();
-        return false;
+        return owned;
     }
 
     @Override
@@ -1096,13 +1235,23 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
             }
             return true;
         }
-        return scrollView.scrollBy(scrollY);
+        boolean changed = scrollView.scrollBy(scrollY);
+        if (isDragging()) projectDrop(mouseX, mouseY);
+        return changed;
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (!visible || !enabled) {
             return false;
+        }
+        if (isDragging()) {
+            if (UiHistoryShortcut.fromKey(keyCode, modifiers) != null) {
+                endInteractions(UiInputCapture.EndReason.CANCEL);
+                return false;
+            }
+            if (keyCode == GLFW.GLFW_KEY_ESCAPE) endInteractions(UiInputCapture.EndReason.CANCEL);
+            return true;
         }
         if (pickerOpen) {
             return pickerKeyPressed(keyCode);
@@ -1267,6 +1416,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
 
     @Override
     public void setFocused(boolean newFocused) {
+        if (!newFocused) endInteractions(UiInputCapture.EndReason.FOCUS_SCOPE_CHANGED);
         this.focused = newFocused;
     }
 

@@ -1,5 +1,5 @@
 /***
- * UI kit：Java 声明式客户端 UI 组件集（阶段 E 记录的**公开边界**，尚未拆包发布）。
+ * UI kit：Java 声明式客户端 UI 组件集（当前公开边界，尚未拆包发布）。
  *
  * <p><b>公开入口</b>（第三方宿主可直接依赖，签名变更按兼容策略走变更记录）：</p>
  * <ul>
@@ -17,7 +17,8 @@
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiLinearLayout}</li>
  *   <li>树编辑：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeEditor}（节点操作、绑定与视图事件）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreePath}（节点路径）、
- *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeCodec}（宿主编解码注入）</li>
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeCodec}（宿主编解码注入）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeMoveInteraction}（捕获、移动预览、释放提交与取消）</li>
  *   <li>输入与捕获：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiInputTarget}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiInputRouter}（路由顺序：顶层 modal 作用域 →

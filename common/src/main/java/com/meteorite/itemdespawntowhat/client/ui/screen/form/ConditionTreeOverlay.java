@@ -11,6 +11,7 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeCodec;
 import com.meteorite.itemdespawntowhat.client.ui.screen.RuleEditorP4Panels;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
@@ -112,7 +113,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
             var change = editor.lastChange();
             JsonElement next = editor.tree().encode(codec);
             session.apply(editor.undoOpKey(), () -> {
-                if (change != null) ConditionTreeNodes.remapInputs(session, change.before(), change.after(), scope);
+                if (change != null) ConditionTreeNodes.remapInputs(session, change, scope);
                 if (next == null) session.draft().removeAt(scope); else session.draft().setAt(scope, next);
             });
             revision = session.revision();
@@ -175,6 +176,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     }
 
     private void toggleSource() {
+        editor.endInteractions(UiInputCapture.EndReason.FOCUS_SCOPE_CHANGED);
         finishParameters();
         if (parameters != null) parameters.panel().setFocused(false);
         editor.closePicker();
@@ -218,6 +220,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
 
     /** 历史回填读取当前草稿，不把旧面板值重新提交为配置。 */
     public void historyChanged() {
+        editor.endInteractions(UiInputCapture.EndReason.UNMOUNTED);
         unmountParameters();
         reloadExpression();
         selectedPath = null;
@@ -232,6 +235,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
 
     // 历史使外层作用域失效时只卸载旧视图，不再提交该路径的控件值。
     public void discardView() {
+        editor.endInteractions(UiInputCapture.EndReason.UNMOUNTED);
         unmountParameters();
         pressed = null;
         editor.closePicker();
@@ -289,7 +293,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     @Override public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
         if (!sourceView && parameters != null) parameters.form().tick();
         if (revision != session.revision()) reloadExpression();
-        if (!sourceView && (viewChanged || !Objects.equals(selectedPath, editor.selectedPath())
+        if (!sourceView && !editor.isDragging() && (viewChanged || !Objects.equals(selectedPath, editor.selectedPath())
                 || parameters == null && editor.selectedNode() instanceof ConditionNode.Leaf)) syncSelection();
         for (UiButton button : buttons) if (button.isVisible()) button.render(graphics, renderFont, mouseX, mouseY);
         if (editor.isVisible()) editor.render(graphics, renderFont, mouseX, mouseY);
@@ -304,6 +308,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         }
         Component status = decodeError == null ? editor.operationError() : decodeError;
         if (sourceView && session.hasPendingInput(scope)) status = Component.translatable(UI + "pending_source");
+        if (status == null && editor.isDragging()) status = editor.hint();
         if (status == null && !editor.issues().isEmpty()) status = Component.translatable(UI + "issues",
                 editor.issues().size(), editor.issues().getFirst().label());
         if (status == null && session.hasPendingInput(scope)) status = Component.translatable(UI + "pending_input");
