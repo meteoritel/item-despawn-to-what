@@ -148,6 +148,32 @@ abstract class FormControl {
         return false;
     }
 
+    // 文本快照使用控件固定焦点顺序，复合数量、气候输入同样覆盖。
+    List<String> inputText() {
+        List<UiFocusTarget> targets = new ArrayList<>();
+        addFocusTargets(targets);
+        List<String> text = new ArrayList<>();
+        for (UiFocusTarget target : targets) {
+            if (target instanceof UiTextInput input) text.add(input.value());
+            else if (target instanceof UiTextArea area) text.add(area.value());
+        }
+        return text;
+    }
+
+    void restoreInputText(List<String> text) {
+        List<UiFocusTarget> targets = new ArrayList<>();
+        addFocusTargets(targets);
+        int index = 0;
+        for (UiFocusTarget target : targets) {
+            if (index >= text.size()) break;
+            if (target instanceof UiTextInput input) input.setValue(text.get(index++));
+            else if (target instanceof UiTextArea area) area.setValue(text.get(index++));
+        }
+        markEdited();
+    }
+
+    void retainChildInputs() { }
+
     // 长文本悬停时显示完整内容。
     @Nullable Component fullText() {
         return null;
@@ -263,13 +289,13 @@ abstract class FormControl {
                         FormControl::literalValue, FormControl::textOf, onChanged, ISSUE_PREFIX + "invalid_text");
             case RESOURCE_LOCATION:
                 return new TextControl(font, field, FormControl::idChars,
-                        FormControl::literalValue, FormControl::textOf, onChanged, ISSUE_PREFIX + "invalid_id");
+                        text -> referenceValue(text, false), FormControl::textOf, onChanged, ISSUE_PREFIX + "invalid_id");
             case REGISTRY_ID:
                 return new TextControl(font, field, FormControl::idChars,
-                        FormControl::literalValue, FormControl::textOf, onChanged, ISSUE_PREFIX + "invalid_id");
+                        text -> referenceValue(text, false), FormControl::textOf, onChanged, ISSUE_PREFIX + "invalid_id");
             case TAG:
                 return new TextControl(font, field, FormControl::tagChars,
-                        FormControl::literalValue, FormControl::textOf, onChanged, ISSUE_PREFIX + "invalid_id");
+                        text -> referenceValue(text, true), FormControl::textOf, onChanged, ISSUE_PREFIX + "invalid_id");
             case INTEGER: {
                 int min = field.intMin(Integer.MIN_VALUE);
                 int max = field.intMax(Integer.MAX_VALUE);
@@ -384,6 +410,11 @@ abstract class FormControl {
             }
         }
         return true;
+    }
+
+    private static @Nullable JsonElement referenceValue(String text, boolean allowTag) {
+        String id = allowTag && text.startsWith("#") ? text.substring(1) : text;
+        return net.minecraft.resources.ResourceLocation.tryParse(id) == null ? null : new JsonPrimitive(text);
     }
 
     static JsonElement literalValue(String text) {
@@ -975,13 +1006,24 @@ abstract class FormControl {
         }
 
         @Override
+        List<String> inputText() {
+            return List.of(editor.input().value(), Integer.toString(editor.editingIndex()));
+        }
+
+        @Override
+        void restoreInputText(List<String> text) {
+            if (text.size() == 2) editor.restorePendingInput(text.get(0), Integer.parseInt(text.get(1)));
+            markEdited();
+        }
+
+        @Override
         void finishInput() {
             editor.commitPendingInput();
         }
 
         @Override
         boolean hasPendingInput() {
-            return !editor.items().equals(loadedItems);
+            return !editor.input().value().isBlank() || !editor.items().equals(loadedItems);
         }
 
         @Override
@@ -1087,15 +1129,32 @@ abstract class FormControl {
             if (field.required() && editor.size() == 0) {
                 list.add(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "required")));
             }
+            String pending = editor.input().value().trim();
+            if (!pending.isEmpty() && !validEntry(pending)) {
+                list.add(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "invalid_id")));
+            } else if (!pending.isEmpty() && editor.items().contains(pending)
+                    && (editor.editingIndex() < 0 || !pending.equals(editor.items().get(editor.editingIndex())))) {
+                list.add(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "duplicate")));
+            }
             List<String> seen = new ArrayList<>();
             for (String item : editor.items()) {
                 if (seen.contains(item)) {
                     list.add(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "duplicate")));
                     break;
                 }
+                if (!validEntry(item)) {
+                    list.add(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "invalid_id")));
+                    break;
+                }
                 seen.add(item);
             }
             return list;
+        }
+
+        private boolean validEntry(String value) {
+            if (field.type() == EditorFieldType.STRING_LIST) return true;
+            String id = value.startsWith("#") ? value.substring(1) : value;
+            return net.minecraft.resources.ResourceLocation.tryParse(id) != null;
         }
 
         @Override
@@ -1109,6 +1168,8 @@ abstract class FormControl {
 
     static final class ClimateControl extends FormControl {
 
+        private static final String MIN_FIELD = "min";
+        private static final String MAX_FIELD = "max";
         private final UiTextInput minInput;
         private final UiTextInput maxInput;
         // 装载时写入两个端点的文本基线
@@ -1184,6 +1245,13 @@ abstract class FormControl {
         }
 
         @Override
+        @Nullable UiFocusTarget revealPath(String path, String basePath) {
+            if (path.equals(basePath + "." + MAX_FIELD)) return maxInput;
+            if (path.equals(basePath + "." + MIN_FIELD)) return minInput;
+            return null;
+        }
+
+        @Override
         boolean hasPendingInput() {
             return !minInput.value().equals(loadedMin) || !maxInput.value().equals(loadedMax);
         }
@@ -1241,14 +1309,24 @@ abstract class FormControl {
         List<FormIssue> issues(String path) {
             Double min = parseDouble(minInput.value());
             Double max = parseDouble(maxInput.value());
-            if ((!minInput.value().isBlank() && min == null) || (!maxInput.value().isBlank() && max == null)) {
-                return List.of(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "invalid_number")));
-            }
+            List<FormIssue> issues = new ArrayList<>();
+            checkEnd(issues, path + "." + MIN_FIELD, minInput.value(), min);
+            checkEnd(issues, path + "." + MAX_FIELD, maxInput.value(), max);
             if (min != null && max != null && min > max) {
-                return List.of(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "range_order")));
+                issues.add(FormIssue.error(path + "." + MIN_FIELD, label(), Component.translatable(ISSUE_PREFIX + "range_order")));
             }
-            return List.of();
+            return issues;
         }
+
+        private void checkEnd(List<FormIssue> issues, String path, String text, @Nullable Double value) {
+            if (text.isBlank()) return;
+            double lower = field.doubleMin(-1.0D);
+            double upper = field.doubleMax(1.0D);
+            if (value == null || !Double.isFinite(value) || value < lower || value > upper) {
+                issues.add(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "number_range", lower, upper)));
+            }
+        }
+
     }
 
     // ---- 条件树（条件编辑器与效果编辑器共用） ----
@@ -1622,8 +1700,10 @@ abstract class FormControl {
             this.subFields = field.subFields();
             this.addButton = new UiButton(font, Component.translatable("gui.itemdespawntowhat.edit.list.add"),
                     UiButtonVariant.SECONDARY, () -> {
-                        markEdited();
-                        appendChild(null);
+                        owner.changeChildStructure(field.name(), () -> {
+                            markEdited();
+                            appendChild(null);
+                        }, this::store);
                         onChanged.run();
                     });
         }
@@ -1631,9 +1711,7 @@ abstract class FormControl {
         // 追加一个子表单
         private void appendChild(@Nullable JsonElement value) {
             FormView child = owner.newChildForm(childPath(children.size()), subFields);
-            if (value != null && value.isJsonObject()) {
-                child.reloadWith(value.getAsJsonObject());
-            }
+            child.reloadWith(value != null && value.isJsonObject() ? value.getAsJsonObject() : new JsonObject());
             // 子表单里任何用户改动都要把整个子列表标记为已编辑
             child.setOnChanged(() -> {
                 markEdited();
@@ -1649,9 +1727,16 @@ abstract class FormControl {
                     UiButtonVariant.DANGER, () -> {
                         int index = children.indexOf(child);
                         if (index >= 0) {
-                            markEdited();
-                            children.remove(index);
-                            removeButtons.remove(index);
+                            owner.changeChildStructure(field.name(), () -> {
+                                markEdited();
+                                children.get(index).retainPendingInputs();
+                                owner.clearChildInputs(childPath(index));
+                                children.remove(index);
+                                removeButtons.remove(index);
+                                for (int next = index; next < children.size(); next++) {
+                                    children.get(next).rebase(owner.childPath(childPath(next)));
+                                }
+                            }, this::store);
                             owner.notifyChanged();
                         }
                     });
@@ -1784,8 +1869,22 @@ abstract class FormControl {
         }
 
         @Override
+        List<String> inputText() { return List.of(); }
+
+        @Override
+        void retainChildInputs() {
+            for (FormView child : children) child.retainPendingInputs();
+        }
+
+        @Override
+        void finishInput() {
+            for (FormView child : children) child.commitPendingInputs();
+        }
+
+        @Override
         void load(@Nullable JsonElement value) {
             rememberLoaded(value);
+            retainChildInputs();
             children.clear();
             removeButtons.clear();
             if (value != null && value.isJsonArray()) {

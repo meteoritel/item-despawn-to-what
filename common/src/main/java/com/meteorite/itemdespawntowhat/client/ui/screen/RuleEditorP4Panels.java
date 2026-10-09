@@ -18,6 +18,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumberPolicy;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeValue;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeEnd;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
@@ -58,6 +59,8 @@ import org.lwjgl.glfw.GLFW;
  * {@link #iconFor(RuleCatalogType, String)} 提供物品/方块图标，其余目录类型回落文字槽。
  */
 public final class RuleEditorP4Panels {
+    private static final String RANGE_MIN_FIELD = "min";
+    private static final String RANGE_MAX_FIELD = "max";
 
     private static final String UI = TypeLabels.UI_PREFIX;
     // 区间条 / 昼夜条高度（标签行 + 轨道；昼夜条另含预设行）
@@ -581,7 +584,25 @@ public final class RuleEditorP4Panels {
         form.setCatalogOpener((field, tags, picked) -> pushModal.accept(catalogModal(font, workspace,
                 tags ? RuleCatalogType.TAG : catalogTypeOf(field), isListField(field),
                 Component.translatable(field.labelKey()), screenWidth, screenHeight, picked, field)));
-        return new LeafPanel(font, form, extras, buttons);
+        LeafPanel panel = new LeafPanel(font, form, extras, buttons);
+        int extraIndex = 0;
+        for (EditorField field : fields) if (field.type() == EditorFieldType.CLIMATE_RANGE) {
+            UiRangeBar bar = (UiRangeBar) extras.get(extraIndex++);
+            bar.setPreciseEditor(end -> panel.focusField(join(join(basePath, field.name()),
+                    end == UiRangeEnd.LOW ? RANGE_MIN_FIELD : RANGE_MAX_FIELD)));
+        }
+        if (from != null && to != null && isIntegerLike(from) && isIntegerLike(to)
+                && from.intMin(0) == TIME_MIN && from.intMax(TIME_MAX) == TIME_MAX) {
+            UiCyclicTimeBar bar = (UiCyclicTimeBar) extras.get(extraIndex++);
+            bar.setPreciseEditor(end -> panel.focusField(join(basePath,
+                    end == UiRangeEnd.LOW ? from.name() : to.name())));
+        }
+        if (min != null && max != null && isIntegerLike(min) && isIntegerLike(max)) {
+            UiRangeBar bar = (UiRangeBar) extras.get(extraIndex);
+            bar.setPreciseEditor(end -> panel.focusField(join(basePath,
+                    end == UiRangeEnd.LOW ? min.name() : max.name())));
+        }
+        return panel;
     }
 
     private static boolean isIntegerLike(EditorField field) {

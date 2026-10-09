@@ -9,6 +9,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumberPolicy;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeSlider;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeEnd;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderPainter;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderStyle;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderWindow;
@@ -16,6 +17,7 @@ import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.function.Consumer;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -61,6 +63,7 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
     private boolean visible = true;
     private boolean focused;
     private boolean preciseActive;
+    private @Nullable Consumer<UiRangeEnd> preciseEditor;
 
     public UiRangeBar(Font font, UiNumberPolicy policy, UiRangeValue initial, Texts texts,
                       @Nullable Listener listener) {
@@ -290,9 +293,16 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
     }
 
     // 打开当前端的精确输入行；当前端缺失时同样可输入，提交即补齐该端
+    // 复合表单可将精确编辑交给已有字段输入，统一缓冲与错误定位。
+    public void setPreciseEditor(Consumer<UiRangeEnd> editor) { preciseEditor = editor; }
+
     public boolean openPrecise() {
         if (!enabled || !visible) {
             return false;
+        }
+        if (preciseEditor != null) {
+            preciseEditor.accept(core.selectedEnd());
+            return true;
         }
         preciseActive = true;
         precise.setVisible(true);

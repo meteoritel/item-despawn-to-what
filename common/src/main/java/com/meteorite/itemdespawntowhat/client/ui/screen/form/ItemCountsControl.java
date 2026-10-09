@@ -71,6 +71,34 @@ final class ItemCountsControl extends FormControl {
 
     void setDefaultCount(int count) { defaultCount = count; }
 
+    @Override
+    List<String> inputText() {
+        List<String> text = new ArrayList<>();
+        controls.forEach((reference, control) -> {
+            text.add(reference);
+            text.addAll(control.inputText());
+        });
+        return text;
+    }
+
+    @Override
+    @Nullable UiFocusTarget revealPath(String path, String basePath) {
+        for (var entry : controls.entrySet()) {
+            String referencePath = basePath + "." + entry.getKey();
+            if (path.equals(referencePath)) return entry.getValue().revealPath(referencePath, referencePath);
+        }
+        return null;
+    }
+
+    @Override
+    void restoreInputText(List<String> text) {
+        for (int index = 0; index + 1 < text.size(); index += 2) {
+            NumberControl control = controls.get(text.get(index));
+            if (control != null) control.restoreInputText(List.of(text.get(index + 1)));
+        }
+        markEdited();
+    }
+
     @Override boolean usesLabelColumn() { return false; }
     @Override int height() { return controls.size() * (font.lineHeight + HEADER_GAP + NUMBER_HEIGHT + ROW_GAP); }
 
@@ -114,7 +142,7 @@ final class ItemCountsControl extends FormControl {
     @Override
     List<FormIssue> issues(String path) {
         List<FormIssue> result = new ArrayList<>();
-        controls.values().forEach(control -> result.addAll(control.issues(path)));
+        controls.forEach((reference, control) -> result.addAll(control.issues(path + "." + reference)));
         return result;
     }
 

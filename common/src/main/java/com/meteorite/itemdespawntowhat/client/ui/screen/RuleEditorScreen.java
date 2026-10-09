@@ -1248,6 +1248,7 @@ public final class RuleEditorScreen extends Screen {
         EditSession session = editingSession();
         if (session != null && !session.draft().isDeleted() && !model.isRestoring(editingId)) {
             issues.addAll(localIssues(session.draft()));
+            issues.addAll(session.pendingInputIssues());
         }
         for (String id : model.dirtyRuleIds()) {
             if (id.equals(editingId)) {
@@ -1255,7 +1256,8 @@ public final class RuleEditorScreen extends Screen {
             }
             EditSession other = model.session(id);
             if (other != null && !other.draft().isDeleted() && !model.isRestoring(id)) {
-                List<FormIssue> otherIssues = localIssues(other.draft());
+                List<FormIssue> otherIssues = new ArrayList<>(localIssues(other.draft()));
+                otherIssues.addAll(other.pendingInputIssues());
                 if (issues.stream().noneMatch(FormIssue::blocking) && otherIssues.stream().anyMatch(FormIssue::blocking)) {
                     issueRuleId = id;
                 }

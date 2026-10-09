@@ -105,6 +105,14 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
         this.offset = 0;
     }
 
+    public int editingIndex() { return editingIndex; }
+
+    // 装载会话输入时保持追加/覆盖语义，不提交列表。
+    public void restorePendingInput(String text, int index) {
+        input.setValue(text);
+        editingIndex = index >= 0 && index < items.size() ? index : -1;
+    }
+
     public int size() {
         return items.size();
     }
@@ -191,6 +199,8 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
     // 输入内容提交：追加或覆盖选中项
     private void commitInput() {
         String text = input.value().trim();
+        String id = mode == Mode.TAG && text.startsWith("#") ? text.substring(1) : text;
+        if (mode != Mode.TEXT && net.minecraft.resources.ResourceLocation.tryParse(id) == null) return;
         if (text.isEmpty()) {
             return;
         }
