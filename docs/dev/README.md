@@ -85,6 +85,7 @@
 | 文档 | 适用范围 |
 |---|---|
 | [debug/debug-validation-guide.md](debug/debug-validation-guide.md) | 在 IDE 中开始调试、一条命令创建功能场景、场景控制与清理验收、实时日志校对、性能优化前后对比方案 |
+| [debug/condition-editor-validation-guide.md](debug/condition-editor-validation-guide.md) | 条件树大屏编辑、双视图、批量操作、撤销重做、保存回显的 Fabric/NeoForge 游戏内验收步骤 |
 | [debug/debug-test-pipeline.md](debug/debug-test-pipeline.md) | 开发环境实机测试流水线：一键运行与 P0~P4 各阶段的目标、命令与判定 |
 | [debug/debug-scenario-extension.md](debug/debug-scenario-extension.md) | 调试场景统一技术路线与扩展方式：新增普通场景、参数与动作、统一断言、性能与生命周期边界、新增自动阶段 |
 | [debug/debug-settlement-examples.md](debug/debug-settlement-examples.md) | 开发环境结算示例与日志读法、与内置数据包的边界 |

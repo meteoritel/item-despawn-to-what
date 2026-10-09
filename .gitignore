@@ -34,3 +34,5 @@ docs/archive/
 
 # 本地开发诊断：分析记录、日志快照和解析结果，不提交远程仓库
 /.local/debug/
+/.local/
+/.scratch/
