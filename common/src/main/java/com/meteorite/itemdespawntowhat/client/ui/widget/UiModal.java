@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.widget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiAction;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
@@ -74,7 +75,7 @@ public final class UiModal implements UiWidget {
     private Consumer<UiModal> closeHandler;
     // 是否可见
     private boolean visible = true;
-    private Runnable onHistoryChanged = () -> {};
+    private Consumer<UiHistoryShortcut> onHistoryChanged = shortcut -> {};
     private Runnable onClosed = () -> {};
 
     /** 各关闭入口统一通知宿主保存输入缓冲并释放交互。 */
@@ -89,12 +90,17 @@ public final class UiModal implements UiWidget {
 
     /** 宿主配置历史恢复后，重新装载当前内容；不派发底层键盘事件。 */
     public UiModal onHistoryChanged(Runnable callback) {
+        onHistoryChanged = shortcut -> callback.run();
+        return this;
+    }
+
+    public UiModal onHistoryChanged(Consumer<UiHistoryShortcut> callback) {
         onHistoryChanged = callback;
         return this;
     }
 
-    void historyChanged() {
-        onHistoryChanged.run();
+    void historyChanged(UiHistoryShortcut shortcut) {
+        onHistoryChanged.accept(shortcut);
     }
 
     private UiModal(Font font) {

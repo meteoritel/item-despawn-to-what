@@ -1,6 +1,9 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
+import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeNodes;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeEditor;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreePath;
 import com.meteorite.itemdespawntowhat.client.edit.OpaqueCondition;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
@@ -14,11 +17,9 @@ import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionLimits;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
@@ -110,8 +111,10 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
     private ConditionExpression expression = ConditionExpression.EMPTY;
     // 控件矩形
     private UiRect bounds = new UiRect(0, 0, 0, 0);
-    // 被折叠的节点路径（默认全部展开）
-    private final Set<String> collapsed = new HashSet<>();
+    // 通用节点操作和纯视图状态由 Kit 承载。
+    private final UiTreeEditor<ConditionNode> tree;
+    private @Nullable UiTreeEditor.Change<ConditionNode> lastChange;
+    private @Nullable Component operationError;
     // 展平后的可见行
     private final List<Row> rows = new ArrayList<>();
     // 当前违规项
@@ -158,6 +161,50 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
 
     // 字体由 render 接收；保留构造参数以兼容现有组件 API。
     public UiConditionTreeEditor(@SuppressWarnings("unused") Font font) {
+        tree = new UiTreeEditor<>(ConditionTreeNodes.INSTANCE, () -> expression.root(), change -> {
+            lastChange = change;
+            applyNode(change.after());
+        }, this::validateCandidate,
+                Component.translatable("gui.itemdespawntowhat.edit.tree.invalid_path"),
+                Component.translatable("gui.itemdespawntowhat.edit.tree.invalid_parent"));
+    }
+
+    public UiTreeEditor<ConditionNode> tree() { return tree; }
+    public @Nullable UiTreeEditor.Change<ConditionNode> lastChange() { return lastChange; }
+    public @Nullable Component operationError() { return operationError; }
+    public void setBeforeEdit(Runnable handler) { tree.setBeforeEdit(handler); }
+
+    private @Nullable Component validateCandidate(@Nullable ConditionNode root) {
+        ConditionExpression candidate = new ConditionExpression(root);
+        if (candidate.depth() > ConditionLimits.MAX_DEPTH) return Component.translatable(
+                "gui.itemdespawntowhat.edit.issue.too_deep", candidate.depth(), ConditionLimits.MAX_DEPTH);
+        if (candidate.nodeCount() > ConditionLimits.MAX_NODES) return Component.translatable(
+                "gui.itemdespawntowhat.edit.issue.too_many_nodes", candidate.nodeCount(), ConditionLimits.MAX_NODES);
+        if (candidate.leafCount() > ConditionLimits.MAX_LEAVES) return Component.translatable(
+                "gui.itemdespawntowhat.edit.issue.too_many_leaves", candidate.leafCount(), ConditionLimits.MAX_LEAVES);
+        return null;
+    }
+
+    private boolean accept(UiTreeEditor.Outcome result) {
+        operationError = result.error();
+        return result.changed();
+    }
+
+    private boolean isCollapsed(String path) {
+        UiTreePath nodePath = ConditionTreeNodes.path(path);
+        return nodePath != null && tree.collapsed().contains(nodePath);
+    }
+
+    private boolean unfold(String path) {
+        UiTreePath nodePath = ConditionTreeNodes.path(path);
+        if (nodePath == null || !tree.collapsed().contains(nodePath)) return false;
+        tree.setCollapsed(nodePath, false);
+        return true;
+    }
+
+    private void fold(String path) {
+        UiTreePath nodePath = ConditionTreeNodes.path(path);
+        if (nodePath != null) tree.setCollapsed(nodePath, true);
     }
 
     // 最近一次改动的撤销操作 key
@@ -272,15 +319,15 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
 
     // 展开全部
     public void expandAll() {
-        collapsed.clear();
+        tree.expandAll();
         rebuild();
     }
 
-    // 折叠全部（根节点保留展开，否则只剩一行）
+    // 将整棵树折叠为根节点。
     public void collapseAll() {
-        collapsed.clear();
+        tree.expandAll();
         if (expression.root() != null) {
-            collapsed.add(ROOT_PATH);
+            fold(ROOT_PATH);
         }
         rebuild();
     }
@@ -292,8 +339,8 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
 
     // 选中的节点
     public @Nullable ConditionNode selectedNode() {
-        Row row = selectedRow();
-        return row == null ? null : row.node();
+        UiTreePath path = ConditionTreeNodes.path(selectedPath);
+        return path == null ? null : tree.query(path);
     }
 
     // 可见行数
@@ -305,13 +352,17 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
     public void selectPath(@Nullable String path) {
         if (path == null) {
             selectedPath = null;
+            tree.select(null);
             return;
         }
         String nodePath = allNodes.keySet().stream()
                 .filter(candidate -> path.equals(candidate) || path.startsWith(candidate + "."))
                 .max(java.util.Comparator.comparingInt(String::length)).orElse(null);
         if (nodePath == null) return;
-        collapsed.removeIf(candidate -> nodePath.startsWith(candidate + "."));
+        UiTreePath target = ConditionTreeNodes.path(nodePath);
+        for (UiTreePath ancestor : tree.collapsed()) {
+            if (target != null && ancestor.isAncestorOf(target)) tree.setCollapsed(ancestor, false);
+        }
         selectedPath = nodePath;
         rebuild();
         ensureVisible(indexOfPath(nodePath));
@@ -341,11 +392,8 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
             return false;
         }
         ConditionNode group = allOf ? new ConditionNode.AllOf(List.of()) : new ConditionNode.AnyOf(List.of());
-        boolean added = addNode(group);
-        if (added) {
-            lastOpKey = EditSession.OP_ADD_GROUP;
-        }
-        return added;
+        lastOpKey = EditSession.OP_ADD_GROUP;
+        return addNode(group);
     }
 
     // 给选中节点包一层 NOT
@@ -361,8 +409,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
             return false;
         }
         lastOpKey = EditSession.OP_WRAP_NOT;
-        applyAt(row.path(), ConditionNode.Inverted::new);
-        return true;
+        return applyAt(row.path(), ConditionNode.Inverted::new);
     }
 
     // 删除选中节点（根节点被删除后表达式变为空）
@@ -377,15 +424,15 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
         if (row.parentIndex() < 0) {
             selectedPath = null;
             lastOpKey = EditSession.OP_DELETE_NODE;
-            applyNode(null);
-            return true;
+            return accept(tree.delete(UiTreePath.ROOT));
         }
         Row parent = rows.get(row.parentIndex());
         String nextSelection = parent.path();
         lastOpKey = EditSession.OP_DELETE_NODE;
-        applyAt(row.path(), node -> null);
-        selectPath(nextSelection);
-        return true;
+        UiTreePath path = ConditionTreeNodes.path(row.path());
+        boolean changed = path != null && accept(tree.delete(path));
+        if (changed) selectPath(nextSelection);
+        return changed;
     }
 
     // 在父分组内上移/下移选中节点
@@ -411,9 +458,9 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
         int target = index + delta;
         String parentPath = parent.path();
         lastOpKey = EditSession.OP_MOVE_NODE;
-        applyAt(parentPath, node -> swapTerms(node, index, target));
-        selectPath(parentPath + ".terms[" + target + "]");
-        return true;
+        boolean changed = applyAt(parentPath, node -> swapTerms(node, index, target));
+        if (changed) selectPath(parentPath + "." + RuleFields.TERMS + "[" + target + "]");
+        return changed;
     }
 
     // 切换选中分组的 ALL / ANY
@@ -429,8 +476,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
             return false;
         }
         lastOpKey = EditSession.OP_TOGGLE_KIND;
-        applyAt(row.path(), UiConditionTreeEditor::toggleKind);
-        return true;
+        return applyAt(row.path(), UiConditionTreeEditor::toggleKind);
     }
 
     // 编辑选中叶节点的参数
@@ -463,8 +509,8 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
         if (row == null || !hasChildren(row.node())) {
             return false;
         }
-        if (!collapsed.remove(row.path())) {
-            collapsed.add(row.path());
+        if (!unfold(row.path())) {
+            fold(row.path());
         }
         rebuild();
         return true;
@@ -502,6 +548,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
         if (selectedPath != null && indexOfPath(selectedPath) < 0) {
             selectedPath = rows.isEmpty() ? null : rows.get(Math.clamp(hoveredIndex, 0, rows.size() - 1)).path();
         }
+        tree.select(ConditionTreeNodes.path(selectedPath));
         if (hoveredIndex >= rows.size()) {
             hoveredIndex = -1;
         }
@@ -573,7 +620,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
         Row info = allNodes.get(path);
         int index = rows.size();
         rows.add(new Row(node, path, depth, parentIndex, info.incomplete(), info.overflow(), info.deep(), info.leafOrdinal()));
-        if (collapsed.contains(path)) return;
+        if (isCollapsed(path)) return;
         if (node instanceof ConditionNode.AllOf(var allTerms)) {
             if (allTerms.isEmpty()) {
                 append(null, path + "." + RuleFields.TERMS + "[0]", depth + 1, index);
@@ -682,71 +729,10 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
         }
     }
 
-    // 在指定路径上应用变换（返回 null 表示删除该节点）
-    private void applyAt(String path, UnaryOperator<ConditionNode> transform) {
-        ConditionNode root = expression.root();
-        if (root == null) {
-            return;
-        }
-        if (ROOT_PATH.equals(path)) {
-            applyNode(transform.apply(root));
-            return;
-        }
-        ConditionNode updated = transformByPath(root, ROOT_PATH, path, transform);
-        if (updated != null) {
-            applyNode(updated);
-        }
-    }
-
-    // 递归变换：命中目标路径时调用 transform，子项返回 null 表示从 terms 中移除
-    private static @Nullable ConditionNode transformByPath(@Nullable ConditionNode node, String nodePath, String targetPath,
-                                                           UnaryOperator<ConditionNode> transform) {
-        if (node == null) return null;
-        if (nodePath.equals(targetPath)) {
-            return transform.apply(node);
-        }
-        if (node instanceof ConditionNode.AllOf(var allTerms)) {
-            return new ConditionNode.AllOf(transformChildren(allTerms, nodePath, targetPath, transform));
-        }
-        if (node instanceof ConditionNode.AnyOf(var anyTerms)) {
-            return new ConditionNode.AnyOf(transformChildren(anyTerms, nodePath, targetPath, transform));
-        }
-        if (node instanceof ConditionNode.Inverted(var invertedTerm)) {
-            ConditionNode term = transformByPath(invertedTerm, nodePath + "." + RuleFields.TERM, targetPath, transform);
-            return new ConditionNode.Inverted(term);
-        }
-        return node;
-    }
-
-    // 逐个子项递归变换
-    private static List<ConditionNode> transformChildren(List<ConditionNode> terms, String nodePath, String targetPath,
-                                                         UnaryOperator<ConditionNode> transform) {
-        List<ConditionNode> out = new ArrayList<>(terms.size());
-        for (int i = 0; i < terms.size(); i++) {
-            ConditionNode child = transformByPath(terms.get(i), nodePath + ".terms[" + i + "]", targetPath, transform);
-            if (child != null) {
-                out.add(child);
-            }
-        }
-        return out;
-    }
-
-    // 向分组追加子项；不是分组时原样返回
-    private static ConditionNode appendTerm(ConditionNode node, ConditionNode child) {
-        if (node instanceof ConditionNode.Inverted(var term) && term == null) {
-            return new ConditionNode.Inverted(child);
-        }
-        if (node instanceof ConditionNode.AllOf(var allTerms)) {
-            List<ConditionNode> terms = new ArrayList<>(allTerms);
-            terms.add(child);
-            return new ConditionNode.AllOf(terms);
-        }
-        if (node instanceof ConditionNode.AnyOf(var anyTerms)) {
-            List<ConditionNode> terms = new ArrayList<>(anyTerms);
-            terms.add(child);
-            return new ConditionNode.AnyOf(terms);
-        }
-        return node;
+    // 指定节点更新由 Kit 校验和提交，不在控件中复制结构变换算法。
+    private boolean applyAt(String path, UnaryOperator<ConditionNode> transform) {
+        UiTreePath nodePath = ConditionTreeNodes.path(path);
+        return nodePath != null && accept(tree.update(nodePath, transform));
     }
 
     // 交换分组内两个子项
@@ -785,62 +771,25 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
 
     // 追加节点：有目标分组就追加，没有分组时包一层 ALL 以保持语义
     private boolean addNode(ConditionNode newNode) {
-        ConditionNode root = expression.root();
-        if (root == null) {
-            applyNode(newNode);
-            selectPath(ROOT_PATH);
-            return true;
+        if (expression.root() == null) {
+            boolean changed = accept(tree.create(null, 0, newNode));
+            if (changed) selectPath(ROOT_PATH);
+            return changed;
         }
         String groupPath = pickerGroupPath != null ? pickerGroupPath : targetGroupPath();
         if (groupPath == null) {
-            applyNode(new ConditionNode.AllOf(List.of(root, newNode)));
-            selectPath(ROOT_PATH + ".terms[1]");
-            return true;
+            boolean changed = applyAt(ROOT_PATH, root -> new ConditionNode.AllOf(List.of(root, newNode)));
+            if (changed) selectPath(ROOT_PATH + "." + RuleFields.TERMS + "[1]");
+            return changed;
         }
-        ConditionNode target = findNode(groupPath);
-        boolean inverted = target instanceof ConditionNode.Inverted;
-        List<ConditionNode> terms = termsOf(target);
-        int size = terms == null ? 0 : terms.size();
-        applyAt(groupPath, node -> appendTerm(node, newNode));
-        selectPath(inverted ? groupPath + "." + RuleFields.TERM : groupPath + ".terms[" + size + "]");
-        return true;
-    }
-
-    // 按路径取节点
-    private @Nullable ConditionNode findNode(String path) {
-        ConditionNode current = expression.root();
-        if (current == null) {
-            return null;
-        }
-        if (ROOT_PATH.equals(path)) {
-            return current;
-        }
-        for (String part : path.substring(ROOT_PATH.length() + 1).split("\\.")) {
-            if (current == null) {
-                return null;
-            }
-            if (part.equals(RuleFields.TERM)) {
-                current = current instanceof ConditionNode.Inverted inverted ? inverted.term() : null;
-                continue;
-            }
-            int open = part.indexOf('[');
-            if (open < 0 || !part.startsWith(RuleFields.TERMS)) {
-                return null;
-            }
-            int close = part.indexOf(']', open);
-            int index;
-            try {
-                index = Integer.parseInt(part.substring(open + 1, close));
-            } catch (NumberFormatException | IndexOutOfBoundsException ignored) {
-                return null;
-            }
-            List<ConditionNode> terms = termsOf(current);
-            if (terms == null || index < 0 || index >= terms.size()) {
-                return null;
-            }
-            current = terms.get(index);
-        }
-        return current;
+        UiTreePath parent = ConditionTreeNodes.path(groupPath);
+        ConditionNode target = parent == null ? null : tree.query(parent);
+        if (target == null) return false;
+        int size = ConditionTreeNodes.INSTANCE.children(target).size();
+        boolean changed = accept(tree.create(parent, size, newNode));
+        if (changed) selectPath(target instanceof ConditionNode.Inverted ? groupPath + "." + RuleFields.TERM
+                : groupPath + "." + RuleFields.TERMS + "[" + size + "]");
+        return changed;
     }
 
     // 分组是否为空
@@ -912,7 +861,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
         }
         // TODO 美术资源：展开标记暂用 ASCII +/-，后续可替换为像素贴图
         if (hasChildren(row.node())) {
-            String mark = collapsed.contains(row.path()) ? "+" : "-";
+            String mark = isCollapsed(row.path()) ? "+" : "-";
             graphics.drawString(renderFont, mark, markerX + 2, rowY + UiTheme.TEXT_OFFSET, UiPalette.TEXT_PRIMARY, false);
         }
         int textX = markerX + MARKER_WIDTH;
@@ -1057,12 +1006,13 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
         lastClickIndex = index;
         lastClickTime = now;
         selectedPath = row.path();
+        tree.select(ConditionTreeNodes.path(selectedPath));
         if (row.node() == null && button == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
             return beginAddCondition();
         }
         if (contentX >= markerX && contentX <= markerX + MARKER_WIDTH && hasChildren(row.node())) {
-            if (!collapsed.remove(row.path())) {
-                collapsed.add(row.path());
+            if (!unfold(row.path())) {
+                fold(row.path());
             }
             rebuild();
             return true;
@@ -1268,6 +1218,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
             return false;
         }
         selectedPath = rows.get(index).path();
+        tree.select(ConditionTreeNodes.path(selectedPath));
         ensureVisible(index);
         return true;
     }
@@ -1278,8 +1229,8 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
         if (row == null) {
             return false;
         }
-        if (hasChildren(row.node()) && !collapsed.contains(row.path())) {
-            collapsed.add(row.path());
+        if (hasChildren(row.node()) && !isCollapsed(row.path())) {
+            fold(row.path());
             rebuild();
             return true;
         }
@@ -1295,8 +1246,8 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
         if (row == null) {
             return false;
         }
-        if (hasChildren(row.node()) && collapsed.contains(row.path())) {
-            collapsed.remove(row.path());
+        if (hasChildren(row.node()) && isCollapsed(row.path())) {
+            unfold(row.path());
             rebuild();
             return true;
         }
