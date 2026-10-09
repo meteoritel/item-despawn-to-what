@@ -344,9 +344,10 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         return this;
     }
 
-    // 控件值变化时的统一回调
+    // 完成的滑条、开关和选择操作立即写入；聚焦文本仍只保留缓冲。
     void notifyChanged() {
         retainPendingInputs();
+        applyToDraft();
         if (changeListener != null) {
             changeListener.run();
         }
