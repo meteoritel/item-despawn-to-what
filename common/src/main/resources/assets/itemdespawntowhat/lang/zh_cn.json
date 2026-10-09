@@ -415,6 +415,7 @@
   "gui.itemdespawntowhat.edit.issue.too_many_leaves": "叶条件过多：%s（上限 %s）",
   "gui.itemdespawntowhat.edit.json.truncated": "……（省略 %s 个字符）",
   "gui.itemdespawntowhat.edit.field.raw_json": "原始 JSON",
+  "gui.itemdespawntowhat.edit.tree.parameters_readonly": "[参数只读]",
   "gui.itemdespawntowhat.edit.unknown_condition": "未知条件：%s",
   "gui.itemdespawntowhat.edit.unknown_effect": "未知动作：%s",
   "itemdespawntowhat.edit.issue.decode": "规则解码失败：%s",
