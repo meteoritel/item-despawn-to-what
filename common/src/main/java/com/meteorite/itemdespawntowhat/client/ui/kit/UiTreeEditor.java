@@ -54,6 +54,11 @@ public final class UiTreeEditor<N> {
 
     public Adapter<N> adapter() { return adapter; }
     public @Nullable N root() { return root.get(); }
+    /** 读取外部表示；回填根由宿主执行，不产生配置操作事件。 */
+    public <S> UiTreeCodec.DecodeResult<N> decode(UiTreeCodec<N, S> codec, @Nullable S source) {
+        return codec.decode(source);
+    }
+    public <S> @Nullable S encode(UiTreeCodec<N, S> codec) { return codec.encode(root.get()); }
     public void setBeforeEdit(Runnable handler) { beforeEdit = Objects.requireNonNull(handler); }
     public void setOnViewChanged(Consumer<ViewChange> listener) { onViewChanged = Objects.requireNonNull(listener); }
     public @Nullable UiTreePath selected() { return selected; }

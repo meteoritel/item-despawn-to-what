@@ -957,5 +957,12 @@
   "gui.itemdespawntowhat.edit.cost.auto.one": "每轮消耗 1 个源物品",
   "gui.itemdespawntowhat.edit.cost.auto.zero": "每轮不消耗源物品；仅执行其它消耗动作",
   "gui.itemdespawntowhat.edit.quantity.row": "%s · %s",
-  "gui.itemdespawntowhat.edit.rule.catalyst_all_required": "所有催化剂均需达到各自门槛"
+  "gui.itemdespawntowhat.edit.rule.catalyst_all_required": "所有催化剂均需达到各自门槛",
+  "gui.itemdespawntowhat.edit.tree.button.source": "JSON 源码",
+  "gui.itemdespawntowhat.edit.tree.button.tree": "条件树",
+  "gui.itemdespawntowhat.edit.tree.button.copy_json": "复制 JSON",
+  "gui.itemdespawntowhat.edit.tree.source_empty": "无条件，conditions 字段省略",
+  "gui.itemdespawntowhat.edit.tree.source_title": "当前条件 JSON（只读）",
+  "gui.itemdespawntowhat.edit.tree.source_invalid": "条件格式无法解析，请查看 JSON",
+  "gui.itemdespawntowhat.edit.tree.pending_source": "有未完成输入，JSON 显示最近接受的值"
 }

@@ -154,3 +154,5 @@
 本项目新增 `UiTreePath` 与 `UiTreeEditor`，为宿主不可变节点提供路径查询、创建、删除、更新、容量约束、绑定操作事件及独立选择/折叠事件。接口不依赖条件模型、Gson、主题或 loader；`ConditionTreeNodes` 与 `ConditionTreeOverlay` 是实际接入的宿主适配和页面，不属于 Kit。
 
 该通用核心由本项目实现，未复制开源 Web 树编辑器源码，未修改来源仓库，也未回流上游。维护副本的原始23文件来源记录保持有效。
+
+`UiTreeCodec` 与 `UiTreeEditor.decode/encode` 是本项目新增的宿主编解码注入接口，具体条件 JSON 由宿主 `ConditionTreeJsonCodec` 处理。宿主多行文本控件增加可选择复制的只读模式，条件叠加页实际用于源码查看；未引入外部树编辑器代码或运行依赖。
