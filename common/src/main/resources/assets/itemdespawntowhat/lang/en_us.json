@@ -394,6 +394,7 @@
   "itemdespawntowhat.command.config.edit_lock.release.idle": "The rule editor is already free.",
   "itemdespawntowhat.command.config.edit_lock.release.released": "Released the rule editor lock held by %1$s.",
   "gui.itemdespawntowhat.edit.tree.empty": "No conditions yet",
+  "gui.itemdespawntowhat.edit.tree.add_placeholder": "+ Add condition",
   "gui.itemdespawntowhat.edit.tree.hint": "A add  G group  N not  T and/or  Del delete  Enter edit",
   "gui.itemdespawntowhat.edit.tree.accessible_name": "Condition tree editor",
   "gui.itemdespawntowhat.edit.tree.node.all": "ALL of",
