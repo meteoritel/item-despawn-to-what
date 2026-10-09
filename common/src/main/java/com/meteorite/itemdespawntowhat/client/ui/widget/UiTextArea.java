@@ -261,20 +261,14 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
         }
     }
 
-    // 当前选中区间 [起, 止]；原版行视图类型跨包不可命名，这里由选中文本与光标位置推导
+    // 当前选中区间 [起, 止]，直接使用原版选择锚点，重复文本不影响高亮位置。
     private int[] selectionRange() {
         if (!textField.hasSelection()) {
             return new int[0];
         }
-        String text = textField.value();
-        String selected = textField.getSelectedText();
-        if (selected.isEmpty()) {
-            return new int[0];
-        }
         int cursor = textField.cursor();
-        int start = cursor >= selected.length() && text.startsWith(selected, cursor - selected.length())
-                ? cursor - selected.length() : cursor;
-        return new int[]{start, start + selected.length()};
+        int anchor = textField.anchor();
+        return new int[]{Math.min(cursor, anchor), Math.max(cursor, anchor)};
     }
 
     // 自行折行：与原版文本模型同一套拆分器，保证光标行号与行边界一致
