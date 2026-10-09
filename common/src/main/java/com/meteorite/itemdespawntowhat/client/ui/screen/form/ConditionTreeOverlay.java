@@ -1,13 +1,14 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
 import com.google.gson.JsonElement;
+import com.google.gson.JsonArray;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeJsonCodec;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeNodes;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.OpaqueCondition;
-import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
+import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeClipboard;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
@@ -58,6 +59,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     private final Runnable changed;
     private final UiConditionTreeEditor editor;
     private final UiTreeCodec<ConditionNode, JsonElement> codec;
+    private final ConditionTreeClipboard clipboard;
     private final UiTextArea source;
     private final List<UiButton> buttons = new ArrayList<>();
     private final List<UiButton> treeButtons = new ArrayList<>();
@@ -87,17 +89,19 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         this.parameterFactory = parameterFactory;
         this.changed = changed;
         codec = new ConditionTreeJsonCodec(support.registry());
+        clipboard = new ConditionTreeClipboard(support.registry());
         source = new UiTextArea(font, Component.translatable(UI + "source_empty"));
         source.setEditable(false);
         source.setSelectableWhenReadOnly(true);
         source.setAccessibleName(Component.translatable(UI + "source_title"));
         editor = new UiConditionTreeEditor(font).setTypeOptions(support.typeOptions()).setLeafFactory(support.leafFactory());
         editor.setLeafSummary(leaf -> {
-            JsonElement raw = RuleDraft.encodeConditions(new ConditionExpression(leaf), support.registry());
+            JsonElement raw = codec.encode(leaf);
             return raw != null && raw.isJsonObject() && raw.getAsJsonObject().get(RuleFields.CONDITION) != null
                     ? NaturalSummary.conditionLeaf(raw.getAsJsonObject().getAsJsonObject(RuleFields.CONDITION))
                     : com.meteorite.itemdespawntowhat.client.edit.TypeLabels.conditionLabel(leaf.condition().type());
         });
+        editor.setClipboardActions(this::copyNodes, this::pasteNodes);
         editor.setOnEditLeaf(leaf -> {
             syncSelection();
             showParameters = true;
@@ -127,6 +131,10 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         addButton("any", () -> editor.addGroup(false));
         addButton("not", editor::wrapSelectedInNot);
         addButton("remove", editor::deleteSelected);
+        addButton("copy_nodes", editor::copySelection);
+        addButton("paste_nodes", editor::pasteSelection);
+        addButton("wrap_all", () -> editor.wrapSelection(true));
+        addButton("wrap_any", () -> editor.wrapSelection(false));
         addButton("up", () -> editor.moveSelected(-1));
         addButton("down", () -> editor.moveSelected(1));
         addButton("expand", editor::expandAll);
@@ -173,6 +181,27 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
             source.moveCursorToStart();
         }
         copyButton.setEnabled(!text.isEmpty());
+    }
+
+    private void copyNodes() {
+        if (sourceView) return;
+        finishParameters();
+        reloadExpression();
+        JsonArray nodes = new JsonArray();
+        for (var path : editor.selectedSubtrees()) {
+            JsonElement raw = session.draft().getAt(ConditionTreeNodes.jsonPath(editor.expression().root(), path, scope));
+            if (raw != null) nodes.add(raw.deepCopy());
+        }
+        if (nodes.isEmpty()) { editor.showOperationError(Component.translatable(UI + "select_copy")); return; }
+        Minecraft.getInstance().keyboardHandler.setClipboard(SOURCE_JSON.toJson(nodes));
+        editor.showOperationError(null);
+    }
+
+    private void pasteNodes() {
+        if (sourceView) return;
+        var result = clipboard.read(Minecraft.getInstance().keyboardHandler.getClipboard());
+        if (result.error() != null) { editor.showOperationError(result.error()); return; }
+        editor.pasteNodes(result.nodes());
     }
 
     private void toggleSource() {
@@ -313,10 +342,16 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
                 editor.issues().size(), editor.issues().getFirst().label());
         if (status == null && session.hasPendingInput(scope)) status = Component.translatable(UI + "pending_input");
         if (status == null && sourceView && source.value().isEmpty()) status = Component.translatable(UI + "source_empty");
+        if (status == null && !sourceView && editor.tree().selection().size() > 1) status = Component.translatable(UI + "selection", editor.tree().selection().size());
         if (status == null) status = Component.translatable(UI + "counts", editor.nodeCount(), editor.leafCount(), editor.depth());
         graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont, status.getString(), Math.max(0, bounds.width() - 4)),
                 bounds.x() + 2, bounds.bottom() - STATUS_HEIGHT + 4,
                 editor.isValid() && editor.operationError() == null ? UiPalette.TEXT_SECONDARY : UiPalette.DANGER, false);
+        if (!sourceView && !editor.isDragging()) {
+            Component selectionHint = Component.translatable(UI + "selection_hint");
+            graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont, selectionHint.getString(), Math.max(0, bounds.width() - 4)),
+                    bounds.x() + 2, bounds.bottom() - renderFont.lineHeight, UiPalette.TEXT_SECONDARY, false);
+        }
         Component tip = !sourceView && parameters != null && (wide || showParameters) ? parameters.form().tooltipAt(mouseX, mouseY) : null;
         if (tip == null && editor.isVisible()) tip = editor.tooltipAt(mouseX, mouseY);
         if (tip != null) graphics.renderTooltip(renderFont, renderFont.split(tip,

@@ -424,9 +424,9 @@ void moveCursorToStart();      // 回填后调用：光标与垂直滚动都回�
 | `setBeforeEdit(Runnable)` | 操作读取根之前完成宿主合法输入；宿主不能将非法文本写入配置 |
 | `select(path)` / `selected()` | 选择真实节点或清空选择；不存在的路径忽略 |
 | `setCollapsed(path, value)` / `collapsed()` / `expandAll()` | 管理只读可查询的折叠状态，不修改绑定树 |
-| `setOnViewChanged(listener)` | 接收 `ViewChange(selected, collapsed)`，与配置操作事件分开 |
+| `setOnViewChanged(listener)` | 接收 `ViewChange(selected, collapsed, selection)`，与配置操作事件分开 |
 
-`Outcome(changed, error)` 区分已接受、无变化和错误。配置操作仅在实际改变时产生一次 `Change(before, after, Kind, paths)`；Kind 为 CREATE、DELETE、UPDATE、MOVE。三参数构造保留，默认路径映射为空。宿主在接受回调内写历史，回填根不调用修改入口。节点与子项列表由宿主适配器保持不可变，不得修改既有节点。
+`Outcome(changed, error)` 区分已接受、无变化和错误。配置操作仅在实际改变时产生一次 `Change(before, after, Kind, paths, removed)`；Kind 为 CREATE、DELETE、UPDATE、MOVE。三参数与四参数构造保留，默认路径映射和移除集合为空。宿主在接受回调内写历史，回填根不调用修改入口。节点与子项列表由宿主适配器保持不可变，不得修改既有节点。
 
 实际接入：`ConditionTreeNodes` 适配现有 ConditionNode；`UiConditionTreeEditor` 的创建、删除、更新、查询、选择和折叠均调用 Kit。空 NOT 由宿主重建为 `Inverted(null)`；NOT 的容量为1，叶容量为0。逐表达式限额校验与本地化提示由宿主注入。`ConditionTreeOverlay` 将配置操作与输入路径迁移放入同一 EditSession 事务；JSON、参数表单、服务端保存均留在宿主。
 
@@ -448,3 +448,22 @@ void moveCursorToStart();      // 回填后调用：光标与垂直滚动都回�
 `UiTreeEditor.decode(codec, source)` 调用注入解码，返回结果由宿主回填，不提交操作事件；`encode(codec)` 编码当前绑定根。实际条件页注入 `ConditionTreeJsonCodec`，读取条件草稿、结构写回及源码展示均使用该能力。未知叶由宿主保留完整 JSON；未修改的已接受根保留原有字段。
 
 宿主 `ConditionTreeOverlay` 默认显示树，顶部切换到当前表达式的缩进 JSON；无根时保持字段省略。`UiTextArea.setSelectableWhenReadOnly(true)` 配合 `setEditable(false)` 允许选中、滚动、Ctrl+A/C 和复制按钮；字符、删除、剪切与粘贴不修改文本。只读文本不消费局部撤销，Ctrl+Z 交给当前规则历史。切换视图完成合法字段、保留未完成输入，不产生配置历史；源码展示已接受值并提示未完成输入。
+
+
+### 多选与批量结构操作
+
+`UiTreeEditor.selection()` 返回选择集合，`selected()` 是用于逐节点编辑的主节点。`setSelection(paths, primary)` 与 `toggleSelection(path)` 只发 ViewChange，原有 `select(path)` 切回单选；ViewChange 增加 selection，并保留原双参数构造。`normalizedSelection()` / 静态 `normalize(paths)` 按树顺序去重，移除已选祖先覆盖的后代；复制、删除、移动与包组均以这些最高子树为单位，不重复处理后代。
+
+| API | 批量契约 |
+| --- | --- |
+| `deleteMany(paths)` | 按路径逆序移除最高子树，适配器保留空父；一次 DELETE 事件 |
+| `createMany(parent, index, nodes)` | 在明确位置插入全部节点；空根仅允许一个节点，不自动建组或替换既有根；一次 CREATE 事件 |
+| `wrapMany(paths, wrapper, invalidSelection)` | 同父连续节点可包装，宿主提供 AND/OR 等 wrapper；仅选中根时包住整个根；一次 UPDATE 事件 |
+| `beginMove(paths)` / `previewMove(before, paths, target, position)` | 捕获后保持原树顺序，先移除全部源，再检查目标容量与整体候选；任一非法目标整批拒绝 |
+| `UiTreeMoveInteraction.begin(paths)` | 使用同一移动生命周期；MovePreview.sources 保存归一化的最高源子树，正常释放一次 MOVE 事件 |
+
+批量事件的 `Change.paths` 包含所有存活原节点的旧→新路径，`removed` 记录被删除的最高子树。宿主先按前树路径清除删除子树的输入缓冲，再完整迁移存活字段；两者与 JSON 写入在同一事务内完成。复制粘贴只携带已接受业务节点，不复制非法文本缓冲；粘贴节点由宿主解码成新节点，原节点输入仍按映射保留。容量、整树限额与无变化判断沿用同一核心，错误与无变化不产生绑定事件。
+
+条件页面实际接入 Ctrl 点击切换、Shift 点击可见行范围、Ctrl+A 选择可见真实节点；点击已选节点先保留多选以允许拖动，未拖动释放后转为单选。Ctrl+C/V 与工具栏复制/粘贴使用宿主系统剪贴板；剪贴板交换格式为单个节点 JSON 或节点 JSON 数组，正式配置格式保持不变。剪贴板读取检查节点/叶/深度限额及草稿结构；候选整树仍由宿主 validator 验证。粘贴在选中分组末尾、选中叶之后或空占位对应父内插入，拒绝已有子项的 NOT，不自动替换或合并。源码只读页只分发文本键盘事件，不调用树粘贴。
+
+工具栏的包 AND／OR 对应 wrapMany；不同父或不连续选择给出具体错误。参数表单只绑定主节点，批量结构操作不覆盖多个条件参数。未知叶复制直接从共享草稿读取完整原文，移动与包装复用原条件节点；剪贴板和配置 JSON、系统剪贴板、条件限额均不进入 Kit。

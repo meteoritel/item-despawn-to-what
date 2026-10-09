@@ -75,10 +75,16 @@ public final class ConditionTreeNodes implements UiTreeEditor.Adapter<ConditionN
 
     /** 显式移动路径覆盖所有原节点；JSON 路径用各自的前后树转换，并与写入处于同一事务。 */
     public static void remapInputs(EditSession session, UiTreeEditor.Change<ConditionNode> change, String scope) {
-        if (change.paths().isEmpty()) {
+        if (change.paths().isEmpty() && change.removed().isEmpty() && change.added().isEmpty()) {
             remapInputs(session, change.before(), change.after(), scope);
             return;
         }
+        java.util.Set<String> removed = change.removed().stream().map(path -> jsonPath(change.before(), path, scope))
+                .collect(java.util.stream.Collectors.toSet());
+        java.util.Set<String> added = change.added().stream().map(path -> jsonPath(change.after(), path, scope))
+                .collect(java.util.stream.Collectors.toSet());
+        session.recordInputStructure(removed, added);
+        removed.forEach(session::clearPendingInputs);
         Map<String, String> paths = new LinkedHashMap<>();
         change.paths().forEach((before, after) -> paths.put(jsonPath(change.before(), before, scope),
                 jsonPath(change.after(), after, scope)));

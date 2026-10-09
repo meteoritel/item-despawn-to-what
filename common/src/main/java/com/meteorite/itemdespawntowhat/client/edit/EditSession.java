@@ -11,6 +11,8 @@ import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.LinkedHashSet;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import org.jetbrains.annotations.Nullable;
@@ -58,6 +60,8 @@ public final class EditSession {
     private long nextInputIdentity;
     private long revision;
     private @Nullable Map<String, String> transactionInputPaths;
+    private @Nullable Set<String> transactionRemovedScopes;
+    private @Nullable Set<String> transactionAddedScopes;
 
     public long revision() { return revision; }
 
@@ -114,6 +118,12 @@ public final class EditSession {
         pendingInputs.putAll(moved);
     }
 
+    /** 在 apply 内记录完全移除/新建的子树，历史恢复不将新节点输入按祖先路径冒认旧节点。 */
+    public void recordInputStructure(Set<String> removed, Set<String> added) {
+        if (transactionRemovedScopes != null) transactionRemovedScopes.addAll(removed);
+        if (transactionAddedScopes != null) transactionAddedScopes.addAll(added);
+    }
+
     private static PendingInput atPath(PendingInput input, String from, String to) {
         List<FormIssue> issues = input.issues().stream().map(issue ->
                 new FormIssue(within(issue.path(), from) ? to + issue.path().substring(from.length()) : issue.path(),
@@ -130,7 +140,7 @@ public final class EditSession {
     private @Nullable Consumer<Boolean> flagWriter;
 
     // 历史条目：操作标签 + 操作前的完整快照 + 删除标记 + 目标级布尔标记
-    private record Entry(String opKey, JsonObject snapshot, boolean deleted, boolean flag, Map<String, PendingInput> inputs, Map<String, String> paths) {
+    private record Entry(String opKey, JsonObject snapshot, boolean deleted, boolean flag, Map<String, PendingInput> inputs, Map<String, String> paths, Set<String> excludedScopes, Set<String> inverseExcludedScopes) {
     }
 
     public EditSession(String targetId, RuleDraft draft) {
@@ -173,12 +183,16 @@ public final class EditSession {
         boolean deletedBefore = draft.isDeleted();
         boolean flagBefore = currentFlag();
         Map<String, String> changedPaths = new LinkedHashMap<>();
+        Set<String> removedScopes = new LinkedHashSet<>();
+        Set<String> addedScopes = new LinkedHashSet<>();
         transactionInputPaths = changedPaths;
+        transactionRemovedScopes = removedScopes;
+        transactionAddedScopes = addedScopes;
         try { change.run(); }
-        finally { transactionInputPaths = null; }
+        finally { transactionInputPaths = null; transactionRemovedScopes = null; transactionAddedScopes = null; }
         // 删除标记与目标级标记也算改动：只改标记不改 JSON 的操作同样要能撤销
         if (!before.equals(draft.view()) || deletedBefore != draft.isDeleted() || flagBefore != currentFlag()) {
-            undoStack.push(new Entry(normalize(opKey), before, deletedBefore, flagBefore, inputsBefore, inversePaths(changedPaths)));
+            undoStack.push(new Entry(normalize(opKey), before, deletedBefore, flagBefore, inputsBefore, inversePaths(changedPaths), Set.copyOf(addedScopes), Set.copyOf(removedScopes)));
             while (undoStack.size() > HISTORY_LIMIT) {
                 undoStack.removeLast();
             }
@@ -241,7 +255,7 @@ public final class EditSession {
             return false;
         }
         Entry entry = undoStack.pop();
-        redoStack.push(new Entry(entry.opKey(), draft.view().deepCopy(), draft.isDeleted(), currentFlag(), Map.copyOf(pendingInputs), inversePaths(entry.paths())));
+        redoStack.push(new Entry(entry.opKey(), draft.view().deepCopy(), draft.isDeleted(), currentFlag(), Map.copyOf(pendingInputs), inversePaths(entry.paths()), entry.inverseExcludedScopes(), entry.excludedScopes()));
         restorePendingInputs(entry);
         draft.replaceWith(entry.snapshot());
         draft.setDeleted(entry.deleted());
@@ -256,7 +270,7 @@ public final class EditSession {
             return false;
         }
         Entry entry = redoStack.pop();
-        undoStack.push(new Entry(entry.opKey(), draft.view().deepCopy(), draft.isDeleted(), currentFlag(), Map.copyOf(pendingInputs), inversePaths(entry.paths())));
+        undoStack.push(new Entry(entry.opKey(), draft.view().deepCopy(), draft.isDeleted(), currentFlag(), Map.copyOf(pendingInputs), inversePaths(entry.paths()), entry.inverseExcludedScopes(), entry.excludedScopes()));
         restorePendingInputs(entry);
         draft.replaceWith(entry.snapshot());
         draft.setDeleted(entry.deleted());
@@ -279,6 +293,7 @@ public final class EditSession {
         // 无唯一匹配时不绑定到其他同类型节点，删除节点的输入随节点离开当前草稿。
         boolean fieldEdit = OP_SET_FIELD.equals(entry.opKey()) || OP_SET_SOURCE.equals(entry.opKey());
         for (var current : latest.values()) {
+            if (entry.excludedScopes().stream().anyMatch(scope -> within(current.getKey(), scope))) continue;
             String mapped = entry.paths().keySet().stream().filter(scope -> within(current.getKey(), scope))
                     .max(java.util.Comparator.comparingInt(String::length)).orElse(null);
             String target = mapped != null ? entry.paths().get(mapped) + current.getKey().substring(mapped.length())

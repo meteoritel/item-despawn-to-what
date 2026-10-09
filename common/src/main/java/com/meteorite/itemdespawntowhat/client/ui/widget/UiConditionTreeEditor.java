@@ -23,11 +23,14 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.LinkedHashSet;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
@@ -122,6 +125,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
     private final UiTreeEditor<ConditionNode> tree;
     private final UiTreeMoveInteraction<ConditionNode> move;
     private @Nullable UiTreePath armedDrag;
+    private boolean collapseSelectionOnRelease;
     private double pressX;
     private double pressY;
     private double dragX;
@@ -141,6 +145,9 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
     private @Nullable ConditionExpression inspectedExpression;
     // 选中的节点路径
     private @Nullable String selectedPath;
+    private @Nullable String selectionAnchor;
+    private @Nullable Runnable copyAction;
+    private @Nullable Runnable pasteAction;
     // 悬停行下标，-1 表示无悬停
     private int hoveredIndex = -1;
     // 行高
@@ -206,6 +213,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
     /** 宿主在切页、历史回填、卸载或关闭时取消手势；只有释放可提交移动。 */
     public void endInteractions(UiInputCapture.EndReason reason) {
         armedDrag = null;
+        collapseSelectionOnRelease = false;
         dropRow = -1;
         dragLabel = null;
         move.end(reason);
@@ -214,6 +222,77 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
     public @Nullable UiTreeEditor.Change<ConditionNode> lastChange() { return lastChange; }
     public @Nullable Component operationError() { return operationError; }
     public void setBeforeEdit(Runnable handler) { tree.setBeforeEdit(handler); }
+    public void setClipboardActions(Runnable copy, Runnable paste) { copyAction = copy; pasteAction = paste; }
+    public void showOperationError(@Nullable Component error) { operationError = error; }
+
+    public List<UiTreePath> selectedSubtrees() { return tree.normalizedSelection(); }
+
+    private void followPrimarySelection() {
+        UiTreePath primary = tree.selected();
+        selectedPath = primary == null ? null : ConditionTreeNodes.jsonPath(expression.root(), primary, ROOT_PATH);
+    }
+
+    public boolean copySelection() {
+        if (!enabled || tree.selection().isEmpty() || copyAction == null) return false;
+        copyAction.run();
+        return true;
+    }
+
+    public boolean pasteSelection() {
+        if (!enabled || pasteAction == null) return false;
+        pasteAction.run();
+        return true;
+    }
+
+    public boolean pasteNodes(List<ConditionNode> nodes) {
+        if (!enabled) return false;
+        Row row = selectedRow();
+        UiTreePath parent;
+        int index;
+        if (expression.isEmpty()) { parent = null; index = 0; }
+        else if (row != null && row.node() == null && row.parentIndex() >= 0) {
+            parent = ConditionTreeNodes.path(rows.get(row.parentIndex()).path());
+            index = 0;
+        } else {
+            UiTreePath selected = row == null ? UiTreePath.ROOT : ConditionTreeNodes.path(row.path());
+            ConditionNode target = selected == null ? null : tree.query(selected);
+            if (target != null && ConditionTreeNodes.INSTANCE.childCapacity(target) > 0) {
+                parent = selected;
+                index = ConditionTreeNodes.INSTANCE.children(target).size();
+            } else if (selected != null && !selected.indices().isEmpty()) {
+                parent = selected.parent();
+                index = selected.indices().getLast() + 1;
+            } else {
+                operationError = Component.translatable("gui.itemdespawntowhat.edit.tree.paste_parent");
+                return false;
+            }
+        }
+        if (parent == null && nodes.size() > 1) {
+            operationError = Component.translatable("gui.itemdespawntowhat.edit.tree.paste_root");
+            return false;
+        }
+        lastOpKey = EditSession.OP_ADD_CONDITION;
+        boolean changed = accept(tree.createMany(parent, index, nodes));
+        if (changed) { followPrimarySelection(); rebuild(); if (selectedPath != null) selectPath(selectedPath); }
+        return changed;
+    }
+
+    public boolean wrapSelection(boolean all) {
+        if (!enabled) return false;
+        lastOpKey = EditSession.OP_ADD_GROUP;
+        boolean changed = accept(tree.wrapMany(tree.selection(), nodes -> all ? new ConditionNode.AllOf(nodes)
+                : new ConditionNode.AnyOf(nodes), Component.translatable("gui.itemdespawntowhat.edit.tree.wrap_selection")));
+        if (changed) { followPrimarySelection(); rebuild(); }
+        return changed;
+    }
+
+    private boolean selectAllVisible() {
+        List<UiTreePath> paths = rows.stream().filter(row -> row.node() != null)
+                .map(row -> ConditionTreeNodes.path(row.path())).filter(java.util.Objects::nonNull).toList();
+        tree.setSelection(paths, tree.selected());
+        followPrimarySelection();
+        return true;
+    }
 
     private @Nullable Component validateCandidate(@Nullable ConditionNode root) {
         ConditionExpression candidate = new ConditionExpression(root);
@@ -264,6 +343,8 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
     public void setExpression(ConditionExpression newExpression) {
         endInteractions(UiInputCapture.EndReason.UNMOUNTED);
         this.expression = newExpression == null ? ConditionExpression.EMPTY : newExpression;
+        tree.setSelection(tree.selection(), tree.selected());
+        followPrimarySelection();
         rebuild();
     }
 
@@ -413,6 +494,10 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
             if (target != null && ancestor.isAncestorOf(target)) tree.setCollapsed(ancestor, false);
         }
         selectedPath = nodePath;
+        if (target != null) {
+            if (tree.selection().contains(target)) tree.setSelection(tree.selection(), target);
+            else tree.select(target);
+        }
         rebuild();
         ensureVisible(indexOfPath(nodePath));
     }
@@ -463,24 +548,19 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
 
     // 删除选中节点（根节点被删除后表达式变为空）
     public boolean deleteSelected() {
-        if (!enabled) {
-            return false;
-        }
-        Row row = selectedRow();
-        if (row == null || row.node() == null) {
-            return false;
-        }
-        if (row.parentIndex() < 0) {
-            selectedPath = null;
-            lastOpKey = EditSession.OP_DELETE_NODE;
-            return accept(tree.delete(UiTreePath.ROOT));
-        }
-        Row parent = rows.get(row.parentIndex());
-        String nextSelection = parent.path();
+        if (!enabled || tree.selection().isEmpty()) return false;
+        List<UiTreePath> selected = tree.normalizedSelection();
+        UiTreePath parent = selected.isEmpty() || selected.getFirst().indices().isEmpty() ? null : selected.getFirst().parent();
         lastOpKey = EditSession.OP_DELETE_NODE;
-        UiTreePath path = ConditionTreeNodes.path(row.path());
-        boolean changed = path != null && accept(tree.delete(path));
-        if (changed) selectPath(nextSelection);
+        boolean changed = accept(tree.deleteMany(selected));
+        if (changed) {
+            selectedPath = null;
+            if (parent != null && tree.query(parent) != null) {
+                tree.select(parent);
+                followPrimarySelection();
+            }
+            rebuild();
+        }
         return changed;
     }
 
@@ -490,6 +570,10 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
             return false;
         }
         if (delta == 0) {
+            return false;
+        }
+        if (tree.normalizedSelection().size() > 1) {
+            operationError = Component.translatable("gui.itemdespawntowhat.edit.tree.move_multiple");
             return false;
         }
         Row row = selectedRow();
@@ -594,10 +678,9 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
         if (root != null) {
             append(root, ROOT_PATH, 0, -1);
         }
-        if (selectedPath != null && indexOfPath(selectedPath) < 0) {
+        if (selectedPath != null && !allNodes.containsKey(selectedPath) && indexOfPath(selectedPath) < 0) {
             selectedPath = rows.isEmpty() ? null : rows.get(Math.clamp(hoveredIndex, 0, rows.size() - 1)).path();
         }
-        tree.select(ConditionTreeNodes.path(selectedPath));
         if (hoveredIndex >= rows.size()) {
             hoveredIndex = -1;
         }
@@ -898,7 +981,8 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
 
     // 绘制一行
     private void drawRow(GuiGraphics graphics, Font renderFont, Row row, int index, int rowY, int rowWidth) {
-        boolean selected = selectedPath != null && selectedPath.equals(row.path());
+        UiTreePath nodePath = ConditionTreeNodes.path(row.path());
+        boolean selected = nodePath != null && tree.selection().contains(nodePath);
         if (selected) {
             UiTheme.drawSelection(graphics, new UiRect(0, rowY, rowWidth, rowHeight));
             UiTheme.drawSelectMarker(graphics, new UiRect(0, rowY, rowWidth, rowHeight));
@@ -1057,21 +1141,50 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
         boolean doubleClick = index == lastClickIndex && now - lastClickTime <= DOUBLE_CLICK_MS;
         lastClickIndex = index;
         lastClickTime = now;
-        selectedPath = row.path();
-        tree.select(ConditionTreeNodes.path(selectedPath));
+        boolean control = Screen.hasControlDown();
+        boolean shift = Screen.hasShiftDown();
+        UiTreePath clicked = ConditionTreeNodes.path(row.path());
+        if (row.node() != null && clicked != null) {
+            if (shift) {
+                int anchor = selectionAnchor == null ? index : indexOfPath(selectionAnchor);
+                if (anchor < 0) anchor = index;
+                Set<UiTreePath> selected = new LinkedHashSet<>(control ? tree.selection() : Set.of());
+                for (int range = Math.min(anchor, index); range <= Math.max(anchor, index); range++) {
+                    Row item = rows.get(range);
+                    if (item.node() != null) {
+                        UiTreePath itemPath = ConditionTreeNodes.path(item.path());
+                        if (itemPath != null) selected.add(itemPath);
+                    }
+                }
+                tree.setSelection(selected, clicked);
+            } else if (control) {
+                tree.toggleSelection(clicked);
+                selectionAnchor = row.path();
+            } else if (tree.selection().contains(clicked)) {
+                collapseSelectionOnRelease = tree.selection().size() > 1;
+                tree.setSelection(tree.selection(), clicked);
+                selectionAnchor = row.path();
+            } else {
+                tree.select(clicked);
+                selectionAnchor = row.path();
+            }
+            followPrimarySelection();
+        } else selectedPath = row.path();
         if (row.node() == null && button == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
             return beginAddCondition();
         }
         if (contentX >= markerX && contentX <= markerX + MARKER_WIDTH && hasChildren(row.node())) {
+            collapseSelectionOnRelease = false;
             if (!unfold(row.path())) {
                 fold(row.path());
             }
             rebuild();
             return true;
         }
-        if (doubleClick) {
+        if (doubleClick && !control && !shift) {
             activate();
-        } else if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT && !ROOT_PATH.equals(row.path())) {
+        } else if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT && clicked != null
+                && tree.selection().contains(clicked) && !ROOT_PATH.equals(row.path())) {
             armedDrag = ConditionTreeNodes.path(row.path());
             pressX = mouseX;
             pressY = mouseY;
@@ -1134,7 +1247,10 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
         if (!isDragging() && source != null && Math.hypot(mouseX - pressX, mouseY - pressY) >= DRAG_START_DISTANCE) {
             Row sourceRow = allNodes.get(ConditionTreeNodes.jsonPath(expression.root(), source, ROOT_PATH));
             String label = sourceRow == null ? "" : rowLabel(sourceRow).getString();
-            if (move.begin(source)) {
+            List<UiTreePath> sources = tree.normalizedSelection();
+            if (sources.size() > 1) label = Component.translatable("gui.itemdespawntowhat.edit.tree.drag_many", sources.size()).getString();
+            if (move.begin(sources.isEmpty() ? List.of(source) : sources)) {
+                collapseSelectionOnRelease = false;
                 dragLabel = label;
                 lastClickIndex = -1;
             }
@@ -1211,6 +1327,11 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         boolean owned = armedDrag != null || scrollView.isDragging() || isDragging();
+        if (!isDragging() && collapseSelectionOnRelease && button == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+            tree.select(tree.selected());
+            followPrimarySelection();
+        }
+        collapseSelectionOnRelease = false;
         if (isDragging() && button == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
             projectDrop(mouseX, mouseY);
             lastOpKey = EditSession.OP_MOVE_NODE;
@@ -1255,6 +1376,11 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
         }
         if (pickerOpen) {
             return pickerKeyPressed(keyCode);
+        }
+        if ((modifiers & GLFW.GLFW_MOD_CONTROL) != 0 && (modifiers & (GLFW.GLFW_MOD_ALT | GLFW.GLFW_MOD_SUPER)) == 0) {
+            if (keyCode == GLFW.GLFW_KEY_A) return selectAllVisible();
+            if (keyCode == GLFW.GLFW_KEY_C) return copySelection();
+            if (keyCode == GLFW.GLFW_KEY_V) return pasteSelection();
         }
         if (rows.isEmpty()) {
             if (keyCode == GLFW.GLFW_KEY_A || keyCode == GLFW.GLFW_KEY_ENTER
