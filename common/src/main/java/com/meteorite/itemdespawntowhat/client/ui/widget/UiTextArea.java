@@ -18,6 +18,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import net.minecraft.util.StringUtil;
 import org.jetbrains.annotations.Nullable;
+import org.lwjgl.glfw.GLFW;
 
 /**
  * 多行文本编辑框：换行、选择、滚动与剪贴板由原版 {@link MultilineTextField} 承担，外观按 kit 主题自绘。
@@ -69,6 +70,7 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
     private boolean visible = true;
     // 是否可编辑
     private boolean editable = true;
+    private boolean selectableWhenReadOnly;
     // 是否持有焦点
     private boolean focused;
     // 本次按下是否由本控件承接
@@ -124,6 +126,11 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
     // 设置是否可编辑
     public void setEditable(boolean editable) {
         this.editable = editable;
+    }
+
+    /** 允许只读文本获得焦点、选择和复制；不启用修改或文本局部历史。 */
+    public void setSelectableWhenReadOnly(boolean selectable) {
+        this.selectableWhenReadOnly = selectable;
     }
 
     // 设置占位提示
@@ -254,20 +261,14 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
         }
     }
 
-    // 当前选中区间 [起, 止]；原版行视图类型跨包不可命名，这里由选中文本与光标位置推导
+    // 当前选中区间 [起, 止]，直接使用原版选择锚点，重复文本不影响高亮位置。
     private int[] selectionRange() {
         if (!textField.hasSelection()) {
             return new int[0];
         }
-        String text = textField.value();
-        String selected = textField.getSelectedText();
-        if (selected.isEmpty()) {
-            return new int[0];
-        }
         int cursor = textField.cursor();
-        int start = cursor >= selected.length() && text.startsWith(selected, cursor - selected.length())
-                ? cursor - selected.length() : cursor;
-        return new int[]{start, start + selected.length()};
+        int anchor = textField.anchor();
+        return new int[]{Math.min(cursor, anchor), Math.max(cursor, anchor)};
     }
 
     // 自行折行：与原版文本模型同一套拆分器，保证光标行号与行边界一致
@@ -301,7 +302,7 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (!visible || !editable || button != 0 || !bounds.contains(mouseX, mouseY)) {
+        if (!canFocus() || button != 0 || !bounds.contains(mouseX, mouseY)) {
             return false;
         }
         this.pressed = true;
@@ -322,7 +323,7 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        if (!pressed || !editable) {
+        if (!pressed || !canFocus()) {
             return false;
         }
         textField.setSelecting(true);
@@ -346,11 +347,11 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!visible || !editable || !focused) {
+        if (!visible || !focused || (!editable && !selectableWhenReadOnly)) {
             return false;
         }
         UiHistoryShortcut shortcut = UiHistoryShortcut.fromKey(keyCode, modifiers);
-        if (shortcut != null) {
+        if (shortcut != null && editable) {
             restore(shortcut == UiHistoryShortcut.UNDO ? textHistory.undo() : textHistory.redo());
             return true;
         }
@@ -361,6 +362,7 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
             }
             return false;
         }
+        if (!editable && !isReadOnlyNavigation(keyCode, modifiers)) return false;
         UiTextHistory.Snapshot before = snapshot();
         boolean handled = textField.keyPressed(keyCode);
         textHistory.record(before, snapshot());
@@ -386,7 +388,18 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
 
     @Override
     public boolean canFocus() {
-        return visible && editable;
+        return visible && (editable || selectableWhenReadOnly);
+    }
+
+    private static boolean isReadOnlyNavigation(int keyCode, int modifiers) {
+        if ((modifiers & GLFW.GLFW_MOD_CONTROL) != 0
+                && (modifiers & (GLFW.GLFW_MOD_ALT | GLFW.GLFW_MOD_SUPER)) == 0
+                && (keyCode == GLFW.GLFW_KEY_A || keyCode == GLFW.GLFW_KEY_C)) return true;
+        return switch (keyCode) {
+            case GLFW.GLFW_KEY_LEFT, GLFW.GLFW_KEY_RIGHT, GLFW.GLFW_KEY_UP, GLFW.GLFW_KEY_DOWN,
+                    GLFW.GLFW_KEY_HOME, GLFW.GLFW_KEY_END, GLFW.GLFW_KEY_PAGE_UP, GLFW.GLFW_KEY_PAGE_DOWN -> true;
+            default -> false;
+        };
     }
 
     @Override

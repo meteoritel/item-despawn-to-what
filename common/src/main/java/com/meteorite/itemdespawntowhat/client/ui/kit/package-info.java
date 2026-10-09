@@ -15,6 +15,10 @@
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiControlGroup}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiLinearLayout}</li>
+ *   <li>树编辑：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeEditor}（节点操作、绑定与视图事件）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreePath}（节点路径）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeCodec}（宿主编解码注入）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeMoveInteraction}（捕获、移动预览、释放提交与取消）</li>
  *   <li>输入与捕获：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiInputTarget}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiInputRouter}（路由顺序：顶层 modal 作用域 →
@@ -34,9 +38,6 @@
  *   <li>文本局部历史：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTextHistory}（文本、光标与选择快照）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut}（事件修饰键识别撤销与重做）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryDispatcher}（当前作用域优先与宿主历史派发）</li>
- *   <li>不可变树：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreePath}、
- *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeEditor}（绑定、容量、移动候选与视图状态）、
- *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeMoveInteraction}（捕获、预览、释放提交与取消）</li>
  *   <li>焦点：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager}</li>
  *   <li>导航：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiNavigationHistory}（泛型快照、有界历史与有效性过滤）</li>

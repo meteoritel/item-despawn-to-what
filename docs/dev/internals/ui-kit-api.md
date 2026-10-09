@@ -440,3 +440,11 @@ void moveCursorToStart();      // 回填后调用：光标与垂直滚动都回�
 `UiTreeMoveInteraction<N>(editor, ended)` 提供真实输入生命周期：`begin(source)` 在 `beforeEdit` 后捕获基准，`preview(target, position)` 缓存当前落点候选，`clearPreview()` 清空落点，`isActive()`/`preview()` 查询状态，`end(reason)` 统一结束。仅 `UiInputCapture.EndReason.RELEASE` 提交最近展示的候选，其余原因取消；结束回调收到一次 Outcome。宿主须把按下/拖动/释放路由给捕获的同一个控件，并在失焦、隐藏、禁用、卸载和历史回填时结束交互。
 
 条件树控件接入四像素拖动阈值，行上四分之一为 BEFORE，中间为 INSIDE，下四分之一为 AFTER；空分组/NOT 的添加占位映射到父节点内部。原树在拖动中保留，显示节点浮影、落点线及具体拒绝原因；滚轮可滚动选择屏外落点。释放使用同一落点投影并提交候选，Esc 仅取消手势，规则历史快捷键先取消再交给宿主。`UiConditionTreeEditor.isDragging()` 和 `endInteractions(reason)` 供页面暂停参数重建并取消捕获；JSON 视图切换、历史回填和卸载均取消手势。移动 NOT 唯一子项时保留空 NOT，未知叶节点与其原文按原节点移动。
+
+### 树编解码注入与只读源码
+
+`UiTreeCodec<N,S>` 由宿主实现：`decode(S)` 返回 `DecodeResult<N>(root,error)`，成功且 root 为 null 表示空树，error 非空表示无法解析，宿主不得将其当空树覆盖。`encode(N)` 返回宿主外部表示，允许用 null 表示省略。Kit 不要求 JSON，也不依赖 Gson。
+
+`UiTreeEditor.decode(codec, source)` 调用注入解码，返回结果由宿主回填，不提交操作事件；`encode(codec)` 编码当前绑定根。实际条件页注入 `ConditionTreeJsonCodec`，读取条件草稿、结构写回及源码展示均使用该能力。未知叶由宿主保留完整 JSON；未修改的已接受根保留原有字段。
+
+宿主 `ConditionTreeOverlay` 默认显示树，顶部切换到当前表达式的缩进 JSON；无根时保持字段省略。`UiTextArea.setSelectableWhenReadOnly(true)` 配合 `setEditable(false)` 允许选中、滚动、Ctrl+A/C 和复制按钮；字符、删除、剪切与粘贴不修改文本。只读文本不消费局部撤销，Ctrl+Z 交给当前规则历史。切换视图完成合法字段、保留未完成输入，不产生配置历史；源码展示已接受值并提示未完成输入。

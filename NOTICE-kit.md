@@ -161,3 +161,5 @@
 本项目新增 `UiTreeMoveInteraction`，并为 `UiTreeEditor` 增加 BEFORE/INSIDE/AFTER 候选移动、完整旧→新节点路径映射与 MOVE 操作事件。候选经过父容量及宿主校验，预览不写绑定；正常释放提交一次，其他捕获结束原因取消。条件树页面已实际接入，参数路径迁移与草稿写入处于同一历史事务，业务 JSON 与条件限制留在宿主。
 
 接口由本项目实现，只依赖通用 Kit、Java、Minecraft Component 与 JetBrains annotations；不复制 Web 编辑器源码，不修改来源仓库。尚未回流上游、未发布独立库，原始23文件来源记录保持有效。
+
+`UiTreeCodec` 与 `UiTreeEditor.decode/encode` 是本项目新增的宿主编解码注入接口，具体条件 JSON 由宿主 `ConditionTreeJsonCodec` 处理。宿主多行文本控件增加可选择复制的只读模式，条件叠加页实际用于源码查看；未引入外部树编辑器代码或运行依赖。
