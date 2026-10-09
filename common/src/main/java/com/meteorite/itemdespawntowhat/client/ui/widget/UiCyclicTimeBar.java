@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -72,6 +73,7 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
     private boolean visible = true;
     private boolean focused;
     private boolean preciseActive;
+    private @Nullable Consumer<UiRangeEnd> preciseEditor;
 
     public UiCyclicTimeBar(Font font, Texts texts, @Nullable Listener listener) {
         this.font = Objects.requireNonNull(font, "font");
@@ -374,9 +376,16 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
     }
 
     // 打开当前端的精确输入（允许任意合法刻）
+    // 复合表单可将精确编辑交给已有字段输入，统一缓冲与错误定位。
+    public void setPreciseEditor(Consumer<UiRangeEnd> editor) { preciseEditor = editor; }
+
     public boolean openPrecise() {
         if (!enabled || !visible) {
             return false;
+        }
+        if (preciseEditor != null) {
+            preciseEditor.accept(core.selectedEnd());
+            return true;
         }
         preciseActive = true;
         precise.setVisible(true);

@@ -583,6 +583,7 @@
   "gui.itemdespawntowhat.edit.issue.effects_limit": "Too many actions (limit 32)",
   "gui.itemdespawntowhat.edit.issue.invalid_id": "Invalid ID",
   "gui.itemdespawntowhat.edit.issue.invalid_number": "Invalid number",
+  "gui.itemdespawntowhat.edit.issue.number_range": "Enter a number from %s to %s",
   "gui.itemdespawntowhat.edit.unit.seconds": "s",
   "gui.itemdespawntowhat.edit.unit.level": "Lv",
   "gui.itemdespawntowhat.edit.issue.invalid_text": "Invalid text",

@@ -59,7 +59,8 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
 
     private final Font font;
     private final EditSession session;
-    private final String basePath;
+    private String basePath;
+    private long loadedRevision;
     private final List<Row> rows = new ArrayList<>();
     private @Nullable SuggestionProvider suggestionProvider;
     private @Nullable CatalogOpener catalogOpener;
@@ -102,7 +103,6 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
     private int contentHeight;
     private boolean visible = true;
     private boolean enabled = true;
-    private boolean wasEditing;
     private @Nullable String highlightPath;
     private int highlightTicks;
 
@@ -263,8 +263,8 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
     }
 
     private void pick(Row row, boolean tags) {
-        if (!enabled || catalogOpener == null || pendingInputIssue() != null) return;
-        applyToDraft();
+        if (!enabled || catalogOpener == null) return;
+        commitPendingInputs();
         catalogOpener.open(row.field, tags, ids -> {
             if (ids.isEmpty() || !enabled) return;
             JsonElement value;
@@ -287,6 +287,26 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
             return basePath;
         }
         return childPath(field.name());
+    }
+
+    void changeChildStructure(String relative, Runnable change, Supplier<JsonElement> value) {
+        commitPendingInputs();
+        session.apply(EditSession.OP_SET_FIELD, () -> {
+            change.run();
+            session.draft().setAt(childPath(relative), value.get());
+        });
+        loadedRevision = session.revision();
+        for (Row row : rows) if (row.field.name().equals(relative)) acceptInput(row);
+    }
+
+    void clearChildInputs(String relative) { session.clearPendingInputs(childPath(relative)); }
+
+    // 重排嵌套表单时同步输入路径，不把下标变化绑定到另一个子项。
+    void rebase(String nextBase) {
+        retainPendingInputs();
+        session.remapPendingInputs(basePath, nextBase);
+        basePath = nextBase;
+        for (Row row : rows) row.path = pathFor(row.field);
     }
 
     // 拼接子路径
@@ -326,6 +346,7 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
 
     // 控件值变化时的统一回调
     void notifyChanged() {
+        retainPendingInputs();
         if (changeListener != null) {
             changeListener.run();
         }
@@ -333,6 +354,8 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
 
     // 从草稿重新装载全部控件
     public void reload() {
+        retainPendingInputs();
+        loadedRevision = session.revision();
         RuleDraft draft = session.draft();
         for (Row row : rows) {
             JsonElement original = draft.getAt(row.path);
@@ -361,6 +384,10 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
             }
             row.control.load(displayed);
             row.control.rememberLoaded(original);
+            row.loadedInputs = row.control.inputText();
+            row.loaded = true;
+            EditSession.PendingInput pending = session.pendingInput(row.path);
+            if (pending != null) row.control.restoreInputText(pending.text());
             if (row.defaultText != null && row.control instanceof FormControl.TextControl text) text.displayDefault(row.defaultText);
         }
     }
@@ -384,29 +411,72 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
 
     // 用给定对象装载控件（子列表新建子项时使用，不读草稿）
     public void reloadWith(JsonObject object) {
+        retainPendingInputs();
+        loadedRevision = session.revision();
         for (Row row : rows) {
             JsonElement value = object.has(row.field.name()) ? object.get(row.field.name()) : null;
             row.control.load(value);
+            row.loadedInputs = row.control.inputText();
+            row.loaded = true;
+            EditSession.PendingInput pending = session.pendingInput(row.path);
+            if (pending != null) row.control.restoreInputText(pending.text());
         }
+    }
+
+    /** 保存会话内输入，不改变规则 JSON 或配置历史。 */
+    public void retainPendingInputs() {
+        // 历史或结构操作已恢复路径时，旧控件不得再按旧路径覆盖会话输入。
+        if (loadedRevision != session.revision()) return;
+        for (Row row : rows) {
+            row.control.retainChildInputs();
+            if (!row.loaded) continue;
+            List<String> text = row.control.inputText();
+            if (!text.equals(row.loadedInputs)) {
+                session.retainPendingInput(row.path, text, row.control.issues(row.path));
+            } else session.clearPendingInput(row.path);
+        }
+    }
+
+    /** 完成当前字段输入；只写合法值，非法文本留在会话缓冲。 */
+    public boolean commitPendingInputs() {
+        return applyToDraft(true);
     }
 
     // 把控件值写回草稿；逐字段比较，只有真正变化才记入撤销历史
     public boolean applyToDraft() {
+        return applyToDraft(false);
+    }
+
+    private boolean applyToDraft(boolean finish) {
+        if (loadedRevision != session.revision()) reload();
+        retainPendingInputs();
         RuleDraft draft = session.draft();
         boolean written = false;
         for (Row row : rows) {
             if (row.field.type() == EditorFieldType.NOTE || row.path.isEmpty()) {
                 continue;
             }
+            if (finish) row.control.finishInput();
+            if ((!finish && row.control.isEditing()) || (!row.control.inputText().isEmpty()
+                    && row.control.issues(row.path).stream().anyMatch(FormIssue::blocking))) continue;
             JsonElement next = row.control.store();
             JsonElement current = draft.getAt(row.path);
             if (Objects.equals(current, next)) {
+                if (finish || !row.control.isEditing()) acceptInput(row);
                 continue;
             }
             writeField(row, next);
+            acceptInput(row);
             written = true;
         }
+        retainPendingInputs();
         return written;
+    }
+
+    private void acceptInput(Row row) {
+        row.loadedInputs = row.control.inputText();
+        row.control.rememberLoaded(session.draft().getAt(row.path));
+        session.clearPendingInput(row.path);
     }
 
     // 文本提交、卡片移除和目录添加共用写入入口，关联更新不会拆成第二条撤销记录。
@@ -415,6 +485,7 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         JsonElement current = draft.getAt(row.path);
         if (Objects.equals(current, next)) return;
         JsonElement before = current == null ? null : current.deepCopy();
+        session.clearPendingInput(row.path);
         session.apply(opKeyFor(row), () -> {
             if (next == null) draft.removeAt(row.path);
             else draft.setAt(row.path, next.deepCopy());
@@ -429,6 +500,7 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
             }
             if (fieldWritten != null) fieldWritten.accept(row.path, before);
         });
+        loadedRevision = session.revision();
         if (RuleFields.CATALYST_ITEMS.equals(row.field.name())) {
             // 只刷新数量行，保留其它字段尚未提交的输入。
             JsonElement owner = basePath.isEmpty() ? draft.view() : draft.getAt(basePath);
@@ -458,7 +530,8 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
             if (row.field.type() == EditorFieldType.NOTE || row.field.type() == EditorFieldType.RAW_JSON) {
                 continue;
             }
-            JsonElement value = row.control.store();
+            JsonElement value = row.control.issues(row.path).stream().anyMatch(FormIssue::blocking)
+                    ? row.control.originalElement() : row.control.store();
             if (value != null) {
                 object.add(row.field.name(), value.deepCopy());
             }
@@ -551,16 +624,24 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         }
     }
 
-    // 每帧调用：控件失去焦点时统一落盘
+    // 每个字段独立完成编辑，切换到下一字段也提交一次，不按字符记录。
     public void tick() {
-        if (highlightTicks > 0) {
-            highlightTicks--;
+        if (loadedRevision != session.revision()) reload();
+        if (highlightTicks > 0) highlightTicks--;
+        retainPendingInputs();
+        for (Row row : rows) {
+            boolean editing = row.control.isEditing();
+            if (row.wasEditing && !editing) {
+                row.control.finishInput();
+                if (row.control.issues(row.path).stream().noneMatch(FormIssue::blocking)) {
+                    JsonElement next = row.control.store();
+                    writeField(row, next);
+                    acceptInput(row);
+                }
+            }
+            row.wasEditing = editing;
         }
-        boolean editing = isEditing();
-        if (wasEditing && !editing) {
-            applyToDraft();
-        }
-        wasEditing = editing;
+        retainPendingInputs();
     }
 
     public boolean isEditing() {
@@ -582,7 +663,7 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         return layoutRows(Math.max(0, width));
     }
 
-    // 只有用户修改过的非法输入才阻止离开，不阻止未完成草稿切换页签。
+    // 保存前检查当前输入；切换页面允许保留非法文本。
     public @Nullable FormIssue pendingInputIssue() {
         for (Row row : rows) {
             row.control.finishInput();
@@ -741,16 +822,19 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
 
     // 焦点作用域切换（打开模态、切页）：先结束进行中的捕获再换焦点
     public void onFocusScopeChanged() {
+        retainPendingInputs();
         endInteractions(UiInputCapture.EndReason.FOCUS_SCOPE_CHANGED);
     }
 
     // 表单从界面卸载
     public void unmount() {
+        retainPendingInputs();
         endInteractions(UiInputCapture.EndReason.UNMOUNTED);
     }
 
     // 宿主屏幕关闭
     public void onHostClosed() {
+        retainPendingInputs();
         endInteractions(UiInputCapture.EndReason.HOST_CLOSED);
     }
 
@@ -766,6 +850,7 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         if (!visible) {
             return;
         }
+        tick();
         syncBounds();
         graphics.enableScissor(viewportX, viewportY, viewportX + viewportWidth, viewportY + viewportHeight);
         try {
@@ -789,6 +874,12 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
                     continue;
                 }
                 row.control.render(graphics, renderFont, mouseX, mouseY);
+                if (row.control.issues(row.path).stream().anyMatch(FormIssue::blocking)) {
+                    int left = viewportX + row.controlRelX;
+                    int top = screenY + row.controlRelY;
+                    graphics.fill(left, top + row.control.layoutHeight() - 1,
+                            left + row.controlWidth, top + row.control.layoutHeight(), UiPalette.DANGER);
+                }
                 for (var pickerButton : row.pickers) pickerButton.render(graphics, renderFont, mouseX, mouseY);
                 for (com.meteorite.itemdespawntowhat.client.ui.widget.UiButton action : row.actions) action.render(graphics, renderFont, mouseX, mouseY);
             }
@@ -1000,6 +1091,13 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         // 顺序：聚焦控件优先；方向键与 PageUp/PageDown 都不允许同时改值和滚动
         for (Row row : rows) {
             if (row.visible && handlesInput(row.control) && row.control.keyPressed(keyCode, scanCode, modifiers)) {
+                retainPendingInputs();
+                if ((keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER)
+                        && row.field.type() != EditorFieldType.LONG_TEXT
+                        && row.control.issues(row.path).stream().noneMatch(FormIssue::blocking)) {
+                    writeField(row, row.control.store());
+                    acceptInput(row);
+                }
                 return true;
             }
         }
@@ -1031,6 +1129,7 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         }
         for (Row row : rows) {
             if (row.visible && handlesInput(row.control) && row.control.charTyped(codePoint, modifiers)) {
+                retainPendingInputs();
                 return true;
             }
         }
@@ -1051,6 +1150,9 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
 
     // 选中框内的一行
     private static final class Row {
+        private boolean loaded;
+        private boolean wasEditing;
+        private List<String> loadedInputs = List.of();
         private boolean visible = true;
         private boolean tooltipEnabled = true;
         private @Nullable Component defaultText;
@@ -1069,7 +1171,7 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         }
 
         final EditorField field;
-        final String path;
+        String path;
         final FormControl control;
         int contentY;
         int contentHeight;

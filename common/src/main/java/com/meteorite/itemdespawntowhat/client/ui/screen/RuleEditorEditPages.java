@@ -1550,7 +1550,15 @@ public final class RuleEditorEditPages {
         int fieldHeight = descriptor.fields().size() * ROW_H + 8;
         int contentHeight = Math.clamp(Math.max(fieldHeight, panel.contentHeight() + 8), 36, 220);
         modal.contentWidget(panel, contentHeight);
-        modal.onClosed(panel::unmount);
+        modal.onClosed(() -> {
+            JsonElement current = session.draft().getAt(path);
+            if (current instanceof JsonObject object
+                    && leaf.condition().type().toString().equals(stringField(object, RuleFields.TYPE))) {
+                form.commitPendingInputs();
+                host.onDraftChanged();
+            }
+            panel.unmount();
+        });
         modal.onHistoryChanged(() -> {
             JsonElement current = session.draft().getAt(path);
             if (current instanceof JsonObject object
@@ -1572,7 +1580,7 @@ public final class RuleEditorEditPages {
                 panel.focusField(issue.path());
                 return;
             }
-            form.applyToDraft();
+            form.commitPendingInputs();
             owner.reload();
             host.onDraftChanged();
             host.modals().closeTop();
@@ -2647,7 +2655,7 @@ public final class RuleEditorEditPages {
         // 存在条件的类型改写必须先落盘，才能与关联消耗配置的重指向合并为一次可撤销操作
         boolean changed = flushPresenceTypes();
         for (FormView form : liveForms) {
-            if (form.isVisible() && form.applyToDraft()) {
+            if (form.isVisible() && form.commitPendingInputs()) {
                 changed = true;
             }
         }
@@ -2845,7 +2853,7 @@ public final class RuleEditorEditPages {
             if (open.contains(entry.modal())) {
                 return false;
             }
-            entry.panel().endInteractions();
+            entry.panel().unmount();
             return true;
         });
     }
@@ -3097,27 +3105,12 @@ public final class RuleEditorEditPages {
         return list.dragIndexAt(mouseY);
     }
 
-    // 切换或结构修改前先校验文本缓冲，再提交旧表单，避免重建丢失输入。
+    // 切换前提交合法字段，非法文本留在会话，重建表单后仍可继续填写。
     public boolean blockNavigation() {
-        if (!enabled) {
-            return false;
-        }
-        for (FormView form : liveForms) {
-            FormIssue issue = form.pendingInputIssue();
-            if (issue != null) {
-                host.notice(Component.translatable(UI + "notice.issue", issue.label(), issue.message()), UiPalette.DANGER);
-                UiFocusTarget target = form.revealPath(issue.path());
-                if (target != null) {
-                    host.focus().focusOn(target);
-                    ensureVisible(target);
-                }
-                return true;
-            }
-        }
+        if (!enabled) return false;
+        for (FormView form : liveForms) form.retainPendingInputs();
         endInteractions();
-        if (enabled && applyToDraft()) {
-            host.onDraftChanged();
-        }
+        if (applyToDraft()) host.onDraftChanged();
         return false;
     }
 
