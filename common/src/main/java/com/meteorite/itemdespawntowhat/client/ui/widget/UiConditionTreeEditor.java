@@ -96,7 +96,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
     }
 
     // 展平后的可见行
-    private record Row(ConditionNode node, String path, int depth, int parentIndex, boolean incomplete,
+    private record Row(@Nullable ConditionNode node, String path, int depth, int parentIndex, boolean incomplete,
                        boolean overflow, boolean deep, int leafOrdinal) {
     }
 
@@ -127,7 +127,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
     // 表达式变更回调
     private @Nullable Listener listener;
     // 空树提示
-    private Component emptyMessage = Component.translatable("gui.itemdespawntowhat.edit.tree.empty");
+    private Component emptyMessage = Component.translatable("gui.itemdespawntowhat.edit.tree.add_placeholder");
     // 是否持有键盘焦点
     private boolean focused;
     // 是否可见
@@ -330,7 +330,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
             return false;
         }
         Row row = selectedRow();
-        if (row == null) {
+        if (row == null || row.node() == null) {
             return false;
         }
         if (row.node() instanceof ConditionNode.Inverted) {
@@ -347,7 +347,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
             return false;
         }
         Row row = selectedRow();
-        if (row == null) {
+        if (row == null || row.node() == null) {
             return false;
         }
         if (row.parentIndex() < 0) {
@@ -373,7 +373,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
             return false;
         }
         Row row = selectedRow();
-        if (row == null || row.parentIndex() < 0) {
+        if (row == null || row.node() == null || row.parentIndex() < 0) {
             return false;
         }
         Row parent = rows.get(row.parentIndex());
@@ -476,7 +476,11 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
     }
 
     // 递归展平：只有展开的节点才展平其子项
-    private void append(ConditionNode node, String path, int depth, int parentIndex, int[] counters) {
+    private void append(@Nullable ConditionNode node, String path, int depth, int parentIndex, int[] counters) {
+        if (node == null) {
+            rows.add(new Row(null, path, depth, parentIndex, false, false, false, -1));
+            return;
+        }
         counters[0]++;
         int nodeOrdinal = counters[0];
         int leafOrdinal = -1;
@@ -516,10 +520,16 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
             return;
         }
         if (node instanceof ConditionNode.AllOf(var allTerms)) {
+            if (allTerms.isEmpty()) {
+                append(null, path + "." + RuleFields.TERMS + "[0]", depth + 1, index, counters);
+            }
             for (int i = 0; i < allTerms.size(); i++) {
                 append(allTerms.get(i), path + ".terms[" + i + "]", depth + 1, index, counters);
             }
         } else if (node instanceof ConditionNode.AnyOf(var anyTerms)) {
+            if (anyTerms.isEmpty()) {
+                append(null, path + "." + RuleFields.TERMS + "[0]", depth + 1, index, counters);
+            }
             for (int i = 0; i < anyTerms.size(); i++) {
                 append(anyTerms.get(i), path + ".terms[" + i + "]", depth + 1, index, counters);
             }
@@ -598,6 +608,9 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
             if (current.node() instanceof ConditionNode.AllOf || current.node() instanceof ConditionNode.AnyOf) {
                 return current.path();
             }
+            if (current.node() instanceof ConditionNode.Inverted(var term) && term == null) {
+                return current.path();
+            }
             index = current.parentIndex();
         }
         return null;
@@ -631,8 +644,9 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
     }
 
     // 递归变换：命中目标路径时调用 transform，子项返回 null 表示从 terms 中移除
-    private static @Nullable ConditionNode transformByPath(ConditionNode node, String nodePath, String targetPath,
+    private static @Nullable ConditionNode transformByPath(@Nullable ConditionNode node, String nodePath, String targetPath,
                                                            UnaryOperator<ConditionNode> transform) {
+        if (node == null) return null;
         if (nodePath.equals(targetPath)) {
             return transform.apply(node);
         }
@@ -644,7 +658,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
         }
         if (node instanceof ConditionNode.Inverted(var invertedTerm)) {
             ConditionNode term = transformByPath(invertedTerm, nodePath + "." + RuleFields.TERM, targetPath, transform);
-            return term == null ? null : new ConditionNode.Inverted(term);
+            return new ConditionNode.Inverted(term);
         }
         return node;
     }
@@ -664,6 +678,9 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
 
     // 向分组追加子项；不是分组时原样返回
     private static ConditionNode appendTerm(ConditionNode node, ConditionNode child) {
+        if (node instanceof ConditionNode.Inverted(var term) && term == null) {
+            return new ConditionNode.Inverted(child);
+        }
         if (node instanceof ConditionNode.AllOf(var allTerms)) {
             List<ConditionNode> terms = new ArrayList<>(allTerms);
             terms.add(child);
@@ -690,7 +707,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
     }
 
     // 取分组子项，非分组返回 null
-    private static @Nullable List<ConditionNode> termsOf(ConditionNode node) {
+    private static @Nullable List<ConditionNode> termsOf(@Nullable ConditionNode node) {
         if (node instanceof ConditionNode.AllOf(var allTerms)) {
             return allTerms;
         }
@@ -725,10 +742,12 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
             selectPath(ROOT_PATH + ".terms[1]");
             return true;
         }
-        List<ConditionNode> terms = termsOf(findNode(groupPath));
+        ConditionNode target = findNode(groupPath);
+        boolean inverted = target instanceof ConditionNode.Inverted;
+        List<ConditionNode> terms = termsOf(target);
         int size = terms == null ? 0 : terms.size();
         applyAt(groupPath, node -> appendTerm(node, newNode));
-        selectPath(groupPath + ".terms[" + size + "]");
+        selectPath(inverted ? groupPath + "." + RuleFields.TERM : groupPath + ".terms[" + size + "]");
         return true;
     }
 
@@ -771,17 +790,15 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
 
     // 分组是否为空
     private static boolean isIncomplete(ConditionNode node) {
+        if (node instanceof ConditionNode.Inverted(var term)) return term == null;
         List<ConditionNode> terms = termsOf(node);
         return terms != null && terms.isEmpty();
     }
 
     // 是否有子节点
-    private static boolean hasChildren(ConditionNode node) {
-        if (node instanceof ConditionNode.Inverted) {
-            return true;
-        }
-        List<ConditionNode> terms = termsOf(node);
-        return terms != null && !terms.isEmpty();
+    private static boolean hasChildren(@Nullable ConditionNode node) {
+        return node instanceof ConditionNode.Inverted || node instanceof ConditionNode.AllOf
+                || node instanceof ConditionNode.AnyOf;
     }
 
     // ---- 渲染 ----
@@ -854,7 +871,9 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
     private Component rowLabel(Row row) {
         ConditionNode node = row.node();
         Component label;
-        if (node instanceof ConditionNode.AllOf all) {
+        if (node == null) {
+            return Component.translatable("gui.itemdespawntowhat.edit.tree.add_placeholder");
+        } else if (node instanceof ConditionNode.AllOf all) {
             label = Component.translatable("gui.itemdespawntowhat.edit.tree.group_label",
                     Component.translatable("gui.itemdespawntowhat.edit.tree.node.all"), all.terms().size());
         } else if (node instanceof ConditionNode.AnyOf any) {
@@ -957,6 +976,9 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
         }
         int index = indexAt(mouseX, mouseY);
         if (index < 0) {
+            if (rows.isEmpty() && button == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+                return beginAddCondition();
+            }
             return true;
         }
         Row row = rows.get(index);
@@ -968,6 +990,9 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
         lastClickIndex = index;
         lastClickTime = now;
         selectedPath = row.path();
+        if (row.node() == null && button == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+            return beginAddCondition();
+        }
         if (contentX >= markerX && contentX <= markerX + MARKER_WIDTH && hasChildren(row.node())) {
             if (!collapsed.remove(row.path())) {
                 collapsed.add(row.path());
@@ -1066,9 +1091,11 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
             return pickerKeyPressed(keyCode);
         }
         if (rows.isEmpty()) {
-            if (keyCode == GLFW.GLFW_KEY_A || keyCode == GLFW.GLFW_KEY_G) {
+            if (keyCode == GLFW.GLFW_KEY_A || keyCode == GLFW.GLFW_KEY_ENTER
+                    || keyCode == GLFW.GLFW_KEY_KP_ENTER || keyCode == GLFW.GLFW_KEY_SPACE) {
                 return beginAddCondition();
             }
+            if (keyCode == GLFW.GLFW_KEY_G) return addGroup((modifiers & GLFW.GLFW_MOD_SHIFT) == 0);
             return false;
         }
         boolean shift = (modifiers & GLFW.GLFW_MOD_SHIFT) != 0;
@@ -1236,7 +1263,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
             return false;
         }
         Row row = selectedRow();
-        if (row == null) {
+        if (row == null || row.node() == null) {
             return beginAddCondition();
         }
         if (row.node() instanceof ConditionNode.Leaf) {

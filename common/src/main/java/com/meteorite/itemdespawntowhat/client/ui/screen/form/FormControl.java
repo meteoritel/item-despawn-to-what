@@ -1281,7 +1281,7 @@ abstract class FormControl {
                 markEdited();
                 onChanged.run();
             });
-            this.editor.setEmptyMessage(Component.translatable("gui.itemdespawntowhat.edit.tree.unrestricted"));
+            this.editor.setEmptyMessage(Component.translatable("gui.itemdespawntowhat.edit.tree.add_placeholder"));
             if (support != null) {
                 addButton("add", editor::beginAddCondition);
                 addButton("all", () -> editor.addGroup(true));

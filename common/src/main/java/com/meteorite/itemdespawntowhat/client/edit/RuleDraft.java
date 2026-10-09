@@ -8,8 +8,6 @@ import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
-import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
-import com.mojang.serialization.JsonOps;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -201,7 +199,7 @@ public final class RuleDraft {
         return rawConditionsAt("");
     }
 
-    // 解码条件树；无法解码（未知类型、旧格式等）时返回 null，调用方回退只读 JSON 展示
+    // 解码可续编的条件草稿；无法识别的形状或类型返回 null，调用方保留原始 JSON。
     public @Nullable ConditionExpression conditionsOrNull(TypeRegistry<ConditionType<?>> conditionTypes) {
         return conditionsAt("", conditionTypes);
     }
@@ -219,13 +217,13 @@ public final class RuleDraft {
         return raw == null || raw.isJsonNull() ? null : raw;
     }
 
-    // 解码任意位置的条件树；无法解码返回 null，调用方回退只读 JSON 展示
+    // 解码任意位置的条件草稿；空组与缺项 NOT 保留，正式配置解码仍由后端严格执行。
     public @Nullable ConditionExpression conditionsAt(String path, TypeRegistry<ConditionType<?>> conditionTypes) {
         JsonElement raw = rawConditionsAt(path);
         if (raw == null) {
             return ConditionExpression.EMPTY;
         }
-        return RuleCodecs.conditionExpressionCodec(conditionTypes).parse(JsonOps.INSTANCE, raw).result().orElse(null);
+        return decodeConditions(raw, conditionTypes);
     }
 
     // 替换任意位置的条件树；空表达式删除该字段（契约要求不得输出 null）
@@ -250,18 +248,16 @@ public final class RuleDraft {
         if (expression == null || expression.isEmpty()) {
             return null;
         }
-        return RuleCodecs.conditionExpressionCodec(conditionTypes)
-                .encodeStart(JsonOps.INSTANCE, expression).result().orElse(null);
+        return new ConditionDraftCodec(conditionTypes).encode(expression);
     }
 
-    // JSON → 条件树（无法解码返回 null，调用方回退只读展示）
+    // JSON → 可续编条件草稿（无法识别返回 null，调用方保留原文）。
     public static @Nullable ConditionExpression decodeConditions(@Nullable JsonElement raw,
             TypeRegistry<ConditionType<?>> conditionTypes) {
         if (raw == null || raw.isJsonNull()) {
             return ConditionExpression.EMPTY;
         }
-        return RuleCodecs.conditionExpressionCodec(conditionTypes)
-                .parse(JsonOps.INSTANCE, raw).result().orElse(null);
+        return new ConditionDraftCodec(conditionTypes).decode(raw);
     }
 
     // 规则级 conditions 视作根路径

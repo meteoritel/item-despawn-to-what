@@ -19,6 +19,12 @@
 - 初始页：新建**空白**规则落在输入页（`RuleEditorScreen#createRule` 在 `templateId == null` 时切换页签到 `input`）；从模板新建或打开已有规则落在基本页（`RuleEditorScreen#openEditor` 置 `tab = INFO`，字段 `tab` 的默认值见该类字段声明）。
 - 切页前先提交有效编辑：`RuleEditorScreen#switchTab` 走 `pages.blockNavigation()` 门禁后 `pages.setPage(target)`；提交路径见第 5、7 节。
 
+### 条件树草稿与正式配置
+
+- `RuleDraft` 的条件树读写通过客户端 `ConditionDraftCodec`：空 `all_of` / `any_of` 保留空 `terms`，缺项 `inverted` 保留 `op` 并省略 `term`；重新打开表单仍可继续编辑。叶参数仍交给既有正式类型 Codec，旧形状与未识别数据不被静默迁移。
+- `UiConditionTreeEditor` 在空树和空组合内部显示“＋ 添加条件”；删除 NOT 唯一子项后保留 NOT，并可从内部入口补齐。添加占位不是条件节点，不计入节点数、叶数和深度限额。
+- 无根表达式继续省略 `conditions`，表示无条件限制；空组合和缺项 NOT 是未完成草稿，表单及规则保存前的结构校验均拦截。服务端的正式 `RuleCodecs` 和运行时求值保持既有严格契约。
+
 ## 2. 存在条件：唯一入口在输入页
 
 - 两个开关：催化剂 / 流体，标签 `rule.presence.add_catalyst`（「启用催化剂」）/ `rule.presence.add_fluid`（「启用流体条件」）。催化剂卡片按「启用 → 物品选择与最低触发数量 → 消耗开关 → 每轮消耗数量」排列；物品与流体选择复用目录及卡片控件，卡片内可逐项移除引用。
