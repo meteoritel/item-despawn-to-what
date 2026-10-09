@@ -581,6 +581,7 @@
   "gui.itemdespawntowhat.edit.issue.effects_limit": "动作数量超限（上限 32）",
   "gui.itemdespawntowhat.edit.issue.invalid_id": "ID 不合法",
   "gui.itemdespawntowhat.edit.issue.invalid_number": "数字不合法",
+  "gui.itemdespawntowhat.edit.issue.number_range": "输入 %s 到 %s 之间的数字",
   "gui.itemdespawntowhat.edit.unit.seconds": "秒",
   "gui.itemdespawntowhat.edit.unit.level": "级",
   "gui.itemdespawntowhat.edit.issue.invalid_text": "文本不合法",

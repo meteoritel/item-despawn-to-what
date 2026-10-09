@@ -471,6 +471,21 @@ final class NumberControl extends FormControl {
     }
 
     @Override
+    @Nullable UiFocusTarget revealPath(String path, String basePath) {
+        return path.equals(basePath) ? input : null;
+    }
+
+    @Override
+    void restoreInputText(List<String> text) {
+        if (text.isEmpty()) return;
+        setInputValue(text.getFirst());
+        JsonElement parsed = parseText(input.value());
+        if (parsed != null) slider.core().setValue(parsed.getAsDouble());
+        slider.setError(!input.value().isBlank() && parsed == null);
+        markEdited();
+    }
+
+    @Override
     boolean hasPendingInput() {
         return !input.value().equals(loadedText);
     }

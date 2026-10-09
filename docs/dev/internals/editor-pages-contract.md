@@ -17,7 +17,7 @@
 - 结果页**不重复**消耗参数：过滤链配合 `isInputOwnedConsumptionField`（`consume_source`→`count`/`counts`；`consume_catalyst`→`items`/`count`/`counts`/`radius`；`consume_fluid`→`fluid`，**不过滤** `require_source`——输入页不管理它），并在首个消耗动作参数前插说明行 `effect.consume_params_on_input`；`chance` / `delay_ticks` / `conditions` 仍在结果页编辑。
 - 术语：一个 outcome 一律称「**方案**」（`button.candidate_*` / `notice.candidate_*` / `undo.*_candidate` / `issue.candidate_*` / `rule.combination` 等文案已统一，`effect.consume_params_on_input` 为新增），只有页签名仍是「结果」（`tab.results`）；`candidate.implicit` 与 `structure.convert_hint` 已删除。
 - 初始页：新建**空白**规则落在输入页（`RuleEditorScreen#createRule` 在 `templateId == null` 时切换页签到 `input`）；从模板新建或打开已有规则落在基本页（`RuleEditorScreen#openEditor` 置 `tab = INFO`，字段 `tab` 的默认值见该类字段声明）。
-- 切页前先提交有效编辑：`RuleEditorScreen#switchTab` 走 `pages.blockNavigation()` 门禁后 `pages.setPage(target)`；提交路径见第 5、7 节。
+- 切页前先提交合法字段，非法文本保留在当前会话输入缓冲：`RuleEditorScreen#switchTab` 走 `pages.blockNavigation()` 门禁后 `pages.setPage(target)`；提交路径见第 5、7 节。
 
 ### 条件树草稿与正式配置
 
@@ -88,6 +88,7 @@
 
 - 所有草稿修改必须走 `EditSession.apply(opKey, change)`：记录前深拷贝快照 → 只有真变化（含删除标记与目标级标记）才压栈 → 清空重做栈。撤销/重做是整份草稿快照置换；历史上限 100（`EditSession.HISTORY_LIMIT`）。
 - 因此「勾选/取消存在条件」「逐项移除一个叶」「类型改写 + 重指向」各自是**一条**撤销记录。
+- 输入缓冲独立于已接受的规则 JSON，切页、重载和返回保留未完成文本；非法或缺失必需输入阻止保存，具体生命周期与结构操作路径同步见 [编辑输入状态](editor-input-state.md)。
 - 撤销粒度是**字段级**：`FormView.applyToDraft()` 逐字段比较，每个真实变化的字段单独 `session.apply`。所以叶弹窗里改了多个字段 → 需要多次撤销；**弹窗确认本身不是一条记录**。
 - 空父组自下而上整理（`removeLeafAt`、`isEmptyGroup` 均在 `RuleEditorEditPages`）：`all_of` / `any_of` 看 `terms`、`inverted` 看 `term`；空组连父一起删，但**不改变 `any_of` / `inverted` 的结构语义**。
 - 保存走既有编辑保存协议，见 [edit-save-protocol](../backend/flows/edit-save-protocol.md)。
