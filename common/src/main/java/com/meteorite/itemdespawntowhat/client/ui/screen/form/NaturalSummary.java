@@ -104,7 +104,7 @@ public final class NaturalSummary {
         if (RuleFields.OP_LEAF.equals(op)) {
             JsonObject condition = node.has(RuleFields.CONDITION) && node.get(RuleFields.CONDITION).isJsonObject()
                     ? node.getAsJsonObject(RuleFields.CONDITION) : new JsonObject();
-            return leaf(condition);
+            return conditionLeaf(condition);
         }
         if (RuleFields.OP_INVERTED.equals(op)) {
             JsonObject term = node.has(RuleFields.TERM) && node.get(RuleFields.TERM).isJsonObject()
@@ -131,7 +131,7 @@ public final class NaturalSummary {
     }
 
     // 单个条件叶摘要
-    private static Component leaf(JsonObject condition) {
+    public static Component conditionLeaf(JsonObject condition) {
         ResourceLocation type = typeOf(condition);
         if (type == null) {
             return Component.translatable(PREFIX + "unknown_condition");

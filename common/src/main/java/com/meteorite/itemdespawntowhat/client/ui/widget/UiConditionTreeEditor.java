@@ -15,9 +15,12 @@ import com.meteorite.itemdespawntowhat.core.model.ConditionLimits;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.UnaryOperator;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -113,6 +116,11 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
     private final List<Row> rows = new ArrayList<>();
     // 当前违规项
     private final List<Issue> issues = new ArrayList<>();
+    // 全树节点信息独立于可见行，折叠不会改变计数和违规标记。
+    private final Map<String, Row> allNodes = new HashMap<>();
+    private final Map<String, Component> leafSummaries = new HashMap<>();
+    private @Nullable Function<ConditionNode.Leaf, Component> leafSummary;
+    private @Nullable ConditionExpression inspectedExpression;
     // 选中的节点路径
     private @Nullable String selectedPath;
     // 悬停行下标，-1 表示无悬停
@@ -172,8 +180,14 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
 
     // 结构是否完整（空表达式视为合法）
     public boolean isValid() {
-        return expression.isStructurallyValid();
+        return expression.isStructurallyValid() && issues.isEmpty();
     }
+
+    public int nodeCount() { return expression.nodeCount(); }
+
+    public int leafCount() { return expression.leafCount(); }
+
+    public int depth() { return expression.depth(); }
 
     // 违规项明细（只读）
     public List<Issue> issues() {
@@ -211,6 +225,14 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
     // 设置叶参数编辑回调
     public UiConditionTreeEditor setOnEditLeaf(Consumer<ConditionNode.Leaf> callback) {
         this.onEditLeaf = callback;
+        return this;
+    }
+
+    // 参数摘要由宿主生成，不读取注册表，也不向条件模型写入显示字段。
+    public UiConditionTreeEditor setLeafSummary(Function<ConditionNode.Leaf, Component> formatter) {
+        this.leafSummary = formatter;
+        inspectedExpression = null;
+        rebuild();
         return this;
     }
 
@@ -279,19 +301,20 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
         return rows.size();
     }
 
-    // 选中指定路径的节点（路径不存在时忽略）
+    // 节点或其参数字段路径均可定位；先展开祖先再滚动到节点。
     public void selectPath(@Nullable String path) {
         if (path == null) {
             selectedPath = null;
             return;
         }
-        for (Row row : rows) {
-            if (row.path().equals(path)) {
-                selectedPath = path;
-                ensureVisible(indexOfPath(path));
-                return;
-            }
-        }
+        String nodePath = allNodes.keySet().stream()
+                .filter(candidate -> path.equals(candidate) || path.startsWith(candidate + "."))
+                .max(java.util.Comparator.comparingInt(String::length)).orElse(null);
+        if (nodePath == null) return;
+        collapsed.removeIf(candidate -> nodePath.startsWith(candidate + "."));
+        selectedPath = nodePath;
+        rebuild();
+        ensureVisible(indexOfPath(nodePath));
     }
 
     // ---- 结构操作（工具栏与键盘共用） ----
@@ -465,11 +488,16 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
     // 重新展平可见行并同步滚动范围
     private void rebuild() {
         rows.clear();
-        issues.clear();
         ConditionNode root = expression.root();
+        if (inspectedExpression != expression) {
+            issues.clear();
+            allNodes.clear();
+            leafSummaries.clear();
+            if (root != null) inspect(root, ROOT_PATH, 0, new int[2]);
+            inspectedExpression = expression;
+        }
         if (root != null) {
-            int[] counters = new int[2];
-            append(root, ROOT_PATH, 0, -1, counters);
+            append(root, ROOT_PATH, 0, -1);
         }
         if (selectedPath != null && indexOfPath(selectedPath) < 0) {
             selectedPath = rows.isEmpty() ? null : rows.get(Math.clamp(hoveredIndex, 0, rows.size() - 1)).path();
@@ -482,12 +510,8 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
         scrollView.setScrollbarVisible(rows.size() * rowHeight > viewportHeight);
     }
 
-    // 递归展平：只有展开的节点才展平其子项
-    private void append(@Nullable ConditionNode node, String path, int depth, int parentIndex, int[] counters) {
-        if (node == null) {
-            rows.add(new Row(null, path, depth, parentIndex, false, false, false, -1));
-            return;
-        }
+    // 深度优先扫描完整表达式；占位行不计为真实节点。
+    private void inspect(ConditionNode node, String path, int depth, int[] counters) {
         counters[0]++;
         int nodeOrdinal = counters[0];
         int leafOrdinal = -1;
@@ -501,8 +525,10 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
                 || leafOrdinal > ConditionLimits.MAX_LEAVES;
         // 契约 §5.2：深度超过 DEEP_HINT_DEPTH 只做层级引导提示，不计入违规项
         boolean deep = depth + 1 > DEEP_HINT_DEPTH;
-        int index = rows.size();
-        rows.add(new Row(node, path, depth, parentIndex, incomplete, overflow, deep, leafOrdinal));
+        allNodes.put(path, new Row(node, path, depth, -1, incomplete, overflow, deep, leafOrdinal));
+        if (node instanceof ConditionNode.Leaf leaf && leaf.condition() != null && leafSummary != null) {
+            leafSummaries.put(path, leafSummary.apply(leaf));
+        }
         if (incomplete) {
             issues.add(new Issue(IssueKind.INCOMPLETE_GROUP, path,
                     Component.translatable("gui.itemdespawntowhat.edit.issue.incomplete_group")));
@@ -523,25 +549,47 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
             issues.add(new Issue(IssueKind.TOO_MANY_LEAVES, path, Component.translatable("gui.itemdespawntowhat.edit.issue.too_many_leaves",
                     leafOrdinal, ConditionLimits.MAX_LEAVES)));
         }
-        if (collapsed.contains(path)) {
+        if (node instanceof ConditionNode.AllOf all) {
+            inspectTerms(all.terms(), path, depth, counters);
+        } else if (node instanceof ConditionNode.AnyOf any) {
+            inspectTerms(any.terms(), path, depth, counters);
+        } else if (node instanceof ConditionNode.Inverted inverted && inverted.term() != null) {
+            inspect(inverted.term(), path + "." + RuleFields.TERM, depth + 1, counters);
+        }
+    }
+
+    private void inspectTerms(List<ConditionNode> terms, String path, int depth, int[] counters) {
+        for (int i = 0; i < terms.size(); i++) {
+            inspect(terms.get(i), path + "." + RuleFields.TERMS + "[" + i + "]", depth + 1, counters);
+        }
+    }
+
+    // 只投影展开节点；标记和序号来自全树扫描，不受折叠影响。
+    private void append(@Nullable ConditionNode node, String path, int depth, int parentIndex) {
+        if (node == null) {
+            rows.add(new Row(null, path, depth, parentIndex, false, false, false, -1));
             return;
         }
+        Row info = allNodes.get(path);
+        int index = rows.size();
+        rows.add(new Row(node, path, depth, parentIndex, info.incomplete(), info.overflow(), info.deep(), info.leafOrdinal()));
+        if (collapsed.contains(path)) return;
         if (node instanceof ConditionNode.AllOf(var allTerms)) {
             if (allTerms.isEmpty()) {
-                append(null, path + "." + RuleFields.TERMS + "[0]", depth + 1, index, counters);
+                append(null, path + "." + RuleFields.TERMS + "[0]", depth + 1, index);
             }
             for (int i = 0; i < allTerms.size(); i++) {
-                append(allTerms.get(i), path + ".terms[" + i + "]", depth + 1, index, counters);
+                append(allTerms.get(i), path + "." + RuleFields.TERMS + "[" + i + "]", depth + 1, index);
             }
         } else if (node instanceof ConditionNode.AnyOf(var anyTerms)) {
             if (anyTerms.isEmpty()) {
-                append(null, path + "." + RuleFields.TERMS + "[0]", depth + 1, index, counters);
+                append(null, path + "." + RuleFields.TERMS + "[0]", depth + 1, index);
             }
             for (int i = 0; i < anyTerms.size(); i++) {
-                append(anyTerms.get(i), path + ".terms[" + i + "]", depth + 1, index, counters);
+                append(anyTerms.get(i), path + "." + RuleFields.TERMS + "[" + i + "]", depth + 1, index);
             }
         } else if (node instanceof ConditionNode.Inverted(var invertedTerm)) {
-            append(invertedTerm, path + "." + RuleFields.TERM, depth + 1, index, counters);
+            append(invertedTerm, path + "." + RuleFields.TERM, depth + 1, index);
         }
     }
 
@@ -868,10 +916,18 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
             graphics.drawString(renderFont, mark, markerX + 2, rowY + UiTheme.TEXT_OFFSET, UiPalette.TEXT_PRIMARY, false);
         }
         int textX = markerX + MARKER_WIDTH;
-        int color = row.overflow() ? UiPalette.DANGER : UiPalette.TEXT_PRIMARY;
+        int color = issues.stream().anyMatch(issue -> issue.path().equals(row.path())
+                || issue.path().startsWith(row.path() + ".")) ? UiPalette.DANGER : UiPalette.TEXT_PRIMARY;
         String label = TextScroll.trimToWidth(renderFont, rowLabel(row).getString(),
                 Math.max(0, rowWidth - textX - 2));
         graphics.drawString(renderFont, label, textX, rowY + UiTheme.TEXT_OFFSET, color, false);
+    }
+
+    // 完整行文案供宿主提示，窄树中截断的参数仍可读取。
+    public @Nullable Component tooltipAt(double mouseX, double mouseY) {
+        if (pickerOpen || !scrollView.canHoverContent(mouseX, mouseY)) return null;
+        int index = indexAt(mouseX, mouseY);
+        return index < 0 ? null : rowLabel(rows.get(index));
     }
 
     // 行文本：组合节点显示 ALL/ANY/NOT 与子项数，叶节点显示条件类型标签，并附不完整/超限标记
@@ -891,7 +947,7 @@ public final class UiConditionTreeEditor implements UiWidget, UiFocusTarget {
         } else if (node instanceof ConditionNode.Leaf(var leafCondition)) {
             label = leafCondition == null
                     ? Component.translatable("gui.itemdespawntowhat.edit.tree.leaf_missing")
-                    : typeLabel(leafCondition.type());
+                    : leafSummaries.getOrDefault(row.path(), typeLabel(leafCondition.type()));
             if (leafCondition instanceof OpaqueCondition) {
                 label = label.copy().append(" ").append(Component.translatable(
                         "gui.itemdespawntowhat.edit.tree.parameters_readonly"));
