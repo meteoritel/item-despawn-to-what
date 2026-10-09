@@ -1,6 +1,9 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
 import com.google.gson.JsonElement;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeJsonCodec;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeNodes;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.OpaqueCondition;
@@ -8,6 +11,7 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeCodec;
 import com.meteorite.itemdespawntowhat.client.ui.screen.RuleEditorP4Panels;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
@@ -15,6 +19,7 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionTreeEditor;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextArea;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
@@ -22,6 +27,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import net.minecraft.client.gui.Font;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
@@ -36,6 +42,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     private static final int STATUS_HEIGHT = 22;
     private static final int TOOLTIP_MIN_WIDTH = 80;
     private static final int TOOLTIP_MAX_WIDTH = 250;
+    private static final Gson SOURCE_JSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
 
     public record Parameters(FormView form, RuleEditorP4Panels.LeafPanel panel, Component title) {}
     @FunctionalInterface
@@ -50,7 +57,12 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     private final ParameterFactory parameterFactory;
     private final Runnable changed;
     private final UiConditionTreeEditor editor;
+    private final UiTreeCodec<ConditionNode, JsonElement> codec;
+    private final UiTextArea source;
     private final List<UiButton> buttons = new ArrayList<>();
+    private final List<UiButton> treeButtons = new ArrayList<>();
+    private final UiButton viewButton;
+    private final UiButton copyButton;
     private final UiButton parametersButton;
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     private UiRect parameterRect = bounds;
@@ -59,7 +71,8 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     private @Nullable String parameterType;
     private @Nullable String selectedPath;
     private @Nullable UiWidget pressed;
-    private int toolbarHeight;
+    private @Nullable Component decodeError;
+    private boolean sourceView;
     private boolean wide;
     private boolean showParameters;
     private boolean focused;
@@ -74,6 +87,11 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         this.support = support;
         this.parameterFactory = parameterFactory;
         this.changed = changed;
+        codec = new ConditionTreeJsonCodec(support.registry());
+        source = new UiTextArea(font, Component.translatable(UI + "source_empty"));
+        source.setEditable(false);
+        source.setSelectableWhenReadOnly(true);
+        source.setAccessibleName(Component.translatable(UI + "source_title"));
         editor = new UiConditionTreeEditor(font).setTypeOptions(support.typeOptions()).setLeafFactory(support.leafFactory());
         editor.setLeafSummary(leaf -> {
             JsonElement raw = RuleDraft.encodeConditions(new ConditionExpression(leaf), support.registry());
@@ -94,14 +112,17 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         });
         editor.setListener(expression -> {
             var change = editor.lastChange();
-            JsonElement next = RuleDraft.encodeConditions(expression, support.registry());
+            JsonElement next = editor.tree().encode(codec);
             session.apply(editor.undoOpKey(), () -> {
                 if (change != null) ConditionTreeNodes.remapInputs(session, change.before(), change.after(), scope);
                 if (next == null) session.draft().removeAt(scope); else session.draft().setAt(scope, next);
             });
             revision = session.revision();
+            refreshSource();
             changed.run();
         });
+        viewButton = addButton("source", this::toggleSource);
+        copyButton = addButton("copy_json", () -> Minecraft.getInstance().keyboardHandler.setClipboard(source.value()));
         addButton("add", editor::beginAddCondition);
         addButton("all", () -> editor.addGroup(true));
         addButton("any", () -> editor.addGroup(false));
@@ -117,6 +138,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
             if (!showParameters && parameters != null) parameters.panel().setFocused(false);
             layout();
         });
+        treeButtons.addAll(buttons.subList(2, buttons.size()));
         editor.tree().setOnViewChanged(view -> viewChanged = true);
         reloadExpression();
     }
@@ -136,9 +158,33 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     }
 
     private void reloadExpression() {
-        ConditionExpression expression = RuleDraft.decodeConditions(session.draft().getAt(scope), support.registry());
-        if (expression != null) editor.setExpression(expression);
+        var result = editor.tree().decode(codec, session.draft().getAt(scope));
+        decodeError = result.error();
+        editor.setEnabled(result.succeeded());
+        if (result.succeeded()) editor.setExpression(new ConditionExpression(result.root()));
+        refreshSource();
         revision = session.revision();
+    }
+
+    private void refreshSource() {
+        JsonElement raw = decodeError == null ? editor.tree().encode(codec) : session.draft().getAt(scope);
+        String text = raw == null || raw.isJsonNull() ? "" : SOURCE_JSON.toJson(raw);
+        if (!text.equals(source.value())) {
+            source.setValue(text);
+            source.moveCursorToStart();
+        }
+        copyButton.setEnabled(!text.isEmpty());
+    }
+
+    private void toggleSource() {
+        finishParameters();
+        if (parameters != null) parameters.panel().setFocused(false);
+        editor.closePicker();
+        editor.setFocused(false);
+        sourceView = !sourceView;
+        reloadExpression();
+        source.setFocused(sourceView);
+        layout();
     }
 
     private void finishParameters() {
@@ -164,7 +210,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         unmountParameters();
         selectedPath = next;
         ConditionNode node = editor.selectedNode();
-        if (node instanceof ConditionNode.Leaf leaf && leaf.condition() != null && !(leaf.condition() instanceof OpaqueCondition)) {
+        if (next != null && node instanceof ConditionNode.Leaf leaf && leaf.condition() != null && !(leaf.condition() instanceof OpaqueCondition)) {
             parameterPath = scope + next.substring(UiConditionTreeEditor.ROOT_PATH.length()) + "." + RuleFields.CONDITION;
             parameterType = leaf.condition().type().toString();
             parameters = parameterFactory.create(parameterPath, leaf);
@@ -192,9 +238,12 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         pressed = null;
         editor.closePicker();
         editor.setFocused(false);
+        source.setFocused(false);
     }
 
     public void reveal(String fieldPath) {
+        sourceView = false;
+        source.setFocused(false);
         editor.selectPath(UiConditionTreeEditor.ROOT_PATH + fieldPath.substring(scope.length()));
         syncSelection();
         if (parameters != null) {
@@ -212,7 +261,11 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
 
     private void layout() {
         wide = bounds.width() >= MIN_PANE_WIDTH * 2 + GAP;
-        parametersButton.setVisible(!wide);
+        for (UiButton button : treeButtons) button.setVisible(!sourceView);
+        parametersButton.setVisible(!sourceView && !wide);
+        viewButton.setLabel(Component.translatable(UI + "button." + (sourceView ? "tree" : "source")));
+        copyButton.setVisible(sourceView);
+        source.setVisible(sourceView);
         int x = bounds.x();
         int y = bounds.y();
         for (UiButton button : buttons) {
@@ -222,12 +275,13 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
             button.setBounds(x, y, width, TOOL_HEIGHT);
             x += width + GAP;
         }
-        toolbarHeight = y - bounds.y() + TOOL_HEIGHT + GAP;
+        int toolbarHeight = y - bounds.y() + TOOL_HEIGHT + GAP;
         int bodyY = bounds.y() + toolbarHeight;
         int height = Math.max(0, bounds.height() - toolbarHeight - STATUS_HEIGHT);
         int treeWidth = wide ? (bounds.width() - GAP) / 2 : bounds.width();
-        editor.setVisible(wide || !showParameters);
+        editor.setVisible(!sourceView && (wide || !showParameters));
         editor.setBounds(bounds.x(), bodyY, treeWidth, height);
+        source.setBounds(bounds.x(), bodyY, bounds.width(), height);
         parameterRect = new UiRect(wide ? bounds.x() + treeWidth + GAP : bounds.x(), bodyY,
                 wide ? bounds.width() - treeWidth - GAP : bounds.width(), height);
         if (parameters != null) parameters.panel().setBounds(parameterRect.x(), parameterRect.y() + TOOL_HEIGHT,
@@ -235,13 +289,14 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     }
 
     @Override public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
-        if (parameters != null) parameters.form().tick();
+        if (!sourceView && parameters != null) parameters.form().tick();
         if (revision != session.revision()) reloadExpression();
-        if (viewChanged || !Objects.equals(selectedPath, editor.selectedPath())
-                || parameters == null && editor.selectedNode() instanceof ConditionNode.Leaf) syncSelection();
+        if (!sourceView && (viewChanged || !Objects.equals(selectedPath, editor.selectedPath())
+                || parameters == null && editor.selectedNode() instanceof ConditionNode.Leaf)) syncSelection();
         for (UiButton button : buttons) if (button.isVisible()) button.render(graphics, renderFont, mouseX, mouseY);
         if (editor.isVisible()) editor.render(graphics, renderFont, mouseX, mouseY);
-        if (wide || showParameters) {
+        if (sourceView) source.render(graphics, renderFont, mouseX, mouseY);
+        if (!sourceView && (wide || showParameters)) {
             UiTheme.drawInset(graphics, parameterRect);
             Component title = parameters == null ? Component.translatable(UI + (editor.selectedNode() instanceof ConditionNode.Leaf leaf
                     && leaf.condition() instanceof OpaqueCondition ? "parameters_readonly" : "select_node")) : parameters.title();
@@ -249,15 +304,17 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
                     parameterRect.x() + 2, parameterRect.y() + 3, UiPalette.TEXT_PRIMARY, false);
             if (parameters != null) parameters.panel().render(graphics, renderFont, mouseX, mouseY);
         }
-        Component status = editor.operationError();
+        Component status = decodeError == null ? editor.operationError() : decodeError;
+        if (sourceView && session.hasPendingInput(scope)) status = Component.translatable(UI + "pending_source");
         if (status == null && !editor.issues().isEmpty()) status = Component.translatable(UI + "issues",
                 editor.issues().size(), editor.issues().getFirst().label());
         if (status == null && session.hasPendingInput(scope)) status = Component.translatable(UI + "pending_input");
+        if (status == null && sourceView && source.value().isEmpty()) status = Component.translatable(UI + "source_empty");
         if (status == null) status = Component.translatable(UI + "counts", editor.nodeCount(), editor.leafCount(), editor.depth());
         graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont, status.getString(), Math.max(0, bounds.width() - 4)),
                 bounds.x() + 2, bounds.bottom() - STATUS_HEIGHT + 4,
                 editor.isValid() && editor.operationError() == null ? UiPalette.TEXT_SECONDARY : UiPalette.DANGER, false);
-        Component tip = parameters != null && (wide || showParameters) ? parameters.form().tooltipAt(mouseX, mouseY) : null;
+        Component tip = !sourceView && parameters != null && (wide || showParameters) ? parameters.form().tooltipAt(mouseX, mouseY) : null;
         if (tip == null && editor.isVisible()) tip = editor.tooltipAt(mouseX, mouseY);
         if (tip != null) graphics.renderTooltip(renderFont, renderFont.split(tip,
                 Math.max(TOOLTIP_MIN_WIDTH, Math.min(TOOLTIP_MAX_WIDTH, bounds.width()))), mouseX, mouseY);
@@ -266,6 +323,9 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     @Override public boolean mouseClicked(double x, double y, int button) {
         pressed = null;
         if (y >= bounds.bottom() - STATUS_HEIGHT && bounds.contains(x, y) && !editor.issues().isEmpty()) {
+            sourceView = false;
+            source.setFocused(false);
+            layout();
             editor.selectPath(editor.issues().getFirst().path());
             syncSelection();
             return true;
@@ -273,6 +333,11 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         for (UiButton target : buttons) if (target.isVisible() && target.mouseClicked(x, y, button)) {
             if (parameters != null) parameters.panel().setFocused(false);
             pressed = target;
+            return true;
+        }
+        if (sourceView) {
+            if (!source.mouseClicked(x, y, button)) return false;
+            pressed = source;
             return true;
         }
         if (parameters != null && (wide || showParameters) && parameterRect.contains(x, y)) {
@@ -301,10 +366,12 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         return pressed != null && pressed.mouseDragged(x, y, button, dx, dy);
     }
     @Override public boolean mouseScrolled(double x, double y, double dx, double dy) {
+        if (sourceView) return source.mouseScrolled(x, y, dx, dy);
         if (parameters != null && (wide || showParameters) && parameterRect.contains(x, y)) return parameters.panel().mouseScrolled(x, y, dx, dy);
         return editor.isVisible() && editor.mouseScrolled(x, y, dx, dy);
     }
     @Override public boolean keyPressed(int key, int scan, int modifiers) {
+        if (sourceView) return source.keyPressed(key, scan, modifiers);
         if (parameters != null && (wide || showParameters) && parameters.panel().isFocused()
                 && parameters.panel().keyPressed(key, scan, modifiers)) return true;
         if (key == GLFW.GLFW_KEY_TAB) {
@@ -318,11 +385,12 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         return consumed;
     }
     @Override public boolean keyReleased(int key, int scan, int modifiers) {
+        if (sourceView) return source.keyReleased(key, scan, modifiers);
         if (parameters != null && (wide || showParameters) && parameters.panel().isFocused()) return parameters.panel().keyReleased(key, scan, modifiers);
         return editor.isVisible() && editor.keyReleased(key, scan, modifiers);
     }
     @Override public boolean charTyped(char codePoint, int modifiers) {
-        return parameters != null && (wide || showParameters) && parameters.panel().isFocused()
+        return !sourceView && parameters != null && (wide || showParameters) && parameters.panel().isFocused()
                 && parameters.panel().charTyped(codePoint, modifiers);
     }
     @Override public boolean canFocus() { return true; }
@@ -330,6 +398,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     @Override public void setFocused(boolean value) {
         focused = value;
         editor.setFocused(value && editor.isVisible());
+        source.setFocused(value && sourceView);
         if (parameters != null) parameters.panel().setFocused(false);
     }
     @Override public boolean activate() { return false; }

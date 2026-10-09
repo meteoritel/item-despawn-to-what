@@ -957,5 +957,12 @@
   "gui.itemdespawntowhat.edit.cost.auto.one": "Consumes 1 source item per round",
   "gui.itemdespawntowhat.edit.cost.auto.zero": "No source item cost; only other consumption actions run",
   "gui.itemdespawntowhat.edit.quantity.row": "%s · %s",
-  "gui.itemdespawntowhat.edit.rule.catalyst_all_required": "Every catalyst must meet its own threshold"
+  "gui.itemdespawntowhat.edit.rule.catalyst_all_required": "Every catalyst must meet its own threshold",
+  "gui.itemdespawntowhat.edit.tree.button.source": "JSON source",
+  "gui.itemdespawntowhat.edit.tree.button.tree": "Condition tree",
+  "gui.itemdespawntowhat.edit.tree.button.copy_json": "Copy JSON",
+  "gui.itemdespawntowhat.edit.tree.source_empty": "No condition; the conditions field is omitted",
+  "gui.itemdespawntowhat.edit.tree.source_title": "Current condition JSON (read-only)",
+  "gui.itemdespawntowhat.edit.tree.source_invalid": "Cannot parse this condition; inspect the JSON",
+  "gui.itemdespawntowhat.edit.tree.pending_source": "Unfinished input; JSON shows the last accepted values"
 }

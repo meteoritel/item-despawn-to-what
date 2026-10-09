@@ -15,6 +15,9 @@
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiControlGroup}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiLinearLayout}</li>
+ *   <li>树编辑：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeEditor}（节点操作、绑定与视图事件）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreePath}（节点路径）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeCodec}（宿主编解码注入）</li>
  *   <li>输入与捕获：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiInputTarget}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiInputRouter}（路由顺序：顶层 modal 作用域 →

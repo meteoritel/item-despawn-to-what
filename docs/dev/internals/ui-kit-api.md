@@ -429,3 +429,11 @@ void moveCursorToStart();      // 回填后调用：光标与垂直滚动都回�
 `Outcome(changed, error)` 区分已接受、无变化和错误。配置操作仅在实际改变时产生一次 `Change(before, after, Kind)`；Kind 为 CREATE、DELETE、UPDATE。宿主在接受回调内写历史，回填根不调用修改入口。节点与子项列表由宿主适配器保持不可变，不得修改既有节点。
 
 实际接入：`ConditionTreeNodes` 适配现有 ConditionNode；`UiConditionTreeEditor` 的创建、删除、更新、查询、选择和折叠均调用 Kit。空 NOT 由宿主重建为 `Inverted(null)`；NOT 的容量为1，叶容量为0。逐表达式限额校验与本地化提示由宿主注入。`ConditionTreeOverlay` 将配置操作与输入路径迁移放入同一 EditSession 事务；JSON、参数表单、服务端保存均留在宿主。
+
+### 树编解码注入与只读源码
+
+`UiTreeCodec<N,S>` 由宿主实现：`decode(S)` 返回 `DecodeResult<N>(root,error)`，成功且 root 为 null 表示空树，error 非空表示无法解析，宿主不得将其当空树覆盖。`encode(N)` 返回宿主外部表示，允许用 null 表示省略。Kit 不要求 JSON，也不依赖 Gson。
+
+`UiTreeEditor.decode(codec, source)` 调用注入解码，返回结果由宿主回填，不提交操作事件；`encode(codec)` 编码当前绑定根。实际条件页注入 `ConditionTreeJsonCodec`，读取条件草稿、结构写回及源码展示均使用该能力。未知叶由宿主保留完整 JSON；未修改的已接受根保留原有字段。
+
+宿主 `ConditionTreeOverlay` 默认显示树，顶部切换到当前表达式的缩进 JSON；无根时保持字段省略。`UiTextArea.setSelectableWhenReadOnly(true)` 配合 `setEditable(false)` 允许选中、滚动、Ctrl+A/C 和复制按钮；字符、删除、剪切与粘贴不修改文本。只读文本不消费局部撤销，Ctrl+Z 交给当前规则历史。切换视图完成合法字段、保留未完成输入，不产生配置历史；源码展示已接受值并提示未完成输入。
