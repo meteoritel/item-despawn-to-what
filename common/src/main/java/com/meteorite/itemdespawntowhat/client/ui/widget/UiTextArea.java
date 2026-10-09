@@ -48,6 +48,9 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
     private UiRect bounds;
     // 已同步到文本模型的换行宽度
     private int textWidth = -1;
+    private @Nullable String displayedText;
+    private int displayedWidth = -1;
+    private List<int[]> displayedLines = List.of();
     // 可见行数
     private int rows = DEFAULT_ROWS;
     // 长度上限（Unicode 码点）
@@ -274,17 +277,20 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
     // 自行折行：与原版文本模型同一套拆分器，保证光标行号与行边界一致
     private List<int[]> displayLines() {
         String text = textField.value();
+        int width = innerWidth();
+        if (text.equals(displayedText) && width == displayedWidth) return displayedLines;
         List<int[]> lines = new ArrayList<>();
         if (text.isEmpty()) {
             lines.add(new int[]{0, 0});
-            return lines;
+        } else {
+            font.getSplitter().splitLines(text, width, Style.EMPTY, false,
+                    (style, begin, end) -> lines.add(new int[]{begin, end}));
+            if (text.charAt(text.length() - 1) == '\n') lines.add(new int[]{text.length(), text.length()});
         }
-        font.getSplitter().splitLines(text, innerWidth(), Style.EMPTY, false,
-                (style, begin, end) -> lines.add(new int[]{begin, end}));
-        if (text.charAt(text.length() - 1) == '\n') {
-            lines.add(new int[]{text.length(), text.length()});
-        }
-        return lines;
+        displayedText = text;
+        displayedWidth = width;
+        displayedLines = List.copyOf(lines);
+        return displayedLines;
     }
 
     // 内容超出可视高度时在右侧绘制滚动条
