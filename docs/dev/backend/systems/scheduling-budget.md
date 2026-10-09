@@ -2,7 +2,7 @@
 
 > 事实来源：`core/runtime/scheduler/**`（16 个类）、`core/runtime/ConversionRuntime.java`（`onServerTick`）、`core/runtime/ConversionSettlement.java`（效果与返还的分步执行）、`core/config/ServerConfig.java`。
 > 相关模块：[conversion-runtime.md](../modules/conversion-runtime.md)；类清单由 modules 层维护，本文只讲机制。配置值见 [config.md](config.md)。
-> 现行决策：[ADR-0024 共享服务器 tick 预算调度器](../../../adr/0024-shared-server-tick-budget-scheduler.md)（取代 ADR-0015 决策 3 与 ADR-0017 决策 4 的预算模型）。背景（已归档，仅作设计底稿）：[PLAN.md §4.6](../../../archive/backend-round-2/PLAN.md)、[ADR-0002 共享服务器预算](../../../archive/backend-round-2/docs/adr/0002-shared-server-budget.md)。
+> 现行决策：[ADR-0024 共享服务器 tick 预算调度器](../../../adr/0024-shared-server-tick-budget-scheduler.md)（取代 ADR-0015 决策 3 与 ADR-0017 决策 4 的预算模型）。
 
 ## 1. 一句话模型
 

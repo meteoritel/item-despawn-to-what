@@ -56,7 +56,7 @@
 | **标签引用** | 仅在标签数据已绑定（`hasBoundTags`）时 | 未命中 → **WARN**（数据包标签可能后加载，不能据此拒载） | `RefChecks.warnMissingTag` |
 | **动态引用** | 有 `MinecraftServer` 时 | 维度 / 群系 / **已加载**战利品表 | `RuleReferenceValidator.validate` |
 
-`RuleReferenceValidator` 依据当前实际加载内容：维度用 `server.levelKeys()`、群系用 `registryAccess().registryOrThrow(Registries.BIOME)`、战利品表用 `server.reloadableRegistries().lookup().lookup(Registries.LOOT_TABLE)`。它遍历顶层 effects、各候选 `outcomes[i].effects[j]` 以及这两处的效果级条件树（维度/群系叶）。`server == null`（离线装配）时跳过，只能做静态校验。
+`RuleReferenceValidator` 依据当前实际加载内容：维度用 `server.levelKeys()`、群系用 `registryAccess().registryOrThrow(Registries.BIOME)`、战利品表用 `server.reloadableRegistries().lookup().lookup(Registries.LOOT_TABLE)`。它遍历顶层 effects、各候选 `outcomes[i].effects[j]` 以及这两处的效果级条件树（维度/群系叶）。`server == null`（离线装配）时**由装配层在调用点跳过本步**（`RuleLoadingService.loadAndValidate`），只能做静态校验；校验器自身不处理 null。
 
 > 踩坑：标签**不校验存在性**（`hasBoundTags` 为假时完全跳过）——拼错标签不会报错，运行时静默不匹配。
 

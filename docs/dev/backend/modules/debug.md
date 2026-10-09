@@ -1,7 +1,7 @@
 # 功能模块：调试与开发场景（`core/debug`）
 
 > 事实来源：`core/debug/**`（19 个文件）。仅在**加载器 development 环境**启用，发布环境不注册任何 debug 入口。
-> 操作步骤见 [实机测试流水线](../../debug-test-pipeline.md)，场景统一声明与扩展方式见 [统一技术路线](../../debug-scenario-extension.md)。
+> 操作步骤见 [实机测试流水线](../../debug/debug-test-pipeline.md)，场景统一声明与扩展方式见 [统一技术路线](../../debug/debug-scenario-extension.md)。
 
 ## 1. 类清单
 
@@ -77,5 +77,5 @@
 ## 6. 相关
 
 - 端到端链路：[../flows/debug-scenario-flow.md](../flows/debug-scenario-flow.md)
-- 实机验证与性能对比：[../../debug-validation-guide.md](../../debug-validation-guide.md)
+- 实机验证与性能对比：[../../debug/debug-validation-guide.md](../../debug/debug-validation-guide.md)
 - 调度预算：[../systems/scheduling-budget.md](../systems/scheduling-budget.md)

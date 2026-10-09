@@ -48,7 +48,7 @@
 | `SimpleEffectType<P>` | record | `(id, MapCodec<P>, Validator<P>, EffectExecutor<P>, boolean oneShot)`；四参构造缺省按非一次性效果 |
 | `SimpleConditionType<P>` | record | `(id, MapCodec<P>, Validator<P>, ConditionEvaluator<P>, EvaluabilityCheck<P>)`；四参构造缺省 `evaluability` 恒为 `AVAILABLE` |
 
-> 约定：**参数对象 `P` 同时实现 `Effect`/`Condition`**，分发解码后可直接作为规则里的效果/条件叶使用。`Effect` 接口只剩 `type()`/`delayTicks()`/`chance()`/`conditions()`（`conditions()` 为 `@Nullable`，`effectiveConditions()` 空值回落 `ConditionExpression.EMPTY`）；`Condition` 接口只剩 `type()`。
+> 约定：**参数对象 `P` 同时实现 `Effect`/`Condition`**，分发解码后可直接作为规则里的效果/条件叶使用。`Effect` 接口为 `type()`/`delayTicks()`/`chance()`/`conditions()`（`conditions()` 为 `@Nullable`）四项查询方法，外加**必须实现**的 `withConditions(ConditionExpression)`（返回仅替换效果级条件的新实例）与默认实现 `effectiveConditions()`（空值回落 `ConditionExpression.EMPTY`）；`Condition` 接口只剩 `type()`。
 
 ### 2.5 内置实现的组织模式
 

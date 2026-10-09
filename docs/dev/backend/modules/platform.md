@@ -8,7 +8,7 @@
 | 类 | 职责 |
 |---|---|
 | `Services` | `ServiceLoader.load(IPlatformHelper.class).findFirst()` 静态装配；静态常量 `PLATFORM` |
-| `IPlatformHelper` | 两端共用的平台能力契约：`getPlatformName()`、`isModLoaded`、`isDevelopmentEnvironment`、`getConfigDir`、`getEnvironmentName()`、`sendToPlayer(player, payload)`、`getDropState(entity)` / `setDropState(entity, state)`（`getEnvironmentName` 与两个 `DropState` 方法为 default 实现） |
+| `IPlatformHelper` | 两端共用的平台能力契约：`getPlatformName()`、`isModLoaded`、`isDevelopmentEnvironment`、`getConfigDir`、`getEnvironmentName()`、`sendToPlayer(player, payload)`、`getDropState(entity)` / `setDropState(entity, state)`（`getEnvironmentName`、`sendToPlayer` 与两个 `DropState` 方法均为 default 实现：环境名按开发环境派生、发包默认抛不支持、状态默认无状态 / 空操作） |
 
 服务发现文件：`META-INF/services/com.meteorite.itemdespawntowhat.platform.services.IPlatformHelper`（Fabric 内容 `FabricPlatformHelper`，NeoForge 内容 `NeoForgePlatformHelper`）。
 
@@ -111,7 +111,7 @@
 
 ## 7. 模组级配置
 
-`ServerConfig`（`server.json`，含 `overlay_directory`、`new_product_protection_ticks`、`conversion_cooldown_ticks`、寿命兜底刻数等字段）见 [../systems/config.md](../systems/config.md)。引导时两端都用 `DropStateStore.configure(...)` 注入状态持续时长。
+`ServerConfig`（`server.json`，含 `overlay_directory`、`new_product_protection_seconds`、`conversion_cooldown_seconds`、寿命兜底刻数等字段）见 [../systems/config.md](../systems/config.md)。引导时两端都用 `DropStateStore.configure(...)` 注入状态持续时长。
 
 ## 8. 扩展点
 

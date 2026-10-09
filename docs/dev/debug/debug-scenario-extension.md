@@ -18,7 +18,7 @@ flowchart LR
 
 ## 新增普通场景
 
-1. 复制 [run/convert.json](../../common/src/main/resources/idtw-debug/scenarios/run/convert.json) 为 `run/<名称>.json`，修改规则 ID、输入和预期。名称只用小写字母、数字和下划线。
+1. 复制 [run/convert.json](../../../common/src/main/resources/idtw-debug/scenarios/run/convert.json) 为 `run/<名称>.json`，修改规则 ID、输入和预期。名称只用小写字母、数字和下划线。
 2. 将 `run/<名称>` 加入 `manifest.json`。名称、默认参数及帮助条目自动注册，无需修改 Java 列表。
 3. 在 en_us.json、zh_cn.json 增加 `itemdespawntowhat.command.debug.scene.description.run.<名称>`。
 4. 重启开发环境，运行 `/idtw debug examples` 和 `/idtw debug run <名称>`。

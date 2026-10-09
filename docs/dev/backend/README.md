@@ -1,7 +1,7 @@
 # 后端开发者文档地图
 
 > 范围：**Minecraft 1.21.1 / Fabric + NeoForge 的后端**——`common` 的 `core/**` 与两端平台接入层。
-> 不含前端编辑 UI（编辑器已落地，界面契约见 [plan-frontend-rewrite-contract.md](../../plan/plan-frontend-rewrite-contract.md)，扩展点见 [client-editor-spi.md](../../guide/client-editor-spi.md)）。
+> 不含前端编辑 UI（编辑器已落地；界面契约见 [../internals/editor-pages-contract.md](../internals/editor-pages-contract.md) 与 [../internals/editor-card-layout.md](../internals/editor-card-layout.md)，UI kit 扩展点见 [../internals/ui-kit-api.md](../internals/ui-kit-api.md)）。
 > 目的：**知道技术路线、能找到类、知道改哪里**。所有结论都能在仓库中逐个核对。
 
 ## 1. 三层视图：同一个后端，三种问题
@@ -52,7 +52,7 @@
 | [edit-save-protocol.md](flows/edit-save-protocol.md) | 打开编辑器 → 请求快照 → 提交变更集 → 校验 → 写盘 → 重载 |
 | [debug-scenario-flow.md](flows/debug-scenario-flow.md) | `/idtw debug` 命令 → 场景准备 → 观测 → 测量 → 清理 |
 
-相关外部文档：[Debug 实机验证与反馈指南](../debug-validation-guide.md)（在 `docs/dev/`）、[ADR 目录](../../adr/)、[领域词汇表](../../../CONTEXT.md)。
+相关外部文档：[Debug 实机验证与反馈指南](../debug/debug-validation-guide.md)、[ADR 目录](../../adr/)、[领域词汇表](../../../CONTEXT.md)。
 
 ## 3. 按包 → 文档 路由
 

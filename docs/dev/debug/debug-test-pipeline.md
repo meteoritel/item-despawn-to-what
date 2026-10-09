@@ -8,7 +8,7 @@
 
 | 命令 | 自动执行内容 | 默认间隔下的大致耗时 |
 | --- | --- | --- |
-| `/idtw debug pipeline p0` | 只解析检查1001数量拒绝边界，再测20秒空基线 | 约26秒 |
+| `/idtw debug pipeline p0` | 测20秒空基线；`bench normal 1001 10` 的数量拒绝边界是**只解析不执行**的检查，每个阶段启动时都会执行 | 约26秒 |
 | `/idtw debug pipeline p1` | 基础4个功能场景，各12秒 | 约1分15秒 |
 | `/idtw debug pipeline p2` | 其余14个功能场景，各12秒，reload最后 | 约4分15秒 |
 | `/idtw debug pipeline p3` | 空基线，再逐级100/250/500/1000档的4类负载，各20秒，最多17轮 | 约7～8分钟 |
@@ -54,7 +54,7 @@ flowchart LR
 5. 执行 `/idtw debug examples` 核对场景列表。IDEA 控制台过滤 `[IDTW_DEBUG]`，按 run 编号保存每轮 START～END。
 6. 在没有活动场景时运行 `/idtw debug bench normal 1001 10`：命令必须拒绝数量，不能出现该命令对应的 START 或创建实体。随后正常命令的 START 应显示 `source_entity_limit=1000`，且 entities 不超过1000。
 
-1001是边界拒绝测试，不会实际生成1001个实体。不要修改 JSON 绕过数量限制；命令、资源加载和运行前检查共用同一上限。
+1001是边界拒绝测试，不会实际生成1001个实体。不要修改 JSON 绕过数量限制；命令、资源加载和运行前检查共用同一上限。`/idtw debug pipeline` 的每个阶段在启动时也会自动做一次同样的解析检查（只解析、不执行）。
 
 ## P1：基础冒烟
 

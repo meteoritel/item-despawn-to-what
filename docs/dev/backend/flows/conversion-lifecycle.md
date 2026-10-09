@@ -1,7 +1,7 @@
 # 纵向系统：转化生命周期
 
 > 从一个掉落物进入世界，到它被转化为产物或自然消失的端到端流程。
-> 类职责见 [conversion-runtime.md](../modules/conversion-runtime.md)；排期/退避/共享预算见 [scheduling-budget.md](../systems/scheduling-budget.md)；平台触发入口与 Mixin 见 [platform.md](../modules/platform.md)。决策：[ADR-0015](../../../adr/0015-runtime-scheduling-and-tracking.md)、[ADR-0017](../../../adr/0017-backend-cutover-and-budgeted-effects.md)、[round-2 决策 0001](../../../archive/backend-round-2/docs/adr/0001-conversion-commitment.md)。
+> 类职责见 [conversion-runtime.md](../modules/conversion-runtime.md)；排期/退避/共享预算见 [scheduling-budget.md](../systems/scheduling-budget.md)；平台触发入口与 Mixin 见 [platform.md](../modules/platform.md)。决策：[ADR-0015](../../../adr/0015-runtime-scheduling-and-tracking.md)、[ADR-0017](../../../adr/0017-backend-cutover-and-budgeted-effects.md)。
 
 ## 1. 全景
 
@@ -68,7 +68,7 @@
 
 ### 2.6 计划 → 派发 → 交付（`ConversionSettlement`）
 
-1. **计划**：`g = min(held / c, 候选最小完整容量)`；候选按组合模式逐个尝试，容量（统一 `spawn_entity` 各子类的 server.json/nearby_products 开组阈值）不足或催化剂不足的候选跳过，选**一个**候选；全部不可用 → 组数 0、整堆返还；仅含一次性类型的候选 → 对同一源封顶一组；混合可重复产出者仍可多组，世界一次性动作只尝试一次。容量/催化剂搜索受预算分片，未完成则本刻不落决定，下刻重试。
+1. **计划**：`g = min(held / c, 催化剂可用组数上限)`（每组源成本 `c ≤ 0` 时按 1 组计；未声明 `catalyst_cost` 时上限不设限）。计划期只为**第一组**选候选，`groupCount` 记录该组数上界：候选按组合模式逐个尝试，容量为 0 或催化剂不足的候选跳过，全部不可用则整堆返还；仅含一次性类型的候选 → 对同一源封顶一组；混合可重复产出者仍可多组，世界一次性动作只尝试一次。**候选的完整容量不参与组数上界**：派发期逐组复核容量与催化剂，不足时把已开组数截断并把剩余源交还。容量/催化剂搜索受预算分片，未完成则本刻不落决定，下刻重试。
 2. **派发**：逐组进行——先支付催化剂（`payGroup`，不足则截断组数并释放预留）、再扣固定源成本 `held -= c`、`record.groupStarted(c)` 写盘，开组后按定义序派发候选内效果（每个效果的 `delay_ticks` 经调度器顺延）；每刻派发量受 `dispatch_batch_size` 限制。
 3. **效果回执**：执行器经 `EffectResult` / `reportProgress` 回执真实完成量，结算层 `account()` 分 `APPLIED`/`DEFERRED`/`SKIPPED`/`FAILED` 计数，**计划量不冒充成功量**。
 4. **交付**：剩余库存 `held` 作为返还物分批加入世界（`ReturnItemSpawner`，位置搜索"起点附近 → 向上扫描 → 限高以上"分步推进）；交付一份才从待交付量里扣除，全部交付后 `record.complete`。

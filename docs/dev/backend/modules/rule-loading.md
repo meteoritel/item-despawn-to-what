@@ -84,11 +84,13 @@ config 覆盖层     config/<overlay_directory>/rules/**/*.json
 | 场景 | id 取值 |
 |---|---|
 | 含 `id` 字段 | 取该字段（须为合法 `ResourceLocation`） |
-| 单条规则文件省略 `id` | 数据包：`<文件命名空间>:<去 idtw/rules/ 前缀与 .json 的相对路径>`；覆盖层：`<overlay_directory>:<去扩展名的相对路径>` |
+| 单条规则文件省略 `id` | 数据包：`<文件命名空间>:<去 idtw/rules/ 前缀与 .json 的相对路径>`；覆盖层：`<覆盖层命名空间>:<去扩展名的相对路径>` |
 | 多条规则文件某条省略 `id` | **该条拒载**（多条目文件必须显式声明 id） |
 | 同一文件内 id 重复 | 后者拒载（ERROR） |
 
 > id 推导分散在 `DatapackRuleReader.deriveId`、`OverlayRuleReader.deriveId`（读取侧）与 `RuleOverlayWriter.locate`（写入侧）**三处，必须与解析层对齐**——不同步会导致写入/下发落到错误目标。`RuleFileParser` 只消费调用方传入的 `derivedId`，自身不推导。
+>
+> 覆盖层推导所用的命名空间来自 `RuleLoadContext.overlayNamespace()`（平台注入的模组 id），与 `server.json` 的 `overlay_directory` **无关**；两者默认恰好同名（都是 `itemdespawntowhat`），因此改 `overlay_directory` 只改变覆盖层目录位置，不改变推导 id 的命名空间。
 
 ## 5. 读取与解码细节
 

@@ -1,15 +1,15 @@
 # 功能模块：转化运行时（`core/runtime`）
 
-> 事实来源：`core/runtime/`（17 类）+ `core/state/`（3 类）；调度器实现 `core/runtime/scheduler/`（16 类）见 [scheduling-budget.md](../systems/scheduling-budget.md)，本文不复述其类清单。
+> 事实来源：`core/runtime/`（19 类）+ `core/state/`（3 类）；调度器实现 `core/runtime/scheduler/`（16 类）见 [scheduling-budget.md](../systems/scheduling-budget.md)，本文不复述其类清单。
 > 追踪、触发、条件求值、候选选择、完整组结算与返还、效果派发的引擎；**世界操作只在服务端主线程执行**。
-> 决策：[ADR-0015](../../../adr/0015-runtime-scheduling-and-tracking.md)（排期与追踪基线）、[ADR-0017](../../../adr/0017-backend-cutover-and-budgeted-effects.md)（core 唯一执行链路）；完整组结算、固定成本与候选择一的契约见 [round-2 决策 0001](../../../archive/backend-round-2/docs/adr/0001-conversion-commitment.md)（完整底稿 [PLAN.md](../../../archive/backend-round-2/PLAN.md)）。
+> 决策：[ADR-0015](../../../adr/0015-runtime-scheduling-and-tracking.md)（排期与追踪基线）、[ADR-0017](../../../adr/0017-backend-cutover-and-budgeted-effects.md)（core 唯一执行链路）。完整组结算、固定成本与候选择一的契约在 `ConversionSettlement` 与 `CatalystReservations` 的类注释中就地记录。
 
 ## 1. 类清单
 
 | 类 | 职责 | 关键成员 |
 |---|---|---|
 | `ConversionRuntime` | 总控：规则索引 + 维度级追踪 + 触发请求 + 排期/退避 + 结算派发 | `onItemAdded`、`requestEnvironmentalConversion`、`requestConversion`、`onServerTick`、`attempt`、`select`、`performConversion`、`deferNaturalExpiry`、`replaceRules`、`rescan`、`clear`、`shutdown`、`schedulerStats`、`budgetSnapshot` |
-| `ConversionSettlement` | 一次转化的结算任务（计划 → 派发 → 交付），固定成本、完整组、真实账目 | `step`、`plan`、`dispatch`、`deliver`、`abort`、`account`、`groupsFor`、`capacityGroups` |
+| `ConversionSettlement` | 一次转化的结算任务（计划 → 派发 → 交付），固定成本、完整组、真实账目 | `step`、`plan`、`dispatch`、`deliver`、`abort`、`account`、`capacityGroups` |
 | `CatalystAllocation` | 催化剂共享库存分配 | 按逐引用需求求完整轮次；图构建与搜索可按 tick 预算续跑，输出逐轮支付清单；效果式消耗复用同一分配算法 |
 | `CatalystReservations` | 运行期催化剂预留表（按维度 + 任务），预留 → 支付三态，不落盘 | `available`、`tryReserve`、`payGroup`、`releaseOwner`、`clear` |
 | `SettlementLedger` | 主世界 `SavedData` 结算账本（进行中 + 已完成记录，带上限裁剪） | `get`、`put`、`find`、`unsettled`、`pendingDeliveryTotal`、`prune` |
@@ -17,6 +17,7 @@
 | `SettlementRecovery` | 重启 / 维度加载后的待返还交付任务（`REBATE`） | `step`、`onCancelled`、`finish` |
 | `RoundRobinCursors` | 主世界 `SavedData` 轮询游标（规则 id + 维度，持久化） | `get`、`cursor`、`moveTo` |
 | `RuleIndex` | "物品 id → 候选规则"查询结构：直接物品建索引、标签懒展开 | `build`、`candidates`、`ordered` |
+| `CatalystThresholdProjection` | 门槛运行投影：把 `catalyst_present` **留空**的门槛解析为当前消耗配置下的有效值，在 `RuleIndex.build` 内执行 | `project`、`resolveThreshold` |
 | `ExpressionEvaluator` | 条件求值入口（`matches` = `evaluate` == MATCH） | `matches`、`evaluate` |
 | `ExpressionTreeEvaluator` | 条件树递归求值，四态（MATCH / NO_MATCH / UNAVAILABLE / ERROR） | `evaluate`、`evaluateNode` |
 | `RuntimeConditionContext` | `ConditionContext` 的服务端 record 实现（纯参数聚合） | 注入按维度复用的 `RuntimeTagLookup` / `RuntimeClimateSampler` |
@@ -129,4 +130,4 @@ delay           = max(0, dueAge - entity.getAge())
 - 类型与消耗语义：[type-system.md](type-system.md)、[rule-model.md](rule-model.md)
 - 平台触发入口与 Mixin：[platform.md](platform.md)
 - 配置字段：[../systems/config.md](../systems/config.md)
-- 决策：[ADR-0015](../../../adr/0015-runtime-scheduling-and-tracking.md)、[ADR-0017](../../../adr/0017-backend-cutover-and-budgeted-effects.md)、[round-2 决策 0001](../../../archive/backend-round-2/docs/adr/0001-conversion-commitment.md)
+- 决策：[ADR-0015](../../../adr/0015-runtime-scheduling-and-tracking.md)、[ADR-0017](../../../adr/0017-backend-cutover-and-budgeted-effects.md)

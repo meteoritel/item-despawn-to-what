@@ -17,7 +17,7 @@
 ```text
 RuleRuntimeHost.start(server)
   ├─ shutdown()                          # 释放上一轮（单人世界切存档会先后启动多个服务端）
-  ├─ ServerConfig.loadOrCreate(...)      # 读 config/<overlay_directory>/server.json，缺失即写默认
+  ├─ ServerConfig.loadOrCreate(...)      # 读固定的 config/itemdespawntowhat/server.json，缺失即写默认
   ├─ BuiltinTypeRegistries.create()      # 条件→freeze→表达式Codec→效果→freeze
   ├─ new ConversionRuntime(config, registries, lifespanProvider)
   ├─ loadRules(context, "服务端启动")
@@ -52,7 +52,7 @@ RuleRuntimeHost.reload(server, rm)          # 数据包重载 / 命令重载 / �
 | 4 | 逐文件解析 | `RuleFileParser.parse(json, origin, derivedId, issues)`：严格策略、单条才允许 id 推导、控制字段校验 |
 | 5 | 合并 | `RuleMerger.merge`：`TreeMap` 按层优先级 → 层内重排 `normals + controls` → `disabled`/`delete` 后应用 |
 | 6 | 解码 | `RuleLoader.decodeEntry`：剔除控制字段、补 id、`disabled` 注入 `enabled=false`；解码器 `RuntimeException` 记堆栈 |
-| 7 | 校验 | `RuleValidation.validate`（带注册表重载）+ `RuleReferenceValidator.validate`（`server==null` 跳过动态引用；动态引用覆盖顶层 `effects` 与 `outcomes` 内 effects） |
+| 7 | 校验 | `RuleValidation.validate`（带注册表重载）+ `RuleReferenceValidator.validate`（`server==null` 时由装配层在调用点跳过动态引用；动态引用覆盖顶层 `effects` 与 `outcomes` 内 effects） |
 | 8 | 替换 | `ConversionRuntime.replaceRules`：重建 `RuleIndex`（`build` 内先做催化剂门槛投影）、清空 `tracked`、`tags`/`climate` 置 null、按维度 `cancelRealm(RULE_RELOAD)` 取消旧任务 |
 | 9 | 回扫 | `ConversionRuntime.rescan(level)`：先按维度取消旧任务并交付该维度待返还记录，再遍历 `level.getAllEntities()` 中 `ItemEntity` 逐个 `onItemAdded` |
 | 10 | 推进版本 | `reload` 成功路径 `EditSessionManager.bumpVersion()`（`start` 不走此步） |
@@ -61,7 +61,7 @@ RuleRuntimeHost.reload(server, rm)          # 数据包重载 / 命令重载 / �
 
 - **枚举资源/覆盖层目录失败** → `IllegalStateException`/`UncheckedIOException`，`reload` 捕获 `RuntimeException` 后**保留上一版索引**并返回 null，异常不外抛到 `/reload`。
 - **单个坏文件/坏规则** → 拒载该文件/该条，其余继续（见 [issue-validation.md](../systems/issue-validation.md)）。
-- **规则重载不清空已提交效果**，只重建检查/索引/缓存；已提交效果继续完成。
+- **规则重载会取消该维度的全部在队任务（含效果类）**：`replaceRules` 对每个维度调用 `cancelRealm(RULE_RELOAD)`，转换结算任务正是 `EFFECT` 类，因此正在进行的结算被带原因取消并转入中断路径（记录 INTERRUPTED、保留待返还、释放未支付的催化剂预留）。已落盘的结算记录不会重放已开始的组，只在该维度重扫或下次启动时交付待返还部分。
 - **门槛投影随索引重建生效**：`RuleIndex.build` 内把 `catalyst_present` 留空的门槛解析成当前消耗配置下的有效值（见 [catalyst-threshold-projection.md](../systems/catalyst-threshold-projection.md)）；因此改消耗量后重载即改变有效门槛，无需改动已保存声明。
 - **启动期的首次数据包加载**不作为重载处理（那时维度尚未创建），统一交给 `start`。
 - **后加载的维度**由 `levelLoaded` 补一次回扫（`levelLoaded` → `rescan`）；维度卸载走 `levelUnloaded` → `clear`。

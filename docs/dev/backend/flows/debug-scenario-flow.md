@@ -1,7 +1,7 @@
 # 纵向系统：调试场景链路
 
 > 从 `/idtw debug` 命令到场景准备、观测、测量、清理的端到端流程。
-> 类职责见 [debug.md](../modules/debug.md)；操作与性能对比方案见 [Debug 实机验证指南](../../debug-validation-guide.md)。
+> 类职责见 [debug.md](../modules/debug.md)；操作与性能对比方案见 [Debug 实机验证指南](../../debug/debug-validation-guide.md)。
 
 ## 1. 全景
 
@@ -46,4 +46,4 @@
 
 - 模块细节：[../modules/debug.md](../modules/debug.md)
 - 转化链路：[conversion-lifecycle.md](conversion-lifecycle.md)
-- 操作步骤与性能对比：[../../debug-validation-guide.md](../../debug-validation-guide.md)
+- 操作步骤与性能对比：[../../debug/debug-validation-guide.md](../../debug/debug-validation-guide.md)

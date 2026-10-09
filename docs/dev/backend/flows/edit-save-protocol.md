@@ -30,12 +30,14 @@ RequestRuleSnapshotPayload (C2S)
   → RuleSnapshotChunker：≤4 MiB 出 RuleSnapshotPayload，超限按 UTF-8 字节切 RuleSnapshotChunkPayload
 ```
 
-心跳 `HeartbeatRuleEditorPayload` 正常无回执，失效回 `SESSION_EXPIRED`（客户端据此回到未持有状态）。
+心跳 `HeartbeatRuleEditorPayload` 正常无回执；失效时按身份回不同状态码——原持有者回 `SESSION_EXPIRED`，非持有者回 `LOCK_NOT_OWNED`（客户端据此回到未持有状态）。
 
 ## 3. 选择目录（分页）
 
 ```text
-RequestRuleCatalogPayload (C2S) → owns + isOwner + confirmed 校验 → page/pageSize 与类型合法性校验
+RequestRuleCatalogPayload (C2S) → owns + isOwner 校验（失效 → SESSION_EXPIRED / LOCK_NOT_OWNED）
+  → page/pageSize 合法性校验（越界 → INVALID_REQUEST）
+  → confirmed 校验（未确认的 OPENING 会话不接受目录请求）→ 类型合法性校验
   → heartbeat → RuleCatalogService.page(server, type, filter, page, pageSize)
   → RuleCatalogPayload (S2C)：分页结果 + lastPage
 ```
@@ -76,7 +78,7 @@ SaveRuleChangeSetPayload / SaveRuleChangeSetChunkPayload* (C2S)
 
 ## 6. 版本戳推进时机
 
-成功的数据包重载（`RuleRuntimeHost.reload`）与保存（`bumpVersion`）都推进 `sessions.version()`；快照下发前与保存前都先 `synchronizeDiskRevision()`，覆盖层被手工修改时自增。保存后 reload 失败时：仍 `bumpVersion()` 并回 `SAVED_NOT_RELOADED`（`writtenToDisk=true, reloaded=false`），同时**保留上一版索引**（规则已落盘，下次启动/重载生效）。`/idtw config convert` 已随 P8 结论退役（命令与 `RuleConvertService` 已删除），不再推进修订号；旧 v1.2.1 配置不再加载，需用 `/idtw config edit` 手工重建，见 [更新说明](../../../guide/update-notes.md)。
+成功的数据包重载（`RuleRuntimeHost.reload`）与保存（`bumpVersion`）都推进 `sessions.version()`；快照下发前与保存前都先 `synchronizeDiskRevision()`，覆盖层被手工修改时自增。保存后 reload 失败时：仍 `bumpVersion()` 并回 `SAVED_NOT_RELOADED`（`writtenToDisk=true, reloaded=false`），同时**保留上一版索引**（规则已落盘，下次启动/重载生效）。`/idtw config convert` 已随 P8 结论退役（命令与 `RuleConvertService` 已删除），不再推进修订号；旧 v1.2.1 配置不再加载，需用 `/idtw config edit` 手工重建。
 
 ## 7. 相关
 
