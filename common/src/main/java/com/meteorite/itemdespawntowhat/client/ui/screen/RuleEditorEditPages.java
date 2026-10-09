@@ -1550,6 +1550,15 @@ public final class RuleEditorEditPages {
         int fieldHeight = descriptor.fields().size() * ROW_H + 8;
         int contentHeight = Math.clamp(Math.max(fieldHeight, panel.contentHeight() + 8), 36, 220);
         modal.contentWidget(panel, contentHeight);
+        modal.onHistoryChanged(() -> {
+            JsonElement current = session.draft().getAt(path);
+            if (current instanceof JsonObject object
+                    && leaf.condition().type().toString().equals(stringField(object, RuleFields.TYPE))) {
+                panel.reload();
+            } else {
+                host.modals().close(modal);
+            }
+        });
         leafPanels.add(new LeafEntry(modal, panel));
         modal.retainOnConfirm(true);
         modal.confirm(Component.translatable(UI + "button.confirm"), () -> {

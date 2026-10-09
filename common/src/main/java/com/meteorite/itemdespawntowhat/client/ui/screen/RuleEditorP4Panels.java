@@ -71,6 +71,7 @@ public final class RuleEditorP4Panels {
     private static final int DAY_MINUTE_OFFSET = 360;
     private static final int TIME_MIN = 0;
     private static final int TIME_MAX = 23999;
+    private static final int DEFAULT_TIME_RANGE_END = 12000;
 
     private RuleEditorP4Panels() {
     }
@@ -561,27 +562,35 @@ public final class RuleEditorP4Panels {
                                       int screenHeight) {
         List<UiWidget> extras = new ArrayList<>();
         List<UiButton> buttons = new ArrayList<>();
+        List<Runnable> reloadValues = new ArrayList<>();
         RuleDraft draft = session.draft();
         for (EditorField field : fields) {
             if (field.type() == EditorFieldType.CLIMATE_RANGE) {
-                extras.add(climateBar(font, draft, field, basePath, applyChange, onChange));
+                UiRangeBar bar = climateBar(font, draft, field, basePath, applyChange, onChange);
+                extras.add(bar);
+                reloadValues.add(() -> bar.core().setValue(readRange(draft, join(basePath, field.name()))));
             }
         }
         EditorField from = field(fields, "from");
         EditorField to = field(fields, "to");
         if (from != null && to != null && isIntegerLike(from) && isIntegerLike(to)
                 && from.intMin(0) == TIME_MIN && from.intMax(TIME_MAX) == TIME_MAX) {
-            extras.add(timeBar(font, draft, from, to, basePath, applyChange, onChange));
+            UiCyclicTimeBar bar = timeBar(font, draft, from, to, basePath, applyChange, onChange);
+            extras.add(bar);
+            reloadValues.add(() -> bar.setRange(intAt(draft, join(basePath, from.name()), TIME_MIN),
+                    intAt(draft, join(basePath, to.name()), DEFAULT_TIME_RANGE_END)));
         }
         EditorField min = field(fields, "min");
         EditorField max = field(fields, "max");
         if (min != null && max != null && isIntegerLike(min) && isIntegerLike(max)) {
-            extras.add(intRangeBar(font, draft, min, max, basePath, applyChange, onChange));
+            UiRangeBar bar = intRangeBar(font, draft, min, max, basePath, applyChange, onChange);
+            extras.add(bar);
+            reloadValues.add(() -> bar.core().setValue(readRange(draft, join(basePath, min.name()), join(basePath, max.name()))));
         }
         form.setCatalogOpener((field, tags, picked) -> pushModal.accept(catalogModal(font, workspace,
                 tags ? RuleCatalogType.TAG : catalogTypeOf(field), isListField(field),
                 Component.translatable(field.labelKey()), screenWidth, screenHeight, picked, field)));
-        return new LeafPanel(font, form, extras, buttons);
+        return new LeafPanel(font, form, extras, buttons, reloadValues);
     }
 
     private static boolean isIntegerLike(EditorField field) {
@@ -674,7 +683,7 @@ public final class RuleEditorP4Panels {
             });
             onChange.run();
         });
-        bar.setRange(intAt(draft, fromPath, TIME_MIN), intAt(draft, toPath, 12000));
+        bar.setRange(intAt(draft, fromPath, TIME_MIN), intAt(draft, toPath, DEFAULT_TIME_RANGE_END));
         bar.setLabel(Component.translatable(from.labelKey()));
         return bar;
     }
@@ -730,6 +739,7 @@ public final class RuleEditorP4Panels {
         private final FormView form;
         private final List<UiWidget> extras;
         private final List<UiButton> buttons;
+        private final List<Runnable> reloadValues;
         // 动态说明行（门槛留空时的「默认：N」等）：供应者返回 null 表示当前不画出该行
         private final List<Supplier<Component>> notes = new ArrayList<>();
         private final List<UiRect> noteRects = new ArrayList<>();
@@ -740,12 +750,19 @@ public final class RuleEditorP4Panels {
         private boolean enabled = true;
         private int focusIndex;
 
-        LeafPanel(Font font, FormView form, List<UiWidget> extras, List<UiButton> buttons) {
+        LeafPanel(Font font, FormView form, List<UiWidget> extras, List<UiButton> buttons, List<Runnable> reloadValues) {
             this.font = font;
             this.noteLineHeight = font.lineHeight + 1;
             this.form = form;
             this.extras = extras;
             this.buttons = buttons;
+            this.reloadValues = reloadValues;
+        }
+
+        /** 历史恢复后回填已接受的字段与区间值，未完成文本由表单保留。 */
+        public void reload() {
+            form.reload();
+            reloadValues.forEach(Runnable::run);
         }
 
         // 追加一条动态说明行：高度在布局时预留，内容每帧重新求值
