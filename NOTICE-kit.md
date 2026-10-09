@@ -154,3 +154,10 @@
 本项目新增 `UiTreePath` 与 `UiTreeEditor`，为宿主不可变节点提供路径查询、创建、删除、更新、容量约束、绑定操作事件及独立选择/折叠事件。接口不依赖条件模型、Gson、主题或 loader；`ConditionTreeNodes` 与 `ConditionTreeOverlay` 是实际接入的宿主适配和页面，不属于 Kit。
 
 该通用核心由本项目实现，未复制开源 Web 树编辑器源码，未修改来源仓库，也未回流上游。维护副本的原始23文件来源记录保持有效。
+
+
+## 通用树移动与输入捕获
+
+本项目新增 `UiTreeMoveInteraction`，并为 `UiTreeEditor` 增加 BEFORE/INSIDE/AFTER 候选移动、完整旧→新节点路径映射与 MOVE 操作事件。候选经过父容量及宿主校验，预览不写绑定；正常释放提交一次，其他捕获结束原因取消。条件树页面已实际接入，参数路径迁移与草稿写入处于同一历史事务，业务 JSON 与条件限制留在宿主。
+
+接口由本项目实现，只依赖通用 Kit、Java、Minecraft Component 与 JetBrains annotations；不复制 Web 编辑器源码，不修改来源仓库。尚未回流上游、未发布独立库，原始23文件来源记录保持有效。

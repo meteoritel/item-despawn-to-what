@@ -1,5 +1,5 @@
 /***
- * UI kit：Java 声明式客户端 UI 组件集（阶段 E 记录的**公开边界**，尚未拆包发布）。
+ * UI kit：Java 声明式客户端 UI 组件集（当前公开边界，尚未拆包发布）。
  *
  * <p><b>公开入口</b>（第三方宿主可直接依赖，签名变更按兼容策略走变更记录）：</p>
  * <ul>
@@ -34,6 +34,9 @@
  *   <li>文本局部历史：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTextHistory}（文本、光标与选择快照）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut}（事件修饰键识别撤销与重做）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryDispatcher}（当前作用域优先与宿主历史派发）</li>
+ *   <li>不可变树：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreePath}、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeEditor}（绑定、容量、移动候选与视图状态）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeMoveInteraction}（捕获、预览、释放提交与取消）</li>
  *   <li>焦点：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager}</li>
  *   <li>导航：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiNavigationHistory}（泛型快照、有界历史与有效性过滤）</li>

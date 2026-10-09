@@ -426,6 +426,17 @@ void moveCursorToStart();      // 回填后调用：光标与垂直滚动都回�
 | `setCollapsed(path, value)` / `collapsed()` / `expandAll()` | 管理只读可查询的折叠状态，不修改绑定树 |
 | `setOnViewChanged(listener)` | 接收 `ViewChange(selected, collapsed)`，与配置操作事件分开 |
 
-`Outcome(changed, error)` 区分已接受、无变化和错误。配置操作仅在实际改变时产生一次 `Change(before, after, Kind)`；Kind 为 CREATE、DELETE、UPDATE。宿主在接受回调内写历史，回填根不调用修改入口。节点与子项列表由宿主适配器保持不可变，不得修改既有节点。
+`Outcome(changed, error)` 区分已接受、无变化和错误。配置操作仅在实际改变时产生一次 `Change(before, after, Kind, paths)`；Kind 为 CREATE、DELETE、UPDATE、MOVE。三参数构造保留，默认路径映射为空。宿主在接受回调内写历史，回填根不调用修改入口。节点与子项列表由宿主适配器保持不可变，不得修改既有节点。
 
 实际接入：`ConditionTreeNodes` 适配现有 ConditionNode；`UiConditionTreeEditor` 的创建、删除、更新、查询、选择和折叠均调用 Kit。空 NOT 由宿主重建为 `Inverted(null)`；NOT 的容量为1，叶容量为0。逐表达式限额校验与本地化提示由宿主注入。`ConditionTreeOverlay` 将配置操作与输入路径迁移放入同一 EditSession 事务；JSON、参数表单、服务端保存均留在宿主。
+
+
+### 单节点移动与捕获
+
+`UiTreeEditor.DropPosition` 为 BEFORE、INSIDE、AFTER；前后落点插入锚点的父节点，内部落点追加到锚点末尾。`beginMove(source)` 先执行 `beforeEdit`，随后读取更新后的树；`previewMove(before, source, target, position)` 只构造候选，不写绑定或历史。候选按移除后的父容量检查，自身及后代落点、根的同级落点、叶父节点和超容量拒绝，错误文本可由 `setMoveErrors(MoveErrors)` 注入；整个候选仍经过宿主 validator。
+
+`MovePreview<N>` 包含前后根、源路径、锚点、落点方位、移动后的路径、完整旧路径→新路径映射和 Outcome。映射包含所有原节点及不变路径，不依赖值相等或对象身份。`commitMove(preview)` 只接受基准仍相同的候选，合法且有变化时产生一次 MOVE 事件，迁移选择与折叠；错误、取消、无变化不触发绑定。宿主把 `Change.paths` 转成业务字段路径，并与草稿写入放在同一历史事务内；前后字段路径须分别用对应树转换。
+
+`UiTreeMoveInteraction<N>(editor, ended)` 提供真实输入生命周期：`begin(source)` 在 `beforeEdit` 后捕获基准，`preview(target, position)` 缓存当前落点候选，`clearPreview()` 清空落点，`isActive()`/`preview()` 查询状态，`end(reason)` 统一结束。仅 `UiInputCapture.EndReason.RELEASE` 提交最近展示的候选，其余原因取消；结束回调收到一次 Outcome。宿主须把按下/拖动/释放路由给捕获的同一个控件，并在失焦、隐藏、禁用、卸载和历史回填时结束交互。
+
+条件树控件接入四像素拖动阈值，行上四分之一为 BEFORE，中间为 INSIDE，下四分之一为 AFTER；空分组/NOT 的添加占位映射到父节点内部。原树在拖动中保留，显示节点浮影、落点线及具体拒绝原因；滚轮可滚动选择屏外落点。释放使用同一落点投影并提交候选，Esc 仅取消手势，规则历史快捷键先取消再交给宿主。`UiConditionTreeEditor.isDragging()` 和 `endInteractions(reason)` 供页面暂停参数重建并取消捕获；JSON 视图切换、历史回填和卸载均取消手势。移动 NOT 唯一子项时保留空 NOT，未知叶节点与其原文按原节点移动。
