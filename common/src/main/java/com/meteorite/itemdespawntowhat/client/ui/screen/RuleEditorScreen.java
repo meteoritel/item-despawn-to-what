@@ -1961,20 +1961,19 @@ public final class RuleEditorScreen extends Screen {
 
     // 服务端 VALIDATION_FAILED 定位：规则 → 页签 → 候选 → 效果 → 条件 → 字段
     private void locateValidationIssues() {
-        if (pages == null) {
-            return;
-        }
         for (RuleIssue issue : workspace.lastIssues()) {
             if (issue == null || !RuleIssue.SEVERITY_ERROR.equals(issue.severity())) {
-                continue;
-            }
-            if (issue.ruleId() != null && editingId != null && !issue.ruleId().equals(editingId)) {
                 continue;
             }
             String path = issue.fieldPath();
             if (path == null || path.isBlank()) {
                 continue;
             }
+            if (issue.ruleId() != null && (!issue.ruleId().equals(editingId) || mode != Mode.EDIT)) {
+                openEditor(issue.ruleId());
+                if (!issue.ruleId().equals(editingId) || mode != Mode.EDIT) continue;
+            }
+            if (pages == null || mode != Mode.EDIT) continue;
             Component message = issue.messageCode().isBlank()
                     ? Component.literal(issue.fallbackMessage())
                     : Component.translatable(issue.messageCode(), issue.messageArgs().toArray());

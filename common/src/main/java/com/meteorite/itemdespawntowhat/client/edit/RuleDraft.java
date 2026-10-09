@@ -366,16 +366,14 @@ public final class RuleDraft {
         if (from < 0 || from >= array.size() || to < 0 || to >= array.size()) {
             return false;
         }
-        JsonElement element = array.remove(from);
-        if (element == null) {
-            return false;
-        }
-        // Gson 的 JsonArray 没有按索引插入，用 set/add 组合实现「移动到 to」
-        if (to < array.size()) {
-            array.set(to, element);
+        JsonElement element = array.get(from);
+        // to 是移动后的最终下标；逐项平移保留列表长度与所有元素对象。
+        if (from < to) {
+            for (int index = from; index < to; index++) array.set(index, array.get(index + 1));
         } else {
-            array.add(element);
+            for (int index = from; index > to; index--) array.set(index, array.get(index - 1));
         }
+        array.set(to, element);
         return true;
     }
 
