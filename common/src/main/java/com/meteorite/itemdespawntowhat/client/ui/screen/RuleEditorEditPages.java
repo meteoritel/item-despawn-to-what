@@ -10,6 +10,7 @@ import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDescriptors;
 import com.meteorite.itemdespawntowhat.client.edit.ClientTypeRegistries;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionEditorRegistry;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
+import com.meteorite.itemdespawntowhat.client.edit.DraftListInputs;
 import com.meteorite.itemdespawntowhat.client.edit.EditorFactories;
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
@@ -3244,7 +3245,11 @@ public final class RuleEditorEditPages {
             restoreSwitches();
             return false;
         }
-        session.apply(opKey, change);
+        DraftListInputs inputs = DraftListInputs.capture(session.draft().view());
+        session.apply(opKey, () -> {
+            change.run();
+            inputs.remap(session);
+        });
         host.onDraftChanged();
         requestRebuild();
         return true;
