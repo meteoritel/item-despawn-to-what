@@ -1550,6 +1550,7 @@ public final class RuleEditorEditPages {
         int fieldHeight = descriptor.fields().size() * ROW_H + 8;
         int contentHeight = Math.clamp(Math.max(fieldHeight, panel.contentHeight() + 8), 36, 220);
         modal.contentWidget(panel, contentHeight);
+        modal.onClosed(panel::unmount);
         modal.onHistoryChanged(() -> {
             JsonElement current = session.draft().getAt(path);
             if (current instanceof JsonObject object

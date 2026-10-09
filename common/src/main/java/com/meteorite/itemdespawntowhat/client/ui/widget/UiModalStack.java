@@ -108,7 +108,7 @@ public final class UiModalStack implements UiWidget {
         if (modals.isEmpty()) {
             return false;
         }
-        modals.removeLast();
+        modals.removeLast().closed();
         relayout();
         refreshFocus();
         return true;
@@ -117,6 +117,7 @@ public final class UiModalStack implements UiWidget {
     // 关闭指定弹窗
     public void close(UiModal modal) {
         if (modals.remove(modal)) {
+            modal.closed();
             relayout();
             refreshFocus();
         }
@@ -124,7 +125,9 @@ public final class UiModalStack implements UiWidget {
 
     // 清空弹窗
     public void clear() {
+        List<UiModal> closing = List.copyOf(modals);
         modals.clear();
+        closing.reversed().forEach(UiModal::closed);
         focusManager.clear();
     }
 
