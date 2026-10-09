@@ -1630,6 +1630,7 @@ public final class RuleEditorEditPages {
         if (session == null || host.rejectWhenFrozen()) return false;
         owner.commitPendingInputs();
         String scope = owner.draftPath(RuleFields.CONDITIONS);
+        JsonObject owners = conditionOwnerShape(session.draft().view());
         ConditionTreeOverlay overlay = new ConditionTreeOverlay(font, session, scope, pageConditionSupport(owner),
                 (path, leaf) -> createLeafParameters(session, path, leaf), host::onDraftChanged);
         int chromeReserve = UiTheme.HEADER_HEIGHT + UiTheme.PADDING * 3 + UiModal.BUTTON_HEIGHT;
@@ -1641,16 +1642,55 @@ public final class RuleEditorEditPages {
             owner.reload();
             host.onDraftChanged();
         });
-        modal.onHistoryChanged(() -> {
+        modal.onHistoryChanged(shortcut -> {
+            String operation = shortcut == com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut.UNDO
+                    ? session.redoOpKey() : session.undoOpKey();
             String ownerPath = scope.substring(0, Math.max(0, scope.length() - RuleFields.CONDITIONS.length() - 1));
-            if (!ownerPath.isEmpty() && session.draft().getAt(ownerPath) == null) host.modals().close(modal);
-            else overlay.historyChanged();
+            boolean outerStructure = operation != null && switch (operation) {
+                case EditSession.OP_ADD_EFFECT, EditSession.OP_REMOVE_EFFECT, EditSession.OP_MOVE_EFFECT,
+                        EditSession.OP_ADD_CANDIDATE, EditSession.OP_REMOVE_CANDIDATE, EditSession.OP_MOVE_CANDIDATE,
+                        EditSession.OP_EDIT_CANDIDATE, EditSession.OP_CONVERT_STRUCTURE,
+                        EditSession.OP_RESTORE_ORIGINAL, EditSession.OP_CREATE_RULE, EditSession.OP_DELETE_RULE -> true;
+                default -> false;
+            };
+            if (!ownerPath.isEmpty() && (outerStructure || session.draft().getAt(ownerPath) == null
+                    || !owners.equals(conditionOwnerShape(session.draft().view())))) {
+                modal.onClosed(overlay::discardView);
+                host.modals().close(modal);
+            } else overlay.historyChanged();
         });
         modal.cancel(Component.translatable(UI + "button.back"));
         modal.layoutCentered(host.screenWidth(), host.screenHeight());
         host.modals().push(modal);
         if (fieldPath != null) overlay.reveal(fieldPath);
         return true;
+    }
+
+    // 外层索引的归属还会被存在条件联动修改；只比较方案身份与动作类型序列。
+    private static JsonObject conditionOwnerShape(JsonObject rule) {
+        JsonObject shape = new JsonObject();
+        shape.add(RuleFields.EFFECTS, effectTypeSequence(rule.get(RuleFields.EFFECTS)));
+        JsonArray candidates = new JsonArray();
+        if (rule.get(RuleFields.OUTCOMES) instanceof JsonArray outcomes) {
+            for (JsonElement raw : outcomes) {
+                JsonObject candidate = new JsonObject();
+                if (raw instanceof JsonObject object) {
+                    candidate.add(RuleFields.CANDIDATE_ID, object.get(RuleFields.CANDIDATE_ID));
+                    candidate.add(RuleFields.EFFECTS, effectTypeSequence(object.get(RuleFields.EFFECTS)));
+                }
+                candidates.add(candidate);
+            }
+        }
+        shape.add(RuleFields.OUTCOMES, candidates);
+        return shape;
+    }
+
+    private static JsonArray effectTypeSequence(@Nullable JsonElement raw) {
+        JsonArray types = new JsonArray();
+        if (raw instanceof JsonArray effects) for (JsonElement effect : effects) {
+            types.add(effect instanceof JsonObject object ? object.get(RuleFields.TYPE) : null);
+        }
+        return types;
     }
 
     // 找到发起编辑的条件树

@@ -183,6 +183,11 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     /** 返回或被卸载时完成合法字段，保留非法字段并结束捕获。 */
     public void unmount() {
         finishParameters();
+        discardView();
+    }
+
+    // 历史使外层作用域失效时只卸载旧视图，不再提交该路径的控件值。
+    public void discardView() {
         unmountParameters();
         pressed = null;
         editor.closePicker();
