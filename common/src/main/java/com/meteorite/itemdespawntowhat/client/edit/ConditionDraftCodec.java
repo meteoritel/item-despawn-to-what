@@ -14,10 +14,11 @@ import com.mojang.serialization.JsonOps;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 客户端条件草稿编解码：允许空组合与缺少子项的 NOT，叶参数仍通过正式类型 Codec 处理。
+ * 客户端条件草稿编解码：允许空组合与缺少子项的 NOT；已知叶通过正式 Codec，未知叶原样保留。
  * 正式配置的解码与保存规则由服务端保持严格；无根表达式由宿主省略 conditions 字段。
  */
 public final class ConditionDraftCodec {
@@ -25,8 +26,10 @@ public final class ConditionDraftCodec {
     private static final Set<String> GROUP_FIELDS = Set.of(RuleFields.OP, RuleFields.TERMS);
     private static final Set<String> INVERTED_FIELDS = Set.of(RuleFields.OP, RuleFields.TERM);
     private final Codec<ConditionExpression> strictCodec;
+    private final TypeRegistry<ConditionType<?>> conditionTypes;
 
     public ConditionDraftCodec(TypeRegistry<ConditionType<?>> conditionTypes) {
+        this.conditionTypes = conditionTypes;
         strictCodec = RuleCodecs.conditionExpressionCodec(conditionTypes);
     }
 
@@ -54,12 +57,28 @@ public final class ConditionDraftCodec {
             case RuleFields.OP_ALL_OF -> decodeGroup(object, true);
             case RuleFields.OP_ANY_OF -> decodeGroup(object, false);
             case RuleFields.OP_INVERTED -> decodeInverted(object);
-            case RuleFields.OP_LEAF -> {
-                ConditionExpression expression = strictCodec.parse(JsonOps.INSTANCE, object).result().orElse(null);
-                yield expression == null ? null : expression.root();
-            }
+            case RuleFields.OP_LEAF -> decodeLeaf(object);
             default -> null;
         };
+    }
+
+    private @Nullable ConditionNode decodeLeaf(JsonObject object) {
+        if (!(object.get(RuleFields.CONDITION) instanceof JsonObject parameters)) {
+            return null;
+        }
+        JsonElement rawType = parameters.get(RuleFields.TYPE);
+        if (rawType == null || !rawType.isJsonPrimitive() || !rawType.getAsJsonPrimitive().isString()) {
+            return null;
+        }
+        ResourceLocation type = ResourceLocation.tryParse(rawType.getAsString());
+        if (type == null) {
+            return null;
+        }
+        if (conditionTypes.find(type).isEmpty()) {
+            return new ConditionNode.Leaf(new OpaqueCondition(type, object));
+        }
+        ConditionExpression expression = strictCodec.parse(JsonOps.INSTANCE, object).result().orElse(null);
+        return expression == null ? null : expression.root();
     }
 
     private @Nullable ConditionNode decodeGroup(JsonObject object, boolean allOf) {
@@ -89,7 +108,10 @@ public final class ConditionDraftCodec {
     }
 
     private @Nullable JsonElement encodeNode(@Nullable ConditionNode node) {
-        if (node instanceof ConditionNode.Leaf) {
+        if (node instanceof ConditionNode.Leaf(var condition)) {
+            if (condition instanceof OpaqueCondition opaque) {
+                return opaque.rawNode();
+            }
             return strictCodec.encodeStart(JsonOps.INSTANCE, new ConditionExpression(node)).result().orElse(null);
         }
         JsonObject object = new JsonObject();
