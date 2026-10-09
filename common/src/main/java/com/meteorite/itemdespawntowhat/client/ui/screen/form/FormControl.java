@@ -1322,7 +1322,7 @@ abstract class FormControl {
             boolean any = editor.rowCount() > 0;
             for (int i = 0; i < toolbar.size(); i++) {
                 boolean show = i == 0 || any && (i == 8 || i == 5 && editor.selectedNode() != null
-                        || i == 4 && editor.selectedNode() instanceof com.meteorite.itemdespawntowhat.core.model.ConditionNode.Leaf
+                        || i == 4 && editor.canEditSelectedLeaf()
                         || advancedTools && i <= 7);
                 toolbar.get(i).setVisible(show);
             }
@@ -1338,7 +1338,7 @@ abstract class FormControl {
                     cursorY += buttonHeight + 2;
                 }
                 button.setBounds(cursorX, cursorY, buttonWidth, buttonHeight);
-                button.setEnabled(enabled);
+                button.setEnabled(enabled && (button != toolbar.get(4) || editor.canEditSelectedLeaf()));
                 cursorX += buttonWidth + 2;
             }
             return cursorY - y + buttonHeight + 2;

@@ -415,6 +415,7 @@
   "gui.itemdespawntowhat.edit.issue.too_many_leaves": "Too many leaf conditions: %s (limit %s)",
   "gui.itemdespawntowhat.edit.json.truncated": "... (%s characters omitted)",
   "gui.itemdespawntowhat.edit.field.raw_json": "Raw JSON",
+  "gui.itemdespawntowhat.edit.tree.parameters_readonly": "[parameters read-only]",
   "gui.itemdespawntowhat.edit.unknown_condition": "Unknown condition: %s",
   "gui.itemdespawntowhat.edit.unknown_effect": "Unknown action: %s",
   "itemdespawntowhat.edit.issue.decode": "Failed to decode a rule: %s",
