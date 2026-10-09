@@ -1,13 +1,12 @@
 # 功能模块：规则模型与契约（`core/api` + `core/model`）
 
-> 事实来源：`core/api/**`（20 个文件）、`core/model/**`（22 个文件）。
+> 事实来源：`core/api/**`、`core/model/**`。
 > 这是后端最稳定的"契约面"：模型不可变，世界操作不在这里发生。
 
 ## 1. 定位与依赖方向
 
 - `core/api`：定义**全部对外契约**——类型定义契约、执行/求值上下文与回执、解码契约、类型分发工具、问题模型与一批值/常量。它**不依赖** `model`/`registry`/`runtime`，是全项目的依赖底座（被 120+ 文件引用）。
-- `core/model`：`api` 契约的具体落地——规则的数据形态、条件树算法、Codec 组装、语义校验。它依赖 `api`，**不直接依赖** `registry`（只引用 `TypeRegistry` 接口）。
-- 实际依赖例外：语义校验引用 `core/type` 的引用校验助手 `RefChecks`（`RuleValidation`），而 `core/type` 的效果 / 条件实现又依赖 `core/model` 的 `Effect` / `Condition` 接口——两包因此构成**包级循环依赖**。上图的 `model → load` 主干仍成立，但改 `core/type` 的公共契约前需注意该环。
+- `core/model`：`api` 契约的具体落地——规则的数据形态、条件树算法、Codec 组装、语义校验。项目内只依赖 `api`，包括引用校验助手 `RefChecks`；**不直接依赖** `type` 或 `registry`（只引用 `TypeRegistry` 接口）。
 - 加载层（`core/load`）通过 `RuleDecoder` 契约与模型解耦，见 [rule-loading.md](rule-loading.md)。
 
 ```text
@@ -56,6 +55,7 @@ core/api  ←──────────── core/model ──────�
 | `RuleFields` | util | **全部 JSON 字段名常量的唯一来源**：规则级（含 `display_name` / `triggers` / `source_cost` / `catalyst_cost` / `combination` / `outcomes` / `schema_version`）、候选结果内部、催化剂成本内部、源匹配、效果通用、条件树节点（`op` / `terms` / `term` / `condition` 与四个 op 取值）、旧格式 `negated`、覆盖层控制 `disabled`·`delete`。模型、加载与命令输出统一引用，禁止散落字面量。 |
 | `TaggedId` | record | 通用引用：注册表 id 或 `#标签`。`CODEC`、`parse(String)`、`serialized()`、`id()`、`tag()` |
 | `ParamChecks` | util | 内置类型 `validateParams` 的公共助手，统一错误文案与字段路径。`required` / `inRange(int|double)` / `positive` / `notEmpty` / `orderedRange` / `child` / `index` |
+| `RefChecks` | util | 注册表引用存在性校验，供模型、服务与内置类型共用。非标签引用未命中 → ERROR；标签数据已绑定时，标签未命中 → WARN。`check`（单项）/`checkAll`（列表）；规则见 [issue-validation.md](../systems/issue-validation.md)。 |
 
 ## 3. `core/model` 类清单
 

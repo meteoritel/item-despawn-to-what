@@ -8,7 +8,7 @@ import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleConditionType;
 import com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks;
-import com.meteorite.itemdespawntowhat.core.type.RefChecks;
+import com.meteorite.itemdespawntowhat.core.api.RefChecks;
 import com.meteorite.itemdespawntowhat.core.type.condition.eval.SurroundingBlocksEvaluator;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;

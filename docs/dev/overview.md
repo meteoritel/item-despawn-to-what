@@ -16,7 +16,7 @@ ItemDespawnToWhat（mod id `itemdespawntowhat`）是一个 Minecraft 1.21.1 的 
 | 项 | 取值 |
 |---|---|
 | Minecraft | 1.21.1（版本区间 `[1.21.1, 1.22)`） |
-| 加载器 | Fabric（Loader 0.16.9、Fabric API 0.109.0+1.21.1）与 NeoForge（21.1.218） |
+| 加载器 | Fabric（Loader 0.16.9、Fabric API 0.109.0+1.21.1）；NeoForge 构建版本为 21.1.218，元数据声明的依赖区间为 `[21.1.210,)` |
 | 语言与工具链 | Java 21；Gradle 多模块工程 |
 | 工程模块 | `common`（平台无关实现）、`fabric`、`neoforge`（平台接入） |
 | 映射 | Mojang 官方映射（构建期附加 Parchment 参数名） |

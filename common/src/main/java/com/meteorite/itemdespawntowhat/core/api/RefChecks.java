@@ -1,8 +1,5 @@
-package com.meteorite.itemdespawntowhat.core.type;
+package com.meteorite.itemdespawntowhat.core.api;
 
-import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
-import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
-import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
@@ -10,7 +7,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.List;
 
 /**
- * 注册表引用（TaggedId）的存在性校验，供内置效果与条件类型共用。
+ * 注册表引用（TaggedId）的存在性校验，供规则模型、服务与内置类型共用。
  * 语义：
  * - null 表示"未填写"，直接通过；
  * - 非标签引用：注册表 containsKey 未命中 → ERROR；

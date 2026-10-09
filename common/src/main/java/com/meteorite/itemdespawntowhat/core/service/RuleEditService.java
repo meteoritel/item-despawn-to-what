@@ -186,16 +186,16 @@ public final class RuleEditService {
         if (!sessions.owns(payload.sessionId()) || !sessions.isOwner(player.getUUID())) {
             return Outbound.of(sessionLost(payload.sessionId(), player));
         }
+        if (!sessions.confirmed(payload.sessionId())) {
+            // 会话状态优先于请求参数：未确认的 OPENING 会话不接受目录请求
+            return Outbound.of(sessionLost(payload.sessionId(), player));
+        }
         if (payload.page() < 0 || payload.pageSize() <= 0
                 || payload.pageSize() > RequestRuleCatalogPayload.MAX_PAGE_SIZE) {
             return Outbound.of(result(payload.sessionId(), "", RuleSaveStatus.INVALID_REQUEST,
                     RuleSaveStatus.INVALID_REQUEST.messageKey(),
                     args("page=" + payload.page() + ", pageSize=" + payload.pageSize()),
                     List.of(), false, false));
-        }
-        if (!sessions.confirmed(payload.sessionId())) {
-            // 未确认的 OPENING 会话不接受目录请求
-            return Outbound.of(sessionLost(payload.sessionId(), player));
         }
         RuleCatalogType type = RuleCatalogType.fromId(payload.catalogType());
         if (type == null) {

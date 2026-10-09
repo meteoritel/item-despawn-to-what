@@ -126,7 +126,8 @@ public final class RuleNaming {
 
     /**
      * 单个效果的短标题。
-     * <p>本模组 12 种效果走本地化短标题；第三方或未知类型走 {@link TypeLabels#effectLabel(ResourceLocation)}
+     * <p>本模组 10 种效果类型走本地化短标题；spawn_entity 的 item/entity/experience 是同一类型的三个变体。
+     * 第三方或未知类型走 {@link TypeLabels#effectLabel(ResourceLocation)}
      * （其自身已有 literal(id) 兜底）。
      */
     public static Component effectTitle(@Nullable JsonObject effect, NameSource source) {

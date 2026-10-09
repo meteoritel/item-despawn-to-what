@@ -7,7 +7,7 @@ import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.api.TypeDefinition;
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
-import com.meteorite.itemdespawntowhat.core.type.RefChecks;
+import com.meteorite.itemdespawntowhat.core.api.RefChecks;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.core.registries.BuiltInRegistries;
 import org.jetbrains.annotations.Nullable;

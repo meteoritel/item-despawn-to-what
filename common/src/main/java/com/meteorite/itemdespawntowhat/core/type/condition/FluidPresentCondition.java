@@ -7,7 +7,7 @@ import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleConditionType;
-import com.meteorite.itemdespawntowhat.core.type.RefChecks;
+import com.meteorite.itemdespawntowhat.core.api.RefChecks;
 import com.meteorite.itemdespawntowhat.core.type.condition.eval.FluidPresentEvaluator;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;

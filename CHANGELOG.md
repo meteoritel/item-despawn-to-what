@@ -1,6 +1,9 @@
 # 更新日志 Change log
 
 ## [开发中]
+### 环境与依赖
+- **NeoForge 版本口径**：`gradle.properties` 的 `neoforge_version=21.1.218` 是构建依赖版本；`neoforge.mods.toml` 的 `[21.1.210,)` 是运行依赖的声明区间，下界为 21.1.210。声明区间不代表其中所有版本均经过运行验证。
+
 ### 新增
 - **NeoForge TOML 服务端配置**：新增 `ModConfigValues`，通过 `itemdespawntowhat-server.toml` 可调整以下参数：
   - `side_effects.lightning_interval_ticks`（默认 8）：闪电每次之间的间隔 tick 数

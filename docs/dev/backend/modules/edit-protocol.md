@@ -112,6 +112,7 @@
 
 - **权限** `canEdit` 与 `/idtw` 的 `hasAccess` 一致：单人世界或权限等级 ≥2；未就绪/无权限直接回 `UNAVAILABLE` / `NO_PERMISSION`。
 - **每个授权检查点**（心跳、快照、目录、变更集、分片）都校验 `sessionId` 与状态匹配，失败回 `SESSION_EXPIRED` / `LOCK_NOT_OWNED`。
+- **目录请求校验顺序**：先检查会话归属与已确认状态，再检查分页参数和目录类型；未确认的 OPENING 会话优先返回会话失效回执，已确认会话的非法参数返回 `INVALID_REQUEST`。仅通过全部检查的请求续期心跳。
 - **幂等**：`operationId` 由客户端生成，服务端对同一会话保留最近 16 条已处理回执，重复提交直接回放、不重复写盘。
 - **并发保存保护**：`beginApply` 只允许 ACTIVE→APPLYING；正在 APPLYING 时的新提交回 `INVALID_REQUEST`（`apply in progress`）并保留会话。
 - 玩家断开仅清分片缓存（`clearPlayer`），会话按租约到期释放；停服 `reset()` 清空分片与幂等表。

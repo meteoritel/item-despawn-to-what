@@ -7,7 +7,7 @@
 
 - `core/registry`：`TypeRegistry` 的默认实现 `SimpleTypeRegistry`（**注册期可变、`freeze()` 后只读**）+ 两个语义异常。
 - `core/extension`：第三方 SPI `RuleTypeProvider`，经 `META-INF/services` 加载。
-- `core/type`：10 个内置条件、10 个内置效果，以及公共工具 `EnumCodecs`、`RefChecks`。
+- `core/type`：10 个内置条件、10 个内置效果，以及公共工具 `EnumCodecs`。引用校验统一使用 `core/api/RefChecks`，见 [规则模型与契约](rule-model.md)。
 - 类型定义形态（`EffectType`/`ConditionType`/`Simple*Type`）与 `Effect`/`Condition` 接口定义在 `core/model`，执行/求值上下文与回执定义在 `core/api`；本文只覆盖注册表、SPI 与内置实现。
 
 ## 2. 类清单
@@ -34,7 +34,6 @@
 | 类 | 职责 |
 |---|---|
 | `EnumCodecs` | `lowerCase(Class<E>)`：枚举取 JSON 统一小写下划线、解析**大小写不敏感**，未知或空取值报错时附可选值列表 |
-| `RefChecks` | 动态引用校验助手：非标签引用未命中 → ERROR；标签引用仅在标签数据已绑定时校验，未命中 → WARN（数据包标签可能后加载，不能据此拒载）。`check`（单项）/`checkAll`（列表，路径形如 `path[0]`） |
 | `BuiltinConditionTypes` | 注册 10 个内置条件类型；`create()`（构建并冻结）/`createMutable()`（交由装配器统一冻结） |
 | `BuiltinEffectTypes` | 注册 10 个内置效果类型；`create(expressionCodec)`/`createMutable(expressionCodec)`（效果记录含效果级 `conditions`，需先有表达式 Codec） |
 

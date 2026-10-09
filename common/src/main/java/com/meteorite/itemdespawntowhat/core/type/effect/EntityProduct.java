@@ -3,7 +3,7 @@ package com.meteorite.itemdespawntowhat.core.type.effect;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
-import com.meteorite.itemdespawntowhat.core.type.RefChecks;
+import com.meteorite.itemdespawntowhat.core.api.RefChecks;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.MapCodec;

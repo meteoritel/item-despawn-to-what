@@ -6,7 +6,7 @@ import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionTrees;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
-import com.meteorite.itemdespawntowhat.core.type.RefChecks;
+import com.meteorite.itemdespawntowhat.core.api.RefChecks;
 import com.meteorite.itemdespawntowhat.core.type.condition.BiomeCondition;
 import com.meteorite.itemdespawntowhat.core.type.condition.DimensionCondition;
 import com.meteorite.itemdespawntowhat.core.type.effect.LootTableEffect;
@@ -14,11 +14,15 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 
+import java.util.Objects;
+
 /** 服务端动态引用校验：使用当前维度、群系注册表和真正加载成功的战利品表。 */
 public final class RuleReferenceValidator {
     private RuleReferenceValidator() {}
 
+    /** 动态校验要求非空 server；离线装配须由调用方跳过本步。 */
     public static boolean validate(Rule rule, MinecraftServer server, IssueCollector issues, String origin) {
+        Objects.requireNonNull(server, "动态引用校验需要 MinecraftServer");
         int before = issues.errors().size();
         validateConditions(rule.conditions(), server, issues, origin, RuleFields.CONDITIONS);
         for (int i = 0; i < rule.effects().size(); i++) {

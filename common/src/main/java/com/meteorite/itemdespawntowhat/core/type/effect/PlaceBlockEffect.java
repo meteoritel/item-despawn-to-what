@@ -8,7 +8,7 @@ import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleEffectType;
-import com.meteorite.itemdespawntowhat.core.type.RefChecks;
+import com.meteorite.itemdespawntowhat.core.api.RefChecks;
 import com.meteorite.itemdespawntowhat.core.type.EnumCodecs;
 import com.meteorite.itemdespawntowhat.core.type.effect.exec.PlaceBlockExecutor;
 import com.mojang.serialization.Codec;
