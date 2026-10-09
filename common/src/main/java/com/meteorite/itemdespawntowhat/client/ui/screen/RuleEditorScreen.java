@@ -1215,9 +1215,13 @@ public final class RuleEditorScreen extends Screen {
         }
     }
 
-    private void restoreHistory(UiHistoryShortcut shortcut) {
-        if (mode != Mode.EDIT) return;
+    private boolean restoreHistory(UiHistoryShortcut shortcut) {
+        if (mode != Mode.EDIT) return false;
+        EditSession session = editingSession();
+        if (session == null) return false;
+        long revision = session.revision();
         if (shortcut == UiHistoryShortcut.UNDO) undo(); else redo();
+        return session.revision() != revision;
     }
 
     private void undo() {

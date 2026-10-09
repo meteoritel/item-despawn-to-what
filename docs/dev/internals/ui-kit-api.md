@@ -400,6 +400,8 @@ void moveCursorToStart();      // 回填后调用：光标与垂直滚动都回�
 
 宿主 `UiModal.onClosed` 在确认、取消、按 Esc、显式关闭或清栈移除该弹层时调用一次；用于保存会话内输入及释放交互捕获，不自动提交正式配置。叶参数弹层已接入卸载，并在历史恢复后同步字段与区间值；节点已移除时关闭相应弹层。
 
+`UiModalStack.setHistoryTarget` 接收返回是否恢复历史的函数；未恢复时不通知弹层回填。`UiModal.onHistoryChanged` 可接收无参数回调或带 `UiHistoryShortcut` 的回调。独立叶参数弹窗在结构历史恢复后关闭，避免同类型邻居占据原路径时错误重绑；字段历史恢复继续在弹窗内回填。
+
 `UiTextHistory` 是控件局部历史，不持有规则草稿。默认容量 `DEFAULT_CAPACITY = 100`，也可通过构造参数指定正容量。`Snapshot(String text, int cursor, int anchor)` 使用 UTF-16 光标和选择锚点，与原版输入控件一致；位置钳在文本内。`record(before, after)` 只记录内容变化，超出容量丢弃最早记录，新输入清空重做；`undo()` / `redo()` 返回待回填快照，无记录返回 null。`canUndo()` / `canRedo()` 查询状态，`clear()` 清空历史。
 
 宿主 `UiTextInput` 与 `UiTextArea` 均已接入：被接受的键入、删除、剪切、粘贴和多行换行各记录局部快照；光标、选择和拒绝输入不记历史。撤销恢复文本、光标与选择，通知已有输入变化回调一次，不调用配置提交接口。可编辑且聚焦的输入始终消费撤销/重做快捷键，即使历史为空，容器不得继续撤销底层规则。
