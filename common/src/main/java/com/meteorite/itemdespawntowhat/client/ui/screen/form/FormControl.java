@@ -10,7 +10,6 @@ import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.EditorPreset;
 import com.meteorite.itemdespawntowhat.client.edit.FieldNumbers;
 import com.meteorite.itemdespawntowhat.client.edit.JsonSummary;
-import com.meteorite.itemdespawntowhat.client.edit.OpaqueCondition;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
@@ -1343,7 +1342,6 @@ abstract class FormControl {
         private final Font font;
         private int toolbarHeight;
         private boolean enabled = true;
-        private boolean advancedTools;
 
         private final UiConditionTreeEditor editor;
         private final @Nullable ConditionSupport support;
@@ -1371,20 +1369,11 @@ abstract class FormControl {
                 onChanged.run();
             });
             this.editor.setEmptyMessage(Component.translatable("gui.itemdespawntowhat.edit.tree.add_placeholder"));
-            if (support != null) {
-                addButton("add", editor::beginAddCondition);
-                addButton("all", () -> editor.addGroup(true));
-                addButton("any", () -> editor.addGroup(false));
-                addButton("not", editor::wrapSelectedInNot);
-                addButton("edit", editor::editSelectedLeaf);
-                addButton("remove", editor::deleteSelected);
-                addButton("up", () -> editor.moveSelected(-1));
-                addButton("down", () -> editor.moveSelected(1));
-                addButton("advanced", () -> advancedTools = !advancedTools);
-            }
+            editor.setEnabled(false);
+            if (support != null) addButton("open", () -> support.openTree(editor, null));
         }
 
-        // 鼠标按钮和原有快捷键共用条件树操作。
+        // 条件卡片提供大屏编辑入口。
         private void addButton(String name, Runnable action) {
             toolbar.add(new UiButton(font, Component.translatable("gui.itemdespawntowhat.edit.tree.button." + name),
                     UiButtonVariant.SECONDARY, action::run));
@@ -1408,13 +1397,6 @@ abstract class FormControl {
             if (toolbar.isEmpty() || fallbackRaw != null) {
                 return 0;
             }
-            boolean any = editor.rowCount() > 0;
-            for (int i = 0; i < toolbar.size(); i++) {
-                boolean show = i == 0 || any && (i == 8 || i == 5 && editor.selectedNode() != null
-                        || i == 4 && editor.canEditSelectedLeaf()
-                        || advancedTools && i <= 7);
-                toolbar.get(i).setVisible(show);
-            }
             int cursorX = x;
             int cursorY = y;
             int buttonHeight = usesCardSpacing() ? 20 : BUTTON_HEIGHT;
@@ -1427,7 +1409,7 @@ abstract class FormControl {
                     cursorY += buttonHeight + 2;
                 }
                 button.setBounds(cursorX, cursorY, buttonWidth, buttonHeight);
-                button.setEnabled(enabled && (button != toolbar.get(4) || editor.canEditSelectedLeaf()));
+                button.setEnabled(enabled);
                 cursorX += buttonWidth + 2;
             }
             return cursorY - y + buttonHeight + 2;
@@ -1469,7 +1451,7 @@ abstract class FormControl {
                     return true;
                 }
             }
-            return editor.mouseClicked(mouseX, mouseY, button);
+            return support != null && editor.bounds().contains(mouseX, mouseY) && support.openTree(editor, null);
         }
 
         @Override
@@ -1507,7 +1489,7 @@ abstract class FormControl {
         @Override
         void setEnabled(boolean enabled) {
             this.enabled = enabled;
-            editor.setEnabled(enabled);
+            editor.setEnabled(false);
             toolbar.forEach(button -> button.setEnabled(enabled));
         }
 
@@ -1576,11 +1558,7 @@ abstract class FormControl {
         @Nullable UiFocusTarget revealPath(String path, String basePath) {
             if (fallbackRaw != null || !path.startsWith(basePath)) return null;
             editor.selectPath(UiConditionTreeEditor.ROOT_PATH + path.substring(basePath.length()));
-            if (support != null && path.contains("." + RuleFields.CONDITION + ".")
-                    && editor.selectedNode() instanceof com.meteorite.itemdespawntowhat.core.model.ConditionNode.Leaf leaf
-                    && !(leaf.condition() instanceof OpaqueCondition)) {
-                support.revealLeaf(leaf, path);
-            }
+            if (support != null && support.openTree(editor, path)) return toolbar.isEmpty() ? null : toolbar.getFirst();
             return editor;
         }
 

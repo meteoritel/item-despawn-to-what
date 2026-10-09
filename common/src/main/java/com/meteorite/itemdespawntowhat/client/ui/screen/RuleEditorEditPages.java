@@ -25,6 +25,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionSupport;
+import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionTreeOverlay;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormIssue;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.NaturalSummary;
@@ -164,6 +165,7 @@ public final class RuleEditorEditPages {
 
     // 布局常量
     private static final int PAD = 4;
+    private static final int TREE_OVERLAY_MARGIN = 8;
     private static final int ROW_H = 20;
     private static final int BUTTON_H = 20;
     private static final int BUTTON_GAP = 4;
@@ -783,21 +785,7 @@ public final class RuleEditorEditPages {
     private FormView presenceForm(EditSession session, PresenceLeaf leaf) {
         FormView form = newForm(session, leaf.conditionPath(), presenceDescriptor(leaf));
         form.hideRowLabel(leaf.fieldPath());
-        form.setOnFieldWritten((path, before) -> {
-            if (!leaf.fieldPath().equals(path)) return;
-            if (leaf.catalyst()) {
-                JsonObject condition = java.util.Objects.requireNonNull(session.draft().getAt(leaf.conditionPath())).getAsJsonObject();
-                reconcileQuantities(condition, RuleFields.ITEM_COUNTS, stringList(condition.get(RuleFields.CATALYST_ITEMS)),
-                        catalystThreshold(leaf));
-                retargetCatalystItems(session.draft(), stringList(before),
-                        stringList(session.draft().getAt(path)));
-            } else {
-                var selected = stringList(session.draft().getAt(path));
-                List<String> previous = stringList(before);
-                if (selected.size() == 1) retargetFluidActions(session.draft(),
-                        previous.size() == 1 ? previous.getFirst() : "", selected.getFirst());
-            }
-        });
+        configurePresenceWrites(form, session, leaf);
         // 类型改写立即落盘（类型 + 关联消耗配置重指向 = 同一次可撤销操作）；此处不重建页面，
         // 目录选择可连续多次回调，重建会让后续选择写进已卸载的控件
         form.setOnChanged(() -> {
@@ -817,6 +805,24 @@ public final class RuleEditorEditPages {
                     UiButtonVariant.SECONDARY, () -> removePresenceLeaf(leaf)));
         }
         return form;
+    }
+
+    private void configurePresenceWrites(FormView form, EditSession session, PresenceLeaf leaf) {
+        form.setOnFieldWritten((path, before) -> {
+            if (!leaf.fieldPath().equals(path)) return;
+            if (leaf.catalyst()) {
+                JsonObject condition = java.util.Objects.requireNonNull(session.draft().getAt(leaf.conditionPath())).getAsJsonObject();
+                reconcileQuantities(condition, RuleFields.ITEM_COUNTS, stringList(condition.get(RuleFields.CATALYST_ITEMS)),
+                        catalystThreshold(leaf));
+                retargetCatalystItems(session.draft(), stringList(before),
+                        stringList(session.draft().getAt(path)));
+            } else {
+                var selected = stringList(session.draft().getAt(path));
+                List<String> previous = stringList(before);
+                if (selected.size() == 1) retargetFluidActions(session.draft(),
+                        previous.size() == 1 ? previous.getFirst() : "", selected.getFirst());
+            }
+        });
     }
 
     // 催化剂先选择物品，再设置门槛；组合关系仍由触发页管理。
@@ -1476,6 +1482,11 @@ public final class RuleEditorEditPages {
             }
 
             @Override
+            public boolean openTree(UiConditionTreeEditor tree, @Nullable String fieldPath) {
+                return openConditionTree(owner, fieldPath);
+            }
+
+            @Override
             public TypeRegistry<ConditionType<?>> registry() {
                 return base.registry();
             }
@@ -1507,48 +1518,11 @@ public final class RuleEditorEditPages {
         String path = owner.draftPath(base.endsWith("." + RuleFields.CONDITION) ? base : base + "." + RuleFields.CONDITION);
         // 先写入新建的树节点，叶参数表单才有可读取的草稿路径。
         owner.applyToDraft();
-        TypeEditorDescriptor descriptor = ConditionEditorRegistry.descriptorFor(leaf.condition().type());
-        boolean catalystLeaf = CATALYST_PRESENT_ID.equals(leaf.condition().type());
-        // 催化剂门槛字段对外统一称「最低触发数量」，留空时才给出「默认：N」
-        if (catalystLeaf) {
-            descriptor = new TypeEditorDescriptor(descriptor.id(), descriptor.label(),
-                    relabelCatalystThreshold(descriptor.fields()), descriptor.readOnly());
-        }
-        PresenceLeaf presence = catalystLeaf ? findPresenceLeaf(path) : null;
-        FormView form = new FormView(font, session, path);
-        form.setConditionSupport(pageConditionSupport(form));
-        form.setSuggestionProvider(host.suggestions());
-        form.setOnChanged(host::onDraftChanged);
-        // 输入被长度上限拒绝时立刻显示一条可读提示（字段名：问题）
-        form.setOnRejectedNotice(message -> host.notice(message, UiPalette.DANGER));
-        form.setCatalogOpener((field, tags, onPicked) -> {
-            RuleCatalogType type = tags ? RuleCatalogType.TAG : RuleEditorP4Panels.catalogTypeOf(field);
-            if (type == null || host.rejectWhenFrozen()) return;
-            boolean multi = field.type() == com.meteorite.itemdespawntowhat.client.edit.EditorFieldType.TAG_LIST
-                    || field.type() == com.meteorite.itemdespawntowhat.client.edit.EditorFieldType.RL_LIST;
-            host.modals().push(RuleEditorP4Panels.catalogModal(font, host.workspace(), type, multi,
-                    Component.translatable(field.labelKey()), host.screenWidth(), host.screenHeight(), onPicked, field));
-        });
-        form.setDescriptor(descriptor);
-        form.reload();
-        configureQuantityFields(form, session, path, descriptor);
-        UiModal modal = UiModal.create(font);
-        // 标题带同类型编号与作用域：多个同类条件叶也能确认自己在编辑哪一项
-        modal.title(presence == null ? descriptor.label()
-                : Component.translatable(UI + "rule.presence.title", descriptor.label(),
-                        presence.ordinal(), presence.scopeLabel()));
-        // 已知条件类型附带区间条（气候/昼夜/高度光照）与注册表字段的目录按钮；
-        // 面板自身负责子控件的事件转发与 Tab 顺序，普通数值字段仍由表单承载
-        RuleEditorP4Panels.LeafPanel content = RuleEditorP4Panels.leafPanel(font, form, session, descriptor.fields(),
-                path, change -> apply(EditSession.OP_SET_FIELD, change), () -> {
-                    form.reload();
-                    host.onDraftChanged();
-                }, host.modals()::push, host.workspace(), host.screenWidth(), host.screenHeight());
-        String noteKey = catalystLeaf ? UI + "rule.catalyst_all_required"
-                : FLUID_PRESENT_ID.equals(leaf.condition().type()) ? UI + "field.fluid_present.fluid.hint" : null;
-        RuleEditorP4Panels.LeafPanel panel = noteKey == null ? content : content.addNote(() -> Component.translatable(noteKey));
-        int fieldHeight = descriptor.fields().size() * ROW_H + 8;
-        int contentHeight = Math.clamp(Math.max(fieldHeight, panel.contentHeight() + 8), 36, 220);
+        ConditionTreeOverlay.Parameters parameters = createLeafParameters(session, path, leaf);
+        FormView form = parameters.form();
+        RuleEditorP4Panels.LeafPanel panel = parameters.panel();
+        UiModal modal = UiModal.create(font).title(parameters.title());
+        int contentHeight = Math.clamp(panel.contentHeight() + 8, 36, 220);
         modal.contentWidget(panel, contentHeight);
         modal.onClosed(() -> {
             JsonElement current = session.draft().getAt(path);
@@ -1589,6 +1563,86 @@ public final class RuleEditorEditPages {
         modal.layoutCentered(host.screenWidth(), host.screenHeight());
         host.modals().push(modal);
         if (fieldPath != null) panel.focusField(fieldPath);
+    }
+
+    // 叶弹窗与条件叠加页共用同一套参数、目录、区间条和关联写入。
+    private ConditionTreeOverlay.Parameters createLeafParameters(EditSession session, String path, ConditionNode.Leaf leaf) {
+        TypeEditorDescriptor descriptor = ConditionEditorRegistry.descriptorFor(leaf.condition().type());
+        boolean catalystLeaf = CATALYST_PRESENT_ID.equals(leaf.condition().type());
+        // 催化剂门槛字段对外统一称「最低触发数量」，留空时才给出「默认：N」
+        if (catalystLeaf) {
+            descriptor = new TypeEditorDescriptor(descriptor.id(), descriptor.label(),
+                    relabelCatalystThreshold(descriptor.fields()), descriptor.readOnly());
+        }
+        PresenceLeaf presence = catalystLeaf ? findPresenceLeaf(path) : null;
+        FormView form = new FormView(font, session, path);
+        form.setConditionSupport(pageConditionSupport(form));
+        form.setSuggestionProvider(host.suggestions());
+        form.setOnChanged(() -> {
+            form.applyToDraft();
+            host.onDraftChanged();
+        });
+        // 输入被长度上限拒绝时立刻显示一条可读提示（字段名：问题）
+        form.setOnRejectedNotice(message -> host.notice(message, UiPalette.DANGER));
+        form.setCatalogOpener((field, tags, onPicked) -> {
+            RuleCatalogType type = tags ? RuleCatalogType.TAG : RuleEditorP4Panels.catalogTypeOf(field);
+            if (type == null || host.rejectWhenFrozen()) return;
+            boolean multi = field.type() == com.meteorite.itemdespawntowhat.client.edit.EditorFieldType.TAG_LIST
+                    || field.type() == com.meteorite.itemdespawntowhat.client.edit.EditorFieldType.RL_LIST;
+            host.modals().push(RuleEditorP4Panels.catalogModal(font, host.workspace(), type, multi,
+                    Component.translatable(field.labelKey()), host.screenWidth(), host.screenHeight(), onPicked, field));
+        });
+        form.setDescriptor(descriptor);
+        form.reload();
+        configureQuantityFields(form, session, path, descriptor);
+        PresenceLeaf linked = findPresenceLeaf(path);
+        if (linked != null && linked.ruleLevel()) configurePresenceWrites(form, session, linked);
+        // 已知条件类型附带区间条（气候/昼夜/高度光照）与注册表字段的目录按钮；
+        // 面板自身负责子控件的事件转发与 Tab 顺序，普通数值字段仍由表单承载
+        RuleEditorP4Panels.LeafPanel content = RuleEditorP4Panels.leafPanel(font, form, session, descriptor.fields(),
+                path, change -> {
+                    form.commitPendingInputs();
+                    session.apply(EditSession.OP_SET_FIELD, change);
+                    host.onDraftChanged();
+                }, () -> {
+                    form.reload();
+                    host.onDraftChanged();
+                }, host.modals()::push, host.workspace(), host.screenWidth(), host.screenHeight());
+        String noteKey = catalystLeaf ? UI + "rule.catalyst_all_required"
+                : FLUID_PRESENT_ID.equals(leaf.condition().type()) ? UI + "field.fluid_present.fluid.hint" : null;
+        RuleEditorP4Panels.LeafPanel panel = noteKey == null ? content : content.addNote(() -> Component.translatable(noteKey));
+        Component title = presence == null ? descriptor.label() : Component.translatable(UI + "rule.presence.title",
+                descriptor.label(), presence.ordinal(), presence.scopeLabel());
+        return new ConditionTreeOverlay.Parameters(form, panel, title);
+    }
+
+    // 大屏编辑只绑定当前条件范围，不要求整条规则已填完整。
+    private boolean openConditionTree(FormView owner, @Nullable String fieldPath) {
+        EditSession session = host.session();
+        if (session == null || host.rejectWhenFrozen()) return false;
+        owner.commitPendingInputs();
+        String scope = owner.draftPath(RuleFields.CONDITIONS);
+        ConditionTreeOverlay overlay = new ConditionTreeOverlay(font, session, scope, pageConditionSupport(owner),
+                (path, leaf) -> createLeafParameters(session, path, leaf), host::onDraftChanged);
+        int chromeReserve = UiTheme.HEADER_HEIGHT + UiTheme.PADDING * 3 + UiModal.BUTTON_HEIGHT;
+        UiModal modal = UiModal.create(font).title(Component.translatable(UI + "tree.title"))
+                .preferredWidth(Math.max(UiModal.MIN_WIDTH, host.screenWidth() - TREE_OVERLAY_MARGIN))
+                .contentWidget(overlay, Math.max(0, host.screenHeight() - TREE_OVERLAY_MARGIN - chromeReserve));
+        modal.onClosed(() -> {
+            overlay.unmount();
+            owner.reload();
+            host.onDraftChanged();
+        });
+        modal.onHistoryChanged(() -> {
+            String ownerPath = scope.substring(0, Math.max(0, scope.length() - RuleFields.CONDITIONS.length() - 1));
+            if (!ownerPath.isEmpty() && session.draft().getAt(ownerPath) == null) host.modals().close(modal);
+            else overlay.historyChanged();
+        });
+        modal.cancel(Component.translatable(UI + "button.back"));
+        modal.layoutCentered(host.screenWidth(), host.screenHeight());
+        host.modals().push(modal);
+        if (fieldPath != null) overlay.reveal(fieldPath);
+        return true;
     }
 
     // 找到发起编辑的条件树

@@ -405,3 +405,25 @@ void moveCursorToStart();      // 回填后调用：光标与垂直滚动都回�
 宿主 `UiTextInput` 与 `UiTextArea` 均已接入：被接受的键入、删除、剪切、粘贴和多行换行各记录局部快照；光标、选择和拒绝输入不记历史。撤销恢复文本、光标与选择，通知已有输入变化回调一次，不调用配置提交接口。可编辑且聚焦的输入始终消费撤销/重做快捷键，即使历史为空，容器不得继续撤销底层规则。
 
 `setValue` / 单行 `clear` 是程序回填，不触发变化回调、不追加历史；装载不同内容会清空局部历史。业务过滤和码点上限只限制用户新增输入，不截断回填或历史恢复。多行换行宽度变化时保留当前文本、选择与局部历史。局部历史不跨控件销毁保存；规则配置历史和完整字段编辑的提交粒度由宿主管理。
+
+## 通用不可变树编辑
+
+`UiTreePath(List<Integer> indices)` 使用父节点子项下标表示位置，空路径 `ROOT` 为根；`child`、`parent`、`isAncestorOf` 用于路径组合与祖先判断。构造复制列表并拒绝负下标。
+
+`UiTreeEditor<N>` 直接绑定宿主节点，不创建第二份业务树。构造注入 `Adapter<N>`、根 `Supplier<N>`、接受变更的 `Consumer<Change<N>>`、候选根校验函数及非法路径/父节点提示；空根允许为 null。Kit 不读取注册表、不持有配置历史。适配器通过 `children`、`withChildren` 读写不可变子项，并用 `childCapacity` 声明容量；`UNLIMITED_CHILDREN` 表示不限制，`acceptsChildren(node, count)` 检查候选数量。
+
+| 入口 | 行为 |
+| --- | --- |
+| `root()` / `query(UiTreePath)` | 读取当前绑定根/节点，路径不存在返回 null |
+| `create(parent, index, node)` | 插入父节点子项；parent 为 null 仅用于创建空树根；父容量和插入下标先检查 |
+| `delete(path)` | 删除指定节点；删除根产生空树，父重建由适配器决定 |
+| `update(path, updater)` | 不可变替换节点；updater 返回 null 表示删除 |
+| `accept(before, after, Kind)` | 校验并接受候选根；无变化与校验失败不触发绑定 |
+| `setBeforeEdit(Runnable)` | 操作读取根之前完成宿主合法输入；宿主不能将非法文本写入配置 |
+| `select(path)` / `selected()` | 选择真实节点或清空选择；不存在的路径忽略 |
+| `setCollapsed(path, value)` / `collapsed()` / `expandAll()` | 管理只读可查询的折叠状态，不修改绑定树 |
+| `setOnViewChanged(listener)` | 接收 `ViewChange(selected, collapsed)`，与配置操作事件分开 |
+
+`Outcome(changed, error)` 区分已接受、无变化和错误。配置操作仅在实际改变时产生一次 `Change(before, after, Kind)`；Kind 为 CREATE、DELETE、UPDATE。宿主在接受回调内写历史，回填根不调用修改入口。节点与子项列表由宿主适配器保持不可变，不得修改既有节点。
+
+实际接入：`ConditionTreeNodes` 适配现有 ConditionNode；`UiConditionTreeEditor` 的创建、删除、更新、查询、选择和折叠均调用 Kit。空 NOT 由宿主重建为 `Inverted(null)`；NOT 的容量为1，叶容量为0。逐表达式限额校验与本地化提示由宿主注入。`ConditionTreeOverlay` 将配置操作与输入路径迁移放入同一 EditSession 事务；JSON、参数表单、服务端保存均留在宿主。
