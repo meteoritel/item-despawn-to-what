@@ -1,6 +1,6 @@
 # 编辑器四页职责与输入↔触发联动契约
 
-> 状态：当前实现（2026-10-08，阶段 2 GUI 已落地并通过串行构建）。行为依据 `docs/spec/editor-page-responsibilities-2026-10-07.md`；覆盖 `client/ui/screen/RuleEditorEditPages.java`、`client/ui/screen/RuleEditorScreen.java`、`client/ui/screen/RuleEditorP4Panels.java` 与 core 侧 `CatalystPresentCondition` / `CatalystThresholdProjection`。面向改编辑器的人：说明四页各管什么、输入页与触发页如何按**确切叶路径**关联、以及撤销粒度。
+> 状态：当前实现（2026-10-09，已通过串行构建）。相关规格：`docs/spec/editor-page-responsibilities-2026-10-07.md`；覆盖 `client/ui/screen/RuleEditorEditPages.java`、`client/ui/screen/RuleEditorScreen.java`、`client/ui/screen/RuleEditorP4Panels.java` 与 core 侧 `CatalystPresentCondition` / `CatalystThresholdProjection`。面向改编辑器的人：说明四页各管什么、输入页与触发页如何按**确切叶路径**关联、以及撤销粒度。
 
 ## 1. 四页职责
 
@@ -20,15 +20,18 @@
 
 ## 2. 存在条件：唯一入口在输入页
 
-- 两个开关：催化剂 / 流体，标签 `rule.presence.add_catalyst` / `rule.presence.add_fluid`（`:540-541` 调用 `buildPresenceSection`，实现 `:600-616`）。
+- 两个开关：催化剂 / 流体，标签 `rule.presence.add_catalyst`（「启用催化剂」）/ `rule.presence.add_fluid`（「启用流体条件」）。催化剂卡片按「启用 → 物品选择与最低触发数量 → 消耗开关 → 每轮消耗数量」排列；物品与流体选择复用目录及卡片控件，卡片内可逐项移除引用。
 - 勾选 = 在**规则级条件**里新增一个存在条件叶（`addRuleLevelPresence` `:673-697`）：条件为空树时直接写入叶；根已是 `all_of` 时把叶追加进 `terms`；否则把**完整旧根**与新叶一起放进新的 `all_of(旧根, 叶)`——保留旧根整体语义，不把叶插进当前选中的节点。
-- 新叶 JSON：`{op: leaf, condition: {type: …, items: []}}`；催化剂叶**不预写 `count`**（`presenceLeafJson` `:757-767`，注释明确「不预写 count=1」）。通用条件工厂会给催化剂预写 `count=1`，所以这里改走同一份 JSON 解析（`presenceLeafNode` `:770-776`）。
-- 类型字段的 basePath 就是**该叶的 condition 路径**：`newForm(session, leaf.conditionPath(), presenceDescriptor(leaf))`（`:620`）；字段路径 `fieldPath() = conditionPath + ".items"`（催化剂）或 `+ ".fluid"`（流体）（`PresenceLeaf` 记录 `:235-257`）。**类型不再存在 `catalyst_cost.items` 里**。
+- 输入页启用催化剂创建 `{op: leaf, condition: {type: …, items: [], count: 1}}`，门槛从 1 开始且可独立编辑。触发页新建催化剂叶仍省略 `count`，保留运行期默认门槛语义；打开已有省略门槛的叶只显示有效值，不自动写回。
+- 存在条件类型字段的 basePath 就是该叶的 condition 路径：`newForm(session, leaf.conditionPath(), presenceDescriptor(leaf))`；字段路径 `fieldPath() = conditionPath + ".items"`（催化剂）或 `+ ".fluid"`（流体）。存在叶的物品选择同步关联的消耗配置，后者仍保留运行所需的 `items`。
 - 未勾选时不渲染类型字段（`:539-541` 与 `buildPresenceSection` 行为）。
-- 逐项移除按钮挂在类型行尾（`rule.presence.remove`，`:633-634`）；删除只作用于**这一个叶**（`:663-670`：`removeLeafAt(draft, leaf.path())`）。
+- 单个催化剂或流体叶不重复显示编号、作用域与整叶移除按钮；多个同类型叶保留标题和整叶移除入口。卡片上的移除只删除该引用；整叶移除只删除对应的条件叶。流体引用留空时显示「任意非空流体」，沿用后端的任意流体语义。
+- 流体目录、选中卡片及标签成员共用 `FluidPreviewIcons`：从流体对应方块的模型图集取得静态材质和方块染色，绘制有明暗面的立体方块图标；流水等非源流体名称带「流动」标识。目录与文本候选过滤注册表中的空流体，流体标签预览也过滤空成员。材质每帧从当前图集读取，不保留资源重载前的 sprite。
 - 取消勾选 = 删除规则级里该类型的全部存在叶（`removeRuleLevelPresence` `:700-717`，逐个删并整理空父组；删除未生效即停手，防死循环）。
-- **独立消耗配置完全不受存在条件开关影响**：规则级 `catalyst_cost`、方案内 `consume_catalyst`、`consume_fluid` 都不随勾选/取消被删改。
-- 消耗参数主入口也在输入页：来源消耗（`sourceForm` / `sourceCostForm`，`:499-521`）、催化剂成本开关与表单（`catalystToggle` / `catalystForm`，`:523-538`）。当来源或催化剂由动作内消耗效果承载时，表单直接绑定该效果路径（`RuleCostBinding.Ref`）并把开关置灰，避免两处编辑同一份数据。
+- 关闭「启用催化剂」会一并删除规则级 `catalyst_cost` 及规则中的 `consume_catalyst` 效果，关闭「消耗催化剂」只删除消耗配置并保留存在条件。流体存在开关仍不影响独立移除动作。每次开关操作与其关联删除共用一条撤销记录。
+- 消耗参数主入口也在输入页：来源消耗（`sourceForm` / `sourceCostForm`）、催化剂消耗开关与表单（`catalystToggle` / `catalystForm`）。选定催化剂物品后才能首次开启消耗；开启时每轮数量初始化为当前门槛，随后可独立调整。关闭消耗前会固定省略门槛的当前有效值，避免删除消耗配置后门槛变化。
+- 催化剂消耗区只显示每轮数量，不重复选择物品、不显示搜索半径。新建固定成本省略半径，由后端默认值 1 处理；已有显式半径原样保留。没有规则级存在叶的已有独立消耗规则仍显示其物品选择入口。
+- 已有消耗效果的数量表单直接绑定 `RuleCostBinding.Ref` 的原效果路径，不生成额外固定成本；催化剂消耗开关可关闭这类效果，来源消耗模式仍锁定为原效果。
 
 ## 3. 同一份叶扫描：路径、编号与作用域
 
@@ -56,15 +59,16 @@
 
 ## 5. 类型改写与关联消耗配置重指向
 
-- 催化剂类型（items）改写**立即落盘**，且与「关联消耗配置重指向」合并为**同一次可撤销操作**：`flushPresenceType`（`:924-954`）。写回前先校验路径仍指向**同类叶**（`:930-939`），否则不写回——防止复活已被条件树删除的叶。
+- 催化剂类型（items）改写立即写入草稿，且与关联消耗配置重指向合并为同一次可撤销操作。`FormView.setOnFieldWritten` 在字段写入的同一个 `EditSession.apply` 内通知宿主，目录添加也走此入口；缓冲提交仍由 `flushPresenceType` 校验确切叶路径后同步。
 - 重指向规则（`retargetCatalystItems` `:957-1003`）：只重写「items 为空」或「与旧集合相同」的 `catalyst_cost` 与动作内 `consume_catalyst`；集合语义、顺序无关（`referencesDiffer` `:1006-1008`）。类型被清空（`after` 为空）属中间态，**不连带清空消耗配置**（`:958-961`）。
-- 流体类型走常规提交（`flushPresenceType` 对流体直接返回 `false`，`:925-928`）：流体没有需要同步重指向的消耗配置，这是有意简化。
+- 流体类型改写同步关联的 `consume_fluid.fluid`：目录添加走 `FormView.setOnFieldWritten`，缓冲提交走 `flushPresenceType`；类型写入和关联更新共用一条撤销记录。
 - 类型缓冲不会漏落盘：`applyToDraft()` 第一件事就是 `flushPresenceTypes()`（`:2287-2298`），否则类型改写会被普通提交流程拆成两条记录。
 - 类型表单**不在改类型后重建页面**（`:621-622` 注释）：目录选择可连续多次回调，重建会让后续选择写进已卸载的控件。
 
 ## 6. 有效门槛与运行期同源
 
 - 门槛字段对外统一叫「最低触发数量」（`rule.catalyst_min_count`）：叶弹窗里把原字段重新贴标签（`relabelCatalystThreshold` `:1036-1042`、`relabelCatalystCountField` `:1045-1049`）。
+- 输入页直接显示并编辑门槛；省略值通过 `FormView.setRowDefaultValue` 回填有效数量，未编辑时保留省略状态。消耗区省略数量时显示后端默认值 1，首次开启消耗则显式写入当前门槛数量。
 - 留空时才显示「默认：N」（`rule.catalyst_min_count_effective`）：`thresholdNote`（`:1052-1058`）仅当 `form.pendingValue(countPath)` 为空才返回文案；**显式填写后不再显示**。
 - N 与运行期**完全同源**：`effectiveThreshold`（`:1062-1076`）把整条草稿用 `RuleCodecs.codec(ClientTypeRegistries.effects(), ClientTypeRegistries.conditions())` 解码成 `Rule`，再调用 `core/runtime/CatalystThresholdProjection.resolveThreshold(rule, taggedItems(conditionPath), scopeEffectOf(rule, conditionPath))`。
 - 草稿尚不完整（解码失败）才退化：`fallbackThreshold`（`:1119-1143`）取同作用域消耗配置的 `count`（集合匹配时才采用），否则默认门槛 1（`CatalystPresentCondition.DEFAULT_COUNT`）。
@@ -78,6 +82,7 @@
 - 撤销粒度是**字段级**：`FormView.applyToDraft()`（`ui/screen/form/FormView.java:274-297`）逐字段比较，每个真实变化的字段单独 `session.apply`。所以叶弹窗里改了多个字段 → 需要多次撤销；**弹窗确认本身不是一条记录**。
 - 空父组自下而上整理（`removeLeafAt` `:720-734`、`isEmptyGroup` `:743-754`）：`all_of` / `any_of` 看 `terms`、`inverted` 看 `term`；空组连父一起删，但**不改变 `any_of` / `inverted` 的结构语义**。
 - 保存走既有编辑保存协议，见 [edit-save-protocol](<../backend/flows/edit-save-protocol.md>)。
+- 新建、从模板新建及复制成功后清空操作提示，不显示「已创建规则」；错误与应用结果仍由原有提示区显示。
 
 ## 8. 已知限制
 
@@ -98,6 +103,7 @@
 
 - 管理页不提供独立的选中规则预览面板或展开/收起预览按钮，规则树使用内容区的完整宽度；配方行图标与悬停说明仍在树内显示。
 - 顶部按钮栏依次提供新建规则、从模板创建、编辑、启用或停用、复制、删除、更多；按钮按当前文案宽度自动换行。底部提供应用更改与变更清单。
+- 新建与从模板创建的命名弹窗只填写规则 ID 的路径部分，命名空间固定为 `itemdespawntowhat` 并只读展示；名字支持小写字母、数字及 `_ - . /`，创建后的显示名可使用中文。输入时校验格式及 ID 唯一性，与已有规则或尚未应用的新建规则重复时在弹窗内显示红字并禁用确认；校验失败保留弹窗与输入。
 - 编辑、启用或停用、复制、删除、更多在未选中规则或工作区冻结时禁用；选择分类不算选中规则。
 - 启用开关根据当前规则体的 `enabled` 显示下一步动作：省略或为 `true` 时显示“停用”，为 `false` 时显示“启用”。切换后标签随草稿状态更新。
 - “更多”提供屏蔽或取消屏蔽、恢复原始；屏蔽开关根据当前规则体的 `delete` 显示下一步动作。删除使用顶部入口并保留确认弹窗。

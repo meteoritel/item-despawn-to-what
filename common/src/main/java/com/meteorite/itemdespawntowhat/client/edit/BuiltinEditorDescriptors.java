@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.edit;
 
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import com.meteorite.itemdespawntowhat.core.model.CatalystCost;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.network.chat.Component;
@@ -300,13 +301,12 @@ public final class BuiltinEditorDescriptors {
         ), false);
     }
 
-    // 催化剂固定成本对象：items 必填（支持标签），count/radius 可省略
+    // 输入页消耗区只显示每轮数量；物品在存在条件区选择，半径不提供自定义入口。
     public static TypeEditorDescriptor catalystCostDescriptor() {
         String r = "gui.itemdespawntowhat.edit.rule.";
         return new TypeEditorDescriptor(CATALYST_COST_DESCRIPTOR, Component.translatable(r + "catalyst_cost"), List.of(
-                EditorField.tagList(RuleFields.CATALYST_ITEMS, r + "catalyst_cost.items", "minecraft:item").asRequired(),
-                EditorField.optionalInteger(RuleFields.CATALYST_COUNT, r + "catalyst_cost.count", 1, 64),
-                EditorField.optionalInteger(RuleFields.CATALYST_RADIUS, r + "catalyst_cost.radius", 1, 8)
+                EditorField.integer(RuleFields.CATALYST_COUNT, r + "catalyst_cost.count",
+                        CatalystCost.MIN_COUNT, CatalystCost.MAX_COUNT)
         ), false);
     }
 

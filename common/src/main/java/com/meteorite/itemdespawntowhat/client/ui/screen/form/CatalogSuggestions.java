@@ -58,6 +58,8 @@ public final class CatalogSuggestions implements SuggestionProvider {
         for (RuleCatalogType type : types) {
             java.util.Set<String> validTags = type == RuleCatalogType.TAG ? com.meteorite.itemdespawntowhat.client.ui.screen.FieldCatalogChoices.tags(field) : null;
             for (RuleCatalogEntry entry : entriesOf(type)) {
+                if (type == RuleCatalogType.FLUID
+                        && com.meteorite.itemdespawntowhat.client.ui.screen.FluidPreviewIcons.isEmpty(entry.id())) continue;
                 if (validTags != null && !validTags.contains(entry.id())) continue;
                 if (candidates.size() >= MAX_SUGGESTIONS) {
                     break;

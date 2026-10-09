@@ -144,12 +144,13 @@ public final class RuleEditorP4Panels {
         return looksLikeKey ? Component.translatable(raw) : Component.literal(raw);
     }
 
-    // 物品/方块图标；其他目录类型回落文字槽（缺贴图不阻塞功能）
+    // 物品、方块、实体和流体图标；其他目录类型回落文字槽。
     public static @Nullable UiIcon iconFor(@Nullable RuleCatalogType type, @Nullable String id) {
         if (type == null || id == null || id.isBlank()) {
             return null;
         }
-        if (id.startsWith("#") && (type == RuleCatalogType.ITEM || type == RuleCatalogType.BLOCK || type == RuleCatalogType.ENTITY))
+        if (id.startsWith("#") && (type == RuleCatalogType.ITEM || type == RuleCatalogType.BLOCK
+                || type == RuleCatalogType.ENTITY || type == RuleCatalogType.FLUID))
             return TagPreviewIcons.resolve(type, id).icon();
         String normalized = id.startsWith("#") ? id.substring(1) : id;
         ResourceLocation key = ResourceLocation.tryParse(
@@ -159,6 +160,7 @@ public final class RuleEditorP4Panels {
         }
         if (type == RuleCatalogType.ENTITY && !id.startsWith("#")) return EntityPreviewIcons.icon(key.toString(), 0);
         if (type == RuleCatalogType.BLOCK && !id.startsWith("#")) return BlockPreviewIcons.icon(key.toString());
+        if (type == RuleCatalogType.FLUID && !id.startsWith("#")) return FluidPreviewIcons.icon(key.toString());
         ItemStack stack = switch (type) {
             case ITEM -> stackOf(BuiltInRegistries.ITEM.getOptional(key).orElse(null));
             case BLOCK -> BuiltInRegistries.BLOCK.getOptional(key).map(block -> stackOf(block.asItem()))
@@ -349,6 +351,7 @@ public final class RuleEditorP4Panels {
                 List<UiCatalogGrid.Entry> mapped = new ArrayList<>();
                 java.util.Set<String> validTags = field != null && type == RuleCatalogType.TAG ? FieldCatalogChoices.tags(field) : null;
                 for (RuleCatalogEntry entry : catalog.entries()) {
+                    if (type == RuleCatalogType.FLUID && FluidPreviewIcons.isEmpty(entry.id())) continue;
                     if (validTags != null && !validTags.contains(entry.id())) continue;
                     if (type == RuleCatalogType.ENTITY && field != null && FieldCatalogChoices.isGenericProduct(field)
                             && (entry.id().equals("minecraft:item") || entry.id().equals("minecraft:experience_orb"))) continue;
@@ -358,8 +361,12 @@ public final class RuleEditorP4Panels {
                         var tag = TagPreviewIcons.resolve(memberType == null ? RuleCatalogType.ITEM : memberType, entry.id());
                         tagPreviews.put(entry.id(), tag);
                         mapped.add(new UiCatalogGrid.Entry(entry.id(), tag.label(), null, tag.icon()));
-                    } else mapped.add(new UiCatalogGrid.Entry(entry.id(), catalogLabel(entry.label()),
-                            sub == null || sub.isBlank() ? null : catalogLabel(sub), iconFor(type, entry.id())));
+                    } else {
+                        ResourceLocation id = ResourceLocation.tryParse(entry.id());
+                        Component fluidLabel = type == RuleCatalogType.FLUID && id != null ? FluidPreviewIcons.label(id) : null;
+                        mapped.add(new UiCatalogGrid.Entry(entry.id(), fluidLabel == null ? catalogLabel(entry.label()) : fluidLabel,
+                                sub == null || sub.isBlank() ? null : catalogLabel(sub), iconFor(type, entry.id())));
+                    }
                 }
                 if (includeTags && tags != null && field != null) {
                     java.util.Set<String> allowed = FieldCatalogChoices.tags(field);

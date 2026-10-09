@@ -51,6 +51,11 @@ public final class TagPreviewIcons {
                     .map(set -> set.stream().map(holder -> new Member(holder.value().getDescription(),
                             EntityPreviewIcons.icon(BuiltInRegistries.ENTITY_TYPE.getKey(holder.value()).toString(), 0))).toList())
                     .orElse(List.of());
+            case FLUID -> BuiltInRegistries.FLUID.getTag(TagKey.create(Registries.FLUID, id))
+                    .map(set -> set.stream().filter(holder -> !holder.value().defaultFluidState().isEmpty())
+                            .map(holder -> new Member(FluidPreviewIcons.label(BuiltInRegistries.FLUID.getKey(holder.value())),
+                                    FluidPreviewIcons.icon(BuiltInRegistries.FLUID.getKey(holder.value()).toString()))).toList())
+                    .orElse(List.of());
             default -> List.of();
         };
         members = members.stream().filter(member -> member.icon() != null).toList();
@@ -74,6 +79,6 @@ public final class TagPreviewIcons {
     }
 
     private static String kind(RuleCatalogType type) {
-        return switch (type) { case BLOCK -> "blocks"; case ENTITY -> "entities"; default -> "items"; };
+        return switch (type) { case BLOCK -> "blocks"; case ENTITY -> "entities"; case FLUID -> "fluids"; default -> "items"; };
     }
 }

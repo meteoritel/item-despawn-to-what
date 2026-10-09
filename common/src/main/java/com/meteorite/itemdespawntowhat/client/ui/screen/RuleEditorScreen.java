@@ -90,6 +90,8 @@ public final class RuleEditorScreen extends Screen {
     private static final int EDIT_PAD = 8;
     private static final int ROW_H = 12;
     private static final int NOTICE_H = 10;
+    private static final int RULE_ID_MAX_LENGTH = 128;
+    private static final String DEFAULT_RULE_NAME = "new_rule";
     // i18n 前缀
     private static final String UI = "gui.itemdespawntowhat.edit.";
     private static final String ISSUE = UI + "issue.";
@@ -211,7 +213,6 @@ public final class RuleEditorScreen extends Screen {
     // ---- P6：草稿落盘与冲突 ----
     // 「应用全部」按钮（无改动或会话冻结时禁用）
     private @Nullable UiButton applyButton;
-    private @Nullable UiButton requiredButton;
     // 撤销 / 重做按钮（显示下一次操作名，无历史时禁用）
     private @Nullable UiButton undoButton;
     private @Nullable UiButton redoButton;
@@ -293,7 +294,6 @@ public final class RuleEditorScreen extends Screen {
         tabControl.setOnChanged(this::switchTab);
         buildListButtons();
         buildFooterButtons();
-        requiredButton = button(UI + "button.required", UiButtonVariant.SECONDARY, this::showMissing);
         refreshList();
         rebuildEdit();
         rebuildFocus();
@@ -388,25 +388,6 @@ public final class RuleEditorScreen extends Screen {
         modals.push(modal);
     }
 
-    private void showMissing() {
-        EditSession session = editingSession();
-        if (session == null) return;
-        var missing = com.meteorite.itemdespawntowhat.client.edit.RuleRequirements.find(session.draft().view());
-        UiListView<com.meteorite.itemdespawntowhat.client.edit.RuleRequirements.Missing> list = new UiListView<>(font,
-                (graphics, rowFont, item, index, row, selected, hovered, focused) -> graphics.drawString(rowFont,
-                        Component.translatable(item.labelKey()), row.x() + 2, row.y() + 2, UiPalette.TEXT_PRIMARY, false));
-        list.setItems(missing);
-        list.setActivateOnSingleClick(true);
-        list.setEmptyMessage(Component.translatable(UI + "required.ready"));
-        UiModal modal = UiModal.create(font).title(Component.translatable(UI + "button.required"));
-        list.setOnActivate(item -> {
-            revealIssue(FormIssue.error(item.path(), Component.translatable(item.labelKey()), Component.translatable(UI + "issue.required")));
-            modals.close(modal);
-        });
-        modal.contentWidget(list, Math.clamp(missing.size() * 12L, 24, 100)).cancel(Component.translatable(UI + "button.cancel"));
-        modals.push(modal.layoutCentered(width, height));
-    }
-
     private void showChanges() {
         Component body = Component.translatable(UI + "changes.note");
         for (String id : model.dirtyRuleIds()) {
@@ -461,11 +442,6 @@ public final class RuleEditorScreen extends Screen {
             tabControl.setBounds(pagePad, y, Math.max(0, w - pagePad * 2), TAB_H);
             tabControl.render(graphics, font, mouseX, mouseY);
             y += TAB_H + EDIT_PAD;
-        }
-        if (mode == Mode.EDIT && requiredButton != null && requiredButton.isVisible()) {
-            requiredButton.setBounds(pagePad, y, Math.max(0, w - pagePad * 2), 16);
-            requiredButton.render(graphics, font, mouseX, mouseY);
-            y += 20;
         }
         int availableWidth = Math.max(0, w - pagePad * 2);
         int footerHeight = (mode == Mode.LIST ? listBar : footerBar).preferredHeight(availableWidth);
@@ -928,23 +904,69 @@ public final class RuleEditorScreen extends Screen {
         if (rejectWhenFrozen()) {
             return;
         }
-        promptText(UI + "prompt.new_title", "itemdespawntowhat:new_rule",
-                value -> createRule(value, templateId));
+        RuleNameInput content = new RuleNameInput(font);
+        UiTextInput input = content.input();
+        input.setMaxLength(RULE_ID_MAX_LENGTH);
+        input.setValue(DEFAULT_RULE_NAME);
+        UiModal modal = UiModal.create(font).title(Component.translatable(UI + "prompt.new_title"))
+                .preferredWidth(RuleNameInput.MODAL_WIDTH);
+        modal.contentWidget(content, content.preferredHeight());
+        UiButton confirmButton = new UiButton(font, Component.translatable(UI + "button.confirm"),
+                UiButtonVariant.PRIMARY, null);
+        Runnable validate = () -> {
+            Component problem = ruleNameProblem(input.value());
+            content.setProblem(problem);
+            confirmButton.setEnabled(problem == null);
+        };
+        Runnable submit = () -> {
+            validate.run();
+            if (ruleNameProblem(input.value()) == null && createRule(input.value(), templateId)) {
+                modals.close(modal);
+            }
+        };
+        confirmButton.setAction(submit::run);
+        input.setOnValueChanged(validate);
+        input.setOnCommit(value -> submit.run());
+        modal.addButton(confirmButton).cancel(Component.translatable(UI + "button.cancel"));
+        validate.run();
+        modal.layoutCentered(this.width, this.height);
+        modals.push(modal);
+        // 登记暂时禁用的按钮，输入合法后仍可通过 Tab 到达确认按钮。
+        UiFocusManager modalFocus = modals.focusManager();
+        modalFocus.beginUpdate();
+        modalFocus.add(content);
+        for (UiButton button : modal.buttons()) {
+            modalFocus.add(button);
+        }
+        modalFocus.endUpdate();
+        modalFocus.focusOn(content);
+        input.selectAll();
     }
 
-    private void createRule(String value, @Nullable String templateId) {
+    private @Nullable Component ruleNameProblem(String value) {
+        String name = value.trim();
+        ResourceLocation id = name.indexOf(':') >= 0 ? null : normalizeId(name);
+        if (id == null) {
+            return Component.translatable(UI + "prompt.invalid_name");
+        }
+        String key = id.toString();
+        return model.entry(key) != null || model.isCreated(key)
+                ? Component.translatable(UI + "notice.duplicate_id") : null;
+    }
+
+    private boolean createRule(String value, @Nullable String templateId) {
         if (rejectWhenFrozen()) {
-            return;
+            return false;
         }
         ResourceLocation id = normalizeId(value);
         if (id == null) {
             setNotice(Component.translatable(UI + "notice.invalid_id"), UiPalette.DANGER);
-            return;
+            return false;
         }
         String key = id.toString();
         if (model.entry(key) != null || model.isCreated(key)) {
             setNotice(Component.translatable(UI + "notice.duplicate_id"), UiPalette.DANGER);
-            return;
+            return false;
         }
         JsonObject body;
         if (templateId == null) {
@@ -953,7 +975,7 @@ public final class RuleEditorScreen extends Screen {
             JsonObject loaded = RuleTemplateHooks.load(ResourceLocation.tryParse(templateId));
             if (loaded == null) {
                 setNotice(Component.translatable(UI + "notice.template_failed"), UiPalette.DANGER);
-                return;
+                return false;
             }
             body = BuiltinEditorDefaults.copyOf(key, loaded);
             // 模板里的 enabled=false 只用于样本演示，从模板新建的规则一律启用
@@ -963,7 +985,8 @@ public final class RuleEditorScreen extends Screen {
         refreshList();
         openEditor(key);
         if (templateId == null) { switchTab("input"); if (tabControl != null) tabControl.setSelected(tab.value()); }
-        setNotice(Component.translatable(UI + "notice.created"), UiPalette.SUCCESS);
+        setNotice(null, UiPalette.TEXT_SECONDARY);
+        return true;
     }
 
     private void promptDuplicate() {
@@ -987,7 +1010,7 @@ public final class RuleEditorScreen extends Screen {
             candidate = sourceId + "_copy" + suffix;
             suffix++;
         }
-        promptText(UI + "prompt.duplicate_title", candidate, value -> {
+        promptDuplicateId(candidate, value -> {
             // 弹窗期间可能已被冻结（应用在途 / 会话结束），提交前再确认一次
             if (rejectWhenFrozen()) {
                 return;
@@ -1005,7 +1028,7 @@ public final class RuleEditorScreen extends Screen {
             model.createSession(key, BuiltinEditorDefaults.copyOf(key, body));
             refreshList();
             openEditor(key);
-            setNotice(Component.translatable(UI + "notice.created"), UiPalette.SUCCESS);
+            setNotice(null, UiPalette.TEXT_SECONDARY);
         });
     }
 
@@ -1499,7 +1522,6 @@ public final class RuleEditorScreen extends Screen {
                 focus.add(button);
             }
         } else {
-            if (requiredButton != null && requiredButton.isVisible()) focus.add(requiredButton);
             if (tabControl != null) {
                 focus.add(tabControl);
             }
@@ -1549,7 +1571,6 @@ public final class RuleEditorScreen extends Screen {
             return globalBar.mouseClicked(mouseX, mouseY, button)
                     || listBar.mouseClicked(mouseX, mouseY, button);
         }
-        if (requiredButton != null && requiredButton.mouseClicked(mouseX, mouseY, button)) return true;
         if (tabControl != null && tabControl.mouseClicked(mouseX, mouseY, button)) {
             return true;
         }
@@ -1583,7 +1604,6 @@ public final class RuleEditorScreen extends Screen {
         if (ruleList != null) consumed |= ruleList.mouseReleased(mouseX, mouseY, button);
         consumed |= globalBar.mouseReleased(mouseX, mouseY, button);
         consumed |= listBar.mouseReleased(mouseX, mouseY, button);
-        if (requiredButton != null) consumed |= requiredButton.mouseReleased(mouseX, mouseY, button);
         consumed |= footerBar.mouseReleased(mouseX, mouseY, button);
         return consumed || super.mouseReleased(mouseX, mouseY, button);
     }
@@ -1749,12 +1769,6 @@ public final class RuleEditorScreen extends Screen {
             applyButton.setLabel(Component.translatable(UI + "button.apply_changes", model.dirtyRuleIds().size()));
         }
         EditSession session = editingSession();
-        if (requiredButton != null && session != null) {
-            int missing = com.meteorite.itemdespawntowhat.client.edit.RuleRequirements.find(session.draft().view()).size();
-            // 没有缺失项时不再显示「待补充必填项：0」横幅
-            requiredButton.setVisible(missing > 0);
-            requiredButton.setLabel(Component.translatable(UI + "required.count", missing));
-        }
         boolean canUndo = editable && session != null && session.canUndo();
         boolean canRedo = editable && session != null && session.canRedo();
         if (undoButton != null) {
@@ -2000,13 +2014,13 @@ public final class RuleEditorScreen extends Screen {
         return parsed;
     }
 
-    // 文本输入弹窗
-    private void promptText(String titleKey, String initial, Consumer<String> onValue) {
+    // 复制规则的完整 ID 输入弹窗
+    private void promptDuplicateId(String initial, Consumer<String> onValue) {
         UiTextInput input = new UiTextInput(font, Component.translatable(UI + "prompt.id_hint"));
-        input.setMaxLength(128);
+        input.setMaxLength(RULE_ID_MAX_LENGTH);
         input.setValue(initial);
         UiModal modal = UiModal.create(font);
-        modal.title(Component.translatable(titleKey));
+        modal.title(Component.translatable(UI + "prompt.duplicate_title"));
         modal.contentWidget(input, ROW_H + 4);
         modal.confirm(Component.translatable(UI + "button.confirm"), () -> onValue.accept(input.value()));
         modal.cancel(Component.translatable(UI + "button.cancel"));

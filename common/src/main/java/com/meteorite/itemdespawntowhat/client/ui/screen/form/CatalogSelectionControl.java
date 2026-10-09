@@ -9,6 +9,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
+import com.meteorite.itemdespawntowhat.client.ui.screen.FluidPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.screen.RuleDisplayLabels;
 import com.meteorite.itemdespawntowhat.client.ui.screen.RuleEditorP4Panels;
 import com.meteorite.itemdespawntowhat.client.ui.screen.TagPreviewIcons;
@@ -24,7 +25,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
-/*** 输入页的紧凑物品卡片：按名称测量宽度并换行，保留滚动、键盘导航与标签轮播。 */
+/*** 输入页的紧凑物品与流体卡片：按名称测量宽度并换行，保留滚动、键盘导航与标签轮播。 */
 final class CatalogSelectionControl extends FormControl implements UiFocusTarget {
     private static final String UI = "gui.itemdespawntowhat.edit.";
     private static final int CHIP_HEIGHT = 24;
@@ -89,7 +90,8 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
         int hovered = indexAt(mouseX, mouseY);
         scroll.push(graphics);
         try {
-            if (values.isEmpty()) graphics.drawString(renderFont, Component.translatable(UI + "selection.empty"),
+            if (values.isEmpty()) graphics.drawString(renderFont, Component.translatable(UI +
+                            (catalogType() == RuleCatalogType.FLUID ? "selection.any_fluid" : "selection.empty")),
                     4, 8, UiPalette.TEXT_SECONDARY, false);
             for (int i = 0; i < values.size(); i++) {
                 UiRect chip = chips.get(i);
@@ -126,20 +128,27 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
     }
 
     private Selection selection(JsonElement raw) {
+        RuleCatalogType type = catalogType();
         String id = raw.isJsonPrimitive() && raw.getAsJsonPrimitive().isString() ? raw.getAsString() : "";
         Component name = Component.translatable(UI + "selection.unknown");
         UiIcon icon;
         if (id.startsWith("#")) {
-            var tag = TagPreviewIcons.resolve(RuleCatalogType.ITEM, id);
+            var tag = TagPreviewIcons.resolve(type, id);
             name = Component.literal("# ").append(tag.label());
             icon = tag.icon();
         } else {
             ResourceLocation key = ResourceLocation.tryParse(id);
-            Component label = key == null ? null : RuleDisplayLabels.label(key);
+            Component label = key == null ? null : type == RuleCatalogType.FLUID
+                    ? FluidPreviewIcons.label(key) : RuleDisplayLabels.label(key);
             if (label != null) name = label;
-            icon = RuleEditorP4Panels.iconFor(RuleCatalogType.ITEM, id);
+            icon = RuleEditorP4Panels.iconFor(type, id);
         }
         return new Selection(raw.deepCopy(), id, name, icon);
+    }
+
+    private RuleCatalogType catalogType() {
+        RuleCatalogType type = RuleEditorP4Panels.catalogTypeOf(field);
+        return type == null ? RuleCatalogType.ITEM : type;
     }
 
     @Override

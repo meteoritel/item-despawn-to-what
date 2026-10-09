@@ -44,6 +44,7 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
+import com.meteorite.itemdespawntowhat.core.model.CatalystCost;
 import com.meteorite.itemdespawntowhat.core.model.CombinationMode;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionLimits;
@@ -233,7 +234,7 @@ public final class RuleEditorEditPages {
     private static final ResourceLocation CATALYST_PRESENT_ID = CatalystPresentCondition.ID;
     private static final ResourceLocation FLUID_PRESENT_ID = FluidPresentCondition.ID;
 
-    // 输入页的「添加催化剂 / 添加流体」开关：勾选状态由草稿规则级条件里是否存在该类型的叶决定
+    // 输入页的存在条件开关：勾选状态由草稿规则级条件里是否存在该类型的叶决定
     private @Nullable UiCheckBox catalystPresenceToggle;
     private @Nullable UiCheckBox fluidPresenceToggle;
     // 存在条件的类型表单行（含标题行矩形），逐项按确切叶路径绑定
@@ -264,7 +265,7 @@ public final class RuleEditorEditPages {
         }
     }
 
-    // 输入页的一行存在条件：叶 + 只含类型字段的表单 + 标题行矩形
+    // 输入页的一行存在条件：叶、物品与门槛表单及标题行矩形
     private static final class PresenceRow {
         private final PresenceLeaf leaf;
         private final FormView form;
@@ -437,6 +438,9 @@ public final class RuleEditorEditPages {
         if (page == Page.INPUT) form.setOnChanged(() -> {
             form.applyToDraft();
             if (form == sourceForm) updateBlacklistVisibility();
+            if (form == catalystForm) {
+                for (PresenceRow row : presenceRows) if (row.leaf.catalyst()) row.form.reload();
+            }
             host.onDraftChanged();
         });
         // 输入被长度上限拒绝时立刻显示一条可读提示（字段名：问题）
@@ -564,24 +568,36 @@ public final class RuleEditorEditPages {
             liveWidgets.add(sourceCostForm);
         }
 
+        buildPresenceSection(session, CATALYST_PRESENT_ID, UI + "rule.presence.add_catalyst");
         RuleCostBinding.Ref catalystRef = RuleCostBinding.consumeCatalyst(rule);
         boolean catalystOn = rule.has(RuleFields.CATALYST_COST);
-        catalystToggle = new UiCheckBox(font, Component.translatable(UI + "rule.catalyst_cost"), catalystRef != null || catalystOn);
+        boolean catalystEnabled = hasRuleLevelPresence(rule, CATALYST_PRESENT_ID);
+        TypeEditorDescriptor catalystDescriptor = BuiltinEditorDescriptors.catalystCostDescriptor();
+        // 已有独立消耗规则没有存在叶时，仍保留其物品编辑入口。
+        if (!catalystEnabled) {
+            List<EditorField> fields = new ArrayList<>();
+            fields.add(EditorField.tagList(RuleFields.CATALYST_ITEMS, UI + "rule.catalyst_cost.items",
+                    "minecraft:item").asRequired());
+            fields.addAll(catalystDescriptor.fields());
+            catalystDescriptor = TypeEditorDescriptor.of(catalystDescriptor.id(), catalystDescriptor.label(), fields);
+        }
+        catalystToggle = new UiCheckBox(font, Component.translatable(UI + "rule.catalyst_consume"), catalystRef != null || catalystOn);
+        catalystToggle.setVisible(catalystEnabled || catalystRef != null || catalystOn);
+        catalystToggle.setOnChanged(this::onCatalystToggle);
         if (catalystRef != null) {
-            catalystToggle.setEnabled(false);
             catalystNote = Component.translatable(UI + "cost.from_effect_path", Component.literal(catalystRef.path()));
-            catalystForm = newForm(session, catalystRef.path(), ownFieldsOnly(EffectEditorRegistry.descriptorFor(CONSUME_CATALYST_ID)));
+            catalystForm = newForm(session, catalystRef.path(), catalystDescriptor);
         } else {
-            catalystToggle.setOnChanged(this::onCatalystToggle);
-            catalystForm = catalystOn ? newForm(session, RuleFields.CATALYST_COST, BuiltinEditorDescriptors.catalystCostDescriptor()) : null;
+            catalystForm = catalystOn ? newForm(session, RuleFields.CATALYST_COST, catalystDescriptor) : null;
         }
         liveWidgets.add(catalystToggle);
         if (catalystForm != null) {
+            String costPath = catalystRef == null ? RuleFields.CATALYST_COST : catalystRef.path();
+            catalystForm.setRowDefaultValue(costPath + "." + RuleFields.CATALYST_COUNT,
+                    () -> new JsonPrimitive(CatalystCost.DEFAULT_COUNT));
             liveForms.add(catalystForm);
             liveWidgets.add(catalystForm);
         }
-        // 存在条件：类型的唯一入口是条件叶，未勾选时不渲染类型字段
-        buildPresenceSection(session, CATALYST_PRESENT_ID, UI + "rule.presence.add_catalyst");
         buildPresenceSection(session, FLUID_PRESENT_ID, UI + "rule.presence.add_fluid");
     }
 
@@ -620,7 +636,7 @@ public final class RuleEditorEditPages {
         });
     }
 
-    // 催化剂成本开关：开启建空的固定成本（类型不写在这里，来自存在叶），关闭移除字段
+    // 开启消耗时用当前门槛初始化每轮成本；关闭同时移除既有消耗效果，避免残留扣除。
     private void onCatalystToggle(boolean checked) {
         EditSession session = host.session();
         if (session == null) {
@@ -629,13 +645,47 @@ public final class RuleEditorEditPages {
         RuleDraft draft = session.draft();
         apply(EditSession.OP_SET_FIELD, () -> {
             if (checked) {
-                draft.setAt(RuleFields.CATALYST_COST, new JsonObject());
-                // 存在叶里已选的催化剂物品立刻同步到固定成本，避免出现「有成本没类型」的空档
+                PresenceLeaf leaf = selectedCatalystLeaf(draft);
+                if (leaf == null) return;
+                int count = catalystThreshold(leaf);
+                // 显式固定当前门槛，之后调整消耗量不会反向改变触发条件。
+                draft.setInt(leaf.conditionPath() + "." + RuleFields.CATALYST_COUNT, count);
+                JsonObject cost = new JsonObject();
+                cost.addProperty(RuleFields.CATALYST_COUNT, count);
+                draft.setAt(RuleFields.CATALYST_COST, cost);
                 retargetCatalystItems(draft, List.of(), ruleLevelCatalystItems(draft));
             } else {
-                draft.remove(RuleFields.CATALYST_COST);
+                for (PresenceLeaf leaf : ruleLevelPresence(draft.view(), CATALYST_PRESENT_ID)) {
+                    String countPath = leaf.conditionPath() + "." + RuleFields.CATALYST_COUNT;
+                    if (draft.getAt(countPath) == null) draft.setInt(countPath, catalystThreshold(leaf));
+                }
+                removeCatalystConsumption(draft);
             }
         });
+    }
+
+    private static @Nullable PresenceLeaf selectedCatalystLeaf(RuleDraft draft) {
+        for (PresenceLeaf leaf : ruleLevelPresence(draft.view(), CATALYST_PRESENT_ID)) {
+            if (!stringList(draft.getAt(leaf.fieldPath())).isEmpty()) return leaf;
+        }
+        return null;
+    }
+
+    // 读取显式门槛；省略时沿用同运行期的有效默认值。
+    private int catalystThreshold(PresenceLeaf leaf) {
+        EditSession session = host.session();
+        JsonElement count = session == null ? null
+                : session.draft().getAt(leaf.conditionPath() + "." + RuleFields.CATALYST_COUNT);
+        return count != null && count.isJsonPrimitive() && count.getAsJsonPrimitive().isNumber()
+                ? count.getAsInt() : effectiveThreshold(leaf.conditionPath());
+    }
+
+    private static void removeCatalystConsumption(RuleDraft draft) {
+        draft.remove(RuleFields.CATALYST_COST);
+        RuleCostBinding.Ref ref;
+        while ((ref = RuleCostBinding.consumeCatalyst(draft.view())) != null) {
+            draft.removeAt(ref.path());
+        }
     }
 
     // ---- 输入页的存在条件（催化剂 / 流体）与门槛提示 ----
@@ -659,9 +709,24 @@ public final class RuleEditorEditPages {
         }
     }
 
-    // 存在条件的类型表单：只含类型字段，绑定到对应条件叶的 condition 路径
+    // 存在条件表单绑定到确切叶路径，催化剂额外呈现门槛。
     private FormView presenceForm(EditSession session, PresenceLeaf leaf) {
         FormView form = newForm(session, leaf.conditionPath(), presenceDescriptor(leaf));
+        form.hideRowLabel(leaf.fieldPath());
+        form.setOnFieldWritten((path, before) -> {
+            if (!leaf.fieldPath().equals(path)) return;
+            if (leaf.catalyst()) {
+                retargetCatalystItems(session.draft(), stringList(before),
+                        stringList(session.draft().getAt(path)));
+            } else {
+                retargetFluidActions(session.draft(), primitiveString(before),
+                        primitiveString(session.draft().getAt(path)));
+            }
+        });
+        if (leaf.catalyst()) {
+            form.setRowDefaultValue(leaf.conditionPath() + "." + RuleFields.CATALYST_COUNT,
+                    () -> new JsonPrimitive(effectiveThreshold(leaf.conditionPath())));
+        }
         // 类型改写立即落盘（类型 + 关联消耗配置重指向 = 同一次可撤销操作）；此处不重建页面，
         // 目录选择可连续多次回调，重建会让后续选择写进已卸载的控件
         form.setOnChanged(() -> {
@@ -669,26 +734,31 @@ public final class RuleEditorEditPages {
             if (current == null || host.rejectWhenFrozen()) {
                 return;
             }
-            if (flushPresenceType(current, leaf, form)) {
-                host.onDraftChanged();
-            }
+            flushPresenceType(current, leaf, form);
+            form.applyToDraft();
+            applyEnabled();
+            // 目录选择已在同一次字段写入中提交，仍需通知宿主刷新规则摘要。
+            host.onDraftChanged();
         });
-        // 逐项移除按钮挂在类型行尾：删除只作用于这一个叶，不影响独立消耗配置
-        form.setRowAction(leaf.fieldPath(), new UiButton(font, Component.translatable(UI + "rule.presence.remove"),
-                UiButtonVariant.SECONDARY, () -> removePresenceLeaf(leaf)));
+        // 选择卡片自带逐项移除；多个同类型叶保留移除整条条件的入口。
+        if (ruleLevelPresence(session.draft().view(), leaf.type()).size() > 1) {
+            form.setRowAction(leaf.fieldPath(), new UiButton(font, Component.translatable(UI + "rule.presence.remove"),
+                    UiButtonVariant.SECONDARY, () -> removePresenceLeaf(leaf)));
+        }
         return form;
     }
 
-    // 输入页的类型描述符：催化剂只暴露 items，流体只暴露 fluid（存在判定与组合关系留在触发页）
+    // 催化剂先选择物品，再设置门槛；组合关系仍由触发页管理。
     private TypeEditorDescriptor presenceDescriptor(PresenceLeaf leaf) {
         List<EditorField> fields = leaf.catalyst()
                 ? List.of(EditorField.tagList(RuleFields.CATALYST_ITEMS, UI + "field.catalyst_present.items", "minecraft:item")
-                        .asRequired())
+                        .asRequired(), EditorField.optionalInteger(RuleFields.CATALYST_COUNT,
+                        UI + "rule.catalyst_min_count", CatalystCost.MIN_COUNT, CatalystCost.MAX_COUNT))
                 : List.of(EditorField.optionalTag("fluid", UI + "field.fluid_present.fluid", "minecraft:fluid"));
         return TypeEditorDescriptor.of(leaf.type(), TypeLabels.conditionLabel(leaf.type()), fields);
     }
 
-    // 存在条件开关：勾选新增规则级条件叶，取消删除规则级叶；独立消耗配置始终不受影响
+    // 关闭催化剂时同时关闭消耗；流体继续只管理存在条件。
     private void onPresenceToggle(ResourceLocation type, boolean checked) {
         EditSession session = host.session();
         if (session == null) {
@@ -699,6 +769,7 @@ public final class RuleEditorEditPages {
             if (checked) {
                 addRuleLevelPresence(draft, type);
             } else {
+                if (CATALYST_PRESENT_ID.equals(type)) removeCatalystConsumption(draft);
                 removeRuleLevelPresence(draft, type);
             }
         });
@@ -717,6 +788,10 @@ public final class RuleEditorEditPages {
     // 结构新增：空树直接加叶；已有根不是 all_of 时把完整旧根与新叶一起放进新的 all_of
     private static void addRuleLevelPresence(RuleDraft draft, ResourceLocation type) {
         JsonObject leaf = presenceLeafJson(type);
+        if (CATALYST_PRESENT_ID.equals(type)) {
+            leaf.getAsJsonObject(RuleFields.CONDITION).addProperty(RuleFields.CATALYST_COUNT,
+                    CatalystPresentCondition.DEFAULT_COUNT);
+        }
         JsonElement current = draft.getAt(RuleFields.CONDITIONS);
         if (current == null || current.isJsonNull()) {
             draft.setAt(RuleFields.CONDITIONS, leaf);
@@ -1123,8 +1198,9 @@ public final class RuleEditorEditPages {
             if (!row.leaf.ruleLevel() || !row.leaf.type().equals(type)) {
                 continue;
             }
-            row.headerRect = new UiRect(x, cursor, width, LINE_H);
-            cursor += LINE_H;
+            boolean showHeader = ruleLevelPresence(currentView(), type).size() > 1;
+            row.headerRect = showHeader ? new UiRect(x, cursor, width, LINE_H) : null;
+            if (showHeader) cursor += LINE_H;
             cursor = layoutForm(row.form, x, cursor, width);
         }
         return cursor;
@@ -2049,7 +2125,7 @@ public final class RuleEditorEditPages {
         y = layoutForm(sourceCostForm, x, y, width);
         top = finishCard(area.x(), top, area.width(), y, "card.source");
         y = layoutPresenceSection(CATALYST_PRESENT_ID, x, top + CARD_PAD + CARD_HEADER_H, width);
-        if (catalystToggle != null) {
+        if (catalystToggle != null && catalystToggle.isVisible()) {
             catalystToggle.setBounds(x, y, width, ROW_H);
             y += ROW_H + PAD;
         }
@@ -2638,7 +2714,11 @@ public final class RuleEditorEditPages {
             sourceCostMode.setEnabled(enabled && RuleCostBinding.consumeSource(view) == null);
         }
         if (catalystToggle != null) {
-            catalystToggle.setEnabled(enabled && RuleCostBinding.consumeCatalyst(view) == null);
+            EditSession session = host.session();
+            boolean hasCost = view != null && (view.has(RuleFields.CATALYST_COST)
+                    || RuleCostBinding.consumeCatalyst(view) != null);
+            catalystToggle.setEnabled(enabled && (hasCost || session != null
+                    && selectedCatalystLeaf(session.draft()) != null));
         }
         if (catalystPresenceToggle != null) {
             catalystPresenceToggle.setEnabled(enabled);

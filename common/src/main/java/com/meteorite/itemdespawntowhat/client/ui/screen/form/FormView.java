@@ -18,7 +18,9 @@ import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -74,6 +76,12 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
     }
     private @Nullable ConditionSupport conditionSupport;
     private @Nullable Runnable changeListener;
+    private @Nullable BiConsumer<String, JsonElement> fieldWritten;
+
+    // 关联字段在同一次撤销操作内同步；第二个参数为写入前的值。
+    public void setOnFieldWritten(BiConsumer<String, JsonElement> listener) {
+        fieldWritten = listener;
+    }
     // 输入被上限拒绝时的即时提示出口（页面显示 notice）
     private @Nullable Consumer<Component> rejectedNoticeHandler;
     private @Nullable Picker picker;
@@ -114,9 +122,10 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
 
     // 追加一个字段
     public FormView addField(EditorField field) {
+        var catalogType = com.meteorite.itemdespawntowhat.client.ui.screen.RuleEditorP4Panels.catalogTypeOf(field);
         boolean iconSelection = catalogSelections
-                && com.meteorite.itemdespawntowhat.client.ui.screen.RuleEditorP4Panels.catalogTypeOf(field)
-                == com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType.ITEM
+                && (catalogType == com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType.ITEM
+                || catalogType == com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType.FLUID)
                 && switch (field.type()) { case TAG, TAG_LIST, RESOURCE_LOCATION, RL_LIST -> true; default -> false; };
         Row row = new Row(field, pathFor(field), iconSelection
                 ? new CatalogSelectionControl(font, field, this::notifyChanged)
@@ -195,6 +204,12 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         }
     }
 
+    // 动态默认值只用于回填，未编辑时仍保留原字段的省略状态。
+    public void setRowDefaultValue(String path, Supplier<JsonElement> value) {
+        for (Row row : rows) if (row.path.equals(path)) row.defaultValue = value;
+        reload();
+    }
+
     // 只由卡片编辑页启用，弹窗等其它宿主保留原有密度。
     public void useCardSpacing() {
         minimumControlHeight = 20;
@@ -253,7 +268,7 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
                 merged.addAll(ids);
                 com.google.gson.JsonArray array = new com.google.gson.JsonArray(); merged.forEach(array::add); value = array;
             } else value = new com.google.gson.JsonPrimitive(ids.getFirst());
-            session.apply(EditSession.OP_SET_FIELD, () -> session.draft().setAt(row.path, value));
+            writeField(row, value);
             reload(); notifyChanged();
         });
     }
@@ -314,7 +329,8 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         for (Row row : rows) {
             JsonElement original = draft.getAt(row.path);
             JsonElement container = basePath.isEmpty() ? draft.view() : draft.getAt(basePath);
-            JsonElement effective = original == null && container != null && container.isJsonObject()
+            JsonElement effective = original == null && row.defaultValue != null ? row.defaultValue.get()
+                    : original == null && container != null && container.isJsonObject()
                     ? com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDefaults.effectiveValue(container.getAsJsonObject(), row.field.name()) : null;
             row.defaultDisplayed = original == null && effective != null;
             row.control.load(row.defaultDisplayed ? effective : original);
@@ -344,17 +360,23 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
             if (Objects.equals(current, next)) {
                 continue;
             }
-            String path = row.path;
-            String opKey = opKeyFor(row);
-            if (next == null) {
-                session.apply(opKey, () -> draft.removeAt(path));
-            } else {
-                JsonElement value = next.deepCopy();
-                session.apply(opKey, () -> draft.setAt(path, value));
-            }
+            writeField(row, next);
             written = true;
         }
         return written;
+    }
+
+    // 文本提交、卡片移除和目录添加共用写入入口，关联更新不会拆成第二条撤销记录。
+    private void writeField(Row row, @Nullable JsonElement next) {
+        RuleDraft draft = session.draft();
+        JsonElement current = draft.getAt(row.path);
+        if (Objects.equals(current, next)) return;
+        JsonElement before = current == null ? null : current.deepCopy();
+        session.apply(opKeyFor(row), () -> {
+            if (next == null) draft.removeAt(row.path);
+            else draft.setAt(row.path, next.deepCopy());
+            if (fieldWritten != null) fieldWritten.accept(row.path, before);
+        });
     }
 
     // 撤销操作名：来源列表单独成项（契约 §5.2 的来源与排除标签），其余交给控件自报
@@ -966,6 +988,7 @@ public final class FormView implements com.meteorite.itemdespawntowhat.client.ui
         private boolean visible = true;
         private boolean tooltipEnabled = true;
         private @Nullable Component defaultText;
+        private @Nullable Supplier<JsonElement> defaultValue;
         private boolean defaultDisplayed;
         private boolean labelVisible = true;
         private final List<com.meteorite.itemdespawntowhat.client.ui.widget.UiButton> pickers = new ArrayList<>();
