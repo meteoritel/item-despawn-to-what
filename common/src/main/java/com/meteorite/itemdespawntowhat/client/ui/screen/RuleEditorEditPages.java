@@ -2044,7 +2044,8 @@ public final class RuleEditorEditPages {
             return;
         }
         RuleDraft draft = session.draft();
-        if (!apply(EditSession.OP_MOVE_CANDIDATE, () -> draft.moveOutcome(from, to))) {
+        boolean[] moved = {false};
+        if (!apply(EditSession.OP_MOVE_CANDIDATE, () -> moved[0] = draft.moveOutcome(from, to)) || !moved[0]) {
             return;
         }
         candidateIndex = to;
@@ -2180,7 +2181,8 @@ public final class RuleEditorEditPages {
         }
         RuleDraft draft = session.draft();
         String listPath = ResultStructure.listPath(draft.view(), candidateIndex);
-        if (!apply(EditSession.OP_MOVE_EFFECT, () -> draft.moveInList(listPath, from, to))) {
+        boolean[] moved = {false};
+        if (!apply(EditSession.OP_MOVE_EFFECT, () -> moved[0] = draft.moveInList(listPath, from, to)) || !moved[0]) {
             return;
         }
         effectIndex = to;

@@ -367,6 +367,15 @@ public final class RuleDraft {
             return false;
         }
         JsonElement element = array.get(from);
+        boolean changesOrder = false;
+        for (int index = Math.min(from, to); index <= Math.max(from, to); index++) {
+            if (!element.equals(array.get(index))) {
+                changesOrder = true;
+                break;
+            }
+        }
+        // 区间内容完全相同时是无变化操作，不能仅交换对象身份及其输入缓冲。
+        if (!changesOrder) return false;
         // to 是移动后的最终下标；逐项平移保留列表长度与所有元素对象。
         if (from < to) {
             for (int index = from; index < to; index++) array.set(index, array.get(index + 1));
