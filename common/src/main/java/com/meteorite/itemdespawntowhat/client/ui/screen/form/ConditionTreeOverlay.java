@@ -53,7 +53,6 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     private final Font font;
     private final EditSession session;
     private final String scope;
-    private final ConditionSupport support;
     private final ParameterFactory parameterFactory;
     private final Runnable changed;
     private final UiConditionTreeEditor editor;
@@ -84,7 +83,6 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         this.font = font;
         this.session = session;
         this.scope = scope;
-        this.support = support;
         this.parameterFactory = parameterFactory;
         this.changed = changed;
         codec = new ConditionTreeJsonCodec(support.registry());
