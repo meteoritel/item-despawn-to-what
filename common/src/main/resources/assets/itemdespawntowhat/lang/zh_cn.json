@@ -440,6 +440,8 @@
   "gui.itemdespawntowhat.edit.button.enable": "启用",
   "gui.itemdespawntowhat.edit.button.disable": "停用",
   "gui.itemdespawntowhat.edit.button.undo": "撤销",
+  "gui.itemdespawntowhat.edit.button.undo_shortcut": "撤销（Ctrl+Z）",
+  "gui.itemdespawntowhat.edit.button.redo_shortcut": "重做（Ctrl+Shift+Z / Ctrl+Y）",
   "gui.itemdespawntowhat.edit.condition.biome": "生物群系",
   "gui.itemdespawntowhat.edit.condition.catalyst_present": "存在催化物",
   "gui.itemdespawntowhat.edit.condition.dimension": "维度",

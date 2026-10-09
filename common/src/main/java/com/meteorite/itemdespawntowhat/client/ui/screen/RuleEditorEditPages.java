@@ -1550,6 +1550,24 @@ public final class RuleEditorEditPages {
         int fieldHeight = descriptor.fields().size() * ROW_H + 8;
         int contentHeight = Math.clamp(Math.max(fieldHeight, panel.contentHeight() + 8), 36, 220);
         modal.contentWidget(panel, contentHeight);
+        modal.onClosed(() -> {
+            JsonElement current = session.draft().getAt(path);
+            if (current instanceof JsonObject object
+                    && leaf.condition().type().toString().equals(stringField(object, RuleFields.TYPE))) {
+                form.commitPendingInputs();
+                host.onDraftChanged();
+            }
+            panel.unmount();
+        });
+        modal.onHistoryChanged(() -> {
+            JsonElement current = session.draft().getAt(path);
+            if (current instanceof JsonObject object
+                    && leaf.condition().type().toString().equals(stringField(object, RuleFields.TYPE))) {
+                panel.reload();
+            } else {
+                host.modals().close(modal);
+            }
+        });
         leafPanels.add(new LeafEntry(modal, panel));
         modal.retainOnConfirm(true);
         modal.confirm(Component.translatable(UI + "button.confirm"), () -> {
@@ -1566,11 +1584,6 @@ public final class RuleEditorEditPages {
             owner.reload();
             host.onDraftChanged();
             host.modals().closeTop();
-        });
-        modal.onCancel(() -> {
-            form.commitPendingInputs();
-            form.retainPendingInputs();
-            host.onDraftChanged();
         });
         modal.cancel(Component.translatable(UI + "button.cancel"));
         modal.layoutCentered(host.screenWidth(), host.screenHeight());

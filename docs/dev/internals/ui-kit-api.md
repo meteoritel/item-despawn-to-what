@@ -394,6 +394,12 @@ void moveCursorToStart();      // 回填后调用：光标与垂直滚动都回�
 
 `UiHistoryShortcut.fromKey(int keyCode, int modifiers)` 使用事件修饰键识别 Ctrl+Z（UNDO）、Ctrl+Shift+Z 和 Ctrl+Y（REDO）；含 Alt/Super 的组合或其他按键返回 null，不读取全局输入状态。
 
+`UiHistoryDispatcher.dispatch(keyCode, scanCode, modifiers, activeScope, history)` 接收当前作用域的 `KeyHandler` 与宿主 `Consumer<UiHistoryShortcut>`。只处理历史快捷键，先调用当前作用域，让聚焦文本控件消费局部历史；未消费时才调用宿主规则历史。识别到快捷键始终返回 true，即使没有宿主历史也不向其他作用域穿透；普通按键返回 false。
+
+`RuleEditorScreen` 和 `UiModalStack` 均通过此入口接入当前规则的历史。弹层只投递顶层内容，配置历史恢复后通过 `UiModal.onHistoryChanged` 通知已打开的内容回填；此通知不派发底层键盘事件。撤销与重做按钮保留，并标注快捷键。
+
+宿主 `UiModal.onClosed` 在确认、取消、按 Esc、显式关闭或清栈移除该弹层时调用一次；用于保存会话内输入及释放交互捕获，不自动提交正式配置。叶参数弹层已接入卸载，并在历史恢复后同步字段与区间值；节点已移除时关闭相应弹层。
+
 `UiTextHistory` 是控件局部历史，不持有规则草稿。默认容量 `DEFAULT_CAPACITY = 100`，也可通过构造参数指定正容量。`Snapshot(String text, int cursor, int anchor)` 使用 UTF-16 光标和选择锚点，与原版输入控件一致；位置钳在文本内。`record(before, after)` 只记录内容变化，超出容量丢弃最早记录，新输入清空重做；`undo()` / `redo()` 返回待回填快照，无记录返回 null。`canUndo()` / `canRedo()` 查询状态，`clear()` 清空历史。
 
 宿主 `UiTextInput` 与 `UiTextArea` 均已接入：被接受的键入、删除、剪切、粘贴和多行换行各记录局部快照；光标、选择和拒绝输入不记历史。撤销恢复文本、光标与选择，通知已有输入变化回调一次，不调用配置提交接口。可编辑且聚焦的输入始终消费撤销/重做快捷键，即使历史为空，容器不得继续撤销底层规则。

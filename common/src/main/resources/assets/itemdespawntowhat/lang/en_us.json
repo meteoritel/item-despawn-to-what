@@ -440,6 +440,8 @@
   "gui.itemdespawntowhat.edit.button.enable": "Enable",
   "gui.itemdespawntowhat.edit.button.disable": "Disable",
   "gui.itemdespawntowhat.edit.button.undo": "Undo",
+  "gui.itemdespawntowhat.edit.button.undo_shortcut": "Undo (Ctrl+Z)",
+  "gui.itemdespawntowhat.edit.button.redo_shortcut": "Redo (Ctrl+Shift+Z / Ctrl+Y)",
   "gui.itemdespawntowhat.edit.condition.biome": "Biome",
   "gui.itemdespawntowhat.edit.condition.catalyst_present": "Catalyst present",
   "gui.itemdespawntowhat.edit.condition.dimension": "Dimension",

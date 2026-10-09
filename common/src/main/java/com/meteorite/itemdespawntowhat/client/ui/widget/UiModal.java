@@ -74,6 +74,28 @@ public final class UiModal implements UiWidget {
     private Consumer<UiModal> closeHandler;
     // 是否可见
     private boolean visible = true;
+    private Runnable onHistoryChanged = () -> {};
+    private Runnable onClosed = () -> {};
+
+    /** 各关闭入口统一通知宿主保存输入缓冲并释放交互。 */
+    public UiModal onClosed(Runnable callback) {
+        onClosed = callback;
+        return this;
+    }
+
+    void closed() {
+        onClosed.run();
+    }
+
+    /** 宿主配置历史恢复后，重新装载当前内容；不派发底层键盘事件。 */
+    public UiModal onHistoryChanged(Runnable callback) {
+        onHistoryChanged = callback;
+        return this;
+    }
+
+    void historyChanged() {
+        onHistoryChanged.run();
+    }
 
     private UiModal(Font font) {
         this.font = font;
