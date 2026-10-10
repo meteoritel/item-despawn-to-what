@@ -78,7 +78,7 @@ SaveRuleChangeSetPayload / SaveRuleChangeSetChunkPayload* (C2S)
 
 ## 6. 版本戳推进时机
 
-成功的数据包重载（`RuleRuntimeHost.reload`）与保存（`bumpVersion`）都推进 `sessions.version()`；快照下发前与保存前都先 `synchronizeDiskRevision()`，覆盖层被手工修改时自增。保存后 reload 失败时：仍 `bumpVersion()` 并回 `SAVED_NOT_RELOADED`（`writtenToDisk=true, reloaded=false`），同时**保留上一版索引**（规则已落盘，下次启动/重载生效）。`/idtw config convert` 已随 P8 结论退役（命令与 `RuleConvertService` 已删除），不再推进修订号；旧 v1.2.1 配置不再加载，需用 `/idtw config edit` 手工重建。
+成功的数据包重载（`RuleRuntimeHost.reload`）与保存（`bumpVersion`）都推进 `sessions.version()`；快照下发前与保存前都先 `synchronizeDiskRevision()`，覆盖层被手工修改时自增。保存后 reload 失败时：仍 `bumpVersion()` 并回 `SAVED_NOT_RELOADED`（`writtenToDisk=true, reloaded=false`），同时**保留上一版索引**（规则已落盘，下次启动/重载生效）。
 
 ## 7. 相关
 

@@ -27,5 +27,5 @@
 ## 后果
 
 - 过载时表现为**延后**而非丢弃或提前执行；不再承诺任意负载下固定的到期精度或固定 tick 耗时。
-- 调试性能口径为 `idtw-scene-v3`：区分 `vanilla_tick_cost`（原版服务器 tick）与 `idtw_runtime_cost`（本模组运行时），`server_tick_cost` 含本模组运行时成本（见 [debug-validation-guide.md](../dev/debug/debug-validation-guide.md)）。
+- 调试性能口径为 `idtw-scene-v3`：区分 `vanilla_tick_cost`（原版服务器 tick）与 `idtw_runtime_cost`（本模组运行时），`server_tick_cost` 含本模组运行时成本（见 [debug.md](../dev/backend/modules/debug.md)）。
 - 新增任何长循环业务（位置搜索、返还交付等）都必须拆成有界步骤接入本调度器，禁止在别处另建完整服务器预算。

@@ -45,7 +45,7 @@
 - **错误前缀**：未知字段报 `类型 <id> 存在未知字段: <key>`；参数错误报 `类型 <id> 参数错误: <message>`（解决 DFU `intRange/doubleRange` 错误不含字段名的问题）；
 - **encode**：由 `typeIdGetter` 写回 `type`；**未注册类型直接抛 `IllegalStateException`**（暴露编程错误，避免写出无法回读的 JSON）。
 
-**条件树接入**：`RuleCodecs.conditionExpressionCodec(conditionTypes)` 不再用「两级 `listOf().xmap` 组组」，而是构造一个**递归条件节点 codec**——叶子 codec 来自 `TypeDispatch.flat(conditionTypes, Condition::type).codec()`；`all_of` / `any_of` / `inverted` 组合节点在一个匿名 `MapCodec<ConditionNode>` 中按 `op` 分派，并通过内部 `NodeCodecHolder` 在构造完成后回填自引用，实现 `terms` / `term` 的递归解析（构造期不能自引用，否则无限递归）。表达式外壳是一个 `Codec<ConditionExpression>`：解码**只接受 JSON 对象**（数组即旧二维 DNF，明确拒绝），编码空表达式时写成恒真的空 `all_of` 以保证可回读。`effectCodec(effectTypes)` 仍直接由 `TypeDispatch.flat` 生成。
+**条件树接入**：`RuleCodecs.conditionExpressionCodec(conditionTypes)` 构造一个**递归条件节点 codec**——叶子 codec 来自 `TypeDispatch.flat(conditionTypes, Condition::type).codec()`；`all_of` / `any_of` / `inverted` 组合节点在一个匿名 `MapCodec<ConditionNode>` 中按 `op` 分派，并通过内部 `NodeCodecHolder` 在构造完成后回填自引用，实现 `terms` / `term` 的递归解析（构造期不能自引用，否则无限递归）。表达式外壳是一个 `Codec<ConditionExpression>`：解码**只接受 JSON 对象**（数组形式明确拒绝），编码空表达式时写成恒真的空 `all_of` 以保证可回读。`effectCodec(effectTypes)` 仍直接由 `TypeDispatch.flat` 生成。
 
 ### 严格度差异（重要）
 

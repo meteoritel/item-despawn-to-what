@@ -1,6 +1,6 @@
 # 编辑器四页职责与输入↔触发联动契约
 
-> 状态：当前实现。覆盖 `client/ui/screen/RuleEditorEditPages.java`、`client/ui/screen/RuleEditorScreen.java`、`client/ui/screen/RuleEditorP4Panels.java` 与 core 侧 `CatalystPresentCondition` / `CatalystThresholdProjection`。面向改编辑器的人：说明四页各管什么、输入页与触发页如何按**确切叶路径**关联、以及撤销粒度。
+> 事实来源：`client/ui/screen/RuleEditorEditPages.java`、`client/ui/screen/RuleEditorScreen.java`、`client/ui/screen/RuleEditorP4Panels.java` 与 core 侧 `CatalystPresentCondition` / `CatalystThresholdProjection`。面向改编辑器的人：说明四页各管什么、输入页与触发页如何按**确切叶路径**关联、以及撤销粒度。
 > 定位约定：本文按「类名 + 成员名」引用源码（如 `RuleEditorEditPages#buildInput`），不写行号——行号会随重构漂移，成员名才是稳定锚点。
 
 ## 1. 四页职责
@@ -15,7 +15,7 @@
 - 页枚举 `Page`、`switch (page)` 派发、版面与渲染入口、以及各页自己保存的滚动偏移表（`scrollOffsets`）都在 `RuleEditorEditPages` 内。
 - 结果页分两层：**多方案**才有方案层（`singlePlan = candidates == 1`，`RuleEditorEditPages`）；宽屏左列直接是动作列表（`!singlePlan` 时跳过方案列表布局）；窄屏单方案阶段夹取到 `[1,2]`，多方案仍为 `[0,2]`（stage0 方案层 / stage1 返回方案）；单方案不生成「打开方案」按钮，`candidateList` 创建但不注册进 `liveWidgets`；方案按钮可见性由 `plans || (singlePlan && actions)` 控制；`combinationControl` 仅 `candidates>1` 创建。
 - 结果页**不重复**消耗参数：过滤链配合 `isInputOwnedConsumptionField`（`consume_source`→`count`/`counts`；`consume_catalyst`→`items`/`count`/`counts`/`radius`；`consume_fluid`→`fluid`，**不过滤** `require_source`——输入页不管理它），并在首个消耗动作参数前插说明行 `effect.consume_params_on_input`；`chance` / `delay_ticks` / `conditions` 仍在结果页编辑。
-- 术语：一个 outcome 一律称「**方案**」（`button.candidate_*` / `notice.candidate_*` / `undo.*_candidate` / `issue.candidate_*` / `rule.combination` 等文案已统一，`effect.consume_params_on_input` 为新增），只有页签名仍是「结果」（`tab.results`）；`candidate.implicit` 与 `structure.convert_hint` 已删除。
+- 术语：一个 outcome 一律称「**方案**」（`button.candidate_*` / `notice.candidate_*` / `undo.*_candidate` / `issue.candidate_*` / `rule.combination` / `effect.consume_params_on_input` 等文案统一使用该词），只有页签名仍是「结果」（`tab.results`）。
 - 初始页：新建**空白**规则落在输入页（`RuleEditorScreen#createRule` 在 `templateId == null` 时切换页签到 `input`）；从模板新建或打开已有规则落在基本页（`RuleEditorScreen#openEditor` 置 `tab = INFO`，字段 `tab` 的默认值见该类字段声明）。
 - 切页前先提交合法字段，非法文本保留在当前会话输入缓冲：`RuleEditorScreen#switchTab` 走 `pages.blockNavigation()` 门禁后 `pages.setPage(target)`；提交路径见第 5、7 节。
 
@@ -98,14 +98,14 @@
 
 - 条件树**叶行本身不显示编号**：编号只在输入页存在条件标题行与叶弹窗标题（`UiConditionTreeEditor` 内没有 presence / ordinal / scope 相关代码）。
 - 输入页只列**规则级**存在叶；动作局部存在叶只能在触发页的条件树里逐叶进入弹窗编辑。
-- 显示名/备注一次性粘贴超过「2×码点上限」的纯补充平面字符（如 emoji）时，可能被原版 `EditBox` 的 UTF-16 单元上限静默截断到恰好上限而不弹超限提示；逐字符键入与常规粘贴不受影响（上限判定本身仍按码点，见 [ui-kit-api](ui-kit-api.md)）。
+- 显示名/备注一次性粘贴超过「2×码点上限」的纯补充平面字符（如 emoji）时，可能被原版 `EditBox` 的 UTF-16 单元上限静默截断到恰好上限而不弹超限提示；逐字符键入与常规粘贴不受影响（上限判定本身仍按码点，见 [文本控件](ui-kit/text-controls.md)）。
 - 流体多选不会自动改写独立移除动作的目标；单选只重指向未指定类型或与原单值相同的动作。
 
 ## 9. 相关文档
 
 - 门槛运行期：[催化剂门槛运行投影](../backend/systems/catalyst-threshold-projection.md)
 - 类型与字段：[类型系统](../backend/modules/type-system.md)
-- UI kit 契约：[ui-kit-api](ui-kit-api.md)
+- UI kit 契约：[ui-kit/README.md](ui-kit/README.md)
 - 布局与视觉规格：[编辑页卡片布局](editor-card-layout.md)
 
 ## 10. 管理页布局与条目操作
@@ -117,13 +117,13 @@
 - 启用开关根据当前规则体的 `enabled` 显示下一步动作：省略或为 `true` 时显示“停用”，为 `false` 时显示“启用”。切换后标签随草稿状态更新。
 - “更多”提供屏蔽或取消屏蔽、恢复原始；屏蔽开关根据当前规则体的 `delete` 显示下一步动作。删除使用顶部入口并保留确认弹窗。
 
-## 条件树大屏编辑作用域
+## 11. 条件树大屏编辑作用域
 
 条件卡片显示当前缩进树和参数摘要，通过“编辑条件树”进入大屏叠加页。`ConditionSupport.openTree` 由 `RuleEditorEditPages` 提供，范围来自表单的 `draftPath(conditions)`，适用于规则级及动作局部条件。条件编辑无需先填完整条规则。
 
 叠加页默认缩进树。宽屏左树右参数，窄屏可切换树/参数；顶栏提供添加、AND/OR、NOT、删除、同级顺序和展开/折叠。空树与缺项 NOT 的添加入口保持可用，未知叶只限制参数编辑。底部显示完整树诊断、未完成输入或节点/叶/深度统计。
 
-旧叶弹窗与侧栏共用 `createLeafParameters`，包括描述符、数量默认值、目录/建议、区间/时间条及存在条件关联写入。每个合法字段完成编辑才写配置历史；侧栏切节点前提交合法值，非法文本保留在 EditSession。参数接受后重新读取当前条件范围，树摘要同步更新。
+叶弹窗与侧栏共用 `createLeafParameters`，包括描述符、数量默认值、目录/建议、区间/时间条及存在条件关联写入。每个合法字段完成编辑才写配置历史；侧栏切节点前提交合法值，非法文本保留在 EditSession。参数接受后重新读取当前条件范围，树摘要同步更新。
 
 树操作经 Kit 绑定回调，在同一事务中写当前条件 JSON、迁移所有结构共享节点的输入路径，并清除删除叶的输入。判断使用节点对象身份，内容相同的叶不按类型或 record 相等性混同。选择和折叠属于纯视图事件。返回与 Esc 结束捕获并保留草稿，只有主编辑器保存提交正式配置。
 
@@ -131,7 +131,7 @@
 
 条件树叠加页顶部可在树与只读 JSON 之间切换，默认树视图。JSON 只展示当前规则级或动作局部的 conditions 表达式，按缩进排版，可选择复制或整段复制；空表达式显示字段省略提示。非法文本留在会话缓冲，JSON 保留最近已接受值并显示提示。视图切换不新增配置历史，源码不接受直接修改。
 
-## 外层结构变化与保存回显
+## 12. 外层结构变化与保存回显
 
 结果页的候选与动作重排保持目标最终下标、列表长度和所有 JSON 元素。`DraftListInputs` 在页面操作的同一 `EditSession.apply` 事务内按原 JSON 对象身份迁移候选 / 动作作用域输入：删除对象清除其缓冲，存活对象生成完整路径映射，包含当时没有缓冲的对象；映射进入历史，供操作之后新增输入的撤销与重做使用。不会按相同类型或相同 JSON 内容猜测对象身份。
 

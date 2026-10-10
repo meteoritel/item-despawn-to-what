@@ -8,7 +8,7 @@
 
 **整个服务器只持有一个调度器**（`ServerScheduler`，由 `ConversionRuntime` 在构造时建立并持有）。所有维度、所有任务种类**共享同一份每 tick 时间软预算与全局工作量上限**，按「维度 × 任务种类」切成 lane 做公平轮转；预算耗尽的任务保留**原始到期刻**、跨 tick 延后，不做静默丢弃。
 
-调度器取代了旧的 `TickScheduler`（按维度、按检查/效果各持一份预算）。核心目标：维度与队列之间不再各自记账、预算不再累加，同龄批量掉落物的集中到期在一个可配置窗口内被摊平。
+设计目标：维度与队列之间不各自记账、预算不累加，同龄批量掉落物的集中到期在一个可配置窗口内被摊平。
 
 ## 2. 任务模型（`ServerTask` / `StepResult`）
 
@@ -27,7 +27,7 @@
 - `EFFECT` —— `ConversionSettlement`（转化结算：计划 / 派发 / 交付三阶段）与 `RuntimeEffectContext.schedule`（延迟效果）。
 - `REBATE` —— `SettlementRecovery`（停服 / 卸载后重启的返还交付）。
 - `MAINTENANCE` —— `RunnableTask` 未指定种类时的缺省。
-- `WORLD_SEARCH` —— **当前未使用**，为后续把位置搜索独立成种类预留。
+- `WORLD_SEARCH` —— 已声明的种类，当前没有任务使用。
 
 ## 3. 每 tick 预算（`ServerTickBudget`）
 

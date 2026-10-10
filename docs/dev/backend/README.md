@@ -1,7 +1,7 @@
 # 后端开发者文档地图
 
 > 范围：**Minecraft 1.21.1 / Fabric + NeoForge 的后端**——`common` 的 `core/**` 与两端平台接入层。
-> 不含前端编辑 UI（编辑器已落地；界面契约见 [../internals/editor-pages-contract.md](../internals/editor-pages-contract.md) 与 [../internals/editor-card-layout.md](../internals/editor-card-layout.md)，UI kit 扩展点见 [../internals/ui-kit-api.md](../internals/ui-kit-api.md)）。
+> 不含前端编辑 UI（编辑器已落地；界面契约见 [../internals/editor-pages-contract.md](../internals/editor-pages-contract.md) 与 [../internals/editor-card-layout.md](../internals/editor-card-layout.md)，UI kit 扩展点见 [../internals/ui-kit/README.md](../internals/ui-kit/README.md)）。
 > 目的：**知道技术路线、能找到类、知道改哪里**。所有结论都能在仓库中逐个核对。
 
 ## 1. 三层视图：同一个后端，三种问题
@@ -14,7 +14,7 @@
 | **横向系统** | [systems/](systems/) | 跨模块的机制怎么运作（注册、校验、调度、缓存、平台、配置） | 改机制、理解某条铁律为什么存在 |
 | **纵向系统** | [flows/](flows/) | 端到端链路怎么走（一次加载/一次转化/一次保存） | 追调用链、排查跨层问题 |
 
-包的定位：`core` 是**唯一的规则执行链路**（旧链路已删除）。`client` 侧为规则编辑器与快捷键，不在此范围内。
+包的定位：`core` 是**唯一的规则执行链路**。`client` 侧为规则编辑器与快捷键，不在此范围内。
 
 ## 2. 目录
 
@@ -52,7 +52,7 @@
 | [edit-save-protocol.md](flows/edit-save-protocol.md) | 打开编辑器 → 请求快照 → 提交变更集 → 校验 → 写盘 → 重载 |
 | [debug-scenario-flow.md](flows/debug-scenario-flow.md) | `/idtw debug` 命令 → 场景准备 → 观测 → 测量 → 清理 |
 
-相关外部文档：[Debug 实机验证与反馈指南](../debug/debug-validation-guide.md)、[ADR 索引](../../adr/README.md)、[领域词汇表](../../../GLOSSARY.md)。
+相关外部文档：[ADR 索引](../../adr/README.md)、[领域词汇表](../../../GLOSSARY.md)。
 
 ## 3. 按包 → 文档 路由
 

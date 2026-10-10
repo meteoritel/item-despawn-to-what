@@ -33,8 +33,8 @@ Codec 用 `optionalFieldOf`：**未知键忽略、缺失键取默认**。因此�
 | `new_product_protection_seconds` | `newProductProtectionSeconds` | int | 2 | **0**..3600 | 新产物临时保护（秒）；0 表示不授予 |
 | `conversion_cooldown_seconds` | `conversionCooldownSeconds` | int | 5 | **0**..3600 | 转化冷却（秒）；0 表示不授予 |
 | `position_search_checks_per_tick` | `positionSearchChecksPerTick` | int | 16 | 1..4096 | 每刻候选位置检查上限（安全生成与返还位置搜索共用） |
-| `debug_scenario_prepare_batch_size` | `debugScenarioPrepareBatchSize` | int | 128 | 1..100000 | 阶段 7 debug 场景每 tick 准备源数量上限 |
-| `debug_scenario_prepare_budget_us` | `debugScenarioPrepareBudgetUs` | int | 2000 | 1..100000 | 阶段 7 debug 场景准备软预算（微秒） |
+| `debug_scenario_prepare_batch_size` | `debugScenarioPrepareBatchSize` | int | 128 | 1..100000 | debug 场景每 tick 准备源数量上限 |
+| `debug_scenario_prepare_budget_us` | `debugScenarioPrepareBudgetUs` | int | 2000 | 1..100000 | debug 场景准备软预算（微秒） |
 
 > `new_product_protection_seconds` / `conversion_cooldown_seconds` 的下限是 **0**（允许显式关闭），其余键下限均为 1。`max_work_units_per_tick` 是唯一**可选**键：缺失时读作空 `Optional`。
 

@@ -82,8 +82,6 @@ core/api  ←──────────── core/model ──────�
 | `ConditionLimits` | util | 条件树与规则规模上限的**唯一常量来源** | `MAX_LEAVES=128`、`MAX_NODES=256`、`MAX_DEPTH=16`、`MAX_EFFECTS=32`、`MAX_SOURCE_ENTRIES=256`、`MAX_DISPLAY_NAME_CODEPOINTS=128` |
 | `Condition` | interface | 条件叶（实现类本身即参数对象） | `type()`；常量 `TYPE_FIELD` / `NEGATED_FIELD`（后者仅用于解码期识别旧格式并报错） |
 
-> 旧结构已删除：`ConditionGroup` 类、`ConditionExpression.groups()`、`Condition.negated()` 与 `CommonFields` 的 `negated` 片段都不再存在（决策见 [ADR-0018](../../../adr/0018-condition-tree-contract.md)）。
-
 ### 3.3 类型定义形态
 
 | 类 | 类型 | 职责 |
@@ -125,7 +123,7 @@ core/api  ←──────────── core/model ──────�
 | `effects` | 数组 | 否 | `[]` | 平铺效果；与 `outcomes` 二选一 |
 | `triggers` | 字符串数组 | 否 | `[]`（视为 `{natural}`） | `natural` / `fire` / `lava` / `cactus` |
 | `source_cost` | object | 否 | 无 | `{物品或 #tag 引用: 每轮数量}`；数量为正整数，引用必须属于 `source.items`，缺省引用为 1 |
-| `catalyst_cost` | object | 否 | 无 | `{items, counts?, count?, radius?}`，整数写法已废弃（解码报错） |
+| `catalyst_cost` | object | 否 | 无 | `{items, counts?, count?, radius?}`，整数写法解码报错 |
 | `combination` | 字符串 | 否 | `round_robin` | `round_robin` / `priority` |
 | `outcomes` | 数组 | 否 | `[]` | 候选结果；与顶层 `effects` 二选一 |
 | `schema_version` | int | 否 | `1` | 当前仅支持 1，其它值拒绝 |

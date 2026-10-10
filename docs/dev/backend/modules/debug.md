@@ -1,7 +1,7 @@
 # 功能模块：调试与开发场景（`core/debug`）
 
 > 事实来源：`core/debug/**`（19 个文件）。仅在**加载器 development 环境**启用，发布环境不注册任何 debug 入口。
-> 操作步骤见 [实机测试流水线](../../debug/debug-test-pipeline.md)，场景统一声明与扩展方式见 [统一技术路线](../../debug/debug-scenario-extension.md)。
+> 场景声明与扩展方式见本文 §1、§3 与 [command.md](command.md) §4；端到端链路见 [../flows/debug-scenario-flow.md](../flows/debug-scenario-flow.md)。
 
 ## 1. 类清单
 
@@ -68,7 +68,7 @@
 
 - 场景/性能日志用 INFO，**不依赖** `server.json.debug_logging`；性能场景关闭逐实体过程日志（即使用户把 `debug_logging` 设为 true）。
 - 样本有界：`DebugMeasurements.MAX_SAMPLES=12000`，满则停止，不伪造更长窗口。
-- v3的server_tick_cost按每tick原版数组成本与IDTW运行时实测成本相加后求分位数，排除后续开发场景推进及其它结束事件监听器；缺失计时不能通过阶段性能门槛。旧v2口径不可直接混比。
+- v3的server_tick_cost按每tick原版数组成本与IDTW运行时实测成本相加后求分位数，排除后续开发场景推进及其它结束事件监听器；缺失计时不能通过阶段性能门槛。不同诊断版本的口径不可直接混比。
 - pending_scene_effects排除正常CONDITION_CHECK，pending_scene_checks独立记录；清理取消全部句柄，scheduler pending按实时车道汇总，避免上一tick快照误报。
 - `expiry` 场景要求实际寿命 ≤32767，否则明确拒绝该场景。
 - 诊断必须复用**真实平台寿命提供器**，不能用通用兜底冒充 NeoForge 当前寿命。
@@ -77,5 +77,4 @@
 ## 6. 相关
 
 - 端到端链路：[../flows/debug-scenario-flow.md](../flows/debug-scenario-flow.md)
-- 实机验证与性能对比：[../../debug/debug-validation-guide.md](../../debug/debug-validation-guide.md)
 - 调度预算：[../systems/scheduling-budget.md](../systems/scheduling-budget.md)

@@ -76,7 +76,7 @@
 
 ## 4. 内置条件类型（10 个）
 
-所有条件叶通用字段：`type`（必填）。**叶级取反（`negated`）已删除**：取反一律由条件树的 `inverted` 节点承担，叶内出现 `negated` 由解码器明确报错（`Condition.NEGATED_FIELD` 仅作常量保留供识别旧格式）。条件叶 JSON 形状为 `{"op":"leaf","condition":{"type":...,<类型专属字段平铺>}}`，取反为 `{"op":"inverted","term":{...}}`。
+所有条件叶通用字段：`type`（必填）。**叶级取反不受支持**（`negated`）：取反一律由条件树的 `inverted` 节点承担，叶内出现 `negated` 由解码器明确报错（`Condition.NEGATED_FIELD` 是解码期识别用的常量）。条件叶 JSON 形状为 `{"op":"leaf","condition":{"type":...,<类型专属字段平铺>}}`，取反为 `{"op":"inverted","term":{...}}`。
 
 求值器 `ConditionEvaluator.test(P, ConditionContext)` 是**纯谓词**，返回 `boolean`（未取反的原始判定），**不承担消耗**。运行时由条件树求值器把谓词结果与可求值性门禁聚合为四态 `ConditionResult{MATCH, NO_MATCH, UNAVAILABLE, ERROR}`：只有 `MATCH` 通过；`UNAVAILABLE`（上下文不足）与 `ERROR`（求值抛异常）一律不触发，且 `inverted` 节点**不改变**（原样穿透）。
 
@@ -101,7 +101,7 @@
 
 所有效果通用字段：`type`（必填）、`delay_ticks`（默认 0）、`chance`（默认 1.0，域 `[0,1]`）、`conditions`（可选，单根条件树，缺省省略而非 `null`）。
 
-执行器 `EffectExecutor.execute(P, EffectContext)` 返回 **`EffectResult`**（不再是 `void`）：`outcome ∈ {APPLIED, DEFERRED, SKIPPED, FAILED}` + `appliedUnits`（实际完成量：件数/个数/方块数/经验点/世界效果次数）+ `pendingUnits`（已受理待完成量），`oneShot` 标记一次性世界效果。异步批次经 `EffectContext.reportProgress(int)` 把 `pendingUnits` 逐步收敛为 `appliedUnits`；**结算层只按回执记账，禁止用计划数量冒充成功量**。`counted()` 表示该回执计入本组产出（`APPLIED`/`DEFERRED`）。
+执行器 `EffectExecutor.execute(P, EffectContext)` 返回 **`EffectResult`**：`outcome ∈ {APPLIED, DEFERRED, SKIPPED, FAILED}` + `appliedUnits`（实际完成量：件数/个数/方块数/经验点/世界效果次数）+ `pendingUnits`（已受理待完成量），`oneShot` 标记一次性世界效果。异步批次经 `EffectContext.reportProgress(int)` 把 `pendingUnits` 逐步收敛为 `appliedUnits`；**结算层只按回执记账，禁止用计划数量冒充成功量**。`counted()` 表示该回执计入本组产出（`APPLIED`/`DEFERRED`）。
 
 ### 5.1 生效效果（7）
 

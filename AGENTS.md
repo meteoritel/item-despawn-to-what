@@ -7,7 +7,7 @@
 
 ## 文档
 - 开发者文档写入 `docs/dev/`，说明架构、模块职责、API 与实现机制。
-- 后端改动查阅[后端文档地图](docs/dev/backend/README.md)；UI kit 改动查阅[UI kit API](docs/dev/internals/ui-kit-api.md)。
+- 后端改动查阅[后端文档地图](docs/dev/backend/README.md)；客户端编辑器与 UI kit 改动查阅[客户端文档地图](docs/dev/internals/README.md)。
 
 ## 核心原则
 按任务复杂度分级执行：

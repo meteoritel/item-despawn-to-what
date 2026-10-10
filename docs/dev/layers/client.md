@@ -2,7 +2,7 @@
 
 > 覆盖 `client/net`、`client/edit`、`client/key`、`client/ui`（`kit` / `theme` / `widget` / `screen` / `screen/form` / `prototype`）。
 > 面向改编辑器与改 UI kit 的开发者。类级契约见 [../internals/editor-pages-contract.md](../internals/editor-pages-contract.md)、
-> [../internals/ui-kit-api.md](../internals/ui-kit-api.md)、[../internals/editor-card-layout.md](../internals/editor-card-layout.md)。
+> [../internals/ui-kit/README.md](../internals/ui-kit/README.md)、[../internals/editor-card-layout.md](../internals/editor-card-layout.md)。
 
 ## 1. 定位与隔离
 
@@ -71,8 +71,8 @@ kit 提供内容排版、控件与交互、输入上下文与捕获、数值策�
 - `ui/theme` 是灰色像素主题：把调色板映射成 kit 所需的样式对象后注入；只依赖 Minecraft 客户端通用类型与 kit，不依赖内核与平台 API。
 - `ui/widget` 在 kit 之上提供可直接使用的输入框、多行文本域、列表、树、弹窗、按钮变体、滑块、区间条、周期时间条、条件树编辑器等；
   所有控件遵循统一的"渲染 / 输入"契约，由宿主屏幕统一转发鼠标、键盘与滚动事件。
-- 控件层把 kit 的核心语义包装成兼容旧签名的公开接口（滑块 / 区间条 / 周期条都是对 kit 核心的委托），
-  **界面因此已实际使用 kit 的标量、区间与周期核心**。
+- 控件层把 kit 的核心语义包装为公开接口（滑块 / 区间条 / 周期条都是对 kit 核心的委托）；
+  界面使用 kit 的标量、区间与周期核心。
 - **鼠标释放归属契约**：容器记录本次按下命中的控件，释放与拖动只派发给该归属；没有归属时不派发、不广播。
   弹出层在其存续期间是**唯一事件所有者**，此时释放交给弹出层；关闭弹出层必须清掉归属状态。
   禁止为单个按钮在其释放回调里写绕过归属的特例。

@@ -12,7 +12,7 @@
 
 ## 页面生命周期
 
-切页和返回前调用 `commitPendingInputs()`，卸载调用 `unmount()`。`unmount()` 只保存未完成文本和结束捕获，不再提交旧控件值。重建表单后 `reload()` 从当前 JSON 装载已接受值并恢复同路径缓冲。非法文本允许切页，保存前由 `EditSession.pendingInputIssues()` 汇总拦截。
+切页和返回前调用 `commitPendingInputs()`，卸载调用 `unmount()`。`unmount()` 只保存未完成文本和结束捕获，不提交控件值。重建表单后 `reload()` 从当前 JSON 装载已接受值并恢复同路径缓冲。非法文本允许切页，保存前由 `EditSession.pendingInputIssues()` 汇总拦截。
 
 `EditSession.revision()` 在规则 JSON 或历史恢复时变化。表单记录装载时的 revision；旧控件在卸载或重载前不会把旧路径文本覆盖到已恢复的会话状态，写入前会先重载当前代数据。
 
@@ -26,4 +26,4 @@
 
 历史条目保存 JSON、输入路径快照与结构操作的逆向路径映射。每份缓冲有会话内稳定 identity；撤销和重做恢复路径时保留该缓冲的最新文本。完成字段的缓冲在生成历史前移除，因此字段撤销不会用刚接受的文本覆盖撤销后的 JSON。结构变更后才产生的缓冲也按记录的路径映射移动；宿主必须提供所有受影响节点路径，不能用条件类型序号代替节点身份。
 
-载入新草稿 `EditSession.load()` 清空输入缓冲与历史。配置历史保持每条规则独立；文本局部历史由输入控件管理，见 [UI kit API](ui-kit-api.md)。
+载入新草稿 `EditSession.load()` 清空输入缓冲与历史。配置历史保持每条规则独立；文本局部历史由输入控件管理，见 [文本控件与文本历史](ui-kit/text-controls.md)。

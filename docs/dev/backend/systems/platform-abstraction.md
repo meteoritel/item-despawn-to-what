@@ -45,7 +45,7 @@ S2C 的「打开编辑界面 / 收到快照 / 收到回执 / 收到目录」需�
 
 平台 `RuleRuntimeEvents` 只做「事件 → `RuleRuntimeHost`」转发，业务在 core。**core 不知道任何加载器事件，它的全部入口是 `RuleRuntimeHost` 的静态方法**；两端事件与方法的一一映射表见 [platform.md](../modules/platform.md) §3。这里只强调本系统新增 / 关键的几类注入点：
 
-- **唯一服务器 tick 推进入口**：`RuleRuntimeHost.tickServer(server)`（Fabric `END_SERVER_TICK` / NeoForge `ServerTickEvent.Post`）推进**唯一一份**公共预算；**不再按维度推进**（旧实现每维度各 `tickLevel`，会让同一份总预算被重复推进）。所有维度共享一次推进（见 [scheduling-budget.md](scheduling-budget.md)）。
+- **唯一服务器 tick 推进入口**：`RuleRuntimeHost.tickServer(server)`（Fabric `END_SERVER_TICK` / NeoForge `ServerTickEvent.Post`）推进**唯一一份**公共预算；**不按维度重复推进**，所有维度共享这一次推进（见 [scheduling-budget.md](scheduling-budget.md)）。
 - **寿命提供者注入**：`LifespanProvider` 是 core 的平台差异收敛点；平台在 `start` 建 `ConversionRuntime` 时注入——Fabric 返回 `server.json` 的兜底刻数，NeoForge 返回 `entity.lifespan`（`ItemStack#getEntityLifespan`，保留其它模组的修改）。core 只依赖接口。
 - **环境销毁与保护入口**：NeoForge 用原生事件——`ItemExpireEvent`（自然消失，配 `addExtraLife(1)` / `setExtendedLifetime()`）与 `EntityInvulnerabilityCheckEvent`（三类环境伤害保护，经 `DropStateStore.blocksEnvironmentalDamage`）。Fabric 无等价事件，由 `ItemEntityMixin` 补齐：自然到期 `discard()` 拦截（`@Redirect`）、`hurt` 头部环境伤害保护（`@Inject HEAD`，返回 `false` 即免疫）、真实致死分支转发 `requestEnvironmentalConversion`、合并兼容（`tryToMerge` / `merge`）。NeoForge 端仍保留一处 Mixin，但只补原生事件覆盖不到的真实致死 `ItemStack#onDestroyed` 转发与合并兼容。
 - **实体移除**：两端分别经 `ENTITY_UNLOAD` / `EntityLeaveLevelEvent` 作纯入口转发。

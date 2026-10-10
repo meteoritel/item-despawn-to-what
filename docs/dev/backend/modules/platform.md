@@ -118,7 +118,6 @@
 - **加平台能力**：扩 `IPlatformHelper` + 两端实现；core 通过 `Services.PLATFORM` 使用。
 - **加平台事件**：在两端 `RuleRuntimeEvents` 加转发，业务留在 core。
 - **必须新增 Mixin**：优先找已有 Event API；确无等价事件时才写 Mixin，且**仅作入口**，业务放 core（如 `ItemEntityMixin` 只调 `deferNaturalExpiry` / `requestEnvironmentalConversion`）。注意两端回调签名不同时**各自写独立描述符**，不强行共用。
-- **页面/客户端入口**：属于 client 范围，本轮不在文档内。
 
 ## 9. 相关
 

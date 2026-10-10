@@ -26,7 +26,7 @@
 - 用新规则集重建 `RuleIndex`（旧对象整体替换）；
 - 清空各维度 `tracked`；
 - 把各维度的 `tags` / `climate` 置 **null**（强制下次使用时按新数据包重建，**防止读到旧数据包标签**）；
-- 对每个维度 `scheduler.cancelRealm(key, RULE_RELOAD)`——**检查与效果任务一起带原因取消**（旧实现只清检查队列，效果队列会跨 reload 残留）。
+- 对每个维度 `scheduler.cancelRealm(key, RULE_RELOAD)`——**检查与效果任务一起带原因取消**，效果队列不跨 reload 残留。
 
 即所有与数据包相关的缓存**随 reload 整体丢弃**，不单独失效。规则索引 `RuleIndex` 自身的 `tagCache` / `queryCache` 也随对象替换一并丢弃。
 
