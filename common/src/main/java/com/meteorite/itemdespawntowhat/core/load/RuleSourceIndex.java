@@ -18,15 +18,9 @@ public final class RuleSourceIndex {
 
     // 按 id 排序后的分层条目
     private final List<Entry> entries;
-    // id → 分层条目
-    private final Map<ResourceLocation, Entry> byId;
-    // 归并前的原始条目（顺序不变，用于问题定位）
-    private final List<RawRuleEntry> rawEntries;
 
-    private RuleSourceIndex(List<Entry> entries, Map<ResourceLocation, Entry> byId, List<RawRuleEntry> rawEntries) {
+    private RuleSourceIndex(List<Entry> entries) {
         this.entries = entries;
-        this.byId = byId;
-        this.rawEntries = rawEntries;
     }
 
     // 单条规则的分层视图：base 为数据包层胜出条目，overlay 为覆盖层胜出条目，control 为最后一次控制条目
@@ -89,7 +83,6 @@ public final class RuleSourceIndex {
         }
 
         List<Entry> entries = new ArrayList<>(builders.size());
-        Map<ResourceLocation, Entry> byId = new LinkedHashMap<>();
         for (Map.Entry<ResourceLocation, Builder> bucket : builders.entrySet()) {
             Builder builder = bucket.getValue();
             if (builder.base == null && builder.overlay == null && builder.control == null) {
@@ -98,38 +91,14 @@ public final class RuleSourceIndex {
             Entry entry = new Entry(bucket.getKey(), builder.base, builder.overlay, builder.control,
                     builder.controlWins, builder.controlFromOverlay);
             entries.add(entry);
-            byId.put(entry.id(), entry);
         }
         entries.sort(Comparator.comparing(entry -> entry.id().toString()));
-        return new RuleSourceIndex(List.copyOf(entries), byId, List.copyOf(input));
-    }
-
-    // 空索引
-    public static RuleSourceIndex empty() {
-        return new RuleSourceIndex(List.of(), Map.of(), List.of());
+        return new RuleSourceIndex(List.copyOf(entries));
     }
 
     // 全部分层条目（按 id 排序）
     public List<Entry> entries() {
         return entries;
-    }
-
-    // 按 id 取分层条目
-    public @Nullable Entry byId(ResourceLocation id) {
-        return id == null ? null : byId.get(id);
-    }
-
-    // 归并前的原始条目
-    public List<RawRuleEntry> rawEntries() {
-        return rawEntries;
-    }
-
-    public boolean isEmpty() {
-        return entries.isEmpty();
-    }
-
-    public int size() {
-        return entries.size();
     }
 
     // 归并过程中的可变桶

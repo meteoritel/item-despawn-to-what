@@ -2,7 +2,7 @@
 
 > 事实来源：`core/runtime/`（19 类）+ `core/state/`（3 类）；调度器实现 `core/runtime/scheduler/`（16 类）见 [scheduling-budget.md](../systems/scheduling-budget.md)，本文不复述其类清单。
 > 追踪、触发、条件求值、候选选择、完整组结算与返还、效果派发的引擎；**世界操作只在服务端主线程执行**。
-> 决策：[ADR-0015](../../../adr/0015-runtime-scheduling-and-tracking.md)（排期与追踪基线）、[ADR-0017](../../../adr/0017-backend-cutover-and-budgeted-effects.md)（core 唯一执行链路）。完整组结算、固定成本与候选择一的契约在 `ConversionSettlement` 与 `CatalystReservations` 的类注释中就地记录。
+> 决策：[ADR-0023](../../../adr/0023-triggers-fixed-cost-and-complete-group-settlement.md)（完整组结算）、[ADR-0024](../../../adr/0024-shared-server-tick-budget-scheduler.md)（共享预算调度）。完整组结算、固定成本与候选择一的契约在 `ConversionSettlement` 与 `CatalystReservations` 的类注释中就地记录。
 
 ## 1. 类清单
 
@@ -130,4 +130,4 @@ delay           = max(0, dueAge - entity.getAge())
 - 类型与消耗语义：[type-system.md](type-system.md)、[rule-model.md](rule-model.md)
 - 平台触发入口与 Mixin：[platform.md](platform.md)
 - 配置字段：[../systems/config.md](../systems/config.md)
-- 决策：[ADR-0015](../../../adr/0015-runtime-scheduling-and-tracking.md)、[ADR-0017](../../../adr/0017-backend-cutover-and-budgeted-effects.md)
+- 决策：[ADR-0023](../../../adr/0023-triggers-fixed-cost-and-complete-group-settlement.md)、[ADR-0024](../../../adr/0024-shared-server-tick-budget-scheduler.md)

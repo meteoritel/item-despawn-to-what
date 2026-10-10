@@ -52,7 +52,7 @@
 | [edit-save-protocol.md](flows/edit-save-protocol.md) | 打开编辑器 → 请求快照 → 提交变更集 → 校验 → 写盘 → 重载 |
 | [debug-scenario-flow.md](flows/debug-scenario-flow.md) | `/idtw debug` 命令 → 场景准备 → 观测 → 测量 → 清理 |
 
-相关外部文档：[Debug 实机验证与反馈指南](../debug/debug-validation-guide.md)、[ADR 目录](../../adr/)、[领域词汇表](../../../CONTEXT.md)。
+相关外部文档：[Debug 实机验证与反馈指南](../debug/debug-validation-guide.md)、[ADR 索引](../../adr/README.md)、[领域词汇表](../../../GLOSSARY.md)。
 
 ## 3. 按包 → 文档 路由
 
@@ -107,4 +107,4 @@
 
 ## 6. 事实来源
 
-每篇文档头部标注它的事实来源类。核对顺序：文档 → 源码；两者不一致时以源码为准，并回来修正文档。决策背景看 ADR，术语看 [CONTEXT.md](../../../CONTEXT.md)。
+每篇文档头部标注它的事实来源类。核对顺序：文档 → 源码；两者不一致时以源码为准，并回来修正文档。决策背景看 [ADR 索引](../../adr/README.md)，术语看 [GLOSSARY.md](../../../GLOSSARY.md)。

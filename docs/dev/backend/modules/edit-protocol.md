@@ -1,7 +1,7 @@
 # 功能模块：编辑协议与持久化（`core/network` + `core/service` 写入/会话）
 
 > 事实来源：`core/network/protocol/**`、`core/network/transport/**`、`core/network/catalog/**`、`core/service/{RuleEditService, EditSessionManager, RuleEditSessionLimits, RuleOverlayWriter, RuleSubmissionValidator, RuleSnapshotAssembler}.java`。
-> 客户端编辑器已落地，本协议为现行客户端编辑通道。规则契约（新增字段与条件树）见 [rule-model.md](rule-model.md)；决策：[ADR-0016](../../../adr/0016-edit-protocol-changeset-version-stamp.md)、[ADR-0019](../../../adr/0019-exclusive-edit-session-and-target-lock.md)、[ADR-0020](../../../adr/0020-source-catalog-and-overlay-control-entries.md)。
+> 客户端编辑器已落地，本协议为现行客户端编辑通道。规则契约（新增字段与条件树）见 [rule-model.md](rule-model.md)；决策：[ADR-0019](../../../adr/0019-exclusive-edit-session-and-target-lock.md)、[ADR-0020](../../../adr/0020-source-catalog-and-overlay-control-entries.md)。
 
 ## 1. 类清单
 
@@ -164,4 +164,4 @@
 - 规则模型与字段：[rule-model.md](rule-model.md)
 - 平台注册：[platform.md](platform.md)、[../systems/platform-abstraction.md](../systems/platform-abstraction.md)
 - 校验：[../systems/issue-validation.md](../systems/issue-validation.md)
-- 决策：[ADR-0016](../../../adr/0016-edit-protocol-changeset-version-stamp.md)、[ADR-0019](../../../adr/0019-exclusive-edit-session-and-target-lock.md)
+- 决策：[ADR-0019](../../../adr/0019-exclusive-edit-session-and-target-lock.md)、[ADR-0020](../../../adr/0020-source-catalog-and-overlay-control-entries.md)

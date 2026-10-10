@@ -202,4 +202,4 @@ flowchart BT
 - 各层类级细节：[../backend/README.md](../backend/README.md)
 - 端到端链路：[../flows.md](../flows.md)
 - 硬约束与使用约定：[../conventions.md](../conventions.md)
-- 决策背景：`docs/adr/` 下的 ADR-0012 ~ ADR-0027
+- 决策背景：[docs/adr/](../../adr/) 的现行决策（含索引）

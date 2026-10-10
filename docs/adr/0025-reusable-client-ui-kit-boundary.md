@@ -1,7 +1,7 @@
 # ADR-0025：维护可复用客户端 kit，为独立 API 库准备边界
 
-> 状态：已接受、待实施；用户于 2026-10-03 确认完整 GUI 计划与 kit 规格。
-> 依据：[GUI 主计划](../plan/plan-gui-rule-update.md)、[kit API 规格](../plan/plan-gui-rule-update-kit.md)。
+> 状态：已实施；用户于 2026-10-03 确认完整 GUI 计划与 kit 规格。
+> 依据：GUI 主计划与 kit API 规格（本期设计确认）。
 
 后端规则更新需要标量/区间/周期控件、目录网格与更完整的输入生命周期，而用户希望尽量复用并将 kit 未来独立为 API 库。继续维持 [ADR-0022](0022-client-ui-kit-adoption.md) 的冻结复制件、把新增能力全部放在业务 widget 中，会使交互和主题依赖继续混杂，之后拆库成本增加；立即发布外部库又会把尚在开发的接口过早固化。
 
@@ -17,4 +17,4 @@
 
 允许实施时按实际使用精确补充原版 `com.mojang.blaze3d` 渲染类的依赖白名单，并同步检查脚本、package-info、API 文档和 NOTICE。禁止项目业务、Gson 与 loader 反向依赖的边界继续有效；不整包放开 com.mojang，不以全限定名绕过约束。
 
-此补充已实施：`UiEntityPreview`、`UiIcon.Rendered` 与宿主 `EntityPreviewIcons` 分层；精确放行 `com.mojang.blaze3d.platform.Lighting`，没有放开整个包。职责和证据见 [Kit 实体预览提取方案](../plan/plan-kit-entity-preview-2026-10-07.md)。
+此补充已实施：`UiEntityPreview`、`UiIcon.Rendered` 与宿主 `EntityPreviewIcons` 分层；精确放行 `com.mojang.blaze3d.platform.Lighting`，没有放开整个包。职责和证据见 [UI kit API](../dev/internals/ui-kit-api.md) 的实体预览章节与 [NOTICE-kit.md](../../NOTICE-kit.md)。

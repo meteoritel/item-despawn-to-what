@@ -44,7 +44,7 @@
 
 | 文档 | 适用范围 |
 |---|---|
-| [overview.md](overview.md) | 项目定位、平台与版本环境、系统边界（做什么 / 不做什么）、领域术语表、两类读者的读法 |
+| [overview.md](overview.md) | 项目定位、平台与版本环境、系统边界（做什么 / 不做什么）、术语入口（指向根 `GLOSSARY.md`）、两类读者的读法 |
 | [architecture.md](architecture.md) | 六组十一层的分层模型、**Mermaid 架构关系图**、依赖方向铁律、三条数据流（规则流 / 掉落物流 / 编辑流）、结构性特征 |
 | [layers/server-core.md](layers/server-core.md) | 服务端内核：契约层、模型层、类型与扩展层（含第三方 SPI）、加载与装配层、运行时层（追踪 / 结算 / 实体状态）、调度与共享预算、索引与缓存、内核扩展点 |
 | [layers/authoring.md](layers/authoring.md) | 创作与管控：候选目录两段式分工、编辑协议与会话（快照三视图、变更集、独占会话、分片限额、权威落盘）、命令树与权限口径、调试层与场景、该层扩展点 |
@@ -92,6 +92,7 @@
 | [internals/ui-kit-api.md](internals/ui-kit-api.md) | UI kit 的公开面、依赖边界与检查脚本、输入路由与捕获生命周期、数值策略与滑块接入、样式注入、实机预览 API、鼠标释放归属、码点长度上限 |
 | [internals/editor-pages-contract.md](internals/editor-pages-contract.md) | 编辑器四页职责、存在条件的唯一入口、同一份叶扫描与编号、输入与触发按确切叶路径关联、物品与数量联动、撤销与保存语义、管理页布局 |
 | [internals/editor-card-layout.md](internals/editor-card-layout.md) | 四阶段编辑页的卡片布局与视觉规格：卡片分组、间距与高度、目录控件、黑名单选择、数量控件与预览尺寸 |
+| [internals/editor-input-state.md](internals/editor-input-state.md) | 编辑输入缓冲与配置历史：字段输入生命周期、页面生命周期、树结构操作与历史路径迁移 |
 
 ## 5. 权威性与维护
 
@@ -100,5 +101,5 @@
 - **源码定位用符号，不写行号**：实现层文档引用源码时以「类名 + 成员名」为锚点，不写 `文件:行号`（行号随重构漂移即失效）。
 - **链接必须可解析**：本目录内的相对链接目标必须存在；目标文档已删除时改为普通文字或指向现行文档。
 - **决策背景**：设计取舍与替代方案见 [`docs/adr/`](../adr/)；本目录文档只链接、不复述。
-- **术语**：领域术语见 [overview.md](overview.md) §4；项目级词汇记录见仓库根目录的 `CONTEXT.md`。
+- **术语**：唯一术语表见仓库根目录 [GLOSSARY.md](../../GLOSSARY.md)；overview.md 只作为入口指针。
 - **新增文档**：先判断属于抽象层还是实现层，再扩写现有文档或新开文件，并登记到本文档第 3、4 节。

@@ -1,7 +1,7 @@
 # 纵向系统：编辑保存协议
 
 > 从"打开编辑器"到"规则落盘并重建索引"的端到端流程。客户端编辑器已落地，本流程为现行链路。
-> 类职责见 [edit-protocol.md](../modules/edit-protocol.md)、[issue-validation.md](../systems/issue-validation.md)。决策：[ADR-0016](../../../adr/0016-edit-protocol-changeset-version-stamp.md)、[ADR-0019](../../../adr/0019-exclusive-edit-session-and-target-lock.md)。
+> 类职责见 [edit-protocol.md](../modules/edit-protocol.md)、[issue-validation.md](../systems/issue-validation.md)。决策：[ADR-0019](../../../adr/0019-exclusive-edit-session-and-target-lock.md)、[ADR-0020](../../../adr/0020-source-catalog-and-overlay-control-entries.md)。
 
 ## 1. 打开编辑器
 

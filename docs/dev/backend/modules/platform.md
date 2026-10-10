@@ -52,7 +52,7 @@
 | 维度加载 / 卸载 | `ServerWorldEvents.LOAD` / `UNLOAD` | `LevelEvent.Load` / `Unload` |
 | 包层判定 | `FabricLoader.getAllMods()` 命中 mod id → BUILTIN，否则 WORLD | `packId.startsWith("mod/")` → BUILTIN，否则 WORLD |
 
-> **单一服务端 tick 推进入口**：两端都只在"服务端 tick 结束"事件里推进一次公共预算（所有维度共享，ADR-0002），不再按维度 tick 推进。顺序固定为 `beginRuntimeTick → RuleRuntimeHost.tickServer → DebugSessionManager.tick → (每 20 tick) RuleEditServerHandler.expireIdle`。
+> **单一服务端 tick 推进入口**：两端都只在"服务端 tick 结束"事件里推进一次公共预算（所有维度共享，见 [ADR-0024](../../../adr/0024-shared-server-tick-budget-scheduler.md)），不再按维度 tick 推进。顺序固定为 `beginRuntimeTick → RuleRuntimeHost.tickServer → DebugSessionManager.tick → (每 20 tick) RuleEditServerHandler.expireIdle`。
 
 ## 4. Mixin（无原生等价事件时的最小入口）
 
@@ -125,4 +125,4 @@
 - 平台抽象机制：[../systems/platform-abstraction.md](../systems/platform-abstraction.md)
 - 配置：[../systems/config.md](../systems/config.md)
 - 引导链路与重载：[../flows/rule-loading-flow.md](../flows/rule-loading-flow.md)
-- 决策：[ADR-0017](../../../adr/0017-backend-cutover-and-budgeted-effects.md)、[ADR-0024](../../../adr/0024-shared-server-tick-budget-scheduler.md)
+- 决策：[ADR-0024](../../../adr/0024-shared-server-tick-budget-scheduler.md)、[ADR-0023](../../../adr/0023-triggers-fixed-cost-and-complete-group-settlement.md)

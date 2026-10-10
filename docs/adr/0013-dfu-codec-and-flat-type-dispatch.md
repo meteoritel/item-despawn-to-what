@@ -1,13 +1,10 @@
-# 用 DFU Codec 统一序列化，并按扁平字段做类型分发
-
-> 实施补充：本文的最新调度、区块生命周期、保存与前端边界以 [ADR-0017](0017-backend-cutover-and-budgeted-effects.md) 和 [当前架构](../dev/backend/README.md) 为准。
-> **实施补充（2026-10-03）**：条件叶（`leaf` 节点内）仍走本文的扁平类型分发；但条件表达式的**外壳**已从 DNF 二维数组改为递归条件树（见 [ADR-0018](0018-condition-tree-contract.md)），不再直接对数组做分发。
+# ADR-0013：用 DFU Codec 统一序列化，并按扁平字段做类型分发
 
 ## 背景
 旧链路用 Gson + `@SerializedName` 手写序列化：61 个文件、两处独立 Gson 实例、三套并存的校验策略（未知字段拒整文件 / 启动逐条丢弃 / reload 一条非法即整体失败），并且 Gson 默认静默忽略未知字段，配置错误会"静默退化"而不是报错。同时效果与条件是多态类型，需要一个能按 `type` 查注册表的解码入口。
 
 ## 决策
-1. **一套 DFU Codec**：规则、效果、条件叶全部用 `RecordCodecBuilder` / `MapCodec` + `RegistryOps`；效果与条件叶经注册表按 `type` 分发。
+1. **一套 DFU Codec**：规则、效果、条件叶全部用 `RecordCodecBuilder` / `MapCodec` + `RegistryOps`；效果与条件叶经注册表按 `type` 分发。条件表达式的外壳是递归条件树（见 [ADR-0018](0018-condition-tree-contract.md)），分发只作用于条件叶。
 2. **扁平分发**：`core/api/TypeDispatch.flat(registry, typeIdGetter)` 让类型专属字段与通用字段处在**同一个 JSON 对象**中，不产生 DFU 默认 `dispatch` 的嵌套 `value` 字段。
 3. **类型定义自带编解码与校验**：`TypeDefinition<P>` = `id()` + `codec()` + `validateParams()`；`EffectType` 附加 `executor()`，`ConditionType` 附加 `evaluator()`，一次查表同时拿到三者。
 4. **可空字段经 Optional 中转**：DFU 的 `DataResult` 内部用 `Optional.of`，任何 codec 产出 null 都会在解码期抛 NPE；可空字段一律以 `Optional` 承载，在记录构造的最后一步 `orElse(null)`。

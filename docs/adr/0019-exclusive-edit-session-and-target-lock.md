@@ -1,12 +1,12 @@
 # ADR-0019：全局独占编辑会话与目标级编辑锁
 
-- 状态：已实施（P3，2026-10-02）；契约见 [实施契约 §3](../plan/plan-frontend-rewrite-contract.md)，常量与 DTO 在 `core/service/EditSessionManager.java`、`core/network/protocol/`、`core/network/transport/`。
-- 依据：[规划书 §6](../plan/plan-frontend-rewrite.md)（独占编辑锁与时序）、[规划书 §7.1](../plan/plan-frontend-rewrite.md)（协议升级）。
-- 替代范围：取代 [ADR-0016](0016-edit-protocol-changeset-version-stamp.md) 中「per-player 会话 + 仅靠版本戳」的并发模型，并升级到协议版本 2。
+- 状态：已实施（2026-10-02）；实现见 `core/service/EditSessionManager.java`、`core/network/protocol/`、`core/network/transport/` 与[编辑协议](../dev/backend/modules/edit-protocol.md)。
+- 依据：独占编辑锁与时序、协议版本升级的设计确认。
+- 替代范围：取代此前「per-player 会话 + 仅靠版本戳」的并发模型，并升级到协议版本 2。
 
 ## 背景
 
-旧链路是「全局单 UUID 锁」；ADR-0016 改成 per-player 编辑会话（空闲 5 分钟超时）后，并发保护主要由版本戳承担。但规划书 §6 指出：规则编辑目标是**全局唯一的一份覆盖层**，多玩家同时编辑只靠「提交时版本冲突」兜底，会出现编辑中的视图与磁盘状态长期分叉；同时旧实现用墙钟计时（单人世界暂停时租约照旧流逝），且回执混用文案与状态码，客户端无法可靠分支。
+此前的编辑链路是「全局单 UUID 锁」，其后改为 per-player 编辑会话（空闲 5 分钟超时），并发保护主要由版本戳承担。但规划书 §6 指出：规则编辑目标是**全局唯一的一份覆盖层**，多玩家同时编辑只靠「提交时版本冲突」兜底，会出现编辑中的视图与磁盘状态长期分叉；同时旧实现用墙钟计时（单人世界暂停时租约照旧流逝），且回执混用文案与状态码，客户端无法可靠分支。
 
 ## 决策
 
@@ -31,8 +31,8 @@
 
 ## 后果
 
-- P3 必须实现会话状态机、协议版本拒绝、分片装配与幂等表；客户端所有失败分支按 `RuleSaveStatus` 处理，未知码走 `UNAVAILABLE` 兜底。
+- 必须实现会话状态机、协议版本拒绝、分片装配与幂等表；客户端所有失败分支按 `RuleSaveStatus` 处理，未知码走 `UNAVAILABLE` 兜底。
 - 快照与变更集上限提升到 4 MiB 后，必须保留按 UTF-8 **字节**计算的限额（不得把字符数当字节数）并显式拒绝超量请求。
 - 新增任何编辑入口都要复用取锁流程；禁止出现「绕过独占锁的生产入口」。
-- 会话失效、写盘成功但重载失败（`SAVED_NOT_RELOADED`）等状态必须能回显到界面，且沿用既有版本戳语义（见 [ADR-0016](0016-edit-protocol-changeset-version-stamp.md)）与权威落盘规则。
+- 会话失效、写盘成功但重载失败（`SAVED_NOT_RELOADED`）等状态必须能回显到界面，且沿用既有版本戳语义与权威落盘规则（见 [编辑协议](../dev/backend/modules/edit-protocol.md)）。
 - 编辑会话的时限常量（15/10/60 秒）成为客户端心跳周期与 UX 的硬约束；修改需同步契约 §3.1。

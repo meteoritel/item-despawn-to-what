@@ -2,7 +2,7 @@
 
 > 事实来源：`core/runtime/scheduler/**`（16 个类）、`core/runtime/ConversionRuntime.java`（`onServerTick`）、`core/runtime/ConversionSettlement.java`（效果与返还的分步执行）、`core/config/ServerConfig.java`。
 > 相关模块：[conversion-runtime.md](../modules/conversion-runtime.md)；类清单由 modules 层维护，本文只讲机制。配置值见 [config.md](config.md)。
-> 现行决策：[ADR-0024 共享服务器 tick 预算调度器](../../../adr/0024-shared-server-tick-budget-scheduler.md)（取代 ADR-0015 决策 3 与 ADR-0017 决策 4 的预算模型）。
+> 现行决策：[ADR-0024 共享服务器 tick 预算调度器](../../../adr/0024-shared-server-tick-budget-scheduler.md)。
 
 ## 1. 一句话模型
 
@@ -67,7 +67,7 @@ spread = ceil(due / window)
 额度   = clamp(spread, 1, batch)
 ```
 
-即：一个到期刻集中到期的 `due` 个任务，被摊到约 `window` 个 tick 里搬运（每 tick 约 `due/window` 个），同时每 lane 每 tick 至多搬 `batch` 个。这是 PLAN §4.6 允许的**时间精度让步**：以到期时刻的精度换取集中工作量分散。
+即：一个到期刻集中到期的 `due` 个任务，被摊到约 `window` 个 tick 里搬运（每 tick 约 `due/window` 个），同时每 lane 每 tick 至多搬 `batch` 个。这是共享预算设计允许的**时间精度让步**：以到期时刻的精度换取集中工作量分散。
 
 **不提前、不丢弃**：`takeDue` 只搬 `桶键 <= gameTime` 的桶——公平轮转不会让任务提前执行；未搬到的到期桶保留原始 `dueTick`，跨 tick 延后而非丢弃。
 

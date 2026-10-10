@@ -1,9 +1,8 @@
 # ADR-0023：消失方式触发、固定成本与完整转化组结算
 
-- 状态：已实施（2026-10-03，第二轮后端改造；提交 `63eea8b`），已通过用户实机验收。
+- 状态：已实施（2026-10-03），已通过用户实机验收。
 - 实现见：`core/model/TriggerKind`、`CombinationMode`、`CatalystCost`、`OutcomeCandidate`、`Rule`；`core/runtime/ConversionSettlement`、`CatalystReservations`、`SettlementLedger`、`SettlementRecord`、`SettlementRecovery`、`RoundRobinCursors`；`core/state/DropState`。
-- 替代范围：扩展 [ADR-0012](0012-rule-model-and-effect-list.md) 的规则模型（新增 `triggers` / `source_cost` / `catalyst_cost` / `combination` / `outcomes` / `schema_version`）；取代 [ADR-0015](0015-runtime-scheduling-and-tracking.md) 决策 3 的「按堆叠预估 rounds」式结算。
-- 依据：历史规划 `docs/archive/backend-round-2/PLAN.md` 与其 `0001-conversion-commitment`（本地归档，不纳入版本控制）。
+- 替代范围：扩展 [ADR-0012](0012-rule-model-and-effect-list.md) 的规则模型（新增 `triggers` / `source_cost` / `catalyst_cost` / `combination` / `outcomes` / `schema_version`）；取代此前「按堆叠预估 rounds」式结算。
 
 ## 背景
 
@@ -29,6 +28,6 @@
 
 ## 后果
 
-- 规则 JSON 契约 **breaking**：旧规则未声明 `triggers` 时仅自然消失；`source_cost` 必须为正、`catalyst_cost` 改为对象写法、`effects` 与 `outcomes` 互斥、新增 `schema_version`（当前仅支持 1）。内置数据包已同步更新，**不提供自动迁移**（`/idtw config convert` 已退役，见 [ADR-0018](0018-condition-tree-contract.md) 文首注记）。
+- 规则 JSON 契约 **breaking**：旧规则未声明 `triggers` 时仅自然消失；`source_cost` 必须为正、`catalyst_cost` 改为对象写法、`effects` 与 `outcomes` 互斥、新增 `schema_version`（当前仅支持 1）。内置数据包已同步更新，**不提供自动迁移**。
 - 后续 GUI 需能表达触发、固定成本、候选与组合模式；旧 GUI 无法表达新结构时**拒绝可能丢字段的保存**（见 [edit-protocol.md](../dev/backend/modules/edit-protocol.md)）。
 - 数量守恒与「已开始组不恢复」成为可观测行为，调试场景与结算示例以此为准。

@@ -1,10 +1,8 @@
----
-status: accepted
----
+# ADR-0026：统一实体生成效果，按产出子类分发
 
-# 统一实体生成效果，按产出子类分发
+> 状态：已接受（2026-10-07）；实现见 `core/type/effect/SpawnEntityEffect.java` 与 [类型系统](../dev/backend/modules/type-system.md) §5.1。
 
-用户于 2026-10-06 开始确认本决策，并于 2026-10-07 明确执行途中的上限边界：将目前独立的掉落物生成、通用实体生成和经验生成合并为一种实体生成效果，按产出子类分发。当前仍处于开发阶段，新契约直接替换旧格式，随实现重写项目内现有示例/测试 JSON，不要求数据迁移。通用实体子类支持生物之外的其他实体。掉落物和经验球固定通过专用子类配置，通用实体子类不接受 minecraft:item / minecraft:experience_orb。数量按物品件数、实体个数、经验点数计量，保留按实际消耗源物品数计算经验的选项。此决策已实施：`SpawnEntityEffect` 持有 sealed `EntityProduct`，由 `variant` 分派 item/entity/experience。JSON 使用扁平字段，见 [实体产物指南](../guide/entity-products.md)。
+用户于 2026-10-06 开始确认本决策，并于 2026-10-07 明确执行途中的上限边界：将目前独立的掉落物生成、通用实体生成和经验生成合并为一种实体生成效果，按产出子类分发。当前仍处于开发阶段，新契约直接替换旧格式，随实现重写项目内现有示例/测试 JSON，不要求数据迁移。通用实体子类支持生物之外的其他实体。掉落物和经验球固定通过专用子类配置，通用实体子类不接受 minecraft:item / minecraft:experience_orb。数量按物品件数、实体个数、经验点数计量，保留按实际消耗源物品数计算经验的选项。此决策已实施：`SpawnEntityEffect` 持有 sealed `EntityProduct`，由 `variant` 分派 item/entity/experience。JSON 使用扁平字段，见[类型系统](../dev/backend/modules/type-system.md) §5.1。
 
 考虑过保留现有三个后端效果、只统一 UI 分类的方案。最终选择将统一抽象落实到后端，使规则类型、校验与编辑入口围绕共同概念组织；具体产物的参数通过子类表达。各子类保留自身计量单位，不因共有实体基类而混同。
 
@@ -22,4 +20,4 @@ status: accepted
 
 用户已确认后续按三个顺序任务拆分：模型/分发/校验 → 执行/结算/资源 JSON → UI 分类/子类编辑。用户已确认开始实施，三个任务均已落盘；游戏验收由用户执行。
 
-关联记录：[UI 设计对齐与问题排查](../plan/grill-ui-alignment-2026-10-06.md)。
+

@@ -1,9 +1,8 @@
 # ADR-0024：所有维度共享的公共服务器 tick 预算调度器
 
-- 状态：已实施（2026-10-03，第二轮后端改造；提交 `63eea8b`），已通过用户实机验收。
+- 状态：已实施（2026-10-03），已通过用户实机验收。
 - 实现见：`core/runtime/scheduler/`（`ServerScheduler`、`RealmQueues`、`TaskLane`、`ServerTaskKind`、`SchedulerConfig`、`ServerTickBudget`、`StepResult`、`StepOutcome`、`CancelReason` 等）；配置键见 [config.md](../dev/backend/systems/config.md)。
-- 替代范围：取代 [ADR-0015](0015-runtime-scheduling-and-tracking.md) 决策 3 的「每 tick `max_checks_per_tick` 分桶」与 [ADR-0017](0017-backend-cutover-and-budgeted-effects.md) 决策 4 的「检查 / 效果各自独立的分桶队列」中的预算模型。
-- 依据：历史规划 `docs/archive/backend-round-2/PLAN.md` §4.6 与其 `0002-shared-server-budget`（本地归档，不纳入版本控制）。
+- 替代范围：取代此前「每维度每 tick `max_checks_per_tick` 分桶」与「检查 / 效果各自独立的分桶队列」的预算模型。
 
 ## 背景
 
@@ -28,5 +27,5 @@
 ## 后果
 
 - 过载时表现为**延后**而非丢弃或提前执行；不再承诺任意负载下固定的到期精度或固定 tick 耗时。
-- 调试性能口径升级为 **v3**：区分 `vanilla_tick_cost`（原版服务器 tick）与 `idtw_runtime_cost`（本模组运行时），`server_tick_cost` 现含本模组运行时成本，**v3 数据不可与 v2 直接混比**（见 [debug-validation-guide.md](../dev/debug-validation-guide.md)）。
+- 调试性能口径为 `idtw-scene-v3`：区分 `vanilla_tick_cost`（原版服务器 tick）与 `idtw_runtime_cost`（本模组运行时），`server_tick_cost` 含本模组运行时成本（见 [debug-validation-guide.md](../dev/debug/debug-validation-guide.md)）。
 - 新增任何长循环业务（位置搜索、返还交付等）都必须拆成有界步骤接入本调度器，禁止在别处另建完整服务器预算。

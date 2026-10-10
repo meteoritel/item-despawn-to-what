@@ -39,9 +39,9 @@ config 覆盖层     config/<overlay_directory>/rules/**/*.json
 | `OverlayRuleReader` | 读 config 覆盖层条目 | `read(overlayRoot, defaultNamespace, issues)`；私有 `deriveId(relativePath, ns)` |
 | `RuleMerger` | 三层按 id 合并（含 disabled/delete 控制） | `merge(entries, issues)` |
 | `RuleLoader` | 加载入口：读取 → 合并 → 解码 | `load(request)`、`loadRaw(request, issues)` |
-| `RuleSourceIndex` | **合并前**原始条目按 id 归并为 base / overlay / control 三层视图（只归并，不读文件/解码/校验），供快照判定 origin/status 与编辑使用 | `build(rawEntries)`、`empty()`、`entries()`、`byId(id)`、`rawEntries()`；`Entry(id, base, overlay, control, controlWins, controlFromOverlay)` + `deleted()`/`disabled()`/`hasBody()`/`baseBody()`/`overlayBody()` |
+| `RuleSourceIndex` | **合并前**原始条目按 id 归并为 base / overlay / control 三层视图（只归并，不读文件/解码/校验），供快照判定 origin/status 与编辑使用 | `build(rawEntries)`、`entries()`；`Entry(id, base, overlay, control, controlWins, controlFromOverlay)` + `deleted()`/`disabled()`/`hasBody()`/`baseBody()`/`overlayBody()` |
 
-> `RuleSourceIndex` 与 `RuleMerger` 共用同一「层内后者胜」顺序语义，但用途不同：`RuleMerger` 产出可解码的合并结果，`RuleSourceIndex` 保留被覆盖/停用的原始基底以便可恢复（见 [edit-protocol.md](edit-protocol.md)）。其 `byId()` / `rawEntries()` 目前无调用方（保留为查询入口）。
+> `RuleSourceIndex` 与 `RuleMerger` 共用同一「层内后者胜」顺序语义，但用途不同：`RuleMerger` 产出可解码的合并结果，`RuleSourceIndex` 保留被覆盖/停用的原始基底以便可恢复（见 [edit-protocol.md](edit-protocol.md)）。
 
 ### 2.2 `core/service`（装配）
 

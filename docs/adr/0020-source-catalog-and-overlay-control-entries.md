@@ -1,8 +1,8 @@
 # ADR-0020：来源目录、覆盖层语义与停用/屏蔽控制条目
 
-- 状态：部分已实施（加载与合并链路已按 [ADR-0014](0014-three-layer-scope-and-overlay-merge.md) 工作；完整来源目录与快照形态按 P4b 交付）；契约见 [实施契约 §3.6](../plan/plan-frontend-rewrite-contract.md)、[规划书 §7.2](../plan/plan-frontend-rewrite.md)。
-- 依据：[规划书 §7.2](../plan/plan-frontend-rewrite.md)（完整来源目录）、[规划书 §8.3](../plan/plan-frontend-rewrite.md)（应用流程）、[契约 §5.2](../plan/plan-frontend-rewrite-contract.md)（覆盖文件形态）。
-- 相关术语：`CONTEXT.md` 中的「来源层」「覆盖层」「数据包基底」「覆盖控制条目」「来源标识」。
+- 状态：已实施；实现见 `core/load/RuleSourceIndex.java`、`core/service/RuleSnapshotAssembler.java` 与[编辑协议](../dev/backend/modules/edit-protocol.md)。
+- 依据：加载与合并链路沿用 [ADR-0014](0014-three-layer-scope-and-overlay-merge.md)；来源目录、应用流程与覆盖文件形态为本决策内容。
+- 相关术语：`GLOSSARY.md` 中的「来源层」「覆盖层」「数据包基底」「覆盖控制条目」「来源标识」。
 
 ## 背景
 
@@ -32,7 +32,7 @@
 | 删除自建规则 | 删除覆盖层条目；若存在同 ID 基底，改用恢复/屏蔽操作并提示 |
 
 5. **两种「删除」不可混称**：协议 `DELETE` 表示删除覆盖条目；JSON `delete=true` 表示屏蔽基底。`disabled` 保留内容、最终来源记为覆盖层；`delete` 直接删除同 ID 基底规则。
-6. **同层内顺序固定**：普通条目先合并、控制条目后应用（见 `CONTEXT.md` 「覆盖控制条目」）。
+6. **同层内顺序固定**：普通条目先合并、控制条目后应用（见 [GLOSSARY.md](../../GLOSSARY.md) 「覆盖控制条目」）。
 7. **编辑器保存形态**：顶层 JSON **对象**，一个文件一条规则；文件名由规则 id 生成（`:` 与 `/` 替换为 `_`，加 `.json`）。顶层数组形态只用于只读的数据包原始文件（契约 §5.2）。
 8. **冲突与坏 JSON 保留数据、阻止有歧义的修改**：同 ID 多文件重复定义、路径冲突或坏 JSON 时保留原数据并给出来源定位，不提供自动修复。
 
@@ -46,8 +46,8 @@
 
 ## 后果
 
-- P4b 需要在加载服务中保留原始 JSON、来源、排序序号与问题列表，快照体积增大，因此走分片传输（见 [ADR-0019](0019-exclusive-edit-session-and-target-lock.md) 的 4 MiB 上限）。
+- 加载服务需要保留原始 JSON、来源、排序序号与问题列表，快照体积增大，因此走分片传输（见 [ADR-0019](0019-exclusive-edit-session-and-target-lock.md) 的 4 MiB 上限）。
 - GUI 必须展示控制状态（停用/屏蔽/非法/基底缺失），并据此决定可用操作；不可解析条目只能查看问题。
 - 覆盖层文件名与 id 的映射成为约定：重命名规则 id 等于「新建 + 删除」，界面需按 [ADR-0021](0021-display-name-and-stable-ids.md) 的规则提示用户。
 - 删除动作必须区分协议 DELETE 与 JSON `delete=true`，命令、网络与界面文案都要分别表述，禁止使用同一个「删除」标签。
-- 遗留的「停用后无法恢复」问题在此决策下闭环，相关回归点写入 P7 验收（契约 §7）。
+- 「停用后无法恢复」的问题在此决策下闭环。

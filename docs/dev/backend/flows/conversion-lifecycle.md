@@ -1,7 +1,7 @@
 # 纵向系统：转化生命周期
 
 > 从一个掉落物进入世界，到它被转化为产物或自然消失的端到端流程。
-> 类职责见 [conversion-runtime.md](../modules/conversion-runtime.md)；排期/退避/共享预算见 [scheduling-budget.md](../systems/scheduling-budget.md)；平台触发入口与 Mixin 见 [platform.md](../modules/platform.md)。决策：[ADR-0015](../../../adr/0015-runtime-scheduling-and-tracking.md)、[ADR-0017](../../../adr/0017-backend-cutover-and-budgeted-effects.md)。
+> 类职责见 [conversion-runtime.md](../modules/conversion-runtime.md)；排期/退避/共享预算见 [scheduling-budget.md](../systems/scheduling-budget.md)；平台触发入口与 Mixin 见 [platform.md](../modules/platform.md)。决策：[ADR-0023](../../../adr/0023-triggers-fixed-cost-and-complete-group-settlement.md)、[ADR-0024](../../../adr/0024-shared-server-tick-budget-scheduler.md)。
 
 ## 1. 全景
 

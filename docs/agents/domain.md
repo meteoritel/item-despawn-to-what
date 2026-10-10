@@ -1,13 +1,13 @@
 # 领域文档
 
-本项目采用 single-context 布局：根目录 `GLOSSARY.md` 与 `docs/adr/`。
+本项目采用 single-context 布局：根目录术语表 `GLOSSARY.md` 与 `docs/adr/`（索引见 [ADR 目录](../adr/README.md)）。
 
 ## 读取规则
 
 探索代码前，读取根目录术语表，并读取与任务相关的 ADR。
 相关开发者文档按 `AGENTS.md` 中的文档入口查阅。
 
-术语表尚不存在时，直接继续工作；由 `domain-modeling` 在术语得到确认后按需创建。
+术语表与 ADR 均已存在；遇到术语缺口时先核对现有用语，再由 `domain-modeling` 确认后写入 `GLOSSARY.md`。
 
 ## 术语与决策
 

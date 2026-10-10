@@ -1,6 +1,6 @@
 # 编辑器四页职责与输入↔触发联动契约
 
-> 状态：当前实现。相关规格：`docs/spec/editor-page-responsibilities-2026-10-07.md`；覆盖 `client/ui/screen/RuleEditorEditPages.java`、`client/ui/screen/RuleEditorScreen.java`、`client/ui/screen/RuleEditorP4Panels.java` 与 core 侧 `CatalystPresentCondition` / `CatalystThresholdProjection`。面向改编辑器的人：说明四页各管什么、输入页与触发页如何按**确切叶路径**关联、以及撤销粒度。
+> 状态：当前实现。覆盖 `client/ui/screen/RuleEditorEditPages.java`、`client/ui/screen/RuleEditorScreen.java`、`client/ui/screen/RuleEditorP4Panels.java` 与 core 侧 `CatalystPresentCondition` / `CatalystThresholdProjection`。面向改编辑器的人：说明四页各管什么、输入页与触发页如何按**确切叶路径**关联、以及撤销粒度。
 > 定位约定：本文按「类名 + 成员名」引用源码（如 `RuleEditorEditPages#buildInput`），不写行号——行号会随重构漂移，成员名才是稳定锚点。
 
 ## 1. 四页职责
@@ -103,7 +103,6 @@
 
 ## 9. 相关文档
 
-- 行为规范：[编辑器四页职责（spec）](../../spec/editor-page-responsibilities-2026-10-07.md)
 - 门槛运行期：[催化剂门槛运行投影](../backend/systems/catalyst-threshold-projection.md)
 - 类型与字段：[类型系统](../backend/modules/type-system.md)
 - UI kit 契约：[ui-kit-api](ui-kit-api.md)
