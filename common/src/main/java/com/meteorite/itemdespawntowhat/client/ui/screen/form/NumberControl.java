@@ -59,6 +59,8 @@ final class NumberControl extends FormControl {
     // 滑块常用交互窗口（JSON 单位），恒为合法域的子区间
     private final double windowMin;
     private final double windowMax;
+    // 行内输入框的宽度下限覆盖：数量对象等逐行对齐布局用各行最大值统一（0 = 各自按文本取样）
+    private int inputWidthOverride;
     private @Nullable JsonElement loaded;
     // 装载时写入输入框的文本基线；未编辑且文本未变时视为「未编辑」
     private String loadedText = "";
@@ -317,9 +319,19 @@ final class NumberControl extends FormControl {
 
     // 输入框宽度：按当前文本取样，夹在最小宽度与可用宽度三分之一之间
     private int inputWidth(int available) {
-        int sample = font.width(displayText(slider.value())) + 10;
+        int sample = Math.max(font.width(displayText(slider.value())) + 10, inputWidthOverride);
         int limit = Math.max(MIN_INPUT_WIDTH, available / 3);
         return Math.clamp(sample, MIN_INPUT_WIDTH, limit);
+    }
+
+    // 行内输入框的期望宽度：对齐布局在设置覆盖前用各行最大值统一宽度
+    int preferredInputWidth(int available) {
+        return inputWidth(available);
+    }
+
+    // 统一行内输入框宽度下限（0 表示各自按文本取样）
+    void setInputWidthOverride(int width) {
+        inputWidthOverride = Math.max(0, width);
     }
 
     // 预设按钮宽度：文本宽度 + 内边距

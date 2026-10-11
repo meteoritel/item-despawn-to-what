@@ -4,35 +4,56 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
+import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.screen.RuleDisplayLabels;
+import com.meteorite.itemdespawntowhat.client.ui.screen.RuleEditorP4Panels;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
+import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
-/** 物品数量对象的表单控件：复用数值控件的滑条、精确输入、撤销与错误校验。 */
+/**
+ * 物品数量对象的表单控件：复用数值控件的滑条、精确输入、撤销与错误校验。
+ * <p>每个引用只占一行：行首是物品图标与本地化名称，随后是该物品的数量滑条与精确输入；
+ * 图标列与名称列宽度全场统一，所有滑条从同一横坐标开始、到同一横坐标结束。
+ * <p>名称超过列宽时在名称列内悬停滚动；悬停图标给出完整名称、字段名与引用注册名。
+ */
 final class ItemCountsControl extends FormControl {
+    // 行间距
     private static final int ROW_GAP = 6;
-    private static final int HEADER_GAP = 4;
-    private static final int NUMBER_HEIGHT = 20;
+    // 滑条行高（与卡片表单的单行高度一致）
+    private static final int ROW_HEIGHT = 20;
+    // 行首图标列宽度与图标到名称的间距
+    private static final int ICON_COLUMN = 16;
+    private static final int ICON_GAP = 6;
+    // 名称列与滑条之间的间距
+    private static final int NAME_GAP = 6;
+    // 名称最长像素宽度：超出的名称截断为省略号
+    private static final int NAME_MAX_WIDTH = 100;
+    // 名称列占行宽的比例分母：窄窗口下优先保证滑条宽度
+    private static final int NAME_COLUMN_SHARE = 3;
     private static final int DEFAULT_COUNT = 1;
     private static final int INITIAL_SLIDER_MAX = 64;
+    // 悬停提示的「名称 · 字段名」格式 key
+    private static final String QUANTITY_ROW_KEY = "gui.itemdespawntowhat.edit.quantity.row";
+
     private final Font font;
     private final Runnable onChanged;
-    private final Map<String, NumberControl> controls = new LinkedHashMap<>();
-    private final Map<String, Component> labels = new LinkedHashMap<>();
-    private final Map<String, UiRect> headers = new LinkedHashMap<>();
+    private final Map<String, Entry> entries = new LinkedHashMap<>();
     private JsonObject values = new JsonObject();
     private int defaultCount = DEFAULT_COUNT;
+    // 最近一次布局使用的行高：命中判定与绘制共用同一份几何
+    private int lastRowHeight = ROW_HEIGHT;
     private @Nullable NumberControl pressed;
 
     ItemCountsControl(Font font, EditorField field, Runnable onChanged) {
@@ -41,32 +62,76 @@ final class ItemCountsControl extends FormControl {
         this.onChanged = onChanged;
     }
 
+    // 一个引用对应的一行：数量控件、行首名称与图标、当前布局位置
+    private static final class Entry {
+        private final String reference;
+        private final NumberControl control;
+        private final Component name;
+        private final @Nullable UiIcon icon;
+        private int rowY;
+        private int iconX;
+        private int iconY;
+        private int nameX;
+        private int nameY;
+        private int nameWidth;
+        // 名称滚动计时：只在悬停名称列时推进，移开后归零回到起点
+        private int scrollTicks;
+
+        private Entry(String reference, NumberControl control, Component name, @Nullable UiIcon icon) {
+            this.reference = reference;
+            this.control = control;
+            this.name = name;
+            this.icon = icon;
+        }
+
+        // 图标列命中：悬停读取完整名称与引用注册名
+        private boolean iconHit(double x, double y, int rowHeight) {
+            return x >= iconX && x < iconX + ICON_COLUMN && y >= rowY && y < rowY + rowHeight;
+        }
+
+        // 名称列命中：悬停滚动超宽名称
+        private boolean nameHit(double x, double y, int rowHeight) {
+            return nameWidth > 0 && x >= nameX && x < nameX + nameWidth && y >= rowY && y < rowY + rowHeight;
+        }
+    }
+
     void setReferences(List<String> references) {
         List<String> unique = references.stream().distinct().toList();
-        if (new ArrayList<>(controls.keySet()).equals(unique)) return;
-        Map<String, NumberControl> next = new LinkedHashMap<>();
-        labels.clear();
+        if (new ArrayList<>(entries.keySet()).equals(unique)) return;
+        Map<String, Entry> next = new LinkedHashMap<>();
         for (String reference : unique) {
-            NumberControl control = controls.get(reference);
-            if (control == null) {
-                EditorField number = EditorField.integerSlider(field.name(), field.labelKey(),
-                        field.intMin(DEFAULT_COUNT), field.intMax(Integer.MAX_VALUE), DEFAULT_COUNT, INITIAL_SLIDER_MAX);
-                control = java.util.Objects.requireNonNull(NumberControl.create(font, number, () -> {
-                    markEdited();
-                    onChanged.run();
-                }));
-                control.setMinimumHeight(NUMBER_HEIGHT);
-                control.load(values.has(reference) ? values.get(reference) : new JsonPrimitive(defaultCount));
+            Entry entry = entries.get(reference);
+            if (entry == null) {
+                entry = new Entry(reference, createControl(), displayName(reference),
+                        RuleEditorP4Panels.iconFor(RuleCatalogType.ITEM, reference));
+                entry.control.load(values.has(reference) ? values.get(reference) : new JsonPrimitive(defaultCount));
             }
-            next.put(reference, control);
-            ResourceLocation id = reference.startsWith("#") ? null : ResourceLocation.tryParse(reference);
-            Component item = id == null ? Component.literal(reference) : BuiltInRegistries.ITEM.getOptional(id)
-                    .map(value -> Component.translatable(value.getDescriptionId()))
-                    .orElse(Component.literal(reference));
-            labels.put(reference, Component.translatable("gui.itemdespawntowhat.edit.quantity.row", item, label()));
+            next.put(reference, entry);
         }
-        controls.clear();
-        controls.putAll(next);
+        entries.clear();
+        entries.putAll(next);
+    }
+
+    // 每行复用同规格的数值控件：初始数量 1，滑条常用窗口 1..64
+    private NumberControl createControl() {
+        EditorField number = EditorField.integerSlider(field.name(), field.labelKey(),
+                field.intMin(DEFAULT_COUNT), field.intMax(Integer.MAX_VALUE), DEFAULT_COUNT, INITIAL_SLIDER_MAX);
+        NumberControl control = java.util.Objects.requireNonNull(NumberControl.create(font, number, () -> {
+            markEdited();
+            onChanged.run();
+        }));
+        control.setMinimumHeight(ROW_HEIGHT);
+        return control;
+    }
+
+    // 名称取本地化物品名；标签与未知引用保留原始注册名，悬停提示可读完整内容
+    private static Component displayName(String reference) {
+        if (reference.startsWith("#")) {
+            return Component.literal(reference);
+        }
+        ResourceLocation id = ResourceLocation.tryParse(reference);
+        Component label = id == null ? null : RuleDisplayLabels.label(id);
+        return label == null ? Component.literal(reference) : label;
     }
 
     void setDefaultCount(int count) { defaultCount = count; }
@@ -74,18 +139,18 @@ final class ItemCountsControl extends FormControl {
     @Override
     List<String> inputText() {
         List<String> text = new ArrayList<>();
-        controls.forEach((reference, control) -> {
-            text.add(reference);
-            text.addAll(control.inputText());
-        });
+        for (Entry entry : entries.values()) {
+            text.add(entry.reference);
+            text.addAll(entry.control.inputText());
+        }
         return text;
     }
 
     @Override
     @Nullable UiFocusTarget revealPath(String path, String basePath) {
-        for (var entry : controls.entrySet()) {
-            String referencePath = basePath + "." + entry.getKey();
-            if (path.equals(referencePath)) return entry.getValue().revealPath(referencePath, referencePath);
+        for (Entry entry : entries.values()) {
+            String referencePath = basePath + "." + entry.reference;
+            if (path.equals(referencePath)) return entry.control.revealPath(referencePath, referencePath);
         }
         return null;
     }
@@ -93,33 +158,67 @@ final class ItemCountsControl extends FormControl {
     @Override
     void restoreInputText(List<String> text) {
         for (int index = 0; index + 1 < text.size(); index += 2) {
-            NumberControl control = controls.get(text.get(index));
-            if (control != null) control.restoreInputText(List.of(text.get(index + 1)));
+            Entry entry = entries.get(text.get(index));
+            if (entry != null) entry.control.restoreInputText(List.of(text.get(index + 1)));
         }
         markEdited();
     }
 
     @Override boolean usesLabelColumn() { return false; }
-    @Override int height() { return controls.size() * (font.lineHeight + HEADER_GAP + NUMBER_HEIGHT + ROW_GAP); }
+
+    @Override
+    int height() {
+        return entries.isEmpty() ? 0 : entries.size() * (rowHeight() + ROW_GAP) - ROW_GAP;
+    }
+
+    // 行高与内层数值控件一致：卡片表单为 20，其它密度随控件自身最小高度
+    private int rowHeight() {
+        int height = ROW_HEIGHT;
+        for (Entry entry : entries.values()) height = Math.max(height, entry.control.layoutHeight());
+        return height;
+    }
 
     @Override
     void setBounds(int x, int y, int width) {
-        headers.clear();
-        for (var entry : controls.entrySet()) {
-            headers.put(entry.getKey(), new UiRect(x, y, width, font.lineHeight));
-            entry.getValue().setBounds(x, y + font.lineHeight + HEADER_GAP, width);
-            y += font.lineHeight + HEADER_GAP + NUMBER_HEIGHT + ROW_GAP;
+        int rowHeight = rowHeight();
+        // 名称列取全场最宽名称（封顶 NAME_MAX_WIDTH），保证滑条上下对齐
+        int nameWidth = 0;
+        for (Entry entry : entries.values()) {
+            nameWidth = Math.max(nameWidth, Math.clamp(font.width(entry.name), 0, NAME_MAX_WIDTH));
+        }
+        int labelWidth = Math.clamp(ICON_COLUMN + ICON_GAP + nameWidth, 0, Math.max(0, width / NAME_COLUMN_SHARE));
+        int contentX = x + labelWidth + NAME_GAP;
+        int contentWidth = Math.max(0, width - labelWidth - NAME_GAP);
+        // 精确输入框宽度按各行最大值统一，滑条右端也随之对齐
+        int inputWidth = 0;
+        for (Entry entry : entries.values()) {
+            inputWidth = Math.max(inputWidth, entry.control.preferredInputWidth(contentWidth));
+        }
+        this.lastRowHeight = rowHeight;
+        int rowY = y;
+        for (Entry entry : entries.values()) {
+            entry.control.setInputWidthOverride(inputWidth);
+            entry.rowY = rowY;
+            entry.iconX = x;
+            entry.iconY = rowY + Math.max(0, (rowHeight - (entry.icon == null ? ICON_COLUMN : entry.icon.height())) / 2);
+            entry.nameX = x + ICON_COLUMN + ICON_GAP;
+            entry.nameY = rowY + Math.max(0, (rowHeight - font.lineHeight) / 2);
+            entry.nameWidth = Math.max(0, labelWidth - ICON_COLUMN - ICON_GAP);
+            entry.control.setBounds(contentX, rowY, contentWidth);
+            rowY += rowHeight + ROW_GAP;
         }
     }
 
     @Override
-    void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
-        for (var entry : controls.entrySet()) {
-            UiRect header = headers.get(entry.getKey());
-            if (header == null) continue;
-            graphics.drawString(font, font.plainSubstrByWidth(labels.get(entry.getKey()).getString(), header.width()),
-                    header.x(), header.y(), UiPalette.TEXT_SECONDARY, false);
-            entry.getValue().render(graphics, font, mouseX, mouseY);
+    void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
+        for (Entry entry : entries.values()) {
+            if (entry.icon != null) entry.icon.render(graphics, entry.iconX, entry.iconY);
+            // 名称超宽时只有悬停才平移：起点与终点各停顿一次后往返，移开即回到起点
+            boolean hovered = entry.nameHit(mouseX, mouseY, lastRowHeight);
+            entry.scrollTicks = hovered ? entry.scrollTicks + 1 : 0;
+            TextScroll.draw(graphics, renderFont, entry.name.getString(), entry.nameX, entry.nameY,
+                    entry.nameWidth, UiPalette.TEXT_SECONDARY, hovered, entry.scrollTicks, false);
+            entry.control.render(graphics, renderFont, mouseX, mouseY);
         }
     }
 
@@ -127,30 +226,38 @@ final class ItemCountsControl extends FormControl {
     void load(@Nullable JsonElement value) {
         rememberLoaded(value);
         values = value != null && value.isJsonObject() ? value.getAsJsonObject().deepCopy() : new JsonObject();
-        controls.forEach((reference, control) -> control.load(
-                values.has(reference) ? values.get(reference) : new JsonPrimitive(defaultCount)));
+        for (Entry entry : entries.values()) {
+            entry.control.load(values.has(entry.reference) ? values.get(entry.reference)
+                    : new JsonPrimitive(defaultCount));
+        }
     }
 
     @Override
     @Nullable JsonElement store() {
         if (!isEdited() && !hasPendingInput()) return originalElement();
         JsonObject result = new JsonObject();
-        controls.forEach((reference, control) -> result.add(reference, control.store()));
+        for (Entry entry : entries.values()) {
+            result.add(entry.reference, entry.control.store());
+        }
         return result;
     }
 
     @Override
     List<FormIssue> issues(String path) {
         List<FormIssue> result = new ArrayList<>();
-        controls.forEach((reference, control) -> result.addAll(control.issues(path + "." + reference)));
+        for (Entry entry : entries.values()) {
+            result.addAll(entry.control.issues(path + "." + entry.reference));
+        }
         return result;
     }
 
     @Override
     boolean mouseClicked(double x, double y, int button) {
-        for (NumberControl control : controls.values()) if (control.mouseClicked(x, y, button)) {
-            pressed = control;
-            return true;
+        for (Entry entry : entries.values()) {
+            if (entry.control.mouseClicked(x, y, button)) {
+                pressed = entry.control;
+                return true;
+            }
         }
         return false;
     }
@@ -166,26 +273,43 @@ final class ItemCountsControl extends FormControl {
         return pressed != null && pressed.mouseDragged(x, y, button, dx, dy);
     }
     @Override boolean keyPressed(int key, int scan, int modifiers) {
-        for (NumberControl control : controls.values()) if (control.keyPressed(key, scan, modifiers)) return true;
+        for (Entry entry : entries.values()) if (entry.control.keyPressed(key, scan, modifiers)) return true;
         return false;
     }
     @Override boolean keyReleased(int key, int scan, int modifiers) {
-        for (NumberControl control : controls.values()) if (control.keyReleased(key, scan, modifiers)) return true;
+        for (Entry entry : entries.values()) if (entry.control.keyReleased(key, scan, modifiers)) return true;
         return false;
     }
     @Override boolean charTyped(char point, int modifiers) {
-        for (NumberControl control : controls.values()) if (control.charTyped(point, modifiers)) return true;
+        for (Entry entry : entries.values()) if (entry.control.charTyped(point, modifiers)) return true;
         return false;
     }
-    @Override void addFocusTargets(List<UiFocusTarget> out) { controls.values().forEach(control -> control.addFocusTargets(out)); }
-    @Override void setEnabled(boolean enabled) { controls.values().forEach(control -> control.setEnabled(enabled)); }
-    @Override boolean hasPendingInput() { return controls.values().stream().anyMatch(NumberControl::hasPendingInput); }
-    @Override boolean isEditing() { return controls.values().stream().anyMatch(NumberControl::isEditing); }
-    @Override void finishInput() { controls.values().forEach(NumberControl::finishInput); }
-    @Override void endInteractions(UiInputCapture.EndReason reason) { controls.values().forEach(control -> control.endInteractions(reason)); }
+    @Override void addFocusTargets(List<UiFocusTarget> out) {
+        entries.values().forEach(entry -> entry.control.addFocusTargets(out));
+    }
+    @Override void setEnabled(boolean enabled) {
+        entries.values().forEach(entry -> entry.control.setEnabled(enabled));
+    }
+    @Override boolean hasPendingInput() {
+        return entries.values().stream().anyMatch(entry -> entry.control.hasPendingInput());
+    }
+    @Override boolean isEditing() {
+        return entries.values().stream().anyMatch(entry -> entry.control.isEditing());
+    }
+    @Override void finishInput() {
+        entries.values().forEach(entry -> entry.control.finishInput());
+    }
+    @Override void endInteractions(UiInputCapture.EndReason reason) {
+        entries.values().forEach(entry -> entry.control.endInteractions(reason));
+    }
     @Override @Nullable Component tooltipAt(double x, double y) {
-        for (var header : headers.entrySet()) if (header.getValue().contains(x, y)) return labels.get(header.getKey()).copy()
-                .append("\n").append(header.getKey());
+        // 提示只在图标列弹出：名称列留给悬停滚动，避免提示框盖住正在滚动的名称
+        for (Entry entry : entries.values()) {
+            if (entry.iconHit(x, y, lastRowHeight)) {
+                return Component.translatable(QUANTITY_ROW_KEY, entry.name, label()).copy()
+                        .append("\n").append(entry.reference);
+            }
+        }
         return null;
     }
 }

@@ -78,7 +78,7 @@
 
 ## 6. 数量展示与运行期同源
 
-- `ItemCountsControl` 复用 `NumberControl`，按引用显示物品名称、数量滑条与精确输入；输入页和条件叶弹窗共用该控件。
+- `ItemCountsControl` 复用 `NumberControl`，按引用逐行显示物品图标与名称、数量滑条与精确输入；行首图标列与名称列按全场最宽名称统一宽度，滑条起止上下对齐；输入页和条件叶弹窗共用该控件。
 - 催化剂门槛统一称「最低触发数量」，消耗区称「每轮消耗数量」；GUI 搜索半径使用默认 1，不提供自定义入口。
 - 显式 `counts` 优先，缺省引用采用显式 `count`；门槛均缺省时，`quantityDefaults` 解码完整草稿并调用 `CatalystThresholdProjection.resolveThreshold` 按引用展示有效门槛。未编辑时保留原字段缺失状态。
 - 草稿未能解码时展示显式 `count` 或默认 1；作用域按确切条件路径解析，不把不同候选结果或效果的消耗参数混用。
