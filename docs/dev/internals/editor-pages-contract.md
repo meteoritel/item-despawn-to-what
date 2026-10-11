@@ -138,3 +138,12 @@
 顶层 effects 转成 `outcomes[0].effects` 时原效果数组与对象被保留，输入前缀同步迁移。输入页移除催化剂消耗动作引发的动作下标变化同样迁移。产物子类等同路径对象替换属于字段编辑，保留该作用域的输入，不当作结构删除。
 
 主编辑器保存前检查所有脏规则的未完成输入与条件结构。服务端仍执行完整解码、语义和引用校验，校验拒绝不清除草稿；服务端字段问题先打开其 ruleId 所属规则，再按原字段路径定位，避免将其它规则或动作局部条件问题套到当前规则树。
+
+## 13. i18n 键分工
+
+| 前缀 | 用途 | 例子 |
+|---|---|---|
+| `gui.itemdespawntowhat.edit.*` | 界面文本：标题、按钮、字段标签、枚举值、类型显示名 | `gui.itemdespawntowhat.edit.field.y_level.min` |
+| `itemdespawntowhat.edit.*` | 协议回执与校验问题的消息码（服务端生成、客户端翻译） | `itemdespawntowhat.edit.status.lock_busy` |
+
+字段标签 `gui.itemdespawntowhat.edit.field.<类型 path>.<字段>`、枚举值 `gui.itemdespawntowhat.edit.enum.<组>.<值>`、类型显示名 `gui.itemdespawntowhat.edit.<condition|effect>.<类型>`。`en_us.json` 与 `zh_cn.json` 的键集合必须完全一致（当前各 987 个键）。协议回执状态码见 [编辑协议](../backend/modules/edit-protocol.md) §4.2。

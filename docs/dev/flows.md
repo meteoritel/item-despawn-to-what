@@ -118,5 +118,5 @@ flowchart TB
 ## 5. 相关
 
 - 分层与依赖：[architecture.md](architecture.md)、[layers/](layers/)
-- 硬约束与验证流程：[conventions.md](conventions.md)
+- 全局硬约束：[backend/README.md](backend/README.md) §4
 - 类级链路细节：[backend/flows/](backend/flows/)

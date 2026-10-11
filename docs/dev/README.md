@@ -33,7 +33,7 @@
 | 任务 | 先读 |
 |---|---|
 | 理解整体架构 / 找某功能的所在层 | [architecture.md](architecture.md) → [layers/](layers/) |
-| 加效果 / 条件 / 规则字段 | [conventions.md](conventions.md) §2 → [layers/server-core.md](layers/server-core.md) → [backend/modules/type-system.md](backend/modules/type-system.md) 或 [backend/modules/rule-model.md](backend/modules/rule-model.md) |
+| 加效果 / 条件 / 规则字段 | [layers/server-core.md](layers/server-core.md) → [backend/modules/type-system.md](backend/modules/type-system.md) 或 [backend/modules/rule-model.md](backend/modules/rule-model.md) |
 | 改规则加载 / 来源合并 | [backend/modules/rule-loading.md](backend/modules/rule-loading.md) |
 | 改转化运行时 / 结算 | [backend/modules/conversion-runtime.md](backend/modules/conversion-runtime.md) → [backend/flows/conversion-lifecycle.md](backend/flows/conversion-lifecycle.md) |
 | 改编辑器界面 / 加字段行 | [layers/client.md](layers/client.md) → [internals/editor-pages-contract.md](internals/editor-pages-contract.md) |
@@ -44,7 +44,7 @@
 | 加 / 改命令 | [backend/modules/command.md](backend/modules/command.md) |
 | 调试命令与开发场景 | [backend/modules/debug.md](backend/modules/debug.md) |
 | 使用 / 改造 UI kit | [internals/ui-kit/README.md](internals/ui-kit/README.md) |
-| 提交前跑检查与构建 | [conventions.md](conventions.md) §4 |
+| 提交前跑文档检查与构建 | [conventions.md](conventions.md) §4（文档校验）；构建用 `tools/dsh-build.ps1` |
 
 ## 3. 抽象层文档目录
 
@@ -57,7 +57,7 @@
 | [layers/client.md](layers/client.md) | 客户端：协议工作区与开屏入口、草稿与撤销、类型编辑器注册表与回退、UI kit 边界与输入生命周期、主题与控件适配、四页界面契约、按键、已知限制 |
 | [layers/platform.md](layers/platform.md) | 平台接入：三种注入方式、引导与生命周期、事件与 Mixin 原则、两端差异摘要、网络与协议注册、模组级配置分组 |
 | [flows.md](flows.md) | 四条端到端链路概览：规则加载、转化生命周期、编辑保存协议、调试场景 |
-| [conventions.md](conventions.md) | 硬约束清单、扩展点路由表、可依赖与不可依赖的对外面、交付前验证流程、AI agent 使用约定、文档维护约定 |
+| [conventions.md](conventions.md) | 文档层级与职责、阅读协议、文档维护约定、文档校验 |
 
 ## 4. 执行层文档目录
 
@@ -105,13 +105,5 @@
 
 ## 5. 权威性与维护
 
-- **权威范围**：架构、职责与约束以抽象层为准；类名、方法行为、字段与常量的逐项事实以执行层为准；两者冲突时以源码为准。
-- **单一来源**：同一事实只维护一处。类清单与字段表只在执行层；抽象层只描述契约与职责。
-- **只写当前状态**：文档不得出现修改历史、变更日志、版本记录、日期注记，也不写「已废弃 / 已删除 / 已改为 / 旧实现」一类历史叙述；过期内容直接删除，不保留退役章节。
-- **代码变更即同步**：改动功能时同步更新对应文档；文档落后于源码时以源码为准并回改文档。
-- **符号定位不写行号**：引用源码用「类名 + 成员名」，行号会随重构漂移。
-- **链接必须可解析**：运行 `python tools/check-docs.py` 校验全部相对链接；目标文档删除时改为文字或指向现行文档。
-- **决策背景**：`docs/adr/` 只记为什么这样设计与被否决的方案；本目录文档只链接不复述。
-- **术语**：唯一术语表为仓库根 [GLOSSARY.md](../../GLOSSARY.md)。
-- **新增文档**：先判断属于哪一层，再扩写现有文档或新建单主题文件，并登记到第 3、4 节；执行层每篇只写一个主题，便于按需检索。
-- **玩家文档**：面向终端用户的使用手册放在 `docs/wiki/`，不写进本目录。
+- **入口唯一**：新增文档必须登记到第 3、4 节。
+- 文档层级与职责、权威范围、单一来源、链接规则与校验方式见 [conventions.md](conventions.md)。

@@ -1,7 +1,7 @@
 # 项目概述
 
 > 本文是抽象层文档的起点，只交代项目定位、边界与术语，不涉及类与方法。
-> 架构与模块分层见 [architecture.md](architecture.md)；术语进入代码前的读法见 [conventions.md](conventions.md)。
+> 架构与模块分层见 [architecture.md](architecture.md)；文档阅读协议见 [README.md](README.md) §2。
 
 ## 1. 一句话定位
 
@@ -35,6 +35,19 @@ ItemDespawnToWhat（mod id `itemdespawntowhat`）是一个 Minecraft 1.21.1 的 
 - 不提供跨加载器统一的 Mixin 方案：两端各自使用各自的原生事件与最小 Mixin。
 - 不提供图形编辑器以外的规则配置入口保证：命令与 JSON 是稳定入口，但界面承担主要交互。
 
+**对外稳定面**（第三方与集成方可以稳定依赖）：
+
+| 面 | 说明 |
+|---|---|
+| 规则数据格式 | 数据包内的规则目录与 config 覆盖层目录；字段契约见 [layers/server-core.md](layers/server-core.md) 与 [backend/modules/rule-model.md](backend/modules/rule-model.md) |
+| 类型注册 SPI | 以服务发现登记的规则类型提供者；约束见 [layers/server-core.md](layers/server-core.md) §4 |
+| 命令 | `/idtw` 命令树与其权限口径 |
+| 模组级配置 | 固定的模组级配置文件位置与分组语义 |
+| 客户端 UI kit | 声明的公开边界（尚未拆包发布；公开面变更须同步 `internals/ui-kit/` 与边界检查脚本） |
+| 候选目录协议 | 类别枚举与条目字段约定的冻结形状 |
+
+**不构成对外面**（随实现变动）：内核内部包结构与非契约类型、窄接口的具体实现、平台接入层的内部细节、客户端控件层与屏幕层的内部结构、UI kit 的「内部实现」成员。
+
 ## 4. 领域术语
 
 领域术语统一维护在仓库根目录的 [GLOSSARY.md](../../GLOSSARY.md)；本节不再另行列表，避免同一术语出现两处定义。
@@ -43,8 +56,8 @@ ItemDespawnToWhat（mod id `itemdespawntowhat`）是一个 Minecraft 1.21.1 的 
 ## 5. 两类读者
 
 - **人类开发者**：按 [README.md](README.md) 的阅读顺序建立全局认知，再按任务跳转。
-- **AI agent**：先读本文件 + [architecture.md](architecture.md) + [conventions.md](conventions.md) 建立约束集，再按任务读
-  [layers/](layers/) 与 [flows.md](flows.md)；改代码前必须核对 [conventions.md](conventions.md) 的硬约束清单。
+- **AI agent**：先读本文件 + [architecture.md](architecture.md)，再按 [README.md](README.md) 的「任务 → 文档」路由读
+  [layers/](layers/) 与 [flows.md](flows.md)；改代码前先核对 [backend/README.md](backend/README.md) §4 的全局铁律。
 
 ## 6. 子系统地图
 

@@ -121,6 +121,6 @@
 ## 7. 相关
 
 - 端到端链路：[../flows.md](../flows.md)
-- 硬约束与使用约定：[../conventions.md](../conventions.md)
+- 全局硬约束：[../backend/README.md](../backend/README.md) §4
 - 类级细节：[../backend/modules/edit-protocol.md](../backend/modules/edit-protocol.md)、
   [../backend/modules/command.md](../backend/modules/command.md)、[../backend/modules/debug.md](../backend/modules/debug.md)

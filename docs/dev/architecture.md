@@ -1,7 +1,7 @@
 # 架构总览
 
 > 本文只描述分层、依赖方向与数据流，不展开类与方法。
-> 各层职责细节见 [layers/](layers/)；端到端链路见 [flows.md](flows.md)；硬约束见 [conventions.md](conventions.md)。
+> 各层职责细节见 [layers/](layers/)；端到端链路见 [flows.md](flows.md)；全局硬约束见 [backend/README.md](backend/README.md) §4。
 
 ## 1. 分层模型
 

@@ -115,4 +115,4 @@
 - 内核层：[server-core.md](server-core.md)
 - 编辑协议：[authoring.md](authoring.md)
 - 端到端链路：[../flows.md](../flows.md)
-- 硬约束与验证流程：[../conventions.md](../conventions.md)
+- 全局硬约束：[../backend/README.md](../backend/README.md) §4

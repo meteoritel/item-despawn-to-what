@@ -14,7 +14,7 @@
 1. **端隔离**：内核不引用客户端；客户端经协议载荷与静态 sink 与内核通信。
 2. **层内单向**：`client/net`（协议）→ `client/edit`（草稿与注册表）→ `client/ui`（界面）；界面层不得直接接触传输载荷类型。
 3. **UI kit 边界**：kit 是可被宿主依赖的独立边界，只依赖 Minecraft 客户端通用类型、Java 标准库、JOML、LWJGL 与极少数精确允许的渲染类型；
-   **不依赖本模组任何其它包、不依赖加载器 API、不依赖 Gson 业务对象**。边界由脚本强制校验（见 [conventions.md](../conventions.md)）。
+   **不依赖本模组任何其它包、不依赖加载器 API、不依赖 Gson 业务对象**。边界由脚本强制校验（见 [internals/ui-kit/README.md](../internals/ui-kit/README.md) §5）。
 4. **宿主注入**：主题、文案、图标、渲染器、指针与键盘快照全部由宿主传入；kit 不硬编码任何本模组的语言键。
 
 ## 2. `client/net`：协议工作区
@@ -130,4 +130,4 @@ kit 提供内容排版、控件与交互、输入上下文与捕获、数值策�
 
 - 编辑协议：[authoring.md](authoring.md)、[../backend/modules/edit-protocol.md](../backend/modules/edit-protocol.md)
 - 端到端链路：[../flows.md](../flows.md)
-- 硬约束与验证流程：[../conventions.md](../conventions.md)
+- 全局硬约束：[../backend/README.md](../backend/README.md) §4
