@@ -52,6 +52,13 @@ public final class UiPalette {
     // 内凹区域阴影边（上、左）
     public static final int SLOT_BORDER_DARK = 0xFF4A4A4A;
 
+    // ---- 列表与链接 ----
+
+    // 目录选择页列表的隔行条纹（偶数行用 SLOT_FILL，奇数行略亮）
+    public static final int LIST_ROW_ODD = 0xFF959595;
+    // 行内链接文字（清空已选等）
+    public static final int LINK = 0xFF2B4C8C;
+
     // ---- 控件底色 ----
 
     // 普通状态

@@ -146,4 +146,18 @@
 | `gui.itemdespawntowhat.edit.*` | 界面文本：标题、按钮、字段标签、枚举值、类型显示名 | `gui.itemdespawntowhat.edit.field.y_level.min` |
 | `itemdespawntowhat.edit.*` | 协议回执与校验问题的消息码（服务端生成、客户端翻译） | `itemdespawntowhat.edit.status.lock_busy` |
 
-字段标签 `gui.itemdespawntowhat.edit.field.<类型 path>.<字段>`、枚举值 `gui.itemdespawntowhat.edit.enum.<组>.<值>`、类型显示名 `gui.itemdespawntowhat.edit.<condition|effect>.<类型>`。`en_us.json` 与 `zh_cn.json` 的键集合必须完全一致（当前各 987 个键）。协议回执状态码见 [编辑协议](../backend/modules/edit-protocol.md) §4.2。
+字段标签 `gui.itemdespawntowhat.edit.field.<类型 path>.<字段>`、枚举值 `gui.itemdespawntowhat.edit.enum.<组>.<值>`、类型显示名 `gui.itemdespawntowhat.edit.<condition|effect>.<类型>`。`en_us.json` 与 `zh_cn.json` 的键集合必须完全一致（当前各 991 个键）。协议回执状态码见 [编辑协议](../backend/modules/edit-protocol.md) §4.2。
+
+## 14. 目录选择页样板
+
+物品、标签、流体等注册表目录共用同一个选择页：页面控件是 `client/ui/widget/UiCatalogGrid`，弹窗由 `RuleEditorP4Panels#catalogModal` 装配，黑名单入口 `SourceBlacklistPicker` 复用同一尺寸助手与同一套文案。
+
+- `UiCatalogGrid` 只知道「条目 + 图标 + 本地化文本」：条目、图标与全部文本由宿主注入，搜索、翻页与范围切换只发出意图回调；面板不校验也不解析注册表 id。
+- 分页依据：目录由 `RuleEditClientWorkspace#directory` 按类型**一次拉全**（每请求 200 条，`lastPage` 为真即完成，按 id 去重合并；`refreshDirectory` 只重探第 0 页修订号，未变化即复用整份缓存）。选择页在本地做搜索过滤与切片：`total` = 命中条数，`pageCount` = `ceil(total / 200)`（`UiCatalogGrid.PAGE_SIZE`），翻页不产生网络请求。
+- 底部行由 `UiModal#inlineFooter()` 与 `UiFooterHost` 托管：弹窗把按钮行算进内容区高度，页面让出右侧后把翻页（只画 `<`/`>`，完整名称进悬停说明）、页码、分组标签／总数／已选与「清空已选」排在按钮左边，不再为翻页单独占一行。
+- 悬停提示只给条目信息：显示名与注册名各占一行，宿主附加说明（标签成员范围、实体预览不可用）另起一行；渲染前按 240 像素拆行——原版单个 Component 的 `renderTooltip` 重载不处理换行。
+- 条目策略由宿主实现 `UiCatalogGrid.EntryPolicy` 注入：`CatalogEntryPolicy` 把物品与流体的默认排除写在同一处——物品排除空气与仅命令可得的技术性条目，流体只保留可放置的源流体（空流体与流动变体一律排除）；规则固定生效、不提供界面开关。宿主在**分页前**过滤，所以页码、总数与可见条目始终基于同一份事实。
+- 同时存在物品与同注册表标签的目录页在搜索框右侧出现一个范围轮询按钮：显示当前范围的符号（`◆` 只物品 / `#` 只标签 / `≡` 一起），点击按该顺序切到下一个；符号代替文案，完整文案（含「点击切换」提示）只进悬停说明。范围由页面回写、宿主按 `EntryPolicy#scope()` 决定取物品还是标签，切换后映射缓存立即失效。
+- 列表滚动条可拖动：按住滑块拖动即连续滚动，点击轨道即把滑块跳到该处；抓取范围比 4 像素的视觉宽度略宽，内容未超出可见行时不响应。
+- 选择状态由页面持有：多选页再次点击即取消，单选页替换旧选择，`selection()` 按点击顺序返回 id 列表；确认按钮把该列表交给调用方的 `onPicked`。跨条目去重由调用方按 id 处理。
+- 键盘与鼠标等价：方向键移动光标、Home/End 跳首尾、空格切换选择、Enter 激活、PageUp/PageDown 翻屏；滚轮一格滚动多行。列表高度小于一页时按可见行滚动，不改变宿主页码。

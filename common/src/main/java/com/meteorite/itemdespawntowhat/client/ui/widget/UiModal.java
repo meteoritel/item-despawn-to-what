@@ -43,6 +43,8 @@ public final class UiModal implements UiWidget {
     private static final int BUTTON_MIN_WIDTH = 40;
     // 按钮间距
     private static final int BUTTON_SPACING = 4;
+    // 按钮行托管内容时，内容与按钮之间保留的最小间距
+    private static final int INLINE_FOOTER_GAP = 6;
 
     // 字体
     private final Font font;
@@ -67,6 +69,8 @@ public final class UiModal implements UiWidget {
     private int messageOffset;
     // 点击遮罩是否关闭
     private boolean closeOnBackdrop;
+    // 按钮行是否与内容同排
+    private boolean inlineFooter;
     // 确认后是否保留弹窗
     private boolean retainOnConfirm;
     // 取消回调
@@ -171,6 +175,12 @@ public final class UiModal implements UiWidget {
     // 追加取消按钮
     public UiModal cancel(Component label) {
         return addButton(new UiButton(font, label, UiButtonVariant.SECONDARY, this::doCancel));
+    }
+
+    // 按钮行与内容同排：内容区向下延伸一行，实现 UiFooterHost 的内容控件把翻页排到按钮左边
+    public UiModal inlineFooter() {
+        this.inlineFooter = true;
+        return this;
     }
 
     // 设置点击遮罩是否关闭
@@ -278,14 +288,34 @@ public final class UiModal implements UiWidget {
 
     private UiModal setBoundsInternal(int x, int y, int width, int height) {
         this.bounds = new UiRect(Math.max(0, x), Math.max(0, y), Math.max(1, width), Math.max(BUTTON_HEIGHT, height));
+        int footerHeight = footerHeight(bounds.width());
+        // 与按钮同排时把按钮行也算进内容区高度，由内容控件自己让出右侧
+        int inlineExtra = inlineFooter && contentWidget != null ? footerHeight + UiTheme.PADDING : 0;
         this.contentRect = new UiRect(bounds.x() + UiTheme.PADDING, bounds.y() + UiTheme.HEADER_HEIGHT + UiTheme.PADDING,
                 Math.max(0, bounds.width() - UiTheme.PADDING * 2),
-                Math.max(0, bounds.height() - UiTheme.HEADER_HEIGHT - UiTheme.PADDING * 3 - footerHeight(bounds.width())));
+                Math.max(0, bounds.height() - UiTheme.HEADER_HEIGHT - UiTheme.PADDING * 3 - footerHeight) + inlineExtra);
         if (contentWidget != null) {
             contentWidget.setBounds(contentRect.x(), contentRect.y(), contentRect.width(), contentRect.height());
         }
         layoutButtons();
+        if (inlineFooter && contentWidget instanceof UiFooterHost host) {
+            host.setFooterReserved(inlineFooterReserved(), footerHeight);
+        }
         return this;
+    }
+
+    // 按钮行占用的右侧宽度：最左按钮到弹窗内边距再加间距；没有可见按钮时为 0
+    private int inlineFooterReserved() {
+        int leftmost = bounds.right() - UiTheme.PADDING;
+        boolean any = false;
+        for (UiButton button : buttons) {
+            if (!button.isVisible()) {
+                continue;
+            }
+            any = true;
+            leftmost = Math.min(leftmost, button.bounds().x());
+        }
+        return any ? Math.max(0, bounds.right() - leftmost + INLINE_FOOTER_GAP) : 0;
     }
 
     // 长标签按实际宽度换行，正文为按钮预留全部行高。

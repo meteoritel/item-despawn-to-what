@@ -29,6 +29,7 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiNarration;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiRangeBar;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiStructureDiagram;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalog;
@@ -75,6 +76,16 @@ public final class RuleEditorP4Panels {
     private static final int TIME_MIN = 0;
     private static final int TIME_MAX = 23999;
     private static final int DEFAULT_TIME_RANGE_END = 12000;
+
+    // 选择页尺寸：占屏幕大部分，一屏能列出的条目足够多，同时保住复古网页的窗口比例
+    private static final int PICKER_MIN_WIDTH = 280;
+    private static final int PICKER_MAX_WIDTH = 440;
+    private static final int PICKER_MIN_BODY_HEIGHT = 120;
+    private static final int PICKER_MAX_BODY_HEIGHT = 300;
+    private static final int PICKER_MARGIN = 32;
+    // 弹窗除内容区外的固定高度：标题栏 + 三处内边距 + 一行按钮
+    private static final int MODAL_CHROME_HEIGHT = UiTheme.HEADER_HEIGHT + UiTheme.PADDING * 3
+            + UiModal.BUTTON_HEIGHT;
 
     private RuleEditorP4Panels() {
     }
@@ -135,8 +146,9 @@ public final class RuleEditorP4Panels {
         return new UiCatalogGrid.Texts(Component.translatable(UI + (combined ? "pick.search_combined" : "pick.search")),
                 Component.translatable(UI + "pick.empty"), Component.translatable(UI + "pick.loading"),
                 Component.translatable(UI + "pick.error"), Component.translatable(UI + "pick.prev"),
-                Component.translatable(UI + "pick.next"), Component.translatable(UI + "pick.page"),
-                Component.translatable(UI + "pick.selected"));
+                Component.translatable(UI + "pick.next"), Component.translatable(UI + "pick.selected"),
+                Component.translatable(UI + "pick.scope_item"), Component.translatable(UI + "pick.scope_tag"),
+                Component.translatable(UI + "pick.scope_both"), Component.translatable(UI + "pick.clear"));
     }
 
     // 目录标签可能是翻译键或原文：无空格、无冒号且含点号时按翻译键解析
@@ -253,9 +265,12 @@ public final class RuleEditorP4Panels {
         boolean includeTags = combined && field != null && (field.type() == EditorFieldType.TAG || field.type() == EditorFieldType.TAG_LIST);
         workspace.refreshDirectory(type);
         if (includeTags) workspace.refreshDirectory(RuleCatalogType.TAG);
+        // 默认排除规则与「物品 / 标签 / 一起」范围由同一个策略实例持有，页码与总数始终一致
+        CatalogEntryPolicy policy = includeTags ? CatalogEntryPolicy.scoped(type) : CatalogEntryPolicy.fixed(type);
         CatalogMapper mapper = new CatalogMapper();
         mapper.field = field;
         mapper.includeTags = includeTags;
+        mapper.policy = policy;
         UiCatalogGrid grid = new UiCatalogGrid(font, multiSelect, includeTags ? catalogTexts(true) : catalogTexts(), new UiCatalogGrid.Listener() {
             @Override
             public void onSearch(String filter) {
@@ -276,6 +291,7 @@ public final class RuleEditorP4Panels {
                 
             }
         });
+        grid.setEntryPolicy(policy);
         grid.setEntrySource(() -> {
             boolean active = workspace.active();
             if (active != mapper.active) {
@@ -285,6 +301,7 @@ public final class RuleEditorP4Panels {
             List<UiCatalogGrid.Entry> mapped = mapper.map(workspace, type);
             grid.setPage(mapper.page, mapper.pageCount);
             grid.setPageLimits(mapper.page > 0, mapper.hasNext);
+            grid.setStatusNote(Component.translatable(UI + "pick.total", mapper.total));
             grid.setLoading(mapper.cached == null || !mapper.cached.lastPage()
                     || includeTags && (mapper.cachedTags == null || !mapper.cachedTags.lastPage()));
             grid.setError(workspace.directoryFailed(type) || includeTags && workspace.directoryFailed(RuleCatalogType.TAG)
@@ -307,12 +324,25 @@ public final class RuleEditorP4Panels {
         }
         UiModal modal = UiModal.create(font);
         modal.title(title);
-        modal.preferredWidth(combined ? 320 : 280);
-        modal.contentWidget(grid, 150);
+        modal.preferredWidth(pickerWidth(screenWidth));
+        // 翻页与状态排到确认/取消同一行的左侧，省下独立一行的底部空间
+        modal.inlineFooter();
+        modal.contentWidget(grid, pickerBodyHeight(screenHeight));
         modal.confirm(Component.translatable(UI + "button.confirm"), () -> onPicked.accept(grid.selection()));
         modal.cancel(Component.translatable(UI + "button.cancel"));
         modal.layoutCentered(screenWidth, screenHeight);
         return modal;
+    }
+
+    // 选择页宽度：屏幕越宽弹窗越宽，但保留窗口感
+    public static int pickerWidth(int screenWidth) {
+        return Math.clamp(screenWidth - PICKER_MARGIN, PICKER_MIN_WIDTH, PICKER_MAX_WIDTH);
+    }
+
+    // 选择页内容区高度：扣掉弹窗固定部分，剩下的都留给列表
+    public static int pickerBodyHeight(int screenHeight) {
+        return Math.clamp(screenHeight - MODAL_CHROME_HEIGHT - PICKER_MARGIN, PICKER_MIN_BODY_HEIGHT,
+                PICKER_MAX_BODY_HEIGHT);
     }
 
     // 目录缓存 -> 面板条目；同一份缓存实例只转换一次，避免逐帧重建
@@ -322,10 +352,12 @@ public final class RuleEditorP4Panels {
         private RuleCatalog cachedTags;
         private boolean includeTags;
         private @Nullable EditorField field;
+        private @Nullable CatalogEntryPolicy policy;
         private @Nullable List<UiCatalogGrid.Entry> entries;
         private boolean active = true;
         private int page;
         private int pageCount;
+        private int total;
         private boolean hasNext;
         private String filter = "";
 
@@ -333,6 +365,7 @@ public final class RuleEditorP4Panels {
         private Object resources;
         private String mappedFilter = "";
         private int mappedPage = -1;
+        private UiCatalogGrid.Scope mappedScope = UiCatalogGrid.Scope.BOTH;
         private List<UiCatalogGrid.Entry> full = List.of();
         private final java.util.Map<String, TagPreviewIcons.Tag> tagPreviews = new java.util.HashMap<>();
 
@@ -347,15 +380,21 @@ public final class RuleEditorP4Panels {
             RuleCatalog catalog = workspace.directory(type);
             RuleCatalog tags = includeTags ? workspace.directory(RuleCatalogType.TAG) : null;
             boolean changed = catalog != cached || tags != cachedTags;
-            if (changed) {
+            // 范围变化同样要让映射结果失效，否则工具栏的范围按钮不会生效
+            UiCatalogGrid.Scope scope = policy == null ? UiCatalogGrid.Scope.BOTH : policy.scope();
+            if (changed || mappedScope != scope) {
                 tagPreviews.clear();
                 cached = catalog;
                 cachedTags = tags;
-                if (catalog == null) { entries = null; hasNext = false; pageCount = 0; return null; }
+                mappedScope = scope;
+                mappedPage = -1;
+                if (catalog == null) { entries = null; hasNext = false; pageCount = 0; total = 0; return null; }
                 List<UiCatalogGrid.Entry> mapped = new ArrayList<>();
+                boolean withItems = scope != UiCatalogGrid.Scope.TAG;
+                boolean withTags = includeTags && scope != UiCatalogGrid.Scope.ITEM;
                 java.util.Set<String> validTags = field != null && type == RuleCatalogType.TAG ? FieldCatalogChoices.tags(field) : null;
-                for (RuleCatalogEntry entry : catalog.entries()) {
-                    if (type == RuleCatalogType.FLUID && FluidPreviewIcons.isExcluded(entry.id())) continue;
+                for (RuleCatalogEntry entry : withItems ? catalog.entries() : List.<RuleCatalogEntry>of()) {
+                    if (policy != null && policy.hidden(entry.id())) continue;
                     if (validTags != null && !validTags.contains(entry.id())) continue;
                     if (type == RuleCatalogType.ENTITY && field != null && FieldCatalogChoices.isGenericProduct(field)
                             && (entry.id().equals("minecraft:item") || entry.id().equals("minecraft:experience_orb"))) continue;
@@ -372,7 +411,7 @@ public final class RuleEditorP4Panels {
                                 sub == null || sub.isBlank() ? null : catalogLabel(sub), iconFor(type, entry.id())));
                     }
                 }
-                if (includeTags && tags != null && field != null) {
+                if (withTags && tags != null && field != null) {
                     java.util.Set<String> allowed = FieldCatalogChoices.tags(field);
                     for (RuleCatalogEntry entry : tags.entries()) {
                         if (!allowed.contains(entry.id())) continue;
@@ -383,7 +422,7 @@ public final class RuleEditorP4Panels {
                 }
                 full = List.copyOf(mapped);
             }
-            if (changed || mappedPage != page || !mappedFilter.equals(filter)) {
+            if (mappedPage != page || !mappedFilter.equals(filter)) {
                 String query = filter.toLowerCase(Locale.ROOT).trim();
                 boolean tagsOnly = includeTags && query.startsWith("#");
                 String needle = tagsOnly ? query.substring(1) : query;
@@ -391,7 +430,8 @@ public final class RuleEditorP4Panels {
                         .filter(entry -> entry.id().toLowerCase(Locale.ROOT).contains(needle)
                         || entry.label().getString().toLowerCase(Locale.ROOT).contains(needle)
                         || entry.subLabel() != null && entry.subLabel().getString().toLowerCase(Locale.ROOT).contains(needle)).toList();
-                pageCount = Math.max(1, (filtered.size() + UiCatalogGrid.PAGE_SIZE - 1) / UiCatalogGrid.PAGE_SIZE);
+                total = filtered.size();
+                pageCount = Math.max(1, (total + UiCatalogGrid.PAGE_SIZE - 1) / UiCatalogGrid.PAGE_SIZE);
                 page = Math.clamp(page, 0, pageCount - 1);
                 int from = page * UiCatalogGrid.PAGE_SIZE;
                 entries = List.copyOf(filtered.subList(from, Math.min(filtered.size(), from + UiCatalogGrid.PAGE_SIZE)));
