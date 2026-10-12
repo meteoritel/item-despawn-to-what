@@ -23,7 +23,7 @@
 
 `Outcome(changed, error)` 区分已接受、无变化和错误。配置操作仅在实际改变时产生一次 `Change(before, after, Kind, paths, removed)`；Kind 为 CREATE、DELETE、UPDATE、MOVE。三参数与四参数构造保留，默认路径映射和移除集合为空。宿主在接受回调内写历史，回填根不调用修改入口。节点与子项列表由宿主适配器保持不可变，不得修改既有节点。
 
-实际接入：`ConditionTreeNodes` 适配现有 ConditionNode；结构编辑只在画布 `UiConditionGraphEditor`，其创建、删除、更新、查询、选择和折叠均调用 Kit，只读摘要 `UiConditionTreeSummary` 只展示树干与叶条件名并接收选择。两者共用 `ConditionTreeContract` 的注入面（`ROOT_PATH`、`TypeOption`、`LeafFactory`、`Listener` 与 `Navigation` 导航契约）。空 NOT 由宿主重建为 `Inverted(null)`；NOT 的容量为1，叶容量为0。逐表达式限额校验与本地化提示由宿主注入。`ConditionTreeOverlay` 将配置操作与输入路径迁移放入同一 EditSession 事务；JSON、参数表单、服务端保存均留在宿主。
+实际接入：`ConditionTreeNodes` 适配现有 ConditionNode；结构编辑只在画布 `UiConditionGraphEditor`，其创建、删除、更新、查询和选择均调用 Kit，只读摘要 `UiConditionTreeSummary` 只展示树干与叶条件名并接收选择。kit 的 `UiTreeEditor` 仍提供折叠能力，画布页不使用折叠，始终展示整棵树。两者共用 `ConditionTreeContract` 的注入面（`ROOT_PATH`、`TypeOption`、`LeafFactory`、`Listener` 与 `Navigation` 导航契约）。空 NOT 由宿主重建为 `Inverted(null)`；NOT 的容量为1，叶容量为0。逐表达式限额校验与本地化提示由宿主注入。`ConditionTreeOverlay` 将配置操作与输入路径迁移放入同一 EditSession 事务；JSON、参数表单、服务端保存均留在宿主。
 
 ## 2. 单节点移动与捕获
 
