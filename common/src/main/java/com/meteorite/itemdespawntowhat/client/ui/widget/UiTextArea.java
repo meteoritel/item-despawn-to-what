@@ -1,6 +1,9 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextSelection;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextHistory;
@@ -44,6 +47,7 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
     // 文本模型：宽度为 final，宽度变化时按当前值重建
     private AccessibleTextField textField;
     private final UiTextHistory textHistory = new UiTextHistory();
+    private final UiTextSelection selection;
     // 控件矩形
     private UiRect bounds;
     // 已同步到文本模型的换行宽度
@@ -76,8 +80,6 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
     private boolean selectableWhenReadOnly;
     // 是否持有焦点
     private boolean focused;
-    // 本次按下是否由本控件承接
-    private boolean pressed;
     // 程序化写入期间不触发变化回调与长度回退
     private boolean programmatic;
     // 获得焦点的时刻，用于光标闪烁
@@ -92,6 +94,25 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
         this.accessibleName = hint;
         this.textField = createField(MIN_WIDTH - PADDING_X * 2 - SCROLLBAR_WIDTH);
         this.bounds = new UiRect(0, 0, MIN_WIDTH, height());
+        selection = new UiTextSelection(new UiTextSelection.Target() {
+            @Override
+            public int cursor() { return textField.cursor(); }
+            @Override
+            public int anchor() { return textField.anchor(); }
+            @Override
+            public void seek(double pointerX, double pointerY) {
+                textField.setSelecting(false);
+                seekCursor(pointerX, pointerY);
+            }
+            @Override
+            public void select(int anchor, int cursor) {
+                textField.setSelecting(false);
+                textField.seekCursor(Whence.ABSOLUTE, anchor);
+                textField.setSelecting(true);
+                textField.seekCursor(Whence.ABSOLUTE, cursor);
+                textField.setSelecting(false);
+            }
+        });
     }
 
     // 建立文本模型并挂接回调
@@ -109,6 +130,7 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
 
     // 程序化设置文本：光标留在末尾，回填路径随后调用 moveCursorToStart()
     public void setValue(String value) {
+        endInteraction(UiInputCapture.EndReason.UNMOUNTED);
         String next = value == null ? "" : value;
         boolean changed = !next.equals(textField.value());
         programmatic = true;
@@ -131,11 +153,13 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
 
     // 设置是否可编辑
     public void setEditable(boolean editable) {
+        if (!editable && !selectableWhenReadOnly) endInteraction(UiInputCapture.EndReason.DISABLED);
         this.editable = editable;
     }
 
     /** 允许只读文本获得焦点、选择和复制；不启用修改或文本局部历史。 */
     public void setSelectableWhenReadOnly(boolean selectable) {
+        if (!selectable && !editable) endInteraction(UiInputCapture.EndReason.DISABLED);
         this.selectableWhenReadOnly = selectable;
     }
 
@@ -171,6 +195,7 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
 
     // 设置是否可见
     public void setVisible(boolean visible) {
+        selection.setVisible(visible);
         this.visible = visible;
     }
 
@@ -311,34 +336,30 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (!canFocus() || button != 0 || !bounds.contains(mouseX, mouseY)) {
-            return false;
-        }
-        this.pressed = true;
+        selection.setBounds(bounds);
+        selection.setEnabled(canFocus());
+        if (!selection.mousePressed(pointerContext(mouseX, mouseY, button))) return false;
         setFocused(true);
-        textField.setSelecting(Screen.hasShiftDown());
-        seekCursor(mouseX, mouseY);
         return true;
     }
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (!pressed) {
-            return false;
-        }
-        this.pressed = false;
-        return true;
+        return selection.mouseReleased(pointerContext(mouseX, mouseY, button));
     }
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        if (!pressed || !canFocus()) {
-            return false;
-        }
-        textField.setSelecting(true);
-        seekCursor(mouseX, mouseY);
-        textField.setSelecting(Screen.hasShiftDown());
-        return true;
+        return selection.mouseDragged(pointerContext(mouseX, mouseY, button));
+    }
+
+    public void endInteraction(UiInputCapture.EndReason reason) {
+        selection.endInteraction(reason);
+    }
+
+    private static UiInputContext pointerContext(double mouseX, double mouseY, int button) {
+        return UiInputContext.of(mouseX, mouseY, button,
+                Screen.hasShiftDown(), Screen.hasControlDown(), Screen.hasAltDown());
     }
 
     @Override
@@ -356,6 +377,7 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        endInteraction(UiInputCapture.EndReason.RELEASE);
         if (!visible || !focused || (!editable && !selectableWhenReadOnly)) {
             return false;
         }
@@ -383,6 +405,7 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
 
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
+        endInteraction(UiInputCapture.EndReason.RELEASE);
         if (!visible || !editable || !focused) {
             return false;
         }
@@ -413,6 +436,7 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
 
     @Override
     public void setFocused(boolean focused) {
+        if (!focused) endInteraction(UiInputCapture.EndReason.FOCUS_SCOPE_CHANGED);
         this.focused = focused;
         if (focused) {
             this.focusedTime = Util.getMillis();

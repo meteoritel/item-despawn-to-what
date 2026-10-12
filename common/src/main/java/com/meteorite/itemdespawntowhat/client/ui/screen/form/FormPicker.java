@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
@@ -169,12 +170,16 @@ final class FormPicker {
         return true;
     }
 
+    void endInteraction(UiInputCapture.EndReason reason) {
+        filterInput.endInteraction(reason);
+    }
+
     boolean mouseReleased(double mouseX, double mouseY, int button) {
         return filterInput.mouseReleased(mouseX, mouseY, button);
     }
 
     boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        return false;
+        return filterInput.mouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
     boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {

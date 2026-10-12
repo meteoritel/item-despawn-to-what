@@ -125,7 +125,9 @@ final class ClimateControl extends FormControl {
 
     @Override
     boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        return range.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+        return minInput.mouseDragged(mouseX, mouseY, button, dragX, dragY)
+                || maxInput.mouseDragged(mouseX, mouseY, button, dragX, dragY)
+                || range.mouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
     @Override
@@ -149,6 +151,8 @@ final class ClimateControl extends FormControl {
     @Override
     void endInteractions(UiInputCapture.EndReason reason) {
         range.endInteraction(reason);
+        minInput.endInteraction(reason);
+        maxInput.endInteraction(reason);
     }
 
     @Override

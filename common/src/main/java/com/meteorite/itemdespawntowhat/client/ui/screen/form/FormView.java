@@ -216,6 +216,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
     }
 
     // 展示有效默认文本，不修改草稿的字段存在性。
+    @SuppressWarnings("unused")
     public void setRowDefaultText(String path, Component value) {
         for (FormRow row : rows) if (row.path.equals(path) && row.control instanceof TextControl text) {
             row.defaultText = value;
@@ -673,6 +674,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
 
     // 统一结束入口：把「未提交的预览」按原因回退或提交，交由各控件实现
     void endInteractions(UiInputCapture.EndReason reason) {
+        if (picker != null) picker.endInteraction(reason);
         for (FormRow row : rows) {
             row.control.endInteractions(reason);
         }
@@ -763,6 +765,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
     }
 
     public void closePicker() {
+        if (picker != null) picker.endInteraction(UiInputCapture.EndReason.UNMOUNTED);
         this.picker = null;
     }
 

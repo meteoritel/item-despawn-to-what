@@ -5,6 +5,7 @@ import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiListEditor;
 import java.util.ArrayList;
 import java.util.List;
@@ -87,6 +88,11 @@ final class ListControl extends FormControl {
     @Override
     boolean mouseReleased(double mouseX, double mouseY, int button) {
         return editor.mouseReleased(mouseX, mouseY, button);
+    }
+
+    @Override
+    void endInteractions(UiInputCapture.EndReason reason) {
+        editor.input().endInteraction(reason);
     }
 
     @Override

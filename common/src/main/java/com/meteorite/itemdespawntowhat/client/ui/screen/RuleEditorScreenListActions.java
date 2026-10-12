@@ -19,7 +19,7 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import java.util.List;
-import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -41,6 +41,8 @@ final class RuleEditorScreenListActions {
     private static final int ROW_H = 12;
     private static final String DEFAULT_RULE_NAME = "new_rule";
     private static final String COPY_SUFFIX = "_copy";
+    private static final int COPY_BASE_MAX_LENGTH = RULE_ID_MAX_LENGTH - COPY_SUFFIX.length()
+            - Integer.toString(Integer.MAX_VALUE).length();
     private static final int TEMPLATE_ROW_MAX_H = 140;
     private static final String UI = "gui.itemdespawntowhat.edit.";
 
@@ -60,11 +62,15 @@ final class RuleEditorScreenListActions {
         if (host.rejectWhenFrozen()) {
             return;
         }
+        promptRuleName("prompt.new_title", DEFAULT_RULE_NAME, value -> createRule(value, templateId));
+    }
+
+    private void promptRuleName(String titleKey, String initial, Predicate<String> onSubmit) {
         RuleNameInput content = new RuleNameInput(host.font());
         UiTextInput input = content.input();
         input.setMaxLength(RULE_ID_MAX_LENGTH);
-        input.setValue(DEFAULT_RULE_NAME);
-        UiModal modal = UiModal.create(THEME, host.font()).title(Component.translatable(UI + "prompt.new_title"))
+        input.setValue(initial);
+        UiModal modal = UiModal.create(THEME, host.font()).title(Component.translatable(UI + titleKey))
                 .preferredWidth(RuleNameInput.MODAL_WIDTH);
         modal.contentWidget(content, content.preferredHeight());
         UiButton confirmButton = new UiButton(THEME, host.font(), Component.translatable(UI + "button.confirm"),
@@ -76,7 +82,7 @@ final class RuleEditorScreenListActions {
         };
         Runnable submit = () -> {
             validate.run();
-            if (ruleNameProblem(input.value()) == null && createRule(input.value(), templateId)) {
+            if (ruleNameProblem(input.value()) == null && onSubmit.test(input.value())) {
                 host.modals().close(modal);
             }
         };
@@ -100,8 +106,7 @@ final class RuleEditorScreenListActions {
     }
 
     private @Nullable Component ruleNameProblem(String value) {
-        String name = value.trim();
-        ResourceLocation id = name.indexOf(':') >= 0 ? null : normalizeId(name);
+        ResourceLocation id = normalizeId(value);
         if (id == null) {
             return Component.translatable(UI + "prompt.invalid_name");
         }
@@ -162,31 +167,35 @@ final class RuleEditorScreenListActions {
             return;
         }
         RuleValue body = session.draft().root().deepCopy();
-        String candidate = sourceId + COPY_SUFFIX;
+        String sourceName = ResourceLocation.parse(sourceId).getPath();
+        String copyBase = sourceName.replaceAll("[^a-z0-9_]", "_");
+        copyBase = copyBase.substring(0, Math.min(copyBase.length(), COPY_BASE_MAX_LENGTH));
+        String candidate = copyBase + COPY_SUFFIX;
         int suffix = 2;
-        while (host.model().entry(candidate) != null || host.model().isCreated(candidate)) {
-            candidate = sourceId + COPY_SUFFIX + suffix;
+        while (ruleNameProblem(candidate) != null) {
+            candidate = copyBase + COPY_SUFFIX + suffix;
             suffix++;
         }
-        promptDuplicateId(candidate, value -> {
+        promptRuleName("prompt.duplicate_title", candidate, value -> {
             // 弹窗期间可能已被冻结（应用在途 / 会话结束），提交前再确认一次
             if (host.rejectWhenFrozen()) {
-                return;
+                return false;
             }
             ResourceLocation id = normalizeId(value);
             if (id == null) {
                 host.setNotice(Component.translatable(UI + "notice.invalid_id"), THEME.palette().danger());
-                return;
+                return false;
             }
             String key = id.toString();
             if (host.model().entry(key) != null || host.model().isCreated(key)) {
                 host.setNotice(Component.translatable(UI + "notice.duplicate_id"), THEME.palette().danger());
-                return;
+                return false;
             }
             host.model().createSession(key, BuiltinEditorDefaults.copyOf(key, body));
             host.refreshList();
             host.openEditor(key);
             host.setNotice(null, THEME.palette().textSecondary());
+            return true;
         });
     }
 
@@ -323,31 +332,10 @@ final class RuleEditorScreenListActions {
     }
 
     private @Nullable ResourceLocation normalizeId(String value) {
-        String trimmed = value == null ? "" : value.trim();
-        if (trimmed.isEmpty()) {
+        if (value == null || value.isEmpty() || value.length() > RULE_ID_MAX_LENGTH
+                || !RuleNameInput.allowsCharacters(value)) {
             return null;
         }
-        ResourceLocation parsed = trimmed.indexOf(':') >= 0
-                ? ResourceLocation.tryParse(trimmed)
-                : ResourceLocation.tryParse(TypeLabels.OWN_NAMESPACE + ":" + trimmed);
-        if (parsed == null || !TypeLabels.OWN_NAMESPACE.equals(parsed.getNamespace())) {
-            return null;
-        }
-        return parsed;
-    }
-
-    // 复制规则的完整 ID 输入弹窗
-    private void promptDuplicateId(String initial, Consumer<String> onValue) {
-        UiTextInput input = new UiTextInput(THEME, host.font(), Component.translatable(UI + "prompt.id_hint"));
-        input.setMaxLength(RULE_ID_MAX_LENGTH);
-        input.setValue(initial);
-        UiModal modal = UiModal.create(THEME, host.font());
-        modal.title(Component.translatable(UI + "prompt.duplicate_title"));
-        modal.contentWidget(input, ROW_H + 4);
-        modal.confirm(Component.translatable(UI + "button.confirm"), () -> onValue.accept(input.value()));
-        modal.cancel(Component.translatable(UI + "button.cancel"));
-        modal.layoutCentered(host.screenWidth(), host.screenHeight());
-        host.modals().push(modal);
-        input.setFocused(true);
+        return ResourceLocation.tryParse(TypeLabels.OWN_NAMESPACE + ":" + value);
     }
 }

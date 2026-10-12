@@ -36,7 +36,7 @@ powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1
 | 分组 | 类型 |
 | --- | --- |
 | 内容排版 | `UiDocument`、`UiNode`、`UiIcon`、`UiTransform`、`UiMetrics`、`UiPointer`、`TextMeasurer`、`TextScroll` |
-| 控件与交互 | `UiControl`、`UiControlStyle`、`UiControlGroup`、`UiControlRole`、`UiScrollView`、`UiLinearLayout`、`UiFlowLayout`、`UiTextHistory`、`UiHistoryDispatcher`、`UiHistoryShortcut` |
+| 控件与交互 | `UiControl`、`UiControlStyle`、`UiControlGroup`、`UiControlRole`、`UiScrollView`、`UiLinearLayout`、`UiFlowLayout`、`UiTextSelection`、`UiTextHistory`、`UiHistoryDispatcher`、`UiHistoryShortcut` |
 | 实体与加载预览 | `UiEntityPreview`、`UiBlockPreview`、`UiModelBounds`、`UiCarousel`、`UiIcon.Rendered`、`UiSpinner` |
 | 输入与捕获 | `UiInputContext`、`UiInputTarget`、`UiInputRouter`、`UiInputCapture`、`UiValueInteraction` |
 | 数值与滑块 | `UiNumberPolicy`、`UiNumbers`、`UiSliderWindow`；`UiScalarSlider`、`UiRangeSlider`、`UiRangeValue`、`UiRangeEnd`、`UiCyclicRange` |
@@ -74,7 +74,7 @@ powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1
 校验顺序（与项目验证协议一致）：
 
 1. 用 IDE 语言服务检查改动的 Java 文件；
-2. `powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1` 校验依赖边界（当前：66 个文件、197 条 import、0 处违规）；
+2. `powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1` 校验依赖边界（依赖边界须无违规）；
 3. `powershell -ExecutionPolicy Bypass -File tools/dsh-build.ps1 -Tasks "build"`。
 
 「拆包就绪门槛」（本仓库暂不把 kit 拆成独立 Gradle 模块/子包的理由）：

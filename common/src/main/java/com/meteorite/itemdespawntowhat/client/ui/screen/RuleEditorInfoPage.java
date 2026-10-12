@@ -2,15 +2,11 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
-import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
-import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import java.util.List;
 import net.minecraft.client.gui.GuiGraphics;
@@ -19,7 +15,7 @@ import net.minecraft.util.FormattedCharSequence;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 基本信息页：只读规则 ID、显示名与恢复默认、启用、优先级与备注。
+ * 基本信息页：只读规则 ID、显示名、启用、优先级与备注。
  */
 final class RuleEditorInfoPage {
 
@@ -36,19 +32,15 @@ final class RuleEditorInfoPage {
     // 清理本页持有的控件引用（重建/切页时由容器调用）
     void reset() {
         infoForm = null;
-        restoreNameButton = null;
         infoIdRect = null;
     }
 
     @Nullable FormView infoForm;
 
-    @Nullable UiButton restoreNameButton;
-
     @Nullable UiRect infoIdRect;
 
     void buildInfo(EditSession session) {
-        RuleValue rule = session.draft().root();
-        // 自上而下：只读规则 ID、显示名与恢复按钮、启用、加高的优先级控件、多行备注；
+        // 自上而下：只读规则 ID、显示名、启用、加高的优先级控件、多行备注；
         // 页头只保留当前实际生效名称，页内不再重复说明文案
         TypeEditorDescriptor descriptor = TypeEditorDescriptor.of(RuleEditorPageSupport.INFO_PAGE, Component.translatable(RuleEditorPageSupport.UI + "tab.info"), List.of(
                 EditorField.optionalText(RuleFields.DISPLAY_NAME, RuleEditorPageSupport.UI + "rule.display_name").withHint(RuleEditorPageSupport.UI + "rule.display_name_hint"),
@@ -58,49 +50,11 @@ final class RuleEditorInfoPage {
         infoForm = pages.newForm(session, "", descriptor);
         infoForm.useCompactSpacing();
         // 滑条与数字输入同高，备注保留三行可见高度。
-        infoForm.setRowHeight(RuleFields.PRIORITY, pages.PRIORITY_ROW_HEIGHT);
+        infoForm.setRowHeight(RuleFields.PRIORITY, RuleEditorEditPages.PRIORITY_ROW_HEIGHT);
         infoForm.setRowHeight(RuleFields.NOTES, 36);
-        RuleValue.Mapping automatic = RuleValue.mapping(rule);
-        automatic.remove(RuleFields.DISPLAY_NAME);
-        infoForm.setRowDefaultText(RuleFields.DISPLAY_NAME, RuleNaming.ruleTitle(automatic.build(), pages.nameSource));
         infoForm.suppressRowTooltip(RuleFields.ENABLED);
-        restoreNameButton = new UiButton(RuleEditorEditPages.THEME, pages.font, Component.translatable(RuleEditorPageSupport.UI + "button.restore_name"), UiButtonVariant.SECONDARY, this::restoreAutoName);
-        restoreNameButton.setEnabled(canRestoreName(rule));
-        // 恢复按钮挂在显示名行尾：与它作用的字段同排，且随表单一起禁用
-        infoForm.setRowAction(RuleFields.DISPLAY_NAME, restoreNameButton);
         pages.liveForms.add(infoForm);
         pages.liveWidgets.add(infoForm);
-    }
-
-    boolean canRestoreName(@Nullable RuleValue rule) {
-        if (rule != null && rule.has(RuleFields.DISPLAY_NAME)) return true;
-        RuleValue pending = infoForm == null ? null : infoForm.pendingValue(RuleFields.DISPLAY_NAME);
-        return pending != null && pending.isText() && !pending.asText().isBlank();
-    }
-
-    void restoreAutoName() {
-        EditSession session = pages.host.session();
-        if (session == null) {
-            return;
-        }
-        RuleValue view = session.draft().root();
-        if (!canRestoreName(view)) {
-            return;
-        }
-        RuleDraft draft = session.draft();
-        // 当前缓冲值可能尚未落盘；与删除放在同一个编辑步内，撤销一次即回到操作前的显示名
-        RuleValue pending = infoForm == null ? null : infoForm.pendingValue(RuleFields.DISPLAY_NAME);
-        if (!pages.apply(EditSession.OP_SET_FIELD, () -> {
-            if (pending != null) {
-                draft.setAt(RuleFields.DISPLAY_NAME, pending.deepCopy());
-            }
-            draft.remove(RuleFields.DISPLAY_NAME);
-        })) {
-            return;
-        }
-        // 旧控件即将被重建，显式清空焦点，不让焦点轮廓停在已卸载的输入框上
-        pages.host.focus().clearFocus();
-        pages.host.notice(Component.translatable(RuleEditorPageSupport.UI + "notice.name_restored"), THEME.palette().textSecondary());
     }
 
     int layoutInfo(UiRect area) {

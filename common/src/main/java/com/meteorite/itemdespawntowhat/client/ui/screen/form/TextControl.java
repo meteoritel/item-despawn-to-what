@@ -6,6 +6,7 @@ import com.meteorite.itemdespawntowhat.client.edit.EditorPreset;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextArea;
@@ -145,8 +146,15 @@ final class TextControl extends FormControl {
     }
 
     @Override
+    void endInteractions(UiInputCapture.EndReason reason) {
+        input.endInteraction(reason);
+        if (area != null) area.endInteraction(reason);
+    }
+
+    @Override
     boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        return area != null && area.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+        return area != null ? area.mouseDragged(mouseX, mouseY, button, dragX, dragY)
+                : input.mouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
     @Override

@@ -350,6 +350,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     }
 
     public UiCatalogGrid setVisible(boolean visible) {
+        search.setVisible(visible);
         this.visible = visible;
         return this;
     }

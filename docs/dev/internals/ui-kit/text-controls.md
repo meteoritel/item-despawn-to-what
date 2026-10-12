@@ -1,6 +1,6 @@
 # UI kit：文本控件、码点上限与文本历史
 
-> 事实来源：宿主 `client/ui/widget/UiTextArea.java`、`client/ui/widget/UiTextInput.java`、`client/ui/widget/UiModal.java`、`client/ui/widget/UiModalStack.java`、`client/ui/screen/form/FormControl.java`、`client/ui/screen/form/TextControl.java`，kit `UiTextHistory`、`UiHistoryShortcut`、`UiHistoryDispatcher`。
+> 事实来源：宿主 `client/ui/widget/UiTextArea.java`、`client/ui/widget/UiTextInput.java`、`client/ui/widget/UiModal.java`、`client/ui/widget/UiModalStack.java`、`client/ui/screen/form/FormControl.java`、`client/ui/screen/form/TextControl.java`，kit `UiTextSelection`、`UiTextHistory`、`UiHistoryShortcut`、`UiHistoryDispatcher`。
 > 上承 [UI kit 入口](README.md)。`UiTextArea` 与 `UiTextInput` 属于**宿主侧** widget 包（不是 kit 包），边界规则不变。
 
 ## 1. UiTextArea：真正的多行文本编辑
@@ -20,7 +20,7 @@ void moveCursorToStart();      // 回填后调用：光标与垂直滚动都回�
 - `UiTextArea#activate()` **恒返回 false**：Enter 属于换行而不是激活，按键继续交给文本模型；宿主不要把 Enter 当提交。
 - 高度 = `rows × font.lineHeight + 2×2`（`UiTextArea#height()`）；可见行数由 `setRows` 控制（`UiTextArea#setRows`，默认 3 行）。
 - 垂直滚动是像素级 `scrollOffset`；`scrollToCursor` 保证光标所在行可见，上限见 `maxScroll()`；内容超出可视高度时右侧画 3px 滚动条，滚轮按 `font.lineHeight × 2` 步进（`UiTextArea#mouseScrolled`）。
-- 输入：`mouseClicked` 命中即置 `pressed` 并定位光标；`mouseReleased` / `mouseDragged` 需 `pressed`；`keyPressed` 先处理 Esc→`onCancel`，其余交给文本模型；`charTyped` 需聚焦且 `StringUtil.isAllowedChatCharacter`。
+- 输入：鼠标定位和拖动选择委托 `UiTextSelection`，捕获期间接收矩形外的拖动与左键释放；`keyPressed` 先处理 Esc→`onCancel`，其余交给文本模型；`charTyped` 需聚焦且 `StringUtil.isAllowedChatCharacter`。
 - 程序化 `setValue` 期间不触发变化回调、不参与长度回退（`programmatic` 守卫）。
 
 ## 2. 长度上限一律按 Unicode 码点
@@ -47,12 +47,12 @@ void moveCursorToStart();      // 回填后调用：光标与垂直滚动都回�
 
 | API | 位置 | 说明 |
 |---|---|---|
-| `FormView.setRowAction(String path, UiButton)` | `FormView` | 给字段行挂行尾操作按钮（如「恢复自动命名」）；宽度按按钮文本自适应 |
+| `FormView.setRowAction(String path, UiButton)` | `FormView` | 给字段行挂行尾操作按钮；宽度按按钮文本自适应 |
 | `FormView.pendingValue(String path)` | `FormView` | 读取该字段尚未提交的缓冲值；字段不存在返回 null |
 | `FormView.setRowHeight(String path, int)` | `FormView` | 覆盖该行控件高度（<=0 恢复自然高度） |
 | `FormControl.setHeightOverride(int)` | `FormControl` | 覆盖值默认 `-1`；实际行高 = 覆盖值或自然高度，见 `layoutHeight()` 与 `FormView` 的布局计算 |
 
-实例：基本页优先级行用 `RuleEditorEditPages` 的 `PRIORITY_ROW_HEIGHT` 常量（取值 18）覆盖行高；「恢复自动命名」按钮挂在显示名行尾并随表单禁用。
+实例：基本页优先级行用 `RuleEditorEditPages` 的 `PRIORITY_ROW_HEIGHT` 常量（取值 18）覆盖行高。
 
 ## 5. 文本局部历史与快捷键
 
@@ -71,3 +71,13 @@ void moveCursorToStart();      // 回填后调用：光标与垂直滚动都回�
 宿主 `UiTextInput` 与 `UiTextArea` 均已接入：被接受的键入、删除、剪切、粘贴和多行换行各记录局部快照；光标、选择和拒绝输入不记历史。撤销恢复文本、光标与选择，通知已有输入变化回调一次，不调用配置提交接口。可编辑且聚焦的输入始终消费撤销/重做快捷键，即使历史为空，容器不得继续撤销底层规则。
 
 `setValue` / 单行 `clear` 是程序回填，不触发变化回调、不追加历史；装载不同内容会清空局部历史。业务过滤和码点上限只限制用户新增输入，不截断回填或历史恢复。多行换行宽度变化时保留当前文本、选择与局部历史。局部历史不跨控件销毁保存；规则配置历史和完整字段编辑的提交粒度由宿主管理。
+
+## 6. 公共鼠标文本选择 API
+
+`UiTextSelection` 实现 `UiInputTarget` 与 `UiInputCapture.Target`，构造时接收宿主 `Target`：`cursor()` / `anchor()` 返回 UTF-16 索引，`seek(pointerX, pointerY)` 将指针映射到光标，`select(anchor, cursor)` 恢复有方向的选择。模型、字体测量、文本绘制与视口滚动由宿主负责，kit 不查询全局键盘状态或业务数据。
+
+- `setBounds(UiRect)`、`setEnabled(boolean)`、`setVisible(boolean)` 控制按下命中；只有可见、启用且矩形内的左键按下开始捕获。
+- 普通按下以命中光标为锚点；Shift 按下保留原选择锚点。拖动固定该锚点，支持向两个方向跨越它，且不受控件矩形限制；非左键事件不结束左键捕获。
+- `mouseReleased(UiInputContext)` 正常结束捕获并保留选择；`isSelecting()` 查询捕获状态。`endInteraction(EndReason)` 用于隐藏、禁用、失焦、卸载或关闭；取消恢复按下前的光标和选择，不修改文本，也不产生文本历史。
+- `UiTextInput` 与 `UiTextArea` 的鼠标入口构造显式 `UiInputContext`，分别使用原版 `EditBox.onClick` 与多行坐标定位实现映射；最终视口跟随活动光标。键盘操作结束鼠标捕获并保留选择，原版剪贴板、Delete / Backspace、Ctrl+A/C/X/V 和局部撤销继续操作当前选择。
+- 控件隐藏、禁用、失焦与程序回填结束捕获；两个 widget 的 `endInteraction` 可供宿主显式调用。表单文本、数字、气候区间、字符串列表和候选值筛选均转发拖动与释放，表单生命周期结束入口一并终止选择；管理页搜索框也转发这两个事件。

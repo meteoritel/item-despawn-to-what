@@ -539,10 +539,6 @@ public final class RuleEditorEditPages {
         for (UiButton button : buttons) {
             button.setEnabled(enabled);
         }
-        // 恢复默认同时检查尚未提交的自定义名称。
-        if (ruleEditorInfoPage.restoreNameButton != null) {
-            ruleEditorInfoPage.restoreNameButton.setEnabled(enabled && ruleEditorInfoPage.canRestoreName(view));
-        }
         for (UiButton button : candidateButtons) {
             button.setEnabled(enabled);
         }
@@ -555,9 +551,6 @@ public final class RuleEditorEditPages {
         pruneLeafPanels();
         for (FormView form : liveForms) {
             form.tick();
-        }
-        if (ruleEditorInfoPage.restoreNameButton != null) {
-            ruleEditorInfoPage.restoreNameButton.setEnabled(enabled && ruleEditorInfoPage.canRestoreName(currentView()));
         }
         flushRebuild();
     }

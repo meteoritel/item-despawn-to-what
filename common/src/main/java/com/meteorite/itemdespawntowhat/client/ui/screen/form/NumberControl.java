@@ -443,7 +443,8 @@ final class NumberControl extends FormControl {
 
     @Override
     boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        return slider.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+        return input.mouseDragged(mouseX, mouseY, button, dragX, dragY)
+                || slider.mouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
     @Override
@@ -513,6 +514,7 @@ final class NumberControl extends FormControl {
     @Override
     void endInteractions(UiInputCapture.EndReason reason) {
         slider.endInteraction(reason);
+        input.endInteraction(reason);
     }
 
     // ---- 精确输入与预设 ----

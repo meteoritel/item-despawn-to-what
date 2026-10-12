@@ -1,6 +1,9 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextSelection;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
@@ -12,6 +15,7 @@ import java.util.function.Predicate;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
@@ -20,7 +24,7 @@ import org.lwjgl.glfw.GLFW;
  * 单行文本输入框。
  * <p>封装原版 {@link EditBox}：关闭原版边框，改由主题绘制内凹像素框；
  * 支持占位提示、长度限制、输入过滤、提交（Enter）与取消（Esc）。
- * <p>点击输入框本身不夺取焦点，焦点顺序由宿主的 {@code UiFocusManager} 统一维护。
+ * <p>点击输入框可定位光标并拖动选择；焦点顺序由宿主的 {@code UiFocusManager} 统一维护。
  */
 public final class UiTextInput implements UiWidget, UiFocusTarget {
 
@@ -34,6 +38,7 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
     // 原版输入框
     private final TrackedEditBox editBox;
     private final UiTextHistory textHistory = new UiTextHistory();
+    private final UiTextSelection selection;
     private boolean programmatic;
     private final Font font;
     // 控件矩形
@@ -48,8 +53,6 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
     private boolean visible = true;
     // 是否可编辑（原版 EditBox 未暴露读取方法，这里自行记录）
     private boolean editable = true;
-    // 本次按下是否由本控件承接：只有承接了按下的控件才消费释放，避免吞掉后面控件的释放
-    private boolean pressed;
     // 码点上限：原版 EditBox 的上限按 UTF-16 单元截断，不能直接用，这里自己按 Unicode 码点判定
     private int maxLength = 256;
     // 最近一次被接受的文本（构造函数里初始化），超限时整体回退到它
@@ -83,6 +86,19 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
         this.editBox.setResponder(text -> onValueAccepted());
         this.lastAccepted = editBox.getValue();
         this.accessibleName = hint;
+        selection = new UiTextSelection(new UiTextSelection.Target() {
+            @Override
+            public int cursor() { return editBox.getCursorPosition(); }
+            @Override
+            public int anchor() { return editBox.anchor(); }
+            @Override
+            public void seek(double pointerX, double pointerY) { seekCursor(pointerX, pointerY); }
+            @Override
+            public void select(int anchor, int cursor) {
+                editBox.setHighlightPos(anchor);
+                editBox.setCursorPosition(cursor);
+            }
+        });
     }
 
     // 当前文本
@@ -172,6 +188,7 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
 
     // 设置是否可编辑
     public UiTextInput setEditable(boolean editable) {
+        if (!editable) endInteraction(UiInputCapture.EndReason.DISABLED);
         this.editable = editable;
         editBox.setEditable(editable);
         return this;
@@ -197,6 +214,7 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
 
     // 设置是否可见
     public UiTextInput setVisible(boolean visible) {
+        selection.setVisible(visible);
         this.visible = visible;
         editBox.setVisible(visible);
         return this;
@@ -251,24 +269,47 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (!visible || !bounds.contains(mouseX, mouseY)) {
-            return false;
-        }
-        this.pressed = true;
-        return editBox.mouseClicked(mouseX, mouseY, button);
+        selection.setBounds(bounds);
+        selection.setEnabled(canFocus());
+        if (!selection.mousePressed(pointerContext(mouseX, mouseY, button))) return false;
+        setFocused(true);
+        return true;
     }
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (!pressed) {
-            return false;
+        return selection.mouseReleased(pointerContext(mouseX, mouseY, button));
+    }
+
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        return selection.mouseDragged(pointerContext(mouseX, mouseY, button));
+    }
+
+    public void endInteraction(UiInputCapture.EndReason reason) {
+        selection.endInteraction(reason);
+    }
+
+    private static UiInputContext pointerContext(double mouseX, double mouseY, int button) {
+        return UiInputContext.of(mouseX, mouseY, button,
+                Screen.hasShiftDown(), Screen.hasControlDown(), Screen.hasAltDown());
+    }
+
+    private void seekCursor(double mouseX, double mouseY) {
+        editBox.onClick(mouseX, mouseY);
+        if (!selection.isSelecting()) return;
+        int cursor = editBox.getCursorPosition();
+        // 越界拖动越过可见文本的端点，推动水平视口；按码点移动，避免拆开代理对。
+        if (mouseX < editBox.getX() && cursor > 0) {
+            editBox.setCursorPosition(value().offsetByCodePoints(cursor, -1));
+        } else if (mouseX >= editBox.getX() + editBox.getWidth() && cursor < value().length()) {
+            editBox.setCursorPosition(value().offsetByCodePoints(cursor, 1));
         }
-        this.pressed = false;
-        return editBox.mouseReleased(mouseX, mouseY, button);
     }
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        endInteraction(UiInputCapture.EndReason.RELEASE);
         if (!visible || !editBox.isFocused()) {
             return false;
         }
@@ -298,6 +339,7 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
 
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
+        endInteraction(UiInputCapture.EndReason.RELEASE);
         if (!visible) {
             return false;
         }
@@ -314,6 +356,7 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
 
     @Override
     public void setFocused(boolean focused) {
+        if (!focused) endInteraction(UiInputCapture.EndReason.FOCUS_SCOPE_CHANGED);
         editBox.setFocused(focused);
     }
 
@@ -338,6 +381,7 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
 
     // 程序回填不通知宿主，不产生局部历史；不同内容成为新的装载基线。
     private void backfill(String value) {
+        endInteraction(UiInputCapture.EndReason.UNMOUNTED);
         boolean changed = !value.equals(editBox.getValue());
         programmatic = true;
         try {

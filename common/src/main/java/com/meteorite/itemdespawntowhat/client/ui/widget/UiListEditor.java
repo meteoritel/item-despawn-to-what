@@ -138,6 +138,7 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
 
     public void setEnabled(boolean next) {
         this.enabled = next;
+        input.setEditable(next);
     }
 
     public boolean isEnabled() {

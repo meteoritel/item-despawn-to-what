@@ -6,6 +6,7 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleCategories;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.shared.TagPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -436,6 +437,7 @@ final class RuleEditorScreenListPage {
     // ---- 指针与键盘委托 ----
 
     void onScopeChanged() {
+        if (searchField != null) searchField.endInteraction(UiInputCapture.EndReason.FOCUS_SCOPE_CHANGED);
         if (ruleList != null) ruleList.mouseReleased(-1, -1, 0);
     }
 
@@ -480,12 +482,14 @@ final class RuleEditorScreenListPage {
 
     boolean mouseReleased(double mouseX, double mouseY, int button) {
         boolean consumed = ruleList != null && ruleList.mouseReleased(mouseX, mouseY, button);
+        consumed |= searchField != null && searchField.mouseReleased(mouseX, mouseY, button);
         consumed |= globalBar.mouseReleased(mouseX, mouseY, button);
         consumed |= listBar.mouseReleased(mouseX, mouseY, button);
         return consumed;
     }
 
     boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (searchField != null && searchField.mouseDragged(mouseX, mouseY, button, dragX, dragY)) return true;
         return ruleList != null && ruleList.mouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
