@@ -22,7 +22,6 @@ import java.util.function.Supplier;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -117,10 +116,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
     // 追加一个字段
     public FormView addField(EditorField field) {
         var catalogType = FieldCatalogTypes.catalogTypeOf(field);
-        boolean iconSelection = catalogSelections
-                && (catalogType == RuleCatalogType.ITEM
-                || catalogType == RuleCatalogType.FLUID)
-                && switch (field.type()) { case TAG, TAG_LIST, RESOURCE_LOCATION, RL_LIST -> true; default -> false; };
+        boolean iconSelection = catalogSelections && catalogType != null && isCatalogField(field);
         FormRow row = new FormRow(field, pathFor(field), iconSelection
                 ? new CatalogSelectionControl(font, field, this::notifyChanged)
                 : FormControl.create(font, this, field, this::notifyChanged));
@@ -246,7 +242,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
     // 支持叶子面板在描述符载入后挂接目录入口。
     private void addPickers(FormRow row) {
         if (catalogOpener != null && FieldCatalogTypes.catalogTypeOf(row.field) != null
-                && switch (row.field.type()) { case TAG, TAG_LIST, RESOURCE_LOCATION, RL_LIST -> true; default -> false; }) {
+                && isCatalogField(row.field)) {
             row.pickers.add(new UiButton(THEME, font,
                     Component.translatable("gui.itemdespawntowhat.edit.pick." + (catalogSelections ? "add" : "open")),
                     UiButtonVariant.SECONDARY, () -> pick(row, false)));
@@ -275,6 +271,13 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
             writeField(row, value);
             reload(); notifyChanged();
         });
+    }
+
+    private static boolean isCatalogField(EditorField field) {
+        return switch (field.type()) {
+            case TAG, TAG_LIST, RESOURCE_LOCATION, REGISTRY_ID, RL_LIST -> true;
+            default -> false;
+        };
     }
 
     // 字段在草稿中的路径：原始 JSON 行与说明行指向所在对象本身
@@ -431,6 +434,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
     // 新建子表单（子列表的每一项）
     FormView newChildForm(String relativePath, List<EditorField> fields) {
         FormView child = new FormView(font, session, childPath(relativePath));
+        if (catalogSelections) child.useCatalogSelections();
         child.setSuggestionProvider(suggestionProvider);
         child.setConditionSupport(conditionSupport);
         child.setCatalogOpener(catalogOpener);

@@ -159,6 +159,8 @@
 
 物品、标签、流体等注册表目录共用同一个选择页：页面控件是 `client/ui/widget/UiCatalogGrid`，弹窗由 `RuleEditorP4Panels#catalogModal` 装配，黑名单入口 `SourceBlacklistPicker` 复用同一尺寸助手与同一套文案。
 
+- 注册表字段的已选内容由 `CatalogSelectionControl` 显示为可逐项移除的卡片：物品、流体、方块、实体、维度、群系、战利品表和状态效果共用此控件；没有图标的目录按文字卡片布局。`RuleDisplayLabels.catalogLabel` 按确切目录类型取名称，缺少本地化或未知资源时保留原 ID，未编辑值原样写回。`FormView` 为有目录映射的 TAG / TAG_LIST / RESOURCE_LOCATION / REGISTRY_ID / RL_LIST 字段选择卡片控件，主编辑表单、条件叶参数与子表单均启用；自由字符串列表及无目录映射的字段保留文本输入。
+
 - `UiCatalogGrid` 只知道「条目 + 图标 + 本地化文本」：条目、图标与全部文本由宿主注入，搜索、翻页与范围切换只发出意图回调；面板不校验也不解析注册表 id。
 - 分页依据：目录由 `RuleEditClientWorkspace#directory` 按类型**一次拉全**（每请求 200 条，`lastPage` 为真即完成，按 id 去重合并；`refreshDirectory` 只重探第 0 页修订号，未变化即复用整份缓存）。选择页在本地做搜索过滤与切片：`total` = 命中条数，`pageCount` = `ceil(total / 200)`（`UiCatalogGrid.PAGE_SIZE`），翻页不产生网络请求。
 - 底部行由 `UiModal#inlineFooter()` 与 `UiFooterHost` 托管：弹窗把按钮行算进内容区高度，页面让出右侧后把翻页（只画 `<`/`>`，完整名称进悬停说明）、页码、分组标签／总数／已选与「清空已选」排在按钮左边，不再为翻页单独占一行。

@@ -231,6 +231,7 @@ final class RuleEditorTriggerPage {
         }
         RuleEditorPageSupport.PresenceLeaf presence = catalystLeaf ? pages.ruleEditorInputPage.findPresenceLeaf(path) : null;
         FormView form = new FormView(pages.font, session, path);
+        form.useCatalogSelections();
         form.setConditionSupport(pageConditionSupport(form));
         form.setSuggestionProvider(pages.host.suggestions());
         form.setOnChanged(() -> {
@@ -245,7 +246,7 @@ final class RuleEditorTriggerPage {
             boolean multi = field.type() == com.meteorite.itemdespawntowhat.client.edit.EditorFieldType.TAG_LIST
                     || field.type() == com.meteorite.itemdespawntowhat.client.edit.EditorFieldType.RL_LIST;
             pages.host.modals().push(RuleEditorP4Panels.catalogModal(pages.font, pages.host.workspace(), type, multi,
-                    Component.translatable(field.labelKey()), pages.host.screenWidth(), pages.host.screenHeight(), onPicked, field));
+                    Component.translatable(field.labelKey()), pages.host.screenWidth(), pages.host.screenHeight(), onPicked, field, true));
         });
         form.setDescriptor(descriptor);
         form.reload();

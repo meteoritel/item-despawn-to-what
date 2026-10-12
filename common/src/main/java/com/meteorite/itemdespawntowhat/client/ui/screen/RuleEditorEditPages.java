@@ -242,7 +242,7 @@ public final class RuleEditorEditPages {
     // 表单工厂
     FormView newForm(EditSession session, String basePath, TypeEditorDescriptor descriptor) {
         FormView form = new FormView(font, session, basePath);
-        if (page == Page.INPUT) form.useCatalogSelections();
+        form.useCatalogSelections();
         form.setConditionSupport(ruleEditorTriggerPage.pageConditionSupport(form));
         form.setSuggestionProvider(host.suggestions());
         form.setOnChanged(host::onDraftChanged);
@@ -272,7 +272,7 @@ public final class RuleEditorEditPages {
             boolean multi = field.type() == com.meteorite.itemdespawntowhat.client.edit.EditorFieldType.TAG_LIST
                     || field.type() == com.meteorite.itemdespawntowhat.client.edit.EditorFieldType.RL_LIST;
             host.modals().push(RuleEditorP4Panels.catalogModal(font, host.workspace(), type, multi,
-                    Component.translatable(field.labelKey()), host.screenWidth(), host.screenHeight(), onPicked, field, page == Page.INPUT));
+                    Component.translatable(field.labelKey()), host.screenWidth(), host.screenHeight(), onPicked, field, true));
         });
         form.setDescriptor(descriptor);
         form.reload();

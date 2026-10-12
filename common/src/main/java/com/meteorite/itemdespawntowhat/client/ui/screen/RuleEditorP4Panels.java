@@ -165,7 +165,7 @@ public final class RuleEditorP4Panels {
         return catalogModal(font, workspace, type, multiSelect, title, screenWidth, screenHeight, onPicked, field, false);
     }
 
-    // 输入页合并普通目录与同字段所属注册表的标签，沿用既有目录缓存和协议。
+    // 注册表选择合并普通目录与同字段所属注册表的标签，沿用既有目录缓存和协议。
     public static UiModal catalogModal(Font font, EditorWorkspaceView workspace, RuleCatalogType type,
                                        boolean multiSelect, Component title, int screenWidth, int screenHeight,
                                        Consumer<List<String>> onPicked, @Nullable EditorField field, boolean combined) {
@@ -535,7 +535,7 @@ public final class RuleEditorP4Panels {
         }
         form.setCatalogOpener((field, tags, picked) -> pushModal.accept(catalogModal(font, workspace,
                 tags ? RuleCatalogType.TAG : FieldCatalogTypes.catalogTypeOf(field), isListField(field),
-                Component.translatable(field.labelKey()), screenWidth, screenHeight, picked, field)));
+                Component.translatable(field.labelKey()), screenWidth, screenHeight, picked, field, true)));
         LeafPanel panel = new LeafPanel(font, form, extras, buttons, reloadValues);
         int extraIndex = 0;
         for (EditorField field : fields) if (field.type() == EditorFieldType.CLIMATE_RANGE) {

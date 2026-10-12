@@ -427,6 +427,8 @@
   "gui.itemdespawntowhat.edit.tree.operator.any": "OR · 或",
   "gui.itemdespawntowhat.edit.tree.operator.not": "NOT · 非",
   "gui.itemdespawntowhat.edit.tree.flow_hint": "整棵条件树满足后执行",
+  "gui.itemdespawntowhat.edit.tag.label.biomes": "群系标签",
+  "gui.itemdespawntowhat.edit.tag.supports.biomes": "匹配标签 %s 中的所有群系",
   "gui.itemdespawntowhat.edit.tree.node.source": "源物品",
   "gui.itemdespawntowhat.edit.tree.node.result": "结果",
   "gui.itemdespawntowhat.edit.tree.node.any": "任一满足",

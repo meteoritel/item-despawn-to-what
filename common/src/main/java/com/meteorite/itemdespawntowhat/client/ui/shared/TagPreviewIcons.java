@@ -80,6 +80,12 @@ public final class TagPreviewIcons {
     }
 
     private static String kind(RuleCatalogType type) {
-        return switch (type) { case BLOCK -> "blocks"; case ENTITY -> "entities"; case FLUID -> "fluids"; default -> "items"; };
+        return switch (type) {
+            case BLOCK -> "blocks";
+            case ENTITY -> "entities";
+            case FLUID -> "fluids";
+            case BIOME -> "biomes";
+            default -> "items";
+        };
     }
 }

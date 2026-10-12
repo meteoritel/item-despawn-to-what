@@ -14,7 +14,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes;
-import com.meteorite.itemdespawntowhat.client.ui.shared.FluidPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
 import com.meteorite.itemdespawntowhat.client.ui.shared.TagPreviewIcons;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
@@ -27,7 +26,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
-/*** 输入页的紧凑物品与流体卡片：按名称测量宽度并换行，保留滚动、键盘导航与标签轮播。 */
+/*** 注册表字段的紧凑选择卡片：按名称测量宽度并换行，保留滚动、键盘导航与标签轮播。 */
 final class CatalogSelectionControl extends FormControl implements UiFocusTarget {
 
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
@@ -36,6 +35,10 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
     private static final int CHIP_HEIGHT = 24;
     private static final int GAP = 4;
     private static final int MAX_HEIGHT = 3 * (CHIP_HEIGHT + GAP) - GAP;
+    private static final int CHIP_MAX_WIDTH = 124;
+    private static final int ICON_TEXT_OFFSET = 24;
+    private static final int TEXT_PADDING = 4;
+    private static final int REMOVE_AREA_WIDTH = 18;
     private final Font font;
     private final UiScrollView scroll = new UiScrollView();
     private final List<Selection> values = new ArrayList<>();
@@ -71,7 +74,9 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
         int x = 0;
         int y = 0;
         for (Selection entry : values) {
-            int chipWidth = Math.min(width, Math.clamp(font.width(entry.name()) + 42, 48, 124));
+            int textOffset = entry.icon() == null ? TEXT_PADDING : ICON_TEXT_OFFSET;
+            int chipWidth = Math.min(width, Math.clamp(font.width(entry.name()) + textOffset + REMOVE_AREA_WIDTH,
+                    CHIP_HEIGHT * 2, CHIP_MAX_WIDTH));
             if (x > 0 && x + chipWidth > width) { x = 0; y += CHIP_HEIGHT + GAP; }
             chips.add(new UiRect(x, y, chipWidth, CHIP_HEIGHT));
             x += chipWidth + GAP;
@@ -105,8 +110,10 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
                 boolean chosen = focused && i == selected;
                 THEME.drawChip(graphics, chip, chosen, enabled && i == hovered);
                 if (entry.icon() != null) entry.icon().render(graphics, chip.x() + 4, chip.y() + 4);
-                graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont, entry.name().getString(), Math.max(0, chip.width() - 42)),
-                        chip.x() + 24, chip.y() + (CHIP_HEIGHT - renderFont.lineHeight) / 2,
+                int textOffset = entry.icon() == null ? TEXT_PADDING : ICON_TEXT_OFFSET;
+                graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont, entry.name().getString(),
+                                Math.max(0, chip.width() - textOffset - REMOVE_AREA_WIDTH)),
+                        chip.x() + textOffset, chip.y() + (CHIP_HEIGHT - renderFont.lineHeight) / 2,
                         !enabled ? THEME.palette().textDisabled() : chosen ? THEME.palette().textOnDark() : THEME.palette().textPrimary(), false);
                 int crossX = chip.right() - 11;
                 int crossY = chip.y() + 9;
@@ -143,9 +150,8 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
             icon = tag.icon();
         } else {
             ResourceLocation key = ResourceLocation.tryParse(id);
-            Component label = key == null ? null : type == RuleCatalogType.FLUID
-                    ? FluidPreviewIcons.label(key) : RuleDisplayLabels.label(key);
-            if (label != null) name = label;
+            Component label = key == null ? null : RuleDisplayLabels.catalogLabel(type, key);
+            name = label != null ? label : id.isEmpty() ? name : Component.literal(id);
             icon = CatalogPreviewIcons.iconFor(type, id);
         }
         return new Selection(raw.deepCopy(), id, name, icon);
@@ -171,6 +177,10 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
     List<FormIssue> issues(String path) {
         if (field.required() && values.isEmpty()) return List.of(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "required")));
         for (Selection value : values) {
+            boolean allowsTags = field.type() == EditorFieldType.TAG || field.type() == EditorFieldType.TAG_LIST;
+            if (!allowsTags && value.id().startsWith("#")) {
+                return List.of(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "invalid_id")));
+            }
             String id = value.id().startsWith("#") ? value.id().substring(1) : value.id();
             if (ResourceLocation.tryParse(id) == null) return List.of(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "invalid_id")));
         }
