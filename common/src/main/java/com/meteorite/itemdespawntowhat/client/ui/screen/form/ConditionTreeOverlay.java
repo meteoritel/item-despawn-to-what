@@ -14,6 +14,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiIconStrip;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeCodec;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiFlatSkin;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
@@ -61,14 +62,16 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
 
     // ---- 布局 ----
 
-    // 顶部水平功能栏高度
-    private static final int FUNCTION_BAR_HEIGHT = 20;
+    // 外壳统一线宽：内容区外围 1 像素外框，以及外壳各区域与画布之间的 1 像素分隔线
+    private static final int SHELL_LINE = 1;
+    // 图标格边长：图标最大边 16 加每侧 2 像素格子留白（与 UiIconStrip 的单格布局一致）
+    private static final int ICON_CELL = 16 + 2 * 2;
+    // 顶部水平功能栏高度：外框 1 + 图标格 20 + 分隔线 1；图标格被垂直居中，图标上下各余 2 像素
+    private static final int FUNCTION_BAR_HEIGHT = SHELL_LINE + ICON_CELL + SHELL_LINE;
     // 左侧竖直工具列宽度
-    private static final int TOOL_COLUMN_WIDTH = 20;
+    private static final int TOOL_COLUMN_WIDTH = ICON_CELL;
     // 底部状态栏高度
     private static final int STATUS_BAR_HEIGHT = 14;
-    // 外壳分区之间的 1 像素留白
-    private static final int CHROME_GAP = 1;
     // 状态栏文本左右留白
     private static final int STATUS_TEXT_PAD = 3;
     // 只读 JSON 视图的复制按钮
@@ -108,6 +111,8 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     private final List<UiIconStrip.Item> toolItems = new ArrayList<>();
     // 需要选中节点才可用的工具
     private final List<UiIconStrip.Item> selectionTools = new ArrayList<>();
+    // 功能栏的 4 个格子句柄：量取底板宽度用，收窄后右侧空白交还画布
+    private final List<UiIconStrip.Item> functionItems;
     private final UiIconStrip.Item undoItem;
     private final UiIconStrip.Item redoItem;
     private final UiIconStrip.Item jsonItem;
@@ -190,6 +195,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
                 Component.translatable(UI + "button.source"), this::toggleSource);
         helpItem = functionBar.add(CHROME_THEME.icon(UiHostTheme.ICON_HELP, false), CHROME_THEME.icon(UiHostTheme.ICON_HELP, true),
                 Component.translatable(UI + "tool.help"), this::toggleHelp);
+        functionItems = List.of(undoItem, redoItem, jsonItem, helpItem);
 
         toolColumn = new ConditionTreeChrome.Strip(font, UiIconStrip.Orientation.VERTICAL);
         // 7 格：分组与包组的 ∧ / ∨ 由画布在 [+] 热区处再选，工具列不再各占两格
@@ -473,14 +479,15 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
 
     private void layout() {
         int statusHeight = Math.min(STATUS_BAR_HEIGHT, bounds.height());
-        int barHeight = Math.clamp(bounds.height() - statusHeight - CHROME_GAP, 0, FUNCTION_BAR_HEIGHT);
+        int barHeight = Math.clamp(bounds.height() - statusHeight, 0, FUNCTION_BAR_HEIGHT);
         int toolWidth = Math.min(TOOL_COLUMN_WIDTH, bounds.width());
         functionBar.setBounds(bounds.x(), bounds.y(), bounds.width(), barHeight);
-        int bodyY = bounds.y() + barHeight + CHROME_GAP;
-        int bodyHeight = Math.max(0, bounds.height() - barHeight - statusHeight - CHROME_GAP * 2);
+        // 分区紧贴：功能栏、工具列、状态栏与画布之间不留缝隙，区域边界由 1 像素分隔线表达
+        int bodyY = bounds.y() + barHeight;
+        int bodyHeight = Math.max(0, bounds.height() - barHeight - statusHeight);
         toolColumn.setBounds(bounds.x(), bodyY, toolWidth, bodyHeight);
-        int canvasWidth = Math.max(0, bounds.width() - toolWidth - CHROME_GAP);
-        canvasRect = new UiRect(bounds.x() + toolWidth + CHROME_GAP, bodyY, canvasWidth, bodyHeight);
+        int canvasWidth = Math.max(0, bounds.width() - toolWidth);
+        canvasRect = new UiRect(bounds.x() + toolWidth, bodyY, canvasWidth, bodyHeight);
         statusRect = new UiRect(bounds.x(), bounds.y() + bounds.height() - statusHeight, bounds.width(), statusHeight);
         copyJsonRect = sourceView
                 ? new UiRect(Math.max(canvasRect.x(), canvasRect.right() - COPY_BUTTON_WIDTH - 2), canvasRect.y() + 2,
@@ -531,16 +538,16 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         if (!sourceView && !editor.isDragging() && !Objects.equals(selectedPath, editor.selectedPath())) {
             syncSelection();
         }
-        CHROME_THEME.drawChrome(graphics, functionBar.bounds());
+        drawShell(graphics);
         functionBar.render(graphics, renderFont, mouseX, mouseY);
         if (sourceView) {
             source.render(graphics, renderFont, mouseX, mouseY);
             renderCopyButton(graphics);
         } else {
-            CHROME_THEME.drawChrome(graphics, toolColumn.bounds());
             toolColumn.render(graphics, renderFont, mouseX, mouseY);
             editor.render(graphics, renderFont, mouseX, mouseY);
         }
+        drawShellLines(graphics);
         renderStatus(graphics);
         if (helpOpen) {
             renderHelp(graphics);
@@ -550,6 +557,56 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
             graphics.renderTooltip(renderFont, renderFont.split(tip,
                     Math.clamp(bounds.width(), TOOLTIP_MIN_WIDTH, TOOLTIP_MAX_WIDTH)), mouseX, mouseY);
         }
+    }
+
+    // 外壳底板：整幅先铺画布底色，再给功能栏、工具列与状态栏铺与模态承载面同色的底板。
+    // 外壳不再各自画一圈独立边框，功能栏底板收窄后，右侧空白直接露出画布底色。
+    private void drawShell(GuiGraphics graphics) {
+        var palette = CHROME_THEME.palette();
+        graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), palette.canvasFill());
+        int plateWidth = functionBarPlateWidth();
+        if (plateWidth > 0) {
+            graphics.fill(bounds.x(), bounds.y(), bounds.x() + plateWidth, functionBar.bounds().bottom(), palette.panelFill());
+        }
+        if (toolColumn.bounds().width() > 0 && toolColumn.bounds().height() > 0) {
+            graphics.fill(toolColumn.bounds().x(), toolColumn.bounds().y(), toolColumn.bounds().right(),
+                    toolColumn.bounds().bottom(), palette.panelFill());
+        }
+        if (statusRect.height() > 0) {
+            graphics.fill(statusRect.x(), statusRect.y(), statusRect.right(), statusRect.bottom(), palette.panelFill());
+        }
+    }
+
+    // 外壳线条：内容区外围一圈 canvasBorder 外框，加功能栏 / 工具列 / 状态栏与画布之间的 1 像素分隔线。
+    // 功能栏与下方区域的分隔线取画布顶框所在行、状态栏上缘的分隔线取画布底框所在行，两条线与画布自身
+    // 描边同色，因此各自自左缘到右缘连成一条线（左段止于画布左框，右侧由画布描边续上）。线条画在图标格
+    // 之后，以免工具列的格子盖住外框左列，代价是工具列首格的顶行与顶部分隔线共行。
+    // 收窄的只是底板绘制范围，格子命中仍按格子矩形判定。
+    private void drawShellLines(GuiGraphics graphics) {
+        int color = CHROME_THEME.palette().canvasBorder();
+        UiFlatSkin.drawOutline(graphics, bounds, color);
+        int plateWidth = functionBarPlateWidth();
+        if (plateWidth > 0) {
+            graphics.fill(bounds.x() + plateWidth - SHELL_LINE, bounds.y(), bounds.x() + plateWidth,
+                    functionBar.bounds().bottom(), color);
+        }
+        int toolWidth = Math.min(TOOL_COLUMN_WIDTH, bounds.width());
+        int bodyY = toolColumn.bounds().y();
+        if (toolWidth > 0 && bodyY > bounds.y() && bodyY < bounds.bottom()) {
+            graphics.fill(bounds.x(), bodyY, bounds.x() + toolWidth, bodyY + SHELL_LINE, color);
+            if (statusRect.height() > 0 && statusRect.y() > bounds.y()) {
+                graphics.fill(bounds.x(), statusRect.y() - SHELL_LINE, bounds.x() + toolWidth, statusRect.y(), color);
+            }
+        }
+    }
+
+    // 功能栏底板宽度：量到最后一个图标格的右缘再加 1 像素收尾线，右侧剩余区域交还画布
+    private int functionBarPlateWidth() {
+        int cellsWidth = UiIconStrip.cellsWidth(functionItems);
+        if (cellsWidth <= 0) {
+            return 0;
+        }
+        return Math.min(functionBar.bounds().width(), cellsWidth + SHELL_LINE);
     }
 
     private void renderCopyButton(GuiGraphics graphics) {
@@ -567,7 +624,6 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         if (statusRect.height() <= 0) {
             return;
         }
-        CHROME_THEME.drawStatusBar(graphics, statusRect);
         int textY = statusRect.y() + (statusRect.height() - font.lineHeight) / 2;
         Component right = statusRight();
         int rightWidth = font.width(right.getString());
@@ -662,9 +718,6 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         // 参数框的字段提示由适配器在 GUI 屏幕坐标下缓存，类型列表打开时不显示旧表单提示。
         if (tip == null && inlineEditor != null && !editor.hasPopup()) {
             tip = inlineEditor.hoverTooltip();
-        }
-        if (tip == null && editor.isVisible()) {
-            tip = editor.tooltipAt(mouseX, mouseY);
         }
         return tip;
     }

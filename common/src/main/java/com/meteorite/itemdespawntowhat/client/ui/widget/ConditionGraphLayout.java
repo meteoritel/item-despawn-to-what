@@ -26,8 +26,16 @@ final class ConditionGraphLayout {
     static final int CARD_PADDING_X = 4;
     static final int CARD_PADDING_Y = 2;
     static final int CARD_ROW_HEIGHT = 10;
-    static final int CARD_HEIGHT = CARD_PADDING_Y * 2 + CARD_ROW_HEIGHT * 2;
+    // 卡片内部：标题带 + 1 像素分隔线 + 固定两行内容区，叶与容器共用同一套纵向分区
+    static final int TITLE_BAND_HEIGHT = CARD_ROW_HEIGHT;
+    static final int CARD_SEPARATOR = 1;
+    static final int CONTENT_ROWS = 2;
+    static final int CARD_HEIGHT = CARD_PADDING_Y * 2 + TITLE_BAND_HEIGHT + CARD_SEPARATOR
+            + CONTENT_ROWS * CARD_ROW_HEIGHT;
     static final int BORDER = 1;
+    // 卡片内部各分区的起点：相对卡片顶边，描边与上内边距之后依次是标题带、分隔线和内容区
+    static final int TITLE_BAND_TOP = BORDER + CARD_PADDING_Y;
+    static final int CONTENT_TOP = TITLE_BAND_TOP + TITLE_BAND_HEIGHT + CARD_SEPARATOR;
     private static final int LEVEL_PITCH = CARD_HEIGHT + 18;
     private static final int SIBLING_GAP = 12;
     static final int LOGIC_CUT_CORNER = 6;
@@ -134,7 +142,6 @@ final class ConditionGraphLayout {
     boolean hasIssues() { return !issues.isEmpty(); }
     @Nullable UiTreePath path(ConditionNode node) { return paths.get(node); }
     @Nullable ConditionNode nodeAtPath(UiTreePath path) { return nodesByPath.get(path); }
-    @Nullable NodeInfo info(ConditionNode node) { return infos.get(node); }
     @Nullable ConditionNode root() { return expression.root(); }
     UiRect sourceRect() { return sourceRect; }
     UiRect resultRect() { return resultRect; }
@@ -292,7 +299,8 @@ final class ConditionGraphLayout {
         if (cached != null) {
             return cached;
         }
-        int measured = Math.max(font.width(row1Label(node).getString()), font.width(row2Label(node).getString()))
+        int measured = Math.max(Math.max(font.width(titleLabel(node).getString()),
+                        font.width(summaryLabel(node).getString())), font.width(statusLabel(node).getString()))
                 + (CARD_PADDING_X + BORDER) * 2;
         if (isContainer(node)) {
             measured = Math.max(measured, font.width(operatorLabel(node)) + LOGIC_CUT_CORNER * 2);
@@ -313,6 +321,10 @@ final class ConditionGraphLayout {
                 layout.widthOf(wrapper), CARD_HEIGHT);
     }
 
+    /**
+     * 第一行文案：叶为类型名（只读参数另附标记），容器为容器语义；结构标记已由
+     * {@link #statusLabel(ConditionNode)} 独立成行，不再拼进标题，标题带才能整体居中。
+     */
     Component row1Label(ConditionNode node) {
         Component label = switch (node) {
             case ConditionNode.AllOf ignored -> Component.translatable("gui.itemdespawntowhat.edit.tree.node.all");
@@ -326,34 +338,64 @@ final class ConditionGraphLayout {
             label = label.copy().append(" ").append(Component.translatable(
                     "gui.itemdespawntowhat.edit.tree.parameters_readonly"));
         }
-        NodeInfo info = infos.get(node);
-        if (info == null) {
-            return label;
-        }
-        if (info.incomplete()) {
-            label = label.copy().append(" ").append(Component.translatable("gui.itemdespawntowhat.edit.tree.incomplete"));
-        }
-        if (info.overflow()) {
-            label = label.copy().append(" ").append(Component.translatable("gui.itemdespawntowhat.edit.tree.overflow_mark"));
-        } else if (info.deep()) {
-            // 超限时已有超限标记，避免同一行堆叠两个标记
-            label = label.copy().append(" ").append(Component.translatable("gui.itemdespawntowhat.edit.tree.deep_mark"));
-        }
         return label;
     }
 
-    Component row2Label(ConditionNode node) {
+    // 标题带文案：容器用运算符与本地化含义，叶沿用第一行
+    Component titleLabel(ConditionNode node) {
+        return isContainer(node) ? operatorLabel(node) : row1Label(node);
+    }
+
+    // 内容行 1：叶为参数摘要，容器为容器语义（全部满足 / 任一满足 / 取反）
+    Component summaryLabel(ConditionNode node) {
+        if (isContainer(node)) {
+            return row1Label(node);
+        }
         if (node instanceof ConditionNode.Leaf(var condition)) {
             if (condition == null) {
                 return Component.translatable("gui.itemdespawntowhat.edit.tree.leaf_missing");
             }
             return leafSummaries.getOrDefault(node, typeLabel(condition.type()));
         }
+        return Component.empty();
+    }
+
+    // 内容行 2：只服务容器的分支计数，叶没有第二行内容
+    Component row2Label(ConditionNode node) {
+        if (!isContainer(node)) {
+            return Component.empty();
+        }
         List<ConditionNode> children = ConditionTreeNodes.INSTANCE.children(node);
         if (children.isEmpty()) {
             return Component.translatable("gui.itemdespawntowhat.edit.tree.empty");
         }
         return Component.translatable("gui.itemdespawntowhat.edit.tree.drag_many", children.size());
+    }
+
+    // 内容行 2（叶）：结构标记，无问题时为空。超限优先于层级较深，避免同一行堆叠两个标记
+    Component statusLabel(ConditionNode node) {
+        NodeInfo info = infos.get(node);
+        if (info == null) {
+            return Component.empty();
+        }
+        if (info.incomplete()) {
+            return Component.translatable("gui.itemdespawntowhat.edit.tree.incomplete");
+        }
+        if (info.overflow()) {
+            return Component.translatable("gui.itemdespawntowhat.edit.tree.overflow_mark");
+        }
+        if (info.deep()) {
+            return Component.translatable("gui.itemdespawntowhat.edit.tree.deep_mark");
+        }
+        return Component.empty();
+    }
+
+    /**
+     * 节点自身或子树是否存在结构问题：描边取色与悬停提示标题行色共用同一判定。
+     */
+    boolean hasIssue(ConditionNode node) {
+        NodeInfo info = infos.get(node);
+        return info != null && info.subtreeIssue();
     }
 
     private Component typeLabel(@Nullable ResourceLocation type) {

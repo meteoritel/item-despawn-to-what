@@ -2,10 +2,13 @@ package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.BORDER;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.CARD_PADDING_X;
-import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.CARD_PADDING_Y;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.CARD_ROW_HEIGHT;
+import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.CARD_SEPARATOR;
+import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.CONTENT_TOP;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.FLOW_HINT_KEY;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.LOGIC_CUT_CORNER;
+import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.TITLE_BAND_HEIGHT;
+import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.TITLE_BAND_TOP;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.isContainer;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeNodes;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
@@ -17,7 +20,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeEditor;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreePath;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.Hotspot;
-import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.NodeInfo;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
 import java.util.List;
 import java.util.Set;
@@ -181,13 +183,8 @@ final class ConditionGraphRenderer {
     private void drawEndpoint(GuiGraphics graphics, Font renderFont, Component title, Component summary, UiRect rect) {
         graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), theme.palette().canvasGroupFill());
         drawBorder(graphics, rect, theme.palette().canvasCardBorder());
-        int x = rect.x() + BORDER + CARD_PADDING_X;
-        int y = rect.y() + BORDER + CARD_PADDING_Y;
-        int width = Math.max(0, rect.width() - (BORDER + CARD_PADDING_X) * 2);
-        graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont, title.getString(), width),
-                x, y, theme.palette().canvasText(), false);
-        graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont, summary.getString(), width),
-                x, y + CARD_ROW_HEIGHT, theme.palette().canvasTextMuted(), false);
+        drawTitleBand(graphics, renderFont, title, rect, BORDER, theme.palette().canvasText());
+        drawContentRow(graphics, renderFont, summary, theme.palette().canvasTextMuted(), rect, BORDER, 0);
     }
 
     private void drawCard(GuiGraphics graphics, Font renderFont, ConditionNode node, UiRect rect,
@@ -197,22 +194,16 @@ final class ConditionGraphRenderer {
             return;
         }
         int fill = selected ? theme.palette().canvasCardSelectedFill()
-                : theme.palette().canvasCardFill();
-        if (hovered && !selected) {
-            fill = theme.palette().canvasCardHoverFill();
-        }
+                : hovered ? theme.palette().canvasCardHoverFill() : theme.palette().canvasCardFill();
+        boolean issue = graph.hasIssue(node);
+        int thickness = selected ? BORDER * 2 : BORDER;
         graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), fill);
-        drawBorder(graphics, rect, selected ? theme.palette().canvasCardBorderSelected() : theme.palette().canvasCardBorder());
-        NodeInfo info = graph.info(node);
-        int textX = rect.x() + BORDER + CARD_PADDING_X;
-        int textWidth = Math.max(0, rect.width() - (BORDER + CARD_PADDING_X) * 2);
-        int row1Y = rect.y() + BORDER + CARD_PADDING_Y;
-        int color = info != null && (info.overflow() || info.leafMissing() || info.subtreeIssue())
-                ? theme.palette().canvasTextDanger() : theme.palette().canvasText();
-        String row1 = TextScroll.trimToWidth(renderFont, graph.row1Label(node).getString(), textWidth);
-        String row2 = TextScroll.trimToWidth(renderFont, graph.row2Label(node).getString(), textWidth);
-        graphics.drawString(renderFont, row1, textX, row1Y, color, false);
-        graphics.drawString(renderFont, row2, textX, row1Y + CARD_ROW_HEIGHT, theme.palette().canvasTextMuted(), false);
+        drawBorder(graphics, rect, borderColor(selected, issue, hovered), thickness);
+        drawTitleBand(graphics, renderFont, graph.titleLabel(node), rect, thickness,
+                issue ? theme.palette().canvasTextDanger() : theme.palette().canvasText());
+        drawContentRow(graphics, renderFont, graph.summaryLabel(node), theme.palette().canvasText(), rect, thickness, 0);
+        drawContentRow(graphics, renderFont, graph.statusLabel(node), theme.palette().canvasTextDanger(),
+                rect, thickness, 1);
     }
 
     private void drawLogicCard(GuiGraphics graphics, Font renderFont, ConditionNode node, UiRect rect,
@@ -229,22 +220,57 @@ final class ConditionGraphRenderer {
             fill = theme.palette().canvasNotFill();
             text = theme.palette().canvasNotText();
         }
-        NodeInfo info = graph.info(node);
-        boolean invalid = info != null && info.subtreeIssue();
-        int border = invalid ? theme.palette().canvasTextDanger()
-                : selected ? theme.palette().canvasCardBorderSelected() : text;
-        int thickness = selected || hovered ? BORDER * 2 : BORDER;
-        drawLogicShape(graphics, node, rect, border);
+        // 容器保留形状与运算符盖色，强调色只作用于描边，避免覆盖语义色
+        boolean issue = graph.hasIssue(node);
+        int thickness = selected ? BORDER * 2 : BORDER;
+        drawLogicShape(graphics, node, rect, borderColor(selected, issue, hovered));
         UiRect inner = new UiRect(rect.x() + thickness, rect.y() + thickness,
                 rect.width() - thickness * 2, rect.height() - thickness * 2);
         drawLogicShape(graphics, node, inner, fill);
-        String title = TextScroll.trimToWidth(renderFont, graph.operatorLabel(node).getString(), rect.width() - LOGIC_CUT_CORNER * 2);
-        String detail = TextScroll.trimToWidth(renderFont, graph.row1Label(node).getString(), rect.width() - LOGIC_CUT_CORNER * 2);
-        int y = rect.y() + BORDER + CARD_PADDING_Y;
-        graphics.drawString(renderFont, title, rect.x() + (rect.width() - renderFont.width(title)) / 2, y,
-                invalid ? theme.palette().canvasTextDanger() : text, false);
-        graphics.drawString(renderFont, detail, rect.x() + (rect.width() - renderFont.width(detail)) / 2,
-                y + CARD_ROW_HEIGHT, text, false);
+        drawTitleBand(graphics, renderFont, graph.titleLabel(node), rect, thickness,
+                issue ? theme.palette().canvasTextDanger() : text);
+        drawContentRow(graphics, renderFont, graph.summaryLabel(node), text, rect, thickness, 0);
+        drawContentRow(graphics, renderFont, graph.row2Label(node), theme.palette().canvasTextMuted(),
+                rect, thickness, 1);
+    }
+
+    /**
+     * 卡片描边取色，优先级为 选中 &gt; 结构问题 &gt; 悬停，叶与容器共用同一规则。
+     */
+    private int borderColor(boolean selected, boolean issue, boolean hovered) {
+        if (selected) {
+            return theme.palette().canvasCardBorderSelected();
+        }
+        if (issue) {
+            return theme.palette().canvasTextDanger();
+        }
+        return hovered ? theme.palette().canvasCardBorderSelected() : theme.palette().canvasCardBorder();
+    }
+
+    /**
+     * 绘制卡片外壳的标题带与分隔线：标题整行居中，分隔线横跨描边内侧。
+     * 端点、条件叶与容器共用同一套内部纵向分区，超长标题按可用宽度裁剪。
+     */
+    private void drawTitleBand(GuiGraphics graphics, Font renderFont, Component title, UiRect rect,
+                               int thickness, int titleColor) {
+        String text = TextScroll.trimToWidth(renderFont, title.getString(),
+                Math.max(0, rect.width() - (thickness + CARD_PADDING_X) * 2));
+        graphics.drawString(renderFont, text, rect.x() + (rect.width() - renderFont.width(text)) / 2,
+                rect.y() + TITLE_BAND_TOP, titleColor, false);
+        int separatorY = rect.y() + TITLE_BAND_TOP + TITLE_BAND_HEIGHT;
+        graphics.fill(rect.x() + thickness, separatorY, rect.right() - thickness, separatorY + CARD_SEPARATOR,
+                theme.palette().canvasCardBorder());
+    }
+
+    /**
+     * 绘制内容区第 row 行（0 起）的左对齐文本，超出内容宽按宽度裁剪。
+     */
+    private void drawContentRow(GuiGraphics graphics, Font renderFont, Component content, int color,
+                                UiRect rect, int thickness, int row) {
+        String text = TextScroll.trimToWidth(renderFont, content.getString(),
+                Math.max(0, rect.width() - (thickness + CARD_PADDING_X) * 2));
+        graphics.drawString(renderFont, text, rect.x() + thickness + CARD_PADDING_X,
+                rect.y() + CONTENT_TOP + row * CARD_ROW_HEIGHT, color, false);
     }
 
     private static void drawLogicShape(GuiGraphics graphics, ConditionNode node, UiRect rect, int color) {
@@ -324,10 +350,23 @@ final class ConditionGraphRenderer {
     }
 
     static void drawBorder(GuiGraphics graphics, UiRect rect, int color) {
-        graphics.fill(rect.x(), rect.y(), rect.right(), rect.y() + BORDER, color);
-        graphics.fill(rect.x(), rect.bottom() - BORDER, rect.right(), rect.bottom(), color);
-        graphics.fill(rect.x(), rect.y() + BORDER, rect.x() + BORDER, rect.bottom() - BORDER, color);
-        graphics.fill(rect.right() - BORDER, rect.y() + BORDER, rect.right(), rect.bottom() - BORDER, color);
+        drawBorder(graphics, rect, color, BORDER);
+    }
+
+    /**
+     * 逐圈内缩绘制描边，厚度大于 1 时得到整圈加粗的同心边框（选中态）。
+     */
+    static void drawBorder(GuiGraphics graphics, UiRect rect, int color, int thickness) {
+        for (int inset = 0; inset < thickness; inset++) {
+            int left = rect.x() + inset;
+            int top = rect.y() + inset;
+            int right = rect.right() - inset;
+            int bottom = rect.bottom() - inset;
+            graphics.fill(left, top, right, top + BORDER, color);
+            graphics.fill(left, bottom - BORDER, right, bottom, color);
+            graphics.fill(left, top + BORDER, left + BORDER, bottom - BORDER, color);
+            graphics.fill(right - BORDER, top + BORDER, right, bottom - BORDER, color);
+        }
     }
 
 }

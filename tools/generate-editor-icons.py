@@ -113,16 +113,18 @@ def icon_view_tree(d, c, a):
 
 
 def icon_view_json(d, c, a):
-    _v(d, 4, 3, 12, c)
+    # 左「{」：竖直主干偏左，顶/底横线向右延伸，中部尖点在主干右侧
+    _v(d, 3, 3, 12, c)
     _h(d, 3, 4, 3, c)
     _h(d, 3, 4, 12, c)
-    _px(d, 3, 7, c)
-    _px(d, 3, 8, c)
-    _v(d, 11, 3, 12, c)
+    _px(d, 4, 7, c)
+    _px(d, 4, 8, c)
+    # 右「}」：与左侧沿图标中线镜像
+    _v(d, 12, 3, 12, c)
     _h(d, 11, 12, 3, c)
     _h(d, 11, 12, 12, c)
-    _px(d, 12, 7, c)
-    _px(d, 12, 8, c)
+    _px(d, 11, 7, c)
+    _px(d, 11, 8, c)
 
 
 def icon_help(d, c, a):
@@ -141,28 +143,44 @@ def icon_add_condition(d, c, a):
     _v(d, 8, 3, 12, a)
 
 
-def _logic_and(d, x, y, color):
-    # ∧：底宽 5、高 5 的尖顶，表示「全部满足」
-    d.line((x, y + 4, x + 2, y), fill=color)
-    d.line((x + 2, y, x + 4, y + 4), fill=color)
+# ---- 分组图标族：容器 + 内部三个小方块 ----
+# 三个方块按 2+1 排布：14x14 外框（1..14）内部可用区为 12x12，
+# 横排三个 4px 方块连间隙需要 14px 放不下，2+1 是唯一的整数像素居中排布。
+_GROUP_BLOCKS = ((3, 3), (9, 3), (6, 9))
+_GROUP_BLOCK_SIZE = 4
 
 
-def _logic_or(d, x, y, color):
-    # ∨：与 ∧ 同尺寸的倒置尖底，表示「任一满足」
-    d.line((x, y, x + 2, y + 4), fill=color)
-    d.line((x + 2, y + 4, x + 4, y), fill=color)
+def _group_blocks(d, color, filled):
+    """在容器内部画三个小方块；filled 为假时画空心方块，用于「任一满足」变体。"""
+    for x, y in _GROUP_BLOCKS:
+        _rect(d, x, y, x + _GROUP_BLOCK_SIZE - 1, y + _GROUP_BLOCK_SIZE - 1, color, fill=filled)
+
+
+def _container_frame(d, color):
+    # 完整方框：条件收进一个容器
+    _rect(d, 1, 1, 14, 14, color)
+
+
+def _container_brackets(d, color):
+    # 左右相向的方括号：与方框同族，表达「把选中条件包成容器」
+    _v(d, 1, 1, 14, color)
+    _h(d, 1, 3, 1, color)
+    _h(d, 1, 3, 14, color)
+    _v(d, 14, 1, 14, color)
+    _h(d, 12, 14, 1, color)
+    _h(d, 12, 14, 14, color)
 
 
 def icon_add_group(d, c, a):
-    # 容器框 + ∧：添加全部满足分组
-    _rect(d, 1, 1, 14, 14, c)
-    _logic_and(d, 5, 5, c)
+    # 方框 + 三个实心方块：添加「全部满足」分组
+    _container_frame(d, c)
+    _group_blocks(d, c, True)
 
 
 def icon_add_group_any(d, c, a):
-    # 容器框 + ∨：添加任一满足分组
-    _rect(d, 1, 1, 14, 14, c)
-    _logic_or(d, 5, 5, c)
+    # 与 icon_add_group 同族，方块改空心：添加「任一满足」分组
+    _container_frame(d, c)
+    _group_blocks(d, c, False)
 
 
 def icon_invert(d, c, a):
@@ -187,17 +205,15 @@ def icon_move_down(d, c, a):
 
 
 def icon_wrap(d, c, a):
-    # 两侧向内箭头 + ∧：包成全部满足
-    _poly(d, [(2, 4), (2, 11), (4, 7)], c)
-    _poly(d, [(13, 4), (13, 11), (11, 7)], c)
-    _logic_and(d, 5, 5, c)
+    # 相向括号 + 三个实心方块：把选中条件包成「全部满足」分组
+    _container_brackets(d, c)
+    _group_blocks(d, c, True)
 
 
 def icon_wrap_any(d, c, a):
-    # 两侧向内箭头 + ∨：包成任一满足
-    _poly(d, [(2, 4), (2, 11), (4, 7)], c)
-    _poly(d, [(13, 4), (13, 11), (11, 7)], c)
-    _logic_or(d, 5, 5, c)
+    # 与 icon_wrap 同族，方块改空心：把选中条件包成「任一满足」分组
+    _container_brackets(d, c)
+    _group_blocks(d, c, False)
 
 
 ICONS = {

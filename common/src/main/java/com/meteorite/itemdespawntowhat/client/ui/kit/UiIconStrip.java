@@ -78,6 +78,33 @@ public final class UiIconStrip implements UiInputTarget, UiFocusTarget {
     @Override
     public UiRect bounds() { return bounds; }
 
+    /**
+     * 量取一组格子横向覆盖的宽度：取可见格子的最右边缘减最左边缘，零可见格子时为 0。
+     *
+     * <p>只读度量，不改变布局与命中判定；同一图标条内的格子沿排列方向紧邻摆放，因此水平条
+     * 用它得到各格宽度之和，竖直条得到单格宽度。宿主借此把底板收窄到最后一格之后，把右侧
+     * 空白交还画布，而命中仍按格子矩形处理。</p>
+     *
+     * @param items 同一图标条内的格子句柄，{@code null} 视为空集合
+     * @return 可见格子横向覆盖的宽度
+     */
+    public static int cellsWidth(@Nullable List<Item> items) {
+        if (items == null) {
+            return 0;
+        }
+        int left = Integer.MAX_VALUE;
+        int right = Integer.MIN_VALUE;
+        for (Item item : items) {
+            if (item == null || !item.isVisible()) {
+                continue;
+            }
+            UiRect rect = item.bounds();
+            left = Math.min(left, rect.x());
+            right = Math.max(right, rect.right());
+        }
+        return left == Integer.MAX_VALUE ? 0 : Math.max(0, right - left);
+    }
+
     /** 绘制全部可见格子；{@code mouseX/mouseY} 为宿主 GUI 逻辑坐标。 */
     public void render(GuiGraphics graphics, int mouseX, int mouseY) {
         for (int i = 0; i < cells.size(); i++) {

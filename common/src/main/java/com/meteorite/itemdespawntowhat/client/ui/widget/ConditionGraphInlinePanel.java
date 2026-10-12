@@ -147,7 +147,7 @@ final class ConditionGraphInlinePanel {
         if (!(anchorNode instanceof ConditionNode.Leaf)) {
             close();
         } else {
-            title = graph.row1Label(anchorNode);
+            title = graph.titleLabel(anchorNode);
         }
         if (form == null) return;
         panelRect = panel.bounds(bounds);

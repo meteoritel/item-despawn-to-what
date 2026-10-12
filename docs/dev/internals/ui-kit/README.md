@@ -49,6 +49,14 @@ powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1
 
 调用示例类：`UiSliderExamples`（无规则语义，只有装配与事件顺序）。
 
+### 2.1 成员变更登记
+
+维护副本的新增与修改成员在本表登记，不再依赖与上游逐文件比对（[ADR-0028](../../../adr/0028-canvas-page-and-flat-skin.md) 决策 5）：
+
+| 类型 | 成员 | 用途与来源 | 宿主接入点 |
+| --- | --- | --- | --- |
+| `UiIconStrip` | `cellsWidth(List<Item>)` | 静态只读度量：一组可见格子横向覆盖的宽度（最右边缘减最左边缘），零可见格子返回 0。新增成员，上游无对应实现 | 画布页外壳（`ConditionTreeOverlay`）用它把功能栏底板收窄到最后一个图标格之后，右侧空白交还画布 |
+
 ## 3. 分册
 
 | 分册 | 什么时候读 | 内容 |

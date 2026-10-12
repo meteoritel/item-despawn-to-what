@@ -170,6 +170,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     private @Nullable UiTreePath pickerParent;
     private int pickerIndex;
     private final ConditionGraphInlinePanel inlinePanel;
+    private final ConditionGraphTooltip tooltip;
 
     private boolean groupKindPending;
     private boolean kindMenuOpen;
@@ -188,6 +189,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         renderer = new ConditionGraphRenderer(this.theme, font, graph);
         picker = new ConditionGraphTypePicker(this.theme, font, this::confirmPicker);
         inlinePanel = new ConditionGraphInlinePanel(this.theme, font, graph);
+        tooltip = new ConditionGraphTooltip(this.theme, font);
         tree = new UiTreeEditor<>(ConditionTreeNodes.INSTANCE, () -> expression.root(), change -> {
             lastChange = change;
             applyNode(change.after());
@@ -732,8 +734,8 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         viewInitialized = true;
     }
 
-    // 悬停提示：完整第一行 + 第二行
-    public @Nullable Component tooltipAt(double mouseX, double mouseY) {
+    // 悬停提示：标题行 + 摘要行 + 结构标记行，由画布自绘面板呈现（原版 tooltip 不参与）
+    private @Nullable List<ConditionGraphTooltip.Line> tooltipAt(double mouseX, double mouseY) {
         if (!visible || isDragging() || picker.isOpen() || kindMenuOpen || addMode || !bounds.contains(mouseX, mouseY)) {
             return null;
         }
@@ -745,7 +747,16 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         if (node == null) {
             return null;
         }
-        return graph.row1Label(node).copy().append(" · ").append(graph.row2Label(node));
+        boolean issue = graph.hasIssue(node);
+        List<ConditionGraphTooltip.Line> lines = new ArrayList<>();
+        lines.add(new ConditionGraphTooltip.Line(graph.titleLabel(node),
+                issue ? theme.palette().canvasTextDanger() : theme.palette().canvasText()));
+        lines.add(new ConditionGraphTooltip.Line(graph.summaryLabel(node), theme.palette().canvasTextMuted()));
+        Component status = graph.statusLabel(node);
+        if (!status.getString().isEmpty()) {
+            lines.add(new ConditionGraphTooltip.Line(status, theme.palette().canvasTextDanger()));
+        }
+        return lines;
     }
 
     /** 当前手势或默认快捷键提示，供宿主底部状态栏展示。 */
@@ -754,7 +765,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             UiTreeEditor.MovePreview<ConditionNode> preview = move.preview();
             if (preview != null && preview.outcome().error() == null && dropTarget != null) {
                 return Component.translatable("gui.itemdespawntowhat.edit.tree.drop_"
-                        + preview.position().name().toLowerCase(Locale.ROOT), graph.row1Label(dropTarget));
+                        + preview.position().name().toLowerCase(Locale.ROOT), graph.titleLabel(dropTarget));
             }
             if (operationError != null) {
                 return operationError;
@@ -830,6 +841,10 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         if (kindMenuOpen) {
             updateKindMenuRect();
             renderKindMenu(graphics, renderFont);
+        }
+        List<ConditionGraphTooltip.Line> tip = tooltipAt(mouseX, mouseY);
+        if (tip != null) {
+            tooltip.render(graphics, bounds, tip, mouseX, mouseY);
         }
     }
 
@@ -1227,7 +1242,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
                 ConditionNode node = tree.query(source);
                 dragLabel = sources.size() > 1
                         ? Component.translatable("gui.itemdespawntowhat.edit.tree.drag_many", sources.size()).getString()
-                        : node == null ? "" : graph.row1Label(node).getString();
+                        : node == null ? "" : graph.titleLabel(node).getString();
             }
         }
         if (!move.isActive()) {
