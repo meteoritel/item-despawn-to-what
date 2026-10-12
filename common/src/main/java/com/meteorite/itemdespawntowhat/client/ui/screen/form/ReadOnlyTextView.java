@@ -2,7 +2,8 @@ package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiListView;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
 import net.minecraft.client.gui.Font;
@@ -12,6 +13,10 @@ import net.minecraft.util.FormattedCharSequence;
 
 /*** 按可用宽度换行的只读详情，供损坏规则与长文案完整阅读。 */
 public final class ReadOnlyTextView implements UiWidget, UiFocusTarget {
+
+    // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
+    private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
+
     private final Font font;
     private final Component text;
     private final UiListView<FormattedCharSequence> lines;
@@ -20,8 +25,8 @@ public final class ReadOnlyTextView implements UiWidget, UiFocusTarget {
     public ReadOnlyTextView(Font font, Component text) {
         this.font = font;
         this.text = text;
-        lines = new UiListView<>(font, (graphics, rowFont, line, index, row, selected, hovered, focused) ->
-                graphics.drawString(rowFont, line, row.x() + 2, row.y() + 2, UiPalette.TEXT_PRIMARY, false));
+        lines = new UiListView<>(THEME, font, (graphics, rowFont, line, index, row, selected, hovered, focused) ->
+                graphics.drawString(rowFont, line, row.x() + 2, row.y() + 2, THEME.palette().textPrimary(), false));
         lines.setRowHeight(font.lineHeight + 2);
     }
 

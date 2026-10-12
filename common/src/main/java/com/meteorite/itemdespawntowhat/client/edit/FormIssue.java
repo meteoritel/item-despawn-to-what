@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.client.ui.screen.form;
+package com.meteorite.itemdespawntowhat.client.edit;
 
 import net.minecraft.network.chat.Component;
 

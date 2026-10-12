@@ -1,22 +1,26 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
-import com.google.gson.JsonElement;
-import com.google.gson.JsonPrimitive;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.EditorPreset;
 import com.meteorite.itemdespawntowhat.client.edit.FieldNumbers;
+import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
+import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.NumericDomain;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumberPolicy;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumbers;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderRole;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderSkin;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderWindow;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiValueInteraction;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiSlider;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.client.gui.Font;
@@ -35,6 +39,9 @@ import org.jetbrains.annotations.Nullable;
  * 换算与解析全部委托 {@link FieldNumbers} 的纯函数，显示精度不反写 JSON。
  */
 final class NumberControl extends FormControl {
+
+    // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
+    private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
 
     // 行内精确输入框的最小宽度
     private static final int MIN_INPUT_WIDTH = 34;
@@ -61,7 +68,7 @@ final class NumberControl extends FormControl {
     private final double windowMax;
     // 行内输入框的宽度下限覆盖：数量对象等逐行对齐布局用各行最大值统一（0 = 各自按文本取样）
     private int inputWidthOverride;
-    private @Nullable JsonElement loaded;
+    private @Nullable RuleValue loaded;
     // 装载时写入输入框的文本基线；未编辑且文本未变时视为「未编辑」
     private String loadedText = "";
     private boolean settingInput;
@@ -114,7 +121,7 @@ final class NumberControl extends FormControl {
         this.windowMin = windowLow;
         this.windowMax = windowHigh;
 
-        this.slider = new UiSlider(font, domainMin, domainMax, numbers.step());
+        this.slider = new UiSlider(THEME, font, domainMin, domainMax, numbers.step());
         double fine = Math.min(numbers.step(), numbers.shiftStep());
         this.slider.core().setPolicy(integerDomain
                 ? UiNumberPolicy.integer((int) Math.round(domainMin), (int) Math.round(domainMax),
@@ -130,14 +137,14 @@ final class NumberControl extends FormControl {
         this.slider.core().setValue(neutralValue());
 
         Component hint = hint();
-        this.input = new UiTextInput(font, hint == null ? Component.empty() : hint);
+        this.input = new UiTextInput(THEME, font, hint == null ? Component.empty() : hint);
         this.input.setFilter(integerDomain || amplifierField ? FormControl::integerChars
                 : FormControl::decimalChars);
         this.input.setOnCommit(this::commitText);
         this.input.setOnCancel(this::discardTextBuffer);
         this.input.setOnValueChanged(this::previewText);
         for (EditorPreset preset : field.presets()) {
-            UiButton button = new UiButton(font, Component.translatable(preset.labelKey()),
+            UiButton button = new UiButton(THEME, font, Component.translatable(preset.labelKey()),
                     UiButtonVariant.SECONDARY, () -> applyPreset(preset.value()));
             presetButtons.add(button);
         }
@@ -213,35 +220,35 @@ final class NumberControl extends FormControl {
             return FieldNumbers.ticksToSecondsText((int) Math.round(jsonValue));
         }
         if (integerDomain) {
-            return Long.toString(Math.round(jsonValue));
+            return UiNumbers.roundedText(jsonValue);
         }
         return FieldNumbers.text(jsonValue, field.displayPrecision());
     }
 
     // 界面文本解析回 JSON 值；空缓冲与非法/越界均返回 null
-    private @Nullable JsonElement parseText(String text) {
+    private @Nullable RuleValue parseText(String text) {
         String trimmed = text == null ? "" : text.trim();
         if (trimmed.isEmpty()) {
             return null;
         }
         if (amplifierField) {
             Integer amplifier = FieldNumbers.amplifierOf(trimmed);
-            return amplifier != null && withinDomain(amplifier) ? new JsonPrimitive(amplifier) : null;
+            return amplifier != null && withinDomain(amplifier) ? RuleValue.integer(amplifier) : null;
         }
         if (percentField) {
             Double chance = FieldNumbers.parsePercent(trimmed);
-            return chance != null && withinDomain(chance) ? new JsonPrimitive(chance) : null;
+            return chance != null && withinDomain(chance) ? RuleValue.decimal(chance) : null;
         }
         if (ticksField) {
             Integer ticks = FieldNumbers.parseSecondsToTicks(trimmed);
-            return ticks != null && withinDomain(ticks) ? new JsonPrimitive(ticks) : null;
+            return ticks != null && withinDomain(ticks) ? RuleValue.integer(ticks) : null;
         }
         if (integerDomain) {
             Integer value = parseExactInt(trimmed);
-            return value != null && withinDomain(value) ? new JsonPrimitive(value) : null;
+            return value != null && withinDomain(value) ? RuleValue.integer(value) : null;
         }
-        Double value = parseFinite(trimmed);
-        return value != null && withinDomain(value) ? new JsonPrimitive(value) : null;
+        Double value = UiNumbers.parseFinite(trimmed);
+        return value != null && withinDomain(value) ? RuleValue.decimal(value) : null;
     }
 
     private boolean withinDomain(double value) {
@@ -261,26 +268,16 @@ final class NumberControl extends FormControl {
         }
     }
 
-    // 小数解析：NaN 与 Infinity 一律拒绝
-    private static @Nullable Double parseFinite(String text) {
-        try {
-            double parsed = Double.parseDouble(text);
-            return Double.isFinite(parsed) ? parsed : null;
-        } catch (NumberFormatException exception) {
+    private static @Nullable Double jsonNumber(RuleValue value) {
+        if (value == null || !value.isNumber()) {
             return null;
         }
+        double number = value.asDecimal(0.0D);
+        return Double.isFinite(number) ? number : null;
     }
 
-    private static @Nullable Double jsonNumber(JsonElement element) {
-        if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isNumber()) {
-            return null;
-        }
-        double value = element.getAsDouble();
-        return Double.isFinite(value) ? value : null;
-    }
-
-    private static String rawText(JsonElement element) {
-        return element.isJsonPrimitive() ? element.getAsString() : element.toString();
+    private static String rawText(RuleValue value) {
+        return value.isScalar() ? value.asText() : value.toJson();
     }
 
     // ---- FormControl ----
@@ -295,9 +292,10 @@ final class NumberControl extends FormControl {
     void setBounds(int x, int y, int width) {
         // 有效行高：默认 12；被 FormControl 行高覆盖时 slider 与数字输入框一起变高
         int rowHeight = layoutHeight();
-        slider.core().setStyle(rowHeight >= 18 ? UiTheme.cardSliderStyle() : UiTheme.sliderStyle());
-        slider.core().setPainter(rowHeight >= 18 ? UiTheme.cardSliderPainter()
-                : com.meteorite.itemdespawntowhat.client.ui.kit.PixelSliderPainter.INSTANCE);
+        // 加高行改用宽松档滑块外观：样式与画法成对取自注入主题，避免两套来源混用
+        UiSliderSkin skin = THEME.sliderSkin(rowHeight >= 18 ? UiSliderRole.ROOMY : UiSliderRole.COMPACT);
+        slider.core().setStyle(skin.style());
+        slider.core().setPainter(skin.painter());
         int reserved = 0;
         for (UiButton button : presetButtons) {
             reserved += buttonWidth(button) + GAP;
@@ -349,10 +347,10 @@ final class NumberControl extends FormControl {
     }
 
     @Override
-    void load(@Nullable JsonElement value) {
+    void load(@Nullable RuleValue value) {
         textPreviewing = false;
         rememberLoaded(value);
-        this.loaded = value == null || value.isJsonNull() ? null : value.deepCopy();
+        this.loaded = value == null || value.isNull() ? null : value.deepCopy();
         if (loaded == null) {
             this.loadedText = "";
             setInputValue("");
@@ -375,11 +373,11 @@ final class NumberControl extends FormControl {
     }
 
     @Override
-    @Nullable JsonElement store() {
+    @Nullable RuleValue store() {
         String text = input.value().trim();
-        // 未编辑且文本仍等于装载基线：原样回写原始元素（缺失即 null），applyToDraft 跳过该字段
+        // 未编辑且文本仍等于装载基线：原样回写原始值（缺失即 null），applyToDraft 跳过该字段
         if (!isEdited() && text.equals(loadedText.trim())) {
-            return originalElement();
+            return originalValue();
         }
         if (text.isEmpty()) {
             // 必填/不可空字段清空时不删除既有值，交由 issues() 提示（阻止应用）
@@ -392,7 +390,7 @@ final class NumberControl extends FormControl {
             }
             return keepExisting ? loaded : null;
         }
-        JsonElement parsed = parseText(text);
+        RuleValue parsed = parseText(text);
         if (parsed != null) {
             textPreviewing = false;
             markEdited();
@@ -491,8 +489,8 @@ final class NumberControl extends FormControl {
     void restoreInputText(List<String> text) {
         if (text.isEmpty()) return;
         setInputValue(text.getFirst());
-        JsonElement parsed = parseText(input.value());
-        if (parsed != null) slider.core().setValue(parsed.getAsDouble());
+        RuleValue parsed = parseText(input.value());
+        if (parsed != null) slider.core().setValue(parsed.asDecimal(0.0D));
         slider.setError(!input.value().isBlank() && parsed == null);
         markEdited();
     }
@@ -522,8 +520,8 @@ final class NumberControl extends FormControl {
     // Enter 提交：合法则回填滑杆并回调一次，非法则保留缓冲并报错
     private void commitText(String text) {
         markEdited();
-        JsonElement parsed = parseText(text);
-        Double number = parsed == null ? null : parsed.getAsDouble();
+        RuleValue parsed = parseText(text);
+        Double number = parsed == null ? null : parsed.asDecimal(0.0D);
         if (number == null) {
             slider.setError(true);
             return;
@@ -559,9 +557,9 @@ final class NumberControl extends FormControl {
             textStartText = previousAcceptedText;
             textPreviewing = true;
         }
-        JsonElement parsed = parseText(input.value());
+        RuleValue parsed = parseText(input.value());
         if (parsed != null) {
-            slider.setError(!slider.core().setValue(parsed.getAsDouble()));
+            slider.setError(!slider.core().setValue(parsed.asDecimal(0.0D)));
         } else if (input.value().isBlank() && !field.required()) {
             slider.core().setValue(neutralValue());
             slider.setError(false);
@@ -572,11 +570,11 @@ final class NumberControl extends FormControl {
     // 预设：按 JSON 单位解析后作为一次提交
     private void applyPreset(String presetValue) {
         markEdited();
-        JsonElement parsed = parseText(presetValue);
+        RuleValue parsed = parseText(presetValue);
         if (parsed == null) {
             return;
         }
-        double number = parsed.getAsDouble();
+        double number = parsed.asDecimal(0.0D);
         if (!slider.core().setValue(number)) {
             slider.setError(true);
             return;

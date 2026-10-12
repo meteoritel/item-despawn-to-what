@@ -3,10 +3,11 @@ package com.meteorite.itemdespawntowhat.client.ui.widget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryDispatcher;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -43,7 +44,15 @@ public final class UiModalStack implements UiWidget {
         historyTarget = target;
     }
 
+    // 注入的宿主主题
+    private final UiHostTheme theme;
+    // 兼容入口：未迁移模块沿用默认宿主主题
     public UiModalStack() {
+        this(UiHostThemes.defaultTheme());
+    }
+
+    public UiModalStack(UiHostTheme theme) {
+        this.theme = UiHostThemes.require(theme);
         focusManager.setEnterActivates(true);
         focusManager.setSpaceActivates(true);
     }
@@ -179,10 +188,10 @@ public final class UiModalStack implements UiWidget {
         if (modals.isEmpty()) {
             return;
         }
-        int baseAlpha = (UiPalette.MODAL_DIM >>> 24) & 0xFF;
+        int baseAlpha = (theme.palette().modalDim() >>> 24) & 0xFF;
         int alpha = baseAlpha * (FADE_TICKS - fadeTicks) / FADE_TICKS;
         if (alpha > 0) {
-            int dim = (alpha << 24) | (UiPalette.MODAL_DIM & 0x00FFFFFF);
+            int dim = (alpha << 24) | (theme.palette().modalDim() & 0x00FFFFFF);
             UiRenderLayers.draw(graphics, UiRenderLayers.MODAL_STEP,
                     () -> graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), dim));
         }

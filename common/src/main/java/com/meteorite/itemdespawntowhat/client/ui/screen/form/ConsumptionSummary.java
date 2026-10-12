@@ -1,8 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
+import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
@@ -36,12 +34,12 @@ public final class ConsumptionSummary {
     }
 
     // 判定消耗语义类别
-    public static Kind kind(@Nullable JsonElement effects) {
+    public static Kind kind(@Nullable RuleValue effects) {
         int source = 0;
         int catalyst = 0;
         int fluid = 0;
-        if (effects != null && effects.isJsonArray()) {
-            for (JsonElement element : effects.getAsJsonArray()) {
+        if (effects != null && effects.isList()) {
+            for (RuleValue element : effects.items()) {
                 String type = typeOf(element);
                 if (CONSUME_SOURCE.equals(type)) {
                     source++;
@@ -62,7 +60,7 @@ public final class ConsumptionSummary {
     }
 
     // 消耗语义提示文案 key（gui.itemdespawntowhat.edit.consumption.hint.*）
-    public static Component hint(@Nullable JsonElement effects) {
+    public static Component hint(@Nullable RuleValue effects) {
         return switch (kind(effects)) {
             case IMPLICIT -> Component.translatable("gui.itemdespawntowhat.edit.consumption.hint.implicit");
             case EXPLICIT_SOURCE -> Component.translatable("gui.itemdespawntowhat.edit.consumption.hint.explicit_source");
@@ -72,34 +70,34 @@ public final class ConsumptionSummary {
     }
 
     // 固定源成本优先；重复消耗只在各效果列表内部判断，不把不同候选混为重复。
-    public static Component hintRule(JsonObject rule) {
-        JsonElement cost = rule.get(RuleFields.SOURCE_COST);
-        if (cost != null && cost.isJsonObject()) {
+    public static Component hintRule(RuleValue rule) {
+        RuleValue cost = rule.child(RuleFields.SOURCE_COST);
+        if (cost != null && cost.isMapping()) {
             return Component.translatable("gui.itemdespawntowhat.edit.consumption.hint.fixed");
         }
-        JsonArray all = new JsonArray();
-        JsonElement flat = rule.get(RuleFields.EFFECTS);
-        if (flat != null && flat.isJsonArray()) {
-            all.addAll(flat.getAsJsonArray());
+        RuleValue.Sequence all = RuleValue.list();
+        RuleValue flat = rule.child(RuleFields.EFFECTS);
+        if (flat != null && flat.isList()) {
+            all.addAll(flat.items());
             if (isDuplicate(flat)) {
                 return hint(flat);
             }
         }
-        JsonElement outcomes = rule.get(RuleFields.OUTCOMES);
-        if (outcomes != null && outcomes.isJsonArray()) {
-            for (JsonElement candidate : outcomes.getAsJsonArray()) {
-                JsonElement effects = candidate.isJsonObject() ? candidate.getAsJsonObject().get(RuleFields.CANDIDATE_EFFECTS) : null;
-                if (effects != null && effects.isJsonArray()) {
+        RuleValue outcomes = rule.child(RuleFields.OUTCOMES);
+        if (outcomes != null && outcomes.isList()) {
+            for (RuleValue candidate : outcomes.items()) {
+                RuleValue effects = candidate.isMapping() ? candidate.child(RuleFields.CANDIDATE_EFFECTS) : null;
+                if (effects != null && effects.isList()) {
                     if (isDuplicate(effects)) {
                         return hint(effects);
                     }
-                    all.addAll(effects.getAsJsonArray());
+                    all.addAll(effects.items());
                 }
             }
         }
         boolean source = false;
         boolean explicit = false;
-        for (JsonElement effect : all) {
+        for (RuleValue effect : all.build().items()) {
             String type = typeOf(effect);
             source |= CONSUME_SOURCE.equals(type);
             explicit |= CONSUME_SOURCE.equals(type) || CONSUME_CATALYST.equals(type) || CONSUME_FLUID.equals(type);
@@ -109,24 +107,24 @@ public final class ConsumptionSummary {
     }
 
     // 是否重复声明（保存前拦截用）
-    public static boolean isDuplicate(@Nullable JsonElement effects) {
+    public static boolean isDuplicate(@Nullable RuleValue effects) {
         return kind(effects) == Kind.DUPLICATE;
     }
 
     // 读取效果类型
-    private static @Nullable String typeOf(JsonElement element) {
-        if (element == null || !element.isJsonObject()) {
+    private static @Nullable String typeOf(@Nullable RuleValue element) {
+        if (element == null || !element.isMapping()) {
             return null;
         }
-        JsonObject object = element.getAsJsonObject();
-        return object.has("type") && object.get("type").isJsonPrimitive() ? object.get("type").getAsString() : null;
+        RuleValue type = element.child(RuleFields.TYPE);
+        return type != null && type.isScalar() ? type.asText() : null;
     }
 
     // 统计消耗效果条数
-    public static int consumeEffectCount(@Nullable JsonArray effects) {
+    public static int consumeEffectCount(@Nullable RuleValue effects) {
         int count = 0;
         if (effects != null) {
-            for (JsonElement element : effects) {
+            for (RuleValue element : effects.items()) {
                 String type = typeOf(element);
                 if (CONSUME_SOURCE.equals(type) || CONSUME_CATALYST.equals(type) || CONSUME_FLUID.equals(type)) {
                     count++;

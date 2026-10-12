@@ -100,9 +100,9 @@ boolean cancel();                // 回退到 startValue 并回调 cancelled
 各宿主的归属实现（按源码核对）：
 
 - `FormView`：字段 `pressedWidget` / `pressedControl`。`mouseClicked` 依次询问 picker → 行内 picker 按钮 → 行尾 action 按钮（如「恢复自动命名」）→ 行控件，命中即 `rememberPress`；`mouseReleased` 先取出并清空归属，再只派发一次；`mouseDragged` 同样只给归属；行内 picker 打开时按第 5 节处理。
-- `RuleEditorEditPages`：字段 `pressedWidget`。`mouseClicked` 先给页面滚动条，再遍历 `liveWidgets` 记录归属；`mouseReleased` 只在归属仍 `isVisible()` 时派发一次并清空；无归属返回 false。
+- `RuleEditorPageInput`：字段 `pressedWidget`。`mouseClicked` 先给页面滚动条，再遍历 `liveWidgets` 记录归属；`mouseReleased` 只在归属仍 `isVisible()` 时派发一次并清空；无归属返回 false。`RuleEditorEditPages` 的 `mouseClicked` / `mouseReleased` 只把事件委托给它。
 - 控件级兜底：`UiTextArea.pressed`、`UiTextInput.pressed` 与 `UiButton.mouseReleased` 的 `control.isPressed()` 检查。它们共同保证「容器派给我、但我这次没接住按下」时也不消费释放。
-- 复合表单（`FormControl.TextControl`）把同行多类输入合成一次命中：`mouseClicked` 先试预设按钮再给输入控件，`mouseReleased` / `mouseDragged` 只转发给当前可见的那个；释放归属仍由外层容器记录，子控件不重复记账。
+- 复合表单（`TextControl`，`FormControl` 的子类）把同行多类输入合成一次命中：`mouseClicked` 先试预设按钮再给输入控件，`mouseReleased` / `mouseDragged` 只转发给当前可见的那个；释放归属仍由外层容器记录，子控件不重复记账。
 
 ## 5. 弹出层所有者契约（行内 picker）
 

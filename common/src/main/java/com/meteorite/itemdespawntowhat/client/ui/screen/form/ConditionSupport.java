@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionTreeEditor;
+import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeContract;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionTreeSummary;
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
@@ -15,10 +16,10 @@ import org.jetbrains.annotations.Nullable;
 public interface ConditionSupport {
 
     // 可添加的条件类型清单
-    List<UiConditionTreeEditor.TypeOption> typeOptions();
+    List<ConditionTreeContract.TypeOption> typeOptions();
 
     // 新建叶子的工厂
-    UiConditionTreeEditor.LeafFactory leafFactory();
+    ConditionTreeContract.LeafFactory leafFactory();
 
     // 打开叶子参数编辑页
     Consumer<ConditionNode.Leaf> onEditLeaf();
@@ -29,7 +30,7 @@ public interface ConditionSupport {
     }
 
     // 打开当前表达式的编辑作用域；默认宿主不提供叠加页。
-    default boolean openTree(UiConditionTreeEditor tree, @Nullable String fieldPath) { return false; }
+    default boolean openTree(UiConditionTreeSummary tree, @Nullable String fieldPath) { return false; }
 
     // 条件表达式解码所用的类型注册表
     TypeRegistry<ConditionType<?>> registry();

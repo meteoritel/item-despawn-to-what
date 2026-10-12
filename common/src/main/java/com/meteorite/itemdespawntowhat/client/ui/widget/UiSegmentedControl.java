@@ -3,8 +3,8 @@ package com.meteorite.itemdespawntowhat.client.ui.widget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -40,7 +40,10 @@ public final class UiSegmentedControl implements UiWidget, UiFocusTarget {
     private boolean focused;
     private @Nullable Consumer<String> onChanged;
 
-    public UiSegmentedControl(Font font, List<Option> options) {
+    // 注入的宿主主题
+    private final UiHostTheme theme;
+    public UiSegmentedControl(UiHostTheme theme, Font font, List<Option> options) {
+        this.theme = UiHostThemes.require(theme);
         this.font = Objects.requireNonNull(font, "font");
         setOptions(options);
     }
@@ -177,9 +180,9 @@ public final class UiSegmentedControl implements UiWidget, UiFocusTarget {
         int chosen = selectedIndex();
         for (int i = 0; i < options.size(); i++) {
             UiRect segment = segmentRect(i);
-            UiTheme.drawSegment(graphics, new UiRect(segment.x() + 1, segment.y(), Math.max(0, segment.width() - 2), segment.height()),
+            theme.drawSegment(graphics, new UiRect(segment.x() + 1, segment.y(), Math.max(0, segment.width() - 2), segment.height()),
                     enabled, i == chosen, i == hovered);
-            int color = !enabled ? UiPalette.TEXT_DISABLED : i == chosen ? UiPalette.TEXT_ON_DARK : UiPalette.TEXT_PRIMARY;
+            int color = !enabled ? theme.palette().textDisabled() : i == chosen ? theme.palette().textOnDark() : theme.palette().textPrimary();
             String label = TextScroll.trimToWidth(renderFont, options.get(i).label().getString(),
                     Math.max(0, segment.width() - 4));
             graphics.drawString(renderFont, label, segment.x() + Math.max(0, (segment.width() - renderFont.width(label)) / 2),
@@ -189,7 +192,7 @@ public final class UiSegmentedControl implements UiWidget, UiFocusTarget {
             int index = Math.max(0, chosen);
             UiRect segment = segmentRect(index);
             graphics.fill(segment.x() + 5, segment.y() + segment.height() / 2 - 1,
-                    segment.x() + 7, segment.y() + segment.height() / 2 + 1, UiPalette.TEXT_ON_DARK);
+                    segment.x() + 7, segment.y() + segment.height() / 2 + 1, theme.palette().textOnDark());
         }
     }
 

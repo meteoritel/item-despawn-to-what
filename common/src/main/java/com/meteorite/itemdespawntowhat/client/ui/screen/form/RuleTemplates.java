@@ -1,9 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import com.meteorite.itemdespawntowhat.Constants;
+import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -70,7 +68,7 @@ public final class RuleTemplates {
     }
 
     // 读取模板规则体：id 为 null、资源不存在或解析失败时返回 null
-    public static @Nullable JsonObject load(@Nullable ResourceLocation id) {
+    public static @Nullable RuleValue load(@Nullable ResourceLocation id) {
         if (id == null) {
             return null;
         }
@@ -80,26 +78,26 @@ public final class RuleTemplates {
     }
 
     // 读取指定资源的顶层 JSON 对象；失败一律返回 null 并记一条警告
-    private static @Nullable JsonObject read(ResourceLocation id) {
+    private static @Nullable RuleValue read(ResourceLocation id) {
         Resource resource = manager().getResource(id).orElse(null);
         if (resource == null) {
             return null;
         }
         try (BufferedReader reader = resource.openAsReader()) {
-            JsonElement element = JsonParser.parseReader(reader);
-            if (element == null) {
+            RuleValue root = RuleValue.parse(reader);
+            if (root == null) {
                 return null;
             }
             // 样本允许顶层数组：模板取数组里的第一条规则
-            if (element.isJsonArray()) {
-                for (JsonElement item : element.getAsJsonArray()) {
-                    if (item != null && item.isJsonObject()) {
-                        return item.getAsJsonObject();
+            if (root.isList()) {
+                for (RuleValue item : root.items()) {
+                    if (item.isMapping()) {
+                        return item;
                     }
                 }
                 return null;
             }
-            return element.isJsonObject() ? element.getAsJsonObject() : null;
+            return root.isMapping() ? root : null;
         } catch (Exception exception) {
             Constants.LOG.warn("读取内置规则模板失败: {}", id, exception);
             return null;

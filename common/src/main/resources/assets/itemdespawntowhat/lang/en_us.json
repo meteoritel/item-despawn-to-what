@@ -421,7 +421,6 @@
   "gui.itemdespawntowhat.edit.tree.pending_input": "Unfinished parameter input",
   "gui.itemdespawntowhat.edit.tree.counts": "%s conditions · %s leaves · depth %s",
   "gui.itemdespawntowhat.edit.tree.issues": "%s errors: %s",
-  "gui.itemdespawntowhat.edit.tree.hint": "Del delete · arrows move · Ctrl+A select all · Ctrl+C/V copy-paste · Ctrl+0 fit view · Ctrl+Home go to root · drag empty space to pan · click a condition leaf to edit",
   "gui.itemdespawntowhat.edit.tree.accessible_name": "Condition tree editor",
   "gui.itemdespawntowhat.edit.tree.node.all": "ALL of",
   "gui.itemdespawntowhat.edit.tree.node.any": "ANY of",

@@ -28,6 +28,11 @@ public final class DraftListInputs {
         return new DraftListInputs(rule);
     }
 
+    /** 界面侧入口：直接以草稿快照，界面不接触 JSON 类型。 */
+    public static DraftListInputs capture(RuleDraft draft) {
+        return new DraftListInputs(draft == null ? new JsonObject() : draft.workingView());
+    }
+
     private void collectEffects(JsonElement value, String path) {
         if (!(value instanceof JsonArray effects)) return;
         for (int index = 0; index < effects.size(); index++) {
@@ -37,7 +42,7 @@ public final class DraftListInputs {
 
     /** 必须在修改列表的同一个 apply 内调用，映射也记录没有缓冲的存活对象。 */
     public void remap(EditSession session) {
-        DraftListInputs after = capture(session.draft().view());
+        DraftListInputs after = capture(session.draft().workingView());
         Map<String, JsonObject> byPath = new LinkedHashMap<>();
         after.objects.forEach((object, path) -> byPath.put(path, object));
         Map<String, String> paths = new LinkedHashMap<>();

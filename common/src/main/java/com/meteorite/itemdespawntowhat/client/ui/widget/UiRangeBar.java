@@ -1,21 +1,21 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.PixelSliderPainter;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumberPolicy;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumbers;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeEnd;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeSlider;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeEnd;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderPainter;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderStyle;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderWindow;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
-import java.util.Locale;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import java.util.Objects;
 import java.util.function.Consumer;
 import net.minecraft.client.gui.Font;
@@ -49,12 +49,15 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
     private static final int TRACK_ROW_HEIGHT = 12;
     private static final int VALUE_SLOT_WIDTH = 54;
 
+    // 取值文本的小数位数（与迁移前 %.2f 一致）
+    private static final int VALUE_DECIMALS = 2;
+
     private final Font font;
     private final Texts texts;
     private final UiRangeSlider core;
     private final UiTextInput precise;
-    private final UiSliderPainter painter = PixelSliderPainter.INSTANCE;
-    private final UiSliderStyle style = UiTheme.sliderStyle();
+    private final UiSliderPainter painter;
+    private final UiSliderStyle style;
 
     private @Nullable Listener listener;
     private UiRect bounds = new UiRect(0, 0, 0, 0);
@@ -65,8 +68,13 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
     private boolean preciseActive;
     private @Nullable Consumer<UiRangeEnd> preciseEditor;
 
-    public UiRangeBar(Font font, UiNumberPolicy policy, UiRangeValue initial, Texts texts,
+    // 注入的宿主主题
+    private final UiHostTheme theme;
+    public UiRangeBar(UiHostTheme theme, Font font, UiNumberPolicy policy, UiRangeValue initial, Texts texts,
                       @Nullable Listener listener) {
+        this.theme = UiHostThemes.require(theme);
+        this.painter = theme.sliderSkin(UiSliderRole.COMPACT).painter();
+        this.style = theme.sliderSkin(UiSliderRole.COMPACT).style();
         this.font = Objects.requireNonNull(font, "font");
         Objects.requireNonNull(policy, "policy");
         this.texts = Objects.requireNonNull(texts, "texts");
@@ -85,7 +93,7 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
                 closePrecise();
             }
         });
-        this.precise = new UiTextInput(font, texts.preciseHint());
+        this.precise = new UiTextInput(theme, font, texts.preciseHint());
         this.precise.setMaxLength(24);
         this.precise.setVisible(false);
         this.precise.setOnCommit(this::commitPrecise);
@@ -138,7 +146,7 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
         int rowHeight = Math.min(TRACK_ROW_HEIGHT, Math.max(4, bounds.height() - LABEL_HEIGHT));
         this.trackRow = new UiRect(x, y + LABEL_HEIGHT, bounds.width(), rowHeight);
         this.core.setBounds(trackRow.x(), trackRow.y(), trackRow.width(), trackRow.height());
-        this.precise.setBounds(x, trackRow.bottom(), Math.max(24, bounds.width()), UiTheme.ROW_HEIGHT);
+        this.precise.setBounds(x, trackRow.bottom(), Math.max(24, bounds.width()), theme.rowHeight());
     }
 
     @Override
@@ -168,12 +176,12 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
         if (label != null) {
             String text = TextScroll.trimToWidth(font, label.getString(),
                     Math.max(1, bounds.width() - VALUE_SLOT_WIDTH));
-            graphics.drawString(font, text, bounds.x(), bounds.y(), UiPalette.TEXT_SECONDARY, false);
+            graphics.drawString(font, text, bounds.x(), bounds.y(), theme.palette().textSecondary(), false);
         }
         Component shown = formatValue(core.selectedValue());
         String valueText = TextScroll.trimToWidth(font, shown.getString(), Math.max(1, VALUE_SLOT_WIDTH));
         graphics.drawString(font, valueText, Math.max(bounds.x(), bounds.right() - font.width(valueText)), bounds.y(),
-                enabled ? UiPalette.TEXT_PRIMARY : UiPalette.TEXT_DISABLED, false);
+                enabled ? theme.palette().textPrimary() : theme.palette().textDisabled(), false);
     }
 
     private void drawTrack(GuiGraphics graphics, UiRangeValue value, int mouseX, int mouseY) {
@@ -206,7 +214,7 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
 
     private void drawEndHint(GuiGraphics graphics, int x, Component hint) {
         String text = TextScroll.trimToWidth(font, hint.getString(), Math.max(1, bounds.width() / 2));
-        graphics.drawString(font, text, x, trackRow.bottom() - 9, UiPalette.TEXT_DISABLED, false);
+        graphics.drawString(font, text, x, trackRow.bottom() - 9, theme.palette().textDisabled(), false);
     }
 
     private void drawHint(GuiGraphics graphics, UiRangeValue value) {
@@ -216,17 +224,14 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
         Component hint = value.lowPresent() && value.highPresent() ? texts.preciseHint() : texts.absentHint();
         String text = TextScroll.trimToWidth(font, hint.getString(), Math.max(1, bounds.width()));
         graphics.drawString(font, text, bounds.x(), Math.max(bounds.y(), bounds.bottom() - 9),
-                UiPalette.TEXT_DISABLED, false);
+                theme.palette().textDisabled(), false);
     }
 
     private Component formatValue(double value) {
         if (!Double.isFinite(value)) {
             return Component.literal("-");
         }
-        if (Math.rint(value) == value) {
-            return Component.literal(Long.toString((long) value));
-        }
-        return Component.literal(String.format(Locale.ROOT, "%.2f", value));
+        return Component.literal(UiNumbers.plainExact(value, VALUE_DECIMALS, UiNumbers.MAX_LONG_AS_DOUBLE));
     }
 
     // ---- 输入 ----
@@ -344,10 +349,7 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
         if (!Double.isFinite(value)) {
             return "";
         }
-        if (Math.rint(value) == value) {
-            return Long.toString((long) value);
-        }
-        return String.format(Locale.ROOT, "%.2f", value);
+        return UiNumbers.plainExact(value, VALUE_DECIMALS, UiNumbers.MAX_LONG_AS_DOUBLE);
     }
 
     private void closePrecise() {

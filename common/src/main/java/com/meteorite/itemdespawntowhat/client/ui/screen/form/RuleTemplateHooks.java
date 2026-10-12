@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
-import com.google.gson.JsonObject;
+import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
@@ -19,7 +19,7 @@ public final class RuleTemplateHooks {
         List<Suggestion> list();
 
         // 读取模板规则体
-        @Nullable JsonObject load(ResourceLocation id);
+        @Nullable RuleValue load(ResourceLocation id);
     }
 
     // 已注册来源
@@ -46,9 +46,12 @@ public final class RuleTemplateHooks {
         return current != null ? List.copyOf(current.list()) : RuleTemplates.list();
     }
 
-    // 读取模板规则体
-    public static @Nullable JsonObject load(ResourceLocation id) {
+    // 读取模板规则体：动态值对象出口，供规则列表页消费
+    public static @Nullable RuleValue load(ResourceLocation id) {
         Provider current = provider;
-        return current != null ? current.load(id) : RuleTemplates.load(id);
+        if (current != null) {
+            return current.load(id);
+        }
+        return RuleTemplates.load(id);
     }
 }

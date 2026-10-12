@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.client.ui.screen;
+package com.meteorite.itemdespawntowhat.client.ui.shared;
 
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import java.util.Set;
@@ -14,7 +14,7 @@ public final class FieldCatalogChoices {
     private FieldCatalogChoices() { }
 
     public static Set<String> tags(EditorField field) {
-        var type = RuleEditorP4Panels.catalogTypeOf(field);
+        var type = FieldCatalogTypes.catalogTypeOf(field);
         if (type == null) return Set.of();
         var level = Minecraft.getInstance().level;
         return switch (type) {

@@ -1,6 +1,5 @@
 package com.meteorite.itemdespawntowhat.client.edit;
 
-import com.google.gson.JsonElement;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeCodec;
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
@@ -11,30 +10,30 @@ import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
 /** 条件 JSON 的宿主适配；未修改的树保留已接受原文中的全部字段。 */
-public final class ConditionTreeJsonCodec implements UiTreeCodec<ConditionNode, JsonElement> {
-    private final ConditionDraftCodec codec;
+public final class ConditionTreeJsonCodec implements UiTreeCodec<ConditionNode, RuleValue> {
+    private final TypeRegistry<ConditionType<?>> types;
     private @Nullable ConditionNode acceptedRoot;
-    private @Nullable JsonElement acceptedJson;
+    private @Nullable RuleValue acceptedJson;
     private boolean decoded;
 
     public ConditionTreeJsonCodec(TypeRegistry<ConditionType<?>> types) {
-        codec = new ConditionDraftCodec(types);
+        this.types = types;
     }
 
-    @Override public DecodeResult<ConditionNode> decode(@Nullable JsonElement source) {
-        ConditionExpression expression = codec.decode(source);
+    @Override public DecodeResult<ConditionNode> decode(@Nullable RuleValue source) {
+        ConditionExpression expression = RuleDraft.decodeConditions(source, types);
         decoded = expression != null;
         if (expression == null) return new DecodeResult<>(null,
                 Component.translatable("gui.itemdespawntowhat.edit.tree.source_invalid"));
         acceptedRoot = expression.root();
-        acceptedJson = source == null || source.isJsonNull() ? null : source.deepCopy();
+        acceptedJson = source == null || source.isNull() ? null : source.deepCopy();
         return new DecodeResult<>(acceptedRoot, null);
     }
 
-    @Override public @Nullable JsonElement encode(@Nullable ConditionNode root) {
+    @Override public @Nullable RuleValue encode(@Nullable ConditionNode root) {
         if (decoded && Objects.equals(acceptedRoot, root)) {
             return acceptedJson == null ? null : acceptedJson.deepCopy();
         }
-        return codec.encode(root == null ? ConditionExpression.EMPTY : new ConditionExpression(root));
+        return RuleDraft.encodeConditionsValue(root == null ? ConditionExpression.EMPTY : new ConditionExpression(root), types);
     }
 }

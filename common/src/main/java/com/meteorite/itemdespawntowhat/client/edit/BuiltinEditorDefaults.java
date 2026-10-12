@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import net.minecraft.resources.ResourceLocation;
+import org.jetbrains.annotations.Nullable;
 
 /***
  * 内置类型的新建默认参数（对齐 docs/plan/plan-frontend-rewrite-forms.md §5/§6）。
@@ -20,44 +21,44 @@ public final class BuiltinEditorDefaults {
     // 新建规则的默认体：与空白/模板共用 {@link EditorFactories} 的候选工厂
     // 只写稳定 id、空的源列表、固定源成本 1、当前结构版本与一个初始候选；
     // 其余字段（enabled/priority/triggers/combination 等）依赖后端默认，保持省略。
-    public static JsonObject ruleBody(String ruleId) {
-        return EditorFactories.blankRule(ruleId);
+    public static RuleValue ruleBody(String ruleId) {
+        return RuleValue.wrap(EditorFactories.blankRule(ruleId));
     }
 
     // 复制/另存为：深拷贝规则体并换 id；候选同时分配新身份
-    public static JsonObject copyOf(String newRuleId, JsonObject source) {
-        return EditorFactories.copyRule(newRuleId, source);
+    public static RuleValue copyOf(String newRuleId, @Nullable RuleValue source) {
+        return RuleValue.wrap(EditorFactories.copyRule(newRuleId, source == null ? null : source.unwrap().getAsJsonObject()));
     }
 
     // 新建效果的默认体
-    public static JsonObject effectBody(ResourceLocation type) {
+    public static RuleValue effectBody(ResourceLocation type) {
         JsonObject body = new JsonObject();
         body.addProperty(RuleFields.TYPE, type.toString());
         applyEffectDefaults(body, type.getPath());
         fillDescriptorDefaults(body, EffectEditorRegistry.descriptorFor(type));
-        return body;
+        return RuleValue.wrap(body);
     }
 
-    // 仅用于展示省略字段的有效默认值，不写入草稿。
-    public static com.google.gson.JsonElement effectiveValue(JsonObject object, String field) {
+    // 仅用于展示省略字段的有效默认值（RuleValue 入口：界面层不再持有 JsonElement），不写入草稿。
+    public static @Nullable RuleValue effectiveValue(RuleValue object, String field) {
         if (object != null && object.has(RuleFields.TYPE)) {
-            ResourceLocation type = ResourceLocation.tryParse(object.get(RuleFields.TYPE).getAsString());
+            ResourceLocation type = ResourceLocation.tryParse(object.child(RuleFields.TYPE).asText());
             if (type != null && TypeLabels.OWN_NAMESPACE.equals(type.getNamespace())) {
-                if ("chance".equals(field)) return new com.google.gson.JsonPrimitive(1.0);
-                if ("delay_ticks".equals(field)) return new com.google.gson.JsonPrimitive(0);
-                JsonObject defaults = effectBody(type);
+                if ("chance".equals(field)) return RuleValue.decimal(1.0D);
+                if ("delay_ticks".equals(field)) return RuleValue.integer(0);
+                RuleValue defaults = effectBody(type);
                 if ("spawn_entity".equals(type.getPath())) {
-                    if ("amount".equals(field)) return new com.google.gson.JsonPrimitive(1);
-                    if ("age".equals(field)) return new com.google.gson.JsonPrimitive(0);
-                    if ("per_source_item".equals(field)) return new com.google.gson.JsonPrimitive(false);
+                    if ("amount".equals(field)) return RuleValue.integer(1);
+                    if ("age".equals(field)) return RuleValue.integer(0);
+                    if ("per_source_item".equals(field)) return RuleValue.flag(false);
                 }
-                return defaults.get(field);
+                return defaults.child(field);
             }
         }
         return switch (field) {
-            case "enabled" -> new com.google.gson.JsonPrimitive(true);
-            case "priority" -> new com.google.gson.JsonPrimitive(0);
-            case "trigger_after_seconds" -> new com.google.gson.JsonPrimitive(com.meteorite.itemdespawntowhat.core.model.RuleCodecs.DEFAULT_TRIGGER_AFTER_SECONDS);
+            case "enabled" -> RuleValue.flag(true);
+            case "priority" -> RuleValue.integer(0);
+            case "trigger_after_seconds" -> RuleValue.integer(com.meteorite.itemdespawntowhat.core.model.RuleCodecs.DEFAULT_TRIGGER_AFTER_SECONDS);
             default -> null;
         };
     }

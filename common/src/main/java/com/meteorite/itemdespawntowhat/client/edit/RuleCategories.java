@@ -4,13 +4,19 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import java.util.LinkedHashSet;
+import org.jetbrains.annotations.Nullable;
 import java.util.Set;
 
 /*** 虚拟分类只依据全部方案中的产出动作，既不改文件路径，也不重复列出规则。 */
 public final class RuleCategories {
     private RuleCategories() { }
 
-    public static String category(JsonObject rule) {
+    public static String category(@Nullable RuleValue rule) {
+        return categoryJson(rule == null || !rule.isMapping() ? null : rule.unwrap().getAsJsonObject());
+    }
+
+    // 分类判定：输入为规则 JSON 对象
+    private static String categoryJson(@Nullable JsonObject rule) {
         Set<String> outputs = new LinkedHashSet<>();
         if (rule != null) {
             scan(rule.get("effects"), outputs);

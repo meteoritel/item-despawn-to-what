@@ -1,12 +1,12 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDefaults;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorChangeSet;
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
+import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.draft.DraftConflict;
 import com.meteorite.itemdespawntowhat.client.edit.draft.DraftJournal;
 import com.meteorite.itemdespawntowhat.client.edit.draft.DraftStore;
@@ -17,6 +17,7 @@ import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshotEntry;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -50,7 +51,7 @@ public final class RuleEditorModel {
     // 从磁盘读回、等待绑定到服务端快照的草稿（按目标 id）
     private final LinkedHashMap<String, PersistedDraft> restored = new LinkedHashMap<>();
     // 草稿建立时的服务端整条规则基线（null 表示当时服务端没有该规则）
-    private final LinkedHashMap<String, JsonObject> baselines = new LinkedHashMap<>();
+    private final LinkedHashMap<String, RuleValue> baselines = new LinkedHashMap<>();
     // 与服务端不一致、等待玩家选择的规则（按目标 id）
     private final LinkedHashMap<String, DraftConflict> conflicts = new LinkedHashMap<>();
     // 本次恢复到的草稿数量（界面提示一次后清空）
@@ -93,7 +94,7 @@ public final class RuleEditorModel {
                 continue;
             }
             RuleSnapshotEntry entry = this.entries.get(current.getKey());
-            JsonObject body = ruleBody(entry);
+            RuleValue body = ruleBody(entry);
             if (body == null) {
                 iterator.remove();
                 continue;
@@ -155,48 +156,51 @@ public final class RuleEditorModel {
             return existing;
         }
         RuleSnapshotEntry entry = this.entries.get(id);
-        JsonObject body = ruleBody(entry);
+        RuleValue body = ruleBody(entry);
         if (body == null) {
             return null;
         }
         EditSession session = new EditSession(id, RuleDraft.of(body));
         this.sessions.put(id, session);
-        this.captureBaseline(id, entry.effective());
+        // 基线取服务端「生效视图」的深拷贝快照；没有生效视图时记为不存在
+        this.captureBaseline(id, entry.effective() == null ? null : RuleDraft.of(entry.effective()).root());
         this.bindSession(id, session);
         return session;
     }
 
     // 显示和筛选优先读取草稿，不为浏览列表额外创建会话。
-    public @Nullable JsonObject displayBody(String id) {
+    public @Nullable RuleValue displayBody(String id) {
         EditSession session = sessions.get(id);
-        return session == null ? ruleBody(entries.get(id)) : session.draft().view();
+        return session == null ? ruleBody(entries.get(id)) : session.draft().root();
     }
 
     // 被屏蔽、停用或失效的条目仍可保留规则体；纯控制条目回落到基底。
-    private static @Nullable JsonObject ruleBody(@Nullable RuleSnapshotEntry entry) {
+    private static @Nullable RuleValue ruleBody(@Nullable RuleSnapshotEntry entry) {
         if (entry == null) {
             return null;
         }
-        JsonObject effective = entry.effective();
-        if (hasRuleBody(effective)) {
-            return effective;
+        // 核心层视图仍是 JSON 对象：按「生效 / 覆盖 / 基底」顺序转成值视图并跳过控制条目
+        for (var raw : Arrays.asList(entry.effective(), entry.overlay(), entry.base())) {
+            if (raw == null) {
+                continue;
+            }
+            RuleValue candidate = RuleDraft.of(raw).root();
+            if (hasRuleBody(candidate)) {
+                return candidate;
+            }
         }
-        JsonObject overlay = entry.overlay();
-        if (hasRuleBody(overlay)) {
-            return overlay;
-        }
-        return hasRuleBody(entry.base()) ? entry.base() : null;
+        return null;
     }
 
     // delete/enabled 控制条目不是完整规则体，不能当作空规则交给表单。
-    private static boolean hasRuleBody(@Nullable JsonObject body) {
+    private static boolean hasRuleBody(@Nullable RuleValue body) {
         return body != null && (body.has(RuleFields.SOURCE)
                 || body.has(RuleFields.EFFECTS)
                 || body.has(RuleFields.OUTCOMES));
     }
 
     // 新建一条规则草稿
-    public EditSession createSession(String id, JsonObject body) {
+    public EditSession createSession(String id, RuleValue body) {
         // 初始态用「带 id 的默认骨架」，再把模板/复制内容作为一次可撤销的「新建规则」写入：
         // 撤销新建后仍是带 id 的合法骨架，而不是空对象
         RuleDraft draft = RuleDraft.of(BuiltinEditorDefaults.ruleBody(id));
@@ -292,11 +296,11 @@ public final class RuleEditorModel {
                 this.journal.drop(id);
                 continue;
             }
-            session.load(RuleDraft.of(session.draft().toJson()));
+            session.load(RuleDraft.of(session.draft().root()));
             session.clearHistory();
             this.createdIds.remove(id);
             // 服务端已接受的内容成为新的草稿基线，并删掉落盘草稿
-            this.captureBaseline(id, session.draft().toJson());
+            this.captureBaseline(id, session.draft().root());
             this.conflicts.remove(id);
             this.journal.drop(id);
         }
@@ -318,19 +322,22 @@ public final class RuleEditorModel {
                 continue;
             }
             RuleSnapshotEntry entry = this.entries.get(id);
-            JsonObject serverBody = entry == null || entry.effective() == null
-                    ? null : entry.effective().deepCopy();
+            // 服务端当前内容的值快照；没有生效视图即视为目标不存在
+            RuleValue serverBody = entry == null || entry.effective() == null
+                    ? null : RuleDraft.of(entry.effective()).root();
+            // 落盘草稿的基线快照；缺失（旧版草稿）表示基线未知
+            RuleValue baseline = stored.baselineValue();
             // 整条规则比较（不做逐字段合并）：目标消失、同名新规则、内容被改都会提示
             if (stored.created() && serverBody != null) {
                 this.conflicts.put(id, new DraftConflict(id, DraftConflict.Reason.TARGET_EXISTS));
             } else if (!stored.created() && serverBody == null) {
                 this.conflicts.put(id, new DraftConflict(id, DraftConflict.Reason.TARGET_MISSING));
-            } else if (serverBody != null && (stored.baseline() == null || !stored.baseline().equals(serverBody))) {
+            } else if (serverBody != null && (baseline == null || !baseline.equals(serverBody))) {
                 // 基线缺失（旧版草稿）或内容确实变了：保守判为远端已变，交给玩家选
                 this.conflicts.put(id, new DraftConflict(id, DraftConflict.Reason.REMOTE_CHANGED));
             }
-            RuleDraft draft = serverBody == null ? RuleDraft.of(new JsonObject()) : RuleDraft.of(serverBody);
-            draft.replaceWith(stored.draft());
+            RuleDraft draft = RuleDraft.of(serverBody);
+            draft.replaceWith(stored.draftValue());
             draft.setDeleted(stored.deleted());
             EditSession session = new EditSession(id, draft);
             if (stored.created()) {
@@ -379,13 +386,14 @@ public final class RuleEditorModel {
 
     // 当前草稿快照（含基线，供落盘与冲突比较）
     private PersistedDraft snapshotOf(String id, EditSession session) {
-        JsonObject baseline = this.baselines.get(id);
+        RuleValue baseline = this.baselines.get(id);
         return new PersistedDraft(
                 id,
                 this.createdIds.contains(id),
                 this.restoreIds.contains(id),
                 session.draft().isDeleted(),
-                baseline == null ? null : baseline.deepCopy(),
+                // 落盘载体仍以 JSON 对象表达：值快照经草稿入口转回 JSON
+                baseline == null ? null : RuleDraft.of(baseline).toJson(),
                 session.draft().toJson(),
                 this.snapshotVersion,
                 this.workspace.contextRevision(),
@@ -393,7 +401,7 @@ public final class RuleEditorModel {
     }
 
     // 记录草稿建立时的服务端整条规则内容
-    private void captureBaseline(String id, @Nullable JsonObject serverBody) {
+    private void captureBaseline(String id, @Nullable RuleValue serverBody) {
         this.baselines.put(id, serverBody == null ? null : serverBody.deepCopy());
     }
 
@@ -449,7 +457,8 @@ public final class RuleEditorModel {
         }
         EditSession session = this.sessions.get(id);
         RuleSnapshotEntry entry = this.entries.get(id);
-        JsonObject serverBody = entry == null || entry.effective() == null ? null : entry.effective();
+        RuleValue serverBody = entry == null || entry.effective() == null
+                ? null : RuleDraft.of(entry.effective()).root();
         if (keepDraft) {
             this.captureBaseline(id, serverBody);
             // 目标已不存在时草稿转为「新建规则」；目标已存在则不再是新建
@@ -474,7 +483,7 @@ public final class RuleEditorModel {
             this.restoreIds.remove(id);
             return;
         }
-        session.load(RuleDraft.of(serverBody.deepCopy()));
+        session.load(RuleDraft.of(serverBody));
         session.clearHistory();
         this.createdIds.remove(id);
         this.captureBaseline(id, serverBody);

@@ -1,8 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
+import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import java.util.ArrayList;
 import java.util.List;
@@ -39,33 +37,32 @@ public final class RuleTriggers {
     }
 
     // 是否显式声明了 triggers 数组
-    public static boolean isExplicit(@Nullable JsonObject rule) {
+    public static boolean isExplicit(@Nullable RuleValue rule) {
         if (rule == null) {
             return false;
         }
-        JsonElement element = rule.get(RuleFields.TRIGGERS);
-        return element != null && element.isJsonArray();
+        RuleValue element = rule.child(RuleFields.TRIGGERS);
+        return element != null && element.isList();
     }
 
     // 是否显式写成空数组（本地校验拦截）
-    public static boolean isExplicitlyEmpty(@Nullable JsonObject rule) {
-        return isExplicit(rule) && rule.getAsJsonArray(RuleFields.TRIGGERS).isEmpty();
+    public static boolean isExplicitlyEmpty(@Nullable RuleValue rule) {
+        return isExplicit(rule) && rule.child(RuleFields.TRIGGERS).isEmpty();
     }
 
     /**
      * 有效展示集合：省略或空数组 → 仅自然触发；显式数组 → 去重后已知取值按固定顺序在前、未知取值按原顺序在后。
      */
-    public static List<String> effective(@Nullable JsonObject rule) {
+    public static List<String> effective(@Nullable RuleValue rule) {
         if (!isExplicit(rule)) {
             return List.of(NATURAL);
         }
-        JsonArray array = rule.getAsJsonArray(RuleFields.TRIGGERS);
         List<String> declared = new ArrayList<>();
-        for (JsonElement element : array) {
-            if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString()) {
+        for (RuleValue element : rule.child(RuleFields.TRIGGERS).items()) {
+            if (element == null || !element.isText()) {
                 continue;
             }
-            String value = element.getAsString();
+            String value = element.asText();
             if (!declared.contains(value)) {
                 declared.add(value);
             }
@@ -88,12 +85,12 @@ public final class RuleTriggers {
     }
 
     // 是否允许 trigger_after_seconds：仅自然触发需要延时
-    public static boolean allowsDelay(@Nullable JsonObject rule) {
+    public static boolean allowsDelay(@Nullable RuleValue rule) {
         return effective(rule).contains(NATURAL);
     }
 
     // 生成显式数组：已知取值按固定顺序，未知取值按原顺序追加在后
-    public static JsonArray toArray(List<String> values) {
+    public static RuleValue toArray(List<String> values) {
         List<String> ordered = new ArrayList<>();
         for (String value : KNOWN) {
             if (values.contains(value)) {
@@ -105,10 +102,10 @@ public final class RuleTriggers {
                 ordered.add(value);
             }
         }
-        JsonArray array = new JsonArray();
+        RuleValue.Sequence array = RuleValue.list();
         for (String value : ordered) {
-            array.add(value);
+            array.add(RuleValue.text(value));
         }
-        return array;
+        return array.build();
     }
 }

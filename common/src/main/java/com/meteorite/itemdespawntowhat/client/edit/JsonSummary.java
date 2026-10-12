@@ -13,6 +13,28 @@ public final class JsonSummary {
     private JsonSummary() {
     }
 
+    // 压缩成一行（RuleValue 入口：界面层不再持有 JsonElement）
+    public static String compact(RuleValue value) {
+        return value == null || value.isNull() ? "null" : value.toJson();
+    }
+
+    // 截断到 maxLength 个字符
+    public static String compact(RuleValue value, int maxLength) {
+        String full = compact(value);
+        return full.length() <= maxLength ? full : full.substring(0, Math.max(0, maxLength)) + "\u2026";
+    }
+
+    // 生成摘要文本；被截断时追加本地化的省略提示
+    public static Component describe(RuleValue value, int maxLength) {
+        String full = compact(value);
+        if (full.length() <= maxLength) {
+            return Component.literal(full);
+        }
+        int omitted = full.length() - Math.max(0, maxLength);
+        return Component.literal(compact(value, maxLength) + " ")
+                .append(Component.translatable("gui.itemdespawntowhat.edit.json.truncated", omitted));
+    }
+
     // 压缩成一行（Gson 的 toString 即紧凑形式）
     public static String compact(JsonElement element) {
         return element == null || element.isJsonNull() ? "null" : element.toString();

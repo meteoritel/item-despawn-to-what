@@ -1,6 +1,6 @@
 # UI kit：通用不可变树编辑
 
-> 事实来源：`client/ui/kit/` 的 `UiTreePath`、`UiTreeEditor`、`UiTreeMoveInteraction`、`UiTreeCodec`；宿主 `ConditionTreeNodes`、`UiConditionTreeEditor`、`ConditionTreeOverlay`、`ConditionTreeJsonCodec`。
+> 事实来源：`client/ui/kit/` 的 `UiTreePath`、`UiTreeEditor`、`UiTreeMoveInteraction`、`UiTreeCodec`；宿主 `ConditionTreeNodes`、`UiConditionTreeSummary`、`ConditionTreeOverlay`、`ConditionTreeJsonCodec`，以及摘要与画布共用的注入面 `ConditionTreeContract`。
 > 上承 [UI kit 入口](README.md)；输入捕获与结束原因见 [input-routing.md](input-routing.md) §3。
 
 ## 1. UiTreePath 与 UiTreeEditor
@@ -23,7 +23,7 @@
 
 `Outcome(changed, error)` 区分已接受、无变化和错误。配置操作仅在实际改变时产生一次 `Change(before, after, Kind, paths, removed)`；Kind 为 CREATE、DELETE、UPDATE、MOVE。三参数与四参数构造保留，默认路径映射和移除集合为空。宿主在接受回调内写历史，回填根不调用修改入口。节点与子项列表由宿主适配器保持不可变，不得修改既有节点。
 
-实际接入：`ConditionTreeNodes` 适配现有 ConditionNode；`UiConditionTreeEditor` 的创建、删除、更新、查询、选择和折叠均调用 Kit。空 NOT 由宿主重建为 `Inverted(null)`；NOT 的容量为1，叶容量为0。逐表达式限额校验与本地化提示由宿主注入。`ConditionTreeOverlay` 将配置操作与输入路径迁移放入同一 EditSession 事务；JSON、参数表单、服务端保存均留在宿主。
+实际接入：`ConditionTreeNodes` 适配现有 ConditionNode；结构编辑只在画布 `UiConditionGraphEditor`，其创建、删除、更新、查询、选择和折叠均调用 Kit，只读摘要 `UiConditionTreeSummary` 只展示树干与叶条件名并接收选择。两者共用 `ConditionTreeContract` 的注入面（`ROOT_PATH`、`TypeOption`、`LeafFactory`、`Listener` 与 `Navigation` 导航契约）。空 NOT 由宿主重建为 `Inverted(null)`；NOT 的容量为1，叶容量为0。逐表达式限额校验与本地化提示由宿主注入。`ConditionTreeOverlay` 将配置操作与输入路径迁移放入同一 EditSession 事务；JSON、参数表单、服务端保存均留在宿主。
 
 ## 2. 单节点移动与捕获
 
@@ -33,7 +33,7 @@
 
 `UiTreeMoveInteraction<N>(editor, ended)` 提供真实输入生命周期：`begin(source)` 在 `beforeEdit` 后捕获基准，`preview(target, position)` 缓存当前落点候选，`clearPreview()` 清空落点，`isActive()`/`preview()` 查询状态，`end(reason)` 统一结束。仅 `UiInputCapture.EndReason.RELEASE` 提交最近展示的候选，其余原因取消；结束回调收到一次 Outcome。宿主须把按下/拖动/释放路由给捕获的同一个控件，并在失焦、隐藏、禁用、卸载和历史回填时结束交互。
 
-条件树控件接入四像素拖动阈值，行上四分之一为 BEFORE，中间为 INSIDE，下四分之一为 AFTER；空分组/NOT 的添加占位映射到父节点内部。原树在拖动中保留，显示节点浮影、落点线及具体拒绝原因；滚轮可滚动选择屏外落点。释放使用同一落点投影并提交候选，Esc 仅取消手势，规则历史快捷键先取消再交给宿主。`UiConditionTreeEditor.isDragging()` 和 `endInteractions(reason)` 供页面暂停参数重建并取消捕获；JSON 视图切换、历史回填和卸载均取消手势。移动 NOT 唯一子项时保留空 NOT，未知叶节点与其原文按原节点移动。
+条件树控件接入四像素拖动阈值，行上四分之一为 BEFORE，中间为 INSIDE，下四分之一为 AFTER；空分组/NOT 的添加占位映射到父节点内部。原树在拖动中保留，显示节点浮影、落点线及具体拒绝原因；滚轮可滚动选择屏外落点。释放使用同一落点投影并提交候选，Esc 仅取消手势，规则历史快捷键先取消再交给宿主。`UiConditionGraphEditor.isDragging()` 和 `endInteractions(reason)` 供页面暂停参数重建并取消捕获；JSON 视图切换、历史回填和卸载均取消手势。移动 NOT 唯一子项时保留空 NOT，未知叶节点与其原文按原节点移动。
 
 ## 3. 树编解码注入与只读源码
 
@@ -60,3 +60,7 @@
 条件页面实际接入 Ctrl 点击切换、Shift 点击可见行范围、Ctrl+A 选择可见真实节点；点击已选节点先保留多选以允许拖动，未拖动释放后转为单选。Ctrl+C/V 与工具栏复制/粘贴使用宿主系统剪贴板；剪贴板交换格式为单个节点 JSON 或节点 JSON 数组，正式配置格式保持不变。剪贴板读取检查节点/叶/深度限额及草稿结构；候选整树仍由宿主 validator 验证。粘贴在选中分组末尾、选中叶之后或空占位对应父内插入，拒绝已有子项的 NOT，不自动替换或合并。源码只读页只分发文本键盘事件，不调用树粘贴。
 
 工具栏的包 AND／OR 对应 wrapMany；不同父或不连续选择给出具体错误。参数表单只绑定主节点，批量结构操作不覆盖多个条件参数。未知叶复制直接从共享草稿读取完整原文，移动与包装复用原条件节点；剪贴板和配置 JSON、系统剪贴板、条件限额均不进入 Kit。
+
+## 5. 已知限制
+
+- 缩进摘要只读，点击节点只回调 `UiConditionTreeSummary.setOnOpenCanvas` 通知宿主打开画布，**不携带节点路径**；是否定位由宿主决定。当前宿主在摘要点击时传 `null`，画布停在默认视图，只有表单问题定位链路才带字段路径并选中对应节点（宿主侧现状与链路见 [编辑器四页契约](../editor-pages-contract.md) §8）。

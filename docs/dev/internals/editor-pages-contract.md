@@ -1,43 +1,43 @@
 # 编辑器四页职责与输入↔触发联动契约
 
-> 事实来源：`client/ui/screen/RuleEditorEditPages.java`、`client/ui/screen/RuleEditorScreen.java`、`client/ui/screen/RuleEditorP4Panels.java` 与 core 侧 `CatalystPresentCondition` / `CatalystThresholdProjection`。面向改编辑器的人：说明四页各管什么、输入页与触发页如何按**确切叶路径**关联、以及撤销粒度。
-> 定位约定：本文按「类名 + 成员名」引用源码（如 `RuleEditorEditPages#buildInput`），不写行号——行号会随重构漂移，成员名才是稳定锚点。
+> 事实来源：`client/ui/screen/` 的 `RuleEditorEditPages.java`、`RuleEditorScreen.java`、`RuleEditorScreenEditPage.java`、`RuleEditorScreenListPage.java`、`RuleEditorScreenListActions.java`、`RuleEditorScreenButtonBar.java`、`RuleEditorPageInput.java`、`RuleEditorValidation.java`、`RuleEditorP4Panels.java`，以及 core 侧 `CatalystPresentCondition` / `CatalystThresholdProjection`。面向改编辑器的人：说明四页各管什么、输入页与触发页如何按**确切叶路径**关联、以及撤销粒度。
+> 定位约定：本文按「类名 + 成员名」引用源码（如 `RuleEditorInputPage#buildInput`），不写行号——行号会随重构漂移，成员名才是稳定锚点。
 
 ## 1. 四页职责
 
 | 页 | 构建入口 | 负责 | 不负责 |
 |---|---|---|---|
-| 基本页 INFO | `RuleEditorEditPages#buildInfo` | 规则身份与元信息：只读规则 ID、显示名、备注、启用开关、「恢复自动命名」按钮、优先级 | 条件、消耗、结果 |
-| 输入页 INPUT | `RuleEditorEditPages#buildInput` | 来源与来源消耗、催化剂固定成本开关与表单、**存在条件（催化剂/流体）的唯一入口**、消耗参数主入口 | 组合结构、结果 |
-| 触发页 TRIGGER | `RuleEditorEditPages#buildTrigger` | 触发原因勾选、延迟秒数、条件树卡片与画布页 `ConditionTreeOverlay`：结构增删/取反/组合及叶参数就地编辑框 | 输入页的来源与固定消耗 |
-| 结果页 RESULTS | `RuleEditorEditPages#buildResults` | 组合方式、方案（outcomes）与动作、效果参数 | 条件树、固定成本 |
+| 基本页 INFO | `RuleEditorInfoPage#buildInfo` | 规则身份与元信息：只读规则 ID、显示名、备注、启用开关、「恢复自动命名」按钮、优先级 | 条件、消耗、结果 |
+| 输入页 INPUT | `RuleEditorInputPage#buildInput` | 来源与来源消耗、催化剂固定成本开关与表单、**存在条件（催化剂/流体）的唯一入口**、消耗参数主入口 | 组合结构、结果 |
+| 触发页 TRIGGER | `RuleEditorTriggerPage#buildTrigger` | 触发原因勾选、延迟秒数、条件树卡片与画布页 `ConditionTreeOverlay`：结构增删/取反/组合及叶参数就地编辑框 | 输入页的来源与固定消耗 |
+| 结果页 RESULTS | `RuleEditorResultsPage#buildResults` | 组合方式、方案（outcomes）与动作、效果参数 | 条件树、固定成本 |
 
-- 页枚举 `Page`、`switch (page)` 派发、版面与渲染入口、以及各页自己保存的滚动偏移表（`scrollOffsets`）都在 `RuleEditorEditPages` 内。
-- 结果页分两层：**多方案**才有方案层（`singlePlan = candidates == 1`，`RuleEditorEditPages`）；宽屏左列直接是动作列表（`!singlePlan` 时跳过方案列表布局）；窄屏单方案阶段夹取到 `[1,2]`，多方案仍为 `[0,2]`（stage0 方案层 / stage1 返回方案）；单方案不生成「打开方案」按钮，`candidateList` 创建但不注册进 `liveWidgets`；方案按钮可见性由 `plans || (singlePlan && actions)` 控制；`combinationControl` 仅 `candidates>1` 创建。
+- 页枚举 `Page` 与 `switch (page)` 派发仍在 `RuleEditorEditPages`；页内的按下 / 释放 / 拖动 / 滚动与键盘派发由 `RuleEditorPageInput` 承担，`RuleEditorEditPages` 的 `mouseClicked` / `mouseReleased` 只做委托。
+- 结果页分两层：**多方案**才有方案层（`singlePlan = candidates == 1`，`RuleEditorResultsPage`）；宽屏左列直接是动作列表（`!singlePlan` 时跳过方案列表布局）；窄屏单方案阶段夹取到 `[1,2]`，多方案仍为 `[0,2]`（stage0 方案层 / stage1 返回方案）；单方案不生成「打开方案」按钮，`candidateList` 创建但不注册进 `liveWidgets`；方案按钮可见性由 `plans || (singlePlan && actions)` 控制；`combinationControl` 仅 `candidates>1` 创建。
 - 结果页**不重复**消耗参数：过滤链配合 `isInputOwnedConsumptionField`（`consume_source`→`count`/`counts`；`consume_catalyst`→`items`/`count`/`counts`/`radius`；`consume_fluid`→`fluid`，**不过滤** `require_source`——输入页不管理它），并在首个消耗动作参数前插说明行 `effect.consume_params_on_input`；`chance` / `delay_ticks` / `conditions` 仍在结果页编辑。
 - 术语：一个 outcome 一律称「**方案**」（`button.candidate_*` / `notice.candidate_*` / `undo.*_candidate` / `issue.candidate_*` / `rule.combination` / `effect.consume_params_on_input` 等文案统一使用该词），只有页签名仍是「结果」（`tab.results`）。
-- 初始页：新建**空白**规则落在输入页（`RuleEditorScreen#createRule` 在 `templateId == null` 时切换页签到 `input`）；从模板新建或打开已有规则落在基本页（`RuleEditorScreen#openEditor` 置 `tab = INFO`，字段 `tab` 的默认值见该类字段声明）。
-- 切页前先提交合法字段，非法文本保留在当前会话输入缓冲：`RuleEditorScreen#switchTab` 走 `pages.blockNavigation()` 门禁后 `pages.setPage(target)`；提交路径见第 5、7 节。
+- 初始页：新建**空白**规则落在输入页（`RuleEditorScreenListActions#createRule` 在 `templateId == null` 时切换页签到 `input`）；从模板新建或打开已有规则落在基本页（`RuleEditorScreen#openEditor` 置 `tab = INFO`，字段 `tab` 的默认值见该类字段声明）。
+- 切页前先提交合法字段，非法文本保留在当前会话输入缓冲：`RuleEditorScreenEditPage#switchTab` 走 `pages.blockNavigation()` 门禁后 `pages.setPage(target)`；提交路径见第 5、7 节。
 
 ### 条件树草稿与正式配置
 
 - `RuleDraft` 的条件树读写通过客户端 `ConditionDraftCodec`：空 `all_of` / `any_of` 保留空 `terms`，缺项 `inverted` 保留 `op` 并省略 `term`；重新打开表单仍可继续编辑。叶参数仍交给既有正式类型 Codec，旧形状与未识别数据不被静默迁移。
-- `UiConditionTreeEditor` 在空树和空组合内部显示“＋ 添加条件”；删除 NOT 唯一子项后保留 NOT，并可从内部入口补齐。添加占位不是条件节点，不计入节点数、叶数和深度限额。
+- 画布 `UiConditionGraphEditor` 在空树和空组合内部显示“＋ 添加条件”；删除 NOT 唯一子项后保留 NOT，并可从内部入口补齐。添加占位不是条件节点，不计入节点数、叶数和深度限额。
 - 无根表达式继续省略 `conditions`，表示无条件限制；空组合和缺项 NOT 是未完成草稿，表单及规则保存前的结构校验均拦截。服务端的正式 `RuleCodecs` 和运行时求值保持既有严格契约。
 - 条件叶行复用 `NaturalSummary.conditionLeaf` 展示类型和已接受参数；摘要仅用于显示，不写入配置。截断行可悬停查看全文，叶参数确认并重载表单后同步更新。
-- `UiConditionTreeEditor` 的完整树扫描独立于可见行投影，节点数、叶数、深度和结构问题不受折叠影响。树实例或摘要格式器变化才重新扫描，布局和折叠复用结果；错误子树的祖先行使用错误颜色。
-- `FormView.revealPath` 将树内的节点或参数字段路径交给条件控件；定位展开祖先、选中并滚动到节点。已知条件的参数字段问题通过 `ConditionSupport.revealLeaf` 打开叶参数弹窗并聚焦字段；未知叶保留局部只读。表单问题保留具体树路径及带实际限额的提示，正式保存拦截不依赖展开状态。
+- 条件树的完整树扫描由 `ConditionTreeInspection` 承担，独立于可见行投影，节点数、叶数、深度和结构问题不受折叠影响。树实例或摘要格式器变化才重新扫描，布局和折叠复用结果；错误子树的祖先行使用错误颜色。
+- `FormView.revealPath` 将树内的节点或参数字段路径交给条件控件；定位展开祖先、选中并滚动到节点。问题定位链路按现状为 `FormView.revealPath` → `FormControl.revealPath(path, basePath)` → `ConditionSupport.openTree(tree, fieldPath)` → `RuleEditorTriggerPage.openConditionTree(owner, fieldPath)` → `ConditionTreeOverlay.reveal(fieldPath)`，只有这条链路带路径。已知条件的参数字段问题通过 `ConditionSupport.revealLeaf` 打开叶参数弹窗并聚焦字段；未知叶保留局部只读。表单问题保留具体树路径及带实际限额的提示，正式保存拦截不依赖展开状态。
 
 ## 2. 存在条件：唯一入口在输入页
 
 - 两个开关：催化剂 / 流体，标签 `rule.presence.add_catalyst`（「启用催化剂」）/ `rule.presence.add_fluid`（「启用流体条件」）。催化剂卡片按「启用 → 物品选择与最低触发数量 → 消耗开关 → 每轮消耗数量」排列；物品与流体选择复用目录及卡片控件，卡片内可逐项移除引用。
-- 勾选 = 在**规则级条件**里新增一个存在条件叶（`RuleEditorEditPages#addRuleLevelPresence`）：条件为空树时直接写入叶；根已是 `all_of` 时把叶追加进 `terms`；否则把**完整旧根**与新叶一起放进新的 `all_of(旧根, 叶)`——保留旧根整体语义，不把叶插进当前选中的节点。
+- 勾选 = 在**规则级条件**里新增一个存在条件叶（`RuleEditorInputPage#addRuleLevelPresence`）：条件为空树时直接写入叶；根已是 `all_of` 时把叶追加进 `terms`；否则把**完整旧根**与新叶一起放进新的 `all_of(旧根, 叶)`——保留旧根整体语义，不把叶插进当前选中的节点。
 - 输入页启用催化剂创建 `{op: leaf, condition: {type: …, items: [], count: 1}}`，每个引用的门槛从 1 开始，由 `counts` 对象分别编辑。触发页新建催化剂叶仍省略 `count`，保留运行期默认门槛语义；打开已有省略门槛的叶只显示有效值，不自动写回。
 - 存在条件类型字段的 basePath 就是该叶的 condition 路径：`newForm(session, leaf.conditionPath(), presenceDescriptor(leaf))`；字段路径 `fieldPath() = conditionPath + ".items"`（催化剂）或 `+ ".fluids"`（流体列表，任一种命中即可）。存在叶的物品选择同步关联的消耗配置，后者仍保留运行所需的 `items`。
-- 未勾选时不渲染类型字段（`RuleEditorEditPages#buildPresenceSection` 的行为）。
+- 未勾选时不渲染类型字段（`RuleEditorInputPage#buildPresenceSection` 的行为）。
 - 单个催化剂或流体叶不重复显示编号、作用域与整叶移除按钮；多个同类型叶保留标题和整叶移除入口。卡片上的移除只删除该引用；整叶移除只删除对应的条件叶。流体引用留空时显示「任意非空流体」，沿用后端的任意流体语义。
 - 流体目录、选中卡片及标签成员共用 `FluidPreviewIcons`：从流体对应方块的模型图集取得静态材质和方块染色，绘制有明暗面的立体方块图标；流水等非源流体名称带「流动」标识。目录与文本候选过滤注册表中的空流体，流体标签预览也过滤空成员。材质每帧从当前图集读取，不保留资源重载前的 sprite。
-- 取消勾选 = 删除规则级里该类型的全部存在叶（`RuleEditorEditPages#removeRuleLevelPresence`，逐个删并整理空父组；删除未生效即停手，防死循环）。
+- 取消勾选 = 删除规则级里该类型的全部存在叶（`RuleEditorInputPage#removeRuleLevelPresence`，逐个删并整理空父组；删除未生效即停手，防死循环）。
 - 关闭「启用催化剂」会一并删除规则级 `catalyst_cost` 及规则中的 `consume_catalyst` 效果，关闭「消耗催化剂」只删除消耗配置并保留存在条件。流体存在开关仍不影响独立移除动作。每次开关操作与其关联删除共用一条撤销记录。
 - 消耗参数主入口也在输入页：来源消耗（`sourceForm` / `sourceCostForm`）、催化剂消耗开关与表单（`catalystToggle` / `catalystForm`）。选定催化剂物品后才能首次开启消耗；开启时每轮数量初始化为当前门槛，随后可独立调整。关闭消耗前会固定省略门槛的当前有效值，避免删除消耗配置后门槛变化。
 - 催化剂消耗区只显示每轮数量，不重复选择物品、不显示搜索半径。新建固定成本省略半径，由后端默认值 1 处理；已有显式半径原样保留。没有规则级存在叶的已有独立消耗规则仍显示其物品选择入口。
@@ -45,7 +45,7 @@
 
 ## 3. 同一份叶扫描：路径、编号与作用域
 
-`RuleEditorEditPages#scanPresenceLeaves` 用同一条递归（`collectPresence`，路径语法与草稿一致：`terms[i]` / `term` / `condition`）扫描三条线，返回全量存在条件叶并**按固定顺序编号**：
+`RuleEditorInputPage#scanPresenceLeaves` 用同一条递归（`collectPresence`，路径语法与草稿一致：`terms[i]` / `term` / `condition`）扫描三条线，返回全量存在条件叶并**按固定顺序编号**：
 
 | 顺序 | 扫描位置 | 作用域文案 |
 |---|---|---|
@@ -61,7 +61,7 @@
 **契约**：输入页与触发页之间不存在类型副本，也不按「类型相同」匹配；两侧都按**确切叶路径**指向同一份草稿 JSON。
 
 1. 输入页只呈现**规则级**叶（`ruleLevelPresence` 过滤 `leaf.ruleLevel()`）；动作局部叶不在此列出，只在触发页条件树里编辑。
-2. 触发页**不新增类型副本**：`buildTrigger` 只建触发原因勾选框、延迟表单与条件树；叶结构未变，既有 `UiConditionTreeEditor` 直接呈现，叶的增删/取反/组合操作不变。
+2. 触发页**不新增类型副本**：`buildTrigger` 只建触发原因勾选框、延迟表单与条件树；叶结构未变，新增与结构编辑经画布 `UiConditionGraphEditor`，卡片内的 `UiConditionTreeSummary` 只呈现树干与叶条件名，叶的增删/取反/组合操作不变。
 3. 叶参数编辑入口：`pageConditionSupport(owner)` → `openLeafEditor(owner, leaf)`。弹窗以**发起编辑的那个表单**为 owner：`editConditionLeaf` 在 `liveForms` 里用 `findTree(form, leaf)` 找到承载该叶的表单，路径取该树的 `selectedPath()`。同名同类型的多个叶各绑各的路径，**不会误绑**。
 4. 弹窗标题带类型编号与作用域；催化剂叶显示所有引用均需达标的说明，流体叶显示任一种即可匹配的说明。
 5. 确认时只写回该叶自己的路径：`form.applyToDraft()` 后 `owner.reload()` 刷新发起编辑的表单，再由 `host.onDraftChanged()` 通知宿主。逐项编辑**不改变组合结构**，也**不会把动作局部条件提升到规则级**。
@@ -90,16 +90,18 @@
 - 因此「勾选/取消存在条件」「逐项移除一个叶」「类型改写 + 重指向」各自是**一条**撤销记录。
 - 输入缓冲独立于已接受的规则 JSON，切页、重载和返回保留未完成文本；非法或缺失必需输入阻止保存，具体生命周期与结构操作路径同步见 [编辑输入状态](editor-input-state.md)。
 - 撤销粒度是**字段级**：`FormView.applyToDraft()` 逐字段比较，每个真实变化的字段单独 `session.apply`。所以叶弹窗里改了多个字段 → 需要多次撤销；**弹窗确认本身不是一条记录**。
-- 空父组自下而上整理（`removeLeafAt`、`isEmptyGroup` 均在 `RuleEditorEditPages`）：`all_of` / `any_of` 看 `terms`、`inverted` 看 `term`；空组连父一起删，但**不改变 `any_of` / `inverted` 的结构语义**。
-- 保存走既有编辑保存协议，见 [edit-save-protocol](../backend/flows/edit-save-protocol.md)。
+- 空父组自下而上整理（`removeLeafAt` 在 `RuleEditorInputPage`，`isEmptyGroup` 在 `RuleEditorPageSupport`）：`all_of` / `any_of` 看 `terms`、`inverted` 看 `term`；空组连父一起删，但**不改变 `any_of` / `inverted` 的结构语义**。
+- 保存走既有编辑保存协议，见 [edit-save-protocol](../backend/flows/edit-save-protocol.md)。编辑页在保存前调用客户端校验 `RuleEditorValidation.collectIssues()`；命中问题时按 `issueRuleId` 先打开所属规则、再按原字段路径定位，服务端校验仍是权威。
 - 新建、从模板新建及复制成功后清空操作提示，不显示「已创建规则」；错误与应用结果仍由原有提示区显示。
 
 ## 8. 已知限制
 
-- 条件树**叶行本身不显示编号**：编号只在输入页存在条件标题行与叶弹窗标题（`UiConditionTreeEditor` 内没有 presence / ordinal / scope 相关代码）。
+- 条件树**叶行本身不显示编号**：编号只在输入页存在条件标题行与叶弹窗标题（`UiConditionTreeSummary` 内没有 presence / ordinal / scope 相关代码）。
 - 输入页只列**规则级**存在叶；动作局部存在叶只能在触发页的条件树里逐叶进入弹窗编辑。
 - 显示名/备注一次性粘贴超过「2×码点上限」的纯补充平面字符（如 emoji）时，可能被原版 `EditBox` 的 UTF-16 单元上限静默截断到恰好上限而不弹超限提示；逐字符键入与常规粘贴不受影响（上限判定本身仍按码点，见 [文本控件](ui-kit/text-controls.md)）。
 - 流体多选不会自动改写独立移除动作的目标；单选只重指向未指定类型或与原单值相同的动作。
+- 缩进摘要点击节点会打开画布，但停在默认视图、不选中该节点：摘要点击传 `null`，只有第 1 节的问题定位链路才带字段路径并选中对应节点。
+- `ConditionTreeOverlay`（830 行）与 `RuleEditorResultsPage`（812 行）仍是超大类，本轮重构未拆分，登记为后续单独立项。
 
 ## 9. 相关文档
 
@@ -110,6 +112,7 @@
 
 ## 10. 管理页布局与条目操作
 
+- 管理页列表模式由 `RuleEditorScreenListPage` 承担（规则树、筛选框、条目判定与刷新）；新建/从模板创建、复制、启用或停用、屏蔽或取消屏蔽、恢复原始、删除由 `RuleEditorScreenListActions` 承担；列表与编辑页共用的按钮排由 `RuleEditorScreenButtonBar` 提供。
 - 管理页不提供独立的选中规则预览面板或展开/收起预览按钮，规则树使用内容区的完整宽度；配方行图标与悬停说明仍在树内显示。
 - 顶部按钮栏依次提供新建规则、从模板创建、编辑、启用或停用、复制、删除、更多；按钮按当前文案宽度自动换行。底部提供应用更改与变更清单。
 - 新建与从模板创建的命名弹窗只填写规则 ID 的路径部分，命名空间固定为 `itemdespawntowhat` 并只读展示；名字支持小写字母、数字及 `_ - . /`，创建后的显示名可使用中文。输入时校验格式及 ID 唯一性，与已有规则或尚未应用的新建规则重复时在弹窗内显示红字并禁用确认；校验失败保留弹窗与输入。
@@ -119,7 +122,7 @@
 
 ## 11. 条件树画布页
 
-条件卡片显示当前条件摘要，通过「编辑条件树」进入**整页画布页**（`ConditionTreeOverlay`，由 `UiModal` 承载）。`ConditionSupport.openTree` 由 `RuleEditorEditPages` 提供，范围来自表单的 `draftPath(conditions)`，规则级与动作局部共用同一条路径；条件编辑不要求整条规则已填完整。
+条件卡片显示当前条件摘要，通过「编辑条件树」进入**整页画布页**（`ConditionTreeOverlay`，由 `UiModal` 承载）。`ConditionSupport.openTree` 由 `RuleEditorTriggerPage` 提供，范围来自表单的 `draftPath(conditions)`，规则级与动作局部共用同一条路径；条件编辑不要求整条规则已填完整。
 
 **版面**：整页是条件树画布（`UiConditionGraphEditor`），四周是外壳——左上角水平图标功能栏（撤销 / 重做 / JSON 轮询 / 帮助）、左缘竖直工具列共 7 格（添加条件 / 分组 / 取反 / 删除 / 上移 / 下移 / 包组）、底部状态栏（错误、未完成输入、条件 / 叶 / 深度统计与缩放比例）。**没有折叠与展开**：画布始终展示整棵树，节点位置由结构自动布局，根在顶部。
 

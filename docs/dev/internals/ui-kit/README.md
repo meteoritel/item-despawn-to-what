@@ -3,7 +3,7 @@
 > 事实来源：`common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/`。
 > 本文是 UI kit 的入口：只覆盖依赖边界、公开面与分册索引；具体契约按需读对应分册，不要把整套分册一次读完。
 > 定位约定：分册按「类名 + 成员名」引用源码，不写行号（行号会随重构漂移）。
-> 相关决策：[ADR-0022](../../../adr/0022-client-ui-kit-adoption.md)（同源引入）、[ADR-0025](../../../adr/0025-reusable-client-ui-kit-boundary.md)（可回流的维护副本与依赖边界）。
+> 相关决策：[ADR-0022](../../../adr/0022-client-ui-kit-adoption.md)（同源引入）、[ADR-0025](../../../adr/0025-reusable-client-ui-kit-boundary.md)（可回流的维护副本与依赖边界）、[ADR-0033](../../../adr/0033-kit-zero-reference-public-api-retention.md)（零引用公开类的保留口径）。
 
 ## 1. 定位与依赖边界
 
@@ -35,16 +35,17 @@ powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1
 
 | 分组 | 类型 |
 | --- | --- |
-| 内容排版 | `UiDocument`、`UiNode`、`UiIcon`、`UiTransform`、`UiMetrics`、`TextMeasurer`、`TextScroll` |
-| 控件与交互 | `UiControl`、`UiControlStyle`、`UiControlGroup`、`UiScrollView`、`UiLinearLayout` |
-| 实体与加载预览 | `UiEntityPreview`、`UiIcon.Rendered`、`UiSpinner` |
+| 内容排版 | `UiDocument`、`UiNode`、`UiIcon`、`UiTransform`、`UiMetrics`、`UiPointer`、`TextMeasurer`、`TextScroll` |
+| 控件与交互 | `UiControl`、`UiControlStyle`、`UiControlGroup`、`UiControlRole`、`UiScrollView`、`UiLinearLayout`、`UiFlowLayout`、`UiTextHistory`、`UiHistoryDispatcher`、`UiHistoryShortcut` |
+| 实体与加载预览 | `UiEntityPreview`、`UiBlockPreview`、`UiModelBounds`、`UiCarousel`、`UiIcon.Rendered`、`UiSpinner` |
 | 输入与捕获 | `UiInputContext`、`UiInputTarget`、`UiInputRouter`、`UiInputCapture`、`UiValueInteraction` |
-| 数值策略 | `UiNumberPolicy`、`UiSliderWindow` |
-| 滑块 | `UiScalarSlider`、`UiRangeSlider`、`UiRangeValue`、`UiRangeEnd`、`UiCyclicRange` |
-| 滑块样式 | `UiSliderStyle`、`UiSliderPainter`、`PixelSliderPainter` |
+| 数值与滑块 | `UiNumberPolicy`、`UiNumbers`、`UiSliderWindow`；`UiScalarSlider`、`UiRangeSlider`、`UiRangeValue`、`UiRangeEnd`、`UiCyclicRange` |
+| 滑块样式与样式注入 | `UiSliderStyle`、`UiSliderPainter`、`PixelSliderPainter`、`UiSliderRole`、`UiSliderSkin`、`UiStyleSource` |
 | 焦点 | `UiFocusTarget`、`UiFocusManager` |
-| 导航 / 灯箱 / 几何 | `UiNavigationHistory`；`UiLightbox`、`UiImageView`、`LightboxImage`；`UiRect`、`UiTarget`、`UiAction`、`UiNineSlice` |
+| 灯箱与几何 | `UiLightbox`、`UiImageView`、`LightboxImage`；`UiRect`、`UiTarget`、`UiAction`、`UiNineSlice` |
 | 画布与树布局 | `UiTidyTreeLayout`、`UiDotGrid`、`UiOrthoLink`、`UiRubberBand`、`UiIconSheet`、`UiIconStrip`、`UiFloatingPanel` |
+| 不可变树编辑 | `UiTreePath`、`UiTreeEditor`、`UiTreeMoveInteraction`、`UiTreeCodec` |
+| 导航与绘制层级 | `UiNavigationHistory`、`UiRenderLayers` |
 
 调用示例类：`UiSliderExamples`（无规则语义，只有装配与事件顺序）。
 
@@ -73,7 +74,7 @@ powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1
 校验顺序（与项目验证协议一致）：
 
 1. 用 IDE 语言服务检查改动的 Java 文件；
-2. `powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1` 校验依赖边界（当前：60 个文件、193 条 import、0 处违规）；
+2. `powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1` 校验依赖边界（当前：66 个文件、197 条 import、0 处违规）；
 3. `powershell -ExecutionPolicy Bypass -File tools/dsh-build.ps1 -Tasks "build"`。
 
 「拆包就绪门槛」（本仓库暂不把 kit 拆成独立 Gradle 模块/子包的理由）：
@@ -88,3 +89,5 @@ powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1
 - 滑块、区间与周期三类核心均已接线使用：`UiSlider`（委托 `UiScalarSlider`）由表单的数值控件创建，`UiRangeBar` / `UiCyclicTimeBar` 分别委托 `UiRangeSlider` / `UiCyclicRange`，并在触发页的区间与时间条件面板中实例化。
 - 区间与周期核心只提供逻辑与几何，高亮与时间条渲染由宿主完成。
 - 不在 kit 内保证 1.21.1 以外的 Minecraft 版本兼容。
+- 零引用公开面：`UiFloatingPanel`（浮动面板）、`UiNavigationHistory`（导航历史）、`UiLinearLayout`（线性布局）、`UiInputRouter`（输入路由）属通用预留面，`UiSliderExamples` 是滑块装配示例（无规则语义，只有装配与事件顺序）；这 5 个类当前无生产引用，按 [ADR-0033](../../../adr/0033-kit-zero-reference-public-api-retention.md) 保留并登记，不视为悬空。
+- 数值入口两套语义不可互换：容差版 `UiNumbers.plain(double, int)`（按 `INTEGER_TOLERANCE` 消除浮点噪声）用于接受尾数抖动的读数，当前生产消费点是拖动中的滑块读数 `UiScalarSlider.formatValue()`；需要精确还原草稿值的显示点用严格入口 `UiNumbers.plainExact(double, int[, double])`、`isExactIntegral(double, double)`、`trimTrailingZeros(String)`、`roundedText(double)`（取 `Math.round` 语义，不等于 `%.0f` 的 HALF_UP）、`parseFinite(String)` / `parseInt(String)`，表单控件与区间条已改用严格入口。

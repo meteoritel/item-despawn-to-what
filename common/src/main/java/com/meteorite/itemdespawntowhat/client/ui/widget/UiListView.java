@@ -1,10 +1,11 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -33,7 +34,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     }
 
     // 默认行高
-    public static final int DEFAULT_ROW_HEIGHT = UiTheme.ROW_HEIGHT;
+    public static final int DEFAULT_ROW_HEIGHT = UiHostThemes.defaultTheme().rowHeight();
     // 双击判定间隔（毫秒）
     private static final long DOUBLE_CLICK_MS = 250L;
     // 滚动条预留宽度（与 kit 的滚动条宽度保持一致）
@@ -69,7 +70,15 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     private int lastClickIndex = -1;
 
     // 字体由 render 接收；保留构造参数以兼容现有组件 API。
+    // 注入的宿主主题
+    private final UiHostTheme theme;
+    // 兼容入口：未迁移模块沿用默认宿主主题
     public UiListView(@SuppressWarnings("unused") Font font, RowRenderer<T> rowRenderer) {
+        this(UiHostThemes.defaultTheme(), font, rowRenderer);
+    }
+
+    public UiListView(UiHostTheme theme, @SuppressWarnings("unused") Font font, RowRenderer<T> rowRenderer) {
+        this.theme = UiHostThemes.require(theme);
         this.rowRenderer = rowRenderer;
     }
 
@@ -247,11 +256,11 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         if (!visible) {
             return;
         }
-        UiTheme.drawInset(graphics, bounds);
+        theme.drawInset(graphics, bounds);
         UiRect viewport = scrollView.viewport();
         if (items.isEmpty()) {
             graphics.drawCenteredString(font, emptyMessage, viewport.x() + viewport.width() / 2,
-                    viewport.y() + Math.max(0, viewport.height() / 2 - 4), UiPalette.TEXT_SECONDARY);
+                    viewport.y() + Math.max(0, viewport.height() / 2 - 4), theme.palette().textSecondary());
             return;
         }
         int hoveredIndex = indexAt(mouseX, mouseY);
@@ -264,20 +273,20 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
             }
             UiRect row = new UiRect(0, rowY, rowWidth, rowHeight);
             if (i == selectedIndex) {
-                UiTheme.drawSelection(graphics, row);
-                UiTheme.drawSelectMarker(graphics, row);
+                theme.drawSelection(graphics, row);
+                theme.drawSelectMarker(graphics, row);
             } else if (i == hoveredIndex) {
-                graphics.fill(row.x(), row.y(), row.right(), row.bottom(), UiPalette.CONTROL_HOVER);
+                graphics.fill(row.x(), row.y(), row.right(), row.bottom(), theme.palette().controlHover());
             }
-            UiRect textRow = new UiRect(row.x() + UiTheme.SELECT_MARKER_WIDTH, row.y(),
-                    Math.max(0, row.width() - UiTheme.SELECT_MARKER_WIDTH), row.height());
+            UiRect textRow = new UiRect(row.x() + theme.selectMarkerWidth(), row.y(),
+                    Math.max(0, row.width() - theme.selectMarkerWidth()), row.height());
             rowRenderer.renderRow(graphics, font, items.get(i), i, textRow, i == selectedIndex, i == hoveredIndex, focused);
         }
         scrollView.pop(graphics);
         if (focused) {
-            UiTheme.drawFocusOutline(graphics, bounds);
+            theme.drawFocusOutline(graphics, bounds);
         }
-        scrollView.renderScrollbar(graphics, UiTheme.secondaryStyle());
+        scrollView.renderScrollbar(graphics, theme.controlStyle(UiControlRole.SECONDARY));
     }
 
     // ---- 输入 ----

@@ -3,8 +3,8 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
 import net.minecraft.client.gui.Font;
@@ -15,6 +15,10 @@ import org.jetbrains.annotations.Nullable;
 
 /** 新建规则的名字输入区，固定展示命名空间并为校验错误预留位置。 */
 final class RuleNameInput implements UiWidget, UiFocusTarget {
+
+    // 宿主默认主题：屏幕按主题取色与绘制原语
+    private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
+
     static final int MODAL_WIDTH = 320;
     private static final int INPUT_HEIGHT = 20;
     private static final int GAP = 4;
@@ -30,7 +34,7 @@ final class RuleNameInput implements UiWidget, UiFocusTarget {
 
     RuleNameInput(Font font) {
         this.font = font;
-        input = new UiTextInput(font, Component.translatable(TypeLabels.UI_PREFIX + "prompt.name_hint"));
+        input = new UiTextInput(THEME, font, Component.translatable(TypeLabels.UI_PREFIX + "prompt.name_hint"));
     }
 
     UiTextInput input() {
@@ -42,7 +46,7 @@ final class RuleNameInput implements UiWidget, UiFocusTarget {
     }
 
     int preferredHeight() {
-        int width = MODAL_WIDTH - UiTheme.PADDING * 2;
+        int width = MODAL_WIDTH - THEME.padding() * 2;
         int textRows = font.split(namespace, width).size()
                 + font.split(help, width).size() + ERROR_ROWS;
         return INPUT_HEIGHT + textRows * font.lineHeight + GAP * 3;
@@ -62,11 +66,11 @@ final class RuleNameInput implements UiWidget, UiFocusTarget {
 
     @Override
     public void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
-        drawLines(graphics, namespace, bounds.y(), UiPalette.TEXT_SECONDARY);
+        drawLines(graphics, namespace, bounds.y(), THEME.palette().textSecondary());
         input.render(graphics, font, mouseX, mouseY);
-        int errorY = drawLines(graphics, help, input.bounds().bottom() + GAP, UiPalette.TEXT_SECONDARY) + GAP;
+        int errorY = drawLines(graphics, help, input.bounds().bottom() + GAP, THEME.palette().textSecondary()) + GAP;
         if (problem != null) {
-            drawLines(graphics, problem, errorY, UiPalette.DANGER);
+            drawLines(graphics, problem, errorY, THEME.palette().danger());
         }
     }
 

@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.client.ui.screen;
+package com.meteorite.itemdespawntowhat.client.ui.shared;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiCarousel;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
@@ -45,7 +45,7 @@ public final class TagPreviewIcons {
                     .orElse(List.of());
             case BLOCK -> BuiltInRegistries.BLOCK.getTag(TagKey.create(Registries.BLOCK, id))
                     .map(set -> set.stream().map(holder -> new Member(holder.value().getName(),
-                            RuleEditorP4Panels.iconFor(RuleCatalogType.BLOCK, BuiltInRegistries.BLOCK.getKey(holder.value()).toString()))).toList())
+                            CatalogPreviewIcons.iconFor(RuleCatalogType.BLOCK, BuiltInRegistries.BLOCK.getKey(holder.value()).toString()))).toList())
                     .orElse(List.of());
             case ENTITY -> BuiltInRegistries.ENTITY_TYPE.getTag(TagKey.create(Registries.ENTITY_TYPE, id))
                     .map(set -> set.stream().map(holder -> new Member(holder.value().getDescription(),

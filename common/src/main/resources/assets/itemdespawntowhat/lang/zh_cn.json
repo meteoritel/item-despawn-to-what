@@ -421,7 +421,6 @@
   "gui.itemdespawntowhat.edit.tree.pending_input": "参数尚未填完",
   "gui.itemdespawntowhat.edit.tree.counts": "共 %s 个条件 · %s 个叶子 · 层级 %s",
   "gui.itemdespawntowhat.edit.tree.issues": "%s 处错误：%s",
-  "gui.itemdespawntowhat.edit.tree.hint": "Del 删除 · 方向键移动 · Ctrl+A 全选 · Ctrl+C/V 复制粘贴 · Ctrl+0 适配视图 · Ctrl+Home 回到根 · 拖拽空白平移 · 点击条件叶编辑参数",
   "gui.itemdespawntowhat.edit.tree.accessible_name": "条件树编辑器",
   "gui.itemdespawntowhat.edit.tree.node.all": "全部满足",
   "gui.itemdespawntowhat.edit.tree.node.any": "任一满足",

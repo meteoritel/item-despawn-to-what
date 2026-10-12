@@ -5,8 +5,8 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSpinner;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -210,12 +210,15 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         statusNote = note;
     }
 
-    public UiCatalogGrid(Font font, boolean multiSelect, Texts texts, Listener listener) {
+    // 注入的宿主主题
+    private final UiHostTheme theme;
+    public UiCatalogGrid(UiHostTheme theme, Font font, boolean multiSelect, Texts texts, Listener listener) {
+        this.theme = UiHostThemes.require(theme);
         this.font = Objects.requireNonNull(font, "font");
         this.multiSelect = multiSelect;
         this.texts = Objects.requireNonNull(texts, "texts");
         this.listener = Objects.requireNonNull(listener, "listener");
-        this.search = new UiTextInput(font, texts.searchHint());
+        this.search = new UiTextInput(theme, font, texts.searchHint());
         this.search.setMaxLength(128);
         this.search.setAccessibleName(texts.searchHint());
         this.search.setOnValueChanged(() -> {
@@ -401,7 +404,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
                 SCROLLBAR_WIDTH, cellsRect.height());
 
         // 翻页在最左：符号按钮 + 页码；其后是状态文字；最右留给「清空已选」
-        int buttonHeight = Math.min(UiTheme.ROW_HEIGHT, footerRect.height());
+        int buttonHeight = Math.min(theme.rowHeight(), footerRect.height());
         int buttonY = footerRect.y() + Math.max(0, (footerRect.height() - buttonHeight) / 2);
         int prevWidth = symbolWidth(PREV_SYMBOL);
         int nextWidth = symbolWidth(NEXT_SYMBOL);
@@ -615,7 +618,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     private void drawToolbar(GuiGraphics graphics, int mouseX, int mouseY) {
         search.render(graphics, font, mouseX, mouseY);
         drawScopeButton(graphics, mouseX, mouseY);
-        UiTheme.drawDivider(graphics, toolbarRect.x(), toolbarRect.bottom(), toolbarRect.width());
+        theme.drawDivider(graphics, toolbarRect.x(), toolbarRect.bottom(), toolbarRect.width());
     }
 
     // 范围轮询按钮：符号表示当前范围，点击切到下一个，完整文案只进悬停说明
@@ -625,17 +628,17 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         }
         boolean hovered = enabled && scopeRect.contains(mouseX, mouseY);
         graphics.fill(scopeRect.x(), scopeRect.y(), scopeRect.right(), scopeRect.bottom(),
-                hovered ? UiPalette.CONTROL_HOVER : UiPalette.CONTROL_FILL);
-        UiTheme.drawBevel(graphics, scopeRect, UiPalette.CONTROL_BEVEL_LIGHT, UiPalette.CONTROL_BEVEL_DARK);
+                hovered ? theme.palette().controlHover() : theme.palette().controlFill());
+        theme.drawBevel(graphics, scopeRect, theme.palette().controlBevelLight(), theme.palette().controlBevelDark());
         String symbol = scopeSymbol(policy.scope());
         graphics.drawString(font, symbol, scopeRect.x() + Math.max(0, (scopeRect.width() - font.width(symbol)) / 2),
                 scopeRect.y() + Math.max(0, (scopeRect.height() - font.lineHeight) / 2),
-                enabled ? UiPalette.TEXT_PRIMARY : UiPalette.TEXT_DISABLED, false);
+                enabled ? theme.palette().textPrimary() : theme.palette().textDisabled(), false);
     }
 
     private void drawList(GuiGraphics graphics) {
         if (listRect.width() > 0 && listRect.height() > 0) {
-            UiTheme.drawInset(graphics, listRect);
+            theme.drawInset(graphics, listRect);
         }
         if (cellsRect.width() > 0 && cellsRect.height() > 0) {
             int columns = columns();
@@ -661,10 +664,10 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     // 一行 = 图标 + 名称；已选整行高亮并在行尾打勾，悬停行名称超宽时滚动
     private void drawRow(GuiGraphics graphics, Entry entry, UiRect cell, int row, boolean hovered, boolean cursorAt) {
         boolean chosen = isSelected(entry.id());
-        int fill = !enabled ? UiPalette.SLOT_FILL
-                : chosen ? UiPalette.CONTROL_SELECTED
-                : hovered ? UiPalette.CONTROL_HOVER
-                : (row % 2 == 0 ? UiPalette.SLOT_FILL : UiPalette.LIST_ROW_ODD);
+        int fill = !enabled ? theme.palette().slotFill()
+                : chosen ? theme.palette().controlSelected()
+                : hovered ? theme.palette().controlHover()
+                : (row % 2 == 0 ? theme.palette().slotFill() : theme.palette().listRowOdd());
         graphics.fill(cell.x(), cell.y(), cell.right(), cell.bottom(), fill);
 
         if (entry.icon() != null) {
@@ -673,14 +676,14 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         int textX = cell.x() + PADDING_X + ICON_BOX + ICON_GAP;
         int textWidth = Math.max(0, cell.right() - MARK_WIDTH - textX);
         String label = rowLabel(entry).getString();
-        int color = enabled ? UiPalette.TEXT_PRIMARY : UiPalette.TEXT_DISABLED;
+        int color = enabled ? theme.palette().textPrimary() : theme.palette().textDisabled();
         TextScroll.draw(graphics, font, label, textX, cell.y() + Math.max(0, (ROW_HEIGHT - font.lineHeight) / 2),
                 textWidth, color, enabled && hovered, hovered ? hoverScrollTicks : 0, false);
         if (chosen) {
             drawCheck(graphics, cell.right() - MARK_WIDTH + 3, cell.y() + 6);
         }
         if (cursorAt) {
-            UiTheme.drawFocusOutline(graphics, cell);
+            theme.drawFocusOutline(graphics, cell);
         }
     }
 
@@ -710,8 +713,8 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     }
 
     // 行尾选中勾：深蓝像素勾，压在浅蓝选中底上
-    private static void drawCheck(GuiGraphics graphics, int x, int y) {
-        int color = UiPalette.ACCENT_PRESSED;
+    private void drawCheck(GuiGraphics graphics, int x, int y) {
+        int color = theme.palette().accentPressed();
         graphics.fill(x, y + 3, x + 1, y + 4, color);
         graphics.fill(x + 1, y + 4, x + 2, y + 5, color);
         graphics.fill(x + 2, y + 3, x + 3, y + 4, color);
@@ -730,30 +733,30 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         int maxScroll = rows - visible;
         int thumbY = scrollbarRect.y() + (maxScroll <= 0 ? 0 : (trackHeight - thumbHeight) * scrollRow / maxScroll);
         graphics.fill(scrollbarRect.x(), scrollbarRect.y(), scrollbarRect.right(), scrollbarRect.bottom(),
-                UiPalette.SCROLL_TRACK);
+                theme.palette().scrollTrack());
         graphics.fill(scrollbarRect.x(), thumbY, scrollbarRect.right(), thumbY + thumbHeight,
-                UiPalette.SCROLL_THUMB);
+                theme.palette().scrollThumb());
     }
 
     private void drawFooter(GuiGraphics graphics, int mouseX, int mouseY) {
         if (footerRect.height() <= 0) {
             return;
         }
-        UiTheme.drawDivider(graphics, bounds.x(), footerRect.y() - 1, bounds.width());
+        theme.drawDivider(graphics, bounds.x(), footerRect.y() - 1, bounds.width());
         Component status = statusText();
         boolean busy = (loading || explicitLoading) && error == null;
         if (busy) {
             UiSpinner.render(graphics, statusRect.x(), statusRect.y() + Math.max(0, (statusRect.height() - 10) / 2),
-                    Util.getMillis(), UiTheme.secondaryTextColor());
+                    Util.getMillis(), theme.secondaryTextColor());
         }
         int textOffset = busy ? 14 : 0;
         String trimmed = TextScroll.trimToWidth(font, status.getString(), Math.max(0, statusRect.width() - textOffset));
         graphics.drawString(font, trimmed, statusRect.x() + textOffset,
                 statusRect.y() + Math.max(0, (statusRect.height() - font.lineHeight) / 2),
-                error != null ? UiPalette.DANGER : UiPalette.TEXT_SECONDARY, false);
+                error != null ? theme.palette().danger() : theme.palette().textSecondary(), false);
         if (canClear()) {
             boolean hovered = clearRect.contains(mouseX, mouseY);
-            int color = hovered ? UiPalette.ACCENT_PRESSED : UiPalette.LINK;
+            int color = hovered ? theme.palette().accentPressed() : theme.palette().link();
             String link = TextScroll.trimToWidth(font, texts.clear().getString(), Math.max(1, clearRect.width()));
             int clearY = clearRect.y() + Math.max(0, (clearRect.height() - font.lineHeight) / 2);
             graphics.drawString(font, link, clearRect.x(), clearY, color, false);
@@ -766,7 +769,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         graphics.drawString(font, pages,
                 pageRect.x() + Math.max(0, (pageRect.width() - font.width(pages)) / 2),
                 pageRect.y() + Math.max(0, (pageRect.height() - font.lineHeight) / 2),
-                UiPalette.TEXT_PRIMARY, false);
+                theme.palette().textPrimary(), false);
     }
 
     private void drawPagerButton(GuiGraphics graphics, UiRect rect, String symbol, boolean allowed, int mouseX,
@@ -776,11 +779,11 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         }
         boolean hovered = enabled && allowed && rect.contains(mouseX, mouseY);
         graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(),
-                !allowed ? UiPalette.CONTROL_DISABLED : (hovered ? UiPalette.CONTROL_HOVER : UiPalette.CONTROL_FILL));
-        UiTheme.drawBevel(graphics, rect, UiPalette.CONTROL_BEVEL_LIGHT, UiPalette.CONTROL_BEVEL_DARK);
+                !allowed ? theme.palette().controlDisabled() : (hovered ? theme.palette().controlHover() : theme.palette().controlFill()));
+        theme.drawBevel(graphics, rect, theme.palette().controlBevelLight(), theme.palette().controlBevelDark());
         graphics.drawString(font, symbol, rect.x() + Math.max(0, (rect.width() - font.width(symbol)) / 2),
                 rect.y() + Math.max(0, (rect.height() - font.lineHeight) / 2),
-                allowed ? UiPalette.TEXT_PRIMARY : UiPalette.TEXT_DISABLED, false);
+                allowed ? theme.palette().textPrimary() : theme.palette().textDisabled(), false);
     }
 
     // 底部状态：错误 > 加载 > 空结果；正常时是「分组标签 · 总数 · 已选」，页码由翻页按钮旁的分子分母承担

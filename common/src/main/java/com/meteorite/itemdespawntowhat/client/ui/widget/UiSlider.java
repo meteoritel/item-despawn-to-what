@@ -7,9 +7,12 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumberPolicy;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiScalarSlider;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderRole;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderSkin;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderWindow;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiValueInteraction;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import java.util.Objects;
 import java.util.function.DoubleConsumer;
 import java.util.function.Function;
@@ -40,13 +43,15 @@ public final class UiSlider implements UiWidget, UiFocusTarget, UiInputTarget {
     private double max;
     private double step;
 
-    public UiSlider(Font font, double min, double max, double step) {
+    public UiSlider(UiHostTheme theme, Font font, double min, double max, double step) {
         Objects.requireNonNull(font, "font");
         this.min = sanitizeMin(min);
         this.max = sanitizeMax(this.min, max);
         this.step = sanitizeStep(step);
         this.core = new UiScalarSlider(buildPolicy(), new UiSliderWindow(this.min, this.max));
-        this.core.setStyle(UiTheme.sliderStyle());
+        UiSliderSkin skin = UiHostThemes.require(theme).sliderSkin(UiSliderRole.COMPACT);
+        this.core.setStyle(skin.style());
+        this.core.setPainter(skin.painter());
     }
 
     // kit 核心，供需要窗口/样式/提交回调等新能力的调用方直接使用

@@ -3,7 +3,6 @@ package com.meteorite.itemdespawntowhat.client.edit;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonElement;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
-import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormIssue;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -178,7 +177,7 @@ public final class EditSession {
     // 所有草稿修改都必须走这里：opKey 为操作标签（i18n key），change 内只做字段写入
     public void apply(String opKey, Runnable change) {
         Objects.requireNonNull(change, "change");
-        JsonObject before = draft.view().deepCopy();
+        JsonObject before = draft.workingView().deepCopy();
         Map<String, PendingInput> inputsBefore = Map.copyOf(pendingInputs);
         boolean deletedBefore = draft.isDeleted();
         boolean flagBefore = currentFlag();
@@ -191,7 +190,7 @@ public final class EditSession {
         try { change.run(); }
         finally { transactionInputPaths = null; transactionRemovedScopes = null; transactionAddedScopes = null; }
         // 删除标记与目标级标记也算改动：只改标记不改 JSON 的操作同样要能撤销
-        if (!before.equals(draft.view()) || deletedBefore != draft.isDeleted() || flagBefore != currentFlag()) {
+        if (!before.equals(draft.workingView()) || deletedBefore != draft.isDeleted() || flagBefore != currentFlag()) {
             undoStack.push(new Entry(normalize(opKey), before, deletedBefore, flagBefore, inputsBefore, inversePaths(changedPaths), Set.copyOf(addedScopes), Set.copyOf(removedScopes)));
             while (undoStack.size() > HISTORY_LIMIT) {
                 undoStack.removeLast();
@@ -255,7 +254,7 @@ public final class EditSession {
             return false;
         }
         Entry entry = undoStack.pop();
-        redoStack.push(new Entry(entry.opKey(), draft.view().deepCopy(), draft.isDeleted(), currentFlag(), Map.copyOf(pendingInputs), inversePaths(entry.paths()), entry.inverseExcludedScopes(), entry.excludedScopes()));
+        redoStack.push(new Entry(entry.opKey(), draft.workingView().deepCopy(), draft.isDeleted(), currentFlag(), Map.copyOf(pendingInputs), inversePaths(entry.paths()), entry.inverseExcludedScopes(), entry.excludedScopes()));
         restorePendingInputs(entry);
         draft.replaceWith(entry.snapshot());
         draft.setDeleted(entry.deleted());
@@ -270,7 +269,7 @@ public final class EditSession {
             return false;
         }
         Entry entry = redoStack.pop();
-        undoStack.push(new Entry(entry.opKey(), draft.view().deepCopy(), draft.isDeleted(), currentFlag(), Map.copyOf(pendingInputs), inversePaths(entry.paths()), entry.inverseExcludedScopes(), entry.excludedScopes()));
+        undoStack.push(new Entry(entry.opKey(), draft.workingView().deepCopy(), draft.isDeleted(), currentFlag(), Map.copyOf(pendingInputs), inversePaths(entry.paths()), entry.inverseExcludedScopes(), entry.excludedScopes()));
         restorePendingInputs(entry);
         draft.replaceWith(entry.snapshot());
         draft.setDeleted(entry.deleted());
@@ -314,7 +313,7 @@ public final class EditSession {
         int leafEnd = path.lastIndexOf("." + RuleFields.CONDITION + ".");
         if (leafEnd < 0) return path;
         String ownerPath = path.substring(0, leafEnd + RuleFields.CONDITION.length() + 1);
-        JsonElement owner = draft.getAt(ownerPath);
+        JsonElement owner = draft.elementAt(ownerPath);
         if (owner == null) return null;
         List<String> matches = new ArrayList<>();
         findObjectPaths(target, "", owner, matches);
@@ -342,7 +341,7 @@ public final class EditSession {
 
     // 当前已接受的草稿快照（落盘与冲突比较使用）
     public JsonObject snapshot() {
-        return draft.view().deepCopy();
+        return draft.workingView().deepCopy();
     }
 
     // 状态变化监听（脏标记、撤销栈深度变化）

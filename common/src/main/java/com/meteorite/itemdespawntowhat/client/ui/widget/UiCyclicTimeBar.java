@@ -7,8 +7,8 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeEnd;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -75,7 +75,10 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
     private boolean preciseActive;
     private @Nullable Consumer<UiRangeEnd> preciseEditor;
 
-    public UiCyclicTimeBar(Font font, Texts texts, @Nullable Listener listener) {
+    // 注入的宿主主题
+    private final UiHostTheme theme;
+    public UiCyclicTimeBar(UiHostTheme theme, Font font, Texts texts, @Nullable Listener listener) {
+        this.theme = UiHostThemes.require(theme);
         this.font = Objects.requireNonNull(font, "font");
         this.texts = Objects.requireNonNull(texts, "texts");
         this.listener = listener;
@@ -93,7 +96,7 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
                 closePrecise();
             }
         });
-        this.precise = new UiTextInput(font, texts.preciseHint());
+        this.precise = new UiTextInput(theme, font, texts.preciseHint());
         this.precise.setMaxLength(16);
         this.precise.setVisible(false);
         this.precise.setOnCommit(this::commitPrecise);
@@ -168,7 +171,7 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
         this.presetRow = new UiRect(x, trackRow.bottom(), bounds.width(),
                 Math.min(PRESET_HEIGHT, Math.max(0, bounds.bottom() - trackRow.bottom())));
         this.core.setBounds(trackRow.x(), trackRow.y(), trackRow.width(), trackRow.height());
-        this.precise.setBounds(x, presetRow.bottom(), Math.max(24, bounds.width()), UiTheme.ROW_HEIGHT);
+        this.precise.setBounds(x, presetRow.bottom(), Math.max(24, bounds.width()), theme.rowHeight());
     }
 
     @Override
@@ -191,7 +194,7 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
         } else if (focused) {
             String hint = TextScroll.trimToWidth(font, texts.preciseHint().getString(), Math.max(1, bounds.width()));
             graphics.drawString(font, hint, bounds.x(), Math.max(bounds.y(), bounds.bottom() - 9),
-                    UiPalette.TEXT_DISABLED, false);
+                    theme.palette().textDisabled(), false);
         }
     }
 
@@ -200,14 +203,14 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
         String left = label == null ? "" : label.getString();
         String trimmed = TextScroll.trimToWidth(font, left, Math.max(1, bounds.width() / 2));
         graphics.drawString(font, trimmed, bounds.x(), bounds.y(),
-                enabled ? UiPalette.TEXT_SECONDARY : UiPalette.TEXT_DISABLED, false);
+                enabled ? theme.palette().textSecondary() : theme.palette().textDisabled(), false);
         String range = tickText(core.from()) + " -> " + tickText(core.to());
         String state = core.isSinglePoint() ? texts.singlePoint().getString()
                 : (core.crossesPeriod() ? texts.wrapHint().getString() : "");
         String right = TextScroll.trimToWidth(font, range + (state.isEmpty() ? "" : " " + state),
                 Math.max(1, bounds.width() - font.width(trimmed) - 4));
         graphics.drawString(font, right, Math.max(bounds.x(), bounds.right() - font.width(right)), bounds.y(),
-                enabled ? UiPalette.TEXT_PRIMARY : UiPalette.TEXT_DISABLED, false);
+                enabled ? theme.palette().textPrimary() : theme.palette().textDisabled(), false);
     }
 
     private void drawTrack(GuiGraphics graphics) {
@@ -218,10 +221,10 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
         int left = core.trackLeft();
         int right = core.trackRight();
         graphics.fill(left, trackY, right, trackY + TRACK_COLOR_HEIGHT,
-                enabled ? UiPalette.SCROLL_TRACK : UiPalette.CONTROL_DISABLED);
+                enabled ? theme.palette().scrollTrack() : theme.palette().controlDisabled());
         int fromX = core.xOf(core.from());
         int toX = core.xOf(core.to());
-        int highlight = enabled ? UiPalette.ACCENT : UiPalette.CONTROL_DISABLED;
+        int highlight = enabled ? theme.palette().accent() : theme.palette().controlDisabled();
         if (core.isSinglePoint()) {
             graphics.fill(Math.max(left, fromX - 1), trackY - 1, Math.min(right, fromX + 1),
                     trackY + TRACK_COLOR_HEIGHT + 1, highlight);
@@ -237,21 +240,21 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
         int gap = ticks.isEmpty() ? Integer.MAX_VALUE : Math.max(1, core.trackWidth() / ticks.size());
         for (UiCyclicRange.Tick tick : ticks) {
             int x = core.xOf(tick.tick());
-            graphics.fill(x, trackRow.y(), x + 1, trackRow.y() + 2, UiPalette.TEXT_DISABLED);
+            graphics.fill(x, trackRow.y(), x + 1, trackRow.y() + 2, theme.palette().textDisabled());
             if (tick.label() != null && gap >= TICK_LABEL_MIN_GAP) {
                 String text = tick.label().getString();
-                graphics.drawString(font, text, x - font.width(text) / 2, trackRow.y(), UiPalette.TEXT_DISABLED,
+                graphics.drawString(font, text, x - font.width(text) / 2, trackRow.y(), theme.palette().textDisabled(),
                         false);
             }
         }
-        drawThumb(graphics, fromX, UiPalette.ACCENT);
-        drawThumb(graphics, toX, UiPalette.ACCENT_HOVER);
+        drawThumb(graphics, fromX, theme.palette().accent());
+        drawThumb(graphics, toX, theme.palette().accentHover());
     }
 
     private void drawThumb(GuiGraphics graphics, int x, int color) {
         int width = core.thumbWidth();
         graphics.fill(x - width / 2, trackRow.y(), x - width / 2 + width, trackRow.bottom(),
-                enabled ? color : UiPalette.CONTROL_DISABLED);
+                enabled ? color : theme.palette().controlDisabled());
     }
 
     private void drawPresets(GuiGraphics graphics, int mouseX, int mouseY) {
@@ -268,14 +271,14 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
             boolean activePreset = Math.abs(preset.fromTick() - core.from()) < 0.5D
                     && Math.abs(preset.toTick() - core.to()) < 0.5D;
             boolean hovered = enabled && rect.contains(mouseX, mouseY);
-            int fill = activePreset ? UiPalette.CONTROL_SELECTED
-                    : (hovered ? UiPalette.CONTROL_HOVER : UiPalette.CONTROL_FILL);
+            int fill = activePreset ? theme.palette().controlSelected()
+                    : (hovered ? theme.palette().controlHover() : theme.palette().controlFill());
             graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), fill);
-            UiTheme.drawBevel(graphics, rect, UiPalette.CONTROL_BEVEL_LIGHT, UiPalette.CONTROL_BEVEL_DARK);
+            theme.drawBevel(graphics, rect, theme.palette().controlBevelLight(), theme.palette().controlBevelDark());
             String text = TextScroll.trimToWidth(font, preset.label().getString(), Math.max(1, width - 4));
             graphics.drawString(font, text, rect.x() + Math.max(0, (width - font.width(text)) / 2),
                     rect.y() + Math.max(0, (rect.height() - 8) / 2),
-                    enabled ? UiPalette.TEXT_PRIMARY : UiPalette.TEXT_DISABLED, false);
+                    enabled ? theme.palette().textPrimary() : theme.palette().textDisabled(), false);
             x += width + 2;
         }
     }

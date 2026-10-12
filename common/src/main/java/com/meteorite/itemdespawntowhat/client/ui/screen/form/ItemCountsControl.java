@@ -1,16 +1,16 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonPrimitive;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
+import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
+import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
-import com.meteorite.itemdespawntowhat.client.ui.screen.RuleDisplayLabels;
-import com.meteorite.itemdespawntowhat.client.ui.screen.RuleEditorP4Panels;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
+import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons;
+import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -29,6 +29,9 @@ import org.jetbrains.annotations.Nullable;
  * <p>名称超过列宽时在名称列内悬停滚动；悬停图标给出完整名称、字段名与引用注册名。
  */
 final class ItemCountsControl extends FormControl {
+
+    // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
+    private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
     // 行间距
     private static final int ROW_GAP = 6;
     // 滑条行高（与卡片表单的单行高度一致）
@@ -50,7 +53,7 @@ final class ItemCountsControl extends FormControl {
     private final Font font;
     private final Runnable onChanged;
     private final Map<String, Entry> entries = new LinkedHashMap<>();
-    private JsonObject values = new JsonObject();
+    private RuleValue values = RuleValue.mapping().build();
     private int defaultCount = DEFAULT_COUNT;
     // 最近一次布局使用的行高：命中判定与绘制共用同一份几何
     private int lastRowHeight = ROW_HEIGHT;
@@ -103,8 +106,8 @@ final class ItemCountsControl extends FormControl {
             Entry entry = entries.get(reference);
             if (entry == null) {
                 entry = new Entry(reference, createControl(), displayName(reference),
-                        RuleEditorP4Panels.iconFor(RuleCatalogType.ITEM, reference));
-                entry.control.load(values.has(reference) ? values.get(reference) : new JsonPrimitive(defaultCount));
+                        CatalogPreviewIcons.iconFor(RuleCatalogType.ITEM, reference));
+                entry.control.load(values.childOr(reference, RuleValue.integer(defaultCount)));
             }
             next.put(reference, entry);
         }
@@ -217,29 +220,28 @@ final class ItemCountsControl extends FormControl {
             boolean hovered = entry.nameHit(mouseX, mouseY, lastRowHeight);
             entry.scrollTicks = hovered ? entry.scrollTicks + 1 : 0;
             TextScroll.draw(graphics, renderFont, entry.name.getString(), entry.nameX, entry.nameY,
-                    entry.nameWidth, UiPalette.TEXT_SECONDARY, hovered, entry.scrollTicks, false);
+                    entry.nameWidth, THEME.palette().textSecondary(), hovered, entry.scrollTicks, false);
             entry.control.render(graphics, renderFont, mouseX, mouseY);
         }
     }
 
     @Override
-    void load(@Nullable JsonElement value) {
+    void load(@Nullable RuleValue value) {
         rememberLoaded(value);
-        values = value != null && value.isJsonObject() ? value.getAsJsonObject().deepCopy() : new JsonObject();
+        values = value != null && value.isMapping() ? value.deepCopy() : RuleValue.mapping().build();
         for (Entry entry : entries.values()) {
-            entry.control.load(values.has(entry.reference) ? values.get(entry.reference)
-                    : new JsonPrimitive(defaultCount));
+            entry.control.load(values.childOr(entry.reference, RuleValue.integer(defaultCount)));
         }
     }
 
     @Override
-    @Nullable JsonElement store() {
-        if (!isEdited() && !hasPendingInput()) return originalElement();
-        JsonObject result = new JsonObject();
+    @Nullable RuleValue store() {
+        if (!isEdited() && !hasPendingInput()) return originalValue();
+        RuleValue.Mapping result = RuleValue.mapping();
         for (Entry entry : entries.values()) {
-            result.add(entry.reference, entry.control.store());
+            result.putIfPresent(entry.reference, entry.control.store());
         }
-        return result;
+        return result.build();
     }
 
     @Override

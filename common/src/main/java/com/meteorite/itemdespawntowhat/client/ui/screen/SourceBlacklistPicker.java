@@ -1,9 +1,10 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
+import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
+import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCatalogGrid;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
@@ -23,29 +24,35 @@ import org.jetbrains.annotations.Nullable;
 
 /*** 黑名单仅从源标签的成员中添加具体物品，按标签分页；成员快照只在打开时解析。 */
 final class SourceBlacklistPicker {
+
+    // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
+    private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
+
     private static final String UI = "gui.itemdespawntowhat.edit.";
 
     private SourceBlacklistPicker() { }
 
-    static List<String> sourceTags(@Nullable JsonObject rule) {
-        if (rule == null || !(rule.get(RuleFields.SOURCE) instanceof JsonObject source)
-                || !(source.get(RuleFields.SOURCE_ITEMS) instanceof JsonArray items)) return List.of();
+    static List<String> sourceTags(@Nullable RuleValue rule) {
+        if (rule == null || !rule.isMapping()) return List.of();
+        RuleValue source = rule.child(RuleFields.SOURCE);
+        if (source == null || !source.isMapping()) return List.of();
+        RuleValue items = source.child(RuleFields.SOURCE_ITEMS);
+        if (items == null || !items.isList()) return List.of();
         LinkedHashSet<String> tags = new LinkedHashSet<>();
-        for (JsonElement item : items) {
-            if (!item.isJsonPrimitive() || !item.getAsJsonPrimitive().isString()) continue;
-            String raw = item.getAsString();
+        // 仅收集形如 #命名空间:路径 的源标签，非文本元素自然被 textItems() 跳过
+        for (String raw : items.textItems()) {
             if (raw.startsWith("#") && ResourceLocation.tryParse(raw.substring(1)) != null) tags.add(raw);
         }
         return List.copyOf(tags);
     }
 
-    static UiModal modal(Font font, EditorWorkspaceView workspace, JsonObject rule, int width, int height,
+    static UiModal modal(Font font, EditorWorkspaceView workspace, @Nullable RuleValue rule, int width, int height,
                          Consumer<List<String>> onPicked) {
         CatalogEntryPolicy policy = CatalogEntryPolicy.fixed(RuleCatalogType.ITEM);
         Pages pages = new Pages(sourceTags(rule), policy);
         UiCatalogGrid.Texts texts = RuleEditorP4Panels.catalogTexts()
                 .withEmpty(Component.translatable(UI + "blacklist.empty"));
-        UiCatalogGrid grid = new UiCatalogGrid(font, true, texts, new UiCatalogGrid.Listener() {
+        UiCatalogGrid grid = new UiCatalogGrid(THEME, font, true, texts, new UiCatalogGrid.Listener() {
                     @Override public void onSearch(String filter) { pages.filter(filter); }
                     @Override public void onPageChange(int delta) { pages.index = Math.clamp(pages.index + delta, 0, Math.max(0, pages.filtered.size() - 1)); }
                 });
@@ -59,7 +66,7 @@ final class SourceBlacklistPicker {
             grid.setPageLabel(Component.translatable(UI + "blacklist.page", page.tag(), page.part() + 1, page.parts()));
             return page.items();
         });
-        UiModal modal = UiModal.create(font).title(Component.translatable(UI + "rule.source.exclude"));
+        UiModal modal = UiModal.create(THEME, font).title(Component.translatable(UI + "rule.source.exclude"));
         modal.preferredWidth(RuleEditorP4Panels.pickerWidth(width));
         modal.inlineFooter();
         modal.contentWidget(grid, RuleEditorP4Panels.pickerBodyHeight(height));
@@ -93,7 +100,7 @@ final class SourceBlacklistPicker {
                         .map(set -> set.stream().map(holder -> {
                             String itemId = BuiltInRegistries.ITEM.getKey(holder.value()).toString();
                             return new UiCatalogGrid.Entry(itemId, holder.value().getDescription(), null,
-                                    RuleEditorP4Panels.iconFor(RuleCatalogType.ITEM, itemId));
+                                    CatalogPreviewIcons.iconFor(RuleCatalogType.ITEM, itemId));
                         }).toList()).orElse(List.of());
                 groups.add(new Group(tag, members));
             }

@@ -2,10 +2,12 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
+import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
+import com.meteorite.itemdespawntowhat.client.ui.shared.BlockPreviewIcons;
+import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons;
+import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
+import com.meteorite.itemdespawntowhat.client.ui.shared.TagPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
@@ -62,13 +64,13 @@ public final class RuleRecipeView {
     /*** 分隔符没有图标，对象没有额外前缀，按相同顺序生成文字和图标关系。 */
     private record Part(@Nullable ObjectPart object, Component separator) { }
 
-    public RuleRecipeView(@Nullable JsonObject rule) {
-        JsonObject body = object(rule);
-        List<JsonObject> effects = effects(body);
+    public RuleRecipeView(@Nullable RuleValue rule) {
+        RuleValue body = object(rule);
+        List<RuleValue> effects = effects(body);
         List<ObjectPart> sources = new ArrayList<>();
-        for (JsonElement entry : array(object(body.get(RuleFields.SOURCE)).get(RuleFields.SOURCE_ITEMS))) {
-            if (entry.isJsonPrimitive() && entry.getAsJsonPrimitive().isString()) {
-                String reference = entry.getAsString();
+        for (RuleValue entry : array(object(body.child(RuleFields.SOURCE)).child(RuleFields.SOURCE_ITEMS)).items()) {
+            if (entry.isText()) {
+                String reference = entry.asText();
                 sources.add(resource(reference, RuleCatalogType.ITEM, sourceCost(body, effects, reference)));
             }
         }
@@ -76,17 +78,17 @@ public final class RuleRecipeView {
         addParts(sources, "sources");
 
         Map<String, ObjectPart> catalysts = new LinkedHashMap<>();
-        JsonObject cost = object(body.get("catalyst_cost"));
+        RuleValue cost = object(body.child("catalyst_cost"));
         addCatalysts(catalysts, cost, true);
-        collectConditions(body.get("conditions"), false, catalysts);
-        for (JsonObject effect : effects) {
-            collectConditions(effect.get("conditions"), false, catalysts);
+        collectConditions(body.child("conditions"), false, catalysts);
+        for (RuleValue effect : effects) {
+            collectConditions(effect.child("conditions"), false, catalysts);
             if ((OWN + "consume_catalyst").equals(text(effect, "type"))) addCatalysts(catalysts, effect, true);
         }
         for (ObjectPart catalyst : catalysts.values()) { separator("plus"); parts.add(new Part(catalyst, Component.empty())); }
         separator("arrow");
         List<ObjectPart> products = new ArrayList<>();
-        for (JsonObject effect : effects) {
+        for (RuleValue effect : effects) {
             String type = text(effect, "type");
             if (!List.of(OWN + "consume_source", OWN + "consume_catalyst", OWN + "consume_fluid").contains(type)) {
                 products.add(product(effect, body));
@@ -108,7 +110,7 @@ public final class RuleRecipeView {
         if (!catalysts.isEmpty()) details.append("\n").append(Component.translatable(UI + "catalyst_help"));
         if (parts.stream().anyMatch(part -> part.object() != null && part.object().quantities.size() > 1))
             details.append("\n").append(Component.translatable(UI + "quantity_help"));
-        if (array(body.get("outcomes")).size() > 1)
+        if (array(body.child("outcomes")).size() > 1)
             details.append("\n").append(Component.translatable(UI + "outcomes_help"));
         if (parts.stream().anyMatch(part -> part.object() != null && part.object().perSourceItem))
             details.append("\n").append(Component.translatable(UI + "experience_help"));
@@ -244,11 +246,11 @@ public final class RuleRecipeView {
 
     private static ObjectPart placeholder(String key) { return new ObjectPart(Component.translatable(UI + key), UNKNOWN, 0); }
     // 成本在前，条件按 terms 原序，随后依方案/动作原序；重名只合并角标，保留首次位置。
-    private static void addCatalysts(Map<String, ObjectPart> target, JsonObject owner, boolean consumed) {
-        for (JsonElement entry : array(owner.get("items"))) {
-            if (!entry.isJsonPrimitive() || !entry.getAsJsonPrimitive().isString()) continue;
-            String id = entry.getAsString();
-            int count = integer(object(owner.get(RuleFields.ITEM_COUNTS)), id, integer(owner, RuleFields.CATALYST_COUNT, 1));
+    private static void addCatalysts(Map<String, ObjectPart> target, RuleValue owner, boolean consumed) {
+        for (RuleValue entry : array(owner.child("items")).items()) {
+            if (!entry.isText()) continue;
+            String id = entry.asText();
+            int count = integer(object(owner.child(RuleFields.ITEM_COUNTS)), id, integer(owner, RuleFields.CATALYST_COUNT, 1));
             ObjectPart part = target.computeIfAbsent(id, ignored -> resource(id, RuleCatalogType.ITEM, 0));
             if (count > 0) {
                 part.quantities.add(count);
@@ -257,17 +259,17 @@ public final class RuleRecipeView {
         }
     }
 
-    private static void collectConditions(JsonElement raw, boolean inverted, Map<String, ObjectPart> catalysts) {
-        JsonObject node = object(raw);
+    private static void collectConditions(@Nullable RuleValue raw, boolean inverted, Map<String, ObjectPart> catalysts) {
+        RuleValue node = object(raw);
         String op = text(node, "op");
-        if ("inverted".equals(op)) collectConditions(node.get("term"), !inverted, catalysts);
+        if ("inverted".equals(op)) collectConditions(node.child("term"), !inverted, catalysts);
         else if ("leaf".equals(op)) {
-            JsonObject condition = object(node.get("condition"));
+            RuleValue condition = object(node.child("condition"));
             if (!inverted && (OWN + "catalyst_present").equals(text(condition, "type"))) addCatalysts(catalysts, condition, false);
-        } else for (JsonElement term : array(node.get("terms"))) collectConditions(term, inverted, catalysts);
+        } else for (RuleValue term : array(node.child("terms")).items()) collectConditions(term, inverted, catalysts);
     }
 
-    private static ObjectPart product(JsonObject effect, JsonObject rule) {
+    private static ObjectPart product(RuleValue effect, RuleValue rule) {
         String type = text(effect, "type");
         if ((OWN + "spawn_entity").equals(type)) {
             return switch (text(effect, "variant")) {
@@ -298,12 +300,14 @@ public final class RuleRecipeView {
         return new ObjectPart(RuleNaming.effectTitle(effect, RuleDisplayLabels::label), RulePreviewIcons.action(effect), integer(effect, "count", 0));
     }
 
-    static String firstSource(JsonObject rule) {
-        JsonArray entries = array(object(rule.get("source")).get("items"));
-        return entries.isEmpty() || !entries.get(0).isJsonPrimitive() ? "" : entries.get(0).getAsString();
+    static String firstSource(RuleValue rule) {
+        RuleValue entries = array(object(rule.child("source")).child("items"));
+        if (entries.isEmpty()) return "";
+        RuleValue first = entries.item(0);
+        return first == null || !first.isScalar() ? "" : first.asText();
     }
 
-    static @Nullable UiIcon firstSourceIcon(JsonObject rule) {
+    static @Nullable UiIcon firstSourceIcon(RuleValue rule) {
         String raw = firstSource(rule);
         if (raw.startsWith("#")) return TagPreviewIcons.sourceBlocks(raw).icon();
         ResourceLocation id = ResourceLocation.tryParse(raw);
@@ -327,43 +331,50 @@ public final class RuleRecipeView {
             case ENTITY -> BuiltInRegistries.ENTITY_TYPE.getOptional(id).map(net.minecraft.world.entity.EntityType::getDescription).orElse(Component.literal(raw));
             default -> Component.literal(raw);
         };
-        return new ObjectPart(name, RuleEditorP4Panels.iconFor(type, raw), quantity);
+        return new ObjectPart(name, CatalogPreviewIcons.iconFor(type, raw), quantity);
     }
 
-    private static List<JsonObject> effects(JsonObject rule) {
-        List<JsonObject> result = new ArrayList<>();
-        appendEffects(result, rule.get("effects"));
-        for (JsonElement outcome : array(rule.get("outcomes"))) appendEffects(result, object(outcome).get("effects"));
+    private static List<RuleValue> effects(RuleValue rule) {
+        List<RuleValue> result = new ArrayList<>();
+        appendEffects(result, rule.child("effects"));
+        for (RuleValue outcome : array(rule.child("outcomes")).items()) appendEffects(result, object(outcome).child("effects"));
         return result;
     }
-    private static void appendEffects(List<JsonObject> target, JsonElement raw) {
-        for (JsonElement entry : array(raw)) if (entry instanceof JsonObject effect) target.add(effect);
+    private static void appendEffects(List<RuleValue> target, @Nullable RuleValue raw) {
+        for (RuleValue entry : array(raw).items()) if (entry.isMapping()) target.add(entry);
     }
-    private static int sourceCost(JsonObject rule, List<JsonObject> effects, String reference) {
-        if (rule.has(RuleFields.SOURCE_COST)) return integer(object(rule.get(RuleFields.SOURCE_COST)), reference, 1);
+    private static int sourceCost(RuleValue rule, List<RuleValue> effects, String reference) {
+        if (rule.has(RuleFields.SOURCE_COST)) return integer(object(rule.child(RuleFields.SOURCE_COST)), reference, 1);
         int cost = 0;
         boolean consumption = false;
-        for (JsonObject effect : effects) {
+        for (RuleValue effect : effects) {
             String type = text(effect, "type");
             consumption |= List.of(OWN + "consume_source", OWN + "consume_catalyst", OWN + "consume_fluid").contains(type);
             if ((OWN + "consume_source").equals(type)) cost = (int) Math.min(Integer.MAX_VALUE, (long) cost
-                    + integer(object(effect.get(RuleFields.ITEM_COUNTS)), reference, integer(effect, RuleFields.CATALYST_COUNT, 1)));
+                    + integer(object(effect.child(RuleFields.ITEM_COUNTS)), reference, integer(effect, RuleFields.CATALYST_COUNT, 1)));
         }
         return consumption ? cost : 1;
     }
     private static String numbers(LinkedHashSet<Integer> values) { return String.join("/", values.stream().map(String::valueOf).toList()); }
-    private static JsonObject object(@Nullable JsonElement value) { return value instanceof JsonObject object ? object : new JsonObject(); }
-    private static JsonArray array(@Nullable JsonElement value) { return value instanceof JsonArray array ? array : new JsonArray(); }
-    private static String text(JsonObject value, String key) {
-        JsonElement raw = value.get(key);
-        return raw != null && raw.isJsonPrimitive() && raw.getAsJsonPrimitive().isString() ? raw.getAsString() : "";
+    private static RuleValue object(@Nullable RuleValue value) { return value != null && value.isMapping() ? value : RuleValue.mapping().build(); }
+    private static RuleValue array(@Nullable RuleValue value) { return value != null && value.isList() ? value : RuleValue.list().build(); }
+    private static String text(RuleValue value, String key) {
+        RuleValue raw = value.child(key);
+        return raw != null && raw.isText() ? raw.asText() : "";
     }
-    private static int integer(JsonObject value, String key, int fallback) {
-        try { return value.has(key) ? Math.max(0, value.get(key).getAsInt()) : fallback; }
-        catch (RuntimeException exception) { return fallback; }
+    private static int integer(RuleValue value, String key, int fallback) {
+        RuleValue raw = value.child(key);
+        if (raw == null) return fallback;
+        try {
+            if (raw.isNumber()) return Math.max(0, raw.asInteger(0));
+            if (raw.isText()) return Math.max(0, Integer.parseInt(raw.asText().trim()));
+        } catch (RuntimeException exception) {
+            return fallback;
+        }
+        return fallback;
     }
-    private static boolean bool(JsonObject value, String key) {
-        JsonElement raw = value.get(key);
-        return raw != null && raw.isJsonPrimitive() && raw.getAsJsonPrimitive().isBoolean() && raw.getAsBoolean();
+    private static boolean bool(RuleValue value, String key) {
+        RuleValue raw = value.child(key);
+        return raw != null && raw.isFlag() && raw.asFlag(false);
     }
 }

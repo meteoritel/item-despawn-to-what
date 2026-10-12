@@ -1,20 +1,22 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
+import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
+import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
-import com.meteorite.itemdespawntowhat.client.ui.screen.FluidPreviewIcons;
-import com.meteorite.itemdespawntowhat.client.ui.screen.RuleDisplayLabels;
-import com.meteorite.itemdespawntowhat.client.ui.screen.RuleEditorP4Panels;
-import com.meteorite.itemdespawntowhat.client.ui.screen.TagPreviewIcons;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
+import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons;
+import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes;
+import com.meteorite.itemdespawntowhat.client.ui.shared.FluidPreviewIcons;
+import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
+import com.meteorite.itemdespawntowhat.client.ui.shared.TagPreviewIcons;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import java.util.ArrayList;
 import java.util.List;
@@ -27,6 +29,9 @@ import org.lwjgl.glfw.GLFW;
 
 /*** 输入页的紧凑物品与流体卡片：按名称测量宽度并换行，保留滚动、键盘导航与标签轮播。 */
 final class CatalogSelectionControl extends FormControl implements UiFocusTarget {
+
+    // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
+    private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
     private static final String UI = "gui.itemdespawntowhat.edit.";
     private static final int CHIP_HEIGHT = 24;
     private static final int GAP = 4;
@@ -43,7 +48,7 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
     private boolean focused;
 
     /*** 完整保留既有元素，格式错误的条目不会因其它编辑而丢失。 */
-    private record Selection(JsonElement value, String id, Component name, @Nullable UiIcon icon) { }
+    private record Selection(RuleValue value, String id, Component name, @Nullable UiIcon icon) { }
 
     CatalogSelectionControl(Font font, EditorField field, Runnable onChanged) {
         super(field);
@@ -92,44 +97,44 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
         try {
             if (values.isEmpty()) graphics.drawString(renderFont, Component.translatable(UI +
                             (catalogType() == RuleCatalogType.FLUID ? "selection.any_fluid" : "selection.empty")),
-                    4, 8, UiPalette.TEXT_SECONDARY, false);
+                    4, 8, THEME.palette().textSecondary(), false);
             for (int i = 0; i < values.size(); i++) {
                 UiRect chip = chips.get(i);
                 if (chip.bottom() <= scroll.offset() || chip.y() >= scroll.offset() + layoutHeight()) continue;
                 Selection entry = values.get(i);
                 boolean chosen = focused && i == selected;
-                UiTheme.drawChip(graphics, chip, chosen, enabled && i == hovered);
+                THEME.drawChip(graphics, chip, chosen, enabled && i == hovered);
                 if (entry.icon() != null) entry.icon().render(graphics, chip.x() + 4, chip.y() + 4);
                 graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont, entry.name().getString(), Math.max(0, chip.width() - 42)),
                         chip.x() + 24, chip.y() + (CHIP_HEIGHT - renderFont.lineHeight) / 2,
-                        !enabled ? UiPalette.TEXT_DISABLED : chosen ? UiPalette.TEXT_ON_DARK : UiPalette.TEXT_PRIMARY, false);
+                        !enabled ? THEME.palette().textDisabled() : chosen ? THEME.palette().textOnDark() : THEME.palette().textPrimary(), false);
                 int crossX = chip.right() - 11;
                 int crossY = chip.y() + 9;
-                int color = enabled && i == hovered ? UiPalette.DANGER : chosen ? UiPalette.TEXT_ON_DARK : UiPalette.TEXT_SECONDARY;
+                int color = enabled && i == hovered ? THEME.palette().danger() : chosen ? THEME.palette().textOnDark() : THEME.palette().textSecondary();
                 for (int pixel = 0; pixel < 5; pixel++) {
                     graphics.fill(crossX + pixel, crossY + pixel, crossX + pixel + 1, crossY + pixel + 1, color);
                     graphics.fill(crossX + 4 - pixel, crossY + pixel, crossX + 5 - pixel, crossY + pixel + 1, color);
                 }
             }
         } finally { scroll.pop(graphics); }
-        scroll.renderScrollbar(graphics, UiTheme.secondaryStyle());
+        scroll.renderScrollbar(graphics, THEME.controlStyle(UiControlRole.SECONDARY));
     }
 
     @Override
-    void load(@Nullable JsonElement value) {
+    void load(@Nullable RuleValue value) {
         rememberLoaded(value);
         values.clear();
-        if (value instanceof JsonArray array) {
-            for (JsonElement entry : array) values.add(selection(entry));
-        } else if (value != null && !value.isJsonNull()) values.add(selection(value));
+        if (value != null && value.isList()) {
+            for (RuleValue entry : value.items()) values.add(selection(entry));
+        } else if (value != null && !value.isNull()) values.add(selection(value));
         measuredWidth = -1;
         selected = Math.min(selected, values.size() - 1);
         measure(scroll.viewport().width());
     }
 
-    private Selection selection(JsonElement raw) {
+    private Selection selection(RuleValue raw) {
         RuleCatalogType type = catalogType();
-        String id = raw.isJsonPrimitive() && raw.getAsJsonPrimitive().isString() ? raw.getAsString() : "";
+        String id = raw.isText() ? raw.asText() : "";
         Component name = Component.translatable(UI + "selection.unknown");
         UiIcon icon;
         if (id.startsWith("#")) {
@@ -141,25 +146,25 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
             Component label = key == null ? null : type == RuleCatalogType.FLUID
                     ? FluidPreviewIcons.label(key) : RuleDisplayLabels.label(key);
             if (label != null) name = label;
-            icon = RuleEditorP4Panels.iconFor(type, id);
+            icon = CatalogPreviewIcons.iconFor(type, id);
         }
         return new Selection(raw.deepCopy(), id, name, icon);
     }
 
     private RuleCatalogType catalogType() {
-        RuleCatalogType type = RuleEditorP4Panels.catalogTypeOf(field);
+        RuleCatalogType type = FieldCatalogTypes.catalogTypeOf(field);
         return type == null ? RuleCatalogType.ITEM : type;
     }
 
     @Override
-    @Nullable JsonElement store() {
-        if (!isEdited()) return originalElement();
+    @Nullable RuleValue store() {
+        if (!isEdited()) return originalValue();
         boolean multiple = field.type() == EditorFieldType.TAG_LIST || field.type() == EditorFieldType.RL_LIST;
         if (!multiple) return values.isEmpty() ? null : values.getFirst().value().deepCopy();
         if (values.isEmpty() && field.nullable()) return null;
-        JsonArray result = new JsonArray();
+        RuleValue.Sequence result = RuleValue.list();
         values.forEach(entry -> result.add(entry.value().deepCopy()));
-        return result;
+        return result.build();
     }
 
     @Override

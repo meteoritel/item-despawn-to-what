@@ -47,14 +47,19 @@ public final class RuleNaming {
 
     // 规则标题（传草稿视图）
     public static Component ruleTitle(@Nullable RuleDraft draft, NameSource source) {
-        return ruleTitle(draft == null ? null : draft.view(), source);
+        return ruleTitleJson(draft == null ? null : draft.workingView(), source);
+    }
+
+    // 规则标题（传动态值对象）：值对象到 JSON 的转换收敛在本包内
+    public static Component ruleTitle(@Nullable RuleValue rule, NameSource source) {
+        return ruleTitleJson(rule == null || !rule.isMapping() ? null : rule.unwrap().getAsJsonObject(), source);
     }
 
     /**
      * 规则标题：display_name → 自动模板 → 安全兜底（id 文本）。
      * <p>多候选规则用候选轮询/优先模板，其余（含顶层单结果）用单结果模板。
      */
-    public static Component ruleTitle(@Nullable JsonObject rule, NameSource source) {
+    private static Component ruleTitleJson(@Nullable JsonObject rule, NameSource source) {
         if (rule == null) {
             return Component.translatable(PREFIX + "unfinished_no_result");
         }
@@ -63,19 +68,24 @@ public final class RuleNaming {
             if (displayName != null && !displayName.isBlank()) {
                 return Component.literal(displayName.trim());
             }
-            Component sourcePart = sourceTitle(rule, source);
+            Component sourcePart = sourceTitleJson(rule, source);
             int candidates = sizeOf(rule, RuleFields.OUTCOMES);
             if (candidates > 1) {
                 return Component.translatable(PREFIX + multiResultKey(rule), sourcePart, candidates);
             }
-            return Component.translatable(PREFIX + "single_result", sourcePart, resultTitle(rule, source));
+            return Component.translatable(PREFIX + "single_result", sourcePart, resultTitleJson(rule, source));
         } catch (RuntimeException error) {
             return safeFallback(rule);
         }
     }
 
+    // 源物品短摘要（传动态值对象）
+    public static Component sourceTitle(@Nullable RuleValue rule, NameSource source) {
+        return sourceTitleJson(rule == null || !rule.isMapping() ? null : rule.unwrap().getAsJsonObject(), source);
+    }
+
     // 源物品短摘要：未选源 → 未完成占位；多项 → 多输入模板
-    public static Component sourceTitle(@Nullable JsonObject rule, NameSource source) {
+    private static Component sourceTitleJson(@Nullable JsonObject rule, NameSource source) {
         List<JsonElement> entries = entries(rule, RuleFields.SOURCE, RuleFields.SOURCE_ITEMS);
         if (entries.isEmpty()) {
             return Component.translatable(PREFIX + "unfinished_no_source");
@@ -88,35 +98,50 @@ public final class RuleNaming {
         return Component.translatable(PREFIX + "multi_input", first, others);
     }
 
+    // 结果短摘要（传动态值对象）
+    public static Component resultTitle(@Nullable RuleValue rule, NameSource source) {
+        return resultTitleJson(rule == null || !rule.isMapping() ? null : rule.unwrap().getAsJsonObject(), source);
+    }
+
     // 结果短摘要：候选列表 → 第一个候选；顶层 effects → 效果列表
-    public static Component resultTitle(@Nullable JsonObject rule, NameSource source) {
+    private static Component resultTitleJson(@Nullable JsonObject rule, NameSource source) {
         JsonArray outcomes = arrayOf(rule, RuleFields.OUTCOMES);
         if (outcomes != null && !outcomes.isEmpty()) {
-            return candidateTitle(asObject(outcomes.get(0)), 1, source);
+            return candidateTitleJson(asObject(outcomes.get(0)), 1, source);
         }
         JsonArray effects = arrayOf(rule, RuleFields.EFFECTS);
         if (effects == null || effects.isEmpty()) {
             return Component.translatable(PREFIX + "unfinished_no_result");
         }
-        return effectListTitle(effects, source);
+        return effectListTitleJson(effects, source);
+    }
+
+    // 候选标题（传动态值对象）
+    public static Component candidateTitle(@Nullable RuleValue candidate, int ordinal, NameSource source) {
+        return candidateTitleJson(candidate == null || !candidate.isMapping() ? null : candidate.unwrap().getAsJsonObject(), ordinal, source);
     }
 
     // 候选标题："结果 %1$s：%2$s"
-    public static Component candidateTitle(@Nullable JsonObject candidate, int ordinal, NameSource source) {
+    private static Component candidateTitleJson(@Nullable JsonObject candidate, int ordinal, NameSource source) {
         JsonArray effects = candidate == null ? null : arrayOf(candidate, RuleFields.CANDIDATE_EFFECTS);
         Component body = effects == null || effects.isEmpty()
                 ? Component.translatable(PREFIX + "unfinished_no_result")
-                : effectListTitle(effects, source);
+                : effectListTitleJson(effects, source);
         return Component.translatable(PREFIX + "candidate", ordinal, body);
     }
 
+    // 效果列表摘要（传动态值对象）
+    public static Component effectListTitle(@Nullable RuleValue effects, NameSource source) {
+        return effectListTitleJson(effects == null || !effects.isList() ? null : effects.unwrap().getAsJsonArray(), source);
+    }
+
     // 效果列表摘要：代表项 + 「另有 n 项」
-    public static Component effectListTitle(@Nullable JsonArray effects, NameSource source) {
+    private static Component effectListTitleJson(@Nullable JsonArray effects, NameSource source) {
         List<JsonObject> list = objects(effects);
         if (list.isEmpty()) {
             return Component.translatable(PREFIX + "unfinished_no_result");
         }
-        Component first = effectTitle(representative(list), source);
+        Component first = effectTitleJson(representative(list), source);
         int others = list.size() - 1;
         if (others <= 0) {
             return first;
@@ -130,7 +155,12 @@ public final class RuleNaming {
      * 第三方或未知类型走 {@link TypeLabels#effectLabel(ResourceLocation)}
      * （其自身已有 literal(id) 兜底）。
      */
-    public static Component effectTitle(@Nullable JsonObject effect, NameSource source) {
+    public static Component effectTitle(@Nullable RuleValue effect, NameSource source) {
+        return effectTitleJson(effect == null || !effect.isMapping() ? null : effect.unwrap().getAsJsonObject(), source);
+    }
+
+    // 单个效果的短标题：输入为效果 JSON 对象
+    private static Component effectTitleJson(@Nullable JsonObject effect, NameSource source) {
         if (effect == null) {
             return Component.translatable(PREFIX + "unfinished_no_result");
         }

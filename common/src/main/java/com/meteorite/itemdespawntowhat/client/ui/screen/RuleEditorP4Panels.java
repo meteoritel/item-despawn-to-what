@@ -1,35 +1,33 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonPrimitive;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
+import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
-import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiCyclicRange;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumberPolicy;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeEnd;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeValue;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
+import com.meteorite.itemdespawntowhat.client.ui.screen.form.LeafPanel;
+import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons;
+import com.meteorite.itemdespawntowhat.client.ui.shared.EntityPreviewIcons;
+import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogChoices;
+import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes;
+import com.meteorite.itemdespawntowhat.client.ui.shared.FluidPreviewIcons;
+import com.meteorite.itemdespawntowhat.client.ui.shared.TagPreviewIcons;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCatalogGrid;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCyclicTimeBar;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiNarration;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiRangeBar;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiStructureDiagram;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalog;
@@ -39,37 +37,30 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.glfw.GLFW;
 
 /**
- * P4 宿主装配（主计划 §4/§7/§8）：目录图标面板接线、气候/昼夜/高度区间条、结构图解与叶子编辑面板。
+ * P4 宿主装配（主计划 §4/§7/§8）：目录图标面板接线、气候/昼夜/高度区间条、结构图解与叶子面板装配
+ * （面板实现见 {@link LeafPanel}）。
  * <p>本类只做「把 kit 控件与目录链路接到规则草稿上」的装配，不复制数据层逻辑：
  * 写入一律经调用方给定的 {@code applyChange}（内部走 {@link EditSession#apply(String, Runnable)}，
  * 一次完整操作 = 一条撤销记录）。
  * <p>目录条目、图标与文本由宿主解析：{@link #catalogLabel(String)} 判定翻译键，
- * {@link #iconFor(RuleCatalogType, String)} 提供物品/方块图标，其余目录类型回落文字槽。
+ * 图标分发见 {@link com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons#iconFor(RuleCatalogType, String)}，
+ * 其余目录类型回落文字槽。
  */
 public final class RuleEditorP4Panels {
+
+    // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
+    private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
+
     private static final String RANGE_MIN_FIELD = "min";
     private static final String RANGE_MAX_FIELD = "max";
 
     private static final String UI = TypeLabels.UI_PREFIX;
-    // 区间条 / 昼夜条高度（标签行 + 轨道；昼夜条另含预设行）
-    private static final int RANGE_HEIGHT = 24;
-    private static final int CYCLIC_HEIGHT = 40;
-    private static final int BUTTON_HEIGHT = 16;
-    private static final int BUTTON_GAP = 2;
-    private static final int EXTRA_GAP = 2;
     // 一天 24000 刻；0 刻对应 Minecraft 06:00
     private static final double DAY_TICKS = 24000.0D;
     private static final int DAY_MINUTE_OFFSET = 360;
@@ -84,7 +75,7 @@ public final class RuleEditorP4Panels {
     private static final int PICKER_MAX_BODY_HEIGHT = 300;
     private static final int PICKER_MARGIN = 32;
     // 弹窗除内容区外的固定高度：标题栏 + 三处内边距 + 一行按钮
-    private static final int MODAL_CHROME_HEIGHT = UiTheme.HEADER_HEIGHT + UiTheme.PADDING * 3
+    private static final int MODAL_CHROME_HEIGHT = THEME.headerHeight() + THEME.padding() * 3
             + UiModal.BUTTON_HEIGHT;
 
     private RuleEditorP4Panels() {
@@ -125,7 +116,7 @@ public final class RuleEditorP4Panels {
 
     // 全天 / 白天 / 夜间预设；点击即一次提交
     public static UiCyclicTimeBar dailyBar(Font font, UiCyclicTimeBar.Listener listener) {
-        UiCyclicTimeBar bar = new UiCyclicTimeBar(font, cyclicTexts(), listener);
+        UiCyclicTimeBar bar = new UiCyclicTimeBar(THEME, font, cyclicTexts(), listener);
         bar.setTicks(dayTicks());
         bar.setFormatter(RuleEditorP4Panels::clockText);
         bar.setPresets(List.of(
@@ -160,90 +151,6 @@ public final class RuleEditorP4Panels {
         return looksLikeKey ? Component.translatable(raw) : Component.literal(raw);
     }
 
-    // 物品、方块、实体和流体图标；其他目录类型回落文字槽。
-    public static @Nullable UiIcon iconFor(@Nullable RuleCatalogType type, @Nullable String id) {
-        if (type == null || id == null || id.isBlank()) {
-            return null;
-        }
-        if (id.startsWith("#") && (type == RuleCatalogType.ITEM || type == RuleCatalogType.BLOCK
-                || type == RuleCatalogType.ENTITY || type == RuleCatalogType.FLUID))
-            return TagPreviewIcons.resolve(type, id).icon();
-        String normalized = id.startsWith("#") ? id.substring(1) : id;
-        ResourceLocation key = ResourceLocation.tryParse(
-                normalized.indexOf(':') >= 0 ? normalized : "minecraft:" + normalized);
-        if (key == null) {
-            return null;
-        }
-        if (type == RuleCatalogType.ENTITY && !id.startsWith("#")) return EntityPreviewIcons.icon(key.toString(), 0);
-        if (type == RuleCatalogType.BLOCK && !id.startsWith("#")) return BlockPreviewIcons.icon(key.toString());
-        if (type == RuleCatalogType.FLUID && !id.startsWith("#")) return FluidPreviewIcons.icon(key.toString());
-        ItemStack stack = switch (type) {
-            case ITEM -> stackOf(BuiltInRegistries.ITEM.getOptional(key).orElse(null));
-            case BLOCK -> BuiltInRegistries.BLOCK.getOptional(key).map(block -> stackOf(block.asItem()))
-                    .orElse(ItemStack.EMPTY);
-            default -> ItemStack.EMPTY;
-        };
-        return stack.isEmpty() ? null : new UiIcon.Item(stack);
-    }
-
-    private static ItemStack stackOf(@Nullable Item item) {
-        return item == null || item == Items.AIR ? ItemStack.EMPTY : new ItemStack(item);
-    }
-
-    // 字段的注册表提示 -> 目录类型（只覆盖能落到目录面板的类型）
-    public static @Nullable RuleCatalogType catalogTypeOf(EditorField field) {
-        String registry = field.registry();
-        if ((registry == null || registry.isBlank()) && field.domain() != null) {
-            registry = field.domain();
-        }
-        if (registry != null && !registry.isBlank()) {
-            RuleCatalogType byRegistry = registryType(registry);
-            if (byRegistry != null) {
-                return byRegistry;
-            }
-        }
-        return switch (field.name()) {
-            case "biomes", "biome" -> RuleCatalogType.BIOME;
-            case "items", "item" -> RuleCatalogType.ITEM;
-            case "blocks", "block" -> RuleCatalogType.BLOCK;
-            case "entity_types", "entity" -> RuleCatalogType.ENTITY;
-            case "fluids", "fluid" -> RuleCatalogType.FLUID;
-            case "loot_table" -> RuleCatalogType.LOOT_TABLE;
-            case "dimension" -> RuleCatalogType.DIMENSION;
-            case "potion_effects", "effect", "mob_effect" -> RuleCatalogType.MOB_EFFECT;
-            default -> null;
-        };
-    }
-
-    private static @Nullable RuleCatalogType registryType(String registry) {
-        String name = registry.toLowerCase(Locale.ROOT);
-        if (name.equals("item") || name.equals("items") || name.endsWith(":item")) {
-            return RuleCatalogType.ITEM;
-        }
-        if (name.equals("block") || name.equals("blocks") || name.endsWith(":block")) {
-            return RuleCatalogType.BLOCK;
-        }
-        if (name.contains("entity_type") || name.equals("entity")) {
-            return RuleCatalogType.ENTITY;
-        }
-        if (name.contains("fluid")) {
-            return RuleCatalogType.FLUID;
-        }
-        if (name.contains("loot_table")) {
-            return RuleCatalogType.LOOT_TABLE;
-        }
-        if (name.contains("biome")) {
-            return RuleCatalogType.BIOME;
-        }
-        if (name.contains("dimension") || name.equals("level")) {
-            return RuleCatalogType.DIMENSION;
-        }
-        if (name.contains("mob_effect") || name.contains("potion")) {
-            return RuleCatalogType.MOB_EFFECT;
-        }
-        return null;
-    }
-
     // 目录面板弹窗：数据与请求全部走既有工作区链路，翻页/搜索只发意图
     public static UiModal catalogModal(Font font, EditorWorkspaceView workspace, RuleCatalogType type,
                                        boolean multiSelect, Component title, int screenWidth, int screenHeight,
@@ -271,7 +178,7 @@ public final class RuleEditorP4Panels {
         mapper.field = field;
         mapper.includeTags = includeTags;
         mapper.policy = policy;
-        UiCatalogGrid grid = new UiCatalogGrid(font, multiSelect, includeTags ? catalogTexts(true) : catalogTexts(), new UiCatalogGrid.Listener() {
+        UiCatalogGrid grid = new UiCatalogGrid(THEME, font, multiSelect, includeTags ? catalogTexts(true) : catalogTexts(), new UiCatalogGrid.Listener() {
             @Override
             public void onSearch(String filter) {
                 mapper.page = 0;
@@ -322,7 +229,7 @@ public final class RuleEditorP4Panels {
             grid.setEnabled(false);
             grid.setError(Component.translatable(UI + "pick.frozen"));
         }
-        UiModal modal = UiModal.create(font);
+        UiModal modal = UiModal.create(THEME, font);
         modal.title(title);
         modal.preferredWidth(pickerWidth(screenWidth));
         // 翻页与状态排到确认/取消同一行的左侧，省下独立一行的底部空间
@@ -400,7 +307,7 @@ public final class RuleEditorP4Panels {
                             && (entry.id().equals("minecraft:item") || entry.id().equals("minecraft:experience_orb"))) continue;
                     String sub = validTags == null ? entry.subLabel() : Component.translatable(field.labelKey()).getString();
                     if (type == RuleCatalogType.TAG) {
-                        RuleCatalogType memberType = field == null ? RuleCatalogType.ITEM : catalogTypeOf(field);
+                        RuleCatalogType memberType = field == null ? RuleCatalogType.ITEM : FieldCatalogTypes.catalogTypeOf(field);
                         var tag = TagPreviewIcons.resolve(memberType == null ? RuleCatalogType.ITEM : memberType, entry.id());
                         tagPreviews.put(entry.id(), tag);
                         mapped.add(new UiCatalogGrid.Entry(entry.id(), tag.label(), null, tag.icon()));
@@ -408,7 +315,7 @@ public final class RuleEditorP4Panels {
                         ResourceLocation id = ResourceLocation.tryParse(entry.id());
                         Component fluidLabel = type == RuleCatalogType.FLUID && id != null ? FluidPreviewIcons.label(id) : null;
                         mapped.add(new UiCatalogGrid.Entry(entry.id(), fluidLabel == null ? catalogLabel(entry.label()) : fluidLabel,
-                                sub == null || sub.isBlank() ? null : catalogLabel(sub), iconFor(type, entry.id())));
+                                sub == null || sub.isBlank() ? null : catalogLabel(sub), CatalogPreviewIcons.iconFor(type, entry.id())));
                     }
                 }
                 if (withTags && tags != null && field != null) {
@@ -443,35 +350,34 @@ public final class RuleEditorP4Panels {
     }
 
     // 气候模式且六维全部无约束：本地拦截，不放进待提交状态（服务端 BiomeCondition 同样会拒绝）
-    public static boolean climateAllUnbounded(@Nullable JsonObject rule) {
+    public static boolean climateAllUnbounded(@Nullable RuleValue rule) {
         if (rule == null || !rule.has(RuleFields.CONDITIONS)) {
             return false;
         }
-        return climateAllUnbounded(rule.get(RuleFields.CONDITIONS));
+        return containsUnboundedClimate(rule.child(RuleFields.CONDITIONS));
     }
 
     private static final String[] CLIMATE_FIELDS = {"temperature", "humidity", "continentalness", "erosion", "depth",
             "weirdness"};
 
-    private static boolean climateAllUnbounded(@Nullable JsonElement element) {
+    private static boolean containsUnboundedClimate(@Nullable RuleValue element) {
         if (element == null) {
             return false;
         }
-        if (element.isJsonObject()) {
-            JsonObject body = element.getAsJsonObject();
-            if (isClimateCondition(body) && !hasBoundedClimate(body)) {
+        if (element.isMapping()) {
+            if (isClimateCondition(element) && !hasBoundedClimate(element)) {
                 return true;
             }
-            for (String key : body.keySet()) {
-                if (climateAllUnbounded(body.get(key))) {
+            for (String key : element.keys()) {
+                if (containsUnboundedClimate(element.child(key))) {
                     return true;
                 }
             }
             return false;
         }
-        if (element.isJsonArray()) {
-            for (JsonElement child : element.getAsJsonArray()) {
-                if (climateAllUnbounded(child)) {
+        if (element.isList()) {
+            for (RuleValue child : element.items()) {
+                if (containsUnboundedClimate(child)) {
                     return true;
                 }
             }
@@ -479,47 +385,44 @@ public final class RuleEditorP4Panels {
         return false;
     }
 
-    private static boolean isClimateCondition(JsonObject body) {
-        JsonElement type = body.get(RuleFields.TYPE);
-        JsonElement mode = body.get("mode");
-        return type != null && type.isJsonPrimitive() && type.getAsJsonPrimitive().isString()
-                && type.getAsString().endsWith("biome")
-                && mode != null && mode.isJsonPrimitive() && mode.getAsJsonPrimitive().isString()
-                && "climate".equals(mode.getAsString());
+    private static boolean isClimateCondition(RuleValue body) {
+        RuleValue type = body.child(RuleFields.TYPE);
+        RuleValue mode = body.child("mode");
+        return type != null && type.isText() && type.asText().endsWith("biome")
+                && mode != null && mode.isText() && "climate".equals(mode.asText());
     }
 
     // 至少一端有界才算有效约束，避免 "temperature": {} 被当作已填写
-    private static boolean hasBoundedClimate(JsonObject body) {
+    private static boolean hasBoundedClimate(RuleValue body) {
         for (String name : CLIMATE_FIELDS) {
-            JsonElement range = body.get(name);
-            if (range == null || !range.isJsonObject()) {
+            RuleValue range = body.child(name);
+            if (range == null || !range.isMapping()) {
                 continue;
             }
-            JsonObject bounds = range.getAsJsonObject();
-            if (isNumber(bounds.get("min")) || isNumber(bounds.get("max"))) {
+            if (isNumber(range.child("min")) || isNumber(range.child("max"))) {
                 return true;
             }
         }
         return false;
     }
 
-    private static boolean isNumber(@Nullable JsonElement element) {
-        return element != null && element.isJsonPrimitive() && element.getAsJsonPrimitive().isNumber();
+    private static boolean isNumber(@Nullable RuleValue element) {
+        return element != null && element.isNumber();
     }
 
     // ---- 结构图解 ----
 
     // 槽位与连接：源物品 ->（催化剂）-> 候选 -> 效果；节点 id 由宿主映射到页面/候选/效果
-    public static UiStructureDiagram structureDiagram(Font font, JsonObject rule, RuleNaming.NameSource source,
+    public static UiStructureDiagram structureDiagram(Font font, RuleValue rule, RuleNaming.NameSource source,
                                                       int candidateIndex, Consumer<String> navigate) {
-        UiStructureDiagram diagram = new UiStructureDiagram(font, navigate::accept);
+        UiStructureDiagram diagram = new UiStructureDiagram(THEME, font, navigate::accept);
         diagram.setEmptyMessage(Component.translatable(UI + "diagram.empty"));
         diagram.setNodes(diagramNodes(rule, source, candidateIndex));
         diagram.setEdges(diagramEdges(rule));
         return diagram;
     }
 
-    public static List<UiStructureDiagram.Node> diagramNodes(@Nullable JsonObject rule, RuleNaming.NameSource source,
+    public static List<UiStructureDiagram.Node> diagramNodes(@Nullable RuleValue rule, RuleNaming.NameSource source,
                                                              int candidateIndex) {
         List<UiStructureDiagram.Node> nodes = new ArrayList<>();
         if (rule == null) {
@@ -535,7 +438,7 @@ public final class RuleEditorP4Panels {
         }
         int candidates = Math.max(1, ResultStructure.candidateCount(rule));
         for (int index = 0; index < candidates; index++) {
-            JsonObject candidate = ResultStructure.candidateAt(rule, index);
+            RuleValue candidate = ResultStructure.candidateAt(rule, index);
             String listPath = ResultStructure.listPath(rule, index);
             int effects = ResultStructure.effectCount(rule, index);
             nodes.add(new UiStructureDiagram.Node("candidate:" + index,
@@ -551,19 +454,19 @@ public final class RuleEditorP4Panels {
         return nodes;
     }
 
-    private static @Nullable JsonObject effectAt(@Nullable JsonObject candidate, int index) {
-        if (candidate == null || !candidate.has(RuleFields.CANDIDATE_EFFECTS)
-                || !candidate.get(RuleFields.CANDIDATE_EFFECTS).isJsonArray()) {
+    private static @Nullable RuleValue effectAt(@Nullable RuleValue candidate, int index) {
+        if (candidate == null || !candidate.isMapping()) {
             return null;
         }
-        JsonArray effects = candidate.getAsJsonArray(RuleFields.CANDIDATE_EFFECTS);
-        if (index < 0 || index >= effects.size() || !effects.get(index).isJsonObject()) {
+        RuleValue effects = candidate.child(RuleFields.CANDIDATE_EFFECTS);
+        if (effects == null || !effects.isList() || index < 0 || index >= effects.size()) {
             return null;
         }
-        return effects.get(index).getAsJsonObject();
+        RuleValue effect = effects.item(index);
+        return effect != null && effect.isMapping() ? effect : null;
     }
 
-    public static List<UiStructureDiagram.Edge> diagramEdges(@Nullable JsonObject rule) {
+    public static List<UiStructureDiagram.Edge> diagramEdges(@Nullable RuleValue rule) {
         List<UiStructureDiagram.Edge> edges = new ArrayList<>();
         if (rule == null) {
             return edges;
@@ -631,7 +534,7 @@ public final class RuleEditorP4Panels {
             reloadValues.add(() -> bar.core().setValue(readRange(draft, join(basePath, min.name()), join(basePath, max.name()))));
         }
         form.setCatalogOpener((field, tags, picked) -> pushModal.accept(catalogModal(font, workspace,
-                tags ? RuleCatalogType.TAG : catalogTypeOf(field), isListField(field),
+                tags ? RuleCatalogType.TAG : FieldCatalogTypes.catalogTypeOf(field), isListField(field),
                 Component.translatable(field.labelKey()), screenWidth, screenHeight, picked, field)));
         LeafPanel panel = new LeafPanel(font, form, extras, buttons, reloadValues);
         int extraIndex = 0;
@@ -678,19 +581,11 @@ public final class RuleEditorP4Panels {
         return basePath == null || basePath.isBlank() ? name : basePath + "." + name;
     }
 
-    // 按钮宽度：先满足最小可点宽度，再压进可用宽度（可用宽度可能小于最小值）
-    // 这里刻意不用 Math.clamp：可用宽度可能小于最小宽度，clamp 的 min>max 会抛异常
-    @SuppressWarnings("ManualMinMaxCalculation")
-    private static int fitWidth(int preferred, int available) {
-        int atLeastMin = Math.max(preferred, 60);
-        return available < atLeastMin ? available : atLeastMin;
-    }
-
     // 气候区间：字段自身是 {min,max} 对象，两端可省略；0.1 普通步长 / 0.01 Shift
     private static UiRangeBar climateBar(Font font, RuleDraft draft, EditorField field, String basePath,
                                          Consumer<Runnable> applyChange, Runnable onChange) {
         String path = join(basePath, field.name());
-        UiRangeBar bar = new UiRangeBar(font,
+        UiRangeBar bar = new UiRangeBar(THEME, font,
                 UiNumberPolicy.of(field.doubleMin(-1.0D), field.doubleMax(1.0D), 0.1D, 0.01D),
                 readRange(draft, path), rangeTexts(), value -> {
                     applyChange.accept(() -> {
@@ -699,14 +594,14 @@ public final class RuleEditorP4Panels {
                             draft.removeAt(path);
                             return;
                         }
-                        JsonObject body = new JsonObject();
+                        RuleValue.Mapping body = RuleValue.mapping();
                         if (value.lowPresent()) {
-                            body.add("min", new JsonPrimitive(value.low()));
+                            body.put("min", RuleValue.decimal(value.low()));
                         }
                         if (value.highPresent()) {
-                            body.add("max", new JsonPrimitive(value.high()));
+                            body.put("max", RuleValue.decimal(value.high()));
                         }
-                        draft.setAt(path, body);
+                        draft.setAt(path, body.build());
                     });
                     onChange.run();
                 });
@@ -719,7 +614,7 @@ public final class RuleEditorP4Panels {
                                           String basePath, Consumer<Runnable> applyChange, Runnable onChange) {
         String lowPath = join(basePath, minField.name());
         String highPath = join(basePath, maxField.name());
-        UiRangeBar bar = new UiRangeBar(font,
+        UiRangeBar bar = new UiRangeBar(THEME, font,
                 UiNumberPolicy.integer(minField.intMin(-2048), maxField.intMax(2048), 1, 1),
                 readRange(draft, lowPath, highPath), rangeTexts(), value -> {
                     applyChange.accept(() -> {
@@ -739,8 +634,8 @@ public final class RuleEditorP4Panels {
         String toPath = join(basePath, to.name());
         UiCyclicTimeBar bar = dailyBar(font, (fromTick, toTick) -> {
             applyChange.accept(() -> {
-                draft.setAt(fromPath, new JsonPrimitive((int) Math.round(fromTick)));
-                draft.setAt(toPath, new JsonPrimitive((int) Math.round(toTick)));
+                draft.setAt(fromPath, RuleValue.integer((int) Math.round(fromTick)));
+                draft.setAt(toPath, RuleValue.integer((int) Math.round(toTick)));
             });
             onChange.run();
         });
@@ -750,402 +645,40 @@ public final class RuleEditorP4Panels {
     }
 
     private static int intAt(RuleDraft draft, String path, int fallback) {
-        JsonElement value = draft.getAt(path);
-        return value != null && value.isJsonPrimitive() && value.getAsJsonPrimitive().isNumber()
-                ? value.getAsInt() : fallback;
+        RuleValue value = draft.valueAt(path);
+        return value != null && value.isNumber() ? value.asInteger(fallback) : fallback;
     }
 
     // 气候区间字段：对象内的端点键固定为 min / max
     private static UiRangeValue readRange(RuleDraft draft, String path) {
-        JsonElement element = draft.getAt(path);
-        if (element == null || !element.isJsonObject()) {
+        RuleValue element = draft.valueAt(path);
+        if (element == null || !element.isMapping()) {
             return UiRangeValue.EMPTY;
         }
-        JsonObject body = element.getAsJsonObject();
-        return readRange(body.get("min"), body.get("max"));
+        return readRange(element.child("min"), element.child("max"));
     }
 
     // 两个独立路径上的端点（高度/光照）
     private static UiRangeValue readRange(RuleDraft draft, String lowPath, String highPath) {
-        return readRange(draft.getAt(lowPath), draft.getAt(highPath));
+        return readRange(draft.valueAt(lowPath), draft.valueAt(highPath));
     }
 
-    private static UiRangeValue readRange(@Nullable JsonElement low, @Nullable JsonElement high) {
-        boolean lowPresent = low != null && low.isJsonPrimitive() && low.getAsJsonPrimitive().isNumber();
-        boolean highPresent = high != null && high.isJsonPrimitive() && high.getAsJsonPrimitive().isNumber();
+    private static UiRangeValue readRange(@Nullable RuleValue low, @Nullable RuleValue high) {
+        boolean lowPresent = low != null && low.isNumber();
+        boolean highPresent = high != null && high.isNumber();
         if (!lowPresent && !highPresent) {
             return UiRangeValue.EMPTY;
         }
-        return new UiRangeValue(lowPresent ? low.getAsDouble() : 0.0D, highPresent ? high.getAsDouble() : 0.0D,
-                lowPresent, highPresent);
+        return new UiRangeValue(lowPresent ? low.asDecimal(0.0D) : 0.0D,
+                highPresent ? high.asDecimal(0.0D) : 0.0D, lowPresent, highPresent);
     }
 
     private static void writeNumber(RuleDraft draft, String path, @Nullable Double value) {
         if (value == null) {
             draft.removeAt(path);
         } else {
-            draft.setAt(path, new JsonPrimitive(value));
+            draft.setAt(path, RuleValue.decimal(value));
         }
     }
 
-
-    /**
-     * 叶子面板：附加区间控件 + 目录按钮 + 表单，纵向排列。
-     * <p>面板自身是模态内容控件，因此它负责把指针/键盘/字符事件转发给子控件，并在内部维护
-     * Tab / Shift+Tab 的焦点顺序（附加控件 -> 目录按钮 -> 表单字段）。
-     */
-    public static final class LeafPanel implements UiWidget, UiFocusTarget {
-
-        private final Font font;
-        private final FormView form;
-        private final List<UiWidget> extras;
-        private final List<UiButton> buttons;
-        private final List<Runnable> reloadValues;
-        // 动态说明行（门槛留空时的「默认：N」等）：供应者返回 null 表示当前不画出该行
-        private final List<Supplier<Component>> notes = new ArrayList<>();
-        private final List<UiRect> noteRects = new ArrayList<>();
-        // 说明行行高：比正文字高多 1 像素，避免与表单末行贴死
-        private final int noteLineHeight;
-        private UiRect bounds = new UiRect(0, 0, 0, 0);
-        private boolean focused;
-        private boolean enabled = true;
-        private int focusIndex;
-
-        LeafPanel(Font font, FormView form, List<UiWidget> extras, List<UiButton> buttons, List<Runnable> reloadValues) {
-            this.font = font;
-            this.noteLineHeight = font.lineHeight + 1;
-            this.form = form;
-            this.extras = extras;
-            this.buttons = buttons;
-            this.reloadValues = reloadValues;
-        }
-
-        /** 历史恢复后回填已接受的字段与区间值，未完成文本由表单保留。 */
-        public void reload() {
-            form.reload();
-            reloadValues.forEach(Runnable::run);
-        }
-
-        // 追加一条动态说明行：高度在布局时预留，内容每帧重新求值
-        public LeafPanel addNote(Supplier<Component> note) {
-            notes.add(note);
-            return this;
-        }
-
-        // 面板内容总高（模态据此申请高度）
-        public int contentHeight() {
-            int height = 0;
-            for (UiWidget extra : extras) {
-                height += extraHeight(extra) + EXTRA_GAP;
-            }
-            if (!buttons.isEmpty()) {
-                height += BUTTON_HEIGHT + BUTTON_GAP;
-            }
-            height += form.contentHeight();
-            height += notes.size() * noteLineHeight;
-            return Math.max(24, height);
-        }
-
-        private static int extraHeight(UiWidget widget) {
-            return widget instanceof UiCyclicTimeBar ? CYCLIC_HEIGHT : RANGE_HEIGHT;
-        }
-
-        @Override
-        public UiRect bounds() {
-            return bounds;
-        }
-
-        @Override
-        public void setBounds(int x, int y, int width, int height) {
-            this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
-            layout();
-        }
-
-        private void layout() {
-            int x = bounds.x();
-            int width = bounds.width();
-            int cursorY = bounds.y();
-            for (UiWidget extra : extras) {
-                int extraHeight = extraHeight(extra);
-                extra.setBounds(x, cursorY, width, extraHeight);
-                cursorY += extraHeight + EXTRA_GAP;
-            }
-            cursorY = layoutButtons(cursorY);
-            int notesHeight = notes.size() * noteLineHeight;
-            form.setBounds(x, cursorY, width, Math.max(12, bounds.bottom() - cursorY - notesHeight));
-            // 说明行固定排在表单下方，供应者返回 null 时仅留白不画字
-            noteRects.clear();
-            int noteY = cursorY + Math.max(12, bounds.bottom() - cursorY - notesHeight);
-            for (int index = 0; index < notes.size(); index++) {
-                noteRects.add(new UiRect(x, noteY, width, noteLineHeight));
-                noteY += noteLineHeight;
-            }
-        }
-
-        private int layoutButtons(int cursorY) {
-            if (buttons.isEmpty()) {
-                return cursorY;
-            }
-            int x = bounds.x();
-            int cursorX = x;
-            for (UiButton button : buttons) {
-                int buttonWidth = fitWidth(button.preferredWidth(4), bounds.width());
-                if (cursorX > x && cursorX + buttonWidth > bounds.right()) {
-                    cursorX = x;
-                    cursorY += BUTTON_HEIGHT + BUTTON_GAP;
-                }
-                button.setBounds(cursorX, cursorY, buttonWidth, BUTTON_HEIGHT);
-                cursorX += buttonWidth + BUTTON_GAP;
-            }
-            return cursorY + BUTTON_HEIGHT + BUTTON_GAP;
-        }
-
-        // 结束所有未完成交互（切页/关闭/失权）
-        public void endInteractions() {
-            for (UiWidget extra : extras) {
-                if (extra instanceof UiRangeBar bar) {
-                    bar.endInteraction(UiInputCapture.EndReason.FOCUS_SCOPE_CHANGED);
-                } else if (extra instanceof UiCyclicTimeBar bar) {
-                    bar.endInteraction(UiInputCapture.EndReason.FOCUS_SCOPE_CHANGED);
-                }
-            }
-            form.onFocusScopeChanged();
-        }
-
-        public void unmount() {
-            for (UiWidget extra : extras) {
-                if (extra instanceof UiRangeBar bar) {
-                    bar.unmount();
-                } else if (extra instanceof UiCyclicTimeBar bar) {
-                    bar.unmount();
-                }
-            }
-            form.unmount();
-        }
-
-        public void onHostClosed() {
-            for (UiWidget extra : extras) {
-                if (extra instanceof UiRangeBar bar) {
-                    bar.onHostClosed();
-                } else if (extra instanceof UiCyclicTimeBar bar) {
-                    bar.onHostClosed();
-                }
-            }
-            form.onHostClosed();
-        }
-
-        public void setEnabled(boolean enabled) {
-            this.enabled = enabled;
-            for (UiWidget extra : extras) {
-                if (extra instanceof UiRangeBar bar) {
-                    bar.setEnabled(enabled);
-                } else if (extra instanceof UiCyclicTimeBar bar) {
-                    bar.setEnabled(enabled);
-                }
-            }
-            for (UiButton button : buttons) {
-                button.setEnabled(enabled);
-            }
-            form.setEnabled(enabled);
-        }
-
-        // 面板内部焦点顺序：附加控件 -> 目录按钮 -> 表单字段
-        public List<UiFocusTarget> focusTargets() {
-            List<UiFocusTarget> targets = new ArrayList<>();
-            for (UiWidget extra : extras) {
-                if (extra instanceof UiFocusTarget target) {
-                    targets.add(target);
-                }
-            }
-            targets.addAll(buttons);
-            targets.addAll(form.focusTargets());
-            return targets;
-        }
-
-        @Override
-        public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
-            for (UiWidget extra : extras) {
-                extra.render(graphics, renderFont, mouseX, mouseY);
-            }
-            for (UiButton button : buttons) {
-                button.render(graphics, renderFont, mouseX, mouseY);
-            }
-            form.render(graphics, renderFont, mouseX, mouseY);
-            for (int index = 0; index < notes.size() && index < noteRects.size(); index++) {
-                Component note = notes.get(index).get();
-                if (note == null) {
-                    continue;
-                }
-                UiRect rect = noteRects.get(index);
-                String text = TextScroll.trimToWidth(font, note.getString(), Math.max(1, rect.width()));
-                graphics.drawString(font, text, rect.x(), rect.y(), UiPalette.TEXT_SECONDARY, false);
-            }
-        }
-
-        @Override
-        public boolean mouseClicked(double mouseX, double mouseY, int button) {
-            if (!enabled || !bounds.contains(mouseX, mouseY)) {
-                return false;
-            }
-            List<UiFocusTarget> targets = focusTargets();
-            if (button == 0) {
-                for (int index = 0; index < targets.size(); index++) {
-                    UiFocusTarget target = targets.get(index);
-                    boolean hit = target.canFocus() && target.bounds().contains(mouseX, mouseY);
-                    target.setFocused(hit);
-                    if (hit) {
-                        focusIndex = index;
-                    }
-                }
-            }
-            for (UiButton candidate : buttons) {
-                if (candidate.isVisible() && candidate.mouseClicked(mouseX, mouseY, button)) {
-                    return true;
-                }
-            }
-            for (UiWidget extra : extras) {
-                if (extra.mouseClicked(mouseX, mouseY, button)) {
-                    return true;
-                }
-            }
-            return form.mouseClicked(mouseX, mouseY, button);
-        }
-
-        @Override
-        public boolean mouseReleased(double mouseX, double mouseY, int button) {
-            boolean consumed = false;
-            for (UiWidget extra : extras) {
-                consumed |= extra.mouseReleased(mouseX, mouseY, button);
-            }
-            consumed |= form.mouseReleased(mouseX, mouseY, button);
-            for (UiButton candidate : buttons) {
-                consumed |= candidate.mouseReleased(mouseX, mouseY, button);
-            }
-            return consumed;
-        }
-
-        @Override
-        public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-            boolean consumed = false;
-            for (UiWidget extra : extras) {
-                consumed |= extra.mouseDragged(mouseX, mouseY, button, dragX, dragY);
-            }
-            consumed |= form.mouseDragged(mouseX, mouseY, button, dragX, dragY);
-            return consumed;
-        }
-
-        @Override
-        public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-            return form.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
-        }
-
-        @Override
-        public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-            if (keyCode == GLFW.GLFW_KEY_TAB) {
-                moveFocus((modifiers & GLFW.GLFW_MOD_SHIFT) != 0 ? -1 : 1);
-                return true;
-            }
-            for (UiWidget extra : extras) {
-                if (extra.keyPressed(keyCode, scanCode, modifiers)) {
-                    return true;
-                }
-            }
-            for (UiButton button : buttons) {
-                if (button.isFocused() && button.keyPressed(keyCode, scanCode, modifiers)) {
-                    return true;
-                }
-            }
-            return form.keyPressed(keyCode, scanCode, modifiers);
-        }
-
-        @Override
-        public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
-            boolean consumed = false;
-            for (UiWidget extra : extras) {
-                consumed |= extra.keyReleased(keyCode, scanCode, modifiers);
-            }
-            consumed |= form.keyReleased(keyCode, scanCode, modifiers);
-            return consumed;
-        }
-
-        @Override
-        public boolean charTyped(char codePoint, int modifiers) {
-            for (UiWidget extra : extras) {
-                if (extra.charTyped(codePoint, modifiers)) {
-                    return true;
-                }
-            }
-            return form.charTyped(codePoint, modifiers);
-        }
-
-        // 参数校验失败时，内部焦点与字段滚动保持一致。
-        public void focusField(String path) {
-            UiFocusTarget target = form.revealPath(path);
-            List<UiFocusTarget> targets = focusTargets();
-            for (int index = 0; index < targets.size(); index++) {
-                boolean selected = targets.get(index) == target;
-                targets.get(index).setFocused(selected);
-                if (selected) {
-                    focusIndex = index;
-                }
-            }
-        }
-
-        private void moveFocus(int delta) {
-            List<UiFocusTarget> targets = focusTargets();
-            if (targets.isEmpty()) {
-                return;
-            }
-            int count = targets.size();
-            focusIndex = ((focusIndex + delta) % count + count) % count;
-            for (int index = 0; index < count; index++) {
-                targets.get(index).setFocused(index == focusIndex);
-            }
-            focused = true;
-            // 面板内部焦点切换同样播报（屏幕的焦点管理器看不到面板内部顺序）
-            UiNarration.focus(targets.get(focusIndex));
-        }
-
-        @Override
-        public boolean canFocus() {
-            return enabled;
-        }
-
-        @Override
-        public void setFocused(boolean focused) {
-            this.focused = focused;
-            List<UiFocusTarget> targets = focusTargets();
-            if (!focused) {
-                for (UiFocusTarget target : targets) {
-                    target.setFocused(false);
-                }
-                return;
-            }
-            if (targets.isEmpty()) {
-                return;
-            }
-            focusIndex = Math.clamp(focusIndex, 0, targets.size() - 1);
-            targets.get(focusIndex).setFocused(true);
-        }
-
-        @Override
-        public boolean isFocused() {
-            return focused;
-        }
-
-        @Override
-        public boolean activate() {
-            List<UiFocusTarget> targets = focusTargets();
-            if (targets.isEmpty()) {
-                return false;
-            }
-            focusIndex = Math.clamp(focusIndex, 0, targets.size() - 1);
-            return targets.get(focusIndex).activate();
-        }
-
-        @Override
-        public Component accessibleName() {
-            return Component.translatable(UI + "diagram.leaf").copy().append(" (" + extras.size() + ")");
-        }
-    }
 }

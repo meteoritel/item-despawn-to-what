@@ -1,0 +1,563 @@
+package com.meteorite.itemdespawntowhat.client.ui.screen;
+
+import com.meteorite.itemdespawntowhat.client.edit.EditSession;
+import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
+import com.meteorite.itemdespawntowhat.client.edit.RuleCategories;
+import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
+import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.shared.TagPreviewIcons;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiListView;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiModalStack;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiSegmentedControl;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiTreeNode;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiTreeView;
+import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshotEntry;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.network.chat.Component;
+import org.jetbrains.annotations.Nullable;
+
+/**
+ * 规则编辑器「规则管理页」（LIST 模式）：搜索、筛选、分类规则树与配方预览，以及列表底排按钮的状态同步。
+ *
+ * <p>本类只持有管理页控件与视图状态（选中项、展开分类、每个条目的配方视图），
+ * 规则会话与工作区、弹窗栈、提示条、跨模式动作都通过 {@link Host} 暴露的屏幕能力完成；
+ * 新建 / 复制 / 模板 / 启停 / 删除等条目动作在 {@link RuleEditorScreenListActions}，
+ * 模式切换、保存入口与编辑页由 {@link RuleEditorScreen} 与 {@link RuleEditorScreenEditPage} 负责。</p>
+ */
+final class RuleEditorScreenListPage {
+
+    /*** 宿主能力：管理页只通过这些入口读写屏幕状态与跨模式动作。 */
+    interface Host {
+
+        // 渲染字体
+        Font font();
+
+        // 弹窗栈
+        UiModalStack modals();
+
+        // 规则模型（快照、草稿会话与脏规则）
+        RuleEditorModel model();
+
+        // 编辑工作区只读视图
+        EditorWorkspaceView workspace();
+
+        // 屏幕宽高
+        int screenWidth();
+
+        int screenHeight();
+
+        // 冻结（会话失效 / 只读）时拒绝写入
+        boolean rejectWhenFrozen();
+
+        // 底部提示条
+        void setNotice(@Nullable Component message, int color);
+
+        // 条目显示名（未命名时回退到本地化占位）
+        String labelText(String id);
+
+        // 打开编辑页
+        void openEditor(String id);
+
+        // 新建规则后直接切到「输入与成本」页签
+        void selectInputTab();
+
+        // 草稿改动清单弹窗
+        void showChanges();
+
+        // 提交当前草稿（与编辑页保存按钮同一入口）
+        void save();
+
+        // 确认弹窗
+        void confirm(String titleKey, String messageKey, Runnable onConfirm);
+
+        // 重建规则树（条目动作改动草稿后的统一刷新入口）
+        void refreshList();
+    }
+
+    private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
+    // 布局常量
+    private static final int ROW_H = 12;
+    private static final int SEARCH_MAX_WIDTH = 160;
+    private static final int FILTER_COUNT = 4;
+    private static final int SEARCH_MAX_LENGTH = 128;
+    private static final int MORE_MODAL_WIDTH = 300;
+    private static final int TAG_MODAL_WIDTH = 280;
+    // i18n 前缀
+    private static final String UI = "gui.itemdespawntowhat.edit.";
+
+    private final Host host;
+    private final RuleEditorScreenListActions actions;
+
+    // ---- 列表控件与视图状态 ----
+    private @Nullable UiTextInput searchField;
+    private @Nullable UiSegmentedControl filterControl;
+    private @Nullable UiTreeView<String> ruleList;
+    private final List<String> visibleIds = new ArrayList<>();
+    private final List<UiButton> listButtons = new ArrayList<>();
+    private final RuleEditorScreenButtonBar listBar = new RuleEditorScreenButtonBar();
+    private final RuleEditorScreenButtonBar globalBar = new RuleEditorScreenButtonBar();
+    private final List<UiButton> selectedButtons = new ArrayList<>();
+    private @Nullable UiButton toggleButton;
+    private @Nullable UiButton applyButton;
+    private final Set<String> expandedCategories = new LinkedHashSet<>();
+    private final Map<String, RuleRecipeView> recipeViews = new LinkedHashMap<>();
+    private String lastQuery = "";
+    private String lastTreeQuery = "";
+    private int filterIndex;
+
+    RuleEditorScreenListPage(Host host) {
+        this.host = host;
+        this.actions = new RuleEditorScreenListActions(host, this::selectedRuleId);
+    }
+
+    // ---- 初始化 ----
+
+    // 控件在首次 init 时创建；resize 再次 init 时保留输入缓冲、选择与滚动。
+    boolean initialized() {
+        return ruleList != null;
+    }
+
+    void init() {
+        Font font = host.font();
+        searchField = new UiTextInput(THEME, font, Component.translatable(UI + "list.search"));
+        searchField.setMaxLength(SEARCH_MAX_LENGTH);
+        searchField.setValue(lastQuery);
+        filterControl = new UiSegmentedControl(THEME, font, filterOptions());
+        filterControl.setSelected(filterOptions().get(filterIndex).value());
+        filterControl.setOnChanged(value -> {
+            filterIndex = indexOfFilter(value);
+            refreshList();
+        });
+        ruleList = new UiTreeView<>(THEME, font, (graphics, rowFont, node, row, depth, selected, hovered, focused) -> {
+            if (node.value().startsWith("@")) {
+                graphics.drawString(rowFont, TextScroll.trimToWidth(rowFont, node.label().getString(), row.width() - 4),
+                        row.x() + 2, row.y() + (row.height() - rowFont.lineHeight) / 2, THEME.palette().textSecondary(), false);
+            } else renderRuleRow(graphics, rowFont, node.value(), row, hovered);
+        });
+        ruleList.setRowHeightProvider(node -> font.lineHeight + 4
+                + (node.value().startsWith("@") ? 0 : RuleRecipeView.CONTENT_HEIGHT + 1));
+        ruleList.setEmptyMessage(Component.translatable(UI + "list.empty"));
+        ruleList.setOnActivate(node -> { if (!node.value().startsWith("@")) host.openEditor(node.value()); });
+        buildListButtons();
+    }
+
+    private List<UiSegmentedControl.Option> filterOptions() {
+        return List.of(
+                new UiSegmentedControl.Option("all", Component.translatable(UI + "filter.all")),
+                new UiSegmentedControl.Option("enabled", Component.translatable(UI + "filter.enabled")),
+                new UiSegmentedControl.Option("disabled", Component.translatable(UI + "filter.disabled")),
+                new UiSegmentedControl.Option("issue", Component.translatable(UI + "filter.issue")));
+    }
+
+    private int indexOfFilter(String value) {
+        for (int i = 0; i < FILTER_COUNT; i++) {
+            if (filterOptions().get(i).value().equals(value)) {
+                return i;
+            }
+        }
+        return 0;
+    }
+
+    // ---- 按钮 ----
+
+    private void buildListButtons() {
+        listButtons.clear();
+        UiButton create = button(UI + "button.new", UiButtonVariant.PRIMARY, actions::promptNewRule);
+        UiButton templates = button(UI + "button.template", UiButtonVariant.SECONDARY, actions::openTemplatePicker);
+        UiButton edit = button(UI + "button.edit", UiButtonVariant.PRIMARY, () -> {
+            String id = selectedRuleId(); if (id != null) host.openEditor(id);
+        });
+        toggleButton = button(UI + "button.enable", UiButtonVariant.SECONDARY, actions::toggleSelectedEnabled);
+        UiButton copy = button(UI + "button.duplicate", UiButtonVariant.SECONDARY, actions::promptDuplicate);
+        UiButton more = button(UI + "button.more", UiButtonVariant.SECONDARY, this::openMore);
+        UiButton delete = button(UI + "button.delete", UiButtonVariant.DANGER, actions::deleteSelected);
+        applyButton = button(UI + "button.apply", UiButtonVariant.PRIMARY, host::save);
+        UiButton changes = button(UI + "button.changes", UiButtonVariant.SECONDARY, host::showChanges);
+        selectedButtons.clear();
+        selectedButtons.addAll(List.of(edit, toggleButton, copy, delete, more));
+        globalBar.set(List.of(create, templates, edit, toggleButton, copy, delete, more));
+        listBar.set(List.of(applyButton, changes));
+        listButtons.addAll(List.of(create, templates, edit, toggleButton, copy, delete, more, applyButton, changes));
+    }
+
+    private UiButton button(String labelKey, UiButtonVariant variant, Runnable action) {
+        return new UiButton(THEME, host.font(), Component.translatable(labelKey), variant, action::run);
+    }
+
+    /*** 纵向菜单项，避免窄屏和英文长按钮挤出弹窗。 */
+    private record MenuAction(String key, Runnable action) { }
+
+    private void openMore() {
+        if (selectedRuleId() == null) { actions.noSelection(); return; }
+        UiModal modal = UiModal.create(THEME, host.font()).title(Component.translatable(UI + "button.more"));
+        UiListView<MenuAction> list = new UiListView<>(THEME, host.font(),
+                (graphics, rowFont, item, index, row, selected, hovered, focused) -> graphics.drawString(rowFont,
+                        Component.translatable(UI + item.key()), row.x() + 4, row.y() + 4, THEME.palette().textPrimary(), false));
+        String id = selectedRuleId();
+        RuleValue body = id == null ? null : host.model().displayBody(id);
+        boolean masked = body != null && body.flag(RuleFields.DELETE, false);
+        list.setItems(List.of(new MenuAction(masked ? "button.unmask" : "button.mask", actions::maskSelected),
+                new MenuAction("button.restore", actions::restoreSelected)));
+        list.setRowHeight(20);
+        list.setActivateOnSingleClick(true);
+        list.setOnActivate(item -> { host.modals().close(modal); item.action().run(); });
+        modal.contentWidget(list, 44).cancel(Component.translatable(UI + "button.cancel"));
+        modal.preferredWidth(MORE_MODAL_WIDTH).layoutCentered(host.screenWidth(), host.screenHeight());
+        host.modals().push(modal);
+    }
+
+    // 列表条目操作随选中状态同步；切换按钮只显示下一步动作，布局按当前文案计算。
+    void updateButtons() {
+        String id = selectedRuleId();
+        for (UiButton button : selectedButtons) {
+            button.setEnabled(host.workspace().active() && id != null);
+        }
+        if (toggleButton != null) {
+            RuleValue body = id == null ? null : host.model().displayBody(id);
+            boolean enabled = body != null && (!body.has(RuleFields.ENABLED) || body.flag(RuleFields.ENABLED, false));
+            toggleButton.setLabel(Component.translatable(UI + (enabled ? "button.disable" : "button.enable")));
+        }
+    }
+
+    // 「应用全部」按钮的可用状态与文案
+    void updateApplyButton() {
+        if (applyButton == null) {
+            return;
+        }
+        applyButton.setEnabled(host.workspace().active() && host.model().hasDirty());
+        applyButton.setLabel(Component.translatable(UI + "button.apply_changes", host.model().dirtyRuleIds().size()));
+    }
+
+    // ---- 渲染 ----
+
+    int footerHeight(int width) {
+        return listBar.preferredHeight(width);
+    }
+
+    void renderFooter(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY, int y, int width) {
+        listBar.layout(y, width);
+        listBar.render(graphics, renderFont, mouseX, mouseY);
+    }
+
+    // 管理页布局：工具排、搜索框与筛选、规则树
+    void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY, UiRect area) {
+        updateButtons();
+        int headerHeight = globalBar.preferredHeight(area.width());
+        globalBar.layout(area.y(), area.width());
+        globalBar.render(graphics, renderFont, mouseX, mouseY);
+        int searchY = area.y() + headerHeight + RuleEditorPageSupport.PAD;
+        int searchWidth = Math.min(SEARCH_MAX_WIDTH, area.width() / 2);
+        if (searchField != null) {
+            searchField.setBounds(area.x(), searchY, searchWidth, ROW_H);
+            searchField.render(graphics, renderFont, mouseX, mouseY);
+        }
+        if (filterControl != null) {
+            filterControl.setBounds(area.x() + searchWidth + 2, searchY, area.width() - searchWidth - 2, ROW_H);
+            filterControl.render(graphics, renderFont, mouseX, mouseY);
+        }
+        int listY = searchY + ROW_H + RuleEditorPageSupport.PAD;
+        int available = Math.max(0, area.bottom() - listY);
+        if (ruleList != null) {
+            ruleList.setBounds(area.x(), listY, area.width(), available);
+            ruleList.render(graphics, renderFont, mouseX, mouseY);
+        }
+    }
+
+    // 名称和状态放第一行；原注册名位置改为图标配方，不显示内部规则 ID。
+    private void renderRuleRow(GuiGraphics graphics, Font rowFont, String id, UiRect row, boolean hovered) {
+        RuleSnapshotEntry entry = host.model().entry(id);
+        int color = isRuleActive(id, entry) ? THEME.palette().textPrimary() : THEME.palette().textDisabled();
+        String state = ruleState(id).getString();
+        int stateWidth = rowFont.width(state);
+        graphics.drawString(rowFont, TextScroll.trimToWidth(rowFont, host.labelText(id),
+                Math.max(0, row.width() - stateWidth - 6)), row.x() + 2, row.y() + 2, color, false);
+        if (!state.isBlank()) graphics.drawString(rowFont, state, row.right() - stateWidth - 2, row.y() + 2,
+                host.model().hasError(id) ? THEME.palette().danger() : THEME.palette().textSecondary(), false);
+        RuleRecipeView recipe = recipeViews.get(id);
+        if (recipe != null) recipe.render(graphics, rowFont,
+                new UiRect(row.x() + 2, row.y() + rowFont.lineHeight + 3,
+                        Math.max(0, row.width() - 4), RuleRecipeView.CONTENT_HEIGHT), color, hovered);
+    }
+
+    // 状态用明确文字，正常启用不占用配方行；草稿标志与问题提示不再使用符号。
+    private Component ruleState(String id) {
+        if (host.model().hasError(id)) return Component.translatable(UI + "recipe.status.error");
+        EditSession session = host.model().session(id);
+        if (session != null && (session.isDirty() || host.model().isRestoring(id)))
+            return Component.translatable(UI + "recipe.status.pending");
+        RuleSnapshotEntry entry = host.model().entry(id);
+        if (entry != null && RuleSnapshotEntry.STATUS_MASKED.equals(entry.status()))
+            return Component.translatable(UI + "recipe.status.masked");
+        return isRuleActive(id, entry) ? Component.empty() : Component.translatable(UI + "recipe.status.disabled");
+    }
+
+    // ---- 列表维护 ----
+
+    void refreshList() {
+        if (ruleList == null) {
+            return;
+        }
+        String selectedValue = ruleList.selectedNode() == null ? null : ruleList.selectedNode().value();
+        int scrollOffset = ruleList.scrollOffset();
+        visibleIds.clear();
+        recipeViews.clear();
+        String query = lastQuery == null ? "" : lastQuery.toLowerCase(Locale.ROOT).trim();
+        for (String id : host.model().ruleIds()) {
+            RuleSnapshotEntry entry = host.model().entry(id);
+            if (!matchesFilter(id, entry)) {
+                continue;
+            }
+            if (!query.isEmpty()
+                    && !id.toLowerCase(Locale.ROOT).contains(query)
+                    && !host.labelText(id).toLowerCase(Locale.ROOT).contains(query)
+                    && !matchesBodyQuery(id, query)) {
+                continue;
+            }
+            visibleIds.add(id);
+            recipeViews.put(id, new RuleRecipeView(host.model().displayBody(id)));
+        }
+        if (lastTreeQuery.isBlank()) rememberCategoryState(ruleList.roots());
+        lastTreeQuery = lastQuery;
+        List<UiTreeNode<String>> roots = new ArrayList<>();
+        UiTreeNode<String> entity = categoryNode("entity");
+        for (String category : List.of("entity.item", "entity.entity", "entity.experience", "entity.mixed")) entity.addChild(categoryNode(category));
+        roots.add(entity);
+        for (String category : List.of("block", "loot", "world", "mixed", "extension")) roots.add(categoryNode(category));
+        for (String id : visibleIds) {
+            String category = RuleCategories.category(host.model().displayBody(id));
+            UiTreeNode<String> group = roots.stream().flatMap(root -> root == entity ? root.children().stream() : java.util.stream.Stream.of(root))
+                    .filter(node -> node.value().equals("@" + category)).findFirst().orElseThrow();
+            group.addChild(id, Component.literal(host.labelText(id)));
+        }
+        List<UiTreeNode<String>> nonempty = new ArrayList<>();
+        for (UiTreeNode<String> root : roots) {
+            if (root == entity) {
+                UiTreeNode<String> parent = categoryNode("entity");
+                root.children().stream().filter(node -> !node.children().isEmpty()).forEach(node -> parent.addChild(counted(node)));
+                if (!parent.children().isEmpty()) nonempty.add(parent);
+            } else if (!root.children().isEmpty()) nonempty.add(counted(root));
+        }
+        ruleList.setRoots(nonempty);
+        ruleList.setSelectedNode(findNode(nonempty, selectedValue));
+        ruleList.setScrollOffset(scrollOffset);
+    }
+
+    // 刷新时按稳定值恢复目录或规则选择，不依赖重建前的节点实例。
+    private @Nullable UiTreeNode<String> findNode(List<UiTreeNode<String>> nodes, @Nullable String value) {
+        if (value == null) return null;
+        for (UiTreeNode<String> node : nodes) {
+            if (value.equals(node.value())) return node;
+            UiTreeNode<String> child = findNode(node.children(), value);
+            if (child != null) return child;
+        }
+        return null;
+    }
+
+    private UiTreeNode<String> counted(UiTreeNode<String> node) {
+        UiTreeNode<String> copy = new UiTreeNode<>(node.value(), node.label().copy().append(" (" + node.children().size() + ")"))
+                .setExpanded(node.isExpanded());
+        node.children().forEach(copy::addChild);
+        return copy;
+    }
+
+    private UiTreeNode<String> categoryNode(String category) {
+        return new UiTreeNode<>("@" + category, Component.translatable(UI + "category." + category))
+                .setExpanded(!lastQuery.isBlank() || expandedCategories.contains(category));
+    }
+
+    private void rememberCategoryState(List<UiTreeNode<String>> nodes) {
+        for (UiTreeNode<String> node : nodes) {
+            if (!node.value().startsWith("@")) continue;
+            String category = node.value().substring(1);
+            if (node.isExpanded()) expandedCategories.add(category); else expandedCategories.remove(category);
+            rememberCategoryState(node.children());
+        }
+    }
+
+    // 当前草稿中的资源 ID、备注与参数也参与搜索；不触发目录查询。
+    private boolean matchesBodyQuery(String id, String query) {
+        RuleValue body = host.model().displayBody(id);
+        return body != null && body.toJson().toLowerCase(Locale.ROOT).contains(query);
+    }
+
+    private boolean matchesFilter(String id, @Nullable RuleSnapshotEntry entry) {
+        boolean active = isRuleActive(id, entry);
+        return switch (filterIndex) {
+            case 1 -> active;
+            case 2 -> !active;
+            case 3 -> entry != null && !entry.issues().isEmpty() || host.model().hasError(id);
+            default -> true;
+        };
+    }
+
+    // 尚未修改的条目以快照状态为准；改动、恢复与新建条目以当前草稿为准。
+    private boolean isRuleActive(String id, @Nullable RuleSnapshotEntry entry) {
+        EditSession session = host.model().session(id);
+        if (session != null && (session.isDirty() || host.model().isCreated(id) || host.model().isRestoring(id))) {
+            return !session.draft().isDeleted() && session.draft().getBoolean(RuleFields.ENABLED, true);
+        }
+        return entry == null || RuleSnapshotEntry.STATUS_ACTIVE.equals(entry.status());
+    }
+
+    private @Nullable String selectedRuleId() {
+        UiTreeNode<String> node = ruleList == null ? null : ruleList.selectedNode();
+        return node == null || node.value().startsWith("@") ? null : node.value();
+    }
+
+    // 搜索框内容变化后重新过滤
+    private void syncSearch() {
+        if (searchField == null) {
+            return;
+        }
+        String value = searchField.value();
+        if (!value.equals(lastQuery)) {
+            lastQuery = value;
+            refreshList();
+        }
+    }
+
+    // ---- 指针与键盘委托 ----
+
+    void onScopeChanged() {
+        if (ruleList != null) ruleList.mouseReleased(-1, -1, 0);
+    }
+
+    boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (searchField != null && searchField.mouseClicked(mouseX, mouseY, button)) {
+            return true;
+        }
+        if (filterControl != null && filterControl.mouseClicked(mouseX, mouseY, button)) {
+            return true;
+        }
+        if (ruleList != null && ruleList.mouseClicked(mouseX, mouseY, button)) {
+            return true;
+        }
+        return globalBar.mouseClicked(mouseX, mouseY, button)
+                || listBar.mouseClicked(mouseX, mouseY, button);
+    }
+
+    // 点击配方标签：打开标签轮播弹窗；未命中标签时返回 false 交回屏幕继续命中测试。
+    boolean openTagDetails(double mouseX, double mouseY) {
+        TagPreviewIcons.Tag tag = tagAt(mouseX, mouseY);
+        if (tag == null) {
+            return false;
+        }
+        host.modals().push(UiModal.create(THEME, host.font()).title(Component.translatable(UI + "tag.title", tag.id()))
+                .contentWidget(new TagCarouselView(host.font(), tag), Math.clamp(host.screenHeight() - 70, 110, 220))
+                .preferredWidth(TAG_MODAL_WIDTH).cancel(Component.translatable(UI + "button.close"))
+                .layoutCentered(host.screenWidth(), host.screenHeight()));
+        return true;
+    }
+
+    // 指针必须先通过树的内容门禁，再命中配方标签。
+    private @Nullable TagPreviewIcons.Tag tagAt(double mouseX, double mouseY) {
+        if (ruleList == null) return null;
+        UiTreeNode<String> node = ruleList.nodeAt(mouseX, mouseY);
+        if (node == null) return null;
+        RuleRecipeView recipe = recipeViews.get(node.value());
+        if (recipe == null) return null;
+        UiRect row = ruleList.nodeContentBounds(node);
+        return recipe.tagAt(host.font(), new UiRect(row.x() + 2, row.y() + host.font().lineHeight + 3,
+                Math.max(0, row.width() - 4), RuleRecipeView.CONTENT_HEIGHT), mouseX, mouseY);
+    }
+
+    boolean mouseReleased(double mouseX, double mouseY, int button) {
+        boolean consumed = ruleList != null && ruleList.mouseReleased(mouseX, mouseY, button);
+        consumed |= globalBar.mouseReleased(mouseX, mouseY, button);
+        consumed |= listBar.mouseReleased(mouseX, mouseY, button);
+        return consumed;
+    }
+
+    boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        return ruleList != null && ruleList.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    }
+
+    boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        return ruleList != null && ruleList.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+    }
+
+    // 历史快捷键派发路径：搜索框优先消费，不触发列表刷新。
+    boolean searchKeyPressed(int keyCode, int scanCode, int modifiers) {
+        return searchField != null && searchField.isFocused() && searchField.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    // 列表页普通按键：搜索框消费后同步过滤；否则交给规则树。
+    boolean listKeyPressed(int keyCode, int scanCode, int modifiers) {
+        if (searchField != null && searchField.isFocused()
+                && searchField.keyPressed(keyCode, scanCode, modifiers)) {
+            syncSearch();
+            return true;
+        }
+        return ruleList != null && ruleList.isFocused() && ruleList.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    boolean charTyped(char codePoint, int modifiers) {
+        if (searchField != null && searchField.isFocused() && searchField.charTyped(codePoint, modifiers)) {
+            syncSearch();
+            return true;
+        }
+        return false;
+    }
+
+    // 悬停在规则条目上时的多行提示；未命中返回 null。
+    @Nullable Component tooltipAt(double mouseX, double mouseY) {
+        if (ruleList == null || !ruleList.bounds().contains(mouseX, mouseY)) {
+            return null;
+        }
+        UiTreeNode<String> node = ruleList.nodeAt(mouseX, mouseY);
+        if (node == null || node.value().startsWith("@")) {
+            return null;
+        }
+        String id = node.value();
+        RuleRecipeView recipe = recipeViews.get(id);
+        TagPreviewIcons.Tag tag = tagAt(mouseX, mouseY);
+        Component tip = tag == null ? Component.literal(host.labelText(id)).append("\n").append(recipe == null ? Component.empty() : recipe.tooltip())
+                : tag.tooltip();
+        Component state = ruleState(id);
+        if (!state.getString().isBlank()) tip = tip.copy().append("\n").append(state);
+        if (RulePreviewIcons.unavailable(host.model().displayBody(id))) tip = tip.copy()
+                .append("\n").append(Component.translatable(UI + "preview.unavailable"));
+        return tip;
+    }
+
+    // ---- 焦点与使能 ----
+
+    void addFocusTargets(UiFocusManager focus) {
+        if (searchField != null) {
+            focus.add(searchField);
+        }
+        if (filterControl != null) {
+            focus.add(filterControl);
+        }
+        if (ruleList != null) {
+            focus.add(ruleList);
+        }
+        for (UiButton button : listButtons) {
+            focus.add(button);
+        }
+    }
+
+    // 冻结时列表页动作按钮一并禁用（返回按钮不在其中）
+    void setButtonsEnabled(boolean editable) {
+        for (UiButton button : listButtons) {
+            button.setEnabled(editable);
+        }
+    }
+}

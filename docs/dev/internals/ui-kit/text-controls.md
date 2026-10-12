@@ -1,6 +1,6 @@
 # UI kit：文本控件、码点上限与文本历史
 
-> 事实来源：宿主 `client/ui/widget/UiTextArea.java`、`client/ui/widget/UiTextInput.java`、`client/ui/screen/form/FormControl.java`，kit `UiTextHistory`、`UiHistoryShortcut`、`UiHistoryDispatcher`、`UiModalStack`、`UiModal`。
+> 事实来源：宿主 `client/ui/widget/UiTextArea.java`、`client/ui/widget/UiTextInput.java`、`client/ui/widget/UiModal.java`、`client/ui/widget/UiModalStack.java`、`client/ui/screen/form/FormControl.java`、`client/ui/screen/form/TextControl.java`，kit `UiTextHistory`、`UiHistoryShortcut`、`UiHistoryDispatcher`。
 > 上承 [UI kit 入口](README.md)。`UiTextArea` 与 `UiTextInput` 属于**宿主侧** widget 包（不是 kit 包），边界规则不变。
 
 ## 1. UiTextArea：真正的多行文本编辑
@@ -29,19 +29,19 @@ void moveCursorToStart();      // 回填后调用：光标与垂直滚动都回�
 
 - `UiTextArea#onTextChanged`：`text.codePointCount(0, text.length()) > maxLength` → 整段回退到 `lastAccepted`（光标钳在回退文本内）→ `reportOverflow()`；**整体拒绝、绝不截断半个代理对**。
 - `UiTextInput`：过滤器先判码点上限、再判业务 `filter`，超限整体拒绝并 `reportOverflow`；原版 `EditBox` 的单元上限设为 `Integer.MAX_VALUE`，用户输入由码点过滤器整体接受或拒绝，程序回填完整保留；`onValueAccepted` 还有一次兜底回退。
-- 宿主接线（`FormControl.TextControl`）：上限 `textLimit()` = 备注 1024 / 显示名 128 / 其它 TEXT 256；`setOnOverflow` → `notifyTooLong()` 置 `rejectedOverflow = true` 并立即提示（提示经 `reportRejected` → `NOTICE_ISSUE` + 本地化 key）；**下一次被接受的输入变化**清除该标记。
+- 宿主接线（`TextControl`）：上限 `textLimit()` = 备注 1024 / 显示名 128 / 其它 TEXT 256；`setOnOverflow` → `notifyTooLong()` 置 `rejectedOverflow = true` 并立即提示（提示经 `reportRejected` → `NOTICE_ISSUE` + 本地化 key）；**下一次被接受的输入变化**清除该标记。
 - 行内提示是 **warning 而不是阻塞错误**：`issues(path)` 在 `rejectedOverflow || 码点 > 上限` 时返回 `FormIssue.warning`；被拒时缓冲值本身仍在合法范围，既有原文超限由规则级校验给出阻塞错误（该处注释即为此事实来源）。
-- 提示 key 由 `FormControl.TextControl#tooLongKey()` 选择：备注 → `issue.notes_too_long`，显示名 → `issue.display_name_too_long`，其它文本字段**没有专属文案、不提示**。
+- 提示 key 由 `TextControl#tooLongKey()` 选择：备注 → `issue.notes_too_long`，显示名 → `issue.display_name_too_long`，其它文本字段**没有专属文案、不提示**。
 
 已知边界：显示名/备注一次性粘贴超过「2×码点上限」的纯补充平面字符（如 emoji）时，可能被原版 `EditBox` 的 UTF-16 单元上限静默截断到恰好上限而不弹超限提示；逐字符键入与常规粘贴不受影响（上限判定本身仍按码点）。
 
 ## 3. 程序回填：完整不截断，并从开头显示
 
-- `FormControl.TextControl#load` 先把上限抬到 `max(textLimit(), 装载文本码点数)` 再原样写入，随后调用 `moveCursorToStart()`；备注走 `UiTextArea`（多行分支），单行走 `UiTextInput`。这保证既有超长原文在浏览或编辑其它字段时不被截短，窄宽度下也不会只显示尾部。
+- `TextControl#load` 先把上限抬到 `max(textLimit(), 装载文本码点数)` 再原样写入，随后调用 `moveCursorToStart()`；备注走 `UiTextArea`（多行分支），单行走 `UiTextInput`。这保证既有超长原文在浏览或编辑其它字段时不被截短，窄宽度下也不会只显示尾部。
 - `UiTextArea#moveCursorToStart()` 把光标 seek 到 0 并置 `scrollOffset = 0`；`setValue` 的注释明确「回填路径随后调用」。
 - `UiTextInput#moveCursorToStart()` = 内部单参重载 + 清除选择。
 - 单行与多行**同一约定**：回填必须完整、首屏从开头可读；编辑期间宿主不要调用（会抢走用户光标）。
-- 备注默认 3 行：`FormControl.TextControl.NOTES_ROWS = 3`；只有 `LONG_TEXT` 才创建多行控件，单行输入框隐藏但保留装载基线（`load` 的控件创建分支）；多行备注不支持预设按钮。
+- 备注默认 3 行：`TextControl.NOTES_ROWS = 3`；只有 `LONG_TEXT` 才创建多行控件，单行输入框隐藏但保留装载基线（`load` 的控件创建分支）；多行备注不支持预设按钮。
 
 ## 4. 宿主公开 API（与文本行相关）
 

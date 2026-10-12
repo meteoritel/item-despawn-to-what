@@ -1,14 +1,11 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeClipboard;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeJsonCodec;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeNodes;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.OpaqueCondition;
+import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
@@ -16,11 +13,10 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiIconStrip;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeCodec;
-import com.meteorite.itemdespawntowhat.client.ui.screen.RuleEditorP4Panels;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiFlatPalette;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiFlatSkin;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeContract;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionGraphEditor;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionTreeEditor;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextArea;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
@@ -50,6 +46,12 @@ import org.lwjgl.glfw.GLFW;
  */
 public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
 
+    // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
+    // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
+    private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
+    // 画布页外壳（功能栏/工具列/状态栏/帮助浮层）使用扁平宿主主题（ADR-0028：仅显式取用生效）
+    private static final UiHostTheme CHROME_THEME = UiHostThemes.flatTheme();
+
     // 本地化前缀：条件树页
     private static final String UI = "gui.itemdespawntowhat.edit.tree.";
     // 本地化前缀：规则编辑器（复用既有撤销/重做与通用按钮文案）
@@ -78,10 +80,8 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     private static final int TOOLTIP_MIN_WIDTH = 80;
     private static final int TOOLTIP_MAX_WIDTH = 250;
 
-    private static final Gson SOURCE_JSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
-
     /** 叶参数表单与承载面板；title 为宿主提供的条件名，内联框当前不绘制标题。 */
-    public record Parameters(FormView form, RuleEditorP4Panels.LeafPanel panel, Component title) { }
+    public record Parameters(FormView form, LeafPanel panel, Component title) { }
 
     /** 参数面板工厂：按条件路径与叶子构造表单。 */
     @FunctionalInterface
@@ -98,7 +98,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     private final ParameterFactory parameterFactory;
     private final Runnable changed;
     private final UiConditionGraphEditor editor;
-    private final UiTreeCodec<ConditionNode, JsonElement> codec;
+    private final UiTreeCodec<ConditionNode, RuleValue> codec;
     private final ConditionTreeClipboard clipboard;
     private final UiTextArea source;
     private final ConditionTreeChrome.Strip functionBar;
@@ -144,15 +144,16 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         this.changed = changed;
         codec = new ConditionTreeJsonCodec(support.registry());
         clipboard = new ConditionTreeClipboard(support.registry());
-        source = new UiTextArea(font, Component.translatable(UI + "source_empty"));
+        source = new UiTextArea(THEME, font, Component.translatable(UI + "source_empty"));
         source.setEditable(false);
         source.setSelectableWhenReadOnly(true);
         source.setAccessibleName(Component.translatable(UI + "source_title"));
-        editor = new UiConditionGraphEditor(font).setTypeOptions(support.typeOptions()).setLeafFactory(support.leafFactory());
+        editor = new UiConditionGraphEditor(THEME, font).setTypeOptions(support.typeOptions()).setLeafFactory(support.leafFactory());
         editor.setLeafSummary(leaf -> {
-            JsonElement raw = codec.encode(leaf);
-            return raw != null && raw.isJsonObject() && raw.getAsJsonObject().get(RuleFields.CONDITION) != null
-                    ? NaturalSummary.conditionLeaf(raw.getAsJsonObject().getAsJsonObject(RuleFields.CONDITION))
+            RuleValue raw = codec.encode(leaf);
+            RuleValue condition = raw != null && raw.isMapping() ? raw.child(RuleFields.CONDITION) : null;
+            return condition != null
+                    ? NaturalSummary.conditionLeaf(condition)
                     : TypeLabels.conditionLabel(leaf.condition().type());
         });
         editor.setClipboardActions(this::copyNodes, this::pasteNodes);
@@ -167,7 +168,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         });
         editor.setListener(expression -> {
             var change = editor.lastChange();
-            JsonElement next = editor.tree().encode(codec);
+            RuleValue next = editor.tree().encode(codec);
             session.apply(editor.undoOpKey(), () -> {
                 if (change != null) ConditionTreeNodes.remapInputs(session, change, scope);
                 if (next == null) session.draft().removeAt(scope); else session.draft().setAt(scope, next);
@@ -178,25 +179,25 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         });
 
         functionBar = new ConditionTreeChrome.Strip(font, UiIconStrip.Orientation.HORIZONTAL);
-        undoItem = functionBar.add(UiFlatSkin.icon(UiFlatSkin.ICON_UNDO, false), UiFlatSkin.icon(UiFlatSkin.ICON_UNDO, true),
+        undoItem = functionBar.add(CHROME_THEME.icon(UiHostTheme.ICON_UNDO, false), CHROME_THEME.icon(UiHostTheme.ICON_UNDO, true),
                 Component.translatable(EDIT_UI + "button.undo_shortcut"), this::undo);
-        redoItem = functionBar.add(UiFlatSkin.icon(UiFlatSkin.ICON_REDO, false), UiFlatSkin.icon(UiFlatSkin.ICON_REDO, true),
+        redoItem = functionBar.add(CHROME_THEME.icon(UiHostTheme.ICON_REDO, false), CHROME_THEME.icon(UiHostTheme.ICON_REDO, true),
                 Component.translatable(EDIT_UI + "button.redo_shortcut"), this::redo);
         // JSON 轮询：同一个入口按当前视图切换字形与提示，切回条件树时换成条件树图标
-        jsonItem = functionBar.add(UiFlatSkin.icon(UiFlatSkin.ICON_VIEW_JSON, false), UiFlatSkin.icon(UiFlatSkin.ICON_VIEW_JSON, true),
+        jsonItem = functionBar.add(CHROME_THEME.icon(UiHostTheme.ICON_VIEW_JSON, false), CHROME_THEME.icon(UiHostTheme.ICON_VIEW_JSON, true),
                 Component.translatable(UI + "button.source"), this::toggleSource);
-        helpItem = functionBar.add(UiFlatSkin.icon(UiFlatSkin.ICON_HELP, false), UiFlatSkin.icon(UiFlatSkin.ICON_HELP, true),
+        helpItem = functionBar.add(CHROME_THEME.icon(UiHostTheme.ICON_HELP, false), CHROME_THEME.icon(UiHostTheme.ICON_HELP, true),
                 Component.translatable(UI + "tool.help"), this::toggleHelp);
 
         toolColumn = new ConditionTreeChrome.Strip(font, UiIconStrip.Orientation.VERTICAL);
         // 7 格：分组与包组的 ∧ / ∨ 由画布在 [+] 热区处再选，工具列不再各占两格
-        addConditionItem = addTool(UiFlatSkin.ICON_ADD_CONDITION, UI + "button.add", false, editor::beginAddCondition);
-        groupItem = addTool(UiFlatSkin.ICON_GROUP_ALL, UI + "button.group", false, editor::beginAddGroupWithKind);
-        addTool(UiFlatSkin.ICON_INVERT, UI + "button.not", true, editor::invertSelection);
-        addTool(UiFlatSkin.ICON_REMOVE, UI + "button.remove", true, editor::removeSelection);
-        addTool(UiFlatSkin.ICON_MOVE_UP, UI + "button.up", true, () -> editor.moveSelection(-1));
-        addTool(UiFlatSkin.ICON_MOVE_DOWN, UI + "button.down", true, () -> editor.moveSelection(1));
-        wrapItem = addTool(UiFlatSkin.ICON_WRAP_ALL, UI + "button.wrap", true, editor::beginWrapWithKind);
+        addConditionItem = addTool(UiHostTheme.ICON_ADD_CONDITION, UI + "button.add", false, editor::beginAddCondition);
+        groupItem = addTool(UiHostTheme.ICON_GROUP_ALL, UI + "button.group", false, editor::beginAddGroupWithKind);
+        addTool(UiHostTheme.ICON_INVERT, UI + "button.not", true, editor::invertSelection);
+        addTool(UiHostTheme.ICON_REMOVE, UI + "button.remove", true, editor::removeSelection);
+        addTool(UiHostTheme.ICON_MOVE_UP, UI + "button.up", true, () -> editor.moveSelection(-1));
+        addTool(UiHostTheme.ICON_MOVE_DOWN, UI + "button.down", true, () -> editor.moveSelection(1));
+        wrapItem = addTool(UiHostTheme.ICON_WRAP_ALL, UI + "button.wrap", true, editor::beginWrapWithKind);
 
         reloadExpression();
     }
@@ -209,7 +210,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
 
     // 加一个工具格：需要选中节点的进 selectionTools，由布局按选择变化统一使能
     private UiIconStrip.Item addTool(int iconRow, String tooltipKey, boolean needsSelection, Runnable action) {
-        UiIconStrip.Item item = toolColumn.add(UiFlatSkin.icon(iconRow, false), UiFlatSkin.icon(iconRow, true),
+        UiIconStrip.Item item = toolColumn.add(CHROME_THEME.icon(iconRow, false), CHROME_THEME.icon(iconRow, true),
                 Component.translatable(tooltipKey), action::run);
         toolItems.add(item);
         if (needsSelection) selectionTools.add(item);
@@ -219,7 +220,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     // ---- 数据绑定 ----
 
     private void reloadExpression() {
-        var result = editor.tree().decode(codec, session.draft().getAt(scope));
+        var result = editor.tree().decode(codec, session.draft().valueAt(scope));
         decodeError = result.error();
         editor.setEnabled(result.succeeded());
         if (result.succeeded()) editor.setExpression(new ConditionExpression(result.root()));
@@ -228,8 +229,8 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     }
 
     private void refreshSource() {
-        JsonElement raw = decodeError == null ? editor.tree().encode(codec) : session.draft().getAt(scope);
-        String text = raw == null || raw.isJsonNull() ? "" : SOURCE_JSON.toJson(raw);
+        RuleValue raw = decodeError == null ? editor.tree().encode(codec) : session.draft().valueAt(scope);
+        String text = raw == null || raw.isNull() ? "" : raw.toPrettyJson();
         if (!text.equals(source.value())) {
             source.setValue(text);
             source.moveCursorToStart();
@@ -242,16 +243,16 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         }
         finishParameters();
         reloadExpression();
-        JsonArray nodes = new JsonArray();
+        RuleValue.Sequence nodes = RuleValue.list();
         for (var path : editor.selectedSubtrees()) {
-            JsonElement raw = session.draft().getAt(ConditionTreeNodes.jsonPath(editor.expression().root(), path, scope));
+            RuleValue raw = session.draft().valueAt(ConditionTreeNodes.jsonPath(editor.expression().root(), path, scope));
             if (raw != null) nodes.add(raw.deepCopy());
         }
-        if (nodes.isEmpty()) {
+        if (nodes.size() == 0) {
             editor.showOperationError(Component.translatable(UI + "select_copy"));
             return;
         }
-        Minecraft.getInstance().keyboardHandler.setClipboard(SOURCE_JSON.toJson(nodes));
+        Minecraft.getInstance().keyboardHandler.setClipboard(nodes.build().toPrettyJson());
         editor.showOperationError(null);
     }
 
@@ -339,10 +340,10 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     // ---- 参数表单与内联框 ----
 
     private void finishParameters() {
-        JsonElement current = parameterPath == null ? null : session.draft().getAt(parameterPath);
-        if (parameters != null && current != null && current.isJsonObject()
-                && current.getAsJsonObject().get(RuleFields.TYPE) != null
-                && Objects.equals(parameterType, current.getAsJsonObject().get(RuleFields.TYPE).getAsString())
+        RuleValue current = parameterPath == null ? null : session.draft().valueAt(parameterPath);
+        RuleValue currentType = current != null && current.isMapping() ? current.child(RuleFields.TYPE) : null;
+        if (parameters != null && currentType != null && currentType.isScalar()
+                && Objects.equals(parameterType, currentType.asText())
                 && parameters.form().commitPendingInputs()) {
             changed.run();
         }
@@ -373,7 +374,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         unmountParameters();
         selectedPath = next;
         if (leaf != null && next != null) {
-            parameterPath = scope + next.substring(UiConditionTreeEditor.ROOT_PATH.length()) + "." + RuleFields.CONDITION;
+            parameterPath = scope + next.substring(ConditionTreeContract.ROOT_PATH.length()) + "." + RuleFields.CONDITION;
             parameterType = leaf.condition().type().toString();
             parameters = parameterFactory.create(parameterPath, leaf);
             // 内联框锚定当前主选中节点，几何、动画与裁剪由画布负责
@@ -420,7 +421,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     public void reveal(String fieldPath) {
         sourceView = false;
         source.setFocused(false);
-        editor.selectPath(UiConditionTreeEditor.ROOT_PATH + fieldPath.substring(scope.length()));
+        editor.selectPath(ConditionTreeContract.ROOT_PATH + fieldPath.substring(scope.length()));
         syncSelection();
         setFocusSlot(FocusSlot.CANVAS);
         if (parameters != null) {
@@ -458,8 +459,8 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         editor.setVisible(!sourceView);
         source.setVisible(sourceView);
 
-        int jsonRow = sourceView ? UiFlatSkin.ICON_VIEW_TREE : UiFlatSkin.ICON_VIEW_JSON;
-        jsonItem.setIcon(UiFlatSkin.icon(jsonRow, false), UiFlatSkin.icon(jsonRow, true));
+        int jsonRow = sourceView ? UiHostTheme.ICON_VIEW_TREE : UiHostTheme.ICON_VIEW_JSON;
+        jsonItem.setIcon(CHROME_THEME.icon(jsonRow, false), CHROME_THEME.icon(jsonRow, true));
         undoItem.setEnabled(session.canUndo());
         redoItem.setEnabled(session.canRedo());
         helpItem.setSelected(helpOpen);
@@ -494,13 +495,13 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
                 || !Objects.equals(selectedPath, editor.selectedPath()))) {
             syncSelection();
         }
-        UiFlatSkin.drawChrome(graphics, functionBar.bounds());
+        CHROME_THEME.drawChrome(graphics, functionBar.bounds());
         functionBar.render(graphics, renderFont, mouseX, mouseY);
         if (sourceView) {
             source.render(graphics, renderFont, mouseX, mouseY);
             renderCopyButton(graphics);
         } else {
-            UiFlatSkin.drawChrome(graphics, toolColumn.bounds());
+            CHROME_THEME.drawChrome(graphics, toolColumn.bounds());
             toolColumn.render(graphics, renderFont, mouseX, mouseY);
             editor.render(graphics, renderFont, mouseX, mouseY);
         }
@@ -519,18 +520,18 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         if (copyJsonRect.width() <= 0 || copyJsonRect.height() <= 0) {
             return;
         }
-        UiFlatSkin.drawSurface(graphics, copyJsonRect, UiFlatPalette.PANEL_CONTROL_FILL, UiFlatPalette.CHROME_BORDER);
+        CHROME_THEME.drawSurface(graphics, copyJsonRect, CHROME_THEME.palette().panelControlFill(), CHROME_THEME.palette().chromeBorder());
         Component label = Component.translatable(UI + "button.copy_json");
         graphics.drawString(font, TextScroll.trimToWidth(font, label.getString(), Math.max(0, copyJsonRect.width() - 4)),
                 copyJsonRect.x() + 3, copyJsonRect.y() + (copyJsonRect.height() - font.lineHeight) / 2,
-                UiFlatPalette.PANEL_TEXT, false);
+                CHROME_THEME.palette().panelText(), false);
     }
 
     private void renderStatus(GuiGraphics graphics) {
         if (statusRect.height() <= 0) {
             return;
         }
-        UiFlatSkin.drawStatusBar(graphics, statusRect);
+        CHROME_THEME.drawStatusBar(graphics, statusRect);
         int textY = statusRect.y() + (statusRect.height() - font.lineHeight) / 2;
         Component right = statusRight();
         int rightWidth = font.width(right.getString());
@@ -539,7 +540,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
                         Math.max(0, statusRect.width() - rightWidth - STATUS_TEXT_PAD * 3)),
                 statusRect.x() + STATUS_TEXT_PAD, textY, statusColor(), false);
         graphics.drawString(font, right.getString(), statusRect.right() - rightWidth - STATUS_TEXT_PAD, textY,
-                UiFlatPalette.STATUS_TEXT_MUTED, false);
+                CHROME_THEME.palette().statusTextMuted(), false);
     }
 
     private void renderHelp(GuiGraphics graphics) {
@@ -549,14 +550,14 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         int height = HELP_PADDING * 2 + font.lineHeight + HELP_LINE_GAP + lines.size() * lineStep;
         int x = canvasRect.x() + Math.max(0, (canvasRect.width() - width) / 2);
         int y = canvasRect.y() + Math.max(0, (canvasRect.height() - height) / 2);
-        UiFlatSkin.drawHelp(graphics, new UiRect(x, y, width, height));
+        CHROME_THEME.drawHelp(graphics, new UiRect(x, y, width, height));
         int textY = y + HELP_PADDING;
         graphics.drawString(font, TextScroll.trimToWidth(font, Component.translatable(UI + "help.title").getString(),
-                Math.max(0, width - HELP_PADDING * 2)), x + HELP_PADDING, textY, UiFlatPalette.HELP_TEXT, false);
+                Math.max(0, width - HELP_PADDING * 2)), x + HELP_PADDING, textY, CHROME_THEME.palette().helpText(), false);
         textY += lineStep;
         for (Component line : lines) {
             graphics.drawString(font, TextScroll.trimToWidth(font, line.getString(), Math.max(0, width - HELP_PADDING * 2)),
-                    x + HELP_PADDING, textY, UiFlatPalette.HELP_TEXT_MUTED, false);
+                    x + HELP_PADDING, textY, CHROME_THEME.palette().helpTextMuted(), false);
             textY += lineStep;
         }
     }
@@ -605,9 +606,9 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
 
     private int statusColor() {
         if (decodeError != null || editor.operationError() != null || !editor.isValid()) {
-            return UiFlatPalette.STATUS_TEXT_DANGER;
+            return CHROME_THEME.palette().statusTextDanger();
         }
-        return editor.issues().isEmpty() ? UiFlatPalette.STATUS_TEXT : UiFlatPalette.STATUS_TEXT_WARNING;
+        return editor.issues().isEmpty() ? CHROME_THEME.palette().statusText() : CHROME_THEME.palette().statusTextWarning();
     }
 
     private @Nullable Component tooltipAt(int mouseX, int mouseY) {

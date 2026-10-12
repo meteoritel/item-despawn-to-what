@@ -5,7 +5,8 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiControl;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.client.gui.Font;
@@ -38,7 +39,15 @@ public final class UiButton implements UiWidget, UiFocusTarget {
     // 是否可见
     private boolean visible = true;
 
+    // 注入的宿主主题
+    private final UiHostTheme theme;
+    // 兼容入口：未迁移模块沿用默认宿主主题
     public UiButton(Font font, Component label, UiButtonVariant variant, UiAction action) {
+        this(UiHostThemes.defaultTheme(), font, label, variant, action);
+    }
+
+    public UiButton(UiHostTheme theme, Font font, Component label, UiButtonVariant variant, UiAction action) {
+        this.theme = UiHostThemes.require(theme);
         this.font = font;
         this.label = label;
         this.variant = variant;
@@ -48,8 +57,8 @@ public final class UiButton implements UiWidget, UiFocusTarget {
 
     // 把当前字段重新写入 kit 控件
     private void apply() {
-        control.configure(font, label, variant.textColor(), icon, tooltip, action);
-        control.setStyle(variant.style());
+        control.configure(font, label, theme.controlTextColor(variant.role()), icon, tooltip, action);
+        control.setStyle(theme.controlStyle(variant.role()));
         control.setEnabled(enabled && variant.interactive());
         control.setVisible(visible);
     }
@@ -142,7 +151,7 @@ public final class UiButton implements UiWidget, UiFocusTarget {
             return;
         }
         control.render(graphics, font, mouseX, mouseY);
-        UiTheme.drawBevel(graphics, control.bounds(), variant.bevelLight(), variant.bevelDark());
+        theme.drawBevel(graphics, control.bounds(), theme.palette().controlBevelLight(), theme.palette().controlBevelDark());
     }
 
     @Override

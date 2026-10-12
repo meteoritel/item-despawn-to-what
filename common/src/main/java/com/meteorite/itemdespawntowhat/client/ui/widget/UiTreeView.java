@@ -1,10 +1,11 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -39,7 +40,7 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
     // 展开标记区宽度
     public static final int MARKER_WIDTH = 9;
     // 默认行高
-    public static final int DEFAULT_ROW_HEIGHT = UiTheme.ROW_HEIGHT;
+    public static final int DEFAULT_ROW_HEIGHT = UiHostThemes.defaultTheme().rowHeight();
     // 滚动条预留宽度（与 kit 的滚动条宽度保持一致）
     private static final int SCROLLBAR_RESERVE = 4;
     // 双击判定间隔（毫秒）
@@ -92,7 +93,15 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
     private UiTreeNode<T> lastClickNode;
 
     // 字体由 render 接收；保留构造参数以兼容现有组件 API。
+    // 注入的宿主主题
+    private final UiHostTheme theme;
+    // 兼容入口：未迁移模块沿用默认宿主主题
     public UiTreeView(@SuppressWarnings("unused") Font font, NodeRenderer<T> nodeRenderer) {
+        this(UiHostThemes.defaultTheme(), font, nodeRenderer);
+    }
+
+    public UiTreeView(UiHostTheme theme, @SuppressWarnings("unused") Font font, NodeRenderer<T> nodeRenderer) {
+        this.theme = UiHostThemes.require(theme);
         this.nodeRenderer = nodeRenderer;
     }
 
@@ -330,11 +339,11 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
         if (!visible) {
             return;
         }
-        UiTheme.drawInset(graphics, bounds);
+        theme.drawInset(graphics, bounds);
         UiRect viewport = scrollView.viewport();
         if (visibleRows.isEmpty()) {
             graphics.drawCenteredString(font, emptyMessage, viewport.x() + viewport.width() / 2,
-                    viewport.y() + Math.max(0, viewport.height() / 2 - 4), UiPalette.TEXT_SECONDARY);
+                    viewport.y() + Math.max(0, viewport.height() / 2 - 4), theme.palette().textSecondary());
             return;
         }
         int hoveredIndex = indexAt(mouseX, mouseY);
@@ -347,9 +356,9 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
             UiRect row = new UiRect(0, visibleRow.top, rowWidth, visibleRow.height);
             boolean selected = visibleRow.node == selectedNode;
             if (selected) {
-                UiTheme.drawSelection(graphics, row);
+                theme.drawSelection(graphics, row);
             } else if (i == hoveredIndex) {
-                graphics.fill(row.x(), row.y(), row.right(), row.bottom(), UiPalette.CONTROL_HOVER);
+                graphics.fill(row.x(), row.y(), row.right(), row.bottom(), theme.palette().controlHover());
             }
             int markerX = visibleRow.depth * INDENT_WIDTH;
             if (!visibleRow.node.isLeaf()) {
@@ -362,22 +371,22 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
         }
         scrollView.pop(graphics);
         if (focused) {
-            UiTheme.drawFocusOutline(graphics, bounds);
+            theme.drawFocusOutline(graphics, bounds);
         }
-        scrollView.renderScrollbar(graphics, UiTheme.secondaryStyle());
+        scrollView.renderScrollbar(graphics, theme.controlStyle(UiControlRole.SECONDARY));
     }
 
     // ---- 输入 ----
 
     // 像素三角不依赖字体字形；叶子只保留缩进，不绘制虚假的展开按钮。
-    private static void drawTriangle(GuiGraphics graphics, int x, int centerY, boolean expanded) {
+    private void drawTriangle(GuiGraphics graphics, int x, int centerY, boolean expanded) {
         for (int step = 0; step < 4; step++) {
             if (expanded) {
                 graphics.fill(x + step, centerY - 2 + step, x + 7 - step, centerY - 1 + step,
-                        UiPalette.TEXT_PRIMARY);
+                        theme.palette().textPrimary());
             } else {
                 graphics.fill(x + 1 + step, centerY - 3 + step, x + 2 + step, centerY + 4 - step,
-                        UiPalette.TEXT_PRIMARY);
+                        theme.palette().textPrimary());
             }
         }
     }

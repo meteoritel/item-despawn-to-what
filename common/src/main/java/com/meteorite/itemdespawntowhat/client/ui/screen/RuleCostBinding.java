@@ -1,9 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
+import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import java.util.List;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -38,11 +37,11 @@ public final class RuleCostBinding {
     }
 
     // 定位第一个指定类型的效果：先顶层 effects，再按顺序扫描各候选
-    public static @Nullable Ref find(@Nullable JsonObject rule, String effectId) {
+    public static @Nullable Ref find(@Nullable RuleValue rule, String effectId) {
         if (rule == null) {
             return null;
         }
-        JsonArray flat = arrayOf(rule, RuleFields.EFFECTS);
+        RuleValue flat = arrayOf(rule, RuleFields.EFFECTS);
         if (flat != null) {
             int index = indexOf(flat, effectId);
             if (index >= 0) {
@@ -50,61 +49,62 @@ public final class RuleCostBinding {
                 return new Ref(RuleFields.EFFECTS, index, path, null, -1);
             }
         }
-        JsonArray outcomes = arrayOf(rule, RuleFields.OUTCOMES);
+        RuleValue outcomes = arrayOf(rule, RuleFields.OUTCOMES);
         if (outcomes == null) {
             return null;
         }
-        for (int candidate = 0; candidate < outcomes.size(); candidate++) {
-            JsonElement element = outcomes.get(candidate);
-            if (element == null || !element.isJsonObject()) {
+        List<RuleValue> candidates = outcomes.items();
+        for (int candidate = 0; candidate < candidates.size(); candidate++) {
+            RuleValue element = candidates.get(candidate);
+            if (element == null || !element.isMapping()) {
                 continue;
             }
-            JsonObject body = element.getAsJsonObject();
-            JsonArray effects = arrayOf(body, RuleFields.CANDIDATE_EFFECTS);
+            RuleValue effects = arrayOf(element, RuleFields.CANDIDATE_EFFECTS);
             if (effects == null) {
                 continue;
             }
             int index = indexOf(effects, effectId);
             if (index >= 0) {
                 String listPath = RuleFields.OUTCOMES + "[" + candidate + "]." + RuleFields.CANDIDATE_EFFECTS;
-                return new Ref(listPath, index, listPath + "[" + index + "]", stringOf(body), candidate);
+                return new Ref(listPath, index, listPath + "[" + index + "]", stringOf(element), candidate);
             }
         }
         return null;
     }
 
     // 定位消耗来源物品效果
-    public static @Nullable Ref consumeSource(@Nullable JsonObject rule) {
+    public static @Nullable Ref consumeSource(@Nullable RuleValue rule) {
         return find(rule, CONSUME_SOURCE);
     }
 
     // 定位消耗催化剂效果
-    public static @Nullable Ref consumeCatalyst(@Nullable JsonObject rule) {
+    public static @Nullable Ref consumeCatalyst(@Nullable RuleValue rule) {
         return find(rule, CONSUME_CATALYST);
     }
 
     // 效果是否为指定类型（字符串比较，不做资源名解析）
-    public static boolean isType(@Nullable JsonElement effect, String effectId) {
+    public static boolean isType(@Nullable RuleValue effect, String effectId) {
         String type = typeOf(effect);
         return type != null && type.equals(effectId);
     }
 
     // 读取效果类型字符串
-    public static @Nullable String typeOf(@Nullable JsonElement effect) {
-        if (effect == null || !effect.isJsonObject()) {
+    public static @Nullable String typeOf(@Nullable RuleValue effect) {
+        if (effect == null || !effect.isMapping()) {
             return null;
         }
-        JsonElement type = effect.getAsJsonObject().get(RuleFields.TYPE);
-        if (type == null || !type.isJsonPrimitive() || !type.getAsJsonPrimitive().isString()) {
+        RuleValue type = effect.child(RuleFields.TYPE);
+        if (type == null || !type.isText()) {
             return null;
         }
-        return type.getAsString();
+        return type.asText();
     }
 
     // 查找指定类型的下标
-    private static int indexOf(JsonArray array, String effectId) {
-        for (int i = 0; i < array.size(); i++) {
-            if (isType(array.get(i), effectId)) {
+    private static int indexOf(RuleValue array, String effectId) {
+        List<RuleValue> items = array.items();
+        for (int i = 0; i < items.size(); i++) {
+            if (isType(items.get(i), effectId)) {
                 return i;
             }
         }
@@ -112,17 +112,17 @@ public final class RuleCostBinding {
     }
 
     // 读取数组字段
-    private static @Nullable JsonArray arrayOf(JsonObject owner, String name) {
-        JsonElement element = owner.get(name);
-        return element != null && element.isJsonArray() ? element.getAsJsonArray() : null;
+    private static @Nullable RuleValue arrayOf(RuleValue owner, String name) {
+        RuleValue element = owner.child(name);
+        return element != null && element.isList() ? element : null;
     }
 
     // 读取候选稳定 id（缺失或类型不符时返回 null）
-    private static @Nullable String stringOf(JsonObject owner) {
-        JsonElement element = owner.get(RuleFields.CANDIDATE_ID);
-        if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString()) {
+    private static @Nullable String stringOf(RuleValue owner) {
+        RuleValue element = owner.child(RuleFields.CANDIDATE_ID);
+        if (element == null || !element.isText()) {
             return null;
         }
-        return element.getAsString();
+        return element.asText();
     }
 }

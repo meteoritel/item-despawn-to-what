@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.client.ui.screen;
+package com.meteorite.itemdespawntowhat.client.ui.shared;
 
 import com.meteorite.itemdespawntowhat.client.edit.ConditionEditorRegistry;
 import com.meteorite.itemdespawntowhat.client.edit.EffectEditorRegistry;

@@ -3,8 +3,8 @@ package com.meteorite.itemdespawntowhat.client.ui.widget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -57,7 +57,10 @@ public final class UiStructureDiagram implements UiWidget, UiFocusTarget {
     private int topRow;
     private int cursor = -1;
 
-    public UiStructureDiagram(Font font, @Nullable Listener listener) {
+    // 注入的宿主主题
+    private final UiHostTheme theme;
+    public UiStructureDiagram(UiHostTheme theme, Font font, @Nullable Listener listener) {
+        this.theme = UiHostThemes.require(theme);
         this.font = Objects.requireNonNull(font, "font");
         this.listener = listener;
     }
@@ -187,7 +190,7 @@ public final class UiStructureDiagram implements UiWidget, UiFocusTarget {
         }
         if (nodes.isEmpty()) {
             String text = TextScroll.trimToWidth(font, emptyMessage.getString(), Math.max(1, bounds.width()));
-            graphics.drawString(font, text, bounds.x(), bounds.y(), UiPalette.TEXT_DISABLED, false);
+            graphics.drawString(font, text, bounds.x(), bounds.y(), theme.palette().textDisabled(), false);
             return;
         }
         int lastRow = Math.min(rowCount(), topRow + visibleRows());
@@ -209,21 +212,21 @@ public final class UiStructureDiagram implements UiWidget, UiFocusTarget {
 
     private void drawNode(GuiGraphics graphics, int index, UiRect rect, int mouseX, int mouseY) {
         boolean hovered = enabled && rect.contains(mouseX, mouseY);
-        int fill = index == cursor && focused ? UiPalette.CONTROL_SELECTED
-                : (hovered ? UiPalette.CONTROL_HOVER : UiPalette.CONTROL_FILL);
-        graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), enabled ? fill : UiPalette.CONTROL_DISABLED);
-        UiTheme.drawBevel(graphics, rect, UiPalette.CONTROL_BEVEL_LIGHT, UiPalette.CONTROL_BEVEL_DARK);
+        int fill = index == cursor && focused ? theme.palette().controlSelected()
+                : (hovered ? theme.palette().controlHover() : theme.palette().controlFill());
+        graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), enabled ? fill : theme.palette().controlDisabled());
+        theme.drawBevel(graphics, rect, theme.palette().controlBevelLight(), theme.palette().controlBevelDark());
         Node node = nodes.get(index);
         String title = TextScroll.trimToWidth(font, node.title().getString(), Math.max(1, rect.width() - 4));
         graphics.drawString(font, title, rect.x() + 2, rect.y() + 4,
-                enabled ? UiPalette.TEXT_PRIMARY : UiPalette.TEXT_DISABLED, false);
+                enabled ? theme.palette().textPrimary() : theme.palette().textDisabled(), false);
         if (showsDetail() && node.detail() != null) {
             String detail = TextScroll.trimToWidth(font, node.detail().getString(), Math.max(1, rect.width() - 4));
-            graphics.drawString(font, detail, rect.x() + 2, rect.y() + NODE_HEIGHT - 2, UiPalette.TEXT_SECONDARY,
+            graphics.drawString(font, detail, rect.x() + 2, rect.y() + NODE_HEIGHT - 2, theme.palette().textSecondary(),
                     false);
         }
         if (index == cursor && focused) {
-            UiTheme.drawFocusOutline(graphics, rect);
+            theme.drawFocusOutline(graphics, rect);
         }
     }
 
@@ -231,7 +234,7 @@ public final class UiStructureDiagram implements UiWidget, UiFocusTarget {
         int x = rect.right() + 1;
         int y = rect.y() + rect.height() / 2 - 3;
         graphics.drawString(font, connected ? "->" : "  ", x, y,
-                connected ? UiPalette.ACCENT : UiPalette.TEXT_DISABLED, false);
+                connected ? theme.palette().accent() : theme.palette().textDisabled(), false);
     }
 
     // 是否存在给定连线（相邻节点之间才画箭头，其余关系不猜测）

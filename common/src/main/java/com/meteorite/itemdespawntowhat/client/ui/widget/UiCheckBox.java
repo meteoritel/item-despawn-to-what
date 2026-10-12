@@ -3,8 +3,8 @@ package com.meteorite.itemdespawntowhat.client.ui.widget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import java.util.Objects;
 import java.util.function.Consumer;
 import net.minecraft.client.gui.Font;
@@ -33,7 +33,10 @@ public final class UiCheckBox implements UiWidget, UiFocusTarget {
     private boolean focused;
     private @Nullable Consumer<Boolean> onChanged;
 
-    public UiCheckBox(Font font, Component label, boolean checked) {
+    // 注入的宿主主题
+    private final UiHostTheme theme;
+    public UiCheckBox(UiHostTheme theme, Font font, Component label, boolean checked) {
+        this.theme = UiHostThemes.require(theme);
         this.font = Objects.requireNonNull(font, "font");
         this.label = label == null ? Component.empty() : label;
         this.checked = checked;
@@ -117,21 +120,21 @@ public final class UiCheckBox implements UiWidget, UiFocusTarget {
         boolean hovered = enabled && bounds.contains(mouseX, mouseY);
         int boxY = bounds.y() + Math.max(0, (bounds.height() - BOX_SIZE) / 2);
         UiRect box = new UiRect(bounds.x(), boxY, BOX_SIZE, BOX_SIZE);
-        UiTheme.drawInset(graphics, box);
+        theme.drawInset(graphics, box);
         if (checked) {
             graphics.fill(box.x() + 2, box.y() + 2, box.right() - 2, box.bottom() - 2,
-                    enabled ? UiPalette.ACCENT : UiPalette.CONTROL_DISABLED);
+                    enabled ? theme.palette().accent() : theme.palette().controlDisabled());
             // TODO 美术：勾选图标贴图（当前用 ASCII 字符占位）
-            graphics.drawString(renderFont, "X", box.x() + 2, box.y() + 1, UiPalette.TEXT_ON_DARK, false);
+            graphics.drawString(renderFont, "X", box.x() + 2, box.y() + 1, theme.palette().textOnDark(), false);
         }
         int textX = box.right() + LABEL_GAP;
         int maxWidth = Math.max(0, bounds.right() - textX);
         String text = TextScroll.trimToWidth(renderFont, label.getString(), maxWidth);
-        int color = !enabled ? UiPalette.TEXT_DISABLED : (hovered ? UiPalette.TEXT_PRIMARY : UiTheme.textColor(true));
+        int color = !enabled ? theme.palette().textDisabled() : (hovered ? theme.palette().textPrimary() : theme.textColor(true));
         int textY = bounds.y() + Math.max(0, (bounds.height() - renderFont.lineHeight) / 2);
         graphics.drawString(renderFont, text, textX, textY, color, false);
         if (focused) {
-            UiTheme.drawFocusOutline(graphics, bounds);
+            theme.drawFocusOutline(graphics, bounds);
         }
     }
 

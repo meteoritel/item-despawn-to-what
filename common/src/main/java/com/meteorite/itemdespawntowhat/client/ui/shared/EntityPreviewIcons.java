@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.client.ui.screen;
+package com.meteorite.itemdespawntowhat.client.ui.shared;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiEntityPreview;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;

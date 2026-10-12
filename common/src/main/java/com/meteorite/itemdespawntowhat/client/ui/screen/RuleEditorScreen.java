@@ -1,235 +1,90 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDefaults;
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDescriptors;
-import com.meteorite.itemdespawntowhat.client.edit.ClientTypeRegistries;
-import com.meteorite.itemdespawntowhat.client.edit.ConditionEditorRegistry;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
-import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
-import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
-import com.meteorite.itemdespawntowhat.client.edit.draft.DraftConflict;
+import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
+import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryDispatcher;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.net.RuleEditClientState;
-import com.meteorite.itemdespawntowhat.client.ui.screen.form.CatalogSuggestions;
-import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionSupport;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConsumptionSummary;
-import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormIssue;
-import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
-import com.meteorite.itemdespawntowhat.client.ui.screen.form.RuleTemplateHooks;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.NaturalSummary;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.ReadOnlyTextView;
-import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
-import com.meteorite.itemdespawntowhat.client.ui.screen.form.Suggestion;
-import com.meteorite.itemdespawntowhat.client.ui.screen.form.SuggestionProvider;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionTreeEditor;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiListView;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiTreeView;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiTreeNode;
-import com.meteorite.itemdespawntowhat.client.edit.RuleCategories;
+import com.meteorite.itemdespawntowhat.client.ui.shared.BlockPreviewIcons;
+import com.meteorite.itemdespawntowhat.client.ui.shared.EntityPreviewIcons;
+import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModalStack;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiNarration;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiSegmentedControl;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
-import com.meteorite.itemdespawntowhat.core.api.RuleFields;
-import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
-import com.meteorite.itemdespawntowhat.core.model.CatalystCost;
-import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
-import com.meteorite.itemdespawntowhat.core.model.ConditionLimits;
-import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
-import com.meteorite.itemdespawntowhat.core.model.ConditionType;
-import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleIssue;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveStatus;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshotEntry;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
-import java.util.function.Consumer;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
 /***
  * 规则编辑器主屏（契约 §5、docs/plan/plan-frontend-rewrite-forms.md）。
- * <p>两种模式：规则管理页（列表/搜索/筛选/新建/复制/停用/删除/恢复原始/模板）与规则编辑页
+ * <p>两种模式：规则管理页（列表 / 搜索 / 筛选 / 新建 / 复制 / 停用 / 删除 / 恢复原始 / 模板）与规则编辑页
  * （基本信息 / 源物品 / 触发条件 / 效果 四个页签）。所有字段编辑走描述符驱动的
- * {@link FormView}，条件树走 {@link UiConditionTreeEditor}，界面任何位置都不出现可编辑 JSON 文本框。
+ * {@link com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView}，条件树走
+ * {@link com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionTreeSummary}，界面任何位置都不出现可编辑 JSON 文本框。
+ * <p>本类只保留模式切换、屏幕生命周期、布局编排与事件派发：管理页在 {@link RuleEditorScreenListPage}
+ * （条目动作在 {@link RuleEditorScreenListActions}），编辑页与保存 / 校验入口在 {@link RuleEditorScreenEditPage}
+ * （本地校验在 {@link RuleEditorValidation}），两者的公共按钮排为 {@link RuleEditorScreenButtonBar}。
  * <p>只有工作区处于 ACTIVE 时可编辑；APPLYING 冻结；工作区进入 FREE 时自行关屏。
  */
 public final class RuleEditorScreen extends Screen {
 
+    // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
+    private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
+
     // 布局常量
     private static final int PAD = 4;
     private static final int HEADER_H = 14;
-    private static final int TAB_H = 22;
     private static final int EDIT_HEADER_H = 24;
     private static final int EDIT_PAD = 8;
-    private static final int ROW_H = 12;
     private static final int NOTICE_H = 10;
-    private static final int RULE_ID_MAX_LENGTH = 128;
-    private static final String DEFAULT_RULE_NAME = "new_rule";
     // i18n 前缀
     private static final String UI = "gui.itemdespawntowhat.edit.";
-    private static final String ISSUE = UI + "issue.";
 
     // 模式
     private enum Mode { LIST, EDIT }
 
-    // 编辑页签（取值与 RuleEditorEditPages.Page 对应，标签键为 tab.<value>）
-
     private final EditorWorkspaceView workspace;
     private final RuleEditorModel model;
     private final UiFocusManager focus = new UiFocusManager();
-    private final UiModalStack modals = new UiModalStack();
+    private final UiModalStack modals = new UiModalStack(THEME);
 
-    // 当前模式与页签
+    // 管理页（LIST）与编辑页（EDIT）：各自持有控件与视图状态
+    private final RuleEditorScreenListPage listPage;
+    private final RuleEditorScreenEditPage editPage;
+
+    // 当前模式与编辑对象
     private Mode mode = Mode.LIST;
-    private RuleEditorEditPages.Page tab = RuleEditorEditPages.Page.INFO;
-    // 状态提示（保存回执/校验失败等）
-    private @Nullable Component notice;
-    private int noticeColor = UiPalette.TEXT_SECONDARY;
-    // 已消费的回执序号
-    private long seenResultSeq;
-
-    // ---- 管理页 ----
-    private @Nullable UiTextInput searchField;
-    private @Nullable UiSegmentedControl filterControl;
-    private @Nullable UiTreeView<String> ruleList;
-    private final List<String> visibleIds = new ArrayList<>();
-    private final List<UiButton> listButtons = new ArrayList<>();
-    private final ButtonBar listBar = new ButtonBar();
-    private final ButtonBar globalBar = new ButtonBar();
-    private final List<UiButton> selectedButtons = new ArrayList<>();
-    private @Nullable UiButton toggleButton;
-    private final Set<String> expandedCategories = new LinkedHashSet<>();
-    private final java.util.Map<String, RuleRecipeView> recipeViews = new java.util.LinkedHashMap<>();
-    private String lastQuery = "";
-    private String lastTreeQuery = "";
-    private int filterIndex;
-
-    // ---- 编辑页 ----
     private @Nullable String editingId;
-    // 四页编辑流程（基本信息 / 输入与成本 / 触发与条件 / 结果）
-    private @Nullable RuleEditorEditPages pages;
-    private @Nullable UiSegmentedControl tabControl;
-    private final List<UiButton> footerButtons = new ArrayList<>();
-    private final ButtonBar footerBar = new ButtonBar(22, 4, true);
-    // 编辑内容区（每帧重算；切页与问题定位复用同一份布局）
-    private UiRect lastEditArea = new UiRect(0, 0, 0, 0);
+    // 状态提示（保存回执 / 校验失败等）
+    private @Nullable Component notice;
+    private int noticeColor = THEME.palette().textSecondary();
 
-    // 页面宿主适配：把屏幕能力（会话 / 焦点 / 弹窗 / 提示 / 冻结 / 尺寸）暴露给四页编辑流程
-    private final RuleEditorEditPages.Host pagesHost = new RuleEditorEditPages.Host() {
-
-        @Override
-        public Font font() {
-            return RuleEditorScreen.this.font;
-        }
-
-        @Override
-        public @Nullable EditSession session() {
-            return editingSession();
-        }
-
-        @Override
-        public UiFocusManager focus() {
-            return focus;
-        }
-
-        @Override
-        public UiModalStack modals() {
-            return modals;
-        }
-
-        @Override
-        public void onDraftChanged() {
-            RuleEditorScreen.this.onDraftChanged();
-        }
-
-        @Override
-        public void onControlsChanged() {
-            rebuildFocus();
-        }
-
-        @Override
-        public void notice(Component message, int color) {
-            setNotice(message, color);
-        }
-
-        @Override
-        public SuggestionProvider suggestions() {
-            return suggestionProvider();
-        }
-
-        @Override
-        public ConditionSupport conditionSupport() {
-            return pageConditionSupport();
-        }
-
-        @Override
-        public EditorWorkspaceView workspace() {
-            return RuleEditorScreen.this.workspace;
-        }
-
-        @Override
-        public boolean rejectWhenFrozen() {
-            return RuleEditorScreen.this.rejectWhenFrozen();
-        }
-
-        @Override
-        public int screenWidth() {
-            return RuleEditorScreen.this.width;
-        }
-
-        @Override
-        public int screenHeight() {
-            return RuleEditorScreen.this.height;
-        }
-    };
-
-    // ---- P6：草稿落盘与冲突 ----
-    // 「应用全部」按钮（无改动或会话冻结时禁用）
-    private @Nullable UiButton applyButton;
-    // 撤销 / 重做按钮（显示下一次操作名，无历史时禁用）
-    private @Nullable UiButton undoButton;
-    private @Nullable UiButton redoButton;
-    // 已弹过冲突窗的目标 id（避免每帧重复弹；解决后移除）
-    private final Set<String> promptedConflicts = new LinkedHashSet<>();
     // 上一帧的可编辑状态（冻结切换时刷新表单使能）
     private boolean lastEditable = true;
     // 冻结提示只提示一次
     private boolean frozenNotified;
-
     // 草稿被修改后需要在下一帧刷新列表
     private boolean listNeedsRefresh;
-    // 注册表候选建议（惰性创建；创建失败时退化为无建议）
-    private @Nullable SuggestionProvider catalogSuggestions;
-
     // 内容区（每帧重算，供命中测试复用）
     private UiRect contentArea = new UiRect(0, 0, 0, 0);
 
@@ -239,21 +94,61 @@ public final class RuleEditorScreen extends Screen {
         BuiltinEditorDescriptors.bootstrap();
         this.workspace = Objects.requireNonNull(workspace, "workspace");
         this.model = new RuleEditorModel(workspace);
-        modals.setHistoryTarget(this::restoreHistory);
+        // 管理页宿主适配：把屏幕能力暴露给列表页与条目动作
+        RuleEditorScreenListPage.Host listHost = new RuleEditorScreenListPage.Host() {
+            @Override public Font font() { return RuleEditorScreen.this.font; }
+            @Override public UiModalStack modals() { return modals; }
+            @Override public RuleEditorModel model() { return model; }
+            @Override public EditorWorkspaceView workspace() { return RuleEditorScreen.this.workspace; }
+            @Override public int screenWidth() { return RuleEditorScreen.this.width; }
+            @Override public int screenHeight() { return RuleEditorScreen.this.height; }
+            @Override public boolean rejectWhenFrozen() { return RuleEditorScreen.this.rejectWhenFrozen(); }
+            @Override public void setNotice(@Nullable Component message, int color) { RuleEditorScreen.this.setNotice(message, color); }
+            @Override public String labelText(String id) { return RuleEditorScreen.this.labelText(id); }
+            @Override public void openEditor(String id) { RuleEditorScreen.this.openEditor(id); }
+            @Override public void selectInputTab() { editPage.openInputTab(); }
+            @Override public void showChanges() { RuleEditorScreen.this.showChanges(); }
+            @Override public void save() { editPage.save(); }
+            @Override public void confirm(String titleKey, String messageKey, Runnable onConfirm) { RuleEditorScreen.this.confirm(titleKey, messageKey, onConfirm); }
+            @Override public void refreshList() { listPage.refreshList(); }
+        };
+        // 编辑页宿主适配：把屏幕能力暴露给页签组合视图与保存流程
+        RuleEditorScreenEditPage.Host editHost = new RuleEditorScreenEditPage.Host() {
+            @Override public Font font() { return RuleEditorScreen.this.font; }
+            @Override public UiFocusManager focus() { return focus; }
+            @Override public UiModalStack modals() { return modals; }
+            @Override public RuleEditorModel model() { return model; }
+            @Override public EditorWorkspaceView workspace() { return RuleEditorScreen.this.workspace; }
+            @Override public @Nullable EditSession session() { return editingSession(); }
+            @Override public @Nullable String editingId() { return editingId; }
+            @Override public boolean isEditMode() { return mode == Mode.EDIT; }
+            @Override public void onDraftChanged() { RuleEditorScreen.this.onDraftChanged(); }
+            @Override public void rebuildFocus() { RuleEditorScreen.this.rebuildFocus(); }
+            @Override public void setNotice(@Nullable Component message, int color) { RuleEditorScreen.this.setNotice(message, color); }
+            @Override public void refreshList() { listPage.refreshList(); }
+            @Override public boolean rejectWhenFrozen() { return RuleEditorScreen.this.rejectWhenFrozen(); }
+            @Override public void openEditor(String id) { RuleEditorScreen.this.openEditor(id); }
+            @Override public void closeScreen() { RuleEditorScreen.this.onClose(); }
+            @Override public void rebuildEditableState() { RuleEditorScreen.this.rebuildEditableState(); }
+            @Override public void showChanges() { RuleEditorScreen.this.showChanges(); }
+            @Override public void backToList() { RuleEditorScreen.this.backToList(); }
+            @Override public int screenWidth() { return RuleEditorScreen.this.width; }
+            @Override public int screenHeight() { return RuleEditorScreen.this.height; }
+        };
+        this.listPage = new RuleEditorScreenListPage(listHost);
+        this.editPage = new RuleEditorScreenEditPage(editHost);
+        modals.setHistoryTarget(editPage::restoreHistory);
         modals.setOnScopeChanged(() -> {
-            if (ruleList != null) ruleList.mouseReleased(-1, -1, 0);
-            if (pages != null) pages.endInteractions();
+            listPage.onScopeChanged();
+            editPage.endInteractions();
         });
         // 焦点变化时播报控件的可读名称（未开启朗读时 GameNarrator 内部会静默）
         focus.setListener((previous, next) -> {
             UiNarration.focus(next);
             focus.setSpaceActivates(!(next instanceof UiTextInput)
                     && !(next instanceof com.meteorite.itemdespawntowhat.client.ui.widget.UiListEditor));
-            if (next != null && pages != null) {
-                pages.ensureVisible(next);
-            }
+            editPage.ensureVisible(next);
         });
-        this.seenResultSeq = workspace.resultSeq();
         this.model.refresh();
     }
 
@@ -269,158 +164,15 @@ public final class RuleEditorScreen extends Screen {
     protected void init() {
         super.init();
         // resize 会再次调用 init；保留控件、输入缓冲、选择与滚动，仅在渲染时更新几何。
-        if (ruleList != null) {
+        if (listPage.initialized()) {
             modals.setBounds(0, 0, width, height);
             return;
         }
-        searchField = new UiTextInput(font, Component.translatable(UI + "list.search"));
-        searchField.setMaxLength(128);
-        searchField.setValue(lastQuery);
-        filterControl = new UiSegmentedControl(font, filterOptions());
-        filterControl.setSelected(filterOptions().get(filterIndex).value());
-        filterControl.setOnChanged(value -> {
-            filterIndex = indexOfFilter(value);
-            refreshList();
-        });
-        ruleList = new UiTreeView<>(font, (graphics, rowFont, node, row, depth, selected, hovered, focused) -> {
-            if (node.value().startsWith("@")) {
-                graphics.drawString(rowFont, TextScroll.trimToWidth(rowFont, node.label().getString(), row.width() - 4),
-                        row.x() + 2, row.y() + (row.height() - rowFont.lineHeight) / 2, UiPalette.TEXT_SECONDARY, false);
-            } else renderRuleRow(graphics, rowFont, node.value(), row, hovered);
-        });
-        ruleList.setRowHeightProvider(node -> font.lineHeight + 4
-                + (node.value().startsWith("@") ? 0 : RuleRecipeView.CONTENT_HEIGHT + 1));
-        ruleList.setEmptyMessage(Component.translatable(UI + "list.empty"));
-        ruleList.setOnActivate(node -> { if (!node.value().startsWith("@")) openEditor(node.value()); });
-        tabControl = new UiSegmentedControl(font, tabOptions());
-        tabControl.setSelected(tab.value());
-        tabControl.setOnChanged(this::switchTab);
-        buildListButtons();
-        buildFooterButtons();
-        refreshList();
-        rebuildEdit();
+        listPage.init();
+        editPage.init();
+        listPage.refreshList();
+        editPage.rebuildEdit();
         rebuildFocus();
-    }
-
-    private List<UiSegmentedControl.Option> filterOptions() {
-        return List.of(
-                new UiSegmentedControl.Option("all", Component.translatable(UI + "filter.all")),
-                new UiSegmentedControl.Option("enabled", Component.translatable(UI + "filter.enabled")),
-                new UiSegmentedControl.Option("disabled", Component.translatable(UI + "filter.disabled")),
-                new UiSegmentedControl.Option("issue", Component.translatable(UI + "filter.issue")));
-    }
-
-    private int indexOfFilter(String value) {
-        for (int i = 0; i < 4; i++) {
-            if (filterOptions().get(i).value().equals(value)) {
-                return i;
-            }
-        }
-        return 0;
-    }
-
-    private List<UiSegmentedControl.Option> tabOptions() {
-        List<UiSegmentedControl.Option> options = new ArrayList<>();
-        for (RuleEditorEditPages.Page value : RuleEditorEditPages.Page.values()) {
-            options.add(new UiSegmentedControl.Option(value.value(),
-                    Component.translatable(UI + "tab." + value.value())));
-        }
-        return options;
-    }
-
-    // 切页：先结束进行中的预览并提交有效编辑，再重建目标页
-    private void switchTab(String value) {
-        RuleEditorEditPages.Page target = RuleEditorEditPages.Page.of(value);
-        if (target == tab) {
-            return;
-        }
-        if (pages != null) {
-            if (pages.blockNavigation()) {
-                if (tabControl != null) {
-                    tabControl.setSelected(tab.value());
-                }
-                return;
-            }
-            pages.setPage(target);
-        }
-        tab = target;
-        rebuildFocus();
-    }
-
-    // ---- 按钮 ----
-
-    private void buildListButtons() {
-        listButtons.clear();
-        UiButton create = button(UI + "button.new", UiButtonVariant.PRIMARY, this::promptNewRule);
-        UiButton templates = button(UI + "button.template", UiButtonVariant.SECONDARY, this::openTemplatePicker);
-        UiButton edit = button(UI + "button.edit", UiButtonVariant.PRIMARY, () -> {
-            String id = selectedRuleId(); if (id != null) openEditor(id);
-        });
-        toggleButton = button(UI + "button.enable", UiButtonVariant.SECONDARY, this::toggleSelectedEnabled);
-        UiButton copy = button(UI + "button.duplicate", UiButtonVariant.SECONDARY, this::promptDuplicate);
-        UiButton more = button(UI + "button.more", UiButtonVariant.SECONDARY, this::openMore);
-        UiButton delete = button(UI + "button.delete", UiButtonVariant.DANGER, this::deleteSelected);
-        applyButton = button(UI + "button.apply", UiButtonVariant.PRIMARY, this::save);
-        UiButton changes = button(UI + "button.changes", UiButtonVariant.SECONDARY, this::showChanges);
-        selectedButtons.clear();
-        selectedButtons.addAll(List.of(edit, toggleButton, copy, delete, more));
-        globalBar.set(List.of(create, templates, edit, toggleButton, copy, delete, more));
-        listBar.set(List.of(applyButton, changes));
-        listButtons.addAll(List.of(create, templates, edit, toggleButton, copy, delete, more, applyButton, changes));
-    }
-
-    /*** 纵向菜单项，避免窄屏和英文长按钮挤出弹窗。 */
-    private record MenuAction(String key, Runnable action) { }
-
-    private void openMore() {
-        if (selectedRuleId() == null) { noSelection(); return; }
-        UiModal modal = UiModal.create(font).title(Component.translatable(UI + "button.more"));
-        UiListView<MenuAction> list = new UiListView<>(font,
-                (graphics, rowFont, item, index, row, selected, hovered, focused) -> graphics.drawString(rowFont,
-                        Component.translatable(UI + item.key()), row.x() + 4, row.y() + 4, UiPalette.TEXT_PRIMARY, false));
-        String id = selectedRuleId();
-        JsonObject body = id == null ? null : model.displayBody(id);
-        boolean masked = body != null && body.has(RuleFields.DELETE) && body.get(RuleFields.DELETE).getAsBoolean();
-        list.setItems(List.of(new MenuAction(masked ? "button.unmask" : "button.mask", this::maskSelected),
-                new MenuAction("button.restore", this::restoreSelected)));
-        list.setRowHeight(20);
-        list.setActivateOnSingleClick(true);
-        list.setOnActivate(item -> { modals.close(modal); item.action().run(); });
-        modal.contentWidget(list, 44).cancel(Component.translatable(UI + "button.cancel"));
-        modal.preferredWidth(300).layoutCentered(width, height);
-        modals.push(modal);
-    }
-
-    private void showChanges() {
-        Component body = Component.translatable(UI + "changes.note");
-        for (String id : model.dirtyRuleIds()) {
-            EditSession session = model.session(id);
-            String kind = model.isRestoring(id) ? "restore" : model.isCreated(id) ? "create"
-                    : session != null && session.draft().isDeleted() ? "remove" : "modify";
-            body = body.copy().append("\n").append(Component.translatable(UI + "changes." + kind))
-                    .append(": ").append(labelText(id));
-        }
-        modals.push(UiModal.create(font).title(Component.translatable(UI + "button.changes"))
-                .message(body).preferredWidth(300).cancel(Component.translatable(UI + "button.cancel"))
-                .layoutCentered(width, height));
-    }
-
-    private void buildFooterButtons() {
-        footerButtons.clear();
-        footerButtons.add(button(UI + "button.save", UiButtonVariant.PRIMARY, this::save));
-        this.undoButton = button(UI + "button.undo", UiButtonVariant.SECONDARY, this::undo);
-        this.redoButton = button(UI + "button.redo", UiButtonVariant.SECONDARY, this::redo);
-        this.undoButton.setTooltip(Component.translatable(UI + "button.undo_shortcut"));
-        this.redoButton.setTooltip(Component.translatable(UI + "button.redo_shortcut"));
-        footerButtons.add(this.undoButton);
-        footerButtons.add(this.redoButton);
-        footerButtons.add(button(UI + "button.changes", UiButtonVariant.SECONDARY, this::showChanges));
-        footerButtons.add(button(UI + "button.back", UiButtonVariant.SECONDARY, this::backToList));
-        footerBar.set(footerButtons);
-    }
-
-    private UiButton button(String labelKey, UiButtonVariant variant, Runnable action) {
-        return new UiButton(font, Component.translatable(labelKey), variant, action::run);
     }
 
     // ---- 渲染 ----
@@ -437,36 +189,31 @@ public final class RuleEditorScreen extends Screen {
         int w = this.width;
         int h = this.height;
         modals.setBounds(0, 0, w, h);
-        UiTheme.drawWindow(graphics, new UiRect(0, 0, w, h));
+        THEME.drawWindow(graphics, new UiRect(0, 0, w, h));
         int headerHeight = mode == Mode.EDIT ? EDIT_HEADER_H : HEADER_H;
         int pagePad = mode == Mode.EDIT ? EDIT_PAD : PAD;
-        UiTheme.drawDivider(graphics, 0, headerHeight, w);
+        THEME.drawDivider(graphics, 0, headerHeight, w);
         drawHeaderText(graphics);
         int y = headerHeight + PAD;
-        if (mode == Mode.EDIT && tabControl != null) {
-            tabControl.setBounds(pagePad, y, Math.max(0, w - pagePad * 2), TAB_H);
-            tabControl.render(graphics, font, mouseX, mouseY);
-            y += TAB_H + EDIT_PAD;
+        if (mode == Mode.EDIT) {
+            y = editPage.layoutTabs(graphics, font, mouseX, mouseY, pagePad, y);
         }
         int availableWidth = Math.max(0, w - pagePad * 2);
-        int footerHeight = (mode == Mode.LIST ? listBar : footerBar).preferredHeight(availableWidth);
+        int footerHeight = mode == Mode.LIST ? listPage.footerHeight(availableWidth) : editPage.footerHeight(availableWidth);
         int footerY = h - pagePad - footerHeight;
         int noticeY = footerY - PAD - (notice == null ? 0 : NOTICE_H);
         contentArea = new UiRect(pagePad, y, availableWidth, Math.max(0, noticeY - y - EDIT_PAD));
         if (mode == Mode.LIST) {
-            renderListMode(graphics, mouseX, mouseY);
+            listPage.render(graphics, font, mouseX, mouseY, contentArea);
         } else {
-            graphics.fill(pagePad - 2, y - 2, w - pagePad + 2, Math.max(y - 2, noticeY - PAD), UiPalette.PANEL_FILL);
-            renderEditMode(graphics, mouseX, mouseY);
+            graphics.fill(pagePad - 2, y - 2, w - pagePad + 2, Math.max(y - 2, noticeY - PAD), THEME.palette().panelFill());
+            editPage.render(graphics, font, mouseX, mouseY, contentArea);
         }
         drawNotice(graphics, noticeY, w);
         if (mode == Mode.LIST) {
-            listBar.layout(footerY, Math.max(0, w - PAD * 2));
-            listBar.render(graphics, font, mouseX, mouseY);
+            listPage.renderFooter(graphics, font, mouseX, mouseY, footerY, Math.max(0, w - PAD * 2));
         } else {
-            UiTheme.drawDivider(graphics, pagePad, footerY - PAD, availableWidth);
-            footerBar.layout(pagePad, footerY, availableWidth);
-            footerBar.render(graphics, font, mouseX, mouseY);
+            editPage.renderFooter(graphics, font, mouseX, mouseY, pagePad, footerY, availableWidth);
         }
         mouseX = actualMouseX;
         mouseY = actualMouseY;
@@ -478,30 +225,19 @@ public final class RuleEditorScreen extends Screen {
             } else if (mode == Mode.EDIT && mouseY < EDIT_HEADER_H) {
                 EditSession session = editingSession();
                 if (session != null) {
-                    tip = NaturalSummary.rule(session.draft().view()).copy().append("\n")
-                            .append(ConsumptionSummary.hintRule(session.draft().view()));
+                    tip = NaturalSummary.rule(session.draft().root()).copy().append("\n")
+                            .append(ConsumptionSummary.hintRule(session.draft().root()));
                 }
-            } else if (mode == Mode.LIST && ruleList != null && ruleList.bounds().contains(mouseX, mouseY)) {
-                UiTreeNode<String> node = ruleList.nodeAt(mouseX, mouseY);
-                if (node != null && !node.value().startsWith("@")) {
-                    String id = node.value();
-                    RuleRecipeView recipe = recipeViews.get(id);
-                    var tag = tagAt(mouseX, mouseY);
-                    tip = tag == null ? Component.literal(labelText(id)).append("\n").append(recipe == null ? Component.empty() : recipe.tooltip())
-                            : tag.tooltip();
-                    Component state = ruleState(id);
-                    if (!state.getString().isBlank()) tip = tip.copy().append("\n").append(state);
-                    if (RulePreviewIcons.unavailable(model.displayBody(id))) tip = tip.copy()
-                            .append("\n").append(Component.translatable(UI + "preview.unavailable"));
-                }
+            } else if (mode == Mode.LIST) {
+                tip = listPage.tooltipAt(mouseX, mouseY);
             }
             if (tip != null) {
                 renderTooltip(graphics, tip, mouseX, mouseY);
             }
         }
         // 字段说明提示：没有弹窗时才显示，避免盖住上层内容
-        if (modals.isEmpty() && mode == Mode.EDIT && pages != null) {
-            Component tip = pages.tooltipAt(mouseX, mouseY);
+        if (modals.isEmpty() && mode == Mode.EDIT) {
+            Component tip = editPage.tooltipAt(mouseX, mouseY);
             if (tip != null) {
                 renderTooltip(graphics, tip, mouseX, mouseY);
             }
@@ -527,11 +263,11 @@ public final class RuleEditorScreen extends Screen {
         int textY = mode == Mode.EDIT ? (EDIT_HEADER_H - font.lineHeight) / 2 : 3;
         int stateWidth = font.width(state) + 12;
         title = TextScroll.trimToWidth(font, title, Math.max(0, this.width - padding * 2 - stateWidth - PAD));
-        graphics.drawString(font, title, padding, textY, UiPalette.HEADER_TEXT, false);
+        graphics.drawString(font, title, padding, textY, THEME.palette().headerText(), false);
         if (mode == Mode.EDIT) {
-            UiTheme.drawPanel(graphics, new UiRect(this.width - padding - stateWidth, 4, stateWidth, EDIT_HEADER_H - 8));
+            THEME.drawPanel(graphics, new UiRect(this.width - padding - stateWidth, 4, stateWidth, EDIT_HEADER_H - 8));
         }
-        graphics.drawString(font, state, this.width - padding - font.width(state) - (mode == Mode.EDIT ? 6 : 0), textY, UiPalette.HEADER_TEXT, false);
+        graphics.drawString(font, state, this.width - padding - font.width(state) - (mode == Mode.EDIT ? 6 : 0), textY, THEME.palette().headerText(), false);
     }
 
     // 底部状态提示
@@ -543,297 +279,11 @@ public final class RuleEditorScreen extends Screen {
         graphics.drawString(font, text, PAD, y + 1, noticeColor, false);
     }
 
-    // 管理页布局
-    private void renderListMode(GuiGraphics graphics, int mouseX, int mouseY) {
-        UiRect area = contentArea;
-        updateSelectedButtons();
-        int headerHeight = globalBar.preferredHeight(area.width());
-        globalBar.layout(area.y(), area.width());
-        globalBar.render(graphics, font, mouseX, mouseY);
-        int searchY = area.y() + headerHeight + PAD;
-        int searchWidth = Math.min(160, area.width() / 2);
-        if (searchField != null) {
-            searchField.setBounds(area.x(), searchY, searchWidth, ROW_H);
-            searchField.render(graphics, font, mouseX, mouseY);
-        }
-        if (filterControl != null) {
-            filterControl.setBounds(area.x() + searchWidth + 2, searchY, area.width() - searchWidth - 2, ROW_H);
-            filterControl.render(graphics, font, mouseX, mouseY);
-        }
-        int listY = searchY + ROW_H + PAD;
-        int available = Math.max(0, area.bottom() - listY);
-        if (ruleList != null) {
-            ruleList.setBounds(area.x(), listY, area.width(), available);
-            ruleList.render(graphics, font, mouseX, mouseY);
-        }
-    }
-
-    // 条目操作随选中状态同步；切换按钮只显示下一步动作，布局按当前文案计算。
-    private void updateSelectedButtons() {
-        String id = selectedRuleId();
-        for (UiButton button : selectedButtons) {
-            button.setEnabled(workspace.active() && id != null);
-        }
-        if (toggleButton != null) {
-            JsonObject body = id == null ? null : model.displayBody(id);
-            boolean enabled = body != null && (!body.has(RuleFields.ENABLED) || body.get(RuleFields.ENABLED).getAsBoolean());
-            toggleButton.setLabel(Component.translatable(UI + (enabled ? "button.disable" : "button.enable")));
-        }
-    }
-
-    // 编辑页布局：四个页签各自在内容区里排布控件（含窄屏分层）
-    private void renderEditMode(GuiGraphics graphics, int mouseX, int mouseY) {
-        lastEditArea = new UiRect(contentArea.x(), contentArea.y(), contentArea.width(), contentArea.height());
-        if (pages == null) {
-            return;
-        }
-        pages.layout(lastEditArea);
-        pages.render(graphics, font, mouseX, mouseY);
-    }
-
-    // 名称和状态放第一行；原注册名位置改为图标配方，不显示内部规则 ID。
-    private void renderRuleRow(GuiGraphics graphics, Font rowFont, String id, UiRect row, boolean hovered) {
-        RuleSnapshotEntry entry = model.entry(id);
-        int color = isRuleActive(id, entry) ? UiPalette.TEXT_PRIMARY : UiPalette.TEXT_DISABLED;
-        String state = ruleState(id).getString();
-        int stateWidth = rowFont.width(state);
-        graphics.drawString(rowFont, TextScroll.trimToWidth(rowFont, labelText(id),
-                Math.max(0, row.width() - stateWidth - 6)), row.x() + 2, row.y() + 2, color, false);
-        if (!state.isBlank()) graphics.drawString(rowFont, state, row.right() - stateWidth - 2, row.y() + 2,
-                model.hasError(id) ? UiPalette.DANGER : UiPalette.TEXT_SECONDARY, false);
-        RuleRecipeView recipe = recipeViews.get(id);
-        if (recipe != null) recipe.render(graphics, rowFont,
-                new UiRect(row.x() + 2, row.y() + rowFont.lineHeight + 3,
-                        Math.max(0, row.width() - 4), RuleRecipeView.CONTENT_HEIGHT), color, hovered);
-    }
-
-    // 状态用明确文字，正常启用不占用配方行；草稿标志与问题提示不再使用符号。
-    private Component ruleState(String id) {
-        if (model.hasError(id)) return Component.translatable(UI + "recipe.status.error");
-        EditSession session = model.session(id);
-        if (session != null && (session.isDirty() || model.isRestoring(id)))
-            return Component.translatable(UI + "recipe.status.pending");
-        RuleSnapshotEntry entry = model.entry(id);
-        if (entry != null && RuleSnapshotEntry.STATUS_MASKED.equals(entry.status()))
-            return Component.translatable(UI + "recipe.status.masked");
-        return isRuleActive(id, entry) ? Component.empty() : Component.translatable(UI + "recipe.status.disabled");
-    }
-
-    // 效果列表行
-    // ---- 列表维护 ----
-
-    private void refreshList() {
-        if (ruleList == null) {
-            return;
-        }
-        String selectedValue = ruleList.selectedNode() == null ? null : ruleList.selectedNode().value();
-        int scrollOffset = ruleList.scrollOffset();
-        visibleIds.clear();
-        recipeViews.clear();
-        String query = lastQuery == null ? "" : lastQuery.toLowerCase(Locale.ROOT).trim();
-        for (String id : model.ruleIds()) {
-            RuleSnapshotEntry entry = model.entry(id);
-            if (!matchesFilter(id, entry)) {
-                continue;
-            }
-            if (!query.isEmpty()
-                    && !id.toLowerCase(Locale.ROOT).contains(query)
-                    && !labelText(id).toLowerCase(Locale.ROOT).contains(query)
-                    && !matchesBodyQuery(id, query)) {
-                continue;
-            }
-            visibleIds.add(id);
-            recipeViews.put(id, new RuleRecipeView(model.displayBody(id)));
-        }
-        if (lastTreeQuery.isBlank()) rememberCategoryState(ruleList.roots());
-        lastTreeQuery = lastQuery;
-        List<UiTreeNode<String>> roots = new ArrayList<>();
-        UiTreeNode<String> entity = categoryNode("entity");
-        for (String category : List.of("entity.item", "entity.entity", "entity.experience", "entity.mixed")) entity.addChild(categoryNode(category));
-        roots.add(entity);
-        for (String category : List.of("block", "loot", "world", "mixed", "extension")) roots.add(categoryNode(category));
-        for (String id : visibleIds) {
-            String category = RuleCategories.category(model.displayBody(id));
-            UiTreeNode<String> group = roots.stream().flatMap(root -> root == entity ? root.children().stream() : java.util.stream.Stream.of(root))
-                    .filter(node -> node.value().equals("@" + category)).findFirst().orElseThrow();
-            group.addChild(id, Component.literal(labelText(id)));
-        }
-        List<UiTreeNode<String>> nonempty = new ArrayList<>();
-        for (UiTreeNode<String> root : roots) {
-            if (root == entity) {
-                UiTreeNode<String> parent = categoryNode("entity");
-                root.children().stream().filter(node -> !node.children().isEmpty()).forEach(node -> parent.addChild(counted(node)));
-                if (!parent.children().isEmpty()) nonempty.add(parent);
-            } else if (!root.children().isEmpty()) nonempty.add(counted(root));
-        }
-        ruleList.setRoots(nonempty);
-        ruleList.setSelectedNode(findNode(nonempty, selectedValue));
-        ruleList.setScrollOffset(scrollOffset);
-    }
-
-    // 刷新时按稳定值恢复目录或规则选择，不依赖重建前的节点实例。
-    private @Nullable UiTreeNode<String> findNode(List<UiTreeNode<String>> nodes, @Nullable String value) {
-        if (value == null) return null;
-        for (UiTreeNode<String> node : nodes) {
-            if (value.equals(node.value())) return node;
-            UiTreeNode<String> child = findNode(node.children(), value);
-            if (child != null) return child;
-        }
-        return null;
-    }
-
-    private UiTreeNode<String> counted(UiTreeNode<String> node) {
-        UiTreeNode<String> copy = new UiTreeNode<>(node.value(), node.label().copy().append(" (" + node.children().size() + ")"))
-                .setExpanded(node.isExpanded());
-        node.children().forEach(copy::addChild);
-        return copy;
-    }
-
-    private UiTreeNode<String> categoryNode(String category) {
-        return new UiTreeNode<>("@" + category, Component.translatable(UI + "category." + category))
-                .setExpanded(!lastQuery.isBlank() || expandedCategories.contains(category));
-    }
-
-    private void rememberCategoryState(List<UiTreeNode<String>> nodes) {
-        for (UiTreeNode<String> node : nodes) {
-            if (!node.value().startsWith("@")) continue;
-            String category = node.value().substring(1);
-            if (node.isExpanded()) expandedCategories.add(category); else expandedCategories.remove(category);
-            rememberCategoryState(node.children());
-        }
-    }
-
-    // 当前草稿中的资源 ID、备注与参数也参与搜索；不触发目录查询。
-    private boolean matchesBodyQuery(String id, String query) {
-        JsonObject body = model.displayBody(id);
-        return body != null && body.toString().toLowerCase(Locale.ROOT).contains(query);
-    }
-
-    private boolean matchesFilter(String id, @Nullable RuleSnapshotEntry entry) {
-        boolean active = isRuleActive(id, entry);
-        return switch (filterIndex) {
-            case 1 -> active;
-            case 2 -> !active;
-            case 3 -> entry != null && !entry.issues().isEmpty() || model.hasError(id);
-            default -> true;
-        };
-    }
-
-    // 尚未修改的条目以快照状态为准；改动、恢复与新建条目以当前草稿为准。
-    private boolean isRuleActive(String id, @Nullable RuleSnapshotEntry entry) {
-        EditSession session = model.session(id);
-        if (session != null && (session.isDirty() || model.isCreated(id) || model.isRestoring(id))) {
-            return !session.draft().isDeleted() && session.draft().getBoolean(RuleFields.ENABLED, true);
-        }
-        return entry == null || RuleSnapshotEntry.STATUS_ACTIVE.equals(entry.status());
-    }
-
-    private String labelText(String id) {
-        JsonObject body = model.displayBody(id);
-        String label = body == null ? "" : RuleNaming.ruleTitle(body, RuleDisplayLabels::label).getString();
-        return label.isBlank() || label.equals(id) ? Component.translatable(UI + "recipe.unnamed").getString() : label;
-    }
-
-    private @Nullable String selectedRuleId() {
-        UiTreeNode<String> node = ruleList == null ? null : ruleList.selectedNode();
-        return node == null || node.value().startsWith("@") ? null : node.value();
-    }
-
-    // 搜索框内容变化后重新过滤
-    private void syncSearch() {
-        if (searchField == null) {
-            return;
-        }
-        String value = searchField.value();
-        if (!value.equals(lastQuery)) {
-            lastQuery = value;
-            refreshList();
-        }
-    }
-
-    // ---- 草稿与表单 ----
+    // ---- 模式切换 ----
 
     private @Nullable EditSession editingSession() {
         return editingId == null ? null : model.session(editingId);
     }
-
-    private void rebuildEdit() {
-        EditSession session = editingSession();
-        if (mode != Mode.EDIT || session == null) {
-            pages = null;
-            return;
-        }
-        if (pages == null) {
-            pages = new RuleEditorEditPages(pagesHost);
-        }
-        pages.setPage(tab);
-        pages.rebuild();
-        if (lastEditArea.width() > 0) {
-            pages.layout(lastEditArea);
-        }
-        // 页面控件是刚重建的，按当前工作区状态同步一次使能（APPLYING 期间必须冻结）
-        lastEditable = workspace.active();
-        applyEditableStateNow(lastEditable);
-    }
-
-    // 提交当前页所有可见表单的待写字段（切页 / 返回 / 应用 / 关屏前调用）
-    private void applyAllForms() {
-        if (pages != null) {
-            pages.applyToDraft();
-        }
-    }
-
-    private void onDraftChanged() {
-        listNeedsRefresh = true;
-    }
-
-    // 建议提供者（注册表候选），构造失败时降级为无建议
-    private SuggestionProvider suggestionProvider() {
-        if (catalogSuggestions == null) {
-            try {
-                catalogSuggestions = new CatalogSuggestions();
-            } catch (RuntimeException | LinkageError error) {
-                // 目录建议是辅助入口；依赖尚不可用时保留空候选，不阻止规则编辑。
-            }
-        }
-        return catalogSuggestions == null ? field -> List.of() : catalogSuggestions;
-    }
-
-    // 条件树宿主能力（页签与效果级条件共用）
-    private ConditionSupport pageConditionSupport() {
-        return new ConditionSupport() {
-            @Override
-            public List<UiConditionTreeEditor.TypeOption> typeOptions() {
-                List<UiConditionTreeEditor.TypeOption> options = new ArrayList<>();
-                for (TypeEditorDescriptor descriptor : ConditionEditorRegistry.all()) {
-                    options.add(new UiConditionTreeEditor.TypeOption(descriptor.id(), descriptor.label()));
-                }
-                return options;
-            }
-
-            @Override
-            public UiConditionTreeEditor.LeafFactory leafFactory() {
-                return ClientTypeRegistries::leafNode;
-            }
-
-            @Override
-            public Consumer<ConditionNode.Leaf> onEditLeaf() {
-                // 叶参数编辑由四页编辑流程自己实现（它知道发起编辑的那个表单实例）
-                return leaf -> {
-                    if (pages != null) {
-                        pages.editConditionLeaf(leaf);
-                    }
-                };
-            }
-
-            @Override
-            public TypeRegistry<ConditionType<?>> registry() {
-                return ClientTypeRegistries.conditions();
-            }
-        };
-    }
-
-    // ---- 模式切换 ----
 
     private void openEditor(String id) {
         if (rejectWhenFrozen()) {
@@ -853,31 +303,28 @@ public final class RuleEditorScreen extends Screen {
                 showRuleDetails(entry);
                 return;
             }
-            setNotice(Component.translatable(UI + "notice.rule_unavailable"), UiPalette.WARNING);
+            setNotice(Component.translatable(UI + "notice.rule_unavailable"), THEME.palette().warning());
             return;
         }
-        if (pages != null && pages.blockNavigation()) {
+        if (editPage.blockNavigation()) {
             return;
         }
         editingId = id;
         mode = Mode.EDIT;
-        tab = RuleEditorEditPages.Page.INFO;
         // 换规则时重建页面状态（候选与效果选择归零）
-        pages = null;
-        if (tabControl != null) {
-            tabControl.setSelected(tab.value());
-        }
-        rebuildEdit();
+        editPage.openNew();
+        editPage.rebuildEdit();
         rebuildFocus();
     }
 
     // 损坏规则显示原始视图与服务端问题，不创建会被表单改写的草稿。
     private void showRuleDetails(RuleSnapshotEntry entry) {
-        UiModal modal = UiModal.create(font);
+        UiModal modal = UiModal.create(THEME, font);
         modal.title(Component.translatable(UI + "detail.rule", entry.id().toString()));
         modal.message(Component.translatable(UI + (RuleSnapshotEntry.STATUS_INVALID.equals(entry.status())
                 ? "detail.invalid" : "detail.unavailable")));
-        String raw = new com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(entry.toJson());
+        // 核心条目视图仍是 JSON 对象：经草稿入口转为值视图后再美化输出
+        String raw = RuleDraft.of(entry.toJson()).root().toPrettyJson();
         modal.contentWidget(new ReadOnlyTextView(font, Component.literal(raw)), Math.clamp(height - 90, 36, 180));
         modal.cancel(Component.translatable(UI + "button.close"));
         modal.layoutCentered(width, height);
@@ -886,658 +333,32 @@ public final class RuleEditorScreen extends Screen {
 
     // 返回管理页：先结束交互并卸载页面，再刷新列表
     private void backToList() {
-        if (pages != null) {
-            if (pages.blockNavigation()) {
-                return;
-            }
-            pages.unmount();
+        if (!editPage.unmount()) {
+            return;
         }
-        pages = null;
         mode = Mode.LIST;
         editingId = null;
-        refreshList();
+        listPage.refreshList();
         rebuildFocus();
     }
 
-    // ---- 管理页动作 ----
-
-    private void promptNewRule() {
-        promptNewRule(null);
-    }
-
-    private void promptNewRule(@Nullable String templateId) {
-        if (rejectWhenFrozen()) {
-            return;
-        }
-        RuleNameInput content = new RuleNameInput(font);
-        UiTextInput input = content.input();
-        input.setMaxLength(RULE_ID_MAX_LENGTH);
-        input.setValue(DEFAULT_RULE_NAME);
-        UiModal modal = UiModal.create(font).title(Component.translatable(UI + "prompt.new_title"))
-                .preferredWidth(RuleNameInput.MODAL_WIDTH);
-        modal.contentWidget(content, content.preferredHeight());
-        UiButton confirmButton = new UiButton(font, Component.translatable(UI + "button.confirm"),
-                UiButtonVariant.PRIMARY, null);
-        Runnable validate = () -> {
-            Component problem = ruleNameProblem(input.value());
-            content.setProblem(problem);
-            confirmButton.setEnabled(problem == null);
-        };
-        Runnable submit = () -> {
-            validate.run();
-            if (ruleNameProblem(input.value()) == null && createRule(input.value(), templateId)) {
-                modals.close(modal);
-            }
-        };
-        confirmButton.setAction(submit::run);
-        input.setOnValueChanged(validate);
-        input.setOnCommit(value -> submit.run());
-        modal.addButton(confirmButton).cancel(Component.translatable(UI + "button.cancel"));
-        validate.run();
-        modal.layoutCentered(this.width, this.height);
-        modals.push(modal);
-        // 登记暂时禁用的按钮，输入合法后仍可通过 Tab 到达确认按钮。
-        UiFocusManager modalFocus = modals.focusManager();
-        modalFocus.beginUpdate();
-        modalFocus.add(content);
-        for (UiButton button : modal.buttons()) {
-            modalFocus.add(button);
-        }
-        modalFocus.endUpdate();
-        modalFocus.focusOn(content);
-        input.selectAll();
-    }
-
-    private @Nullable Component ruleNameProblem(String value) {
-        String name = value.trim();
-        ResourceLocation id = name.indexOf(':') >= 0 ? null : normalizeId(name);
-        if (id == null) {
-            return Component.translatable(UI + "prompt.invalid_name");
-        }
-        String key = id.toString();
-        return model.entry(key) != null || model.isCreated(key)
-                ? Component.translatable(UI + "notice.duplicate_id") : null;
-    }
-
-    private boolean createRule(String value, @Nullable String templateId) {
-        if (rejectWhenFrozen()) {
-            return false;
-        }
-        ResourceLocation id = normalizeId(value);
-        if (id == null) {
-            setNotice(Component.translatable(UI + "notice.invalid_id"), UiPalette.DANGER);
-            return false;
-        }
-        String key = id.toString();
-        if (model.entry(key) != null || model.isCreated(key)) {
-            setNotice(Component.translatable(UI + "notice.duplicate_id"), UiPalette.DANGER);
-            return false;
-        }
-        JsonObject body;
-        if (templateId == null) {
-            body = BuiltinEditorDefaults.ruleBody(key);
-        } else {
-            JsonObject loaded = RuleTemplateHooks.load(ResourceLocation.tryParse(templateId));
-            if (loaded == null) {
-                setNotice(Component.translatable(UI + "notice.template_failed"), UiPalette.DANGER);
-                return false;
-            }
-            body = BuiltinEditorDefaults.copyOf(key, loaded);
-            // 模板里的 enabled=false 只用于样本演示，从模板新建的规则一律启用
-            body.addProperty(RuleFields.ENABLED, true);
-        }
-        model.createSession(key, body);
-        refreshList();
-        openEditor(key);
-        if (templateId == null) { switchTab("input"); if (tabControl != null) tabControl.setSelected(tab.value()); }
-        setNotice(null, UiPalette.TEXT_SECONDARY);
-        return true;
-    }
-
-    private void promptDuplicate() {
-        if (rejectWhenFrozen()) {
-            return;
-        }
-        String sourceId = selectedRuleId();
-        if (sourceId == null) {
-            noSelection();
-            return;
-        }
-        EditSession session = model.openSession(sourceId);
-        if (session == null) {
-            noSelection();
-            return;
-        }
-        JsonObject body = session.draft().toJson();
-        String candidate = sourceId + "_copy";
-        int suffix = 2;
-        while (model.entry(candidate) != null || model.isCreated(candidate)) {
-            candidate = sourceId + "_copy" + suffix;
-            suffix++;
-        }
-        promptDuplicateId(candidate, value -> {
-            // 弹窗期间可能已被冻结（应用在途 / 会话结束），提交前再确认一次
-            if (rejectWhenFrozen()) {
-                return;
-            }
-            ResourceLocation id = normalizeId(value);
-            if (id == null) {
-                setNotice(Component.translatable(UI + "notice.invalid_id"), UiPalette.DANGER);
-                return;
-            }
-            String key = id.toString();
-            if (model.entry(key) != null || model.isCreated(key)) {
-                setNotice(Component.translatable(UI + "notice.duplicate_id"), UiPalette.DANGER);
-                return;
-            }
-            model.createSession(key, BuiltinEditorDefaults.copyOf(key, body));
-            refreshList();
-            openEditor(key);
-            setNotice(null, UiPalette.TEXT_SECONDARY);
-        });
-    }
-
-    // 从内置模板新建
-    private void openTemplatePicker() {
-        if (rejectWhenFrozen()) {
-            return;
-        }
-        List<Suggestion> templates = RuleTemplateHooks.list();
-        if (templates.isEmpty()) {
-            setNotice(Component.translatable(UI + "notice.template_empty"), UiPalette.WARNING);
-            return;
-        }
-        UiModal modal = UiModal.create(font);
-        modal.title(Component.translatable(UI + "prompt.template_title"));
-        UiListView<Suggestion> view = new UiListView<>(font, this::renderTemplateRow);
-        view.setItems(templates);
-        view.setRowHeight(ROW_H);
-        view.setEmptyMessage(Component.translatable(UI + "list.empty"));
-        view.setOnActivate(suggestion -> {
-            modals.closeTop();
-            promptNewRule(suggestion.value());
-        });
-        int height = Math.clamp((long) templates.size() * ROW_H, ROW_H, 140);
-        modal.contentWidget(view, height);
-        modal.cancel(Component.translatable(UI + "button.cancel"));
-        modal.layoutCentered(this.width, this.height);
-        modals.push(modal);
-    }
-
-    private void renderTemplateRow(GuiGraphics graphics, Font rowFont, Suggestion item, int index, UiRect row,
-            boolean selected, boolean hovered, boolean focused) {
-        String label = TextScroll.trimToWidth(rowFont, item.label().getString(), Math.max(0, row.width() - 4));
-        graphics.drawString(rowFont, label, row.x() + 2, row.y() + 2, UiPalette.TEXT_PRIMARY, false);
-    }
-
-    private void toggleSelectedEnabled() {
-        if (rejectWhenFrozen()) {
-            return;
-        }
-        String id = selectedRuleId();
-        if (id == null) {
-            noSelection();
-            return;
-        }
-        EditSession session = model.openSession(id);
-        if (session == null) {
-            noSelection();
-            return;
-        }
-        RuleDraft draft = session.draft();
-        boolean enabled = !draft.getBoolean(RuleFields.ENABLED, true);
-        session.apply(EditSession.OP_SET_FIELD, () -> draft.setBoolean(RuleFields.ENABLED, enabled));
-        refreshList();
-        setNotice(Component.translatable(enabled ? UI + "notice.enabled" : UI + "notice.disabled"), UiPalette.SUCCESS);
-    }
-
-    private void maskSelected() {
-        if (rejectWhenFrozen()) {
-            return;
-        }
-        String id = selectedRuleId();
-        if (id == null) {
-            noSelection();
-            return;
-        }
-        EditSession session = model.openSession(id);
-        if (session == null) {
-            noSelection();
-            return;
-        }
-        RuleDraft draft = session.draft();
-        boolean masked = !draft.getBoolean(RuleFields.DELETE, false);
-        session.apply(EditSession.OP_SET_FIELD, () -> draft.setBoolean(RuleFields.DELETE, masked));
-        refreshList();
-        setNotice(Component.translatable(masked ? UI + "notice.masked" : UI + "notice.unmasked"), UiPalette.SUCCESS);
-    }
-
-    private void restoreSelected() {
-        if (rejectWhenFrozen()) {
-            return;
-        }
-        String id = selectedRuleId();
-        if (id == null) {
-            noSelection();
-            return;
-        }
-        EditSession session = model.openSession(id);
-        if (session == null) {
-            noSelection();
-            return;
-        }
-        // 走统一门面：「恢复原始版本」也要能撤销
-        session.apply(EditSession.OP_RESTORE_ORIGINAL, () -> model.markRestore(id));
-        refreshList();
-        setNotice(Component.translatable(UI + "notice.restored"), UiPalette.SUCCESS);
-    }
-
-    private void deleteSelected() {
-        if (rejectWhenFrozen()) {
-            return;
-        }
-        String id = selectedRuleId();
-        if (id == null) {
-            noSelection();
-            return;
-        }
-        if (model.isCreated(id)) {
-            confirm(UI + "confirm.delete_title", UI + "confirm.delete_draft_message", () -> {
-                if (rejectWhenFrozen()) {
-                    return;
-                }
-                model.dropSession(id);
-                refreshList();
-                setNotice(Component.translatable(UI + "notice.deleted"), UiPalette.SUCCESS);
-            });
-            return;
-        }
-        confirm(UI + "confirm.delete_title", UI + "confirm.delete_message", () -> {
-            if (rejectWhenFrozen()) {
-                return;
-            }
-            model.openSession(id);
-            model.markDeleted(id, true);
-            refreshList();
-            setNotice(Component.translatable(UI + "notice.deleted"), UiPalette.SUCCESS);
-        });
-    }
-
-    // ---- 效果动作 ----
-
-    // ---- 保存 / 撤销 ----
-
-    private void save() {
-        // F-I：先把当前草稿落盘（写盘本身有 2 秒节流），保证崩溃窗口内的最近编辑不丢
-        if (pages != null && pages.blockNavigation()) {
-            return;
-        }
-        applyAllForms();
-        model.persistNow();
-        List<FormIssue> issues = collectIssues();
-        // 只有「本地可证非法」才阻塞保存；未注册第三方类型等提醒项不阻塞（服务端才是权威校验方）
-        FormIssue blocker = null;
-        for (FormIssue issue : issues) {
-            if (issue.blocking()) {
-                blocker = issue;
-                break;
-            }
-        }
-        if (blocker != null) {
-            // 字段级问题带上字段名，玩家才知道该改哪里（label 与 message 同一实例时说明它本身就是说明文案）
-            Component notice = blocker.label() == blocker.message()
-                    ? blocker.message()
-                    : Component.translatable(UI + "notice.issue", blocker.label(), blocker.message());
-            setNotice(notice, UiPalette.DANGER);
-            if (issueRuleId != null && !issueRuleId.equals(editingId)) {
-                openEditor(issueRuleId);
-            }
-            revealIssue(blocker);
-            return;
-        }
-        String json = model.buildChangeSetJson();
-        if (json == null) {
-            setNotice(Component.translatable(UI + "notice.no_changes"), UiPalette.TEXT_SECONDARY);
-            return;
-        }
-        if (!workspace.active()) {
-            setNotice(Component.translatable(UI + "notice.frozen"), UiPalette.WARNING);
-            return;
-        }
-        if (workspace.save(workspace.newOperationId(), json)) {
-            setNotice(Component.translatable(UI + "notice.applying"), UiPalette.TEXT_SECONDARY);
-            if (!issues.isEmpty()) {
-                // 提醒项不阻塞保存，但把玩家带到第一条上（例如未注册的第三方条件类型）
-                revealIssue(issues.getFirst());
-            }
-        } else {
-            setNotice(Component.translatable(UI + "notice.save_rejected"), UiPalette.DANGER);
-        }
-    }
-
-    private boolean restoreHistory(UiHistoryShortcut shortcut) {
-        if (mode != Mode.EDIT) return false;
-        EditSession session = editingSession();
-        if (session == null) return false;
-        long revision = session.revision();
-        if (shortcut == UiHistoryShortcut.UNDO) undo(); else redo();
-        return session.revision() != revision;
-    }
-
-    private void undo() {
-        if (rejectWhenFrozen()) {
-            return;
-        }
-        if (pages != null && pages.blockNavigation()) {
-            return;
-        }
-        EditSession session = editingSession();
-        if (session != null && session.canUndo()) {
-            session.undo();
-            rebuildEdit();
-            rebuildFocus();
-        }
-    }
-
-    private void redo() {
-        if (rejectWhenFrozen()) {
-            return;
-        }
-        if (pages != null && pages.blockNavigation()) {
-            return;
-        }
-        EditSession session = editingSession();
-        if (session != null && session.canRedo()) {
-            session.redo();
-            rebuildEdit();
-            rebuildFocus();
-        }
-    }
-
-    private @Nullable String issueRuleId;
-
-    private List<FormIssue> collectIssues() {
-        issueRuleId = editingId;
-        List<FormIssue> issues = new ArrayList<>();
-        EditSession session = editingSession();
-        if (session != null && !session.draft().isDeleted() && !model.isRestoring(editingId)) {
-            issues.addAll(localIssues(session.draft()));
-            issues.addAll(session.pendingInputIssues());
-        }
+    // 草稿改动清单（管理页底排与编辑页底排共用）
+    private void showChanges() {
+        Component body = Component.translatable(UI + "changes.note");
         for (String id : model.dirtyRuleIds()) {
-            if (id.equals(editingId)) {
-                continue;
-            }
-            EditSession other = model.session(id);
-            if (other != null && !other.draft().isDeleted() && !model.isRestoring(id)) {
-                List<FormIssue> otherIssues = new ArrayList<>(localIssues(other.draft()));
-                otherIssues.addAll(other.pendingInputIssues());
-                if (issues.stream().noneMatch(FormIssue::blocking) && otherIssues.stream().anyMatch(FormIssue::blocking)) {
-                    issueRuleId = id;
-                }
-                issues.addAll(otherIssues);
-            }
+            EditSession session = model.session(id);
+            String kind = model.isRestoring(id) ? "restore" : model.isCreated(id) ? "create"
+                    : session != null && session.draft().isDeleted() ? "remove" : "modify";
+            body = body.copy().append("\n").append(Component.translatable(UI + "changes." + kind))
+                    .append(": ").append(labelText(id));
         }
-        if (pages != null) {
-            issues.addAll(pages.issues());
-        }
-        return issues;
+        modals.push(UiModal.create(THEME, font).title(Component.translatable(UI + "button.changes"))
+                .message(body).preferredWidth(300).cancel(Component.translatable(UI + "button.cancel"))
+                .layoutCentered(width, height));
     }
 
-    // 本地保存前拦截（forms.md §9 的可本地判定项；服务端仍是权威校验方）
-    private List<FormIssue> localIssues(RuleDraft draft) {
-        List<FormIssue> issues = new ArrayList<>();
-        for (var missing : com.meteorite.itemdespawntowhat.client.edit.RuleRequirements.find(draft.view()))
-            issues.add(FormIssue.error(missing.path(), Component.translatable(missing.labelKey()), Component.translatable(UI + "issue.required")));
-        JsonArray effects = jsonArray(draft.view().get(RuleFields.EFFECTS));
-        JsonArray outcomes = jsonArray(draft.view().get(RuleFields.OUTCOMES));
-        if (effects.isEmpty() && outcomes.isEmpty()) {
-            issues.add(issue(RuleFields.EFFECTS, UI + "issue.effects_empty"));
-        } else if (effects.size() > 32) {
-            issues.add(issue(RuleFields.EFFECTS, UI + "issue.effects_limit"));
-        }
-        // effects 与 outcomes 二选一：同时声明会被服务端拒绝，本地先拦
-        if (!effects.isEmpty() && !outcomes.isEmpty()) {
-            issues.add(issue(RuleFields.OUTCOMES, UI + "issue.outcomes_conflict"));
-        }
-        // 规则级条件树
-        validateConditionTree(draft, "", RuleFields.CONDITIONS, issues);
-        // 效果级条件树：切到别的效果页签时也要能拦住，否则只在服务端报 VALIDATION_FAILED
-        for (int i = 0; i < effects.size(); i++) {
-            JsonElement element = effects.get(i);
-            if (!element.isJsonObject()) {
-                continue;
-            }
-            // rawConditionsAt 需要指向 conditions 元素本身
-            String path = RuleFields.EFFECTS + "[" + i + "]." + RuleFields.CONDITIONS;
-            validateConditionTree(draft, path, path, issues);
-        }
-        // 候选结果：id 非空且唯一、effects 非空；候选内效果级条件树同样本地校验
-        Set<String> candidateIds = new LinkedHashSet<>();
-        for (int i = 0; i < outcomes.size(); i++) {
-            JsonElement element = outcomes.get(i);
-            String candidatePath = RuleFields.OUTCOMES + "[" + i + "]";
-            if (!element.isJsonObject()) {
-                issues.add(issue(candidatePath, UI + "issue.candidate_id_invalid"));
-                continue;
-            }
-            JsonObject candidate = element.getAsJsonObject();
-            JsonElement idElement = candidate.get(RuleFields.CANDIDATE_ID);
-            if (idElement == null || !idElement.isJsonPrimitive() || idElement.getAsString().isBlank()
-                    || !candidateIds.add(idElement.getAsString())) {
-                issues.add(issue(candidatePath + "." + RuleFields.CANDIDATE_ID, UI + "issue.candidate_id_invalid"));
-            }
-            JsonArray candidateEffects = jsonArray(candidate.get(RuleFields.CANDIDATE_EFFECTS));
-            if (candidateEffects.isEmpty()) {
-                issues.add(issue(candidatePath + "." + RuleFields.CANDIDATE_EFFECTS, UI + "issue.candidate_effects_empty"));
-                continue;
-            }
-            for (int j = 0; j < candidateEffects.size(); j++) {
-                if (!candidateEffects.get(j).isJsonObject()) {
-                    continue;
-                }
-                String conditionsPath = candidatePath + "." + RuleFields.CANDIDATE_EFFECTS + "[" + j + "]."
-                        + RuleFields.CONDITIONS;
-                validateConditionTree(draft, conditionsPath, conditionsPath, issues);
-            }
-        }
-        JsonElement name = draft.view().get(RuleFields.DISPLAY_NAME);
-        if (name != null && name.isJsonPrimitive()
-                && name.getAsString().codePointCount(0, name.getAsString().length()) > 128) {
-            issues.add(issue(RuleFields.DISPLAY_NAME, UI + "issue.display_name_too_long"));
-        }
-        // 备注上限按 Unicode 码点判定：多字节字符不应被 UTF-16 单元数提前算超
-        JsonElement notes = draft.view().get(RuleFields.NOTES);
-        if (notes != null && notes.isJsonPrimitive()
-                && notes.getAsString().codePointCount(0, notes.getAsString().length()) > 1024) {
-            issues.add(issue(RuleFields.NOTES, UI + "issue.notes_too_long"));
-        }
-        JsonElement seconds = draft.view().get(RuleFields.TRIGGER_AFTER_SECONDS);
-        if (seconds != null && seconds.isJsonPrimitive() && seconds.getAsJsonPrimitive().isNumber()
-                && seconds.getAsInt() < 0) {
-            issues.add(issue(RuleFields.TRIGGER_AFTER_SECONDS, UI + "issue.trigger_negative"));
-        }
-        // 固定成本按引用分别校验；数量必须为正整数，引用必须来自已选物品。
-        JsonElement sourceCost = draft.view().get(RuleFields.SOURCE_COST);
-        JsonArray sourceItems = jsonArray(draft.getAt(RuleFields.SOURCE + "." + RuleFields.SOURCE_ITEMS));
-        if (sourceCost != null && invalidItemCounts(sourceCost, sourceItems, Integer.MAX_VALUE)) {
-            issues.add(issue(RuleFields.SOURCE_COST, UI + "issue.source_cost_not_positive"));
-        }
-        // catalyst_cost 契约（与服务端 RuleValidation / RuleCodecs 对齐）：必须是对象 {items, counts?, count?, radius?}，
-        // 整数写法已废弃；items 不能为空、count / radius 只在显式写出时做区间拦截
-        JsonElement catalystCost = draft.view().get(RuleFields.CATALYST_COST);
-        boolean hasCatalystCost = catalystCost != null && !catalystCost.isJsonNull();
-        if (hasCatalystCost) {
-            if (!catalystCost.isJsonObject()) {
-                issues.add(issue(RuleFields.CATALYST_COST, UI + "issue.catalyst_cost_not_object"));
-            } else {
-                JsonObject cost = catalystCost.getAsJsonObject();
-                JsonElement counts = cost.get(RuleFields.ITEM_COUNTS);
-                if (counts != null && invalidItemCounts(counts, jsonArray(cost.get(RuleFields.CATALYST_ITEMS)), CatalystCost.MAX_COUNT)) {
-                    issues.add(issue(RuleFields.CATALYST_COST + "." + RuleFields.ITEM_COUNTS,
-                            UI + "issue.catalyst_cost_count_out_of_range"));
-                }
-                if (jsonArray(cost.get(RuleFields.CATALYST_ITEMS)).isEmpty()) {
-                    issues.add(issue(RuleFields.CATALYST_COST + "." + RuleFields.CATALYST_ITEMS,
-                            UI + "issue.catalyst_cost_items_empty"));
-                }
-                JsonElement countElement = cost.get(RuleFields.CATALYST_COUNT);
-                if (isInteger(countElement) && (countElement.getAsInt() < CatalystCost.MIN_COUNT
-                        || countElement.getAsInt() > CatalystCost.MAX_COUNT)) {
-                    issues.add(issue(RuleFields.CATALYST_COST + "." + RuleFields.CATALYST_COUNT,
-                            UI + "issue.catalyst_cost_count_out_of_range"));
-                }
-                JsonElement radiusElement = cost.get(RuleFields.CATALYST_RADIUS);
-                if (isInteger(radiusElement) && (radiusElement.getAsInt() < CatalystCost.MIN_RADIUS
-                        || radiusElement.getAsInt() > CatalystCost.MAX_RADIUS)) {
-                    issues.add(issue(RuleFields.CATALYST_COST + "." + RuleFields.CATALYST_RADIUS,
-                            UI + "issue.catalyst_cost_radius_out_of_range"));
-                }
-            }
-        }
-        // 结构版本：当前只支持 RuleCodecs.DEFAULT_SCHEMA_VERSION
-        JsonElement schemaVersion = draft.view().get(RuleFields.SCHEMA_VERSION);
-        if (isInteger(schemaVersion) && schemaVersion.getAsInt() != RuleCodecs.DEFAULT_SCHEMA_VERSION) {
-            issues.add(issue(RuleFields.SCHEMA_VERSION, UI + "issue.schema_version_unsupported"));
-        }
-        // 消耗效果统计覆盖顶层 effects 与候选结果内 effects
-        Map<String, Integer> consumption = new LinkedHashMap<>();
-        countConsumption(effects, consumption);
-        for (JsonElement element : outcomes) {
-            if (element.isJsonObject()) {
-                countConsumption(jsonArray(element.getAsJsonObject().get(RuleFields.CANDIDATE_EFFECTS)), consumption);
-            }
-        }
-        for (Integer count : consumption.values()) {
-            if (count != null && count > 1) {
-                issues.add(issue(RuleFields.EFFECTS, UI + "issue.duplicate_consumption"));
-            }
-        }
-        // 固定成本与同名消耗效果互斥（重复记账）
-        if (sourceCost != null && consumption.containsKey(TypeLabels.OWN_NAMESPACE + ":consume_source")) {
-            issues.add(issue(RuleFields.SOURCE_COST, UI + "issue.double_bookkeeping"));
-        }
-        if (hasCatalystCost && consumption.containsKey(TypeLabels.OWN_NAMESPACE + ":consume_catalyst")) {
-            issues.add(issue(RuleFields.CATALYST_COST, UI + "issue.double_bookkeeping"));
-        }
-        return issues;
-    }
-
-    private static boolean invalidItemCounts(JsonElement raw, JsonArray items, int maximum) {
-        if (!(raw instanceof JsonObject counts)) return true;
-        for (var entry : counts.entrySet()) {
-            JsonElement value = entry.getValue();
-            if (!items.contains(new com.google.gson.JsonPrimitive(entry.getKey())) || !isInteger(value)) return true;
-            try {
-                int count = value.getAsBigDecimal().intValueExact();
-                if (count < 1 || count > maximum) return true;
-            } catch (ArithmeticException | NumberFormatException invalid) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    // 统计一组效果里的消耗类型（同一消耗效果在规则内只允许出现一次）
-    private static void countConsumption(JsonArray effects, Map<String, Integer> consumption) {
-        for (JsonElement element : effects) {
-            if (!element.isJsonObject()) {
-                continue;
-            }
-            JsonElement typeElement = element.getAsJsonObject().get(RuleFields.TYPE);
-            if (typeElement == null || !typeElement.isJsonPrimitive()) {
-                continue;
-            }
-            String type = typeElement.getAsString();
-            if (type.startsWith(TypeLabels.OWN_NAMESPACE + ":consume_")) {
-                consumption.merge(type, 1, Integer::sum);
-            }
-        }
-    }
-
-    // 读取草稿中的数组字段：非数组统一按空数组处理
-    private static JsonArray jsonArray(@Nullable JsonElement raw) {
-        return raw != null && raw.isJsonArray() ? raw.getAsJsonArray() : new JsonArray();
-    }
-
-    // 是否为数值 JSON：成本与结构版本的本地拦截只处理显式写出的数值
-    private static boolean isInteger(@Nullable JsonElement raw) {
-        return raw != null && raw.isJsonPrimitive() && raw.getAsJsonPrimitive().isNumber();
-    }
-
-    // 校验某条路径下的条件树（规则级传 ""，效果级传 "effects[i]"），问题路径指向 conditions 字段
-    private void validateConditionTree(RuleDraft draft, String draftPath, String issuePath, List<FormIssue> issues) {
-        if (draft.rawConditionsAt(draftPath) == null) {
-            return;
-        }
-        ConditionExpression expression = draft.conditionsAt(draftPath, ClientTypeRegistries.conditions());
-        if (expression == null) {
-            // 只有本地可证结构损坏（不是对象 / 缺 op / op 不是字符串）才阻塞；
-            // 未注册或第三方类型只提醒：原数据在草稿里原样保留，服务端才是权威校验方
-            if (isStructurallyDamaged(draft.rawConditionsAt(draftPath))) {
-                issues.add(issue(issuePath, UI + "issue.conditions_decode"));
-            } else {
-                issues.add(warning(issuePath, UI + "issue.conditions_unregistered"));
-            }
-            return;
-        }
-        if (!expression.isStructurallyValid()) {
-            issues.add(issue(issuePath, ISSUE + "incomplete_group"));
-        }
-        if (expression.leafCount() > ConditionLimits.MAX_LEAVES) {
-            issues.add(issue(issuePath, ISSUE + "too_many_leaves"));
-        }
-        if (expression.nodeCount() > ConditionLimits.MAX_NODES) {
-            issues.add(issue(issuePath, ISSUE + "too_many_nodes"));
-        }
-        if (expression.depth() > ConditionLimits.MAX_DEPTH) {
-            issues.add(issue(issuePath, ISSUE + "too_deep", expression.depth(), ConditionLimits.MAX_DEPTH));
-        }
-    }
-
-    private FormIssue issue(String path, String messageKey) {
-        return issue(path, messageKey, new Object[0]);
-    }
-
-    // 带占位符参数的校验项（阻塞保存）
-    private FormIssue issue(String path, String messageKey, Object... args) {
-        Component message = Component.translatable(messageKey, args);
-        return FormIssue.error(path, message, message);
-    }
-
-    // 带占位符参数的提醒项（不阻塞保存）
-    private FormIssue warning(String path, String messageKey, Object... args) {
-        Component message = Component.translatable(messageKey, args);
-        return FormIssue.warning(path, message, message);
-    }
-
-    // 条件树 JSON 是否本地可证损坏：不是对象、缺 op 或 op 不是原始值
-    private static boolean isStructurallyDamaged(@Nullable JsonElement raw) {
-        if (raw == null || raw.isJsonNull() || !raw.isJsonObject()) {
-            return true;
-        }
-        JsonElement op = raw.getAsJsonObject().get(RuleFields.OP);
-        return op == null || !op.isJsonPrimitive();
-    }
-
-    // 校验失败定位：先结束交互并提交当前页待写字段，再按路径切页并聚焦到具体字段
-    // （规则 → 页签 → 候选 → 效果 → 条件 → 字段；路径到当前下标的映射由页面负责）
-    private void revealIssue(FormIssue issue) {
-        if (pages == null || issue == null) {
-            return;
-        }
-        pages.endInteractions();
-        applyAllForms();
-        UiFocusTarget target = pages.reveal(issue.path());
-        tab = pages.page();
-        if (tabControl != null) {
-            tabControl.setSelected(tab.value());
-        }
-        rebuildFocus();
-        if (target != null) {
-            focus.focusOn(target);
-            pages.ensureVisible(target);
-        }
+    private void onDraftChanged() {
+        listNeedsRefresh = true;
     }
 
     // ---- 焦点 / 事件 / 生命周期 ----
@@ -1546,30 +367,9 @@ public final class RuleEditorScreen extends Screen {
         focus.clear();
         focus.beginUpdate();
         if (mode == Mode.LIST) {
-            if (searchField != null) {
-                focus.add(searchField);
-            }
-            if (filterControl != null) {
-                focus.add(filterControl);
-            }
-            if (ruleList != null) {
-                focus.add(ruleList);
-            }
-            for (UiButton button : listButtons) {
-                focus.add(button);
-            }
+            listPage.addFocusTargets(focus);
         } else {
-            if (tabControl != null) {
-                focus.add(tabControl);
-            }
-            if (pages != null) {
-                for (UiFocusTarget target : pages.focusTargets()) {
-                    focus.add(target);
-                }
-            }
-            for (UiButton button : footerButtons) {
-                focus.add(button);
-            }
+            editPage.addFocusTargets(focus);
         }
         focus.endUpdate();
         if (focus.focused() == null) {
@@ -1582,54 +382,19 @@ public final class RuleEditorScreen extends Screen {
         if (modals.isVisible()) {
             return modals.mouseClicked(mouseX, mouseY, button);
         }
-        if (button == 0 && mode == Mode.LIST) {
-            var tag = tagAt(mouseX, mouseY);
-            if (tag != null) {
-                modals.push(UiModal.create(font).title(Component.translatable(UI + "tag.title", tag.id()))
-                        .contentWidget(new TagCarouselView(font, tag), Math.clamp(height - 70, 110, 220))
-                        .preferredWidth(280).cancel(Component.translatable(UI + "button.close"))
-                        .layoutCentered(width, height));
-                return true;
-            }
+        if (button == 0 && mode == Mode.LIST && listPage.openTagDetails(mouseX, mouseY)) {
+            return true;
         }
         if (button == 0) {
             focusClicked(mouseX, mouseY);
         }
         if (mode == Mode.LIST) {
-            if (searchField != null && searchField.mouseClicked(mouseX, mouseY, button)) {
-                return true;
-            }
-            if (filterControl != null && filterControl.mouseClicked(mouseX, mouseY, button)) {
-                return true;
-            }
-            if (ruleList != null && ruleList.mouseClicked(mouseX, mouseY, button)) {
-                return true;
-            }
-            return globalBar.mouseClicked(mouseX, mouseY, button)
-                    || listBar.mouseClicked(mouseX, mouseY, button);
+            return listPage.mouseClicked(mouseX, mouseY, button);
         }
-        if (tabControl != null && tabControl.mouseClicked(mouseX, mouseY, button)) {
-            return true;
-        }
-        if (pages != null && pages.mouseClicked(mouseX, mouseY, button)) {
-            return true;
-        }
-        if (footerBar.mouseClicked(mouseX, mouseY, button)) {
+        if (editPage.mouseClicked(mouseX, mouseY, button)) {
             return true;
         }
         return super.mouseClicked(mouseX, mouseY, button);
-    }
-
-    // 指针必须先通过树的内容门禁，再命中配方标签，滚动条拖动期间不会打开或提示。
-    private @Nullable TagPreviewIcons.Tag tagAt(double mouseX, double mouseY) {
-        if (ruleList == null) return null;
-        UiTreeNode<String> node = ruleList.nodeAt(mouseX, mouseY);
-        if (node == null) return null;
-        RuleRecipeView recipe = recipeViews.get(node.value());
-        if (recipe == null) return null;
-        UiRect row = ruleList.nodeContentBounds(node);
-        return recipe.tagAt(font, new UiRect(row.x() + 2, row.y() + font.lineHeight + 3,
-                Math.max(0, row.width() - 4), RuleRecipeView.CONTENT_HEIGHT), mouseX, mouseY);
     }
 
     @Override
@@ -1637,11 +402,9 @@ public final class RuleEditorScreen extends Screen {
         if (modals.isVisible()) {
             return modals.mouseReleased(mouseX, mouseY, button);
         }
-        boolean consumed = pages != null && pages.mouseReleased(mouseX, mouseY, button);
-        if (ruleList != null) consumed |= ruleList.mouseReleased(mouseX, mouseY, button);
-        consumed |= globalBar.mouseReleased(mouseX, mouseY, button);
-        consumed |= listBar.mouseReleased(mouseX, mouseY, button);
-        consumed |= footerBar.mouseReleased(mouseX, mouseY, button);
+        boolean consumed = editPage.mouseReleased(mouseX, mouseY, button);
+        consumed |= listPage.mouseReleased(mouseX, mouseY, button);
+        consumed |= editPage.footerMouseReleased(mouseX, mouseY, button);
         return consumed || super.mouseReleased(mouseX, mouseY, button);
     }
 
@@ -1650,11 +413,10 @@ public final class RuleEditorScreen extends Screen {
         if (modals.isVisible()) {
             return modals.mouseDragged(mouseX, mouseY, button, dragX, dragY);
         }
-        if (pages != null && pages.mouseDragged(mouseX, mouseY, button, dragX, dragY)) {
+        if (editPage.mouseDragged(mouseX, mouseY, button, dragX, dragY)) {
             return true;
         }
-        if (mode == Mode.LIST && ruleList != null
-                && ruleList.mouseDragged(mouseX, mouseY, button, dragX, dragY)) {
+        if (mode == Mode.LIST && listPage.mouseDragged(mouseX, mouseY, button, dragX, dragY)) {
             return true;
         }
         return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
@@ -1666,10 +428,10 @@ public final class RuleEditorScreen extends Screen {
             return modals.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
         }
         if (mode == Mode.LIST) {
-            if (ruleList != null && ruleList.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
+            if (listPage.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
                 return true;
             }
-        } else if (pages != null && pages.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
+        } else if (editPage.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
             return true;
         }
         return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
@@ -1687,18 +449,17 @@ public final class RuleEditorScreen extends Screen {
             return modals.keyPressed(keyCode, scanCode, modifiers);
         }
         if (UiHistoryDispatcher.dispatch(keyCode, scanCode, modifiers, (key, scan, mods) -> {
-            if (mode == Mode.LIST && searchField != null && searchField.isFocused()
-                    && searchField.keyPressed(key, scan, mods)) return true;
-            if (mode == Mode.EDIT && pages != null && pages.keyPressed(key, scan, mods)) return true;
+            if (mode == Mode.LIST && listPage.searchKeyPressed(key, scan, mods)) return true;
+            if (mode == Mode.EDIT && editPage.keyPressed(key, scan, mods)) return true;
             return focus.keyPressed(key, scan, mods);
-        }, this::restoreHistory)) return true;
+        }, editPage::restoreHistory)) return true;
         // Esc 先交给正在捕获输入的控件：行内精确输入回退缓冲、拖动中的数值取消预览；
         // 均未消费时才逐级取消（编辑页返回列表，列表页关闭屏幕）
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
             if (focus.keyPressed(keyCode, scanCode, modifiers)) {
                 return true;
             }
-            if (mode == Mode.EDIT && pages != null && pages.keyPressed(keyCode, scanCode, modifiers)) {
+            if (mode == Mode.EDIT && editPage.keyPressed(keyCode, scanCode, modifiers)) {
                 return true;
             }
             if (mode == Mode.EDIT) {
@@ -1712,15 +473,10 @@ public final class RuleEditorScreen extends Screen {
             return true;
         }
         if (mode == Mode.LIST) {
-            if (searchField != null && searchField.isFocused()
-                    && searchField.keyPressed(keyCode, scanCode, modifiers)) {
-                syncSearch();
+            if (listPage.listKeyPressed(keyCode, scanCode, modifiers)) {
                 return true;
             }
-            if (ruleList != null && ruleList.isFocused() && ruleList.keyPressed(keyCode, scanCode, modifiers)) {
-                return true;
-            }
-        } else if (pages != null && pages.keyPressed(keyCode, scanCode, modifiers)) {
+        } else if (editPage.keyPressed(keyCode, scanCode, modifiers)) {
             return true;
         }
         return focus.keyPressed(keyCode, scanCode, modifiers) || super.keyPressed(keyCode, scanCode, modifiers);
@@ -1732,7 +488,7 @@ public final class RuleEditorScreen extends Screen {
             if (!target.canFocus() || !target.bounds().contains(mouseX, mouseY)) {
                 continue;
             }
-            if (pages != null && pages.focusTargets().contains(target) && !contentArea.contains(mouseX, mouseY)) {
+            if (editPage.isPageFocusTarget(target) && !contentArea.contains(mouseX, mouseY)) {
                 continue;
             }
             focus.focusOn(target);
@@ -1744,7 +500,7 @@ public final class RuleEditorScreen extends Screen {
     // 键盘抬起：把滑杆方向键的按住过程合并为一次提交
     @Override
     public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
-        if (mode == Mode.EDIT && pages != null && pages.keyReleased(keyCode, scanCode, modifiers)) {
+        if (mode == Mode.EDIT && editPage.keyReleased(keyCode, scanCode, modifiers)) {
             return true;
         }
         return super.keyReleased(keyCode, scanCode, modifiers);
@@ -1755,11 +511,10 @@ public final class RuleEditorScreen extends Screen {
         if (modals.isVisible()) {
             return modals.charTyped(codePoint, modifiers);
         }
-        if (mode == Mode.LIST && searchField != null && searchField.isFocused() && searchField.charTyped(codePoint, modifiers)) {
-            syncSearch();
+        if (mode == Mode.LIST && listPage.charTyped(codePoint, modifiers)) {
             return true;
         }
-        if (mode == Mode.EDIT && pages != null && pages.charTyped(codePoint, modifiers)) {
+        if (mode == Mode.EDIT && editPage.charTyped(codePoint, modifiers)) {
             return true;
         }
         return super.charTyped(codePoint, modifiers);
@@ -1771,33 +526,31 @@ public final class RuleEditorScreen extends Screen {
         // F-A：快照是打开屏幕之后才到的（打开时只发出了请求），每帧消费一次；
         // refresh() 内部按快照实例去重，重复调用无副作用
         if (model.refresh()) {
-            refreshList();
-            rebuildEdit();
+            listPage.refreshList();
+            editPage.rebuildEdit();
             rebuildFocus();
         }
         if (listNeedsRefresh) {
             listNeedsRefresh = false;
-            refreshList();
+            listPage.refreshList();
         }
-        if (mode == Mode.EDIT && pages != null) {
-            pages.tick();
-        }
-        pollWorkspace();
+        editPage.tick();
+        editPage.pollWorkspace();
         // P6：节流落盘、恢复提示、按钮状态、冲突弹窗与冻结
         model.tickPersistence();
         if (model.consumeDraftFailures() > 0) {
-            setNotice(Component.translatable(UI + "notice.draft_save_failed"), UiPalette.WARNING);
+            setNotice(Component.translatable(UI + "notice.draft_save_failed"), THEME.palette().warning());
         }
         int restored = model.consumeRestoredCount();
         if (restored > 0) {
-            setNotice(Component.translatable(UI + "notice.restored_draft", restored), UiPalette.WARNING);
+            setNotice(Component.translatable(UI + "notice.restored_draft", restored), THEME.palette().warning());
         }
         updateActionButtons();
-        promptConflicts();
+        editPage.promptConflicts();
         boolean editable = workspace.active();
         if (!editable && !frozenNotified) {
             frozenNotified = true;
-            setNotice(Component.translatable(UI + "notice.frozen"), UiPalette.WARNING);
+            setNotice(Component.translatable(UI + "notice.frozen"), THEME.palette().warning());
         } else if (editable) {
             frozenNotified = false;
         }
@@ -1806,34 +559,9 @@ public final class RuleEditorScreen extends Screen {
 
     // 应用全部按钮与撤销/重做按钮的可用状态与标签
     private void updateActionButtons() {
-        boolean editable = workspace.active();
-        updateSelectedButtons();
-        if (applyButton != null) {
-            applyButton.setEnabled(editable && model.hasDirty());
-        }
-        if (!footerButtons.isEmpty()) {
-            footerButtons.getFirst().setLabel(Component.translatable(UI + "button.apply_changes", model.dirtyRuleIds().size()));
-        }
-        if (applyButton != null) {
-            applyButton.setLabel(Component.translatable(UI + "button.apply_changes", model.dirtyRuleIds().size()));
-        }
-        EditSession session = editingSession();
-        boolean canUndo = editable && session != null && session.canUndo();
-        boolean canRedo = editable && session != null && session.canRedo();
-        if (undoButton != null) {
-            undoButton.setEnabled(canUndo);
-            String opKey = canUndo ? session.undoOpKey() : null;
-            undoButton.setLabel(opKey == null
-                    ? Component.translatable(UI + "button.undo")
-                    : Component.translatable(UI + "button.undo_named", Component.translatable(opKey)));
-        }
-        if (redoButton != null) {
-            redoButton.setEnabled(canRedo);
-            String opKey = canRedo ? session.redoOpKey() : null;
-            redoButton.setLabel(opKey == null
-                    ? Component.translatable(UI + "button.redo")
-                    : Component.translatable(UI + "button.redo_named", Component.translatable(opKey)));
-        }
+        listPage.updateButtons();
+        listPage.updateApplyButton();
+        editPage.updateHistoryButtons();
     }
 
     // 冻结（APPLYING / 非 ACTIVE）时禁用表单控件；状态切换时才真正遍历
@@ -1845,16 +573,18 @@ public final class RuleEditorScreen extends Screen {
         applyEditableStateNow(editable);
     }
 
-    // 立即同步页面的使能状态（页面控件是新建出来的，默认可用，必须显式同步一次）
+    // 页面重建后立即同步使能状态（页面控件是新建出来的，默认可用，必须显式同步一次）
+    private void rebuildEditableState() {
+        lastEditable = workspace.active();
+        applyEditableStateNow(lastEditable);
+    }
+
+    // 立即同步页面的使能状态
     private void applyEditableStateNow(boolean editable) {
-        if (pages != null) {
-            pages.setEnabled(editable);
-        }
+        editPage.setPagesEnabled(editable);
         // 列表页动作按钮同属可编辑面：冻结时一并禁用，避免「点了没反应」
         // （返回按钮不禁用，保证冻结期间玩家仍能退出屏幕）
-        for (UiButton button : this.listButtons) {
-            button.setEnabled(editable);
-        }
+        listPage.setButtonsEnabled(editable);
         // 应用/撤销/重做再按脏标记与历史精确修正
         updateActionButtons();
     }
@@ -1864,147 +594,34 @@ public final class RuleEditorScreen extends Screen {
         if (workspace.active()) {
             return false;
         }
-        setNotice(Component.translatable(UI + "notice.frozen"), UiPalette.WARNING);
+        setNotice(Component.translatable(UI + "notice.frozen"), THEME.palette().warning());
         return true;
-    }
-
-    // 有冲突就弹窗（一次弹一个，已提示过的不重复弹）
-    private void promptConflicts() {
-        for (DraftConflict conflict : model.conflicts()) {
-            if (promptedConflicts.add(conflict.targetId())) {
-                openConflictModal(conflict);
-                return;
-            }
-        }
-    }
-
-    // 冲突弹窗：保留草稿 / 丢弃草稿用服务端版本 / 稍后决定
-    private void openConflictModal(DraftConflict conflict) {
-        String id = conflict.targetId();
-        UiModal modal = UiModal.create(font);
-        modal.title(Component.translatable(UI + "conflict.title"));
-        modal.message(Component.translatable(UI + "conflict.message." + conflict.messageSuffix(), id));
-        modal.confirm(Component.translatable(UI + "conflict.keep"), () -> {
-            model.resolveConflict(id, true);
-            promptedConflicts.remove(id);
-            refreshList();
-            rebuildEdit();
-            rebuildFocus();
-            setNotice(Component.translatable(UI + "notice.conflict_kept"), UiPalette.TEXT_SECONDARY);
-        });
-        modal.addButton(new UiButton(font, Component.translatable(UI + "conflict.use_server"),
-                UiButtonVariant.DANGER, () -> {
-                    model.resolveConflict(id, false);
-                    promptedConflicts.remove(id);
-                    refreshList();
-                    rebuildEdit();
-                    rebuildFocus();
-                    setNotice(Component.translatable(UI + "notice.conflict_discarded"), UiPalette.WARNING);
-                }));
-        modal.cancel(Component.translatable(UI + "conflict.later"));
-        modal.layoutCentered(this.width, this.height);
-        modals.push(modal);
     }
 
     // 外部重新打开时刷新界面（此时工作区已进入 ACTIVE 并发出快照请求）
     public void refreshFromWorkspace() {
         model.refresh();
-        refreshList();
-        rebuildEdit();
+        listPage.refreshList();
+        editPage.rebuildEdit();
         rebuildFocus();
-    }
-
-    // 保存回执与工作区状态轮询
-    private void pollWorkspace() {
-        long sequence = workspace.resultSeq();
-        if (sequence != seenResultSeq) {
-            seenResultSeq = sequence;
-            RuleSaveStatus status = workspace.lastStatus();
-            model.refresh();
-            if (status == RuleSaveStatus.SUCCESS || status == RuleSaveStatus.NO_CHANGES) {
-                model.acceptSaved();
-                setNotice(Component.translatable(status.messageKey()), UiPalette.SUCCESS);
-            } else if (status == RuleSaveStatus.SAVED_NOT_RELOADED) {
-                model.acceptSaved();
-                setNotice(Component.translatable(status.messageKey()), UiPalette.WARNING);
-            } else if (isSessionLost(status)) {
-                // 失权/断线：取消未完成预览、停用写入、保留草稿；不从 GUI 重开会话，也不写盘
-                cancelPreviews();
-                Component reason = status == null ? Component.empty() : Component.translatable(status.messageKey());
-                setNotice(reason.copy().append(" ").append(Component.translatable(UI + "notice.session_reopen")),
-                        UiPalette.DANGER);
-            } else if (status == RuleSaveStatus.VALIDATION_FAILED) {
-                setNotice(Component.translatable(status.messageKey()), UiPalette.DANGER);
-                locateValidationIssues();
-            } else if (status != null) {
-                setNotice(Component.translatable(status.messageKey(), workspace.lastMessageArgs().toArray()),
-                        UiPalette.DANGER);
-            }
-            refreshList();
-            rebuildEdit();
-            rebuildFocus();
-        }
-        if (workspace.state() == RuleEditClientState.FREE && workspace.openRequest() == null) {
-            this.onClose();
-        }
-    }
-
-    // 会话失效状态码：取消预览、停用写入、保留草稿（失权或断线不写盘）
-    private static boolean isSessionLost(@Nullable RuleSaveStatus status) {
-        return status == RuleSaveStatus.NO_PERMISSION || status == RuleSaveStatus.LOCK_NOT_OWNED
-                || status == RuleSaveStatus.LOCK_BUSY || status == RuleSaveStatus.SESSION_EXPIRED;
-    }
-
-    // 取消未完成交互：关闭弹窗并结束页面的活动捕获（旧草稿保留）
-    private void cancelPreviews() {
-        while (!modals.isEmpty()) {
-            modals.closeTop();
-        }
-        if (pages != null) {
-            pages.endInteractions();
-        }
-    }
-
-    // 服务端 VALIDATION_FAILED 定位：规则 → 页签 → 候选 → 效果 → 条件 → 字段
-    private void locateValidationIssues() {
-        for (RuleIssue issue : workspace.lastIssues()) {
-            if (issue == null || !RuleIssue.SEVERITY_ERROR.equals(issue.severity())) {
-                continue;
-            }
-            String path = issue.fieldPath();
-            if (path == null || path.isBlank()) {
-                continue;
-            }
-            if (issue.ruleId() != null && (!issue.ruleId().equals(editingId) || mode != Mode.EDIT)) {
-                openEditor(issue.ruleId());
-                if (!issue.ruleId().equals(editingId) || mode != Mode.EDIT) continue;
-            }
-            if (pages == null || mode != Mode.EDIT) continue;
-            Component message = issue.messageCode().isBlank()
-                    ? Component.literal(issue.fallbackMessage())
-                    : Component.translatable(issue.messageCode(), issue.messageArgs().toArray());
-            revealIssue(FormIssue.error(path, message, message));
-            setNotice(Component.translatable(UI + "notice.validation_located", message), UiPalette.DANGER);
-            return;
-        }
     }
 
     // 用户主动关闭：有未保存改动先确认
     private void closeByUser() {
-        if (pages != null && pages.blockNavigation()) {
+        if (editPage.blockNavigation()) {
             return;
         }
         if (model.hasDirty()) {
             confirm(UI + "confirm.discard_title", UI + "confirm.discard_message", () -> {
                 // 玩家确认放弃：连落盘草稿一起删掉，避免下次打开又「恢复」回来
                 model.discardAllDrafts();
-                closePages();
+                editPage.close();
                 workspace.close("screen_closed");
                 this.onClose();
             });
             return;
         }
-        closePages();
+        editPage.close();
         workspace.close("screen_closed");
         this.onClose();
     }
@@ -2020,21 +637,11 @@ public final class RuleEditorScreen extends Screen {
     public void onClose() {
         EntityPreviewIcons.clear();
         BlockPreviewIcons.clear();
-        applyAllForms();
-        closePages();
+        editPage.applyAllForms();
+        editPage.close();
         // P6：关屏前把未应用草稿写盘（断线 / 关游戏 / 关界面都能恢复）
         model.persistNow();
         super.onClose();
-    }
-
-    // 关屏 / 会话失效：结束页面交互并让表单释放捕获与输入状态
-    private void closePages() {
-        if (pages == null) {
-            return;
-        }
-        pages.endInteractions();
-        pages.onHostClosed();
-        pages = null;
     }
 
     // ---- 小工具 ----
@@ -2044,151 +651,21 @@ public final class RuleEditorScreen extends Screen {
         this.noticeColor = color;
     }
 
-    private void noSelection() {
-        setNotice(Component.translatable(UI + "notice.no_selection"), UiPalette.WARNING);
-    }
-
-    private @Nullable ResourceLocation normalizeId(String value) {
-        String trimmed = value == null ? "" : value.trim();
-        if (trimmed.isEmpty()) {
-            return null;
-        }
-        ResourceLocation parsed = trimmed.indexOf(':') >= 0
-                ? ResourceLocation.tryParse(trimmed)
-                : ResourceLocation.tryParse(TypeLabels.OWN_NAMESPACE + ":" + trimmed);
-        if (parsed == null || !TypeLabels.OWN_NAMESPACE.equals(parsed.getNamespace())) {
-            return null;
-        }
-        return parsed;
-    }
-
-    // 复制规则的完整 ID 输入弹窗
-    private void promptDuplicateId(String initial, Consumer<String> onValue) {
-        UiTextInput input = new UiTextInput(font, Component.translatable(UI + "prompt.id_hint"));
-        input.setMaxLength(RULE_ID_MAX_LENGTH);
-        input.setValue(initial);
-        UiModal modal = UiModal.create(font);
-        modal.title(Component.translatable(UI + "prompt.duplicate_title"));
-        modal.contentWidget(input, ROW_H + 4);
-        modal.confirm(Component.translatable(UI + "button.confirm"), () -> onValue.accept(input.value()));
-        modal.cancel(Component.translatable(UI + "button.cancel"));
-        modal.layoutCentered(this.width, this.height);
-        modals.push(modal);
-        input.setFocused(true);
+    // 条目显示名（空名或与 id 相同时回退到本地化占位）
+    private String labelText(String id) {
+        RuleValue body = model.displayBody(id);
+        String label = body == null ? "" : RuleNaming.ruleTitle(body, RuleDisplayLabels::label).getString();
+        return label.isBlank() || label.equals(id) ? Component.translatable(UI + "recipe.unnamed").getString() : label;
     }
 
     // 确认弹窗
     private void confirm(String titleKey, String messageKey, Runnable onConfirm) {
-        UiModal modal = UiModal.create(font);
+        UiModal modal = UiModal.create(THEME, font);
         modal.title(Component.translatable(titleKey));
         modal.message(Component.translatable(messageKey));
         modal.confirm(Component.translatable(UI + "button.confirm"), onConfirm::run);
         modal.cancel(Component.translatable(UI + "button.cancel"));
         modal.layoutCentered(this.width, this.height);
         modals.push(modal);
-    }
-
-    // 底排按钮：自动换行、左对齐
-    private static final class ButtonBar {
-        private final int buttonHeight;
-        private final int gap;
-        private final boolean fillRow;
-
-        private ButtonBar() { this(16, 2, false); }
-
-        private ButtonBar(int buttonHeight, int gap, boolean fillRow) {
-            this.buttonHeight = buttonHeight;
-            this.gap = gap;
-            this.fillRow = fillRow;
-        }
-
-        private final List<UiButton> buttons = new ArrayList<>();
-
-        private void set(List<UiButton> next) {
-            buttons.clear();
-            buttons.addAll(next);
-        }
-
-        private int preferredHeight(int width) {
-            int rows = rows(width);
-            return rows == 0 ? 0 : rows * buttonHeight + (rows - 1) * gap;
-        }
-
-        private int rows(int width) {
-            if (buttons.stream().noneMatch(UiButton::isVisible)) {
-                return 0;
-            }
-            if (width <= 0) {
-                return 1;
-            }
-            int rows = 1;
-            int used = 0;
-            for (UiButton button : buttons) {
-                if (!button.isVisible()) continue;
-                int buttonWidth = Math.clamp(button.preferredWidth(6), Math.min(24, width), width);
-                if (used > 0 && used + buttonWidth > width) {
-                    rows++;
-                    used = 0;
-                }
-                used += buttonWidth + gap;
-            }
-            return rows;
-        }
-
-        private void layout(int y, int width) { layout(PAD, y, width); }
-
-        private void layout(int x, int y, int width) {
-            int limit = Math.max(1, width);
-            int cursorX = x;
-            int cursorY = y;
-            int extra = 0;
-            if (fillRow && rows(width) == 1) {
-                int count = 0;
-                int used = 0;
-                for (UiButton button : buttons) {
-                    if (!button.isVisible()) continue;
-                    used += Math.clamp(button.preferredWidth(6), Math.min(24, limit), limit);
-                    count++;
-                }
-                if (count > 0) extra = Math.max(0, (limit - used - (count - 1) * gap) / count);
-            }
-            for (UiButton button : buttons) {
-                if (!button.isVisible()) continue;
-                int buttonWidth = Math.clamp(button.preferredWidth(6), Math.min(24, limit), limit) + extra;
-                if (cursorX > x && cursorX + buttonWidth > x + limit) {
-                    cursorX = x;
-                    cursorY += buttonHeight + gap;
-                }
-                button.setBounds(cursorX, cursorY, buttonWidth, buttonHeight);
-                cursorX += buttonWidth + gap;
-            }
-        }
-
-        private void render(@NotNull GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
-            for (UiButton button : buttons) {
-                if (button.isVisible()) {
-                    button.render(graphics, renderFont, mouseX, mouseY);
-                }
-            }
-        }
-
-        private boolean mouseClicked(double mouseX, double mouseY, int button) {
-            for (UiButton candidate : buttons) {
-                if (candidate.isVisible() && candidate.mouseClicked(mouseX, mouseY, button)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        private boolean mouseReleased(double mouseX, double mouseY, int button) {
-            boolean consumed = false;
-            for (UiButton candidate : buttons) {
-                if (candidate.isVisible()) {
-                    consumed |= candidate.mouseReleased(mouseX, mouseY, button);
-                }
-            }
-            return consumed;
-        }
     }
 }

@@ -2,10 +2,10 @@ package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextHistory;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextHistory;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.Util;
@@ -83,7 +83,10 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
     // 获得焦点的时刻，用于光标闪烁
     private long focusedTime;
 
-    public UiTextArea(Font font, @Nullable Component hint) {
+    // 注入的宿主主题
+    private final UiHostTheme theme;
+    public UiTextArea(UiHostTheme theme, Font font, @Nullable Component hint) {
+        this.theme = UiHostThemes.require(theme);
         this.font = font;
         this.hint = hint;
         this.accessibleName = hint;
@@ -207,8 +210,8 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
         }
         ensureTextWidth();
         syncBounds();
-        UiTheme.drawInset(graphics, bounds);
-        graphics.fill(bounds.x() + 1, bounds.y() + 1, bounds.right() - 1, bounds.bottom() - 1, UiPalette.SLOT_INNER);
+        theme.drawInset(graphics, bounds);
+        graphics.fill(bounds.x() + 1, bounds.y() + 1, bounds.right() - 1, bounds.bottom() - 1, theme.palette().slotInner());
         int innerX = bounds.x() + PADDING_X;
         int innerY = bounds.y() + PADDING_Y;
         int innerWidth = innerWidth();
@@ -216,7 +219,7 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
         graphics.enableScissor(innerX, innerY, innerX + innerWidth + SCROLLBAR_WIDTH, innerY + innerHeight);
         try {
             if (textField.value().isEmpty() && !focused && hint != null) {
-                graphics.drawWordWrap(renderFont, hint, innerX, innerY, innerWidth, UiPalette.TEXT_DISABLED);
+                graphics.drawWordWrap(renderFont, hint, innerX, innerY, innerWidth, theme.palette().textDisabled());
             } else {
                 renderLines(graphics, renderFont, innerX, innerY, innerHeight);
             }
@@ -225,7 +228,7 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
         }
         renderScrollbar(graphics, innerY, innerHeight);
         if (focused) {
-            UiTheme.drawFocusOutline(graphics, bounds);
+            theme.drawFocusOutline(graphics, bounds);
         }
     }
 
@@ -253,13 +256,13 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
                 if (from < to) {
                     int highlightX = innerX + renderFont.width(text.substring(begin, from));
                     int highlightWidth = renderFont.width(text.substring(from, to));
-                    UiTheme.drawSelection(graphics, new UiRect(highlightX, lineY - 1, Math.max(1, highlightWidth), lineHeight));
+                    theme.drawSelection(graphics, new UiRect(highlightX, lineY - 1, Math.max(1, highlightWidth), lineHeight));
                 }
             }
-            graphics.drawString(renderFont, text.substring(begin, end), innerX, lineY, UiPalette.TEXT_ON_DARK, false);
+            graphics.drawString(renderFont, text.substring(begin, end), innerX, lineY, theme.palette().textOnDark(), false);
             if (blink && cursor >= begin && cursor <= end) {
                 int cursorX = innerX + renderFont.width(text.substring(begin, cursor));
-                graphics.fill(cursorX - 1, lineY - 1, cursorX + 1, lineY + lineHeight - 1, UiPalette.TEXT_ON_DARK);
+                graphics.fill(cursorX - 1, lineY - 1, cursorX + 1, lineY + lineHeight - 1, theme.palette().textOnDark());
             }
         }
     }
@@ -300,10 +303,10 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
             return;
         }
         int x = bounds.right() - SCROLLBAR_WIDTH - 1;
-        graphics.fill(x, innerY, x + SCROLLBAR_WIDTH, innerY + innerHeight, UiPalette.SCROLL_TRACK);
+        graphics.fill(x, innerY, x + SCROLLBAR_WIDTH, innerY + innerHeight, theme.palette().scrollTrack());
         int thumbHeight = Math.max(8, innerHeight * innerHeight / Math.max(1, textField.getLineCount() * font.lineHeight));
         int thumbY = innerY + (innerHeight - thumbHeight) * scrollOffset / maxScroll;
-        graphics.fill(x, thumbY, x + SCROLLBAR_WIDTH, thumbY + thumbHeight, UiPalette.SCROLL_THUMB);
+        graphics.fill(x, thumbY, x + SCROLLBAR_WIDTH, thumbY + thumbHeight, theme.palette().scrollThumb());
     }
 
     @Override

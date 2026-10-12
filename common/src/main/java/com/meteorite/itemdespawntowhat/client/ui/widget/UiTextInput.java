@@ -2,11 +2,11 @@ package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextHistory;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextHistory;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import net.minecraft.client.gui.Font;
@@ -61,13 +61,21 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
     // 文本被接受发生变化时的回调（宿主据此清除超限提示）
     private @Nullable Runnable onValueChanged;
 
+    // 注入的宿主主题
+    private final UiHostTheme theme;
+    // 兼容入口：未迁移模块沿用默认宿主主题
     public UiTextInput(Font font, Component hint) {
+        this(UiHostThemes.defaultTheme(), font, hint);
+    }
+
+    public UiTextInput(UiHostTheme theme, Font font, Component hint) {
+        this.theme = UiHostThemes.require(theme);
         this.font = font;
-        this.editBox = new TrackedEditBox(font);
+        this.editBox = new TrackedEditBox(font, theme.rowHeight());
         this.editBox.setBordered(false);
         this.editBox.setHint(hint);
-        this.editBox.setTextColor(UiPalette.TEXT_ON_DARK);
-        this.editBox.setTextColorUneditable(UiPalette.TEXT_DISABLED);
+        this.editBox.setTextColor(theme.palette().textOnDark());
+        this.editBox.setTextColorUneditable(theme.palette().textDisabled());
         // 长度由码点过滤器控制；程序回填不经过原版截断。
         this.editBox.setMaxLength(Integer.MAX_VALUE);
         installFilter();
@@ -232,12 +240,12 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
         if (!visible) {
             return;
         }
-        UiTheme.drawInset(graphics, bounds);
-        graphics.fill(bounds.x() + 1, bounds.y() + 1, bounds.right() - 1, bounds.bottom() - 1, UiPalette.SLOT_INNER);
+        theme.drawInset(graphics, bounds);
+        graphics.fill(bounds.x() + 1, bounds.y() + 1, bounds.right() - 1, bounds.bottom() - 1, theme.palette().slotInner());
         UiRenderLayers.draw(graphics, UiRenderLayers.FOREGROUND,
                 () -> editBox.renderWidget(graphics, mouseX, mouseY, 0.0F));
         if (editBox.isFocused()) {
-            UiTheme.drawFocusOutline(graphics, bounds);
+            theme.drawFocusOutline(graphics, bounds);
         }
     }
 
@@ -369,8 +377,8 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
     private static final class TrackedEditBox extends EditBox {
         private int anchor;
 
-        private TrackedEditBox(Font font) {
-            super(font, 0, 0, MIN_WIDTH, UiTheme.ROW_HEIGHT, Component.empty());
+        private TrackedEditBox(Font font, int rowHeight) {
+            super(font, 0, 0, MIN_WIDTH, rowHeight, Component.empty());
         }
 
         @Override

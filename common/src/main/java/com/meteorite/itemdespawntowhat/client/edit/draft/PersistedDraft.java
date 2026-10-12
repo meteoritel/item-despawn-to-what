@@ -2,6 +2,8 @@ package com.meteorite.itemdespawntowhat.client.edit.draft;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
+import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import org.jetbrains.annotations.Nullable;
 
 /***
@@ -25,6 +27,16 @@ public record PersistedDraft(
 
     // 落盘格式版本：将来结构变更时可据此迁移或丢弃
     public static final int FORMAT_VERSION = 1;
+
+    // 建立草稿时的服务端基线（动态值快照）；缺省返回 null
+    public @Nullable RuleValue baselineValue() {
+        return baseline == null ? null : RuleDraft.of(baseline).root();
+    }
+
+    // 草稿内容（动态值快照）
+    public RuleValue draftValue() {
+        return RuleDraft.of(draft).root();
+    }
 
     // 序列化为落盘 JSON
     public JsonObject toJson() {

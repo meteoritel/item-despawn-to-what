@@ -3,8 +3,8 @@ package com.meteorite.itemdespawntowhat.client.ui.widget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -55,11 +55,14 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
     private boolean focused;
     private @Nullable Consumer<List<String>> onChanged;
 
-    public UiListEditor(Font font, Mode mode, @Nullable String registryHint) {
+    // 注入的宿主主题
+    private final UiHostTheme theme;
+    public UiListEditor(UiHostTheme theme, Font font, Mode mode, @Nullable String registryHint) {
+        this.theme = UiHostThemes.require(theme);
         Objects.requireNonNull(font, "font");
         this.mode = mode == null ? Mode.ID : mode;
         this.registryHint = registryHint;
-        this.input = new UiTextInput(font, Component.translatable("gui.itemdespawntowhat.edit.list.input_hint"));
+        this.input = new UiTextInput(theme, font, Component.translatable("gui.itemdespawntowhat.edit.list.input_hint"));
         this.input.setMaxLength(MAX_ENTRY_LENGTH);
         this.input.setFilter(this::acceptText);
         this.input.setOnCommit(text -> commitInput());
@@ -302,13 +305,13 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
         if (!visible) {
             return;
         }
-        UiTheme.drawInset(graphics, bounds);
+        theme.drawInset(graphics, bounds);
         UiRect area = listArea();
         int visibleRows = visibleRowCount();
         if (items.isEmpty()) {
             String empty = Component.translatable("gui.itemdespawntowhat.edit.list.empty").getString();
             graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont, empty, Math.max(0, area.width() - 2)),
-                    area.x() + 1, area.y() + 1, UiPalette.TEXT_DISABLED, false);
+                    area.x() + 1, area.y() + 1, theme.palette().textDisabled(), false);
         } else {
             clampOffset(visibleRows);
             for (int row = 0; row < visibleRows; row++) {
@@ -320,23 +323,23 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
                 boolean isSelected = index == selected;
                 boolean hovered = enabled && rowRect.contains(mouseX, mouseY);
                 if (isSelected) {
-                    UiTheme.drawSelection(graphics, rowRect);
-                    UiTheme.drawSelectMarker(graphics, rowRect);
+                    theme.drawSelection(graphics, rowRect);
+                    theme.drawSelectMarker(graphics, rowRect);
                 } else if (hovered) {
-                    graphics.fill(rowRect.x(), rowRect.y(), rowRect.right(), rowRect.bottom(), UiPalette.CONTROL_HOVER);
+                    graphics.fill(rowRect.x(), rowRect.y(), rowRect.right(), rowRect.bottom(), theme.palette().controlHover());
                 }
-                int textX = rowRect.x() + UiTheme.SELECT_MARKER_WIDTH;
+                int textX = rowRect.x() + theme.selectMarkerWidth();
                 String text = TextScroll.trimToWidth(renderFont, items.get(index),
                         Math.max(0, rowRect.right() - textX - 2));
                 graphics.drawString(renderFont, text, textX, rowRect.y() + 2,
-                        enabled ? UiPalette.TEXT_PRIMARY : UiPalette.TEXT_DISABLED, false);
+                        enabled ? theme.palette().textPrimary() : theme.palette().textDisabled(), false);
             }
         }
         if (enabled) {
             input.render(graphics, renderFont, mouseX, mouseY);
         }
         if (focused) {
-            UiTheme.drawFocusOutline(graphics, bounds);
+            theme.drawFocusOutline(graphics, bounds);
         }
     }
 

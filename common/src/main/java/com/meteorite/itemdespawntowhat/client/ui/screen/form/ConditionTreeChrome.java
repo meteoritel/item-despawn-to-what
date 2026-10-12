@@ -7,8 +7,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiIconStrip;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTarget;
-import com.meteorite.itemdespawntowhat.client.ui.screen.RuleEditorP4Panels;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiFlatSkin;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionGraphEditor;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
 import net.minecraft.client.gui.Font;
@@ -28,7 +27,7 @@ import org.lwjgl.glfw.GLFW;
  *
  * <p>叶子参数表单不再走浮动调板，而是由 {@link Inline} 适配成画布的内联编辑框：
  * 几何、动画与 pose 变换由画布负责，适配器只把内容坐标系下的事件转发给
- * {@link RuleEditorP4Panels.LeafPanel}。</p>
+ * {@link LeafPanel}。</p>
  */
 final class ConditionTreeChrome {
 
@@ -52,7 +51,8 @@ final class ConditionTreeChrome {
 
         Strip(Font font, UiIconStrip.Orientation orientation) {
             this.strip = new UiIconStrip(font, orientation);
-            strip.setStyle(UiFlatSkin.STRIP_STYLE);
+            // 画布页外壳使用扁平宿主主题的条带样式（ADR-0028：仅显式取用时生效）
+            strip.setStyle(UiHostThemes.flatTheme().stripStyle());
         }
 
         UiIconStrip.Item add(UiIcon normal, UiIcon disabled, Component tooltip, UiAction action) {
@@ -115,7 +115,7 @@ final class ConditionTreeChrome {
     }
 
     /**
-     * 内联参数框：把 {@link RuleEditorP4Panels.LeafPanel}（内部承载 {@link FormView}、目录按钮、
+     * 内联参数框：把 {@link LeafPanel}（内部承载 {@link FormView}、目录按钮、
      * 区间条与说明行）接进画布冻结的 {@link UiConditionGraphEditor.InlineEditor} 契约。
      *
      * <p>坐标一律为内容坐标系：画布调用前已入栈 pose 变换，因此这里把传入坐标原样当作面板坐标
@@ -126,13 +126,13 @@ final class ConditionTreeChrome {
         // 测量用的临时高度：取足够大的值，避免表单按可用高度折算滚动条宽度而低估自然高度
         private static final int MEASURE_PROBE_HEIGHT = Integer.MAX_VALUE / 4;
 
-        private final RuleEditorP4Panels.LeafPanel panel;
+        private final LeafPanel panel;
         private final FormView form;
         // 当前帧鼠标下的字段提示（校验问题优先）：内联框契约没有 tooltip 通道，
         // 由适配器在内容坐标下缓存，外壳随后用屏幕坐标绘制，避免提示随画布缩放
         private @Nullable Component hoverTooltip;
 
-        Inline(RuleEditorP4Panels.LeafPanel panel, FormView form) {
+        Inline(LeafPanel panel, FormView form) {
             this.panel = panel;
             this.form = form;
         }
