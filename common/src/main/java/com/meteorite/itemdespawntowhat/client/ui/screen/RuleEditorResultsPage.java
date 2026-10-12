@@ -722,7 +722,7 @@ final class RuleEditorResultsPage {
         if (session == null) {
             return;
         }
-        UiStructureDiagram diagram = RuleEditorP4Panels.structureDiagram(pages.font, session.draft().root(), pages.nameSource,
+        UiStructureDiagram diagram = RuleEditorPanelFactory.structureDiagram(pages.font, session.draft().root(), pages.nameSource,
                 candidateIndex, this::navigateDiagram);
         UiModal modal = UiModal.create(RuleEditorEditPages.THEME, pages.font);
         modal.title(Component.translatable(RuleEditorPageSupport.UI + "button.diagram"));

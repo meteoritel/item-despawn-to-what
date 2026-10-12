@@ -43,7 +43,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * P4 宿主装配（主计划 §4/§7/§8）：目录图标面板接线、昼夜/高度区间条、结构图解与叶子面板装配
+ * 编辑页的面板装配工厂：目录选择页、昼夜/高度区间条、结构图解与叶子面板装配
  * （面板实现见 {@link LeafPanel}）。
  * <p>本类只做「把 kit 控件与目录链路接到规则草稿上」的装配，不复制数据层逻辑：
  * 写入一律经调用方给定的 {@code applyChange}（内部走 {@link EditSession#apply(String, Runnable)}，
@@ -52,7 +52,7 @@ import org.jetbrains.annotations.Nullable;
  * 图标分发见 {@link com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons#iconFor(RuleCatalogType, String)}，
  * 其余目录类型回落文字槽。
  */
-public final class RuleEditorP4Panels {
+public final class RuleEditorPanelFactory {
 
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
     private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
@@ -80,7 +80,7 @@ public final class RuleEditorP4Panels {
     private static final int MODAL_CHROME_HEIGHT = THEME.headerHeight() + THEME.padding() * 3
             + UiModal.BUTTON_HEIGHT;
 
-    private RuleEditorP4Panels() {
+    private RuleEditorPanelFactory() {
     }
 
     // ---- 时间换算 ----
@@ -120,7 +120,7 @@ public final class RuleEditorP4Panels {
     public static UiCyclicTimeBar dailyBar(Font font, UiCyclicTimeBar.Listener listener) {
         UiCyclicTimeBar bar = new UiCyclicTimeBar(THEME, font, cyclicTexts(), listener);
         bar.setTicks(dayTicks());
-        bar.setFormatter(RuleEditorP4Panels::clockText);
+        bar.setFormatter(RuleEditorPanelFactory::clockText);
         bar.setPresets(List.of(
                 new UiCyclicTimeBar.Preset(Component.translatable(UI + "time.preset_all"), 0.0D, 23999.0D),
                 new UiCyclicTimeBar.Preset(Component.translatable(UI + "time.preset_day"), 0.0D, 11000.0D),

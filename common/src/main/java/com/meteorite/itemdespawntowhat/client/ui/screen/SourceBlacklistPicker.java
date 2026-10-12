@@ -50,7 +50,7 @@ final class SourceBlacklistPicker {
                          Consumer<List<String>> onPicked) {
         CatalogEntryPolicy policy = CatalogEntryPolicy.fixed(RuleCatalogType.ITEM);
         Pages pages = new Pages(sourceTags(rule), policy);
-        UiCatalogGrid.Texts texts = RuleEditorP4Panels.catalogTexts()
+        UiCatalogGrid.Texts texts = RuleEditorPanelFactory.catalogTexts()
                 .withEmpty(Component.translatable(UI + "blacklist.empty"));
         UiCatalogGrid grid = new UiCatalogGrid(THEME, font, true, texts, new UiCatalogGrid.Listener() {
                     @Override public void onSearch(String filter) { pages.filter(filter); }
@@ -67,9 +67,9 @@ final class SourceBlacklistPicker {
             return page.items();
         });
         UiModal modal = UiModal.create(THEME, font).title(Component.translatable(UI + "rule.source.exclude"));
-        modal.preferredWidth(RuleEditorP4Panels.pickerWidth(width));
+        modal.preferredWidth(RuleEditorPanelFactory.pickerWidth(width));
         modal.inlineFooter();
-        modal.contentWidget(grid, RuleEditorP4Panels.pickerBodyHeight(height));
+        modal.contentWidget(grid, RuleEditorPanelFactory.pickerBodyHeight(height));
         modal.confirm(Component.translatable(UI + "button.confirm"), () -> {
             if (workspace.active()) onPicked.accept(grid.selection());
         });

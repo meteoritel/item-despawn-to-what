@@ -666,7 +666,7 @@ final class RuleEditorPageSupport {
         } else if (effects > ConditionLimits.MAX_EFFECTS) {
             issues.add(FormIssue.error(RuleFields.EFFECTS, Component.translatable(UI + "candidate.section"), limit));
         }
-        if (RuleEditorP4Panels.climateAllUnbounded(rule)) {
+        if (RuleEditorPanelFactory.climateAllUnbounded(rule)) {
             Component message = Component.translatable(UI + "issue.climate_empty");
             issues.add(FormIssue.error(RuleFields.CONDITIONS, Component.translatable(UI + "rule.conditions"), message));
         }

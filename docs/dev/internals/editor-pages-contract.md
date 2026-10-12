@@ -1,6 +1,6 @@
 # 编辑器四页职责与输入↔触发联动契约
 
-> 事实来源：`client/ui/screen/` 的 `RuleEditorEditPages.java`、`RuleEditorScreen.java`、`RuleEditorScreenEditPage.java`、`RuleEditorScreenListPage.java`、`RuleEditorScreenListActions.java`、`RuleEditorScreenButtonBar.java`、`RuleEditorPageInput.java`、`RuleEditorValidation.java`、`RuleEditorP4Panels.java`，以及 core 侧 `CatalystPresentCondition` / `CatalystThresholdProjection`。面向改编辑器的人：说明四页各管什么、输入页与触发页如何按**确切叶路径**关联、以及撤销粒度。
+> 事实来源：`client/ui/screen/` 的 `RuleEditorEditPages.java`、`RuleEditorScreen.java`、`RuleEditorScreenEditPage.java`、`RuleEditorScreenListPage.java`、`RuleEditorScreenListActions.java`、`RuleEditorScreenButtonBar.java`、`RuleEditorPageInput.java`、`RuleEditorValidation.java`、`RuleEditorPanelFactory.java`，以及 core 侧 `CatalystPresentCondition` / `CatalystThresholdProjection`。面向改编辑器的人：说明四页各管什么、输入页与触发页如何按**确切叶路径**关联、以及撤销粒度。
 > 定位约定：本文按「类名 + 成员名」引用源码（如 `RuleEditorInputPage#buildInput`），不写行号——行号会随重构漂移，成员名才是稳定锚点。
 
 ## 1. 四页职责
@@ -65,7 +65,7 @@
 3. 叶参数编辑入口：`pageConditionSupport(owner)` → `openLeafEditor(owner, leaf)`。弹窗以**发起编辑的那个表单**为 owner：`editConditionLeaf` 在 `liveForms` 里用 `findTree(form, leaf)` 找到承载该叶的表单，路径取该树的 `selectedPath()`。同名同类型的多个叶各绑各的路径，**不会误绑**。
 4. 弹窗标题带类型编号与作用域；催化剂叶显示所有引用均需达标的说明，流体叶显示任一种即可匹配的说明。
 5. 确认时只写回该叶自己的路径：`form.applyToDraft()` 后 `owner.reload()` 刷新发起编辑的表单，再由 `host.onDraftChanged()` 通知宿主。逐项编辑**不改变组合结构**，也**不会把动作局部条件提升到规则级**。
-6. 实现细节：叶弹窗内的目录选择、区间条与事件转发由 `RuleEditorP4Panels#leafPanel(...)` 承载（`basePath` 即叶参数在草稿中的路径）；门槛说明行经 `LeafPanel#addNote` 注入；校验失败时 `focusField(issue.path())` 把焦点定位到问题字段。
+6. 实现细节：叶弹窗内的目录选择、区间条与事件转发由 `RuleEditorPanelFactory#leafPanel(...)` 承载（`basePath` 即叶参数在草稿中的路径）；门槛说明行经 `LeafPanel#addNote` 注入；校验失败时 `focusField(issue.path())` 把焦点定位到问题字段。
 
 ### 4.1 生物群系参数与范围控件
 
@@ -177,7 +177,7 @@
 
 ## 14. 目录选择页样板
 
-物品、标签、流体等注册表目录共用同一个选择页：页面控件是 `client/ui/widget/UiCatalogGrid`，弹窗由 `RuleEditorP4Panels#catalogModal` 装配，黑名单入口 `SourceBlacklistPicker` 复用同一尺寸助手与同一套文案。
+物品、标签、流体等注册表目录共用同一个选择页：页面控件是 `client/ui/widget/UiCatalogGrid`，弹窗由 `RuleEditorPanelFactory#catalogModal` 装配，黑名单入口 `SourceBlacklistPicker` 复用同一尺寸助手与同一套文案。
 
 标签展示名统一由 `TagPreviewIcons.Tag#label` 返回带 `#` 的完整标签名（例如 `#minecraft:logs`），选择目录、已选卡片与规则预览共用该名称。长名称按控件宽度裁剪，完整名称和匹配范围可悬停查看；成员图标轮播与展开浏览共用标签快照。
 

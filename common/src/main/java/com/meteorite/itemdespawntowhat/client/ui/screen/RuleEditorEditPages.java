@@ -41,7 +41,7 @@ import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 规则编辑页签的组合视图（主计划 §4 页面与导航、§5 现行结构与 JSON 编辑、§7 输入草稿与会话）。
+ * 规则编辑页签的组合视图（四页契约见 docs/dev/internals/editor-pages-contract.md）。
  * <p>四页共用同一个 {@link EditSession} 草稿：所有写入都通过 {@link EditSession#apply(String, Runnable)}
  * 提交为一条撤销记录；只读展示（自动标题、路径提示、只读高级区、摘要）不写数据。
  * <p>顶层 effects 展示为单一隐式候选：打开、改别名、改效果都不会自动生成 outcomes；
@@ -271,7 +271,7 @@ public final class RuleEditorEditPages {
             if (type == null || host.rejectWhenFrozen()) return;
             boolean multi = field.type() == com.meteorite.itemdespawntowhat.client.edit.EditorFieldType.TAG_LIST
                     || field.type() == com.meteorite.itemdespawntowhat.client.edit.EditorFieldType.RL_LIST;
-            host.modals().push(RuleEditorP4Panels.catalogModal(font, host.workspace(), type, multi,
+            host.modals().push(RuleEditorPanelFactory.catalogModal(font, host.workspace(), type, multi,
                     Component.translatable(field.labelKey()), host.screenWidth(), host.screenHeight(), onPicked, field, true));
         });
         form.setDescriptor(descriptor);

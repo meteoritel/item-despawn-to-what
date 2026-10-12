@@ -251,7 +251,7 @@ final class RuleEditorTriggerPage {
             if (type == null || pages.host.rejectWhenFrozen()) return;
             boolean multi = field.type() == com.meteorite.itemdespawntowhat.client.edit.EditorFieldType.TAG_LIST
                     || field.type() == com.meteorite.itemdespawntowhat.client.edit.EditorFieldType.RL_LIST;
-            pages.host.modals().push(RuleEditorP4Panels.catalogModal(pages.font, pages.host.workspace(), type, multi,
+            pages.host.modals().push(RuleEditorPanelFactory.catalogModal(pages.font, pages.host.workspace(), type, multi,
                     Component.translatable(field.labelKey()), pages.host.screenWidth(), pages.host.screenHeight(), onPicked, field, true));
         });
         form.setDescriptor(descriptor);
@@ -262,7 +262,7 @@ final class RuleEditorTriggerPage {
         if (linked != null && linked.ruleLevel()) pages.ruleEditorInputPage.configurePresenceWrites(form, session, linked);
         // 已知条件类型附带区间条（昼夜/高度光照）与注册表字段的目录按钮；
         // 面板自身负责子控件的事件转发与 Tab 顺序，普通数值字段仍由表单承载
-        LeafPanel content = RuleEditorP4Panels.leafPanel(pages.font, form, session, descriptor.fields(),
+        LeafPanel content = RuleEditorPanelFactory.leafPanel(pages.font, form, session, descriptor.fields(),
                 path, change -> {
                     form.commitPendingInputs();
                     session.apply(EditSession.OP_SET_FIELD, change);
