@@ -51,16 +51,19 @@ final class FormPicker {
     private final List<Suggestion> filtered = new ArrayList<>();
     private final UiTextInput filterInput;
     private final Consumer<String> onPicked;
+    private final List<String> chosen;
     private int selectedIndex;
     private int offset;
     private UiRect rect = new UiRect(0, 0, 0, 0);
     private UiRect listRect = new UiRect(0, 0, 0, 0);
 
-    FormPicker(Font font, UiHostTheme theme, List<Suggestion> suggestions, Consumer<String> onPicked, Host host) {
+    FormPicker(Font font, UiHostTheme theme, List<Suggestion> suggestions, List<String> chosen,
+               Consumer<String> onPicked, Host host) {
         this.theme = theme;
         this.host = host;
         this.all = suggestions;
         this.onPicked = onPicked;
+        this.chosen = List.copyOf(chosen);
         this.filterInput = new UiTextInput(theme, font,
                 Component.translatable("gui.itemdespawntowhat.edit.picker.filter"));
         this.filterInput.setOnCommit(text -> confirm());
@@ -81,6 +84,13 @@ final class FormPicker {
         }
         this.selectedIndex = 0;
         this.offset = 0;
+        for (int i = 0; i < filtered.size(); i++) {
+            if (chosen.contains(filtered.get(i).value())) {
+                selectedIndex = i;
+                offset = Math.clamp(i, 0, Math.max(0, filtered.size() - PICKER_ROWS));
+                break;
+            }
+        }
     }
 
     private void confirm() {
@@ -129,7 +139,7 @@ final class FormPicker {
             }
             int rowY = listRect.y() + i * rowHeight();
             UiRect rowRect = new UiRect(listRect.x(), rowY, listRect.width(), rowHeight());
-            if (index == selectedIndex) {
+            if (index == selectedIndex || chosen.contains(filtered.get(index).value())) {
                 theme.drawSelection(graphics, rowRect);
             } else if (rowRect.contains(mouseX, mouseY)) {
                 graphics.fill(rowRect.x(), rowRect.y(), rowRect.right(), rowRect.bottom(), theme.palette().controlHover());

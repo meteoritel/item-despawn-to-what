@@ -971,6 +971,8 @@
   "gui.itemdespawntowhat.edit.pick.scope_both": "Items and tags (click to cycle)",
   "gui.itemdespawntowhat.edit.pick.total": "%s total",
   "gui.itemdespawntowhat.edit.pick.clear": "Clear selection",
+  "gui.itemdespawntowhat.edit.pick.source_conflict": "! Overlaps source items and cannot be a catalyst; deselect existing conflicts",
+  "gui.itemdespawntowhat.edit.pick.catalyst_conflict": "! Overlaps catalyst items and cannot be a source; deselect existing conflicts",
   "gui.itemdespawntowhat.edit.selection.empty": "Nothing added",
   "gui.itemdespawntowhat.edit.selection.any_fluid": "Any non-empty fluid",
   "gui.itemdespawntowhat.edit.selection.unknown": "Unknown item",

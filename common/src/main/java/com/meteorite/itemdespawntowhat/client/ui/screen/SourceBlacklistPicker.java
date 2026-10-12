@@ -57,6 +57,8 @@ final class SourceBlacklistPicker {
                     @Override public void onPageChange(int delta) { pages.index = Math.clamp(pages.index + delta, 0, Math.max(0, pages.filtered.size() - 1)); }
                 });
         grid.setEntryPolicy(policy);
+        RuleValue source = rule == null ? null : rule.child(RuleFields.SOURCE);
+        grid.setSelection(source == null ? List.of() : RuleEditorPageSupport.stringList(source.child(RuleFields.SOURCE_EXCLUDE)));
         grid.setEntrySource(() -> {
             grid.setEnabled(workspace.active());
             if (pages.filtered.isEmpty()) return List.of();

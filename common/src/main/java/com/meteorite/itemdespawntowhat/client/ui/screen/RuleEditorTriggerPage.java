@@ -246,13 +246,14 @@ final class RuleEditorTriggerPage {
         });
         // 输入被长度上限拒绝时立刻显示一条可读提示（字段名：问题）
         form.setOnRejectedNotice(message -> pages.host.notice(message, THEME.palette().danger()));
-        form.setCatalogOpener((field, tags, onPicked) -> {
+        form.setSelectionCatalogOpener((field, fieldPath, tags, selected, onPicked) -> {
             RuleCatalogType type = tags ? RuleCatalogType.TAG : FieldCatalogTypes.catalogTypeOf(field);
             if (type == null || pages.host.rejectWhenFrozen()) return;
             boolean multi = field.type() == com.meteorite.itemdespawntowhat.client.edit.EditorFieldType.TAG_LIST
                     || field.type() == com.meteorite.itemdespawntowhat.client.edit.EditorFieldType.RL_LIST;
-            pages.host.modals().push(RuleEditorPanelFactory.catalogModal(pages.font, pages.host.workspace(), type, multi,
-                    Component.translatable(field.labelKey()), pages.host.screenWidth(), pages.host.screenHeight(), onPicked, field, true));
+            pages.host.modals().push(RuleEditorPanelFactory.fieldCatalogModal(pages.font, pages.host.workspace(), type, multi,
+                    Component.translatable(field.labelKey()), pages.host.screenWidth(), pages.host.screenHeight(), onPicked,
+                    field, session.draft(), fieldPath, selected));
         });
         form.setDescriptor(descriptor);
         form.reload();

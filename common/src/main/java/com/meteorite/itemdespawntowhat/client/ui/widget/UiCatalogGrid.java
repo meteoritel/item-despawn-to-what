@@ -123,6 +123,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     private static final int PADDING_X = 3;
     // 行尾选中勾的保留宽度
     private static final int MARK_WIDTH = 10;
+    private static final String UNAVAILABLE_MARK = "!";
     // 列表内凹面板的边框与滚动条
     private static final int LIST_BORDER = 2;
     private static final int SCROLLBAR_WIDTH = 4;
@@ -162,6 +163,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     private @Nullable EntryPolicy policy;
     private @Nullable Runnable onRetry;
     private Function<String, Component> tooltipSuffix = ignored -> null;
+    private Function<String, @Nullable Component> unavailableReason = ignored -> null;
 
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     private UiRect toolbarRect = new UiRect(0, 0, 0, 0);
@@ -279,6 +281,27 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
 
     public List<String> selection() {
         return List.copyOf(selection);
+    }
+
+    /**
+     * 回填完整选择，跨页与过滤保留；程序化回填不触发编辑回调。
+     * @param ids 当前字段引用，单选模式只采用第一项
+     */
+    public void setSelection(List<String> ids) {
+        selection.clear();
+        for (String id : ids) {
+            if (id == null || id.isBlank() || selection.contains(id)) continue;
+            selection.add(id);
+            if (!multiSelect) break;
+        }
+    }
+
+    /**
+     * 注入不可新增选择的原因；已有冲突选择仍可取消，原因进入行尾标记与悬停提示。
+     * @param reason 按条目 ID 查询原因，返回 null 表示可选
+     */
+    public void setUnavailableReason(Function<String, @Nullable Component> reason) {
+        unavailableReason = Objects.requireNonNull(reason, "reason");
     }
 
     public boolean isSelected(String id) {
@@ -665,6 +688,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     // 一行 = 图标 + 名称；已选整行高亮并在行尾打勾，悬停行名称超宽时滚动
     private void drawRow(GuiGraphics graphics, Entry entry, UiRect cell, int row, boolean hovered, boolean cursorAt) {
         boolean chosen = isSelected(entry.id());
+        boolean unavailable = unavailableReason.apply(entry.id()) != null;
         int fill = !enabled ? theme.palette().slotFill()
                 : chosen ? theme.palette().controlSelected()
                 : hovered ? theme.palette().controlHover()
@@ -677,10 +701,14 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         int textX = cell.x() + PADDING_X + ICON_BOX + ICON_GAP;
         int textWidth = Math.max(0, cell.right() - MARK_WIDTH - textX);
         String label = rowLabel(entry).getString();
-        int color = enabled ? theme.palette().textPrimary() : theme.palette().textDisabled();
-        TextScroll.draw(graphics, font, label, textX, cell.y() + Math.max(0, (ROW_HEIGHT - font.lineHeight) / 2),
+        int color = enabled && !unavailable ? theme.palette().textPrimary() : theme.palette().textDisabled();
+        int textY = cell.y() + Math.max(0, (ROW_HEIGHT - font.lineHeight) / 2);
+        TextScroll.draw(graphics, font, label, textX, textY,
                 textWidth, color, enabled && hovered, hovered ? hoverScrollTicks : 0, false);
-        if (chosen) {
+        if (unavailable) {
+            graphics.drawString(font, UNAVAILABLE_MARK, cell.right() - MARK_WIDTH + 3,
+                    textY, theme.palette().warning(), false);
+        } else if (chosen) {
             drawCheck(graphics, cell.right() - MARK_WIDTH + 3, cell.y() + 6);
         }
         if (cursorAt) {
@@ -997,7 +1025,8 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         if (cursor < 0 || cursor >= entries.size()) {
             return;
         }
-        listener.onActivate(entries.get(cursor).id());
+        String id = entries.get(cursor).id();
+        if (unavailableReason.apply(id) == null) listener.onActivate(id);
     }
 
     // 选择切换：单选模式替换旧选择，多选模式切换单项
@@ -1005,6 +1034,8 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         if (id == null || id.isBlank()) {
             return;
         }
+        // 冲突项禁止新增，但保留取消已有冲突项的修复入口。
+        if (!selection.contains(id) && unavailableReason.apply(id) != null) return;
         if (multiSelect) {
             if (!selection.remove(id)) {
                 selection.add(id);
@@ -1071,6 +1102,8 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         List<Component> lines = new ArrayList<>(3);
         lines.add(rowLabel(entry));
         lines.add(Component.literal(entry.id()));
+        Component reason = unavailableReason.apply(entry.id());
+        if (reason != null) lines.add(reason);
         Component suffix = tooltipSuffix.apply(entry.id());
         if (suffix != null) {
             lines.add(suffix);

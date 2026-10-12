@@ -56,15 +56,58 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
     long loadedRevision;
     final List<FormRow> rows = new ArrayList<>();
     private @Nullable SuggestionProvider suggestionProvider;
-    private @Nullable CatalogOpener catalogOpener;
+    private @Nullable SelectionCatalogOpener catalogOpener;
 
-    /*** 字段目录入口由页面提供，表单不访问网络。 */
+    /** 字段目录追加入口，供不支持当前选择快照的宿主使用。 */
     @FunctionalInterface
     public interface CatalogOpener {
+        /**
+         * 打开目录并追加所选引用。
+         * @param field 字段描述符
+         * @param tags 是否只浏览标签
+         * @param onPicked 新选引用的回调
+         */
         void open(EditorField field, boolean tags, Consumer<List<String>> onPicked);
     }
 
+    /** 字段目录入口由页面提供，表单传递确切字段路径与当前选择，不访问网络。 */
+    @FunctionalInterface
+    public interface SelectionCatalogOpener {
+        /**
+         * 打开目录，确认后返回完整选择快照。
+         * @param field 字段描述符
+         * @param path 字段在草稿中的确切路径
+         * @param tags 是否只浏览标签
+         * @param selected 当前字段中的引用
+         * @param onPicked 确认后的完整选择回调
+         */
+        void open(EditorField field, String path, boolean tags, List<String> selected, Consumer<List<String>> onPicked);
+    }
+
+    /**
+     * 设置追加式目录入口；宿主不需提供完整选择快照。
+     * @param opener 目录入口，null 表示移除入口
+     * @return 当前表单
+     */
+    @SuppressWarnings("unused")
     public FormView setCatalogOpener(@Nullable CatalogOpener opener) {
+        return setSelectionCatalogOpener(opener == null ? null : (field, path, tags, selected, onPicked) ->
+                opener.open(field, tags, added -> {
+                    if (added.isEmpty()) return;
+                    if (field.type() == EditorFieldType.TAG_LIST || field.type() == EditorFieldType.RL_LIST) {
+                        java.util.LinkedHashSet<String> merged = new java.util.LinkedHashSet<>(selected);
+                        merged.addAll(added);
+                        onPicked.accept(List.copyOf(merged));
+                    } else onPicked.accept(added);
+                }));
+    }
+
+    /**
+     * 设置返回完整选择快照的目录入口。
+     * @param opener 目录入口，null 表示移除入口
+     * @return 当前表单
+     */
+    public FormView setSelectionCatalogOpener(@Nullable SelectionCatalogOpener opener) {
         catalogOpener = opener;
         for (FormRow row : rows) { row.pickers.clear(); addPickers(row); }
         return this;
@@ -280,17 +323,25 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
     private void pick(FormRow row, boolean tags) {
         if (!enabled || catalogOpener == null) return;
         commitPendingInputs();
-        catalogOpener.open(row.field, tags, ids -> {
-            if (ids.isEmpty() || !enabled) return;
+        RuleValue existing = session.draft().valueAt(row.path);
+        List<String> selected = existing == null ? List.of()
+                : existing.isList() ? existing.textItems() : existing.isText() ? List.of(existing.asText()) : List.of();
+        catalogOpener.open(row.field, row.path, tags, selected, ids -> {
+            if (!enabled) return;
             RuleValue value;
             if (row.field.type() == EditorFieldType.TAG_LIST || row.field.type() == EditorFieldType.RL_LIST) {
-                java.util.LinkedHashSet<String> merged = new java.util.LinkedHashSet<>();
-                RuleValue existing = session.draft().valueAt(row.path);
-                if (existing != null && existing.isList()) for (RuleValue element : existing.items())
-                    if (element.isText()) merged.add(element.asText());
-                merged.addAll(ids);
-                RuleValue.Sequence array = RuleValue.list(); merged.forEach(id -> array.add(RuleValue.text(id))); value = array.build();
-            } else value = RuleValue.text(ids.getFirst());
+                // 文本引用由完整选择替换；未知元素保留，避免目录编辑破坏扩展数据。
+                RuleValue.Sequence array = RuleValue.list();
+                java.util.LinkedHashSet<String> remaining = new java.util.LinkedHashSet<>(ids);
+                if (existing != null && existing.isList()) for (RuleValue element : existing.items()) {
+                    if (!element.isText() || remaining.remove(element.asText())) array.add(element.deepCopy());
+                }
+                remaining.forEach(id -> array.add(RuleValue.text(id)));
+                value = array.build();
+            } else {
+                if (ids.isEmpty()) return;
+                value = RuleValue.text(ids.getFirst());
+            }
             writeField(row, value);
             reload(); notifyChanged();
         });
@@ -465,7 +516,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         if (catalogSelections) child.useCatalogSelections();
         child.setSuggestionProvider(suggestionProvider);
         child.setConditionSupport(conditionSupport);
-        child.setCatalogOpener(catalogOpener);
+        child.setSelectionCatalogOpener(catalogOpener);
         child.setLabelWidth(labelWidth);
         child.setOnChanged(this::notifyChanged);
         for (EditorField field : fields) {
@@ -757,7 +808,10 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         if (suggestions == null || suggestions.isEmpty()) {
             return;
         }
-        this.picker = new FormPicker(font, THEME, suggestions, onPicked, this);
+        RuleValue value = session.draft().valueAt(childPath(field.name()));
+        List<String> chosen = value == null ? List.of()
+                : value.isList() ? value.textItems() : value.isText() ? List.of(value.asText()) : List.of();
+        this.picker = new FormPicker(font, THEME, suggestions, chosen, onPicked, this);
     }
 
     public boolean isPickerOpen() {

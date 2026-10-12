@@ -37,6 +37,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import net.minecraft.client.gui.Font;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -171,6 +172,23 @@ public final class RuleEditorPanelFactory {
     public static UiModal catalogModal(Font font, EditorWorkspaceView workspace, RuleCatalogType type,
                                        boolean multiSelect, Component title, int screenWidth, int screenHeight,
                                        Consumer<List<String>> onPicked, @Nullable EditorField field, boolean combined) {
+        return catalogModal(font, workspace, type, multiSelect, title, screenWidth, screenHeight,
+                onPicked, field, combined, List.of(), ignored -> null);
+    }
+
+    // 字段路径来自实际发起选择的表单行，子表单和条件叶都以同一入口解析互斥范围。
+    static UiModal fieldCatalogModal(Font font, EditorWorkspaceView workspace, RuleCatalogType type,
+                                     boolean multiSelect, Component title, int screenWidth, int screenHeight,
+                                     Consumer<List<String>> onPicked, EditorField field, RuleDraft draft,
+                                     String path, List<String> selected) {
+        return catalogModal(font, workspace, type, multiSelect, title, screenWidth, screenHeight,
+                onPicked, field, true, selected, SourceCatalystSelectionPolicy.forField(draft, path));
+    }
+
+    private static UiModal catalogModal(Font font, EditorWorkspaceView workspace, RuleCatalogType type,
+                                        boolean multiSelect, Component title, int screenWidth, int screenHeight,
+                                        Consumer<List<String>> onPicked, @Nullable EditorField field, boolean combined,
+                                        List<String> selected, Function<String, @Nullable Component> unavailableReason) {
         boolean includeTags = combined && field != null && (field.type() == EditorFieldType.TAG || field.type() == EditorFieldType.TAG_LIST);
         workspace.refreshDirectory(type);
         if (includeTags) workspace.refreshDirectory(RuleCatalogType.TAG);
@@ -180,7 +198,13 @@ public final class RuleEditorPanelFactory {
         mapper.field = field;
         mapper.includeTags = includeTags;
         mapper.policy = policy;
+        UiModal modal = UiModal.create(THEME, font);
         UiCatalogGrid grid = new UiCatalogGrid(THEME, font, multiSelect, includeTags ? catalogTexts(true) : catalogTexts(), new UiCatalogGrid.Listener() {
+            @Override
+            public void onSelectionChanged(List<String> selection) {
+                refreshCatalogConfirm(modal, workspace.active(), selection, unavailableReason);
+            }
+
             @Override
             public void onSearch(String filter) {
                 mapper.page = 0;
@@ -201,8 +225,11 @@ public final class RuleEditorPanelFactory {
             }
         });
         grid.setEntryPolicy(policy);
+        grid.setSelection(selected);
+        grid.setUnavailableReason(unavailableReason);
         grid.setEntrySource(() -> {
             boolean active = workspace.active();
+            refreshCatalogConfirm(modal, active, grid.selection(), unavailableReason);
             if (active != mapper.active) {
                 mapper.active = active;
                 grid.setEnabled(active);
@@ -231,16 +258,26 @@ public final class RuleEditorPanelFactory {
             grid.setEnabled(false);
             grid.setError(Component.translatable(UI + "pick.frozen"));
         }
-        UiModal modal = UiModal.create(THEME, font);
         modal.title(title);
         modal.preferredWidth(pickerWidth(screenWidth));
         // 翻页与状态排到确认/取消同一行的左侧，省下独立一行的底部空间
         modal.inlineFooter();
         modal.contentWidget(grid, pickerBodyHeight(screenHeight));
-        modal.confirm(Component.translatable(UI + "button.confirm"), () -> onPicked.accept(grid.selection()));
+        modal.confirm(Component.translatable(UI + "button.confirm"), () -> {
+            List<String> selection = grid.selection();
+            if (workspace.active() && selection.stream().noneMatch(id -> unavailableReason.apply(id) != null))
+                onPicked.accept(selection);
+        });
+        refreshCatalogConfirm(modal, workspace.active(), grid.selection(), unavailableReason);
         modal.cancel(Component.translatable(UI + "button.cancel"));
         modal.layoutCentered(screenWidth, screenHeight);
         return modal;
+    }
+
+    private static void refreshCatalogConfirm(UiModal modal, boolean active, List<String> selection,
+                                               Function<String, @Nullable Component> unavailableReason) {
+        if (!modal.buttons().isEmpty()) modal.buttons().getFirst().setEnabled(active
+                && selection.stream().noneMatch(id -> unavailableReason.apply(id) != null));
     }
 
     // 选择页宽度：屏幕越宽弹窗越宽，但保留窗口感
@@ -531,9 +568,9 @@ public final class RuleEditorPanelFactory {
             extras.add(bar);
             reloadValues.add(() -> bar.core().setValue(integerRange(draft, min, max, basePath)));
         }
-        form.setCatalogOpener((field, tags, picked) -> pushModal.accept(catalogModal(font, workspace,
+        form.setSelectionCatalogOpener((field, path, tags, selected, picked) -> pushModal.accept(fieldCatalogModal(font, workspace,
                 tags ? RuleCatalogType.TAG : FieldCatalogTypes.catalogTypeOf(field), isListField(field),
-                Component.translatable(field.labelKey()), screenWidth, screenHeight, picked, field, true)));
+                Component.translatable(field.labelKey()), screenWidth, screenHeight, picked, field, draft, path, selected)));
         LeafPanel panel = new LeafPanel(font, form, extras, buttons, reloadValues);
         int extraIndex = 0;
         if (from != null && to != null && isIntegerLike(from) && isIntegerLike(to)

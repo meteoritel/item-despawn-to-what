@@ -971,6 +971,8 @@
   "gui.itemdespawntowhat.edit.pick.scope_both": "物品与标签一起显示（点击切换）",
   "gui.itemdespawntowhat.edit.pick.total": "共 %s 项",
   "gui.itemdespawntowhat.edit.pick.clear": "清空已选",
+  "gui.itemdespawntowhat.edit.pick.source_conflict": "! 与源物品范围重叠，不能作为催化剂；已选冲突项可取消",
+  "gui.itemdespawntowhat.edit.pick.catalyst_conflict": "! 与催化剂范围重叠，不能作为源物品；已选冲突项可取消",
   "gui.itemdespawntowhat.edit.selection.empty": "尚未添加",
   "gui.itemdespawntowhat.edit.selection.any_fluid": "任意非空流体",
   "gui.itemdespawntowhat.edit.selection.unknown": "未知物品",

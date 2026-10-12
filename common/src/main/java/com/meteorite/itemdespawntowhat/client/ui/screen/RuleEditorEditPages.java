@@ -261,7 +261,7 @@ public final class RuleEditorEditPages {
         });
         // 输入被长度上限拒绝时立刻显示一条可读提示（字段名：问题）
         form.setOnRejectedNotice(message -> host.notice(message, THEME.palette().danger()));
-        form.setCatalogOpener((field, tags, onPicked) -> {
+        form.setSelectionCatalogOpener((field, path, tags, selected, onPicked) -> {
             if (page == Page.INPUT && RuleFields.SOURCE.equals(basePath) && RuleFields.SOURCE_EXCLUDE.equals(field.name())) {
                 if (!host.rejectWhenFrozen()) host.modals().push(SourceBlacklistPicker.modal(font, host.workspace(), session.draft().root(),
                         host.screenWidth(), host.screenHeight(), onPicked));
@@ -271,8 +271,9 @@ public final class RuleEditorEditPages {
             if (type == null || host.rejectWhenFrozen()) return;
             boolean multi = field.type() == com.meteorite.itemdespawntowhat.client.edit.EditorFieldType.TAG_LIST
                     || field.type() == com.meteorite.itemdespawntowhat.client.edit.EditorFieldType.RL_LIST;
-            host.modals().push(RuleEditorPanelFactory.catalogModal(font, host.workspace(), type, multi,
-                    Component.translatable(field.labelKey()), host.screenWidth(), host.screenHeight(), onPicked, field, true));
+            host.modals().push(RuleEditorPanelFactory.fieldCatalogModal(font, host.workspace(), type, multi,
+                    Component.translatable(field.labelKey()), host.screenWidth(), host.screenHeight(), onPicked,
+                    field, session.draft(), path, selected));
         });
         form.setDescriptor(descriptor);
         form.reload();
