@@ -179,6 +179,8 @@
 
 物品、标签、流体等注册表目录共用同一个选择页：页面控件是 `client/ui/widget/UiCatalogGrid`，弹窗由 `RuleEditorP4Panels#catalogModal` 装配，黑名单入口 `SourceBlacklistPicker` 复用同一尺寸助手与同一套文案。
 
+标签展示名统一由 `TagPreviewIcons.Tag#label` 返回带 `#` 的完整标签名（例如 `#minecraft:logs`），选择目录、已选卡片与规则预览共用该名称。长名称按控件宽度裁剪，完整名称和匹配范围可悬停查看；成员图标轮播与展开浏览共用标签快照。
+
 - 注册表字段的已选内容由 `CatalogSelectionControl` 显示为可逐项移除的卡片：物品、流体、方块、实体、维度、群系、战利品表和状态效果共用此控件；没有图标的目录按文字卡片布局。`RuleDisplayLabels.catalogLabel` 按确切目录类型取名称，缺少本地化或未知资源时保留原 ID，未编辑值原样写回。`FormView` 为有目录映射的 TAG / TAG_LIST / RESOURCE_LOCATION / REGISTRY_ID / RL_LIST 字段选择卡片控件，主编辑表单、条件叶参数与子表单均启用；自由字符串列表及无目录映射的字段保留文本输入。
 
 - `UiCatalogGrid` 只知道「条目 + 图标 + 本地化文本」：条目、图标与全部文本由宿主注入，搜索、翻页与范围切换只发出意图回调；面板不校验也不解析注册表 id。

@@ -146,7 +146,7 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
         UiIcon icon;
         if (id.startsWith("#")) {
             var tag = TagPreviewIcons.resolve(type, id);
-            name = Component.literal("# ").append(tag.label());
+            name = tag.label();
             icon = tag.icon();
         } else {
             ResourceLocation key = ResourceLocation.tryParse(id);

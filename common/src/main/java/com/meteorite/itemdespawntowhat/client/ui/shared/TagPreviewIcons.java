@@ -15,14 +15,14 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.BlockItem;
 
-/*** 从已同步注册表取得标签成员；界面只显示本地化范围，注册名只进入 tooltip。 */
+/*** 从已同步注册表取得标签成员；展示完整标签名，悬停说明匹配范围与成员数量。 */
 public final class TagPreviewIcons {
     private static final String UI = "gui.itemdespawntowhat.edit.tag.";
     private TagPreviewIcons() { }
 
     /*** 可展开的标签快照，不将单个示例物品解释为唯一匹配对象。 */
     public record Tag(RuleCatalogType type, String id, List<Member> members, UiCarousel carousel) {
-        public Component label() { return Component.translatable(UI + "label." + kind(type)); }
+        public Component label() { return Component.translatable(UI + "label", id); }
         public Component tooltip() {
             var tip = Component.translatable(UI + "supports." + kind(type), id);
             return tip.append("\n").append(Component.translatable(UI + "expand", members.size()));
