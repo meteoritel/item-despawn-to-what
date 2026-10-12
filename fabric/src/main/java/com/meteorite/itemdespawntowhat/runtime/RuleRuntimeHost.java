@@ -38,7 +38,6 @@ import java.util.List;
  * - 引导：读 config/itemdespawntowhat/server.json → 建内置类型注册表 → 加载三层规则 → 建 ConversionRuntime → 回扫全部已加载维度；
  * - 事件：掉落物进入世界、维度 tick 结束、维度加载/卸载、数据包重载、服务端停止；
  * - 平台差异：Fabric 没有加载器提供的物品寿命 API，寿命使用 server.json 的兜底刻数。
- * 当前唯一转化链路；旧 JSON 仅供显式迁移命令读取。
  */
 public final class RuleRuntimeHost {
 

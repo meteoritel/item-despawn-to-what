@@ -9,6 +9,7 @@
 |---|---|
 | 编辑器四页各负责什么、输入页与触发页怎么联动、管理页怎么布局 | [editor-pages-contract.md](editor-pages-contract.md) |
 | 字段输入缓冲、切页/卸载时的提交、树结构操作后输入路径怎么迁移 | [editor-input-state.md](editor-input-state.md) |
+| 未应用的草稿存到哪、怎么节流写盘、重启/断线后怎么恢复与判冲突 | [editor-draft-persistence.md](editor-draft-persistence.md) |
 | 每页卡片分组、间距、控件尺寸与视觉规格 | [editor-card-layout.md](editor-card-layout.md) |
 | UI kit 能依赖什么、公开面有哪些、输入/数值/文本/树怎么接入 | [ui-kit/README.md](ui-kit/README.md) |
 
@@ -16,7 +17,7 @@
 
 | 包 | 主文档 |
 |---|---|
-| `client/edit` | [editor-input-state.md](editor-input-state.md)、[editor-pages-contract.md](editor-pages-contract.md) |
+| `client/edit` | [editor-input-state.md](editor-input-state.md)、[editor-pages-contract.md](editor-pages-contract.md)、[editor-draft-persistence.md](editor-draft-persistence.md) |
 | `client/ui/screen` | [editor-pages-contract.md](editor-pages-contract.md)、[editor-card-layout.md](editor-card-layout.md) |
 | `client/ui/widget`、`client/ui/theme` | [editor-card-layout.md](editor-card-layout.md)、[ui-kit/README.md](ui-kit/README.md) |
 | `client/ui/kit` | [ui-kit/README.md](ui-kit/README.md) |

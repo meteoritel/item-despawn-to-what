@@ -2,7 +2,8 @@
 
 > 覆盖 `client/net`、`client/edit`、`client/key`、`client/ui`（`kit` / `theme` / `widget` / `screen` / `screen/form` / `prototype`）。
 > 面向改编辑器与改 UI kit 的开发者。类级契约见 [../internals/editor-pages-contract.md](../internals/editor-pages-contract.md)、
-> [../internals/ui-kit/README.md](../internals/ui-kit/README.md)、[../internals/editor-card-layout.md](../internals/editor-card-layout.md)。
+> [../internals/ui-kit/README.md](../internals/ui-kit/README.md)、[../internals/editor-card-layout.md](../internals/editor-card-layout.md)、
+> [../internals/editor-draft-persistence.md](../internals/editor-draft-persistence.md)。
 
 ## 1. 定位与隔离
 

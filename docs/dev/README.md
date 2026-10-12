@@ -96,6 +96,7 @@
 | [internals/editor-pages-contract.md](internals/editor-pages-contract.md) | 编辑器四页职责、存在条件的唯一入口、同一份叶扫描与编号、输入与触发按确切叶路径关联、物品与数量联动、撤销与保存语义、管理页布局、大屏条件树 |
 | [internals/editor-card-layout.md](internals/editor-card-layout.md) | 四阶段编辑页的卡片布局与视觉规格：卡片分组、间距与高度、目录控件、黑名单选择、数量控件与预览尺寸 |
 | [internals/editor-input-state.md](internals/editor-input-state.md) | 编辑输入缓冲与配置历史：字段输入生命周期、页面生命周期、树结构操作与历史路径迁移 |
+| [internals/editor-draft-persistence.md](internals/editor-draft-persistence.md) | 客户端草稿持久化：草稿目录与命名、落盘文件格式、节流写盘与失败重试、重启/断线恢复与三类冲突判定 |
 | [internals/ui-kit/README.md](internals/ui-kit/README.md) | UI kit 依赖边界与检查脚本、公开入口分组、分册索引、宿主接入清单、拆包就绪门槛 |
 | [internals/ui-kit/input-routing.md](internals/ui-kit/input-routing.md) | 事件路由顺序、输入上下文与目标契约、捕获与单值操作生命周期、按下归属与弹出层所有者契约 |
 | [internals/ui-kit/value-controls.md](internals/ui-kit/value-controls.md) | UiNumberPolicy / UiSliderWindow、三类滑块核心、样式注入 |
