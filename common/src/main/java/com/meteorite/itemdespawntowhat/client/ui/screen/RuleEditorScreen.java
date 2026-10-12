@@ -1677,6 +1677,12 @@ public final class RuleEditorScreen extends Screen {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // F1–F12 属于原版全局热键（F2 截图、F3 调试、F11 全屏）。原版 KeyboardHandler 在
+        // screen.keyPressed 返回 true 时会直接 return、不再把该键喂给 KeyMapping，因此本模组的
+        // 任何界面都不得消费功能键；这里在最外层统一放行，弹层与页面都覆盖到。
+        if (keyCode >= GLFW.GLFW_KEY_F1 && keyCode <= GLFW.GLFW_KEY_F12) {
+            return false;
+        }
         if (modals.isVisible()) {
             return modals.keyPressed(keyCode, scanCode, modifiers);
         }

@@ -248,16 +248,25 @@ public final class UiModalStack implements UiWidget {
         if (modal == null) {
             return false;
         }
-        if (UiHistoryDispatcher.dispatch(keyCode, scanCode, modifiers, modal::keyPressed, shortcut -> {
-            if (historyTarget != null && historyTarget.apply(shortcut)) {
-                for (UiModal current : List.copyOf(modals)) current.historyChanged(shortcut);
-            }
-        })) return true;
+        if (UiHistoryDispatcher.dispatch(keyCode, scanCode, modifiers, modal::keyPressed, this::requestHistory)) return true;
         if (modal.keyPressed(keyCode, scanCode, modifiers)) {
             return true;
         }
         focusManager.setSpaceActivates(focusManager.focused() instanceof UiButton);
         return focusManager.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    /**
+     * 以编程方式请求一次撤销或重做，链路与 Ctrl+Z 完全一致：先交给宿主历史目标，
+     * 成功后再通知所有已打开的模态。界面按钮用它，避免绕过宿主页面重建与模态的失效守卫。
+     */
+    public void requestHistory(UiHistoryShortcut shortcut) {
+        if (historyTarget == null || !historyTarget.apply(shortcut)) {
+            return;
+        }
+        for (UiModal current : List.copyOf(modals)) {
+            current.historyChanged(shortcut);
+        }
     }
 
     @Override

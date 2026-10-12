@@ -9,7 +9,7 @@
 |---|---|---|---|
 | 基本页 INFO | `RuleEditorEditPages#buildInfo` | 规则身份与元信息：只读规则 ID、显示名、备注、启用开关、「恢复自动命名」按钮、优先级 | 条件、消耗、结果 |
 | 输入页 INPUT | `RuleEditorEditPages#buildInput` | 来源与来源消耗、催化剂固定成本开关与表单、**存在条件（催化剂/流体）的唯一入口**、消耗参数主入口 | 组合结构、结果 |
-| 触发页 TRIGGER | `RuleEditorEditPages#buildTrigger` | 触发原因勾选、延迟秒数、条件树卡片与大屏 `ConditionTreeOverlay`：结构增删/取反/组合及叶参数侧栏 | 输入页的来源与固定消耗 |
+| 触发页 TRIGGER | `RuleEditorEditPages#buildTrigger` | 触发原因勾选、延迟秒数、条件树卡片与画布页 `ConditionTreeOverlay`：结构增删/取反/组合及叶参数就地编辑框 | 输入页的来源与固定消耗 |
 | 结果页 RESULTS | `RuleEditorEditPages#buildResults` | 组合方式、方案（outcomes）与动作、效果参数 | 条件树、固定成本 |
 
 - 页枚举 `Page`、`switch (page)` 派发、版面与渲染入口、以及各页自己保存的滚动偏移表（`scrollOffsets`）都在 `RuleEditorEditPages` 内。
@@ -117,19 +117,23 @@
 - 启用开关根据当前规则体的 `enabled` 显示下一步动作：省略或为 `true` 时显示“停用”，为 `false` 时显示“启用”。切换后标签随草稿状态更新。
 - “更多”提供屏蔽或取消屏蔽、恢复原始；屏蔽开关根据当前规则体的 `delete` 显示下一步动作。删除使用顶部入口并保留确认弹窗。
 
-## 11. 条件树大屏编辑作用域
+## 11. 条件树画布页
 
-条件卡片显示当前缩进树和参数摘要，通过“编辑条件树”进入大屏叠加页。`ConditionSupport.openTree` 由 `RuleEditorEditPages` 提供，范围来自表单的 `draftPath(conditions)`，适用于规则级及动作局部条件。条件编辑无需先填完整条规则。
+条件卡片显示当前条件摘要，通过「编辑条件树」进入**整页画布页**（`ConditionTreeOverlay`，由 `UiModal` 承载）。`ConditionSupport.openTree` 由 `RuleEditorEditPages` 提供，范围来自表单的 `draftPath(conditions)`，规则级与动作局部共用同一条路径；条件编辑不要求整条规则已填完整。
 
-叠加页默认缩进树。宽屏左树右参数，窄屏可切换树/参数；顶栏提供添加、AND/OR、NOT、删除、同级顺序和展开/折叠。空树与缺项 NOT 的添加入口保持可用，未知叶只限制参数编辑。底部显示完整树诊断、未完成输入或节点/叶/深度统计。
+**版面**：整页是条件树画布（`UiConditionGraphEditor`），四周是外壳——左上角水平图标功能栏（撤销 / 重做 / JSON 轮询 / 帮助）、左缘竖直工具列共 7 格（添加条件 / 分组 / 取反 / 删除 / 上移 / 下移 / 包组）、底部状态栏（错误、未完成输入、条件 / 叶 / 深度统计与缩放比例）。**没有折叠与展开**：画布始终展示整棵树，节点位置由结构自动布局，根在顶部。
 
-叶弹窗与侧栏共用 `createLeafParameters`，包括描述符、数量默认值、目录/建议、区间/时间条及存在条件关联写入。每个合法字段完成编辑才写配置历史；侧栏切节点前提交合法值，非法文本保留在 EditSession。参数接受后重新读取当前条件范围，树摘要同步更新。
+**手势**：空白区左键拖拽 = 平移画布，**Shift + 拖拽 = 框选**，中键或空格 + 左键也是平移；滚轮以鼠标位置为锚点按 50 / 100 / 150 / 200 四档缩放；`Ctrl+0` 适配视图、`Ctrl+Home` 回到根。点阵网格随内容平移，步长随档位变化。键盘支持方向键导航、`Ctrl+A`、`Ctrl+C/V`、`Del` 与 `Esc` 取消当前手势；文本框聚焦时画布快捷键让位。
 
-树操作经 Kit 绑定回调，在同一事务中写当前条件 JSON、迁移所有结构共享节点的输入路径，并清除删除叶的输入。判断使用节点对象身份，内容相同的叶不按类型或 record 相等性混同。选择和折叠属于纯视图事件。返回与 Esc 结束捕获并保留草稿，只有主编辑器保存提交正式配置。
+**添加条件**：点工具列「添加条件」后，所有可添加位置显示 `[+]` 热区；点击热区弹出**可搜索的类型列表**，选定后直接进入参数编辑。整棵树为空时，画布中央常驻一个可点的大 `[+]`，点击同样直接开类型列表。「分组」与「包组」工具不直接创建：先在热区处（包组在选区附近）弹出 ∧ / ∨ 小菜单（全部满足 / 任一满足），选定后才插入容器或包裹选区。
 
-`UiModal.onHistoryChanged` 回填当前条件并刷新侧栏；动作局部树遇到外层动作/方案结构恢复、归属类型序列变化或范围删除时关闭，只卸载旧视图，不提交旧参数到新的索引归属。规则级条件范围保持稳定。正常返回的 `onClosed` 完成合法字段、保留非法文本和卸载控件。参数字段问题可打开大屏页，展开对应祖先并聚焦侧栏字段。模态键盘继续遵守文本优先及当前规则独立历史。
+**参数编辑**：选中条件叶后，参数编辑框在**该卡片下方就地展开**（越界翻到卡片上方），约 160ms 高度 + 透明度动画，`Esc` 收起。容器节点（全部满足 / 任一满足 / 取反）没有参数，不展开。表单仍由 `createLeafParameters` 装配——描述符、数量默认值、目录 / 建议、区间 / 时间条与存在条件关联写入全部复用，只是容器由侧栏换成内联框（`ConditionTreeChrome.Inline` 适配 `LeafPanel` + `FormView`）。
 
-条件树叠加页顶部可在树与只读 JSON 之间切换，默认树视图。JSON 只展示当前规则级或动作局部的 conditions 表达式，按缩进排版，可选择复制或整段复制；空表达式显示字段省略提示。非法文本留在会话缓冲，JSON 保留最近已接受值并显示提示。视图切换不新增配置历史，源码不接受直接修改。
+**草稿与历史**：树操作经 Kit 绑定回调，在同一事务中写当前条件 JSON、迁移所有结构共享节点的输入路径，并清除删除叶的输入；判断使用节点对象身份，内容相同的叶不按类型或 record 相等性混同。参数编辑只在字段完成时写一条配置历史；内联框切换节点前提交合法值，非法文本保留在 EditSession。`UiModal.onHistoryChanged` 回填当前条件并收起内联框；动作局部树遇到外层动作 / 方案结构恢复、归属类型序列变化或范围删除时关闭，只卸载旧视图，不提交旧参数到新的索引归属。正常返回的 `onClosed` 完成合法字段、保留非法文本并卸载控件。参数字段问题可打开画布页、定位到对应节点并就地展开编辑框。模态键盘遵守文本优先与当前规则独立历史。
+
+**只读 JSON**：功能栏的轮询按钮在树与只读 JSON 之间切换，默认树视图。JSON 只展示当前规则级或动作局部的 conditions 表达式，按缩进排版，可选择复制或整段复制；空表达式显示字段省略提示。非法文本留在会话缓冲，JSON 保留最近已接受值并显示提示。视图切换不新增配置历史，源码不接受直接修改。
+
+**视觉**：画布页与内联框使用扁平皮肤（`UiFlatPalette` / `UiFlatSkin`：1 像素同色描边 + 灰阶层次，无立体凸凹与阴影）；其它编辑页继续使用 `UiPalette` / `UiTheme`，两者互不影响。
 
 ## 12. 外层结构变化与保存回显
 
@@ -146,7 +150,7 @@
 | `gui.itemdespawntowhat.edit.*` | 界面文本：标题、按钮、字段标签、枚举值、类型显示名 | `gui.itemdespawntowhat.edit.field.y_level.min` |
 | `itemdespawntowhat.edit.*` | 协议回执与校验问题的消息码（服务端生成、客户端翻译） | `itemdespawntowhat.edit.status.lock_busy` |
 
-字段标签 `gui.itemdespawntowhat.edit.field.<类型 path>.<字段>`、枚举值 `gui.itemdespawntowhat.edit.enum.<组>.<值>`、类型显示名 `gui.itemdespawntowhat.edit.<condition|effect>.<类型>`。`en_us.json` 与 `zh_cn.json` 的键集合必须完全一致（当前各 991 个键）。协议回执状态码见 [编辑协议](../backend/modules/edit-protocol.md) §4.2。
+字段标签 `gui.itemdespawntowhat.edit.field.<类型 path>.<字段>`、枚举值 `gui.itemdespawntowhat.edit.enum.<组>.<值>`、类型显示名 `gui.itemdespawntowhat.edit.<condition|effect>.<类型>`。`en_us.json` 与 `zh_cn.json` 的键集合必须完全一致（当前各 995 个键）。协议回执状态码见 [编辑协议](../backend/modules/edit-protocol.md) §4.2。
 
 ## 14. 目录选择页样板
 

@@ -57,11 +57,18 @@
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTarget}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiAction}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiNineSlice}</li>
+ *   <li>画布原语：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTidyTreeLayout}（固定层高清量树布局）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiDotGrid}（随缩放换步长的点阵网格）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiOrthoLink}（正交折线）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiRubberBand}（框选）</li>
+ *   <li>图标与调板：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiIconSheet}（规则网格贴图切片）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiIconStrip}（水平功能栏 / 竖直工具列）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiFloatingPanel}（拖动 / 折叠 / 贴边吸附 / 贴底抽屉）</li>
  * </ul>
  *
  * <p><b>内部实现</b>（同为 {@code public}，但不承诺兼容，宿主不应依赖）：没有独立的内部类型，
  * 内部口径都落在各类的非公开成员上——{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiDocument}
- * 的排版缓存与私有几何公式、{@code UiMetrics} 的计时细节、{@code UiTransform} 的裁剪工具等。
+ * 的排版缓存与私有几何公式、{@code UiMetrics} 的计时细节等。
  * 它们可以随实现改动而不进变更记录。</p>
  *
  * <p><b>依赖方向</b>：本包只依赖 Minecraft 客户端通用类型、Java 标准库、JOML、LWJGL（按键常量）与

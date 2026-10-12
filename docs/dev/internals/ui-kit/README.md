@@ -44,6 +44,7 @@ powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1
 | 滑块样式 | `UiSliderStyle`、`UiSliderPainter`、`PixelSliderPainter` |
 | 焦点 | `UiFocusTarget`、`UiFocusManager` |
 | 导航 / 灯箱 / 几何 | `UiNavigationHistory`；`UiLightbox`、`UiImageView`、`LightboxImage`；`UiRect`、`UiTarget`、`UiAction`、`UiNineSlice` |
+| 画布与树布局 | `UiTidyTreeLayout`、`UiDotGrid`、`UiOrthoLink`、`UiRubberBand`、`UiIconSheet`、`UiIconStrip`、`UiFloatingPanel` |
 
 调用示例类：`UiSliderExamples`（无规则语义，只有装配与事件顺序）。
 
@@ -72,7 +73,7 @@ powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1
 校验顺序（与项目验证协议一致）：
 
 1. 用 IDE 语言服务检查改动的 Java 文件；
-2. `powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1` 校验依赖边界（当前：53 个文件、169 条 import、0 处违规）；
+2. `powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1` 校验依赖边界（当前：60 个文件、193 条 import、0 处违规）；
 3. `powershell -ExecutionPolicy Bypass -File tools/dsh-build.ps1 -Tasks "build"`。
 
 「拆包就绪门槛」（本仓库暂不把 kit 拆成独立 Gradle 模块/子包的理由）：

@@ -1638,6 +1638,10 @@ public final class RuleEditorEditPages {
         UiModal modal = UiModal.create(font).title(Component.translatable(UI + "tree.title"))
                 .preferredWidth(Math.max(UiModal.MIN_WIDTH, host.screenWidth() - TREE_OVERLAY_MARGIN))
                 .contentWidget(overlay, Math.max(0, host.screenHeight() - TREE_OVERLAY_MARGIN - chromeReserve));
+        // 功能栏的撤销/重做按钮与 Ctrl+Z 走同一条历史链路
+        overlay.setHistoryActions(
+                () -> host.modals().requestHistory(com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut.UNDO),
+                () -> host.modals().requestHistory(com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut.REDO));
         modal.onClosed(() -> {
             overlay.unmount();
             owner.reload();

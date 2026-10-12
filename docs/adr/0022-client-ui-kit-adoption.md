@@ -14,7 +14,7 @@
 3. **保持 kit 通用**：kit 不得 import 本项目其他包，不得依赖 `core.model`，不得 import 平台 API，也不得引用 `Constants.MOD_ID`；仅依赖 Minecraft 客户端通用类型、Java 标准库、JOML、LWJGL 与 JetBrains annotations。
 4. **不复制贴图资源**：`UiNineSlice` 与 `UiIcon.Sprite` 使用的纹理 id 由调用方提供；主题层（`client/ui/theme/`）当前用纯色像素边框绘制，需要美术资源的位置以 `TODO(美术)` 注释标出。
 5. **主题与控件分层**：kit 只提供通用布局/交互原语；灰色像素主题在 `client/ui/theme/`，本模组控件在 `client/ui/widget/`，业务屏幕在 `client/ui/screen/`。
-6. **视觉验收基线**：最低 320×240 GUI 逻辑坐标；小尺寸页签可滚动、参数转单列；大屏扩宽但不留大片空白；禁止现代网页式圆角卡片；颜色必须辅以文字或图标。
+6. **视觉验收基线**：最低 320×240 GUI 逻辑坐标；小尺寸页签可滚动、参数转单列；大屏扩宽但不留大片空白；颜色必须辅以文字或图标。圆角卡片的取舍与画布页的扁平皮肤见 [ADR-0028](0028-canvas-page-and-flat-skin.md)。
 
 ## 理由
 
@@ -26,7 +26,7 @@
 
 ## 后果
 
-- `client/ui/kit/` 按 [ADR-0025](0025-reusable-client-ui-kit-boundary.md) 作为**可回流的维护副本**：改动需保持与源提交可逐文件比对。
+- `client/ui/kit/` 按 [ADR-0025](0025-reusable-client-ui-kit-boundary.md) 作为**可回流的维护副本**：改动以记录来源与差异的方式维护，公开面扩张见 [ADR-0028](0028-canvas-page-and-flat-skin.md)。
 - 主题层承担视觉规范（灰色像素风、状态色 + 文字/图标双编码），控件层承担本模组交互（输入框、列表、条件树等）。
 - 贴图缺失期间，相关位置以 `TODO(美术)` 标记，验收时按「无贴图不阻塞功能」处理。
 - 契约 §5 的尺寸与缩放验收（320×240 与 1920×1080、缩放 1x/2x/3x、无文本溢出与控件重叠）由主题与控件层共同承担。
