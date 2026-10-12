@@ -25,8 +25,8 @@ import org.lwjgl.glfw.GLFW;
  * {@link UiInputContext}。条件树外壳只与本类交互：转发与上下文构造集中在这里，
  * 不在外壳各处散落 kit 调用，kit 签名调整时也只需改这一个文件。</p>
  *
- * <p>叶子参数表单不再走浮动调板，而是由 {@link Inline} 适配成画布的内联编辑框：
- * 几何、动画与 pose 变换由画布负责，适配器只把内容坐标系下的事件转发给
+ * <p>叶子参数表单由 {@link Inline} 适配成画布右侧的参数编辑框：
+     * 几何、动画与裁剪由画布负责，适配器只把 GUI 屏幕坐标下的事件转发给
  * {@link LeafPanel}。</p>
  */
 final class ConditionTreeChrome {
@@ -118,8 +118,7 @@ final class ConditionTreeChrome {
      * 内联参数框：把 {@link LeafPanel}（内部承载 {@link FormView}、目录按钮、
      * 区间条与说明行）接进画布冻结的 {@link UiConditionGraphEditor.InlineEditor} 契约。
      *
-     * <p>坐标一律为内容坐标系：画布调用前已入栈 pose 变换，因此这里把传入坐标原样当作面板坐标
-     * 转发，不做屏幕坐标换算。</p>
+     * <p>坐标一律为 GUI 屏幕坐标：参数框固定在画布右侧，不参与画布的平移与缩放。</p>
      */
     static final class Inline implements UiConditionGraphEditor.InlineEditor {
 
@@ -129,7 +128,7 @@ final class ConditionTreeChrome {
         private final LeafPanel panel;
         private final FormView form;
         // 当前帧鼠标下的字段提示（校验问题优先）：内联框契约没有 tooltip 通道，
-        // 由适配器在内容坐标下缓存，外壳随后用屏幕坐标绘制，避免提示随画布缩放
+        // 由适配器在 GUI 屏幕坐标下缓存，外壳随后绘制
         private @Nullable Component hoverTooltip;
 
         Inline(LeafPanel panel, FormView form) {

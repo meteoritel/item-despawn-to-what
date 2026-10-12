@@ -410,7 +410,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
             parameterPath = scope + next.substring(ConditionTreeContract.ROOT_PATH.length()) + "." + RuleFields.CONDITION;
             parameterType = leaf.condition().type().toString();
             parameters = parameterFactory.create(parameterPath, leaf);
-            // 内联框锚定当前主选中节点，几何、动画与裁剪由画布负责
+            // 参数框关联当前主选中节点；画布负责右侧吸附、滑入动画与裁剪。
             inlineEditor = new ConditionTreeChrome.Inline(parameters.panel(), parameters.form());
             editor.setInlineEditor(inlineEditor, editor.tree().selected());
         } else {
@@ -659,8 +659,8 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         } else if (!sourceView && toolColumn.bounds().contains(mouseX, mouseY)) {
             tip = toolColumn.tooltipAt(mouseX, mouseY);
         }
-        // 内联框的字段提示由适配器在内容坐标下缓存，优先于画布卡片提示
-        if (tip == null && inlineEditor != null) {
+        // 参数框的字段提示由适配器在 GUI 屏幕坐标下缓存，类型列表打开时不显示旧表单提示。
+        if (tip == null && inlineEditor != null && !editor.hasPopup()) {
             tip = inlineEditor.hoverTooltip();
         }
         if (tip == null && editor.isVisible()) {

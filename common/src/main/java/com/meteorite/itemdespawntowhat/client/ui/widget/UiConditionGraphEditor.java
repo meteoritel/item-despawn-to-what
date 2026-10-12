@@ -11,6 +11,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiOrthoLink;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRubberBand;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTidyTreeLayout;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTransform;
@@ -64,7 +65,7 @@ import org.lwjgl.glfw.GLFW;
  * </ul>
  *
  * <p>控件不持有正式保存入口，候选修改通过绑定回调交给宿主；参数编辑既可以交给表单层
- * （{@link #setOnEditLeaf(Consumer)}），也可以由宿主装载 {@link InlineEditor} 在锚点卡片下方内联展开，
+ * （{@link #setOnEditLeaf(Consumer)}），也可以由宿主装载 {@link InlineEditor} 在画布右侧展开，
  * 见 {@link #setInlineEditor(InlineEditor, UiTreePath)}。分组与包组的「全部满足 / 任一满足」由画布内的
  * 小菜单选择，外壳只需调用 {@link #beginAddGroupWithKind()} 与 {@link #beginWrapWithKind()}。</p>
  */
@@ -121,26 +122,22 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     // 拖拽幽灵距指针的像素
     private static final int DRAG_GHOST_GAP = 6;
 
+    // ---- 右侧面板：类型选择与参数编辑共用几何、动画与皮肤 ----
+
+    private static final int SIDE_PANEL_MAX_WIDTH = 220;
+    private static final int SIDE_PANEL_PADDING = 4;
+    private static final int SIDE_PANEL_HEADER = 14;
+    private static final long SIDE_PANEL_ANIM_MS = 160L;
+    private static final int SIDE_PANEL_LAYER = UiRenderLayers.FOREGROUND + UiRenderLayers.ICON;
+    private static final String PICKER_HINT_KEY = "gui.itemdespawntowhat.edit.picker.mouse_hint";
+
     // ---- 类型选择框 ----
 
-    private static final int PICKER_MAX_WIDTH = 220;
-    private static final int PICKER_MARGIN = 8;
-    private static final int PICKER_HEADER = 14;
     private static final int PICKER_SEARCH_ROW = 14;
     private static final int PICKER_ROW_HEIGHT = 12;
-    private static final int PICKER_MAX_ROWS = 8;
     private static final int PICKER_FOOTER = 12;
     // 筛选文本长度上限
     private static final int PICKER_FILTER_MAX = 32;
-
-    // ---- 内联参数编辑框 ----
-
-    // 内联框最小宽度（内容单位）
-    private static final int INLINE_MIN_WIDTH = 140;
-    // 内联框与锚点卡片之间的内容像素间距
-    private static final int INLINE_GAP = 6;
-    // 内联框展开 / 收起的动画时长（毫秒）
-    private static final long INLINE_ANIM_MS = 160L;
 
     // ---- 空树中央大热区 ----
 
@@ -215,16 +212,15 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     private record Hotspot(@Nullable UiTreePath parent, int index, UiRect rect) {}
 
     /**
-     * 内联参数编辑框的内容契约：几何、绘制与输入坐标一律为**内容坐标系**（与卡片同一坐标系）。
+     * 参数编辑框的内容契约：几何、绘制与输入坐标一律为 GUI 屏幕坐标，不随画布平移或缩放。
      *
-     * <p>画布负责把屏幕坐标换算成内容坐标后再转发，并按 160ms ease-out 动画只改变高度与透明度；
-     * 宿主只需实现表单本体。</p>
+     * <p>画布负责右侧面板的背景、标题、裁剪与 160ms ease-out 滑入动画；宿主只需实现表单本体。</p>
      */
     public interface InlineEditor {
         int preferredHeight(int width);
-        UiRect bounds();                       // 内容坐标系
+        UiRect bounds();                       // GUI 屏幕坐标
         void setBounds(int x, int y, int width, int height);
-        void render(GuiGraphics graphics, Font font, int mouseX, int mouseY);   // 内容坐标系
+        void render(GuiGraphics graphics, Font font, int mouseX, int mouseY);   // GUI 屏幕坐标
         boolean mouseClicked(double x, double y, int button);
         boolean mouseDragged(double x, double y, int button, double dragX, double dragY);
         boolean mouseReleased(double x, double y, int button);
@@ -232,6 +228,42 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         boolean keyPressed(int keyCode, int scanCode, int modifiers);
         boolean charTyped(char codePoint, int modifiers);
         boolean isVisible();
+    }
+
+    // 面板只沿水平方向移动，内容始终按完整尺寸布局，避免动画改变表单行高或滚动范围。
+    private static final class SidePanelAnimation {
+        private float openness;
+        private float from;
+        private float target;
+        private long startedAt;
+
+        void start(float next) {
+            tick();
+            from = openness;
+            target = next;
+            startedAt = Util.getMillis();
+        }
+
+        void tick() {
+            if (openness == target) return;
+            long duration = Math.max(1L, Math.round(SIDE_PANEL_ANIM_MS * Math.abs(target - from)));
+            float progress = Math.clamp((Util.getMillis() - startedAt) / (float) duration, 0.0F, 1.0F);
+            float remaining = 1.0F - progress;
+            float eased = 1.0F - remaining * remaining * remaining;
+            openness = progress >= 1.0F ? target : from + (target - from) * eased;
+        }
+
+        void reset() {
+            openness = 0.0F;
+            from = 0.0F;
+            target = 0.0F;
+        }
+
+        UiRect bounds(UiRect viewport) {
+            int width = Math.min(SIDE_PANEL_MAX_WIDTH, viewport.width());
+            int slide = Math.round(width * (1.0F - openness));
+            return new UiRect(viewport.right() - width + slide, viewport.y(), width, viewport.height());
+        }
     }
 
     // 分组方式：全部满足 / 任一满足
@@ -344,16 +376,19 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     private UiRect pickerListRect = new UiRect(0, 0, 0, 0);
     private int pickerVisibleRows = 1;
     private List<ConditionTreeContract.TypeOption> filteredOptions = List.of();
+    private final SidePanelAnimation pickerAnimation = new SidePanelAnimation();
+    private boolean pickerPointerKnown;
+    private int pickerMouseX;
+    private int pickerMouseY;
 
-    // 内联参数编辑框状态；几何每次都从锚点卡片重新推导
+    // 参数框锚点用于校验所属叶；面板几何只依赖画布边界与滑入进度。
     private @Nullable InlineEditor inlineEditor;
     private @Nullable UiTreePath inlineAnchorPath;
     private boolean inlineClosing;
     private boolean inlineCaptured;
-    private float inlineOpenness;
-    private float inlineAnimFrom;
-    private float inlineAnimTarget;
-    private long inlineAnimStart;
+    private final SidePanelAnimation inlineAnimation = new SidePanelAnimation();
+    private UiRect inlinePanelRect = new UiRect(0, 0, 0, 0);
+    private Component inlineTitle = Component.translatable("gui.itemdespawntowhat.edit.diagram.leaf");
 
     // 分组 / 包组的「全部满足 / 任一满足」小菜单
     private boolean groupKindPending;
@@ -1153,9 +1188,10 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         boolean emptyTree = expression.root() == null;
         double localX = transform.toLocalX(mouseX);
         double localY = transform.toLocalY(mouseY);
-        hoveredNode = !pickerOpen && !kindMenuOpen && inside ? nodeAt(localX, localY) : null;
+        boolean overPanel = inlineEditorHit(mouseX, mouseY);
+        hoveredNode = !pickerOpen && !kindMenuOpen && !overPanel && inside ? nodeAt(localX, localY) : null;
         // 空树空闲态也要亮出中央大 [+]，让人一眼看出这里可以点
-        hoveredHotspot = (addMode || emptyTree) && !pickerOpen && !kindMenuOpen && inside
+        hoveredHotspot = (addMode || emptyTree) && !pickerOpen && !kindMenuOpen && !overPanel && inside
                 ? hotspotAt(localX, localY) : null;
 
         drawCanvasBackground(graphics);
@@ -1174,8 +1210,6 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             if (move.isActive()) {
                 drawDropMarker(graphics);
             }
-            // 内联参数编辑框画在卡片与连线之上、拖拽浮影之下
-            renderInlineEditor(graphics, renderFont, mouseX, mouseY);
         } finally {
             graphics.pose().popPose();
             UiTransform.disableScissor(graphics);
@@ -1189,9 +1223,16 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         if (move.isActive()) {
             drawDragGhost(graphics, renderFont, mouseX, mouseY);
         }
+        if (!pickerOpen) {
+            renderInlineEditor(graphics, renderFont, mouseX, mouseY);
+        }
         if (pickerOpen) {
+            pickerAnimation.tick();
             updatePickerRects();
-            renderPicker(graphics, renderFont);
+            updatePickerHover(mouseX, mouseY);
+            renderSidePanel(graphics, pickerRect,
+                    Component.translatable("gui.itemdespawntowhat.edit.picker.title"),
+                    () -> renderPicker(graphics, renderFont));
         }
         if (kindMenuOpen) {
             updateKindMenuRect();
@@ -1384,8 +1425,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     // ---- 内联参数编辑框 ----
 
     /**
-     * 装载内联参数编辑框：几何由锚点卡片推导（宽度 = max(卡片宽, 140)，紧贴卡片下沿 6 内容像素，
-     * 下方越出视口时翻到卡片上方），并以 160ms ease-out 展开高度与透明度。
+     * 装载参数编辑框：锚点关联当前条件叶，面板以 160ms ease-out 从画布右侧滑入并贴住右边界。
      * 传入 null 等价于 {@link #clearInlineEditor()}。
      */
     public void setInlineEditor(@Nullable InlineEditor editor, @Nullable UiTreePath anchorPath) {
@@ -1403,22 +1443,24 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         inlineClosing = false;
         inlineCaptured = false;
         if (restart) {
-            inlineOpenness = 0.0F;
+            inlineAnimation.reset();
         }
-        startInlineAnimation(1.0F);
+        inlineAnimation.start(1.0F);
     }
 
-    /** 收起内联参数编辑框：先按相同动画收缩，动画结束后再释放；未装载时不做任何事。 */
+    /** 收起参数编辑框：向右滑出，动画结束后释放；未装载时不做任何事。 */
     public void clearInlineEditor() {
         if (inlineEditor == null || inlineClosing) {
             return;
         }
-        if (inlineOpenness <= 0.0F) {
+        inlineAnimation.tick();
+        if (inlineAnimation.openness <= 0.0F) {
             releaseInlineEditor();
             return;
         }
         inlineClosing = true;
-        startInlineAnimation(0.0F);
+        inlineCaptured = false;
+        inlineAnimation.start(0.0F);
     }
 
     /** {@return 是否已装载内联参数编辑框（含收起动画期间）} */
@@ -1426,33 +1468,14 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         return inlineEditor != null;
     }
 
-    private void startInlineAnimation(float target) {
-        inlineAnimFrom = inlineOpenness;
-        inlineAnimTarget = Math.clamp(target, 0.0F, 1.0F);
-        inlineAnimStart = Util.getMillis();
-    }
-
-    // 按 ease-out 推进展开度：只影响高度与透明度；关闭态动画结束后释放编辑框
+    // 参数框关闭动画结束后释放，选择框与参数框复用同一套动画曲线。
     private void tickInlineAnimation() {
         if (inlineEditor == null) {
             return;
         }
-        if (inlineAnimTarget == inlineOpenness) {
-            if (inlineClosing) {
-                releaseInlineEditor();
-            }
-            return;
-        }
-        float span = Math.abs(inlineAnimTarget - inlineAnimFrom);
-        long durationMs = Math.max(1L, Math.round(INLINE_ANIM_MS * span));
-        float progress = Math.clamp((Util.getMillis() - inlineAnimStart) / (float) durationMs, 0.0F, 1.0F);
-        float eased = 1.0F - (1.0F - progress) * (1.0F - progress) * (1.0F - progress);
-        inlineOpenness = Math.clamp(inlineAnimFrom + (inlineAnimTarget - inlineAnimFrom) * eased, 0.0F, 1.0F);
-        if (progress >= 1.0F) {
-            inlineOpenness = inlineAnimTarget;
-            if (inlineClosing) {
-                releaseInlineEditor();
-            }
+        inlineAnimation.tick();
+        if (inlineClosing && inlineAnimation.openness <= 0.0F) {
+            releaseInlineEditor();
         }
     }
 
@@ -1461,9 +1484,8 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         inlineAnchorPath = null;
         inlineClosing = false;
         inlineCaptured = false;
-        inlineOpenness = 0.0F;
-        inlineAnimFrom = 0.0F;
-        inlineAnimTarget = 0.0F;
+        inlineAnimation.reset();
+        inlinePanelRect = new UiRect(0, 0, 0, 0);
     }
 
     /*
@@ -1480,70 +1502,72 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         clearInlineEditor();
     }
 
-    // 内联框几何：内容坐标系；高度按当前展开度裁切
+    // 面板按 GUI 屏幕坐标布局；表单只在固定的内容区内滚动。
     private void updateInlineBounds() {
-        InlineEditor editor = inlineEditor;
-        if (editor == null) {
-            return;
-        }
-        ConditionNode anchor = inlineAnchorPath == null ? null : nodesByPath.get(inlineAnchorPath);
-        GraphNode wrapper = anchor == null ? null : wrappers.get(anchor);
-        if (wrapper == null) {
-            clearInlineEditor();
-            return;
-        }
-        UiRect card = cardRect(wrapper);
-        UiRect viewport = transform.viewport();
-        int viewLeft = (int) Math.ceil(transform.toLocalX(viewport.x()));
-        int viewTop = (int) Math.ceil(transform.toLocalY(viewport.y()));
-        int viewRight = (int) Math.floor(transform.toLocalX(viewport.right()));
-        int viewBottom = (int) Math.floor(transform.toLocalY(viewport.bottom()));
-        int viewWidth = Math.max(1, viewRight - viewLeft);
-        int width = Math.clamp(Math.max(card.width(), INLINE_MIN_WIDTH),
-                Math.min(INLINE_MIN_WIDTH, viewWidth), viewWidth);
-        int fullHeight = Math.max(0, editor.preferredHeight(width));
-        int x = Math.clamp(card.x() + (card.width() - width) / 2, viewLeft, Math.max(viewLeft, viewRight - width));
-        int y = card.bottom() + INLINE_GAP;
-        if (y + fullHeight > viewBottom) {
-            // 下方放不下就翻到卡片上方
-            y = card.y() - INLINE_GAP - fullHeight;
-        }
-        y = Math.clamp(y, viewTop, Math.max(viewTop, viewBottom - fullHeight));
-        int openHeight = Math.clamp((int) Math.ceil(fullHeight * Math.clamp(inlineOpenness, 0.0F, 1.0F)),
-                0, fullHeight);
-        editor.setBounds(x, y, width, openHeight);
-    }
-
-    private void renderInlineEditor(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
         tickInlineAnimation();
         InlineEditor editor = inlineEditor;
         if (editor == null) {
             return;
         }
+        ConditionNode anchor = inlineAnchorPath == null ? null : nodesByPath.get(inlineAnchorPath);
+        if (!(anchor instanceof ConditionNode.Leaf)) {
+            clearInlineEditor();
+        } else {
+            inlineTitle = row1Label(anchor);
+        }
+        if (inlineEditor == null) return;
+        inlinePanelRect = inlineAnimation.bounds(bounds);
+        int width = Math.max(0, inlinePanelRect.width() - SIDE_PANEL_PADDING * 2);
+        int availableHeight = Math.max(0, inlinePanelRect.height() - SIDE_PANEL_HEADER - SIDE_PANEL_PADDING * 2);
+        // 全高侧面板直接分配内容区，不做临时大视口测量，保留长表单的滚动位置。
+        editor.setBounds(inlinePanelRect.x() + SIDE_PANEL_PADDING,
+                inlinePanelRect.y() + SIDE_PANEL_HEADER + SIDE_PANEL_PADDING, width, availableHeight);
+    }
+
+    private void renderInlineEditor(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
         updateInlineBounds();
-        editor = inlineEditor;
+        InlineEditor editor = inlineEditor;
         if (editor == null || !editor.isVisible()) {
             return;
         }
-        UiRect rect = editor.bounds();
-        if (rect.width() <= 0 || rect.height() <= 0) {
+        if (inlinePanelRect.width() <= 0 || inlinePanelRect.height() <= 0) {
             return;
         }
-        float alpha = Math.clamp(inlineOpenness, 0.0F, 1.0F);
-        int localX = (int) Math.round(transform.toLocalX(mouseX));
-        int localY = (int) Math.round(transform.toLocalY(mouseY));
-        // 展开过程中裁切到当前高度，避免表单内容先于高度冒出来
-        UiTransform.enableScissor(graphics, rect);
-        graphics.setColor(1.0F, 1.0F, 1.0F, alpha);
+        renderSidePanel(graphics, inlinePanelRect, inlineTitle, () -> {
+            UiTransform.enableScissor(graphics, editor.bounds());
+            try {
+                boolean interactive = !inlineClosing && bounds.contains(mouseX, mouseY)
+                        && inlinePanelRect.contains(mouseX, mouseY);
+                editor.render(graphics, renderFont, interactive ? mouseX : Integer.MIN_VALUE,
+                        interactive ? mouseY : Integer.MIN_VALUE);
+            } finally {
+                UiTransform.disableScissor(graphics);
+            }
+        });
+    }
+
+    // 面板背景、边框和标题与内容处于同一独立层，完整盖住底下的画布卡片与文字。
+    private void renderSidePanel(GuiGraphics graphics, UiRect rect, Component title, Runnable content) {
+        if (rect.width() <= 0 || rect.height() <= 0) return;
+        UiTransform.enableScissor(graphics, bounds);
         try {
-            editor.render(graphics, renderFont, localX, localY);
+            UiRenderLayers.draw(graphics, SIDE_PANEL_LAYER, () -> {
+                graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), theme.palette().canvasPickerFill());
+                graphics.fill(rect.x() + BORDER, rect.y() + BORDER, rect.right() - BORDER,
+                        rect.y() + SIDE_PANEL_HEADER, theme.palette().canvasPickerHeaderFill());
+                drawBorder(graphics, rect, theme.palette().canvasPickerBorder());
+                graphics.drawString(font, TextScroll.trimToWidth(font, title.getString(),
+                                Math.max(0, rect.width() - SIDE_PANEL_PADDING * 2)),
+                        rect.x() + SIDE_PANEL_PADDING, rect.y() + (SIDE_PANEL_HEADER - font.lineHeight) / 2,
+                        theme.palette().canvasPickerHeaderText(), false);
+                content.run();
+            });
         } finally {
-            graphics.setColor(1.0F, 1.0F, 1.0F, 1.0F);
             UiTransform.disableScissor(graphics);
         }
     }
 
-    // 屏幕坐标是否落在内联框内容矩形内（命中前按当前几何刷新一次）
+    // 命中包含面板空白与标题，避免点穿到画布；输入坐标与表单绘制坐标相同。
     private boolean inlineEditorHit(double screenX, double screenY) {
         if (inlineEditor == null) {
             return false;
@@ -1553,7 +1577,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         if (editor == null || !editor.isVisible()) {
             return false;
         }
-        return editor.bounds().contains(transform.toLocalX(screenX), transform.toLocalY(screenY));
+        return bounds.contains(screenX, screenY) && inlinePanelRect.contains(screenX, screenY);
     }
 
     // ---- 分组方式小菜单 ----
@@ -1746,7 +1770,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             return false;
         }
         if (pickerOpen) {
-            handlePickerClick(mouseX, mouseY);
+            if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT) handlePickerClick(mouseX, mouseY);
             return true;
         }
         if (kindMenuOpen) {
@@ -1754,12 +1778,12 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             return true;
         }
         if (!bounds.contains(mouseX, mouseY)) return false;
-        // 内联框打开时鼠标命中优先：坐标换算成内容坐标后转发
+        // 右侧面板优先接收输入；关闭动画期间只阻止点穿，不再编辑字段。
         if (inlineEditorHit(mouseX, mouseY)) {
             InlineEditor editor = inlineEditor;
-            inlineCaptured = true;
-            if (editor != null) {
-                editor.mouseClicked(transform.toLocalX(mouseX), transform.toLocalY(mouseY), button);
+            inlineCaptured = !inlineClosing;
+            if (editor != null && !inlineClosing) {
+                editor.mouseClicked(mouseX, mouseY, button);
             }
             return true;
         }
@@ -1914,9 +1938,8 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             return false;
         }
         if (inlineCaptured && inlineEditor != null) {
-            double scale = transform.scale();
-            return inlineEditor.mouseDragged(transform.toLocalX(mouseX), transform.toLocalY(mouseY), button,
-                    deltaX / scale, deltaY / scale);
+            inlineEditor.mouseDragged(mouseX, mouseY, button, deltaX, deltaY);
+            return true;
         }
         if (panning) {
             double stepX = mouseX - panLastX;
@@ -2001,7 +2024,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             inlineCaptured = false;
             InlineEditor editor = inlineEditor;
             return editor == null
-                    || editor.mouseReleased(transform.toLocalX(mouseX), transform.toLocalY(mouseY), button);
+                    || editor.mouseReleased(mouseX, mouseY, button);
         }
         if (panning) {
             // 空白区按下并拖动才算平移；没有位移时按空白点击处理：清空选择
@@ -2047,6 +2070,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         if (pickerOpen) {
             if (filteredOptions.size() > 1) {
                 pickerCursor = Math.clamp(pickerCursor + (scrollY > 0.0D ? -1 : 1), 0, filteredOptions.size() - 1);
+                updatePickerRects();
             }
             return true;
         }
@@ -2054,8 +2078,10 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             kindMenuIndex = Math.clamp(kindMenuIndex + (scrollY > 0.0D ? -1 : 1), 0, GroupKind.values().length - 1);
             return true;
         }
-        if (inlineEditorHit(mouseX, mouseY) && inlineEditor != null
-                && inlineEditor.mouseScrolled(transform.toLocalX(mouseX), transform.toLocalY(mouseY), scrollY)) {
+        if (inlineEditorHit(mouseX, mouseY)) {
+            if (inlineEditor != null && !inlineClosing) {
+                inlineEditor.mouseScrolled(mouseX, mouseY, scrollY);
+            }
             return true;
         }
         // 滚轮以鼠标位置为锚点逐档缩放
@@ -2084,7 +2110,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             return true;
         }
         // 内联框优先拿键盘：文本框聚焦时画布快捷键必须让位
-        if (inlineEditor != null) {
+        if (inlineEditor != null && !inlineClosing) {
             if (inlineEditor.keyPressed(keyCode, scanCode, modifiers)) {
                 return true;
             }
@@ -2193,7 +2219,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             // 菜单只有两个固定选项，不接受文本输入
             return false;
         }
-        return inlineEditor != null && inlineEditor.charTyped(codePoint, modifiers);
+        return inlineEditor != null && !inlineClosing && inlineEditor.charTyped(codePoint, modifiers);
     }
 
     // ---- 键盘导航 ----
@@ -2304,6 +2330,9 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         pickerCursor = 0;
         pickerOffset = 0;
         pickerFilter.setLength(0);
+        pickerAnimation.reset();
+        pickerAnimation.start(1.0F);
+        pickerPointerKnown = false;
         refreshFilter();
         updatePickerRects();
     }
@@ -2316,6 +2345,8 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         filteredOptions = List.of();
         pickerCursor = 0;
         pickerOffset = 0;
+        pickerAnimation.reset();
+        pickerPointerKnown = false;
     }
 
     private void refreshFilter() {
@@ -2329,45 +2360,44 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     }
 
     private void updatePickerRects() {
-        int width = Math.clamp(bounds.width() - PICKER_MARGIN * 2, 0, PICKER_MAX_WIDTH);
-        if (width <= 0 || width > bounds.width()) {
+        pickerRect = pickerAnimation.bounds(bounds);
+        int width = pickerRect.width();
+        int availableRows = (bounds.height() - SIDE_PANEL_HEADER - PICKER_SEARCH_ROW - PICKER_FOOTER
+                - SIDE_PANEL_PADDING * 2) / PICKER_ROW_HEIGHT;
+        if (width <= SIDE_PANEL_PADDING * 2 || availableRows <= 0) {
             closePicker();
             pickerRect = new UiRect(0, 0, 0, 0);
             return;
         }
-        int maxRows = Math.max(1, (bounds.height() - PICKER_HEADER - PICKER_SEARCH_ROW - PICKER_FOOTER
-                - PICKER_MARGIN * 2) / PICKER_ROW_HEIGHT);
-        pickerVisibleRows = Math.clamp(Math.min(PICKER_MAX_ROWS, maxRows), 1, Math.max(1, filteredOptions.size()));
+        pickerVisibleRows = Math.clamp(filteredOptions.size(), 1, availableRows);
         // 光标移动到可见范围外时滚动列表，确保所有条件类型均可点选。
         pickerOffset = Math.clamp(pickerOffset, Math.max(0, pickerCursor - pickerVisibleRows + 1), pickerCursor);
         pickerOffset = Math.clamp(pickerOffset, 0, Math.max(0, filteredOptions.size() - pickerVisibleRows));
-        int height = PICKER_HEADER + PICKER_SEARCH_ROW + pickerVisibleRows * PICKER_ROW_HEIGHT + PICKER_FOOTER;
-        if (height > bounds.height()) {
-            closePicker();
-            pickerRect = new UiRect(0, 0, 0, 0);
-            return;
-        }
-        int x = bounds.x() + (bounds.width() - width) / 2;
-        int y = bounds.y() + (bounds.height() - height) / 2;
-        pickerRect = new UiRect(x, y, width, height);
-        pickerSearchRect = new UiRect(x + 2, y + PICKER_HEADER, width - 4, PICKER_SEARCH_ROW - 2);
-        pickerListRect = new UiRect(x + 1, pickerSearchRect.bottom() + 1, width - 2,
+        int x = pickerRect.x();
+        int y = pickerRect.y();
+        pickerSearchRect = new UiRect(x + SIDE_PANEL_PADDING, y + SIDE_PANEL_HEADER + SIDE_PANEL_PADDING,
+                width - SIDE_PANEL_PADDING * 2, PICKER_SEARCH_ROW - BORDER);
+        pickerListRect = new UiRect(x + SIDE_PANEL_PADDING, pickerSearchRect.bottom() + BORDER,
+                width - SIDE_PANEL_PADDING * 2,
                 pickerVisibleRows * PICKER_ROW_HEIGHT);
+    }
+
+    // 只在指针移动时切换选择，静止的鼠标不会覆盖方向键或滚轮刚选中的类型。
+    private void updatePickerHover(int mouseX, int mouseY) {
+        boolean moved = !pickerPointerKnown || mouseX != pickerMouseX || mouseY != pickerMouseY;
+        pickerPointerKnown = true;
+        pickerMouseX = mouseX;
+        pickerMouseY = mouseY;
+        if (moved) {
+            int index = pickerIndexAt(mouseX, mouseY);
+            if (index >= 0) pickerCursor = index;
+        }
     }
 
     private void renderPicker(GuiGraphics graphics, Font renderFont) {
         if (pickerRect.width() <= 0 || pickerRect.height() <= 0) {
             return;
         }
-        graphics.fill(pickerRect.x(), pickerRect.y(), pickerRect.right(), pickerRect.bottom(), theme.palette().canvasPickerFill());
-        graphics.fill(pickerRect.x() + 1, pickerRect.y() + 1, pickerRect.right() - 1,
-                pickerRect.y() + PICKER_HEADER, theme.palette().canvasPickerHeaderFill());
-        drawBorder(graphics, pickerRect, theme.palette().canvasPickerBorder());
-        graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont,
-                        Component.translatable("gui.itemdespawntowhat.edit.picker.title").getString(),
-                        pickerRect.width() - 6),
-                pickerRect.x() + 3, pickerRect.y() + 3, theme.palette().canvasPickerHeaderText(), false);
-
         graphics.fill(pickerSearchRect.x(), pickerSearchRect.y(), pickerSearchRect.right(),
                 pickerSearchRect.bottom(), theme.palette().canvasPickerInputFill());
         drawBorder(graphics, pickerSearchRect, theme.palette().canvasPickerInputBorder());
@@ -2406,9 +2436,10 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             }
         }
         graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont,
-                        Component.translatable("gui.itemdespawntowhat.edit.picker.hint").getString(),
-                        pickerRect.width() - 6),
-                pickerRect.x() + 3, pickerListRect.bottom() + 2, theme.palette().canvasPickerTextMuted(), false);
+                        Component.translatable(PICKER_HINT_KEY).getString(),
+                        Math.max(0, pickerRect.width() - SIDE_PANEL_PADDING * 2)),
+                pickerRect.x() + SIDE_PANEL_PADDING, pickerRect.bottom() - PICKER_FOOTER,
+                theme.palette().canvasPickerTextMuted(), false);
     }
 
     private void handlePickerClick(double mouseX, double mouseY) {
@@ -2424,7 +2455,8 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     }
 
     private int pickerIndexAt(double mouseX, double mouseY) {
-        if (filteredOptions.isEmpty() || !pickerListRect.contains(mouseX, mouseY)) {
+        if (!pickerOpen || !bounds.contains(mouseX, mouseY)
+                || filteredOptions.isEmpty() || !pickerListRect.contains(mouseX, mouseY)) {
             return -1;
         }
         int row = (int) ((mouseY - pickerListRect.y()) / Math.max(1, PICKER_ROW_HEIGHT));
@@ -2453,6 +2485,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
                 confirmPicker();
             }
         }
+        if (pickerOpen) updatePickerRects();
     }
 
     // 确认类型只生成默认叶节点；参数编辑由后续点击叶卡片触发。
