@@ -441,7 +441,7 @@
   "gui.itemdespawntowhat.edit.picker.title": "选择条件类型",
   "gui.itemdespawntowhat.edit.picker.empty": "没有可用的条件类型",
   "gui.itemdespawntowhat.edit.picker.hint": "↑/↓ 选择  回车 确定  Esc 取消",
-  "gui.itemdespawntowhat.edit.picker.mouse_hint": "悬停选择  点击/回车确认  Esc 取消",
+  "gui.itemdespawntowhat.edit.picker.mouse_hint": "滚轮滚动  悬停选择  点击确认",
   "gui.itemdespawntowhat.edit.issue.incomplete_group": "条件组不完整：至少需要一个子项",
   "gui.itemdespawntowhat.edit.issue.missing_condition": "有叶节点尚未选择条件",
   "gui.itemdespawntowhat.edit.issue.too_deep": "深度 %s 超过上限 %s",

@@ -1,0 +1,298 @@
+package com.meteorite.itemdespawntowhat.client.ui.widget;
+
+import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.BORDER;
+import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.CARD_PADDING_X;
+import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.CARD_PADDING_Y;
+import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphRenderer.drawBorder;
+import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphSidePanel.SIDE_PANEL_HEADER;
+import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphSidePanel.SIDE_PANEL_PADDING;
+import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlRole;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import java.util.List;
+import java.util.Locale;
+import java.util.function.Consumer;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import org.lwjgl.glfw.GLFW;
+
+/** 可搜索的条件类型选择器：独立管理过滤、光标、滚动与鼠标捕获。 */
+final class ConditionGraphTypePicker {
+    private static final int PICKER_SEARCH_ROW = 14;
+    private static final int PICKER_ROW_HEIGHT = 18;
+    private static final int PICKER_FOOTER = 12;
+    private static final int PICKER_FILTER_MAX = 32;
+    private static final int SEARCH_PADDING = 2;
+    private static final int CARET_WIDTH = 1;
+    private static final String PICKER_HINT_KEY = "gui.itemdespawntowhat.edit.picker.mouse_hint";
+    // 类型选择框状态
+    private boolean open;
+    private int cursor;
+    private final UiScrollView scroll = new UiScrollView();
+    private final StringBuilder filterText = new StringBuilder();
+    private UiRect panelRect = new UiRect(0, 0, 0, 0);
+    private UiRect searchRect = new UiRect(0, 0, 0, 0);
+    private UiRect listRect = new UiRect(0, 0, 0, 0);
+    private List<ConditionTreeContract.TypeOption> filteredOptions = List.of();
+    private final ConditionGraphSidePanel panel;
+    private boolean pointerKnown;
+    private int lastMouseX;
+    private int lastMouseY;
+
+    private final UiHostTheme theme;
+    private final Consumer<ResourceLocation> onConfirm;
+    private List<ConditionTreeContract.TypeOption> typeOptions = List.of();
+    private UiRect bounds = new UiRect(0, 0, 0, 0);
+
+    ConditionGraphTypePicker(UiHostTheme theme, Font font, Consumer<ResourceLocation> onConfirm) {
+        this.theme = theme;
+        this.onConfirm = onConfirm;
+        panel = new ConditionGraphSidePanel(theme, font);
+    }
+
+    boolean isOpen() { return open; }
+    void setOptions(List<ConditionTreeContract.TypeOption> options) { this.typeOptions = options; }
+    void setBounds(UiRect bounds) { this.bounds = bounds; }
+    void cancelCapture() { scroll.mouseReleased(); }
+
+    void open(List<ConditionTreeContract.TypeOption> options, UiRect bounds) {
+        this.typeOptions = options;
+        this.bounds = bounds;
+        open = true;
+        cursor = 0;
+        scroll.setOffset(0);
+        filterText.setLength(0);
+        panel.reset();
+        panel.start(1.0F);
+        pointerKnown = false;
+        refreshFilter();
+        updateBounds();
+    }
+
+    void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
+        panel.tick();
+        updateBounds();
+        updateHover(mouseX, mouseY);
+        panel.render(graphics, bounds,
+                Component.translatable("gui.itemdespawntowhat.edit.picker.title"),
+                () -> renderContents(graphics, renderFont));
+    }
+
+    void mouseClicked(double mouseX, double mouseY, int button) {
+        if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT) handleClick(mouseX, mouseY);
+    }
+
+    void mouseDragged(double mouseY, int button) {
+        if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT) scroll.mouseDragged(mouseY);
+    }
+
+    void mouseReleased(int button) {
+        if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT) scroll.mouseReleased();
+    }
+
+    void mouseScrolled(double mouseX, double mouseY, double scrollY) {
+        if (listRect.contains(mouseX, mouseY)) scroll.scrollBy(scrollY);
+    }
+
+    boolean charTyped(char codePoint) {
+        if (codePoint < ' ') return false;
+        if (filterText.length() < PICKER_FILTER_MAX) filterText.append(codePoint);
+        refreshFilter();
+        return true;
+    }
+
+    private void confirm() {
+        if (cursor < 0 || cursor >= filteredOptions.size()) {
+            close();
+            return;
+        }
+        ResourceLocation type = filteredOptions.get(cursor).id();
+        close();
+        onConfirm.accept(type);
+    }
+
+    void close() {
+        open = false;
+        filterText.setLength(0);
+        filteredOptions = List.of();
+        cursor = 0;
+        scroll.setOffset(0);
+        scroll.mouseReleased();
+        panel.reset();
+        pointerKnown = false;
+    }
+
+    private void refreshFilter() {
+        String needle = filterText.toString().trim().toLowerCase(Locale.ROOT);
+        filteredOptions = needle.isEmpty() ? List.copyOf(typeOptions) : typeOptions.stream()
+                .filter(option -> option.label().getString().toLowerCase(Locale.ROOT).contains(needle)
+                        || option.id().toString().toLowerCase(Locale.ROOT).contains(needle))
+                .toList();
+        cursor = Math.clamp(cursor, 0, Math.max(0, filteredOptions.size() - 1));
+        scroll.setOffset(0);
+        scroll.mouseReleased();
+        updateBounds();
+        if (open) revealCursor();
+    }
+
+    private void updateBounds() {
+        panelRect = panel.bounds(bounds);
+        int width = panelRect.width();
+        int listHeight = bounds.height() - SIDE_PANEL_HEADER - PICKER_SEARCH_ROW - PICKER_FOOTER
+                - SIDE_PANEL_PADDING * 2;
+        if (width <= SIDE_PANEL_PADDING * 2 || listHeight < PICKER_ROW_HEIGHT) {
+            close();
+            panelRect = new UiRect(0, 0, 0, 0);
+            return;
+        }
+        int x = panelRect.x();
+        int y = panelRect.y();
+        searchRect = new UiRect(x + SIDE_PANEL_PADDING, y + SIDE_PANEL_HEADER + SIDE_PANEL_PADDING,
+                width - SIDE_PANEL_PADDING * 2, PICKER_SEARCH_ROW - BORDER);
+        listRect = new UiRect(x + SIDE_PANEL_PADDING, searchRect.bottom() + BORDER,
+                width - SIDE_PANEL_PADDING * 2, listHeight);
+        scroll.setViewport(listRect.x(), listRect.y(), listRect.width(), listHeight);
+        scroll.setContentHeight(filteredOptions.size() * PICKER_ROW_HEIGHT);
+        scroll.setStep(PICKER_ROW_HEIGHT);
+        scroll.setScrollbarVisible(scroll.maxOffset() > 0);
+    }
+
+    private void revealCursor() {
+        scroll.ensureVisible(new UiRect(0, cursor * PICKER_ROW_HEIGHT,
+                listRect.width(), PICKER_ROW_HEIGHT));
+    }
+
+    private void updateHover(int mouseX, int mouseY) {
+        // 静止指针不覆盖键盘选择；内容滚动也不改变当前高亮。
+        boolean moved = !pointerKnown || mouseX != lastMouseX || mouseY != lastMouseY;
+        pointerKnown = true;
+        lastMouseX = mouseX;
+        lastMouseY = mouseY;
+        if (moved) {
+            int index = indexAt(mouseX, mouseY);
+            if (index >= 0) cursor = index;
+        }
+    }
+
+    private void renderContents(GuiGraphics graphics, Font renderFont) {
+        if (panelRect.width() <= 0 || panelRect.height() <= 0) {
+            return;
+        }
+        renderSearch(graphics, renderFont);
+        renderList(graphics, renderFont);
+        renderFooter(graphics, renderFont);
+    }
+
+    private void renderSearch(GuiGraphics graphics, Font renderFont) {
+        graphics.fill(searchRect.x(), searchRect.y(), searchRect.right(),
+                searchRect.bottom(), theme.palette().canvasPickerInputFill());
+        drawBorder(graphics, searchRect, theme.palette().canvasPickerInputBorder());
+        String filter = filterText.toString();
+        String searchText = filter.isEmpty()
+                ? Component.translatable("gui.itemdespawntowhat.edit.picker.filter").getString() : filter;
+        int searchColor = filter.isEmpty() ? theme.palette().canvasPickerTextDisabled() : theme.palette().canvasTextOnAccent();
+        graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont, searchText, searchRect.width() - SEARCH_PADDING * 2 - CARET_WIDTH * 2),
+                searchRect.x() + SEARCH_PADDING, searchRect.y() + SEARCH_PADDING, searchColor, false);
+        int caretX = searchRect.x() + SEARCH_PADDING + Math.min(renderFont.width(filter), searchRect.width() - SEARCH_PADDING * 2);
+        graphics.fill(caretX, searchRect.y() + SEARCH_PADDING, caretX + CARET_WIDTH, searchRect.bottom() - SEARCH_PADDING,
+                theme.palette().canvasTextOnAccent());
+
+    }
+
+    private void renderList(GuiGraphics graphics, Font renderFont) {
+        int rowWidth = listRect.width()
+                - (scroll.isScrollbarVisible() ? UiScrollView.SCROLLBAR_WIDTH + BORDER : 0);
+        scroll.push(graphics);
+        try {
+            if (filteredOptions.isEmpty()) {
+                graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont,
+                                Component.translatable("gui.itemdespawntowhat.edit.picker.empty").getString(),
+                                rowWidth - CARD_PADDING_X),
+                        CARD_PADDING_X, CARD_PADDING_Y, theme.palette().canvasPickerTextMuted(), false);
+            } else {
+                int first = scroll.offset() / PICKER_ROW_HEIGHT;
+                int end = Math.min(filteredOptions.size(),
+                        (scroll.offset() + listRect.height() + PICKER_ROW_HEIGHT - 1) / PICKER_ROW_HEIGHT);
+                for (int optionIndex = first; optionIndex < end; optionIndex++) {
+                    int rowY = optionIndex * PICKER_ROW_HEIGHT;
+                    boolean current = optionIndex == cursor;
+                    if (current) {
+                        graphics.fill(0, rowY, rowWidth, rowY + PICKER_ROW_HEIGHT,
+                                theme.palette().canvasPickerRowSelected());
+                    }
+                    graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont,
+                                    filteredOptions.get(optionIndex).label().getString(), rowWidth - CARD_PADDING_X * 2),
+                            CARD_PADDING_X, rowY + (PICKER_ROW_HEIGHT - renderFont.lineHeight) / 2,
+                            current ? theme.palette().canvasPickerText() : theme.palette().canvasPickerTextMuted(), false);
+                }
+            }
+        } finally {
+            scroll.pop(graphics);
+        }
+        scroll.renderScrollbar(graphics, theme.controlStyle(UiControlRole.SECONDARY));
+    }
+
+    private void renderFooter(GuiGraphics graphics, Font renderFont) {
+        graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont,
+                        Component.translatable(PICKER_HINT_KEY).getString(),
+                        Math.max(0, panelRect.width() - SIDE_PANEL_PADDING * 2)),
+                panelRect.x() + SIDE_PANEL_PADDING, panelRect.bottom() - PICKER_FOOTER,
+                theme.palette().canvasPickerTextMuted(), false);
+    }
+
+    private void handleClick(double mouseX, double mouseY) {
+        if (bounds.contains(mouseX, mouseY)
+                && scroll.mousePressed(mouseX, mouseY, GLFW.GLFW_MOUSE_BUTTON_LEFT)) return;
+        int index = indexAt(mouseX, mouseY);
+        if (index >= 0) {
+            cursor = index;
+            confirm();
+            return;
+        }
+        if (!panelRect.contains(mouseX, mouseY)) {
+            close();
+        }
+    }
+
+    private int indexAt(double mouseX, double mouseY) {
+        if (!open || !bounds.contains(mouseX, mouseY)
+                || filteredOptions.isEmpty() || !scroll.canHoverContent(mouseX, mouseY)) {
+            return -1;
+        }
+        int index = (int) (scroll.toContentY(mouseY) / PICKER_ROW_HEIGHT);
+        return index >= 0 && index < filteredOptions.size() ? index : -1;
+    }
+
+    void keyPressed(int keyCode) {
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            close();
+        } else if (keyCode == GLFW.GLFW_KEY_BACKSPACE) {
+            if (!filterText.isEmpty()) {
+                filterText.setLength(filterText.length() - 1);
+                refreshFilter();
+            }
+        } else if (keyCode == GLFW.GLFW_KEY_UP) {
+            cursor = Math.max(0, cursor - 1);
+        } else if (keyCode == GLFW.GLFW_KEY_DOWN) {
+            cursor = Math.clamp(cursor + 1, 0, Math.max(0, filteredOptions.size() - 1));
+        } else if (keyCode == GLFW.GLFW_KEY_HOME) {
+            cursor = 0;
+        } else if (keyCode == GLFW.GLFW_KEY_END) {
+            cursor = Math.max(0, filteredOptions.size() - 1);
+        } else if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
+            if (!filteredOptions.isEmpty()) {
+                confirm();
+            }
+        }
+        if (open && (keyCode == GLFW.GLFW_KEY_UP || keyCode == GLFW.GLFW_KEY_DOWN
+                || keyCode == GLFW.GLFW_KEY_HOME || keyCode == GLFW.GLFW_KEY_END)) {
+            updateBounds();
+            revealCursor();
+        }
+    }
+
+}

@@ -1,39 +1,35 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.BORDER;
+import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.CARD_HEIGHT;
+import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.isContainer;
+import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphRenderer.drawBorder;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeNodes;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.OpaqueCondition;
-import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiDotGrid;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiOrthoLink;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRubberBand;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiTidyTreeLayout;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTransform;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeEditor;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeMoveInteraction;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreePath;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.Hotspot;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
-import net.minecraft.Util;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -43,180 +39,38 @@ import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
 /**
- * 条件树画布控件：整页画布式的条件树编辑器，直接编辑 {@link ConditionExpression} / {@link ConditionNode}。
+ * 条件树画布编辑入口：协调结构操作、选择、拖拽、键盘导航与宿主回调。
  *
- * <p>与 {@link UiConditionTreeSummary} 的关系：结构操作与选择语义全部复用 {@link UiTreeEditor} +
- * {@link ConditionTreeNodes}，宿主注入面与操作面沿用同名方法；区别只在渲染与输入层——节点由
- * {@link UiTidyTreeLayout} 自动布局成自上而下的节点图，画布由 {@link UiTransform} 承载平移与
- * 50 / 100 / 150 / 200 四档缩放，不做折叠与展开。</p>
+ * <p>结构与选择由 {@link UiTreeEditor} 和 {@link ConditionTreeNodes} 处理；展示数据由
+ * {@link ConditionGraphLayout} 重建，{@link ConditionGraphRenderer} 绘制画布。
+ * 类型选择与参数表单分别交给 {@link ConditionGraphTypePicker} 和 {@link ConditionGraphInlinePanel}，
+ * 共用 {@link ConditionGraphSidePanel} 的屏幕坐标、外观和动画。</p>
  *
- * <p>与 {@link UiConditionTreeSummary}（缩进摘要，只读）的关系：两者共用同一份数据与校验，
- * 渲染模式只决定展示形态。宿主注入类型与路径常量由 {@link ConditionTreeContract} 承接，两者都实现
- * {@link ConditionTreeContract.Navigation}，宿主可用同一组语义在两种渲染之间迁移选中项；
- * 限额判定、节点状态与违规项来自 {@link ConditionTreeInspection}，不在此重复实现。
-
- * <p>本控件是条件树唯一的编辑入口：结构操作、参数内联编辑与类型选择都在这里完成。</p>
- *
- * <ul>
- *   <li>鼠标：单击选中、再次点击已选中的叶编辑参数、Ctrl 点击增删、Shift 点击树序范围、空白左键拖拽平移、Shift+空白拖拽框选、
- *       中键或空格+左键拖拽平移、拖动节点移动、滚轮逐档缩放。</li>
- *   <li>键盘：方向键移动选择、Delete 删除、Ctrl+A 全选、Ctrl+C/V 复制粘贴、空格拖拽平移、
- *       Ctrl+0 适配视图、Ctrl+Home 回到根、Esc 取消当前手势或收起内联编辑框。</li>
- * </ul>
- *
- * <p>控件不持有正式保存入口，候选修改通过绑定回调交给宿主；参数编辑既可以交给表单层
- * （{@link #setOnEditLeaf(Consumer)}），也可以由宿主装载 {@link InlineEditor} 在画布右侧展开，
- * 见 {@link #setInlineEditor(InlineEditor, UiTreePath)}。分组与包组的「全部满足 / 任一满足」由画布内的
- * 小菜单选择，外壳只需调用 {@link #beginAddGroupWithKind()} 与 {@link #beginWrapWithKind()}。</p>
+ * <p>宿主通过 {@link ConditionTreeContract.Navigation} 同步路径，通过
+ * {@link #setInlineEditor(InlineEditor, UiTreePath)} 装载条件叶参数；候选修改经绑定回调交回宿主，
+ * 控件不持有正式保存入口。缩进摘要 {@link UiConditionTreeSummary} 共用条件数据与校验，保持只读。</p>
  */
 public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, ConditionTreeContract.Navigation {
 
-    // ---- 画布 ----
-
-    // 点阵网格在 100% 档位下的步长；其它档位由 kit 按 scale 换算
-    private static final int DOT_BASE_STEP = 16;
-    // 适配视图时内容四周保留的屏幕像素
+    // 视图定位与手势阈值使用 GUI 屏幕像素。
     private static final int FIT_PADDING = 12;
-    // 回到根时根卡片顶边距视口顶部的屏幕像素
     private static final int RESET_TOP_MARGIN = 16;
-    // 键盘导航后把目标卡片带回视口时保留的屏幕像素
     private static final int REVEAL_MARGIN = 24;
-    // 框选填充色（半透明强调色）
-
-    // ---- 节点卡片 ----
-
-    // 卡片最小 / 最大宽度（内容单位）
-    private static final int CARD_MIN_WIDTH = 60;
-    private static final int CARD_MAX_WIDTH = 168;
-    // 卡片左右内边距与上下内边距
-    private static final int CARD_PADDING_X = 4;
-    private static final int CARD_PADDING_Y = 2;
-    // 卡片单行高度：两行 = 第一行类型名与状态标记，第二行参数摘要
-    private static final int CARD_ROW_HEIGHT = 10;
-    // 卡片高度
-    private static final int CARD_HEIGHT = CARD_PADDING_Y * 2 + CARD_ROW_HEIGHT * 2;
-    // 扁平风格统一使用的 1 像素描边宽度
-    private static final int BORDER = 1;
-    // 层间距：卡片高度 + 连线垂直空间
-    private static final int LEVEL_PITCH = CARD_HEIGHT + 18;
-    // 同层相邻卡片的最小水平间距
-    private static final int SIBLING_GAP = 12;
-    // 正交连线粗细
-    private static final int LINK_THICKNESS = 1;
-    private static final int LOGIC_ROUND_RADIUS = 4;
-    private static final int LOGIC_CUT_CORNER = 6;
-    private static final int LINK_ARROW_SIZE = 3;
-    private static final int FLOW_ROUTE_GAP = 18;
-    private static final int FLOW_DASH_LENGTH = 4;
-    private static final int FLOW_DASH_GAP = 3;
-    private static final String FLOW_HINT_KEY = "gui.itemdespawntowhat.edit.tree.flow_hint";
-
-    // ---- [+] 热区 ----
-
-    // 非空容器子项末尾的小热区边长
-    private static final int HOTSPOT_SIZE = 12;
-    // 空容器与空树的大热区边长
-    private static final int HOTSPOT_LARGE_SIZE = 22;
-
-    // ---- 拖拽与框选 ----
-
-    // 判定拖拽开始的屏幕像素距离
     private static final int DRAG_START_DISTANCE = 4;
-    // 卡片上下边缘用于判定 BEFORE / AFTER 的比例分母
     private static final int DROP_EDGE_DIVISOR = 4;
-    // 落点标记厚度
-    private static final int DROP_MARKER_THICKNESS = 2;
-    // 拖拽幽灵距指针的像素
-    private static final int DRAG_GHOST_GAP = 6;
-
-    // ---- 右侧面板：类型选择与参数编辑共用几何、动画与皮肤 ----
-
-    private static final int SIDE_PANEL_MAX_WIDTH = 220;
-    private static final int SIDE_PANEL_PADDING = 4;
-    private static final int SIDE_PANEL_HEADER = 14;
-    private static final long SIDE_PANEL_ANIM_MS = 160L;
-    private static final int SIDE_PANEL_LAYER = UiRenderLayers.FOREGROUND + UiRenderLayers.ICON;
-    private static final String PICKER_HINT_KEY = "gui.itemdespawntowhat.edit.picker.mouse_hint";
-
-    // ---- 类型选择框 ----
-
-    private static final int PICKER_SEARCH_ROW = 14;
-    private static final int PICKER_ROW_HEIGHT = 12;
-    private static final int PICKER_FOOTER = 12;
-    // 筛选文本长度上限
-    private static final int PICKER_FILTER_MAX = 32;
-
-    // ---- 空树中央大热区 ----
-
-    // 空树提示文字与大热区之间的屏幕像素间距
-    private static final int EMPTY_HINT_GAP = 4;
 
     // ---- 分组方式小菜单 ----
 
     // 菜单与锚点之间的屏幕像素间距
     private static final int KIND_MENU_GAP = 4;
+    private static final int KIND_MENU_ROW_HEIGHT = 18;
+    private static final int KIND_MENU_FOOTER = 12;
     // 菜单行文本左右内边距
     private static final int KIND_MENU_PADDING = 4;
     // 菜单最小宽度
     private static final int KIND_MENU_MIN_WIDTH = 56;
     // 键盘操作提示：与类型选择框共用一套措辞
     private static final String KIND_MENU_HINT_KEY = "gui.itemdespawntowhat.edit.picker.hint";
-
-    // 布局用包装节点：节点身份即对象身份，不依赖 ConditionNode 的值相等。
-    // children 使用包内可见：外层控件负责装配子列表，而本类自身是 private 的。
-    private abstract static class GraphNode {
-        List<GraphNode> children = List.of();
-    }
-
-    // 真实条件节点
-    private static final class NodeSlot extends GraphNode {
-        private final ConditionNode node;
-
-        NodeSlot(ConditionNode node) {
-            this.node = node;
-        }
-    }
-
-    // 容器末尾为 [+] 预留的槽位
-    private static final class HotspotSlot extends GraphNode {
-        private final @Nullable ConditionNode container;
-
-        HotspotSlot(@Nullable ConditionNode container) {
-            this.container = container;
-        }
-    }
-
-    // 只读链路端点，不参与条件表达式、选择、结构操作与限额统计。
-    private static final class EndpointSlot extends GraphNode {
-        private final Component title;
-        private Component summary = Component.empty();
-
-        EndpointSlot(String titleKey) {
-            title = Component.translatable(titleKey);
-        }
-    }
-
-    // 布局数据源：卡片宽度由文本测量得到，[+] 槽位按固定边长占位
-    private record LayoutSource(UiConditionGraphEditor editor) implements UiTidyTreeLayout.Source<GraphNode> {
-        @Override
-        public List<GraphNode> children(GraphNode node) {
-            return node.children;
-        }
-
-        @Override
-        public int width(GraphNode node) {
-            if (node instanceof HotspotSlot hotspot) {
-                return hotspot.container == null ? HOTSPOT_LARGE_SIZE : HOTSPOT_SIZE;
-            }
-            if (node instanceof EndpointSlot) {
-                return Math.max(editor.endpointWidth(editor.sourceSlot), editor.endpointWidth(editor.resultSlot));
-            }
-            return editor.cardWidth(((NodeSlot) node).node);
-        }
-    }
-
-    // 单个可添加位置：parent 为 null 表示空树（作为新根写入）
-    private record Hotspot(@Nullable UiTreePath parent, int index, UiRect rect) {}
 
     /**
      * 参数编辑框的内容契约：几何、绘制与输入坐标一律为 GUI 屏幕坐标，不随画布平移或缩放。
@@ -235,42 +89,6 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         boolean keyPressed(int keyCode, int scanCode, int modifiers);
         boolean charTyped(char codePoint, int modifiers);
         boolean isVisible();
-    }
-
-    // 面板只沿水平方向移动，内容始终按完整尺寸布局，避免动画改变表单行高或滚动范围。
-    private static final class SidePanelAnimation {
-        private float openness;
-        private float from;
-        private float target;
-        private long startedAt;
-
-        void start(float next) {
-            tick();
-            from = openness;
-            target = next;
-            startedAt = Util.getMillis();
-        }
-
-        void tick() {
-            if (openness == target) return;
-            long duration = Math.max(1L, Math.round(SIDE_PANEL_ANIM_MS * Math.abs(target - from)));
-            float progress = Math.clamp((Util.getMillis() - startedAt) / (float) duration, 0.0F, 1.0F);
-            float remaining = 1.0F - progress;
-            float eased = 1.0F - remaining * remaining * remaining;
-            openness = progress >= 1.0F ? target : from + (target - from) * eased;
-        }
-
-        void reset() {
-            openness = 0.0F;
-            from = 0.0F;
-            target = 0.0F;
-        }
-
-        UiRect bounds(UiRect viewport) {
-            int width = Math.min(SIDE_PANEL_MAX_WIDTH, viewport.width());
-            int slide = Math.round(width * (1.0F - openness));
-            return new UiRect(viewport.right() - width + slide, viewport.y(), width, viewport.height());
-        }
     }
 
     // 分组方式：全部满足 / 任一满足
@@ -294,17 +112,10 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     // 「分组 / 包组」小菜单的确认目标
     private enum KindMenuTarget { INSERT_GROUP, WRAP_SELECTION }
 
-    // 全树扫描得到的单节点状态，供卡片配色与状态标记使用
-    private record NodeInfo(UiTreePath path, boolean incomplete, boolean overflow, boolean deep,
-                            boolean leafMissing, boolean subtreeIssue) {}
-
     private final Font font;
     private final UiTransform transform = UiTransform.ofScales(0.5, 1.0, 1.5, 2.0);
-    private final UiTidyTreeLayout<GraphNode> layout = new UiTidyTreeLayout<>(LEVEL_PITCH, SIBLING_GAP);
-    private final LayoutSource layoutSource = new LayoutSource(this);
-    private final EndpointSlot sourceSlot = new EndpointSlot("gui.itemdespawntowhat.edit.tree.node.source");
-    private final EndpointSlot resultSlot = new EndpointSlot("gui.itemdespawntowhat.edit.tree.node.result");
-    private UiRect resultRect = new UiRect(0, 0, 0, 0);
+    private final ConditionGraphLayout graph;
+    private final ConditionGraphRenderer renderer;
     private final UiRubberBand rubberBand = new UiRubberBand();
     private final UiTreeEditor<ConditionNode> tree;
     private final UiTreeMoveInteraction<ConditionNode> move;
@@ -318,21 +129,6 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     private boolean viewInitialized;
     private boolean centerEmptyView;
     private @Nullable ConditionNode laidOutRoot;
-
-    // 每轮重建得到的布局数据；键全部按对象身份匹配
-    private final List<NodeSlot> graphNodes = new ArrayList<>();
-    private final List<HotspotSlot> hotspotSlots = new ArrayList<>();
-    private final List<Hotspot> hotspots = new ArrayList<>();
-    private final Map<ConditionNode, GraphNode> wrappers = new IdentityHashMap<>();
-    private final Map<ConditionNode, UiTreePath> paths = new IdentityHashMap<>();
-    // 路径 → 节点反查：内联框锚点与菜单定位使用
-    private final Map<UiTreePath, ConditionNode> nodesByPath = new HashMap<>();
-    private final Map<ConditionNode, NodeInfo> infos = new IdentityHashMap<>();
-    private final Map<ConditionNode, Component> leafSummaries = new IdentityHashMap<>();
-    private final Map<ConditionNode, Integer> cardWidths = new IdentityHashMap<>();
-    // 树序（深度优先前序），Shift 范围选择与键盘导航使用
-    private final List<ConditionNode> order = new ArrayList<>();
-    private final List<ConditionTreeInspection.Issue> issues = new ArrayList<>();
 
     private @Nullable Function<ConditionNode.Leaf, Component> leafSummary;
     private List<ConditionTreeContract.TypeOption> typeOptions = List.of();
@@ -368,37 +164,13 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     private double panTravel;
     private boolean spaceDown;
     private @Nullable UiTreePath selectionAnchor;
-    private @Nullable ConditionNode hoveredNode;
-    private @Nullable Hotspot hoveredHotspot;
 
-    // 类型选择框状态
-    private boolean pickerOpen;
+    private final ConditionGraphTypePicker picker;
     private boolean pickerAppend;
     private @Nullable UiTreePath pickerParent;
     private int pickerIndex;
-    private int pickerCursor;
-    private int pickerOffset;
-    private final StringBuilder pickerFilter = new StringBuilder();
-    private UiRect pickerRect = new UiRect(0, 0, 0, 0);
-    private UiRect pickerSearchRect = new UiRect(0, 0, 0, 0);
-    private UiRect pickerListRect = new UiRect(0, 0, 0, 0);
-    private int pickerVisibleRows = 1;
-    private List<ConditionTreeContract.TypeOption> filteredOptions = List.of();
-    private final SidePanelAnimation pickerAnimation = new SidePanelAnimation();
-    private boolean pickerPointerKnown;
-    private int pickerMouseX;
-    private int pickerMouseY;
+    private final ConditionGraphInlinePanel inlinePanel;
 
-    // 参数框锚点用于校验所属叶；面板几何只依赖画布边界与滑入进度。
-    private @Nullable InlineEditor inlineEditor;
-    private @Nullable UiTreePath inlineAnchorPath;
-    private boolean inlineClosing;
-    private boolean inlineCaptured;
-    private final SidePanelAnimation inlineAnimation = new SidePanelAnimation();
-    private UiRect inlinePanelRect = new UiRect(0, 0, 0, 0);
-    private Component inlineTitle = Component.translatable("gui.itemdespawntowhat.edit.diagram.leaf");
-
-    // 分组 / 包组的「全部满足 / 任一满足」小菜单
     private boolean groupKindPending;
     private boolean kindMenuOpen;
     private KindMenuTarget kindMenuTarget = KindMenuTarget.INSERT_GROUP;
@@ -412,6 +184,10 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     public UiConditionGraphEditor(UiHostTheme theme, Font font) {
         this.theme = UiHostThemes.require(theme);
         this.font = font;
+        graph = new ConditionGraphLayout(font);
+        renderer = new ConditionGraphRenderer(this.theme, font, graph);
+        picker = new ConditionGraphTypePicker(this.theme, font, this::confirmPicker);
+        inlinePanel = new ConditionGraphInlinePanel(this.theme, font, graph);
         tree = new UiTreeEditor<>(ConditionTreeNodes.INSTANCE, () -> expression.root(), change -> {
             lastChange = change;
             applyNode(change.after());
@@ -449,6 +225,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
 
     public UiConditionGraphEditor setTypeOptions(List<ConditionTreeContract.TypeOption> options) {
         this.typeOptions = List.copyOf(options);
+        picker.setOptions(typeOptions);
         rebuild();
         return this;
     }
@@ -484,7 +261,8 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         rubberActive = false;
         rubberBand.clear();
         clearPanState();
-        inlineCaptured = false;
+        inlinePanel.cancelCapture();
+        picker.cancelCapture();
         move.end(reason);
         if (reason != UiInputCapture.EndReason.RELEASE) {
             addMode = false;
@@ -548,7 +326,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     }
 
     public boolean isValid() {
-        return expression.isStructurallyValid() && issues.isEmpty();
+        return expression.isStructurallyValid() && !graph.hasIssues();
     }
 
     public int nodeCount() {
@@ -565,7 +343,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
 
     /** 违规项明细（只读）。 */
     public List<ConditionTreeInspection.Issue> issues() {
-        return List.copyOf(issues);
+        return graph.issues();
     }
 
     /** 最近一次改动的撤销操作 key。 */
@@ -592,11 +370,11 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             tree.select(null);
             return;
         }
-        ConditionNode target = nodeForJsonPath(path);
+        ConditionNode target = graph.nodeForJsonPath(path);
         if (target == null) {
             return;
         }
-        UiTreePath treePath = paths.get(target);
+        UiTreePath treePath = graph.path(target);
         if (treePath == null) {
             return;
         }
@@ -626,19 +404,16 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     }
 
     public boolean isPickerOpen() {
-        return pickerOpen;
+        return picker.isOpen();
     }
 
     public boolean hasPopup() {
-        return pickerOpen || kindMenuOpen;
+        return picker.isOpen() || kindMenuOpen;
     }
 
     /** 宿主提供源物品与结果摘要；缺失内容用空摘要保留端点框。 */
     public void setEndpoints(Component sourceSummary, Component resultSummary) {
-        if (sourceSlot.summary.equals(sourceSummary) && resultSlot.summary.equals(resultSummary)) return;
-        sourceSlot.summary = sourceSummary;
-        resultSlot.summary = resultSummary;
-        rebuild();
+        if (graph.setEndpoints(sourceSummary, resultSummary)) rebuild();
     }
 
     public boolean isAddMode() {
@@ -794,10 +569,10 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     }
 
     public boolean selectAll() {
-        if (order.isEmpty()) {
+        if (graph.nodes().isEmpty()) {
             return false;
         }
-        List<UiTreePath> all = order.stream().map(paths::get).filter(java.util.Objects::nonNull).toList();
+        List<UiTreePath> all = graph.nodes().stream().map(graph::path).filter(java.util.Objects::nonNull).toList();
         tree.setSelection(all, tree.selected());
         followPrimarySelection();
         return true;
@@ -880,16 +655,14 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     /** 缩放 100% 并把根卡片顶边中点放回视口顶部。 */
     public void resetView() {
         transform.reset();
-        UiRect rootRect = cardRect(sourceSlot);
-        transform.centerOn(rootRect.x() + rootRect.width() / 2.0, 0);
+        UiRect rootRect = graph.rootRect();
+        transform.centerOn(rootRect.x() + rootRect.width() / 2.0, rootRect.y());
         transform.panBy(0, RESET_TOP_MARGIN - transform.viewport().height() / 2.0);
     }
 
     /** 选择能容纳整棵树的档位并居中显示。 */
     public void fitToContent() {
-        int width = expression.root() == null ? layout.contentWidth()
-                : flowRouteX() + CARD_PADDING_X * 2 + font.width(Component.translatable(FLOW_HINT_KEY));
-        transform.fit(0, 0, width, resultRect.bottom(), FIT_PADDING);
+        transform.fit(0, 0, graph.contentWidth(), graph.contentHeight(), FIT_PADDING);
     }
 
     /** 逐档缩放，锚点为视口中心。 */
@@ -916,6 +689,8 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     public void setBounds(int x, int y, int width, int height) {
         this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
         transform.setViewport(bounds.x(), bounds.y(), bounds.width(), bounds.height());
+        picker.setBounds(bounds);
+        inlinePanel.setBounds(bounds);
     }
 
     @Override
@@ -943,36 +718,13 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
 
     // 全量重建：扫描状态、建立包装节点、运行整齐树布局。
     private void rebuild() {
-        graphNodes.clear();
-        hotspotSlots.clear();
-        hotspots.clear();
-        wrappers.clear();
-        paths.clear();
-        nodesByPath.clear();
-        infos.clear();
-        leafSummaries.clear();
-        cardWidths.clear();
-        order.clear();
-        issues.clear();
         ConditionNode previousRoot = laidOutRoot;
         ConditionNode root = expression.root();
         laidOutRoot = root;
-        if (root == null) {
-            HotspotSlot empty = new HotspotSlot(null);
-            hotspotSlots.add(empty);
-            sourceSlot.children = List.of(empty);
-        } else {
-            inspect(root, UiTreePath.ROOT, 1, new int[2]);
-            NodeSlot wrapperRoot = wrap(root, UiTreePath.ROOT);
-            sourceSlot.children = List.of(wrapperRoot);
-        }
-        layout.layout(sourceSlot, layoutSource);
-        UiRect sourceRect = cardRect(sourceSlot);
-        resultRect = new UiRect(sourceRect.x(), layout.contentHeight(), sourceRect.width(), CARD_HEIGHT);
-        collectHotspots();
+        graph.rebuild(expression, typeOptions, leafSummary);
         tree.setSelection(tree.selection(), tree.selected());
         followPrimarySelection();
-        validateInlineAnchor();
+        inlinePanel.validateAnchor();
         if (!viewInitialized || root == null && previousRoot != null) {
             // 视口尺寸在下一帧渲染时可用，届时适配完整源物品到结果链路。
             centerEmptyView = true;
@@ -980,187 +732,20 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         viewInitialized = true;
     }
 
-    // 深度优先扫描：违规项、树序、路径、参数摘要与状态标记一次算完。
-    private boolean inspect(ConditionNode node, UiTreePath path, int depth, int[] counters) {
-        counters[0]++;
-        int nodeOrdinal = counters[0];
-        int leafOrdinal = -1;
-        if (node instanceof ConditionNode.Leaf) {
-            counters[1]++;
-            leafOrdinal = counters[1];
-        }
-        paths.put(node, path);
-        nodesByPath.put(path, node);
-        order.add(node);
-        if (node instanceof ConditionNode.Leaf leaf && leaf.condition() != null && leafSummary != null) {
-            leafSummaries.put(node, leafSummary.apply(leaf));
-        }
-        boolean incomplete = ConditionTreeInspection.isIncomplete(node);
-        boolean overflow = ConditionTreeInspection.isOverflow(depth, nodeOrdinal, leafOrdinal);
-        boolean deep = ConditionTreeInspection.isDeep(depth);
-        boolean leafMissing = ConditionTreeInspection.isLeafMissing(node);
-        // 违规项由共用校验生成：缩进摘要与画布只有一份判定与一套文案
-        String jsonPath = ConditionTreeNodes.jsonPath(expression.root(), path, ConditionTreeContract.ROOT_PATH);
-        issues.addAll(ConditionTreeInspection.nodeIssues(node, jsonPath, depth, nodeOrdinal, leafOrdinal));
-        boolean subtreeIssue = incomplete || leafMissing || overflow;
-        List<ConditionNode> children = ConditionTreeNodes.INSTANCE.children(node);
-        for (int index = 0; index < children.size(); index++) {
-            subtreeIssue |= inspect(children.get(index), path.child(index), depth + 1, counters);
-        }
-        infos.put(node, new NodeInfo(path, incomplete, overflow, deep, leafMissing, subtreeIssue));
-        return subtreeIssue;
-    }
-
-    // 建立布局包装节点；容器在有子项时额外预留一个 [+] 槽位，保证热区不遮挡子树。
-    private NodeSlot wrap(ConditionNode node, UiTreePath path) {
-        NodeSlot wrapper = new NodeSlot(node);
-        wrappers.put(node, wrapper);
-        graphNodes.add(wrapper);
-        List<ConditionNode> children = ConditionTreeNodes.INSTANCE.children(node);
-        List<GraphNode> wrapped = new ArrayList<>(children.size() + 1);
-        for (int index = 0; index < children.size(); index++) {
-            wrapped.add(wrap(children.get(index), path.child(index)));
-        }
-        if (isContainer(node) && !children.isEmpty()
-                && ConditionTreeNodes.INSTANCE.childCapacity(node) > children.size()) {
-            HotspotSlot hotspot = new HotspotSlot(node);
-            hotspotSlots.add(hotspot);
-            wrapped.add(hotspot);
-        }
-        wrapper.children = List.copyOf(wrapped);
-        return wrapper;
-    }
-
-    private void collectHotspots() {
-        for (HotspotSlot slot : hotspotSlots) {
-            ConditionNode container = slot.container;
-            if (container == null) {
-                hotspots.add(new Hotspot(null, 0, centered(cardRect(slot))));
-                continue;
-            }
-            UiTreePath parent = paths.get(container);
-            if (parent == null) {
-                continue;
-            }
-            hotspots.add(new Hotspot(parent, ConditionTreeNodes.INSTANCE.children(container).size(), cardRect(slot)));
-        }
-        for (NodeSlot wrapper : graphNodes) {
-            ConditionNode node = wrapper.node;
-            if (!isContainer(node) || !ConditionTreeNodes.INSTANCE.children(node).isEmpty()) {
-                continue;
-            }
-            UiTreePath parent = paths.get(node);
-            if (parent == null) {
-                continue;
-            }
-            hotspots.add(new Hotspot(parent, 0, centered(cardRect(wrapper))));
-        }
-    }
-
-    private static UiRect centered(UiRect card) {
-        return new UiRect(card.x() + (card.width() - HOTSPOT_LARGE_SIZE) / 2,
-                card.y() + (card.height() - HOTSPOT_LARGE_SIZE) / 2, HOTSPOT_LARGE_SIZE, HOTSPOT_LARGE_SIZE);
-    }
-
-    private int cardWidth(ConditionNode node) {
-        Integer cached = cardWidths.get(node);
-        if (cached != null) {
-            return cached;
-        }
-        int measured = Math.max(font.width(row1Label(node).getString()), font.width(row2Label(node).getString()))
-                + (CARD_PADDING_X + BORDER) * 2;
-        if (isContainer(node)) {
-            measured = Math.max(measured, font.width(operatorLabel(node)) + LOGIC_CUT_CORNER * 2);
-        }
-        int width = Math.clamp(measured, CARD_MIN_WIDTH, CARD_MAX_WIDTH);
-        cardWidths.put(node, width);
-        return width;
-    }
-
-    private int endpointWidth(EndpointSlot endpoint) {
-        int measured = Math.max(font.width(endpoint.title), font.width(endpoint.summary))
-                + (CARD_PADDING_X + BORDER) * 2;
-        return Math.clamp(measured, CARD_MIN_WIDTH, CARD_MAX_WIDTH);
-    }
-
-    private UiRect cardRect(GraphNode wrapper) {
-        return new UiRect(layout.x(wrapper), layout.y(wrapper), layout.widthOf(wrapper), CARD_HEIGHT);
-    }
-
-    // ---- 文案 ----
-
-    // 第一行：类型名 + 状态标记
-    private Component row1Label(ConditionNode node) {
-        Component label = switch (node) {
-            case ConditionNode.AllOf ignored -> Component.translatable("gui.itemdespawntowhat.edit.tree.node.all");
-            case ConditionNode.AnyOf ignored -> Component.translatable("gui.itemdespawntowhat.edit.tree.node.any");
-            case ConditionNode.Inverted ignored -> Component.translatable("gui.itemdespawntowhat.edit.tree.node.not");
-            case ConditionNode.Leaf(var condition) -> condition == null
-                    ? Component.translatable("gui.itemdespawntowhat.edit.tree.leaf_missing")
-                    : typeLabel(condition.type());
-        };
-        if (node instanceof ConditionNode.Leaf(var condition) && condition instanceof OpaqueCondition) {
-            label = label.copy().append(" ").append(Component.translatable(
-                    "gui.itemdespawntowhat.edit.tree.parameters_readonly"));
-        }
-        NodeInfo info = infos.get(node);
-        if (info == null) {
-            return label;
-        }
-        if (info.incomplete()) {
-            label = label.copy().append(" ").append(Component.translatable("gui.itemdespawntowhat.edit.tree.incomplete"));
-        }
-        if (info.overflow()) {
-            label = label.copy().append(" ").append(Component.translatable("gui.itemdespawntowhat.edit.tree.overflow_mark"));
-        } else if (info.deep()) {
-            // 超限时已有超限标记，避免同一行堆叠两个标记
-            label = label.copy().append(" ").append(Component.translatable("gui.itemdespawntowhat.edit.tree.deep_mark"));
-        }
-        return label;
-    }
-
-    // 第二行：参数摘要；组合节点显示分支数量
-    private Component row2Label(ConditionNode node) {
-        if (node instanceof ConditionNode.Leaf(var condition)) {
-            if (condition == null) {
-                return Component.translatable("gui.itemdespawntowhat.edit.tree.leaf_missing");
-            }
-            return leafSummaries.getOrDefault(node, typeLabel(condition.type()));
-        }
-        List<ConditionNode> children = ConditionTreeNodes.INSTANCE.children(node);
-        if (children.isEmpty()) {
-            return Component.translatable("gui.itemdespawntowhat.edit.tree.empty");
-        }
-        return Component.translatable("gui.itemdespawntowhat.edit.tree.drag_many", children.size());
-    }
-
-    // 条件类型标签：优先使用宿主注入的选项标签，其次走本地化 key，最后回退原始 id
-    private Component typeLabel(@Nullable ResourceLocation type) {
-        if (type == null) {
-            return Component.translatable("gui.itemdespawntowhat.edit.tree.leaf_missing");
-        }
-        for (ConditionTreeContract.TypeOption option : typeOptions) {
-            if (option.id().equals(type)) {
-                return option.label();
-            }
-        }
-        return TypeLabels.conditionLabel(type);
-    }
-
     // 悬停提示：完整第一行 + 第二行
     public @Nullable Component tooltipAt(double mouseX, double mouseY) {
-        if (!visible || isDragging() || pickerOpen || kindMenuOpen || addMode || !bounds.contains(mouseX, mouseY)) {
+        if (!visible || isDragging() || picker.isOpen() || kindMenuOpen || addMode || !bounds.contains(mouseX, mouseY)) {
             return null;
         }
         // 内联框自带提示，避免画布卡片提示压住表单
-        if (inlineEditorHit(mouseX, mouseY)) {
+        if (inlinePanel.contains(mouseX, mouseY)) {
             return null;
         }
-        ConditionNode node = nodeAt(transform.toLocalX(mouseX), transform.toLocalY(mouseY));
+        ConditionNode node = graph.nodeAt(transform.toLocalX(mouseX), transform.toLocalY(mouseY));
         if (node == null) {
             return null;
         }
-        return row1Label(node).copy().append(" · ").append(row2Label(node));
+        return graph.row1Label(node).copy().append(" · ").append(graph.row2Label(node));
     }
 
     /** 当前手势或默认快捷键提示，供宿主底部状态栏展示。 */
@@ -1169,13 +754,13 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             UiTreeEditor.MovePreview<ConditionNode> preview = move.preview();
             if (preview != null && preview.outcome().error() == null && dropTarget != null) {
                 return Component.translatable("gui.itemdespawntowhat.edit.tree.drop_"
-                        + preview.position().name().toLowerCase(Locale.ROOT), row1Label(dropTarget));
+                        + preview.position().name().toLowerCase(Locale.ROOT), graph.row1Label(dropTarget));
             }
             if (operationError != null) {
                 return operationError;
             }
         }
-        if (pickerOpen) {
+        if (picker.isOpen()) {
             return Component.translatable("gui.itemdespawntowhat.edit.picker.hint");
         }
         if (addMode) {
@@ -1201,51 +786,46 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         boolean emptyTree = expression.root() == null;
         double localX = transform.toLocalX(mouseX);
         double localY = transform.toLocalY(mouseY);
-        boolean overPanel = inlineEditorHit(mouseX, mouseY);
-        hoveredNode = !pickerOpen && !kindMenuOpen && !overPanel && inside ? nodeAt(localX, localY) : null;
+        boolean overPanel = inlinePanel.contains(mouseX, mouseY);
+        ConditionNode hoveredNode = !picker.isOpen() && !kindMenuOpen && !overPanel && inside ? graph.nodeAt(localX, localY) : null;
         // 空树空闲态也要亮出中央大 [+]，让人一眼看出这里可以点
-        hoveredHotspot = (addMode || emptyTree) && !pickerOpen && !kindMenuOpen && !overPanel && inside
-                ? hotspotAt(localX, localY) : null;
+        Hotspot hoveredHotspot = (addMode || emptyTree) && !picker.isOpen() && !kindMenuOpen && !overPanel && inside
+                ? graph.hotspotAt(localX, localY) : null;
 
-        drawCanvasBackground(graphics);
+        renderer.drawCanvasBackground(graphics, bounds);
         transform.enableScissor(graphics);
-        drawDotGrid(graphics, viewport);
+        renderer.drawDotGrid(graphics, transform, viewport);
         transform.push(graphics);
         try {
-            drawLinks(graphics);
-            drawCards(graphics, renderFont);
+            renderer.drawLinks(graphics, tree.selection());
+            renderer.drawCards(graphics, renderFont, tree.selection(), hoveredNode);
             if (addMode || emptyTree) {
-                drawHotspots(graphics, renderFont);
+                renderer.drawHotspots(graphics, renderFont, hoveredHotspot);
             }
             if (rubberActive) {
                 rubberBand.draw(graphics, theme.palette().canvasRubberFill(), theme.palette().canvasAccent());
             }
             if (move.isActive()) {
-                drawDropMarker(graphics);
+                renderer.drawDropMarker(graphics, move.preview(), dropTarget);
             }
         } finally {
             graphics.pose().popPose();
             UiTransform.disableScissor(graphics);
         }
         if (emptyTree && !addMode) {
-            drawEmptyMessage(graphics, renderFont, viewport);
+            renderer.drawEmptyMessage(graphics, renderFont, viewport, transform, emptyMessage);
         }
-        if (focused && !pickerOpen && !kindMenuOpen) {
+        if (focused && !picker.isOpen() && !kindMenuOpen) {
             theme.drawFocusOutline(graphics, bounds);
         }
         if (move.isActive()) {
-            drawDragGhost(graphics, renderFont, mouseX, mouseY);
+            renderer.drawDragGhost(graphics, renderFont, bounds, dragLabel, mouseX, mouseY);
         }
-        if (!pickerOpen) {
-            renderInlineEditor(graphics, renderFont, mouseX, mouseY);
+        if (!picker.isOpen()) {
+            inlinePanel.render(graphics, renderFont, mouseX, mouseY);
         }
-        if (pickerOpen) {
-            pickerAnimation.tick();
-            updatePickerRects();
-            updatePickerHover(mouseX, mouseY);
-            renderSidePanel(graphics, pickerRect,
-                    Component.translatable("gui.itemdespawntowhat.edit.picker.title"),
-                    () -> renderPicker(graphics, renderFont));
+        if (picker.isOpen()) {
+            picker.render(graphics, renderFont, mouseX, mouseY);
         }
         if (kindMenuOpen) {
             updateKindMenuRect();
@@ -1253,464 +833,21 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         }
     }
 
-    /*
-     * 点阵网格锚定内容原点：把内容 (0,0) 的屏幕位置按步长取模，得到视口内第一列 / 第一行点阵，
-     * 因此平移画布时网格跟着内容一起走；步长仍随缩放档位变化。
-     * 步长换算与 kit 的 UiDotGrid 保持一致（屏幕步长 = 基准步长 × 缩放，至少 1 像素）。
-     */
-    private void drawDotGrid(GuiGraphics graphics, UiRect viewport) {
-        int step = Math.max(1, (int) Math.round(DOT_BASE_STEP * transform.scale()));
-        int gridX = alignToGrid(transform.toScreenX(0), viewport.x(), step);
-        int gridY = alignToGrid(transform.toScreenY(0), viewport.y(), step);
-        UiDotGrid.draw(graphics, transform.scale(), gridX, gridY, viewport.right(), viewport.bottom(),
-                DOT_BASE_STEP, theme.palette().canvasGridDot());
-    }
+    // ---- 参数面板宿主接口 ----
 
-    // 把内容原点在屏幕上的位置对齐到 [start, start + step) 内的第一个点阵坐标
-    private static int alignToGrid(double originScreen, int start, int step) {
-        long offset = Math.floorMod((long) Math.floor(originScreen) - start, (long) step);
-        return start + (int) offset;
-    }
-
-    // 扁平画布底：纯色填充 + 1px 描边，不使用立体凹凸
-    private void drawCanvasBackground(GuiGraphics graphics) {
-        graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), theme.palette().canvasFill());
-        drawBorder(graphics, bounds, theme.palette().canvasBorder());
-    }
-
-    // 空树提示：紧贴中央大 [+] 的上方，保证「这里能点」一眼可见
-    private void drawEmptyMessage(GuiGraphics graphics, Font renderFont, UiRect viewport) {
-        String text = TextScroll.trimToWidth(renderFont, emptyMessage.getString(), Math.max(0, viewport.width() - 8));
-        int textWidth = renderFont.width(text);
-        int centerX = viewport.x() + viewport.width() / 2;
-        int textY = viewport.y() + viewport.height() / 2 - renderFont.lineHeight - EMPTY_HINT_GAP;
-        if (!hotspots.isEmpty()) {
-            UiRect hotspot = hotspots.getFirst().rect();
-            centerX = (int) Math.round(transform.toScreenX(hotspot.x() + hotspot.width() / 2.0));
-            textY = (int) Math.round(transform.toScreenY(hotspot.y())) - renderFont.lineHeight - EMPTY_HINT_GAP;
-        }
-        int textX = Math.clamp(centerX - textWidth / 2, viewport.x() + EMPTY_HINT_GAP,
-                Math.max(viewport.x() + EMPTY_HINT_GAP, viewport.right() - textWidth - EMPTY_HINT_GAP));
-        int clampedY = Math.clamp(textY, viewport.y() + EMPTY_HINT_GAP,
-                Math.max(viewport.y() + EMPTY_HINT_GAP, viewport.bottom() - renderFont.lineHeight - EMPTY_HINT_GAP));
-        graphics.drawString(renderFont, text, textX, clampedY, theme.palette().canvasHintText(), false);
-    }
-
-    private void drawLinks(GuiGraphics graphics) {
-        UiRect sourceRect = cardRect(sourceSlot);
-        ConditionNode root = expression.root();
-        if (root == null) {
-            UiRect hotspot = hotspots.getFirst().rect();
-            drawEndpointLink(graphics, sourceRect, hotspot);
-            drawEndpointLink(graphics, hotspot, resultRect);
-        } else {
-            GraphNode rootWrapper = wrappers.get(root);
-            if (rootWrapper != null) {
-                UiRect rootRect = cardRect(rootWrapper);
-                drawEndpointLink(graphics, sourceRect, rootRect);
-                drawResultFlow(graphics, rootRect);
-            }
-        }
-        for (NodeSlot wrapper : graphNodes) {
-            ConditionNode node = wrapper.node;
-            List<ConditionNode> children = ConditionTreeNodes.INSTANCE.children(node);
-            if (children.isEmpty()) {
-                continue;
-            }
-            UiRect parentRect = cardRect(wrapper);
-            for (ConditionNode child : children) {
-                GraphNode childWrapper = wrappers.get(child);
-                if (childWrapper == null) {
-                    continue;
-                }
-                UiRect childRect = cardRect(childWrapper);
-                int color = tree.selection().contains(paths.get(node)) || tree.selection().contains(paths.get(child))
-                        ? theme.palette().canvasLinkSelected() : theme.palette().canvasLink();
-                int childCenterX = childRect.x() + childRect.width() / 2;
-                UiOrthoLink.drawDown(graphics, parentRect.x() + parentRect.width() / 2, parentRect.bottom(),
-                        childCenterX, childRect.y(), LINK_THICKNESS, color);
-                drawDownArrow(graphics, childCenterX, childRect.y(), color);
-            }
-        }
-    }
-
-    private void drawEndpointLink(GuiGraphics graphics, UiRect from, UiRect to) {
-        int centerX = to.x() + to.width() / 2;
-        UiOrthoLink.drawDown(graphics, from.x() + from.width() / 2, from.bottom(),
-                centerX, to.y(), LINK_THICKNESS, theme.palette().canvasLink());
-        drawDownArrow(graphics, centerX, to.y(), theme.palette().canvasLink());
-    }
-
-    private static void drawDownArrow(GuiGraphics graphics, int centerX, int tipY, int color) {
-        for (int row = 0; row < LINK_ARROW_SIZE; row++) {
-            graphics.fill(centerX - row, tipY - row - BORDER, centerX + row + BORDER, tipY - row, color);
-        }
-    }
-
-    private int flowRouteX() { return layout.contentWidth() + FLOW_ROUTE_GAP; }
-
-    // 只有根表达式的整体结果控制执行；虚线绕过整个子树，不从每个叶子汇线到结果。
-    private void drawResultFlow(GuiGraphics graphics, UiRect root) {
-        int routeX = flowRouteX();
-        int fromY = root.y() + root.height() / 2;
-        int toY = resultRect.y() + resultRect.height() / 2;
-        int color = theme.palette().canvasFlowLink();
-        drawDashedLine(graphics, root.right(), fromY, routeX, fromY, color);
-        drawDashedLine(graphics, routeX, fromY, routeX, toY, color);
-        drawDashedLine(graphics, resultRect.right(), toY, routeX, toY, color);
-        for (int row = 0; row < LINK_ARROW_SIZE; row++) {
-            graphics.fill(resultRect.right() + row, toY - row,
-                    resultRect.right() + row + BORDER, toY + row + BORDER, color);
-        }
-        graphics.drawString(font, Component.translatable(FLOW_HINT_KEY), routeX + CARD_PADDING_X,
-                fromY + CARD_ROW_HEIGHT, color, false);
-    }
-
-    private static void drawDashedLine(GuiGraphics graphics, int x1, int y1, int x2, int y2, int color) {
-        int distance = Math.max(x2 - x1, y2 - y1);
-        boolean horizontal = y1 == y2;
-        for (int offset = 0; offset < distance; offset += FLOW_DASH_LENGTH + FLOW_DASH_GAP) {
-            int length = Math.min(FLOW_DASH_LENGTH, distance - offset);
-            int x = horizontal ? x1 + offset : x1;
-            int y = horizontal ? y1 : y1 + offset;
-            graphics.fill(x, y, x + (horizontal ? length : LINK_THICKNESS),
-                    y + (horizontal ? LINK_THICKNESS : length), color);
-        }
-    }
-
-    private void drawCards(GuiGraphics graphics, Font renderFont) {
-        drawEndpoint(graphics, renderFont, sourceSlot, cardRect(sourceSlot));
-        drawEndpoint(graphics, renderFont, resultSlot, resultRect);
-        for (NodeSlot wrapper : graphNodes) {
-            ConditionNode node = wrapper.node;
-            UiRect rect = cardRect(wrapper);
-            if (rect.right() < 0 || rect.bottom() < 0) {
-                continue;
-            }
-            boolean selected = tree.selection().contains(paths.get(node));
-            drawCard(graphics, renderFont, node, rect, selected, node == hoveredNode);
-        }
-    }
-
-    private void drawEndpoint(GuiGraphics graphics, Font renderFont, EndpointSlot endpoint, UiRect rect) {
-        graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), theme.palette().canvasGroupFill());
-        drawBorder(graphics, rect, theme.palette().canvasCardBorder());
-        int x = rect.x() + BORDER + CARD_PADDING_X;
-        int y = rect.y() + BORDER + CARD_PADDING_Y;
-        int width = Math.max(0, rect.width() - (BORDER + CARD_PADDING_X) * 2);
-        graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont, endpoint.title.getString(), width),
-                x, y, theme.palette().canvasText(), false);
-        graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont, endpoint.summary.getString(), width),
-                x, y + CARD_ROW_HEIGHT, theme.palette().canvasTextMuted(), false);
-    }
-
-    private void drawCard(GuiGraphics graphics, Font renderFont, ConditionNode node, UiRect rect,
-                          boolean selected, boolean hovered) {
-        if (isContainer(node)) {
-            drawLogicCard(graphics, renderFont, node, rect, selected, hovered);
-            return;
-        }
-        int fill = selected ? theme.palette().canvasCardSelectedFill()
-                : isContainer(node) ? theme.palette().canvasGroupFill() : theme.palette().canvasCardFill();
-        if (hovered && !selected) {
-            fill = theme.palette().canvasCardHoverFill();
-        }
-        graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), fill);
-        drawBorder(graphics, rect, selected ? theme.palette().canvasCardBorderSelected() : theme.palette().canvasCardBorder());
-        NodeInfo info = infos.get(node);
-        int textX = rect.x() + BORDER + CARD_PADDING_X;
-        int textWidth = Math.max(0, rect.width() - (BORDER + CARD_PADDING_X) * 2);
-        int row1Y = rect.y() + BORDER + CARD_PADDING_Y;
-        int color = info != null && (info.overflow() || info.leafMissing() || info.subtreeIssue())
-                ? theme.palette().canvasTextDanger() : theme.palette().canvasText();
-        String row1 = TextScroll.trimToWidth(renderFont, row1Label(node).getString(), textWidth);
-        String row2 = TextScroll.trimToWidth(renderFont, row2Label(node).getString(), textWidth);
-        graphics.drawString(renderFont, row1, textX, row1Y, color, false);
-        graphics.drawString(renderFont, row2, textX, row1Y + CARD_ROW_HEIGHT, theme.palette().canvasTextMuted(), false);
-    }
-
-    private Component operatorLabel(ConditionNode node) {
-        String key = switch (node) {
-            case ConditionNode.AllOf ignored -> "gui.itemdespawntowhat.edit.tree.operator.all";
-            case ConditionNode.AnyOf ignored -> "gui.itemdespawntowhat.edit.tree.operator.any";
-            case ConditionNode.Inverted ignored -> "gui.itemdespawntowhat.edit.tree.operator.not";
-            default -> throw new IllegalArgumentException("Not a logic node");
-        };
-        return Component.translatable(key);
-    }
-
-    private void drawLogicCard(GuiGraphics graphics, Font renderFont, ConditionNode node, UiRect rect,
-                               boolean selected, boolean hovered) {
-        int fill;
-        int text;
-        if (node instanceof ConditionNode.AllOf) {
-            fill = theme.palette().canvasAllFill();
-            text = theme.palette().canvasAllText();
-        } else if (node instanceof ConditionNode.AnyOf) {
-            fill = theme.palette().canvasAnyFill();
-            text = theme.palette().canvasAnyText();
-        } else {
-            fill = theme.palette().canvasNotFill();
-            text = theme.palette().canvasNotText();
-        }
-        NodeInfo info = infos.get(node);
-        boolean invalid = info != null && info.subtreeIssue();
-        int border = invalid ? theme.palette().canvasTextDanger()
-                : selected ? theme.palette().canvasCardBorderSelected() : text;
-        int thickness = selected || hovered ? BORDER * 2 : BORDER;
-        drawLogicShape(graphics, node, rect, border);
-        UiRect inner = new UiRect(rect.x() + thickness, rect.y() + thickness,
-                rect.width() - thickness * 2, rect.height() - thickness * 2);
-        drawLogicShape(graphics, node, inner, fill);
-        String title = TextScroll.trimToWidth(renderFont, operatorLabel(node).getString(), rect.width() - LOGIC_CUT_CORNER * 2);
-        String detail = TextScroll.trimToWidth(renderFont, row1Label(node).getString(), rect.width() - LOGIC_CUT_CORNER * 2);
-        int y = rect.y() + BORDER + CARD_PADDING_Y;
-        graphics.drawString(renderFont, title, rect.x() + (rect.width() - renderFont.width(title)) / 2, y,
-                invalid ? theme.palette().canvasTextDanger() : text, false);
-        graphics.drawString(renderFont, detail, rect.x() + (rect.width() - renderFont.width(detail)) / 2,
-                y + CARD_ROW_HEIGHT, text, false);
-    }
-
-    // 像素圆角、胶囊和切角使用同一矩形布局与命中区，不影响结构操作。
-    private static void drawLogicShape(GuiGraphics graphics, ConditionNode node, UiRect rect, int color) {
-        int radius = node instanceof ConditionNode.AnyOf ? rect.height() / 2
-                : node instanceof ConditionNode.Inverted ? LOGIC_CUT_CORNER : LOGIC_ROUND_RADIUS;
-        radius = Math.clamp(radius, 0, Math.min(rect.width(), rect.height()) / 2);
-        int bandTop = 0;
-        int bandInset = -1;
-        for (int row = 0; row <= rect.height(); row++) {
-            int edge = Math.min(row, rect.height() - row - BORDER);
-            int inset = 0;
-            if (row == rect.height()) inset = -1;
-            else if (edge < radius) {
-                if (node instanceof ConditionNode.Inverted) inset = radius - edge;
-                else {
-                    double dy = radius - edge - 0.5D;
-                    inset = (int) Math.ceil(radius - Math.sqrt(radius * radius - dy * dy));
-                }
-            }
-            // 相同缩进的连续扫描行合并绘制，长直边只提交一个矩形。
-            if (inset != bandInset) {
-                if (row > bandTop) {
-                    graphics.fill(rect.x() + bandInset, rect.y() + bandTop, rect.right() - bandInset,
-                            rect.y() + row, color);
-                }
-                bandTop = row;
-                bandInset = inset;
-            }
-        }
-    }
-
-    private void drawHotspots(GuiGraphics graphics, Font renderFont) {
-        for (Hotspot hotspot : hotspots) {
-            UiRect rect = hotspot.rect();
-            boolean hovered = hotspot == hoveredHotspot;
-            graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(),
-                    hovered ? theme.palette().canvasAccentHover() : theme.palette().canvasAccent());
-            drawBorder(graphics, rect, theme.palette().canvasHotspotBorder());
-            String mark = "+";
-            graphics.drawString(renderFont, mark, rect.x() + (rect.width() - renderFont.width(mark)) / 2,
-                    rect.y() + (rect.height() - renderFont.lineHeight) / 2 + 1, theme.palette().canvasTextOnAccent(), false);
-        }
-    }
-
-    private void drawDropMarker(GuiGraphics graphics) {
-        UiTreeEditor.MovePreview<ConditionNode> preview = move.preview();
-        if (preview == null || dropTarget == null) {
-            return;
-        }
-        GraphNode wrapper = wrappers.get(dropTarget);
-        if (wrapper == null) {
-            return;
-        }
-        UiRect rect = cardRect(wrapper);
-        int color = preview.outcome().error() == null ? theme.palette().canvasAccent() : theme.palette().canvasTextDanger();
-        if (preview.position() == UiTreeEditor.DropPosition.INSIDE) {
-            drawBorder(graphics, rect, color);
-            drawBorder(graphics, new UiRect(rect.x() - BORDER, rect.y() - BORDER,
-                    rect.width() + BORDER * 2, rect.height() + BORDER * 2), color);
-            return;
-        }
-        // 同层节点水平排列，BEFORE / AFTER 用目标卡片左右两侧的竖直短线表示
-        int x = preview.position() == UiTreeEditor.DropPosition.BEFORE
-                ? rect.x() - DROP_MARKER_THICKNESS : rect.right();
-        graphics.fill(x, rect.y(), x + DROP_MARKER_THICKNESS, rect.bottom(), color);
-    }
-
-    private void drawDragGhost(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
-        String label = dragLabel == null ? "" : dragLabel;
-        int width = Math.min(bounds.width(), renderFont.width(label) + DRAG_GHOST_GAP * 2);
-        int height = renderFont.lineHeight + 2;
-        int x = Math.clamp(mouseX + DRAG_GHOST_GAP, bounds.x(), Math.max(bounds.x(), bounds.right() - width));
-        int y = Math.clamp(mouseY + DRAG_GHOST_GAP, bounds.y(), Math.max(bounds.y(), bounds.bottom() - height));
-        graphics.fill(x, y, x + width, y + height, theme.palette().canvasDragGhostFill());
-        graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont, label, Math.max(0, width - DRAG_GHOST_GAP)),
-                x + DRAG_GHOST_GAP / 2, y + 1, theme.palette().canvasText(), false);
-    }
-
-    private static void drawBorder(GuiGraphics graphics, UiRect rect, int color) {
-        graphics.fill(rect.x(), rect.y(), rect.right(), rect.y() + BORDER, color);
-        graphics.fill(rect.x(), rect.bottom() - BORDER, rect.right(), rect.bottom(), color);
-        graphics.fill(rect.x(), rect.y() + BORDER, rect.x() + BORDER, rect.bottom() - BORDER, color);
-        graphics.fill(rect.right() - BORDER, rect.y() + BORDER, rect.right(), rect.bottom() - BORDER, color);
-    }
-
-    // ---- 内联参数编辑框 ----
-
-    /**
-     * 装载参数编辑框：锚点关联当前条件叶，面板以 160ms ease-out 从画布右侧滑入并贴住右边界。
-     * 传入 null 等价于 {@link #clearInlineEditor()}。
-     */
+    /** 装载条件叶参数表单；null 表单或路径表示收起面板。 */
     public void setInlineEditor(@Nullable InlineEditor editor, @Nullable UiTreePath anchorPath) {
-        if (editor == null || anchorPath == null) {
-            clearInlineEditor();
-            return;
-        }
-        if (editor == inlineEditor && anchorPath.equals(inlineAnchorPath) && !inlineClosing) {
-            return;
-        }
-        // 只有锚点变化才从头展开；同一锚点换实例时保留当前展开度，避免宿主每帧新建适配器导致动画永远重来
-        boolean restart = !anchorPath.equals(inlineAnchorPath);
-        inlineEditor = editor;
-        inlineAnchorPath = anchorPath;
-        inlineClosing = false;
-        inlineCaptured = false;
-        if (restart) {
-            inlineAnimation.reset();
-        }
-        inlineAnimation.start(1.0F);
+        inlinePanel.mount(editor, anchorPath);
     }
 
-    /** 收起参数编辑框：向右滑出，动画结束后释放；未装载时不做任何事。 */
+    /** 向右收起参数面板，动画结束后释放表单。 */
     public void clearInlineEditor() {
-        if (inlineEditor == null || inlineClosing) {
-            return;
-        }
-        inlineAnimation.tick();
-        if (inlineAnimation.openness <= 0.0F) {
-            releaseInlineEditor();
-            return;
-        }
-        inlineClosing = true;
-        inlineCaptured = false;
-        inlineAnimation.start(0.0F);
+        inlinePanel.close();
     }
 
-    /** {@return 是否已装载内联参数编辑框（含收起动画期间）} */
+    /** 是否已装载参数表单，含关闭动画期间。 */
     public boolean isInlineEditorOpen() {
-        return inlineEditor != null;
-    }
-
-    // 参数框关闭动画结束后释放，选择框与参数框复用同一套动画曲线。
-    private void tickInlineAnimation() {
-        if (inlineEditor == null) {
-            return;
-        }
-        inlineAnimation.tick();
-        if (inlineClosing && inlineAnimation.openness <= 0.0F) {
-            releaseInlineEditor();
-        }
-    }
-
-    private void releaseInlineEditor() {
-        inlineEditor = null;
-        inlineAnchorPath = null;
-        inlineClosing = false;
-        inlineCaptured = false;
-        inlineAnimation.reset();
-        inlinePanelRect = new UiRect(0, 0, 0, 0);
-    }
-
-    /*
-     * 锚点路径在树里消失、或该位置不再是叶节点（被替换成容器）时收起内联框。
-     * 不按对象身份判等：参数提交会让整棵树重建出新对象，按身份判等会在每次输入后误关表单。
-     */
-    private void validateInlineAnchor() {
-        if (inlineEditor == null || inlineAnchorPath == null) {
-            return;
-        }
-        if (nodesByPath.get(inlineAnchorPath) instanceof ConditionNode.Leaf) {
-            return;
-        }
-        clearInlineEditor();
-    }
-
-    // 面板按 GUI 屏幕坐标布局；表单只在固定的内容区内滚动。
-    private void updateInlineBounds() {
-        tickInlineAnimation();
-        InlineEditor editor = inlineEditor;
-        if (editor == null) {
-            return;
-        }
-        ConditionNode anchor = inlineAnchorPath == null ? null : nodesByPath.get(inlineAnchorPath);
-        if (!(anchor instanceof ConditionNode.Leaf)) {
-            clearInlineEditor();
-        } else {
-            inlineTitle = row1Label(anchor);
-        }
-        if (inlineEditor == null) return;
-        inlinePanelRect = inlineAnimation.bounds(bounds);
-        int width = Math.max(0, inlinePanelRect.width() - SIDE_PANEL_PADDING * 2);
-        int availableHeight = Math.max(0, inlinePanelRect.height() - SIDE_PANEL_HEADER - SIDE_PANEL_PADDING * 2);
-        // 全高侧面板直接分配内容区，不做临时大视口测量，保留长表单的滚动位置。
-        editor.setBounds(inlinePanelRect.x() + SIDE_PANEL_PADDING,
-                inlinePanelRect.y() + SIDE_PANEL_HEADER + SIDE_PANEL_PADDING, width, availableHeight);
-    }
-
-    private void renderInlineEditor(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
-        updateInlineBounds();
-        InlineEditor editor = inlineEditor;
-        if (editor == null || !editor.isVisible()) {
-            return;
-        }
-        if (inlinePanelRect.width() <= 0 || inlinePanelRect.height() <= 0) {
-            return;
-        }
-        renderSidePanel(graphics, inlinePanelRect, inlineTitle, () -> {
-            UiTransform.enableScissor(graphics, editor.bounds());
-            try {
-                boolean interactive = !inlineClosing && bounds.contains(mouseX, mouseY)
-                        && inlinePanelRect.contains(mouseX, mouseY);
-                editor.render(graphics, renderFont, interactive ? mouseX : Integer.MIN_VALUE,
-                        interactive ? mouseY : Integer.MIN_VALUE);
-            } finally {
-                UiTransform.disableScissor(graphics);
-            }
-        });
-    }
-
-    // 面板背景、边框和标题与内容处于同一独立层，完整盖住底下的画布卡片与文字。
-    private void renderSidePanel(GuiGraphics graphics, UiRect rect, Component title, Runnable content) {
-        if (rect.width() <= 0 || rect.height() <= 0) return;
-        UiTransform.enableScissor(graphics, bounds);
-        try {
-            UiRenderLayers.draw(graphics, SIDE_PANEL_LAYER, () -> {
-                graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), theme.palette().canvasPickerFill());
-                graphics.fill(rect.x() + BORDER, rect.y() + BORDER, rect.right() - BORDER,
-                        rect.y() + SIDE_PANEL_HEADER, theme.palette().canvasPickerHeaderFill());
-                drawBorder(graphics, rect, theme.palette().canvasPickerBorder());
-                graphics.drawString(font, TextScroll.trimToWidth(font, title.getString(),
-                                Math.max(0, rect.width() - SIDE_PANEL_PADDING * 2)),
-                        rect.x() + SIDE_PANEL_PADDING, rect.y() + (SIDE_PANEL_HEADER - font.lineHeight) / 2,
-                        theme.palette().canvasPickerHeaderText(), false);
-                content.run();
-            });
-        } finally {
-            UiTransform.disableScissor(graphics);
-        }
-    }
-
-    // 命中包含面板空白与标题，避免点穿到画布；输入坐标与表单绘制坐标相同。
-    private boolean inlineEditorHit(double screenX, double screenY) {
-        if (inlineEditor == null) {
-            return false;
-        }
-        updateInlineBounds();
-        InlineEditor editor = inlineEditor;
-        if (editor == null || !editor.isVisible()) {
-            return false;
-        }
-        return bounds.contains(screenX, screenY) && inlinePanelRect.contains(screenX, screenY);
+        return inlinePanel.isOpen();
     }
 
     // ---- 分组方式小菜单 ----
@@ -1748,7 +885,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         }
         int maxWidth = Math.max(1, bounds.width() - KIND_MENU_PADDING);
         width = Math.min(width, maxWidth);
-        int height = Math.min(kinds.length * PICKER_ROW_HEIGHT + PICKER_FOOTER, bounds.height());
+        int height = Math.min(kinds.length * KIND_MENU_ROW_HEIGHT + KIND_MENU_FOOTER, bounds.height());
         int x = anchor.right() + KIND_MENU_GAP;
         if (x + width > bounds.right()) {
             x = anchor.x() - KIND_MENU_GAP - width;
@@ -1757,8 +894,8 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         int y = Math.clamp(anchor.y(), bounds.y(), Math.max(bounds.y(), bounds.bottom() - height));
         kindMenuRect = new UiRect(x, y, width, height);
         // 高度被小视口压缩时同步压缩列表区，避免提示行画到菜单底框之外
-        int maxListHeight = Math.max(0, height - BORDER * 2 - PICKER_FOOTER);
-        int listHeight = Math.min(kinds.length * PICKER_ROW_HEIGHT, maxListHeight);
+        int maxListHeight = Math.max(0, height - BORDER * 2 - KIND_MENU_FOOTER);
+        int listHeight = Math.min(kinds.length * KIND_MENU_ROW_HEIGHT, maxListHeight);
         kindMenuListRect = new UiRect(x + BORDER, y + BORDER, Math.max(0, width - BORDER * 2), listHeight);
     }
 
@@ -1768,8 +905,8 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             return hotspot == null ? null : toScreenRect(hotspot.rect());
         }
         ConditionNode first = firstSelectedInOrder();
-        GraphNode wrapper = first == null ? null : wrappers.get(first);
-        return wrapper == null ? null : toScreenRect(cardRect(wrapper));
+        UiRect rect = first == null ? null : graph.rect(first);
+        return rect == null ? null : toScreenRect(rect);
     }
 
     private UiRect toScreenRect(UiRect content) {
@@ -1782,8 +919,8 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
 
     // 选区里树序最靠前的节点：包组菜单定位在它附近
     private @Nullable ConditionNode firstSelectedInOrder() {
-        for (ConditionNode node : order) {
-            UiTreePath path = paths.get(node);
+        for (ConditionNode node : graph.nodes()) {
+            UiTreePath path = graph.path(node);
             if (path != null && tree.selection().contains(path)) {
                 return node;
             }
@@ -1800,11 +937,11 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
                 theme.palette().canvasPickerFill());
         drawBorder(graphics, kindMenuRect, theme.palette().canvasPickerBorder());
         for (int index = 0; index < kinds.length; index++) {
-            int rowY = kindMenuRect.y() + BORDER + index * PICKER_ROW_HEIGHT;
+            int rowY = kindMenuRect.y() + BORDER + index * KIND_MENU_ROW_HEIGHT;
             boolean current = index == Math.clamp(kindMenuIndex, 0, kinds.length - 1);
             if (current) {
                 graphics.fill(kindMenuRect.x() + BORDER, rowY, kindMenuRect.right() - BORDER,
-                        rowY + PICKER_ROW_HEIGHT, theme.palette().canvasPickerRowSelected());
+                        rowY + KIND_MENU_ROW_HEIGHT, theme.palette().canvasPickerRowSelected());
             }
             graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont, kinds[index].label().getString(),
                             Math.max(0, kindMenuRect.width() - KIND_MENU_PADDING * 2)),
@@ -1834,7 +971,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         if (!kindMenuListRect.contains(mouseX, mouseY)) {
             return -1;
         }
-        int row = (int) ((mouseY - kindMenuListRect.y()) / Math.max(1, PICKER_ROW_HEIGHT));
+        int row = (int) ((mouseY - kindMenuListRect.y()) / Math.max(1, KIND_MENU_ROW_HEIGHT));
         return row >= 0 && row < GroupKind.values().length ? row : -1;
     }
 
@@ -1874,27 +1011,6 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         groupKindPending = false;
     }
 
-    // ---- 命中 ----
-
-    private @Nullable ConditionNode nodeAt(double localX, double localY) {
-        for (int index = graphNodes.size() - 1; index >= 0; index--) {
-            NodeSlot wrapper = graphNodes.get(index);
-            if (cardRect(wrapper).contains(localX, localY)) {
-                return wrapper.node;
-            }
-        }
-        return null;
-    }
-
-    private @Nullable Hotspot hotspotAt(double localX, double localY) {
-        for (Hotspot hotspot : hotspots) {
-            if (hotspot.rect().contains(localX, localY)) {
-                return hotspot;
-            }
-        }
-        return null;
-    }
-
     // ---- 输入 ----
 
     @Override
@@ -1902,8 +1018,8 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         if (!visible || !enabled) {
             return false;
         }
-        if (pickerOpen) {
-            if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT) handlePickerClick(mouseX, mouseY);
+        if (picker.isOpen()) {
+            picker.mouseClicked(mouseX, mouseY, button);
             return true;
         }
         if (kindMenuOpen) {
@@ -1912,12 +1028,8 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         }
         if (!bounds.contains(mouseX, mouseY)) return false;
         // 右侧面板优先接收输入；关闭动画期间只阻止点穿，不再编辑字段。
-        if (inlineEditorHit(mouseX, mouseY)) {
-            InlineEditor editor = inlineEditor;
-            inlineCaptured = !inlineClosing;
-            if (editor != null && !inlineClosing) {
-                editor.mouseClicked(mouseX, mouseY, button);
-            }
+        if (inlinePanel.contains(mouseX, mouseY)) {
+            inlinePanel.mouseClicked(mouseX, mouseY, button);
             return true;
         }
         boolean left = button == GLFW.GLFW_MOUSE_BUTTON_LEFT;
@@ -1934,7 +1046,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         double localY = transform.toLocalY(mouseY);
         boolean emptyTree = expression.root() == null;
         if (addMode || emptyTree) {
-            Hotspot hotspot = hotspotAt(localX, localY);
+            Hotspot hotspot = graph.hotspotAt(localX, localY);
             if (hotspot != null) {
                 if (groupKindPending) {
                     openGroupKindMenu(hotspot);
@@ -1953,7 +1065,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
                 return true;
             }
         }
-        ConditionNode node = nodeAt(localX, localY);
+        ConditionNode node = graph.nodeAt(localX, localY);
         if (node == null) {
             // 空白区左键拖拽 = 平移；框选改到 Shift + 拖拽
             if (Screen.hasShiftDown()) {
@@ -1963,7 +1075,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             beginPan(mouseX, mouseY, true);
             return true;
         }
-        UiTreePath clicked = paths.get(node);
+        UiTreePath clicked = graph.path(node);
         if (clicked == null) {
             return true;
         }
@@ -2011,9 +1123,9 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
 
     private void selectRange(UiTreePath clicked, boolean additive) {
         ConditionNode anchorNode = selectionAnchor == null ? null : tree.query(selectionAnchor);
-        int anchorIndex = anchorNode == null ? -1 : indexOfNode(anchorNode);
+        int anchorIndex = anchorNode == null ? -1 : graph.indexOfNode(anchorNode);
         ConditionNode clickedNode = tree.query(clicked);
-        int clickedIndex = clickedNode == null ? -1 : indexOfNode(clickedNode);
+        int clickedIndex = clickedNode == null ? -1 : graph.indexOfNode(clickedNode);
         if (anchorIndex < 0 || clickedIndex < 0) {
             tree.select(clicked);
             selectionAnchor = clicked;
@@ -2022,7 +1134,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         }
         Set<UiTreePath> selected = new LinkedHashSet<>(additive ? tree.selection() : Set.of());
         for (int index = Math.min(anchorIndex, clickedIndex); index <= Math.max(anchorIndex, clickedIndex); index++) {
-            selected.add(paths.get(order.get(index)));
+            selected.add(graph.path(graph.nodes().get(index)));
         }
         selected.remove(null);
         tree.setSelection(selected, clicked);
@@ -2052,14 +1164,13 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     private void finishRubberBand() {
         if (rubberBand.active()) {
             Set<UiTreePath> selected = new LinkedHashSet<>(rubberBase);
-            for (ConditionNode node : order) {
-                GraphNode wrapper = wrappers.get(node);
-                if (wrapper == null) {
+            for (ConditionNode node : graph.nodes()) {
+                UiRect rect = graph.rect(node);
+                if (rect == null) {
                     continue;
                 }
-                UiRect rect = cardRect(wrapper);
                 if (rubberBand.intersects(rect.x(), rect.y(), rect.width(), rect.height())) {
-                    selected.add(paths.get(node));
+                    selected.add(graph.path(node));
                 }
             }
             selected.remove(null);
@@ -2075,8 +1186,12 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         if (!visible || !enabled) {
             return false;
         }
-        if (inlineCaptured && inlineEditor != null) {
-            inlineEditor.mouseDragged(mouseX, mouseY, button, deltaX, deltaY);
+        if (picker.isOpen()) {
+            picker.mouseDragged(mouseY, button);
+            return true;
+        }
+        if (inlinePanel.hasCapture()) {
+            inlinePanel.mouseDragged(mouseX, mouseY, button, deltaX, deltaY);
             return true;
         }
         if (panning) {
@@ -2112,7 +1227,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
                 ConditionNode node = tree.query(source);
                 dragLabel = sources.size() > 1
                         ? Component.translatable("gui.itemdespawntowhat.edit.tree.drag_many", sources.size()).getString()
-                        : node == null ? "" : row1Label(node).getString();
+                        : node == null ? "" : graph.row1Label(node).getString();
             }
         }
         if (!move.isActive()) {
@@ -2124,19 +1239,18 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
 
     // 落点判定：卡片上四分之一为 BEFORE、下四分之一为 AFTER，中间为 INSIDE；叶节点按上下半区择近。
     private void projectDrop(double localX, double localY) {
-        ConditionNode target = nodeAt(localX, localY);
+        ConditionNode target = graph.nodeAt(localX, localY);
         if (target == null) {
             dropTarget = null;
             move.clearPreview();
             operationError = null;
             return;
         }
-        GraphNode wrapper = wrappers.get(target);
-        UiTreePath targetPath = paths.get(target);
-        if (wrapper == null || targetPath == null) {
+        UiRect rect = graph.rect(target);
+        UiTreePath targetPath = graph.path(target);
+        if (rect == null || targetPath == null) {
             return;
         }
-        UiRect rect = cardRect(wrapper);
         double within = localY - rect.y();
         int edge = Math.max(1, CARD_HEIGHT / DROP_EDGE_DIVISOR);
         UiTreeEditor.DropPosition position;
@@ -2158,11 +1272,12 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (inlineCaptured) {
-            inlineCaptured = false;
-            InlineEditor editor = inlineEditor;
-            return editor == null
-                    || editor.mouseReleased(mouseX, mouseY, button);
+        if (picker.isOpen()) {
+            picker.mouseReleased(button);
+            return true;
+        }
+        if (inlinePanel.hasCapture()) {
+            return inlinePanel.mouseReleased(mouseX, mouseY, button);
         }
         if (panning) {
             // 空白区按下并拖动才算平移；没有位移时按空白点击处理：清空选择
@@ -2183,7 +1298,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         boolean editLeaf = left && leafEditArmed && !move.isActive() && clickedLeafPath != null
                 && Math.hypot(mouseX - pressScreenX, mouseY - pressScreenY) < DRAG_START_DISTANCE
                 && clickedLeafPath.equals(tree.selected())
-                && tree.query(clickedLeafPath) == nodeAt(transform.toLocalX(mouseX), transform.toLocalY(mouseY));
+                && tree.query(clickedLeafPath) == graph.nodeAt(transform.toLocalX(mouseX), transform.toLocalY(mouseY));
         if (!move.isActive() && collapseSelectionOnRelease && left) {
             tree.select(tree.selected());
             followPrimarySelection();
@@ -2207,21 +1322,16 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         if (!visible || !enabled || !bounds.contains(mouseX, mouseY) || scrollY == 0.0D) {
             return false;
         }
-        if (pickerOpen) {
-            if (filteredOptions.size() > 1) {
-                pickerCursor = Math.clamp(pickerCursor + (scrollY > 0.0D ? -1 : 1), 0, filteredOptions.size() - 1);
-                updatePickerRects();
-            }
+        if (picker.isOpen()) {
+            picker.mouseScrolled(mouseX, mouseY, scrollY);
             return true;
         }
         if (kindMenuOpen) {
             kindMenuIndex = Math.clamp(kindMenuIndex + (scrollY > 0.0D ? -1 : 1), 0, GroupKind.values().length - 1);
             return true;
         }
-        if (inlineEditorHit(mouseX, mouseY)) {
-            if (inlineEditor != null && !inlineClosing) {
-                inlineEditor.mouseScrolled(mouseX, mouseY, scrollY);
-            }
+        if (inlinePanel.contains(mouseX, mouseY)) {
+            inlinePanel.mouseScrolled(mouseX, mouseY, scrollY);
             return true;
         }
         // 滚轮以鼠标位置为锚点逐档缩放
@@ -2234,8 +1344,8 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         if (!visible || !enabled) {
             return false;
         }
-        if (pickerOpen) {
-            pickerKeyPressed(keyCode);
+        if (picker.isOpen()) {
+            picker.keyPressed(keyCode);
             return true;
         }
         if (kindMenuOpen) {
@@ -2250,15 +1360,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             return true;
         }
         // 内联框优先拿键盘：文本框聚焦时画布快捷键必须让位
-        if (inlineEditor != null && !inlineClosing) {
-            if (inlineEditor.keyPressed(keyCode, scanCode, modifiers)) {
-                return true;
-            }
-            if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-                clearInlineEditor();
-                return true;
-            }
-        }
+        if (inlinePanel.keyPressed(keyCode, scanCode, modifiers)) return true;
         boolean control = (modifiers & GLFW.GLFW_MOD_CONTROL) != 0
                 && (modifiers & (GLFW.GLFW_MOD_ALT | GLFW.GLFW_MOD_SUPER)) == 0;
         boolean shift = (modifiers & GLFW.GLFW_MOD_SHIFT) != 0;
@@ -2283,7 +1385,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
                 return true;
             }
         }
-        if (inlineEditor != null) {
+        if (inlinePanel.isOpen()) {
             // 内联框打开且未匹配 Ctrl 快捷键：其余按键交给文本框，避免输入字母 / 空格 / 删除误触画布命令
             return false;
         }
@@ -2299,7 +1401,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             }
             return false;
         }
-        if (order.isEmpty()) {
+        if (graph.nodes().isEmpty()) {
             if (keyCode == GLFW.GLFW_KEY_A || keyCode == GLFW.GLFW_KEY_ENTER
                     || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
                 return beginAddCondition();
@@ -2345,21 +1447,14 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         if (!visible || !enabled) {
             return false;
         }
-        if (pickerOpen) {
-            if (codePoint < ' ') {
-                return false;
-            }
-            if (pickerFilter.length() < PICKER_FILTER_MAX) {
-                pickerFilter.append(codePoint);
-            }
-            refreshFilter();
-            return true;
+        if (picker.isOpen()) {
+            return picker.charTyped(codePoint);
         }
         if (kindMenuOpen) {
             // 菜单只有两个固定选项，不接受文本输入
             return false;
         }
-        return inlineEditor != null && !inlineClosing && inlineEditor.charTyped(codePoint, modifiers);
+        return inlinePanel.charTyped(codePoint, modifiers);
     }
 
     // ---- 键盘导航 ----
@@ -2367,10 +1462,10 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     private boolean navigate(int keyCode) {
         UiTreePath selected = tree.selected();
         if (selected == null) {
-            if (order.isEmpty()) {
+            if (graph.nodes().isEmpty()) {
                 return false;
             }
-            return selectNode(order.getFirst());
+            return selectNode(graph.nodes().getFirst());
         }
         ConditionNode node = tree.query(selected);
         if (node == null) {
@@ -2388,8 +1483,8 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             if (!children.isEmpty()) {
                 next = selected.child(0);
             } else {
-                int index = indexOfNode(node);
-                next = index >= 0 && index + 1 < order.size() ? paths.get(order.get(index + 1)) : null;
+                int index = graph.indexOfNode(node);
+                next = index >= 0 && index + 1 < graph.nodes().size() ? graph.path(graph.nodes().get(index + 1)) : null;
             }
         }
         if (next == null || tree.query(next) == null) {
@@ -2410,17 +1505,8 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         return tree.query(candidate) == null ? null : candidate;
     }
 
-    private int indexOfNode(ConditionNode node) {
-        for (int index = 0; index < order.size(); index++) {
-            if (order.get(index) == node) {
-                return index;
-            }
-        }
-        return -1;
-    }
-
     private boolean selectNode(ConditionNode node) {
-        UiTreePath path = paths.get(node);
+        UiTreePath path = graph.path(node);
         if (path == null) {
             return false;
         }
@@ -2432,11 +1518,10 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
 
     // 把卡片带进视口，保留 REVEAL_MARGIN 屏幕像素边距
     private void revealNode(ConditionNode node) {
-        GraphNode wrapper = wrappers.get(node);
-        if (wrapper == null) {
+        UiRect rect = graph.rect(node);
+        if (rect == null) {
             return;
         }
-        UiRect rect = cardRect(wrapper);
         UiRect viewport = transform.viewport();
         double left = transform.toScreenX(rect.x());
         double top = transform.toScreenY(rect.y());
@@ -2459,195 +1544,31 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         }
     }
 
-    // ---- 类型选择框 ----
+    // ---- 类型选择确认与树写入 ----
 
     private void openPicker(Hotspot hotspot) {
         closeKindMenu();
-        pickerOpen = true;
         pickerAppend = false;
         pickerParent = hotspot.parent();
         pickerIndex = hotspot.index();
-        pickerCursor = 0;
-        pickerOffset = 0;
-        pickerFilter.setLength(0);
-        pickerAnimation.reset();
-        pickerAnimation.start(1.0F);
-        pickerPointerKnown = false;
-        refreshFilter();
-        updatePickerRects();
+        picker.open(typeOptions, bounds);
     }
 
-    /** 关闭类型选择框；未打开时不做任何事。 */
     public void closePicker() {
-        pickerOpen = false;
+        picker.close();
         pickerParent = null;
-        pickerFilter.setLength(0);
-        filteredOptions = List.of();
-        pickerCursor = 0;
-        pickerOffset = 0;
-        pickerAnimation.reset();
-        pickerPointerKnown = false;
     }
 
-    private void refreshFilter() {
-        String needle = pickerFilter.toString().trim().toLowerCase(Locale.ROOT);
-        filteredOptions = needle.isEmpty() ? List.copyOf(typeOptions) : typeOptions.stream()
-                .filter(option -> option.label().getString().toLowerCase(Locale.ROOT).contains(needle)
-                        || option.id().toString().toLowerCase(Locale.ROOT).contains(needle))
-                .toList();
-        pickerCursor = Math.clamp(pickerCursor, 0, Math.max(0, filteredOptions.size() - 1));
-        pickerOffset = Math.clamp(pickerOffset, 0, Math.max(0, filteredOptions.size() - 1));
-    }
-
-    private void updatePickerRects() {
-        pickerRect = pickerAnimation.bounds(bounds);
-        int width = pickerRect.width();
-        int availableRows = (bounds.height() - SIDE_PANEL_HEADER - PICKER_SEARCH_ROW - PICKER_FOOTER
-                - SIDE_PANEL_PADDING * 2) / PICKER_ROW_HEIGHT;
-        if (width <= SIDE_PANEL_PADDING * 2 || availableRows <= 0) {
-            closePicker();
-            pickerRect = new UiRect(0, 0, 0, 0);
-            return;
-        }
-        pickerVisibleRows = Math.clamp(filteredOptions.size(), 1, availableRows);
-        // 光标移动到可见范围外时滚动列表，确保所有条件类型均可点选。
-        pickerOffset = Math.clamp(pickerOffset, Math.max(0, pickerCursor - pickerVisibleRows + 1), pickerCursor);
-        pickerOffset = Math.clamp(pickerOffset, 0, Math.max(0, filteredOptions.size() - pickerVisibleRows));
-        int x = pickerRect.x();
-        int y = pickerRect.y();
-        pickerSearchRect = new UiRect(x + SIDE_PANEL_PADDING, y + SIDE_PANEL_HEADER + SIDE_PANEL_PADDING,
-                width - SIDE_PANEL_PADDING * 2, PICKER_SEARCH_ROW - BORDER);
-        pickerListRect = new UiRect(x + SIDE_PANEL_PADDING, pickerSearchRect.bottom() + BORDER,
-                width - SIDE_PANEL_PADDING * 2,
-                pickerVisibleRows * PICKER_ROW_HEIGHT);
-    }
-
-    // 只在指针移动时切换选择，静止的鼠标不会覆盖方向键或滚轮刚选中的类型。
-    private void updatePickerHover(int mouseX, int mouseY) {
-        boolean moved = !pickerPointerKnown || mouseX != pickerMouseX || mouseY != pickerMouseY;
-        pickerPointerKnown = true;
-        pickerMouseX = mouseX;
-        pickerMouseY = mouseY;
-        if (moved) {
-            int index = pickerIndexAt(mouseX, mouseY);
-            if (index >= 0) pickerCursor = index;
-        }
-    }
-
-    private void renderPicker(GuiGraphics graphics, Font renderFont) {
-        if (pickerRect.width() <= 0 || pickerRect.height() <= 0) {
-            return;
-        }
-        graphics.fill(pickerSearchRect.x(), pickerSearchRect.y(), pickerSearchRect.right(),
-                pickerSearchRect.bottom(), theme.palette().canvasPickerInputFill());
-        drawBorder(graphics, pickerSearchRect, theme.palette().canvasPickerInputBorder());
-        String filter = pickerFilter.toString();
-        String searchText = filter.isEmpty()
-                ? Component.translatable("gui.itemdespawntowhat.edit.picker.filter").getString() : filter;
-        int searchColor = filter.isEmpty() ? theme.palette().canvasPickerTextDisabled() : theme.palette().canvasTextOnAccent();
-        graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont, searchText, pickerSearchRect.width() - 6),
-                pickerSearchRect.x() + 2, pickerSearchRect.y() + 2, searchColor, false);
-        int caretX = pickerSearchRect.x() + 2 + Math.min(renderFont.width(filter), pickerSearchRect.width() - 4);
-        graphics.fill(caretX, pickerSearchRect.y() + 2, caretX + 1, pickerSearchRect.bottom() - 2,
-                theme.palette().canvasTextOnAccent());
-
-        if (filteredOptions.isEmpty()) {
-            graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont,
-                            Component.translatable("gui.itemdespawntowhat.edit.picker.empty").getString(),
-                            pickerListRect.width() - 4),
-                    pickerListRect.x() + 2, pickerListRect.y() + 2, theme.palette().canvasPickerTextMuted(), false);
-        } else {
-            pickerOffset = Math.clamp(pickerOffset, 0, Math.max(0, filteredOptions.size() - pickerVisibleRows));
-            for (int row = 0; row < pickerVisibleRows; row++) {
-                int optionIndex = pickerOffset + row;
-                if (optionIndex >= filteredOptions.size()) {
-                    break;
-                }
-                int rowY = pickerListRect.y() + row * PICKER_ROW_HEIGHT;
-                boolean current = optionIndex == pickerCursor;
-                if (current) {
-                    graphics.fill(pickerListRect.x(), rowY, pickerListRect.right(), rowY + PICKER_ROW_HEIGHT,
-                            theme.palette().canvasPickerRowSelected());
-                }
-                graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont,
-                                filteredOptions.get(optionIndex).label().getString(), pickerListRect.width() - 8),
-                        pickerListRect.x() + 4, rowY + 2,
-                        current ? theme.palette().canvasPickerText() : theme.palette().canvasPickerTextMuted(), false);
-            }
-        }
-        graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont,
-                        Component.translatable(PICKER_HINT_KEY).getString(),
-                        Math.max(0, pickerRect.width() - SIDE_PANEL_PADDING * 2)),
-                pickerRect.x() + SIDE_PANEL_PADDING, pickerRect.bottom() - PICKER_FOOTER,
-                theme.palette().canvasPickerTextMuted(), false);
-    }
-
-    private void handlePickerClick(double mouseX, double mouseY) {
-        int index = pickerIndexAt(mouseX, mouseY);
-        if (index >= 0) {
-            pickerCursor = index;
-            confirmPicker();
-            return;
-        }
-        if (!pickerRect.contains(mouseX, mouseY)) {
-            closePicker();
-        }
-    }
-
-    private int pickerIndexAt(double mouseX, double mouseY) {
-        if (!pickerOpen || !bounds.contains(mouseX, mouseY)
-                || filteredOptions.isEmpty() || !pickerListRect.contains(mouseX, mouseY)) {
-            return -1;
-        }
-        int row = (int) ((mouseY - pickerListRect.y()) / Math.max(1, PICKER_ROW_HEIGHT));
-        int index = pickerOffset + row;
-        return index >= 0 && index < filteredOptions.size() ? index : -1;
-    }
-
-    private void pickerKeyPressed(int keyCode) {
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            closePicker();
-        } else if (keyCode == GLFW.GLFW_KEY_BACKSPACE) {
-            if (!pickerFilter.isEmpty()) {
-                pickerFilter.setLength(pickerFilter.length() - 1);
-                refreshFilter();
-            }
-        } else if (keyCode == GLFW.GLFW_KEY_UP) {
-            pickerCursor = Math.max(0, pickerCursor - 1);
-        } else if (keyCode == GLFW.GLFW_KEY_DOWN) {
-            pickerCursor = Math.clamp(pickerCursor + 1, 0, Math.max(0, filteredOptions.size() - 1));
-        } else if (keyCode == GLFW.GLFW_KEY_HOME) {
-            pickerCursor = 0;
-        } else if (keyCode == GLFW.GLFW_KEY_END) {
-            pickerCursor = Math.max(0, filteredOptions.size() - 1);
-        } else if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
-            if (!filteredOptions.isEmpty()) {
-                confirmPicker();
-            }
-        }
-        if (pickerOpen) updatePickerRects();
-    }
-
-    // 确认类型只生成默认叶节点；参数编辑由后续点击叶卡片触发。
-    private void confirmPicker() {
-        if (pickerCursor < 0 || pickerCursor >= filteredOptions.size()) {
-            closePicker();
-            return;
-        }
-        ResourceLocation type = filteredOptions.get(pickerCursor).id();
+    private void confirmPicker(ResourceLocation type) {
         UiTreePath parent = pickerParent;
         int index = pickerIndex;
         boolean append = pickerAppend;
         closePicker();
         addMode = false;
         ConditionTreeContract.LeafFactory factory = leafFactory;
-        if (factory == null) {
-            return;
-        }
+        if (factory == null) return;
         ConditionNode leaf = factory.create(type);
-        if (leaf == null) {
-            return;
-        }
+        if (leaf == null) return;
         lastOpKey = EditSession.OP_ADD_CONDITION;
         boolean inserted = append ? addNode(leaf) : insertNode(parent, index, leaf);
         if (inserted) revealNode(leaf);
@@ -2667,23 +1588,6 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         UiTreePath primary = tree.selected();
         selectedPath = primary == null ? null
                 : ConditionTreeNodes.jsonPath(expression.root(), primary, ConditionTreeContract.ROOT_PATH);
-    }
-
-    private @Nullable ConditionNode nodeForJsonPath(String path) {
-        ConditionNode best = null;
-        int bestLength = -1;
-        for (Map.Entry<ConditionNode, UiTreePath> entry : paths.entrySet()) {
-            String candidate = ConditionTreeNodes.jsonPath(expression.root(), entry.getValue(),
-                    ConditionTreeContract.ROOT_PATH);
-            if (!path.equals(candidate) && !path.startsWith(candidate + ".")) {
-                continue;
-            }
-            if (candidate.length() > bestLength) {
-                bestLength = candidate.length();
-                best = entry.getKey();
-            }
-        }
-        return best;
     }
 
     private boolean accept(UiTreeEditor.Outcome result) {
@@ -2765,11 +1669,6 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         ConditionNode element = copy.remove(from);
         copy.add(to, element);
         return node instanceof ConditionNode.AllOf ? new ConditionNode.AllOf(copy) : new ConditionNode.AnyOf(copy);
-    }
-
-    private static boolean isContainer(@Nullable ConditionNode node) {
-        return node instanceof ConditionNode.AllOf || node instanceof ConditionNode.AnyOf
-                || node instanceof ConditionNode.Inverted;
     }
 
     // ---- 焦点 ----

@@ -441,7 +441,7 @@
   "gui.itemdespawntowhat.edit.picker.title": "Choose a condition type",
   "gui.itemdespawntowhat.edit.picker.empty": "No condition types available",
   "gui.itemdespawntowhat.edit.picker.hint": "Up/Down select  Enter confirm  Esc cancel",
-  "gui.itemdespawntowhat.edit.picker.mouse_hint": "Hover select  Click/Enter confirm  Esc cancel",
+  "gui.itemdespawntowhat.edit.picker.mouse_hint": "Wheel scroll  Hover select  Click confirm",
   "gui.itemdespawntowhat.edit.issue.incomplete_group": "Incomplete group: at least one child is required",
   "gui.itemdespawntowhat.edit.issue.missing_condition": "A leaf node has no condition selected",
   "gui.itemdespawntowhat.edit.issue.too_deep": "Depth %s exceeds the limit %s",
