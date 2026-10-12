@@ -47,7 +47,7 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * 独占编辑会话的业务编排（契约 §3）：打开/确认/心跳/关闭/快照/目录/保存。
+ * 独占编辑会话的业务编排：打开/确认/心跳/关闭/快照/目录/保存。
  * 本类只产出"要下发的载荷"，不直接触碰网络；平台 registrar 与命令层负责发送。
  * 所有授权检查点都校验 sessionId 与持有者，失败回 SESSION_EXPIRED / LOCK_NOT_OWNED。
  * 时钟一律使用服务端活动 tick，由调用方（tick 事件）传入。

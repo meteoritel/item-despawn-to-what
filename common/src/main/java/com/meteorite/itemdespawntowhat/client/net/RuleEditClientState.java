@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.net;
 
 /***
- * 客户端编辑会话状态机（契约 §3.1 的服务端状态在客户端的镜像）。
+ * 客户端编辑会话状态机。
  * 界面层据此决定是否显示编辑控件、是否允许提交：只有 {@link #ACTIVE} 可编辑。
  */
 public enum RuleEditClientState {

@@ -21,9 +21,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * /idtw config 子命令组：reload / edit / validate / list / edit-lock（规划书 3.10、契约 §3.7）。
+ * /idtw config 子命令组：reload / edit / validate / list / edit-lock（命令树见 docs/dev/backend/modules/command.md）。
  * 全部只读或经由既有 core/service 能力落盘，命令层不直接写文件。
- * 旧链路转换器 /idtw config convert 已按 P8 结论退役（见 docs/plan/v1.2.1-migration-evaluation.md）。
  * 「编辑入口」必须先原子取锁成功才下发打开载荷；取锁失败回结构化 LOCK_BUSY 状态与持有者。
  */
 final class RuleConfigCommands {
@@ -32,7 +31,7 @@ final class RuleConfigCommands {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    // 组装 config 分支；只有 edit-lock status 不要求编辑权限（契约 §3.7：任何玩家都能查看自身状态）
+    // 组装 config 分支；只有 edit-lock status 不要求编辑权限
     static LiteralArgumentBuilder<CommandSourceStack> build(RuleCommandContext context) {
         return Commands.literal("config")
                 .then(Commands.literal("reload")

@@ -16,7 +16,7 @@ import java.util.Locale;
 import java.util.Map;
 
 /***
- * 规则目录服务：消费 core/catalog 的候选数据源（冻结接口，实现归 task-8），
+ * 规则目录服务：消费 core/catalog 的候选数据源，
  * 负责按"类型 + 来源修订号"缓存全量候选、大小写不敏感过滤、分页切分与修订失效，产出可下发的 RuleCatalog。
  * 只做读取与切分，不做权限与会话校验（那属 RuleEditService）。
  */

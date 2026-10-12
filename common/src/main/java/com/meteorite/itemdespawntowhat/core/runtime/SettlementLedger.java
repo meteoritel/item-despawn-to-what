@@ -20,7 +20,7 @@ import java.util.Map;
 /**
  * 服务器级结算账本：保存进行中与已完成的转化结算记录。
  * 存在主世界（服务端全局）的数据存储里：维度卸载或停服都不会丢掉记录本身，
- * 返回待返还数据的完整恢复由阶段 6 落地；写入仍只发生在服务端线程。
+ * 返回待返还数据的完整恢复由 ConversionRuntime 落地；写入仍只发生在服务端线程。
  */
 public final class SettlementLedger extends SavedData {
 
@@ -72,7 +72,7 @@ public final class SettlementLedger extends SavedData {
         return count;
     }
 
-    // 待恢复记录快照（按加入顺序）：阶段6 恢复只交付这些记录的 pendingDelivery，不重放旧效果队列
+    // 待恢复记录快照（按加入顺序）： 恢复只交付这些记录的 pendingDelivery，不重放旧效果队列
     public List<SettlementRecord> unsettled() {
         List<SettlementRecord> list = new ArrayList<>();
         for (SettlementRecord record : records.values()) {
@@ -128,7 +128,7 @@ public final class SettlementLedger extends SavedData {
                 }
             }
             if (victim == null) {
-                // 上限是硬保护：未结清/中断记录是阶段 6 的恢复依据，一条都不能裁，只告警并结束本次裁剪
+                // 上限是硬保护：未结清/中断记录是恢复依据，一条都不能裁，只告警并结束本次裁剪
                 LOGGER.warn("结算账本达到上限 {} 且没有可裁剪的已完成记录，未结清记录全部保留", MAX_RECORDS);
                 break;
             }

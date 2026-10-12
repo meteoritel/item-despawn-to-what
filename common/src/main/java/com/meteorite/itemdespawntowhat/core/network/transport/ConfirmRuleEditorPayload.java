@@ -7,7 +7,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * C2S：客户端确认已进入编辑界面（契约 §3.3），服务端据此把会话从 OPENING 推进到 ACTIVE。
+ * C2S：客户端确认已进入编辑界面，服务端据此把会话从 OPENING 推进到 ACTIVE。
  */
 public record ConfirmRuleEditorPayload(String sessionId, int protocolVersion) implements CustomPacketPayload {
 

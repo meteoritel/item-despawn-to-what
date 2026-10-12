@@ -16,7 +16,7 @@ import java.util.List;
  * 条件类型 dimension：按掉落物所在维度匹配。
  * 参数 dimensions 为维度 id 列表，至少一项；命中任意一项即成立。
  * 维度属于动态注册表（不在 BuiltInRegistries 中），本层只做语法与数量校验，
- * 存在性复核留给阶段③ 的运行时/命令层（那里能拿到 RegistryAccess）。
+ * 存在性复核留给的运行时/命令层（那里能拿到 RegistryAccess）。
  * JSON 示例：{ "type": "itemdespawntowhat:dimension", "dimensions": ["minecraft:overworld"] }
  */
 public record DimensionCondition(List<ResourceLocation> dimensions) implements Condition {

@@ -23,7 +23,7 @@ import java.util.Map;
 
 /**
  * consume_catalyst：消耗触发位置附近作为触媒的物品（如祭坛上的献祭物）。
- * items 为物品 id 或 #tag 的混合列表，必填且不得为空；本类只承载参数模型与参数校验（阶段②）。
+ * items 为物品 id 或 #tag 的混合列表，必填且不得为空；本类只承载参数模型与参数校验。
  */
 public record ConsumeCatalystEffect(
         List<TaggedId> items,

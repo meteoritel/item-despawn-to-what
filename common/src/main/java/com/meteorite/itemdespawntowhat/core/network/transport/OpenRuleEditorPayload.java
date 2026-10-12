@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * S2C：服务端要求客户端打开规则编辑入口，并携带会话握手信息（契约 §3.3）。
+ * S2C：服务端要求客户端打开规则编辑入口，并携带会话握手信息。
  * statusCode 为 {@link RuleSaveStatus} 名；取锁失败时同样下发本载荷，客户端按码提示持有者。
  */
 public record OpenRuleEditorPayload(String sessionId, String targetId, int protocolVersion,
@@ -52,7 +52,7 @@ public record OpenRuleEditorPayload(String sessionId, String targetId, int proto
         }
     }
 
-    // 编码：字段顺序与契约 §3.3 一致
+    // 编码：字段顺序固定
     private static void encode(FriendlyByteBuf buffer, OpenRuleEditorPayload payload) {
         buffer.writeUtf(payload.sessionId(), RuleEditLimits.MAX_ID_CHARS);
         buffer.writeUtf(payload.targetId(), RuleEditLimits.MAX_CODE_CHARS);

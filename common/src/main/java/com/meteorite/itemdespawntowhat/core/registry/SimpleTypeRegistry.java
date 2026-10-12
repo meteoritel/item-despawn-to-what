@@ -19,7 +19,7 @@ import java.util.Set;
  *
  * <p><b>生命周期与并发约定</b>
  * <ul>
- *   <li><b>注册期</b>：只允许<b>单个线程</b>调用 {@link #register}，此阶段不保证并发读安全；</li>
+ * <li><b>注册期</b>：只允许<b>单个线程</b>调用 {@link #register}，此阶段不保证并发读安全；</li>
  *   <li><b>冻结</b>：由执行注册的同一线程调用 {@link #freeze()}，内部结构被替换为不可变快照；</li>
  *   <li><b>冻结后</b>：{@link #find}、{@link #require}、{@link #all}、{@link #ids} 可被任意线程并发调用，
  *       注册表内容不再变化（快照通过 volatile 字段安全发布）。</li>
@@ -36,7 +36,7 @@ import java.util.Set;
  * <p><b>与接口的关系</b>：{@link TypeRegistry} 接口层面<b>不承诺只读</b>（{@link #register} 始终在契约内），
  * 冻结语义完全由本实现保证——冻结后再注册会在运行期抛 {@link RegistryFrozenException}。
  *
- * <p>本类属于与 core/api 同层的通用基础设施，不感知任何具体类型；内置类型注册表见阶段②。
+ * <p>本类属于与 core/api 同层的通用基础设施，不感知任何具体类型；内置类型注册表见 {@code BuiltinTypeRegistries}。
  *
  * @param <T> 注册的类型定义（效果类型或条件类型的公共形态）
  */

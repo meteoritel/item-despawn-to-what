@@ -7,7 +7,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * C2S：客户端退出编辑器（契约 §3.3），服务端立即释放会话；reasonCode 供日志与统计使用。
+ * C2S：客户端退出编辑器，服务端立即释放会话；reasonCode 供日志与统计使用。
  */
 public record CloseRuleEditorPayload(String sessionId, String reasonCode) implements CustomPacketPayload {
 

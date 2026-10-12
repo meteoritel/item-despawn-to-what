@@ -17,7 +17,7 @@ import java.util.function.IntConsumer;
 /**
  * 效果执行上下文的服务端实现。
  * 延迟任务经公共服务器调度器登记，绑定"维度 realm + 位置"；源实体可能已消失，执行器需自行容错。
- * 阶段 4 起每个转化组各持有一个实例，异步批次通过进度回执把「已受理」收敛为「已完成」。
+ * 每个转化组各持有一个实例，异步批次通过进度回执把「已受理」收敛为「已完成」。
  */
 public final class RuntimeEffectContext implements EffectContext {
 

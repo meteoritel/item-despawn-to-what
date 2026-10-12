@@ -29,7 +29,7 @@ import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
 /***
- * 数值控件：kit 滑杆 + 行内精确输入框（字段规格 §1/§4）。
+ * 数值控件：kit 滑杆 + 行内精确输入框。
  * <p>滑杆使用字段的「常用交互窗口」，但提交始终按后端合法域校验：窗口不充当硬限额，
  * 窗口之外的既有合法值照原样显示与精确编辑，绝不在装载时被钳制。
  * <p>双向搬运分三条路径：回填走 {@link UiSlider#core()} 的精确 {@code setValue}

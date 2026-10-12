@@ -7,7 +7,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * C2S：客户端提交规则变更集（json 为 {@code RuleEditChangeSet.serialize()} 文本，契约 §3.3）。
+ * C2S：客户端提交规则变更集。
  * operationId 由客户端生成，服务端对同一会话保留最近 16 个用于幂等；
  * 超过直发上限的变更集走 {@link SaveRuleChangeSetChunkPayload} 分片。
  */

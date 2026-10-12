@@ -83,7 +83,7 @@ public final class DropStateStore {
         set(entity, get(entity).withTemporary(protectionUntil, cooldownUntil));
     }
 
-    // 授予返还物状态：永久保护 + 永久禁转（阶段 6 的返还交付调用）
+    // 授予返还物状态：永久保护 + 永久禁转（返还交付时调用）
     public static void grantPermanentReturn(ItemEntity entity) {
         if (entity == null) {
             return;

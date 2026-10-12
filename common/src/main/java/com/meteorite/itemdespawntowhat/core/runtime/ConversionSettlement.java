@@ -69,7 +69,7 @@ import java.util.function.IntConsumer;
  * 一次性效果（EffectType.oneShot）：不参与候选数量上限；仅含一次性效果的候选最多一组；
  * 同一源请求内每个一次性效果槽（候选 id + 槽序号）只尝试一次，概率落空或条件不满足也算已尝试，续跑不重试。
  * 真实账目只来自执行器回执（EffectResult 与 reportProgress），计划量不冒充成功量；
- * 取消（规则重载/维度卸载/停服）只落一条待返还记录，不在不安全时刻做世界写入，交给阶段 6 恢复。
+ * 取消（规则重载/维度卸载/停服）只落一条待返还记录，不在不安全时刻做世界写入，交给 恢复。
  */
 final class ConversionSettlement implements ServerTask {
 
@@ -126,7 +126,7 @@ final class ConversionSettlement implements ServerTask {
     private int dispatchedThisStep;
     private boolean groupOpen;
     private boolean cancelled;
-    // 返还位置搜索游标：跨刻保留进度，交付成功后重置（阶段 5）
+    // 返还位置搜索游标：跨刻保留进度，交付成功后重置
     private ReturnItemSpawner.PositionSearch rebateSearch;
 
     ConversionSettlement(ConversionRuntime runtime, ServerScheduler scheduler, ServerLevel level, ItemEntity source,
@@ -191,7 +191,7 @@ final class ConversionSettlement implements ServerTask {
 
     // 中止结算并把待返还量落盘：取消路径（onCancelled）与异常路径（step 的 catch）共用同一条顺序，
     // 不新造第二份账目口径。顺序：幂等位 → 待返还同步 → 状态记录 → 释放未支付预留 → 写盘 + 观测。
-    // 本方法不做任何世界写入（维度卸载/停服时加入世界不安全，待返还数据留给阶段 6 恢复）；
+    // 本方法不做任何世界写入（维度卸载/停服时加入世界不安全，待返还数据留给 恢复）；
     // 返回 false 表示此前已中止过（幂等，不重复写盘）。failed=true 时记 FAILED 语义，否则记 INTERRUPTED。
     private boolean abort(String reason, boolean failed) {
         if (cancelled) {
@@ -313,7 +313,7 @@ final class ConversionSettlement implements ServerTask {
         return rotationIndex >= 0 ? rotationIndex : cursors.cursor(cursorKey(), structureVersion, candidates.size());
     }
 
-    // 无法开出任何一组：整堆返还，不支付任何成本（阶段 4 验收⑤）
+    // 无法开出任何一组：整堆返还，不支付任何成本
     private StepResult abandonAll() {
         pendingCandidate = null;
         pendingCandidateIndex = -1;
@@ -669,7 +669,7 @@ final class ConversionSettlement implements ServerTask {
 
     // 候选结构版本：把候选（id、安全生成/起点填充标记、效果顺序与全部参数）用规则编解码器编码成稳定 JSON 文本，
     // 再取 SHA-256 前 8 字节。硬约束：不得使用对象哈希——record 的 hashCode 会逐层展开组件，而枚举组件用的是
-    // Object 身份哈希（值不受内容约束，随 JVM、哈希模式与分配状态变化），重启后可能被判为新结构而让游标归零（PLAN.md:276 验收③）。
+    // Object 身份哈希（值不受内容约束，随 JVM、哈希模式与分配状态变化），重启后可能被判为新结构而让游标归零。
     private int structureVersion(List<OutcomeCandidate> candidates) {
         Codec<List<OutcomeCandidate>> codec = OutcomeCandidate.codec(RuleCodecs.effectCodec(runtime.types().effectTypes())).listOf();
         DynamicOps<JsonElement> ops = RegistryOps.create(JsonOps.INSTANCE, level.registryAccess());

@@ -12,9 +12,9 @@ import java.util.UUID;
 
 /**
  * 规则与候选结果的工厂：空白新建、模板创建、复制全部走同一套身份分配与默认体构造。
- * <p>身份分配（主计划 §6 / ADR-0021）：规则 id 形如 {@code itemdespawntowhat:rule_<32位小写UUID>}，
+ * <p>身份分配（ADR-0021）：规则 id 形如 {@code itemdespawntowhat:rule_<32位小写UUID>}，
  * 候选 id 形如 {@code result_<32位小写UUID>}；模板创建与复制一律分配全新身份，不做「沿用旧 id」的猜测。
- * <p>未改动的后端默认值不写进 JSON（fields §1/§2）：新规则只落 id、source、固定源成本、
+ * <p>未改动的后端默认值不写进 JSON：新规则只落 id、source、固定源成本、
  * schema_version 与一个初始候选；enabled / priority / trigger_after_seconds / triggers / combination
  * 全部依赖服务端默认，避免把默认值固化进覆盖层文件。
  * <p>safe_spawn 与 fill_origin 也不写入，保持后端默认（false / true）。

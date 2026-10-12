@@ -12,7 +12,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 只读自动命名与短摘要服务（主计划 §6）：本地化模板 + Component 参数。
+ * 只读自动命名与短摘要服务：本地化模板 + Component 参数。
  * <p>解析优先级：非空 {@code display_name} → 自动标题 → 安全兜底（规则 id 文本 / 未完成占位）。
  * <p>标题只用于展示：不写 JSON、不决定覆盖文件名、不改变游标指纹；{@code notes} 不参与命名。
  * <p>资源名通过 {@link NameSource} 注入；目录未加载或缺失时回落 {@code namespace:path} 文本

@@ -22,7 +22,7 @@ import java.util.Optional;
 /**
  * consume_fluid：消耗触发位置处的流体。
  * fluid 可空表示"任意流体"；非空时为流体 id 或 #tag。require_source 为真时要求同位置存在源掉落物。
- * 本类只承载参数模型与参数校验（阶段②）。
+ * 本类只承载参数模型与参数校验。
  */
 public record ConsumeFluidEffect(
         @Nullable TaggedId fluid,

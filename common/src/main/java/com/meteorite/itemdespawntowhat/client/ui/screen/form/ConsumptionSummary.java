@@ -6,7 +6,7 @@ import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
 /***
- * 消耗语义摘要（forms.md §7）：判断当前效果列表属于隐式消耗、显式消耗、显式消耗来源，还是重复声明。
+ * 消耗语义摘要：判断当前效果列表属于隐式消耗、显式消耗、显式消耗来源，还是重复声明。
  * 只读草稿 JSON，不修改任何数据。
  */
 public final class ConsumptionSummary {

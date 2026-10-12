@@ -9,7 +9,7 @@ import java.util.stream.Collectors;
 
 /**
  * 消失方式：物品被销毁（消失）的途径类别，一条规则可同时声明多种。
- * 未声明时按 natural 处理（对齐 PLAN §4.2「消失方式集合默认仅自然消失」）。
+ * 未声明时按 natural 处理。
  * JSON 取值为小写下划线，解析大小写不敏感，未知取值明确报错，不做静默回退。
  */
 public enum TriggerKind {

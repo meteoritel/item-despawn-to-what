@@ -11,11 +11,10 @@ import java.util.List;
 
 /***
  * 服务端下发的规则快照：版本戳 + 上下文修订 + 逐条规则的来源视图 + 整体问题清单。
- * rules: List&lt;JsonObject&gt; 与 issues: List&lt;String&gt; 已被契约 §3.6 的 entries/issues 取代。
  */
 public record RuleSnapshot(int version, int contextRevision, List<RuleSnapshotEntry> entries, List<RuleIssue> issues) {
 
-    // 线上 JSON 键；字段名与契约 §3.6 一一对应
+    // 线上 JSON 字段键
     public static final String KEY_VERSION = "version";
     public static final String KEY_CONTEXT_REVISION = "context_revision";
     public static final String KEY_ENTRIES = "entries";

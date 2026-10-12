@@ -23,7 +23,7 @@ import java.util.Optional;
 
 /**
  * arrow_rain：在触发位置上方生成一阵箭雨。
- * potion_effects 可空，元素为箭矢携带的药水效果（效果 id + 持续刻数 + 等级）。本类只承载参数模型与参数校验（阶段②）。
+ * potion_effects 可空，元素为箭矢携带的药水效果（效果 id + 持续刻数 + 等级）。本类只承载参数模型与参数校验。
  */
 public record ArrowRainEffect(
         int count,

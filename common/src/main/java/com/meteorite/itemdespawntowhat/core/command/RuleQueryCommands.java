@@ -19,7 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * /idtw rule 子命令组：list 与 show &lt;id&gt;（规划书 3.10）。
+ * /idtw rule 子命令组：list 与 show &lt;id&gt;。
  * show 输出的是覆盖层文件原始 JSON（经 RuleSnapshotAssembler 装配），便于手改后核对。
  */
 final class RuleQueryCommands {

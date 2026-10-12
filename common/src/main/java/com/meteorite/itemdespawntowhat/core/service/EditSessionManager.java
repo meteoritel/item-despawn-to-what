@@ -7,7 +7,7 @@ import java.nio.file.Path;
 import java.util.UUID;
 
 /**
- * 全局单一编辑目标的会话状态机（契约 §3.1）与覆盖层版本戳管理。
+ * 全局单一编辑目标的会话状态机与覆盖层版本戳管理。
  * 状态机：FREE --取锁--> OPENING --客户端确认--> ACTIVE --提交变更集--> APPLYING --应用结束--> ACTIVE；
  * OPENING/ACTIVE/APPLYING 在释放、断线、租约到期或强制释放时回到 FREE。
  * 同一时刻至多 1 个非 FREE 会话，因此独占性不再依赖"按玩家隔离"。
@@ -17,7 +17,7 @@ import java.util.UUID;
 public final class EditSessionManager {
 
     /***
-     * 会话状态（契约 §3.1）。
+     * 会话状态。
      */
     public enum SessionState {
         // 空闲：无任何会话
@@ -144,7 +144,7 @@ public final class EditSessionManager {
         return state != SessionState.FREE && ownerUuid != null && ownerUuid.equals(player);
     }
 
-    // 会话是否已确认（ACTIVE 或 APPLYING）：快照/目录请求的状态守卫（契约 §3.3 要求校验状态）
+    // 会话是否已确认（ACTIVE 或 APPLYING）：快照/目录请求的状态守卫
     public synchronized boolean confirmed(String sessionId) {
         return (state == SessionState.ACTIVE || state == SessionState.APPLYING) && matches(sessionId);
     }

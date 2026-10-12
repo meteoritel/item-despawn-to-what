@@ -10,12 +10,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 /***
- * 目录分页结果：P3 只做骨架收发（条目可为空），目录数据由 P4 的目录来源填充。
+ * 目录分页结果：条目由服务端目录来源填充；无可用来源时条目为空。
  * entries 的 JSON 文本经 RuleCatalogPayload 下发，客户端自行解析。
  */
 public record RuleCatalog(RuleCatalogType type, int revision, List<RuleCatalogEntry> entries, boolean lastPage) {
 
-    // 线上 JSON 键；字段名与契约 §3.6 一一对应
+    // 线上 JSON 字段键
     public static final String KEY_TYPE = "type";
     public static final String KEY_REVISION = "revision";
     public static final String KEY_ENTRIES = "entries";
@@ -25,7 +25,7 @@ public record RuleCatalog(RuleCatalogType type, int revision, List<RuleCatalogEn
         entries = entries == null ? List.of() : List.copyOf(entries);
     }
 
-    // 空目录（P3 骨架：类型合法但内容未接入）
+    // 空目录（类型合法但来源为空时使用）
     public static RuleCatalog empty(RuleCatalogType type, int revision) {
         return new RuleCatalog(type, revision, List.of(), true);
     }

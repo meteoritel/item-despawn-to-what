@@ -31,15 +31,15 @@ final class DebugPerformanceWindow {
     private long missingTimingTicks;
     private final QueueWindow checks;
     private final QueueWindow effects;
-    // 阶段7：本维度按任务种类的队列切片（level 级），把阶段2 的 checks/effects 两类口径扩到全部种类
+    // 本维度按任务种类的队列切片（level 级），把 checks/effects 两类口径扩到全部种类
     private final EnumMap<ServerTaskKind, QueueWindow> levelKindQueues = new EnumMap<>(ServerTaskKind.class);
-    // 阶段7：跨维度合并的预算使用率、就绪延迟、到期搬运分布（server 级）
+    // 跨维度合并的预算使用率、就绪延迟、到期搬运分布（server 级）
     private final DebugDistribution serverBudgetRatioPpm = new DebugDistribution();
     // 就绪延迟只在「存在就绪任务的 tick」采样（就绪数取 per_kind.deferred 之和），不是全 tick 平均：
     // 无就绪任务时延迟恒为 0，混入会把 p50/p95 稀释成 0、掩盖真实等待
     private final DebugDistribution serverReadyDelayTicks = new DebugDistribution();
     private final DebugDistribution serverDrainedPerTick = new DebugDistribution();
-    // 阶段7：跨维度合并的单类步骤耗时（server 级），每个 kind 一条独立样本数组
+    // 跨维度合并的单类步骤耗时（server 级），每个 kind 一条独立样本数组
     private final EnumMap<ServerTaskKind, DebugMeasurements> serverKindStepMicros = new EnumMap<>(ServerTaskKind.class);
     private final ConversionRuntime runtime;
     private final long started = System.nanoTime();
@@ -151,7 +151,7 @@ final class DebugPerformanceWindow {
             budgetSamples++;
             // 比例以百万分之一为整数样本：nearest-rank 只接受整数，避免浮点样本与排序口径混用
             serverBudgetRatioPpm.add(Math.round(ratio * 1_000_000D));
-            // 这里的耗尽按预算自身标志统计（与阶段2 调度器口径不同：调度器只在「仍有剩余工作」时才计入 exhausted_by_*）
+            // 这里的耗尽按预算自身标志统计（与其他调度统计口径不同：调度器只在「仍有剩余工作」时才计入 exhausted_by_*）
             if (budget.timeExpired()) { ticksTimeExhausted++; }
             if (budget.workUnitsExpired()) { ticksWorkUnitsExhausted++; }
             if (!budget.timeExpired() && !budget.workUnitsExpired()) { ticksUnexhausted++; }
@@ -217,7 +217,7 @@ final class DebugPerformanceWindow {
         data.addProperty("tick_cost_scope", "vanilla_tick_plus_idtw_runtime");
         data.addProperty("tick_timing_complete", missingTimingTicks == 0);
         data.addProperty("tick_timing_missing_ticks", missingTimingTicks);
-        // 本维度（level 级）切片：旧字段保持不变，便于和阶段0 基线逐字段对照
+        // 本维度（level 级）切片：旧字段保持不变，便于与既有基线逐字段对照
         data.add("checks", checks.summary());
         data.add("effects", effects.summary());
         JsonObject levelKinds = new JsonObject();
@@ -258,7 +258,7 @@ final class DebugPerformanceWindow {
         }
         data.add("server_kind_step_micros", serverKindMicros);
         data.add("scheduler", schedulerSummary());
-        // 结算账本规模：未结清记录是阶段 6 的恢复依据，已完成记录按 tick 过期裁剪
+        // 结算账本规模：未结清记录是恢复依据，已完成记录按 tick 过期裁剪
         SettlementLedger ledger = SettlementLedger.get(level);
         data.addProperty("ledger_unsettled", ledger.unsettledCount());
         data.addProperty("ledger_records", ledger.size());

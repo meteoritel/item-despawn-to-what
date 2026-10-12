@@ -7,7 +7,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * C2S：客户端在已持有会话的前提下请求规则快照（契约 §3.3）。
+ * C2S：客户端在已持有会话的前提下请求规则快照。
  * 会话校验不通过时服务端回 SESSION_EXPIRED/LOCK_NOT_OWNED，不在请求路径上创建会话。
  */
 public record RequestRuleSnapshotPayload(String sessionId, String requestId) implements CustomPacketPayload {

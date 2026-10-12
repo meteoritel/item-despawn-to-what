@@ -7,9 +7,9 @@ import net.minecraft.world.item.ItemStack;
 
 /**
  * 一次转化的结算记录：计划量、已开始的组、真实完成量与返还交付进度。
- * 账目口径（PLAN §4.4 / ADR-0001）：N = C + 已交付返还 + 尚待交付返还，C = 每组源成本 × 已开始组数；
+ * 账目口径：N = C + 已交付返还 + 尚待交付返还，C = 每组源成本 × 已开始组数；
  * appliedUnits 只由执行器回执累加，pendingUnits 是已派发未回执的部分，计划量不冒充成功量。
- * 记录可持久化：无法加入世界的返还留在 pendingDelivery 里，交给阶段 6 恢复。
+ * 记录可持久化：无法加入世界的返还留在 pendingDelivery 里，交给 恢复。
  * 催化剂按单独账目计数（catalystCostPerGroup / catalystGroupsPaid / catalystsConsumed），不进源物品守恒式（D31）。
  */
 public final class SettlementRecord {
@@ -39,7 +39,7 @@ public final class SettlementRecord {
     private int skippedEffects;
     private int failedEffects;
     // 催化剂固定成本（D31）：每组消耗件数、已支付组数、已真实扣减的催化剂总件数；
-    // 未声明 catalyst_cost 的规则三项恒为 0，且不写盘（存档字节与阶段 6 完全一致）
+    // 未声明 catalyst_cost 的规则三项恒为 0，且不写盘（存档字节与 完全一致）
     private int catalystCostPerGroup;
     private int catalystGroupsPaid;
     private int catalystsConsumed;
@@ -226,7 +226,7 @@ public final class SettlementRecord {
             tag.putDouble("pos_y", positionY);
             tag.putDouble("pos_z", positionZ);
         }
-        // 催化剂字段只在 >0 时写盘：未声明 catalyst_cost 的存档字节与阶段 6 完全一致
+        // 催化剂字段只在 >0 时写盘：未声明 catalyst_cost 的存档字节与 完全一致
         if (catalystCostPerGroup > 0) {
             tag.putInt("catalyst_cost", catalystCostPerGroup);
         }

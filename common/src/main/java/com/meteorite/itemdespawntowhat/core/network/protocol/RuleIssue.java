@@ -28,7 +28,7 @@ public record RuleIssue(String severity, @Nullable String ruleId, String origin,
     public static final String ORIGIN_RUNTIME = "runtime";
     public static final String ORIGIN_NETWORK = "network";
 
-    // 线上 JSON 键；字段名与契约 §3.5 一一对应
+    // 线上 JSON 字段键
     public static final String KEY_SEVERITY = "severity";
     public static final String KEY_RULE_ID = "rule_id";
     public static final String KEY_ORIGIN = "origin";

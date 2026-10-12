@@ -7,7 +7,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * C2S：大变更集的分片（契约 §3.3）。transferId 标识一次传输，index 从 0 递增，count 为总分片数。
+ * C2S：大变更集的分片。transferId 标识一次传输，index 从 0 递增，count 为总分片数。
  * 服务端按 transferId 重组（{@link RuleEditChunkAccumulator}），收齐后走与直发完全相同的保存流程。
  */
 public record SaveRuleChangeSetChunkPayload(String sessionId, String operationId, String transferId,

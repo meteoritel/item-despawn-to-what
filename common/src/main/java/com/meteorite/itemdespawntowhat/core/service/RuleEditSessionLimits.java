@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.service;
 
 /**
- * 独占编辑会话的时间与权限常量（契约 §3.1、§3.2）。
+ * 独占编辑会话的时间与权限常量。
  * 所有时间常量以"服务端活动 tick"为单位（20 tick = 1 秒），暂停时租约不流逝。
  */
 public final class RuleEditSessionLimits {
@@ -21,7 +21,7 @@ public final class RuleEditSessionLimits {
     // 打开编辑器所需的权限等级
     public static final int REQUIRED_PERMISSION_LEVEL = 2;
 
-    // 每个会话保留的幂等操作记录条数（契约 §3.3）
+    // 每个会话保留的幂等操作记录条数
     public static final int MAX_OPERATION_HISTORY = 16;
 
     // 每秒对应的 tick 数

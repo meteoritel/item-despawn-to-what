@@ -12,7 +12,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 /***
- * 编辑器快捷键的共用逻辑（契约 §5.3）：快捷键只做「重开已有会话的界面」，
+ * 编辑器快捷键的共用逻辑：快捷键只做「重开已有会话的界面」，
  * 绝不自行发起编辑会话；没有会话时只提示玩家使用 /idtw config edit 指令。
  * <p>开发环境（{@link DebugMode#ENABLED}）下没有会话时改为打开 UI kit 原型屏，便于美术核对；
  * 该分支在发布环境不存在，因此不构成绕过编辑锁的生产入口。

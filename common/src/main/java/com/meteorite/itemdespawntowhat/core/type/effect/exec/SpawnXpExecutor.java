@@ -11,7 +11,7 @@ import net.minecraft.world.phys.Vec3;
  * 实体产出经验子类执行器：在触发位置生成经验球。
  * rounds 语义：amount 按 rounds 缩放；per_source_item 表示"每个源物品一份"，
  * 倍率改用 coveredSourceItems()（= 本组实际扣减的源物品数）而不是叠加快照，二者不叠加。
- * 阶段 4 起每个经验批次通过 context.reportProgress 回执真实入账的点数。
+ * 每个经验批次通过 context.reportProgress 回执真实入账的点数。
  * 约定：delay_ticks / chance / 效果级 conditions 由运行时统一处理，本类不再判断；
  * 异常不吞、不捕获，由运行时统一捕获并记录（规则 id + 效果类型 + 位置）。
  */

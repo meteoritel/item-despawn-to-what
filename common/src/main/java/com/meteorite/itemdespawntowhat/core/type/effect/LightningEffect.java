@@ -16,7 +16,7 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * lightning：在触发位置召唤闪电。
- * 本类只承载参数模型与参数校验（阶段②），运行时执行逻辑属阶段③。
+ * 本类只承载参数模型与参数校验，运行时执行逻辑属。
  */
 public record LightningEffect(
         int count,

@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * 大变更集分片重组器（契约 §3.3）：按玩家 + transferId 分组，收齐后返回完整变更集文本。
+ * 大变更集分片重组器：按玩家 + transferId 分组，收齐后返回完整变更集文本。
  * 时钟一律用服务端活动 tick（20 tick = 1 秒），暂停时不推进；同一玩家最多 2 个在途传输。
  */
 public final class RuleEditChunkAccumulator {

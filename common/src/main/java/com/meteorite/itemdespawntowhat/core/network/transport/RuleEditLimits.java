@@ -39,7 +39,7 @@ public final class RuleEditLimits {
     // 分片传输空闲超时的 tick 口径（20 tick = 1 秒）：时钟一律用服务端活动 tick，暂停时不流逝
     public static final long TRANSFER_TIMEOUT_TICKS = TRANSFER_TIMEOUT_MILLIS / 50L;
 
-    // S2C 快照单包上限（契约 §3.2：由 1_000_000 提升到 4 MiB）
+    // S2C 快照单包上限
     public static final int MAX_SNAPSHOT_BYTES = 4 * 1024 * 1024;
 
     // 字符串编解码器的字符数上限：按字节上限折算（UTF-8 单字符最多 4 字节，取字节上限即可覆盖）

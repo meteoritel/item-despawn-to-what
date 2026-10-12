@@ -30,7 +30,7 @@ public final class SpawnEntityExecutor {
 
 
 
-    // 单个运行批次最多生成的实体数（沿用阶段 4 的批次大小）
+    // 单个运行批次最多生成的实体数
     private static final int SPAWNS_PER_RUN = 8;
     // 安全搜索范围：水平 ±2（5×5），上下各 2 格，共 125 个候选
     private static final int SEARCH_HORIZONTAL = 2;
@@ -128,7 +128,7 @@ public final class SpawnEntityExecutor {
         }
         @Override
         public void run() {
-            // 安全搜索可能读取相邻方块，候选范围比阶段 4 的生成点更宽，需多留一圈区块
+            // 安全搜索可能读取相邻方块，候选范围比 原生成点更宽，需多留一圈区块
             int area = safeSpawn ? SEARCH_HORIZONTAL : 1;
             if (!com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks.containsArea(level, center, area)) {
                 context.schedule(20, this); return;

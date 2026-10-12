@@ -12,7 +12,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.List;
 
 /***
- * 界面层使用的编辑工作区只读视图（契约 §5.3）：不暴露任何传输 payload 类型，
+ * 界面层使用的编辑工作区只读视图：不暴露任何传输 payload 类型，
  * 界面只按 statusCode 派生出的 {@link RuleSaveStatus} 分支，禁止解析文案。
  */
 public interface EditorWorkspaceView {

@@ -30,7 +30,7 @@ public record RuleSnapshotEntry(ResourceLocation id, String origin, String statu
     public static final String STATUS_MASKED = "masked";
     public static final String STATUS_INVALID = "invalid";
 
-    // 线上 JSON 键；字段名与契约 §3.6 一一对应
+    // 线上 JSON 字段键
     public static final String KEY_ID = "id";
     public static final String KEY_ORIGIN = "origin";
     public static final String KEY_STATUS = "status";

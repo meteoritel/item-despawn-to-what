@@ -5,7 +5,7 @@ import java.util.List;
 import net.minecraft.network.chat.Component;
 
 /**
- * kit 数值控件的无规则语义调用示例（规格 §7）。
+ * kit 数值控件的无规则语义调用示例。
  *
  * <p>三个示例只演示 kit 自身的装配与事件顺序，不涉及任何业务字段、不读取存档、配置或世界时间：
  * 宿主把示例里的标签换成自己的本地化 key、把回调接到自己的状态上即可。</p>

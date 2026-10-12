@@ -59,7 +59,7 @@ final class FormControlRegistry {
                     FormControl::intOf, onChanged, FormControl.ISSUE_PREFIX + "invalid_number");
         });
         map.put(EditorFieldType.TICKS, (font, owner, field, onChanged) -> {
-            // 刻数与字段规格 §4 一致：0..INT_MAX，旧 72000 只是 UI 人为上限，不得充当后端合法域
+            // 刻数合法域为 0..INT_MAX；UI 侧不额外收紧，后端合法域才是提交依据
             int min = field.intMin(0);
             int max = field.intMax(Integer.MAX_VALUE);
             return new TextControl(font, field, FormControl::integerChars, text -> FormControl.boundedInt(text, min, max),

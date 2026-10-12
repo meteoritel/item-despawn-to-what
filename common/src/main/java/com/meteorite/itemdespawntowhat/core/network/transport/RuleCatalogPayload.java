@@ -7,8 +7,8 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * S2C：目录分页结果（契约 §3.3、§3.6）。json 为 {@code RuleCatalog.serialize()} 文本，
- * P3 阶段为骨架（条目为空、lastPage=true），目录数据由 P4/P5 接入。
+ * S2C：目录分页结果。json 为 {@code RuleCatalog.serialize()} 文本；
+ * 来源为空时条目为空且 lastPage=true。
  */
 public record RuleCatalogPayload(String sessionId, String requestId, String catalogType,
                                  int revision, String json, boolean lastPage) implements CustomPacketPayload {

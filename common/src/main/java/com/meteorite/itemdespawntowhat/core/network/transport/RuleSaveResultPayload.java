@@ -11,7 +11,7 @@ import org.jetbrains.annotations.NotNull;
 import java.util.List;
 
 /**
- * S2C：保存/请求回执（契约 §3.3、§3.4、§3.5）。客户端只按 statusCode 分支，禁止解析文案。
+ * S2C：保存/请求回执。客户端只按 statusCode 分支，禁止解析文案。
  * messageCode 为全限定翻译 key，fallbackMessage 供缺失翻译时兜底展示。
  */
 public record RuleSaveResultPayload(String sessionId, String operationId, String statusCode,
@@ -43,7 +43,7 @@ public record RuleSaveResultPayload(String sessionId, String operationId, String
                 resultVersion, writtenToDisk, reloaded, issues);
     }
 
-    // 编码：字段顺序与契约 §3.3 一致
+    // 编码：字段顺序固定
     private static void encode(FriendlyByteBuf buffer, RuleSaveResultPayload payload) {
         buffer.writeUtf(payload.sessionId(), RuleEditLimits.MAX_ID_CHARS);
         buffer.writeUtf(payload.operationId(), RuleEditLimits.MAX_ID_CHARS);

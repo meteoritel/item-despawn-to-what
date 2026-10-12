@@ -35,7 +35,7 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 @EventBusSubscriber(modid = ItemDespawnToWhat.MOD_ID)
 public final class RuleEditPayloadRegistrar {
 
-    // 与 Fabric 端保持同一协议版本号（契约 §3：版本 2）
+    // 与 Fabric 端保持同一协议版本号
     private static final String PROTOCOL_VERSION = "2";
 
     private RuleEditPayloadRegistrar() {

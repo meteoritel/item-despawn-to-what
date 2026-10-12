@@ -99,7 +99,7 @@ public final class EffectTargets {
     }
 
     // 转化产物加入世界：显式区别于其它实体来源，只在这里授予新产物临时保护与冷却（D18）；
-    // 授予动作与返还物共用 ReturnItemSpawner.applyGrant，避免两处状态语义漂移（阶段 5）
+    // 授予动作与返还物共用 ReturnItemSpawner.applyGrant，避免两处状态语义漂移
     static void addConversionProduct(EffectContext context, net.minecraft.world.entity.item.ItemEntity product) {
         ReturnItemSpawner.applyGrant(product, ReturnItemSpawner.Kind.CONVERSION_PRODUCT);
         addEntity(context, product);

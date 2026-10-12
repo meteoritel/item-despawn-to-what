@@ -9,14 +9,14 @@ import java.util.List;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 服务器问题路径 → 编辑器稳定身份的映射核心（主计划 §7）。
+ * 服务器问题路径 → 编辑器稳定身份的映射核心。
  * <p>分两段：{@link #anchor(String, String, JsonObject)} 在问题产生时的草稿形状上先记下节点身份
  * （候选 id、效果类型、条件节点 op/类型与出现序号）；{@link IssueAnchor#resolve(JsonObject)}
  * 再把身份映射到当前草稿的下标。数组重排或增删后不会跳错对象：身份找不到时才回落到原下标。
  * <p>同一数组里存在多个完全同类型节点（如同型效果各一份、同型条件叶多份）时身份不唯一，
  * 此时按出现顺序取第一个匹配项；这一点在界面上只表现为「定位到同类的第一个节点」。
  * <p>未知、空或畸变路径都不抛异常：至少落到对应规则与问题页签（{@link Tab#INFO}）。
- * <p>界面侧的选中与展开由 P3 负责，本类只提供映射结果。
+ * <p>界面侧的选中与展开由编辑器页面负责，本类只提供映射结果。
  */
 public final class RuleIssueLocator {
 

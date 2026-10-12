@@ -20,8 +20,8 @@ import java.util.List;
 /**
  * arrow_rain 执行器：按间隔在触发位置上方分波生成箭矢，可携带药水效果。
  * rounds 语义：一次性世界效果，不随 rounds 缩放（不是「每个物品一份」的结果），
- * 也不参与容量计算与组数限制（ADR-0001 阶段 4）。
- * 阶段 4 起每支箭矢通过 context.reportProgress(1) 回执真实完成量。
+ * 也不参与容量计算与组数限制。
+ * 每支箭矢通过 context.reportProgress(1) 回执真实完成量。
  * 约定：delay_ticks / chance / 效果级 conditions 由运行时统一处理，本类不再判断；
  * 异常不吞、不捕获，由运行时统一捕获并记录（规则 id + 效果类型 + 位置）。
  */

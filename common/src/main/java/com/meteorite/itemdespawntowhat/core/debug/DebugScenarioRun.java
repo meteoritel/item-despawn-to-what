@@ -135,7 +135,7 @@ final class DebugScenarioRun {
             frame.addProperty("scheduler_cancelled_server_wide", merged.cancelled());
             frame.addProperty("scheduler_dropped_server_wide", merged.dropped());
             frame.addProperty("scheduler_max_ready_delay_ticks", merged.maxReadyDelayTicks());
-            // 阶段7：本 tick 的服务器级就绪延迟与到期搬运量，用于逐 tick 观察平滑窗口是否铺开
+            // 本 tick 的服务器级就绪延迟与到期搬运量，用于逐 tick 观察平滑窗口是否铺开
             frame.addProperty("scheduler_last_max_ready_delay_ticks", merged.lastMaxReadyDelayTicks());
             frame.addProperty("scheduler_drained_in_tick", merged.lastDrainedTasks());
             if (budget != null) {

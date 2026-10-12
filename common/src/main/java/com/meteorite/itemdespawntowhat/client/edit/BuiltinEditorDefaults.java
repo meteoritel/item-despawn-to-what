@@ -7,7 +7,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 /***
- * 内置类型的新建默认参数（对齐 docs/plan/plan-frontend-rewrite-forms.md §5/§6）。
+ * 内置类型的新建默认参数（字段与取值域见 docs/dev/backend/modules/type-system.md）。
  * 策略：只填入文档给出默认值的字段（枚举/布尔/数值）；必填的 id、标签与列表不凭空捏造，
  * 留空由表单的本地校验定位到具体字段，避免把猜测值写进覆盖层文件。
  */
@@ -75,7 +75,7 @@ public final class BuiltinEditorDefaults {
         return leaf;
     }
 
-    // 条件类型的文档默认值（forms.md §5）
+    // 条件类型的文档默认值
     private static void applyConditionDefaults(JsonObject body, String path) {
         switch (path) {
             case "weather" -> body.addProperty("weather", "clear");
@@ -99,7 +99,7 @@ public final class BuiltinEditorDefaults {
         }
     }
 
-    // 效果类型的文档默认值（forms.md §6）
+    // 效果类型的文档默认值
     private static void applyEffectDefaults(JsonObject body, String path) {
         switch (path) {
             // 消耗源物品沿用固定成本默认值。

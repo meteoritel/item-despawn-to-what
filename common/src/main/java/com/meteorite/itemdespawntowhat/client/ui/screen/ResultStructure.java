@@ -6,7 +6,7 @@ import java.util.List;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 结果结构（顶层 effects / outcomes 候选）的只读模型（主计划 §4 结果、§5 现行结构与 JSON 编辑）。
+ * 结果结构（顶层 effects / outcomes 候选）的只读模型。
  * <p>顶层 effects 展示为「单一隐式候选」；outcomes 为非空候选列表。读取一律不修改数据，
  * 结构转换与写入都交给 {@link com.meteorite.itemdespawntowhat.client.edit.RuleDraft}。
  */

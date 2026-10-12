@@ -34,7 +34,7 @@ import java.util.List;
 
 /**
  * 新链路（core/runtime）在 Fabric 端的引导与生命周期持有者。
- * 职责边界（对应规划书 3.7 / 3.12 与阶段③ 验收）：
+ * 职责边界：
  * - 引导：读 config/itemdespawntowhat/server.json → 建内置类型注册表 → 加载三层规则 → 建 ConversionRuntime → 回扫全部已加载维度；
  * - 事件：掉落物进入世界、维度 tick 结束、维度加载/卸载、数据包重载、服务端停止；
  * - 平台差异：Fabric 没有加载器提供的物品寿命 API，寿命使用 server.json 的兜底刻数。
@@ -60,13 +60,13 @@ public final class RuleRuntimeHost {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    // 网络编辑层入口：以窄接口暴露运行时的覆盖层路径与重建能力（阶段④）
+    // 网络编辑层入口：以窄接口暴露运行时的覆盖层路径与重建能力
     // 放在这里而不是 core，是为了让 core/network/transport 不反向依赖平台运行时
     public static RuleEditServerContext editContext() {
         return EDIT_CONTEXT;
     }
 
-    // 命令层入口：以窄接口暴露运行时、模组级配置与编辑层统计（阶段⑤ /idtw 命令树）
+    // 命令层入口：以窄接口暴露运行时、模组级配置与编辑层统计
     public static RuleCommandContext commandContext() {
         return COMMAND_CONTEXT;
     }
@@ -289,7 +289,7 @@ public final class RuleRuntimeHost {
         }
     }
 
-    // Fabric 端寿命提供者：使用 server.json 的兜底刻数，与 NeoForge 端语义对齐（规划书 3.12）
+    // Fabric 端寿命提供者：使用 server.json 的兜底刻数，与 NeoForge 端语义对齐
     private static LifespanProvider fabricLifespan(ServerConfig config) {
         return (level, entity) -> config.fabricLifespanFallbackTicks();
     }

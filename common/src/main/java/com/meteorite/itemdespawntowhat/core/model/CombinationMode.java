@@ -9,8 +9,8 @@ import java.util.stream.Collectors;
 
 /**
  * 候选结果组合模式：同一转化组选出候选结果的方式。
- * round_robin（默认，轮询）与 priority（优先，按声明顺序取第一个可用候选）由阶段 4 执行侧落地，
- * 阶段 1 只负责承载、往返与本层校验。
+ * round_robin（默认，轮询）与 priority（优先，按声明顺序取第一个可用候选）由产出执行器落地，
+ * 只负责承载、往返与本层校验。
  */
 public enum CombinationMode {
 

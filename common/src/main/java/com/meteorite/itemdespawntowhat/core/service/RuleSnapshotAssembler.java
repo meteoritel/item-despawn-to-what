@@ -35,7 +35,7 @@ import java.util.Set;
 
 /***
  * 规则快照装配器：把"来源分层索引 + 当前生效规则"组装成下发给客户端的快照。
- * 条目形状（冻结契约 §3.6）：RuleSnapshotEntry(id, origin, status, editable, effective, base, overlay, issues)
+ * 条目形状：RuleSnapshotEntry(id, origin, status, editable, effective, base, overlay, issues)
  * - base 视图来自数据包层原始 JSON，overlay 视图来自覆盖层原始 JSON，两者都保留原文（不做模型往返）；
  * - effective 优先使用模型编码后的最终结果（解码成功时权威），否则退回原始 JSON；
  * - origin 取 overlay | datapack | mixed，status 取 active | disabled | masked | invalid；
@@ -106,7 +106,7 @@ public final class RuleSnapshotAssembler {
                 continue;
             }
             boolean overlayLayer = leftover.getValue().origin().layer() == RuleSourceLayer.OVERLAY;
-            // 能走到这里的都是已解码出本体的规则，按契约 §3.6 一律可编辑
+            // 能走到这里的都是已解码出本体的规则，一律可编辑
             entries.put(leftover.getKey(), new RuleSnapshotEntry(leftover.getKey(),
                     overlayLayer ? RuleSnapshotEntry.ORIGIN_OVERLAY : RuleSnapshotEntry.ORIGIN_DATAPACK,
                     RuleSnapshotEntry.STATUS_ACTIVE, true,
@@ -249,7 +249,7 @@ public final class RuleSnapshotAssembler {
         return false;
     }
 
-    // Issue → RuleIssue：severity 与 ruleId 必须带上（契约 §3.6 要求 invalid 条目可定位）
+    // Issue → RuleIssue：severity 与 ruleId 必须带上
     private static RuleIssue toRuleIssue(Issue issue, ResourceLocation id, Set<String> origins) {
         boolean overlay = false;
         for (String origin : origins) {

@@ -23,7 +23,7 @@ import java.util.Optional;
 /**
  * place_block：在触发位置按指定形状放置方块。
  * block（TaggedId，可空）与 use_source_block 至少需要其一：前者放置指定方块，后者放置源物品对应的方块。
- * 本类只承载参数模型与参数校验（阶段②）。
+ * 本类只承载参数模型与参数校验。
  */
 public record PlaceBlockEffect(
         @Nullable TaggedId block,

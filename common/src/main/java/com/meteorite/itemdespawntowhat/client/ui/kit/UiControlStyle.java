@@ -5,7 +5,7 @@ package com.meteorite.itemdespawntowhat.client.ui.kit;
  * 避免结构色散落到控件与各浮层的渲染点（对齐 {@code UiTextPalette} 的语义色分层约定）。
  *
  * <p>文本色仍由调用方从语义色表传入——本类只管**控件结构色**（背景、轮廓、滚动条），
- * 与 {@code docs/dev/internals/journal-ui-internals.md}「文本配色约束」的分工一致。</p>
+ * 与宿主主题「文本色由调用方注入」的分工一致。</p>
  *
  * <p>{@link #PARCHMENT} 的普通/悬停背景与既有 {@code UiControl} 硬编码值逐像素相同，
  * 按下/选中/禁用/焦点是新增态，旧界面不会触发，因此换用本样式不改变既有画面。</p>

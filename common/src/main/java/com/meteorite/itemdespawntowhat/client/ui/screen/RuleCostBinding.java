@@ -6,7 +6,7 @@ import java.util.List;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 消耗类效果在草稿中的定位（主计划 §4 输入与成本、§5 现行结构与 JSON 编辑）。
+ * 消耗类效果在草稿中的定位。
  * <p>规则级固定成本（source_cost / catalyst_cost）与同名 consume 效果是两种表达方式：
  * 存在 consume 效果时成本区必须编辑那一条原效果、只更新原路径，并且禁止同时生成规则级固定成本字段。
  * <p>本类只做只读定位，绝不修改数据。

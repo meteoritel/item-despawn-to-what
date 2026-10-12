@@ -23,7 +23,7 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * 客户端保存前校验：把草稿与服务端契约的可本地判定项收敛成问题清单。
- * <p>只读取会话、模型与页面视图，不写数据；阻塞项与服务端权威校验的边界见 forms.md §9。</p>
+ * <p>只读取会话、模型与页面视图，不写数据；本地只拦截可判定项，服务端始终是权威校验方（两级判据见 docs/dev/backend/systems/issue-validation.md）。</p>
  */
 final class RuleEditorValidation {
 
@@ -97,7 +97,7 @@ final class RuleEditorValidation {
         return issues;
     }
 
-    // 本地保存前拦截（forms.md §9 的可本地判定项；服务端仍是权威校验方）
+    // 本地保存前拦截
     private List<FormIssue> localIssues(RuleDraft draft) {
         List<FormIssue> issues = new ArrayList<>();
         for (var missing : RuleRequirements.find(draft))

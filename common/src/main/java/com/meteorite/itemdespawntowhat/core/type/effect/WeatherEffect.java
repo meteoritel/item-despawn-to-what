@@ -17,7 +17,7 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * weather：切换触发维度（或其所在区域）的天气。
- * mode 必填（rain / clear）；duration_ticks 为持续刻数（上限对齐原版一天的 24000 刻）。本类只承载参数模型与参数校验（阶段②）。
+ * mode 必填（rain / clear）；duration_ticks 为持续刻数（上限对齐原版一天的 24000 刻）。本类只承载参数模型与参数校验。
  */
 public record WeatherEffect(
         Mode mode,

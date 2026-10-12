@@ -22,7 +22,7 @@ import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
 /**
- * 昼夜时间条（宿主侧控件，主计划 §4 触发与条件、kit 规格 §5 周期区间）。
+ * 昼夜时间条（宿主侧控件，底层用 kit 的周期区间核心）。
  * <p>交互语义委托 kit 的 {@link UiCyclicRange}：端点允许完整合法刻域、from&gt;to 表示跨零点、
  * 同刻为单点；普通拖动按 {@link #DRAG_STEP} 刻吸附，精确输入接受任意合法刻。
  * <p>0 刻对应 Minecraft 06:00 的换算由宿主的 formatter 提供，本类不假设世界时间。

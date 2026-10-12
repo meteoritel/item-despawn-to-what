@@ -15,7 +15,7 @@ import java.util.Map;
 
 /**
  * 候选轮询游标：按「规则 id + 维度」共享并持久化，保证跨实体接续与重启后继续。
- * 候选结构版本（候选 id 与效果构成的哈希）变化时自动重置游标，避免旧位置指向新结构（阶段 4 验收③）。
+ * 候选结构版本（候选 id 与效果构成的哈希）变化时自动重置游标，避免旧位置指向新结构。
  */
 public final class RoundRobinCursors extends SavedData {
 

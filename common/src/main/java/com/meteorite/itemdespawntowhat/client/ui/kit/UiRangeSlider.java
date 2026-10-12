@@ -21,7 +21,7 @@ import org.lwjgl.glfw.GLFW;
  *       没有数值变化就不回调 committed。</li>
  * </ul>
  *
- * <p>本类只关心逻辑与几何，不绘制：区间渲染（P4 时间条/双端轨道）由宿主用 kit 的样式与
+ * <p>本类只关心逻辑与几何，不绘制：区间渲染（时间条与双端轨道）由宿主用 kit 的样式与
  * painter 完成。</p>
  */
 public final class UiRangeSlider implements UiFocusTarget, UiInputTarget, UiInputCapture.Target {

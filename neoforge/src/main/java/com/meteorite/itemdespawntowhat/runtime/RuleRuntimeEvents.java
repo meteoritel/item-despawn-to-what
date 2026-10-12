@@ -23,7 +23,7 @@ import static com.meteorite.itemdespawntowhat.ItemDespawnToWhat.MOD_ID;
 
 /**
  * 新链路（core/runtime）在 NeoForge 端的事件入口。
- * 本类只做事件到 RuleRuntimeHost 的转发，不含业务逻辑（规划书 3.12：平台层只做入口）。
+ * 本类只做事件到 RuleRuntimeHost 的转发，不含业务逻辑。
  */
 @EventBusSubscriber(modid = MOD_ID)
 public final class RuleRuntimeEvents {

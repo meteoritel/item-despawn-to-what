@@ -7,10 +7,10 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * S2C：大快照的分片（契约 §3.3 的分片规则 + Lead 批准的新增载荷）。
+ * S2C：大快照的分片。
  * 快照序列化后不超过 {@link RuleEditLimits#MAX_SNAPSHOT_BYTES} 时仍走整包 {@link RuleSnapshotPayload}；
  * 超限时改发 N 片：同一 transferId、index 从 0 到 count-1，客户端收齐按顺序拼接后走 RuleSnapshot.parse。
- * 服务端在途上限与"60 秒无进展即丢弃"沿用契约 §3.3 的规定。
+ * 服务端对在途分片设有上限，超过 60 秒无进展即丢弃整次传输。
  */
 public record RuleSnapshotChunkPayload(String sessionId, String requestId, String transferId,
                                        int index, int count, String chunk) implements CustomPacketPayload {

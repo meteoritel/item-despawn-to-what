@@ -16,7 +16,7 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * loot_table：在触发位置按战利品表产出掉落物。
- * loot_table 为纯 ResourceLocation（无 tag 语义，故不使用 TaggedId）。本类只承载参数模型与参数校验（阶段②）。
+ * loot_table 为纯 ResourceLocation（无 tag 语义，故不使用 TaggedId）。本类只承载参数模型与参数校验。
  */
 public record LootTableEffect(
         ResourceLocation lootTable,

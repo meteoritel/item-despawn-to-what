@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 /***
- * 自然语言摘要：把规则/条件/效果 JSON 渲染成玩家可读的一行中文（forms.md §10）。
+ * 自然语言摘要：把规则/条件/效果 JSON 渲染成玩家可读的一行中文。
  * 纯只读：不修改草稿，也不依赖后端 record 类型，第三方类型按原始字段名展示。
  */
 public final class NaturalSummary {

@@ -133,7 +133,7 @@ public final class RuleEditServerHandler {
         dispatch(context, player, service.requestSnapshot(player, context, serverOf(player), payload, tick(player)));
     }
 
-    // C2S 目录请求：P3 只回骨架目录
+    // C2S 目录请求：应答当前会话已确认后按来源分页下发
     public static void handleCatalogRequest(ServerPlayer player, RuleEditServerContext context,
                                             RequestRuleCatalogPayload payload) {
         RuleEditService service = readyService(player, context, sessionId(payload == null ? null : payload.sessionId()));

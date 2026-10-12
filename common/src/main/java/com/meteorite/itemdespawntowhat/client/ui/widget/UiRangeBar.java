@@ -26,7 +26,7 @@ import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
 /**
- * 区间条（宿主侧控件，主计划 §4 条件与 §8 视觉）。
+ * 区间条（宿主侧控件）。
  * <p>交互语义全部委托 kit 的 {@link UiRangeSlider}：普通区间保持 min≤max、拖到对端停在相同值、
  * 方向键按住只在抬起时合并提交一次、Esc 回退；本类只负责像素渲染（{@link UiSliderPainter}）、
  * 端点缺失提示、精确输入行以及「一次完整操作 = 一次提交」的回调。

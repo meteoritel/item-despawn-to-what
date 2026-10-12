@@ -30,7 +30,7 @@ public final class RuleTemplateHooks {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    // 注册模板来源（Lead 接线用）
+    // 注册模板来源（客户端初始化时接线）
     public static void setProvider(@Nullable Provider newProvider) {
         provider = newProvider;
     }

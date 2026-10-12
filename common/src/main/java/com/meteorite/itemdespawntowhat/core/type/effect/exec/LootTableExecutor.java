@@ -17,7 +17,7 @@ import net.minecraft.world.phys.Vec3;
 /**
  * loot_table 执行器：以触发位置为原点、luck 为幸运值开表并生成掉落物。
  * rounds 语义：单组一轮，按 context.rounds() 次开表（等价的产出折算），分批执行，不截断轮数。
- * 阶段 4 起每件战利品通过 context.reportProgress(stack.getCount()) 回执真实完成量。
+ * 每件战利品通过 context.reportProgress(stack.getCount()) 回执真实完成量。
  * 约定：delay_ticks / chance / 效果级 conditions 由运行时统一处理，本类不再判断；
  * 异常不吞、不捕获，由运行时统一捕获并记录（规则 id + 效果类型 + 位置）。
  */

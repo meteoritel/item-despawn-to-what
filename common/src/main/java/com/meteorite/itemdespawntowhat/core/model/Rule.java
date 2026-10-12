@@ -65,7 +65,7 @@ public record Rule(
         return enabled && !effectiveOutcomes().isEmpty();
     }
 
-    // 生效的消失方式：未声明时按 natural 处理（PLAN §4.2：默认仅自然消失）
+    // 生效的消失方式：未声明时按 natural 处理
     public Set<TriggerKind> effectiveTriggers() {
         return triggers.isEmpty() ? Set.of(TriggerKind.NATURAL) : triggers;
     }

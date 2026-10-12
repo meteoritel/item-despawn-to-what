@@ -6,7 +6,7 @@ package com.meteorite.itemdespawntowhat.core.network.protocol;
  */
 public final class RuleEditProtocol {
 
-    // 契约 §3.2：协议版本，客户端与服务端必须一致
+    // 协议版本，客户端与服务端必须一致
     public static final int VERSION = 2;
 
     private RuleEditProtocol() {

@@ -6,7 +6,7 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 /**
  * 掉落物实体层的转化状态：临时保护、临时冷却、永久保护、永久禁转。
  * 状态只挂在实体上，不进 ItemStack：拾取即实体消亡，重丢得到的是普通掉落物，不继承任何状态。
- * 时间字段是绝对值（服务端游戏刻），计时基准为 ServerLevel#getGameTime()：卸载不暂停、重启后继续（PLAN §4.5）。
+ * 时间字段是绝对值（服务端游戏刻），计时基准为 ServerLevel#getGameTime()：卸载不暂停、重启后继续。
  * 0 表示未设置：合并临时状态时取较晚到期刻，未设置的一方不参与取大（D3）。
  */
 public record DropState(
@@ -82,7 +82,7 @@ public record DropState(
                 permanentProtection, permanentConversionBan);
     }
 
-    // 授予返还物状态：永久保护 + 永久禁转（阶段 6 的返还交付调用）
+    // 授予返还物状态：永久保护 + 永久禁转（返还交付时调用）
     public DropState withPermanentReturn() {
         return new DropState(version, temporaryProtectionUntil, temporaryCooldownUntil, true, true);
     }

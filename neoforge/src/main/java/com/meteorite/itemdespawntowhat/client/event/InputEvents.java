@@ -14,7 +14,7 @@ import net.neoforged.neoforge.client.event.InputEvent;
 @EventBusSubscriber(modid = ItemDespawnToWhat.MOD_ID, value = Dist.CLIENT)
 public class InputEvents {
 
-    // 客户端 tick：驱动编辑工作区的会话心跳（契约 §3.1）
+    // 客户端 tick：驱动编辑工作区的会话心跳
     @SubscribeEvent
     public static void onClientTick(ClientTickEvent.Post event) {
         RuleEditClientWorkspace.instance().tick();

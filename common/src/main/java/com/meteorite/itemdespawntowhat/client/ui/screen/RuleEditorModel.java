@@ -25,7 +25,7 @@ import java.util.Set;
 
 /***
  * 编辑页数据模型：把服务端快照映射成「按规则 id 的草稿会话」。
- * 所有字段与结构编辑都必须经过 {@link EditSession#apply}，保证每个编辑入口都有撤销标签（契约 §5，task-9 前置）。
+ * 所有字段与结构编辑都必须经过 {@link EditSession#apply}，保证每个编辑入口都有撤销标签（编辑会话见 docs/dev/layers/client.md）。
  */
 public final class RuleEditorModel {
 
@@ -46,7 +46,7 @@ public final class RuleEditorModel {
     // 是否至少成功加载过一次快照
     private boolean loaded;
 
-    // 草稿落盘日志（P6：跨界面关闭 / 断线 / 重启恢复）
+    // 草稿落盘日志（跨界面关闭 / 断线 / 重启恢复）
     private final DraftJournal journal = new DraftJournal(new DraftStore());
     // 从磁盘读回、等待绑定到服务端快照的草稿（按目标 id）
     private final LinkedHashMap<String, PersistedDraft> restored = new LinkedHashMap<>();

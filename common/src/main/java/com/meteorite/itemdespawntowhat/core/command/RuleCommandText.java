@@ -10,7 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 命令反馈组件构造器（阶段⑤ 唯一出口）。
+ * 命令反馈组件构造器。
  * 输出**可翻译组件**：{@code Component.translatable(key, 位置参数...)}，由客户端按玩家语言渲染；
  * 参数一律按追加顺序对应语言文件里的 {@code %1$s/%2$s...}，因此每个 key 的参数个数固定——
  * 条件分支的场景用空串占位，不做可变参数。禁止在命令实现里拼中文字面量。

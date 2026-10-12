@@ -51,7 +51,7 @@ import java.util.UUID;
 
 /**
  * 转化运行时：规则索引 + 维度级追踪与调度。
- * 设计要点（对应规划书 Q12/Q13/Q22/Q38/Q39）：
+ * 设计要点：
  * - 触发时刻 = min(trigger_after_seconds, 自然消失时刻)，在自然 discard 之前判定；
  * - 计时按**绝对存活时间**，条件不满足则退避重试（1s→2s→4s→封顶）；
  * - 状态按维度 key 索引；任务上下文持有维度对象，维度卸载即整体释放；
@@ -84,7 +84,7 @@ public final class ConversionRuntime {
     private final Set<String> activeRecoveries = new HashSet<>();
     // 首次服务端 tick 后做一次全局恢复扫描；之后新加载的维度由 rescan 补扫
     private boolean recoveryScanned;
-    // 上次扫描中因维度未加载而保持不动的记录数（低频观测，阶段7 使用）
+    // 上次扫描中因维度未加载而保持不动的记录数（低频观测，使用）
     private long recoverySkippedDimensions;
 
     // 单个维度的运行时状态；任务本身归公共调度器所有，这里只保存缓存与追踪表
@@ -182,10 +182,10 @@ public final class ConversionRuntime {
         }
     }
 
-    // 公共请求入口：自然消失与三类环境销毁共用同一条检查/执行路径（PLAN §4.4）
+    // 公共请求入口：自然消失与三类环境销毁共用同一条检查/执行路径
     // 环境致死时本方法在 hurt 调用栈内同步执行「条件检查 + 规则选择」（单实体一次，量小）；
-    // 效果一律经调度器排队并在共享 tick 预算内执行（见 ConversionSettlement#dispatchEffect）。这是阶段 3 的设计选择，
-    // 环境集中销毁是否把峰值转移到这里留阶段 7 观测。
+    // 效果一律经调度器排队并在共享 tick 预算内执行（见 ConversionSettlement#dispatchEffect）。这是 的设计选择，
+    // 环境集中销毁是否把峰值转移到这里留 观测。
     public void requestConversion(ServerLevel level, ItemEntity item, TriggerKind kind) {
         if (item == null || kind == null || excluded(item)) {
             return;
@@ -225,7 +225,7 @@ public final class ConversionRuntime {
         }
     }
 
-    // ========== 阶段6：持久返还恢复 ==========
+    // ========== ：持久返还恢复 ==========
 
     // 全局恢复扫描：只交付记录里的待返还库存，不恢复旧效果队列；维度未加载的记录保持不动
     private void recoverSettlements(MinecraftServer server, SettlementLedger ledger) {
@@ -270,7 +270,7 @@ public final class ConversionRuntime {
     }
 
     // 交付任务入队：REBATE 车道；世界写入只会在 scheduler.tick 推进时发生且受公共预算约束。
-    // 口径（lead 裁决 A）：停机或维度卸载时未交付的库存（含尚未开始组的源库存）不在停服瞬间返还，
+    // 口径：停机或维度卸载时未交付的库存（含尚未开始组的源库存）不在停服瞬间返还，
     // 而是作为待返还记录留在账本里，于下一次服务端启动、且目标维度已加载后由本路径交付。
     private void startRecovery(ServerLevel level, SettlementLedger ledger, SettlementRecord record) {
         // 重启后源实体已不存在：位置取自记录；旧存档缺位置字段时退回该维度出生点
@@ -289,12 +289,12 @@ public final class ConversionRuntime {
         activeRecoveries.remove(id);
     }
 
-    // 在飞的返还恢复任务数（阶段7 观测）
+    // 在飞的返还恢复任务数观测
     public int activeRecoveryCount() {
         return activeRecoveries.size();
     }
 
-    // 上次恢复扫描中因维度未加载而保持不动的记录数（阶段7 观测）
+    // 上次恢复扫描中因维度未加载而保持不动的记录数观测
     public long recoverySkippedDimensions() {
         return recoverySkippedDimensions;
     }
@@ -389,7 +389,7 @@ public final class ConversionRuntime {
                 effects ? ServerTaskKind.EFFECT : ServerTaskKind.CONDITION_CHECK);
     }
 
-    // 任意任务种类的单维度队列观测（阶段7：把 checks/effects 两类口径扩到返还与维护等全部种类）；只读，不改变调度行为
+    // 任意任务种类的单维度队列观测（：把 checks/effects 两类口径扩到返还与维护等全部种类）；只读，不改变调度行为
     public QueueStats queueStats(ServerLevel level, ServerTaskKind kind) {
         return scheduler.queueStats(level.dimension(), kind);
     }
@@ -461,7 +461,7 @@ public final class ConversionRuntime {
 
     // 一次到期判定：选规则 → 执行；条件不满足则退避重试（kind 为本次请求的消失方式）
     // 调用点有两类：调度器到期检查（自然消失）与环境致死请求（在 hurt 调用栈内同步调用）；
-    // 两者共用同一份追踪、预算与调度器，效果派发统一走 ConversionSettlement（阶段 7 再评估环境峰值）。
+    // 两者共用同一份追踪、预算与调度器，效果派发统一走 ConversionSettlement（后续再评估环境峰值）。
     private void attempt(ServerLevel level, UUID uuid, TriggerKind kind) {
         LevelState state = levels.get(level.dimension());
         if (state == null) {
@@ -535,7 +535,7 @@ public final class ConversionRuntime {
     private Rule select(ServerLevel level, ItemEntity item, List<Rule> candidates, boolean expiring, TriggerKind kind) {
         ConditionContext context = conditionContext(level, item);
         for (Rule rule : candidates) {
-            // 规则未声明该消失方式时不参与（阶段 1 契约：未声明按 natural 处理）
+            // 规则未声明该消失方式时不参与（契约：未声明按 natural 处理）
             if (!rule.effectiveTriggers().contains(kind)) {
                 continue;
             }
@@ -573,7 +573,7 @@ public final class ConversionRuntime {
             state.tracked.remove(item.getUUID());
             return;
         }
-        // 每组固定源成本 c：显式 source_cost 优先，其次隐式 1 个，再次各 consume_source 之和（Q1 真实结算）
+        // 每组固定源成本 c：显式 source_cost 优先，其次隐式 1 个，再次各 consume_source 之和
         int costPerGroup = types.perRoundSourceConsumption(rule, source);
         tracked.locked = true;
         try {

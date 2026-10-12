@@ -7,8 +7,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * C2S：客户端请求选择目录的一页（契约 §3.3、§3.6）。
- * P3 阶段服务端只做会话校验与骨架应答，目录内容由 P4/P5 接入。
+ * C2S：客户端请求选择目录的一页；服务端校验会话与分页参数后按来源分页应答。
  */
 public record RequestRuleCatalogPayload(String sessionId, String requestId, String catalogType,
                                         String filter, int page, int pageSize) implements CustomPacketPayload {

@@ -18,7 +18,7 @@ import java.util.List;
 
 /**
  * 条件树求值：把 ConditionExpression 的递归结构求成四态结果（MATCH / NO_MATCH / UNAVAILABLE / ERROR）。
- * 三条关键约定（契约 §2.6）：
+ * 三条关键约定：
  * 1) inverted 只互换 MATCH 与 NO_MATCH，UNAVAILABLE / ERROR 原样保留，杜绝「判不了」被取反成「成立」；
  * 2) 组合节点按序短路，但 UNAVAILABLE / ERROR 只记标记继续，且 UNAVAILABLE 优先于 ERROR；
  * 3) 空 all_of 恒真、空 any_of 恒假（编辑器中间态），不抛异常。

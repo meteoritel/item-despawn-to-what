@@ -3,8 +3,7 @@ package com.meteorite.itemdespawntowhat.core.model;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 条件表达式：整棵条件树只有一个根节点，root 为 null 表示无条件。
- * 旧版「组 × 叶」二维数组结构已废弃（见 docs/plan/plan-frontend-rewrite-contract.md §2），
+ * 条件表达式：整棵条件树只有一个根节点，root 为 null 表示无条件（JSON 形状见 docs/dev/backend/modules/rule-model.md）。
  * 空表达式、空 all_of / any_of 都允许构造与序列化（编辑器中间态），非空性只在 isStructurallyValid() 与解码期强制。
  */
 public record ConditionExpression(@Nullable ConditionNode root) {

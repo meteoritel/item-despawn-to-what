@@ -7,7 +7,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * S2C：服务端下发规则快照（json 为 {@code RuleSnapshot.serialize()} 的 JSON 文本，契约 §3.3）。
+ * S2C：服务端下发规则快照。
  * requestId 原样回带，客户端据此把响应配到请求上。
  */
 public record RuleSnapshotPayload(String sessionId, String requestId, String snapshotJson)

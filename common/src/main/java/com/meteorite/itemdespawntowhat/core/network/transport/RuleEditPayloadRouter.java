@@ -4,7 +4,7 @@ import java.util.function.Consumer;
 
 /**
  * 新链路 S2C 载荷的客户端门面：服务端侧只装载空消费者，注册回调时静默丢弃。
- * 保留字符串消费者以兼容既有客户端实现，另提供结构化消费者供 P5 界面层使用。
+ * 保留字符串消费者以兼容既有客户端实现，另提供结构化消费者供界面层使用。
  */
 public final class RuleEditPayloadRouter {
 

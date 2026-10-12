@@ -12,7 +12,7 @@ import org.apache.logging.log4j.Logger;
 
 /**
  * 新链路（core/runtime）在 Fabric 端的事件入口。
- * 本类只做事件到 RuleRuntimeHost 的转发，不含业务逻辑（规划书 3.12：平台层只做入口）。
+ * 本类只做事件到 RuleRuntimeHost 的转发，不含业务逻辑。
  */
 public final class RuleRuntimeEvents {
 

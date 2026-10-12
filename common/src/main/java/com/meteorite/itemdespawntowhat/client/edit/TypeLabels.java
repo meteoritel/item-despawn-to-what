@@ -6,7 +6,7 @@ import net.minecraft.resources.ResourceLocation;
 
 /**
  * 类型标签工具：把条件/效果类型 id 转成本地化文本。
- * <p>按契约 §5.1 的裁决，类型显示名使用 {@code gui.itemdespawntowhat.edit.condition.<type>} 与
+ * <p>类型显示名使用 {@code gui.itemdespawntowhat.edit.condition.<type>} 与
  * {@code gui.itemdespawntowhat.edit.effect.<type>}；本模组命名空间下 {@code <type>} 即路径
  * （例如 {@code gui.itemdespawntowhat.edit.condition.y_level}），第三方命名空间下为了不撞键
  * 使用 {@code <namespace>.<path>}。若新键缺失，回退到旧版约定 {@code <kind>.<namespace>.type.<path>}，
@@ -14,7 +14,7 @@ import net.minecraft.resources.ResourceLocation;
  */
 public final class TypeLabels {
 
-    // 界面文本前缀（契约 §5.1）
+    // 界面文本前缀
     public static final String UI_PREFIX = "gui.itemdespawntowhat.edit.";
 
     // 本模组命名空间
@@ -33,12 +33,12 @@ public final class TypeLabels {
         return label("effect", id);
     }
 
-    // 按契约 §5.1 生成类型显示名 key（conditions/effects 的类型名）
+    // 生成类型显示名 key（conditions/effects 的类型名）
     public static String displayKey(String kind, ResourceLocation id) {
         return UI_PREFIX + kind + "." + typeSegment(id);
     }
 
-    // 类型显示名 key 的兼容别名：对外统一走契约 §5.1 的口径
+    // 类型显示名 key 的兼容别名：对外统一口径
     public static String key(String kind, ResourceLocation id) {
         return displayKey(kind, id);
     }

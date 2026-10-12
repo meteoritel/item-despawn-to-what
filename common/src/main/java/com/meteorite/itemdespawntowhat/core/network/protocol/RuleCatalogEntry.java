@@ -8,7 +8,7 @@ import com.google.gson.JsonObject;
  */
 public record RuleCatalogEntry(String id, String label, String subLabel, String icon) {
 
-    // 线上 JSON 键；字段名与契约 §3.6 一一对应
+    // 线上 JSON 字段键
     public static final String KEY_ID = "id";
     public static final String KEY_LABEL = "label";
     public static final String KEY_SUB_LABEL = "sub_label";

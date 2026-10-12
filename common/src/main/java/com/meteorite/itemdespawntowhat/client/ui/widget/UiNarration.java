@@ -6,7 +6,7 @@ import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 旁白适配（主计划 §8「键盘与朗读」）：把控件的 {@link UiFocusTarget#accessibleName()}
+ * 旁白适配：把控件的 {@link UiFocusTarget#accessibleName()}
  * 交给 Minecraft narrator 播报。
  * <p>只读取当前选项状态：未开启朗读、平台不支持或朗读服务不可用时保持静默，不影响界面输入。
  * <p>{@code GameNarrator.sayNow(Component)} 自身会检查 narrator 状态并在需要时打断上一句，

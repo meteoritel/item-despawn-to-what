@@ -8,8 +8,8 @@ import java.util.List;
 
 /**
  * 候选结果：转化组的候选之一，内含多个共同执行的效果。
- * 候选标识在规则内唯一；safe_spawn（安全生成位置）与 fill_origin（起点填充）由阶段 5 执行侧落地，
- * 阶段 1 只负责承载、往返与本层校验（默认值对齐 PLAN §4.2：安全生成关闭、起点填充开启）。
+ * 候选标识在规则内唯一；safe_spawn（安全生成位置）默认 false，fill_origin（起点填充）默认 true。
+ * 本类只负责承载、往返与本层校验，两个开关的执行侧语义由产出执行器实现。
  */
 public record OutcomeCandidate(
         String id,

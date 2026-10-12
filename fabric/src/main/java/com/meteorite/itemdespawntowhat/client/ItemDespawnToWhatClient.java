@@ -14,10 +14,10 @@ public final class ItemDespawnToWhatClient implements ClientModInitializer {
         RegisterEvent.register();
         InputEvents.register();
         FabricRuleEditClientRegistrar.register();
-        // 编辑工作区接线：安装 S2C 消费者与上行发送器（契约 §5.3）
+        // 编辑工作区接线：安装 S2C 消费者与上行发送器
         RuleEditClientWorkspace.installSinks();
         RuleEditClientWorkspace.installSender(ClientPlayNetworking::send);
-        // 编辑界面接线：把 P5 主屏注册为 EditorScreenHooks 的实现（契约 §5.3）
+        // 编辑界面接线：把编辑器主屏注册为 EditorScreenHooks 的实现
         RuleEditorOpener.bootstrap();
     }
 }

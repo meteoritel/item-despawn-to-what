@@ -183,7 +183,7 @@ final class FormDraftWriter {
         }
     }
 
-    // 撤销操作名：来源列表单独成项（契约 §5.2 的来源与排除标签），其余交给控件自报
+    // 撤销操作名：来源列表单独成项，其余交给控件自报
     private static String opKeyFor(FormRow row) {
         if (row.path.equals(RuleFields.SOURCE) || row.path.startsWith(RuleFields.SOURCE + ".")) {
             return EditSession.OP_SET_SOURCE;

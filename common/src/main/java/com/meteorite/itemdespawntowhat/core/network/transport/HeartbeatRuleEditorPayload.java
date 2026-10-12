@@ -7,7 +7,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * C2S：客户端心跳（契约 §3.3），服务端刷新会话租约；缺少心跳超过 LEASE_SECONDS 即释放。
+ * C2S：客户端心跳，服务端刷新会话租约；缺少心跳超过 LEASE_SECONDS 即释放。
  */
 public record HeartbeatRuleEditorPayload(String sessionId) implements CustomPacketPayload {
 

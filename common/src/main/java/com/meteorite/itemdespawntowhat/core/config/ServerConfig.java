@@ -65,10 +65,10 @@ public record ServerConfig(
     public static final int DEFAULT_NEW_PRODUCT_PROTECTION_SECONDS = 2;
     public static final int DEFAULT_CONVERSION_COOLDOWN_SECONDS = 5;
 
-    // 位置搜索默认值：每刻最多检查 16 个候选位置（阶段 5 安全生成与返还位置搜索共用）
+    // 位置搜索默认值：每刻最多检查 16 个候选位置（安全生成与返还位置搜索共用）
     public static final int DEFAULT_POSITION_SEARCH_CHECKS_PER_TICK = 16;
 
-    // 阶段7 调试场景准备参数：每 tick 最多准备 128 个源、准备软预算 2000us（与原硬编码 128 / 2_000_000L 逐位等价）
+    // 调试场景准备参数：每 tick 最多准备 128 个源、准备软预算 2000us（与原硬编码 128 / 2_000_000L 逐位等价）
     public static final int DEFAULT_DEBUG_SCENARIO_PREPARE_BATCH_SIZE = 128;
     public static final int DEFAULT_DEBUG_SCENARIO_PREPARE_BUDGET_US = 2000;
 
@@ -124,7 +124,7 @@ public record ServerConfig(
             // 位置搜索每刻候选检查上限：0 会让搜索停摆，故下限为 1
             Codec.intRange(1, 4096).optionalFieldOf("position_search_checks_per_tick", DEFAULT_POSITION_SEARCH_CHECKS_PER_TICK)
                     .forGetter(ServerConfig::positionSearchChecksPerTick),
-            // 阶段7：只影响 debug 场景的准备阶段（每 tick 源数量上限、准备软预算），不参与 server_budget_us
+            // 只影响 debug 场景的准备阶段（每 tick 源数量上限、准备软预算），不参与 server_budget_us
             Codec.intRange(1, 100000).optionalFieldOf("debug_scenario_prepare_batch_size", DEFAULT_DEBUG_SCENARIO_PREPARE_BATCH_SIZE)
                     .forGetter(ServerConfig::debugScenarioPrepareBatchSize),
             // 单位微秒：2000us 即原硬编码的 2_000_000L 纳秒

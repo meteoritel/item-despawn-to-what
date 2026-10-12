@@ -34,12 +34,12 @@ public final class ServerScheduler {
     private long exhaustedByWorkUnits;
     private int peakPending;
     private long maxReadyDelayTicks;
-    // 阶段7 观测：本 tick 的服务器级最大就绪延迟，以及到期搬运是否被平滑窗口铺开
+    // 观测：本 tick 的服务器级最大就绪延迟，以及到期搬运是否被平滑窗口铺开
     private long lastMaxReadyDelayTicks;
     private long lastDrainedTasks;
     private long drainedTicks;
     private long maxDrainedInTick;
-    // 阶段7 观测：按任务种类的本 tick 忙碌微秒（跨维度合并），每 tick 结算后快照为 kindLastMicros
+    // 观测：按任务种类的本 tick 忙碌微秒（跨维度合并），每 tick 结算后快照为 kindLastMicros
     private final EnumMap<ServerTaskKind, Long> kindMicrosThisTick = new EnumMap<>(ServerTaskKind.class);
     private final EnumMap<ServerTaskKind, Long> kindLastMicros = new EnumMap<>(ServerTaskKind.class);
     private long backlogStartTick = -1L;
@@ -87,7 +87,7 @@ public final class ServerScheduler {
         return realmFor(realmKey).schedule(task, lastGameTime + Math.max(0, delayTicks));
     }
 
-    // 指定到期 tick 入队，供阶段6 的持久返还恢复原始时间。
+    // 指定到期 tick 入队，供 的持久返还恢复原始时间。
     public ScheduledTask scheduleAt(Object realmKey, ServerTask task, long dueTick) {
         Objects.requireNonNull(task, "task");
         return realmFor(realmKey).schedule(task, dueTick);
@@ -180,7 +180,7 @@ public final class ServerScheduler {
         budget.charge(result.workUnits());
         long elapsed = System.nanoTime() - started;
         lane.recordStep(elapsed);
-        // 阶段7 观测：按种类累计本 tick 的忙碌微秒，用于跨维度的单类峰值定位
+        // 观测：按种类累计本 tick 的忙碌微秒，用于跨维度的单类峰值定位
         kindMicrosThisTick.merge(lane.kind(), elapsed / 1000L, Long::sum);
         steps++;
         long[] counters = kindCounters.computeIfAbsent(lane.kind(), key -> new long[6]);
@@ -202,7 +202,7 @@ public final class ServerScheduler {
                 failed++;
                 counters[1]++;
             }
-            // 阶段7 起把 YIELD（预算/区块让出）与 RETRY（业务重试）分列计数；requeued 对外仍是两者合计
+            // 把 YIELD（预算/区块让出）与 RETRY（业务重试）分列计数；requeued 对外仍是两者合计
             case YIELD -> {
                 if (!handle.terminal()) {
                     lane.requeue(handle, lastGameTime + Math.max(1, result.nextDelayTicks()));
@@ -287,7 +287,7 @@ public final class ServerScheduler {
         }
     }
 
-    // 维度卸载：逐项上报原因后清空该 realm，不留静默丢弃；持久返还由阶段6 补。
+    // 维度卸载：逐项上报原因后清空该 realm，不留静默丢弃；持久返还由 补。
     public void releaseRealm(Object realmKey, CancelReason reason) {
         RealmQueues realm = realms.remove(realmKey);
         if (realm != null) {
