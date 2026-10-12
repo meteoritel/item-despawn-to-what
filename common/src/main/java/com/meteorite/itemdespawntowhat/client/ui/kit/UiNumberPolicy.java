@@ -120,7 +120,8 @@ public record UiNumberPolicy(double min, double max, double coarseStep, double f
         return span / trackPixels;
     }
 
+    // 整数域判定委派给 kit 的严格入口，避免与显示侧出现两份同义实现
     private static boolean isIntegral(double value) {
-        return Double.isFinite(value) && value == Math.rint(value) && Math.abs(value) <= 9007199254740992.0D;
+        return UiNumbers.isExactIntegral(value, UiNumbers.MAX_EXACT_INTEGER);
     }
 }

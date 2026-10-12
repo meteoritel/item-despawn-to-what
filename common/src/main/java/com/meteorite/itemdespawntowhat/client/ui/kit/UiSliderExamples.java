@@ -36,8 +36,10 @@ public final class UiSliderExamples {
             UiValueInteraction.Listener listener) {
         UiNumberPolicy policy = UiNumberPolicy.of(0.0D, 1.0D, 0.05D, 0.01D).withFineDragFactor(0.25D);
         UiScalarSlider slider = new UiScalarSlider(policy, UiSliderWindow.of(0.0D, 1.0D));
-        slider.setStyle(UiSliderStyle.pixelDefaults());
-        slider.setPainter(PixelSliderPainter.INSTANCE);
+        // 无主题宿主可直接用 kit 自带的像素外观（样式与画法成对）
+        UiSliderSkin skin = UiSliderSkin.pixelDefaults();
+        slider.setStyle(skin.style());
+        slider.setPainter(skin.painter());
         slider.setLabel(label);
         slider.setPageStep(0.1D);
         slider.setInteractionListener(listener);

@@ -1,6 +1,5 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit;
 
-import java.util.Locale;
 import java.util.Objects;
 import java.util.function.Function;
 import net.minecraft.client.gui.Font;
@@ -32,6 +31,9 @@ import org.lwjgl.glfw.GLFW;
  * 宿主可替换成主题化或贴图实现。</p>
  */
 public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInputCapture.Target {
+
+    /** 默认显示小数位数：整数按 {@link UiNumbers} 的整数直出规则显示。 */
+    private static final int VALUE_DECIMALS = 2;
 
     private final UiInputCapture capture = new UiInputCapture();
     private final UiValueInteraction interaction = new UiValueInteraction();
@@ -208,7 +210,7 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInp
         return dragging;
     }
 
-    // 当前值的显示文本
+    // 当前值的显示文本：整数直出、否则定点小数；规则集中在 UiNumbers，避免与宿主各写一份
     public Component formatValue() {
         if (formatter != null) {
             Component custom = formatter.apply(value);
@@ -216,10 +218,7 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInp
                 return custom;
             }
         }
-        if (Math.abs(value - Math.rint(value)) < 1.0E-6D) {
-            return Component.literal(Long.toString(Math.round(value)));
-        }
-        return Component.literal(String.format(Locale.ROOT, "%.2f", value));
+        return Component.literal(UiNumbers.plain(value, VALUE_DECIMALS));
     }
 
     @Override

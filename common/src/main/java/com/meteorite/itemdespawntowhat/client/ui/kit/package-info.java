@@ -9,12 +9,22 @@
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTransform}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiMetrics}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.TextMeasurer}、
- *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll}</li>
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll}；
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiFlowLayout}（按可用宽度换行的流式排布，
+ *       测量与实际摆放共用同一份几何）</li>
  *   <li>控件与交互：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiControl}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiControlStyle}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiControlGroup}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiLinearLayout}</li>
+ *   <li>宿主样式注入：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiStyleSource}（宿主主题实现、
+ *       控件消费；kit 不持有全局主题）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiControlRole}（控件结构样式的语义角色）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderSkin}（滑块样式与画法成对注入）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderRole}（滑块外观档位）；
+ *       取值类型为既有的 {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiControlStyle}、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderStyle} 与
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderPainter}</li>
  *   <li>树编辑：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeEditor}（节点操作、绑定与视图事件）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreePath}（节点路径）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeCodec}（宿主编解码注入）、
@@ -26,7 +36,8 @@
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture}（捕获与统一结束原因）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiValueInteraction}（begin / preview / commit / cancel）</li>
  *   <li>数值策略：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiNumberPolicy}（合法数值域、粗细档与吸附）、
- *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderWindow}（轨道显示窗口，可与数值域不同）</li>
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderWindow}（轨道显示窗口，可与数值域不同）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiNumbers}（数值文本互转：整数直出与定点小数、有限值解析）</li>
  *   <li>滑块：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiScalarSlider}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeSlider}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeValue}、
@@ -96,7 +107,7 @@
  * {@link com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll} 另有非交互工具方法
  * {@code trimToWidth(Font, String, int)}（超宽时截断并补 ASCII 省略号），与悬停滚动入口并存。
  * 依赖边界、输入路由顺序、捕获与操作生命周期、数值策略、滑块接入示例与 style 注入方式见
- * {@code docs/dev/internals/ui-kit-api.md}。</p>
+ * {@code docs/dev/internals/ui-kit/README.md}。</p>
  *
  * <p><b>调用示例</b>：无规则语义的装配示例见 {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderExamples}——
  * {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderExamples#scalarSlider}（普通小数滑块：精确回填、
@@ -106,6 +117,6 @@
  *
  * <p><b>尚未完成</b>：独立 Gradle 模块与发布脚本，需要另立拆包任务；当前只冻结边界与检查方式。
  * 子包拆分（{@code api/} 与 {@code internal/}）已评估并决定不做，理由见
- * {@code docs/dev/internals/ui-kit-api.md} 的「拆包就绪门槛」。</p>
+ * {@code docs/dev/internals/ui-kit/README.md} 的「拆包就绪门槛」。</p>
  */
 package com.meteorite.itemdespawntowhat.client.ui.kit;
