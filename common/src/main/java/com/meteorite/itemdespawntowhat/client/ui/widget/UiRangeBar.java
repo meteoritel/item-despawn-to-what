@@ -59,7 +59,7 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
     private final UiSliderPainter painter;
     private final UiSliderStyle style;
 
-    private @Nullable Listener listener;
+    private final @Nullable Listener listener;
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     private UiRect trackRow = new UiRect(0, 0, 0, 0);
     private boolean enabled = true;
@@ -173,13 +173,17 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
 
     private void drawLabelRow(GuiGraphics graphics) {
         Component label = core.label();
+        UiRangeValue value = core.value();
+        Component shown = Component.translatable("gui.itemdespawntowhat.edit.range.value",
+                formatValue(value.low()), formatValue(value.high()));
+        int valueWidth = Math.min(bounds.width(), Math.max(VALUE_SLOT_WIDTH, font.width(shown)));
         if (label != null) {
             String text = TextScroll.trimToWidth(font, label.getString(),
-                    Math.max(1, bounds.width() - VALUE_SLOT_WIDTH));
+                    Math.max(1, bounds.width() - valueWidth));
             graphics.drawString(font, text, bounds.x(), bounds.y(), theme.palette().textSecondary(), false);
         }
-        Component shown = formatValue(core.selectedValue());
-        String valueText = TextScroll.trimToWidth(font, shown.getString(), Math.max(1, VALUE_SLOT_WIDTH));
+        String valueText = TextScroll.trimToWidth(font, shown.getString(),
+                Math.max(1, label == null ? bounds.width() : valueWidth));
         graphics.drawString(font, valueText, Math.max(bounds.x(), bounds.right() - font.width(valueText)), bounds.y(),
                 enabled ? theme.palette().textPrimary() : theme.palette().textDisabled(), false);
     }
@@ -190,18 +194,29 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
                 Math.max(1, style.trackHeight()));
         int lowX = value.lowPresent() ? core.xOf(value.low()) : -1;
         int highX = value.highPresent() ? core.xOf(value.high()) : -1;
-        int fillLeft = lowX >= 0 ? lowX : (highX >= 0 ? highX : track.x());
-        int fillRight = highX >= 0 ? highX : fillLeft;
+        int fillLeft = lowX >= 0 ? lowX : track.x();
+        int fillRight = highX >= 0 ? highX : (value.isEmpty() ? fillLeft : track.right());
         UiRect filled = new UiRect(Math.min(fillLeft, fillRight), trackY, Math.abs(fillRight - fillLeft),
                 Math.max(1, style.trackHeight()));
         double selected = core.selectedValue();
         int thumbX = Double.isFinite(selected) ? core.xOf(selected) : track.x();
-        UiRect thumb = new UiRect(thumbX - core.thumbWidth() / 2, trackRow.y(), core.thumbWidth(),
+        UiRect thumb = new UiRect(thumbX - core.thumbWidth() / 2, trackRow.y(),
+                Double.isFinite(selected) ? core.thumbWidth() : 0,
                 Math.max(1, trackRow.height()));
         UiRect textSlot = new UiRect(0, 0, 0, 0);
         boolean hovered = enabled && bounds.contains(mouseX, mouseY);
         painter.paint(graphics, new UiSliderPainter.Frame(bounds, track, filled, thumb, textSlot, style,
                 enabled, hovered, core.isDragging(), focused, core.isDragging(), false, false, false));
+        UiRangeEnd other = core.selectedEnd().other();
+        if (value.isPresent(other)) {
+            UiRect otherThumb = new UiRect(core.xOf(value.value(other)) - core.thumbWidth() / 2,
+                    trackRow.y(), core.thumbWidth(), Math.max(1, trackRow.height()));
+            UiRect empty = new UiRect(0, 0, 0, 0);
+            // 第二个手柄复用主题绘制，不重复覆盖轨道或当前手柄的焦点框。
+            painter.paint(graphics, new UiSliderPainter.Frame(empty, empty, empty, otherThumb, empty, style,
+                    enabled, enabled && otherThumb.contains(mouseX, mouseY), false, false, false,
+                    false, false, false));
+        }
         // 端点缺失时给出文字提示：颜色不是唯一线索
         if (!value.lowPresent()) {
             drawEndHint(graphics, track.x(), texts.lowEnd());
@@ -299,7 +314,7 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
 
     // 打开当前端的精确输入行；当前端缺失时同样可输入，提交即补齐该端
     // 复合表单可将精确编辑交给已有字段输入，统一缓冲与错误定位。
-    public void setPreciseEditor(Consumer<UiRangeEnd> editor) { preciseEditor = editor; }
+    public void setPreciseEditor(@Nullable Consumer<UiRangeEnd> editor) { preciseEditor = editor; }
 
     public boolean openPrecise() {
         if (!enabled || !visible) {
@@ -320,10 +335,8 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
 
     private void commitPrecise(@Nullable String text) {
         String raw = text == null ? "" : text.trim();
-        double parsed;
-        try {
-            parsed = Double.parseDouble(raw);
-        } catch (NumberFormatException invalid) {
+        Double parsed = UiNumbers.parseFinite(raw);
+        if (parsed == null) {
             closePrecise();
             return;
         }
@@ -331,18 +344,16 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
         if (!current.isPresent(core.selectedEnd())) {
             // 补齐缺失端：一次回填 + 一次提交，仍是一条撤销记录
             double bounded = core.policy().clamp(parsed);
+            if (core.selectedEnd() == UiRangeEnd.LOW && current.highPresent()) bounded = Math.min(bounded, current.high());
+            if (core.selectedEnd() == UiRangeEnd.HIGH && current.lowPresent()) bounded = Math.max(bounded, current.low());
             UiRangeValue next = current.withValue(core.selectedEnd(), bounded);
             core.setValue(next);
             closePrecise();
             fireCommitted(next);
             return;
         }
-        boolean accepted = core.setSelectedValue(parsed, false);
+        core.setSelectedValue(parsed, false);
         closePrecise();
-        if (accepted) {
-            // setSelectedValue 已经通过 committed 回调提交；这里保证端点缺失分支也提交一次
-            fireCommitted(core.value());
-        }
     }
 
     private String plainText(double value) {
@@ -388,6 +399,7 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
 
     @Override
     public void setFocused(boolean focused) {
+        if (this.focused && !focused) core.onFocusScopeChanged();
         this.focused = focused;
         if (!focused) {
             closePrecise();

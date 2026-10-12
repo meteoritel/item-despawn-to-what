@@ -43,7 +43,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * P4 宿主装配（主计划 §4/§7/§8）：目录图标面板接线、气候/昼夜/高度区间条、结构图解与叶子面板装配
+ * P4 宿主装配（主计划 §4/§7/§8）：目录图标面板接线、昼夜/高度区间条、结构图解与叶子面板装配
  * （面板实现见 {@link LeafPanel}）。
  * <p>本类只做「把 kit 控件与目录链路接到规则草稿上」的装配，不复制数据层逻辑：
  * 写入一律经调用方给定的 {@code applyChange}（内部走 {@link EditSession#apply(String, Runnable)}，
@@ -59,6 +59,8 @@ public final class RuleEditorP4Panels {
 
     private static final String RANGE_MIN_FIELD = "min";
     private static final String RANGE_MAX_FIELD = "max";
+    private static final int FALLBACK_RANGE_MIN = -2048;
+    private static final int FALLBACK_RANGE_MAX = 2048;
 
     private static final String UI = TypeLabels.UI_PREFIX;
     // 一天 24000 刻；0 刻对应 Minecraft 06:00
@@ -510,12 +512,8 @@ public final class RuleEditorP4Panels {
         List<UiButton> buttons = new ArrayList<>();
         List<Runnable> reloadValues = new ArrayList<>();
         RuleDraft draft = session.draft();
-        for (EditorField field : fields) {
-            if (field.type() == EditorFieldType.CLIMATE_RANGE) {
-                UiRangeBar bar = climateBar(font, draft, field, basePath, applyChange, onChange);
-                extras.add(bar);
-                reloadValues.add(() -> bar.core().setValue(readRange(draft, join(basePath, field.name()))));
-            }
+        for (EditorField field : fields) if (field.type() == EditorFieldType.CLIMATE_RANGE) {
+            form.hideRowLabel(join(basePath, field.name()));
         }
         EditorField from = field(fields, "from");
         EditorField to = field(fields, "to");
@@ -526,23 +524,18 @@ public final class RuleEditorP4Panels {
             reloadValues.add(() -> bar.setRange(intAt(draft, join(basePath, from.name()), TIME_MIN),
                     intAt(draft, join(basePath, to.name()), DEFAULT_TIME_RANGE_END)));
         }
-        EditorField min = field(fields, "min");
-        EditorField max = field(fields, "max");
+        EditorField min = field(fields, RANGE_MIN_FIELD);
+        EditorField max = field(fields, RANGE_MAX_FIELD);
         if (min != null && max != null && isIntegerLike(min) && isIntegerLike(max)) {
             UiRangeBar bar = intRangeBar(font, draft, min, max, basePath, applyChange, onChange);
             extras.add(bar);
-            reloadValues.add(() -> bar.core().setValue(readRange(draft, join(basePath, min.name()), join(basePath, max.name()))));
+            reloadValues.add(() -> bar.core().setValue(integerRange(draft, min, max, basePath)));
         }
         form.setCatalogOpener((field, tags, picked) -> pushModal.accept(catalogModal(font, workspace,
                 tags ? RuleCatalogType.TAG : FieldCatalogTypes.catalogTypeOf(field), isListField(field),
                 Component.translatable(field.labelKey()), screenWidth, screenHeight, picked, field, true)));
         LeafPanel panel = new LeafPanel(font, form, extras, buttons, reloadValues);
         int extraIndex = 0;
-        for (EditorField field : fields) if (field.type() == EditorFieldType.CLIMATE_RANGE) {
-            UiRangeBar bar = (UiRangeBar) extras.get(extraIndex++);
-            bar.setPreciseEditor(end -> panel.focusField(join(join(basePath, field.name()),
-                    end == UiRangeEnd.LOW ? RANGE_MIN_FIELD : RANGE_MAX_FIELD)));
-        }
         if (from != null && to != null && isIntegerLike(from) && isIntegerLike(to)
                 && from.intMin(0) == TIME_MIN && from.intMax(TIME_MAX) == TIME_MAX) {
             UiCyclicTimeBar bar = (UiCyclicTimeBar) extras.get(extraIndex++);
@@ -581,42 +574,14 @@ public final class RuleEditorP4Panels {
         return basePath == null || basePath.isBlank() ? name : basePath + "." + name;
     }
 
-    // 气候区间：字段自身是 {min,max} 对象，两端可省略；0.1 普通步长 / 0.01 Shift
-    private static UiRangeBar climateBar(Font font, RuleDraft draft, EditorField field, String basePath,
-                                         Consumer<Runnable> applyChange, Runnable onChange) {
-        String path = join(basePath, field.name());
-        UiRangeBar bar = new UiRangeBar(THEME, font,
-                UiNumberPolicy.of(field.doubleMin(-1.0D), field.doubleMax(1.0D), 0.1D, 0.01D),
-                readRange(draft, path), rangeTexts(), value -> {
-                    applyChange.accept(() -> {
-                        if (!value.lowPresent() && !value.highPresent()) {
-                            // 两端都不约束：省略该维，不写空对象（fields §3）
-                            draft.removeAt(path);
-                            return;
-                        }
-                        RuleValue.Mapping body = RuleValue.mapping();
-                        if (value.lowPresent()) {
-                            body.put("min", RuleValue.decimal(value.low()));
-                        }
-                        if (value.highPresent()) {
-                            body.put("max", RuleValue.decimal(value.high()));
-                        }
-                        draft.setAt(path, body.build());
-                    });
-                    onChange.run();
-                });
-        bar.setLabel(Component.translatable(field.labelKey()));
-        return bar;
-    }
-
     // 高度/光照区间：两个可省略的整数端点
     private static UiRangeBar intRangeBar(Font font, RuleDraft draft, EditorField minField, EditorField maxField,
                                           String basePath, Consumer<Runnable> applyChange, Runnable onChange) {
         String lowPath = join(basePath, minField.name());
         String highPath = join(basePath, maxField.name());
         UiRangeBar bar = new UiRangeBar(THEME, font,
-                UiNumberPolicy.integer(minField.intMin(-2048), maxField.intMax(2048), 1, 1),
-                readRange(draft, lowPath, highPath), rangeTexts(), value -> {
+                UiNumberPolicy.integer(minField.intMin(FALLBACK_RANGE_MIN), maxField.intMax(FALLBACK_RANGE_MAX), 1, 1),
+                integerRange(draft, minField, maxField, basePath), rangeTexts(), value -> {
                     applyChange.accept(() -> {
                         writeNumber(draft, lowPath, value.lowPresent() ? value.low() : null);
                         writeNumber(draft, highPath, value.highPresent() ? value.high() : null);
@@ -649,28 +614,13 @@ public final class RuleEditorP4Panels {
         return value != null && value.isNumber() ? value.asInteger(fallback) : fallback;
     }
 
-    // 气候区间字段：对象内的端点键固定为 min / max
-    private static UiRangeValue readRange(RuleDraft draft, String path) {
-        RuleValue element = draft.valueAt(path);
-        if (element == null || !element.isMapping()) {
-            return UiRangeValue.EMPTY;
-        }
-        return readRange(element.child("min"), element.child("max"));
-    }
-
-    // 两个独立路径上的端点（高度/光照）
-    private static UiRangeValue readRange(RuleDraft draft, String lowPath, String highPath) {
-        return readRange(draft.valueAt(lowPath), draft.valueAt(highPath));
-    }
-
-    private static UiRangeValue readRange(@Nullable RuleValue low, @Nullable RuleValue high) {
-        boolean lowPresent = low != null && low.isNumber();
-        boolean highPresent = high != null && high.isNumber();
-        if (!lowPresent && !highPresent) {
-            return UiRangeValue.EMPTY;
-        }
-        return new UiRangeValue(lowPresent ? low.asDecimal(0.0D) : 0.0D,
-                highPresent ? high.asDecimal(0.0D) : 0.0D, lowPresent, highPresent);
+    // 缺失端以数值域边界显示，草稿仍保留缺失状态；首次拖动后才写入区间。
+    private static UiRangeValue integerRange(RuleDraft draft, EditorField min, EditorField max, String basePath) {
+        double low = intAt(draft, join(basePath, min.name()), min.intMin(FALLBACK_RANGE_MIN));
+        double high = intAt(draft, join(basePath, max.name()), max.intMax(FALLBACK_RANGE_MAX));
+        // 倒置值由精确输入校验，不能让预览区间的构造异常阻断整个面板。
+        return low <= high ? UiRangeValue.of(low, high)
+                : UiRangeValue.of(min.intMin(FALLBACK_RANGE_MIN), max.intMax(FALLBACK_RANGE_MAX));
     }
 
     private static void writeNumber(RuleDraft draft, String path, @Nullable Double value) {

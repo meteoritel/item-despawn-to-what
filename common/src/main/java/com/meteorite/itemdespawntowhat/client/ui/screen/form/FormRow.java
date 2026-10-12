@@ -5,6 +5,7 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
@@ -20,6 +21,7 @@ final class FormRow {
     boolean wasEditing;
     List<String> loadedInputs = List.of();
     boolean visible = true;
+    @Nullable BooleanSupplier visibility;
     boolean tooltipEnabled = true;
     @Nullable Component defaultText;
     @Nullable Supplier<RuleValue> defaultValue;

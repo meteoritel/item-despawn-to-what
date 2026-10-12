@@ -15,6 +15,7 @@ import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -179,13 +180,34 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
     // 隐藏行退出键盘导航与命中，但保存原有字段内容。
     public void setRowVisible(String path, boolean visible) {
         for (FormRow row : rows) if (row.path.equals(path)) {
+            if (row.visible == visible) return;
             row.visible = visible;
             if (!visible) {
+                row.control.endInteractions(UiInputCapture.EndReason.HIDDEN);
                 List<UiFocusTarget> targets = new ArrayList<>();
                 row.control.addFocusTargets(targets);
                 targets.forEach(target -> target.setFocused(false));
             }
         }
+    }
+
+    // 模式相关字段随当前输入和历史回填显示；隐藏行保留原有值与文本缓冲。
+    public void setRowVisibility(String path, BooleanSupplier visibility) {
+        for (FormRow row : rows) if (row.path.equals(path)) row.visibility = visibility;
+        refreshRowVisibility();
+    }
+
+    void refreshRowVisibility() {
+        boolean changed = false;
+        for (FormRow row : rows) if (row.visibility != null) {
+            boolean next = row.visibility.getAsBoolean();
+            if (row.visible != next) {
+                setRowVisible(row.path, next);
+                row.wasEditing = false;
+                changed = true;
+            }
+        }
+        if (changed) layout(viewportX, viewportY, viewportWidth, viewportHeight);
     }
 
     // 启用开关等含义直观的行不弹出提示。
@@ -345,6 +367,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
 
     // 完成的滑条、开关和选择操作立即写入；聚焦文本仍只保留缓冲。
     void notifyChanged() {
+        refreshRowVisibility();
         retainPendingInputs();
         applyToDraft();
         if (changeListener != null) {
@@ -356,10 +379,14 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
 
     public void reload() {
         draftWriter.reload();
+        refreshRowVisibility();
+        retainPendingInputs();
     }
 
     public void reloadWith(RuleValue object) {
         draftWriter.reloadWith(object);
+        refreshRowVisibility();
+        retainPendingInputs();
     }
 
     /** 保存会话内输入，不改变规则 JSON 或配置历史。 */
@@ -450,7 +477,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
     public List<FormIssue> issues() {
         List<FormIssue> list = new ArrayList<>();
         for (FormRow row : rows) {
-            if (row.field.type() == EditorFieldType.NOTE) {
+            if (!row.visible || row.field.type() == EditorFieldType.NOTE) {
                 continue;
             }
             list.addAll(row.control.issues(row.path));
@@ -520,9 +547,11 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
     // 每个字段独立完成编辑，切换到下一字段也提交一次，不按字符记录。
     public void tick() {
         if (loadedRevision != session.revision()) reload();
+        refreshRowVisibility();
         if (highlightTicks > 0) highlightTicks--;
         retainPendingInputs();
         for (FormRow row : rows) {
+            if (!row.visible) continue;
             boolean editing = row.control.isEditing();
             if (row.wasEditing && !editing) {
                 row.control.finishInput();

@@ -306,6 +306,8 @@ public final class UiRangeSlider implements UiFocusTarget, UiInputTarget, UiInpu
         this.dragAnchorValue = this.value.value(this.selectedEnd);
         this.dragFineAnchor = context.shiftDown();
         this.previewSelected(this.valueAtPointer(context.pointerX(), this.dragFineAnchor), this.dragFineAnchor);
+        // 点击轨道先移动端点，后续拖动从该位置继续，避免跳回点击前的数值。
+        this.dragAnchorValue = this.value.value(this.selectedEnd);
         return true;
     }
 

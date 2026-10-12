@@ -291,6 +291,8 @@ public final class UiCyclicRange implements UiFocusTarget, UiInputTarget, UiInpu
         this.dragAnchorPointer = context.pointerX();
         this.dragAnchorValue = this.selectedTick();
         this.previewSelected(this.tickAtPointer(context.pointerX()));
+        // 点击轨道后从预览位置继续拖动，避免回跳到点击前的端点。
+        this.dragAnchorValue = this.selectedTick();
         return true;
     }
 

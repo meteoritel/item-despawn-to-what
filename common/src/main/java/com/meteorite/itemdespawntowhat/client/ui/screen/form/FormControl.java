@@ -134,6 +134,10 @@ abstract class FormControl {
     void finishInput() {
     }
 
+    // 字段写入后更新复合控件的文本基线，不重载控件或打断焦点。
+    void inputAccepted() {
+    }
+
     // 尚未写入草稿的非法文本不能在切换或重建时静默丢弃。
     boolean hasPendingInput() {
         return false;
@@ -431,4 +435,3 @@ abstract class FormControl {
         return UiNumbers.trimTrailingZeros(UiNumbers.plainExact(value, DECIMAL_DECIMALS, DECIMAL_INTEGER_LIMIT));
     }
 }
-

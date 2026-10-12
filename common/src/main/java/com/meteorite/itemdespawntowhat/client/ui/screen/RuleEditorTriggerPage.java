@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionEditorRegistry;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
+import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
@@ -23,8 +24,10 @@ import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
+import com.meteorite.itemdespawntowhat.core.type.condition.BiomeCondition;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -40,6 +43,9 @@ final class RuleEditorTriggerPage {
 
     // 主题：与容器共用宿主默认主题
     private static final UiHostTheme THEME = RuleEditorEditPages.THEME;
+    private static final String BIOME_MODE_FIELD = "mode";
+    private static final String BIOME_IDS_FIELD = "biomes";
+    private static final String CLIMATE_MODE = "climate";
 
     RuleEditorTriggerPage(RuleEditorEditPages pages) {
         this.pages = pages;
@@ -250,10 +256,11 @@ final class RuleEditorTriggerPage {
         });
         form.setDescriptor(descriptor);
         form.reload();
+        if (BiomeCondition.ID.equals(leaf.condition().type())) configureBiomeFields(form, descriptor);
         pages.ruleEditorInputPage.configureQuantityFields(form, session, path, descriptor);
         RuleEditorPageSupport.PresenceLeaf linked = pages.ruleEditorInputPage.findPresenceLeaf(path);
         if (linked != null && linked.ruleLevel()) pages.ruleEditorInputPage.configurePresenceWrites(form, session, linked);
-        // 已知条件类型附带区间条（气候/昼夜/高度光照）与注册表字段的目录按钮；
+        // 已知条件类型附带区间条（昼夜/高度光照）与注册表字段的目录按钮；
         // 面板自身负责子控件的事件转发与 Tab 顺序，普通数值字段仍由表单承载
         LeafPanel content = RuleEditorP4Panels.leafPanel(pages.font, form, session, descriptor.fields(),
                 path, change -> {
@@ -270,6 +277,17 @@ final class RuleEditorTriggerPage {
         Component title = presence == null ? descriptor.label() : Component.translatable(RuleEditorPageSupport.UI + "rule.presence.title",
                 descriptor.label(), presence.ordinal(), presence.scopeLabel());
         return new ConditionTreeOverlay.Parameters(form, panel, title);
+    }
+
+    private static void configureBiomeFields(FormView form, TypeEditorDescriptor descriptor) {
+        BooleanSupplier climate = () -> {
+            RuleValue mode = form.pendingValue(form.draftPath(BIOME_MODE_FIELD));
+            return mode != null && mode.isText() && CLIMATE_MODE.equals(mode.asText());
+        };
+        form.setRowVisibility(form.draftPath(BIOME_IDS_FIELD), () -> !climate.getAsBoolean());
+        for (EditorField field : descriptor.fields()) if (field.type() == EditorFieldType.CLIMATE_RANGE) {
+            form.setRowVisibility(form.draftPath(field.name()), climate);
+        }
     }
 
     boolean openConditionTree(FormView owner, @Nullable String fieldPath) {

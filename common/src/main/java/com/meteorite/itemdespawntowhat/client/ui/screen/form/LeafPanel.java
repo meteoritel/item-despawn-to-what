@@ -297,7 +297,8 @@ public final class LeafPanel implements UiWidget, UiFocusTarget {
             return true;
         }
         for (UiWidget extra : extras) {
-            if (extra.keyPressed(keyCode, scanCode, modifiers)) {
+            if (extra instanceof UiFocusTarget target && target.isFocused()
+                    && extra.keyPressed(keyCode, scanCode, modifiers)) {
                 return true;
             }
         }
@@ -322,7 +323,8 @@ public final class LeafPanel implements UiWidget, UiFocusTarget {
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
         for (UiWidget extra : extras) {
-            if (extra.charTyped(codePoint, modifiers)) {
+            if (extra instanceof UiFocusTarget target && target.isFocused()
+                    && extra.charTyped(codePoint, modifiers)) {
                 return true;
             }
         }

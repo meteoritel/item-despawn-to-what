@@ -108,7 +108,7 @@ final class FormDraftWriter {
             if (!row.loaded) continue;
             List<String> text = row.control.inputText();
             if (!text.equals(row.loadedInputs)) {
-                view.session.retainPendingInput(row.path, text, row.control.issues(row.path));
+                view.session.retainPendingInput(row.path, text, row.visible ? row.control.issues(row.path) : List.of());
             } else view.session.clearPendingInput(row.path);
         }
     }
@@ -119,7 +119,7 @@ final class FormDraftWriter {
         RuleDraft draft = view.session.draft();
         boolean written = false;
         for (FormRow row : view.rows) {
-            if (row.field.type() == EditorFieldType.NOTE || row.path.isEmpty()) {
+            if (!row.visible || row.field.type() == EditorFieldType.NOTE || row.path.isEmpty()) {
                 continue;
             }
             if (finish) row.control.finishInput();
@@ -142,6 +142,7 @@ final class FormDraftWriter {
     void acceptInput(FormRow row) {
         row.loadedInputs = row.control.inputText();
         row.control.rememberLoaded(view.session.draft().valueAt(row.path));
+        row.control.inputAccepted();
         view.session.clearPendingInput(row.path);
     }
 
@@ -197,6 +198,7 @@ final class FormDraftWriter {
      */
     @Nullable FormIssue pendingInputIssue() {
         for (FormRow row : view.rows) {
+            if (!row.visible) continue;
             row.control.finishInput();
             if (row.control.hasPendingInput()) {
                 for (FormIssue issue : row.control.issues(row.path)) {
