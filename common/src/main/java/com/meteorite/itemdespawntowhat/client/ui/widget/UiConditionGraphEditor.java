@@ -58,7 +58,7 @@ import org.lwjgl.glfw.GLFW;
  * <p>本控件是条件树唯一的编辑入口：结构操作、参数内联编辑与类型选择都在这里完成。</p>
  *
  * <ul>
- *   <li>鼠标：单击选中、Ctrl 点击增删、Shift 点击树序范围、空白左键拖拽平移、Shift+空白拖拽框选、
+ *   <li>鼠标：单击选中、再次点击已选中的叶编辑参数、Ctrl 点击增删、Shift 点击树序范围、空白左键拖拽平移、Shift+空白拖拽框选、
  *       中键或空格+左键拖拽平移、拖动节点移动、滚轮逐档缩放。</li>
  *   <li>键盘：方向键移动选择、Delete 删除、Ctrl+A 全选、Ctrl+C/V 复制粘贴、空格拖拽平移、
  *       Ctrl+0 适配视图、Ctrl+Home 回到根、Esc 取消当前手势或收起内联编辑框。</li>
@@ -103,6 +103,13 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     private static final int SIBLING_GAP = 12;
     // 正交连线粗细
     private static final int LINK_THICKNESS = 1;
+    private static final int LOGIC_ROUND_RADIUS = 4;
+    private static final int LOGIC_CUT_CORNER = 6;
+    private static final int LINK_ARROW_SIZE = 3;
+    private static final int FLOW_ROUTE_GAP = 18;
+    private static final int FLOW_DASH_LENGTH = 4;
+    private static final int FLOW_DASH_GAP = 3;
+    private static final String FLOW_HINT_KEY = "gui.itemdespawntowhat.edit.tree.flow_hint";
 
     // ---- [+] 热区 ----
 
@@ -344,6 +351,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     // 手势状态（世界坐标，缩放与平移无关）
     private @Nullable UiTreePath armedDrag;
     private @Nullable UiTreePath clickedLeafPath;
+    private boolean leafEditArmed;
     private double pressScreenX;
     private double pressScreenY;
     private boolean collapseSelectionOnRelease;
@@ -879,7 +887,9 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
 
     /** 选择能容纳整棵树的档位并居中显示。 */
     public void fitToContent() {
-        transform.fit(0, 0, layout.contentWidth(), resultRect.bottom(), FIT_PADDING);
+        int width = expression.root() == null ? layout.contentWidth()
+                : flowRouteX() + CARD_PADDING_X * 2 + font.width(Component.translatable(FLOW_HINT_KEY));
+        transform.fit(0, 0, width, resultRect.bottom(), FIT_PADDING);
     }
 
     /** 逐档缩放，锚点为视口中心。 */
@@ -1059,6 +1069,9 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         }
         int measured = Math.max(font.width(row1Label(node).getString()), font.width(row2Label(node).getString()))
                 + (CARD_PADDING_X + BORDER) * 2;
+        if (isContainer(node)) {
+            measured = Math.max(measured, font.width(operatorLabel(node)) + LOGIC_CUT_CORNER * 2);
+        }
         int width = Math.clamp(measured, CARD_MIN_WIDTH, CARD_MAX_WIDTH);
         cardWidths.put(node, width);
         return width;
@@ -1292,13 +1305,16 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             drawEndpointLink(graphics, hotspot, resultRect);
         } else {
             GraphNode rootWrapper = wrappers.get(root);
-            if (rootWrapper != null) drawEndpointLink(graphics, sourceRect, cardRect(rootWrapper));
+            if (rootWrapper != null) {
+                UiRect rootRect = cardRect(rootWrapper);
+                drawEndpointLink(graphics, sourceRect, rootRect);
+                drawResultFlow(graphics, rootRect);
+            }
         }
         for (NodeSlot wrapper : graphNodes) {
             ConditionNode node = wrapper.node;
             List<ConditionNode> children = ConditionTreeNodes.INSTANCE.children(node);
             if (children.isEmpty()) {
-                drawEndpointLink(graphics, cardRect(wrapper), resultRect);
                 continue;
             }
             UiRect parentRect = cardRect(wrapper);
@@ -1310,15 +1326,56 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
                 UiRect childRect = cardRect(childWrapper);
                 int color = tree.selection().contains(paths.get(node)) || tree.selection().contains(paths.get(child))
                         ? theme.palette().canvasLinkSelected() : theme.palette().canvasLink();
+                int childCenterX = childRect.x() + childRect.width() / 2;
                 UiOrthoLink.drawDown(graphics, parentRect.x() + parentRect.width() / 2, parentRect.bottom(),
-                        childRect.x() + childRect.width() / 2, childRect.y(), LINK_THICKNESS, color);
+                        childCenterX, childRect.y(), LINK_THICKNESS, color);
+                drawDownArrow(graphics, childCenterX, childRect.y(), color);
             }
         }
     }
 
     private void drawEndpointLink(GuiGraphics graphics, UiRect from, UiRect to) {
+        int centerX = to.x() + to.width() / 2;
         UiOrthoLink.drawDown(graphics, from.x() + from.width() / 2, from.bottom(),
-                to.x() + to.width() / 2, to.y(), LINK_THICKNESS, theme.palette().canvasLink());
+                centerX, to.y(), LINK_THICKNESS, theme.palette().canvasLink());
+        drawDownArrow(graphics, centerX, to.y(), theme.palette().canvasLink());
+    }
+
+    private static void drawDownArrow(GuiGraphics graphics, int centerX, int tipY, int color) {
+        for (int row = 0; row < LINK_ARROW_SIZE; row++) {
+            graphics.fill(centerX - row, tipY - row - BORDER, centerX + row + BORDER, tipY - row, color);
+        }
+    }
+
+    private int flowRouteX() { return layout.contentWidth() + FLOW_ROUTE_GAP; }
+
+    // 只有根表达式的整体结果控制执行；虚线绕过整个子树，不从每个叶子汇线到结果。
+    private void drawResultFlow(GuiGraphics graphics, UiRect root) {
+        int routeX = flowRouteX();
+        int fromY = root.y() + root.height() / 2;
+        int toY = resultRect.y() + resultRect.height() / 2;
+        int color = theme.palette().canvasFlowLink();
+        drawDashedLine(graphics, root.right(), fromY, routeX, fromY, color);
+        drawDashedLine(graphics, routeX, fromY, routeX, toY, color);
+        drawDashedLine(graphics, resultRect.right(), toY, routeX, toY, color);
+        for (int row = 0; row < LINK_ARROW_SIZE; row++) {
+            graphics.fill(resultRect.right() + row, toY - row,
+                    resultRect.right() + row + BORDER, toY + row + BORDER, color);
+        }
+        graphics.drawString(font, Component.translatable(FLOW_HINT_KEY), routeX + CARD_PADDING_X,
+                fromY + CARD_ROW_HEIGHT, color, false);
+    }
+
+    private static void drawDashedLine(GuiGraphics graphics, int x1, int y1, int x2, int y2, int color) {
+        int distance = Math.max(x2 - x1, y2 - y1);
+        boolean horizontal = y1 == y2;
+        for (int offset = 0; offset < distance; offset += FLOW_DASH_LENGTH + FLOW_DASH_GAP) {
+            int length = Math.min(FLOW_DASH_LENGTH, distance - offset);
+            int x = horizontal ? x1 + offset : x1;
+            int y = horizontal ? y1 : y1 + offset;
+            graphics.fill(x, y, x + (horizontal ? length : LINK_THICKNESS),
+                    y + (horizontal ? LINK_THICKNESS : length), color);
+        }
     }
 
     private void drawCards(GuiGraphics graphics, Font renderFont) {
@@ -1349,6 +1406,10 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
 
     private void drawCard(GuiGraphics graphics, Font renderFont, ConditionNode node, UiRect rect,
                           boolean selected, boolean hovered) {
+        if (isContainer(node)) {
+            drawLogicCard(graphics, renderFont, node, rect, selected, hovered);
+            return;
+        }
         int fill = selected ? theme.palette().canvasCardSelectedFill()
                 : isContainer(node) ? theme.palette().canvasGroupFill() : theme.palette().canvasCardFill();
         if (hovered && !selected) {
@@ -1366,6 +1427,78 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         String row2 = TextScroll.trimToWidth(renderFont, row2Label(node).getString(), textWidth);
         graphics.drawString(renderFont, row1, textX, row1Y, color, false);
         graphics.drawString(renderFont, row2, textX, row1Y + CARD_ROW_HEIGHT, theme.palette().canvasTextMuted(), false);
+    }
+
+    private Component operatorLabel(ConditionNode node) {
+        String key = switch (node) {
+            case ConditionNode.AllOf ignored -> "gui.itemdespawntowhat.edit.tree.operator.all";
+            case ConditionNode.AnyOf ignored -> "gui.itemdespawntowhat.edit.tree.operator.any";
+            case ConditionNode.Inverted ignored -> "gui.itemdespawntowhat.edit.tree.operator.not";
+            default -> throw new IllegalArgumentException("Not a logic node");
+        };
+        return Component.translatable(key);
+    }
+
+    private void drawLogicCard(GuiGraphics graphics, Font renderFont, ConditionNode node, UiRect rect,
+                               boolean selected, boolean hovered) {
+        int fill;
+        int text;
+        if (node instanceof ConditionNode.AllOf) {
+            fill = theme.palette().canvasAllFill();
+            text = theme.palette().canvasAllText();
+        } else if (node instanceof ConditionNode.AnyOf) {
+            fill = theme.palette().canvasAnyFill();
+            text = theme.palette().canvasAnyText();
+        } else {
+            fill = theme.palette().canvasNotFill();
+            text = theme.palette().canvasNotText();
+        }
+        NodeInfo info = infos.get(node);
+        boolean invalid = info != null && info.subtreeIssue();
+        int border = invalid ? theme.palette().canvasTextDanger()
+                : selected ? theme.palette().canvasCardBorderSelected() : text;
+        int thickness = selected || hovered ? BORDER * 2 : BORDER;
+        drawLogicShape(graphics, node, rect, border);
+        UiRect inner = new UiRect(rect.x() + thickness, rect.y() + thickness,
+                rect.width() - thickness * 2, rect.height() - thickness * 2);
+        drawLogicShape(graphics, node, inner, fill);
+        String title = TextScroll.trimToWidth(renderFont, operatorLabel(node).getString(), rect.width() - LOGIC_CUT_CORNER * 2);
+        String detail = TextScroll.trimToWidth(renderFont, row1Label(node).getString(), rect.width() - LOGIC_CUT_CORNER * 2);
+        int y = rect.y() + BORDER + CARD_PADDING_Y;
+        graphics.drawString(renderFont, title, rect.x() + (rect.width() - renderFont.width(title)) / 2, y,
+                invalid ? theme.palette().canvasTextDanger() : text, false);
+        graphics.drawString(renderFont, detail, rect.x() + (rect.width() - renderFont.width(detail)) / 2,
+                y + CARD_ROW_HEIGHT, text, false);
+    }
+
+    // 像素圆角、胶囊和切角使用同一矩形布局与命中区，不影响结构操作。
+    private static void drawLogicShape(GuiGraphics graphics, ConditionNode node, UiRect rect, int color) {
+        int radius = node instanceof ConditionNode.AnyOf ? rect.height() / 2
+                : node instanceof ConditionNode.Inverted ? LOGIC_CUT_CORNER : LOGIC_ROUND_RADIUS;
+        radius = Math.clamp(radius, 0, Math.min(rect.width(), rect.height()) / 2);
+        int bandTop = 0;
+        int bandInset = -1;
+        for (int row = 0; row <= rect.height(); row++) {
+            int edge = Math.min(row, rect.height() - row - BORDER);
+            int inset = 0;
+            if (row == rect.height()) inset = -1;
+            else if (edge < radius) {
+                if (node instanceof ConditionNode.Inverted) inset = radius - edge;
+                else {
+                    double dy = radius - edge - 0.5D;
+                    inset = (int) Math.ceil(radius - Math.sqrt(radius * radius - dy * dy));
+                }
+            }
+            // 相同缩进的连续扫描行合并绘制，长直边只提交一个矩形。
+            if (inset != bandInset) {
+                if (row > bandTop) {
+                    graphics.fill(rect.x() + bandInset, rect.y() + bandTop, rect.right() - bandInset,
+                            rect.y() + row, color);
+                }
+                bandTop = row;
+                bandInset = inset;
+            }
+        }
     }
 
     private void drawHotspots(GuiGraphics graphics, Font renderFont) {
@@ -1836,6 +1969,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         }
         boolean control = Screen.hasControlDown();
         boolean shift = Screen.hasShiftDown();
+        boolean alreadySelected = tree.selection().size() == 1 && clicked.equals(tree.selected());
         if (shift) {
             selectRange(clicked, control);
         } else if (control) {
@@ -1850,12 +1984,15 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             selectionAnchor = clicked;
         }
         followPrimarySelection();
-        if (!control && !shift && node instanceof ConditionNode.Leaf) clickedLeafPath = clicked;
+        if (!control && !shift && node instanceof ConditionNode.Leaf) {
+            clickedLeafPath = clicked;
+            leafEditArmed = alreadySelected;
+        }
+        pressScreenX = mouseX;
+        pressScreenY = mouseY;
         // 根节点没有同级位置，不能拖动
         if (!clicked.indices().isEmpty()) {
             armedDrag = clicked;
-            pressScreenX = mouseX;
-            pressScreenY = mouseY;
         }
         return true;
     }
@@ -1863,6 +2000,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     private void endGestureForNewPress() {
         armedDrag = null;
         clickedLeafPath = null;
+        leafEditArmed = false;
         collapseSelectionOnRelease = false;
         dragLabel = null;
         dropTarget = null;
@@ -2042,7 +2180,8 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         }
         boolean owned = armedDrag != null || clickedLeafPath != null || move.isActive();
         boolean left = button == GLFW.GLFW_MOUSE_BUTTON_LEFT;
-        boolean editLeaf = left && !move.isActive() && clickedLeafPath != null
+        boolean editLeaf = left && leafEditArmed && !move.isActive() && clickedLeafPath != null
+                && Math.hypot(mouseX - pressScreenX, mouseY - pressScreenY) < DRAG_START_DISTANCE
                 && clickedLeafPath.equals(tree.selected())
                 && tree.query(clickedLeafPath) == nodeAt(transform.toLocalX(mouseX), transform.toLocalY(mouseY));
         if (!move.isActive() && collapseSelectionOnRelease && left) {
@@ -2057,6 +2196,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         }
         armedDrag = null;
         clickedLeafPath = null;
+        leafEditArmed = false;
         dropTarget = null;
         if (editLeaf) editSelectedLeaf();
         return owned;

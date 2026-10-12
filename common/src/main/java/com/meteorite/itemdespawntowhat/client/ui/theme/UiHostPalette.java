@@ -218,6 +218,14 @@ public final class UiHostPalette {
         return UiFlatPalette.CANVAS_GROUP_FILL;
     }
 
+    public int canvasAllFill() { return UiFlatPalette.CANVAS_ALL_FILL; }
+    public int canvasAllText() { return UiFlatPalette.CANVAS_ALL_TEXT; }
+    public int canvasAnyFill() { return UiFlatPalette.CANVAS_ANY_FILL; }
+    public int canvasAnyText() { return UiFlatPalette.CANVAS_ANY_TEXT; }
+    public int canvasNotFill() { return UiFlatPalette.CANVAS_NOT_FILL; }
+    public int canvasNotText() { return UiFlatPalette.CANVAS_NOT_TEXT; }
+    public int canvasFlowLink() { return UiFlatPalette.CANVAS_FLOW_LINK; }
+
     public int canvasCardHoverFill() {
         return UiFlatPalette.CANVAS_CARD_HOVER_FILL;
     }

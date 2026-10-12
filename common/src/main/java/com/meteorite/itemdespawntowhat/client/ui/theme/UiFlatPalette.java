@@ -4,7 +4,7 @@ package com.meteorite.itemdespawntowhat.client.ui.theme;
  * 条件树画布页（画布本体、页内外壳与内联参数框）的扁平配色。
  *
  * <p>与 {@link UiPalette} 的立体像素主题并列：本类只提供二维扁平外观需要的颜色，
- * 用 1 像素同色描边和灰阶层次区分区域，不出现高光边与阴影边。
+ * 用灰阶层次区分区域，逻辑运算符使用蓝、绿、紫语义色，不出现高光边与阴影边。
  * 语义相同的基础色直接引用 {@link UiPalette}，避免同一含义维护两份字面量。</p>
  *
  * <p>本类只被条件树画布页与它的适配层读取；其它编辑页继续使用 {@link UiPalette}，
@@ -71,6 +71,14 @@ public final class UiFlatPalette {
     public static final int CANVAS_CARD_FILL = UiPalette.CONTROL_FILL;
     // 容器卡片底色：比叶深一档
     public static final int CANVAS_GROUP_FILL = UiPalette.PANEL_FILL;
+    // 逻辑运算符用固定语义色；选中态只改变描边，不覆盖运算符颜色。
+    public static final int CANVAS_ALL_FILL = 0xFFD9E7FF;
+    public static final int CANVAS_ALL_TEXT = 0xFF234EA0;
+    public static final int CANVAS_ANY_FILL = 0xFFD9F6E4;
+    public static final int CANVAS_ANY_TEXT = 0xFF22643D;
+    public static final int CANVAS_NOT_FILL = 0xFFEADFF8;
+    public static final int CANVAS_NOT_TEXT = 0xFF674193;
+    public static final int CANVAS_FLOW_LINK = 0xFF315E69;
     // 悬停中的卡片底色
     public static final int CANVAS_CARD_HOVER_FILL = UiPalette.CONTROL_HOVER;
     // 选中卡片底色
