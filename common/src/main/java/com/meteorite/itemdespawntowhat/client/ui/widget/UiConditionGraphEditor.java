@@ -120,8 +120,6 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     private static final int DROP_MARKER_THICKNESS = 2;
     // 拖拽幽灵距指针的像素
     private static final int DRAG_GHOST_GAP = 6;
-    // 双击判定间隔（毫秒）
-    private static final long DOUBLE_CLICK_MS = 300L;
 
     // ---- 类型选择框 ----
 
@@ -177,10 +175,20 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
 
     // 容器末尾为 [+] 预留的槽位
     private static final class HotspotSlot extends GraphNode {
-        private final ConditionNode container;
+        private final @Nullable ConditionNode container;
 
-        HotspotSlot(ConditionNode container) {
+        HotspotSlot(@Nullable ConditionNode container) {
             this.container = container;
+        }
+    }
+
+    // 只读链路端点，不参与条件表达式、选择、结构操作与限额统计。
+    private static final class EndpointSlot extends GraphNode {
+        private final Component title;
+        private Component summary = Component.empty();
+
+        EndpointSlot(String titleKey) {
+            title = Component.translatable(titleKey);
         }
     }
 
@@ -193,7 +201,13 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
 
         @Override
         public int width(GraphNode node) {
-            return node instanceof HotspotSlot ? HOTSPOT_SIZE : editor.cardWidth(((NodeSlot) node).node);
+            if (node instanceof HotspotSlot hotspot) {
+                return hotspot.container == null ? HOTSPOT_LARGE_SIZE : HOTSPOT_SIZE;
+            }
+            if (node instanceof EndpointSlot) {
+                return Math.max(editor.endpointWidth(editor.sourceSlot), editor.endpointWidth(editor.resultSlot));
+            }
+            return editor.cardWidth(((NodeSlot) node).node);
         }
     }
 
@@ -249,6 +263,9 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     private final UiTransform transform = UiTransform.ofScales(0.5, 1.0, 1.5, 2.0);
     private final UiTidyTreeLayout<GraphNode> layout = new UiTidyTreeLayout<>(LEVEL_PITCH, SIBLING_GAP);
     private final LayoutSource layoutSource = new LayoutSource(this);
+    private final EndpointSlot sourceSlot = new EndpointSlot("gui.itemdespawntowhat.edit.tree.node.source");
+    private final EndpointSlot resultSlot = new EndpointSlot("gui.itemdespawntowhat.edit.tree.node.result");
+    private UiRect resultRect = new UiRect(0, 0, 0, 0);
     private final UiRubberBand rubberBand = new UiRubberBand();
     private final UiTreeEditor<ConditionNode> tree;
     private final UiTreeMoveInteraction<ConditionNode> move;
@@ -294,6 +311,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
 
     // 手势状态（世界坐标，缩放与平移无关）
     private @Nullable UiTreePath armedDrag;
+    private @Nullable UiTreePath clickedLeafPath;
     private double pressScreenX;
     private double pressScreenY;
     private boolean collapseSelectionOnRelease;
@@ -309,14 +327,13 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     private boolean panMoved;
     private double panTravel;
     private boolean spaceDown;
-    private @Nullable UiTreePath lastClickPath;
-    private long lastClickTime;
     private @Nullable UiTreePath selectionAnchor;
     private @Nullable ConditionNode hoveredNode;
     private @Nullable Hotspot hoveredHotspot;
 
     // 类型选择框状态
     private boolean pickerOpen;
+    private boolean pickerAppend;
     private @Nullable UiTreePath pickerParent;
     private int pickerIndex;
     private int pickerCursor;
@@ -417,6 +434,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     /** 宿主在切页、历史回填、卸载或关闭时取消手势；只有释放可提交移动。 */
     public void endInteractions(UiInputCapture.EndReason reason) {
         armedDrag = null;
+        clickedLeafPath = null;
         collapseSelectionOnRelease = false;
         dragLabel = null;
         dropTarget = null;
@@ -552,16 +570,32 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
 
     // ---- 结构操作（工具栏与键盘共用） ----
 
-    /** 进入添加条件模式：画布显示所有 [+] 热区，点击热区弹出可搜索类型列表。 */
+    /** 直接打开类型列表，确认后追加到当前容器或在根外包一层全部满足。 */
     public boolean beginAddCondition() {
         if (!enabled) {
             return false;
         }
-        addMode = true;
+        addMode = false;
         groupKindPending = false;
-        closePicker();
-        closeKindMenu();
+        openPicker(new Hotspot(null, 0, bounds));
+        pickerAppend = true;
         return true;
+    }
+
+    public boolean isPickerOpen() {
+        return pickerOpen;
+    }
+
+    public boolean hasPopup() {
+        return pickerOpen || kindMenuOpen;
+    }
+
+    /** 宿主提供源物品与结果摘要；缺失内容用空摘要保留端点框。 */
+    public void setEndpoints(Component sourceSummary, Component resultSummary) {
+        if (sourceSlot.summary.equals(sourceSummary) && resultSlot.summary.equals(resultSummary)) return;
+        sourceSlot.summary = sourceSummary;
+        resultSlot.summary = resultSummary;
+        rebuild();
     }
 
     public boolean isAddMode() {
@@ -803,29 +837,14 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     /** 缩放 100% 并把根卡片顶边中点放回视口顶部。 */
     public void resetView() {
         transform.reset();
-        ConditionNode root = expression.root();
-        if (root == null) {
-            transform.centerOn(0, 0);
-            return;
-        }
-        GraphNode wrapper = wrappers.get(root);
-        if (wrapper == null) {
-            return;
-        }
-        UiRect rootRect = cardRect(wrapper);
+        UiRect rootRect = cardRect(sourceSlot);
         transform.centerOn(rootRect.x() + rootRect.width() / 2.0, 0);
         transform.panBy(0, RESET_TOP_MARGIN - transform.viewport().height() / 2.0);
     }
 
     /** 选择能容纳整棵树的档位并居中显示。 */
     public void fitToContent() {
-        if (expression.root() == null) {
-            resetView();
-            return;
-        }
-        // contentHeight 是「层数 × 层高」：最后一层只用到卡片高度，按卡片底边取实际内容高度
-        int contentHeight = layout.contentHeight() - LEVEL_PITCH + CARD_HEIGHT;
-        transform.fit(0, 0, layout.contentWidth(), contentHeight, FIT_PADDING);
+        transform.fit(0, 0, layout.contentWidth(), resultRect.bottom(), FIT_PADDING);
     }
 
     /** 逐档缩放，锚点为视口中心。 */
@@ -894,18 +913,23 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         ConditionNode root = expression.root();
         laidOutRoot = root;
         if (root == null) {
-            layout.clear();
+            HotspotSlot empty = new HotspotSlot(null);
+            hotspotSlots.add(empty);
+            sourceSlot.children = List.of(empty);
         } else {
             inspect(root, UiTreePath.ROOT, 1, new int[2]);
             NodeSlot wrapperRoot = wrap(root, UiTreePath.ROOT);
-            layout.layout(wrapperRoot, layoutSource);
+            sourceSlot.children = List.of(wrapperRoot);
         }
+        layout.layout(sourceSlot, layoutSource);
+        UiRect sourceRect = cardRect(sourceSlot);
+        resultRect = new UiRect(sourceRect.x(), layout.contentHeight(), sourceRect.width(), CARD_HEIGHT);
         collectHotspots();
         tree.setSelection(tree.selection(), tree.selected());
         followPrimarySelection();
         validateInlineAnchor();
-        if (root == null && (previousRoot != null || !viewInitialized)) {
-            // 视口尺寸在下一帧渲染时才可用，届时再把空树大热区对准视口中心
+        if (!viewInitialized || root == null && previousRoot != null) {
+            // 视口尺寸在下一帧渲染时可用，届时适配完整源物品到结果链路。
             centerEmptyView = true;
         }
         viewInitialized = true;
@@ -965,6 +989,10 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     private void collectHotspots() {
         for (HotspotSlot slot : hotspotSlots) {
             ConditionNode container = slot.container;
+            if (container == null) {
+                hotspots.add(new Hotspot(null, 0, centered(cardRect(slot))));
+                continue;
+            }
             UiTreePath parent = paths.get(container);
             if (parent == null) {
                 continue;
@@ -981,11 +1009,6 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
                 continue;
             }
             hotspots.add(new Hotspot(parent, 0, centered(cardRect(wrapper))));
-        }
-        if (expression.root() == null) {
-            hotspots.add(new Hotspot(null, 0, new UiRect(
-                    -HOTSPOT_LARGE_SIZE / 2, -HOTSPOT_LARGE_SIZE / 2,
-                    HOTSPOT_LARGE_SIZE, HOTSPOT_LARGE_SIZE)));
         }
     }
 
@@ -1004,6 +1027,12 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         int width = Math.clamp(measured, CARD_MIN_WIDTH, CARD_MAX_WIDTH);
         cardWidths.put(node, width);
         return width;
+    }
+
+    private int endpointWidth(EndpointSlot endpoint) {
+        int measured = Math.max(font.width(endpoint.title), font.width(endpoint.summary))
+                + (CARD_PADDING_X + BORDER) * 2;
+        return Math.clamp(measured, CARD_MIN_WIDTH, CARD_MAX_WIDTH);
     }
 
     private UiRect cardRect(GraphNode wrapper) {
@@ -1117,7 +1146,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         transform.setViewport(bounds.x(), bounds.y(), bounds.width(), bounds.height());
         if (centerEmptyView) {
             centerEmptyView = false;
-            transform.centerOn(0, 0);
+            fitToContent();
         }
         UiRect viewport = transform.viewport();
         boolean inside = bounds.contains(mouseX, mouseY);
@@ -1214,10 +1243,21 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     }
 
     private void drawLinks(GuiGraphics graphics) {
+        UiRect sourceRect = cardRect(sourceSlot);
+        ConditionNode root = expression.root();
+        if (root == null) {
+            UiRect hotspot = hotspots.getFirst().rect();
+            drawEndpointLink(graphics, sourceRect, hotspot);
+            drawEndpointLink(graphics, hotspot, resultRect);
+        } else {
+            GraphNode rootWrapper = wrappers.get(root);
+            if (rootWrapper != null) drawEndpointLink(graphics, sourceRect, cardRect(rootWrapper));
+        }
         for (NodeSlot wrapper : graphNodes) {
             ConditionNode node = wrapper.node;
             List<ConditionNode> children = ConditionTreeNodes.INSTANCE.children(node);
             if (children.isEmpty()) {
+                drawEndpointLink(graphics, cardRect(wrapper), resultRect);
                 continue;
             }
             UiRect parentRect = cardRect(wrapper);
@@ -1235,7 +1275,14 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         }
     }
 
+    private void drawEndpointLink(GuiGraphics graphics, UiRect from, UiRect to) {
+        UiOrthoLink.drawDown(graphics, from.x() + from.width() / 2, from.bottom(),
+                to.x() + to.width() / 2, to.y(), LINK_THICKNESS, theme.palette().canvasLink());
+    }
+
     private void drawCards(GuiGraphics graphics, Font renderFont) {
+        drawEndpoint(graphics, renderFont, sourceSlot, cardRect(sourceSlot));
+        drawEndpoint(graphics, renderFont, resultSlot, resultRect);
         for (NodeSlot wrapper : graphNodes) {
             ConditionNode node = wrapper.node;
             UiRect rect = cardRect(wrapper);
@@ -1245,6 +1292,18 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             boolean selected = tree.selection().contains(paths.get(node));
             drawCard(graphics, renderFont, node, rect, selected, node == hoveredNode);
         }
+    }
+
+    private void drawEndpoint(GuiGraphics graphics, Font renderFont, EndpointSlot endpoint, UiRect rect) {
+        graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), theme.palette().canvasGroupFill());
+        drawBorder(graphics, rect, theme.palette().canvasCardBorder());
+        int x = rect.x() + BORDER + CARD_PADDING_X;
+        int y = rect.y() + BORDER + CARD_PADDING_Y;
+        int width = Math.max(0, rect.width() - (BORDER + CARD_PADDING_X) * 2);
+        graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont, endpoint.title.getString(), width),
+                x, y, theme.palette().canvasText(), false);
+        graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont, endpoint.summary.getString(), width),
+                x, y + CARD_ROW_HEIGHT, theme.palette().canvasTextMuted(), false);
     }
 
     private void drawCard(GuiGraphics graphics, Font renderFont, ConditionNode node, UiRect rect,
@@ -1683,7 +1742,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (!visible || !enabled || !bounds.contains(mouseX, mouseY)) {
+        if (!visible || !enabled) {
             return false;
         }
         if (pickerOpen) {
@@ -1694,6 +1753,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             handleKindMenuClick(mouseX, mouseY);
             return true;
         }
+        if (!bounds.contains(mouseX, mouseY)) return false;
         // 内联框打开时鼠标命中优先：坐标换算成内容坐标后转发
         if (inlineEditorHit(mouseX, mouseY)) {
             InlineEditor editor = inlineEditor;
@@ -1750,10 +1810,6 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         if (clicked == null) {
             return true;
         }
-        long now = Util.getMillis();
-        boolean doubleClick = clicked.equals(lastClickPath) && now - lastClickTime <= DOUBLE_CLICK_MS;
-        lastClickPath = clicked;
-        lastClickTime = now;
         boolean control = Screen.hasControlDown();
         boolean shift = Screen.hasShiftDown();
         if (shift) {
@@ -1770,10 +1826,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             selectionAnchor = clicked;
         }
         followPrimarySelection();
-        if (doubleClick && !control && !shift) {
-            activate();
-            return true;
-        }
+        if (!control && !shift && node instanceof ConditionNode.Leaf) clickedLeafPath = clicked;
         // 根节点没有同级位置，不能拖动
         if (!clicked.indices().isEmpty()) {
             armedDrag = clicked;
@@ -1785,6 +1838,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
 
     private void endGestureForNewPress() {
         armedDrag = null;
+        clickedLeafPath = null;
         collapseSelectionOnRelease = false;
         dragLabel = null;
         dropTarget = null;
@@ -1898,7 +1952,6 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
                 dragLabel = sources.size() > 1
                         ? Component.translatable("gui.itemdespawntowhat.edit.tree.drag_many", sources.size()).getString()
                         : node == null ? "" : row1Label(node).getString();
-                lastClickPath = null;
             }
         }
         if (!move.isActive()) {
@@ -1964,8 +2017,11 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             finishRubberBand();
             return true;
         }
-        boolean owned = armedDrag != null || move.isActive();
+        boolean owned = armedDrag != null || clickedLeafPath != null || move.isActive();
         boolean left = button == GLFW.GLFW_MOUSE_BUTTON_LEFT;
+        boolean editLeaf = left && !move.isActive() && clickedLeafPath != null
+                && clickedLeafPath.equals(tree.selected())
+                && tree.query(clickedLeafPath) == nodeAt(transform.toLocalX(mouseX), transform.toLocalY(mouseY));
         if (!move.isActive() && collapseSelectionOnRelease && left) {
             tree.select(tree.selected());
             followPrimarySelection();
@@ -1977,7 +2033,9 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             move.end(UiInputCapture.EndReason.RELEASE);
         }
         armedDrag = null;
+        clickedLeafPath = null;
         dropTarget = null;
+        if (editLeaf) editSelectedLeaf();
         return owned;
     }
 
@@ -2047,7 +2105,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
                 return true;
             }
             if (keyCode == GLFW.GLFW_KEY_HOME) {
-                centerOnRoot();
+                resetView();
                 return true;
             }
             if (keyCode == GLFW.GLFW_KEY_EQUAL || keyCode == GLFW.GLFW_KEY_KP_ADD) {
@@ -2206,19 +2264,6 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         return true;
     }
 
-    private void centerOnRoot() {
-        ConditionNode root = expression.root();
-        if (root == null) {
-            transform.centerOn(0, 0);
-            return;
-        }
-        GraphNode wrapper = wrappers.get(root);
-        if (wrapper != null) {
-            UiRect rect = cardRect(wrapper);
-            transform.centerOn(rect.x() + rect.width() / 2.0, rect.y() + rect.height() / 2.0);
-        }
-    }
-
     // 把卡片带进视口，保留 REVEAL_MARGIN 屏幕像素边距
     private void revealNode(ConditionNode node) {
         GraphNode wrapper = wrappers.get(node);
@@ -2253,12 +2298,14 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     private void openPicker(Hotspot hotspot) {
         closeKindMenu();
         pickerOpen = true;
+        pickerAppend = false;
         pickerParent = hotspot.parent();
         pickerIndex = hotspot.index();
         pickerCursor = 0;
         pickerOffset = 0;
         pickerFilter.setLength(0);
         refreshFilter();
+        updatePickerRects();
     }
 
     /** 关闭类型选择框；未打开时不做任何事。 */
@@ -2291,6 +2338,9 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         int maxRows = Math.max(1, (bounds.height() - PICKER_HEADER - PICKER_SEARCH_ROW - PICKER_FOOTER
                 - PICKER_MARGIN * 2) / PICKER_ROW_HEIGHT);
         pickerVisibleRows = Math.clamp(Math.min(PICKER_MAX_ROWS, maxRows), 1, Math.max(1, filteredOptions.size()));
+        // 光标移动到可见范围外时滚动列表，确保所有条件类型均可点选。
+        pickerOffset = Math.clamp(pickerOffset, Math.max(0, pickerCursor - pickerVisibleRows + 1), pickerCursor);
+        pickerOffset = Math.clamp(pickerOffset, 0, Math.max(0, filteredOptions.size() - pickerVisibleRows));
         int height = PICKER_HEADER + PICKER_SEARCH_ROW + pickerVisibleRows * PICKER_ROW_HEIGHT + PICKER_FOOTER;
         if (height > bounds.height()) {
             closePicker();
@@ -2405,7 +2455,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         }
     }
 
-    // 确认类型：生成默认叶节点并插入热区位置，随后直接进入参数编辑
+    // 确认类型只生成默认叶节点；参数编辑由后续点击叶卡片触发。
     private void confirmPicker() {
         if (pickerCursor < 0 || pickerCursor >= filteredOptions.size()) {
             closePicker();
@@ -2414,6 +2464,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         ResourceLocation type = filteredOptions.get(pickerCursor).id();
         UiTreePath parent = pickerParent;
         int index = pickerIndex;
+        boolean append = pickerAppend;
         closePicker();
         addMode = false;
         ConditionTreeContract.LeafFactory factory = leafFactory;
@@ -2425,9 +2476,8 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             return;
         }
         lastOpKey = EditSession.OP_ADD_CONDITION;
-        if (insertNode(parent, index, leaf)) {
-            editSelectedLeaf();
-        }
+        boolean inserted = append ? addNode(leaf) : insertNode(parent, index, leaf);
+        if (inserted) revealNode(leaf);
     }
 
     // ---- 树变换 ----
@@ -2558,7 +2608,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
 
     @Override
     public void setFocused(boolean newFocused) {
-        if (!newFocused) {
+        if (focused && !newFocused) {
             endInteractions(UiInputCapture.EndReason.FOCUS_SCOPE_CHANGED);
         }
         this.focused = newFocused;

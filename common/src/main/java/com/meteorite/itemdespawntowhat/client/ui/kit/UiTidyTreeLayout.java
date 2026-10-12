@@ -85,7 +85,13 @@ public final class UiTidyTreeLayout<N> {
         if (cached != null) return cached;
         int own = sourceWidth(node, source);
         subtreeWidths.put(node, own);
-        int total = Math.max(own, childrenWidth(source.children(node)));
+        List<N> children = source.children(node);
+        if (children != null) {
+            for (N child : children) {
+                if (child != null) subtreeWidth(child, source);
+            }
+        }
+        int total = Math.max(own, childrenWidth(children));
         subtreeWidths.put(node, total);
         return total;
     }
