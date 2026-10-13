@@ -17,8 +17,21 @@ import org.jetbrains.annotations.Nullable;
 
 /*** 客户端展示名称：直接读取已加载的注册表与语言，不触发目录请求。 */
 public final class RuleDisplayLabels {
+    private static final String TAG_PREFIX = "#";
+    private static final String TAG_LABEL_KEY = "gui.itemdespawntowhat.edit.tag.label";
     private RuleDisplayLabels() {
         throw new UnsupportedOperationException("Utility class");
+    }
+
+    /**
+     * 展示完整标签注册名，统一添加一个标签前缀，供目录、已选卡片与摘要共用。
+     *
+     * @param id 可带标签前缀的完整注册名
+     * @return 只含一个前置 {@code #} 的标签显示名
+     */
+    public static Component tagLabel(String id) {
+        String name = id.startsWith(TAG_PREFIX) ? id : TAG_PREFIX + id;
+        return Component.translatable(TAG_LABEL_KEY, name);
     }
 
     // 名称查询均为注册表索引查找；未知资源交给调用方保留原始 ID。

@@ -22,7 +22,7 @@ public final class TagPreviewIcons {
 
     /*** 可展开的标签快照，不将单个示例物品解释为唯一匹配对象。 */
     public record Tag(RuleCatalogType type, String id, List<Member> members, UiCarousel carousel) {
-        public Component label() { return Component.translatable(UI + "label", id); }
+        public Component label() { return RuleDisplayLabels.tagLabel(id); }
         public Component tooltip() {
             var tip = Component.translatable(UI + "supports." + kind(type), id);
             return tip.append("\n").append(Component.translatable(UI + "expand", members.size()));

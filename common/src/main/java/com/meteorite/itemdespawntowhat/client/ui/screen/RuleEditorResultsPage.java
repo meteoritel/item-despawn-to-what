@@ -60,9 +60,6 @@ final class RuleEditorResultsPage {
     private static final int ACTION_REMOVE_INSET = 2;
     private static final int ACTION_LIST_MIN_HEIGHT = ACTION_ROW_HEIGHT * 2 + 2;
     private static final int TOOLBAR_HEIGHT = 20;
-    private static final int PLAN_SELECTOR_MIN_WIDTH = 80;
-    private static final int PLAN_PICKER_WIDTH = 320;
-    private static final int PLAN_PICKER_ROWS = 7;
     private static final int DETAIL_HEADER_HEIGHT = 26;
     private static final int DETAIL_ICON_SIZE = 18;
     private static final int DETAIL_PADDING = 6;
@@ -89,7 +86,7 @@ final class RuleEditorResultsPage {
     // 清理本页持有的控件引用（重建/切页时由容器调用）
     void reset() {
         typePicker.close();
-        planSelector = null;
+        planPager = null;
         safeSpawnBox = null;
         fillOriginBox = null;
         combinationControl = null;
@@ -113,7 +110,7 @@ final class RuleEditorResultsPage {
 
     int effectIndex;
 
-    @Nullable UiButton planSelector;
+    private @Nullable PlanPager planPager;
 
     @Nullable UiCheckBox safeSpawnBox;
 
@@ -161,13 +158,12 @@ final class RuleEditorResultsPage {
         int candidates = Math.max(1, ResultStructure.candidateCount(rule));
         candidateIndex = Math.clamp(candidateIndex, 0, candidates - 1);
         resultStage = Math.clamp(resultStage, 1, 2);
-        planSelector = new UiButton(THEME, pages.font,
-                Component.translatable(RuleEditorPageSupport.UI + "results.plan_selector", candidateIndex + 1, candidates),
-                UiButtonVariant.SECONDARY, this::openPlanPicker);
-        planSelector.setTooltip(RuleNaming.candidateTitle(ResultStructure.candidateAt(rule, candidateIndex),
-                candidateIndex + 1, pages.nameSource), Component.translatable(RuleEditorPageSupport.UI + "results.select_plan"));
-        pages.liveWidgets.add(planSelector);
-        pages.buttons.add(planSelector);
+        planPager = new PlanPager(candidates);
+        pages.liveWidgets.add(planPager);
+        pages.liveWidgets.add(planPager.previous);
+        pages.liveWidgets.add(planPager.next);
+        pages.buttons.add(planPager.previous);
+        pages.buttons.add(planPager.next);
         resultBack = new UiButton(THEME, pages.font,
                 Component.translatable(RuleEditorPageSupport.UI + "button.result_actions"), UiButtonVariant.SECONDARY,
                 () -> enterResultStage(1));
@@ -299,7 +295,9 @@ final class RuleEditorResultsPage {
             pages.buttons.add(emptyAddButton);
         }
         pages.addCandidateButton("button.candidate_add", this::addCandidate);
-        pages.addCandidateButton("results.plan_more", () -> openResultMore(true));
+        pages.addCandidateButton("button.diagram", this::openDiagram);
+        pages.addCandidateButton("button.candidate_duplicate", this::duplicateCandidate);
+        if (candidates > 1) pages.addCandidateButton("results.plan_more", () -> openResultMore(true));
         if (effectCount > 0) {
             // 每屏只保留一个主操作，主操作是页脚的「应用更改」，动作类按钮统一为次操作
             pages.addEffectButton("button.effect_add", this::openEffectPicker);
@@ -314,8 +312,6 @@ final class RuleEditorResultsPage {
         if (pages.blockNavigation()) return;
         List<MenuAction> actions = new ArrayList<>();
         if (candidate) {
-            actions.add(new MenuAction(Component.translatable(RuleEditorPageSupport.UI + "button.diagram"), false, this::openDiagram));
-            actions.add(new MenuAction(Component.translatable(RuleEditorPageSupport.UI + "button.candidate_duplicate"), false, this::duplicateCandidate));
             int count = ResultStructure.candidateCount(pages.currentView());
             if (candidateIndex > 0) actions.add(new MenuAction(Component.translatable(RuleEditorPageSupport.UI + "button.candidate_up"), false, () -> moveCandidateBy(-1)));
             if (candidateIndex + 1 < count) actions.add(new MenuAction(Component.translatable(RuleEditorPageSupport.UI + "button.candidate_down"), false, () -> moveCandidateBy(1)));
@@ -642,16 +638,6 @@ final class RuleEditorResultsPage {
         effectIndex = to;
     }
 
-    void renderCandidateRow(GuiGraphics graphics, Font renderFont, Integer item, int index, UiRect row, boolean selected, boolean hovered, boolean focused) {
-        RuleValue view = pages.currentView();
-        RuleValue candidate = ResultStructure.candidateAt(view, item);
-        // 方案标题统一走 RuleNaming（「方案 %s：%s」），不再出现「隐式结果」这类结构术语
-        Component title = RuleNaming.candidateTitle(candidate, item + 1, pages.nameSource);
-        String text = TextScroll.trimToWidth(pages.font, title.getString(), Math.max(1, row.width() - 4));
-        graphics.drawString(renderFont, text, row.x() + 2, row.y() + (row.height() - renderFont.lineHeight) / 2,
-                THEME.palette().textPrimary(), false);
-    }
-
     void renderEffectRow(GuiGraphics graphics, Font renderFont, Integer item, int index, UiRect row, boolean selected, boolean hovered, boolean focused) {
         RuleValue view = pages.currentView();
         RuleValue array = ResultStructure.effectsAt(view, candidateIndex);
@@ -694,34 +680,23 @@ final class RuleEditorResultsPage {
                 + (showAdvancedEffects ? "results.advanced_open" : "results.advanced_closed"));
     }
 
-    private void openPlanPicker() {
+    private void selectPlanBy(int delta) {
         if (pages.blockNavigation()) return;
         int count = Math.max(1, ResultStructure.candidateCount(pages.currentView()));
-        UiListView<Integer> list = new UiListView<>(THEME, pages.font, this::renderCandidateRow);
-        list.setRowHeight(ACTION_ROW_HEIGHT);
-        List<Integer> indexes = new ArrayList<>();
-        for (int index = 0; index < count; index++) indexes.add(index);
-        list.setItems(indexes);
-        list.setSelectedIndex(candidateIndex);
-        list.setActivateOnSingleClick(true);
-        UiModal modal = UiModal.create(THEME, pages.font)
-                .title(Component.translatable(RuleEditorPageSupport.UI + "results.select_plan"));
-        list.setOnActivate(index -> {
-            if (pages.blockNavigation()) return;
-            pages.host.modals().close(modal);
-            if (candidateIndex != index) {
-                candidateIndex = index;
-                effectIndex = 0;
-                showAdvancedEffects = false;
-            }
-            enterResultStage(1);
-            pages.flushRebuild();
-        });
-        modal.contentWidget(list, Math.min(count, PLAN_PICKER_ROWS) * ACTION_ROW_HEIGHT + 2)
-                .preferredWidth(PLAN_PICKER_WIDTH).cancel(Component.translatable(RuleEditorPageSupport.UI + "button.cancel"))
-                .layoutCentered(pages.host.screenWidth(), pages.host.screenHeight());
-        list.ensureVisible(candidateIndex);
-        pages.host.modals().push(modal);
+        int target = candidateIndex + delta;
+        if (target < 0 || target >= count || target == candidateIndex) return;
+        candidateIndex = target;
+        effectIndex = 0;
+        showAdvancedEffects = false;
+        enterResultStage(1);
+    }
+
+    // 容器统一应用使能后再恢复翻页边界，避免第一／末页箭头被重新启用。
+    void updatePlanButtons(boolean enabled) {
+        if (planPager == null) return;
+        int count = Math.max(1, ResultStructure.candidateCount(pages.currentView()));
+        planPager.previous.setEnabled(enabled && candidateIndex > 0);
+        planPager.next.setEnabled(enabled && candidateIndex + 1 < count);
     }
 
     void enterResultStage(int stage) {
@@ -775,9 +750,9 @@ final class RuleEditorResultsPage {
     private int layoutToolbar(int x, int y, int width) {
         List<UiWidget> controls = new ArrayList<>();
         List<Integer> sizes = new ArrayList<>();
-        if (planSelector != null) {
-            controls.add(planSelector);
-            sizes.add(Math.clamp(planSelector.preferredWidth(RuleEditorPageSupport.PAD), Math.min(width, PLAN_SELECTOR_MIN_WIDTH), width));
+        if (planPager != null) {
+            controls.add(planPager);
+            sizes.add(Math.min(width, planPager.preferredWidth()));
         }
         if (combinationControl != null) {
             controls.add(combinationControl);
@@ -971,10 +946,15 @@ final class RuleEditorResultsPage {
     @Nullable Component tooltipAt(double mouseX, double mouseY) {
         if (typePicker.isOpen()) return null;
         if (removeIndexAt(mouseX, mouseY) >= 0) return Component.translatable(RuleEditorPageSupport.UI + "button.effect_remove");
-        if (planSelector != null && planSelector.bounds().contains(mouseX, mouseY))
-            return RuleNaming.candidateTitle(ResultStructure.candidateAt(pages.currentView(), candidateIndex),
-                    candidateIndex + 1, pages.nameSource).copy().append("\n")
-                    .append(Component.translatable(RuleEditorPageSupport.UI + "results.select_plan"));
+        if (planPager != null) {
+            if (planPager.previous.bounds().contains(mouseX, mouseY))
+                return Component.translatable(RuleEditorPageSupport.UI + "results.previous_plan");
+            if (planPager.next.bounds().contains(mouseX, mouseY))
+                return Component.translatable(RuleEditorPageSupport.UI + "results.next_plan");
+            if (planPager.bounds().contains(mouseX, mouseY))
+                return RuleNaming.candidateTitle(ResultStructure.candidateAt(pages.currentView(), candidateIndex),
+                        candidateIndex + 1, pages.nameSource);
+        }
         if (combinationControl != null && combinationControl.bounds().contains(mouseX, mouseY))
             return Component.translatable(RuleEditorPageSupport.UI + "results.combination_help");
         if (variantControl != null && variantControl.isVisible() && variantControl.bounds().contains(mouseX, mouseY))
@@ -1014,6 +994,62 @@ final class RuleEditorResultsPage {
             return null;
         }
         return Component.translatable(RuleEditorPageSupport.UI + "effect.readonly_note", typeId.toString());
+    }
+
+    /** 方案翻页组：只让左右按钮接收输入，页码与两箭头保持同一行。 */
+    private final class PlanPager implements UiWidget {
+        private final Component label;
+        private final UiButton previous;
+        private final UiButton next;
+        private UiRect bounds = new UiRect(0, 0, 0, 0);
+        private UiRect labelRect = bounds;
+
+        private PlanPager(int count) {
+            label = Component.translatable(RuleEditorPageSupport.UI + "results.plan_page", candidateIndex + 1, count);
+            previous = new UiButton(THEME, pages.font,
+                    Component.translatable(RuleEditorPageSupport.UI + "results.previous_plan_symbol"),
+                    UiButtonVariant.SECONDARY, () -> selectPlanBy(-1));
+            next = new UiButton(THEME, pages.font,
+                    Component.translatable(RuleEditorPageSupport.UI + "results.next_plan_symbol"),
+                    UiButtonVariant.SECONDARY, () -> selectPlanBy(1));
+            previous.setTooltip(Component.translatable(RuleEditorPageSupport.UI + "results.previous_plan"));
+            next.setTooltip(Component.translatable(RuleEditorPageSupport.UI + "results.next_plan"));
+        }
+
+        private int preferredWidth() {
+            return TOOLBAR_HEIGHT * 2 + pages.font.width(label) + RuleEditorPageSupport.BUTTON_GAP * 2;
+        }
+
+        /** @return 整组的屏幕矩形 */
+        @Override public UiRect bounds() { return bounds; }
+
+        /**
+         * 分配左右按钮与中间页码的同排几何。
+         * @param x 左缘
+         * @param y 顶缘
+         * @param width 可用宽度
+         * @param height 行高
+         */
+        @Override public void setBounds(int x, int y, int width, int height) {
+            bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
+            int buttonWidth = Math.min(TOOLBAR_HEIGHT, bounds.width() / 2);
+            previous.setBounds(x, y, buttonWidth, bounds.height());
+            next.setBounds(bounds.right() - buttonWidth, y, buttonWidth, bounds.height());
+            labelRect = new UiRect(x + buttonWidth, y, Math.max(0, bounds.width() - buttonWidth * 2), bounds.height());
+        }
+
+        /**
+         * 居中绘制只读页码；按钮由页面统一绘制。
+         * @param graphics 绘制上下文
+         * @param font 绘制字体
+         * @param mouseX 鼠标屏幕 X 坐标
+         * @param mouseY 鼠标屏幕 Y 坐标
+         */
+        @Override public void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+            String text = TextScroll.trimToWidth(font, label.getString(), labelRect.width());
+            graphics.drawString(font, text, labelRect.x() + (labelRect.width() - font.width(text)) / 2,
+                    labelRect.y() + (labelRect.height() - font.lineHeight) / 2, THEME.palette().textPrimary(), false);
+        }
     }
 
     /**

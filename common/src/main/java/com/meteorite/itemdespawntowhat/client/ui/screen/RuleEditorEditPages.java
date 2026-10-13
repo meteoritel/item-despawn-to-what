@@ -655,6 +655,7 @@ public final class RuleEditorEditPages {
         for (UiButton button : effectButtons) {
             button.setEnabled(enabled);
         }
+        ruleEditorResultsPage.updatePlanButtons(enabled);
     }
 
     public void tick() {

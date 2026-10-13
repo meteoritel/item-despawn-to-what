@@ -130,7 +130,7 @@ final class ItemCountsControl extends FormControl {
     // 名称取本地化物品名；标签与未知引用保留原始注册名，悬停提示可读完整内容
     private static Component displayName(String reference) {
         if (reference.startsWith("#")) {
-            return Component.literal(reference);
+            return RuleDisplayLabels.tagLabel(reference);
         }
         ResourceLocation id = ResourceLocation.tryParse(reference);
         Component label = id == null ? null : RuleDisplayLabels.label(id);

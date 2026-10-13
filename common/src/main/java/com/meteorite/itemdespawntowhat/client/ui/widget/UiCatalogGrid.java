@@ -5,6 +5,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSpinner;
+import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import java.util.ArrayList;
@@ -716,10 +717,10 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         }
     }
 
-    // 行内与悬停提示共用的显示名：标签条目补上 # 前缀，与条目 id 的写法一致
+    // 标签名称由共用方法生成，避免目录行和标签快照各添加一次前缀。
     private static Component rowLabel(Entry entry) {
         Component label = entry.label() == null ? Component.literal(entry.id()) : entry.label();
-        return entry.id().startsWith("#") ? Component.literal("# ").append(label) : label;
+        return entry.id().startsWith("#") ? RuleDisplayLabels.tagLabel(entry.id()) : label;
     }
 
     // 图标槽固定 16 像素：比槽更大的贴图按比例缩到槽内，避免压到上下相邻行
