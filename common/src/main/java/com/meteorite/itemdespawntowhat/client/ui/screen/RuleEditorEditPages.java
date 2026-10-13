@@ -586,7 +586,7 @@ public final class RuleEditorEditPages {
                 return tooltip;
             }
         }
-        return null;
+        return page == Page.RESULTS ? ruleEditorResultsPage.tooltipAt(mouseX, mouseY) : null;
     }
 
     /**
@@ -781,8 +781,8 @@ public final class RuleEditorEditPages {
         liveWidgets.add(button);
     }
 
-    void addEffectButton(String labelKey, UiAction action) {
-        UiButton button = new UiButton(THEME, font, Component.translatable(RuleEditorPageSupport.UI + labelKey), UiButtonVariant.SECONDARY, action);
+    void addEffectButton(String labelKey, UiButtonVariant variant, UiAction action) {
+        UiButton button = new UiButton(THEME, font, Component.translatable(RuleEditorPageSupport.UI + labelKey), variant, action);
         effectButtons.add(button);
         liveWidgets.add(button);
     }

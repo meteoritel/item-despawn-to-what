@@ -57,8 +57,6 @@ final class RuleEditorPageSupport {
     static final int CARD_GAP = 8;
     static final int CARD_HEADER_H = 20;
     static final int LINE_H = 10;
-    static final int LIST_ROWS = 4;
-    static final int NARROW_WIDTH = 430;
 
     static final String UI = TypeLabels.UI_PREFIX;
 

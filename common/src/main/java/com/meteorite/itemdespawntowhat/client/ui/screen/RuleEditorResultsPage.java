@@ -12,6 +12,8 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlowLayout;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.NaturalSummary;
@@ -24,6 +26,7 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiListView;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiSegmentedControl;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiStructureDiagram;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.model.CombinationMode;
 import com.meteorite.itemdespawntowhat.core.model.ConditionLimits;
@@ -37,7 +40,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 结果页：方案列表、效果列表、组合模式和动作参数，以及结构图解入口。
+ * 结果页：顶部管理方案，左侧选择执行动作，右侧编辑参数；窄屏在动作和参数之间导航。
  */
 final class RuleEditorResultsPage {
 
@@ -46,6 +49,19 @@ final class RuleEditorResultsPage {
 
     // 主题：与容器共用宿主默认主题
     private static final UiHostTheme THEME = RuleEditorEditPages.THEME;
+    private static final int NAVIGATION_MIN_WIDTH = 128;
+    private static final int NAVIGATION_MAX_WIDTH = 184;
+    private static final int DETAIL_MIN_WIDTH = 212;
+    private static final int ACTION_ROW_HEIGHT = 28;
+    private static final int ACTION_LIST_MIN_HEIGHT = ACTION_ROW_HEIGHT * 2 + 2;
+    private static final int TOOLBAR_HEIGHT = 20;
+    private static final int PLAN_SELECTOR_MIN_WIDTH = 80;
+    private static final int PLAN_PICKER_WIDTH = 320;
+    private static final int PLAN_PICKER_ROWS = 7;
+    private static final int DETAIL_HEADER_HEIGHT = 26;
+    private static final int DETAIL_ICON_SIZE = 18;
+    private static final int DETAIL_PADDING = 6;
+    private static final int EMPTY_MESSAGE_GAP = 8;
 
     RuleEditorResultsPage(RuleEditorEditPages pages) {
         this.pages = pages;
@@ -53,36 +69,35 @@ final class RuleEditorResultsPage {
 
     // 清理本页持有的控件引用（重建/切页时由容器调用）
     void reset() {
-        candidateList = null;
+        planSelector = null;
         safeSpawnBox = null;
         fillOriginBox = null;
         combinationControl = null;
-        combinationLabelRect = null;
         effectList = null;
         effectForm = null;
         variantControl = null;
         advancedEffectForm = null;
         advancedButton = null;
         resultBack = null;
-        productPreviewRect = null;
+        detailHeaderRect = null;
+        emptyDetailRect = null;
+        planStrategyRect = null;
         selectedAction = null;
         effectNoteRect = null;
-        singlePlan = false;
+        openActionButton = null;
     }
 
     int candidateIndex;
 
     int effectIndex;
 
-    @Nullable UiListView<Integer> candidateList;
+    @Nullable UiButton planSelector;
 
     @Nullable UiCheckBox safeSpawnBox;
 
     @Nullable UiCheckBox fillOriginBox;
 
     @Nullable UiSegmentedControl combinationControl;
-
-    @Nullable UiRect combinationLabelRect;
 
     @Nullable UiListView<Integer> effectList;
 
@@ -98,11 +113,17 @@ final class RuleEditorResultsPage {
 
     boolean showAdvancedEffects;
 
-    boolean singlePlan;
-
     int resultStage;
 
-    @Nullable UiRect productPreviewRect;
+    private @Nullable UiButton openActionButton;
+
+    private @Nullable UiRect detailHeaderRect;
+
+    private @Nullable UiRect emptyDetailRect;
+
+    private @Nullable UiRect planStrategyRect;
+
+    private boolean revealSelectedEffect;
 
     @Nullable RuleValue selectedAction;
 
@@ -113,49 +134,19 @@ final class RuleEditorResultsPage {
         RuleValue rule = draft.root();
         int candidates = Math.max(1, ResultStructure.candidateCount(rule));
         candidateIndex = Math.clamp(candidateIndex, 0, candidates - 1);
-        // 单方案（顶层 effects）：结果页直达动作与产出参数，不渲染方案选择层
-        singlePlan = candidates == 1;
-        if (singlePlan) {
-            resultStage = Math.max(1, resultStage);
-        }
-
-        candidateList = new UiListView<>(RuleEditorEditPages.THEME, pages.font, this::renderCandidateRow);
-        candidateList.setRowHeight(RuleEditorPageSupport.ROW_H);
-        candidateList.setEmptyMessage(Component.translatable(RuleEditorPageSupport.UI + "candidate.flat_note"));
-        List<Integer> indexes = new ArrayList<>();
-        for (int i = 0; i < candidates; i++) {
-            indexes.add(i);
-        }
-        candidateList.setItems(indexes);
-        pages.rebuilding = true;
-        candidateList.setSelectedIndex(candidateIndex);
-        pages.rebuilding = false;
-        candidateList.setOnSelectionChanged(index -> {
-            if (pages.rebuilding) {
-                return;
-            }
-            if (pages.blockNavigation()) {
-                pages.rebuilding = true;
-                if (candidateList != null) {
-                    candidateList.setSelectedIndex(candidateIndex);
-                }
-                pages.rebuilding = false;
-                return;
-            }
-            candidateIndex = Math.max(0, index);
-            effectIndex = 0;
-            pages.requestRebuild();
-        });
-        candidateList.setOnActivate(index -> enterResultStage(1));
-        if (!singlePlan) {
-            // 单方案没有方案层：列表不登记为控件，不可见也不可聚焦
-            pages.liveWidgets.add(candidateList);
-        }
-        resultBack = new UiButton(RuleEditorEditPages.THEME, pages.font, Component.translatable(RuleEditorPageSupport.UI + "button.result_plans"), UiButtonVariant.SECONDARY,
-                () -> enterResultStage(resultStage == 2 ? 1 : 0));
+        resultStage = Math.clamp(resultStage, 1, 2);
+        planSelector = new UiButton(THEME, pages.font,
+                Component.translatable(RuleEditorPageSupport.UI + "results.plan_selector", candidateIndex + 1, candidates),
+                UiButtonVariant.SECONDARY, this::openPlanPicker);
+        planSelector.setTooltip(RuleNaming.candidateTitle(ResultStructure.candidateAt(rule, candidateIndex),
+                candidateIndex + 1, pages.nameSource), Component.translatable(RuleEditorPageSupport.UI + "results.select_plan"));
+        pages.liveWidgets.add(planSelector);
+        pages.buttons.add(planSelector);
+        resultBack = new UiButton(THEME, pages.font,
+                Component.translatable(RuleEditorPageSupport.UI + "button.result_actions"), UiButtonVariant.SECONDARY,
+                () -> enterResultStage(1));
         pages.liveWidgets.add(resultBack);
         pages.buttons.add(resultBack);
-        if (!singlePlan && pages.host.screenWidth() < RuleEditorPageSupport.NARROW_WIDTH) pages.addCandidateButton("button.candidate_edit", () -> enterResultStage(1));
 
         RuleValue candidate = ResultStructure.candidateAt(rule, candidateIndex);
         RuleValue actions = ResultStructure.effectsAt(rule, candidateIndex);
@@ -184,7 +175,7 @@ final class RuleEditorResultsPage {
         int effectCount = ResultStructure.effectCount(rule, candidateIndex);
         effectIndex = Math.clamp(effectIndex, 0, Math.max(0, effectCount - 1));
         effectList = new UiListView<>(RuleEditorEditPages.THEME, pages.font, this::renderEffectRow);
-        effectList.setRowHeight(24);
+        effectList.setRowHeight(ACTION_ROW_HEIGHT);
         effectList.setEmptyMessage(Component.translatable(RuleEditorPageSupport.UI + "summary.no_effect"));
         List<Integer> effects = new ArrayList<>();
         for (int i = 0; i < effectCount; i++) {
@@ -211,13 +202,21 @@ final class RuleEditorResultsPage {
         });
         effectList.setOnActivate(index -> enterResultStage(2));
         pages.liveWidgets.add(effectList);
-        if (pages.host.screenWidth() < RuleEditorPageSupport.NARROW_WIDTH && effectCount > 0) pages.addEffectButton("button.effect_edit", () -> enterResultStage(2));
+        revealSelectedEffect = true;
+        if (effectCount > 0) {
+            openActionButton = new UiButton(THEME, pages.font,
+                    Component.translatable(RuleEditorPageSupport.UI + "button.effect_edit"), UiButtonVariant.SECONDARY,
+                    () -> enterResultStage(2));
+            pages.liveWidgets.add(openActionButton);
+            pages.buttons.add(openActionButton);
+        }
 
         RuleValue array = ResultStructure.effectsAt(rule, candidateIndex);
         if (array != null && effectIndex >= 0 && effectIndex < array.size()) {
             RuleValue element = array.item(effectIndex);
             String type = RuleCostBinding.typeOf(element);
             ResourceLocation typeId = type == null ? null : ResourceLocation.tryParse(type);
+            selectedAction = element != null && element.isMapping() ? element : null;
             if (typeId != null) {
                 String actionPath = listPath + "[" + effectIndex + "]";
                 TypeEditorDescriptor descriptor = EffectEditorRegistry.descriptorFor(typeId);
@@ -226,14 +225,13 @@ final class RuleEditorResultsPage {
                     String variant = element.text("variant", "item");
                     descriptor = BuiltinEditorDescriptors.entityDescriptor(variant);
                     variantControl = new UiSegmentedControl(RuleEditorEditPages.THEME, pages.font, List.of(
-                            new UiSegmentedControl.Option("item", Component.translatable(RuleEditorPageSupport.UI + "product.item")),
-                            new UiSegmentedControl.Option("entity", Component.translatable(RuleEditorPageSupport.UI + "product.entity")),
-                            new UiSegmentedControl.Option("experience", Component.translatable(RuleEditorPageSupport.UI + "product.experience"))));
+                            new UiSegmentedControl.Option("item", Component.translatable(RuleEditorPageSupport.UI + "results.product.item")),
+                            new UiSegmentedControl.Option("entity", Component.translatable(RuleEditorPageSupport.UI + "results.product.entity")),
+                            new UiSegmentedControl.Option("experience", Component.translatable(RuleEditorPageSupport.UI + "results.product.experience"))));
                     variantControl.setSelected(variant);
                     variantControl.setOnChanged(value -> switchProduct(actionPath, value));
                     pages.liveWidgets.add(variantControl);
                 }
-                selectedAction = element.isMapping() ? element : null;
                 // 消耗参数的主编辑入口在输入页：结果页动作详情不重复提供类型/数量/半径
                 List<EditorField> primary = new ArrayList<>(descriptor.fields().stream()
                         .filter(field -> !RuleEditorPageSupport.isCommonActionField(field))
@@ -244,12 +242,14 @@ final class RuleEditorResultsPage {
                 }
                 List<EditorField> advanced = descriptor.fields().stream().filter(RuleEditorPageSupport::isCommonActionField).toList();
                 effectForm = pages.newForm(session, actionPath, new TypeEditorDescriptor(descriptor.id(), descriptor.label(), primary, descriptor.readOnly()));
+                effectForm.useCompactSpacing();
                 pages.liveForms.add(effectForm);
                 pages.liveWidgets.add(effectForm);
                 if (!advanced.isEmpty()) {
                     advancedEffectForm = pages.newForm(session, actionPath, new TypeEditorDescriptor(descriptor.id(), descriptor.label(), advanced, false));
+                    advancedEffectForm.useCompactSpacing();
                     pages.liveForms.add(advancedEffectForm); pages.liveWidgets.add(advancedEffectForm);
-                    advancedButton = new UiButton(RuleEditorEditPages.THEME, pages.font, Component.translatable(RuleEditorPageSupport.UI + "button.advanced"), UiButtonVariant.SECONDARY, () -> {
+                    advancedButton = new UiButton(THEME, pages.font, advancedLabel(), UiButtonVariant.SECONDARY, () -> {
                         if (pages.blockNavigation()) return;
                         showAdvancedEffects = !showAdvancedEffects; pages.requestRebuild();
                     });
@@ -259,9 +259,9 @@ final class RuleEditorResultsPage {
         }
 
         pages.addCandidateButton("button.candidate_add", this::addCandidate);
-        pages.addCandidateButton("button.more", () -> openResultMore(true));
-        pages.addEffectButton("button.effect_add", this::openEffectPicker);
-        if (effectCount > 0) pages.addEffectButton("button.more", () -> openResultMore(false));
+        pages.addCandidateButton("results.plan_more", () -> openResultMore(true));
+        pages.addEffectButton("button.effect_add", UiButtonVariant.PRIMARY, this::openEffectPicker);
+        if (effectCount > 0) pages.addEffectButton("results.action_more", UiButtonVariant.SECONDARY, () -> openResultMore(false));
     }
 
     record MenuAction(Component label, Runnable action) { }
@@ -272,20 +272,23 @@ final class RuleEditorResultsPage {
         if (candidate) {
             actions.add(new MenuAction(Component.translatable(RuleEditorPageSupport.UI + "button.diagram"), this::openDiagram));
             actions.add(new MenuAction(Component.translatable(RuleEditorPageSupport.UI + "button.candidate_duplicate"), this::duplicateCandidate));
-            actions.add(new MenuAction(Component.translatable(RuleEditorPageSupport.UI + "button.candidate_up"), () -> moveCandidateBy(-1)));
-            actions.add(new MenuAction(Component.translatable(RuleEditorPageSupport.UI + "button.candidate_down"), () -> moveCandidateBy(1)));
-            if (ResultStructure.hasOutcomes(pages.currentView())) actions.add(new MenuAction(Component.translatable(RuleEditorPageSupport.UI + "button.candidate_remove"), this::removeCandidate));
+            int count = ResultStructure.candidateCount(pages.currentView());
+            if (candidateIndex > 0) actions.add(new MenuAction(Component.translatable(RuleEditorPageSupport.UI + "button.candidate_up"), () -> moveCandidateBy(-1)));
+            if (candidateIndex + 1 < count) actions.add(new MenuAction(Component.translatable(RuleEditorPageSupport.UI + "button.candidate_down"), () -> moveCandidateBy(1)));
+            if (count > 1) actions.add(new MenuAction(Component.translatable(RuleEditorPageSupport.UI + "button.candidate_remove"), this::removeCandidate));
         } else {
             actions.add(new MenuAction(Component.translatable(RuleEditorPageSupport.UI + "button.effect_duplicate"), this::duplicateEffect));
-            actions.add(new MenuAction(Component.translatable(RuleEditorPageSupport.UI + "button.effect_up"), () -> moveEffectBy(-1)));
-            actions.add(new MenuAction(Component.translatable(RuleEditorPageSupport.UI + "button.effect_down"), () -> moveEffectBy(1)));
+            if (effectIndex > 0) actions.add(new MenuAction(Component.translatable(RuleEditorPageSupport.UI + "button.effect_up"), () -> moveEffectBy(-1)));
+            if (effectIndex + 1 < ResultStructure.effectCount(pages.currentView(), candidateIndex))
+                actions.add(new MenuAction(Component.translatable(RuleEditorPageSupport.UI + "button.effect_down"), () -> moveEffectBy(1)));
             actions.add(new MenuAction(Component.translatable(RuleEditorPageSupport.UI + "button.effect_remove"), this::removeEffect));
         }
         UiListView<MenuAction> list = new UiListView<>(RuleEditorEditPages.THEME, pages.font, (graphics, rowFont, item, index, row, selected, hovered, focused) ->
                 graphics.drawString(rowFont, item.label(), row.x() + 2, row.y() + 2, THEME.palette().textPrimary(), false));
         list.setItems(actions);
         list.setActivateOnSingleClick(true);
-        UiModal modal = UiModal.create(RuleEditorEditPages.THEME, pages.font).title(Component.translatable(RuleEditorPageSupport.UI + "button.more"));
+        UiModal modal = UiModal.create(THEME, pages.font).title(Component.translatable(RuleEditorPageSupport.UI
+                + (candidate ? "results.plan_more" : "results.action_more_title")));
         list.setOnActivate(item -> { pages.host.modals().close(modal); item.action().run(); pages.flushRebuild(); });
         modal.contentWidget(list, actions.size() * 12 + 4).cancel(Component.translatable(RuleEditorPageSupport.UI + "button.cancel"));
         pages.host.modals().push(modal.layoutCentered(pages.host.screenWidth(), pages.host.screenHeight()));
@@ -463,9 +466,6 @@ final class RuleEditorResultsPage {
     }
 
     void renderTypeRow(GuiGraphics graphics, Font renderFont, ResourceLocation item, int index, UiRect row, boolean selected, boolean hovered, boolean focused) {
-        if (selected) {
-            THEME.drawSelection(graphics, row);
-        }
         TypeEditorDescriptor descriptor = EffectEditorRegistry.find(item);
         Component label = descriptor == null ? TypeLabels.effectLabel(item) : descriptor.label();
         String text = TextScroll.trimToWidth(pages.font, label.getString(), Math.max(1, row.width() - 4));
@@ -564,21 +564,16 @@ final class RuleEditorResultsPage {
     }
 
     void renderCandidateRow(GuiGraphics graphics, Font renderFont, Integer item, int index, UiRect row, boolean selected, boolean hovered, boolean focused) {
-        if (selected) {
-            THEME.drawSelection(graphics, row);
-        }
         RuleValue view = pages.currentView();
         RuleValue candidate = ResultStructure.candidateAt(view, item);
         // 方案标题统一走 RuleNaming（「方案 %s：%s」），不再出现「隐式结果」这类结构术语
         Component title = RuleNaming.candidateTitle(candidate, item + 1, pages.nameSource);
         String text = TextScroll.trimToWidth(pages.font, title.getString(), Math.max(1, row.width() - 4));
-        graphics.drawString(pages.font, text, row.x() + 2, row.y() + 2, focused ? THEME.palette().textPrimary() : THEME.palette().textSecondary(), false);
+        graphics.drawString(renderFont, text, row.x() + 2, row.y() + (row.height() - renderFont.lineHeight) / 2,
+                THEME.palette().textPrimary(), false);
     }
 
     void renderEffectRow(GuiGraphics graphics, Font renderFont, Integer item, int index, UiRect row, boolean selected, boolean hovered, boolean focused) {
-        if (selected) {
-            THEME.drawSelection(graphics, row);
-        }
         RuleValue view = pages.currentView();
         RuleValue array = ResultStructure.effectsAt(view, candidateIndex);
         RuleValue element = array != null && item >= 0 && item < array.size() ? array.item(item) : null;
@@ -587,14 +582,14 @@ final class RuleEditorResultsPage {
         String text = (item + 1) + ". " + title.getString();
         var icon = RulePreviewIcons.action(effect);
         int inset = icon == null ? 2 : 24;
-        if (icon != null) icon.render(graphics, row.x() + 2, row.y() + 2);
+        if (icon != null) icon.render(graphics, row.x() + 2, row.y() + (row.height() - DETAIL_ICON_SIZE) / 2);
         String trimmed = TextScroll.trimToWidth(pages.font, text, Math.max(1, row.width() - inset - 2));
-        graphics.drawString(pages.font, trimmed, row.x() + inset, row.y() + 2, THEME.palette().textPrimary(), false);
+        graphics.drawString(pages.font, trimmed, row.x() + inset, row.y() + 4, THEME.palette().textPrimary(), false);
         if (element != null) {
             int summaryWidth = row.width() - inset - 4;
             if (summaryWidth > 12) {
                 String summary = TextScroll.trimToWidth(pages.font, NaturalSummary.effect(element).getString(), summaryWidth);
-                graphics.drawString(pages.font, summary, row.x() + inset, row.y() + 13, THEME.palette().textSecondary(), false);
+                graphics.drawString(pages.font, summary, row.x() + inset, row.y() + 16, THEME.palette().textSecondary(), false);
             }
         }
     }
@@ -617,101 +612,182 @@ final class RuleEditorResultsPage {
         if (pages.apply(EditSession.OP_SET_FIELD, () -> session.draft().setAt(path, next.build()))) pages.requestRebuild();
     }
 
+    private Component advancedLabel() {
+        return Component.translatable(RuleEditorPageSupport.UI
+                + (showAdvancedEffects ? "results.advanced_open" : "results.advanced_closed"));
+    }
+
+    private void openPlanPicker() {
+        if (pages.blockNavigation()) return;
+        int count = Math.max(1, ResultStructure.candidateCount(pages.currentView()));
+        UiListView<Integer> list = new UiListView<>(THEME, pages.font, this::renderCandidateRow);
+        list.setRowHeight(ACTION_ROW_HEIGHT);
+        List<Integer> indexes = new ArrayList<>();
+        for (int index = 0; index < count; index++) indexes.add(index);
+        list.setItems(indexes);
+        list.setSelectedIndex(candidateIndex);
+        list.setActivateOnSingleClick(true);
+        UiModal modal = UiModal.create(THEME, pages.font)
+                .title(Component.translatable(RuleEditorPageSupport.UI + "results.select_plan"));
+        list.setOnActivate(index -> {
+            if (pages.blockNavigation()) return;
+            pages.host.modals().close(modal);
+            if (candidateIndex != index) {
+                candidateIndex = index;
+                effectIndex = 0;
+                showAdvancedEffects = false;
+            }
+            enterResultStage(1);
+            pages.flushRebuild();
+        });
+        modal.contentWidget(list, Math.min(count, PLAN_PICKER_ROWS) * ACTION_ROW_HEIGHT + 2)
+                .preferredWidth(PLAN_PICKER_WIDTH).cancel(Component.translatable(RuleEditorPageSupport.UI + "button.cancel"))
+                .layoutCentered(pages.host.screenWidth(), pages.host.screenHeight());
+        list.ensureVisible(candidateIndex);
+        pages.host.modals().push(modal);
+    }
+
     void enterResultStage(int stage) {
         if (pages.blockNavigation()) return;
-        // 单方案没有方案层，最小层级是动作列表
-        resultStage = singlePlan ? Math.clamp(stage, 1, 2) : Math.clamp(stage, 0, 2);
+        resultStage = Math.clamp(stage, 1, 2);
         pages.pageScroll.setOffset(0);
         pages.requestRebuild();
     }
 
     int layoutResults(UiRect area) {
-        boolean wide = area.width() >= RuleEditorPageSupport.NARROW_WIDTH;
-        // 单方案没有方案层：窄屏最低层级是动作列表，宽屏左列直接是动作列表
-        boolean plans = !singlePlan && (wide || resultStage == 0);
-        boolean actions = wide || resultStage == 1;
-        boolean detail = wide || resultStage == 2;
-        boolean backVisible = !wide && resultStage > (singlePlan ? 1 : 0);
-        RuleEditorPageSupport.show(candidateList, plans);
-        pages.candidateButtons.forEach(button -> RuleEditorPageSupport.show(button, plans || (singlePlan && actions)));
-        RuleEditorPageSupport.show(combinationControl, plans);
+        boolean split = area.width() >= NAVIGATION_MIN_WIDTH + DETAIL_MIN_WIDTH + RuleEditorPageSupport.CARD_GAP;
+        boolean actions = split || resultStage == 1;
+        boolean detail = split || resultStage == 2;
         RuleEditorPageSupport.show(effectList, actions);
         pages.effectButtons.forEach(button -> RuleEditorPageSupport.show(button, actions));
-        RuleEditorPageSupport.show(safeSpawnBox, detail && showAdvancedEffects); RuleEditorPageSupport.show(fillOriginBox, detail && showAdvancedEffects);
-        RuleEditorPageSupport.show(effectForm, detail); RuleEditorPageSupport.show(variantControl, detail); RuleEditorPageSupport.show(advancedButton, detail);
+        RuleEditorPageSupport.show(openActionButton, !split && actions);
+        RuleEditorPageSupport.show(resultBack, !split && detail);
+        RuleEditorPageSupport.show(safeSpawnBox, detail && showAdvancedEffects);
+        RuleEditorPageSupport.show(fillOriginBox, detail && showAdvancedEffects);
+        RuleEditorPageSupport.show(effectForm, detail);
+        RuleEditorPageSupport.show(variantControl, detail);
+        RuleEditorPageSupport.show(advancedButton, detail);
         RuleEditorPageSupport.show(advancedEffectForm, detail && showAdvancedEffects);
-        RuleEditorPageSupport.show(resultBack, backVisible);
-        combinationLabelRect = null; productPreviewRect = null; effectNoteRect = null;
-        int x = area.x(), y = area.y();
-        if (backVisible && resultBack != null) {
-            resultBack.setLabel(Component.translatable(RuleEditorPageSupport.UI + (resultStage == 2 ? "button.result_actions" : "button.result_plans")));
-            resultBack.setBounds(x, y, area.width(), RuleEditorPageSupport.BUTTON_H); y += RuleEditorPageSupport.BUTTON_H + RuleEditorPageSupport.PAD;
+        detailHeaderRect = null;
+        emptyDetailRect = null;
+        planStrategyRect = null;
+        effectNoteRect = null;
+        int y = layoutToolbar(area.x(), area.y(), area.width());
+        if (!split) {
+            if (detail && resultBack != null) {
+                resultBack.setBounds(area.x(), y, area.width(), TOOLBAR_HEIGHT);
+                y += TOOLBAR_HEIGHT + RuleEditorPageSupport.PAD;
+            }
+            int availableHeight = Math.max(0, area.bottom() - y);
+            return actions ? layoutActions(area.x(), y, area.width(), availableHeight)
+                    : layoutActionDetail(area.x(), y, area.width(), availableHeight);
         }
-        if (!wide) {
-            if (resultStage == 0) return layoutPlans(x, y, area.width());
-            if (resultStage == 1) return layoutActions(x, y, area.width(), singlePlan);
-            return layoutActionDetail(x, y, area.width());
-        }
-        int navigationWidth = Math.clamp(area.width() * 36L / 100, 120, 200);
-        int navY = y;
-        if (!singlePlan) {
-            navY = layoutPlans(x, navY, navigationWidth) + RuleEditorPageSupport.PAD;
-        }
-        navY = layoutActions(x, navY, navigationWidth, singlePlan);
-        int detailX = x + navigationWidth + RuleEditorPageSupport.CARD_GAP;
-        return Math.max(navY, layoutActionDetail(detailX, y, area.right() - detailX));
+        int navigationWidth = Math.clamp(area.width() / 3, NAVIGATION_MIN_WIDTH, NAVIGATION_MAX_WIDTH);
+        int detailX = area.x() + navigationWidth + RuleEditorPageSupport.CARD_GAP;
+        int availableHeight = Math.max(0, area.bottom() - y);
+        int navigationBottom = layoutActions(area.x(), y, navigationWidth, availableHeight);
+        int detailBottom = layoutActionDetail(detailX, y, area.right() - detailX, availableHeight);
+        return Math.max(navigationBottom, detailBottom);
     }
 
-    int layoutPlans(int x, int y, int width) {
-        int cardX = x, top = y, cardWidth = width;
-        x += RuleEditorPageSupport.CARD_PAD;
-        y += RuleEditorPageSupport.CARD_PAD + RuleEditorPageSupport.CARD_HEADER_H;
-        width = Math.max(0, width - RuleEditorPageSupport.CARD_PAD * 2);
+    // 方案管理始终在页首；工具条按实际文案换行，英文与小窗口不挤占动作参数宽度。
+    private int layoutToolbar(int x, int y, int width) {
+        List<UiWidget> controls = new ArrayList<>();
+        List<Integer> sizes = new ArrayList<>();
+        if (planSelector != null) {
+            controls.add(planSelector);
+            sizes.add(Math.clamp(planSelector.preferredWidth(RuleEditorPageSupport.PAD), Math.min(width, PLAN_SELECTOR_MIN_WIDTH), width));
+        }
         if (combinationControl != null) {
-            combinationLabelRect = new UiRect(x, y, width, RuleEditorPageSupport.LINE_H); y += RuleEditorPageSupport.LINE_H;
-            combinationControl.setBounds(x, y, width, RuleEditorPageSupport.ROW_H); y += RuleEditorPageSupport.ROW_H + RuleEditorPageSupport.PAD;
+            controls.add(combinationControl);
+            int optionWidth = combinationControl.options().stream()
+                    .mapToInt(option -> pages.font.width(option.label())).max().orElse(0);
+            sizes.add(Math.min(width, (optionWidth + RuleEditorPageSupport.PAD * 2) * combinationControl.options().size()));
         }
-        int listHeight = Math.clamp(candidateList == null ? 1 : candidateList.size(), 1, RuleEditorPageSupport.LIST_ROWS) * RuleEditorPageSupport.ROW_H + 2;
-        if (candidateList != null) candidateList.setBounds(x, y, width, listHeight);
-        y += listHeight + RuleEditorPageSupport.BUTTON_GAP;
-        y += pages.layoutButtonGroup(pages.candidateButtons, x, y, width);
-        return pages.finishCard(cardX, top, cardWidth, y, "card.plans");
+        for (UiButton button : pages.candidateButtons) {
+            controls.add(button);
+            sizes.add(Math.min(width, button.preferredWidth(RuleEditorPageSupport.PAD)));
+        }
+        UiFlowLayout.Wrap flow = UiFlowLayout.wrap(sizes.stream().mapToInt(Integer::intValue).toArray(), width,
+                RuleEditorPageSupport.BUTTON_GAP, TOOLBAR_HEIGHT);
+        for (int index = 0; index < controls.size(); index++) {
+            UiRect offset = flow.bounds(index);
+            controls.get(index).setBounds(x + offset.x(), y + offset.y(), offset.width(), offset.height());
+        }
+        return y + flow.height() + RuleEditorPageSupport.CARD_GAP;
     }
 
-    int layoutActions(int x, int y, int width, boolean withCandidateButtons) {
-        int cardX = x, top = y, cardWidth = width;
-        x += RuleEditorPageSupport.CARD_PAD;
-        y += RuleEditorPageSupport.CARD_PAD + RuleEditorPageSupport.CARD_HEADER_H;
-        width = Math.max(0, width - RuleEditorPageSupport.CARD_PAD * 2);
-        int listHeight = Math.max(74, Math.clamp(effectList == null ? 1 : effectList.size(), 1, RuleEditorPageSupport.LIST_ROWS) * 24 + 2);
-        if (effectList != null) effectList.setBounds(x, y, width, listHeight);
-        y += listHeight + RuleEditorPageSupport.BUTTON_GAP;
-        y += pages.layoutButtonGroup(pages.effectButtons, x, y, width);
-        if (withCandidateButtons) {
-            y += pages.layoutButtonGroup(pages.candidateButtons, x, y, width) + RuleEditorPageSupport.BUTTON_GAP;
+    private int layoutActions(int x, int top, int width, int availableHeight) {
+        int contentX = x + DETAIL_PADDING;
+        int contentWidth = Math.max(0, width - DETAIL_PADDING * 2);
+        int listY = top + DETAIL_HEADER_HEIGHT + DETAIL_PADDING;
+        List<UiButton> footer = new ArrayList<>(pages.effectButtons);
+        if (openActionButton != null && openActionButton.isVisible()) footer.addFirst(openActionButton);
+        int footerHeight = pages.layoutButtonGroup(footer, contentX, listY, contentWidth);
+        int bottom = Math.max(top + availableHeight, listY + ACTION_LIST_MIN_HEIGHT
+                + RuleEditorPageSupport.BUTTON_GAP + footerHeight + DETAIL_PADDING);
+        int footerY = bottom - DETAIL_PADDING - footerHeight;
+        pages.layoutButtonGroup(footer, contentX, footerY, contentWidth);
+        if (effectList != null) {
+            effectList.setBounds(contentX, listY, contentWidth,
+                    Math.max(0, footerY - RuleEditorPageSupport.BUTTON_GAP - listY));
+            if (revealSelectedEffect) {
+                effectList.ensureVisible(effectIndex);
+                revealSelectedEffect = false;
+            }
         }
-        return pages.finishCard(cardX, top, cardWidth, y, "card.actions");
+        pages.cards.add(new RuleEditorEditPages.PageCard(new UiRect(x, top, width, bottom - top),
+                Component.translatable(RuleEditorPageSupport.UI + "card.actions")));
+        return bottom;
     }
 
-    int layoutActionDetail(int x, int y, int width) {
-        int cardX = x, top = y, cardWidth = width;
-        x += RuleEditorPageSupport.CARD_PAD;
-        y += RuleEditorPageSupport.CARD_PAD + RuleEditorPageSupport.CARD_HEADER_H;
-        width = Math.max(0, width - RuleEditorPageSupport.CARD_PAD * 2);
-        if (variantControl != null) { variantControl.setBounds(x, y, width, RuleEditorPageSupport.ROW_H); y += RuleEditorPageSupport.ROW_H + RuleEditorPageSupport.PAD; }
-        if (selectedAction != null && RulePreviewIcons.action(selectedAction) != null) {
-            boolean entityPreview = RulePreviewIcons.action(selectedAction) instanceof com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon.Rendered;
-            int previewHeight = entityPreview ? 60 : 24;
-            productPreviewRect = new UiRect(x, y, Math.min(entityPreview ? 72 : 24, width), previewHeight);
-            y += previewHeight + RuleEditorPageSupport.PAD;
+    private int layoutActionDetail(int x, int top, int width, int availableHeight) {
+        detailHeaderRect = new UiRect(x + DETAIL_PADDING, top + DETAIL_PADDING,
+                Math.max(0, width - DETAIL_PADDING * 2), DETAIL_HEADER_HEIGHT - DETAIL_PADDING);
+        int contentX = x + DETAIL_PADDING;
+        int contentWidth = detailHeaderRect.width();
+        int y = top + DETAIL_HEADER_HEIGHT + DETAIL_PADDING;
+        boolean empty = effectList == null || effectList.size() == 0;
+        if (!empty) {
+            if (variantControl != null) {
+                variantControl.setBounds(contentX, y, contentWidth, TOOLBAR_HEIGHT);
+                y += TOOLBAR_HEIGHT + RuleEditorPageSupport.PAD;
+            }
+            if (readonlyEffectNote(pages.currentView()) != null) {
+                effectNoteRect = new UiRect(contentX, y, contentWidth, RuleEditorPageSupport.LINE_H);
+                y += RuleEditorPageSupport.LINE_H + RuleEditorPageSupport.PAD;
+            }
+            y = pages.layoutForm(effectForm, contentX, y, contentWidth);
+            if (advancedButton != null) {
+                advancedButton.setBounds(contentX, y, contentWidth, TOOLBAR_HEIGHT);
+                y += TOOLBAR_HEIGHT + RuleEditorPageSupport.PAD;
+            }
+            if (showAdvancedEffects) {
+                if (safeSpawnBox != null || fillOriginBox != null) {
+                    planStrategyRect = new UiRect(contentX, y, contentWidth, RuleEditorPageSupport.LINE_H);
+                    y += RuleEditorPageSupport.LINE_H + RuleEditorPageSupport.PAD;
+                }
+                if (safeSpawnBox != null) {
+                    safeSpawnBox.setBounds(contentX, y, contentWidth, RuleEditorPageSupport.ROW_H);
+                    y += RuleEditorPageSupport.ROW_H + RuleEditorPageSupport.PAD;
+                }
+                if (fillOriginBox != null) {
+                    fillOriginBox.setBounds(contentX, y, contentWidth, RuleEditorPageSupport.ROW_H);
+                    y += RuleEditorPageSupport.ROW_H + RuleEditorPageSupport.PAD;
+                }
+                y = pages.layoutForm(advancedEffectForm, contentX, y, contentWidth);
+            }
+        } else {
+            int messageHeight = pages.font.lineHeight + EMPTY_MESSAGE_GAP + pages.font.split(
+                    Component.translatable(RuleEditorPageSupport.UI + "results.empty_help"), Math.max(1, contentWidth)).size()
+                    * (pages.font.lineHeight + 2);
+            y += messageHeight + DETAIL_PADDING;
         }
-        if (pages.currentView() != null && readonlyEffectNote(pages.currentView()) != null) { effectNoteRect = new UiRect(x, y, width, RuleEditorPageSupport.LINE_H); y += RuleEditorPageSupport.LINE_H + RuleEditorPageSupport.PAD; }
-        y = pages.layoutForm(effectForm, x, y, width);
-        if (showAdvancedEffects && safeSpawnBox != null) { safeSpawnBox.setBounds(x, y, width, RuleEditorPageSupport.ROW_H); y += RuleEditorPageSupport.ROW_H + RuleEditorPageSupport.PAD; }
-        if (showAdvancedEffects && fillOriginBox != null) { fillOriginBox.setBounds(x, y, width, RuleEditorPageSupport.ROW_H); y += RuleEditorPageSupport.ROW_H + RuleEditorPageSupport.PAD; }
-        if (advancedButton != null) { advancedButton.setBounds(x, y, width, RuleEditorPageSupport.BUTTON_H); y += RuleEditorPageSupport.BUTTON_H + RuleEditorPageSupport.PAD; }
-        if (showAdvancedEffects) y = pages.layoutForm(advancedEffectForm, x, y, width);
-        return pages.finishCard(cardX, top, cardWidth, y, "card.action_detail");
+        int bottom = Math.max(top + availableHeight, y + DETAIL_PADDING);
+        if (empty) emptyDetailRect = new UiRect(contentX, top + DETAIL_HEADER_HEIGHT + DETAIL_PADDING,
+                contentWidth, Math.max(0, bottom - top - DETAIL_HEADER_HEIGHT - DETAIL_PADDING * 2));
+        pages.cards.add(new RuleEditorEditPages.PageCard(new UiRect(x, top, width, bottom - top), null));
+        return bottom;
     }
 
     void openDiagram() {
@@ -744,6 +820,7 @@ final class RuleEditorResultsPage {
         }
         if (nodeId.startsWith("candidate:")) {
             candidateIndex = RuleEditorPageSupport.intOr(nodeId.substring("candidate:".length()), candidateIndex);
+            resultStage = 1;
             pages.setPage(RuleEditorEditPages.Page.RESULTS);
             return;
         }
@@ -757,44 +834,78 @@ final class RuleEditorResultsPage {
                 }
                 effectIndex = RuleEditorPageSupport.intOr(rest.substring(colon + 1), effectIndex);
             }
+            resultStage = 2;
             pages.setPage(RuleEditorEditPages.Page.RESULTS);
         }
     }
 
     void renderResults(GuiGraphics graphics) {
-        if (productPreviewRect != null && selectedAction != null && pages.lastArea != null) {
-            THEME.drawInset(graphics, productPreviewRect);
-            var icon = RulePreviewIcons.action(selectedAction);
-            if (icon instanceof com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon.Rendered rendered) {
-                rendered.painter().render(graphics, productPreviewRect);
-            } else if (icon != null) icon.render(graphics, productPreviewRect.x() + (productPreviewRect.width() - 16) / 2,
-                    productPreviewRect.y() + (productPreviewRect.height() - 16) / 2);
-            int labelX = productPreviewRect.right() + RuleEditorPageSupport.PAD;
-            int labelWidth = Math.max(0, pages.cards.getLast().bounds().right() - RuleEditorPageSupport.CARD_PAD - labelX);
-            pages.drawText(graphics, new UiRect(labelX, productPreviewRect.y() + 4, labelWidth, RuleEditorPageSupport.LINE_H),
-                    RuleNaming.effectTitle(selectedAction, pages.nameSource), THEME.palette().textPrimary());
-            if (selectedAction.has("entity")) {
-                RuleValue entity = selectedAction.child("entity");
-                String id = entity == null ? "" : entity.asText();
-                int age = selectedAction.integer("age", 0);
-                if (EntityPreviewIcons.unavailable(id, age)) pages.drawText(graphics,
-                        new UiRect(productPreviewRect.right() + RuleEditorPageSupport.PAD, productPreviewRect.y(), Math.max(0, pages.lastArea.right() - productPreviewRect.right() - RuleEditorPageSupport.PAD), 20),
-                        Component.translatable(RuleEditorPageSupport.UI + "preview.unavailable"), THEME.palette().textSecondary());
+        if (detailHeaderRect != null) {
+            UiIcon icon = selectedAction == null ? null : RulePreviewIcons.action(selectedAction);
+            int titleX = detailHeaderRect.x();
+            if (icon != null) {
+                icon.render(graphics, titleX, detailHeaderRect.y());
+                titleX += DETAIL_ICON_SIZE + RuleEditorPageSupport.PAD;
+            }
+            Component title = emptyDetailRect != null ? Component.translatable(RuleEditorPageSupport.UI + "card.action_detail")
+                    : RuleNaming.effectTitle(selectedAction, pages.nameSource);
+            var titleLines = pages.font.split(title.copy().withStyle(net.minecraft.ChatFormatting.BOLD),
+                    Math.max(1, detailHeaderRect.right() - titleX));
+            if (!titleLines.isEmpty()) graphics.drawString(pages.font, titleLines.getFirst(), titleX,
+                    detailHeaderRect.y() + RuleEditorPageSupport.PAD, THEME.palette().textPrimary(), false);
+            THEME.drawDivider(graphics, detailHeaderRect.x(), detailHeaderRect.bottom(), detailHeaderRect.width());
+        }
+        if (emptyDetailRect != null) {
+            var lines = pages.font.split(Component.translatable(RuleEditorPageSupport.UI + "results.empty_help"),
+                    Math.max(1, emptyDetailRect.width()));
+            int textHeight = pages.font.lineHeight + EMPTY_MESSAGE_GAP + lines.size() * (pages.font.lineHeight + 2);
+            int y = emptyDetailRect.y() + Math.max(0, (emptyDetailRect.height() - textHeight) / 2);
+            pages.drawText(graphics, new UiRect(emptyDetailRect.x(), y, emptyDetailRect.width(), pages.font.lineHeight),
+                    Component.translatable(RuleEditorPageSupport.UI + "results.empty_title"), THEME.palette().textPrimary());
+            y += pages.font.lineHeight + EMPTY_MESSAGE_GAP;
+            for (var line : lines) {
+                graphics.drawString(pages.font, line, emptyDetailRect.x(), y, THEME.palette().textSecondary(), false);
+                y += pages.font.lineHeight + 2;
             }
         }
-        pages.drawText(graphics, combinationLabelRect, Component.translatable(RuleEditorPageSupport.UI + "rule.combination"), THEME.palette().textSecondary());
-        RuleValue view = pages.currentView();
-        if (view == null) {
-            return;
-        }
-        // 不再用「本规则使用顶层 effects」这类结构说明；单方案直接进入动作层
-        Component readonlyNote = readonlyEffectNote(view);
-        if (readonlyNote != null) {
-            pages.drawText(graphics, effectNoteRect, readonlyNote, THEME.palette().warning());
-        }
+        Component readonlyNote = readonlyEffectNote(pages.currentView());
+        if (readonlyNote != null) pages.drawText(graphics, effectNoteRect, readonlyNote, THEME.palette().warning());
+        pages.drawText(graphics, planStrategyRect, Component.translatable(RuleEditorPageSupport.UI + "results.plan_strategy"),
+                THEME.palette().textSecondary());
     }
 
-    @Nullable Component readonlyEffectNote(RuleValue view) {
+    @Nullable Component tooltipAt(double mouseX, double mouseY) {
+        if (effectList != null && effectList.isVisible()) {
+            int index = effectList.itemIndexAt(mouseX, mouseY);
+            RuleValue effects = ResultStructure.effectsAt(pages.currentView(), candidateIndex);
+            if (effects != null && index >= 0 && index < effects.size()) {
+                RuleValue effect = effects.item(index);
+                return actionTooltip(effect);
+            }
+        }
+        if (detailHeaderRect != null && detailHeaderRect.contains(mouseX, mouseY) && selectedAction != null)
+            return actionTooltip(selectedAction);
+        if (planSelector != null && planSelector.bounds().contains(mouseX, mouseY))
+            return RuleNaming.candidateTitle(ResultStructure.candidateAt(pages.currentView(), candidateIndex),
+                    candidateIndex + 1, pages.nameSource).copy().append("\n")
+                    .append(Component.translatable(RuleEditorPageSupport.UI + "results.select_plan"));
+        if (combinationControl != null && combinationControl.bounds().contains(mouseX, mouseY))
+            return Component.translatable(RuleEditorPageSupport.UI + "results.combination_help");
+        if (variantControl != null && variantControl.isVisible() && variantControl.bounds().contains(mouseX, mouseY))
+            return Component.translatable(RuleEditorPageSupport.UI + "results.product_help");
+        if (effectNoteRect != null && effectNoteRect.contains(mouseX, mouseY)) return readonlyEffectNote(pages.currentView());
+        return null;
+    }
+
+    private Component actionTooltip(@Nullable RuleValue effect) {
+        var tooltip = RuleNaming.effectTitle(effect, pages.nameSource).copy().append("\n").append(NaturalSummary.effect(effect));
+        if (effect != null && effect.has("entity")
+                && EntityPreviewIcons.unavailable(effect.text("entity", ""), effect.integer("age", 0)))
+            tooltip.append("\n").append(Component.translatable(RuleEditorPageSupport.UI + "preview.unavailable"));
+        return tooltip;
+    }
+
+    @Nullable Component readonlyEffectNote(@Nullable RuleValue view) {
         RuleValue effects = ResultStructure.effectsAt(view, candidateIndex);
         if (effects == null || effectIndex < 0 || effectIndex >= effects.size()) {
             return null;

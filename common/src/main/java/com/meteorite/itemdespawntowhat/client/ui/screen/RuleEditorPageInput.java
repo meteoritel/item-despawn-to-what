@@ -9,7 +9,7 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * 规则编辑页的输入事件分发：把按下、释放、拖动、滚动与键盘输入派发给当前页控件，
- * 并维护结果页候选 / 效果列表的拖动排序状态。
+ * 并维护结果页动作列表的拖动排序状态。
  */
 final class RuleEditorPageInput {
 
@@ -19,7 +19,6 @@ final class RuleEditorPageInput {
     // 拖动目标
     private enum DragKind {
         NONE,
-        CANDIDATE,
         EFFECT
     }
 
@@ -76,7 +75,6 @@ final class RuleEditorPageInput {
     boolean mouseReleased(double mouseX, double mouseY, int button) {
         pages.pageScroll.mouseReleased();
         if (dragKind != DragKind.NONE) {
-            DragKind kind = dragKind;
             int from = dragFrom;
             int to = dragTo;
             boolean active = dragActive;
@@ -85,11 +83,7 @@ final class RuleEditorPageInput {
             dragFrom = -1;
             dragTo = -1;
             if (active && from >= 0 && to >= 0 && from != to) {
-                if (kind == DragKind.CANDIDATE) {
-                    pages.ruleEditorResultsPage.moveCandidate(from, to);
-                } else {
-                    pages.ruleEditorResultsPage.moveEffect(from, to);
-                }
+                pages.ruleEditorResultsPage.moveEffect(from, to);
                 pages.flushRebuild();
                 return true;
             }
@@ -113,7 +107,7 @@ final class RuleEditorPageInput {
         if (dragKind != DragKind.NONE) {
             if (Math.abs(mouseY - dragStartY) >= DRAG_START_THRESHOLD) {
                 dragActive = true;
-                dragTo = rowIndexAt(dragKind, mouseY);
+                dragTo = rowIndexAt(mouseY);
             }
             if (dragActive) {
                 return true;
@@ -173,8 +167,7 @@ final class RuleEditorPageInput {
         if (!dragActive) {
             return;
         }
-        UiListView<?> list = dragKind == DragKind.CANDIDATE
-                ? pages.ruleEditorResultsPage.candidateList : pages.ruleEditorResultsPage.effectList;
+        UiListView<?> list = pages.ruleEditorResultsPage.effectList;
         UiRect rect = list == null ? null : list.visibleRowBounds(dragTo);
         if (rect != null) {
             RuleEditorEditPages.THEME.drawSelection(graphics, rect);
@@ -189,11 +182,7 @@ final class RuleEditorPageInput {
         dragActive = false;
         UiListView<?> list = null;
         DragKind kind = DragKind.NONE;
-        if (pages.ruleEditorResultsPage.candidateList != null && pages.ruleEditorResultsPage.candidateList.isVisible()
-                && pages.ruleEditorResultsPage.candidateList.bounds().contains(mouseX, mouseY)) {
-            list = pages.ruleEditorResultsPage.candidateList;
-            kind = DragKind.CANDIDATE;
-        } else if (pages.ruleEditorResultsPage.effectList != null && pages.ruleEditorResultsPage.effectList.isVisible()
+        if (pages.ruleEditorResultsPage.effectList != null && pages.ruleEditorResultsPage.effectList.isVisible()
                 && pages.ruleEditorResultsPage.effectList.bounds().contains(mouseX, mouseY)) {
             list = pages.ruleEditorResultsPage.effectList;
             kind = DragKind.EFFECT;
@@ -207,9 +196,8 @@ final class RuleEditorPageInput {
     }
 
     // 指针位置对应的行下标
-    private int rowIndexAt(DragKind kind, double mouseY) {
-        UiListView<?> list = kind == DragKind.CANDIDATE
-                ? pages.ruleEditorResultsPage.candidateList : pages.ruleEditorResultsPage.effectList;
+    private int rowIndexAt(double mouseY) {
+        UiListView<?> list = pages.ruleEditorResultsPage.effectList;
         if (list == null || list.size() == 0) {
             return -1;
         }
