@@ -60,7 +60,9 @@ void moveCursorToStart();      // 回填后调用：光标与垂直滚动都回�
 
 `UiHistoryDispatcher.dispatch(keyCode, scanCode, modifiers, activeScope, history)` 接收当前作用域的 `KeyHandler` 与宿主 `Consumer<UiHistoryShortcut>`。只处理历史快捷键，先调用当前作用域，让聚焦文本控件消费局部历史；未消费时才调用宿主规则历史。识别到快捷键始终返回 true，即使没有宿主历史也不向其他作用域穿透；普通按键返回 false。
 
-`RuleEditorScreen` 和 `UiModalStack` 均通过此入口接入当前规则的历史。弹层只投递顶层内容，配置历史恢复后通过 `UiModal.onHistoryChanged` 通知已打开的内容回填；此通知不派发底层键盘事件。撤销与重做按钮保留，并标注快捷键。
+`RuleEditorScreen` 和 `UiModalStack` 均通过此入口接入当前规则的历史。弹层只投递顶层内容，配置历史恢复后通过 `UiModal.onHistoryChanged` 通知已打开的内容回填；此通知不派发底层键盘事件。
+
+快捷键是编辑页唯一的规则历史图形入口：编辑页底排只有「应用更改 / 变更清单 / 返回」，不提供撤销与重做按钮。条件树弹窗的功能栏仍有撤销与重做图标，其提示标注快捷键，`RuleEditorTriggerPage` 将其转为 `UiHistoryShortcut` 投递给同一条历史链路。
 
 宿主 `UiModal.onClosed` 在确认、取消、按 Esc、显式关闭或清栈移除该弹层时调用一次；用于保存会话内输入及释放交互捕获，不自动提交正式配置。叶参数弹层已接入卸载，并在历史恢复后同步字段与区间值；节点已移除时关闭相应弹层。
 

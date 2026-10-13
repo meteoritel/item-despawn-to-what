@@ -39,8 +39,11 @@ import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 规则编辑器「编辑页」（EDIT 模式）：四个页签的组合视图、底排按钮、保存 / 撤销 / 重做，
+ * 规则编辑器「编辑页」（EDIT 模式）：四个页签的组合视图、底排按钮、保存，
  * 以及草稿冲突、保存回执轮询与校验问题定位。
+ *
+ * <p>撤销 / 重做保留 Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y 快捷键入口；
+ * 条件树弹窗另有自己的撤销 / 重做图标，两者都走同一条会话历史链路。</p>
  *
  * <p>本类持有 {@link RuleEditorEditPages} 组合视图与编辑页控件；会话、工作区、焦点、弹窗与提示条
  * 通过 {@link Host} 暴露的屏幕能力访问。本地校验交给 {@link RuleEditorValidation}，
@@ -127,8 +130,6 @@ final class RuleEditorScreenEditPage {
     private final RuleEditorScreenButtonBar footerBar = new RuleEditorScreenButtonBar(22, 4, true);
     // 编辑内容区（每帧重算；切页与问题定位复用同一份布局）
     private UiRect lastEditArea = new UiRect(0, 0, 0, 0);
-    private @Nullable UiButton undoButton;
-    private @Nullable UiButton redoButton;
 
     // 草稿冲突：已弹过冲突窗的目标 id（避免每帧重复弹；解决后移除）
     private final Set<String> promptedConflicts = new LinkedHashSet<>();
@@ -275,12 +276,6 @@ final class RuleEditorScreenEditPage {
     private void buildFooterButtons() {
         footerButtons.clear();
         footerButtons.add(button(UI + "button.save", UiButtonVariant.PRIMARY, this::save));
-        this.undoButton = button(UI + "button.undo", UiButtonVariant.SECONDARY, this::undo);
-        this.redoButton = button(UI + "button.redo", UiButtonVariant.SECONDARY, this::redo);
-        this.undoButton.setTooltip(Component.translatable(UI + "button.undo_shortcut"));
-        this.redoButton.setTooltip(Component.translatable(UI + "button.redo_shortcut"));
-        footerButtons.add(this.undoButton);
-        footerButtons.add(this.redoButton);
         footerButtons.add(button(UI + "button.changes", UiButtonVariant.SECONDARY, host::showChanges));
         footerButtons.add(button(UI + "button.back", UiButtonVariant.SECONDARY, host::backToList));
         footerBar.set(footerButtons);
@@ -439,28 +434,10 @@ final class RuleEditorScreenEditPage {
         }
     }
 
-    // 底排「保存」按钮与撤销 / 重做按钮的可用状态与标签
+    // 底排「保存」按钮的可用状态与标签（撤销 / 重做已移出底排，仅保留快捷键入口）
     void updateHistoryButtons() {
-        boolean editable = host.workspace().active();
         if (!footerButtons.isEmpty()) {
             footerButtons.getFirst().setLabel(Component.translatable(UI + "button.apply_changes", host.model().dirtyRuleIds().size()));
-        }
-        EditSession session = host.session();
-        boolean canUndo = editable && session != null && session.canUndo();
-        boolean canRedo = editable && session != null && session.canRedo();
-        if (undoButton != null) {
-            undoButton.setEnabled(canUndo);
-            String opKey = canUndo ? session.undoOpKey() : null;
-            undoButton.setLabel(opKey == null
-                    ? Component.translatable(UI + "button.undo")
-                    : Component.translatable(UI + "button.undo_named", Component.translatable(opKey)));
-        }
-        if (redoButton != null) {
-            redoButton.setEnabled(canRedo);
-            String opKey = canRedo ? session.redoOpKey() : null;
-            redoButton.setLabel(opKey == null
-                    ? Component.translatable(UI + "button.redo")
-                    : Component.translatable(UI + "button.redo_named", Component.translatable(opKey)));
         }
     }
 
