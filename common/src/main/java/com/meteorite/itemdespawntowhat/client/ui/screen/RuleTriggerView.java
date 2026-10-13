@@ -75,7 +75,7 @@ final class RuleTriggerView {
         return Math.max(font.width(arrow), Math.max(timeWidth, iconWidth)) + SIDE_PADDING * 2;
     }
 
-    void render(GuiGraphics graphics, Font font, UiRect area, Component arrow, int color) {
+    void render(GuiGraphics graphics, Font font, UiRect area, Component arrow, int color, boolean active) {
         if (seconds != null) {
             graphics.pose().pushPose();
             try {
@@ -93,7 +93,7 @@ final class RuleTriggerView {
             try {
                 graphics.pose().translate(x, area.y() + TIME_HEIGHT + ARROW_HEIGHT, 0);
                 graphics.pose().scale((float) ICON_SIZE / icon.width(), (float) ICON_SIZE / icon.height(), 1);
-                icon.render(graphics, 0, 0);
+                RulePreviewIcons.render(graphics, icon, 0, 0, active);
             } finally { graphics.pose().popPose(); }
             x += ICON_SIZE + ICON_GAP;
         }

@@ -6,15 +6,37 @@ import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.EntityPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.TagPreviewIcons;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
+import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import org.jetbrains.annotations.Nullable;
 
 /*** 管理页和动作导航共用产出图标；图标只表示类型，文字保留完整方案信息。 */
 public final class RulePreviewIcons {
+    private static final float DISABLED_BRIGHTNESS = 0.35F;
     private static final java.util.Map<String, UiIcon> ICONS = new java.util.LinkedHashMap<>(32, 0.75F, true);
     private RulePreviewIcons() { }
     public static void clear() { ICONS.clear(); }
+
+    // 图标与文本分别处理禁用色；缓冲必须在调色前后提交，避免污染相邻的启用条目。
+    static void render(GuiGraphics graphics, UiIcon icon, int x, int y, boolean active) {
+        if (active) {
+            icon.render(graphics, x, y);
+            return;
+        }
+        graphics.flush();
+        float[] shaderColor = RenderSystem.getShaderColor();
+        float red = shaderColor[0], green = shaderColor[1], blue = shaderColor[2], alpha = shaderColor[3];
+        graphics.setColor(red * DISABLED_BRIGHTNESS, green * DISABLED_BRIGHTNESS,
+                blue * DISABLED_BRIGHTNESS, alpha);
+        try {
+            icon.render(graphics, x, y);
+        } finally {
+            try { graphics.flush(); }
+            finally { graphics.setColor(red, green, blue, alpha); }
+        }
+    }
 
     public static @Nullable UiIcon action(@Nullable RuleValue action) {
         if (action == null) return null;

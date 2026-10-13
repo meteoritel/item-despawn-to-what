@@ -146,12 +146,17 @@ public final class RuleRecipeView {
     // 管理树和变更清单共用两行条目：标题与状态在上，输入及产出关系在下。
     static void renderRow(GuiGraphics graphics, Font font, UiRect row, String title, Component state,
                           int color, int stateColor, @Nullable RuleRecipeView recipe, boolean hovered) {
+        renderRow(graphics, font, row, title, state, color, stateColor, recipe, hovered, true);
+    }
+
+    static void renderRow(GuiGraphics graphics, Font font, UiRect row, String title, Component state,
+                          int color, int stateColor, @Nullable RuleRecipeView recipe, boolean hovered, boolean active) {
         int stateWidth = font.width(state);
         graphics.drawString(font, TextScroll.trimToWidth(font, title,
                 Math.max(0, row.width() - stateWidth - 6)), row.x() + 2, row.y() + 2, color, false);
         if (!state.getString().isBlank()) graphics.drawString(font, state, row.right() - stateWidth - 2,
                 row.y() + 2, stateColor, false);
-        if (recipe != null) recipe.render(graphics, font, recipeBounds(font, row), color, hovered);
+        if (recipe != null) recipe.render(graphics, font, recipeBounds(font, row), color, hovered, active);
     }
 
     static UiRect recipeBounds(Font font, UiRect row) {
@@ -175,6 +180,10 @@ public final class RuleRecipeView {
 
     // 首选图标+名称，窄行改图标关系；超长时悬停横向滚动，离开恢复原序起点。
     public void render(GuiGraphics graphics, Font font, UiRect row, int color, boolean hovered) {
+        render(graphics, font, row, color, hovered, true);
+    }
+
+    private void render(GuiGraphics graphics, Font font, UiRect row, int color, boolean hovered, boolean active) {
         boolean names = width(font, true) <= row.width();
         int total = width(font, names);
         long now = Util.getMillis();
@@ -196,7 +205,7 @@ public final class RuleRecipeView {
                 if (x >= end) break;
                 if (x + size <= row.x()) { x += size; continue; }
                 if (part.transition()) triggerView.render(graphics, font,
-                        new UiRect(x, row.y(), size, row.height()), part.separator(), color);
+                        new UiRect(x, row.y(), size, row.height()), part.separator(), color, active);
                 else if (part.object() == null) graphics.drawString(font, part.separator(), x, contentY + 5, color, false);
                 else {
                     ObjectPart value = part.object();
@@ -204,10 +213,11 @@ public final class RuleRecipeView {
                         graphics.fill(x, row.y(), x + size - 2, row.bottom(), 0x224F7299);
                         graphics.fill(x, row.bottom() - 1, x + size - 2, row.bottom(), 0xFF6688AA);
                     }
-                    value.icon.render(graphics, x, contentY + 1);
-                    if (!value.consumedQuantities.isEmpty() || value.fluidConsumed) consumedStar(graphics, x + ICON_SIZE - 7, contentY);
+                    RulePreviewIcons.render(graphics, value.icon, x, contentY + 1, active);
+                    if (!value.consumedQuantities.isEmpty() || value.fluidConsumed)
+                        consumedStar(graphics, x + ICON_SIZE - 7, contentY, active ? CONSUMED_COLOR : color);
                     if (!value.quantities.isEmpty()) badge(graphics, font, value.quantityText,
-                            x + ICON_SIZE, contentY + 12);
+                            x + ICON_SIZE, contentY + 12, active ? 0xFFFFFFFF : color);
                     if (names) graphics.drawString(font, value.name, x + ICON_SIZE + 3, contentY + 5, color, false);
                     if (value.tag != null) for (int step = 0; step < 3; step++)
                         graphics.fill(x + size - 7 + step, contentY + 7 + step,
@@ -263,7 +273,7 @@ public final class RuleRecipeView {
     }
 
     // 角标位于图标内部，矩阵独立恢复，后续物品和文字不受缩放影响。
-    private static void badge(GuiGraphics graphics, Font font, String text, int right, int y) {
+    private static void badge(GuiGraphics graphics, Font font, String text, int right, int y, int color) {
         float scale = Math.min(0.65F, 18.0F / Math.max(1, font.width(text)));
         int width = (int) Math.ceil(font.width(text) * scale);
         graphics.pose().pushPose();
@@ -271,23 +281,23 @@ public final class RuleRecipeView {
             graphics.pose().translate(right - width, y, UiRenderLayers.FOREGROUND);
             graphics.pose().translate(0, 1, 0);
             graphics.pose().scale(scale, scale, 1);
-            graphics.drawString(font, text, 0, 0, 0xFFFFFFFF, true);
+            graphics.drawString(font, text, 0, 0, color, true);
         } finally { graphics.pose().popPose(); }
     }
 
     // 透明底橙色五角星：用像素绘制，避免语言或资源包缺少星号字形。
-    private static void consumedStar(GuiGraphics graphics, int x, int y) {
+    private static void consumedStar(GuiGraphics graphics, int x, int y, int color) {
         graphics.pose().pushPose();
         try {
             graphics.pose().translate(x, y, UiRenderLayers.FOREGROUND);
-            graphics.fill(3, 0, 4, 2, CONSUMED_COLOR);
-            graphics.fill(0, 2, 7, 3, CONSUMED_COLOR);
-            graphics.fill(1, 3, 6, 4, CONSUMED_COLOR);
-            graphics.fill(2, 4, 5, 5, CONSUMED_COLOR);
-            graphics.fill(1, 5, 3, 6, CONSUMED_COLOR);
-            graphics.fill(4, 5, 6, 6, CONSUMED_COLOR);
-            graphics.fill(0, 6, 2, 7, CONSUMED_COLOR);
-            graphics.fill(5, 6, 7, 7, CONSUMED_COLOR);
+            graphics.fill(3, 0, 4, 2, color);
+            graphics.fill(0, 2, 7, 3, color);
+            graphics.fill(1, 3, 6, 4, color);
+            graphics.fill(2, 4, 5, 5, color);
+            graphics.fill(1, 5, 3, 6, color);
+            graphics.fill(4, 5, 6, 6, color);
+            graphics.fill(0, 6, 2, 7, color);
+            graphics.fill(5, 6, 7, 7, color);
         } finally { graphics.pose().popPose(); }
     }
 

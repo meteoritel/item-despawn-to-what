@@ -287,10 +287,11 @@ final class RuleEditorScreenListPage {
     // 名称和状态放第一行；原注册名位置改为图标配方，不显示内部规则 ID。
     private void renderRuleRow(GuiGraphics graphics, Font rowFont, String id, UiRect row, boolean hovered) {
         RuleSnapshotEntry entry = host.model().entry(id);
-        int color = isRuleActive(id, entry) ? THEME.palette().textPrimary() : THEME.palette().textDisabled();
+        boolean active = isRuleActive(id, entry);
+        int color = active ? THEME.palette().textPrimary() : THEME.palette().textDisabled();
         RuleRecipeView.renderRow(graphics, rowFont, row, host.labelText(id), ruleState(id), color,
                 host.model().hasError(id) ? THEME.palette().danger() : THEME.palette().textSecondary(),
-                recipeViews.get(id), hovered);
+                recipeViews.get(id), hovered, active);
     }
 
     // 状态用明确文字，正常启用不占用配方行；草稿标志与问题提示不再使用符号。
@@ -353,7 +354,7 @@ final class RuleEditorScreenListPage {
             if (root == entity) {
                 UiTreeNode<String> parent = categoryNode("entity");
                 root.children().stream().filter(node -> !node.children().isEmpty()).forEach(node -> parent.addChild(counted(node)));
-                if (!parent.children().isEmpty()) nonempty.add(parent);
+                if (!parent.children().isEmpty()) nonempty.add(counted(parent));
             } else if (!root.children().isEmpty()) nonempty.add(counted(root));
         }
         ruleList.setRoots(nonempty);
@@ -373,10 +374,16 @@ final class RuleEditorScreenListPage {
     }
 
     private UiTreeNode<String> counted(UiTreeNode<String> node) {
-        UiTreeNode<String> copy = new UiTreeNode<>(node.value(), node.label().copy().append(" (" + node.children().size() + ")"))
+        UiTreeNode<String> copy = new UiTreeNode<>(node.value(), node.label().copy().append(" (" + ruleCount(node) + ")"))
                 .setExpanded(node.isExpanded());
         node.children().forEach(copy::addChild);
         return copy;
+    }
+
+    // 分类计数只统计规则叶；父分类汇总全部子分类，不受展开状态影响。
+    private int ruleCount(UiTreeNode<String> node) {
+        if (!node.value().startsWith("@")) return 1;
+        return node.children().stream().mapToInt(this::ruleCount).sum();
     }
 
     private UiTreeNode<String> categoryNode(String category) {

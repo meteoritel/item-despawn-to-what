@@ -235,7 +235,7 @@ public final class RuleEditorScreen extends Screen {
         int footerHeight = mode == Mode.LIST ? listPage.footerHeight(availableWidth) : editPage.footerHeight(availableWidth);
         int footerY = h - pagePad - footerHeight;
         int noticeY = footerY - PAD - (notice == null ? 0 : NOTICE_H);
-        contentArea = new UiRect(pagePad, y, availableWidth, Math.max(0, noticeY - y - EDIT_PAD));
+        contentArea = new UiRect(pagePad, y, availableWidth, Math.max(0, noticeY - y - pagePad));
         if (mode == Mode.LIST) {
             listPage.render(graphics, font, mouseX, mouseY, contentArea);
         } else {
