@@ -3,7 +3,7 @@ package com.meteorite.itemdespawntowhat.client.edit;
 /**
  * 编辑器字段类型：决定表单控件如何渲染、如何校验取值。
  * <p>本枚举只描述「字段长什么样」，不含具体参数语义；
- * 注册表访问、模板等规则专用逻辑不进本包。
+ * 注册表访问等规则专用逻辑不进本包。
  */
 public enum EditorFieldType {
     // 单行文本

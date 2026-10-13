@@ -5,30 +5,22 @@ import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
-import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.screen.form.RuleTemplateHooks;
-import com.meteorite.itemdespawntowhat.client.ui.screen.form.Suggestion;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiListView;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
-import java.util.List;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
-import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 规则管理页的条目动作：新建（含模板）/ 复制 / 启用 / 屏蔽 / 恢复原始 / 删除，以及这些动作共用的
+ * 规则管理页的条目动作：新建 / 复制 / 启用 / 屏蔽 / 恢复原始 / 删除，以及这些动作共用的
  * 规则 ID 命名与弹窗流程。
  *
  * <p>动作只通过 {@link RuleEditorScreenListPage.Host} 读取屏幕能力，选中项由构造时传入的选择器提供；
@@ -38,12 +30,10 @@ final class RuleEditorScreenListActions {
 
     private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
     private static final int RULE_ID_MAX_LENGTH = 128;
-    private static final int ROW_H = 12;
     private static final String DEFAULT_RULE_NAME = "new_rule";
     private static final String COPY_SUFFIX = "_copy";
     private static final int COPY_BASE_MAX_LENGTH = RULE_ID_MAX_LENGTH - COPY_SUFFIX.length()
             - Integer.toString(Integer.MAX_VALUE).length();
-    private static final int TEMPLATE_ROW_MAX_H = 140;
     private static final String UI = "gui.itemdespawntowhat.edit.";
 
     private final RuleEditorScreenListPage.Host host;
@@ -55,14 +45,10 @@ final class RuleEditorScreenListActions {
     }
 
     void promptNewRule() {
-        promptNewRule(null);
-    }
-
-    void promptNewRule(@Nullable String templateId) {
         if (host.rejectWhenFrozen()) {
             return;
         }
-        promptRuleName("prompt.new_title", DEFAULT_RULE_NAME, value -> createRule(value, templateId));
+        promptRuleName("prompt.new_title", DEFAULT_RULE_NAME, this::createRule);
     }
 
     private void promptRuleName(String titleKey, String initial, Predicate<String> onSubmit) {
@@ -115,7 +101,7 @@ final class RuleEditorScreenListActions {
                 ? Component.translatable(UI + "notice.duplicate_id") : null;
     }
 
-    private boolean createRule(String value, @Nullable String templateId) {
+    private boolean createRule(String value) {
         if (host.rejectWhenFrozen()) {
             return false;
         }
@@ -129,25 +115,10 @@ final class RuleEditorScreenListActions {
             host.setNotice(Component.translatable(UI + "notice.duplicate_id"), THEME.palette().danger());
             return false;
         }
-        RuleValue body;
-        if (templateId == null) {
-            body = BuiltinEditorDefaults.ruleBody(key);
-        } else {
-            RuleValue loaded = RuleTemplateHooks.load(ResourceLocation.tryParse(templateId));
-            if (loaded == null) {
-                host.setNotice(Component.translatable(UI + "notice.template_failed"), THEME.palette().danger());
-                return false;
-            }
-            body = BuiltinEditorDefaults.copyOf(key, loaded);
-            // 模板里的 enabled=false 只用于样本演示，从模板新建的规则一律启用
-            body = RuleValue.mapping(body).put(RuleFields.ENABLED, RuleValue.flag(true)).build();
-        }
-        host.model().createSession(key, body);
+        host.model().createSession(key, BuiltinEditorDefaults.ruleBody(key));
         host.refreshList();
         host.openEditor(key);
-        if (templateId == null) {
-            host.selectInputTab();
-        }
+        host.selectInputTab();
         host.setNotice(null, THEME.palette().textSecondary());
         return true;
     }
@@ -197,39 +168,6 @@ final class RuleEditorScreenListActions {
             host.setNotice(null, THEME.palette().textSecondary());
             return true;
         });
-    }
-
-    // 从内置模板新建
-    void openTemplatePicker() {
-        if (host.rejectWhenFrozen()) {
-            return;
-        }
-        List<Suggestion> templates = RuleTemplateHooks.list();
-        if (templates.isEmpty()) {
-            host.setNotice(Component.translatable(UI + "notice.template_empty"), THEME.palette().warning());
-            return;
-        }
-        UiModal modal = UiModal.create(THEME, host.font());
-        modal.title(Component.translatable(UI + "prompt.template_title"));
-        UiListView<Suggestion> view = new UiListView<>(THEME, host.font(), this::renderTemplateRow);
-        view.setItems(templates);
-        view.setRowHeight(ROW_H);
-        view.setEmptyMessage(Component.translatable(UI + "list.empty"));
-        view.setOnActivate(suggestion -> {
-            host.modals().closeTop();
-            promptNewRule(suggestion.value());
-        });
-        int height = Math.clamp((long) templates.size() * ROW_H, ROW_H, TEMPLATE_ROW_MAX_H);
-        modal.contentWidget(view, height);
-        modal.cancel(Component.translatable(UI + "button.cancel"));
-        modal.layoutCentered(host.screenWidth(), host.screenHeight());
-        host.modals().push(modal);
-    }
-
-    private void renderTemplateRow(GuiGraphics graphics, Font rowFont, Suggestion item, int index, UiRect row,
-            boolean selected, boolean hovered, boolean focused) {
-        String label = TextScroll.trimToWidth(rowFont, item.label().getString(), Math.max(0, row.width() - 4));
-        graphics.drawString(rowFont, label, row.x() + 2, row.y() + 2, THEME.palette().textPrimary(), false);
     }
 
     void toggleSelectedEnabled() {

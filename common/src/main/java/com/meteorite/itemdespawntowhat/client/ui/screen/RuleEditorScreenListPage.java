@@ -39,7 +39,7 @@ import org.jetbrains.annotations.Nullable;
  *
  * <p>本类只持有管理页控件与视图状态（选中项、展开分类、每个条目的配方视图），
  * 规则会话与工作区、弹窗栈、提示条、跨模式动作都通过 {@link Host} 暴露的屏幕能力完成；
- * 新建 / 复制 / 模板 / 启停 / 删除等条目动作在 {@link RuleEditorScreenListActions}，
+ * 新建 / 复制 / 启停 / 删除等条目动作在 {@link RuleEditorScreenListActions}，
  * 模式切换、保存入口与编辑页由 {@link RuleEditorScreen} 与 {@link RuleEditorScreenEditPage} 负责。</p>
  */
 final class RuleEditorScreenListPage {
@@ -181,7 +181,6 @@ final class RuleEditorScreenListPage {
     private void buildListButtons() {
         listButtons.clear();
         UiButton create = button(UI + "button.new", UiButtonVariant.PRIMARY, actions::promptNewRule);
-        UiButton templates = button(UI + "button.template", UiButtonVariant.SECONDARY, actions::openTemplatePicker);
         UiButton edit = button(UI + "button.edit", UiButtonVariant.PRIMARY, () -> {
             String id = selectedRuleId(); if (id != null) host.openEditor(id);
         });
@@ -193,9 +192,9 @@ final class RuleEditorScreenListPage {
         UiButton changes = button(UI + "button.changes", UiButtonVariant.SECONDARY, host::showChanges);
         selectedButtons.clear();
         selectedButtons.addAll(List.of(edit, toggleButton, copy, delete, more));
-        globalBar.set(List.of(create, templates, edit, toggleButton, copy, delete, more));
+        globalBar.set(List.of(create, edit, toggleButton, copy, delete, more));
         listBar.set(List.of(applyButton, changes));
-        listButtons.addAll(List.of(create, templates, edit, toggleButton, copy, delete, more, applyButton, changes));
+        listButtons.addAll(List.of(create, edit, toggleButton, copy, delete, more, applyButton, changes));
     }
 
     private UiButton button(String labelKey, UiButtonVariant variant, Runnable action) {

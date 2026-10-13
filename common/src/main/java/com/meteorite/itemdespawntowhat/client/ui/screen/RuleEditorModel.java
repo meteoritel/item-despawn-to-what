@@ -201,7 +201,7 @@ public final class RuleEditorModel {
 
     // 新建一条规则草稿
     public EditSession createSession(String id, RuleValue body) {
-        // 初始态用「带 id 的默认骨架」，再把模板/复制内容作为一次可撤销的「新建规则」写入：
+        // 初始态用「带 id 的默认骨架」，再把传入内容作为一次可撤销的「新建规则」写入：
         // 撤销新建后仍是带 id 的合法骨架，而不是空对象
         RuleDraft draft = RuleDraft.of(BuiltinEditorDefaults.ruleBody(id));
         EditSession session = new EditSession(id, draft);

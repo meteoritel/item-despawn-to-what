@@ -18,7 +18,7 @@ public final class BuiltinEditorDefaults {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    // 新建规则的默认体：与空白/模板共用 {@link EditorFactories} 的候选工厂
+    // 新建规则的默认体：使用 {@link EditorFactories} 的空白规则工厂
     // 只写稳定 id、空的源列表、固定源成本 1、当前结构版本与一个初始候选；
     // 其余字段（enabled/priority/triggers/combination 等）依赖后端默认，保持省略。
     public static RuleValue ruleBody(String ruleId) {

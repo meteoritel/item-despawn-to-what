@@ -37,7 +37,7 @@ import org.lwjgl.glfw.GLFW;
 
 /***
  * 规则编辑器主屏（四页契约见 docs/dev/internals/editor-pages-contract.md）。
- * <p>两种模式：规则管理页（列表 / 搜索 / 筛选 / 新建 / 复制 / 停用 / 删除 / 恢复原始 / 模板）与规则编辑页
+ * <p>两种模式：规则管理页（列表 / 搜索 / 筛选 / 新建 / 复制 / 停用 / 删除 / 恢复原始）与规则编辑页
  * （基本信息 / 源物品 / 触发条件 / 效果 四个页签）。所有字段编辑走描述符驱动的
  * {@link com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView}，条件树走
  * {@link com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionTreeSummary}，界面任何位置都不出现可编辑 JSON 文本框。

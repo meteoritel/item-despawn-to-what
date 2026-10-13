@@ -4,7 +4,7 @@ import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import java.util.List;
 
 /**
- * 输入建议提供者：登记表 / 数据包 / 内置模板等候选值的来源。
+ * 输入建议提供者：登记表 / 数据包等候选值的来源。
  * <p>界面只依赖本接口，候选值由屏幕在构造时注入。
  */
 public interface SuggestionProvider {

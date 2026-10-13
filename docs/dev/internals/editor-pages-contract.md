@@ -17,7 +17,7 @@
 - 结果页由 `RuleEditorResultsPage` 提供顶部方案工具条及动作／参数工作区：方案选择弹窗按单击或键盘激活切换，单方案与多方案均直接进入动作层；组合方式只在多方案时显示。添加、复制、排序、删除与结构图解分别从方案或动作入口执行；方案排序使用方案操作菜单，动作保留列表拖动排序。窄屏仅有动作列表（stage 1）和动作参数（stage 2）两层，顶部方案管理在两层均可用。
 - 结果页**不重复**消耗参数：过滤链配合 `isInputOwnedConsumptionField`（`consume_source`→`count`/`counts`；`consume_catalyst`→`items`/`count`/`counts`/`radius`；`consume_fluid`→`fluid`，**不过滤** `require_source`——输入页不管理它），并在首个消耗动作参数前插说明行 `effect.consume_params_on_input`；`chance` / `delay_ticks` / `conditions` 仍在结果页编辑。
 - 术语：一个 outcome 一律称「**方案**」（`button.candidate_*` / `notice.candidate_*` / `undo.*_candidate` / `issue.candidate_*` / `rule.combination` / `effect.consume_params_on_input` 等文案统一使用该词），只有页签名仍是「结果」（`tab.results`）。
-- 初始页：新建**空白**规则落在输入页（`RuleEditorScreenListActions#createRule` 在 `templateId == null` 时切换页签到 `input`）；从模板新建或打开已有规则落在基本页（`RuleEditorScreen#openEditor` 置 `tab = INFO`，字段 `tab` 的默认值见该类字段声明）。
+- 初始页：新建**空白**规则落在输入页（`RuleEditorScreenListActions#createRule` 调用 `selectInputTab`）；打开已有规则落在基本页（`RuleEditorScreen#openEditor` 置 `tab = INFO`，字段 `tab` 的默认值见该类字段声明）。
 - 切页前先提交合法字段，非法文本保留在当前会话输入缓冲：`RuleEditorScreenEditPage#switchTab` 走 `pages.blockNavigation()` 门禁后 `pages.setPage(target)`；提交路径见第 5、7 节。
 - 页名与页内提示同名：输入页一律称「**输入**」（`tab.input`），页内提示、文档与代码注释不得再用其他名字指代该页。
 - 页头右侧状态条只表达状态且不可点击：`RuleEditorScreen#drawHeaderText` 以 `header.editing`（「当前编辑 · %s」）作标题，状态条取 `state.applied` / `state.unapplied`（「待应用」，与列表页 `recipe.status.pending` 同词）/ `state.active` / `state.freezing`，右端面板不参与命中判定。
@@ -105,7 +105,7 @@
 - 撤销粒度是**字段级**：`FormView.applyToDraft()` 逐字段比较，每个真实变化的字段单独 `session.apply`。所以叶弹窗里改了多个字段 → 需要多次撤销；**弹窗确认本身不是一条记录**。
 - 空父组自下而上整理（`removeLeafAt` 在 `RuleEditorInputPage`，`isEmptyGroup` 在 `RuleEditorPageSupport`）：`all_of` / `any_of` 看 `terms`、`inverted` 看 `term`；空组连父一起删，但**不改变 `any_of` / `inverted` 的结构语义**。
 - 保存走既有编辑保存协议，见 [edit-save-protocol](../backend/flows/edit-save-protocol.md)。编辑页在保存前调用客户端校验 `RuleEditorValidation.collectIssues()`；命中问题时按 `issueRuleId` 先打开所属规则、再按原字段路径定位，服务端校验仍是权威。
-- 新建、从模板新建及复制成功后清空操作提示，不显示「已创建规则」；错误与应用结果仍由原有提示区显示。
+- 新建及复制成功后清空操作提示，不显示「已创建规则」；错误与应用结果仍由原有提示区显示。
 
 ## 8. 已知限制
 
@@ -125,12 +125,12 @@
 
 ## 10. 管理页布局与条目操作
 
-- 管理页列表模式由 `RuleEditorScreenListPage` 承担（规则树、筛选框、条目判定与刷新）；新建/从模板创建、复制、启用或停用、屏蔽或取消屏蔽、恢复原始、删除由 `RuleEditorScreenListActions` 承担；列表与编辑页共用的按钮排由 `RuleEditorScreenButtonBar` 提供。
+- 管理页列表模式由 `RuleEditorScreenListPage` 承担（规则树、筛选框、条目判定与刷新）；新建、复制、启用或停用、屏蔽或取消屏蔽、恢复原始、删除由 `RuleEditorScreenListActions` 承担；列表与编辑页共用的按钮排由 `RuleEditorScreenButtonBar` 提供。
 - 管理页不提供独立的选中规则预览面板或展开/收起预览按钮，规则树使用内容区的完整宽度；配方行图标与悬停说明仍在树内显示。
 - 管理列表与变更清单共用 `RuleRecipeView.renderRow` 的两行布局：首行显示名称及状态或变更类型，次行显示源物品、催化剂、流体浸润与产出图标关系。变更清单由 `RuleChangesView` 提供滚动列表，名称及配方取当前展示草稿；删除标志不清空规则体，删除条目仍展示待删除内容，恢复条目沿用当前展示草稿并标记恢复类型。悬停可查看完整输入与产出说明。
 - 配方行扫描规则级与动作级条件中的正向催化剂、流体存在叶，取反叶不作为输入要求，双重取反恢复展示。流体列表优先于单个 `fluid` 引用，二者均空显示“任意非空流体”；流体不显示数量角标。流体消耗动作使用与催化剂相同的橙色星号，明确引用保留自身范围，任意流体消耗标记全部已列出的流体；符号表示配置了消耗，实际匹配与执行仍由条件和方案决定。
-- 顶部按钮栏依次提供新建规则、从模板创建、编辑、启用或停用、复制、删除、更多；按钮按当前文案宽度自动换行。底部提供应用更改与变更清单。
-- 新建、从模板创建与复制共用命名弹窗，只填写规则 ID 的路径部分，命名空间固定为 `itemdespawntowhat`；弹窗仅提示名称支持小写字母、数字和下划线，输入过滤与提交校验采用同一字符限制。复制建议名将源路径的不支持字符替换为下划线，追加复制后缀并避开重复 ID。基本页的显示名由用户手动填写，未设置时输入框为空；列表及页头仍使用既有名称展示兜底。输入时校验格式及 ID 唯一性，与已有规则或尚未应用的新建规则重复时在弹窗内显示红字并禁用确认；校验失败保留弹窗与输入。
+- 顶部按钮栏依次提供新建规则、编辑、启用或停用、复制、删除、更多；按钮按当前文案宽度自动换行。底部提供应用更改与变更清单。
+- 新建与复制共用命名弹窗，只填写规则 ID 的路径部分，命名空间固定为 `itemdespawntowhat`；弹窗仅提示名称支持小写字母、数字和下划线，输入过滤与提交校验采用同一字符限制。复制建议名将源路径的不支持字符替换为下划线，追加复制后缀并避开重复 ID。基本页的显示名由用户手动填写，未设置时输入框为空；列表及页头仍使用既有名称展示兜底。输入时校验格式及 ID 唯一性，与已有规则或尚未应用的新建规则重复时在弹窗内显示红字并禁用确认；校验失败保留弹窗与输入。
 - 编辑、启用或停用、复制、删除、更多在未选中规则或工作区冻结时禁用；选择分类不算选中规则。
 - 启用开关根据当前规则体的 `enabled` 显示下一步动作：省略或为 `true` 时显示“停用”，为 `false` 时显示“启用”。切换后标签随草稿状态更新。
 - “更多”提供屏蔽或取消屏蔽、恢复原始；屏蔽开关根据当前规则体的 `delete` 显示下一步动作。删除使用顶部入口并保留确认弹窗。
