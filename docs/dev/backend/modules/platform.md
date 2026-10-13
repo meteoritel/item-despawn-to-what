@@ -77,21 +77,21 @@
 
 `PlayerDeathDrops.mark` 仅当 `owner instanceof Player && player.isDeadOrDying()` 时打 `Constants.CHECK_LOCK_TAG`。**标记必须在实体入世界前完成**；两端都只对死亡玩家生效，普通丢物品不受影响。致死转化分类由 `core/state/DamageClassification`（common 唯一来源）负责，平台层只判定"是否关键致死点"，不重复定义伤害类别。
 
-`fabric.mod.json` 的 `mixins` 列表声明 `itemdespawntowhat.mixins.json`；该文件列出 `PlayerMixin / ItemEntityMixin / EntityMixin`，`defaultRequire:1`。NeoForge 的 `neoforge.mods.toml` 用 `[[mixins]]` 声明 `itemdespawntowhat.mixins.json`，该文件只列 `ItemEntityMixin`。
+`fabric.mod.json` 的 `mixins` 列表声明 `itemdespawntowhat.mixins.json`；该文件列出 `PlayerMixin / ItemEntityMixin / EntityMixin / ItemLifespanReferenceMixin`，`defaultRequire:1`。NeoForge 的 `neoforge.mods.toml` 用 `[[mixins]]` 声明 `itemdespawntowhat.mixins.json`，该文件只列 `ItemEntityMixin`。
 
 ## 5. 网络注册器与客户端
 
 | 项 | Fabric | NeoForge |
 |---|---|---|
 | 主类 | `ItemDespawnToWhat implements ModInitializer`；`onInitialize` 注册事件 / payload / 命令 | `ItemDespawnToWhat @Mod`，**空构造器**；事件与协议靠 `@EventBusSubscriber` 自动发现 |
-| C2S/S2C 类型注册 | `PayloadTypeRegistry.playC2S/playS2C`（C2S ×7、S2C ×5） | `RegisterPayloadHandlersEvent` + `registrar("2")`（C2S ×7、S2C ×5） |
-| C2S 接收器 | `ServerPlayNetworking.registerGlobalReceiver` ×7 | `playToServer` ×7 |
-| S2C 接收器 | 客户端 `FabricRuleEditClientRegistrar` 注册（×5） | `playToClient` ×5，处理器**只做 `RuleEditPayloadRouter` / `OpenRuleEditorPayload.dispatchOpenEditor` 分发**，不引用客户端类 |
+| C2S/S2C 类型注册 | `PayloadTypeRegistry.playC2S/playS2C`（C2S ×8、S2C ×6） | `RegisterPayloadHandlersEvent` + `registrar(Integer.toString(RuleEditProtocol.VERSION))`（C2S ×8、S2C ×6） |
+| C2S 接收器 | `ServerPlayNetworking.registerGlobalReceiver` ×8 | `playToServer` ×8 |
+| S2C 接收器 | 客户端 `FabricRuleEditClientRegistrar` 注册（×6） | `playToClient` ×6，处理器**只做 `RuleEditPayloadRouter` / `OpenRuleEditorPayload.dispatchOpenEditor` 分发**，不引用客户端类 |
 | 断线清理 | `ServerPlayConnectionEvents.DISCONNECT` | `PlayerEvent.PlayerLoggedOutEvent` |
 | 命令注册 | `CommandRegistrationCallback.EVENT` | `RegisterCommandsEvent` |
 | 客户端主类 | `ItemDespawnToWhatClient`（`ClientModInitializer`）：按键 / S2C 接收器 / 工作区接线 / 界面 bootstrap | 无独立主类，用 `@EventBusSubscriber(Dist.CLIENT)`（`RegisterEvent` 静态块接线工作区与界面） |
 
-协议版本两端对齐（`RuleEditProtocol.VERSION = 2`，NeoForge registrar 传 `"2"`）。**C2S 与 S2C 的类型都必须在公共初始化注册**，否则专用服务端连接协商会判定通道缺失。
+协议版本两端对齐（`RuleEditProtocol.VERSION = 3`，NeoForge registrar 从该常量生成版本字符串）。**C2S 与 S2C 的类型都必须在公共初始化注册**，否则专用服务端连接协商会判定通道缺失。
 
 ## 6. 掉落物状态与寿命的平台适配
 
@@ -102,7 +102,8 @@
 | 计时基准 | `ServerLevel#getGameTime()` 的**绝对游戏刻**（卸载不暂停、重启后继续） | 同左 |
 | 自然消失拦截 | Mixin `@Redirect` tick 第二处 `discard()` | `ItemExpireEvent` + `addExtraLife(1)` |
 | 环境伤害保护 | Mixin `@Inject` `hurt` HEAD（三类全防） | `EntityInvulnerabilityCheckEvent`（三类全防） |
-| lifespan 取值 | `config.fabricLifespanFallbackTicks()`（无加载器寿命 API，兜底常量） | `entity.lifespan`（`ItemStack#getEntityLifespan`，保留其它模组修改） |
+| lifespan 取值 | `FabricLifespanReference.ticks()` 的正采样值，未采样时使用 `config.fabricLifespanFallbackTicks()` | `entity.lifespan`（`ItemStack#getEntityLifespan`，保留其它模组修改） |
+| GUI 参考寿命 | `ItemLifespanReferenceMixin` 被动观察首次服务端 tick 的寿命阈值，`FabricLifespanReference` 缓存到停服；不修改比较结果 | 启动时读取一个普通石头物品实体的 `lifespan`，缓存到停服 |
 | lifespan 数值钳制 | 配置兜底值；`expiry` 场景 >32767 拒绝 | 原版钳制 32766，`age≥32765` 触发 `setExtendedLifetime` |
 | 死亡掉落排除 | 两个 Mixin + `PlayerDeathDrops.mark` | `LivingDropsEvent` 直接打 tag |
 | 包层判定 | 查 `FabricLoader.getAllMods()` | `packId.startsWith("mod/")` |

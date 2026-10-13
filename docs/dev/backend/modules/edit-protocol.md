@@ -9,7 +9,7 @@
 
 | 类 | 职责 |
 |---|---|
-| `RuleEditProtocol` | 协议版本常量 `VERSION = 2`；握手不一致即拒绝 |
+| `RuleEditProtocol` | 协议版本常量 `VERSION = 3`；握手不一致即拒绝 |
 | `RuleSnapshot` | `{version, context_revision, List<RuleSnapshotEntry> entries, List<RuleIssue> issues}`；`serialize()`/`parse()`。客户端只按 JSON 渲染，不依赖服务端模型类 |
 | `RuleSnapshotEntry` | 单条规则的来源三视图：`{id, origin, status, editable, effective, base, overlay, issues}`。`origin ∈ overlay\|datapack\|mixed`，`status ∈ active\|disabled\|masked\|invalid` |
 | `RuleEdit` | `{id, action(UPSERT\|DELETE), rule}`；upsert 必带 rule，id 归一为小写下划线 |
@@ -29,6 +29,8 @@
 | `CloseRuleEditorPayload` | C2S | `sessionId` / `reasonCode` |
 | `RequestRuleSnapshotPayload` | C2S | `sessionId` / `requestId` |
 | `RequestRuleCatalogPayload` | C2S | `sessionId` / `requestId` / `catalogType` / `filter` / `page` / `pageSize`（`MAX_PAGE_SIZE = 200`） |
+| `RequestRuleLifespanPayload` | C2S | `sessionId` / `requestId` |
+| `RuleLifespanPayload` | S2C | `sessionId` / `requestId` / `lifespanTicks`（普通物品参考寿命；零表示尚未采样） |
 | `SaveRuleChangeSetPayload` | C2S | `sessionId` / `operationId` / `changeSetJson`（直发，≤ `MAX_DIRECT_CHARS`） |
 | `SaveRuleChangeSetChunkPayload` | C2S | `sessionId` / `operationId` / `transferId`(≤64) / `index` / `count` / `chunk`(≤ `MAX_CHUNK_CHARS`) |
 | `OpenRuleEditorPayload` | S2C | `sessionId` / `targetId` / `protocolVersion` / `contextRevision` / `statusCode` / `messageArgs` / `fallbackMessage`；取锁失败时同样下发（`statusCode=LOCK_BUSY`、`sessionId` 为空）。唯一开屏路径：客户端 `RuleEditClientWorkspace` 用 `installOpenEditorPayloadSink(Consumer)` 注册，成功后 `EditorScreenHooks.open(request)` |
@@ -48,7 +50,7 @@
 | `RuleEditPayloadCodec` | 载荷共用编解码片段（字符串列表 / 可空字符串 / `RuleIssue` 列表）；超限即抛解码异常 |
 | `RuleEditPayloadRouter` | 客户端入站门面：字符串 sink（兼容）+ 结构化 sink（快照 / 分片 / 回执 / 目录）；服务端只装载空消费者 |
 | `OpenRuleEditorPayload` | 承载 `installOpenEditorPayloadSink` / `dispatchOpenEditor`（开屏入口的唯一静态 sink） |
-| `RuleEditServerContext` | 窄接口：向网络层暴露运行时能力（由平台 `RuleRuntimeHost` 实现） | `overlayRoot()`、`overlayNamespace()`、`typeRegistries()`、`loadMerged(server)`、`rebuildAndRescan(server)`、`sendTo(player, payload)` |
+| `RuleEditServerContext` | 窄接口：向网络层暴露运行时能力（由平台 `RuleRuntimeHost` 实现） | `overlayRoot()`、`overlayNamespace()`、`typeRegistries()`、`loadMerged(server)`、`rebuildAndRescan(server)`、`sendTo(player, payload)`、`referenceLifespanTicks()` |
 | `RuleEditServerHandler` | 服务端处理编排（**薄转发**） | `openEditor`、`handleConfirm`、`handleHeartbeat`、`handleClose`、`handleSnapshotRequest`、`handleCatalogRequest`、`handleChangeSet`、`handleChangeSetChunk`、`expireIdle`、`clearPlayer`、`reset`、`isReady`、`canEdit`、`sessionManager`/`service` |
 
 ### 1.4 `core/network/catalog`
@@ -113,6 +115,7 @@
 - **权限** `canEdit` 与 `/idtw` 的 `hasAccess` 一致：单人世界或权限等级 ≥2；未就绪/无权限直接回 `UNAVAILABLE` / `NO_PERMISSION`。
 - **每个授权检查点**（心跳、快照、目录、变更集、分片）都校验 `sessionId` 与状态匹配，失败回 `SESSION_EXPIRED` / `LOCK_NOT_OWNED`。
 - **目录请求校验顺序**：先检查会话归属与已确认状态，再检查分页参数和目录类型；未确认的 OPENING 会话优先返回会话失效回执，已确认会话的非法参数返回 `INVALID_REQUEST`。仅通过全部检查的请求续期心跳。
+- **寿命查询**：权限与就绪检查后，服务层校验已确认会话；只读取平台缓存的普通物品参考寿命，不解析源匹配、不展开标签、不创建实体。平台尚未采样时应答零并保留单项待交付请求，`expireIdle` 每 20 tick 检查采样状态，完成后向仍持有权限与已确认会话的玩家补发一次缓存结果。参考值不随规则重载失效；客户端仅接受当前会话与最近请求号的应答，正寿命结果保留到断线。
 - **幂等**：`operationId` 由客户端生成，服务端对同一会话保留最近 16 条已处理回执，重复提交直接回放、不重复写盘。
 - **并发保存保护**：`beginApply` 只允许 ACTIVE→APPLYING；正在 APPLYING 时的新提交回 `INVALID_REQUEST`（`apply in progress`）并保留会话。
 - 玩家断开仅清分片缓存（`clearPlayer`），会话按租约到期释放；停服 `reset()` 清空分片与幂等表。
