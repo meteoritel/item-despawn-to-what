@@ -9,6 +9,7 @@ import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
 import com.meteorite.itemdespawntowhat.client.ui.shared.TagPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
+import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
@@ -51,6 +52,7 @@ public final class RuleRecipeView {
         private final LinkedHashSet<Integer> quantities = new LinkedHashSet<>();
         private final LinkedHashSet<Integer> consumedQuantities = new LinkedHashSet<>();
         private boolean perSourceItem;
+        private boolean fluidConsumed;
         private String quantityText = "";
         private @Nullable TagPreviewIcons.Tag tag;
 
@@ -78,14 +80,28 @@ public final class RuleRecipeView {
         addParts(sources, "sources");
 
         Map<String, ObjectPart> catalysts = new LinkedHashMap<>();
+        Map<String, ObjectPart> fluids = new LinkedHashMap<>();
         RuleValue cost = object(body.child("catalyst_cost"));
         addCatalysts(catalysts, cost, true);
-        collectConditions(body.child("conditions"), false, catalysts);
+        collectConditions(body.child("conditions"), false, catalysts, fluids);
         for (RuleValue effect : effects) {
-            collectConditions(effect.child("conditions"), false, catalysts);
+            collectConditions(effect.child("conditions"), false, catalysts, fluids);
             if ((OWN + "consume_catalyst").equals(text(effect, "type"))) addCatalysts(catalysts, effect, true);
         }
+        // 任意流体消耗可作用于已列出的每种流体；明确引用保留自身范围，不推断标签交集。
+        boolean consumesAnyFluid = false;
+        for (RuleValue effect : effects) {
+            if (!(OWN + "consume_fluid").equals(text(effect, "type"))) continue;
+            String reference = text(effect, "fluid");
+            if (reference.isEmpty()) consumesAnyFluid = true;
+            else fluid(fluids, reference).fluidConsumed = true;
+        }
+        if (consumesAnyFluid) {
+            if (fluids.isEmpty()) fluid(fluids, "");
+            fluids.values().forEach(part -> part.fluidConsumed = true);
+        }
         for (ObjectPart catalyst : catalysts.values()) { separator("plus"); parts.add(new Part(catalyst, Component.empty())); }
+        for (ObjectPart fluid : fluids.values()) { separator("plus"); parts.add(new Part(fluid, Component.empty())); }
         separator("arrow");
         List<ObjectPart> products = new ArrayList<>();
         for (RuleValue effect : effects) {
@@ -104,10 +120,12 @@ public final class RuleRecipeView {
         MutableComponent details = Component.empty();
         appendDetails(details, "input", sources);
         appendDetails(details, "catalyst", new ArrayList<>(catalysts.values()));
+        appendDetails(details, "fluid", new ArrayList<>(fluids.values()));
         appendDetails(details, "output", products);
         if (sources.size() > 1)
             details.append("\n").append(Component.translatable(UI + "matching_help"));
         if (!catalysts.isEmpty()) details.append("\n").append(Component.translatable(UI + "catalyst_help"));
+        if (!fluids.isEmpty()) details.append("\n").append(Component.translatable(UI + "fluid_help"));
         if (parts.stream().anyMatch(part -> part.object() != null && part.object().quantities.size() > 1))
             details.append("\n").append(Component.translatable(UI + "quantity_help"));
         if (array(body.child("outcomes")).size() > 1)
@@ -120,7 +138,23 @@ public final class RuleRecipeView {
     public Component summary() { return summary; }
     public Component tooltip() { return tooltip; }
 
-    // 每种对象各占一行，消耗只写在对应催化剂后，不堆叠重复的角标和滚动说明。
+    // 管理树和变更清单共用两行条目：标题与状态在上，输入及产出关系在下。
+    static void renderRow(GuiGraphics graphics, Font font, UiRect row, String title, Component state,
+                          int color, int stateColor, @Nullable RuleRecipeView recipe, boolean hovered) {
+        int stateWidth = font.width(state);
+        graphics.drawString(font, TextScroll.trimToWidth(font, title,
+                Math.max(0, row.width() - stateWidth - 6)), row.x() + 2, row.y() + 2, color, false);
+        if (!state.getString().isBlank()) graphics.drawString(font, state, row.right() - stateWidth - 2,
+                row.y() + 2, stateColor, false);
+        if (recipe != null) recipe.render(graphics, font, recipeBounds(font, row), color, hovered);
+    }
+
+    static UiRect recipeBounds(Font font, UiRect row) {
+        return new UiRect(row.x() + 2, row.y() + font.lineHeight + 3,
+                Math.max(0, row.width() - 4), CONTENT_HEIGHT);
+    }
+
+    // 每种对象各占一行；流体不计件数，消耗符号与催化剂共用。
     private static void appendDetails(MutableComponent details, String role, List<ObjectPart> objects) {
         for (ObjectPart value : objects) {
             if (!details.getString().isEmpty()) details.append("\n");
@@ -129,6 +163,7 @@ public final class RuleRecipeView {
                     : Component.translatable(UI + "quantity", name, value.quantityText);
             if (!value.consumedQuantities.isEmpty()) item = item.copy().append(Component.translatable(UI + "consumption",
                     numbers(value.consumedQuantities)));
+            if (value.fluidConsumed) item = item.copy().append(Component.translatable(UI + "fluid_consumption"));
             details.append(Component.translatable(UI + role, item));
         }
     }
@@ -162,7 +197,7 @@ public final class RuleRecipeView {
                         graphics.fill(x, row.bottom() - 1, x + size - 2, row.bottom(), 0xFF6688AA);
                     }
                     value.icon.render(graphics, x, row.y() + 1);
-                    if (!value.consumedQuantities.isEmpty()) consumedStar(graphics, x + ICON_SIZE - 7, row.y());
+                    if (!value.consumedQuantities.isEmpty() || value.fluidConsumed) consumedStar(graphics, x + ICON_SIZE - 7, row.y());
                     if (!value.quantities.isEmpty()) badge(graphics, font, value.quantityText,
                             x + ICON_SIZE, row.y() + 12);
                     if (names) graphics.drawString(font, value.name, x + ICON_SIZE + 3, row.y() + 5, color, false);
@@ -259,14 +294,29 @@ public final class RuleRecipeView {
         }
     }
 
-    private static void collectConditions(@Nullable RuleValue raw, boolean inverted, Map<String, ObjectPart> catalysts) {
+    private static ObjectPart fluid(Map<String, ObjectPart> fluids, String reference) {
+        return fluids.computeIfAbsent(reference, ignored -> reference.isEmpty()
+                ? new ObjectPart(Component.translatable(UI + "any_fluid"), new UiIcon.Item(new ItemStack(Items.BUCKET)), 0)
+                : resource(reference, RuleCatalogType.FLUID, 0));
+    }
+
+    private static void addFluids(Map<String, ObjectPart> fluids, RuleValue condition) {
+        List<RuleValue> references = array(condition.child(RuleFields.FLUIDS)).items();
+        if (references.isEmpty()) fluid(fluids, text(condition, "fluid"));
+        else for (RuleValue reference : references) if (reference.isText()) fluid(fluids, reference.asText());
+    }
+
+    // 取反叶不代表需要浸润或催化剂；双重取反恢复正向展示。
+    private static void collectConditions(@Nullable RuleValue raw, boolean inverted, Map<String, ObjectPart> catalysts,
+                                          Map<String, ObjectPart> fluids) {
         RuleValue node = object(raw);
         String op = text(node, "op");
-        if ("inverted".equals(op)) collectConditions(node.child("term"), !inverted, catalysts);
+        if ("inverted".equals(op)) collectConditions(node.child("term"), !inverted, catalysts, fluids);
         else if ("leaf".equals(op)) {
             RuleValue condition = object(node.child("condition"));
             if (!inverted && (OWN + "catalyst_present").equals(text(condition, "type"))) addCatalysts(catalysts, condition, false);
-        } else for (RuleValue term : array(node.child("terms")).items()) collectConditions(term, inverted, catalysts);
+            if (!inverted && (OWN + "fluid_present").equals(text(condition, "type"))) addFluids(fluids, condition);
+        } else for (RuleValue term : array(node.child("terms")).items()) collectConditions(term, inverted, catalysts, fluids);
     }
 
     private static ObjectPart product(RuleValue effect, RuleValue rule) {
@@ -329,6 +379,10 @@ public final class RuleRecipeView {
             case ITEM -> BuiltInRegistries.ITEM.getOptional(id).map(net.minecraft.world.item.Item::getDescription).orElse(Component.literal(raw));
             case BLOCK -> BuiltInRegistries.BLOCK.getOptional(id).map(net.minecraft.world.level.block.Block::getName).orElse(Component.literal(raw));
             case ENTITY -> BuiltInRegistries.ENTITY_TYPE.getOptional(id).map(net.minecraft.world.entity.EntityType::getDescription).orElse(Component.literal(raw));
+            case FLUID -> {
+                Component label = RuleDisplayLabels.catalogLabel(type, id);
+                yield label == null ? Component.literal(raw) : label;
+            }
             default -> Component.literal(raw);
         };
         return new ObjectPart(name, CatalogPreviewIcons.iconFor(type, raw), quantity);

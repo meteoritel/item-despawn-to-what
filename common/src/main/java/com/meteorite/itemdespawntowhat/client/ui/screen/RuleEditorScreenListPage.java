@@ -285,16 +285,9 @@ final class RuleEditorScreenListPage {
     private void renderRuleRow(GuiGraphics graphics, Font rowFont, String id, UiRect row, boolean hovered) {
         RuleSnapshotEntry entry = host.model().entry(id);
         int color = isRuleActive(id, entry) ? THEME.palette().textPrimary() : THEME.palette().textDisabled();
-        String state = ruleState(id).getString();
-        int stateWidth = rowFont.width(state);
-        graphics.drawString(rowFont, TextScroll.trimToWidth(rowFont, host.labelText(id),
-                Math.max(0, row.width() - stateWidth - 6)), row.x() + 2, row.y() + 2, color, false);
-        if (!state.isBlank()) graphics.drawString(rowFont, state, row.right() - stateWidth - 2, row.y() + 2,
-                host.model().hasError(id) ? THEME.palette().danger() : THEME.palette().textSecondary(), false);
-        RuleRecipeView recipe = recipeViews.get(id);
-        if (recipe != null) recipe.render(graphics, rowFont,
-                new UiRect(row.x() + 2, row.y() + rowFont.lineHeight + 3,
-                        Math.max(0, row.width() - 4), RuleRecipeView.CONTENT_HEIGHT), color, hovered);
+        RuleRecipeView.renderRow(graphics, rowFont, row, host.labelText(id), ruleState(id), color,
+                host.model().hasError(id) ? THEME.palette().danger() : THEME.palette().textSecondary(),
+                recipeViews.get(id), hovered);
     }
 
     // 状态用明确文字，正常启用不占用配方行；草稿标志与问题提示不再使用符号。

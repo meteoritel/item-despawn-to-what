@@ -57,6 +57,9 @@ public final class RuleEditorScreen extends Screen {
     private static final int EDIT_HEADER_H = 24;
     private static final int EDIT_PAD = 8;
     private static final int NOTICE_H = 10;
+    private static final int CHANGES_MODAL_WIDTH = 420;
+    private static final int CHANGES_MODAL_MAX_HEIGHT = 220;
+    private static final int CHANGES_MODAL_SCREEN_MARGIN = 90;
     // i18n 前缀
     private static final String UI = "gui.itemdespawntowhat.edit.";
 
@@ -344,16 +347,11 @@ public final class RuleEditorScreen extends Screen {
 
     // 草稿改动清单（管理页底排与编辑页底排共用）
     private void showChanges() {
-        Component body = Component.translatable(UI + "changes.note");
-        for (String id : model.dirtyRuleIds()) {
-            EditSession session = model.session(id);
-            String kind = model.isRestoring(id) ? "restore" : model.isCreated(id) ? "create"
-                    : session != null && session.draft().isDeleted() ? "remove" : "modify";
-            body = body.copy().append("\n").append(Component.translatable(UI + "changes." + kind))
-                    .append(": ").append(labelText(id));
-        }
+        RuleChangesView changes = new RuleChangesView(font, model, this::labelText);
         modals.push(UiModal.create(THEME, font).title(Component.translatable(UI + "button.changes"))
-                .message(body).preferredWidth(300).cancel(Component.translatable(UI + "button.cancel"))
+                .contentWidget(changes, changes.preferredHeight(Math.clamp(height - CHANGES_MODAL_SCREEN_MARGIN,
+                        RuleRecipeView.CONTENT_HEIGHT, CHANGES_MODAL_MAX_HEIGHT)))
+                .preferredWidth(CHANGES_MODAL_WIDTH).cancel(Component.translatable(UI + "button.cancel"))
                 .layoutCentered(width, height));
     }
 
