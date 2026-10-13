@@ -21,6 +21,8 @@ import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostPalette;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiListView;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiTypePicker;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModalStack;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiNarration;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
@@ -213,7 +215,8 @@ public final class RuleEditorScreen extends Screen {
         this.renderBackground(graphics, mouseX, mouseY, partialTick);
         int actualMouseX = mouseX;
         int actualMouseY = mouseY;
-        var pointer = com.meteorite.itemdespawntowhat.client.ui.kit.UiPointer.gated(modals.isEmpty(), mouseX, mouseY);
+        UiTypePicker picker = mode == Mode.EDIT ? editPage.activeTypePicker() : null;
+        var pointer = com.meteorite.itemdespawntowhat.client.ui.kit.UiPointer.gated(modals.isEmpty() && picker == null, mouseX, mouseY);
         mouseX = pointer.x();
         mouseY = pointer.y();
         int w = this.width;
@@ -248,7 +251,11 @@ public final class RuleEditorScreen extends Screen {
         mouseX = actualMouseX;
         mouseY = actualMouseY;
         modals.render(graphics, font, mouseX, mouseY);
-        if (modals.isEmpty()) {
+        if (modals.isEmpty() && picker != null) {
+            picker.setBounds(contentArea.x(), contentArea.y(), contentArea.width(), contentArea.height());
+            picker.render(graphics, font, mouseX, mouseY);
+        }
+        if (modals.isEmpty() && picker == null) {
             Component tip = null;
             if (notice != null && noticeTruncated && noticeRect != null && noticeRect.contains(mouseX, mouseY)) {
                 tip = notice;
@@ -266,7 +273,7 @@ public final class RuleEditorScreen extends Screen {
             }
         }
         // 字段说明提示：没有弹窗时才显示，避免盖住上层内容
-        if (modals.isEmpty() && mode == Mode.EDIT && !editPage.renderDescriptionTooltip(graphics, mouseX, mouseY)) {
+        if (modals.isEmpty() && picker == null && mode == Mode.EDIT && !editPage.renderDescriptionTooltip(graphics, mouseX, mouseY)) {
             Component tip = editPage.tooltipAt(mouseX, mouseY);
             if (tip != null) {
                 renderTooltip(graphics, tip, mouseX, mouseY);
@@ -426,6 +433,8 @@ public final class RuleEditorScreen extends Screen {
         if (modals.isVisible()) {
             return modals.mouseClicked(mouseX, mouseY, button);
         }
+        UiTypePicker picker = activeTypePicker();
+        if (picker != null) return picker.mouseClicked(mouseX, mouseY, button);
         if (button == 0 && mode == Mode.LIST && listPage.openTagDetails(mouseX, mouseY)) {
             return true;
         }
@@ -446,6 +455,8 @@ public final class RuleEditorScreen extends Screen {
         if (modals.isVisible()) {
             return modals.mouseReleased(mouseX, mouseY, button);
         }
+        UiTypePicker picker = activeTypePicker();
+        if (picker != null) return picker.mouseReleased(mouseX, mouseY, button);
         boolean consumed = editPage.mouseReleased(mouseX, mouseY, button);
         consumed |= listPage.mouseReleased(mouseX, mouseY, button);
         consumed |= editPage.footerMouseReleased(mouseX, mouseY, button);
@@ -457,6 +468,8 @@ public final class RuleEditorScreen extends Screen {
         if (modals.isVisible()) {
             return modals.mouseDragged(mouseX, mouseY, button, dragX, dragY);
         }
+        UiTypePicker picker = activeTypePicker();
+        if (picker != null) return picker.mouseDragged(mouseX, mouseY, button, dragX, dragY);
         if (editPage.mouseDragged(mouseX, mouseY, button, dragX, dragY)) {
             return true;
         }
@@ -471,6 +484,8 @@ public final class RuleEditorScreen extends Screen {
         if (modals.isVisible()) {
             return modals.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
         }
+        UiTypePicker picker = activeTypePicker();
+        if (picker != null) return picker.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
         if (mode == Mode.LIST) {
             if (listPage.mouseScrolled(mouseX, mouseY, scrollX, scrollY)) {
                 return true;
@@ -492,6 +507,8 @@ public final class RuleEditorScreen extends Screen {
         if (modals.isVisible()) {
             return modals.keyPressed(keyCode, scanCode, modifiers);
         }
+        UiTypePicker picker = activeTypePicker();
+        if (picker != null) return picker.keyPressed(keyCode, scanCode, modifiers);
         if (UiHistoryDispatcher.dispatch(keyCode, scanCode, modifiers, (key, scan, mods) -> {
             if (mode == Mode.LIST && listPage.searchKeyPressed(key, scan, mods)) return true;
             if (mode == Mode.EDIT && editPage.keyPressed(key, scan, mods)) return true;
@@ -532,6 +549,9 @@ public final class RuleEditorScreen extends Screen {
             if (!target.canFocus() || !target.bounds().contains(mouseX, mouseY)) {
                 continue;
             }
+            if (target instanceof UiListView<?> list && !list.acceptsFocusAt(mouseX, mouseY)) {
+                continue;
+            }
             if (editPage.isPageFocusTarget(target) && !contentArea.contains(mouseX, mouseY)) {
                 continue;
             }
@@ -544,6 +564,8 @@ public final class RuleEditorScreen extends Screen {
     // 键盘抬起：把滑杆方向键的按住过程合并为一次提交
     @Override
     public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
+        UiTypePicker picker = activeTypePicker();
+        if (!modals.isVisible() && picker != null) return picker.keyReleased(keyCode, scanCode, modifiers);
         if (mode == Mode.EDIT && editPage.keyReleased(keyCode, scanCode, modifiers)) {
             return true;
         }
@@ -555,6 +577,8 @@ public final class RuleEditorScreen extends Screen {
         if (modals.isVisible()) {
             return modals.charTyped(codePoint, modifiers);
         }
+        UiTypePicker picker = activeTypePicker();
+        if (picker != null) return picker.charTyped(codePoint, modifiers);
         if (mode == Mode.LIST && listPage.charTyped(codePoint, modifiers)) {
             return true;
         }
@@ -562,6 +586,10 @@ public final class RuleEditorScreen extends Screen {
             return true;
         }
         return super.charTyped(codePoint, modifiers);
+    }
+
+    private @Nullable UiTypePicker activeTypePicker() {
+        return mode == Mode.EDIT ? editPage.activeTypePicker() : null;
     }
 
     @Override

@@ -21,6 +21,7 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeContract;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiTypePicker;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModalStack;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiSegmentedControl;
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
@@ -323,6 +324,12 @@ final class RuleEditorScreenEditPage {
 
     @Nullable Component tooltipAt(double mouseX, double mouseY) {
         return pages == null ? null : pages.tooltipAt(mouseX, mouseY);
+    }
+
+    @Nullable UiTypePicker activeTypePicker() {
+        if (pages == null) return null;
+        UiTypePicker picker = pages.ruleEditorResultsPage.typePicker;
+        return picker.isOpen() ? picker : null;
     }
 
     // ---- 页面装配与生命周期 ----

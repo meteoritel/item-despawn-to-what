@@ -20,8 +20,15 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import org.lwjgl.glfw.GLFW;
 
-/** 可搜索的条件类型选择器：独立管理过滤、光标、滚动与鼠标捕获。 */
-final class ConditionGraphTypePicker {
+/** 条件与行为共用的右侧类型选择面板：统一搜索、键盘选择、滚动与滑入外观。 */
+public final class UiTypePicker implements UiWidget {
+    /**
+     * 一条可选择的类型。
+     *
+     * @param id 类型注册名，用于搜索与确认回调
+     * @param label 玩家可读的本地化名称
+     */
+    public record Option(ResourceLocation id, Component label) { }
     private static final int PICKER_SEARCH_ROW = 14;
     private static final int PICKER_ROW_HEIGHT = 18;
     private static final int PICKER_FOOTER = 12;
@@ -37,29 +44,46 @@ final class ConditionGraphTypePicker {
     private UiRect panelRect = new UiRect(0, 0, 0, 0);
     private UiRect searchRect = new UiRect(0, 0, 0, 0);
     private UiRect listRect = new UiRect(0, 0, 0, 0);
-    private List<ConditionTreeContract.TypeOption> filteredOptions = List.of();
+    private List<Option> filteredOptions = List.of();
     private final ConditionGraphSidePanel panel;
     private boolean pointerKnown;
     private int lastMouseX;
     private int lastMouseY;
 
     private final UiHostTheme theme;
+    private final Component title;
     private final Consumer<ResourceLocation> onConfirm;
-    private List<ConditionTreeContract.TypeOption> typeOptions = List.of();
+    private List<Option> typeOptions = List.of();
     private UiRect bounds = new UiRect(0, 0, 0, 0);
 
-    ConditionGraphTypePicker(UiHostTheme theme, Font font, Consumer<ResourceLocation> onConfirm) {
+    /**
+     * 创建共用类型选择面板。
+     *
+     * @param theme 面板配色与控件主题
+     * @param font 文本测量与绘制字体
+     * @param title 面板标题
+     * @param onConfirm 用户确认类型后的回调
+     */
+    public UiTypePicker(UiHostTheme theme, Font font, Component title, Consumer<ResourceLocation> onConfirm) {
+        this.title = title;
         this.theme = theme;
         this.onConfirm = onConfirm;
         panel = new ConditionGraphSidePanel(theme, font);
     }
 
-    boolean isOpen() { return open; }
-    void setOptions(List<ConditionTreeContract.TypeOption> options) { this.typeOptions = options; }
+    /** @return 选择面板是否正在接收输入 */
+    public boolean isOpen() { return open; }
+    void setOptions(List<Option> options) { this.typeOptions = options; }
     void setBounds(UiRect bounds) { this.bounds = bounds; }
     void cancelCapture() { scroll.mouseReleased(); }
 
-    void open(List<ConditionTreeContract.TypeOption> options, UiRect bounds) {
+    /**
+     * 在宿主可视区域右缘打开选择面板，并清空上次搜索与选择。
+     *
+     * @param options 可选择的类型列表
+     * @param bounds 宿主可视区域
+     */
+    public void open(List<Option> options, UiRect bounds) {
         this.typeOptions = options;
         this.bounds = bounds;
         open = true;
@@ -73,17 +97,36 @@ final class ConditionGraphTypePicker {
         updateBounds();
     }
 
-    void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
+    /**
+     * 按宿主边界绘制滑入面板。
+     * @param graphics 绘制上下文
+     * @param renderFont 内容字体
+     * @param mouseX 鼠标屏幕 X 坐标
+     * @param mouseY 鼠标屏幕 Y 坐标
+     */
+    @Override
+    public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
+        if (!open) return;
         panel.tick();
         updateBounds();
         updateHover(mouseX, mouseY);
         panel.render(graphics, bounds,
-                Component.translatable("gui.itemdespawntowhat.edit.picker.title"),
+                title,
                 () -> renderContents(graphics, renderFont));
     }
 
-    void mouseClicked(double mouseX, double mouseY, int button) {
+    /**
+     * 捕获面板打开时的点击；单击条目确认，点击面板外关闭。
+     * @param mouseX 鼠标屏幕 X 坐标
+     * @param mouseY 鼠标屏幕 Y 坐标
+     * @param button 鼠标按钮
+     * @return 面板是否消费本次点击
+     */
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (!open) return false;
         if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT) handleClick(mouseX, mouseY);
+        return true;
     }
 
     void mouseDragged(double mouseY, int button) {
@@ -115,7 +158,8 @@ final class ConditionGraphTypePicker {
         onConfirm.accept(type);
     }
 
-    void close() {
+    /** 关闭面板并释放滚动条捕获；不提交类型。 */
+    public void close() {
         open = false;
         filterText.setLength(0);
         filteredOptions = List.of();
@@ -293,6 +337,98 @@ final class ConditionGraphTypePicker {
             updateBounds();
             revealCursor();
         }
+    }
+
+    /** @return 宿主可视区域 */
+    @Override public UiRect bounds() { return bounds; }
+
+    /**
+     * 更新宿主区域，面板始终沿右缘定位。
+     * @param x 可视区域左缘
+     * @param y 可视区域顶缘
+     * @param width 可视区域宽度
+     * @param height 可视区域高度
+     */
+    @Override public void setBounds(int x, int y, int width, int height) {
+        bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
+        if (open) updateBounds();
+    }
+
+    /** @return 是否显示选择面板 */
+    @Override public boolean isVisible() { return open; }
+
+    /**
+     * 转发滚动条拖动，阻止底层控件接收同一事件。
+     * @param x 鼠标屏幕 X 坐标
+     * @param y 鼠标屏幕 Y 坐标
+     * @param button 鼠标按钮
+     * @param dragX 水平移动量
+     * @param dragY 垂直移动量
+     * @return 面板是否消费本次拖动
+     */
+    @Override public boolean mouseDragged(double x, double y, int button, double dragX, double dragY) {
+        if (!open) return false;
+        mouseDragged(y, button);
+        return true;
+    }
+
+    /**
+     * 释放选择面板的滚动条捕获。
+     * @param x 鼠标屏幕 X 坐标
+     * @param y 鼠标屏幕 Y 坐标
+     * @param button 鼠标按钮
+     * @return 面板是否消费本次释放
+     */
+    @Override public boolean mouseReleased(double x, double y, int button) {
+        if (!open) return false;
+        mouseReleased(button);
+        return true;
+    }
+
+    /**
+     * 在类型列表上滚动，面板外的滚轮不传到底层页面。
+     * @param x 鼠标屏幕 X 坐标
+     * @param y 鼠标屏幕 Y 坐标
+     * @param scrollX 水平滚动量
+     * @param scrollY 垂直滚动量
+     * @return 面板是否消费本次滚动
+     */
+    @Override public boolean mouseScrolled(double x, double y, double scrollX, double scrollY) {
+        if (!open) return false;
+        mouseScrolled(x, y, scrollY);
+        return true;
+    }
+
+    /**
+     * 搜索、方向键与确认均由同一个选择器处理。
+     * @param keyCode GLFW 按键码
+     * @param scanCode 键盘扫描码
+     * @param modifiers 修饰键标记
+     * @return 面板是否消费本次按键
+     */
+    @Override public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (!open) return false;
+        keyPressed(keyCode);
+        return true;
+    }
+
+    /**
+     * 捕获面板打开时的按键释放。
+     * @param keyCode GLFW 按键码
+     * @param scanCode 键盘扫描码
+     * @param modifiers 修饰键标记
+     * @return 面板是否消费本次释放
+     */
+    @Override public boolean keyReleased(int keyCode, int scanCode, int modifiers) { return open; }
+
+    /**
+     * 把输入字符追加到类型搜索词。
+     * @param codePoint 输入字符
+     * @param modifiers 修饰键标记
+     * @return 面板是否消费本次字符输入
+     */
+    @Override public boolean charTyped(char codePoint, int modifiers) {
+        return open && charTyped(codePoint);
     }
 
 }

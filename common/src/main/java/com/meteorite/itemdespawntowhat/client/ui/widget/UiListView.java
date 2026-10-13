@@ -327,7 +327,8 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         }
         scrollView.pop(graphics);
         if (focused) {
-            theme.drawFocusOutline(graphics, bounds);
+            UiRect focusBounds = chipRows ? visibleRowBounds(selectedIndex) : bounds;
+            if (focusBounds != null) theme.drawFocusOutline(graphics, focusBounds);
         }
         scrollView.renderScrollbar(graphics, theme.controlStyle(UiControlRole.SECONDARY));
     }
@@ -344,7 +345,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         }
         int index = indexAt(mouseX, mouseY);
         if (index < 0) {
-            return true;
+            return !chipRows;
         }
         long now = Util.getMillis();
         boolean doubleClick = index == lastClickIndex && now - lastClickTime <= DOUBLE_CLICK_MS;
@@ -422,6 +423,17 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     }
 
     // ---- 焦点 ----
+
+    /**
+     * 判断指针能否赋予列表焦点；气泡样式仅接受条目点击，空白不夺取焦点。
+     *
+     * @param mouseX 鼠标屏幕 X 坐标
+     * @param mouseY 鼠标屏幕 Y 坐标
+     * @return 是否命中可聚焦的列表内容
+     */
+    public boolean acceptsFocusAt(double mouseX, double mouseY) {
+        return visible && bounds.contains(mouseX, mouseY) && (!chipRows || itemIndexAt(mouseX, mouseY) >= 0);
+    }
 
     @Override
     public boolean canFocus() {

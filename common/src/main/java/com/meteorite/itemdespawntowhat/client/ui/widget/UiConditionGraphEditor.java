@@ -43,7 +43,7 @@ import org.lwjgl.glfw.GLFW;
  *
  * <p>结构与选择由 {@link UiTreeEditor} 和 {@link ConditionTreeNodes} 处理；展示数据由
  * {@link ConditionGraphLayout} 重建，{@link ConditionGraphRenderer} 绘制画布。
- * 类型选择与参数表单分别交给 {@link ConditionGraphTypePicker} 和 {@link ConditionGraphInlinePanel}，
+ * 类型选择与参数表单分别交给 {@link UiTypePicker} 和 {@link ConditionGraphInlinePanel}，
  * 共用 {@link ConditionGraphSidePanel} 的屏幕坐标、外观和动画。</p>
  *
  * <p>宿主通过 {@link ConditionTreeContract.Navigation} 同步路径，通过
@@ -165,7 +165,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     private boolean spaceDown;
     private @Nullable UiTreePath selectionAnchor;
 
-    private final ConditionGraphTypePicker picker;
+    private final UiTypePicker picker;
     private boolean pickerAppend;
     private @Nullable UiTreePath pickerParent;
     private int pickerIndex;
@@ -187,7 +187,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         this.font = font;
         graph = new ConditionGraphLayout(font);
         renderer = new ConditionGraphRenderer(this.theme, font, graph);
-        picker = new ConditionGraphTypePicker(this.theme, font, this::confirmPicker);
+        picker = new UiTypePicker(this.theme, font, Component.translatable("gui.itemdespawntowhat.edit.picker.title"), this::confirmPicker);
         inlinePanel = new ConditionGraphInlinePanel(this.theme, font, graph);
         tooltip = new UiDescriptionTooltip(this.theme, font);
         tree = new UiTreeEditor<>(ConditionTreeNodes.INSTANCE, () -> expression.root(), change -> {
@@ -227,7 +227,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
 
     public UiConditionGraphEditor setTypeOptions(List<ConditionTreeContract.TypeOption> options) {
         this.typeOptions = List.copyOf(options);
-        picker.setOptions(typeOptions);
+        picker.setOptions(pickerOptions());
         rebuild();
         return this;
     }
@@ -1563,12 +1563,16 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
 
     // ---- 类型选择确认与树写入 ----
 
+    private List<UiTypePicker.Option> pickerOptions() {
+        return typeOptions.stream().map(option -> new UiTypePicker.Option(option.id(), option.label())).toList();
+    }
+
     private void openPicker(Hotspot hotspot) {
         closeKindMenu();
         pickerAppend = false;
         pickerParent = hotspot.parent();
         pickerIndex = hotspot.index();
-        picker.open(typeOptions, bounds);
+        picker.open(pickerOptions(), bounds);
     }
 
     public void closePicker() {

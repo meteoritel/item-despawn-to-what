@@ -17,6 +17,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCheckBox;
@@ -25,6 +26,7 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiListView;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiSegmentedControl;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiStructureDiagram;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiTypePicker;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.model.CombinationMode;
@@ -65,9 +67,6 @@ final class RuleEditorResultsPage {
     private static final int DETAIL_ICON_SIZE = 18;
     private static final int DETAIL_PADDING = 6;
     private static final int EMPTY_MESSAGE_GAP = 8;
-    // 类型选择弹窗：一次最多显示的行数与弹窗宽度
-    private static final int TYPE_PICKER_MAX_ROWS = 8;
-    private static final int TYPE_PICKER_WIDTH = 200;
     // 结构图解弹窗：宽度区间与图内容高度
     private static final int DIAGRAM_MIN_WIDTH = 200;
     private static final int DIAGRAM_MAX_WIDTH = 320;
@@ -78,10 +77,18 @@ final class RuleEditorResultsPage {
 
     RuleEditorResultsPage(RuleEditorEditPages pages) {
         this.pages = pages;
+        typePicker = new UiTypePicker(UiHostThemes.flatTheme(), pages.font,
+                Component.translatable(RuleEditorPageSupport.UI + "pick.type_title"), type -> {
+                    addEffectOfType(type);
+                    pages.flushRebuild();
+                });
     }
+
+    final UiTypePicker typePicker;
 
     // 清理本页持有的控件引用（重建/切页时由容器调用）
     void reset() {
+        typePicker.close();
         planSelector = null;
         safeSpawnBox = null;
         fillOriginBox = null;
@@ -516,36 +523,9 @@ final class RuleEditorResultsPage {
             notice(RuleEditorScreen.NoticeLevel.WARNING, Component.translatable(RuleEditorPageSupport.UI + "notice.no_effect"));
             return;
         }
-        UiListView<ResourceLocation> list = new UiListView<>(RuleEditorEditPages.THEME, pages.font, this::renderTypeRow);
-        list.setRowHeight(THEME.rowHeight());
-        list.setItems(types);
-        list.setSelectedIndex(0);
-        UiModal modal = UiModal.create(RuleEditorEditPages.THEME, pages.font);
-        modal.title(Component.translatable(RuleEditorPageSupport.UI + "pick.type_title"));
-        // 回车与「确认」等价；键盘提示与消耗类说明都进内容区，不再用 notice 承载
-        list.setOnActivate(type -> {
-            pages.host.modals().close(modal);
-            addEffectOfType(type);
-            pages.flushRebuild();
-        });
-        ModalContent content = new ModalContent(pages.font, THEME,
-                Component.translatable(RuleEditorPageSupport.UI + "pick.consume_hint"),
-                Component.translatable(RuleEditorPageSupport.UI + "pick.type_hint"), list);
-        // 内容高 = 列表区（行数 × 列表行高 + 列表上下边框）与说明行之和，保证最后一行完整可见且不产生多余空白
-        int rows = Math.min(types.size(), TYPE_PICKER_MAX_ROWS);
-        modal.contentWidget(content, rows * THEME.rowHeight() + THEME.border() * 2 + content.hintHeight());
-        modal.preferredWidth(TYPE_PICKER_WIDTH);
-        modal.confirm(Component.translatable(RuleEditorPageSupport.UI + "button.confirm"), () -> addEffectOfType(list.selectedItem()));
-        modal.cancel(Component.translatable(RuleEditorPageSupport.UI + "button.cancel"));
-        modal.layoutCentered(pages.host.screenWidth(), pages.host.screenHeight());
-        pages.host.modals().push(modal);
-    }
-
-    void renderTypeRow(GuiGraphics graphics, Font renderFont, ResourceLocation item, int index, UiRect row, boolean selected, boolean hovered, boolean focused) {
-        TypeEditorDescriptor descriptor = EffectEditorRegistry.find(item);
-        Component label = descriptor == null ? TypeLabels.effectLabel(item) : descriptor.label();
-        String text = TextScroll.trimToWidth(pages.font, label.getString(), Math.max(1, row.width() - 4));
-        graphics.drawString(pages.font, text, row.x() + 2, row.y() + 2, THEME.palette().textPrimary(), false);
+        if (pages.lastArea == null) return;
+        typePicker.open(types.stream().map(type -> new UiTypePicker.Option(type,
+                EffectEditorRegistry.descriptorFor(type).label())).toList(), pages.lastArea);
     }
 
     void addEffectOfType(@Nullable ResourceLocation type) {
@@ -989,6 +969,7 @@ final class RuleEditorResultsPage {
     }
 
     @Nullable Component tooltipAt(double mouseX, double mouseY) {
+        if (typePicker.isOpen()) return null;
         if (removeIndexAt(mouseX, mouseY) >= 0) return Component.translatable(RuleEditorPageSupport.UI + "button.effect_remove");
         if (planSelector != null && planSelector.bounds().contains(mouseX, mouseY))
             return RuleNaming.candidateTitle(ResultStructure.candidateAt(pages.currentView(), candidateIndex),
@@ -1003,6 +984,7 @@ final class RuleEditorResultsPage {
     }
 
     boolean renderDescriptionTooltip(GuiGraphics graphics, int mouseX, int mouseY) {
+        if (typePicker.isOpen()) return false;
         if (removeIndexAt(mouseX, mouseY) >= 0) return false;
         RuleValue effect = null;
         if (effectList != null && effectList.isVisible()) {

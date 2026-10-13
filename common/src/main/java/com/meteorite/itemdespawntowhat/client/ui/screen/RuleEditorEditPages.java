@@ -610,6 +610,7 @@ public final class RuleEditorEditPages {
     // 冻结/只读时禁用交互
     public void setEnabled(boolean next) {
         enabled = next;
+        if (!next) ruleEditorResultsPage.typePicker.close();
         applyEnabled();
     }
 
