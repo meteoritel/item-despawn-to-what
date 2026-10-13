@@ -193,8 +193,10 @@ core/api  ←──────────── core/model ──────�
 
 | 档 | 入口 | 是否需要注册表 | 内容 |
 |---|---|---|---|
-| 结构档 | `validate(rule, issues, origin)` | 否 | id 合法、`trigger_after_seconds≥0`、`schema_version` 受支持、source 非空、effects/outcomes 至少一个且互斥、`source_cost` 各数量为正且引用已选源物品、`catalyst_cost` 合法、`display_name` 码点上限、条件树结构、消耗效果不重复、静态物品引用存在、候选 id 非空唯一且 effects 非空 |
+| 结构档 | `validate(rule, issues, origin)` | 否 | id 合法、`trigger_after_seconds≥0`、`schema_version` 受支持、source 非空、effects/outcomes 至少一个且互斥、`source_cost` 各数量为正且引用已选源物品、`catalyst_cost` 合法、`source_cost` 与 `consume_source` 互斥、`catalyst_cost` 与 `consume_catalyst` 互斥、`display_name` 码点上限、条件树结构、消耗效果不重复、静态物品引用存在、候选 id 非空唯一且 effects 非空 |
 | 参数档 | `validate(rule, effectTypes, conditionTypes, issues, origin)` | **是** | 在结构档之上，逐效果/逐叶做类型专属 `validateParams`，未注册类型报错 |
+
+成本声明与对应的消耗效果互斥：声明 `source_cost` 后不得再声明 `consume_source`，声明 `catalyst_cost` 后不得再声明 `consume_catalyst`——否则同一份成本会被重复记账，按结构档拒载，字段路径分别指向 `source_cost` / `catalyst_cost`。
 
 上限集中在 `ConditionLimits`：`effects≤32`、规则级与每个效果级条件树各自 `叶≤128`、`节点≤256`、`深度≤16`、`source` 项（匹配+排除）`≤256`、`display_name≤128` 码点、候选数量 `≤32`。**装配层必须用带注册表的重载**，否则未注册类型与区间类非法参数会被静默放行（见 [rule-loading.md](rule-loading.md)）。
 

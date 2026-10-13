@@ -95,7 +95,7 @@ UiCyclicRange  UiSliderExamples.cyclicRange(Component label, UiRect bounds, doub
 - 取值方法：`resolveTrack(boolean)`、`resolveFill(boolean)`、`resolveThumb(boolean, boolean)`、`resolveLabelText(boolean, boolean)`、`resolveValueText(boolean, boolean)`；无主题宿主可用 `UiSliderStyle.pixelDefaults()`。
 - 画法：`UiSliderPainter.paint(GuiGraphics, Frame)`，`Frame` 携带 `bounds/track/filled/thumb/textSlot/style` 与 `enabled/hovered/pressed/focused/dragging/error/overflowBelow/overflowAbove`；kit 自带 `PixelSliderPainter.INSTANCE`（纯色像素，无贴图）。
 - 宿主主题：`client/ui/theme/UiTheme.sliderStyle()` 把调色板映射成 `UiSliderStyle` 供注入。**kit 不 import 主题包**，样式只能由宿主注入；替换 painter 不影响控件逻辑。
-- 默认像素主题的紧凑手柄宽 5 像素，带明暗边与中央刻痕，区间条的命中宽度跟随注入样式。`PixelSliderPainter` 与宿主复选框不绘制焦点外框，键盘焦点与输入逻辑仍保持启用。
+- 宿主主题的紧凑滑块样式轨高 4、手柄宽 5；区间条的命中宽度跟随注入样式。`PixelSliderPainter` 与宿主复选框不绘制焦点外框，键盘焦点与输入逻辑仍保持启用。
 
 ## 4. 宿主要求
 

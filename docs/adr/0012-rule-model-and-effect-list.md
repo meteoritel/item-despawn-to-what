@@ -1,5 +1,7 @@
 # ADR-0012：规则模型与效果列表
 
+- 状态：已实施；实现见 `core/model/Rule.java`、`core/model/Effect.java`、`core/model/ConditionExpression.java`。
+
 ## 背景
 旧链路是"一个转化类型 = 一个 Config 子类 = 一个 Executor = 一个结果"：9 个类型要维护 9 套 DTO、9 个校验入口与 2N 个类，新增一种效果要改约 8 处（注册表 / Config 子类 / Executor / 客户端 FormDefinition / Presenter / i18n / 文档 / 示例），且"结果"与"消耗"被拆在配置与执行两侧，无法表达"一次触发做多件事"。
 

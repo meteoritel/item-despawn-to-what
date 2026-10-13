@@ -1,5 +1,7 @@
 # ADR-0014：三层配置作用域与按 id 覆盖合并
 
+- 状态：已实施；实现见 `core/load/RuleLoader.java`、`core/load/RuleMerger.java`、`core/load/RuleSourceIndex.java`。
+
 ## 背景
 旧链路把配置放在 `config/itemdespawntowhat/<ns>/<type>.json`：既是唯一来源，又是 GUI 的写入目标；"数据包只能改配置目录"导致整合包作者无法用数据包分发默认规则，而 GUI 一保存又整文件覆盖，把 disabled / 编译失败 / 未命中标签的规则直接删掉（A1）。
 

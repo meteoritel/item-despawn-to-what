@@ -41,17 +41,17 @@
 
 ### 1.3 `core/network/transport`（工具与服务端）
 
-| 类 | 职责 |
-|---|---|
-| `RuleEditLimits` | 全部限额常量与 UTF-8 字节计算 `encodedLength`（见 §4.3） |
-| `RuleChangeSetChunker` / `RuleSnapshotChunker` | 上行变更集 / 下行快照切分：不超直发上限出整包，否则按 **UTF-8 字节**切分（不拆代理对） |
-| `RuleEditTextChunks` | 共享的按 UTF-8 字节切分实现（上下行同一口径） |
-| `RuleEditChunkAccumulator` | 上行分片重组：逐片校验、**重复下标以首片为准**、收齐后 `join()` 并复核总量；过期（1200 tick）清理 |
-| `RuleEditPayloadCodec` | 载荷共用编解码片段（字符串列表 / 可空字符串 / `RuleIssue` 列表）；超限即抛解码异常 |
-| `RuleEditPayloadRouter` | 客户端入站门面：字符串 sink（兼容）+ 结构化 sink（快照 / 分片 / 回执 / 目录）；服务端只装载空消费者 |
-| `OpenRuleEditorPayload` | 承载 `installOpenEditorPayloadSink` / `dispatchOpenEditor`（开屏入口的唯一静态 sink） |
+| 类 | 职责 | 关键成员 |
+|---|---|---|
+| `RuleEditLimits` | 全部限额常量与 UTF-8 字节计算 | `encodedLength(String)`、`MAX_*` 常量组（见 §4.3 常量清单） |
+| `RuleChangeSetChunker` / `RuleSnapshotChunker` | 上行变更集 / 下行快照切分：不超直发上限出整包，否则按 **UTF-8 字节**切分（不拆代理对） | `split(sessionId, operationId, json)` / `split(sessionId, requestId, json)` |
+| `RuleEditTextChunks` | 共享的按 UTF-8 字节切分实现（上下行同一口径） | `splitByUtf8Bytes`、`utf8Length`（包内） |
+| `RuleEditChunkAccumulator` | 上行分片重组：逐片校验、**重复下标以首片为准**、收齐后按序拼接并复核总量；过期（1200 tick）清理 | `accept`、`isShapeValid`、`expireIdle`、`clear`、`clearAll`、`AcceptResult` |
+| `RuleEditPayloadCodec` | 载荷共用编解码片段（字符串列表 / 可空字符串 / `RuleIssue` 列表）；超限即抛解码异常 | `writeStrings`/`readStrings`、`writeNullableString`/`readNullableString`、`writeIssues`/`readIssues`（包内） |
+| `RuleEditPayloadRouter` | 客户端入站门面：字符串 sink（兼容）+ 结构化 sink（快照 / 分片 / 回执 / 目录 / 寿命）；服务端只装载空消费者 | `installSnapshotSink`、`installSnapshotPayloadSink`、`installResultSink`、`installResultPayloadSink`、`installCatalogSink`、`installChunkSink`、`installLifespanSink`、`dispatchSnapshot`、`dispatchResult`、`dispatchChunk`、`dispatchCatalog`、`dispatchLifespan` |
+| `OpenRuleEditorPayload` | 承载 `installOpenEditorPayloadSink` / `dispatchOpenEditor`（开屏入口的唯一静态 sink） | `TYPE`、`STREAM_CODEC` |
 | `RuleEditServerContext` | 窄接口：向网络层暴露运行时能力（由平台 `RuleRuntimeHost` 实现） | `overlayRoot()`、`overlayNamespace()`、`typeRegistries()`、`loadMerged(server)`、`rebuildAndRescan(server)`、`sendTo(player, payload)`、`referenceLifespanTicks()` |
-| `RuleEditServerHandler` | 服务端处理编排（**薄转发**） | `openEditor`、`handleConfirm`、`handleHeartbeat`、`handleClose`、`handleSnapshotRequest`、`handleCatalogRequest`、`handleChangeSet`、`handleChangeSetChunk`、`expireIdle`、`clearPlayer`、`reset`、`isReady`、`canEdit`、`sessionManager`/`service` |
+| `RuleEditServerHandler` | 服务端处理编排（**薄转发**） | `openEditor`、`handleConfirm`、`handleHeartbeat`、`handleClose`、`handleSnapshotRequest`、`handleCatalogRequest`、`handleLifespanRequest`、`handleChangeSet`、`handleChangeSetChunk`、`expireIdle`、`clearPlayer`、`reset`、`isReady`、`canEdit`、`sessionManager`/`service` |
 
 ### 1.4 `core/network/catalog`
 
@@ -63,7 +63,7 @@
 
 | 类 | 职责 | 关键成员 |
 |---|---|---|
-| `RuleEditService` | 编辑会话的业务编排（打开/确认/心跳/关闭/快照/目录/保存），只产出"要下发的载荷"，不直接碰网络 | `openEditor`、`confirm`、`heartbeat`、`close`、`requestSnapshot`、`requestCatalog`、`submitChangeSet`、`submitChunk`、`expireSessions`、`forceRelease`；幂等表 `recentResults`（最近 16 条） |
+| `RuleEditService` | 编辑会话的业务编排（打开/确认/心跳/关闭/快照/目录/寿命/保存），只产出"要下发的载荷"，不直接碰网络 | `openEditor`、`confirm`、`heartbeat`、`close`、`requestSnapshot`、`requestCatalog`、`requestLifespan`、`pollLifespan`、`submitChangeSet`、`submitChunk`、`expireSessions`、`forceRelease`；幂等表 `recentResults`（最近 16 条） |
 | `EditSessionManager` | 全局单一目标的会话状态机（FREE/OPENING/ACTIVE/APPLYING）与 `.edit_version` 版本戳 | `acquire` / `confirm` / `heartbeat` / `owns` / `isOwner` / `confirmed` / `beginApply` / `finishApply` / `release` / `expire` / `version` / `bumpVersion` / `synchronizeDiskRevision` |
 | `RuleEditSessionLimits` | 会话时间与权限常量 | `TARGET_ID = itemdespawntowhat:rules`、`OPEN_CONFIRM_WINDOW_SECONDS=15`、`HEARTBEAT_INTERVAL_SECONDS=10`、`LEASE_SECONDS=60`、`REQUIRED_PERMISSION_LEVEL=2`、`MAX_OPERATION_HISTORY=16` |
 | `RuleOverlayWriter` | 覆盖层逐 id 写入：预备 → 备份 → 原子提交 → 失败回滚 | `apply(changes, issues) → ApplyResult{writtenFiles, conflicts}` |
@@ -77,7 +77,7 @@
 条目 `RuleSnapshotEntry(id, origin, status, editable, effective, base, overlay, issues)`：
 
 - **三视图**：`base` 为数据包层原始 JSON，`overlay` 为覆盖层原始 JSON，两者都保留原文（**不做模型往返**）；`effective` 优先取**模型编码结果**（解码成功时权威），失败时退回 `overlay` 或 `base` 原文，保证客户端仍能看到内容。缺失的视图以 JSON `null` 下发，客户端按"无此视图"处理。
-- **`editable` 语义**：`editable = base != null || overlay != null`（该条目存在规则内容）。**纯数据包规则同样为 `true`**；`editable` **不表示「能否表单编辑」**——`status = invalid`（解码失败）的条目同样可以为 true，是否只读展示由客户端按 `status` / `issues` 决定。
+- **`editable` 语义（内容存在标记）**：`editable = base != null || overlay != null`，即该条目在数据包层或覆盖层是否存在非控制条目内容（只被控制条目声明停用 / 删除时为 `false`，**纯数据包规则为 `true`**）；客户端据此决定打开表单编辑还是只展示详情——`status = invalid` 或带 error 级 issue 的条目即使 `editable = true` 也只读展示。
 - **`origin`**：`overlay` / `datapack` / `mixed`（两层都有即 mixed），由 `RuleSourceIndex` 归并结果判定。
 - **`status`**：控制条目声明删除→`masked`、声明停用→`disabled`；否则解码成功→`active`、解码失败→`invalid`。`invalid` 条目会带上 `severity=error` 的 `RuleIssue`（无法定位时兜底 `itemdespawntowhat.edit.issue.decode`）。
 - **`issues`**：把加载/校验问题按 `origin` / `field_path` 关联到具体条目；无法关联的问题作为快照级 issue（`origin=runtime`）下发。
@@ -126,7 +126,7 @@
 
 ### 4.3 网络限额
 
-命名空间 `idtw`。直发 32 000 B；单片 30 000 B；变更集/快照上限均 4 MiB；`MAX_CHUNK_COUNT = ceil(4MiB / 30000)`（=140）；transferId ≤64；每玩家并发 2 个在途传输；空闲超时 60 s（1200 tick）；`MAX_ID_CHARS=64`、`MAX_CODE_CHARS=128`、`MAX_FALLBACK_CHARS=512`、`MAX_MESSAGE_ARGS=8`、`MAX_ISSUES_PER_RESULT=64`；编解码器留 `PACKET_SLACK_BYTES=4096` 余量，超限请求先抵服务端再回 `INVALID_REQUEST`，不直接断连。目录单页上限 200（默认 50）。**长度始终按 UTF-8 字节计**（`encodedLength`），防多字节绕过。
+命名空间 `idtw`。直发 32 000 B；单片 30 000 B；变更集/快照上限均 4 MiB；`MAX_CHUNK_COUNT = ceil(4MiB / 30000)`（=140）；transferId ≤64；每玩家并发 2 个在途传输；空闲超时 60 s（1200 tick）；`MAX_ID_CHARS=64`、`MAX_CODE_CHARS=128`、`MAX_FALLBACK_CHARS=512`、`MAX_MESSAGE_ARGS=8`、`MAX_MESSAGE_ARG_CHARS=256`、`MAX_ISSUES_PER_RESULT=64`；编解码器留 `PACKET_SLACK_BYTES=4096` 余量，超限请求先抵服务端再回 `INVALID_REQUEST`，不直接断连。目录单页上限 200（默认 50）。**长度始终按 UTF-8 字节计**（`encodedLength`），防多字节绕过。
 
 ### 4.4 权威落盘
 
@@ -143,7 +143,7 @@
 
 ## 6. 分片传输
 
-`RuleEditChunkAccumulator.accept`：逐片校验（transferId 长度、下标范围、单片字节数），**重复下标以首片为准**，收齐后 `join()` 并复核总量（≤4 MiB）；超过在途上限时丢弃最早传输；过期会话在 `expireIdle` 顺带清理。每玩家最多 2 个在途传输，未收齐不回执。`handleChangeSetChunk` 收齐后复用 `handleChangeSet` 的同一保存流程。下行快照超 4 MiB 时才分片（`RuleSnapshotChunker`），超过总片数上限则无法下发，回结构化失败回执。
+`RuleEditChunkAccumulator.accept`：逐片校验（transferId 长度、下标范围、单片字节数），**重复下标以首片为准**，收齐后按序拼接并复核总量（≤4 MiB，超限回 `rejected`）；超过在途上限时丢弃最早传输；过期会话在 `expireIdle` 顺带清理。每玩家最多 2 个在途传输，未收齐不回执。`handleChangeSetChunk` 收齐后复用 `handleChangeSet` 的同一保存流程。下行快照超 4 MiB 时才分片（`RuleSnapshotChunker`），超过总片数上限则无法下发，回结构化失败回执。
 
 ## 7. 新契约字段如何进入快照与校验
 

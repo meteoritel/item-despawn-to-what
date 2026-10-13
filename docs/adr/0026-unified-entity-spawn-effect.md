@@ -1,6 +1,6 @@
 # ADR-0026：统一实体生成效果，按产出子类分发
 
-> 状态：已接受（2026-10-07）；实现见 `core/type/effect/SpawnEntityEffect.java` 与 [类型系统](../dev/backend/modules/type-system.md) §5.1。
+> 状态：已实施（2026-10-07）；实现见 `core/type/effect/SpawnEntityEffect.java` 与 [类型系统](../dev/backend/modules/type-system.md) §5.1。
 
 用户于 2026-10-06 开始确认本决策，并于 2026-10-07 明确执行途中的上限边界：将目前独立的掉落物生成、通用实体生成和经验生成合并为一种实体生成效果，按产出子类分发。当前仍处于开发阶段，新契约直接替换旧格式，随实现重写项目内现有示例/测试 JSON，不要求数据迁移。通用实体子类支持生物之外的其他实体。掉落物和经验球固定通过专用子类配置，通用实体子类不接受 minecraft:item / minecraft:experience_orb。数量按物品件数、实体个数、经验点数计量，保留按实际消耗源物品数计算经验的选项。此决策已实施：`SpawnEntityEffect` 持有 sealed `EntityProduct`，由 `variant` 分派 item/entity/experience。JSON 使用扁平字段，见[类型系统](../dev/backend/modules/type-system.md) §5.1。
 

@@ -4,7 +4,7 @@
 
 支持 Minecraft **1.21.1 / Fabric / NeoForge**，开发与构建使用 **JDK 21**。
 
-后端已切换到统一的 `core/**` 规则链路，旧配置模型、执行器、网络与编辑器已退役。**规则编辑器已落地**：`/idtw config edit` 在服务端取得独占编辑锁后打开，支持浏览 / 新建 / 复制 / 编辑 / 停用 / 删除 / 恢复规则、递归条件树、草稿持久化与撤销重做；也可以直接用 JSON 与命令管理规则。
+后端使用统一的 `core/**` 规则链路。**规则编辑器已落地**：`/idtw config edit` 在服务端取得独占编辑锁后打开，支持浏览 / 新建 / 复制 / 编辑 / 停用 / 删除 / 恢复规则、递归条件树、草稿持久化与撤销重做；也可以直接用 JSON 与命令管理规则。
 
 ## 开始使用
 
@@ -20,7 +20,7 @@
   "source": { "items": ["minecraft:chicken"] },
   "trigger_after_seconds": 10,
   "effects": [
-    { "type": "itemdespawntowhat:spawn_item", "item": "minecraft:rotten_flesh", "count": 1 }
+    { "type": "itemdespawntowhat:spawn_entity", "variant": "item", "item": "minecraft:rotten_flesh", "count": 1 }
   ]
 }
 ```

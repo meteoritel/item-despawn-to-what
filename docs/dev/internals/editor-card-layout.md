@@ -1,10 +1,10 @@
 # 四阶段编辑页卡片布局
 
-视觉参考为 [assets/editor-page-concepts/](assets/editor-page-concepts/) 下的四页概念图（概念图中的文案和交互不是实现依据）；字段、条件路径和撤销行为遵循 [编辑页契约](editor-pages-contract.md)。
+字段、条件路径和撤销行为遵循 [编辑页契约](editor-pages-contract.md)。
 
 - `RuleEditorScreen` 管理固定页头、全宽四页页签、状态标签和底部操作栏。编辑页外边距为 8，页签和底部按钮高为 22；底部按钮按实际文本宽度换行，单行时均分剩余宽度。
 - `RuleEditorEditPages` 按实际内容高度生成 `PageCard`：基本信息一张；输入页为源物品、催化剂、流体三张；触发页为触发方式和触发条件两张；结果页为顶部方案工具条、执行行为与行为设置两张卡片。一般卡片内边距、间距均为 8，标题区高为 20；基本页省去重复标题区，内边距为 6，规则 ID 用 0.8 倍字幅显示。卡片头部（蓝条、可选图标、加粗标题、底部分隔线）统一由 `RuleEditorEditPages.drawCardHeader` 绘制，头部矩形由 `cardHeaderRect(x, y, width, inset)` 派生、高取 `CARD_HEADER_H`（20），蓝条宽 2、标题距蓝条 4、分隔线距头部下缘 5；几何全部相对头部矩形计算，因此各卡片的蓝条位置、标题基线与分隔线 y 坐标一致。内缩因页而异：结果页两栏与详情卡取 `RuleEditorResultsPage.DETAIL_PADDING`（6），其它三页取 `RuleEditorPageSupport.CARD_PAD`（8）。
-- `UiTheme.drawCard` 使用浅灰底、柔和单层描边和抗锯齿圆角；取消突出的黑白立体边与偏移阴影。`UiSegmentedControl` 的选中段用浅蓝底 `selected` 九宫格（中心色取 `UiPalette.CONTROL_SELECTED`，即 `#9FB6CE`）、未选中段用 `control` 九宫格，段内文字统一取正文色 `TEXT_PRIMARY`（浅蓝选中底上白字对比度不足），键盘焦点在选中段左侧画 3×3 深色点；分段最外两侧各留 1 像素、相邻两段之间合计 2 像素。底图位于 `textures/gui/editor/`，用 `tools/generate-editor-surfaces.py`（Python + Pillow）生成，每张 32×32、九宫格角区为 8（切片参数留在 Java 侧，即 `UiTheme` 的 `UiNineSlice(..., 32, 8)`）；圆角和描边不随整张卡片拉伸。底图配色由该脚本从 `UiPalette.java` 的常量派生：card 中心取 `CONTROL_FILL`、control 中心取 `PANEL_FILL`、hover 中心取 `CONTROL_HOVER`、selected 中心取 `CONTROL_SELECTED` 且描边取 `ACCENT_PRESSED`、disabled 中心取 `CONTROL_DISABLED`；chip 的中心色与 card / control / hover / disabled 的中性描边色没有调色板来源，作为脚本内具名常量维护。任一调色板常量缺失或格式不符时脚本直接报错退出，不回落旧字面量，改调色板后重跑脚本即可对齐贴图。
+- `UiTheme.drawCard` 使用浅灰底、柔和单层描边和抗锯齿圆角；取消突出的黑白立体边与偏移阴影。`UiSegmentedControl` 的选中段用浅蓝底 `selected` 九宫格（中心色取 `UiPalette.CONTROL_SELECTED`，即 `#9FB6CE`）、未选中段用 `control` 九宫格，段内文字统一取正文色 `TEXT_PRIMARY`（浅蓝选中底上白字对比度不足），键盘焦点在选中段左侧画 3×3 深色点；分段最外两侧各留 1 像素、相邻两段之间合计 2 像素。底图位于 `textures/gui/editor/`，用 `tools/generate-editor-surfaces.py`（Python + Pillow）生成，每张 32×32、九宫格角区为 8（切片参数留在 Java 侧，即 `UiTheme` 的 `UiNineSlice(..., 32, 8)`）；圆角和描边不随整张卡片拉伸。底图配色由该脚本从 `UiPalette.java` 的常量派生：card 中心取 `CONTROL_FILL`、control 中心取 `SLOT_FILL`、hover 中心取 `CONTROL_HOVER`、selected 中心取 `CONTROL_SELECTED` 且描边取 `ACCENT_PRESSED`、disabled 中心取 `CONTROL_DISABLED`；chip 的中心色与 card / control / hover / disabled 的中性描边色没有调色板来源，作为脚本内具名常量维护。任一调色板常量缺失或格式不符时脚本直接报错退出，不回落旧字面量，改调色板后重跑脚本即可对齐贴图。
 - 窗口与卡片分属两个层级：模态窗口是系统级浮层，由 `UiModal` 以 `UiTheme.drawWindow` 绘制像素窗口外观、居中覆盖在页面上，并按 `UiRenderLayers` 的模态分层绘制（层步长 600，高于页面前景层），因此窗口必然盖住页面内容（含页面底部的通知行），通知不为浮到窗口之上另调层级；模态打开期间页面让出指针且不绘制页面提示与悬停提示；卡片是页面内容，绘制在页面内容视口内并受其裁剪，滚动只移动卡片内容。
 - 页面表单通过 `FormView.useCardSpacing()` 启用 20 的最小控件高度和 6 的行间距；基本页再用 `useCompactSpacing()` 调整为 18 的最小高度、4 的行间距和 64 的标签列。备注高为 36。卡片字段不再重复添加“默认”前缀；标题加粗，单行输入文字垂直居中。复合控件按内容测量，其它宿主保持默认密度。标签列默认 88 宽并按可用宽度收紧到三分之一；行内自带文字的控件（复选框、数量对象、条件树）按自身标签宽度收窄该列，让出的宽度交给控件内部，其余行保持统一列宽以对齐控件左边缘。区间条与时间条端点行（`min` / `max`、`from` / `to`）的标签只写端点名（如起始 / 结束、最小 / 最大），时刻范围与可跨零点写在同组说明行里，避免标签超出标签列。
 - 表单目录按钮按本地化文本测量宽度；同排剩余控件宽度少于 64 时，按钮整体移到控件下面并按需换行。测量与命中矩形共用同一组按钮，按钮缓存仅在装配变化时更新。
@@ -40,7 +40,7 @@
 - **帮助浮层**：功能栏的问号格切换（`ConditionTreeOverlay`）。面板宽度按正文测量，夹在 160 与画布可用宽度之间；正文 7 条动作条目各以两字动作标签开头（新增 / 编辑 / 选择 / 移动 / 视图 / 平移 / 关闭），说明先按「内宽扣掉标签列」的可用宽度折行再绘制，逐行都不裁剪。标题取 `helpText`、说明取 `helpTextMuted`；浮层是模态的，任意点击或 `Esc` 关闭。
 - **连线**：父卡片底到子卡片顶的正交折线（竖—横—竖三段），线宽与坐标都取整到屏幕像素。
 - **热区**：非空容器末尾的小 `[+]` 为 12×12；空容器与空树中央的大 `[+]` 为 22×22。
-- **类型选择浮层**：条件与行为共用 `UiTypePicker` 的可搜索侧栏，最大宽 220、列表行高 18、按可用高度裁剪，标题与搜索行高 14，列表占满其下方可用区域。分组 / 包组的 ∧∨ 小菜单行高 12，间距 4、最小宽 56。
+- **类型选择浮层**：条件与行为共用 `UiTypePicker` 的可搜索侧栏，最大宽 220、列表行高 18、按可用高度裁剪，标题与搜索行高 14，列表占满其下方可用区域。分组 / 包组的 ∧∨ 小菜单行高 18、底部提示行 12，间距 4、最小宽 56。
 - **内联参数框**：从画布右缘滑入的侧面板，宽度取 `min(220, 画布宽)`、高度取满画布；展开 / 收起为 160ms ease-out，动画只改滑入位置。标题行 14、内边距 4，表单内容宽 = 面板宽 − 8（面板取到上限 220 时表单宽 212）。表单沿用默认密度（卡片密度只由卡片编辑页启用），标签列默认 88、按可用宽度收紧到三分之一；说明行与其它行一样保留该标签列（`FormRowLayout.rowLabelWidth` 对 `EditorFieldType.NOTE` 返回统一列宽），因此 212 宽时标签列 70、说明行绘制宽 = 212 − 70 − 4 = 138；出现 4 像素滚动条时表单宽 208、标签列 69、说明行 135。说明文字必须收进该宽度，放不下时由悬停提示给出全文。
 - **扁平皮肤**：`UiFlatPalette` / `UiFlatSkin` 用于画布页、内联框与共用类型选择侧栏——1 像素同色描边 + 灰阶层次，无立体凸凹与阴影；图标取自 `textures/gui/editor/icons_{dark,light}.png` 图集（单元格 16×16、2 列状态、14 行）。表单页仍用 `UiPalette` / `UiTheme`，两者互不影响。
 - **画布配色归属**：画布本体、外壳与内联框的全部颜色都取 `UiFlatPalette` 的「条件树画布」段（卡片底色 / 描边、连线、强调色、热区、浮层、框选填充等），不直接引用 `UiPalette`；因此调整画布观感只改这一处，不会波及表单页。

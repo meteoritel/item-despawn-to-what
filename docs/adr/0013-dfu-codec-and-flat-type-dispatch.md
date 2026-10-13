@@ -1,5 +1,7 @@
 # ADR-0013：用 DFU Codec 统一序列化，并按扁平字段做类型分发
 
+- 状态：已实施；实现见 `core/api/TypeDispatch.java`、`core/api/TypeRegistry.java`、`core/api/RuleDecoder.java`。
+
 ## 背景
 旧链路用 Gson + `@SerializedName` 手写序列化：61 个文件、两处独立 Gson 实例、三套并存的校验策略（未知字段拒整文件 / 启动逐条丢弃 / reload 一条非法即整体失败），并且 Gson 默认静默忽略未知字段，配置错误会"静默退化"而不是报错。同时效果与条件是多态类型，需要一个能按 `type` 查注册表的解码入口。
 

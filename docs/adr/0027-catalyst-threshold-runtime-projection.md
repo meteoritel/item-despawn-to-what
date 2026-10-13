@@ -1,6 +1,6 @@
 # ADR-0027：催化剂默认门槛保留声明、在运行投影中派生
 
-状态：已接受，2026-10-07；`core` 与客户端 UI 契约均已实施，实现见 [催化剂门槛运行投影](../dev/backend/systems/catalyst-threshold-projection.md) 与[编辑器四页职责与输入↔触发联动契约](../dev/internals/editor-pages-contract.md)。
+- 状态：已实施（2026-10-07）；实现见 [催化剂门槛运行投影](../dev/backend/systems/catalyst-threshold-projection.md) 与[编辑器四页职责与输入↔触发联动契约](../dev/internals/editor-pages-contract.md)。
 
 催化剂每轮消耗量与存在门槛独立。条件门槛未填写时跟随对应消耗量，没有消耗配置时默认 1 件；明确填写的门槛保持独立。保存时必须保留“未填写”，否则下一次调整消耗量会丢失跟随语义。
 

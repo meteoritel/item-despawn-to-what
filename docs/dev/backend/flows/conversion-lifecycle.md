@@ -36,7 +36,7 @@
 | 自然消失 | `deferNaturalExpiry`（原版 discard 前） | 首次拦截置 `expiryPending`、取消旧任务、`delay=0` 立即排一次 `attempt(kind=natural)`；到期后即使条件不满足也会在 `attempt` 中被移除并 `discard`。**原版没有"消失后"回调，拦截点在 discard 之前。** |
 | 火 / 岩浆 / 仙人掌 | `requestEnvironmentalConversion` | 在真实致死分支（`ItemStack#onDestroyed` 之前）调用，`DamageClassification.classify` 归类后 `requestConversion`；接触危险源、受伤但存活、原版免疫伤害都不触发 |
 
-两者共用 `requestConversion` 与同一份追踪/预算：规则未声明该消失方式时不参与（未声明按 `natural`）；环境请求在 `hurt` 调用栈内同步跑条件检查与规则选择。
+两者共用同一份追踪状态、公共预算与 `attempt` / `select` 判定（自然路径经 `scheduleCheck` 排队，环境路径经 `requestConversion` 同步判定）：规则未声明该消失方式时不参与（未声明按 `natural`）；环境请求在 `hurt` 调用栈内同步跑条件检查与规则选择。
 
 ### 2.3 到期检查（`attempt` → `select`）
 
@@ -62,7 +62,7 @@
 | 步骤 | 动作 |
 |---|---|
 | 接管源 | `held = source.copy()`；`source.setCount(0)`；实体打持久化 `converted` 标签（防重载/区块重进重复提交） |
-| 每组成本 | `c = perRoundSourceConsumption(rule)`：显式 `source_cost` 优先，其次隐式 1，再次所有 `consume_source` 的 `count` 之和 |
+| 每组成本 | `c = perRoundSourceConsumption(rule, stack)`，四种取值情形见 [conversion-runtime.md §3](../modules/conversion-runtime.md) |
 | 账本 | 写 `SettlementRecord`（含源位置，供重启后返还搜索）到 `SettlementLedger`，`ConversionSettlement` 作为 `EFFECT` 任务立即入队 |
 | 清理 | `finally`：解锁、移除追踪（源实体此刻已清空，自然路径随后 `discard`） |
 

@@ -59,7 +59,7 @@ delay           = max(0, dueAge - entity.getAge())
 | 自然消失 | 原版 discard 前拦截 → `deferNaturalExpiry` | 置 `expiryPending`、取消旧任务、以 `delay=0` 排一次 `attempt(kind=NATURAL)`；返回 `true` 表示已接管本次 discard |
 | 火 / 岩浆 / 仙人掌 | 真实致死分支 → `requestEnvironmentalConversion` | `DamageClassification.classify` 归类后调 `requestConversion(kind)`；`kind` 不属于三类则忽略 |
 
-`requestConversion` 是自然与三类环境销毁的**公共入口**：`item`/`kind` 为空或 `excluded` → 返回；未 tracked → 先 `onItemAdded` 补齐；`locked` → 忽略（同一死亡多份伤害调用的去重）；否则 `attempt`。环境致死请求在 `hurt` 调用栈内**同步**执行「条件检查 + 规则选择」（单实体一次、量小），效果一律经调度器排队在共享预算内执行。规则未声明该消失方式时不参与（`rule.effectiveTriggers()`，未声明按 `natural`）。
+两条路径最终都进入同一个 `attempt` / `select`，共用同一份追踪状态与公共预算：自然路径经 `deferNaturalExpiry` → `scheduleCheck` 排队，环境路径经 `requestEnvironmentalConversion` → `requestConversion` 同步判定。`requestConversion`：`item`/`kind` 为空或 `excluded` → 返回；未 tracked → 先 `onItemAdded` 补齐；`locked` → 忽略（同一死亡多份伤害调用的去重）；否则 `attempt`。环境致死请求在 `hurt` 调用栈内**同步**执行「条件检查 + 规则选择」（单实体一次、量小），效果一律经调度器排队在共享预算内执行。规则未声明该消失方式时不参与（`rule.effectiveTriggers()`，未声明按 `natural`）。
 
 ### 2.4 到期判定（`attempt` → `select`）
 
@@ -75,8 +75,8 @@ delay           = max(0, dueAge - entity.getAge())
 
 命中后 `performConversion` 把**整堆源物品转入结算库存**：`held = source.copy()`、`source.setCount(0)`、给实体打持久化 `converted` 标签，写一条 `SettlementRecord` 到账本，并把 `ConversionSettlement` 作为 `EFFECT` 任务立即入队。结算任务三阶段：计划 → 派发 → 交付。
 
-- **每组固定源成本** `c = perRoundSourceConsumption(rule, sourceStack)`：显式 `source_cost` 优先，按当前源堆叠取直接物品或首个配置数量的匹配标签，缺省为 1；其次隐式 1（未声明任何 `consume_*`），再次 `consume_source.counts` 对当前源物品的数量，缺省采用效果 `count`。`source_cost` 与 `consume_source` 由 `RuleValidation` 拒绝同时声明。
-- **计划组数**由 `held / c` 与候选完整容量共同约束；统一 `spawn_entity` 各子类使用服务端 `nearby_products` 阈值，相同 TaggedId 的多个动作合并本组需求。经验按本组实际源成本计算总点数，再保守估计原版拆分球数。仅含一次性动作的候选对同一源封顶一组，混合候选仍可多组。
+- **每组固定源成本** `c = perRoundSourceConsumption(rule, sourceStack)`（`BuiltinTypeRegistries`）四种情形：显式 `source_cost` → 按当前源堆叠取直接物品，否则取 `source.items` 中首个命中的标签，缺省 1；未声明 `source_cost` 且未声明任何 `consume_*` → 隐式 1；未声明 `source_cost` 但声明了 `consume_source` → 各 `consume_source` 对当前源物品数量之和（`counts` 优先、缺省效果 `count`）；只声明其它消耗效果（如 `consume_fluid`）→ 0，表示不按堆叠轮次展开。`source_cost` 与 `consume_source` 由 `RuleValidation` 拒绝同时声明。
+- **计划组数** `planned = min(held / c, 催化剂可用组数上界)`（`c ≤ 0` 时按 1 组；未声明 `catalyst_cost` 时上界不设限），**候选容量不参与组数上界**——容量只在开组前复核，不足即截断已开始组数并把剩余源交还（见本节「每组准入」）。统一 `spawn_entity` 各子类使用服务端 `nearby_products` 阈值，相同 TaggedId 的多个动作合并本组需求。经验按本组实际源成本计算总点数，再保守估计原版拆分球数。仅含一次性动作的候选对同一源封顶一组，混合候选仍可多组。
 - **每组准入**：未开组再次检查真实邻域容量，不足时不支付该组成本并返还剩余源；已开始组不再检查邻近阈值，执行器继续分批完成，允许短暂超额。配置阈值不是硬上限，不清理已生成实体；不同 tag 的重叠集合没有统一硬预留保证，预算/区块/异常中断保持原契约。
 - **候选选择**：每个转化组只选**一个**候选结果。`ROUND_ROBIN`（默认）从游标处依次尝试，`PRIORITY` 取第一个可用候选；容量不足或催化剂不足的候选跳过，**全部候选都无法完成一组时整堆返还、不支付任何成本**。不能把组合模式实现成"全部结果执行、只调先后顺序"。
 - **催化剂固定成本**（`rule.catalystCost()`）：一组结算需分别支付 `items` 各引用的 `counts` 数量，缺省采用 `count`。`CatalystAllocation` 用共享库存分配完整轮次，重叠标签不会重复使用库存；图构建与增广搜索按预算跨 tick 续跑。计划期登记逐轮支付清单并预留（`CatalystReservations.tryReserve`，全有或全无、绝不半预留），**开组时先支付再开组**（`payGroup`：PAID / RETRY / SHORT）；不足则截断组数、释放预留，剩余源走返还（**绝不"少扣照常产出"**）。支付计费进度可跨 tick 保留，真正扣除前重新核对全部实体、物品类型及预留数量。催化剂账目使用本组各引用数量之和，不进源物品守恒式。
@@ -109,7 +109,7 @@ delay           = max(0, dueAge - entity.getAge())
 
 ## 6. 效果回执与上下文
 
-- `RuntimeEffectContext` **按转化组**构造（每组一个实例）：`rounds()` 恒为 1（一轮 = 一组），`coveredSourceItems()` 是本组实扣源数量，`outcomeId` / `groupIndex` / `groupCount` / `groupSourceCost` 描述本组；`reportProgress(units)` 把"已受理"收敛为"已完成"；`safeSpawn()` / `fillOrigin()` / `positionSearchChecksPerTick()` 是候选级位置策略。
+- `RuntimeEffectContext` **按转化组**构造（每组一个实例）：`rounds()` 恒为 1（一轮 = 一组），`coveredSourceItems()` 取本组固定源成本（`source_cost ≤ 0` 时按 1，`groupSourceCost` 为同一原值），`outcomeId` / `groupIndex` / `groupCount` 描述本组；`reportProgress(units)` 把"已受理"收敛为"已完成"；`safeSpawn()` / `fillOrigin()` / `positionSearchChecksPerTick()` 是候选级位置策略。
 - `schedule(delay, task)` 经公共调度器以 `EFFECT` 任务登记，经 `runWhenLoaded` 在目标区块未加载时 `schedule(20, task)` 重试，**不主动加载区块**。
 - `runEffect`：先判效果级 `conditions`（不成立 → `SKIPPED`），再判 `chance`（落空 → `SKIPPED`），类型未注册 → `FAILED`，否则调执行器；`RuntimeException` 被捕获记失败，不影响后续效果。结算层 `account()` 分类计数：`APPLIED` → `addApplied`，`DEFERRED` → `addApplied` + `addPending`，`SKIPPED` → `effectSkipped`，`FAILED` → `effectFailed`。
 

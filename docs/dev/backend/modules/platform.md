@@ -56,7 +56,7 @@
 
 ## 4. Mixin（无原生等价事件时的最小入口）
 
-**Fabric 三个 Mixin**：
+**Fabric 四个 Mixin**：
 
 | Mixin | 注入 | 作用 | 性质 |
 |---|---|---|---|
@@ -67,6 +67,7 @@
 | `ItemEntityMixin` | `@Inject` `ItemEntity.merge` **TAIL** | 临时状态并集写回合并目标，源实体状态清除（D3） | 入口 |
 | `PlayerMixin` | `@Inject` `Player.drop(ItemStack,ZZ)` **RETURN** | 返回值 ItemEntity 交 `PlayerDeathDrops.mark`（入世界前打 tag） | 入口，仅设标记 |
 | `EntityMixin` | `@Redirect` `Entity.spawnAtLocation` 内 `Level.addFreshEntity` | 若为 ItemEntity 则先 `PlayerDeathDrops.mark` | 入口，仅设标记 |
+| `ItemLifespanReferenceMixin` | `@ModifyExpressionValue` `ItemEntity.tick` 的 `intValue=6000` 常量（`require=0`、`allow=1`），`priority=900` | 被动观察原版自然消失阈值供 GUI 参考寿命采样（`FabricLifespanReference.observe`），**原值原样返回、不改判定** | 只读观察 |
 
 **NeoForge 一个 Mixin**（自然消失/环境伤害保护走原生事件，此处只补两处平台没有等价事件的能力）：
 

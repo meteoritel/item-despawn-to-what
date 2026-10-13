@@ -26,18 +26,18 @@ core 侧只声明它需要的最小能力，具体状态由平台 `RuleRuntimeHo
 | 窄接口 | 需求方 | 提供方 | 暴露的能力 |
 |---|---|---|---|
 | `RuleCommandContext` | `core/command` | `RuleRuntimeHost.COMMAND_CONTEXT` | `runtime` / `serverConfig` / `editContext` / `overlayNamespace` / `overlayVersion` / `activeSessionCount` / `reloadRules` |
-| `RuleEditServerContext` | `core/network` | `RuleRuntimeHost.EDIT_CONTEXT` | `overlayRoot` / `overlayNamespace` / `typeRegistries` / `loadMerged` / `rebuildAndRescan` / `sendTo` |
+| `RuleEditServerContext` | `core/network` | `RuleRuntimeHost.EDIT_CONTEXT` | `overlayRoot` / `overlayNamespace` / `typeRegistries` / `loadMerged` / `rebuildAndRescan` / `sendTo` / `referenceLifespanTicks` |
 
 好处：`core/command` 与 `core/network` 不必依赖平台运行时类；平台侧也无需把运行时内部状态提升为公共 API。窄接口所有成员都可能返回 null（服务端启动完成前命令树尚未就绪）。
 
 ## 4. 静态 sink：core 不反向依赖 client
 
-S2C 的「打开编辑界面 / 收到快照 / 收到回执 / 收到目录」需要触达客户端，但 core 不能引用 client。做法：core 暴露静态 sink，由客户端安装回调，服务端不安装即空操作。
+S2C 的「打开编辑界面 / 收到快照 / 收到回执 / 收到目录 / 收到参考寿命」需要触达客户端，但 core 不能引用 client。做法：core 暴露静态 sink，由客户端安装回调，服务端不安装即空操作。
 
 | sink | 安装方 | 分发 |
 |---|---|---|
 | `OpenRuleEditorPayload.installOpenEditorPayloadSink(Consumer<OpenRuleEditorPayload>)` | 客户端（`client/net/RuleEditClientWorkspace`） | `dispatchOpenEditor(payload)` |
-| `RuleEditPayloadRouter.installSnapshotPayloadSink` / `installChunkSink` / `installResultPayloadSink` / `installCatalogSink` | 客户端（`client/net/RuleEditClientWorkspace`） | `dispatchSnapshot` / `dispatchChunk` / `dispatchResult` / `dispatchCatalog` |
+| `RuleEditPayloadRouter.installSnapshotPayloadSink` / `installChunkSink` / `installResultPayloadSink` / `installCatalogSink` / `installLifespanSink` | 客户端（`client/net/RuleEditClientWorkspace`） | `dispatchSnapshot` / `dispatchChunk` / `dispatchResult` / `dispatchCatalog` / `dispatchLifespan` |
 
 平台接收器**只调 router**；专用服务端未安装 sink 时静默丢弃。（router 另有 `installSnapshotSink(String)` / `installResultSink(String)` 两个文本重载，供不解析 payload 的客户端使用。）
 
@@ -46,7 +46,7 @@ S2C 的「打开编辑界面 / 收到快照 / 收到回执 / 收到目录」需�
 平台 `RuleRuntimeEvents` 只做「事件 → `RuleRuntimeHost`」转发，业务在 core。**core 不知道任何加载器事件，它的全部入口是 `RuleRuntimeHost` 的静态方法**；两端事件与方法的一一映射表见 [platform.md](../modules/platform.md) §3。这里只强调本系统新增 / 关键的几类注入点：
 
 - **唯一服务器 tick 推进入口**：`RuleRuntimeHost.tickServer(server)`（Fabric `END_SERVER_TICK` / NeoForge `ServerTickEvent.Post`）推进**唯一一份**公共预算；**不按维度重复推进**，所有维度共享这一次推进（见 [scheduling-budget.md](scheduling-budget.md)）。
-- **寿命提供者注入**：`LifespanProvider` 是 core 的平台差异收敛点；平台在 `start` 建 `ConversionRuntime` 时注入——Fabric 返回 `server.json` 的兜底刻数，NeoForge 返回 `entity.lifespan`（`ItemStack#getEntityLifespan`，保留其它模组的修改）。core 只依赖接口。
+- **寿命提供者注入**：`LifespanProvider` 是 core 的平台差异收敛点；平台在 `start` 建 `ConversionRuntime` 时注入——Fabric 优先用被动观察到的原版阈值，未采样时退回 `server.json` 的兜底刻数；NeoForge 返回实体当前寿命 `entity.lifespan`（`ItemStack#getEntityLifespan`，保留其它模组的修改）。core 只依赖接口。
 - **环境销毁与保护入口**：NeoForge 用原生事件——`ItemExpireEvent`（自然消失，配 `addExtraLife(1)` / `setExtendedLifetime()`）与 `EntityInvulnerabilityCheckEvent`（三类环境伤害保护，经 `DropStateStore.blocksEnvironmentalDamage`）。Fabric 无等价事件，由 `ItemEntityMixin` 补齐：自然到期 `discard()` 拦截（`@Redirect`）、`hurt` 头部环境伤害保护（`@Inject HEAD`，返回 `false` 即免疫）、真实致死分支转发 `requestEnvironmentalConversion`、合并兼容（`tryToMerge` / `merge`）。NeoForge 端仍保留一处 Mixin，但只补原生事件覆盖不到的真实致死 `ItemStack#onDestroyed` 转发与合并兼容。
 - **实体移除**：两端分别经 `ENTITY_UNLOAD` / `EntityLeaveLevelEvent` 作纯入口转发。
 

@@ -10,4 +10,4 @@
 
 后果：基础输入与生命周期必须先统一，现有 widget 用必要适配逐步替换；公开接口需要示例和依赖审阅。接受这部分开发成本，换取后续复用与拆库时不携带规则业务；没有真实调用的抽象延后。
 
-Kit 提取通用实体绘制核心与受控图标绘制适配，供目录、管理树、方案/动作行和选中预览四处复用；宿主提供实体创建、缓存/失效、模型中心/尺寸修正与项目指定的屏障图标/本地化提示。通用核心负责适框、旋转、裁剪、光照、缓冲提交和状态恢复，不接管目录协议或规则语义。渲染依赖白名单按实际使用精确放行原版 `com.mojang.blaze3d` 类（当前仅 `platform.Lighting`），并同步检查脚本、package-info 与 API 文档；禁止项目业务、Gson 与 loader 反向依赖的边界继续有效，不整包放开 com.mojang，不以全限定名绕过约束。分层为 `UiEntityPreview` / `UiIcon.Rendered` / 宿主 `EntityPreviewIcons`，职责与证据见 [UI kit 文档](../dev/internals/ui-kit/rendering-and-preview.md)。
+Kit 提取通用实体绘制核心与受控图标绘制适配，供目录、管理树、方案/行为行和选中预览四处复用；宿主提供实体创建、缓存/失效、模型中心/尺寸修正与项目指定的屏障图标/本地化提示。通用核心负责适框、旋转、裁剪、光照、缓冲提交和状态恢复，不接管目录协议或规则语义。渲染依赖白名单按实际使用精确放行原版 `com.mojang.blaze3d` 类（当前仅 `platform.Lighting`），并同步检查脚本、package-info 与 API 文档；禁止项目业务、Gson 与 loader 反向依赖的边界继续有效，不整包放开 com.mojang，不以全限定名绕过约束。分层为 `UiEntityPreview` / `UiIcon.Rendered` / 宿主 `EntityPreviewIcons`，职责与证据见 [UI kit 文档](../dev/internals/ui-kit/rendering-and-preview.md)。

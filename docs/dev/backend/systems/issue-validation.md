@@ -27,7 +27,7 @@
 
 | 档 | 入口 | 需要注册表 | 内容 |
 |---|---|---|---|
-| 结构档 | `RuleValidation.validate(rule, issues, origin)` | 否 | id 合法、`trigger_after_seconds≥0`、`schema_version` 受支持、source 非空、effects/outcomes 至少一个且互斥、`source_cost` 为正、`catalyst_cost` 合法、`display_name` 码点上限、条件树结构合法、消耗效果不重复、静态物品引用存在、候选 id 非空唯一且各候选 effects 非空 |
+| 结构档 | `RuleValidation.validate(rule, issues, origin)` | 否 | id 合法、`trigger_after_seconds≥0`、`schema_version` 受支持、source 非空、effects/outcomes 至少一个且互斥、`source_cost` 各数量为正且引用已选源物品、`catalyst_cost` 合法、`source_cost` 与 `consume_source` 不得同时声明、`catalyst_cost` 与 `consume_catalyst` 不得同时声明、`display_name` 码点上限、条件树结构合法、消耗效果不重复、静态物品引用存在、候选 id 非空唯一且各候选 effects 非空 |
 | 参数档 | `RuleValidation.validate(rule, effectTypes, conditionTypes, issues, origin)` | **是** | 结构档之上，逐效果/逐叶做类型专属 `validateParams`，未注册类型报错 |
 
 **装配层必须使用带注册表的重载**：`RuleLoadingService.loadAndValidate` 特意用注册表感知重载，否则未注册引用与区间/结构类非法参数会被**静默放行**。
@@ -43,7 +43,7 @@
 
 用 `ParamChecks.child(path, field)` / `ParamChecks.index(path, i)` 拼接，统一错误文案与路径格式。条件树沿 `ConditionTrees.forEachLeaf(...)` 深度优先展开，路径与 JSON 形状一致，最终形如：
 
-- 规则级条件叶：`conditions.terms[0].condition.value`（单叶根则为 `conditions.condition.value`）；
+- 规则级条件叶：`conditions.terms[0].condition`（单叶根则为 `conditions.condition`）；
 - 效果级条件叶：`outcomes[0].effects[1].conditions.terms[0].condition.dimensions`；
 - 效果参数：`effects[0].count`、`outcomes[0].effects[1].count`；
 - 催化剂成本：`catalyst_cost.items[0]`、`catalyst_cost.count`。

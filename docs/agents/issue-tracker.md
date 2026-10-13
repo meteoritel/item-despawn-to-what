@@ -5,7 +5,7 @@
 ## 文件约定
 
 - 每个功能使用 `.scratch/<feature-slug>/`。
-- 技能生成的任务 spec 使用该目录下的 `spec.md`；项目正式规格仍位于 `docs/spec/`，任务通过链接引用相关规格。
+- 技能生成的任务 spec 使用该目录下的 `spec.md`；项目正式文档不放在 `.scratch/` 内，规则与背景请链接 `docs/dev/`、`docs/adr/` 或 `GLOSSARY.md`。
 - 每张实施任务使用独立文件 `issues/<NN>-<slug>.md`，编号从 `01` 开始。
 - 分诊任务顶部使用 `Status:` 记录状态，名称见 `triage-labels.md`；使用 `Category:` 记录 `bug` 或 `enhancement`。
 - 评论与讨论追加到文件末尾的 `## Comments` 下。

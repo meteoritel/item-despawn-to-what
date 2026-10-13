@@ -20,7 +20,7 @@
 - `keyPressed/keyReleased(@Nullable UiInputTarget focused, @Nullable UiInputTarget container, int keyCode, int scanCode, int modifiers)`：聚焦控件优先，未消费才交给容器。
 - `charTyped(@Nullable UiInputTarget focused, @Nullable UiInputTarget container, char codePoint, int modifiers)`。
 
-宿主侧现状：`client/ui/screen/form/FormView#keyPressed` 的处理顺序是「picker → 聚焦控件 → 未消费才滚动」，`PAGE_UP`/`PAGE_DOWN` 在聚焦控件之后才处理；`FormView#keyReleased` 把 key-up 交给聚焦控件，宿主屏幕 `RuleEditorScreen#keyReleased` 再转发给它。kit 侧控件在未显式启用页步长（`setPageStep(n>0)`）时不消费这两个键，因此普通滑块不会与容器滚动冲突。
+宿主侧现状：`client/ui/screen/form/FormInputRouter#keyPressed`（`FormView#keyPressed` 委托给它）的处理顺序是「picker → 聚焦控件 → 未消费才滚动」，`PAGE_UP`/`PAGE_DOWN` 在聚焦控件之后才处理；`FormInputRouter#keyReleased` 把 key-up 交给聚焦控件，宿主屏幕 `RuleEditorScreen#keyReleased` 再转发给它。kit 侧控件在未显式启用页步长（`setPageStep(n>0)`）时不消费这两个键，因此普通滑块不会与容器滚动冲突。
 事件只消费一次的约定由宿主保证：任何控件返回 true 后，容器与页面级处理都必须立即停止。
 
 本节只约定「一次事件由谁消费」；容器把释放与拖动派发给哪个控件另有一套**按下归属**规则，见第 4 节。
@@ -99,17 +99,17 @@ boolean cancel();                // 回退到 startValue 并回调 cancelled
 
 各宿主的归属实现（按源码核对）：
 
-- `FormView`：字段 `pressedWidget` / `pressedControl`。`mouseClicked` 依次询问 picker → 行内 picker 按钮 → 行尾 action 按钮（如「恢复自动命名」）→ 行控件，命中即 `rememberPress`；`mouseReleased` 先取出并清空归属，再只派发一次；`mouseDragged` 同样只给归属；行内 picker 打开时按第 5 节处理。
-- `RuleEditorPageInput`：字段 `pressedWidget`。`mouseClicked` 先给页面滚动条，再遍历 `liveWidgets` 记录归属；`mouseReleased` 只在归属仍 `isVisible()` 时派发一次并清空；无归属返回 false。`RuleEditorEditPages` 的 `mouseClicked` / `mouseReleased` 只把事件委托给它。
-- 控件级兜底：`UiTextArea.pressed`、`UiTextInput.pressed` 与 `UiButton.mouseReleased` 的 `control.isPressed()` 检查。它们共同保证「容器派给我、但我这次没接住按下」时也不消费释放。
+- `FormView`：字段 `pressedWidget` / `pressedControl` 声明在 `FormView`（几何与滚动状态也由它持有），归属逻辑集中在 `client/ui/screen/form/FormInputRouter`，`FormView` 的鼠标与键盘入口全部委托给它。`mouseClicked` 依次询问 picker → 行内 picker 按钮 → 行尾 action 按钮（如「恢复自动命名」）→ 行控件，命中即 `rememberPress`；`mouseReleased` 先取出并清空归属，再只派发一次；`mouseDragged` 同样只给归属；行内 picker 打开时按第 5 节处理。
+- `RuleEditorPageInput`（`client/ui/screen/RuleEditorPageInput`）：字段 `pressedWidget`。`mouseClicked` 先给页面滚动条、再给结果页行内删除，然后遍历 `liveWidgets` 记录归属；`mouseReleased` 先结算拖动排序，再只在归属仍 `isVisible()` 时派发一次并清空，无归属返回 false。`RuleEditorEditPages` 的 `mouseClicked` / `mouseReleased` 只把事件委托给它。
+- 控件级兜底：`UiButton.mouseReleased` 检查 `control.isPressed()`；`UiTextArea` / `UiTextInput` 把鼠标事件委托给 kit 的 `UiTextSelection`，其 `mouseReleased` 返回 `capture.release()`，只有本次确实由它捕获按下才消费。它们共同保证「容器派给我、但我这次没接住按下」时也不消费释放。
 - 复合表单（`TextControl`，`FormControl` 的子类）把同行多类输入合成一次命中：`mouseClicked` 先试预设按钮再给输入控件，`mouseReleased` / `mouseDragged` 只转发给当前可见的那个；释放归属仍由外层容器记录，子控件不重复记账。
 
 ## 5. 弹出层所有者契约（行内 picker）
 
-**契约句**：当行内 picker 处于打开状态时，`FormView` 把 `mouseClicked` / `mouseReleased` / `mouseDragged` 直接交给该 picker，picker 即当前唯一事件所有者；关闭后恢复容器归属派发。**这是设计契约，不是例外**——弹出层在其存续期间是唯一所有者；「按钮必须收到自己的释放事件」只在本层未接管时适用。
+**契约句**：当行内 picker 处于打开状态时，`FormInputRouter` 把鼠标、滚轮与键盘事件直接交给该 picker，picker 即当前唯一事件所有者；关闭后恢复容器归属派发。**这是设计契约，不是例外**——弹出层在其存续期间是唯一所有者；「按钮必须收到自己的释放事件」只在本层未接管时适用。
 
 - 原因：下拉/选择层覆盖在表单之上，若仍按「按下归属」派发，释放会被下层控件抢走，选择项点不到；让弹出层独占本层事件是与归属模型一致的更强所有者语义。
-- 与之对应：picker 关闭时必须清掉归属状态，避免下一次释放沿用陈旧所有者。
+- 与之对应：picker 打开期间容器不再记录新的按下归属（点击先交给 picker），picker 关闭后恢复归属派发，因此不会沿用陈旧所有者。
 
 ## 6. 禁止与反例
 

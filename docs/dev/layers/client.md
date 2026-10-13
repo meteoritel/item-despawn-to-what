@@ -1,6 +1,6 @@
 # 抽象层：客户端（编辑工作区 · 界面 · UI kit）
 
-> 覆盖 `client/net`、`client/edit`、`client/key`、`client/ui`（`kit` / `theme` / `widget` / `screen` / `screen/form` / `prototype`）。
+> 覆盖 `client/net`、`client/edit`、`client/key`、`client/ui`（`kit` / `theme` / `widget` / `screen` / `screen/form` / `shared` / `prototype`）。
 > 面向改编辑器与改 UI kit 的开发者。类级契约见 [../internals/editor-pages-contract.md](../internals/editor-pages-contract.md)、
 > [../internals/ui-kit/README.md](../internals/ui-kit/README.md)、[../internals/editor-card-layout.md](../internals/editor-card-layout.md)、
 > [../internals/editor-draft-persistence.md](../internals/editor-draft-persistence.md)。
