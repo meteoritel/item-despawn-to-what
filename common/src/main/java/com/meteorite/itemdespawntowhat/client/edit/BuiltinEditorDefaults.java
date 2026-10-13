@@ -83,7 +83,12 @@ public final class BuiltinEditorDefaults {
                 body.addProperty("from", 0);
                 body.addProperty("to", 23999);
             }
-            case "y_level", "light_level", "outdoor", "fluid_present", "surrounding_blocks" -> {
+            case "y_level" -> {
+                // 新增高度条件必须带明确约束，不创建两端留空的恒真叶。
+                body.addProperty("min", BuiltinEditorDescriptors.Y_LEVEL_SLIDER_MIN);
+                body.addProperty("max", BuiltinEditorDescriptors.Y_LEVEL_SLIDER_MAX);
+            }
+            case "light_level", "outdoor", "fluid_present", "surrounding_blocks" -> {
                 // 无默认参数：以上类型要么无参，要么留空即为「不约束」/待用户选择
             }
             case "dimension" -> body.add("dimensions", new JsonArray());

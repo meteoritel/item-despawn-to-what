@@ -8,6 +8,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
 import com.meteorite.itemdespawntowhat.core.service.RuleEditSessionLimits;
+import com.meteorite.itemdespawntowhat.core.type.condition.YLevelCondition;
 
 /***
  * 内置条件/效果编辑器描述符表：10 个条件 + 10 个效果各注册一条描述符。
@@ -17,6 +18,10 @@ import com.meteorite.itemdespawntowhat.core.service.RuleEditSessionLimits;
  * 回退为只读 JSON 摘要，且草稿原样保留未识别字段。
  */
 public final class BuiltinEditorDescriptors {
+    /** 高度条件滑条的常用下界；既有超出窗口的合法参数仍保留。 */
+    public static final int Y_LEVEL_SLIDER_MIN = -64;
+    /** 高度条件滑条的常用上界。 */
+    public static final int Y_LEVEL_SLIDER_MAX = 512;
 
     /** 寿命应答未抵达时的滑条窗口，沿用服务端默认自然寿命并换算为秒。 */
     public static final int DEFAULT_TRIGGER_WINDOW_SECONDS =
@@ -134,12 +139,13 @@ public final class BuiltinEditorDescriptors {
                 EditorField.note(h + "time_of_day.note")
         ), false));
 
-        // y_level：两端全空 = 恒真
+        // Integer.MAX_VALUE 仅表达 int 的存储边界，常用滑条窗口不限制 JSON 参数高度。
         ResourceLocation yLevel = id("y_level");
         ConditionEditorRegistry.register(new TypeEditorDescriptor(yLevel, TypeLabels.conditionLabel(yLevel), List.of(
-                EditorField.optionalInteger("min", h + "y_level.min", -2048, 2048),
-                EditorField.optionalInteger("max", h + "y_level.max", -2048, 2048),
-                EditorField.note(h + "y_level.note")
+                EditorField.optionalInteger("min", h + "y_level.min", YLevelCondition.MIN_Y, Integer.MAX_VALUE)
+                        .withNumbers(NumericDomain.integers(YLevelCondition.MIN_Y, Integer.MAX_VALUE, Y_LEVEL_SLIDER_MIN, Y_LEVEL_SLIDER_MAX)),
+                EditorField.optionalInteger("max", h + "y_level.max", YLevelCondition.MIN_Y, Integer.MAX_VALUE)
+                        .withNumbers(NumericDomain.integers(YLevelCondition.MIN_Y, Integer.MAX_VALUE, Y_LEVEL_SLIDER_MIN, Y_LEVEL_SLIDER_MAX))
         ), false));
 
         // light_level：两端全空 = 恒真

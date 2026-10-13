@@ -90,7 +90,7 @@
 | 6 | `catalyst_present` | `items: List<TaggedId>`（必填非空）；`counts: Map<TaggedId,int[1,64]>`（可选）；`count: int[1,64]`（可选，缺省引用的门槛） | 所在方块格 1×1×1 内每个引用分别达到其有效门槛，全部满足才通过（排除源自身）；`count` 留空 = 门槛跟随同作用域催化剂消耗量，见 [催化剂门槛运行投影](../systems/catalyst-threshold-projection.md) |
 | 7 | `fluid_present` | `fluids: List<TaggedId>`（可选、任一种命中即可）；`fluid: TaggedId`（列表为空时采用，均空=任意）；`require_source: bool`（默认 true） | 非源模式接受同族流动变体；`#minecraft:empty` 恒不命中 |
 | 8 | `time_of_day` | `from: int[0,23999]`、`to: int[0,23999]`（均必填） | `dayTime mod 24000` 区间；`from>to` 表示跨零点 |
-| 9 | `y_level` | `min/max: Integer[-2048,2048]`（可空=不限） | Y 坐标区间；min 不得大于 max |
+| 9 | `y_level` | `min/max: Integer ≥ -2048`（可空=不限，无世界高度上限） | Y 坐标区间；min 不得大于 max |
 | 10 | `light_level` | `min/max: Integer[0,15]`（可空=不限） | `getMaxLocalRawBrightness`（天光衰减后与方块光取大）区间；min 不得大于 max |
 
 > `surrounding_blocks` 有一条**特殊门禁**：周围区块未全部加载时通过 `evaluability(...)` 返回 `Evaluability.UNAVAILABLE`（而非 `false`），由求值层映射为 `ConditionResult.UNAVAILABLE`，`inverted` 也不会把它当作「不成立」翻转。

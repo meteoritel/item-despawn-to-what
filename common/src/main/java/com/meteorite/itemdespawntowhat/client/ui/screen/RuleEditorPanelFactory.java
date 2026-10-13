@@ -12,6 +12,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiCyclicRange;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumberPolicy;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeEnd;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeValue;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderWindow;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.LeafPanel;
 import com.meteorite.itemdespawntowhat.client.ui.shared.BlockPreviewIcons;
@@ -65,6 +66,7 @@ public final class RuleEditorPanelFactory {
     private static final int FALLBACK_RANGE_MAX = 2048;
 
     private static final String UI = TypeLabels.UI_PREFIX;
+    private static final ResourceLocation Y_LEVEL_ID = ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "y_level");
     // 一天 24000 刻；0 刻对应 Minecraft 06:00
     private static final double DAY_TICKS = 24000.0D;
     private static final int DAY_MINUTE_OFFSET = 360;
@@ -573,8 +575,16 @@ public final class RuleEditorPanelFactory {
         }
         EditorField min = field(fields, RANGE_MIN_FIELD);
         EditorField max = field(fields, RANGE_MAX_FIELD);
+        RuleValue condition = draft.valueAt(basePath);
+        boolean heightCondition = condition != null && Y_LEVEL_ID.toString()
+                .equals(condition.text(RuleFields.TYPE, ""));
         if (min != null && max != null && isIntegerLike(min) && isIntegerLike(max)) {
             UiRangeBar bar = intRangeBar(font, draft, min, max, basePath, applyChange, onChange);
+            if (heightCondition) {
+                form.setRowVisible(join(basePath, min.name()), false);
+                form.setRowVisible(join(basePath, max.name()), false);
+                bar.setLabel(TypeLabels.conditionLabel(Y_LEVEL_ID));
+            }
             extras.add(bar);
             reloadValues.add(() -> bar.core().setValue(integerRange(draft, min, max, basePath)));
         }
@@ -589,7 +599,7 @@ public final class RuleEditorPanelFactory {
             bar.setPreciseEditor(end -> panel.focusField(join(basePath,
                     end == UiRangeEnd.LOW ? from.name() : to.name())));
         }
-        if (min != null && max != null && isIntegerLike(min) && isIntegerLike(max)) {
+        if (!heightCondition && min != null && max != null && isIntegerLike(min) && isIntegerLike(max)) {
             UiRangeBar bar = (UiRangeBar) extras.get(extraIndex);
             bar.setPreciseEditor(end -> panel.focusField(join(basePath,
                     end == UiRangeEnd.LOW ? min.name() : max.name())));
@@ -636,6 +646,8 @@ public final class RuleEditorPanelFactory {
                     onChange.run();
                 });
         bar.setLabel(Component.translatable(minField.labelKey()));
+        bar.core().setWindow(new UiSliderWindow(minField.sliderMin(minField.intMin(FALLBACK_RANGE_MIN)),
+                maxField.sliderMax(maxField.intMax(FALLBACK_RANGE_MAX))));
         return bar;
     }
 
@@ -661,10 +673,13 @@ public final class RuleEditorPanelFactory {
         return value != null && value.isNumber() ? value.asInteger(fallback) : fallback;
     }
 
-    // 缺失端以数值域边界显示，草稿仍保留缺失状态；首次拖动后才写入区间。
+    // 缺失端以滑条窗口边界显示，草稿仍保留缺失状态；首次拖动后才写入区间。
     private static UiRangeValue integerRange(RuleDraft draft, EditorField min, EditorField max, String basePath) {
-        double low = intAt(draft, join(basePath, min.name()), min.intMin(FALLBACK_RANGE_MIN));
-        double high = intAt(draft, join(basePath, max.name()), max.intMax(FALLBACK_RANGE_MAX));
+        double low = intAt(draft, join(basePath, min.name()), (int) min.sliderMin(min.intMin(FALLBACK_RANGE_MIN)));
+        double high = intAt(draft, join(basePath, max.name()), (int) max.sliderMax(max.intMax(FALLBACK_RANGE_MAX)));
+        // 单端合法值可能超出常用窗口；缺失端的预览须包含它，不改变草稿中的无限端。
+        if (draft.valueAt(join(basePath, min.name())) == null) low = Math.min(low, high);
+        if (draft.valueAt(join(basePath, max.name())) == null) high = Math.max(low, high);
         // 倒置值由精确输入校验，不能让预览区间的构造异常阻断整个面板。
         return low <= high ? UiRangeValue.of(low, high)
                 : UiRangeValue.of(min.intMin(FALLBACK_RANGE_MIN), max.intMax(FALLBACK_RANGE_MAX));

@@ -598,7 +598,6 @@
   "gui.itemdespawntowhat.edit.field.weather.weather": "Weather",
   "gui.itemdespawntowhat.edit.field.y_level.max": "Max Y",
   "gui.itemdespawntowhat.edit.field.y_level.min": "Min Y",
-  "gui.itemdespawntowhat.edit.field.y_level.note": "Empty ends: any height",
   "gui.itemdespawntowhat.edit.filter.all": "All",
   "gui.itemdespawntowhat.edit.filter.disabled": "Disabled",
   "gui.itemdespawntowhat.edit.filter.enabled": "Enabled",

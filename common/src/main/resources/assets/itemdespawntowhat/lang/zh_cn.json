@@ -598,7 +598,6 @@
   "gui.itemdespawntowhat.edit.field.weather.weather": "天气",
   "gui.itemdespawntowhat.edit.field.y_level.max": "最大 Y",
   "gui.itemdespawntowhat.edit.field.y_level.min": "最小 Y",
-  "gui.itemdespawntowhat.edit.field.y_level.note": "两端留空即不限制高度",
   "gui.itemdespawntowhat.edit.filter.all": "全部",
   "gui.itemdespawntowhat.edit.filter.disabled": "已停用",
   "gui.itemdespawntowhat.edit.filter.enabled": "已启用",

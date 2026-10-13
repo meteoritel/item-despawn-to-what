@@ -15,7 +15,8 @@ import java.util.Optional;
 
 /**
  * 条件类型 y_level：按掉落物的 Y 坐标区间匹配。
- * 参数 min / max 均可空（null = 该端不限制），取值域 [-2048,2048]，且 min 不得大于 max。
+ * 参数 min / max 均可空（null = 该端不限制），不得低于 -2048，且 min 不得大于 max。
+ * 不按世界限高设置参数上限，以兼容其它模组扩展的世界高度；参数仍使用 int 表示。
  * JSON 示例：{ "type": "itemdespawntowhat:y_level", "min": 60 }
  */
 public record YLevelCondition(Integer min, Integer max) implements Condition {
@@ -27,9 +28,8 @@ public record YLevelCondition(Integer min, Integer max) implements Condition {
     private static final String FIELD_MIN = "min";
     private static final String FIELD_MAX = "max";
 
-    // 世界高度范围（1.21.1 主世界可放置高度之外的极端值也无意义，这里取安全上界）
-    private static final int MIN_Y = -2048;
-    private static final int MAX_Y = 2048;
+    /** 高度参数的合法下限，供校验与编辑器域描述共用。 */
+    public static final int MIN_Y = -2048;
 
     // 参数编解码器：两端均可选，缺省为 null
     public static final MapCodec<YLevelCondition> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
@@ -48,18 +48,33 @@ public record YLevelCondition(Integer min, Integer max) implements Condition {
         return new SimpleConditionType<>(ID, CODEC, YLevelCondition::validateParams, YLevelEvaluator::test);
     }
 
-    // 参数语义校验：两端取值域 + 区间有序
+    /**
+     * 校验高度参数下界和区间顺序；世界限高不构成参数上限。
+     *
+     * @param params 待校验的高度区间
+     * @param issues 参数问题收集器
+     * @param fieldPath 当前条件的字段路径
+     * @return 两个端点及区间顺序是否均合法
+     */
     public static boolean validateParams(YLevelCondition params, IssueCollector issues, String fieldPath) {
         boolean valid = true;
         if (params.min() != null) {
-            valid &= ParamChecks.inRange(params.min(), MIN_Y, MAX_Y, FIELD_MIN, issues,
+            valid &= validateMinimum(params.min(), FIELD_MIN, issues,
                     ParamChecks.child(fieldPath, FIELD_MIN));
         }
         if (params.max() != null) {
-            valid &= ParamChecks.inRange(params.max(), MIN_Y, MAX_Y, FIELD_MAX, issues,
+            valid &= validateMinimum(params.max(), FIELD_MAX, issues,
                     ParamChecks.child(fieldPath, FIELD_MAX));
         }
         valid &= ParamChecks.orderedRange(params.min(), params.max(), FIELD_MIN + "/" + FIELD_MAX, issues, fieldPath);
         return valid;
+    }
+
+    private static boolean validateMinimum(int value, String field, IssueCollector issues, String path) {
+        if (value < MIN_Y) {
+            issues.error(field + " 不得低于 " + MIN_Y + "，当前为 " + value, null, path);
+            return false;
+        }
+        return true;
     }
 }
