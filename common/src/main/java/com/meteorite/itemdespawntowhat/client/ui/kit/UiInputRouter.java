@@ -26,45 +26,100 @@ public final class UiInputRouter {
         SCROLLED
     }
 
-    // 指针按下：捕获目标优先，其次命中控件
+    /**
+     * 指针按下：捕获目标优先，其次命中控件。
+     *
+     * @param captureTarget 捕获目标，无捕获时为 null
+     * @param hitTarget 指针命中的控件，无命中时为 null
+     * @param context 指针事件上下文
+     * @return 事件是否已被消费
+     */
     public static boolean pressed(@Nullable UiInputTarget captureTarget, @Nullable UiInputTarget hitTarget,
                                   UiInputContext context) {
         return routePointer(captureTarget, hitTarget, context, PointerPhase.PRESSED, 0.0D);
     }
 
-    // 指针拖动：捕获目标优先，保证拖出矩形仍继续
+    /**
+     * 指针拖动：捕获目标优先，保证指针拖出矩形后仍继续。
+     *
+     * @param captureTarget 捕获目标，无捕获时为 null
+     * @param hitTarget 指针命中的控件，无命中时为 null
+     * @param context 指针事件上下文
+     * @return 事件是否已被消费
+     */
     public static boolean dragged(@Nullable UiInputTarget captureTarget, @Nullable UiInputTarget hitTarget,
                                   UiInputContext context) {
         return routePointer(captureTarget, hitTarget, context, PointerPhase.DRAGGED, 0.0D);
     }
 
-    // 指针释放：只交给捕获目标；没有捕获时按普通命中派发
+    /**
+     * 指针释放：只交给捕获目标；没有捕获时按普通命中派发，保证一次拖动只提交一次。
+     *
+     * @param captureTarget 捕获目标，无捕获时为 null
+     * @param hitTarget 指针命中的控件，无命中时为 null
+     * @param context 指针事件上下文
+     * @return 事件是否已被消费
+     */
     public static boolean released(@Nullable UiInputTarget captureTarget, @Nullable UiInputTarget hitTarget,
                                    UiInputContext context) {
         return routePointer(captureTarget, hitTarget, context, PointerPhase.RELEASED, 0.0D);
     }
 
-    // 滚轮：捕获目标优先，其次命中控件
+    /**
+     * 滚轮：捕获目标优先，其次命中控件。
+     *
+     * @param captureTarget 捕获目标，无捕获时为 null
+     * @param hitTarget 指针命中的控件，无命中时为 null
+     * @param context 指针事件上下文
+     * @param scrollY 纵向滚动量
+     * @return 事件是否已被消费
+     */
     public static boolean scrolled(@Nullable UiInputTarget captureTarget, @Nullable UiInputTarget hitTarget,
                                    UiInputContext context, double scrollY) {
         return routePointer(captureTarget, hitTarget, context, PointerPhase.SCROLLED, scrollY);
     }
 
-    // 键按下：聚焦控件优先，未消费才交给容器导航
+    /**
+     * 键按下：聚焦控件优先，未被消费才交给容器导航。
+     *
+     * @param focused 聚焦控件，无焦点时为 null
+     * @param container 容器导航目标
+     * @param keyCode GLFW 键码
+     * @param scanCode 平台扫描码
+     * @param modifiers 修饰键位掩码
+     * @return 事件是否已被消费
+     */
     public static boolean keyPressed(@Nullable UiInputTarget focused, @Nullable UiInputTarget container,
                                      int keyCode, int scanCode, int modifiers) {
         if (focused != null && focused.keyPressed(keyCode, scanCode, modifiers)) return true;
         return container != null && container != focused && container.keyPressed(keyCode, scanCode, modifiers);
     }
 
-    // 键抬起：与 keyPressed 同一顺序，用于把按键重复合并成一次提交
+    /**
+     * 键抬起：与 {@link #keyPressed} 同一顺序，用于把按住的方向键重复合并成一次提交。
+     *
+     * @param focused 聚焦控件，无焦点时为 null
+     * @param container 容器导航目标
+     * @param keyCode GLFW 键码
+     * @param scanCode 平台扫描码
+     * @param modifiers 修饰键位掩码
+     * @return 事件是否已被消费
+     */
     public static boolean keyReleased(@Nullable UiInputTarget focused, @Nullable UiInputTarget container,
                                       int keyCode, int scanCode, int modifiers) {
         if (focused != null && focused.keyReleased(keyCode, scanCode, modifiers)) return true;
         return container != null && container != focused && container.keyReleased(keyCode, scanCode, modifiers);
     }
 
-    // 字符输入：聚焦控件优先
+    /**
+     * 字符输入：聚焦控件优先。
+     *
+     * @param focused 聚焦控件，无焦点时为 null
+     * @param container 容器导航目标
+     * @param codePoint 输入的字符
+     * @param modifiers 修饰键位掩码
+     * @return 事件是否已被消费
+     */
     public static boolean charTyped(@Nullable UiInputTarget focused, @Nullable UiInputTarget container,
                                     char codePoint, int modifiers) {
         if (focused != null && focused.charTyped(codePoint, modifiers)) return true;

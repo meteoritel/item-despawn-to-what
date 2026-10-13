@@ -13,8 +13,8 @@ import com.meteorite.itemdespawntowhat.core.type.effect.PlaceBlockEffect;
 
 /***
  * 内置条件/效果编辑器描述符表：10 个条件 + 10 个效果各注册一条描述符。
- * <p>字段名与 {@code docs/dev/backend/modules/type-system.md} 的 JSON 字段名逐字一致，
- * 取值域同该文档的参数表；界面通过通用表单引擎按描述符渲染，不写 22 个手写表单类。
+ * <p>字段名取自 core 的 {@link RuleFields} 常量与 core 类型定义的 JSON 字段，取值域与 core 侧参数一致；
+ * 界面通过通用表单引擎按描述符渲染，不写 22 个手写表单类。
  * <p>未在此注册的第三方类型由 {@link ConditionEditorRegistry}/{@link EffectEditorRegistry}
  * 回退为只读 JSON 摘要，且草稿原样保留未识别字段。
  */

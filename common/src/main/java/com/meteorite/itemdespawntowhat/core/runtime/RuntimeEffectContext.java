@@ -38,6 +38,7 @@ public final class RuntimeEffectContext implements EffectContext {
     private final boolean safeSpawn;
     private final boolean fillOrigin;
 
+    // 便捷构造：源物品快照取实体当前堆叠，未注入进度回执，候选级开关取默认值
     public RuntimeEffectContext(ServerLevel level, ItemEntity source, Vec3 position,
                                ResourceLocation ruleId, ServerScheduler scheduler, Object realmKey,
                                int rounds, int coveredSourceItems, String outcomeId, int groupIndex,
@@ -48,6 +49,7 @@ public final class RuntimeEffectContext implements EffectContext {
                 false, true);
     }
 
+    // 便捷构造：在上一构造基础上注入进度回执通道，候选级开关仍取默认值
     public RuntimeEffectContext(ServerLevel level, ItemEntity source, Vec3 position,
                                ResourceLocation ruleId, ServerScheduler scheduler, Object realmKey,
                                int rounds, int coveredSourceItems, String outcomeId, int groupIndex,
@@ -137,6 +139,7 @@ public final class RuntimeEffectContext implements EffectContext {
     }
 
     @Override
+    // 返回快照副本：调用方就地修改（如调整数量）不会污染上下文持有的快照
     public ItemStack sourceStack() {
         return sourceSnapshot.copy();
     }
@@ -157,6 +160,7 @@ public final class RuntimeEffectContext implements EffectContext {
     }
 
     @Override
+    // 进度回执：只接受正向计数；未注入回执通道时静默忽略
     public void reportProgress(int units) {
         if (progressSink != null && units > 0) {
             progressSink.accept(units);

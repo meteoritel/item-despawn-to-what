@@ -24,6 +24,7 @@ public final class ConsumeSourceExecutor {
         throw new UnsupportedOperationException("Utility class");
     }
 
+    // 从实体上的实时堆叠扣减（每组源成本 × rounds），按实际扣减量回执，扣空后移除实体
     public static EffectResult execute(ConsumeSourceEffect effect, EffectContext context) {
         ItemEntity source = context.source();
         if (source == null || !source.isAlive()) {

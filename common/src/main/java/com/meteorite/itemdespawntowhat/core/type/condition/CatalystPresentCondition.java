@@ -60,6 +60,7 @@ public record CatalystPresentCondition(List<TaggedId> items, @Nullable Integer c
         counts = Map.copyOf(counts);
     }
 
+    // 单个催化剂的判定门槛：counts 未配置该引用时退回 count，count 留空则取 DEFAULT_COUNT
     public int countFor(TaggedId item) {
         return counts.getOrDefault(item, count == null ? DEFAULT_COUNT : count);
     }

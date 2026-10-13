@@ -4,7 +4,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.Locale;
 
-/***
+/**
  * 保存/请求回执状态码。客户端按码分支，禁止解析文案。
  * 状态码的线上形态就是枚举名（String），客户端保持大小写敏感比较。
  */

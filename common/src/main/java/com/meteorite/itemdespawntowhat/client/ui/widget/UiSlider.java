@@ -27,8 +27,8 @@ import org.lwjgl.glfw.GLFW;
  * 数值滑杆：左侧标签，右侧当前值，中间像素轨道与滑块。
  * <p>数值一律同时显示为文本，颜色不是唯一线索。
  * <p>本类是宿主适配层：数值域、窗口、吸附、捕获、preview/commit/cancel 全部委托给 kit 的
- * {@link UiScalarSlider}，公开方法签名与旧版保持一致（fluent setter 返回自身）。
- * <p>{@link #setOnChanged(DoubleConsumer)} 保留旧的「每次变化都回调」语义，桥接到 kit 的
+ * {@link UiScalarSlider}；对外保持既有调用点使用的签名，fluent setter 返回自身。
+ * <p>{@link #setOnChanged(DoubleConsumer)} 的语义是「每次变化都回调」，桥接到 kit 的
  * preview 回调；需要在提交时才落盘的调用方请直接用 kit 的交互回调或 {@link #core()}。
  */
 public final class UiSlider implements UiWidget, UiFocusTarget, UiInputTarget {
@@ -267,7 +267,7 @@ public final class UiSlider implements UiWidget, UiFocusTarget, UiInputTarget {
         return UiInputContext.pointer(mouseX, mouseY, button, modifiers);
     }
 
-    // 用当前取值域与步长构造 kit 数值策略；step<=0 时沿用旧版键盘回退档
+    // 用当前取值域与步长构造 kit 数值策略；step<=0 时键盘微调档回退为取值域百分之一（下限 1.0E-4）
     private UiNumberPolicy buildPolicy() {
         double coarse = this.step > 0.0D ? this.step : Math.max(1.0E-4D, (this.max - this.min) / 100.0D);
         return UiNumberPolicy.of(this.min, this.max, coarse);

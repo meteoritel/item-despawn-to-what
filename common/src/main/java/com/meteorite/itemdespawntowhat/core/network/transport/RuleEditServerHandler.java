@@ -35,7 +35,7 @@ public final class RuleEditServerHandler {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    // 会话状态机；覆盖层根目录不可用时返回 null（运行时与命令层兼容旧调用点）
+    // 会话状态机；覆盖层根目录不可用时返回 null（调用方需按不可用处理）
     public static synchronized @Nullable EditSessionManager sessionManager(RuleEditServerContext context) {
         if (context == null || context.overlayRoot() == null) {
             return null;

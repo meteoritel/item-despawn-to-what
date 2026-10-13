@@ -27,6 +27,7 @@ public final class LootTableExecutor {
         throw new UnsupportedOperationException("Utility class");
     }
 
+    // 按 rounds 次开表，每次产出的战利品单独调度生成并回执真实件数
     public static EffectResult execute(LootTableEffect effect, EffectContext context) {
         ServerLevel level = context.level();
         ResourceKey<LootTable> key = ResourceKey.create(Registries.LOOT_TABLE, effect.lootTable());
@@ -55,7 +56,7 @@ public final class LootTableExecutor {
                 stack.copy());
         entity.setDeltaMovement((level.random.nextDouble() - 0.5) * 0.1, 0.2,
                 (level.random.nextDouble() - 0.5) * 0.1);
-        // 转化产物：走显式产物入口，授予临时保护与冷却（D18）
+        // 转化产物：走显式产物入口，授予临时保护与冷却
         EffectTargets.addConversionProduct(context, entity);
         // 真实完成量回执：按实际生成的件数计
         context.reportProgress(stack.getCount());

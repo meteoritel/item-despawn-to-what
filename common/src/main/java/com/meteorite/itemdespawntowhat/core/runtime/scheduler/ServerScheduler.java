@@ -48,6 +48,7 @@ public final class ServerScheduler {
     private ServerTickBudgetSnapshot lastSnapshot =
             new ServerTickBudgetSnapshot(0L, 0L, 0L, 0, 0, 0, false, false, false);
 
+    // 构造调度器：预算参数在构造时固定，realm 在首次登记时创建
     public ServerScheduler(SchedulerConfig config) {
         this.config = Objects.requireNonNull(config, "config");
     }
@@ -56,7 +57,7 @@ public final class ServerScheduler {
         return config;
     }
 
-    // 最近一次推进的游戏刻；调度器尚未推进时返回 0（与旧实现启动时的 level.getGameTime() 一致）。
+    // 最近一次推进的游戏刻；调度器尚未推进时为 0。
     @SuppressWarnings("unused") // 公共诊断接口，允许外部开发工具读取。
     public long currentTick() {
         return lastGameTime;
@@ -87,7 +88,7 @@ public final class ServerScheduler {
         return realmFor(realmKey).schedule(task, lastGameTime + Math.max(0, delayTicks));
     }
 
-    // 指定到期 tick 入队，供 的持久返还恢复原始时间。
+    // 指定到期 tick 入队：持久返还恢复时按记录保留原始到期时间。
     public ScheduledTask scheduleAt(Object realmKey, ServerTask task, long dueTick) {
         Objects.requireNonNull(task, "task");
         return realmFor(realmKey).schedule(task, dueTick);
@@ -152,7 +153,7 @@ public final class ServerScheduler {
     }
 
     // 单条 lane 本 tick 的搬运额度：按到期量在平滑窗口内分摊，并受 dispatch_batch_size 上限约束。
-    // 计数上限取 批量×窗口，既能覆盖一个完整窗口的突发量，也避免为巨大积压做全量遍历。
+    // 计数上限取 batch × window，既能覆盖一个完整窗口的突发量，也避免为巨大积压做全量遍历。
     private int drainAllowance(TaskLane lane, long gameTime) {
         int batch = config.dispatchBatchSize();
         int window = config.checkSpreadWindowTicks();
@@ -287,7 +288,7 @@ public final class ServerScheduler {
         }
     }
 
-    // 维度卸载：逐项上报原因后清空该 realm，不留静默丢弃；持久返还由 补。
+    // 维度卸载：逐项上报原因后清空该 realm，不留静默丢弃；待返还库存由恢复任务补交。
     public void releaseRealm(Object realmKey, CancelReason reason) {
         RealmQueues realm = realms.remove(realmKey);
         if (realm != null) {
@@ -312,12 +313,13 @@ public final class ServerScheduler {
         return total;
     }
 
+    // 指定 realm 的待处理任务数；realm 未登记时返回 0
     public int pendingCount(Object realmKey) {
         RealmQueues realm = realms.get(realmKey);
         return realm == null ? 0 : realm.pendingCount();
     }
 
-    // 单条队列的观测值；realm 不存在时返回零值，与旧实现一致。
+    // 单条队列的观测值；realm 不存在时返回零值。
     public QueueStats queueStats(Object realmKey, ServerTaskKind kind) {
         RealmQueues realm = realms.get(realmKey);
         return realm == null ? new QueueStats(0, 0, 0L, 0L, 0L, 0L) : realm.queueStats(kind, lastGameTime);
@@ -327,7 +329,7 @@ public final class ServerScheduler {
         return lastSnapshot;
     }
 
-    // pending按当前车道计数汇总，取消后立即可见；耗时等字段仍是最近已结束tick的快照。
+    // pending 按当前车道实时汇总，取消后立即可见；耗时等字段仍是最近一次已结束 tick 的快照。
     public SchedulerStats stats() {
         EnumMap<ServerTaskKind, KindStats> perKind = new EnumMap<>(ServerTaskKind.class);
         for (ServerTaskKind kind : ServerTaskKind.values()) {

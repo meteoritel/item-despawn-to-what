@@ -13,7 +13,7 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
-/*** 统一实体生成效果：按 variant 分发产物，公共执行字段只定义一次。 */
+/** 统一实体生成效果：按 variant 分发产物，公共执行字段只定义一次。 */
 public record SpawnEntityEffect(EntityProduct product, int delayTicks, double chance,
                                 @Nullable ConditionExpression conditions) implements Effect {
     public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("itemdespawntowhat", "spawn_entity");
@@ -29,10 +29,12 @@ public record SpawnEntityEffect(EntityProduct product, int delayTicks, double ch
                 new SpawnEntityEffect(product, delay, chance, conditions.orElse(null))));
     }
 
+    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器
     public static EffectType<SpawnEntityEffect> effectType(Codec<ConditionExpression> expressionCodec) {
         return new SimpleEffectType<>(ID, codec(expressionCodec), SpawnEntityEffect::validateParams, SpawnEntityExecutor::execute);
     }
 
+    // 参数语义校验：子类选择必填，随后交给对应子类校验自身字段
     public static boolean validateParams(SpawnEntityEffect effect, IssueCollector issues, String path) {
         if (effect.product() == null) {
             issues.error("请选择实体产出子类", null, path + ".variant");

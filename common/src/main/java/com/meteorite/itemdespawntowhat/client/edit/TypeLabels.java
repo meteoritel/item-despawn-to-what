@@ -9,7 +9,7 @@ import net.minecraft.resources.ResourceLocation;
  * <p>类型显示名使用 {@code gui.itemdespawntowhat.edit.condition.<type>} 与
  * {@code gui.itemdespawntowhat.edit.effect.<type>}；本模组命名空间下 {@code <type>} 即路径
  * （例如 {@code gui.itemdespawntowhat.edit.condition.y_level}），第三方命名空间下为了不撞键
- * 使用 {@code <namespace>.<path>}。若新键缺失，回退到旧版约定 {@code <kind>.<namespace>.type.<path>}，
+ * 使用 {@code <namespace>.<path>}。若新键缺失，回退到兼容 key {@code <kind>.<namespace>.type.<path>}，
  * 再回退到原始 id 字符串，保证第三方扩展类型在没有 lang 条目时也能被识别。
  */
 public final class TypeLabels {
@@ -43,7 +43,7 @@ public final class TypeLabels {
         return displayKey(kind, id);
     }
 
-    // 旧版约定 key：<kind>.<namespace>.type.<path>（仅作回退）
+    // 兼容回退 key：<kind>.<namespace>.type.<path>（新键缺失时使用）
     public static String legacyKey(String kind, ResourceLocation id) {
         return kind + "." + id.getNamespace() + ".type." + id.getPath();
     }
@@ -55,7 +55,7 @@ public final class TypeLabels {
                 : id.getNamespace() + "." + id.getPath();
     }
 
-    // 依次尝试新键、旧键、原始 id；键是否存在与语言无关（en_us 与 zh_cn 键集合必须一致），
+    // 依次尝试新键、兼容回退键、原始 id；键是否存在与语言无关（en_us 与 zh_cn 键集合必须一致），
     // 因此这里的判断在切换语言后依然成立，文本本身仍是惰性翻译。
     private static Component label(String kind, ResourceLocation id) {
         Language language = Language.getInstance();

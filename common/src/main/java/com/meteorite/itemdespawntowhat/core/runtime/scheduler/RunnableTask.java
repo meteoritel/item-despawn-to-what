@@ -2,7 +2,7 @@ package com.meteorite.itemdespawntowhat.core.runtime.scheduler;
 
 /**
  * 把既有的无参动作适配成 ServerTask：一次调用即完成，固定消耗 1 个工作单位。
- * 取消语义与原 TickScheduler.Task 一致：被取消的动作不会再执行，业务侧自行负责清理。
+ * 取消语义：被取消的动作不会再执行，业务侧自行负责清理。
  */
 public final class RunnableTask implements ServerTask {
 
@@ -10,6 +10,7 @@ public final class RunnableTask implements ServerTask {
     private final String name;
     private final Runnable action;
 
+    // 构造适配器：kind 缺省为 MAINTENANCE，name 缺省为 unnamed
     public RunnableTask(ServerTaskKind kind, String name, Runnable action) {
         this.kind = kind == null ? ServerTaskKind.MAINTENANCE : kind;
         this.name = name == null ? "unnamed" : name;

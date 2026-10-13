@@ -3,7 +3,7 @@ package com.meteorite.itemdespawntowhat.core.network.transport;
 import java.util.ArrayList;
 import java.util.List;
 
-/***
+/**
  * 文本切分工具：按 UTF-8 字节上限切分字符串。
  * 上行变更集与下行快照的分片共用同一实现，保证两侧对"一片多大"的口径完全一致，
  * 且不会把代理对（surrogate pair）拆到两个分片里。

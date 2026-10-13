@@ -17,7 +17,7 @@ import net.minecraft.client.gui.GuiGraphics;
  * 取主题并传入控件，因此换主题或测试替换主题都不依赖全局静态状态。</p>
  *
  * <p>度量与绘制原语保持与既有像素主题逐一相同：像素皮肤是默认实现，画布页的扁平外壳仍由
- * {@code UiFlatSkin} 在调用方显式注入（见 ADR-0028），本接口不改变既有画面。</p>
+ * {@code UiFlatSkin} 在调用方显式注入，本接口不改变既有画面。</p>
  */
 public interface UiHostTheme extends UiStyleSource {
 

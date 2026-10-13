@@ -19,7 +19,7 @@ public record SchedulerConfig(long budgetNanos, int maxWorkUnitsPerTick, int eff
         positionSearchChecksPerTick = Math.max(1, positionSearchChecksPerTick);
     }
 
-    // 从模组级服务端配置换算；工作量上限缺省回退到旧的 max_checks_per_tick。
+    // 从模组级服务端配置换算；工作量上限缺省回退到 max_checks_per_tick。
     public static SchedulerConfig from(ServerConfig config) {
         return new SchedulerConfig(
                 Math.max(1L, config.serverBudgetUs()) * 1000L,

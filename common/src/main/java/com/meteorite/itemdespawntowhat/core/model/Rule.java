@@ -13,9 +13,9 @@ import java.util.Set;
  * 转化规则：后端唯一的配置单元。
  * 一条规则 = 源匹配 + 消失方式集合 + 条件表达式 + 固定成本 + 组合模式 + 候选结果集合；
  * 同一掉落物只执行优先级最高的那一条规则。
- * <p>effects 是平铺效果列表，只用于兼容旧数据包与第三方效果类型；声明了 outcomes 时以候选结果为准，
+ * <p>effects 是平铺效果列表，为兼容既有数据包与第三方效果类型而保留；声明了 outcomes 时以候选结果为准，
  * 两者不得同时声明（由 {@link RuleValidation} 拒绝）。未声明 outcomes 时，顶层 effects 由
- * {@link #effectiveOutcomes()} 隐式映射为唯一候选 id=default，行为与旧版本一致。
+ * {@link #effectiveOutcomes()} 隐式映射为唯一候选 id=default。
  * displayName 是可选展示名：规范化后为空串视为未设置（null），长度上限由 RuleValidation 按 code point 校验。
  */
 public record Rule(
@@ -70,7 +70,7 @@ public record Rule(
         return triggers.isEmpty() ? Set.of(TriggerKind.NATURAL) : triggers;
     }
 
-    // 生效的候选结果：未声明 outcomes 时由顶层 effects 隐式映射为唯一候选 default（兼容旧格式）
+    // 生效的候选结果：未声明 outcomes 时由顶层 effects 隐式映射为唯一候选 default（供顶层 effects 写法使用）
     public List<OutcomeCandidate> effectiveOutcomes() {
         if (!outcomes.isEmpty()) {
             return outcomes;

@@ -19,6 +19,7 @@ import java.util.Map;
 
 /**
  * consume_source：消耗来源掉落物的物品堆叠。
+ * counts 按源物品引用（item id 或 #tag）分别配置消耗量，未配置的引用取 count。
  * 规则未显式声明任何 consume_* 效果时按隐式消耗处理（见 core/model/Rule#usesImplicitSourceConsumption）。本类只承载参数模型与参数校验。
  */
 public record ConsumeSourceEffect(

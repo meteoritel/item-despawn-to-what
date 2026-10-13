@@ -163,7 +163,7 @@ final class DebugScenarioRun {
         return window.elapsedSeconds() >= seconds || window.full();
     }
 
-    // 每 tick 的源数量与准备软预算改由 server.json 提供（debug_scenario_prepare_batch_size / debug_scenario_prepare_budget_us）；准备耗时不混入测量窗口。
+    // 源数量与准备软预算由 server.json 的 debug_scenario_prepare_batch_size / debug_scenario_prepare_budget_us 提供；准备耗时不混入测量窗口。
     private void prepare(RuleCommandContext context) {
         ConversionRuntime runtime = java.util.Objects.requireNonNull(context.runtime());
         if (definition.spec.catalystCount() > 0 && (!LoadedChunks.containsArea(level, BlockPos.containing(origin), 1)
@@ -175,7 +175,7 @@ final class DebugScenarioRun {
         if (config == null) {
             config = ServerConfig.DEFAULT;
         }
-        // 默认 128 与 2000us 与原硬编码 128 / 2_000_000L 逐位等价；这两键只影响场景准备，不参与 server_budget_us
+        // 默认 128 与 2000us；这两键只影响场景准备，不参与 server_budget_us
         int batchSize = config.debugScenarioPrepareBatchSize();
         long deadline = System.nanoTime() + (long) config.debugScenarioPrepareBudgetUs() * 1000L;
         for (int batch = 0; batch < batchSize && sources.size() < definition.sources && System.nanoTime() < deadline; batch++) {

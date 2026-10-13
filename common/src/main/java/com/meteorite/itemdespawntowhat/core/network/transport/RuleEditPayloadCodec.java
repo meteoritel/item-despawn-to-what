@@ -7,7 +7,7 @@ import net.minecraft.network.FriendlyByteBuf;
 import java.util.ArrayList;
 import java.util.List;
 
-/***
+/**
  * 编辑链路载荷的共用编解码片段：字符串列表、可空字符串与结构化问题列表。
  * 全部字段按契约的"先校验长度、不截断"原则编解码，超限即抛解码异常交由连接层断开。
  */

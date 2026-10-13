@@ -10,7 +10,7 @@ import net.minecraft.resources.ResourceLocation;
 
 /**
  * 条件类型 outdoor：判断掉落物是否暴露在天空下（露天）。
- * 无类型专属参数；叶级取反已删除，取反请用条件树的 { "op": "inverted", "term": ... }。
+ * 无类型专属参数；叶级取反不受支持，取反请用条件树的 { "op": "inverted", "term": ... }。
  * JSON 示例：{ "op": "leaf", "condition": { "type": "itemdespawntowhat:outdoor" } }
  */
 public record OutdoorCondition() implements Condition {

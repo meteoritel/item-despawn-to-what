@@ -20,8 +20,10 @@ public final class FabricRuleEditClientRegistrar {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    // 注册 S2C 接收器；重复调用安全
-    // 网络回调借用游戏客户端；这里只调度任务，不负责关闭 Minecraft 实例。
+    /**
+     * 注册 S2C 接收器；同一通道重复注册只会覆盖处理器，不会抛异常。
+     * 网络回调借用游戏客户端；这里只调度任务，不负责关闭 Minecraft 实例。
+     */
     @SuppressWarnings("resource")
     public static void register() {
         ClientPlayNetworking.registerGlobalReceiver(RuleSnapshotPayload.TYPE,

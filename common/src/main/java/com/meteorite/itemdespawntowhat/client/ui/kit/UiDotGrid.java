@@ -15,6 +15,17 @@ public final class UiDotGrid {
     private UiDotGrid() {
     }
 
+    /**
+     * 在给定矩形内绘制点阵网格；矩形无效、缩放非法或点数超过上限时放弃绘制。
+     *
+     * @param scale 缩放档位
+     * @param x0 矩形一端 X 坐标
+     * @param y0 矩形一端 Y 坐标
+     * @param x1 矩形另一端 X 坐标
+     * @param y1 矩形另一端 Y 坐标
+     * @param baseStep 未缩放的基准步长（像素）
+     * @param color 方格颜色
+     */
     public static void draw(GuiGraphics graphics, double scale, int x0, int y0, int x1, int y1,
                             int baseStep, int color) {
         int left = Math.min(x0, x1);

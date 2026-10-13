@@ -272,7 +272,7 @@ public final class RuleRuntimeHost {
         return current != null && current.deferNaturalExpiry(level, item);
     }
 
-    // 服务器 tick 结束：推进唯一的公共预算；所有维度、所有任务种类共享同一份额度（ADR-0002）
+    // 服务器 tick 结束：推进唯一的公共预算；所有维度、所有任务种类共享同一份额度
     public static void tickServer(MinecraftServer server) {
         ConversionRuntime current = runtime;
         if (current != null) {

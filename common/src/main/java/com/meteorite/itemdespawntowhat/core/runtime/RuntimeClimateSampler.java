@@ -23,12 +23,14 @@ public final class RuntimeClimateSampler implements ClimateSampler {
     private final boolean multiNoise;
     private final Map<BlockPos, ClimateSample> cache = new LinkedHashMap<>(256, 0.75f, true);
 
+    // 构造采样器：只在群系源为多噪声（主世界 / 下界）时启用采样，其它维度统一返回 null
     public RuntimeClimateSampler(ServerLevel level) {
         this.level = level;
         this.multiNoise = level.getChunkSource().getGenerator().getBiomeSource() instanceof MultiNoiseBiomeSource;
     }
 
     @Override
+    // 按 quart 坐标采样气候参数：命中缓存直接返回，LRU 上限 4096 项
     public @Nullable ClimateSample sample(BlockPos pos) {
         if (!multiNoise) {
             return null;

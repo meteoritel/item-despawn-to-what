@@ -3,13 +3,12 @@ package com.meteorite.itemdespawntowhat.core.network.transport;
 import java.nio.charset.StandardCharsets;
 
 /**
- * 新链路配置编辑协议的通道命名空间与资源上限。
- * 与旧链路 {@code network.ConfigEditLimits} 完全独立，不共享常量也不互相引用；
- * 数值口径对齐既有结论：serverbound 自定义载荷整包 32767 字节，clientbound 侧预留 4 MiB。
+ * 配置编辑协议的通道命名空间与资源上限。
+ * 数值口径：serverbound 自定义载荷整包 32767 字节，clientbound 侧预留 4 MiB。
  */
 public final class RuleEditLimits {
 
-    // 新链路 payload 的 ResourceLocation 命名空间，与旧链路通道区分
+    // payload 的 ResourceLocation 命名空间
     public static final String NAMESPACE = "idtw";
 
     // 单包直发上限（内容字节）：serverbound 整包上限 32767，扣掉包头开销后取 32000
@@ -33,7 +32,7 @@ public final class RuleEditLimits {
     // 每个玩家同时存活的分片传输上限
     public static final int MAX_TRANSFERS_PER_PLAYER = 2;
 
-    // 分片传输的空闲超时（沿用旧链路 60s 口径）
+    // 分片传输的空闲超时（60s，与既有链路口径一致）
     public static final long TRANSFER_TIMEOUT_MILLIS = 60_000L;
 
     // 分片传输空闲超时的 tick 口径（20 tick = 1 秒）：时钟一律用服务端活动 tick，暂停时不流逝

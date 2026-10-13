@@ -9,14 +9,14 @@ import java.util.UUID;
 /**
  * 全局单一编辑目标的会话状态机与覆盖层版本戳管理。
  * 状态机：FREE --取锁--> OPENING --客户端确认--> ACTIVE --提交变更集--> APPLYING --应用结束--> ACTIVE；
- * OPENING/ACTIVE/APPLYING 在释放、断线、租约到期或强制释放时回到 FREE。
+ * OPENING/ACTIVE/APPLYING 在主动释放、租约到期或强制释放时回到 FREE；断线不立即释放，由租约到期回收。
  * 同一时刻至多 1 个非 FREE 会话，因此独占性不再依赖"按玩家隔离"。
  * 时钟一律使用 MinecraftServer.getTickCount()（暂停感知），禁止挂钟时间。
  * 版本戳持久化在覆盖层根目录的 .edit_version（非 .json 后缀，不会被规则读取器扫描）。
  */
 public final class EditSessionManager {
 
-    /***
+    /**
      * 会话状态。
      */
     public enum SessionState {
@@ -30,14 +30,14 @@ public final class EditSessionManager {
         APPLYING
     }
 
-    /***
+    /**
      * 会话只读视图（供指令查询与日志使用）。
      */
     public record SessionInfo(String sessionId, UUID ownerUuid, String ownerName, SessionState state,
                               long openedTick, long lastHeartbeatTick) {
     }
 
-    /***
+    /**
      * 取锁结果：成功时携带新会话，失败时携带当前持有者信息。
      */
     public record AcquireResult(boolean acquired, SessionInfo session, String holderName, UUID holderUuid) {
@@ -57,6 +57,7 @@ public final class EditSessionManager {
     private long openedTick;
     private long lastHeartbeatTick;
 
+    // 构造会话管理器：版本戳从覆盖层根目录的 .edit_version 读取，缺失或损坏按 0 起算
     public EditSessionManager(Path overlayRoot) {
         this.versionFile = overlayRoot.resolve(VERSION_FILE_NAME);
         this.version = readVersion();
@@ -76,7 +77,7 @@ public final class EditSessionManager {
         return version;
     }
 
-    // 在快照和保存前同步磁盘修订，手工编辑尚未 reload 也不能被旧客户端视图覆盖。
+    // 在快照和保存前同步磁盘修订，手工编辑尚未 reload 时也不能被过期客户端视图覆盖。
     public synchronized void synchronizeDiskRevision() {
         byte[] current;
         try {
@@ -193,8 +194,6 @@ public final class EditSessionManager {
         }
         return null;
     }
-
-    // 断线处理：契约要求会话在租约到期后释放，因此此处只保留会话，由 expire 负责回收
 
     private boolean matches(String sessionId) {
         return this.sessionId != null && this.sessionId.equals(sessionId);

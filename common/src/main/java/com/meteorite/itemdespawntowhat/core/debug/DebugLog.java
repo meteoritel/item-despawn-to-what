@@ -53,7 +53,7 @@ final class DebugLog {
         data.addProperty("position_search_checks_per_tick", config.positionSearchChecksPerTick());
         data.addProperty("debug_scenario_prepare_batch_size", config.debugScenarioPrepareBatchSize());
         data.addProperty("debug_scenario_prepare_budget_us", config.debugScenarioPrepareBudgetUs());
-        // 兼容旧日志字段名：公共预算即原来的队列软预算
+        // 字段名沿用既有日志口径：公共预算即队列软预算
         data.addProperty("queue_soft_budget_us", config.serverBudgetUs());
         return data;
     }

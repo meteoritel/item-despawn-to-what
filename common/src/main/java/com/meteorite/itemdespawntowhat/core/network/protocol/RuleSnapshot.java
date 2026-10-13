@@ -9,7 +9,7 @@ import com.mojang.serialization.DataResult;
 import java.util.ArrayList;
 import java.util.List;
 
-/***
+/**
  * 服务端下发的规则快照：版本戳 + 上下文修订 + 逐条规则的来源视图 + 整体问题清单。
  */
 public record RuleSnapshot(int version, int contextRevision, List<RuleSnapshotEntry> entries, List<RuleIssue> issues) {

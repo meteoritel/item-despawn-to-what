@@ -40,53 +40,73 @@ public record UiNumberPolicy(double min, double max, double coarseStep, double f
         }
     }
 
-    // 小数策略：粗档与细档相同
+    /**
+     * 小数策略：粗档与细档相同
+     */
     public static UiNumberPolicy of(double min, double max, double step) {
         return new UiNumberPolicy(min, max, step, step, false, 0.25D);
     }
 
-    // 小数策略：分别指定粗档与细档
+    /**
+     * 小数策略：分别指定粗档与细档
+     */
     public static UiNumberPolicy of(double min, double max, double coarseStep, double fineStep) {
         return new UiNumberPolicy(min, max, coarseStep, fineStep, false, 0.25D);
     }
 
-    // 整数策略：边界与步长必须是整数，细档默认 1
+    /**
+     * 整数策略：边界与步长必须是整数，细档默认 1
+     */
     public static UiNumberPolicy integer(int min, int max, int coarseStep) {
         return new UiNumberPolicy(min, max, coarseStep, 1.0D, true, 0.25D);
     }
 
-    // 整数策略：分别指定粗档与细档
+    /**
+     * 整数策略：分别指定粗档与细档
+     */
     public static UiNumberPolicy integer(int min, int max, int coarseStep, int fineStep) {
         return new UiNumberPolicy(min, max, coarseStep, fineStep, true, 0.25D);
     }
 
-    // 返回换用另一细调拖动灵敏度的新策略（不修改原记录）
+    /**
+     * 返回换用另一细调拖动灵敏度的新策略（不修改原记录）
+     */
     public UiNumberPolicy withFineDragFactor(double factor) {
         return new UiNumberPolicy(min, max, coarseStep, fineStep, integerOnly, factor);
     }
 
-    // 域跨度
+    /**
+     * 域跨度
+     */
     public double span() {
         return max - min;
     }
 
-    // 按档位取步长
+    /**
+     * 按档位取步长
+     */
     public double step(boolean fine) {
         return fine ? fineStep : coarseStep;
     }
 
-    // 把值钳制到合法域；NaN 取 min
+    /**
+     * 把值钳制到合法域；NaN 取 min
+     */
     public double clamp(double value) {
         if (Double.isNaN(value)) return min;
         return Math.clamp(value, min, max);
     }
 
-    // 吸附到最近的合法档位并钳制；非有限值按 min 处理
+    /**
+     * 吸附到最近的合法档位并钳制；非有限值按 min 处理
+     */
     public double snap(double value, boolean fine) {
         return clamp(snapUnclamped(value, fine));
     }
 
-    // 吸附到最近的合法档位，但不做域钳制（调用方自行决定钳制顺序）
+    /**
+     * 吸附到最近的合法档位，但不做域钳制（调用方自行决定钳制顺序）
+     */
     public double snapUnclamped(double value, boolean fine) {
         if (!Double.isFinite(value)) return min;
         double step = step(fine);

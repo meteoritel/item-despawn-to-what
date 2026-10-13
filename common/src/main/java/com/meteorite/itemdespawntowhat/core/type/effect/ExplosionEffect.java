@@ -16,7 +16,8 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * explosion：在触发位置产生爆炸。
- * visual_only 为真时只播放爆炸视觉与音效，不破坏方块、不伤害实体。本类只承载参数模型与参数校验。
+ * visual_only 为真时只播放爆炸视觉与音效，不破坏方块、不伤害实体。
+ * 注册为一次性效果（oneShot）：不参与候选容量计算，对同一源最多尝试一组。本类只承载参数模型与参数校验。
  */
 public record ExplosionEffect(
         float power,

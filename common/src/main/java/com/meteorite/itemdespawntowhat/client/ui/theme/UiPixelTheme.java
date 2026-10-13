@@ -11,7 +11,7 @@ import net.minecraft.client.gui.GuiGraphics;
 /**
  * 默认宿主主题：现行灰色像素外观，绘制与用色逐项转发到既有 {@link UiTheme} 与 {@link UiPalette}。
  *
- * <p>本类是「宿主入口默认提供现行主题」的落点（见 ADR-0032）：映射不复制数值，只把静态入口改为
+ * <p>本类是「宿主入口默认提供现行主题」的落点：映射不复制数值，只把静态入口改为
  * 可注入的实例方法，因此既有画面不变，控件与屏幕也不再静态取色。</p>
  */
 public final class UiPixelTheme implements UiHostTheme {

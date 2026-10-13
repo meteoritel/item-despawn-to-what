@@ -69,7 +69,7 @@ import java.util.function.IntConsumer;
  * 一次性效果（EffectType.oneShot）：不参与候选数量上限；仅含一次性效果的候选最多一组；
  * 同一源请求内每个一次性效果槽（候选 id + 槽序号）只尝试一次，概率落空或条件不满足也算已尝试，续跑不重试。
  * 真实账目只来自执行器回执（EffectResult 与 reportProgress），计划量不冒充成功量；
- * 取消（规则重载/维度卸载/停服）只落一条待返还记录，不在不安全时刻做世界写入，交给 恢复。
+ * 取消（规则重载/维度卸载/停服）只落一条待返还记录，不在不安全时刻做世界写入，交给恢复任务（SettlementRecovery）交付。
  */
 final class ConversionSettlement implements ServerTask {
 
@@ -129,6 +129,7 @@ final class ConversionSettlement implements ServerTask {
     // 返还位置搜索游标：跨刻保留进度，交付成功后重置
     private ReturnItemSpawner.PositionSearch rebateSearch;
 
+    // 构造结算任务：源库存 held 已在触发时刻整堆移出源实体，记录与账本由调用方给出
     ConversionSettlement(ConversionRuntime runtime, ServerScheduler scheduler, ServerLevel level, ItemEntity source,
                          Rule rule, ItemStack held, SettlementRecord record, SettlementLedger ledger) {
         this.runtime = runtime;
@@ -180,6 +181,7 @@ final class ConversionSettlement implements ServerTask {
     }
 
     @Override
+    // 取消回调：中止结算并落盘待返还；ROUND_ROBIN 规则额外记录一条调试日志
     public void onCancelled(CancelReason reason) {
         if (!abort(reason.name(), false)) {
             return;
@@ -191,7 +193,7 @@ final class ConversionSettlement implements ServerTask {
 
     // 中止结算并把待返还量落盘：取消路径（onCancelled）与异常路径（step 的 catch）共用同一条顺序，
     // 不新造第二份账目口径。顺序：幂等位 → 待返还同步 → 状态记录 → 释放未支付预留 → 写盘 + 观测。
-    // 本方法不做任何世界写入（维度卸载/停服时加入世界不安全，待返还数据留给 恢复）；
+    // 本方法不做任何世界写入（维度卸载/停服时加入世界不安全，待返还数据留给恢复任务 SettlementRecovery）；
     // 返回 false 表示此前已中止过（幂等，不重复写盘）。failed=true 时记 FAILED 语义，否则记 INTERRUPTED。
     private boolean abort(String reason, boolean failed) {
         if (cancelled) {
@@ -207,7 +209,7 @@ final class ConversionSettlement implements ServerTask {
                 record.interrupt(reason, level.getGameTime());
             }
         }
-        // 释放未支付的催化剂预留（计划期登记、开组时转已支付）：无世界写入且幂等（D33）
+        // 释放未支付的催化剂预留（计划期登记、开组时转已支付）：无世界写入且幂等
         reservations().releaseOwner(record.id());
         try {
             ledger.put(record);
@@ -237,13 +239,13 @@ final class ConversionSettlement implements ServerTask {
         }
         int costPerGroup = record.sourceCostPerGroup();
         int sourceGroups = costPerGroup > 0 ? held.getCount() / costPerGroup : 1;
-        // 催化剂固定成本上界（D31）：-1 = 预算耗尽本刻不落决定
+        // 催化剂固定成本上界：-1 = 预算耗尽本刻不落决定
         int catalystLimit = catalystGroupLimit(budget);
         if (catalystLimit < 0) {
             return StepResult.yield(1, 1);
         }
         int planned = Math.min(sourceGroups, catalystLimit);
-        // 本结算第一组的候选（B1）：计划期只落「第一组」的选择，后续组在派发期逐组重选
+        // 本结算第一组的候选：计划期只落「第一组」的选择，后续组在派发期逐组重选
         int pick = SELECT_EXHAUSTED;
         if (planned > 0) {
             pick = selectCandidateForGroup(budget);
@@ -282,7 +284,7 @@ final class ConversionSettlement implements ServerTask {
         return StepResult.yield(1, 1);
     }
 
-    // 为本组选候选（B1）：轮询从扫描起点依次找剩余容量 >= 1 的候选（首次取共享游标），优先模式从列表首项找；
+    // 为本组选候选：轮询从扫描起点依次找剩余容量 >= 1 的候选（首次取共享游标），优先模式从列表首项找；
     // 缓存记录本地预留，开组前仍复核世界存量。CAPACITY_PENDING = 预算耗尽需重试，
     // SELECT_EXHAUSTED = 所有候选都开不出一组
     private int selectCandidateForGroup(ServerTickBudget budget) {
@@ -358,7 +360,7 @@ final class ConversionSettlement implements ServerTask {
     }
 
     // 触发位置 radius 盒内命中催化剂定义的掉落物，排除源实体；按到触发点距离由近及远排序，
-    // 距离相同时按 UUID 兜底，保证与实体遍历顺序无关（D31）
+    // 距离相同时按 UUID 兜底，保证与实体遍历顺序无关
     private List<ItemEntity> collectCatalystItems(CatalystCost catalyst) {
         AABB box = EffectTargets.blockBox(source.blockPosition(), catalyst.radius());
         List<ItemEntity> found = level.getEntitiesOfClass(ItemEntity.class, box,
@@ -373,7 +375,8 @@ final class ConversionSettlement implements ServerTask {
         return runtime.catalystReservations();
     }
 
-    // 聚合同一产物的组内需求，用共用阈值检查完整组；经验采用合并前的保守逻辑球数。
+    // 聚合同一产物的组内需求：按邻近产物上限与单组需求算出可开组数；经验球按合并前的保守球数估算。
+    // 仅含一次性效果的候选不参与容量计算，固定按 1 组处理。
     private int capacityGroups(OutcomeCandidate selected, ServerTickBudget budget) {
         boolean hasOneShot = false;
         boolean hasRepeatable = false;
@@ -448,7 +451,7 @@ final class ConversionSettlement implements ServerTask {
                     }
                 }
                 if (pendingCandidate == null) {
-                    // 每组独立选候选（B1）：轮询从共享游标搜索能完成一组的候选，容量不足的候选跳过
+                    // 每组独立选候选：轮询从共享游标搜索能完成一组的候选，容量不足的候选跳过
                     int pick = selectCandidateForGroup(budget);
                     if (pick == CAPACITY_PENDING) {
                         // 容量搜索未完成（预算耗尽）：本刻不开组，不落任何决定，下刻从同一游标重算
@@ -471,7 +474,7 @@ final class ConversionSettlement implements ServerTask {
                     pendingCandidate = candidates.get(pick);
                     pendingCandidateIndex = pick;
                 }
-                // 催化剂固定成本支付（D33）：先支付再开组；不足则截断组数并释放预留，绝不半支付
+                // 催化剂固定成本支付：先支付再开组；不足则截断组数并释放预留，绝不半支付
                 int perGroup = record.catalystCostPerGroup();
                 int paidCatalyst = 0;
                 if (perGroup > 0) {
@@ -499,11 +502,11 @@ final class ConversionSettlement implements ServerTask {
                 }
                 int cost = Math.min(record.sourceCostPerGroup(), held.getCount());
                 if (cost > 0) {
-                    // 已开始的组支付完整固定成本（ADR-0001），成本从结算库存里扣掉
+                    // 已开始的组支付完整固定成本，成本从结算库存里扣掉
                     held.setCount(held.getCount() - cost);
                 }
                 record.groupStarted(cost);
-                // 固定顺序：催化剂已支付、源成本已扣减，才记账并写盘（D33）
+                // 固定顺序：催化剂已支付、源成本已扣减，才记账并写盘
                 record.catalystGroupPaid(paidCatalyst);
                 // 已开始组立即写盘：中途停服重启后，已支付成本的组不会因为未落盘而被当作「未开始库存」重复返还
                 ledger.put(record);
@@ -534,7 +537,7 @@ final class ConversionSettlement implements ServerTask {
             int slot = effectCursor++;
             Effect effect = effects.get(slot);
             if (isOneShotAttempted(candidate.id(), slot, effect)) {
-                // 同一源请求内一次性效果只尝试一次（B2）：后续组跳过该槽，不重试也不重复计费
+                // 同一源请求内一次性效果只尝试一次：后续组跳过该槽，不重试也不重复计费
                 if (DebugMode.ENABLED) {
                     DebugScenarioManager.observe(source, "EFFECT_ONESHOT_SKIPPED", "effect", effect.type(),
                             "outcome", candidate.id(), "slot", slot, "group", groupsStarted);
@@ -551,7 +554,7 @@ final class ConversionSettlement implements ServerTask {
     }
 
     // 一次性效果是否已在同一源请求（本次结算）内尝试过：首次尝试时登记并返回 false；
-    // 概率落空、条件不满足、执行失败都算已尝试，续跑不重试（B2）；未注册类型不参与
+    // 概率落空、条件不满足、执行失败都算已尝试，续跑不重试；未注册类型不参与
     private boolean isOneShotAttempted(String candidateId, int slot, Effect effect) {
         EffectType<?> definition = runtime.effectDefinition(effect.type());
         if (definition == null || !definition.oneShot()) {

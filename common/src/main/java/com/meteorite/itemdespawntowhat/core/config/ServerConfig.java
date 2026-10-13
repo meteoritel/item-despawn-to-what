@@ -68,7 +68,7 @@ public record ServerConfig(
     // 位置搜索默认值：每刻最多检查 16 个候选位置（安全生成与返还位置搜索共用）
     public static final int DEFAULT_POSITION_SEARCH_CHECKS_PER_TICK = 16;
 
-    // 调试场景准备参数：每 tick 最多准备 128 个源、准备软预算 2000us（与原硬编码 128 / 2_000_000L 逐位等价）
+    // 调试场景准备参数：每 tick 最多准备 128 个源、准备软预算 2000us（2000us = 2_000_000 纳秒）
     public static final int DEFAULT_DEBUG_SCENARIO_PREPARE_BATCH_SIZE = 128;
     public static final int DEFAULT_DEBUG_SCENARIO_PREPARE_BUDGET_US = 2000;
 
@@ -107,7 +107,7 @@ public record ServerConfig(
                     .forGetter(ServerConfig::debugLogging),
             Codec.intRange(100, 100000).optionalFieldOf("server_budget_us", DEFAULT_SERVER_BUDGET_US)
                     .forGetter(ServerConfig::serverBudgetUs),
-            // 可选键：缺失时回退到 max_checks_per_tick，避免旧配置被无条件压低预算
+            // 可选键：缺失时回退到 max_checks_per_tick，避免既有配置被无条件压低预算
             Codec.intRange(1, 100000).optionalFieldOf("max_work_units_per_tick")
                     .forGetter(ServerConfig::maxWorkUnitsPerTick),
             Codec.intRange(1, 100000).optionalFieldOf("effects_work_units_per_tick", DEFAULT_EFFECTS_WORK_UNITS_PER_TICK)
@@ -127,12 +127,12 @@ public record ServerConfig(
             // 只影响 debug 场景的准备阶段（每 tick 源数量上限、准备软预算），不参与 server_budget_us
             Codec.intRange(1, 100000).optionalFieldOf("debug_scenario_prepare_batch_size", DEFAULT_DEBUG_SCENARIO_PREPARE_BATCH_SIZE)
                     .forGetter(ServerConfig::debugScenarioPrepareBatchSize),
-            // 单位微秒：2000us 即原硬编码的 2_000_000L 纳秒
+            // 单位微秒：2000us 即 2_000_000 纳秒
             Codec.intRange(1, 100000).optionalFieldOf("debug_scenario_prepare_budget_us", DEFAULT_DEBUG_SCENARIO_PREPARE_BUDGET_US)
                     .forGetter(ServerConfig::debugScenarioPrepareBudgetUs)
     ).apply(instance, ServerConfig::new));
 
-    // 旧调用点沿用原参数列表，邻近阈值采用服务器统一默认。
+    // 便捷构造：不含邻近阈值参数，统一取 NearbyProductLimits.DEFAULT
     @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
     public ServerConfig(int checkIntervalTicks, int backoffMaxTicks, int maxChecksPerTick, String overlayDirectory, int fabricLifespanFallbackTicks, boolean debugLogging, int serverBudgetUs, Optional<Integer> maxWorkUnitsPerTick, int effectsWorkUnitsPerTick, int checkSpreadWindowTicks, int dispatchBatchSize, int newProductProtectionSeconds, int conversionCooldownSeconds, int positionSearchChecksPerTick, int debugScenarioPrepareBatchSize, int debugScenarioPrepareBudgetUs) {
         this(checkIntervalTicks, backoffMaxTicks, maxChecksPerTick, overlayDirectory, fabricLifespanFallbackTicks, debugLogging, serverBudgetUs, maxWorkUnitsPerTick, effectsWorkUnitsPerTick, checkSpreadWindowTicks, dispatchBatchSize, newProductProtectionSeconds, conversionCooldownSeconds, positionSearchChecksPerTick, debugScenarioPrepareBatchSize, debugScenarioPrepareBudgetUs, NearbyProductLimits.DEFAULT);
@@ -144,7 +144,7 @@ public record ServerConfig(
                     .forGetter(ServerConfig::nearbyProducts)
     ).apply(instance, (base, limits) -> new ServerConfig(base.checkIntervalTicks(), base.backoffMaxTicks(), base.maxChecksPerTick(), base.overlayDirectory(), base.fabricLifespanFallbackTicks(), base.debugLogging(), base.serverBudgetUs(), base.maxWorkUnitsPerTick(), base.effectsWorkUnitsPerTick(), base.checkSpreadWindowTicks(), base.dispatchBatchSize(), base.newProductProtectionSeconds(), base.conversionCooldownSeconds(), base.positionSearchChecksPerTick(), base.debugScenarioPrepareBatchSize(), base.debugScenarioPrepareBudgetUs(), limits)));
 
-    // 全局工作量上限：未显式配置时回退到旧的 max_checks_per_tick，保证旧配置意图不丢失
+    // 全局工作量上限：未显式配置时回退到 max_checks_per_tick，保持既有配置意图
     public int effectiveMaxWorkUnitsPerTick() {
         return maxWorkUnitsPerTick.orElse(maxChecksPerTick);
     }

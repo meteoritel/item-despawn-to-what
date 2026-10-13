@@ -51,7 +51,7 @@ final class ConditionTreeChrome {
 
         Strip(Font font, UiIconStrip.Orientation orientation) {
             this.strip = new UiIconStrip(font, orientation);
-            // 画布页外壳使用扁平宿主主题的条带样式（ADR-0028：仅显式取用时生效）
+            // 画布页外壳使用扁平宿主主题的条带样式（仅显式取用时生效）
             strip.setStyle(UiHostThemes.flatTheme().stripStyle());
         }
 

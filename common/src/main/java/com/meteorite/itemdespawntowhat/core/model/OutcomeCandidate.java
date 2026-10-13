@@ -43,7 +43,7 @@ public record OutcomeCandidate(
         ).apply(instance, OutcomeCandidate::new));
     }
 
-    // 隐式候选：把旧格式的顶层 effects 映射成唯一候选（兼容行为，不写入 JSON）
+    // 隐式候选：把顶层 effects 映射成唯一候选（仅内存态，不写入 JSON）
     public static OutcomeCandidate implicit(List<Effect> effects) {
         return new OutcomeCandidate(IMPLICIT_ID, effects, DEFAULT_SAFE_SPAWN, DEFAULT_FILL_ORIGIN);
     }

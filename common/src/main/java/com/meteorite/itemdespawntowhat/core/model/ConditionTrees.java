@@ -119,7 +119,7 @@ public final class ConditionTrees {
                 warnInvalidPath("updateTermsAt", path, "叶节点没有 terms");
                 return root;
             }
-            // 文档语义是「Inverted 传入只含唯一 term 的单元素列表」，term 为 null 时无法成立，按类型不符失败
+            // Inverted 只接受含唯一 term 的单元素列表；term 为 null 时无法成立，按类型不符失败
             case ConditionNode.Inverted(ConditionNode term) when term == null -> {
                 warnInvalidPath("updateTermsAt", path, "inverted 节点的 term 为 null（结构非法）");
                 return root;

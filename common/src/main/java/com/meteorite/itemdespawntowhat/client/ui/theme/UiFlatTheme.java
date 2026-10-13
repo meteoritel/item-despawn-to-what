@@ -15,7 +15,7 @@ import net.minecraft.client.gui.GuiGraphics;
  * 调色板与绘制原语取自 {@link UiFlatPalette} 与 {@link UiFlatSkin}。
  *
  * <p>本主题只经 {@link UiHostThemes#flatTheme()} 供调用方显式取用，不是默认主题：
- * {@link UiHostThemes#defaultTheme()} 仍是像素外观，其它页面在未显式注入时画面不变（ADR-0028）。</p>
+ * {@link UiHostThemes#defaultTheme()} 仍是像素外观，其它页面在未显式注入时画面不变。</p>
  *
  * <p>控件可见的调色板与像素主题相同：两种皮肤的差别在控件颜色之外的外壳描边与层次上，
  * 画布色 {@code canvas*} 本就是扁平取值，因此 {@link UiHostPalette} 可直接使用。度量沿用宿主级常量，

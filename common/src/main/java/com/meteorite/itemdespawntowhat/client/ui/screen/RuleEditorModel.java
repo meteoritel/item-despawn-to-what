@@ -25,7 +25,7 @@ import java.util.Set;
 
 /***
  * 编辑页数据模型：把服务端快照映射成「按规则 id 的草稿会话」。
- * 所有字段与结构编辑都必须经过 {@link EditSession#apply}，保证每个编辑入口都有撤销标签（编辑会话见 docs/dev/layers/client.md）。
+ * 所有字段与结构编辑都必须经过 {@link EditSession#apply}，保证每个编辑入口都有撤销标签。
  */
 public final class RuleEditorModel {
 
@@ -325,7 +325,7 @@ public final class RuleEditorModel {
             // 服务端当前内容的值快照；没有生效视图即视为目标不存在
             RuleValue serverBody = entry == null || entry.effective() == null
                     ? null : RuleDraft.of(entry.effective()).root();
-            // 落盘草稿的基线快照；缺失（旧版草稿）表示基线未知
+            // 落盘草稿的基线快照；既有草稿未记录基线时为 null，表示基线未知
             RuleValue baseline = stored.baselineValue();
             // 整条规则比较（不做逐字段合并）：目标消失、同名新规则、内容被改都会提示
             if (stored.created() && serverBody != null) {
@@ -333,7 +333,7 @@ public final class RuleEditorModel {
             } else if (!stored.created() && serverBody == null) {
                 this.conflicts.put(id, new DraftConflict(id, DraftConflict.Reason.TARGET_MISSING));
             } else if (serverBody != null && (baseline == null || !baseline.equals(serverBody))) {
-                // 基线缺失（旧版草稿）或内容确实变了：保守判为远端已变，交给玩家选
+                // 基线缺失（既有草稿未记录基线）或内容确实变了：保守判为远端已变，交给玩家选
                 this.conflicts.put(id, new DraftConflict(id, DraftConflict.Reason.REMOTE_CHANGED));
             }
             RuleDraft draft = RuleDraft.of(serverBody);

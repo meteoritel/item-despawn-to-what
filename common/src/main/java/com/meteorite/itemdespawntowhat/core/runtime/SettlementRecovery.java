@@ -15,7 +15,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 /**
- * 持久返还交付任务：加载或重启后只交付结算记录里的待返还库存，不恢复旧效果队列。
+ * 持久返还交付任务：加载或重启后只交付结算记录里的待返还库存，不恢复既有效果队列。
  * 交付量每步直接读取记录字段 pendingDelivery（唯一口径，与「已派发未回执」的 pendingUnits 无关），
  * 交付成功后才扣减待交付量并写盘，因此正常路径不会多生成；区块不可用时带退避延后重试，
  * 停服/维度卸载时由调度器带原因取消，取消路径不做世界写入。

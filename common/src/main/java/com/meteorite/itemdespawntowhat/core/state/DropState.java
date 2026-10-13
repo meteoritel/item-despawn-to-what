@@ -7,10 +7,10 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
  * 掉落物实体层的转化状态：临时保护、临时冷却、永久保护、永久禁转。
  * 状态只挂在实体上，不进 ItemStack：拾取即实体消亡，重丢得到的是普通掉落物，不继承任何状态。
  * 时间字段是绝对值（服务端游戏刻），计时基准为 ServerLevel#getGameTime()：卸载不暂停、重启后继续。
- * 0 表示未设置：合并临时状态时取较晚到期刻，未设置的一方不参与取大（D3）。
+ * 0 表示未设置：合并临时状态时取较晚到期刻，未设置的一方不参与取大。
  */
 public record DropState(
-        // 结构版本：只识别 1，未知版本按无状态处理（D7）
+        // 结构版本：只识别 1，未知版本按无状态处理
         int version,
         // 临时保护到期刻（绝对值游戏刻，0 表示未设置）
         long temporaryProtectionUntil,
@@ -59,7 +59,7 @@ public record DropState(
         return temporaryProtectionUntil > 0L && gameTime < temporaryProtectionUntil;
     }
 
-    // 是否豁免三类环境伤害：永久保护或临时保护有效（D2：恒为三类全防，不存掩码）
+    // 是否豁免三类环境伤害：永久保护或临时保护有效（恒为三类全防，不存掩码）
     public boolean isProtected(long gameTime) {
         return permanentProtection || protectsTemporarily(gameTime);
     }
@@ -69,7 +69,7 @@ public record DropState(
         return temporaryCooldownUntil <= 0L ? 0L : Math.max(0L, temporaryCooldownUntil - gameTime);
     }
 
-    // 是否阻止启动转化：永久禁转，或临时冷却未到期（任务清单 5）
+    // 是否阻止启动转化：永久禁转，或临时冷却未到期
     public boolean blocksConversion(long gameTime) {
         return permanentConversionBan || cooldownRemaining(gameTime) > 0L;
     }
@@ -87,13 +87,13 @@ public record DropState(
         return new DropState(version, temporaryProtectionUntil, temporaryCooldownUntil, true, true);
     }
 
-    // 永久标志是否完全一致：合并兼容的判据（D3）
+    // 永久标志是否完全一致：合并兼容的判据
     public boolean permanentFlagsMatch(DropState other) {
         return other != null && permanentProtection == other.permanentProtection
                 && permanentConversionBan == other.permanentConversionBan;
     }
 
-    // 临时状态并集：双方到期刻各自取较晚者，永久标志沿用本状态（D3：merge TAIL 使用）
+    // 临时状态并集：双方到期刻各自取较晚者，永久标志沿用本状态（merge 尾部使用）
     public DropState unionTemporary(DropState other) {
         return new DropState(version,
                 Math.max(temporaryProtectionUntil, other.temporaryProtectionUntil),

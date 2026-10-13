@@ -47,6 +47,7 @@
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderPainter}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.PixelSliderPainter}</li>
  *   <li>文本局部历史：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTextHistory}（文本、光标与选择快照）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTextSelection}（鼠标选择：固定锚点、Shift 扩选与矩形外拖动）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut}（事件修饰键识别撤销与重做）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryDispatcher}（当前作用域优先与宿主历史派发）</li>
  *   <li>焦点：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget}、
@@ -105,9 +106,7 @@
  * {@code setStyle} 覆盖样式后文本色随之重算（除非先调用 {@code setTextColor}）；
  * 其 {@code Labels} 新增 default 方法 {@code zoomReadout(int)}，既有实现无需改动。
  * {@link com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll} 另有非交互工具方法
- * {@code trimToWidth(Font, String, int)}（超宽时截断并补 ASCII 省略号），与悬停滚动入口并存。
- * 依赖边界、输入路由顺序、捕获与操作生命周期、数值策略、滑块接入示例与 style 注入方式见
- * {@code docs/dev/internals/ui-kit/README.md}。</p>
+ * {@code trimToWidth(Font, String, int)}（超宽时截断并补 ASCII 省略号），与悬停滚动入口并存。</p>
  *
  * <p><b>调用示例</b>：无规则语义的装配示例见 {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderExamples}——
  * {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderExamples#scalarSlider}（普通小数滑块：精确回填、
@@ -116,7 +115,6 @@
  * {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderExamples#cyclicRange}（周期区间：宿主注入周期/刻度/标记）。</p>
  *
  * <p><b>尚未完成</b>：独立 Gradle 模块与发布脚本，需要另立拆包任务；当前只冻结边界与检查方式。
- * 子包拆分（{@code api/} 与 {@code internal/}）已评估并决定不做，理由见
- * {@code docs/dev/internals/ui-kit/README.md} 的「拆包就绪门槛」。</p>
+ * 子包拆分（{@code api/} 与 {@code internal/}）已评估并决定不做。</p>
  */
 package com.meteorite.itemdespawntowhat.client.ui.kit;

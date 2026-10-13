@@ -60,6 +60,7 @@ public final class CatalystThresholdProjection {
         return items.isEmpty() ? FALLBACK_THRESHOLD : resolveThreshold(rule, items, scopeEffect, items.getFirst());
     }
 
+    // 按单个引用解析门槛：同作用域成本优先，其次全规则唯一匹配成本，否则退回 DEFAULT_COUNT；编辑器「默认：N」提示与此处共用同一判定
     public static int resolveThreshold(Rule rule, List<TaggedId> items, @Nullable Effect scopeEffect, TaggedId reference) {
         // 同作用域优先：效果级条件跟随所在效果自身的消耗量
         if (scopeEffect instanceof ConsumeCatalystEffect consume && sameItems(items, consume.items())) {

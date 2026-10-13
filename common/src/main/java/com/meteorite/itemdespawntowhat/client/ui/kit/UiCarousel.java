@@ -11,20 +11,38 @@ public final class UiCarousel {
 
     public UiCarousel(List<UiIcon> icons) { this.icons = List.copyOf(icons); }
 
+    /**
+     * 当前应展示的成员下标；选中后按固定间隔自动推进，成员为空时返回 -1。
+     *
+     * @param milliseconds 宿主时间（毫秒）
+     * @return 成员下标
+     */
     public int index(long milliseconds) {
         if (icons.isEmpty()) return -1;
         return Math.floorMod(selected + (int) (Math.max(0, milliseconds - selectedAt) / 1500), icons.size());
     }
 
-    // 手动选中后重新计时，不把上一轮自动切换的时间带入下一项。
+    /**
+     * 手动选中后重新计时，不把上一轮自动切换的时间带入下一项。
+     *
+     * @param index 目标下标，越界时取模
+     * @param milliseconds 宿主时间（毫秒）
+     */
     public void select(int index, long milliseconds) {
         if (icons.isEmpty()) return;
         selected = Math.floorMod(index, icons.size());
         selectedAt = milliseconds;
     }
 
+    /**
+     * 相对当前项步进。
+     *
+     * @param direction -1 上一项，+1 下一项
+     * @param milliseconds 宿主时间（毫秒）
+     */
     public void step(int direction, long milliseconds) { select(index(milliseconds) + direction, milliseconds); }
 
+    /** 绘制当前项；图标按区域等比缩放并居中。 */
     public void render(GuiGraphics graphics, UiRect box, long milliseconds) {
         int index = index(milliseconds);
         if (index < 0) return;

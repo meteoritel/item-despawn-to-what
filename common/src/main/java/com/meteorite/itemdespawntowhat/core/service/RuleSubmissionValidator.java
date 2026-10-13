@@ -10,7 +10,7 @@ import com.meteorite.itemdespawntowhat.core.model.RuleValidation;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEdit;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEditChangeSet;
 
-/** 网络保存与旧配置迁移共用的提交校验；解码或语义错误必须发生在写入前。 */
+/** 网络保存与既有配置迁移共用的提交校验；解码或语义错误必须发生在写入前。 */
 public final class RuleSubmissionValidator {
     private RuleSubmissionValidator() {}
 

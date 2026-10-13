@@ -37,7 +37,7 @@ public sealed interface ConditionNode
     }
 
     /**
-     * 条件叶：承载一个具体条件参数对象，叶级取反已删除，取反一律用 Inverted。
+     * 条件叶：承载一个具体条件参数对象；叶级取反不受支持，取反一律用 Inverted。
      */
     record Leaf(Condition condition) implements ConditionNode {
     }

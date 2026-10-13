@@ -16,7 +16,8 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * lightning：在触发位置召唤闪电。
- * 本类只承载参数模型与参数校验，运行时执行逻辑属。
+ * 注册为一次性效果（oneShot）：不参与候选容量计算，对同一源最多尝试一组。
+ * 本类只承载参数模型与参数校验，运行时执行逻辑见 LightningExecutor。
  */
 public record LightningEffect(
         int count,

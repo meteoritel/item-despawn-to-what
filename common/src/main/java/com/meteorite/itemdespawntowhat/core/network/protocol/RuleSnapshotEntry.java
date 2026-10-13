@@ -10,7 +10,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 
-/***
+/**
  * 单条规则的来源视图：客户端据此渲染"生效值 / 基础值 / 覆盖值"三态。
  * origin 取值 overlay/datapack/mixed；status 取值 active/disabled/masked/invalid。
  */

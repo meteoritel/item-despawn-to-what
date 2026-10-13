@@ -35,7 +35,7 @@ public interface EffectContext {
     /**
      * 本组一次性应用的轮数（≥1）。
      * 「一轮 = 一组」，运行时逐组派发效果，因此本值恒为 1；
-     * 产出类与消耗类效果仍按本值缩放（与旧实现写法保持一致）。
+     * 产出类与消耗类效果仍按本值缩放。
      * 一次性世界效果（闪电/爆炸/箭雨/天气）不乘。
      */
     int rounds();
@@ -71,13 +71,13 @@ public interface EffectContext {
 
     // 候选级安全生成开关：为 true 时生成位置需要在原点附近搜索安全点
     default boolean safeSpawn() {
-        // 默认关闭：沿用原点生成行为
+        // 默认关闭：按原点行为生成
         return false;
     }
 
     // 候选级起点填充开关：为 false 时方块效果不尝试填充触发位置本身
     default boolean fillOrigin() {
-        // 默认开启：沿用原先中心位置的填充尝试
+        // 默认开启：中心位置本身也参与填充尝试
         return true;
     }
 

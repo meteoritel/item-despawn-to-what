@@ -9,8 +9,8 @@ import net.minecraft.world.item.ItemStack;
  * 一次转化的结算记录：计划量、已开始的组、真实完成量与返还交付进度。
  * 账目口径：N = C + 已交付返还 + 尚待交付返还，C = 每组源成本 × 已开始组数；
  * appliedUnits 只由执行器回执累加，pendingUnits 是已派发未回执的部分，计划量不冒充成功量。
- * 记录可持久化：无法加入世界的返还留在 pendingDelivery 里，交给 恢复。
- * 催化剂按单独账目计数（catalystCostPerGroup / catalystGroupsPaid / catalystsConsumed），不进源物品守恒式（D31）。
+ * 记录可持久化：无法加入世界的返还留在 pendingDelivery 里，交给恢复任务（SettlementRecovery）逐步交付。
+ * 催化剂按单独账目计数（catalystCostPerGroup / catalystGroupsPaid / catalystsConsumed），不进源物品守恒式。
  */
 public final class SettlementRecord {
 
@@ -23,7 +23,7 @@ public final class SettlementRecord {
     private final ItemStack source;
     private final int initialCount;
     private final int sourceCostPerGroup;
-    // 记录创建时的源位置：重启后源实体可能已不存在，返还交付只能以这个位置为搜索起点（旧记录缺该字段）
+    // 记录创建时的源位置：重启后源实体可能已不存在，返还交付只能以这个位置为搜索起点；缺该字段的记录退回世界出生点
     private final double positionX;
     private final double positionY;
     private final double positionZ;
@@ -38,8 +38,8 @@ public final class SettlementRecord {
     private int pendingUnits;
     private int skippedEffects;
     private int failedEffects;
-    // 催化剂固定成本（D31）：每组消耗件数、已支付组数、已真实扣减的催化剂总件数；
-    // 未声明 catalyst_cost 的规则三项恒为 0，且不写盘（存档字节与 完全一致）
+    // 催化剂固定成本：每组消耗件数、已支付组数、已真实扣减的催化剂总件数；
+    // 未声明 catalyst_cost 的规则三项恒为 0，且不写盘（存档字节与未声明时一致）
     private int catalystCostPerGroup;
     private int catalystGroupsPaid;
     private int catalystsConsumed;
@@ -48,7 +48,7 @@ public final class SettlementRecord {
     private long startedTick = -1L;
     private long finishedTick = -1L;
 
-    // 无位置的重载：旧存档与外部构造用，恢复交付时退回世界出生点
+    // 无位置的重载：供缺位置字段的存档与外部构造使用，恢复交付时退回世界出生点
     SettlementRecord(String id, String ruleId, String dimension, ItemStack source, int initialCount, int sourceCostPerGroup) {
         this(id, ruleId, dimension, source, initialCount, sourceCostPerGroup, false, 0.0D, 0.0D, 0.0D);
     }
@@ -84,7 +84,7 @@ public final class SettlementRecord {
         startedTick = gameTime;
     }
 
-    // 一组开始：该组的固定源成本已从结算库存扣减（ADR-0001 只对已开始的组收费）
+    // 一组开始：该组的固定源成本已从结算库存扣减（只对已开始的组收费）
     void groupStarted(int cost) {
         groupsStarted++;
         consumedSources += Math.max(0, cost);
@@ -219,14 +219,14 @@ public final class SettlementRecord {
         tag.putString("interrupt_reason", interruptReason);
         tag.putLong("started_tick", startedTick);
         tag.putLong("finished_tick", finishedTick);
-        // 位置字段：旧存档缺 has_position，恢复交付退回世界出生点
+        // 位置字段：缺 has_position 的记录恢复交付时退回世界出生点，故只在有位置时写入坐标
         tag.putBoolean("has_position", hasPosition);
         if (hasPosition) {
             tag.putDouble("pos_x", positionX);
             tag.putDouble("pos_y", positionY);
             tag.putDouble("pos_z", positionZ);
         }
-        // 催化剂字段只在 >0 时写盘：未声明 catalyst_cost 的存档字节与 完全一致
+        // 催化剂字段只在 >0 时写盘：未声明 catalyst_cost 的记录不产生这些字段，存档字节保持一致
         if (catalystCostPerGroup > 0) {
             tag.putInt("catalyst_cost", catalystCostPerGroup);
         }
@@ -257,7 +257,7 @@ public final class SettlementRecord {
         record.pendingUnits = tag.getInt("pending_units");
         record.skippedEffects = tag.getInt("skipped_effects");
         record.failedEffects = tag.getInt("failed_effects");
-        // 缺失取 0：旧存档与未声明 catalyst_cost 的记录都不产生催化剂账目
+        // 缺失取 0：没有该字段的记录（未声明 catalyst_cost）不产生催化剂账目
         record.catalystCostPerGroup = tag.contains("catalyst_cost") ? tag.getInt("catalyst_cost") : 0;
         record.catalystGroupsPaid = tag.contains("catalyst_groups_paid") ? tag.getInt("catalyst_groups_paid") : 0;
         record.catalystsConsumed = tag.contains("catalysts_consumed") ? tag.getInt("catalysts_consumed") : 0;

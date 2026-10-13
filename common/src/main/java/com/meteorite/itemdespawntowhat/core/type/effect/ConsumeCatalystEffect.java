@@ -57,6 +57,7 @@ public record ConsumeCatalystEffect(
         counts = Map.copyOf(counts);
     }
 
+    // 单个催化剂的支付门槛：counts 未配置该引用时取 count
     public int countFor(TaggedId item) { return counts.getOrDefault(item, count); }
 
     // 类型专属参数编解码器；通用字段复用 CommonFields 片段（codec 层不得产出 null）

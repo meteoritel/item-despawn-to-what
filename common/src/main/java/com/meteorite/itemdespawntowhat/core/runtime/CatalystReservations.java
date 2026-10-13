@@ -18,7 +18,7 @@ import net.minecraft.world.level.Level;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTickBudget;
 
 /**
- * 催化剂固定成本的运行期预留表（D31）：同维度维护「已预留未支付」的催化剂实体 UUID → 件数，
+ * 催化剂固定成本的运行期预留表：同维度维护「已预留未支付」的催化剂实体 UUID → 件数，
  * 使多个结算任务不会重复使用同一批催化剂；组开始时把该组预留转为已支付（真实 shrink + 空栈 discard）。
  * 访问约束：只在服务端线程访问，不做同步；按维度分表，跨维度互不影响。
  * 生命周期：纯运行期结构、不落盘 —— 重启后预留自然消失，中断时已释放的预留不会在重启后产生任何件数扣减或返还。
@@ -31,6 +31,7 @@ final class CatalystReservations {
     // 支付三态：已支付 / 本刻预算不足需下刻重试 / 可用量不足（含实体已不存在或被扣减）
     enum PayOutcome { PAID, RETRY, SHORT }
 
+    // 支付结果：三态 + 实际支付件数（RETRY / SHORT 恒为 0）
     record PayResult(PayOutcome outcome, int paid) {
         static PayResult paid(int paid) { return new PayResult(PayOutcome.PAID, paid); }
         static PayResult retry() { return new PayResult(PayOutcome.RETRY, 0); }

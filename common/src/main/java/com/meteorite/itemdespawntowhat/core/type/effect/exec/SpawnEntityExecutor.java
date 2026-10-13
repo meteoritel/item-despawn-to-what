@@ -25,7 +25,10 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
-/*** 统一实体生成分发与通用实体策略，保留有界安全位置搜索。 */
+/**
+ * 统一实体生成分发入口：按产出子类（物品 / 经验 / 通用实体）分派到对应执行策略。
+ * 通用实体的安全位置搜索有界（5×5×5 共 125 个候选，垂直方向权重更高），搜索不成功时回退到原点附近。
+ */
 public final class SpawnEntityExecutor {
 
 
@@ -128,7 +131,8 @@ public final class SpawnEntityExecutor {
         }
         @Override
         public void run() {
-            // 安全搜索可能读取相邻方块，候选范围比 原生成点更宽，需多留一圈区块
+            // 每个实体都重新搜索：上一个命中位置可能已被占用；候选检查数按刻累计，用尽即让出并保留搜索游标
+            // 安全搜索可能读取相邻方块，候选范围比原生成点更宽，需多留一圈区块
             int area = safeSpawn ? SEARCH_HORIZONTAL : 1;
             if (!com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks.containsArea(level, center, area)) {
                 context.schedule(20, this); return;

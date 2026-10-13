@@ -95,7 +95,7 @@ public final class RuleDraft {
         this.deleted = false;
     }
 
-    // ---- 值对象读写（界面侧入口；见 ADR-0029 决策 4） ----
+    // ---- 值对象读写（界面侧入口） ----
 
     // 工作副本的实时值视图；不复制，随草稿修改而变化
     public RuleValue root() {

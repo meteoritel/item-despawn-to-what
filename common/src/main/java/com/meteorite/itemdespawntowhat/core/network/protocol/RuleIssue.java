@@ -8,7 +8,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 
-/***
+/**
  * 结构化问题：跨网络传输，客户端不得解析中文日志或字符串拼接来决定状态。
  * severity 取值 error/warning/info；origin 取值 overlay/datapack/runtime/network；
  * messageCode 为全限定翻译 key，messageArgs 供 Component.translatable 使用。

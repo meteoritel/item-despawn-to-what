@@ -27,7 +27,7 @@ public record DimensionCondition(List<ResourceLocation> dimensions) implements C
     // 参数 JSON 字段名
     private static final String FIELD_DIMENSIONS = "dimensions";
 
-    // 参数编解码器：叶级取反已删除（改用条件树的 inverted 节点）；列表缺省为空，缺失由 validateParams 给出可读错误
+    // 参数编解码器：叶级取反不受支持（改用条件树的 inverted 节点）；列表缺省为空，缺失由 validateParams 给出可读错误
     public static final MapCodec<DimensionCondition> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
             ResourceLocation.CODEC.listOf().optionalFieldOf(FIELD_DIMENSIONS, List.of())
                     .forGetter(DimensionCondition::dimensions)

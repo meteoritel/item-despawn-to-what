@@ -38,7 +38,7 @@ import java.util.Set;
  */
 public final class RuleCatalogSources {
 
-    // 按服务端实例缓存的源列表：换服（或换存档）时整体重建，旧服务端随之可回收
+    // 按服务端实例缓存的源列表：换服（或换存档）时整体重建，前一个服务端实例随之可回收
     private static volatile CacheEntry cache;
 
     private RuleCatalogSources() {

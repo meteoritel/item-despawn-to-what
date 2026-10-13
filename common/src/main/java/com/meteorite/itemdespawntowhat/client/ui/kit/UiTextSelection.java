@@ -27,15 +27,18 @@ public final class UiTextSelection implements UiInputTarget, UiInputCapture.Targ
         this.target = Objects.requireNonNull(target, "Text selection target");
     }
 
+    /** 命中矩形；由宿主在布局阶段写入，指针落在矩形外时仍可继续拖动（捕获中）。 */
     public void setBounds(UiRect bounds) {
         this.bounds = Objects.requireNonNull(bounds, "Text selection bounds");
     }
 
+    /** 禁用时立即以 {@link UiInputCapture.EndReason#DISABLED} 结束进行中的选择。 */
     public void setEnabled(boolean enabled) {
         if (!enabled) endInteraction(UiInputCapture.EndReason.DISABLED);
         this.enabled = enabled;
     }
 
+    /** 隐藏时立即以 {@link UiInputCapture.EndReason#HIDDEN} 结束进行中的选择。 */
     public void setVisible(boolean visible) {
         if (!visible) endInteraction(UiInputCapture.EndReason.HIDDEN);
         this.visible = visible;

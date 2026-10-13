@@ -25,7 +25,7 @@ record DebugScenarioSpec(String key, int sources, int stackSize, int seconds, in
     // 路径前缀同时区分同名功能与性能场景。
     boolean benchmark() { return key.startsWith("bench/"); }
 
-    // 保留现有命令名称，目录迁移不影响游戏内触发。
+    // 命令名称固定，目录布局变化不影响游戏内触发。
     String name() { return key.substring(key.indexOf('/') + 1); }
 
     // 全部描述使用同一组本地化键，包括性能场景。

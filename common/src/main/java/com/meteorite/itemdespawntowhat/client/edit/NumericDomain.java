@@ -4,8 +4,7 @@ import java.math.BigDecimal;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 数值字段的域元数据：把「后端合法域 / 滑块常用窗口 / 交互步长 / 显示精度」分开记录
- * （字段表见 docs/dev/backend/modules/rule-model.md）。
+ * 数值字段的域元数据：把「后端合法域 / 滑块常用窗口 / 交互步长 / 显示精度」分开记录。
  * <p>常用窗口只影响滑块手感，不是提交硬限额：窗口外的合法值仍可精确输入并保存。
  * <p>显示精度为 {@code -1} 表示按值的最短往返表示回填，不做任何舍入
  * （概率 0.123456 打开界面后必须仍是 0.123456）。

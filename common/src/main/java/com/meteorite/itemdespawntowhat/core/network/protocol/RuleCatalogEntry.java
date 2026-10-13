@@ -2,7 +2,7 @@ package com.meteorite.itemdespawntowhat.core.network.protocol;
 
 import com.google.gson.JsonObject;
 
-/***
+/**
  * 目录条目：id 为注册表 id 或标签 id，label 为展示名（已本地化 key 或原文）。
  * subLabel/icon 允许空串，客户端按缺省渲染。
  */

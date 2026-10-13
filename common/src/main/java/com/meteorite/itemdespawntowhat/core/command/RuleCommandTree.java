@@ -14,14 +14,14 @@ import java.util.List;
 /** /idtw 的唯一命令入口；配置与查询位于 command，诊断入口位于 debug。 */
 public final class RuleCommandTree {
 
-    // 新链路命令分组名，注册到 /idtw 之下
+    // 命令树根节点名，注册到 /idtw 之下
     public static final String ROOT = "idtw";
 
     private RuleCommandTree() {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    // 把新链路命令树注册到调度器；平台初始化时调用一次
+    // 把命令树注册到调度器；平台初始化时调用一次
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher, RuleCommandContext context) {
         // 根节点不统一鉴权：edit-lock status 任何玩家可用，
         // 权限下放到各子分支（config 的写操作与 rule/debug 全部保留 hasAccess）

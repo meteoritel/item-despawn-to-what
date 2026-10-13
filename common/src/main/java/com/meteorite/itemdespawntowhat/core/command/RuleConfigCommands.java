@@ -21,7 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * /idtw config 子命令组：reload / edit / validate / list / edit-lock（命令树见 docs/dev/backend/modules/command.md）。
+ * /idtw config 子命令组：reload / edit / validate / list / edit-lock。
  * 全部只读或经由既有 core/service 能力落盘，命令层不直接写文件。
  * 「编辑入口」必须先原子取锁成功才下发打开载荷；取锁失败回结构化 LOCK_BUSY 状态与持有者。
  */

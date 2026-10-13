@@ -2,10 +2,10 @@ package com.meteorite.itemdespawntowhat.core.runtime.scheduler;
 
 /**
  * 任务被取消的原因。
- * 只要求「不得静默丢弃」，每种原因都计入统计；持久返还的差异处理由 补。
+ * 只要求「不得静默丢弃」，每种原因都计入统计；持久返还的差异处理由恢复任务补齐。
  */
 public enum CancelReason {
-    // 规则重载：索引重建，旧检查与效果任务全部失效。
+    // 规则重载：索引重建，既有检查与效果任务全部失效。
     RULE_RELOAD,
     // 维度卸载：该维度的任务离开调度器。
     DIMENSION_UNLOAD,

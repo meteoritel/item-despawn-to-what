@@ -9,7 +9,7 @@ import net.minecraft.world.damagesource.DamageTypes;
 import java.util.Set;
 
 /**
- * 环境销毁的伤害归因常量表（D1）：common 内唯一来源，平台层不重复定义。
+ * 环境销毁的伤害归因常量表：common 内唯一来源，平台层不重复定义。
  * 火 = 直接点燃（in_fire）+ 火焰持续伤害（on_fire）；岩浆 = lava；仙人掌 = cactus。
  * 明确不使用 DamageTypeTags.IS_FIRE：该标签还含 lava / hot_floor / campfire / 火球，
  * 会把岩浆误判成火，违反「岩浆与火重叠时先区分岩浆」。

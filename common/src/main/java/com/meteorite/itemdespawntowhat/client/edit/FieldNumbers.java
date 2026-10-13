@@ -6,7 +6,7 @@ import java.math.RoundingMode;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 数值字段的文本与 JSON 值互转（字段表见 docs/dev/backend/modules/rule-model.md）。
+ * 数值字段的文本与 JSON 值互转。
  * <ul>
  *   <li>概率按原始精度往返：0.123456 显示为 12.3456%，写回仍是 0.123456；</li>
  *   <li>刻数按十进制换算秒（0.05 秒为最小可表示单位），秒×20 不是整数时拒绝而不是静默取整；</li>

@@ -68,15 +68,15 @@ public final class ConversionRuntime {
     private static final Logger LOGGER = LogManager.getLogger();
     // 每秒刻数：trigger_after_seconds 与 tick 的换算
     private static final int TICKS_PER_SECOND = 20;
-    // 结算账本裁剪间隔：1200 tick = 60 秒（已完成的旧记录按 tick 过期，未结清记录一律保留）
+    // 结算账本裁剪间隔：1200 tick = 60 秒（已完成记录按 tick 过期，未结清记录一律保留）
     private static final long SETTLEMENT_PRUNE_INTERVAL_TICKS = 1200L;
 
     private final ServerConfig config;
     private final BuiltinTypeRegistries types;
     private final LifespanProvider lifespanProvider;
-    // 公共调度器：整个服务器唯一实例，所有维度共享同一份每 tick 时间与工作量预算（ADR-0002）
+    // 公共调度器：整个服务器唯一实例，所有维度共享同一份每 tick 时间与工作量预算
     private final ServerScheduler scheduler;
-    // 催化剂预留表：任务级不落盘的运行期结构，停服时整体清空（D31）
+    // 催化剂预留表：任务级不落盘的运行期结构，停服时整体清空
     private final CatalystReservations catalystReservations = new CatalystReservations();
     private final Map<ResourceKey<Level>, LevelState> levels = new HashMap<>();
     private volatile RuleIndex index = RuleIndex.empty();
@@ -84,7 +84,7 @@ public final class ConversionRuntime {
     private final Set<String> activeRecoveries = new HashSet<>();
     // 首次服务端 tick 后做一次全局恢复扫描；之后新加载的维度由 rescan 补扫
     private boolean recoveryScanned;
-    // 上次扫描中因维度未加载而保持不动的记录数（低频观测，使用）
+    // 观测：上次扫描中因维度未加载而保持不动的记录数（低频读取，供命令与调试输出使用）
     private long recoverySkippedDimensions;
 
     // 单个维度的运行时状态；任务本身归公共调度器所有，这里只保存缓存与追踪表
@@ -108,10 +108,12 @@ public final class ConversionRuntime {
     public record TrackedItemInfo(boolean tracked, int failureCount, boolean locked, long nextCheckTick) {
     }
 
+    // 便捷构造：寿命提供器取原版默认值，自然消失时刻按原版寿命规则推算
     public ConversionRuntime(ServerConfig config, BuiltinTypeRegistries types) {
         this(config, types, LifespanProvider.vanillaDefault());
     }
 
+    // 构造运行时：调度器预算从 config 推导，维度状态在首次登记时按需创建
     public ConversionRuntime(ServerConfig config, BuiltinTypeRegistries types, LifespanProvider lifespanProvider) {
         this.config = config;
         this.types = types;
@@ -131,11 +133,11 @@ public final class ConversionRuntime {
         this.index = RuleIndex.build(rules, issues);
         for (LevelState state : levels.values()) {
             state.tracked.clear();
-            // 标签与气候缓存必须随 reload 失效，否则条件求值会读到旧数据包的标签成员
+            // 标签与气候缓存必须随 reload 失效，否则条件求值会读到重新加载前的标签成员
             state.tags = null;
             state.climate = null;
         }
-        // 旧实现只清检查队列，效果队列会跨 reload 残留；现在按维度统一带原因取消
+        // 按维度统一带原因取消：检查队列与效果队列一并清空，避免跨 reload 残留
         for (ResourceKey<Level> key : levels.keySet()) {
             scheduler.cancelRealm(key, CancelReason.RULE_RELOAD);
         }
@@ -144,6 +146,7 @@ public final class ConversionRuntime {
         }
     }
 
+    // 当前生效的规则索引（replaceRules 时整体替换）
     public RuleIndex index() {
         return index;
     }
@@ -182,10 +185,10 @@ public final class ConversionRuntime {
         }
     }
 
-    // 公共请求入口：自然消失与三类环境销毁共用同一条检查/执行路径
+    // 环境销毁的请求入口（自然消失由调度器的到期检查直接调用 attempt，不走本方法）：先补齐本刻的追踪，再交给 attempt 同步判定
     // 环境致死时本方法在 hurt 调用栈内同步执行「条件检查 + 规则选择」（单实体一次，量小）；
-    // 效果一律经调度器排队并在共享 tick 预算内执行（见 ConversionSettlement#dispatchEffect）。这是 的设计选择，
-    // 环境集中销毁是否把峰值转移到这里留 观测。
+    // 效果一律经调度器排队并在共享 tick 预算内执行（见 ConversionSettlement#dispatchEffect）：这是刻意的设计选择，
+    // 环境集中销毁是否把峰值转移到这里，仍需观测。
     public void requestConversion(ServerLevel level, ItemEntity item, TriggerKind kind) {
         if (item == null || kind == null || excluded(item)) {
             return;
@@ -209,7 +212,7 @@ public final class ConversionRuntime {
     }
 
     // 每 tick 推进一次公共预算：所有维度的检查与效果共享同一份时间与工作量额度。
-    // 时钟取主世界游戏刻（各维度 DerivedLevelData 共用同一值），与旧的按维度推进时刻一致。
+    // 时钟取主世界游戏刻（各维度 DerivedLevelData 共用同一值），所有维度按同一时刻推进。
     public void onServerTick(MinecraftServer server) {
         long gameTime = server.overworld().getGameTime();
         scheduler.tick(gameTime);
@@ -225,9 +228,9 @@ public final class ConversionRuntime {
         }
     }
 
-    // ========== ：持久返还恢复 ==========
+    // ========== 持久返还恢复 ==========
 
-    // 全局恢复扫描：只交付记录里的待返还库存，不恢复旧效果队列；维度未加载的记录保持不动
+    // 全局恢复扫描：只交付记录里的待返还库存，不恢复既有效果队列；维度未加载的记录保持不动
     private void recoverSettlements(MinecraftServer server, SettlementLedger ledger) {
         int skipped = 0;
         for (SettlementRecord record : ledger.unsettled()) {
@@ -273,7 +276,7 @@ public final class ConversionRuntime {
     // 口径：停机或维度卸载时未交付的库存（含尚未开始组的源库存）不在停服瞬间返还，
     // 而是作为待返还记录留在账本里，于下一次服务端启动、且目标维度已加载后由本路径交付。
     private void startRecovery(ServerLevel level, SettlementLedger ledger, SettlementRecord record) {
-        // 重启后源实体已不存在：位置取自记录；旧存档缺位置字段时退回该维度出生点
+        // 重启后源实体已不存在：位置取自记录；记录缺位置字段时退回该维度出生点
         Vec3 position = record.hasPosition()
                 ? new Vec3(record.positionX(), record.positionY(), record.positionZ())
                 : Vec3.atBottomCenterOf(level.getSharedSpawnPos());
@@ -294,18 +297,18 @@ public final class ConversionRuntime {
         return activeRecoveries.size();
     }
 
-    // 上次恢复扫描中因维度未加载而保持不动的记录数观测
+    // 观测：上次恢复扫描中因维度未加载而保持不动的记录数
     public long recoverySkippedDimensions() {
         return recoverySkippedDimensions;
     }
 
-    // reload 后回扫已加载实体重建追踪（修复热重载对已存在掉落物无效）
+    // reload 后回扫已加载实体重建追踪（使热重载对已存在的掉落物同样生效）
     public void rescan(ServerLevel level) {
         LevelState state = stateOf(level);
         state.tracked.clear();
-        // 重扫会重建追踪，先按维度取消旧任务（检查与效果一起），不留静默丢弃
+        // 重扫会重建追踪，先按维度取消既有任务（检查与效果一起），不留静默丢弃
         scheduler.cancelRealm(level.dimension(), CancelReason.RULE_RELOAD);
-        // 维度加载/重扫时补扫该维度的待返还记录：只交付库存，不恢复旧效果队列（与规则内容无关）
+        // 维度加载/重扫时补扫该维度的待返还记录：只交付库存，不恢复既有效果队列（与规则内容无关）
         recoverLevel(level, SettlementLedger.get(level));
         if (index.isEmpty() && DebugScenarioManager.inactive(level.getServer())) {
             return;
@@ -350,6 +353,7 @@ public final class ConversionRuntime {
 
     // ========== 统计（供开发场景实时日志与性能窗口使用） ==========
 
+    // 该维度当前被追踪的掉落物数量
     public int trackedCount(ServerLevel level) {
         LevelState state = levels.get(level.dimension());
         return state == null ? 0 : state.tracked.size();
@@ -374,6 +378,7 @@ public final class ConversionRuntime {
         return index.candidates(itemIdOf(entity));
     }
 
+    // 该维度在调度器中尚未开始的任务数
     public int pendingTasks(ServerLevel level) {
         return scheduler.pendingCount(level.dimension());
     }
@@ -389,7 +394,7 @@ public final class ConversionRuntime {
                 effects ? ServerTaskKind.EFFECT : ServerTaskKind.CONDITION_CHECK);
     }
 
-    // 任意任务种类的单维度队列观测（：把 checks/effects 两类口径扩到返还与维护等全部种类）；只读，不改变调度行为
+    // 任意任务种类的单维度队列观测：把 checks/effects 两类口径扩到返还与维护等全部种类；只读，不改变调度行为
     public QueueStats queueStats(ServerLevel level, ServerTaskKind kind) {
         return scheduler.queueStats(level.dimension(), kind);
     }
@@ -461,7 +466,7 @@ public final class ConversionRuntime {
 
     // 一次到期判定：选规则 → 执行；条件不满足则退避重试（kind 为本次请求的消失方式）
     // 调用点有两类：调度器到期检查（自然消失）与环境致死请求（在 hurt 调用栈内同步调用）；
-    // 两者共用同一份追踪、预算与调度器，效果派发统一走 ConversionSettlement（后续再评估环境峰值）。
+    // 两者共用同一份追踪、预算与调度器，效果派发统一走 ConversionSettlement。
     private void attempt(ServerLevel level, UUID uuid, TriggerKind kind) {
         LevelState state = levels.get(level.dimension());
         if (state == null) {
@@ -484,7 +489,7 @@ public final class ConversionRuntime {
             reschedule(level, item, tracked, 1);
             return;
         }
-        // 转化门禁：永久禁转（返还物）在实体生命周期内阻止转化；临时冷却到期前不启动新转化（任务清单 5）
+        // 转化门禁：永久禁转（返还物）在实体生命周期内阻止转化；临时冷却到期前不启动新转化
         DropState dropState = DropStateStore.get(item);
         if (dropState.permanentConversionBan()) {
             state.tracked.remove(uuid);
@@ -559,6 +564,7 @@ public final class ConversionRuntime {
         return !excluded(item) && item.getAge() >= dueAge(level, item, rule);
     }
 
+    // 该规则在该掉落物上的年龄门槛：triggerAfterSeconds 换算为 tick，且不超过自然消失前一刻
     private long dueAge(ServerLevel level, ItemEntity item, Rule rule) {
         return Math.min((long) rule.triggerAfterSeconds() * TICKS_PER_SECOND,
                 Math.max(1, lifespanProvider.lifespanTicks(level, item)) - 1L);
@@ -577,7 +583,7 @@ public final class ConversionRuntime {
         int costPerGroup = types.perRoundSourceConsumption(rule, source);
         tracked.locked = true;
         try {
-            // 所有权转移：整堆进入结算库存，源实体本刻清空（与原实现「本刻即完成扣减」的时间点一致）
+            // 所有权转移：整堆进入结算库存，源实体本刻清空（扣减时间点保持在源实体清空的本刻）
             ItemStack held = source.copy();
             source.setCount(0);
             item.addTag(Constants.CONVERTED_TAG);
@@ -615,7 +621,7 @@ public final class ConversionRuntime {
         }
         if (effect.chance() < 1.0D && base.random().nextDouble() >= effect.chance()) {
             if (DebugMode.ENABLED) { DebugScenarioManager.observe(item, "EFFECT_CHANCE_SKIPPED", "effect", effect.type(), "chance", effect.chance()); }
-            // 概率落空仍支付本组固定成本：不免费重试、不返还（ADR-0001）
+            // 概率落空仍支付本组固定成本：不免费重试、不返还
             return EffectResult.skipped("chance_missed");
         }
         EffectType<?> definition = types.effectTypes().getOrNull(effect.type());

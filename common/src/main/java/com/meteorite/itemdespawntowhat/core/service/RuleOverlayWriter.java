@@ -46,6 +46,7 @@ public final class RuleOverlayWriter {
     private record Location(RuleFile file, int index) {}
     private final Path root;
     private final String namespace;
+    // 写入目录固定为 <overlayRoot>/rules；defaultNamespace 用于无 id 的单对象文件反推规则 id
     public RuleOverlayWriter(Path overlayRoot, String defaultNamespace) {
         root = overlayRoot.toAbsolutePath().normalize().resolve(RulePaths.OVERLAY_RULES_DIRECTORY);
         namespace = defaultNamespace;

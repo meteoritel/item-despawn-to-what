@@ -11,7 +11,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 
-/*** 掉落物产出子类执行器，已开始组按物品件数分批完成。 */
+/** 掉落物产出子类执行器：产出量按物品件数计算，受限时按件数分批生成。 */
 public final class SpawnItemExecutor {
 
 
@@ -20,6 +20,7 @@ public final class SpawnItemExecutor {
         throw new UnsupportedOperationException("Utility class");
     }
 
+    // 单组一轮：产出量 = count × rounds，分批过程由 ItemBatch 按实际生成件数回执
     public static EffectResult execute(EntityProduct.Item effect, EffectContext context) {
         Item item = EffectTargets.resolveOrThrow(effect.item(), BuiltInRegistries.ITEM, context.random(),
                 "item");
@@ -54,7 +55,7 @@ public final class SpawnItemExecutor {
                         position.z + (level.random.nextDouble() - 0.5) * 0.3, new ItemStack(item, size));
                 entity.setDeltaMovement((level.random.nextDouble() - 0.5) * 0.1, 0.2,
                         (level.random.nextDouble() - 0.5) * 0.1);
-                // 转化产物：走显式产物入口，授予临时保护与冷却（D18）
+                // 转化产物：走显式产物入口，授予临时保护与冷却
                 EffectTargets.addConversionProduct(context, entity);
                 // 真实完成量回执：按实际写入世界的件数计
                 context.reportProgress(size);

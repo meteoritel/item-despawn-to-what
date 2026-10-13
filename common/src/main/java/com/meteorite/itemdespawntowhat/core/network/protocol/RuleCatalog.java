@@ -9,7 +9,7 @@ import com.mojang.serialization.DataResult;
 import java.util.ArrayList;
 import java.util.List;
 
-/***
+/**
  * 目录分页结果：条目由服务端目录来源填充；无可用来源时条目为空。
  * entries 的 JSON 文本经 RuleCatalogPayload 下发，客户端自行解析。
  */

@@ -46,7 +46,9 @@ public final class UiInputCapture {
 
     @Nullable private Target captured;
 
-    // 开始捕获；若已有其它目标持有捕获，先用 CANCEL 结束它，保证同一时刻只有一个目标
+    /**
+     * 开始捕获；若已有其它目标持有捕获，先用 CANCEL 结束它，保证同一时刻只有一个目标
+     */
     public void begin(Target target) {
         Objects.requireNonNull(target, "Capture target");
         if (captured == target) return;

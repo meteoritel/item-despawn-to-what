@@ -4,7 +4,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.Locale;
 
-/***
+/**
  * 选择目录类型：物品/方块/实体/战利品表/群系/维度/标签/流体/状态效果。
  * 与 core/catalog 的数据源、core/network/catalog 的分页缓存配套使用。
  */

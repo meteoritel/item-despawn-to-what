@@ -52,7 +52,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
     private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
-    // 画布页外壳（功能栏/工具列/状态栏/帮助浮层）使用扁平宿主主题（ADR-0028：仅显式取用生效）
+    // 画布页外壳（功能栏/工具列/状态栏/帮助浮层）使用扁平宿主主题（仅显式取用生效）
     private static final UiHostTheme CHROME_THEME = UiHostThemes.flatTheme();
 
     // 本地化前缀：条件树页

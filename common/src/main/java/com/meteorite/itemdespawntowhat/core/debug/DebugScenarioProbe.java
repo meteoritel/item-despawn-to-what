@@ -108,7 +108,7 @@ final class DebugScenarioProbe {
         }
     }
 
-    // 基础不变量和资源声明都经过同一个断言器；无场景名称或新旧场景分支。
+    // 基础不变量和资源声明都走同一个断言器：不按场景名称或场景种类分支，检查口径统一。
     JsonArray checks(JsonObject metrics) {
         captureReturns();
         run.tasks.removeIf(ScheduledTask::terminal);

@@ -217,7 +217,7 @@ final class DebugPerformanceWindow {
         data.addProperty("tick_cost_scope", "vanilla_tick_plus_idtw_runtime");
         data.addProperty("tick_timing_complete", missingTimingTicks == 0);
         data.addProperty("tick_timing_missing_ticks", missingTimingTicks);
-        // 本维度（level 级）切片：旧字段保持不变，便于与既有基线逐字段对照
+        // 本维度（level 级）切片：字段名保持既有口径，便于与基线逐字段对照
         data.add("checks", checks.summary());
         data.add("effects", effects.summary());
         JsonObject levelKinds = new JsonObject();

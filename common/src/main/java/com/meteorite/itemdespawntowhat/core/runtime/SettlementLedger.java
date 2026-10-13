@@ -72,7 +72,7 @@ public final class SettlementLedger extends SavedData {
         return count;
     }
 
-    // 待恢复记录快照（按加入顺序）： 恢复只交付这些记录的 pendingDelivery，不重放旧效果队列
+    // 待恢复记录快照（按加入顺序）：恢复任务只交付这些记录的 pendingDelivery，不重放既有效果队列
     public List<SettlementRecord> unsettled() {
         List<SettlementRecord> list = new ArrayList<>();
         for (SettlementRecord record : records.values()) {
@@ -112,7 +112,7 @@ public final class SettlementLedger extends SavedData {
         return total;
     }
 
-    // 裁剪：已完成且返还交付完毕的旧记录先按 tick 过期，再按条数上限兜底
+    // 裁剪：已完成且返还交付完毕的记录先按 tick 过期，再按条数上限兜底
     public void prune(long gameTime) {
         boolean changed = records.values().removeIf(record ->
                 record.status() == SettlementRecord.Status.COMPLETED

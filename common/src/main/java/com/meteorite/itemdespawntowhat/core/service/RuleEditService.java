@@ -75,6 +75,7 @@ public final class RuleEditService {
     public record LifespanReply(ServerPlayer player, RuleLifespanPayload payload) { }
 
 
+    // 构造编排服务：会话状态机由调用方注入；网络与加载依赖一律经方法参数传入
     public RuleEditService(EditSessionManager sessions) {
         this.sessions = Objects.requireNonNull(sessions, "sessions");
     }
@@ -84,29 +85,31 @@ public final class RuleEditService {
         return sessions;
     }
 
-    /***
+    /**
      * 一次请求要下发的载荷集合。
      */
     public record Outbound(List<CustomPacketPayload> packets) {
 
         public static final Outbound EMPTY = new Outbound(List.of());
 
+        // 便利工厂：可变参数按传入顺序组装成不可变载荷集合
         public static Outbound of(CustomPacketPayload... packets) {
             return new Outbound(List.of(packets));
         }
 
+        // 拷贝入参列表，保证回执载荷集合不可变
         public static Outbound of(List<CustomPacketPayload> packets) {
             return new Outbound(List.copyOf(packets));
         }
     }
 
-    /***
+    /**
      * 打开结果：成功时 acquired=true，失败时携带当前持有者名字。
      */
     public record OpenOutcome(boolean acquired, String holderName, OpenRuleEditorPayload payload) {
     }
 
-    /***
+    /**
      * 超时释放结果：target 为需要被通知的玩家（无人可通知时为 null），outbound 为要下发的载荷。
      */
     public record Expired(@Nullable ServerPlayer target, Outbound outbound) {
@@ -244,7 +247,7 @@ public final class RuleEditService {
     }
 
     /**
-     * 平台完成首次采样后补发一次结果；已结束的会话不会接收旧应答。
+     * 平台完成首次采样后补发一次结果；已结束的会话不会接收过期应答。
      * @param server 当前服务端
      * @param context 平台参考寿命来源
      * @return 可交付应答；未采样或会话无效时为空

@@ -33,7 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/***
+/**
  * 规则快照装配器：把"来源分层索引 + 当前生效规则"组装成下发给客户端的快照。
  * 条目形状：RuleSnapshotEntry(id, origin, status, editable, effective, base, overlay, issues)
  * - base 视图来自数据包层原始 JSON，overlay 视图来自覆盖层原始 JSON，两者都保留原文（不做模型往返）；
@@ -117,7 +117,7 @@ public final class RuleSnapshotAssembler {
                 snapshotIssues(issues, index));
     }
 
-    // 兼容入口：仅有覆盖层与合并结果时装配（命令查询等只读路径使用）
+    // 简化入口：仅有覆盖层与合并结果时装配（命令查询等只读路径使用）
     public static RuleSnapshot assemble(List<LoadedRule<Rule>> merged,
                                         Path overlayRoot,
                                         String overlayNamespace,
@@ -132,7 +132,7 @@ public final class RuleSnapshotAssembler {
         if (issues == null || issues.isEmpty()) {
             return snapshot;
         }
-        // 纯文本问题（旧调用方传入）追加为快照级告警
+        // 纯文本问题（以字符串形式传入）追加为快照级告警
         List<RuleIssue> merged2 = new ArrayList<>(snapshot.issues());
         for (String text : issues) {
             merged2.add(new RuleIssue(RuleIssue.SEVERITY_WARNING, null, RuleIssue.ORIGIN_RUNTIME,

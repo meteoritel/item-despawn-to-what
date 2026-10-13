@@ -56,8 +56,7 @@ public class FabricPlatformHelper implements IPlatformHelper {
     @Override
     public void setDropState(Entity entity, DropState state) {
         AttachmentTarget target = (AttachmentTarget) entity;
-        // 无状态即显式移除附件（AttachmentTarget#removeAttached(AttachmentType)，已用 javap 核实存在），
-        // 避免给每个掉落物都写一份空数据
+        // 无状态即显式移除附件，避免给每个掉落物都写一份空数据
         if (state == null || state.isEmpty()) {
             target.removeAttached(DROP_STATE);
         } else {

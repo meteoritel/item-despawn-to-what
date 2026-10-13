@@ -7,7 +7,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.phys.Vec3;
 
-/***
+/**
  * 实体产出经验子类执行器：在触发位置生成经验球。
  * rounds 语义：amount 按 rounds 缩放；per_source_item 表示"每个源物品一份"，
  * 倍率改用 coveredSourceItems()（= 本组实际扣减的源物品数）而不是叠加快照，二者不叠加。

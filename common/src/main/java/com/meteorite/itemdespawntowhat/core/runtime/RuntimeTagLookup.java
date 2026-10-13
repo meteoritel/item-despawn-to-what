@@ -27,6 +27,7 @@ public final class RuntimeTagLookup implements TagLookup {
     private final ServerLevel level;
     private final Map<String, Set<ResourceLocation>> cache = new HashMap<>();
 
+    // 构造标签查询：缓存按维度实例持有，随运行时重建（reload）一起丢弃
     public RuntimeTagLookup(ServerLevel level) {
         this.level = level;
     }

@@ -19,33 +19,45 @@ public record UiSliderWindow(double min, double max) {
         }
     }
 
-    // 显式构造
+    /**
+     * 显式构造
+     */
     public static UiSliderWindow of(double min, double max) {
         return new UiSliderWindow(min, max);
     }
 
-    // 窗口跨度
+    /**
+     * 窗口跨度
+     */
     public double span() {
         return max - min;
     }
 
-    // 值是否落在显示窗口内
+    /**
+     * 值是否落在显示窗口内
+     */
     public boolean contains(double value) {
         return Double.isFinite(value) && value >= min && value <= max;
     }
 
-    // 未钳制的轨道比例；<0 或 >1 表示值在显示窗口之外
+    /**
+     * 未钳制的轨道比例：{@code <0} 或 {@code >1} 表示值在显示窗口之外
+     */
     public double fraction(double value) {
         return (value - min) / span();
     }
 
-    // 把任意比例钳制到 [0,1]
+    /**
+     * 把任意比例钳制到 [0,1]
+     */
     public double clampFraction(double fraction) {
         if (Double.isNaN(fraction)) return 0.0D;
         return Math.clamp(fraction, 0.0D, 1.0D);
     }
 
-    // 由轨道比例换算数值；比例先钳制，保证点击轨道不产生窗口外的值
+    /**
+     * 由轨道比例换算数值；比例先钳制，保证点击轨道不产生窗口外的值
+     */
     public double valueAt(double fraction) {
         return min + clampFraction(fraction) * span();
     }

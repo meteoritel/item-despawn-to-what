@@ -16,7 +16,7 @@ import java.util.*;
 /**
  * 方块效果按游标分批计数和放置；形状偏移按参数复用，未加载区块等待后续处理。
  * 每放置一个方块通过 context.reportProgress(1) 回执真实完成量。
- * ：只替换可替换方块（canBeReplaced），不满足目标状态合法放置的位置只跳过并继续下一个候选，
+ * 放置策略：只替换可替换方块（canBeReplaced），不满足目标状态合法放置的位置只跳过并继续下一个候选，
  * 不为凑数突破自身 limit/radius；候选级 fill_origin 关闭时不尝试触发位置本身。
  */
 public final class PlaceBlockExecutor {
@@ -25,6 +25,7 @@ public final class PlaceBlockExecutor {
     private record ShapeKey(PlaceBlockEffect.Shape shape, int radius, boolean fillOrigin) {}
     private PlaceBlockExecutor() {}
 
+    // 放置步骤经调度器延后执行：本方法只解析目标方块与候选位置，并回执上限计划量
     public static EffectResult execute(PlaceBlockEffect effect, EffectContext context) {
         Block block = resolveBlock(effect, context);
         List<BlockPos> candidates = offsets(effect, context.fillOrigin());

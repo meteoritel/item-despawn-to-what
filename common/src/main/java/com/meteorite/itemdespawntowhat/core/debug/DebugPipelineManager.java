@@ -23,7 +23,7 @@ final class DebugPipelineManager {
     // 公共场景入口据此拒绝插队，冷却时也保留占用。
     static boolean active(MinecraftServer server) { return DebugMode.ENABLED && ACTIVE.containsKey(server); }
 
-    // 创建有限计划，不执行mcfunction或修改全局规则；场景仍走原有后端。
+    // 创建有限计划，不执行 mcfunction 或修改全局规则；每一步仍走既有场景后端。
     static int start(CommandSourceStack source, RuleCommandContext context, String name, int entities, int gap) {
         if (!DebugMode.ENABLED) { return failure(source, "development_only"); }
         if (!(source.getEntity() instanceof ServerPlayer player)) { return failure(source, "player_only"); }
@@ -89,7 +89,7 @@ final class DebugPipelineManager {
         }
     }
 
-    // 兼容原debug stop：冷却期间也能取消后续计划。
+    // stop 子命令：冷却期间也能取消后续计划。
     static int stop(CommandSourceStack source, RuleCommandContext context) {
         if (!active(source.getServer())) { return failure(source, "not_running"); }
         halt(source.getServer(), context, "manual_stop");

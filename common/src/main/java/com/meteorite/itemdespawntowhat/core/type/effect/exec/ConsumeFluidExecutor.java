@@ -25,7 +25,7 @@ import org.apache.logging.log4j.Logger;
  * rounds 语义：按「每轮消耗 1 格」实现，最多尝试 rounds 次；
  * 同一位置在同一 tick 内只能被消耗一次（消耗后流体状态立即变空），
  * 因此实际通常只消耗 1 格，未消耗的轮次被剔除并记录，不会静默截断。
- * 流体只作为实时存在条件，不参与组数与份数预留（ADR-0001）。
+ * 流体只作为实时存在条件，不参与组数与份数预留。
  * 约定：delay_ticks / chance / 效果级 conditions 由运行时统一处理，本类不再判断；
  * 异常不吞、不捕获，由运行时统一捕获并记录（规则 id + 效果类型 + 位置）。
  */
@@ -37,6 +37,7 @@ public final class ConsumeFluidExecutor {
         throw new UnsupportedOperationException("Utility class");
     }
 
+    // 每轮消耗 1 格；位置不再有匹配流体时立即停止，未消耗的轮次按 short_of_fluid 回执
     public static EffectResult execute(ConsumeFluidEffect effect, EffectContext context) {
         ServerLevel level = context.level();
         Vec3 position = context.position();

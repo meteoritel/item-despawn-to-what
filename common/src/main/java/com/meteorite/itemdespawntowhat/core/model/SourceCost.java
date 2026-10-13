@@ -23,6 +23,7 @@ public record SourceCost(Map<TaggedId, Integer> counts) {
         return forStack(source, stack, DEFAULT_COUNT);
     }
 
+    // 未声明成本的源返回 fallback；标签按源声明的顺序取首个命中
     public int forStack(SourceMatcher source, ItemStack stack, int fallback) {
         TaggedId direct = new TaggedId(BuiltInRegistries.ITEM.getKey(stack.getItem()), false);
         Integer exact = counts.get(direct);

@@ -32,7 +32,7 @@ public interface Effect {
         return conditions == null ? ConditionExpression.EMPTY : conditions;
     }
 
-    // 字段名常量引用点，确保实现类与文档使用同一套命名
+    // 字段名常量的引用点，确保实现类与常量定义使用同一套命名
     String TYPE_FIELD = RuleFields.TYPE;
     String DELAY_TICKS_FIELD = RuleFields.DELAY_TICKS;
     String CHANCE_FIELD = RuleFields.CHANCE;

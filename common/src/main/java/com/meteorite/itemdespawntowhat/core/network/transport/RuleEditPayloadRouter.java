@@ -3,16 +3,16 @@ package com.meteorite.itemdespawntowhat.core.network.transport;
 import java.util.function.Consumer;
 
 /**
- * 新链路 S2C 载荷的客户端门面：服务端侧只装载空消费者，注册回调时静默丢弃。
+ * S2C 载荷的客户端门面：服务端侧只装载空消费者，注册回调时静默丢弃。
  * 保留字符串消费者以兼容既有客户端实现，另提供结构化消费者供界面层使用。
  */
 public final class RuleEditPayloadRouter {
 
-    // 原始 JSON 快照消费者（旧签名，兼容既有客户端注册代码）
+    // 原始 JSON 快照消费者（字符串签名版本，供既有客户端注册代码使用）
     private static volatile Consumer<String> snapshotSink;
     // 结构化快照消费者
     private static volatile Consumer<RuleSnapshotPayload> structuredSnapshotSink;
-    // 原始回执文本消费者（旧签名，兼容既有客户端注册代码）
+    // 原始回执文本消费者（字符串签名版本，供既有客户端注册代码使用）
     private static volatile Consumer<String> resultSink;
     // 结构化回执消费者
     private static volatile Consumer<RuleSaveResultPayload> structuredResultSink;

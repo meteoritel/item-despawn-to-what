@@ -42,7 +42,9 @@ public final class UiValueInteraction {
     private double currentValue;
     @Nullable private Listener listener;
 
-    // 开始一次操作；已有操作在进行中时返回 false，调用方应先结束旧操作
+    /**
+     * 开始一次操作；已有操作在进行中时返回 false，调用方应先结束旧操作
+     */
     public boolean begin(double startValue, @Nullable Listener listener) {
         if (active || !Double.isFinite(startValue)) return false;
         this.active = true;
@@ -65,12 +67,16 @@ public final class UiValueInteraction {
         return currentValue;
     }
 
-    // 值相对起点是否已变化；未在操作中时恒为 false
+    /**
+     * 值相对起点是否已变化；未在操作中时恒为 false
+     */
     public boolean changed() {
         return active && currentValue != startValue;
     }
 
-    // 预览一个新值；未在操作中、值非法或与当前相同都不回调
+    /**
+     * 预览一个新值；未在操作中、值非法或与当前相同都不回调
+     */
     public boolean preview(double value) {
         if (!active || !Double.isFinite(value) || value == currentValue) return false;
         currentValue = value;
@@ -78,7 +84,9 @@ public final class UiValueInteraction {
         return true;
     }
 
-    // 正常提交；返回值表示是否产生了变化（false = 不写历史）
+    /**
+     * 正常提交；返回值表示是否产生了变化（false = 不写历史）
+     */
     public boolean commit() {
         if (!active) return false;
         double committed = currentValue;
@@ -89,7 +97,9 @@ public final class UiValueInteraction {
         return changed;
     }
 
-    // 取消并回退；返回值表示是否结束了一次进行中的操作
+    /**
+     * 取消并回退；返回值表示是否结束了一次进行中的操作
+     */
     public boolean cancel() {
         if (!active) return false;
         double restored = startValue;
@@ -99,7 +109,9 @@ public final class UiValueInteraction {
         return true;
     }
 
-    // 清空操作状态；不触发任何回调
+    /**
+     * 清空操作状态；不触发任何回调
+     */
     public void reset() {
         active = false;
         listener = null;

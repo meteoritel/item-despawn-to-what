@@ -18,10 +18,10 @@ public final class RuleFields {
     public static final String TRIGGER_AFTER_SECONDS = "trigger_after_seconds";
     // 消失方式集合（数组）；缺省表示仅自然消失
     public static final String TRIGGERS = "triggers";
-    // 规则级固定源成本（正整数）；缺省表示未声明，沿用效果式/隐式消耗语义
+    // 规则级固定源成本（正整数）；缺省表示未声明，按效果式/隐式消耗语义处理
     public static final String SOURCE_COST = "source_cost";
     // 规则级催化剂固定成本（对象 {items, count, radius}）；缺省表示未声明。
-    // 整数写法已废弃：由 RuleCodecs 的解码前检查明确报错，不做静默兼容
+    // 只接受对象写法；整数写法由 RuleCodecs 的解码前检查明确报错，不做静默兼容
     public static final String CATALYST_COST = "catalyst_cost";
     // 候选结果组合模式：round_robin（默认） / priority
     public static final String COMBINATION = "combination";
@@ -73,8 +73,8 @@ public final class RuleFields {
     public static final String OP_INVERTED = "inverted";
     public static final String OP_LEAF = "leaf";
 
-    // ===== 条件叶（旧格式） ===== //
-    // 旧版叶级取反字段：已废弃，条件树的解码器遇到它会明确报错，提示改用 inverted
+    // ===== 条件叶的叶级字段 ===== //
+    // 叶级取反字段：不受支持，条件树的解码器遇到它会明确报错，提示改用 inverted 节点
     public static final String NEGATED = "negated";
 
     // ===== 覆盖层控制字段 ===== //

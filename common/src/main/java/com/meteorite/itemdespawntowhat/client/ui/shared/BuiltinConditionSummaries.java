@@ -24,7 +24,7 @@ import org.jetbrains.annotations.Nullable;
  *
  * <p><b>文案约定</b>：摘要不重复条件类型名（卡片标题行已显示类型名），也不输出 JSON 字段名、全限定 ID 或
  * 英文枚举名；取值缺失时退回「未设置」，让玩家看出参数还没填。通用格式化（引用、区间、枚举、布尔、连接）
- * 见 {@link SummaryFormats}；字段名与取值语义见 {@code docs/dev/backend/modules/type-system.md}。
+ * 见 {@link SummaryFormats}。
  */
 public final class BuiltinConditionSummaries {
 
@@ -47,7 +47,7 @@ public final class BuiltinConditionSummaries {
     private static final String Y_ANY_KEY = COND + "y_level.any";
     private static final String LIGHT_ANY_KEY = COND + "light_level.any";
 
-    // ---- 条件 JSON 字段名（镜像 docs/dev/backend/modules/type-system.md） ----
+    // ---- 条件 JSON 字段名 ----
     private static final String FIELD_DIMENSIONS = "dimensions";
     private static final String FIELD_BIOMES = "biomes";
     private static final String FIELD_MODE = "mode";

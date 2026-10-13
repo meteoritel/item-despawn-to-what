@@ -24,7 +24,7 @@ import java.util.List;
 
 /**
  * 掉落物生成统一入口：转化产物与返还物共用同一套「创建 + 授予实体状态 + 加入世界」路径。
- * 转化产物授予新产物临时保护与转化冷却（D18），返还物授予永久保护与永久禁转；
+ * 转化产物授予新产物临时保护与转化冷却，返还物授予永久保护与永久禁转；
  * 返还位置搜索按「起点附近 → 向上扫描 → 限高以上」三级推进，全部在公共预算内分步完成，
  * 单刻候选检查数受 position_search_checks_per_tick 限制，未完成则下刻从断点继续，绝不无限扫描。
  */
@@ -49,7 +49,7 @@ public final class ReturnItemSpawner {
     // 统一的实体状态授予：产物与返还物只有这一处分支，避免两处授予语义漂移
     public static void applyGrant(ItemEntity item, Kind kind) {
         if (kind == Kind.PERMANENT_RETURN) {
-            // 返还掉落物永久免转（D18：返还物不再参与转化）
+            // 返还掉落物永久免转（返还物不再参与转化）
             DropStateStore.grantPermanentReturn(item);
         } else {
             DropStateStore.grantNewProduct(item);
@@ -134,6 +134,7 @@ public final class ReturnItemSpawner {
         private int checked;
         private @Nullable Vec3 decided;
 
+        // 搜索游标绑定源掉落物：起点取其当前坐标，扫描上限取所在维度的建造高度
         public PositionSearch(ServerLevel level, ItemEntity source) {
             this.level = level;
             this.source = source;

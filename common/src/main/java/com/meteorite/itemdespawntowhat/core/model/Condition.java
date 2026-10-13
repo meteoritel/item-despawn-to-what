@@ -5,8 +5,8 @@ import net.minecraft.resources.ResourceLocation;
 
 /**
  * 条件叶：条件树中的原子谓词（实现类本身就是它的参数对象）。
- * 叶级取反（negated）已删除：取反一律由 {@link ConditionNode.Inverted} 节点承担，
- * NEGATED_FIELD 仅作为常量保留，供解码期识别旧格式并给出明确错误。
+ * 叶级取反（negated）不受支持：取反一律由 {@link ConditionNode.Inverted} 节点承担；
+ * NEGATED_FIELD 仅作为常量保留，供解码期识别该写法并给出明确错误。
  */
 public interface Condition {
 

@@ -22,7 +22,7 @@ public final class RuleEditChunkAccumulator {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    /***
+    /**
      * 分片重组结果：收齐时 complete=true 且 json 非空；收齐后超过变更集总量上限时 rejected=true；
      * 其余情况（未收齐、形状非法）两者皆为 false。调用方据此决定"等待"还是回 INVALID_REQUEST。
      */
@@ -122,7 +122,7 @@ public final class RuleEditChunkAccumulator {
         SESSIONS.clear();
     }
 
-    /***
+    /**
      * 单个分片传输的接收状态。
      */
     private static final class ChunkSession {

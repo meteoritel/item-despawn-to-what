@@ -6,7 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-/***
+/**
  * 快照下发切分器：把序列化后的快照文本切成整包或若干分片。
  * 不超过 {@link RuleEditLimits#MAX_SNAPSHOT_BYTES} 时返回单个 {@link RuleSnapshotPayload}；
  * 超限时按 **UTF-8 字节**切分（不是按字符数），保证每片都满足接收侧的字节上限，且不会把代理对拆开。

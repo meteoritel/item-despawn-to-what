@@ -59,7 +59,7 @@ public final class DropStateStore {
         }
     }
 
-    // 三类环境伤害且实体处于保护期：本次伤害完全不生效（判定必须先于原版扣血，D2/D4）
+    // 三类环境伤害且实体处于保护期：本次伤害完全不生效（判定必须先于原版扣血）
     public static boolean blocksEnvironmentalDamage(Entity entity, DamageSource source, long gameTime) {
         if (!DamageClassification.isEnvironmental(source)) {
             return false;
@@ -67,7 +67,7 @@ public final class DropStateStore {
         return get(entity).isProtected(gameTime);
     }
 
-    // 授予新产物状态：临时保护 + 临时冷却，只在转化产物生成点显式调用（D18）
+    // 授予新产物状态：临时保护 + 临时冷却，只在转化产物生成点显式调用
     public static void grantNewProduct(ItemEntity entity) {
         if (entity == null) {
             return;

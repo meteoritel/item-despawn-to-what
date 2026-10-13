@@ -20,7 +20,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Stream;
 
-/*** 实体产出子类：专用参数独立建模，公共执行字段由外层效果承载。 */
+/** 实体产出子类：专用参数独立建模，公共执行字段由外层效果承载。 */
 public sealed interface EntityProduct permits EntityProduct.Item, EntityProduct.Generic, EntityProduct.Experience {
     MapCodec<EntityProduct> CODEC = strict(Codec.STRING.comapFlatMap(value -> switch (value) {
         case "item", "entity", "experience" -> DataResult.success(value);
@@ -65,7 +65,7 @@ public sealed interface EntityProduct permits EntityProduct.Item, EntityProduct.
         };
     }
 
-    /*** 掉落物数量按物品件数计算。 */
+    /** 掉落物数量按物品件数计算。 */
     record Item(TaggedId item, int count) implements EntityProduct {
         public static final MapCodec<Item> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
                 TaggedId.CODEC.fieldOf("item").forGetter(Item::item),
@@ -81,7 +81,7 @@ public sealed interface EntityProduct permits EntityProduct.Item, EntityProduct.
         }
     }
 
-    /*** 通用实体包含生物和其他实体，特殊产物固定走专用入口。 */
+    /** 通用实体包含生物和其他实体，特殊产物固定走专用入口。 */
     record Generic(TaggedId entity, int count, int age) implements EntityProduct {
         public static final MapCodec<Generic> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
                 TaggedId.CODEC.fieldOf("entity").forGetter(Generic::entity),
@@ -112,7 +112,7 @@ public sealed interface EntityProduct permits EntityProduct.Item, EntityProduct.
         }
     }
 
-    /*** 经验数量按点数计算，倍率取本组实际支付的源物品件数。 */
+    /** 经验数量按点数计算，倍率取本组实际支付的源物品件数。 */
     record Experience(int amount, boolean perSourceItem) implements EntityProduct {
         public static final MapCodec<Experience> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
                 Codec.intRange(1, 65536).optionalFieldOf("amount", 1).forGetter(Experience::amount),

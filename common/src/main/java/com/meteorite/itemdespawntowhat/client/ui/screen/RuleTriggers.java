@@ -7,7 +7,7 @@ import java.util.List;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 触发原因（triggers）的只读解析与写入（字段见 docs/dev/backend/modules/rule-model.md）。
+ * 触发原因（triggers）的只读解析与写入。
  * <p>JSON 是唯一事实源：字段省略时按「有效自然触发」展示；用户改动后写为显式数组，
  * 空数组由屏幕的本地校验以阻塞问题拦截（不允许提交全不选）。
  * <p>未识别的取值原样保留：编辑动作只重排已知取值，不静默丢弃第三方或未来版本的取值。

@@ -19,17 +19,51 @@ import org.jetbrains.annotations.Nullable;
 
 /** 绑定宿主不可变节点的通用树操作；配置变更与选择、折叠事件分开。 */
 public final class UiTreeEditor<N> {
+    /**
+     * 宿主为树编辑器提供的节点读写接口：子节点读取、替换与容量约束。
+     *
+     * @param <N> 宿主节点类型
+     */
     public interface Adapter<N> {
+        /** 子节点数量无上限的哨兵值。 */
         int UNLIMITED_CHILDREN = Integer.MAX_VALUE;
+        /** @param node 目标节点 @return 该节点的子节点列表 */
         List<N> children(N node);
+        /**
+         * 用新的子节点列表替换指定节点的子节点。
+         *
+         * @param node 目标节点
+         * @param children 替换后的子节点列表
+         * @return 替换后的新节点；不修改传入节点
+         */
         N withChildren(N node, List<N> children);
+        /** @param node 目标节点 @return 该节点允许的最大子节点数，{@link #UNLIMITED_CHILDREN} 表示无上限 */
         int childCapacity(N node);
+        /**
+         * 默认按 {@link #childCapacity} 判断容量；childCount 为负视为不合法。
+         *
+         * @param node 目标节点
+         * @param childCount 替换后的子节点数量
+         * @return 是否接受该子节点数量
+         */
         default boolean acceptsChildren(N node, int childCount) {
             return childCount >= 0 && childCount <= childCapacity(node);
         }
     }
 
+    /** 配置操作种类，随 {@link Change} 一起提交给宿主。 */
     public enum Kind { CREATE, DELETE, UPDATE, MOVE }
+    /**
+     * 一次已提交的配置操作：整树前后快照与操作种类，供宿主写回自己的存储。
+     *
+     * @param before 操作前的根节点
+     * @param after 操作后的根节点
+     * @param kind 操作种类
+     * @param paths 旧路径到新路径的映射，视图据此跟随结构变化
+     * @param removed 本次操作移除的路径
+     * @param added 本次操作新增的路径
+     * @param <N> 宿主节点类型
+     */
     public record Change<N>(@Nullable N before, @Nullable N after, Kind kind, Map<UiTreePath, UiTreePath> paths,
                             Set<UiTreePath> removed, Set<UiTreePath> added) {
         public Change { paths = Map.copyOf(paths); removed = Set.copyOf(removed); added = Set.copyOf(added); }
@@ -41,8 +75,32 @@ public final class UiTreeEditor<N> {
         }
         public Change(@Nullable N before, @Nullable N after, Kind kind) { this(before, after, kind, Map.of()); }
     }
+    /** 拖放落点相对目标节点的位置：目标之前、目标之内、目标之后。 */
     public enum DropPosition { BEFORE, INSIDE, AFTER }
+    /**
+     * 移动预览失败时展示给宿主的本地化文案，按失败原因区分。
+     *
+     * @param cycle 把节点移入自身子树，或尝试移动根节点
+     * @param rootSibling 根节点没有同级位置可插入
+     * @param noChildren 目标节点不接受任何子节点
+     * @param fullParent 目标父节点容量已满
+     * @param stale 提交时树基准已变化
+     */
     public record MoveErrors(Component cycle, Component rootSibling, Component noChildren, Component fullParent, Component stale) {}
+    /**
+     * 一次移动预览：不修改树，只给出候选结果与全部受影响路径。
+     *
+     * @param before 拖拽基准（预览前的根节点）
+     * @param after 候选结果根节点；被拒绝时与 before 相同
+     * @param source 规范化后的首个源路径
+     * @param target 拖放目标路径
+     * @param position 落点位置
+     * @param movedTo 移动后主节点的新路径；被拒绝时为 null
+     * @param paths 旧路径到新路径的映射，用于提交后跟随视图选择
+     * @param outcome 是否发生结构变化以及拒绝原因
+     * @param sources 规范化后的全部源路径
+     * @param <N> 宿主节点类型
+     */
     public record MovePreview<N>(@Nullable N before, @Nullable N after, UiTreePath source, UiTreePath target,
                                  DropPosition position, @Nullable UiTreePath movedTo,
                                  Map<UiTreePath, UiTreePath> paths, Outcome outcome, List<UiTreePath> sources) {
@@ -53,7 +111,20 @@ public final class UiTreeEditor<N> {
             this(before, after, source, target, position, movedTo, paths, outcome, List.of(source));
         }
     }
+    /**
+     * 操作结果。
+     *
+     * @param changed 是否已提交给宿主
+     * @param error 未提交时的原因；无错误或未变化时为 null
+     */
     public record Outcome(boolean changed, @Nullable Component error) {}
+    /**
+     * 视图状态变化：折叠与选择只影响展示，不产生配置操作事件。
+     *
+     * @param selected 主节点路径；选择为空时为 null
+     * @param collapsed 已折叠的节点路径
+     * @param selection 全部选中路径
+     */
     public record ViewChange(@Nullable UiTreePath selected, Set<UiTreePath> collapsed, Set<UiTreePath> selection) {
         public ViewChange { collapsed = Set.copyOf(collapsed); selection = Set.copyOf(selection); }
         public ViewChange(@Nullable UiTreePath selected, Set<UiTreePath> collapsed) {
@@ -85,6 +156,7 @@ public final class UiTreeEditor<N> {
         this.moveErrors = new MoveErrors(invalidParent, invalidParent, invalidParent, invalidParent, invalidPath);
     }
 
+    /** 替换移动失败时使用的本地化文案；默认沿用构造器传入的无路径与非法父节点提示。 */
     public void setMoveErrors(MoveErrors errors) { moveErrors = Objects.requireNonNull(errors); }
 
     public Adapter<N> adapter() { return adapter; }
@@ -93,6 +165,7 @@ public final class UiTreeEditor<N> {
     public <S> UiTreeCodec.DecodeResult<N> decode(UiTreeCodec<N, S> codec, @Nullable S source) {
         return codec.decode(source);
     }
+    /** 把当前根编码为宿主的外部表示；根为 null 时返回 null。 */
     public <S> @Nullable S encode(UiTreeCodec<N, S> codec) { return codec.encode(root.get()); }
     public void setBeforeEdit(Runnable handler) { beforeEdit = Objects.requireNonNull(handler); }
     public void setOnViewChanged(Consumer<ViewChange> listener) { onViewChanged = Objects.requireNonNull(listener); }
@@ -158,6 +231,7 @@ public final class UiTreeEditor<N> {
 
     private void notifyView() { onViewChanged.accept(new ViewChange(selected, collapsed, selection)); }
 
+    /** 按路径查找节点；路径不存在或越界时返回 null。 */
     public @Nullable N query(UiTreePath path) { return query(root.get(), path); }
 
     private @Nullable N query(@Nullable N node, UiTreePath path) {

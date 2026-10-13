@@ -51,6 +51,7 @@ public record FluidPresentCondition(TaggedId fluid, boolean requireSource, List<
         fluids = List.copyOf(fluids);
     }
 
+    // 实际参与匹配的引用：fluids 非空时优先，否则退回单个 fluid；两者皆空得到空列表（表示任意流体）
     public List<TaggedId> references() {
         return fluids.isEmpty() && fluid != null ? List.of(fluid) : fluids;
     }

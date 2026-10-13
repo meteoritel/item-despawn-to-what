@@ -39,10 +39,12 @@ public record CatalystCost(
         counts = Map.copyOf(counts);
     }
 
+    // 单个引用应支付的数量：counts 未配置该引用时取规则级 count
     public int countFor(TaggedId item) {
         return counts.getOrDefault(item, count);
     }
 
+    // 全部引用（按引用去重后）的数量合计
     public int totalCount() {
         return items.stream().distinct().mapToInt(this::countFor).sum();
     }

@@ -34,7 +34,7 @@ import java.util.stream.Stream;
  * 效果与条件叶均通过注册表做扁平类型分发：类型专属字段与通用字段位于同一个 JSON 对象中。
  * 硬约束：codec 层不得产出 null（DFU 的 DataResult 内部使用 Optional.of，null 会在解码期抛 NPE）；
  * 可选字段一律以 Optional 承载，在记录构造的最后一步 orElse(null) 落回可空字段。
- * 旧格式（条件二维数组 / conditions.groups / 叶级 negated）一律明确报错，不做静默兼容。
+ * 条件二维数组 / conditions.groups / 叶级 negated 三种写法一律明确报错，不做静默兼容。
  */
 public final class RuleCodecs {
 
@@ -81,7 +81,7 @@ public final class RuleCodecs {
             RuleFields.CATALYST_RADIUS
     );
 
-    // 旧版二维数组条件的分组字段名：仅用于识别旧格式并报错
+    // 条件二维数组写法的分组字段名：仅用于识别该写法并报错
     private static final String LEGACY_GROUPS = "groups";
 
     // 组合节点允许的节点级字段
@@ -93,7 +93,7 @@ public final class RuleCodecs {
     private static final String ALLOWED_OPS = RuleFields.OP_ALL_OF + " / " + RuleFields.OP_ANY_OF
             + " / " + RuleFields.OP_INVERTED + " / " + RuleFields.OP_LEAF;
 
-    // 取反迁移提示：叶级 negated 已删除
+    // 取反写法提示：叶级 negated 不受支持，报错时引导改用 inverted 节点
     private static final String INVERT_HINT =
             "叶级 negated 已删除：取反请用 {\"op\":\"inverted\",\"term\":{\"op\":\"leaf\",\"condition\":{...}}}";
 
@@ -113,7 +113,7 @@ public final class RuleCodecs {
             public <T> DataResult<Pair<ConditionExpression, T>> decode(DynamicOps<T> ops, T input) {
                 var asMap = ops.getMap(input);
                 if (asMap.result().isEmpty()) {
-                    // 数组即旧版「外层 OR / 内层 AND」二维数组格式，必须明确拒绝而不是给出泛化的类型错误
+                    // 数组是条件二维数组写法（外层 OR / 内层 AND）：必须明确拒绝而不是给出泛化的类型错误
                     return DataResult.error(() -> "条件表达式必须是条件树对象，允许的 op: " + ALLOWED_OPS
                             + "；旧格式（条件数组 / groups 字段 / 叶级 negated）已废弃");
                 }
@@ -341,14 +341,14 @@ public final class RuleCodecs {
         if (rawCondition == null) {
             return DataResult.error(() -> "op=leaf 缺少 condition 字段（条件对象应位于 condition 字段内部）");
         }
-        // 条件对象内部的 negated 单独识别，给出迁移提示（TypeDispatch 的未知字段检查也会兜底拦截）
+        // 条件对象内部的 negated 单独识别，给出写法提示（TypeDispatch 的未知字段检查也会兜底拦截）
         if (ops.get(rawCondition, RuleFields.NEGATED).result().isPresent()) {
             return DataResult.error(() -> INVERT_HINT);
         }
         return leafCodec.parse(ops, rawCondition).map(ConditionNode.Leaf::new);
     }
 
-    // 缺少 op 时的分类报错：区分旧格式（groups / 直接内联的叶）与书写遗漏
+    // 缺少 op 时的分类报错：区分被拒绝的写法（groups / 直接内联的叶）与书写遗漏
     private static <T> String missingOpMessage(MapLike<T> input) {
         if (input.get(RuleFields.TERMS) != null || input.get(RuleFields.TERM) != null) {
             return "条件节点缺少 op 字段：组合节点须写成 {\"op\":\"all_of\",\"terms\":[...]} / "

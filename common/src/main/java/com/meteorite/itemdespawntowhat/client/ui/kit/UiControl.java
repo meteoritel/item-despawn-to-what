@@ -38,6 +38,16 @@ public final class UiControl implements UiFocusTarget {
     private boolean focused;
     private boolean pressed;
 
+    /**
+     * 重配控件内容并重建命中目标；同一标签重复配置不打断标签滚动。
+     *
+     * @param font 文本测量用字体
+     * @param label 标签文本
+     * @param color 文本颜色
+     * @param icon 图标，可为 null
+     * @param tooltip 提示行
+     * @param action 激活动作；为 null 时同时取消焦点与按下态（纯标签不可激活）
+     */
     public void configure(Font font, Component label, int color, @Nullable UiIcon icon,
                           List<Component> tooltip, @Nullable UiAction action) {
         // 重建同一标签时不打断滚动：浮层按秒重配控件，逐次归零会看到每秒跳回起点。
@@ -142,7 +152,12 @@ public final class UiControl implements UiFocusTarget {
         return true;
     }
 
-    // 只在内容确实越出控件矩形时才设裁剪：无裁剪快路径必须保证文字与图标都在边界内（见 needsClip）。
+    /**
+     * 绘制控件；只在内容确实越出控件矩形时才设置裁剪（见 {@code needsClip}）。
+     *
+     * @param mouseX 指针 X 坐标，用于悬停判定
+     * @param mouseY 指针 Y 坐标，用于悬停判定
+     */
     public void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
         if (!visible) return;
         boolean hovered = enabled && bounds.contains(mouseX, mouseY);

@@ -59,7 +59,7 @@ public final class RuleRuntimeEvents {
             if (entity instanceof ItemEntity item) { RuleRuntimeHost.onItemRemoved(world, item); }
         });
 
-        // 服务器 tick 结束：只推进一次公共预算（所有维度共享，ADR-0002）
+        // 服务器 tick 结束：只推进一次公共预算（所有维度共享）
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             DebugSessionManager.beginRuntimeTick(server);
             RuleRuntimeHost.tickServer(server);

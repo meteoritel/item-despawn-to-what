@@ -22,8 +22,8 @@ import java.util.Map;
 
 /**
  * 规则加载装配层。
- * 唯一同时依赖 core/load（三层来源与覆盖合并）与 core/model（规则解码与校验）的类，
- * 使加载层与模型层各自保持单向依赖。
+ * 加载链路的装配点（load 与 model 的桥接）：core/load 不 import core/model（泛型 T），
+ * 模型经 RuleDecoder 注入，由本层把三层来源、覆盖合并与规则解码、校验串联起来。
  * 本层不做缓存、不做单例、不管理生命周期——那些属运行时。
  */
 public final class RuleLoadingService {

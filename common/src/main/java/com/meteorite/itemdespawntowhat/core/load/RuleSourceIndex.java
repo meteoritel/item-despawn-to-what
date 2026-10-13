@@ -9,7 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/***
+/**
  * 规则来源分层索引：把合并前的原始条目按 id 归并为 base（数据包层）/ overlay（覆盖层）/ control（停用·删除控制条目）三层视图。
  * 供快照装配器判定 origin（overlay|datapack|mixed）与 status（active|disabled|masked），并分别下发 base 与 overlay 视图。
  * 本类不读文件、不解码、不校验，只做归并；层内"后者胜"的顺序语义与 RuleMerger 保持一致。

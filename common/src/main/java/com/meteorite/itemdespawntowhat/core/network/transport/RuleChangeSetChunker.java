@@ -6,7 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-/***
+/**
  * 变更集提交切分器：不超过直发上限时返回单个 {@link SaveRuleChangeSetPayload}；
  * 超限时按 UTF-8 字节切成 {@link SaveRuleChangeSetChunkPayload} 分片，服务端按 transferId 重组后走同一保存流程。
  * 超过契约上限（{@link RuleEditLimits#MAX_CHANGE_SET_BYTES}）或 json 为空时返回空列表，由调用方按"请求不合法/无内容"处理。

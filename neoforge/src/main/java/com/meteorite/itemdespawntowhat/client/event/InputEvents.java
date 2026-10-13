@@ -14,12 +14,13 @@ import net.neoforged.neoforge.client.event.InputEvent;
 @EventBusSubscriber(modid = ItemDespawnToWhat.MOD_ID, value = Dist.CLIENT)
 public class InputEvents {
 
-    // 客户端 tick：驱动编辑工作区的会话心跳
+    /** 客户端 tick：驱动编辑工作区的会话心跳。 */
     @SubscribeEvent
     public static void onClientTick(ClientTickEvent.Post event) {
         RuleEditClientWorkspace.instance().tick();
     }
 
+    /** 按键输入：把按下的编辑器快捷键转交共用逻辑处理。 */
     @SubscribeEvent
     public static void onKeyInput(InputEvent.Key event) {
         if (!ModKeyBindings.openGuiKey.consumeClick()) {

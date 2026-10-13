@@ -17,6 +17,9 @@ public final class UiNavigationHistory<State> {
         this.capacity = capacity;
     }
 
+    /**
+     * 记录一个快照：超出容量时丢弃最旧项；与栈顶相同的快照、以及恢复过程中的记录都被忽略。
+     */
     public void push(State state) {
         Objects.requireNonNull(state);
         if (restoring || state.equals(entries.peekLast())) return;
@@ -24,11 +27,18 @@ public final class UiNavigationHistory<State> {
         while (entries.size() > capacity) entries.removeFirst();
     }
 
+    /**
+     * 先剔除已失效的快照，再报告是否还有可回退项。
+     */
     public boolean canGoBack(Predicate<State> valid) {
         entries.removeIf(state -> !valid.test(state));
         return !entries.isEmpty();
     }
 
+    /**
+     * 从最新往回找第一个有效快照后恢复；恢复期间触发的 {@link #push(State)} 不写入历史。
+     * 没有有效项时返回 {@code false}，历史保持原样。
+     */
     public boolean back(Predicate<State> valid, Consumer<State> restore) {
         while (!entries.isEmpty()) {
             State state = entries.removeLast();
@@ -40,5 +50,6 @@ public final class UiNavigationHistory<State> {
         return false;
     }
 
+    /** 清空全部快照。 */
     public void clear() { entries.clear(); }
 }

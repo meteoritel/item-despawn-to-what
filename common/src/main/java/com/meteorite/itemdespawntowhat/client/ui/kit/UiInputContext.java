@@ -17,7 +17,9 @@ public record UiInputContext(double pointerX, double pointerY, int button,
     /** 空上下文：键盘事件或程序化调用没有指针信息时使用。 */
     public static final UiInputContext EMPTY = new UiInputContext(0.0D, 0.0D, -1, false, false, false);
 
-    // 由 GLFW 修饰键位掩码构造；宿主从原版事件拿到的 modifiers 可直接传入
+    /**
+     * 由 GLFW 修饰键位掩码构造；宿主从原版事件拿到的 modifiers 可直接传入
+     */
     public static UiInputContext pointer(double pointerX, double pointerY, int button, int modifiers) {
         return new UiInputContext(pointerX, pointerY, button,
                 (modifiers & GLFW.GLFW_MOD_SHIFT) != 0,
@@ -25,23 +27,31 @@ public record UiInputContext(double pointerX, double pointerY, int button,
                 (modifiers & GLFW.GLFW_MOD_ALT) != 0);
     }
 
-    // 只有修饰键、没有指针的上下文
+    /**
+     * 只有修饰键、没有指针的上下文
+     */
     public static UiInputContext keys(int modifiers) {
         return pointer(0.0D, 0.0D, -1, modifiers);
     }
 
-    // 完整显式构造，便于需要单独指定三个修饰键的宿主
+    /**
+     * 完整显式构造，便于需要单独指定三个修饰键的宿主
+     */
     public static UiInputContext of(double pointerX, double pointerY, int button,
                                     boolean shift, boolean ctrl, boolean alt) {
         return new UiInputContext(pointerX, pointerY, button, shift, ctrl, alt);
     }
 
-    // 保留按键与修饰键，替换指针坐标
+    /**
+     * 保留按键与修饰键，替换指针坐标
+     */
     public UiInputContext withPointer(double pointerX, double pointerY) {
         return new UiInputContext(pointerX, pointerY, button, shift, ctrl, alt);
     }
 
-    // 还原为 GLFW 修饰键位掩码，便于继续交给原版控件
+    /**
+     * 还原为 GLFW 修饰键位掩码，便于继续交给原版控件
+     */
     public int modifiers() {
         int modifiers = 0;
         if (shift) modifiers |= GLFW.GLFW_MOD_SHIFT;

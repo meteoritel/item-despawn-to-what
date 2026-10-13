@@ -40,6 +40,7 @@ public final class CatalystAllocation {
     private boolean searching;
     private boolean building = true;
 
+    // 构造分配器：available 为各实体当前可用件数，maximumGroups 为待判定的组数上界
     CatalystAllocation(CatalystCost cost, List<ItemEntity> items, int[] available, int maximumGroups) {
         this.cost = cost;
         this.references = cost.items().stream().distinct().toList();
@@ -53,6 +54,7 @@ public final class CatalystAllocation {
         resetAttempt();
     }
 
+    // 在预算内推进二分增广：预算耗尽返回 false（调用方下刻续跑），返回 true 表示上下界已收敛
     boolean advance(ServerTickBudget budget) {
         while (low < high) {
             if (budget.exhausted()) return false;
@@ -62,6 +64,7 @@ public final class CatalystAllocation {
         return true;
     }
 
+    // 已确认可支持的完整组数（二分下界）
     int groups() {
         return low;
     }
