@@ -52,6 +52,8 @@ final class RuleEditorResultsPage {
     private static final int NAVIGATION_MAX_WIDTH = 184;
     private static final int DETAIL_MIN_WIDTH = 212;
     private static final int ACTION_ROW_HEIGHT = 28;
+    private static final int ACTION_CONTENT_INSET = 4;
+    private static final int ACTION_ICON_TEXT_GAP = 4;
     private static final int ACTION_REMOVE_SIZE = 14;
     private static final int ACTION_REMOVE_INSET = 2;
     private static final int ACTION_LIST_MIN_HEIGHT = ACTION_ROW_HEIGHT * 2 + 2;
@@ -198,6 +200,7 @@ final class RuleEditorResultsPage {
         effectList = new UiListView<>(RuleEditorEditPages.THEME, pages.font, this::renderEffectRow);
         effectList.setRowHeight(ACTION_ROW_HEIGHT);
         effectList.setSelectionMarkerVisible(false);
+        effectList.setChipRows(true);
         effectList.setEmptyMessage(Component.translatable(RuleEditorPageSupport.UI + "summary.no_effect"));
         List<Integer> effects = new ArrayList<>();
         for (int i = 0; i < effectCount; i++) {
@@ -677,8 +680,9 @@ final class RuleEditorResultsPage {
         Component title = RuleNaming.effectTitle(effect, pages.nameSource);
         String text = (item + 1) + ". " + title.getString();
         var icon = RulePreviewIcons.action(effect);
-        int inset = icon == null ? 2 : 24;
-        if (icon != null) icon.render(graphics, row.x() + 2, row.y() + (row.height() - DETAIL_ICON_SIZE) / 2);
+        int inset = ACTION_CONTENT_INSET + (icon == null ? 0 : DETAIL_ICON_SIZE + ACTION_ICON_TEXT_GAP);
+        if (icon != null) icon.render(graphics, row.x() + ACTION_CONTENT_INSET,
+                row.y() + (row.height() - DETAIL_ICON_SIZE) / 2);
         UiRect remove = actionRemoveRect(row);
         String trimmed = TextScroll.trimToWidth(pages.font, text, Math.max(1, remove.x() - row.x() - inset - ACTION_REMOVE_INSET));
         graphics.drawString(pages.font, trimmed, row.x() + inset, row.y() + (row.height() - renderFont.lineHeight) / 2,
@@ -780,9 +784,11 @@ final class RuleEditorResultsPage {
         int navigationWidth = Math.clamp(area.width() / 3, NAVIGATION_MIN_WIDTH, NAVIGATION_MAX_WIDTH);
         int detailX = area.x() + navigationWidth + RuleEditorPageSupport.CARD_GAP;
         int availableHeight = Math.max(0, area.bottom() - y);
-        int navigationBottom = layoutActions(area.x(), y, navigationWidth, availableHeight);
-        int detailBottom = layoutActionDetail(detailX, y, area.right() - detailX, availableHeight);
-        return Math.max(navigationBottom, detailBottom);
+        // 先取得左栏列表与按钮的高度下限，再让右栏内容决定共用底边。
+        // 最终摆放左栏时复用此底边，切换行为和展开高级区均会同步伸缩。
+        int navigationBottom = layoutActionControls(area.x(), y, navigationWidth, availableHeight);
+        int detailBottom = layoutActionDetail(detailX, y, area.right() - detailX, navigationBottom - y);
+        return layoutActions(area.x(), y, navigationWidth, detailBottom - y);
     }
 
     // 方案管理始终在页首；工具条按实际文案换行，英文与小窗口不挤占动作参数宽度。
@@ -813,6 +819,17 @@ final class RuleEditorResultsPage {
     }
 
     private int layoutActions(int x, int top, int width, int availableHeight) {
+        int bottom = layoutActionControls(x, top, width, availableHeight);
+        if (effectList != null && revealSelectedEffect) {
+            effectList.ensureVisible(effectIndex);
+            revealSelectedEffect = false;
+        }
+        pages.cards.add(RuleEditorEditPages.PageCard.titled(new UiRect(x, top, width, bottom - top),
+                Component.translatable(RuleEditorPageSupport.UI + "card.actions"), DETAIL_PADDING));
+        return bottom;
+    }
+
+    private int layoutActionControls(int x, int top, int width, int availableHeight) {
         int contentX = x + DETAIL_PADDING;
         int contentWidth = Math.max(0, width - DETAIL_PADDING * 2);
         int listY = top + DETAIL_HEADER_HEIGHT + DETAIL_PADDING;
@@ -826,14 +843,7 @@ final class RuleEditorResultsPage {
         if (effectList != null) {
             effectList.setBounds(contentX, listY, contentWidth,
                     Math.max(0, footerY - RuleEditorPageSupport.BUTTON_GAP - listY));
-            if (revealSelectedEffect) {
-                effectList.ensureVisible(effectIndex);
-                revealSelectedEffect = false;
-            }
         }
-        // 头部内缩与左栏内容一致（DETAIL_PADDING），保证两栏卡片的蓝条、标题基线、分隔线位置相同
-        pages.cards.add(RuleEditorEditPages.PageCard.titled(new UiRect(x, top, width, bottom - top),
-                Component.translatable(RuleEditorPageSupport.UI + "card.actions"), DETAIL_PADDING));
         return bottom;
     }
 

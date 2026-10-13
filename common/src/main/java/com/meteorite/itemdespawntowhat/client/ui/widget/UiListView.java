@@ -39,6 +39,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     private static final long DOUBLE_CLICK_MS = 250L;
     // 滚动条预留宽度（与 kit 的滚动条宽度保持一致）
     private static final int SCROLLBAR_RESERVE = 4;
+    private static final int CHIP_ROW_GAP = 4;
 
     // 行渲染器
     private final RowRenderer<T> rowRenderer;
@@ -62,6 +63,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     private Consumer<T> onActivate;
     private boolean activateOnSingleClick;
     private boolean selectionMarkerVisible = true;
+    private boolean chipRows;
     // 是否持有键盘焦点
     private boolean focused;
     // 是否可见
@@ -163,6 +165,16 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         selectionMarkerVisible = visible;
     }
 
+    /**
+     * 使用独立的圆角气泡行，列表底色透明，行间留白不参与条目命中。
+     *
+     * @param enabled 是否启用气泡样式；启用时不绘制左侧选中标记
+     */
+    public void setChipRows(boolean enabled) {
+        chipRows = enabled;
+        updateContentSize();
+    }
+
     // 设置激活回调
     public UiListView<T> setOnActivate(Consumer<T> callback) {
         this.onActivate = callback;
@@ -180,7 +192,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         if (index < 0 || index >= items.size()) {
             return;
         }
-        scrollView.ensureVisible(new UiRect(0, index * rowHeight, Math.max(0, scrollView.viewport().width()), rowHeight));
+        scrollView.ensureVisible(new UiRect(0, index * rowHeight, Math.max(0, scrollView.viewport().width()), rowContentHeight()));
     }
 
     // ---- 布局 ----
@@ -200,10 +212,15 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
 
     // 根据数据量与视口更新滚动范围
     private void updateContentSize() {
-        scrollView.setContentHeight(items.size() * rowHeight);
+        int contentHeight = items.isEmpty() ? 0 : (items.size() - 1) * rowHeight + rowContentHeight();
+        scrollView.setContentHeight(contentHeight);
         int viewportHeight = scrollView.viewport().height();
         visibleRowCount = Math.max(1, viewportHeight / Math.max(1, rowHeight));
-        scrollView.setScrollbarVisible(items.size() * rowHeight > viewportHeight);
+        scrollView.setScrollbarVisible(contentHeight > viewportHeight);
+    }
+
+    private int rowContentHeight() {
+        return chipRows ? Math.max(1, rowHeight - CHIP_ROW_GAP) : rowHeight;
     }
 
     // 内容区可用宽度（扣除滚动条）
@@ -222,6 +239,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
             return -1;
         }
         int contentY = (int) (mouseY - viewport.y()) + scrollView.offset();
+        if (contentY % rowHeight >= rowContentHeight()) return -1;
         int index = contentY / Math.max(1, rowHeight);
         return index >= 0 && index < items.size() ? index : -1;
     }
@@ -243,18 +261,16 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         if (index < 0 || index >= items.size()) return null;
         UiRect viewport = scrollView.viewport();
         return new UiRect(viewport.x(), viewport.y() + index * rowHeight - scrollView.offset(),
-                contentWidth(), rowHeight);
+                contentWidth(), rowContentHeight());
     }
 
     // 供宿主绘制行级覆盖层；返回与实际视口相交的可见矩形。
     public @Nullable UiRect visibleRowBounds(int index) {
-        if (index < 0 || index >= items.size()) {
-            return null;
-        }
+        UiRect row = rowBounds(index);
+        if (row == null) return null;
         UiRect viewport = scrollView.viewport();
-        int top = viewport.y() + index * rowHeight - scrollView.offset();
-        int start = Math.max(top, viewport.y());
-        int end = Math.min(top + rowHeight, viewport.bottom());
+        int start = Math.max(row.y(), viewport.y());
+        int end = Math.min(row.bottom(), viewport.bottom());
         return end > start ? new UiRect(viewport.x(), start, contentWidth(), end - start) : null;
     }
 
@@ -279,7 +295,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         if (!visible) {
             return;
         }
-        theme.drawInset(graphics, bounds);
+        if (!chipRows) theme.drawInset(graphics, bounds);
         UiRect viewport = scrollView.viewport();
         if (items.isEmpty()) {
             // 空文案用主要文本色：在内凹底 SLOT_FILL 上 textSecondary 的对比度不足
@@ -287,7 +303,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
                     viewport.y() + Math.max(0, viewport.height() / 2 - 4), theme.palette().textPrimary());
             return;
         }
-        int hoveredIndex = indexAt(mouseX, mouseY);
+        int hoveredIndex = itemIndexAt(mouseX, mouseY);
         int rowWidth = contentWidth();
         scrollView.push(graphics);
         for (int i = 0; i < items.size(); i++) {
@@ -295,14 +311,16 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
             if (rowY + rowHeight < scrollView.offset() || rowY > scrollView.offset() + viewport.height()) {
                 continue;
             }
-            UiRect row = new UiRect(0, rowY, rowWidth, rowHeight);
-            if (i == selectedIndex) {
+            UiRect row = new UiRect(0, rowY, rowWidth, rowContentHeight());
+            if (chipRows) {
+                theme.drawChip(graphics, row, i == selectedIndex, i == hoveredIndex);
+            } else if (i == selectedIndex) {
                 theme.drawSelection(graphics, row);
                 if (selectionMarkerVisible) theme.drawSelectMarker(graphics, row);
             } else if (i == hoveredIndex) {
                 graphics.fill(row.x(), row.y(), row.right(), row.bottom(), theme.palette().controlHover());
             }
-            int markerWidth = selectionMarkerVisible ? theme.selectMarkerWidth() : 0;
+            int markerWidth = !chipRows && selectionMarkerVisible ? theme.selectMarkerWidth() : 0;
             UiRect textRow = new UiRect(row.x() + markerWidth, row.y(),
                     Math.max(0, row.width() - markerWidth), row.height());
             rowRenderer.renderRow(graphics, font, items.get(i), i, textRow, i == selectedIndex, i == hoveredIndex, focused);
