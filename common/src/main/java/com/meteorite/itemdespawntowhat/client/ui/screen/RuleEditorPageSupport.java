@@ -654,10 +654,6 @@ final class RuleEditorPageSupport {
     }
 
     static void addPageIssues(@Nullable RuleValue rule, List<FormIssue> issues) {
-        if (RuleTriggers.isExplicitlyEmpty(rule)) {
-            Component message = Component.translatable(UI + "issue.trigger_empty");
-            issues.add(FormIssue.error(RuleFields.TRIGGERS, Component.translatable(UI + "rule.triggers"), message));
-        }
         int candidates = ResultStructure.candidateCount(rule);
         int effects = ResultStructure.totalEffectCount(rule);
         Component limit = Component.translatable(UI + "issue.candidate_limit");

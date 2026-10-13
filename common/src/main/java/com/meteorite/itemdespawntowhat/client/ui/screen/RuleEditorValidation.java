@@ -102,6 +102,11 @@ final class RuleEditorValidation {
         List<FormIssue> issues = new ArrayList<>();
         for (var missing : RuleRequirements.find(draft))
             issues.add(FormIssue.error(missing.path(), Component.translatable(missing.labelKey()), Component.translatable(UI + "issue.required")));
+        // 全部脏规则都需检查，避免切换规则或返回管理页后绕过触发方式校验。
+        if (RuleTriggers.isExplicitlyEmpty(draft.root())) {
+            issues.add(FormIssue.error(RuleFields.TRIGGERS, Component.translatable(UI + "rule.triggers"),
+                    Component.translatable(UI + "issue.trigger_empty")));
+        }
         RuleValue effects = listOf(draft.root().child(RuleFields.EFFECTS));
         RuleValue outcomes = listOf(draft.root().child(RuleFields.OUTCOMES));
         if (effects.size() == 0 && outcomes.size() == 0) {

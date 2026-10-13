@@ -387,7 +387,7 @@ final class RuleEditorTriggerPage {
         RuleValue view = pages.currentView();
         // 提示只在「显式选择空触发」这一确实缺失的状态出现，有效触发不再恒显
         if (RuleTriggers.isExplicitlyEmpty(view)) {
-            pages.drawText(graphics, triggerNoteRect, Component.translatable(RuleEditorPageSupport.UI + "trigger.note"), THEME.palette().textDisabled());
+            pages.drawText(graphics, triggerNoteRect, Component.translatable(RuleEditorPageSupport.UI + "trigger.note"), THEME.palette().warning());
         }
         // 等待时长只对自然触发生效，其他触发组合下不显示该说明
         if (RuleTriggers.allowsDelay(view)) {

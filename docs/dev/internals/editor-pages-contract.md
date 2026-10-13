@@ -12,6 +12,7 @@
 | 触发页 TRIGGER | `RuleEditorTriggerPage#buildTrigger` | 触发原因勾选、触发时间（秒）、条件树卡片与画布页 `ConditionTreeOverlay`：结构增删/取反/组合及叶参数就地编辑框 | 输入页的来源与固定消耗 |
 | 结果页 RESULTS | `RuleEditorResultsPage#buildResults` | 组合方式、方案（outcomes）与动作、效果参数 | 条件树、固定成本 |
 
+- 触发方式未声明时默认勾选自然消失；显式空数组保留全部不勾选的草稿状态，触发卡片以警告色显示“请至少勾选一项”。重新勾选任一方式即移除警告；`RuleEditorValidation` 保存前检查全部脏规则的空触发数组，切页、切换规则或返回管理页不绕过检查。
 - 页枚举 `Page` 与 `switch (page)` 派发仍在 `RuleEditorEditPages`；页内的按下 / 释放 / 拖动 / 滚动与键盘派发由 `RuleEditorPageInput` 承担，`RuleEditorEditPages` 的 `mouseClicked` / `mouseReleased` 只做委托。
 - 结果页分两层：**多方案**才有方案层（`singlePlan = candidates == 1`，`RuleEditorResultsPage`）；宽屏左列直接是动作列表（`!singlePlan` 时跳过方案列表布局）；窄屏单方案阶段夹取到 `[1,2]`，多方案仍为 `[0,2]`（stage0 方案层 / stage1 返回方案）；单方案不生成「打开方案」按钮，`candidateList` 创建但不注册进 `liveWidgets`；方案按钮可见性由 `plans || (singlePlan && actions)` 控制；`combinationControl` 仅 `candidates>1` 创建。
 - 结果页**不重复**消耗参数：过滤链配合 `isInputOwnedConsumptionField`（`consume_source`→`count`/`counts`；`consume_catalyst`→`items`/`count`/`counts`/`radius`；`consume_fluid`→`fluid`，**不过滤** `require_source`——输入页不管理它），并在首个消耗动作参数前插说明行 `effect.consume_params_on_input`；`chance` / `delay_ticks` / `conditions` 仍在结果页编辑。
