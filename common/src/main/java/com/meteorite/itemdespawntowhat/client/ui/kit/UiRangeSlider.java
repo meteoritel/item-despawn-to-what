@@ -240,6 +240,14 @@ public final class UiRangeSlider implements UiFocusTarget, UiInputTarget, UiInpu
         return this.dragging;
     }
 
+    /**
+     * 判断区间是否仍在预览，供宿主延后提交关联输入。
+     * @return 鼠标或键盘操作尚未结束时为 true
+     */
+    public boolean isInteracting() {
+        return this.operationActive;
+    }
+
     // 大步伐；<=0 或非有限表示不消费 PageUp/PageDown
     public void setPageStep(double pageStep) {
         this.pageStep = Double.isFinite(pageStep) && pageStep > 0.0D ? pageStep : 0.0D;

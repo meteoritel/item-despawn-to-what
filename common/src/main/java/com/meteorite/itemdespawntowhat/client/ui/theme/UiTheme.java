@@ -89,12 +89,12 @@ public final class UiTheme {
     }
 
     // 滑块样式：把主题色调色板映射成 kit 的不可变样式（kit 不反向依赖主题，只能由宿主注入）
-    // 尺寸沿用 widget/UiSlider 的 TRACK_HEIGHT=4、THUMB_WIDTH=3、手柄上下各溢出 2 像素
+    // 紧凑轨道配 5 像素手柄，灰底上的明暗描边仍有可见内部。
     private static final UiSliderStyle SLIDER_STYLE = new UiSliderStyle(
             UiPalette.SCROLL_TRACK, UiPalette.ACCENT, UiPalette.CONTROL_FILL, UiPalette.CONTROL_HOVER,
             UiPalette.CONTROL_DISABLED, UiPalette.FOCUS_OUTLINE, UiPalette.DANGER, UiPalette.WARNING,
             UiPalette.TRANSPARENT, UiPalette.TEXT_PRIMARY, UiPalette.TEXT_PRIMARY, UiPalette.TEXT_DISABLED,
-            UiPalette.DANGER, 4, 3, 2);
+            UiPalette.DANGER, 4, 5, 2);
 
     private static final UiSliderStyle CARD_SLIDER_STYLE = new UiSliderStyle(
             UiPalette.SLOT_INNER, UiPalette.ACCENT, UiPalette.CONTROL_FILL, UiPalette.CONTROL_HOVER,

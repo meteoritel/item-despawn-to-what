@@ -62,6 +62,7 @@ public final class UiRangeSlider implements UiFocusTarget, UiInputTarget, UiInpu
 - 输入与几何：`mousePressed/mouseDragged/mouseReleased(UiInputContext)`、`keyPressed/keyReleased(int, int, int)`、`containsPointer(double, double)`、`valueAtPointer(double, boolean)`、`xOf(double)`、`trackLeft()/trackRight()/trackWidth()`。
 - 生命周期：`setValue(UiRangeValue)` 回填 + `isBackfillInvalid()`；`setListener(Listener)`（`began/previewed/committed/cancelled` 均传 `UiRangeValue`）；`endInteraction/unmount/onFocusScopeChanged/onHostClosed`。
 - **不做渲染**：本类只提供逻辑与几何，区间/时间条的绘制由宿主完成。
+- `isInteracting()` 同时覆盖鼠标与键盘预览，宿主可据此延后关联输入的提交。宿主 `UiRangeBar.Listener` 转发 `onBegan/onPreviewed/onCommitted/onCancelled`，回填不触发这些回调。
 
 ### 2.3 UiCyclicRange（周期区间核心）
 
@@ -94,6 +95,7 @@ UiCyclicRange  UiSliderExamples.cyclicRange(Component label, UiRect bounds, doub
 - 取值方法：`resolveTrack(boolean)`、`resolveFill(boolean)`、`resolveThumb(boolean, boolean)`、`resolveLabelText(boolean, boolean)`、`resolveValueText(boolean, boolean)`；无主题宿主可用 `UiSliderStyle.pixelDefaults()`。
 - 画法：`UiSliderPainter.paint(GuiGraphics, Frame)`，`Frame` 携带 `bounds/track/filled/thumb/textSlot/style` 与 `enabled/hovered/pressed/focused/dragging/error/overflowBelow/overflowAbove`；kit 自带 `PixelSliderPainter.INSTANCE`（纯色像素，无贴图）。
 - 宿主主题：`client/ui/theme/UiTheme.sliderStyle()` 把调色板映射成 `UiSliderStyle` 供注入。**kit 不 import 主题包**，样式只能由宿主注入；替换 painter 不影响控件逻辑。
+- 默认像素主题的紧凑手柄宽 5 像素，带明暗边与中央刻痕，区间条的命中宽度跟随注入样式。`PixelSliderPainter` 与宿主复选框不绘制焦点外框，键盘焦点与输入逻辑仍保持启用。
 
 ## 4. 宿主要求
 

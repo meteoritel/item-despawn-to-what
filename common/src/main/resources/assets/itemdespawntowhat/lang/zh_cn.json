@@ -534,7 +534,6 @@
   "gui.itemdespawntowhat.edit.field.biome.erosion": "侵蚀度",
   "gui.itemdespawntowhat.edit.field.biome.humidity": "湿度",
   "gui.itemdespawntowhat.edit.field.biome.mode": "模式",
-  "gui.itemdespawntowhat.edit.field.biome.note": "某维两端留空即不约束",
   "gui.itemdespawntowhat.edit.field.biome.temperature": "温度",
   "gui.itemdespawntowhat.edit.field.biome.weirdness": "奇异度",
   "gui.itemdespawntowhat.edit.field.catalyst_present.count": "数量",

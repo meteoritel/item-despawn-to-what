@@ -50,12 +50,5 @@ public final class PixelSliderPainter implements UiSliderPainter {
         if (frame.error() && bounds.height() > 0) {
             graphics.fill(bounds.x(), bounds.bottom() - 1, bounds.right(), bounds.bottom(), style.errorColor());
         }
-        if (frame.focused() && bounds.width() > 0 && bounds.height() > 0) {
-            int color = style.focusColor();
-            graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.y() + 1, color);
-            graphics.fill(bounds.x(), bounds.bottom() - 1, bounds.right(), bounds.bottom(), color);
-            graphics.fill(bounds.x(), bounds.y() + 1, bounds.x() + 1, bounds.bottom() - 1, color);
-            graphics.fill(bounds.right() - 1, bounds.y() + 1, bounds.right(), bounds.bottom() - 1, color);
-        }
     }
 }

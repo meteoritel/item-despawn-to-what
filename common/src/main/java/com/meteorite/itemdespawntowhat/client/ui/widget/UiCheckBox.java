@@ -133,9 +133,6 @@ public final class UiCheckBox implements UiWidget, UiFocusTarget {
         int color = !enabled ? theme.palette().textDisabled() : (hovered ? theme.palette().textPrimary() : theme.textColor(true));
         int textY = bounds.y() + Math.max(0, (bounds.height() - renderFont.lineHeight) / 2);
         graphics.drawString(renderFont, text, textX, textY, color, false);
-        if (focused) {
-            theme.drawFocusOutline(graphics, bounds);
-        }
     }
 
     @Override

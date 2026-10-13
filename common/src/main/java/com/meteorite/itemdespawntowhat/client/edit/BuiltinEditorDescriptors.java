@@ -79,7 +79,6 @@ public final class BuiltinEditorDescriptors {
         biomeFields.add(EditorField.climateRange("erosion", h + "biome.erosion"));
         biomeFields.add(EditorField.climateRange("depth", h + "biome.depth"));
         biomeFields.add(EditorField.climateRange("weirdness", h + "biome.weirdness"));
-        biomeFields.add(EditorField.note(h + "biome.note"));
         ConditionEditorRegistry.register(new TypeEditorDescriptor(biome, TypeLabels.conditionLabel(biome), biomeFields, false));
 
         // weather：三种天气

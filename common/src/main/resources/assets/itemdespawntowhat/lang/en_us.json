@@ -534,7 +534,6 @@
   "gui.itemdespawntowhat.edit.field.biome.erosion": "Erosion",
   "gui.itemdespawntowhat.edit.field.biome.humidity": "Humidity",
   "gui.itemdespawntowhat.edit.field.biome.mode": "Mode",
-  "gui.itemdespawntowhat.edit.field.biome.note": "Empty ends = no limit",
   "gui.itemdespawntowhat.edit.field.biome.temperature": "Temperature",
   "gui.itemdespawntowhat.edit.field.biome.weirdness": "Weirdness",
   "gui.itemdespawntowhat.edit.field.catalyst_present.count": "Count",

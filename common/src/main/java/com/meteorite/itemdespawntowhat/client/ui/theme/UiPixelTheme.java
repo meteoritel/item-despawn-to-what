@@ -1,6 +1,5 @@
 package com.meteorite.itemdespawntowhat.client.ui.theme;
 
-import com.meteorite.itemdespawntowhat.client.ui.kit.PixelSliderPainter;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlStyle;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
@@ -102,7 +101,7 @@ public final class UiPixelTheme implements UiHostTheme {
     @Override
     public UiSliderSkin sliderSkin(UiSliderRole role) {
         return switch (role) {
-            case COMPACT -> new UiSliderSkin(UiTheme.sliderStyle(), PixelSliderPainter.INSTANCE);
+            case COMPACT -> new UiSliderSkin(UiTheme.sliderStyle(), UiTheme.cardSliderPainter());
             case ROOMY -> new UiSliderSkin(UiTheme.cardSliderStyle(), UiTheme.cardSliderPainter());
         };
     }

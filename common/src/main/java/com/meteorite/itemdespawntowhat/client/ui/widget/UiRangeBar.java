@@ -35,10 +35,35 @@ import org.lwjgl.glfw.GLFW;
  */
 public final class UiRangeBar implements UiWidget, UiFocusTarget {
 
-    // 一次完整操作结束（鼠标释放、方向键抬起、精确输入提交）时回调
+    /** 区间的预览、提交与取消回调；预览不应写入配置历史。 */
     public interface Listener {
 
+        /**
+         * 在预览前保存宿主输入的回退基线。
+         * @param value 操作开始时的区间
+         */
+        default void onBegan(UiRangeValue value) {
+        }
+
+        /**
+         * 拖动预览时同步宿主输入框，但不产生提交历史。
+         * @param value 当前预览区间
+         */
+        default void onPreviewed(UiRangeValue value) {
+        }
+
+        /**
+         * 提交一次完整区间操作。
+         * @param value 最终区间
+         */
         void onCommitted(UiRangeValue value);
+
+        /**
+         * 取消操作时恢复宿主输入。
+         * @param value 回退后的区间
+         */
+        default void onCancelled(UiRangeValue value) {
+        }
     }
 
     // 宿主提供的本地化文本
@@ -90,15 +115,26 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
         this.listener = listener;
         this.core = new UiRangeSlider(policy, new UiSliderWindow(policy.min(), policy.max()),
                 initial == null ? UiRangeValue.EMPTY : initial);
-        this.core.setThumbWidth(3);
+        this.core.setThumbWidth(style.thumbWidth());
         this.core.setListener(new UiRangeSlider.Listener() {
+            @Override
+            public void began(UiRangeValue startValue) {
+                if (listener != null) listener.onBegan(startValue);
+            }
+
             @Override
             public void committed(UiRangeValue startValue, UiRangeValue currentValue) {
                 fireCommitted(currentValue);
             }
 
             @Override
+            public void previewed(UiRangeValue startValue, UiRangeValue currentValue) {
+                if (listener != null) listener.onPreviewed(currentValue);
+            }
+
+            @Override
             public void cancelled(UiRangeValue startValue, UiRangeValue restoredValue) {
+                if (listener != null) listener.onCancelled(restoredValue);
                 closePrecise();
             }
         });
