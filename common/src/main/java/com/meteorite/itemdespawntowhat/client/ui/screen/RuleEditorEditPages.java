@@ -680,6 +680,19 @@ public final class RuleEditorEditPages {
         });
     }
 
+    /**
+     * 绘制当前结果动作的自绘说明，保持与页面滚动一致的命中范围。
+     *
+     * @param graphics 绘制上下文
+     * @param mouseX 鼠标屏幕 X 坐标
+     * @param mouseY 鼠标屏幕 Y 坐标
+     * @return 是否已绘制说明面板
+     */
+    public boolean renderDescriptionTooltip(GuiGraphics graphics, int mouseX, int mouseY) {
+        return page == Page.RESULTS && !pageScroll.isDragging() && pageScroll.contains(mouseX, mouseY)
+                && ruleEditorResultsPage.renderDescriptionTooltip(graphics, mouseX, mouseY);
+    }
+
     public @Nullable Component tooltipAt(double mouseX, double mouseY) {
         if (pageScroll.isDragging()) return null;
         if (!pageScroll.contains(mouseX, mouseY)) {

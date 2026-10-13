@@ -11,6 +11,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumberPolicy;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumbers;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderSkin;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderWindow;
@@ -68,6 +69,7 @@ final class NumberControl extends FormControl {
     private double windowMax;
     // 行内输入框的宽度下限覆盖：数量对象等逐行对齐布局用各行最大值统一（0 = 各自按文本取样）
     private int inputWidthOverride;
+    private UiRect unitBounds = new UiRect(0, 0, 0, 0);
     private @Nullable RuleValue loaded;
     // 装载时写入输入框的文本基线；未编辑且文本未变时视为「未编辑」
     private String loadedText = "";
@@ -128,8 +130,7 @@ final class NumberControl extends FormControl {
                         (int) Math.round(numbers.step()), (int) Math.round(fine))
                 : UiNumberPolicy.of(domainMin, domainMax, numbers.step(), fine));
         this.slider.core().setWindow(new UiSliderWindow(windowMin, windowMax));
-        this.slider.setLabel(unitLabel());
-        // 值文本由行内精确输入框承担，滑杆不再重复显示，只保留单位提示
+        // 单位由宿主在轨道外绘制，避免文字与滑块占用同一矩形。
         this.slider.setFormatter(value -> Component.empty());
         // 不消费 PageUp/PageDown，交给 FormView 做整页滚动
         this.slider.core().setPageStep(0.0D);
@@ -310,14 +311,18 @@ final class NumberControl extends FormControl {
         for (UiButton button : presetButtons) {
             reserved += buttonWidth(button) + GAP;
         }
-        int available = Math.max(24, width - reserved);
+        Component unit = unitLabel();
+        int unitWidth = unit.getString().isEmpty() ? 0 : font.width(unit) + GAP;
+        unitBounds = new UiRect(x, y, unitWidth, rowHeight);
+        int sliderX = x + unitWidth;
+        int available = Math.max(24, width - reserved - unitWidth);
         int inputWidth = inputWidth(available);
         int sliderWidth = Math.max(12, available - inputWidth - GAP);
-        slider.setBounds(x, y, sliderWidth, rowHeight);
-        input.setBounds(x + sliderWidth + GAP, y, inputWidth, rowHeight);
+        slider.setBounds(sliderX, y, sliderWidth, rowHeight);
+        input.setBounds(sliderX + sliderWidth + GAP, y, inputWidth, rowHeight);
         // 预设按钮保持默认高度，在加高的行里垂直居中，保证仍可点击
         int buttonY = y + Math.max(0, (rowHeight - DEFAULT_HEIGHT) / 2);
-        int cursor = x + available + GAP;
+        int cursor = sliderX + available + GAP;
         for (UiButton button : presetButtons) {
             int buttonWidth = buttonWidth(button);
             button.setBounds(cursor, buttonY, buttonWidth, DEFAULT_HEIGHT);
@@ -349,6 +354,9 @@ final class NumberControl extends FormControl {
 
     @Override
     void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
+        graphics.drawString(renderFont, unitLabel(), unitBounds.x(),
+                unitBounds.y() + Math.max(0, (unitBounds.height() - renderFont.lineHeight) / 2),
+                THEME.palette().textSecondary(), false);
         slider.render(graphics, renderFont, mouseX, mouseY);
         input.render(graphics, renderFont, mouseX, mouseY);
         for (UiButton button : presetButtons) {

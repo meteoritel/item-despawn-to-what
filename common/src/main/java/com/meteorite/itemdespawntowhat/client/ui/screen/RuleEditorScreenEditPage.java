@@ -317,6 +317,10 @@ final class RuleEditorScreenEditPage {
         footerBar.render(graphics, renderFont, mouseX, mouseY);
     }
 
+    boolean renderDescriptionTooltip(GuiGraphics graphics, int mouseX, int mouseY) {
+        return pages != null && pages.renderDescriptionTooltip(graphics, mouseX, mouseY);
+    }
+
     @Nullable Component tooltipAt(double mouseX, double mouseY) {
         return pages == null ? null : pages.tooltipAt(mouseX, mouseY);
     }

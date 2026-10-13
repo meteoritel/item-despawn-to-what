@@ -61,6 +61,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     // 激活回调
     private Consumer<T> onActivate;
     private boolean activateOnSingleClick;
+    private boolean selectionMarkerVisible = true;
     // 是否持有键盘焦点
     private boolean focused;
     // 是否可见
@@ -153,6 +154,15 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     // 导航清单与菜单可显式使用单击激活，普通可编辑列表仍保持双击。
     public void setActivateOnSingleClick(boolean enabled) { activateOnSingleClick = enabled; }
 
+    /**
+     * 设置是否绘制并预留左侧选中标记；隐藏时仍保留选中背景和键盘导航。
+     *
+     * @param visible 是否显示选中标记
+     */
+    public void setSelectionMarkerVisible(boolean visible) {
+        selectionMarkerVisible = visible;
+    }
+
     // 设置激活回调
     public UiListView<T> setOnActivate(Consumer<T> callback) {
         this.onActivate = callback;
@@ -223,6 +233,19 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
 
     public boolean isDraggingScrollbar() { return scrollView.isDragging(); }
 
+    /**
+     * 返回数据行的完整屏幕矩形，供宿主统一行内操作的绘制与命中坐标。
+     *
+     * @param index 数据行下标
+     * @return 未裁剪的行矩形，下标无效时返回 null
+     */
+    public @Nullable UiRect rowBounds(int index) {
+        if (index < 0 || index >= items.size()) return null;
+        UiRect viewport = scrollView.viewport();
+        return new UiRect(viewport.x(), viewport.y() + index * rowHeight - scrollView.offset(),
+                contentWidth(), rowHeight);
+    }
+
     // 供宿主绘制行级覆盖层；返回与实际视口相交的可见矩形。
     public @Nullable UiRect visibleRowBounds(int index) {
         if (index < 0 || index >= items.size()) {
@@ -275,12 +298,13 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
             UiRect row = new UiRect(0, rowY, rowWidth, rowHeight);
             if (i == selectedIndex) {
                 theme.drawSelection(graphics, row);
-                theme.drawSelectMarker(graphics, row);
+                if (selectionMarkerVisible) theme.drawSelectMarker(graphics, row);
             } else if (i == hoveredIndex) {
                 graphics.fill(row.x(), row.y(), row.right(), row.bottom(), theme.palette().controlHover());
             }
-            UiRect textRow = new UiRect(row.x() + theme.selectMarkerWidth(), row.y(),
-                    Math.max(0, row.width() - theme.selectMarkerWidth()), row.height());
+            int markerWidth = selectionMarkerVisible ? theme.selectMarkerWidth() : 0;
+            UiRect textRow = new UiRect(row.x() + markerWidth, row.y(),
+                    Math.max(0, row.width() - markerWidth), row.height());
             rowRenderer.renderRow(graphics, font, items.get(i), i, textRow, i == selectedIndex, i == hoveredIndex, focused);
         }
         scrollView.pop(graphics);

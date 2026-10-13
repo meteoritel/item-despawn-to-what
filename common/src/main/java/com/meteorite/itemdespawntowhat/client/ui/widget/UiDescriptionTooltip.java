@@ -12,10 +12,10 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 
 /**
- * 画布节点悬停提示面板：把带行色的文本逐行折行后自绘底色与描边。
- * 层级高于画布内容与侧栏，避免被卡片或滑入面板遮挡；折行宽度受面板可用宽度与最大宽度双重限制。
+ * 条件节点与动作参数共用的悬停说明面板：按语义行色折行，自绘底色与描边。
+ * 层级高于内容与侧栏，面板定位受宿主传入的可视区域约束。
  */
-final class ConditionGraphTooltip {
+public final class UiDescriptionTooltip {
     private static final int TOOLTIP_MIN_WIDTH = 80;
     private static final int TOOLTIP_MAX_WIDTH = 250;
     private static final int TOOLTIP_PADDING = 4;
@@ -25,28 +25,39 @@ final class ConditionGraphTooltip {
     private static final int TOOLTIP_MOUSE_OFFSET = 12;
     private static final int TOOLTIP_LAYER = UiRenderLayers.FOREGROUND * 2 + UiRenderLayers.ICON;
 
-    /** 面板中的一行：正文与行色由调用方按语义决定（标题 / 摘要 / 结构问题）。 */
-    record Line(Component text, int color) {
+    /**
+     * 面板中的语义行。
+     *
+     * @param text 标题、参数说明或问题文本
+     * @param color 对应语义的文字颜色
+     */
+    public record Line(Component text, int color) {
     }
 
     private final UiHostTheme theme;
     private final Font font;
 
-    ConditionGraphTooltip(UiHostTheme theme, Font font) {
+    /**
+     * 创建使用宿主浮层配色的说明面板。
+     *
+     * @param theme 宿主主题
+     * @param font 折行与绘制字体
+     */
+    public UiDescriptionTooltip(UiHostTheme theme, Font font) {
         this.theme = theme;
         this.font = font;
     }
 
     /**
-     * 在画布内绘制提示面板。
+     * 在宿主可视区域内绘制提示面板。
      *
      * @param graphics 绘制上下文
-     * @param bounds 画布可视区域，面板越界时按此区域翻转并钳制
+     * @param bounds 宿主可视区域，面板越界时按此区域翻转并钳制
      * @param lines 提示内容行，空行会被跳过
      * @param mouseX 鼠标屏幕 X 坐标
      * @param mouseY 鼠标屏幕 Y 坐标
      */
-    void render(GuiGraphics graphics, UiRect bounds, List<Line> lines, int mouseX, int mouseY) {
+    public void render(GuiGraphics graphics, UiRect bounds, List<Line> lines, int mouseX, int mouseY) {
         if (lines.isEmpty() || bounds.width() <= 0 || bounds.height() <= 0) {
             return;
         }

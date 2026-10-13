@@ -16,12 +16,11 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlowLayout;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
-import com.meteorite.itemdespawntowhat.client.ui.screen.form.NaturalSummary;
-import com.meteorite.itemdespawntowhat.client.ui.shared.EntityPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCheckBox;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiDescriptionTooltip;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiListView;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiSegmentedControl;
@@ -53,6 +52,8 @@ final class RuleEditorResultsPage {
     private static final int NAVIGATION_MAX_WIDTH = 184;
     private static final int DETAIL_MIN_WIDTH = 212;
     private static final int ACTION_ROW_HEIGHT = 28;
+    private static final int ACTION_REMOVE_SIZE = 14;
+    private static final int ACTION_REMOVE_INSET = 2;
     private static final int ACTION_LIST_MIN_HEIGHT = ACTION_ROW_HEIGHT * 2 + 2;
     private static final int TOOLBAR_HEIGHT = 20;
     private static final int PLAN_SELECTOR_MIN_WIDTH = 80;
@@ -92,6 +93,7 @@ final class RuleEditorResultsPage {
         detailHeaderRect = null;
         emptyDetailRect = null;
         planStrategyRect = null;
+        actionParametersRect = null;
         selectedAction = null;
         effectNoteRect = null;
         openActionButton = null;
@@ -136,6 +138,7 @@ final class RuleEditorResultsPage {
     private @Nullable UiRect emptyDetailRect;
 
     private @Nullable UiRect planStrategyRect;
+    private @Nullable UiRect actionParametersRect;
 
     private boolean revealSelectedEffect;
 
@@ -164,8 +167,12 @@ final class RuleEditorResultsPage {
 
         RuleValue candidate = ResultStructure.candidateAt(rule, candidateIndex);
         RuleValue actions = ResultStructure.effectsAt(rule, candidateIndex);
-        boolean generic = RuleEditorPageSupport.containsAction(actions, "spawn_entity", "entity");
-        boolean blocks = RuleEditorPageSupport.containsAction(actions, "place_block", null);
+        int selectedIndex = Math.clamp(effectIndex, 0, Math.max(0, actions == null ? 0 : actions.size() - 1));
+        RuleValue selected = actions == null ? null : actions.item(selectedIndex);
+        ResourceLocation selectedType = selected == null ? null : ResourceLocation.tryParse(selected.text(RuleFields.TYPE, ""));
+        boolean generic = ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "spawn_entity").equals(selectedType)
+                && "entity".equals(selected.text("variant", "item"));
+        boolean blocks = ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "place_block").equals(selectedType);
         if (generic) {
             safeSpawnBox = new UiCheckBox(RuleEditorEditPages.THEME, pages.font, Component.translatable(RuleEditorPageSupport.UI + "candidate.safe_spawn"), RuleEditorPageSupport.boolOf(candidate, RuleFields.SAFE_SPAWN, false));
             safeSpawnBox.setOnChanged(checked -> setCandidateStrategy(RuleFields.SAFE_SPAWN, checked));
@@ -190,6 +197,7 @@ final class RuleEditorResultsPage {
         effectIndex = Math.clamp(effectIndex, 0, Math.max(0, effectCount - 1));
         effectList = new UiListView<>(RuleEditorEditPages.THEME, pages.font, this::renderEffectRow);
         effectList.setRowHeight(ACTION_ROW_HEIGHT);
+        effectList.setSelectionMarkerVisible(false);
         effectList.setEmptyMessage(Component.translatable(RuleEditorPageSupport.UI + "summary.no_effect"));
         List<Integer> effects = new ArrayList<>();
         for (int i = 0; i < effectCount; i++) {
@@ -581,20 +589,43 @@ final class RuleEditorResultsPage {
     }
 
     void removeEffect() {
+        removeEffect(effectIndex);
+    }
+
+    private void removeEffect(int index) {
         EditSession session = pages.host.session();
         if (session == null) {
             return;
         }
         RuleDraft draft = session.draft();
         String listPath = ResultStructure.listPath(draft.root(), candidateIndex);
-        int index = effectIndex;
         if (index < 0 || index >= draft.effectCountAt(listPath)) {
             return;
         }
         if (!pages.apply(EditSession.OP_REMOVE_EFFECT, () -> draft.removeAt(listPath + "[" + index + "]"))) {
             return;
         }
-        effectIndex = Math.max(0, index - 1);
+        // 删除非选中行时保留当前动作；删掉当前行时选中前一行。
+        if (index <= effectIndex) effectIndex = Math.max(0, effectIndex - 1);
+    }
+
+    private UiRect actionRemoveRect(UiRect row) {
+        return new UiRect(row.right() - ACTION_REMOVE_INSET - ACTION_REMOVE_SIZE,
+                row.y() + (row.height() - ACTION_REMOVE_SIZE) / 2, ACTION_REMOVE_SIZE, ACTION_REMOVE_SIZE);
+    }
+
+    private int removeIndexAt(double mouseX, double mouseY) {
+        if (effectList == null || !effectList.isVisible()) return -1;
+        int index = effectList.itemIndexAt(mouseX, mouseY);
+        UiRect row = effectList.rowBounds(index);
+        return row != null && actionRemoveRect(row).contains(mouseX, mouseY) ? index : -1;
+    }
+
+    boolean clickRemove(double mouseX, double mouseY, int button) {
+        int index = removeIndexAt(mouseX, mouseY);
+        if (button != 0 || index < 0) return false;
+        if (!pages.blockNavigation()) removeEffect(index);
+        return true;
     }
 
     void moveEffectBy(int delta) {
@@ -648,15 +679,12 @@ final class RuleEditorResultsPage {
         var icon = RulePreviewIcons.action(effect);
         int inset = icon == null ? 2 : 24;
         if (icon != null) icon.render(graphics, row.x() + 2, row.y() + (row.height() - DETAIL_ICON_SIZE) / 2);
-        String trimmed = TextScroll.trimToWidth(pages.font, text, Math.max(1, row.width() - inset - 2));
-        graphics.drawString(pages.font, trimmed, row.x() + inset, row.y() + 4, THEME.palette().textPrimary(), false);
-        if (element != null) {
-            int summaryWidth = row.width() - inset - 4;
-            if (summaryWidth > 12) {
-                String summary = TextScroll.trimToWidth(pages.font, NaturalSummary.effect(element).getString(), summaryWidth);
-                graphics.drawString(pages.font, summary, row.x() + inset, row.y() + 16, THEME.palette().textSecondary(), false);
-            }
-        }
+        UiRect remove = actionRemoveRect(row);
+        String trimmed = TextScroll.trimToWidth(pages.font, text, Math.max(1, remove.x() - row.x() - inset - ACTION_REMOVE_INSET));
+        graphics.drawString(pages.font, trimmed, row.x() + inset, row.y() + (row.height() - renderFont.lineHeight) / 2,
+                THEME.palette().textPrimary(), false);
+        graphics.drawCenteredString(renderFont, "×", remove.x() + remove.width() / 2,
+                remove.y() + (remove.height() - renderFont.lineHeight) / 2, THEME.palette().danger());
     }
 
     void switchProduct(String path, String variant) {
@@ -737,6 +765,7 @@ final class RuleEditorResultsPage {
         detailHeaderRect = null;
         emptyDetailRect = null;
         planStrategyRect = null;
+        actionParametersRect = null;
         effectNoteRect = null;
         int y = layoutToolbar(area.x(), area.y(), area.width());
         if (!split) {
@@ -842,6 +871,8 @@ final class RuleEditorResultsPage {
                     fillOriginBox.setBounds(contentX, y, contentWidth, RuleEditorPageSupport.ROW_H);
                     y += RuleEditorPageSupport.ROW_H + RuleEditorPageSupport.PAD;
                 }
+                actionParametersRect = new UiRect(contentX, y, contentWidth, RuleEditorPageSupport.LINE_H);
+                y += RuleEditorPageSupport.LINE_H + RuleEditorPageSupport.PAD;
                 y = pages.layoutForm(advancedEffectForm, contentX, y, contentWidth);
             }
         } else {
@@ -943,19 +974,12 @@ final class RuleEditorResultsPage {
         if (readonlyNote != null) pages.drawText(graphics, effectNoteRect, readonlyNote, THEME.palette().warning());
         pages.drawText(graphics, planStrategyRect, Component.translatable(RuleEditorPageSupport.UI + "results.plan_strategy"),
                 THEME.palette().textSecondary());
+        pages.drawText(graphics, actionParametersRect, Component.translatable(RuleEditorPageSupport.UI + "results.action_parameters"),
+                THEME.palette().textSecondary());
     }
 
     @Nullable Component tooltipAt(double mouseX, double mouseY) {
-        if (effectList != null && effectList.isVisible()) {
-            int index = effectList.itemIndexAt(mouseX, mouseY);
-            RuleValue effects = ResultStructure.effectsAt(pages.currentView(), candidateIndex);
-            if (effects != null && index >= 0 && index < effects.size()) {
-                RuleValue effect = effects.item(index);
-                return actionTooltip(effect);
-            }
-        }
-        if (detailHeaderRect != null && detailHeaderRect.contains(mouseX, mouseY) && selectedAction != null)
-            return actionTooltip(selectedAction);
+        if (removeIndexAt(mouseX, mouseY) >= 0) return Component.translatable(RuleEditorPageSupport.UI + "button.effect_remove");
         if (planSelector != null && planSelector.bounds().contains(mouseX, mouseY))
             return RuleNaming.candidateTitle(ResultStructure.candidateAt(pages.currentView(), candidateIndex),
                     candidateIndex + 1, pages.nameSource).copy().append("\n")
@@ -968,12 +992,20 @@ final class RuleEditorResultsPage {
         return null;
     }
 
-    private Component actionTooltip(@Nullable RuleValue effect) {
-        var tooltip = RuleNaming.effectTitle(effect, pages.nameSource).copy().append("\n").append(NaturalSummary.effect(effect));
-        if (effect != null && effect.has("entity")
-                && EntityPreviewIcons.unavailable(effect.text("entity", ""), effect.integer("age", 0)))
-            tooltip.append("\n").append(Component.translatable(RuleEditorPageSupport.UI + "preview.unavailable"));
-        return tooltip;
+    boolean renderDescriptionTooltip(GuiGraphics graphics, int mouseX, int mouseY) {
+        if (removeIndexAt(mouseX, mouseY) >= 0) return false;
+        RuleValue effect = null;
+        if (effectList != null && effectList.isVisible()) {
+            int index = effectList.itemIndexAt(mouseX, mouseY);
+            RuleValue effects = ResultStructure.effectsAt(pages.currentView(), candidateIndex);
+            if (effects != null && index >= 0 && index < effects.size()) effect = effects.item(index);
+        }
+        if (effect == null && detailHeaderRect != null && detailHeaderRect.contains(mouseX, mouseY)) effect = selectedAction;
+        if (effect == null || !effect.isMapping()) return false;
+        new UiDescriptionTooltip(THEME, pages.font).render(graphics,
+                new UiRect(0, 0, pages.host.screenWidth(), pages.host.screenHeight()),
+                ActionDescription.lines(effect, THEME), mouseX, mouseY);
+        return true;
     }
 
     @Nullable Component readonlyEffectNote(@Nullable RuleValue view) {

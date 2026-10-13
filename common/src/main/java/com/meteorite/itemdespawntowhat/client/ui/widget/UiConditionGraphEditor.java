@@ -170,7 +170,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     private @Nullable UiTreePath pickerParent;
     private int pickerIndex;
     private final ConditionGraphInlinePanel inlinePanel;
-    private final ConditionGraphTooltip tooltip;
+    private final UiDescriptionTooltip tooltip;
 
     private boolean groupKindPending;
     private boolean kindMenuOpen;
@@ -189,7 +189,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         renderer = new ConditionGraphRenderer(this.theme, font, graph);
         picker = new ConditionGraphTypePicker(this.theme, font, this::confirmPicker);
         inlinePanel = new ConditionGraphInlinePanel(this.theme, font, graph);
-        tooltip = new ConditionGraphTooltip(this.theme, font);
+        tooltip = new UiDescriptionTooltip(this.theme, font);
         tree = new UiTreeEditor<>(ConditionTreeNodes.INSTANCE, () -> expression.root(), change -> {
             lastChange = change;
             applyNode(change.after());
@@ -737,7 +737,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     }
 
     // 悬停提示：标题行 + 摘要行 + 结构标记行，由画布自绘面板呈现（原版 tooltip 不参与）
-    private @Nullable List<ConditionGraphTooltip.Line> tooltipAt(double mouseX, double mouseY) {
+    private @Nullable List<UiDescriptionTooltip.Line> tooltipAt(double mouseX, double mouseY) {
         if (!visible || isDragging() || picker.isOpen() || kindMenuOpen || addMode || !bounds.contains(mouseX, mouseY)) {
             return null;
         }
@@ -750,13 +750,13 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             return null;
         }
         boolean issue = graph.hasIssue(node);
-        List<ConditionGraphTooltip.Line> lines = new ArrayList<>();
-        lines.add(new ConditionGraphTooltip.Line(graph.titleLabel(node),
+        List<UiDescriptionTooltip.Line> lines = new ArrayList<>();
+        lines.add(new UiDescriptionTooltip.Line(graph.titleLabel(node),
                 issue ? theme.palette().canvasTextDanger() : theme.palette().canvasText()));
-        lines.add(new ConditionGraphTooltip.Line(graph.summaryLabel(node), theme.palette().canvasTextMuted()));
+        lines.add(new UiDescriptionTooltip.Line(graph.summaryLabel(node), theme.palette().canvasTextMuted()));
         Component status = graph.statusLabel(node);
         if (!status.getString().isEmpty()) {
-            lines.add(new ConditionGraphTooltip.Line(status, theme.palette().canvasTextDanger()));
+            lines.add(new UiDescriptionTooltip.Line(status, theme.palette().canvasTextDanger()));
         }
         return lines;
     }
@@ -844,7 +844,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             updateKindMenuRect();
             renderKindMenu(graphics, renderFont);
         }
-        List<ConditionGraphTooltip.Line> tip = tooltipAt(mouseX, mouseY);
+        List<UiDescriptionTooltip.Line> tip = tooltipAt(mouseX, mouseY);
         if (tip != null) {
             tooltip.render(graphics, bounds, tip, mouseX, mouseY);
         }

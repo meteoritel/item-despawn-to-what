@@ -540,7 +540,7 @@
   "gui.itemdespawntowhat.edit.field.climate.min": "最小值",
   "gui.itemdespawntowhat.edit.field.common.chance": "概率（%）",
   "gui.itemdespawntowhat.edit.field.common.conditions": "条件",
-  "gui.itemdespawntowhat.edit.field.common.delay_ticks": "延迟（刻）",
+  "gui.itemdespawntowhat.edit.field.common.delay_ticks": "延迟",
   "gui.itemdespawntowhat.edit.field.common.delay_ticks.hint": "0 表示立即",
   "gui.itemdespawntowhat.edit.field.consume_catalyst.count": "数量",
   "gui.itemdespawntowhat.edit.field.consume_catalyst.items": "催化物",
@@ -1029,5 +1029,15 @@
   "gui.itemdespawntowhat.edit.tree.help.close": "Esc 或再点问号",
   "dimension.minecraft.overworld": "主世界",
   "dimension.minecraft.the_nether": "下界",
-  "dimension.minecraft.the_end": "末地"
+  "dimension.minecraft.the_end": "末地",
+  "gui.itemdespawntowhat.edit.results.action_parameters": "动作参数（当前动作）",
+  "gui.itemdespawntowhat.edit.results.description_unavailable": "此动作未提供参数说明；原始数据保留在详情中。",
+  "gui.itemdespawntowhat.edit.results.parameter": "%s：%s",
+  "gui.itemdespawntowhat.edit.results.value.yes": "是",
+  "gui.itemdespawntowhat.edit.results.value.no": "否",
+  "gui.itemdespawntowhat.edit.results.value.none": "无",
+  "gui.itemdespawntowhat.edit.results.immediate": "立即",
+  "gui.itemdespawntowhat.edit.results.seconds": "%s 秒",
+  "gui.itemdespawntowhat.edit.results.quantity": "%s × %s",
+  "gui.itemdespawntowhat.edit.results.separator": "；"
 }

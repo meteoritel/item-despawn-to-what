@@ -540,7 +540,7 @@
   "gui.itemdespawntowhat.edit.field.climate.min": "Min",
   "gui.itemdespawntowhat.edit.field.common.chance": "Chance (%)",
   "gui.itemdespawntowhat.edit.field.common.conditions": "Conditions",
-  "gui.itemdespawntowhat.edit.field.common.delay_ticks": "Delay (ticks)",
+  "gui.itemdespawntowhat.edit.field.common.delay_ticks": "Delay",
   "gui.itemdespawntowhat.edit.field.common.delay_ticks.hint": "0 means immediately",
   "gui.itemdespawntowhat.edit.field.consume_catalyst.count": "Count",
   "gui.itemdespawntowhat.edit.field.consume_catalyst.items": "Catalyst items",
@@ -1029,5 +1029,15 @@
   "gui.itemdespawntowhat.edit.tree.help.close": "Esc or the ? button again",
   "dimension.minecraft.overworld": "Overworld",
   "dimension.minecraft.the_nether": "The Nether",
-  "dimension.minecraft.the_end": "The End"
+  "dimension.minecraft.the_end": "The End",
+  "gui.itemdespawntowhat.edit.results.action_parameters": "Action parameters (selected action)",
+  "gui.itemdespawntowhat.edit.results.description_unavailable": "No parameter description is available; original data is retained in the details.",
+  "gui.itemdespawntowhat.edit.results.parameter": "%s: %s",
+  "gui.itemdespawntowhat.edit.results.value.yes": "Yes",
+  "gui.itemdespawntowhat.edit.results.value.no": "No",
+  "gui.itemdespawntowhat.edit.results.value.none": "None",
+  "gui.itemdespawntowhat.edit.results.immediate": "Immediately",
+  "gui.itemdespawntowhat.edit.results.seconds": "%s seconds",
+  "gui.itemdespawntowhat.edit.results.quantity": "%s × %s",
+  "gui.itemdespawntowhat.edit.results.separator": "; "
 }

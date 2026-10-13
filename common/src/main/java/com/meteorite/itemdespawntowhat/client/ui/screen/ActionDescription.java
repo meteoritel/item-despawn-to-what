@@ -1,0 +1,133 @@
+package com.meteorite.itemdespawntowhat.client.ui.screen;
+
+import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDefaults;
+import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDescriptors;
+import com.meteorite.itemdespawntowhat.client.edit.EditorField;
+import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
+import com.meteorite.itemdespawntowhat.client.edit.EffectEditorRegistry;
+import com.meteorite.itemdespawntowhat.client.edit.FieldNumbers;
+import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
+import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
+import com.meteorite.itemdespawntowhat.client.ui.screen.form.NaturalSummary;
+import com.meteorite.itemdespawntowhat.client.ui.shared.EntityPreviewIcons;
+import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes;
+import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiDescriptionTooltip;
+import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
+import java.util.ArrayList;
+import java.util.List;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+
+/** 动作的玩家说明：按已注册字段的语义展示有效值，不枚举原始 JSON 键值。 */
+final class ActionDescription {
+    private static final String UI = RuleEditorPageSupport.UI;
+
+    private ActionDescription() { }
+
+    static List<UiDescriptionTooltip.Line> lines(RuleValue action, UiHostTheme theme) {
+        List<UiDescriptionTooltip.Line> lines = new ArrayList<>();
+        lines.add(new UiDescriptionTooltip.Line(RuleNaming.effectTitle(action, RuleDisplayLabels::label),
+                theme.palette().canvasText()));
+        ResourceLocation type = ResourceLocation.tryParse(action.text(RuleFields.TYPE, ""));
+        var descriptor = type == null ? null : EffectEditorRegistry.find(type);
+        if (descriptor == null || descriptor.readOnly()) {
+            lines.add(new UiDescriptionTooltip.Line(Component.translatable(UI + "results.description_unavailable"),
+                    theme.palette().canvasTextMuted()));
+            return lines;
+        }
+        if (TypeLabels.OWN_NAMESPACE.equals(type.getNamespace()) && "spawn_entity".equals(type.getPath())) {
+            descriptor = BuiltinEditorDescriptors.entityDescriptor(action.text("variant", "item"));
+        }
+        for (EditorField field : descriptor.fields()) {
+            RuleValue value = action.child(field.name());
+            if (value == null) value = BuiltinEditorDefaults.effectiveValue(action, field.name());
+            Component description = describe(field, value);
+            if (description != null) {
+                lines.add(new UiDescriptionTooltip.Line(Component.translatable(UI + "results.parameter",
+                        Component.translatable(field.labelKey()), description), theme.palette().canvasTextMuted()));
+            }
+        }
+        if (action.has("entity") && EntityPreviewIcons.unavailable(action.text("entity", ""), action.integer("age", 0))) {
+            lines.add(new UiDescriptionTooltip.Line(Component.translatable(UI + "preview.unavailable"),
+                    theme.palette().canvasTextDanger()));
+        }
+        return lines;
+    }
+
+    private static Component describe(EditorField field, RuleValue value) {
+        // 条件缺省代表无条件；其它缺省参数只展示已确认的有效默认值。
+        if (field.type() == EditorFieldType.CONDITION_TREE) {
+            return NaturalSummary.conditions(value);
+        }
+        if (value == null || value.isNull()) return null;
+        return switch (field.type()) {
+            case NOTE, RAW_JSON -> null;
+            case BOOLEAN -> Component.translatable(UI + "results.value." + (value.asFlag(false) ? "yes" : "no"));
+            case ENUM -> Component.translatable(UI + "enum." + field.enumGroup() + "." + value.asText());
+            case PERCENT -> Component.literal(FieldNumbers.percentText(value.asDecimal(1.0D)));
+            case TICKS -> value.asInteger(0) == 0 ? Component.translatable(UI + "results.immediate")
+                    : Component.translatable(UI + "results.seconds", FieldNumbers.ticksToSecondsText(value.asInteger(0)));
+            case AMPLIFIER -> Component.literal(Integer.toString(FieldNumbers.levelOf(value.asInteger(0))));
+            case ITEM_COUNTS -> counts(value);
+            case SUBLIST -> sublist(field, value);
+            case TAG, REGISTRY_ID, RESOURCE_LOCATION -> reference(field, value.asText());
+            case TAG_LIST, RL_LIST, STRING_LIST -> value.isList()
+                    ? join(value.items().stream().map(item -> reference(field, item.asText())).toList()) : null;
+            default -> value.isScalar() ? Component.literal(value.asText()) : null;
+        };
+    }
+
+    private static Component counts(RuleValue value) {
+        if (value.isScalar()) return Component.literal(value.asText());
+        if (!value.isMapping()) return null;
+        List<Component> parts = new ArrayList<>();
+        for (var entry : value.entries().entrySet()) {
+            parts.add(Component.translatable(UI + "results.quantity", itemLabel(entry.getKey()), entry.getValue().asText()));
+        }
+        return join(parts);
+    }
+
+    private static Component sublist(EditorField field, RuleValue value) {
+        if (!value.isList()) return null;
+        List<Component> parts = new ArrayList<>();
+        for (RuleValue item : value.items()) {
+            if (!item.isMapping()) continue;
+            List<Component> fields = new ArrayList<>();
+            for (EditorField child : field.subFields()) {
+                Component text = describe(child, item.child(child.name()));
+                if (text != null) fields.add(Component.translatable(UI + "results.parameter",
+                        Component.translatable(child.labelKey()), text));
+            }
+            parts.add(join(fields));
+        }
+        return join(parts);
+    }
+
+    private static Component reference(EditorField field, String text) {
+        ResourceLocation id = ResourceLocation.tryParse(text);
+        RuleCatalogType catalog = FieldCatalogTypes.catalogTypeOf(field);
+        Component label = id == null || catalog == null ? null : RuleDisplayLabels.catalogLabel(catalog, id);
+        // 标签和未加载的资源保留注册名，不能把它们误认成同名的物品。
+        return label == null ? Component.literal(text) : label;
+    }
+
+    private static Component itemLabel(String text) {
+        ResourceLocation id = ResourceLocation.tryParse(text);
+        Component label = id == null ? null : RuleDisplayLabels.catalogLabel(RuleCatalogType.ITEM, id);
+        return label == null ? Component.literal(text) : label;
+    }
+
+    private static Component join(List<Component> parts) {
+        if (parts.isEmpty()) return Component.translatable(UI + "results.value.none");
+        var result = Component.empty();
+        for (Component part : parts) {
+            if (!result.getString().isEmpty()) result.append(Component.translatable(UI + "results.separator"));
+            result.append(part);
+        }
+        return result;
+    }
+}

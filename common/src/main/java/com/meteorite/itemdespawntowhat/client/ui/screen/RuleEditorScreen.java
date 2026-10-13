@@ -266,7 +266,7 @@ public final class RuleEditorScreen extends Screen {
             }
         }
         // 字段说明提示：没有弹窗时才显示，避免盖住上层内容
-        if (modals.isEmpty() && mode == Mode.EDIT) {
+        if (modals.isEmpty() && mode == Mode.EDIT && !editPage.renderDescriptionTooltip(graphics, mouseX, mouseY)) {
             Component tip = editPage.tooltipAt(mouseX, mouseY);
             if (tip != null) {
                 renderTooltip(graphics, tip, mouseX, mouseY);

@@ -53,6 +53,11 @@ final class RuleEditorPageInput {
         if (pages.pageScroll.mousePressed(mouseX, mouseY, button)) {
             return true;
         }
+        // 行内删除先于列表选中与拖动排序，避免叉号触发双击激活或拖动。
+        if (pages.ruleEditorResultsPage.clickRemove(mouseX, mouseY, button)) {
+            pages.flushRebuild();
+            return true;
+        }
         boolean handled = false;
         for (UiWidget widget : pages.liveWidgets) {
             if (widget.isVisible() && widget.mouseClicked(mouseX, mouseY, button)) {
