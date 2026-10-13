@@ -141,9 +141,38 @@ public final class NaturalSummary {
         if (builtin != null) {
             return builtin;
         }
+        return conditionTreeLeaf(condition);
+    }
+
+    /**
+     * 条件树摘要里的叶标签：树摘要没有卡片标题行，因此把条件名一并带上。
+     *
+     * @param condition 条件叶 JSON
+     * @return 条件名，或「条件名（参数摘要）」；没有可展示参数时只返回条件名
+     */
+    public static Component conditionTreeLeaf(RuleValue condition) {
+        ResourceLocation type = typeOf(condition);
+        if (type == null) {
+            return Component.translatable(PREFIX + "unknown_condition");
+        }
         Component label = TypeLabels.conditionLabel(type);
-        Component params = fields(condition, type, "condition");
+        Component params = conditionParams(condition);
         return params == null ? label : Component.translatable(PREFIX + "leaf", label, params);
+    }
+
+    /**
+     * 条件叶的参数摘要：内建类型给玩家可读的短摘要，第三方/未注册类型按字段名兜底。
+     *
+     * @param condition 条件叶 JSON
+     * @return 参数摘要；类型未知或没有可展示参数时返回 null
+     */
+    public static @Nullable Component conditionParams(RuleValue condition) {
+        ResourceLocation type = typeOf(condition);
+        if (type == null) {
+            return null;
+        }
+        Component builtin = BuiltinConditionSummaries.summary(condition, type);
+        return builtin != null ? builtin : fields(condition, type, "condition");
     }
 
     // 按描述符顺序渲染类型专属字段；无参条件返回 null

@@ -333,7 +333,7 @@ final class RuleEditorScreenListPage {
             RuleValue body = host.model().displayBody(id);
             recipeViews.put(id, new RuleRecipeView(body));
             conditionTooltips.put(id, ConditionTreeTextSummary.format(
-                    body == null ? null : body.child(RuleFields.CONDITIONS), summaryLines, NaturalSummary::conditionLeaf));
+                    body == null ? null : body.child(RuleFields.CONDITIONS), summaryLines, NaturalSummary::conditionTreeLeaf));
         }
         if (lastTreeQuery.isBlank()) rememberCategoryState(ruleList.roots());
         lastTreeQuery = lastQuery;

@@ -9,6 +9,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
 import java.util.ArrayList;
@@ -19,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -27,7 +29,7 @@ import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
 /***
- * 条件树缩进摘要：只读展示树干与叶条件名，并作为进入画布编辑器的入口。
+ * 条件树缩进摘要：只读展示树干、叶条件名与参数摘要，并作为进入画布编辑器的入口。
  * <p>本控件不提供结构编辑、拖拽与参数输入：点击节点只选中该节点并通过
  * {@link #setOnOpenCanvas(Consumer)} 通知宿主打开画布；展开标记用于折叠展示，不改变结构。
  * 条件树的结构与参数编辑全部在 {@link UiConditionGraphEditor}（画布与其内联编辑框）完成。</p>
@@ -92,6 +94,8 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     private List<ConditionTreeContract.TypeOption> typeOptions = List.of();
     // 空树提示
     private Component emptyMessage = Component.translatable("gui.itemdespawntowhat.edit.tree.add_placeholder");
+    // 叶条件参数摘要，由宿主注入；为空时叶行只显示条件名
+    private @Nullable Function<ConditionNode.Leaf, Component> leafDetail;
     // 进入画布的入口回调，参数为节点的树路径
     private @Nullable Consumer<String> onOpenCanvas;
     // 是否持有键盘焦点
@@ -152,6 +156,12 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     // 设置条件类型选项
     public UiConditionTreeSummary setTypeOptions(List<ConditionTreeContract.TypeOption> options) {
         this.typeOptions = List.copyOf(options);
+        return this;
+    }
+
+    // 设置叶条件的参数摘要（参数值），为空时叶行只显示条件名
+    public UiConditionTreeSummary setLeafDetail(@Nullable Function<ConditionNode.Leaf, Component> detail) {
+        this.leafDetail = detail;
         return this;
     }
 
@@ -501,7 +511,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     }
 
     // 行文本：组节点用分组名（与「包成组」菜单共用 tree.node.*）与子项数，取反节点用与画布标题共用的运算符名
-    // （tree.operator.not），叶节点只显示条件名，并附不完整/超限标记
+    // （tree.operator.not），叶节点显示条件名与参数摘要，并附不完整/超限标记
     private Component rowLabel(Row row) {
         ConditionNode node = row.node();
         Component label;
@@ -515,10 +525,8 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
                     Component.translatable("gui.itemdespawntowhat.edit.tree.node.any"), any.terms().size());
         } else if (node instanceof ConditionNode.Inverted) {
             label = Component.translatable("gui.itemdespawntowhat.edit.tree.operator.not");
-        } else if (node instanceof ConditionNode.Leaf(var leafCondition)) {
-            label = leafCondition == null
-                    ? Component.translatable("gui.itemdespawntowhat.edit.tree.leaf_missing")
-                    : typeLabel(leafCondition.type());
+        } else if (node instanceof ConditionNode.Leaf leaf) {
+            label = leafLabel(leaf);
         } else {
             label = Component.empty();
         }
@@ -532,6 +540,19 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
             label = label.copy().append(" ").append(Component.translatable("gui.itemdespawntowhat.edit.tree.deep_mark"));
         }
         return label;
+    }
+
+    // 叶标签：条件名（参数摘要）；缺条件或参数摘要为空时只留条件名
+    private Component leafLabel(ConditionNode.Leaf leaf) {
+        Condition condition = leaf.condition();
+        if (condition == null) {
+            return Component.translatable("gui.itemdespawntowhat.edit.tree.leaf_missing");
+        }
+        Component name = typeLabel(condition.type());
+        Function<ConditionNode.Leaf, Component> detail = leafDetail;
+        Component params = detail == null ? null : detail.apply(leaf);
+        return params == null || params.getString().isEmpty()
+                ? name : Component.translatable("gui.itemdespawntowhat.edit.summary.leaf", name, params);
     }
 
     // 条件类型标签：优先使用宿主注入的选项标签，其次走本地化 key，最后回退原始 id

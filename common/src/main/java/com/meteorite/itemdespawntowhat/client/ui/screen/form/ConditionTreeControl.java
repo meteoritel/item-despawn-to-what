@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeJsonCodec;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
@@ -15,6 +16,7 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeInspection;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionTreeSummary;
+import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import java.util.ArrayList;
 import java.util.List;
@@ -50,6 +52,15 @@ final class ConditionTreeControl extends FormControl {
         this.editor = new UiConditionTreeSummary(THEME, font);
         this.editor.setTypeOptions(support == null ? List.of() : support.typeOptions());
         this.editor.setEmptyMessage(Component.translatable("gui.itemdespawntowhat.edit.tree.add_placeholder"));
+        // 摘要按「条件名（参数摘要）」展示，与规则列表悬停的条件树文案保持一致
+        if (support != null) {
+            ConditionTreeJsonCodec codec = new ConditionTreeJsonCodec(support.registry());
+            this.editor.setLeafDetail(leaf -> {
+                RuleValue raw = codec.encode(leaf);
+                RuleValue condition = raw != null && raw.isMapping() ? raw.child(RuleFields.CONDITION) : null;
+                return condition == null ? null : NaturalSummary.conditionParams(condition);
+            });
+        }
         // 摘要只读：点击节点进入画布（条件树唯一编辑入口），结构与参数都在画布内完成
         this.editor.setOnOpenCanvas(path -> {
             editor.selectPath(path);
