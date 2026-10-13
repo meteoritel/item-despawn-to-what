@@ -7,6 +7,7 @@ import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveResultPayl
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotPayload;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleLifespanPayload;
 
 /**
  * 新链路配置编辑 S2C 载荷的 Fabric 客户端接收器。
@@ -34,6 +35,9 @@ public final class FabricRuleEditClientRegistrar {
 
         ClientPlayNetworking.registerGlobalReceiver(RuleCatalogPayload.TYPE,
                 (payload, context) -> context.client().execute(() -> RuleEditPayloadRouter.dispatchCatalog(payload)));
+
+        ClientPlayNetworking.registerGlobalReceiver(RuleLifespanPayload.TYPE,
+                (payload, context) -> context.client().execute(() -> RuleEditPayloadRouter.dispatchLifespan(payload)));
 
         // 编辑入口：接收器把载荷切到客户端线程，开屏由 RuleEditClientWorkspace 的消费者统一负责
         ClientPlayNetworking.registerGlobalReceiver(OpenRuleEditorPayload.TYPE,

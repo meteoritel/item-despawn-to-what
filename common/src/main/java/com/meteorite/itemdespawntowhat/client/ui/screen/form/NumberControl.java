@@ -64,8 +64,8 @@ final class NumberControl extends FormControl {
     private final double domainMin;
     private final double domainMax;
     // 滑块常用交互窗口（JSON 单位），恒为合法域的子区间
-    private final double windowMin;
-    private final double windowMax;
+    private double windowMin;
+    private double windowMax;
     // 行内输入框的宽度下限覆盖：数量对象等逐行对齐布局用各行最大值统一（0 = 各自按文本取样）
     private int inputWidthOverride;
     private @Nullable RuleValue loaded;
@@ -148,6 +148,16 @@ final class NumberControl extends FormControl {
                     UiButtonVariant.SECONDARY, () -> applyPreset(preset.value()));
             presetButtons.add(button);
         }
+    }
+
+    void setWindow(double min, double max) {
+        if (isEditing() || slider.isDragging() || !Double.isFinite(min) || !Double.isFinite(max)) return;
+        double nextMin = Math.clamp(min, domainMin, domainMax);
+        double nextMax = Math.clamp(max, domainMin, domainMax);
+        if (nextMax <= nextMin || nextMin == windowMin && nextMax == windowMax) return;
+        windowMin = nextMin;
+        windowMax = nextMax;
+        slider.core().setWindow(new UiSliderWindow(windowMin, windowMax));
     }
 
     // 域元数据完整时返回数值控件，否则返回 null 由调用方回退文本控件

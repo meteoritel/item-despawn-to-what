@@ -32,9 +32,11 @@ import java.util.function.Consumer;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
+import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDescriptors;
+import com.meteorite.itemdespawntowhat.core.service.RuleEditSessionLimits;
 
 /**
- * 触发与条件页：触发来源、延迟、条件树摘要与画布页入口，以及条件叶参数弹窗。
+ * 触发与条件页：触发来源、触发时间、条件树摘要与画布页入口，以及条件叶参数弹窗。
  */
 final class RuleEditorTriggerPage {
 
@@ -81,7 +83,7 @@ final class RuleEditorTriggerPage {
         }
         if (RuleTriggers.allowsDelay(rule)) {
             delayForm = pages.newForm(session, "", TypeEditorDescriptor.of(RuleEditorPageSupport.DELAY_PAGE, Component.translatable(RuleEditorPageSupport.UI + "rule.trigger_after_seconds"), List.of(
-                    EditorField.integerSlider(RuleFields.TRIGGER_AFTER_SECONDS, RuleEditorPageSupport.UI + "rule.trigger_after_seconds", 0, Integer.MAX_VALUE, 0, 600).optional())));
+                    EditorField.integerSlider(RuleFields.TRIGGER_AFTER_SECONDS, RuleEditorPageSupport.UI + "rule.trigger_after_seconds", 0, Integer.MAX_VALUE, 0, BuiltinEditorDescriptors.DEFAULT_TRIGGER_WINDOW_SECONDS).optional())));
             pages.liveForms.add(delayForm);
             pages.liveWidgets.add(delayForm);
         }
@@ -91,6 +93,16 @@ final class RuleEditorTriggerPage {
         conditionsForm.setLabelWidth(90);
         pages.liveForms.add(conditionsForm);
         pages.liveWidgets.add(conditionsForm);
+    }
+
+    void updateLifespanWindow() {
+        EditSession session = pages.host.session();
+        if (delayForm == null || session == null) return;
+        int ticks = pages.host.workspace().referenceLifespanTicks();
+        // 整数秒向上取整保证不足一秒的寿命也可拖动；常用窗口不钳制既有触发值。
+        int seconds = ticks <= 0 ? BuiltinEditorDescriptors.DEFAULT_TRIGGER_WINDOW_SECONDS
+                : (int) Math.ceil((double) ticks / RuleEditSessionLimits.TICKS_PER_SECOND);
+        delayForm.setRowSliderWindow(RuleFields.TRIGGER_AFTER_SECONDS, 0, Math.max(1, seconds));
     }
 
     void onTriggerToggled() {
@@ -139,7 +151,10 @@ final class RuleEditorTriggerPage {
 
             @Override
             public boolean openTree(UiConditionTreeSummary tree, @Nullable String fieldPath) {
-                return openConditionTree(owner, fieldPath);
+                // 摘要给相对节点路径，问题定位给绝对草稿路径；局部动作条件需要补齐所属作用域。
+                String path = fieldPath != null && (fieldPath.equals(RuleFields.CONDITIONS)
+                        || fieldPath.startsWith(RuleFields.CONDITIONS + ".")) ? owner.draftPath(fieldPath) : fieldPath;
+                return openConditionTree(owner, path);
             }
 
             @Override

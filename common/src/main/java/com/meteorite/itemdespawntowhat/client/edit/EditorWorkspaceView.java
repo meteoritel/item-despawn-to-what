@@ -50,6 +50,12 @@ public interface EditorWorkspaceView {
     // 请求目录页
     boolean requestCatalog(RuleCatalogType type, @Nullable String filter, int page, int pageSize);
 
+    /**
+     * 查询服务端统一参考寿命。
+     * @return 自然寿命 tick；应答未到时为零
+     */
+    int referenceLifespanTicks();
+
     // 提交变更集 JSON
     boolean save(@Nullable String operationId, @Nullable String changeSetJson);
 

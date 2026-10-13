@@ -17,6 +17,8 @@ import com.meteorite.itemdespawntowhat.runtime.RuleRuntimeHost;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleLifespanPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleLifespanPayload;
 
 /**
  * 新链路（core/network/transport）配置编辑 payload 的 Fabric 注册入口。
@@ -46,6 +48,7 @@ public final class RuleEditPayloadRegistrar {
         PayloadTypeRegistry.playC2S().register(CloseRuleEditorPayload.TYPE, CloseRuleEditorPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RequestRuleSnapshotPayload.TYPE, RequestRuleSnapshotPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RequestRuleCatalogPayload.TYPE, RequestRuleCatalogPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RequestRuleLifespanPayload.TYPE, RequestRuleLifespanPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(SaveRuleChangeSetPayload.TYPE, SaveRuleChangeSetPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(SaveRuleChangeSetChunkPayload.TYPE, SaveRuleChangeSetChunkPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(OpenRuleEditorPayload.TYPE, OpenRuleEditorPayload.STREAM_CODEC);
@@ -53,6 +56,7 @@ public final class RuleEditPayloadRegistrar {
         PayloadTypeRegistry.playS2C().register(RuleSnapshotChunkPayload.TYPE, RuleSnapshotChunkPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(RuleSaveResultPayload.TYPE, RuleSaveResultPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(RuleCatalogPayload.TYPE, RuleCatalogPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playS2C().register(RuleLifespanPayload.TYPE, RuleLifespanPayload.STREAM_CODEC);
 
         // 服务端接收器：统一切到服务端线程后交给共享 handler，平台侧只做薄转发
         ServerPlayNetworking.registerGlobalReceiver(ConfirmRuleEditorPayload.TYPE,
@@ -74,6 +78,10 @@ public final class RuleEditPayloadRegistrar {
         ServerPlayNetworking.registerGlobalReceiver(RequestRuleCatalogPayload.TYPE,
                 (payload, context) -> context.server().execute(() ->
                         RuleEditServerHandler.handleCatalogRequest(context.player(), RuleRuntimeHost.editContext(), payload)));
+
+        ServerPlayNetworking.registerGlobalReceiver(RequestRuleLifespanPayload.TYPE,
+                (payload, context) -> context.server().execute(() ->
+                        RuleEditServerHandler.handleLifespanRequest(context.player(), RuleRuntimeHost.editContext(), payload)));
 
         ServerPlayNetworking.registerGlobalReceiver(SaveRuleChangeSetPayload.TYPE,
                 (payload, context) -> context.server().execute(() ->

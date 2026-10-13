@@ -45,6 +45,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleLifespanPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleLifespanPayload;
 
 /**
  * 独占编辑会话的业务编排：打开/确认/心跳/关闭/快照/目录/保存。
@@ -62,6 +64,16 @@ public final class RuleEditService {
     private final Map<String, RuleSaveResultPayload> recentResults = new LinkedHashMap<>();
     // 幂等表所属会话；会话变化即整体失效
     private String resultsSessionId;
+    private @Nullable UUID lifespanOwner;
+    private @Nullable RequestRuleLifespanPayload pendingLifespan;
+
+    /**
+     * 已采样后需要交付给玩家的参考寿命应答。
+     * @param player 应答接收者
+     * @param payload 缓存的寿命应答
+     */
+    public record LifespanReply(ServerPlayer player, RuleLifespanPayload payload) { }
+
 
     public RuleEditService(EditSessionManager sessions) {
         this.sessions = Objects.requireNonNull(sessions, "sessions");
@@ -208,6 +220,52 @@ public final class RuleEditService {
                 payload.page(), payload.pageSize());
         return Outbound.of(new RuleCatalogPayload(payload.sessionId(), payload.requestId(),
                 type.id(), catalog.revision(), catalog.serialize(), catalog.lastPage()));
+    }
+
+    /**
+     * 获取服务端缓存的参考寿命；尚未采样时保留最近请求并先应答零。
+     * @param player 会话持有者
+     * @param context 平台参考寿命来源
+     * @param payload 参考寿命请求
+     * @param tick 服务端活动刻
+     * @return 缓存应答或会话失败回执
+     */
+    public Outbound requestLifespan(ServerPlayer player, RuleEditServerContext context,
+            RequestRuleLifespanPayload payload, long tick) {
+        if (!sessions.owns(payload.sessionId()) || !sessions.isOwner(player.getUUID())
+                || !sessions.confirmed(payload.sessionId())) {
+            return Outbound.of(sessionLost(payload.sessionId(), player));
+        }
+        sessions.heartbeat(payload.sessionId(), tick);
+        int ticks = context.referenceLifespanTicks();
+        pendingLifespan = ticks == 0 ? payload : null;
+        lifespanOwner = ticks == 0 ? player.getUUID() : null;
+        return Outbound.of(new RuleLifespanPayload(payload.sessionId(), payload.requestId(), ticks));
+    }
+
+    /**
+     * 平台完成首次采样后补发一次结果；已结束的会话不会接收旧应答。
+     * @param server 当前服务端
+     * @param context 平台参考寿命来源
+     * @return 可交付应答；未采样或会话无效时为空
+     */
+    public @Nullable LifespanReply pollLifespan(MinecraftServer server, RuleEditServerContext context) {
+        RequestRuleLifespanPayload pending = pendingLifespan;
+        UUID owner = lifespanOwner;
+        if (pending == null || owner == null) return null;
+        if (!sessions.owns(pending.sessionId()) || !sessions.isOwner(owner)
+                || !sessions.confirmed(pending.sessionId())) {
+            pendingLifespan = null;
+            lifespanOwner = null;
+            return null;
+        }
+        int ticks = context.referenceLifespanTicks();
+        if (ticks == 0) return null;
+        ServerPlayer player = server.getPlayerList().getPlayer(owner);
+        pendingLifespan = null;
+        lifespanOwner = null;
+        return player == null ? null : new LifespanReply(player,
+                new RuleLifespanPayload(pending.sessionId(), pending.requestId(), ticks));
     }
 
     // C2S 变更集：完整的保存编排（幂等 → 会话/权限 → 版本戳 → 校验 → 落盘 → 重载 → 回执 + 新快照）
@@ -410,6 +468,8 @@ public final class RuleEditService {
         RuleEditChunkAccumulator.clearAll();
         recentResults.clear();
         resultsSessionId = null;
+        pendingLifespan = null;
+        lifespanOwner = null;
     }
 
     // 组装并下发快照；失败时回结构化回执

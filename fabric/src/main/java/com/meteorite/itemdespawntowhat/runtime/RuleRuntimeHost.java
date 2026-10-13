@@ -128,6 +128,12 @@ public final class RuleRuntimeHost {
             return typeRegistries;
         }
 
+        /** @return 服务端缓存的 GUI 参考寿命 tick；尚未采样时为零 */
+        @Override
+        public int referenceLifespanTicks() {
+            return FabricLifespanReference.ticks();
+        }
+
         @Override
         public void sendTo(ServerPlayer player, CustomPacketPayload payload) {
             // 发包方式由平台层提供（Fabric: ServerPlayNetworking / NeoForge: PacketDistributor）
@@ -230,6 +236,7 @@ public final class RuleRuntimeHost {
             current.shutdown();
         }
         RuleEditServerHandler.reset();
+        FabricLifespanReference.reset();
         // 停服后复位实体状态时长，避免同一进程内下一个服务端实例沿用上一轮配置
         DropStateStore.configure(0, 0);
         runtime = null;
@@ -291,7 +298,10 @@ public final class RuleRuntimeHost {
 
     // Fabric 端寿命提供者：使用 server.json 的兜底刻数，与 NeoForge 端语义对齐
     private static LifespanProvider fabricLifespan(ServerConfig config) {
-        return (level, entity) -> config.fabricLifespanFallbackTicks();
+        return (level, entity) -> {
+            int observed = FabricLifespanReference.ticks();
+            return observed > 0 ? observed : config.fabricLifespanFallbackTicks();
+        };
     }
 
     // 读取模组级配置；缺失即由 ServerConfig.loadOrCreate 落盘默认值（职责在 core，平台层不重复处理）

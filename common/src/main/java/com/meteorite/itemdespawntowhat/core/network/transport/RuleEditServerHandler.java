@@ -143,6 +143,18 @@ public final class RuleEditServerHandler {
         dispatch(context, player, service.requestCatalog(player, payload, tick(player)));
     }
 
+    /**
+     * 转发已授权编辑器的统一参考寿命查询。
+     * @param player 请求玩家
+     * @param context 平台运行时上下文
+     * @param payload 查询载荷
+     */
+    public static void handleLifespanRequest(ServerPlayer player, RuleEditServerContext context,
+                                            RequestRuleLifespanPayload payload) {
+        RuleEditService service = readyService(player, context, payload.sessionId());
+        if (service != null) dispatch(context, player, service.requestLifespan(player, context, payload, tick(player)));
+    }
+
     // C2S 变更集提交
     public static void handleChangeSet(ServerPlayer player, RuleEditServerContext context,
                                        SaveRuleChangeSetPayload payload) {
@@ -170,6 +182,8 @@ public final class RuleEditServerHandler {
             return;
         }
         RuleEditService.Expired expired = editService.expireSessions(server, server.getTickCount());
+        RuleEditService.LifespanReply reply = editService.pollLifespan(server, context);
+        if (reply != null && canEdit(reply.player())) context.sendTo(reply.player(), reply.payload());
         if (expired.target() != null) {
             dispatch(context, expired.target(), expired.outbound());
         }

@@ -26,6 +26,8 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -58,6 +60,7 @@ public final class RuleRuntimeHost {
     private static volatile Path overlayRoot;
     // 新链路运行时；未引导或已停止时为 null
     private static volatile ConversionRuntime runtime;
+    private static int referenceLifespanTicks;
 
     private RuleRuntimeHost() {
         throw new UnsupportedOperationException("Utility class");
@@ -130,6 +133,12 @@ public final class RuleRuntimeHost {
             return typeRegistries;
         }
 
+        /** @return 服务端缓存的 GUI 参考寿命 tick；尚未采样时为零 */
+        @Override
+        public int referenceLifespanTicks() {
+            return referenceLifespanTicks;
+        }
+
         @Override
         public void sendTo(ServerPlayer player, CustomPacketPayload payload) {
             // 发包方式由平台层提供（Fabric: ServerPlayNetworking / NeoForge: PacketDistributor）
@@ -181,6 +190,11 @@ public final class RuleRuntimeHost {
         newRuntime.replaceRules(result.rules(), result.issues());
         logLoadResult("服务端启动", result);
 
+        // 普通物品仅在启动时查询一次；GUI 参考值不参与实际实体调度或配置合法性校验。
+        ServerLevel referenceLevel = server.overworld();
+        ItemEntity referenceItem = new ItemEntity(referenceLevel, 0, 0, 0,
+                new ItemStack(Items.STONE));
+        referenceLifespanTicks = Math.max(1, referenceItem.lifespan);
         currentServer = server;
         serverConfig = config;
         typeRegistries = registries;
@@ -242,6 +256,7 @@ public final class RuleRuntimeHost {
             current.shutdown();
         }
         RuleEditServerHandler.reset();
+        referenceLifespanTicks = 0;
         // 停服后复位实体状态时长，避免同一进程内下一个服务端实例沿用上一轮配置
         DropStateStore.configure(0, 0);
         runtime = null;

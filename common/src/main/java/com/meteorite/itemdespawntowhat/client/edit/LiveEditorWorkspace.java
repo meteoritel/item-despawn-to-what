@@ -92,6 +92,12 @@ public final class LiveEditorWorkspace implements EditorWorkspaceView {
         return this.workspace().requestCatalog(type, filter, page, pageSize);
     }
 
+    /**
+     * @return 服务端参考寿命 tick；应答未到时为零
+     */
+    @Override
+    public int referenceLifespanTicks() { return workspace().referenceLifespanTicks(); }
+
     @Override
     public boolean save(@Nullable String operationId, @Nullable String changeSetJson) {
         return this.workspace().save(operationId, changeSetJson);

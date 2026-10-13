@@ -106,6 +106,23 @@ public final class RuleEditPayloadRouter {
         dispatchResult(payload.statusCode());
     }
 
+    private static volatile Consumer<RuleLifespanPayload> lifespanSink;
+
+    /**
+     * 安装客户端寿命应答消费者，服务端保持为空。
+     * @param sink 应答消费者
+     */
+    public static void installLifespanSink(Consumer<RuleLifespanPayload> sink) { lifespanSink = sink; }
+
+    /**
+     * 分发服务端寿命应答。
+     * @param payload 寿命应答
+     */
+    public static void dispatchLifespan(RuleLifespanPayload payload) {
+        Consumer<RuleLifespanPayload> sink = lifespanSink;
+        if (sink != null) sink.accept(payload);
+    }
+
     // 分发目录分页
     public static void dispatchCatalog(RuleCatalogPayload payload) {
         if (payload == null) {

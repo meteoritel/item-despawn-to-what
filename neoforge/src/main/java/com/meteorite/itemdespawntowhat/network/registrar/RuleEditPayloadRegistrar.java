@@ -25,6 +25,9 @@ import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
+import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEditProtocol;
+import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleLifespanPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleLifespanPayload;
 
 /**
  * 新链路（core/network/transport）配置编辑 payload 的 NeoForge 注册入口。
@@ -36,7 +39,7 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 public final class RuleEditPayloadRegistrar {
 
     // 与 Fabric 端保持同一协议版本号
-    private static final String PROTOCOL_VERSION = "2";
+    private static final String PROTOCOL_VERSION = Integer.toString(RuleEditProtocol.VERSION);
 
     private RuleEditPayloadRegistrar() {
         throw new UnsupportedOperationException("Utility class");
@@ -74,6 +77,10 @@ public final class RuleEditPayloadRegistrar {
                 (payload, context) -> handleOnServer(context, payload, (player, body) ->
                         RuleEditServerHandler.handleCatalogRequest(player, RuleRuntimeHost.editContext(), body)));
 
+        registrar.playToServer(RequestRuleLifespanPayload.TYPE, RequestRuleLifespanPayload.STREAM_CODEC,
+                (payload, context) -> handleOnServer(context, payload, (player, body) ->
+                        RuleEditServerHandler.handleLifespanRequest(player, RuleRuntimeHost.editContext(), body)));
+
         registrar.playToServer(SaveRuleChangeSetPayload.TYPE, SaveRuleChangeSetPayload.STREAM_CODEC,
                 (payload, context) -> handleOnServer(context, payload, (player, body) ->
                         RuleEditServerHandler.handleChangeSet(player, RuleRuntimeHost.editContext(), body)));
@@ -98,6 +105,9 @@ public final class RuleEditPayloadRegistrar {
         registrar.playToClient(RuleCatalogPayload.TYPE, RuleCatalogPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() ->
                         RuleEditPayloadRouter.dispatchCatalog(payload)));
+
+        registrar.playToClient(RuleLifespanPayload.TYPE, RuleLifespanPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> RuleEditPayloadRouter.dispatchLifespan(payload)));
 
         // 编辑入口：同样只做入站分发，客户端打开界面由 OpenRuleEditorPayload 的消费者执行
         registrar.playToClient(OpenRuleEditorPayload.TYPE, OpenRuleEditorPayload.STREAM_CODEC,

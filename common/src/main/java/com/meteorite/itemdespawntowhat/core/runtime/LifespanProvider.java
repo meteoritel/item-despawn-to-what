@@ -5,7 +5,7 @@ import net.minecraft.world.entity.item.ItemEntity;
 
 /**
  * 掉落物自然消失时间的提供者（平台差异收敛点）。
- * NeoForge 端可返回 getEntityLifespan 事件值；Fabric 端返回可配置的兜底常量。
+ * NeoForge 端读取实体 lifespan；Fabric 端读取采样的自然寿命阈值，未采样时使用配置兜底。
  */
 @FunctionalInterface
 public interface LifespanProvider {

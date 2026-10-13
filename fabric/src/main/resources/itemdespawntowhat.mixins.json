@@ -5,6 +5,7 @@
     "mixins": [
         "PlayerMixin",
         "ItemEntityMixin",
+        "ItemLifespanReferenceMixin",
         "EntityMixin"
     ],
     "injectors": {

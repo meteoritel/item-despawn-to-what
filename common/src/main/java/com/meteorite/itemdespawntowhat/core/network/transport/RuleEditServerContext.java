@@ -32,6 +32,12 @@ public interface RuleEditServerContext {
     // 规则落盘后重建索引并对全部已加载维度回扫
     void rebuildAndRescan(MinecraftServer server);
 
+    /**
+     * 读取服务端缓存的普通物品参考寿命，仅用于 GUI 滑条窗口。
+     * @return 参考寿命 tick；零表示平台尚未完成采样
+     */
+    int referenceLifespanTicks();
+
     // 向指定玩家发送一个自定义负载（S2C）；由平台层实现真实的发包方式
     void sendTo(ServerPlayer player, CustomPacketPayload payload);
 }

@@ -550,6 +550,7 @@ public final class RuleEditorEditPages {
 
     public void tick() {
         pruneLeafPanels();
+        ruleEditorTriggerPage.updateLifespanWindow();
         for (FormView form : liveForms) {
             form.tick();
         }

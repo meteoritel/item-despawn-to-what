@@ -6,6 +6,8 @@ import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
+import com.meteorite.itemdespawntowhat.core.service.RuleEditSessionLimits;
 
 /***
  * 内置条件/效果编辑器描述符表：10 个条件 + 10 个效果各注册一条描述符。
@@ -15,6 +17,10 @@ import net.minecraft.resources.ResourceLocation;
  * 回退为只读 JSON 摘要，且草稿原样保留未识别字段。
  */
 public final class BuiltinEditorDescriptors {
+
+    /** 寿命应答未抵达时的滑条窗口，沿用服务端默认自然寿命并换算为秒。 */
+    public static final int DEFAULT_TRIGGER_WINDOW_SECONDS =
+            (int) (ServerConfig.DEFAULT_FABRIC_LIFESPAN_FALLBACK_TICKS / RuleEditSessionLimits.TICKS_PER_SECOND);
 
     // 字段标签前缀
     private static final String FIELD = "gui.itemdespawntowhat.edit.field.";
@@ -278,7 +284,7 @@ public final class BuiltinEditorDescriptors {
                         .optional(),
                 EditorField.optionalText(RuleFields.DISPLAY_NAME, r + "display_name"),
                 EditorField.longText(RuleFields.NOTES, r + "notes"),
-                EditorField.integerSlider("trigger_after_seconds", r + "trigger_after_seconds", 0, Integer.MAX_VALUE, 0, 600)
+                EditorField.integerSlider("trigger_after_seconds", r + "trigger_after_seconds", 0, Integer.MAX_VALUE, 0, DEFAULT_TRIGGER_WINDOW_SECONDS)
                         .optional()
         ), false);
     }

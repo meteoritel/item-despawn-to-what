@@ -273,6 +273,18 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         reload();
     }
 
+    /**
+     * 设置数值字段的常用滑条窗口，不修改合法域、草稿值或正在输入的缓冲。
+     * @param path 绝对字段路径
+     * @param min 窗口下限
+     * @param max 窗口上限
+     */
+    public void setRowSliderWindow(String path, double min, double max) {
+        for (FormRow row : rows) if (row.path.equals(path) && row.control instanceof NumberControl number) {
+            number.setWindow(min, max);
+        }
+    }
+
     // 数量对象按引用身份展示；对象键无需进入草稿的点分路径语法。
     public void setItemCountReferences(String path, List<String> references) {
         for (FormRow row : rows) if (row.path.equals(path) && row.control instanceof ItemCountsControl counts) {

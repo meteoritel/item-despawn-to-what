@@ -19,6 +19,7 @@ import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotChunkP
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotPayload;
 import com.meteorite.itemdespawntowhat.core.service.RuleEditSessionLimits;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -28,6 +29,9 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleLifespanPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditLimits;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleLifespanPayload;
 
 /***
  * 客户端编辑会话工作区：client/net 对界面层的唯一入口。
@@ -57,6 +61,37 @@ public final class RuleEditClientWorkspace {
     private final Map<RuleCatalogType, RuleCatalog> catalogs = new EnumMap<>(RuleCatalogType.class);
     // 每种目录最近一次请求的 requestId：用于丢弃过时响应
     private final Map<RuleCatalogType, String> catalogRequestIds = new EnumMap<>(RuleCatalogType.class);
+
+    private String lifespanRequestId = "";
+    private int queriedLifespanTicks;
+    private @Nullable ClientPacketListener lifespanConnection;
+
+    /**
+     * 获取当前连接的统一参考寿命；首次请求后等待应答，切换规则或源物品均复用缓存。
+     * @return 参考寿命 tick；尚未采样时为零
+     */
+    public synchronized int referenceLifespanTicks() {
+        ClientPacketListener connection = Minecraft.getInstance().getConnection();
+        // 连接身份隔离缓存，即使断线时编辑器已关闭，也不会把参考值带到下一台服务器。
+        if (connection != lifespanConnection) {
+            queriedLifespanTicks = 0;
+            lifespanRequestId = "";
+            lifespanConnection = connection;
+        }
+        if (state != RuleEditClientState.ACTIVE || connection == null) return 0;
+        if (queriedLifespanTicks > 0) return queriedLifespanTicks;
+        if (lifespanRequestId.isEmpty()) {
+            lifespanRequestId = UUID.randomUUID().toString();
+            if (!send(new RequestRuleLifespanPayload(sessionId, lifespanRequestId))) lifespanRequestId = "";
+        }
+        return queriedLifespanTicks;
+    }
+
+    private synchronized void onLifespan(RuleLifespanPayload payload) {
+        if (!sessionId.isEmpty() && sessionId.equals(payload.sessionId()) && lifespanRequestId.equals(payload.requestId())) {
+            queriedLifespanTicks = Math.max(0, payload.lifespanTicks());
+        }
+    }
 
     // 上行发送器；未注入时所有上行报文丢弃并记日志
     private @Nullable PacketSender sender;
@@ -262,7 +297,7 @@ public final class RuleEditClientWorkspace {
         List<CustomPacketPayload> packets = RuleChangeSetChunker.split(sessionId, operationId, changeSetJson);
         if (packets.isEmpty()) {
             LOGGER.warn("变更集为空或超过上限，未提交: bytes={}",
-                    com.meteorite.itemdespawntowhat.core.network.transport.RuleEditLimits.encodedLength(changeSetJson));
+                    RuleEditLimits.encodedLength(changeSetJson));
             return false;
         }
         state = RuleEditClientState.APPLYING;
@@ -280,6 +315,8 @@ public final class RuleEditClientWorkspace {
     // 清空工作区：断线/退出世界时调用（不清除已注入的发送器与消费者）
     public synchronized void reset() {
         endSession();
+        queriedLifespanTicks = 0;
+        lifespanConnection = null;
         lastResult = null;
         openRequest = null;
         openFailure = null;
@@ -317,6 +354,7 @@ public final class RuleEditClientWorkspace {
         RuleEditPayloadRouter.installChunkSink(this::onSnapshotChunk);
         RuleEditPayloadRouter.installResultPayloadSink(this::onResult);
         RuleEditPayloadRouter.installCatalogSink(this::onCatalog);
+        RuleEditPayloadRouter.installLifespanSink(this::onLifespan);
         OpenRuleEditorPayload.installOpenEditorPayloadSink(this::onOpen);
     }
 
@@ -470,6 +508,7 @@ public final class RuleEditClientWorkspace {
             catalogs.clear();
         directories.clear();
             catalogRequestIds.clear();
+            lifespanRequestId = "";
             chunkBuffer.clear();
             lastHeartbeatTick = 0L;
             if (hadSession) {
