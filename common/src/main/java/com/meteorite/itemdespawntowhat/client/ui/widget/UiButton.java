@@ -5,6 +5,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiControl;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import java.util.ArrayList;
@@ -15,7 +16,7 @@ import net.minecraft.network.chat.Component;
 
 /***
  * 按钮控件。
- * <p>委托 kit 的 {@link UiControl} 处理状态与焦点，再叠加主题的像素立体边，
+ * <p>委托 kit 的 {@link UiControl} 处理状态与焦点，按需绘制主题的像素立体边或胶囊底图，
  * 因此同时兼容键盘（Tab / Enter）与鼠标（按下、拖出取消）操作。
  */
 public final class UiButton implements UiWidget, UiFocusTarget {
@@ -38,6 +39,10 @@ public final class UiButton implements UiWidget, UiFocusTarget {
     private boolean enabled = true;
     // 是否可见
     private boolean visible = true;
+    private boolean chipStyle;
+    private int hoverTicks;
+    private static final int CHIP_PADDING = 4;
+    private static final int ICON_GAP = 3;
 
     // 注入的宿主主题
     private final UiHostTheme theme;
@@ -74,6 +79,17 @@ public final class UiButton implements UiWidget, UiFocusTarget {
     public UiButton setIcon(UiIcon icon) {
         this.icon = icon;
         apply();
+        return this;
+    }
+
+    /**
+     * 选择胶囊底图，沿用按钮的点击、禁用与键盘焦点行为。
+     *
+     * @param chipStyle 是否使用宿主主题的胶囊样式
+     * @return 当前按钮
+     */
+    public UiButton setChipStyle(boolean chipStyle) {
+        this.chipStyle = chipStyle;
         return this;
     }
 
@@ -125,7 +141,7 @@ public final class UiButton implements UiWidget, UiFocusTarget {
     public int preferredWidth(int padding) {
         int width = font.width(label) + padding * 2;
         if (icon != null) {
-            width += icon.width() + 3;
+            width += icon.width() + ICON_GAP;
         }
         return width;
     }
@@ -150,8 +166,36 @@ public final class UiButton implements UiWidget, UiFocusTarget {
         if (!visible) {
             return;
         }
+        if (chipStyle) {
+            renderChip(graphics, font, mouseX, mouseY);
+            return;
+        }
         control.render(graphics, font, mouseX, mouseY);
         theme.drawBevel(graphics, control.bounds(), theme.palette().controlBevelLight(), theme.palette().controlBevelDark());
+    }
+
+    private void renderChip(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+        UiRect rect = bounds();
+        boolean hovered = control.isHittable() && rect.contains(mouseX, mouseY);
+        if (control.isEnabled()) theme.drawChip(graphics, rect, isPressed(), hovered);
+        else theme.drawSegment(graphics, rect, false, false, false);
+        int iconWidth = icon == null ? 0 : icon.width() + ICON_GAP;
+        int available = Math.max(0, rect.width() - CHIP_PADDING * 2);
+        int contentWidth = Math.min(available, font.width(label) + iconWidth);
+        int x = rect.x() + (rect.width() - contentWidth) / 2;
+        // 胶囊按钮在窄布局中仍须把图标与文字裁剪到自身范围。
+        graphics.enableScissor(rect.x(), rect.y(), rect.right(), rect.bottom());
+        try {
+            if (icon != null) icon.render(graphics, x, rect.y() + (rect.height() - icon.height()) / 2);
+            hoverTicks = hovered ? hoverTicks + 1 : 0;
+            int color = control.isEnabled() ? theme.controlTextColor(variant.role()) : theme.palette().textDisabled();
+            TextScroll.draw(graphics, font, label.getString(), x + iconWidth,
+                    rect.y() + (rect.height() - font.lineHeight) / 2,
+                    Math.max(0, contentWidth - iconWidth), color, hovered, hoverTicks, false);
+        } finally {
+            graphics.disableScissor();
+        }
+        if (control.isFocused()) theme.drawFocusOutline(graphics, rect);
     }
 
     @Override

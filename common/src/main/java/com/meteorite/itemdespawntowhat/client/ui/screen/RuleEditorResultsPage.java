@@ -12,8 +12,8 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiAction;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlowLayout;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -23,9 +23,7 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCheckBox;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiDescriptionTooltip;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiListView;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiSegmentedControl;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiStructureDiagram;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTypePicker;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
@@ -59,19 +57,11 @@ final class RuleEditorResultsPage {
     private static final int ACTION_REMOVE_SIZE = 14;
     private static final int ACTION_REMOVE_INSET = 2;
     private static final int ACTION_LIST_MIN_HEIGHT = ACTION_ROW_HEIGHT * 2 + 2;
-    private static final int TOOLBAR_HEIGHT = 20;
+    private static final int TOOLBAR_HEIGHT = 24;
     private static final int DETAIL_HEADER_HEIGHT = 26;
     private static final int DETAIL_ICON_SIZE = 18;
     private static final int DETAIL_PADDING = 6;
     private static final int EMPTY_MESSAGE_GAP = 8;
-    // 结构图解弹窗：宽度区间与图内容高度
-    private static final int DIAGRAM_MIN_WIDTH = 200;
-    private static final int DIAGRAM_MAX_WIDTH = 320;
-    private static final int DIAGRAM_CONTENT_HEIGHT = 160;
-    // 菜单行内缩，以及「可撤销」提示与标签之间的最小间隙
-    private static final int MENU_ROW_INSET = 2;
-    private static final int MENU_HINT_GAP = 4;
-
     RuleEditorResultsPage(RuleEditorEditPages pages) {
         this.pages = pages;
         typePicker = new UiTypePicker(UiHostThemes.flatTheme(), pages.font,
@@ -89,7 +79,10 @@ final class RuleEditorResultsPage {
         planPager = null;
         safeSpawnBox = null;
         fillOriginBox = null;
-        combinationControl = null;
+        combinationButton = null;
+        deletePlanButton = null;
+        movePlanUpButton = null;
+        movePlanDownButton = null;
         effectList = null;
         effectForm = null;
         variantControl = null;
@@ -116,7 +109,10 @@ final class RuleEditorResultsPage {
 
     @Nullable UiCheckBox fillOriginBox;
 
-    @Nullable UiSegmentedControl combinationControl;
+    @Nullable UiButton combinationButton;
+    private @Nullable UiButton deletePlanButton;
+    private @Nullable UiButton movePlanUpButton;
+    private @Nullable UiButton movePlanDownButton;
 
     @Nullable UiListView<Integer> effectList;
 
@@ -189,12 +185,10 @@ final class RuleEditorResultsPage {
             pages.liveWidgets.add(fillOriginBox);
         }
         if (candidates > 1) {
-            combinationControl = new UiSegmentedControl(RuleEditorEditPages.THEME, pages.font, List.of(
-                    new UiSegmentedControl.Option(CombinationMode.ROUND_ROBIN.key(), Component.translatable(RuleEditorPageSupport.UI + "combination.round_robin")),
-                    new UiSegmentedControl.Option(CombinationMode.PRIORITY.key(), Component.translatable(RuleEditorPageSupport.UI + "combination.priority"))));
-            combinationControl.setSelected(RuleEditorPageSupport.combinationOf(rule));
-            combinationControl.setOnChanged(this::onCombinationChanged);
-            pages.liveWidgets.add(combinationControl);
+            combinationButton = new UiButton(THEME, pages.font, combinationLabel(rule), UiButtonVariant.SECONDARY,
+                    this::cycleCombination).setChipStyle(true);
+            pages.liveWidgets.add(combinationButton);
+            pages.buttons.add(combinationButton);
         }
 
         String listPath = ResultStructure.listPath(rule, candidateIndex);
@@ -294,72 +288,45 @@ final class RuleEditorResultsPage {
             pages.liveWidgets.add(emptyAddButton);
             pages.buttons.add(emptyAddButton);
         }
-        pages.addCandidateButton("button.candidate_add", this::addCandidate);
-        pages.addCandidateButton("button.diagram", this::openDiagram);
-        pages.addCandidateButton("button.candidate_duplicate", this::duplicateCandidate);
-        if (candidates > 1) pages.addCandidateButton("results.plan_more", () -> openResultMore(true));
+        addPlanButton("results.plan_new", this::addCandidate);
+        addPlanButton("results.plan_copy", this::duplicateCandidate);
+        deletePlanButton = addPlanButton("results.plan_delete", this::removeCandidate);
+        movePlanUpButton = addPlanButton("button.candidate_up", () -> moveCandidateBy(-1));
+        movePlanDownButton = addPlanButton("button.candidate_down", () -> moveCandidateBy(1));
         if (effectCount > 0) {
-            // 每屏只保留一个主操作，主操作是页脚的「应用更改」，动作类按钮统一为次操作
-            pages.addEffectButton("button.effect_add", this::openEffectPicker);
-            pages.addEffectButton("results.action_more", () -> openResultMore(false));
+            pages.addEffectButton(this::openEffectPicker);
         }
     }
 
-    // 菜单条目：dangerous 为 true 的条目用危险色绘制，并在行尾标注删除可撤销
-    record MenuAction(Component label, boolean dangerous, Runnable action) { }
+    private UiButton addPlanButton(String key, UiAction action) {
+        UiButton button = new UiButton(THEME, pages.font, Component.translatable(RuleEditorPageSupport.UI + key),
+                UiButtonVariant.SECONDARY, action).setChipStyle(true);
+        pages.candidateButtons.add(button);
+        pages.liveWidgets.add(button);
+        return button;
+    }
 
-    void openResultMore(boolean candidate) {
+    private Component combinationLabel(@Nullable RuleValue rule) {
+        return Component.translatable(RuleEditorPageSupport.UI + "combination."
+                + RuleEditorPageSupport.combinationOf(rule));
+    }
+
+    void updateCombinationLabel(@Nullable RuleValue rule) {
+        if (combinationButton != null) combinationButton.setLabel(combinationLabel(rule));
+    }
+
+    private void cycleCombination() {
         if (pages.blockNavigation()) return;
-        List<MenuAction> actions = new ArrayList<>();
-        if (candidate) {
-            int count = ResultStructure.candidateCount(pages.currentView());
-            if (candidateIndex > 0) actions.add(new MenuAction(Component.translatable(RuleEditorPageSupport.UI + "button.candidate_up"), false, () -> moveCandidateBy(-1)));
-            if (candidateIndex + 1 < count) actions.add(new MenuAction(Component.translatable(RuleEditorPageSupport.UI + "button.candidate_down"), false, () -> moveCandidateBy(1)));
-            if (count > 1) actions.add(new MenuAction(Component.translatable(RuleEditorPageSupport.UI + "button.candidate_remove"), true, this::removeCandidate));
-        } else {
-            actions.add(new MenuAction(Component.translatable(RuleEditorPageSupport.UI + "button.effect_duplicate"), false, this::duplicateEffect));
-            if (effectIndex > 0) actions.add(new MenuAction(Component.translatable(RuleEditorPageSupport.UI + "button.effect_up"), false, () -> moveEffectBy(-1)));
-            if (effectIndex + 1 < ResultStructure.effectCount(pages.currentView(), candidateIndex))
-                actions.add(new MenuAction(Component.translatable(RuleEditorPageSupport.UI + "button.effect_down"), false, () -> moveEffectBy(1)));
-            actions.add(new MenuAction(Component.translatable(RuleEditorPageSupport.UI + "button.effect_remove"), true, this::removeEffect));
-        }
-        UiListView<MenuAction> list = new UiListView<>(RuleEditorEditPages.THEME, pages.font, this::renderMenuRow);
-        list.setRowHeight(THEME.rowHeight());
-        list.setItems(actions);
-        list.setActivateOnSingleClick(true);
-        UiModal modal = UiModal.create(THEME, pages.font).title(Component.translatable(RuleEditorPageSupport.UI
-                + (candidate ? "results.plan_more" : "results.action_more_title")));
-        list.setOnActivate(item -> { pages.host.modals().close(modal); item.action().run(); pages.flushRebuild(); });
-        modal.contentWidget(list, actions.size() * THEME.rowHeight() + THEME.border() * 2)
-                .cancel(Component.translatable(RuleEditorPageSupport.UI + "button.cancel"));
-        pages.host.modals().push(modal.layoutCentered(pages.host.screenWidth(), pages.host.screenHeight()));
+        String current = RuleEditorPageSupport.combinationOf(pages.currentView());
+        String next = CombinationMode.ROUND_ROBIN.key().equals(current)
+                ? CombinationMode.PRIORITY.key() : CombinationMode.ROUND_ROBIN.key();
+        onCombinationChanged(next);
+        updateCombinationLabel(pages.currentView());
     }
 
     // 提示只表达级别：色值由屏幕层按级别取（编辑页宿主桥接层仍以颜色传递）
     private void notice(RuleEditorScreen.NoticeLevel level, Component message) {
         pages.host.notice(message, RuleEditorScreen.noticeColor(level));
-    }
-
-    // 菜单行：危险条目换危险色，并在行尾补「可撤销」这一颜色以外的线索
-    private void renderMenuRow(GuiGraphics graphics, Font renderFont, MenuAction item, int index, UiRect row,
-            boolean selected, boolean hovered, boolean focused) {
-        int textY = row.y() + MENU_ROW_INSET;
-        if (!item.dangerous()) {
-            graphics.drawString(renderFont, item.label().getString(), row.x() + MENU_ROW_INSET, textY,
-                    THEME.palette().textPrimary(), false);
-            return;
-        }
-        String hint = Component.translatable(RuleEditorPageSupport.UI + "results.remove_undo_hint").getString();
-        int available = Math.max(1, row.width() - MENU_ROW_INSET * 2);
-        int hintWidth = renderFont.width(hint);
-        boolean showHint = hintWidth + MENU_HINT_GAP < available;
-        int labelWidth = showHint ? available - hintWidth - MENU_HINT_GAP : available;
-        String label = TextScroll.trimToWidth(renderFont, item.label().getString(), labelWidth);
-        graphics.drawString(renderFont, label, row.x() + MENU_ROW_INSET, textY, THEME.palette().danger(), false);
-        if (showHint) {
-            graphics.drawString(renderFont, hint, row.right() - MENU_ROW_INSET - hintWidth, textY,
-                    THEME.palette().textSecondary(), false);
-        }
     }
 
     void setCandidateStrategy(String field, boolean value) {
@@ -462,6 +429,8 @@ final class RuleEditorResultsPage {
             return;
         }
         RuleDraft draft = session.draft();
+        // 至少保留一个方案，与工具条的禁用边界一致。
+        if (!draft.hasOutcomes() || draft.outcomeCount() <= 1) return;
         int index = Math.max(0, candidateIndex);
         if (!pages.apply(EditSession.OP_REMOVE_CANDIDATE, () -> draft.removeAt(RuleFields.OUTCOMES + "[" + index + "]"))) {
             return;
@@ -542,35 +511,6 @@ final class RuleEditorResultsPage {
         effectIndex = Math.max(0, draft.effectCountAt(listPath) - 1);
     }
 
-    void duplicateEffect() {
-        if (pages.blockNavigation()) {
-            return;
-        }
-        EditSession session = pages.host.session();
-        if (session == null) {
-            return;
-        }
-        RuleDraft draft = session.draft();
-        if (ResultStructure.totalEffectCount(draft.root()) >= ConditionLimits.MAX_EFFECTS) {
-            notice(RuleEditorScreen.NoticeLevel.WARNING, Component.translatable(RuleEditorPageSupport.UI + "issue.candidate_limit", ConditionLimits.MAX_EFFECTS));
-            return;
-        }
-        String listPath = ResultStructure.listPath(draft.root(), candidateIndex);
-        List<RuleValue> effects = draft.effectValuesAt(listPath);
-        if (effectIndex < 0 || effectIndex >= effects.size()) {
-            return;
-        }
-        RuleValue copy = effects.get(effectIndex);
-        if (!pages.apply(EditSession.OP_ADD_EFFECT, () -> draft.setAt(listPath + "[" + draft.effectCountAt(listPath) + "]", copy))) {
-            return;
-        }
-        effectIndex = Math.max(0, draft.effectCountAt(listPath) - 1);
-    }
-
-    void removeEffect() {
-        removeEffect(effectIndex);
-    }
-
     private void removeEffect(int index) {
         EditSession session = pages.host.session();
         if (session == null) {
@@ -605,23 +545,6 @@ final class RuleEditorResultsPage {
         if (button != 0 || index < 0) return false;
         if (!pages.blockNavigation()) removeEffect(index);
         return true;
-    }
-
-    void moveEffectBy(int delta) {
-        int target = effectIndex + delta;
-        if (delta == 0 || target < 0) {
-            return;
-        }
-        EditSession session = pages.host.session();
-        if (session == null) {
-            return;
-        }
-        RuleDraft draft = session.draft();
-        String listPath = ResultStructure.listPath(draft.root(), candidateIndex);
-        if (target >= draft.effectCountAt(listPath)) {
-            return;
-        }
-        moveEffect(effectIndex, target);
     }
 
     void moveEffect(int from, int to) {
@@ -691,12 +614,16 @@ final class RuleEditorResultsPage {
         enterResultStage(1);
     }
 
-    // 容器统一应用使能后再恢复翻页边界，避免第一／末页箭头被重新启用。
+    // 容器统一应用使能后恢复方案数量与位置边界，避免不可用操作被重新启用。
     void updatePlanButtons(boolean enabled) {
-        if (planPager == null) return;
         int count = Math.max(1, ResultStructure.candidateCount(pages.currentView()));
-        planPager.previous.setEnabled(enabled && candidateIndex > 0);
-        planPager.next.setEnabled(enabled && candidateIndex + 1 < count);
+        if (planPager != null) {
+            planPager.previous.setEnabled(enabled && candidateIndex > 0);
+            planPager.next.setEnabled(enabled && candidateIndex + 1 < count);
+        }
+        if (deletePlanButton != null) deletePlanButton.setEnabled(enabled && count > 1);
+        if (movePlanUpButton != null) movePlanUpButton.setEnabled(enabled && candidateIndex > 0);
+        if (movePlanDownButton != null) movePlanDownButton.setEnabled(enabled && candidateIndex + 1 < count);
     }
 
     void enterResultStage(int stage) {
@@ -754,11 +681,11 @@ final class RuleEditorResultsPage {
             controls.add(planPager);
             sizes.add(Math.min(width, planPager.preferredWidth()));
         }
-        if (combinationControl != null) {
-            controls.add(combinationControl);
-            int optionWidth = combinationControl.options().stream()
-                    .mapToInt(option -> pages.font.width(option.label())).max().orElse(0);
-            sizes.add(Math.min(width, (optionWidth + RuleEditorPageSupport.PAD * 2) * combinationControl.options().size()));
+        if (combinationButton != null) {
+            controls.add(combinationButton);
+            int optionWidth = java.util.Arrays.stream(CombinationMode.values()).mapToInt(mode -> pages.font.width(
+                    Component.translatable(RuleEditorPageSupport.UI + "combination." + mode.key()))).max().orElse(0);
+            sizes.add(Math.min(width, optionWidth + RuleEditorPageSupport.PAD * 2));
         }
         for (UiButton button : pages.candidateButtons) {
             controls.add(button);
@@ -860,57 +787,6 @@ final class RuleEditorResultsPage {
         return bottom;
     }
 
-    void openDiagram() {
-        if (pages.blockNavigation()) {
-            return;
-        }
-        EditSession session = pages.host.session();
-        if (session == null) {
-            return;
-        }
-        UiStructureDiagram diagram = RuleEditorPanelFactory.structureDiagram(pages.font, session.draft().root(), pages.nameSource,
-                candidateIndex, this::navigateDiagram);
-        UiModal modal = UiModal.create(RuleEditorEditPages.THEME, pages.font);
-        modal.title(Component.translatable(RuleEditorPageSupport.UI + "button.diagram"));
-        modal.preferredWidth(Math.clamp(pages.host.screenWidth() - 16, DIAGRAM_MIN_WIDTH, DIAGRAM_MAX_WIDTH));
-        ModalContent content = new ModalContent(pages.font, THEME, null,
-                Component.translatable(RuleEditorPageSupport.UI + "diagram.note"), diagram);
-        // 内容高 = 图解区高度与说明行之和（说明行口径见 ModalContent.hintHeight），图解内容不因说明行被压缩
-        modal.contentWidget(content, DIAGRAM_CONTENT_HEIGHT + content.hintHeight());
-        modal.cancel(Component.translatable(RuleEditorPageSupport.UI + "button.cancel"));
-        modal.layoutCentered(pages.host.screenWidth(), pages.host.screenHeight());
-        pages.host.modals().push(modal);
-    }
-
-    void navigateDiagram(String nodeId) {
-        if (nodeId == null) {
-            return;
-        }
-        if ("source".equals(nodeId) || "catalyst".equals(nodeId)) {
-            pages.setPage(RuleEditorEditPages.Page.INPUT);
-            return;
-        }
-        if (nodeId.startsWith("candidate:")) {
-            candidateIndex = RuleEditorPageSupport.intOr(nodeId.substring("candidate:".length()), candidateIndex);
-            resultStage = 1;
-            pages.setPage(RuleEditorEditPages.Page.RESULTS);
-            return;
-        }
-        if (nodeId.startsWith("effect:")) {
-            String rest = nodeId.substring("effect:".length());
-            int colon = rest.lastIndexOf(':');
-            if (colon > 0) {
-                int candidate = RuleEditorPageSupport.indexIn(rest.substring(0, colon), RuleFields.OUTCOMES);
-                if (candidate >= 0) {
-                    candidateIndex = candidate;
-                }
-                effectIndex = RuleEditorPageSupport.intOr(rest.substring(colon + 1), effectIndex);
-            }
-            resultStage = 2;
-            pages.setPage(RuleEditorEditPages.Page.RESULTS);
-        }
-    }
-
     // 右栏头部：空态显示卡片标题，否则显示所选动作的图标与名称
     private RuleEditorEditPages.CardHeader detailHeader() {
         if (emptyDetailRect != null) {
@@ -955,8 +831,11 @@ final class RuleEditorResultsPage {
                 return RuleNaming.candidateTitle(ResultStructure.candidateAt(pages.currentView(), candidateIndex),
                         candidateIndex + 1, pages.nameSource);
         }
-        if (combinationControl != null && combinationControl.bounds().contains(mouseX, mouseY))
+        if (combinationButton != null && combinationButton.bounds().contains(mouseX, mouseY))
             return Component.translatable(RuleEditorPageSupport.UI + "results.combination_help");
+        if (deletePlanButton != null && deletePlanButton.bounds().contains(mouseX, mouseY))
+            return Component.translatable(RuleEditorPageSupport.UI + "button.candidate_remove").copy()
+                    .append("\n").append(Component.translatable(RuleEditorPageSupport.UI + "results.remove_undo_hint"));
         if (variantControl != null && variantControl.isVisible() && variantControl.bounds().contains(mouseX, mouseY))
             return Component.translatable(RuleEditorPageSupport.UI + "results.product_help");
         if (effectNoteRect != null && effectNoteRect.contains(mouseX, mouseY)) return readonlyEffectNote(pages.currentView());
@@ -1008,12 +887,12 @@ final class RuleEditorResultsPage {
             label = Component.translatable(RuleEditorPageSupport.UI + "results.plan_page", candidateIndex + 1, count);
             previous = new UiButton(THEME, pages.font,
                     Component.translatable(RuleEditorPageSupport.UI + "results.previous_plan_symbol"),
-                    UiButtonVariant.SECONDARY, () -> selectPlanBy(-1));
+                    UiButtonVariant.SECONDARY, () -> selectPlanBy(-1)).setChipStyle(true);
             next = new UiButton(THEME, pages.font,
                     Component.translatable(RuleEditorPageSupport.UI + "results.next_plan_symbol"),
-                    UiButtonVariant.SECONDARY, () -> selectPlanBy(1));
-            previous.setTooltip(Component.translatable(RuleEditorPageSupport.UI + "results.previous_plan"));
-            next.setTooltip(Component.translatable(RuleEditorPageSupport.UI + "results.next_plan"));
+                    UiButtonVariant.SECONDARY, () -> selectPlanBy(1)).setChipStyle(true);
+            previous.setAccessibleName(Component.translatable(RuleEditorPageSupport.UI + "results.previous_plan"));
+            next.setAccessibleName(Component.translatable(RuleEditorPageSupport.UI + "results.next_plan"));
         }
 
         private int preferredWidth() {
@@ -1052,133 +931,4 @@ final class RuleEditorResultsPage {
         }
     }
 
-    /**
-     * 弹窗内容装配：可选的一行说明、可交互内容、可选的一行键盘提示。
-     *
-     * <p>弹窗只渲染内容控件且只把输入转发给它，因此说明行与列表必须合成一个控件交给弹窗；
-     * 说明行的高度在这里一并算进内容高度，保证弹窗按「行数 × 行高」精确贴合列表。</p>
-     */
-    private static final class ModalContent implements UiWidget, UiFocusTarget {
-
-        private final Font font;
-        private final UiHostTheme theme;
-        private final @Nullable Component headerHint;
-        private final @Nullable Component footerHint;
-        private final UiWidget content;
-        private UiRect bounds = new UiRect(0, 0, 0, 0);
-
-        ModalContent(Font font, UiHostTheme theme, @Nullable Component headerHint, @Nullable Component footerHint,
-                UiWidget content) {
-            this.font = font;
-            this.theme = theme;
-            this.headerHint = headerHint;
-            this.footerHint = footerHint;
-            this.content = content;
-        }
-
-        // 单行说明占用的高度（正文行高 + 与内容之间的间距）。调用方把它加进 UiModal 的内容高，
-        // setBounds 再从内容区扣掉同一式子，故内容区恒等于调用方传入的内容高；UiModal 的头部、内边距与页脚
-        // 这些固定 chrome 不参与此处计算，由 UiModal 自行扣除。
-        int hintHeight() {
-            return (headerHint == null ? 0 : font.lineHeight + theme.padding())
-                    + (footerHint == null ? 0 : font.lineHeight + theme.padding());
-        }
-
-        @Override
-        public UiRect bounds() {
-            return bounds;
-        }
-
-        @Override
-        public void setBounds(int x, int y, int width, int height) {
-            int bodyTop = y + (headerHint == null ? 0 : font.lineHeight + theme.padding());
-            int bodyBottom = y + Math.max(0, height) - (footerHint == null ? 0 : font.lineHeight + theme.padding());
-            bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
-            content.setBounds(x, bodyTop, Math.max(0, width), Math.max(0, bodyBottom - bodyTop));
-        }
-
-        @Override
-        public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
-            if (headerHint != null) {
-                drawHint(graphics, headerHint, bounds.y() + theme.textOffset());
-            }
-            content.render(graphics, renderFont, mouseX, mouseY);
-            if (footerHint != null) {
-                drawHint(graphics, footerHint, bounds.bottom() - font.lineHeight - theme.padding() + theme.textOffset());
-            }
-        }
-
-        // 说明行按可用宽度截断（过宽时带省略号）
-        private void drawHint(GuiGraphics graphics, Component hint, int y) {
-            String text = TextScroll.trimToWidth(font, hint.getString(), Math.max(1, bounds.width()));
-            graphics.drawString(font, text, bounds.x(), y, theme.palette().textSecondary(), false);
-        }
-
-        @Override
-        public boolean isVisible() {
-            return content.isVisible();
-        }
-
-        @Override
-        public boolean mouseClicked(double mouseX, double mouseY, int button) {
-            return content.mouseClicked(mouseX, mouseY, button);
-        }
-
-        @Override
-        public boolean mouseReleased(double mouseX, double mouseY, int button) {
-            return content.mouseReleased(mouseX, mouseY, button);
-        }
-
-        @Override
-        public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-            return content.mouseDragged(mouseX, mouseY, button, dragX, dragY);
-        }
-
-        @Override
-        public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-            return content.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
-        }
-
-        @Override
-        public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-            return content.keyPressed(keyCode, scanCode, modifiers);
-        }
-
-        @Override
-        public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
-            return content.keyReleased(keyCode, scanCode, modifiers);
-        }
-
-        @Override
-        public boolean charTyped(char codePoint, int modifiers) {
-            return content.charTyped(codePoint, modifiers);
-        }
-
-        @Override
-        public boolean canFocus() {
-            return content instanceof UiFocusTarget target && target.canFocus();
-        }
-
-        @Override
-        public void setFocused(boolean focused) {
-            if (content instanceof UiFocusTarget target) {
-                target.setFocused(focused);
-            }
-        }
-
-        @Override
-        public boolean isFocused() {
-            return content instanceof UiFocusTarget target && target.isFocused();
-        }
-
-        @Override
-        public boolean activate() {
-            return content instanceof UiFocusTarget target && target.activate();
-        }
-
-        @Override
-        public @Nullable Component accessibleName() {
-            return content instanceof UiFocusTarget target ? target.accessibleName() : null;
-        }
-    }
 }

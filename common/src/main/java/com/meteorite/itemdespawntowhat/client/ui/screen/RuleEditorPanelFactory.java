@@ -5,7 +5,6 @@ import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
-import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiCyclicRange;
@@ -29,7 +28,6 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiCatalogGrid;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCyclicTimeBar;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiRangeBar;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiStructureDiagram;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalog;
@@ -46,7 +44,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 编辑页的面板装配工厂：目录选择页、昼夜/高度区间条、结构图解与叶子面板装配
+ * 编辑页的面板装配工厂：目录选择页、昼夜/高度区间条与叶子面板装配。
  * （面板实现见 {@link LeafPanel}）。
  * <p>本类只做「把 kit 控件与目录链路接到规则草稿上」的装配，不复制数据层逻辑：
  * 写入一律经调用方给定的 {@code applyChange}（内部走 {@link EditSession#apply(String, Runnable)}，
@@ -456,86 +454,6 @@ public final class RuleEditorPanelFactory {
 
     private static boolean isNumber(@Nullable RuleValue element) {
         return element != null && element.isNumber();
-    }
-
-    // ---- 结构图解 ----
-
-    // 槽位与连接：源物品 ->（催化剂）-> 候选 -> 效果；节点 id 由宿主映射到页面/候选/效果
-    public static UiStructureDiagram structureDiagram(Font font, RuleValue rule, RuleNaming.NameSource source,
-                                                      int candidateIndex, Consumer<String> navigate) {
-        UiStructureDiagram diagram = new UiStructureDiagram(THEME, font, navigate::accept);
-        diagram.setEmptyMessage(Component.translatable(UI + "diagram.empty"));
-        diagram.setNodes(diagramNodes(rule, source, candidateIndex));
-        diagram.setEdges(diagramEdges(rule));
-        return diagram;
-    }
-
-    public static List<UiStructureDiagram.Node> diagramNodes(@Nullable RuleValue rule, RuleNaming.NameSource source,
-                                                             int candidateIndex) {
-        List<UiStructureDiagram.Node> nodes = new ArrayList<>();
-        if (rule == null) {
-            return nodes;
-        }
-        // sourceTitle 需要整条规则对象（内部按 rule.source.items 取值），不能传 source 子对象
-        nodes.add(new UiStructureDiagram.Node("source", RuleNaming.sourceTitle(rule, source),
-                Component.translatable(UI + "diagram.source")));
-        boolean hasCatalyst = rule.has(RuleFields.CATALYST_COST);
-        if (hasCatalyst) {
-            nodes.add(new UiStructureDiagram.Node("catalyst",
-                    Component.translatable(UI + "rule.catalyst_cost"), null));
-        }
-        int candidates = Math.max(1, ResultStructure.candidateCount(rule));
-        for (int index = 0; index < candidates; index++) {
-            RuleValue candidate = ResultStructure.candidateAt(rule, index);
-            String listPath = ResultStructure.listPath(rule, index);
-            int effects = ResultStructure.effectCount(rule, index);
-            nodes.add(new UiStructureDiagram.Node("candidate:" + index,
-                    RuleNaming.candidateTitle(candidate, index + 1, source),
-                    Component.translatable(UI + "diagram.effects", effects)));
-            for (int effect = 0; effect < effects; effect++) {
-                nodes.add(new UiStructureDiagram.Node("effect:" + listPath + ":" + effect,
-                        RuleNaming.effectTitle(effectAt(candidate, effect), source),
-                        index == candidateIndex ? null
-                                : Component.translatable(UI + "diagram.other_candidate", index + 1)));
-            }
-        }
-        return nodes;
-    }
-
-    private static @Nullable RuleValue effectAt(@Nullable RuleValue candidate, int index) {
-        if (candidate == null || !candidate.isMapping()) {
-            return null;
-        }
-        RuleValue effects = candidate.child(RuleFields.CANDIDATE_EFFECTS);
-        if (effects == null || !effects.isList() || index < 0 || index >= effects.size()) {
-            return null;
-        }
-        RuleValue effect = effects.item(index);
-        return effect != null && effect.isMapping() ? effect : null;
-    }
-
-    public static List<UiStructureDiagram.Edge> diagramEdges(@Nullable RuleValue rule) {
-        List<UiStructureDiagram.Edge> edges = new ArrayList<>();
-        if (rule == null) {
-            return edges;
-        }
-        boolean hasCatalyst = rule.has(RuleFields.CATALYST_COST);
-        if (hasCatalyst) {
-            edges.add(new UiStructureDiagram.Edge("source", "catalyst"));
-        }
-        int candidates = Math.max(1, ResultStructure.candidateCount(rule));
-        String previous = hasCatalyst ? "catalyst" : "source";
-        for (int index = 0; index < candidates; index++) {
-            String candidateId = "candidate:" + index;
-            edges.add(new UiStructureDiagram.Edge(previous, candidateId));
-            String listPath = ResultStructure.listPath(rule, index);
-            int effects = ResultStructure.effectCount(rule, index);
-            for (int effect = 0; effect < effects; effect++) {
-                edges.add(new UiStructureDiagram.Edge(candidateId, "effect:" + listPath + ":" + effect));
-            }
-            previous = candidateId;
-        }
-        return edges;
     }
 
     // ---- 叶子编辑面板 ----

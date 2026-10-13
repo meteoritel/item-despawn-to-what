@@ -634,8 +634,8 @@ public final class RuleEditorEditPages {
         }
         ruleEditorTriggerPage.triggerBoxes.forEach(box -> box.setEnabled(enabled));
         if (ruleEditorResultsPage.variantControl != null) ruleEditorResultsPage.variantControl.setEnabled(enabled);
-        if (ruleEditorResultsPage.combinationControl != null) {
-            ruleEditorResultsPage.combinationControl.setEnabled(enabled && ResultStructure.hasOutcomes(view));
+        if (ruleEditorResultsPage.combinationButton != null) {
+            ruleEditorResultsPage.combinationButton.setEnabled(enabled && ResultStructure.hasOutcomes(view));
         }
         if (ruleEditorResultsPage.safeSpawnBox != null) {
             ruleEditorResultsPage.safeSpawnBox.setEnabled(enabled);
@@ -766,7 +766,7 @@ public final class RuleEditorEditPages {
         if (path.startsWith(RuleFields.COMBINATION)) {
             page = Page.RESULTS;
             rebuild();
-            return ruleEditorResultsPage.combinationControl;
+            return ruleEditorResultsPage.combinationButton;
         }
         if (path.startsWith(RuleFields.SOURCE) || path.startsWith(RuleFields.CATALYST_COST)) {
             page = Page.INPUT;
@@ -886,9 +886,7 @@ public final class RuleEditorEditPages {
         for (int index = 0; index < ruleEditorTriggerPage.triggerBoxes.size(); index++) {
             ruleEditorTriggerPage.triggerBoxes.get(index).setChecked(triggers.contains(RuleTriggers.known().get(index)));
         }
-        if (ruleEditorResultsPage.combinationControl != null) {
-            ruleEditorResultsPage.combinationControl.setSelected(RuleEditorPageSupport.combinationOf(view));
-        }
+        ruleEditorResultsPage.updateCombinationLabel(view);
         RuleValue candidate = ResultStructure.candidateAt(view, ruleEditorResultsPage.candidateIndex);
         if (ruleEditorResultsPage.safeSpawnBox != null) {
             ruleEditorResultsPage.safeSpawnBox.setChecked(RuleEditorPageSupport.boolOf(candidate, RuleFields.SAFE_SPAWN, false));
@@ -898,15 +896,9 @@ public final class RuleEditorEditPages {
         }
     }
 
-    void addCandidateButton(String labelKey, UiAction action) {
-        UiButton button = new UiButton(THEME, font, Component.translatable(RuleEditorPageSupport.UI + labelKey), UiButtonVariant.SECONDARY, action);
-        candidateButtons.add(button);
-        liveWidgets.add(button);
-    }
-
     // 动作类按钮统一为次操作：每屏唯一的主操作是页脚的「应用更改」
-    void addEffectButton(String labelKey, UiAction action) {
-        UiButton button = new UiButton(THEME, font, Component.translatable(RuleEditorPageSupport.UI + labelKey), UiButtonVariant.SECONDARY, action);
+    void addEffectButton(UiAction action) {
+        UiButton button = new UiButton(THEME, font, Component.translatable(RuleEditorPageSupport.UI + "button.effect_add"), UiButtonVariant.SECONDARY, action);
         effectButtons.add(button);
         liveWidgets.add(button);
     }

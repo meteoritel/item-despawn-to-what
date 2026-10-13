@@ -14,7 +14,7 @@
 
 - 触发方式未声明时默认勾选自然消失；显式空数组保留全部不勾选的草稿状态，触发卡片以警告色显示“请至少勾选一项”。重新勾选任一方式即移除警告；`RuleEditorValidation` 保存前检查全部脏规则的空触发数组，切页、切换规则或返回管理页不绕过检查。
 - 页枚举 `Page` 与 `switch (page)` 派发仍在 `RuleEditorEditPages`；页内的按下 / 释放 / 拖动 / 滚动与键盘派发由 `RuleEditorPageInput` 承担，`RuleEditorEditPages` 的 `mouseClicked` / `mouseReleased` 只做委托。
-- 结果页由 `RuleEditorResultsPage` 提供顶部方案工具条及行为／参数工作区：左右箭头按单击或键盘激活直接切换方案，中间页码只读，单方案与多方案均直接进入行为层；组合方式只在多方案时显示。添加、复制、排序、删除与结构图解分别从方案或行为入口执行；结构图解和复制方案使用独立按钮，方案排序与删除使用多方案的方案操作菜单，行为保留列表拖动排序。窄屏仅有行为列表（stage 1）和行为参数（stage 2）两层，顶部方案管理在两层均可用。
+- 结果页由 `RuleEditorResultsPage` 提供顶部方案工具条及行为／参数工作区：左右箭头按单击或键盘激活直接切换方案，中间页码只读，单方案与多方案均直接进入行为层；方案操作使用胶囊按钮；组合方式只在多方案时显示，单击轮换枚举值，其后依次为新建、复制、删除、上移与下移，直接执行操作。删除与移动按钮按方案数量和位置禁用。行为通过胶囊叉号删除，保留列表拖动排序。窄屏仅有行为列表（stage 1）和行为参数（stage 2）两层，顶部方案管理在两层均可用。
 - 结果页**不重复**消耗参数：过滤链配合 `isInputOwnedConsumptionField`（`consume_source`→`count`/`counts`；`consume_catalyst`→`items`/`count`/`counts`/`radius`；`consume_fluid`→`fluid`，**不过滤** `require_source`——输入页不管理它），并在首个消耗行为参数前插说明行 `effect.consume_params_on_input`；`chance` / `delay_ticks` / `conditions` 仍在结果页编辑。
 - 术语：一个 outcome 一律称「**方案**」（`button.candidate_*` / `notice.candidate_*` / `undo.*_candidate` / `issue.candidate_*` / `rule.combination` / `effect.consume_params_on_input` 等文案统一使用该词），只有页签名仍是「结果」（`tab.results`）。
 - 初始页：新建**空白**规则落在输入页（`RuleEditorScreenListActions#createRule` 调用 `selectInputTab`）；打开已有规则落在基本页（`RuleEditorScreen#openEditor` 置 `tab = INFO`，字段 `tab` 的默认值见该类字段声明）。

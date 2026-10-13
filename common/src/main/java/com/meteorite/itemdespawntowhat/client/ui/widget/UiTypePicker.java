@@ -31,11 +31,9 @@ public final class UiTypePicker implements UiWidget {
     public record Option(ResourceLocation id, Component label) { }
     private static final int PICKER_SEARCH_ROW = 14;
     private static final int PICKER_ROW_HEIGHT = 18;
-    private static final int PICKER_FOOTER = 12;
     private static final int PICKER_FILTER_MAX = 32;
     private static final int SEARCH_PADDING = 2;
     private static final int CARET_WIDTH = 1;
-    private static final String PICKER_HINT_KEY = "gui.itemdespawntowhat.edit.picker.mouse_hint";
     // 类型选择框状态
     private boolean open;
     private int cursor;
@@ -186,7 +184,7 @@ public final class UiTypePicker implements UiWidget {
     private void updateBounds() {
         panelRect = panel.bounds(bounds);
         int width = panelRect.width();
-        int listHeight = bounds.height() - SIDE_PANEL_HEADER - PICKER_SEARCH_ROW - PICKER_FOOTER
+        int listHeight = bounds.height() - SIDE_PANEL_HEADER - PICKER_SEARCH_ROW
                 - SIDE_PANEL_PADDING * 2;
         if (width <= SIDE_PANEL_PADDING * 2 || listHeight < PICKER_ROW_HEIGHT) {
             close();
@@ -228,7 +226,6 @@ public final class UiTypePicker implements UiWidget {
         }
         renderSearch(graphics, renderFont);
         renderList(graphics, renderFont);
-        renderFooter(graphics, renderFont);
     }
 
     private void renderSearch(GuiGraphics graphics, Font renderFont) {
@@ -278,14 +275,6 @@ public final class UiTypePicker implements UiWidget {
             scroll.pop(graphics);
         }
         scroll.renderScrollbar(graphics, theme.controlStyle(UiControlRole.SECONDARY));
-    }
-
-    private void renderFooter(GuiGraphics graphics, Font renderFont) {
-        graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont,
-                        Component.translatable(PICKER_HINT_KEY).getString(),
-                        Math.max(0, panelRect.width() - SIDE_PANEL_PADDING * 2)),
-                panelRect.x() + SIDE_PANEL_PADDING, panelRect.bottom() - PICKER_FOOTER,
-                theme.palette().canvasPickerTextMuted(), false);
     }
 
     private void handleClick(double mouseX, double mouseY) {
