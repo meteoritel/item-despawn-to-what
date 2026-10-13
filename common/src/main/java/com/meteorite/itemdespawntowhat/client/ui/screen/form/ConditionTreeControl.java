@@ -53,7 +53,7 @@ final class ConditionTreeControl extends FormControl {
         // 摘要只读：点击节点进入画布（条件树唯一编辑入口），结构与参数都在画布内完成
         this.editor.setOnOpenCanvas(path -> {
             editor.selectPath(path);
-            if (support != null) support.openTree(editor, null);
+            if (support != null) support.openTree(editor, path);
         });
         if (support != null) addButton("open", () -> support.openTree(editor, null));
     }

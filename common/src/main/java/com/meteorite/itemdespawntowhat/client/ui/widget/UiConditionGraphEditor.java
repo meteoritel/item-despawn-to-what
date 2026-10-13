@@ -388,6 +388,8 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             tree.select(treePath);
         }
         selectionAnchor = treePath;
+        // 外部路径定位优先于首帧整树适配，避免预览跳转后视口又被重置。
+        centerEmptyView = false;
         revealNode(target);
     }
 
@@ -1640,15 +1642,32 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             return changed;
         }
         ConditionNode target = tree.query(parent);
+        if (target instanceof ConditionNode.Inverted) {
+            // NOT 只能容纳一个子节点；在其子节点处包组，保留取反范围与现有条件。
+            UiTreePath child = parent.child(0);
+            boolean changed = applyAt(child, node -> new ConditionNode.AllOf(List.of(node, newNode)));
+            if (changed) {
+                tree.select(child.child(1));
+                followPrimarySelection();
+            }
+            return changed;
+        }
         int size = target == null ? 0 : ConditionTreeNodes.INSTANCE.children(target).size();
         return insertNode(parent, size, newNode);
     }
 
-    // 当前目标容器：选中容器则用它，否则向上找最近的容器
+    // 明确选中位置优先；无选择时以最深叶为锚点，同深度取树序最后一叶。
     private @Nullable UiTreePath targetContainerPath() {
         UiTreePath selected = tree.selected();
         if (selected == null) {
-            return null;
+            for (ConditionNode node : graph.nodes()) {
+                if (!(node instanceof ConditionNode.Leaf)) continue;
+                UiTreePath path = graph.path(node);
+                if (path != null && (selected == null || path.indices().size() >= selected.indices().size())) {
+                    selected = path;
+                }
+            }
+            if (selected == null) return null;
         }
         UiTreePath current = selected;
         while (true) {
