@@ -9,6 +9,7 @@ import net.minecraft.resources.ResourceLocation;
 import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
 import com.meteorite.itemdespawntowhat.core.service.RuleEditSessionLimits;
 import com.meteorite.itemdespawntowhat.core.type.condition.YLevelCondition;
+import com.meteorite.itemdespawntowhat.core.type.effect.PlaceBlockEffect;
 
 /***
  * 内置条件/效果编辑器描述符表：10 个条件 + 10 个效果各注册一条描述符。
@@ -173,7 +174,8 @@ public final class BuiltinEditorDescriptors {
                 EditorField.enumIn("shape", h + "place_block.shape", "place_block_shape", "square", "circle", "cross").optional(),
                 EditorField.integer("count", h + "place_block.count", 1, 64).optional(),
                 EditorField.integer("radius", h + "place_block.radius", 1, 32).optional(),
-                EditorField.optionalInteger("limit", h + "place_block.limit", 1, 4096),
+                EditorField.optionalInteger(PlaceBlockEffect.LIMIT_FIELD, h + "place_block.limit",
+                        PlaceBlockEffect.MIN_LIMIT, PlaceBlockEffect.MAX_LIMIT),
                 EditorField.note(h + "place_block.note")
         ));
 

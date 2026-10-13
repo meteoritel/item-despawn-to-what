@@ -188,7 +188,9 @@ public final class UiButton implements UiWidget, UiFocusTarget {
         try {
             if (icon != null) icon.render(graphics, x, rect.y() + (rect.height() - icon.height()) / 2);
             hoverTicks = hovered ? hoverTicks + 1 : 0;
-            int color = control.isEnabled() ? theme.controlTextColor(variant.role()) : theme.palette().textDisabled();
+            // 胶囊使用浅色底，不能沿用主按钮深色底对应的白字。
+            int color = !control.isEnabled() ? theme.palette().textDisabled()
+                    : variant == UiButtonVariant.DANGER ? theme.palette().danger() : theme.palette().textPrimary();
             TextScroll.draw(graphics, font, label.getString(), x + iconWidth,
                     rect.y() + (rect.height() - font.lineHeight) / 2,
                     Math.max(0, contentWidth - iconWidth), color, hovered, hoverTicks, false);

@@ -69,7 +69,10 @@ final class RuleChangesView implements UiWidget, UiFocusTarget {
         int index = list.itemIndexAt(mouseX, mouseY);
         if (index < 0) return;
         Change change = list.items().get(index);
-        Component tip = Component.literal(change.title()).append("\n").append(change.recipe().tooltip())
+        UiRect row = list.visibleRowBounds(index);
+        Component tip = row == null ? null : change.recipe().triggerTooltipAt(rowFont,
+                RuleRecipeView.recipeBounds(rowFont, row), mouseX, mouseY);
+        if (tip == null) tip = Component.literal(change.title()).append("\n").append(change.recipe().tooltip())
                 .append("\n").append(change.kind());
         graphics.renderTooltip(rowFont, rowFont.split(tip, Math.clamp(bounds.width(), 1, TOOLTIP_WIDTH)), mouseX, mouseY);
     }

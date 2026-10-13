@@ -35,12 +35,14 @@ public final class RuleRecipeView {
     private static final String UI = "gui.itemdespawntowhat.edit.recipe.";
     private static final String OWN = "itemdespawntowhat:";
     private static final int ICON_SIZE = 18;
-    static final int CONTENT_HEIGHT = 20;
+    private static final int OBJECT_CONTENT_HEIGHT = 20;
+    static final int CONTENT_HEIGHT = RuleTriggerView.HEIGHT;
     private static final int CONSUMED_COLOR = 0xFFFFA500;
     private static final UiIcon UNKNOWN = new UiIcon.Item(new ItemStack(Items.BARRIER));
     private final List<Part> parts = new ArrayList<>();
     private final Component summary;
     private final Component tooltip;
+    private final RuleTriggerView triggerView;
     private final UiScrollView clip = new UiScrollView();
     private long hoverStarted;
     private long lastDraw;
@@ -63,11 +65,14 @@ public final class RuleRecipeView {
         }
     }
 
-    /*** 分隔符没有图标，对象没有额外前缀，按相同顺序生成文字和图标关系。 */
-    private record Part(@Nullable ObjectPart object, Component separator) { }
+    /** 普通分隔符显示文字，转换箭头承载触发信息；对象与文本摘要保持相同顺序。 */
+    private record Part(@Nullable ObjectPart object, Component separator, boolean transition) {
+        private Part(@Nullable ObjectPart object, Component separator) { this(object, separator, false); }
+    }
 
     public RuleRecipeView(@Nullable RuleValue rule) {
         RuleValue body = object(rule);
+        triggerView = new RuleTriggerView(rule);
         List<RuleValue> effects = effects(body);
         List<ObjectPart> sources = new ArrayList<>();
         for (RuleValue entry : array(object(body.child(RuleFields.SOURCE)).child(RuleFields.SOURCE_ITEMS)).items()) {
@@ -102,7 +107,7 @@ public final class RuleRecipeView {
         }
         for (ObjectPart catalyst : catalysts.values()) { separator("plus"); parts.add(new Part(catalyst, Component.empty())); }
         for (ObjectPart fluid : fluids.values()) { separator("plus"); parts.add(new Part(fluid, Component.empty())); }
-        separator("arrow");
+        parts.add(new Part(null, Component.translatable(UI + "arrow"), true));
         List<ObjectPart> products = new ArrayList<>();
         for (RuleValue effect : effects) {
             String type = text(effect, "type");
@@ -184,30 +189,33 @@ public final class RuleRecipeView {
         int end = row.right() - (overflow > 0 && !hovered ? font.width("...") + 2 : 0);
         try {
             int x = row.x() - shift;
+            int contentY = row.y() + (row.height() - OBJECT_CONTENT_HEIGHT) / 2;
             for (Part part : parts) {
                 int size = partWidth(font, part, names);
                 if (!hovered && x + size > end) break;
                 if (x >= end) break;
                 if (x + size <= row.x()) { x += size; continue; }
-                if (part.object() == null) graphics.drawString(font, part.separator(), x, row.y() + 5, color, false);
+                if (part.transition()) triggerView.render(graphics, font,
+                        new UiRect(x, row.y(), size, row.height()), part.separator(), color);
+                else if (part.object() == null) graphics.drawString(font, part.separator(), x, contentY + 5, color, false);
                 else {
                     ObjectPart value = part.object();
                     if (value.tag != null) {
                         graphics.fill(x, row.y(), x + size - 2, row.bottom(), 0x224F7299);
                         graphics.fill(x, row.bottom() - 1, x + size - 2, row.bottom(), 0xFF6688AA);
                     }
-                    value.icon.render(graphics, x, row.y() + 1);
-                    if (!value.consumedQuantities.isEmpty() || value.fluidConsumed) consumedStar(graphics, x + ICON_SIZE - 7, row.y());
+                    value.icon.render(graphics, x, contentY + 1);
+                    if (!value.consumedQuantities.isEmpty() || value.fluidConsumed) consumedStar(graphics, x + ICON_SIZE - 7, contentY);
                     if (!value.quantities.isEmpty()) badge(graphics, font, value.quantityText,
-                            x + ICON_SIZE, row.y() + 12);
-                    if (names) graphics.drawString(font, value.name, x + ICON_SIZE + 3, row.y() + 5, color, false);
+                            x + ICON_SIZE, contentY + 12);
+                    if (names) graphics.drawString(font, value.name, x + ICON_SIZE + 3, contentY + 5, color, false);
                     if (value.tag != null) for (int step = 0; step < 3; step++)
-                        graphics.fill(x + size - 7 + step, row.y() + 7 + step,
-                                x + size - 6 + step, row.y() + 12 - step, color);
+                        graphics.fill(x + size - 7 + step, contentY + 7 + step,
+                                x + size - 6 + step, contentY + 12 - step, color);
                 }
                 x += size;
             }
-            if (overflow > 0 && !hovered) graphics.drawString(font, "...", end + 2, row.y() + 5, color, false);
+            if (overflow > 0 && !hovered) graphics.drawString(font, "...", end + 2, contentY + 5, color, false);
         } finally { clip.pop(graphics); }
     }
 
@@ -223,20 +231,32 @@ public final class RuleRecipeView {
     }
 
     private int width(Font font, boolean names) { return parts.stream().mapToInt(part -> partWidth(font, part, names)).sum(); }
-    private static int partWidth(Font font, Part part, boolean names) {
+    private int partWidth(Font font, Part part, boolean names) {
+        if (part.transition()) return triggerView.width(font, part.separator());
         return part.object() == null ? font.width(part.separator()) : ICON_SIZE + 3
                 + (names ? font.width(part.object().name) : 0) + (part.object().tag == null ? 0 : 9);
     }
 
     // 命中与绘制共用名字省略和横向滚动口径；只展开实际可见的标签容器。
     public @Nullable TagPreviewIcons.Tag tagAt(Font font, UiRect row, double mouseX, double mouseY) {
+        Part part = partAt(font, row, mouseX, mouseY);
+        return part == null || part.object() == null ? null : part.object().tag;
+    }
+
+    @Nullable Component triggerTooltipAt(Font font, UiRect row, double mouseX, double mouseY) {
+        Part part = partAt(font, row, mouseX, mouseY);
+        return part != null && part.transition() ? triggerView.tooltip() : null;
+    }
+
+    // 标签与触发信息共用配方绘制的宽度和滚动位移，避免新增箭头宽度后命中错位。
+    private @Nullable Part partAt(Font font, UiRect row, double mouseX, double mouseY) {
         if (!row.contains(mouseX, mouseY)) return null;
         boolean names = width(font, true) <= row.width();
         int overflow = Math.max(0, width(font, names) - row.width());
         int x = row.x() - horizontalShift(Util.getMillis(), overflow, true);
         for (Part part : parts) {
             int size = partWidth(font, part, names);
-            if (mouseX >= x && mouseX < x + size && part.object() != null) return part.object().tag;
+            if (mouseX >= x && mouseX < x + size) return part;
             x += size;
         }
         return null;

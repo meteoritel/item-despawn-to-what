@@ -9,6 +9,8 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.shared.TagPreviewIcons;
+import com.meteorite.itemdespawntowhat.client.ui.shared.ConditionTreeTextSummary;
+import com.meteorite.itemdespawntowhat.client.ui.screen.form.NaturalSummary;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
@@ -100,6 +102,7 @@ final class RuleEditorScreenListPage {
     private static final int SEARCH_MAX_LENGTH = 128;
     private static final int MORE_MODAL_WIDTH = 300;
     private static final int TAG_MODAL_WIDTH = 280;
+    private static final int TOOLTIP_RESERVED_LINES = 8;
     // i18n 前缀
     private static final String UI = "gui.itemdespawntowhat.edit.";
 
@@ -119,6 +122,7 @@ final class RuleEditorScreenListPage {
     private @Nullable UiButton applyButton;
     private final Set<String> expandedCategories = new LinkedHashSet<>();
     private final Map<String, RuleRecipeView> recipeViews = new LinkedHashMap<>();
+    private final Map<String, Component> conditionTooltips = new LinkedHashMap<>();
     private String lastQuery = "";
     private String lastTreeQuery = "";
     private int filterIndex;
@@ -198,7 +202,7 @@ final class RuleEditorScreenListPage {
     }
 
     private UiButton button(String labelKey, UiButtonVariant variant, Runnable action) {
-        return new UiButton(THEME, host.font(), Component.translatable(labelKey), variant, action::run);
+        return new UiButton(THEME, host.font(), Component.translatable(labelKey), variant, action::run).setChipStyle(true);
     }
 
     /*** 纵向菜单项，避免窄屏和英文长按钮挤出弹窗。 */
@@ -311,7 +315,9 @@ final class RuleEditorScreenListPage {
         int scrollOffset = ruleList.scrollOffset();
         visibleIds.clear();
         recipeViews.clear();
+        conditionTooltips.clear();
         String query = lastQuery == null ? "" : lastQuery.toLowerCase(Locale.ROOT).trim();
+        int summaryLines = Math.max(2, host.screenHeight() / host.font().lineHeight - TOOLTIP_RESERVED_LINES);
         for (String id : host.model().ruleIds()) {
             RuleSnapshotEntry entry = host.model().entry(id);
             if (!matchesFilter(id, entry)) {
@@ -324,7 +330,10 @@ final class RuleEditorScreenListPage {
                 continue;
             }
             visibleIds.add(id);
-            recipeViews.put(id, new RuleRecipeView(host.model().displayBody(id)));
+            RuleValue body = host.model().displayBody(id);
+            recipeViews.put(id, new RuleRecipeView(body));
+            conditionTooltips.put(id, ConditionTreeTextSummary.format(
+                    body == null ? null : body.child(RuleFields.CONDITIONS), summaryLines, NaturalSummary::conditionLeaf));
         }
         if (lastTreeQuery.isBlank()) rememberCategoryState(ruleList.roots());
         lastTreeQuery = lastQuery;
@@ -468,8 +477,7 @@ final class RuleEditorScreenListPage {
         RuleRecipeView recipe = recipeViews.get(node.value());
         if (recipe == null) return null;
         UiRect row = ruleList.nodeContentBounds(node);
-        return recipe.tagAt(host.font(), new UiRect(row.x() + 2, row.y() + host.font().lineHeight + 3,
-                Math.max(0, row.width() - 4), RuleRecipeView.CONTENT_HEIGHT), mouseX, mouseY);
+        return recipe.tagAt(host.font(), RuleRecipeView.recipeBounds(host.font(), row), mouseX, mouseY);
     }
 
     boolean mouseReleased(double mouseX, double mouseY, int button) {
@@ -523,8 +531,12 @@ final class RuleEditorScreenListPage {
         }
         String id = node.value();
         RuleRecipeView recipe = recipeViews.get(id);
+        Component triggerTip = recipe == null ? null : recipe.triggerTooltipAt(host.font(),
+                RuleRecipeView.recipeBounds(host.font(), ruleList.nodeContentBounds(node)), mouseX, mouseY);
+        if (triggerTip != null) return triggerTip;
         TagPreviewIcons.Tag tag = tagAt(mouseX, mouseY);
-        Component tip = tag == null ? Component.literal(host.labelText(id)).append("\n").append(recipe == null ? Component.empty() : recipe.tooltip())
+        Component tip = tag == null ? Component.translatable(UI + "recipe.condition_tree").append("\n")
+                .append(conditionTooltips.getOrDefault(id, Component.empty()))
                 : tag.tooltip();
         Component state = ruleState(id);
         if (!state.getString().isBlank()) tip = tip.copy().append("\n").append(state);

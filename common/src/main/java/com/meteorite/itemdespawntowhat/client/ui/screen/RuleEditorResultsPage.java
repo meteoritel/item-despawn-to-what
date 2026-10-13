@@ -641,8 +641,8 @@ final class RuleEditorResultsPage {
         pages.effectButtons.forEach(button -> RuleEditorPageSupport.show(button, actions));
         RuleEditorPageSupport.show(openActionButton, !split && actions);
         RuleEditorPageSupport.show(resultBack, !split && detail);
-        RuleEditorPageSupport.show(safeSpawnBox, detail && showAdvancedEffects);
-        RuleEditorPageSupport.show(fillOriginBox, detail && showAdvancedEffects);
+        RuleEditorPageSupport.show(safeSpawnBox, detail);
+        RuleEditorPageSupport.show(fillOriginBox, detail);
         RuleEditorPageSupport.show(effectForm, detail);
         RuleEditorPageSupport.show(variantControl, detail);
         RuleEditorPageSupport.show(advancedButton, detail);
@@ -746,23 +746,24 @@ final class RuleEditorResultsPage {
                 y += RuleEditorPageSupport.LINE_H + RuleEditorPageSupport.PAD;
             }
             y = pages.layoutForm(effectForm, contentX, y, contentWidth);
+            // 方案级生成策略属于常规选项，不随行为高级参数的折叠状态隐藏。
+            if (safeSpawnBox != null || fillOriginBox != null) {
+                planStrategyRect = new UiRect(contentX, y, contentWidth, RuleEditorPageSupport.LINE_H);
+                y += RuleEditorPageSupport.LINE_H + RuleEditorPageSupport.PAD;
+            }
+            if (safeSpawnBox != null) {
+                safeSpawnBox.setBounds(contentX, y, contentWidth, RuleEditorPageSupport.ROW_H);
+                y += RuleEditorPageSupport.ROW_H + RuleEditorPageSupport.PAD;
+            }
+            if (fillOriginBox != null) {
+                fillOriginBox.setBounds(contentX, y, contentWidth, RuleEditorPageSupport.ROW_H);
+                y += RuleEditorPageSupport.ROW_H + RuleEditorPageSupport.PAD;
+            }
             if (advancedButton != null) {
                 advancedButton.setBounds(contentX, y, contentWidth, TOOLBAR_HEIGHT);
                 y += TOOLBAR_HEIGHT + RuleEditorPageSupport.PAD;
             }
             if (showAdvancedEffects) {
-                if (safeSpawnBox != null || fillOriginBox != null) {
-                    planStrategyRect = new UiRect(contentX, y, contentWidth, RuleEditorPageSupport.LINE_H);
-                    y += RuleEditorPageSupport.LINE_H + RuleEditorPageSupport.PAD;
-                }
-                if (safeSpawnBox != null) {
-                    safeSpawnBox.setBounds(contentX, y, contentWidth, RuleEditorPageSupport.ROW_H);
-                    y += RuleEditorPageSupport.ROW_H + RuleEditorPageSupport.PAD;
-                }
-                if (fillOriginBox != null) {
-                    fillOriginBox.setBounds(contentX, y, contentWidth, RuleEditorPageSupport.ROW_H);
-                    y += RuleEditorPageSupport.ROW_H + RuleEditorPageSupport.PAD;
-                }
                 actionParametersRect = new UiRect(contentX, y, contentWidth, RuleEditorPageSupport.LINE_H);
                 y += RuleEditorPageSupport.LINE_H + RuleEditorPageSupport.PAD;
                 y = pages.layoutForm(advancedEffectForm, contentX, y, contentWidth);

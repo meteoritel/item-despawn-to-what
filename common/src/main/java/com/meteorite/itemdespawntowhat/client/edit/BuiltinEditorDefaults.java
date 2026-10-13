@@ -3,13 +3,14 @@ package com.meteorite.itemdespawntowhat.client.edit;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import com.meteorite.itemdespawntowhat.core.type.effect.PlaceBlockEffect;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 /***
- * 内置类型的新建默认参数（字段与取值域见 docs/dev/backend/modules/type-system.md）。
- * 策略：只填入文档给出默认值的字段（枚举/布尔/数值）；必填的 id、标签与列表不凭空捏造，
- * 留空由表单的本地校验定位到具体字段，避免把猜测值写进覆盖层文件。
+ * 内置类型的新建初值与省略字段的展示默认值。
+ * 必填的 id、标签与列表留空，由表单校验定位；新建初值不代表已保存规则的缺省语义，
+ * {@link #effectiveValue(RuleValue, String)} 按后端语义展示省略字段。
  */
 public final class BuiltinEditorDefaults {
 
@@ -42,10 +43,12 @@ public final class BuiltinEditorDefaults {
     // 仅用于展示省略字段的有效默认值（RuleValue 入口：界面层不再持有 JsonElement），不写入草稿。
     public static @Nullable RuleValue effectiveValue(RuleValue object, String field) {
         if (object != null && object.has(RuleFields.TYPE)) {
-            ResourceLocation type = ResourceLocation.tryParse(object.child(RuleFields.TYPE).asText());
+            ResourceLocation type = ResourceLocation.tryParse(object.text(RuleFields.TYPE, ""));
             if (type != null && TypeLabels.OWN_NAMESPACE.equals(type.getNamespace())) {
                 if ("chance".equals(field)) return RuleValue.decimal(1.0D);
                 if ("delay_ticks".equals(field)) return RuleValue.integer(0);
+                // 放置上限仅作为新建行为的初值；已有省略字段仍表示不限制。
+                if (PlaceBlockEffect.ID.equals(type) && PlaceBlockEffect.LIMIT_FIELD.equals(field)) return null;
                 RuleValue defaults = effectBody(type);
                 if ("spawn_entity".equals(type.getPath())) {
                     if ("amount".equals(field)) return RuleValue.integer(1);
@@ -104,7 +107,7 @@ public final class BuiltinEditorDefaults {
         }
     }
 
-    // 效果类型的文档默认值
+    // 新建效果的界面初值。
     private static void applyEffectDefaults(JsonObject body, String path) {
         switch (path) {
             // 消耗源物品沿用固定成本默认值。
@@ -115,10 +118,11 @@ public final class BuiltinEditorDefaults {
             }
             case "place_block" -> {
                 // block 与 use_source_block 至少要有一个：use_source_block 后端默认 false，保持缺省语义
-                body.addProperty("use_source_block", false);
+                body.addProperty(PlaceBlockEffect.USE_SOURCE_BLOCK_FIELD, PlaceBlockEffect.DEFAULT_USE_SOURCE_BLOCK);
                 body.addProperty("shape", "square");
-                body.addProperty("count", 1);
-                body.addProperty("radius", 6);
+                body.addProperty(PlaceBlockEffect.COUNT_FIELD, PlaceBlockEffect.DEFAULT_COUNT);
+                body.addProperty(PlaceBlockEffect.RADIUS_FIELD, PlaceBlockEffect.DEFAULT_RADIUS);
+                body.addProperty(PlaceBlockEffect.LIMIT_FIELD, PlaceBlockEffect.MAX_LIMIT);
             }
             case "loot_table" -> body.addProperty("luck", 0.0F);
             case "lightning" -> body.addProperty("count", 1);
