@@ -259,8 +259,9 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         theme.drawInset(graphics, bounds);
         UiRect viewport = scrollView.viewport();
         if (items.isEmpty()) {
+            // 空文案用主要文本色：在内凹底 SLOT_FILL 上 textSecondary 的对比度不足
             graphics.drawCenteredString(font, emptyMessage, viewport.x() + viewport.width() / 2,
-                    viewport.y() + Math.max(0, viewport.height() / 2 - 4), theme.palette().textSecondary());
+                    viewport.y() + Math.max(0, viewport.height() / 2 - 4), theme.palette().textPrimary());
             return;
         }
         int hoveredIndex = indexAt(mouseX, mouseY);

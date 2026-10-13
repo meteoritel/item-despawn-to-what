@@ -14,6 +14,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlowLayout;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionSupport;
@@ -35,6 +36,9 @@ import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
+import java.util.Objects;
+import java.util.function.Supplier;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -112,7 +116,15 @@ public final class RuleEditorEditPages {
         // 控件重建后同步宿主的焦点目标。
         void onControlsChanged();
 
-        // 提示条
+        /**
+         * 提示桥接：把提示文本交给屏幕层决定形态与存活时长。
+         *
+         * <p>本重载只接受色值，仅服务既有经本接口上报的桥接调用点；新增调用点先表达级别，
+         * 用 {@code RuleEditorScreen.noticeColor(NoticeLevel)} 折算，不在页面里直接比较调色板。</p>
+         *
+         * @param message 提示文本；null 表示清除
+         * @param color   由提示级别折算出的调色板色值
+         */
         void notice(Component message, int color);
 
         // 输入建议
@@ -165,8 +177,69 @@ public final class RuleEditorEditPages {
     @Nullable UiRect lastArea;
     final List<PageCard> cards = new ArrayList<>();
 
-    /*** 页面分区的绘制数据，与控件共用滚动坐标。 */
-    record PageCard(UiRect bounds, @Nullable Component title) { }
+    /*** 卡片头部内容：标题必填，图标可选（图标绘制在标题行内、蓝条右侧）。 */
+    record CardHeader(Component title, @Nullable UiIcon icon) {
+        CardHeader {
+            Objects.requireNonNull(title, "title");
+        }
+    }
+
+    /**
+     * 页面分区的绘制数据，与控件共用滚动坐标。
+     * <p>头部内容既可以是构造时的常量标题，也可以在每帧渲染时求值（见 {@link #dynamic}），
+     * 卡片之间的头部几何统一由 {@link #headerRect()} 派生，绘制统一走
+     * {@link RuleEditorEditPages#drawCardHeader}。</p>
+     */
+    static final class PageCard {
+
+        // 卡片矩形
+        private final UiRect bounds;
+        // 头部内容来源；为空表示该卡片不绘制头部
+        private final @Nullable Supplier<CardHeader> header;
+        // 头部内容距卡片边缘的内缩，决定蓝条、图标、标题与分隔线的位置
+        private final int headerInset;
+
+        /** 静态标题卡片：头部内缩沿用页面默认值，不绘制图标。 */
+        PageCard(UiRect bounds, @Nullable Component title) {
+            this(bounds, constantHeader(title), RuleEditorPageSupport.CARD_PAD);
+        }
+
+        private PageCard(UiRect bounds, @Nullable Supplier<CardHeader> header, int headerInset) {
+            this.bounds = bounds;
+            this.header = header;
+            this.headerInset = headerInset;
+        }
+
+        /** 静态标题卡片：由调用方指定头部内缩，用于同页内需要对齐的卡片。 */
+        static PageCard titled(UiRect bounds, Component title, int headerInset) {
+            return new PageCard(bounds, constantHeader(title), headerInset);
+        }
+
+        /** 动态头部卡片：标题与图标在每帧渲染时求值，可随编辑状态变化。 */
+        static PageCard dynamic(UiRect bounds, Supplier<CardHeader> header, int headerInset) {
+            return new PageCard(bounds, header, headerInset);
+        }
+
+        // 常量标题包装为头部内容来源；标题为空即表示该卡片没有头部
+        private static @Nullable Supplier<CardHeader> constantHeader(@Nullable Component title) {
+            return title == null ? null : () -> new CardHeader(title, null);
+        }
+
+        /** 卡片矩形：卡片高与滚动坐标都相对它计算。 */
+        UiRect bounds() {
+            return bounds;
+        }
+
+        /** 当前头部内容；返回 null 表示该卡片不绘制头部。 */
+        @Nullable CardHeader header() {
+            return header == null ? null : header.get();
+        }
+
+        /** 头部矩形：由卡片矩形按内缩与固定头高派生，蓝条、标题与分隔线都相对它定位。 */
+        UiRect headerRect() {
+            return cardHeaderRect(bounds.x(), bounds.y(), bounds.width(), headerInset);
+        }
+    }
 
     // 输入事件分发与拖动状态
     private final RuleEditorPageInput input;
@@ -196,6 +269,8 @@ public final class RuleEditorEditPages {
         scrollOffsets.put(page, pageScroll.offset());
         endInteractions();
         page = target;
+        // 切页后旧页面的提示不再成立：经桥接通知屏幕层清除（消息为 null 即清除，色值沿用 INFO 口径的次要文本色）
+        host.notice(null, THEME.palette().textSecondary());
         ruleEditorResultsPage.effectIndex = 0;
         rebuild();
         pageScroll.setOffset(scrollOffsets.getOrDefault(page, 0));
@@ -350,6 +425,45 @@ public final class RuleEditorEditPages {
 
     // ---- 渲染 ----
 
+    // 卡片头部：蓝条宽度、蓝条与标题的间隙、分隔线距头部矩形底边的间隙（像素）
+    private static final int HEADER_BAR_WIDTH = 2;
+    private static final int HEADER_TITLE_GAP = 4;
+    private static final int HEADER_DIVIDER_GAP = 5;
+
+    /*** 卡片头部矩形：卡片左上角按内缩偏移、头高固定为 {@link RuleEditorPageSupport#CARD_HEADER_H}，
+     * 是蓝条、图标、标题与分隔线的唯一位置基准。 */
+    static UiRect cardHeaderRect(int x, int y, int width, int inset) {
+        return new UiRect(x + inset, y + inset, Math.max(0, width - inset * 2), RuleEditorPageSupport.CARD_HEADER_H);
+    }
+
+    /**
+     * 绘制卡片头部：左侧蓝条、标题行内的可选图标、加粗标题与底部分隔线。
+     * <p>编辑器内所有卡片头部都经此绘制，卡片之间的蓝条位置、标题基线与分隔线 y 坐标因此完全一致；
+     * 几何全部相对 {@code headerRect} 计算，调用方只需提供头部矩形与内容。</p>
+     *
+     * @param font       绘制字体：蓝条高度取 {@code font.lineHeight}，标题按剩余宽度换行
+     * @param headerRect 头部矩形，高取 {@link RuleEditorPageSupport#CARD_HEADER_H}
+     * @param icon       标题行内图标，可为 null；非空时紧接蓝条之后占位
+     * @param title      标题文案，加粗显示
+     */
+    static void drawCardHeader(GuiGraphics graphics, Font font, UiRect headerRect, @Nullable UiIcon icon, Component title) {
+        if (headerRect.width() <= 0) {
+            return;
+        }
+        graphics.fill(headerRect.x(), headerRect.y(), headerRect.x() + HEADER_BAR_WIDTH, headerRect.y() + font.lineHeight,
+                THEME.palette().accent());
+        int titleX = headerRect.x() + HEADER_BAR_WIDTH + HEADER_TITLE_GAP;
+        if (icon != null) {
+            icon.render(graphics, titleX, headerRect.y());
+            titleX += icon.width() + RuleEditorPageSupport.PAD;
+        }
+        var titleLines = font.split(title.copy().withStyle(ChatFormatting.BOLD), Math.max(1, headerRect.right() - titleX));
+        if (!titleLines.isEmpty()) {
+            graphics.drawString(font, titleLines.getFirst(), titleX, headerRect.y(), THEME.palette().textPrimary(), false);
+        }
+        THEME.drawDivider(graphics, headerRect.x(), headerRect.y() + headerRect.height() - HEADER_DIVIDER_GAP, headerRect.width());
+    }
+
     public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
         if (lastArea == null || lastArea.height() == 0) {
             return;
@@ -361,16 +475,10 @@ public final class RuleEditorEditPages {
         try {
             for (PageCard card : cards) {
                 THEME.drawCard(graphics, card.bounds());
-                UiRect rect = card.bounds();
-                if (card.title() == null) continue;
-                graphics.fill(rect.x() + RuleEditorPageSupport.CARD_PAD, rect.y() + RuleEditorPageSupport.CARD_PAD, rect.x() + RuleEditorPageSupport.CARD_PAD + 2,
-                        rect.y() + RuleEditorPageSupport.CARD_PAD + font.lineHeight, THEME.palette().accent());
-                var titleLines = font.split(card.title().copy().withStyle(net.minecraft.ChatFormatting.BOLD),
-                        Math.max(1, rect.width() - RuleEditorPageSupport.CARD_PAD * 2 - 6));
-                if (!titleLines.isEmpty()) graphics.drawString(font, titleLines.getFirst(),
-                        rect.x() + RuleEditorPageSupport.CARD_PAD + 6, rect.y() + RuleEditorPageSupport.CARD_PAD, THEME.palette().textPrimary(), false);
-                THEME.drawDivider(graphics, rect.x() + RuleEditorPageSupport.CARD_PAD, rect.y() + RuleEditorPageSupport.CARD_PAD + RuleEditorPageSupport.CARD_HEADER_H - 5,
-                        Math.max(0, rect.width() - RuleEditorPageSupport.CARD_PAD * 2));
+                CardHeader header = card.header();
+                if (header != null) {
+                    drawCardHeader(graphics, font, card.headerRect(), header.icon(), header.title());
+                }
             }
             switch (page) {
                 case INFO -> ruleEditorInfoPage.renderInfo(graphics);
@@ -781,8 +889,9 @@ public final class RuleEditorEditPages {
         liveWidgets.add(button);
     }
 
-    void addEffectButton(String labelKey, UiButtonVariant variant, UiAction action) {
-        UiButton button = new UiButton(THEME, font, Component.translatable(RuleEditorPageSupport.UI + labelKey), variant, action);
+    // 动作类按钮统一为次操作：每屏唯一的主操作是页脚的「应用更改」
+    void addEffectButton(String labelKey, UiAction action) {
+        UiButton button = new UiButton(THEME, font, Component.translatable(RuleEditorPageSupport.UI + labelKey), UiButtonVariant.SECONDARY, action);
         effectButtons.add(button);
         liveWidgets.add(button);
     }

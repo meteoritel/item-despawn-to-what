@@ -17,9 +17,21 @@ import org.lwjgl.glfw.GLFW;
 
 /***
  * 分段选择控件：把少量互斥取值渲染成一排等宽按钮（枚举取值用）。
- * <p>选中项同时用底色与文字颜色区分，颜色不是唯一线索。
+ * <p>选中段用主题的 selected 九宫格（中心色为 {@code CONTROL_SELECTED}）绘制，未选中段用 control 九宫格，
+ * 两者底图不同；段内文字统一用 {@code TEXT_PRIMARY}，避免浅蓝选中底上的白字对比度不足。
  */
 public final class UiSegmentedControl implements UiWidget, UiFocusTarget {
+
+    // 最外侧左右各留的缩进（像素）
+    private static final int EDGE_INSET = 1;
+    // 相邻两段之间的空白（像素），由两侧各 EDGE_INSET 缩进构成
+    private static final int SEGMENT_GAP = EDGE_INSET * 2;
+    // 段内文字左右各保留的像素，避免文字贴边
+    private static final int LABEL_INSET = 4;
+    // 键盘焦点指示点边长（像素）
+    private static final int FOCUS_DOT_SIZE = 3;
+    // 键盘焦点指示点距段左边界的像素
+    private static final int FOCUS_DOT_INSET = 4;
 
     /*** 单个分段选项 */
     public record Option(String value, Component label) {
@@ -147,7 +159,7 @@ public final class UiSegmentedControl implements UiWidget, UiFocusTarget {
         this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
     }
 
-    // 第 index 段的矩形（等分，最后一段吃掉余数）
+    // 第 index 段的矩形：按控件宽度均分，各段宽度相差不超过 1 像素（整数像素无法整除时的最小偏差）
     private UiRect segmentRect(int index) {
         int count = options.size();
         if (count == 0) {
@@ -180,19 +192,25 @@ public final class UiSegmentedControl implements UiWidget, UiFocusTarget {
         int chosen = selectedIndex();
         for (int i = 0; i < options.size(); i++) {
             UiRect segment = segmentRect(i);
-            theme.drawSegment(graphics, new UiRect(segment.x() + 1, segment.y(), Math.max(0, segment.width() - 2), segment.height()),
-                    enabled, i == chosen, i == hovered);
-            int color = !enabled ? theme.palette().textDisabled() : i == chosen ? theme.palette().textOnDark() : theme.palette().textPrimary();
+            // 底图矩形左右各缩进 EDGE_INSET：最外两侧各留 1 像素，相邻两段之间合计 SEGMENT_GAP 像素
+            UiRect surface = new UiRect(segment.x() + EDGE_INSET, segment.y(),
+                    Math.max(0, segment.width() - SEGMENT_GAP), segment.height());
+            theme.drawSegment(graphics, surface, enabled, i == chosen, i == hovered);
+            // 选中态只由底图区分：浅蓝选中底上的白字对比度不足，故两态段内文字统一用主要文本色
+            int color = enabled ? theme.palette().textPrimary() : theme.palette().textDisabled();
             String label = TextScroll.trimToWidth(renderFont, options.get(i).label().getString(),
-                    Math.max(0, segment.width() - 4));
+                    Math.max(0, segment.width() - LABEL_INSET));
             graphics.drawString(renderFont, label, segment.x() + Math.max(0, (segment.width() - renderFont.width(label)) / 2),
                     segment.y() + Math.max(0, (segment.height() - renderFont.lineHeight) / 2), color, false);
         }
         if (focused) {
             int index = Math.max(0, chosen);
             UiRect segment = segmentRect(index);
-            graphics.fill(segment.x() + 5, segment.y() + segment.height() / 2 - 1,
-                    segment.x() + 7, segment.y() + segment.height() / 2 + 1, theme.palette().textOnDark());
+            // 焦点指示用深色点：选中段是浅蓝底，白色点在浅蓝底上不可辨
+            int dotY = segment.y() + Math.max(0, (segment.height() - FOCUS_DOT_SIZE) / 2);
+            int dotX = segment.x() + FOCUS_DOT_INSET;
+            graphics.fill(dotX, dotY,
+                    dotX + FOCUS_DOT_SIZE, dotY + FOCUS_DOT_SIZE, theme.palette().textPrimary());
         }
     }
 

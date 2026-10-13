@@ -654,7 +654,7 @@ final class RuleEditorPageSupport {
     static void addPageIssues(@Nullable RuleValue rule, List<FormIssue> issues) {
         int candidates = ResultStructure.candidateCount(rule);
         int effects = ResultStructure.totalEffectCount(rule);
-        Component limit = Component.translatable(UI + "issue.candidate_limit");
+        Component limit = Component.translatable(UI + "issue.candidate_limit", ConditionLimits.MAX_EFFECTS);
         if (candidates > ConditionLimits.MAX_EFFECTS) {
             issues.add(FormIssue.error(RuleFields.OUTCOMES, Component.translatable(UI + "candidate.section"), limit));
         } else if (effects > ConditionLimits.MAX_EFFECTS) {

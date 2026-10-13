@@ -17,6 +17,7 @@ import com.meteorite.itemdespawntowhat.client.ui.screen.form.ReadOnlyTextView;
 import com.meteorite.itemdespawntowhat.client.ui.shared.BlockPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.EntityPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostPalette;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
@@ -28,6 +29,7 @@ import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshotEntry;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Objects;
+import net.minecraft.Util;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -57,6 +59,10 @@ public final class RuleEditorScreen extends Screen {
     private static final int EDIT_HEADER_H = 24;
     private static final int EDIT_PAD = 8;
     private static final int NOTICE_H = 10;
+    // INFO 提示的存活时长：操作回执不需要常驻，超时后自动清除
+    private static final long NOTICE_INFO_TTL_MS = 5000L;
+    // 实心提示色块的左右内边距
+    private static final int NOTICE_CHIP_PAD = 3;
     private static final int CHANGES_MODAL_WIDTH = 420;
     private static final int CHANGES_MODAL_MAX_HEIGHT = 220;
     private static final int CHANGES_MODAL_SCREEN_MARGIN = 90;
@@ -65,6 +71,19 @@ public final class RuleEditorScreen extends Screen {
 
     // 模式
     private enum Mode { LIST, EDIT }
+
+    /**
+     * 底部状态提示的级别：决定提示的绘制形态与存活时长。
+     * <p>调用点只表达语义，具体用色由屏幕按级别从主题调色板取，各页面不再自带色值。</p>
+     */
+    public enum NoticeLevel {
+        /** 操作回执：纯文本绘制，短暂显示后自动清除 */
+        INFO,
+        /** 需要玩家留意的异常：实心色块常驻，直到被新提示替换或页面 / 模态切换 */
+        WARNING,
+        /** 危险或失败：形态与 WARNING 一致，改用危险色区分 */
+        DANGER
+    }
 
     private final EditorWorkspaceView workspace;
     private final RuleEditorModel model;
@@ -80,7 +99,15 @@ public final class RuleEditorScreen extends Screen {
     private @Nullable String editingId;
     // 状态提示（保存回执 / 校验失败等）
     private @Nullable Component notice;
-    private int noticeColor = THEME.palette().textSecondary();
+    private NoticeLevel noticeLevel = NoticeLevel.INFO;
+    // INFO 提示自动清除的时间戳（{@link Util#getMillis()} 口径）；0 表示常驻
+    private long noticeExpiresAt;
+    // 上一帧的提示是否被截断（决定悬停提示是否出现）
+    private boolean noticeTruncated;
+    // 上一帧绘制的提示区域（悬停命中测试用），未绘制时为 null
+    private @Nullable UiRect noticeRect;
+    // 上一帧是否存在模态（用于识别「模态打开」这一清除时机）
+    private boolean lastModalsEmpty = true;
 
     // 上一帧的可编辑状态（冻结切换时刷新表单使能）
     private boolean lastEditable = true;
@@ -197,11 +224,11 @@ public final class RuleEditorScreen extends Screen {
         int pagePad = mode == Mode.EDIT ? EDIT_PAD : PAD;
         THEME.drawDivider(graphics, 0, headerHeight, w);
         drawHeaderText(graphics);
+        int availableWidth = Math.max(0, w - pagePad * 2);
         int y = headerHeight + PAD;
         if (mode == Mode.EDIT) {
             y = editPage.layoutTabs(graphics, font, mouseX, mouseY, pagePad, y);
         }
-        int availableWidth = Math.max(0, w - pagePad * 2);
         int footerHeight = mode == Mode.LIST ? listPage.footerHeight(availableWidth) : editPage.footerHeight(availableWidth);
         int footerY = h - pagePad - footerHeight;
         int noticeY = footerY - PAD - (notice == null ? 0 : NOTICE_H);
@@ -223,7 +250,7 @@ public final class RuleEditorScreen extends Screen {
         modals.render(graphics, font, mouseX, mouseY);
         if (modals.isEmpty()) {
             Component tip = null;
-            if (notice != null && new UiRect(PAD, noticeY, availableWidth, NOTICE_H).contains(mouseX, mouseY)) {
+            if (notice != null && noticeTruncated && noticeRect != null && noticeRect.contains(mouseX, mouseY)) {
                 tip = notice;
             } else if (mode == Mode.EDIT && mouseY < EDIT_HEADER_H) {
                 EditSession session = editingSession();
@@ -273,13 +300,28 @@ public final class RuleEditorScreen extends Screen {
         graphics.drawString(font, state, this.width - padding - font.width(state) - (mode == Mode.EDIT ? 6 : 0), textY, THEME.palette().headerText(), false);
     }
 
-    // 底部状态提示
+    // 底部状态提示：INFO 为纯文本，WARNING / DANGER 为实心色块（颜色与形状双线索）
     private void drawNotice(GuiGraphics graphics, int y, int w) {
+        noticeRect = null;
+        noticeTruncated = false;
         if (notice == null) {
             return;
         }
-        String text = TextScroll.trimToWidth(font, notice.getString(), Math.max(0, w - PAD * 2));
-        graphics.drawString(font, text, PAD, y + 1, noticeColor, false);
+        int maxWidth = Math.max(0, w - PAD * 2);
+        String full = notice.getString();
+        String text = TextScroll.trimToWidth(font, full, maxWidth);
+        noticeTruncated = !text.equals(full);
+        UiHostPalette palette = THEME.palette();
+        if (noticeLevel == NoticeLevel.INFO) {
+            graphics.drawString(font, text, PAD, y + 1, palette.textSecondary(), false);
+            noticeRect = new UiRect(PAD, y, font.width(text), NOTICE_H);
+            return;
+        }
+        int fill = noticeLevel == NoticeLevel.DANGER ? palette.danger() : palette.warning();
+        UiRect chip = new UiRect(PAD, y, Math.min(maxWidth, font.width(text) + NOTICE_CHIP_PAD * 2), NOTICE_H);
+        THEME.drawSurface(graphics, chip, fill, palette.controlBevelDark());
+        graphics.drawString(font, text, chip.x() + NOTICE_CHIP_PAD, y + 1, palette.textPrimary(), false);
+        noticeRect = chip;
     }
 
     // ---- 模式切换 ----
@@ -314,6 +356,8 @@ public final class RuleEditorScreen extends Screen {
         }
         editingId = id;
         mode = Mode.EDIT;
+        // 页面切换：提示只对切换前的页面成立，连 INFO 一起清除
+        setNotice(null, NoticeLevel.INFO);
         // 换规则时重建页面状态（候选与效果选择归零）
         editPage.openNew();
         editPage.rebuildEdit();
@@ -341,6 +385,8 @@ public final class RuleEditorScreen extends Screen {
         }
         mode = Mode.LIST;
         editingId = null;
+        // 页面切换：提示只对切换前的页面成立
+        setNotice(null, NoticeLevel.INFO);
         listPage.refreshList();
         rebuildFocus();
     }
@@ -521,6 +567,12 @@ public final class RuleEditorScreen extends Screen {
     @Override
     public void tick() {
         modals.tick();
+        // 模态打开：常驻提示描述的是被弹窗接管的页面状态，先清除避免两处同时给结论
+        boolean modalsEmpty = modals.isEmpty();
+        if (lastModalsEmpty && !modalsEmpty) {
+            clearStickyNotice();
+        }
+        lastModalsEmpty = modalsEmpty;
         // F-A：快照是打开屏幕之后才到的（打开时只发出了请求），每帧消费一次；
         // refresh() 内部按快照实例去重，重复调用无副作用
         if (model.refresh()) {
@@ -553,6 +605,10 @@ public final class RuleEditorScreen extends Screen {
             frozenNotified = false;
         }
         applyEditableState(editable);
+        // INFO 是操作回执：达到存活时长后自动清除，WARNING / DANGER 由替换或切页清除
+        if (notice != null && noticeExpiresAt > 0L && Util.getMillis() >= noticeExpiresAt) {
+            setNotice(null, NoticeLevel.INFO);
+        }
     }
 
     // 应用全部按钮与撤销/重做按钮的可用状态与标签
@@ -644,9 +700,51 @@ public final class RuleEditorScreen extends Screen {
 
     // ---- 小工具 ----
 
-    private void setNotice(@Nullable Component message, int color) {
+    /**
+     * 设置底部状态提示。
+     *
+     * @param message 提示文本；null 表示清除提示
+     * @param level   提示级别，决定绘制形态与存活时长
+     */
+    public void setNotice(@Nullable Component message, NoticeLevel level) {
         this.notice = message;
-        this.noticeColor = color;
+        this.noticeLevel = level;
+        // INFO 是操作回执，短暂显示后自动消失；WARNING / DANGER 需要玩家处理，常驻
+        this.noticeExpiresAt = message != null && level == NoticeLevel.INFO ? Util.getMillis() + NOTICE_INFO_TTL_MS : 0L;
+        this.noticeTruncated = false;
+        this.noticeRect = null;
+    }
+
+    /**
+     * 把提示级别折算为编辑页宿主桥接层（{@code RuleEditorEditPages.Host#notice(Component, int)}）的色值。
+     *
+     * <p>桥接层只接受颜色，本方法让页面调用点仍只表达级别，取色集中在屏幕层。</p>
+     *
+     * @param level 提示级别
+     * @return 与该级别对应的调色板色值
+     */
+    public static int noticeColor(NoticeLevel level) {
+        UiHostPalette palette = THEME.palette();
+        return switch (level) {
+            case WARNING -> palette.warning();
+            case DANGER -> palette.danger();
+            case INFO -> palette.textSecondary();
+        };
+    }
+
+    // 只服务既有以颜色表达紧急度的桥接调用点（编辑页 / 列表页经 Host 上报），按调色板语义折算为提示级别
+    private void setNotice(@Nullable Component message, int color) {
+        UiHostPalette palette = THEME.palette();
+        NoticeLevel level = color == palette.danger() ? NoticeLevel.DANGER
+                : color == palette.warning() ? NoticeLevel.WARNING : NoticeLevel.INFO;
+        setNotice(message, level);
+    }
+
+    // 只清除常驻提示：INFO 自身会超时；模态打开与页签切换各自触发一次清除
+    private void clearStickyNotice() {
+        if (notice != null && noticeLevel != NoticeLevel.INFO) {
+            setNotice(null, NoticeLevel.INFO);
+        }
     }
 
     // 条目显示名（空名或与 id 相同时回退到本地化占位）

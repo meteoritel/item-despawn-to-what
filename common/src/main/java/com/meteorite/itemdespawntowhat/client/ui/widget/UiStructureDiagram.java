@@ -43,6 +43,11 @@ public final class UiStructureDiagram implements UiWidget, UiFocusTarget {
     private static final int MIN_NODE_WIDTH = 96;
     private static final int DETAIL_MIN_WIDTH = 132;
     private static final int ARROW_WIDTH = 10;
+    // 标签左右内边距与标题首行的顶部偏移
+    private static final int LABEL_INSET = 2;
+    private static final int LABEL_TOP = 4;
+    // 标签最多换行数：超出部分截断并补省略号
+    private static final int MAX_TITLE_LINES = 2;
 
     private final Font font;
     private final List<Node> nodes = new ArrayList<>();
@@ -56,6 +61,8 @@ public final class UiStructureDiagram implements UiWidget, UiFocusTarget {
     private boolean focused;
     private int topRow;
     private int cursor = -1;
+    // 当前节点标题实际需要的行数（1..MAX_TITLE_LINES），由全部节点取最大值
+    private int titleLineCount = 1;
 
     // 注入的宿主主题
     private final UiHostTheme theme;
@@ -71,6 +78,7 @@ public final class UiStructureDiagram implements UiWidget, UiFocusTarget {
             nodes.addAll(next);
         }
         cursor = nodes.isEmpty() ? -1 : Math.clamp(cursor < 0 ? 0 : cursor, 0, nodes.size() - 1);
+        updateTitleLines();
         return this;
     }
 
@@ -105,6 +113,7 @@ public final class UiStructureDiagram implements UiWidget, UiFocusTarget {
     @Override
     public void setBounds(int x, int y, int width, int height) {
         this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
+        updateTitleLines();
         clampCursor();
     }
 
@@ -133,7 +142,61 @@ public final class UiStructureDiagram implements UiWidget, UiFocusTarget {
     }
 
     private int rowHeight() {
-        return (showsDetail() ? NODE_HEIGHT + LINE_HEIGHT : NODE_HEIGHT) + GAP;
+        return nodeHeight() + GAP;
+    }
+
+    // 标题区高度：单行时与原始 NODE_HEIGHT 口径一致，多行时按行高累加
+    private int titleHeight() {
+        return NODE_HEIGHT + (titleLineCount - 1) * font.lineHeight;
+    }
+
+    // 细节行高度：只在能放下细节且确实有细节时占位
+    private int detailHeight() {
+        return showsDetail() ? LINE_HEIGHT : 0;
+    }
+
+    private int nodeHeight() {
+        return titleHeight() + detailHeight();
+    }
+
+    // 标题行数取全部节点需要的最大值，保证同一屏内节点高度一致
+    private void updateTitleLines() {
+        int width = Math.max(1, nodeWidth() - LABEL_INSET * 2);
+        int lines = 1;
+        for (Node node : nodes) {
+            lines = Math.max(lines, wrapLabel(node.title(), width).size());
+        }
+        titleLineCount = Math.clamp(lines, 1, MAX_TITLE_LINES);
+    }
+
+    // 按可用宽度换行（最多 MAX_TITLE_LINES 行）：优先在空格处断开，末行放不下时截断并补省略号
+    private List<String> wrapLabel(Component label, int width) {
+        List<String> lines = new ArrayList<>();
+        int limit = Math.max(1, width);
+        String text = label.getString().strip();
+        // 末行留给截断结果，因此只对前面的行做换行
+        for (int budget = MAX_TITLE_LINES - 1; budget > 0; budget--) {
+            if (text.isEmpty()) {
+                break;
+            }
+            int fitted = font.plainSubstrByWidth(text, limit).length();
+            if (fitted >= text.length()) {
+                break;
+            }
+            int split = text.lastIndexOf(' ', fitted);
+            if (split <= 0) {
+                split = Math.max(1, fitted);
+            }
+            lines.add(text.substring(0, split).stripTrailing());
+            text = text.substring(split).stripLeading();
+        }
+        if (!text.isEmpty()) {
+            lines.add(TextScroll.trimToWidth(font, text, limit));
+        }
+        if (lines.isEmpty()) {
+            lines.add("");
+        }
+        return lines;
     }
 
     private boolean showsDetail() {
@@ -168,7 +231,7 @@ public final class UiStructureDiagram implements UiWidget, UiFocusTarget {
         int column = index % perRow;
         int x = bounds.x() + column * (nodeWidth() + ARROW_WIDTH + GAP);
         int y = bounds.y() + (row - topRow) * rowHeight();
-        return new UiRect(x, y, nodeWidth(), rowHeight() - GAP);
+        return new UiRect(x, y, nodeWidth(), nodeHeight());
     }
 
     private int indexAt(double mouseX, double mouseY) {
@@ -217,13 +280,18 @@ public final class UiStructureDiagram implements UiWidget, UiFocusTarget {
         graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), enabled ? fill : theme.palette().controlDisabled());
         theme.drawBevel(graphics, rect, theme.palette().controlBevelLight(), theme.palette().controlBevelDark());
         Node node = nodes.get(index);
-        String title = TextScroll.trimToWidth(font, node.title().getString(), Math.max(1, rect.width() - 4));
-        graphics.drawString(font, title, rect.x() + 2, rect.y() + 4,
-                enabled ? theme.palette().textPrimary() : theme.palette().textDisabled(), false);
+        int labelWidth = Math.max(1, rect.width() - LABEL_INSET * 2);
+        int titleColor = enabled ? theme.palette().textPrimary() : theme.palette().textDisabled();
+        List<String> titleLines = wrapLabel(node.title(), labelWidth);
+        for (int line = 0; line < titleLines.size(); line++) {
+            String text = TextScroll.trimToWidth(font, titleLines.get(line), labelWidth);
+            graphics.drawString(font, text, rect.x() + LABEL_INSET, rect.y() + LABEL_TOP + line * font.lineHeight,
+                    titleColor, false);
+        }
         if (showsDetail() && node.detail() != null) {
-            String detail = TextScroll.trimToWidth(font, node.detail().getString(), Math.max(1, rect.width() - 4));
-            graphics.drawString(font, detail, rect.x() + 2, rect.y() + NODE_HEIGHT - 2, theme.palette().textSecondary(),
-                    false);
+            String detail = TextScroll.trimToWidth(font, node.detail().getString(), labelWidth);
+            graphics.drawString(font, detail, rect.x() + LABEL_INSET, rect.y() + titleHeight() - LABEL_INSET,
+                    theme.palette().textSecondary(), false);
         }
         if (index == cursor && focused) {
             theme.drawFocusOutline(graphics, rect);

@@ -80,16 +80,16 @@ public final class UiPalette {
 
     // ---- 状态色 ----
 
-    // 主要操作
-    public static final int ACCENT = 0xFF6E86A8;
-    // 主要操作悬停
-    public static final int ACCENT_HOVER = 0xFF8499B8;
-    // 主要操作按下
-    public static final int ACCENT_PRESSED = 0xFF5A708F;
+    // 主要操作（白字对比度 5.06:1）
+    public static final int ACCENT = 0xFF5B708D;
+    // 主要操作悬停（白字对比度 4.72:1）
+    public static final int ACCENT_HOVER = 0xFF607591;
+    // 主要操作按下（白字对比度 6.71:1）
+    public static final int ACCENT_PRESSED = 0xFF4A5D78;
     // 危险操作
     public static final int DANGER = 0xFFA44A44;
-    // 危险操作悬停
-    public static final int DANGER_HOVER = 0xFFB85C56;
+    // 危险操作悬停（白字对比度 5.05:1）
+    public static final int DANGER_HOVER = 0xFFAA5650;
     // 危险操作按下
     public static final int DANGER_PRESSED = 0xFF8B3B36;
     // 成功
