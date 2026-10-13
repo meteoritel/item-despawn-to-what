@@ -55,4 +55,28 @@ public final class RuleDisplayLabels {
             default -> null;
         };
     }
+
+    /**
+     * 语言键缺失时的兜底显示名：把资源路径按 {@code _} 与 {@code /} 切词并首字母大写，
+     * 例如 {@code twilightforest:twilight_forest} 显示为 {@code Twilight Forest}。
+     *
+     * <p>命名空间不参与显示，因此玩家看到的不会是 {@code minecraft:} 一类原始 ID；
+     * 完整注册名仍由目录条目的悬停提示给出。</p>
+     *
+     * @param id 查不到本地化显示名的资源 ID
+     * @return 由路径各词拼出的人话名称，路径为空时返回原始路径
+     */
+    public static Component idFallback(ResourceLocation id) {
+        StringBuilder text = new StringBuilder();
+        for (String word : id.getPath().split("[_/]")) {
+            if (word.isEmpty()) {
+                continue;
+            }
+            if (!text.isEmpty()) {
+                text.append(' ');
+            }
+            text.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
+        }
+        return Component.literal(text.isEmpty() ? id.getPath() : text.toString());
+    }
 }

@@ -68,15 +68,17 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
         if (contentHeight > MAX_HEIGHT) arrange(Math.max(0, width - UiScrollView.SCROLLBAR_WIDTH - GAP));
     }
 
-    // 测量、绘制与命中共用矩形，每张卡片最多 124 像素；长名称可悬停读取。
+    // 测量、绘制与命中共用矩形：只有一条时占满行宽，多条时每张卡片最多 124 像素；长名称可悬停读取。
     private void arrange(int width) {
         chips.clear();
         int x = 0;
         int y = 0;
+        // 单条目不必为换行留余地，放宽到整行宽，长名称不再被裁剪
+        int chipLimit = values.size() == 1 ? Math.max(CHIP_HEIGHT * 2, width) : CHIP_MAX_WIDTH;
         for (Selection entry : values) {
             int textOffset = entry.icon() == null ? TEXT_PADDING : ICON_TEXT_OFFSET;
             int chipWidth = Math.min(width, Math.clamp(font.width(entry.name()) + textOffset + REMOVE_AREA_WIDTH,
-                    CHIP_HEIGHT * 2, CHIP_MAX_WIDTH));
+                    CHIP_HEIGHT * 2, chipLimit));
             if (x > 0 && x + chipWidth > width) { x = 0; y += CHIP_HEIGHT + GAP; }
             chips.add(new UiRect(x, y, chipWidth, CHIP_HEIGHT));
             x += chipWidth + GAP;
@@ -151,7 +153,12 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
         } else {
             ResourceLocation key = ResourceLocation.tryParse(id);
             Component label = key == null ? null : RuleDisplayLabels.catalogLabel(type, key);
-            name = label != null ? label : id.isEmpty() ? name : Component.literal(id);
+            if (label != null) {
+                name = label;
+            } else if (!id.isEmpty()) {
+                // 查不到语言键的维度、群系按路径给出人话名，完整注册名仍由悬停提示给出
+                name = key == null ? Component.literal(id) : RuleDisplayLabels.idFallback(key);
+            }
             icon = CatalogPreviewIcons.iconFor(type, id);
         }
         return new Selection(raw.deepCopy(), id, name, icon);
@@ -299,7 +306,9 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
         int index = indexAt(x, y);
         if (index < 0) return null;
         Selection entry = values.get(index);
-        return entry.name().copy().append("\n").append(entry.id())
+        // 原版存在显示名完全相同的方块（挂墙/悬挂告示牌），悬停必须能看注册名加以区分
+        return entry.name().copy().append("\n")
+                .append(Component.translatable(UI + "selection.registry_id")).append(" ").append(entry.id())
                 .append("\n").append(Component.translatable(UI + "selection.remove_hint"));
     }
 }

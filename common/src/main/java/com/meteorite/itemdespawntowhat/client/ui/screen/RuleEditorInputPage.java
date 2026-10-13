@@ -32,7 +32,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 输入与成本页：来源与消耗、催化剂与流体的存在条件、消耗参数与门槛提示。
+ * 输入页：来源与消耗、催化剂与流体的存在条件、消耗参数与门槛提示。
  */
 final class RuleEditorInputPage {
 

@@ -322,54 +322,58 @@ final class ConditionGraphLayout {
     }
 
     /**
-     * 第一行文案：叶为类型名（只读参数另附标记），容器为容器语义；结构标记已由
-     * {@link #statusLabel(ConditionNode)} 独立成行，不再拼进标题，标题带才能整体居中。
+     * 标题带文案：容器为运算符，叶为类型名（只读参数另附标记）。卡片只显示运算符本身，
+     * 它的本地化含义不再另起一行，避免同一张卡片把类型名或运算符说两遍。
      */
-    Component row1Label(ConditionNode node) {
-        Component label = switch (node) {
-            case ConditionNode.AllOf ignored -> Component.translatable("gui.itemdespawntowhat.edit.tree.node.all");
-            case ConditionNode.AnyOf ignored -> Component.translatable("gui.itemdespawntowhat.edit.tree.node.any");
-            case ConditionNode.Inverted ignored -> Component.translatable("gui.itemdespawntowhat.edit.tree.node.not");
-            case ConditionNode.Leaf(var condition) -> condition == null
-                    ? Component.translatable("gui.itemdespawntowhat.edit.tree.leaf_missing")
-                    : typeLabel(condition.type());
-        };
-        if (node instanceof ConditionNode.Leaf(var condition) && condition instanceof OpaqueCondition) {
+    Component titleLabel(ConditionNode node) {
+        return isContainer(node) ? operatorLabel(node) : leafTitleLabel(node);
+    }
+
+    // 叶标题：类型名是该行唯一内容，参数摘要与结构标记分别占内容行 1 与内容行 2
+    private Component leafTitleLabel(ConditionNode node) {
+        // 容器走标题带的运算符，不会进到这里
+        if (!(node instanceof ConditionNode.Leaf(var condition))) {
+            return Component.empty();
+        }
+        Component label = condition == null
+                ? Component.translatable("gui.itemdespawntowhat.edit.tree.leaf_missing")
+                : typeLabel(condition.type());
+        if (condition instanceof OpaqueCondition) {
             label = label.copy().append(" ").append(Component.translatable(
                     "gui.itemdespawntowhat.edit.tree.parameters_readonly"));
         }
         return label;
     }
 
-    // 标题带文案：容器用运算符与本地化含义，叶沿用第一行
-    Component titleLabel(ConditionNode node) {
-        return isContainer(node) ? operatorLabel(node) : row1Label(node);
-    }
-
-    // 内容行 1：叶为参数摘要，容器为容器语义（全部满足 / 任一满足 / 取反）
+    // 内容行 1：叶为参数摘要（未选条件时留空，标题已给出「未选择条件」），容器为分支计数
     Component summaryLabel(ConditionNode node) {
         if (isContainer(node)) {
-            return row1Label(node);
+            return branchCountLabel(node);
         }
         if (node instanceof ConditionNode.Leaf(var condition)) {
             if (condition == null) {
-                return Component.translatable("gui.itemdespawntowhat.edit.tree.leaf_missing");
+                return Component.empty();
             }
             return leafSummaries.getOrDefault(node, typeLabel(condition.type()));
         }
         return Component.empty();
     }
 
-    // 内容行 2：只服务容器的分支计数，叶没有第二行内容
-    Component row2Label(ConditionNode node) {
-        if (!isContainer(node)) {
-            return Component.empty();
-        }
+    // 容器内容行 1：子项计数，空容器显示「暂无条件」
+    private Component branchCountLabel(ConditionNode node) {
         List<ConditionNode> children = ConditionTreeNodes.INSTANCE.children(node);
         if (children.isEmpty()) {
             return Component.translatable("gui.itemdespawntowhat.edit.tree.empty");
         }
         return Component.translatable("gui.itemdespawntowhat.edit.tree.drag_many", children.size());
+    }
+
+    /**
+     * 容器内容行 2：与条件叶共用同一套结构标记判定（渲染器对容器调用本方法、对叶直接调用
+     * {@link #statusLabel(ConditionNode)}，签名保持既有形状）。
+     */
+    Component row2Label(ConditionNode node) {
+        return statusLabel(node);
     }
 
     // 内容行 2（叶）：结构标记，无问题时为空。超限优先于层级较深，避免同一行堆叠两个标记

@@ -57,6 +57,12 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
     private static final int PRESET_HEIGHT = 12;
     private static final int TRACK_COLOR_HEIGHT = 4;
     private static final int TICK_LABEL_MIN_GAP = 16;
+    // 独立提示行的高度（聚焦时显示精确输入的按键提示）
+    private static final int HINT_HEIGHT = 9;
+    // 提示与相邻文字之间的留白
+    private static final int HINT_GAP = 4;
+    // 行内提示可用的最小宽度：再窄就不显示，避免只画出半截文字
+    private static final int MIN_HINT_WIDTH = 64;
 
     private final Font font;
     private final Texts texts;
@@ -68,6 +74,8 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     private UiRect trackRow = new UiRect(0, 0, 0, 0);
     private UiRect presetRow = new UiRect(0, 0, 0, 0);
+    // 独立提示行；宿主高度不足时为 null（提示改在标签行内显示）
+    private @Nullable UiRect hintRow;
     private boolean enabled = true;
     private boolean visible = true;
     private boolean focused;
@@ -169,8 +177,32 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
         this.trackRow = new UiRect(x, y + LABEL_HEIGHT, bounds.width(), rowHeight);
         this.presetRow = new UiRect(x, trackRow.bottom(), bounds.width(),
                 Math.min(PRESET_HEIGHT, Math.max(0, bounds.bottom() - trackRow.bottom())));
+        // 高度预算够时提示独占一行；不够时留空，提示改在标签行内绘制
+        int usedHeight = LABEL_HEIGHT + rowHeight + presetRow.height();
+        this.hintRow = bounds.height() - usedHeight >= HINT_HEIGHT
+                ? new UiRect(x, y + usedHeight, bounds.width(), HINT_HEIGHT) : null;
         this.core.setBounds(trackRow.x(), trackRow.y(), trackRow.width(), trackRow.height());
         this.precise.setBounds(x, presetRow.bottom(), Math.max(24, bounds.width()), theme.rowHeight());
+    }
+
+    /**
+     * 时间条不含提示行时所需的最小高度：标签行 + 轨道行 + 预设行。
+     * <p>宿主按本值分配高度即可让绘制完全落在自身 bounds 内，聚焦提示会并入标签行的空白处显示。</p>
+     *
+     * @return 标签行、轨道行与预设行的高度之和
+     */
+    public static int baseHeight() {
+        return LABEL_HEIGHT + TRACK_ROW_HEIGHT + PRESET_HEIGHT;
+    }
+
+    /**
+     * 时间条带独立提示行时的首选高度：{@link #baseHeight()} 再加一行提示。
+     * <p>宿主给足本高度时聚焦提示独占一行；否则提示并入标签行，不会压住预设按钮。</p>
+     *
+     * @return 标签行、轨道行、预设行与提示行的高度之和
+     */
+    public static int preferredHeight() {
+        return baseHeight() + HINT_HEIGHT;
     }
 
     @Override
@@ -185,19 +217,18 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
         if (!visible) {
             return;
         }
-        drawLabelRow(graphics);
+        // 没有独立提示行时，聚焦提示挤进标签行的空白处，避免压住预设按钮
+        drawLabelRow(graphics, hintRow == null && focused && !preciseActive);
         drawTrack(graphics);
         drawPresets(graphics, mouseX, mouseY);
         if (preciseActive) {
             precise.render(graphics, renderFont, mouseX, mouseY);
-        } else if (focused) {
-            String hint = TextScroll.trimToWidth(font, texts.preciseHint().getString(), Math.max(1, bounds.width()));
-            graphics.drawString(font, hint, bounds.x(), Math.max(bounds.y(), bounds.bottom() - 9),
-                    theme.palette().textDisabled(), false);
+        } else if (hintRow != null && focused) {
+            drawHintRow(graphics);
         }
     }
 
-    private void drawLabelRow(GuiGraphics graphics) {
+    private void drawLabelRow(GuiGraphics graphics, boolean inlineHint) {
         Component label = core.label();
         String left = label == null ? "" : label.getString();
         String trimmed = TextScroll.trimToWidth(font, left, Math.max(1, bounds.width() / 2));
@@ -207,9 +238,34 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
         String state = core.isSinglePoint() ? texts.singlePoint().getString()
                 : (core.crossesPeriod() ? texts.wrapHint().getString() : "");
         String right = TextScroll.trimToWidth(font, range + (state.isEmpty() ? "" : " " + state),
-                Math.max(1, bounds.width() - font.width(trimmed) - 4));
-        graphics.drawString(font, right, Math.max(bounds.x(), bounds.right() - font.width(right)), bounds.y(),
+                Math.max(1, bounds.width() - font.width(trimmed) - HINT_GAP));
+        int rightX = Math.max(bounds.x(), bounds.right() - font.width(right));
+        if (inlineHint) {
+            drawInlineHint(graphics, bounds.x() + font.width(trimmed), rightX);
+        }
+        graphics.drawString(font, right, rightX, bounds.y(),
                 enabled ? theme.palette().textPrimary() : theme.palette().textDisabled(), false);
+    }
+
+    // 标签行内的聚焦提示：占用标签与区间文字之间的空白，宽度不足时整体略过
+    private void drawInlineHint(GuiGraphics graphics, int labelEnd, int rightX) {
+        int start = labelEnd + HINT_GAP;
+        int available = rightX - HINT_GAP - start;
+        if (available < MIN_HINT_WIDTH) {
+            return;
+        }
+        String text = TextScroll.trimToWidth(font, texts.preciseHint().getString(), available);
+        graphics.drawString(font, text, start, bounds.y(), theme.palette().textDisabled(), false);
+    }
+
+    // 宿主机给足高度时的独立提示行
+    private void drawHintRow(GuiGraphics graphics) {
+        UiRect row = hintRow;
+        if (row == null) {
+            return;
+        }
+        String text = TextScroll.trimToWidth(font, texts.preciseHint().getString(), Math.max(1, row.width()));
+        graphics.drawString(font, text, row.x(), row.y(), theme.palette().textDisabled(), false);
     }
 
     private void drawTrack(GuiGraphics graphics) {

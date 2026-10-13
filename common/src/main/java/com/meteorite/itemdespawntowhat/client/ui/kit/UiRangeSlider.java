@@ -542,7 +542,10 @@ public final class UiRangeSlider implements UiFocusTarget, UiInputTarget, UiInpu
         if (!this.value.isPresent(this.selectedEnd)) {
             return;
         }
-        this.previewValue(this.value.withValue(this.selectedEnd, this.boundEnd(this.selectedEnd, raw)));
+        // 拖动与连按方向键同样要过策略档位：snap 内含 clamp，
+        // 否则会预览出声明范围与精度之外的值（控件显示与校验报警因此不一致）
+        double bounded = this.boundEnd(this.selectedEnd, this.policy.snap(raw, fine));
+        this.previewValue(this.value.withValue(this.selectedEnd, bounded));
     }
 
     private boolean previewValue(UiRangeValue next) {

@@ -9,7 +9,9 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
+import com.meteorite.itemdespawntowhat.client.ui.shared.BuiltinConditionSummaries;
 import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
+import com.meteorite.itemdespawntowhat.client.ui.shared.SummaryFormats;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
@@ -50,7 +52,7 @@ public final class NaturalSummary {
             RuleValue body = candidate.isMapping() ? candidate.child(RuleFields.CANDIDATE_EFFECTS) : null;
             candidates.add(Component.translatable(PREFIX + "candidate", ordinal++, effects(body)));
         }
-        return join(candidates);
+        return SummaryFormats.join(candidates);
     }
 
     // 条件树摘要
@@ -70,7 +72,7 @@ public final class NaturalSummary {
         for (RuleValue element : raw.items()) {
             parts.add(effect(element));
         }
-        return join(parts);
+        return SummaryFormats.join(parts);
     }
 
     // 单个效果摘要
@@ -93,8 +95,8 @@ public final class NaturalSummary {
         }
         Component label = TypeLabels.effectLabel(type);
         Component params = fields(raw, type, "effect");
-        return params == null ? Component.translatable(PREFIX + "effect", label, join(parts))
-                : Component.translatable(PREFIX + "effect_with_params", label, params, join(parts));
+        return params == null ? Component.translatable(PREFIX + "effect", label, SummaryFormats.join(parts))
+                : Component.translatable(PREFIX + "effect_with_params", label, params, SummaryFormats.join(parts));
     }
 
     // 递归渲染条件节点
@@ -123,7 +125,7 @@ public final class NaturalSummary {
             if (parts.isEmpty()) {
                 return Component.translatable(PREFIX + "empty");
             }
-            return Component.translatable(PREFIX + (RuleFields.OP_ANY_OF.equals(op) ? "any" : "all"), join(parts));
+            return Component.translatable(PREFIX + (RuleFields.OP_ANY_OF.equals(op) ? "any" : "all"), SummaryFormats.join(parts));
         }
         return Component.literal(op.isEmpty() ? "?" : op);
     }
@@ -133,6 +135,11 @@ public final class NaturalSummary {
         ResourceLocation type = typeOf(condition);
         if (type == null) {
             return Component.translatable(PREFIX + "unknown_condition");
+        }
+        // 内建类型改用玩家可读的短摘要；第三方/未注册类型仍按字段名兜底
+        Component builtin = BuiltinConditionSummaries.summary(condition, type);
+        if (builtin != null) {
+            return builtin;
         }
         Component label = TypeLabels.conditionLabel(type);
         Component params = fields(condition, type, "condition");
@@ -170,7 +177,7 @@ public final class NaturalSummary {
                         Component.literal(entry.getKey()), value(entry.getValue())));
             }
         }
-        return parts.isEmpty() ? null : join(parts);
+        return parts.isEmpty() ? null : SummaryFormats.join(parts);
     }
 
     // 取值文本
@@ -183,7 +190,7 @@ public final class NaturalSummary {
             for (RuleValue element : value.items()) {
                 parts.add(value(element));
             }
-            return parts.isEmpty() ? Component.translatable(PREFIX + "value_empty") : join(parts);
+            return parts.isEmpty() ? Component.translatable(PREFIX + "value_empty") : SummaryFormats.join(parts);
         }
         if (value.isMapping()) {
             return Component.literal(JsonSummary.compact(value, 32));
@@ -218,15 +225,4 @@ public final class NaturalSummary {
         }
     }
 
-    // 用逗号连接
-    private static Component join(List<Component> parts) {
-        Component result = Component.empty();
-        for (int i = 0; i < parts.size(); i++) {
-            if (i > 0) {
-                result = result.copy().append(Component.translatable(PREFIX + "separator"));
-            }
-            result = result.copy().append(parts.get(i));
-        }
-        return result;
-    }
 }

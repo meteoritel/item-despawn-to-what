@@ -14,15 +14,14 @@ import net.minecraft.locale.Language;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.AgeableMob;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import org.jetbrains.annotations.Nullable;
 
-/*** 宿主的可见实体模型缓存和屏障兜底；上限 256，切服、语言或模型资源变化时失效。 */
+/*** 宿主的可见实体模型缓存和中性占位标记；上限 256，切服、语言或模型资源变化时失效。 */
 public final class EntityPreviewIcons {
     private static final int MAX_ENTRIES = 256;
-    private static final UiIcon BARRIER = new UiIcon.Item(new ItemStack(Items.BARRIER));
+    // 没有可见渲染器（NoopRenderer 等）时的中性占位标记，与方块预览共用
+    private static final UiIcon UNAVAILABLE = CatalogPreviewIcons.unavailableMarker(16, 16);
     private static final Map<String, UiIcon> ICONS = new LinkedHashMap<>(32, 0.75F, true);
     private static final Map<String, Preview> CACHE = new LinkedHashMap<>(32, 0.75F, true);
     private static Object world;
@@ -114,6 +113,6 @@ public final class EntityPreviewIcons {
                 preview.unavailable = true;
             } catch (RuntimeException exception) { preview.unavailable = true; preview.entity = null; }
         }
-        BARRIER.render(graphics, box.x() + (box.width() - 16) / 2, box.y() + (box.height() - 16) / 2);
+        UNAVAILABLE.render(graphics, box.x() + (box.width() - 16) / 2, box.y() + (box.height() - 16) / 2);
     }
 }

@@ -76,7 +76,7 @@ final class RuleEditorScreenListPage {
         // 打开编辑页
         void openEditor(String id);
 
-        // 新建规则后直接切到「输入与成本」页签
+        // 新建规则后直接切到「输入」页签
         void selectInputTab();
 
         // 草稿改动清单弹窗

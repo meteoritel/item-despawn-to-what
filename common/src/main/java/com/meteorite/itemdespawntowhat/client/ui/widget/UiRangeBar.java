@@ -52,6 +52,13 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
     // 取值文本的小数位数（与迁移前 %.2f 一致）
     private static final int VALUE_DECIMALS = 2;
 
+    // 独立提示行的高度（聚焦时显示精确输入的按键提示）
+    private static final int HINT_HEIGHT = 9;
+    // 提示与相邻文字之间的留白
+    private static final int HINT_GAP = 4;
+    // 行内提示可用的最小宽度：再窄就不显示，避免只画出半截文字
+    private static final int MIN_HINT_WIDTH = 64;
+
     private final Font font;
     private final Texts texts;
     private final UiRangeSlider core;
@@ -62,6 +69,8 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
     private final @Nullable Listener listener;
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     private UiRect trackRow = new UiRect(0, 0, 0, 0);
+    // 独立提示行；宿主高度不足时为 null（提示改在标签行内显示）
+    private @Nullable UiRect hintRow;
     private boolean enabled = true;
     private boolean visible = true;
     private boolean focused;
@@ -101,6 +110,26 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
             closePrecise();
             this.core.endInteraction(UiInputCapture.EndReason.CANCEL);
         });
+    }
+
+    /**
+     * 区间条不含提示行时所需的最小高度：标签行 + 轨道行。
+     * <p>宿主按本值分配高度即可让绘制完全落在自身 bounds 内，聚焦提示会并入标签行的空白处显示。</p>
+     *
+     * @return 标签行与轨道行的高度之和
+     */
+    public static int baseHeight() {
+        return LABEL_HEIGHT + TRACK_ROW_HEIGHT;
+    }
+
+    /**
+     * 区间条带独立提示行时的首选高度：{@link #baseHeight()} 再加一行提示。
+     * <p>宿主给足本高度时聚焦提示独占一行；否则提示并入标签行，不会压住轨道。</p>
+     *
+     * @return 标签行、轨道行与提示行的高度之和
+     */
+    public static int preferredHeight() {
+        return baseHeight() + HINT_HEIGHT;
     }
 
     // kit 核心：需要窗口/端点开关/分页步长等能力的宿主直接用
@@ -145,6 +174,10 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
         this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
         int rowHeight = Math.min(TRACK_ROW_HEIGHT, Math.max(4, bounds.height() - LABEL_HEIGHT));
         this.trackRow = new UiRect(x, y + LABEL_HEIGHT, bounds.width(), rowHeight);
+        // 高度预算够时提示独占一行；不够时留空，提示改在标签行内绘制
+        int usedHeight = LABEL_HEIGHT + rowHeight;
+        this.hintRow = bounds.height() - usedHeight >= HINT_HEIGHT
+                ? new UiRect(x, y + usedHeight, bounds.width(), HINT_HEIGHT) : null;
         this.core.setBounds(trackRow.x(), trackRow.y(), trackRow.width(), trackRow.height());
         this.precise.setBounds(x, trackRow.bottom(), Math.max(24, bounds.width()), theme.rowHeight());
     }
@@ -162,7 +195,8 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
             return;
         }
         UiRangeValue value = core.value();
-        drawLabelRow(graphics);
+        // 没有独立提示行时，聚焦提示挤进标签行的空白处，避免压住轨道
+        drawLabelRow(graphics, hintRow == null && focused && !preciseActive);
         drawTrack(graphics, value, mouseX, mouseY);
         if (preciseActive) {
             precise.render(graphics, renderFont, mouseX, mouseY);
@@ -171,21 +205,43 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
         }
     }
 
-    private void drawLabelRow(GuiGraphics graphics) {
+    private void drawLabelRow(GuiGraphics graphics, boolean inlineHint) {
         Component label = core.label();
         UiRangeValue value = core.value();
         Component shown = Component.translatable("gui.itemdespawntowhat.edit.range.value",
                 formatValue(value.low()), formatValue(value.high()));
         int valueWidth = Math.min(bounds.width(), Math.max(VALUE_SLOT_WIDTH, font.width(shown)));
+        int labelEnd = bounds.x();
         if (label != null) {
             String text = TextScroll.trimToWidth(font, label.getString(),
                     Math.max(1, bounds.width() - valueWidth));
             graphics.drawString(font, text, bounds.x(), bounds.y(), theme.palette().textSecondary(), false);
+            labelEnd = bounds.x() + font.width(text);
         }
         String valueText = TextScroll.trimToWidth(font, shown.getString(),
                 Math.max(1, label == null ? bounds.width() : valueWidth));
-        graphics.drawString(font, valueText, Math.max(bounds.x(), bounds.right() - font.width(valueText)), bounds.y(),
+        int valueX = Math.max(bounds.x(), bounds.right() - font.width(valueText));
+        if (inlineHint) {
+            drawInlineHint(graphics, labelEnd, valueX, value);
+        }
+        graphics.drawString(font, valueText, valueX, bounds.y(),
                 enabled ? theme.palette().textPrimary() : theme.palette().textDisabled(), false);
+    }
+
+    // 标签行内的聚焦提示：占用标签与取值文本之间的空白，宽度不足时整体略过
+    private void drawInlineHint(GuiGraphics graphics, int labelEnd, int valueX, UiRangeValue value) {
+        int start = labelEnd + HINT_GAP;
+        int available = valueX - HINT_GAP - start;
+        if (available < MIN_HINT_WIDTH) {
+            return;
+        }
+        String text = TextScroll.trimToWidth(font, hintText(value).getString(), available);
+        graphics.drawString(font, text, start, bounds.y(), theme.palette().textDisabled(), false);
+    }
+
+    // 聚焦时的按键提示：两端齐全提示精确输入，缺端时提示回车补端
+    private Component hintText(UiRangeValue value) {
+        return value.lowPresent() && value.highPresent() ? texts.preciseHint() : texts.absentHint();
     }
 
     private void drawTrack(GuiGraphics graphics, UiRangeValue value, int mouseX, int mouseY) {
@@ -233,13 +289,13 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
     }
 
     private void drawHint(GuiGraphics graphics, UiRangeValue value) {
-        if (!focused) {
+        UiRect row = hintRow;
+        if (!focused || row == null) {
+            // 没有独立提示行时提示已在标签行内绘制，此处不能再画以免压住轨道
             return;
         }
-        Component hint = value.lowPresent() && value.highPresent() ? texts.preciseHint() : texts.absentHint();
-        String text = TextScroll.trimToWidth(font, hint.getString(), Math.max(1, bounds.width()));
-        graphics.drawString(font, text, bounds.x(), Math.max(bounds.y(), bounds.bottom() - 9),
-                theme.palette().textDisabled(), false);
+        String text = TextScroll.trimToWidth(font, hintText(value).getString(), Math.max(1, row.width()));
+        graphics.drawString(font, text, row.x(), row.y(), theme.palette().textDisabled(), false);
     }
 
     private Component formatValue(double value) {

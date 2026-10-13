@@ -27,6 +27,9 @@ final class ClimateControl extends FormControl {
     private static final String MIN_FIELD = "min";
     private static final String MAX_FIELD = "max";
     private static final String CLIMATE_UI = "gui.itemdespawntowhat.edit.field.climate.";
+    // 复选框自带文案、方框与文字间距只有 3px，立体 inset 主题下描边外扩后几乎贴住文字；
+    // 本行不显示行标签，文案是唯一说明，因此前置一个空格（约 4px）保证可见间距
+    private static final String TOGGLE_TEXT_INDENT = " ";
     private static final int TOGGLE_HEIGHT = 16;
     private static final int RANGE_HEIGHT = 24;
     private static final int GAP = 2;
@@ -59,7 +62,7 @@ final class ClimateControl extends FormControl {
             markEdited();
             onChanged.run();
         });
-        matching = new UiCheckBox(THEME, font, Component.translatable(CLIMATE_UI + "enabled", label()), false);
+        matching = new UiCheckBox(THEME, font, toggleLabel(), false);
         range = new UiRangeBar(THEME, font,
                 UiNumberPolicy.of(lower(), upper(), STEP, FINE_STEP), fullRange(),
                 new UiRangeBar.Texts(Component.translatable(CLIMATE_UI + MIN_FIELD),
@@ -90,6 +93,11 @@ final class ClimateControl extends FormControl {
             onChanged.run();
         });
         updateEnabled();
+    }
+
+    // 气候开关的文案：本行唯一文案，前置缩进让复选框方框与文字留有可见间距
+    private Component toggleLabel() {
+        return Component.literal(TOGGLE_TEXT_INDENT).append(Component.translatable(CLIMATE_UI + "enabled", label()));
     }
 
     @Override

@@ -47,7 +47,7 @@ import org.jetbrains.annotations.Nullable;
  * <p>顶层 effects 展示为单一隐式候选：打开、改别名、改效果都不会自动生成 outcomes；
  * 只有用户新增第二个候选或明确编辑候选专属策略时，才用 {@link RuleDraft#convertToOutcomes(String)}
  * 做一次原子转换（保留原效果对象、一次撤销可整体还原）。
- * <p>消耗类效果（consume_source / consume_catalyst）映射到「输入与成本」页，只更新原效果路径，
+ * <p>消耗类效果（consume_source / consume_catalyst）映射到「输入」页，只更新原效果路径，
  * 不会同时生成规则级固定成本字段；这两类效果不出现在效果选择器里。
  */
 public final class RuleEditorEditPages {
@@ -60,7 +60,7 @@ public final class RuleEditorEditPages {
 
         // 基本信息
         INFO("info"),
-        // 输入与成本
+        // 输入
         INPUT("input"),
         // 触发与条件
         TRIGGER("trigger"),

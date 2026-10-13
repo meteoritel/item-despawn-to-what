@@ -366,7 +366,7 @@ final class RuleEditorScreenEditPage {
         }
     }
 
-    // 新建规则后直接切到「输入与成本」页签
+    // 新建规则后直接切到「输入」页签
     void openInputTab() {
         switchTab(RuleEditorEditPages.Page.INPUT.value());
         if (tabControl != null) {

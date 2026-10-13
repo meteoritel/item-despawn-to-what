@@ -18,13 +18,16 @@
 - 术语：一个 outcome 一律称「**方案**」（`button.candidate_*` / `notice.candidate_*` / `undo.*_candidate` / `issue.candidate_*` / `rule.combination` / `effect.consume_params_on_input` 等文案统一使用该词），只有页签名仍是「结果」（`tab.results`）。
 - 初始页：新建**空白**规则落在输入页（`RuleEditorScreenListActions#createRule` 在 `templateId == null` 时切换页签到 `input`）；从模板新建或打开已有规则落在基本页（`RuleEditorScreen#openEditor` 置 `tab = INFO`，字段 `tab` 的默认值见该类字段声明）。
 - 切页前先提交合法字段，非法文本保留在当前会话输入缓冲：`RuleEditorScreenEditPage#switchTab` 走 `pages.blockNavigation()` 门禁后 `pages.setPage(target)`；提交路径见第 5、7 节。
+- 页名与页内提示同名：输入页一律称「**输入**」（`tab.input`），页内提示、文档与代码注释不得再用其他名字指代该页。
+- 页头右侧状态条只表达状态且不可点击：`RuleEditorScreen#drawHeaderText` 以 `header.editing`（「当前编辑 · %s」）作标题，状态条取 `state.applied` / `state.unapplied`（「待应用」，与列表页 `recipe.status.pending` 同词）/ `state.active` / `state.freezing`，右端面板不参与命中判定。
+- 界面用词口径：条件树运算符一律取 `tree.operator.*`（「且」/「或」/「非」），画布卡片标题与树摘要的取反行共用该键，撤销标签与移动提示同样只用「非」；组合名 `tree.node.all`「全部满足」/ `tree.node.any`「任一满足」只用于「包成组」菜单与组行。消耗提示与校验提示不得出现 JSON 字段名、英文枚举或全限定 ID，字段名一律换成界面用词（`catalyst_cost.items` → 「催化剂成本的物品」，`schema_version` → 「规则文件版本」）。
 
 ### 条件树草稿与正式配置
 
 - `RuleDraft` 的条件树读写通过客户端 `ConditionDraftCodec`：空 `all_of` / `any_of` 保留空 `terms`，缺项 `inverted` 保留 `op` 并省略 `term`；重新打开表单仍可继续编辑。叶参数仍交给既有正式类型 Codec，旧形状与未识别数据不被静默迁移。
 - 画布 `UiConditionGraphEditor` 在空树和空组合内部显示“＋ 添加条件”；删除 NOT 唯一子项后保留 NOT，并可从内部入口补齐。添加占位不是条件节点，不计入节点数、叶数和深度限额。
 - 无根表达式继续省略 `conditions`，表示无条件限制；空组合和缺项 NOT 是未完成草稿，表单及规则保存前的结构校验均拦截。服务端的正式 `RuleCodecs` 和运行时求值保持既有严格契约。
-- 条件叶行复用 `NaturalSummary.conditionLeaf` 展示类型和已接受参数；摘要仅用于显示，不写入配置。截断行可悬停查看全文，叶参数确认并重载表单后同步更新。
+- 条件叶行复用 `NaturalSummary.conditionLeaf` 展示类型和已接受参数；摘要仅用于显示，不写入配置。截断行可悬停查看全文，叶参数确认并重载表单后同步更新。行首展开 / 收起标记是 1 像素扫描线拼出的像素三角（▼ 已展开、▶ 已收起，与 `UiTreeView` 的树标记同形），层级用 1 像素竖线引导；缩进宽度、行高与标记命中范围由 `UiConditionTreeSummary` 的常量固定。
 - 条件树的完整树扫描由 `ConditionTreeInspection` 承担，独立于可见行投影，节点数、叶数、深度和结构问题不受折叠影响。树实例或摘要格式器变化才重新扫描，布局和折叠复用结果；错误子树的祖先行使用错误颜色。
 - `FormView.revealPath` 将树内的节点或参数字段路径交给条件控件；定位展开祖先、选中并滚动到节点。问题定位链路按现状为 `FormView.revealPath` → `FormControl.revealPath(path, basePath)` → `ConditionSupport.openTree(tree, fieldPath)` → `RuleEditorTriggerPage.openConditionTree(owner, fieldPath)` → `ConditionTreeOverlay.reveal(fieldPath)`，只有这条链路带路径。已知条件的参数字段问题通过 `ConditionSupport.revealLeaf` 打开叶参数弹窗并聚焦字段；未知叶保留局部只读。表单问题保留具体树路径及带实际限额的提示，正式保存拦截不依赖展开状态。
 
@@ -156,7 +159,7 @@
 
 **只读 JSON**：功能栏的轮询按钮在树与只读 JSON 之间切换，默认树视图。JSON 只展示当前规则级或动作局部的 conditions 表达式，按缩进排版，可选择复制或整段复制；空表达式显示字段省略提示。非法文本留在会话缓冲，JSON 保留最近已接受值并显示提示。视图切换不新增配置历史，源码不接受直接修改。
 
-**视觉**：画布页与参数框使用扁平皮肤（`UiFlatPalette` / `UiFlatSkin`），无立体凸凹与阴影。条件叶使用普通矩形；AND 使用蓝色圆角框、OR 使用绿色胶囊框、NOT 使用紫色切角框。卡片内部统一为居中标题带、1 像素分隔线与固定两行内容区：容器标题带显示运算符、内容首行为运算符的本地化含义，条件叶标题带为类型名、内容为参数摘要与结构标记。描边常态为 1 像素卡片描边色，悬停未选中为 1 像素强调色，选中为 2 像素强调色，结构问题使用错误描边和文字，优先级为 选中 > 结构问题 > 悬停；强调色只作用于描边，不覆盖运算符盖色。卡片悬停提示由画布自绘面板绘制（底色与描边取浮层配色，层级高于画布内容与侧栏），不再交给原版 tooltip；功能栏、工具列与内联参数框字段仍用原版 tooltip。形状按连续扫描行合并绘制，布局与命中保持原矩形。其它编辑页继续使用 `UiPalette` / `UiTheme`。
+**视觉**：画布页与参数框使用扁平皮肤（`UiFlatPalette` / `UiFlatSkin`），无立体凸凹与阴影。条件叶使用普通矩形；AND 使用蓝色圆角框、OR 使用绿色胶囊框、NOT 使用紫色切角框。卡片内部统一为居中标题带、1 像素分隔线与固定两行内容区：容器标题带显示运算符（`且` / `或` / `非`，容器语义只由运算符表达、内容行不再重复），内容首行为分支计数、次行为结构标记；条件叶标题带为类型名，内容为参数摘要与结构标记。描边常态为 1 像素卡片描边色，悬停未选中为 1 像素强调色，选中为 2 像素强调色，结构问题使用错误描边和文字，优先级为 选中 > 结构问题 > 悬停；强调色只作用于描边，不覆盖运算符盖色。卡片悬停提示由画布自绘面板绘制（底色与描边取浮层配色，层级高于画布内容与侧栏），不再交给原版 tooltip；功能栏、工具列与内联参数框字段仍用原版 tooltip。形状按连续扫描行合并绘制，布局与命中保持原矩形。其它编辑页继续使用 `UiPalette` / `UiTheme`。
 
 ## 12. 外层结构变化与保存回显
 

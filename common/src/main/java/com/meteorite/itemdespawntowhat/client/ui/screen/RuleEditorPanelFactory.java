@@ -14,6 +14,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeEnd;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeValue;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.LeafPanel;
+import com.meteorite.itemdespawntowhat.client.ui.shared.BlockPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.EntityPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogChoices;
@@ -251,8 +252,14 @@ public final class RuleEditorPanelFactory {
         grid.setTooltipSuffix(id -> {
             var tag = mapper.tagPreviews.get(id);
             if (tag != null) return tag.tooltip();
-            return type == RuleCatalogType.ENTITY && EntityPreviewIcons.unavailable(id, 0)
-                    ? Component.translatable(UI + "preview.unavailable") : null;
+            // 给不出静态预览的条目在悬停里说明原因：实体没有可见渲染器、方块没有静态模型（告示牌等）
+            if (type == RuleCatalogType.ENTITY && EntityPreviewIcons.unavailable(id, 0)) {
+                return Component.translatable(UI + "preview.unavailable");
+            }
+            if (type == RuleCatalogType.BLOCK && BlockPreviewIcons.unavailable(id)) {
+                return Component.translatable(UI + "preview.unavailable");
+            }
+            return null;
         });
         if (!workspace.active()) {
             grid.setEnabled(false);
@@ -549,8 +556,11 @@ public final class RuleEditorPanelFactory {
         List<UiButton> buttons = new ArrayList<>();
         List<Runnable> reloadValues = new ArrayList<>();
         RuleDraft draft = session.draft();
-        for (EditorField field : fields) if (field.type() == EditorFieldType.CLIMATE_RANGE) {
-            form.hideRowLabel(join(basePath, field.name()));
+        // 自带文字的行内控件不显示行标签：同一文案只出现一次，省下的宽度交给控件自身
+        for (EditorField field : fields) {
+            if (field.type() == EditorFieldType.CLIMATE_RANGE || field.type() == EditorFieldType.BOOLEAN) {
+                form.hideRowLabel(join(basePath, field.name()));
+            }
         }
         EditorField from = field(fields, "from");
         EditorField to = field(fields, "to");

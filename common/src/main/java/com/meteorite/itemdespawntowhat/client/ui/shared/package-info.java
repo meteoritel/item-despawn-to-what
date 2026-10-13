@@ -10,7 +10,10 @@
  * 展示名称查询（{@link com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels}）、
  * 字段到目录类型的映射与可选标签过滤
  * （{@link com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes}、
- * {@link com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogChoices}）。</p>
+ * {@link com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogChoices}）、
+ * 条件摘要的通用格式化与内建条件摘要
+ * （{@link com.meteorite.itemdespawntowhat.client.ui.shared.SummaryFormats}、
+ * {@link com.meteorite.itemdespawntowhat.client.ui.shared.BuiltinConditionSummaries}）。</p>
  *
  * <p><b>边界</b>：本包只依赖 {@code client.edit}（字段描述符与编辑器注册表）、
  * {@code client.ui.kit}、原版客户端类型与 JDK；不得依赖 {@code client.ui.screen}、

@@ -77,10 +77,13 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     // 只读 JSON 视图的复制按钮
     private static final int COPY_BUTTON_WIDTH = 62;
     private static final int COPY_BUTTON_HEIGHT = 14;
-    // 帮助浮层
-    private static final int HELP_WIDTH = 236;
+    // 帮助浮层：面板宽度按正文测量后夹在最小值与该上限之间，窄视口下再退到画布可用宽度
+    private static final int HELP_WIDTH = 320;
+    private static final int HELP_MIN_WIDTH = 160;
     private static final int HELP_PADDING = 6;
     private static final int HELP_LINE_GAP = 2;
+    // 动作标签列与说明文字之间的间距
+    private static final int HELP_LABEL_GAP = 6;
     // 提示气泡宽度范围
     private static final int TOOLTIP_MIN_WIDTH = 80;
     private static final int TOOLTIP_MAX_WIDTH = 250;
@@ -635,36 +638,117 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
                 CHROME_THEME.palette().statusTextMuted(), false);
     }
 
+    /**
+     * 帮助浮层：标题下逐条绘制「两字动作标签 + 说明」。面板宽度按正文测量后夹在最小宽度与画布
+     * 可用宽度之间；说明列的可用宽度先按内宽扣掉动作标签列算出，文本按其折行，因此每行都不会
+     * 超出面板内宽，也就不需要任何裁剪。
+     */
     private void renderHelp(GuiGraphics graphics) {
-        List<Component> lines = helpLines();
-        int width = Math.clamp(canvasRect.width() - 8, 1, HELP_WIDTH);
+        List<HelpEntry> entries = helpEntries();
+        // 动作标签列宽取最宽标签：说明列左边缘由此对齐成一条竖线
+        int labelWidth = 0;
+        for (HelpEntry entry : entries) {
+            labelWidth = Math.max(labelWidth, font.width(entry.label().getString()));
+        }
+        int available = Math.clamp(canvasRect.width() - 8, 1, HELP_WIDTH);
+        int textLimit = Math.max(1, available - HELP_PADDING * 2 - labelWidth - HELP_LABEL_GAP);
+        List<List<String>> bodies = new ArrayList<>(entries.size());
+        int contentWidth = font.width(Component.translatable(UI + "help.title").getString());
+        int lineCount = 1;
+        for (HelpEntry entry : entries) {
+            List<String> lines = wrapText(entry.text().getString(), textLimit);
+            bodies.add(lines);
+            lineCount += lines.size();
+            for (String line : lines) {
+                contentWidth = Math.max(contentWidth, labelWidth + HELP_LABEL_GAP + font.width(line));
+            }
+        }
+        int width = Math.clamp(contentWidth + HELP_PADDING * 2, Math.min(HELP_MIN_WIDTH, available), available);
         int lineStep = font.lineHeight + HELP_LINE_GAP;
-        int height = HELP_PADDING * 2 + font.lineHeight + HELP_LINE_GAP + lines.size() * lineStep;
+        int height = HELP_PADDING * 2 + lineCount * lineStep - HELP_LINE_GAP;
         int x = canvasRect.x() + Math.max(0, (canvasRect.width() - width) / 2);
         int y = canvasRect.y() + Math.max(0, (canvasRect.height() - height) / 2);
         CHROME_THEME.drawHelp(graphics, new UiRect(x, y, width, height));
         int textY = y + HELP_PADDING;
-        graphics.drawString(font, TextScroll.trimToWidth(font, Component.translatable(UI + "help.title").getString(),
-                Math.max(0, width - HELP_PADDING * 2)), x + HELP_PADDING, textY, CHROME_THEME.palette().helpText(), false);
+        graphics.drawString(font, Component.translatable(UI + "help.title").getString(), x + HELP_PADDING, textY,
+                CHROME_THEME.palette().helpText(), false);
         textY += lineStep;
-        for (Component line : lines) {
-            graphics.drawString(font, TextScroll.trimToWidth(font, line.getString(), Math.max(0, width - HELP_PADDING * 2)),
-                    x + HELP_PADDING, textY, CHROME_THEME.palette().helpTextMuted(), false);
-            textY += lineStep;
+        for (int index = 0; index < entries.size(); index++) {
+            List<String> lines = bodies.get(index);
+            for (int row = 0; row < lines.size(); row++) {
+                if (row == 0) {
+                    graphics.drawString(font, entries.get(index).label().getString(), x + HELP_PADDING, textY,
+                            CHROME_THEME.palette().helpText(), false);
+                }
+                graphics.drawString(font, lines.get(row), x + HELP_PADDING + labelWidth + HELP_LABEL_GAP, textY,
+                        CHROME_THEME.palette().helpTextMuted(), false);
+                textY += lineStep;
+            }
         }
     }
 
-    // 帮助正文：与画布手势一一对应，措辞保持领域词
-    private List<Component> helpLines() {
-        return List.of(
-                Component.translatable(UI + "help.add"),
-                Component.translatable(UI + "help.select"),
-                Component.translatable(UI + "help.pan"),
-                Component.translatable(UI + "help.edit"),
-                Component.translatable(UI + "help.view"),
-                Component.translatable(UI + "hint"),
-                Component.translatable(UI + "help.close"));
+    /**
+     * 把说明文本按可用宽度折成若干行：先按空白断行，单个超长词（长 CJK 串或长标识符）
+     * 再按字符断行，保证每行宽度都不超过 maxWidth，且至少产出一行。
+     *
+     * @param text     说明文本
+     * @param maxWidth 单行允许的最大像素宽度
+     * @return 自顶向下的行文本，元素个数至少为 1
+     */
+    private List<String> wrapText(String text, int maxWidth) {
+        List<String> lines = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        for (String token : text.split(" ")) {
+            if (token.isEmpty()) {
+                continue;
+            }
+            if (!current.isEmpty() && font.width(current + " " + token) > maxWidth) {
+                lines.add(current.toString());
+                current.setLength(0);
+            }
+            if (current.isEmpty() && font.width(token) > maxWidth) {
+                for (int index = 0; index < token.length(); index++) {
+                    current.append(token.charAt(index));
+                    if (font.width(current.toString()) > maxWidth && current.length() > 1) {
+                        current.setLength(current.length() - 1);
+                        lines.add(current.toString());
+                        current.setLength(0);
+                        current.append(token.charAt(index));
+                    }
+                }
+                continue;
+            }
+            if (!current.isEmpty()) {
+                current.append(' ');
+            }
+            current.append(token);
+        }
+        if (!current.isEmpty() || lines.isEmpty()) {
+            lines.add(current.toString());
+        }
+        return lines;
     }
+
+    // 帮助正文条目：按玩家上手的动作顺序排列，每条以两字动作标签开头
+    private List<HelpEntry> helpEntries() {
+        return List.of(
+                helpEntry("add"),
+                helpEntry("edit"),
+                helpEntry("select"),
+                helpEntry("move"),
+                helpEntry("view"),
+                helpEntry("pan"),
+                helpEntry("close"));
+    }
+
+    /** 帮助条目：动作标签取 {@code help.action.*}，说明取 {@code help.*}，两者按动作名配对。 */
+    private HelpEntry helpEntry(String action) {
+        return new HelpEntry(Component.translatable(UI + "help.action." + action),
+                Component.translatable(UI + "help." + action));
+    }
+
+    /** 帮助浮层的单个条目：左侧动作标签、右侧按宽度折行后的说明。 */
+    private record HelpEntry(Component label, Component text) { }
 
     // 状态栏左侧诊断：解码错误 > 手势提示 > 问题定位 > 未完成输入 > 选择与统计
     private Component statusText() {

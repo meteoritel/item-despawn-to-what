@@ -35,7 +35,7 @@ import org.lwjgl.glfw.GLFW;
  * 宿主注入类型与路径常量见 {@link ConditionTreeContract}；本类只实现其中的
  * {@link ConditionTreeContract.Navigation}，向宿主暴露选中项语义。
  * <ul>
- *   <li>鼠标：单击节点进入画布，单击 +/- 标记折叠展开，滚轮滚动。</li>
+ *   <li>鼠标：单击节点进入画布，单击展开 / 收起标记（▼ 已展开、▶ 已收起）折叠展示，滚轮滚动。</li>
  *   <li>键盘：↑/↓ 移动焦点，←/→ 折叠或进入子节点，Enter/Space 进入画布，
  *       PgUp/PgDn/Home/End 快速移动。</li>
  * </ul>
@@ -46,6 +46,14 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     private static final int INDENT_WIDTH = 10;
     // 展开标记区宽度
     private static final int MARKER_WIDTH = 9;
+    // 标记水平起点（相对标记区左缘）
+    private static final int MARKER_INSET = 1;
+    // 展开 / 收起标记的扫描线层数、最大宽度与半高，与 UiTreeView 的像素三角同形同尺寸
+    private static final int MARK_SCANLINES = 4;
+    private static final int MARK_SPAN = 7;
+    private static final int MARK_HALF_HEIGHT = 3;
+    // 层级引导线相对标记区左缘的偏移：对齐上一层标记区中心，使同一分支的引导线连成一条竖线
+    private static final int GUIDE_INSET = 6;
     // 默认行高
     private static final int DEFAULT_ROW_HEIGHT = 12;
     // 滚动条预留宽度（与 kit 滚动条宽度保持一致）
@@ -443,16 +451,13 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
             graphics.fill(0, rowY, rowWidth, rowY + rowHeight, theme.palette().controlHover());
         }
         int markerX = theme.selectMarkerWidth() + row.depth() * INDENT_WIDTH;
-        // 非根节点画一小段横向连线，帮助区分层级
+        // 层级引导：上一层标记列上的 1 像素竖线，贯穿本行；用更浅的正文色与标记拉开层次
         if (row.depth() > 0) {
-            graphics.fill(markerX - 5, rowY + rowHeight / 2, markerX - 2, rowY + rowHeight / 2 + 1,
-                    theme.palette().textSecondary());
+            int guideX = markerX - GUIDE_INSET;
+            graphics.fill(guideX, rowY, guideX + 1, rowY + rowHeight, theme.palette().textDisabled());
         }
-        // TODO 美术资源：展开标记暂用 ASCII +/-，后续可替换为像素贴图
         if (hasChildren(row.node())) {
-            String mark = isCollapsed(row.path()) ? "+" : "-";
-            graphics.drawString(renderFont, mark, markerX + 2, rowY + theme.textOffset(),
-                    theme.palette().textPrimary(), false);
+            drawMark(graphics, markerX + MARKER_INSET, rowY + rowHeight / 2, !isCollapsed(row.path()));
         }
         int textX = markerX + MARKER_WIDTH;
         int color = issues.stream().anyMatch(issue -> issue.path().equals(row.path())
@@ -460,6 +465,30 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         String label = TextScroll.trimToWidth(renderFont, rowLabel(row).getString(),
                 Math.max(0, rowWidth - textX - 2));
         graphics.drawString(renderFont, label, textX, rowY + theme.textOffset(), color, false);
+    }
+
+    /**
+     * 绘制展开 / 收起标记：{@code MARK_SCANLINES} 层 1 像素扫描线拼成的像素三角，不依赖字体字形。
+     *
+     * <p>几何与 {@link UiTreeView} 的树标记一致——已展开画向下的实心三角、已收起画向右的实心三角，
+     * 让弹窗树与缩进摘要共用同一种标记；三角最大宽度落在标记区内，命中范围仍是
+     * {@code markerX} 到 {@code markerX + MARKER_WIDTH}。</p>
+     *
+     * @param graphics 绘制目标
+     * @param x        三角左缘横坐标（标记区左缘加 {@code MARKER_INSET}）
+     * @param centerY  行的垂直中线
+     * @param expanded 已展开时画向下三角，收起时画向右三角
+     */
+    private void drawMark(GuiGraphics graphics, int x, int centerY, boolean expanded) {
+        for (int step = 0; step < MARK_SCANLINES; step++) {
+            if (expanded) {
+                graphics.fill(x + step, centerY - MARK_HALF_HEIGHT + 1 + step, x + MARK_SPAN - step,
+                        centerY - MARK_HALF_HEIGHT + 2 + step, theme.palette().textPrimary());
+            } else {
+                graphics.fill(x + step + 1, centerY - MARK_HALF_HEIGHT + step, x + step + 2,
+                        centerY + MARK_HALF_HEIGHT + 1 - step, theme.palette().textPrimary());
+            }
+        }
     }
 
     // 完整行文案供宿主提示，窄树中截断的文本仍可读取。
@@ -471,7 +500,8 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         return index < 0 ? null : rowLabel(rows.get(index));
     }
 
-    // 行文本：组合节点显示 ALL/ANY/NOT 与子项数，叶节点只显示条件名，并附不完整/超限标记
+    // 行文本：组节点用分组名（与「包成组」菜单共用 tree.node.*）与子项数，取反节点用与画布标题共用的运算符名
+    // （tree.operator.not），叶节点只显示条件名，并附不完整/超限标记
     private Component rowLabel(Row row) {
         ConditionNode node = row.node();
         Component label;
@@ -484,7 +514,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
             label = Component.translatable("gui.itemdespawntowhat.edit.tree.group_label",
                     Component.translatable("gui.itemdespawntowhat.edit.tree.node.any"), any.terms().size());
         } else if (node instanceof ConditionNode.Inverted) {
-            label = Component.translatable("gui.itemdespawntowhat.edit.tree.node.not");
+            label = Component.translatable("gui.itemdespawntowhat.edit.tree.operator.not");
         } else if (node instanceof ConditionNode.Leaf(var leafCondition)) {
             label = leafCondition == null
                     ? Component.translatable("gui.itemdespawntowhat.edit.tree.leaf_missing")

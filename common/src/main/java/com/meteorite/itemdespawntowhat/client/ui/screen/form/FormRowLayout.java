@@ -22,6 +22,8 @@ final class FormRowLayout {
     private static final int LABEL_GAP = 4;
     // 标签行高（标签在上方时使用）
     private static final int LABEL_LINE_HEIGHT = 10;
+    // 行内自带文字的控件至少保留的标签列宽度
+    private static final int MIN_INLINE_LABEL_WIDTH = 32;
 
     // 工具类，禁止实例化
     private FormRowLayout() {
@@ -30,6 +32,26 @@ final class FormRowLayout {
     // 行尾操作按钮宽度：文本宽度加内边距
     static int actionWidth(Font font, UiButton button) {
         return Math.max(16, font.width(button.label()) + 8);
+    }
+
+    /**
+     * 该行标签列实际预留的宽度。
+     *
+     * <p>行内自带文字的控件（复选框、物品计数行、条件树）内部还要再分「名称 / 轨道 / 数值」，
+     * 统一列宽会把控件挤窄到看不清条目名，因此这类行按标签文本宽度收窄；其余行保持统一列宽，
+     * 控件左边缘仍对齐。说明行整行显示，不参与标签列对齐。</p>
+     *
+     * @param row                 当前行
+     * @param effectiveLabelWidth 表单统一标签列宽（已按可用宽度收紧）
+     * @param font                文本测量字体
+     * @return 该行预留的标签列宽度
+     */
+    private static int rowLabelWidth(FormRow row, int effectiveLabelWidth, Font font) {
+        if (row.control.usesLabelColumn() || row.field.type() == EditorFieldType.NOTE) {
+            return effectiveLabelWidth;
+        }
+        int inlineSpan = Math.max(MIN_INLINE_LABEL_WIDTH, font.width(row.control.label()));
+        return Math.min(effectiveLabelWidth, inlineSpan);
     }
 
     static void syncBounds(List<FormRow> rows, int viewportX, int viewportY, int scrollOffset, Font font) {
@@ -80,8 +102,9 @@ final class FormRowLayout {
             visibleRows++;
             boolean showLabel = row.labelVisible && (minimumControlHeight == 0 || row.control.usesLabelColumn());
             row.narrow = narrow && showLabel;
-            row.labelWidth = showLabel ? effectiveLabelWidth : 0;
-            int controlWidth = narrow || !showLabel ? availableWidth : Math.max(0, availableWidth - effectiveLabelWidth - LABEL_GAP);
+            int rowLabelWidth = rowLabelWidth(row, effectiveLabelWidth, font);
+            row.labelWidth = showLabel ? rowLabelWidth : 0;
+            int controlWidth = narrow || !showLabel ? availableWidth : Math.max(0, availableWidth - rowLabelWidth - LABEL_GAP);
             int reserved = 0;
             for (var pickerButton : row.pickers) reserved += actionWidth(font, pickerButton) + 2;
             for (com.meteorite.itemdespawntowhat.client.ui.widget.UiButton action : row.actions) {
@@ -92,7 +115,7 @@ final class FormRowLayout {
             row.buttonWrapWidth = controlWidth;
             row.controlWidth = Math.max(0, row.buttonsBelow ? controlWidth : controlWidth - reserved);
             row.controlWidth = row.control.preferredWidth(row.controlWidth);
-            row.controlRelX = narrow || !showLabel ? 0 : effectiveLabelWidth + LABEL_GAP;
+            row.controlRelX = narrow || !showLabel ? 0 : rowLabelWidth + LABEL_GAP;
             if (row.field.type() == EditorFieldType.NOTE) {
                 row.controlRelY = 0;
                 row.contentHeight = row.control.height();
