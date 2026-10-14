@@ -43,43 +43,52 @@ public final class ServerTickBudget {
         this.frozenNanos = 0L;
     }
 
+    /** 本预算周期对应的游戏刻，由调度器在 {@link #begin(long, long, int)} 时写入。 */
     public long gameTime() {
         return gameTime;
     }
 
+    /** 本周期的时间上限（纳秒），已在入参处按最小 1 纳秒归一。 */
     public long budgetNanos() {
         return budgetNanos;
     }
 
+    /** 本周期的全局工作量上限，已在入参处按最小 1 归一。 */
     public int maxWorkUnits() {
         return maxWorkUnits;
     }
 
-    // 当前已用时间（纳秒）；结算后返回本 tick 的最终值。
+    /** 当前已用时间（纳秒）；结算后返回本 tick 冻结的最终值。 */
     public long usedNanos() {
         return frozen ? frozenNanos : Math.max(0L, System.nanoTime() - startedNanos);
     }
 
+    /** 本周期已记入的工作量：在 maxWorkUnits 处截断，不会越界。 */
     public int usedWorkUnits() {
         return usedWorkUnits;
     }
 
+    /** 剩余可用工作量（负数归零），供任务在单步内自行节流。 */
     public int remainingWorkUnits() {
         return Math.max(0, maxWorkUnits - usedWorkUnits);
     }
 
+    /** 本周期搬运的到期任务数：与业务工作量分开计数，以区分排队成本与执行成本。 */
     public int drainedTasks() {
         return drainedTasks;
     }
 
+    /** 时间上限是否已耗尽；标记只由记账与结算提交，本方法不改变它。 */
     public boolean timeExpired() {
         return timeExpired;
     }
 
+    /** 工作量上限是否已耗尽；标记只由记账与结算提交，本方法不改变它。 */
     public boolean workUnitsExpired() {
         return workUnitsExpired;
     }
 
+    /** 预算耗尽时是否仍有待推进任务：仅用于解释观测结论，不参与调度决策。 */
     public boolean workRemaining() {
         return workRemaining;
     }
@@ -138,6 +147,11 @@ public final class ServerTickBudget {
         }
     }
 
+    /**
+     * 冻结当前统计为不可变快照，供观测与开发工具读取。
+     *
+     * @return 本 tick 的预算统计快照
+     */
     public ServerTickBudgetSnapshot snapshot() {
         return new ServerTickBudgetSnapshot(gameTime, budgetNanos, usedNanos(), usedWorkUnits, maxWorkUnits,
                 drainedTasks, timeExpired, workUnitsExpired, workRemaining);
