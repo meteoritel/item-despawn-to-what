@@ -137,11 +137,13 @@ public final class RuleOverlayWriter {
                     locations.put(change.id(), new ArrayList<>(List.of(location)));
                     dirty.add(location.file.path);
                 } else {
-                    // 包括损坏 JSON 在内的任何现存文件都不能被新规则覆盖。
-                    if (Files.exists(target, LinkOption.NOFOLLOW_LINKS) || files.containsKey(target)) {
+                    RuleFile existing = files.get(target);
+                    // 合法空数组不承载规则，可复用其路径；其它现存内容（包括损坏 JSON）仍禁止覆盖。
+                    boolean reusableEmptyArray = existing != null && existing.array && existing.entries.isEmpty();
+                    if (!reusableEmptyArray && (Files.exists(target, LinkOption.NOFOLLOW_LINKS) || existing != null)) {
                         throw new IOException("新增规则目标文件已被占用: " + target);
                     }
-                    RuleFile file = new RuleFile(target, false, null);
+                    RuleFile file = new RuleFile(target, false, existing == null ? null : existing.original);
                     file.entries.add(body);
                     file.liveEntries = 1;
                     files.put(target, file);
@@ -279,9 +281,12 @@ public final class RuleOverlayWriter {
                 requireActive(active);
                 safePath(file.path);
                 Files.createDirectories(file.path.getParent());
-                Path temp = Files.createTempFile(file.path.getParent(), ".idtw-", ".tmp");
-                temporary.put(file, temp);
-                Files.writeString(temp, file.content().toString(), StandardCharsets.UTF_8);
+                // 删空的文件参与同一批备份与回滚，但不再生成空数组占用规则路径。
+                if (file.liveEntries > 0) {
+                    Path temp = Files.createTempFile(file.path.getParent(), ".idtw-", ".tmp");
+                    temporary.put(file, temp);
+                    Files.writeString(temp, file.content().toString(), StandardCharsets.UTF_8);
+                }
                 verifyUnchanged(file);
                 if (file.original != null) {
                     Path backup = file.path.resolveSibling(file.path.getFileName() + ".bak");
@@ -294,7 +299,8 @@ public final class RuleOverlayWriter {
                 progress.accept(new RuleSaveProgress(RuleSaveProgress.Stage.WRITING, committed.size(), files.size(),
                         root.relativize(file.path).toString(), true));
                 verifyUnchanged(file);
-                move(temporary.get(file), file.path);
+                if (file.liveEntries == 0) { Files.delete(file.path); }
+                else { move(temporary.get(file), file.path); }
                 committed.add(file);
             }
             requireActive(active);
