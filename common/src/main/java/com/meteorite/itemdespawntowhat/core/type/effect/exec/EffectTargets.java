@@ -1,19 +1,16 @@
 package com.meteorite.itemdespawntowhat.core.type.effect.exec;
 
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
-import com.meteorite.itemdespawntowhat.core.type.TaggedItemMatch;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.tags.TagKey;
 import net.minecraft.util.RandomSource;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
-import java.util.List;
 import java.util.function.IntConsumer;
 import java.util.function.IntUnaryOperator;
 
@@ -56,13 +53,6 @@ public final class EffectTargets {
     // 效果式消耗与催化剂固定成本（core/runtime）共用本方法，禁止在调用方复刻同一口径
     public static AABB blockBox(BlockPos center, int radius) {
         return AABB.unitCubeFromLowerCorner(Vec3.atLowerCornerOf(center)).inflate(radius);
-    }
-
-    // 物品栈是否命中 items 中的任一引用（非 tag 比物品，tag 比标签）；未注册的物品 id 与不存在的标签都不算命中
-    // 唯一实现位于 TaggedItemMatch：催化剂固定成本与效果式消耗共用同一口径，禁止在调用方复刻判定。
-    // 本方法保留同名入口只为兼容既有执行器调用方；逐实体热点循环应先 compileAll 再复用匹配器
-    public static boolean matchesAny(List<TaggedId> items, ItemStack stack) {
-        return TaggedItemMatch.compileAll(items).matches(stack);
     }
 
     // 实际生成位置可能越过源区块边界；保留实体等区块加载后再加入。

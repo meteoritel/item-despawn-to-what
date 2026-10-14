@@ -101,6 +101,8 @@ public final class RuleRuntimeHostCore {
         PackLayerResolver packLayerResolver();
 
         /**
+         * 读取启动采样得到的 GUI 参考寿命（tick）：无加载器寿命 API 的平台用它推算自然寿命。
+         *
          * @return 服务端缓存的 GUI 参考寿命 tick；尚未采样时为零
          */
         int referenceLifespanTicks();
@@ -163,7 +165,7 @@ public final class RuleRuntimeHostCore {
             overlayRoot = overlay;
             runtime = newRuntime;
             saveReloadContext = saveContext;
-            // 实体状态持续时间取自本次配置：新产物保护与转化冷却各自可为 0（D18，0 表示不授予）
+            // 实体状态持续时间取自本次配置：新产物保护与转化冷却各自可为 0，0 表示不授予该保护或冷却
             DropStateStore.configure(config.newProductProtectionTicks(), config.conversionCooldownTicks());
 
             int levelCount = 0;
@@ -190,7 +192,7 @@ public final class RuleRuntimeHostCore {
     }
 
     /**
-     * 数据包重载：重建规则索引并回扫全部已加载维度，使已存在的掉落物立即按新规则重选（A3）。
+     * 数据包重载：重建规则索引并回扫全部已加载维度，使已存在的掉落物立即按新规则重选。
      * 调用点必须位于服务端线程；运行时未就绪或重载失败时返回 null 并保留上一版索引。
      *
      * @param server 当前服务端
@@ -300,7 +302,7 @@ public final class RuleRuntimeHostCore {
         }
     }
 
-    // 维度卸载：释放该维度的追踪状态与到期任务，避免强引用维度对象（A4）
+    // 维度卸载：释放该维度的追踪状态与到期任务，避免强引用维度对象
     public void levelUnloaded(ServerLevel level) {
         ConversionRuntime current = runtime;
         if (current != null) {
