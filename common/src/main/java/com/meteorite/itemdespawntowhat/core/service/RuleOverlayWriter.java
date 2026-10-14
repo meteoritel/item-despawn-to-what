@@ -3,9 +3,8 @@ package com.meteorite.itemdespawntowhat.core.service;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import com.google.gson.JsonParseException;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
+import com.meteorite.itemdespawntowhat.core.api.RuleDecodeBudget;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.load.RulePaths;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEdit;
@@ -19,11 +18,24 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.stream.Stream;
 
-/** 覆盖层逐 id 写入：保留未编辑 JSON，整批预备、备份、提交；失败时回滚已经写入的文件。 */
+/**
+ * 覆盖层逐 id 写入：保留未编辑 JSON，整批预备、备份、提交；失败时回滚已经写入的文件、
+ * 本轮写出的备份与临时文件，使目录回到保存前状态。
+ * 单次保存只扫描并解析目录一次，后续阶段复用已读字节与元数据指纹，不重复读取全文。
+ */
 public final class RuleOverlayWriter {
+    // 备份文件后缀：备份供管理员手工恢复，成功路径保留最新备份
+    private static final String BACKUP_SUFFIX = ".bak";
+    // 备份轮换暂存前缀：为新备份腾出位置时先把既有备份改名到这里
+    private static final String ROTATED_BACKUP_PREFIX = ".idtw-bak-";
+    // 暂存文件统一后缀
+    private static final String TEMPORARY_SUFFIX = ".tmp";
+    // 覆盖层文件被外部修改时的统一拒绝文案
+    private static final String EXTERNALLY_MODIFIED_MESSAGE = "准备保存时文件已被外部修改: ";
     /** 写入结果；零文件或存在冲突均不能解释为保存成功。 */
     public record ApplyResult(int writtenFiles, List<String> conflicts, boolean rollbackFailed) {
         /**
@@ -40,6 +52,11 @@ public final class RuleOverlayWriter {
         private final boolean array;
         private final byte[] original;
         private final List<JsonElement> entries = new ArrayList<>();
+        // 读盘时刻的文件指纹；保存准备阶段靠它发现外部修改，无需重读全文
+        private FileStamp stamp;
+        // 本轮为该文件准备的备份路径，以及被腾开位置的既有备份（无既有备份时为空）
+        private Path backup;
+        private Path rotatedBackup;
         private int liveEntries;
         private int remainingIndexXor;
         private ResourceLocation inferredId;
@@ -56,6 +73,29 @@ public final class RuleOverlayWriter {
     }
     /** 规则所在文件及条目下标。 */
     private record Location(RuleFile file, int index) {}
+    /**
+     * 覆盖层文件在读取时刻的元数据指纹。
+     * 准备阶段用它与当前属性比对即可发现外部修改，避免为校验重复读取全文；
+     * 属性读不到时视为已修改，不把不可判定当成未变更。
+     */
+    private record FileStamp(long size, long modifiedMillis) {
+        // 取样失败或目标不再是普通文件时返回空，交由比对方判定为已修改
+        private static FileStamp of(Path path) {
+            try {
+                BasicFileAttributes attributes = Files.readAttributes(path, BasicFileAttributes.class,
+                        LinkOption.NOFOLLOW_LINKS);
+                if (!attributes.isRegularFile()) { return null; }
+                return new FileStamp(attributes.size(), attributes.lastModifiedTime().toMillis());
+            } catch (IOException unreadable) {
+                return null;
+            }
+        }
+        // 文件仍是普通文件且大小、修改时间都与取样时一致才算未变更
+        private boolean matches(Path path) {
+            FileStamp current = of(path);
+            return current != null && current.size() == size && current.modifiedMillis() == modifiedMillis;
+        }
+    }
     private final Path root;
     private final String namespace;
     // 写入目录固定为 <overlayRoot>/rules；defaultNamespace 用于无 id 的单对象文件反推规则 id
@@ -144,6 +184,8 @@ public final class RuleOverlayWriter {
                         throw new IOException("新增规则目标文件已被占用: " + target);
                     }
                     RuleFile file = new RuleFile(target, false, existing == null ? null : existing.original);
+                    // 复用空数组文件时沿用其读取指纹，后续校验仍以同一份快照为准
+                    file.stamp = existing == null ? null : existing.stamp;
                     file.entries.add(body);
                     file.liveEntries = 1;
                     files.put(target, file);
@@ -179,7 +221,7 @@ public final class RuleOverlayWriter {
         Path target = root.resolve(id.getNamespace()).resolve(id.getPath() + RulePaths.RULE_FILE_EXTENSION).normalize();
         if (!target.startsWith(root)) { throw new IOException("规则路径越过 rules 目录: " + id); }
         safePath(target);
-        safePath(target.resolveSibling(target.getFileName() + ".bak"));
+        safePath(target.resolveSibling(target.getFileName() + BACKUP_SUFFIX));
         return target;
     }
 
@@ -197,17 +239,20 @@ public final class RuleOverlayWriter {
                     .filter(p -> p.toString().endsWith(RulePaths.RULE_FILE_EXTENSION)).sorted().toList()) {
                 requireActive(active);
                 safePath(path);
+                FileStamp stamp = FileStamp.of(path);
                 byte[] original = Files.readAllBytes(path);
-                JsonElement json;
-                try { json = JsonParser.parseString(new String(original, StandardCharsets.UTF_8)); }
-                catch (JsonParseException | IllegalStateException invalid) {
+                // 规则文本一律走统一的有界解码入口：非法 JSON 与嵌套超深同样只是拒载该文件
+                RuleDecodeBudget.ParseResult parsed = RuleDecodeBudget.parse(new String(original, StandardCharsets.UTF_8));
+                if (!parsed.ok()) {
                     // 无关坏文件不阻断保存，但必须留下来源，供管理员修复；原始字节不参与写回。
                     org.apache.logging.log4j.LogManager.getLogger().warn(
-                            "保存扫描保留非法 JSON 文件: {}", path, invalid);
+                            "保存扫描保留非法 JSON 文件: {}（{}）", path, parsed.failureReason());
                     continue;
                 }
+                JsonElement json = parsed.element();
                 if (!json.isJsonObject() && !json.isJsonArray()) { continue; }
                 RuleFile file = new RuleFile(path, json.isJsonArray(), original);
+                file.stamp = stamp;
                 if (file.array) { json.getAsJsonArray().forEach(file.entries::add); }
                 else { file.entries.add(json); }
                 files.put(path, file);
@@ -265,7 +310,7 @@ public final class RuleOverlayWriter {
         return found.getFirst();
     }
 
-    // 所有临时文件与备份准备成功后才替换；普通 I/O 失败时恢复整批原内容。
+    // 所有临时文件与备份准备成功后才替换；普通 I/O 失败时恢复整批原内容，并把备份放回原状、清理临时文件。
     private static void requireActive(java.util.function.BooleanSupplier active) throws IOException {
         if (!active.getAsBoolean()) { throw new IOException("保存请求已失效"); }
         RuleOverlayStore.progress();
@@ -283,22 +328,19 @@ public final class RuleOverlayWriter {
                 Files.createDirectories(file.path.getParent());
                 // 删空的文件参与同一批备份与回滚，但不再生成空数组占用规则路径。
                 if (file.liveEntries > 0) {
-                    Path temp = Files.createTempFile(file.path.getParent(), ".idtw-", ".tmp");
+                    Path temp = Files.createTempFile(file.path.getParent(), ".idtw-", TEMPORARY_SUFFIX);
                     temporary.put(file, temp);
                     Files.writeString(temp, file.content().toString(), StandardCharsets.UTF_8);
                 }
-                verifyUnchanged(file);
-                if (file.original != null) {
-                    Path backup = file.path.resolveSibling(file.path.getFileName() + ".bak");
-                    safePath(backup);
-                    Files.copy(file.path, backup, StandardCopyOption.REPLACE_EXISTING);
-                }
+                // 准备阶段只核对元数据并写备份，全文逐字节比对留到替换前的那一次
+                verifyMetadataUnchanged(file);
+                prepareBackup(file);
             }
             for (RuleFile file : files) {
                 requireActive(active);
                 progress.accept(new RuleSaveProgress(RuleSaveProgress.Stage.WRITING, committed.size(), files.size(),
                         root.relativize(file.path).toString(), true));
-                verifyUnchanged(file);
+                verifyContentUnchanged(file);
                 if (file.liveEntries == 0) { Files.delete(file.path); }
                 else { move(temporary.get(file), file.path); }
                 committed.add(file);
@@ -306,6 +348,8 @@ public final class RuleOverlayWriter {
             requireActive(active);
             // 唯一提交确认点；主线程取消只做 CAS，绝不与本线程并发恢复文件。
             if (!confirmCommit.getAsBoolean()) { throw new IOException("保存已取消，回滚整批文件"); }
+            // 提交确认之后失败已不可能，此刻才丢弃被逐出的既有备份
+            for (RuleFile file : files) { discardRotatedBackup(file); }
         } catch (IOException | RuntimeException failure) {
             Collections.reverse(committed);
             int restored = 0;
@@ -315,28 +359,83 @@ public final class RuleOverlayWriter {
                 try {
                     if (file.original == null) { Files.deleteIfExists(file.path); }
                     else {
-                        Path restore = Files.createTempFile(file.path.getParent(), ".idtw-restore-", ".tmp");
+                        Path restore = Files.createTempFile(file.path.getParent(), ".idtw-restore-", TEMPORARY_SUFFIX);
                         try { Files.write(restore, file.original); move(restore, file.path); }
                         finally { Files.deleteIfExists(restore); }
                     }
                 } catch (IOException | RuntimeException rollbackFailure) { failure.addSuppressed(rollbackFailure); }
             }
+            rollbackBackups(files, failure);
             throw failure;
         } finally {
-            for (Path temp : temporary.values()) {
-                try { Files.deleteIfExists(temp); }
-                catch (IOException cleanupFailure) {
-                    // 清理暂存文件失败不改变已经完成的提交结果。
-                    org.apache.logging.log4j.LogManager.getLogger().warn("暂存文件清理失败: {}", temp, cleanupFailure);
+            for (Path temp : temporary.values()) { deleteQuietly(temp); }
+        }
+    }
+
+    // 准备阶段核对：只比对读取时刻的元数据指纹，不重读全文
+    private static void verifyMetadataUnchanged(RuleFile file) throws IOException {
+        boolean unchanged = file.original == null
+                ? !Files.exists(file.path, LinkOption.NOFOLLOW_LINKS)
+                : file.stamp != null && file.stamp.matches(file.path);
+        if (!unchanged) { throw new IOException(EXTERNALLY_MODIFIED_MESSAGE + file.path); }
+    }
+
+    // 替换前核对：整次保存唯一一次全文比对，任何破坏性写入前都必须逐字节确认内容未变
+    private static void verifyContentUnchanged(RuleFile file) throws IOException {
+        boolean exists = Files.exists(file.path, LinkOption.NOFOLLOW_LINKS);
+        if (file.original == null ? exists : !exists || !Arrays.equals(file.original, Files.readAllBytes(file.path))) {
+            throw new IOException(EXTERNALLY_MODIFIED_MESSAGE + file.path);
+        }
+    }
+
+    // 用内存中已读字节写出备份，不再回读源文件；已有旧备份先整体改名挪开，失败时能原样放回
+    private static void prepareBackup(RuleFile file) throws IOException {
+        if (file.original == null) { return; }
+        Path backup = file.path.resolveSibling(file.path.getFileName() + BACKUP_SUFFIX);
+        safePath(backup);
+        file.backup = backup;
+        if (Files.exists(backup, LinkOption.NOFOLLOW_LINKS)) {
+            Path rotated = Files.createTempFile(file.path.getParent(), ROTATED_BACKUP_PREFIX, TEMPORARY_SUFFIX);
+            try {
+                move(backup, rotated);
+            } catch (IOException | RuntimeException rotateFailure) {
+                // 改名失败时这一步不留暂存文件，目录与保存前一致
+                deleteQuietly(rotated);
+                throw rotateFailure;
+            }
+            file.rotatedBackup = rotated;
+        }
+        Files.write(backup, file.original);
+    }
+
+    // 失败时把本轮动过的备份恢复原状：既有备份放回原位即恢复旧内容，本轮新写的备份删除
+    private static void rollbackBackups(List<RuleFile> files, Throwable failure) {
+        for (RuleFile file : files) {
+            try {
+                if (file.rotatedBackup != null) {
+                    move(file.rotatedBackup, file.backup);
+                    file.rotatedBackup = null;
+                } else if (file.backup != null) {
+                    Files.deleteIfExists(file.backup);
                 }
+            } catch (IOException | RuntimeException rollbackFailure) {
+                failure.addSuppressed(rollbackFailure);
             }
         }
     }
 
-    private static void verifyUnchanged(RuleFile file) throws IOException {
-        boolean exists = Files.exists(file.path, LinkOption.NOFOLLOW_LINKS);
-        if (file.original == null ? exists : !exists || !Arrays.equals(file.original, Files.readAllBytes(file.path))) {
-            throw new IOException("准备保存时文件已被外部修改: " + file.path);
+    // 提交确认后丢弃被逐出的既有备份；清理失败只告警，不改变已经完成的提交结果
+    private static void discardRotatedBackup(RuleFile file) {
+        if (file.rotatedBackup == null) { return; }
+        deleteQuietly(file.rotatedBackup);
+        file.rotatedBackup = null;
+    }
+
+    // 删除暂存或备份文件：失败只告警，不把清理问题升级成保存失败
+    private static void deleteQuietly(Path path) {
+        try { Files.deleteIfExists(path); }
+        catch (IOException cleanupFailure) {
+            org.apache.logging.log4j.LogManager.getLogger().warn("暂存文件清理失败: {}", path, cleanupFailure);
         }
     }
 

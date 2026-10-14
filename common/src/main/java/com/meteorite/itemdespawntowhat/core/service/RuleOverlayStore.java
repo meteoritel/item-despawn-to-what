@@ -25,7 +25,10 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 
-/** 覆盖层文件工作的单一所有者；Future 终态仅在实际调用退出后发布。 */
+/**
+ * 覆盖层文件工作的单一所有者；Future 终态仅在实际调用退出后发布。
+ * 作业登记按存档实例隔离：关闭时未能在期限内退出的作业被放弃登记并记录，不再阻塞后续存档。
+ */
 final class RuleOverlayStore {
     private static final Logger LOGGER = LogManager.getLogger("IDTW.OverlayStore");
     private static final String VERSION_FILE = ".edit_version";
@@ -36,9 +39,12 @@ final class RuleOverlayStore {
     private static final long RETRY_NANOS = TimeUnit.SECONDS.toNanos(5);
     private static final long STOP_NANOS = TimeUnit.SECONDS.toNanos(30);
     private static final Object JOB_LOCK = new Object();
-    private static final Set<Job<?>> JOBS = new HashSet<>();
+    // 本存档实例的作业登记：作业退出时从这里注销，关闭后本实例不再出现在任何等待条件里
+    private final Set<Job<?>> jobs = new HashSet<>();
+    // 仍有在途作业的存档实例登记；静态入口只检查这里，已退役存档的遗留作业不会阻塞后续存档
+    private static final Set<RuleOverlayStore> OPEN_STORES = new HashSet<>();
     private static final ThreadLocal<Job<?>> CURRENT = new ThreadLocal<>();
-    // 全进程保留单写入者；旧生命周期的实际作业退出前不允许启动新存档。
+    // 全进程保留单写入者线程；作业登记按存档隔离，旧存档未退出的作业不再阻止新存档启动。
     private static final ThreadPoolExecutor WORKER = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
             new ArrayBlockingQueue<>(MAX_BACKGROUND_JOBS), action -> {
         Thread thread = new Thread(action, "IDTW.RuleSaveIO");
@@ -124,7 +130,7 @@ final class RuleOverlayStore {
                 return CompletableFuture.failedFuture(new RejectedExecutionException("覆盖层已关闭或需要恢复"));
             }
             Job<T> job = new Job<>(this, name, action);
-            synchronized (JOB_LOCK) { JOBS.add(job); }
+            synchronized (JOB_LOCK) { jobs.add(job); OPEN_STORES.add(this); }
             try { WORKER.execute(job); }
             catch (RejectedExecutionException busy) { job.reject(busy); }
             return job.result;
@@ -135,8 +141,8 @@ final class RuleOverlayStore {
         long now = System.nanoTime();
         boolean stalled = false;
         synchronized (JOB_LOCK) {
-            for (Job<?> job : JOBS) {
-                if (job.store == this && now - job.progressAt > STALL_NANOS) {
+            for (Job<?> job : jobs) {
+                if (now - job.progressAt > STALL_NANOS) {
                     stalled = true;
                     if (!job.warned) {
                         job.warned = true;
@@ -199,33 +205,43 @@ final class RuleOverlayStore {
         synchronized (this) { flushRevision(); closed = true; }
         long deadline = System.nanoTime() + STOP_NANOS;
         Set<Job<?>> queued;
-        synchronized (JOB_LOCK) { queued = Set.copyOf(JOBS); }
+        synchronized (JOB_LOCK) { queued = Set.copyOf(jobs); }
         // 完成回调可以获取 store 锁，不能在 JOB_LOCK 内调用。
         for (Job<?> job : queued) {
-            if (job.store == this && !job.name.equals(PERSIST_REVISION_JOB) && WORKER.remove(job)) {
+            if (!job.name.equals(PERSIST_REVISION_JOB) && WORKER.remove(job)) {
                 job.reject(new CancellationException("覆盖层已停服"));
             }
         }
+        int abandoned;
         synchronized (JOB_LOCK) {
-            while (JOBS.stream().anyMatch(job -> job.store == this)) {
+            while (!jobs.isEmpty()) {
                 long remaining = deadline - System.nanoTime();
-                if (remaining <= 0) {
-                    LOGGER.error("停服等待覆盖层工作超时；旧工作退出前禁止下一存档启动：{}", root);
-                    return;
-                }
+                if (remaining <= 0) { break; }
                 try { TimeUnit.NANOSECONDS.timedWait(JOB_LOCK, remaining); }
                 catch (InterruptedException interrupted) {
                     Thread.currentThread().interrupt();
-                    LOGGER.warn("停服等待被中断；旧工作退出前仍禁止启动下一存档：{}", root);
-                    return;
+                    LOGGER.warn("停服等待覆盖层工作被中断，放弃等待未退出的作业：{}", root);
+                    break;
                 }
             }
+            // 存档实例退役：作业即使仍未退出也放弃登记，其退出时不再回写本集合（remove 无副作用）
+            abandoned = jobs.size();
+            jobs.clear();
+            OPEN_STORES.remove(this);
+        }
+        if (abandoned > 0) {
+            LOGGER.error("停服等待覆盖层工作未在期限内结束；已放弃登记 {} 个作业并解除对后续存档的阻塞（作业可能仍在写盘）：{}",
+                    abandoned, root);
         }
     }
 
     static void requireIdle() {
         synchronized (JOB_LOCK) {
-            if (!JOBS.isEmpty()) { throw new IllegalStateException("上一存档的覆盖层文件工作尚未退出，请等待后重试"); }
+            // 只保留仍有在途作业的存档：已退役或已空闲的存档不再构成启动阻塞
+            OPEN_STORES.removeIf(store -> store.jobs.isEmpty());
+            if (!OPEN_STORES.isEmpty()) {
+                throw new IllegalStateException("上一存档的覆盖层文件工作尚未退出，请等待后重试");
+            }
         }
     }
 
@@ -261,14 +277,14 @@ final class RuleOverlayStore {
             catch (Throwable thrown) { failure = thrown; }
             finally { CURRENT.remove(); }
             // 完成 Future 前先注销实际调用；调用方从不对这个 Future 执行取消或超时完成。
-            synchronized (JOB_LOCK) { JOBS.remove(this); JOB_LOCK.notifyAll(); }
+            synchronized (JOB_LOCK) { store.jobs.remove(this); JOB_LOCK.notifyAll(); }
             if (failure == null) { result.complete(value); }
             else { result.completeExceptionally(failure); }
             if (failure instanceof VirtualMachineError fatal) { throw fatal; }
         }
 
         private void reject(Throwable failure) {
-            synchronized (JOB_LOCK) { JOBS.remove(this); JOB_LOCK.notifyAll(); }
+            synchronized (JOB_LOCK) { store.jobs.remove(this); JOB_LOCK.notifyAll(); }
             result.completeExceptionally(failure);
         }
     }

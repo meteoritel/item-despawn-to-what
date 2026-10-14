@@ -2,8 +2,8 @@ package com.meteorite.itemdespawntowhat.core.runtime;
 
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.model.CatalystCost;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTickBudget;
-import com.meteorite.itemdespawntowhat.core.type.effect.exec.EffectTargets;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
+import com.meteorite.itemdespawntowhat.core.type.TaggedItemMatch;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -18,6 +18,8 @@ public final class CatalystAllocation {
     private static final int SOURCE = 0;
     private final CatalystCost cost;
     private final List<TaggedId> references;
+    // 与 references 下标对齐的匹配器：构造时按引用各编译一次，图构建逐项复用，不重复建 TagKey
+    private final List<TaggedItemMatch> referenceMatches;
     private final List<ItemEntity> items;
     private final int[] available;
     private final List<ItemStack> stacks;
@@ -50,6 +52,7 @@ public final class CatalystAllocation {
     CatalystAllocation(CatalystCost cost, List<ItemEntity> items, int[] available, int maximumGroups) {
         this.cost = cost;
         this.references = cost.items().stream().distinct().toList();
+        referenceMatches = this.references.stream().map(TaggedItemMatch::compile).toList();
         this.items = List.copyOf(items);
         stacks = items.stream().map(item -> item.getItem().copy()).toList();
         this.available = available.clone();
@@ -152,7 +155,7 @@ public final class CatalystAllocation {
                 int demand = cost.countFor(reference) * attempt;
                 if (itemCursor == 0) edge(SOURCE, node, demand);
                 if (itemCursor < items.size()) {
-                    if (EffectTargets.matchesAny(List.of(reference), stacks.get(itemCursor))) {
+                    if (referenceMatches.get(referenceCursor).matches(stacks.get(itemCursor))) {
                         Edge match = edge(node, 1 + references.size() + itemCursor, demand);
                         links.add(new Link(referenceCursor, itemCursor, match));
                     }

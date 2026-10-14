@@ -2,8 +2,8 @@ package com.meteorite.itemdespawntowhat.core.config;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
+import com.meteorite.itemdespawntowhat.core.api.RuleDecodeBudget;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.DataResult;
@@ -181,7 +181,13 @@ public record ServerConfig(
         }
         try {
             String text = Files.readString(file, StandardCharsets.UTF_8);
-            JsonElement json = JsonParser.parseString(text);
+            RuleDecodeBudget.ParseResult document = RuleDecodeBudget.parse(text);
+            if (!document.ok()) {
+                // 嵌套超深与语法非法同样按解析失败上报，与下方 CODEC 分支共用同一前缀
+                issues.error("server.json 解析失败: " + document.failureReason(), file.toString(), null);
+                return DEFAULT;
+            }
+            JsonElement json = document.element();
             DataResult<ServerConfig> result = CODEC.parse(JsonOps.INSTANCE, json);
             Optional<ServerConfig> parsed = result.resultOrPartial(message ->
                     issues.error("server.json 解析失败: " + message, file.toString(), null));

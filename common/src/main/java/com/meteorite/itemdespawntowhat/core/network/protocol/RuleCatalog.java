@@ -3,7 +3,7 @@ package com.meteorite.itemdespawntowhat.core.network.protocol;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
+import com.meteorite.itemdespawntowhat.core.api.RuleDecodeBudget;
 import com.mojang.serialization.DataResult;
 
 import java.util.ArrayList;
@@ -49,8 +49,13 @@ public record RuleCatalog(RuleCatalogType type, int revision, List<RuleCatalogEn
         if (text == null || text.isBlank()) {
             return DataResult.error(() -> "目录为空");
         }
+        RuleDecodeBudget.ParseResult parsed = RuleDecodeBudget.parse(text);
+        if (!parsed.ok()) {
+            // 统一有界解析入口报出的失败原因
+            return DataResult.error(() -> "目录解析失败: " + parsed.failureReason());
+        }
         try {
-            JsonElement element = JsonParser.parseString(text);
+            JsonElement element = parsed.element();
             if (!element.isJsonObject()) {
                 return DataResult.error(() -> "目录不是 JSON 对象");
             }

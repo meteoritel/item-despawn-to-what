@@ -19,17 +19,21 @@
 
 机制与铁律见 [../systems/platform-abstraction.md](../systems/platform-abstraction.md)。
 
-## 2. `RuleRuntimeHost`：引导与生命周期持有者
+## 2. 宿主：公共宿主核心与两端薄适配器
 
-两端同名类，均为**静态持有者**，暴露相同方法名（NeoForge 额外持有 `currentServer` 供数据包重载枚举维度）：
+引导与生命周期的编排在公共宿主核心 `RuleRuntimeHostCore`（`core/host`）：它持有一次存档生命周期的运行时状态（当前服务端、转化运行时、编辑 / 命令窄接口的适配器），并以 `PlatformAdapter` 窄接口接收平台差异——寿命提供者、包层解析、参考寿命采样与清理。
+
+两端 `RuleRuntimeHost` 是**静态持有者，退化为薄适配器**：各持有一个核心实例、实现 `PlatformAdapter`，把事件转发给核心。两端暴露相同的语义方法名：
 
 | 方法 | 作用 |
 |---|---|
-| `start(server)` | `shutdown()` 清上一轮 → 读 `server.json` → `BuiltinTypeRegistries.create()` → 建 `ConversionRuntime`（注入平台 `LifespanProvider`）→ 加载三层规则 → `replaceRules` → `DropStateStore.configure(新产物保护刻数, 转化冷却刻数)` → 对全部已加载维度 `rescan`。**必须等 `ServerStarted`**（全部维度已创建），否则会漏掉启动期已存在的掉落物 |
+| `start(server)` | 核心的启动步骤：`shutdown()` 清上一轮 → 读 `server.json` → `BuiltinTypeRegistries.create()` → 建 `ConversionRuntime`（注入平台 `LifespanProvider`）→ 加载三层规则 → `replaceRules` → `DropStateStore.configure(新产物保护刻数, 转化冷却刻数)` → 对全部已加载维度 `rescan`。**必须等 `ServerStarted`**（全部维度已创建），否则会漏掉启动期已存在的掉落物 |
 | `reload(server[, resourceManager])` | 重建索引 + 全维度 rescan + `bumpVersion()`；失败保留旧索引并返回 null |
 | `shutdown()` | 释放全部维度状态 + `RuleEditServerHandler.reset()` + `DropStateStore.configure(0, 0)`（避免同进程下一个服务端实例沿用旧配置） |
-| `onItemAdded` / `onItemRemoved` / `deferNaturalExpiry` / `requestEnvironmentalConversion` / `tickServer` / `levelLoaded` / `levelUnloaded` | 转发给 `ConversionRuntime` |
-| `editContext()` / `commandContext()` | 返回两个匿名窄接口实现（`EDIT_CONTEXT` / `COMMAND_CONTEXT`），字段都是 volatile 静态状态，调用时实时读取 |
+| `onItemAdded` / `onItemRemoved` / `deferNaturalExpiry` / `requestEnvironmentalConversion` / `tickServer` / `levelLoaded` / `levelUnloaded` | 转发给核心，核心再转发给 `ConversionRuntime` |
+| `editContext()` / `commandContext()` | 返回核心持有的两个窄接口适配器，内部状态实时读取 |
+
+**失败降级**：启动链路任一步抛运行时异常都就地回退到「未启动」状态并记录原因，异常不外泄到平台启动回调，世界仍可加载与重载。
 
 覆盖层路径 = `getConfigDir()/server.json` 里的 `overlay_directory`；但 **`server.json` 自身位置固定为 `config/itemdespawntowhat/server.json`**，不受该字段影响，避免引导期自引用。
 

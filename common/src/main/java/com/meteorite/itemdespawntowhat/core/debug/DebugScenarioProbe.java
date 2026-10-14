@@ -2,8 +2,8 @@ package com.meteorite.itemdespawntowhat.core.debug;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ScheduledTask;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTaskKind;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ScheduledTaskHandle;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
 import com.meteorite.itemdespawntowhat.core.state.DropStateStore;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -111,7 +111,7 @@ final class DebugScenarioProbe {
     // 基础不变量和资源声明都走同一个断言器：不按场景名称或场景种类分支，检查口径统一。
     JsonArray checks(JsonObject metrics) {
         captureReturns();
-        run.tasks.removeIf(ScheduledTask::terminal);
+        run.tasks.removeIf(ScheduledTaskHandle::terminal);
         long pendingEffects = run.tasks.stream().filter(task -> task.kind() != ServerTaskKind.CONDITION_CHECK).count();
         long pendingChecks = run.tasks.size() - pendingEffects;
         metrics.addProperty("pending_scene_effects", pendingEffects);

@@ -124,6 +124,7 @@ config 覆盖层     config/<overlay_directory>/rules/**/*.json
 - 群系：`server.registryAccess().registryOrThrow(Registries.BIOME)`，**仅 `EXACT` 模式**做引用校验；
 - 战利品表：`server.reloadableRegistries().lookup()`；
 - 引用存在性统一走 `RefChecks`：**非标签引用未命中 → ERROR**；**标签未命中 → WARN**（标签可能后加载，不能据此拒载）。
+- **校验器只做遍历与汇总**：具体类型的判定由该类型的参数对象经动态引用校验扩展点实现（见 [issue-validation.md](../systems/issue-validation.md) §5 与 [ADR-0036](../../../adr/0036-dynamic-reference-check-extension-point.md)），第三方类型自带判定、不需要改核心校验器。
 
 ### 6.3 每轮源消耗
 
@@ -145,7 +146,7 @@ config 覆盖层     config/<overlay_directory>/rules/**/*.json
 - **新增来源层**：改 `RuleSourceLayer` 与 `RuleMerger` 分层逻辑（很少见）。
 - **改合并策略**：改 `RuleMerger`，注意"普通先、控制后"不变量。
 - **改 id 推导**：三处必须同步（`DatapackRuleReader.deriveId` / `OverlayRuleReader.deriveId` / `RuleOverlayWriter.locate`）。
-- **改动态引用校验范围**：改 `RuleReferenceValidator`，新增的第三方动态引用由第三方自己的校验器处理。
+- **改动态引用校验范围**：新增第三方动态引用 → 在**自己的参数对象**上实现动态引用校验扩展点（核心校验器无需改动）；只有当遍历范围本身要变（如新的挂载位置）才改 `RuleReferenceValidator`。
 - **改来源分层/快照形态**：改 `RuleSourceIndex`（归并语义）与 `RuleSnapshotAssembler`（快照装配，见 [edit-protocol.md](edit-protocol.md)）。
 
 ## 8. 相关

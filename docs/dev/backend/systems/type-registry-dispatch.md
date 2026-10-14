@@ -67,6 +67,7 @@
 ## 5. 扩展点与踩坑
 
 - 新增类型定义 → [type-system.md](../modules/type-system.md) 第 6 节；第三方 SPI → 同文第 7 节。
+- 新增带动态引用的类型 → 在参数对象上实现动态引用校验扩展点（见 [issue-validation.md](issue-validation.md) §5）；核心引用校验器只遍历分派。
 - 新增条件节点类型 → 改 `ConditionNode`、`ConditionTrees`、`RuleCodecs.nodeMapCodec` 三处，并同步 `ConditionExpression.isStructurallyValid()` 的形状判断（见 [rule-model.md](../modules/rule-model.md) 扩展点）。
 - 踩坑：注册表接口不承诺只读；注册顺序不可颠倒；类型内/条件节点/候选元素/催化剂成本对象未知字段都是硬错误、只有规则顶层才 WARN；编码未注册类型会抛异常（GUI 保存路径必须捕获）；条件树自引用必须在构造后回填。
 

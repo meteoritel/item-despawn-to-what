@@ -4,8 +4,7 @@ import com.meteorite.itemdespawntowhat.core.api.ConditionContext;
 import com.meteorite.itemdespawntowhat.core.api.ConditionResult;
 import com.meteorite.itemdespawntowhat.core.api.Evaluability;
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
-import com.meteorite.itemdespawntowhat.core.debug.DebugMode;
-import com.meteorite.itemdespawntowhat.core.debug.DebugScenarioManager;
+import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
@@ -149,8 +148,8 @@ public final class ExpressionTreeEvaluator {
             observe(context, value ? "CONDITION_TRUE" : "CONDITION_FALSE", condition);
             return value ? ConditionResult.MATCH : ConditionResult.NO_MATCH;
         } catch (RuntimeException failure) {
-            if (DebugMode.ENABLED) {
-                DebugScenarioManager.observe(context.source(), "ERROR", "condition", condition.type(), "error", failure.toString());
+            if (RuntimeObserver.current().enabled()) {
+                RuntimeObserver.current().observe(context.source(), "ERROR", "condition", condition.type(), "error", failure.toString());
             }
             LOGGER.error("条件求值失败：类型={} 位置={}", condition.type(), context.pos(), failure);
             return ConditionResult.ERROR;
@@ -159,8 +158,8 @@ public final class ExpressionTreeEvaluator {
 
     // 开发环境下的条件求值观察点
     private static void observe(ConditionContext context, String event, Condition condition) {
-        if (DebugMode.ENABLED) {
-            DebugScenarioManager.observe(context.source(), event,
+        if (RuntimeObserver.current().enabled()) {
+            RuntimeObserver.current().observe(context.source(), event,
                     "condition", condition.type(), "evaluated_position", context.pos());
         }
     }

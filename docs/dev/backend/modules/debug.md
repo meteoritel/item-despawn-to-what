@@ -1,6 +1,6 @@
 # 功能模块：调试与开发场景（`core/debug`）
 
-> 事实来源：`core/debug/**`（19 个文件）。仅在**加载器 development 环境**启用，发布环境不注册任何 debug 入口。
+> 事实来源：`core/debug/**`（20 个文件）、`core/api/RuntimeObserver.java`（观测接缝）。仅在**加载器 development 环境**启用，发布环境不注册任何 debug 入口。
 > 场景声明与扩展方式见本文 §1、§3 与 [command.md](command.md) §4；端到端链路见 [../flows/debug-scenario-flow.md](../flows/debug-scenario-flow.md)。
 
 ## 1. 类清单
@@ -10,6 +10,7 @@
 | `DebugMode` | 环境判定 | `ENABLED = Services.PLATFORM.isDevelopmentEnvironment()` |
 | `DebugSessionManager` | 两端已有事件的开发诊断入口 | beginRuntimeTick与tick配对计时；首tick打READY；停服释放计时及场景状态 |
 | `DebugScenarioManager` | 每服务器一轮场景的编排/登记/观察/调度/收尾；UUID → (run, source) 绑定 | `schedule`、`observe`、`converted`、`outputAdded`、`prepareOutput`、`allowsRuntimeLogging` |
+| `DebugRuntimeObserver` | 观测接缝的调试实现：把运行时观测回调接到会话计时与场景编排上 | `enabled`、`inactive`、`observe`、`converted`、`prepareOutput`、`outputAdded`、`schedule`（均转发给 `DebugScenarioManager`） |
 | `DebugScenarioDefinition` | 用**真实** Codec / 校验 / `RuleIndex` 构建场景规则与预期量 | 读取 `DebugScenarioSpec`；规则 origin 标为 `development-memory` |
 | `DebugScenarioRun` | 单轮有界负载状态机与校对（SETUP / WARMUP / MEASURE / CLEANUP） | `finish()`、统一断言和已完成报告 |
 | `DebugScenarioCatalog` / `DebugScenarioSpec` | 场景manifest及严格资源声明 | 名称、默认输入、动作与预期的唯一来源 |
@@ -27,7 +28,8 @@
 ## 2. 场景如何复用真实链路
 
 - 场景规则用**真实** `RuleCodecs.codec(...)` 解析 + `RuleValidation.validate` + `RuleIndex.build`，**不是旁路实现**；只是规则 origin 标为 `development-memory`。
-- 观察的是真实后端入口：`ConversionRuntime` 在正常链路里回调 `observe`/`converted`/`schedule`/`prepareOutput`/`outputAdded`。
+- 观察的是真实后端入口：运行时代码只依赖契约层的观测接缝，各真实链路的回调经它分派；调试实现由两端 `RuleRuntimeEvents` 在服务端装配阶段注入，未注入时接缝为空实现，语义等价于「未启用调试」。
+- 会话存续期的「是否活跃」也经接缝查询（`inactive` / `allowsRuntimeLogging`），运行时代码不直接引用 `DebugMode` 之外的环境判定。
 - **候选规则隔离**：仅对本轮登记 UUID 使用场景索引，其它实体回落到用户普通索引；测试产物在加入前登记，**不进入用户的普通规则链**。
 - `expiry` 场景用**真实**寿命提供器 `runtime.lifespanTicks(...)`，直接设原版 NBT `Age`。
 - 测量窗口只在准备 + 20 tick 预热后开始；服务端 tick 耗时直接读 `server.getTickTimesNanos()`。

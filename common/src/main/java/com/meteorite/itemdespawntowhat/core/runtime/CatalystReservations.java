@@ -15,7 +15,7 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTickBudget;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 
 /**
  * 催化剂固定成本的运行期预留表：同维度维护「已预留未支付」的催化剂实体 UUID → 件数，

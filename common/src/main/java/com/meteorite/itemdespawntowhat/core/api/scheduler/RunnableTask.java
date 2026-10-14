@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.core.runtime.scheduler;
+package com.meteorite.itemdespawntowhat.core.api.scheduler;
 
 /**
  * 把既有的无参动作适配成 ServerTask：一次调用即完成，固定消耗 1 个工作单位。

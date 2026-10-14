@@ -1,37 +1,31 @@
 package com.meteorite.itemdespawntowhat.core.runtime;
 
-import com.google.gson.JsonElement;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
-import com.meteorite.itemdespawntowhat.core.debug.DebugMode;
-import com.meteorite.itemdespawntowhat.core.debug.DebugScenarioManager;
 import com.meteorite.itemdespawntowhat.core.model.CatalystCost;
 import com.meteorite.itemdespawntowhat.core.model.CombinationMode;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.OutcomeCandidate;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
-import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.CancelReason;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.CancelReason;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerScheduler;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTask;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTaskKind;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTickBudget;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.StepResult;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.StepResult;
+import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
+import com.meteorite.itemdespawntowhat.core.type.TaggedItemMatch;
 import com.meteorite.itemdespawntowhat.core.type.effect.SpawnEntityEffect;
 import com.meteorite.itemdespawntowhat.core.type.effect.EntityProduct;
 import com.meteorite.itemdespawntowhat.core.config.NearbyProductLimits;
 import com.meteorite.itemdespawntowhat.core.type.effect.exec.EffectTargets;
 import com.meteorite.itemdespawntowhat.core.type.effect.exec.SpawnXpExecutor;
 import com.meteorite.itemdespawntowhat.core.type.effect.exec.ReturnItemSpawner;
-import com.mojang.serialization.Codec;
-import com.mojang.serialization.DynamicOps;
-import com.mojang.serialization.JsonOps;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.RegistryOps;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.Entity;
@@ -44,9 +38,6 @@ import net.minecraft.world.phys.Vec3;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -117,6 +108,9 @@ final class ConversionSettlement implements ServerTask {
     // 各候选剩余可开始组数（下标与 candidates 对齐）：CAPACITY_UNKNOWN = 未查询；
     // Integer.MAX_VALUE = 无限，不递减
     private final int[] remainingCapacity;
+    // 本刻已查询过的候选容量（下标与 candidates 对齐，CAPACITY_UNKNOWN = 本刻未查询）：
+    // 世界存量在刻间可能变化，同一刻内同一候选只查一次世界并复用结果
+    private final int[] capacityThisStep;
     // 同一源请求内已尝试过的一次性效果槽（键 = 候选 id + "#" + 槽序号）
     private final Set<String> attemptedOneShots = new HashSet<>();
     private EffectContext groupContext;
@@ -126,6 +120,9 @@ final class ConversionSettlement implements ServerTask {
     private int dispatchedThisStep;
     private boolean groupOpen;
     private boolean cancelled;
+    // 待返还库存的所有权：true = 结算任务仍持有，提交点负责把记录的待返还量对齐到手里的结算库存；
+    // 中止或交付完成后移交（剩余库存改由恢复任务交付，本任务只写盘、不再改写待返还量）
+    private boolean ownsStock = true;
     // 返还位置搜索游标：跨刻保留进度，交付成功后重置
     private ReturnItemSpawner.PositionSearch rebateSearch;
 
@@ -143,10 +140,13 @@ final class ConversionSettlement implements ServerTask {
         this.ledger = ledger;
         this.cursors = RoundRobinCursors.get(level);
         this.candidates = rule.effectiveOutcomes();
-        this.structureVersion = structureVersion(candidates);
+        // 候选结构摘要按规则实例缓存，结构未变时不重算；失效条件见 ConversionRuntime
+        this.structureVersion = runtime.candidateStructureVersion(rule, level.registryAccess());
         this.rotation = rule.combination() == CombinationMode.ROUND_ROBIN && candidates.size() > 1;
         this.remainingCapacity = new int[candidates.size()];
         Arrays.fill(this.remainingCapacity, CAPACITY_UNKNOWN);
+        this.capacityThisStep = new int[candidates.size()];
+        Arrays.fill(this.capacityThisStep, CAPACITY_UNKNOWN);
     }
 
     @Override
@@ -165,19 +165,34 @@ final class ConversionSettlement implements ServerTask {
             return StepResult.done(1);
         }
         dispatchedThisStep = 0;
+        // 本刻容量查询结果只在同一刻内复用：世界存量在刻间可变，跨刻复用旧的正数测量值会高估 room
+        Arrays.fill(capacityThisStep, CAPACITY_UNKNOWN);
         try {
-            return switch (phase) {
+            StepResult result = switch (phase) {
                 case PLANNING -> plan(budget);
                 case DISPATCHING -> dispatch(budget);
                 case DELIVERING -> deliver(budget);
                 case DONE -> StepResult.done(1);
             };
+            // 唯一状态提交点：正常完成、显式中止、预算耗尽提前让出与交付让出都在这里统一落盘，
+            // 因此不存在只在部分返回路径同步的账目字段
+            commit();
+            return result;
         } catch (RuntimeException failure) {
             // 异常路径与取消路径共用同一条中止顺序：先把待返还量写盘并释放未支付预留，
             // 再把异常抛给调度器转 FAILED，避免预留悬空
             abort("exception: " + failure.getClass().getSimpleName(), true);
             throw failure;
         }
+    }
+
+    // 唯一状态提交点：所有权仍在本任务时，先把记录的待返还量对齐到手里的结算库存，再把记录写进账本标脏；
+    // 同一刻内的多处账目变动只在这里落盘一次。所有权已移交（中止/完成）时只写盘，不覆盖恢复任务推进的进度
+    private void commit() {
+        if (ownsStock) {
+            record.syncPendingDelivery(held.getCount());
+        }
+        ledger.put(record);
     }
 
     @Override
@@ -200,6 +215,8 @@ final class ConversionSettlement implements ServerTask {
             return false;
         }
         cancelled = true;
+        // 中止即移交库存所有权：剩余库存改由恢复任务交付，本任务不再改写待返还量
+        ownsStock = false;
         if (!record.completed()) {
             // 待返还量以任务手里的结算库存为准：重启后只交付这一部分，不重放已开始的组
             record.syncPendingDelivery(held.getCount());
@@ -212,16 +229,16 @@ final class ConversionSettlement implements ServerTask {
         // 释放未支付的催化剂预留（计划期登记、开组时转已支付）：无世界写入且幂等
         reservations().releaseOwner(record.id());
         try {
-            ledger.put(record);
+            commit();
         } catch (RuntimeException failure) {
             LOGGER.warn("结算记录写盘失败：id={} reason={}", record.id(), reason, failure);
         }
-        if (DebugMode.ENABLED) {
-            DebugScenarioManager.observe(source, "SETTLEMENT_CANCELLED", "record", record.id(),
+        if (RuntimeObserver.current().enabled()) {
+            RuntimeObserver.current().observe(source, "SETTLEMENT_CANCELLED", "record", record.id(),
                     "reason", reason, "pending_delivery", record.pendingDelivery());
         }
-        if (DebugMode.ENABLED && record.catalystCostPerGroup() > 0) {
-            DebugScenarioManager.observe(source, "CATALYST_RELEASED", "record", record.id(), "reason", reason,
+        if (RuntimeObserver.current().enabled() && record.catalystCostPerGroup() > 0) {
+            RuntimeObserver.current().observe(source, "CATALYST_RELEASED", "record", record.id(), "reason", reason,
                     "released_groups", Math.max(0, record.groupCount() - record.groupsStarted()));
         }
         return true;
@@ -269,14 +286,14 @@ final class ConversionSettlement implements ServerTask {
         // 组数定稿后先登记催化剂成本再落计划；预留已完成，两者之间没有 yield 点
         record.catalystPlan(catalyst == null ? 0 : catalyst.totalCount());
         record.plan(pendingCandidate.id(), groupCount);
-        if (DebugMode.ENABLED && catalyst != null) {
-            DebugScenarioManager.observe(source, "CATALYST_PLANNED", "record", record.id(), "rule", rule.id(),
+        if (RuntimeObserver.current().enabled() && catalyst != null) {
+            RuntimeObserver.current().observe(source, "CATALYST_PLANNED", "record", record.id(), "rule", rule.id(),
                     "per_group", catalyst.totalCount(), "groups", groupCount, "reserved", groupCount * catalyst.totalCount());
         }
-        if (DebugMode.ENABLED) {
+        if (RuntimeObserver.current().enabled()) {
             // 每次结算只观测一条 OUTCOME_PLANNED（candidate = 本结算第一组所选候选，groups = 组数上界）；
             // 多组结算的逐组候选切换由每组的 EFFECT_SCHEDULED / EFFECT_ONESHOT_SKIPPED 观测体现
-            DebugScenarioManager.observe(source, "OUTCOME_PLANNED", "rule", rule.id(), "candidate", pendingCandidate.id(),
+            RuntimeObserver.current().observe(source, "OUTCOME_PLANNED", "rule", rule.id(), "candidate", pendingCandidate.id(),
                     "groups", groupCount, "source_cost_per_group", record.sourceCostPerGroup(), "available", held.getCount(),
                     "structure_version", structureVersion, "cursor_start", rotationStart(), "candidates", candidates.size());
         }
@@ -292,9 +309,12 @@ final class ConversionSettlement implements ServerTask {
         int scan = rotationStart();
         for (int offset = 0; offset < size; offset++) {
             int index = Math.floorMod(scan + offset, size);
-            OutcomeCandidate selected = candidates.get(index);
             int cached = remainingCapacity[index];
-            int remaining = capacityGroups(selected, budget);
+            // 本地预留只减不增，是候选剩余组数的硬上界：已判定为 0 时不必再查世界
+            if (cached == 0) {
+                continue;
+            }
+            int remaining = capacityGroupsAt(index, budget);
             if (remaining == CAPACITY_PENDING) { return CAPACITY_PENDING; }
             // 保留本结算对待生成组的本地预留，同时复核已经变化的世界存量。
             if (cached != CAPACITY_UNKNOWN) { remaining = Math.min(remaining, cached); }
@@ -305,6 +325,21 @@ final class ConversionSettlement implements ServerTask {
             return index;
         }
         return SELECT_EXHAUSTED;
+    }
+
+    // 候选剩余可开组数：同一刻内同一候选只查一次世界，选组与开组前复核复用同一结果。
+    // 派发期刻内唯一的世界写是催化剂支付（只减少物品数），复用刻内更早的测量值不会高估剩余容量；
+    // 预算耗尽（CAPACITY_PENDING）不记入本刻缓存，下刻重新查询
+    private int capacityGroupsAt(int index, ServerTickBudget budget) {
+        int cached = capacityThisStep[index];
+        if (cached != CAPACITY_UNKNOWN) {
+            return cached;
+        }
+        int remaining = capacityGroups(candidates.get(index), budget);
+        if (remaining != CAPACITY_PENDING) {
+            capacityThisStep[index] = remaining;
+        }
+        return remaining;
     }
 
     // 轮询扫描起点：未推进过时读取共享游标（跨结算接续），推进过则用本结算内的位置；优先模式恒为 0
@@ -321,8 +356,8 @@ final class ConversionSettlement implements ServerTask {
         pendingCandidateIndex = -1;
         groupCount = 0;
         record.plan("", 0);
-        if (DebugMode.ENABLED) {
-            DebugScenarioManager.observe(source, "OUTCOME_SKIPPED", "rule", rule.id(), "candidates", candidates.size());
+        if (RuntimeObserver.current().enabled()) {
+            RuntimeObserver.current().observe(source, "OUTCOME_SKIPPED", "rule", rule.id(), "candidates", candidates.size());
         }
         phase = Phase.DELIVERING;
         return StepResult.yield(1, 1);
@@ -363,8 +398,9 @@ final class ConversionSettlement implements ServerTask {
     // 距离相同时按 UUID 兜底，保证与实体遍历顺序无关
     private List<ItemEntity> collectCatalystItems(CatalystCost catalyst) {
         AABB box = EffectTargets.blockBox(source.blockPosition(), catalyst.radius());
+        TaggedItemMatch target = TaggedItemMatch.compileAll(catalyst.items());
         List<ItemEntity> found = level.getEntitiesOfClass(ItemEntity.class, box,
-                item -> item != source && !item.isRemoved() && EffectTargets.matchesAny(catalyst.items(), item.getItem()));
+                item -> item != source && !item.isRemoved() && target.matches(item.getItem()));
         found.sort(Comparator.comparingDouble((ItemEntity item) -> item.position().distanceToSqr(source.position()))
                 .thenComparing((ItemEntity item) -> item.getUUID().toString()));
         return found;
@@ -442,7 +478,7 @@ final class ConversionSettlement implements ServerTask {
             if (!groupOpen) {
                 // 已选但尚未支付成本的候选可能跨刻等待，开组前再次核对邻近存量。
                 if (pendingCandidate != null) {
-                    int capacity = capacityGroups(pendingCandidate, budget);
+                    int capacity = capacityGroupsAt(pendingCandidateIndex, budget);
                     if (capacity == CAPACITY_PENDING) { return StepResult.yield(1, 1); }
                     remainingCapacity[pendingCandidateIndex] = Math.min(remainingCapacity[pendingCandidateIndex], capacity);
                     if (remainingCapacity[pendingCandidateIndex] <= 0) {
@@ -459,13 +495,13 @@ final class ConversionSettlement implements ServerTask {
                     }
                     if (pick == SELECT_EXHAUSTED) {
                         // 所有候选都开不出一组：组数截断为已开始组数，剩余源库存走返还路径
+                        // （截断结果与预留释放由本刻唯一提交点落盘）
                         int stoppedGroups = groupCount - groupsStarted;
                         groupCount = groupsStarted;
                         record.plan(record.candidateId(), groupCount);
                         reservations().releaseOwner(record.id());
-                        ledger.put(record);
-                        if (DebugMode.ENABLED) {
-                            DebugScenarioManager.observe(source, "OUTCOME_SKIPPED", "record", record.id(), "rule", rule.id(),
+                        if (RuntimeObserver.current().enabled()) {
+                            RuntimeObserver.current().observe(source, "OUTCOME_SKIPPED", "record", record.id(), "rule", rule.id(),
                                     "candidates", candidates.size(), "groups_started", groupsStarted,
                                     "stopped_groups", stoppedGroups, "reason", "capacity");
                         }
@@ -486,13 +522,13 @@ final class ConversionSettlement implements ServerTask {
                     if (pay.outcome() == CatalystReservations.PayOutcome.SHORT) {
                         // 可用量不足：不开该组（不扣源成本、不派发效果），组数截断为已开始组数，
                         // 释放未支付预留，剩余源库存走正常返还路径（绝不「少扣照常产出」）
+                        // （截断结果由本刻唯一提交点落盘）
                         int shortGroups = groupCount - groupsStarted;
                         groupCount = groupsStarted;
                         record.plan(record.candidateId(), groupCount);
                         reservations().releaseOwner(record.id());
-                        ledger.put(record);
-                        if (DebugMode.ENABLED) {
-                            DebugScenarioManager.observe(source, "CATALYST_SHORT", "record", record.id(), "rule", rule.id(),
+                        if (RuntimeObserver.current().enabled()) {
+                            RuntimeObserver.current().observe(source, "CATALYST_SHORT", "record", record.id(), "rule", rule.id(),
                                     "groups_started", groupsStarted, "group_count", groupCount,
                                     "short_groups", shortGroups, "short_catalyst", shortGroups * perGroup);
                         }
@@ -506,10 +542,10 @@ final class ConversionSettlement implements ServerTask {
                     held.setCount(held.getCount() - cost);
                 }
                 record.groupStarted(cost);
-                // 固定顺序：催化剂已支付、源成本已扣减，才记账并写盘
+                // 固定顺序：催化剂已支付、源成本已扣减，才记账
                 record.catalystGroupPaid(paidCatalyst);
-                // 已开始组立即写盘：中途停服重启后，已支付成本的组不会因为未落盘而被当作「未开始库存」重复返还
-                ledger.put(record);
+                // 已开始组由本刻唯一提交点落盘（扣减与提交点之间没有让出点）：
+                // 中途停服重启后，已支付成本的组不会因为未落盘而被当作「未开始库存」重复返还
                 groupsStarted++;
                 groupOpen = true;
                 effectCursor = 0;
@@ -527,6 +563,7 @@ final class ConversionSettlement implements ServerTask {
                 groupContext = contextForGroup(groupsStarted);
             }
             if (budget.exhausted() || dispatchedThisStep >= batch) {
+                // 预算耗尽或批量上限让出：本刻账目由 step 的唯一提交点落盘后再返回
                 return StepResult.yield(1, 1);
             }
             List<Effect> effects = candidate.effects();
@@ -538,8 +575,8 @@ final class ConversionSettlement implements ServerTask {
             Effect effect = effects.get(slot);
             if (isOneShotAttempted(candidate.id(), slot, effect)) {
                 // 同一源请求内一次性效果只尝试一次：后续组跳过该槽，不重试也不重复计费
-                if (DebugMode.ENABLED) {
-                    DebugScenarioManager.observe(source, "EFFECT_ONESHOT_SKIPPED", "effect", effect.type(),
+                if (RuntimeObserver.current().enabled()) {
+                    RuntimeObserver.current().observe(source, "EFFECT_ONESHOT_SKIPPED", "effect", effect.type(),
                             "outcome", candidate.id(), "slot", slot, "group", groupsStarted);
                 }
                 continue;
@@ -548,7 +585,7 @@ final class ConversionSettlement implements ServerTask {
             budget.charge(1);
             dispatchedThisStep++;
         }
-        record.syncPendingDelivery(held.getCount());
+        // 派发结束：待返还量与本刻账目由唯一提交点落盘，随后进入交付阶段
         phase = Phase.DELIVERING;
         return StepResult.yield(1, 1);
     }
@@ -575,14 +612,11 @@ final class ConversionSettlement implements ServerTask {
             ItemStack stack = held.copyWithCount(size);
             ReturnItemSpawner.Outcome outcome = deliverStack(stack, budget);
             if (outcome == ReturnItemSpawner.Outcome.CHUNK_UNLOADED) {
-                record.syncPendingDelivery(held.getCount());
-                ledger.put(record);
+                // 区块未加载：待返还量由本刻唯一提交点落盘，退避后重试
                 return StepResult.retry(1, 20);
             }
             if (outcome == ReturnItemSpawner.Outcome.NEEDS_MORE_STEPS) {
                 // 位置搜索本刻预算用尽：保留待返还、下刻从断点继续，不整批放弃
-                record.syncPendingDelivery(held.getCount());
-                ledger.put(record);
                 return StepResult.yield(1, 1);
             }
             held.setCount(held.getCount() - size);
@@ -591,25 +625,24 @@ final class ConversionSettlement implements ServerTask {
             deliveredNow++;
         }
         if (held.getCount() > 0) {
-            record.syncPendingDelivery(held.getCount());
-            ledger.put(record);
+            // 本刻批量交付上限已到：剩余待返还由唯一提交点落盘，下刻继续
             return StepResult.yield(1, 1);
         }
-        record.syncPendingDelivery(0);
+        // 返还已全部交付：完成记录并交出库存所有权（提交点此后只写盘，不再对齐待返还量）
         record.complete(level.getGameTime());
-        ledger.put(record);
+        ownsStock = false;
         // 防御：已完成记录的未支付预留必然为空（取消/不足路径已释放），这里幂等再释放一次
         reservations().releaseOwner(record.id());
         phase = Phase.DONE;
-        if (DebugMode.ENABLED) {
-            DebugScenarioManager.observe(source, "SETTLEMENT_COMPLETED", "record", record.id(), "rule", rule.id(),
+        if (RuntimeObserver.current().enabled()) {
+            RuntimeObserver.current().observe(source, "SETTLEMENT_COMPLETED", "record", record.id(), "rule", rule.id(),
                     "candidate", record.candidateId(), "groups", record.groupCount(),
                     "consumed_sources", record.consumedSources(), "applied_units", record.appliedUnits(),
                     "pending_units", record.pendingUnits(), "returned", record.deliveredReturns(),
                     "pending_delivery", record.pendingDelivery());
         }
-        if (DebugMode.ENABLED) {
-            DebugScenarioManager.observe(source, "REBATE_DELIVERED", "record", record.id(), "returned", record.deliveredReturns());
+        if (RuntimeObserver.current().enabled()) {
+            RuntimeObserver.current().observe(source, "REBATE_DELIVERED", "record", record.id(), "returned", record.deliveredReturns());
         }
         return StepResult.done(1);
     }
@@ -637,11 +670,11 @@ final class ConversionSettlement implements ServerTask {
     // 效果派发：延迟交给调度器，条件与概率在执行时统一判定
     private void dispatchEffect(Effect effect, EffectContext context) {
         int delay = Math.max(0, effect.delayTicks());
-        if (DebugMode.ENABLED) {
-            DebugScenarioManager.observe(source, "EFFECT_SCHEDULED", "effect", effect.type(),
+        if (RuntimeObserver.current().enabled()) {
+            RuntimeObserver.current().observe(source, "EFFECT_SCHEDULED", "effect", effect.type(),
                     "delay_ticks", delay, "chance", effect.chance(), "outcome", candidate.id());
         }
-        DebugScenarioManager.schedule(source, scheduler, level.dimension(),
+        RuntimeObserver.current().schedule(source, scheduler, level.dimension(),
                 level.getGameTime() + delay, new EffectTask(runtime, level, source, context, effect, this::account));
     }
 
@@ -649,19 +682,22 @@ final class ConversionSettlement implements ServerTask {
     private void account(EffectResult result) {
         if (result == null) {
             record.effectFailed();
-            return;
-        }
-        switch (result.outcome()) {
-            case APPLIED -> record.addApplied(result.appliedUnits());
-            case DEFERRED -> {
-                record.addApplied(result.appliedUnits());
-                record.addPending(result.pendingUnits());
+        } else {
+            switch (result.outcome()) {
+                case APPLIED -> record.addApplied(result.appliedUnits());
+                case DEFERRED -> {
+                    record.addApplied(result.appliedUnits());
+                    record.addPending(result.pendingUnits());
+                }
+                case SKIPPED -> record.effectSkipped();
+                case FAILED -> record.effectFailed();
             }
-            case SKIPPED -> record.effectSkipped();
-            case FAILED -> record.effectFailed();
         }
-        if (DebugMode.ENABLED) {
-            DebugScenarioManager.observe(source, "EFFECT_SETTLED", "outcome", result.outcome(),
+        // 回执只更新本记录的效果计数（applied/pending units，落盘字段），不改待返还量：同样经唯一提交点落盘；
+        // 所有权已移交（中止/完成）时提交点只写盘，不对齐待返还量，避免覆盖恢复任务的交付进度
+        commit();
+        if (result != null && RuntimeObserver.current().enabled()) {
+            RuntimeObserver.current().observe(source, "EFFECT_SETTLED", "outcome", result.outcome(),
                     "applied", result.appliedUnits(), "pending", result.pendingUnits(), "detail", result.detail());
         }
     }
@@ -671,47 +707,22 @@ final class ConversionSettlement implements ServerTask {
         return rule.id() + "@" + level.dimension().location();
     }
 
-    // 候选结构版本：把候选（id、安全生成/起点填充标记、效果顺序与全部参数）用规则编解码器编码成稳定 JSON 文本，
-    // 再取 SHA-256 前 8 字节。硬约束：不得使用对象哈希——record 的 hashCode 会逐层展开组件，而枚举组件用的是
-    // Object 身份哈希（值不受内容约束，随 JVM、哈希模式与分配状态变化），重启后可能被判为新结构而让游标归零。
-    private int structureVersion(List<OutcomeCandidate> candidates) {
-        Codec<List<OutcomeCandidate>> codec = OutcomeCandidate.codec(RuleCodecs.effectCodec(runtime.types().effectTypes())).listOf();
-        DynamicOps<JsonElement> ops = RegistryOps.create(JsonOps.INSTANCE, level.registryAccess());
-        JsonElement json = codec.encodeStart(ops, candidates)
-                .resultOrPartial(reason -> LOGGER.warn("候选结构摘要编码失败，轮询游标将重置：规则={} 原因={}", rule.id(), reason))
-                .orElse(null);
-        if (json == null) {
-            return 0;
-        }
-        return digestVersion(json.toString());
-    }
-
-    // 内容摘要：同一文本必然同值、文本变化必然变值（SHA-256 前 8 字节碰撞概率可忽略），与任何对象身份无关
-    private static int digestVersion(String text) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8));
-            int version = 0;
-            for (int i = 0; i < 8; i++) {
-                version = (version << 8) | (digest[i] & 0xFF);
-            }
-            return version;
-        } catch (NoSuchAlgorithmException impossible) {
-            // 所有 JVM 都必须提供 SHA-256；真缺失时退回字符串内容哈希，仍与对象身份无关
-            return text.hashCode();
-        }
-    }
-
-    // 邻近物品总量：与实体产出掉落物子类同一判定（具体物品比注册表对象，标签比 TagKey）
+    // 邻近物品总量：与实体产出掉落物子类同一判定（具体物品比注册表对象，标签比 TagKey），
+    // 匹配器按引用编译一次后逐实体复用，不在查询谓词里重复创建 TagKey。
+    // 计数口径与 countNearbyEntities 一致：谓词只筛选实体，收集条数由查询的 maxResults 限制，
+    // 数量来自结果列表；物品按堆叠数逐条累加（空堆叠不命中，因此收满 limit 条时总量必然 >= limit，
+    // 此时 room 已经归零，不会高估可开组数）。
     private int countNearbyItems(TaggedId reference, int limit, int radius) {
         AABB box = searchBox(radius);
-        int[] total = {0};
-        level.getEntities(EntityTypeTest.forClass(ItemEntity.class), box, nearby -> {
-            if (nearby.isAlive() && matchesItem(reference, nearby.getItem())) {
-                total[0] = (int) Math.min(Integer.MAX_VALUE, (long) total[0] + nearby.getItem().getCount());
-            }
-            return total[0] >= limit;
-        }, new ArrayList<>(1), 1);
-        return total[0];
+        TaggedItemMatch target = TaggedItemMatch.compile(reference);
+        List<ItemEntity> nearby = new ArrayList<>();
+        level.getEntities(EntityTypeTest.forClass(ItemEntity.class), box,
+                item -> item.isAlive() && !item.getItem().isEmpty() && target.matches(item.getItem()), nearby, limit);
+        int total = 0;
+        for (ItemEntity item : nearby) {
+            total = saturatedAdd(total, item.getItem().getCount());
+        }
+        return total;
     }
 
     // 邻近实体总量：与 spawn_entity 执行器同一判定（支持具体类型与标签）
@@ -740,17 +751,6 @@ final class ConversionSettlement implements ServerTask {
         Vec3 position = source.position();
         return AABB.unitCubeFromLowerCorner(Vec3.atLowerCornerOf(BlockPos.containing(position.x, position.y, position.z)))
                 .inflate(radius);
-    }
-
-    private static boolean matchesItem(TaggedId reference, ItemStack stack) {
-        if (reference == null || stack.isEmpty()) {
-            return false;
-        }
-        if (reference.tag()) {
-            return stack.is(TagKey.create(Registries.ITEM, reference.id()));
-        }
-        return BuiltInRegistries.ITEM.containsKey(reference.id())
-                && stack.is(BuiltInRegistries.ITEM.get(reference.id()));
     }
 
     private static boolean matchesEntityType(TaggedId reference, Entity entity) {

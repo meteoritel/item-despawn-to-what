@@ -15,12 +15,12 @@ import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveProgress;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditLimits;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerContext;
 import com.meteorite.itemdespawntowhat.core.runtime.RuleIndex;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.CancelReason;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTask;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTaskKind;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTickBudget;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.StepOutcome;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.StepResult;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.CancelReason;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.StepOutcome;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.StepResult;
 import net.minecraft.server.MinecraftServer;
 import org.jetbrains.annotations.Nullable;
 
@@ -98,7 +98,7 @@ final class RuleSaveTask implements ServerTask {
         });
     }
 
-    void schedule() { context.saveScheduler().schedule(SAVE_REALM, this, 1); }
+    void schedule() { context.scheduleTask(SAVE_REALM, this, 1); }
     void invalidate() { active.set(false); commitState.compareAndSet(CommitState.OPEN, CommitState.CANCELLED); }
     void cancel() {
         if (!commitState.compareAndSet(CommitState.OPEN, CommitState.CANCELLED)) { return; }

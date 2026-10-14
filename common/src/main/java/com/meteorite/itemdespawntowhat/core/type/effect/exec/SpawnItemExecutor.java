@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.core.type.effect.exec;
 
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.StepWorkCounter;
 import com.meteorite.itemdespawntowhat.core.type.effect.EntityProduct;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -14,7 +15,12 @@ import net.minecraft.world.phys.Vec3;
 /** 掉落物产出子类执行器：产出量按物品件数计算，受限时按件数分批生成。 */
 public final class SpawnItemExecutor {
 
-
+    /**
+     * 单批最多写入的掉落物实体数：行为上界，取值与语义保持不变，只限制单步产出量。
+     * 每个真正写入世界的 ItemEntity 按 1 个工作单位回执（见 {@link StepWorkCounter#report(int)}），
+     * 故该上界同时是一个调度步骤最多计入的计费单位数。
+     */
+    private static final int ITEM_SPAWNS_PER_RUN = 16;
 
     private SpawnItemExecutor() {
         throw new UnsupportedOperationException("Utility class");
@@ -30,7 +36,7 @@ public final class SpawnItemExecutor {
         return EffectResult.deferred(count, "batched");
     }
 
-    /** 分批生成掉落物，仅保留剩余物品数，每批最多生成 16 个实体。 */
+    /** 分批生成掉落物，仅保留剩余物品数，每批最多生成 {@link #ITEM_SPAWNS_PER_RUN} 个实体。 */
     private static final class ItemBatch implements Runnable {
         private final EffectContext context;
         private final Item item;
@@ -48,7 +54,7 @@ public final class SpawnItemExecutor {
             int capacity = remaining;
             if (capacity <= 0) { return; }
             int maxStack = Math.max(1, item.getDefaultMaxStackSize());
-            for (int i = 0; i < 16 && capacity > 0; i++) {
+            for (int i = 0; i < ITEM_SPAWNS_PER_RUN && capacity > 0; i++) {
                 int size = Math.min(capacity, maxStack);
                 ItemEntity entity = new ItemEntity(level,
                         position.x + (level.random.nextDouble() - 0.5) * 0.3, position.y + 0.1,
@@ -59,6 +65,8 @@ public final class SpawnItemExecutor {
                 EffectTargets.addConversionProduct(context, entity);
                 // 真实完成量回执：按实际写入世界的件数计
                 context.reportProgress(size);
+                // 计价：一个真正写入世界的实体记 1 个工作单位
+                StepWorkCounter.report(1);
                 capacity -= size;
                 remaining -= size;
             }

@@ -1,21 +1,16 @@
 package com.meteorite.itemdespawntowhat.core.type.effect.exec;
 
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
-import com.meteorite.itemdespawntowhat.core.debug.DebugMode;
-import com.meteorite.itemdespawntowhat.core.debug.DebugScenarioManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.tags.TagKey;
 import net.minecraft.util.RandomSource;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
-import java.util.List;
+import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
 import java.util.function.IntConsumer;
 import java.util.function.IntUnaryOperator;
 
@@ -60,29 +55,6 @@ public final class EffectTargets {
         return AABB.unitCubeFromLowerCorner(Vec3.atLowerCornerOf(center)).inflate(radius);
     }
 
-    // 物品栈是否命中 items 中的任一引用（非 tag 比物品，tag 比标签）；未注册的物品 id 与不存在的标签都不算命中
-    // 催化剂固定成本与效果式消耗共用同一口径：本方法任何改动同时影响两处，禁止在调用方复刻
-    public static boolean matchesAny(List<TaggedId> items, ItemStack stack) {
-        for (TaggedId reference : items) {
-            if (reference == null) {
-                continue;
-            }
-            if (reference.tag()) {
-                if (stack.is(TagKey.create(Registries.ITEM, reference.id()))) {
-                    return true;
-                }
-                continue;
-            }
-            if (!BuiltInRegistries.ITEM.containsKey(reference.id())) {
-                continue;
-            }
-            if (stack.is(BuiltInRegistries.ITEM.get(reference.id()))) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     // 实际生成位置可能越过源区块边界；保留实体等区块加载后再加入。
     // 此处借用 Minecraft 管理的实例，生命周期由游戏负责，不能在此关闭。
     @SuppressWarnings("resource")
@@ -90,11 +62,11 @@ public final class EffectTargets {
         if (!com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks.contains(context.level(), entity.blockPosition())) {
             context.schedule(20, () -> addEntity(context, entity));
         } else {
-            if (DebugMode.ENABLED) { DebugScenarioManager.prepareOutput(context, entity); }
+            if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().prepareOutput(context, entity); }
             if (!context.level().addFreshEntity(entity)) {
                 throw new IllegalStateException("实体生成被拒绝：规则=" + context.ruleId() + " 类型=" + entity.getType());
             }
-            if (DebugMode.ENABLED) { DebugScenarioManager.outputAdded(context, entity); }
+            if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().outputAdded(context, entity); }
         }
     }
 

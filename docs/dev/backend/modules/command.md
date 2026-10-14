@@ -8,7 +8,7 @@
 | 类 | 职责 | 关键成员 |
 |---|---|---|
 | `RuleCommandTree` | `/idtw` 唯一入口：根节点装配、权限口径、反馈出口 | `ROOT="idtw"`、`register(dispatcher, context)`、`hasAccess(source)`、`reply` / `replyAll` / `replyFailure` / `notReady` |
-| `RuleCommandContext` | 窄接口：向命令层暴露运行时能力（由两端 `RuleRuntimeHost` 实现） | `runtime()`、`serverConfig()`、`editContext()`、`overlayNamespace()`、`overlayVersion()`、`activeSessionCount()`、`reloadRules(server)` |
+| `RuleCommandContext` | 窄接口：向命令层暴露运行时能力（由公共宿主核心以适配器实现，两端 `RuleRuntimeHost` 只转发） | `runtime()`、`serverConfig()`、`editContext()`、`overlayNamespace()`、`overlayVersion()`、`activeSessionCount()`、`reloadRules(server)` |
 | `RuleCommandText` | i18n 反馈组件构造器（**唯一出口，禁止中文字面量**） | `of` / `kv` / `build`、`issue` / `issues` / `issueTexts` / `summary` |
 | `RuleConfigCommands` | `config` 分支：reload / edit / validate / list / edit-lock | `build(context)` |
 | `RuleQueryCommands` | `rule` 分支：list / show | `build(context)` |
@@ -58,7 +58,7 @@
 
 | 命令 | 实现 | 后端调用 |
 |---|---|---|
-| `/idtw config reload` | `RuleConfigCommands.reload` | `RuleCommandContext.reloadRules(server)`（实现走 `RuleRuntimeHost.reload`） |
+| `/idtw config reload` | `RuleConfigCommands.reload` | `RuleCommandContext.reloadRules(server)`（实现走公共宿主核心的重载路径） |
 | `/idtw config edit` | `RuleConfigCommands.edit` | 先 `RuleEditServerHandler.openEditor(player, editContext)` 原子取锁，成功才下发 `OpenRuleEditorPayload` |
 | `/idtw config validate` | `RuleConfigCommands.validate` | `context.editContext().loadMerged(server)`（只读，不重建索引） |
 | `/idtw config list` | `RuleConfigCommands.list` | `loadMerged`；逐条列出 id/layer/priority/trigger_seconds/effects/enabled/origin |
@@ -71,13 +71,13 @@
 
 ## 4. 扩展点
 
-- **新增子命令**：在 `RuleConfigCommands`/`RuleQueryCommands` 加分支，文案进 `RuleCommandText` + 双语 lang；需要新运行时能力时扩 `RuleCommandContext` 并在两端 `RuleRuntimeHost` 的 `COMMAND_CONTEXT` 实现。
+- **新增子命令**：在 `RuleConfigCommands`/`RuleQueryCommands` 加分支，文案进 `RuleCommandText` + 双语 lang；需要新运行时能力时扩 `RuleCommandContext` 并在公共宿主核心的同名适配器上实现（两端宿主只提供平台差异，不再各自实现窄接口）。
 - **新增 debug 场景/阶段**：只加 `idtw-debug/` 下的 JSON 声明与 manifest 条目，不改命令树（见 [debug.md](debug.md)）。
 - **改权限口径**：改 `RuleCommandTree.hasAccess`（与 `RuleEditServerHandler.canEdit` 保持一致）。
 
 ## 5. 相关
 
-- 平台实现：[platform.md](platform.md)（`RuleRuntimeHost.COMMAND_CONTEXT`）
+- 平台实现：[platform.md](platform.md)（公共宿主核心的 `RuleCommandContext` 适配器）
 - 编辑协议：[edit-protocol.md](edit-protocol.md)
 - 调试命令：[debug.md](debug.md)
 - i18n 约束：所有命令文案必须同步 `en_us.json` 与 `zh_cn.json`

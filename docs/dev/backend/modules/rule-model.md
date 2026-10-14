@@ -79,7 +79,7 @@ core/api  ←──────────── core/model ──────�
 | `ConditionExpression` | record | 条件表达式：整棵树只有一个根节点，`root=null` 表示无条件 | `EMPTY`、`isEmpty()`、`leafCount()`、`nodeCount()`、`depth()`、`isStructurallyValid()` |
 | `ConditionNode` | sealed interface | 递归条件节点 | permits `AllOf(List<ConditionNode>)` / `AnyOf(List<ConditionNode>)` / `Inverted(ConditionNode term)` / `Leaf(Condition condition)` |
 | `ConditionTrees` | util | 条件树遍历、统计与不可变结构变换（求值/校验/编辑器共用） | `forEachLeaf(...)`（带 JSON 路径）、`leafCount` / `nodeCount` / `depth`、`replaceAt(...)`、`updateTermsAt(...)` |
-| `ConditionLimits` | util | 条件树与规则规模上限的**唯一常量来源** | `MAX_LEAVES=128`、`MAX_NODES=256`、`MAX_DEPTH=16`、`MAX_EFFECTS=32`、`MAX_SOURCE_ENTRIES=256`、`MAX_DISPLAY_NAME_CODEPOINTS=128` |
+| `ConditionLimits` | util | 条件树与规则规模上限常量；节点数与深度引用契约层解码预算的同一常量 | `MAX_LEAVES=128`、`MAX_NODES=256`（同源）、`MAX_DEPTH=16`（同源）、`MAX_EFFECTS=32`、`MAX_SOURCE_ENTRIES=256`、`MAX_DISPLAY_NAME_CODEPOINTS=128` |
 | `Condition` | interface | 条件叶（实现类本身即参数对象） | `type()`；常量 `TYPE_FIELD` / `NEGATED_FIELD`（后者仅用于解码期识别旧格式并报错） |
 
 ### 3.3 类型定义形态
@@ -198,13 +198,13 @@ core/api  ←──────────── core/model ──────�
 
 成本声明与对应的消耗效果互斥：声明 `source_cost` 后不得再声明 `consume_source`，声明 `catalyst_cost` 后不得再声明 `consume_catalyst`——否则同一份成本会被重复记账，按结构档拒载，字段路径分别指向 `source_cost` / `catalyst_cost`。
 
-上限集中在 `ConditionLimits`：`effects≤32`、规则级与每个效果级条件树各自 `叶≤128`、`节点≤256`、`深度≤16`、`source` 项（匹配+排除）`≤256`、`display_name≤128` 码点、候选数量 `≤32`。**装配层必须用带注册表的重载**，否则未注册类型与区间类非法参数会被静默放行（见 [rule-loading.md](rule-loading.md)）。
+上限集中在 `ConditionLimits`（条件树的节点数与深度与契约层解码预算同源，解码期先做一次预算预检、超限整条拒载，模型层校验是解码后的纵深防御）：`effects≤32`、规则级与每个效果级条件树各自 `叶≤128`、`节点≤256`、`深度≤16`、`source` 项（匹配+排除）`≤256`、`display_name≤128` 码点、候选数量 `≤32`。**装配层必须用带注册表的重载**，否则未注册类型与区间类非法参数会被静默放行（见 [rule-loading.md](rule-loading.md)）。
 
 ## 5. 扩展点
 
 - **新增规则级字段**：在 `RuleFields` 加常量 → `RuleCodecs` 的 `RecordCodecBuilder` 组里加 `.optionalFieldOf(...)` → `Rule` record 加分量 → 必要时 `RuleValidation` 加校验 → `KNOWN_RULE_FIELDS` 同步。
 - **新增条件节点类型**：改 `ConditionNode`（sealed permits）、`ConditionTrees`（统计/变换/遍历）、`RuleCodecs.nodeMapCodec`（编解码与字段白名单）——注意 `ConditionExpression.isStructurallyValid()` 也要同步形状判断。
-- **新增校验收紧/放宽**：改 `RuleValidation`，问题写入 `IssueCollector`，返回布尔表示该条是否干净；新上限统一加到 `ConditionLimits`。
+- **新增校验收紧/放宽**：改 `RuleValidation`，问题写入 `IssueCollector`，返回布尔表示该条是否干净；通用规模上限加到 `ConditionLimits`，条件树的深度 / 节点预算改契约层解码预算常量（两处必须同源）。
 - **新增通用效果字段**：改 `CommonFields`（保持返回 `RecordCodecBuilder`、不产 null）。
 
 ## 6. 相关

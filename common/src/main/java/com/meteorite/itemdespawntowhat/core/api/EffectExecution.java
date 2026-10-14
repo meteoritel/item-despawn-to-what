@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.api;
 
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTickBudget;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 import org.jetbrains.annotations.Nullable;
 
 /** 效果的一次执行状态；仅在服务端线程推进，取消后直接丢弃，不重放已执行的世界操作。 */

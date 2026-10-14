@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.core.model;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
+import com.meteorite.itemdespawntowhat.core.api.RuleDecodeBudget;
 import com.meteorite.itemdespawntowhat.core.api.RuleDecoder;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.api.TypeDispatch;
@@ -172,7 +173,8 @@ public final class RuleCodecs {
                         catalystCost.orElse(null), combination, outcomes, schemaVersion)));
     }
 
-    // 构造加载层可用的解码器；未知顶层字段不阻断加载，但会作为 WARN 进入 IssueCollector
+    // 构造加载层可用的解码器；未知顶层字段不阻断加载，但会作为 WARN 进入 IssueCollector。
+    // 条件树规模预检必须发生在递归解码之前：递归下钻由 DFU codec 与条件树自身完成，超深或超规模输入会在解码期击穿调用栈
     public static RuleDecoder<Rule> decoder(RegistryAccess registryAccess,
                                             TypeRegistry<EffectType<?>> effectTypes,
                                             TypeRegistry<ConditionType<?>> conditionTypes) {
@@ -182,6 +184,11 @@ public final class RuleCodecs {
             warnUnknownFields(body, issues);
             checkOutcomeFields(body, issues);
             checkCatalystCostFields(body, issues);
+            if (!RuleDecodeBudget.checkConditionBudgets(body, issues)) {
+                // 议题已由预检写入，这里同时给出 DataResult 级失败，调用方即使忽略议题也拿不到可用规则
+                return DataResult.error(() -> "条件树规模超出上限: 深度<="
+                        + RuleDecodeBudget.MAX_CONDITION_DEPTH + "、节点<=" + RuleDecodeBudget.MAX_CONDITION_NODES);
+            }
             return ruleCodec.decode(ops, body).map(Pair::getFirst);
         };
     }

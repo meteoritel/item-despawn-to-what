@@ -21,6 +21,9 @@ import java.util.Map;
  * 服务器级结算账本：保存进行中与已完成的转化结算记录。
  * 存在主世界（服务端全局）的数据存储里：维度卸载或停服都不会丢掉记录本身，
  * 返回待返还数据的完整恢复由 ConversionRuntime 落地；写入仍只发生在服务端线程。
+ * 可变性契约：记录是可变对象，两张索引持有同一个引用，账本不在写入时做快照；
+ * 因此「修改记录字段」与「put 标脏」必须由持有者在同一处提交点完成——SavedData 只在仍为脏时落盘，
+ * 漏标脏的字段修改不会进入存档。落盘读取的是提交时刻的字段值，故提交点之后内存账目与落盘值一致。
  */
 public final class SettlementLedger extends SavedData {
 
@@ -31,8 +34,10 @@ public final class SettlementLedger extends SavedData {
     private static final int MAX_RECORDS = 512;
     private static final long RETAIN_COMPLETED_TICKS = 6000L;
 
+    // 主索引：持有与 scanIndex 相同的可变记录引用，不做写入时拷贝；迭代顺序即加入与持久化顺序。
+    // 两张索引只能通过 index / unindex 成对变更，禁止在其它位置单独增删其中一张。
     private final Map<String, SettlementRecord> records = new LinkedHashMap<>();
-    // 保存重载的稳定游标索引；不改变账本的加入顺序或持久化顺序。
+    // 恢复游标索引（同样持有可变记录引用）；不改变账本的加入顺序或持久化顺序。
     private final java.util.NavigableMap<String, SettlementRecord> scanIndex = new java.util.TreeMap<>();
 
     // 取主世界账本（同一 id 全局唯一，维度卸载不影响）
@@ -45,14 +50,37 @@ public final class SettlementLedger extends SavedData {
                 DATA_ID);
     }
 
-    // 记录入账（新建或更新同一 id）
+    // 记录入账（新建或更新同一 id）：两张索引写入同一引用并标脏，是记录字段变更的唯一落盘点
     public void put(SettlementRecord record) {
         if (record == null || record.id().isEmpty()) {
             return;
         }
+        index(record);
+        setDirty();
+    }
+
+    // 两张索引的唯一写入入口：records 决定加入与持久化顺序，scanIndex 提供恢复游标；调用方不得单独写其中一张
+    private void index(SettlementRecord record) {
         records.put(record.id(), record);
         scanIndex.put(record.id(), record);
-        setDirty();
+    }
+
+    // 两张索引的唯一摘除入口：返回是否真的摘除，调用方据此决定是否需要标脏
+    private boolean unindex(String id) {
+        boolean removed = records.remove(id) != null;
+        removed |= scanIndex.remove(id) != null;
+        return removed;
+    }
+
+    // 撤销一条登记（扣减失败补偿专用）：把记录从两张索引成对摘除并标脏，
+    // 避免重启后的恢复任务把已经写回源实体的库存再交付一次；未登记该 id 时为空操作
+    void remove(String id) {
+        if (id == null || id.isEmpty()) {
+            return;
+        }
+        if (unindex(id)) {
+            setDirty();
+        }
     }
 
     // 按 id 查询，未找到返回 null
@@ -122,14 +150,17 @@ public final class SettlementLedger extends SavedData {
 
     // 裁剪：已完成且返还交付完毕的记录先按 tick 过期，再按条数上限兜底
     public void prune(long gameTime) {
-        boolean changed = records.values().removeIf(record -> {
+        boolean changed = false;
+        // 先按 tick 判定过期再成对摘除：记录可变，判定必须发生在摘除之前，快照遍历避免边遍历边改主索引
+        for (SettlementRecord record : List.copyOf(records.values())) {
             boolean expired = record.status() == SettlementRecord.Status.COMPLETED
-                        && record.pendingDelivery() <= 0
-                        && record.finishedTick() >= 0L
-                        && gameTime - record.finishedTick() > RETAIN_COMPLETED_TICKS;
-            if (expired) { scanIndex.remove(record.id()); }
-            return expired;
-        });
+                    && record.pendingDelivery() <= 0
+                    && record.finishedTick() >= 0L
+                    && gameTime - record.finishedTick() > RETAIN_COMPLETED_TICKS;
+            if (expired) {
+                changed |= unindex(record.id());
+            }
+        }
         while (records.size() > MAX_RECORDS) {
             String victim = null;
             for (Map.Entry<String, SettlementRecord> entry : records.entrySet()) {
@@ -143,8 +174,7 @@ public final class SettlementLedger extends SavedData {
                 LOGGER.warn("结算账本达到上限 {} 且没有可裁剪的已完成记录，未结清记录全部保留", MAX_RECORDS);
                 break;
             }
-            records.remove(victim);
-            scanIndex.remove(victim);
+            unindex(victim);
             changed = true;
         }
         if (changed) {
@@ -176,8 +206,7 @@ public final class SettlementLedger extends SavedData {
             try {
                 SettlementRecord record = SettlementRecord.load(entry, registries);
                 if (!record.id().isEmpty()) {
-                    ledger.records.put(record.id(), record);
-                    ledger.scanIndex.put(record.id(), record);
+                    ledger.index(record);
                 }
             } catch (RuntimeException failure) {
                 LOGGER.warn("结算记录恢复失败，已跳过：index={}", index, failure);

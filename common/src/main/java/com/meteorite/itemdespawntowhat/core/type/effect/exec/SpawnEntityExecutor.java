@@ -2,8 +2,8 @@ package com.meteorite.itemdespawntowhat.core.type.effect.exec;
 
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
-import com.meteorite.itemdespawntowhat.core.debug.DebugMode;
-import com.meteorite.itemdespawntowhat.core.debug.DebugScenarioManager;
+import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.StepWorkCounter;
 import com.meteorite.itemdespawntowhat.core.type.effect.SpawnEntityEffect;
 import com.meteorite.itemdespawntowhat.core.type.effect.EntityProduct;
 import net.minecraft.core.BlockPos;
@@ -33,7 +33,7 @@ public final class SpawnEntityExecutor {
 
 
 
-    // 单个运行批次最多生成的实体数
+    // 单个运行批次最多生成的实体数：行为上界，取值与语义保持不变；每个成功生成的实体回执 1 个工作单位
     private static final int SPAWNS_PER_RUN = 8;
     // 安全搜索范围：水平 ±2（5×5），上下各 2 格，共 125 个候选
     private static final int SEARCH_HORIZONTAL = 2;
@@ -147,6 +147,8 @@ public final class SpawnEntityExecutor {
                     while (searchCursor < SEARCH_OFFSETS.size() && checks < checkLimit) {
                         BlockPos candidate = center.offset(SEARCH_OFFSETS.get(searchCursor++));
                         checks++;
+                        // 计价：每检查一个候选点（含地面判据与碰撞箱、危险方块读取）记 1 个工作单位
+                        StepWorkCounter.report(1);
                         if (isSafeSpawnPosition(type, level, candidate)) { target = candidate; break; }
                     }
                     if (target == null && searchCursor < SEARCH_OFFSETS.size()) {
@@ -154,8 +156,8 @@ public final class SpawnEntityExecutor {
                         context.schedule(1, this); return;
                     }
                     targetReady = true;
-                    if (DebugMode.ENABLED) {
-                        DebugScenarioManager.observe(context.source(), "SPAWN_POS_SEARCH",
+                    if (RuntimeObserver.current().enabled()) {
+                        RuntimeObserver.current().observe(context.source(), "SPAWN_POS_SEARCH",
                                 "entity", BuiltInRegistries.ENTITY_TYPE.getKey(type),
                                 "candidates_checked", searchCursor,
                                 "hit", target != null,
@@ -195,6 +197,8 @@ public final class SpawnEntityExecutor {
             EffectTargets.addEntity(context, spawned);
             // 真实完成量回执：每个成功写入世界的实体计 1
             context.reportProgress(1);
+            // 计价：同上，一个真正写入世界的实体记 1 个工作单位
+            StepWorkCounter.report(1);
         }
     }
 }

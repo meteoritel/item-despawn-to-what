@@ -4,7 +4,8 @@ import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.model.CatalystCost;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTickBudget;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
+import com.meteorite.itemdespawntowhat.core.type.TaggedItemMatch;
 import com.meteorite.itemdespawntowhat.core.type.effect.exec.EffectTargets;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -23,6 +24,8 @@ public final class CatalystPaymentExecution implements EffectExecution {
     private final EffectContext context;
     private final AABB box;
     private final int rounds;
+    // 本次付款的候选引用匹配器：构造时编译一次，邻域查询谓词逐实体复用
+    private final TaggedItemMatch targets;
     private List<ItemEntity> candidates;
     private int[] available;
     private int scanCursor;
@@ -41,6 +44,7 @@ public final class CatalystPaymentExecution implements EffectExecution {
         this.context = context;
         box = EffectTargets.blockBox(BlockPos.containing(context.position()), cost.radius());
         rounds = Math.max(1, context.rounds());
+        targets = TaggedItemMatch.compileAll(cost.items());
     }
 
     /**
@@ -57,7 +61,7 @@ public final class CatalystPaymentExecution implements EffectExecution {
             // 原版邻域查询与排序不可抢占；逐实体库存采集和分配搜索在后续预算步骤完成。
             candidates = context.level().getEntitiesOfClass(ItemEntity.class, box,
                     item -> item != context.source() && item.isAlive() && !item.getItem().isEmpty()
-                            && EffectTargets.matchesAny(cost.items(), item.getItem()));
+                            && targets.matches(item.getItem()));
             candidates.sort(Comparator.comparingDouble((ItemEntity item) -> item.distanceToSqr(context.position()))
                     .thenComparing(ItemEntity::getUUID));
             available = new int[candidates.size()];
