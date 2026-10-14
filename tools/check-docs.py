@@ -2,7 +2,8 @@
 """文档链接与禁用路径校验。
 
 扫描仓库内所有 Markdown 文档，检查两类问题：
-1) 相对链接必须可解析（悬空链接即违规）；
+1) 相对链接必须可解析（悬空链接即违规）：直接命中目标文件，或补 `.md` 后命中
+   （`docs/wiki/` 的页间链接是 GitHub Wiki 页名写法，不带扩展名）；
 2) 现役文档不得出现禁用路径（归档路径：.local/archive、docs/archive）。
 
 退出码：0 = 通过；1 = 存在违规；2 = 配置错误（未找到 Markdown 文档）。
@@ -36,6 +37,18 @@ def collect_docs(root: Path) -> list[Path]:
     return sorted(docs)
 
 
+def link_exists(base: Path, clean: str) -> bool:
+    """判断相对链接目标是否存在。
+
+    GitHub Wiki 的页间链接写成不带扩展名的页面名，因此直接命中失败时再补 `.md` 试一次。
+    """
+    if (base / clean).resolve().exists():
+        return True
+    if clean.endswith(".md"):
+        return False
+    return (base / f"{clean}.md").resolve().exists()
+
+
 def check(root: Path) -> int:
     docs = collect_docs(root)
     if not docs:
@@ -65,7 +78,7 @@ def check(root: Path) -> int:
                 if not clean:
                     continue
                 link_total += 1
-                if not (doc.parent / clean).resolve().exists():
+                if not link_exists(doc.parent, clean):
                     violations.append((rel, line_no, "悬空链接", target))
 
     print(f"[信息] 扫描文档：{len(docs)} 个，相对链接：{link_total} 条")

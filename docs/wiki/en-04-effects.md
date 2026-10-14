@@ -2,7 +2,7 @@
 
 This page explains what a rule can do after it fires: which `type` each effect uses, which parameters it takes, and what players see in game.
 
-After a rule fires, the mod runs every effect object in the `effects` array in order: it hands out items, spawns entities, awards experience, places blocks, strikes lightning, changes the weather, or consumes source items. In JSON, **one effect is one object**, and `type` says which effect it is. You can write effects in the top-level `effects` array of a rule or in the `effects` array of a candidate. For conditions, see [Conditions](en-03-conditions.md); for costs and group settlement, see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement.md).
+After a rule fires, the mod runs every effect object in the `effects` array in order: it hands out items, spawns entities, awards experience, places blocks, strikes lightning, changes the weather, or consumes source items. In JSON, **one effect is one object**, and `type` says which effect it is. You can write effects in the top-level `effects` array of a rule or in the `effects` array of a candidate. For conditions, see [Conditions](en-03-conditions); for costs and group settlement, see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
 
 | Effect | `type` | One-shot | What it does |
 |---|---|---|---|
@@ -28,7 +28,7 @@ Every effect object can carry the four fields below. `type` is required and the 
 | `type` | Says which effect this is | An effect id that starts with `itemdespawntowhat:`, listed in the table above | None, required | A wrong name rejects the rule, and the message lists the registered types |
 | `delay_ticks` | How long to wait before running this effect | Integer (unit: ticks, 20 ticks = 1 second) | `0` | Counts from the moment the rule fires; a negative value rejects the rule, and the message names `delay_ticks` |
 | `chance` | The chance this effect passes, rolled when its turn comes | `0.0` to `1.0` | `1.0` | A value outside this range rejects the rule with a message about `chance`; `1` or `1.0` always runs |
-| `conditions` | Controls this one effect and nothing else | A condition tree, written as shown in [Conditions](en-03-conditions.md) | Omit for no conditions | The mod only evaluates it; the effect is skipped when the conditions fail |
+| `conditions` | Controls this one effect and nothing else | A condition tree, written as shown in [Conditions](en-03-conditions) | Omit for no conditions | The mod only evaluates it; the effect is skipped when the conditions fail |
 
 Three things worth knowing:
 
@@ -41,9 +41,9 @@ Three things worth knowing:
 - **Effects start in written order**: the object written first starts first. Every effect carries its own delay, so effects do not always finish in written order; an arrow rain that starts early can finish after an explosion that starts later.
 - **Work spreads over several ticks**: when one effect has to produce many things, the mod does not stack them all up in a single tick but finishes them over several ticks, with at most 16 item entities per batch, 8 entities per tick, and 128 block positions per tick. Players watch the results appear one batch at a time.
 - **Chance and conditions belong to one effect**: every effect rolls its own `chance` and evaluates its own `conditions`. When one effect fails its roll, the other effects of the same group still run.
-- **One effect failing does not stop the others**: when an effect errors out at run time, for example because an item it refers to no longer exists after a data pack update, the mod records that failure and continues with the next effect. Nothing already done rolls back, and the whole rule is not cancelled. The failure appears in the result; for how to trace it, see [Getting Started](en-01-getting-started.md).
+- **One effect failing does not stop the others**: when an effect errors out at run time, for example because an item it refers to no longer exists after a data pack update, the mod records that failure and continues with the next effect. Nothing already done rolls back, and the whole rule is not cancelled. The failure appears in the result; for how to trace it, see [Getting Started](en-01-getting-started).
 - **Timing of the check**: the mod evaluates `conditions` and rolls `chance` at the moment the effect is due to run, after its delay, not when the rule fires.
-- **Every group runs the effects once**: each group that starts runs the effects once, so `count` is the amount for that single run and a loot table rolls once per group. For how a whole stack splits into groups, see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement.md).
+- **Every group runs the effects once**: each group that starts runs the effects once, so `count` is the amount for that single run and a loot table rolls once per group. For how a whole stack splits into groups, see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
 - **A cap of 32**: one rule can hold at most 32 effects in total, counting the `effects` of every candidate. A rule above the cap is rejected.
 - **One-shot effects**: `arrow_rain`, `lightning`, `explosion`, and `weather` are one-shot. They play once for a given source, they do not repeat with the group count, and they take no part in the capacity check of a candidate. Each source gets at most one attempt at them: a failed roll, unmet conditions, and a run-time error all count as that one attempt.
 
@@ -68,13 +68,13 @@ The **variant** field decides what comes out: `variant` is required and takes `i
 { "type": "itemdespawntowhat:spawn_entity", "variant": "item", "item": "minecraft:rotten_flesh", "count": 1 }
 ```
 
-What you see in game: one piece of rotten flesh lands near the trigger position, within 0.15 blocks horizontally, and players can pick it up right away. The new drop carries protection and a conversion cooldown so that the rules do not consume it again at once; see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement.md).
+What you see in game: one piece of rotten flesh lands near the trigger position, within 0.15 blocks horizontally, and players can pick it up right away. The new drop carries protection and a conversion cooldown so that the rules do not consume it again at once; see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
 
 ### Variant entity: Entities
 
 | Field | What it does | Values | Default | Notes |
 |---|---|---|---|---|
-| `entity` | Which entity to spawn | Entity type id or tag | None, required | When a candidate turns on `safe_spawn`, the mod first looks for a spot to stand on nearby; see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement.md) |
+| `entity` | Which entity to spawn | Entity type id or tag | None, required | When a candidate turns on `safe_spawn`, the mod first looks for a spot to stand on nearby; see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement) |
 | `count` | How many entities to spawn | 1 to 64 | `1` | The mod spawns at most 8 per tick and continues on later ticks |
 | `age` | Age | Integer, positive or negative | `0` | Applies only to mobs that grow up, such as farm animals and villagers; `0` is an adult and `-24000` is a newborn |
 
@@ -152,7 +152,7 @@ Notes:
 - When you write neither field, the rule is rejected with a message about `block` and `use_source_block`. When you write both, `block` wins.
 - Blocks go only at **the same height as the trigger position**; nothing stacks above or below.
 - Only replaceable positions, such as grass and water, are used, and the block needs support. A position that does not fit is skipped, and the mod never steps outside `radius` to reach `count`.
-- Whether the trigger position itself takes part depends on the fill origin switch of the candidate; see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement.md).
+- Whether the trigger position itself takes part depends on the fill origin switch of the candidate; see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
 
 ```json
 { "type": "itemdespawntowhat:place_block", "use_source_block": true, "shape": "square", "count": 1, "radius": 1 }
@@ -237,7 +237,7 @@ A few notes: `clear` switches the weather to clear, the mod does not set the wea
 
 ## Consuming Effects
 
-Consumption effects consume their materials at the moment a group starts: `consume_source` consumes source items, `consume_catalyst` consumes item drops near the trigger position, and `consume_fluid` consumes the fluid in the trigger block. They do the same job as the rule-level fixed costs (`source_cost` and `catalyst_cost`), and one rule may use only one spelling for the same material; see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement.md).
+Consumption effects consume their materials at the moment a group starts: `consume_source` consumes source items, `consume_catalyst` consumes item drops near the trigger position, and `consume_fluid` consumes the fluid in the trigger block. They do the same job as the rule-level fixed costs (`source_cost` and `catalyst_cost`), and one rule may use only one spelling for the same material; see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
 
 ### Consume Source (consume_source)
 
@@ -259,7 +259,7 @@ Consumption effects consume their materials at the moment a group starts: `consu
 }
 ```
 
-What you see in game: the source items this conversion used drop by the stated amount; when fewer items are available the mod takes what it can and never goes below zero. For the implicit consumption that applies when a rule declares no consumption at all, see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement.md).
+What you see in game: the source items this conversion used drop by the stated amount; when fewer items are available the mod takes what it can and never goes below zero. For the implicit consumption that applies when a rule declares no consumption at all, see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
 
 ### Consume Catalyst (consume_catalyst)
 
@@ -307,12 +307,12 @@ What you see in game: each round the mod takes the water in the trigger block. F
 - `limit`: the cap on the number of products, counted within `radius`.
 - `radius`: the meaning depends on the effect. In `place_block` it is the search radius for placement, and in `consume_catalyst` it is the search radius for the item drops to consume. It is also the range that `limit` counts.
 
-A server-level protection also stops a conversion when too many products lie nearby. It works per rule and is independent of the parameters of a single effect; see [Server Configuration](en-07-server-config.md).
+A server-level protection also stops a conversion when too many products lie nearby. It works per rule and is independent of the parameters of a single effect; see [Server Configuration](en-07-server-config).
 
 ## Related
 
-- [Conditions](en-03-conditions.md)
-- [Outcome Candidates and Settlement](en-05-outcomes-and-settlement.md)
-- [Rule Fields](en-02-rule-basics.md)
-- [Server Configuration](en-07-server-config.md)
+- [Conditions](en-03-conditions)
+- [Outcome Candidates and Settlement](en-05-outcomes-and-settlement)
+- [Rule Fields](en-02-rule-basics)
+- [Server Configuration](en-07-server-config)
 

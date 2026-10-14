@@ -4,7 +4,7 @@
 
 模组会把三个位置里的规则一起读进来，这三个位置叫**来源层**（`builtin`、`world`、`overlay`）：**内置数据包**（`builtin`）是模组自带的规则，随模组更新被替换；**世界数据包**（`world`）是你放进存档的数据包里的规则；**config 覆盖层**（`overlay`）是 `config/itemdespawntowhat/rules/` 下的文件，也是三层里唯一由你手写的一层。三者的优先级固定为 config 覆盖层 > 世界数据包 > 内置数据包。
 
-规则的基本字段（`id`、`priority`、`source` 等）见 [规则基础字段](zh-02-rule-basics.md)；能不能转化由条件决定，见 [条件](zh-03-conditions.md)；转化出什么见 [效果](zh-04-effects.md) 与 [候选结果与结算](zh-05-outcomes-and-settlement.md)；改完文件怎么生效见 [首次使用与生效流程](zh-01-getting-started.md)。
+规则的基本字段（`id`、`priority`、`source` 等）见 [规则基础字段](zh-02-rule-basics)；能不能转化由条件决定，见 [条件](zh-03-conditions)；转化出什么见 [效果](zh-04-effects) 与 [候选结果与结算](zh-05-outcomes-and-settlement)；改完文件怎么生效见 [首次使用与生效流程](zh-01-getting-started)。
 
 ## 三层来源与优先级
 
@@ -154,11 +154,11 @@
 
 一个掉落物一次只执行**一条**规则。规则之间按三个关键字排队，取第一条同时满足「声明了本次**消失方式**（`triggers`，掉落物被销毁的途径：`natural`、`fire`、`lava`、`cactus`；不写时只对 `natural` 生效）」与「条件命中」的规则：
 
-1. **优先级**（`priority`，整数，默认 0）：数值越大越靠前，字段说明见 [规则基础字段](zh-02-rule-basics.md)。
-2. **条件叶数**（条件树里的叶节点个数）：越多越靠前——`all_of` 下两个叶算 2，`inverted` 包一个叶算 1，组合节点本身不计数。条件写得更具体的那条更容易胜出，写法见 [条件](zh-03-conditions.md)。
+1. **优先级**（`priority`，整数，默认 0）：数值越大越靠前，字段说明见 [规则基础字段](zh-02-rule-basics)。
+2. **条件叶数**（条件树里的叶节点个数）：越多越靠前——`all_of` 下两个叶算 2，`inverted` 包一个叶算 1，组合节点本身不计数。条件写得更具体的那条更容易胜出，写法见 [条件](zh-03-conditions)。
 3. **定义顺序**（每条 `id` 第一次被读到的先后）：以上都相同时，先被读到的先执行。
 
-排队靠前但条件不命中的规则会被跳过，继续往下找，直到找到一条能执行的；一条都不命中时，这次不转化，规则会按**退避**节奏继续重试（间隔从 1 秒起逐步拉长，上限由 `backoff_max_ticks` 控制，见 [服务端配置](zh-07-server-config.md)）。
+排队靠前但条件不命中的规则会被跳过，继续往下找，直到找到一条能执行的；一条都不命中时，这次不转化，规则会按**退避**节奏继续重试（间隔从 1 秒起逐步拉长，上限由 `backoff_max_ticks` 控制，见 [服务端配置](zh-07-server-config)）。
 
 用 `priority` 控制结果：内置规则 `itemdespawntowhat:builtin_multi_effect`（钻石雷鸣）已经管着钻石且优先级是 0。如果你想让钻石改成别的产物，又不想覆盖那条内置规则，可以新增一条自己 `id` 的规则并给它更高的优先级：
 
@@ -206,7 +206,7 @@ mypack:diamond_to_gold | 来源层=overlay | 优先级=10 | 触发=60 秒 | 效�
 
 其中来源层取值为 `builtin` / `world` / `overlay`；**来源标识**（`出处`）写成「层名[数据包名]:文件路径」，只有数据包层带方括号里的数据包名，例如 `世界数据包[mypack]:data/mypack/idtw/rules/xxx.json`，覆盖层显示相对 `config/itemdespawntowhat` 的路径。
 
-改完文件要重新加载才生效，命令的完整语法见 [命令参考](zh-08-commands.md)。
+改完文件要重新加载才生效，命令的完整语法见 [命令参考](zh-08-commands)。
 
 ## 排查：覆盖或停用看起来没生效
 
@@ -217,11 +217,11 @@ mypack:diamond_to_gold | 来源层=overlay | 优先级=10 | 触发=60 秒 | 效�
 3. **有没有加载成功**：用 `/idtw config validate` 或 `/idtw config list` 看错误与告警——它们会带上出问题的来源与字段路径。文件里 JSON 语法错误、文件为空、顶层既不是规则对象也不是规则数组，都会让整份文件被拒载；单条规则写错只是那一条不生效。
 4. **控制条目的写法是否合法**：`disabled` / `delete` 必须是布尔值、不能同时为 `true`、只能写在覆盖层；`disabled` 找不到同 id 基底时会被忽略，并出现一条告警。
 5. **是不是被另一条规则抢走了**：同一个掉落物只执行一条规则，检查有没有优先级更高、或条件叶数更多的规则也管着这个物品；用 `/idtw config list` 看「优先级」和「出处」。
-6. **改完是否重新加载过**：见 [首次使用与生效流程](zh-01-getting-started.md)。
+6. **改完是否重新加载过**：见 [首次使用与生效流程](zh-01-getting-started)。
 
 ## 相关
 
-- [首次使用与生效流程](zh-01-getting-started.md)
-- [规则基础字段](zh-02-rule-basics.md)
-- [候选结果与结算](zh-05-outcomes-and-settlement.md)
-- [命令参考](zh-08-commands.md)
+- [首次使用与生效流程](zh-01-getting-started)
+- [规则基础字段](zh-02-rule-basics)
+- [候选结果与结算](zh-05-outcomes-and-settlement)
+- [命令参考](zh-08-commands)

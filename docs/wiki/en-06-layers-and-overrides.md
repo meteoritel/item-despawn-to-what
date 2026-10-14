@@ -4,7 +4,7 @@ This page explains where the mod reads rules from, which layer wins, how to disa
 
 The mod reads rules from three places and applies them together, and each place is a **source layer** (`builtin`, `world`, `overlay`). A **built-in datapack** (`builtin`) ships inside the mod, and a mod update replaces it. A **world datapack** (`world`) is a datapack you add to the world save. A **config overlay** (`overlay`) is a file under `config/itemdespawntowhat/rules/`, and it is the only layer you write by hand. Priority is fixed: config overlay > world datapack > built-in datapack.
 
-For the basic rule fields (`id`, `priority`, `source`, and more), see [Rule Fields](en-02-rule-basics.md). Whether a conversion happens depends on conditions, covered in [Conditions](en-03-conditions.md). What a rule produces is covered in [Effects](en-04-effects.md) and [Outcome Candidates and Settlement](en-05-outcomes-and-settlement.md). How a file change takes effect is covered in [Getting Started](en-01-getting-started.md).
+For the basic rule fields (`id`, `priority`, `source`, and more), see [Rule Fields](en-02-rule-basics). Whether a conversion happens depends on conditions, covered in [Conditions](en-03-conditions). What a rule produces is covered in [Effects](en-04-effects) and [Outcome Candidates and Settlement](en-05-outcomes-and-settlement). How a file change takes effect is covered in [Getting Started](en-01-getting-started).
 
 ## The Three Source Layers and Their Priority
 
@@ -154,11 +154,11 @@ Follow these rules when you write a control entry:
 
 One dropped item runs exactly **one** rule at a time. The rules queue up by three keys, and the mod takes the first rule that declares the **trigger kind** for this destruction path and whose conditions match. A **trigger kind** (`triggers`) is one way a dropped item is destroyed: `natural`, `fire`, `lava`, or `cactus`. A rule that omits `triggers` applies to `natural` only.
 
-1. **Priority** (`priority`, an integer, default 0): a higher value goes first. See [Rule Fields](en-02-rule-basics.md) for the field itself.
-2. **Condition leaf count** (the number of leaf nodes in the condition tree): more leaves go first. Under `all_of` two leaves count as 2, `inverted` around one leaf counts as 1, and a combination node does not count by itself. A rule with more specific conditions is more likely to win; see [Conditions](en-03-conditions.md) for the syntax.
+1. **Priority** (`priority`, an integer, default 0): a higher value goes first. See [Rule Fields](en-02-rule-basics) for the field itself.
+2. **Condition leaf count** (the number of leaf nodes in the condition tree): more leaves go first. Under `all_of` two leaves count as 2, `inverted` around one leaf counts as 1, and a combination node does not count by itself. A rule with more specific conditions is more likely to win; see [Conditions](en-03-conditions) for the syntax.
 3. **Definition order** (the order in which each `id` is first read): when the first two keys tie, the rule read first runs first.
 
-A rule that queues higher but whose conditions do not match is skipped, and the mod keeps looking until it finds one it can run. When no rule matches, the dropped item does not convert this time, and the mod retries on a **backoff** rhythm: the interval starts at 1 second and grows, up to the cap in `backoff_max_ticks` (see [Server Configuration](en-07-server-config.md)).
+A rule that queues higher but whose conditions do not match is skipped, and the mod keeps looking until it finds one it can run. When no rule matches, the dropped item does not convert this time, and the mod retries on a **backoff** rhythm: the interval starts at 1 second and grows, up to the cap in `backoff_max_ticks` (see [Server Configuration](en-07-server-config)).
 
 Use `priority` to control the result. The built-in rule `itemdespawntowhat:builtin_multi_effect` (Diamond Thunder) already covers diamonds at priority 0. To send diamonds to a different product without overriding that rule, add a rule with your own `id` and a higher priority:
 
@@ -206,7 +206,7 @@ mypack:diamond_to_gold | layer=overlay | priority=10 | trigger=60s | effects=1 |
 
 The `layer` value is `builtin`, `world`, or `overlay`. The **origin** (the `origin` value) reads `layer name[pack name]:file path`, and only a datapack layer carries the pack name in brackets, for example `世界数据包[mypack]:data/mypack/idtw/rules/xxx.json`. An overlay rule shows a path relative to `config/itemdespawntowhat`. The layer name inside `origin` comes from the mod and is not translated.
 
-Reload after you change a file. The full syntax of the commands is in [Command Reference](en-08-commands.md).
+Reload after you change a file. The full syntax of the commands is in [Command Reference](en-08-commands).
 
 ## Troubleshooting: An Override or Disable That Seems to Do Nothing
 
@@ -217,11 +217,11 @@ Check these in order:
 3. **A successful load.** Run `/idtw config validate` or `/idtw config list` and read the errors and warnings, which name the source and the field path. A JSON syntax error, an empty file, or a top level that is neither a rule object nor a rule array makes the mod reject the whole file. An error inside one rule stops only that rule.
 4. **A legal control entry.** `disabled` and `delete` must be booleans, must not both be `true`, and belong in an overlay. When `disabled` finds no matching base rule, the mod ignores it and prints a warning.
 5. **Another rule taking over.** One dropped item runs one rule, so check for a rule with a higher priority or more condition leaves that also covers this item. Use `/idtw config list` and read the priority and the origin.
-6. **A reload after the change.** See [Getting Started](en-01-getting-started.md).
+6. **A reload after the change.** See [Getting Started](en-01-getting-started).
 
 ## Related
 
-- [Getting Started](en-01-getting-started.md)
-- [Rule Fields](en-02-rule-basics.md)
-- [Outcome Candidates and Settlement](en-05-outcomes-and-settlement.md)
-- [Command Reference](en-08-commands.md)
+- [Getting Started](en-01-getting-started)
+- [Rule Fields](en-02-rule-basics)
+- [Outcome Candidates and Settlement](en-05-outcomes-and-settlement)
+- [Command Reference](en-08-commands)

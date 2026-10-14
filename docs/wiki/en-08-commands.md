@@ -49,7 +49,7 @@ This command reads every source again from the rule files on disk, checks them, 
 
 - **It only checks and never applies**: it leaves the active rules alone, so you can read the result before you decide to run `reload`.
 - It reads the current state on disk, so an edit you saved is visible to `validate` before you run `reload`.
-- Running `validate` once after you start the game is the simplest way to find problems. For the full checklist, see [Getting Started](en-01-getting-started.md).
+- Running `validate` once after you start the game is the simplest way to find problems. For the full checklist, see [Getting Started](en-01-getting-started).
 
 ## /idtw config reload
 
@@ -59,7 +59,7 @@ This command reads the rules from every source again and applies them at once, w
 
 - Dropped items already on the ground are judged again under the new rules, so you do not need to drop them a second time.
 - Run it after every JSON edit, or reload datapacks, or restart the server. Otherwise the game never reads your changes.
-- It reloads rules only and does not read `server.json` again. To change server settings, restart the server; see [Server Configuration](en-07-server-config.md).
+- It reloads rules only and does not read `server.json` again. To change server settings, restart the server; see [Server Configuration](en-07-server-config).
 
 ## /idtw config list
 
@@ -75,7 +75,7 @@ myrules:chicken_to_rotten_flesh | layer=overlay | priority=0 | trigger=10s | eff
 - `layer` is one of the English layer names `builtin`, `world`, or `overlay`. `origin` is the layer name plus the source pack ID and the file path; for the overlay it gives the path relative to `config/itemdespawntowhat`.
 - `priority` repeats the `priority` field and reads `0` when the rule omits it. `trigger` is the `trigger_after_seconds` value in seconds. `effects` counts the entries in the top-level `effects` list; a rule that declares only `outcomes` shows `0` here, because effects inside an outcome candidate do not count.
 - A rule with `enabled=false` still appears in the list; it does not take part in matching.
-- When the same ID exists in several layers, only the one that wins appears. For how the layers merge, see [Source Layers and Overrides](en-06-layers-and-overrides.md).
+- When the same ID exists in several layers, only the one that wins appears. For how the layers merge, see [Source Layers and Overrides](en-06-layers-and-overrides).
 
 ## /idtw rule list and /idtw rule show
 
@@ -143,6 +143,6 @@ Syntax: `/idtw config edit-lock release`, which needs permission level 2 or high
 
 ## Related
 
-- [Getting Started](en-01-getting-started.md): where files go and how to apply your edits.
-- [Source Layers and Overrides](en-06-layers-and-overrides.md): the three-layer merge behind `layer` and `origin`.
-- [Server Configuration](en-07-server-config.md): the settings `reload` does not re-read.
+- [Getting Started](en-01-getting-started): where files go and how to apply your edits.
+- [Source Layers and Overrides](en-06-layers-and-overrides): the three-layer merge behind `layer` and `origin`.
+- [Server Configuration](en-07-server-config): the settings `reload` does not re-read.

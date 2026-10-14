@@ -75,6 +75,18 @@ jobs:
 
               target="${raw_target%%#*}"
               [[ -z "${target}" ]] && continue
+
+              # GitHub Wiki 把带 .md 的相对链接当成 wiki 仓库里的文件，
+              # 点击后会跳到 raw.githubusercontent.com 展示 Markdown 源码；
+              # 页间链接必须写成不带扩展名的页面名
+              case "${target}" in
+                *.md|*.MD)
+                  echo "::error file=${rel_file}::Wiki 页间链接不得带 .md 扩展名，应写成页名：${raw_target} → ${target%.md}"
+                  error_count=$((error_count + 1))
+                  continue
+                  ;;
+              esac
+
               # 只看文件名部分是否存在扩展名，避免路径里的 . / .. 被误判
               filename="${target##*/}"
               [[ "${filename}" == *.* ]] || target="${target}.md"

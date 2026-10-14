@@ -49,7 +49,7 @@
 
 - **只检查，不应用**：它不会改变正在生效的规则，所以你可以先看结果再决定要不要 `reload`。
 - 它读的是磁盘现状：刚保存的文件会被读进来，还没 `reload` 也照样能查。
-- 打开游戏后先跑一次 `validate`，是最省事的排错方式；排查清单见 [首次使用与生效流程](zh-01-getting-started.md)。
+- 打开游戏后先跑一次 `validate`，是最省事的排错方式；排查清单见 [首次使用与生效流程](zh-01-getting-started)。
 
 ## /idtw config reload
 
@@ -59,7 +59,7 @@
 
 - 已经在地上的掉落物也会按新规则重新判断，不需要重新丢一次。
 - 改完 JSON 文件必须执行它，或重载数据包、重启服务器，否则改动不会被游戏读取。
-- 它只重载规则，不会重载 `server.json`：改服务器参数要重启服务端，见 [服务端配置](zh-07-server-config.md)。
+- 它只重载规则，不会重载 `server.json`：改服务器参数要重启服务端，见 [服务端配置](zh-07-server-config)。
 
 ## /idtw config list
 
@@ -75,7 +75,7 @@ myrules:chicken_to_rotten_flesh | 来源层=overlay | 优先级=0 | 触发=10 �
 - `来源层` 是 `builtin`、`world`、`overlay` 三个英文层名之一；`出处` 是层名加上来源数据包标识与文件路径，覆盖层则给出相对 `config/itemdespawntowhat` 的路径。
 - `优先级` 是规则里的 `priority`，没写就是 `0`；`触发` 是 `trigger_after_seconds` 的秒数；`效果` 是最外层 `effects` 列表里的效果个数（只写 `outcomes` 的规则这里是 `0`，写在候选结果里的效果不计入这一列）。
 - `启用=false` 的规则仍在清单里，只是不参与匹配。
-- 同一个 id 在多层都有时，只显示最终生效的那一条；想看合并规则见 [来源层与覆盖](zh-06-layers-and-overrides.md)。
+- 同一个 id 在多层都有时，只显示最终生效的那一条；想看合并规则见 [来源层与覆盖](zh-06-layers-and-overrides)。
 
 ## /idtw rule list 与 /idtw rule show
 
@@ -143,6 +143,6 @@ myrules:chicken_to_rotten_flesh | 来源层=overlay | 启用=true | 出处=confi
 
 ## 相关
 
-- [首次使用与生效流程](zh-01-getting-started.md)：文件放哪、改完怎么应用。
-- [来源层与覆盖](zh-06-layers-and-overrides.md)：`来源层` 与 `出处` 背后的三层合并规则。
-- [服务端配置](zh-07-server-config.md)：`reload` 不会重载的那些参数。
+- [首次使用与生效流程](zh-01-getting-started)：文件放哪、改完怎么应用。
+- [来源层与覆盖](zh-06-layers-and-overrides)：`来源层` 与 `出处` 背后的三层合并规则。
+- [服务端配置](zh-07-server-config)：`reload` 不会重载的那些参数。

@@ -2,7 +2,7 @@
 
 This page explains how to write the `conditions` field and when the mod checks it.
 
-For the other rule fields, see [Rule Fields](en-02-rule-basics.md). For effects and material costs, see [Effects](en-04-effects.md) and [Outcome Candidates and Settlement](en-05-outcomes-and-settlement.md).
+For the other rule fields, see [Rule Fields](en-02-rule-basics). For effects and material costs, see [Effects](en-04-effects) and [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
 
 ## What Conditions Do
 
@@ -65,7 +65,7 @@ This example means "outdoors, and not a thunderstorm".
 
 ### Put the Tree in a Rule
 
-`conditions` is one top-level rule field, and its value is the tree above. A rule has exactly one root node. The example lists only the condition-related fields; see [Rule Fields](en-02-rule-basics.md) for the required fields it leaves out:
+`conditions` is one top-level rule field, and its value is the tree above. A rule has exactly one root node. The example lists only the condition-related fields; see [Rule Fields](en-02-rule-basics) for the required fields it leaves out:
 
 ```json
 {
@@ -142,7 +142,7 @@ The typical case where you see unavailable is `surrounding_blocks`. When the nei
 
 When a condition is unsatisfied, the mod does not drop the rule. It schedules another check later:
 
-- The backoff starts at the check interval and doubles on every failure until it reaches the ceiling. The default check interval is 20 ticks and the ceiling is 100 ticks, so 1 second, then 2, then 4, then at most 5. Two server settings control these numbers: `check_interval_ticks` and `backoff_max_ticks`. See [Server Configuration](en-07-server-config.md).
+- The backoff starts at the check interval and doubles on every failure until it reaches the ceiling. The default check interval is 20 ticks and the ceiling is 100 ticks, so 1 second, then 2, then 4, then at most 5. Two server settings control these numbers: `check_interval_ticks` and `backoff_max_ticks`. See [Server Configuration](en-07-server-config).
 - Retries continue until shortly before the drop would despawn on its own. If no rule has converted the drop by then, it despawns the vanilla way and never converts.
 
 A condition with a window, such as "only at night", is a normal way to write a rule. The drop converts when the window opens, so you do not need to shrink `trigger_after_seconds`. The stricter the condition, the longer the wait before the condition is satisfied and the greater the chance that the drop is picked up or despawns early. That is a trade-off, not a fault.
@@ -447,7 +447,7 @@ The condition decides whether the drop's own block cell contains enough of the n
 }
 ```
 
-Typical uses: recipe-style rules that need the materials on site. The condition only decides; consuming the catalyst needs a matching consuming effect, as described in [Effects](en-04-effects.md).
+Typical uses: recipe-style rules that need the materials on site. The condition only decides; consuming the catalyst needs a matching consuming effect, as described in [Effects](en-04-effects).
 
 ## Common Combinations
 
@@ -557,6 +557,6 @@ Logs on all six sides, where every direction you fill in must match:
 
 ## Related
 
-- Rule fields and source entries: [Rule Fields](en-02-rule-basics.md)
-- Effects and material costs: [Effects](en-04-effects.md)
-- Conversion results and the return path: [Outcome Candidates and Settlement](en-05-outcomes-and-settlement.md)
+- Rule fields and source entries: [Rule Fields](en-02-rule-basics)
+- Effects and material costs: [Effects](en-04-effects)
+- Conversion results and the return path: [Outcome Candidates and Settlement](en-05-outcomes-and-settlement)

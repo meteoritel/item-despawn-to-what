@@ -4,7 +4,7 @@ This page explains what a rule produces, what each conversion group pays, and wh
 
 An **outcome candidate** (an element of `outcomes`) is one possible output a conversion can pick. A **conversion group** is one unit of settlement: it picks one outcome candidate and pays the cost of that group.
 
-Effect parameters, such as what `spawn_entity` produces or how `place_block` places blocks, are on [Effects](en-04-effects.md). Nearby product limits and per-tick check counts are server parameters on [Server Configuration](en-07-server-config.md). Whether a conversion starts at all depends on conditions, see [Conditions](en-03-conditions.md).
+Effect parameters, such as what `spawn_entity` produces or how `place_block` places blocks, are on [Effects](en-04-effects). Nearby product limits and per-tick check counts are server parameters on [Server Configuration](en-07-server-config). Whether a conversion starts at all depends on conditions, see [Conditions](en-03-conditions).
 
 ## Declaring Output: Effects or Outcomes
 
@@ -26,7 +26,7 @@ A rule must answer what it converts into. There are two ways to write that answe
 | Field | What it does | Values | Default | Notes |
 | --- | --- | --- | --- | --- |
 | `id` | The name of this candidate | A non-empty string, unique inside one rule | — (required) | A candidate built from `effects` uses `default` |
-| `effects` | The effects this candidate runs | An array of effects | — (required, cannot be empty) | Effect types and parameters are on [Effects](en-04-effects.md) |
+| `effects` | The effects this candidate runs | An array of effects | — (required, cannot be empty) | Effect types and parameters are on [Effects](en-04-effects) |
 | `safe_spawn` | Whether to look for a safe spot before spawning a mob | `true` / `false` | `false` | Affects only the `entity` variant of `spawn_entity` |
 | `fill_origin` | Whether `place_block` may fill the trigger position itself | `true` / `false` | `true` | Affects only `place_block` |
 
@@ -175,7 +175,7 @@ Write an object that maps a source item reference to a positive integer. The num
 | `consume_catalyst` | The catalysts of each group, within a radius of the trigger position | Matches `catalyst_cost`, and a rule can declare only one of the two |
 | `consume_fluid` | Fluid near the trigger position | Has no rule-level field, so you can only write it as an effect |
 
-- Effect parameters and shared fields, such as `delay_ticks`, `chance`, and `conditions`, are on [Effects](en-04-effects.md).
+- Effect parameters and shared fields, such as `delay_ticks`, `chance`, and `conditions`, are on [Effects](en-04-effects).
 - One rule may declare each consumption effect only once, counting the top-level `effects` together with the `effects` of every candidate. A repeated declaration is rejected.
 - A consumption effect written inside a candidate runs only when that candidate is picked and the group opens.
 
@@ -224,11 +224,11 @@ About interruption and recovery:
 
 Check in this order:
 
-1. **The rule was never picked**: when conditions are not satisfied, the mod does not convert the dropped item and retries on a backoff rhythm, from 1 second to 2 seconds to 4 seconds until it reaches the ceiling. The item is either too young or in the wrong place. See [Conditions](en-03-conditions.md).
-2. **The rule was not loaded or not enabled**: `enabled` is `false`, another rule with the same id from a higher source layer replaces this one, or a wrong JSON field rejects the rule. A rule change takes effect only after a reload. See [Getting Started](en-01-getting-started.md) and [Source Layers and Overrides](en-06-layers-and-overrides.md).
+1. **The rule was never picked**: when conditions are not satisfied, the mod does not convert the dropped item and retries on a backoff rhythm, from 1 second to 2 seconds to 4 seconds until it reaches the ceiling. The item is either too young or in the wrong place. See [Conditions](en-03-conditions).
+2. **The rule was not loaded or not enabled**: `enabled` is `false`, another rule with the same id from a higher source layer replaces this one, or a wrong JSON field rejects the rule. A rule change takes effect only after a reload. See [Getting Started](en-01-getting-started) and [Source Layers and Overrides](en-06-layers-and-overrides).
 3. **The stack is smaller than one group**: when the stack size is below the source cost per group, a cost of 2 with only 1 item left for example, no group can open. You will see the dropped item vanish on time and a matching stack reappear nearby. That is the return, and the returned item never converts again.
-4. **The nearby product limit is full**: when matching products around the trigger point, such as items, mobs, or experience orbs, already reached the limit from the server configuration, the mod skips every candidate that cannot open a group. When no candidate can open a group, the whole stack returns unchanged. See [Server Configuration](en-07-server-config.md).
-5. **The candidate itself was skipped**: its effect-level `conditions` were not satisfied, or its `chance` missed. The mod still consumes the source items, and you see no output. See [Effects](en-04-effects.md).
+4. **The nearby product limit is full**: when matching products around the trigger point, such as items, mobs, or experience orbs, already reached the limit from the server configuration, the mod skips every candidate that cannot open a group. When no candidate can open a group, the whole stack returns unchanged. See [Server Configuration](en-07-server-config).
+5. **The candidate itself was skipped**: its effect-level `conditions` were not satisfied, or its `chance` missed. The mod still consumes the source items, and you see no output. See [Effects](en-04-effects).
 6. **The output was delayed**: an effect that sets `delay_ticks` produces its output later than the moment the dropped item disappears, which happens with delayed lightning or with mobs that spawn in batches.
 7. **The output landed somewhere else**: a `place_block` effect with `fill_origin` set to `false` never fills the trigger position itself, and a mob spawned with `safe_spawn` may appear on a neighboring block.
 
@@ -236,8 +236,8 @@ A one-line order to troubleshoot: first confirm that the rule itself was picked,
 
 ## Related
 
-- [Rule Fields](en-02-rule-basics.md)
-- [Conditions](en-03-conditions.md)
-- [Effects](en-04-effects.md)
-- [Source Layers and Overrides](en-06-layers-and-overrides.md)
-- [Server Configuration](en-07-server-config.md)
+- [Rule Fields](en-02-rule-basics)
+- [Conditions](en-03-conditions)
+- [Effects](en-04-effects)
+- [Source Layers and Overrides](en-06-layers-and-overrides)
+- [Server Configuration](en-07-server-config)

@@ -2,7 +2,7 @@
 
 This page explains what each setting in `server.json` does, which values it accepts, and when you need to change it.
 
-These settings control how the server runs: how often the mod checks, how much work it does per tick, and how it protects and cools down its products. They do not decide what a drop turns into. For that, see [Rule Fields](en-02-rule-basics.md).
+These settings control how the server runs: how often the mod checks, how much work it does per tick, and how it protects and cools down its products. They do not decide what a drop turns into. For that, see [Rule Fields](en-02-rule-basics).
 
 ## What This File Is
 
@@ -104,7 +104,7 @@ Notes:
 
 - `0` turns the matching check off, which means no limit. Only the three `*_limit` fields accept `0`, and the three `*_radius` fields do not.
 - A limit only decides whether a new conversion group can start. It is not a hard ceiling on what exists nearby, and it does not keep the count at or below the limit.
-- A group stopped by a limit consumes no source items. The source items that cannot start a group go through the return path, as described in [Outcome Candidates and Settlement](en-05-outcomes-and-settlement.md). A returned item never converts again, so the surplus does not queue up for a later slot.
+- A group stopped by a limit consumes no source items. The source items that cannot start a group go through the return path, as described in [Outcome Candidates and Settlement](en-05-outcomes-and-settlement). A returned item never converts again, so the surplus does not queue up for a later slot.
 - Lowering a limit makes conversions easier to postpone, and heavy product buildup can stop output for a long time. When all three limits are in use, the tightest one decides.
 
 Example: lift every nearby count limit while the other settings keep their defaults:
@@ -203,8 +203,8 @@ Effect: rules now load from `config/my_idtw/rules/`. Move the contents of the ol
 
 ## Related
 
-- File location and the first launch: [Getting Started](en-01-getting-started.md)
-- Top-level rule fields, such as `trigger_after_seconds`: [Rule Fields](en-02-rule-basics.md)
-- The overlay directory and source priority: [Source Layers and Overrides](en-06-layers-and-overrides.md)
-- The return path and settlement: [Outcome Candidates and Settlement](en-05-outcomes-and-settlement.md)
-- How to use each command: [Command Reference](en-08-commands.md)
+- File location and the first launch: [Getting Started](en-01-getting-started)
+- Top-level rule fields, such as `trigger_after_seconds`: [Rule Fields](en-02-rule-basics)
+- The overlay directory and source priority: [Source Layers and Overrides](en-06-layers-and-overrides)
+- The return path and settlement: [Outcome Candidates and Settlement](en-05-outcomes-and-settlement)
+- How to use each command: [Command Reference](en-08-commands)

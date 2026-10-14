@@ -16,14 +16,14 @@ This page covers the top-level fields a rule accepts: what each field does, whic
 | `triggers` | Which trigger kinds apply | Array of `natural` / `fire` / `lava` / `cactus` | `natural` only when omitted | Yes |
 | `trigger_after_seconds` | How many seconds the item survives under natural despawn | Non-negative integer in seconds | `300` | Yes |
 
-The fields `effects`, `outcomes`, `combination`, `source_cost`, and `catalyst_cost` belong to outcome candidates and settlement. For their syntax, see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement.md).
+The fields `effects`, `outcomes`, `combination`, `source_cost`, and `catalyst_cost` belong to outcome candidates and settlement. For their syntax, see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
 
 ## id: The Identity of the Rule
 
 - **What it does**: identifies one rule. The mod merges sources by ID at load time, so only one rule with a given ID ends up active. Commands, the editor, and error messages all use it to locate a rule.
 - **Values and ranges**: a string in the form `namespace:path`, for example `myrules:chicken_to_rotten_flesh`. The namespace and the path accept only lowercase letters, digits, underscores, dots, and hyphens, and the path can use `/` to nest.
-- **Default**: it is optional. The mod derives it from the file path only when the file holds a single rule. Every entry in a multi-rule file must declare `id`, or the mod rejects that entry at load. For the derivation rules, see [Getting Started](en-01-getting-started.md).
-- **When to change it**: when you name a new rule; when you want to disable or replace an existing rule through the overlay, which requires the exact same ID (see [Source Layers and Overrides](en-06-layers-and-overrides.md)); or when you move a rule from one file to another.
+- **Default**: it is optional. The mod derives it from the file path only when the file holds a single rule. Every entry in a multi-rule file must declare `id`, or the mod rejects that entry at load. For the derivation rules, see [Getting Started](en-01-getting-started).
+- **When to change it**: when you name a new rule; when you want to disable or replace an existing rule through the overlay, which requires the exact same ID (see [Source Layers and Overrides](en-06-layers-and-overrides)); or when you move a rule from one file to another.
 
 ```json
 {
@@ -61,7 +61,7 @@ These two fields affect display only. Changing them does not change what the rul
 - **What it does**: with `false`, the mod still reads the rule and still lists it in `/idtw config list`, but the rule takes no part in matching, which temporarily turns it off.
 - **Values and ranges**: `true` or `false`. Any other type, such as the string `false`, rejects that rule at load.
 - **Default**: `true`.
-- **When to change it**: to turn a rule off while you watch the rest, or to keep a working rule around without using it. To turn off a builtin rule for good, use an overlay control entry rather than editing the builtin file, which is read-only (see [Source Layers and Overrides](en-06-layers-and-overrides.md)).
+- **When to change it**: to turn a rule off while you watch the rest, or to keep a working rule around without using it. To turn off a builtin rule for good, use an overlay control entry rather than editing the builtin file, which is read-only (see [Source Layers and Overrides](en-06-layers-and-overrides)).
 
 ```json
 {
@@ -140,7 +140,7 @@ More notes:
 
 This rule has `priority` 10, so the mod tries it before the chicken rule that also sits at `0`.
 
-More sorting rules apply when priorities tie. For the full candidate order and for how the mod picks the single rule to run, see [Source Layers and Overrides](en-06-layers-and-overrides.md).
+More sorting rules apply when priorities tie. For the full candidate order and for how the mod picks the single rule to run, see [Source Layers and Overrides](en-06-layers-and-overrides).
 
 ## triggers: Which Trigger Kinds Apply
 
@@ -255,11 +255,11 @@ A wrong field affects that one rule only. Other rules in the same file still loa
 | `schema_version` other than `1` | That rule is rejected at load |
 | An unknown extra top-level field | The rule still loads, and the mod reports it as a warning |
 
-For the troubleshooting flow, see [Getting Started](en-01-getting-started.md). For conditions, see [Conditions](en-03-conditions.md); for effects and output, see [Effects](en-04-effects.md).
+For the troubleshooting flow, see [Getting Started](en-01-getting-started). For conditions, see [Conditions](en-03-conditions); for effects and output, see [Effects](en-04-effects).
 
 ## Related
 
-- [Getting Started](en-01-getting-started.md): where files go and how to apply your edits.
-- [Conditions](en-03-conditions.md): how to limit a rule to specific situations.
-- [Effects](en-04-effects.md): what a rule can do when it fires.
-- [Outcome Candidates and Settlement](en-05-outcomes-and-settlement.md): `outcomes`, `combination`, and the cost fields.
+- [Getting Started](en-01-getting-started): where files go and how to apply your edits.
+- [Conditions](en-03-conditions): how to limit a rule to specific situations.
+- [Effects](en-04-effects): what a rule can do when it fires.
+- [Outcome Candidates and Settlement](en-05-outcomes-and-settlement): `outcomes`, `combination`, and the cost fields.

@@ -26,7 +26,7 @@ Here are a few results you can build with rules:
 | Thunder and weather | Strikes lightning, or turns a thunderstorm into rain |
 | Explosion | Detonates once in low light or in weather that is not clear |
 
-After a rule matches, the mod settles the work in groups: one group consumes the declared number of source items and expands its output for the whole group. If fewer source items are present than one group needs, the mod returns the rest to you or leaves it on the ground. The **return** step is called a payback. For details, see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement.md).
+After a rule matches, the mod settles the work in groups: one group consumes the declared number of source items and expands its output for the whole group. If fewer source items are present than one group needs, the mod returns the rest to you or leaves it on the ground. The **return** step is called a payback. For details, see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
 
 ## Where Configuration Lives
 
@@ -39,7 +39,7 @@ Rules come from two locations with different write access, and the mod merges th
 
 A **source layer** is one of those locations. It decides which copy of a rule wins. Merge order, from lowest to highest, is builtin, world, then config overlay. When two layers hold the same ID, the higher layer replaces the lower one as a whole.
 
-On first start, the mod also creates `config/itemdespawntowhat/server.json`. That file holds only server performance and operations settings, such as check intervals, batch limits, and debug logging. It has nothing to do with rule content; for the full field list, see [Server Configuration](en-07-server-config.md). Its `overlay_directory` field is the name of the overlay folder and defaults to `itemdespawntowhat`, which is why the writable path above reads `config/itemdespawntowhat`. Leave it alone unless you have a specific reason to change it.
+On first start, the mod also creates `config/itemdespawntowhat/server.json`. That file holds only server performance and operations settings, such as check intervals, batch limits, and debug logging. It has nothing to do with rule content; for the full field list, see [Server Configuration](en-07-server-config). Its `overlay_directory` field is the name of the overlay folder and defaults to `itemdespawntowhat`, which is why the writable path above reads `config/itemdespawntowhat`. Leave it alone unless you have a specific reason to change it.
 
 You can put overlay rules in any subfolder of `rules/`, and the extension must be `.json`, for example `config/itemdespawntowhat/rules/myrules/chicken_to_rotten_flesh.json`. The subfolder only affects the derived rule ID; it does not affect loading.
 
@@ -99,7 +99,7 @@ Field by field:
 | `trigger_after_seconds` | How many seconds the dropped item survives before the rule triggers | Non-negative integer | `300` | The rule never fires later than the item's natural despawn |
 | `effects` | What happens when the rule triggers | Non-empty array; use either `effects` or `outcomes` | None; at least one of the two | Each element is an **effect** and must carry `type` |
 
-The rule above omits two fields you can ignore for now: `enabled` (already `true` by default; write `false` to keep the rule out of matching) and `triggers` (defaults to `natural` only). For the full description, see [Rule Fields](en-02-rule-basics.md).
+The rule above omits two fields you can ignore for now: `enabled` (already `true` by default; write `false` to keep the rule out of matching) and `triggers` (defaults to `natural` only). For the full description, see [Rule Fields](en-02-rule-basics).
 
 **What happens next**: any `minecraft:chicken` dropped item disappears at second 10 and spawns one `minecraft:rotten_flesh` dropped item in the same place. Because the rule declares no consumption effect, the group consumes one source item by default, which is one chicken. Without such a rule, the chicken waits for its natural despawn and vanilla removes it.
 
@@ -116,7 +116,7 @@ Two points to remember:
 - **Reload after every file change** (run `/idtw config reload`, or reload datapacks, or restart the server). Otherwise the game never reads your edits.
 - **Only the broken part is rejected**: when the whole file fails to parse as JSON, or when the root is neither a rule object nor a rule array, none of that file takes effect. A field error in one rule rejects only that rule; other rules in the same file still load.
 
-The commands need a singleplayer world, or permission level 2 or higher. For the other commands, see [Command Reference](en-08-commands.md).
+The commands need a singleplayer world, or permission level 2 or higher. For the other commands, see [Command Reference](en-08-commands).
 
 To edit rules in the built-in editor instead, `/idtw config edit` is an equivalent entry point. A player runs it, and the server opens the editor after taking the edit lock.
 
@@ -139,7 +139,7 @@ The mod ships 8 sample files that hold 10 rules in the builtin datapack. Six of 
 
 **How to inspect them**: run `/idtw config list` to list the active rules one by one. Each line shows the ID, source layer, priority, trigger seconds, effect count, and enabled state. You can also open `data/itemdespawntowhat/idtw/rules/` in the datapack and read the samples.
 
-**How to disable or delete them**: builtin rules are read-only, so you cannot edit them directly. Use an **override control entry** with the same ID in the config overlay to disable or delete one. For that syntax and the merge rules, see [Source Layers and Overrides](en-06-layers-and-overrides.md).
+**How to disable or delete them**: builtin rules are read-only, so you cannot edit them directly. Use an **override control entry** with the same ID in the config overlay to disable or delete one. For that syntax and the merge rules, see [Source Layers and Overrides](en-06-layers-and-overrides).
 
 ## Rule Not Working? Check in Order
 
@@ -148,14 +148,14 @@ The mod ships 8 sample files that hold 10 rules in the builtin datapack. Six of 
 3. **Is `enabled` set to `false`?** A disabled rule still appears in the load list (`config list` shows "启用=false"), but it does not take part in matching. A builtin rule you disabled through an overlay also shows as not enabled.
 4. **Does `source` match?** Check the spelling of the item ID, its namespace, and the tag name. An unknown static item ID rejects that rule. Also check that `exclude` is not removing the item you want.
 5. **Are the trigger kind and timing right?** With no `triggers` field, only `natural` applies. To watch a burn, a lava, or a cactus case, list that value in `triggers`. When `trigger_after_seconds` is longer than the item actually survives, the item despawns first and the rule never fires.
-6. **Are the conditions met?** If any condition in `conditions` fails, the mod never picks that rule. For condition types and semantics, see [Conditions](en-03-conditions.md).
+6. **Are the conditions met?** If any condition in `conditions` fails, the mod never picks that rule. For condition types and semantics, see [Conditions](en-03-conditions).
 7. **Did a higher-priority rule win?** One dropped item runs one rule at a time. The mod sorts candidates by higher `priority` first, then by more condition leaves, then by definition order, and picks the first rule whose trigger kind matches and whose conditions hold. When several rules claim the same item, raise the `priority` of the one you want, narrow its `source`, or tighten its conditions.
 
 Start with the output of `/idtw config validate`. It tells you which origin and which field path holds the problem.
 
 ## Related
 
-- [Rule Fields](en-02-rule-basics.md): which top-level fields a rule accepts and what each default is.
-- [Conditions](en-03-conditions.md): when a rule is allowed to fire.
-- [Effects](en-04-effects.md): what a rule does when it fires.
-- [Command Reference](en-08-commands.md): every command for checking and applying your edits.
+- [Rule Fields](en-02-rule-basics): which top-level fields a rule accepts and what each default is.
+- [Conditions](en-03-conditions): when a rule is allowed to fire.
+- [Effects](en-04-effects): what a rule does when it fires.
+- [Command Reference](en-08-commands): every command for checking and applying your edits.

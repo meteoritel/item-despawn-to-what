@@ -16,14 +16,14 @@
 | `triggers` | 在哪些消失方式下触发 | 数组，取值 `natural` / `fire` / `lava` / `cactus` | 省略表示只有 `natural` | 是 |
 | `trigger_after_seconds` | 自然消失时，存活多少秒后触发 | 非负整数（秒） | `300` | 是 |
 
-另外还有只属于候选结果与结算的 `effects`、`outcomes`、`combination`、`source_cost` 与 `catalyst_cost`，写法见 [候选结果与结算](zh-05-outcomes-and-settlement.md)。
+另外还有只属于候选结果与结算的 `effects`、`outcomes`、`combination`、`source_cost` 与 `catalyst_cost`，写法见 [候选结果与结算](zh-05-outcomes-and-settlement)。
 
 ## id：规则的身份
 
 - **作用**：标识一条规则。加载时按 id 合并各个来源，同一个 id 只有一条最终生效；命令、编辑器与报错信息都用它定位规则。
 - **取值/范围**：`命名空间:路径` 形式的字符串，例如 `myrules:chicken_to_rotten_flesh`。命名空间与路径都只能用小写字母、数字、下划线、点与连字符，路径内可以用 `/` 分层。
-- **默认值**：可以不写。仅当文件里只有一条规则时，才由文件路径推导；多条目文件里每条都必须显式写 `id`，否则该条被拒载。推导方式见 [首次使用与生效流程](zh-01-getting-started.md)。
-- **什么时候需要动它**：给新规则起名时；想用覆盖层停用或替换一条已有规则时（必须写一模一样的 id，见 [来源层与覆盖](zh-06-layers-and-overrides.md)）；把一条规则从一个文件搬到另一个文件时。
+- **默认值**：可以不写。仅当文件里只有一条规则时，才由文件路径推导；多条目文件里每条都必须显式写 `id`，否则该条被拒载。推导方式见 [首次使用与生效流程](zh-01-getting-started)。
+- **什么时候需要动它**：给新规则起名时；想用覆盖层停用或替换一条已有规则时（必须写一模一样的 id，见 [来源层与覆盖](zh-06-layers-and-overrides)）；把一条规则从一个文件搬到另一个文件时。
 
 ```json
 {
@@ -61,7 +61,7 @@
 - **作用**：写 `false` 时，这条规则仍会被读取、仍出现在 `/idtw config list` 里，但不参与匹配，等于临时关掉它。
 - **取值/范围**：`true` 或 `false`。写成其它类型（比如字符串形式的 `false`）会让该条被拒载。
 - **默认值**：`true`。
-- **什么时候需要动它**：调试期间想先关掉某条再继续观察；保留一条还能用的配置但暂时不用它。要长期关闭内置规则时，更推荐用覆盖层停用，而不是改内置文件（内置文件只读，见 [来源层与覆盖](zh-06-layers-and-overrides.md)）。
+- **什么时候需要动它**：调试期间想先关掉某条再继续观察；保留一条还能用的配置但暂时不用它。要长期关闭内置规则时，更推荐用覆盖层停用，而不是改内置文件（内置文件只读，见 [来源层与覆盖](zh-06-layers-and-overrides)）。
 
 ```json
 {
@@ -140,7 +140,7 @@
 
 这条规则的 `priority` 是 10，会比同为 `0` 的鸡肉规则更先被尝试。
 
-优先级相同时还有后续排序规则，完整的候选顺序与「只执行一条」的判定过程见 [来源层与覆盖](zh-06-layers-and-overrides.md)。
+优先级相同时还有后续排序规则，完整的候选顺序与「只执行一条」的判定过程见 [来源层与覆盖](zh-06-layers-and-overrides)。
 
 ## triggers：在哪些消失方式下触发
 
@@ -255,11 +255,11 @@
 | `schema_version` 不是 `1` | 该条拒载 |
 | 顶层多写了不认识的字段 | 不拒载，但会作为告警提示出来 |
 
-排查流程见 [首次使用与生效流程](zh-01-getting-started.md)；条件的写法见 [条件](zh-03-conditions.md)；效果与产出见 [效果](zh-04-effects.md)。
+排查流程见 [首次使用与生效流程](zh-01-getting-started)；条件的写法见 [条件](zh-03-conditions)；效果与产出见 [效果](zh-04-effects)。
 
 ## 相关
 
-- [首次使用与生效流程](zh-01-getting-started.md)：文件放哪、改完怎么应用。
-- [条件](zh-03-conditions.md)：怎么限制规则只在特定情况下生效。
-- [效果](zh-04-effects.md)：触发后能做哪些事。
-- [候选结果与结算](zh-05-outcomes-and-settlement.md)：`outcomes`、`combination` 与各类成本字段。
+- [首次使用与生效流程](zh-01-getting-started)：文件放哪、改完怎么应用。
+- [条件](zh-03-conditions)：怎么限制规则只在特定情况下生效。
+- [效果](zh-04-effects)：触发后能做哪些事。
+- [候选结果与结算](zh-05-outcomes-and-settlement)：`outcomes`、`combination` 与各类成本字段。
