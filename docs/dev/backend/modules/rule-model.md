@@ -37,7 +37,7 @@ core/api  ←──────────── core/model ──────�
 | `Evaluability` | enum | 可求值性前置门禁 | `AVAILABLE` / `UNAVAILABLE` |
 | `EffectResult` | record | 效果执行回执（结算记账唯一依据） | `outcome`（`APPLIED`/`DEFERRED`/`SKIPPED`/`FAILED`）+ `appliedUnits` + `pendingUnits` + `oneShot` + `detail`；`applied(...)` / `deferred(...)` / `skipped(...)` / `failed(...)` / `asOneShot()` / `counted()` |
 | `ClimateSampler` / `ClimateSample` | interface / record | 6 参数气候采样（温度/湿度/大陆性/侵蚀/深度/怪异度） | `sample(BlockPos)` |
-| `TagLookup` | interface | 6 类标签成员查询；标签不存在返回 false | `itemInTag` / `blockInTag` / `entityInTag` / `biomeInTag` / `fluidInTag` / `mobEffectInTag` |
+| `TagLookup` | interface | 5 类标签成员查询（方块 / 实体 / 生物群系 / 流体 / 药水效果；物品标签由候选索引展开）；标签不存在返回 false | `blockInTag` / `entityInTag` / `biomeInTag` / `fluidInTag` / `mobEffectInTag` |
 
 ### 2.3 解码与问题模型
 

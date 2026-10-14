@@ -22,7 +22,7 @@
 5. **空组合节点可构造、可序列化**：空 `all_of`/`any_of` 是编辑中间态，构造器与编码都必须允许；非空性只在 `isStructurallyValid()` 与解码期强制（`terms` 缺失或为空即报错）。
 6. **限额统一**：`ConditionLimits` 定义 `MAX_LEAVES=128`、`MAX_NODES=256`、`MAX_DEPTH=16`、`MAX_EFFECTS=32`、`MAX_SOURCE_ENTRIES=256`、`MAX_DISPLAY_NAME_CODEPOINTS=128`，其中节点数与深度与契约层解码预算共用同一常量（`ConditionLimits` 引用）；`RuleValidation` 里写死的 128/32 改为引用常量。限额**逐表达式**计算，规则级与每个效果级条件树各自受限，不跨表达式累加。
 7. **四态求值**：`ConditionResult{MATCH, NO_MATCH, UNAVAILABLE, ERROR}` 与 `Evaluability{AVAILABLE, UNAVAILABLE}`。`ConditionType` 增加 `default Evaluability evaluability(P params, ConditionContext context) { return AVAILABLE; }`，供「当前上下文不足以判定」（例如区块未加载）使用。求值按下列规则短路聚合：`inverted` 只交换 MATCH/NO_MATCH，`UNAVAILABLE`/`ERROR` **原样穿透**；组合节点聚合时 `UNAVAILABLE` 优先于 `ERROR`；空 `all_of` → MATCH、空 `any_of` → NO_MATCH。
-8. **可求值性门禁迁移**：`surrounding_blocks` 的 `LoadedChunks.containsArea(level, pos, 1)` 从 `ExpressionEvaluator` 移入该条件的 `evaluability(...)`，求值器不再硬编码具体条件类型。
+8. **可求值性门禁迁移**：`surrounding_blocks` 的 `ChunkPresence.containsArea(level, pos, 1)` 从 `ExpressionEvaluator` 移入该条件的 `evaluability(...)`，求值器不再硬编码具体条件类型。
 9. **只有 `MATCH` 通过根**：`UNAVAILABLE`/`ERROR` 一律不触发效果；`matches(...)` 保留为 `evaluate(...) == MATCH` 的便捷入口，供旧调用点过渡。
 10. **旧格式零兼容**：`conditions` 为数组、对象含 `groups`、叶内 `negated` 一律返回明确错误信息，不做静默迁移，也不提供自动转换。
 

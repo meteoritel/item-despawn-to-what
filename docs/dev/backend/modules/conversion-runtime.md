@@ -25,9 +25,9 @@
 | `ExpressionTreeEvaluator` | 条件树递归求值，四态（MATCH / NO_MATCH / UNAVAILABLE / ERROR） | `evaluate`、`evaluateNode` |
 | `RuntimeConditionContext` | `ConditionContext` 的服务端 record 实现（纯参数聚合） | 注入按维度复用的 `RuntimeTagLookup` / `RuntimeClimateSampler` |
 | `RuntimeEffectContext` | `EffectContext` 实现：**按转化组**构造，持有源快照、组信息与调度器 | `schedule`、`runWhenLoaded`、`reportProgress` |
-| `RuntimeTagLookup` | 标签成员查询，按 `kind:tagId` 缓存（不存在缓存空集） | `itemInTag` … `members` |
+| `RuntimeTagLookup` | `TagLookup` 的服务端实现：按 `kind:tagId` 缓存（不存在缓存空集） | `blockInTag` … `mobEffectInTag`、`members` |
 | `RuntimeClimateSampler` | 气候采样，按 quart 坐标缓存，上限 4096、超限淘汰最旧 | `sample` |
-| `LoadedChunks` | 无副作用区块存在性查询（**禁止为执行规则生成区块**） | `contains`、`containsArea` |
+| `LoadedChunks` | 运行时区块门面：转调契约层 `ChunkPresence`（**禁止为执行规则生成区块**） | `contains`、`containsArea` |
 | `LifespanProvider` | 平台差异收敛点：掉落物自然寿命刻数 | `lifespanTicks(level, entity)`、`vanillaDefault()`（6000） |
 | `PlayerDeathDrops` | 玩家死亡掉落排除策略（入世界前打 `check_lock`） | `mark(entity, item)` |
 | `DropState` | 掉落物实体层状态：临时保护/冷却、永久保护/禁转，绝对值游戏刻计时 | `isProtected`、`cooldownRemaining`、`blocksConversion`、`withTemporary`、`withPermanentReturn`、`permanentFlagsMatch`、`unionTemporary` |
@@ -59,7 +59,7 @@ delay           = max(0, dueAge - entity.getAge())
 
 | 消失方式 | 平台入口 | 运行时动作 |
 |---|---|---|
-| 自然消失 | 原版 discard 前拦截 → `deferNaturalExpiry` | 置 `expiryPending`、取消旧任务、以 `delay=0` 排一次 `attempt(kind=NATURAL)`；返回 `true` 表示已接管本次 discard |
+| 自然消失 | 原版 discard 前拦截 → `deferNaturalExpiry` | 置 `expiryPending`、以 `NATURAL_EXPIRY_DEFERRED` 取消旧任务、以 `delay=0` 排一次 `attempt(kind=NATURAL)`；返回 `true` 表示已接管本次 discard |
 | 火 / 岩浆 / 仙人掌 | 真实致死分支 → `requestEnvironmentalConversion` | `DamageClassification.classify` 归类后调 `requestConversion(kind)`；`kind` 不属于三类则忽略 |
 
 两条路径最终都进入同一个 `attempt` / `select`，共用同一份追踪状态与公共预算：自然路径经 `deferNaturalExpiry` → `scheduleCheck` 排队，环境路径经 `requestEnvironmentalConversion` → `requestConversion` 同步判定。`requestConversion`：`item`/`kind` 为空或 `excluded` → 返回；未 tracked → 先 `onItemAdded` 补齐；`locked` → 忽略（同一死亡多份伤害调用的去重）；否则 `attempt`。环境致死请求在 `hurt` 调用栈内**同步**执行「条件检查 + 规则选择」（单实体一次、量小），效果一律经调度器排队在共享预算内执行。规则未声明该消失方式时不参与（`rule.effectiveTriggers()`，未声明按 `natural`）。

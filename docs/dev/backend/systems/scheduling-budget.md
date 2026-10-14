@@ -86,6 +86,7 @@ spread = ceil(due / window)
 | `SERVER_STOP` | 停服（`shutdown`） |
 | `ENTITY_REMOVED` | 源实体被移除 |
 | `SCENARIO_STOP` | 开发场景主动停止 |
+| `NATURAL_EXPIRY_DEFERRED` | 掉落物临近自然寿命（`ConversionRuntime.deferNaturalExpiry`）：既有检查让位给重新排定的预留检查 |
 
 三个入口的语义差异：
 

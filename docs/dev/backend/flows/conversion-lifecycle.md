@@ -33,7 +33,7 @@
 
 | 消失方式 | 入口 | 关键点 |
 |---|---|---|
-| 自然消失 | `deferNaturalExpiry`（原版 discard 前） | 首次拦截置 `expiryPending`、取消旧任务、`delay=0` 立即排一次 `attempt(kind=natural)`；到期后即使条件不满足也会在 `attempt` 中被移除并 `discard`。**原版没有"消失后"回调，拦截点在 discard 之前。** |
+| 自然消失 | `deferNaturalExpiry`（原版 discard 前） | 首次拦截置 `expiryPending`、以 `NATURAL_EXPIRY_DEFERRED` 取消旧任务、`delay=0` 立即排一次 `attempt(kind=natural)`；到期后即使条件不满足也会在 `attempt` 中被移除并 `discard`。**原版没有"消失后"回调，拦截点在 discard 之前。** |
 | 火 / 岩浆 / 仙人掌 | `requestEnvironmentalConversion` | 在真实致死分支（`ItemStack#onDestroyed` 之前）调用，`DamageClassification.classify` 归类后 `requestConversion`；接触危险源、受伤但存活、原版免疫伤害都不触发 |
 
 两者共用同一份追踪状态、公共预算与 `attempt` / `select` 判定（自然路径经 `scheduleCheck` 排队，环境路径经 `requestConversion` 同步判定）：规则未声明该消失方式时不参与（未声明按 `natural`）；环境请求在 `hurt` 调用栈内同步跑条件检查与规则选择。

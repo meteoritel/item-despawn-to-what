@@ -66,6 +66,7 @@
 - **消费** `core/catalog` 的数据源，负责**大小写不敏感的子串过滤（id / label / subLabel）、分页切分、按「类型 + 来源修订号」缓存全量候选与修订失效**，产出可下发的 `RuleCatalog`。
 - 默认每页 `DEFAULT_PAGE_SIZE = 50`，单页上限 `RequestRuleCatalogPayload.MAX_PAGE_SIZE`；越界页码夹到最后一页。
 - `invalidate()` / `invalidate(type)` 在保存、重载或来源内容变化后清缓存。
+- **来源构建失败不致命**：`RuleCatalogSources.builtin(server)` 抛运行时异常时该类型按无数据源处理并记录 WARN 日志，用于区分「该类型没有数据源」与「数据源实现体报错」。
 
 **两者关系**：`core/catalog` 提供「有哪些、变没变」；`core/network/catalog` 提供「怎么分页下发、何时失效」；编辑端经 `RequestRuleCatalogPayload` / `RuleCatalogPayload` 取分页目录（见 [edit-protocol.md](../modules/edit-protocol.md)）。
 
