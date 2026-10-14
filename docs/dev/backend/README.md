@@ -59,6 +59,7 @@
 | 包 | 主文档 |
 |---|---|
 | `core/api` | [rule-model.md](modules/rule-model.md) + [type-registry-dispatch.md](systems/type-registry-dispatch.md) + [issue-validation.md](systems/issue-validation.md) |
+| `core/api/scheduler` | [scheduling-budget.md](systems/scheduling-budget.md)（契约）+ [conversion-runtime.md](modules/conversion-runtime.md) |
 | `core/model` | [rule-model.md](modules/rule-model.md) |
 | `core/load` | [rule-loading.md](modules/rule-loading.md) |
 | `core/service` | [rule-loading.md](modules/rule-loading.md)（装配）+ [edit-protocol.md](modules/edit-protocol.md)（写入/会话） |
@@ -73,6 +74,7 @@
 | `core/command` | [command.md](modules/command.md) |
 | `core/debug` | [debug.md](modules/debug.md) |
 | `core/config` | [config.md](systems/config.md) + [platform.md](modules/platform.md) |
+| `core/host` | [platform.md](modules/platform.md) + [platform-abstraction.md](systems/platform-abstraction.md) |
 | `Constants.java`、`platform/` | [platform-abstraction.md](systems/platform-abstraction.md)、[platform.md](modules/platform.md) |
 | `fabric/`、`neoforge/` | [platform.md](modules/platform.md) |
 

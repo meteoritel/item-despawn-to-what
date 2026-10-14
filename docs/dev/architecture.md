@@ -11,12 +11,12 @@
 |---|---|---|---|
 | 外部输入 | 资源与配置 | 数据包、`config` | 提供规则文件、模组级配置、开发环境场景声明 |
 | 平台接入 | 加载器接入层 | `fabric/`、`neoforge/` | 把加载器事件、网络载荷、命令、客户端引导接到内核；承载最小 Mixin |
-| 平台抽象 | 平台抽象层 | `platform/`、`core/config` | 平台能力契约、窄接口、静态 sink、引导与生命周期持有者 |
-| 服务端内核 | 契约层 | `core/api` | 全局对外契约：类型、执行 / 求值上下文、解码、问题模型、字段常量 |
+| 平台抽象 | 平台抽象层 | `platform/`、`core/config`、`core/host` | 平台能力契约、窄接口、静态 sink、公共宿主核心（引导与生命周期编排）与两端薄适配器 |
+| 服务端内核 | 契约层 | `core/api`、`core/api/scheduler` | 全局对外契约：类型、执行 / 求值上下文、解码、问题模型、字段常量、调度契约 |
 | 服务端内核 | 模型层 | `core/model` | 规则数据形态、条件树、编解码组装、语义校验 |
 | 服务端内核 | 类型与扩展层 | `core/registry`、`core/extension`、`core/type` | 类型注册表、第三方 SPI、内置条件与效果实现 |
 | 服务端内核 | 加载与装配层 | `core/load`、`core/service`（装配） | 三层来源读取、合并、解码、校验、候选索引 |
-| 服务端内核 | 运行时层 | `core/runtime`（含 `scheduler`）、`core/state` | 追踪、排期、求值、完整组结算与返还、共享预算调度、实体状态 |
+| 服务端内核 | 运行时层 | `core/runtime`（含 `scheduler` 实现）、`core/state` | 追踪、排期、求值、完整组结算与返还、共享预算调度、实体状态 |
 | 创作与管控 | 目录与编辑层 | `core/catalog`、`core/network`、`core/service`（编辑） | 候选枚举、编辑快照、变更集、独占会话、权威落盘 |
 | 创作与管控 | 命令与调试层 | `core/command`、`core/debug` | 命令树与权限口径；开发环境场景、流水线、性能观测 |
 | 客户端 | 客户端层 | `client/net`、`client/edit`、`client/ui`、`client/key` | 协议工作区、草稿与撤销、编辑器注册表、界面与 UI kit、按键 |
@@ -44,7 +44,8 @@ flowchart TB
         SVC["Services / IPlatformHelper"]
         NARROW["窄接口<br/>RuleCommandContext / RuleEditServerContext"]
         SINK["静态 sink<br/>开屏与结果分发"]
-        HOST["RuleRuntimeHost<br/>引导与生命周期持有者"]
+        HOST["RuleRuntimeHost<br/>两端薄适配器"]
+        HOSTCORE["RuleRuntimeHostCore<br/>公共宿主核心"]
     end
 
     subgraph CORE["服务端内核 core"]
@@ -72,29 +73,30 @@ flowchart TB
 
     DP --> LOAD
     OVL --> LOAD
-    CFG --> HOST
+    CFG --> HOSTCORE
     DBG --> DBGC
 
     EV --> HOST
     MIX --> HOST
-    HOST -->|引导 / 重载| LOAD
-    HOST -->|事件 / tick| RT
-    HOST -.实现.-> NARROW
+    HOST --> HOSTCORE
     HOST -.实现.-> SVC
+    HOSTCORE -->|引导 / 重载| LOAD
+    HOSTCORE -->|事件 / tick| RT
+    HOSTCORE -.实现.-> NARROW
 
-    LOAD --> MODEL
     MODEL --> API
     TYPE --> MODEL
     RT --> TYPE
     RT --> STATE
     STATE --> SVC
+    SVC -->|DropState| STATE
 
     NARROW -->|命令能力| CMD
     NARROW -->|编辑能力| EDIT
     CMD --> LOAD
     CMD --> EDIT
     CAT --> EDIT
-    EDIT -->|重建索引与回扫| HOST
+    EDIT -->|重建索引与回扫| HOSTCORE
 
     RT --> SINK
     SINK --> CNET
@@ -110,8 +112,9 @@ flowchart TB
     DBGC --> RT
 ```
 
-图读法：实线表示调用 / 数据方向，虚线表示"平台侧实现 core 定义的窄接口"。
+图读法：实线表示调用 / 数据方向，虚线表示"core 定义的窄接口由公共宿主核心实现、平台能力契约由平台侧实现"。
 内核不向上引用平台与客户端；客户端只经协议与静态 sink 与内核通信。
+平台能力契约的实体状态方法以 `core/state` 的 `DropState` 为参数，因此 `Services` 与掉落物状态层存在**类型级**双向引用；运行期状态仍只由内核单向持有。
 
 ## 3. 依赖方向铁律
 

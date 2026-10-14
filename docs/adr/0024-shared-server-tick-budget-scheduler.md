@@ -1,7 +1,7 @@
 # ADR-0024：所有维度共享的公共服务器 tick 预算调度器
 
 - 状态：已实施（2026-10-03），已通过用户实机验收。
-- 实现见：`core/runtime/scheduler/`（`ServerScheduler`、`RealmQueues`、`TaskLane`、`ServerTaskKind`、`SchedulerConfig`、`ServerTickBudget`、`StepResult`、`StepOutcome`、`CancelReason` 等）；配置键见 [config.md](../dev/backend/systems/config.md)。
+- 实现见：契约（`ServerTask`、`ServerTaskKind`、`StepResult`、`StepOutcome`、`CancelReason`、`ServerTickBudget`、`TaskQueue` 等）在 `core/api/scheduler/`，实现（`ServerScheduler`、`RealmQueues`、`TaskLane`、`SchedulerConfig` 等）在 `core/runtime/scheduler/`，分层理由见 [ADR-0034](0034-scheduler-contract-and-implementation-layering.md)；配置键见 [config.md](../dev/backend/systems/config.md)。
 - 替代范围：取代此前「每维度每 tick `max_checks_per_tick` 分桶」与「检查 / 效果各自独立的分桶队列」的预算模型。
 
 ## 背景

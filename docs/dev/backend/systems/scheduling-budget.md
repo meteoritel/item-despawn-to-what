@@ -1,8 +1,8 @@
 # 横向系统：调度与性能预算
 
-> 事实来源：`core/runtime/scheduler/**`（16 个类）、`core/runtime/ConversionRuntime.java`（`onServerTick`）、`core/runtime/ConversionSettlement.java`（效果与返还的分步执行）、`core/config/ServerConfig.java`。
+> 事实来源：`core/api/scheduler/**`（11 个类：任务模型、预算句柄、队列抽象等契约）、`core/runtime/scheduler/**`（8 个类：调度器与分道队列实现）、`core/runtime/ConversionRuntime.java`（`onServerTick`）、`core/runtime/ConversionSettlement.java`（效果与返还的分步执行）、`core/config/ServerConfig.java`。
 > 相关模块：[conversion-runtime.md](../modules/conversion-runtime.md)；类清单由 modules 层维护，本文只讲机制。配置值见 [config.md](config.md)。
-> 现行决策：[ADR-0024 共享服务器 tick 预算调度器](../../../adr/0024-shared-server-tick-budget-scheduler.md)。
+> 现行决策：[ADR-0024 共享服务器 tick 预算调度器](../../../adr/0024-shared-server-tick-budget-scheduler.md)、[ADR-0034 调度契约与实现分层](../../../adr/0034-scheduler-contract-and-implementation-layering.md)。
 
 ## 1. 一句话模型
 
@@ -16,10 +16,10 @@
 |---|---|
 | `ServerTask` | 最小任务单元：`kind()`、`tracingName()`、`step(ServerTickBudget)` 返回 `StepResult`、`onCancelled(reason)`、`onFailed(failure)`、`onReleased()`。FAILED 清理只通知一次；主动返回 FAILED 的 failure 为 null，步骤异常则传原异常，清理异常记录后继续其它任务。`VirtualMachineError` 直接重抛。实现者**不得依赖平台类**，**单步必须有界**（长循环自行拆分）。 |
 | `ServerTaskKind` | `CONDITION_CHECK` / `WORLD_SEARCH`（预留，现有实现仍并入条件检查）/ `EFFECT` / `REBATE` / `MAINTENANCE`。 |
-| `StepResult` | `(outcome, workUnits, nextDelayTicks)`；紧凑构造器把 `workUnits` 夹到 **≥ 1**、`nextDelayTicks` 夹到 ≥ 0，防止零成本步骤绕过预算。 |
+| `StepResult` | `(outcome, workUnits, nextDelayTicks)`；紧凑构造器把 `workUnits` 夹到 **≥ 1**、`nextDelayTicks` 夹到 ≥ 0，防止零成本步骤绕过预算。回执是计费**下限**，真实计费见 §3。 |
 | `StepOutcome` | `DONE`（可释放）/ `YIELD`（让出，稍后继续）/ `RETRY`（业务重试）/ `FAILED`（记失败、不再入队）。 |
-| `ScheduledTask` | 已入队任务的句柄。状态机 `PENDING → READY → RUNNING → DONE / FAILED / CANCELLED`；`cancel(reason)` 幂等且必带原因。 |
-| `RunnableTask` | 把 `Runnable` 适配成一次性 `ServerTask`（固定 1 工作量）；是缺省 / 维护类任务的落点。 |
+| `ScheduledTaskHandle`（契约）/ `ScheduledTask`（实现） | 已入队任务的句柄。状态机 `PENDING → READY → RUNNING → DONE / FAILED / CANCELLED`；`cancel(reason)` 幂等且必带原因。 |
+| `RunnableTask` | 把 `Runnable` 适配成一次性 `ServerTask`；步骤回执固定为 1，只是**计费下限与兜底**，真实计费取步骤内上报的工作量。是缺省 / 维护类任务的落点。 |
 
 各任务种类的实际来源：
 
@@ -43,7 +43,9 @@ usedWorkUnits >= maxWorkUnitsPerTick        # 全局工作量上限
 - 时间预算 `serverBudgetNanos` = `server_budget_us × 1000`（默认 10000us = **10ms 软预算**）。
 - 工作量上限 `maxWorkUnitsPerTick` = `effectiveMaxWorkUnitsPerTick()`（`max_work_units_per_tick`，缺省回退 `max_checks_per_tick`，默认 **512**）。
 - 两者**任一耗尽** `exhausted()` 即为真；调用方必须在**每个任务之间**检查。
-- **扣费口径**：每次 `step` 后 `charge(result.workUnits())`；到期搬运固定 `chargeDrain()` = 1 个工作量并单独计数；`ConversionSettlement` 在容量 / 催化剂查询处还会额外 `charge`（例如每次世界查询 `CAPACITY_QUERY_UNITS = 2`）。超额度时截断，绝不越过本 tick 上限。
+- **扣费口径**：调度器在每步前后开一个**线程隔离的工作量窗口**，步骤内产生的真实世界操作量由执行代码主动上报；每步结束后取「任务步骤回执」与「步骤内上报量」的**较大值**扣费，因此只回执固定值的任务不会再低估自身成本。窗口按深度计数，最外层关闭时汇总，非正数上报与窗口外上报一律忽略。
+- **回执来源**：放置方块、生成实体、生成物品、爆炸四个执行器按真实世界操作量上报；到期搬运固定 `chargeDrain()` = 1` 个工作量并单独计数；`ConversionSettlement` 在容量 / 催化剂查询处还会额外 `charge`（例如每次世界查询 `CAPACITY_QUERY_UNITS = 2`）。
+- **提交时机**：耗尽判定是**无副作用纯查询**；超额度截断与「本 tick 已耗尽」标记只在扣费与收尾提交时落地，查询本身不改变预算状态。任何情况下都不越过本 tick 上限。
 
 **效果类的单独限额**：`effects_work_units_per_tick`（默认 64）。`EFFECT` lane 在本 tick 累计消耗的工作量达到该值后，本轮内被跳过，**避免效果类吃掉全部公共额度**而饿死条件检查。
 
@@ -114,7 +116,7 @@ spread = ceil(due / window)
 ## 8. 扩展点
 
 - **改预算 / 窗口 / 批量** → `ServerConfig`（见 [config.md](config.md)）+ `SchedulerConfig.from`。
-- **新增任务种类** → 扩 `ServerTaskKind`；注意 `SchedulerStats` 按全枚举聚合，`perKind` 会自动增项。
+- **新增任务种类** → 扩契约层的 `ServerTaskKind`；注意 `SchedulerStats` 按全枚举聚合，`perKind` 会自动增项。
 - **新增任务** → 实现 `ServerTask`（`kind` / `tracingName` / **有界** `step`），经 `scheduler.schedule` / `scheduleAt` 入队；长操作按 `StepResult.yield(...)` 分步。
 - **改搬运平滑** → `ServerScheduler.drainAllowance`（窗口与批量在此合成额度）。
 - **改公平策略** → `runTick` 与 `rotationCursor`。

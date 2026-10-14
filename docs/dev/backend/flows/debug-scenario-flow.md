@@ -11,7 +11,7 @@
   → DebugScenarioManager 登记本轮（每服务器一轮）
   → DebugScenarioDefinition 用真实 Codec/校验/RuleIndex 建内存场景规则 + 预期
   → DebugScenarioRun 状态机：SETUP → WARMUP(20 tick) → MEASURE → CLEANUP
-  → ConversionRuntime 在真实链路回调 observe/converted/schedule/prepareOutput/outputAdded
+  → 运行时的真实链路回调观测接缝（由 DebugRuntimeObserver 在服务端装配阶段注入）
   → DebugLog 输出 START/过程事件/FRAME/END；`finish()` 汇总 expected/checks/actual 并判定 PASS/FAIL/INCOMPLETE
 ```
 
