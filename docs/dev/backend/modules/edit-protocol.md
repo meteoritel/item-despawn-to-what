@@ -67,14 +67,15 @@
 | 类 | 职责 | 关键成员 |
 |---|---|---|
 | `RuleEditService` | 编辑会话的业务编排（打开/确认/心跳/关闭/快照/目录/寿命/保存），只产出"要下发的载荷"，不直接碰网络 | `openEditor`、`confirm`、`heartbeat`、`close`、`requestSnapshot`、`requestCatalog`、`requestLifespan`、`pollLifespan`、`submitChangeSet`、`submitChunk`、`cancelSave`、`pollSaveProgress`、`pollSave`、`expireSessions`、`forceRelease`；幂等表 `recentResults`（最近 16 条） |
-| `EditSessionManager` | 全局单一目标的会话状态机（FREE/OPENING/ACTIVE/APPLYING）与 `.edit_version` 版本戳 | `acquire` / `confirm` / `heartbeat` / `owns` / `isOwner` / `confirmed` / `beginApply` / `finishApply` / `release` / `expire` / `version` / `bumpVersion` / `synchronizeDiskRevision` |
+| `EditSessionManager` | 全局单一目标的会话状态机（FREE/OPENING/ACTIVE/APPLYING），委托文件所有者管理修订号 | `acquire` / `confirm` / `heartbeat` / `owns` / `isOwner` / `confirmed` / `beginApply` / `finishApply` / `release` / `expire` / `version` / `bumpVersion` / `synchronizeDiskRevision` |
 | `RuleEditSessionLimits` | 会话时间与权限常量 | `TARGET_ID = itemdespawntowhat:rules`、`OPEN_CONFIRM_WINDOW_SECONDS=15`、`HEARTBEAT_INTERVAL_SECONDS=10`、`LEASE_SECONDS=60`、`REQUIRED_PERMISSION_LEVEL=2`、`MAX_OPERATION_HISTORY=16` |
+| `RuleOverlayStore` | 覆盖层文件工作与修订号的单一所有者：有界串行队列、内容指纹、原子持久化、进展监测、停服隔离 | `submit`、`acceptRevision`、`committed`、`flushRevision`、`stalled`、`close`、`requireIdle` |
 | `RuleOverlayWriter` | 覆盖层逐 id 写入：预备 → 备份 → 原子提交 → 失败回滚 | `apply(changes, issues) → ApplyResult{writtenFiles, conflicts, rollbackFailed}` |
 | `RuleSubmissionValidator` | 写入前唯一校验闸门（控制条目 / 解码 + 语义 + 动态引用） | `validate(changeSet, server, types, issues)` |
 | `RuleSnapshotAssembler` | 来源分层索引 + 当前生效规则 → 下发快照 | `assemble`、`encodeRule`（服务端线程）、`assembleEncoded`（纯 JSON 装配） |
 
-| `RuleSaveTask` | 公共 MAINTENANCE 任务：后台解析/读写、逐条校验、分步发布与回扫 | `step`、`invalidate`、`cancel`、`progress`；后台文件队列由本类持有 |
-| `RuleSnapshotTask` | 快照读取、逐条解码/编码、后台 JSON 装配与分片 | `step`；每 tick 最多下发一片 |
+| `RuleSaveTask` | 公共 MAINTENANCE 任务：后台解析/读写、逐条校验、分步发布与回扫 | `step`、`invalidate`、`cancel`、`progress`、`pollCompletion`；后台工作提交给 `RuleOverlayStore` |
+| `RuleSnapshotTask` | 快照读取、逐条解码/编码、后台 JSON 装配与分片 | `step`、`pollCompletion`；每 tick 最多下发一片 |
 | `RuleSaveReloadContext` | 启动/数据包重载时发布的原始基底、文件问题与解码上下文 | 对象身份用于识别重载；后台不访问 ResourceManager |
 
 ## 2. 快照形状
@@ -118,7 +119,7 @@
   → finishApply → 回执；冲突/未重载的最新快照另行排队
 ```
 
-保存与快照步骤最多处理 `SAVE_ENTRIES_PER_STEP=8` 项，同时受公共 tick 预算和 `SAVE_STEP_BUDGET_NANOS=1_000_000`（1ms）步骤软预算约束；让出后最早下一 tick 续接。没有固定编辑条数拒绝门槛，4 MiB 总字节限制仍有效。文件 I/O、JSON 拼接/解析/装配与纯模型索引构建使用进程级单后台线程，待执行队列上限为 `RuleSaveTask.MAX_BACKGROUND_JOBS=8`；队列满时拒绝新后台工作，不转回主线程执行，尚未写盘的保存回 `UNAVAILABLE`。第三方 Codec、注册表相关校验、任务取消与世界访问均留在服务端线程。单次 Codec、规则查询或原版操作不可抢占，因此不承诺任意单步均小于预算。保存失败在索引发布前保留上一版索引；发布后的回扫失败回 `SAVED_NOT_RELOADED`，不回滚已发布索引。
+保存与快照步骤最多处理 `SAVE_ENTRIES_PER_STEP=8` 项，同时受公共 tick 预算和 `SAVE_STEP_BUDGET_NANOS=1_000_000`（1ms）步骤软预算约束；让出后最早下一 tick 续接。没有固定编辑条数拒绝门槛，4 MiB 总字节限制仍有效。文件 I/O、JSON 拼接/解析/装配与纯模型索引构建使用进程级单后台线程，待执行队列上限为 `RuleOverlayStore.MAX_BACKGROUND_JOBS=8`；队列满时拒绝新后台工作，不转回主线程执行，尚未写盘的保存回 `UNAVAILABLE`。第三方 Codec、注册表相关校验、任务取消与世界访问均留在服务端线程。单次 Codec、规则查询或原版操作不可抢占，因此不承诺任意单步均小于预算。保存失败在索引发布前保留上一版索引；发布后的回扫失败回 `SAVED_NOT_RELOADED`，不回滚已发布索引。
 
 
 ### 4.1 保存进度与取消
@@ -137,7 +138,7 @@
 - **寿命查询**：权限与就绪检查后，服务层校验已确认会话；只读取平台缓存的普通物品参考寿命，不解析源匹配、不展开标签、不创建实体。平台尚未采样时应答零并保留单项待交付请求，`expireIdle` 每 20 tick 检查采样状态，完成后向仍持有权限与已确认会话的玩家补发一次缓存结果。参考值不随规则重载失效；客户端仅接受当前会话与最近请求号的应答，正寿命结果保留到断线。
 - **幂等**：同一在途 `operationId` 等待原任务；最近 16 条已处理回执直接回放，不重复写盘。
 - **并发保存保护**：`beginApply` 只允许 ACTIVE→APPLYING；正在 APPLYING 时的新提交回 `INVALID_REQUEST`（`apply in progress`）并保留会话。
-- 会话失效、关闭、强制释放或玩家离线/失去权限使尚未提交的保存失效；后台在提交检查点退出并回滚。APPLYING 期间保持锁；关闭或强制释放记录延后释放意图，`pollSave` 确认文件工作退出后通过 `finishApply` 释放；正常完成回到 ACTIVE 并刷新租约。已发布索引必须完成旧任务清理与回扫；停服在 vanilla 最终存档前同步取消未清理的结算，后台收到失效信号，停服阶段等待文件队列退出/回滚，完成后才允许同进程下一存档启动。
+- 会话失效、关闭、强制释放或玩家离线/失去权限使尚未提交的保存失效；后台在提交检查点退出并回滚。APPLYING 期间保持锁；关闭或强制释放记录延后释放意图，`pollSave` 确认文件工作退出后通过 `finishApply` 释放；正常完成回到 ACTIVE 并刷新租约。已发布索引必须完成旧任务清理与回扫；停服在 vanilla 最终存档前同步取消未清理的结算，后台收到失效信号，停服文件等待不持有网络处理器或编辑服务监视器；未开始的文件工作可以撤销，修订持久化与运行中的工作等待真实退出。等待上限为 30 秒，超时或中断保留进程级作业登记；两端启动在加载规则前检查登记，旧工作未退出时拒绝启动下一存档。
 - `/idtw config reload/validate/list` 与 `/idtw rule list/show` 在保存期间明确提示稍后重试，避免读取整批替换的中间状态。
 - 数据包重载在保存期间只保留最近一次延后请求，并使尚未提交的保存失效；文件工作结束后才执行，避免读取替换中间状态。快照至多一个准备任务与一个最新待启动请求，保存期间暂缓准备。
 
@@ -159,9 +160,13 @@
 
 ## 5. 版本戳与磁盘修订
 
-- 版本文件 `overlayRoot/.edit_version`（无 `.json` 后缀，规则读取器不会扫描它）；缺失/非法按 0，`bumpVersion` 自增并落盘（落盘失败仅保持内存计数）。
-- **成功的数据包重载 / 保存 / 覆盖层外部改动均推进版本戳**。首次目录基线由后台读取，打开编辑器时只读取小型版本文件。
-- `readDiskRevision` 在后台对 `rules/**/*.json` 做 SHA-256 指纹（含坏 JSON 原始字节）；服务端通过 `acceptDiskRevision` 接纳版本，后台 `persistRevision` 写入版本文件。检测到手工改动即推进版本；提交前再次核对整目录与各目标原始字节。无法核对时拒绝尚未写盘的保存；已写盘后重载核对失败回 `SAVED_NOT_RELOADED`。快照读取前后也核对修订。
+- 版本文件为覆盖层根目录的 `.edit_version`（非 JSON，规则读取器不扫描）；文件缺失或非法按零建立基线，非法值记录警告。保持整数协议格式，递增溢出显式抛出异常。
+- `RuleOverlayStore` 统一分配修订；成功数据包重载、文件提交、检测到覆盖层外部改动均推进。重载不在服务端线程扫描目录，下次后台读取建立覆盖层基线。保存提交后在原文件调用中登记修订并尝试持久化，不由保存任务预测下一版本。
+- 所有内部持久化均使用同一后台线程，写入最新已分配修订；同目录临时文件准备后原子替换，不支持原子移动时退回普通替换。旧调用不能把旧修订写回。失败记录日志并保留待持久化值，服务层 tick 至少间隔 5 秒重试；规则文件仍是权威来源，持久化失败不回滚已提交规则。
+- `readDiskRevision` 在后台按路径排序计算 SHA-256，包含坏 JSON 原始字节；逐块读取并检查取消。提交前再次核对目录指纹与各目标原始字节，快照读取前后也核对修订。无法核对时拒绝尚未写盘的保存；已提交但后续读取失败回 `SAVED_NOT_RELOADED`。
+- 文件 Future 仅表示实际调用已经返回，不对其执行取消或超时完成。任一作业排队或执行超过 60 秒无进展时记录一次阶段告警，保存／快照发出协作取消；实际调用退出前保持隔离，拒绝新的保存与重载。底层 I/O 不保证响应取消，不在超时后提前开放目标。
+- 调度器取消或 FAILED 摘除句柄后，`RuleEditService` 仍轮询保存／快照的实际完成，幂等接纳结果并交付终态；后台不操作会话、世界或网络。回滚失败将目标置为恢复隔离，后续保存、重载与命令读取被拒绝，需检查 `.bak` 并在修复文件后重启。
+- 保存与快照交接后台前固定模型集合、JSON 映射、指纹与修订号；交接后的可变元素不再由服务端线程修改。现有备份与逐文件替换不提供进程崩溃后的整批事务恢复。
 
 ## 6. 分片传输
 

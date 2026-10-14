@@ -27,13 +27,9 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -41,15 +37,6 @@ import java.util.function.Consumer;
 /** 保存续接任务：后台只处理文件与独占 JSON，世界、注册表和第三方类型校验均在公共 tick 预算内执行。 */
 final class RuleSaveTask implements ServerTask {
     private static final Object SAVE_REALM = new Object();
-    private static final int MAX_BACKGROUND_JOBS = 8;
-    // 全进程单队列使停服取消后的回滚与下一存档的保存串行，不并发写入同一覆盖层。
-    private static final ThreadPoolExecutor FILE_WORKER = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
-            new ArrayBlockingQueue<>(MAX_BACKGROUND_JOBS), job -> {
-        Thread thread = new Thread(job, "IDTW.RuleSaveIO");
-        thread.setDaemon(true);
-        return thread;
-    });
-
     private enum CommitState { OPEN, CANCELLED, COMMITTED }
     private enum Phase { REQUEST, VALIDATE, WRITE, READ, DECODE, INDEX, APPLY, DONE }
     record Outcome(RuleSaveStatus status, String detail, IssueCollector issues, int edited, int files,
@@ -59,6 +46,7 @@ final class RuleSaveTask implements ServerTask {
     private record RawReload(List<RawRuleEntry> entries, IssueCollector issues) { }
 
     private final EditSessionManager sessions;
+    private final RuleOverlayStore store;
     private final RuleEditServerContext context;
     private final MinecraftServer server;
     private final RuleSaveReloadContext reloadContext;
@@ -82,6 +70,7 @@ final class RuleSaveTask implements ServerTask {
     private int writtenFiles;
     private volatile boolean written;
     private boolean revisionAccepted;
+    private boolean detached;
     private @Nullable Throwable pendingFailure;
     private RawReload reload;
     private final List<LoadedRule<Rule>> decoded = new ArrayList<>();
@@ -90,13 +79,14 @@ final class RuleSaveTask implements ServerTask {
     RuleSaveTask(EditSessionManager sessions, RuleEditServerContext context, MinecraftServer server,
                  String sessionId, java.util.UUID owner, java.util.function.Supplier<String> text, Consumer<Outcome> completion) {
         this.sessions = sessions;
+        this.store = sessions.store();
         this.context = context;
         this.server = server;
         this.reloadContext = context.saveReloadContext();
         this.completion = completion;
         this.sessionId = sessionId;
         this.owner = owner;
-        request = background(() -> {
+        request = store.submit("save-request", () -> {
             String json = java.util.Objects.requireNonNullElse(text.get(), "");
             if (RuleEditLimits.encodedLength(json) > RuleEditLimits.MAX_CHANGE_SET_BYTES) {
                 throw new IllegalArgumentException("change set too large");
@@ -104,16 +94,15 @@ final class RuleSaveTask implements ServerTask {
             var parsed = RuleEditChangeSet.parse(json);
             RuleEditChangeSet value = parsed.result().orElseThrow(() -> new IllegalArgumentException(
                     parsed.error().map(com.mojang.serialization.DataResult.Error::message).orElse("变更集解析失败")));
-            return new Request(value, value.isEmpty() ? null : sessions.readDiskRevision());
+            return new Request(value, value.isEmpty() ? null : sessions.readDiskRevision(active::get));
         });
     }
 
     void schedule() { context.saveScheduler().schedule(SAVE_REALM, this, 1); }
     void invalidate() { active.set(false); commitState.compareAndSet(CommitState.OPEN, CommitState.CANCELLED); }
-    boolean cancel() {
-        if (!commitState.compareAndSet(CommitState.OPEN, CommitState.CANCELLED)) { return false; }
+    void cancel() {
+        if (!commitState.compareAndSet(CommitState.OPEN, CommitState.CANCELLED)) { return; }
         active.set(false);
-        return true;
     }
 
     RuleSaveProgress progress() {
@@ -187,7 +176,6 @@ final class RuleSaveTask implements ServerTask {
             }
         } catch (RuntimeException failure) {
             if (apply != null) { apply.onFailed(failure); }
-            if (written && !revisionAccepted) { sessions.acceptDiskRevision(null, true); revisionAccepted = true; }
             Throwable cause = failure instanceof CompletionException && failure.getCause() != null ? failure.getCause() : failure;
             org.apache.logging.log4j.LogManager.getLogger().error("规则保存步骤失败：phase={}", phase, cause);
             finish(written ? RuleSaveStatus.SAVED_NOT_RELOADED
@@ -207,7 +195,6 @@ final class RuleSaveTask implements ServerTask {
                 if (changes.isEmpty()) { finish(RuleSaveStatus.NO_CHANGES, ""); return true; }
                 sessions.acceptDiskRevision(diskRevision, false);
                 int version = sessions.version();
-                background(() -> { sessions.persistRevision(version); return null; });
                 if (changes.expectedVersion() != version) { finish(RuleSaveStatus.VERSION_CONFLICT, ""); }
                 else if (reloadContext == null || context.typeRegistries() == null) { finish(RuleSaveStatus.UNAVAILABLE, ""); }
                 else { phase = Phase.VALIDATE; }
@@ -219,16 +206,23 @@ final class RuleSaveTask implements ServerTask {
                     appendIssues(local);
                     if (local.hasErrors()) { finish(RuleSaveStatus.VALIDATION_FAILED, local.format()); }
                 } else {
-                    int version = sessions.version();
-                    write = background(() -> {
+                    RuleEditChangeSet submitted = changes;
+                    byte[] expectedRevision = diskRevision.clone();
+                    write = store.submit("save-write", () -> {
                         IssueCollector local = new IssueCollector();
                         var result = new RuleOverlayWriter(java.util.Objects.requireNonNull(reloadContext.loadContext().overlayRoot()),
-                                reloadContext.loadContext().overlayNamespace()).apply(changes, local, active::get,
-                                () -> Arrays.equals(diskRevision, readRevision()),
-                                () -> commitState.compareAndSet(CommitState.OPEN, CommitState.COMMITTED), fileProgress::set);
+                                reloadContext.loadContext().overlayNamespace()).apply(submitted, local, active::get,
+                                () -> Arrays.equals(expectedRevision, readRevision()),
+                                () -> commitState.compareAndSet(CommitState.OPEN, CommitState.COMMITTED), value -> {
+                                    RuleOverlayStore.progress();
+                                    fileProgress.set(value);
+                                });
                         written = result.writtenFiles() > 0;
-                        if (written) { sessions.persistRevision(version + 1); }
+                        if (result.rollbackFailed()) { store.requireRecovery(); }
+                        // 提交先登记修订；后续读取失败不能漏计一次已确认的提交。
+                        if (written) { store.committed(); }
                         byte[] revision = sessions.readDiskRevision();
+                        if (written) { store.acceptRevision(revision, false); }
                         return new Written(result, local, revision);
                     });
                     phase = Phase.WRITE;
@@ -243,13 +237,14 @@ final class RuleSaveTask implements ServerTask {
                     finish(RuleSaveStatus.WRITE_FAILED, result.issues().format());
                 } else if (!written) { finish(RuleSaveStatus.NO_CHANGES, ""); }
                 else {
-                    raw = background(() -> {
+                    byte[] committedRevision = diskRevision.clone();
+                    raw = store.submit("save-reload-read", () -> {
                         IssueCollector local = new IssueCollector();
                         reloadContext.baseIssues().forEach(local::add);
                         List<RawRuleEntry> entries = new ArrayList<>(reloadContext.baseRules());
                         entries.addAll(OverlayRuleReader.read(reloadContext.loadContext().overlayRoot(),
                                 reloadContext.loadContext().overlayNamespace(), local));
-                        if (!Arrays.equals(diskRevision, sessions.readDiskRevision())) {
+                        if (!Arrays.equals(committedRevision, sessions.readDiskRevision(active::get))) {
                             throw new IllegalStateException("准备保存重载时覆盖层修订已变化");
                         }
                         return new RawReload(RuleMerger.merge(entries, local), local);
@@ -274,9 +269,11 @@ final class RuleSaveTask implements ServerTask {
                     appendIssues(local);
                 } else {
                     // 纯模型索引构建没有世界访问，后台使用的模型集合不再由服务端线程修改。
-                    prepared = background(() -> {
-                        RuleIndex index = RuleIndex.build(decoded, new IssueCollector());
-                        if (!Arrays.equals(diskRevision, sessions.readDiskRevision())) {
+                    List<LoadedRule<Rule>> readyRules = List.copyOf(decoded);
+                    byte[] indexedRevision = diskRevision.clone();
+                    prepared = store.submit("save-index", () -> {
+                        RuleIndex index = RuleIndex.build(readyRules, new IssueCollector());
+                        if (!Arrays.equals(indexedRevision, sessions.readDiskRevision(active::get))) {
                             throw new IllegalStateException("索引准备期间覆盖层修订已变化");
                         }
                         return index;
@@ -300,14 +297,14 @@ final class RuleSaveTask implements ServerTask {
     }
 
     private byte[] readRevision() {
-        try { return sessions.readDiskRevision(); }
+        try { return sessions.readDiskRevision(active::get); }
         catch (java.io.IOException failure) { throw new java.io.UncheckedIOException(failure); }
     }
 
     private void acceptWrite(Written result) {
         if (commitState.get() != CommitState.CANCELLED || result.result().rollbackFailed()) { appendIssues(result.issues()); }
         writtenFiles = result.result().writtenFiles(); written = writtenFiles > 0;
-        if (written && !revisionAccepted) { sessions.acceptDiskRevision(result.revision(), true); revisionAccepted = true; }
+        if (written && !revisionAccepted) { sessions.acceptDiskRevision(result.revision(), false); revisionAccepted = true; }
         diskRevision = result.revision();
     }
 
@@ -328,45 +325,33 @@ final class RuleSaveTask implements ServerTask {
 
     @Override public void onCancelled(CancelReason reason) {
         invalidate();
-        if (apply != null) { apply.onCancelled(reason); }
+        detached = true;
+        if (apply != null) { apply.onCancelled(reason); apply = null; }
     }
 
     @Override public void onFailed(@Nullable Throwable failure) {
         invalidate();
-        if (backgroundPending()) {
-            pendingFailure = failure == null ? new IllegalStateException("保存调度步骤失败") : failure;
-            // 调度器 FAILED 已摘除原槽位；重新排期只等待后台退出，不与后台并发收尾。
-            schedule();
-            return;
-        }
-        if (apply != null) { apply.onFailed(failure); }
-        if (written && !revisionAccepted) { sessions.acceptDiskRevision(null, true); revisionAccepted = true; }
-        finish(written ? RuleSaveStatus.SAVED_NOT_RELOADED : RuleSaveStatus.WRITE_FAILED,
-                failure == null ? "FAILED" : failure.toString());
+        detached = true;
+        pendingFailure = failure == null ? new IllegalStateException("保存调度步骤失败") : failure;
+        if (apply != null) { apply.onFailed(failure); apply = null; }
     }
 
-    static <T> CompletableFuture<T> background(Callable<T> action) {
-        try {
-            return CompletableFuture.supplyAsync(() -> {
-                try { return action.call(); }
-                catch (Exception failure) { throw new CompletionException(failure); }
-            }, FILE_WORKER);
-        } catch (RejectedExecutionException busy) {
-            // 只让请求失败，不把文件/JSON 工作退回主线程执行，也不扩大后台队列。
-            return CompletableFuture.failedFuture(busy);
+    // 原调度句柄被摘除后，服务层仍在主线程接纳真实结果并完成业务终态。
+    void pollCompletion() {
+        if (finished()) { return; }
+        if (store.stalled()) {
+            pendingFailure = new IllegalStateException("覆盖层后台工作长时间无进展，等待文件调用退出");
+            invalidate();
         }
-    }
-
-    static void awaitFileWork() {
-        // 停服阶段等待既有磁盘工作退出/回滚，避免同进程新存档启动时读取半批替换的目录。
-        CompletableFuture<Void> drained = new CompletableFuture<>();
-        FILE_WORKER.prestartCoreThread();
+        if (!detached || backgroundPending()) { return; }
         try {
-            FILE_WORKER.getQueue().put(() -> drained.complete(null));
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("等待保存文件队列结束时被中断", interrupted);
+            if (write != null) { acceptWrite(write.join()); }
+            boolean rollbackFailed = write != null && write.join().result().rollbackFailed();
+            finish(written ? RuleSaveStatus.SAVED_NOT_RELOADED
+                            : pendingFailure == null && !rollbackFailed ? RuleSaveStatus.CANCELLED : RuleSaveStatus.WRITE_FAILED,
+                    pendingFailure == null ? "保存调度已取消，请检查回滚结果" : pendingFailure.toString());
+        } catch (RuntimeException failure) {
+            finish(written ? RuleSaveStatus.SAVED_NOT_RELOADED : RuleSaveStatus.WRITE_FAILED, failure.toString());
         }
-        drained.join();
     }
 }

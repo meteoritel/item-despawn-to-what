@@ -1,8 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.service;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.UUID;
 
@@ -43,11 +41,7 @@ public final class EditSessionManager {
     public record AcquireResult(boolean acquired, SessionInfo session, String holderName, UUID holderUuid) {
     }
 
-    private static final String VERSION_FILE_NAME = ".edit_version";
-
-    private final Path versionFile;
-    private int version;
-    private byte[] diskRevision;
+    private final RuleOverlayStore store;
 
     // 全局唯一会话状态
     private SessionState state = SessionState.FREE;
@@ -58,74 +52,70 @@ public final class EditSessionManager {
     private long lastHeartbeatTick;
     private boolean releasePending;
 
-    // 构造会话管理器：版本戳从覆盖层根目录的 .edit_version 读取，缺失或损坏按 0 起算
-    public EditSessionManager(Path overlayRoot) {
-        this.versionFile = overlayRoot.resolve(VERSION_FILE_NAME);
-        this.version = readVersion();
-        // 首次磁盘基线由保存/快照后台读取，打开编辑器时不全量扫描规则目录。
-    }
-
-    // 当前覆盖层版本戳
-    public synchronized int version() {
-        return version;
-    }
-
-    // 覆盖层内容变化后推进版本戳并持久化
-    public synchronized int bumpVersion() {
-        version = version + 1;
-        persistVersion();
-        refreshDiskRevision();
-        return version;
-    }
-
-    // 在快照和保存前同步磁盘修订，手工编辑尚未 reload 时也不能被过期客户端视图覆盖。
-    public synchronized void synchronizeDiskRevision() {
-        byte[] current;
-        try {
-            current = fingerprint();
-        } catch (IOException failure) {
-            throw new java.io.UncheckedIOException("无法核对规则目录修订", failure);
-        }
-        if (diskRevision == null) {
-            diskRevision = current;
-        } else if (!java.util.Arrays.equals(current, diskRevision)) {
-            version++;
-            persistVersion();
-            diskRevision = current;
-        }
-    }
-
     /**
-     * 在后台计算覆盖层修订，不持有会话锁，不访问世界。
-     * @return 全目录内容指纹
-     * @throws IOException 目录或文件读取失败
+     * 创建覆盖层对应的独占会话与文件工作所有者。
+     * @param overlayRoot 覆盖层根目录
+     * @throws IllegalStateException 上一生命周期仍有文件工作未结束
      */
-    public byte[] readDiskRevision() throws IOException {
-        return fingerprint();
+    public EditSessionManager(Path overlayRoot) {
+        RuleOverlayStore.requireIdle();
+        store = new RuleOverlayStore(overlayRoot);
+    }
+
+    /** @return 当前覆盖层修订号 */
+    public synchronized int version() { return store.version(); }
+
+    /**
+     * 成功重载后推进修订，持久化由文件队列执行。
+     * @return 推进后的修订号
+     */
+    public synchronized int bumpVersion() { return store.bumpVersion(); }
+
+    /**
+     * 同步覆盖层内容基线；调用方必须位于文件后台线程。
+     * @throws java.io.UncheckedIOException 文件读取失败
+     */
+    public void synchronizeDiskRevision() {
+        try { acceptDiskRevision(readDiskRevision(), false); }
+        catch (IOException failure) { throw new java.io.UncheckedIOException(failure); }
     }
 
     /**
-     * 服务端线程接纳后台修订；文件持久化由保存后台队列随后执行。
-     * @param revision 全目录内容指纹
-     * @param saved 是否为本次已写盘的保存，需要主动推进版本
+     * 在后台读取目录内容指纹，不访问世界。
+     * @return 全目录内容指纹
+     * @throws IOException 文件读取失败
+     */
+    public byte[] readDiskRevision() throws IOException { return store.fingerprint(() -> true); }
+
+    byte[] readDiskRevision(java.util.function.BooleanSupplier active) throws IOException {
+        return store.fingerprint(active);
+    }
+
+    /**
+     * 接纳完整读取的覆盖层基线并登记待持久化修订。
+     * @param revision 全目录内容指纹，可为 null 以重新建立基线
+     * @param saved 是否接纳一次新提交
      */
     public synchronized void acceptDiskRevision(byte[] revision, boolean saved) {
-        if (saved || diskRevision != null && !java.util.Arrays.equals(revision, diskRevision)) { version++; }
-        diskRevision = revision;
+        store.acceptRevision(revision, saved);
     }
 
     /**
-     * 后台持久化指定版本，不扫描目录也不持有会话锁。
-     * @param revision 服务端线程已确认的版本
+     * 登记修订持久化请求；旧调用的修订参数不能覆盖最新已分配修订。
+     * @param revision 调用方已观察的修订号
      */
     public void persistRevision(int revision) {
-        try {
-            Files.createDirectories(versionFile.getParent());
-            Files.writeString(versionFile, Integer.toString(revision), StandardCharsets.UTF_8);
-        } catch (IOException ignored) {
-            // 修订号写盘失败可容忍，规则文件仍是权威来源。
-        }
+        if (revision > store.version()) { throw new IllegalArgumentException("不能持久化尚未分配的修订号"); }
+        store.flushRevision();
     }
+
+    RuleOverlayStore store() { return store; }
+
+    /**
+     * 在下一服务端加载规则前确认上一生命周期的真实文件调用已经退出。
+     * @throws IllegalStateException 尚有旧文件工作
+     */
+    public static void requireFileWorkIdle() { RuleOverlayStore.requireIdle(); }
 
     // 当前活跃会话数：全局至多 1
     public synchronized int activeSessionCount() {
@@ -251,58 +241,4 @@ public final class EditSessionManager {
         this.lastHeartbeatTick = 0L;
     }
 
-    private void refreshDiskRevision() {
-        try {
-            diskRevision = fingerprint();
-        } catch (IOException failure) {
-            diskRevision = null;
-            org.apache.logging.log4j.LogManager.getLogger().warn("无法读取规则目录修订，后续保存将重新核对", failure);
-        }
-    }
-
-    // 只读所有规则文件；坏 JSON 的原始字节同样参与修订，不解析、不写回。
-    private byte[] fingerprint() throws IOException {
-        java.security.MessageDigest digest;
-        try {
-            digest = java.security.MessageDigest.getInstance("SHA-256");
-        } catch (java.security.NoSuchAlgorithmException impossible) {
-            throw new IllegalStateException(impossible);
-        }
-        Path root = versionFile.getParent().resolve(com.meteorite.itemdespawntowhat.core.load.RulePaths.OVERLAY_RULES_DIRECTORY);
-        if (!Files.isDirectory(root)) {
-            return digest.digest();
-        }
-        try (var walk = Files.walk(root)) {
-            for (Path file : walk.filter(Files::isRegularFile).filter(path -> path.toString().endsWith(".json")).sorted().toList()) {
-                byte[] name = root.relativize(file).toString().getBytes(StandardCharsets.UTF_8);
-                byte[] content = Files.readAllBytes(file);
-                digest.update(java.nio.ByteBuffer.allocate(8).putInt(name.length).putInt(content.length).array());
-                digest.update(name);
-                digest.update(content);
-            }
-        }
-        return digest.digest();
-    }
-
-    // 读取持久化版本；缺失或非法按 0 处理
-    private int readVersion() {
-        try {
-            if (Files.isRegularFile(versionFile)) {
-                return Integer.parseInt(Files.readString(versionFile, StandardCharsets.UTF_8).trim());
-            }
-        } catch (IOException | NumberFormatException ignored) {
-            // 版本文件损坏不影响启动，按 0 重新计数
-        }
-        return 0;
-    }
-
-    // 版本写盘失败不阻断保存流程，仅保持内存计数
-    private void persistVersion() {
-        try {
-            Files.createDirectories(versionFile.getParent());
-            Files.writeString(versionFile, Integer.toString(version), StandardCharsets.UTF_8);
-        } catch (IOException ignored) {
-            // 见方法注释：版本戳不是权威数据，落盘失败可容忍
-        }
-    }
 }

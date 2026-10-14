@@ -103,7 +103,7 @@ public final class RuleOverlayWriter {
         try {
             requireActive(active);
             safePath(root);
-            load(files);
+            load(files, active);
             Map<ResourceLocation, List<Location>> locations = index(files.values());
             Set<ResourceLocation> seen = new HashSet<>();
             int processed = 0;
@@ -187,11 +187,12 @@ public final class RuleOverlayWriter {
         }
     }
 
-    private void load(Map<Path, RuleFile> files) throws IOException {
+    private void load(Map<Path, RuleFile> files, java.util.function.BooleanSupplier active) throws IOException {
         if (!Files.isDirectory(root)) { return; }
         try (Stream<Path> walk = Files.walk(root)) {
             for (Path path : walk.filter(p -> Files.isRegularFile(p, LinkOption.NOFOLLOW_LINKS))
                     .filter(p -> p.toString().endsWith(RulePaths.RULE_FILE_EXTENSION)).sorted().toList()) {
+                requireActive(active);
                 safePath(path);
                 byte[] original = Files.readAllBytes(path);
                 JsonElement json;
@@ -259,6 +260,7 @@ public final class RuleOverlayWriter {
     // 所有临时文件与备份准备成功后才替换；普通 I/O 失败时恢复整批原内容。
     private static void requireActive(java.util.function.BooleanSupplier active) throws IOException {
         if (!active.getAsBoolean()) { throw new IOException("保存请求已失效"); }
+        RuleOverlayStore.progress();
     }
 
     private void commit(List<RuleFile> files, java.util.function.BooleanSupplier active,

@@ -41,6 +41,7 @@ final class RuleSnapshotTask implements ServerTask {
     private final RuleEditServerContext context;
     private final MinecraftServer server;
     private final EditSessionManager sessions;
+    private final RuleOverlayStore store;
     private final RuleSaveReloadContext reloadContext;
     private final String sessionId;
     private final String requestId;
@@ -52,7 +53,7 @@ final class RuleSnapshotTask implements ServerTask {
     private Codec<Rule> encoder;
     private int version;
     private int cursor;
-    private boolean cancelled;
+    private volatile boolean cancelled;
     private boolean finished;
     private final List<LoadedRule<Rule>> decoded = new ArrayList<>();
     private final Map<ResourceLocation, JsonObject> encoded = new LinkedHashMap<>();
@@ -60,16 +61,17 @@ final class RuleSnapshotTask implements ServerTask {
     RuleSnapshotTask(RuleEditServerContext context, MinecraftServer server, EditSessionManager sessions,
                      String sessionId, String requestId, Consumer<List<CustomPacketPayload>> completion) {
         this.context = context; this.server = server; this.sessions = sessions;
+        store = sessions.store();
         this.sessionId = sessionId; this.requestId = requestId; this.completion = completion;
         reloadContext = java.util.Objects.requireNonNull(context.saveReloadContext());
-        reading = RuleSaveTask.background(() -> {
-            byte[] revision = sessions.readDiskRevision();
+        reading = store.submit("snapshot-read", () -> {
+            byte[] revision = sessions.readDiskRevision(() -> !cancelled);
             IssueCollector issues = new IssueCollector();
             reloadContext.baseIssues().forEach(issues::add);
             var load = reloadContext.loadContext();
             List<RawRuleEntry> entries = new ArrayList<>(reloadContext.baseRules());
             entries.addAll(OverlayRuleReader.read(load.overlayRoot(), load.overlayNamespace(), issues));
-            if (!java.util.Arrays.equals(revision, sessions.readDiskRevision())) {
+            if (!java.util.Arrays.equals(revision, sessions.readDiskRevision(() -> !cancelled))) {
                 throw new IllegalStateException("准备快照时覆盖层修订已变化");
             }
             return new Source(revision, RuleMerger.merge(entries, issues), RuleSourceIndex.build(entries), issues);
@@ -84,7 +86,9 @@ final class RuleSnapshotTask implements ServerTask {
     @Override public StepResult step(ServerTickBudget budget) {
         if (finished) { return StepResult.done(1); }
         if (cancelled || !sessions.owns(sessionId) || context.saveReloadContext() != reloadContext) {
-            complete(List.of()); return StepResult.done(1);
+            invalidate();
+            pollCompletion();
+            return finished ? StepResult.done(1) : StepResult.yield(1, 1);
         }
         try {
             if (source == null) {
@@ -92,7 +96,6 @@ final class RuleSnapshotTask implements ServerTask {
                 source = reading.join(); reading = null;
                 sessions.acceptDiskRevision(source.revision(), false);
                 version = sessions.version();
-                RuleSaveTask.background(() -> { sessions.persistRevision(version); return null; });
             }
             long deadline = System.nanoTime() + RuleEditLimits.SAVE_STEP_BUDGET_NANOS;
             if (decoder == null && cursor < source.entries().size() && !budget.exhausted()) {
@@ -119,9 +122,13 @@ final class RuleSnapshotTask implements ServerTask {
             if (cursor < source.entries().size()) { return StepResult.yield(1, 1); }
             if (preparing == null) {
                 // 交接后的容器不再由服务端线程修改；装配与分片不触碰 Codec、注册表或世界。
-                preparing = RuleSaveTask.background(() -> {
-                    String json = RuleSnapshotAssembler.assembleEncoded(source.index(), decoded, version, version, encoded, source.issues().issues()).serialize();
-                    if (!java.util.Arrays.equals(source.revision(), sessions.readDiskRevision())) {
+                Source capturedSource = source;
+                List<LoadedRule<Rule>> readyRules = List.copyOf(decoded);
+                Map<ResourceLocation, JsonObject> readyJson = Map.copyOf(encoded);
+                int capturedVersion = version;
+                preparing = store.submit("snapshot-assemble", () -> {
+                    String json = RuleSnapshotAssembler.assembleEncoded(capturedSource.index(), readyRules, capturedVersion, capturedVersion, readyJson, capturedSource.issues().issues()).serialize();
+                    if (!java.util.Arrays.equals(capturedSource.revision(), sessions.readDiskRevision(() -> !cancelled))) {
                         throw new IllegalStateException("快照准备期间覆盖层修订已变化");
                     }
                     if (RuleEditLimits.encodedLength(json) > RuleEditLimits.MAX_SNAPSHOT_BYTES) { return List.of(); }
@@ -147,5 +154,14 @@ final class RuleSnapshotTask implements ServerTask {
     }
 
     @Override public void onCancelled(CancelReason reason) { invalidate(); }
-    @Override public void onFailed(@Nullable Throwable failure) { complete(List.of()); }
+    @Override public void onFailed(@Nullable Throwable failure) { invalidate(); }
+
+    // 服务层在原句柄取消后仍负责交付完成；等待真实文件调用退出再释放快照槽位。
+    void pollCompletion() {
+        if (finished) { return; }
+        if (store.stalled()) { invalidate(); }
+        if (cancelled && (reading == null || reading.isDone()) && (preparing == null || preparing.isDone())) {
+            complete(List.of());
+        }
+    }
 }

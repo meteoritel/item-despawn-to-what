@@ -95,10 +95,10 @@ public final class RuleEditService {
     }
 
     /**
-     * 判断保存是否仍在处理或等待结果交付，供磁盘读取入口避免观察整批替换的中间状态。
-     * @return 是否存在未结束保存
+     * 判断覆盖层是否被保存或恢复隔离占用，供磁盘读取入口避免观察不完整目录。
+     * @return 是否应暂缓覆盖层读取
      */
-    public boolean saving() { return pendingSave != null; }
+    public boolean saving() { return pendingSave != null || sessions.store().unavailable(); }
 
     /**
      * 一次请求要下发的载荷集合。
@@ -349,7 +349,7 @@ public final class RuleEditService {
             return Outbound.of(result(sessionId, operationId, RuleSaveStatus.INVALID_REQUEST,
                     RuleSaveStatus.INVALID_REQUEST.messageKey(), args("apply in progress"), List.of(), false, false));
         }
-        if (server == null || context.saveReloadContext() == null) {
+        if (server == null || context.saveReloadContext() == null || sessions.store().unavailable()) {
             return Outbound.of(result(sessionId, operationId, RuleSaveStatus.UNAVAILABLE,
                     RuleSaveStatus.UNAVAILABLE.messageKey(), List.of(), List.of(), false, false));
         }
@@ -384,6 +384,10 @@ public final class RuleEditService {
      * @return 是否已接管重载
      */
     public boolean deferReload(Runnable reload) {
+        if (sessions.store().unavailable()) {
+            LOGGER.error("覆盖层文件工作不可用，拒绝重载并保留当前运行时索引");
+            return true;
+        }
         if (pendingSave == null) { return false; }
         pendingSave.invalidate();
         deferredReload = reload;
@@ -396,7 +400,9 @@ public final class RuleEditService {
      * @return 回执接收者与载荷，尚未完成时为 null
      */
     public @Nullable SaveReply pollSave(MinecraftServer server) {
+        sessions.store().flushRevision();
         if (pendingSave == null) { return null; }
+        pendingSave.pollCompletion();
         if (!sessions.owns(savingSessionId)) { pendingSave.invalidate(); }
         ServerPlayer owner = server.getPlayerList().getPlayer(savingOwner);
         if (!com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler.canEdit(owner)) {
@@ -435,7 +441,8 @@ public final class RuleEditService {
         if (!sessions.owns(payload.sessionId()) || !sessions.isOwner(player.getUUID())) { return Outbound.EMPTY; }
         if (pendingSave != null) {
             if (payload.sessionId().equals(savingSessionId) && payload.operationId().equals(savingOperationId)) {
-                if (pendingSave.cancel()) { sentProgress = null; }
+                pendingSave.cancel();
+                sentProgress = null;
             }
             return Outbound.EMPTY;
         }
@@ -505,11 +512,11 @@ public final class RuleEditService {
         RuleEditChunkAccumulator.clear(playerId);
     }
 
-    // 停服：清空分片与幂等记录（会话对象随下次启动重建）
-    public synchronized void reset() {
+    // 停服等待不持有服务层监视器；超时作业仍由文件所有者登记并阻止下一次启动。
+    public void reset() {
         if (pendingSave != null) { pendingSave.invalidate(); }
         if (pendingSnapshot != null) { pendingSnapshot.invalidate(); }
-        RuleSaveTask.awaitFileWork();
+        sessions.store().close();
         pendingSave = null;
         completedSave = null;
         deferredReload = null;
@@ -546,6 +553,7 @@ public final class RuleEditService {
      * @return 本 tick 的网络交付，暂无数据时为 null
      */
     public @Nullable SaveReply pollSnapshot(MinecraftServer server, RuleEditServerContext context) {
+        if (pendingSnapshot != null) { pendingSnapshot.pollCompletion(); }
         if (pendingSave != null) { return null; }
         startSnapshot(server, context);
         if (snapshotPackets.isEmpty() || deliveringSnapshot == null) { return null; }

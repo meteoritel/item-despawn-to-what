@@ -227,7 +227,7 @@ public final class RuleEditServerHandler {
 
     /**
      * 查询磁盘保存是否占用编辑目标，供同步规则命令避开文件替换中的目录。
-     * @return 是否存在未结束保存
+     * @return 是否存在未结束保存或覆盖层恢复隔离
      */
     public static boolean isSaving() { return editService != null && editService.saving(); }
 
@@ -239,7 +239,7 @@ public final class RuleEditServerHandler {
     }
 
     // 停服：清空分片与幂等记录，并丢弃当前状态机
-    public static synchronized void reset() {
+    public static void reset() {
         if (editService != null) {
             editService.reset();
         }

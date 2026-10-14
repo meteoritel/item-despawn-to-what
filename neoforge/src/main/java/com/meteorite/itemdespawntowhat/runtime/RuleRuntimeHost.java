@@ -193,6 +193,7 @@ public final class RuleRuntimeHost {
     public static void start(MinecraftServer server) {
         // 同一进程内可能先后启动多个服务端（单人世界切换存档）：先释放上一轮状态
         shutdown();
+        com.meteorite.itemdespawntowhat.core.service.EditSessionManager.requireFileWorkIdle();
 
         IssueCollector configIssues = new IssueCollector();
         ServerConfig config = loadServerConfig(configIssues);
