@@ -693,7 +693,7 @@ final class ConversionSettlement implements ServerTask {
                 case FAILED -> record.effectFailed();
             }
         }
-        // 回执只改观测计数（applied/pending units），不改待返还量：同样经唯一提交点落盘；
+        // 回执只更新本记录的效果计数（applied/pending units，落盘字段），不改待返还量：同样经唯一提交点落盘；
         // 所有权已移交（中止/完成）时提交点只写盘，不对齐待返还量，避免覆盖恢复任务的交付进度
         commit();
         if (result != null && RuntimeObserver.current().enabled()) {
