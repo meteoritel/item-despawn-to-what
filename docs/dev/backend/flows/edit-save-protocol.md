@@ -12,7 +12,8 @@
   → 下发 OpenRuleEditorPayload：成功 statusCode=SUCCESS（带 sessionId）；
      失败 statusCode=LOCK_BUSY 且 sessionId 为空，messageArgs=当前持有者
   → 客户端 payloadSink（RuleEditClientWorkspace.onOpen）校验协议版本与 statusCode
-  → 成功后发 ConfirmRuleEditorPayload、请求快照，并 EditorScreenHooks.open(request) 打开编辑界面
+  → 成功后发 ConfirmRuleEditorPayload，并 EditorScreenHooks.open(request) 打开编辑界面
+  → 首份快照由服务端确认入口提供；等待时列表显示加载提示
 ```
 
 `RuleEditServerContext` 下发 `OpenRuleEditorPayload`；服务端无 sink 时静默丢弃（core 不反向依赖 client）。取锁失败也要下发载荷，客户端据此提示持有者。
@@ -21,7 +22,7 @@
 
 ```text
 ConfirmRuleEditorPayload (C2S)：version 校验 → owns + isOwner → EditSessionManager.confirm(OPENING→ACTIVE)
-  → 排队准备最新快照
+  → 启动最新快照的后台读取，主线程解码排入公共调度器
 RequestRuleSnapshotPayload (C2S)
   → owns + isOwner 校验；未确认的 OPENING 会话不接受快照请求
   → heartbeat(sessionId, tick)            # 续租
@@ -29,6 +30,8 @@ RequestRuleSnapshotPayload (C2S)
   → 后台装配原始来源三视图与序列化、切片
   → 小快照直发，大快照每 tick 一片；超总量上限回 UNAVAILABLE
 ```
+
+首次打开不额外发送 `RequestRuleSnapshotPayload`；该请求用于主动刷新与保存后的补拉。无保存与在途快照时，请求入口即启动后台读取，不等待 tick 轮询启动；主线程步骤在同一快照内复用解码器与编码 Codec，构建与执行仍受公共预算约束。
 
 心跳 `HeartbeatRuleEditorPayload` 正常无回执；失效时按身份回不同状态码——原持有者回 `SESSION_EXPIRED`，非持有者回 `LOCK_NOT_OWNED`（客户端据此回到未持有状态）。
 

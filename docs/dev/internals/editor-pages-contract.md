@@ -18,6 +18,7 @@
 - 结果页**不重复**消耗参数：过滤链配合 `isInputOwnedConsumptionField`（`consume_source`→`count`/`counts`；`consume_catalyst`→`items`/`count`/`counts`/`radius`；`consume_fluid`→`fluid`，**不过滤** `require_source`——输入页不管理它），并在首个消耗行为参数前插说明行 `effect.consume_params_on_input`；`chance` / `delay_ticks` / `conditions` 仍在结果页编辑。
 - 术语：一个 outcome 一律称「**方案**」（`button.candidate_*` / `notice.candidate_*` / `undo.*_candidate` / `issue.candidate_*` / `rule.combination` / `effect.consume_params_on_input` 等文案统一使用该词），只有页签名仍是「结果」（`tab.results`）。
 - 初始页：新建**空白**规则落在输入页（`RuleEditorScreenListActions#createRule` 调用 `selectInputTab`）；打开已有规则落在基本页（`RuleEditorScreen#openEditor` 置 `tab = INFO`，字段 `tab` 的默认值见该类字段声明）。
+- 管理列表在 `RuleEditorModel#isLoaded` 为 false 时显示“正在加载规则…”；收到首份有效快照后，列表或筛选结果为空才显示空列表提示。`RuleEditorScreenListPage#refreshList` 随快照载入更新文案。
 - 切页前先提交合法字段，非法文本保留在当前会话输入缓冲：`RuleEditorScreenEditPage#switchTab` 走 `pages.blockNavigation()` 门禁后 `pages.setPage(target)`；提交路径见第 5、7 节。
 - 页名与页内提示同名：输入页一律称「**输入**」（`tab.input`），页内提示、文档与代码注释不得再用其他名字指代该页。
 - 页头右侧状态条只表达状态且不可点击：`RuleEditorScreen#drawHeaderText` 以 `header.editing`（「当前编辑 · %s」）作标题，状态条取 `state.applied` / `state.unapplied`（「待应用」，与列表页 `recipe.status.pending` 同词）/ `state.active` / `state.freezing`，右端面板不参与命中判定。

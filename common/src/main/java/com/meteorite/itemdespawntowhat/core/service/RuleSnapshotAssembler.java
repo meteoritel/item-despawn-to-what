@@ -307,7 +307,7 @@ public final class RuleSnapshotAssembler {
     }
 
     // 模型编码：失败返回 null（由调用方决定退回原始 JSON 或标记 invalid）
-    private static @Nullable JsonObject encode(Codec<Rule> codec, Rule rule) {
+    static @Nullable JsonObject encode(Codec<Rule> codec, Rule rule) {
         if (rule == null) {
             return null;
         }

@@ -104,8 +104,8 @@
 固定顺序（`RuleEditServerHandler` → `RuleEditService`）：
 
 ```text
-请求快照：权限/就绪 → 会话持有与确认校验 → heartbeat → 排队 RuleSnapshotTask
-  → 后台核对修订与读取覆盖层 → 公共预算逐条解码、校验、编码
+请求快照：权限/就绪 → 会话持有与确认校验 → heartbeat → 启动 RuleSnapshotTask 后台读取
+  → 后台核对修订与读取覆盖层 → 公共预算逐条解码、校验、编码（同份快照复用编解码器）
   → 后台装配三视图、序列化与切片 → 每 tick 下发一片
 提交变更集：operationId 合法性 → 会话持有校验 → 幂等查表
   → 同一在途 operationId 等待同一结果；其它在途提交拒绝

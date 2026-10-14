@@ -534,6 +534,7 @@ public final class RuleEditService {
         if (session != null) {
             requestedSnapshot = new SnapshotRequest(session.ownerUuid(), sessionId, requestId);
             snapshotPackets.clear();
+            startSnapshot(server, context);
         }
         return Outbound.EMPTY;
     }
@@ -546,11 +547,24 @@ public final class RuleEditService {
      */
     public @Nullable SaveReply pollSnapshot(MinecraftServer server, RuleEditServerContext context) {
         if (pendingSave != null) { return null; }
+        startSnapshot(server, context);
+        if (snapshotPackets.isEmpty() || deliveringSnapshot == null) { return null; }
+        if (!sessions.owns(deliveringSnapshot.sessionId())) { snapshotPackets.clear(); return null; }
+        ServerPlayer player = server.getPlayerList().getPlayer(deliveringSnapshot.owner());
+        if (!com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler.canEdit(player)) {
+            snapshotPackets.clear(); return null;
+        }
+        return new SaveReply(player, Outbound.of(snapshotPackets.removeFirst()));
+    }
+
+    // 请求到达即开始纯文件工作；保存和在途准备仍串行，Codec 只由公共调度器执行。
+    private void startSnapshot(MinecraftServer server, RuleEditServerContext context) {
+        if (pendingSave != null) { return; }
         if (requestedSnapshot != null && pendingSnapshot == null) {
             SnapshotRequest current = requestedSnapshot;
             if (!sessions.owns(current.sessionId()) || context.saveReloadContext() == null) {
                 requestedSnapshot = null;
-                return null;
+                return;
             }
             pendingSnapshot = new RuleSnapshotTask(context, server, sessions, current.sessionId(), current.requestId(), packets -> {
                 pendingSnapshot = null;
@@ -564,13 +578,6 @@ public final class RuleEditService {
             });
             pendingSnapshot.schedule();
         }
-        if (snapshotPackets.isEmpty() || deliveringSnapshot == null) { return null; }
-        if (!sessions.owns(deliveringSnapshot.sessionId())) { snapshotPackets.clear(); return null; }
-        ServerPlayer player = server.getPlayerList().getPlayer(deliveringSnapshot.owner());
-        if (!com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler.canEdit(player)) {
-            snapshotPackets.clear(); return null;
-        }
-        return new SaveReply(player, Outbound.of(snapshotPackets.removeFirst()));
     }
 
     // 会话已失效的统一回执

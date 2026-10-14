@@ -626,6 +626,7 @@
   "gui.itemdespawntowhat.edit.list.empty": "No entries",
   "gui.itemdespawntowhat.edit.list.error": "[!]",
   "gui.itemdespawntowhat.edit.list.input_hint": "Enter appends; press Enter on a selected row to edit",
+  "gui.itemdespawntowhat.edit.list.loading": "Loading rules...",
   "gui.itemdespawntowhat.edit.list.remove": "Remove",
   "gui.itemdespawntowhat.edit.list.search": "Search",
   "gui.itemdespawntowhat.edit.notice.applying": "Applying changes...",

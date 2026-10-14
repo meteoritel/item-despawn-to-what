@@ -402,7 +402,7 @@ public final class RuleEditClientWorkspace {
         OpenRuleEditorPayload.installOpenEditorPayloadSink(this::onOpen);
     }
 
-    // 收到打开/拒绝授权：成功则确认、进入 ACTIVE、请求快照并打开界面；失败只记录（界面由服务端指令回执提示）
+    // 首份快照由确认应答提供，不再额外请求，避免替换在途请求后重复准备。
     private synchronized void onOpen(@Nullable OpenRuleEditorPayload payload) {
         if (payload == null || payload.sessionId().isEmpty()) {
             return;
@@ -440,7 +440,6 @@ public final class RuleEditClientWorkspace {
         state = RuleEditClientState.OPENING;
         send(new ConfirmRuleEditorPayload(sessionId, RuleEditProtocol.VERSION));
         state = RuleEditClientState.ACTIVE;
-        requestSnapshot();
         EditorScreenHooks.open(request);
     }
 

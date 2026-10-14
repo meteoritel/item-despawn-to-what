@@ -626,6 +626,7 @@
   "gui.itemdespawntowhat.edit.list.empty": "暂无条目",
   "gui.itemdespawntowhat.edit.list.error": "[!]",
   "gui.itemdespawntowhat.edit.list.input_hint": "输入新条目后回车追加；选中条目后回车进入编辑",
+  "gui.itemdespawntowhat.edit.list.loading": "正在加载规则…",
   "gui.itemdespawntowhat.edit.list.remove": "移除",
   "gui.itemdespawntowhat.edit.list.search": "搜索",
   "gui.itemdespawntowhat.edit.notice.applying": "正在应用改动…",

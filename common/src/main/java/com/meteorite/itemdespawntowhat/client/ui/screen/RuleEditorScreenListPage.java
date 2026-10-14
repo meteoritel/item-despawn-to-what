@@ -158,7 +158,6 @@ final class RuleEditorScreenListPage {
         });
         ruleList.setRowHeightProvider(node -> font.lineHeight + 4
                 + (node.value().startsWith("@") ? 0 : RuleRecipeView.CONTENT_HEIGHT + 1));
-        ruleList.setEmptyMessage(Component.translatable(UI + "list.empty"));
         ruleList.setOnActivate(node -> { if (!node.value().startsWith("@")) host.openEditor(node.value()); });
         buildListButtons();
     }
@@ -312,6 +311,8 @@ final class RuleEditorScreenListPage {
         if (ruleList == null) {
             return;
         }
+        // 未收到首份快照不能判为空；有效空快照和筛选结果为空才使用空列表文案。
+        ruleList.setEmptyMessage(Component.translatable(UI + (host.model().isLoaded() ? "list.empty" : "list.loading")));
         String selectedValue = ruleList.selectedNode() == null ? null : ruleList.selectedNode().value();
         int scrollOffset = ruleList.scrollOffset();
         visibleIds.clear();

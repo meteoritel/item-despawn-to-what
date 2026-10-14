@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.core.service;
 
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
+import com.meteorite.itemdespawntowhat.core.api.RuleDecoder;
 import com.meteorite.itemdespawntowhat.core.load.LoadedRule;
 import com.meteorite.itemdespawntowhat.core.load.OverlayRuleReader;
 import com.meteorite.itemdespawntowhat.core.load.RawRuleEntry;
@@ -20,6 +21,7 @@ import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTask;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTaskKind;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTickBudget;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.StepResult;
+import com.mojang.serialization.Codec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -46,6 +48,8 @@ final class RuleSnapshotTask implements ServerTask {
     private CompletableFuture<Source> reading;
     private CompletableFuture<List<CustomPacketPayload>> preparing;
     private Source source;
+    private RuleDecoder<Rule> decoder;
+    private Codec<Rule> encoder;
     private int version;
     private int cursor;
     private boolean cancelled;
@@ -91,17 +95,23 @@ final class RuleSnapshotTask implements ServerTask {
                 RuleSaveTask.background(() -> { sessions.persistRevision(version); return null; });
             }
             long deadline = System.nanoTime() + RuleEditLimits.SAVE_STEP_BUDGET_NANOS;
+            if (decoder == null && cursor < source.entries().size() && !budget.exhausted()) {
+                // Codec 构建也计入步骤预算，同一快照内复用，不为每条规则重建整棵 Codec。
+                var load = reloadContext.loadContext();
+                decoder = RuleCodecs.decoder(load.registryAccess(), load.effectTypes(), load.conditionTypes());
+                encoder = RuleCodecs.codec(load.effectTypes(), load.conditionTypes());
+            }
             int processed = 0;
             while (cursor < source.entries().size() && processed < RuleEditLimits.SAVE_ENTRIES_PER_STEP
                     && !budget.exhausted() && System.nanoTime() < deadline) {
                 RawRuleEntry entry = source.entries().get(cursor++);
                 var load = reloadContext.loadContext();
-                RuleLoader.decodeEntry(entry, RuleCodecs.decoder(load.registryAccess(), load.effectTypes(), load.conditionTypes()), source.issues())
+                RuleLoader.decodeEntry(entry, decoder, source.issues())
                         .filter(rule -> RuleValidation.validate(rule, load.effectTypes(), load.conditionTypes(), source.issues(), entry.origin().display())
                                 && RuleReferenceValidator.validate(rule, server, source.issues(), entry.origin().display()))
                         .ifPresent(rule -> {
                             decoded.add(new LoadedRule<>(entry.id(), entry.origin(), rule));
-                            JsonObject json = RuleSnapshotAssembler.encodeRule(rule, load.effectTypes(), load.conditionTypes());
+                            JsonObject json = RuleSnapshotAssembler.encode(encoder, rule);
                             if (json != null) { encoded.put(entry.id(), json); }
                         });
                 budget.charge(1); processed++;
