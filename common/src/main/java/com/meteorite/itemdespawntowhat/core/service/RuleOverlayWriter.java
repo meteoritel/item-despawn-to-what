@@ -32,13 +32,17 @@ public final class RuleOverlayWriter {
         private final boolean array;
         private final byte[] original;
         private final List<JsonElement> entries = new ArrayList<>();
+        private int liveEntries;
+        private int remainingIndexXor;
+        private ResourceLocation inferredId;
         private RuleFile(Path path, boolean array, byte[] original) {
             this.path = path; this.array = array; this.original = original;
         }
         private JsonElement content() {
-            if (!array && entries.size() == 1) { return entries.getFirst(); }
+            if (!array && liveEntries == 1) { return entries.get(remainingIndexXor); }
             JsonArray result = new JsonArray();
-            entries.forEach(result::add);
+            // Java null 是本批删除的槽位；JSON null 与其它未编辑成员必须原样保留。
+            entries.stream().filter(Objects::nonNull).forEach(result::add);
             return result;
         }
     }
@@ -54,20 +58,44 @@ public final class RuleOverlayWriter {
 
     // 拒绝路径穿越、符号链接、重复编辑和文件占用；任何预备错误均不写入。
     public ApplyResult apply(RuleEditChangeSet changes, IssueCollector issues) {
+        return apply(changes, issues, () -> true, () -> true);
+    }
+
+    /**
+     * 在保存后台队列准备并提交整批规则；失效请求在提交检查点退出，已替换文件按原内容回滚。
+     * @param changes 本批编辑
+     * @param issues 本批问题
+     * @param active 请求是否仍有效，不得访问世界
+     * @param revisionMatches 提交前的全目录修订核对，不得访问世界
+     * @return 整批写入结果
+     */
+    public ApplyResult apply(RuleEditChangeSet changes, IssueCollector issues,
+                             java.util.function.BooleanSupplier active,
+                             java.util.function.BooleanSupplier revisionMatches) {
         Map<Path, RuleFile> files = new LinkedHashMap<>();
         Set<Path> dirty = new LinkedHashSet<>();
         List<String> conflicts = new ArrayList<>();
         try {
+            requireActive(active);
             safePath(root);
             load(files);
+            Map<ResourceLocation, List<Location>> locations = index(files.values());
             Set<ResourceLocation> seen = new HashSet<>();
             for (RuleEdit change : changes.edits()) {
+                requireActive(active);
                 if (!seen.add(change.id())) { throw new IOException("重复编辑规则: " + change.id()); }
                 Path target = target(change.id());
-                Location location = locate(files, change.id());
+                Location location = locate(locations, change.id());
                 if (change.action() == RuleEdit.Action.DELETE) {
                     if (location != null) {
-                        location.file.entries.remove(location.index);
+                        RuleFile file = location.file;
+                        removeInferred(locations, file);
+                        locations.remove(change.id());
+                        // 保留稳定槽位，后续编辑不因数组删除而指向错误条目。
+                        file.entries.set(location.index, null);
+                        file.liveEntries--;
+                        file.remainingIndexXor ^= location.index;
+                        addInferred(locations, file);
                         dirty.add(location.file.path);
                     }
                     continue;
@@ -75,7 +103,9 @@ public final class RuleOverlayWriter {
                 JsonObject body = Objects.requireNonNull(change.rule(), "upsert 缺少 rule").deepCopy();
                 body.addProperty(RuleFields.ID, change.id().toString());
                 if (location != null) {
+                    removeInferred(locations, location.file);
                     location.file.entries.set(location.index, body);
+                    locations.put(change.id(), new ArrayList<>(List.of(location)));
                     dirty.add(location.file.path);
                 } else {
                     // 包括损坏 JSON 在内的任何现存文件都不能被新规则覆盖。
@@ -84,14 +114,22 @@ public final class RuleOverlayWriter {
                     }
                     RuleFile file = new RuleFile(target, false, null);
                     file.entries.add(body);
+                    file.liveEntries = 1;
                     files.put(target, file);
+                    locations.put(change.id(), new ArrayList<>(List.of(new Location(file, 0))));
                     dirty.add(target);
                 }
             }
-            commit(dirty.stream().map(files::get).toList());
+            requireActive(active);
+            if (!revisionMatches.getAsBoolean()) { throw new IOException("准备保存时覆盖层修订已变化"); }
+            commit(dirty.stream().map(files::get).toList(), active);
             return new ApplyResult(dirty.size(), List.of());
         } catch (IOException | RuntimeException failure) {
-            org.apache.logging.log4j.LogManager.getLogger().error("覆盖层整批保存失败", failure);
+            if (active.getAsBoolean()) {
+                org.apache.logging.log4j.LogManager.getLogger().error("覆盖层整批保存失败", failure);
+            } else {
+                org.apache.logging.log4j.LogManager.getLogger().debug("覆盖层保存已取消并结束回滚", failure);
+            }
             String message = "覆盖层整批保存失败: " + failure.getMessage();
             if (failure.getSuppressed().length > 0) { message += "；部分文件回滚失败，请用 .bak 恢复并检查日志"; }
             issues.error(message, root.toString(), null);
@@ -140,35 +178,67 @@ public final class RuleOverlayWriter {
         }
     }
 
-    private Location locate(Map<Path, RuleFile> files, ResourceLocation id) throws IOException {
-        Location found = null;
-        for (RuleFile file : files.values()) {
+    private Map<ResourceLocation, List<Location>> index(Collection<RuleFile> files) {
+        Map<ResourceLocation, List<Location>> locations = new HashMap<>();
+        for (RuleFile file : files) {
+            file.liveEntries = file.entries.size();
             for (int i = 0; i < file.entries.size(); i++) {
+                file.remainingIndexXor ^= i;
                 JsonElement element = file.entries.get(i);
                 if (!element.isJsonObject()) { continue; }
                 JsonObject body = element.getAsJsonObject();
                 ResourceLocation candidate = null;
                 try {
                     if (body.has(RuleFields.ID)) { candidate = ResourceLocation.tryParse(body.get(RuleFields.ID).getAsString()); }
-                    else if (file.entries.size() == 1) {
-                        candidate = ResourceLocation.tryParse(namespace + ":" + RulePaths.stripExtension(root.relativize(file.path).toString().replace('\\', '/')));
-                    }
                 } catch (RuntimeException invalid) { /* 未编辑的坏条目原样保留。 */ }
-                if (id.equals(candidate)) {
-                    if (found != null) { throw new IOException("覆盖层同 id 多处定义，需先手动消歧: " + id); }
-                    found = new Location(file, i);
+                if (candidate != null) {
+                    locations.computeIfAbsent(candidate, key -> new ArrayList<>()).add(new Location(file, i));
                 }
             }
+            addInferred(locations, file);
         }
-        return found;
+        return locations;
+    }
+
+    private void addInferred(Map<ResourceLocation, List<Location>> locations, RuleFile file) {
+        if (file.liveEntries != 1) { return; }
+        JsonElement entry = file.entries.get(file.remainingIndexXor);
+        if (!entry.isJsonObject() || entry.getAsJsonObject().has(RuleFields.ID)) { return; }
+        ResourceLocation id = ResourceLocation.tryParse(namespace + ":"
+                + RulePaths.stripExtension(root.relativize(file.path).toString().replace('\\', '/')));
+        if (id != null) {
+            file.inferredId = id;
+            locations.computeIfAbsent(id, key -> new ArrayList<>()).add(new Location(file, file.remainingIndexXor));
+        }
+    }
+
+    private static void removeInferred(Map<ResourceLocation, List<Location>> locations, RuleFile file) {
+        if (file.inferredId == null) { return; }
+        List<Location> entries = locations.get(file.inferredId);
+        entries.remove(new Location(file, file.remainingIndexXor));
+        if (entries.isEmpty()) { locations.remove(file.inferredId); }
+        file.inferredId = null;
+    }
+
+    private static Location locate(Map<ResourceLocation, List<Location>> locations, ResourceLocation id) throws IOException {
+        List<Location> found = locations.get(id);
+        // 未编辑的重复 id 不阻断其它规则保存，只有命中歧义 id 时整批拒绝。
+        if (found == null) { return null; }
+        if (found.size() != 1) { throw new IOException("覆盖层同 id 多处定义，需先手动消歧: " + id); }
+        return found.getFirst();
     }
 
     // 所有临时文件与备份准备成功后才替换；普通 I/O 失败时恢复整批原内容。
-    private static void commit(List<RuleFile> files) throws IOException {
+    private static void requireActive(java.util.function.BooleanSupplier active) throws IOException {
+        if (!active.getAsBoolean()) { throw new IOException("保存请求已失效"); }
+    }
+
+    private static void commit(List<RuleFile> files, java.util.function.BooleanSupplier active) throws IOException {
         Map<RuleFile, Path> temporary = new LinkedHashMap<>();
         List<RuleFile> committed = new ArrayList<>();
         try {
             for (RuleFile file : files) {
+                requireActive(active);
                 safePath(file.path);
                 Files.createDirectories(file.path.getParent());
                 Path temp = Files.createTempFile(file.path.getParent(), ".idtw-", ".tmp");
@@ -182,10 +252,12 @@ public final class RuleOverlayWriter {
                 }
             }
             for (RuleFile file : files) {
+                requireActive(active);
                 verifyUnchanged(file);
                 move(temporary.get(file), file.path);
                 committed.add(file);
             }
+            requireActive(active);
         } catch (IOException failure) {
             Collections.reverse(committed);
             for (RuleFile file : committed) {

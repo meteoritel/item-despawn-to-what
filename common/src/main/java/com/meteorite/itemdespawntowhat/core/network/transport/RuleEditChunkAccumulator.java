@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * 大变更集分片重组器：按玩家 + transferId 分组，收齐后返回完整变更集文本。
+ * 大变更集分片重组器：按玩家 + transferId 分组，收齐后返回有序分片，文本拼接由保存后台队列执行。
  * 时钟一律用服务端活动 tick（20 tick = 1 秒），暂停时不推进；同一玩家最多 2 个在途传输。
  */
 public final class RuleEditChunkAccumulator {
@@ -23,10 +23,32 @@ public final class RuleEditChunkAccumulator {
     }
 
     /**
-     * 分片重组结果：收齐时 complete=true 且 json 非空；收齐后超过变更集总量上限时 rejected=true；
+     * 分片重组结果：收齐时 complete=true 且 chunks 非空；收齐后超过变更集总量上限时 rejected=true；
      * 其余情况（未收齐、形状非法）两者皆为 false。调用方据此决定"等待"还是回 INVALID_REQUEST。
      */
-    public record AcceptResult(boolean complete, boolean rejected, String json) {
+    public record AcceptResult(boolean complete, boolean rejected, List<String> chunks) {
+        /**
+         * 固定收齐分片，避免调用方修改后台待拼接的数据。
+         * @param complete 是否收齐
+         * @param rejected 是否拒绝
+         * @param chunks 下标顺序的分片
+         */
+        public AcceptResult { chunks = List.copyOf(chunks); }
+        /**
+         * 兼容完整文本调用方的构造入口。
+         * @param complete 是否收齐
+         * @param rejected 是否拒绝
+         * @param json 完整文本
+         */
+        public AcceptResult(boolean complete, boolean rejected, String json) {
+            this(complete, rejected, json.isEmpty() ? List.of() : List.of(json));
+        }
+
+        /**
+         * 按下标拼接文本；生产保存入口在后台执行拼接。
+         * @return 完整变更集文本
+         */
+        public String json() { return String.join("", chunks); }
 
         // 未收齐（含形状非法，形状校验由调用方先行判定）
         private static final AcceptResult PENDING = new AcceptResult(false, false, "");
@@ -66,7 +88,7 @@ public final class RuleEditChunkAccumulator {
             byTransfer.put(transferId, session);
         }
         session.touch(tick);
-        String complete = session.offer(index, chunk);
+        List<String> complete = session.offer(index, chunk);
         if (complete == null) {
             return AcceptResult.PENDING;
         }
@@ -74,7 +96,7 @@ public final class RuleEditChunkAccumulator {
         if (byTransfer.isEmpty()) {
             SESSIONS.remove(playerId);
         }
-        if (RuleEditLimits.encodedLength(complete) > RuleEditLimits.MAX_CHANGE_SET_BYTES) {
+        if (session.receivedBytes > RuleEditLimits.MAX_CHANGE_SET_BYTES) {
             return AcceptResult.REJECTED;
         }
         return new AcceptResult(true, false, complete);
@@ -158,7 +180,7 @@ public final class RuleEditChunkAccumulator {
         }
 
         // 写入一片；已存在的下标按首片为准，收齐返回拼接结果，否则返回 null
-        private String offer(int index, String chunk) {
+        private List<String> offer(int index, String chunk) {
             if (chunks[index] == null) {
                 chunks[index] = chunk;
                 received++;
@@ -167,7 +189,6 @@ public final class RuleEditChunkAccumulator {
             if (received < count) {
                 return null;
             }
-            StringBuilder builder = new StringBuilder(Math.max(receivedBytes, 64));
             List<String> ordered = new ArrayList<>(count);
             for (String part : chunks) {
                 if (part == null) {
@@ -175,10 +196,7 @@ public final class RuleEditChunkAccumulator {
                 }
                 ordered.add(part);
             }
-            for (String part : ordered) {
-                builder.append(part);
-            }
-            return builder.toString();
+            return List.copyOf(ordered);
         }
     }
 }

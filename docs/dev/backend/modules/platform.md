@@ -48,11 +48,11 @@
 | 环境伤害保护（三类） | **Mixin**（见 §4） | `EntityInvulnerabilityCheckEvent` → `DropStateStore.blocksEnvironmentalDamage` 为真则 `setInvulnerable(true)` |
 | 致死分支请求转化 | **Mixin**（见 §4） | **Mixin**（见 §4，两端各用不同注入描述符） |
 | 死亡背包排除 | **两个 Mixin** + `PlayerDeathDrops.mark` | `LivingDropsEvent` 直接给 drops 打 `Constants.CHECK_LOCK_TAG` |
-| 服务端 tick / 调试 / expireIdle | `END_SERVER_TICK`（`beginRuntimeTick` → `tickServer` → `DebugSessionManager.tick`；`tickCount%20==0` 时 `expireIdle`） | `ServerTickEvent.Post`（同左） |
+| 服务端 tick / 调试 / expireIdle | `END_SERVER_TICK`（`beginRuntimeTick` → `tickServer` → `RuleEditServerHandler.tick` → `DebugSessionManager.tick`；`tickCount%20==0` 时 `expireIdle`） | `ServerTickEvent.Post`（同左） |
 | 维度加载 / 卸载 | `ServerWorldEvents.LOAD` / `UNLOAD` | `LevelEvent.Load` / `Unload` |
 | 包层判定 | `FabricLoader.getAllMods()` 命中 mod id → BUILTIN，否则 WORLD | `packId.startsWith("mod/")` → BUILTIN，否则 WORLD |
 
-> **单一服务端 tick 推进入口**：两端都只在"服务端 tick 结束"事件里推进一次公共预算（所有维度共享，见 [ADR-0024](../../../adr/0024-shared-server-tick-budget-scheduler.md)），不再按维度 tick 推进。顺序固定为 `beginRuntimeTick → RuleRuntimeHost.tickServer → DebugSessionManager.tick → (每 20 tick) RuleEditServerHandler.expireIdle`。
+> **单一服务端 tick 推进入口**：两端都只在"服务端 tick 结束"事件里推进一次公共预算（所有维度共享，见 [ADR-0024](../../../adr/0024-shared-server-tick-budget-scheduler.md)），不再按维度 tick 推进。顺序固定为 `beginRuntimeTick → RuleRuntimeHost.tickServer → RuleEditServerHandler.tick → DebugSessionManager.tick → (每 20 tick) RuleEditServerHandler.expireIdle`。
 
 ## 4. Mixin（无原生等价事件时的最小入口）
 
@@ -109,7 +109,7 @@
 | 死亡掉落排除 | 两个 Mixin + `PlayerDeathDrops.mark` | `LivingDropsEvent` 直接打 tag |
 | 包层判定 | 查 `FabricLoader.getAllMods()` | `packId.startsWith("mod/")` |
 
-> 共同点：`start/reload/shutdown/onItemAdded/onItemRemoved/requestEnvironmentalConversion/deferNaturalExpiry/tickServer/levelLoaded/levelUnloaded` 语义两端口径一致；保存后的重建走同一 `reload` 路径。`DropState` 与 `DamageClassification` 在 common，平台层不重复定义状态结构或伤害类别。
+> 共同点：`start/reload/shutdown/onItemAdded/onItemRemoved/requestEnvironmentalConversion/deferNaturalExpiry/tickServer/levelLoaded/levelUnloaded` 语义两端口径一致；保存后的重建使用缓存数据包基底和 `applySavedIndex` 分步清理/回扫；数据包重载在保存期间延后至文件工作结束。`DropState` 与 `DamageClassification` 在 common，平台层不重复定义状态结构或伤害类别。
 
 ## 7. 模组级配置
 

@@ -32,6 +32,8 @@ public final class SettlementLedger extends SavedData {
     private static final long RETAIN_COMPLETED_TICKS = 6000L;
 
     private final Map<String, SettlementRecord> records = new LinkedHashMap<>();
+    // 保存重载的稳定游标索引；不改变账本的加入顺序或持久化顺序。
+    private final java.util.NavigableMap<String, SettlementRecord> scanIndex = new java.util.TreeMap<>();
 
     // 取主世界账本（同一 id 全局唯一，维度卸载不影响）
     // 此处借用 Minecraft 管理的实例，生命周期由游戏负责，不能在此关闭。
@@ -49,6 +51,7 @@ public final class SettlementLedger extends SavedData {
             return;
         }
         records.put(record.id(), record);
+        scanIndex.put(record.id(), record);
         setDirty();
     }
 
@@ -59,6 +62,11 @@ public final class SettlementLedger extends SavedData {
 
     public int size() {
         return records.size();
+    }
+
+    SettlementRecord nextForRecovery(String afterId) {
+        var entry = afterId == null ? scanIndex.firstEntry() : scanIndex.higherEntry(afterId);
+        return entry == null ? null : entry.getValue();
     }
 
     // 统计进行中的记录数（未完成且有待返还数据），供调试观测
@@ -114,11 +122,14 @@ public final class SettlementLedger extends SavedData {
 
     // 裁剪：已完成且返还交付完毕的记录先按 tick 过期，再按条数上限兜底
     public void prune(long gameTime) {
-        boolean changed = records.values().removeIf(record ->
-                record.status() == SettlementRecord.Status.COMPLETED
+        boolean changed = records.values().removeIf(record -> {
+            boolean expired = record.status() == SettlementRecord.Status.COMPLETED
                         && record.pendingDelivery() <= 0
                         && record.finishedTick() >= 0L
-                        && gameTime - record.finishedTick() > RETAIN_COMPLETED_TICKS);
+                        && gameTime - record.finishedTick() > RETAIN_COMPLETED_TICKS;
+            if (expired) { scanIndex.remove(record.id()); }
+            return expired;
+        });
         while (records.size() > MAX_RECORDS) {
             String victim = null;
             for (Map.Entry<String, SettlementRecord> entry : records.entrySet()) {
@@ -133,6 +144,7 @@ public final class SettlementLedger extends SavedData {
                 break;
             }
             records.remove(victim);
+            scanIndex.remove(victim);
             changed = true;
         }
         if (changed) {
@@ -165,6 +177,7 @@ public final class SettlementLedger extends SavedData {
                 SettlementRecord record = SettlementRecord.load(entry, registries);
                 if (!record.id().isEmpty()) {
                     ledger.records.put(record.id(), record);
+                    ledger.scanIndex.put(record.id(), record);
                 }
             } catch (RuntimeException failure) {
                 LOGGER.warn("结算记录恢复失败，已跳过：index={}", index, failure);

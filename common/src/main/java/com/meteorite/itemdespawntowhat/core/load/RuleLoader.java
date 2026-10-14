@@ -61,7 +61,15 @@ public final class RuleLoader {
     }
 
     // 解码单条规则；失败即该条拒载，并把解码期问题补全为带来源与字段路径的记录
-    private static <T> Optional<T> decodeEntry(RawRuleEntry entry, RuleDecoder<T> decoder, IssueCollector issues) {
+    /**
+     * 解码单个合并条目并补全问题来源；跨 tick 加载与完整加载共用此入口。
+     * @param entry 合并后的原始条目
+     * @param decoder 注册表感知的解码器
+     * @param issues 本次加载问题
+     * @return 解码结果；非法条目为空
+     * @param <T> 模型类型
+     */
+    public static <T> Optional<T> decodeEntry(RawRuleEntry entry, RuleDecoder<T> decoder, IssueCollector issues) {
         IssueCollector local = new IssueCollector();
         Optional<T> decoded;
         try {

@@ -18,30 +18,42 @@ public final class RuleSubmissionValidator {
     public static boolean validate(RuleEditChangeSet changes, net.minecraft.server.MinecraftServer server,
                                    BuiltinTypeRegistries types, IssueCollector issues) {
         for (RuleEdit edit : changes.edits()) {
-            if (edit.action() == RuleEdit.Action.DELETE) { continue; }
-            JsonObject body = java.util.Objects.requireNonNull(edit.rule()).deepCopy();
-            body.addProperty("id", edit.id().toString());
-            if (body.has("disabled") || body.has("delete")) {
-                String field = body.has("delete") ? "delete" : "disabled";
-                boolean valid = body.size() == 2 && body.get(field).isJsonPrimitive()
-                        && body.get(field).getAsJsonPrimitive().isBoolean() && body.get(field).getAsBoolean();
-                if (!valid) { issues.error("控制条目只能包含 id 和一个值为 true 的 disabled/delete 字段", edit.id().toString(), field); }
-                continue;
-            }
-            try {
-                var decoded = RuleCodecs.decoder(server.registryAccess(), types.effectTypes(), types.conditionTypes()).decode(body, issues);
-                Rule rule = decoded.result().orElse(null);
-                if (rule == null) {
-                    issues.error(decoded.error().map(DataResult.Error::message).orElse("规则解码失败"), edit.id().toString(), null);
-                } else {
-                    RuleValidation.validate(rule, types.effectTypes(), types.conditionTypes(), issues, edit.id().toString());
-                    RuleReferenceValidator.validate(rule, server, issues, edit.id().toString());
-                }
-            } catch (RuntimeException failure) {
-                // 第三方类型的 Codec/校验器失误也必须拒绝整批，不能进入落盘阶段。
-                issues.error("规则校验异常: " + failure, edit.id().toString(), null);
-            }
+            validateEdit(edit, server, types, issues);
         }
-        return issues.errors().isEmpty();
+        return !issues.hasErrors();
+    }
+
+    /**
+     * 校验单条编辑，供跨 tick 保存复用完整校验闸门；必须在服务端线程调用。
+     * @param edit 编辑意图
+     * @param server 当前服务端
+     * @param types 类型注册表
+     * @param issues 本批问题收集器
+     */
+    public static void validateEdit(RuleEdit edit, net.minecraft.server.MinecraftServer server,
+                                    BuiltinTypeRegistries types, IssueCollector issues) {
+        if (edit.action() == RuleEdit.Action.DELETE) { return; }
+        JsonObject body = java.util.Objects.requireNonNull(edit.rule()).deepCopy();
+        body.addProperty("id", edit.id().toString());
+        if (body.has("disabled") || body.has("delete")) {
+            String field = body.has("delete") ? "delete" : "disabled";
+            boolean valid = body.size() == 2 && body.get(field).isJsonPrimitive()
+                    && body.get(field).getAsJsonPrimitive().isBoolean() && body.get(field).getAsBoolean();
+            if (!valid) { issues.error("控制条目只能包含 id 和一个值为 true 的 disabled/delete 字段", edit.id().toString(), field); }
+            return;
+        }
+        try {
+            var decoded = RuleCodecs.decoder(server.registryAccess(), types.effectTypes(), types.conditionTypes()).decode(body, issues);
+            Rule rule = decoded.result().orElse(null);
+            if (rule == null) {
+                issues.error(decoded.error().map(DataResult.Error::message).orElse("规则解码失败"), edit.id().toString(), null);
+            } else {
+                RuleValidation.validate(rule, types.effectTypes(), types.conditionTypes(), issues, edit.id().toString());
+                RuleReferenceValidator.validate(rule, server, issues, edit.id().toString());
+            }
+        } catch (RuntimeException failure) {
+            // 第三方类型的 Codec/校验器失误也必须拒绝整批，不能进入落盘阶段。
+            issues.error("规则校验异常: " + failure, edit.id().toString(), null);
+        }
     }
 }

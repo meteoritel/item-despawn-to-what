@@ -23,6 +23,10 @@ public final class RuleEditLimits {
     // 一次变更集的字节上限
     public static final int MAX_CHANGE_SET_BYTES = 4 * 1024 * 1024;
 
+    // 单次保存步骤最多处理 8 条；同时受公共 tick 预算与本步骤 1ms 软预算约束。
+    public static final int SAVE_ENTRIES_PER_STEP = 8;
+    public static final long SAVE_STEP_BUDGET_NANOS = 1_000_000L;
+
     // 单片数量上限
     public static final int MAX_CHUNK_COUNT = (MAX_CHANGE_SET_BYTES + MAX_CHUNK_BYTES - 1) / MAX_CHUNK_BYTES;
 

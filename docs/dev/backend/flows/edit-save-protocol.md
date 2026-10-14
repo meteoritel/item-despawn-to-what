@@ -21,13 +21,13 @@
 
 ```text
 ConfirmRuleEditorPayload (C2S)：version 校验 → owns + isOwner → EditSessionManager.confirm(OPENING→ACTIVE)
-  → 立即回发最新快照
+  → 排队准备最新快照
 RequestRuleSnapshotPayload (C2S)
   → owns + isOwner 校验；未确认的 OPENING 会话不接受快照请求
   → heartbeat(sessionId, tick)            # 续租
-  → synchronizeDiskRevision               # 手工改过覆盖层也给出权威修订号
-  → RuleSnapshotAssembler.assemble(...)   # 覆盖层原始 JSON + 数据包层模型编码；editable = base/overlay 非空
-  → RuleSnapshotChunker：≤4 MiB 出 RuleSnapshotPayload，超限按 UTF-8 字节切 RuleSnapshotChunkPayload
+  → RuleSnapshotTask：后台读取、核对修订；公共预算逐条解码/编码
+  → 后台装配原始来源三视图与序列化、切片
+  → 小快照直发，大快照每 tick 一片；超总量上限回 UNAVAILABLE
 ```
 
 心跳 `HeartbeatRuleEditorPayload` 正常无回执；失效时按身份回不同状态码——原持有者回 `SESSION_EXPIRED`，非持有者回 `LOCK_NOT_OWNED`（客户端据此回到未持有状态）。
@@ -47,20 +47,20 @@ RequestRuleCatalogPayload (C2S) → owns + isOwner 校验（失效 → SESSION_E
 ## 4. 提交变更集
 
 ```text
-SaveRuleChangeSetPayload / SaveRuleChangeSetChunkPayload* (C2S)
-  → operationId 非空且 ≤64 B、变更集总量 ≤4 MiB
-  → owns + isOwner 校验（失效 → SESSION_EXPIRED / LOCK_NOT_OWNED，不落盘）
-  → 幂等查表：同一 operationId 直接回放上次回执，不重复写盘
-  → 解析 RuleEditChangeSet（失败 → INVALID_REQUEST，记入幂等表）
-  → beginApply（ACTIVE→APPLYING；正在 APPLYING 时回 INVALID_REQUEST 并保留会话）
-  → 空集 → NO_CHANGES
-  → expectedVersion 与 sessions.version() 不一致 → 整批拒绝（VERSION_CONFLICT）+ 最新快照，不落盘
-  → RuleSubmissionValidator.validate(...)   # 控制条目 / 解码 + 语义 + 动态引用；无部分通过
-  → RuleOverlayWriter.apply(...)            # 基于磁盘内容：预备→(.bak)→原子替换→失败回滚
-  → rebuildAndRescan(server)               # 重建索引 + 全维度 rescan
-  → 成功：SUCCESS（resultVersion=新版本）；**重载失败：SAVED_NOT_RELOADED（writtenToDisk=true, reloaded=false），保留上一版索引**
-  → finishApply(ACTIVE) → 回执 + (冲突/未重载时追加)最新快照
+直发/分片收齐 → operationId、会话、权限、幂等校验
+  → beginApply → RuleSaveTask 入 MAINTENANCE 车道
+  → 后台拼接与解析、核对字节和磁盘修订
+  → 空集 NO_CHANGES；版本不符整批 VERSION_CONFLICT
+  → 公共预算逐条完整校验，任一错误整批拒绝且不落盘
+  → 后台基于磁盘 id 索引预备、核对、备份、提交；失败回滚
+  → 后台合并新覆盖层与数据包基底；公共预算逐条解码与校验
+  → 后台准备索引；服务端发布、摘除旧队列
+  → 公共预算逐项取消旧任务、恢复返还、回扫掉落物
+  → finishApply → 回执；VERSION_CONFLICT/SAVED_NOT_RELOADED 的最新快照另行排队
 ```
+
+每步条数与软时间预算见[编辑协议](../modules/edit-protocol.md) §4。保存可以跨多个 tick；同一在途操作只运行一次，文件后台队列全进程串行。会话失效取消尚未提交的写入；已发布索引的清理必须完成。数据包重载等待文件工作结束后执行。
+
 
 *分片：`RuleEditChunkAccumulator` 按 `transferId` 重组，收齐后复用同一 `handleChangeSet`；未收齐不回执，超过总量上限回 `INVALID_REQUEST`。
 
@@ -78,7 +78,7 @@ SaveRuleChangeSetPayload / SaveRuleChangeSetChunkPayload* (C2S)
 
 ## 6. 版本戳推进时机
 
-成功的数据包重载（`RuleRuntimeHost.reload`）与保存（`bumpVersion`）都推进 `sessions.version()`；快照下发前与保存前都先 `synchronizeDiskRevision()`，覆盖层被手工修改时自增。保存后 reload 失败时：仍 `bumpVersion()` 并回 `SAVED_NOT_RELOADED`（`writtenToDisk=true, reloaded=false`），同时**保留上一版索引**（规则已落盘，下次启动/重载生效）。
+数据包重载、保存写盘成功和检测到覆盖层外部改动均推进版本。保存与快照的目录指纹计算在后台执行，版本接纳在服务端线程执行，版本文件后台持久化。保存写盘成功但索引发布前失败时保留上一版索引；索引发布后的回扫失败不撤回新索引，回 `SAVED_NOT_RELOADED`。
 
 ## 7. 相关
 

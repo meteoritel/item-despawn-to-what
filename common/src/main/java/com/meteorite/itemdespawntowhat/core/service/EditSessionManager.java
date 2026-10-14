@@ -61,7 +61,7 @@ public final class EditSessionManager {
     public EditSessionManager(Path overlayRoot) {
         this.versionFile = overlayRoot.resolve(VERSION_FILE_NAME);
         this.version = readVersion();
-        refreshDiskRevision();
+        // 首次磁盘基线由保存/快照后台读取，打开编辑器时不全量扫描规则目录。
     }
 
     // 当前覆盖层版本戳
@@ -85,10 +85,44 @@ public final class EditSessionManager {
         } catch (IOException failure) {
             throw new java.io.UncheckedIOException("无法核对规则目录修订", failure);
         }
-        if (!java.util.Arrays.equals(current, diskRevision)) {
+        if (diskRevision == null) {
+            diskRevision = current;
+        } else if (!java.util.Arrays.equals(current, diskRevision)) {
             version++;
             persistVersion();
             diskRevision = current;
+        }
+    }
+
+    /**
+     * 在后台计算覆盖层修订，不持有会话锁，不访问世界。
+     * @return 全目录内容指纹
+     * @throws IOException 目录或文件读取失败
+     */
+    public byte[] readDiskRevision() throws IOException {
+        return fingerprint();
+    }
+
+    /**
+     * 服务端线程接纳后台修订；文件持久化由保存后台队列随后执行。
+     * @param revision 全目录内容指纹
+     * @param saved 是否为本次已写盘的保存，需要主动推进版本
+     */
+    public synchronized void acceptDiskRevision(byte[] revision, boolean saved) {
+        if (saved || diskRevision != null && !java.util.Arrays.equals(revision, diskRevision)) { version++; }
+        diskRevision = revision;
+    }
+
+    /**
+     * 后台持久化指定版本，不扫描目录也不持有会话锁。
+     * @param revision 服务端线程已确认的版本
+     */
+    public void persistRevision(int revision) {
+        try {
+            Files.createDirectories(versionFile.getParent());
+            Files.writeString(versionFile, Integer.toString(revision), StandardCharsets.UTF_8);
+        } catch (IOException ignored) {
+            // 修订号写盘失败可容忍，规则文件仍是权威来源。
         }
     }
 

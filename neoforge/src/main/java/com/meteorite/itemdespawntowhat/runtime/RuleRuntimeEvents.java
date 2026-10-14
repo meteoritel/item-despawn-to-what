@@ -107,6 +107,7 @@ public final class RuleRuntimeEvents {
     public static void onServerTick(net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) {
         DebugSessionManager.beginRuntimeTick(event.getServer());
         RuleRuntimeHost.tickServer(event.getServer());
+        com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler.tick(event.getServer(), RuleRuntimeHost.editContext());
         DebugSessionManager.tick(event.getServer(), RuleRuntimeHost.commandContext());
         if (event.getServer().getTickCount() % 20 == 0) {
             com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler

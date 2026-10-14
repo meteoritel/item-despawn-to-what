@@ -8,13 +8,13 @@
 
 | 类 | 职责 | 关键成员 |
 |---|---|---|
-| `ConversionRuntime` | 总控：规则索引 + 维度级追踪 + 触发请求 + 排期/退避 + 结算派发 | `onItemAdded`、`requestEnvironmentalConversion`、`requestConversion`、`onServerTick`、`attempt`、`select`、`performConversion`、`deferNaturalExpiry`、`replaceRules`、`rescan`、`clear`、`shutdown`、`schedulerStats`、`budgetSnapshot` |
+| `ConversionRuntime` | 总控：规则索引 + 维度级追踪 + 触发请求 + 排期/退避 + 结算派发 | `onItemAdded`、`requestEnvironmentalConversion`、`requestConversion`、`onServerTick`、`attempt`、`select`、`performConversion`、`deferNaturalExpiry`、`replaceRules`、`applySavedIndex`、`rescan`、`clear`、`shutdown`、`schedulerStats`、`budgetSnapshot` |
 | `ConversionSettlement` | 一次转化的结算任务（计划 → 派发 → 交付），固定成本、完整组、真实账目 | `step`、`plan`、`dispatch`、`deliver`、`abort`、`account`、`capacityGroups` |
 | `CatalystAllocation` | 催化剂共享库存分配 | 按逐引用需求求完整轮次；图构建与搜索可按 tick 预算续跑，输出逐轮支付清单；效果式消耗复用同一分配算法 |
 | `CatalystReservations` | 运行期催化剂预留表（按维度 + 任务），预留 → 支付三态，不落盘 | `available`、`tryReserve`、`payGroup`、`releaseOwner`、`clear` |
 | `SettlementLedger` | 主世界 `SavedData` 结算账本（进行中 + 已完成记录，带上限裁剪） | `get`、`put`、`find`、`unsettled`、`pendingDeliveryTotal`、`prune` |
 | `SettlementRecord` | 单次结算记录：计划量、已开始组、真实完成量、返还交付进度；可持久化 | `plan`、`groupStarted`、`addProgress`、`delivered`、`syncPendingDelivery`、`complete`、`interrupt`、`needsRecovery`、`save`/`load` |
-| `SettlementRecovery` | 重启 / 维度加载后的待返还交付任务（`REBATE`） | `step`、`onCancelled`、`finish` |
+| `SettlementRecovery` | 重启 / 维度加载后的待返还交付任务（`REBATE`） | `step`、`onCancelled`、`onFailed`、`finish` |
 | `RoundRobinCursors` | 主世界 `SavedData` 轮询游标（规则 id + 维度，持久化） | `get`、`cursor`、`moveTo` |
 | `RuleIndex` | "物品 id → 候选规则"查询结构：直接物品建索引、标签懒展开 | `build`、`candidates`、`ordered` |
 | `CatalystThresholdProjection` | 门槛运行投影：把 `catalyst_present` **留空**的门槛解析为当前消耗配置下的有效值，在 `RuleIndex.build` 内执行 | `project`、`resolveThreshold` |
@@ -97,6 +97,8 @@ delay           = max(0, dueAge - entity.getAge())
 - `SettlementLedger` 存于**主世界** `SavedData`（`itemdespawntowhat_settlements`），维度卸载/停服都不丢记录；已完成且交付完毕的旧记录按 tick 过期（保留 6000 tick）并按条数上限兜底裁剪，**未结清记录一条不裁**。
 - 中断（`onCancelled`）与异常（`step` 的 catch）走同一条 `abort` 顺序：置 `cancelled`、以 `held.getCount()` 同步待返还、记 `INTERRUPTED`/`FAILED`、释放未支付催化剂预留、写盘。**本路径不做任何世界写入**（维度卸载/停服时加入世界不安全）。
 - 恢复：`onServerTick` 首次服务端 tick 后全局扫描一次，`rescan`（维度加载/重载）补扫该维度；未加载维度的记录保持在账本等待。`SettlementRecovery` 只交付记录里的 `pendingDelivery`，**不恢复旧效果队列、不重放已开始的组**；`needsRecovery()` 只看待返还库存（`pendingDelivery > 0 && !source.isEmpty()`），绝不把"已派发未回执"的 `pendingUnits` 当成待返还库存。`activeRecoveries` 幂等位保证同一记录同一时刻只允许一个交付任务。
+- `SettlementRecovery` 失败与取消共用幂等清理：不补做世界写入，保留待返还数据并释放预留；`finally` 释放 `activeRecoveries`，即使收尾写盘失败也允许后续扫描重新排期。
+- 保存重载通过 `applySavedIndex` 发布预建索引，立即摘除旧队列并逐项取消，再用账本 id 游标逐条恢复返还、用已加载掉落物 id 游标跨 tick 回扫。掉落物加入/移除事件维护该有序集合；临近自然消失的物品在等待回扫期间及时按新索引补追踪。
 
 ## 5. 实体状态（`core/state`）
 

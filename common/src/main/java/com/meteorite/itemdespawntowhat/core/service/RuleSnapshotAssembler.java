@@ -65,7 +65,32 @@ public final class RuleSnapshotAssembler {
                                         TypeRegistry<EffectType<?>> effectTypes,
                                         TypeRegistry<ConditionType<?>> conditionTypes,
                                         @Nullable List<Issue> issues) {
-        Codec<Rule> codec = RuleCodecs.codec(effectTypes, conditionTypes);
+        Map<ResourceLocation, JsonObject> encoded = new LinkedHashMap<>();
+        if (merged != null) {
+            for (LoadedRule<Rule> loaded : merged) {
+                if (loaded != null && loaded.id() != null) {
+                    JsonObject body = encodeRule(loaded.value(), effectTypes, conditionTypes);
+                    if (body != null) { encoded.put(loaded.id(), body); }
+                }
+            }
+        }
+        return assembleEncoded(index, merged, version, contextRevision, encoded, issues);
+    }
+
+    /**
+     * 使用服务端线程预编码的模型 JSON 装配来源三视图；不调用 Codec，可在独占后台任务中使用。
+     * @param index 原始来源索引
+     * @param merged 完整校验后的规则
+     * @param version 覆盖层版本
+     * @param contextRevision 上下文版本
+     * @param encoded 规则 id 对应的模型编码结果
+     * @param issues 加载与校验问题
+     * @return 完整规则快照
+     */
+    public static RuleSnapshot assembleEncoded(RuleSourceIndex index, List<LoadedRule<Rule>> merged,
+                                               int version, int contextRevision,
+                                               Map<ResourceLocation, JsonObject> encoded,
+                                               @Nullable List<Issue> issues) {
         Map<ResourceLocation, LoadedRule<Rule>> remaining = new LinkedHashMap<>();
         if (merged != null) {
             for (LoadedRule<Rule> loaded : merged) {
@@ -83,7 +108,7 @@ public final class RuleSnapshotAssembler {
                 LoadedRule<Rule> loaded = remaining.remove(source.id());
                 JsonObject overlay = copy(source.overlayBody());
                 JsonObject base = copy(source.baseBody());
-                JsonObject effective = loaded == null ? null : encode(codec, loaded.value());
+                JsonObject effective = loaded == null ? null : copy(encoded.get(loaded.id()));
                 if (effective == null) {
                     // 解码失败（或该 id 只被控制条目接管）时退回原始 JSON，保证客户端仍能看到内容
                     effective = overlay != null ? copy(overlay) : copy(base);
@@ -101,8 +126,8 @@ public final class RuleSnapshotAssembler {
 
         // 2) 兜底：索引未覆盖但已解码的规则（原始条目读取异常时仍要下发本体）
         for (Map.Entry<ResourceLocation, LoadedRule<Rule>> leftover : remaining.entrySet()) {
-            JsonObject encoded = encode(codec, leftover.getValue().value());
-            if (encoded == null) {
+            JsonObject body = copy(encoded.get(leftover.getKey()));
+            if (body == null) {
                 continue;
             }
             boolean overlayLayer = leftover.getValue().origin().layer() == RuleSourceLayer.OVERLAY;
@@ -110,7 +135,7 @@ public final class RuleSnapshotAssembler {
             entries.put(leftover.getKey(), new RuleSnapshotEntry(leftover.getKey(),
                     overlayLayer ? RuleSnapshotEntry.ORIGIN_OVERLAY : RuleSnapshotEntry.ORIGIN_DATAPACK,
                     RuleSnapshotEntry.STATUS_ACTIVE, true,
-                    encoded, encoded.deepCopy(), overlayLayer ? encoded.deepCopy() : null, List.of()));
+                    body, body.deepCopy(), overlayLayer ? body.deepCopy() : null, List.of()));
         }
 
         return new RuleSnapshot(version, contextRevision, List.copyOf(entries.values()),
@@ -267,6 +292,18 @@ public final class RuleSnapshotAssembler {
     // IssueSeverity → RuleIssue 的 severity 字符串
     private static String severityOf(Issue issue) {
         return issue.severity() == IssueSeverity.ERROR ? RuleIssue.SEVERITY_ERROR : RuleIssue.SEVERITY_WARNING;
+    }
+
+    /**
+     * 编码一条模型用于快照；第三方 Codec 必须在服务端线程调用。
+     * @param rule 已解码规则
+     * @param effectTypes 效果类型注册表
+     * @param conditionTypes 条件类型注册表
+     * @return 模型 JSON；编码失败时为 null
+     */
+    public static @Nullable JsonObject encodeRule(Rule rule, TypeRegistry<EffectType<?>> effectTypes,
+                                                  TypeRegistry<ConditionType<?>> conditionTypes) {
+        return encode(RuleCodecs.codec(effectTypes, conditionTypes), rule);
     }
 
     // 模型编码：失败返回 null（由调用方决定退回原始 JSON 或标记 invalid）

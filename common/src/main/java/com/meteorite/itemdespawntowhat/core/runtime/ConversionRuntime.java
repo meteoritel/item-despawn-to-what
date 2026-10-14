@@ -21,6 +21,10 @@ import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ScheduledTask;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.SchedulerConfig;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.SchedulerStats;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerScheduler;
+import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTask;
+import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTickBudget;
+import com.meteorite.itemdespawntowhat.core.runtime.scheduler.StepResult;
+import com.meteorite.itemdespawntowhat.core.runtime.scheduler.StepOutcome;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTaskKind;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTickBudgetSnapshot;
 import com.meteorite.itemdespawntowhat.core.service.BuiltinTypeRegistries;
@@ -80,6 +84,8 @@ public final class ConversionRuntime {
     private final CatalystReservations catalystReservations = new CatalystReservations();
     private final Map<ResourceKey<Level>, LevelState> levels = new HashMap<>();
     private volatile RuleIndex index = RuleIndex.empty();
+    private long ruleGeneration;
+    private boolean savedRescanPending;
     // 恢复幂等位：同一结算记录同一时刻只允许一个待返还交付任务，重复扫描/重复入队都不会多发
     private final Set<String> activeRecoveries = new HashSet<>();
     // 首次服务端 tick 后做一次全局恢复扫描；之后新加载的维度由 rescan 补扫
@@ -89,7 +95,9 @@ public final class ConversionRuntime {
 
     // 单个维度的运行时状态；任务本身归公共调度器所有，这里只保存缓存与追踪表
     private static final class LevelState {
-        private final Map<UUID, TrackedState> tracked = new HashMap<>();
+        private Map<UUID, TrackedState> tracked = new HashMap<>();
+        // 所有已加载掉落物都登记，即使暂时没有匹配规则；有序 id 游标允许跨 tick 回扫。
+        private final java.util.NavigableMap<Integer, ItemEntity> items = new java.util.TreeMap<>();
         private RuntimeTagLookup tags;
         private RuntimeClimateSampler climate;
     }
@@ -130,6 +138,8 @@ public final class ConversionRuntime {
 
     // 规则热替换：重建索引并清空全部追踪状态（由随后的 rescan 重建）
     public void replaceRules(List<LoadedRule<Rule>> rules, IssueCollector issues) {
+        ruleGeneration++;
+        savedRescanPending = false;
         this.index = RuleIndex.build(rules, issues);
         for (LevelState state : levels.values()) {
             state.tracked.clear();
@@ -151,10 +161,98 @@ public final class ConversionRuntime {
         return index;
     }
 
+    /**
+     * 发布预建索引并创建保存重载续接任务：旧队列立即停止执行，取消、恢复扫描与掉落物回扫逐项进行。
+     * @param server 当前服务端
+     * @param prepared 完整校验后准备的索引
+     * @return 在服务端线程与公共预算内推进的任务
+     */
+    public ServerTask applySavedIndex(MinecraftServer server, RuleIndex prepared) {
+        long generation = ++ruleGeneration;
+        savedRescanPending = true;
+        java.util.List<ServerTask> cleanup = new java.util.ArrayList<>();
+        for (var entry : levels.entrySet()) {
+            cleanup.add(scheduler.detachRealm(entry.getKey(), CancelReason.RULE_RELOAD));
+            LevelState state = entry.getValue();
+            state.tracked = new HashMap<>();
+            state.tags = null;
+            state.climate = null;
+        }
+        index = prepared;
+        java.util.List<ServerLevel> worlds = new java.util.ArrayList<>();
+        server.getAllLevels().forEach(worlds::add);
+        return new ServerTask() {
+            private int cleanupIndex;
+            private String recoveryCursor;
+            private boolean recoveryDone;
+            private int worldIndex;
+            private Integer entityCursor;
+            private Integer entityLimit;
+
+            @Override public ServerTaskKind kind() { return ServerTaskKind.MAINTENANCE; }
+            @Override public String tracingName() { return "saved-rule-rescan"; }
+            @Override public StepResult step(ServerTickBudget budget) {
+                if (cleanupIndex < cleanup.size()) {
+                    if (cleanup.get(cleanupIndex).step(budget).outcome() == StepOutcome.DONE) { cleanupIndex++; }
+                    return StepResult.yield(1, 1);
+                }
+                // 外部重载拥有更新的索引；仍清理已摘除的旧队列，但不再重建旧视图追踪。
+                if (generation != ruleGeneration) { return StepResult.done(1); }
+                if (!recoveryDone) {
+                    SettlementLedger ledger = SettlementLedger.get(server.overworld());
+                    SettlementRecord record = ledger.nextForRecovery(recoveryCursor);
+                    if (record == null) { recoveryDone = true; }
+                    else {
+                        recoveryCursor = record.id();
+                        ServerLevel world = levelOf(server, record.dimension());
+                        if (record.needsRecovery() && world != null && !activeRecoveries.contains(record.id())) {
+                            startRecovery(world, ledger, record);
+                        }
+                    }
+                    return StepResult.yield(1, 1);
+                }
+                if (worldIndex < worlds.size()) {
+                    ServerLevel world = worlds.get(worldIndex);
+                    LevelState state = levels.get(world.dimension());
+                    if (state == null || server.getLevel(world.dimension()) != world) {
+                        advanceWorld();
+                        return StepResult.yield(1, 1);
+                    }
+                    if (entityLimit == null) { entityLimit = state.items.isEmpty() ? Integer.MIN_VALUE : state.items.lastKey(); }
+                    var next = entityCursor == null ? state.items.firstEntry() : state.items.higherEntry(entityCursor);
+                    if (next == null || next.getKey() > entityLimit) { advanceWorld(); }
+                    else {
+                        entityCursor = next.getKey();
+                        onItemAdded(world, next.getValue());
+                    }
+                    return StepResult.yield(1, 1);
+                }
+                savedRescanPending = false;
+                return StepResult.done(1);
+            }
+
+            private void advanceWorld() { worldIndex++; entityCursor = null; entityLimit = null; }
+
+            @Override public void onCancelled(CancelReason reason) {
+                // 停服必须在 vanilla 最终存档前清理尚未通知的结算任务。
+                for (int i = cleanupIndex; i < cleanup.size(); i++) { cleanup.get(i).onCancelled(reason); }
+                if (generation == ruleGeneration) { savedRescanPending = false; }
+            }
+
+            @Override public void onFailed(@org.jetbrains.annotations.Nullable Throwable failure) {
+                // 已发布后的回扫失误仍需清理旧结算队列；正常运行时分步收尾，不集中取消。
+                for (int i = cleanupIndex; i < cleanup.size(); i++) { scheduler.schedule(this, cleanup.get(i), 1); }
+                if (generation == ruleGeneration) { savedRescanPending = false; }
+            }
+        };
+    }
+
     // ========== 事件入口（由平台层调用） ==========
 
     // 掉落物进入世界：仅当存在候选规则时纳入追踪
     public void onItemAdded(ServerLevel level, ItemEntity entity) {
+        LevelState state = stateOf(level);
+        state.items.put(entity.getId(), entity);
         if (index.isEmpty() && DebugScenarioManager.inactive(level.getServer())) { return; }
         if (excluded(entity)) {
             if (DebugMode.ENABLED) { DebugScenarioManager.observe(entity, "EXCLUDED", "death_locked",
@@ -165,7 +263,6 @@ public final class ConversionRuntime {
         if (candidates.isEmpty()) {
             return;
         }
-        LevelState state = stateOf(level);
         // 已追踪则不再重复排期（ENTITY_LOAD 在区块重新追踪时会重复触发）
         if (state.tracked.containsKey(entity.getUUID())) {
             return;
@@ -305,14 +402,12 @@ public final class ConversionRuntime {
     // reload 后回扫已加载实体重建追踪（使热重载对已存在的掉落物同样生效）
     public void rescan(ServerLevel level) {
         LevelState state = stateOf(level);
+        state.items.clear();
         state.tracked.clear();
         // 重扫会重建追踪，先按维度取消既有任务（检查与效果一起），不留静默丢弃
         scheduler.cancelRealm(level.dimension(), CancelReason.RULE_RELOAD);
         // 维度加载/重扫时补扫该维度的待返还记录：只交付库存，不恢复既有效果队列（与规则内容无关）
         recoverLevel(level, SettlementLedger.get(level));
-        if (index.isEmpty() && DebugScenarioManager.inactive(level.getServer())) {
-            return;
-        }
         for (Entity entity : level.getAllEntities()) {
             if (entity instanceof ItemEntity item && !item.isRemoved()) {
                 onItemAdded(level, item);
@@ -688,6 +783,7 @@ public final class ConversionRuntime {
         if (DebugMode.ENABLED) { DebugScenarioManager.observe(item, "REMOVED", "reason", item.getRemovalReason()); }
         LevelState state = levels.get(level.dimension());
         if (state == null) { return; }
+        state.items.remove(item.getId());
         TrackedState tracked = state.tracked.remove(item.getUUID());
         if (tracked != null && tracked.task != null) { tracked.task.cancel(CancelReason.ENTITY_REMOVED); }
     }
@@ -695,6 +791,8 @@ public final class ConversionRuntime {
     // 自然消失入口只预留最后一次有预算的检查，不在实体 tick 内执行昂贵效果。
     public boolean deferNaturalExpiry(ServerLevel level, ItemEntity item) {
         if (excluded(item)) { return false; }
+        // 回扫可能延后数刻；临近原版消失的物品按新索引及时补追踪，避免等待回扫期间漏转化。
+        if (savedRescanPending) { onItemAdded(level, item); }
         LevelState state = levels.get(level.dimension());
         if (state == null) { return false; }
         TrackedState tracked = state.tracked.get(item.getUUID());

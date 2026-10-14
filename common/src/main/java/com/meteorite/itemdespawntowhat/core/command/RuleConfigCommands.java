@@ -55,6 +55,7 @@ final class RuleConfigCommands {
 
     // config reload：重建规则索引并回扫全部维度，回显条数与问题数
     private static int reload(CommandContext<CommandSourceStack> ctx, RuleCommandContext context) {
+        if (RuleEditServerHandler.isSaving()) { return RuleCommandTree.saveBusy(ctx); }
         MinecraftServer server = ctx.getSource().getServer();
         RuleLoadResult<Rule> result = context.reloadRules(server);
         if (result == null) {
@@ -159,6 +160,7 @@ final class RuleConfigCommands {
 
     // config validate：离线体检全部来源，输出问题清单（含来源与字段路径）与统计
     private static int validate(CommandContext<CommandSourceStack> ctx, RuleCommandContext context) {
+        if (RuleEditServerHandler.isSaving()) { return RuleCommandTree.saveBusy(ctx); }
         RuleLoadResult<Rule> result = load(ctx, context);
         if (result == null) {
             return RuleCommandTree.notReady(ctx);
@@ -171,6 +173,7 @@ final class RuleConfigCommands {
 
     // config list：逐条列出生效规则（id / 来源层 / 优先级 / 触发秒数 / 效果数 / 是否启用）
     private static int list(CommandContext<CommandSourceStack> ctx, RuleCommandContext context) {
+        if (RuleEditServerHandler.isSaving()) { return RuleCommandTree.saveBusy(ctx); }
         RuleLoadResult<Rule> result = load(ctx, context);
         if (result == null) {
             return RuleCommandTree.notReady(ctx);

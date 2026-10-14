@@ -26,6 +26,7 @@ final class SettlementRecovery implements ServerTask {
     // 交付失败后的退避起点与上限：20 tick 起，最多 1200 tick（1 分钟），避免区块长期不可用时反复重试
     private static final int BASE_RETRY_DELAY_TICKS = 20;
     private static final int MAX_RETRY_DELAY_TICKS = 1200;
+    private static final String FAILURE_REASON = "TASK_FAILED";
 
     private final ConversionRuntime runtime;
     private final ServerScheduler scheduler;
@@ -36,8 +37,8 @@ final class SettlementRecovery implements ServerTask {
     private final ItemEntity anchor;
     private ReturnItemSpawner.PositionSearch search;
     private int failures;
-    // 取消幂等：同一记录被重复取消（停服后又维度卸载）不得重复记账
-    private boolean cancelled;
+    // 终态清理幂等：失败与取消共用，避免重复记账。
+    private boolean closed;
 
     SettlementRecovery(ConversionRuntime runtime, ServerScheduler scheduler, ServerLevel level,
                        SettlementRecord record, SettlementLedger ledger, Vec3 position) {
@@ -109,22 +110,32 @@ final class SettlementRecovery implements ServerTask {
 
     @Override
     public void onCancelled(CancelReason reason) {
-        if (cancelled) {
+        close(reason.name());
+    }
+
+    @Override
+    public void onFailed(@org.jetbrains.annotations.Nullable Throwable failure) {
+        close(FAILURE_REASON);
+    }
+
+    private void close(String reason) {
+        if (closed) {
             return;
         }
-        cancelled = true;
-        // 释放未支付的催化剂预留（恢复路径不支付催化剂，仅防御性释放）：幂等、无世界写入
-        runtime.catalystReservations().releaseOwner(record.id());
-        // 取消（维度卸载/停服）不做世界写入：已交付量在每次交付后已写盘，这里只保留待返还数据
-        // 顺序证据：停服取消发生在 vanilla stopServer() 的 ServerStoppingEvent/SERVER_STOPPING，
-        // 之后才是 flush → saveAllChunks → 维度 close，所以这次 ledger.put 会被最终存档保存
-        record.interrupt(reason.name(), level.getGameTime());
+        closed = true;
         try {
-            ledger.put(record);
-        } catch (RuntimeException failure) {
-            LOGGER.warn("返还记录写盘失败：id={} reason={}", record.id(), reason, failure);
+            // 失败与取消均不补做世界写入，只保留剩余库存并释放未支付预留。
+            runtime.catalystReservations().releaseOwner(record.id());
+            record.interrupt(reason, level.getGameTime());
+            try {
+                ledger.put(record);
+            } catch (RuntimeException failure) {
+                LOGGER.warn("返还记录写盘失败：id={} reason={}", record.id(), reason, failure);
+            }
+        } finally {
+            // 即使收尾写盘或预留释放失败，也允许后续扫描重新排期。
+            runtime.onRecoveryFinished(record.id());
         }
-        runtime.onRecoveryFinished(record.id());
     }
 
     // 交付结束：记录标记完成并释放幂等位

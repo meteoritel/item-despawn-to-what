@@ -166,11 +166,13 @@ public final class ServerScheduler {
     private StepResult runStep(TaskLane lane, ScheduledTask handle) {
         long started = System.nanoTime();
         StepResult result;
+        Throwable stepFailure = null;
         try {
             result = handle.task().step(budget);
         } catch (VirtualMachineError fatal) {
             throw fatal;
         } catch (Throwable failure) {
+            stepFailure = failure;
             LOGGER.error("调度任务执行失败：realm={} kind={} task={}", lane.realmKey(), lane.kind(),
                     handle.task().tracingName(), failure);
             result = StepResult.failed(1);
@@ -199,6 +201,15 @@ public final class ServerScheduler {
             case FAILED -> {
                 if (!handle.terminal()) {
                     handle.markFailed();
+                    try {
+                        handle.task().onFailed(stepFailure);
+                    } catch (VirtualMachineError fatal) {
+                        throw fatal;
+                    } catch (Throwable cleanupFailure) {
+                        // 单个任务的收尾异常不能阻止其它 lane 推进；FAILED 终态不重复通知。
+                        LOGGER.error("调度任务失败清理异常：realm={} kind={} task={}", lane.realmKey(), lane.kind(),
+                                handle.task().tracingName(), cleanupFailure);
+                    }
                 }
                 failed++;
                 counters[1]++;
@@ -286,6 +297,35 @@ public final class ServerScheduler {
         if (realm != null) {
             realm.cancelAll(reason);
         }
+    }
+
+    /**
+     * 将维度旧队列从执行轮转中摘除，以续接任务逐项取消；同 key 的新任务进入新队列。
+     * @param realmKey 维度标识
+     * @param reason 取消原因
+     * @return 每步最多取消一个槽位的清理任务
+     */
+    public ServerTask detachRealm(Object realmKey, CancelReason reason) {
+        RealmQueues detached = realms.remove(realmKey);
+        // 本 tick 的轮转列表已创建；旧 lane 必须立即停止搬运与执行，不能等到下 tick 才退出。
+        if (detached != null) { detached.detach(); }
+        return new ServerTask() {
+            @Override public ServerTaskKind kind() { return ServerTaskKind.MAINTENANCE; }
+            @Override public String tracingName() { return "realm-cleanup/" + realmKey; }
+            @Override public StepResult step(ServerTickBudget tickBudget) {
+                if (detached == null) { return StepResult.done(1); }
+                try {
+                    return detached.cancelOne(reason) ? StepResult.yield(1, 1) : StepResult.done(1);
+                } catch (RuntimeException failure) {
+                    // 槽位已经摘除，记录失误后仍推进其它任务的取消。
+                    LOGGER.error("维度任务清理异常：realm={}", realmKey, failure);
+                    return StepResult.yield(1, 1);
+                }
+            }
+            @Override public void onCancelled(CancelReason cancellation) {
+                if (detached != null) { detached.cancelAll(cancellation); }
+            }
+        };
     }
 
     // 维度卸载：逐项上报原因后清空该 realm，不留静默丢弃；待返还库存由恢复任务补交。

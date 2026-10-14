@@ -16,6 +16,11 @@ import com.meteorite.itemdespawntowhat.core.runtime.LifespanProvider;
 import com.meteorite.itemdespawntowhat.core.service.BuiltinTypeRegistries;
 import com.meteorite.itemdespawntowhat.core.service.RuleLoadContext;
 import com.meteorite.itemdespawntowhat.core.service.RuleLoadingService;
+import com.meteorite.itemdespawntowhat.core.service.RuleSaveReloadContext;
+import com.meteorite.itemdespawntowhat.core.runtime.RuleIndex;
+import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerScheduler;
+import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTask;
+import com.meteorite.itemdespawntowhat.core.load.DatapackRuleReader;
 import com.meteorite.itemdespawntowhat.core.state.DropStateStore;
 import com.meteorite.itemdespawntowhat.platform.Services;
 import net.minecraft.core.RegistryAccess;
@@ -55,6 +60,7 @@ public final class RuleRuntimeHost {
     private static volatile Path overlayRoot;
     // 新链路运行时；未引导或已停止时为 null
     private static volatile ConversionRuntime runtime;
+    private static RuleSaveReloadContext saveReloadContext;
 
     private RuleRuntimeHost() {
         throw new UnsupportedOperationException("Utility class");
@@ -151,6 +157,17 @@ public final class RuleRuntimeHost {
         }
 
         @Override
+        public RuleSaveReloadContext saveReloadContext() { return saveReloadContext; }
+
+        @Override
+        public ServerScheduler saveScheduler() { return java.util.Objects.requireNonNull(runtime).scheduler(); }
+
+        @Override
+        public ServerTask applySavedIndex(MinecraftServer server, RuleIndex index) {
+            return java.util.Objects.requireNonNull(runtime).applySavedIndex(server, index);
+        }
+
+        @Override
         public void rebuildAndRescan(MinecraftServer server) {
             // 与数据包重载共用同一条 apply 路径（重建索引 + 全维度回扫）
             if (reload(server, server.getResourceManager()) == null) {
@@ -180,8 +197,10 @@ public final class RuleRuntimeHost {
         Path overlay = Services.PLATFORM.getConfigDir().resolve(config.overlayDirectory());
         ConversionRuntime newRuntime = new ConversionRuntime(config, registries, fabricLifespan(config));
 
-        RuleLoadResult<Rule> result = loadRules(
+        RuleSaveReloadContext saveContext = captureSaveContext(
                 context(server.getResourceManager(), server.registryAccess(), overlay, registries, server));
+        RuleLoadResult<Rule> result = RuleLoadingService.loadAndValidate(saveContext.loadContext(), saveContext.baseRules());
+        saveContext.baseIssues().forEach(result.issues()::add);
         newRuntime.replaceRules(result.rules(), result.issues());
         logLoadResult("服务端启动", result);
 
@@ -189,6 +208,7 @@ public final class RuleRuntimeHost {
         typeRegistries = registries;
         overlayRoot = overlay;
         runtime = newRuntime;
+        saveReloadContext = saveContext;
         // 实体状态持续时间取自本次配置：新产物保护与转化冷却各自可为 0（D18，0 表示不授予）
         DropStateStore.configure(config.newProductProtectionTicks(), config.conversionCooldownTicks());
 
@@ -204,6 +224,7 @@ public final class RuleRuntimeHost {
     // 调用点必须位于服务端线程（Fabric 的 END_DATA_PACK_RELOAD 已由 handleAsync(server) 保证）
     // 返回本次加载结果供命令层回显；运行时未就绪或重载失败时返回 null
     public static RuleLoadResult<Rule> reload(MinecraftServer server, ResourceManager resourceManager) {
+        if (RuleEditServerHandler.deferReload(() -> reload(server, server.getResourceManager()))) { return null; }
         ConversionRuntime current = runtime;
         BuiltinTypeRegistries registries = typeRegistries;
         Path overlay = overlayRoot;
@@ -212,9 +233,12 @@ public final class RuleRuntimeHost {
             return null;
         }
         try {
-            RuleLoadResult<Rule> result = loadRules(
+            RuleSaveReloadContext saveContext = captureSaveContext(
                     context(resourceManager, server.registryAccess(), overlay, registries, server));
+            RuleLoadResult<Rule> result = RuleLoadingService.loadAndValidate(saveContext.loadContext(), saveContext.baseRules());
+            saveContext.baseIssues().forEach(result.issues()::add);
             current.replaceRules(result.rules(), result.issues());
+            saveReloadContext = saveContext;
             logLoadResult("数据包重载", result);
             for (ServerLevel level : server.getAllLevels()) {
                 current.rescan(level);
@@ -240,6 +264,7 @@ public final class RuleRuntimeHost {
         // 停服后复位实体状态时长，避免同一进程内下一个服务端实例沿用上一轮配置
         DropStateStore.configure(0, 0);
         runtime = null;
+        saveReloadContext = null;
         typeRegistries = null;
         overlayRoot = null;
         serverConfig = null;
@@ -328,6 +353,13 @@ public final class RuleRuntimeHost {
                         .anyMatch(mod -> mod.getMetadata().getId().equals(packId))
                         ? com.meteorite.itemdespawntowhat.core.load.RuleSourceLayer.BUILTIN
                         : com.meteorite.itemdespawntowhat.core.load.RuleSourceLayer.WORLD).withServer(server);
+    }
+
+    // 基底只在启动/数据包重载时读取，保存后台不接触 ResourceManager 或平台包判定器。
+    private static RuleSaveReloadContext captureSaveContext(RuleLoadContext context) {
+        IssueCollector issues = new IssueCollector();
+        var base = DatapackRuleReader.read(context.resourceManager(), context.layerResolver(), issues);
+        return new RuleSaveReloadContext(context, base, issues.issues());
     }
 
     // 执行一次加载 + 语义校验；异常被转为 ERROR 级问题，避免坏配置拖垮服务端启动或重载

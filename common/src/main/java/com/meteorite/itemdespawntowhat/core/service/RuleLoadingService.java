@@ -45,6 +45,28 @@ public final class RuleLoadingService {
     // 加载 + 语义校验：语义非法的规则被剔除，问题保留在结果的问题收集器中
     public static RuleLoadResult<Rule> loadAndValidate(RuleLoadContext context) {
         RuleLoadResult<Rule> loaded = load(context);
+        return validateLoaded(context, loaded);
+    }
+
+    /**
+     * 用已读取的数据包基底执行完整加载，供平台发布保存重载快照时复用同一来源集合。
+     * @param context 当前加载上下文
+     * @param base 数据包层原始条目
+     * @return 覆盖合并、解码与校验后的结果
+     */
+    public static RuleLoadResult<Rule> loadAndValidate(RuleLoadContext context, List<RawRuleEntry> base) {
+        IssueCollector issues = new IssueCollector();
+        List<RawRuleEntry> raw = new ArrayList<>(base);
+        raw.addAll(OverlayRuleReader.read(context.overlayRoot(), context.overlayNamespace(), issues));
+        var decoder = RuleCodecs.decoder(context.registryAccess(), context.effectTypes(), context.conditionTypes());
+        List<LoadedRule<Rule>> decoded = new ArrayList<>();
+        for (RawRuleEntry entry : com.meteorite.itemdespawntowhat.core.load.RuleMerger.merge(raw, issues)) {
+            RuleLoader.decodeEntry(entry, decoder, issues).ifPresent(rule -> decoded.add(new LoadedRule<>(entry.id(), entry.origin(), rule)));
+        }
+        return validateLoaded(context, new RuleLoadResult<>(List.copyOf(decoded), issues));
+    }
+
+    private static RuleLoadResult<Rule> validateLoaded(RuleLoadContext context, RuleLoadResult<Rule> loaded) {
         var server = context.server();
         List<LoadedRule<Rule>> valid = new ArrayList<>(loaded.rules().size());
         for (LoadedRule<Rule> entry : loaded.rules()) {

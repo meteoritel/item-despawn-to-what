@@ -46,11 +46,11 @@
 | `RuleEditLimits` | 全部限额常量与 UTF-8 字节计算 | `encodedLength(String)`、`MAX_*` 常量组（见 §4.3 常量清单） |
 | `RuleChangeSetChunker` / `RuleSnapshotChunker` | 上行变更集 / 下行快照切分：不超直发上限出整包，否则按 **UTF-8 字节**切分（不拆代理对） | `split(sessionId, operationId, json)` / `split(sessionId, requestId, json)` |
 | `RuleEditTextChunks` | 共享的按 UTF-8 字节切分实现（上下行同一口径） | `splitByUtf8Bytes`、`utf8Length`（包内） |
-| `RuleEditChunkAccumulator` | 上行分片重组：逐片校验、**重复下标以首片为准**、收齐后按序拼接并复核总量；过期（1200 tick）清理 | `accept`、`isShapeValid`、`expireIdle`、`clear`、`clearAll`、`AcceptResult` |
+| `RuleEditChunkAccumulator` | 上行分片重组：逐片校验、**重复下标以首片为准**、收齐后返回有序分片并复核累计字节，后台按序拼接；过期（1200 tick）清理 | `accept`、`isShapeValid`、`expireIdle`、`clear`、`clearAll`、`AcceptResult` |
 | `RuleEditPayloadCodec` | 载荷共用编解码片段（字符串列表 / 可空字符串 / `RuleIssue` 列表）；超限即抛解码异常 | `writeStrings`/`readStrings`、`writeNullableString`/`readNullableString`、`writeIssues`/`readIssues`（包内） |
 | `RuleEditPayloadRouter` | 客户端入站门面：字符串 sink（兼容）+ 结构化 sink（快照 / 分片 / 回执 / 目录 / 寿命）；服务端只装载空消费者 | `installSnapshotSink`、`installSnapshotPayloadSink`、`installResultSink`、`installResultPayloadSink`、`installCatalogSink`、`installChunkSink`、`installLifespanSink`、`dispatchSnapshot`、`dispatchResult`、`dispatchChunk`、`dispatchCatalog`、`dispatchLifespan` |
 | `OpenRuleEditorPayload` | 承载 `installOpenEditorPayloadSink` / `dispatchOpenEditor`（开屏入口的唯一静态 sink） | `TYPE`、`STREAM_CODEC` |
-| `RuleEditServerContext` | 窄接口：向网络层暴露运行时能力（由平台 `RuleRuntimeHost` 实现） | `overlayRoot()`、`overlayNamespace()`、`typeRegistries()`、`loadMerged(server)`、`rebuildAndRescan(server)`、`sendTo(player, payload)`、`referenceLifespanTicks()` |
+| `RuleEditServerContext` | 窄接口：向网络层暴露运行时能力（由平台 `RuleRuntimeHost` 实现） | `overlayRoot()`、`overlayNamespace()`、`typeRegistries()`、`loadMerged(server)`、`rebuildAndRescan(server)`、`sendTo(player, payload)`、`referenceLifespanTicks()`、`saveReloadContext()`、`saveScheduler()`、`applySavedIndex(server, index)` |
 | `RuleEditServerHandler` | 服务端处理编排（**薄转发**） | `openEditor`、`handleConfirm`、`handleHeartbeat`、`handleClose`、`handleSnapshotRequest`、`handleCatalogRequest`、`handleLifespanRequest`、`handleChangeSet`、`handleChangeSetChunk`、`expireIdle`、`clearPlayer`、`reset`、`isReady`、`canEdit`、`sessionManager`/`service` |
 
 ### 1.4 `core/network/catalog`
@@ -68,7 +68,11 @@
 | `RuleEditSessionLimits` | 会话时间与权限常量 | `TARGET_ID = itemdespawntowhat:rules`、`OPEN_CONFIRM_WINDOW_SECONDS=15`、`HEARTBEAT_INTERVAL_SECONDS=10`、`LEASE_SECONDS=60`、`REQUIRED_PERMISSION_LEVEL=2`、`MAX_OPERATION_HISTORY=16` |
 | `RuleOverlayWriter` | 覆盖层逐 id 写入：预备 → 备份 → 原子提交 → 失败回滚 | `apply(changes, issues) → ApplyResult{writtenFiles, conflicts}` |
 | `RuleSubmissionValidator` | 写入前唯一校验闸门（控制条目 / 解码 + 语义 + 动态引用） | `validate(changeSet, server, types, issues)` |
-| `RuleSnapshotAssembler` | 来源分层索引 + 当前生效规则 → 下发快照 | `assemble(index, merged, version, contextRevision, effectTypes, conditionTypes, issues)` |
+| `RuleSnapshotAssembler` | 来源分层索引 + 当前生效规则 → 下发快照 | `assemble`、`encodeRule`（服务端线程）、`assembleEncoded`（纯 JSON 装配） |
+
+| `RuleSaveTask` | 公共 MAINTENANCE 任务：后台解析/读写、逐条校验、分步发布与回扫 | `step`、`invalidate`；后台文件队列由本类持有 |
+| `RuleSnapshotTask` | 快照读取、逐条解码/编码、后台 JSON 装配与分片 | `step`；每 tick 最多下发一片 |
+| `RuleSaveReloadContext` | 启动/数据包重载时发布的原始基底、文件问题与解码上下文 | 对象身份用于识别重载；后台不访问 ResourceManager |
 
 ## 2. 快照形状
 
@@ -97,18 +101,22 @@
 固定顺序（`RuleEditServerHandler` → `RuleEditService`）：
 
 ```text
-请求快照：权限 → 运行时就绪 → 会话持有校验(owns + isOwner + confirmed) → heartbeat 续租
-  → synchronizeDiskRevision(磁盘修订核对) → RuleSnapshotAssembler.assemble → 分片切分下发
-提交变更集：operationId 合法性 → 总量上限 → 会话持有校验 → 幂等查表(命中直接回放)
-  → 解析 RuleEditChangeSet → beginApply
-  → 空集 → NO_CHANGES
-  → synchronizeDiskRevision → 版本戳校验(不一致整批拒绝 VERSION_CONFLICT + 最新快照，不落盘)
-  → RuleSubmissionValidator 完整校验(失败 VALIDATION_FAILED，不落盘)
-  → RuleOverlayWriter.apply(基于磁盘原始内容) → conflicts 或 issues.errors 非空 → WRITE_FAILED
-  → writtenFiles==0 → NO_CHANGES
-  → rebuildAndRescan(重建索引+全维度回扫) → 成功 SUCCESS / 失败 SAVED_NOT_RELOADED
-  → finishApply → 回执 + (冲突/未重载时追加)最新快照
+请求快照：权限/就绪 → 会话持有与确认校验 → heartbeat → 排队 RuleSnapshotTask
+  → 后台核对修订与读取覆盖层 → 公共预算逐条解码、校验、编码
+  → 后台装配三视图、序列化与切片 → 每 tick 下发一片
+提交变更集：operationId 合法性 → 会话持有校验 → 幂等查表
+  → 同一在途 operationId 等待同一结果；其它在途提交拒绝
+  → beginApply → 排队 RuleSaveTask
+  → 后台拼接分片、检查总字节、解析、读取磁盘修订 → 服务端接纳修订
+  → 空集 NO_CHANGES / 版本不符 VERSION_CONFLICT
+  → 公共预算逐条完整校验 → 后台预建 id 索引、准备文件、核对修订、备份与原子提交
+  → 后台读取新覆盖层并合并缓存基底 → 公共预算逐条解码/校验 → 后台预建运行时索引
+  → 发布索引、摘除旧队列 → 分步取消、恢复返还、回扫掉落物
+  → finishApply → 回执；冲突/未重载的最新快照另行排队
 ```
+
+保存与快照步骤最多处理 `SAVE_ENTRIES_PER_STEP=8` 项，同时受公共 tick 预算和 `SAVE_STEP_BUDGET_NANOS=1_000_000`（1ms）步骤软预算约束；让出后最早下一 tick 续接。没有固定编辑条数拒绝门槛，4 MiB 总字节限制仍有效。文件 I/O、JSON 拼接/解析/装配与纯模型索引构建使用进程级单后台线程，待执行队列上限为 `RuleSaveTask.MAX_BACKGROUND_JOBS=8`；队列满时拒绝新后台工作，不转回主线程执行，尚未写盘的保存回 `UNAVAILABLE`。第三方 Codec、注册表相关校验、任务取消与世界访问均留在服务端线程。单次 Codec、规则查询或原版操作不可抢占，因此不承诺任意单步均小于预算。保存失败在索引发布前保留上一版索引；发布后的回扫失败回 `SAVED_NOT_RELOADED`，不回滚已发布索引。
+
 
 ### 4.1 授权与限流
 
@@ -116,9 +124,11 @@
 - **每个授权检查点**（心跳、快照、目录、变更集、分片）都校验 `sessionId` 与状态匹配，失败回 `SESSION_EXPIRED` / `LOCK_NOT_OWNED`。
 - **目录请求校验顺序**：先检查会话归属与已确认状态，再检查分页参数和目录类型；未确认的 OPENING 会话优先返回会话失效回执，已确认会话的非法参数返回 `INVALID_REQUEST`。仅通过全部检查的请求续期心跳。
 - **寿命查询**：权限与就绪检查后，服务层校验已确认会话；只读取平台缓存的普通物品参考寿命，不解析源匹配、不展开标签、不创建实体。平台尚未采样时应答零并保留单项待交付请求，`expireIdle` 每 20 tick 检查采样状态，完成后向仍持有权限与已确认会话的玩家补发一次缓存结果。参考值不随规则重载失效；客户端仅接受当前会话与最近请求号的应答，正寿命结果保留到断线。
-- **幂等**：`operationId` 由客户端生成，服务端对同一会话保留最近 16 条已处理回执，重复提交直接回放、不重复写盘。
+- **幂等**：同一在途 `operationId` 等待原任务；最近 16 条已处理回执直接回放，不重复写盘。
 - **并发保存保护**：`beginApply` 只允许 ACTIVE→APPLYING；正在 APPLYING 时的新提交回 `INVALID_REQUEST`（`apply in progress`）并保留会话。
-- 玩家断开仅清分片缓存（`clearPlayer`），会话按租约到期释放；停服 `reset()` 清空分片与幂等表。
+- 会话失效、关闭、强制释放或玩家离线/失去权限使尚未提交的保存失效；后台在提交检查点退出并回滚。会话锁仍按原租约规则释放。已发布索引必须完成旧任务清理与回扫；停服在 vanilla 最终存档前同步取消未清理的结算，后台收到失效信号，停服阶段等待文件队列退出/回滚，完成后才允许同进程下一存档启动。
+- `/idtw config reload/validate/list` 与 `/idtw rule list/show` 在保存期间明确提示稍后重试，避免读取整批替换的中间状态。
+- 数据包重载在保存期间只保留最近一次延后请求，并使尚未提交的保存失效；文件工作结束后才执行，避免读取替换中间状态。快照至多一个准备任务与一个最新待启动请求，保存期间暂缓准备。
 
 ### 4.2 回执状态码
 
@@ -133,24 +143,25 @@
 - 写盘依据**磁盘文件内容**，按 id 逐条 upsert/delete，保留未编辑条目、非对象数组成员与未知字段；命中控制条目或解码失败的文件不会被覆盖。
 - 写文件用**原子写 + `.bak` 备份**，逐文件替换；任一环节失败**逆序回滚**已提交文件。删除单条文件的唯一条目时写成**空数组**而非删文件。
 - `ApplyResult.writtenFiles()==0` 或 `conflicts` 非空都不算保存成功；I/O 失败尝试恢复，回滚失败明确报错并保留 `.bak`。
-- **路径安全**：拒绝 `.`/`..` 路径段与越界、拒绝跟随符号链接；同 id 多处定义直接拒绝，要求人工消歧。
+- **路径安全**：拒绝 `.`/`..` 路径段与越界、拒绝跟随符号链接；编辑命中同 id 多处定义时拒绝，未编辑的歧义条目不阻断其它保存。
+- **查询索引**：加载后一次构建 id→位置列表，逐条查询不全量扫描；删除使用稳定槽位，输出时略过 Java null 删除槽位并保留 JSON null。单成员无 id 条目的文件路径推导随删除增量维护。
 
 ## 5. 版本戳与磁盘修订
 
 - 版本文件 `overlayRoot/.edit_version`（无 `.json` 后缀，规则读取器不会扫描它）；缺失/非法按 0，`bumpVersion` 自增并落盘（落盘失败仅保持内存计数）。
-- **成功的数据包重载 / 保存 / 覆盖层外部改动均推进版本戳**。
-- `synchronizeDiskRevision` 对 `rules/**/*.json` 做 SHA-256 指纹（**含坏 JSON 原始字节**）比对，检测到手工改动即自增；**无法核对磁盘时拒绝保存**（不能把未知修订当作仍然匹配）。快照生成路径也先做这一步，避免客户端拿过期版本提交。
+- **成功的数据包重载 / 保存 / 覆盖层外部改动均推进版本戳**。首次目录基线由后台读取，打开编辑器时只读取小型版本文件。
+- `readDiskRevision` 在后台对 `rules/**/*.json` 做 SHA-256 指纹（含坏 JSON 原始字节）；服务端通过 `acceptDiskRevision` 接纳版本，后台 `persistRevision` 写入版本文件。检测到手工改动即推进版本；提交前再次核对整目录与各目标原始字节。无法核对时拒绝尚未写盘的保存；已写盘后重载核对失败回 `SAVED_NOT_RELOADED`。快照读取前后也核对修订。
 
 ## 6. 分片传输
 
-`RuleEditChunkAccumulator.accept`：逐片校验（transferId 长度、下标范围、单片字节数），**重复下标以首片为准**，收齐后按序拼接并复核总量（≤4 MiB，超限回 `rejected`）；超过在途上限时丢弃最早传输；过期会话在 `expireIdle` 顺带清理。每玩家最多 2 个在途传输，未收齐不回执。`handleChangeSetChunk` 收齐后复用 `handleChangeSet` 的同一保存流程。下行快照超 4 MiB 时才分片（`RuleSnapshotChunker`），超过总片数上限则无法下发，回结构化失败回执。
+`RuleEditChunkAccumulator.accept` 逐片检查 transferId、下标和单片字节数，重复下标以首片为准；收齐时按累计字节复核总量并返回有序分片，保存后台再拼接。每玩家至多 2 个在途传输，未收齐不回执，超量回 `INVALID_REQUEST`，空闲 1200 tick 清理。下行快照不超过 32 000 B 时直发，大快照每片 30 000 B、每 tick 一片；总量超过 4 MiB 或总片数超过上限时回结构化失败回执。
 
 ## 7. 新契约字段如何进入快照与校验
 
 规则契约（`display_name`、`triggers`、`source_cost`、`catalyst_cost`、`combination`、`outcomes`、`schema_version` 与条件树 `conditions`）通过两条通路进入编辑通道，无需在协议层逐个建字段：
 
 - **快照侧**：覆盖层规则直接下发**文件原始 JSON**，所有字段（含尚未识别的字段）原样保留；数据包/内置规则由 `RuleCodecs` 的模型编码下发，天然覆盖全部契约字段。模型解码成功时 `effective` 用编码结果（权威形态），失败退回原文。
-- **校验侧**：`RuleSubmissionValidator.validate` 是写入前的唯一闸门——对每条 upsert 用 `RuleCodecs.decoder(...)` 做**完整契约解码**（含条件树、新字段、候选结果与固定成本），再跑 `RuleValidation.validate`（语义）与 `RuleReferenceValidator.validate`（动态引用）。任一错误即 `issues.errors` 非空。
+- **校验侧**：`RuleSubmissionValidator.validateEdit` 是跨 tick 保存逐条复用的完整校验闸门（批量入口 `validate` 也委托它）——对每条 upsert 用 `RuleCodecs.decoder(...)` 做**完整契约解码**（含条件树、新字段、候选结果与固定成本），再跑 `RuleValidation.validate`（语义）与 `RuleReferenceValidator.validate`（动态引用）。任一错误即 `issues.errors` 非空。
 - **拒绝有损保存的落点**：旧 GUI 无法表达新结构（如仍写旧版二维数组条件、整数写法 `catalyst_cost`）时，解码**明确报错**（不静默兼容），整批在校验阶段被拒绝、**不落盘**，回 `VALIDATION_FAILED` 并附 `RuleIssue` 定位到具体字段。控制条目（`disabled`/`delete`）走独立校验分支：只允许 id + 一个值为 true 的控制字段。
 
 ## 8. 扩展点

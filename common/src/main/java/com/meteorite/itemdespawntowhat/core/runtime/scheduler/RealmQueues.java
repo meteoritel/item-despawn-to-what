@@ -95,6 +95,15 @@ final class RealmQueues {
         }
     }
 
+    boolean cancelOne(CancelReason reason) {
+        for (TaskLane lane : lanes.values()) {
+            if (lane.cancelOne(reason)) { return true; }
+        }
+        return false;
+    }
+
+    void detach() { lanes.values().forEach(TaskLane::detach); }
+
     void finishTick() {
         for (TaskLane lane : lanes.values()) {
             lane.finishTick();

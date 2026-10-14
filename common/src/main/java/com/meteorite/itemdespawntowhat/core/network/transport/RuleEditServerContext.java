@@ -3,6 +3,10 @@ package com.meteorite.itemdespawntowhat.core.network.transport;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoadResult;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.service.BuiltinTypeRegistries;
+import com.meteorite.itemdespawntowhat.core.service.RuleSaveReloadContext;
+import com.meteorite.itemdespawntowhat.core.runtime.RuleIndex;
+import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerScheduler;
+import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTask;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -31,6 +35,26 @@ public interface RuleEditServerContext {
 
     // 规则落盘后重建索引并对全部已加载维度回扫
     void rebuildAndRescan(MinecraftServer server);
+
+    /**
+     * 获取当前数据包基底的保存重载快照；仅在服务端线程调用。
+     * @return 基底快照，运行时未就绪时为 null
+     */
+    @Nullable RuleSaveReloadContext saveReloadContext();
+
+    /**
+     * 获取服务器唯一的公共预算调度器。
+     * @return 已就绪的调度器
+     */
+    ServerScheduler saveScheduler();
+
+    /**
+     * 发布准备好的索引，并返回跨 tick 取消旧任务与回扫的续接任务。
+     * @param server 当前服务端
+     * @param index 后台基于校验后模型准备的索引
+     * @return 服务端线程上的续接任务
+     */
+    ServerTask applySavedIndex(MinecraftServer server, RuleIndex index);
 
     /**
      * 读取服务端缓存的普通物品参考寿命，仅用于 GUI 滑条窗口。

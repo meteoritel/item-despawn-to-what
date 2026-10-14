@@ -189,6 +189,34 @@ public final class RuleEditServerHandler {
         }
     }
 
+    /**
+     * 每 tick 交付保存续接任务的完成回执。
+     * @param server 当前服务端
+     * @param context 平台网络上下文
+     */
+    public static void tick(MinecraftServer server, RuleEditServerContext context) {
+        if (editService == null) { return; }
+        RuleEditService.SaveReply reply = editService.pollSave(server);
+        if (reply != null) { dispatch(context, reply.player(), reply.outbound()); }
+        RuleEditService.SaveReply snapshot = editService.pollSnapshot(server, context);
+        if (snapshot != null) { dispatch(context, snapshot.player(), snapshot.outbound()); }
+    }
+
+    /**
+     * 保存期间延后规则重载，防止重载读取文件替换的中间状态。
+     * @param reload 服务端线程上的重载动作
+     * @return 是否已延后
+     */
+    public static boolean deferReload(Runnable reload) {
+        return editService != null && editService.deferReload(reload);
+    }
+
+    /**
+     * 查询磁盘保存是否占用编辑目标，供同步规则命令避开文件替换中的目录。
+     * @return 是否存在未结束保存
+     */
+    public static boolean isSaving() { return editService != null && editService.saving(); }
+
     // 玩家断开：只清分片缓存；会话按契约在租约到期后释放
     public static synchronized void clearPlayer(UUID playerId) {
         if (editService != null) {

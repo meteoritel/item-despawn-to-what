@@ -3,18 +3,12 @@ package com.meteorite.itemdespawntowhat.core.service;
 import com.meteorite.itemdespawntowhat.core.api.Issue;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.IssueSeverity;
-import com.meteorite.itemdespawntowhat.core.load.PackLayerResolver;
-import com.meteorite.itemdespawntowhat.core.load.RuleLoadResult;
-import com.meteorite.itemdespawntowhat.core.load.RuleSourceIndex;
-import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.network.catalog.RuleCatalogService;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalog;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEditChangeSet;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEditProtocol;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleIssue;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveStatus;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshot;
 import com.meteorite.itemdespawntowhat.core.network.transport.CloseRuleEditorPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.ConfirmRuleEditorPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.HeartbeatRuleEditorPayload;
@@ -26,11 +20,8 @@ import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditChunkAccum
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditLimits;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerContext;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveResultPayload;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotChunkPayload;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotChunker;
 import com.meteorite.itemdespawntowhat.core.network.transport.SaveRuleChangeSetChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.SaveRuleChangeSetPayload;
-import com.mojang.serialization.DataResult;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -66,6 +57,17 @@ public final class RuleEditService {
     private String resultsSessionId;
     private @Nullable UUID lifespanOwner;
     private @Nullable RequestRuleLifespanPayload pendingLifespan;
+    private RuleSaveTask pendingSave;
+    private String savingSessionId;
+    private String savingOperationId;
+    private UUID savingOwner;
+    private RuleSaveResultPayload completedSave;
+    private Runnable deferredReload;
+    private RuleSnapshotTask pendingSnapshot;
+    private SnapshotRequest requestedSnapshot;
+    private SnapshotRequest deliveringSnapshot;
+    private final java.util.ArrayDeque<CustomPacketPayload> snapshotPackets = new java.util.ArrayDeque<>();
+    private record SnapshotRequest(UUID owner, String sessionId, String requestId) { }
 
     /**
      * 已采样后需要交付给玩家的参考寿命应答。
@@ -84,6 +86,12 @@ public final class RuleEditService {
     public EditSessionManager sessions() {
         return sessions;
     }
+
+    /**
+     * 判断保存是否仍在处理或等待结果交付，供磁盘读取入口避免观察整批替换的中间状态。
+     * @return 是否存在未结束保存
+     */
+    public boolean saving() { return pendingSave != null; }
 
     /**
      * 一次请求要下发的载荷集合。
@@ -177,6 +185,7 @@ public final class RuleEditService {
         if (!sessions.owns(payload.sessionId()) || !sessions.isOwner(player.getUUID())) {
             return Outbound.of(sessionLost(payload.sessionId(), player));
         }
+        if (pendingSave != null) { pendingSave.invalidate(); }
         sessions.release();
         return Outbound.of(result(payload.sessionId(), "", RuleSaveStatus.SUCCESS,
                 RuleSaveStatus.SUCCESS.messageKey(), List.of(), List.of(), false, false));
@@ -275,7 +284,7 @@ public final class RuleEditService {
     public Outbound submitChangeSet(ServerPlayer player, RuleEditServerContext context, MinecraftServer server,
                                     SaveRuleChangeSetPayload payload, long tick) {
         return submit(player, context, server, payload.sessionId(), payload.operationId(),
-                payload.changeSetJson(), tick);
+                payload::changeSetJson, tick);
     }
 
     // C2S 分片：先校验会话，再重组；收齐后复用直发保存流程
@@ -300,22 +309,17 @@ public final class RuleEditService {
             // 未收齐：不回执，等待剩余分片或由客户端超时处理
             return Outbound.EMPTY;
         }
-        return submit(player, context, server, payload.sessionId(), payload.operationId(), accepted.json(), tick);
+        return submit(player, context, server, payload.sessionId(), payload.operationId(), () -> String.join("", accepted.chunks()), tick);
     }
 
     // 保存主流程
     private synchronized Outbound submit(ServerPlayer player, RuleEditServerContext context, MinecraftServer server,
-                                         String rawSessionId, String rawOperationId, String json, long tick) {
+                                         String rawSessionId, String rawOperationId, java.util.function.Supplier<String> json, long tick) {
         String sessionId = rawSessionId == null ? "" : rawSessionId;
         String operationId = rawOperationId == null ? "" : rawOperationId;
-        String body = json == null ? "" : json;
         if (operationId.isEmpty() || RuleEditLimits.encodedLength(operationId) > RuleEditLimits.MAX_ID_CHARS) {
             return Outbound.of(result(sessionId, operationId, RuleSaveStatus.INVALID_REQUEST,
                     RuleSaveStatus.INVALID_REQUEST.messageKey(), args("operationId"), List.of(), false, false));
-        }
-        if (RuleEditLimits.encodedLength(body) > RuleEditLimits.MAX_CHANGE_SET_BYTES) {
-            return Outbound.of(result(sessionId, operationId, RuleSaveStatus.INVALID_REQUEST,
-                    RuleSaveStatus.INVALID_REQUEST.messageKey(), args("change set too large"), List.of(), false, false));
         }
         if (!sessions.owns(sessionId)) {
             return Outbound.of(sessionLost(sessionId, player));
@@ -331,111 +335,84 @@ public final class RuleEditService {
             return Outbound.of(previous);
         }
 
-        DataResult<RuleEditChangeSet> parsed = RuleEditChangeSet.parse(body);
-        RuleEditChangeSet changeSet = parsed.result().orElse(null);
-        if (changeSet == null) {
-            String detail = parsed.error().map(DataResult.Error::message).orElse("unknown");
-            RuleSaveResultPayload failed = result(sessionId, operationId, RuleSaveStatus.INVALID_REQUEST,
-                    "itemdespawntowhat.edit.parse_failed", args(detail), List.of(), false, false);
-            remember(failed);
-            return Outbound.of(failed);
+        if (pendingSave != null) {
+            if (sessionId.equals(savingSessionId) && operationId.equals(savingOperationId)) { return Outbound.EMPTY; }
+            return Outbound.of(result(sessionId, operationId, RuleSaveStatus.INVALID_REQUEST,
+                    RuleSaveStatus.INVALID_REQUEST.messageKey(), args("apply in progress"), List.of(), false, false));
         }
-
-        if (!sessions.beginApply(sessionId)) {
-            EditSessionManager.SessionInfo current = sessions.session();
-            if (current != null && sessionId.equals(current.sessionId())
-                    && current.state() == EditSessionManager.SessionState.APPLYING) {
-                // 正在应用上一批变更：拒绝新提交但保留会话，避免客户端误判失效而关闭界面
-                return Outbound.of(result(sessionId, operationId, RuleSaveStatus.INVALID_REQUEST,
-                        RuleSaveStatus.INVALID_REQUEST.messageKey(), args("apply in progress"),
-                        List.of(), false, false));
-            }
-            return Outbound.of(sessionLost(sessionId, player));
+        if (server == null || context.saveReloadContext() == null) {
+            return Outbound.of(result(sessionId, operationId, RuleSaveStatus.UNAVAILABLE,
+                    RuleSaveStatus.UNAVAILABLE.messageKey(), List.of(), List.of(), false, false));
         }
-        RuleSaveResultPayload outcome;
-        try {
-            outcome = applyChangeSet(context, server, sessionId, operationId, changeSet);
-        } finally {
-            sessions.finishApply(sessionId, tick);
-        }
-        remember(outcome);
-
-        // 版本冲突、会话失效等场景都要让客户端拿到最新快照
-        if (RuleSaveStatus.VERSION_CONFLICT.id().equals(outcome.statusCode())
-                || RuleSaveStatus.SAVED_NOT_RELOADED.id().equals(outcome.statusCode())) {
-            List<CustomPacketPayload> packets = new ArrayList<>();
-            packets.add(outcome);
-            packets.addAll(snapshotPackets(context, server, sessionId, ""));
-            return Outbound.of(List.copyOf(packets));
-        }
-        return Outbound.of(outcome);
+        if (!sessions.beginApply(sessionId)) { return Outbound.of(sessionLost(sessionId, player)); }
+        sessions.heartbeat(sessionId, tick);
+        if (pendingSnapshot != null) { pendingSnapshot.invalidate(); }
+        requestedSnapshot = null;
+        snapshotPackets.clear();
+        savingSessionId = sessionId;
+        savingOperationId = operationId;
+        savingOwner = player.getUUID();
+        pendingSave = new RuleSaveTask(sessions, context, server, sessionId, player.getUUID(), json, outcome -> {
+            if (outcome.written()) { RuleCatalogService.invalidate(); }
+            completedSave = result(sessionId, operationId, outcome.status(), outcome.status().messageKey(),
+                    switch (outcome.status()) {
+                        case SUCCESS -> args(Integer.toString(outcome.edited()), Integer.toString(outcome.files()));
+                        case VERSION_CONFLICT -> args(Integer.toString(sessions.version()), Integer.toString(outcome.expectedVersion()));
+                        default -> args(outcome.detail());
+                    }, toIssues(outcome.issues()), outcome.written(),
+                    outcome.status() == RuleSaveStatus.SUCCESS);
+            remember(completedSave);
+            sessions.finishApply(sessionId, server.getTickCount());
+        });
+        pendingSave.schedule();
+        return Outbound.EMPTY;
     }
 
-    // 落盘与重载：任何异常都不抛出到网络层，统一转成结构化回执
-    private RuleSaveResultPayload applyChangeSet(RuleEditServerContext context, MinecraftServer server,
-                                                 String sessionId, String operationId, RuleEditChangeSet changeSet) {
-        if (changeSet.isEmpty()) {
-            return result(sessionId, operationId, RuleSaveStatus.NO_CHANGES,
-                    RuleSaveStatus.NO_CHANGES.messageKey(), List.of(), List.of(), false, false);
-        }
-        try {
-            sessions.synchronizeDiskRevision();
-        } catch (RuntimeException failure) {
-            LOGGER.error("规则修订核对失败", failure);
-            return result(sessionId, operationId, RuleSaveStatus.WRITE_FAILED,
-                    RuleSaveStatus.WRITE_FAILED.messageKey(), args(describe(failure)), List.of(), false, false);
-        }
-        if (!versionMatches(changeSet)) {
-            return result(sessionId, operationId, RuleSaveStatus.VERSION_CONFLICT,
-                    RuleSaveStatus.VERSION_CONFLICT.messageKey(),
-                    args(Integer.toString(sessions.version()), Integer.toString(changeSet.expectedVersion())),
-                    List.of(), false, false);
-        }
-
-        IssueCollector issues = new IssueCollector();
-        var registries = context.typeRegistries();
-        if (registries == null) {
-            return result(sessionId, operationId, RuleSaveStatus.UNAVAILABLE,
-                    RuleSaveStatus.UNAVAILABLE.messageKey(), List.of(), List.of(), false, false);
-        }
-        if (!RuleSubmissionValidator.validate(changeSet, server, registries, issues)) {
-            return result(sessionId, operationId, RuleSaveStatus.VALIDATION_FAILED,
-                    RuleSaveStatus.VALIDATION_FAILED.messageKey(),
-                    args(firstError(issues)), toIssues(issues), false, false);
-        }
-        var overlayRoot = context.overlayRoot();
-        if (overlayRoot == null) {
-            return result(sessionId, operationId, RuleSaveStatus.UNAVAILABLE,
-                    RuleSaveStatus.UNAVAILABLE.messageKey(), List.of(), List.of(), false, false);
-        }
-        RuleOverlayWriter.ApplyResult applied =
-                new RuleOverlayWriter(overlayRoot, context.overlayNamespace()).apply(changeSet, issues);
-        if (!applied.conflicts().isEmpty() || !issues.errors().isEmpty()) {
-            String detail = applied.conflicts().isEmpty() ? firstError(issues) : String.join("; ", applied.conflicts());
-            return result(sessionId, operationId, RuleSaveStatus.WRITE_FAILED,
-                    RuleSaveStatus.WRITE_FAILED.messageKey(), args(detail), toIssues(issues), false, false);
-        }
-        if (applied.writtenFiles() == 0) {
-            return result(sessionId, operationId, RuleSaveStatus.NO_CHANGES,
-                    RuleSaveStatus.NO_CHANGES.messageKey(), List.of(), toIssues(issues), false, false);
-        }
-
-        // 索引重建 + 全维度 rescan：已存在的掉落物立即按新规则重选
-        try {
-            context.rebuildAndRescan(server);
-        } catch (RuntimeException failure) {
-            sessions.bumpVersion();
-            RuleCatalogService.invalidate();
-            LOGGER.error("保存后重建规则索引失败（覆盖层已写入，保留上一版索引）", failure);
-            return result(sessionId, operationId, RuleSaveStatus.SAVED_NOT_RELOADED,
-                    RuleSaveStatus.SAVED_NOT_RELOADED.messageKey(), List.of(), toIssues(issues), true, false);
-        }
-        RuleCatalogService.invalidate();
-        return result(sessionId, operationId, RuleSaveStatus.SUCCESS,
-                RuleSaveStatus.SUCCESS.messageKey(),
-                args(Integer.toString(changeSet.edits().size()), Integer.toString(applied.writtenFiles())),
-                toIssues(issues), true, true);
+    /**
+     * 保存期间的数据包重载延后至文件工作结束，撤销尚未提交的保存；只保留最近一次重载。
+     * @param reload 服务端线程上的重载动作
+     * @return 是否已接管重载
+     */
+    public boolean deferReload(Runnable reload) {
+        if (pendingSave == null) { return false; }
+        pendingSave.invalidate();
+        deferredReload = reload;
+        return true;
     }
+
+    /**
+     * 每个服务端 tick 交付异步保存回执，世界与网络访问只发生在调用线程。
+     * @param server 当前服务端
+     * @return 回执接收者与载荷，尚未完成时为 null
+     */
+    public @Nullable SaveReply pollSave(MinecraftServer server) {
+        if (pendingSave == null) { return null; }
+        if (!sessions.owns(savingSessionId)) { pendingSave.invalidate(); }
+        ServerPlayer owner = server.getPlayerList().getPlayer(savingOwner);
+        if (owner != null && !com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler.canEdit(owner)) {
+            pendingSave.invalidate();
+        }
+        if (!pendingSave.finished()) { return null; }
+        RuleSaveResultPayload payload = completedSave;
+        pendingSave = null;
+        completedSave = null;
+        Runnable reload = deferredReload;
+        deferredReload = null;
+        if (reload != null) { reload.run(); }
+        if (payload != null && sessions.owns(payload.sessionId())
+                && (reload != null || RuleSaveStatus.VERSION_CONFLICT.id().equals(payload.statusCode())
+                    || RuleSaveStatus.SAVED_NOT_RELOADED.id().equals(payload.statusCode()))) {
+            requestedSnapshot = new SnapshotRequest(savingOwner, payload.sessionId(), "");
+        }
+        return owner == null || payload == null ? null : new SaveReply(owner, Outbound.of(payload));
+    }
+
+    /**
+     * 已完成保存的网络交付。
+     * @param player 接收者
+     * @param outbound 结果载荷
+     */
+    public record SaveReply(ServerPlayer player, Outbound outbound) { }
 
     // 租约与确认窗口检查：超时释放后把 SESSION_EXPIRED 回执交给持有者
     public Expired expireSessions(MinecraftServer server, long tick) {
@@ -458,6 +435,7 @@ public final class RuleEditService {
 
     // 强制释放（管理员指令）：返回被释放的会话，空闲时返回 null
     public synchronized EditSessionManager.SessionInfo forceRelease() {
+        if (pendingSave != null) { pendingSave.invalidate(); }
         return sessions.release();
     }
 
@@ -468,6 +446,15 @@ public final class RuleEditService {
 
     // 停服：清空分片与幂等记录（会话对象随下次启动重建）
     public synchronized void reset() {
+        if (pendingSave != null) { pendingSave.invalidate(); }
+        if (pendingSnapshot != null) { pendingSnapshot.invalidate(); }
+        RuleSaveTask.awaitFileWork();
+        pendingSave = null;
+        completedSave = null;
+        deferredReload = null;
+        pendingSnapshot = null;
+        requestedSnapshot = null;
+        snapshotPackets.clear();
         RuleEditChunkAccumulator.clearAll();
         recentResults.clear();
         resultsSessionId = null;
@@ -475,57 +462,54 @@ public final class RuleEditService {
         lifespanOwner = null;
     }
 
-    // 组装并下发快照；失败时回结构化回执
+    // 快照请求只保留最新一个；读盘、解码、编码与分片由续接任务处理。
     private Outbound snapshotOutbound(RuleEditServerContext context, MinecraftServer server,
                                       String sessionId, String requestId) {
-        List<CustomPacketPayload> packets = snapshotPackets(context, server, sessionId, requestId);
-        if (!packets.isEmpty()) {
-            return Outbound.of(packets);
+        if (server == null || context.saveReloadContext() == null) {
+            return Outbound.of(result(sessionId, "", RuleSaveStatus.UNAVAILABLE,
+                    RuleSaveStatus.UNAVAILABLE.messageKey(), List.of(), List.of(), false, false));
         }
-        return Outbound.of(result(sessionId, "", RuleSaveStatus.UNAVAILABLE,
-                "itemdespawntowhat.edit.snapshot_failed", List.of(), List.of(), false, false));
+        EditSessionManager.SessionInfo session = sessions.session();
+        if (session != null) {
+            requestedSnapshot = new SnapshotRequest(session.ownerUuid(), sessionId, requestId);
+            snapshotPackets.clear();
+        }
+        return Outbound.EMPTY;
     }
 
-    // 生成快照下发载荷：不超过单包上限时一个整包，超限时按 UTF-8 字节切成多片；异常返回空列表（调用方转回执）
-    private List<CustomPacketPayload> snapshotPackets(RuleEditServerContext context, MinecraftServer server,
-                                                      String sessionId, String requestId) {
-        try {
-            var registries = context.typeRegistries();
-            var overlayRoot = context.overlayRoot();
-            if (registries == null || overlayRoot == null || server == null) {
-                return List.of();
+    /**
+     * 每 tick 最多交付一片快照；在途快照与待启动请求各最多一个，保存期间暂缓准备。
+     * @param server 当前服务端
+     * @param context 平台上下文
+     * @return 本 tick 的网络交付，暂无数据时为 null
+     */
+    public @Nullable SaveReply pollSnapshot(MinecraftServer server, RuleEditServerContext context) {
+        if (pendingSave != null) { return null; }
+        if (requestedSnapshot != null && pendingSnapshot == null) {
+            SnapshotRequest current = requestedSnapshot;
+            if (!sessions.owns(current.sessionId()) || context.saveReloadContext() == null) {
+                requestedSnapshot = null;
+                return null;
             }
-            try {
-                // 手工改过覆盖层也要在快照里给出权威修订号，否则客户端视图会拿着过期版本去提交
-                sessions.synchronizeDiskRevision();
-            } catch (RuntimeException failure) {
-                LOGGER.error("规则修订核对失败", failure);
-                return List.of();
-            }
-            RuleLoadResult<Rule> merged = context.loadMerged(server);
-            IssueCollector sourceIssues = new IssueCollector();
-            RuleLoadContext loadContext = RuleLoadContext.full(
-                    server.getResourceManager(), overlayRoot, context.overlayNamespace(),
-                    server.registryAccess(), registries.effectTypes(), registries.conditionTypes(),
-                    PackLayerResolver.allWorld()).withServer(server);
-            RuleSourceIndex index = RuleLoadingService.sourceIndex(loadContext, sourceIssues);
-            List<Issue> issues = new ArrayList<>(merged.allIssues());
-            issues.addAll(sourceIssues.issues());
-            RuleSnapshot snapshot = RuleSnapshotAssembler.assemble(index, merged.rules(),
-                    sessions.version(), sessions.version(),
-                    registries.effectTypes(), registries.conditionTypes(), List.copyOf(issues));
-            String text = snapshot.serialize();
-            List<CustomPacketPayload> packets = RuleSnapshotChunker.split(
-                    sessionId == null ? "" : sessionId, requestId == null ? "" : requestId, text);
-            if (!packets.isEmpty() && packets.getFirst() instanceof RuleSnapshotChunkPayload) {
-                LOGGER.info("规则快照超过单包上限，已分片下发: bytes={} chunks={}",
-                        RuleEditLimits.encodedLength(text), packets.size());
-            }
-            return packets;
-        } catch (RuntimeException failure) {
-            LOGGER.error("生成规则快照失败", failure);
-            return List.of();
+            pendingSnapshot = new RuleSnapshotTask(context, server, sessions, current.sessionId(), current.requestId(), packets -> {
+                pendingSnapshot = null;
+                if (requestedSnapshot != current) { return; }
+                requestedSnapshot = null;
+                deliveringSnapshot = current;
+                if (packets.isEmpty()) {
+                    snapshotPackets.add(result(current.sessionId(), "", RuleSaveStatus.UNAVAILABLE,
+                            "itemdespawntowhat.edit.snapshot_failed", List.of(), List.of(), false, false));
+                } else { snapshotPackets.addAll(packets); }
+            });
+            pendingSnapshot.schedule();
         }
+        if (snapshotPackets.isEmpty() || deliveringSnapshot == null) { return null; }
+        if (!sessions.owns(deliveringSnapshot.sessionId())) { snapshotPackets.clear(); return null; }
+        ServerPlayer player = server.getPlayerList().getPlayer(deliveringSnapshot.owner());
+        if (!com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler.canEdit(player)) {
+            snapshotPackets.clear(); return null;
+        }
+        return new SaveReply(player, Outbound.of(snapshotPackets.removeFirst()));
     }
 
     // 会话已失效的统一回执
@@ -533,11 +517,6 @@ public final class RuleEditService {
         RuleSaveStatus status = sessions.isOwner(player.getUUID())
                 ? RuleSaveStatus.SESSION_EXPIRED : RuleSaveStatus.LOCK_NOT_OWNED;
         return result(sessionId, "", status, status.messageKey(), List.of(), List.of(), false, false);
-    }
-
-    // 版本戳比较：客户端视图版本必须与服务端一致
-    private boolean versionMatches(RuleEditChangeSet changeSet) {
-        return sessions.version() == changeSet.expectedVersion();
     }
 
     // 组装回执载荷
@@ -624,16 +603,4 @@ public final class RuleEditService {
         return List.copyOf(args);
     }
 
-    // 首条错误文本
-    private static String firstError(IssueCollector issues) {
-        if (issues == null || issues.errors().isEmpty()) {
-            return "";
-        }
-        return issues.errors().getFirst().format();
-    }
-
-    // 异常转可读文本
-    private static String describe(RuntimeException failure) {
-        return failure.getMessage() == null ? failure.getClass().getSimpleName() : failure.getMessage();
-    }
 }

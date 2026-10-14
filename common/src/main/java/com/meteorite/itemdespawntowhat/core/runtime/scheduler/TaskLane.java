@@ -22,6 +22,7 @@ final class TaskLane {
     private long lastMicros;
     private long maxMicros;
     private long totalVisited;
+    private boolean detached;
 
     TaskLane(Object realmKey, ServerTaskKind kind) {
         this.realmKey = realmKey;
@@ -56,6 +57,7 @@ final class TaskLane {
 
     // 按额度把到期桶中的任务搬入就绪队列：一次只搬一个，搬运本身消耗 1 个工作单位。
     boolean takeDue(long gameTime, ServerTickBudget budget, int allowance) {
+        if (detached) { return false; }
         if (drainedThisTick >= allowance) {
             return false;
         }
@@ -97,6 +99,7 @@ final class TaskLane {
 
     // 取一个就绪任务执行；取消的条目在这里被懒删除。
     ScheduledTask pollReady() {
+        if (detached) { return null; }
         while (!ready.isEmpty()) {
             ScheduledTask head = ready.pollFirst();
             if (head.terminal()) {
@@ -192,4 +195,19 @@ final class TaskLane {
         ready.clear();
         pending = 0;
     }
+
+    // 跨 tick 清理时每步只摘取一个槽位，终态槽位也计入处理额度。
+    boolean cancelOne(CancelReason reason) {
+        ScheduledTask task = ready.pollFirst();
+        if (task == null) {
+            Map.Entry<Long, ArrayDeque<ScheduledTask>> entry = buckets.firstEntry();
+            if (entry == null) { return false; }
+            task = entry.getValue().pollFirst();
+            if (entry.getValue().isEmpty()) { buckets.pollFirstEntry(); }
+        }
+        if (task != null) { task.cancel(reason); }
+        return true;
+    }
+
+    void detach() { detached = true; }
 }

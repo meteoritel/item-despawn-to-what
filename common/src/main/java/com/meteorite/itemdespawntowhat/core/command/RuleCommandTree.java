@@ -62,4 +62,13 @@ public final class RuleCommandTree {
     public static int notReady(CommandContext<CommandSourceStack> context) {
         return replyFailure(context, RuleCommandText.of("itemdespawntowhat.command.not_ready").build());
     }
+
+    /**
+     * 提示等待整批保存结束后再读取或重载磁盘规则。
+     * @param context 命令上下文
+     * @return 命令失败码
+     */
+    public static int saveBusy(CommandContext<CommandSourceStack> context) {
+        return replyFailure(context, RuleCommandText.of("itemdespawntowhat.command.save_busy").build());
+    }
 }

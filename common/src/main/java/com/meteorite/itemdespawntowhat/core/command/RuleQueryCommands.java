@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.core.command;
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoadResult;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshot;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshotEntry;
 import com.meteorite.itemdespawntowhat.core.service.RuleSnapshotAssembler;
@@ -42,6 +43,7 @@ final class RuleQueryCommands {
 
     // rule list：紧凑清单（id / 来源层 / 是否启用 / 来源标识）
     private static int list(CommandContext<CommandSourceStack> ctx, RuleCommandContext context) {
+        if (RuleEditServerHandler.isSaving()) { return RuleCommandTree.saveBusy(ctx); }
         RuleLoadResult<Rule> result = load(ctx, context);
         if (result == null) {
             return RuleCommandTree.notReady(ctx);
@@ -62,6 +64,7 @@ final class RuleQueryCommands {
 
     // rule show <id>：输出该规则的原始 JSON（覆盖层文件原文优先）
     private static int show(CommandContext<CommandSourceStack> ctx, RuleCommandContext context, ResourceLocation id) {
+        if (RuleEditServerHandler.isSaving()) { return RuleCommandTree.saveBusy(ctx); }
         RuleLoadResult<Rule> merged = load(ctx, context);
         if (merged == null) {
             return RuleCommandTree.notReady(ctx);

@@ -14,7 +14,7 @@
 
 | 类型 | 角色 |
 |---|---|
-| `ServerTask` | 最小任务单元：`kind()`、`tracingName()`、`step(ServerTickBudget)` 返回 `StepResult`、`onCancelled(reason)`、`onReleased()`。实现者**不得依赖平台类**，**单步必须有界**（长循环自行拆分）。 |
+| `ServerTask` | 最小任务单元：`kind()`、`tracingName()`、`step(ServerTickBudget)` 返回 `StepResult`、`onCancelled(reason)`、`onFailed(failure)`、`onReleased()`。FAILED 清理只通知一次；主动返回 FAILED 的 failure 为 null，步骤异常则传原异常，清理异常记录后继续其它任务。`VirtualMachineError` 直接重抛。实现者**不得依赖平台类**，**单步必须有界**（长循环自行拆分）。 |
 | `ServerTaskKind` | `CONDITION_CHECK` / `WORLD_SEARCH`（预留，现有实现仍并入条件检查）/ `EFFECT` / `REBATE` / `MAINTENANCE`。 |
 | `StepResult` | `(outcome, workUnits, nextDelayTicks)`；紧凑构造器把 `workUnits` 夹到 **≥ 1**、`nextDelayTicks` 夹到 ≥ 0，防止零成本步骤绕过预算。 |
 | `StepOutcome` | `DONE`（可释放）/ `YIELD`（让出，稍后继续）/ `RETRY`（业务重试）/ `FAILED`（记失败、不再入队）。 |
@@ -26,8 +26,10 @@
 - `CONDITION_CHECK` —— `ConversionRuntime.scheduleCheck`（到期检查、退避重试、`deferNaturalExpiry` 的最后一次检查）。
 - `EFFECT` —— `ConversionSettlement`（转化结算：计划 / 派发 / 交付三阶段）与 `RuntimeEffectContext.schedule`（延迟效果）。
 - `REBATE` —— `SettlementRecovery`（停服 / 卸载后重启的返还交付）。
-- `MAINTENANCE` —— `RunnableTask` 未指定种类时的缺省。
+- `MAINTENANCE` —— `RunnableTask` 未指定种类时的缺省，以及 `RuleSaveTask` / `RuleSnapshotTask` 的保存、快照和重载续接。文件 I/O 与 JSON 拼接/解析/装配在串行后台队列中进行，公共预算只推进服务端线程上的步骤。
 - `WORLD_SEARCH` —— 已声明的种类，当前没有任务使用。
+
+`detachRealm` 将旧队列立即移出轮转，旧 lane 在本 tick 已建立的轮转列表里也不再搬运/执行；返回的清理任务每步最多摘除一个槽位并带原因取消。保存重载用它避免集中取消大量旧任务；停服仍同步清理所有未通知的结算，确保最终存档保留待返还库存。
 
 ## 3. 每 tick 预算（`ServerTickBudget`）
 

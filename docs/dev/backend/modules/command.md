@@ -15,6 +15,8 @@
 | `RuleDebugCommands` | `debug` 分支装配：`help` / `examples` / `run` / `bench` / `pipeline` / `stop` / `status` / `mark` | `build(context)`（场景名由 `DebugScenarioCatalog` 声明驱动） |
 | `DebugPipelineCommands` | `debug pipeline` 子分支：`p0`～`p4` 与 `help` / `status` / `stop` | `build(context)`（阶段名由 `DebugPipelineCatalog` 声明驱动） |
 
+保存期间，`config reload/validate/list` 与 `rule list/show` 返回本地化的保存忙碌提示，不读取或重载替换中的磁盘目录；编辑锁状态查询和强制释放仍可使用。
+
 ## 2. 命令树与权限
 
 ```text
