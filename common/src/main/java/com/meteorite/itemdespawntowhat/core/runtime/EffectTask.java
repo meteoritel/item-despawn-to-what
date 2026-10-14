@@ -4,13 +4,12 @@ import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
-import com.meteorite.itemdespawntowhat.core.debug.DebugMode;
-import com.meteorite.itemdespawntowhat.core.debug.DebugScenarioManager;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.CancelReason;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.StepResult;
+import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -49,14 +48,14 @@ final class EffectTask implements ServerTask {
         try {
             result = execution.advance(budget);
         } catch (RuntimeException failure) {
-            if (DebugMode.ENABLED) DebugScenarioManager.observe(source, "ERROR", "effect", effect.type(),
+            if (RuntimeObserver.current().enabled()) RuntimeObserver.current().observe(source, "ERROR", "effect", effect.type(),
                     "error", failure.toString());
             org.apache.logging.log4j.LogManager.getLogger().error(
                     "效果执行失败：规则={} 效果={} 位置={}", context.ruleId(), effect.type(), context.position(), failure);
             result = EffectResult.failed(failure.toString());
         }
         if (result == null) { return StepResult.yield(1, 1); }
-        if (DebugMode.ENABLED) DebugScenarioManager.observe(source, "EFFECT_EXECUTOR_RETURNED",
+        if (RuntimeObserver.current().enabled()) RuntimeObserver.current().observe(source, "EFFECT_EXECUTOR_RETURNED",
                 "effect", effect.type(), "outcome", result.outcome());
         finish(result);
         return StepResult.done(1);

@@ -2,8 +2,7 @@ package com.meteorite.itemdespawntowhat.core.type.effect.exec;
 
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
-import com.meteorite.itemdespawntowhat.core.debug.DebugMode;
-import com.meteorite.itemdespawntowhat.core.debug.DebugScenarioManager;
+import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
 import com.meteorite.itemdespawntowhat.core.type.effect.PlaceBlockEffect;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -130,8 +129,8 @@ public final class PlaceBlockExecutor {
             // 放置结束：记录真实成功数、计划上限与候选数，便于验收与排查半径不足
             if (!reported) {
                 reported = true;
-                if (DebugMode.ENABLED) {
-                    DebugScenarioManager.observe(context.source(), "PLACE_BLOCK_RESULT",
+                if (RuntimeObserver.current().enabled()) {
+                    RuntimeObserver.current().observe(context.source(), "PLACE_BLOCK_RESULT",
                             "candidates", offsets.size(), "placed", placed, "target", target);
                 }
             }

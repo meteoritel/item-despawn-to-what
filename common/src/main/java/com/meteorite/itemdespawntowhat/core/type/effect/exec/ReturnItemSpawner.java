@@ -1,9 +1,8 @@
 package com.meteorite.itemdespawntowhat.core.type.effect.exec;
 
-import com.meteorite.itemdespawntowhat.core.debug.DebugMode;
-import com.meteorite.itemdespawntowhat.core.debug.DebugScenarioManager;
 import com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
+import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
 import com.meteorite.itemdespawntowhat.core.state.DropStateStore;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -207,8 +206,8 @@ public final class ReturnItemSpawner {
         // 决定位置并记录观测：stage 1 表示回退向上扫描，stage 2 表示限高以上
         private Vec3 decide(Vec3 position) {
             decided = position;
-            if (DebugMode.ENABLED) {
-                DebugScenarioManager.observe(source, "REBATE_POS_SEARCH",
+            if (RuntimeObserver.current().enabled()) {
+                RuntimeObserver.current().observe(source, "REBATE_POS_SEARCH",
                         "stage", stage,
                         "candidates_checked", checked,
                         "above_limit", stage >= 2,

@@ -8,7 +8,7 @@ import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudgetSnapshot;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.StepResult;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.TaskQueue;
-import com.meteorite.itemdespawntowhat.core.debug.DebugMode;
+import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -315,7 +315,7 @@ public final class ServerScheduler implements TaskQueue {
      * 仅在开发环境写入 INFO（该环境控制台不输出 DEBUG）；无任务且无搬运的 tick 不输出，避免高 TPS 刷屏。
      */
     private void logBudgetObservation() {
-        if (!DebugMode.ENABLED || lastSnapshot.gameTime() == lastBudgetLogGameTime) {
+        if (!RuntimeObserver.current().enabled() || lastSnapshot.gameTime() == lastBudgetLogGameTime) {
             return;
         }
         if (lastSnapshot.drainedTasks() == 0 && steps == lastLoggedSteps) {
