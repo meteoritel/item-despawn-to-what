@@ -51,8 +51,9 @@ public final class RuleSubmissionValidator {
                 RuleValidation.validate(rule, types.effectTypes(), types.conditionTypes(), issues, edit.id().toString());
                 RuleReferenceValidator.validate(rule, server, issues, edit.id().toString());
             }
-        } catch (RuntimeException failure) {
-            // 第三方类型的 Codec/校验器失误也必须拒绝整批，不能进入落盘阶段。
+        } catch (RuntimeException | StackOverflowError failure) {
+            // 第三方类型的 Codec/校验器失误也必须拒绝整批，不能进入落盘阶段；
+            // 条件树过深引发的栈溢出是 Error，不捕获会直接击穿校验流程
             issues.error("规则校验异常: " + failure, edit.id().toString(), null);
         }
     }
