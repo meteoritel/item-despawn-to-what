@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.core.type.effect.exec;
 
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.StepWorkCounter;
 import com.meteorite.itemdespawntowhat.core.type.effect.ExplosionEffect;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
@@ -18,6 +19,13 @@ import net.minecraft.world.phys.Vec3;
  * 异常不吞、不捕获，由运行时统一捕获并记录（规则 id + 效果类型 + 位置）。
  */
 public final class ExplosionExecutor {
+
+    /**
+     * 单次破坏型爆炸的计费工作量：一步内完成整次原版 explode，方块破坏与实体伤害判定覆盖半径内的全部方块，
+     * 代价远高于单次方块读写，故按与其代价相称的常量计入本 tick 预算（见 {@link StepWorkCounter#report(int)}）。
+     * 该常量只影响计费，不改变爆炸的行为与产出。
+     */
+    private static final int EXPLOSION_WORK_UNITS = 128;
 
     private ExplosionExecutor() {
         throw new UnsupportedOperationException("Utility class");
@@ -44,6 +52,8 @@ public final class ExplosionExecutor {
         }
         level.explode(null, position.x, position.y, position.z, effect.power(), effect.fire(),
                 Level.ExplosionInteraction.TNT);
+        // 计价：一步完成整次世界操作，按具名常量回执；等待区块与 visual_only 不构成破坏型操作，不回执
+        StepWorkCounter.report(EXPLOSION_WORK_UNITS);
         return EffectResult.applied(1);
     }
 }

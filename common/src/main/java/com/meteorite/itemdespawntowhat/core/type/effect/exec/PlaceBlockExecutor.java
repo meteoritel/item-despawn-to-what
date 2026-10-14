@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.core.type.effect.exec;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.StepWorkCounter;
 import com.meteorite.itemdespawntowhat.core.type.effect.PlaceBlockEffect;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -20,6 +21,12 @@ import java.util.*;
  */
 public final class PlaceBlockExecutor {
     private static final Map<ShapeKey, List<BlockPos>> OFFSETS = new HashMap<>();
+    /**
+     * 单步最多处理的方块位置数：计数段与放置段共享同一上界，取值与语义保持不变，只限制本步处理量。
+     * 每个已处理位置按 1 个工作单位回执（见 {@link StepWorkCounter#report(int)}），
+     * 因此该上界同时决定一个调度步骤最多向本 tick 预算计入多少工作单位。
+     */
+    private static final int MAX_VISITS_PER_STEP = 128;
     /** 不含维度引用的形状缓存键；起点填充开关会改变候选集合，须参与缓存键。 */
     private record ShapeKey(PlaceBlockEffect.Shape shape, int radius, boolean fillOrigin) {}
     private PlaceBlockExecutor() {}
@@ -66,7 +73,10 @@ public final class PlaceBlockExecutor {
         });
     }
 
-    /** 计数与放置的持续游标，最多处理 128 个方块位置后让出本刻。 */
+    /**
+     * 计数与放置的持续游标，最多处理 {@link #MAX_VISITS_PER_STEP} 个方块位置后让出本刻。
+     * 每个已处理位置向本 tick 预算回执 1 个工作单位：计数段位置为一次方块读取，放置段位置含读取、放置合法性与 setBlock 写入。
+     */
     private static final class Placement implements Runnable {
         private final EffectContext context;
         private final Block block;
@@ -100,7 +110,7 @@ public final class PlaceBlockExecutor {
         @SuppressWarnings("resource")
         public void run() {
             int visits = 0;
-            while (counting && visits++ < 128) {
+            while (counting && visits++ < MAX_VISITS_PER_STEP) {
                 if (pendingCount == null && countPositions.hasNext()) { pendingCount = countPositions.next().immutable(); }
                 if (pendingCount == null || existing >= limit) {
                     target = Math.max(0, Math.min(target, limit - existing));
@@ -108,16 +118,20 @@ public final class PlaceBlockExecutor {
                     break;
                 }
                 if (!com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks.contains(context.level(), pendingCount)) { context.schedule(20, this); return; }
+                // 计价：一次方块读取记 1 个工作单位，循环上界即单个调度步骤的计费上界
+                StepWorkCounter.report(1);
                 if (context.level().getBlockState(pendingCount).is(block)) { existing++; }
                 pendingCount = null;
             }
-            while (!counting && cursor < offsets.size() && placed < target && visits++ < 128) {
+            while (!counting && cursor < offsets.size() && placed < target && visits++ < MAX_VISITS_PER_STEP) {
                 BlockPos pos = center.offset(offsets.get(cursor));
                 // canSurvive 可能读取相邻方块，边界两侧都须已加载。
                 if (!com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks.contains(context.level(), pos.offset(-1, 0, -1)) || !com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks.contains(context.level(), pos.offset(1, 0, 1))) {
                     context.schedule(20, this); return;
                 }
                 cursor++;
+                // 计价：一个候选位置的读取与放置尝试记 1 个工作单位
+                StepWorkCounter.report(1);
                 if (context.level().getBlockState(pos).canBeReplaced() && state.canSurvive(context.level(), pos)
                         && context.level().setBlock(pos, state, Block.UPDATE_ALL)) {
                     placed++;
