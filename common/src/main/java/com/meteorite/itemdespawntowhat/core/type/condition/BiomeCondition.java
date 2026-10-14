@@ -2,7 +2,10 @@ package com.meteorite.itemdespawntowhat.core.type.condition;
 
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
+import com.meteorite.itemdespawntowhat.core.api.RefChecks;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
+import com.meteorite.itemdespawntowhat.core.extension.DynamicReferenceCheck;
+import com.meteorite.itemdespawntowhat.core.extension.DynamicReferenceContext;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleConditionType;
@@ -11,6 +14,7 @@ import com.meteorite.itemdespawntowhat.core.type.condition.eval.BiomeEvaluator;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
@@ -38,7 +42,7 @@ public record BiomeCondition(
         ClimateRange erosion,
         ClimateRange depth,
         ClimateRange weirdness
-) implements Condition {
+) implements Condition, DynamicReferenceCheck {
 
     // 类型 id，同时是 JSON 中 type 字段的取值
     public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("itemdespawntowhat", "biome");
@@ -121,6 +125,20 @@ public record BiomeCondition(
             return valid;
         }
         return valid;
+    }
+
+    /**
+     * 动态引用校验：仅在 exact 模式下逐项校验群系引用是否存在；climate 模式不使用 biomes 列表。
+     *
+     * @param context 当前服务端、统一议题收集通道与当前条件叶的字段路径
+     */
+    @Override
+    public void checkDynamicReferences(DynamicReferenceContext context) {
+        if (mode() != Mode.EXACT) {
+            return;
+        }
+        RefChecks.checkAll(biomes, context.server().registryAccess().registryOrThrow(Registries.BIOME),
+                FIELD_BIOMES, context.issues(), ParamChecks.child(context.fieldPath(), FIELD_BIOMES));
     }
 
     // 是否填写了至少一个"有约束力"的气候参数区间（区间对象存在但两端都空视为未填写）

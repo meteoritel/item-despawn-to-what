@@ -2,6 +2,8 @@ package com.meteorite.itemdespawntowhat.core.type.effect;
 
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
+import com.meteorite.itemdespawntowhat.core.extension.DynamicReferenceCheck;
+import com.meteorite.itemdespawntowhat.core.extension.DynamicReferenceContext;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
@@ -11,6 +13,8 @@ import com.meteorite.itemdespawntowhat.core.type.effect.exec.LootTableExecutor;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
@@ -24,7 +28,7 @@ public record LootTableEffect(
         int delayTicks,
         double chance,
         @Nullable ConditionExpression conditions
-) implements Effect {
+) implements Effect, DynamicReferenceCheck {
 
     // 效果类型 id，同时是 JSON 中 type 字段的取值
     public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("itemdespawntowhat", "loot_table");
@@ -63,6 +67,21 @@ public record LootTableEffect(
         valid &= ParamChecks.inRange(params.luck(), MIN_LUCK, MAX_LUCK, LUCK_FIELD, issues,
                 ParamChecks.child(fieldPath, LUCK_FIELD));
         return valid;
+    }
+
+    /**
+     * 动态引用校验：战利品表必须能在服务端已加载的战利品表注册表中查到。
+     * 效果级条件不在此处理，由核心校验器沿条件树逐叶展开。
+     *
+     * @param context 当前服务端、统一议题收集通道与当前效果的字段路径
+     */
+    @Override
+    public void checkDynamicReferences(DynamicReferenceContext context) {
+        if (context.server().reloadableRegistries().lookup().lookup(Registries.LOOT_TABLE)
+                .flatMap(tables -> tables.get(ResourceKey.create(Registries.LOOT_TABLE, lootTable))).isEmpty()) {
+            context.issues().error("未找到已加载的战利品表: " + lootTable, null,
+                    ParamChecks.child(context.fieldPath(), LOOT_TABLE_FIELD));
+        }
     }
 
     @Override
