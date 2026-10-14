@@ -60,7 +60,7 @@
 
 | 类 | 职责 | 关键成员 |
 |---|---|---|
-| `EffectTargets` | 执行器共享的引用解析与空间查询工具；**不捕获、不吞异常**，硬错误直接抛出交给运行时 | `resolve`（未命中返回 null）/`resolveOrThrow`、`blockBox(center, radius)`、`matchesAny(items, stack)`（催化剂固定成本与效果式消耗同口径）、`addEntity`、`addConversionProduct`、`saturatedAdd`/`saturatedMultiply`、`forEachStep(...)` |
+| `EffectTargets` | 执行器共享的引用解析与空间查询工具；**不捕获、不吞异常**，硬错误直接抛出交给运行时 | `resolve`（未命中返回 null）/`resolveOrThrow`、`blockBox(center, radius)`（效果式消耗与催化剂固定成本共用的搜索盒）、`addEntity`、`addConversionProduct`、`saturatedAdd`/`saturatedMultiply`、`forEachStep(...)` |
 | `ReturnItemSpawner` | 掉落物生成统一入口：转化产物与返还物共用「创建 + 授予实体状态 + 加入世界」路径 | `Kind{CONVERSION_PRODUCT, PERMANENT_RETURN}`、`applyGrant`、`spawn`、`deliver`、内部 `PositionSearch`（三级位置搜索：起点附近 → 向上扫描 → 限高以上，跨刻分步） |
 
 ## 3. 注册生命周期（顺序固定）
