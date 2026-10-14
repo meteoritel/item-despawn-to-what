@@ -423,7 +423,7 @@ final class DebugScenarioRun {
 
     // 已完成任务已从集合释放，停止时仅取消本轮尚在队列中的效果。
     private void cleanup(ConversionRuntime runtime) {
-        tasks.forEach(task -> task.cancel(CancelReason.SCENARIO_STOP));
+        List.copyOf(tasks).forEach(task -> task.cancel(CancelReason.SCENARIO_STOP));
         tasks.clear();
         for (ItemEntity source : sources) {
             if (runtime != null) { runtime.onItemRemoved(level, source); }

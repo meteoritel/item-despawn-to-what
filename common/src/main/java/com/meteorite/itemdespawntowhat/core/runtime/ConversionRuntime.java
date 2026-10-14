@@ -6,6 +6,7 @@ import com.meteorite.itemdespawntowhat.core.debug.DebugScenarioManager;
 import com.meteorite.itemdespawntowhat.core.api.ConditionContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecutor;
+import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
@@ -704,37 +705,35 @@ public final class ConversionRuntime {
         }
     }
 
-    // 单效果执行：效果级条件 → 概率 → 执行器；回执原样交给结算层记账，异常被隔离并记失败
-    EffectResult runEffect(ServerLevel level, ItemEntity item, EffectContext base, Effect effect) {
+    // 条件与概率只在开始时判断一次，续接状态归本次效果任务独占。
+    EffectExecution startEffect(ServerLevel level, ItemEntity item, EffectContext base, Effect effect) {
         var conditions = effect.conditions();
         if (conditions != null && !conditions.isEmpty()) {
             ConditionContext context = conditionContext(level, item, BlockPos.containing(base.position()));
             if (!ExpressionEvaluator.matches(conditions, context, types.conditionTypes())) {
                 if (DebugMode.ENABLED) { DebugScenarioManager.observe(item, "EFFECT_CONDITION_SKIPPED", "effect", effect.type()); }
-                return EffectResult.skipped("conditions_unmet");
+                return budget -> EffectResult.skipped("conditions_unmet");
             }
         }
         if (effect.chance() < 1.0D && base.random().nextDouble() >= effect.chance()) {
             if (DebugMode.ENABLED) { DebugScenarioManager.observe(item, "EFFECT_CHANCE_SKIPPED", "effect", effect.type(), "chance", effect.chance()); }
             // 概率落空仍支付本组固定成本：不免费重试、不返还
-            return EffectResult.skipped("chance_missed");
+            return budget -> EffectResult.skipped("chance_missed");
         }
         EffectType<?> definition = types.effectTypes().getOrNull(effect.type());
         if (definition == null) {
             if (DebugMode.ENABLED) { DebugScenarioManager.observe(item, "ERROR", "effect", effect.type(), "reason", "type_not_registered"); }
             LOGGER.error("规则 {} 引用了未注册的效果类型 {}", base.ruleId(), effect.type());
-            return EffectResult.failed("type_not_registered");
+            return budget -> EffectResult.failed("type_not_registered");
         }
         try {
             if (DebugMode.ENABLED) { DebugScenarioManager.observe(item, "EFFECT_BEGIN", "effect", effect.type()); }
-            EffectResult result = executorOf(definition).execute(effect, base);
-            if (DebugMode.ENABLED) { DebugScenarioManager.observe(item, "EFFECT_EXECUTOR_RETURNED", "effect", effect.type(),
-                    "outcome", result == null ? "null" : result.outcome()); }
-            return result == null ? EffectResult.failed("no_result") : result;
+            EffectExecution execution = executorOf(definition).start(effect, base);
+            return execution == null ? budget -> EffectResult.failed("no_execution") : execution;
         } catch (RuntimeException e) {
             if (DebugMode.ENABLED) { DebugScenarioManager.observe(item, "ERROR", "effect", effect.type(), "error", e.toString()); }
             LOGGER.error("效果执行失败：规则={} 效果={} 位置={}", base.ruleId(), effect.type(), base.position(), e);
-            return EffectResult.failed(String.valueOf(e));
+            return budget -> EffectResult.failed(String.valueOf(e));
         }
     }
 

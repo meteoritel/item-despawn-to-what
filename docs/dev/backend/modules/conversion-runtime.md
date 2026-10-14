@@ -1,6 +1,6 @@
 # 功能模块：转化运行时（`core/runtime`）
 
-> 事实来源：`core/runtime/`（19 类）+ `core/state/`（3 类）；调度器实现 `core/runtime/scheduler/`（16 类）见 [scheduling-budget.md](../systems/scheduling-budget.md)，本文不复述其类清单。
+> 事实来源：`core/runtime/`（21 类）+ `core/state/`（3 类）；调度器实现 `core/runtime/scheduler/`（16 类）见 [scheduling-budget.md](../systems/scheduling-budget.md)，本文不复述其类清单。
 > 追踪、触发、条件求值、候选选择、完整组结算与返还、效果派发的引擎；**世界操作只在服务端主线程执行**。
 > 决策：[ADR-0023](../../../adr/0023-triggers-fixed-cost-and-complete-group-settlement.md)（完整组结算）、[ADR-0024](../../../adr/0024-shared-server-tick-budget-scheduler.md)（共享预算调度）。完整组结算、固定成本与候选择一的契约在 `ConversionSettlement` 与 `CatalystReservations` 的类注释中就地记录。
 
@@ -10,7 +10,9 @@
 |---|---|---|
 | `ConversionRuntime` | 总控：规则索引 + 维度级追踪 + 触发请求 + 排期/退避 + 结算派发 | `onItemAdded`、`requestEnvironmentalConversion`、`requestConversion`、`onServerTick`、`attempt`、`select`、`performConversion`、`deferNaturalExpiry`、`replaceRules`、`applySavedIndex`、`rescan`、`clear`、`shutdown`、`schedulerStats`、`budgetSnapshot` |
 | `ConversionSettlement` | 一次转化的结算任务（计划 → 派发 → 交付），固定成本、完整组、真实账目 | `step`、`plan`、`dispatch`、`deliver`、`abort`、`account`、`capacityGroups` |
-| `CatalystAllocation` | 催化剂共享库存分配 | 按逐引用需求求完整轮次；图构建与搜索可按 tick 预算续跑，输出逐轮支付清单；效果式消耗复用同一分配算法 |
+| `CatalystAllocation` | 催化剂共享库存分配 | 按逐引用需求求完整轮次；图构建与搜索可按 tick 预算续跑，输出逐轮支付清单；效果式消耗复用同一有预算分配算法 |
+| `CatalystPaymentExecution` | `consume_catalyst` 效果的跨 tick 付款状态 | 库存采集、共享库存分配、付款清单整理与支付前逐项计费均可续接；扣减前重读完整清单并确认实体仍存活、物品类型、数量和半径，整轮校验后同一主线程步骤内一次扣减 |
+| `EffectTask` | 单效果的预算任务 | 条件与概率仅在任务首次开始时判定；`EffectExecution.advance` 返回 null 表示续接，最终回执只记账一次；取消丢弃未完成效果，不重放世界操作 |
 | `CatalystReservations` | 运行期催化剂预留表（按维度 + 任务），预留 → 支付三态，不落盘 | `available`、`tryReserve`、`payGroup`、`releaseOwner`、`clear` |
 | `SettlementLedger` | 主世界 `SavedData` 结算账本（进行中 + 已完成记录，带上限裁剪） | `get`、`put`、`find`、`unsettled`、`pendingDeliveryTotal`、`prune` |
 | `SettlementRecord` | 单次结算记录：计划量、已开始组、真实完成量、返还交付进度；可持久化 | `plan`、`groupStarted`、`addProgress`、`delivered`、`syncPendingDelivery`、`complete`、`interrupt`、`needsRecovery`、`save`/`load` |
@@ -113,9 +115,11 @@ delay           = max(0, dueAge - entity.getAge())
 
 - `RuntimeEffectContext` **按转化组**构造（每组一个实例）：`rounds()` 恒为 1（一轮 = 一组），`coveredSourceItems()` 取本组固定源成本（`source_cost ≤ 0` 时按 1，`groupSourceCost` 为同一原值），`outcomeId` / `groupIndex` / `groupCount` 描述本组；`reportProgress(units)` 把"已受理"收敛为"已完成"；`safeSpawn()` / `fillOrigin()` / `positionSearchChecksPerTick()` 是候选级位置策略。
 - `schedule(delay, task)` 经公共调度器以 `EFFECT` 任务登记，经 `runWhenLoaded` 在目标区块未加载时 `schedule(20, task)` 重试，**不主动加载区块**。
-- `runEffect`：先判效果级 `conditions`（不成立 → `SKIPPED`），再判 `chance`（落空 → `SKIPPED`），类型未注册 → `FAILED`，否则调执行器；`RuntimeException` 被捕获记失败，不影响后续效果。结算层 `account()` 分类计数：`APPLIED` → `addApplied`，`DEFERRED` → `addApplied` + `addPending`，`SKIPPED` → `effectSkipped`，`FAILED` → `effectFailed`。
+- `EffectTask` 在单效果开始时判效果级 `conditions` 和 `chance`，只判一次；类型未注册 → `FAILED`。同步 `EffectExecutor` 经默认 `start` 保持兼容；长计算覆盖 `start` 返回按 `ServerTickBudget` 续接的 `EffectExecution`。预算耗尽只让出任务，不生成业务失败或材料不足回执。最终 `EffectResult` 由结算层 `account()` 分类计数：`APPLIED` → `addApplied`，`DEFERRED` → `addApplied` + `addPending`，`SKIPPED` → `effectSkipped`，`FAILED` → `effectFailed`。
 
 ## 7. 扩展点
+
+催化剂付款仍采用软预算：邻域查询、排序、数组准备及分配算法内部的单次整理操作不可抢占；最终清单复核与整轮扣减也不能跨 tick 拆开。预算续接限制连续搜索与清单整理的工作量，不保证每个原子步骤都小于时间预算。`consume_catalyst` 的直接同步执行入口返回 `budget_required` 失败回执，调用方应使用 `start` 并在公共调度器内推进执行状态。
 
 - **改排期/退避语义**：改 `ConversionRuntime.scheduleInitial` / `attempt` / `reschedule` 与 `ServerConfig.backoffTicks`。
 - **改规则选择排序**：改 `RuleIndex.RULE_ORDER` 比较键。

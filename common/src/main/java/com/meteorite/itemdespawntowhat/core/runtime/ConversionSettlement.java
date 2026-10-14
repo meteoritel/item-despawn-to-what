@@ -641,7 +641,8 @@ final class ConversionSettlement implements ServerTask {
             DebugScenarioManager.observe(source, "EFFECT_SCHEDULED", "effect", effect.type(),
                     "delay_ticks", delay, "chance", effect.chance(), "outcome", candidate.id());
         }
-        context.schedule(delay, () -> account(runtime.runEffect(level, source, context, effect)));
+        DebugScenarioManager.schedule(source, scheduler, level.dimension(),
+                level.getGameTime() + delay, new EffectTask(runtime, level, source, context, effect, this::account));
     }
 
     // 执行器回执入账：已完成、已受理未完成、跳过与失败分别计数，计划量不冒充成功量

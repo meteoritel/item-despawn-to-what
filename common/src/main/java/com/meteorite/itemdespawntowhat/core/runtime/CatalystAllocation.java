@@ -39,6 +39,12 @@ public final class CatalystAllocation {
     private int edgeCursor;
     private boolean searching;
     private boolean building = true;
+    private int paymentReference;
+    private java.util.Iterator<Map.Entry<Integer, Integer>> paymentPicks;
+    private int paymentNeeded;
+    private final Map<Integer, Integer> combinedPayment = new LinkedHashMap<>();
+    private java.util.Iterator<Map.Entry<Integer, Integer>> outputPicks;
+    private final List<CatalystReservations.Hold> paymentOutput = new ArrayList<>();
 
     // 构造分配器：available 为各实体当前可用件数，maximumGroups 为待判定的组数上界
     CatalystAllocation(CatalystCost cost, List<ItemEntity> items, int[] available, int maximumGroups) {
@@ -69,18 +75,6 @@ public final class CatalystAllocation {
         return low;
     }
 
-    // 效果式消耗按单轮同步执行，复用相同的共享库存分配，避免重叠标签的贪心误判。
-    public static Map<ItemEntity, Integer> payment(CatalystCost cost, List<ItemEntity> items, int rounds) {
-        int[] available = items.stream().mapToInt(item -> item.getItem().getCount()).toArray();
-        CatalystAllocation allocation = new CatalystAllocation(cost, items, available, rounds);
-        while (allocation.low < allocation.high) allocation.step();
-        if (allocation.groups() < rounds) return Map.of();
-        Map<ItemEntity, Integer> payment = new LinkedHashMap<>();
-        for (var reference : allocation.best) reference.forEach((index, amount) ->
-                payment.merge(items.get(index), amount, Integer::sum));
-        return payment;
-    }
-
     // 分配成功的总量拆成逐轮支付计划；同一实体命中多个引用时在同一轮合并扣除。
     List<List<CatalystReservations.Hold>> paymentGroups(int count) {
         List<Map<Integer, Integer>> remaining = best.stream()
@@ -104,6 +98,37 @@ public final class CatalystAllocation {
             result.add(List.copyOf(holds));
         }
         return result;
+    }
+
+    // 效果式消耗按预算整理合并付款清单，预算不足时保留游标，不能被解释为库存不足。
+    List<CatalystReservations.Hold> totalPayment(int rounds, ServerTickBudget budget) {
+        while (paymentReference < references.size()) {
+            if (paymentPicks == null) {
+                paymentNeeded = cost.countFor(references.get(paymentReference)) * rounds;
+                paymentPicks = best.get(paymentReference).entrySet().iterator();
+            }
+            while (paymentNeeded > 0 && paymentPicks.hasNext()) {
+                if (budget.exhausted()) return null;
+                budget.charge(1);
+                Map.Entry<Integer, Integer> pick = paymentPicks.next();
+                int take = Math.min(paymentNeeded, pick.getValue());
+                if (take > 0) combinedPayment.merge(pick.getKey(), take, Integer::sum);
+                paymentNeeded -= take;
+            }
+            if (paymentNeeded > 0) throw new IllegalStateException("催化剂分配结果不足完整付款计划");
+            paymentPicks = null;
+            paymentReference++;
+        }
+        if (outputPicks == null) outputPicks = combinedPayment.entrySet().iterator();
+        while (outputPicks.hasNext()) {
+            if (budget.exhausted()) return null;
+            budget.charge(1);
+            Map.Entry<Integer, Integer> payment = outputPicks.next();
+            int index = payment.getKey();
+            paymentOutput.add(new CatalystReservations.Hold(items.get(index).getUUID(), payment.getValue(),
+                    stacks.get(index).getItem()));
+        }
+        return List.copyOf(paymentOutput);
     }
 
     private void resetAttempt() {

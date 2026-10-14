@@ -8,6 +8,10 @@ import com.meteorite.itemdespawntowhat.core.runtime.scheduler.RunnableTask;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ScheduledTask;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerScheduler;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTaskKind;
+import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTask;
+import com.meteorite.itemdespawntowhat.core.runtime.scheduler.CancelReason;
+import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTickBudget;
+import com.meteorite.itemdespawntowhat.core.runtime.scheduler.StepResult;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -173,6 +177,48 @@ public final class DebugScenarioManager {
         }), dueTick);
         binding.run.tasks.add(holder[0]);
         return holder[0];
+    }
+
+    /**
+     * 调试场景下登记可续接任务；任务终态时自动移除句柄，避免场景停止重复取消已完成任务。
+     * @param source 场景源实体
+     * @param scheduler 公共调度器
+     * @param realmKey 维度标识
+     * @param dueTick 到期刻
+     * @param task 可续接服务端任务
+     * @return 已登记句柄
+     */
+    public static ScheduledTask schedule(ItemEntity source, ServerScheduler scheduler, Object realmKey,
+                                         long dueTick, ServerTask task) {
+        Binding binding = DebugMode.ENABLED ? ENTITIES.get(source.getUUID()) : null;
+        if (binding == null || !binding.source) {
+            return scheduler.scheduleAt(realmKey, task, dueTick);
+        }
+        ScheduledTask[] holder = new ScheduledTask[1];
+        holder[0] = scheduler.scheduleAt(realmKey, new TrackedTask(task, binding.run, holder), dueTick);
+        binding.run.tasks.add(holder[0]);
+        return holder[0];
+    }
+
+    private record TrackedTask(ServerTask delegate, DebugScenarioRun run, ScheduledTask[] holder) implements ServerTask {
+
+        @Override public ServerTaskKind kind() { return delegate.kind(); }
+        @Override public String tracingName() { return delegate.tracingName(); }
+        @Override public StepResult step(ServerTickBudget budget) {
+            return delegate.step(budget);
+        }
+        @Override public void onCancelled(CancelReason reason) {
+            try { delegate.onCancelled(reason); }
+            finally { run.tasks.remove(holder[0]); }
+        }
+        @Override public void onFailed(Throwable failure) {
+            try { delegate.onFailed(failure); }
+            finally { run.tasks.remove(holder[0]); }
+        }
+        @Override public void onReleased() {
+            try { delegate.onReleased(); }
+            finally { run.tasks.remove(holder[0]); }
+        }
     }
 
     // 产物加入前隔离它的规则和合并行为，避免测试产物触发用户的其他规则。

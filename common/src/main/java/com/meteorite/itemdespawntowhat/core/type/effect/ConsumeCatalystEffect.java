@@ -10,6 +10,10 @@ import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleEffectType;
 import com.meteorite.itemdespawntowhat.core.api.RefChecks;
+import com.meteorite.itemdespawntowhat.core.api.EffectExecutor;
+import com.meteorite.itemdespawntowhat.core.api.EffectContext;
+import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
+import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.type.effect.exec.ConsumeCatalystExecutor;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
@@ -79,7 +83,18 @@ public record ConsumeCatalystEffect(
 
     // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器
     public static EffectType<ConsumeCatalystEffect> effectType(Codec<ConditionExpression> expressionCodec) {
-        return new SimpleEffectType<>(ID, codec(expressionCodec), ConsumeCatalystEffect::validateParams, ConsumeCatalystExecutor::execute);
+        EffectExecutor<ConsumeCatalystEffect> executor = new EffectExecutor<>() {
+            @Override
+            public EffectResult execute(ConsumeCatalystEffect effect, EffectContext context) {
+                return ConsumeCatalystExecutor.execute(effect, context);
+            }
+
+            @Override
+            public EffectExecution start(ConsumeCatalystEffect effect, EffectContext context) {
+                return ConsumeCatalystExecutor.start(effect, context);
+            }
+        };
+        return new SimpleEffectType<>(ID, codec(expressionCodec), ConsumeCatalystEffect::validateParams, executor);
     }
 
     // 参数语义校验；问题写入 issues，不抛异常
