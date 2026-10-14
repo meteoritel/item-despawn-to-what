@@ -2,9 +2,8 @@ package com.meteorite.itemdespawntowhat.core.load;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParseException;
-import com.google.gson.JsonParser;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
+import com.meteorite.itemdespawntowhat.core.api.RuleDecodeBudget;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
@@ -17,7 +16,7 @@ import java.util.Set;
 /**
  * 规则文件解析：把一份 JSON 文本转换为原始条目列表。
  * 支持"单条规则对象"与"规则数组"两种文件形状；id 优先取字段，缺省由文件路径推导为 &lt;ns&gt;:&lt;相对路径去扩展名&gt;。
- * 统一严格策略：整个文件解析失败（非法 JSON / 顶层类型错误）→ 整文件拒载；
+ * 统一严格策略：整个文件解析失败（非法 JSON / 嵌套深度超限 / 顶层类型错误）→ 整文件拒载；
  * 单条语义非法（id 非法、控制字段非法、同文件 id 重复等）→ 仅该条拒载，其余照常。
  */
 public final class RuleFileParser {
@@ -33,13 +32,13 @@ public final class RuleFileParser {
                                            RuleOrigin origin,
                                            @Nullable ResourceLocation derivedId,
                                            IssueCollector issues) {
-        JsonElement root;
-        try {
-            root = JsonParser.parseString(json);
-        } catch (JsonParseException | IllegalStateException e) {
-            issues.error("JSON 解析失败: " + e.getMessage(), origin.display(), "");
+        RuleDecodeBudget.ParseResult parsed = RuleDecodeBudget.parse(json);
+        if (!parsed.ok()) {
+            // 统一走有界解析入口：嵌套超深与语法非法都只报结构化议题，不让解析期错误向上逃逸
+            issues.error("JSON 解析失败: " + parsed.failureReason(), origin.display(), "");
             return List.of();
         }
+        JsonElement root = parsed.element();
         if (root == null || root.isJsonNull()) {
             issues.error("规则文件为空", origin.display(), "");
             return List.of();

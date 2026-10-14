@@ -76,8 +76,9 @@ public final class RuleLoader {
             var result = decoder.decode(decodeBody(entry), local);
             result.error().ifPresent(error -> local.error(error.message(), null, null));
             decoded = result.result();
-        } catch (RuntimeException e) {
-            // 完整堆栈进日志，Issue 里保留类名与首个栈帧，避免异常被折叠成不可定位的字符串
+        } catch (RuntimeException | StackOverflowError e) {
+            // 完整堆栈进日志，Issue 里保留类名与首个栈帧，避免异常被折叠成不可定位的字符串；
+            // 栈溢出属于 Error，不捕获会直接击穿整次加载，因此与运行时异常同样降级为拒载该条
             LOGGER.error("解码规则 {} 时发生异常，来源: {}", entry.id(), entry.origin().display(), e);
             local.error("解码规则时发生异常: " + describe(e), null, null);
             decoded = Optional.empty();
@@ -86,8 +87,8 @@ public final class RuleLoader {
         return decoded;
     }
 
-    // 异常摘要：异常类名 + 首个栈帧
-    private static String describe(RuntimeException e) {
+    // 异常摘要：异常类名 + 首个栈帧（同时覆盖 Error 级失败）
+    private static String describe(Throwable e) {
         StackTraceElement[] frames = e.getStackTrace();
         String frame = frames.length == 0 ? "<无栈帧>" : frames[0].toString();
         return e.getClass().getName() + " @ " + frame;
