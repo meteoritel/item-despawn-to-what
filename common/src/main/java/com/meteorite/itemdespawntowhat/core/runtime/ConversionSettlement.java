@@ -1,6 +1,5 @@
 package com.meteorite.itemdespawntowhat.core.runtime;
 
-import com.google.gson.JsonElement;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
@@ -10,7 +9,6 @@ import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.OutcomeCandidate;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
-import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.CancelReason;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerScheduler;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
@@ -18,19 +16,16 @@ import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.StepResult;
 import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
+import com.meteorite.itemdespawntowhat.core.type.TaggedItemMatch;
 import com.meteorite.itemdespawntowhat.core.type.effect.SpawnEntityEffect;
 import com.meteorite.itemdespawntowhat.core.type.effect.EntityProduct;
 import com.meteorite.itemdespawntowhat.core.config.NearbyProductLimits;
 import com.meteorite.itemdespawntowhat.core.type.effect.exec.EffectTargets;
 import com.meteorite.itemdespawntowhat.core.type.effect.exec.SpawnXpExecutor;
 import com.meteorite.itemdespawntowhat.core.type.effect.exec.ReturnItemSpawner;
-import com.mojang.serialization.Codec;
-import com.mojang.serialization.DynamicOps;
-import com.mojang.serialization.JsonOps;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.RegistryOps;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.Entity;
@@ -43,9 +38,6 @@ import net.minecraft.world.phys.Vec3;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -148,7 +140,8 @@ final class ConversionSettlement implements ServerTask {
         this.ledger = ledger;
         this.cursors = RoundRobinCursors.get(level);
         this.candidates = rule.effectiveOutcomes();
-        this.structureVersion = structureVersion(candidates);
+        // 候选结构摘要按规则实例缓存，结构未变时不重算；失效条件见 ConversionRuntime
+        this.structureVersion = runtime.candidateStructureVersion(rule, level.registryAccess());
         this.rotation = rule.combination() == CombinationMode.ROUND_ROBIN && candidates.size() > 1;
         this.remainingCapacity = new int[candidates.size()];
         Arrays.fill(this.remainingCapacity, CAPACITY_UNKNOWN);
@@ -405,8 +398,9 @@ final class ConversionSettlement implements ServerTask {
     // 距离相同时按 UUID 兜底，保证与实体遍历顺序无关
     private List<ItemEntity> collectCatalystItems(CatalystCost catalyst) {
         AABB box = EffectTargets.blockBox(source.blockPosition(), catalyst.radius());
+        TaggedItemMatch target = TaggedItemMatch.compileAll(catalyst.items());
         List<ItemEntity> found = level.getEntitiesOfClass(ItemEntity.class, box,
-                item -> item != source && !item.isRemoved() && EffectTargets.matchesAny(catalyst.items(), item.getItem()));
+                item -> item != source && !item.isRemoved() && target.matches(item.getItem()));
         found.sort(Comparator.comparingDouble((ItemEntity item) -> item.position().distanceToSqr(source.position()))
                 .thenComparing((ItemEntity item) -> item.getUUID().toString()));
         return found;
@@ -713,45 +707,17 @@ final class ConversionSettlement implements ServerTask {
         return rule.id() + "@" + level.dimension().location();
     }
 
-    // 候选结构版本：把候选（id、安全生成/起点填充标记、效果顺序与全部参数）用规则编解码器编码成稳定 JSON 文本，
-    // 再取 SHA-256 前 8 字节。硬约束：不得使用对象哈希——record 的 hashCode 会逐层展开组件，而枚举组件用的是
-    // Object 身份哈希（值不受内容约束，随 JVM、哈希模式与分配状态变化），重启后可能被判为新结构而让游标归零。
-    private int structureVersion(List<OutcomeCandidate> candidates) {
-        Codec<List<OutcomeCandidate>> codec = OutcomeCandidate.codec(RuleCodecs.effectCodec(runtime.types().effectTypes())).listOf();
-        DynamicOps<JsonElement> ops = RegistryOps.create(JsonOps.INSTANCE, level.registryAccess());
-        JsonElement json = codec.encodeStart(ops, candidates)
-                .resultOrPartial(reason -> LOGGER.warn("候选结构摘要编码失败，轮询游标将重置：规则={} 原因={}", rule.id(), reason))
-                .orElse(null);
-        if (json == null) {
-            return 0;
-        }
-        return digestVersion(json.toString());
-    }
-
-    // 内容摘要：同一文本必然同值、文本变化必然变值（SHA-256 前 8 字节碰撞概率可忽略），与任何对象身份无关
-    private static int digestVersion(String text) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8));
-            int version = 0;
-            for (int i = 0; i < 8; i++) {
-                version = (version << 8) | (digest[i] & 0xFF);
-            }
-            return version;
-        } catch (NoSuchAlgorithmException impossible) {
-            // 所有 JVM 都必须提供 SHA-256；真缺失时退回字符串内容哈希，仍与对象身份无关
-            return text.hashCode();
-        }
-    }
-
-    // 邻近物品总量：与实体产出掉落物子类同一判定（具体物品比注册表对象，标签比 TagKey）。
+    // 邻近物品总量：与实体产出掉落物子类同一判定（具体物品比注册表对象，标签比 TagKey），
+    // 匹配器按引用编译一次后逐实体复用，不在查询谓词里重复创建 TagKey。
     // 计数口径与 countNearbyEntities 一致：谓词只筛选实体，收集条数由查询的 maxResults 限制，
     // 数量来自结果列表；物品按堆叠数逐条累加（空堆叠不命中，因此收满 limit 条时总量必然 >= limit，
     // 此时 room 已经归零，不会高估可开组数）。
     private int countNearbyItems(TaggedId reference, int limit, int radius) {
         AABB box = searchBox(radius);
+        TaggedItemMatch target = TaggedItemMatch.compile(reference);
         List<ItemEntity> nearby = new ArrayList<>();
         level.getEntities(EntityTypeTest.forClass(ItemEntity.class), box,
-                item -> item.isAlive() && matchesItem(reference, item.getItem()), nearby, limit);
+                item -> item.isAlive() && !item.getItem().isEmpty() && target.matches(item.getItem()), nearby, limit);
         int total = 0;
         for (ItemEntity item : nearby) {
             total = saturatedAdd(total, item.getItem().getCount());
@@ -785,17 +751,6 @@ final class ConversionSettlement implements ServerTask {
         Vec3 position = source.position();
         return AABB.unitCubeFromLowerCorner(Vec3.atLowerCornerOf(BlockPos.containing(position.x, position.y, position.z)))
                 .inflate(radius);
-    }
-
-    private static boolean matchesItem(TaggedId reference, ItemStack stack) {
-        if (reference == null || stack.isEmpty()) {
-            return false;
-        }
-        if (reference.tag()) {
-            return stack.is(TagKey.create(Registries.ITEM, reference.id()));
-        }
-        return BuiltInRegistries.ITEM.containsKey(reference.id())
-                && stack.is(BuiltInRegistries.ITEM.get(reference.id()));
     }
 
     private static boolean matchesEntityType(TaggedId reference, Entity entity) {
