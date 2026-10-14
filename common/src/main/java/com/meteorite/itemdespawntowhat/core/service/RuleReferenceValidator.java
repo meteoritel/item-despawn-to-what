@@ -1,22 +1,24 @@
 package com.meteorite.itemdespawntowhat.core.service;
 
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
+import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import com.meteorite.itemdespawntowhat.core.extension.DynamicReferenceCheck;
+import com.meteorite.itemdespawntowhat.core.extension.DynamicReferenceContext;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionTrees;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
-import com.meteorite.itemdespawntowhat.core.api.RefChecks;
-import com.meteorite.itemdespawntowhat.core.type.condition.BiomeCondition;
-import com.meteorite.itemdespawntowhat.core.type.condition.DimensionCondition;
-import com.meteorite.itemdespawntowhat.core.type.effect.LootTableEffect;
-import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Objects;
 
-/** 服务端动态引用校验：使用当前维度、群系注册表和真正加载成功的战利品表。 */
+/**
+ * 服务端动态引用校验：只负责遍历规则中的条件树与效果清单，并把每一项交给类型自带的动态引用扩展点
+ * （见 {@link DynamicReferenceCheck}），议题由统一收集通道汇总。
+ * 本类不感知任何具体效果或条件类型，第三方类型实现扩展点即可获得同等校验。
+ */
 public final class RuleReferenceValidator {
     private RuleReferenceValidator() {}
 
@@ -40,37 +42,29 @@ public final class RuleReferenceValidator {
         return issues.errors().size() == before;
     }
 
-    // 单个效果的动态引用校验：战利品表必须真实加载成功，效果级条件沿树递归展开
+    // 单个效果：先交给效果自身的动态引用扩展点，再沿效果级条件树逐叶展开
     private static void validateEffectReferences(Effect effect, MinecraftServer server, IssueCollector issues,
                                                  String origin, String path) {
-        if (effect instanceof LootTableEffect loot && server.reloadableRegistries().lookup()
-                .lookup(Registries.LOOT_TABLE).flatMap(tables -> tables.get(ResourceKey.create(Registries.LOOT_TABLE, loot.lootTable()))).isEmpty()) {
-            issues.error("未找到已加载的战利品表: " + loot.lootTable(), origin, path + ".loot_table");
-        }
+        checkDynamicReferences(effect, server, issues, origin, path);
         var conditions = effect.conditions();
-        if (conditions != null) { validateConditions(conditions, server, issues, origin, path + ".conditions"); }
+        if (conditions != null) {
+            validateConditions(conditions, server, issues, origin, ParamChecks.child(path, RuleFields.CONDITIONS));
+        }
     }
 
     // 沿条件树逐叶做动态引用校验：路径与 JSON 形状一致（如 conditions.terms[0].condition.dimensions）
     private static void validateConditions(ConditionExpression expression, MinecraftServer server,
                                            IssueCollector issues, String origin, String path) {
-        ConditionTrees.forEachLeaf(expression.root(), path, (field, leaf) -> {
-            if (leaf == null) {
-                return;
-            }
-            if (leaf instanceof DimensionCondition dimension) {
-                for (var id : dimension.dimensions()) {
-                    if (!server.levelKeys().contains(ResourceKey.create(Registries.DIMENSION, id))) {
-                        issues.error("未知维度: " + id, origin, field + ".dimensions");
-                    }
-                }
-            } else if (leaf instanceof BiomeCondition biome && biome.mode() == BiomeCondition.Mode.EXACT) {
-                IssueCollector local = new IssueCollector();
-                RefChecks.checkAll(biome.biomes(), server.registryAccess().registryOrThrow(Registries.BIOME),
-                        "biomes", local, field + ".biomes");
-                local.issues().forEach(issue -> issues.add(new com.meteorite.itemdespawntowhat.core.api.Issue(
-                        issue.severity(), issue.message(), origin, issue.fieldPath())));
-            }
-        });
+        ConditionTrees.forEachLeaf(expression.root(), path, (field, leaf) ->
+                checkDynamicReferences(leaf, server, issues, origin, field));
+    }
+
+    // 扩展点分派：效果与条件叶共用同一契约，未实现该契约（含 null）的类型视为无动态引用
+    private static void checkDynamicReferences(@Nullable Object target, MinecraftServer server,
+                                               IssueCollector issues, String origin, String fieldPath) {
+        if (target instanceof DynamicReferenceCheck check) {
+            check.checkDynamicReferences(
+                    new DynamicReferenceContext(server, issues.originScoped(origin), fieldPath));
+        }
     }
 }
