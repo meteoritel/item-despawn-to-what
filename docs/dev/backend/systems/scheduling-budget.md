@@ -40,7 +40,7 @@ usedWorkUnits >= maxWorkUnitsPerTick        # 全局工作量上限
 或 System.nanoTime() >= deadline            # deadline = started + serverBudgetNanos
 ```
 
-- 时间预算 `serverBudgetNanos` = `server_budget_us × 1000`（默认 2000us = **2ms 软预算**）。
+- 时间预算 `serverBudgetNanos` = `server_budget_us × 1000`（默认 10000us = **10ms 软预算**）。
 - 工作量上限 `maxWorkUnitsPerTick` = `effectiveMaxWorkUnitsPerTick()`（`max_work_units_per_tick`，缺省回退 `max_checks_per_tick`，默认 **512**）。
 - 两者**任一耗尽** `exhausted()` 即为真；调用方必须在**每个任务之间**检查。
 - **扣费口径**：每次 `step` 后 `charge(result.workUnits())`；到期搬运固定 `chargeDrain()` = 1 个工作量并单独计数；`ConversionSettlement` 在容量 / 催化剂查询处还会额外 `charge`（例如每次世界查询 `CAPACITY_QUERY_UNITS = 2`）。超额度时截断，绝不越过本 tick 上限。

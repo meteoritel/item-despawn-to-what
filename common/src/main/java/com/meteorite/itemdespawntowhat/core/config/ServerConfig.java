@@ -53,8 +53,8 @@ public record ServerConfig(
     public static final int DEFAULT_FABRIC_LIFESPAN_FALLBACK_TICKS = 6000;
     public static final boolean DEFAULT_DEBUG_LOGGING = false;
 
-    // 公共调度预算默认值：2 ms 软预算、512 全局工作量、效果类 64、平滑窗口 20 tick、每 lane 每 tick 最多搬运 64
-    public static final int DEFAULT_SERVER_BUDGET_US = 2000;
+    // 公共调度预算默认值：10 ms 软预算、512 全局工作量、效果类 64、平滑窗口 20 tick、每 lane 每 tick 最多搬运 64
+    public static final int DEFAULT_SERVER_BUDGET_US = 10_000;
     @SuppressWarnings("unused")
     public static final int DEFAULT_MAX_WORK_UNITS_PER_TICK = 512;
     public static final int DEFAULT_EFFECTS_WORK_UNITS_PER_TICK = 64;

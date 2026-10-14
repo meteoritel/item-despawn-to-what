@@ -25,7 +25,7 @@ Codec 用 `optionalFieldOf`：**未知键忽略、缺失键取默认**。因此�
 | `overlay_directory` | `overlayDirectory` | string | `"itemdespawntowhat"` | — | 规则覆盖层目录名（相对 `config/`） |
 | `fabric_lifespan_fallback_ticks` | `fabricLifespanFallbackTicks` | int | 6000 | 1..72000 | Fabric 端 lifespan 兜底（NeoForge 读实体当前 `lifespan`） |
 | `debug_logging` | `debugLogging` | bool | false | — | 常规运行日志开关；开发场景由加载器 development 环境启用，**不依赖此项** |
-| `server_budget_us` | `serverBudgetUs` | int | 2000 | 100..100000 | 每 tick 服务器**共享**软时间预算（微秒，默认 2ms） |
+| `server_budget_us` | `serverBudgetUs` | int | 10000 | 100..100000 | 每 tick 服务器**共享**软时间预算（微秒，默认 10ms） |
 | `max_work_units_per_tick` | `maxWorkUnitsPerTick` | int（可选） | 缺失（回退 512） | 1..100000 | 全局每 tick 工作量上限；**缺省为空**表示回退 `max_checks_per_tick` |
 | `effects_work_units_per_tick` | `effectsWorkUnitsPerTick` | int | 64 | 1..100000 | 效果类每 tick 工作量单独限额（不饿死条件检查） |
 | `check_spread_window_ticks` | `checkSpreadWindowTicks` | int | 20 | 1..1200 | 到期检查的平滑窗口（tick） |
