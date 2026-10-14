@@ -59,7 +59,7 @@ RequestRuleCatalogPayload (C2S) → owns + isOwner 校验（失效 → SESSION_E
   → finishApply → 回执；VERSION_CONFLICT/SAVED_NOT_RELOADED 的最新快照另行排队
 ```
 
-每步条数与软时间预算见[编辑协议](../modules/edit-protocol.md) §4。保存可以跨多个 tick；同一在途操作只运行一次，文件后台队列全进程串行。会话失效取消尚未提交的写入；已发布索引的清理必须完成。数据包重载等待文件工作结束后执行。
+每步条数与软时间预算见[编辑协议](../modules/edit-protocol.md) §4。保存可以跨多个 tick；同一在途操作只运行一次，文件后台队列全进程串行。取消请求在提交确认前使后台回滚；主线程只传递原子信号。APPLYING 不因租约到期释放，关闭／强制释放在保存收尾后生效；已发布索引的清理必须完成。数据包重载等待文件工作结束后执行。
 
 
 *分片：`RuleEditChunkAccumulator` 按 `transferId` 重组，收齐后复用同一 `handleChangeSet`；未收齐不回执，超过总量上限回 `INVALID_REQUEST`。
@@ -73,6 +73,7 @@ RequestRuleCatalogPayload (C2S) → owns + isOwner 校验（失效 → SESSION_E
 | 权威落盘 | 依据**磁盘文件内容**逐 id 增删改，保留未编辑条目/未知字段；控制条目、未涉及规则、坏 JSON 都不会被保存动作删除 |
 | 整批语义 | 全部预备成功才逐个原子替换；任一失败逆序回滚；`writtenFiles==0` 或 `conflicts` 非空不算成功 |
 | 会话隔离 | **全局目标级独占会话**（`TARGET_ID = itemdespawntowhat:rules`，OPENING 15 s / 心跳 10 s / 租约 60 s）；同一目标同一时刻只允许一个会话写，修订号用于乐观校验 |
+| 保存进度 | 客户端立即显示保存模态，服务端节流下发对应操作的阶段计数；取消不关闭界面，回滚完成前独占锁仍保持 |
 | 幂等 | 同一 `operationId` 回放上次回执，不重复写盘 |
 | 路径安全 | 拒绝 `.`/`..` 越界与符号链接 |
 

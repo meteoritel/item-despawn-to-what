@@ -9,6 +9,7 @@ import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.load.RulePaths;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEdit;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEditChangeSet;
+import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveProgress;
 import net.minecraft.resources.ResourceLocation;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -23,7 +24,13 @@ import java.util.stream.Stream;
 /** 覆盖层逐 id 写入：保留未编辑 JSON，整批预备、备份、提交；失败时回滚已经写入的文件。 */
 public final class RuleOverlayWriter {
     /** 写入结果；零文件或存在冲突均不能解释为保存成功。 */
-    public record ApplyResult(int writtenFiles, List<String> conflicts) {
+    public record ApplyResult(int writtenFiles, List<String> conflicts, boolean rollbackFailed) {
+        /**
+         * 构造没有回滚失败的写入结果。
+         * @param writtenFiles 写入文件数
+         * @param conflicts 冲突说明
+         */
+        public ApplyResult(int writtenFiles, List<String> conflicts) { this(writtenFiles, conflicts, false); }
         public ApplyResult { conflicts = List.copyOf(conflicts); }
     }
     /** 文件原始形状与完整条目，非对象条目也必须原样保留。 */
@@ -72,6 +79,24 @@ public final class RuleOverlayWriter {
     public ApplyResult apply(RuleEditChangeSet changes, IssueCollector issues,
                              java.util.function.BooleanSupplier active,
                              java.util.function.BooleanSupplier revisionMatches) {
+        return apply(changes, issues, active, revisionMatches, () -> true, progress -> {});
+    }
+
+    /**
+     * 带进度与原子提交确认的整批写入；取消与提交确认竞争，失败回滚由本调用线程独占执行。
+     * @param changes 本批编辑
+     * @param issues 本批问题
+     * @param active 请求是否仍有效
+     * @param revisionMatches 提交前目录修订核对
+     * @param confirmCommit 原子确认提交；返回 false 时回滚整批
+     * @param progress 接收不可变进度样本，不得访问世界
+     * @return 写入结果及回滚失败标记
+     */
+    public ApplyResult apply(RuleEditChangeSet changes, IssueCollector issues,
+                             java.util.function.BooleanSupplier active,
+                             java.util.function.BooleanSupplier revisionMatches,
+                             java.util.function.BooleanSupplier confirmCommit,
+                             java.util.function.Consumer<RuleSaveProgress> progress) {
         Map<Path, RuleFile> files = new LinkedHashMap<>();
         Set<Path> dirty = new LinkedHashSet<>();
         List<String> conflicts = new ArrayList<>();
@@ -81,8 +106,11 @@ public final class RuleOverlayWriter {
             load(files);
             Map<ResourceLocation, List<Location>> locations = index(files.values());
             Set<ResourceLocation> seen = new HashSet<>();
+            int processed = 0;
             for (RuleEdit change : changes.edits()) {
                 requireActive(active);
+                progress.accept(new RuleSaveProgress(RuleSaveProgress.Stage.PREPARING_FILES, processed++,
+                        changes.edits().size(), change.id().toString(), true));
                 if (!seen.add(change.id())) { throw new IOException("重复编辑规则: " + change.id()); }
                 Path target = target(change.id());
                 Location location = locate(locations, change.id());
@@ -122,10 +150,10 @@ public final class RuleOverlayWriter {
             }
             requireActive(active);
             if (!revisionMatches.getAsBoolean()) { throw new IOException("准备保存时覆盖层修订已变化"); }
-            commit(dirty.stream().map(files::get).toList(), active);
+            commit(dirty.stream().map(files::get).toList(), active, confirmCommit, progress);
             return new ApplyResult(dirty.size(), List.of());
         } catch (IOException | RuntimeException failure) {
-            if (active.getAsBoolean()) {
+            if (active.getAsBoolean() || failure.getSuppressed().length > 0) {
                 org.apache.logging.log4j.LogManager.getLogger().error("覆盖层整批保存失败", failure);
             } else {
                 org.apache.logging.log4j.LogManager.getLogger().debug("覆盖层保存已取消并结束回滚", failure);
@@ -134,7 +162,7 @@ public final class RuleOverlayWriter {
             if (failure.getSuppressed().length > 0) { message += "；部分文件回滚失败，请用 .bak 恢复并检查日志"; }
             issues.error(message, root.toString(), null);
             conflicts.add(message);
-            return new ApplyResult(0, conflicts);
+            return new ApplyResult(0, conflicts, failure.getSuppressed().length > 0);
         }
     }
 
@@ -233,7 +261,9 @@ public final class RuleOverlayWriter {
         if (!active.getAsBoolean()) { throw new IOException("保存请求已失效"); }
     }
 
-    private static void commit(List<RuleFile> files, java.util.function.BooleanSupplier active) throws IOException {
+    private void commit(List<RuleFile> files, java.util.function.BooleanSupplier active,
+                        java.util.function.BooleanSupplier confirmCommit,
+                        java.util.function.Consumer<RuleSaveProgress> progress) throws IOException {
         Map<RuleFile, Path> temporary = new LinkedHashMap<>();
         List<RuleFile> committed = new ArrayList<>();
         try {
@@ -253,14 +283,21 @@ public final class RuleOverlayWriter {
             }
             for (RuleFile file : files) {
                 requireActive(active);
+                progress.accept(new RuleSaveProgress(RuleSaveProgress.Stage.WRITING, committed.size(), files.size(),
+                        root.relativize(file.path).toString(), true));
                 verifyUnchanged(file);
                 move(temporary.get(file), file.path);
                 committed.add(file);
             }
             requireActive(active);
-        } catch (IOException failure) {
+            // 唯一提交确认点；主线程取消只做 CAS，绝不与本线程并发恢复文件。
+            if (!confirmCommit.getAsBoolean()) { throw new IOException("保存已取消，回滚整批文件"); }
+        } catch (IOException | RuntimeException failure) {
             Collections.reverse(committed);
+            int restored = 0;
             for (RuleFile file : committed) {
+                progress.accept(new RuleSaveProgress(RuleSaveProgress.Stage.ROLLING_BACK, restored++, committed.size(),
+                        root.relativize(file.path).toString(), false));
                 try {
                     if (file.original == null) { Files.deleteIfExists(file.path); }
                     else {
@@ -268,7 +305,7 @@ public final class RuleOverlayWriter {
                         try { Files.write(restore, file.original); move(restore, file.path); }
                         finally { Files.deleteIfExists(restore); }
                     }
-                } catch (IOException rollbackFailure) { failure.addSuppressed(rollbackFailure); }
+                } catch (IOException | RuntimeException rollbackFailure) { failure.addSuppressed(rollbackFailure); }
             }
             throw failure;
         } finally {

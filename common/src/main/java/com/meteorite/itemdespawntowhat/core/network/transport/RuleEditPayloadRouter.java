@@ -106,6 +106,23 @@ public final class RuleEditPayloadRouter {
         dispatchResult(payload.statusCode());
     }
 
+    private static volatile Consumer<RuleSaveProgressPayload> progressSink;
+
+    /**
+     * 安装客户端保存进度消费者；服务端不安装消费者。
+     * @param sink 保存进度消费者
+     */
+    public static void installProgressSink(Consumer<RuleSaveProgressPayload> sink) { progressSink = sink; }
+
+    /**
+     * 分发不可变保存进度样本。
+     * @param payload 服务端进度
+     */
+    public static void dispatchProgress(RuleSaveProgressPayload payload) {
+        Consumer<RuleSaveProgressPayload> sink = progressSink;
+        if (sink != null) { sink.accept(payload); }
+    }
+
     private static volatile Consumer<RuleLifespanPayload> lifespanSink;
 
     /**

@@ -3,6 +3,8 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDescriptors;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
+import com.meteorite.itemdespawntowhat.client.net.RuleEditClientState;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
@@ -91,6 +93,22 @@ public final class RuleEditorScreen extends Screen {
     private final RuleEditorModel model;
     private final UiFocusManager focus = new UiFocusManager();
     private final UiModalStack modals = new UiModalStack(THEME);
+    private @Nullable RuleSaveOverlay saveOverlay;
+
+    private boolean saving() { return workspace.state() == RuleEditClientState.APPLYING; }
+
+    private RuleSaveOverlay saveOverlay() {
+        if (saveOverlay == null) {
+            listPage.onScopeChanged();
+            editPage.endInteractions();
+            focus.clearFocus();
+            saveOverlay = new RuleSaveOverlay(font, THEME, workspace);
+        }
+        return saveOverlay;
+    }
+
+    /** @return 保存期间禁止 Esc 关闭；断线收尾由工作区控制 */
+    @Override public boolean shouldCloseOnEsc() { return !saving(); }
 
     // 管理页（LIST）与编辑页（EDIT）：各自持有控件与视图状态
     private final RuleEditorScreenListPage listPage;
@@ -216,7 +234,9 @@ public final class RuleEditorScreen extends Screen {
         int actualMouseX = mouseX;
         int actualMouseY = mouseY;
         UiTypePicker picker = mode == Mode.EDIT ? editPage.activeTypePicker() : null;
-        var pointer = com.meteorite.itemdespawntowhat.client.ui.kit.UiPointer.gated(modals.isEmpty() && picker == null, mouseX, mouseY);
+        boolean saving = saving();
+        if (saving) { saveOverlay(); } else { saveOverlay = null; }
+        var pointer = com.meteorite.itemdespawntowhat.client.ui.kit.UiPointer.gated(!saving && modals.isEmpty() && picker == null, mouseX, mouseY);
         mouseX = pointer.x();
         mouseY = pointer.y();
         int w = this.width;
@@ -250,6 +270,13 @@ public final class RuleEditorScreen extends Screen {
         }
         mouseX = actualMouseX;
         mouseY = actualMouseY;
+        if (saving) {
+            int overlayMouseX = mouseX;
+            int overlayMouseY = mouseY;
+            UiRenderLayers.draw(graphics, UiRenderLayers.MODAL_STEP,
+                    () -> saveOverlay().render(graphics, width, height, overlayMouseX, overlayMouseY, Util.getMillis()));
+            return;
+        }
         modals.render(graphics, font, mouseX, mouseY);
         if (modals.isEmpty() && picker != null) {
             picker.setBounds(contentArea.x(), contentArea.y(), contentArea.width(), contentArea.height());
@@ -387,6 +414,7 @@ public final class RuleEditorScreen extends Screen {
 
     // 返回管理页：先结束交互并卸载页面，再刷新列表
     private void backToList() {
+        if (saving()) { return; }
         if (!editPage.unmount()) {
             return;
         }
@@ -430,6 +458,7 @@ public final class RuleEditorScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (saving()) { saveOverlay().mouseClicked(mouseX, mouseY, button); return true; }
         if (modals.isVisible()) {
             return modals.mouseClicked(mouseX, mouseY, button);
         }
@@ -452,6 +481,7 @@ public final class RuleEditorScreen extends Screen {
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (saving()) { saveOverlay().mouseReleased(mouseX, mouseY, button); return true; }
         if (modals.isVisible()) {
             return modals.mouseReleased(mouseX, mouseY, button);
         }
@@ -465,6 +495,7 @@ public final class RuleEditorScreen extends Screen {
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (saving()) { return true; }
         if (modals.isVisible()) {
             return modals.mouseDragged(mouseX, mouseY, button, dragX, dragY);
         }
@@ -481,6 +512,7 @@ public final class RuleEditorScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (saving()) { return true; }
         if (modals.isVisible()) {
             return modals.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
         }
@@ -504,6 +536,7 @@ public final class RuleEditorScreen extends Screen {
         if (keyCode >= GLFW.GLFW_KEY_F1 && keyCode <= GLFW.GLFW_KEY_F12) {
             return false;
         }
+        if (saving()) { saveOverlay().keyPressed(keyCode, scanCode, modifiers); return true; }
         if (modals.isVisible()) {
             return modals.keyPressed(keyCode, scanCode, modifiers);
         }
@@ -564,6 +597,7 @@ public final class RuleEditorScreen extends Screen {
     // 键盘抬起：把滑杆方向键的按住过程合并为一次提交
     @Override
     public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
+        if (saving()) { return true; }
         UiTypePicker picker = activeTypePicker();
         if (!modals.isVisible() && picker != null) return picker.keyReleased(keyCode, scanCode, modifiers);
         if (mode == Mode.EDIT && editPage.keyReleased(keyCode, scanCode, modifiers)) {
@@ -574,6 +608,7 @@ public final class RuleEditorScreen extends Screen {
 
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
+        if (saving()) { return true; }
         if (modals.isVisible()) {
             return modals.charTyped(codePoint, modifiers);
         }
@@ -665,7 +700,7 @@ public final class RuleEditorScreen extends Screen {
     private void applyEditableStateNow(boolean editable) {
         editPage.setPagesEnabled(editable);
         // 列表页动作按钮同属可编辑面：冻结时一并禁用，避免「点了没反应」
-        // （返回按钮不禁用，保证冻结期间玩家仍能退出屏幕）
+        // 保存期间的返回与关闭由保存模态统一拦截，其它冻结状态仍允许退出。
         listPage.setButtonsEnabled(editable);
         // 应用/撤销/重做再按脏标记与历史精确修正
         updateActionButtons();
@@ -690,6 +725,7 @@ public final class RuleEditorScreen extends Screen {
 
     // 用户主动关闭：有未保存改动先确认
     private void closeByUser() {
+        if (saving()) { return; }
         if (editPage.blockNavigation()) {
             return;
         }
@@ -717,6 +753,7 @@ public final class RuleEditorScreen extends Screen {
     // 只关屏，不动工作区会话（工作区由服务端租约与协议驱动）
     @Override
     public void onClose() {
+        if (saving()) { return; }
         EntityPreviewIcons.clear();
         BlockPreviewIcons.clear();
         editPage.applyAllForms();

@@ -11,6 +11,7 @@ import java.util.Locale;
 public enum RuleSaveStatus {
     SUCCESS,
     NO_CHANGES,
+    CANCELLED,
     NO_PERMISSION,
     LOCK_NOT_OWNED,
     LOCK_BUSY,

@@ -4,6 +4,9 @@ import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalog;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEditProtocol;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveStatus;
+import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveProgress;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveProgressPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.CancelRuleSavePayload;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshot;
 import com.meteorite.itemdespawntowhat.core.network.transport.CloseRuleEditorPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.ConfirmRuleEditorPayload;
@@ -119,6 +122,33 @@ public final class RuleEditClientWorkspace {
 
     // 最近一次保存回执
     private @Nullable RuleSaveResultPayload lastResult;
+    private String savingOperationId = "";
+    private @Nullable RuleSaveProgress saveProgress;
+    private long progressSequence;
+    private boolean cancelRequested;
+
+    /** @return 当前保存进度；无在途保存时为 null */
+    public synchronized @Nullable RuleSaveProgress saveProgress() { return saveProgress; }
+
+    /** @return 是否已请求取消并等待服务端确认 */
+    public synchronized boolean cancelRequested() { return cancelRequested; }
+
+    /**
+     * 请求取消当前保存，不提前结束 APPLYING 或释放会话。
+     * @return 取消信号是否已发出
+     */
+    public synchronized boolean cancelSave() {
+        if (state != RuleEditClientState.APPLYING || saveProgress == null || !saveProgress.cancellable()
+                || cancelRequested || !connected()) { return false; }
+        try {
+            if (!send(new CancelRuleSavePayload(sessionId, savingOperationId))) { return false; }
+        } catch (RuntimeException failure) {
+            LOGGER.warn("发送保存取消请求失败，保持保存状态并等待服务端终态", failure);
+            return false;
+        }
+        cancelRequested = true;
+        return true;
+    }
 
     // 最近一次发送心跳的客户端 tick
     private long lastHeartbeatTick;
@@ -300,12 +330,25 @@ public final class RuleEditClientWorkspace {
                     RuleEditLimits.encodedLength(changeSetJson));
             return false;
         }
+        if (sender == null) { return false; }
+        savingOperationId = operationId;
+        progressSequence = 0;
+        cancelRequested = false;
+        saveProgress = new RuleSaveProgress(RuleSaveProgress.Stage.PREPARING, 0, 0, "", true);
+        lastResult = null;
         state = RuleEditClientState.APPLYING;
-        return sendAll(packets);
+        try { return sendAll(packets); }
+        catch (RuntimeException failure) {
+            LOGGER.warn("发送保存请求失败，等待连接状态或服务端取消确认", failure);
+            if (!connected()) { reset(); return false; }
+            cancelSave();
+            return true;
+        }
     }
 
     // 关闭会话：界面关闭或玩家主动退出时调用
     public synchronized void close(@Nullable String reasonCode) {
+        if (state == RuleEditClientState.APPLYING) { return; }
         if (!sessionId.isEmpty() && connected()) {
             send(new CloseRuleEditorPayload(sessionId, reasonCode == null ? "" : reasonCode));
         }
@@ -353,6 +396,7 @@ public final class RuleEditClientWorkspace {
         RuleEditPayloadRouter.installSnapshotPayloadSink(this::onSnapshot);
         RuleEditPayloadRouter.installChunkSink(this::onSnapshotChunk);
         RuleEditPayloadRouter.installResultPayloadSink(this::onResult);
+        RuleEditPayloadRouter.installProgressSink(this::onProgress);
         RuleEditPayloadRouter.installCatalogSink(this::onCatalog);
         RuleEditPayloadRouter.installLifespanSink(this::onLifespan);
         OpenRuleEditorPayload.installOpenEditorPayloadSink(this::onOpen);
@@ -429,6 +473,18 @@ public final class RuleEditClientWorkspace {
         }
     }
 
+    private synchronized void onProgress(RuleSaveProgressPayload payload) {
+        if (state != RuleEditClientState.APPLYING || !sessionId.equals(payload.sessionId())
+                || !savingOperationId.equals(payload.operationId()) || payload.sequence() <= progressSequence) { return; }
+        progressSequence = payload.sequence();
+        saveProgress = payload.progress();
+        if (saveProgress.stage() != RuleSaveProgress.Stage.CANCELLING
+                && saveProgress.stage() != RuleSaveProgress.Stage.ROLLING_BACK && !saveProgress.cancellable()) {
+            // 提交确认先于取消信号：继续显示保存完成阶段，不显示取消成功。
+            cancelRequested = false;
+        }
+    }
+
     // 收到保存回执：会话失效类状态结束会话并关闭界面，其余回到 ACTIVE
     private synchronized void onResult(@Nullable RuleSaveResultPayload payload) {
         if (payload == null) {
@@ -436,6 +492,12 @@ public final class RuleEditClientWorkspace {
         }
         if (!payload.sessionId().isEmpty() && !payload.sessionId().equals(sessionId)) {
             LOGGER.debug("忽略非当前会话的回执: session={}", payload.sessionId());
+            return;
+        }
+        if (state == RuleEditClientState.APPLYING) {
+            if (!sessionId.equals(payload.sessionId()) || !savingOperationId.equals(payload.operationId())) { return; }
+        } else if (!payload.operationId().isEmpty()) {
+            // 本次保存已结束；迟到的重复回执不能覆盖后续请求或版本。
             return;
         }
         lastResult = payload;
@@ -450,6 +512,9 @@ public final class RuleEditClientWorkspace {
         if (!sessionId.isEmpty() && payload.sessionId().equals(sessionId)) {
             if (state == RuleEditClientState.APPLYING) {
                 state = RuleEditClientState.ACTIVE;
+                savingOperationId = "";
+                saveProgress = null;
+                cancelRequested = false;
             }
             contextRevision = payload.resultVersion();
             // 保存成功/无变化时服务端不附送快照，回到 ACTIVE 后主动补一次快照请求，
@@ -502,6 +567,10 @@ public final class RuleEditClientWorkspace {
         try {
             boolean hadSession = !sessionId.isEmpty();
             state = RuleEditClientState.FREE;
+            savingOperationId = "";
+            saveProgress = null;
+            progressSequence = 0;
+            cancelRequested = false;
             sessionId = "";
             contextRevision = 0;
             snapshot = null;

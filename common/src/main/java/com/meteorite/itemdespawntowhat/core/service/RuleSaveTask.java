@@ -11,6 +11,7 @@ import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
 import com.meteorite.itemdespawntowhat.core.model.RuleValidation;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEditChangeSet;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveStatus;
+import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveProgress;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditLimits;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerContext;
 import com.meteorite.itemdespawntowhat.core.runtime.RuleIndex;
@@ -34,6 +35,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 /** 保存续接任务：后台只处理文件与独占 JSON，世界、注册表和第三方类型校验均在公共 tick 预算内执行。 */
@@ -48,6 +50,7 @@ final class RuleSaveTask implements ServerTask {
         return thread;
     });
 
+    private enum CommitState { OPEN, CANCELLED, COMMITTED }
     private enum Phase { REQUEST, VALIDATE, WRITE, READ, DECODE, INDEX, APPLY, DONE }
     record Outcome(RuleSaveStatus status, String detail, IssueCollector issues, int edited, int files,
                    int expectedVersion, boolean written) { }
@@ -63,6 +66,10 @@ final class RuleSaveTask implements ServerTask {
     private final String sessionId;
     private final java.util.UUID owner;
     private final AtomicBoolean active = new AtomicBoolean(true);
+    // 取消与最终提交只通过 CAS 竞争；文件与回滚始终由单个后台工作独占。
+    private final AtomicReference<CommitState> commitState = new AtomicReference<>(CommitState.OPEN);
+    private final AtomicReference<RuleSaveProgress> fileProgress = new AtomicReference<>(
+            new RuleSaveProgress(RuleSaveProgress.Stage.PREPARING_FILES, 0, 0, "", true));
     private final IssueCollector issues = new IssueCollector();
     private Phase phase = Phase.REQUEST;
     private CompletableFuture<Request> request;
@@ -75,6 +82,7 @@ final class RuleSaveTask implements ServerTask {
     private int writtenFiles;
     private volatile boolean written;
     private boolean revisionAccepted;
+    private @Nullable Throwable pendingFailure;
     private RawReload reload;
     private final List<LoadedRule<Rule>> decoded = new ArrayList<>();
     private ServerTask apply;
@@ -101,7 +109,41 @@ final class RuleSaveTask implements ServerTask {
     }
 
     void schedule() { context.saveScheduler().schedule(SAVE_REALM, this, 1); }
-    void invalidate() { active.set(false); }
+    void invalidate() { active.set(false); commitState.compareAndSet(CommitState.OPEN, CommitState.CANCELLED); }
+    boolean cancel() {
+        if (!commitState.compareAndSet(CommitState.OPEN, CommitState.CANCELLED)) { return false; }
+        active.set(false);
+        return true;
+    }
+
+    RuleSaveProgress progress() {
+        boolean cancellable = active.get() && commitState.get() == CommitState.OPEN && phase != Phase.DONE;
+        if (phase == Phase.WRITE) {
+            RuleSaveProgress value = fileProgress.get();
+            RuleSaveProgress.Stage stage = !active.get() && value.stage() != RuleSaveProgress.Stage.ROLLING_BACK
+                    ? RuleSaveProgress.Stage.CANCELLING : value.stage();
+            return new RuleSaveProgress(stage, value.completed(), value.total(), value.current(), cancellable);
+        }
+        if (!active.get()) { return new RuleSaveProgress(RuleSaveProgress.Stage.CANCELLING, 0, 0, "", false); }
+        RuleSaveProgress.Stage stage = switch (phase) {
+            case REQUEST -> RuleSaveProgress.Stage.PREPARING;
+            case VALIDATE -> RuleSaveProgress.Stage.VALIDATING;
+            case READ -> RuleSaveProgress.Stage.READING;
+            case DECODE -> RuleSaveProgress.Stage.DECODING;
+            case INDEX -> RuleSaveProgress.Stage.INDEXING;
+            default -> RuleSaveProgress.Stage.APPLYING;
+        };
+        int total = phase == Phase.VALIDATE ? changes.edits().size() : phase == Phase.DECODE ? reload.entries().size() : 0;
+        String current = total == 0 ? "" : phase == Phase.VALIDATE
+                ? changes.edits().get(Math.min(cursor, total - 1)).id().toString()
+                : java.util.Objects.toString(reload.entries().get(Math.min(cursor, total - 1)).id(), "");
+        return new RuleSaveProgress(stage, cursor, total, current, cancellable);
+    }
+
+    private boolean backgroundPending() {
+        return request != null && !request.isDone() || write != null && !write.isDone()
+                || raw != null && !raw.isDone() || prepared != null && !prepared.isDone();
+    }
     boolean finished() { return phase == Phase.DONE; }
 
     @Override public ServerTaskKind kind() { return ServerTaskKind.MAINTENANCE; }
@@ -118,12 +160,20 @@ final class RuleSaveTask implements ServerTask {
             // 已发布索引后必须完成旧任务清理与回扫；会话失效只撤销尚未提交的文件工作。
             if ((!active.get() || context.saveReloadContext() != reloadContext) && phase != Phase.APPLY) {
                 invalidate();
-                if (write != null && !write.isDone()) { return StepResult.yield(1, 1); }
+                if (backgroundPending()) { return StepResult.yield(1, 1); }
                 if (write != null && write.isDone() && !revisionAccepted) { acceptWrite(write.join()); }
+                if (write != null && write.join().result().rollbackFailed()) {
+                    finish(RuleSaveStatus.WRITE_FAILED, "取消保存时部分文件回滚失败，请检查日志与 .bak");
+                    return StepResult.done(1);
+                }
+                if (pendingFailure != null) {
+                    finish(written ? RuleSaveStatus.SAVED_NOT_RELOADED : RuleSaveStatus.WRITE_FAILED, pendingFailure.toString());
+                    return StepResult.done(1);
+                }
                 RuleSaveStatus status = written ? RuleSaveStatus.SAVED_NOT_RELOADED
                         : !sessions.owns(sessionId) || player == null ? RuleSaveStatus.SESSION_EXPIRED
                         : !com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler.canEdit(player)
-                        ? RuleSaveStatus.NO_PERMISSION : RuleSaveStatus.INVALID_REQUEST;
+                        ? RuleSaveStatus.NO_PERMISSION : RuleSaveStatus.CANCELLED;
                 finish(status, "保存请求已取消");
                 return StepResult.done(1);
             }
@@ -174,7 +224,8 @@ final class RuleSaveTask implements ServerTask {
                         IssueCollector local = new IssueCollector();
                         var result = new RuleOverlayWriter(java.util.Objects.requireNonNull(reloadContext.loadContext().overlayRoot()),
                                 reloadContext.loadContext().overlayNamespace()).apply(changes, local, active::get,
-                                () -> Arrays.equals(diskRevision, readRevision()));
+                                () -> Arrays.equals(diskRevision, readRevision()),
+                                () -> commitState.compareAndSet(CommitState.OPEN, CommitState.COMMITTED), fileProgress::set);
                         written = result.writtenFiles() > 0;
                         if (written) { sessions.persistRevision(version + 1); }
                         byte[] revision = sessions.readDiskRevision();
@@ -186,7 +237,9 @@ final class RuleSaveTask implements ServerTask {
             case WRITE -> {
                 if (!write.isDone()) { return false; }
                 Written result = write.join(); acceptWrite(result); write = null;
-                if (!result.result().conflicts().isEmpty() || result.issues().hasErrors()) {
+                if (commitState.get() == CommitState.CANCELLED && !result.result().rollbackFailed()) {
+                    finish(RuleSaveStatus.CANCELLED, "");
+                } else if (!result.result().conflicts().isEmpty() || result.issues().hasErrors()) {
                     finish(RuleSaveStatus.WRITE_FAILED, result.issues().format());
                 } else if (!written) { finish(RuleSaveStatus.NO_CHANGES, ""); }
                 else {
@@ -252,7 +305,7 @@ final class RuleSaveTask implements ServerTask {
     }
 
     private void acceptWrite(Written result) {
-        appendIssues(result.issues());
+        if (commitState.get() != CommitState.CANCELLED || result.result().rollbackFailed()) { appendIssues(result.issues()); }
         writtenFiles = result.result().writtenFiles(); written = writtenFiles > 0;
         if (written && !revisionAccepted) { sessions.acceptDiskRevision(result.revision(), true); revisionAccepted = true; }
         diskRevision = result.revision();
@@ -280,6 +333,12 @@ final class RuleSaveTask implements ServerTask {
 
     @Override public void onFailed(@Nullable Throwable failure) {
         invalidate();
+        if (backgroundPending()) {
+            pendingFailure = failure == null ? new IllegalStateException("保存调度步骤失败") : failure;
+            // 调度器 FAILED 已摘除原槽位；重新排期只等待后台退出，不与后台并发收尾。
+            schedule();
+            return;
+        }
         if (apply != null) { apply.onFailed(failure); }
         if (written && !revisionAccepted) { sessions.acceptDiskRevision(null, true); revisionAccepted = true; }
         finish(written ? RuleSaveStatus.SAVED_NOT_RELOADED : RuleSaveStatus.WRITE_FAILED,

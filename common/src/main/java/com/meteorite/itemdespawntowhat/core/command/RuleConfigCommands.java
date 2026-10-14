@@ -137,10 +137,16 @@ final class RuleConfigCommands {
         if (sessions == null) {
             return RuleCommandTree.notReady(ctx);
         }
-        EditSessionManager.SessionInfo released = sessions.release();
+        var service = RuleEditServerHandler.service(editContext);
+        EditSessionManager.SessionInfo released = service == null ? sessions.release() : service.forceRelease();
         if (released == null) {
             return RuleCommandTree.reply(ctx,
                     RuleCommandText.of("itemdespawntowhat.command.config.edit_lock.release.idle").build());
+        }
+
+        if (released.state() == EditSessionManager.SessionState.APPLYING) {
+            return RuleCommandTree.reply(ctx,
+                    RuleCommandText.of("itemdespawntowhat.command.config.edit_lock.release.pending").build());
         }
 
         // 原持有者若在线，立刻收到 SESSION_EXPIRED，客户端据此关闭编辑界面并回到未持有状态

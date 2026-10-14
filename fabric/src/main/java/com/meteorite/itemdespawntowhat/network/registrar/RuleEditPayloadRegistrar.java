@@ -9,6 +9,8 @@ import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleSnapsho
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleCatalogPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveResultPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveProgressPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.CancelRuleSavePayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.SaveRuleChangeSetChunkPayload;
@@ -43,6 +45,8 @@ public final class RuleEditPayloadRegistrar {
         registered = true;
 
         // 类型注册：C2S 供客户端发送、服务端接收；S2C 供服务端发送、客户端接收
+        PayloadTypeRegistry.playC2S().register(CancelRuleSavePayload.TYPE, CancelRuleSavePayload.STREAM_CODEC);
+        PayloadTypeRegistry.playS2C().register(RuleSaveProgressPayload.TYPE, RuleSaveProgressPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(ConfirmRuleEditorPayload.TYPE, ConfirmRuleEditorPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(HeartbeatRuleEditorPayload.TYPE, HeartbeatRuleEditorPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(CloseRuleEditorPayload.TYPE, CloseRuleEditorPayload.STREAM_CODEC);
@@ -59,6 +63,10 @@ public final class RuleEditPayloadRegistrar {
         PayloadTypeRegistry.playS2C().register(RuleLifespanPayload.TYPE, RuleLifespanPayload.STREAM_CODEC);
 
         // 服务端接收器：统一切到服务端线程后交给共享 handler，平台侧只做薄转发
+        ServerPlayNetworking.registerGlobalReceiver(CancelRuleSavePayload.TYPE,
+                (payload, context) -> context.server().execute(() ->
+                        RuleEditServerHandler.handleCancelSave(context.player(), RuleRuntimeHost.editContext(), payload)));
+
         ServerPlayNetworking.registerGlobalReceiver(ConfirmRuleEditorPayload.TYPE,
                 (payload, context) -> context.server().execute(() ->
                         RuleEditServerHandler.handleConfirm(context.player(), RuleRuntimeHost.editContext(), payload)));

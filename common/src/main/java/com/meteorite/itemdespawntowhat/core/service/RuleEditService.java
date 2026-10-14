@@ -9,6 +9,9 @@ import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEditProtocol;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleIssue;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveStatus;
+import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveProgress;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveProgressPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.CancelRuleSavePayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.CloseRuleEditorPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.ConfirmRuleEditorPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.HeartbeatRuleEditorPayload;
@@ -62,6 +65,10 @@ public final class RuleEditService {
     private String savingOperationId;
     private UUID savingOwner;
     private RuleSaveResultPayload completedSave;
+    private static final int PROGRESS_INTERVAL_TICKS = 5;
+    private long progressTick;
+    private long progressSequence;
+    private RuleSaveProgress sentProgress;
     private Runnable deferredReload;
     private RuleSnapshotTask pendingSnapshot;
     private SnapshotRequest requestedSnapshot;
@@ -180,12 +187,12 @@ public final class RuleEditService {
         return Outbound.of(sessionLost(payload.sessionId(), player));
     }
 
-    // C2S 关闭：持有者主动释放，回执后会话立即变 FREE
+    // C2S 关闭：保存期间延后释放，回滚与清理结束后才发送终态
     public Outbound close(ServerPlayer player, CloseRuleEditorPayload payload) {
         if (!sessions.owns(payload.sessionId()) || !sessions.isOwner(player.getUUID())) {
             return Outbound.of(sessionLost(payload.sessionId(), player));
         }
-        if (pendingSave != null) { pendingSave.invalidate(); }
+        if (pendingSave != null) { forceRelease(); return Outbound.EMPTY; }
         sessions.release();
         return Outbound.of(result(payload.sessionId(), "", RuleSaveStatus.SUCCESS,
                 RuleSaveStatus.SUCCESS.messageKey(), List.of(), List.of(), false, false));
@@ -291,12 +298,14 @@ public final class RuleEditService {
     public Outbound submitChunk(ServerPlayer player, RuleEditServerContext context, MinecraftServer server,
                                 SaveRuleChangeSetChunkPayload payload, long tick) {
         if (!sessions.owns(payload.sessionId()) || !sessions.isOwner(player.getUUID())) {
-            return Outbound.of(sessionLost(payload.sessionId(), player));
+            return Outbound.of(sessionLost(payload.sessionId(), player, payload.operationId()));
         }
         if (!RuleEditChunkAccumulator.isShapeValid(payload)) {
             return Outbound.of(result(payload.sessionId(), payload.operationId(), RuleSaveStatus.INVALID_REQUEST,
                     RuleSaveStatus.INVALID_REQUEST.messageKey(), args("chunk"), List.of(), false, false));
         }
+        RuleSaveResultPayload previous = recentResult(payload.sessionId(), payload.operationId());
+        if (previous != null) { return Outbound.of(previous); }
         sessions.heartbeat(payload.sessionId(), tick);
         RuleEditChunkAccumulator.AcceptResult accepted = RuleEditChunkAccumulator.accept(player, payload, tick);
         if (accepted.rejected()) {
@@ -322,7 +331,7 @@ public final class RuleEditService {
                     RuleSaveStatus.INVALID_REQUEST.messageKey(), args("operationId"), List.of(), false, false));
         }
         if (!sessions.owns(sessionId)) {
-            return Outbound.of(sessionLost(sessionId, player));
+            return Outbound.of(sessionLost(sessionId, player, operationId));
         }
         if (!sessions.isOwner(player.getUUID())) {
             return Outbound.of(result(sessionId, operationId, RuleSaveStatus.LOCK_NOT_OWNED,
@@ -344,7 +353,7 @@ public final class RuleEditService {
             return Outbound.of(result(sessionId, operationId, RuleSaveStatus.UNAVAILABLE,
                     RuleSaveStatus.UNAVAILABLE.messageKey(), List.of(), List.of(), false, false));
         }
-        if (!sessions.beginApply(sessionId)) { return Outbound.of(sessionLost(sessionId, player)); }
+        if (!sessions.beginApply(sessionId)) { return Outbound.of(sessionLost(sessionId, player, operationId)); }
         sessions.heartbeat(sessionId, tick);
         if (pendingSnapshot != null) { pendingSnapshot.invalidate(); }
         requestedSnapshot = null;
@@ -352,6 +361,9 @@ public final class RuleEditService {
         savingSessionId = sessionId;
         savingOperationId = operationId;
         savingOwner = player.getUUID();
+        progressTick = tick - PROGRESS_INTERVAL_TICKS;
+        progressSequence = 0;
+        sentProgress = null;
         pendingSave = new RuleSaveTask(sessions, context, server, sessionId, player.getUUID(), json, outcome -> {
             if (outcome.written()) { RuleCatalogService.invalidate(); }
             completedSave = result(sessionId, operationId, outcome.status(), outcome.status().messageKey(),
@@ -361,8 +373,6 @@ public final class RuleEditService {
                         default -> args(outcome.detail());
                     }, toIssues(outcome.issues()), outcome.written(),
                     outcome.status() == RuleSaveStatus.SUCCESS);
-            remember(completedSave);
-            sessions.finishApply(sessionId, server.getTickCount());
         });
         pendingSave.schedule();
         return Outbound.EMPTY;
@@ -389,11 +399,19 @@ public final class RuleEditService {
         if (pendingSave == null) { return null; }
         if (!sessions.owns(savingSessionId)) { pendingSave.invalidate(); }
         ServerPlayer owner = server.getPlayerList().getPlayer(savingOwner);
-        if (owner != null && !com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler.canEdit(owner)) {
+        if (!com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler.canEdit(owner)) {
             pendingSave.invalidate();
+            sessions.release();
         }
         if (!pendingSave.finished()) { return null; }
         RuleSaveResultPayload payload = completedSave;
+        sessions.finishApply(savingSessionId, server.getTickCount());
+        if (payload != null && !sessions.owns(savingSessionId)) {
+            payload = result(savingSessionId, savingOperationId, RuleSaveStatus.SESSION_EXPIRED,
+                    RuleSaveStatus.SESSION_EXPIRED.messageKey(), List.of(), payload.issues(),
+                    payload.writtenToDisk(), payload.reloaded());
+        }
+        if (payload != null) { remember(payload); }
         pendingSave = null;
         completedSave = null;
         Runnable reload = deferredReload;
@@ -405,6 +423,48 @@ public final class RuleEditService {
             requestedSnapshot = new SnapshotRequest(savingOwner, payload.sessionId(), "");
         }
         return owner == null || payload == null ? null : new SaveReply(owner, Outbound.of(payload));
+    }
+
+    /**
+     * 请求取消当前玩家的对应保存；提交确认后只返回不可取消进度，不能回滚已发布规则。
+     * @param player 请求玩家
+     * @param payload 保存操作标识
+     * @return 在途保存无立即终态；未开始写盘或已完成的操作可直接交付取消／幂等回执
+     */
+    public Outbound cancelSave(ServerPlayer player, CancelRuleSavePayload payload) {
+        if (!sessions.owns(payload.sessionId()) || !sessions.isOwner(player.getUUID())) { return Outbound.EMPTY; }
+        if (pendingSave != null) {
+            if (payload.sessionId().equals(savingSessionId) && payload.operationId().equals(savingOperationId)) {
+                if (pendingSave.cancel()) { sentProgress = null; }
+            }
+            return Outbound.EMPTY;
+        }
+        RuleSaveResultPayload previous = recentResult(payload.sessionId(), payload.operationId());
+        if (previous != null) { return Outbound.of(previous); }
+        RuleEditChunkAccumulator.clear(player.getUUID());
+        RuleSaveResultPayload cancelled = result(payload.sessionId(), payload.operationId(), RuleSaveStatus.CANCELLED,
+                RuleSaveStatus.CANCELLED.messageKey(), List.of(), List.of(), false, false);
+        remember(cancelled);
+        return Outbound.of(cancelled);
+    }
+
+    /**
+     * 读取最新进度样本；最多每五个活动 tick 发送一次，不逐条广播后台状态。
+     * @param server 当前服务端
+     * @return 待交付进度，样本未变或保存已完成时为 null
+     */
+    public @Nullable SaveReply pollSaveProgress(MinecraftServer server) {
+        if (pendingSave == null || pendingSave.finished() || server.getTickCount() - progressTick < PROGRESS_INTERVAL_TICKS) {
+            return null;
+        }
+        ServerPlayer player = server.getPlayerList().getPlayer(savingOwner);
+        if (!com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler.canEdit(player)) { return null; }
+        RuleSaveProgress progress = pendingSave.progress();
+        if (progress.equals(sentProgress)) { return null; }
+        sentProgress = progress;
+        progressTick = server.getTickCount();
+        return new SaveReply(player, Outbound.of(new RuleSaveProgressPayload(savingSessionId, savingOperationId,
+                ++progressSequence, progress)));
     }
 
     /**
@@ -439,8 +499,9 @@ public final class RuleEditService {
         return sessions.release();
     }
 
-    // 玩家断开：只清理分片缓存；契约要求会话在租约到期后释放
+    // 玩家断开：保存期间请求延后释放并等待回滚；其它会话由原租约回收
     public void clearPlayer(UUID playerId) {
+        if (pendingSave != null && playerId.equals(savingOwner)) { forceRelease(); }
         RuleEditChunkAccumulator.clear(playerId);
     }
 
@@ -514,9 +575,13 @@ public final class RuleEditService {
 
     // 会话已失效的统一回执
     private RuleSaveResultPayload sessionLost(String sessionId, ServerPlayer player) {
+        return sessionLost(sessionId, player, "");
+    }
+
+    private RuleSaveResultPayload sessionLost(String sessionId, ServerPlayer player, String operationId) {
         RuleSaveStatus status = sessions.isOwner(player.getUUID())
                 ? RuleSaveStatus.SESSION_EXPIRED : RuleSaveStatus.LOCK_NOT_OWNED;
-        return result(sessionId, "", status, status.messageKey(), List.of(), List.of(), false, false);
+        return result(sessionId, operationId, status, status.messageKey(), List.of(), List.of(), false, false);
     }
 
     // 组装回执载荷

@@ -6,6 +6,7 @@ import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalog;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleIssue;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveStatus;
+import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveProgress;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshot;
 import org.jetbrains.annotations.Nullable;
 
@@ -58,6 +59,15 @@ public interface EditorWorkspaceView {
 
     // 提交变更集 JSON
     boolean save(@Nullable String operationId, @Nullable String changeSetJson);
+
+    /** @return 当前保存进度；无保存或实现不提供进度时为 null */
+    default @Nullable RuleSaveProgress saveProgress() { return null; }
+
+    /** @return 是否已发送取消请求并等待收尾 */
+    default boolean cancelRequested() { return false; }
+
+    /** @return 是否已请求取消当前保存；调用不会关闭界面或释放锁 */
+    default boolean cancelSave() { return false; }
 
     // 生成新的操作 id（保存回执用它配对）
     String newOperationId();

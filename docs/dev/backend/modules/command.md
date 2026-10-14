@@ -15,7 +15,7 @@
 | `RuleDebugCommands` | `debug` 分支装配：`help` / `examples` / `run` / `bench` / `pipeline` / `stop` / `status` / `mark` | `build(context)`（场景名由 `DebugScenarioCatalog` 声明驱动） |
 | `DebugPipelineCommands` | `debug pipeline` 子分支：`p0`～`p4` 与 `help` / `status` / `stop` | `build(context)`（阶段名由 `DebugPipelineCatalog` 声明驱动） |
 
-保存期间，`config reload/validate/list` 与 `rule list/show` 返回本地化的保存忙碌提示，不读取或重载替换中的磁盘目录；编辑锁状态查询和强制释放仍可使用。
+保存期间，`config reload/validate/list` 与 `rule list/show` 返回本地化的保存忙碌提示，不读取或重载替换中的磁盘目录；编辑锁状态查询仍可使用；强制释放在保存期间请求终止保存并延后释放，命令明确提示等待收尾。
 
 ## 2. 命令树与权限
 
@@ -63,7 +63,7 @@
 | `/idtw config validate` | `RuleConfigCommands.validate` | `context.editContext().loadMerged(server)`（只读，不重建索引） |
 | `/idtw config list` | `RuleConfigCommands.list` | `loadMerged`；逐条列出 id/layer/priority/trigger_seconds/effects/enabled/origin |
 | `/idtw config edit-lock status` | `RuleConfigCommands.editLockStatus` | `RuleEditServerHandler.sessionManager(...)`；空闲/自身持有/他人持有三种口径 |
-| `/idtw config edit-lock release` | `RuleConfigCommands.editLockRelease` | `EditSessionManager.release()`；原持有者在线时立刻收 `SESSION_EXPIRED` |
+| `/idtw config edit-lock release` | `RuleConfigCommands.editLockRelease` | `RuleEditService.forceRelease()`；非保存状态立即释放，保存期间保持锁直至回滚或清理完成后通知 `SESSION_EXPIRED` |
 | `/idtw rule list` | `RuleQueryCommands.list` | `loadMerged` |
 | `/idtw rule show <id>` | `RuleQueryCommands.show` | `loadMerged` + `RuleSnapshotAssembler.assemble(...)` 取 `effective`（覆盖层原文 / 数据包规则的编码结果） |
 | `/idtw debug run\|bench <场景>` | `RuleDebugCommands` → `DebugScenarioManager.start` | 场景目录声明驱动；见 [debug.md](debug.md) |

@@ -58,6 +58,10 @@ Kit 提交缓冲、恢复 pose/camera/裁剪，并回到普通 GUI 的 3D 物品
 
 `UiCarousel` 接收宿主准备的图标列表，通过 `index(milliseconds)`、`select(index,milliseconds)`、`step(direction,milliseconds)` 和 `render(graphics,box,milliseconds)` 控制轮播。默认 1.5 秒切换，手动选择重新计时；空列表不绘制。标签注册表查询、显示范围、展开容器和本地化仍属于宿主。
 
-## 6. 依赖白名单
+## 6. 进度条 UiProgressBar
+
+`UiProgressBar(Style)` 由宿主注入轨道、填充、边框与动画颜色；`render(graphics, bounds, value, indeterminate, milliseconds)` 接收零到一的真实阶段进度与宿主单调毫秒时间。确定进度用指数平滑接近目标，动画高亮裁切在完成区域；未知总量时区段在轨道内往返。`reset(value, milliseconds)` 用于新任务或阶段切换，避免从上一阶段反向插值。实例只在同一 UI 线程使用，不读取全局时钟、不保留业务任务、不估计剩余时间、不发送取消信号。状态文本、阶段切换和取消权限由宿主负责。
+
+## 7. 依赖白名单
 
 精确依赖白名单包含 `com.mojang.blaze3d.vertex.PoseStack` 与 `VertexConsumer`（和 `com.mojang.blaze3d.platform.Lighting`），边界检查脚本同步维护，不放开整个父包。

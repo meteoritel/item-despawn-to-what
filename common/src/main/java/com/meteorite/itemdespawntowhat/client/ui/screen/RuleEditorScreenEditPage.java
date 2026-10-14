@@ -681,6 +681,8 @@ final class RuleEditorScreenEditPage {
             if (status == RuleSaveStatus.SUCCESS || status == RuleSaveStatus.NO_CHANGES) {
                 host.model().acceptSaved();
                 host.setNotice(Component.translatable(status.messageKey()), THEME.palette().success());
+            } else if (status == RuleSaveStatus.CANCELLED) {
+                host.setNotice(Component.translatable(status.messageKey()), THEME.palette().textSecondary());
             } else if (status == RuleSaveStatus.SAVED_NOT_RELOADED) {
                 host.model().acceptSaved();
                 host.setNotice(Component.translatable(status.messageKey()), THEME.palette().warning());

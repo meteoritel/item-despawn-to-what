@@ -11,6 +11,8 @@ import com.meteorite.itemdespawntowhat.core.network.transport.RuleCatalogPayload
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditPayloadRouter;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveResultPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveProgressPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.CancelRuleSavePayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.SaveRuleChangeSetChunkPayload;
@@ -57,6 +59,12 @@ public final class RuleEditPayloadRegistrar {
         PayloadRegistrar registrar = event.registrar(PROTOCOL_VERSION);
 
         // C2S：确认 / 心跳 / 关闭 / 请求快照 / 请求目录 / 提交变更集 / 提交分片
+        registrar.playToServer(CancelRuleSavePayload.TYPE, CancelRuleSavePayload.STREAM_CODEC,
+                (payload, context) -> handleOnServer(context, payload, (player, body) ->
+                        RuleEditServerHandler.handleCancelSave(player, RuleRuntimeHost.editContext(), body)));
+        registrar.playToClient(RuleSaveProgressPayload.TYPE, RuleSaveProgressPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> RuleEditPayloadRouter.dispatchProgress(payload)));
+
         registrar.playToServer(ConfirmRuleEditorPayload.TYPE, ConfirmRuleEditorPayload.STREAM_CODEC,
                 (payload, context) -> handleOnServer(context, payload, (player, body) ->
                         RuleEditServerHandler.handleConfirm(player, RuleRuntimeHost.editContext(), body)));

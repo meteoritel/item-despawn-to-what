@@ -7,6 +7,7 @@ import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalog;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleIssue;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveStatus;
+import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveProgress;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshot;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveResultPayload;
 import org.jetbrains.annotations.Nullable;
@@ -102,6 +103,13 @@ public final class LiveEditorWorkspace implements EditorWorkspaceView {
     public boolean save(@Nullable String operationId, @Nullable String changeSetJson) {
         return this.workspace().save(operationId, changeSetJson);
     }
+
+    /** @return 当前保存的不可变进度 */
+    @Override public @Nullable RuleSaveProgress saveProgress() { return workspace().saveProgress(); }
+    /** @return 是否已请求取消保存 */
+    @Override public boolean cancelRequested() { return workspace().cancelRequested(); }
+    /** @return 取消请求是否已发出 */
+    @Override public boolean cancelSave() { return workspace().cancelSave(); }
 
     @Override
     public String newOperationId() {

@@ -37,7 +37,7 @@ powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1
 | --- | --- |
 | 内容排版 | `UiDocument`、`UiNode`、`UiIcon`、`UiTransform`、`UiMetrics`、`UiPointer`、`TextMeasurer`、`TextScroll` |
 | 控件与交互 | `UiControl`、`UiControlStyle`、`UiControlGroup`、`UiControlRole`、`UiScrollView`、`UiLinearLayout`、`UiFlowLayout`、`UiTextSelection`、`UiTextHistory`、`UiHistoryDispatcher`、`UiHistoryShortcut` |
-| 实体与加载预览 | `UiEntityPreview`、`UiBlockPreview`、`UiModelBounds`、`UiCarousel`、`UiIcon.Rendered`、`UiSpinner` |
+| 实体与加载预览 | `UiEntityPreview`、`UiBlockPreview`、`UiModelBounds`、`UiCarousel`、`UiIcon.Rendered`、`UiSpinner`、`UiProgressBar` |
 | 输入与捕获 | `UiInputContext`、`UiInputTarget`、`UiInputRouter`、`UiInputCapture`、`UiValueInteraction` |
 | 数值与滑块 | `UiNumberPolicy`、`UiNumbers`、`UiSliderWindow`；`UiScalarSlider`、`UiRangeSlider`、`UiRangeValue`、`UiRangeEnd`、`UiCyclicRange` |
 | 滑块样式与样式注入 | `UiSliderStyle`、`UiSliderPainter`、`PixelSliderPainter`、`UiSliderRole`、`UiSliderSkin`、`UiStyleSource` |
@@ -55,6 +55,7 @@ powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1
 
 | 类型 | 成员 | 用途与来源 | 宿主接入点 |
 | --- | --- | --- | --- |
+| `UiProgressBar` | `Style`、`reset`、`render` | 外部时间与配色驱动的平滑计数／未知总量进度条，无保存业务或网络依赖 | 保存模态 `RuleSaveOverlay` |
 | `UiIconStrip` | `cellsWidth(List<Item>)` | 静态只读度量：一组可见格子横向覆盖的宽度（最右边缘减最左边缘），零可见格子返回 0。新增成员，上游无对应实现 | 画布页外壳（`ConditionTreeOverlay`）用它把功能栏底板收窄到最后一个图标格之后，右侧空白交还画布 |
 
 ## 3. 分册

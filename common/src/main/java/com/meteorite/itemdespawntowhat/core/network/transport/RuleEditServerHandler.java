@@ -113,7 +113,7 @@ public final class RuleEditServerHandler {
         dispatch(context, player, service.heartbeat(player, payload, tick(player)));
     }
 
-    // C2S 关闭：释放会话
+    // C2S 关闭：请求释放会话，保存期间延后到后台收尾
     public static void handleClose(ServerPlayer player, RuleEditServerContext context,
                                    CloseRuleEditorPayload payload) {
         RuleEditService service = readyService(player, context, sessionId(payload == null ? null : payload.sessionId()));
@@ -155,10 +155,22 @@ public final class RuleEditServerHandler {
         if (service != null) dispatch(context, player, service.requestLifespan(player, context, payload, tick(player)));
     }
 
+    /**
+     * 转发对应保存的取消信号，回滚与完成回执仍由服务端续接任务处理。
+     * @param player 请求玩家
+     * @param context 平台上下文
+     * @param payload 保存操作标识
+     */
+    public static void handleCancelSave(ServerPlayer player, RuleEditServerContext context, CancelRuleSavePayload payload) {
+        // 取消不新增写入权限；原持有者即使刚失去编辑权限，也必须等在途写盘收尾后才收到终态。
+        RuleEditService service = service(context);
+        if (service != null) { dispatch(context, player, service.cancelSave(player, payload)); }
+    }
+
     // C2S 变更集提交
     public static void handleChangeSet(ServerPlayer player, RuleEditServerContext context,
                                        SaveRuleChangeSetPayload payload) {
-        RuleEditService service = readyService(player, context, sessionId(payload == null ? null : payload.sessionId()));
+        RuleEditService service = readyService(player, context, sessionId(payload == null ? null : payload.sessionId()), payload == null ? "" : payload.operationId());
         if (service == null || payload == null) {
             return;
         }
@@ -168,7 +180,7 @@ public final class RuleEditServerHandler {
     // C2S 变更集分片
     public static void handleChangeSetChunk(ServerPlayer player, RuleEditServerContext context,
                                             SaveRuleChangeSetChunkPayload payload) {
-        RuleEditService service = readyService(player, context, sessionId(payload == null ? null : payload.sessionId()));
+        RuleEditService service = readyService(player, context, sessionId(payload == null ? null : payload.sessionId()), payload == null ? "" : payload.operationId());
         if (service == null || payload == null) {
             return;
         }
@@ -196,6 +208,8 @@ public final class RuleEditServerHandler {
      */
     public static void tick(MinecraftServer server, RuleEditServerContext context) {
         if (editService == null) { return; }
+        RuleEditService.SaveReply progress = editService.pollSaveProgress(server);
+        if (progress != null) { dispatch(context, progress.player(), progress.outbound()); }
         RuleEditService.SaveReply reply = editService.pollSave(server);
         if (reply != null) { dispatch(context, reply.player(), reply.outbound()); }
         RuleEditService.SaveReply snapshot = editService.pollSnapshot(server, context);
@@ -217,7 +231,7 @@ public final class RuleEditServerHandler {
      */
     public static boolean isSaving() { return editService != null && editService.saving(); }
 
-    // 玩家断开：只清分片缓存；会话按契约在租约到期后释放
+    // 玩家断开：清分片缓存；在途保存请求延后释放，其它会话按租约回收
     public static synchronized void clearPlayer(UUID playerId) {
         if (editService != null) {
             editService.clearPlayer(playerId);
@@ -237,30 +251,42 @@ public final class RuleEditServerHandler {
     // 就绪 + 权限 + 服务层三重检查；失败时把结构化回执直接发给玩家
     private static @Nullable RuleEditService readyService(ServerPlayer player, @Nullable RuleEditServerContext context,
                                                           String sessionId) {
+        return readyService(player, context, sessionId, "");
+    }
+
+    private static @Nullable RuleEditService readyService(ServerPlayer player, @Nullable RuleEditServerContext context,
+                                                          String sessionId, String operationId) {
         if (context == null) {
             LOGGER.warn("编辑请求被忽略：运行时上下文不可用");
             return null;
         }
+        if ((!isReady(context) || !canEdit(player)) && !operationId.isEmpty()
+                && editService != null && editService.saving() && sessionManager != null
+                && sessionManager.owns(sessionId) && sessionManager.isOwner(player.getUUID())) {
+            // 重发在途保存不能提前返回 NO_PERMISSION/UNAVAILABLE；原操作终态统一在收尾后发送。
+            editService.forceRelease();
+            return null;
+        }
         if (!isReady(context)) {
-            sendResult(context, player, sessionId, RuleSaveStatus.UNAVAILABLE);
+            sendResult(context, player, sessionId, operationId, RuleSaveStatus.UNAVAILABLE);
             return null;
         }
         if (!canEdit(player)) {
-            sendResult(context, player, sessionId, RuleSaveStatus.NO_PERMISSION);
+            sendResult(context, player, sessionId, operationId, RuleSaveStatus.NO_PERMISSION);
             return null;
         }
         RuleEditService service = service(context);
         if (service == null) {
-            sendResult(context, player, sessionId, RuleSaveStatus.UNAVAILABLE);
+            sendResult(context, player, sessionId, operationId, RuleSaveStatus.UNAVAILABLE);
             return null;
         }
         return service;
     }
 
-    // 发送单条失败回执（无会话、无操作号）
+    // 发送入口拒绝回执；保存请求保留原操作号，以便客户端配对
     private static void sendResult(RuleEditServerContext context, ServerPlayer player, String sessionId,
-                                   RuleSaveStatus status) {
-        context.sendTo(player, RuleSaveResultPayload.of(sessionId(sessionId), "", status,
+                                   String operationId, RuleSaveStatus status) {
+        context.sendTo(player, RuleSaveResultPayload.of(sessionId(sessionId), operationId, status,
                 status.messageKey(), List.of(), 0, false, false, List.of()));
     }
 

@@ -4,6 +4,7 @@ import com.meteorite.itemdespawntowhat.core.network.transport.OpenRuleEditorPayl
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleCatalogPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditPayloadRouter;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveResultPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveProgressPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotPayload;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
@@ -31,6 +32,9 @@ public final class FabricRuleEditClientRegistrar {
 
         ClientPlayNetworking.registerGlobalReceiver(RuleSnapshotChunkPayload.TYPE,
                 (payload, context) -> context.client().execute(() -> RuleEditPayloadRouter.dispatchChunk(payload)));
+
+        ClientPlayNetworking.registerGlobalReceiver(RuleSaveProgressPayload.TYPE,
+                (payload, context) -> context.client().execute(() -> RuleEditPayloadRouter.dispatchProgress(payload)));
 
         ClientPlayNetworking.registerGlobalReceiver(RuleSaveResultPayload.TYPE,
                 (payload, context) -> context.client().execute(() -> RuleEditPayloadRouter.dispatchResult(payload)));

@@ -9,7 +9,7 @@ import java.util.UUID;
 /**
  * 全局单一编辑目标的会话状态机与覆盖层版本戳管理。
  * 状态机：FREE --取锁--> OPENING --客户端确认--> ACTIVE --提交变更集--> APPLYING --应用结束--> ACTIVE；
- * OPENING/ACTIVE/APPLYING 在主动释放、租约到期或强制释放时回到 FREE；断线不立即释放，由租约到期回收。
+ * OPENING/ACTIVE 可主动释放或超时释放；APPLYING 的释放延后至保存收尾，租约不打断在途保存。
  * 同一时刻至多 1 个非 FREE 会话，因此独占性不再依赖"按玩家隔离"。
  * 时钟一律使用 MinecraftServer.getTickCount()（暂停感知），禁止挂钟时间。
  * 版本戳持久化在覆盖层根目录的 .edit_version（非 .json 后缀，不会被规则读取器扫描）。
@@ -56,6 +56,7 @@ public final class EditSessionManager {
     private String sessionId;
     private long openedTick;
     private long lastHeartbeatTick;
+    private boolean releasePending;
 
     // 构造会话管理器：版本戳从覆盖层根目录的 .edit_version 读取，缺失或损坏按 0 起算
     public EditSessionManager(Path overlayRoot) {
@@ -193,26 +194,29 @@ public final class EditSessionManager {
         return true;
     }
 
-    // 应用结束回到 ACTIVE，并按当前 tick 刷新租约
+    // 应用结束执行延后释放，否则回到 ACTIVE 并刷新租约
     public synchronized void finishApply(String sessionId, long tick) {
         if (state == SessionState.APPLYING && matches(sessionId)) {
-            this.state = SessionState.ACTIVE;
-            this.lastHeartbeatTick = tick;
+            if (releasePending) { clearSession(); }
+            else { this.state = SessionState.ACTIVE; this.lastHeartbeatTick = tick; }
         }
     }
 
-    // 主动释放（客户端关闭、强制释放）；返回被释放的会话，空闲时返回 null
+    // 请求释放；APPLYING 延后至 finishApply，返回目标会话，空闲时返回 null
     public synchronized SessionInfo release() {
         if (state == SessionState.FREE) {
             return null;
         }
         SessionInfo released = snapshotInfo();
-        clearSession();
+        if (state == SessionState.APPLYING) { releasePending = true; }
+        else { clearSession(); }
         return released;
     }
 
-    // 超时检查：OPENING 超确认窗口或非空闲会话超租约即释放，返回被释放的会话
+    // 超时检查只回收 OPENING/ACTIVE；APPLYING 等待保存收尾
     public synchronized SessionInfo expire(long tick) {
+        // 保存工作与回滚未结束前，不开放同一编辑目标；结束时会刷新租约。
+        if (state == SessionState.APPLYING) { return null; }
         if (state == SessionState.OPENING) {
             if (tick - openedTick > RuleEditSessionLimits.OPEN_CONFIRM_WINDOW_TICKS) {
                 SessionInfo expired = snapshotInfo();
@@ -239,6 +243,7 @@ public final class EditSessionManager {
 
     private void clearSession() {
         this.state = SessionState.FREE;
+        this.releasePending = false;
         this.ownerUuid = null;
         this.ownerName = "";
         this.sessionId = null;
