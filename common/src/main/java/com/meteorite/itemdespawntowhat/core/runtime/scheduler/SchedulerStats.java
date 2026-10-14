@@ -1,5 +1,8 @@
 package com.meteorite.itemdespawntowhat.core.runtime.scheduler;
 
+import com.meteorite.itemdespawntowhat.core.api.scheduler.CancelReason;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
+
 import java.util.Map;
 
 /**

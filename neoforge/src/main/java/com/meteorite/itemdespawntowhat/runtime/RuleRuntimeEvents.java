@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.runtime;
 
+import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
+import com.meteorite.itemdespawntowhat.core.debug.DebugRuntimeObserver;
 import com.meteorite.itemdespawntowhat.core.debug.DebugSessionManager;
 
 import net.minecraft.server.level.ServerLevel;
@@ -27,6 +29,11 @@ import static com.meteorite.itemdespawntowhat.ItemDespawnToWhat.MOD_ID;
  */
 @EventBusSubscriber(modid = MOD_ID)
 public final class RuleRuntimeEvents {
+
+    // 装配观测接缝：运行时只依赖 core/api 的接口，调试子系统的实现只在这里注入
+    static {
+        RuntimeObserver.install(new DebugRuntimeObserver());
+    }
 
     private RuleRuntimeEvents() {
         throw new UnsupportedOperationException("Utility class");

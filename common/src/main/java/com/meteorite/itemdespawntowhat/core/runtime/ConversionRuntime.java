@@ -1,8 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.runtime;
 
 import com.meteorite.itemdespawntowhat.Constants;
-import com.meteorite.itemdespawntowhat.core.debug.DebugMode;
-import com.meteorite.itemdespawntowhat.core.debug.DebugScenarioManager;
 import com.meteorite.itemdespawntowhat.core.api.ConditionContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecutor;
@@ -16,18 +14,19 @@ import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.model.TriggerKind;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.CancelReason;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.CancelReason;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.QueueStats;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ScheduledTask;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ScheduledTaskHandle;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.SchedulerConfig;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.SchedulerStats;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerScheduler;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTask;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTickBudget;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.StepResult;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.StepOutcome;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTaskKind;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTickBudgetSnapshot;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.StepResult;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.StepOutcome;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudgetSnapshot;
+import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
 import com.meteorite.itemdespawntowhat.core.service.BuiltinTypeRegistries;
 import com.meteorite.itemdespawntowhat.core.state.DamageClassification;
 import com.meteorite.itemdespawntowhat.core.state.DropState;
@@ -107,7 +106,7 @@ public final class ConversionRuntime {
     private static final class TrackedState {
         private int failureCount;
         private boolean expiryPending;
-        private ScheduledTask task;
+        private ScheduledTaskHandle task;
         private boolean locked;
         // 下次到期判定的游戏刻（仅用于 debug 输出，-1 表示未排期）
         private long nextCheckTick = -1L;
@@ -254,9 +253,9 @@ public final class ConversionRuntime {
     public void onItemAdded(ServerLevel level, ItemEntity entity) {
         LevelState state = stateOf(level);
         state.items.put(entity.getId(), entity);
-        if (index.isEmpty() && DebugScenarioManager.inactive(level.getServer())) { return; }
+        if (index.isEmpty() && RuntimeObserver.current().inactive(level.getServer())) { return; }
         if (excluded(entity)) {
-            if (DebugMode.ENABLED) { DebugScenarioManager.observe(entity, "EXCLUDED", "death_locked",
+            if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(entity, "EXCLUDED", "death_locked",
                     entity.getTags().contains(Constants.CHECK_LOCK_TAG), "unlimited_lifetime", entity.getAge() == -32768); }
             return;
         }
@@ -271,7 +270,7 @@ public final class ConversionRuntime {
         TrackedState tracked = new TrackedState();
         state.tracked.put(entity.getUUID(), tracked);
         scheduleInitial(level, entity, tracked, candidates);
-        if (DebugMode.ENABLED) { DebugScenarioManager.observe(entity, "TRACKED", "next_check_tick", tracked.nextCheckTick,
+        if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(entity, "TRACKED", "next_check_tick", tracked.nextCheckTick,
                 "candidates", candidates.size(), "lifespan_ticks", lifespanTicks(level, entity)); }
     }
 
@@ -305,7 +304,7 @@ public final class ConversionRuntime {
         if (tracked.locked) {
             return;
         }
-        if (DebugMode.ENABLED) { DebugScenarioManager.observe(item, "ENV_DESTROY_REQUEST", "trigger", kind.key()); }
+        if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "ENV_DESTROY_REQUEST", "trigger", kind.key()); }
         attempt(level, item.getUUID(), kind);
     }
 
@@ -467,8 +466,10 @@ public final class ConversionRuntime {
 
     // 某个掉落物的候选规则（已按优先级 → 条件叶数 → 定义序排序），供 /idtw debug why 使用
     public List<Rule> candidatesFor(ItemEntity entity) {
-        if (DebugMode.ENABLED) {
-            List<Rule> scene = DebugScenarioManager.candidates(entity);
+        if (RuntimeObserver.current().enabled()) {
+            // 接缝刻意返回未知元素类型：候选场景的语义是规则列表，在此按契约收窄一次
+            @SuppressWarnings("unchecked")
+            List<Rule> scene = (List<Rule>) RuntimeObserver.current().candidates(entity);
             if (scene != null) { return scene; }
         }
         return index.candidates(itemIdOf(entity));
@@ -521,10 +522,10 @@ public final class ConversionRuntime {
     }
 
     // 登记一次到期检查：到期 tick 按当前游戏刻推导为绝对值，保留原始时间不被改写
-    private ScheduledTask scheduleCheck(ServerLevel level, ItemEntity entity, int delayTicks) {
+    private ScheduledTaskHandle scheduleCheck(ServerLevel level, ItemEntity entity, int delayTicks) {
         long dueTick = level.getGameTime() + Math.max(0, delayTicks);
         UUID uuid = entity.getUUID();
-        return DebugScenarioManager.schedule(entity, scheduler, level.dimension(), ServerTaskKind.CONDITION_CHECK,
+        return RuntimeObserver.current().schedule(entity, scheduler, level.dimension(), ServerTaskKind.CONDITION_CHECK,
                 dueTick, "check", () -> attempt(level, uuid, TriggerKind.NATURAL));
     }
 
@@ -552,9 +553,9 @@ public final class ConversionRuntime {
         delayTicks = Math.min(delayTicks, remaining);
         tracked.nextCheckTick = level.getGameTime() + delayTicks;
         tracked.task = scheduleCheck(level, entity, delayTicks);
-        if (DebugMode.ENABLED) { DebugScenarioManager.observe(entity, "RETRY", "delay_ticks", delayTicks,
+        if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(entity, "RETRY", "delay_ticks", delayTicks,
                 "failure_count", tracked.failureCount, "next_check_tick", tracked.nextCheckTick); }
-        if (config.debugLogging() && DebugScenarioManager.allowsRuntimeLogging(entity)) {
+        if (config.debugLogging() && RuntimeObserver.current().allowsRuntimeLogging(entity)) {
             LOGGER.info("掉落物 {} 条件未满足，{} tick 后重试（第 {} 次失败）",
                     entity.getUUID(), delayTicks, tracked.failureCount);
         }
@@ -642,12 +643,12 @@ public final class ConversionRuntime {
             }
             // 年龄门槛只对自然消失生效：环境致死在当前刻立即判定，与存活时长无关
             if (!expiring && kind == TriggerKind.NATURAL && !isEligible(level, item, rule)) {
-                if (DebugMode.ENABLED) { DebugScenarioManager.observe(item, "AGE_NOT_READY", "rule", rule.id(),
+                if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "AGE_NOT_READY", "rule", rule.id(),
                         "due_age_ticks", dueAge(level, item, rule)); }
                 continue;
             }
             boolean matched = ExpressionEvaluator.matches(rule.conditions(), context, types.conditionTypes());
-            if (DebugMode.ENABLED) { DebugScenarioManager.observe(item, "CANDIDATE", "rule", rule.id(), "matched", matched); }
+            if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "CANDIDATE", "rule", rule.id(), "matched", matched); }
             if (matched) {
                 return rule;
             }
@@ -689,13 +690,13 @@ public final class ConversionRuntime {
                     level.dimension().location().toString(), held, available, costPerGroup,
                     true, item.getX(), item.getY(), item.getZ());
             ledger.put(record);
-            if (DebugMode.ENABLED) {
+            if (RuntimeObserver.current().enabled()) {
                 int estimated = costPerGroup > 0 ? Math.max(1, available / costPerGroup) : 1;
-                DebugScenarioManager.converted(item, rule, estimated);
+                RuntimeObserver.current().converted(item, rule.id().toString(), estimated);
             }
             ConversionSettlement settlement = new ConversionSettlement(this, scheduler, level, item, rule, held, record, ledger);
             scheduler.scheduleAt(level.dimension(), settlement, level.getGameTime());
-            if (config.debugLogging() && DebugScenarioManager.allowsRuntimeLogging(item)) {
+            if (config.debugLogging() && RuntimeObserver.current().allowsRuntimeLogging(item)) {
                 LOGGER.info("掉落物 {} 已按规则 {} 进入结算（可用源 {}，每组成本 {}）",
                         item.getUUID(), rule.id(), available, costPerGroup);
             }
@@ -711,27 +712,27 @@ public final class ConversionRuntime {
         if (conditions != null && !conditions.isEmpty()) {
             ConditionContext context = conditionContext(level, item, BlockPos.containing(base.position()));
             if (!ExpressionEvaluator.matches(conditions, context, types.conditionTypes())) {
-                if (DebugMode.ENABLED) { DebugScenarioManager.observe(item, "EFFECT_CONDITION_SKIPPED", "effect", effect.type()); }
+                if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "EFFECT_CONDITION_SKIPPED", "effect", effect.type()); }
                 return budget -> EffectResult.skipped("conditions_unmet");
             }
         }
         if (effect.chance() < 1.0D && base.random().nextDouble() >= effect.chance()) {
-            if (DebugMode.ENABLED) { DebugScenarioManager.observe(item, "EFFECT_CHANCE_SKIPPED", "effect", effect.type(), "chance", effect.chance()); }
+            if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "EFFECT_CHANCE_SKIPPED", "effect", effect.type(), "chance", effect.chance()); }
             // 概率落空仍支付本组固定成本：不免费重试、不返还
             return budget -> EffectResult.skipped("chance_missed");
         }
         EffectType<?> definition = types.effectTypes().getOrNull(effect.type());
         if (definition == null) {
-            if (DebugMode.ENABLED) { DebugScenarioManager.observe(item, "ERROR", "effect", effect.type(), "reason", "type_not_registered"); }
+            if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "ERROR", "effect", effect.type(), "reason", "type_not_registered"); }
             LOGGER.error("规则 {} 引用了未注册的效果类型 {}", base.ruleId(), effect.type());
             return budget -> EffectResult.failed("type_not_registered");
         }
         try {
-            if (DebugMode.ENABLED) { DebugScenarioManager.observe(item, "EFFECT_BEGIN", "effect", effect.type()); }
+            if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "EFFECT_BEGIN", "effect", effect.type()); }
             EffectExecution execution = executorOf(definition).start(effect, base);
             return execution == null ? budget -> EffectResult.failed("no_execution") : execution;
         } catch (RuntimeException e) {
-            if (DebugMode.ENABLED) { DebugScenarioManager.observe(item, "ERROR", "effect", effect.type(), "error", e.toString()); }
+            if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "ERROR", "effect", effect.type(), "error", e.toString()); }
             LOGGER.error("效果执行失败：规则={} 效果={} 位置={}", base.ruleId(), effect.type(), base.position(), e);
             return budget -> EffectResult.failed(String.valueOf(e));
         }
@@ -779,7 +780,7 @@ public final class ConversionRuntime {
 
     // 离开维度或区块卸载时立即取消检查，释放任务捕获对象。
     public void onItemRemoved(ServerLevel level, ItemEntity item) {
-        if (DebugMode.ENABLED) { DebugScenarioManager.observe(item, "REMOVED", "reason", item.getRemovalReason()); }
+        if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "REMOVED", "reason", item.getRemovalReason()); }
         LevelState state = levels.get(level.dimension());
         if (state == null) { return; }
         state.items.remove(item.getId());
@@ -797,7 +798,7 @@ public final class ConversionRuntime {
         TrackedState tracked = state.tracked.get(item.getUUID());
         if (tracked == null) { return false; }
         if (!tracked.expiryPending) {
-            if (DebugMode.ENABLED) { DebugScenarioManager.observe(item, "NATURAL_EXPIRY_DEFERRED"); }
+            if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "NATURAL_EXPIRY_DEFERRED"); }
             tracked.expiryPending = true;
             if (tracked.task != null) { tracked.task.cancel(CancelReason.ENTITY_REMOVED); }
             tracked.nextCheckTick = level.getGameTime();

@@ -1,8 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.type.effect.exec;
 
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
-import com.meteorite.itemdespawntowhat.core.debug.DebugMode;
-import com.meteorite.itemdespawntowhat.core.debug.DebugScenarioManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
@@ -15,6 +13,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
+import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
 import java.util.List;
 import java.util.function.IntConsumer;
 import java.util.function.IntUnaryOperator;
@@ -90,11 +89,11 @@ public final class EffectTargets {
         if (!com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks.contains(context.level(), entity.blockPosition())) {
             context.schedule(20, () -> addEntity(context, entity));
         } else {
-            if (DebugMode.ENABLED) { DebugScenarioManager.prepareOutput(context, entity); }
+            if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().prepareOutput(context, entity); }
             if (!context.level().addFreshEntity(entity)) {
                 throw new IllegalStateException("实体生成被拒绝：规则=" + context.ruleId() + " 类型=" + entity.getType());
             }
-            if (DebugMode.ENABLED) { DebugScenarioManager.outputAdded(context, entity); }
+            if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().outputAdded(context, entity); }
         }
     }
 

@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.core.runtime.scheduler;
+package com.meteorite.itemdespawntowhat.core.api.scheduler;
 
 /**
  * 公共服务器预算调度器的任务种类。

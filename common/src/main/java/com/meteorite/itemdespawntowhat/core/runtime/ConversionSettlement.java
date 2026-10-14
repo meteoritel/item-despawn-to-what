@@ -4,8 +4,6 @@ import com.google.gson.JsonElement;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
-import com.meteorite.itemdespawntowhat.core.debug.DebugMode;
-import com.meteorite.itemdespawntowhat.core.debug.DebugScenarioManager;
 import com.meteorite.itemdespawntowhat.core.model.CatalystCost;
 import com.meteorite.itemdespawntowhat.core.model.CombinationMode;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
@@ -13,12 +11,13 @@ import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.OutcomeCandidate;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.CancelReason;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.CancelReason;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerScheduler;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTask;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTaskKind;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTickBudget;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.StepResult;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.StepResult;
+import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
 import com.meteorite.itemdespawntowhat.core.type.effect.SpawnEntityEffect;
 import com.meteorite.itemdespawntowhat.core.type.effect.EntityProduct;
 import com.meteorite.itemdespawntowhat.core.config.NearbyProductLimits;
@@ -216,12 +215,12 @@ final class ConversionSettlement implements ServerTask {
         } catch (RuntimeException failure) {
             LOGGER.warn("结算记录写盘失败：id={} reason={}", record.id(), reason, failure);
         }
-        if (DebugMode.ENABLED) {
-            DebugScenarioManager.observe(source, "SETTLEMENT_CANCELLED", "record", record.id(),
+        if (RuntimeObserver.current().enabled()) {
+            RuntimeObserver.current().observe(source, "SETTLEMENT_CANCELLED", "record", record.id(),
                     "reason", reason, "pending_delivery", record.pendingDelivery());
         }
-        if (DebugMode.ENABLED && record.catalystCostPerGroup() > 0) {
-            DebugScenarioManager.observe(source, "CATALYST_RELEASED", "record", record.id(), "reason", reason,
+        if (RuntimeObserver.current().enabled() && record.catalystCostPerGroup() > 0) {
+            RuntimeObserver.current().observe(source, "CATALYST_RELEASED", "record", record.id(), "reason", reason,
                     "released_groups", Math.max(0, record.groupCount() - record.groupsStarted()));
         }
         return true;
@@ -269,14 +268,14 @@ final class ConversionSettlement implements ServerTask {
         // 组数定稿后先登记催化剂成本再落计划；预留已完成，两者之间没有 yield 点
         record.catalystPlan(catalyst == null ? 0 : catalyst.totalCount());
         record.plan(pendingCandidate.id(), groupCount);
-        if (DebugMode.ENABLED && catalyst != null) {
-            DebugScenarioManager.observe(source, "CATALYST_PLANNED", "record", record.id(), "rule", rule.id(),
+        if (RuntimeObserver.current().enabled() && catalyst != null) {
+            RuntimeObserver.current().observe(source, "CATALYST_PLANNED", "record", record.id(), "rule", rule.id(),
                     "per_group", catalyst.totalCount(), "groups", groupCount, "reserved", groupCount * catalyst.totalCount());
         }
-        if (DebugMode.ENABLED) {
+        if (RuntimeObserver.current().enabled()) {
             // 每次结算只观测一条 OUTCOME_PLANNED（candidate = 本结算第一组所选候选，groups = 组数上界）；
             // 多组结算的逐组候选切换由每组的 EFFECT_SCHEDULED / EFFECT_ONESHOT_SKIPPED 观测体现
-            DebugScenarioManager.observe(source, "OUTCOME_PLANNED", "rule", rule.id(), "candidate", pendingCandidate.id(),
+            RuntimeObserver.current().observe(source, "OUTCOME_PLANNED", "rule", rule.id(), "candidate", pendingCandidate.id(),
                     "groups", groupCount, "source_cost_per_group", record.sourceCostPerGroup(), "available", held.getCount(),
                     "structure_version", structureVersion, "cursor_start", rotationStart(), "candidates", candidates.size());
         }
@@ -321,8 +320,8 @@ final class ConversionSettlement implements ServerTask {
         pendingCandidateIndex = -1;
         groupCount = 0;
         record.plan("", 0);
-        if (DebugMode.ENABLED) {
-            DebugScenarioManager.observe(source, "OUTCOME_SKIPPED", "rule", rule.id(), "candidates", candidates.size());
+        if (RuntimeObserver.current().enabled()) {
+            RuntimeObserver.current().observe(source, "OUTCOME_SKIPPED", "rule", rule.id(), "candidates", candidates.size());
         }
         phase = Phase.DELIVERING;
         return StepResult.yield(1, 1);
@@ -464,8 +463,8 @@ final class ConversionSettlement implements ServerTask {
                         record.plan(record.candidateId(), groupCount);
                         reservations().releaseOwner(record.id());
                         ledger.put(record);
-                        if (DebugMode.ENABLED) {
-                            DebugScenarioManager.observe(source, "OUTCOME_SKIPPED", "record", record.id(), "rule", rule.id(),
+                        if (RuntimeObserver.current().enabled()) {
+                            RuntimeObserver.current().observe(source, "OUTCOME_SKIPPED", "record", record.id(), "rule", rule.id(),
                                     "candidates", candidates.size(), "groups_started", groupsStarted,
                                     "stopped_groups", stoppedGroups, "reason", "capacity");
                         }
@@ -491,8 +490,8 @@ final class ConversionSettlement implements ServerTask {
                         record.plan(record.candidateId(), groupCount);
                         reservations().releaseOwner(record.id());
                         ledger.put(record);
-                        if (DebugMode.ENABLED) {
-                            DebugScenarioManager.observe(source, "CATALYST_SHORT", "record", record.id(), "rule", rule.id(),
+                        if (RuntimeObserver.current().enabled()) {
+                            RuntimeObserver.current().observe(source, "CATALYST_SHORT", "record", record.id(), "rule", rule.id(),
                                     "groups_started", groupsStarted, "group_count", groupCount,
                                     "short_groups", shortGroups, "short_catalyst", shortGroups * perGroup);
                         }
@@ -538,8 +537,8 @@ final class ConversionSettlement implements ServerTask {
             Effect effect = effects.get(slot);
             if (isOneShotAttempted(candidate.id(), slot, effect)) {
                 // 同一源请求内一次性效果只尝试一次：后续组跳过该槽，不重试也不重复计费
-                if (DebugMode.ENABLED) {
-                    DebugScenarioManager.observe(source, "EFFECT_ONESHOT_SKIPPED", "effect", effect.type(),
+                if (RuntimeObserver.current().enabled()) {
+                    RuntimeObserver.current().observe(source, "EFFECT_ONESHOT_SKIPPED", "effect", effect.type(),
                             "outcome", candidate.id(), "slot", slot, "group", groupsStarted);
                 }
                 continue;
@@ -601,15 +600,15 @@ final class ConversionSettlement implements ServerTask {
         // 防御：已完成记录的未支付预留必然为空（取消/不足路径已释放），这里幂等再释放一次
         reservations().releaseOwner(record.id());
         phase = Phase.DONE;
-        if (DebugMode.ENABLED) {
-            DebugScenarioManager.observe(source, "SETTLEMENT_COMPLETED", "record", record.id(), "rule", rule.id(),
+        if (RuntimeObserver.current().enabled()) {
+            RuntimeObserver.current().observe(source, "SETTLEMENT_COMPLETED", "record", record.id(), "rule", rule.id(),
                     "candidate", record.candidateId(), "groups", record.groupCount(),
                     "consumed_sources", record.consumedSources(), "applied_units", record.appliedUnits(),
                     "pending_units", record.pendingUnits(), "returned", record.deliveredReturns(),
                     "pending_delivery", record.pendingDelivery());
         }
-        if (DebugMode.ENABLED) {
-            DebugScenarioManager.observe(source, "REBATE_DELIVERED", "record", record.id(), "returned", record.deliveredReturns());
+        if (RuntimeObserver.current().enabled()) {
+            RuntimeObserver.current().observe(source, "REBATE_DELIVERED", "record", record.id(), "returned", record.deliveredReturns());
         }
         return StepResult.done(1);
     }
@@ -637,11 +636,11 @@ final class ConversionSettlement implements ServerTask {
     // 效果派发：延迟交给调度器，条件与概率在执行时统一判定
     private void dispatchEffect(Effect effect, EffectContext context) {
         int delay = Math.max(0, effect.delayTicks());
-        if (DebugMode.ENABLED) {
-            DebugScenarioManager.observe(source, "EFFECT_SCHEDULED", "effect", effect.type(),
+        if (RuntimeObserver.current().enabled()) {
+            RuntimeObserver.current().observe(source, "EFFECT_SCHEDULED", "effect", effect.type(),
                     "delay_ticks", delay, "chance", effect.chance(), "outcome", candidate.id());
         }
-        DebugScenarioManager.schedule(source, scheduler, level.dimension(),
+        RuntimeObserver.current().schedule(source, scheduler, level.dimension(),
                 level.getGameTime() + delay, new EffectTask(runtime, level, source, context, effect, this::account));
     }
 
@@ -660,8 +659,8 @@ final class ConversionSettlement implements ServerTask {
             case SKIPPED -> record.effectSkipped();
             case FAILED -> record.effectFailed();
         }
-        if (DebugMode.ENABLED) {
-            DebugScenarioManager.observe(source, "EFFECT_SETTLED", "outcome", result.outcome(),
+        if (RuntimeObserver.current().enabled()) {
+            RuntimeObserver.current().observe(source, "EFFECT_SETTLED", "outcome", result.outcome(),
                     "applied", result.appliedUnits(), "pending", result.pendingUnits(), "detail", result.detail());
         }
     }

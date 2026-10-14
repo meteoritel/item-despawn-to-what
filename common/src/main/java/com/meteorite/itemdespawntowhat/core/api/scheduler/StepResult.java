@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.core.runtime.scheduler;
+package com.meteorite.itemdespawntowhat.core.api.scheduler;
 
 /**
  * 任务单步执行的回执：消耗的工作量单位与下一次入队延迟。

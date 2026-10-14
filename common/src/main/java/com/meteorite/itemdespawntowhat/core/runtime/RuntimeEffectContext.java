@@ -1,9 +1,9 @@
 package com.meteorite.itemdespawntowhat.core.runtime;
 
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
-import com.meteorite.itemdespawntowhat.core.debug.DebugScenarioManager;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerScheduler;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTaskKind;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
+import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -171,7 +171,7 @@ public final class RuntimeEffectContext implements EffectContext {
     public void schedule(int delayTicks, Runnable task) {
         // 绝对到期 tick 由当前游戏刻推导：跨 tick 延后但保留原始时间，不会提前执行
         long dueTick = level.getGameTime() + Math.max(0, delayTicks);
-        DebugScenarioManager.schedule(source, scheduler, realmKey, ServerTaskKind.EFFECT, dueTick, "effect",
+        RuntimeObserver.current().schedule(source, scheduler, realmKey, ServerTaskKind.EFFECT, dueTick, "effect",
                 () -> runWhenLoaded(task));
     }
 

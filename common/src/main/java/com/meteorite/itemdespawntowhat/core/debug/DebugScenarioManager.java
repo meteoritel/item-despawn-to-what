@@ -4,14 +4,14 @@ import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.command.RuleCommandContext;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.RunnableTask;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ScheduledTask;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerScheduler;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTaskKind;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTask;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.CancelReason;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTickBudget;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.StepResult;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.RunnableTask;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ScheduledTaskHandle;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.TaskQueue;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.CancelReason;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.StepResult;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -157,21 +157,21 @@ public final class DebugScenarioManager {
     }
 
     // 用实际提交参数校对轮次与规则，不再次执行条件预测。
-    public static void converted(ItemEntity source, Rule rule, int rounds) {
+    public static void converted(ItemEntity source, String ruleId, int rounds) {
         if (!DebugMode.ENABLED) { return; }
         Binding binding = ENTITIES.get(source.getUUID());
-        if (binding != null && binding.source) { binding.run.converted(source, rule.id().toString(), rounds); }
+        if (binding != null && binding.source) { binding.run.converted(source, ruleId, rounds); }
     }
 
     // 为实际队列任务保留本轮句柄，完成时释放，停止时可精确取消而不清空普通队列。
-    public static ScheduledTask schedule(ItemEntity source, ServerScheduler scheduler, Object realmKey,
-                                         ServerTaskKind kind, long dueTick, String name, Runnable action) {
+    public static ScheduledTaskHandle schedule(ItemEntity source, TaskQueue queue, Object realmKey,
+                                              ServerTaskKind kind, long dueTick, String name, Runnable action) {
         Binding binding = DebugMode.ENABLED ? ENTITIES.get(source.getUUID()) : null;
         if (binding == null || !binding.source) {
-            return scheduler.scheduleAt(realmKey, new RunnableTask(kind, name, action), dueTick);
+            return queue.scheduleAt(realmKey, new RunnableTask(kind, name, action), dueTick);
         }
-        ScheduledTask[] holder = new ScheduledTask[1];
-        holder[0] = scheduler.scheduleAt(realmKey, new RunnableTask(kind, name, () -> {
+        ScheduledTaskHandle[] holder = new ScheduledTaskHandle[1];
+        holder[0] = queue.scheduleAt(realmKey, new RunnableTask(kind, name, () -> {
             binding.run.tasks.remove(holder[0]);
             action.run();
         }), dueTick);
@@ -182,25 +182,25 @@ public final class DebugScenarioManager {
     /**
      * 调试场景下登记可续接任务；任务终态时自动移除句柄，避免场景停止重复取消已完成任务。
      * @param source 场景源实体
-     * @param scheduler 公共调度器
+     * @param queue 公共调度队列
      * @param realmKey 维度标识
      * @param dueTick 到期刻
      * @param task 可续接服务端任务
      * @return 已登记句柄
      */
-    public static ScheduledTask schedule(ItemEntity source, ServerScheduler scheduler, Object realmKey,
-                                         long dueTick, ServerTask task) {
+    public static ScheduledTaskHandle schedule(ItemEntity source, TaskQueue queue, Object realmKey,
+                                              long dueTick, ServerTask task) {
         Binding binding = DebugMode.ENABLED ? ENTITIES.get(source.getUUID()) : null;
         if (binding == null || !binding.source) {
-            return scheduler.scheduleAt(realmKey, task, dueTick);
+            return queue.scheduleAt(realmKey, task, dueTick);
         }
-        ScheduledTask[] holder = new ScheduledTask[1];
-        holder[0] = scheduler.scheduleAt(realmKey, new TrackedTask(task, binding.run, holder), dueTick);
+        ScheduledTaskHandle[] holder = new ScheduledTaskHandle[1];
+        holder[0] = queue.scheduleAt(realmKey, new TrackedTask(task, binding.run, holder), dueTick);
         binding.run.tasks.add(holder[0]);
         return holder[0];
     }
 
-    private record TrackedTask(ServerTask delegate, DebugScenarioRun run, ScheduledTask[] holder) implements ServerTask {
+    private record TrackedTask(ServerTask delegate, DebugScenarioRun run, ScheduledTaskHandle[] holder) implements ServerTask {
 
         @Override public ServerTaskKind kind() { return delegate.kind(); }
         @Override public String tracingName() { return delegate.tracingName(); }

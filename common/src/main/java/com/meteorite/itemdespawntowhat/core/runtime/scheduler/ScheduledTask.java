@@ -1,10 +1,16 @@
 package com.meteorite.itemdespawntowhat.core.runtime.scheduler;
 
+import com.meteorite.itemdespawntowhat.core.api.scheduler.CancelReason;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ScheduledTaskHandle;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
+
 /**
- * 已入队任务的句柄：承载任务本体、当前到期 tick 与可精确取消的状态。
+ * 已入队任务的句柄实现：承载任务本体、当前到期 tick 与可精确取消的状态。
  * 取消是幂等的，并且一定会把原因上报给调度器计数，不做静默丢弃。
+ * 对外只暴露 {@link ScheduledTaskHandle}，队列归属与生命周期迁移是本实现的内部细节。
  */
-public final class ScheduledTask {
+public final class ScheduledTask implements ScheduledTaskHandle {
 
     // 任务在队列中的生命周期状态。
     public enum State {

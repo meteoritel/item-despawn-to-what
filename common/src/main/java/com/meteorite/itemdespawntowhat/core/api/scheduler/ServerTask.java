@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.core.runtime.scheduler;
+package com.meteorite.itemdespawntowhat.core.api.scheduler;
 
 import org.jetbrains.annotations.Nullable;
 
