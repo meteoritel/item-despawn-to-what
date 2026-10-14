@@ -1,0 +1,159 @@
+name: Publish GitHub Wiki
+
+# 发布标准：
+# 1. 1.21.1 分支的 docs/wiki/ 是唯一内容源。
+# 2. GitHub Wiki 仓库只是发布镜像，不接受独立维护。
+# 3. 每次发布都让 Wiki 内容与源目录完全一致，网页端直接修改会被覆盖。
+# 4. 发布集必须平铺在仓库根目录（GitHub Wiki 不支持子目录），
+#    中英页面通过文件名前缀 zh- / en- 一一对应。
+on:
+  push:
+    branches:
+      - '1.21.1'
+    paths:
+      - 'docs/wiki/**'
+      - '.github/workflows/publish-wiki.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-wiki-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'meteoritel/item-despawn-to-what' && github.ref == 'refs/heads/1.21.1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      WIKI_SOURCE_DIR: docs/wiki
+
+    steps:
+      - name: 检出主仓库
+        uses: actions/checkout@v4
+
+      - name: 校验 Wiki 内容源
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ ! -d "${WIKI_SOURCE_DIR}" ]]; then
+            echo "::error::Wiki 内容源目录不存在：${WIKI_SOURCE_DIR}"
+            exit 1
+          fi
+
+          error_count=0
+
+          # (a) GitHub Wiki 不支持子目录，页面必须全部平铺在仓库根目录，
+          #     语言通过文件名前缀 zh- / en- 区分
+          subdirs="$(find "${WIKI_SOURCE_DIR}" -mindepth 1 -type d)"
+          if [[ -n "${subdirs}" ]]; then
+            echo "::error::GitHub Wiki 不支持子目录，请改用 zh- / en- 文件名前缀：${subdirs}"
+            exit 1
+          fi
+
+          # (b) 必需文件：全局三件套 + 两个语言入口页
+          required_files=(Home.md _Sidebar.md _Footer.md zh-Home.md en-Home.md)
+          for file in "${required_files[@]}"; do
+            if [[ ! -f "${WIKI_SOURCE_DIR}/${file}" ]]; then
+              echo "::error file=${WIKI_SOURCE_DIR}/${file}::缺少 GitHub Wiki 必需文件"
+              exit 1
+            fi
+          done
+
+          # (c) 逐个 Markdown 文件校验相对链接目标存在（相对链接基于文件所在目录解析）
+          while IFS= read -r -d '' md_file; do
+            file_dir="$(dirname "${md_file}")"
+            rel_file="${md_file#${WIKI_SOURCE_DIR}/}"
+
+            while IFS= read -r raw_target; do
+              case "${raw_target}" in
+                http://*|https://*|mailto:*|"") continue ;;
+              esac
+
+              target="${raw_target%%#*}"
+              [[ -z "${target}" ]] && continue
+              # 只看文件名部分是否存在扩展名，避免路径里的 . / .. 被误判
+              filename="${target##*/}"
+              [[ "${filename}" == *.* ]] || target="${target}.md"
+
+              # 规范化路径（处理 ../ 与 ./ 相对段）
+              normalized="$(cd "${file_dir}" && realpath -m "${target}")"
+              if [[ ! -e "${normalized}" ]]; then
+                echo "::error file=${rel_file}::Wiki 本地链接目标不存在：${raw_target}"
+                error_count=$((error_count + 1))
+              fi
+            done < <(grep -oE '\]\([^)]+\)' "${md_file}" | sed -E 's/^\]\((.*)\)$/\1/')
+          done < <(find "${WIKI_SOURCE_DIR}" -name '*.md' -type f -print0)
+
+          # (d) 中英成对：每个 zh-<后缀>.md 必须有同名 en-<后缀>.md，反之亦然
+          while IFS= read -r -d '' md_file; do
+            name="${md_file##*/}"
+            case "${name}" in
+              zh-*) mirror="en-${name#zh-}" ;;
+              en-*) mirror="zh-${name#en-}" ;;
+              *) continue ;;
+            esac
+            if [[ ! -f "${WIKI_SOURCE_DIR}/${mirror}" ]]; then
+              echo "::error file=${WIKI_SOURCE_DIR}/${name}::中英页面必须成对，缺少对应的 ${mirror}"
+              error_count=$((error_count + 1))
+            fi
+          done < <(find "${WIKI_SOURCE_DIR}" -maxdepth 1 -name '*.md' -type f -print0)
+
+          if [[ "${error_count}" -gt 0 ]]; then
+            echo "::error::Wiki 内容源校验未通过，共 ${error_count} 处问题"
+            exit 1
+          fi
+
+          page_count="$(find "${WIKI_SOURCE_DIR}" -maxdepth 1 -name '*.md' -type f | wc -l)"
+          echo "Wiki 内容源校验通过：${WIKI_SOURCE_DIR} 共 ${page_count} 个页面。"
+
+      - name: 克隆 GitHub Wiki 仓库
+        shell: bash
+        env:
+          WIKI_TOKEN: ${{ secrets.METEORITE_MOD_WIKI_SECRET }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${WIKI_TOKEN}" ]]; then
+            echo "::error::缺少仓库 Secret：METEORITE_MOD_WIKI_SECRET"
+            exit 1
+          fi
+
+          wiki_url="https://x-access-token:${WIKI_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git"
+          wiki_dir="${RUNNER_TEMP}/wiki"
+
+          if ! git clone --quiet "${wiki_url}" "${wiki_dir}"; then
+            echo "::error::无法克隆 Wiki 仓库。请先在 GitHub 网页启用 Wiki 并创建首个 Home 页面，同时检查 METEORITE_MOD_WIKI_SECRET 的权限。"
+            exit 1
+          fi
+
+      - name: 同步并推送 Wiki
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          wiki_dir="${RUNNER_TEMP}/wiki"
+          rsync -a --delete --exclude='.git/' "${WIKI_SOURCE_DIR}/" "${wiki_dir}/"
+
+          if [[ -z "$(git -C "${wiki_dir}" status --porcelain)" ]]; then
+            echo "Wiki 已与 ${GITHUB_REF_NAME}@${GITHUB_SHA} 一致，无需提交。"
+            exit 0
+          fi
+
+          git -C "${wiki_dir}" config user.name 'github-actions[bot]'
+          git -C "${wiki_dir}" config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -C "${wiki_dir}" add -A
+          git -C "${wiki_dir}" commit \
+            -m "docs: sync wiki from ${GITHUB_REF_NAME}@${GITHUB_SHA::12}" \
+            -m "Source: https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}"
+
+          wiki_branch="$(git -C "${wiki_dir}" branch --show-current)"
+          if [[ -z "${wiki_branch}" ]]; then
+            echo "::error::无法确定 GitHub Wiki 默认分支"
+            exit 1
+          fi
+
+          git -C "${wiki_dir}" push origin "HEAD:${wiki_branch}"
