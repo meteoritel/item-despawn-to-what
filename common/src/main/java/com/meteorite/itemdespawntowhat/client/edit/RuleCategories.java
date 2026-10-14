@@ -15,6 +15,23 @@ public final class RuleCategories {
         return categoryJson(rule == null || !rule.isMapping() ? null : rule.unwrap().getAsJsonObject());
     }
 
+    /**
+     * 按规则 id 与规则体判定分类，用于调试测试规则这类需要独立归组的规则。
+     *
+     * <p>测试规则的内容仍是普通产出动作，仅凭规则体无法与真实规则区分；
+     * 因此先按 id 判定归属，再回落到常规的产出动作判定。</p>
+     *
+     * @param id 规则 id，允许为 null
+     * @param rule 规则体，允许为 null
+     * @return 分类标识；测试规则固定为 {@link DebugTestRules#CATEGORY}
+     */
+    public static String category(@Nullable String id, @Nullable RuleValue rule) {
+        if (DebugTestRules.isTestRule(id)) {
+            return DebugTestRules.CATEGORY;
+        }
+        return category(rule);
+    }
+
     // 分类判定：输入为规则 JSON 对象
     private static String categoryJson(@Nullable JsonObject rule) {
         Set<String> outputs = new LinkedHashSet<>();

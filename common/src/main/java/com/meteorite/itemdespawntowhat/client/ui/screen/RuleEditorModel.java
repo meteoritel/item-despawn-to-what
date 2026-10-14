@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDefaults;
+import com.meteorite.itemdespawntowhat.client.edit.DebugTestRules;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorChangeSet;
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
@@ -237,6 +238,87 @@ public final class RuleEditorModel {
         if (session != null) {
             session.apply(EditSession.OP_DELETE_RULE, () -> session.draft().setDeleted(deleted));
         }
+    }
+
+    // ---- 调试测试规则 ----
+
+    /**
+     * 统计当前语境下的测试规则数量：包含服务端已有的与本次新建的草稿，不含草稿被标记删除的规则。
+     *
+     * @return 测试规则条数
+     */
+    public int testRuleCount() {
+        int total = 0;
+        for (String id : ruleIds()) {
+            if (DebugTestRules.isTestRule(id) && !isDraftDeleted(id)) {
+                total++;
+            }
+        }
+        return total;
+    }
+
+    /**
+     * 按序号批量填充测试规则草稿：id 已存在的测试规则被跳过（草稿被标记删除时恢复为未删除）。
+     *
+     * <p>只写草稿、不落盘，规则立即可在管理页看到；落盘仍由统一的「应用全部」入口完成。</p>
+     *
+     * @param count 期望的测试规则条数，调用方需保证落在
+     *              [{@link DebugTestRules#MIN_COUNT}, {@link DebugTestRules#MAX_COUNT}] 区间内
+     * @return 本次真正新建的测试规则条数
+     */
+    public int createTestRules(int count) {
+        int created = 0;
+        for (int index = 1; index <= count; index++) {
+            String id = DebugTestRules.ruleId(index);
+            if (this.entries.containsKey(id)) {
+                // 服务端已有：仅在草稿被标记删除时恢复，避免覆盖玩家对同序号规则的改动
+                if (isDraftDeleted(id) && openSession(id) != null) {
+                    markDeleted(id, false);
+                }
+                continue;
+            }
+            if (this.createdIds.contains(id)) {
+                continue;
+            }
+            createSession(id, DebugTestRules.ruleBody(id));
+            created++;
+        }
+        return created;
+    }
+
+    /**
+     * 删除全部测试规则草稿：新建的草稿直接丢弃，服务端已有的标记为待删除。
+     *
+     * <p>判定只依据 id 前缀，因此不会影响任何非测试规则；落盘仍由统一的「应用全部」入口完成。</p>
+     *
+     * @return 本次受影响的测试规则条数
+     */
+    public int deleteTestRules() {
+        int affected = 0;
+        for (String id : ruleIds()) {
+            if (!DebugTestRules.isTestRule(id)) {
+                continue;
+            }
+            if (this.createdIds.contains(id)) {
+                dropSession(id);
+                affected++;
+                continue;
+            }
+            if (isDraftDeleted(id)) {
+                continue;
+            }
+            if (openSession(id) != null) {
+                markDeleted(id, true);
+                affected++;
+            }
+        }
+        return affected;
+    }
+
+    // 草稿是否已标记删除（未打开会话的规则按未删除处理）
+    private boolean isDraftDeleted(String id) {
+        EditSession session = this.sessions.get(id);
+        return session != null && session.draft().isDeleted();
     }
 
     // 存在改动的规则 id（保持服务端顺序）

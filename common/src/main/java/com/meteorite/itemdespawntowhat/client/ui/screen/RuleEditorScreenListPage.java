@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.edit.DebugTestRules;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
 import com.meteorite.itemdespawntowhat.client.edit.RuleCategories;
@@ -343,9 +344,12 @@ final class RuleEditorScreenListPage {
         UiTreeNode<String> entity = categoryNode("entity");
         for (String category : List.of("entity.item", "entity.entity", "entity.experience", "entity.mixed")) entity.addChild(categoryNode(category));
         roots.add(entity);
-        for (String category : List.of("block", "loot", "world", "mixed", "extension")) roots.add(categoryNode(category));
+        for (String category : List.of("block", "loot", "world", "mixed", "extension", DebugTestRules.CATEGORY)) {
+            roots.add(categoryNode(category));
+        }
         for (String id : visibleIds) {
-            String category = RuleCategories.category(host.model().displayBody(id));
+            // 测试规则按 id 前缀单独归入调试分类，其余仍按效果类型推导
+            String category = RuleCategories.category(id, host.model().displayBody(id));
             UiTreeNode<String> group = roots.stream().flatMap(root -> root == entity ? root.children().stream() : java.util.stream.Stream.of(root))
                     .filter(node -> node.value().equals("@" + category)).findFirst().orElseThrow();
             group.addChild(id, Component.literal(host.labelText(id)));

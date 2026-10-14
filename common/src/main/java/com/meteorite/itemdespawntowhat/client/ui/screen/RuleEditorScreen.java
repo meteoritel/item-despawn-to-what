@@ -4,6 +4,7 @@ import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDescriptors;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientState;
+import com.meteorite.itemdespawntowhat.core.debug.DebugMode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
@@ -73,8 +74,8 @@ public final class RuleEditorScreen extends Screen {
     // i18n 前缀
     private static final String UI = "gui.itemdespawntowhat.edit.";
 
-    // 模式
-    private enum Mode { LIST, EDIT }
+    // 模式：DEBUG 为开发环境专用页，只在 debug 模式下可从管理页进入
+    private enum Mode { LIST, EDIT, DEBUG }
 
     /**
      * 底部状态提示的级别：决定提示的绘制形态与存活时长。
@@ -110,9 +111,10 @@ public final class RuleEditorScreen extends Screen {
     /** @return 保存期间禁止 Esc 关闭；断线收尾由工作区控制 */
     @Override public boolean shouldCloseOnEsc() { return !saving(); }
 
-    // 管理页（LIST）与编辑页（EDIT）：各自持有控件与视图状态
+    // 管理页（LIST）、编辑页（EDIT）与调试页（DEBUG）：各自持有控件与视图状态
     private final RuleEditorScreenListPage listPage;
     private final RuleEditorScreenEditPage editPage;
+    private final RuleEditorScreenDebugPage debugPage;
 
     // 当前模式与编辑对象
     private Mode mode = Mode.LIST;
@@ -185,12 +187,26 @@ public final class RuleEditorScreen extends Screen {
             @Override public int screenWidth() { return RuleEditorScreen.this.width; }
             @Override public int screenHeight() { return RuleEditorScreen.this.height; }
         };
+        // 调试页宿主适配：只暴露调试页需要的卡片计数、刷新与返回能力
+        RuleEditorScreenDebugPage.Host debugHost = new RuleEditorScreenDebugPage.Host() {
+            @Override public Font font() { return RuleEditorScreen.this.font; }
+            @Override public UiModalStack modals() { return modals; }
+            @Override public RuleEditorModel model() { return model; }
+            @Override public EditorWorkspaceView workspace() { return RuleEditorScreen.this.workspace; }
+            @Override public int screenWidth() { return RuleEditorScreen.this.width; }
+            @Override public int screenHeight() { return RuleEditorScreen.this.height; }
+            @Override public void setNotice(@Nullable Component message, int color) { RuleEditorScreen.this.setNotice(message, color); }
+            @Override public void refreshList() { listPage.refreshList(); }
+            @Override public void backToList() { RuleEditorScreen.this.backToList(); }
+        };
         this.listPage = new RuleEditorScreenListPage(listHost);
         this.editPage = new RuleEditorScreenEditPage(editHost);
+        this.debugPage = new RuleEditorScreenDebugPage(debugHost);
         modals.setHistoryTarget(editPage::restoreHistory);
         modals.setOnScopeChanged(() -> {
             listPage.onScopeChanged();
             editPage.endInteractions();
+            debugPage.onScopeChanged();
         });
         // 焦点变化时播报控件的可读名称（未开启朗读时 GameNarrator 内部会静默）
         focus.setListener((previous, next) -> {
@@ -220,6 +236,7 @@ public final class RuleEditorScreen extends Screen {
         }
         listPage.init();
         editPage.init();
+        debugPage.init();
         listPage.refreshList();
         editPage.rebuildEdit();
         rebuildFocus();
@@ -252,21 +269,27 @@ public final class RuleEditorScreen extends Screen {
         if (mode == Mode.EDIT) {
             y = editPage.layoutTabs(graphics, font, mouseX, mouseY, pagePad, y);
         }
-        int footerHeight = mode == Mode.LIST ? listPage.footerHeight(availableWidth) : editPage.footerHeight(availableWidth);
+        int footerHeight = switch (mode) {
+            case LIST -> listPage.footerHeight(availableWidth);
+            case EDIT -> editPage.footerHeight(availableWidth);
+            case DEBUG -> debugPage.footerHeight(availableWidth);
+        };
         int footerY = h - pagePad - footerHeight;
         int noticeY = footerY - PAD - (notice == null ? 0 : NOTICE_H);
         contentArea = new UiRect(pagePad, y, availableWidth, Math.max(0, noticeY - y - pagePad));
-        if (mode == Mode.LIST) {
-            listPage.render(graphics, font, mouseX, mouseY, contentArea);
-        } else {
-            graphics.fill(pagePad - 2, y - 2, w - pagePad + 2, Math.max(y - 2, noticeY - PAD), THEME.palette().panelFill());
-            editPage.render(graphics, font, mouseX, mouseY, contentArea);
+        switch (mode) {
+            case LIST -> listPage.render(graphics, font, mouseX, mouseY, contentArea);
+            case EDIT -> {
+                graphics.fill(pagePad - 2, y - 2, w - pagePad + 2, Math.max(y - 2, noticeY - PAD), THEME.palette().panelFill());
+                editPage.render(graphics, font, mouseX, mouseY, contentArea);
+            }
+            case DEBUG -> debugPage.render(graphics, font, mouseX, mouseY, contentArea);
         }
         drawNotice(graphics, noticeY, w);
-        if (mode == Mode.LIST) {
-            listPage.renderFooter(graphics, font, mouseX, mouseY, footerY, Math.max(0, w - PAD * 2));
-        } else {
-            editPage.renderFooter(graphics, font, mouseX, mouseY, pagePad, footerY, availableWidth);
+        switch (mode) {
+            case LIST -> listPage.renderFooter(graphics, font, mouseX, mouseY, footerY, Math.max(0, w - PAD * 2));
+            case EDIT -> editPage.renderFooter(graphics, font, mouseX, mouseY, pagePad, footerY, availableWidth);
+            case DEBUG -> debugPage.renderFooter(graphics, font, mouseX, mouseY, pagePad, footerY, availableWidth);
         }
         mouseX = actualMouseX;
         mouseY = actualMouseY;
@@ -316,7 +339,9 @@ public final class RuleEditorScreen extends Screen {
     // 顶部标题与状态
     private void drawHeaderText(GuiGraphics graphics) {
         String title = this.getTitle().getString();
-        if (mode == Mode.EDIT && editingId != null) {
+        if (mode == Mode.DEBUG) {
+            title = Component.translatable(UI + "debug.title").getString();
+        } else if (mode == Mode.EDIT && editingId != null) {
             // 页头只显示当前实际生效名称；规则 ID 由基本页第一行的只读行单独承担
             title = Component.translatable(UI + "header.editing", labelText(editingId)).getString();
         }
@@ -426,6 +451,19 @@ public final class RuleEditorScreen extends Screen {
         rebuildFocus();
     }
 
+    // 调试页入口条件：debug 模式开启、停在管理页、未在保存且没有弹层或类型选择器
+    private boolean canEnterDebug() {
+        return DebugMode.ENABLED && mode == Mode.LIST && !saving() && modals.isEmpty() && activeTypePicker() == null;
+    }
+
+    // 进入调试页：提示只对切换前的页面成立，与其它模式切换保持一致
+    private void enterDebug() {
+        mode = Mode.DEBUG;
+        setNotice(null, NoticeLevel.INFO);
+        debugPage.updateButtons();
+        rebuildFocus();
+    }
+
     // 草稿改动清单（管理页底排与编辑页底排共用）
     private void showChanges() {
         RuleChangesView changes = new RuleChangesView(font, model, this::labelText);
@@ -445,10 +483,10 @@ public final class RuleEditorScreen extends Screen {
     private void rebuildFocus() {
         focus.clear();
         focus.beginUpdate();
-        if (mode == Mode.LIST) {
-            listPage.addFocusTargets(focus);
-        } else {
-            editPage.addFocusTargets(focus);
+        switch (mode) {
+            case LIST -> listPage.addFocusTargets(focus);
+            case EDIT -> editPage.addFocusTargets(focus);
+            case DEBUG -> debugPage.addFocusTargets(focus);
         }
         focus.endUpdate();
         if (focus.focused() == null) {
@@ -473,6 +511,9 @@ public final class RuleEditorScreen extends Screen {
         if (mode == Mode.LIST) {
             return listPage.mouseClicked(mouseX, mouseY, button);
         }
+        if (mode == Mode.DEBUG) {
+            return debugPage.mouseClicked(mouseX, mouseY, button) || super.mouseClicked(mouseX, mouseY, button);
+        }
         if (editPage.mouseClicked(mouseX, mouseY, button)) {
             return true;
         }
@@ -487,7 +528,9 @@ public final class RuleEditorScreen extends Screen {
         }
         UiTypePicker picker = activeTypePicker();
         if (picker != null) return picker.mouseReleased(mouseX, mouseY, button);
-        boolean consumed = editPage.mouseReleased(mouseX, mouseY, button);
+        boolean consumed = mode == Mode.DEBUG
+                ? debugPage.mouseReleased(mouseX, mouseY, button)
+                : editPage.mouseReleased(mouseX, mouseY, button);
         consumed |= listPage.mouseReleased(mouseX, mouseY, button);
         consumed |= editPage.footerMouseReleased(mouseX, mouseY, button);
         return consumed || super.mouseReleased(mouseX, mouseY, button);
@@ -501,6 +544,10 @@ public final class RuleEditorScreen extends Screen {
         }
         UiTypePicker picker = activeTypePicker();
         if (picker != null) return picker.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+        if (mode == Mode.DEBUG) {
+            return debugPage.mouseDragged(mouseX, mouseY, button, dragX, dragY)
+                    || super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+        }
         if (editPage.mouseDragged(mouseX, mouseY, button, dragX, dragY)) {
             return true;
         }
@@ -530,6 +577,12 @@ public final class RuleEditorScreen extends Screen {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // 调试页入口：仅 debug 模式开启、当前在管理页且没有弹层 / 类型选择器时响应 Ctrl+F8。
+        // F8 属于功能键，切换后仍返回 false 放行，避免阻断原版对该键的处理。
+        if (keyCode == GLFW.GLFW_KEY_F8 && (modifiers & GLFW.GLFW_MOD_CONTROL) != 0 && canEnterDebug()) {
+            enterDebug();
+            return false;
+        }
         // F1–F12 属于原版全局热键（F2 截图、F3 调试、F11 全屏）。原版 KeyboardHandler 在
         // screen.keyPressed 返回 true 时会直接 return、不再把该键喂给 KeyMapping，因此本模组的
         // 任何界面都不得消费功能键；这里在最外层统一放行，弹层与页面都覆盖到。
@@ -545,6 +598,7 @@ public final class RuleEditorScreen extends Screen {
         if (UiHistoryDispatcher.dispatch(keyCode, scanCode, modifiers, (key, scan, mods) -> {
             if (mode == Mode.LIST && listPage.searchKeyPressed(key, scan, mods)) return true;
             if (mode == Mode.EDIT && editPage.keyPressed(key, scan, mods)) return true;
+            if (mode == Mode.DEBUG && debugPage.keyPressed(key, scan, mods)) return true;
             return focus.keyPressed(key, scan, mods);
         }, editPage::restoreHistory)) return true;
         // Esc 先交给正在捕获输入的控件：行内精确输入回退缓冲、拖动中的数值取消预览；
@@ -556,7 +610,7 @@ public final class RuleEditorScreen extends Screen {
             if (mode == Mode.EDIT && editPage.keyPressed(keyCode, scanCode, modifiers)) {
                 return true;
             }
-            if (mode == Mode.EDIT) {
+            if (mode == Mode.EDIT || mode == Mode.DEBUG) {
                 backToList();
             } else {
                 closeByUser();
@@ -570,7 +624,11 @@ public final class RuleEditorScreen extends Screen {
             if (listPage.listKeyPressed(keyCode, scanCode, modifiers)) {
                 return true;
             }
-        } else if (editPage.keyPressed(keyCode, scanCode, modifiers)) {
+        } else if (mode == Mode.EDIT) {
+            if (editPage.keyPressed(keyCode, scanCode, modifiers)) {
+                return true;
+            }
+        } else if (debugPage.keyPressed(keyCode, scanCode, modifiers)) {
             return true;
         }
         return focus.keyPressed(keyCode, scanCode, modifiers) || super.keyPressed(keyCode, scanCode, modifiers);
@@ -618,6 +676,9 @@ public final class RuleEditorScreen extends Screen {
             return true;
         }
         if (mode == Mode.EDIT && editPage.charTyped(codePoint, modifiers)) {
+            return true;
+        }
+        if (mode == Mode.DEBUG && debugPage.charTyped(codePoint, modifiers)) {
             return true;
         }
         return super.charTyped(codePoint, modifiers);
@@ -679,6 +740,7 @@ public final class RuleEditorScreen extends Screen {
         listPage.updateButtons();
         listPage.updateApplyButton();
         editPage.updateHistoryButtons();
+        debugPage.updateButtons();
     }
 
     // 冻结（APPLYING / 非 ACTIVE）时禁用表单控件；状态切换时才真正遍历
@@ -702,6 +764,7 @@ public final class RuleEditorScreen extends Screen {
         // 列表页动作按钮同属可编辑面：冻结时一并禁用，避免「点了没反应」
         // 保存期间的返回与关闭由保存模态统一拦截，其它冻结状态仍允许退出。
         listPage.setButtonsEnabled(editable);
+        debugPage.setButtonsEnabled(editable);
         // 应用/撤销/重做再按脏标记与历史精确修正
         updateActionButtons();
     }
