@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.runtime.scheduler;
 
+import com.meteorite.itemdespawntowhat.core.debug.DebugMode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -45,6 +46,12 @@ public final class ServerScheduler {
     private long backlogStartTick = -1L;
     private long lastBacklogClearTicks = -1L;
     private int rotationCursor;
+    // 观测：本 tick 效果类累计消耗的工作量；runTick 累加，finishTick 输出后归零
+    private int effectsUsedThisTick;
+    // 观测：本 tick 结算后的预算载荷已输出，避免同一 tick 重复打印
+    private long lastBudgetLogGameTime = Long.MIN_VALUE;
+    // 观测：上次预算日志时的累计步骤数，用于计算两次日志之间的步骤增量
+    private long lastLoggedSteps;
     private ServerTickBudgetSnapshot lastSnapshot =
             new ServerTickBudgetSnapshot(0L, 0L, 0L, 0, 0, 0, false, false, false);
 
@@ -114,7 +121,6 @@ public final class ServerScheduler {
 
     // 公平轮转每个 lane：先按额度搬运到期任务，再执行一个就绪任务，直到预算耗尽或没有任务可推进。
     private void runTick(long gameTime, List<TaskLane> order) {
-        int effectsUsed = 0;
         // 搬运额度每 tick 每 lane 只统计一次：countDue 要遍历到期桶，不能在每个 pass 里重复做
         int[] allowances = new int[order.size()];
         for (int i = 0; i < order.size(); i++) {
@@ -129,7 +135,7 @@ public final class ServerScheduler {
                 }
                 int laneIndex = (rotationCursor + i) % order.size();
                 TaskLane lane = order.get(laneIndex);
-                if (lane.kind() == ServerTaskKind.EFFECT && effectsUsed >= config.effectsWorkUnitsPerTick()) {
+                if (lane.kind() == ServerTaskKind.EFFECT && effectsUsedThisTick >= config.effectsWorkUnitsPerTick()) {
                     continue;
                 }
                 if (lane.takeDue(gameTime, budget, allowances[laneIndex])) {
@@ -142,7 +148,7 @@ public final class ServerScheduler {
                 }
                 StepResult result = runStep(lane, handle);
                 if (lane.kind() == ServerTaskKind.EFFECT) {
-                    effectsUsed += result.workUnits();
+                    effectsUsedThisTick += result.workUnits();
                 }
                 progressed = true;
             }
@@ -289,6 +295,35 @@ public final class ServerScheduler {
         kindMicrosThisTick.clear();
         ticks++;
         lastSnapshot = budget.snapshot();
+        logBudgetObservation();
+        // 本 tick 已统计完毕，归零避免无任务的 tick 沿用上一 tick 的效果用量
+        effectsUsedThisTick = 0;
+    }
+
+    /**
+     * 每个忙碌 tick 输出一行可解析的预算载荷，供后续性能测试直接采集。
+     * 仅在开发环境写入 INFO（该环境控制台不输出 DEBUG）；无任务且无搬运的 tick 不输出，避免高 TPS 刷屏。
+     */
+    private void logBudgetObservation() {
+        if (!DebugMode.ENABLED || lastSnapshot.gameTime() == lastBudgetLogGameTime) {
+            return;
+        }
+        if (lastSnapshot.drainedTasks() == 0 && steps == lastLoggedSteps) {
+            return;
+        }
+        long stepsThisTick = steps - lastLoggedSteps;
+        lastLoggedSteps = steps;
+        lastBudgetLogGameTime = lastSnapshot.gameTime();
+        long readyDelay = 0L;
+        for (RealmQueues realm : realms.values()) {
+            readyDelay = Math.max(readyDelay, realm.maxReadyDelay(lastSnapshot.gameTime()));
+        }
+        LOGGER.info("IDTW_BUDGET tick={} used_ns={} budget_ns={} used_units={} max_units={} effects_units={} "
+                        + "max_effect_units={} steps={} drained={} pending={} ready_delay={} exhausted={}",
+                lastSnapshot.gameTime(), lastSnapshot.usedNanos(), lastSnapshot.budgetNanos(),
+                lastSnapshot.usedWorkUnits(), lastSnapshot.maxWorkUnits(), effectsUsedThisTick,
+                config.effectsWorkUnitsPerTick(), stepsThisTick, lastSnapshot.drainedTasks(),
+                pendingCount(), readyDelay, lastSnapshot.exhaustionReason());
     }
 
     // 取消某个 realm 的全部任务但保留 realm 本身：用于规则重载后按维度重扫，任务不留静默丢弃。
