@@ -667,7 +667,9 @@ public final class ConversionRuntime {
                 Math.max(1, lifespanProvider.lifespanTicks(level, item)) - 1L);
     }
 
-    // 执行一条规则：计划期把整堆源物品转入结算库存，随后由 ConversionSettlement 按组支付成本并交付返还
+    // 执行一条规则：计划期把整堆源物品转入结算库存，随后由 ConversionSettlement 按组支付成本并交付返还。
+    // 「扣减 → 登记 → 调度注册」是一个补偿单元：任一步抛异常都把整堆库存写回源实体并撤销登记，
+    // 只有全部成功才把所有权交给结算任务（移除所有权追踪，后续交付与恢复依据由记录承担）。
     private void performConversion(ServerLevel level, LevelState state, ItemEntity item,
                                    TrackedState tracked, Rule rule) {
         ItemStack source = item.getItem();
@@ -679,14 +681,17 @@ public final class ConversionRuntime {
         // 每组固定源成本 c：显式 source_cost 优先，其次隐式 1 个，再次各 consume_source 之和
         int costPerGroup = types.perRoundSourceConsumption(rule, source);
         tracked.locked = true;
+        SettlementRecord record = null;
+        SettlementLedger ledger = null;
+        boolean transferred = false;
         try {
             // 所有权转移：整堆进入结算库存，源实体本刻清空（扣减时间点保持在源实体清空的本刻）
             ItemStack held = source.copy();
             source.setCount(0);
             item.addTag(Constants.CONVERTED_TAG);
-            SettlementLedger ledger = SettlementLedger.get(level);
+            ledger = SettlementLedger.get(level);
             // 记录源位置：重启后源实体已不存在，返还交付只能以记录位置为搜索起点
-            SettlementRecord record = new SettlementRecord(UUID.randomUUID().toString(), rule.id().toString(),
+            record = new SettlementRecord(UUID.randomUUID().toString(), rule.id().toString(),
                     level.dimension().location().toString(), held, available, costPerGroup,
                     true, item.getX(), item.getY(), item.getZ());
             ledger.put(record);
@@ -696,13 +701,24 @@ public final class ConversionRuntime {
             }
             ConversionSettlement settlement = new ConversionSettlement(this, scheduler, level, item, rule, held, record, ledger);
             scheduler.scheduleAt(level.dimension(), settlement, level.getGameTime());
+            transferred = true;
             if (config.debugLogging() && RuntimeObserver.current().allowsRuntimeLogging(item)) {
                 LOGGER.info("掉落物 {} 已按规则 {} 进入结算（可用源 {}，每组成本 {}）",
                         item.getUUID(), rule.id(), available, costPerGroup);
             }
         } finally {
             tracked.locked = false;
-            state.tracked.remove(item.getUUID());
+            if (transferred) {
+                state.tracked.remove(item.getUUID());
+            } else {
+                // 补偿：撤销登记（恢复任务不得再交付这堆库存）、撤销「已转化」标记，
+                // 再把整堆源物品写回源实体并保留所有权追踪，等待下一次转化机会
+                if (record != null) {
+                    ledger.remove(record.id());
+                }
+                item.removeTag(Constants.CONVERTED_TAG);
+                source.setCount(available);
+            }
         }
     }
 

@@ -116,6 +116,9 @@ final class ConversionSettlement implements ServerTask {
     // 各候选剩余可开始组数（下标与 candidates 对齐）：CAPACITY_UNKNOWN = 未查询；
     // Integer.MAX_VALUE = 无限，不递减
     private final int[] remainingCapacity;
+    // 本刻已查询过的候选容量（下标与 candidates 对齐，CAPACITY_UNKNOWN = 本刻未查询）：
+    // 世界存量在刻间可能变化，同一刻内同一候选只查一次世界并复用结果
+    private final int[] capacityThisStep;
     // 同一源请求内已尝试过的一次性效果槽（键 = 候选 id + "#" + 槽序号）
     private final Set<String> attemptedOneShots = new HashSet<>();
     private EffectContext groupContext;
@@ -125,6 +128,9 @@ final class ConversionSettlement implements ServerTask {
     private int dispatchedThisStep;
     private boolean groupOpen;
     private boolean cancelled;
+    // 待返还库存的所有权：true = 结算任务仍持有，提交点负责把记录的待返还量对齐到手里的结算库存；
+    // 中止或交付完成后移交（剩余库存改由恢复任务交付，本任务只写盘、不再改写待返还量）
+    private boolean ownsStock = true;
     // 返还位置搜索游标：跨刻保留进度，交付成功后重置
     private ReturnItemSpawner.PositionSearch rebateSearch;
 
@@ -146,6 +152,8 @@ final class ConversionSettlement implements ServerTask {
         this.rotation = rule.combination() == CombinationMode.ROUND_ROBIN && candidates.size() > 1;
         this.remainingCapacity = new int[candidates.size()];
         Arrays.fill(this.remainingCapacity, CAPACITY_UNKNOWN);
+        this.capacityThisStep = new int[candidates.size()];
+        Arrays.fill(this.capacityThisStep, CAPACITY_UNKNOWN);
     }
 
     @Override
@@ -164,19 +172,34 @@ final class ConversionSettlement implements ServerTask {
             return StepResult.done(1);
         }
         dispatchedThisStep = 0;
+        // 本刻容量查询结果只在同一刻内复用：世界存量在刻间可变，跨刻复用旧的正数测量值会高估 room
+        Arrays.fill(capacityThisStep, CAPACITY_UNKNOWN);
         try {
-            return switch (phase) {
+            StepResult result = switch (phase) {
                 case PLANNING -> plan(budget);
                 case DISPATCHING -> dispatch(budget);
                 case DELIVERING -> deliver(budget);
                 case DONE -> StepResult.done(1);
             };
+            // 唯一状态提交点：正常完成、显式中止、预算耗尽提前让出与交付让出都在这里统一落盘，
+            // 因此不存在只在部分返回路径同步的账目字段
+            commit();
+            return result;
         } catch (RuntimeException failure) {
             // 异常路径与取消路径共用同一条中止顺序：先把待返还量写盘并释放未支付预留，
             // 再把异常抛给调度器转 FAILED，避免预留悬空
             abort("exception: " + failure.getClass().getSimpleName(), true);
             throw failure;
         }
+    }
+
+    // 唯一状态提交点：所有权仍在本任务时，先把记录的待返还量对齐到手里的结算库存，再把记录写进账本标脏；
+    // 同一刻内的多处账目变动只在这里落盘一次。所有权已移交（中止/完成）时只写盘，不覆盖恢复任务推进的进度
+    private void commit() {
+        if (ownsStock) {
+            record.syncPendingDelivery(held.getCount());
+        }
+        ledger.put(record);
     }
 
     @Override
@@ -199,6 +222,8 @@ final class ConversionSettlement implements ServerTask {
             return false;
         }
         cancelled = true;
+        // 中止即移交库存所有权：剩余库存改由恢复任务交付，本任务不再改写待返还量
+        ownsStock = false;
         if (!record.completed()) {
             // 待返还量以任务手里的结算库存为准：重启后只交付这一部分，不重放已开始的组
             record.syncPendingDelivery(held.getCount());
@@ -211,7 +236,7 @@ final class ConversionSettlement implements ServerTask {
         // 释放未支付的催化剂预留（计划期登记、开组时转已支付）：无世界写入且幂等
         reservations().releaseOwner(record.id());
         try {
-            ledger.put(record);
+            commit();
         } catch (RuntimeException failure) {
             LOGGER.warn("结算记录写盘失败：id={} reason={}", record.id(), reason, failure);
         }
@@ -291,9 +316,12 @@ final class ConversionSettlement implements ServerTask {
         int scan = rotationStart();
         for (int offset = 0; offset < size; offset++) {
             int index = Math.floorMod(scan + offset, size);
-            OutcomeCandidate selected = candidates.get(index);
             int cached = remainingCapacity[index];
-            int remaining = capacityGroups(selected, budget);
+            // 本地预留只减不增，是候选剩余组数的硬上界：已判定为 0 时不必再查世界
+            if (cached == 0) {
+                continue;
+            }
+            int remaining = capacityGroupsAt(index, budget);
             if (remaining == CAPACITY_PENDING) { return CAPACITY_PENDING; }
             // 保留本结算对待生成组的本地预留，同时复核已经变化的世界存量。
             if (cached != CAPACITY_UNKNOWN) { remaining = Math.min(remaining, cached); }
@@ -304,6 +332,21 @@ final class ConversionSettlement implements ServerTask {
             return index;
         }
         return SELECT_EXHAUSTED;
+    }
+
+    // 候选剩余可开组数：同一刻内同一候选只查一次世界，选组与开组前复核复用同一结果。
+    // 派发期刻内唯一的世界写是催化剂支付（只减少物品数），复用刻内更早的测量值不会高估剩余容量；
+    // 预算耗尽（CAPACITY_PENDING）不记入本刻缓存，下刻重新查询
+    private int capacityGroupsAt(int index, ServerTickBudget budget) {
+        int cached = capacityThisStep[index];
+        if (cached != CAPACITY_UNKNOWN) {
+            return cached;
+        }
+        int remaining = capacityGroups(candidates.get(index), budget);
+        if (remaining != CAPACITY_PENDING) {
+            capacityThisStep[index] = remaining;
+        }
+        return remaining;
     }
 
     // 轮询扫描起点：未推进过时读取共享游标（跨结算接续），推进过则用本结算内的位置；优先模式恒为 0
@@ -441,7 +484,7 @@ final class ConversionSettlement implements ServerTask {
             if (!groupOpen) {
                 // 已选但尚未支付成本的候选可能跨刻等待，开组前再次核对邻近存量。
                 if (pendingCandidate != null) {
-                    int capacity = capacityGroups(pendingCandidate, budget);
+                    int capacity = capacityGroupsAt(pendingCandidateIndex, budget);
                     if (capacity == CAPACITY_PENDING) { return StepResult.yield(1, 1); }
                     remainingCapacity[pendingCandidateIndex] = Math.min(remainingCapacity[pendingCandidateIndex], capacity);
                     if (remainingCapacity[pendingCandidateIndex] <= 0) {
@@ -458,11 +501,11 @@ final class ConversionSettlement implements ServerTask {
                     }
                     if (pick == SELECT_EXHAUSTED) {
                         // 所有候选都开不出一组：组数截断为已开始组数，剩余源库存走返还路径
+                        // （截断结果与预留释放由本刻唯一提交点落盘）
                         int stoppedGroups = groupCount - groupsStarted;
                         groupCount = groupsStarted;
                         record.plan(record.candidateId(), groupCount);
                         reservations().releaseOwner(record.id());
-                        ledger.put(record);
                         if (RuntimeObserver.current().enabled()) {
                             RuntimeObserver.current().observe(source, "OUTCOME_SKIPPED", "record", record.id(), "rule", rule.id(),
                                     "candidates", candidates.size(), "groups_started", groupsStarted,
@@ -485,11 +528,11 @@ final class ConversionSettlement implements ServerTask {
                     if (pay.outcome() == CatalystReservations.PayOutcome.SHORT) {
                         // 可用量不足：不开该组（不扣源成本、不派发效果），组数截断为已开始组数，
                         // 释放未支付预留，剩余源库存走正常返还路径（绝不「少扣照常产出」）
+                        // （截断结果由本刻唯一提交点落盘）
                         int shortGroups = groupCount - groupsStarted;
                         groupCount = groupsStarted;
                         record.plan(record.candidateId(), groupCount);
                         reservations().releaseOwner(record.id());
-                        ledger.put(record);
                         if (RuntimeObserver.current().enabled()) {
                             RuntimeObserver.current().observe(source, "CATALYST_SHORT", "record", record.id(), "rule", rule.id(),
                                     "groups_started", groupsStarted, "group_count", groupCount,
@@ -505,10 +548,10 @@ final class ConversionSettlement implements ServerTask {
                     held.setCount(held.getCount() - cost);
                 }
                 record.groupStarted(cost);
-                // 固定顺序：催化剂已支付、源成本已扣减，才记账并写盘
+                // 固定顺序：催化剂已支付、源成本已扣减，才记账
                 record.catalystGroupPaid(paidCatalyst);
-                // 已开始组立即写盘：中途停服重启后，已支付成本的组不会因为未落盘而被当作「未开始库存」重复返还
-                ledger.put(record);
+                // 已开始组由本刻唯一提交点落盘（扣减与提交点之间没有让出点）：
+                // 中途停服重启后，已支付成本的组不会因为未落盘而被当作「未开始库存」重复返还
                 groupsStarted++;
                 groupOpen = true;
                 effectCursor = 0;
@@ -526,6 +569,7 @@ final class ConversionSettlement implements ServerTask {
                 groupContext = contextForGroup(groupsStarted);
             }
             if (budget.exhausted() || dispatchedThisStep >= batch) {
+                // 预算耗尽或批量上限让出：本刻账目由 step 的唯一提交点落盘后再返回
                 return StepResult.yield(1, 1);
             }
             List<Effect> effects = candidate.effects();
@@ -547,7 +591,7 @@ final class ConversionSettlement implements ServerTask {
             budget.charge(1);
             dispatchedThisStep++;
         }
-        record.syncPendingDelivery(held.getCount());
+        // 派发结束：待返还量与本刻账目由唯一提交点落盘，随后进入交付阶段
         phase = Phase.DELIVERING;
         return StepResult.yield(1, 1);
     }
@@ -574,14 +618,11 @@ final class ConversionSettlement implements ServerTask {
             ItemStack stack = held.copyWithCount(size);
             ReturnItemSpawner.Outcome outcome = deliverStack(stack, budget);
             if (outcome == ReturnItemSpawner.Outcome.CHUNK_UNLOADED) {
-                record.syncPendingDelivery(held.getCount());
-                ledger.put(record);
+                // 区块未加载：待返还量由本刻唯一提交点落盘，退避后重试
                 return StepResult.retry(1, 20);
             }
             if (outcome == ReturnItemSpawner.Outcome.NEEDS_MORE_STEPS) {
                 // 位置搜索本刻预算用尽：保留待返还、下刻从断点继续，不整批放弃
-                record.syncPendingDelivery(held.getCount());
-                ledger.put(record);
                 return StepResult.yield(1, 1);
             }
             held.setCount(held.getCount() - size);
@@ -590,13 +631,12 @@ final class ConversionSettlement implements ServerTask {
             deliveredNow++;
         }
         if (held.getCount() > 0) {
-            record.syncPendingDelivery(held.getCount());
-            ledger.put(record);
+            // 本刻批量交付上限已到：剩余待返还由唯一提交点落盘，下刻继续
             return StepResult.yield(1, 1);
         }
-        record.syncPendingDelivery(0);
+        // 返还已全部交付：完成记录并交出库存所有权（提交点此后只写盘，不再对齐待返还量）
         record.complete(level.getGameTime());
-        ledger.put(record);
+        ownsStock = false;
         // 防御：已完成记录的未支付预留必然为空（取消/不足路径已释放），这里幂等再释放一次
         reservations().releaseOwner(record.id());
         phase = Phase.DONE;
@@ -648,18 +688,21 @@ final class ConversionSettlement implements ServerTask {
     private void account(EffectResult result) {
         if (result == null) {
             record.effectFailed();
-            return;
-        }
-        switch (result.outcome()) {
-            case APPLIED -> record.addApplied(result.appliedUnits());
-            case DEFERRED -> {
-                record.addApplied(result.appliedUnits());
-                record.addPending(result.pendingUnits());
+        } else {
+            switch (result.outcome()) {
+                case APPLIED -> record.addApplied(result.appliedUnits());
+                case DEFERRED -> {
+                    record.addApplied(result.appliedUnits());
+                    record.addPending(result.pendingUnits());
+                }
+                case SKIPPED -> record.effectSkipped();
+                case FAILED -> record.effectFailed();
             }
-            case SKIPPED -> record.effectSkipped();
-            case FAILED -> record.effectFailed();
         }
-        if (RuntimeObserver.current().enabled()) {
+        // 回执只改观测计数（applied/pending units），不改待返还量：同样经唯一提交点落盘；
+        // 所有权已移交（中止/完成）时提交点只写盘，不对齐待返还量，避免覆盖恢复任务的交付进度
+        commit();
+        if (result != null && RuntimeObserver.current().enabled()) {
             RuntimeObserver.current().observe(source, "EFFECT_SETTLED", "outcome", result.outcome(),
                     "applied", result.appliedUnits(), "pending", result.pendingUnits(), "detail", result.detail());
         }
@@ -700,17 +743,20 @@ final class ConversionSettlement implements ServerTask {
         }
     }
 
-    // 邻近物品总量：与实体产出掉落物子类同一判定（具体物品比注册表对象，标签比 TagKey）
+    // 邻近物品总量：与实体产出掉落物子类同一判定（具体物品比注册表对象，标签比 TagKey）。
+    // 计数口径与 countNearbyEntities 一致：谓词只筛选实体，收集条数由查询的 maxResults 限制，
+    // 数量来自结果列表；物品按堆叠数逐条累加（空堆叠不命中，因此收满 limit 条时总量必然 >= limit，
+    // 此时 room 已经归零，不会高估可开组数）。
     private int countNearbyItems(TaggedId reference, int limit, int radius) {
         AABB box = searchBox(radius);
-        int[] total = {0};
-        level.getEntities(EntityTypeTest.forClass(ItemEntity.class), box, nearby -> {
-            if (nearby.isAlive() && matchesItem(reference, nearby.getItem())) {
-                total[0] = (int) Math.min(Integer.MAX_VALUE, (long) total[0] + nearby.getItem().getCount());
-            }
-            return total[0] >= limit;
-        }, new ArrayList<>(1), 1);
-        return total[0];
+        List<ItemEntity> nearby = new ArrayList<>();
+        level.getEntities(EntityTypeTest.forClass(ItemEntity.class), box,
+                item -> item.isAlive() && matchesItem(reference, item.getItem()), nearby, limit);
+        int total = 0;
+        for (ItemEntity item : nearby) {
+            total = saturatedAdd(total, item.getItem().getCount());
+        }
+        return total;
     }
 
     // 邻近实体总量：与 spawn_entity 执行器同一判定（支持具体类型与标签）

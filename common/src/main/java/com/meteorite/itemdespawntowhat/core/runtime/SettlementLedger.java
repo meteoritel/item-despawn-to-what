@@ -21,6 +21,9 @@ import java.util.Map;
  * 服务器级结算账本：保存进行中与已完成的转化结算记录。
  * 存在主世界（服务端全局）的数据存储里：维度卸载或停服都不会丢掉记录本身，
  * 返回待返还数据的完整恢复由 ConversionRuntime 落地；写入仍只发生在服务端线程。
+ * 可变性契约：记录是可变对象，两张索引持有同一个引用，账本不在写入时做快照；
+ * 因此「修改记录字段」与「put 标脏」必须由持有者在同一处提交点完成——SavedData 只在仍为脏时落盘，
+ * 漏标脏的字段修改不会进入存档。落盘读取的是提交时刻的字段值，故提交点之后内存账目与落盘值一致。
  */
 public final class SettlementLedger extends SavedData {
 
@@ -31,8 +34,9 @@ public final class SettlementLedger extends SavedData {
     private static final int MAX_RECORDS = 512;
     private static final long RETAIN_COMPLETED_TICKS = 6000L;
 
+    // 主索引：持有与 scanIndex 相同的可变记录引用，不做写入时拷贝
     private final Map<String, SettlementRecord> records = new LinkedHashMap<>();
-    // 保存重载的稳定游标索引；不改变账本的加入顺序或持久化顺序。
+    // 保存重载的稳定游标索引（同样持有可变记录引用）；不改变账本的加入顺序或持久化顺序。
     private final java.util.NavigableMap<String, SettlementRecord> scanIndex = new java.util.TreeMap<>();
 
     // 取主世界账本（同一 id 全局唯一，维度卸载不影响）
@@ -45,7 +49,7 @@ public final class SettlementLedger extends SavedData {
                 DATA_ID);
     }
 
-    // 记录入账（新建或更新同一 id）
+    // 记录入账（新建或更新同一 id）：两张索引写入同一引用并标脏，是记录字段变更的唯一落盘点
     public void put(SettlementRecord record) {
         if (record == null || record.id().isEmpty()) {
             return;
@@ -53,6 +57,17 @@ public final class SettlementLedger extends SavedData {
         records.put(record.id(), record);
         scanIndex.put(record.id(), record);
         setDirty();
+    }
+
+    // 撤销一条登记（扣减失败补偿专用）：把记录从两张索引成对摘除并标脏，
+    // 避免重启后的恢复任务把已经写回源实体的库存再交付一次；未登记该 id 时为空操作
+    void remove(String id) {
+        if (id == null || id.isEmpty()) {
+            return;
+        }
+        if (records.remove(id) != null || scanIndex.remove(id) != null) {
+            setDirty();
+        }
     }
 
     // 按 id 查询，未找到返回 null

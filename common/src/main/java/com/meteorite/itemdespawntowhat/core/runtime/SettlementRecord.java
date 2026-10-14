@@ -32,6 +32,8 @@ public final class SettlementRecord {
     private int groupCount;
     private int groupsStarted;
     private int consumedSources;
+    // 待返还量：结算任务持有库存期间由唯一提交点对齐到实际结算库存；
+    // 中止/交付完成后所有权移交恢复任务，改由其按交付进度递减
     private int pendingDelivery;
     private int deliveredReturns;
     private int appliedUnits;
@@ -136,7 +138,8 @@ public final class SettlementRecord {
         deliveredReturns += moved;
     }
 
-    // 用结算库存的实际数量对齐待交付数（成本扣减/交付/中断后调用）
+    // 用结算库存的实际数量对齐待交付数：由持有库存的一方（结算任务的唯一提交点）在落盘前调用，
+    // 保证内存账目与落盘值一致；所有权移交后不再调用，避免覆盖恢复任务推进的交付进度
     void syncPendingDelivery(int remaining) {
         pendingDelivery = Math.max(0, remaining);
     }
