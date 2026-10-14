@@ -6,7 +6,7 @@
 ## 1. 定位
 
 - `core/registry`：`TypeRegistry` 的默认实现 `SimpleTypeRegistry`（**注册期可变、`freeze()` 后只读**）+ 两个语义异常。
-- `core/extension`：第三方 SPI `RuleTypeProvider`，经 `META-INF/services` 加载。
+- `core/extension`：第三方 SPI `RuleTypeProvider`（经 `META-INF/services` 加载），以及类型可自行实现的扩展点（如动态引用校验）。
 - `core/type`：10 个内置条件、10 个内置效果，以及公共工具 `EnumCodecs`。引用校验统一使用 `core/api/RefChecks`，见 [规则模型与契约](rule-model.md)。
 - 类型定义形态（`EffectType`/`ConditionType`/`Simple*Type`）与 `Effect`/`Condition` 接口定义在 `core/model`，执行/求值上下文与回执定义在 `core/api`；本文只覆盖注册表、SPI 与内置实现。
 
@@ -28,6 +28,7 @@
 | 类 | 职责 |
 |---|---|
 | `RuleTypeProvider` | 第三方类型注册 SPI，两阶段调用：`registerConditions(TypeRegistry<ConditionType<?>>)` 先、`registerEffects(TypeRegistry<EffectType<?>>, Codec<ConditionExpression>)` 后；两者均为 `default` 空实现 |
+| `DynamicReferenceCheck` / `DynamicReferenceContext` | 可选扩展点：带动态引用的类型在**自己的参数对象**上实现 `checkDynamicReferences(DynamicReferenceContext)`；上下文携带服务端、问题累积器与字段路径，核心引用校验器只遍历分派 |
 
 ### 2.3 `core/type` 公共工具
 
@@ -150,7 +151,7 @@
 | 2 | `core/type/effect/exec/<Xxx>Executor.java` | 静态 `execute(P, EffectContext)`，返回 `EffectResult`，只做世界操作 |
 | 2 | `core/type/BuiltinEffectTypes.java` | 一行 `registry.register(XxxEffect.effectType(expressionCodec))` |
 
-条件类型同理（`condition/` + `condition/eval/` + `BuiltinConditionTypes`）；需要上下文门禁的条件在 `conditionType()` 里追加 `evaluability`。**框架代码无需改动**：分发、校验调度、注册表都由既有抽象承担。
+条件类型同理（`condition/` + `condition/eval/` + `BuiltinConditionTypes`）；需要上下文门禁的条件在 `conditionType()` 里追加 `evaluability`。参数里含动态引用（维度 / 群系 / 战利品表一类需查服务端现状的引用）时，在参数 record 上额外实现动态引用校验扩展点，核心校验器与装配链都不用改。**框架代码无需改动**：分发、校验调度、注册表都由既有抽象承担。
 
 三条硬约束：① 不产 null（`Optional` 承载、末步 `orElse(null)`）；② 静态工厂不叫 `type()`；③ 引用字段用 `TaggedId`（支持 `#tag`），只有确无标签语义才用裸 `ResourceLocation`。
 

@@ -53,7 +53,7 @@
 | `RuleEditPayloadCodec` | 载荷共用编解码片段（字符串列表 / 可空字符串 / `RuleIssue` 列表）；超限即抛解码异常 | `writeStrings`/`readStrings`、`writeNullableString`/`readNullableString`、`writeIssues`/`readIssues`（包内） |
 | `RuleEditPayloadRouter` | 客户端入站门面：字符串 sink（兼容）+ 结构化 sink（快照 / 分片 / 回执 / 进度 / 目录 / 寿命）；服务端只装载空消费者 | `installSnapshotSink`、`installSnapshotPayloadSink`、`installResultSink`、`installResultPayloadSink`、`installCatalogSink`、`installChunkSink`、`installLifespanSink`、`dispatchSnapshot`、`dispatchResult`、`dispatchChunk`、`dispatchCatalog`、`dispatchLifespan`、`installProgressSink`、`dispatchProgress` |
 | `OpenRuleEditorPayload` | 承载 `installOpenEditorPayloadSink` / `dispatchOpenEditor`（开屏入口的唯一静态 sink） | `TYPE`、`STREAM_CODEC` |
-| `RuleEditServerContext` | 窄接口：向网络层暴露运行时能力（由平台 `RuleRuntimeHost` 实现） | `overlayRoot()`、`overlayNamespace()`、`typeRegistries()`、`loadMerged(server)`、`rebuildAndRescan(server)`、`sendTo(player, payload)`、`referenceLifespanTicks()`、`saveReloadContext()`、`saveScheduler()`、`applySavedIndex(server, index)` |
+| `RuleEditServerContext` | 窄接口：向网络层暴露运行时能力（由公共宿主核心以适配器实现，平台宿主只转发） | `overlayRoot()`、`overlayNamespace()`、`typeRegistries()`、`loadMerged(server)`、`rebuildAndRescan(server)`、`sendTo(player, payload)`、`referenceLifespanTicks()`、`saveReloadContext()`、`scheduleTask(realmKey, task, delayTicks)`、`applySavedIndex(server, index)` |
 | `RuleEditServerHandler` | 服务端处理编排（**薄转发**） | `openEditor`、`handleConfirm`、`handleHeartbeat`、`handleClose`、`handleSnapshotRequest`、`handleCatalogRequest`、`handleLifespanRequest`、`handleChangeSet`、`handleChangeSetChunk`、`handleCancelSave`、`expireIdle`、`clearPlayer`、`reset`、`isReady`、`canEdit`、`sessionManager`/`service` |
 
 ### 1.4 `core/network/catalog`
@@ -69,7 +69,7 @@
 | `RuleEditService` | 编辑会话的业务编排（打开/确认/心跳/关闭/快照/目录/寿命/保存），只产出"要下发的载荷"，不直接碰网络 | `openEditor`、`confirm`、`heartbeat`、`close`、`requestSnapshot`、`requestCatalog`、`requestLifespan`、`pollLifespan`、`submitChangeSet`、`submitChunk`、`cancelSave`、`pollSaveProgress`、`pollSave`、`expireSessions`、`forceRelease`；幂等表 `recentResults`（最近 16 条） |
 | `EditSessionManager` | 全局单一目标的会话状态机（FREE/OPENING/ACTIVE/APPLYING），委托文件所有者管理修订号 | `acquire` / `confirm` / `heartbeat` / `owns` / `isOwner` / `confirmed` / `beginApply` / `finishApply` / `release` / `expire` / `version` / `bumpVersion` / `readDiskRevision` / `acceptDiskRevision` |
 | `RuleEditSessionLimits` | 会话时间与权限常量 | `TARGET_ID = itemdespawntowhat:rules`、`OPEN_CONFIRM_WINDOW_SECONDS=15`、`HEARTBEAT_INTERVAL_SECONDS=10`、`LEASE_SECONDS=60`、`REQUIRED_PERMISSION_LEVEL=2`、`MAX_OPERATION_HISTORY=16` |
-| `RuleOverlayStore` | 覆盖层文件工作与修订号的单一所有者：有界串行队列、内容指纹、原子持久化、进展监测、停服隔离 | `submit`、`acceptRevision`、`committed`、`flushRevision`、`stalled`、`close`、`requireIdle` |
+| `RuleOverlayStore` | 覆盖层文件工作与修订号的单一所有者：有界串行队列、内容指纹、原子持久化、进展监测、按存档实例隔离的作业登记与停服隔离 | `submit`、`acceptRevision`、`committed`、`flushRevision`、`stalled`、`close`、`requireIdle` |
 | `RuleOverlayWriter` | 覆盖层逐 id 写入：预备 → 备份 → 原子提交 → 失败回滚 | `apply(changes, issues) → ApplyResult{writtenFiles, conflicts, rollbackFailed}` |
 | `RuleSubmissionValidator` | 写入前唯一校验闸门（控制条目 / 解码 + 语义 + 动态引用） | `validate(changeSet, server, types, issues)` |
 | `RuleSnapshotAssembler` | 来源分层索引 + 当前生效规则 → 下发快照 | `assemble`、`encodeRule`（服务端线程）、`assembleEncoded`（纯 JSON 装配） |
@@ -138,7 +138,7 @@
 - **寿命查询**：权限与就绪检查后，服务层校验已确认会话；只读取平台缓存的普通物品参考寿命，不解析源匹配、不展开标签、不创建实体。平台尚未采样时应答零并保留单项待交付请求，`expireIdle` 每 20 tick 检查采样状态，完成后向仍持有权限与已确认会话的玩家补发一次缓存结果。参考值不随规则重载失效；客户端仅接受当前会话与最近请求号的应答，正寿命结果保留到断线。
 - **幂等**：同一在途 `operationId` 等待原任务；最近 16 条已处理回执直接回放，不重复写盘。
 - **并发保存保护**：`beginApply` 只允许 ACTIVE→APPLYING；正在 APPLYING 时的新提交回 `INVALID_REQUEST`（`apply in progress`）并保留会话。
-- 会话失效、关闭、强制释放或玩家离线/失去权限使尚未提交的保存失效；后台在提交检查点退出并回滚。APPLYING 期间保持锁；关闭或强制释放记录延后释放意图，`pollSave` 确认文件工作退出后通过 `finishApply` 释放；正常完成回到 ACTIVE 并刷新租约。已发布索引必须完成旧任务清理与回扫；停服在 vanilla 最终存档前同步取消未清理的结算，后台收到失效信号，停服文件等待不持有网络处理器或编辑服务监视器；未开始的文件工作可以撤销，修订持久化与运行中的工作等待真实退出。等待上限为 30 秒，超时或中断保留进程级作业登记；两端启动在加载规则前检查登记，旧工作未退出时拒绝启动下一存档。
+- 会话失效、关闭、强制释放或玩家离线/失去权限使尚未提交的保存失效；后台在提交检查点退出并回滚。APPLYING 期间保持锁；关闭或强制释放记录延后释放意图，`pollSave` 确认文件工作退出后通过 `finishApply` 释放；正常完成回到 ACTIVE 并刷新租约。已发布索引必须完成旧任务清理与回扫；停服在 vanilla 最终存档前同步取消未清理的结算，后台收到失效信号，停服文件等待不持有网络处理器或编辑服务监视器；未开始的文件工作可以撤销，修订持久化与运行中的工作等待真实退出。等待上限为 30 秒；到期限仍未结束的作业**放弃登记并解除对后续存档的阻塞**，记一条 ERROR（作业可能仍在写盘，仍占用那唯一一条 IO 线程），只有仍持有在途作业的存档实例才会阻塞下一个存档启动。
 - `/idtw config reload/validate/list` 与 `/idtw rule list/show` 在保存期间明确提示稍后重试，避免读取整批替换的中间状态。
 - 数据包重载在保存期间只保留最近一次延后请求，并使尚未提交的保存失效；文件工作结束后才执行，避免读取替换中间状态。快照至多一个准备任务与一个最新待启动请求，保存期间暂缓准备。
 
@@ -154,7 +154,8 @@
 
 - 写盘依据**磁盘文件内容**，按 id 逐条 upsert/delete，保留未编辑条目、非对象数组成员与未知字段；命中控制条目或解码失败的文件不会被覆盖。
 - 保存扫描遇到非法 JSON 时记录包含文件路径和解析异常的告警，保留原文件并继续处理其它文件；加载路径的结构化问题仍由规则解析器报告。
-- 写文件用**原子写 + `.bak` 备份**，逐文件替换；任一环节失败**逆序回滚**已提交文件。删除单条文件的唯一条目时写成**空数组**而非删文件。
+- 写文件用**原子写 + `.bak` 备份**，逐文件替换；任一环节失败**逆序回滚**已提交文件，并清理本轮生成的 `.bak` 与临时文件。文件内条目被删空时**直接删除该文件**，不写空数组占位。
+- **单次保存只扫描并解析目录一次**，后续阶段复用已读字节与元数据指纹：准备阶段只核对 `size + mtime` 指纹，逐文件替换前再做一次**逐字节**比对闸门。保留逐字节闸门是有意为之——只比 `size + mtime` 会漏掉同尺寸且时间戳未变的外部改动；比对不一致即判定为外部修改并整批中止。
 - `ApplyResult.writtenFiles()==0` 或 `conflicts` 非空都不算保存成功；I/O 失败尝试恢复，回滚失败明确报错并保留 `.bak`。
 - **路径安全**：拒绝 `.`/`..` 路径段与越界、拒绝跟随符号链接；编辑命中同 id 多处定义时拒绝，未编辑的歧义条目不阻断其它保存。
 - **查询索引**：加载后一次构建 id→位置列表，逐条查询不全量扫描；删除使用稳定槽位，输出时略过 Java null 删除槽位并保留 JSON null。单成员无 id 条目的文件路径推导随删除增量维护。
@@ -184,7 +185,7 @@
 ## 8. 扩展点
 
 - **改限额**：改 `RuleEditLimits`（注意逐片、总量、快照、并发、超时多处）。
-- **改写盘策略**：改 `RuleOverlayWriter`（保持"整批预备 + 原子替换 + 失败回滚 + `verifyUnchanged`"）。
+- **改写盘策略**：改 `RuleOverlayWriter`（保持"整批预备 + 原子替换 + 失败回滚 + 替换前内容闸门"；元数据核对是 `verifyMetadataUnchanged`，逐字节比对是 `verifyContentUnchanged`）。
 - **改快照形状**：改 `RuleSnapshotAssembler`（保持覆盖层用原始 JSON、`editable = base != null || overlay != null`）。
 - **接入新目录类型**：在 `core/catalog` 实现 `RuleCatalogSource` 并登记到 `RuleCatalogSources.builtin`；枚举值加进 `RuleCatalogType`。
 - **新增 payload**：新增协议类 + 在两端注册器登记；C2S 与 S2C **类型**都必须在公共初始化注册，否则连接协商判定通道缺失。

@@ -15,18 +15,18 @@
 - 服务发现文件：两端 `META-INF/services/com.meteorite.itemdespawntowhat.platform.services.IPlatformHelper`（Fabric → `FabricPlatformHelper`，NeoForge → `NeoForgePlatformHelper`）。
 - 契约：`getPlatformName` / `isModLoaded` / `isDevelopmentEnvironment` / `getConfigDir` / `getEnvironmentName()`（默认派生）/ `sendToPlayer(player, payload)`（默认抛异常）/ `getDropState(entity)` / `setDropState(entity, state)`（默认无状态 / 空操作）。
 
-用途举例：`DebugMode.ENABLED` 依赖 `isDevelopmentEnvironment()`；`RuleRuntimeHost` 用 `getConfigDir()` 定位覆盖层与 `server.json`；编辑层用 `sendToPlayer` 发包；实体层掉落物状态经 `getDropState` / `setDropState` 持久化。
+用途举例：`DebugMode.ENABLED` 依赖 `isDevelopmentEnvironment()`；公共宿主核心用 `getConfigDir()` 定位覆盖层与 `server.json`；编辑层用 `sendToPlayer` 发包；实体层掉落物状态经 `getDropState` / `setDropState` 持久化。
 
 **实体状态持久化**由平台差异承载，core 只经 `DropStateStore` 门面访问：NeoForge 走 `Entity#getPersistentData`（`CompoundTag`），Fabric 走持久化 Data Attachment。未实现平台静默降级（读 `NONE`、写空操作），**状态读写位于伤害判定等热路径，绝不抛异常**。
 
 ## 3. 窄接口：core 定义，平台实现
 
-core 侧只声明它需要的最小能力，具体状态由平台 `RuleRuntimeHost` 的匿名实现提供（字段都是 volatile 静态状态，调用时实时读取）：
+core 侧只声明它需要的最小能力，具体实现是内核侧公共宿主核心（`core/host`）的适配器，调用时实时读取；平台宿主只提供差异适配面：
 
 | 窄接口 | 需求方 | 提供方 | 暴露的能力 |
 |---|---|---|---|
-| `RuleCommandContext` | `core/command` | `RuleRuntimeHost.COMMAND_CONTEXT` | `runtime` / `serverConfig` / `editContext` / `overlayNamespace` / `overlayVersion` / `activeSessionCount` / `reloadRules` |
-| `RuleEditServerContext` | `core/network` | `RuleRuntimeHost.EDIT_CONTEXT` | `overlayRoot` / `overlayNamespace` / `typeRegistries` / `loadMerged` / `rebuildAndRescan` / `sendTo` / `referenceLifespanTicks` |
+| `RuleCommandContext` | `core/command` | `RuleRuntimeHostCore` 的 `CommandContext` 适配器 | `runtime` / `serverConfig` / `editContext` / `overlayNamespace` / `overlayVersion` / `activeSessionCount` / `reloadRules` |
+| `RuleEditServerContext` | `core/network` | `RuleRuntimeHostCore` 的 `EditContext` 适配器 | `overlayRoot` / `overlayNamespace` / `typeRegistries` / `loadMerged` / `rebuildAndRescan` / `sendTo` / `referenceLifespanTicks` |
 
 好处：`core/command` 与 `core/network` 不必依赖平台运行时类；平台侧也无需把运行时内部状态提升为公共 API。窄接口所有成员都可能返回 null（服务端启动完成前命令树尚未就绪）。
 
@@ -43,7 +43,7 @@ S2C 的「打开编辑界面 / 收到快照 / 收到回执 / 收到目录 / 收�
 
 ## 5. 事件即调用时机
 
-平台 `RuleRuntimeEvents` 只做「事件 → `RuleRuntimeHost`」转发，业务在 core。**core 不知道任何加载器事件，它的全部入口是 `RuleRuntimeHost` 的静态方法**；两端事件与方法的一一映射表见 [platform.md](../modules/platform.md) §3。这里只强调本系统新增 / 关键的几类注入点：
+平台 `RuleRuntimeEvents` 只做「事件 → `RuleRuntimeHost`」转发，业务在 core。**core 不知道任何加载器事件，它的全部入口是两端 `RuleRuntimeHost` 的静态方法（转发给公共宿主核心）**；两端事件与方法的一一映射表见 [platform.md](../modules/platform.md) §3。这里只强调本系统新增 / 关键的几类注入点：
 
 - **唯一服务器 tick 推进入口**：`RuleRuntimeHost.tickServer(server)`（Fabric `END_SERVER_TICK` / NeoForge `ServerTickEvent.Post`）推进**唯一一份**公共预算；**不按维度重复推进**，所有维度共享这一次推进（见 [scheduling-budget.md](scheduling-budget.md)）。
 - **寿命提供者注入**：`LifespanProvider` 是 core 的平台差异收敛点；平台在 `start` 建 `ConversionRuntime` 时注入——Fabric 优先用被动观察到的原版阈值，未采样时退回 `server.json` 的兜底刻数；NeoForge 返回实体当前寿命 `entity.lifespan`（`ItemStack#getEntityLifespan`，保留其它模组的修改）。core 只依赖接口。

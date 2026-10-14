@@ -1,6 +1,6 @@
 # 功能模块：转化运行时（`core/runtime`）
 
-> 事实来源：`core/runtime/`（21 类）+ `core/state/`（3 类）；调度器实现 `core/runtime/scheduler/`（16 类）见 [scheduling-budget.md](../systems/scheduling-budget.md)，本文不复述其类清单。
+> 事实来源：`core/runtime/`（22 类）+ `core/state/`（3 类）；调度契约 `core/api/scheduler/`（11 类）与实现 `core/runtime/scheduler/`（8 类）见 [scheduling-budget.md](../systems/scheduling-budget.md)，本文不复述其类清单。
 > 追踪、触发、条件求值、候选选择、完整组结算与返还、效果派发的引擎；**世界操作只在服务端主线程执行**。
 > 决策：[ADR-0023](../../../adr/0023-triggers-fixed-cost-and-complete-group-settlement.md)（完整组结算）、[ADR-0024](../../../adr/0024-shared-server-tick-budget-scheduler.md)（共享预算调度）。完整组结算、固定成本与候选择一的契约在 `ConversionSettlement` 与 `CatalystReservations` 的类注释中就地记录。
 
@@ -18,6 +18,7 @@
 | `SettlementRecord` | 单次结算记录：计划量、已开始组、真实完成量、返还交付进度；可持久化 | `plan`、`groupStarted`、`addProgress`、`delivered`、`syncPendingDelivery`、`complete`、`interrupt`、`needsRecovery`、`save`/`load` |
 | `SettlementRecovery` | 重启 / 维度加载后的待返还交付任务（`REBATE`） | `step`、`onCancelled`、`onFailed`、`finish` |
 | `RoundRobinCursors` | 主世界 `SavedData` 轮询游标（规则 id + 维度，持久化） | `get`、`cursor`、`moveTo` |
+| `CandidateStructureVersions` | 按规则实例缓存候选结构摘要（供轮询游标判定结构是否变化） | `versionOf(rule, registries)`、`clear()` |
 | `RuleIndex` | "物品 id → 候选规则"查询结构：直接物品建索引、标签懒展开 | `build`、`candidates`、`ordered` |
 | `CatalystThresholdProjection` | 门槛运行投影：把 `catalyst_present` **留空**的门槛解析为当前消耗配置下的有效值，在 `RuleIndex.build` 内执行 | `project`、`resolveThreshold` |
 | `ExpressionEvaluator` | 条件求值入口（`matches` = `evaluate` == MATCH） | `matches`、`evaluate` |
@@ -75,11 +76,12 @@ delay           = max(0, dueAge - entity.getAge())
 
 ## 3. 完整组结算与数量账目（`ConversionSettlement`）
 
-命中后 `performConversion` 把**整堆源物品转入结算库存**：`held = source.copy()`、`source.setCount(0)`、给实体打持久化 `converted` 标签，写一条 `SettlementRecord` 到账本，并把 `ConversionSettlement` 作为 `EFFECT` 任务立即入队。结算任务三阶段：计划 → 派发 → 交付。
+命中后 `performConversion` 把**整堆源物品转入结算库存**：`held = source.copy()`、`source.setCount(0)`、给实体打持久化 `converted` 标签，写一条 `SettlementRecord` 到账本，并把 `ConversionSettlement` 作为 `EFFECT` 任务立即入队。**「扣减 → 登记 → 调度注册」是一个补偿单元**：调度注册抛异常时整堆库存写回源实体、撤销 `converted` 标签与账本登记，只有全部成功才把所有权交给结算任务；结算任务得到所有权后，中断与失败都不再把库存退回世界。结算任务三阶段：计划 → 派发 → 交付。
 
 - **每组固定源成本** `c = perRoundSourceConsumption(rule, sourceStack)`（`BuiltinTypeRegistries`）四种情形：显式 `source_cost` → 按当前源堆叠取直接物品，否则取 `source.items` 中首个命中的标签，缺省 1；未声明 `source_cost` 且未声明任何 `consume_*` → 隐式 1；未声明 `source_cost` 但声明了 `consume_source` → 各 `consume_source` 对当前源物品数量之和（`counts` 优先、缺省效果 `count`）；只声明其它消耗效果（如 `consume_fluid`）→ 0，表示不按堆叠轮次展开。`source_cost` 与 `consume_source` 由 `RuleValidation` 拒绝同时声明。
 - **计划组数** `planned = min(held / c, 催化剂可用组数上界)`（`c ≤ 0` 时按 1 组；未声明 `catalyst_cost` 时上界不设限），**候选容量不参与组数上界**——容量只在开组前复核，不足即截断已开始组数并把剩余源交还（见本节「每组准入」）。统一 `spawn_entity` 各子类使用服务端 `nearby_products` 阈值，相同 TaggedId 的多个动作合并本组需求。经验按本组实际源成本计算总点数，再保守估计原版拆分球数。仅含一次性动作的候选对同一源封顶一组，混合候选仍可多组。
 - **每组准入**：未开组再次检查真实邻域容量，不足时不支付该组成本并返还剩余源；已开始组不再检查邻近阈值，执行器继续分批完成，允许短暂超额。配置阈值不是硬上限，不清理已生成实体；不同 tag 的重叠集合没有统一硬预留保证，预算/区块/异常中断保持原契约。
+- **同刻容量复用**：每次容量测量记录候选维度，**同一 tick 内同一候选只查一次世界并复用结果**；每步开始时清空复用表（每步归零），避免跨刻沿用旧容量把 room 算大。
 - **候选选择**：每个转化组只选**一个**候选结果。`ROUND_ROBIN`（默认）从游标处依次尝试，`PRIORITY` 取第一个可用候选；容量不足或催化剂不足的候选跳过，**全部候选都无法完成一组时整堆返还、不支付任何成本**。不能把组合模式实现成"全部结果执行、只调先后顺序"。
 - **催化剂固定成本**（`rule.catalystCost()`）：一组结算需分别支付 `items` 各引用的 `counts` 数量，缺省采用 `count`。`CatalystAllocation` 用共享库存分配完整轮次，重叠标签不会重复使用库存；图构建与增广搜索按预算跨 tick 续跑。计划期登记逐轮支付清单并预留（`CatalystReservations.tryReserve`，全有或全无、绝不半预留），**开组时先支付再开组**（`payGroup`：PAID / RETRY / SHORT）；不足则截断组数、释放预留，剩余源走返还（**绝不"少扣照常产出"**）。支付计费进度可跨 tick 保留，真正扣除前重新核对全部实体、物品类型及预留数量。催化剂账目使用本组各引用数量之和，不进源物品守恒式。
 - **数量账目守恒**：设整堆源初始 `N`，每组源成本 `c`，实际开始组数 `g`，则
@@ -91,13 +93,17 @@ delay           = max(0, dueAge - entity.getAge())
 
   概率落空、效果条件不满足、执行途中部分失败都**仍属已支付组**（不免费重试、不返还成本）；真实完成量只来自执行器回执（`EffectResult.appliedUnits` + `reportProgress`），**计划量不冒充成功量**。不足一组不强制产出。
 
+  状态只在**同一个提交点**落盘：正常完成、显式中止、预算耗尽提前让出与为交付而让出都经 `commit()`；记录里用显式的**库存所有权标记**表示`held`是否仍归本次结算，提交时按它同步待交付数量再登记。
+
+  物品与标签引用只有**唯一匹配实现**（`core/type/TaggedItemMatch.java`）：效果式消耗、催化剂固定成本与催化剂条件求值共用同一份匹配语义，调用方不得复刻。
+
 - **一次性效果**（`EffectType.oneShot()`，如闪电/爆炸/箭雨/天气）不参与容量；仅含一次性效果的候选对同一源最多一组，其余含可重复产出者可多组但其中一次性效果仍只尝试一次。
-- **轮询游标**按 `规则 id + 维度` 共享并持久化（`RoundRobinCursors`）；候选结构版本（候选 id、开关、效果顺序与参数的 SHA-256 摘要）变化时游标归零，避免旧位置指向新结构。
+- **轮询游标**按 `规则 id + 维度` 共享并持久化（`RoundRobinCursors`）；候选结构版本（候选 id、开关、效果顺序与参数的 SHA-256 摘要）变化时游标归零，避免旧位置指向新结构。摘要按规则实例缓存，规则索引重建、保存后索引发布与停服时清空。
 
 ## 4. 持久化与恢复
 
 - `SettlementLedger` 存于**主世界** `SavedData`（`itemdespawntowhat_settlements`），维度卸载/停服都不丢记录；已完成且交付完毕的旧记录按 tick 过期（保留 6000 tick）并按条数上限兜底裁剪，**未结清记录一条不裁**。
-- 中断（`onCancelled`）与异常（`step` 的 catch）走同一条 `abort` 顺序：置 `cancelled`、以 `held.getCount()` 同步待返还、记 `INTERRUPTED`/`FAILED`、释放未支付催化剂预留、写盘。**本路径不做任何世界写入**（维度卸载/停服时加入世界不安全）。
+- 中断（`onCancelled`）与异常（`step` 的 catch）走同一条 `abort` 顺序：置 `cancelled`、清除库存所有权标记（仍持有时才同步待返还数量）、记 `INTERRUPTED`/`FAILED`、释放未支付催化剂预留，最后经同一个提交点写盘。**本路径不做任何世界写入**（维度卸载/停服时加入世界不安全）。
 - 恢复：`onServerTick` 首次服务端 tick 后全局扫描一次，`rescan`（维度加载/重载）补扫该维度；未加载维度的记录保持在账本等待。`SettlementRecovery` 只交付记录里的 `pendingDelivery`，**不恢复旧效果队列、不重放已开始的组**；`needsRecovery()` 只看待返还库存（`pendingDelivery > 0 && !source.isEmpty()`），绝不把"已派发未回执"的 `pendingUnits` 当成待返还库存。`activeRecoveries` 幂等位保证同一记录同一时刻只允许一个交付任务。
 - `SettlementRecovery` 失败与取消共用幂等清理：不补做世界写入，保留待返还数据并释放预留；`finally` 释放 `activeRecoveries`，即使收尾写盘失败也允许后续扫描重新排期。
 - 保存重载通过 `applySavedIndex` 发布预建索引，立即摘除旧队列并逐项取消，再用账本 id 游标逐条恢复返还、用已加载掉落物 id 游标跨 tick 回扫。掉落物加入/移除事件维护该有序集合；临近自然消失的物品在等待回扫期间及时按新索引补追踪。

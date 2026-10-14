@@ -1,6 +1,6 @@
 # 横向系统：索引与缓存
 
-> 事实来源：`core/runtime/{RuleIndex, RuntimeTagLookup, RuntimeClimateSampler, ConversionRuntime}.java`、`core/type/effect/exec/PlaceBlockExecutor.java`、`core/catalog/**`、`core/network/catalog/RuleCatalogService.java`。
+> 事实来源：`core/runtime/{RuleIndex, RuntimeTagLookup, RuntimeClimateSampler, CandidateStructureVersions, ConversionRuntime}.java`、`core/type/effect/exec/PlaceBlockExecutor.java`、`core/catalog/**`、`core/network/catalog/RuleCatalogService.java`。
 > 相关模块：[conversion-runtime.md](../modules/conversion-runtime.md)；候选目录的编辑协议见 [edit-protocol.md](../modules/edit-protocol.md)。
 
 ## 1. 候选规则索引（`RuleIndex`）
@@ -26,7 +26,8 @@
 - 用新规则集重建 `RuleIndex`（旧对象整体替换）；
 - 清空各维度 `tracked`；
 - 把各维度的 `tags` / `climate` 置 **null**（强制下次使用时按新数据包重建，**防止读到旧数据包标签**）；
-- 对每个维度 `scheduler.cancelRealm(key, RULE_RELOAD)`——**检查与效果任务一起带原因取消**，效果队列不跨 reload 残留。
+- 对每个维度 `scheduler.cancelRealm(key, RULE_RELOAD)`——**检查与效果任务一起带原因取消**，效果队列不跨 reload 残留；
+- 清空**候选结构摘要**缓存（`CandidateStructureVersions`）——它按规则实例缓存候选结构摘要，供轮询游标判定结构是否变化；除 reload 外，保存后索引发布（`applySavedIndex`）与停服也会清空。
 
 即所有与数据包相关的缓存**随 reload 整体丢弃**，不单独失效。规则索引 `RuleIndex` 自身的 `tagCache` / `queryCache` 也随对象替换一并丢弃。
 
@@ -80,12 +81,13 @@
 | `RuleCatalogSources` 源列表 | 每服务端一份 | 换服务端实例 |
 | `RegistryCatalogSource` / `TagCatalogSource` 条目 | 每修订号一份 | 修订号变化即重建 |
 | `RuleCatalogService.CACHE` | 每 `RuleCatalogType` 一份 | 修订号变化 / `invalidate` |
+| `CandidateStructureVersions` | 每规则实例一份摘要 | 规则索引重建 / 保存后索引发布 / 停服 |
 | `DebugMeasurements` | **12000** 样本 | 每轮场景 |
 
 ## 8. 扩展点与踩坑
 
 - 新增按物品 / 标签查询的结构 → 扩 `RuleIndex`（保持排序键与懒展开）。
-- 新增依赖数据包的缓存 → 必须在 `replaceRules` 中一并置空，否则 reload 后读到旧数据。
+- 新增依赖数据包的缓存 → 必须在 `replaceRules` 中一并置空，否则 reload 后读到旧数据；按规则实例记忆的派生值还要补上保存后索引发布与停服的清理点（参见候选结构摘要）。
 - 新增候选类别 → 扩 `RuleCatalogType` + 在 `RuleCatalogSources.builtin` 增加一个数据源；分页 / 过滤复用 `RuleCatalogService`，不要在两处各写一份。
 - 新增**依赖数据包的运行期派生值**（如留空门槛的有效值）→ 扩 `CatalystThresholdProjection` 并挂在 `RuleIndex.build` 上，随索引整体重建失效；不要为它另建索引或运行期缓存。
 - 踩坑：缓存「整体重建」是刻意设计，不要为单条规则加局部失效路径；`revision()` 必须与顺序无关（用 `Set.hashCode`），否则每 tick 都会误判内容变化；`PlaceBlockExecutor.OFFSETS` 是进程内静态、跨 reload 保留。

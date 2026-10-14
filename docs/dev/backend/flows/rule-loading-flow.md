@@ -7,7 +7,7 @@
 
 | 触发 | Fabric | NeoForge | 说明 |
 |---|---|---|---|
-| 服务端启动 | `SERVER_STARTED` → `RuleRuntimeHost.start` | `ServerStartedEvent` → `start` | **必须等全部维度已创建**，否则回扫漏掉落物 |
+| 服务端启动 | `SERVER_STARTED` → `RuleRuntimeHost.start`（转发给公共宿主核心） | `ServerStartedEvent` → `start` | **必须等全部维度已创建**，否则回扫漏掉落物 |
 | 数据包重载 | `END_DATA_PACK_RELOAD`（`success` 才重建） | `OnDatapackSyncEvent`（仅 `player==null`） | 在新资源与标签切换后加载 |
 | 命令重载 | `/idtw config reload` → `reloadRules` | 同 | 走同一 `reload` |
 | 保存后重建 | 网络保存 → `rebuildAndRescan` | 同 | 见 [edit-save-protocol.md](edit-save-protocol.md) |
@@ -15,7 +15,7 @@
 ## 2. 主流程
 
 ```text
-RuleRuntimeHost.start(server)
+RuleRuntimeHostCore.start(server)          # 两端 RuleRuntimeHost 只做转发
   ├─ shutdown()                          # 释放上一轮（单人世界切存档会先后启动多个服务端）
   ├─ ServerConfig.loadOrCreate(...)      # 读固定的 config/itemdespawntowhat/server.json，缺失即写默认
   ├─ BuiltinTypeRegistries.create()      # 条件→freeze→表达式Codec→效果→freeze
@@ -33,7 +33,7 @@ RuleRuntimeHost.start(server)
   ├─ DropStateStore.configure(protectTicks, cooldownTicks)   # 新产物保护 / 转化冷却时长取自本次配置
   └─ for 每个已加载维度: newRuntime.rescan(level)   # 回扫 ENTITY → onItemAdded
 
-RuleRuntimeHost.reload(server, rm)          # 数据包重载 / 命令重载 / 保存后重建共用
+RuleRuntimeHostCore.reload(server, rm)     # 数据包重载 / 命令重载 / 保存后重建共用；两端 RuleRuntimeHost 只做转发
   ├─ loadRules(context, "数据包重载")
   ├─ current.replaceRules(rules, issues)
   ├─ for 每个已加载维度: current.rescan(level)
