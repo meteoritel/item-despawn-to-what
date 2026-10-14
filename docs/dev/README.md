@@ -97,6 +97,8 @@
 | [internals/editor-card-layout.md](internals/editor-card-layout.md) | 四阶段编辑页的卡片布局与视觉规格：卡片分组、间距与高度、目录控件、黑名单选择、数量控件与预览尺寸 |
 | [internals/editor-input-state.md](internals/editor-input-state.md) | 编辑输入缓冲与配置历史：字段输入生命周期、页面生命周期、树结构操作与历史路径迁移 |
 | [internals/editor-draft-persistence.md](internals/editor-draft-persistence.md) | 客户端草稿持久化：草稿目录与命名、落盘文件格式、节流写盘与失败重试、重启/断线恢复与三类冲突判定 |
+| [internals/gui-screenshot-api-findings.md](internals/gui-screenshot-api-findings.md) | GUI 截图相关 API 核查：无世界渲染、资源加载遮罩、截图写盘时序、构建接入与现有 Screen 依赖 |
+| [internals/gui-screenshot-tool.md](internals/gui-screenshot-tool.md) | NeoForge 开发截图工具：隔离 Source Set、启动参数、fixture、PNG 与结果文件、运行限制 |
 | [internals/ui-kit/README.md](internals/ui-kit/README.md) | UI kit 依赖边界与检查脚本、公开入口分组、分册索引、宿主接入清单、拆包就绪门槛 |
 | [internals/ui-kit/input-routing.md](internals/ui-kit/input-routing.md) | 事件路由顺序、输入上下文与目标契约、捕获与单值操作生命周期、按下归属与弹出层所有者契约 |
 | [internals/ui-kit/value-controls.md](internals/ui-kit/value-controls.md) | UiNumberPolicy / UiSliderWindow、三类滑块核心、样式注入 |

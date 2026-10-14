@@ -22,6 +22,7 @@
 | `client/ui/widget`、`client/ui/theme` | [editor-card-layout.md](editor-card-layout.md)、[ui-kit/README.md](ui-kit/README.md) |
 | `client/ui/kit` | [ui-kit/README.md](ui-kit/README.md) |
 | `client/net`、`client/key`、`client/ui/shared`、`client/ui/prototype` | 无执行层文档；抽象层职责与约束见 [../layers/client.md](../layers/client.md) |
+| `neoforge/src/guiScreenshot` | [gui-screenshot-tool.md](gui-screenshot-tool.md) |
 
 ## 3. 事实来源
 
