@@ -7,6 +7,8 @@ import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogEntry;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleCatalogPayload;
 import net.minecraft.server.MinecraftServer;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -29,6 +31,9 @@ public final class RuleCatalogService {
 
     // 每类型缓存：来源修订号 + 该修订号下的全量候选
     private static final Map<RuleCatalogType, Cached> CACHE = new EnumMap<>(RuleCatalogType.class);
+
+    // 来源实现体报错的记录器：没有日志就无法把「该类型无数据源」与「实现体抛错」区分开
+    private static final Logger LOGGER = LogManager.getLogger();
 
     private RuleCatalogService() {
         throw new UnsupportedOperationException("Utility class");
@@ -104,6 +109,7 @@ public final class RuleCatalogService {
         try {
             sources = RuleCatalogSources.builtin(server);
         } catch (RuntimeException e) {
+            LOGGER.warn("读取规则目录来源失败，本类型按无数据源处理：类型={}", type, e);
             return null;
         }
         if (sources == null) {

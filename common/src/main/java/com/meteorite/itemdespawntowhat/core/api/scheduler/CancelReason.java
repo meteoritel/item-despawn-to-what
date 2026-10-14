@@ -14,5 +14,7 @@ public enum CancelReason {
     // 源实体已被移除。
     ENTITY_REMOVED,
     // 开发场景主动停止。
-    SCENARIO_STOP
+    SCENARIO_STOP,
+    // 自然寿命延后：物品临近原版消失，既有检查让位给重新排定的预留检查。
+    NATURAL_EXPIRY_DEFERRED
 }
