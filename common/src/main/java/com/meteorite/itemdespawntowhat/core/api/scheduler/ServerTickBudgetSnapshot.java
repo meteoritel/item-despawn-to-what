@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.core.runtime.scheduler;
+package com.meteorite.itemdespawntowhat.core.api.scheduler;
 
 /**
  * 单 tick 预算结算后的只读快照，用于性能窗口与 debug 输出。

@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.core.runtime.scheduler;
+package com.meteorite.itemdespawntowhat.core.api.scheduler;
 
 /**
  * 一个服务器 tick 的共享软预算：时间上限与全局工作量上限同时生效。
@@ -20,8 +20,15 @@ public final class ServerTickBudget {
     private boolean frozen;
     private long frozenNanos;
 
-    // 每 tick 开始时由调度器重置；业务代码不得直接调用。
-    void begin(long gameTime, long budgetNanos, int maxWorkUnits) {
+    /**
+     * 开始一个新的 tick 预算周期：重置全部计数与耗尽标记，并立即开始计时。
+     * 仅由调度器在每 tick 推进开始时调用一次，业务代码与任务实现不得调用。
+     *
+     * @param gameTime 本 tick 对应的游戏刻
+     * @param budgetNanos 本 tick 允许消耗的纳秒上限，小于 1 时按 1 处理，避免预算恒为耗尽
+     * @param maxWorkUnits 本 tick 允许消耗的全局工作量上限，小于 1 时按 1 处理
+     */
+    public void begin(long gameTime, long budgetNanos, int maxWorkUnits) {
         this.gameTime = gameTime;
         this.budgetNanos = Math.max(1L, budgetNanos);
         this.maxWorkUnits = Math.max(1, maxWorkUnits);
@@ -95,19 +102,28 @@ public final class ServerTickBudget {
         usedWorkUnits = Math.min(maxWorkUnits, usedWorkUnits + Math.max(0, workUnits));
     }
 
-    // 到期搬运固定消耗 1 个工作单位，并单独计数以便观测搬运占比。
-    void chargeDrain() {
+    /**
+     * 记入一次到期任务搬运的开销：固定消耗 1 个工作单位，并单独计数。
+     * 搬运与任务执行分开计数，是为了让观测能区分"排队调度成本"与"业务执行成本"。
+     */
+    public void chargeDrain() {
         charge(1);
         drainedTasks++;
     }
 
-    // 标记本 tick 结束时仍有待推进任务（含到期桶中未搬运的部分）。
-    void markWorkRemaining() {
+    /**
+     * 标记本 tick 预算耗尽时仍有待推进任务，含已到期但未搬运的部分。
+     * 该标记用于解释"预算耗尽但队列非空"的观测结论，不参与调度决策。
+     */
+    public void markWorkRemaining() {
         workRemaining = true;
     }
 
-    // 冻结本 tick 的耗时，之后的 usedNanos 不再变化。
-    void finish() {
+    /**
+     * 结束本 tick 并冻结耗时：之后 {@link #usedNanos()} 返回本 tick 的最终值。
+     * 冻结而不是继续读时钟，是为了让 tick 结束后的统计与快照保持稳定。
+     */
+    public void finish() {
         frozenNanos = Math.max(0L, System.nanoTime() - startedNanos);
         frozen = true;
     }

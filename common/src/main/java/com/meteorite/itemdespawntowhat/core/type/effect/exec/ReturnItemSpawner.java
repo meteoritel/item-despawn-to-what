@@ -3,7 +3,7 @@ package com.meteorite.itemdespawntowhat.core.type.effect.exec;
 import com.meteorite.itemdespawntowhat.core.debug.DebugMode;
 import com.meteorite.itemdespawntowhat.core.debug.DebugScenarioManager;
 import com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTickBudget;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 import com.meteorite.itemdespawntowhat.core.state.DropStateStore;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;

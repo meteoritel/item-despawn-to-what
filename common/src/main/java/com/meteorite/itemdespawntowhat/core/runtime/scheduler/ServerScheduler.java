@@ -1,5 +1,13 @@
 package com.meteorite.itemdespawntowhat.core.runtime.scheduler;
 
+import com.meteorite.itemdespawntowhat.core.api.scheduler.CancelReason;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ScheduledTaskHandle;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudgetSnapshot;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.StepResult;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.TaskQueue;
 import com.meteorite.itemdespawntowhat.core.debug.DebugMode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -15,8 +23,9 @@ import java.util.Objects;
  * 服务器级共享 tick 预算调度器：每个服务器一个实例，所有维度与任务种类共享同一份时间与工作量预算。
  * 每 tick 只推进一次；到期搬运、就绪提取与任务执行全部计入预算，超出预算的任务保留在队列中跨 tick 延后。
  * 任务保留原始到期 tick：只有在到期后才参与执行，公平轮转不会让任务提前执行。
+ * 本类是实现层：契约层只通过 {@link TaskQueue} 提出排期请求，通过 {@link ScheduledTaskHandle} 引用已入队任务。
  */
-public final class ServerScheduler {
+public final class ServerScheduler implements TaskQueue {
 
     private static final Logger LOGGER = LogManager.getLogger("IDTW.Scheduler");
 
@@ -95,7 +104,8 @@ public final class ServerScheduler {
         return realmFor(realmKey).schedule(task, lastGameTime + Math.max(0, delayTicks));
     }
 
-    // 指定到期 tick 入队：持久返还恢复时按记录保留原始到期时间。
+    // 指定到期 tick 入队：持久返还恢复时按记录保留原始到期时间；返回值收窄为具体实现以保留任务状态查询能力。
+    @Override
     public ScheduledTask scheduleAt(Object realmKey, ServerTask task, long dueTick) {
         Objects.requireNonNull(task, "task");
         return realmFor(realmKey).schedule(task, dueTick);

@@ -18,8 +18,7 @@ import com.meteorite.itemdespawntowhat.core.service.RuleLoadContext;
 import com.meteorite.itemdespawntowhat.core.service.RuleLoadingService;
 import com.meteorite.itemdespawntowhat.core.service.RuleSaveReloadContext;
 import com.meteorite.itemdespawntowhat.core.runtime.RuleIndex;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerScheduler;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTask;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
 import com.meteorite.itemdespawntowhat.core.load.DatapackRuleReader;
 import com.meteorite.itemdespawntowhat.core.state.DropStateStore;
 import com.meteorite.itemdespawntowhat.platform.Services;
@@ -160,7 +159,9 @@ public final class RuleRuntimeHost {
         public RuleSaveReloadContext saveReloadContext() { return saveReloadContext; }
 
         @Override
-        public ServerScheduler saveScheduler() { return java.util.Objects.requireNonNull(runtime).scheduler(); }
+        public void scheduleTask(Object realmKey, ServerTask task, int delayTicks) {
+            java.util.Objects.requireNonNull(runtime).scheduler().schedule(realmKey, task, delayTicks);
+        }
 
         @Override
         public ServerTask applySavedIndex(MinecraftServer server, RuleIndex index) {

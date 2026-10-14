@@ -1,12 +1,11 @@
 package com.meteorite.itemdespawntowhat.core.network.transport;
 
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoadResult;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.service.BuiltinTypeRegistries;
 import com.meteorite.itemdespawntowhat.core.service.RuleSaveReloadContext;
 import com.meteorite.itemdespawntowhat.core.runtime.RuleIndex;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerScheduler;
-import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerTask;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -43,10 +42,14 @@ public interface RuleEditServerContext {
     @Nullable RuleSaveReloadContext saveReloadContext();
 
     /**
-     * 获取服务器唯一的公共预算调度器。
-     * @return 已就绪的调度器
+     * 把已构建好的任务排入服务器公共预算调度器，延迟若干 tick 后执行。
+     * 只暴露排期能力而不暴露调度器本身，使网络层与平台宿主都无需依赖运行时实现类。
+     *
+     * @param realmKey realm 标识，通常是维度键
+     * @param task 待执行任务
+     * @param delayTicks 相对当前刻的延迟刻数，负值按 0 处理
      */
-    ServerScheduler saveScheduler();
+    void scheduleTask(Object realmKey, ServerTask task, int delayTicks);
 
     /**
      * 发布准备好的索引，并返回跨 tick 取消旧任务与回扫的续接任务。
