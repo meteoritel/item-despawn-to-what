@@ -7,7 +7,7 @@ import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleConditionType;
-import com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks;
+import com.meteorite.itemdespawntowhat.core.api.ChunkPresence;
 import com.meteorite.itemdespawntowhat.core.api.RefChecks;
 import com.meteorite.itemdespawntowhat.core.type.condition.eval.SurroundingBlocksEvaluator;
 import com.mojang.serialization.MapCodec;
@@ -66,7 +66,7 @@ public record SurroundingBlocksCondition(
     // 周围区块未全部加载时无法判定，通过可求值性门禁返回 UNAVAILABLE，而不是把「判不了」当成「不成立」
     public static ConditionType<SurroundingBlocksCondition> conditionType() {
         return new SimpleConditionType<>(ID, CODEC, SurroundingBlocksCondition::validateParams, SurroundingBlocksEvaluator::test,
-                (params, context) -> LoadedChunks.containsArea(context.level(), context.pos(), 1)
+                (params, context) -> ChunkPresence.containsArea(context.level(), context.pos(), 1)
                         ? Evaluability.AVAILABLE : Evaluability.UNAVAILABLE);
     }
 

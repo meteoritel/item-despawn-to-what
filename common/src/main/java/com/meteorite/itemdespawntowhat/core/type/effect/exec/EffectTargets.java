@@ -56,8 +56,6 @@ public final class EffectTargets {
     }
 
     // 实际生成位置可能越过源区块边界；保留实体等区块加载后再加入。
-    // 此处借用 Minecraft 管理的实例，生命周期由游戏负责，不能在此关闭。
-    @SuppressWarnings("resource")
     static void addEntity(EffectContext context, net.minecraft.world.entity.Entity entity) {
         if (!com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks.contains(context.level(), entity.blockPosition())) {
             context.schedule(20, () -> addEntity(context, entity));

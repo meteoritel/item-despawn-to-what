@@ -20,7 +20,7 @@ import java.util.function.Function;
 
 /**
  * 标签查询的服务端实现：按标签缓存成员集合，缓存随运行时重建（reload）一起丢弃。
- * 物品/方块/实体/流体/药水效果走静态注册表；生物群系走当前服务端的动态注册表。
+ * 方块/实体/流体/药水效果走静态注册表；生物群系走当前服务端的动态注册表。
  */
 public final class RuntimeTagLookup implements TagLookup {
 
@@ -30,12 +30,6 @@ public final class RuntimeTagLookup implements TagLookup {
     // 构造标签查询：缓存按维度实例持有，随运行时重建（reload）一起丢弃
     public RuntimeTagLookup(ServerLevel level) {
         this.level = level;
-    }
-
-    @Override
-    public boolean itemInTag(ResourceLocation tagId, ResourceLocation itemId) {
-        return members("item", BuiltInRegistries.ITEM, Registries.ITEM, tagId, BuiltInRegistries.ITEM::getKey)
-                .contains(itemId);
     }
 
     @Override

@@ -47,7 +47,7 @@ public record RuleEditChangeSet(int expectedVersion, List<RuleEdit> edits) {
         }
         try {
             JsonElement element = parsed.element();
-            if (!element.isJsonObject()) {
+            if (element == null || !element.isJsonObject()) {
                 return DataResult.error(() -> "变更集不是 JSON 对象");
             }
             JsonObject root = element.getAsJsonObject();

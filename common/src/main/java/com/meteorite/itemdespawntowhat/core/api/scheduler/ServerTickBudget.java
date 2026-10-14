@@ -48,7 +48,10 @@ public final class ServerTickBudget {
         return gameTime;
     }
 
-    /** 本周期的时间上限（纳秒），已在入参处按最小 1 纳秒归一。 */
+    /**
+     * 本周期的时间上限（纳秒），已在入参处按最小 1 纳秒归一。
+     * 保留为对外可观测契约：观测端可直接读取本周期生效的时间上限，不随调度路径收窄可见性。
+     */
     public long budgetNanos() {
         return budgetNanos;
     }
@@ -63,12 +66,18 @@ public final class ServerTickBudget {
         return frozen ? frozenNanos : Math.max(0L, System.nanoTime() - startedNanos);
     }
 
-    /** 本周期已记入的工作量：在 maxWorkUnits 处截断，不会越界。 */
+    /**
+     * 本周期已记入的工作量：在 maxWorkUnits 处截断，不会越界。
+     * 保留为对外可观测契约：观测端可直接读取本周期计费结果，不随调度路径收窄可见性。
+     */
     public int usedWorkUnits() {
         return usedWorkUnits;
     }
 
-    /** 剩余可用工作量（负数归零），供任务在单步内自行节流。 */
+    /**
+     * 剩余可用工作量（负数归零），供任务在单步内自行节流。
+     * 保留为对外可观测契约：任务与观测端可直接读取本步余量，不随调度路径收窄可见性。
+     */
     public int remainingWorkUnits() {
         return Math.max(0, maxWorkUnits - usedWorkUnits);
     }
@@ -88,7 +97,10 @@ public final class ServerTickBudget {
         return workUnitsExpired;
     }
 
-    /** 预算耗尽时是否仍有待推进任务：仅用于解释观测结论，不参与调度决策。 */
+    /**
+     * 预算耗尽时是否仍有待推进任务：仅用于解释观测结论，不参与调度决策。
+     * 保留为对外可观测契约：观测端可直接读取该积压标记，不随调度路径收窄可见性。
+     */
     public boolean workRemaining() {
         return workRemaining;
     }

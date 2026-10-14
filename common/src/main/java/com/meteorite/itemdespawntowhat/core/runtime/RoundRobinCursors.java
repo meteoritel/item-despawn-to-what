@@ -22,6 +22,8 @@ public final class RoundRobinCursors extends SavedData {
     // 数据存储 id（主世界）
     private static final String DATA_ID = "itemdespawntowhat_round_robin";
 
+    // 条目数上限 = 参与轮询的规则数 × 维度数（每项仅两个 int），不随实体或时间增长，因此不做裁剪；
+    // 按维度卸载裁剪反而会丢掉「重启后继续」所依赖的轮询位置。
     private final Map<String, Cursor> cursors = new LinkedHashMap<>();
 
     // 游标：候选结构版本 + 下一个候选下标

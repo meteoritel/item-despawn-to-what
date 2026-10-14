@@ -825,7 +825,7 @@ public final class ConversionRuntime {
         if (!tracked.expiryPending) {
             if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "NATURAL_EXPIRY_DEFERRED"); }
             tracked.expiryPending = true;
-            if (tracked.task != null) { tracked.task.cancel(CancelReason.ENTITY_REMOVED); }
+            if (tracked.task != null) { tracked.task.cancel(CancelReason.NATURAL_EXPIRY_DEFERRED); }
             tracked.nextCheckTick = level.getGameTime();
             tracked.task = scheduleCheck(level, item, 0);
         }

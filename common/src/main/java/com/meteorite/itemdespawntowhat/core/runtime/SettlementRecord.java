@@ -133,7 +133,8 @@ public final class SettlementRecord {
 
     // 返还交付：交付出去后才从待交付里减去
     void delivered(int count) {
-        int moved = Math.max(0, Math.min(count, pendingDelivery));
+        // 上界先归零：pendingDelivery 正常恒非负，但存档读回的字段可能为负，夹取不得因此抛 IllegalArgumentException
+        int moved = Math.clamp(count, 0, Math.max(0, pendingDelivery));
         pendingDelivery -= moved;
         deliveredReturns += moved;
     }

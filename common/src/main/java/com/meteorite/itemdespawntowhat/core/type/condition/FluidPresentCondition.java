@@ -70,8 +70,9 @@ public record FluidPresentCondition(TaggedId fluid, boolean requireSource, List<
     // 参数语义校验：fluid 为空表示任意流体（合法）；非空时做注册表存在性校验并提示 empty 的无效用法
     public static boolean validateParams(FluidPresentCondition params, IssueCollector issues, String fieldPath) {
         boolean valid = true;
+        // 报错字段随引用来源：列表非空时问题出在 fluids，回退到单数 fluid 时出在 fluid
+        String path = ParamChecks.child(fieldPath, params.fluids().isEmpty() ? FIELD_FLUID : RuleFields.FLUIDS);
         for (TaggedId fluid : params.references()) {
-            String path = ParamChecks.child(fieldPath, RuleFields.FLUIDS);
             valid &= RefChecks.check(fluid, BuiltInRegistries.FLUID, FIELD_FLUID, issues, path);
             if (!fluid.tag() && EMPTY_FLUID.equals(fluid.id())) {
                 issues.warn("空流体不会匹配实际流体；留空列表表示任意流体", null, path);

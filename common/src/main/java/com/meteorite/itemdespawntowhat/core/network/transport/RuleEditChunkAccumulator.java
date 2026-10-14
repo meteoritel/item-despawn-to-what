@@ -4,8 +4,8 @@ import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -17,7 +17,7 @@ import java.util.UUID;
 public final class RuleEditChunkAccumulator {
 
     // 玩家 UUID -> (transferId -> 传输会话)
-    private static final Map<UUID, Map<String, ChunkSession>> SESSIONS = new HashMap<>();
+    private static final Map<UUID, Map<String, ChunkSession>> SESSIONS = new LinkedHashMap<>();
 
     private RuleEditChunkAccumulator() {
         throw new UnsupportedOperationException("Utility class");
@@ -90,11 +90,12 @@ public final class RuleEditChunkAccumulator {
         int index = payload.index();
         String chunk = payload.chunk();
         UUID playerId = player.getUUID();
-        Map<String, ChunkSession> byTransfer = SESSIONS.computeIfAbsent(playerId, key -> new HashMap<>());
+        Map<String, ChunkSession> byTransfer = SESSIONS.computeIfAbsent(playerId, key -> new LinkedHashMap<>());
         ChunkSession session = byTransfer.get(transferId);
         if (session == null) {
             if (byTransfer.size() >= RuleEditLimits.MAX_TRANSFERS_PER_PLAYER) {
-                // 在途传输过多：丢弃最早的一个，避免单玩家占用过多内存
+                // 在途传输过多：按插入顺序丢弃最早的一个，避免单玩家占用过多内存；
+                // 顺序由 LinkedHashMap 的插入序保证，淘汰目标确定而不是哈希序
                 Iterator<String> iterator = byTransfer.keySet().iterator();
                 if (iterator.hasNext()) {
                     iterator.next();

@@ -106,14 +106,12 @@ public final class PlaceBlockExecutor {
             this.limit = effect.limit() == null ? Integer.MAX_VALUE : effect.limit();
         }
         @Override
-        // 此处借用 Minecraft 管理的实例，生命周期由游戏负责，不能在此关闭。
-        @SuppressWarnings("resource")
         public void run() {
             int visits = 0;
             while (counting && visits++ < MAX_VISITS_PER_STEP) {
                 if (pendingCount == null && countPositions.hasNext()) { pendingCount = countPositions.next().immutable(); }
                 if (pendingCount == null || existing >= limit) {
-                    target = Math.max(0, Math.min(target, limit - existing));
+                    target = Math.clamp(target, 0, limit - existing);
                     counting = false;
                     break;
                 }
