@@ -300,14 +300,15 @@ public final class RuleEditService {
         if (!sessions.owns(payload.sessionId()) || !sessions.isOwner(player.getUUID())) {
             return Outbound.of(sessionLost(payload.sessionId(), player, payload.operationId()));
         }
-        if (!RuleEditChunkAccumulator.isShapeValid(payload)) {
+        RuleEditChunkAccumulator.ValidatedChunk validated = RuleEditChunkAccumulator.validate(payload);
+        if (validated == null) {
             return Outbound.of(result(payload.sessionId(), payload.operationId(), RuleSaveStatus.INVALID_REQUEST,
                     RuleSaveStatus.INVALID_REQUEST.messageKey(), args("chunk"), List.of(), false, false));
         }
         RuleSaveResultPayload previous = recentResult(payload.sessionId(), payload.operationId());
         if (previous != null) { return Outbound.of(previous); }
         sessions.heartbeat(payload.sessionId(), tick);
-        RuleEditChunkAccumulator.AcceptResult accepted = RuleEditChunkAccumulator.accept(player, payload, tick);
+        RuleEditChunkAccumulator.AcceptResult accepted = RuleEditChunkAccumulator.acceptValidated(player, validated, tick);
         if (accepted.rejected()) {
             // 收齐后超过变更集总量上限：必须回结构化回执，不能让请求静默消失
             return Outbound.of(result(payload.sessionId(), payload.operationId(), RuleSaveStatus.INVALID_REQUEST,

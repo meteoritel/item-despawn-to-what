@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.network.transport;
 
 import net.minecraft.world.entity.player.Player;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -20,6 +21,17 @@ public final class RuleEditChunkAccumulator {
 
     private RuleEditChunkAccumulator() {
         throw new UnsupportedOperationException("Utility class");
+    }
+
+    /** 已通过形状校验的不可变分片；字节数只能由校验入口计算，避免调用方绕过限额。 */
+    public static final class ValidatedChunk {
+        private final SaveRuleChangeSetChunkPayload payload;
+        private final int encodedBytes;
+
+        private ValidatedChunk(SaveRuleChangeSetChunkPayload payload, int encodedBytes) {
+            this.payload = payload;
+            this.encodedBytes = encodedBytes;
+        }
     }
 
     /**
@@ -58,12 +70,21 @@ public final class RuleEditChunkAccumulator {
 
     // 接收一片；收齐返回 complete=true 的结果，超量返回 rejected=true
     public static synchronized AcceptResult accept(Player player, SaveRuleChangeSetChunkPayload payload, long tick) {
-        if (player == null || payload == null) {
+        return acceptValidated(player, validate(payload), tick);
+    }
+
+    /**
+     * 接收已校验分片，复用单片字节数累计总量；重复下标只保留并计入首片。
+     * @param player 发送玩家
+     * @param validated 由 validate 生成的分片；null 表示形状非法
+     * @param tick 服务端活动刻
+     * @return 重组结果
+     */
+    public static synchronized AcceptResult acceptValidated(Player player, @Nullable ValidatedChunk validated, long tick) {
+        if (player == null || validated == null) {
             return AcceptResult.PENDING;
         }
-        if (!isShapeValid(payload)) {
-            return AcceptResult.PENDING;
-        }
+        SaveRuleChangeSetChunkPayload payload = validated.payload;
         String transferId = payload.transferId();
         int count = payload.count();
         int index = payload.index();
@@ -88,7 +109,7 @@ public final class RuleEditChunkAccumulator {
             byTransfer.put(transferId, session);
         }
         session.touch(tick);
-        List<String> complete = session.offer(index, chunk);
+        List<String> complete = session.offer(index, chunk, validated.encodedBytes);
         if (complete == null) {
             return AcceptResult.PENDING;
         }
@@ -104,8 +125,17 @@ public final class RuleEditChunkAccumulator {
 
     // 分片形状校验：transferId/序号/总数/单片长度任一非法即拒绝
     public static boolean isShapeValid(SaveRuleChangeSetChunkPayload payload) {
+        return validate(payload) != null;
+    }
+
+    /**
+     * 校验分片形状并且只计量一次 UTF-8 字节数，供后续接收直接复用。
+     * @param payload 原始分片
+     * @return 校验通过的分片，非法时返回 null
+     */
+    public static @Nullable ValidatedChunk validate(SaveRuleChangeSetChunkPayload payload) {
         if (payload == null) {
-            return false;
+            return null;
         }
         String transferId = payload.transferId();
         int count = payload.count();
@@ -114,10 +144,12 @@ public final class RuleEditChunkAccumulator {
                 || transferId.length() > RuleEditLimits.MAX_TRANSFER_ID_LENGTH
                 || count > RuleEditLimits.MAX_CHUNK_COUNT
                 || index < 0 || index >= count) {
-            return false;
+            return null;
         }
         String chunk = payload.chunk();
-        return chunk != null && RuleEditLimits.encodedLength(chunk) <= RuleEditLimits.MAX_CHUNK_BYTES;
+        if (chunk == null) { return null; }
+        int encodedBytes = RuleEditLimits.encodedLength(chunk);
+        return encodedBytes <= RuleEditLimits.MAX_CHUNK_BYTES ? new ValidatedChunk(payload, encodedBytes) : null;
     }
 
     // 清理超过空闲阈值的分片传输（按活动 tick 计）
@@ -180,11 +212,11 @@ public final class RuleEditChunkAccumulator {
         }
 
         // 写入一片；已存在的下标按首片为准，收齐返回拼接结果，否则返回 null
-        private List<String> offer(int index, String chunk) {
+        private List<String> offer(int index, String chunk, int encodedBytes) {
             if (chunks[index] == null) {
                 chunks[index] = chunk;
                 received++;
-                receivedBytes += RuleEditLimits.encodedLength(chunk);
+                receivedBytes += encodedBytes;
             }
             if (received < count) {
                 return null;

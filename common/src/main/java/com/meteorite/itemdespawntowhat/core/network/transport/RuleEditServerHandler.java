@@ -151,8 +151,11 @@ public final class RuleEditServerHandler {
      */
     public static void handleLifespanRequest(ServerPlayer player, RuleEditServerContext context,
                                             RequestRuleLifespanPayload payload) {
-        RuleEditService service = readyService(player, context, payload.sessionId());
-        if (service != null) dispatch(context, player, service.requestLifespan(player, context, payload, tick(player)));
+        RuleEditService service = readyService(player, context, sessionId(payload == null ? null : payload.sessionId()));
+        if (service == null || payload == null) {
+            return;
+        }
+        dispatch(context, player, service.requestLifespan(player, context, payload, tick(player)));
     }
 
     /**

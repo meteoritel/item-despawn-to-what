@@ -67,7 +67,7 @@
 | 类 | 职责 | 关键成员 |
 |---|---|---|
 | `RuleEditService` | 编辑会话的业务编排（打开/确认/心跳/关闭/快照/目录/寿命/保存），只产出"要下发的载荷"，不直接碰网络 | `openEditor`、`confirm`、`heartbeat`、`close`、`requestSnapshot`、`requestCatalog`、`requestLifespan`、`pollLifespan`、`submitChangeSet`、`submitChunk`、`cancelSave`、`pollSaveProgress`、`pollSave`、`expireSessions`、`forceRelease`；幂等表 `recentResults`（最近 16 条） |
-| `EditSessionManager` | 全局单一目标的会话状态机（FREE/OPENING/ACTIVE/APPLYING），委托文件所有者管理修订号 | `acquire` / `confirm` / `heartbeat` / `owns` / `isOwner` / `confirmed` / `beginApply` / `finishApply` / `release` / `expire` / `version` / `bumpVersion` / `synchronizeDiskRevision` |
+| `EditSessionManager` | 全局单一目标的会话状态机（FREE/OPENING/ACTIVE/APPLYING），委托文件所有者管理修订号 | `acquire` / `confirm` / `heartbeat` / `owns` / `isOwner` / `confirmed` / `beginApply` / `finishApply` / `release` / `expire` / `version` / `bumpVersion` / `readDiskRevision` / `acceptDiskRevision` |
 | `RuleEditSessionLimits` | 会话时间与权限常量 | `TARGET_ID = itemdespawntowhat:rules`、`OPEN_CONFIRM_WINDOW_SECONDS=15`、`HEARTBEAT_INTERVAL_SECONDS=10`、`LEASE_SECONDS=60`、`REQUIRED_PERMISSION_LEVEL=2`、`MAX_OPERATION_HISTORY=16` |
 | `RuleOverlayStore` | 覆盖层文件工作与修订号的单一所有者：有界串行队列、内容指纹、原子持久化、进展监测、停服隔离 | `submit`、`acceptRevision`、`committed`、`flushRevision`、`stalled`、`close`、`requireIdle` |
 | `RuleOverlayWriter` | 覆盖层逐 id 写入：预备 → 备份 → 原子提交 → 失败回滚 | `apply(changes, issues) → ApplyResult{writtenFiles, conflicts, rollbackFailed}` |
@@ -153,6 +153,7 @@
 ### 4.5 权威落盘
 
 - 写盘依据**磁盘文件内容**，按 id 逐条 upsert/delete，保留未编辑条目、非对象数组成员与未知字段；命中控制条目或解码失败的文件不会被覆盖。
+- 保存扫描遇到非法 JSON 时记录包含文件路径和解析异常的告警，保留原文件并继续处理其它文件；加载路径的结构化问题仍由规则解析器报告。
 - 写文件用**原子写 + `.bak` 备份**，逐文件替换；任一环节失败**逆序回滚**已提交文件。删除单条文件的唯一条目时写成**空数组**而非删文件。
 - `ApplyResult.writtenFiles()==0` 或 `conflicts` 非空都不算保存成功；I/O 失败尝试恢复，回滚失败明确报错并保留 `.bak`。
 - **路径安全**：拒绝 `.`/`..` 路径段与越界、拒绝跟随符号链接；编辑命中同 id 多处定义时拒绝，未编辑的歧义条目不阻断其它保存。
@@ -170,7 +171,7 @@
 
 ## 6. 分片传输
 
-`RuleEditChunkAccumulator.accept` 逐片检查 transferId、下标和单片字节数，重复下标以首片为准；收齐时按累计字节复核总量并返回有序分片，保存后台再拼接。每玩家至多 2 个在途传输，未收齐不回执，超量回 `INVALID_REQUEST`，空闲 1200 tick 清理。下行快照不超过 32 000 B 时直发，大快照每片 30 000 B、每 tick 一片；总量超过 4 MiB 或总片数超过上限时回结构化失败回执。
+`RuleEditChunkAccumulator.validate` 逐片检查 transferId、下标和单片字节数，并将不可变载荷和字节数封装为只能由校验入口创建的 `ValidatedChunk`。服务层先校验、查询幂等回执，再调用 `acceptValidated` 重组；直接调用 `accept` 也经过同一校验入口。接收阶段复用字节数，重复下标以首片为准且仅首片计入累计值；收齐时按累计字节复核总量并返回有序分片，保存后台再拼接。每玩家至多 2 个在途传输，未收齐不回执，超量回 `INVALID_REQUEST`，空闲 1200 tick 清理。下行快照不超过 32 000 B 时直发，大快照每片 30 000 B、每 tick 一片；总量超过 4 MiB 或总片数超过上限时回结构化失败回执。
 
 ## 7. 新契约字段如何进入快照与校验
 

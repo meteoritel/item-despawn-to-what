@@ -72,15 +72,6 @@ public final class EditSessionManager {
     public synchronized int bumpVersion() { return store.bumpVersion(); }
 
     /**
-     * 同步覆盖层内容基线；调用方必须位于文件后台线程。
-     * @throws java.io.UncheckedIOException 文件读取失败
-     */
-    public void synchronizeDiskRevision() {
-        try { acceptDiskRevision(readDiskRevision(), false); }
-        catch (IOException failure) { throw new java.io.UncheckedIOException(failure); }
-    }
-
-    /**
      * 在后台读取目录内容指纹，不访问世界。
      * @return 全目录内容指纹
      * @throws IOException 文件读取失败

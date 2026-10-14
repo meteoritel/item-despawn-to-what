@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonParseException;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.load.RulePaths;
@@ -197,7 +198,12 @@ public final class RuleOverlayWriter {
                 byte[] original = Files.readAllBytes(path);
                 JsonElement json;
                 try { json = JsonParser.parseString(new String(original, StandardCharsets.UTF_8)); }
-                catch (RuntimeException invalid) { continue; }
+                catch (JsonParseException | IllegalStateException invalid) {
+                    // 无关坏文件不阻断保存，但必须留下来源，供管理员修复；原始字节不参与写回。
+                    org.apache.logging.log4j.LogManager.getLogger().warn(
+                            "保存扫描保留非法 JSON 文件: {}", path, invalid);
+                    continue;
+                }
                 if (!json.isJsonObject() && !json.isJsonArray()) { continue; }
                 RuleFile file = new RuleFile(path, json.isJsonArray(), original);
                 if (file.array) { json.getAsJsonArray().forEach(file.entries::add); }
