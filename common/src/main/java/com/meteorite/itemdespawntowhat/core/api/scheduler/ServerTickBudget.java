@@ -84,22 +84,20 @@ public final class ServerTickBudget {
         return workRemaining;
     }
 
-    // 时间或工作量任一耗尽即返回 true；调用方必须在每个任务之间检查。
+    /**
+     * 纯查询：时间或工作量任一耗尽即返回 true，不修改任何耗尽标记。
+     * 调用方必须在每个任务之间检查；耗尽标记只由记账入口提交，保证判定可被重复调用而不产生副作用。
+     *
+     * @return 本 tick 预算是否已耗尽
+     */
     public boolean exhausted() {
-        if (usedWorkUnits >= maxWorkUnits) {
-            workUnitsExpired = true;
-            return true;
-        }
-        if (System.nanoTime() >= deadlineNanos) {
-            timeExpired = true;
-            return true;
-        }
-        return false;
+        return usedWorkUnits >= maxWorkUnits || System.nanoTime() >= deadlineNanos;
     }
 
-    // 记入工作量消耗；超过剩余额度时截断，保证不会越过本 tick 上限。
+    // 记入工作量消耗：超过剩余额度时截断，保证不会越过本 tick 上限，并在计费提交处提交耗尽标记。
     public void charge(int workUnits) {
         usedWorkUnits = Math.min(maxWorkUnits, usedWorkUnits + Math.max(0, workUnits));
+        commitExhaustion();
     }
 
     /**
@@ -126,6 +124,18 @@ public final class ServerTickBudget {
     public void finish() {
         frozenNanos = Math.max(0L, System.nanoTime() - startedNanos);
         frozen = true;
+        // 结算时补提交耗尽标记：时间耗尽可能发生在最后一次记账之后，没有任何后续记账可承担该提交
+        commitExhaustion();
+    }
+
+    // 按当前已用额度提交耗尽标记：由记账与结算触发，判定本身（exhausted）保持无副作用。
+    private void commitExhaustion() {
+        if (usedWorkUnits >= maxWorkUnits) {
+            workUnitsExpired = true;
+        }
+        if (System.nanoTime() >= deadlineNanos) {
+            timeExpired = true;
+        }
     }
 
     public ServerTickBudgetSnapshot snapshot() {
