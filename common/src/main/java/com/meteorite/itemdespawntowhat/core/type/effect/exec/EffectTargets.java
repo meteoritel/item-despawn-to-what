@@ -1,11 +1,10 @@
 package com.meteorite.itemdespawntowhat.core.type.effect.exec;
 
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
+import com.meteorite.itemdespawntowhat.core.type.TaggedItemMatch;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.tags.TagKey;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.item.ItemStack;
@@ -60,26 +59,10 @@ public final class EffectTargets {
     }
 
     // 物品栈是否命中 items 中的任一引用（非 tag 比物品，tag 比标签）；未注册的物品 id 与不存在的标签都不算命中
-    // 催化剂固定成本与效果式消耗共用同一口径：本方法任何改动同时影响两处，禁止在调用方复刻
+    // 唯一实现位于 TaggedItemMatch：催化剂固定成本与效果式消耗共用同一口径，禁止在调用方复刻判定。
+    // 本方法保留同名入口只为兼容既有执行器调用方；逐实体热点循环应先 compileAll 再复用匹配器
     public static boolean matchesAny(List<TaggedId> items, ItemStack stack) {
-        for (TaggedId reference : items) {
-            if (reference == null) {
-                continue;
-            }
-            if (reference.tag()) {
-                if (stack.is(TagKey.create(Registries.ITEM, reference.id()))) {
-                    return true;
-                }
-                continue;
-            }
-            if (!BuiltInRegistries.ITEM.containsKey(reference.id())) {
-                continue;
-            }
-            if (stack.is(BuiltInRegistries.ITEM.get(reference.id()))) {
-                return true;
-            }
-        }
-        return false;
+        return TaggedItemMatch.compileAll(items).matches(stack);
     }
 
     // 实际生成位置可能越过源区块边界；保留实体等区块加载后再加入。

@@ -32,6 +32,7 @@ import com.meteorite.itemdespawntowhat.core.state.DamageClassification;
 import com.meteorite.itemdespawntowhat.core.state.DropState;
 import com.meteorite.itemdespawntowhat.core.state.DropStateStore;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -85,6 +86,8 @@ public final class ConversionRuntime {
     private final Map<ResourceKey<Level>, LevelState> levels = new HashMap<>();
     private volatile RuleIndex index = RuleIndex.empty();
     private long ruleGeneration;
+    // 候选结构摘要缓存：按规则实例缓存编码结果，随规则索引代次失效（见 CandidateStructureVersions）
+    private final CandidateStructureVersions candidateStructureVersions;
     private boolean savedRescanPending;
     // 恢复幂等位：同一结算记录同一时刻只允许一个待返还交付任务，重复扫描/重复入队都不会多发
     private final Set<String> activeRecoveries = new HashSet<>();
@@ -127,6 +130,7 @@ public final class ConversionRuntime {
         this.types = types;
         this.lifespanProvider = lifespanProvider;
         this.scheduler = new ServerScheduler(SchedulerConfig.from(config));
+        this.candidateStructureVersions = new CandidateStructureVersions(types);
     }
 
     // 公共调度器，供开发场景读取跨维度预算与队列指标
@@ -141,6 +145,8 @@ public final class ConversionRuntime {
         ruleGeneration++;
         savedRescanPending = false;
         this.index = RuleIndex.build(rules, issues);
+        // 候选结构摘要与规则内容绑定：规则整体替换即失效
+        candidateStructureVersions.clear();
         for (LevelState state : levels.values()) {
             state.tracked.clear();
             // 标签与气候缓存必须随 reload 失效，否则条件求值会读到重新加载前的标签成员
@@ -179,6 +185,8 @@ public final class ConversionRuntime {
             state.climate = null;
         }
         index = prepared;
+        // 发布预建索引即整体换规则：候选结构摘要随之失效
+        candidateStructureVersions.clear();
         java.util.List<ServerLevel> worlds = new java.util.ArrayList<>();
         server.getAllLevels().forEach(worlds::add);
         return new ServerTask() {
@@ -444,6 +452,7 @@ public final class ConversionRuntime {
         activeRecoveries.clear();
         recoveryScanned = false;
         index = RuleIndex.empty();
+        candidateStructureVersions.clear();
     }
 
     // ========== 统计（供开发场景实时日志与性能窗口使用） ==========
@@ -765,9 +774,9 @@ public final class ConversionRuntime {
         return types.effectTypes().getOrNull(type);
     }
 
-    // 内置类型注册表：结算任务复用规则编解码器计算候选结构摘要时需要（只读，不参与规则语义）
-    BuiltinTypeRegistries types() {
-        return types;
+    // 候选结构摘要（结算层建轮询游标时读取）：同一规则实例只编码一次，规则索引重建即失效
+    int candidateStructureVersion(Rule rule, HolderLookup.Provider registries) {
+        return candidateStructureVersions.versionOf(rule, registries);
     }
 
     // 条件上下文：标签与气候采样对象按维度复用（各自带缓存）

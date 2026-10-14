@@ -34,9 +34,10 @@ public final class SettlementLedger extends SavedData {
     private static final int MAX_RECORDS = 512;
     private static final long RETAIN_COMPLETED_TICKS = 6000L;
 
-    // 主索引：持有与 scanIndex 相同的可变记录引用，不做写入时拷贝
+    // 主索引：持有与 scanIndex 相同的可变记录引用，不做写入时拷贝；迭代顺序即加入与持久化顺序。
+    // 两张索引只能通过 index / unindex 成对变更，禁止在其它位置单独增删其中一张。
     private final Map<String, SettlementRecord> records = new LinkedHashMap<>();
-    // 保存重载的稳定游标索引（同样持有可变记录引用）；不改变账本的加入顺序或持久化顺序。
+    // 恢复游标索引（同样持有可变记录引用）；不改变账本的加入顺序或持久化顺序。
     private final java.util.NavigableMap<String, SettlementRecord> scanIndex = new java.util.TreeMap<>();
 
     // 取主世界账本（同一 id 全局唯一，维度卸载不影响）
@@ -54,9 +55,21 @@ public final class SettlementLedger extends SavedData {
         if (record == null || record.id().isEmpty()) {
             return;
         }
+        index(record);
+        setDirty();
+    }
+
+    // 两张索引的唯一写入入口：records 决定加入与持久化顺序，scanIndex 提供恢复游标；调用方不得单独写其中一张
+    private void index(SettlementRecord record) {
         records.put(record.id(), record);
         scanIndex.put(record.id(), record);
-        setDirty();
+    }
+
+    // 两张索引的唯一摘除入口：返回是否真的摘除，调用方据此决定是否需要标脏
+    private boolean unindex(String id) {
+        boolean removed = records.remove(id) != null;
+        removed |= scanIndex.remove(id) != null;
+        return removed;
     }
 
     // 撤销一条登记（扣减失败补偿专用）：把记录从两张索引成对摘除并标脏，
@@ -65,7 +78,7 @@ public final class SettlementLedger extends SavedData {
         if (id == null || id.isEmpty()) {
             return;
         }
-        if (records.remove(id) != null || scanIndex.remove(id) != null) {
+        if (unindex(id)) {
             setDirty();
         }
     }
@@ -137,14 +150,17 @@ public final class SettlementLedger extends SavedData {
 
     // 裁剪：已完成且返还交付完毕的记录先按 tick 过期，再按条数上限兜底
     public void prune(long gameTime) {
-        boolean changed = records.values().removeIf(record -> {
+        boolean changed = false;
+        // 先按 tick 判定过期再成对摘除：记录可变，判定必须发生在摘除之前，快照遍历避免边遍历边改主索引
+        for (SettlementRecord record : List.copyOf(records.values())) {
             boolean expired = record.status() == SettlementRecord.Status.COMPLETED
-                        && record.pendingDelivery() <= 0
-                        && record.finishedTick() >= 0L
-                        && gameTime - record.finishedTick() > RETAIN_COMPLETED_TICKS;
-            if (expired) { scanIndex.remove(record.id()); }
-            return expired;
-        });
+                    && record.pendingDelivery() <= 0
+                    && record.finishedTick() >= 0L
+                    && gameTime - record.finishedTick() > RETAIN_COMPLETED_TICKS;
+            if (expired) {
+                changed |= unindex(record.id());
+            }
+        }
         while (records.size() > MAX_RECORDS) {
             String victim = null;
             for (Map.Entry<String, SettlementRecord> entry : records.entrySet()) {
@@ -158,8 +174,7 @@ public final class SettlementLedger extends SavedData {
                 LOGGER.warn("结算账本达到上限 {} 且没有可裁剪的已完成记录，未结清记录全部保留", MAX_RECORDS);
                 break;
             }
-            records.remove(victim);
-            scanIndex.remove(victim);
+            unindex(victim);
             changed = true;
         }
         if (changed) {
@@ -191,8 +206,7 @@ public final class SettlementLedger extends SavedData {
             try {
                 SettlementRecord record = SettlementRecord.load(entry, registries);
                 if (!record.id().isEmpty()) {
-                    ledger.records.put(record.id(), record);
-                    ledger.scanIndex.put(record.id(), record);
+                    ledger.index(record);
                 }
             } catch (RuntimeException failure) {
                 LOGGER.warn("结算记录恢复失败，已跳过：index={}", index, failure);
