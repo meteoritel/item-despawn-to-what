@@ -4,7 +4,6 @@ import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.state.DropState;
 import com.meteorite.itemdespawntowhat.platform.services.IPlatformHelper;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
-import net.fabricmc.fabric.api.attachment.v1.AttachmentTarget;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentType;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.fabricmc.loader.api.FabricLoader;
@@ -19,6 +18,8 @@ import java.nio.file.Path;
 public class FabricPlatformHelper implements IPlatformHelper {
 
     // 掉落物状态附件：持久化进实体 NBT（fabric:attachments），随区块/实体存档保存并在加载时恢复
+    // 当前 Fabric 版本的附件 API 标记为 Experimental，仅在附件注册与存取处接受此依赖。
+    @SuppressWarnings("UnstableApiUsage")
     private static final AttachmentType<DropState> DROP_STATE = AttachmentRegistry.createPersistent(
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "state"), DropState.CODEC);
 
@@ -48,19 +49,20 @@ public class FabricPlatformHelper implements IPlatformHelper {
     }
 
     @Override
+    @SuppressWarnings("UnstableApiUsage")
     public DropState getDropState(Entity entity) {
-        DropState state = ((AttachmentTarget) entity).getAttached(DROP_STATE);
+        DropState state = entity.getAttached(DROP_STATE);
         return state == null ? DropState.NONE : state;
     }
 
     @Override
+    @SuppressWarnings("UnstableApiUsage")
     public void setDropState(Entity entity, DropState state) {
-        AttachmentTarget target = (AttachmentTarget) entity;
         // 无状态即显式移除附件，避免给每个掉落物都写一份空数据
         if (state == null || state.isEmpty()) {
-            target.removeAttached(DROP_STATE);
+            entity.removeAttached(DROP_STATE);
         } else {
-            target.setAttached(DROP_STATE, state);
+            entity.setAttached(DROP_STATE, state);
         }
     }
 }
