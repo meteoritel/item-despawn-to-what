@@ -48,7 +48,7 @@ public final class ConsumeSourceExecutor {
 
     // 从堆叠中扣减期望数量并返回实际扣减量；期望超过剩余数量时按实际收敛
     static int consumeFromStack(ItemStack stack, int requested) {
-        int consumed = Math.min(Math.max(0, requested), stack.getCount());
+        int consumed = Math.clamp(requested, 0, stack.getCount());
         if (consumed > 0) {
             stack.shrink(consumed);
         }

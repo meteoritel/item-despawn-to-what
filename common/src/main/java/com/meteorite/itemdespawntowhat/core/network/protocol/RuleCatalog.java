@@ -56,7 +56,7 @@ public record RuleCatalog(RuleCatalogType type, int revision, List<RuleCatalogEn
         }
         try {
             JsonElement element = parsed.element();
-            if (!element.isJsonObject()) {
+            if (element == null || !element.isJsonObject()) {
                 return DataResult.error(() -> "目录不是 JSON 对象");
             }
             JsonObject root = element.getAsJsonObject();

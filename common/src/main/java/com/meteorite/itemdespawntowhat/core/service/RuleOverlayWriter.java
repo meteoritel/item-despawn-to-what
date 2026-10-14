@@ -235,11 +235,12 @@ public final class RuleOverlayWriter {
     private void load(Map<Path, RuleFile> files, java.util.function.BooleanSupplier active) throws IOException {
         if (!Files.isDirectory(root)) { return; }
         try (Stream<Path> walk = Files.walk(root)) {
-            for (Path path : walk.filter(p -> Files.isRegularFile(p, LinkOption.NOFOLLOW_LINKS))
-                    .filter(p -> p.toString().endsWith(RulePaths.RULE_FILE_EXTENSION)).sorted().toList()) {
+            for (Path path : walk.filter(p -> p.toString().endsWith(RulePaths.RULE_FILE_EXTENSION)).sorted().toList()) {
+                // 一次属性取样同时判定普通文件与元数据指纹：非普通文件与读不到属性都返回空，按不参与保存跳过
+                FileStamp stamp = FileStamp.of(path);
+                if (stamp == null) { continue; }
                 requireActive(active);
                 safePath(path);
-                FileStamp stamp = FileStamp.of(path);
                 byte[] original = Files.readAllBytes(path);
                 // 规则文本一律走统一的有界解码入口：非法 JSON 与嵌套超深同样只是拒载该文件
                 RuleDecodeBudget.ParseResult parsed = RuleDecodeBudget.parse(new String(original, StandardCharsets.UTF_8));
@@ -250,7 +251,7 @@ public final class RuleOverlayWriter {
                     continue;
                 }
                 JsonElement json = parsed.element();
-                if (!json.isJsonObject() && !json.isJsonArray()) { continue; }
+                if (json == null || (!json.isJsonObject() && !json.isJsonArray())) { continue; }
                 RuleFile file = new RuleFile(path, json.isJsonArray(), original);
                 file.stamp = stamp;
                 if (file.array) { json.getAsJsonArray().forEach(file.entries::add); }

@@ -8,9 +8,6 @@ import net.minecraft.resources.ResourceLocation;
  */
 public interface TagLookup {
 
-    // 物品标签是否包含指定物品
-    boolean itemInTag(ResourceLocation tagId, ResourceLocation itemId);
-
     // 方块标签是否包含指定方块
     boolean blockInTag(ResourceLocation tagId, ResourceLocation blockId);
 

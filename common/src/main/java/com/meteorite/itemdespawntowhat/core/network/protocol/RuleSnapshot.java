@@ -55,7 +55,7 @@ public record RuleSnapshot(int version, int contextRevision, List<RuleSnapshotEn
         }
         try {
             JsonElement element = parsed.element();
-            if (!element.isJsonObject()) {
+            if (element == null || !element.isJsonObject()) {
                 return DataResult.error(() -> "快照不是 JSON 对象");
             }
             JsonObject root = element.getAsJsonObject();

@@ -133,7 +133,7 @@ public final class SettlementRecord {
 
     // 返还交付：交付出去后才从待交付里减去
     void delivered(int count) {
-        int moved = Math.max(0, Math.min(count, pendingDelivery));
+        int moved = Math.clamp(count, 0, pendingDelivery);
         pendingDelivery -= moved;
         deliveredReturns += moved;
     }
