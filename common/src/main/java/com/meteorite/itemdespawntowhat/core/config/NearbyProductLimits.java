@@ -5,12 +5,13 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 
 /**
  * 所有规则共用的邻近开组阈值：以源物品为中心、按半径统计已存在的产出，决定本次转化还能开多少单位。
- * 三类上限（物品 / 实体 / 经验球）各自独立；上限为 0 表示关闭该类检查，半径下限为 1。
+ * 物品与通用实体各自检查；上限为 0 时关闭该类检查，半径下限为 1。
+ * experienceOrbLimit / experienceRadius 仅保留配置读写兼容，不再影响开组或经验产出。
  */
 public record NearbyProductLimits(int itemLimit, int itemRadius, int entityLimit, int entityRadius,
                                   int experienceOrbLimit, int experienceRadius) {
 
-    // 默认阈值：物品 1024 / 实体 128 / 经验球 64，三类半径均为 6 格
+    // 物品与通用实体默认阈值；经验字段保留旧默认值以兼容已有配置。
     public static final NearbyProductLimits DEFAULT = new NearbyProductLimits(1024, 6, 128, 6, 64, 6);
 
     // 配置编解码：字段名 snake_case；上限允许 0（关闭该类检查），半径下限 1

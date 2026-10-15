@@ -60,11 +60,11 @@
 
 | 类 | 职责 | 关键成员 |
 |---|---|---|
-| `EffectTargets` | 执行器共享的引用解析与空间查询工具；**不捕获、不吞异常**，硬错误直接抛出交给运行时 | `resolve`（未命中返回 null）/`resolveOrThrow`、`blockBox(center, radius)`（效果式消耗与催化剂固定成本共用的搜索盒）、`addEntity`、`addEntityProduct`、`addConversionProduct`、`saturatedAdd`/`saturatedMultiply`、`forEachStep(...)` |
+| `EffectTargets` | 执行器共享的引用解析与空间查询工具；**不捕获、不吞异常**，硬错误直接抛出交给运行时 | `resolve`（未命中返回 null）/`resolveOrThrow`、`blockBox(center, radius)`（效果式消耗与催化剂固定成本共用的搜索盒）、`addEntity`、`addEntityProduct`、`addConversionProduct`、`randomHorizontalDisc(random, center, radius, height)`（面积均匀的水平圆盘散点，半径按 `radius × √U`）、`saturatedAdd`/`saturatedMultiply`、`forEachStep(...)` |
 | `ReturnItemSpawner` | 掉落物生成统一入口：转化产物与返还物共用「创建 + 授予实体状态 + 加入世界」路径 | `Kind{CONVERSION_PRODUCT, PERMANENT_RETURN}`、`applyGrant`、`spawn`、`deliver`、内部 `PositionSearch`（三级位置搜索：起点附近 → 向上扫描 → 限高以上，跨刻分步） |
 | `VisualFeedback` | 服务端主线程发送原版粒子，并按维度、刻、反馈种类与方块位置限流 | `conversion`、`entitySpawn`、`returnItem` |
 
-`ConversionRuntime.performConversion` 成功登记并提交结算任务后，在源位置播放 `PORTAL` 与 `ENCHANT` 粒子；实体和物品产物实际加入世界后播放 `END_ROD` 光点，经验在首批 `ExperienceOrb.award` 后播放一次。返还物在成功加入世界后播放 `HAPPY_VILLAGER` 绿色粒子；`ReturnItemSpawner.spawn` 在加入世界前将返还初速度设为向上 0.22 格/刻，普通产物为 0.1 格/刻。箭矢和闪电使用普通实体加入入口，不附加产物光点。
+`ConversionRuntime.performConversion` 成功登记并提交结算任务后，在源位置播放 `PORTAL` 与 `ENCHANT` 粒子；实体和物品产物实际加入世界后播放 `END_ROD` 光点，经验在首批经验球加入世界后播放一次。返还物在成功加入世界后播放 `HAPPY_VILLAGER` 绿色粒子；`ReturnItemSpawner.spawn` 在加入世界前将返还初速度设为向上 0.22 格/刻，普通产物为 0.1 格/刻。箭矢和闪电使用普通实体加入入口，不附加产物光点。
 
 同一维度同刻同方块的同类反馈只发送一次，每类每刻最多 16 组；三类独立计限，超过上限只省略粒子。每次转化反馈为 18 个 `PORTAL` 与 9 个 `ENCHANT`，产物反馈为 8 个 `END_ROD`，返还反馈为 10 个 `HAPPY_VILLAGER`。粒子通过普通距离范围的原版广播发送；限流状态以世界弱引用保存，不持有已卸载世界。
 
@@ -109,7 +109,7 @@
 
 所有效果通用字段：`type`（必填）、`delay_ticks`（默认 0）、`chance`（默认 1.0，域 `[0,1]`）、`conditions`（可选，单根条件树，缺省省略而非 `null`）。
 
-执行器 `EffectExecutor.execute(P, EffectContext)` 返回 **`EffectResult`**：`outcome ∈ {APPLIED, DEFERRED, SKIPPED, FAILED}` + `appliedUnits`（实际完成量：件数/个数/方块数/经验点/世界效果次数）+ `pendingUnits`（已受理待完成量），`oneShot` 标记一次性世界效果。异步批次经 `EffectContext.reportProgress(int)` 把 `pendingUnits` 逐步收敛为 `appliedUnits`；**结算层只按回执记账，禁止用计划数量冒充成功量**。`counted()` 表示该回执计入本组产出（`APPLIED`/`DEFERRED`）。
+执行器 `EffectExecutor.execute(P, EffectContext)` 返回 **`EffectResult`**：`outcome ∈ {APPLIED, DEFERRED, SKIPPED, FAILED}` + `appliedUnits`（实际完成量：件数/个数/方块数/经验点/世界效果次数，`long`）+ `pendingUnits`（已受理待完成量，`long`；合计上限为 `long` 容量，不截断），`oneShot` 标记一次性世界效果。经验产出的 `appliedUnits`/`pendingUnits` 按经验点计，同样为 `long`。异步批次经 `EffectContext.reportProgress(int)` 把 `pendingUnits` 逐步收敛为 `appliedUnits`；**结算层只按回执记账，禁止用计划数量冒充成功量**。`counted()` 表示该回执计入本组产出（`APPLIED`/`DEFERRED`）。`appliedUnits` 与 `pendingUnits` 由 `int` 拓宽为 `long`：调用方按 `int` 读取需自行收窄，按 `long` 读取无需改动；`deferred(int, String)` 兼容重载保留。
 
 ### 5.1 生效效果（7）
 
@@ -129,11 +129,11 @@
 |---|---|---|
 | `item` | `item: TaggedId` 必填，`count: int[1,64]` 默认 1 | 物品件数；支持物品标签 |
 | `entity` | `entity: TaggedId` 必填，`count: int[1,64]` 默认 1，`age: int` 默认 0 | 实体个数，生物及其他实体；age 仅 AgeableMob 生效；拒绝 item / experience_orb 及含它们的标签 |
-| `experience` | `amount: int[1,65536]` 默认 1，`per_source_item: bool` 默认 false | 经验点数；true 按本组实扣源件数计算，false 按组；总点数按原版拆分并保留原版合并 |
+| `experience` | `amount: int[1,65536]` 默认 1，`per_source_item: bool` 默认 false | 经验点数；true 按本组实扣源件数计算，false 按组。执行器先以 `long` 汇总本行为总点数（`amount × 组数或实扣件数`），避免 `int` 溢出；再按单球点数上限 `MAX_POINTS_PER_ORB = Short.MAX_VALUE`（32767）逐球装满，余数落在最后一球，总球数为 `ceil(总量 / 32767)`。每批最多 `ORBS_PER_BATCH = 16` 球，批与批之间至少隔 1 个 tick 续接，直到总量发完，因此分批只限制每批生成的实体数、不截断经验总量，也没有「全局球数硬上限」。执行器先登记回执（`deferred`）再在当刻生成首批，保证计划入账早于进度回执。经验球直接构造 `ExperienceOrb` 并保留原版初速度、拾取与后续同值合并；生成位置为半径 0.5 格、面积均匀的水平极坐标圆盘（`EffectTargets.randomHorizontalDisc`），高度额外抬升 0.2 格。每个经验行为各自统计各自的组数，互不合并 |
 
-子类外字段、规则中的邻近 `limit/radius`、旧 `spawn_item/spawn_xp` 以及缺少 variant 的旧 spawn_entity 均不兼容。邻近阈值移至 [服务端配置](../systems/config.md)；开组后不因阈值截断。`place_block` 的 limit/radius 保留。
+子类外字段、规则中的邻近 `limit/radius`、旧 `spawn_item/spawn_xp` 以及缺少 variant 的旧 spawn_entity 均不兼容。邻近阈值移至 [服务端配置](../systems/config.md)，只覆盖物品与通用实体：经验不受邻近阈值准入，也不因该阈值截断或返还。`place_block` 的 limit/radius 保留。
 
-> **一次性世界效果**（lightning / explosion / arrow_rain / weather）：注册时 `oneShot=true`，执行器回执带 `asOneShot()` 标记，**不乘 `rounds()`**、不参与容量计算，仅含一次性效果的候选对同一源最多尝试一组。实体产出按组展开并使用共享配置做开组准入；place_block 保留自身规则容量。见 [conversion-runtime.md](conversion-runtime.md)。
+> **一次性世界效果**（lightning / explosion / arrow_rain / weather）：注册时 `oneShot=true`，执行器回执带 `asOneShot()` 标记，**不乘 `rounds()`**、不参与容量计算，仅含一次性效果的候选对同一源最多尝试一组。实体产出按组展开，其中物品与通用实体子类使用共享配置做开组准入；place_block 保留自身规则容量。见 [conversion-runtime.md](conversion-runtime.md)。
 > 候选级字段 `safe_spawn`、`fill_origin` 属于**候选结果**（`core/model/OutcomeCandidate.java`），不在任何单个效果的参数里；执行时经 `EffectContext.safeSpawn()`/`fillOrigin()` 透传给 `spawn_entity` / `place_block`。
 
 ### 5.2 消耗效果（3）

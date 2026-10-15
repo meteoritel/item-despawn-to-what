@@ -140,10 +140,10 @@ public final class SettlementLedger extends SavedData {
     }
 
     // 已派发未回执的计划量（调试观测）：不是待返还库存，恢复交付绝不使用
-    public int pendingUnitsTotal() {
-        int total = 0;
+    public long pendingUnitsTotal() {
+        long total = 0;
         for (SettlementRecord record : records.values()) {
-            total += record.pendingUnits();
+            total = Math.addExact(total, record.pendingUnits());
         }
         return total;
     }

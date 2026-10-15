@@ -55,6 +55,13 @@ public final class EffectTargets {
         return AABB.unitCubeFromLowerCorner(Vec3.atLowerCornerOf(center)).inflate(radius);
     }
 
+    // sqrt 将均匀随机数转换为面积均匀的半径，避免圆心过密或方形散点。
+    static Vec3 randomHorizontalDisc(RandomSource random, Vec3 center, double radius, double height) {
+        double angle = random.nextDouble() * Math.TAU;
+        double distance = Math.sqrt(random.nextDouble()) * radius;
+        return center.add(Math.cos(angle) * distance, height, Math.sin(angle) * distance);
+    }
+
     // 实际生成位置可能越过源区块边界；保留实体等区块加载后再加入。
     static void addEntity(EffectContext context, net.minecraft.world.entity.Entity entity) {
         addEntity(context, entity, false);

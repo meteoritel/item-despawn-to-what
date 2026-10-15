@@ -21,7 +21,6 @@ import com.meteorite.itemdespawntowhat.core.type.effect.SpawnEntityEffect;
 import com.meteorite.itemdespawntowhat.core.type.effect.EntityProduct;
 import com.meteorite.itemdespawntowhat.core.config.NearbyProductLimits;
 import com.meteorite.itemdespawntowhat.core.type.effect.exec.EffectTargets;
-import com.meteorite.itemdespawntowhat.core.type.effect.exec.SpawnXpExecutor;
 import com.meteorite.itemdespawntowhat.core.type.effect.exec.ReturnItemSpawner;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -45,7 +44,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.LinkedHashMap;
-import net.minecraft.world.entity.ExperienceOrb;
 import java.util.Set;
 import java.util.function.IntConsumer;
 
@@ -411,14 +409,13 @@ final class ConversionSettlement implements ServerTask {
         return runtime.catalystReservations();
     }
 
-    // 聚合同一产物的组内需求：按邻近产物上限与单组需求算出可开组数；经验球按合并前的保守球数估算。
+    // 聚合同一物品或通用实体的组内需求；经验不参与邻近产物准入，避免球数导致源物品返还。
     // 仅含一次性效果的候选不参与容量计算，固定按 1 组处理。
     private int capacityGroups(OutcomeCandidate selected, ServerTickBudget budget) {
         boolean hasOneShot = false;
         boolean hasRepeatable = false;
         Map<TaggedId, Integer> items = new LinkedHashMap<>();
         Map<TaggedId, Integer> entities = new LinkedHashMap<>();
-        int orbs = 0;
         for (Effect effect : selected.effects()) {
             EffectType<?> definition = runtime.effectDefinition(effect.type());
             if (definition == null) { continue; }
@@ -428,11 +425,7 @@ final class ConversionSettlement implements ServerTask {
                 switch (spawn.product()) {
                     case EntityProduct.Item item -> items.merge(item.item(), item.count(), ConversionSettlement::saturatedAdd);
                     case EntityProduct.Generic entity -> entities.merge(entity.entity(), entity.count(), ConversionSettlement::saturatedAdd);
-                    case EntityProduct.Experience xp -> {
-                        int multiplier = xp.perSourceItem() ? Math.max(1, record.sourceCostPerGroup()) : 1;
-                        int points = (int) Math.min(Integer.MAX_VALUE, (long) xp.amount() * multiplier);
-                        orbs = saturatedAdd(orbs, SpawnXpExecutor.orbCount(points));
-                    }
+                    case EntityProduct.Experience ignored -> { /* 经验仅受执行批次预算约束。 */ }
                 }
             }
         }
@@ -453,14 +446,6 @@ final class ConversionSettlement implements ServerTask {
                 int room = Math.max(0, limits.entityLimit() - countNearbyEntities(demand.getKey(), limits.entityLimit(), limits.entityRadius()));
                 groups = Math.min(groups, room / demand.getValue());
             }
-        }
-        if (orbs > 0 && limits.experienceOrbLimit() > 0) {
-            if (budget.exhausted()) { return CAPACITY_PENDING; }
-            budget.charge(CAPACITY_QUERY_UNITS);
-            List<ExperienceOrb> nearby = new ArrayList<>();
-            level.getEntities(EntityTypeTest.forClass(ExperienceOrb.class), searchBox(limits.experienceRadius()),
-                    Entity::isAlive, nearby, limits.experienceOrbLimit());
-            groups = Math.min(groups, Math.max(0, limits.experienceOrbLimit() - nearby.size()) / orbs);
         }
         return hasOneShot && !hasRepeatable ? 1 : groups;
     }

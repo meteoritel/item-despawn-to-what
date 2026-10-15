@@ -36,8 +36,9 @@ public final class SettlementRecord {
     // 中止/交付完成后所有权移交恢复任务，改由其按交付进度递减
     private int pendingDelivery;
     private int deliveredReturns;
-    private int appliedUnits;
-    private int pendingUnits;
+    // 经验总量可能超过 int；完成量与待完成量在内存和存档中均保留 long 精度。
+    private long appliedUnits;
+    private long pendingUnits;
     private int skippedEffects;
     private int failedEffects;
     // 催化剂固定成本：每组消耗件数、已支付组数、已真实扣减的催化剂总件数；
@@ -107,19 +108,19 @@ public final class SettlementRecord {
     }
 
     // 真实完成量回执（APPLIED / DEFERRED 的已成部分）
-    void addApplied(int units) {
-        appliedUnits += Math.max(0, units);
+    void addApplied(long units) {
+        appliedUnits = Math.addExact(appliedUnits, Math.max(0L, units));
     }
 
     // 已派发未回执的计划量
-    void addPending(int units) {
-        pendingUnits += Math.max(0, units);
+    void addPending(long units) {
+        pendingUnits = Math.addExact(pendingUnits, Math.max(0L, units));
     }
 
     // 异步批次回执：把「已受理」收敛为「已完成」，不重复计费
     void addProgress(int units) {
         int done = Math.max(0, units);
-        appliedUnits += done;
+        appliedUnits = Math.addExact(appliedUnits, done);
         pendingUnits = Math.max(0, pendingUnits - done);
     }
 
@@ -191,8 +192,8 @@ public final class SettlementRecord {
     // 恢复扫描的唯一判据：只看待返还库存，绝不把「已派发未回执」的 pendingUnits 当成待返还库存
     boolean needsRecovery() { return status != Status.COMPLETED && pendingDelivery > 0 && !source.isEmpty(); }
     int deliveredReturns() { return deliveredReturns; }
-    int appliedUnits() { return appliedUnits; }
-    int pendingUnits() { return pendingUnits; }
+    long appliedUnits() { return appliedUnits; }
+    long pendingUnits() { return pendingUnits; }
     int skippedEffects() { return skippedEffects; }
     int failedEffects() { return failedEffects; }
     Status status() { return status; }
@@ -215,8 +216,8 @@ public final class SettlementRecord {
         tag.putInt("consumed_sources", consumedSources);
         tag.putInt("pending_delivery", pendingDelivery);
         tag.putInt("delivered_returns", deliveredReturns);
-        tag.putInt("applied_units", appliedUnits);
-        tag.putInt("pending_units", pendingUnits);
+        tag.putLong("applied_units", appliedUnits);
+        tag.putLong("pending_units", pendingUnits);
         tag.putInt("skipped_effects", skippedEffects);
         tag.putInt("failed_effects", failedEffects);
         tag.putString("status", status.name());
@@ -257,8 +258,8 @@ public final class SettlementRecord {
         record.consumedSources = tag.getInt("consumed_sources");
         record.pendingDelivery = tag.getInt("pending_delivery");
         record.deliveredReturns = tag.getInt("delivered_returns");
-        record.appliedUnits = tag.getInt("applied_units");
-        record.pendingUnits = tag.getInt("pending_units");
+        record.appliedUnits = tag.getLong("applied_units");
+        record.pendingUnits = tag.getLong("pending_units");
         record.skippedEffects = tag.getInt("skipped_effects");
         record.failedEffects = tag.getInt("failed_effects");
         // 缺失取 0：没有该字段的记录（未声明 catalyst_cost）不产生催化剂账目

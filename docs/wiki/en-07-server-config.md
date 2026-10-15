@@ -87,7 +87,7 @@ Time values are in game ticks, and 20 ticks equal 1 second on a normal server.
 
 ## Nearby Product Limits
 
-Before a conversion group starts, the mod counts how many similar products already sit near the destination. If the count has reached the limit, that group does not start. The source items it would have used are then not consumed, as the notes below explain. A group that has already started is never cut short when the count grows, so it finishes normally and can push the count past the limit.
+Before a conversion group starts, the mod counts how many similar products already sit near the destination. If the count has reached the limit, that group does not start. The source items it would have used are then not consumed, as the notes below explain. A group that has already started is never cut short when the count grows, so it finishes normally and can push the count past the limit. This check covers products only: it counts the items and generic entities a candidate would produce, and nearby experience orbs never stop a group over experience storage. A group that also produces items or generic entities still passes their own capacity checks.
 
 These limits apply to every rule. They are not set per rule.
 
@@ -97,24 +97,24 @@ These limits apply to every rule. They are not set per rule.
 | `item_radius` | The counting radius in blocks for the limit above, as a cube centered on the source block with an edge length of 2 × radius + 1 | 1 to 32 | `6`, an edge of 13 blocks |
 | `entity_limit` | The cap on the number of nearby entities of the same kind, counted by the entity type or entity tag that would be produced | 0 to 1000000 | `128` |
 | `entity_radius` | The entity counting radius in blocks, with the same meaning as above | 1 to 32 | `6` |
-| `experience_orb_limit` | The cap on the number of nearby experience orbs, counting every orb in range as one kind | 0 to 1000000 | `64` |
-| `experience_radius` | The experience orb counting radius in blocks, with the same meaning as above | 1 to 32 | `6` |
+| `experience_orb_limit` | A kept field. It stays in the file so existing configs keep working, and it no longer affects any conversion | 0 to 1000000 | `64` |
+| `experience_radius` | A kept field as well. It maps to no counting radius at all | 1 to 32 | `6` |
 
 Notes:
 
-- `0` turns the matching check off, which means no limit. Only the three `*_limit` fields accept `0`, and the three `*_radius` fields do not.
+- `0` turns the matching check off, which means no limit. Of the three `*_limit` fields, only the item and generic entity ones still work; the experience one is kept but does nothing. Only `item_radius` and `entity_radius` are real counting radii, and neither accepts `0`. `experience_radius` still accepts 1 to 32, but its value has no effect.
 - A limit only decides whether a new conversion group can start. It is not a hard ceiling on what exists nearby, and it does not keep the count at or below the limit.
 - A group stopped by a limit consumes no source items. The source items that cannot start a group go through the return path, as described in [Outcome Candidates and Settlement](en-05-outcomes-and-settlement). A returned item never converts again, so the surplus does not queue up for a later slot.
-- Lowering a limit makes conversions easier to postpone, and heavy product buildup can stop output for a long time. When all three limits are in use, the tightest one decides.
+- Lowering a limit makes conversions easier to postpone, and heavy product buildup can stop output for a long time. When the item and generic entity limits are both in use, the tightest one decides.
+- The two experience fields exist only so that existing config files keep loading. Within their allowed ranges, no value you write there changes conversion behavior.
 
-Example: lift every nearby count limit while the other settings keep their defaults:
+Example: lift the nearby count limits for items and generic entities while the other settings keep their defaults. The two experience fields already do nothing, so leave them out:
 
 ```json
 {
   "nearby_products": {
     "item_limit": 0,
-    "entity_limit": 0,
-    "experience_orb_limit": 0
+    "entity_limit": 0
   }
 }
 ```
@@ -199,7 +199,7 @@ Effect: rules now load from `config/my_idtw/rules/`. Move the contents of the ol
 - `fabric_lifespan_fallback_ticks`: used only when the Fabric side cannot read a drop's lifespan.
 - `debug_logging`: turn it on temporarily while you diagnose a problem.
 - `debug_scenario_prepare_batch_size`, `debug_scenario_prepare_budget_us`: these serve test scenarios in a development environment only, and normal play never needs them.
-- The default limits under `nearby_products` are generous, so normal play rarely reaches them.
+- The default limits under `nearby_products` are generous, so normal play rarely reaches them. Its two experience sub-fields no longer do anything, so leave them alone.
 
 ## Related
 

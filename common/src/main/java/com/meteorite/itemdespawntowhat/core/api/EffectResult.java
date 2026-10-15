@@ -7,7 +7,7 @@ package com.meteorite.itemdespawntowhat.core.api;
  * 二者由异步批次通过 {@link EffectContext#reportProgress(int)} 逐步收敛。
  * oneShot 标记一次性世界效果：不参与容量计算，对同一源最多尝试一组。
  */
-public record EffectResult(Outcome outcome, int appliedUnits, int pendingUnits, boolean oneShot, String detail) {
+public record EffectResult(Outcome outcome, long appliedUnits, long pendingUnits, boolean oneShot, String detail) {
 
     // 效果结论：已应用 / 已受理待完成 / 跳过 / 失败
     public enum Outcome { APPLIED, DEFERRED, SKIPPED, FAILED }
@@ -36,6 +36,16 @@ public record EffectResult(Outcome outcome, int appliedUnits, int pendingUnits, 
 
     // 已受理并附带说明
     public static EffectResult deferred(int units, String detail) {
+        return deferred((long) units, detail);
+    }
+
+    /**
+     * 受理大数量异步产出，不把总经验截断到 int 范围。
+     * @param units 待完成的真实计划量
+     * @param detail 回执说明
+     * @return 尚待完成的效果回执
+     */
+    public static EffectResult deferred(long units, String detail) {
         return new EffectResult(Outcome.DEFERRED, 0, units, false, detail);
     }
 
