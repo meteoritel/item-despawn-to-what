@@ -44,7 +44,7 @@
 | 加 / 改命令 | [backend/modules/command.md](backend/modules/command.md) |
 | 调试命令与开发场景 | [backend/modules/debug.md](backend/modules/debug.md) |
 | 使用 / 改造 UI kit | [internals/ui-kit/README.md](internals/ui-kit/README.md) |
-| 提交前跑文档检查与构建 | [conventions.md](conventions.md) §4（文档校验）；构建用 `tools/dsh-build.ps1` |
+| 提交前跑检查与构建 | [conventions.md](conventions.md) §4（文档校验）；`python tools/check-isolation.py`（依赖方向）；`python tools/check-i18n.py`（语言文件 key 同步）；构建用 `tools/dsh-build.ps1` |
 
 ## 3. 抽象层文档目录
 

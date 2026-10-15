@@ -187,7 +187,7 @@
 | `gui.itemdespawntowhat.edit.*` | 界面文本：标题、按钮、字段标签、枚举值、类型显示名 | `gui.itemdespawntowhat.edit.field.y_level.min` |
 | `itemdespawntowhat.edit.*` | 协议回执与校验问题的消息码（服务端生成、客户端翻译） | `itemdespawntowhat.edit.status.lock_busy` |
 
-字段标签 `gui.itemdespawntowhat.edit.field.<类型 path>.<字段>`、枚举值 `gui.itemdespawntowhat.edit.enum.<组>.<值>`、类型显示名 `gui.itemdespawntowhat.edit.<condition|effect>.<类型>`。`en_us.json` 与 `zh_cn.json` 的键集合必须完全一致。协议回执状态码见 [编辑协议](../backend/modules/edit-protocol.md) §4.3。
+字段标签 `gui.itemdespawntowhat.edit.field.<类型 path>.<字段>`、枚举值 `gui.itemdespawntowhat.edit.enum.<组>.<值>`、类型显示名 `gui.itemdespawntowhat.edit.<condition|effect>.<类型>`。`en_us.json` 与 `zh_cn.json` 的键集合必须完全一致，由 `python tools/check-i18n.py` 校验。协议回执状态码见 [编辑协议](../backend/modules/edit-protocol.md) §4.3。
 
 ## 14. 目录选择页样板
 

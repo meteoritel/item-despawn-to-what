@@ -9,6 +9,8 @@
 2. **端隔离**：服务端严格禁止引用客户端类。
 3. **依赖倒置**：`core` 不反向依赖平台运行时或 client；平台通过**窄接口**、**静态 sink** 与**注入点**把能力注入 core。
 
+前两条由 `python tools/check-isolation.py` 强制校验：脚本按 `import` 语句判定，命中即列出违规文件与行号。
+
 ## 2. 平台能力：`Services` + `IPlatformHelper`
 
 - `Services.PLATFORM` 是唯一入口：`ServiceLoader.load(IPlatformHelper.class).findFirst()`，失败抛 NPE（服务发现文件必须随 jar 打包）。

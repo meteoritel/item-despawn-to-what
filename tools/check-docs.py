@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """文档链接与禁用路径校验。
 
-扫描仓库内所有 Markdown 文档，检查两类问题：
+扫描仓库内所有 Markdown 文档，检查三类问题：
 1) 相对链接必须可解析（悬空链接即违规）：直接命中目标文件，或补 `.md` 后命中
    （`docs/wiki/` 的页间链接是 GitHub Wiki 页名写法，不带扩展名）；
-2) 现役文档不得出现禁用路径（归档路径：.local/archive、docs/archive）。
+2) 现役文档不得出现禁用路径（归档路径：.local/archive、docs/archive）；
+3) 现役文档不得反向指向 AGENTS.md：指针方向只能由 AGENTS.md 单向发出，
+   其它文档以链接、路径或依赖方式指回即违规。
 
 退出码：0 = 通过；1 = 存在违规；2 = 配置错误（未找到 Markdown 文档）。
 用法：python tools/check-docs.py [--root <仓库根目录>]
@@ -22,6 +24,8 @@ EXCLUDED_DIRS = {
     "run", "runs", "logs", ".idea",
 }
 FORBIDDEN_PATHS = (".local/archive", "docs/archive")
+# 指针方向只由 AGENTS.md 单向发出：该文件自身豁免，其它文档出现其文件名即违规。
+POINTER_ORIGIN = "AGENTS.md"
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 EXTERNAL_PREFIXES = ("http://", "https://", "mailto:", "#", "tel:")
 FENCE = chr(96) * 3
@@ -70,6 +74,8 @@ def check(root: Path) -> int:
             for forbidden in FORBIDDEN_PATHS:
                 if forbidden in line:
                     violations.append((rel, line_no, "禁用路径", forbidden))
+            if rel != POINTER_ORIGIN and POINTER_ORIGIN in line:
+                violations.append((rel, line_no, "反向指针", POINTER_ORIGIN))
             for match in LINK_RE.finditer(line):
                 target = match.group(1).strip()
                 if not target or target.startswith(EXTERNAL_PREFIXES):
@@ -86,10 +92,11 @@ def check(root: Path) -> int:
         print(f"[违规] 共 {len(violations)} 处：")
         for rel, line_no, kind, detail in violations:
             print(f"  {rel}:{line_no} [{kind}] {detail}")
-        print("修正方式：改指现行文档、删除失效指针，或把已过期文档移出仓库（归档目录不得被现役文档引用）。")
+        print("修正方式：改指现行文档、删除失效指针，或把已过期文档移出仓库（归档目录不得被现役文档引用）；"
+              "反向指针删除该提及，需要长期保留的规则写进 AGENTS.md 自身。")
         return 1
 
-    print("[通过] 文档链接与禁用路径检查通过：0 处违规。")
+    print("[通过] 文档链接、禁用路径与指针方向检查通过：0 处违规。")
     return 0
 
 
