@@ -34,7 +34,7 @@ public final class ArrowRainExecutor {
     // 水平散布半径
     public static final double SPREAD_RADIUS = 5.0;
     // 箭矢初速度
-    public static final float ARROW_SPEED = 3.5F;
+    public static final float ARROW_SPEED = 4.5F;
     // 水平抖动幅度
     public static final float HORIZONTAL_JITTER = 0.08F;
 
@@ -42,8 +42,12 @@ public final class ArrowRainExecutor {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    // 此处借用 Minecraft 管理的实例，生命周期由游戏负责，不能在此关闭。
-    @SuppressWarnings("resource")
+    /**
+     * 调度一场按固定间隔向下发射的箭雨。
+     * @param effect 箭雨数量、拾取模式与药水效果
+     * @param context 规则执行上下文
+     * @return 一次性箭雨序列的待完成回执
+     */
     public static EffectResult execute(ArrowRainEffect effect, EffectContext context) {
         AbstractArrow.Pickup pickup = toVanillaPickup(effect.pickup());
         List<MobEffectInstance> potionEffects = resolvePotionEffects(effect.potionEffects(), context.random());

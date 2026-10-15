@@ -57,13 +57,23 @@ public final class EffectTargets {
 
     // 实际生成位置可能越过源区块边界；保留实体等区块加载后再加入。
     static void addEntity(EffectContext context, net.minecraft.world.entity.Entity entity) {
+        addEntity(context, entity, false);
+    }
+
+    // 产物反馈随延迟加入任务保留，箭雨与闪电沿用各自的原版视觉表现。
+    static void addEntityProduct(EffectContext context, net.minecraft.world.entity.Entity entity) {
+        addEntity(context, entity, true);
+    }
+
+    private static void addEntity(EffectContext context, net.minecraft.world.entity.Entity entity, boolean productFeedback) {
         if (!com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks.contains(context.level(), entity.blockPosition())) {
-            context.schedule(20, () -> addEntity(context, entity));
+            context.schedule(20, () -> addEntity(context, entity, productFeedback));
         } else {
             if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().prepareOutput(context, entity); }
             if (!context.level().addFreshEntity(entity)) {
                 throw new IllegalStateException("实体生成被拒绝：规则=" + context.ruleId() + " 类型=" + entity.getType());
             }
+            if (productFeedback) { VisualFeedback.entitySpawn(context.level(), entity.position()); }
             if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().outputAdded(context, entity); }
         }
     }
@@ -72,7 +82,7 @@ public final class EffectTargets {
     // 授予动作与返还物共用 ReturnItemSpawner.applyGrant，避免两处状态语义漂移
     static void addConversionProduct(EffectContext context, net.minecraft.world.entity.item.ItemEntity product) {
         ReturnItemSpawner.applyGrant(product, ReturnItemSpawner.Kind.CONVERSION_PRODUCT);
-        addEntity(context, product);
+        addEntityProduct(context, product);
     }
 
     // 饱和加法：避免计数溢出为负数

@@ -193,7 +193,7 @@ What you see in game: with a 50 percent chance the mod rolls the simple dungeon 
 { "type": "itemdespawntowhat:lightning", "count": 1, "delay_ticks": 20 }
 ```
 
-What you see in game: after a 1 second delay one bolt strikes, identical to vanilla lightning, so it deals damage and sets blocks on fire. With `count: 3` the first bolt lands exactly on the trigger position and the other two scatter randomly within 5 blocks of it, all landing at ground height.
+What you see in game: after a 1 second delay one bolt strikes, identical to vanilla lightning, so it deals damage and sets blocks on fire. With `count: 3`, the first bolt keeps the trigger's horizontal coordinates and the other two scatter randomly within 5 blocks. Bolts land on the topmost collision or fluid surface, including slabs and stairs; an underground trigger still strikes the surface above. In the void, where no surface exists, bolts use the heightmap height.
 
 ## Explosion (explosion)
 
@@ -315,4 +315,3 @@ A server-level protection also stops a conversion when too many products lie nea
 - [Outcome Candidates and Settlement](en-05-outcomes-and-settlement)
 - [Rule Fields](en-02-rule-basics)
 - [Server Configuration](en-07-server-config)
-

@@ -38,6 +38,8 @@ public final class ReturnItemSpawner {
     // 起点附近的水平搜索半径与垂直范围（不含向上扫描）
     private static final int NEARBY_RADIUS = 2;
     private static final int NEARBY_VERTICAL = 1;
+    private static final double PRODUCT_LIFT_SPEED = 0.1D;
+    private static final double RETURN_HOP_SPEED = 0.22D;
     // 起点附近候选偏移：近处优先，垂直权重更高，等距用 y/x/z 稳定排序
     private static final List<BlockPos> NEARBY_OFFSETS = buildNearbyOffsets();
 
@@ -55,12 +57,28 @@ public final class ReturnItemSpawner {
         }
     }
 
-    // 创建并加入世界；生成被拒时返回 null，由调用方保留待返还并重试
+    /**
+     * 创建带来源保护状态的掉落物，成功加入世界后播放相应反馈。
+     * @param level 目标世界
+     * @param position 实际生成位置
+     * @param stack 要交付的物品
+     * @param kind 掉落物来源，返还物使用上跳初速度
+     * @return 成功加入世界的实体；生成被拒时返回 null，由调用方保留库存并重试
+     */
     public static @Nullable ItemEntity spawn(ServerLevel level, Vec3 position, ItemStack stack, Kind kind) {
         ItemEntity item = new ItemEntity(level, position.x, position.y, position.z, stack);
-        item.setDeltaMovement(0.0D, 0.1D, 0.0D);
+        // 初速度在加入世界前设置，让客户端的首次生成包包含返还上跳运动。
+        item.setDeltaMovement(0.0D, kind == Kind.PERMANENT_RETURN ? RETURN_HOP_SPEED : PRODUCT_LIFT_SPEED, 0.0D);
         applyGrant(item, kind);
-        return level.addFreshEntity(item) ? item : null;
+        if (!level.addFreshEntity(item)) {
+            return null;
+        }
+        if (kind == Kind.PERMANENT_RETURN) {
+            VisualFeedback.returnItem(level, item.position());
+        } else {
+            VisualFeedback.entitySpawn(level, item.position());
+        }
+        return item;
     }
 
     // 交付一份返还物：位置搜索在公共预算内分步推进，区块未加载或生成被拒时交给调用方重试
@@ -92,16 +110,16 @@ public final class ReturnItemSpawner {
         if (!level.noCollision(box)) {
             return false;
         }
-        return !isDangerous(level, pos) && !isDangerous(level, pos.above());
+        return isHarmless(level, pos) && isHarmless(level, pos.above());
     }
 
     // 火、岩浆、仙人掌（含岩浆流体）不算可返还位置：返还物不应落进危险方块
-    private static boolean isDangerous(ServerLevel level, BlockPos pos) {
+    private static boolean isHarmless(ServerLevel level, BlockPos pos) {
         BlockState state = level.getBlockState(pos);
         if (state.is(BlockTags.FIRE) || state.is(Blocks.LAVA) || state.is(Blocks.CACTUS)) {
-            return true;
+            return false;
         }
-        return level.getFluidState(pos).is(FluidTags.LAVA);
+        return !level.getFluidState(pos).is(FluidTags.LAVA);
     }
 
     // 起点附近候选偏移的稳定顺序：dx²+dz²+4·dy² 升序，再按 y/x/z

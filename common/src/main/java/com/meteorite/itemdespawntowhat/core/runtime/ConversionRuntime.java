@@ -31,6 +31,7 @@ import com.meteorite.itemdespawntowhat.core.service.BuiltinTypeRegistries;
 import com.meteorite.itemdespawntowhat.core.state.DamageClassification;
 import com.meteorite.itemdespawntowhat.core.state.DropState;
 import com.meteorite.itemdespawntowhat.core.state.DropStateStore;
+import com.meteorite.itemdespawntowhat.core.type.effect.exec.VisualFeedback;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -711,6 +712,7 @@ public final class ConversionRuntime {
             ConversionSettlement settlement = new ConversionSettlement(this, scheduler, level, item, rule, held, record, ledger);
             scheduler.scheduleAt(level.dimension(), settlement, level.getGameTime());
             transferred = true;
+            VisualFeedback.conversion(level, item.position());
             if (config.debugLogging() && RuntimeObserver.current().allowsRuntimeLogging(item)) {
                 LOGGER.info("掉落物 {} 已按规则 {} 进入结算（可用源 {}，每组成本 {}）",
                         item.getUUID(), rule.id(), available, costPerGroup);

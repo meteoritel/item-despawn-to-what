@@ -194,7 +194,7 @@ public final class SpawnEntityExecutor {
             if (spawned instanceof AgeableMob ageableMob) {
                 ageableMob.setAge(effect.age());
             }
-            EffectTargets.addEntity(context, spawned);
+            EffectTargets.addEntityProduct(context, spawned);
             // 真实完成量回执：每个成功写入世界的实体计 1
             context.reportProgress(1);
             // 计价：同上，一个真正写入世界的实体记 1 个工作单位

@@ -60,8 +60,13 @@
 
 | 类 | 职责 | 关键成员 |
 |---|---|---|
-| `EffectTargets` | 执行器共享的引用解析与空间查询工具；**不捕获、不吞异常**，硬错误直接抛出交给运行时 | `resolve`（未命中返回 null）/`resolveOrThrow`、`blockBox(center, radius)`（效果式消耗与催化剂固定成本共用的搜索盒）、`addEntity`、`addConversionProduct`、`saturatedAdd`/`saturatedMultiply`、`forEachStep(...)` |
+| `EffectTargets` | 执行器共享的引用解析与空间查询工具；**不捕获、不吞异常**，硬错误直接抛出交给运行时 | `resolve`（未命中返回 null）/`resolveOrThrow`、`blockBox(center, radius)`（效果式消耗与催化剂固定成本共用的搜索盒）、`addEntity`、`addEntityProduct`、`addConversionProduct`、`saturatedAdd`/`saturatedMultiply`、`forEachStep(...)` |
 | `ReturnItemSpawner` | 掉落物生成统一入口：转化产物与返还物共用「创建 + 授予实体状态 + 加入世界」路径 | `Kind{CONVERSION_PRODUCT, PERMANENT_RETURN}`、`applyGrant`、`spawn`、`deliver`、内部 `PositionSearch`（三级位置搜索：起点附近 → 向上扫描 → 限高以上，跨刻分步） |
+| `VisualFeedback` | 服务端主线程发送原版粒子，并按维度、刻、反馈种类与方块位置限流 | `conversion`、`entitySpawn`、`returnItem` |
+
+`ConversionRuntime.performConversion` 成功登记并提交结算任务后，在源位置播放 `PORTAL` 与 `ENCHANT` 粒子；实体和物品产物实际加入世界后播放 `END_ROD` 光点，经验在首批 `ExperienceOrb.award` 后播放一次。返还物在成功加入世界后播放 `HAPPY_VILLAGER` 绿色粒子；`ReturnItemSpawner.spawn` 在加入世界前将返还初速度设为向上 0.22 格/刻，普通产物为 0.1 格/刻。箭矢和闪电使用普通实体加入入口，不附加产物光点。
+
+同一维度同刻同方块的同类反馈只发送一次，每类每刻最多 16 组；三类独立计限，超过上限只省略粒子。每次转化反馈为 18 个 `PORTAL` 与 9 个 `ENCHANT`，产物反馈为 8 个 `END_ROD`，返还反馈为 10 个 `HAPPY_VILLAGER`。粒子通过普通距离范围的原版广播发送；限流状态以世界弱引用保存，不持有已卸载世界。
 
 ## 3. 注册生命周期（顺序固定）
 
@@ -113,9 +118,9 @@
 | 1 | `spawn_entity` | `variant: item/entity/experience` 必填；各子类参数见下表 | 统一生成掉落物、通用实体或经验；共用概率/延迟/条件 |
 | 2 | `place_block` | `block: TaggedId`（与 `use_source_block` **至少其一**）；`use_source_block: bool`/false；`shape: square\|circle\|cross`/square；`count: int[1,64]`/1；`radius: int[1,32]`/6；`limit: Integer[1,4096]` | 按形状由内向外扩散放置方块，只替换可替换位置、不突破自身半径 |
 | 3 | `loot_table` | `loot_table: ResourceLocation`（必填，**不支持 `#tag`**）；`luck: float[-100,100]`/0 | 以位置为原点开战利品表（CHEST 参数集，`THIS_ENTITY`=源），逐轮开表并分批生成 |
-| 4 | `lightning` | `count: int[1,16]`/1 | 第 1 道落原点，后续散布 r=5，间隔 8 刻 |
+| 4 | `lightning` | `count: int[1,16]`/1 | 第 1 道保留原点水平坐标，后续散布 r=5，间隔 8 刻；从高度图上方向下求交最上层碰撞或流体表面，贴合半砖与台阶；虚空无表面时回退高度图高度 |
 | 5 | `explosion` | `power: float[0,16]`/3.0；`fire: bool`/false；`visual_only: bool`/false | `visual_only` 只粒子+音效；否则 TNT 交互爆炸 |
-| 6 | `arrow_rain` | `count: int[1,256]`/16；`pickup: disallowed\|allowed\|creative_only`/disallowed；`potion_effects: List<{effect: TaggedId, duration_ticks: int[1,1000000]/100, amplifier: int[0,255]/0}>` | 上方 +80 高度落箭雨，间隔 2 刻，可携带药水效果 |
+| 6 | `arrow_rain` | `count: int[1,256]`/16；`pickup: disallowed\|allowed\|creative_only`/disallowed；`potion_effects: List<{effect: TaggedId, duration_ticks: int[1,1000000]/100, amplifier: int[0,255]/0}>` | 上方 +80 高度落箭雨，初速度 4.5 格/刻，间隔 2 刻，可携带药水效果 |
 | 7 | `weather` | `mode: rain\|clear`（必填）；`duration_ticks: int[1,24000]`/6000；`thundering: bool`/false | 切换维度天气；无天空光维度跳过；已处于目标天气则跳过 |
 
 实体生成的 JSON 字段仍与 `type` 同级，不增加 `product` 包装：
