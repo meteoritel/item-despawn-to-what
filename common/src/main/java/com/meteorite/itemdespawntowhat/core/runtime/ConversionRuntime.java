@@ -5,6 +5,7 @@ import com.meteorite.itemdespawntowhat.core.api.ConditionContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecutor;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
+import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
@@ -12,6 +13,7 @@ import com.meteorite.itemdespawntowhat.core.config.NearbyProductLimits;
 import com.meteorite.itemdespawntowhat.core.load.LoadedRule;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
+import com.meteorite.itemdespawntowhat.core.model.OutcomeCandidate;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.model.TriggerKind;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.CancelReason;
@@ -47,6 +49,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -76,6 +79,9 @@ public final class ConversionRuntime {
     private static final int TICKS_PER_SECOND = 20;
     // 结算账本裁剪间隔：1200 tick = 60 秒（已完成记录按 tick 过期，未结清记录一律保留）
     private static final long SETTLEMENT_PRUNE_INTERVAL_TICKS = 1200L;
+    // 效果级条件不满足 / 概率落空的回执与固定输入原因：属已支付组内的正常结果
+    private static final String CONDITIONS_UNMET = "conditions_unmet";
+    private static final String CHANCE_MISSED = "chance_missed";
 
     private final ServerConfig config;
     private final BuiltinTypeRegistries types;
@@ -692,6 +698,18 @@ public final class ConversionRuntime {
         // 每组固定源成本 c：显式 source_cost 优先，其次隐式 1 个，再次各 consume_source 之和
         int costPerGroup = types.perRoundSourceConsumption(rule, source);
         tracked.locked = true;
+        // 成功转化当刻的触发点：位置必须在源实体清空前读取，清空后实体位置不再可信
+        Vec3 triggerPosition = item.position();
+        // 同一补偿单元内、源实体清空前固定需要先于源实体消失确定输入的类型的本次效果输入：
+        // 效果级条件与概率在此判定一次，结果随任务携带，源实体清空后不再重新判定。
+        // 判定异常按同一补偿单元处理：整堆源物品写回并保留所有权追踪。
+        Map<PreparedEffectKey, EffectPreparation> preparations;
+        try {
+            preparations = prepareEffects(level, item, rule, triggerPosition);
+        } catch (RuntimeException failure) {
+            tracked.locked = false;
+            throw failure;
+        }
         // 首次登记与失败补偿都经受控句柄：账目变更与账本双索引、标脏在同一次调用内完成
         SettlementRecord.Writer writer = null;
         boolean transferred = false;
@@ -708,7 +726,8 @@ public final class ConversionRuntime {
                 int estimated = costPerGroup > 0 ? Math.max(1, available / costPerGroup) : 1;
                 RuntimeObserver.current().converted(item, rule.id().toString(), estimated);
             }
-            ConversionSettlement settlement = new ConversionSettlement(this, scheduler, level, item, rule, held, writer);
+            ConversionSettlement settlement = new ConversionSettlement(this, scheduler, level, item, rule, held, writer,
+                    triggerPosition, preparations);
             scheduler.scheduleAt(level.dimension(), settlement, level.getGameTime());
             transferred = true;
             VisualFeedback.conversion(level, item.position());
@@ -733,19 +752,29 @@ public final class ConversionRuntime {
     }
 
     // 条件与概率只在开始时判断一次，续接状态归本次效果任务独占。
-    EffectExecution startEffect(ServerLevel level, ItemEntity item, EffectContext base, Effect effect) {
-        var conditions = effect.conditions();
-        if (conditions != null && !conditions.isEmpty()) {
-            ConditionContext context = conditionContext(level, item, BlockPos.containing(base.position()));
-            if (!ExpressionEvaluator.matches(conditions, context, types.conditionTypes())) {
-                if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "EFFECT_CONDITION_SKIPPED", "effect", effect.type()); }
-                return budget -> EffectResult.skipped("conditions_unmet");
-            }
+    // preparation 非空表示本次输入已在成功转化当刻固定（含条件/概率判定结果），本方法不再重判。
+    EffectExecution startEffect(ServerLevel level, ItemEntity item, EffectContext base, Effect effect,
+                                @Nullable EffectPreparation preparation) {
+        // 已判定不执行的固定输入：直接给出跳过回执，不重判也不做世界写入
+        if (preparation != null && preparation.gate() != null) {
+            return gatedExecution(preparation.gate());
         }
-        if (effect.chance() < 1.0D && base.random().nextDouble() >= effect.chance()) {
-            if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "EFFECT_CHANCE_SKIPPED", "effect", effect.type(), "chance", effect.chance()); }
-            // 概率落空仍支付本组固定成本：不免费重试、不返还
-            return budget -> EffectResult.skipped("chance_missed");
+        // 成功转化当刻已固定输入时不就地重判条件/概率；未固定的类型保持原有判定时机
+        boolean preEvaluated = preparation != null;
+        if (!preEvaluated) {
+            var conditions = effect.conditions();
+            if (conditions != null && !conditions.isEmpty()) {
+                ConditionContext context = conditionContext(level, item, BlockPos.containing(base.position()));
+                if (!ExpressionEvaluator.matches(conditions, context, types.conditionTypes())) {
+                    if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "EFFECT_CONDITION_SKIPPED", "effect", effect.type()); }
+                    return budget -> EffectResult.skipped(CONDITIONS_UNMET);
+                }
+            }
+            if (effect.chance() < 1.0D && base.random().nextDouble() >= effect.chance()) {
+                if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "EFFECT_CHANCE_SKIPPED", "effect", effect.type(), "chance", effect.chance()); }
+                // 概率落空仍支付本组固定成本：不免费重试、不返还
+                return budget -> EffectResult.skipped(CHANCE_MISSED);
+            }
         }
         EffectType<?> definition = types.effectTypes().getOrNull(effect.type());
         if (definition == null) {
@@ -755,13 +784,70 @@ public final class ConversionRuntime {
         }
         try {
             if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "EFFECT_BEGIN", "effect", effect.type()); }
-            EffectExecution execution = executorOf(definition).start(effect, base);
+            EffectExecution execution = executorOf(definition).start(effect, base, preparation);
             return execution == null ? budget -> EffectResult.failed("no_execution") : execution;
         } catch (RuntimeException e) {
             if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "ERROR", "effect", effect.type(), "error", e.toString()); }
             LOGGER.error("效果执行失败：规则={} 效果={} 位置={}", base.ruleId(), effect.type(), base.position(), e);
             return budget -> EffectResult.failed(String.valueOf(e));
         }
+    }
+
+    // 已判定为不执行的固定输入：直接给出带原因的跳过回执，不做世界写入也不重判
+    private static EffectExecution gatedExecution(String reason) {
+        return budget -> EffectResult.skipped(reason);
+    }
+
+    // 成功转化当刻为「需要先固定输入」的类型逐槽生成固定输入：条件与概率在这里判定一次，
+    // 结果随结算任务携带，源实体清空后不再重新判定。没有准备阶段的类型不产出，保持原有判定时机。
+    private Map<PreparedEffectKey, EffectPreparation> prepareEffects(ServerLevel level, ItemEntity item, Rule rule,
+                                                                    Vec3 position) {
+        Map<PreparedEffectKey, EffectPreparation> preparations = new HashMap<>();
+        BlockPos pos = BlockPos.containing(position);
+        for (OutcomeCandidate candidate : rule.effectiveOutcomes()) {
+            List<Effect> effects = candidate.effects();
+            for (int slot = 0; slot < effects.size(); slot++) {
+                Effect effect = effects.get(slot);
+                EffectType<?> definition = types.effectTypes().getOrNull(effect.type());
+                if (definition == null) {
+                    continue;
+                }
+                EffectPreparation preparation = prepareEffect(definition, effect, level, item, pos, position);
+                if (preparation != null) {
+                    preparations.put(new PreparedEffectKey(candidate.id(), slot), preparation);
+                }
+            }
+        }
+        return preparations;
+    }
+
+    // 泛型桥接：准备入口只读效果参数与成功当刻可读的输入
+    @SuppressWarnings("unchecked")
+    private @Nullable EffectPreparation prepareEffect(EffectType<?> definition, Effect effect, ServerLevel level,
+                                                     ItemEntity item, BlockPos pos, Vec3 position) {
+        EffectPreparation preparation = ((EffectType<Effect>) definition).executor().prepare(effect, level, position);
+        if (preparation == null || preparation.gate() != null) {
+            return preparation;
+        }
+        // 条件不满足与概率落空在成功转化当刻就已确定：结果随任务携带，不被后续世界变化改写
+        var conditions = effect.conditions();
+        if (conditions != null && !conditions.isEmpty()) {
+            ConditionContext context = conditionContext(level, item, pos);
+            if (!ExpressionEvaluator.matches(conditions, context, types.conditionTypes())) {
+                if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "EFFECT_CONDITION_SKIPPED", "effect", effect.type()); }
+                return EffectPreparation.gated(CONDITIONS_UNMET);
+            }
+        }
+        if (effect.chance() < 1.0D && level.random.nextDouble() >= effect.chance()) {
+            if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "EFFECT_CHANCE_SKIPPED", "effect", effect.type(), "chance", effect.chance()); }
+            // 概率落空仍支付本组固定成本：不免费重试、不返还
+            return EffectPreparation.gated(CHANCE_MISSED);
+        }
+        return preparation;
+    }
+
+    // 成功转化当刻固定的效果槽位键：候选项与候选内槽序号，逐槽独立，不按效果值合并
+    record PreparedEffectKey(String candidateId, int slot) {
     }
 
     // 泛型桥接：效果即类型定义声明的 P，执行器只读取参数
