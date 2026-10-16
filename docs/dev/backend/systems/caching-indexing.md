@@ -91,7 +91,7 @@
 - 新增依赖数据包的缓存 → 必须在 `replaceRules` 中一并置空，否则 reload 后读到旧数据；按规则实例记忆的派生值还要补上保存后索引发布与停服的清理点（参见候选结构摘要）。
 - 新增候选类别 → 扩 `RuleCatalogType` + 在 `RuleCatalogSources.builtin` 增加一个数据源；分页 / 过滤复用 `RuleCatalogService`，不要在两处各写一份。
 - 新增**依赖数据包的运行期派生值**（如留空门槛的有效值）→ 扩 `CatalystThresholdProjection` 并挂在 `RuleIndex.build` 上，随索引整体重建失效；不要为它另建索引或运行期缓存。
-- 踩坑：缓存「整体重建」是刻意设计，不要为单条规则加局部失效路径；`revision()` 必须与顺序无关（用 `Set.hashCode`），否则每 tick 都会误判内容变化；`PlaceBlockExecutor.OFFSETS` 是进程内静态、跨 reload 保留。
+- 踩坑：缓存「整体重建」是刻意设计，不要为单条规则加局部失效路径；`revision()` 必须与顺序无关（用集合或映射的 `hashCode`），否则每 tick 都会误判内容变化；`PlaceBlockExecutor.OFFSETS` 是进程内静态、跨 reload 保留。
 
 ## 9. 相关
 
