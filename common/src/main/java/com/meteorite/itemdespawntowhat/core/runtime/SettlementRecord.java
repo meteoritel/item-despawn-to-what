@@ -12,7 +12,8 @@ import net.minecraft.world.item.ItemStack;
  * 记录可持久化：无法加入世界的返还留在 pendingDelivery 里，交给恢复任务（SettlementRecovery）逐步交付。
  * 催化剂按单独账目计数（catalystCostPerGroup / catalystGroupsPaid / catalystsConsumed），不进源物品守恒式。
  * 账目字段不可从外部直接变更：全部变更方法私有，只能经受控写入句柄 {@link Writer} 调用，
- * 由句柄配套维护账本双索引与标脏；业务判断（是否对齐待交付量、记中断还是失败、截断到几组）仍留在各调用方。
+ * 句柄保证「改字段 + 维护账本双索引 + 标脏」在同一次调用内完成，业务判断（是否对齐待交付量、
+ * 记中断还是失败、截断到几组）仍留在各调用方。
  */
 public final class SettlementRecord {
 
@@ -34,7 +35,7 @@ public final class SettlementRecord {
     private int groupCount;
     private int groupsStarted;
     private int consumedSources;
-    // 待返还量：结算任务持有库存期间由唯一提交点对齐到实际结算库存；
+    // 待返还量：结算任务持有库存期间由任务出口对齐到实际结算库存；
     // 中止/交付完成后所有权移交恢复任务，改由其按交付进度递减
     private int pendingDelivery;
     private int deliveredReturns;
@@ -142,7 +143,7 @@ public final class SettlementRecord {
         deliveredReturns += moved;
     }
 
-    // 用结算库存的实际数量对齐待交付数：由持有库存的一方（结算任务的唯一提交点）在落盘前调用，
+    // 用结算库存的实际数量对齐待交付数：由持有库存的一方（结算任务的统一出口）在落账前调用，
     // 保证内存账目与落盘值一致；所有权移交后不再调用，避免覆盖恢复任务推进的交付进度
     private void syncPendingDelivery(int remaining) {
         pendingDelivery = Math.max(0, remaining);
@@ -288,11 +289,11 @@ public final class SettlementRecord {
     /**
      * 结算记录的受控写入句柄：账目字段的唯一变更入口。
      * <p>
-     * 记录与账本两张索引持有同一可变引用，字段变更若不配套落账就会丢失（{@code SavedData} 只在仍为脏时落盘）。
-     * 因此 {@link SettlementRecord} 的变更方法全部私有，调用方只能经本句柄写入：
-     * 新建与撤销登记用 {@link #register} / {@link #discard}，恢复交付与终态用 {@link #deliverAndSave} 等立即提交入口，
-     * 结算任务沿用其统一步骤出口在 {@link #commit()} 一次落账。是否对齐待交付量、记中断还是失败等业务判断
-     * 仍留在各调用方，本句柄不建立通用事务、不自动刷盘、不自动异常回滚。
+     * 记录与账本两张索引持有同一可变引用，字段变更若不配套标脏就会丢失（{@code SavedData} 只在仍为脏时落盘）。
+     * 因此 {@link SettlementRecord} 的变更方法全部私有，调用方只能经本句柄写入，且每个域变更方法都在同一次
+     * 调用内完成「改字段 + 写回双索引 + 标脏」，外部不存在只改字段不落账的漏提交路径：新建用 {@link #register}，
+     * 撤销登记用 {@link #discard}，其余按语义入口调用。是否对齐待交付量、记中断还是失败、截断到几组等业务判断
+     * 仍留在各调用方；本句柄不建立通用事务、不自动刷盘、不自动异常回滚，提交只标脏。
      */
     static final class Writer {
 
@@ -324,8 +325,9 @@ public final class SettlementRecord {
             return record;
         }
 
-        // 落账：把记录当前字段写回账本双索引并标脏；结算任务在统一步骤出口调用一次
-        void commit() {
+        // 落账：把记录当前字段写回账本双索引并标脏；只由本句柄内的变更方法调用，不对调用方暴露，
+        // 避免出现「改了字段却忘记提交」的路径
+        private void commit() {
             ledger.submit(record);
         }
 
@@ -334,82 +336,84 @@ public final class SettlementRecord {
             ledger.unregister(record.id());
         }
 
+        // 每个入口都在同一次调用内改字段并落账（写回双索引 + 标脏），调用方无需再自行提交
         void plan(String candidateId, int groupCount) {
             record.plan(candidateId, groupCount);
+            commit();
         }
 
         void markStarted(long gameTime) {
             record.markStarted(gameTime);
+            commit();
         }
 
+        // 开始一组并落账：调用方已从结算库存扣掉该组固定成本
         void groupStarted(int cost) {
             record.groupStarted(cost);
+            commit();
         }
 
         void catalystPlan(int costPerGroup) {
             record.catalystPlan(costPerGroup);
+            commit();
         }
 
         void catalystGroupPaid(int count) {
             record.catalystGroupPaid(count);
+            commit();
         }
 
         void addApplied(long units) {
             record.addApplied(units);
+            commit();
         }
 
         void addPending(long units) {
             record.addPending(units);
+            commit();
         }
 
-        // 进度回执入口：与其它字段变更一样只改账目，由结算任务的提交点落账
+        // 进度回执入口：执行器只拿到这条写入通道，本方法自己落账；
+        // 只改 applied/pending units，绝不触碰待交付量，因此不覆盖库存所有权与恢复进度
         void addProgress(int units) {
             record.addProgress(units);
+            commit();
         }
 
         void effectSkipped() {
             record.effectSkipped();
+            commit();
         }
 
         void effectFailed() {
             record.effectFailed();
+            commit();
         }
 
+        // 返还交付：交付成功后递减待交付并落账，账目始终等于「还没交付出去的库存」
         void delivered(int count) {
             record.delivered(count);
+            commit();
         }
 
+        // 用结算库存实际数量对齐待交付量：只由仍持有库存所有权的一方调用，移交后不得再调用
         void syncPendingDelivery(int remaining) {
             record.syncPendingDelivery(remaining);
+            commit();
         }
 
         void complete(long gameTime) {
             record.complete(gameTime);
+            commit();
         }
 
         void interrupt(String reason, long gameTime) {
             record.interrupt(reason, gameTime);
+            commit();
         }
 
         void fail(String reason, long gameTime) {
             record.fail(reason, gameTime);
-        }
-
-        // 恢复交付：交付成功后递减待交付并立即落账，账目始终等于「还没交付出去的库存」
-        void deliverAndSave(int count) {
-            record.delivered(count);
-            commit();
-        }
-
-        // 恢复完结：标记完成并立即落账
-        void completeAndSave(long gameTime) {
-            record.complete(gameTime);
-            commit();
-        }
-
-        // 恢复失败/取消：标记中断并立即落账，不补做世界写入
-        void interruptAndSave(String reason, long gameTime) {
-            record.interrupt(reason, gameTime);
             commit();
         }
     }

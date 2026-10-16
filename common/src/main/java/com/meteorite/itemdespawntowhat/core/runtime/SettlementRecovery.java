@@ -83,7 +83,7 @@ final class SettlementRecovery implements ServerTask {
                     scheduler.config().positionSearchChecksPerTick());
             if (outcome == ReturnItemSpawner.Outcome.ADDED) {
                 // 交付成功后才扣减待交付量并落账：账目始终等于「还没交付出去的库存」
-                writer.deliverAndSave(stack.getCount());
+                writer.delivered(stack.getCount());
                 budget.charge(2);
                 delivered++;
                 failures = 0;
@@ -127,7 +127,8 @@ final class SettlementRecovery implements ServerTask {
             // 失败与取消均不补做世界写入，只保留剩余库存并释放未支付预留。
             runtime.catalystReservations().releaseOwner(record.id());
             try {
-                writer.interruptAndSave(reason, level.getGameTime());
+                // 恢复失败/取消只记中断并落账，不补做世界写入
+                writer.interrupt(reason, level.getGameTime());
             } catch (RuntimeException failure) {
                 LOGGER.warn("返还记录写盘失败：id={} reason={}", record.id(), reason, failure);
             }
@@ -139,7 +140,7 @@ final class SettlementRecovery implements ServerTask {
 
     // 交付结束：记录标记完成并落账，释放幂等位
     private void finish() {
-        writer.completeAndSave(level.getGameTime());
+        writer.complete(level.getGameTime());
         runtime.onRecoveryFinished(record.id());
         LOGGER.debug("返还交付完成：记录={} 已交付={}", record.id(), record.deliveredReturns());
     }
