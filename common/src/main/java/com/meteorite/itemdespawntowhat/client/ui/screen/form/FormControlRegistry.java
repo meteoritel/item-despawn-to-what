@@ -18,7 +18,6 @@ import net.minecraft.client.gui.Font;
  */
 final class FormControlRegistry {
 
-    /** 字段控件工厂：参数顺序与 {@link FormControl#create} 一致。 */
     @FunctionalInterface
     interface Factory {
         FormControl create(Font font, FormView owner, EditorField field, Runnable onChanged);
@@ -84,7 +83,7 @@ final class FormControlRegistry {
         map.put(EditorFieldType.STRING_LIST, (font, owner, field, onChanged) -> new ListControl(font, field, onChanged));
         map.put(EditorFieldType.CLIMATE_RANGE, (font, owner, field, onChanged) -> new ClimateControl(font, field, onChanged));
         map.put(EditorFieldType.CONDITION_TREE, (font, owner, field, onChanged) ->
-                new ConditionTreeControl(font, field, owner.conditionSupport()));
+                new ConditionTreeControl(font, field, owner.conditionEditingSupport(), () -> owner.conditionContext(field)));
         map.put(EditorFieldType.SUBLIST, SublistControl::new);
         map.put(EditorFieldType.RAW_JSON, (font, owner, field, onChanged) -> new RawJsonControl(field));
         map.put(EditorFieldType.NOTE, (font, owner, field, onChanged) -> new NoteControl(field));

@@ -546,6 +546,36 @@ public final class RuleEditorPanelFactory {
         return null;
     }
 
+    // 参数表单是否承载某个参数字段路径：判定只读描述符与现役绑定，不建面板、不写草稿。
+    // 描述符字段本身精确承载；气候区间字段额外承载其 min/max 端点；物品数量字段额外承载现役引用条目。
+    // 更深后缀、不存在的子项与已失效引用一律不承载，避免宽前缀把失效位置当成有效位置；
+    // 判定不看草稿值，因此有合法缺省值的字段（如催化剂门槛省略）仍算承载。
+    static boolean carriesField(List<EditorField> fields, String conditionPath, String fieldPath,
+                                Function<EditorField, List<String>> itemReferences) {
+        if (fieldPath == null || fieldPath.isBlank()) {
+            return false;
+        }
+        for (EditorField field : fields) {
+            String fieldAt = join(conditionPath, field.name());
+            if (fieldPath.equals(fieldAt)) {
+                return true;
+            }
+            if (field.type() == EditorFieldType.CLIMATE_RANGE
+                    && (fieldPath.equals(join(fieldAt, RANGE_MIN_FIELD))
+                    || fieldPath.equals(join(fieldAt, RANGE_MAX_FIELD)))) {
+                return true;
+            }
+            if (field.type() == EditorFieldType.ITEM_COUNTS) {
+                for (String reference : itemReferences.apply(field)) {
+                    if (fieldPath.equals(join(fieldAt, reference))) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
     // 基路径归一：空白基路径按无字段处理；本层保留 isBlank 口径
     // （DraftPaths.child 只判 isEmpty，两者仅对「全空白基路径」不同，此处不合并）
     private static String join(String basePath, String name) {

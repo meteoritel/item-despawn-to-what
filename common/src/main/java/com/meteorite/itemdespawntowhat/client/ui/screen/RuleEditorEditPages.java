@@ -17,9 +17,8 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
-import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionSupport;
+import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionEditingSupport;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
-import com.meteorite.itemdespawntowhat.client.ui.screen.form.LeafPanel;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.SuggestionProvider;
 import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes;
 import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
@@ -27,11 +26,9 @@ import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModalStack;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
-import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -130,8 +127,8 @@ public final class RuleEditorEditPages {
         // 输入建议
         SuggestionProvider suggestions();
 
-        // 条件树支持
-        ConditionSupport conditionSupport();
+        // 条件树的共享定义能力（类型清单、按场景创建、解码注册表）
+        ConditionEditingSupport conditionEditingSupport();
 
         // 编辑工作区只读视图（目录面板与只读状态查询）
         EditorWorkspaceView workspace();
@@ -158,12 +155,6 @@ public final class RuleEditorEditPages {
     final List<UiButton> buttons = new ArrayList<>();
     final List<UiButton> candidateButtons = new ArrayList<>();
     final List<UiButton> effectButtons = new ArrayList<>();
-    // 已打开的叶子面板与所属模态：模态关闭后按栈内存在性清理引用
-    final List<LeafEntry> leafPanels = new ArrayList<>();
-
-    // 叶子面板条目：面板随模态一起关闭，模态销毁后引用必须移除
-    record LeafEntry(UiModal modal, LeafPanel panel) {
-    }
 
     // 名称来源：注册表标签优先，缺失回落 id 文本（由 RuleNaming 兜底）
     final RuleNaming.NameSource nameSource = RuleDisplayLabels::label;
@@ -318,7 +309,8 @@ public final class RuleEditorEditPages {
     FormView newForm(EditSession session, String basePath, TypeEditorDescriptor descriptor) {
         FormView form = new FormView(font, session, basePath);
         form.useCatalogSelections();
-        form.setConditionSupport(ruleEditorTriggerPage.pageConditionSupport(form));
+        form.setConditionEditingSupport(ruleEditorTriggerPage.sharedConditionSupport());
+        form.setConditionContextFactory(ruleEditorTriggerPage.conditionContextFactory(form));
         form.setSuggestionProvider(host.suggestions());
         form.setOnChanged(host::onDraftChanged);
         if (page == Page.INPUT) form.setOnChanged(() -> {
@@ -547,10 +539,6 @@ public final class RuleEditorEditPages {
                 form.onFocusScopeChanged();
             }
         }
-        for (LeafEntry entry : leafPanels) {
-            entry.panel().endInteractions();
-        }
-        leafPanels.clear();
     }
 
     // 宿主关闭屏幕：让表单释放全部捕获与输入状态
@@ -558,10 +546,6 @@ public final class RuleEditorEditPages {
         for (FormView form : liveForms) {
             form.onHostClosed();
         }
-        for (LeafEntry entry : leafPanels) {
-            entry.panel().onHostClosed();
-        }
-        leafPanels.clear();
     }
 
     // 宿主离开编辑页（返回管理页）：卸载表单的输入状态
@@ -569,10 +553,6 @@ public final class RuleEditorEditPages {
         for (FormView form : liveForms) {
             form.unmount();
         }
-        for (LeafEntry entry : leafPanels) {
-            entry.panel().unmount();
-        }
-        leafPanels.clear();
     }
 
     // 键盘抬起：把滑杆方向键的按住过程合并为一次提交（屏幕在 EDIT 模式下转发）
@@ -659,27 +639,11 @@ public final class RuleEditorEditPages {
     }
 
     public void tick() {
-        pruneLeafPanels();
         ruleEditorTriggerPage.updateLifespanWindow();
         for (FormView form : liveForms) {
             form.tick();
         }
         flushRebuild();
-    }
-
-    // 模态关闭后移除对应叶子面板引用，避免反复开关累积引用
-    private void pruneLeafPanels() {
-        if (leafPanels.isEmpty()) {
-            return;
-        }
-        List<UiModal> open = host.modals().modals();
-        leafPanels.removeIf(entry -> {
-            if (open.contains(entry.modal())) {
-                return false;
-            }
-            entry.panel().unmount();
-            return true;
-        });
     }
 
     /**
@@ -749,7 +713,7 @@ public final class RuleEditorEditPages {
             }
             return null;
         }
-        if (path.startsWith(RuleFields.CONDITIONS) || path.startsWith(RuleFields.TERMS)) {
+        if (inField(path, RuleFields.CONDITIONS) || inField(path, RuleFields.TERMS)) {
             page = Page.TRIGGER;
             rebuild();
             return ruleEditorTriggerPage.conditionsForm == null ? null : ruleEditorTriggerPage.conditionsForm.revealPath(path);
@@ -778,6 +742,19 @@ public final class RuleEditorEditPages {
         page = Page.INFO;
         rebuild();
         return ruleEditorInfoPage.infoForm == null ? null : ruleEditorInfoPage.infoForm.revealPath(path);
+    }
+
+    // 问题路径是否落在某字段内：等于字段本身，或字段后接「.」「[」的子项；
+    // 仅字符串前缀相同（conditionsExtra）不算该字段
+    private static boolean inField(String path, String field) {
+        if (!path.startsWith(field)) {
+            return false;
+        }
+        if (path.length() == field.length()) {
+            return true;
+        }
+        char next = path.charAt(field.length());
+        return next == '.' || next == '[';
     }
 
     // ---- 输入事件 ----
@@ -841,11 +818,6 @@ public final class RuleEditorEditPages {
             pendingRebuild = false;
             rebuild();
         }
-    }
-
-    // 条件叶编辑入口：由触发页打开叶参数编辑器（宿主与条件树共用）
-    public void editConditionLeaf(ConditionNode.Leaf leaf) {
-        ruleEditorTriggerPage.editConditionLeaf(leaf);
     }
 
     boolean apply(String opKey, Runnable change) {

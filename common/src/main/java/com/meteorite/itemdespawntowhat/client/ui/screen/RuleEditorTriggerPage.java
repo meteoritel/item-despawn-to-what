@@ -1,16 +1,17 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.edit.ConditionEditorRegistry;
-import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
-import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionSupport;
+import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionEditContext;
+import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionEditContextFactory;
+import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionEditingSupport;
+import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionHostCoordination;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionTreeOverlay;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.LeafPanel;
@@ -18,7 +19,6 @@ import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeContract;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCheckBox;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionTreeSummary;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
@@ -29,7 +29,6 @@ import com.meteorite.itemdespawntowhat.core.type.condition.BiomeCondition;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BooleanSupplier;
-import java.util.function.Consumer;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
@@ -126,9 +125,10 @@ final class RuleEditorTriggerPage {
         pages.apply(EditSession.OP_SET_FIELD, () -> draft.setAt(RuleFields.TRIGGERS, RuleTriggers.toArray(values)));
     }
 
-    ConditionSupport pageConditionSupport(FormView owner) {
-        ConditionSupport base = pages.host.conditionSupport();
-        return new ConditionSupport() {
+    // 共享的条件定义与按场景创建：不捕获表单、树或导航状态，可单独装配
+    ConditionEditingSupport sharedConditionSupport() {
+        ConditionEditingSupport base = pages.host.conditionEditingSupport();
+        return new ConditionEditingSupport() {
             @Override
             public List<ConditionTreeContract.TypeOption> typeOptions() {
                 return base.typeOptions();
@@ -141,107 +141,71 @@ final class RuleEditorTriggerPage {
             }
 
             @Override
-            public Consumer<ConditionNode.Leaf> onEditLeaf() {
-                return leaf -> openLeafEditor(owner, leaf);
-            }
-
-            @Override
-            public void revealLeaf(ConditionNode.Leaf leaf, String fieldPath) {
-                openLeafEditor(owner, leaf, fieldPath);
-            }
-
-            @Override
-            public boolean openTree(UiConditionTreeSummary tree, @Nullable String fieldPath) {
-                // 摘要给相对节点路径，问题定位给绝对草稿路径；局部动作条件需要补齐所属作用域。
-                String path = fieldPath != null && (fieldPath.equals(RuleFields.CONDITIONS)
-                        || fieldPath.startsWith(RuleFields.CONDITIONS + ".")) ? owner.draftPath(fieldPath) : fieldPath;
-                return openConditionTree(owner, path);
-            }
-
-            @Override
             public TypeRegistry<ConditionType<?>> registry() {
                 return base.registry();
             }
         };
     }
 
-    void editConditionLeaf(ConditionNode.Leaf leaf) {
-        for (FormView form : pages.liveForms) {
-            if (RuleEditorPageSupport.findTree(form, leaf) != null) {
-                openLeafEditor(form, leaf);
-                return;
+    // 宿主协调：打开前提交原宿主输入，正常关闭刷新原宿主并通知，作用域失效只丢弃旧视图
+    ConditionHostCoordination conditionHostCoordination(FormView host) {
+        return new ConditionHostCoordination() {
+            @Override
+            public void prepareHost() {
+                host.commitPendingInputs();
             }
-        }
-    }
 
-    void openLeafEditor(FormView owner, ConditionNode.Leaf leaf) {
-        openLeafEditor(owner, leaf, null);
-    }
-
-    void openLeafEditor(FormView owner, ConditionNode.Leaf leaf, @Nullable String fieldPath) {
-        EditSession session = pages.host.session();
-        if (session == null) {
-            return;
-        }
-        UiConditionTreeSummary tree = RuleEditorPageSupport.findTree(owner, leaf);
-        String base = tree != null && tree.selectedPath() != null ? tree.selectedPath() : RuleFields.CONDITIONS;
-        String conditionSuffix = "." + RuleFields.CONDITION;
-        String path = owner.draftPath(base.endsWith(conditionSuffix) ? base : DraftPaths.child(base, RuleFields.CONDITION));
-        // 先写入新建的树节点，叶参数表单才有可读取的草稿路径。
-        owner.applyToDraft();
-        ConditionTreeOverlay.Parameters parameters = createLeafParameters(session, path, leaf);
-        FormView form = parameters.form();
-        LeafPanel panel = parameters.panel();
-        UiModal modal = UiModal.create(RuleEditorEditPages.THEME, pages.font).title(parameters.title());
-        int contentHeight = Math.clamp(panel.contentHeight() + 8, 36, 220);
-        modal.contentWidget(panel, contentHeight);
-        modal.onClosed(() -> {
-            RuleValue current = session.draft().valueAt(path);
-            if (current != null && current.isMapping()
-                    && leaf.condition().type().toString().equals(RuleEditorPageSupport.stringField(current, RuleFields.TYPE))) {
-                form.commitPendingInputs();
+            @Override
+            public void closeView(ConditionTreeOverlay view) {
+                view.unmount();
+                host.reload();
                 pages.host.onDraftChanged();
             }
-            panel.unmount();
-        });
-        modal.onHistoryChanged(shortcut -> {
-            String operation = shortcut == com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut.UNDO
-                    ? session.redoOpKey() : session.undoOpKey();
-            if (!EditSession.OP_SET_FIELD.equals(operation) && !EditSession.OP_SET_SOURCE.equals(operation)) {
-                // 结构恢复可能把同类型邻居放回原路径，关闭独立参数弹窗避免错误重绑。
-                modal.onClosed(panel::unmount);
-                pages.host.modals().close(modal);
-                return;
+
+            @Override
+            public void discardView(ConditionTreeOverlay view) {
+                view.discardView();
             }
-            RuleValue current = session.draft().valueAt(path);
-            if (current != null && current.isMapping()
-                    && leaf.condition().type().toString().equals(RuleEditorPageSupport.stringField(current, RuleFields.TYPE))) {
-                panel.reload();
-            } else {
-                pages.host.modals().close(modal);
+        };
+    }
+
+    /**
+     * 条件编辑上下文工厂：以实际条件字段的绝对路径与所属对象路径创建局部目标，
+     * 宿主生命周期仍由原宿主表单调配。
+     *
+     * @param host 发起编辑的原宿主表单
+     * @return 该表单的条件编辑上下文工厂
+     */
+    ConditionEditContextFactory conditionContextFactory(FormView host) {
+        ConditionHostCoordination coordination = conditionHostCoordination(host);
+        return (scope, ownerPath) -> new ConditionEditContext() {
+            @Override
+            public String scope() {
+                return scope;
             }
-        });
-        pages.leafPanels.add(new RuleEditorEditPages.LeafEntry(modal, panel));
-        modal.retainOnConfirm(true);
-        modal.confirm(Component.translatable(RuleEditorPageSupport.UI + "button.confirm"), () -> {
-            form.pendingInputIssue();
-            FormIssue issue = form.issues().stream().filter(FormIssue::blocking).findFirst().orElse(null);
-            if (issue != null) {
-                Component message = Component.translatable(RuleEditorPageSupport.UI + "notice.issue", issue.label(), issue.message());
-                modal.message(message);
-                modal.layoutCentered(pages.host.screenWidth(), pages.host.screenHeight());
-                panel.focusField(issue.path());
-                return;
+
+            @Override
+            public String ownerPath() {
+                return ownerPath;
             }
-            form.commitPendingInputs();
-            owner.reload();
-            pages.host.onDraftChanged();
-            pages.host.modals().closeTop();
-        });
-        modal.cancel(Component.translatable(RuleEditorPageSupport.UI + "button.cancel"));
-        modal.layoutCentered(pages.host.screenWidth(), pages.host.screenHeight());
-        pages.host.modals().push(modal);
-        if (fieldPath != null) panel.focusField(fieldPath);
+
+            @Override
+            public @Nullable String absolutePath(String treePath) {
+                String root = ConditionTreeContract.ROOT_PATH;
+                // 只接受完整段边界：根本身，或根后接点分隔的后继；拒绝 conditionsExtra 这类相似前缀
+                if (!treePath.equals(root) && !treePath.startsWith(root + ".")) return null;
+                return scope + treePath.substring(root.length());
+            }
+
+            @Override
+            public boolean open(@Nullable String treePath) {
+                // null 是显式「只打开作用域画布」；非空坐标转换失败则不开画布，也不提交原宿主输入
+                if (treePath == null) return openConditionTree(coordination, scope, ownerPath, null);
+                String absolute = absolutePath(treePath);
+                if (absolute == null) return false;
+                return openConditionTree(coordination, scope, ownerPath, absolute);
+            }
+        };
     }
 
     ConditionTreeOverlay.Parameters createLeafParameters(EditSession session, String path, ConditionNode.Leaf leaf) {
@@ -255,7 +219,8 @@ final class RuleEditorTriggerPage {
         RuleEditorPageSupport.PresenceLeaf presence = catalystLeaf ? pages.ruleEditorInputPage.findPresenceLeaf(path) : null;
         FormView form = new FormView(pages.font, session, path);
         form.useCatalogSelections();
-        form.setConditionSupport(pageConditionSupport(form));
+        form.setConditionEditingSupport(sharedConditionSupport());
+        form.setConditionContextFactory(conditionContextFactory(form));
         form.setSuggestionProvider(pages.host.suggestions());
         form.setOnChanged(() -> {
             form.applyToDraft();
@@ -308,14 +273,28 @@ final class RuleEditorTriggerPage {
         }
     }
 
-    boolean openConditionTree(FormView owner, @Nullable String fieldPath) {
+    boolean openConditionTree(ConditionHostCoordination coordination, String scope, String ownerPath,
+                              @Nullable String fieldPath) {
         EditSession session = pages.host.session();
         if (session == null || pages.host.rejectWhenFrozen()) return false;
-        owner.commitPendingInputs();
-        String scope = owner.draftPath(RuleFields.CONDITIONS);
+        coordination.prepareHost();
         RuleValue owners = RuleEditorPageSupport.conditionOwnerShape(session.draft().root());
-        ConditionTreeOverlay overlay = new ConditionTreeOverlay(pages.font, session, scope, pageConditionSupport(owner),
-                (path, leaf) -> createLeafParameters(session, path, leaf), pages.host::onDraftChanged);
+        ConditionTreeOverlay overlay = new ConditionTreeOverlay(pages.font, session, scope, sharedConditionSupport(),
+                new ConditionTreeOverlay.ParameterFactory() {
+                    @Override
+                    public ConditionTreeOverlay.Parameters create(String path, ConditionNode.Leaf leaf) {
+                        return createLeafParameters(session, path, leaf);
+                    }
+
+                    // 参数承载能力按现役描述符与绑定引用判定：不构建面板，也不写草稿
+                    @Override
+                    public boolean carriesField(String conditionPath, ConditionNode.Leaf leaf, String fieldPath) {
+                        if (leaf.condition() == null) return false;
+                        TypeEditorDescriptor descriptor = ConditionEditorRegistry.descriptorFor(leaf.condition().type());
+                        return RuleEditorPanelFactory.carriesField(descriptor.fields(), conditionPath, fieldPath,
+                                field -> pages.ruleEditorInputPage.quantityReferences(session, conditionPath, field));
+                    }
+                }, pages.host::onDraftChanged);
         int chromeReserve = THEME.headerHeight() + THEME.padding() * 3 + UiModal.BUTTON_HEIGHT;
         UiModal modal = UiModal.create(RuleEditorEditPages.THEME, pages.font).title(Component.translatable(RuleEditorPageSupport.UI + "tree.title"))
                 .preferredWidth(Math.max(UiModal.MIN_WIDTH, pages.host.screenWidth() - RuleEditorPageSupport.TREE_OVERLAY_MARGIN))
@@ -324,15 +303,10 @@ final class RuleEditorTriggerPage {
         overlay.setHistoryActions(
                 () -> pages.host.modals().requestHistory(com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut.UNDO),
                 () -> pages.host.modals().requestHistory(com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut.REDO));
-        modal.onClosed(() -> {
-            overlay.unmount();
-            owner.reload();
-            pages.host.onDraftChanged();
-        });
+        modal.onClosed(() -> coordination.closeView(overlay));
         modal.onHistoryChanged(shortcut -> {
             String operation = shortcut == com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut.UNDO
                     ? session.redoOpKey() : session.undoOpKey();
-            String ownerPath = scope.substring(0, Math.max(0, scope.length() - RuleFields.CONDITIONS.length() - 1));
             boolean outerStructure = operation != null && switch (operation) {
                 case EditSession.OP_ADD_EFFECT, EditSession.OP_REMOVE_EFFECT, EditSession.OP_MOVE_EFFECT,
                         EditSession.OP_ADD_CANDIDATE, EditSession.OP_REMOVE_CANDIDATE, EditSession.OP_MOVE_CANDIDATE,
@@ -342,7 +316,7 @@ final class RuleEditorTriggerPage {
             };
             if (!ownerPath.isEmpty() && (outerStructure || session.draft().valueAt(ownerPath) == null
                     || !owners.equals(RuleEditorPageSupport.conditionOwnerShape(session.draft().root())))) {
-                modal.onClosed(overlay::discardView);
+                modal.onClosed(() -> coordination.discardView(overlay));
                 pages.host.modals().close(modal);
             } else overlay.historyChanged();
         });

@@ -14,6 +14,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiIconStrip;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeCodec;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreePath;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiFlatSkin;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
@@ -95,6 +96,22 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     @FunctionalInterface
     public interface ParameterFactory {
         Parameters create(String conditionPath, ConditionNode.Leaf leaf);
+
+        /**
+         * 该叶的现役参数表单是否承载这个参数字段路径。
+         *
+         * <p>判定必须无副作用：只按描述符与现役绑定核对，不构建参数面板，不写草稿。字段可以有
+         * 合法缺省值（如催化剂门槛省略），因此只看现役字段是否承载该路径，不看草稿里是否已有该值。
+         * 默认返回 {@code false}，表示无法确认时按退化处理：只打开正确的树，不聚焦。</p>
+         *
+         * @param conditionPath 叶参数在草稿中的绝对路径
+         * @param leaf          目标条件叶
+         * @param fieldPath     待定位的参数字段绝对路径
+         * @return 现役参数表单承载该字段时为 {@code true}
+         */
+        default boolean carriesField(String conditionPath, ConditionNode.Leaf leaf, String fieldPath) {
+            return false;
+        }
     }
 
     // 外壳内的焦点区域：Tab / Shift+Tab 在可用区域之间环绕
@@ -145,7 +162,17 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     private boolean focused;
     private long revision;
 
-    public ConditionTreeOverlay(Font font, EditSession session, String scope, ConditionSupport support,
+    /**
+     * 创建条件画布叠加视图。
+     *
+     * @param font             渲染字体
+     * @param session          草稿会话
+     * @param scope            本视图对应的条件树绝对草稿作用域
+     * @param support          共享的条件定义与按场景创建能力
+     * @param parameterFactory 叶参数表单工厂
+     * @param changed          草稿发生变化时的通知
+     */
+    public ConditionTreeOverlay(Font font, EditSession session, String scope, ConditionEditingSupport support,
                                 ParameterFactory parameterFactory, Runnable changed) {
         this.font = font;
         this.session = session;
@@ -460,15 +487,125 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         source.setFocused(false);
     }
 
+    /**
+     * 按草稿路径定位到本树内的节点或其参数字段。
+     *
+     * <p>路径必须是本作用域下的完整节点前缀，可选再接一段参数字段后缀。节点前缀按结构语法
+     * 严格拆解（{@code .terms[i]} / {@code .term}），并用
+     * {@link ConditionTreeNodes#jsonPath(ConditionNode, UiTreePath, String)} 回渲染核对，
+     * 确保前缀确实对应当前树中的结构；参数字段后缀必须由现役参数表单承载。</p>
+     *
+     * <p>任一步不成立时都只把焦点交给画布：不选中根、祖先或邻居，不创建参数视图，
+     * 也不聚焦失效位置。纯节点定位与未知叶只读展示保持原有语义。</p>
+     *
+     * @param fieldPath 草稿中的绝对路径
+     */
     public void reveal(String fieldPath) {
         sourceView = false;
         source.setFocused(false);
-        editor.selectPath(ConditionTreeContract.ROOT_PATH + fieldPath.substring(scope.length()));
+        String[] split = splitNodePath(fieldPath);
+        if (split == null) {
+            setFocusSlot(FocusSlot.CANVAS);
+            return;
+        }
+        String nodePath = split[0];
+        String parameterSuffix = split[1];
+        UiTreePath treePath = ConditionTreeNodes.path(nodePath);
+        if (treePath == null || !ConditionTreeNodes.jsonPath(editor.expression().root(), treePath,
+                ConditionTreeContract.ROOT_PATH).equals(nodePath)) {
+            // 结构回渲染与本路径不一致：路径语义与当前树不符，退化为只打开树
+            setFocusSlot(FocusSlot.CANVAS);
+            return;
+        }
+        ConditionNode node = editor.tree().query(treePath);
+        if (node == null) {
+            // 本树中已无该节点（结构已变化）：只打开正确的树，不选祖先或邻居
+            setFocusSlot(FocusSlot.CANVAS);
+            return;
+        }
+        if (parameterSuffix == null) {
+            // 纯节点定位：结构已确认，直接选中该节点
+            editor.selectPath(nodePath);
+            syncSelection(true);
+            setFocusSlot(FocusSlot.CANVAS);
+            return;
+        }
+        ConditionNode.Leaf leaf = editableLeaf(node);
+        if (leaf == null) {
+            // 未知/只读叶没有参数表单：不选中节点、不聚焦参数，只打开树
+            setFocusSlot(FocusSlot.CANVAS);
+            return;
+        }
+        String parameterPath = parameterPathOf(nodePath);
+        // 「.condition」本身指向参数对象：选中节点并展开参数；更深的字段必须由现役表单承载才聚焦
+        boolean parameterItself = parameterSuffix.equals("." + RuleFields.CONDITION);
+        if (!parameterItself && !parameterFactory.carriesField(parameterPath, leaf, fieldPath)) {
+            // 失效或不存在参数字段：只打开树，不选中节点、不创建参数视图
+            setFocusSlot(FocusSlot.CANVAS);
+            return;
+        }
+        editor.selectPath(nodePath);
         syncSelection(true);
         setFocusSlot(FocusSlot.CANVAS);
-        if (parameters != null) {
+        if (!parameterItself && parameters != null) {
             parameters.panel().focusField(fieldPath);
         }
+    }
+
+    // 参数表单在草稿中的绝对基路径：节点路径映射回绝对坐标后接条件对象字段
+    private String parameterPathOf(String nodePath) {
+        return scope + nodePath.substring(ConditionTreeContract.ROOT_PATH.length()) + "." + RuleFields.CONDITION;
+    }
+
+    // 拆出「完整节点前缀 + 可选参数字段后缀」：结构语法不合法或节点后还有尾随字符时返回 null。
+    // 后缀以「.condition」开头时才是参数字段，其余未知后缀一律判不合法，避免截成祖先节点
+    private @Nullable String[] splitNodePath(String fieldPath) {
+        if (fieldPath == null || !(fieldPath.equals(scope) || fieldPath.startsWith(scope + "."))) {
+            return null;
+        }
+        String relative = ConditionTreeContract.ROOT_PATH + fieldPath.substring(scope.length());
+        int cursor = ConditionTreeContract.ROOT_PATH.length();
+        while (cursor < relative.length() && relative.charAt(cursor) == '.') {
+            // 结构段至此结束：其余后缀交给参数判定，不能在这里当成未知结构
+            if (relative.startsWith("." + RuleFields.CONDITION, cursor)) {
+                break;
+            }
+            if (relative.startsWith("." + RuleFields.TERMS + "[", cursor)) {
+                int close = relative.indexOf(']', cursor);
+                if (close < 0 || close == cursor + RuleFields.TERMS.length() + 1) {
+                    return null;
+                }
+                String digits = relative.substring(cursor + RuleFields.TERMS.length() + 2, close);
+                try {
+                    if (Integer.parseInt(digits) < 0) return null;
+                } catch (NumberFormatException invalid) {
+                    return null;
+                }
+                cursor = close + 1;
+            } else if (relative.startsWith("." + RuleFields.TERM, cursor)) {
+                int after = cursor + 1 + RuleFields.TERM.length();
+                if (after >= relative.length()) {
+                    cursor = after;
+                    break;
+                }
+                // 必须正好是 term 段：后面是另一个「.」；.termX 这类相似前缀不合法
+                if (relative.charAt(after) != '.') {
+                    return null;
+                }
+                cursor = after;
+            } else {
+                return null;
+            }
+        }
+        if (cursor >= relative.length()) {
+            return new String[]{relative, null};
+        }
+        String suffix = relative.substring(cursor);
+        // 参数字段后缀必须以「.condition」开头；其余未知后缀（conditions.garbage）判不合法
+        if (!suffix.startsWith("." + RuleFields.CONDITION)) {
+            return null;
+        }
+        return new String[]{relative.substring(0, cursor), suffix};
     }
 
     // ---- 布局 ----

@@ -31,7 +31,9 @@
 - 无根表达式继续省略 `conditions`，表示无条件限制；空组合和缺项 NOT 是未完成草稿，表单及规则保存前的结构校验均拦截。服务端的正式 `RuleCodecs` 和运行时求值保持既有严格契约。
 - 条件叶行按「条件名（参数摘要）」展示：条件名取宿主注入的类型选项标签，缺省回退 `TypeLabels.conditionLabel`，参数摘要复用 `NaturalSummary.conditionParams`；摘要仅用于显示，不写入配置。截断行可悬停查看全文，叶参数确认并重载表单后同步更新。行首展开 / 收起标记是 1 像素扫描线拼出的像素三角（▼ 已展开、▶ 已收起，与 `UiTreeView` 的树标记同形），层级用 1 像素竖线引导；缩进宽度、行高与标记命中范围由 `UiConditionTreeSummary` 的常量固定。
 - 条件树的完整树扫描由 `ConditionTreeInspection` 承担，独立于可见行投影，节点数、叶数、深度和结构问题不受折叠影响。树实例或摘要格式器变化才重新扫描，布局和折叠复用结果；错误子树的祖先行使用错误颜色。
-- `FormView.revealPath` 将树内的节点或参数字段路径交给条件控件；定位展开祖先、选中并滚动到节点。问题定位链路按现状为 `FormView.revealPath` → `FormControl.revealPath(path, basePath)` → `ConditionSupport.openTree(tree, fieldPath)` → `RuleEditorTriggerPage.openConditionTree(owner, fieldPath)` → `ConditionTreeOverlay.reveal(fieldPath)`，摘要节点点击也携带节点路径，经所属表单补齐作用域后进入画布并展开已知叶的参数框。已知条件的参数字段问题通过 `ConditionSupport.revealLeaf` 打开叶参数弹窗并聚焦字段；未知叶保留局部只读。表单问题保留具体树路径及带实际限额的提示，正式保存拦截不依赖展开状态。
+- 条件字段绑定**局部编辑上下文**：每个条件树控件由所在表单按自己的字段路径创建上下文（`FormView#conditionContext(EditorField)` → `ConditionEditContextFactory#create(scope, ownerPath)`），`scope` 是该条件字段的绝对草稿路径，`ownerPath` 是字段所属对象的绝对路径。上下文负责把树内相对节点坐标转成绝对草稿路径并打开画布，条件树摘要与画布因此只面对当前这一个目标，不持有全局登记或第二份草稿。
+- 问题定位链路为 `FormView.revealPath` → `FormControl.revealPath(path, basePath)` → `ConditionTreeControl.revealPath`（按字段段边界确认归属、把绝对路径转成以 `ConditionTreeContract.ROOT_PATH` 为根的树内坐标）→ `ConditionEditContext#open(treePath)` → `RuleEditorTriggerPage.openConditionTree(coordination, scope, ownerPath, fieldPath)` → `ConditionTreeOverlay#reveal(fieldPath)`。同一路径既有摘要点击（相对坐标）也有问题定位（绝对路径）两个来源，摘要直接提供树内坐标，问题入口先将绝对路径转为树内坐标；上下文在打开边界将其映射回绝对草稿路径，`ConditionTreeOverlay#reveal` 再按自己的作用域解析节点位置。
+- 画布内的定位严格区分「完整节点」与「可选参数字段后缀」：节点路径经当前树规范回渲染必须完全相等才选中该节点；参数字段还须由现役描述符承载（含气候区间端点与数量字段的现役引用条目）才聚焦。无法唯一归属或越出条件字段范围的请求（如 `conditionsExtra`）返回未处理，不打开画布、不提交宿主输入。树已确定但越界下标、未知后缀（如 `terms[0]foo`）或参数位置失效时，只打开该树，不选中根或祖先，并把焦点交给画布；未知叶保留局部只读。表单问题保留具体树路径及带实际限额的提示，正式保存拦截不依赖展开状态。
 
 ## 2. 存在条件：唯一入口在输入页
 
@@ -61,7 +63,7 @@
 | 3 | 方案内行为 `outcomes[j].effects[k].conditions` | `rule.presence.scope_effect`（「方案 %s · 行为 %s」） |
 
 - 编号按类型各自递增（`counters.merge(type, 1, Integer::sum)`）；标题行 = `rule.presence.title`（「类型 编号 · 作用域」，由 `presenceHeader` 生成）。
-- 输入页与触发页、叶弹窗标题**共用同一份扫描结果**（`ruleLevelPresence`、`findPresenceLeaf`），因此同一类型第 N 项在两侧是同一个编号。
+- 输入页标题与画布参数工厂的标题元数据共用同一份扫描结果（`ruleLevelPresence`、`findPresenceLeaf`），同一类型第 N 项的编号来源一致；画布内联参数框当前不绘制该标题。
 - 草稿与页面表单的主要路径构造共用 `client/edit/DraftPaths`：字段子路径用 `DraftPaths#child`、数组元素路径用 `DraftPaths#indexPath`。`UiConditionTreeSummary` 的树内路径与 `ConditionTreeOverlay` 的作用域映射仍由各自构造；路径前后缀判定属于消费逻辑，不是构造接口。界面层只调用不含 Gson 类型的路径方法，读写方法留在 `client/edit`；数组重排后的路径由调用方按当前结构更新，`DraftPaths#render` 仅渲染已有路径段。
 
 ## 4. 输入↔触发按确切叶路径关联（契约）
@@ -70,10 +72,10 @@
 
 1. 输入页只呈现**规则级**叶（`ruleLevelPresence` 过滤 `leaf.ruleLevel()`）；行为局部叶不在此列出，只在触发页条件树里编辑。
 2. 触发页**不新增类型副本**：`buildTrigger` 只建触发原因勾选框、触发时间表单与条件树；叶结构未变，新增与结构编辑经画布 `UiConditionGraphEditor`，卡片内的 `UiConditionTreeSummary` 只呈现树干与叶条件名，叶的增删/取反/组合操作不变。
-3. 叶参数编辑入口：`pageConditionSupport(owner)` → `openLeafEditor(owner, leaf)`。弹窗以**发起编辑的那个表单**为 owner：`editConditionLeaf` 在 `liveForms` 里用 `findTree(form, leaf)` 找到承载该叶的表单，路径取该树的 `selectedPath()`。同名同类型的多个叶各绑各的路径，**不会误绑**。
-4. 弹窗标题带类型编号与作用域；催化剂叶显示所有引用均需达标的说明，流体叶显示任一种即可匹配的说明。
-5. 确认时只写回该叶自己的路径：`form.applyToDraft()` 后 `owner.reload()` 刷新发起编辑的表单，再由 `host.onDraftChanged()` 通知宿主。逐项编辑**不改变组合结构**，也**不会把行为局部条件提升到规则级**。
-6. 实现细节：叶弹窗内的目录选择、区间条与事件转发由 `RuleEditorPanelFactory#leafPanel(...)` 承载（`basePath` 即叶参数在草稿中的路径）；门槛说明行经 `LeafPanel#addNote` 注入；校验失败时 `focusField(issue.path())` 把焦点定位到问题字段。
+3. 叶参数编辑无独立弹窗：条件树是唯一编辑入口，叶参数由 `ConditionTreeOverlay` 内联的 `LeafPanel` 承载，参数表单的 `basePath` 由画布作用域与当前节点路径直接算出（`createLeafParameters`），不同叶按各自路径绑定，不通过叶对象反查宿主表单。路径定位不提供跨任意外部替换的稳定身份保证。
+4. 参数工厂保留类型编号与作用域的标题元数据，内联框当前不绘制标题；催化剂叶显示所有引用均需达标的说明，流体叶显示任一种即可匹配的说明。
+5. 内联参数完成输入时，`finishParameters` 仅在当前参数对象类型仍匹配时提交待处理输入，有真实变化才通知草稿变化。正常关闭整张画布按 `unmount` → 原宿主 `reload` → 变化通知的顺序处理；历史失效走丢弃分支，不提交旧参数。逐项参数编辑不改变组合结构，也不把行为局部条件提升到规则级。
+6. 实现细节：内联参数框内的目录选择、区间条与事件转发由 `RuleEditorPanelFactory#leafPanel(...)` 承载（`basePath` 即叶参数在草稿中的路径）；门槛说明行经 `LeafPanel#addNote` 注入；校验失败时 `focusField(issue.path())` 把焦点定位到问题字段。
 
 ### 4.1 生物群系参数与范围控件
 
@@ -93,7 +95,7 @@
 
 ## 6. 数量展示与运行期同源
 
-- `ItemCountsControl` 复用 `NumberControl`，按引用逐行显示物品图标与名称、数量滑条与精确输入；行首图标列与名称列按全场最宽名称统一宽度，滑条起止上下对齐；输入页和条件叶弹窗共用该控件。
+- `ItemCountsControl` 复用 `NumberControl`，按引用逐行显示物品图标与名称、数量滑条与精确输入；行首图标列与名称列按全场最宽名称统一宽度，滑条起止上下对齐；输入页和条件叶参数表单共用该控件。
 - 催化剂门槛统一称「最低触发数量」，消耗区称「每轮消耗数量」；GUI 搜索半径使用默认 1，不提供自定义入口。
 - 显式 `counts` 优先，缺省引用采用显式 `count`；门槛均缺省时，`quantityDefaults` 解码完整草稿并调用 `CatalystThresholdProjection.resolveThreshold` 按引用展示有效门槛。未编辑时保留原字段缺失状态。
 - 草稿未能解码时展示显式 `count` 或默认 1；作用域按确切条件路径解析，不把不同候选结果或效果的消耗参数混用。
@@ -104,15 +106,15 @@
 - 所有草稿修改必须走 `EditSession.apply(opKey, change)`：记录前深拷贝快照 → 只有真变化（含删除标记与目标级标记）才压栈 → 清空重做栈。撤销/重做是整份草稿快照置换；历史上限 100（`EditSession.HISTORY_LIMIT`）。
 - 因此「勾选/取消存在条件」「逐项移除一个叶」「类型改写 + 重指向」各自是**一条**撤销记录。
 - 输入缓冲独立于已接受的规则 JSON，切页、重载和返回保留未完成文本；非法或缺失必需输入阻止保存，具体生命周期与结构操作路径同步见 [编辑输入状态](editor-input-state.md)。
-- 撤销粒度是**字段级**：`FormView.applyToDraft()` 逐字段比较，每个真实变化的字段单独 `session.apply`。所以叶弹窗里改了多个字段 → 需要多次撤销；**弹窗确认本身不是一条记录**。
+- 撤销粒度是**字段级**：`FormView.applyToDraft()` 逐字段比较，每个真实变化的字段单独 `session.apply`。所以内联参数框里改了多个字段 → 需要多次撤销；**参数确认本身不是一条记录**。
 - 空父组自下而上整理（`removeLeafAt` 在 `RuleEditorInputPage`，`isEmptyGroup` 在 `RuleEditorPageSupport`）：`all_of` / `any_of` 看 `terms`、`inverted` 看 `term`；空组连父一起删，但**不改变 `any_of` / `inverted` 的结构语义**。
 - 保存走既有编辑保存协议，见 [edit-save-protocol](../backend/flows/edit-save-protocol.md)。编辑页在保存前调用客户端校验 `RuleEditorValidation.collectIssues()`；命中问题时按 `issueRuleId` 先打开所属规则、再按原字段路径定位，服务端校验仍是权威。
 - 新建及复制成功后清空操作提示，不显示「已创建规则」；错误与应用结果仍由原有提示区显示。
 
 ## 8. 已知限制
 
-- 条件树**叶行本身不显示编号**：编号只在输入页存在条件标题行与叶弹窗标题（`UiConditionTreeSummary` 内没有 presence / ordinal / scope 相关代码）。
-- 输入页只列**规则级**存在叶；行为局部存在叶只能在触发页的条件树里逐叶进入弹窗编辑。
+- 条件树叶行与画布内联参数框不显示编号：编号显示在输入页存在条件标题行；参数工厂保留标题元数据，但内联框不绘制（`UiConditionTreeSummary` 内没有 presence / ordinal / scope 相关代码）。
+- 输入页只列**规则级**存在叶；行为局部存在叶只能在触发页的条件树里逐叶进入画布编辑参数。
 - 显示名/备注一次性粘贴超过「2×码点上限」的纯补充平面字符（如 emoji）时，可能被原版 `EditBox` 的 UTF-16 单元上限静默截断到恰好上限而不弹超限提示；逐字符键入与常规粘贴不受影响（上限判定本身仍按码点，见 [文本控件](ui-kit/text-controls.md)）。
 - 流体多选不会自动改写独立移除行为的目标；单选只重指向未指定类型或与原单值相同的行为。
 - 缩进摘要点击节点会打开画布、定位该节点，并自动展开已知条件叶的参数框；未知叶保持只读，容器不展开参数。工具栏入口打开整树默认视图。
@@ -142,7 +144,7 @@
 
 ## 11. 条件树画布页
 
-条件卡片显示当前条件摘要，通过「编辑条件树」进入**整页画布页**（`ConditionTreeOverlay`，由 `UiModal` 承载）。`ConditionSupport.openTree` 由 `RuleEditorTriggerPage` 提供，范围来自表单的 `draftPath(conditions)`，规则级与行为局部共用同一条路径；条件编辑不要求整条规则已填完整。
+条件卡片显示当前条件摘要，通过「编辑条件树」进入**整页画布页**（`ConditionTreeOverlay`，由 `UiModal` 承载）。画布范围由每个条件控件自己的局部编辑上下文给出（`ConditionEditContext#scope`），规则级与行为局部各自按实际条件字段路径装配；条件编辑不要求整条规则已填完整。
 
 **实现职责**：画布组件均位于 `client.ui.widget`；宿主仍通过 `UiConditionGraphEditor` 与其 `InlineEditor` 契约接入。
 

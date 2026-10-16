@@ -13,7 +13,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.CatalogSuggestions;
-import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionSupport;
+import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionEditingSupport;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.SuggestionProvider;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
@@ -25,7 +25,6 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiTypePicker;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModalStack;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiSegmentedControl;
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
-import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleIssue;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveStatus;
@@ -33,7 +32,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.function.Consumer;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -206,8 +204,8 @@ final class RuleEditorScreenEditPage {
         }
 
         @Override
-        public ConditionSupport conditionSupport() {
-            return pageConditionSupport();
+        public ConditionEditingSupport conditionEditingSupport() {
+            return buildConditionEditingSupport();
         }
 
         @Override
@@ -736,9 +734,9 @@ final class RuleEditorScreenEditPage {
         return catalogSuggestions == null ? field -> List.of() : catalogSuggestions;
     }
 
-    // 条件树宿主能力（页签与效果级条件共用）
-    private ConditionSupport pageConditionSupport() {
-        return new ConditionSupport() {
+    // 条件树的共享定义能力（类型清单、按场景创建、解码注册表）：页签与效果级条件共用，不捕获表单或导航状态
+    private ConditionEditingSupport buildConditionEditingSupport() {
+        return new ConditionEditingSupport() {
             @Override
             public List<ConditionTreeContract.TypeOption> typeOptions() {
                 List<ConditionTreeContract.TypeOption> options = new ArrayList<>();
@@ -751,16 +749,6 @@ final class RuleEditorScreenEditPage {
             @Override
             public ConditionTreeContract.LeafFactory leafFactory() {
                 return ClientTypeRegistries::leafNode;
-            }
-
-            @Override
-            public Consumer<ConditionNode.Leaf> onEditLeaf() {
-                // 叶参数编辑由四页编辑流程自己实现（它知道发起编辑的那个表单实例）
-                return leaf -> {
-                    if (pages != null) {
-                        pages.editConditionLeaf(leaf);
-                    }
-                };
             }
 
             @Override

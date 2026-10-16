@@ -103,21 +103,35 @@ final class RuleEditorInputPage {
 
     void configureQuantityFields(FormView form, EditSession session, String basePath,
                                          TypeEditorDescriptor descriptor) {
-        RuleValue owner = basePath.isEmpty() ? session.draft().root() : session.draft().valueAt(basePath);
-        if (owner == null || !owner.isMapping()) {
-            owner = RuleValue.mapping().build();
-        }
         for (EditorField field : descriptor.fields()) {
             if (field.type() != com.meteorite.itemdespawntowhat.client.edit.EditorFieldType.ITEM_COUNTS) continue;
-            boolean source = RuleFields.SOURCE_COST.equals(field.name())
-                    || RuleEditorPageSupport.CONSUME_SOURCE_ID.toString().equals(RuleEditorPageSupport.stringField(owner, RuleFields.TYPE));
             String path = DraftPaths.child(basePath, field.name());
-            List<String> references = source
-                    ? RuleEditorPageSupport.stringList(session.draft().valueAt(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS)))
-                    : RuleEditorPageSupport.stringList(owner.child(RuleFields.CATALYST_ITEMS));
-            form.setItemCountReferences(path, references);
-            form.setRowDefaultValue(path, () -> quantityDefaults(session, basePath, source));
+            form.setItemCountReferences(path, quantityReferences(session, basePath, field));
+            form.setRowDefaultValue(path, () -> quantityDefaults(session, basePath, quantityFromSource(session, basePath, field)));
         }
+    }
+
+    // 物品数量字段的取值来源：来源消耗字段本身，或类型为「消耗来源」的条件对象
+    boolean quantityFromSource(EditSession session, String basePath, EditorField field) {
+        RuleValue owner = ownerAt(session, basePath);
+        return RuleFields.SOURCE_COST.equals(field.name())
+                || RuleEditorPageSupport.CONSUME_SOURCE_ID.toString()
+                .equals(RuleEditorPageSupport.stringField(owner, RuleFields.TYPE));
+    }
+
+    // 物品数量字段当前绑定的引用条目：与参数表单装配使用同一份读取，避免出现第二份推导
+    List<String> quantityReferences(EditSession session, String basePath, EditorField field) {
+        if (quantityFromSource(session, basePath, field)) {
+            return RuleEditorPageSupport.stringList(session.draft()
+                    .valueAt(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS)));
+        }
+        return RuleEditorPageSupport.stringList(ownerAt(session, basePath).child(RuleFields.CATALYST_ITEMS));
+    }
+
+    // 字段所属对象；缺失或非映射时按空对象处理，读取引用与默认值都只看存在的条目
+    private RuleValue ownerAt(EditSession session, String basePath) {
+        RuleValue owner = basePath.isEmpty() ? session.draft().root() : session.draft().valueAt(basePath);
+        return owner == null || !owner.isMapping() ? RuleValue.mapping().build() : owner;
     }
 
     RuleValue quantityDefaults(EditSession session, String basePath, boolean source) {

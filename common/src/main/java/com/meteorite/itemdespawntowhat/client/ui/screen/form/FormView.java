@@ -113,7 +113,8 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         for (FormRow row : rows) { row.pickers.clear(); addPickers(row); }
         return this;
     }
-    private @Nullable ConditionSupport conditionSupport;
+    private @Nullable ConditionEditingSupport conditionEditingSupport;
+    private @Nullable ConditionEditContextFactory conditionContextFactory;
     private @Nullable Runnable changeListener;
     @Nullable BiConsumer<String, RuleValue> fieldWritten;
 
@@ -410,14 +411,37 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         return this;
     }
 
-    public FormView setConditionSupport(@Nullable ConditionSupport support) {
-        this.conditionSupport = support;
+    /**
+     * 装配条件编辑的共享定义能力（类型清单、按场景创建、解码注册表）。
+     *
+     * @param support 共享定义能力，null 时条件树控件只读回退
+     * @return 当前表单
+     */
+    public FormView setConditionEditingSupport(@Nullable ConditionEditingSupport support) {
+        this.conditionEditingSupport = support;
         return this;
     }
 
-    // 条件树控件所用的宿主能力（可为空，为空时条件字段只读回退）
-    @Nullable ConditionSupport conditionSupport() {
-        return conditionSupport;
+    /**
+     * 装配条件编辑上下文的工厂：按实际字段路径与所属对象路径创建局部目标上下文。
+     *
+     * @param factory 上下文工厂，null 时不提供条件画布入口
+     * @return 当前表单
+     */
+    public FormView setConditionContextFactory(@Nullable ConditionEditContextFactory factory) {
+        this.conditionContextFactory = factory;
+        return this;
+    }
+
+    // 条件树控件所用的共享定义能力（可为空，为空时条件字段只读回退）
+    @Nullable ConditionEditingSupport conditionEditingSupport() {
+        return conditionEditingSupport;
+    }
+
+    // 为实际条件字段创建局部上下文：字段路径取自与本行相同的 pathFor，所属对象由本表单基路径显式给出
+    @Nullable ConditionEditContext conditionContext(EditorField field) {
+        if (conditionContextFactory == null) return null;
+        return conditionContextFactory.create(pathFor(field), basePath);
     }
 
     public FormView setLabelWidth(int width) {
@@ -528,7 +552,8 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         FormView child = new FormView(font, session, childPath(relativePath));
         if (catalogSelections) child.useCatalogSelections();
         child.setSuggestionProvider(suggestionProvider);
-        child.setConditionSupport(conditionSupport);
+        child.setConditionEditingSupport(conditionEditingSupport);
+        child.setConditionContextFactory(conditionContextFactory);
         child.setSelectionCatalogOpener(catalogOpener);
         child.setLabelWidth(labelWidth);
         child.setOnChanged(this::notifyChanged);
@@ -556,6 +581,17 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         if (row == null || !row.visible) {
             return null;
         }
+        // 条件树行是条件问题的唯一入口：先问控件能否精确落点。无法落点时直接结束，
+        // 不滚动、不高亮，也不退回到本行的打开按钮等通用焦点。
+        // 普通控件保持原有顺序：先滚动高亮，再让控件处理嵌套定位
+        boolean conditionEntry = row.control instanceof ConditionTreeControl;
+        UiFocusTarget nestedTarget = null;
+        if (conditionEntry) {
+            nestedTarget = row.control.revealPath(path, row.path);
+            if (nestedTarget == null) {
+                return null;
+            }
+        }
         if (row.contentY < scrollOffset) {
             scrollOffset = Math.max(0, row.contentY - 2);
         } else if (row.contentY + row.contentHeight > scrollOffset + viewportHeight) {
@@ -565,7 +601,9 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         syncBounds();
         this.highlightPath = row.path;
         this.highlightTicks = HIGHLIGHT_TICKS;
-        UiFocusTarget nestedTarget = row.control.revealPath(path, row.path);
+        if (!conditionEntry) {
+            nestedTarget = row.control.revealPath(path, row.path);
+        }
         if (nestedTarget != null && nestedTarget.canFocus()) return nestedTarget;
         List<UiFocusTarget> targets = new ArrayList<>();
         row.control.addFocusTargets(targets);
@@ -578,19 +616,25 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
     }
 
     // 按问题路径找行：路径可能正好是字段，也可能指向字段下的子项
+    // 归属必须唯一：多行的字段段边界同时匹配同一路径说明描述符不唯一，此时拒绝定位，
+    // 调用方在滚动、高亮与进入控件之前就会收到 null，不会先改动视图状态
     private @Nullable FormRow rowFor(String path) {
         if (path == null || path.isBlank()) {
             return null;
         }
+        FormRow matched = null;
         for (FormRow row : rows) {
             if (row.field.type() == EditorFieldType.NOTE) {
                 continue;
             }
             if (path.equals(row.path) || path.startsWith(row.path + ".")) {
-                return row;
+                if (matched != null) {
+                    return null;
+                }
+                matched = row;
             }
         }
-        return null;
+        return matched;
     }
 
     // Tab 顺序（U 界面把本表登记进 UiFocusManager）

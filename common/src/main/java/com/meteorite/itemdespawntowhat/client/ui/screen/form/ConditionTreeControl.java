@@ -20,6 +20,7 @@ import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -42,12 +43,24 @@ final class ConditionTreeControl extends FormControl {
     private boolean enabled = true;
 
     private final UiConditionTreeSummary editor;
-    private final @Nullable ConditionSupport support;
+    private final @Nullable ConditionEditingSupport support;
+    private final @Nullable Supplier<ConditionEditContext> contextFactory;
     private @Nullable RuleValue fallbackRaw;
 
-    ConditionTreeControl(Font font, EditorField field, @Nullable ConditionSupport support) {
+    /**
+     * 创建条件树摘要控件。
+     *
+     * @param font    渲染字体
+     * @param field   字段描述符
+     * @param support 共享的条件定义能力
+     * @param contextFactory 按当前绑定解析本字段局部编辑上下文的供应器；null 时摘要只读。
+     *                       供应而非固定实例，因为嵌套表单重排后字段的绝对路径会变化
+     */
+    ConditionTreeControl(Font font, EditorField field, @Nullable ConditionEditingSupport support,
+                         @Nullable Supplier<ConditionEditContext> contextFactory) {
         super(field);
         this.support = support;
+        this.contextFactory = contextFactory;
         this.font = font;
         this.editor = new UiConditionTreeSummary(THEME, font);
         this.editor.setTypeOptions(support == null ? List.of() : support.typeOptions());
@@ -64,9 +77,13 @@ final class ConditionTreeControl extends FormControl {
         // 摘要只读：点击节点进入画布（条件树唯一编辑入口），结构与参数都在画布内完成
         this.editor.setOnOpenCanvas(path -> {
             editor.selectPath(path);
-            if (support != null) support.openTree(editor, path);
+            ConditionEditContext context = context();
+            if (context != null) context.open(path);
         });
-        if (support != null) addButton("open", () -> support.openTree(editor, null));
+        if (contextFactory != null) addButton("open", () -> {
+            ConditionEditContext context = context();
+            if (context != null) context.open(null);
+        });
     }
 
     // 条件卡片提供大屏编辑入口。
@@ -259,10 +276,23 @@ final class ConditionTreeControl extends FormControl {
 
     @Override
     @Nullable UiFocusTarget revealPath(String path, String basePath) {
-        if (fallbackRaw != null || !path.startsWith(basePath)) return null;
-        editor.selectPath(ConditionTreeContract.ROOT_PATH + path.substring(basePath.length()));
-        if (support != null && support.openTree(editor, path)) return toolbar.isEmpty() ? null : toolbar.getFirst();
-        return editor;
+        // 归属按字段段边界判定：等于本字段或本字段下的子项；仅字符串前缀相同（conditionsExtra）不算
+        if (fallbackRaw != null || !(path.equals(basePath) || path.startsWith(basePath + "."))) return null;
+        String treePath = ConditionTreeContract.ROOT_PATH + path.substring(basePath.length());
+        ConditionEditContext context = context();
+        if (context == null) {
+            editor.selectPath(treePath);
+            return editor;
+        }
+        // 先尝试打开画布；坐标无效或会话不可用时返回 null，由表单结束定位且不退回通用焦点
+        if (!context.open(treePath)) return null;
+        editor.selectPath(treePath);
+        return toolbar.isEmpty() ? null : toolbar.getFirst();
+    }
+
+    // 每次使用时解析当前绑定，避免嵌套表单重排后仍指向旧绝对路径
+    private @Nullable ConditionEditContext context() {
+        return contextFactory == null ? null : contextFactory.get();
     }
 
     @Override

@@ -9,11 +9,9 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCheckBox;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionTreeSummary;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiListView;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiSegmentedControl;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
@@ -577,20 +575,6 @@ final class RuleEditorPageSupport {
             }
         }
         return types.build();
-    }
-
-    static @Nullable UiConditionTreeSummary findTree(FormView owner, ConditionNode.Leaf leaf) {
-        for (UiFocusTarget target : owner.focusTargets()) {
-            if (target instanceof UiConditionTreeSummary tree && tree.selectedNode() == leaf) {
-                return tree;
-            }
-        }
-        for (UiFocusTarget target : owner.focusTargets()) {
-            if (target instanceof UiConditionTreeSummary tree) {
-                return tree;
-            }
-        }
-        return null;
     }
 
     static String combinationOf(@Nullable RuleValue rule) {
