@@ -12,7 +12,7 @@
 | `ConversionSettlement` | 一次转化的结算任务（计划 → 派发 → 交付），固定成本、完整组、真实账目 | `step`、`plan`、`dispatch`、`deliver`、`abort`、`account`、`capacityGroups` |
 | `CatalystAllocation` | 催化剂共享库存分配 | 按逐引用需求求完整轮次；图构建与搜索可按 tick 预算续跑，输出逐轮支付清单；效果式消耗复用同一有预算分配算法 |
 | `CatalystPaymentExecution` | `consume_catalyst` 效果的跨 tick 付款状态 | 库存采集、共享库存分配、付款清单整理与支付前逐项计费均可续接；扣减前重读完整清单并确认实体仍存活、物品类型、数量和半径，整轮校验后同一主线程步骤内一次扣减 |
-| `EffectTask` | 单效果的预算任务 | 条件与概率仅在任务首次开始时判定；`EffectExecution.advance` 返回 null 表示续接，最终回执只记账一次；取消丢弃未完成效果，不重放世界操作 |
+| `EffectTask` | 单效果的预算任务 | 条件与概率仅在任务首次开始时判定，或按成功转化当刻固定的槽位输入跳过判定；`EffectExecution.advance` 返回 null 表示续接；结束/失败/取消都先置终态再各通知执行状态与账目一次；取消丢弃未完成效果，不重放世界操作 |
 | `CatalystReservations` | 运行期催化剂预留表（按维度 + 任务），预留 → 支付三态，不落盘 | `available`、`tryReserve`、`payGroup`、`releaseOwner`、`clear` |
 | `SettlementLedger` | 主世界 `SavedData` 结算账本（进行中 + 已完成记录，带上限裁剪）；提交只维护双索引并标脏，不即时刷盘 | `get`、`find`、`unsettled`、`pendingDeliveryTotal`、`prune` |
 | `SettlementRecord` | 单次结算记录：计划量、已开始组、真实完成量、返还交付进度；可持久化 | `needsRecovery`、`save`/`load`；账目变更方法私有，写入见 `SettlementRecord.Writer` |
@@ -25,7 +25,7 @@
 | `ExpressionEvaluator` | 条件求值入口（`matches` = `evaluate` == MATCH） | `matches`、`evaluate` |
 | `ExpressionTreeEvaluator` | 条件树递归求值，四态（MATCH / NO_MATCH / UNAVAILABLE / ERROR） | `evaluate`、`evaluateNode` |
 | `RuntimeConditionContext` | `ConditionContext` 的服务端 record 实现（纯参数聚合） | 注入按维度复用的 `RuntimeTagLookup` / `RuntimeClimateSampler` |
-| `RuntimeEffectContext` | `EffectContext` 实现：**按转化组**构造，持有源快照、组信息与调度器 | `schedule`、`runWhenLoaded`、`reportProgress` |
+| `RuntimeEffectContext` | `EffectContext` 实现：**按转化组**构造，持有源快照、成功转化当刻固定的触发点、组信息与调度器 | `schedule`、`runWhenLoaded`、`reportProgress` |
 | `RuntimeTagLookup` | `TagLookup` 的服务端实现：按 `kind:tagId` 缓存（不存在缓存空集） | `blockInTag` … `mobEffectInTag`、`members` |
 | `RuntimeClimateSampler` | 气候采样，按 quart 坐标缓存，上限 4096、超限淘汰最旧 | `sample` |
 | `LoadedChunks` | 运行时区块门面：转调契约层 `ChunkPresence`（**禁止为执行规则生成区块**） | `contains`、`containsArea` |
@@ -129,7 +129,8 @@ delay           = max(0, dueAge - entity.getAge())
 
 - `RuntimeEffectContext` **按转化组**构造（每组一个实例）：`rounds()` 恒为 1（一轮 = 一组），`coveredSourceItems()` 取本组固定源成本（`source_cost ≤ 0` 时按 1，`groupSourceCost` 为同一原值），`outcomeId` / `groupIndex` / `groupCount` 描述本组；`reportProgress(units)` 把"已受理"收敛为"已完成"；`safeSpawn()` / `fillOrigin()` / `positionSearchChecksPerTick()` 是候选级位置策略。
 - `schedule(delay, task)` 经公共调度器以 `EFFECT` 任务登记，经 `runWhenLoaded` 在目标区块未加载时 `schedule(20, task)` 重试，**不主动加载区块**。
-- `EffectTask` 在单效果开始时判效果级 `conditions` 和 `chance`，只判一次；类型未注册 → `FAILED`。同步 `EffectExecutor` 经默认 `start` 保持兼容；长计算覆盖 `start` 返回按 `ServerTickBudget` 续接的 `EffectExecution`。预算耗尽只让出任务，不生成业务失败或材料不足回执。最终 `EffectResult` 由结算层 `account()` 分类计数：`APPLIED` → `addApplied`，`DEFERRED` → `addApplied` + `addPending`，`SKIPPED` → `effectSkipped`，`FAILED` → `effectFailed`。
+- 成功转化当刻（源实体清空前、同一补偿单元内）先固定触发点坐标，并为「需要先固定输入」的效果类型逐槽生成 `EffectPreparation`（键 = 候选 id + 槽序号，不按效果值合并）：效果级 `conditions` 与 `chance` 在此判定一次并随结算任务携带，源实体清空后不再重新判定；未产出准备的类型不在成功转化当刻固定。
+- `EffectTask` 在单效果开始时按已固定输入执行（跳过则直接给出 `SKIPPED`），未固定的类型就地判效果级 `conditions` 和 `chance`，只判一次；类型未注册 → `FAILED`。同步 `EffectExecutor` 经默认 `start` 保持兼容；长计算覆盖 `start` 返回按 `ServerTickBudget` 续接的 `EffectExecution`；结束、失败与取消三条路径都先置终态并摘掉执行状态引用，再各通知 `EffectExecution.onFinished` / `onCancelled` 与账目一次。预算耗尽只让出任务，不生成业务失败或材料不足回执。最终 `EffectResult` 由结算层 `account()` 分类计数：`APPLIED` → `addApplied`，`DEFERRED` → `addApplied` + `addPending`，`SKIPPED` → `effectSkipped`，`FAILED` → `effectFailed`。
 
 ## 7. 扩展点
 

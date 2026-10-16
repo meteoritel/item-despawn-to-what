@@ -6,6 +6,7 @@ import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.model.CatalystCost;
 import com.meteorite.itemdespawntowhat.core.model.CombinationMode;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
+import com.meteorite.itemdespawntowhat.core.model.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.OutcomeCandidate;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
@@ -83,6 +84,10 @@ final class ConversionSettlement implements ServerTask {
     private final ItemStack held;
     // 触发时刻的整堆快照：计划期整堆已移出实体，效果读取 sourceStack() 时必须用这份快照
     private final ItemStack sourceSnapshot;
+    // 成功转化当刻固定的触发点：源实体清空或被移除后仍以此定位触发点
+    private final Vec3 triggerPosition;
+    // 成功转化当刻固定的效果槽位输入（键 = 候选 id + 槽序号）：源实体清空后仍按固定输入执行
+    private final Map<ConversionRuntime.PreparedEffectKey, EffectPreparation> preparations;
     // 账目读取引用：字段变更方法在 SettlementRecord 内私有，本引用不可写；写入一律经 writer
     private final SettlementRecord record;
     // 受控写入句柄：字段变更与落账（双索引 + 标脏）的唯一入口
@@ -128,7 +133,8 @@ final class ConversionSettlement implements ServerTask {
 
     // 构造结算任务：源库存 held 已在触发时刻整堆移出源实体，受控写入句柄由调用方（首次登记方）给出
     ConversionSettlement(ConversionRuntime runtime, ServerScheduler scheduler, ServerLevel level, ItemEntity source,
-                         Rule rule, ItemStack held, SettlementRecord.Writer writer) {
+                         Rule rule, ItemStack held, SettlementRecord.Writer writer, Vec3 triggerPosition,
+                         Map<ConversionRuntime.PreparedEffectKey, EffectPreparation> preparations) {
         this.runtime = runtime;
         this.scheduler = scheduler;
         this.level = level;
@@ -136,6 +142,8 @@ final class ConversionSettlement implements ServerTask {
         this.rule = rule;
         this.held = held;
         this.sourceSnapshot = held.copy();
+        this.triggerPosition = triggerPosition == null ? source.position() : triggerPosition;
+        this.preparations = preparations == null ? Map.of() : preparations;
         this.writer = writer;
         this.record = writer.record();
         this.cursors = RoundRobinCursors.get(level);
@@ -567,7 +575,7 @@ final class ConversionSettlement implements ServerTask {
                 }
                 continue;
             }
-            dispatchEffect(effect, groupContext);
+            dispatchEffect(effect, slot, groupContext);
             budget.charge(1);
             dispatchedThisStep++;
         }
@@ -648,21 +656,23 @@ final class ConversionSettlement implements ServerTask {
         // 进度回执经受控句柄改账目：执行器持有的只是写入通道，拿不到可任意变更账目的裸入口
         IntConsumer sink = writer::addProgress;
         int covered = record.sourceCostPerGroup() > 0 ? record.sourceCostPerGroup() : 1;
-        // 候选级位置策略（safe_spawn / fill_origin）随组上下文传给执行器
-        return new RuntimeEffectContext(level, source, source.position(), rule.id(), scheduler, level.dimension(),
+        // 候选级位置策略（safe_spawn / fill_origin）随组上下文传给执行器；位置用成功转化当刻的固定值
+        return new RuntimeEffectContext(level, source, triggerPosition, rule.id(), scheduler, level.dimension(),
                 sourceSnapshot, 1, covered, candidate.id(), groupIndex - 1, groupCount, record.sourceCostPerGroup(),
                 sink, candidate.safeSpawn(), candidate.fillOrigin());
     }
 
-    // 效果派发：延迟交给调度器，条件与概率在执行时统一判定
-    private void dispatchEffect(Effect effect, EffectContext context) {
+    // 效果派发：延迟交给调度器；成功转化当刻已固定输入的槽位按固定输入执行，其余在首次执行时统一判定
+    private void dispatchEffect(Effect effect, int slot, EffectContext context) {
+        EffectPreparation preparation = preparations.get(new ConversionRuntime.PreparedEffectKey(candidate.id(), slot));
         int delay = Math.max(0, effect.delayTicks());
         if (RuntimeObserver.current().enabled()) {
             RuntimeObserver.current().observe(source, "EFFECT_SCHEDULED", "effect", effect.type(),
                     "delay_ticks", delay, "chance", effect.chance(), "outcome", candidate.id());
         }
         RuntimeObserver.current().schedule(source, scheduler, level.dimension(),
-                level.getGameTime() + delay, new EffectTask(runtime, level, source, context, effect, this::account));
+                level.getGameTime() + delay,
+                new EffectTask(runtime, level, source, context, effect, preparation, this::account));
     }
 
     // 执行器回执入账：已完成、已受理未完成、跳过与失败分别计数，计划量不冒充成功量

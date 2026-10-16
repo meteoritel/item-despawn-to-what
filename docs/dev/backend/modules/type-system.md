@@ -52,7 +52,7 @@
 
 ### 2.5 内置实现的组织模式
 
-每个内置类型 = 一个**参数 record**（实现 `Effect`/`Condition`）+ `static final ResourceLocation ID` + 静态 `CODEC`/`codec(expressionCodec)` + 静态 `validateParams(...)` + 静态工厂 `effectType(...)`/`conditionType()`；执行/求值实现位于 `exec/`、`eval/` 子包的 `*Executor`/`*Evaluator`。`EffectExecutor.execute` 保持同步执行器的函数式接口；长计算可覆盖默认 `start` 创建独立 `EffectExecution`，由 `EffectTask` 在公共 tick 预算内推进并在完成时一次性回执。
+每个内置类型 = 一个**参数 record**（实现 `Effect`/`Condition`）+ `static final ResourceLocation ID` + 静态 `CODEC`/`codec(expressionCodec)` + 静态 `validateParams(...)` + 静态工厂 `effectType(...)`/`conditionType()`；执行/求值实现位于 `exec/`、`eval/` 子包的 `*Executor`/`*Evaluator`。`EffectExecutor.execute` 保持同步执行器的函数式接口；长计算可覆盖默认 `start` 创建独立 `EffectExecution`，由 `EffectTask` 在公共 tick 预算内推进并在完成时一次性回执。需要先于源实体消失固定输入的类型用匿名 `EffectExecutor` 注册，额外覆盖 `prepare` 与按准备创建执行状态的重载（lambda 注册只表达 `execute`）；效果级 `conditions` 与 `chance` 由成功转化当刻的槽位准备统一判定，准备结果为跳过时执行器直接给出该原因的 `SKIPPED`。
 
 > 命名坑：静态工厂**不能叫 `type()`**——接口已有无参实例方法 `type()`，同签名静态方法在 Java 中非法，故统一用 `effectType(...)`/`conditionType()`。
 
@@ -121,7 +121,7 @@
 | 4 | `lightning` | `count: int[1,16]`/1 | 第 1 道保留原点水平坐标，后续散布 r=5，间隔 8 刻；从高度图上方向下求交最上层碰撞或流体表面，贴合半砖与台阶；虚空无表面时回退高度图高度 |
 | 5 | `explosion` | `power: float[0,16]`/3.0；`fire: bool`/false；`visual_only: bool`/false | `visual_only` 只粒子+音效；否则 TNT 交互爆炸 |
 | 6 | `arrow_rain` | `count: int[1,256]`/16；`pickup: disallowed\|allowed\|creative_only`/disallowed；`potion_effects: List<{effect: TaggedId, duration_ticks: int[1,1000000]/100, amplifier: int[0,255]/0}>` | 上方 +80 高度落箭雨，初速度 4.5 格/刻，间隔 2 刻，可携带药水效果 |
-| 7 | `weather` | `mode: rain\|clear`（必填）；`duration_ticks: int[1,24000]`/6000；`thundering: bool`/false | 切换维度天气；无天空光维度跳过；已处于目标天气则跳过 |
+| 7 | `weather` | `mode: rain\|clear`（必填）；`duration_ticks: int[1,24000]`/6000；`thundering: bool`/false | 切换维度天气；无天空光维度跳过；已处于目标天气则跳过。效果级条件与概率在成功转化当刻判定并随任务携带，天空光与当前天气在执行时实时读取 |
 
 实体生成的 JSON 字段仍与 `type` 同级，不增加 `product` 包装：
 
