@@ -32,7 +32,8 @@ final class SettlementRecovery implements ServerTask {
     private final ServerScheduler scheduler;
     private final ServerLevel level;
     private final SettlementRecord record;
-    private final SettlementLedger ledger;
+    // 受控写入句柄：交付递减与终态标记都经它配套落账（双索引 + 标脏）
+    private final SettlementRecord.Writer writer;
     // 位置载体：记录创建后源实体可能已经不存在，只借它提供搜索起点，不加入世界
     private final ItemEntity anchor;
     private ReturnItemSpawner.PositionSearch search;
@@ -41,12 +42,12 @@ final class SettlementRecovery implements ServerTask {
     private boolean closed;
 
     SettlementRecovery(ConversionRuntime runtime, ServerScheduler scheduler, ServerLevel level,
-                       SettlementRecord record, SettlementLedger ledger, Vec3 position) {
+                       SettlementRecord.Writer writer, Vec3 position) {
         this.runtime = runtime;
         this.scheduler = scheduler;
         this.level = level;
-        this.record = record;
-        this.ledger = ledger;
+        this.writer = writer;
+        this.record = writer.record();
         this.anchor = new ItemEntity(level, position.x, position.y, position.z, ItemStack.EMPTY);
     }
 
@@ -81,9 +82,8 @@ final class SettlementRecovery implements ServerTask {
             ReturnItemSpawner.Outcome outcome = ReturnItemSpawner.deliver(stack, search, budget,
                     scheduler.config().positionSearchChecksPerTick());
             if (outcome == ReturnItemSpawner.Outcome.ADDED) {
-                // 交付成功后才扣减待交付量并写盘：账目始终等于「还没交付出去的库存」
-                record.delivered(stack.getCount());
-                ledger.put(record);
+                // 交付成功后才扣减待交付量并落账：账目始终等于「还没交付出去的库存」
+                writer.deliverAndSave(stack.getCount());
                 budget.charge(2);
                 delivered++;
                 failures = 0;
@@ -126,9 +126,8 @@ final class SettlementRecovery implements ServerTask {
         try {
             // 失败与取消均不补做世界写入，只保留剩余库存并释放未支付预留。
             runtime.catalystReservations().releaseOwner(record.id());
-            record.interrupt(reason, level.getGameTime());
             try {
-                ledger.put(record);
+                writer.interruptAndSave(reason, level.getGameTime());
             } catch (RuntimeException failure) {
                 LOGGER.warn("返还记录写盘失败：id={} reason={}", record.id(), reason, failure);
             }
@@ -138,10 +137,9 @@ final class SettlementRecovery implements ServerTask {
         }
     }
 
-    // 交付结束：记录标记完成并释放幂等位
+    // 交付结束：记录标记完成并落账，释放幂等位
     private void finish() {
-        record.complete(level.getGameTime());
-        ledger.put(record);
+        writer.completeAndSave(level.getGameTime());
         runtime.onRecoveryFinished(record.id());
         LOGGER.debug("返还交付完成：记录={} 已交付={}", record.id(), record.deliveredReturns());
     }

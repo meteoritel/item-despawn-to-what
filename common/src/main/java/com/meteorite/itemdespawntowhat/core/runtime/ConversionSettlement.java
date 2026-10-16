@@ -83,8 +83,10 @@ final class ConversionSettlement implements ServerTask {
     private final ItemStack held;
     // 触发时刻的整堆快照：计划期整堆已移出实体，效果读取 sourceStack() 时必须用这份快照
     private final ItemStack sourceSnapshot;
+    // 账目读取引用：字段变更方法在 SettlementRecord 内私有，本引用不可写；写入一律经 writer
     private final SettlementRecord record;
-    private final SettlementLedger ledger;
+    // 受控写入句柄：字段变更与落账（双索引 + 标脏）的唯一入口
+    private final SettlementRecord.Writer writer;
     private final RoundRobinCursors cursors;
     private final List<OutcomeCandidate> candidates;
     private final int structureVersion;
@@ -124,9 +126,9 @@ final class ConversionSettlement implements ServerTask {
     // 返还位置搜索游标：跨刻保留进度，交付成功后重置
     private ReturnItemSpawner.PositionSearch rebateSearch;
 
-    // 构造结算任务：源库存 held 已在触发时刻整堆移出源实体，记录与账本由调用方给出
+    // 构造结算任务：源库存 held 已在触发时刻整堆移出源实体，受控写入句柄由调用方（首次登记方）给出
     ConversionSettlement(ConversionRuntime runtime, ServerScheduler scheduler, ServerLevel level, ItemEntity source,
-                         Rule rule, ItemStack held, SettlementRecord record, SettlementLedger ledger) {
+                         Rule rule, ItemStack held, SettlementRecord.Writer writer) {
         this.runtime = runtime;
         this.scheduler = scheduler;
         this.level = level;
@@ -134,8 +136,8 @@ final class ConversionSettlement implements ServerTask {
         this.rule = rule;
         this.held = held;
         this.sourceSnapshot = held.copy();
-        this.record = record;
-        this.ledger = ledger;
+        this.writer = writer;
+        this.record = writer.record();
         this.cursors = RoundRobinCursors.get(level);
         this.candidates = rule.effectiveOutcomes();
         // 候选结构摘要按规则实例缓存，结构未变时不重算；失效条件见 ConversionRuntime
@@ -172,7 +174,7 @@ final class ConversionSettlement implements ServerTask {
                 case DELIVERING -> deliver(budget);
                 case DONE -> StepResult.done(1);
             };
-            // 唯一状态提交点：正常完成、显式中止、预算耗尽提前让出与交付让出都在这里统一落盘，
+            // 任务内唯一状态提交点：正常完成、显式中止、预算耗尽提前让出与交付让出都在这里统一落账，
             // 因此不存在只在部分返回路径同步的账目字段
             commit();
             return result;
@@ -184,13 +186,13 @@ final class ConversionSettlement implements ServerTask {
         }
     }
 
-    // 唯一状态提交点：所有权仍在本任务时，先把记录的待返还量对齐到手里的结算库存，再把记录写进账本标脏；
-    // 同一刻内的多处账目变动只在这里落盘一次。所有权已移交（中止/完成）时只写盘，不覆盖恢复任务推进的进度
+    // 任务内唯一状态提交点：所有权仍在本任务时，先把记录的待返还量对齐到手里的结算库存，再经受控句柄落账；
+    // 同一刻内的多处账目变动只在这里提交一次。所有权已移交（中止/完成）时只提交，不覆盖恢复任务推进的进度
     private void commit() {
         if (ownsStock) {
-            record.syncPendingDelivery(held.getCount());
+            writer.syncPendingDelivery(held.getCount());
         }
-        ledger.put(record);
+        writer.commit();
     }
 
     @Override
@@ -217,11 +219,11 @@ final class ConversionSettlement implements ServerTask {
         ownsStock = false;
         if (!record.completed()) {
             // 待返还量以任务手里的结算库存为准：重启后只交付这一部分，不重放已开始的组
-            record.syncPendingDelivery(held.getCount());
+            writer.syncPendingDelivery(held.getCount());
             if (failed) {
-                record.fail(reason, level.getGameTime());
+                writer.fail(reason, level.getGameTime());
             } else {
-                record.interrupt(reason, level.getGameTime());
+                writer.interrupt(reason, level.getGameTime());
             }
         }
         // 释放未支付的催化剂预留（计划期登记、开组时转已支付）：无世界写入且幂等
@@ -245,10 +247,10 @@ final class ConversionSettlement implements ServerTask {
     // 计划：定组数上界 → 为第一组选候选 → 预留催化剂；预算耗尽时本刻不落决定，保持 PLANNING 下刻重试
     private StepResult plan(ServerTickBudget budget) {
         budget.charge(1);
-        record.markStarted(level.getGameTime());
+        writer.markStarted(level.getGameTime());
         if (candidates.isEmpty() || held.getCount() <= 0 || record.sourceCostPerGroup() > held.getCount()) {
             groupCount = 0;
-            record.plan("", 0);
+            writer.plan("", 0);
             phase = Phase.DELIVERING;
             return StepResult.yield(1, 1);
         }
@@ -282,8 +284,8 @@ final class ConversionSettlement implements ServerTask {
             return abandonAll();
         }
         // 组数定稿后先登记催化剂成本再落计划；预留已完成，两者之间没有 yield 点
-        record.catalystPlan(catalyst == null ? 0 : catalyst.totalCount());
-        record.plan(pendingCandidate.id(), groupCount);
+        writer.catalystPlan(catalyst == null ? 0 : catalyst.totalCount());
+        writer.plan(pendingCandidate.id(), groupCount);
         if (RuntimeObserver.current().enabled() && catalyst != null) {
             RuntimeObserver.current().observe(source, "CATALYST_PLANNED", "record", record.id(), "rule", rule.id(),
                     "per_group", catalyst.totalCount(), "groups", groupCount, "reserved", groupCount * catalyst.totalCount());
@@ -353,7 +355,7 @@ final class ConversionSettlement implements ServerTask {
         pendingCandidate = null;
         pendingCandidateIndex = -1;
         groupCount = 0;
-        record.plan("", 0);
+        writer.plan("", 0);
         if (RuntimeObserver.current().enabled()) {
             RuntimeObserver.current().observe(source, "OUTCOME_SKIPPED", "rule", rule.id(), "candidates", candidates.size());
         }
@@ -483,7 +485,7 @@ final class ConversionSettlement implements ServerTask {
                         // （截断结果与预留释放由本刻唯一提交点落盘）
                         int stoppedGroups = groupCount - groupsStarted;
                         groupCount = groupsStarted;
-                        record.plan(record.candidateId(), groupCount);
+                        writer.plan(record.candidateId(), groupCount);
                         reservations().releaseOwner(record.id());
                         if (RuntimeObserver.current().enabled()) {
                             RuntimeObserver.current().observe(source, "OUTCOME_SKIPPED", "record", record.id(), "rule", rule.id(),
@@ -510,7 +512,7 @@ final class ConversionSettlement implements ServerTask {
                         // （截断结果由本刻唯一提交点落盘）
                         int shortGroups = groupCount - groupsStarted;
                         groupCount = groupsStarted;
-                        record.plan(record.candidateId(), groupCount);
+                        writer.plan(record.candidateId(), groupCount);
                         reservations().releaseOwner(record.id());
                         if (RuntimeObserver.current().enabled()) {
                             RuntimeObserver.current().observe(source, "CATALYST_SHORT", "record", record.id(), "rule", rule.id(),
@@ -526,9 +528,9 @@ final class ConversionSettlement implements ServerTask {
                     // 已开始的组支付完整固定成本，成本从结算库存里扣掉
                     held.setCount(held.getCount() - cost);
                 }
-                record.groupStarted(cost);
+                writer.groupStarted(cost);
                 // 固定顺序：催化剂已支付、源成本已扣减，才记账
-                record.catalystGroupPaid(paidCatalyst);
+                writer.catalystGroupPaid(paidCatalyst);
                 // 已开始组由本刻唯一提交点落盘（扣减与提交点之间没有让出点）：
                 // 中途停服重启后，已支付成本的组不会因为未落盘而被当作「未开始库存」重复返还
                 groupsStarted++;
@@ -605,7 +607,7 @@ final class ConversionSettlement implements ServerTask {
                 return StepResult.yield(1, 1);
             }
             held.setCount(held.getCount() - size);
-            record.delivered(size);
+            writer.delivered(size);
             budget.charge(2);
             deliveredNow++;
         }
@@ -614,7 +616,7 @@ final class ConversionSettlement implements ServerTask {
             return StepResult.yield(1, 1);
         }
         // 返还已全部交付：完成记录并交出库存所有权（提交点此后只写盘，不再对齐待返还量）
-        record.complete(level.getGameTime());
+        writer.complete(level.getGameTime());
         ownsStock = false;
         // 防御：已完成记录的未支付预留必然为空（取消/不足路径已释放），这里幂等再释放一次
         reservations().releaseOwner(record.id());
@@ -644,7 +646,8 @@ final class ConversionSettlement implements ServerTask {
 
     // 本组上下文：组序号、组数、本组已付成本与真实回执入口
     private EffectContext contextForGroup(int groupIndex) {
-        IntConsumer sink = record::addProgress;
+        // 进度回执经受控句柄改账目：执行器持有的只是写入通道，拿不到可任意变更账目的裸入口
+        IntConsumer sink = writer::addProgress;
         int covered = record.sourceCostPerGroup() > 0 ? record.sourceCostPerGroup() : 1;
         // 候选级位置策略（safe_spawn / fill_origin）随组上下文传给执行器
         return new RuntimeEffectContext(level, source, source.position(), rule.id(), scheduler, level.dimension(),
@@ -666,16 +669,16 @@ final class ConversionSettlement implements ServerTask {
     // 执行器回执入账：已完成、已受理未完成、跳过与失败分别计数，计划量不冒充成功量
     private void account(EffectResult result) {
         if (result == null) {
-            record.effectFailed();
+            writer.effectFailed();
         } else {
             switch (result.outcome()) {
-                case APPLIED -> record.addApplied(result.appliedUnits());
+                case APPLIED -> writer.addApplied(result.appliedUnits());
                 case DEFERRED -> {
-                    record.addApplied(result.appliedUnits());
-                    record.addPending(result.pendingUnits());
+                    writer.addApplied(result.appliedUnits());
+                    writer.addPending(result.pendingUnits());
                 }
-                case SKIPPED -> record.effectSkipped();
-                case FAILED -> record.effectFailed();
+                case SKIPPED -> writer.effectSkipped();
+                case FAILED -> writer.effectFailed();
             }
         }
         // 回执只更新本记录的效果计数（applied/pending units，落盘字段），不改待返还量：同样经唯一提交点落盘；

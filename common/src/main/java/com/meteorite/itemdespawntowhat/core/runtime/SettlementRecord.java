@@ -11,6 +11,8 @@ import net.minecraft.world.item.ItemStack;
  * appliedUnits 只由执行器回执累加，pendingUnits 是已派发未回执的部分，计划量不冒充成功量。
  * 记录可持久化：无法加入世界的返还留在 pendingDelivery 里，交给恢复任务（SettlementRecovery）逐步交付。
  * 催化剂按单独账目计数（catalystCostPerGroup / catalystGroupsPaid / catalystsConsumed），不进源物品守恒式。
+ * 账目字段不可从外部直接变更：全部变更方法私有，只能经受控写入句柄 {@link Writer} 调用，
+ * 由句柄配套维护账本双索引与标脏；业务判断（是否对齐待交付量、记中断还是失败、截断到几组）仍留在各调用方。
  */
 public final class SettlementRecord {
 
@@ -73,13 +75,13 @@ public final class SettlementRecord {
     }
 
     // 记录已选定候选与计划组数（组数为 0 表示全部返还）
-    void plan(String candidateId, int groupCount) {
+    private void plan(String candidateId, int groupCount) {
         this.candidateId = candidateId == null ? "" : candidateId;
         this.groupCount = Math.max(0, groupCount);
     }
 
     // 开始执行：第一次进入计划步骤时调用，可重入
-    void markStarted(long gameTime) {
+    private void markStarted(long gameTime) {
         if (status != Status.PLANNED) {
             return;
         }
@@ -88,18 +90,18 @@ public final class SettlementRecord {
     }
 
     // 一组开始：该组的固定源成本已从结算库存扣减（只对已开始的组收费）
-    void groupStarted(int cost) {
+    private void groupStarted(int cost) {
         groupsStarted++;
         consumedSources += Math.max(0, cost);
     }
 
     // 计划期登记每组的催化剂成本（0 表示该规则未声明 catalyst_cost）
-    void catalystPlan(int costPerGroup) {
+    private void catalystPlan(int costPerGroup) {
         this.catalystCostPerGroup = Math.max(0, costPerGroup);
     }
 
     // 一组催化剂支付完成：只有真实扣减后才累加（催化剂单独计数，不进源物品守恒式）
-    void catalystGroupPaid(int count) {
+    private void catalystGroupPaid(int count) {
         if (count <= 0) {
             return;
         }
@@ -108,32 +110,32 @@ public final class SettlementRecord {
     }
 
     // 真实完成量回执（APPLIED / DEFERRED 的已成部分）
-    void addApplied(long units) {
+    private void addApplied(long units) {
         appliedUnits = Math.addExact(appliedUnits, Math.max(0L, units));
     }
 
     // 已派发未回执的计划量
-    void addPending(long units) {
+    private void addPending(long units) {
         pendingUnits = Math.addExact(pendingUnits, Math.max(0L, units));
     }
 
     // 异步批次回执：把「已受理」收敛为「已完成」，不重复计费
-    void addProgress(int units) {
+    private void addProgress(int units) {
         int done = Math.max(0, units);
         appliedUnits = Math.addExact(appliedUnits, done);
         pendingUnits = Math.max(0, pendingUnits - done);
     }
 
-    void effectSkipped() {
+    private void effectSkipped() {
         skippedEffects++;
     }
 
-    void effectFailed() {
+    private void effectFailed() {
         failedEffects++;
     }
 
     // 返还交付：交付出去后才从待交付里减去
-    void delivered(int count) {
+    private void delivered(int count) {
         // 上界先归零：pendingDelivery 正常恒非负，但存档读回的字段可能为负，夹取不得因此抛 IllegalArgumentException
         int moved = Math.clamp(count, 0, Math.max(0, pendingDelivery));
         pendingDelivery -= moved;
@@ -142,19 +144,19 @@ public final class SettlementRecord {
 
     // 用结算库存的实际数量对齐待交付数：由持有库存的一方（结算任务的唯一提交点）在落盘前调用，
     // 保证内存账目与落盘值一致；所有权移交后不再调用，避免覆盖恢复任务推进的交付进度
-    void syncPendingDelivery(int remaining) {
+    private void syncPendingDelivery(int remaining) {
         pendingDelivery = Math.max(0, remaining);
     }
 
     // 全部返还交付完毕
-    void complete(long gameTime) {
+    private void complete(long gameTime) {
         status = Status.COMPLETED;
         pendingDelivery = 0;
         finishedTick = gameTime;
     }
 
     // 取消（规则重载 / 维度卸载 / 停服）：只记结算，不在此刻做世界写入
-    void interrupt(String reason, long gameTime) {
+    private void interrupt(String reason, long gameTime) {
         if (status == Status.COMPLETED) {
             return;
         }
@@ -164,7 +166,7 @@ public final class SettlementRecord {
     }
 
     // 结算失败（账目结构与库存不一致等），保留待返还数据
-    void fail(String reason, long gameTime) {
+    private void fail(String reason, long gameTime) {
         status = Status.FAILED;
         interruptReason = reason == null ? "" : reason;
         finishedTick = gameTime;
@@ -281,5 +283,134 @@ public final class SettlementRecord {
             }
         }
         return Status.PLANNED;
+    }
+
+    /**
+     * 结算记录的受控写入句柄：账目字段的唯一变更入口。
+     * <p>
+     * 记录与账本两张索引持有同一可变引用，字段变更若不配套落账就会丢失（{@code SavedData} 只在仍为脏时落盘）。
+     * 因此 {@link SettlementRecord} 的变更方法全部私有，调用方只能经本句柄写入：
+     * 新建与撤销登记用 {@link #register} / {@link #discard}，恢复交付与终态用 {@link #deliverAndSave} 等立即提交入口，
+     * 结算任务沿用其统一步骤出口在 {@link #commit()} 一次落账。是否对齐待交付量、记中断还是失败等业务判断
+     * 仍留在各调用方，本句柄不建立通用事务、不自动刷盘、不自动异常回滚。
+     */
+    static final class Writer {
+
+        // 新建一条记录并登记：入两张索引并标脏；返回的句柄是该记录唯一变更入口
+        static Writer register(SettlementLedger ledger, String id, String ruleId, String dimension,
+                               ItemStack source, int initialCount, int sourceCostPerGroup,
+                               boolean hasPosition, double positionX, double positionY, double positionZ) {
+            Writer writer = new Writer(ledger, new SettlementRecord(id, ruleId, dimension, source,
+                    initialCount, sourceCostPerGroup, hasPosition, positionX, positionY, positionZ));
+            writer.commit();
+            return writer;
+        }
+
+        // 包装账本中已有的记录（恢复扫描按 id 取出记录后据此写入）；不改变索引
+        static Writer of(SettlementLedger ledger, SettlementRecord record) {
+            return new Writer(ledger, record);
+        }
+
+        private final SettlementLedger ledger;
+        private final SettlementRecord record;
+
+        private Writer(SettlementLedger ledger, SettlementRecord record) {
+            this.ledger = ledger;
+            this.record = record;
+        }
+
+        // 记录本体：账目字段读取的唯一来源，不为此复制第二份账目
+        SettlementRecord record() {
+            return record;
+        }
+
+        // 落账：把记录当前字段写回账本双索引并标脏；结算任务在统一步骤出口调用一次
+        void commit() {
+            ledger.submit(record);
+        }
+
+        // 登记失败补偿：把记录从两张索引成对摘除，避免重启后的恢复任务重复交付已写回的库存
+        void discard() {
+            ledger.unregister(record.id());
+        }
+
+        void plan(String candidateId, int groupCount) {
+            record.plan(candidateId, groupCount);
+        }
+
+        void markStarted(long gameTime) {
+            record.markStarted(gameTime);
+        }
+
+        void groupStarted(int cost) {
+            record.groupStarted(cost);
+        }
+
+        void catalystPlan(int costPerGroup) {
+            record.catalystPlan(costPerGroup);
+        }
+
+        void catalystGroupPaid(int count) {
+            record.catalystGroupPaid(count);
+        }
+
+        void addApplied(long units) {
+            record.addApplied(units);
+        }
+
+        void addPending(long units) {
+            record.addPending(units);
+        }
+
+        // 进度回执入口：与其它字段变更一样只改账目，由结算任务的提交点落账
+        void addProgress(int units) {
+            record.addProgress(units);
+        }
+
+        void effectSkipped() {
+            record.effectSkipped();
+        }
+
+        void effectFailed() {
+            record.effectFailed();
+        }
+
+        void delivered(int count) {
+            record.delivered(count);
+        }
+
+        void syncPendingDelivery(int remaining) {
+            record.syncPendingDelivery(remaining);
+        }
+
+        void complete(long gameTime) {
+            record.complete(gameTime);
+        }
+
+        void interrupt(String reason, long gameTime) {
+            record.interrupt(reason, gameTime);
+        }
+
+        void fail(String reason, long gameTime) {
+            record.fail(reason, gameTime);
+        }
+
+        // 恢复交付：交付成功后递减待交付并立即落账，账目始终等于「还没交付出去的库存」
+        void deliverAndSave(int count) {
+            record.delivered(count);
+            commit();
+        }
+
+        // 恢复完结：标记完成并立即落账
+        void completeAndSave(long gameTime) {
+            record.complete(gameTime);
+            commit();
+        }
+
+        // 恢复失败/取消：标记中断并立即落账，不补做世界写入
+        void interruptAndSave(String reason, long gameTime) {
+            record.interrupt(reason, gameTime);
+            commit();
+        }
     }
 }

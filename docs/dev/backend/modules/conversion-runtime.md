@@ -14,8 +14,9 @@
 | `CatalystPaymentExecution` | `consume_catalyst` 效果的跨 tick 付款状态 | 库存采集、共享库存分配、付款清单整理与支付前逐项计费均可续接；扣减前重读完整清单并确认实体仍存活、物品类型、数量和半径，整轮校验后同一主线程步骤内一次扣减 |
 | `EffectTask` | 单效果的预算任务 | 条件与概率仅在任务首次开始时判定；`EffectExecution.advance` 返回 null 表示续接，最终回执只记账一次；取消丢弃未完成效果，不重放世界操作 |
 | `CatalystReservations` | 运行期催化剂预留表（按维度 + 任务），预留 → 支付三态，不落盘 | `available`、`tryReserve`、`payGroup`、`releaseOwner`、`clear` |
-| `SettlementLedger` | 主世界 `SavedData` 结算账本（进行中 + 已完成记录，带上限裁剪） | `get`、`put`、`find`、`unsettled`、`pendingDeliveryTotal`、`prune` |
-| `SettlementRecord` | 单次结算记录：计划量、已开始组、真实完成量、返还交付进度；可持久化 | `plan`、`groupStarted`、`addProgress`、`delivered`、`syncPendingDelivery`、`complete`、`interrupt`、`needsRecovery`、`save`/`load` |
+| `SettlementLedger` | 主世界 `SavedData` 结算账本（进行中 + 已完成记录，带上限裁剪）；提交只维护双索引并标脏，不即时刷盘 | `get`、`find`、`unsettled`、`pendingDeliveryTotal`、`prune` |
+| `SettlementRecord` | 单次结算记录：计划量、已开始组、真实完成量、返还交付进度；可持久化 | `needsRecovery`、`save`/`load`；账目变更方法私有，写入见 `SettlementRecord.Writer` |
+| `SettlementRecord.Writer` | 账目变更的唯一受控入口：一次调用内完成字段变更与账本提交（或首次登记、失败撤销） | `register`、`of`、`record`、`commit`、`discard`、`deliverAndSave`、`completeAndSave`、`interruptAndSave` |
 | `SettlementRecovery` | 重启 / 维度加载后的待返还交付任务（`REBATE`） | `step`、`onCancelled`、`onFailed`、`finish` |
 | `RoundRobinCursors` | 主世界 `SavedData` 轮询游标（规则 id + 维度，持久化） | `get`、`cursor`、`moveTo` |
 | `CandidateStructureVersions` | 按规则实例缓存候选结构摘要（供轮询游标判定结构是否变化） | `versionOf(rule, registries)`、`clear()` |
@@ -93,7 +94,10 @@ delay           = max(0, dueAge - entity.getAge())
 
   概率落空、效果条件不满足、执行途中部分失败都**仍属已支付组**（不免费重试、不返还成本）；真实完成量只来自执行器回执（`EffectResult.appliedUnits` + `reportProgress`），**计划量不冒充成功量**。不足一组不强制产出。
 
-  状态只在**同一个提交点**落盘：正常完成、显式中止、预算耗尽提前让出与为交付而让出都经 `commit()`；记录里用显式的**库存所有权标记**表示`held`是否仍归本次结算，提交时按它同步待交付数量再登记。
+  账目变更只能经受控写入句柄：`SettlementRecord` 的变更方法私有，写入统一经 `SettlementRecord.Writer`，
+  由句柄在同一次调用内完成字段变更与账本双索引维护、标脏（提交只标脏不即时刷盘）。结算任务内正常完成、显式中止、
+  预算耗尽提前让出与为交付而让出都经 `commit()` 一次落账；首次登记与登记失败补偿、恢复交付与终态各自经句柄提交。
+  记录里用显式的**库存所有权标记**表示`held`是否仍归本次结算，持有期间由提交点同步待交付数量，所有权移交后只提交不再对齐。
 
   物品与标签引用只有**唯一匹配实现**（`core/type/TaggedItemMatch.java`）：效果式消耗、催化剂固定成本与催化剂条件求值共用同一份匹配语义，调用方不得复刻。
 
@@ -104,7 +108,7 @@ delay           = max(0, dueAge - entity.getAge())
 
 - 数量账目在 `SettlementRecord` 中以 `long` 保存（`applied_units` / `pending_units`），`SettlementLedger.pendingUnitsTotal()` 亦为 `long`，累加经 `Math.addExact` 防溢出。存档写 `tag.putLong(...)`，读 `tag.getLong(...)`：`CompoundTag.getLong` 接受数值型标签，旧存档里的 `int` 字段可原样读出，无需迁移。
 - `SettlementLedger` 存于**主世界** `SavedData`（`itemdespawntowhat_settlements`），维度卸载/停服都不丢记录；已完成且交付完毕的旧记录按 tick 过期（保留 6000 tick）并按条数上限兜底裁剪，**未结清记录一条不裁**。
-- 中断（`onCancelled`）与异常（`step` 的 catch）走同一条 `abort` 顺序：置 `cancelled`、清除库存所有权标记（仍持有时才同步待返还数量）、记 `INTERRUPTED`/`FAILED`、释放未支付催化剂预留，最后经同一个提交点写盘。**本路径不做任何世界写入**（维度卸载/停服时加入世界不安全）。
+- 中断（`onCancelled`）与异常（`step` 的 catch）走同一条 `abort` 顺序：置 `cancelled`、清除库存所有权标记（仍持有时才同步待返还数量）、记 `INTERRUPTED`/`FAILED`、释放未支付催化剂预留，最后经同一个提交点落账。**本路径不做任何世界写入**（维度卸载/停服时加入世界不安全）。
 - 恢复：`onServerTick` 首次服务端 tick 后全局扫描一次，`rescan`（维度加载/重载）补扫该维度；未加载维度的记录保持在账本等待。`SettlementRecovery` 只交付记录里的 `pendingDelivery`，**不恢复旧效果队列、不重放已开始的组**；`needsRecovery()` 只看待返还库存（`pendingDelivery > 0 && !source.isEmpty()`），绝不把"已派发未回执"的 `pendingUnits` 当成待返还库存。`activeRecoveries` 幂等位保证同一记录同一时刻只允许一个交付任务。
 - `SettlementRecovery` 失败与取消共用幂等清理：不补做世界写入，保留待返还数据并释放预留；`finally` 释放 `activeRecoveries`，即使收尾写盘失败也允许后续扫描重新排期。
 - 保存重载通过 `applySavedIndex` 发布预建索引，立即摘除旧队列并逐项取消，再用账本 id 游标逐条恢复返还、用已加载掉落物 id 游标跨 tick 回扫。掉落物加入/移除事件维护该有序集合；临近自然消失的物品在等待回扫期间及时按新索引补追踪。
