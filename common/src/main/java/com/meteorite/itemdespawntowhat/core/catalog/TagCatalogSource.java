@@ -21,7 +21,9 @@ import java.util.Map;
  * 其 {@code subLabel} 记录首次命中的注册表短名（item / block / entity_type / fluid / biome）。</p>
  * <p>原版语言文件不含标签翻译键（en_us 中无 {@code tag.*} 条目），因此 label 使用原文 {@code #命名空间:路径}，
  * 由界面按需自行本地化或直接展示。</p>
- * <p>修订号按标签 id 集合的内容哈希计算；条目按 id 字典序排序并缓存。只在服务端主线程调用。</p>
+ * <p>修订号按「标签 id → 首次命中的注册表短名」映射的内容哈希计算：id 集合未变、但某个标签改由其他注册表提供时，
+ * 短名随之变化，修订号同样改变，条目缓存因此按最新副标签重建；映射哈希与遍历顺序无关（按条目哈希求和），
+ * 内容未变时修订号保持稳定。条目按 id 字典序排序并缓存。只在服务端主线程调用。</p>
  */
 final class TagCatalogSource implements RuleCatalogSource {
 
@@ -42,13 +44,13 @@ final class TagCatalogSource implements RuleCatalogSource {
 
     @Override
     public int revision() {
-        return RegistryCatalogSource.revisionOf(collect().keySet());
+        return revisionOf(collect());
     }
 
     @Override
     public List<RuleCatalogEntry> all() {
         Map<ResourceLocation, String> tags = collect();
-        int revision = RegistryCatalogSource.revisionOf(tags.keySet());
+        int revision = revisionOf(tags);
         synchronized (this) {
             if (revision != this.cachedRevision) {
                 List<RuleCatalogEntry> built = new ArrayList<>(tags.size());
@@ -60,6 +62,11 @@ final class TagCatalogSource implements RuleCatalogSource {
             }
             return this.cachedEntries;
         }
+    }
+
+    // 内容哈希：同时覆盖标签 id 与注册表短名；Map.hashCode 按条目求和，与顺序无关，故同一内容始终得到同一修订号
+    static int revisionOf(Map<ResourceLocation, String> tags) {
+        return 31 * tags.size() + tags.hashCode();
     }
 
     // 汇总各注册表的标签 id：键为标签 id，值为首次命中的注册表短名
