@@ -17,11 +17,6 @@ public interface PackLayerResolver {
     // 依据包 id（Resource.sourcePackId()）返回该包所属的层；只允许返回 BUILTIN 或 WORLD
     RuleSourceLayer resolve(String packId);
 
-    // 全部判为世界数据包：不区分内置包时的退化实现（层优先级退化为包优先级）
-    static PackLayerResolver allWorld() {
-        return packId -> RuleSourceLayer.WORLD;
-    }
-
     /**
      * 依据本次实际加载包的来源元数据构建分类快照：只有 KnownPack 命名空间为本平台正式注册命名空间的包判为内置数据包，
      * 其余（世界目录包、vanilla/feature 包、未注册来源）一并按世界数据包处理。
