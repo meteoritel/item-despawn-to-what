@@ -3,10 +3,10 @@ package com.meteorite.itemdespawntowhat.core.type.effect;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecutor;
+import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
-import com.meteorite.itemdespawntowhat.core.model.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
@@ -77,7 +77,7 @@ public record WeatherEffect(
 
     // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。
     // 显式实现准备入口：效果级条件与概率在成功转化当刻判定，天气世界写延后到到期时按固定输入执行；
-    // lambda 注册只能表达 execute，因此这里用匿名实现暴露准备与按准备创建执行状态的入口。
+    // 需要准备的类型用显式实现覆盖 prepare 与按准备创建执行状态的重载（lambda 只能表达 execute）。
     public static EffectType<WeatherEffect> effectType(Codec<ConditionExpression> expressionCodec) {
         EffectExecutor<WeatherEffect> executor = new EffectExecutor<>() {
             @Override

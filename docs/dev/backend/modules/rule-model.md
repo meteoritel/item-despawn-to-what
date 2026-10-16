@@ -30,12 +30,12 @@ core/api  ←──────────── core/model ──────�
 | 类 | 类型 | 职责 | 关键成员 |
 |---|---|---|---|
 | `ConditionEvaluator<P>` | `@FunctionalInterface` | 条件求值器（**纯谓词**，返回未取反结果） | `boolean test(P, ConditionContext)` |
-| `EffectExecutor<P>` | `@FunctionalInterface` | 效果执行器（只做世界操作，返回真实回执）；需要先于源实体消失固定输入的类型额外覆盖准备入口 | `EffectResult execute(P, EffectContext)`；`prepare(P, ServerLevel, Vec3)`（默认 `null` = 无准备阶段）、`start(P, EffectContext, EffectPreparation)` |
+| `EffectExecutor<P>` | `@FunctionalInterface` | 效果执行器（只做世界操作，返回真实回执）；支持准备需覆盖 `prepare` 及按准备创建执行状态的重载，只提供 `execute` 的类型沿用默认、不参与准备 | `EffectResult execute(P, EffectContext)`；`prepare(P, ServerLevel, Vec3)`（默认 `null` = 无准备阶段）、`start(P, EffectContext, EffectPreparation)` |
 | `ConditionContext` | interface | 条件求值的**只读**上下文 | `level()` / `source()` / `pos()` / `random()` / `tags()` / `climate()` |
 | `EffectContext` | interface | 效果执行上下文（可产生副作用） | `level()` / `source()` / `sourceStack()` / `position()` / `random()` / `ruleId()` / `rounds()` / `coveredSourceItems()` / `outcomeId()` / `groupIndex()` / `groupCount()` / `groupSourceCost()` / `schedule(int,Runnable)` / `reportProgress(int)` / `safeSpawn()` / `fillOrigin()` / `positionSearchChecksPerTick()` |
 | `ConditionResult` | enum | 条件求值四态 | `MATCH` / `NO_MATCH` / `UNAVAILABLE` / `ERROR`；`isMatch()`（仅 MATCH 为真） |
 | `Evaluability` | enum | 可求值性前置门禁 | `AVAILABLE` / `UNAVAILABLE` |
-| `EffectPreparation` | record | 成功转化当刻固定的效果槽位输入 | `gate`（`@Nullable`；非空 = 按该原因记 `SKIPPED`）+ `ready()` / `gated(String)` |
+| `EffectPreparation` | record | 成功转化当刻固定的效果槽位输入（按候选 id + 槽序号唯一） | `gate`（`@Nullable`；非空 = 按该原因记 `SKIPPED`，为空 = 照常执行）+ `ready()` / `gated(String)` |
 | `EffectResult` | record | 效果执行回执（结算记账唯一依据） | `outcome`（`APPLIED`/`DEFERRED`/`SKIPPED`/`FAILED`）+ `appliedUnits` + `pendingUnits`（两者均为 `long`）+ `oneShot` + `detail`；`applied(...)` / `deferred(...)` / `skipped(...)` / `failed(...)` / `asOneShot()` / `counted()` |
 | `ClimateSampler` / `ClimateSample` | interface / record | 6 参数气候采样（温度/湿度/大陆性/侵蚀/深度/怪异度） | `sample(BlockPos)` |
 | `TagLookup` | interface | 5 类标签成员查询（方块 / 实体 / 生物群系 / 流体 / 药水效果；物品标签由候选索引展开）；标签不存在返回 false | `blockInTag` / `entityInTag` / `biomeInTag` / `fluidInTag` / `mobEffectInTag` |

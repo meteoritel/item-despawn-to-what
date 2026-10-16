@@ -2,10 +2,11 @@ package com.meteorite.itemdespawntowhat.core.type.effect.exec;
 
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
+import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
-import com.meteorite.itemdespawntowhat.core.model.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.type.effect.WeatherEffect;
 import net.minecraft.server.level.ServerLevel;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * weather 执行器：切换触发维度的天气与持续时长。
@@ -19,10 +20,10 @@ import net.minecraft.server.level.ServerLevel;
  */
 public final class WeatherExecutor {
 
-    // 执行期跳过原因：无天空光、已处于目标天气
-    public static final String NO_SKY_LIGHT = "no_sky_light";
-    public static final String ALREADY_RAINING = "already_raining";
-    public static final String ALREADY_CLEAR = "already_clear";
+    // 执行期跳过原因：无天空光、已处于目标天气；仅本类使用
+    private static final String NO_SKY_LIGHT = "no_sky_light";
+    private static final String ALREADY_RAINING = "already_raining";
+    private static final String ALREADY_CLEAR = "already_clear";
 
     private WeatherExecutor() {
         throw new UnsupportedOperationException("Utility class");
@@ -35,7 +36,7 @@ public final class WeatherExecutor {
      * @param preparation 成功转化当刻固定的输入；null 表示未固定输入，直接执行
      * @return 单步执行状态
      */
-    public static EffectExecution start(WeatherEffect effect, EffectContext context, EffectPreparation preparation) {
+    public static EffectExecution start(WeatherEffect effect, EffectContext context, @Nullable EffectPreparation preparation) {
         if (preparation != null && preparation.gate() != null) {
             String reason = preparation.gate();
             return budget -> EffectResult.skipped(reason);

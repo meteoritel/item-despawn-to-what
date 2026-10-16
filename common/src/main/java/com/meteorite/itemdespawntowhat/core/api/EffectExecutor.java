@@ -1,6 +1,5 @@
 package com.meteorite.itemdespawntowhat.core.api;
 
-import com.meteorite.itemdespawntowhat.core.model.EffectPreparation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
@@ -21,7 +20,7 @@ public interface EffectExecutor<P> {
      * 在成功转化当刻固定本次效果的输入，供源实体清空后仍按固定输入执行。
      * 产出非 null 结果即表示本类型采用「成功转化当刻固定输入」的路径：效果级条件与概率在成功转化当刻判定一次并随任务携带。
      * 默认返回 null，这类效果的条件与概率仍在首次执行时判定，结果不随任务携带。
-     * 覆盖本方法的类型必须通过匿名实现暴露（lambda 注册只表达 execute），并与按准备结果创建执行状态的重载成对覆盖。
+     * 支持准备需覆盖本方法与按准备结果创建执行状态的重载；只提供 execute 的类型沿用默认，不参与准备。
      * 传入的是成功转化当刻仍可读的输入，不包含尚未确定的世界状态。
      * @param effect 效果参数
      * @param level 触发维度
@@ -47,7 +46,7 @@ public interface EffectExecutor<P> {
     }
 
     /**
-     * 按成功转化当刻固定的输入创建执行状态；覆盖 prepare 的类型必须成对覆盖本方法。
+     * 按成功转化当刻固定的输入创建执行状态；覆盖 prepare 的类型需成对覆盖本方法。
      * 准备为「跳过」时按该原因直接产出跳过回执，不重新判定条件或概率，也不做世界写入。
      * @param effect 效果参数
      * @param context 本组上下文

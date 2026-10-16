@@ -2,9 +2,9 @@ package com.meteorite.itemdespawntowhat.core.runtime;
 
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
+import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
-import com.meteorite.itemdespawntowhat.core.model.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.CancelReason;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
@@ -19,7 +19,8 @@ import java.util.function.Consumer;
 
 /**
  * 一次效果的预算任务：创建状态一次，最终回执一次；取消不补做世界写入。
- * 结束、失败与取消三条路径都先置终态并摘掉执行状态引用，再各通知执行状态与账目一次，
+ * 结束与失败先置终态、摘掉执行状态引用，再各通知账目与执行状态一次；
+ * 取消同样先置终态、摘引用，但只通知执行状态，不产生回执也不入账。
  * 因此回调重入或回调异常都不会重放世界操作、不会重复入账。
  */
 final class EffectTask implements ServerTask {
@@ -84,11 +85,15 @@ final class EffectTask implements ServerTask {
 
     private void finish(EffectResult result) {
         if (finished) { return; }
-        // 先置终态再回调：账目与执行状态各通知一次，回调异常也不能导致世界效果重放或重复入账
+        // 先置终态、摘引用再回调：回调异常不会重放世界效果，也不会重复入账
         finished = true;
         EffectExecution active = execution;
         execution = null;
-        resultSink.accept(result);
-        if (active != null) { active.onFinished(result); }
+        try {
+            resultSink.accept(result);
+        } finally {
+            // 账目回调抛出也必须完成一次执行状态通知，且此后再无路径重入
+            if (active != null) { active.onFinished(result); }
+        }
     }
 }
