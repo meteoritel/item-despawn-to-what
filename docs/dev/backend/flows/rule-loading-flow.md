@@ -40,7 +40,7 @@ RuleRuntimeHostCore.reload(server, rm)     # 数据包重载 / 命令重载 / �
   └─ sessionManager(editContext).bumpVersion()   # 推进覆盖层修订号
 ```
 
-**context 组装**：`RuleLoadContext.full(resourceManager, overlayRoot, MOD_NAMESPACE, registryAccess, effectTypes, conditionTypes, layerResolver).withServer(server)`。`layerResolver` 由平台注入（如 Fabric 用 `FabricLoader.getAllMods()` 是否含该 packId 判定 BUILTIN/WORLD）。
+**context 组装**：`RuleLoadContext.full(resourceManager, overlayRoot, MOD_NAMESPACE, registryAccess, effectTypes, conditionTypes, layerResolver).withServer(server)`。`layerResolver` 由平台注入：在本次 `resourceManager` 的 `listPacks()` 上按包的 KnownPack 命名空间建不可变快照（Fabric `fabric` / NeoForge `neoforge` 判 BUILTIN，其余 WORLD）。
 
 ## 3. 分步证据
 

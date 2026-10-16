@@ -29,7 +29,7 @@ config 覆盖层     config/<overlay_directory>/rules/**/*.json
 | `RuleSourceLayer` | 三层枚举与优先级/可写性 | `BUILTIN(0)` < `WORLD(1)` < `OVERLAY(2)`；`priority()` / `displayName()` / `writable()`（仅 OVERLAY 为 true） |
 | `RuleOrigin` | 每条规则的来源坐标（进 `Issue.origin`） | `datapack(layer, packId, location)` / `overlay(relativePath)` / `display()` |
 | `RulePaths` | 路径与字段路径常量 | `DATAPACK_RULES_DIRECTORY="idtw/rules"`、`OVERLAY_RULES_DIRECTORY="rules"`、`RULE_FILE_EXTENSION=".json"`、`stripExtension()`、`joinFieldPath()` |
-| `PackLayerResolver` | 包 id → 层的可注入判定 | `resolve(String packId)`；静态 `allWorld()`（覆盖层/无数据包场景） |
+| `PackLayerResolver` | 包 id → 层的可注入判定 | `resolve(String packId)`；静态 `fromModPacks(resourceManager, modPackNamespace)`（本次加载包来源快照）、`allWorld()`（覆盖层/无数据包场景） |
 | `RawRuleEntry` | 解析后、解码前的中间载体（保留原始 JsonObject） | record(id, body, origin, disabled, delete, fieldPath)；`isControl()` |
 | `LoadedRule<T>` | 解码成功条目 + 最终来源 | record(id, origin, value) |
 | `RuleLoadRequest<T>` | 一次加载的输入 | record(5 字段)；工厂 `datapacks()`、`overlay()` |

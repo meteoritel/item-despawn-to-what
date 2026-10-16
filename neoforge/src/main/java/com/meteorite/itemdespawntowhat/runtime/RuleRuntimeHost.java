@@ -5,7 +5,6 @@ import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
 import com.meteorite.itemdespawntowhat.core.host.RuleRuntimeHostCore;
 import com.meteorite.itemdespawntowhat.core.load.PackLayerResolver;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoadResult;
-import com.meteorite.itemdespawntowhat.core.load.RuleSourceLayer;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerContext;
 import com.meteorite.itemdespawntowhat.core.runtime.LifespanProvider;
@@ -25,8 +24,10 @@ import net.minecraft.world.item.Items;
  */
 public final class RuleRuntimeHost {
 
-    // NeoForge 数据包来源层判定：内置模组数据包的路径前缀
-    private static final String MOD_PACK_PREFIX = "mod/";
+    // NeoForge 正式模组包注册路径写入的 KnownPack 命名空间：
+    // 普通模组包见 net.neoforged.neoforge.resource.ResourcePackLoader#packFinder，
+    // 可选内置数据包见 net.neoforged.neoforge.event.AddPackFindersEvent#addPackFinders
+    private static final String MOD_PACK_KNOWN_NAMESPACE = "neoforge";
 
     // 公共宿主实现：进程内单实例，状态对应当前存档生命周期
     private static final RuleRuntimeHostCore CORE = new RuleRuntimeHostCore(new NeoForgePlatformAdapter());
@@ -35,7 +36,7 @@ public final class RuleRuntimeHost {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    /** NeoForge 平台适配：寿命走加载器物品寿命；包层判定按内置数据包前缀；启动时采样参考寿命。 */
+    /** NeoForge 平台适配：寿命走加载器物品寿命；包层判定按本次加载包的 KnownPack 注册命名空间；启动时采样参考寿命。 */
     private static final class NeoForgePlatformAdapter implements RuleRuntimeHostCore.PlatformAdapter {
 
         // 服务端缓存的 GUI 参考寿命 tick；尚未采样时为零
@@ -47,10 +48,8 @@ public final class RuleRuntimeHost {
         }
 
         @Override
-        public PackLayerResolver packLayerResolver() {
-            return packId -> packId.startsWith(MOD_PACK_PREFIX)
-                    ? RuleSourceLayer.BUILTIN
-                    : RuleSourceLayer.WORLD;
+        public PackLayerResolver packLayerResolver(ResourceManager resourceManager) {
+            return PackLayerResolver.fromModPacks(resourceManager, MOD_PACK_KNOWN_NAMESPACE);
         }
 
         @Override
