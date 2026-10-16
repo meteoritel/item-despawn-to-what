@@ -386,7 +386,8 @@ public final class ConversionRuntime {
         Vec3 position = record.hasPosition()
                 ? new Vec3(record.positionX(), record.positionY(), record.positionZ())
                 : Vec3.atBottomCenterOf(level.getSharedSpawnPos());
-        SettlementRecovery recovery = new SettlementRecovery(this, scheduler, level, record, ledger, position);
+        SettlementRecovery recovery = new SettlementRecovery(this, scheduler, level,
+                SettlementRecord.Writer.of(ledger, record), position);
         activeRecoveries.add(record.id());
         scheduler.scheduleAt(level.dimension(), recovery, level.getGameTime());
         LOGGER.debug("返还恢复已入队：记录={} 维度={} 待交付={} 位置={}",
@@ -691,25 +692,23 @@ public final class ConversionRuntime {
         // 每组固定源成本 c：显式 source_cost 优先，其次隐式 1 个，再次各 consume_source 之和
         int costPerGroup = types.perRoundSourceConsumption(rule, source);
         tracked.locked = true;
-        SettlementRecord record = null;
-        SettlementLedger ledger = null;
+        // 首次登记与失败补偿都经受控句柄：账目变更与账本双索引、标脏在同一次调用内完成
+        SettlementRecord.Writer writer = null;
         boolean transferred = false;
         try {
             // 所有权转移：整堆进入结算库存，源实体本刻清空（扣减时间点保持在源实体清空的本刻）
             ItemStack held = source.copy();
             source.setCount(0);
             item.addTag(Constants.CONVERTED_TAG);
-            ledger = SettlementLedger.get(level);
             // 记录源位置：重启后源实体已不存在，返还交付只能以记录位置为搜索起点
-            record = new SettlementRecord(UUID.randomUUID().toString(), rule.id().toString(),
-                    level.dimension().location().toString(), held, available, costPerGroup,
+            writer = SettlementRecord.Writer.register(SettlementLedger.get(level), UUID.randomUUID().toString(),
+                    rule.id().toString(), level.dimension().location().toString(), held, available, costPerGroup,
                     true, item.getX(), item.getY(), item.getZ());
-            ledger.put(record);
             if (RuntimeObserver.current().enabled()) {
                 int estimated = costPerGroup > 0 ? Math.max(1, available / costPerGroup) : 1;
                 RuntimeObserver.current().converted(item, rule.id().toString(), estimated);
             }
-            ConversionSettlement settlement = new ConversionSettlement(this, scheduler, level, item, rule, held, record, ledger);
+            ConversionSettlement settlement = new ConversionSettlement(this, scheduler, level, item, rule, held, writer);
             scheduler.scheduleAt(level.dimension(), settlement, level.getGameTime());
             transferred = true;
             VisualFeedback.conversion(level, item.position());
@@ -724,8 +723,8 @@ public final class ConversionRuntime {
             } else {
                 // 补偿：撤销登记（恢复任务不得再交付这堆库存）、撤销「已转化」标记，
                 // 再把整堆源物品写回源实体并保留所有权追踪，等待下一次转化机会
-                if (record != null) {
-                    ledger.remove(record.id());
+                if (writer != null) {
+                    writer.discard();
                 }
                 item.removeTag(Constants.CONVERTED_TAG);
                 source.setCount(available);

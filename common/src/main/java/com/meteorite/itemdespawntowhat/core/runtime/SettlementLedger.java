@@ -22,8 +22,9 @@ import java.util.Map;
  * 存在主世界（服务端全局）的数据存储里：维度卸载或停服都不会丢掉记录本身，
  * 返回待返还数据的完整恢复由 ConversionRuntime 落地；写入仍只发生在服务端线程。
  * 可变性契约：记录是可变对象，两张索引持有同一个引用，账本不在写入时做快照；
- * 因此「修改记录字段」与「put 标脏」必须由持有者在同一处提交点完成——SavedData 只在仍为脏时落盘，
- * 漏标脏的字段修改不会进入存档。落盘读取的是提交时刻的字段值，故提交点之后内存账目与落盘值一致。
+ * 更改变量字段的方法在 {@link SettlementRecord} 内私有，写入统一经 {@link SettlementRecord.Writer}：
+ * 变更与「提交标脏」在同一次调用内完成，调用方无法只改字段不落账。SavedData 只在仍为脏时落盘，
+ * 故提交后内存账目与后续落盘值一致；提交只标脏不即时刷盘。
  */
 public final class SettlementLedger extends SavedData {
 
@@ -50,8 +51,9 @@ public final class SettlementLedger extends SavedData {
                 DATA_ID);
     }
 
-    // 记录入账（新建或更新同一 id）：两张索引写入同一引用并标脏，是记录字段变更的唯一落盘点
-    public void put(SettlementRecord record) {
+    // 提交一条记录（新建或更新同一 id）：两张索引写入同一引用并标脏；只由 SettlementRecord.Writer 调用，
+    // 保证字段变更与索引、标脏同时发生
+    void submit(SettlementRecord record) {
         if (record == null || record.id().isEmpty()) {
             return;
         }
@@ -73,8 +75,9 @@ public final class SettlementLedger extends SavedData {
     }
 
     // 撤销一条登记（扣减失败补偿专用）：把记录从两张索引成对摘除并标脏，
-    // 避免重启后的恢复任务把已经写回源实体的库存再交付一次；未登记该 id 时为空操作
-    void remove(String id) {
+    // 避免重启后的恢复任务把已经写回源实体的库存再交付一次；未登记该 id 时为空操作。
+    // 只由 SettlementRecord.Writer#discard 调用，调用方不直接增删索引
+    void unregister(String id) {
         if (id == null || id.isEmpty()) {
             return;
         }
