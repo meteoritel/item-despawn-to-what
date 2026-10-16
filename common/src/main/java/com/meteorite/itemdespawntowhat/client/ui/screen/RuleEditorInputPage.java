@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDescriptors;
 import com.meteorite.itemdespawntowhat.client.edit.ClientTypeRegistries;
+import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.EffectEditorRegistry;
@@ -110,9 +111,9 @@ final class RuleEditorInputPage {
             if (field.type() != com.meteorite.itemdespawntowhat.client.edit.EditorFieldType.ITEM_COUNTS) continue;
             boolean source = RuleFields.SOURCE_COST.equals(field.name())
                     || RuleEditorPageSupport.CONSUME_SOURCE_ID.toString().equals(RuleEditorPageSupport.stringField(owner, RuleFields.TYPE));
-            String path = basePath.isEmpty() ? field.name() : basePath + "." + field.name();
+            String path = DraftPaths.child(basePath, field.name());
             List<String> references = source
-                    ? RuleEditorPageSupport.stringList(session.draft().valueAt(RuleFields.SOURCE + "." + RuleFields.SOURCE_ITEMS))
+                    ? RuleEditorPageSupport.stringList(session.draft().valueAt(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS)))
                     : RuleEditorPageSupport.stringList(owner.child(RuleFields.CATALYST_ITEMS));
             form.setItemCountReferences(path, references);
             form.setRowDefaultValue(path, () -> quantityDefaults(session, basePath, source));
@@ -125,7 +126,7 @@ final class RuleEditorInputPage {
             owner = RuleValue.mapping().build();
         }
         List<String> references = source
-                ? RuleEditorPageSupport.stringList(session.draft().valueAt(RuleFields.SOURCE + "." + RuleFields.SOURCE_ITEMS))
+                ? RuleEditorPageSupport.stringList(session.draft().valueAt(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS)))
                 : RuleEditorPageSupport.stringList(owner.child(RuleFields.CATALYST_ITEMS));
         RuleValue values = RuleEditorPageSupport.defaultQuantities(owner, references);
         if (!RuleEditorPageSupport.CATALYST_PRESENT_ID.toString().equals(RuleEditorPageSupport.stringField(owner, RuleFields.TYPE))
@@ -151,37 +152,39 @@ final class RuleEditorInputPage {
         RuleValue rule = session.draft().root();
         if (sourceCostForm != null) {
             RuleCostBinding.Ref ref = RuleCostBinding.consumeSource(rule);
-            String path = ref == null ? RuleFields.SOURCE_COST : ref.path() + "." + RuleFields.ITEM_COUNTS;
+            String path = ref == null ? RuleFields.SOURCE_COST
+                    : DraftPaths.child(ref.path(), RuleFields.ITEM_COUNTS);
             sourceCostForm.setItemCountReferences(path,
-                    RuleEditorPageSupport.stringList(session.draft().valueAt(RuleFields.SOURCE + "." + RuleFields.SOURCE_ITEMS)));
+                    RuleEditorPageSupport.stringList(session.draft().valueAt(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS))));
             sourceCostForm.reload();
         }
         for (PresenceRow row : presenceRows) if (row.leaf.catalyst()) {
-            row.form.setItemCountReferences(row.leaf.conditionPath() + "." + RuleFields.ITEM_COUNTS,
+            row.form.setItemCountReferences(DraftPaths.child(row.leaf.conditionPath(), RuleFields.ITEM_COUNTS),
                     RuleEditorPageSupport.stringList(session.draft().valueAt(row.leaf.fieldPath())));
             row.form.reload();
         }
         if (catalystForm != null) {
             RuleCostBinding.Ref ref = RuleCostBinding.consumeCatalyst(rule);
             String base = ref == null ? RuleFields.CATALYST_COST : ref.path();
-            catalystForm.setItemCountReferences(base + "." + RuleFields.ITEM_COUNTS,
-                    RuleEditorPageSupport.stringList(session.draft().valueAt(base + "." + RuleFields.CATALYST_ITEMS)));
+            catalystForm.setItemCountReferences(DraftPaths.child(base, RuleFields.ITEM_COUNTS),
+                    RuleEditorPageSupport.stringList(session.draft().valueAt(
+                            DraftPaths.child(base, RuleFields.CATALYST_ITEMS))));
             catalystForm.reload();
         }
         pages.host.onControlsChanged();
     }
 
     void updateBlacklistVisibility() {
-        if (sourceForm != null) sourceForm.setRowVisible(RuleFields.SOURCE + "." + RuleFields.SOURCE_EXCLUDE,
+        if (sourceForm != null) sourceForm.setRowVisible(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_EXCLUDE),
                 !SourceBlacklistPicker.sourceTags(pages.currentView()).isEmpty());
     }
 
     void buildInput(EditSession session) {
         RuleValue rule = session.draft().root();
         sourceForm = pages.newForm(session, RuleFields.SOURCE, BuiltinEditorDescriptors.sourceDescriptor());
-        sourceForm.hideRowLabel(RuleFields.SOURCE + ".items");
+        sourceForm.hideRowLabel(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS));
         sourceForm.setOnFieldWritten((path, before) -> {
-            if (!path.equals(RuleFields.SOURCE + "." + RuleFields.SOURCE_ITEMS)) return;
+            if (!path.equals(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS))) return;
             List<String> references = RuleEditorPageSupport.stringList(session.draft().valueAt(path));
             if (session.draft().root().has(RuleFields.SOURCE_COST)) {
                 session.draft().replaceWith(RuleEditorPageSupport.withQuantities(session.draft().root(),
@@ -258,7 +261,7 @@ final class RuleEditorInputPage {
         }
         RuleDraft draft = session.draft();
         pages.apply(EditSession.OP_SET_FIELD, () -> draft.setAt(RuleFields.SOURCE_COST, RuleEditorPageSupport.defaultQuantities(null,
-                RuleEditorPageSupport.stringList(draft.valueAt(RuleFields.SOURCE + "." + RuleFields.SOURCE_ITEMS)))));
+                RuleEditorPageSupport.stringList(draft.valueAt(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS))))));
     }
 
     void onCatalystToggle(boolean checked) {
@@ -301,7 +304,7 @@ final class RuleEditorInputPage {
     int catalystThreshold(RuleEditorPageSupport.PresenceLeaf leaf) {
         EditSession session = pages.host.session();
         RuleValue count = session == null ? null
-                : session.draft().valueAt(leaf.conditionPath() + "." + RuleFields.CATALYST_COUNT);
+                : session.draft().valueAt(DraftPaths.child(leaf.conditionPath(), RuleFields.CATALYST_COUNT));
         return count != null && count.isNumber() ? count.asInteger(effectiveThreshold(leaf.conditionPath()))
                 : effectiveThreshold(leaf.conditionPath());
     }
@@ -354,7 +357,8 @@ final class RuleEditorInputPage {
             if (!leaf.fieldPath().equals(path)) return;
             if (leaf.catalyst()) {
                 RuleEditorPageSupport.reconcileQuantities(session.draft(), leaf.conditionPath(), RuleFields.ITEM_COUNTS,
-                        RuleEditorPageSupport.stringList(session.draft().valueAt(leaf.conditionPath() + "." + RuleFields.CATALYST_ITEMS)),
+                        RuleEditorPageSupport.stringList(session.draft().valueAt(
+                                DraftPaths.child(leaf.conditionPath(), RuleFields.CATALYST_ITEMS))),
                         catalystThreshold(leaf));
                 RuleEditorPageSupport.retargetCatalystItems(session.draft(), RuleEditorPageSupport.stringList(before),
                         RuleEditorPageSupport.stringList(session.draft().valueAt(path)));
@@ -464,7 +468,8 @@ final class RuleEditorInputPage {
         if (session == null) {
             return items;
         }
-        for (String reference : RuleEditorPageSupport.stringList(session.draft().valueAt(conditionPath + "." + RuleFields.CATALYST_ITEMS))) {
+        for (String reference : RuleEditorPageSupport.stringList(session.draft().valueAt(
+                DraftPaths.child(conditionPath, RuleFields.CATALYST_ITEMS)))) {
             TaggedId.parse(reference).result().ifPresent(items::add);
         }
         return items;
@@ -476,7 +481,8 @@ final class RuleEditorInputPage {
             return CatalystPresentCondition.DEFAULT_COUNT;
         }
         RuleDraft draft = session.draft();
-        List<String> items = RuleEditorPageSupport.stringList(draft.valueAt(conditionPath + "." + RuleFields.CATALYST_ITEMS));
+        List<String> items = RuleEditorPageSupport.stringList(draft.valueAt(
+                DraftPaths.child(conditionPath, RuleFields.CATALYST_ITEMS)));
         String scopePath = RuleEditorPageSupport.scopePathOf(conditionPath);
         RuleValue scope = draft.valueAt(scopePath);
         if (scope == null || !scope.isMapping()) {
@@ -492,7 +498,7 @@ final class RuleEditorInputPage {
             return CatalystPresentCondition.DEFAULT_COUNT;
         }
         return Math.max(CatalystPresentCondition.DEFAULT_COUNT,
-                intAt(scopePath + "." + RuleFields.CATALYST_COUNT));
+                intAt(DraftPaths.child(scopePath, RuleFields.CATALYST_COUNT)));
     }
 
     int intAt(String path) {

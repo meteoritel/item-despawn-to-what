@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDefaults;
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDescriptors;
+import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorFactories;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
@@ -240,7 +241,7 @@ final class RuleEditorResultsPage {
             ResourceLocation typeId = type == null ? null : ResourceLocation.tryParse(type);
             selectedAction = element != null && element.isMapping() ? element : null;
             if (typeId != null) {
-                String actionPath = listPath + "[" + effectIndex + "]";
+                String actionPath = DraftPaths.indexPath(listPath, effectIndex);
                 TypeEditorDescriptor descriptor = EffectEditorRegistry.descriptorFor(typeId);
                 if (typeId.equals(ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "spawn_entity"))
                         && element.isMapping()) {
@@ -341,7 +342,8 @@ final class RuleEditorResultsPage {
             if (convert) {
                 draft.convertToOutcomes(EditorFactories.uniqueCandidateId(Set.of()));
             }
-            draft.setAt(RuleFields.OUTCOMES + "[" + index + "]." + field, RuleValue.flag(value));
+            draft.setAt(DraftPaths.child(DraftPaths.indexPath(RuleFields.OUTCOMES, index), field),
+                    RuleValue.flag(value));
         });
         if (applied && convert) {
             notice(RuleEditorScreen.NoticeLevel.INFO, Component.translatable(RuleEditorPageSupport.UI + "notice.converted"));
@@ -376,7 +378,7 @@ final class RuleEditorResultsPage {
                     .put(RuleFields.CANDIDATE_ID, RuleValue.text(EditorFactories.uniqueCandidateId(draft.candidateIds())))
                     .put(RuleFields.CANDIDATE_EFFECTS, RuleValue.list().build())
                     .build();
-            draft.setAt(RuleFields.OUTCOMES + "[" + draft.outcomeCount() + "]", body);
+            draft.setAt(DraftPaths.indexPath(RuleFields.OUTCOMES, draft.outcomeCount()), body);
         })) {
             return;
         }
@@ -414,7 +416,7 @@ final class RuleEditorResultsPage {
             RuleValue body = RuleValue.mapping(source)
                     .put(RuleFields.CANDIDATE_ID, RuleValue.text(EditorFactories.uniqueCandidateId(draft.candidateIds())))
                     .build();
-            draft.setAt(RuleFields.OUTCOMES + "[" + draft.outcomeCount() + "]", body);
+            draft.setAt(DraftPaths.indexPath(RuleFields.OUTCOMES, draft.outcomeCount()), body);
         })) {
             return;
         }
@@ -432,7 +434,8 @@ final class RuleEditorResultsPage {
         // 至少保留一个方案，与工具条的禁用边界一致。
         if (!draft.hasOutcomes() || draft.outcomeCount() <= 1) return;
         int index = Math.max(0, candidateIndex);
-        if (!pages.apply(EditSession.OP_REMOVE_CANDIDATE, () -> draft.removeAt(RuleFields.OUTCOMES + "[" + index + "]"))) {
+        if (!pages.apply(EditSession.OP_REMOVE_CANDIDATE,
+                () -> draft.removeAt(DraftPaths.indexPath(RuleFields.OUTCOMES, index)))) {
             return;
         }
         candidateIndex = Math.max(0, index - 1);
@@ -505,7 +508,8 @@ final class RuleEditorResultsPage {
         }
         String listPath = ResultStructure.listPath(draft.root(), candidateIndex);
         RuleValue body = BuiltinEditorDefaults.effectBody(type);
-        if (!pages.apply(EditSession.OP_ADD_EFFECT, () -> draft.setAt(listPath + "[" + draft.effectCountAt(listPath) + "]", body))) {
+        if (!pages.apply(EditSession.OP_ADD_EFFECT,
+                () -> draft.setAt(DraftPaths.indexPath(listPath, draft.effectCountAt(listPath)), body))) {
             return;
         }
         effectIndex = Math.max(0, draft.effectCountAt(listPath) - 1);
@@ -521,7 +525,7 @@ final class RuleEditorResultsPage {
         if (index < 0 || index >= draft.effectCountAt(listPath)) {
             return;
         }
-        if (!pages.apply(EditSession.OP_REMOVE_EFFECT, () -> draft.removeAt(listPath + "[" + index + "]"))) {
+        if (!pages.apply(EditSession.OP_REMOVE_EFFECT, () -> draft.removeAt(DraftPaths.indexPath(listPath, index)))) {
             return;
         }
         // 删除非选中行时保留当前动作；删掉当前行时选中前一行。

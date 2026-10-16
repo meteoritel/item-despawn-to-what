@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import java.util.List;
@@ -45,7 +46,7 @@ public final class RuleCostBinding {
         if (flat != null) {
             int index = indexOf(flat, effectId);
             if (index >= 0) {
-                String path = RuleFields.EFFECTS + "[" + index + "]";
+                String path = DraftPaths.indexPath(RuleFields.EFFECTS, index);
                 return new Ref(RuleFields.EFFECTS, index, path, null, -1);
             }
         }
@@ -65,8 +66,9 @@ public final class RuleCostBinding {
             }
             int index = indexOf(effects, effectId);
             if (index >= 0) {
-                String listPath = RuleFields.OUTCOMES + "[" + candidate + "]." + RuleFields.CANDIDATE_EFFECTS;
-                return new Ref(listPath, index, listPath + "[" + index + "]", stringOf(element), candidate);
+                String listPath = DraftPaths.child(DraftPaths.indexPath(RuleFields.OUTCOMES, candidate),
+                        RuleFields.CANDIDATE_EFFECTS);
+                return new Ref(listPath, index, DraftPaths.indexPath(listPath, index), stringOf(element), candidate);
             }
         }
         return null;

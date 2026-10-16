@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
@@ -545,8 +546,10 @@ public final class RuleEditorPanelFactory {
         return null;
     }
 
+    // 基路径归一：空白基路径按无字段处理；本层保留 isBlank 口径
+    // （DraftPaths.child 只判 isEmpty，两者仅对「全空白基路径」不同，此处不合并）
     private static String join(String basePath, String name) {
-        return basePath == null || basePath.isBlank() ? name : basePath + "." + name;
+        return basePath == null || basePath.isBlank() ? name : DraftPaths.child(basePath, name);
     }
 
     // 高度/光照区间：两个可省略的整数端点

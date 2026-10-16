@@ -112,8 +112,8 @@ public final class ConditionTreeNodes implements UiTreeEditor.Adapter<ConditionN
         paths.put(node, path);
         List<ConditionNode> children = INSTANCE.children(node);
         for (int index = 0; index < children.size(); index++) {
-            String childPath = node instanceof ConditionNode.Inverted ? path + "." + RuleFields.TERM
-                    : path + "." + RuleFields.TERMS + "[" + index + "]";
+            String childPath = node instanceof ConditionNode.Inverted ? DraftPaths.child(path, RuleFields.TERM)
+                    : DraftPaths.indexPath(DraftPaths.child(path, RuleFields.TERMS), index);
             collect(children.get(index), childPath, paths);
         }
     }

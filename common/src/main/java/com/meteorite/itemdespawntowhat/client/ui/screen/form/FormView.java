@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
@@ -396,7 +397,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
 
     // 拼接子路径
     String childPath(String relative) {
-        return basePath.isEmpty() ? relative : basePath + "." + relative;
+        return DraftPaths.child(basePath, relative);
     }
 
     // 条件树返回相对路径，宿主编辑叶参数时需定位到本表单所在的规则或效果。

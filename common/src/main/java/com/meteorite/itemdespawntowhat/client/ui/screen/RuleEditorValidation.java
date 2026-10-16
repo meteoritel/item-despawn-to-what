@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.edit.ClientTypeRegistries;
+import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
@@ -127,14 +128,14 @@ final class RuleEditorValidation {
                 continue;
             }
             // 条件树路径需要指向 conditions 元素本身
-            String path = RuleFields.EFFECTS + "[" + i + "]." + RuleFields.CONDITIONS;
+            String path = DraftPaths.child(DraftPaths.indexPath(RuleFields.EFFECTS, i), RuleFields.CONDITIONS);
             validateConditionTree(draft, path, path, issues);
         }
         // 候选结果：id 非空且唯一、effects 非空；候选内效果级条件树同样本地校验
         Set<String> candidateIds = new LinkedHashSet<>();
         for (int i = 0; i < outcomes.size(); i++) {
             RuleValue element = outcomes.item(i);
-            String candidatePath = RuleFields.OUTCOMES + "[" + i + "]";
+            String candidatePath = DraftPaths.indexPath(RuleFields.OUTCOMES, i);
             if (element == null || !element.isMapping()) {
                 issues.add(issue(candidatePath, UI + "issue.candidate_id_invalid"));
                 continue;
@@ -142,11 +143,11 @@ final class RuleEditorValidation {
             RuleValue idElement = element.child(RuleFields.CANDIDATE_ID);
             if (idElement == null || !idElement.isScalar() || idElement.asText().isBlank()
                     || !candidateIds.add(idElement.asText())) {
-                issues.add(issue(candidatePath + "." + RuleFields.CANDIDATE_ID, UI + "issue.candidate_id_invalid"));
+                issues.add(issue(DraftPaths.child(candidatePath, RuleFields.CANDIDATE_ID), UI + "issue.candidate_id_invalid"));
             }
             RuleValue candidateEffects = listOf(element.child(RuleFields.CANDIDATE_EFFECTS));
             if (candidateEffects.size() == 0) {
-                issues.add(issue(candidatePath + "." + RuleFields.CANDIDATE_EFFECTS, UI + "issue.candidate_effects_empty"));
+                issues.add(issue(DraftPaths.child(candidatePath, RuleFields.CANDIDATE_EFFECTS), UI + "issue.candidate_effects_empty"));
                 continue;
             }
             for (int j = 0; j < candidateEffects.size(); j++) {
@@ -154,8 +155,8 @@ final class RuleEditorValidation {
                 if (effect == null || !effect.isMapping()) {
                     continue;
                 }
-                String conditionsPath = candidatePath + "." + RuleFields.CANDIDATE_EFFECTS + "[" + j + "]."
-                        + RuleFields.CONDITIONS;
+                String conditionsPath = DraftPaths.child(DraftPaths.indexPath(
+                        DraftPaths.child(candidatePath, RuleFields.CANDIDATE_EFFECTS), j), RuleFields.CONDITIONS);
                 validateConditionTree(draft, conditionsPath, conditionsPath, issues);
             }
         }
@@ -175,7 +176,7 @@ final class RuleEditorValidation {
         }
         // 固定成本按引用分别校验；数量必须为正整数，引用必须来自已选物品。
         RuleValue sourceCost = draft.root().child(RuleFields.SOURCE_COST);
-        RuleValue sourceItems = listOf(draft.valueAt(RuleFields.SOURCE + "." + RuleFields.SOURCE_ITEMS));
+        RuleValue sourceItems = listOf(draft.valueAt(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS)));
         if (sourceCost != null && invalidItemCounts(sourceCost, sourceItems, Integer.MAX_VALUE)) {
             issues.add(issue(RuleFields.SOURCE_COST, UI + "issue.source_cost_not_positive"));
         }
@@ -190,23 +191,23 @@ final class RuleEditorValidation {
                 RuleValue counts = catalystCost.child(RuleFields.ITEM_COUNTS);
                 if (counts != null && invalidItemCounts(counts, listOf(catalystCost.child(RuleFields.CATALYST_ITEMS)),
                         CatalystCost.MAX_COUNT)) {
-                    issues.add(issue(RuleFields.CATALYST_COST + "." + RuleFields.ITEM_COUNTS,
+                    issues.add(issue(DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.ITEM_COUNTS),
                             UI + "issue.catalyst_cost_count_out_of_range"));
                 }
                 if (listOf(catalystCost.child(RuleFields.CATALYST_ITEMS)).size() == 0) {
-                    issues.add(issue(RuleFields.CATALYST_COST + "." + RuleFields.CATALYST_ITEMS,
+                    issues.add(issue(DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.CATALYST_ITEMS),
                             UI + "issue.catalyst_cost_items_empty"));
                 }
                 RuleValue countElement = catalystCost.child(RuleFields.CATALYST_COUNT);
                 if (isInteger(countElement) && (countElement.asInteger(0) < CatalystCost.MIN_COUNT
                         || countElement.asInteger(0) > CatalystCost.MAX_COUNT)) {
-                    issues.add(issue(RuleFields.CATALYST_COST + "." + RuleFields.CATALYST_COUNT,
+                    issues.add(issue(DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.CATALYST_COUNT),
                             UI + "issue.catalyst_cost_count_out_of_range"));
                 }
                 RuleValue radiusElement = catalystCost.child(RuleFields.CATALYST_RADIUS);
                 if (isInteger(radiusElement) && (radiusElement.asInteger(0) < CatalystCost.MIN_RADIUS
                         || radiusElement.asInteger(0) > CatalystCost.MAX_RADIUS)) {
-                    issues.add(issue(RuleFields.CATALYST_COST + "." + RuleFields.CATALYST_RADIUS,
+                    issues.add(issue(DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.CATALYST_RADIUS),
                             UI + "issue.catalyst_cost_radius_out_of_range"));
                 }
             }

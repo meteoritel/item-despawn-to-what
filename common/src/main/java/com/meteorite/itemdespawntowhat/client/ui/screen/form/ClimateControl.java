@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
@@ -226,8 +227,8 @@ final class ClimateControl extends FormControl {
 
     @Override
     @Nullable UiFocusTarget revealPath(String path, String basePath) {
-        if (path.equals(basePath + "." + MAX_FIELD)) return maxInput;
-        if (path.equals(basePath + "." + MIN_FIELD)) return minInput;
+        if (path.equals(DraftPaths.child(basePath, MAX_FIELD))) return maxInput;
+        if (path.equals(DraftPaths.child(basePath, MIN_FIELD))) return minInput;
         return null;
     }
 
@@ -359,13 +360,14 @@ final class ClimateControl extends FormControl {
         Double min = UiNumbers.parseFinite(minInput.value());
         Double max = UiNumbers.parseFinite(maxInput.value());
         List<FormIssue> issues = new ArrayList<>();
-        checkEnd(issues, path + "." + MIN_FIELD, minInput.value(), min);
-        checkEnd(issues, path + "." + MAX_FIELD, maxInput.value(), max);
+        checkEnd(issues, DraftPaths.child(path, MIN_FIELD), minInput.value(), min);
+        checkEnd(issues, DraftPaths.child(path, MAX_FIELD), maxInput.value(), max);
         if (minInput.value().isBlank() && maxInput.value().isBlank()) {
             issues.add(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "required")));
         }
         if (min != null && max != null && min > max) {
-            issues.add(FormIssue.error(path + "." + MIN_FIELD, label(), Component.translatable(ISSUE_PREFIX + "range_order")));
+            issues.add(FormIssue.error(DraftPaths.child(path, MIN_FIELD), label(),
+                    Component.translatable(ISSUE_PREFIX + "range_order")));
         }
         return issues;
     }

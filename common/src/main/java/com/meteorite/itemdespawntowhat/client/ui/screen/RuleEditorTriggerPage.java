@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.edit.ConditionEditorRegistry;
+import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
@@ -184,7 +185,8 @@ final class RuleEditorTriggerPage {
         }
         UiConditionTreeSummary tree = RuleEditorPageSupport.findTree(owner, leaf);
         String base = tree != null && tree.selectedPath() != null ? tree.selectedPath() : RuleFields.CONDITIONS;
-        String path = owner.draftPath(base.endsWith("." + RuleFields.CONDITION) ? base : base + "." + RuleFields.CONDITION);
+        String conditionSuffix = "." + RuleFields.CONDITION;
+        String path = owner.draftPath(base.endsWith(conditionSuffix) ? base : DraftPaths.child(base, RuleFields.CONDITION));
         // 先写入新建的树节点，叶参数表单才有可读取的草稿路径。
         owner.applyToDraft();
         ConditionTreeOverlay.Parameters parameters = createLeafParameters(session, path, leaf);

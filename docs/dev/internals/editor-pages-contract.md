@@ -62,6 +62,7 @@
 
 - 编号按类型各自递增（`counters.merge(type, 1, Integer::sum)`）；标题行 = `rule.presence.title`（「类型 编号 · 作用域」，由 `presenceHeader` 生成）。
 - 输入页与触发页、叶弹窗标题**共用同一份扫描结果**（`ruleLevelPresence`、`findPresenceLeaf`），因此同一类型第 N 项在两侧是同一个编号。
+- 草稿与页面表单的主要路径构造共用 `client/edit/DraftPaths`：字段子路径用 `DraftPaths#child`、数组元素路径用 `DraftPaths#indexPath`。`UiConditionTreeSummary` 的树内路径与 `ConditionTreeOverlay` 的作用域映射仍由各自构造；路径前后缀判定属于消费逻辑，不是构造接口。界面层只调用不含 Gson 类型的路径方法，读写方法留在 `client/edit`；数组重排后的路径由调用方按当前结构更新，`DraftPaths#render` 仅渲染已有路径段。
 
 ## 4. 输入↔触发按确切叶路径关联（契约）
 

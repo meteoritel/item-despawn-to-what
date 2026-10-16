@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDefaults;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
@@ -41,7 +42,8 @@ final class FormDraftWriter {
                 RuleValue owner = container != null && container.isMapping() ? container : RuleValue.mapping().build();
                 boolean source = RuleFields.SOURCE_COST.equals(row.field.name())
                         || RuleValue.text(ConsumeSourceEffect.ID.toString()).equals(owner.child(RuleFields.TYPE));
-                RuleValue references = source ? draft.valueAt(RuleFields.SOURCE + "." + RuleFields.SOURCE_ITEMS)
+                RuleValue references = source
+                        ? draft.valueAt(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS))
                         : owner.child(RuleFields.CATALYST_ITEMS);
                 List<String> ids = stringReferences(references);
                 int fallback = owner.integer(RuleFields.CATALYST_COUNT, CatalystCost.DEFAULT_COUNT);

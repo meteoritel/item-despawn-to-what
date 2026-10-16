@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.edit;
 
+import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -33,14 +34,15 @@ public final class RuleRequirements {
         List<Missing> result = new ArrayList<>();
         RuleValue source = mappingOf(rule == null ? null : rule.child("source"));
         if (itemsOf(source.child("items")).isEmpty()) {
-            result.add(new Missing("source.items", UI + "rule.source.items"));
+            result.add(new Missing(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS), UI + "rule.source.items"));
         }
         boolean any = inspect(itemsOf(rule == null ? null : rule.child("effects")), "effects", result);
         List<RuleValue> outcomes = itemsOf(rule == null ? null : rule.child("outcomes"));
         for (int index = 0; index < outcomes.size(); index++) {
             RuleValue candidate = mappingOf(outcomes.get(index));
             any |= inspect(itemsOf(candidate.child("effects")),
-                    "outcomes[" + index + "].effects", result);
+                    DraftPaths.child(DraftPaths.indexPath(RuleFields.OUTCOMES, index), RuleFields.CANDIDATE_EFFECTS),
+                    result);
         }
         if (!any) {
             result.add(new Missing("effects", UI + "required.results"));
@@ -69,7 +71,8 @@ public final class RuleRequirements {
                 default -> "";
             };
             if (!field.isEmpty() && text(action, field).isBlank()) {
-                missing.add(new Missing(path + "[" + index + "]." + field, UI + "required." + field));
+                missing.add(new Missing(DraftPaths.child(DraftPaths.indexPath(path, index), field),
+                        UI + "required." + field));
             }
         }
         return any;

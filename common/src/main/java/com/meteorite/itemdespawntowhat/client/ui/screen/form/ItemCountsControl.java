@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
@@ -152,7 +153,7 @@ final class ItemCountsControl extends FormControl {
     @Override
     @Nullable UiFocusTarget revealPath(String path, String basePath) {
         for (Entry entry : entries.values()) {
-            String referencePath = basePath + "." + entry.reference;
+            String referencePath = DraftPaths.child(basePath, entry.reference);
             if (path.equals(referencePath)) return entry.control.revealPath(referencePath, referencePath);
         }
         return null;
@@ -248,7 +249,7 @@ final class ItemCountsControl extends FormControl {
     List<FormIssue> issues(String path) {
         List<FormIssue> result = new ArrayList<>();
         for (Entry entry : entries.values()) {
-            result.addAll(entry.control.issues(path + "." + entry.reference));
+            result.addAll(entry.control.issues(DraftPaths.child(path, entry.reference)));
         }
         return result;
     }

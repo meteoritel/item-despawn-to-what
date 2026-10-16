@@ -13,6 +13,9 @@ import org.jetbrains.annotations.Nullable;
  * {@code effects[2].chance}、{@code outcomes[0].effects[1]}、{@code conditions.terms[0].condition}。
  * <p>本类不持有草稿状态、不做模型校验：读写时未识别字段与第三方扩展字段一律原样保留。
  * 路径是「当前 JSON 形状」的表达，重排后必须由调用方重算，不能靠路径下标跟踪对象身份。
+ * <p>本类集中提供草稿路径的解析、读写删与构造（{@link #child} / {@link #indexPath}），
+ * {@link #render} 只把调用方提供的路径段渲染成字符串，不更新下标或跟踪对象身份。构造方法不读写草稿，
+ * 其签名不含 Gson 类型，因此界面层可直接调用；读写方法带 Gson 类型，只在 {@code client.edit} 内使用。
  */
 public final class DraftPaths {
 
@@ -22,17 +25,31 @@ public final class DraftPaths {
     }
 
     /**
-     * 路径段：字段名与可选数组下标（{@code -1} 表示该段没有下标）。
+     * 路径段：字段名与可选数组下标。
+     *
+     * @param name  字段名；{@code [i]} 段的字段名为空串
+     * @param index 数组下标；{@code -1} 表示该段没有下标
      */
     public record Segment(String name, int index) {
 
-        // 该段是否带数组下标
+        /**
+         * 该段是否带数组下标。
+         *
+         * @return 下标不小于 0 时为 {@code true}
+         */
         public boolean hasIndex() {
             return index >= 0;
         }
     }
 
-    // 解析路径：字段名 + 可选一个数组下标；空路径得到空列表
+    /**
+     * 解析路径字符串为路径段列表。
+     * <p>空路径与 {@code null} 得到空列表；连续点与首尾点产生的空段被跳过；
+     * 下标不是整数时该段按无下标处理（静默降级，不抛异常）；{@code ]} 之后的残留字符被丢弃。
+     *
+     * @param path 草稿路径，可为 {@code null}
+     * @return 路径段列表；空路径为空列表
+     */
     public static List<Segment> parse(@Nullable String path) {
         List<Segment> segments = new ArrayList<>();
         if (path == null || path.isEmpty()) {
@@ -61,7 +78,13 @@ public final class DraftPaths {
         return segments;
     }
 
-    // 把路径段重新渲染成字符串（重排后重算路径用）
+    /**
+     * 把路径段重新渲染成路径字符串；空列表得到空串。
+     * <p>数组重排后由调用方按当前结构更新路径段，本方法不负责重算下标。
+     *
+     * @param segments 路径段列表
+     * @return 路径字符串
+     */
     public static String render(List<Segment> segments) {
         StringBuilder builder = new StringBuilder();
         for (Segment segment : segments) {
@@ -76,18 +99,36 @@ public final class DraftPaths {
         return builder.toString();
     }
 
-    // 拼接子字段路径
+    /**
+     * 拼接子字段路径：基路径为空或 {@code null} 时只返回字段名。
+     *
+     * @param path  基路径，可为 {@code null}
+     * @param field 子字段名
+     * @return 子字段路径
+     */
     public static String child(@Nullable String path, String field) {
         return path == null || path.isEmpty() ? field : path + "." + field;
     }
 
-    // 拼接数组元素路径（listPath 为空时只留下标）
+    /**
+     * 拼接数组元素路径：列表路径为空或 {@code null} 时只返回下标段。
+     *
+     * @param listPath 数组所在路径，可为 {@code null}
+     * @param index    元素下标
+     * @return 元素路径
+     */
     public static String indexPath(@Nullable String listPath, int index) {
         String base = listPath == null ? "" : listPath;
         return base + "[" + index + "]";
     }
 
-    // 按路径读取，路径不存在返回 null
+    /**
+     * 按路径读取元素：任一步类型不符或越界即返回 {@code null}。
+     *
+     * @param root     根元素，可为 {@code null}
+     * @param segments 路径段列表
+     * @return 命中的元素；路径不存在为 {@code null}
+     */
     public static @Nullable JsonElement read(@Nullable JsonElement root, List<Segment> segments) {
         JsonElement current = root;
         for (Segment segment : segments) {
@@ -99,12 +140,24 @@ public final class DraftPaths {
         return current;
     }
 
-    // 按路径读取
+    /**
+     * 按路径字符串读取元素。
+     *
+     * @param root 根元素，可为 {@code null}
+     * @param path 草稿路径，可为 {@code null}
+     * @return 命中的元素；路径不存在为 {@code null}
+     */
     public static @Nullable JsonElement readAt(@Nullable JsonElement root, @Nullable String path) {
         return read(root, parse(path));
     }
 
-    // 单步下降：先取字段名，再取数组下标
+    /**
+     * 单步下降：先按字段名进入对象，再按下标进入数组。
+     *
+     * @param current 当前元素，可为 {@code null}
+     * @param segment 路径段
+     * @return 下降后的元素；类型不符或越界为 {@code null}
+     */
     public static @Nullable JsonElement readStep(@Nullable JsonElement current, Segment segment) {
         if (current == null) {
             return null;
@@ -131,7 +184,15 @@ public final class DraftPaths {
         return current;
     }
 
-    // 按路径写入，必要时创建中间容器
+    /**
+     * 按路径写入，必要时创建中间容器。
+     * <p>中间对象缺失时新建；中间数组按需用空对象补洞；带下标的段遇到非数组元素会整体替换成新数组。
+     *
+     * @param root     草稿根对象
+     * @param segments 路径段列表
+     * @param value    写入值
+     * @return 是否写入成功；路径段为空时返回 {@code false}
+     */
     public static boolean write(JsonObject root, List<Segment> segments, JsonElement value) {
         if (segments.isEmpty()) {
             return false;
@@ -171,7 +232,13 @@ public final class DraftPaths {
         return false;
     }
 
-    // 按路径删除
+    /**
+     * 按路径删除；按下标删除会压缩数组，后续元素下标整体前移。
+     *
+     * @param root     草稿根对象
+     * @param segments 路径段列表
+     * @return 是否删除成功；路径段为空或路径不存在时返回 {@code false}
+     */
     public static boolean remove(JsonObject root, List<Segment> segments) {
         if (segments.isEmpty()) {
             return false;

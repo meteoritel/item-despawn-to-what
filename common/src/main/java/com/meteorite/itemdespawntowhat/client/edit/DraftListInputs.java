@@ -17,9 +17,9 @@ public final class DraftListInputs {
         if (rule.get(RuleFields.OUTCOMES) instanceof JsonArray candidates) {
             for (int index = 0; index < candidates.size(); index++) {
                 if (!(candidates.get(index) instanceof JsonObject candidate)) continue;
-                String path = RuleFields.OUTCOMES + "[" + index + "]";
+                String path = DraftPaths.indexPath(RuleFields.OUTCOMES, index);
                 objects.put(candidate, path);
-                collectEffects(candidate.get(RuleFields.CANDIDATE_EFFECTS), path + "." + RuleFields.CANDIDATE_EFFECTS);
+                collectEffects(candidate.get(RuleFields.CANDIDATE_EFFECTS), DraftPaths.child(path, RuleFields.CANDIDATE_EFFECTS));
             }
         }
     }
@@ -36,7 +36,7 @@ public final class DraftListInputs {
     private void collectEffects(JsonElement value, String path) {
         if (!(value instanceof JsonArray effects)) return;
         for (int index = 0; index < effects.size(); index++) {
-            if (effects.get(index) instanceof JsonObject effect) objects.put(effect, path + "[" + index + "]");
+            if (effects.get(index) instanceof JsonObject effect) objects.put(effect, DraftPaths.indexPath(path, index));
         }
     }
 

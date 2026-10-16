@@ -324,10 +324,10 @@ public final class EditSession {
         if (value.equals(target)) matches.add(path);
         if (value instanceof JsonObject object) {
             object.entrySet().forEach(entry -> findObjectPaths(entry.getValue(),
-                    path.isEmpty() ? entry.getKey() : path + "." + entry.getKey(), target, matches));
+                    DraftPaths.child(path, entry.getKey()), target, matches));
         } else if (value.isJsonArray()) {
             for (int index = 0; index < value.getAsJsonArray().size(); index++) {
-                findObjectPaths(value.getAsJsonArray().get(index), path + "[" + index + "]", target, matches);
+                findObjectPaths(value.getAsJsonArray().get(index), DraftPaths.indexPath(path, index), target, matches);
             }
         }
     }

@@ -360,7 +360,7 @@ public final class RuleDraft {
 
     // 候选结果内效果列表的路径
     public static String candidateEffectsPath(int candidateIndex) {
-        return RuleFields.OUTCOMES + "[" + candidateIndex + "]." + RuleFields.CANDIDATE_EFFECTS;
+        return DraftPaths.child(DraftPaths.indexPath(RuleFields.OUTCOMES, candidateIndex), RuleFields.CANDIDATE_EFFECTS);
     }
 
     // 任意位置效果数量（按原始数组长度计数，畸变元素同样占位，保证下标与 JSON 一致）

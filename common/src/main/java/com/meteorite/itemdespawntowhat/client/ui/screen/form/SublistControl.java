@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
@@ -77,7 +78,7 @@ final class SublistControl extends FormControl {
 
     // 子项相对路径：字段名[下标]
     private String childPath(int index) {
-        return field.name() + "[" + index + "]";
+        return DraftPaths.indexPath(field.name(), index);
     }
 
     @Override

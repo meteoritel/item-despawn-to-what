@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.edit.ClientTypeRegistries;
+import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
@@ -85,7 +86,7 @@ final class RuleEditorPageSupport {
 
         // 类型字段的草稿路径
         String fieldPath() {
-            return conditionPath + "." + fieldName();
+            return DraftPaths.child(conditionPath, fieldName());
         }
 
         // 规则级条件叶（非动作局部）
@@ -243,9 +244,9 @@ final class RuleEditorPageSupport {
                 if (!array.get(index).isMapping()) {
                     continue;
                 }
-                String effectPath = RuleFields.EFFECTS + "[" + index + "]";
+                String effectPath = DraftPaths.indexPath(RuleFields.EFFECTS, index);
                 collectPresence(array.get(index).child(RuleFields.CONDITIONS),
-                        effectPath + "." + RuleFields.CONDITIONS,
+                        DraftPaths.child(effectPath, RuleFields.CONDITIONS),
                         Component.translatable(UI + "rule.presence.scope_action", index + 1), effectPath, -1, index,
                         leaves, counters);
             }
@@ -266,10 +267,10 @@ final class RuleEditorPageSupport {
                     if (!inner.get(effectIndex).isMapping()) {
                         continue;
                     }
-                    String effectPath = RuleFields.OUTCOMES + "[" + candidateIndex + "]." + RuleFields.EFFECTS
-                            + "[" + effectIndex + "]";
+                    String effectPath = DraftPaths.indexPath(DraftPaths.child(
+                            DraftPaths.indexPath(RuleFields.OUTCOMES, candidateIndex), RuleFields.EFFECTS), effectIndex);
                     collectPresence(inner.get(effectIndex).child(RuleFields.CONDITIONS),
-                            effectPath + "." + RuleFields.CONDITIONS,
+                            DraftPaths.child(effectPath, RuleFields.CONDITIONS),
                             Component.translatable(UI + "rule.presence.scope_effect", candidateIndex + 1, effectIndex + 1),
                             effectPath, candidateIndex, effectIndex, leaves, counters);
                 }
@@ -294,7 +295,7 @@ final class RuleEditorPageSupport {
                 return;
             }
             int ordinal = counters.merge(type.toString(), 1, Integer::sum);
-            out.add(new PresenceLeaf(path, path + "." + RuleFields.CONDITION, type, ordinal, scope,
+            out.add(new PresenceLeaf(path, DraftPaths.child(path, RuleFields.CONDITION), type, ordinal, scope,
                     effectPath, candidateIndex, effectIndex));
             return;
         }
@@ -302,14 +303,14 @@ final class RuleEditorPageSupport {
         if (terms != null && terms.isList()) {
             List<RuleValue> array = terms.items();
             for (int index = 0; index < array.size(); index++) {
-                collectPresence(array.get(index), path + "." + RuleFields.TERMS + "[" + index + "]", scope,
-                        effectPath, candidateIndex, effectIndex, out, counters);
+                collectPresence(array.get(index), DraftPaths.indexPath(DraftPaths.child(path, RuleFields.TERMS), index),
+                        scope, effectPath, candidateIndex, effectIndex, out, counters);
             }
         }
         RuleValue term = node.child(RuleFields.TERM);
         if (term != null && !term.isNull()) {
-            collectPresence(term, path + "." + RuleFields.TERM, scope, effectPath, candidateIndex, effectIndex,
-                    out, counters);
+            collectPresence(term, DraftPaths.child(path, RuleFields.TERM), scope, effectPath, candidateIndex,
+                    effectIndex, out, counters);
         }
     }
 
@@ -364,8 +365,8 @@ final class RuleEditorPageSupport {
         if (outcomes != null && outcomes.isList()) {
             for (int index = 0; index < outcomes.size(); index++) {
                 if (outcomes.item(index).isMapping()) {
-                    retargetFluidAction(draft, RuleFields.OUTCOMES + "[" + index + "]." + RuleFields.EFFECTS,
-                            before, after);
+                    retargetFluidAction(draft, DraftPaths.child(DraftPaths.indexPath(RuleFields.OUTCOMES, index),
+                            RuleFields.EFFECTS), before, after);
                 }
             }
         }
@@ -416,8 +417,8 @@ final class RuleEditorPageSupport {
                 if (!outcomes.item(index).isMapping()) {
                     continue;
                 }
-                retargetConsumptionList(draft, RuleFields.OUTCOMES + "[" + index + "]." + RuleFields.EFFECTS,
-                        before, after);
+                retargetConsumptionList(draft, DraftPaths.child(DraftPaths.indexPath(RuleFields.OUTCOMES, index),
+                        RuleFields.EFFECTS), before, after);
             }
         }
     }

@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import java.util.List;
@@ -77,7 +78,8 @@ public final class ResultStructure {
     // 候选的效果数组路径（RuleDraft 路径语法）
     public static String listPath(@Nullable RuleValue rule, int candidate) {
         if (hasOutcomes(rule)) {
-            return RuleFields.OUTCOMES + "[" + Math.max(0, candidate) + "]." + RuleFields.CANDIDATE_EFFECTS;
+            return DraftPaths.child(DraftPaths.indexPath(RuleFields.OUTCOMES, Math.max(0, candidate)),
+                    RuleFields.CANDIDATE_EFFECTS);
         }
         return RuleFields.EFFECTS;
     }
