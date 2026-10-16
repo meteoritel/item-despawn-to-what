@@ -364,7 +364,8 @@ final class RuleEditorPageSupport {
         RuleValue outcomes = draft.valueAt(RuleFields.OUTCOMES);
         if (outcomes != null && outcomes.isList()) {
             for (int index = 0; index < outcomes.size(); index++) {
-                if (outcomes.item(index).isMapping()) {
+                RuleValue candidate = outcomes.item(index);
+                if (candidate != null && candidate.isMapping()) {
                     retargetFluidAction(draft, DraftPaths.child(DraftPaths.indexPath(RuleFields.OUTCOMES, index),
                             RuleFields.EFFECTS), before, after);
                 }
@@ -407,14 +408,14 @@ final class RuleEditorPageSupport {
             List<String> references = ruleLevelCatalystItems(draft);
             draft.setAt(RuleFields.CATALYST_COST, RuleValue.mapping(cost)
                     .put(RuleFields.CATALYST_ITEMS, RuleValue.textList(references).build()).build());
-            reconcileQuantities(draft, RuleFields.CATALYST_COST, RuleFields.ITEM_COUNTS, references,
-                    CatalystCost.DEFAULT_COUNT);
+            reconcileQuantities(draft, RuleFields.CATALYST_COST, references, CatalystCost.DEFAULT_COUNT);
         }
         retargetConsumptionList(draft, RuleFields.EFFECTS, before, after);
         RuleValue outcomes = draft.valueAt(RuleFields.OUTCOMES);
         if (outcomes != null && outcomes.isList()) {
             for (int index = 0; index < outcomes.size(); index++) {
-                if (!outcomes.item(index).isMapping()) {
+                RuleValue candidate = outcomes.item(index);
+                if (candidate == null || !candidate.isMapping()) {
                     continue;
                 }
                 retargetConsumptionList(draft, DraftPaths.child(DraftPaths.indexPath(RuleFields.OUTCOMES, index),
@@ -456,14 +457,13 @@ final class RuleEditorPageSupport {
         return withQuantities(updated, RuleFields.ITEM_COUNTS, after, countField(element));
     }
 
-    // 按 ownerPath 写回重建后的计数表
-    static void reconcileQuantities(RuleDraft draft, String ownerPath, String field, List<String> references,
-            int fallback) {
+    // 按 ownerPath 写回重建后的计数表；数量字段固定为 item_counts，仅此字段需要与引用列表对账
+    static void reconcileQuantities(RuleDraft draft, String ownerPath, List<String> references, int fallback) {
         RuleValue owner = draft.valueAt(ownerPath);
         if (owner == null || !owner.isMapping()) {
             return;
         }
-        draft.setAt(ownerPath, withQuantities(owner, field, references, fallback));
+        draft.setAt(ownerPath, withQuantities(owner, RuleFields.ITEM_COUNTS, references, fallback));
     }
 
     // 按 references 顺序重建 field 计数表：已有计数值原样保留，新键取 max(DEFAULT_COUNT, fallback)

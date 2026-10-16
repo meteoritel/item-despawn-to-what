@@ -110,13 +110,13 @@ final class RuleEditorValidation {
         }
         RuleValue effects = listOf(draft.root().child(RuleFields.EFFECTS));
         RuleValue outcomes = listOf(draft.root().child(RuleFields.OUTCOMES));
-        if (effects.size() == 0 && outcomes.size() == 0) {
+        if (effects.isEmpty() && outcomes.isEmpty()) {
             issues.add(issue(RuleFields.EFFECTS, UI + "issue.effects_empty"));
         } else if (effects.size() > MAX_EFFECTS) {
             issues.add(issue(RuleFields.EFFECTS, UI + "issue.effects_limit"));
         }
         // effects 与 outcomes 二选一：同时声明会被服务端拒绝，本地先拦
-        if (effects.size() > 0 && outcomes.size() > 0) {
+        if (!effects.isEmpty() && !outcomes.isEmpty()) {
             issues.add(issue(RuleFields.OUTCOMES, UI + "issue.outcomes_conflict"));
         }
         // 规则级条件树
@@ -146,7 +146,7 @@ final class RuleEditorValidation {
                 issues.add(issue(DraftPaths.child(candidatePath, RuleFields.CANDIDATE_ID), UI + "issue.candidate_id_invalid"));
             }
             RuleValue candidateEffects = listOf(element.child(RuleFields.CANDIDATE_EFFECTS));
-            if (candidateEffects.size() == 0) {
+            if (candidateEffects.isEmpty()) {
                 issues.add(issue(DraftPaths.child(candidatePath, RuleFields.CANDIDATE_EFFECTS), UI + "issue.candidate_effects_empty"));
                 continue;
             }
@@ -194,7 +194,7 @@ final class RuleEditorValidation {
                     issues.add(issue(DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.ITEM_COUNTS),
                             UI + "issue.catalyst_cost_count_out_of_range"));
                 }
-                if (listOf(catalystCost.child(RuleFields.CATALYST_ITEMS)).size() == 0) {
+                if (listOf(catalystCost.child(RuleFields.CATALYST_ITEMS)).isEmpty()) {
                     issues.add(issue(DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.CATALYST_ITEMS),
                             UI + "issue.catalyst_cost_items_empty"));
                 }

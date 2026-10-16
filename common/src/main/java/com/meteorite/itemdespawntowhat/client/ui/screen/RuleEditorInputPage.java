@@ -193,7 +193,7 @@ final class RuleEditorInputPage {
             RuleCostBinding.Ref ref = RuleCostBinding.consumeSource(session.draft().root());
             RuleValue effect = ref == null ? null : session.draft().valueAt(ref.path());
             if (effect != null && effect.isMapping()) {
-                RuleEditorPageSupport.reconcileQuantities(session.draft(), ref.path(), RuleFields.ITEM_COUNTS, references,
+                RuleEditorPageSupport.reconcileQuantities(session.draft(), ref.path(), references,
                         RuleEditorPageSupport.countField(effect));
             }
         });
@@ -356,7 +356,7 @@ final class RuleEditorInputPage {
         form.setOnFieldWritten((path, before) -> {
             if (!leaf.fieldPath().equals(path)) return;
             if (leaf.catalyst()) {
-                RuleEditorPageSupport.reconcileQuantities(session.draft(), leaf.conditionPath(), RuleFields.ITEM_COUNTS,
+                RuleEditorPageSupport.reconcileQuantities(session.draft(), leaf.conditionPath(),
                         RuleEditorPageSupport.stringList(session.draft().valueAt(
                                 DraftPaths.child(leaf.conditionPath(), RuleFields.CATALYST_ITEMS))),
                         catalystThreshold(leaf));

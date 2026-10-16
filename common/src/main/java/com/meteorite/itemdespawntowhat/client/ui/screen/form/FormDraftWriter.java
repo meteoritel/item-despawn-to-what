@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
-import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDefaults;
+import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
@@ -10,10 +10,12 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.model.CatalystCost;
 import com.meteorite.itemdespawntowhat.core.type.effect.ConsumeSourceEffect;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -68,13 +70,15 @@ final class FormDraftWriter {
             row.loaded = true;
             EditSession.PendingInput pending = view.session.pendingInput(row.path);
             if (pending != null) row.control.restoreInputText(pending.text());
-            if (row.defaultText != null && row.control instanceof TextControl text) text.displayDefault(row.defaultText);
+            if (row.defaultText != null && row.control instanceof TextControl text)
+                text.displayDefault(row.defaultText);
         }
     }
 
     private static @Nullable RuleValue effectiveValue(RuleValue owner, String field) {
         if (RuleFields.FLUIDS.equals(field) && owner.has(RuleFields.FLUID)) {
-            return RuleValue.list().add(owner.child(RuleFields.FLUID).deepCopy()).build();
+            RuleValue fluid = owner.child(RuleFields.FLUID);
+            if (fluid != null) return RuleValue.list().add(fluid.deepCopy()).build();
         }
         return BuiltinEditorDefaults.effectiveValue(owner, field);
     }
@@ -101,7 +105,9 @@ final class FormDraftWriter {
         }
     }
 
-    /** 保存会话内输入，不改变规则 JSON 或配置历史。 */
+    /**
+     * 保存会话内输入，不改变规则 JSON 或配置历史。
+     */
     void retainPendingInputs() {
         // 历史或结构操作已恢复路径时，旧控件不得再按旧路径覆盖会话输入。
         if (view.loadedRevision != view.session.revision()) return;
@@ -164,7 +170,8 @@ final class FormDraftWriter {
                 if (amounts != null && amounts.isMapping()) {
                     RuleValue.Mapping selected = RuleValue.mapping();
                     for (String id : stringReferences(next)) {
-                        if (amounts.has(id)) selected.put(id, amounts.child(id).deepCopy());
+                        RuleValue amount = amounts.has(id) ? amounts.child(id) : null;
+                        if (amount != null) selected.put(id, amount.deepCopy());
                     }
                     draft.setAt(view.childPath(RuleFields.ITEM_COUNTS), selected.build());
                 }
@@ -175,13 +182,14 @@ final class FormDraftWriter {
         if (RuleFields.CATALYST_ITEMS.equals(row.field.name())) {
             // 只刷新数量行，保留其它字段尚未提交的输入。
             RuleValue owner = view.basePath.isEmpty() ? draft.root() : draft.valueAt(view.basePath);
-            for (FormRow quantity : view.rows) if (quantity.control instanceof ItemCountsControl counts) {
-                counts.setReferences(stringReferences(next));
-                int fallback = owner != null && owner.isMapping() && owner.has(RuleFields.CATALYST_COUNT)
-                        ? owner.integer(RuleFields.CATALYST_COUNT, CatalystCost.DEFAULT_COUNT) : CatalystCost.DEFAULT_COUNT;
-                counts.setDefaultCount(fallback);
-                counts.load(draft.valueAt(quantity.path));
-            }
+            for (FormRow quantity : view.rows)
+                if (quantity.control instanceof ItemCountsControl counts) {
+                    counts.setReferences(stringReferences(next));
+                    int fallback = owner != null && owner.isMapping() && owner.has(RuleFields.CATALYST_COUNT)
+                            ? owner.integer(RuleFields.CATALYST_COUNT, CatalystCost.DEFAULT_COUNT) : CatalystCost.DEFAULT_COUNT;
+                    counts.setDefaultCount(fallback);
+                    counts.load(draft.valueAt(quantity.path));
+                }
         }
     }
 
