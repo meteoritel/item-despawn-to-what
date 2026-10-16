@@ -45,7 +45,7 @@ RequestRuleCatalogPayload (C2S) → owns + isOwner 校验（失效 → SESSION_E
   → RuleCatalogPayload (S2C)：分页结果 + lastPage
 ```
 
-目录候选来自 `core/catalog` 的九类数据源（物品/方块/实体/战利品表/群系/维度/标签/流体/状态效果）；`RuleCatalogService` 按"类型 + 来源修订号"缓存，保存/重载后 `invalidate()`。
+目录候选来自 `core/catalog` 的九类数据源（物品/方块/实体/战利品表/群系/维度/标签/流体/状态效果）；`RuleCatalogService` 按"类型 + 来源修订号"缓存并归属请求时的服务端实例，保存真正写出后调用 `invalidate()` 显式失效，重载后的内容变化由读取时修订号变化触发重建。
 
 ## 4. 提交变更集
 

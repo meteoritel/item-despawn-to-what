@@ -60,7 +60,7 @@
 
 | 类 | 职责 |
 |---|---|
-| `RuleCatalogService` | 消费 `core/catalog` 的候选数据源：按 `类型 + 来源修订号` 缓存、大小写不敏感过滤（id/label/subLabel）、分页切分、`invalidate()` 失效；只读切分，不做权限与会话校验 |
+| `RuleCatalogService` | 消费 `core/catalog` 的候选数据源：按 `类型 + 来源修订号` 缓存（缓存归属请求时的服务端实例，换服整体清空）、大小写不敏感过滤（id/label/subLabel）、分页切分、`invalidate()` 显式失效（保存写出后调用）；只读切分，不做权限与会话校验 |
 
 ### 1.5 `core/service`（写入/会话）
 

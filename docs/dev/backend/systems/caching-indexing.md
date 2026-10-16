@@ -59,13 +59,13 @@
 - 接口 `RuleCatalogSource`：`type()`（对应 `RuleCatalogType`）、`revision()`（内容修订号）、`all()`（全量候选，已按展示顺序排序）。**接口形状已冻结**，分页 / 过滤不在这里。
 - `RuleCatalogSources.builtin(server)`：按 `RuleCatalogType` 声明顺序建 **9 类**数据源（物品 / 方块 / 实体 / 战利品表 / 群系 / 维度 / 标签 / 流体 / 状态效果），并按**服务端实例缓存**整份源列表（换服 / 换存档整体重建，旧服务端可回收）。
 - `RegistryCatalogSource`：基于注册表 id 集合的通用实现（静态注册表取 `keySet()`，数据包 / 动态注册表取可重载查找或 `registryAccess()`）。条目按 id 字典序排序并**按修订号缓存**；`revision()` 每次现场按 id 集合的**内容哈希**（`31 × size + hashCode`，与顺序无关）计算、**不缓存**——内容未变时稳定，reload 后内容变化即改变。
-- `TagCatalogSource`：合并物品 / 方块 / 实体 / 流体 / 群系五个注册表的标签 id，去重保留首次命中的注册表短名；同样按修订号缓存。
+- `TagCatalogSource`：合并物品 / 方块 / 实体 / 流体 / 群系五个注册表的标签 id，去重保留首次命中的注册表短名；**修订号按「标签 id → 短名」映射的内容哈希计算**（不是只看 id 集合），因此 id 集合未变、标签改由其他注册表提供导致副标签变化时，修订号同样改变并重建条目。
 
 **`core/network/catalog/RuleCatalogService`——传输层（分页 + 过滤 + 缓存）**
 
-- **消费** `core/catalog` 的数据源，负责**大小写不敏感的子串过滤（id / label / subLabel）、分页切分、按「类型 + 来源修订号」缓存全量候选与修订失效**，产出可下发的 `RuleCatalog`。
+- **消费** `core/catalog` 的数据源，负责**大小写不敏感的子串过滤（id / label / subLabel）、分页切分、按「类型 + 来源修订号」缓存全量候选与修订失效**，产出可下发的 `RuleCatalog`。缓存以请求时的服务端实例为界，实例变化即整体清空重建，只保留当前实例的条目。
 - 默认每页 `DEFAULT_PAGE_SIZE = 50`，单页上限 `RequestRuleCatalogPayload.MAX_PAGE_SIZE`；越界页码夹到最后一页。
-- `invalidate()` / `invalidate(type)` 在保存、重载或来源内容变化后清缓存。
+- `invalidate()` / `invalidate(type)` 是**显式失效**，唯一生产调用点是保存真正写出后（`RuleEditService` 的 `outcome.written()`）；来源内容变化由读取时的修订号校验就地重建，不要求每次重载清缓存。
 - **来源构建失败不致命**：`RuleCatalogSources.builtin(server)` 抛运行时异常时该类型按无数据源处理并记录 WARN 日志，用于区分「该类型没有数据源」与「数据源实现体报错」。
 
 **两者关系**：`core/catalog` 提供「有哪些、变没变」；`core/network/catalog` 提供「怎么分页下发、何时失效」；编辑端经 `RequestRuleCatalogPayload` / `RuleCatalogPayload` 取分页目录（见 [edit-protocol.md](../modules/edit-protocol.md)）。
@@ -81,7 +81,7 @@
 | `PlaceBlockExecutor.OFFSETS` | 随 (shape, radius, fillOrigin) 组合 | 进程内静态，不失效 |
 | `RuleCatalogSources` 源列表 | 每服务端一份 | 换服务端实例 |
 | `RegistryCatalogSource` / `TagCatalogSource` 条目 | 每修订号一份 | 修订号变化即重建 |
-| `RuleCatalogService.CACHE` | 每 `RuleCatalogType` 一份 | 修订号变化 / `invalidate` |
+| `RuleCatalogService.CACHE` | 每 `RuleCatalogType` 一份 | 服务端实例更换 / 修订号变化 / 保存写出后的 `invalidate` |
 | `CandidateStructureVersions` | 每规则实例一份摘要 | 规则索引重建 / 保存后索引发布 / 停服 |
 | `DebugMeasurements` | **12000** 样本 | 每轮场景 |
 
