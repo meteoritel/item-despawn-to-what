@@ -9,7 +9,7 @@ import java.util.stream.Stream;
 
 /**
  * 数据包来源层判定：把 ResourceManager 中某个包判定为内置数据包或世界数据包。
- * core/load 不假设平台（NeoForge / Fabric）的包 id 命名习惯，由引导层注入实现。
+ * core/load 不依赖平台加载器：判定实现由引导层在本平台的包来源元数据上构建后注入。
  */
 @FunctionalInterface
 public interface PackLayerResolver {
