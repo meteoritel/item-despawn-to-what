@@ -173,7 +173,7 @@
 
 ## 6. 分片传输
 
-`RuleEditChunkAccumulator.validate` 逐片检查 transferId、下标和单片字节数，并将不可变载荷和字节数封装为只能由校验入口创建的 `ValidatedChunk`。服务层先校验、查询幂等回执，再调用 `acceptValidated` 重组；直接调用 `accept` 也经过同一校验入口。接收阶段复用字节数，重复下标以首片为准且仅首片计入累计值；收齐时按累计字节复核总量并返回有序分片，保存后台再拼接。每玩家至多 2 个在途传输，未收齐不回执，超量回 `INVALID_REQUEST`，空闲 1200 tick 清理。下行快照不超过 32 000 B 时直发，大快照每片 30 000 B、每 tick 最多 4 片；总量超过 4 MiB 或总片数超过上限时回结构化失败回执。
+`RuleEditChunkAccumulator.validate` 逐片检查 transferId、下标和单片字节数，并将不可变载荷和字节数封装为只能由校验入口创建的 `ValidatedChunk`。服务层先校验、查询幂等回执，再调用 `acceptValidated` 重组；直接调用 `accept` 也经过同一校验入口。接收阶段复用字节数，重复下标以首片为准且仅首片计入累计值；收齐时按累计字节复核总量并返回有序分片，保存后台再拼接。每玩家至多 2 个在途传输，未收齐不回执，超量回 `INVALID_REQUEST`，空闲 1200 tick 清理。下行快照不超过 32 000 B 时直发，大快照每片 30 000 B、每 tick 最多 4 片；总量超过 4 MiB 或总片数超过上限时回结构化失败回执。启用首载分段观测时，快照准备与分片投递分别输出 `SERVER_PREP` / `SERVER_DELIVER` 分段日志，字段与开关口径见 [debug.md](debug.md) §3.1。
 
 ## 7. 新契约字段如何进入快照与校验
 
