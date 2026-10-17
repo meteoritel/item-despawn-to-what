@@ -22,6 +22,7 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
@@ -111,7 +112,8 @@ public record PlaceBlockEffect(
 
             @Override
             public @Nullable EffectPreparation prepare(PlaceBlockEffect effect, ServerLevel level, Vec3 position,
-                                                       ItemStack sourceStack, boolean fillOrigin) {
+                                                       ItemEntity sourceEntity, ItemStack sourceStack,
+                                                       boolean fillOrigin) {
                 // 目标方块在此刻按组固定：tag 成员与源物品映射都不再随执行时机变化，候选偏移走跨调用缓存
                 return PlaceBlockExecutor.plan(effect, level, sourceStack, fillOrigin);
             }
