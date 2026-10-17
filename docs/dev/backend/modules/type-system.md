@@ -117,7 +117,7 @@
 |---|---|---|---|
 | 1 | `spawn_entity` | `variant: item/entity/experience` 必填；各子类参数见下表 | 统一生成掉落物、通用实体或经验；共用概率/延迟/条件。物品与通用实体的产物引用与每轮产出量在成功转化当刻固定（标签成员当时抽定），交付期在共享预算内分批写入，逐单位回执真实完成量 |
 | 2 | `place_block` | `block: TaggedId`（与 `use_source_block` **至少其一**）；`use_source_block: bool`/false；`shape: square\|circle\|cross`/square；`count: int[1,64]`/1；`radius: int[1,32]`/6；`limit: Integer[1,4096]` | 按形状由内向外扩散放置方块，只替换可替换位置、不突破自身半径；目标方块与候选偏移由准备固定，邻域计数与放置按预算分批推进，逐块回执真实放置量 |
-| 3 | `loot_table` | `loot_table: ResourceLocation`（必填，**不支持 `#tag`**）；`luck: float[-100,100]`/0 | 以位置为原点开战利品表（CHEST 参数集，`THIS_ENTITY`=源），逐轮开表并分批生成 |
+| 3 | `loot_table` | `loot_table: ResourceLocation`（必填，**不支持 `#tag`**）；`luck: float[-100,100]`/0 | 以位置为原点开战利品表（CHEST 参数集，`THIS_ENTITY`=本次源实体）。每组在成功转化当刻各开表并抽取一次，结果随固定输入携带；交付期不再读源实体、不再开表也不再重抽；产物在共享预算内分批写入世界，逐堆回执实际件数，轮次与工作量分别表达，空表给出独立的已完成空结果 |
 | 4 | `lightning` | `count: int[1,16]`/1 | 第 1 道保留原点水平坐标，后续散布 r=5，间隔 8 刻；从高度图上方向下求交最上层碰撞或流体表面，贴合半砖与台阶；虚空无表面时回退高度图高度。执行状态每步最多落一道，每道真正加入世界后经 `reportProgress(1)` 回执，全部落完的终态回执为 `applied(0)` 增量；次数与基准位置取自成功转化当刻的转换、落点散布在执行状态内抽取并保留到真正落下，区块未加载时退避 20 刻重试且不推进次数。本类型无自有的成功时输入，`prepare` 返回 `EffectPreparation.ready()` 只用于让效果级条件与概率在成功转化当刻判定一次 |
 | 5 | `explosion` | `power: float[0,16]`/3.0；`fire: bool`/false；`visual_only: bool`/false | `visual_only` 只粒子+音效；否则 TNT 交互爆炸。爆炸是单步不可抢占的原子操作，基准位置取自成功转化当刻的转换；覆盖半径所需区块未加载时退避 20 刻重试，就绪后一步完成并回执 `applied(1)`。破坏型按 `EXPLOSION_WORK_UNITS = 128` 计入本 tick 工作量，`visual_only` 只播粒子与音效、不计世界工作量。本类型无自有的成功时输入，`prepare` 返回 `EffectPreparation.ready()` 只用于让效果级条件与概率在成功转化当刻判定一次 |
 | 6 | `arrow_rain` | `count: int[1,256]`/16；`pickup: disallowed\|allowed\|creative_only`/disallowed；`potion_effects: List<{effect: TaggedId, duration_ticks: int[1,1000000]/100, amplifier: int[0,255]/0}>` | 上方 +80 高度落箭雨，初速度 4.5 格/刻，间隔 2 刻，可携带药水效果。执行状态每步最多生成一支，每支真正加入世界后经 `reportProgress(1)` 回执，全部落完的终态回执为 `applied(0)` 增量；次数与基准位置取自成功转化当刻的转换，落点与水平抖动在执行状态内抽取并保留到真正生成，区块未加载时退避 20 刻重试且不推进次数。`potion_effects` 的标签抽取属随机输入，在成功转化当刻抽定后随本类型专用的准备记录（`ArrowRainEffect.Prepared`）携带，执行期不再解析或重抽；成功当刻无法解析的引用按失败回执，不在执行期改写结果 |
@@ -160,7 +160,7 @@
 
 三条硬约束：① 不产 null（`Optional` 承载、末步 `orElse(null)`）；② 静态工厂不叫 `type()`；③ 引用字段用 `TaggedId`（支持 `#tag`），只有确无标签语义才用裸 `ResourceLocation`。
 
-执行器/求值器约定：延迟用 `context.schedule(...)`（绑定"维度+位置"，不要求源存活）；随机用 `context.random()`（维度随机）；大量产出用 `EffectTargets.forEachStep(...)` 分批；**不吞异常**，交给运行时隔离记录。
+执行器/求值器约定：延迟用 `context.schedule(...)`（绑定"维度+位置"，不要求源存活）；随机用 `context.random()`（维度随机）；大量产出在 `start` 返回的 `EffectExecution` 里用游标在共享预算内分批；**不吞异常**，交给运行时隔离记录。
 
 ## 7. 第三方 Java 扩展 SPI
 

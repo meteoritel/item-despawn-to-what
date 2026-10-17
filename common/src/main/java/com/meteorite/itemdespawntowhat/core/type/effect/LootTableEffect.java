@@ -1,5 +1,10 @@
 package com.meteorite.itemdespawntowhat.core.type.effect;
 
+import com.meteorite.itemdespawntowhat.core.api.EffectContext;
+import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
+import com.meteorite.itemdespawntowhat.core.api.EffectExecutor;
+import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
+import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.extension.DynamicReferenceCheck;
@@ -16,6 +21,10 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -55,9 +64,37 @@ public record LootTableEffect(
                 new LootTableEffect(lootTable, luck, delayTicks, chance, conditions.orElse(null))));
     }
 
-    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器
+    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。
+    // 显式实现准备入口与按准备创建执行状态的重载：本次战利品在成功转化当刻开表一次并固定，
+    // 交付期不再读取原源实体、不再重开战利品表，也不再次随机抽取。
     public static EffectType<LootTableEffect> effectType(Codec<ConditionExpression> expressionCodec) {
-        return new SimpleEffectType<>(ID, codec(expressionCodec), LootTableEffect::validateParams, LootTableExecutor::execute);
+        return new SimpleEffectType<>(ID, codec(expressionCodec), LootTableEffect::validateParams,
+                new EffectExecutor<LootTableEffect>() {
+                    @Override
+                    public EffectResult execute(LootTableEffect effect, EffectContext context) {
+                        return LootTableExecutor.execute(effect, context);
+                    }
+
+                    @Override
+                    public @Nullable EffectPreparation prepare(LootTableEffect effect, ServerLevel level, Vec3 position,
+                                                               ItemEntity sourceEntity, ItemStack sourceStack,
+                                                               boolean fillOrigin) {
+                        // 战利品求值需要真实源实体作为 THIS_ENTITY，故这一步必须在源实体清空之前完成
+                        return LootTableExecutor.prepare(effect, level, position, sourceEntity, sourceStack, fillOrigin);
+                    }
+
+                    @Override
+                    public EffectExecution start(LootTableEffect effect, EffectContext context) {
+                        // 无固定输入入口同样不做到期重新抽取：产物只在成功转化当刻固定
+                        return LootTableExecutor.start(effect, context, null);
+                    }
+
+                    @Override
+                    public EffectExecution start(LootTableEffect effect, EffectContext context,
+                                                 @Nullable EffectPreparation preparation) {
+                        return LootTableExecutor.start(effect, context, preparation);
+                    }
+                });
     }
 
     // 参数语义校验；战利品表是否存在由数据包机制保证，此处只校验必填与区间
