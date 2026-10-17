@@ -63,7 +63,7 @@
 |---|---|
 | 接管源 | `held = source.copy()`；`source.setCount(0)`；实体打持久化 `converted` 标签（防重载/区块重进重复提交） |
 | 每组成本 | `c = perRoundSourceConsumption(rule, stack)`，四种取值情形见 [conversion-runtime.md §3](../modules/conversion-runtime.md) |
-| 固定输入 | 源实体清空前读取触发点坐标；为「需要先固定输入」的效果类型逐槽（候选 id + 槽序号）判定效果级 `conditions` 与 `chance` 一次，结果随结算任务携带 |
+| 固定输入 | 源实体清空前读取触发点坐标；为「需要先固定输入」的效果类型按候选 id + 槽序号 + 组序号各固定一份输入：先由类型自己的 `prepare` 抽定本次随机输入（如箭雨的药水标签成员），再判定效果级 `conditions` 与 `chance` 一次，结果随结算任务携带；一次性效果只固定一份，派发时无论实际是第几组都取第 0 份 |
 | 账本 | 经受控句柄首次登记 `SettlementRecord`（含源位置，供重启后返还搜索）到 `SettlementLedger`，`ConversionSettlement` 作为 `EFFECT` 任务立即入队。**「扣减 → 登记 → 调度注册」是一个补偿单元**：任一步失败都把整堆库存写回源实体并撤销 `converted` 标签与账本登记；全部成功才把库存所有权交给结算任务 |
 | 清理 | `finally`：解锁、移除追踪（源实体此刻已清空，自然路径随后 `discard`）；已移交所有权时记录保持待交付，中断与失败都不退回世界 |
 

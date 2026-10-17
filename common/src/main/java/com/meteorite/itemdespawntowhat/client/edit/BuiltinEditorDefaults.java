@@ -53,7 +53,6 @@ public final class BuiltinEditorDefaults {
                 if ("spawn_entity".equals(type.getPath())) {
                     if ("amount".equals(field)) return RuleValue.integer(1);
                     if ("age".equals(field)) return RuleValue.integer(0);
-                    if ("per_source_item".equals(field)) return RuleValue.flag(false);
                 }
                 return defaults.child(field);
             }

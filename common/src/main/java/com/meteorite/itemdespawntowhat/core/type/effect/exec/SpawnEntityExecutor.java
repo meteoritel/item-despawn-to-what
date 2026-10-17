@@ -1,6 +1,8 @@
 package com.meteorite.itemdespawntowhat.core.type.effect.exec;
 
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
+import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
+import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.StepWorkCounter;
@@ -15,6 +17,7 @@ import net.minecraft.world.entity.AgeableMob;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.SpawnPlacements;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -46,12 +49,45 @@ public final class SpawnEntityExecutor {
     }
 
     // 顶层只注册一个实体生成效果，专用执行策略按产出子类分发。
+    // 物品与通用实体仍走一次性同步执行；经验需要跨步骤续接，只经预算执行路径。
     public static EffectResult execute(SpawnEntityEffect effect, EffectContext context) {
         return switch (effect.product()) {
             case EntityProduct.Item item -> SpawnItemExecutor.execute(item, context);
             case EntityProduct.Experience experience -> SpawnXpExecutor.execute(experience, context);
             case EntityProduct.Generic entity -> executeEntity(entity, context);
         };
+    }
+
+    /**
+     * 经验产出的点数依赖本组实际扣减的源物品件数，必须在成功转化当刻固定条件与概率，
+     * 否则源实体清空后无法再判定；物品与通用实体不在本次迁移范围，仍保持首次执行时判定。
+     *
+     * @param effect 实体生成效果参数
+     * @param level 触发维度
+     * @param position 成功转化当刻固定的触发点
+     * @param sourceStack 源清空前的只读库存快照
+     * @param fillOrigin 候选的位置策略
+     * @return 经验产出的空负载固定输入；其余产出子类返回 null
+     */
+    public static @Nullable EffectPreparation prepare(SpawnEntityEffect effect, ServerLevel level, Vec3 position,
+                                                      ItemStack sourceStack, boolean fillOrigin) {
+        return effect.product() instanceof EntityProduct.Experience ? EffectPreparation.ready() : null;
+    }
+
+    /**
+     * 按成功转化当刻固定的输入创建执行状态：经验产出读取固定判定，其余产出子类保持原有入口。
+     *
+     * @param effect 实体生成效果参数
+     * @param context 本组执行上下文
+     * @param preparation 成功转化当刻固定的输入；null 表示该槽位未固定
+     * @return 仅供本次效果使用的执行状态
+     */
+    public static EffectExecution start(SpawnEntityEffect effect, EffectContext context,
+                                        @Nullable EffectPreparation preparation) {
+        if (effect.product() instanceof EntityProduct.Experience experience) {
+            return SpawnXpExecutor.start(experience, context, preparation);
+        }
+        return budget -> execute(effect, context);
     }
 
     private static EffectResult executeEntity(EntityProduct.Generic effect, EffectContext context) {
