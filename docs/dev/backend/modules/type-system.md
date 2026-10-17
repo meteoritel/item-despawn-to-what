@@ -117,7 +117,7 @@
 |---|---|---|---|
 | 1 | `spawn_entity` | `variant: item/entity/experience` 必填；各子类参数见下表 | 统一生成掉落物、通用实体或经验；共用概率/延迟/条件 |
 | 2 | `place_block` | `block: TaggedId`（与 `use_source_block` **至少其一**）；`use_source_block: bool`/false；`shape: square\|circle\|cross`/square；`count: int[1,64]`/1；`radius: int[1,32]`/6；`limit: Integer[1,4096]` | 按形状由内向外扩散放置方块，只替换可替换位置、不突破自身半径；目标方块与候选偏移由准备固定，邻域计数与放置按预算分批推进，逐块回执真实放置量 |
-| 3 | `loot_table` | `loot_table: ResourceLocation`（必填，**不支持 `#tag`**）；`luck: float[-100,100]`/0 | 以位置为原点开战利品表（CHEST 参数集，`THIS_ENTITY`=源），逐轮开表并分批生成 |
+| 3 | `loot_table` | `loot_table: ResourceLocation`（必填，**不支持 `#tag`**）；`luck: float[-100,100]`/0 | 以位置为原点开战利品表（CHEST 参数集，`THIS_ENTITY`=本次源实体）。开表与抽取在成功转化当刻完成一次并随固定输入携带，交付期不再读源实体、不再开表也不再重抽；产物在共享预算内分批写入世界，逐堆回执实际件数，轮次与工作量分别表达，空表给出独立的已完成空结果 |
 | 4 | `lightning` | `count: int[1,16]`/1 | 第 1 道保留原点水平坐标，后续散布 r=5，间隔 8 刻；从高度图上方向下求交最上层碰撞或流体表面，贴合半砖与台阶；虚空无表面时回退高度图高度 |
 | 5 | `explosion` | `power: float[0,16]`/3.0；`fire: bool`/false；`visual_only: bool`/false | `visual_only` 只粒子+音效；否则 TNT 交互爆炸 |
 | 6 | `arrow_rain` | `count: int[1,256]`/16；`pickup: disallowed\|allowed\|creative_only`/disallowed；`potion_effects: List<{effect: TaggedId, duration_ticks: int[1,1000000]/100, amplifier: int[0,255]/0}>` | 上方 +80 高度落箭雨，初速度 4.5 格/刻，间隔 2 刻，可携带药水效果 |
