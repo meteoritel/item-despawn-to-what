@@ -262,8 +262,7 @@ public final class BuiltinEditorDescriptors {
                             .optional().withPresets(new EditorPreset("-24000", "gui.itemdespawntowhat.edit.preset.baby"),
                                     new EditorPreset("0", "gui.itemdespawntowhat.edit.preset.adult")));
             case "experience" -> List.of(
-                    EditorField.integer("amount", FIELD + "spawn_xp.amount", 1, 65536).optional(),
-                    EditorField.bool("per_source_item", FIELD + "spawn_xp.per_source_item"));
+                    EditorField.integer("amount", FIELD + "spawn_xp.amount", 1, 65536).optional());
             default -> List.of(EditorField.tag("item", FIELD + "spawn_item.item", "minecraft:item"),
                     EditorField.integer("count", FIELD + "spawn_item.count", 1, 64).optional());
         };
