@@ -29,7 +29,8 @@ import java.util.List;
 /**
  * loot_table 执行器：在成功转化当刻用真实源实体开表一次并固定产物，随后在共享预算内分批交付。
  * 交付期不再读取源实体、不再打开战利品表，也不再次随机抽取；空表是已完成的空结果。
- * 真实完成量按实际写入世界的物品件数逐堆回执，行为轮数与世界工作量分别表达。
+ * 真实完成量按实际写入世界的物品件数逐堆回执，行为轮数与世界工作量分别表达；
+ * 区块未加载时保留已构造的这堆产物，退避后重试，不重抽散点与初速。
  */
 public final class LootTableExecutor {
 
@@ -158,6 +159,8 @@ public final class LootTableExecutor {
         private final List<ItemStack> drops;
         private final BlockPos center;
         private int cursor;
+        // 已构造但尚未加入世界的这一堆产物：散布位置与初速随机已确定，等待区块时不重造
+        private ItemEntity pendingDrop;
         // 邻区块未加载时的下次重试刻，0 表示不等待
         private long nextAttemptTick;
 
@@ -197,16 +200,21 @@ public final class LootTableExecutor {
                     return null;
                 }
                 ItemStack stack = drops.get(cursor);
-                ItemEntity entity = new ItemEntity(level,
-                        position.x + (level.random.nextDouble() - 0.5) * SCATTER_RADIUS, position.y + SPAWN_HEIGHT,
-                        position.z + (level.random.nextDouble() - 0.5) * SCATTER_RADIUS, stack.copy());
-                entity.setDeltaMovement((level.random.nextDouble() - 0.5) * SPAWN_SCATTER_VELOCITY,
-                        SPAWN_UPWARD_VELOCITY,
-                        (level.random.nextDouble() - 0.5) * SPAWN_SCATTER_VELOCITY);
+                if (pendingDrop == null) {
+                    pendingDrop = new ItemEntity(level,
+                            position.x + (level.random.nextDouble() - 0.5) * SCATTER_RADIUS, position.y + SPAWN_HEIGHT,
+                            position.z + (level.random.nextDouble() - 0.5) * SCATTER_RADIUS, stack.copy());
+                    pendingDrop.setDeltaMovement((level.random.nextDouble() - 0.5) * SPAWN_SCATTER_VELOCITY,
+                            SPAWN_UPWARD_VELOCITY,
+                            (level.random.nextDouble() - 0.5) * SPAWN_SCATTER_VELOCITY);
+                }
                 // 转化产物：走既有显式产物入口，先授予临时保护与冷却再写入世界。
-                // 上面已确认中心 3×3 区块就绪，而散布半径小于一格，故本实体所在区块必然已加载，
-                // 该入口不会改挂延迟任务；因此下面的进度回执确实发生在世界写入之后。
-                EffectTargets.addConversionProduct(context, entity);
+                // 未写入时保留这堆产物，退避后重试，不重抽散点与初速。
+                if (!EffectTargets.addConversionProductNow(context, pendingDrop)) {
+                    nextAttemptTick = gameTime + CHUNK_RETRY_TICKS;
+                    return null;
+                }
+                pendingDrop = null;
                 // 真实完成量回执：按本次实际写入世界的件数计，轮次不在此处放大
                 context.reportProgress(stack.getCount());
                 StepWorkCounter.report(WORK_UNITS_PER_DROP);
@@ -232,8 +240,10 @@ public final class LootTableExecutor {
 
         @Override
         public void onFinished(EffectResult result) {
-            // 正常完成或失败：不再持有未交付部分。取消不经过本回调，由任务摘掉执行状态后不再推进
+            // 正常完成或失败：不再持有未交付部分与已构造未写入的产物。
+            // 取消不经过本回调，由任务摘掉执行状态后不再推进
             cursor = drops.size();
+            pendingDrop = null;
         }
     }
 }

@@ -17,7 +17,7 @@ import org.jetbrains.annotations.Nullable;
  * 经验产出执行器：先按本组实际扣减的源物品件数算出总点数，再按单球安全点数分批生成。
  * 总点数只算一次：每件源物品的点数 × 本组实际扣减件数，不随分批重复计算，也不因邻近经验球数量拒绝或截断。
  * 条件、概率与延迟由运行时处理，不跨行为或转化组合并经验。
- * 每球成功加入世界后回执真实点数；未完成部分留到后续步骤继续，取消后不补做。
+ * 每球成功加入世界后回执真实点数；未完成部分与已构造但尚未写入的球留到后续步骤继续，取消后不补做。
  */
 public final class SpawnXpExecutor {
 
@@ -84,6 +84,9 @@ public final class SpawnXpExecutor {
         private final EffectContext context;
         private long remaining;
         private boolean feedbackSent;
+        // 已构造但尚未加入世界的这个球：原版构造内的朝向与初速随机已确定，等待区块时不重造
+        private ExperienceOrb pendingOrb;
+        private int pendingPoints;
         // 邻区块未加载时的下次重试刻，0 表示不等待
         private long nextAttemptTick;
 
@@ -112,11 +115,22 @@ public final class SpawnXpExecutor {
                 if (budget.exhausted() || budget.remainingWorkUnits() - reportedUnits <= 0) {
                     return null;
                 }
-                int points = (int) Math.min(remaining, MAX_POINTS_PER_ORB);
-                Vec3 position = EffectTargets.randomHorizontalDisc(context.random(), context.position(),
-                        SCATTER_RADIUS, SPAWN_HEIGHT);
-                // award 会再次按原版面额拆球；直接构造保留原版初速度、拾取和后续同值合并。
-                EffectTargets.addEntity(context, new ExperienceOrb(context.level(), position.x, position.y, position.z, points));
+                if (pendingOrb == null) {
+                    int points = (int) Math.min(remaining, MAX_POINTS_PER_ORB);
+                    Vec3 position = EffectTargets.randomHorizontalDisc(context.random(), context.position(),
+                            SCATTER_RADIUS, SPAWN_HEIGHT);
+                    // award 会再次按原版面额拆球；直接构造保留原版初速度、拾取和后续同值合并。
+                    pendingOrb = new ExperienceOrb(context.level(), position.x, position.y, position.z, points);
+                    pendingPoints = points;
+                }
+                if (!EffectTargets.addEntityNow(context, pendingOrb, false)) {
+                    // 两次检查之间该区块卸载：保留已构造的球，退避后重试，不重抽也不计完成量
+                    nextAttemptTick = gameTime + CHUNK_RETRY_TICKS;
+                    return null;
+                }
+                int points = pendingPoints;
+                pendingOrb = null;
+                pendingPoints = 0;
                 remaining -= points;
                 // 真实完成量回执：球已加入世界后才累计点数
                 context.reportProgress(points);
@@ -138,8 +152,10 @@ public final class SpawnXpExecutor {
 
         @Override
         public void onFinished(EffectResult result) {
-            // 交付完成或已失败：不再持有剩余点数，取消路径也不补做
+            // 交付完成或已失败：不再持有剩余点数与已构造未写入的球，取消路径也不补做
             remaining = 0;
+            pendingOrb = null;
+            pendingPoints = 0;
         }
     }
 }

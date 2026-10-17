@@ -657,7 +657,7 @@ final class ConversionSettlement implements ServerTask {
         IntConsumer sink = writer::addProgress;
         int covered = record.sourceCostPerGroup() > 0 ? record.sourceCostPerGroup() : 1;
         // 候选级位置策略（safe_spawn / fill_origin）随组上下文传给执行器；位置用成功转化当刻的固定值
-        return new RuntimeEffectContext(level, source, triggerPosition, rule.id(), scheduler, level.dimension(),
+        return new RuntimeEffectContext(level, source, triggerPosition, rule.id(), scheduler,
                 sourceSnapshot, 1, covered, candidate.id(), groupIndex - 1, groupCount, record.sourceCostPerGroup(),
                 sink, candidate.safeSpawn(), candidate.fillOrigin());
     }

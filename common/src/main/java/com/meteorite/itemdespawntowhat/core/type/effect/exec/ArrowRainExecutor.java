@@ -31,7 +31,7 @@ import java.util.List;
  * 次数、拾取模式与基准位置在创建执行状态时固定，之后只按各自到期刻逐波推进；
  * 每支箭矢真正加入世界后才通过 context.reportProgress(1) 回执真实完成量，
  * 全部落完的终态回执不再重复计入产出，只给出剩余增量 0。
- * 区块未加载时保留尚未落下的这一波及其已抽取的落点，退避后重试，不提前落下也不重新抽取。
+ * 区块未加载时保留尚未落下的这一波：落点与已构造的箭矢（含原版初速随机）都留到真正生成，退避后重试，不提前落下也不重新抽取。
  * 药水效果属于本次转化准备的输入，在成功转化当刻按标签抽定后随准备结果携带，执行状态构造时接收，
  * 到期执行时既不重新解析也不重新抽取。
  * 约定：delay_ticks / chance / 效果级 conditions 由运行时统一处理，本类不再判断；
@@ -120,8 +120,8 @@ public final class ArrowRainExecutor {
         private boolean pendingTarget;
         private double pendingX;
         private double pendingZ;
-        private float pendingJitterX;
-        private float pendingJitterZ;
+        // 已构造但尚未加入世界的这一支箭矢：原版 shoot 与发光等内部随机已在构造时确定，等待区块时不重造
+        private AbstractArrow pendingArrow;
         private EffectResult terminal;
 
         ArrowSeries(ArrowRainEffect effect, EffectContext context, List<MobEffectInstance> potionEffects) {
@@ -160,14 +160,24 @@ public final class ArrowRainExecutor {
             }
             BlockPos column = BlockPos.containing(pendingX, origin.y + SPAWN_HEIGHT, pendingZ);
             if (!LoadedChunks.contains(level, column)) {
-                // 生成列未加载：保留这一波及其落点，退避后重试，不推进次数
+                // 生成列未加载：保留这一波的落点，退避后重试，不推进次数
                 nextDueTick = now + CHUNK_RETRY_TICKS;
                 return null;
             }
-            spawn(level);
+            if (pendingArrow == null) {
+                pendingArrow = build(level);
+            }
+            if (!EffectTargets.addEntityNow(context, pendingArrow, false)) {
+                // 两次检查之间该列卸载：保留已构造的箭矢，退避后重试，不重抽也不计完成量
+                nextDueTick = now + CHUNK_RETRY_TICKS;
+                return null;
+            }
+            // 真实写入世界之后才回执与计费
             context.reportProgress(1);
+            StepWorkCounter.report(1);
             launched++;
             pendingTarget = false;
+            pendingArrow = null;
             nextDueTick = now + INTERVAL_TICKS;
             if (launched >= count) {
                 return finish();
@@ -181,32 +191,30 @@ public final class ArrowRainExecutor {
             return terminal;
         }
 
-        // 抽取这一波的落点与水平抖动：等待区块期间保留，不重复抽取
+        // 抽取这一波的落点：等待区块期间保留，不重复抽取
         private void sampleTarget(RandomSource random) {
             double angle = random.nextDouble() * 2.0 * Math.PI;
             double spread = Math.sqrt(random.nextDouble()) * SPREAD_RADIUS;
             pendingX = origin.x + Math.cos(angle) * spread;
             pendingZ = origin.z + Math.sin(angle) * spread;
-            pendingJitterX = (random.nextFloat() * 2.0F - 1.0F) * HORIZONTAL_JITTER;
-            pendingJitterZ = (random.nextFloat() * 2.0F - 1.0F) * HORIZONTAL_JITTER;
         }
 
-        // 生成单支向下坠落的箭矢
-        private void spawn(ServerLevel level) {
+        // 构造单支向下坠落的箭矢：加入世界之前一次构造完成，射向抖动与原版初速随机只在此时确定
+        private Arrow build(ServerLevel level) {
             Arrow arrow = EntityType.ARROW.create(level);
             if (arrow == null) {
                 throw new IllegalStateException("无法创建箭矢实体");
             }
             arrow.moveTo(pendingX, origin.y + SPAWN_HEIGHT, pendingZ, 0.0F, 90.0F);
-            arrow.shoot(pendingJitterX, -1.0, pendingJitterZ, ARROW_SPEED, 0.0F);
+            float jitterX = (level.random.nextFloat() * 2.0F - 1.0F) * HORIZONTAL_JITTER;
+            float jitterZ = (level.random.nextFloat() * 2.0F - 1.0F) * HORIZONTAL_JITTER;
+            arrow.shoot(jitterX, -1.0, jitterZ, ARROW_SPEED, 0.0F);
             arrow.setOwner(null);
             arrow.pickup = pickup;
             for (MobEffectInstance potionEffect : potionEffects) {
                 arrow.addEffect(new MobEffectInstance(potionEffect));
             }
-            // 生成列已确认加载：此处加入世界是即时完成的，回执才代表真实落箭
-            EffectTargets.addEntity(context, arrow);
-            StepWorkCounter.report(1);
+            return arrow;
         }
     }
 

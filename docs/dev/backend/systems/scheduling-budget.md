@@ -24,7 +24,7 @@
 各任务种类的实际来源：
 
 - `CONDITION_CHECK` —— `ConversionRuntime.scheduleCheck`（到期检查、退避重试、`deferNaturalExpiry` 的最后一次检查）。
-- `EFFECT` —— `ConversionSettlement`（转化结算：计划 / 派发 / 交付三阶段）与 `RuntimeEffectContext.schedule`（延迟效果）。
+- `EFFECT` —— `ConversionSettlement`（转化结算：计划 / 派发 / 交付三阶段）与 `EffectTask`（单个效果在共享预算内续接的执行状态）。
 - `REBATE` —— `SettlementRecovery`（停服 / 卸载后重启的返还交付）。
 - `MAINTENANCE` —— `RunnableTask` 未指定种类时的缺省，以及 `RuleSaveTask` / `RuleSnapshotTask` 的保存、快照和重载续接。文件 I/O 与 JSON 拼接/解析/装配在串行后台队列中进行，公共预算只推进服务端线程上的步骤。
 - `WORLD_SEARCH` —— 已声明的种类，当前没有任务使用。
