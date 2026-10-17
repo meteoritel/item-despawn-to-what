@@ -117,8 +117,6 @@ final class RuleEditorScreenListPage {
     private @Nullable UiButton toggleButton;
     private @Nullable UiButton applyButton;
     private final Set<String> expandedCategories = new LinkedHashSet<>();
-    private final Map<String, RuleRecipeView> recipeViews = new LinkedHashMap<>();
-    private final Map<String, Component> conditionTooltips = new LinkedHashMap<>();
     private String lastQuery = "";
     private String lastTreeQuery = "";
     private int filterIndex;
@@ -294,9 +292,10 @@ final class RuleEditorScreenListPage {
     private void renderRuleRow(GuiGraphics graphics, Font rowFont, String id, UiRect row, boolean hovered) {
         RuleListDisplaySnapshot snapshot = host.display().snapshot(id);
         int color = snapshot.active() ? THEME.palette().textPrimary() : THEME.palette().textDisabled();
+        // 预览随行首见构建并缓存在展示快照上，滚动回来直接复用
         RuleRecipeView.renderRow(graphics, rowFont, row, snapshot.title(), snapshot.state(), color,
                 snapshot.error() ? THEME.palette().danger() : THEME.palette().textSecondary(),
-                recipeViews.get(id), hovered, snapshot.active());
+                snapshot.preview(), hovered, snapshot.active());
     }
 
     // ---- 列表维护 ----
@@ -310,8 +309,6 @@ final class RuleEditorScreenListPage {
         final long refreshStarted = profile ? DebugProfile.start() : 0L;
         long filterMicros = 0L;
         long bodyMicros = 0L;
-        long previewMicros = 0L;
-        long tooltipMicros = 0L;
         // 未收到首份快照不能判为空；有效空快照和筛选结果为空才使用空列表文案。
         ruleList.setEmptyMessage(Component.translatable(UI + (host.model().isLoaded() ? "list.empty" : "list.loading")));
         String selectedValue = ruleList.selectedNode() == null ? null : ruleList.selectedNode().value();
@@ -321,13 +318,10 @@ final class RuleEditorScreenListPage {
         host.display().retain(ruleIds);
         long bodyFetchesBefore = host.display().bodyFetches();
         visibleIds.clear();
-        recipeViews.clear();
-        conditionTooltips.clear();
         String query = lastQuery == null ? "" : lastQuery.toLowerCase(Locale.ROOT).trim();
-        int summaryLines = Math.max(2, host.screenHeight() / host.font().lineHeight - TOOLTIP_RESERVED_LINES);
         for (String id : ruleIds) {
-            // 每条规则只在这里取一次体：展示快照同时给出标题、状态、分类与搜索文本，
-            // 之后的筛选、建树与逐帧渲染都只读快照
+            // 每条规则只在这里取一次体：展示快照同时给出标题、状态、分类与搜索文本；
+            // 配方预览与条件提示不在这里构建，由首行可见与悬停时向快照惰性索取
             long snapshotStarted = profile ? DebugProfile.start() : 0L;
             RuleListDisplaySnapshot snapshot = host.display().snapshot(id);
             bodyMicros += profile ? DebugProfile.micros(snapshotStarted) : 0L;
@@ -338,12 +332,6 @@ final class RuleEditorScreenListPage {
                 continue;
             }
             visibleIds.add(id);
-            long previewStarted = profile ? DebugProfile.start() : 0L;
-            recipeViews.put(id, snapshot.preview());
-            previewMicros += profile ? DebugProfile.micros(previewStarted) : 0L;
-            long tooltipStarted = profile ? DebugProfile.start() : 0L;
-            conditionTooltips.put(id, snapshot.conditionTooltip(summaryLines));
-            tooltipMicros += profile ? DebugProfile.micros(tooltipStarted) : 0L;
         }
         long treeStarted = profile ? DebugProfile.start() : 0L;
         if (lastTreeQuery.isBlank()) rememberCategoryState(ruleList.roots());
@@ -400,16 +388,15 @@ final class RuleEditorScreenListPage {
         if (profile) {
             int rules = ruleIds.size();
             long bodyFetches = host.display().bodyFetches() - bodyFetchesBefore;
-            logRefresh(refreshStarted, filterMicros, bodyMicros, previewMicros, tooltipMicros, treeMicros,
+            logRefresh(refreshStarted, filterMicros, bodyMicros, treeMicros,
                     DebugProfile.micros(rootsStarted), rules, rules - (int) bodyFetches, bodyFetches, firstReady);
         }
     }
 
     // 首载分段观测：一次刷新的分段耗时；first 表示首份快照后的首次刷新（列表可用时刻）
     // body_fetches 是本次刷新实际取体次数，reused 是直接复用展示快照的条数
-    private void logRefresh(long refreshStarted, long filterMicros, long bodyMicros, long previewMicros,
-                            long tooltipMicros, long treeMicros, long rootsMicros,
-                            int rules, int reused, long bodyFetches, boolean firstReady) {
+    private void logRefresh(long refreshStarted, long filterMicros, long bodyMicros, long treeMicros,
+                            long rootsMicros, int rules, int reused, long bodyFetches, boolean firstReady) {
         JsonObject data = new JsonObject();
         data.addProperty("rules", rules);
         data.addProperty("visible", visibleIds.size());
@@ -421,8 +408,6 @@ final class RuleEditorScreenListPage {
         data.addProperty("reused", reused);
         data.addProperty("filter_ms", filterMicros / 1000.0);
         data.addProperty("body_ms", bodyMicros / 1000.0);
-        data.addProperty("preview_ms", previewMicros / 1000.0);
-        data.addProperty("tooltip_ms", tooltipMicros / 1000.0);
         data.addProperty("tree_ms", treeMicros / 1000.0);
         data.addProperty("set_roots_ms", rootsMicros / 1000.0);
         data.addProperty("total_ms", DebugProfile.micros(refreshStarted) / 1000.0);
@@ -551,11 +536,11 @@ final class RuleEditorScreenListPage {
     private @Nullable TagPreviewIcons.Tag tagAt(double mouseX, double mouseY) {
         if (ruleList == null) return null;
         UiTreeNode<String> node = ruleList.nodeAt(mouseX, mouseY);
-        if (node == null) return null;
-        RuleRecipeView recipe = recipeViews.get(node.value());
-        if (recipe == null) return null;
+        // 分类节点没有配方预览；命中配方标签时才向展示快照惰性索取预览
+        if (node == null || node.value().startsWith("@")) return null;
         UiRect row = ruleList.nodeContentBounds(node);
-        return recipe.tagAt(host.font(), RuleRecipeView.recipeBounds(host.font(), row), mouseX, mouseY);
+        return host.display().snapshot(node.value()).preview().tagAt(host.font(),
+                RuleRecipeView.recipeBounds(host.font(), row), mouseX, mouseY);
     }
 
     boolean mouseReleased(double mouseX, double mouseY, int button) {
@@ -608,20 +593,24 @@ final class RuleEditorScreenListPage {
             return null;
         }
         String id = node.value();
-        RuleRecipeView recipe = recipeViews.get(id);
-        Component triggerTip = recipe == null ? null : recipe.triggerTooltipAt(host.font(),
+        // 悬停时才向展示快照索取配方预览与条件提示：未悬停的条目不生成提示
+        RuleListDisplaySnapshot snapshot = host.display().snapshot(id);
+        Component triggerTip = snapshot.preview().triggerTooltipAt(host.font(),
                 RuleRecipeView.recipeBounds(host.font(), ruleList.nodeContentBounds(node)), mouseX, mouseY);
         if (triggerTip != null) return triggerTip;
-        // 悬停提示整份读展示快照：不取体、不重算状态
-        RuleListDisplaySnapshot snapshot = host.display().snapshot(id);
         TagPreviewIcons.Tag tag = tagAt(mouseX, mouseY);
         Component tip = tag == null ? Component.translatable(UI + "recipe.condition_tree").append("\n")
-                .append(conditionTooltips.getOrDefault(id, Component.empty()))
+                .append(snapshot.conditionTooltip(summaryLineBudget()))
                 : tag.tooltip();
         if (snapshot.stateVisible()) tip = tip.copy().append("\n").append(snapshot.state());
         if (snapshot.previewUnavailable()) tip = tip.copy()
                 .append("\n").append(Component.translatable(UI + "preview.unavailable"));
         return tip;
+    }
+
+    // 条件提示的行数预算随窗口高度变化；预算变化时展示快照重建一次提示文本
+    private int summaryLineBudget() {
+        return Math.max(2, host.screenHeight() / host.font().lineHeight - TOOLTIP_RESERVED_LINES);
     }
 
     // ---- 焦点与使能 ----

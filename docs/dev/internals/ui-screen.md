@@ -90,7 +90,7 @@
 - `RuleEditorScreenEditPage#pollWorkspace`：轮询保存回执与草稿冲突。
 - `RuleEditorInfoPage#categoryText`：分类行只读展示当前分类与来源（显式 / 自动），分类名按 `RuleCategorySkeleton#knownLabelKey` 取本地化文本，未知分类按原文显示。
 - `RuleEditorInfoPage#sourceSummary`：来源摘要只读取已取回的来源视图，按就绪 / 在途 / 失败三态呈现；请求失败只影响来源对照，不阻断本页表单编辑。
-- `RuleEditorScreenListPage#refreshList`：先按规则 id 取列表展示快照（`RuleListDisplayCache`），再按快照里的标题、状态与搜索文本做过滤与分组，重建分类规则树；已知分类的层级与顺序来自 `RuleCategorySkeleton`，只消费快照下发的分类，未知分类按原文成组并挂在扩展分组下，已知与未知的子分类统一显示计数。首载分段观测开启时输出 `CLIENT_LIST_REFRESH`（过滤、取体、预览、提示文本、建树、setRoots、`body_fetches`、`reused` 与总耗时，`first=true` 表示首份快照后的首次刷新）。
+- `RuleEditorScreenListPage#refreshList`：先按规则 id 取列表展示快照（`RuleListDisplayCache`），再按快照里的标题、状态与搜索文本做过滤与分组，重建分类规则树；已知分类的层级与顺序来自 `RuleCategorySkeleton`，只消费快照下发的分类，未知分类按原文成组并挂在扩展分组下，已知与未知的子分类统一显示计数。配方预览与条件提示不在刷新时构建：行首次可见时由渲染回调向快照索取预览，悬停时生成条件提示，两者都缓存在快照上。首载分段观测开启时输出 `CLIENT_LIST_REFRESH`（过滤、取体、建树、setRoots、`body_fetches`、`reused` 与总耗时，`first=true` 表示首份快照后的首次刷新）。
 - `RuleListDisplayCache#snapshot`：按「快照版本 + 草稿修订 + 新建 / 恢复标记」判定展示快照是否失效；命中时标题、状态、分类、预览与条件提示直接复用，因此搜索逐键刷新只重算过滤与分组。
 - `RuleListDisplaySnapshot#titleOf`：列表行、分类树节点与页头标题共用同一份标题文本。
 - `RuleEditorScreen#tick`：每帧消费一次新快照；首载分段观测开启时消费成功会输出 `CLIENT_APPLY`（快照进入模型的 `apply_ms`）。
