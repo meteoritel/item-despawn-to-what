@@ -81,7 +81,7 @@ public final class LootTableExecutor {
     }
 
     /**
-     * 旧式同步入口：本类型需要按批次在共享预算内续接，不提供一次性完成的执行方式。
+     * 同步入口：本类型的产物必须在成功转化当刻开表固定后再按批次交付，此处不提供一次性完成的执行方式。
      *
      * @param effect  战利品表效果参数
      * @param context 本组执行上下文
@@ -232,7 +232,7 @@ public final class LootTableExecutor {
 
         @Override
         public void onFinished(EffectResult result) {
-            // 交付完成、已失败或被取消：不再持有未交付部分，取消路径也不补做
+            // 正常完成或失败：不再持有未交付部分。取消不经过本回调，由任务摘掉执行状态后不再推进
             cursor = drops.size();
         }
     }
