@@ -28,7 +28,7 @@ RequestRuleSnapshotPayload (C2S)
   → heartbeat(sessionId, tick)            # 续租
   → RuleSnapshotTask：后台读取、核对修订；公共预算逐条解码/编码
   → 后台装配原始来源三视图与序列化、切片
-  → 小快照直发，大快照每 tick 一片；超总量上限回 UNAVAILABLE
+  → 小快照直发，大快照每 tick 最多 4 片；超总量上限回 UNAVAILABLE
 ```
 
 首次打开不额外发送 `RequestRuleSnapshotPayload`；该请求用于主动刷新与保存后的补拉。无保存与在途快照时，请求入口即启动后台读取，不等待 tick 轮询启动；主线程步骤在同一快照内复用解码器与编码 Codec，构建与执行仍受公共预算约束。

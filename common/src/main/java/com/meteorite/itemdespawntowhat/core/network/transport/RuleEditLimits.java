@@ -27,6 +27,12 @@ public final class RuleEditLimits {
     public static final int SAVE_ENTRIES_PER_STEP = 8;
     public static final long SAVE_STEP_BUDGET_NANOS = 1_000_000L;
 
+    // 单次快照步骤最多处理 32 条；只按条数与公共 tick 预算节流，不设单步时间预算。
+    public static final int SNAPSHOT_ENTRIES_PER_STEP = 32;
+
+    // 快照分片投递节拍：每 tick 最多下发 4 片，缩短大快照的投递 tick 数。
+    public static final int SNAPSHOT_CHUNKS_PER_TICK = 4;
+
     // 单片数量上限
     public static final int MAX_CHUNK_COUNT = (MAX_CHANGE_SET_BYTES + MAX_CHUNK_BYTES - 1) / MAX_CHUNK_BYTES;
 
