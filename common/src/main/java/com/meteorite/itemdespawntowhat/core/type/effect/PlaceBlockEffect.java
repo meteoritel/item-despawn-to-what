@@ -1,5 +1,10 @@
 package com.meteorite.itemdespawntowhat.core.type.effect;
 
+import com.meteorite.itemdespawntowhat.core.api.EffectContext;
+import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
+import com.meteorite.itemdespawntowhat.core.api.EffectExecutor;
+import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
+import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
@@ -16,6 +21,9 @@ import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Optional;
@@ -92,9 +100,35 @@ public record PlaceBlockEffect(
                         limit.orElse(null), delayTicks, chance, conditions.orElse(null))));
     }
 
-    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器
+    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。
+    // 显式实现执行状态入口：放置需要按预算分批推进，lambda 只能表达一次同步执行。
     public static EffectType<PlaceBlockEffect> effectType(Codec<ConditionExpression> expressionCodec) {
-        return new SimpleEffectType<>(ID, codec(expressionCodec), PlaceBlockEffect::validateParams, PlaceBlockExecutor::execute);
+        EffectExecutor<PlaceBlockEffect> executor = new EffectExecutor<>() {
+            @Override
+            public EffectResult execute(PlaceBlockEffect effect, EffectContext context) {
+                return PlaceBlockExecutor.execute(effect, context);
+            }
+
+            @Override
+            public @Nullable EffectPreparation prepare(PlaceBlockEffect effect, ServerLevel level, Vec3 position,
+                                                       ItemStack sourceStack, boolean fillOrigin) {
+                // 目标方块在此刻按组固定：tag 成员与源物品映射都不再随执行时机变化，候选偏移走跨调用缓存
+                return PlaceBlockExecutor.plan(effect, level, sourceStack, fillOrigin);
+            }
+
+            @Override
+            public EffectExecution start(PlaceBlockEffect effect, EffectContext context) {
+                // 无固定输入入口同样不做到期重新解析：目标方块只在成功转化当刻按组固定
+                return PlaceBlockExecutor.start(effect, context);
+            }
+
+            @Override
+            public EffectExecution start(PlaceBlockEffect effect, EffectContext context,
+                                         @Nullable EffectPreparation preparation) {
+                return PlaceBlockExecutor.start(effect, context, preparation);
+            }
+        };
+        return new SimpleEffectType<>(ID, codec(expressionCodec), PlaceBlockEffect::validateParams, executor);
     }
 
     // 参数语义校验；问题写入 issues，不抛异常
