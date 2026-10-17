@@ -87,7 +87,7 @@
 - `RuleEditorPageInput`：页面级输入路由，记录按下归属并只把释放与拖动派发给同一控件；结果页动作列表的拖动排序结果交给 `RuleEditorResultsPage#moveEffect`。
 - `RuleEditorScreenEditPage#save`：提交可见表单后执行 `RuleEditorValidation#collectIssues`，有阻塞问题则定位，否则把变更集交给工作区保存，回执由 `RuleEditorScreenEditPage#pollWorkspace` 轮询。
 - `RuleEditorScreenEditPage#pollWorkspace`：轮询保存回执与草稿冲突。
-- `RuleEditorScreenListPage#refreshList`：按搜索文本、筛选条件与快照条目重建分类规则树；已知分类的层级与顺序来自 `RuleCategorySkeleton`，快照下发分类优先，未声明时回落推断，未知分类按原文成组。
+- `RuleEditorScreenListPage#refreshList`：按搜索文本、筛选条件与快照条目重建分类规则树；已知分类的层级与顺序来自 `RuleCategorySkeleton`，只消费快照下发的分类，未知分类按原文成组并挂在扩展分组下，已知与未知的子分类统一显示计数。
 - `RuleEditorScreenListActions` 的条目动作：`RuleEditorScreenListActions#promptNewRule`、`RuleEditorScreenListActions#promptDuplicate`、`RuleEditorScreenListActions#toggleSelectedEnabled`、`RuleEditorScreenListActions#maskSelected`、`RuleEditorScreenListActions#restoreSelected`、`RuleEditorScreenListActions#deleteSelected`。
 - `RuleEditorScreenListActions#promptNewRule`：默认名由 `#nextDefaultRuleName` 生成，`new_rule` 已被快照条目或本次新建占用时依次尝试 `new_rule_1`、`new_rule_2`……取最小空闲序号。
 - `RuleNameInput#parseId`：输入含一个冒号且两端非空时按 `<namespace>:<path>` 原样解析，否则按 `<path>` 补本模组命名空间；含多个冒号或空段返回 `null`。新建与复制共用该解析。
