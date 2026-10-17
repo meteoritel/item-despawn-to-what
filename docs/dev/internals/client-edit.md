@@ -57,7 +57,8 @@
 | `LiveEditorWorkspace` | class | `instance()`； `state()`； `sessionId()`； `contextRevision()`； `openRequest()`； `snapshot()`； `catalog(...)`； `directory(...)`； `refreshDirectory(...)`； `directoryFailed(...)`； `retryDirectory(...)`； `invalidateDirectories()`； `requestCatalog(...)`； `referenceLifespanTicks()`； `save(...)`； `saveProgress()`； `cancelRequested()`； `cancelSave()`； `newOperationId()`； `close(...)`； `resultSeq()`； `lastStatus()`； `lastMessageCode()`； `lastMessageArgs()`； `lastResultVersion()`； `lastWrittenToDisk()`； `lastReloaded()`； `lastIssues()` | `EditorWorkspaceView` 的实机实现，单例 |
 | `NumericDomain` | record | 组件 `backendMin`/`backendMax`/`windowMin`/`windowMax`/`step`/`shiftStep`/`displayPrecision`/`integer`； `integers(int, int)`； `integers(int, int, int, int)`； `decimals(double, double, double, double)`； `decimals(double, double, double, double, int)`； `withWindow(double, double)`； `withSteps(double, double)`； `domainText()`； `sliderMin(double)`； `sliderMax(double)` | 数值字段的域元数据 |
 | `OpaqueCondition` | class | `type()`； `rawNode()`； `equals(Object)`； `hashCode()` | 实现 `Condition`，只保留类型标识与原始节点 JSON |
-| `RuleCategories` | class | `category(RuleValue)`； `category(String, RuleValue)` | 虚拟分类判定 |
+| `RuleCategories` | class | `category(RuleValue)`； `category(String, RuleValue)`； `category(String, String, RuleValue)` | 分类判定：优先采用快照下发值，缺省时按产出的虚拟判定 |
+| `RuleCategorySkeleton` | class | `LABEL_PREFIX`； `EXTENSION`； `roots()`； `Category(id, children)`（`labelKey()`） | 已知规则分类的层级、顺序与本地化显示名 |
 | `RuleDraft` | class | `of(JsonObject)`； `of(RuleValue)`； `id()`； `original()`； `toJson()`； `toOverlayJson()`； `isDeleted()`； `setDeleted(boolean)`； `isDirty()`； `revert()`； `root()`； `value(String)`； `set(String, RuleValue)`； `has`/`remove`/`get*`/`set*`； `valueAt`； `setAt`； `mergeAt`； `removeAt`； `textAt`/`integerAt`/`decimalAt`/`flagAt`/`valuesAt`； `conditionsValue`； `conditionsValueAt`； `conditionsOrNull`； `setConditions`； `conditionsAt`； `setConditionsAt`； `encodeConditionsValue`； `decodeConditions`； `replaceWith`（2 个重载）； `effectCount`； `moveEffect`； `candidateEffectsPath`； `effectCountAt`； `effectValuesAt`； `moveInList`； `hasFlatEffects`； `hasOutcomes`； `hasConflictingStructures`； `outcomeCount`； `outcomeValues`； `outcomeValueAt`； `moveOutcome`； `candidateIds`； `candidateIdExists`； `convertToOutcomes` | 规则草稿 |
 | `RuleIssueLocator` | class | `Tab`（`SOURCE`/`CONDITIONS`/`RESULTS`/`INFO`）； `AnchorStep`； `ResolvedStep`； `IssueAnchor`（`resolve`/`location`）； `Location`（`known`/`hasCandidate`/`hasEffect`）； `anchor(String, String, JsonObject)`； `anchorAll(String, Iterable<String>, JsonObject)`； `tabOf(String)` | 服务端问题路径到编辑器稳定身份的映射 |
 | `RuleNaming` | class | `PREFIX`； `NameSource`（`label`/`NONE`）； `ruleTitle(RuleDraft, NameSource)`； `ruleTitle(RuleValue, NameSource)`； `sourceTitle`； `resultTitle`； `candidateTitle`； `effectListTitle`； `effectTitle` | 只读自动命名与短摘要 |
@@ -123,6 +124,7 @@
 - `RuleNaming#ruleTitleJson` 的多候选分支：候选数大于 1 时按 `combination` 选择 `multi_result_priority` 或 `multi_result_cycle` 模板。
 - `RuleIssueLocator#anchor` 与 `IssueAnchor#resolve`：数组元素身份依次取 `id:`、`type:`、`op:` 前缀；身份找不到时回落原下标。
 - `RuleCategories#category(String, RuleValue)`：先按 id 判定测试规则，再回落到 `effects`/`outcomes` 的产出动作分类。
+- `RuleCategories#category(String, String, RuleValue)`：快照已下发分类时直接采用，否则回落到上面的产出动作判定；未知分类标识按原文成组。
 - `LiveEditorWorkspace#pollResult`：发现新的 `RuleSaveResultPayload` 时自增 `resultSeq`；所有回执读取方法都先经该入口。
 
 ### 2.6 代码现状（可核对）
@@ -226,7 +228,8 @@
 | `LiveEditorWorkspace` | `EditorWorkspaceView` 的实机实现 | `instance`； `pollResult`； 全部视图方法 |
 | `NumericDomain` | 数值字段域元数据 | `integers`； `decimals`； `withWindow`； `withSteps`； `domainText` |
 | `OpaqueCondition` | 未识别条件叶的原文保留载体 | `type`； `rawNode` |
-| `RuleCategories` | 规则虚拟分类判定 | `category`（2 个重载） |
+| `RuleCategories` | 规则分类判定 | `category`（3 个重载） |
+| `RuleCategorySkeleton` | 已知规则分类的静态骨架 | `roots`； `EXTENSION`； `Category` |
 | `RuleDraft` | 规则草稿 | `of`； `isDirty`； `toOverlayJson`； `setAt`； `mergeAt`； `setConditionsAt`； `moveInList`； `convertToOutcomes` |
 | `RuleIssueLocator` | 问题路径到编辑器稳定身份的映射 | `anchor`； `anchorAll`； `tabOf`； `IssueAnchor#resolve`； `Location` |
 | `RuleNaming` | 只读自动命名与短摘要 | `ruleTitle`； `sourceTitle`； `resultTitle`； `candidateTitle`； `effectTitle` |

@@ -5,6 +5,7 @@ import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.api.Issue;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.IssueSeverity;
+import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
 import com.meteorite.itemdespawntowhat.core.load.LoadedRule;
 import com.meteorite.itemdespawntowhat.core.load.OverlayRuleReader;
@@ -35,8 +36,9 @@ import java.util.Set;
 
 /**
  * 规则快照装配器：把"来源分层索引 + 当前生效规则"组装成下发给客户端的快照。
- * 条目形状：RuleSnapshotEntry(id, origin, status, editable, effective, base, overlay, issues)
+ * 条目形状：RuleSnapshotEntry(id, origin, status, editable, category, effective, base, overlay, issues)
  * - base 视图来自数据包层原始 JSON，overlay 视图来自覆盖层原始 JSON，两者都保留原文（不做模型往返）；
+ * - category 读取作者在规则原始 JSON 顶层的显式分类，覆盖层视图优先于数据包视图；未声明时为空；
  * - effective 优先使用模型编码后的最终结果（解码成功时权威），否则退回原始 JSON；
  * - origin 取 overlay | datapack | mixed，status 取 active | disabled | masked | invalid；
  * - 解码失败或校验致命错误时 status=invalid，并在 issues 中带上 severity/ruleId/origin/fieldPath。
@@ -120,7 +122,8 @@ public final class RuleSnapshotAssembler {
                             RuleIssue.ORIGIN_RUNTIME, "", ISSUE_DECODE, List.of(), "规则解码失败: " + source.id()));
                 }
                 entries.put(source.id(), new RuleSnapshotEntry(source.id(), origin(source), status,
-                        source.hasBody(), effective, base, overlay, entryIssues));
+                        source.hasBody(), explicitCategory(overlay != null ? overlay : base),
+                        effective, base, overlay, entryIssues));
             }
         }
 
@@ -134,7 +137,7 @@ public final class RuleSnapshotAssembler {
             // 能走到这里的都是已解码出本体的规则，一律可编辑
             entries.put(leftover.getKey(), new RuleSnapshotEntry(leftover.getKey(),
                     overlayLayer ? RuleSnapshotEntry.ORIGIN_OVERLAY : RuleSnapshotEntry.ORIGIN_DATAPACK,
-                    RuleSnapshotEntry.STATUS_ACTIVE, true,
+                    RuleSnapshotEntry.STATUS_ACTIVE, true, null,
                     body, body.deepCopy(), overlayLayer ? body.deepCopy() : null, List.of()));
         }
 
@@ -164,6 +167,19 @@ public final class RuleSnapshotAssembler {
                     "", ISSUE_LOAD, List.of(), text == null ? "" : text));
         }
         return new RuleSnapshot(snapshot.version(), snapshot.contextRevision(), snapshot.entries(), List.copyOf(merged2));
+    }
+
+    // 显式分类：取胜出原始视图的顶层 category；缺失、非字符串或空白一律视为未声明
+    private static @Nullable String explicitCategory(@Nullable JsonObject body) {
+        if (body == null) {
+            return null;
+        }
+        JsonElement raw = body.get(RuleFields.CATEGORY);
+        if (raw == null || !raw.isJsonPrimitive() || !raw.getAsJsonPrimitive().isString()) {
+            return null;
+        }
+        String category = raw.getAsString();
+        return category.isBlank() ? null : category;
     }
 
     // 条目状态：删贴（masked）与停用（disabled）优先，其次看解码是否成功

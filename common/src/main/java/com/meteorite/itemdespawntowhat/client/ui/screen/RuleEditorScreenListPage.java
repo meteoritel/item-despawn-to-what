@@ -1,9 +1,9 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
-import com.meteorite.itemdespawntowhat.client.edit.DebugTestRules;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
 import com.meteorite.itemdespawntowhat.client.edit.RuleCategories;
+import com.meteorite.itemdespawntowhat.client.edit.RuleCategorySkeleton;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
@@ -340,27 +340,49 @@ final class RuleEditorScreenListPage {
         }
         if (lastTreeQuery.isBlank()) rememberCategoryState(ruleList.roots());
         lastTreeQuery = lastQuery;
+        // 已知分类的层级、顺序与显示名来自静态骨架；未知分类按原文动态成组
+        List<RuleCategorySkeleton.Category> skeleton = RuleCategorySkeleton.roots();
         List<UiTreeNode<String>> roots = new ArrayList<>();
-        UiTreeNode<String> entity = categoryNode("entity");
-        for (String category : List.of("entity.item", "entity.entity", "entity.experience", "entity.mixed")) entity.addChild(categoryNode(category));
-        roots.add(entity);
-        for (String category : List.of("block", "loot", "world", "mixed", "extension", DebugTestRules.CATEGORY)) {
-            roots.add(categoryNode(category));
+        Map<String, UiTreeNode<String>> groups = new LinkedHashMap<>();
+        for (RuleCategorySkeleton.Category root : skeleton) {
+            UiTreeNode<String> node = categoryNode(root);
+            roots.add(node);
+            groups.put(root.id(), node);
+            for (RuleCategorySkeleton.Category child : root.children()) {
+                UiTreeNode<String> childNode = categoryNode(child);
+                node.addChild(childNode);
+                groups.put(child.id(), childNode);
+            }
         }
         for (String id : visibleIds) {
-            // 测试规则按 id 前缀单独归入调试分类，其余仍按效果类型推导
-            String category = RuleCategories.category(id, host.model().displayBody(id));
-            UiTreeNode<String> group = roots.stream().flatMap(root -> root == entity ? root.children().stream() : java.util.stream.Stream.of(root))
-                    .filter(node -> node.value().equals("@" + category)).findFirst().orElseThrow();
+            // 快照下发的分类优先；未声明时回落到按产出的判定
+            RuleSnapshotEntry entry = host.model().entry(id);
+            String category = RuleCategories.category(entry == null ? null : entry.category(),
+                    id, host.model().displayBody(id));
+            UiTreeNode<String> group = groups.get(category);
+            if (group == null) {
+                group = unknownCategoryNode(groups, category);
+            }
             group.addChild(id, Component.literal(host.labelText(id)));
         }
         List<UiTreeNode<String>> nonempty = new ArrayList<>();
-        for (UiTreeNode<String> root : roots) {
-            if (root == entity) {
-                UiTreeNode<String> parent = categoryNode("entity");
-                root.children().stream().filter(node -> !node.children().isEmpty()).forEach(node -> parent.addChild(counted(node)));
-                if (!parent.children().isEmpty()) nonempty.add(counted(parent));
-            } else if (!root.children().isEmpty()) nonempty.add(counted(root));
+        for (int index = 0; index < roots.size(); index++) {
+            UiTreeNode<String> root = roots.get(index);
+            RuleCategorySkeleton.Category definition = skeleton.get(index);
+            if (definition.children().isEmpty()) {
+                if (!root.children().isEmpty()) nonempty.add(counted(root));
+                continue;
+            }
+            // 父分类只收下有内容的子分类；直接声明父分类的规则按叶子保留
+            UiTreeNode<String> parent = categoryNode(definition);
+            for (UiTreeNode<String> child : root.children()) {
+                if (child.value().startsWith("@")) {
+                    if (!child.children().isEmpty()) parent.addChild(counted(child));
+                } else {
+                    parent.addChild(child);
+                }
+            }
+            if (!parent.children().isEmpty()) nonempty.add(counted(parent));
         }
         ruleList.setRoots(nonempty);
         ruleList.setSelectedNode(findNode(nonempty, selectedValue));
@@ -391,9 +413,18 @@ final class RuleEditorScreenListPage {
         return node.children().stream().mapToInt(this::ruleCount).sum();
     }
 
-    private UiTreeNode<String> categoryNode(String category) {
-        return new UiTreeNode<>("@" + category, Component.translatable(UI + "category." + category))
+    private UiTreeNode<String> categoryNode(RuleCategorySkeleton.Category category) {
+        return new UiTreeNode<>("@" + category.id(), Component.translatable(category.labelKey()))
+                .setExpanded(!lastQuery.isBlank() || expandedCategories.contains(category.id()));
+    }
+
+    // 未知分类：用原文标识成组并挂在扩展分组下；同一分类只建一次
+    private UiTreeNode<String> unknownCategoryNode(Map<String, UiTreeNode<String>> groups, String category) {
+        UiTreeNode<String> node = new UiTreeNode<>("@" + category, Component.literal(category))
                 .setExpanded(!lastQuery.isBlank() || expandedCategories.contains(category));
+        groups.get(RuleCategorySkeleton.EXTENSION).addChild(node);
+        groups.put(category, node);
+        return node;
     }
 
     private void rememberCategoryState(List<UiTreeNode<String>> nodes) {

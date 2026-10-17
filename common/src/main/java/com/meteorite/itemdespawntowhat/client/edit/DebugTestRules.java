@@ -10,7 +10,7 @@ import org.jetbrains.annotations.Nullable;
  * 调试用测试规则的生成约定：统一负责身份前缀、分类归属与最小合法规则体。
  *
  * <p>测试规则以固定 id 前缀标识，删除入口据此只作用于测试规则，不触碰其它规则；
- * 列表页按 {@link RuleCategories#category(String, RuleValue)} 把它们归入独立的 debug 分类。</p>
+ * 规则体显式声明 debug 分类并随快照下发，未经显式分类的旧测试规则仍按 id 前缀回落到 debug 分类。</p>
  *
  * <p>规则体是结构合法的最小规则：单个源物品、映射形式的固定源成本，以及一个经验产出的候选结果；
  * 其余字段（enabled / priority / trigger_after_seconds / triggers / combination）依赖服务端默认值，不写入 JSON。</p>
@@ -70,7 +70,8 @@ public final class DebugTestRules {
      * 构造最小合法规则体。
      *
      * <p>固定源成本必须写成映射形式（{@code {"minecraft:stone": 1}}）：服务端按
-     * {@code SourceCost} 的映射编解码器读取，整数简写无法解码。</p>
+     * {@code SourceCost} 的映射编解码器读取，整数简写无法解码。规则体顶层声明
+     * {@code category = debug}，使测试规则在列表页独立成组。</p>
      *
      * @param ruleId 规则 id
      * @return 可直接交给草稿会话的规则体
@@ -96,6 +97,7 @@ public final class DebugTestRules {
         root.put(RuleFields.SOURCE, source.build());
         root.put(RuleFields.SOURCE_COST, cost.build());
         root.put(RuleFields.SCHEMA_VERSION, RuleValue.integer(RuleCodecs.DEFAULT_SCHEMA_VERSION));
+        root.put(RuleFields.CATEGORY, RuleValue.text(CATEGORY));
         root.put(RuleFields.OUTCOMES, RuleValue.list().add(candidate.build()).build());
         return root.build();
     }

@@ -100,7 +100,7 @@ core/api  ←──────────── core/model ──────�
 
 | 类 | 类型 | 职责 | 关键成员 |
 |---|---|---|---|
-| `RuleCodecs` | util | 规则/条件树/效果编解码组装入口 | `DEFAULT_TRIGGER_AFTER_SECONDS=300`、`DEFAULT_SCHEMA_VERSION=1`、`KNOWN_RULE_FIELDS`（17 项）、`OUTCOME_FIELDS`、`CATALYST_COST_FIELDS`、`conditionExpressionCodec(...)`、`effectCodec(...)`、`codec(...)`、`decoder(...)` |
+| `RuleCodecs` | util | 规则/条件树/效果编解码组装入口 | `DEFAULT_TRIGGER_AFTER_SECONDS=300`、`DEFAULT_SCHEMA_VERSION=1`、`KNOWN_RULE_FIELDS`（18 项）、`OUTCOME_FIELDS`、`CATALYST_COST_FIELDS`、`conditionExpressionCodec(...)`、`effectCodec(...)`、`codec(...)`、`decoder(...)` |
 | `CommonFields` | util | 效果/条件共用字段 codec 片段与默认值 | `DEFAULT_DELAY_TICKS=0`、`DEFAULT_CHANCE=1.0`；`delayTicks` / `chance` / `optionalConditions` |
 | `RuleValidation` | util | 规则语义/参数校验（两档入口） | `validate(Rule, IssueCollector, origin)`、`validate(Rule, effectTypes, conditionTypes, issues, origin)`、`validateEffect` / `validateEffectParams`、`validateConditionParams`、`validateSourceEntries` / `validateSourceReference`、`validateCatalystCost`、`validateOutcomes`、`validateConsumptionEffects`、`warnLargeSource`、`describe`、`matchesDirect` |
 | `ConsumptionDefaults` | util | 消耗类效果 id 常量与判定 | `CONSUME_SOURCE_ID` / `CONSUME_CATALYST_ID` / `CONSUME_FLUID_ID`、`isConsumption(ResourceLocation)` |
@@ -128,6 +128,7 @@ core/api  ←──────────── core/model ──────�
 | `combination` | 字符串 | 否 | `round_robin` | `round_robin` / `priority` |
 | `outcomes` | 数组 | 否 | `[]` | 候选结果；与顶层 `effects` 二选一 |
 | `schema_version` | int | 否 | `1` | 当前仅支持 1，其它值拒绝 |
+| `category` | string | 否 | 无 | 顶层展示分类；只被快照装配读取，不进入 `Rule` 模型，未声明时为空 |
 
 规则必须至少声明 `effects` 或 `outcomes` 之一，且**两者不得同时声明**（`RuleValidation` 拒载）。效果通用字段：`type`（必填）、`delay_ticks`（默认 0，相对规则触发时刻）、`chance`（默认 1.0，域 `[0,1]`）、`conditions`（可选条件树）。条件叶通用字段已无 `negated`（取反见 4.2）。
 
@@ -203,7 +204,7 @@ core/api  ←──────────── core/model ──────�
 
 ## 5. 扩展点
 
-- **新增规则级字段**：在 `RuleFields` 加常量 → `RuleCodecs` 的 `RecordCodecBuilder` 组里加 `.optionalFieldOf(...)` → `Rule` record 加分量 → 必要时 `RuleValidation` 加校验 → `KNOWN_RULE_FIELDS` 同步。
+- **新增规则级字段**：在 `RuleFields` 加常量 → `RuleCodecs` 的 `RecordCodecBuilder` 组里加 `.optionalFieldOf(...)` → `Rule` record 加分量 → 必要时 `RuleValidation` 加校验 → `KNOWN_RULE_FIELDS` 同步。纯展示字段（如 `category`）只加常量与白名单，并在快照装配层直接读取原始 JSON，不进入模型。
 - **新增条件节点类型**：改 `ConditionNode`（sealed permits）、`ConditionTrees`（统计/变换/遍历）、`RuleCodecs.nodeMapCodec`（编解码与字段白名单）——注意 `ConditionExpression.isStructurallyValid()` 也要同步形状判断。
 - **新增校验收紧/放宽**：改 `RuleValidation`，问题写入 `IssueCollector`，返回布尔表示该条是否干净；通用规模上限加到 `ConditionLimits`，条件树的深度 / 节点预算改契约层解码预算常量（两处必须同源）。
 - **新增通用效果字段**：改 `CommonFields`（保持返回 `RecordCodecBuilder`、不产 null）。
