@@ -41,8 +41,8 @@ public interface EffectContext {
     int rounds();
 
     /**
-     * 本组实际扣减的源物品数量（不消耗源物品的规则为整堆数量）。
-     * 需要"按源物品逐个计算"的效果（如实体产出经验子类的 per_source_item）应使用本值而不是 rounds。
+     * 结算层为本组固定的产出计量件数。
+     * 经验产出按本值乘以每件点数算出本组总点数；其它产出类型不按本值缩放。
      */
     int coveredSourceItems();
 

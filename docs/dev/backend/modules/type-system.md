@@ -60,7 +60,7 @@
 
 | 类 | 职责 | 关键成员 |
 |---|---|---|
-| `EffectTargets` | 执行器共享的引用解析与空间查询工具；**不捕获、不吞异常**，硬错误直接抛出交给运行时 | `resolve`（未命中返回 null）/`resolveOrThrow`、`blockBox(center, radius)`（效果式消耗与催化剂固定成本共用的搜索盒）、`addEntity`、`addEntityProduct`、`addConversionProduct`、`randomHorizontalDisc(random, center, radius, height)`（面积均匀的水平圆盘散点，半径按 `radius × √U`）、`saturatedAdd`/`saturatedMultiply`、`forEachStep(...)` |
+| `EffectTargets` | 执行器共享的引用解析与空间查询工具；**不捕获、不吞异常**，硬错误直接抛出交给运行时 | `resolve`（未命中返回 null）/`resolveOrThrow`、`blockBox(center, radius)`（效果式消耗与催化剂固定成本共用的搜索盒）、`addEntity`/`addEntityProduct`/`addConversionProduct`（区块未加载时自行挂 20 刻重试）、`addEntityNow`/`addConversionProductNow`（区块未加载时直接返回 false，由调用方按自身预算节奏重试，并保证回执在真实写入之后）、`randomHorizontalDisc(random, center, radius, height)`（面积均匀的水平圆盘散点，半径按 `radius × √U`）、`saturatedAdd`/`saturatedMultiply`、`forEachStep(...)` |
 | `ReturnItemSpawner` | 掉落物生成统一入口：转化产物与返还物共用「创建 + 授予实体状态 + 加入世界」路径 | `Kind{CONVERSION_PRODUCT, PERMANENT_RETURN}`、`applyGrant`、`spawn`、`deliver`、内部 `PositionSearch`（三级位置搜索：起点附近 → 向上扫描 → 限高以上，跨刻分步） |
 | `VisualFeedback` | 服务端主线程发送原版粒子，并按维度、刻、反馈种类与方块位置限流 | `conversion`、`entitySpawn`、`returnItem` |
 
@@ -115,21 +115,21 @@
 
 | # | type | 参数 | 语义 |
 |---|---|---|---|
-| 1 | `spawn_entity` | `variant: item/entity/experience` 必填；各子类参数见下表 | 统一生成掉落物、通用实体或经验；共用概率/延迟/条件 |
+| 1 | `spawn_entity` | `variant: item/entity/experience` 必填；各子类参数见下表 | 统一生成掉落物、通用实体或经验；共用概率/延迟/条件。物品与通用实体的产物引用与每轮产出量在成功转化当刻固定（标签成员当时抽定），交付期在共享预算内分批写入，逐单位回执真实完成量 |
 | 2 | `place_block` | `block: TaggedId`（与 `use_source_block` **至少其一**）；`use_source_block: bool`/false；`shape: square\|circle\|cross`/square；`count: int[1,64]`/1；`radius: int[1,32]`/6；`limit: Integer[1,4096]` | 按形状由内向外扩散放置方块，只替换可替换位置、不突破自身半径；目标方块与候选偏移由准备固定，邻域计数与放置按预算分批推进，逐块回执真实放置量 |
 | 3 | `loot_table` | `loot_table: ResourceLocation`（必填，**不支持 `#tag`**）；`luck: float[-100,100]`/0 | 以位置为原点开战利品表（CHEST 参数集，`THIS_ENTITY`=本次源实体）。每组在成功转化当刻各开表并抽取一次，结果随固定输入携带；交付期不再读源实体、不再开表也不再重抽；产物在共享预算内分批写入世界，逐堆回执实际件数，轮次与工作量分别表达，空表给出独立的已完成空结果 |
-| 4 | `lightning` | `count: int[1,16]`/1 | 第 1 道保留原点水平坐标，后续散布 r=5，间隔 8 刻；从高度图上方向下求交最上层碰撞或流体表面，贴合半砖与台阶；虚空无表面时回退高度图高度 |
-| 5 | `explosion` | `power: float[0,16]`/3.0；`fire: bool`/false；`visual_only: bool`/false | `visual_only` 只粒子+音效；否则 TNT 交互爆炸 |
-| 6 | `arrow_rain` | `count: int[1,256]`/16；`pickup: disallowed\|allowed\|creative_only`/disallowed；`potion_effects: List<{effect: TaggedId, duration_ticks: int[1,1000000]/100, amplifier: int[0,255]/0}>` | 上方 +80 高度落箭雨，初速度 4.5 格/刻，间隔 2 刻，可携带药水效果 |
+| 4 | `lightning` | `count: int[1,16]`/1 | 第 1 道保留原点水平坐标，后续散布 r=5，间隔 8 刻；从高度图上方向下求交最上层碰撞或流体表面，贴合半砖与台阶；虚空无表面时回退高度图高度。执行状态每步最多落一道，每道真正加入世界后经 `reportProgress(1)` 回执，全部落完的终态回执为 `applied(0)` 增量；次数与基准位置取自成功转化当刻的转换、落点散布在执行状态内抽取并保留到真正落下，区块未加载时退避 20 刻重试且不推进次数。本类型无自有的成功时输入，`prepare` 返回 `EffectPreparation.ready()` 只用于让效果级条件与概率在成功转化当刻判定一次 |
+| 5 | `explosion` | `power: float[0,16]`/3.0；`fire: bool`/false；`visual_only: bool`/false | `visual_only` 只粒子+音效；否则 TNT 交互爆炸。爆炸是单步不可抢占的原子操作，基准位置取自成功转化当刻的转换；覆盖半径所需区块未加载时退避 20 刻重试，就绪后一步完成并回执 `applied(1)`。破坏型按 `EXPLOSION_WORK_UNITS = 128` 计入本 tick 工作量，`visual_only` 只播粒子与音效、不计世界工作量。本类型无自有的成功时输入，`prepare` 返回 `EffectPreparation.ready()` 只用于让效果级条件与概率在成功转化当刻判定一次 |
+| 6 | `arrow_rain` | `count: int[1,256]`/16；`pickup: disallowed\|allowed\|creative_only`/disallowed；`potion_effects: List<{effect: TaggedId, duration_ticks: int[1,1000000]/100, amplifier: int[0,255]/0}>` | 上方 +80 高度落箭雨，初速度 4.5 格/刻，间隔 2 刻，可携带药水效果。执行状态每步最多生成一支，每支真正加入世界后经 `reportProgress(1)` 回执，全部落完的终态回执为 `applied(0)` 增量；次数与基准位置取自成功转化当刻的转换，落点与水平抖动在执行状态内抽取并保留到真正生成，区块未加载时退避 20 刻重试且不推进次数。`potion_effects` 的标签抽取属随机输入，在成功转化当刻抽定后随本类型专用的准备记录（`ArrowRainEffect.Prepared`）携带，执行期不再解析或重抽；成功当刻无法解析的引用按失败回执，不在执行期改写结果 |
 | 7 | `weather` | `mode: rain\|clear`（必填）；`duration_ticks: int[1,24000]`/6000；`thundering: bool`/false | 切换维度天气；无天空光维度跳过；已处于目标天气则跳过。效果级条件与概率在成功转化当刻判定并随任务携带，天空光与当前天气在执行时实时读取 |
 
 实体生成的 JSON 字段仍与 `type` 同级，不增加 `product` 包装：
 
 | `variant` | 专用参数 | 单位与校验 |
 |---|---|---|
-| `item` | `item: TaggedId` 必填，`count: int[1,64]` 默认 1 | 物品件数；支持物品标签 |
-| `entity` | `entity: TaggedId` 必填，`count: int[1,64]` 默认 1，`age: int` 默认 0 | 实体个数，生物及其他实体；age 仅 AgeableMob 生效；拒绝 item / experience_orb 及含它们的标签 |
-| `experience` | `amount: int[1,65536]` 默认 1，`per_source_item: bool` 默认 false | 经验点数；true 按本组实扣源件数计算，false 按组。执行器先以 `long` 汇总本行为总点数（`amount × 组数或实扣件数`），避免 `int` 溢出；再按单球点数上限 `MAX_POINTS_PER_ORB = Short.MAX_VALUE`（32767）逐球装满，余数落在最后一球，总球数为 `ceil(总量 / 32767)`。每批最多 `ORBS_PER_BATCH = 16` 球，批与批之间至少隔 1 个 tick 续接，直到总量发完，因此分批只限制每批生成的实体数、不截断经验总量，也没有「全局球数硬上限」。执行器先登记回执（`deferred`）再在当刻生成首批，保证计划入账早于进度回执。经验球直接构造 `ExperienceOrb` 并保留原版初速度、拾取与后续同值合并；生成位置为半径 0.5 格、面积均匀的水平极坐标圆盘（`EffectTargets.randomHorizontalDisc`），高度额外抬升 0.2 格。每个经验行为各自统计各自的组数，互不合并 |
+| `item` | `item: TaggedId` 必填，`count: int[1,64]` 默认 1 | 物品件数；支持物品标签，成员在成功转化当刻抽定；本组件数 = `count × rounds()`，每批最多写入 16 个实体，逐件回执真实完成量 |
+| `entity` | `entity: TaggedId` 必填，`count: int[1,64]` 默认 1，`age: int` 默认 0 | 实体个数，生物及其他实体；成员在成功转化当刻抽定；本组个数 = `count × rounds()`，每批最多 8 个、每刻候选检查数受配置约束，逐个回执真实完成量；age 仅 AgeableMob 生效；拒绝 item / experience_orb 及含它们的标签 |
+| `experience` | `amount: int[1,65536]` 默认 1 | 每件参与转化源物品的经验点数；本组总点数 = `amount × coveredSourceItems()`，以 `long` 只算一次，避免 `int` 溢出。随后按单球点数上限 `MAX_POINTS_PER_ORB = Short.MAX_VALUE`（32767）逐球装满，余数落在最后一球；每步最多 `ORBS_PER_BATCH = 16` 球，并受公共预算约束：时间耗尽或本步已用额度（含已 `StepWorkCounter.report` 上报、尚未由调度器计费的部分）用尽时立即让出，未发完的部分由执行状态在后续步骤续接，因此分批只限制单步生成量、不截断经验总量，也没有「全局球数硬上限」。每球成功加入世界后才 `reportProgress(点数)` 回执真实完成量，终态回执 `applied(0)` 表示产出已逐球计入、不再重复统计。经验球直接构造 `ExperienceOrb` 并保留原版初速度、拾取与后续同值合并；生成位置为半径 0.5 格、面积均匀的水平极坐标圆盘（`EffectTargets.randomHorizontalDisc`），高度额外抬升 0.2 格。按本组实际扣减件数各自计算，不同行为、不同组的点数不合并 |
 
 子类外字段、规则中的邻近 `limit/radius`、旧 `spawn_item/spawn_xp` 以及缺少 variant 的旧 spawn_entity 均不兼容。邻近阈值移至 [服务端配置](../systems/config.md)，只覆盖物品与通用实体：经验不受邻近阈值准入，也不因该阈值截断或返还。`place_block` 的 limit/radius 保留。
 
@@ -140,9 +140,9 @@
 
 | # | type | 参数 | 语义 |
 |---|---|---|---|
-| 8 | `consume_source` | `counts: Map<TaggedId,int[1,64]>`（可选）；`count: int[1,64]`/1 | 从**实时**堆叠扣 `当前源物品对应数量×rounds`，扣空则 discard；同时是「每组源成本」的声明，结算层按规则成本统一扣减，本执行器按实际扣减量回执避免重复记账 |
-| 9 | `consume_catalyst` | `items: List<TaggedId>`（必填非空）；`counts: Map<TaggedId,int[1,64]>`（可选）；`count: int[1,64]`/1；`radius: int[1,8]`/1 | 半径内分别支付每个引用的 `counts` 数量，缺省采用 `count`，全部付得起才扣；重叠引用共享库存；`items` 相同的 `catalyst_present` 门槛留空时，本效果（效果级条件）或 `catalyst_cost`（规则级条件）的 `count` 即其有效门槛，见 [催化剂门槛运行投影](../systems/catalyst-threshold-projection.md) |
-| 10 | `consume_fluid` | `fluid: TaggedId`/任意；`require_source: bool`/true | 每轮消耗 1 格（同 tick 同位置通常只消耗 1 格）；含水方块只去 waterlogged，否则整块置 AIR；只作实时存在条件，不参与份数预留 |
+| 8 | `consume_source` | `counts: Map<TaggedId,int[1,64]>`（可选）；`count: int[1,64]`/1 | 同时是「每组源成本」的声明：整堆源物品在成功转化当刻已转入结算库存，每组开组时由结算层扣减并记账。执行器只按本组已付成本（`groupSourceCost`，缺省取 `count`）回执真实完成量，**不读源实体、不再扣库存**，因此不会重复记账 |
+| 9 | `consume_catalyst` | `items: List<TaggedId>`（必填非空）；`counts: Map<TaggedId,int[1,64]>`（可选）；`count: int[1,64]`/1；`radius: int[1,8]`/1 | 需求、半径与匹配器在本效果任务开始执行时按参数定稿，邻域库存的查询、分配与整轮扣减仍按共享预算实时完成：半径内分别支付每个引用的 `counts` 数量，缺省采用 `count`，全部付得起才扣；重叠引用共享库存；`items` 相同的 `catalyst_present` 门槛留空时，本效果（效果级条件）或 `catalyst_cost`（规则级条件）的 `count` 即其有效门槛，见 [催化剂门槛运行投影](../systems/catalyst-threshold-projection.md) |
+| 10 | `consume_fluid` | `fluid: TaggedId`/任意；`require_source: bool`/true | 位置与轮数上界在开组时定稿，逐格消耗在共享预算内推进，每个方块读写单元之前检查预算，用尽即让出、下刻从同一位置续接；每成功消耗一格立即经受控进度回执记一次完成量，终态不重复计数；方块写入被世界拒绝时不推进完成量也不计为已完成，但该次读写尝试的工作量照记（工作量计尝试、产出计成功）；每轮消耗 1 格（同 tick 同位置通常只消耗 1 格）；含水方块只去 waterlogged，否则整块置 AIR；只作实时存在条件，不参与份数预留；取消不回滚已消耗格，已完成的格数也不会从账目里抹掉 |
 
 同一条规则内**同一消耗类型只允许一次**，否则拒载。规则未声明任何 `consume_*` 时隐式消耗 1 个源物品（判定入口 `BuiltinTypeRegistries.perRoundSourceConsumption(Rule, ItemStack)`，详见 [conversion-runtime.md](conversion-runtime.md)）。
 

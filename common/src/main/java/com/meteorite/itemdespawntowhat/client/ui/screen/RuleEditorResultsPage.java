@@ -590,11 +590,10 @@ final class RuleEditorResultsPage {
         RuleValue old = session.draft().valueAt(path);
         if (old == null || !old.isMapping()) return;
         RuleValue.Mapping next = RuleValue.mapping(old);
-        for (String field : List.of("item", "entity", "count", "age", "amount", "per_source_item")) next.remove(field);
+        for (String field : List.of("item", "entity", "count", "age", "amount")) next.remove(field);
         next.put("variant", RuleValue.text(variant));
         if ("experience".equals(variant)) {
             next.put("amount", RuleValue.integer(1));
-            next.put("per_source_item", RuleValue.flag(false));
         } else {
             next.put("count", RuleValue.integer(1));
             if ("entity".equals(variant)) next.put("age", RuleValue.integer(0));
