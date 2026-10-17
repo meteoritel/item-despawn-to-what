@@ -62,13 +62,13 @@ The **variant** field decides what comes out: `variant` is required and takes `i
 | Field | What it does | Values | Default | Notes |
 |---|---|---|---|---|
 | `item` | Which item to produce | Item id or tag | None, required | A tag takes one random member |
-| `count` | How many items to produce | 1 to 64 | `1` | When the amount is above the stack size of the item, the mod splits it into several stacks |
+| `count` | How many items to produce | 1 to 64 | `1` | When the amount is above the stack size of the item, the mod splits it into several stacks; at most 16 stacks per tick, the rest continue on later ticks |
 
 ```json
 { "type": "itemdespawntowhat:spawn_entity", "variant": "item", "item": "minecraft:rotten_flesh", "count": 1 }
 ```
 
-What you see in game: one piece of rotten flesh lands near the trigger position, within 0.15 blocks horizontally, and players can pick it up right away. The new drop carries protection and a conversion cooldown so that the rules do not consume it again at once; see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
+What you see in game: one piece of rotten flesh lands near the trigger position, within 0.15 blocks horizontally, and players can pick it up right away. Larger amounts arrive over several ticks instead of all at once; which item comes out and how many pieces is decided the moment the conversion succeeds, not later. The new drop carries protection and a conversion cooldown so that the rules do not consume it again at once; see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
 
 ### Variant entity: Entities
 
