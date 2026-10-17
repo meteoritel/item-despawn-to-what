@@ -19,7 +19,7 @@
 
 按序读完第 3 节的抽象层文档即可建立全局认知，不需要读源码：
 
-[README.md](README.md) → [overview.md](overview.md) → [architecture.md](architecture.md) → [layers/server-core.md](layers/server-core.md) → [layers/authoring.md](layers/authoring.md) → [layers/client.md](layers/client.md) → [layers/platform.md](layers/platform.md) → [flows.md](flows.md) → [conventions.md](conventions.md)
+[README.md](README.md) → [overview.md](overview.md) → [architecture.md](architecture.md) → [layers/server-core.md](layers/server-core.md) → [layers/authoring.md](layers/authoring.md) → [layers/client.md](layers/client.md) → [layers/platform.md](layers/platform.md) → [flows.md](flows.md) → [conventions.md](conventions.md) → [code-style.md](code-style.md)
 
 ### 2.2 执行改动（按需读执行层）
 
@@ -48,7 +48,7 @@
 | 使用 / 改造 UI kit | [internals/ui-kit/README.md](internals/ui-kit/README.md) |
 | 改快捷键 / 平台客户端接入 | [internals/client-entry.md](internals/client-entry.md) |
 | 改主题 / 展示名称 / 目录图标 | [internals/ui-theme.md](internals/ui-theme.md)、[internals/ui-shared.md](internals/ui-shared.md) |
-| 提交前跑检查与构建 | [conventions.md](conventions.md) §4（文档校验）；`python tools/check-isolation.py`（依赖方向）；`python tools/check-i18n.py`（语言文件 key 同步）；构建用 `tools/dsh-build.ps1` |
+| 提交前跑检查与构建 | [conventions.md](conventions.md) §4（校验脚本与退出码）；构建用 `tools/dsh-build.ps1` |
 
 ## 3. 抽象层文档目录
 
@@ -61,7 +61,8 @@
 | [layers/client.md](layers/client.md) | 客户端：协议工作区与开屏入口、草稿与撤销、类型编辑器注册表与回退、UI kit 边界与输入生命周期、主题与控件适配、四页界面契约、按键、已知限制 |
 | [layers/platform.md](layers/platform.md) | 平台接入：三种注入方式、引导与生命周期、事件与 Mixin 原则、两端差异摘要、网络与协议注册、模组级配置分组 |
 | [flows.md](flows.md) | 四条端到端链路概览：规则加载、转化生命周期、编辑保存协议、调试场景 |
-| [conventions.md](conventions.md) | 文档层级与职责、阅读协议、文档维护约定、文档校验 |
+| [conventions.md](conventions.md) | 文档层级与职责、阅读协议、文档维护约定、校验脚本 |
+| [code-style.md](code-style.md) | 代码风格：注释与 JavaDoc 的判定标准、魔法字符串与魔法数字的提取口径 |
 
 ## 4. 执行层文档目录
 

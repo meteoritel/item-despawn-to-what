@@ -31,12 +31,18 @@
 - **新增文档**：先判断属于哪一层，再扩写现有文档或新建单主题文件，并登记到 [README.md](README.md) 第 3、4 节；执行层每篇只写一个主题。
 - **决策背景只进 ADR**：`docs/adr/` 只记为什么这样设计与被否决的方案，其它文档只链接不复述。
 
-## 4. 文档校验
+## 4. 校验脚本
 
-改动的 Markdown 文档在交付前运行 `python tools/check-docs.py`：
+改动后运行对应脚本；退出码 0 表示通过，1 表示违规，2 表示配置错误（如未找到 Markdown 文档）。
 
-- 退出码 0 表示通过；1 表示存在悬空相对链接、禁用路径或反向指针；2 表示配置错误（未找到 Markdown 文档）。
-- 禁用路径常量定义在 [check-docs.py](../../tools/check-docs.py) 内，覆盖归档目录，防止现役文档产生归档指针；同一脚本禁止现役文档反向指向仓库根的 agent 指令文件，指针方向只由该文件单向发出。
+| 脚本 | 触发条件 | 检查内容 |
+|---|---|---|
+| `python tools/check-docs.py` | 改动 Markdown | 悬空相对链接、禁用路径、反向指针 |
+| `python tools/check-isolation.py` | 改动 Java 源码 | 平台隔离与端隔离 |
+| `python tools/check-i18n.py` | 改动语言文件 | `en_us.json` 与 `zh_cn.json` 的 key 同步 |
+| `powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1` | 改动 UI kit | kit 依赖边界 |
+
+禁用路径常量定义在 [check-docs.py](../../tools/check-docs.py) 内，覆盖归档目录，防止现役文档产生归档指针；同一脚本禁止现役文档反向指向仓库根的 agent 指令文件，指针方向只由该文件单向发出。
 
 ## 5. 相关
 
