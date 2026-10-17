@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
 import com.meteorite.itemdespawntowhat.client.edit.RuleCategories;
@@ -24,6 +25,7 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTreeNode;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTreeView;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import com.meteorite.itemdespawntowhat.core.debug.DebugProfile;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshotEntry;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -127,6 +129,8 @@ final class RuleEditorScreenListPage {
     private String lastQuery = "";
     private String lastTreeQuery = "";
     private int filterIndex;
+    // 首载分段观测：首份快照后的首次刷新只记录一次，作为「列表可用」的终点
+    private boolean firstReadyLogged;
 
     RuleEditorScreenListPage(Host host) {
         this.host = host;
@@ -322,6 +326,13 @@ final class RuleEditorScreenListPage {
         if (ruleList == null) {
             return;
         }
+        // 首载分段观测：一次刷新只读一次开关；关闭时除布尔判断外不取时间、不分配对象
+        final boolean profile = DebugProfile.enabled();
+        final long refreshStarted = profile ? DebugProfile.start() : 0L;
+        long filterMicros = 0L;
+        long bodyMicros = 0L;
+        long previewMicros = 0L;
+        long tooltipMicros = 0L;
         // 未收到首份快照不能判为空；有效空快照和筛选结果为空才使用空列表文案。
         ruleList.setEmptyMessage(Component.translatable(UI + (host.model().isLoaded() ? "list.empty" : "list.loading")));
         String selectedValue = ruleList.selectedNode() == null ? null : ruleList.selectedNode().value();
@@ -332,22 +343,33 @@ final class RuleEditorScreenListPage {
         String query = lastQuery == null ? "" : lastQuery.toLowerCase(Locale.ROOT).trim();
         int summaryLines = Math.max(2, host.screenHeight() / host.font().lineHeight - TOOLTIP_RESERVED_LINES);
         for (String id : host.model().ruleIds()) {
+            long filterStarted = profile ? DebugProfile.start() : 0L;
             RuleSnapshotEntry entry = host.model().entry(id);
             if (!matchesFilter(id, entry)) {
+                filterMicros += profile ? DebugProfile.micros(filterStarted) : 0L;
                 continue;
             }
             if (!query.isEmpty()
                     && !id.toLowerCase(Locale.ROOT).contains(query)
                     && !host.labelText(id).toLowerCase(Locale.ROOT).contains(query)
                     && !matchesBodyQuery(id, query)) {
+                filterMicros += profile ? DebugProfile.micros(filterStarted) : 0L;
                 continue;
             }
+            filterMicros += profile ? DebugProfile.micros(filterStarted) : 0L;
             visibleIds.add(id);
+            long bodyStarted = profile ? DebugProfile.start() : 0L;
             RuleValue body = host.model().displayBody(id);
+            bodyMicros += profile ? DebugProfile.micros(bodyStarted) : 0L;
+            long previewStarted = profile ? DebugProfile.start() : 0L;
             recipeViews.put(id, new RuleRecipeView(body));
+            previewMicros += profile ? DebugProfile.micros(previewStarted) : 0L;
+            long tooltipStarted = profile ? DebugProfile.start() : 0L;
             conditionTooltips.put(id, ConditionTreeTextSummary.format(
                     body == null ? null : body.child(RuleFields.CONDITIONS), summaryLines, NaturalSummary::conditionTreeLeaf));
+            tooltipMicros += profile ? DebugProfile.micros(tooltipStarted) : 0L;
         }
+        long treeStarted = profile ? DebugProfile.start() : 0L;
         if (lastTreeQuery.isBlank()) rememberCategoryState(ruleList.roots());
         lastTreeQuery = lastQuery;
         // 已知分类的层级、顺序与显示名来自静态骨架；未知分类按原文动态成组
@@ -367,8 +389,10 @@ final class RuleEditorScreenListPage {
         for (String id : visibleIds) {
             // 快照下发的分类优先；未声明时回落到按产出的判定
             RuleSnapshotEntry entry = host.model().entry(id);
+            long categoryBodyStarted = profile ? DebugProfile.start() : 0L;
             String category = RuleCategories.category(entry == null ? null : entry.category(),
                     id, host.model().displayBody(id));
+            bodyMicros += profile ? DebugProfile.micros(categoryBodyStarted) : 0L;
             UiTreeNode<String> group = groups.get(category);
             if (group == null) {
                 group = unknownCategoryNode(groups, category);
@@ -394,9 +418,41 @@ final class RuleEditorScreenListPage {
             }
             if (!parent.children().isEmpty()) nonempty.add(counted(parent));
         }
+        long treeMicros = profile ? DebugProfile.micros(treeStarted) : 0L;
+        long rootsStarted = profile ? DebugProfile.start() : 0L;
         ruleList.setRoots(nonempty);
         ruleList.setSelectedNode(findNode(nonempty, selectedValue));
         ruleList.setScrollOffset(scrollOffset);
+        // 首份快照后的首次刷新即「列表可用」，与开关状态无关地只认一次
+        boolean firstReady = host.model().isLoaded() && !firstReadyLogged;
+        if (firstReady) {
+            firstReadyLogged = true;
+        }
+        if (profile) {
+            logRefresh(refreshStarted, filterMicros, bodyMicros, previewMicros, tooltipMicros, treeMicros,
+                    DebugProfile.micros(rootsStarted), firstReady);
+        }
+    }
+
+    // 首载分段观测：一次刷新的分段耗时；first 表示首份快照后的首次刷新（列表可用时刻）
+    private void logRefresh(long refreshStarted, long filterMicros, long bodyMicros, long previewMicros,
+                            long tooltipMicros, long treeMicros, long rootsMicros, boolean firstReady) {
+        JsonObject data = new JsonObject();
+        data.addProperty("rules", host.model().ruleIds().size());
+        data.addProperty("visible", visibleIds.size());
+        data.addProperty("snapshot_version", host.model().snapshotVersion());
+        data.addProperty("filter_index", filterIndex);
+        data.addProperty("query_chars", lastQuery == null ? 0 : lastQuery.length());
+        data.addProperty("first", firstReady);
+        // 取体是本次刷新全部规则体读取的累计，包含建树阶段按分类读取的那一次
+        data.addProperty("filter_ms", filterMicros / 1000.0);
+        data.addProperty("body_ms", bodyMicros / 1000.0);
+        data.addProperty("preview_ms", previewMicros / 1000.0);
+        data.addProperty("tooltip_ms", tooltipMicros / 1000.0);
+        data.addProperty("tree_ms", treeMicros / 1000.0);
+        data.addProperty("set_roots_ms", rootsMicros / 1000.0);
+        data.addProperty("total_ms", DebugProfile.micros(refreshStarted) / 1000.0);
+        DebugProfile.event(DebugProfile.SCENE_FIRST_LOAD, "CLIENT_LIST_REFRESH", data);
     }
 
     // 刷新时按稳定值恢复目录或规则选择，不依赖重建前的节点实例。

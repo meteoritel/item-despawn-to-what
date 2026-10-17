@@ -22,6 +22,11 @@ final class DebugLog {
         LOGGER.info("[IDTW_DEBUG] run={} scene={} event={} {}", run, scene, event, data);
     }
 
+    // 首载分段观测：与场景日志共用前缀，过滤 [IDTW_DEBUG] 后按 scene/event 顺序阅读。
+    static void profile(String scene, String event, JsonObject data) {
+        LOGGER.info("[IDTW_DEBUG] profile scene={} event={} {}", scene, event, data);
+    }
+
     // 启动参数只记录一次，不扫描磁盘规则、不读取历史日志。
     static void ready(MinecraftServer server, RuleCommandContext context) {
         JsonObject data = config(context.serverConfig());

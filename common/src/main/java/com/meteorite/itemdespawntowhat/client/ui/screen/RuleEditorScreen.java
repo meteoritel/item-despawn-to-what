@@ -1,10 +1,12 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDescriptors;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientState;
 import com.meteorite.itemdespawntowhat.core.debug.DebugMode;
+import com.meteorite.itemdespawntowhat.core.debug.DebugProfile;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
@@ -701,7 +703,10 @@ public final class RuleEditorScreen extends Screen {
         lastModalsEmpty = modalsEmpty;
         // F-A：快照是打开屏幕之后才到的（打开时只发出了请求），每帧消费一次；
         // refresh() 内部按快照实例去重，重复调用无副作用
-        if (model.refresh()) {
+        long applyStarted = DebugProfile.start();
+        boolean applied = model.refresh();
+        if (applied) {
+            logSnapshotApplied(DebugProfile.micros(applyStarted));
             listPage.refreshList();
             editPage.rebuildEdit();
             rebuildFocus();
@@ -739,6 +744,18 @@ public final class RuleEditorScreen extends Screen {
         if (notice != null && noticeExpiresAt > 0L && Util.getMillis() >= noticeExpiresAt) {
             setNotice(null, NoticeLevel.INFO);
         }
+    }
+
+    // 首载分段观测：快照进入模型（绑定草稿、重建会话）的耗时
+    private void logSnapshotApplied(long micros) {
+        if (!DebugProfile.enabled()) {
+            return;
+        }
+        JsonObject data = new JsonObject();
+        data.addProperty("entries", model.ruleIds().size());
+        data.addProperty("dirty", model.dirtyRuleIds().size());
+        data.addProperty("apply_ms", micros / 1000.0);
+        DebugProfile.event(DebugProfile.SCENE_FIRST_LOAD, "CLIENT_APPLY", data);
     }
 
     // 应用全部按钮与撤销/重做按钮的可用状态与标签

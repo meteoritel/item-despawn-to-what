@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.net;
 
+import com.google.gson.JsonObject;
+import com.meteorite.itemdespawntowhat.core.debug.DebugProfile;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalog;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEditProtocol;
@@ -155,6 +157,12 @@ public final class RuleEditClientWorkspace {
 
     // 最近一次收到的快照
     private @Nullable RuleSnapshot snapshot;
+
+    // 首载分段观测：确认发出时刻与分片接收进度；关闭开关时不取时间也不计数
+    private long firstLoadStartedNanos;
+    private long snapshotRecvStartedNanos;
+    private String snapshotRecvTransferId = "";
+    private int snapshotRecvChunks;
 
     // 最近一次保存回执
     private @Nullable RuleSaveResultPayload lastResult;
@@ -627,6 +635,9 @@ public final class RuleEditClientWorkspace {
         openRequest = request;
         openFailure = null;
         snapshot = null;
+        snapshotRecvStartedNanos = 0L;
+        snapshotRecvTransferId = "";
+        snapshotRecvChunks = 0;
         catalogs.clear();
         directories.clear();
         catalogRequestIds.clear();
@@ -635,6 +646,8 @@ public final class RuleEditClientWorkspace {
         lastResult = null;
         lastHeartbeatTick = currentTick();
         state = RuleEditClientState.OPENING;
+        // 首载起点取确认发出时刻：客户端此后只在等快照，端到端耗时可与同一行日志对读
+        firstLoadStartedNanos = DebugProfile.start();
         send(new ConfirmRuleEditorPayload(sessionId, RuleEditProtocol.VERSION));
         state = RuleEditClientState.ACTIVE;
         EditorScreenHooks.open(request);
@@ -649,9 +662,16 @@ public final class RuleEditClientWorkspace {
             LOGGER.debug("忽略非当前会话的快照: session={}", payload.sessionId());
             return;
         }
-        RuleSnapshot parsed = RuleSnapshot.parse(payload.snapshotJson()).result().orElse(null);
+        applySnapshot(payload.snapshotJson(), false);
+    }
+
+    // 解析并接纳快照；chunked 表示来自分片重组，仅用于区分接收阶段的观测口径
+    private synchronized void applySnapshot(String json, boolean chunked) {
+        long parseStarted = DebugProfile.start();
+        RuleSnapshot parsed = RuleSnapshot.parse(json).result().orElse(null);
+        long parseMicros = DebugProfile.micros(parseStarted);
         if (parsed == null) {
-            LOGGER.warn("规则快照解析失败: bytes={}", payload.snapshotJson().length());
+            LOGGER.warn("规则快照解析失败: bytes={}", json.length());
             return;
         }
         // 修订变化意味着来源内容可能已被保存或数据包重载改写：来源视图缓存整体失效，按需重新取回
@@ -661,6 +681,28 @@ public final class RuleEditClientWorkspace {
         }
         snapshot = parsed;
         contextRevision = parsed.contextRevision();
+        if (DebugProfile.enabled()) {
+            logSnapshotReceived(json, parsed, chunked, parseMicros);
+        }
+    }
+
+    // 首载分段观测：首片到收齐、确认到快照、解析耗时与快照规模
+    private void logSnapshotReceived(String json, RuleSnapshot parsed, boolean chunked, long parseMicros) {
+        JsonObject data = new JsonObject();
+        data.addProperty("entries", parsed.entries() == null ? 0 : parsed.entries().size());
+        data.addProperty("version", parsed.version());
+        data.addProperty("chunked", chunked);
+        data.addProperty("chunks", chunked ? snapshotRecvChunks : 0);
+        data.addProperty("bytes", RuleEditLimits.encodedLength(json));
+        data.addProperty("recv_ms", chunked ? DebugProfile.micros(snapshotRecvStartedNanos) / 1000.0 : 0.0);
+        data.addProperty("parse_ms", parseMicros / 1000.0);
+        data.addProperty("since_open_ms", DebugProfile.micros(firstLoadStartedNanos) / 1000.0);
+        DebugProfile.event(DebugProfile.SCENE_FIRST_LOAD, "CLIENT_RECV", data);
+        // 首份快照之后的重载不再计算「打开到快照」，避免把后续保存的等待也算进首载
+        firstLoadStartedNanos = 0L;
+        snapshotRecvStartedNanos = 0L;
+        snapshotRecvTransferId = "";
+        snapshotRecvChunks = 0;
     }
 
     // 收到快照分片：收齐后按整包处理
@@ -668,9 +710,18 @@ public final class RuleEditClientWorkspace {
         if (payload == null || !payload.sessionId().equals(sessionId)) {
             return;
         }
+        if (DebugProfile.enabled()) {
+            // 新传输批次从首片重新计时，避免把上一批的空闲时间算进本次接收
+            if (snapshotRecvStartedNanos == 0L || !payload.transferId().equals(snapshotRecvTransferId)) {
+                snapshotRecvStartedNanos = DebugProfile.start();
+                snapshotRecvTransferId = payload.transferId();
+                snapshotRecvChunks = 0;
+            }
+            snapshotRecvChunks++;
+        }
         String json = chunkBuffer.accept(payload, currentTick());
         if (json != null) {
-            onSnapshot(new RuleSnapshotPayload(payload.sessionId(), payload.requestId(), json));
+            applySnapshot(json, true);
         }
     }
 

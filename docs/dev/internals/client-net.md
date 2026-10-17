@@ -91,9 +91,10 @@
 - `RuleChunkBuffer#accept`：校验 `transferId` 非空、`1 <= count <= RuleEditLimits#MAX_CHUNK_COUNT`、`0 <= index < count`；`transferId`、`sessionId`、`count` 任一变化或空闲超时即开新批次。
 - `RuleChunkBuffer#isStale`：`tick - lastTick > RuleEditLimits#TRANSFER_TIMEOUT_TICKS` 判超时；该常量为 1200 tick（`TRANSFER_TIMEOUT_MILLIS` 60000 除以每 tick 50 毫秒）。
 - `RuleChunkBuffer#accept` 的收齐路径：按下标顺序拼接，缺失下标按空串处理，返回完整 JSON 后 `clear()`。
-- `RuleEditClientWorkspace#requestSourceView`：仅在 `ACTIVE`、会话非空且已连接时请求；已就绪或在途直接返回，失败后不自动重试，由界面调 `retrySourceView`。
+- `RuleEditClientWorkspace#requestSourceView`：仅在 `ACTIVE`、会话非空且已连接时请求；已就绪或在途直接返回，失败条目在新一次打开时重新请求，界面也可调 `retrySourceView`。
 - `RuleEditClientWorkspace#onSourceView`：按 `requestId` 配到在途缓存项；状态码非 `SUCCESS` 或 JSON 解析失败都标记失败；`onSourceViewChunk` 收齐分片后复用同一入口。
 - `RuleEditClientWorkspace#onSnapshot`：快照修订号变化时清空来源视图缓存与分片缓冲（内容可能已被保存或数据包重载改写）；`sourceView`/`sourceViewLoading`/`sourceViewFailed` 在读取时按 5 秒期限判定超时。
+- `RuleEditClientWorkspace#onSnapshot` / `#onSnapshotChunk`：首载分段观测开启时输出 `CLIENT_RECV`（分片数、字节、首片到收齐 `recv_ms`、解析 `parse_ms`、确认到快照 `since_open_ms`）；关闭时只走原有解析与接纳路径。观测开关与日志格式见 [debug.md](../backend/modules/debug.md) §3.1。
 - `EditorScreenHooks#setOpener`、`#opener`：`volatile` 静态字段的读写；`#open`、`#close` 在字段为 `null` 时记录日志并返回。
 
 ### 2.6 代码现状（可核对）
