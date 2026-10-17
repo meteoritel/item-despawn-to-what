@@ -38,7 +38,7 @@ public final class PlaceBlockExecutor {
     private static final Map<ShapeKey, List<BlockPos>> OFFSETS = new HashMap<>();
     /**
      * 单步最多处理的方块位置数：计数段与放置段共享同一上界，取值与语义保持不变，只限制本步处理量。
-     * 实际单步上界取本值与 {@link ServerTickBudget#remainingWorkUnits()} 的较小者；
+     * 实际单步上界取本值与 {@link ServerTickBudget#remainingWorkUnits()} 的较小者，且本 tick 时间或工作量任一耗尽即让出；
      * 每个已处理位置按 1 个工作单位回执（见 {@link StepWorkCounter#report(int)}），
      * 因此该上界同时决定一个调度步骤最多向本 tick 预算计入多少工作单位。
      */
@@ -170,7 +170,7 @@ public final class PlaceBlockExecutor {
     }
 
     /**
-     * 计数与放置的持续游标：每步最多处理 {@link #MAX_VISITS_PER_STEP} 个方块位置，并受本 tick 预算余量约束。
+     * 计数与放置的持续游标：每步最多处理 {@link #MAX_VISITS_PER_STEP} 个方块位置，并在本 tick 时间或工作量耗尽时让出。
      * 每个已处理位置向本 tick 预算回执 1 个工作单位：计数段位置为一次方块读取，放置段位置含读取、放置合法性与 setBlock 写入。
      * 未完成时 {@code advance} 返回 null 让出本刻，下一次推进从保留的游标继续；区块未加载只推迟推进时机，不改变计划量。
      */
@@ -219,7 +219,7 @@ public final class PlaceBlockExecutor {
             // 本步已上报但尚未由调度器计入预算的工作量，用于把单步处理量夹在本 tick 余量内
             int reported = 0;
             while (counting) {
-                if (visits >= MAX_VISITS_PER_STEP || reported >= budget.remainingWorkUnits()) {
+                if (visits >= MAX_VISITS_PER_STEP || reported >= budget.remainingWorkUnits() || budget.exhausted()) {
                     return null;
                 }
                 if (pendingCount == null && countPositions.hasNext()) { pendingCount = countPositions.next().immutable(); }
@@ -240,7 +240,7 @@ public final class PlaceBlockExecutor {
                 pendingCount = null;
             }
             while (cursor < offsets.size() && placed < target) {
-                if (visits >= MAX_VISITS_PER_STEP || reported >= budget.remainingWorkUnits()) {
+                if (visits >= MAX_VISITS_PER_STEP || reported >= budget.remainingWorkUnits() || budget.exhausted()) {
                     return null;
                 }
                 BlockPos pos = center.offset(offsets.get(cursor));

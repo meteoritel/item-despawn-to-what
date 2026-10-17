@@ -52,7 +52,7 @@
 
 ### 2.5 内置实现的组织模式
 
-每个内置类型 = 一个**参数 record**（实现 `Effect`/`Condition`）+ `static final ResourceLocation ID` + 静态 `CODEC`/`codec(expressionCodec)` + 静态 `validateParams(...)` + 静态工厂 `effectType(...)`/`conditionType()`；执行/求值实现位于 `exec/`、`eval/` 子包的 `*Executor`/`*Evaluator`。`EffectExecutor.execute` 保持同步执行器的函数式接口；长计算可覆盖默认 `start` 创建独立 `EffectExecution`，由 `EffectTask` 在公共 tick 预算内推进；真实完成量可按单位经 `EffectContext.reportProgress` 逐次回执，终态回执只收束任务、不再重复计入产量。支持准备需覆盖 `prepare` 与按准备创建执行状态的重载；只提供 `execute`（含 lambda 注册）的类型沿用默认、不参与准备；效果级 `conditions` 与 `chance` 由成功转化当刻的槽位准备统一判定，准备结果为跳过时执行器直接给出该原因的 `SKIPPED`。
+每个内置类型 = 一个**参数 record**（实现 `Effect`/`Condition`）+ `static final ResourceLocation ID` + 静态 `CODEC`/`codec(expressionCodec)` + 静态 `validateParams(...)` + 静态工厂 `effectType(...)`/`conditionType()`；执行/求值实现位于 `exec/`、`eval/` 子包的 `*Executor`/`*Evaluator`。`EffectExecutor.execute` 保持同步执行器的函数式接口；长计算可覆盖默认 `start` 创建独立 `EffectExecution`，由 `EffectTask` 在公共 tick 预算内推进；真实完成量可按单位经 `EffectContext.reportProgress` 逐次回执：已逐次回执的量不在终态回执里重复计入，没有逐次回执的增量由终态 `appliedUnits` 给出。支持准备需覆盖 `prepare` 与按准备创建执行状态的重载；只提供 `execute`（含 lambda 注册）的类型沿用默认、不参与准备；效果级 `conditions` 与 `chance` 由成功转化当刻的槽位准备统一判定，准备结果为跳过时执行器直接给出该原因的 `SKIPPED`。
 
 > 命名坑：静态工厂**不能叫 `type()`**——接口已有无参实例方法 `type()`，同签名静态方法在 Java 中非法，故统一用 `effectType(...)`/`conditionType()`。
 
