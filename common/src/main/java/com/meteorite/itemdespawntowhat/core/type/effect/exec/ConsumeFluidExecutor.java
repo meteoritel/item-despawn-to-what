@@ -5,6 +5,7 @@ import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.StepWorkCounter;
 import com.meteorite.itemdespawntowhat.core.type.effect.ConsumeFluidEffect;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -93,13 +94,13 @@ public final class ConsumeFluidExecutor {
             if (result != null) {
                 return result;
             }
-            // 一格方块写入是一个不可抢占单元：用尽预算即让出、下刻从同一位置续接；
+            // 一格方块写入是一个不可抢占单元：预算耗尽即让出、下刻从同一位置续接；
             // 每成功消耗一格立即经受控进度回执落账，取消时已发生的消耗不会从账目里消失。
             while (consumed < rounds) {
                 if (budget.exhausted()) {
                     return null;
                 }
-                if (!consumeOne(level, pos, effect, budget)) {
+                if (!consumeOne(level, pos, effect)) {
                     break;
                 }
                 consumed++;
@@ -118,7 +119,7 @@ public final class ConsumeFluidExecutor {
         }
 
         private EffectResult finish(EffectResult terminal) {
-            if (consumed < rounds && terminal.outcome() == EffectResult.Outcome.APPLIED) {
+            if (consumed < rounds) {
                 LOGGER.debug("consume_fluid 未能消耗足够轮次：规则={} 期望={} 实际={} 位置={}",
                         context.ruleId(), rounds, consumed, pos);
             }
@@ -128,8 +129,7 @@ public final class ConsumeFluidExecutor {
     }
 
     // 消耗触发位置的一格匹配流体；该位置已无匹配流体时返回 false，且不计费
-    private static boolean consumeOne(ServerLevel level, BlockPos pos, ConsumeFluidEffect effect,
-                                     ServerTickBudget budget) {
+    private static boolean consumeOne(ServerLevel level, BlockPos pos, ConsumeFluidEffect effect) {
         FluidState fluidState = level.getFluidState(pos);
         if (fluidState.isEmpty() || !matches(effect.fluid(), fluidState)) {
             return false;
@@ -138,8 +138,8 @@ public final class ConsumeFluidExecutor {
             return false;
         }
         BlockState blockState = level.getBlockState(pos);
-        // 计费贴合真实世界操作：确实要写这一格时才占一个预算单元
-        budget.charge(1);
+        // 计价：一次方块读取加一次方块写入记 1 个工作单位，与放置类执行器同一口径
+        StepWorkCounter.report(1);
         // 含水方块：只移除含水状态，保留方块本身
         if (blockState.hasProperty(BlockStateProperties.WATERLOGGED)
                 && blockState.getValue(BlockStateProperties.WATERLOGGED)) {
