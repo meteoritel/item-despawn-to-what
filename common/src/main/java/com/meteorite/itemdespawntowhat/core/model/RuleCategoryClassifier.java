@@ -48,7 +48,7 @@ public final class RuleCategoryClassifier {
         }
         Set<ProductKind> kinds = new LinkedHashSet<>();
         for (Effect effect : rule.allEffects()) {
-            ProductKind kind = productKind(effect, effectTypes);
+            ProductKind kind = productKindOf(effect, effectTypes);
             if (kind != ProductKind.NONE) {
                 kinds.add(kind);
             }
@@ -94,7 +94,7 @@ public final class RuleCategoryClassifier {
             return;
         }
         for (JsonElement element : effects.getAsJsonArray()) {
-            ProductKind kind = element.isJsonObject() ? productKind(decodeEffect(effectCodec, element), effectTypes)
+            ProductKind kind = element.isJsonObject() ? productKindOf(decodeEffect(effectCodec, element), effectTypes)
                     : ProductKind.EXTENSION;
             if (kind != ProductKind.NONE) {
                 kinds.add(kind);
@@ -107,8 +107,17 @@ public final class RuleCategoryClassifier {
         return effectCodec.decode(JsonOps.INSTANCE, element).result().map(Pair::getFirst).orElse(null);
     }
 
-    // 单条效果的产出类别：无法解码或未注册的类型视为未知产出，其余由效果类型按实例参数解析
-    private static ProductKind productKind(@Nullable Effect effect, @Nullable TypeRegistry<EffectType<?>> effectTypes) {
+    /**
+     * 单条已解码效果的产出类别。
+     *
+     * <p>列表预览判断某条效果是否产出时共用本入口，避免展示层按效果类型字符串自行判定。
+     * 未注册类型或无法解码的效果按未知产出处理，与「含未知产出的规则归入扩展分组」一致。</p>
+     *
+     * @param effect      已解码效果，允许为 null（草稿参数不完整导致解码失败）
+     * @param effectTypes 效果类型注册表，允许为 null（缺失时按未知产出处理）
+     * @return 产出类别；无法解码或未注册的类型返回 {@link ProductKind#EXTENSION}
+     */
+    public static ProductKind productKindOf(@Nullable Effect effect, @Nullable TypeRegistry<EffectType<?>> effectTypes) {
         if (effect == null || effectTypes == null) {
             return ProductKind.EXTENSION;
         }

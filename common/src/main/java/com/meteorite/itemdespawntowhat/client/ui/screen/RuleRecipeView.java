@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 
+import com.meteorite.itemdespawntowhat.client.edit.ClientTypeRegistries;
 import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.ui.shared.BlockPreviewIcons;
@@ -13,7 +14,12 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
+import com.meteorite.itemdespawntowhat.core.model.Effect;
+import com.meteorite.itemdespawntowhat.core.model.ProductKind;
+import com.meteorite.itemdespawntowhat.core.model.RuleCategoryClassifier;
+import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
+import com.mojang.serialization.Codec;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -39,6 +45,8 @@ public final class RuleRecipeView {
     static final int CONTENT_HEIGHT = RuleTriggerView.HEIGHT;
     private static final int CONSUMED_COLOR = 0xFFFFA500;
     private static final UiIcon UNKNOWN = new UiIcon.Item(new ItemStack(Items.BARRIER));
+    // 效果解码器：预览按产出类别元数据判断产出，内置类型固定，进程内只建一次
+    private static @Nullable Codec<Effect> effectCodec;
     private final List<Part> parts = new ArrayList<>();
     private final Component summary;
     private final Component tooltip;
@@ -109,9 +117,10 @@ public final class RuleRecipeView {
         parts.add(new Part(null, Component.translatable(UI + "arrow"), true));
         List<ObjectPart> products = new ArrayList<>();
         for (RuleValue effect : effects) {
-            String type = text(effect, "type");
-            if (!List.of(OWN + "consume_source", OWN + "consume_catalyst", OWN + "consume_fluid").contains(type)) {
-                products.add(product(effect, body));
+            // 产出判断只读效果类型的产出类别元数据：NONE 为消耗类效果，不进入产出区
+            ProductKind kind = productKind(effect);
+            if (kind != ProductKind.NONE) {
+                products.add(product(effect, kind, body));
             }
         }
         if (products.isEmpty()) products.add(placeholder(effects.isEmpty() ? "result_missing" : "no_output"));
@@ -346,32 +355,46 @@ public final class RuleRecipeView {
         } else for (RuleValue term : array(node.child("terms")).items()) collectConditions(term, inverted, catalysts, fluids);
     }
 
-    private static ObjectPart product(RuleValue effect, RuleValue rule) {
-        String type = text(effect, "type");
-        if ((OWN + "spawn_entity").equals(type)) {
-            return switch (text(effect, "variant")) {
-                case "item" -> resource(text(effect, "item"), RuleCatalogType.ITEM, integer(effect, "count", 1));
-                case "entity" -> {
-                    ObjectPart part = resource(text(effect, "entity"), RuleCatalogType.ENTITY, integer(effect, "count", 1));
-                    if (!text(effect, "entity").startsWith("#")) part = new ObjectPart(part.name,
-                            RulePreviewIcons.action(effect), integer(effect, "count", 1));
+    // 产出展示形态由产出类别决定：实体子类读专有参数，方块产出支持「放置源方块」，其余按效果标题展示
+    private static ObjectPart product(RuleValue effect, ProductKind kind, RuleValue rule) {
+        return switch (kind) {
+            case ENTITY_ITEM -> resource(text(effect, "item"), RuleCatalogType.ITEM, integer(effect, "count", 1));
+            case ENTITY_ENTITY -> {
+                ObjectPart part = resource(text(effect, "entity"), RuleCatalogType.ENTITY, integer(effect, "count", 1));
+                // 标签引用保留标签图标；具体实体改用动作图标
+                if (!text(effect, "entity").startsWith("#")) part = new ObjectPart(part.name,
+                        RulePreviewIcons.action(effect), integer(effect, "count", 1));
+                yield part;
+            }
+            case ENTITY_EXPERIENCE -> new ObjectPart(Component.translatable(UI + "experience"),
+                    RulePreviewIcons.action(effect), integer(effect, "amount", 1));
+            case BLOCK -> {
+                if (bool(effect, "use_source_block")) {
+                    ObjectPart part = new ObjectPart(Component.translatable(UI + "source_block"), firstSourceIcon(rule), integer(effect, "count", 1));
+                    String source = firstSource(rule);
+                    if (source.startsWith("#")) part.tag = TagPreviewIcons.sourceBlocks(source);
                     yield part;
                 }
-                case "experience" -> new ObjectPart(Component.translatable(UI + "experience"),
-                        RulePreviewIcons.action(effect), integer(effect, "amount", 1));
-                default -> placeholder("result_missing");
-            };
-        }
-        if ((OWN + "place_block").equals(type)) {
-            if (bool(effect, "use_source_block")) {
-                ObjectPart part = new ObjectPart(Component.translatable(UI + "source_block"), firstSourceIcon(rule), integer(effect, "count", 1));
-                String source = firstSource(rule);
-                if (source.startsWith("#")) part.tag = TagPreviewIcons.sourceBlocks(source);
-                return part;
+                yield resource(text(effect, "block"), RuleCatalogType.BLOCK, integer(effect, "count", 1));
             }
-            return resource(text(effect, "block"), RuleCatalogType.BLOCK, integer(effect, "count", 1));
+            default -> new ObjectPart(RuleNaming.effectTitle(effect, RuleDisplayLabels::label),
+                    RulePreviewIcons.action(effect), integer(effect, "count", 0));
+        };
+    }
+
+    // 单条效果的产出类别：解码后读取类型元数据；参数不完整无法解码时按未知产出处理（仍作为产出展示）
+    private static ProductKind productKind(RuleValue effect) {
+        return RuleCategoryClassifier.productKindOf(effect.decode(effectCodec()), ClientTypeRegistries.effects());
+    }
+
+    // 效果解码器惰性构建：注册表内容与数据包无关，进程内只建一次
+    private static Codec<Effect> effectCodec() {
+        Codec<Effect> local = effectCodec;
+        if (local == null) {
+            local = RuleCodecs.effectCodec(ClientTypeRegistries.effects());
+            effectCodec = local;
         }
-        return new ObjectPart(RuleNaming.effectTitle(effect, RuleDisplayLabels::label), RulePreviewIcons.action(effect), integer(effect, "count", 0));
+        return local;
     }
 
     static String firstSource(RuleValue rule) {
