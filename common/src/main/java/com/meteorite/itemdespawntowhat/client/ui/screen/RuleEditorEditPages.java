@@ -4,6 +4,7 @@ import com.meteorite.itemdespawntowhat.client.edit.DraftListInputs;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
+import com.meteorite.itemdespawntowhat.client.edit.RuleCategoryAssignment;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
@@ -821,15 +822,38 @@ public final class RuleEditorEditPages {
     }
 
     boolean apply(String opKey, Runnable change) {
+        return apply(opKey, change, false);
+    }
+
+    /**
+     * 结构类编辑的统一入口：与产出相关的操作会顺带按「感知默认值」同步规则分类。
+     *
+     * <p>分类写入与产出改动处在同一条撤销记录里，撤销该次产出编辑时分类一并回退。</p>
+     *
+     * @param opKey 操作标签（i18n key）
+     * @param change 只做规则结构写入的操作
+     * @return 是否应用成功
+     */
+    boolean applyStructure(String opKey, Runnable change) {
+        return apply(opKey, change, true);
+    }
+
+    // followCategory 为真时在产出变化后同步分类
+    private boolean apply(String opKey, Runnable change, boolean followCategory) {
         EditSession session = host.session();
         if (session == null || host.rejectWhenFrozen() || blockNavigation()) {
             restoreSwitches();
             return false;
         }
         DraftListInputs inputs = DraftListInputs.capture(session.draft());
+        // 感知默认值的比较基准是变化前的派生值，写入后就取不到了
+        String derivedBefore = followCategory ? RuleCategoryAssignment.derive(session.draft().root()) : null;
         session.apply(opKey, () -> {
             change.run();
             inputs.remap(session);
+            if (followCategory) {
+                RuleCategoryAssignment.follow(session.draft(), derivedBefore);
+            }
         });
         host.onDraftChanged();
         requestRebuild();

@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.edit;
 
 import java.util.List;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * 规则分类的静态骨架：已知分类的标识、层级、顺序与本地化显示名。
@@ -41,6 +42,29 @@ public final class RuleCategorySkeleton {
      */
     public static List<Category> roots() {
         return ROOTS;
+    }
+
+    /**
+     * 已知分类的显示名本地化 key。
+     *
+     * @param id 分类标识，允许为 null
+     * @return 已知分类的 key；未知分类返回 null，调用方按原文标识显示
+     */
+    public static @Nullable String knownLabelKey(@Nullable String id) {
+        if (id == null) {
+            return null;
+        }
+        for (Category root : ROOTS) {
+            if (root.id().equals(id)) {
+                return root.labelKey();
+            }
+            for (Category child : root.children()) {
+                if (child.id().equals(id)) {
+                    return child.labelKey();
+                }
+            }
+        }
+        return null;
     }
 
     /**

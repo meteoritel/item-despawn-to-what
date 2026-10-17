@@ -24,7 +24,7 @@
 - 承载编辑会话 `EditSession`：所有草稿修改经统一入口写入完整快照历史，并独立保留未完成输入文本。
 - 提供条件树与草稿 JSON 的编解码适配，未识别的第三方条件叶原样保留。
 - 提供类型编辑器注册表与内置条件/效果描述符表，供表单按描述渲染。
-- 提供规则读写的纯函数与无状态服务：自动命名、必填项清单、问题定位、分类、身份工厂、变更集装配、数值与 JSON 摘要。
+- 提供规则读写的纯函数与无状态服务：自动命名、必填项清单、问题定位、分类与分类自动分配、身份工厂、变更集装配、数值与 JSON 摘要。
 - 提供页面层使用的只读工作区视图 `EditorWorkspaceView` 及其实机实现 `LiveEditorWorkspace`。
 - 不发起网络请求，不打开界面；网络收发由 `client/net` 负责，界面由 `client/ui` 负责。
 
@@ -57,7 +57,8 @@
 | `LiveEditorWorkspace` | class | `instance()`； `state()`； `sessionId()`； `contextRevision()`； `openRequest()`； `snapshot()`； `catalog(...)`； `directory(...)`； `refreshDirectory(...)`； `directoryFailed(...)`； `retryDirectory(...)`； `invalidateDirectories()`； `requestCatalog(...)`； `referenceLifespanTicks()`； `save(...)`； `saveProgress()`； `cancelRequested()`； `cancelSave()`； `newOperationId()`； `close(...)`； `resultSeq()`； `lastStatus()`； `lastMessageCode()`； `lastMessageArgs()`； `lastResultVersion()`； `lastWrittenToDisk()`； `lastReloaded()`； `lastIssues()` | `EditorWorkspaceView` 的实机实现，单例 |
 | `NumericDomain` | record | 组件 `backendMin`/`backendMax`/`windowMin`/`windowMax`/`step`/`shiftStep`/`displayPrecision`/`integer`； `integers(int, int)`； `integers(int, int, int, int)`； `decimals(double, double, double, double)`； `decimals(double, double, double, double, int)`； `withWindow(double, double)`； `withSteps(double, double)`； `domainText()`； `sliderMin(double)`； `sliderMax(double)` | 数值字段的域元数据 |
 | `OpaqueCondition` | class | `type()`； `rawNode()`； `equals(Object)`； `hashCode()` | 实现 `Condition`，只保留类型标识与原始节点 JSON |
-| `RuleCategorySkeleton` | class | `LABEL_PREFIX`； `EXTENSION`； `roots()`； `Category(id, children)`（`labelKey()`） | 已知规则分类的层级、顺序与本地化显示名 |
+| `RuleCategoryAssignment` | class | `SOURCE_EXPLICIT`； `SOURCE_DERIVED`； `declared(RuleValue)`； `derive(RuleValue)`； `source(RuleValue)`； `seed(RuleValue, String)`； `follow(RuleDraft, String)` | 规则分类的开场补回、来源判定与产出变化后的自动跟随 |
+| `RuleCategorySkeleton` | class | `LABEL_PREFIX`； `EXTENSION`； `roots()`； `knownLabelKey(String)`； `Category(id, children)`（`labelKey()`） | 已知规则分类的层级、顺序与本地化显示名 |
 | `RuleDraft` | class | `of(JsonObject)`； `of(RuleValue)`； `id()`； `original()`； `toJson()`； `toOverlayJson()`； `isDeleted()`； `setDeleted(boolean)`； `isDirty()`； `revert()`； `root()`； `value(String)`； `set(String, RuleValue)`； `has`/`remove`/`get*`/`set*`； `valueAt`； `setAt`； `mergeAt`； `removeAt`； `textAt`/`integerAt`/`decimalAt`/`flagAt`/`valuesAt`； `conditionsValue`； `conditionsValueAt`； `conditionsOrNull`； `setConditions`； `conditionsAt`； `setConditionsAt`； `encodeConditionsValue`； `decodeConditions`； `replaceWith`（2 个重载）； `effectCount`； `moveEffect`； `candidateEffectsPath`； `effectCountAt`； `effectValuesAt`； `moveInList`； `hasFlatEffects`； `hasOutcomes`； `hasConflictingStructures`； `outcomeCount`； `outcomeValues`； `outcomeValueAt`； `moveOutcome`； `candidateIds`； `candidateIdExists`； `convertToOutcomes` | 规则草稿 |
 | `RuleIssueLocator` | class | `Tab`（`SOURCE`/`CONDITIONS`/`RESULTS`/`INFO`）； `AnchorStep`； `ResolvedStep`； `IssueAnchor`（`resolve`/`location`）； `Location`（`known`/`hasCandidate`/`hasEffect`）； `anchor(String, String, JsonObject)`； `anchorAll(String, Iterable<String>, JsonObject)`； `tabOf(String)` | 服务端问题路径到编辑器稳定身份的映射 |
 | `RuleNaming` | class | `PREFIX`； `NameSource`（`label`/`NONE`）； `ruleTitle(RuleDraft, NameSource)`； `ruleTitle(RuleValue, NameSource)`； `sourceTitle`； `resultTitle`； `candidateTitle`； `effectListTitle`； `effectTitle` | 只读自动命名与短摘要 |
@@ -123,6 +124,11 @@
 - `RuleNaming#ruleTitleJson` 的多候选分支：候选数大于 1 时按 `combination` 选择 `multi_result_priority` 或 `multi_result_cycle` 模板。
 - `RuleIssueLocator#anchor` 与 `IssueAnchor#resolve`：数组元素身份依次取 `id:`、`type:`、`op:` 前缀；身份找不到时回落原下标。
 - 规则分类由服务端随快照下发并已按显式声明或产出派生；客户端不再按效果类型字符串判定，未知分类标识按原文成组。
+- `RuleCategoryAssignment#seed`：打开编辑会话时把快照条目下发的分类补进草稿 JSON（同时进入基线与工作副本），作者手写的分类不会在保存时丢失；分类以草稿原文形式存在，未改动直接保存不会被判为待保存。
+- `RuleCategoryAssignment#follow`：草稿当前分类为空或等于变化前的派生值时，写入变化后的派生值；其余情况视为作者手写值并保持不动。比较基准在结构写入之前取得。
+- `RuleCategoryAssignment#source`：当前分类与派生值相同视为自动，不同视为作者显式声明；手写值与派生值相同时该值行为与自动值一致。
+- `RuleCategoryAssignment#derive`：经 `RuleCategoryClassifier#classifyJson` 按草稿当前效果派生，草稿不完整（效果参数半填、类型未注册）时该效果按未知产出计。
+- `EditorFactories#copyRule`：副本换身份后清除顶层 `category`，复制出的模板按自身产出重新归类。
 - `LiveEditorWorkspace#pollResult`：发现新的 `RuleSaveResultPayload` 时自增 `resultSeq`；所有回执读取方法都先经该入口。
 
 ### 2.6 代码现状（可核对）

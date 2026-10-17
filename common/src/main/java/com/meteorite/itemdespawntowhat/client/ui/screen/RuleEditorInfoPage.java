@@ -2,6 +2,8 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
+import com.meteorite.itemdespawntowhat.client.edit.RuleCategoryAssignment;
+import com.meteorite.itemdespawntowhat.client.edit.RuleCategorySkeleton;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
@@ -15,7 +17,7 @@ import net.minecraft.util.FormattedCharSequence;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 基本信息页：只读规则 ID、显示名、启用、优先级与备注。
+ * 基本信息页：只读规则 ID、分类及其来源，并编辑显示名、启用、优先级与备注。
  */
 final class RuleEditorInfoPage {
 
@@ -33,11 +35,18 @@ final class RuleEditorInfoPage {
     void reset() {
         infoForm = null;
         infoIdRect = null;
+        infoCategoryRect = null;
+        infoCategoryLines = null;
     }
 
     @Nullable FormView infoForm;
 
     @Nullable UiRect infoIdRect;
+
+    @Nullable UiRect infoCategoryRect;
+
+    // 分类行文本：随布局重新派生，避免每帧重复解码效果
+    @Nullable List<FormattedCharSequence> infoCategoryLines;
 
     void buildInfo(EditSession session) {
         // 自上而下：只读规则 ID、显示名、启用、加高的优先级控件、多行备注；
@@ -63,8 +72,11 @@ final class RuleEditorInfoPage {
         int width = Math.max(0, area.width() - padding * 2);
         int y = area.y() + padding;
         int idLines = Math.max(1, idTextLines(width).size());
-        infoIdRect = new UiRect(x, y, width, (int) Math.ceil(idLines * (pages.font.lineHeight + 1) * 0.8));
-        y = pages.layoutForm(infoForm, x, infoIdRect.bottom() + 4, width);
+        infoIdRect = new UiRect(x, y, width, scaledHeight(idLines));
+        // 分类只做只读展示：不进入表单，避免把展示意图变成可随意改动的字段
+        infoCategoryLines = categoryTextLines(width);
+        infoCategoryRect = new UiRect(x, infoIdRect.bottom() + 2, width, scaledHeight(Math.max(1, infoCategoryLines.size())));
+        y = pages.layoutForm(infoForm, x, infoCategoryRect.bottom() + 4, width);
         int bottom = y + padding;
         pages.cards.add(new RuleEditorEditPages.PageCard(new UiRect(area.x(), area.y(), area.width(), bottom - area.y()), null));
         return bottom;
@@ -77,20 +89,53 @@ final class RuleEditorInfoPage {
     }
 
     void renderInfo(GuiGraphics graphics) {
-        if (infoIdRect == null || pages.currentView() == null) {
+        if (pages.currentView() == null) {
+            return;
+        }
+        renderScaled(graphics, infoIdRect, infoIdRect == null ? List.of() : idTextLines(infoIdRect.width()));
+        renderScaled(graphics, infoCategoryRect, infoCategoryLines == null ? List.of() : infoCategoryLines);
+    }
+
+    // 顶部只读行按 0.8 缩放绘制，宽高换算与缩放比例保持一致
+    private void renderScaled(GuiGraphics graphics, @Nullable UiRect rect, List<FormattedCharSequence> lines) {
+        if (rect == null || lines.isEmpty()) {
             return;
         }
         graphics.pose().pushPose();
         try {
-            graphics.pose().translate(infoIdRect.x(), infoIdRect.y(), 0);
+            graphics.pose().translate(rect.x(), rect.y(), 0);
             graphics.pose().scale(0.8F, 0.8F, 1);
             int lineY = 0;
-            for (FormattedCharSequence line : idTextLines(infoIdRect.width())) {
+            for (FormattedCharSequence line : lines) {
                 graphics.drawString(pages.font, line, 0, lineY, THEME.palette().textSecondary(), false);
                 lineY += pages.font.lineHeight + 1;
             }
         } finally {
             graphics.pose().popPose();
         }
+    }
+
+    // 缩放后的文本块高度
+    private int scaledHeight(int lines) {
+        return (int) Math.ceil(lines * (pages.font.lineHeight + 1) * 0.8);
+    }
+
+    // 分类行：当前分类与来源（显式 / 自动）只读展示
+    List<FormattedCharSequence> categoryTextLines(int width) {
+        RuleValue view = pages.currentView();
+        return pages.font.split(categoryText(view), Math.max(8, (int) (width / 0.8)));
+    }
+
+    // 分类文案：未声明分类时展示当前派生值，来源标记区分作者手写与自动派生
+    private static Component categoryText(@Nullable RuleValue view) {
+        String category = RuleCategoryAssignment.declared(view);
+        if (category == null) {
+            category = RuleCategoryAssignment.derive(view);
+        }
+        String labelKey = RuleCategorySkeleton.knownLabelKey(category);
+        Component label = labelKey == null ? Component.literal(category) : Component.translatable(labelKey);
+        Component source = Component.translatable(RuleEditorPageSupport.UI + "info.category.source."
+                + RuleCategoryAssignment.source(view));
+        return Component.translatable(RuleEditorPageSupport.UI + "info.category", label, source);
     }
 }
