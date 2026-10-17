@@ -415,6 +415,8 @@ public final class RuleEditorScreen extends Screen {
         if (editPage.blockNavigation()) {
             return;
         }
+        // 编辑页打开规则时按需取回来源视图；失败或超时只影响来源对照与「恢复原始版本」
+        model.requestSourceView(id);
         editingId = id;
         mode = Mode.EDIT;
         // 页面切换：提示只对切换前的页面成立，连 INFO 一起清除
@@ -708,6 +710,10 @@ public final class RuleEditorScreen extends Screen {
             listPage.refreshList();
             editPage.rebuildEdit();
             rebuildFocus();
+            // 快照修订变化会清空来源视图缓存：仍在编辑的规则按需重新取回，失败只影响来源对照
+            if (mode == Mode.EDIT && editingId != null) {
+                model.requestSourceView(editingId);
+            }
         }
         if (listNeedsRefresh) {
             listNeedsRefresh = false;

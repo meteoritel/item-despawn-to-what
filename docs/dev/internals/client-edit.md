@@ -25,7 +25,7 @@
 - 提供条件树与草稿 JSON 的编解码适配，未识别的第三方条件叶原样保留。
 - 提供类型编辑器注册表与内置条件/效果描述符表，供表单按描述渲染。
 - 提供规则读写的纯函数与无状态服务：自动命名、必填项清单、问题定位、分类与分类自动分配、身份工厂、变更集装配、数值与 JSON 摘要。
-- 提供页面层使用的只读工作区视图 `EditorWorkspaceView` 及其实机实现 `LiveEditorWorkspace`。
+- 提供页面层使用的只读工作区视图 `EditorWorkspaceView` 及其实机实现 `LiveEditorWorkspace`，其中来源视图以「就绪 / 在途 / 失败」三态查询，并由界面按需触发请求与重试。
 - 不发起网络请求，不打开界面；网络收发由 `client/net` 负责，界面由 `client/ui` 负责。
 
 ### 2.3 对外接口与导出内容
@@ -49,12 +49,12 @@
 | `EditorField` | record | 组件 `name`/`labelKey`/`type`/`domain`/`nullable`/`required`/`registry`/`enumGroup`/`hintKey`/`subFields`/`presets`/`numbers`/`displayPrecision`； 29 个静态工厂（`text` 至 `rawJson`）； `optional()`； `asRequired()`； `withHint(String)`； `withPresets(EditorPreset...)`； `withNumbers(NumericDomain)`； `withDisplayPrecision(int)`； `enumValues()`； `intMin`/`intMax`/`doubleMin`/`doubleMax`/`hasNumericDomain`/`backendMin`/`backendMax`/`sliderMin`/`sliderMax` | 编辑器字段描述 |
 | `EditorFieldType` | enum | `TEXT`； `LONG_TEXT`； `INTEGER`； `ITEM_COUNTS`； `DECIMAL`； `BOOLEAN`； `ENUM`； `RESOURCE_LOCATION`； `REGISTRY_ID`； `TAG`； `TAG_LIST`； `RL_LIST`； `STRING_LIST`； `CLIMATE_RANGE`； `PERCENT`； `AMPLIFIER`； `TICKS`； `SUBLIST`； `CONDITION_TREE`； `NOTE`； `RAW_JSON` | 21 个字段类型常量 |
 | `EditorPreset` | record | `value`； `labelKey` | 字段预设值 |
-| `EditorWorkspaceView` | interface | `state()`； `active()`； `sessionId()`； `contextRevision()`； `openRequest()`； `snapshot()`； `catalog(RuleCatalogType)`； `directory(RuleCatalogType)`； `refreshDirectory(RuleCatalogType)`； `directoryFailed(RuleCatalogType)`； `retryDirectory(RuleCatalogType)`； `invalidateDirectories()`； `requestCatalog(RuleCatalogType, String, int, int)`； `referenceLifespanTicks()`； `save(String, String)`； `saveProgress()`； `cancelRequested()`； `cancelSave()`； `newOperationId()`； `close(String)`； `resultSeq()`； `lastStatus()`； `lastMessageCode()`； `lastMessageArgs()`； `lastResultVersion()`； `lastWrittenToDisk()`； `lastReloaded()`； `lastIssues()` | 页面层使用的编辑工作区只读视图 |
+| `EditorWorkspaceView` | interface | `state()`； `active()`； `sessionId()`； `contextRevision()`； `openRequest()`； `snapshot()`； `catalog(RuleCatalogType)`； `directory(RuleCatalogType)`； `refreshDirectory(RuleCatalogType)`； `directoryFailed(RuleCatalogType)`； `retryDirectory(RuleCatalogType)`； `invalidateDirectories()`； `requestCatalog(RuleCatalogType, String, int, int)`； `requestSourceView(String)`； `sourceView(String)`； `sourceViewLoading(String)`； `sourceViewFailed(String)`； `retrySourceView(String)`； `referenceLifespanTicks()`； `save(String, String)`； `saveProgress()`； `cancelRequested()`； `cancelSave()`； `newOperationId()`； `close(String)`； `resultSeq()`； `lastStatus()`； `lastMessageCode()`； `lastMessageArgs()`； `lastResultVersion()`； `lastWrittenToDisk()`； `lastReloaded()`； `lastIssues()` | 页面层使用的编辑工作区只读视图 |
 | `EffectEditorRegistry` | class | `register(TypeEditorDescriptor)`； `isRegistered(ResourceLocation)`； `find(ResourceLocation)`； `descriptorFor(ResourceLocation)`； `all()`； `ids()` | 效果类型编辑器注册表，与条件注册表同构 |
 | `FieldNumbers` | class | `TICKS_PER_SECOND`； `MIN_SECONDS_STEP`； `MAX_AMPLIFIER`； `MIN_LEVEL`； `MAX_LEVEL`； `percentText(double)`； `parsePercent(String)`； `ticksToSecondsText(int)`； `parseSecondsToTicks(String)`； `parseSecondsDirect(String)`； `levelOf(int)`； `amplifierOf(String)`； `text(double, int)` | 数值字段的文本与 JSON 值互转 |
 | `FormIssue` | record | `path`； `label`； `message`； `blocking`； `error(String, Component, Component)`； `warning(String, Component, Component)`； `matches(String)` | 表单校验问题 |
 | `JsonSummary` | class | `compact(RuleValue)`； `compact(RuleValue, int)`； `describe(RuleValue, int)`； `compact(JsonElement)`； `compact(JsonElement, int)`； `describe(JsonElement, int)` | 只读回退的一行 JSON 摘要 |
-| `LiveEditorWorkspace` | class | `instance()`； `state()`； `sessionId()`； `contextRevision()`； `openRequest()`； `snapshot()`； `catalog(...)`； `directory(...)`； `refreshDirectory(...)`； `directoryFailed(...)`； `retryDirectory(...)`； `invalidateDirectories()`； `requestCatalog(...)`； `referenceLifespanTicks()`； `save(...)`； `saveProgress()`； `cancelRequested()`； `cancelSave()`； `newOperationId()`； `close(...)`； `resultSeq()`； `lastStatus()`； `lastMessageCode()`； `lastMessageArgs()`； `lastResultVersion()`； `lastWrittenToDisk()`； `lastReloaded()`； `lastIssues()` | `EditorWorkspaceView` 的实机实现，单例 |
+| `LiveEditorWorkspace` | class | `instance()`； `state()`； `sessionId()`； `contextRevision()`； `openRequest()`； `snapshot()`； `catalog(...)`； `directory(...)`； `refreshDirectory(...)`； `directoryFailed(...)`； `retryDirectory(...)`； `invalidateDirectories()`； `requestCatalog(...)`； `requestSourceView(...)`； `sourceView(...)`； `sourceViewLoading(...)`； `sourceViewFailed(...)`； `retrySourceView(...)`； `referenceLifespanTicks()`； `save(...)`； `saveProgress()`； `cancelRequested()`； `cancelSave()`； `newOperationId()`； `close(...)`； `resultSeq()`； `lastStatus()`； `lastMessageCode()`； `lastMessageArgs()`； `lastResultVersion()`； `lastWrittenToDisk()`； `lastReloaded()`； `lastIssues()` | `EditorWorkspaceView` 的实机实现，单例 |
 | `NumericDomain` | record | 组件 `backendMin`/`backendMax`/`windowMin`/`windowMax`/`step`/`shiftStep`/`displayPrecision`/`integer`； `integers(int, int)`； `integers(int, int, int, int)`； `decimals(double, double, double, double)`； `decimals(double, double, double, double, int)`； `withWindow(double, double)`； `withSteps(double, double)`； `domainText()`； `sliderMin(double)`； `sliderMax(double)` | 数值字段的域元数据 |
 | `OpaqueCondition` | class | `type()`； `rawNode()`； `equals(Object)`； `hashCode()` | 实现 `Condition`，只保留类型标识与原始节点 JSON |
 | `RuleCategoryAssignment` | class | `SOURCE_EXPLICIT`； `SOURCE_DERIVED`； `declared(RuleValue)`； `derive(RuleValue)`； `source(RuleValue)`； `seed(RuleValue, String)`； `follow(RuleDraft, String)` | 规则分类的开场补回、来源判定与产出变化后的自动跟随 |
@@ -73,7 +73,7 @@
 
 - 依赖本模组：`core.model`（11 个文件 import，共 24 处；`ConditionExpression`、`ConditionNode`、`RuleCodecs`、`CatalystCost` 等）。
 - 依赖本模组：`core.api`（15 个文件 import，共 18 处；`RuleFields`、`TypeRegistry`）。
-- 依赖本模组：`core.network.protocol`（3 个文件 import，共 14 处；`RuleEdit`、`RuleEditChangeSet`、`RuleCatalog`、`RuleIssue`、`RuleSaveStatus`、`RuleSnapshot`）。
+- 依赖本模组：`core.network.protocol`（3 个文件 import；`RuleEdit`、`RuleEditChangeSet`、`RuleCatalog`、`RuleIssue`、`RuleSaveStatus`、`RuleSnapshot`、`RuleSourceView`）。
 - 依赖本模组：`core.type.effect`（3 个文件，3 处；`PlaceBlockEffect`、`SpawnEntityEffect`）。
 - 依赖本模组：`core.type`（1 个文件，2 处；`BuiltinConditionTypes`、`BuiltinEffectTypes`）。
 - 依赖本模组：`core.config`（1 个文件，1 处；`ServerConfig`）、`core.service`（1 个文件，1 处；`RuleEditSessionLimits`）、`core.type.condition`（1 个文件，1 处；`YLevelCondition`）、`core.network.transport`（1 个文件，1 处；`RuleSaveResultPayload`）。
@@ -130,6 +130,7 @@
 - `RuleCategoryAssignment#derive`：经 `RuleCategoryClassifier#classifyJson` 按草稿当前效果派生，草稿不完整（效果参数半填、类型未注册）时该效果按未知产出计。
 - `EditorFactories#copyRule`：副本换身份后清除顶层 `category`，复制出的模板按自身产出重新归类。
 - `LiveEditorWorkspace#pollResult`：发现新的 `RuleSaveResultPayload` 时自增 `resultSeq`；所有回执读取方法都先经该入口。
+- `LiveEditorWorkspace#sourceView` 与 `#sourceViewLoading`/`#sourceViewFailed`：直接转发 `RuleEditClientWorkspace` 的来源视图缓存三态；界面不持有请求标识，只按状态渲染来源对照。
 
 ### 2.6 代码现状（可核对）
 

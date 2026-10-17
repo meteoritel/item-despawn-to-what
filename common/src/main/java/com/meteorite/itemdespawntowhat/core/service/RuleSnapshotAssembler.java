@@ -10,6 +10,7 @@ import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
 import com.meteorite.itemdespawntowhat.core.load.LoadedRule;
 import com.meteorite.itemdespawntowhat.core.load.OverlayRuleReader;
 import com.meteorite.itemdespawntowhat.core.load.RawRuleEntry;
+import com.meteorite.itemdespawntowhat.core.load.RuleOrigin;
 import com.meteorite.itemdespawntowhat.core.load.RuleSourceIndex;
 import com.meteorite.itemdespawntowhat.core.load.RuleSourceLayer;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
@@ -20,6 +21,7 @@ import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleIssue;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshot;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshotEntry;
+import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSourceView;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.JsonOps;
@@ -37,8 +39,8 @@ import java.util.Set;
 
 /**
  * 规则快照装配器：把"来源分层索引 + 当前生效规则"组装成下发给客户端的快照。
- * 条目形状：RuleSnapshotEntry(id, origin, status, editable, category, effective, base, overlay, issues)
- * - base 视图来自数据包层原始 JSON，overlay 视图来自覆盖层原始 JSON，两者都保留原文（不做模型往返）；
+ * 条目形状：RuleSnapshotEntry(id, origin, status, editable, category, effective, hasBase, hasOverlay, issues)
+ * - 条目只携带生效视图与两个存在标记；基底与覆盖内容由 {@link #sourceView(RuleSourceIndex.Entry)} 按需生成；
  * - category 先读取作者在规则原始 JSON 顶层的显式分类（覆盖层视图优先于数据包视图），
  *   未声明时由分类器按生效效果的产出类别派生；两者不一致时以显式值为准；无法派生的条目为空；
  * - effective 优先使用模型编码后的最终结果（解码成功时权威），否则退回原始 JSON；
@@ -127,7 +129,7 @@ public final class RuleSnapshotAssembler {
                 }
                 entries.put(source.id(), new RuleSnapshotEntry(source.id(), origin(source), status,
                         source.hasBody(), category(loaded, overlay != null ? overlay : base, effectTypes),
-                        effective, base, overlay, entryIssues));
+                        effective, base != null, overlay != null, entryIssues));
             }
         }
 
@@ -140,10 +142,10 @@ public final class RuleSnapshotAssembler {
             boolean overlayLayer = leftover.getValue().origin().layer() == RuleSourceLayer.OVERLAY;
             String category = RuleCategoryClassifier.classify(leftover.getValue().value(), effectTypes);
             // 能走到这里的都是已解码出本体的规则，一律可编辑
+            // 原始条目读取异常时没有分层视图：把模型编码结果当作基底内容下发，存在标记按来源层补齐
             entries.put(leftover.getKey(), new RuleSnapshotEntry(leftover.getKey(),
                     overlayLayer ? RuleSnapshotEntry.ORIGIN_OVERLAY : RuleSnapshotEntry.ORIGIN_DATAPACK,
-                    RuleSnapshotEntry.STATUS_ACTIVE, true, category,
-                    body, body.deepCopy(), overlayLayer ? body.deepCopy() : null, List.of()));
+                    RuleSnapshotEntry.STATUS_ACTIVE, true, category, body, true, overlayLayer, List.of()));
         }
 
         return new RuleSnapshot(version, contextRevision, List.copyOf(entries.values()),
@@ -172,6 +174,24 @@ public final class RuleSnapshotAssembler {
                     "", ISSUE_LOAD, List.of(), text == null ? "" : text));
         }
         return new RuleSnapshot(snapshot.version(), snapshot.contextRevision(), snapshot.entries(), List.copyOf(merged2));
+    }
+
+    /**
+     * 把来源分层条目转成按需下发的来源视图：基底与覆盖都保留文件原文（不做模型往返）。
+     * @param source 来源分层条目
+     * @return 来源视图；两层副本都不存在时仍返回只带 id 的空视图
+     */
+    public static RuleSourceView sourceView(RuleSourceIndex.Entry source) {
+        return new RuleSourceView(source.id(), sourceViewOf(source.base()), sourceViewOf(source.overlay()));
+    }
+
+    // 单层来源视图：层标识、数据包 id 与文件路径取原始条目的来源坐标，内容深拷贝
+    private static @Nullable RuleSourceView.View sourceViewOf(@Nullable RawRuleEntry raw) {
+        if (raw == null) {
+            return null;
+        }
+        RuleOrigin origin = raw.origin();
+        return new RuleSourceView.View(origin.layer().id(), origin.packId(), origin.path(), raw.body().deepCopy());
     }
 
     // 分类：显式声明优先，缺失时按生效效果派生；无已解码规则（如已删除条目）时为空

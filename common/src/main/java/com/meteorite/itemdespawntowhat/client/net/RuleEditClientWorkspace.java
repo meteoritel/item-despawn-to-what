@@ -10,18 +10,22 @@ import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveProgress;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveProgressPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.CancelRuleSavePayload;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshot;
+import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSourceView;
 import com.meteorite.itemdespawntowhat.core.network.transport.CloseRuleEditorPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.ConfirmRuleEditorPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.HeartbeatRuleEditorPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.OpenRuleEditorPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleCatalogPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleSnapshotPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleSourceViewPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleCatalogPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleChangeSetChunker;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditPayloadRouter;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveResultPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleSourceViewChunkPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleSourceViewPayload;
 import com.meteorite.itemdespawntowhat.core.service.RuleEditSessionLimits;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
@@ -31,6 +35,7 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -60,7 +65,38 @@ public final class RuleEditClientWorkspace {
     private static final RuleEditClientWorkspace INSTANCE = new RuleEditClientWorkspace();
 
     // 快照分片重组缓冲
-    private final RuleSnapshotChunkBuffer chunkBuffer = new RuleSnapshotChunkBuffer();
+    private final RuleChunkBuffer chunkBuffer = new RuleChunkBuffer();
+
+    // 来源视图缓存上限：只保留最近 8 条，命中不重复请求
+    private static final int SOURCE_VIEW_CACHE_LIMIT = 8;
+    // 来源视图请求超时：超时即降级为「来源对照不可用」，规则编辑与保存不受影响
+    private static final long SOURCE_VIEW_TIMEOUT_MILLIS = 5_000L;
+
+    // 来源视图按需缓存（访问顺序 LRU，最多 8 条）；会话结束整体清空
+    private final Map<String, SourceViewLoad> sourceViews = new LinkedHashMap<>(16, 0.75F, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, SourceViewLoad> eldest) {
+            return size() > SOURCE_VIEW_CACHE_LIMIT;
+        }
+    };
+    // 来源视图分片重组缓冲
+    private final RuleChunkBuffer sourceViewChunks = new RuleChunkBuffer();
+
+    /**
+     * 单条规则的来源视图加载状态：requestId 非空表示请求在途，view 非空表示已就绪，
+     * failed 表示请求失败或超时（编辑页据此降级来源对照）。不对外暴露，界面只读三态查询。
+     */
+    private static final class SourceViewLoad {
+        private String requestId = "";
+        private boolean failed;
+        private long deadline;
+        private @Nullable RuleSourceView view;
+
+        // 请求在途：有请求 id 且尚未失败或超时
+        private boolean loading() {
+            return !requestId.isEmpty() && !failed;
+        }
+    }
 
     // 最近一次收到的目录页，按类型缓存
     private final Map<RuleCatalogType, RuleCatalog> catalogs = new EnumMap<>(RuleCatalogType.class);
@@ -309,6 +345,163 @@ public final class RuleEditClientWorkspace {
         return send(new RequestRuleSnapshotPayload(sessionId, UUID.randomUUID().toString()));
     }
 
+    // ---- 来源视图（按需加载） ----
+
+    /**
+     * 请求某条规则的来源视图：编辑页打开规则时调用；已就绪或在途时不重复请求，
+     * 失败条目在新一次打开时重新请求，界面也可显式调用 {@link #retrySourceView(String)}。
+     *
+     * @param ruleId 规则 id；空值或会话不可用时忽略
+     */
+    public synchronized void requestSourceView(@Nullable String ruleId) {
+        if (ruleId == null || ruleId.isEmpty() || state != RuleEditClientState.ACTIVE
+                || sessionId.isEmpty() || !connected()) {
+            return;
+        }
+        SourceViewLoad existing = sourceViews.get(ruleId);
+        if (existing != null && (existing.view != null || existing.loading())) {
+            return;
+        }
+        SourceViewLoad load = new SourceViewLoad();
+        sourceViews.put(ruleId, load);
+        sendSourceViewRequest(ruleId, load);
+    }
+
+    /**
+     * 读取已取回的来源视图。
+     *
+     * @param ruleId 规则 id
+     * @return 来源视图；尚未取回、失败或超时时为 null
+     */
+    public synchronized @Nullable RuleSourceView sourceView(@Nullable String ruleId) {
+        SourceViewLoad load = ruleId == null ? null : sourceViews.get(ruleId);
+        if (load == null) {
+            return null;
+        }
+        expireSourceView(load);
+        return load.view;
+    }
+
+    /**
+     * @param ruleId 规则 id
+     * @return 是否正在等待来源视图应答
+     */
+    public synchronized boolean sourceViewLoading(@Nullable String ruleId) {
+        SourceViewLoad load = ruleId == null ? null : sourceViews.get(ruleId);
+        if (load == null) {
+            return false;
+        }
+        expireSourceView(load);
+        return load.loading();
+    }
+
+    /**
+     * @param ruleId 规则 id
+     * @return 来源视图是否请求失败或超时（来源对照不可用）
+     */
+    public synchronized boolean sourceViewFailed(@Nullable String ruleId) {
+        SourceViewLoad load = ruleId == null ? null : sourceViews.get(ruleId);
+        if (load == null) {
+            return false;
+        }
+        expireSourceView(load);
+        return load.failed;
+    }
+
+    /**
+     * 重试失败的来源视图请求；成功取回前来源对照继续保持不可用。
+     *
+     * @param ruleId 规则 id；空值或会话不可用时忽略
+     */
+    public synchronized void retrySourceView(@Nullable String ruleId) {
+        if (ruleId == null || ruleId.isEmpty() || state != RuleEditClientState.ACTIVE
+                || sessionId.isEmpty() || !connected()) {
+            return;
+        }
+        SourceViewLoad load = sourceViews.get(ruleId);
+        if (load == null) {
+            requestSourceView(ruleId);
+            return;
+        }
+        if (load.view != null || load.loading()) {
+            return;
+        }
+        load.failed = false;
+        sendSourceViewRequest(ruleId, load);
+    }
+
+    // 发送来源视图请求；发送失败直接标记失败，避免界面停留在「加载中」
+    private void sendSourceViewRequest(String ruleId, SourceViewLoad load) {
+        String requestId = UUID.randomUUID().toString();
+        load.view = null;
+        load.failed = false;
+        load.deadline = 0L;
+        if (!send(new RequestRuleSourceViewPayload(sessionId, requestId, ruleId))) {
+            load.requestId = "";
+            load.failed = true;
+            return;
+        }
+        load.requestId = requestId;
+        load.deadline = System.currentTimeMillis() + SOURCE_VIEW_TIMEOUT_MILLIS;
+    }
+
+    // 超时丢弃：在途请求超过期限即降级为失败，由界面提示来源对照不可用
+    private static void expireSourceView(SourceViewLoad load) {
+        if (load.loading() && System.currentTimeMillis() > load.deadline) {
+            load.requestId = "";
+            load.failed = true;
+            load.deadline = 0L;
+        }
+    }
+
+    // 收到整包来源视图：按 requestId 配到在途请求上，失败状态或解析失败都标记降级
+    private synchronized void onSourceView(@Nullable RuleSourceViewPayload payload) {
+        if (payload == null || !payload.sessionId().equals(sessionId)) {
+            return;
+        }
+        SourceViewLoad load = pendingSourceView(payload.requestId());
+        if (load == null) {
+            LOGGER.debug("忽略过时的来源视图应答: requestId={}", payload.requestId());
+            return;
+        }
+        load.requestId = "";
+        load.deadline = 0L;
+        RuleSourceView view = RuleSaveStatus.fromId(payload.statusCode()) == RuleSaveStatus.SUCCESS
+                ? RuleSourceView.parse(payload.sourceViewJson()).result().orElse(null)
+                : null;
+        load.view = view;
+        load.failed = view == null;
+        if (view == null) {
+            LOGGER.warn("来源视图取回失败: status={} bytes={}", payload.statusCode(),
+                    payload.sourceViewJson().length());
+        }
+    }
+
+    // 收到来源视图分片：收齐后按整包处理
+    private synchronized void onSourceViewChunk(@Nullable RuleSourceViewChunkPayload payload) {
+        if (payload == null || !payload.sessionId().equals(sessionId)) {
+            return;
+        }
+        String json = sourceViewChunks.accept(payload, currentTick());
+        if (json != null) {
+            onSourceView(new RuleSourceViewPayload(payload.sessionId(), payload.requestId(),
+                    RuleSaveStatus.SUCCESS.id(), json));
+        }
+    }
+
+    // 按请求 id 找在途的来源视图缓存项；找不到即视为过时应答
+    private @Nullable SourceViewLoad pendingSourceView(@Nullable String requestId) {
+        if (requestId == null || requestId.isEmpty()) {
+            return null;
+        }
+        for (SourceViewLoad load : sourceViews.values()) {
+            if (requestId.equals(load.requestId)) {
+                return load;
+            }
+        }
+        return null;
+    }
+
     // 请求目录页：仅在持有会话时有效
     public synchronized boolean requestCatalog(RuleCatalogType type, @Nullable String filter, int page, int pageSize) {
         if (sessionId.isEmpty() || type == null || !connected()) {
@@ -407,6 +600,8 @@ public final class RuleEditClientWorkspace {
         RuleEditPayloadRouter.installProgressSink(this::onProgress);
         RuleEditPayloadRouter.installCatalogSink(this::onCatalog);
         RuleEditPayloadRouter.installLifespanSink(this::onLifespan);
+        RuleEditPayloadRouter.installSourceViewSink(this::onSourceView);
+        RuleEditPayloadRouter.installSourceViewChunkSink(this::onSourceViewChunk);
         OpenRuleEditorPayload.installOpenEditorPayloadSink(this::onOpen);
     }
 
@@ -446,6 +641,8 @@ public final class RuleEditClientWorkspace {
         catalogs.clear();
         directories.clear();
         catalogRequestIds.clear();
+        sourceViews.clear();
+        sourceViewChunks.clear();
         lastResult = null;
         lastHeartbeatTick = currentTick();
         state = RuleEditClientState.OPENING;
@@ -476,6 +673,11 @@ public final class RuleEditClientWorkspace {
         if (parsed == null) {
             LOGGER.warn("规则快照解析失败: bytes={}", json.length());
             return;
+        }
+        // 修订变化意味着来源内容可能已被保存或数据包重载改写：来源视图缓存整体失效，按需重新取回
+        if (snapshot == null || snapshot.version() != parsed.version()) {
+            sourceViews.clear();
+            sourceViewChunks.clear();
         }
         snapshot = parsed;
         contextRevision = parsed.contextRevision();
@@ -625,8 +827,10 @@ public final class RuleEditClientWorkspace {
             contextRevision = 0;
             snapshot = null;
             catalogs.clear();
-        directories.clear();
+            directories.clear();
             catalogRequestIds.clear();
+            sourceViews.clear();
+            sourceViewChunks.clear();
             lifespanRequestId = "";
             chunkBuffer.clear();
             lastHeartbeatTick = 0L;
