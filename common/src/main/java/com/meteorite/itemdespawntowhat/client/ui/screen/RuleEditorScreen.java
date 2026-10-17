@@ -9,8 +9,6 @@ import com.meteorite.itemdespawntowhat.core.debug.DebugMode;
 import com.meteorite.itemdespawntowhat.core.debug.DebugProfile;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
-import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
-import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
@@ -21,7 +19,6 @@ import com.meteorite.itemdespawntowhat.client.ui.screen.form.NaturalSummary;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.ReadOnlyTextView;
 import com.meteorite.itemdespawntowhat.client.ui.shared.BlockPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.EntityPreviewIcons;
-import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostPalette;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
@@ -94,6 +91,8 @@ public final class RuleEditorScreen extends Screen {
 
     private final EditorWorkspaceView workspace;
     private final RuleEditorModel model;
+    // 列表展示快照缓存：列表页、页头标题与提示共用，避免按帧重复取体
+    private final RuleListDisplayCache display;
     private final UiFocusManager focus = new UiFocusManager();
     private final UiModalStack modals = new UiModalStack(THEME);
     private @Nullable RuleSaveOverlay saveOverlay;
@@ -148,6 +147,7 @@ public final class RuleEditorScreen extends Screen {
         BuiltinEditorDescriptors.bootstrap();
         this.workspace = Objects.requireNonNull(workspace, "workspace");
         this.model = new RuleEditorModel(workspace);
+        this.display = new RuleListDisplayCache(this.model);
         // 管理页宿主适配：把屏幕能力暴露给列表页与条目动作
         RuleEditorScreenListPage.Host listHost = new RuleEditorScreenListPage.Host() {
             @Override public Font font() { return RuleEditorScreen.this.font; }
@@ -158,7 +158,7 @@ public final class RuleEditorScreen extends Screen {
             @Override public int screenHeight() { return RuleEditorScreen.this.height; }
             @Override public boolean rejectWhenFrozen() { return RuleEditorScreen.this.rejectWhenFrozen(); }
             @Override public void setNotice(@Nullable Component message, int color) { RuleEditorScreen.this.setNotice(message, color); }
-            @Override public String labelText(String id) { return RuleEditorScreen.this.labelText(id); }
+            @Override public RuleListDisplayCache display() { return display; }
             @Override public void openEditor(String id) { RuleEditorScreen.this.openEditor(id); }
             @Override public void selectInputTab() { editPage.openInputTab(); }
             @Override public void showChanges() { RuleEditorScreen.this.showChanges(); }
@@ -898,11 +898,9 @@ public final class RuleEditorScreen extends Screen {
         }
     }
 
-    // 条目显示名（空名或与 id 相同时回退到本地化占位）
+    // 条目显示名（空名或与 id 相同时回退到本地化占位）；与列表共用同一份展示快照
     private String labelText(String id) {
-        RuleValue body = model.displayBody(id);
-        String label = body == null ? "" : RuleNaming.ruleTitle(body, RuleDisplayLabels::label).getString();
-        return label.isBlank() || label.equals(id) ? Component.translatable(UI + "recipe.unnamed").getString() : label;
+        return display.snapshot(id).title();
     }
 
     // 确认弹窗

@@ -1,17 +1,13 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.google.gson.JsonObject;
-import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
 import com.meteorite.itemdespawntowhat.client.edit.RuleCategorySkeleton;
-import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.shared.TagPreviewIcons;
-import com.meteorite.itemdespawntowhat.client.ui.shared.ConditionTreeTextSummary;
-import com.meteorite.itemdespawntowhat.client.ui.screen.form.NaturalSummary;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
@@ -23,9 +19,7 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiSegmentedControl;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTreeNode;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTreeView;
-import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.debug.DebugProfile;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshotEntry;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -74,8 +68,8 @@ final class RuleEditorScreenListPage {
         // 底部提示条
         void setNotice(@Nullable Component message, int color);
 
-        // 条目显示名（未命名时回退到本地化占位）
-        String labelText(String id);
+        // 列表展示快照缓存（标题、状态、分类、预览与提示都从同一份快照读）
+        RuleListDisplayCache display();
 
         // 打开编辑页
         void openEditor(String id);
@@ -219,8 +213,7 @@ final class RuleEditorScreenListPage {
                 (graphics, rowFont, item, index, row, selected, hovered, focused) -> graphics.drawString(rowFont,
                         Component.translatable(UI + item.key()), row.x() + 4, row.y() + 4,
                         item.enabled() ? THEME.palette().textPrimary() : THEME.palette().textDisabled(), false));
-        RuleValue body = host.model().displayBody(id);
-        boolean masked = body != null && body.flag(RuleFields.DELETE, false);
+        boolean masked = host.display().snapshot(id).deleteMarked();
         // 「恢复原始版本」需要先取回来源视图；新建草稿没有原始版本，列表页也不发起来源视图请求
         boolean canRestore = !host.model().isCreated(id) && host.workspace().sourceView(id) != null;
         list.setItems(List.of(new MenuAction(masked ? "button.unmask" : "button.mask", true, actions::maskSelected),
@@ -247,8 +240,7 @@ final class RuleEditorScreenListPage {
             button.setEnabled(host.workspace().active() && id != null);
         }
         if (toggleButton != null) {
-            RuleValue body = id == null ? null : host.model().displayBody(id);
-            boolean enabled = body != null && (!body.has(RuleFields.ENABLED) || body.flag(RuleFields.ENABLED, false));
+            boolean enabled = id != null && host.display().snapshot(id).enabled();
             toggleButton.setLabel(Component.translatable(UI + (enabled ? "button.disable" : "button.enable")));
         }
     }
@@ -298,25 +290,13 @@ final class RuleEditorScreenListPage {
     }
 
     // 名称和状态放第一行；原注册名位置改为图标配方，不显示内部规则 ID。
+    // 一帧内只读展示快照：不读规则体、不逐帧重算状态。
     private void renderRuleRow(GuiGraphics graphics, Font rowFont, String id, UiRect row, boolean hovered) {
-        RuleSnapshotEntry entry = host.model().entry(id);
-        boolean active = isRuleActive(id, entry);
-        int color = active ? THEME.palette().textPrimary() : THEME.palette().textDisabled();
-        RuleRecipeView.renderRow(graphics, rowFont, row, host.labelText(id), ruleState(id), color,
-                host.model().hasError(id) ? THEME.palette().danger() : THEME.palette().textSecondary(),
-                recipeViews.get(id), hovered, active);
-    }
-
-    // 状态用明确文字，正常启用不占用配方行；草稿标志与问题提示不再使用符号。
-    private Component ruleState(String id) {
-        if (host.model().hasError(id)) return Component.translatable(UI + "recipe.status.error");
-        EditSession session = host.model().session(id);
-        if (session != null && (session.isDirty() || host.model().isRestoring(id)))
-            return Component.translatable(UI + "recipe.status.pending");
-        RuleSnapshotEntry entry = host.model().entry(id);
-        if (entry != null && RuleSnapshotEntry.STATUS_MASKED.equals(entry.status()))
-            return Component.translatable(UI + "recipe.status.masked");
-        return isRuleActive(id, entry) ? Component.empty() : Component.translatable(UI + "recipe.status.disabled");
+        RuleListDisplaySnapshot snapshot = host.display().snapshot(id);
+        int color = snapshot.active() ? THEME.palette().textPrimary() : THEME.palette().textDisabled();
+        RuleRecipeView.renderRow(graphics, rowFont, row, snapshot.title(), snapshot.state(), color,
+                snapshot.error() ? THEME.palette().danger() : THEME.palette().textSecondary(),
+                recipeViews.get(id), hovered, snapshot.active());
     }
 
     // ---- 列表维护 ----
@@ -336,36 +316,33 @@ final class RuleEditorScreenListPage {
         ruleList.setEmptyMessage(Component.translatable(UI + (host.model().isLoaded() ? "list.empty" : "list.loading")));
         String selectedValue = ruleList.selectedNode() == null ? null : ruleList.selectedNode().value();
         int scrollOffset = ruleList.scrollOffset();
+        List<String> ruleIds = host.model().ruleIds();
+        // 只保留仍在列表里的条目，缓存随规则集合一起收敛
+        host.display().retain(ruleIds);
+        long bodyFetchesBefore = host.display().bodyFetches();
         visibleIds.clear();
         recipeViews.clear();
         conditionTooltips.clear();
         String query = lastQuery == null ? "" : lastQuery.toLowerCase(Locale.ROOT).trim();
         int summaryLines = Math.max(2, host.screenHeight() / host.font().lineHeight - TOOLTIP_RESERVED_LINES);
-        for (String id : host.model().ruleIds()) {
+        for (String id : ruleIds) {
+            // 每条规则只在这里取一次体：展示快照同时给出标题、状态、分类与搜索文本，
+            // 之后的筛选、建树与逐帧渲染都只读快照
+            long snapshotStarted = profile ? DebugProfile.start() : 0L;
+            RuleListDisplaySnapshot snapshot = host.display().snapshot(id);
+            bodyMicros += profile ? DebugProfile.micros(snapshotStarted) : 0L;
             long filterStarted = profile ? DebugProfile.start() : 0L;
-            RuleSnapshotEntry entry = host.model().entry(id);
-            if (!matchesFilter(id, entry)) {
-                filterMicros += profile ? DebugProfile.micros(filterStarted) : 0L;
-                continue;
-            }
-            if (!query.isEmpty()
-                    && !id.toLowerCase(Locale.ROOT).contains(query)
-                    && !host.labelText(id).toLowerCase(Locale.ROOT).contains(query)
-                    && !matchesBodyQuery(id, query)) {
-                filterMicros += profile ? DebugProfile.micros(filterStarted) : 0L;
-                continue;
-            }
+            boolean matches = matchesFilter(snapshot) && matchesQuery(id, snapshot, query);
             filterMicros += profile ? DebugProfile.micros(filterStarted) : 0L;
+            if (!matches) {
+                continue;
+            }
             visibleIds.add(id);
-            long bodyStarted = profile ? DebugProfile.start() : 0L;
-            RuleValue body = host.model().displayBody(id);
-            bodyMicros += profile ? DebugProfile.micros(bodyStarted) : 0L;
             long previewStarted = profile ? DebugProfile.start() : 0L;
-            recipeViews.put(id, new RuleRecipeView(body));
+            recipeViews.put(id, snapshot.preview());
             previewMicros += profile ? DebugProfile.micros(previewStarted) : 0L;
             long tooltipStarted = profile ? DebugProfile.start() : 0L;
-            conditionTooltips.put(id, ConditionTreeTextSummary.format(
-                    body == null ? null : body.child(RuleFields.CONDITIONS), summaryLines, NaturalSummary::conditionTreeLeaf));
+            conditionTooltips.put(id, snapshot.conditionTooltip(summaryLines));
             tooltipMicros += profile ? DebugProfile.micros(tooltipStarted) : 0L;
         }
         long treeStarted = profile ? DebugProfile.start() : 0L;
@@ -386,15 +363,14 @@ final class RuleEditorScreenListPage {
             }
         }
         for (String id : visibleIds) {
-            // 只消费快照下发的分类；条目不可用或无法派生分类时归入扩展分组
-            RuleSnapshotEntry entry = host.model().entry(id);
-            String category = entry == null || entry.category() == null
-                    ? RuleCategorySkeleton.EXTENSION : entry.category();
+            // 只消费展示快照里的分类与标题；未声明或无法派生分类时归入扩展分组
+            RuleListDisplaySnapshot snapshot = host.display().snapshot(id);
+            String category = snapshot.category() == null ? RuleCategorySkeleton.EXTENSION : snapshot.category();
             UiTreeNode<String> group = groups.get(category);
             if (group == null) {
                 group = unknownCategoryNode(groups, category);
             }
-            group.addChild(id, Component.literal(host.labelText(id)));
+            group.addChild(id, Component.literal(snapshot.title()));
         }
         List<UiTreeNode<String>> nonempty = new ArrayList<>();
         for (int index = 0; index < roots.size(); index++) {
@@ -422,22 +398,27 @@ final class RuleEditorScreenListPage {
             firstReadyLogged = true;
         }
         if (profile) {
+            int rules = ruleIds.size();
+            long bodyFetches = host.display().bodyFetches() - bodyFetchesBefore;
             logRefresh(refreshStarted, filterMicros, bodyMicros, previewMicros, tooltipMicros, treeMicros,
-                    DebugProfile.micros(rootsStarted), firstReady);
+                    DebugProfile.micros(rootsStarted), rules, rules - (int) bodyFetches, bodyFetches, firstReady);
         }
     }
 
     // 首载分段观测：一次刷新的分段耗时；first 表示首份快照后的首次刷新（列表可用时刻）
+    // body_fetches 是本次刷新实际取体次数，reused 是直接复用展示快照的条数
     private void logRefresh(long refreshStarted, long filterMicros, long bodyMicros, long previewMicros,
-                            long tooltipMicros, long treeMicros, long rootsMicros, boolean firstReady) {
+                            long tooltipMicros, long treeMicros, long rootsMicros,
+                            int rules, int reused, long bodyFetches, boolean firstReady) {
         JsonObject data = new JsonObject();
-        data.addProperty("rules", host.model().ruleIds().size());
+        data.addProperty("rules", rules);
         data.addProperty("visible", visibleIds.size());
         data.addProperty("snapshot_version", host.model().snapshotVersion());
         data.addProperty("filter_index", filterIndex);
         data.addProperty("query_chars", lastQuery == null ? 0 : lastQuery.length());
         data.addProperty("first", firstReady);
-        // 取体是本次刷新全部规则体读取的累计，包含建树阶段按分类读取的那一次
+        data.addProperty("body_fetches", bodyFetches);
+        data.addProperty("reused", reused);
         data.addProperty("filter_ms", filterMicros / 1000.0);
         data.addProperty("body_ms", bodyMicros / 1000.0);
         data.addProperty("preview_ms", previewMicros / 1000.0);
@@ -495,29 +476,24 @@ final class RuleEditorScreenListPage {
         }
     }
 
-    // 当前草稿中的资源 ID、备注与参数也参与搜索；不触发目录查询。
-    private boolean matchesBodyQuery(String id, String query) {
-        RuleValue body = host.model().displayBody(id);
-        return body != null && body.toJson().toLowerCase(Locale.ROOT).contains(query);
+    // 搜索：id、标题与当前草稿内容都参与匹配；规则体文本按展示快照缓存，不在逐键刷新时重建
+    private boolean matchesQuery(String id, RuleListDisplaySnapshot snapshot, String query) {
+        if (query.isEmpty()) {
+            return true;
+        }
+        return id.toLowerCase(Locale.ROOT).contains(query)
+                || snapshot.title().toLowerCase(Locale.ROOT).contains(query)
+                || snapshot.searchText().contains(query);
     }
 
-    private boolean matchesFilter(String id, @Nullable RuleSnapshotEntry entry) {
-        boolean active = isRuleActive(id, entry);
+    // 筛选只读展示快照，不重新读取规则体
+    private boolean matchesFilter(RuleListDisplaySnapshot snapshot) {
         return switch (filterIndex) {
-            case 1 -> active;
-            case 2 -> !active;
-            case 3 -> entry != null && !entry.issues().isEmpty() || host.model().hasError(id);
+            case 1 -> snapshot.active();
+            case 2 -> !snapshot.active();
+            case 3 -> snapshot.issues() || snapshot.error();
             default -> true;
         };
-    }
-
-    // 尚未修改的条目以快照状态为准；改动、恢复与新建条目以当前草稿为准。
-    private boolean isRuleActive(String id, @Nullable RuleSnapshotEntry entry) {
-        EditSession session = host.model().session(id);
-        if (session != null && (session.isDirty() || host.model().isCreated(id) || host.model().isRestoring(id))) {
-            return !session.draft().isDeleted() && session.draft().getBoolean(RuleFields.ENABLED, true);
-        }
-        return entry == null || RuleSnapshotEntry.STATUS_ACTIVE.equals(entry.status());
     }
 
     private @Nullable String selectedRuleId() {
@@ -636,13 +612,14 @@ final class RuleEditorScreenListPage {
         Component triggerTip = recipe == null ? null : recipe.triggerTooltipAt(host.font(),
                 RuleRecipeView.recipeBounds(host.font(), ruleList.nodeContentBounds(node)), mouseX, mouseY);
         if (triggerTip != null) return triggerTip;
+        // 悬停提示整份读展示快照：不取体、不重算状态
+        RuleListDisplaySnapshot snapshot = host.display().snapshot(id);
         TagPreviewIcons.Tag tag = tagAt(mouseX, mouseY);
         Component tip = tag == null ? Component.translatable(UI + "recipe.condition_tree").append("\n")
                 .append(conditionTooltips.getOrDefault(id, Component.empty()))
                 : tag.tooltip();
-        Component state = ruleState(id);
-        if (!state.getString().isBlank()) tip = tip.copy().append("\n").append(state);
-        if (RulePreviewIcons.unavailable(host.model().displayBody(id))) tip = tip.copy()
+        if (snapshot.stateVisible()) tip = tip.copy().append("\n").append(snapshot.state());
+        if (snapshot.previewUnavailable()) tip = tip.copy()
                 .append("\n").append(Component.translatable(UI + "preview.unavailable"));
         return tip;
     }
