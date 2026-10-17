@@ -73,16 +73,45 @@ public final class EffectTargets {
     }
 
     private static void addEntity(EffectContext context, net.minecraft.world.entity.Entity entity, boolean productFeedback) {
-        if (!com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks.contains(context.level(), entity.blockPosition())) {
+        if (!addEntityNow(context, entity, productFeedback)) {
             context.schedule(20, () -> addEntity(context, entity, productFeedback));
-        } else {
-            if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().prepareOutput(context, entity); }
-            if (!context.level().addFreshEntity(entity)) {
-                throw new IllegalStateException("实体生成被拒绝：规则=" + context.ruleId() + " 类型=" + entity.getType());
-            }
-            if (productFeedback) { VisualFeedback.entitySpawn(context.level(), entity.position()); }
-            if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().outputAdded(context, entity); }
         }
+    }
+
+    /**
+     * 立即把实体写入世界，不自行排期：区块未加载时直接返回 false，由调用方按自身节奏重试。
+     * 供在共享预算内逐单位推进、且只在真实写入后才回执完成量的执行器使用；
+     * 回执时机由调用方掌握，本方法不产生任何进度或账目变更。
+     *
+     * @param context         本组执行上下文
+     * @param entity          待加入世界的实体
+     * @param productFeedback 是否播放入世界视觉反馈
+     * @return 已写入世界返回 true；邻区块未加载返回 false
+     */
+    static boolean addEntityNow(EffectContext context, net.minecraft.world.entity.Entity entity, boolean productFeedback) {
+        if (!com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks.contains(context.level(), entity.blockPosition())) {
+            return false;
+        }
+        if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().prepareOutput(context, entity); }
+        if (!context.level().addFreshEntity(entity)) {
+            throw new IllegalStateException("实体生成被拒绝：规则=" + context.ruleId() + " 类型=" + entity.getType());
+        }
+        if (productFeedback) { VisualFeedback.entitySpawn(context.level(), entity.position()); }
+        if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().outputAdded(context, entity); }
+        return true;
+    }
+
+    /**
+     * 立即把转化产物写入世界：先授予新产物保护与冷却，再按 {@link #addEntityNow} 加入。
+     * 授予与加入落在同一实体上；未写入时该实体被丢弃、不计完成量，调用方重试时重新构造。
+     *
+     * @param context 本组执行上下文
+     * @param product 已构造好的掉落物产物
+     * @return 已写入世界返回 true；邻区块未加载返回 false
+     */
+    static boolean addConversionProductNow(EffectContext context, net.minecraft.world.entity.item.ItemEntity product) {
+        ReturnItemSpawner.applyGrant(product, ReturnItemSpawner.Kind.CONVERSION_PRODUCT);
+        return addEntityNow(context, product, true);
     }
 
     // 转化产物加入世界：显式区别于其它实体来源，只在这里授予新产物临时保护与冷却；

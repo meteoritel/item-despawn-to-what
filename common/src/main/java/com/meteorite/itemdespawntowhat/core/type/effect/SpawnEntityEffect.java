@@ -17,6 +17,7 @@ import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
@@ -38,7 +39,7 @@ public record SpawnEntityEffect(EntityProduct product, int delayTicks, double ch
     }
 
     // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。
-    // 显式实现准备入口：经验产出要在成功转化当刻固定条件与概率，物品与通用实体不参与准备。
+    // 显式实现准备入口：三个产出子类的引用与产出量都在成功转化当刻固定，交付期不再读原源实体。
     public static EffectType<SpawnEntityEffect> effectType(Codec<ConditionExpression> expressionCodec) {
         EffectExecutor<SpawnEntityEffect> executor = new EffectExecutor<>() {
             @Override
@@ -48,8 +49,9 @@ public record SpawnEntityEffect(EntityProduct product, int delayTicks, double ch
 
             @Override
             public @Nullable EffectPreparation prepare(SpawnEntityEffect effect, ServerLevel level, Vec3 position,
-                                                       ItemStack sourceStack, boolean fillOrigin) {
-                return SpawnEntityExecutor.prepare(effect, level, position, sourceStack, fillOrigin);
+                                                       ItemEntity sourceEntity, ItemStack sourceStack,
+                                                       boolean fillOrigin) {
+                return SpawnEntityExecutor.prepare(effect, level, position, sourceEntity, sourceStack, fillOrigin);
             }
 
             @Override
