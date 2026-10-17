@@ -9,9 +9,9 @@
 
 | 类 | 职责 |
 |---|---|
-| `RuleEditProtocol` | 协议版本常量 `VERSION = 4`；握手不一致即拒绝 |
+| `RuleEditProtocol` | 协议版本常量 `VERSION = 5`；握手不一致即拒绝 |
 | `RuleSnapshot` | `{version, context_revision, List<RuleSnapshotEntry> entries, List<RuleIssue> issues}`；`serialize()`/`parse()`。客户端只按 JSON 渲染，不依赖服务端模型类 |
-| `RuleSnapshotEntry` | 单条规则的来源三视图：`{id, origin, status, editable, effective, base, overlay, issues}`。`origin ∈ overlay\|datapack\|mixed`，`status ∈ active\|disabled\|masked\|invalid` |
+| `RuleSnapshotEntry` | 单条规则的来源三视图：`{id, origin, status, editable, category, effective, base, overlay, issues}`。`origin ∈ overlay\|datapack\|mixed`，`status ∈ active\|disabled\|masked\|invalid`；`category` 为显式分类，未声明时为 `null` |
 | `RuleEdit` | `{id, action(UPSERT\|DELETE), rule}`；upsert 必带 rule，id 归一为小写下划线 |
 | `RuleEditChangeSet` | `{expected_version, List<RuleEdit> edits}`；乐观并发基准，`serialize()`/`parse()` |
 | `RuleSaveProgress` | 不可变阶段、计数、当前内容与可取消标记；当前内容最长 512 UTF-16 单元 |
@@ -75,17 +75,18 @@
 | `RuleSnapshotAssembler` | 来源分层索引 + 当前生效规则 → 下发快照 | `assemble`、`encodeRule`（服务端线程）、`assembleEncoded`（纯 JSON 装配） |
 
 | `RuleSaveTask` | 公共 MAINTENANCE 任务：后台解析/读写、逐条校验、分步发布与回扫 | `step`、`invalidate`、`cancel`、`progress`、`pollCompletion`；后台工作提交给 `RuleOverlayStore` |
-| `RuleSnapshotTask` | 快照读取、逐条解码/编码、后台 JSON 装配与分片 | `step`、`pollCompletion`；每 tick 最多下发一片 |
+| `RuleSnapshotTask` | 快照读取、逐条解码/编码、后台 JSON 装配与分片 | `step`、`pollCompletion`；每 tick 最多下发 4 片 |
 | `RuleSaveReloadContext` | 启动/数据包重载时发布的原始基底、文件问题与解码上下文 | 对象身份用于识别重载；后台不访问 ResourceManager |
 
 ## 2. 快照形状
 
 快照 = `{version, context_revision, entries[], issues[]}`，标题字段当前都取 `EditSessionManager.version()`（覆盖层修订号）。
 
-条目 `RuleSnapshotEntry(id, origin, status, editable, effective, base, overlay, issues)`：
+条目 `RuleSnapshotEntry(id, origin, status, editable, category, effective, base, overlay, issues)`：
 
 - **三视图**：`base` 为数据包层原始 JSON，`overlay` 为覆盖层原始 JSON，两者都保留原文（**不做模型往返**）；`effective` 优先取**模型编码结果**（解码成功时权威），失败时退回 `overlay` 或 `base` 原文，保证客户端仍能看到内容。缺失的视图以 JSON `null` 下发，客户端按"无此视图"处理。
 - **`editable` 语义（内容存在标记）**：`editable = base != null || overlay != null`，即该条目在数据包层或覆盖层是否存在非控制条目内容（只被控制条目声明停用 / 删除时为 `false`，**纯数据包规则为 `true`**）；客户端据此决定打开表单编辑还是只展示详情——`status = invalid` 或带 error 级 issue 的条目即使 `editable = true` 也只读展示。
+- **`category`（展示分类）**：读取胜出原始视图（`overlay` 优先于 `base`）顶层的 `category`；缺失、非字符串或空白时为 `null`。只供列表分组，不进入运行时规则模型，不参与解码与执行。
 - **`origin`**：`overlay` / `datapack` / `mixed`（两层都有即 mixed），由 `RuleSourceIndex` 归并结果判定。
 - **`status`**：控制条目声明删除→`masked`、声明停用→`disabled`；否则解码成功→`active`、解码失败→`invalid`。`invalid` 条目会带上 `severity=error` 的 `RuleIssue`（无法定位时兜底 `itemdespawntowhat.edit.issue.decode`）。
 - **`issues`**：把加载/校验问题按 `origin` / `field_path` 关联到具体条目；无法关联的问题作为快照级 issue（`origin=runtime`）下发。
@@ -107,7 +108,7 @@
 ```text
 请求快照：权限/就绪 → 会话持有与确认校验 → heartbeat → 启动 RuleSnapshotTask 后台读取
   → 后台核对修订与读取覆盖层 → 公共预算逐条解码、校验、编码（同份快照复用编解码器）
-  → 后台装配三视图、序列化与切片 → 每 tick 下发一片
+  → 后台装配三视图、序列化与切片 → 每 tick 最多下发 4 片
 提交变更集：operationId 合法性 → 会话持有校验 → 幂等查表
   → 同一在途 operationId 等待同一结果；其它在途提交拒绝
   → beginApply → 排队 RuleSaveTask
@@ -119,7 +120,7 @@
   → finishApply → 回执；冲突/未重载的最新快照另行排队
 ```
 
-保存与快照步骤最多处理 `SAVE_ENTRIES_PER_STEP=8` 项，同时受公共 tick 预算和 `SAVE_STEP_BUDGET_NANOS=1_000_000`（1ms）步骤软预算约束；让出后最早下一 tick 续接。没有固定编辑条数拒绝门槛，4 MiB 总字节限制仍有效。文件 I/O、JSON 拼接/解析/装配与纯模型索引构建使用进程级单后台线程，待执行队列上限为 `RuleOverlayStore.MAX_BACKGROUND_JOBS=8`；队列满时拒绝新后台工作，不转回主线程执行，尚未写盘的保存回 `UNAVAILABLE`。第三方 Codec、注册表相关校验、任务取消与世界访问均留在服务端线程。单次 Codec、规则查询或原版操作不可抢占，因此不承诺任意单步均小于预算。保存失败在索引发布前保留上一版索引；发布后的回扫失败回 `SAVED_NOT_RELOADED`，不回滚已发布索引。
+保存步骤最多处理 `SAVE_ENTRIES_PER_STEP=8` 项，同时受公共 tick 预算和 `SAVE_STEP_BUDGET_NANOS=1_000_000`（1ms）步骤软预算约束；快照步骤最多处理 `SNAPSHOT_ENTRIES_PER_STEP=32` 项，不设单步时间预算，公共 tick 预算仍是唯一总闸。两类任务让出后最早下一 tick 续接，预算耗尽只延后不丢任务。没有固定编辑条数拒绝门槛，4 MiB 总字节限制仍有效。文件 I/O、JSON 拼接/解析/装配与纯模型索引构建使用进程级单后台线程，待执行队列上限为 `RuleOverlayStore.MAX_BACKGROUND_JOBS=8`；队列满时拒绝新后台工作，不转回主线程执行，尚未写盘的保存回 `UNAVAILABLE`。第三方 Codec、注册表相关校验、任务取消与世界访问均留在服务端线程。单次 Codec、规则查询或原版操作不可抢占，因此不承诺任意单步均小于预算。保存失败在索引发布前保留上一版索引；发布后的回扫失败回 `SAVED_NOT_RELOADED`，不回滚已发布索引。
 
 
 ### 4.1 保存进度与取消
@@ -172,7 +173,7 @@
 
 ## 6. 分片传输
 
-`RuleEditChunkAccumulator.validate` 逐片检查 transferId、下标和单片字节数，并将不可变载荷和字节数封装为只能由校验入口创建的 `ValidatedChunk`。服务层先校验、查询幂等回执，再调用 `acceptValidated` 重组；直接调用 `accept` 也经过同一校验入口。接收阶段复用字节数，重复下标以首片为准且仅首片计入累计值；收齐时按累计字节复核总量并返回有序分片，保存后台再拼接。每玩家至多 2 个在途传输，未收齐不回执，超量回 `INVALID_REQUEST`，空闲 1200 tick 清理。下行快照不超过 32 000 B 时直发，大快照每片 30 000 B、每 tick 一片；总量超过 4 MiB 或总片数超过上限时回结构化失败回执。启用首载分段观测时，快照准备与分片投递分别输出 `SERVER_PREP` / `SERVER_DELIVER` 分段日志，字段与开关口径见 [debug.md](debug.md) §3.1。
+`RuleEditChunkAccumulator.validate` 逐片检查 transferId、下标和单片字节数，并将不可变载荷和字节数封装为只能由校验入口创建的 `ValidatedChunk`。服务层先校验、查询幂等回执，再调用 `acceptValidated` 重组；直接调用 `accept` 也经过同一校验入口。接收阶段复用字节数，重复下标以首片为准且仅首片计入累计值；收齐时按累计字节复核总量并返回有序分片，保存后台再拼接。每玩家至多 2 个在途传输，未收齐不回执，超量回 `INVALID_REQUEST`，空闲 1200 tick 清理。下行快照不超过 32 000 B 时直发，大快照每片 30 000 B、每 tick 最多 4 片；总量超过 4 MiB 或总片数超过上限时回结构化失败回执。启用首载分段观测时，快照准备与分片投递分别输出 `SERVER_PREP` / `SERVER_DELIVER` 分段日志，字段与开关口径见 [debug.md](debug.md) §3.1。
 
 ## 7. 新契约字段如何进入快照与校验
 

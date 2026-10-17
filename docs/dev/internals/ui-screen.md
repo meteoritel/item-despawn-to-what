@@ -87,7 +87,7 @@
 - `RuleEditorPageInput`：页面级输入路由，记录按下归属并只把释放与拖动派发给同一控件；结果页动作列表的拖动排序结果交给 `RuleEditorResultsPage#moveEffect`。
 - `RuleEditorScreenEditPage#save`：提交可见表单后执行 `RuleEditorValidation#collectIssues`，有阻塞问题则定位，否则把变更集交给工作区保存，回执由 `RuleEditorScreenEditPage#pollWorkspace` 轮询。
 - `RuleEditorScreenEditPage#pollWorkspace`：轮询保存回执与草稿冲突。
-- `RuleEditorScreenListPage#refreshList`：按搜索文本、筛选条件与快照条目重建分类规则树；首载分段观测开启时输出 `CLIENT_LIST_REFRESH`（过滤、取体、预览、提示文本、建树、setRoots 与总耗时，`first=true` 表示首份快照后的首次刷新）。
+- `RuleEditorScreenListPage#refreshList`：按搜索文本、筛选条件与快照条目重建分类规则树；已知分类的层级与顺序来自 `RuleCategorySkeleton`，快照下发分类优先，未声明时回落推断，未知分类按原文成组。首载分段观测开启时输出 `CLIENT_LIST_REFRESH`（过滤、取体、预览、提示文本、建树、setRoots 与总耗时，`first=true` 表示首份快照后的首次刷新）。
 - `RuleEditorScreen#tick`：每帧消费一次新快照；首载分段观测开启时消费成功会输出 `CLIENT_APPLY`（快照进入模型的 `apply_ms`）。
 - `RuleEditorScreenListActions` 的条目动作：`RuleEditorScreenListActions#promptNewRule`、`RuleEditorScreenListActions#promptDuplicate`、`RuleEditorScreenListActions#toggleSelectedEnabled`、`RuleEditorScreenListActions#maskSelected`、`RuleEditorScreenListActions#restoreSelected`、`RuleEditorScreenListActions#deleteSelected`。
 - `RuleEditorScreenListActions#promptNewRule`：默认名由 `#nextDefaultRuleName` 生成，`new_rule` 已被快照条目或本次新建占用时依次尝试 `new_rule_1`、`new_rule_2`……取最小空闲序号。

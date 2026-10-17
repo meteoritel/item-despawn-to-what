@@ -126,16 +126,15 @@ final class RuleSnapshotTask implements ServerTask {
                 sessions.acceptDiskRevision(source.revision(), false);
                 version = sessions.version();
             }
-            long deadline = System.nanoTime() + RuleEditLimits.SAVE_STEP_BUDGET_NANOS;
             if (decoder == null && cursor < source.entries().size() && !budget.exhausted()) {
-                // Codec 构建也计入步骤预算，同一快照内复用，不为每条规则重建整棵 Codec。
+                // Codec 构建同样受公共 tick 预算约束，同一快照内复用，不为每条规则重建整棵 Codec。
                 var load = reloadContext.loadContext();
                 decoder = RuleCodecs.decoder(load.registryAccess(), load.effectTypes(), load.conditionTypes());
                 encoder = RuleCodecs.codec(load.effectTypes(), load.conditionTypes());
             }
             int processed = 0;
-            while (cursor < source.entries().size() && processed < RuleEditLimits.SAVE_ENTRIES_PER_STEP
-                    && !budget.exhausted() && System.nanoTime() < deadline) {
+            while (cursor < source.entries().size() && processed < RuleEditLimits.SNAPSHOT_ENTRIES_PER_STEP
+                    && !budget.exhausted()) {
                 RawRuleEntry entry = source.entries().get(cursor++);
                 var load = reloadContext.loadContext();
                 RuleLoader.decodeEntry(entry, decoder, source.issues())
