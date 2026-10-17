@@ -68,12 +68,13 @@
 | `SERVER_DELIVER` | `RuleEditService#pollSnapshot`（队列投递完毕或被丢弃） | `packets`、`sent`、`bytes`、`ticks`、`per_tick`、`total_ms`；中止时附 `aborted` 与 `reason` |
 | `CLIENT_RECV` | `RuleEditClientWorkspace#onSnapshot` / `#onSnapshotChunk` | `entries`、`version`、`chunked`、`chunks`、`bytes`、`recv_ms`（首片至收齐）、`parse_ms`、`since_open_ms`（确认发出至快照落地） |
 | `CLIENT_APPLY` | `RuleEditorScreen#tick` 消费新快照 | `entries`、`dirty`、`apply_ms` |
-| `CLIENT_LIST_REFRESH` | `RuleEditorScreenListPage#refreshList` | `rules`、`visible`、`snapshot_version`、`filter_index`、`query_chars`、`first`、`filter_ms`、`body_ms`、`preview_ms`、`tooltip_ms`、`tree_ms`、`set_roots_ms`、`total_ms` |
+| `CLIENT_LIST_REFRESH` | `RuleEditorScreenListPage#refreshList` | `rules`、`visible`、`snapshot_version`、`filter_index`、`query_chars`、`first`、`body_fetches`、`reused`、`filter_ms`、`body_ms`、`preview_ms`、`tooltip_ms`、`tree_ms`、`set_roots_ms`、`total_ms` |
 
 口径说明：
 
 - `first=true` 的一次 `CLIENT_LIST_REFRESH` 即「列表可用」终点；`CLIENT_RECV.since_open_ms` 给出确认到快照的端到端前半段。
-- `body_ms` 是本次刷新全部规则体读取的累计（含搜索匹配与建树阶段按分类读取的那一次），不是单次读取耗时。
+- `body_ms` 是本次刷新展示快照的累计耗时：条目内容未变时命中缓存，因此只有内容版本变化的规则会真正取体，命中缓存的刷新里该值接近 0。
+- `body_fetches` 是本次刷新实际取体次数，`reused` 是直接复用展示快照的条数；两者相加等于 `rules`，据此核对「一次刷新中每条规则只取一次体」。
 - 三档规模基线：在调试页（Ctrl+F8）把测试规则填充到 10 / 200 / 1000 条，用「应用全部」落盘后关闭并重新打开编辑器——快照只包含已落盘规则；每档记录五个 event 的 `total_ms`，准备阶段另看 `steps`/`ticks`、投递阶段另看 `packets`/`ticks`。同一诊断版本之间才可直接比较。
 - 开关是进程内静态状态：单人（集成服务器）下客户端与服务端同时生效；专用服务器与远程客户端各自运行独立进程，该观测口径以开发客户端的集成服务器为准。
 

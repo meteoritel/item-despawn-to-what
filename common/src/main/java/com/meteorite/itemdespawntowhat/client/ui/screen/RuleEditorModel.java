@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /***
@@ -46,6 +47,10 @@ public final class RuleEditorModel {
     private int snapshotVersion = -1;
     // 是否至少成功加载过一次快照
     private boolean loaded;
+    // 快照级错误汇总（随快照重建）：列表按 id 查询，不再每次遍历问题清单
+    private final Set<String> errorIds = new LinkedHashSet<>();
+    // 生效视图的规则体缓存：同一快照版本内每条规则只做一次深拷贝
+    private final Map<String, RuleValue> effectiveBodies = new LinkedHashMap<>();
 
     // 草稿落盘日志（跨界面关闭 / 断线 / 重启恢复）
     private final DraftJournal journal = new DraftJournal(new DraftStore());
@@ -85,6 +90,9 @@ public final class RuleEditorModel {
         for (RuleSnapshotEntry entry : snapshot.entries()) {
             this.entries.put(entry.id().toString(), entry);
         }
+        // 规则体与错误汇总都随快照重建：换快照即全部失效
+        this.effectiveBodies.clear();
+        this.collectErrorIds(snapshot);
         // 先绑定磁盘草稿（需要最新快照做整条规则比较），再重绑未被改动的内存会话
         this.applyRestoredDrafts();
         // 未改动且非本次新建的会话重新绑定到服务端内容
@@ -95,7 +103,7 @@ public final class RuleEditorModel {
                 continue;
             }
             RuleSnapshotEntry entry = this.entries.get(current.getKey());
-            RuleValue body = ruleBody(entry);
+            RuleValue body = entryBody(current.getKey());
             if (body == null) {
                 iterator.remove();
                 continue;
@@ -169,7 +177,7 @@ public final class RuleEditorModel {
             return existing;
         }
         RuleSnapshotEntry entry = this.entries.get(id);
-        RuleValue body = ruleBody(entry);
+        RuleValue body = entryBody(id);
         if (body == null) {
             return null;
         }
@@ -184,7 +192,28 @@ public final class RuleEditorModel {
     // 显示和筛选优先读取草稿，不为浏览列表额外创建会话。
     public @Nullable RuleValue displayBody(String id) {
         EditSession session = sessions.get(id);
-        return session == null ? ruleBody(entries.get(id)) : session.draft().root();
+        return session == null ? entryBody(id) : session.draft().root();
+    }
+
+    /**
+     * 服务端生效视图的规则体：同一快照版本内每条规则只做一次深拷贝。
+     *
+     * <p>列表展示、页头标题与提示都读这一份，避免每帧按条目重新解码与深拷贝；值对象是只读句柄，
+     * 写入仍走 {@link EditSession#apply} 与 {@link RuleDraft}，不会改到缓存内容。</p>
+     *
+     * @param id 规则 id
+     * @return 规则体；条目不存在或没有可读的生效视图时为 null
+     */
+    public @Nullable RuleValue entryBody(String id) {
+        if (!this.entries.containsKey(id)) {
+            return null;
+        }
+        if (this.effectiveBodies.containsKey(id)) {
+            return this.effectiveBodies.get(id);
+        }
+        RuleValue body = ruleBody(this.entries.get(id));
+        this.effectiveBodies.put(id, body);
+        return body;
     }
 
     // 条目只带生效视图：服务端在解码失败时已把覆盖或基底原文回退为生效视图
@@ -597,30 +626,29 @@ public final class RuleEditorModel {
         this.restoredCount = 0;
     }
 
-    // 快照级问题（服务端汇总）
-    public List<RuleIssue> snapshotIssues() {
-        RuleSnapshot snapshot = this.workspace.snapshot();
-        return snapshot == null || snapshot.issues() == null ? List.of() : List.copyOf(snapshot.issues());
-    }
-
-    // 某条规则的服务端问题
-    public List<RuleIssue> issuesFor(String id) {
-        RuleSnapshotEntry entry = this.entries.get(id);
-        return entry == null || entry.issues() == null ? List.of() : List.copyOf(entry.issues());
-    }
-
-    // 是否含错误级问题（筛选「问题」用）
+    // 是否含错误级问题（筛选「问题」用）：按快照版本预计算，列表与筛选按 id 直接查询
     public boolean hasError(String id) {
-        for (RuleIssue issue : issuesFor(id)) {
-            if (RuleIssue.SEVERITY_ERROR.equals(issue.severity())) {
-                return true;
+        return this.errorIds.contains(id);
+    }
+
+    // 汇总本快照的错误级问题：条目级与快照级问题各扫一遍，之后按 id 查询
+    private void collectErrorIds(RuleSnapshot snapshot) {
+        this.errorIds.clear();
+        for (RuleSnapshotEntry entry : snapshot.entries()) {
+            for (RuleIssue issue : entry.issues()) {
+                if (RuleIssue.SEVERITY_ERROR.equals(issue.severity())) {
+                    this.errorIds.add(entry.id().toString());
+                    break;
+                }
             }
         }
-        for (RuleIssue issue : snapshotIssues()) {
-            if (RuleIssue.SEVERITY_ERROR.equals(issue.severity()) && id.equals(issue.ruleId())) {
-                return true;
+        if (snapshot.issues() == null) {
+            return;
+        }
+        for (RuleIssue issue : snapshot.issues()) {
+            if (RuleIssue.SEVERITY_ERROR.equals(issue.severity()) && issue.ruleId() != null) {
+                this.errorIds.add(issue.ruleId());
             }
         }
-        return false;
     }
 }
