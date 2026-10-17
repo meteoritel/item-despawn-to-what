@@ -260,7 +260,7 @@ Consumption effects consume their materials at the moment a group starts: `consu
 }
 ```
 
-What you see in game: the source items this conversion used drop by the stated amount; when fewer items are available the mod takes what it can and never goes below zero. For the implicit consumption that applies when a rule declares no consumption at all, see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
+What you see in game: the source items this conversion used drop by the stated amount. This is the same cost as `source_cost`: settlement takes it from the source stack it already holds, once per group, and the effect itself never takes a second bite. For the implicit consumption that applies when a rule declares no consumption at all, see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
 
 ### Consume Catalyst (consume_catalyst)
 
@@ -292,7 +292,7 @@ What you see in game: the mod takes 1 bone meal from the closest one near the tr
 { "type": "itemdespawntowhat:consume_fluid", "fluid": "minecraft:water", "require_source": true }
 ```
 
-What you see in game: each round the mod takes the water in the trigger block. For waterlogged blocks, such as waterlogged stairs and slabs, it removes only the water and keeps the block. For a plain fluid block it clears the whole block.
+What you see in game: each round the mod takes the water in the trigger block. For waterlogged blocks, such as waterlogged stairs and slabs, it removes only the water and keeps the block. For a plain fluid block it clears the whole block. Each block cleared counts as one real completion; when the server tick budget runs out the effect pauses and continues from the same block on the next tick.
 
 ### How They Relate to Rule-Level Costs
 

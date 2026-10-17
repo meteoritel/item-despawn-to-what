@@ -134,7 +134,7 @@ delay           = max(0, dueAge - entity.getAge())
 
 ## 7. 扩展点
 
-催化剂付款仍采用软预算：邻域查询、排序、数组准备及分配算法内部的单次整理操作不可抢占；最终清单复核与整轮扣减也不能跨 tick 拆开。预算续接限制连续搜索与清单整理的工作量，不保证每个原子步骤都小于时间预算。`consume_catalyst` 的直接同步执行入口返回 `budget_required` 失败回执，调用方应使用 `start` 并在公共调度器内推进执行状态。
+催化剂付款仍采用软预算：邻域查询、排序、数组准备及分配算法内部的单次整理操作不可抢占；最终清单复核与整轮扣减也不能跨 tick 拆开。预算续接限制连续搜索与清单整理的工作量，不保证每个原子步骤都小于时间预算。流体消耗按「一格 = 一个单元」推进，每个方块读写之前检查预算，用尽即让出、下刻从同一位置续接；每成功消耗一格立即经受控进度回执记一次完成量，终态回执不再重复计数。`consume_source` 的 `execute` 是单步回执：源消耗已由结算层开组时扣减并记账，执行器只按本组已付成本报告真实完成量。`consume_catalyst` 与 `consume_fluid` 的 `execute` 恒返回 `budget_required` 失败回执，两者经 `start` 返回按 `ServerTickBudget` 续接的执行状态，必须在公共调度器内推进。
 
 - **改排期/退避语义**：改 `ConversionRuntime.scheduleInitial` / `attempt` / `reschedule` 与 `ServerConfig.backoffTicks`。
 - **改规则选择排序**：改 `RuleIndex.RULE_ORDER` 比较键。
