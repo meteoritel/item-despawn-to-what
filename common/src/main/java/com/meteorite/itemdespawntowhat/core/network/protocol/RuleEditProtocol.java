@@ -7,8 +7,8 @@ package com.meteorite.itemdespawntowhat.core.network.protocol;
  */
 public final class RuleEditProtocol {
 
-    // 协议版本，客户端与服务端必须一致
-    public static final int VERSION = 4;
+    // 协议版本，客户端与服务端必须一致；快照条目新增分类字段后递增
+    public static final int VERSION = 5;
 
     private RuleEditProtocol() {
         throw new UnsupportedOperationException("Utility class");

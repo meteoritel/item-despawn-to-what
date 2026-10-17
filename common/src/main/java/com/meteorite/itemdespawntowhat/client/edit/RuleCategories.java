@@ -7,10 +7,31 @@ import java.util.LinkedHashSet;
 import org.jetbrains.annotations.Nullable;
 import java.util.Set;
 
-/*** 虚拟分类只依据全部方案中的产出动作，既不改文件路径，也不重复列出规则。 */
+/**
+ * 未声明分类时的虚拟分类判定：只依据全部方案中的产出动作，既不改文件路径，也不重复列出规则。
+ * 快照条目已携带分类时由调用方直接采用该值，不进入这里。
+ */
 public final class RuleCategories {
     private RuleCategories() { }
 
+    /**
+     * 优先采用快照下发的分类，未下发时回落到按产出的判定。
+     *
+     * @param declared 快照条目携带的显式分类，允许为 null 或空白
+     * @param id 规则 id，允许为 null
+     * @param rule 规则体，允许为 null
+     * @return 分类标识；缺省时等同 {@link #category(String, RuleValue)}
+     */
+    public static String category(@Nullable String declared, @Nullable String id, @Nullable RuleValue rule) {
+        return declared == null || declared.isBlank() ? category(id, rule) : declared;
+    }
+
+    /**
+     * 按规则体判定分类。
+     *
+     * @param rule 规则体，允许为 null
+     * @return 分类标识；无规则体时按无产出归入扩展分类
+     */
     public static String category(@Nullable RuleValue rule) {
         return categoryJson(rule == null || !rule.isMapping() ? null : rule.unwrap().getAsJsonObject());
     }

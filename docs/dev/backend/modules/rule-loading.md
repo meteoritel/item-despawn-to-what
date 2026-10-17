@@ -111,7 +111,8 @@ config 覆盖层     config/<overlay_directory>/rules/**/*.json
 
 `RuleCodecs.decoder` 在真正解码前先做三层字段检查：
 
-- **顶层字段白名单** `RuleCodecs.KNOWN_RULE_FIELDS` 共 **17 项**：`id`、`enabled`、`priority`、`display_name`、`notes`、`source`、`conditions`、`trigger_after_seconds`、`effects`、`triggers`、`source_cost`、`catalyst_cost`、`combination`、`outcomes`、`schema_version`、`disabled`、`delete`。顶层未知字段仅 **WARN**，不阻断加载。
+- **顶层字段白名单** `RuleCodecs.KNOWN_RULE_FIELDS` 共 **18 项**：`id`、`enabled`、`priority`、`display_name`、`notes`、`source`、`conditions`、`trigger_after_seconds`、`effects`、`triggers`、`source_cost`、`catalyst_cost`、`combination`、`outcomes`、`schema_version`、`category`、`disabled`、`delete`。顶层未知字段仅 **WARN**，不阻断加载。
+- **`category`**：可选展示分类，只被快照装配读取（覆盖层视图优先于数据包视图），不进入 `Rule` 模型，解码、校验与执行都不读取它。
 - **`outcomes[i]` 元素未知字段为 ERROR**（允许 `id`/`effects`/`safe_spawn`/`fill_origin`）；**`catalyst_cost` 未知字段、非对象写法（旧的整数写法）为 ERROR**。
 - **`schema_version`**：缺省值为 `RuleCodecs.DEFAULT_SCHEMA_VERSION = 1`，当前**仅支持 1**；其它值在 `RuleValidation.validate` 中报 ERROR 拒载。
 - **旧格式不兼容**：条件数组 / `conditions.groups` / 叶级 `negated` 由条件树解码器明确报错，不做静默兼容。

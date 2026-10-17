@@ -62,6 +62,7 @@ public final class RuleCodecs {
             RuleFields.COMBINATION,
             RuleFields.OUTCOMES,
             RuleFields.SCHEMA_VERSION,
+            RuleFields.CATEGORY,
             RuleFields.DISABLED,
             RuleFields.DELETE
     );
