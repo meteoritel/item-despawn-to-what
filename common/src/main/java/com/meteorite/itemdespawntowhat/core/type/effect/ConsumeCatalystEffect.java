@@ -22,6 +22,7 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
@@ -97,7 +98,7 @@ public record ConsumeCatalystEffect(
 
             @Override
             public EffectPreparation prepare(ConsumeCatalystEffect effect, ServerLevel level, Vec3 position,
-                                             ItemStack sourceStack, boolean fillOrigin) {
+                                             ItemEntity sourceEntity, ItemStack sourceStack, boolean fillOrigin) {
                 // 邻域里现有的催化剂数量属于执行期实时世界状态，不在成功转化当刻冻结
                 return EffectPreparation.ready();
             }

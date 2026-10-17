@@ -21,6 +21,7 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
@@ -77,7 +78,7 @@ public record ConsumeFluidEffect(
 
             @Override
             public EffectPreparation prepare(ConsumeFluidEffect effect, ServerLevel level, Vec3 position,
-                                             ItemStack sourceStack, boolean fillOrigin) {
+                                             ItemEntity sourceEntity, ItemStack sourceStack, boolean fillOrigin) {
                 // 位置与轮数上界由上下文与参数在开组时定稿；该处是否仍有匹配流体留到执行期实时判定
                 return EffectPreparation.ready();
             }
