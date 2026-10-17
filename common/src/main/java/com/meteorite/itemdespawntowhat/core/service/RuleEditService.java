@@ -548,7 +548,8 @@ public final class RuleEditService {
     }
 
     /**
-     * 每 tick 最多交付一片快照；在途快照与待启动请求各最多一个，保存期间暂缓准备。
+     * 每 tick 最多交付 {@link RuleEditLimits#SNAPSHOT_CHUNKS_PER_TICK} 个快照分片包，按入队顺序下发，
+     * 分片顺序与 transferId 语义不变；在途快照与待启动请求各最多一个，保存期间暂缓准备。
      * @param server 当前服务端
      * @param context 平台上下文
      * @return 本 tick 的网络交付，暂无数据时为 null
@@ -563,7 +564,12 @@ public final class RuleEditService {
         if (!com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler.canEdit(player)) {
             snapshotPackets.clear(); return null;
         }
-        return new SaveReply(player, Outbound.of(snapshotPackets.removeFirst()));
+        int limit = Math.min(RuleEditLimits.SNAPSHOT_CHUNKS_PER_TICK, snapshotPackets.size());
+        List<CustomPacketPayload> packets = new ArrayList<>(limit);
+        for (int index = 0; index < limit; index++) {
+            packets.add(snapshotPackets.removeFirst());
+        }
+        return new SaveReply(player, Outbound.of(packets));
     }
 
     // 请求到达即开始纯文件工作；保存和在途准备仍串行，Codec 只由公共调度器执行。
