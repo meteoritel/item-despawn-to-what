@@ -60,7 +60,7 @@ public record EffectResult(Outcome outcome, long appliedUnits, long pendingUnits
         return new EffectResult(Outcome.FAILED, 0, 0, false, reason);
     }
 
-    // 标记为一次性世界效果（运行时按效果类型的注册信息补写）
+    // 标记为一次性世界效果回执：由执行器自行附带，仅供观测，不参与准入判定
     public EffectResult asOneShot() {
         return oneShot ? this : new EffectResult(outcome, appliedUnits, pendingUnits, true, detail);
     }

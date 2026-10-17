@@ -120,7 +120,7 @@ public final class ArrowRainExecutor {
         private boolean pendingTarget;
         private double pendingX;
         private double pendingZ;
-        // 已构造但尚未加入世界的这一支箭矢：原版 shoot 与发光等内部随机已在构造时确定，等待区块时不重造
+        // 已构造但尚未加入世界的这一支箭矢：原版 shoot 的射向随机已在构造时确定，等待区块时不重造
         private AbstractArrow pendingArrow;
         private EffectResult terminal;
 

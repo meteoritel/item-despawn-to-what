@@ -128,7 +128,7 @@ delay           = max(0, dueAge - entity.getAge())
 ## 6. 效果回执与上下文
 
 - `RuntimeEffectContext` **按转化组**构造（每组一个实例）：`rounds()` 恒为 1（一轮 = 一组），`coveredSourceItems()` 取本组固定源成本（`source_cost ≤ 0` 时按 1，`groupSourceCost` 为同一原值），`outcomeId` / `groupIndex` / `groupCount` 描述本组；`reportProgress(units)` 把"已受理"收敛为"已完成"；`safeSpawn()` / `fillOrigin()` / `positionSearchChecksPerTick()` 是候选级位置策略。上下文不提供自登记延迟任务的入口。
-- 跨 tick 的延迟、等待与分批只经 `EffectExecution.advance` 续接：到期刻由执行状态自身门控，区块未加载时保留已抽取输入或已构造实体并退避重试，**不主动加载区块**；真实写入世界之后才 `reportProgress` 与 `StepWorkCounter.report`。
+- 跨 tick 的延迟、等待与分批只经 `EffectExecution.advance` 续接：到期刻由执行状态自身门控，区块未加载时保留已抽取输入或已构造实体并退避重试，**不主动加载区块**；业务完成量只在真实写入世界后经 `reportProgress` 上报；工作量按各类型实际计费口径上报。
 - 成功转化当刻（源实体清空前、同一补偿单元内）先固定触发点坐标，并为「需要先固定输入」的效果类型逐组生成 `EffectPreparation`（键 = 候选 id + 槽序号 + 组序号；潜在组数按 `source_cost > 0 ? available / source_cost : 1` 取上界，未启动的组只是多算准备，不选候选、不付催化剂、不派发）：效果级 `conditions` 与 `chance` 按组各判定一次并随结算任务携带，源实体清空后不再重新判定，也不跨组复用同一随机判定；一次性效果只尝试一组，固定一份即可。需要随机抽取的类型引用（标签成员、药水效果）同样在此抽定并随类型自有的准备记录携带（记录字段只读；负载元素不保证不可变）。未产出准备的类型不在成功转化当刻固定。
 - `EffectTask` 在单效果开始时按已固定输入执行（跳过则直接给出 `SKIPPED`），未固定的类型就地判效果级 `conditions` 和 `chance`，只判一次；类型未注册 → `FAILED`。同步 `EffectExecutor` 经默认 `start` 保持兼容；长计算覆盖 `start` 返回按 `ServerTickBudget` 续接的 `EffectExecution`；结束与失败先置终态并摘掉执行状态引用，再各通知账目与 `EffectExecution.onFinished` 一次；取消同样先置终态并摘引用，但只通知 `EffectExecution.onCancelled`，不产生回执也不入账。预算耗尽只让出任务，不生成业务失败或材料不足回执。最终 `EffectResult` 由结算层 `account()` 分类计数：`APPLIED` → `addApplied`，`DEFERRED` → `addApplied` + `addPending`，`SKIPPED` → `effectSkipped`，`FAILED` → `effectFailed`。
 

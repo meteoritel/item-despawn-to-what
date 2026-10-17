@@ -85,7 +85,7 @@ public final class EffectTargets {
 
     /**
      * 立即把转化产物写入世界：先授予新产物保护与冷却，再按 {@link #addEntityNow} 加入。
-     * 授予与加入落在同一实体上；未写入时不计完成量，调用方保留该实体在后续步骤重试。
+     * 授予与加入落在同一实体上；未写入时不计完成量，重试和实体生命周期由调用方管理。
      *
      * @param context 本组执行上下文
      * @param product 已构造好的掉落物产物

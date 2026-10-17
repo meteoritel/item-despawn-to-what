@@ -60,7 +60,7 @@
 
 | 类 | 职责 | 关键成员 |
 |---|---|---|
-| `EffectTargets` | 执行器共享的引用解析与空间查询工具；**不捕获、不吞异常**，硬错误直接抛出交给运行时 | `resolve`（未命中返回 null）/`resolveOrThrow`、`blockBox(center, radius)`（效果式消耗与催化剂固定成本共用的搜索盒）、`addEntityNow`/`addConversionProductNow`（区块未加载时直接返回 false，由调用方保留已构造实体、退避后按自身预算节奏重试，并保证回执与计费只在真实写入之后）、`randomHorizontalDisc(random, center, radius, height)`（面积均匀的水平圆盘散点，半径按 `radius × √U`）、`saturatedAdd`/`saturatedMultiply` |
+| `EffectTargets` | 执行器共享的引用解析与空间查询工具；**不捕获、不吞异常**，硬错误直接抛出交给运行时 | `resolve`（未命中返回 null）/`resolveOrThrow`、`blockBox(center, radius)`（效果式消耗与催化剂固定成本共用的搜索盒）、`addEntityNow`/`addConversionProductNow`（区块未加载时直接返回 false，未写入不计完成量与计费，重试和实体生命周期由调用方管理）、`randomHorizontalDisc(random, center, radius, height)`（面积均匀的水平圆盘散点，半径按 `radius × √U`）、`saturatedAdd`/`saturatedMultiply` |
 | `ReturnItemSpawner` | 掉落物生成统一入口：转化产物与返还物共用「创建 + 授予实体状态 + 加入世界」路径 | `Kind{CONVERSION_PRODUCT, PERMANENT_RETURN}`、`applyGrant`、`spawn`、`deliver`、内部 `PositionSearch`（三级位置搜索：起点附近 → 向上扫描 → 限高以上，跨刻分步） |
 | `VisualFeedback` | 服务端主线程发送原版粒子，并按维度、刻、反馈种类与方块位置限流 | `conversion`、`entitySpawn`、`returnItem` |
 
@@ -133,7 +133,7 @@
 
 子类外字段、规则中的邻近 `limit/radius`、旧 `spawn_item/spawn_xp` 以及缺少 variant 的旧 spawn_entity 均不兼容。邻近阈值移至 [服务端配置](../systems/config.md)，只覆盖物品与通用实体：经验不受邻近阈值准入，也不因该阈值截断或返还。`place_block` 的 limit/radius 保留。
 
-> **一次性世界效果**（lightning / explosion / arrow_rain / weather）：注册时 `oneShot=true`，执行器回执带 `asOneShot()` 标记，**不乘 `rounds()`**、不参与容量计算，仅含一次性效果的候选对同一源最多尝试一组。实体产出按组展开，其中物品与通用实体子类使用共享配置做开组准入；place_block 保留自身规则容量。见 [conversion-runtime.md](conversion-runtime.md)。
+> **一次性世界效果**（lightning / explosion / arrow_rain / weather）：注册时 `oneShot=true`，**不乘 `rounds()`**、不参与容量计算，仅含一次性效果的候选对同一源最多尝试一组。实体产出按组展开，其中物品与通用实体子类使用共享配置做开组准入；place_block 保留自身规则容量。见 [conversion-runtime.md](conversion-runtime.md)。
 > 候选级字段 `safe_spawn`、`fill_origin` 属于**候选结果**（`core/model/OutcomeCandidate.java`），不在任何单个效果的参数里；执行时经 `EffectContext.safeSpawn()`/`fillOrigin()` 透传给 `spawn_entity` / `place_block`。
 
 ### 5.2 消耗效果（3）
