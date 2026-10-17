@@ -8,6 +8,7 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
@@ -30,6 +31,7 @@ public final class RuleDebugCommands {
                 .then(Commands.literal("help").executes(ctx -> help(ctx.getSource())))
                 .then(Commands.literal("examples").executes(ctx -> examples(ctx.getSource())))
                 .then(functional).then(benchmarks)
+                .then(profile())
                 .then(DebugPipelineCommands.build(context))
                 .then(Commands.literal("stop").executes(ctx -> DebugScenarioManager.stop(ctx.getSource(), context)))
                 .then(Commands.literal("status").executes(ctx -> DebugScenarioManager.status(ctx.getSource())))
@@ -56,9 +58,29 @@ public final class RuleDebugCommands {
         parent.then(command);
     }
 
+    // 首载分段观测开关：无参数与 status 查询当前状态，on/off 直接切换；发布环境不会注册本分支。
+    private static LiteralArgumentBuilder<CommandSourceStack> profile() {
+        return Commands.literal("profile")
+                .executes(ctx -> profile(ctx.getSource(), null))
+                .then(Commands.literal("status").executes(ctx -> profile(ctx.getSource(), null)))
+                .then(Commands.literal("on").executes(ctx -> profile(ctx.getSource(), true)))
+                .then(Commands.literal("off").executes(ctx -> profile(ctx.getSource(), false)));
+    }
+
+    // 切换或查询开关；日志由 DebugProfile 内部判定，命令本身不写观测日志。
+    private static int profile(CommandSourceStack source, @Nullable Boolean target) {
+        if (target != null) {
+            DebugProfile.setEnabled(target);
+        }
+        boolean on = DebugProfile.enabled();
+        source.sendSuccess(() -> Component.translatable(PREFIX + "profile.status",
+                Component.translatable(PREFIX + (on ? "profile.state.on" : "profile.state.off"))), false);
+        return 1;
+    }
+
     // 帮助展示控制与日志入口，不另维护一份场景名称列表。
     private static int help(CommandSourceStack source) {
-        for (String key : List.of("help.run", "help.examples", "help.bench", "help.control", "help.pipeline", "help.logs")) {
+        for (String key : List.of("help.run", "help.examples", "help.bench", "help.control", "help.pipeline", "help.profile", "help.logs")) {
             source.sendSuccess(() -> Component.translatable(PREFIX + key), false);
         }
         return 1;

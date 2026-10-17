@@ -60,6 +60,8 @@ public final class DebugSessionManager {
         finally {
             READY.remove(server);
             TIMINGS.remove(server);
+            // 首载观测开关只在本次服务端生命周期内有效，下次进入世界回到默认关闭
+            DebugProfile.setEnabled(false);
         }
     }
 }

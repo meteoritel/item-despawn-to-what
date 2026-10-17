@@ -89,6 +89,7 @@
 - `RuleSnapshotChunkBuffer#accept`：校验 `transferId` 非空、`1 <= count <= RuleEditLimits#MAX_CHUNK_COUNT`、`0 <= index < count`；`transferId`、`sessionId`、`count` 任一变化或空闲超时即开新批次。
 - `RuleSnapshotChunkBuffer#isStale`：`tick - lastTick > RuleEditLimits#TRANSFER_TIMEOUT_TICKS` 判超时；该常量为 1200 tick（`TRANSFER_TIMEOUT_MILLIS` 60000 除以每 tick 50 毫秒）。
 - `RuleSnapshotChunkBuffer#accept` 的收齐路径：按下标顺序拼接，缺失下标按空串处理，返回完整 JSON 后 `clear()`。
+- `RuleEditClientWorkspace#onSnapshot` / `#onSnapshotChunk`：首载分段观测开启时输出 `CLIENT_RECV`（分片数、字节、首片到收齐 `recv_ms`、解析 `parse_ms`、确认到快照 `since_open_ms`）；关闭时只走原有解析与接纳路径。观测开关与日志格式见 [debug.md](../backend/modules/debug.md) §3.1。
 - `EditorScreenHooks#setOpener`、`#opener`：`volatile` 静态字段的读写；`#open`、`#close` 在字段为 `null` 时记录日志并返回。
 
 ### 2.6 代码现状（可核对）

@@ -1,8 +1,10 @@
 package com.meteorite.itemdespawntowhat.core.service;
 
+import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.api.Issue;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.IssueSeverity;
+import com.meteorite.itemdespawntowhat.core.debug.DebugProfile;
 import com.meteorite.itemdespawntowhat.core.network.catalog.RuleCatalogService;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalog;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
@@ -23,6 +25,8 @@ import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditChunkAccum
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditLimits;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerContext;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveResultPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotChunkPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.SaveRuleChangeSetChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.SaveRuleChangeSetPayload;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -74,6 +78,13 @@ public final class RuleEditService {
     private SnapshotRequest requestedSnapshot;
     private SnapshotRequest deliveringSnapshot;
     private final java.util.ArrayDeque<CustomPacketPayload> snapshotPackets = new java.util.ArrayDeque<>();
+    // 首载分段观测：本次投递的起点、总包数、字节与已投递数；关闭时保持零值
+    private long deliveryStartedNanos;
+    private long deliveryStartTick;
+    private long deliveryLastTick;
+    private int deliveryPackets;
+    private long deliveryBytes;
+    private int deliverySent;
     private record SnapshotRequest(UUID owner, String sessionId, String requestId) { }
 
     /**
@@ -358,7 +369,7 @@ public final class RuleEditService {
         sessions.heartbeat(sessionId, tick);
         if (pendingSnapshot != null) { pendingSnapshot.invalidate(); }
         requestedSnapshot = null;
-        snapshotPackets.clear();
+        clearSnapshotPackets("apply");
         savingSessionId = sessionId;
         savingOperationId = operationId;
         savingOwner = player.getUUID();
@@ -523,7 +534,7 @@ public final class RuleEditService {
         deferredReload = null;
         pendingSnapshot = null;
         requestedSnapshot = null;
-        snapshotPackets.clear();
+        clearSnapshotPackets("reset");
         RuleEditChunkAccumulator.clearAll();
         recentResults.clear();
         resultsSessionId = null;
@@ -541,7 +552,7 @@ public final class RuleEditService {
         EditSessionManager.SessionInfo session = sessions.session();
         if (session != null) {
             requestedSnapshot = new SnapshotRequest(session.ownerUuid(), sessionId, requestId);
-            snapshotPackets.clear();
+            clearSnapshotPackets("superseded");
             startSnapshot(server, context);
         }
         return Outbound.EMPTY;
@@ -558,12 +569,69 @@ public final class RuleEditService {
         if (pendingSave != null) { return null; }
         startSnapshot(server, context);
         if (snapshotPackets.isEmpty() || deliveringSnapshot == null) { return null; }
-        if (!sessions.owns(deliveringSnapshot.sessionId())) { snapshotPackets.clear(); return null; }
+        if (!sessions.owns(deliveringSnapshot.sessionId())) { clearSnapshotPackets("session_lost"); return null; }
         ServerPlayer player = server.getPlayerList().getPlayer(deliveringSnapshot.owner());
         if (!com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler.canEdit(player)) {
-            snapshotPackets.clear(); return null;
+            clearSnapshotPackets("no_permission"); return null;
         }
-        return new SaveReply(player, Outbound.of(snapshotPackets.removeFirst()));
+        CustomPacketPayload packet = snapshotPackets.removeFirst();
+        if (DebugProfile.enabled()) {
+            deliverySent++;
+            deliveryLastTick = server.getTickCount();
+            if (snapshotPackets.isEmpty()) { logDelivery(); }
+        }
+        return new SaveReply(player, Outbound.of(packet));
+    }
+
+    // 本次投递的观测起点：包数与字节一次性统计，逐 tick 只累加已投递数
+    private void startDelivery(List<CustomPacketPayload> packets, long tick) {
+        if (!DebugProfile.enabled()) { return; }
+        deliveryStartedNanos = DebugProfile.start();
+        deliveryStartTick = tick;
+        deliveryLastTick = tick;
+        deliveryPackets = packets.size();
+        deliveryBytes = 0L;
+        deliverySent = 0;
+        for (CustomPacketPayload payload : packets) { deliveryBytes += packetBytes(payload); }
+    }
+
+    // 首载分段观测：投递完成的包数、字节与跨 tick 数，用于声明节拍是否匹配每 tick 包数
+    private void logDelivery() {
+        JsonObject data = new JsonObject();
+        data.addProperty("packets", deliveryPackets);
+        data.addProperty("sent", deliverySent);
+        data.addProperty("bytes", deliveryBytes);
+        long ticks = Math.max(0L, deliveryLastTick - deliveryStartTick);
+        data.addProperty("ticks", ticks);
+        data.addProperty("per_tick", ticks == 0L ? deliveryPackets : (double) deliveryPackets / ticks);
+        data.addProperty("total_ms", DebugProfile.micros(deliveryStartedNanos) / 1000.0);
+        DebugProfile.event(DebugProfile.SCENE_FIRST_LOAD, "SERVER_DELIVER", data);
+    }
+
+    // 丢弃排队中的分片：观测开启且确有未投递分片时记录一次中止
+    private void clearSnapshotPackets(String reason) {
+        if (DebugProfile.enabled() && !snapshotPackets.isEmpty()) {
+            JsonObject data = new JsonObject();
+            data.addProperty("packets", deliveryPackets);
+            data.addProperty("sent", deliverySent);
+            data.addProperty("bytes", deliveryBytes);
+            data.addProperty("ticks", Math.max(0L, deliveryLastTick - deliveryStartTick));
+            data.addProperty("aborted", true);
+            data.addProperty("reason", reason);
+            DebugProfile.event(DebugProfile.SCENE_FIRST_LOAD, "SERVER_DELIVER", data);
+        }
+        snapshotPackets.clear();
+    }
+
+    // 下发字节按 UTF-8 计，与分片阈值口径一致
+    private static long packetBytes(CustomPacketPayload payload) {
+        if (payload instanceof RuleSnapshotPayload direct) {
+            return RuleEditLimits.encodedLength(direct.snapshotJson());
+        }
+        if (payload instanceof RuleSnapshotChunkPayload chunk) {
+            return RuleEditLimits.encodedLength(chunk.chunk());
+        }
+        return 0L;
     }
 
     // 请求到达即开始纯文件工作；保存和在途准备仍串行，Codec 只由公共调度器执行。
@@ -583,7 +651,10 @@ public final class RuleEditService {
                 if (packets.isEmpty()) {
                     snapshotPackets.add(result(current.sessionId(), "", RuleSaveStatus.UNAVAILABLE,
                             "itemdespawntowhat.edit.snapshot_failed", List.of(), List.of(), false, false));
-                } else { snapshotPackets.addAll(packets); }
+                } else {
+                    startDelivery(packets, server.getTickCount());
+                    snapshotPackets.addAll(packets);
+                }
             });
             pendingSnapshot.schedule();
         }
