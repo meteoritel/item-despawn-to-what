@@ -41,7 +41,7 @@ public final class SpawnXpExecutor {
     }
 
     /**
-     * 旧式同步入口：经验产出需要跨步骤续接，不提供一次性完成的执行方式。
+     * 同步入口：经验产出需要跨步骤续接，不提供一次性完成的执行方式。
      *
      * @param effect 经验参数
      * @param context 本组执行上下文
