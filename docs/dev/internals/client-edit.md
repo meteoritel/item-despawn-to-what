@@ -57,7 +57,6 @@
 | `LiveEditorWorkspace` | class | `instance()`； `state()`； `sessionId()`； `contextRevision()`； `openRequest()`； `snapshot()`； `catalog(...)`； `directory(...)`； `refreshDirectory(...)`； `directoryFailed(...)`； `retryDirectory(...)`； `invalidateDirectories()`； `requestCatalog(...)`； `requestSourceView(...)`； `sourceView(...)`； `sourceViewLoading(...)`； `sourceViewFailed(...)`； `retrySourceView(...)`； `referenceLifespanTicks()`； `save(...)`； `saveProgress()`； `cancelRequested()`； `cancelSave()`； `newOperationId()`； `close(...)`； `resultSeq()`； `lastStatus()`； `lastMessageCode()`； `lastMessageArgs()`； `lastResultVersion()`； `lastWrittenToDisk()`； `lastReloaded()`； `lastIssues()` | `EditorWorkspaceView` 的实机实现，单例 |
 | `NumericDomain` | record | 组件 `backendMin`/`backendMax`/`windowMin`/`windowMax`/`step`/`shiftStep`/`displayPrecision`/`integer`； `integers(int, int)`； `integers(int, int, int, int)`； `decimals(double, double, double, double)`； `decimals(double, double, double, double, int)`； `withWindow(double, double)`； `withSteps(double, double)`； `domainText()`； `sliderMin(double)`； `sliderMax(double)` | 数值字段的域元数据 |
 | `OpaqueCondition` | class | `type()`； `rawNode()`； `equals(Object)`； `hashCode()` | 实现 `Condition`，只保留类型标识与原始节点 JSON |
-| `RuleCategories` | class | `category(RuleValue)`； `category(String, RuleValue)`； `category(String, String, RuleValue)` | 分类判定：优先采用快照下发值，缺省时按产出的虚拟判定 |
 | `RuleCategorySkeleton` | class | `LABEL_PREFIX`； `EXTENSION`； `roots()`； `Category(id, children)`（`labelKey()`） | 已知规则分类的层级、顺序与本地化显示名 |
 | `RuleDraft` | class | `of(JsonObject)`； `of(RuleValue)`； `id()`； `original()`； `toJson()`； `toOverlayJson()`； `isDeleted()`； `setDeleted(boolean)`； `isDirty()`； `revert()`； `root()`； `value(String)`； `set(String, RuleValue)`； `has`/`remove`/`get*`/`set*`； `valueAt`； `setAt`； `mergeAt`； `removeAt`； `textAt`/`integerAt`/`decimalAt`/`flagAt`/`valuesAt`； `conditionsValue`； `conditionsValueAt`； `conditionsOrNull`； `setConditions`； `conditionsAt`； `setConditionsAt`； `encodeConditionsValue`； `decodeConditions`； `replaceWith`（2 个重载）； `effectCount`； `moveEffect`； `candidateEffectsPath`； `effectCountAt`； `effectValuesAt`； `moveInList`； `hasFlatEffects`； `hasOutcomes`； `hasConflictingStructures`； `outcomeCount`； `outcomeValues`； `outcomeValueAt`； `moveOutcome`； `candidateIds`； `candidateIdExists`； `convertToOutcomes` | 规则草稿 |
 | `RuleIssueLocator` | class | `Tab`（`SOURCE`/`CONDITIONS`/`RESULTS`/`INFO`）； `AnchorStep`； `ResolvedStep`； `IssueAnchor`（`resolve`/`location`）； `Location`（`known`/`hasCandidate`/`hasEffect`）； `anchor(String, String, JsonObject)`； `anchorAll(String, Iterable<String>, JsonObject)`； `tabOf(String)` | 服务端问题路径到编辑器稳定身份的映射 |
@@ -123,8 +122,7 @@
 - `RuleNaming#ruleTitleJson`：非空 `display_name` → 自动标题模板 → id 文本兜底；运行期异常回落到 `safeFallback`。
 - `RuleNaming#ruleTitleJson` 的多候选分支：候选数大于 1 时按 `combination` 选择 `multi_result_priority` 或 `multi_result_cycle` 模板。
 - `RuleIssueLocator#anchor` 与 `IssueAnchor#resolve`：数组元素身份依次取 `id:`、`type:`、`op:` 前缀；身份找不到时回落原下标。
-- `RuleCategories#category(String, RuleValue)`：先按 id 判定测试规则，再回落到 `effects`/`outcomes` 的产出动作分类。
-- `RuleCategories#category(String, String, RuleValue)`：快照已下发分类时直接采用，否则回落到上面的产出动作判定；未知分类标识按原文成组。
+- 规则分类由服务端随快照下发并已按显式声明或产出派生；客户端不再按效果类型字符串判定，未知分类标识按原文成组。
 - `LiveEditorWorkspace#pollResult`：发现新的 `RuleSaveResultPayload` 时自增 `resultSeq`；所有回执读取方法都先经该入口。
 - `LiveEditorWorkspace#sourceView` 与 `#sourceViewLoading`/`#sourceViewFailed`：直接转发 `RuleEditClientWorkspace` 的来源视图缓存三态；界面不持有请求标识，只按状态渲染来源对照。
 
@@ -134,7 +132,7 @@
 - 跨层 import（`client/edit` → `client/ui/kit`）：`ConditionTreeJsonCodec.java` import `UiTreeCodec`；`ConditionTreeNodes.java` import `UiTreeEditor`、`UiTreePath`（2 个文件，3 处）。`package-info.java` 只声明「网络收发由 client/net 负责，界面由 client/ui 负责」，未列出这两条跨层依赖。
 - 同概念多命名（条件树 / 条件图）：本包使用 `ConditionTreeNodes`、`ConditionTreeJsonCodec`、`ConditionTreeClipboard`、`ConditionDraftCodec`；基础组件层对应控件名为 `UiConditionGraphEditor`。
 - 同值常量重复定义：`EditorChangeSet#OWN_NAMESPACE`（`itemdespawntowhat`）与 `TypeLabels#OWN_NAMESPACE` 各定义一份。
-- 效果类型字符串分散维护：`RuleRequirements` 以内联字符串定义 `itemdespawntowhat:consume_source` 等消耗类型并在分支中内联其余类型名；`RuleNaming` 用私有常量 `CONSUME_SOURCE`/`CONSUME_CATALYST`；`RuleCategories#scan` 用 `TypeLabels#OWN_NAMESPACE` 判命名空间后按路径字符串分派。
+- 效果类型字符串分散维护：`RuleRequirements` 以内联字符串定义 `itemdespawntowhat:consume_source` 等消耗类型并在分支中内联其余类型名；`RuleNaming` 用私有常量 `CONSUME_SOURCE`/`CONSUME_CATALYST`。
 - 边界：`RuleRequirements#inspect` 的「是否存在产出」以 `!actions.isEmpty()` 初始化；列表仅含消耗类效果时该方法仍返回 `true`，`RuleRequirements#find` 因此不追加 `required.results`。
 - 缺 JavaDoc 的公开嵌套类型：`RuleValue.Kind`、`ConditionTreeClipboard.ReadResult`；两者的含义只由行注释或类型名表达。
 - 注释风格不一致：`EditSession`、`RuleDraft`、`RuleValue` 的公开成员使用 `//` 行注释；`DraftPaths`、`FieldNumbers` 的公开方法带 JavaDoc 与 `@param`/`@return`。
@@ -229,7 +227,6 @@
 | `LiveEditorWorkspace` | `EditorWorkspaceView` 的实机实现 | `instance`； `pollResult`； 全部视图方法 |
 | `NumericDomain` | 数值字段域元数据 | `integers`； `decimals`； `withWindow`； `withSteps`； `domainText` |
 | `OpaqueCondition` | 未识别条件叶的原文保留载体 | `type`； `rawNode` |
-| `RuleCategories` | 规则分类判定 | `category`（3 个重载） |
 | `RuleCategorySkeleton` | 已知规则分类的静态骨架 | `roots`； `EXTENSION`； `Category` |
 | `RuleDraft` | 规则草稿 | `of`； `isDirty`； `toOverlayJson`； `setAt`； `mergeAt`； `setConditionsAt`； `moveInList`； `convertToOutcomes` |
 | `RuleIssueLocator` | 问题路径到编辑器稳定身份的映射 | `anchor`； `anchorAll`； `tabOf`； `IssueAnchor#resolve`； `Location` |

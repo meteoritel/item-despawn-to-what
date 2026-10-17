@@ -16,6 +16,7 @@ import com.meteorite.itemdespawntowhat.core.load.RuleSourceLayer;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
+import com.meteorite.itemdespawntowhat.core.model.RuleCategoryClassifier;
 import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleIssue;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshot;
@@ -40,7 +41,8 @@ import java.util.Set;
  * 规则快照装配器：把"来源分层索引 + 当前生效规则"组装成下发给客户端的快照。
  * 条目形状：RuleSnapshotEntry(id, origin, status, editable, category, effective, hasBase, hasOverlay, issues)
  * - 条目只携带生效视图与两个存在标记；基底与覆盖内容由 {@link #sourceView(RuleSourceIndex.Entry)} 按需生成；
- * - category 读取作者在规则原始 JSON 顶层的显式分类，覆盖层视图优先于数据包视图；未声明时为空；
+ * - category 先读取作者在规则原始 JSON 顶层的显式分类（覆盖层视图优先于数据包视图），
+ *   未声明时由分类器按生效效果的产出类别派生；两者不一致时以显式值为准；无法派生的条目为空；
  * - effective 优先使用模型编码后的最终结果（解码成功时权威），否则退回原始 JSON；
  * - origin 取 overlay | datapack | mixed，status 取 active | disabled | masked | invalid；
  * - 解码失败或校验致命错误时 status=invalid，并在 issues 中带上 severity/ruleId/origin/fieldPath。
@@ -78,13 +80,14 @@ public final class RuleSnapshotAssembler {
                 }
             }
         }
-        return assembleEncoded(index, merged, version, contextRevision, encoded, issues);
+        return assembleEncoded(index, merged, effectTypes, version, contextRevision, encoded, issues);
     }
 
     /**
      * 使用服务端线程预编码的模型 JSON 装配来源三视图；不调用 Codec，可在独占后台任务中使用。
      * @param index 原始来源索引
      * @param merged 完整校验后的规则
+     * @param effectTypes 效果类型注册表，用于派生未显式声明的分类；须为已冻结的只读视图
      * @param version 覆盖层版本
      * @param contextRevision 上下文版本
      * @param encoded 规则 id 对应的模型编码结果
@@ -92,6 +95,7 @@ public final class RuleSnapshotAssembler {
      * @return 完整规则快照
      */
     public static RuleSnapshot assembleEncoded(RuleSourceIndex index, List<LoadedRule<Rule>> merged,
+                                               TypeRegistry<EffectType<?>> effectTypes,
                                                int version, int contextRevision,
                                                Map<ResourceLocation, JsonObject> encoded,
                                                @Nullable List<Issue> issues) {
@@ -124,7 +128,7 @@ public final class RuleSnapshotAssembler {
                             RuleIssue.ORIGIN_RUNTIME, "", ISSUE_DECODE, List.of(), "规则解码失败: " + source.id()));
                 }
                 entries.put(source.id(), new RuleSnapshotEntry(source.id(), origin(source), status,
-                        source.hasBody(), explicitCategory(overlay != null ? overlay : base),
+                        source.hasBody(), category(loaded, overlay != null ? overlay : base, effectTypes),
                         effective, base != null, overlay != null, entryIssues));
             }
         }
@@ -136,11 +140,12 @@ public final class RuleSnapshotAssembler {
                 continue;
             }
             boolean overlayLayer = leftover.getValue().origin().layer() == RuleSourceLayer.OVERLAY;
+            String category = RuleCategoryClassifier.classify(leftover.getValue().value(), effectTypes);
             // 能走到这里的都是已解码出本体的规则，一律可编辑
             // 原始条目读取异常时没有分层视图：把模型编码结果当作基底内容下发，存在标记按来源层补齐
             entries.put(leftover.getKey(), new RuleSnapshotEntry(leftover.getKey(),
                     overlayLayer ? RuleSnapshotEntry.ORIGIN_OVERLAY : RuleSnapshotEntry.ORIGIN_DATAPACK,
-                    RuleSnapshotEntry.STATUS_ACTIVE, true, null, body, true, overlayLayer, List.of()));
+                    RuleSnapshotEntry.STATUS_ACTIVE, true, category, body, true, overlayLayer, List.of()));
         }
 
         return new RuleSnapshot(version, contextRevision, List.copyOf(entries.values()),
@@ -187,6 +192,16 @@ public final class RuleSnapshotAssembler {
         }
         RuleOrigin origin = raw.origin();
         return new RuleSourceView.View(origin.layer().id(), origin.packId(), origin.path(), raw.body().deepCopy());
+    }
+
+    // 分类：显式声明优先，缺失时按生效效果派生；无已解码规则（如已删除条目）时为空
+    private static @Nullable String category(@Nullable LoadedRule<Rule> loaded, @Nullable JsonObject body,
+                                             TypeRegistry<EffectType<?>> effectTypes) {
+        String explicit = explicitCategory(body);
+        if (explicit != null) {
+            return explicit;
+        }
+        return loaded == null ? null : RuleCategoryClassifier.classify(loaded.value(), effectTypes);
     }
 
     // 显式分类：取胜出原始视图的顶层 category；缺失、非字符串或空白一律视为未声明

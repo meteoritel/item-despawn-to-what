@@ -158,16 +158,19 @@ final class RuleSnapshotTask implements ServerTask {
             }
             if (cursor < source.entries().size()) { return StepResult.yield(1, 1); }
             if (preparing == null) {
-                // 交接后的容器不再由服务端线程修改；装配与分片不触碰 Codec、注册表或世界。
+                // 交接后的容器不再由服务端线程修改；装配与分片不触碰 Codec 或世界，
+                // 效果类型注册表已在启动时冻结，可跨线程只读，用于派生未显式声明的分类。
                 Source capturedSource = source;
                 List<LoadedRule<Rule>> readyRules = List.copyOf(decoded);
                 Map<ResourceLocation, JsonObject> readyJson = Map.copyOf(encoded);
+                var effectTypes = reloadContext.loadContext().effectTypes();
                 int capturedVersion = version;
                 preparing = store.submit("snapshot-assemble", () -> {
                     // 后台装配与切分的耗时单独计量，与解码步骤分开对比
                     long assembleStarted = DebugProfile.start();
                     try {
-                        String json = RuleSnapshotAssembler.assembleEncoded(capturedSource.index(), readyRules, capturedVersion, capturedVersion, readyJson, capturedSource.issues().issues()).serialize();
+                        String json = RuleSnapshotAssembler.assembleEncoded(capturedSource.index(), readyRules, effectTypes,
+                                capturedVersion, capturedVersion, readyJson, capturedSource.issues().issues()).serialize();
                         if (!java.util.Arrays.equals(capturedSource.revision(), sessions.readDiskRevision(() -> !cancelled))) {
                             throw new IllegalStateException("快照准备期间覆盖层修订已变化");
                         }

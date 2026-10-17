@@ -10,6 +10,7 @@ import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
+import com.meteorite.itemdespawntowhat.core.model.ProductKind;
 import com.meteorite.itemdespawntowhat.core.model.SimpleEffectType;
 import com.meteorite.itemdespawntowhat.core.type.effect.exec.SpawnEntityExecutor;
 import com.mojang.serialization.Codec;
@@ -60,7 +61,14 @@ public record SpawnEntityEffect(EntityProduct product, int delayTicks, double ch
                 return SpawnEntityExecutor.start(effect, context, preparation);
             }
         };
-        return new SimpleEffectType<>(ID, codec(expressionCodec), SpawnEntityEffect::validateParams, executor);
+        // 产出类别随 variant 变化：物品 / 通用实体 / 经验各自归入实体分类的子类别
+        return new SimpleEffectType<>(ID, codec(expressionCodec), SpawnEntityEffect::validateParams, executor,
+                false, SpawnEntityEffect::productKind);
+    }
+
+    // 分类器读取的产出类别；缺少产出子类的规则无法加载，按未知产出兜底
+    private static ProductKind productKind(SpawnEntityEffect effect) {
+        return effect.product() == null ? ProductKind.EXTENSION : effect.product().productKind();
     }
 
     // 参数语义校验：子类选择必填，随后交给对应子类校验自身字段

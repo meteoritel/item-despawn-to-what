@@ -14,7 +14,8 @@ import java.util.List;
  * 快照中的一条规则：只携带列表与编辑所需的生效视图、来源、状态、可编辑标记、分类与问题清单，
  * 以及「是否存在基底 / 覆盖副本」两个标记；基底与覆盖内容改由 {@link RuleSourceView} 按需请求下发。
  * origin 取值 overlay/datapack/mixed；status 取值 active/disabled/masked/invalid。
- * category 为作者在规则原始 JSON 顶层的显式分类（覆盖层视图优先于数据包视图），未声明时为 null。
+ * category 为装配后的分类：显式声明优先（覆盖层视图优先于数据包视图），未声明时按生效效果派生；
+ * 无法派生（如已删除条目）时为 null。分类只供列表分组，不参与运行时解码与执行。
  * hasBase/hasOverlay 仅表示该条目在对应层是否有非控制条目副本，不承担内容语义。
  */
 public record RuleSnapshotEntry(ResourceLocation id, String origin, String status,

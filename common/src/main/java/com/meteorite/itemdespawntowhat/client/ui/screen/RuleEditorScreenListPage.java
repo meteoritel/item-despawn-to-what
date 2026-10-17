@@ -3,7 +3,6 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
-import com.meteorite.itemdespawntowhat.client.edit.RuleCategories;
 import com.meteorite.itemdespawntowhat.client.edit.RuleCategorySkeleton;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
@@ -387,12 +386,10 @@ final class RuleEditorScreenListPage {
             }
         }
         for (String id : visibleIds) {
-            // 快照下发的分类优先；未声明时回落到按产出的判定
+            // 只消费快照下发的分类；条目不可用或无法派生分类时归入扩展分组
             RuleSnapshotEntry entry = host.model().entry(id);
-            long categoryBodyStarted = profile ? DebugProfile.start() : 0L;
-            String category = RuleCategories.category(entry == null ? null : entry.category(),
-                    id, host.model().displayBody(id));
-            bodyMicros += profile ? DebugProfile.micros(categoryBodyStarted) : 0L;
+            String category = entry == null || entry.category() == null
+                    ? RuleCategorySkeleton.EXTENSION : entry.category();
             UiTreeNode<String> group = groups.get(category);
             if (group == null) {
                 group = unknownCategoryNode(groups, category);
@@ -403,11 +400,7 @@ final class RuleEditorScreenListPage {
         for (int index = 0; index < roots.size(); index++) {
             UiTreeNode<String> root = roots.get(index);
             RuleCategorySkeleton.Category definition = skeleton.get(index);
-            if (definition.children().isEmpty()) {
-                if (!root.children().isEmpty()) nonempty.add(counted(root));
-                continue;
-            }
-            // 父分类只收下有内容的子分类；直接声明父分类的规则按叶子保留
+            // 父分类只收下有内容的子分类；已知与未知的子分类统一带计数，直接声明父分类的规则按叶子保留
             UiTreeNode<String> parent = categoryNode(definition);
             for (UiTreeNode<String> child : root.children()) {
                 if (child.value().startsWith("@")) {
