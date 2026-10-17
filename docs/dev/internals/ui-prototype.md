@@ -39,7 +39,6 @@
 - 依赖外部：`org.jetbrains.annotations`（1 个文件 import，共 1 处：`@NotNull`）
 - 依赖外部：`org.lwjgl.glfw`（1 个文件 import，共 1 处：`GLFW`）
 - 依赖外部：`java.util`（1 个文件 import，共 2 处：`ArrayList`、`List`）
-- 被依赖：`client/key`（1 个文件 import，共 1 处：`EditorShortcut`）
 - 被依赖：`dev.guiscreenshot`（1 个文件 import，共 1 处：`ScreenshotScreens`，位于 `neoforge/src/guiScreenshot` 源集）
 
 ### 2.5 关键实现位置
@@ -62,19 +61,18 @@
 - `UiPrototypeScreen#openDemoModal` 与 `#openNestedModal`：用 `UiModal.create` 构造弹窗并 `modalStack.push`；嵌套弹窗在已有弹窗之上再压一层。
 - `UiPrototypeScreen#tick`：只把 `tick` 转发给弹窗栈。
 - `UiPrototypeScreen#isPauseScreen`：返回 `false`，原型屏不暂停游戏。
-- `EditorShortcut#prototypeScreen`：`DebugMode.ENABLED` 为真时返回 `new UiPrototypeScreen()`，否则返回 `null`；`DebugMode.ENABLED` 取自 `Services.PLATFORM.isDevelopmentEnvironment()`。
 - `ScreenshotScreens#ScreenshotScreens`：在 `neoforge/src/guiScreenshot` 源集中以 `register("prototype", UiPrototypeScreen::new)` 登记原型屏工厂。
 
 ### 2.6 代码现状（可核对）
 
-- 可达性证据：`client/key` 的 `EditorShortcut#prototypeScreen` 是 `common` 源码中唯一的构造点，方法体为 `return DebugMode.ENABLED ? new UiPrototypeScreen() : null;`；`DebugMode.ENABLED` 的取值来自 `Services.PLATFORM.isDevelopmentEnvironment()`，为假时该路径返回 `null`。
-- 另一条构造路径：`neoforge/src/guiScreenshot` 源集的 `ScreenshotScreens#ScreenshotScreens` 直接登记 `UiPrototypeScreen::new`，该源集不属于 `client/key` 的快捷键路径。
+- 可达性证据：`common` 源码中没有构造 `UiPrototypeScreen` 的类型，游戏内不存在打开原型屏的入口。
+- 唯一构造路径：`neoforge/src/guiScreenshot` 源集的 `ScreenshotScreens#ScreenshotScreens` 直接登记 `UiPrototypeScreen::new`，该源集只在开发截图工具中启动。
 - 主题取用方式不一致：`UiPrototypeScreen` import `UiPalette` 与 `UiTheme`，直接用静态主题类绘制窗口与标题栏，并直接读 `UiTheme.PADDING`、`UiTheme.HEADER_HEIGHT`、`UiTheme.TEXT_OFFSET`；本包不 import `UiHostTheme` 或 `UiHostThemes`。
 - 焦点与指针：基础层用 `UiFocusManager` 管理，弹窗层用 `UiModalStack` 管理；弹窗打开时基础控件的指针被 `UiPointer.gated` 置空。
 - 缺少 JavaDoc：`UiPrototypeScreen` 只有类级 JavaDoc；构造与全部重写方法（`init`、`render`、鼠标与键盘方法、`tick`、`isPauseScreen`）无 JavaDoc，只有行注释或没有注释。
 - 布局字面量：`NARROW_WIDTH = 460`、`LABEL_HEIGHT = 10`、`HINT_HEIGHT = 10` 是本类私有常量；`layout` 内的输入框高度 18、间距 4、按钮最小宽度 40、宽屏输入框最小宽度 120、列表宽度下限 140 与树宽度下限 60 都是方法内字面量。
-- 包声明与入口的边界：`package-info.java` 声明本包不得注册快捷键；本包内没有 `KeyMapping` 注册，到达原型屏的快捷键处理位于入口层 `client/key`。
-- 依赖方向：本层依赖组件层 `client/ui/widget`（9 处），并依赖基础组件层 `client/ui/kit`（3 处）与主题层 `client/ui/theme`（2 处）；入口层 `client/key` 反向 import 本层 1 处。
+- 包声明与入口的边界：`package-info.java` 声明本包不得注册快捷键；本包内没有 `KeyMapping` 注册，客户端也不存在按键入口。
+- 依赖方向：本层依赖组件层 `client/ui/widget`（9 处），并依赖基础组件层 `client/ui/kit`（3 处）与主题层 `client/ui/theme`（2 处）；没有其它客户端包 import 本层。
 
 ## 3. 类清单
 
@@ -87,7 +85,7 @@
 
 - [主题层](ui-theme.md)
 - [UI kit](ui-kit/README.md)
-- [入口层文档（`client/key`）](client-entry.md)
+- [入口层文档：平台客户端接入](client-entry.md)
 - [NeoForge 截图工具](gui-screenshot-tool.md)
 - [客户端层](../layers/client.md)
 - [文档索引](README.md)

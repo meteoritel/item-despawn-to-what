@@ -19,7 +19,7 @@
 | 服务端内核 | 运行时层 | `core/runtime`（含 `scheduler` 实现）、`core/state` | 追踪、排期、求值、完整组结算与返还、共享预算调度、实体状态 |
 | 创作与管控 | 目录与编辑层 | `core/catalog`、`core/network`、`core/service`（编辑） | 候选枚举、编辑快照、变更集、独占会话、权威落盘 |
 | 创作与管控 | 命令与调试层 | `core/command`、`core/debug` | 命令树与权限口径；开发环境场景、流水线、性能观测 |
-| 客户端 | 客户端层 | `client/net`、`client/edit`、`client/ui`、`client/key` | 协议工作区、草稿与撤销、编辑器注册表、界面与 UI kit、按键 |
+| 客户端 | 客户端层 | `client/net`、`client/edit`、`client/ui` | 协议工作区、草稿与撤销、编辑器注册表、界面与 UI kit |
 
 ## 2. 架构关系图
 
@@ -68,7 +68,6 @@ flowchart TB
         CNET["client/net 协议工作区"]
         CEDIT["client/edit 草稿与编辑器注册表"]
         CUI["client/ui 界面与 UI kit"]
-        CKEY["client/key 按键"]
     end
 
     DP --> LOAD
@@ -102,7 +101,6 @@ flowchart TB
     SINK --> CNET
     CNET --> CEDIT
     CEDIT --> CUI
-    CKEY --> CUI
     CUI --> CNET
     NETREG --> EDIT
     CMDREG --> CMD

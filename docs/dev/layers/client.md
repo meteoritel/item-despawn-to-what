@@ -1,6 +1,6 @@
 # 抽象层：客户端（编辑工作区 · 界面 · UI kit）
 
-> 覆盖 `client/net`、`client/edit`、`client/key`、`client/ui`（`kit` / `theme` / `widget` / `screen` / `screen/form` / `shared` / `prototype`）。
+> 覆盖 `client/net`、`client/edit`、`client/ui`（`kit` / `theme` / `widget` / `screen` / `screen/form` / `shared` / `prototype`）。
 > 面向改编辑器与改 UI kit 的开发者。类级契约见 [../internals/ui-screen.md](../internals/ui-screen.md)、
 > [../internals/ui-screen-form.md](../internals/ui-screen-form.md)、[../internals/ui-kit/README.md](../internals/ui-kit/README.md)、
 > [../internals/client-edit.md](../internals/client-edit.md)。
@@ -107,10 +107,11 @@ kit 提供内容排版、控件与交互、输入上下文与捕获、数值策�
 
 未知叶行标明参数只读，参数编辑入口被禁用；同树中的已知叶继续正常编辑。结构操作仍可删除、包组与调整同级顺序，重新编码时未知叶原文保持不变。客户端仍检查组合形状和表达式限额，但不会因条件类型在客户端未知而阻止提交；正式保存由服务端类型注册表与校验决定。
 
-## 5. `client/key`
+## 5. 编辑器打开入口
 
-定义客户端按键（类别与打开界面）。默认不绑定具体键位，由用户自行设置；
-按键触发只是"请求打开编辑器"的入口之一，实际开屏仍须经服务端取锁与开屏载荷。
+编辑器只有一个打开入口：`/idtw config edit` 指令。指令先原子取得全局独占编辑锁，再由服务端下发开屏载荷；
+客户端收到载荷后由协议工作区转换为「打开编辑器」请求，界面实现只负责把屏幕切到前台。
+客户端**不注册按键**，也不存在绕过取锁流程的本地开屏路径。
 
 ## 6. 已知限制
 
@@ -121,7 +122,7 @@ kit 提供内容排版、控件与交互、输入上下文与捕获、数值策�
 - 显示名 / 备注在极端粘贴（一次性超过两倍码点上限的补充平面字符）时可能被原版文本框静默截断到上限而不提示；
   逐字符键入与常规粘贴不受影响，上限判定本身仍按码点。
 - `ui/prototype` 是开发期原型界面，**不属于生产界面**：生产环境没有打开它的入口，也没有为它注册快捷键。
-  开发环境（`DebugMode.ENABLED`）下，`EditorShortcut` 在没有编辑会话时直接打开原型屏；发布环境该分支返回 `null`。
+  该包只由 NeoForge 截图源集的 `ScreenshotScreens` 登记，客户端交互路径不引用它。
 
 ## 7. 扩展点
 

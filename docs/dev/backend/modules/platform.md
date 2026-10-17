@@ -94,7 +94,7 @@
 | S2C 接收器 | 客户端 `FabricRuleEditClientRegistrar` 注册（×6） | `playToClient` ×6，处理器**只做 `RuleEditPayloadRouter` / `OpenRuleEditorPayload.dispatchOpenEditor` 分发**，不引用客户端类 |
 | 断线清理 | `ServerPlayConnectionEvents.DISCONNECT` | `PlayerEvent.PlayerLoggedOutEvent` |
 | 命令注册 | `CommandRegistrationCallback.EVENT` | `RegisterCommandsEvent` |
-| 客户端主类 | `ItemDespawnToWhatClient`（`ClientModInitializer`）：按键 / S2C 接收器 / 工作区接线 / 界面 bootstrap | 无独立主类，用 `@EventBusSubscriber(Dist.CLIENT)`（`RegisterEvent` 静态块接线工作区与界面） |
+| 客户端主类 | `ItemDespawnToWhatClient`（`ClientModInitializer`）：S2C 接收器 / 工作区接线 / 界面 bootstrap | 无独立主类，用 `@EventBusSubscriber(Dist.CLIENT)`（`ClientSetup` 在 `FMLClientSetupEvent` 接线工作区与界面） |
 
 协议版本两端对齐（`RuleEditProtocol.VERSION = 4`，NeoForge registrar 从该常量生成版本字符串）。**C2S 与 S2C 的类型都必须在公共初始化注册**，否则专用服务端连接协商会判定通道缺失。
 

@@ -46,7 +46,7 @@
 | 加 / 改命令 | [backend/modules/command.md](backend/modules/command.md) |
 | 调试命令与开发场景 | [backend/modules/debug.md](backend/modules/debug.md) |
 | 使用 / 改造 UI kit | [internals/ui-kit/README.md](internals/ui-kit/README.md) |
-| 改快捷键 / 平台客户端接入 | [internals/client-entry.md](internals/client-entry.md) |
+| 改平台客户端接入 / 客户端 tick 心跳 | [internals/client-entry.md](internals/client-entry.md) |
 | 改主题 / 展示名称 / 目录图标 | [internals/ui-theme.md](internals/ui-theme.md)、[internals/ui-shared.md](internals/ui-shared.md) |
 | 提交前跑检查与构建 | [conventions.md](conventions.md) §4（校验脚本与退出码）；构建用 `tools/dsh-build.ps1` |
 
@@ -58,7 +58,7 @@
 | [architecture.md](architecture.md) | 分层模型、架构关系图、依赖方向铁律、三条数据流、结构性特征 |
 | [layers/server-core.md](layers/server-core.md) | 服务端内核：契约层、模型层、类型与扩展层（含第三方 SPI）、加载与装配层、运行时层（追踪 / 结算 / 实体状态）、调度与共享预算、索引与缓存 |
 | [layers/authoring.md](layers/authoring.md) | 创作与管控：候选目录两段式分工、编辑协议与会话（快照三视图、变更集、独占会话、分片限额、权威落盘）、命令树与权限口径、调试层与场景 |
-| [layers/client.md](layers/client.md) | 客户端：协议工作区与开屏入口、草稿与撤销、类型编辑器注册表与回退、UI kit 边界与输入生命周期、主题与控件适配、四页界面契约、按键、已知限制 |
+| [layers/client.md](layers/client.md) | 客户端：协议工作区与开屏入口、草稿与撤销、类型编辑器注册表与回退、UI kit 边界与输入生命周期、主题与控件适配、四页界面契约、已知限制 |
 | [layers/platform.md](layers/platform.md) | 平台接入：三种注入方式、引导与生命周期、事件与 Mixin 原则、两端差异摘要、网络与协议注册、模组级配置分组 |
 | [flows.md](flows.md) | 四条端到端链路概览：规则加载、转化生命周期、编辑保存协议、调试场景 |
 | [conventions.md](conventions.md) | 文档层级与职责、阅读协议、文档维护约定、校验脚本 |
@@ -98,7 +98,7 @@
 
 | 文档 | 适用范围 |
 |---|---|
-| [internals/client-entry.md](internals/client-entry.md) | 入口层：按键入口与快捷键处理、Fabric/NeoForge 客户端接入与接收器注册 |
+| [internals/client-entry.md](internals/client-entry.md) | 入口层：Fabric/NeoForge 客户端接入、客户端 tick 心跳与接收器注册 |
 | [internals/client-net.md](internals/client-net.md) | 接口层：协议工作区状态机、上行载荷、下行缓存、快照分片、界面注册槽 |
 | [internals/client-edit.md](internals/client-edit.md) | 状态/数据层：规则草稿与撤销栈、输入缓冲、类型编辑器注册表、条件树编解码、草稿持久化 |
 | [internals/ui-screen.md](internals/ui-screen.md) | 页面层：规则编辑器屏幕、列表/编辑/调试模式页、四页页签、保存遮罩、校验、展示视图 |

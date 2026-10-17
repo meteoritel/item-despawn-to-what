@@ -18,7 +18,7 @@
 6. **结构化问题**：`RuleIssue(severity, ruleId, origin, fieldPath, messageCode, messageArgs, fallbackMessage)`；`messageCode` 是全限定翻译 key（例如 `itemdespawntowhat.edit.error.leaf_limit`），必须同时存在于 `en_us.json` 与 `zh_cn.json`（契约 §3.5）。
 7. **幂等与分片**：`operationId` 由客户端生成，服务端对同一会话保留最近 16 个已处理 id，重复提交直接返回上次回执、不重复写盘；大变更集用 `transferId` + `index`/`count` 分片，同一玩家最多 2 个在途传输，60 秒无进展丢弃。
 8. **授权检查点**：心跳、快照请求、目录请求、变更集提交、分片任一步骤都必须校验 `sessionId` 与状态匹配，否则回执 `SESSION_EXPIRED`/`LOCK_NOT_OWNED`（契约 §3.3）。
-9. **唯一生产入口**：客户端只能由服务端 `OpenRuleEditorPayload` 打开编辑器；指令路径必须**先取锁成功**才发 payload，失败下发 `LOCK_BUSY` 与持有者信息。快捷键在不持有会话时只能提示「请先用指令打开」（契约 §3.7、§5）。
+9. **唯一生产入口**：客户端只能由服务端 `OpenRuleEditorPayload` 打开编辑器；指令路径必须**先取锁成功**才发 payload，失败下发 `LOCK_BUSY` 与持有者信息。`/idtw config edit` 是唯一打开入口，客户端不提供按键等本地开屏路径（契约 §3.7、§5）。
 10. **保存进度与取消**：进度按会话、操作标识和递增序号配对，真实计数与未知总量动画分开。取消与文件提交确认通过原子状态竞争；提交确认前可取消，文件回滚由原后台写入线程独占执行。提交确认后继续完成重载与清理，客户端禁止退出保存 GUI。此边界避免主线程取消与后台回滚并发，也防止已提交规则被迟到取消撤销。
 11. **管理指令**：`/idtw config edit-lock status`（查看自身会话，有权限时显示持有者）与 `/idtw config edit-lock release`（权限 ≥2 强制释放）。
 

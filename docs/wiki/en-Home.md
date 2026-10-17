@@ -2,7 +2,19 @@
 
 This page is the entry point to all player documentation: it says what each page solves and where to look for the task at hand.
 
-To make one dropped item turn into something else, read [Getting Started](en-01-getting-started) first. That page has a minimal rule you can copy, and it covers where the file goes and how to make the rule take effect. Use the tables below for everything else.
+## Open the in-game editor first
+
+To try the mod, you do not need to write any files. Run `/idtw config edit` in a world to open the configuration editor, then follow what the screen shows:
+
+1. Pick a rule in the list and click **Edit**.
+2. Change it on the **Basic / Input / Trigger / Results** tabs: what it drops or spawns, and under which conditions.
+3. Click **Save**; the change takes effect right away.
+
+The bundled example rules are already in the list, so you can start from one: **New rule** builds one from scratch, **Duplicate** copies an example to adjust, and **Enable / Disable** decides whether a rule takes part. Hover over a field or button if you are not sure what it does.
+
+The editor needs a single-player world, or operator level 2 on a server. Only one player can edit at a time; if it is held by someone else, wait for them to close it, or ask an admin to run `/idtw config edit-lock release`.
+
+To write rules as files instead, read [Getting Started](en-01-getting-started); it has a minimal rule you can copy and covers where the file goes and how to make the rule take effect. Use the tables below for everything else.
 
 ## Reading Order
 
@@ -41,5 +53,6 @@ To make one dropped item turn into something else, read [Getting Started](en-01-
 | Fix server lag, conversions that fire too often, or too many products piling up | [Server Configuration](en-07-server-config) |
 | Find out why a rule change did nothing, or read a problem line | [Getting Started](en-01-getting-started), [Command Reference](en-08-commands) |
 | Edit rules in game | Run `/idtw config edit`; see [Command Reference](en-08-commands) for the details. |
+| The editor is held by another player | The edit-lock section of [Command Reference](en-08-commands) |
 
 For the implementation and the architecture, see the developer documentation in `docs/dev/`, which is not part of this guide.

@@ -14,6 +14,7 @@
 
 ### 移除
 - **旧配置链路退役**：按转化类型划分的旧配置模型与执行器、NeoForge 服务端 TOML 配置（`ModConfigValues` / `itemdespawntowhat-server.toml`）、旧网络同步与旧客户端编辑界面，由统一规则链路与规则编辑器取代。
+- **编辑器快捷键退役**：移除客户端按键绑定与快捷键处理，编辑器只保留 `/idtw config edit` 指令入口。
 
 ### New Features
 - **Unified rule pipeline**: the backend now runs a single `core/**` rule path — rules, ordered effects and a recursive condition tree encoded through DFU codecs with flat `type` dispatch. Rules come from three layers (builtin datapack / world datapack / `config` overlay) and merge by id with priority.
@@ -25,6 +26,7 @@
 
 ### Removals
 - **Legacy config path retired**: the per-conversion-type config model and executors, the NeoForge server TOML config (`ModConfigValues` / `itemdespawntowhat-server.toml`), the legacy network sync and the legacy client editor UI, replaced by the unified rule pipeline and the rule editor.
+- **Editor keybinding retired**: the client key mapping and shortcut handling are gone; `/idtw config edit` is the only way to open the editor.
 
 ## [1.2.1]
 

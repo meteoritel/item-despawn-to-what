@@ -66,7 +66,7 @@
 - 依赖外部：`net.minecraft.client`（`Minecraft`）、`net.minecraft.client.multiplayer`（`ClientPacketListener`）、`net.minecraft.network.protocol.common.custom`（`CustomPacketPayload`）
 - 依赖外部：`org.apache.logging.log4j`（`LogManager`、`Logger`，仅 `RuleEditClientWorkspace`）、`org.slf4j`（`Logger`、`LoggerFactory`，仅 `EditorScreenHooks`）、`org.jetbrains.annotations`（`Nullable`）
 - 依赖外部：Java 标准库 `java.util`（`EnumMap`、`List`、`Map`、`UUID`）
-- 被依赖：`client/key`（1 个文件 import，共 5 处）、`client/edit`（2 个文件 import，共 5 处）、`client/event`（2 个文件 import，共 2 处）、`client/register`（1 个文件 import，共 1 处）、`client/ui/screen`（3 个文件 import，共 5 处）、`client/ui/screen/form`（1 个文件 import，共 1 处）、`dev/guiscreenshot`（1 个文件 import，共 2 处）
+- 被依赖：`client/edit`（2 个文件 import，共 5 处）、`client/event`（2 个文件 import，共 2 处）、`client/register`（1 个文件 import，共 1 处）、`client/ui/screen`（3 个文件 import，共 5 处）、`client/ui/screen/form`（1 个文件 import，共 1 处）、`dev/guiscreenshot`（1 个文件 import，共 2 处）
 - 无本模组客户端包依赖：本包不 import 任何 `client/edit` 或 `client/ui` 类
 
 ### 2.5 关键实现位置
@@ -121,7 +121,7 @@
 ## 4. 相关文档
 
 - [客户端前端实现文档索引](README.md)
-- [入口层：按键入口与平台客户端接入](client-entry.md)
+- [入口层：平台客户端接入](client-entry.md)
 - [抽象层：客户端](../layers/client.md)
 - [后端：编辑协议](../backend/modules/edit-protocol.md)
 - [ADR-0019：独占编辑会话与目标锁](../../adr/0019-exclusive-edit-session-and-target-lock.md)

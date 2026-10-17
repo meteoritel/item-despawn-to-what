@@ -8,8 +8,7 @@
 
 | 层级 | 模块 | 代码路径 | 文档 | 源码文件数 |
 |---|---|---|---|---|
-| 入口层 | 按键入口 | `client/key` | [client-entry.md](client-entry.md) | 2 |
-| 入口层 | 平台客户端接入 | `fabric/…/client`、`neoforge/…/client` | [client-entry.md](client-entry.md) | 6 |
+| 入口层 | 平台客户端接入 | `fabric/…/client`、`neoforge/…/client` | [client-entry.md](client-entry.md) | 5 |
 | 接口层 | 协议工作区 | `client/net` | [client-net.md](client-net.md) | 6 |
 | 状态/数据层 | 规则草稿、编辑会话与注册表 | `client/edit` | [client-edit.md](client-edit.md) | 35 |
 | 状态/数据层 | 草稿持久化 | `client/edit/draft` | [client-edit.md](client-edit.md) | 5 |
@@ -38,7 +37,7 @@ UI kit 模块文档的分册索引：
 
 | 要改什么 | 先读 |
 |---|---|
-| 快捷键、开发环境入口、平台客户端注册与事件 | [client-entry.md](client-entry.md) |
+| 平台客户端注册、客户端 tick 心跳与接入 | [client-entry.md](client-entry.md) |
 | 编辑协议、会话状态、开屏、快照分片与目录缓存 | [client-net.md](client-net.md) |
 | 规则草稿、撤销栈、输入缓冲、类型编辑器注册表、条件树编解码、草稿落盘 | [client-edit.md](client-edit.md) |
 | 编辑器屏幕、模式切换、页签、保存遮罩、校验、列表页操作 | [ui-screen.md](ui-screen.md) |
@@ -56,8 +55,7 @@ UI kit 模块文档的分册索引：
 
 | 层级 | 模块 | 依赖的本模组包 |
 |---|---|---|
-| 入口层 | `client/key` | `client/net`；开发环境分支引用 `client/ui/prototype` |
-| 入口层 | 平台客户端接入 | `client/key`、`client/net`、`client/ui/screen` |
+| 入口层 | 平台客户端接入 | `client/net`、`client/ui/screen` |
 | 接口层 | `client/net` | 无本模组客户端包 |
 | 状态/数据层 | `client/edit` | `client/net`、`client/ui/kit` |
 | 状态/数据层 | `client/edit/draft` | `client/edit` |
