@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.network.transport;
 
+import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveStatus;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 
 import java.util.ArrayList;
@@ -23,12 +24,13 @@ public final class RuleSourceViewChunker {
         }
         int bytes = RuleEditLimits.encodedLength(json);
         if (bytes > RuleEditLimits.MAX_SOURCE_VIEW_BYTES) { return List.of(); }
+        String status = RuleSaveStatus.SUCCESS.id();
         if (bytes <= RuleEditLimits.MAX_DIRECT_PACKET_BYTES) {
-            return List.of(new RuleSourceViewPayload(sessionId, requestId, "SUCCESS", json));
+            return List.of(new RuleSourceViewPayload(sessionId, requestId, status, json));
         }
         List<String> chunks = RuleEditTextChunks.splitByUtf8Bytes(json, RuleEditLimits.MAX_CHUNK_BYTES);
         if (chunks.size() <= 1) {
-            return List.of(new RuleSourceViewPayload(sessionId, requestId, "SUCCESS", json));
+            return List.of(new RuleSourceViewPayload(sessionId, requestId, status, json));
         }
         if (chunks.size() > RuleEditLimits.MAX_CHUNK_COUNT) {
             return List.of();
