@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.api;
 
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
@@ -28,12 +29,15 @@ public interface EffectExecutor<P> {
      * @param effect 效果参数
      * @param level 触发维度
      * @param position 成功当刻固定的触发点位置
-     * @param sourceStack 源实体清空前的只读库存快照，供按源物品决定输入的类型读取
+     * @param sourceEntity 成功当刻的源实体，供需要实体整体（如战利品求值的实体参数）的准备读取；
+     *                     该引用只在准备期有效，源实体随后会被清空并被移除，实现不得把它随固定输入携带
+     * @param sourceStack 源实体清空前的只读库存快照，供只按源物品决定输入的类型读取
      * @param fillOrigin 候选的位置策略：是否包含触发位置本身
      * @return 本次执行的固定输入；null 表示本类型没有准备阶段
      */
     default @Nullable EffectPreparation prepare(P effect, ServerLevel level, Vec3 position,
-                                                ItemStack sourceStack, boolean fillOrigin) {
+                                                ItemEntity sourceEntity, ItemStack sourceStack,
+                                                boolean fillOrigin) {
         return null;
     }
 
