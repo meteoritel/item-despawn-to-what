@@ -53,7 +53,6 @@ public final class RuleRecipeView {
         private final UiIcon icon;
         private final LinkedHashSet<Integer> quantities = new LinkedHashSet<>();
         private final LinkedHashSet<Integer> consumedQuantities = new LinkedHashSet<>();
-        private boolean perSourceItem;
         private boolean fluidConsumed;
         private String quantityText = "";
         private @Nullable TagPreviewIcons.Tag tag;
@@ -135,8 +134,6 @@ public final class RuleRecipeView {
             details.append("\n").append(Component.translatable(UI + "quantity_help"));
         if (array(body.child("outcomes")).size() > 1)
             details.append("\n").append(Component.translatable(UI + "outcomes_help"));
-        if (parts.stream().anyMatch(part -> part.object() != null && part.object().perSourceItem))
-            details.append("\n").append(Component.translatable(UI + "experience_help"));
         tooltip = details;
     }
 
@@ -360,11 +357,8 @@ public final class RuleRecipeView {
                             RulePreviewIcons.action(effect), integer(effect, "count", 1));
                     yield part;
                 }
-                case "experience" -> {
-                    ObjectPart xp = new ObjectPart(Component.translatable(UI + "experience"), RulePreviewIcons.action(effect), integer(effect, "amount", 1));
-                    xp.perSourceItem = bool(effect, "per_source_item");
-                    yield xp;
-                }
+                case "experience" -> new ObjectPart(Component.translatable(UI + "experience"),
+                        RulePreviewIcons.action(effect), integer(effect, "amount", 1));
                 default -> placeholder("result_missing");
             };
         }
