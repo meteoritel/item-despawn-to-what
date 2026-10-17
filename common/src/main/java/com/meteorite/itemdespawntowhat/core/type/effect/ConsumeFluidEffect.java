@@ -1,5 +1,10 @@
 package com.meteorite.itemdespawntowhat.core.type.effect;
 
+import com.meteorite.itemdespawntowhat.core.api.EffectContext;
+import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
+import com.meteorite.itemdespawntowhat.core.api.EffectExecutor;
+import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
+import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
@@ -15,6 +20,9 @@ import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Optional;
@@ -57,9 +65,29 @@ public record ConsumeFluidEffect(
                         conditions.orElse(null))));
     }
 
-    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器
+    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。
+    // 显式实现准备入口：效果级条件与概率在成功转化当刻判定并随任务携带；
+    // 触发位置的方块与流体状态属于执行期实时世界状态，不在成功转化当刻冻结。
     public static EffectType<ConsumeFluidEffect> effectType(Codec<ConditionExpression> expressionCodec) {
-        return new SimpleEffectType<>(ID, codec(expressionCodec), ConsumeFluidEffect::validateParams, ConsumeFluidExecutor::execute);
+        EffectExecutor<ConsumeFluidEffect> executor = new EffectExecutor<>() {
+            @Override
+            public EffectResult execute(ConsumeFluidEffect effect, EffectContext context) {
+                return ConsumeFluidExecutor.execute(effect, context);
+            }
+
+            @Override
+            public EffectPreparation prepare(ConsumeFluidEffect effect, ServerLevel level, Vec3 position,
+                                             ItemStack sourceStack, boolean fillOrigin) {
+                // 位置与轮数上界由上下文与参数在开组时定稿；该处是否仍有匹配流体留到执行期实时判定
+                return EffectPreparation.ready();
+            }
+
+            @Override
+            public EffectExecution start(ConsumeFluidEffect effect, EffectContext context) {
+                return ConsumeFluidExecutor.start(effect, context);
+            }
+        };
+        return new SimpleEffectType<>(ID, codec(expressionCodec), ConsumeFluidEffect::validateParams, executor);
     }
 
     // 参数语义校验；fluid 为 null 表示任意流体，不做存在性判定

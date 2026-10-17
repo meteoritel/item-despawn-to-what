@@ -13,6 +13,7 @@ import com.meteorite.itemdespawntowhat.core.api.RefChecks;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecutor;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
+import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.type.effect.exec.ConsumeCatalystExecutor;
 import com.mojang.serialization.Codec;
@@ -20,6 +21,9 @@ import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
@@ -81,12 +85,21 @@ public record ConsumeCatalystEffect(
                 new ConsumeCatalystEffect(items, count, radius, delayTicks, chance, conditions.orElse(null), counts)));
     }
 
-    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器
+    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。
+    // 显式实现准备入口：效果级条件与概率在成功转化当刻判定并随任务携带；
+    // 需求、搜索半径与匹配器都是静态参数，邻域库存的查询、分配与整轮扣减仍在执行期实时完成。
     public static EffectType<ConsumeCatalystEffect> effectType(Codec<ConditionExpression> expressionCodec) {
         EffectExecutor<ConsumeCatalystEffect> executor = new EffectExecutor<>() {
             @Override
             public EffectResult execute(ConsumeCatalystEffect effect, EffectContext context) {
                 return ConsumeCatalystExecutor.execute(effect, context);
+            }
+
+            @Override
+            public EffectPreparation prepare(ConsumeCatalystEffect effect, ServerLevel level, Vec3 position,
+                                             ItemStack sourceStack, boolean fillOrigin) {
+                // 邻域里现有的催化剂数量属于执行期实时世界状态，不在成功转化当刻冻结
+                return EffectPreparation.ready();
             }
 
             @Override
