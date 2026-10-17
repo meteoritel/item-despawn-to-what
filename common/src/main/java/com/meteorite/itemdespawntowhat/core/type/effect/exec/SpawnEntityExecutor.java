@@ -268,9 +268,10 @@ public final class SpawnEntityExecutor {
             // 每刻候选检查上限来自配置（position_search_checks_per_tick），未完成则下刻从断点继续
             int checkLimit = Math.max(1, context.positionSearchChecksPerTick());
             while (spawned < end) {
-                // 单步至少生成一个实体再让出：时间耗尽，或本步已用额度（含已报告未计费部分）耗尽时，剩余数量下次继续
-                if (spawned > 0 && (budget.exhausted() || budget.remainingWorkUnits() - reportedUnits <= 0)) {
-                    break;
+                // 每个实体写入前都复查双预算：时间耗尽或本步已用额度（含已报告未计费部分）耗尽时让出，
+                // 剩余数量与搜索游标原样保留，下一 tick 重获预算后继续
+                if (budget.exhausted() || budget.remainingWorkUnits() - reportedUnits <= 0) {
+                    return null;
                 }
                 if (safeSpawn && !targetReady) {
                     while (searchCursor < SEARCH_OFFSETS.size() && checks < checkLimit) {
@@ -306,12 +307,18 @@ public final class SpawnEntityExecutor {
                 if (checks >= checkLimit && spawned < end) {
                     return null;
                 }
+                // 搜索可能已把本步余量耗尽，写入前再复查一次双预算，避免越过本 tick 额度
+                if (budget.exhausted() || budget.remainingWorkUnits() - reportedUnits <= 0) {
+                    return null;
+                }
                 if (!spawnOne(hit)) {
                     // 写入前一刻区块不再加载：本步不累计完成量，保留游标带退避重试
                     nextAttemptTick = gameTime + CHUNK_RETRY_TICKS;
                     return null;
                 }
                 spawned++;
+                // spawnOne 成功时内部已上报 1 个工作单位，同步计入本步已用额度
+                reportedUnits++;
                 if (safeSpawn) {
                     searchCursor = 0;
                     hit = null;

@@ -69,7 +69,6 @@ public final class SpawnItemExecutor {
     private static final class ItemDelivery implements EffectExecution {
         private final EffectContext context;
         private final Item item;
-        private final int target;
         private int remaining;
         // 邻区块未加载时的下次重试刻，0 表示不等待
         private long nextAttemptTick;
@@ -78,8 +77,7 @@ public final class SpawnItemExecutor {
             this.context = context;
             this.item = item;
             // 件数 = 每轮件数 × 本组轮数，轮数由本组固定，执行期不再读取产出参数
-            this.target = EffectTargets.saturatedMultiply(count, context.rounds());
-            this.remaining = target;
+            this.remaining = EffectTargets.saturatedMultiply(count, context.rounds());
         }
 
         @Override

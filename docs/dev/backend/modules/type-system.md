@@ -60,7 +60,7 @@
 
 | 类 | 职责 | 关键成员 |
 |---|---|---|
-| `EffectTargets` | 执行器共享的引用解析与空间查询工具；**不捕获、不吞异常**，硬错误直接抛出交给运行时 | `resolve`（未命中返回 null）/`resolveOrThrow`、`blockBox(center, radius)`（效果式消耗与催化剂固定成本共用的搜索盒）、`addEntity`/`addEntityProduct`（区块未加载时自行挂 20 刻重试）、`addEntityNow`/`addConversionProductNow`（区块未加载时直接返回 false，由调用方按自身预算节奏重试，并保证回执在真实写入之后）、`randomHorizontalDisc(random, center, radius, height)`（面积均匀的水平圆盘散点，半径按 `radius × √U`）、`saturatedAdd`/`saturatedMultiply`、`forEachStep(...)` |
+| `EffectTargets` | 执行器共享的引用解析与空间查询工具；**不捕获、不吞异常**，硬错误直接抛出交给运行时 | `resolve`（未命中返回 null）/`resolveOrThrow`、`blockBox(center, radius)`（效果式消耗与催化剂固定成本共用的搜索盒）、`addEntity`/`addEntityProduct`/`addConversionProduct`（区块未加载时自行挂 20 刻重试）、`addEntityNow`/`addConversionProductNow`（区块未加载时直接返回 false，由调用方按自身预算节奏重试，并保证回执在真实写入之后）、`randomHorizontalDisc(random, center, radius, height)`（面积均匀的水平圆盘散点，半径按 `radius × √U`）、`saturatedAdd`/`saturatedMultiply`、`forEachStep(...)` |
 | `ReturnItemSpawner` | 掉落物生成统一入口：转化产物与返还物共用「创建 + 授予实体状态 + 加入世界」路径 | `Kind{CONVERSION_PRODUCT, PERMANENT_RETURN}`、`applyGrant`、`spawn`、`deliver`、内部 `PositionSearch`（三级位置搜索：起点附近 → 向上扫描 → 限高以上，跨刻分步） |
 | `VisualFeedback` | 服务端主线程发送原版粒子，并按维度、刻、反馈种类与方块位置限流 | `conversion`、`entitySpawn`、`returnItem` |
 
