@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.api;
 
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
@@ -21,13 +22,18 @@ public interface EffectExecutor<P> {
      * 产出非 null 结果即表示本类型采用「成功转化当刻固定输入」的路径：效果级条件与概率在成功转化当刻判定一次并随任务携带。
      * 默认返回 null，这类效果的条件与概率仍在首次执行时判定，结果不随任务携带。
      * 支持准备需覆盖本方法与按准备结果创建执行状态的重载；只提供 execute 的类型沿用默认，不参与准备。
-     * 传入的是成功转化当刻仍可读的输入，不包含尚未确定的世界状态。
+     * 按「候选 + 槽位 + 组序号」各组调用一次：本次未被选中的候选与尚未启动的组也会调用，
+     * 因此本方法不得产生世界写入、不得付出代价，只读参数与成功当刻可读的输入。
+     * 需要随机抽取的类型引用（标签成员等）必须在这里抽定并随结果携带，不得留到执行期再抽。
      * @param effect 效果参数
      * @param level 触发维度
      * @param position 成功当刻固定的触发点位置
+     * @param sourceStack 源实体清空前的只读库存快照，供按源物品决定输入的类型读取
+     * @param fillOrigin 候选的位置策略：是否包含触发位置本身
      * @return 本次执行的固定输入；null 表示本类型没有准备阶段
      */
-    default @Nullable EffectPreparation prepare(P effect, ServerLevel level, Vec3 position) {
+    default @Nullable EffectPreparation prepare(P effect, ServerLevel level, Vec3 position,
+                                                ItemStack sourceStack, boolean fillOrigin) {
         return null;
     }
 

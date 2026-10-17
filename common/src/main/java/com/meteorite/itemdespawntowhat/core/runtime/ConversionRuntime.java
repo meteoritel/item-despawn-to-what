@@ -705,7 +705,9 @@ public final class ConversionRuntime {
         // 判定异常按同一补偿单元处理：整堆源物品写回并保留所有权追踪。
         Map<PreparedEffectKey, EffectPreparation> preparations;
         try {
-            preparations = prepareEffects(level, item, rule, triggerPosition);
+            // 潜在组数上界：按可用源与每组固定成本算，尚未选候选、未付催化剂、未派发任何组
+            int potentialGroups = costPerGroup > 0 ? available / costPerGroup : 1;
+            preparations = prepareEffects(level, item, rule, triggerPosition, potentialGroups, source.copy());
         } catch (RuntimeException failure) {
             tracked.locked = false;
             throw failure;
@@ -752,7 +754,8 @@ public final class ConversionRuntime {
     }
 
     // 条件与概率只在开始时判断一次，续接状态归本次效果任务独占。
-    // preparation 非空表示本次输入已在成功转化当刻固定（含条件/概率判定结果），本方法不再重判。
+    // preparation 非空表示本组输入已在成功转化当刻固定（含条件/概率判定结果），本方法不再重判、也不再读源实体；
+    // 为空的只有未声明准备阶段的类型，它们保持原有的首次执行时判定时机。
     EffectExecution startEffect(ServerLevel level, ItemEntity item, EffectContext base, Effect effect,
                                 @Nullable EffectPreparation preparation) {
         // 已判定不执行的固定输入：直接给出跳过回执，不重判也不做世界写入
@@ -801,8 +804,12 @@ public final class ConversionRuntime {
     // 成功转化当刻为「需要先固定输入」的类型逐槽生成固定输入：条件与概率在这里判定一次，
     // 结果随结算任务携带，源实体清空后不再重新判定。没有准备阶段的类型不产出，保持原有判定时机。
     private Map<PreparedEffectKey, EffectPreparation> prepareEffects(ServerLevel level, ItemEntity item, Rule rule,
-                                                                    Vec3 position) {
+                                                                    Vec3 position, int potentialGroups,
+                                                                    ItemStack sourceSnapshot) {
         Map<PreparedEffectKey, EffectPreparation> preparations = new HashMap<>();
+        if (potentialGroups <= 0) {
+            return preparations;
+        }
         BlockPos pos = BlockPos.containing(position);
         for (OutcomeCandidate candidate : rule.effectiveOutcomes()) {
             List<Effect> effects = candidate.effects();
@@ -812,9 +819,16 @@ public final class ConversionRuntime {
                 if (definition == null) {
                     continue;
                 }
-                EffectPreparation preparation = prepareEffect(definition, effect, level, item, pos, position);
-                if (preparation != null) {
-                    preparations.put(new PreparedEffectKey(candidate.id(), slot), preparation);
+                // 一次性效果同一源只尝试一组，固定一份即可；其余类型按潜在组各固定一份，随机判定互不复用
+                int groups = definition.oneShot() ? 1 : potentialGroups;
+                for (int group = 0; group < groups; group++) {
+                    EffectPreparation preparation = prepareEffect(definition, effect, level, item, pos, position,
+                            sourceSnapshot, candidate.fillOrigin());
+                    if (preparation == null) {
+                        // 未迁移的类型不在成功转化当刻固定，其条件与概率仍在首次执行时判定
+                        break;
+                    }
+                    preparations.put(new PreparedEffectKey(candidate.id(), slot, group), preparation);
                 }
             }
         }
@@ -824,8 +838,10 @@ public final class ConversionRuntime {
     // 泛型桥接：准备入口只读效果参数与成功当刻可读的输入
     @SuppressWarnings("unchecked")
     private @Nullable EffectPreparation prepareEffect(EffectType<?> definition, Effect effect, ServerLevel level,
-                                                     ItemEntity item, BlockPos pos, Vec3 position) {
-        EffectPreparation preparation = ((EffectType<Effect>) definition).executor().prepare(effect, level, position);
+                                                     ItemEntity item, BlockPos pos, Vec3 position,
+                                                     ItemStack sourceSnapshot, boolean fillOrigin) {
+        EffectPreparation preparation = ((EffectType<Effect>) definition).executor()
+                .prepare(effect, level, position, sourceSnapshot, fillOrigin);
         if (preparation == null || preparation.gate() != null) {
             return preparation;
         }
@@ -846,8 +862,8 @@ public final class ConversionRuntime {
         return preparation;
     }
 
-    // 成功转化当刻固定的效果槽位键：候选项与候选内槽序号，逐槽独立，不按效果值合并
-    record PreparedEffectKey(String candidateId, int slot) {
+    // 成功转化当刻固定的效果键：候选、候选内槽序号与组序号，逐组独立，不跨组复用随机判定
+    record PreparedEffectKey(String candidateId, int slot, int groupIndex) {
     }
 
     // 泛型桥接：效果即类型定义声明的 P，执行器只读取参数

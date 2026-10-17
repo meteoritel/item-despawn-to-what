@@ -575,7 +575,7 @@ final class ConversionSettlement implements ServerTask {
                 }
                 continue;
             }
-            dispatchEffect(effect, slot, groupContext);
+            dispatchEffect(effect, slot, groupContext, groupsStarted - 1);
             budget.charge(1);
             dispatchedThisStep++;
         }
@@ -662,9 +662,10 @@ final class ConversionSettlement implements ServerTask {
                 sink, candidate.safeSpawn(), candidate.fillOrigin());
     }
 
-    // 效果派发：延迟交给调度器；成功转化当刻已固定输入的槽位按固定输入执行，其余在首次执行时统一判定
-    private void dispatchEffect(Effect effect, int slot, EffectContext context) {
-        EffectPreparation preparation = preparations.get(new ConversionRuntime.PreparedEffectKey(candidate.id(), slot));
+    // 效果派发：延迟交给调度器；成功转化当刻已固定输入的槽位按本组的固定输入执行，其余在首次执行时统一判定
+    private void dispatchEffect(Effect effect, int slot, EffectContext context, int groupIndex) {
+        EffectPreparation preparation = preparations.get(
+                new ConversionRuntime.PreparedEffectKey(candidate.id(), slot, preparedGroupIndex(effect, groupIndex)));
         int delay = Math.max(0, effect.delayTicks());
         if (RuntimeObserver.current().enabled()) {
             RuntimeObserver.current().observe(source, "EFFECT_SCHEDULED", "effect", effect.type(),
@@ -673,6 +674,13 @@ final class ConversionSettlement implements ServerTask {
         RuntimeObserver.current().schedule(source, scheduler, level.dimension(),
                 level.getGameTime() + delay,
                 new EffectTask(runtime, level, source, context, effect, preparation, this::account));
+    }
+
+    // 固定输入的准备组序号：一次性效果只在首次尝试时固定一份，因此任何组都取第 0 份；
+    // 其余效果按本组序号各取自己的一份，缺失即表示本组没有固定输入
+    private int preparedGroupIndex(Effect effect, int groupIndex) {
+        EffectType<?> definition = runtime.effectDefinition(effect.type());
+        return definition != null && definition.oneShot() ? 0 : groupIndex;
     }
 
     // 执行器回执入账：已完成、已受理未完成、跳过与失败分别计数，计划量不冒充成功量
