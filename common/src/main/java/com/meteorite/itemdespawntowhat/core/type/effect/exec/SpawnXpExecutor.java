@@ -107,9 +107,10 @@ public final class SpawnXpExecutor {
             // 本步已报告但尚未由调度器计费的额度：单步内 remainingWorkUnits 不会随上报立即减少，需自行扣除
             int reportedUnits = 0;
             while (spawned < ORBS_PER_BATCH && remaining > 0) {
-                // 单步至少生成一颗球再让出：时间耗尽，或本步已用额度（含已报告未计费部分）耗尽时，剩余点数下次继续
-                if (spawned > 0 && (budget.exhausted() || budget.remainingWorkUnits() - reportedUnits <= 0)) {
-                    break;
+                // 每球前守一次：时间耗尽，或本步已用额度（含已报告未计费部分）耗尽时本步不再写入世界，
+                // 剩余点数原样留到后续步骤，不截断总量
+                if (budget.exhausted() || budget.remainingWorkUnits() - reportedUnits <= 0) {
+                    return null;
                 }
                 int points = (int) Math.min(remaining, MAX_POINTS_PER_ORB);
                 Vec3 position = EffectTargets.randomHorizontalDisc(context.random(), context.position(),
