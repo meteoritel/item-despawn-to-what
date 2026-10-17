@@ -4,7 +4,6 @@ import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDefaults;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
-import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
@@ -29,10 +28,9 @@ import org.jetbrains.annotations.Nullable;
 final class RuleEditorScreenListActions {
 
     private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
-    private static final int RULE_ID_MAX_LENGTH = 128;
     private static final String DEFAULT_RULE_NAME = "new_rule";
     private static final String COPY_SUFFIX = "_copy";
-    private static final int COPY_BASE_MAX_LENGTH = RULE_ID_MAX_LENGTH - COPY_SUFFIX.length()
+    private static final int COPY_BASE_MAX_LENGTH = RuleNameInput.MAX_NAME_LENGTH - COPY_SUFFIX.length()
             - Integer.toString(Integer.MAX_VALUE).length();
     private static final String UI = "gui.itemdespawntowhat.edit.";
 
@@ -48,13 +46,34 @@ final class RuleEditorScreenListActions {
         if (host.rejectWhenFrozen()) {
             return;
         }
-        promptRuleName("prompt.new_title", DEFAULT_RULE_NAME, this::createRule);
+        promptRuleName("prompt.new_title", nextDefaultRuleName(), this::createRule);
+    }
+
+    // 默认规则名的递推：new_rule 已存在时依次尝试 new_rule_1、new_rule_2，取未被占用的最小序号
+    private String nextDefaultRuleName() {
+        String candidate = DEFAULT_RULE_NAME;
+        int suffix = 1;
+        while (ruleNameTaken(candidate)) {
+            candidate = DEFAULT_RULE_NAME + "_" + suffix;
+            suffix++;
+        }
+        return candidate;
+    }
+
+    // 规则名（可为完整 id）对应到 id 后是否已被快照条目或本次新建占用
+    private boolean ruleNameTaken(String value) {
+        ResourceLocation id = RuleNameInput.parseId(value);
+        if (id == null) {
+            return false;
+        }
+        String key = id.toString();
+        return host.model().entry(key) != null || host.model().isCreated(key);
     }
 
     private void promptRuleName(String titleKey, String initial, Predicate<String> onSubmit) {
         RuleNameInput content = new RuleNameInput(host.font());
         UiTextInput input = content.input();
-        input.setMaxLength(RULE_ID_MAX_LENGTH);
+        input.setMaxLength(RuleNameInput.MAX_NAME_LENGTH);
         input.setValue(initial);
         UiModal modal = UiModal.create(THEME, host.font()).title(Component.translatable(UI + titleKey))
                 .preferredWidth(RuleNameInput.MODAL_WIDTH);
@@ -92,20 +111,17 @@ final class RuleEditorScreenListActions {
     }
 
     private @Nullable Component ruleNameProblem(String value) {
-        ResourceLocation id = normalizeId(value);
-        if (id == null) {
+        if (RuleNameInput.parseId(value) == null) {
             return Component.translatable(UI + "prompt.invalid_name");
         }
-        String key = id.toString();
-        return host.model().entry(key) != null || host.model().isCreated(key)
-                ? Component.translatable(UI + "notice.duplicate_id") : null;
+        return ruleNameTaken(value) ? Component.translatable(UI + "notice.duplicate_id") : null;
     }
 
     private boolean createRule(String value) {
         if (host.rejectWhenFrozen()) {
             return false;
         }
-        ResourceLocation id = normalizeId(value);
+        ResourceLocation id = RuleNameInput.parseId(value);
         if (id == null) {
             host.setNotice(Component.translatable(UI + "notice.invalid_id"), THEME.palette().danger());
             return false;
@@ -152,7 +168,7 @@ final class RuleEditorScreenListActions {
             if (host.rejectWhenFrozen()) {
                 return false;
             }
-            ResourceLocation id = normalizeId(value);
+            ResourceLocation id = RuleNameInput.parseId(value);
             if (id == null) {
                 host.setNotice(Component.translatable(UI + "notice.invalid_id"), THEME.palette().danger());
                 return false;
@@ -269,11 +285,4 @@ final class RuleEditorScreenListActions {
         host.setNotice(Component.translatable(UI + "notice.no_selection"), THEME.palette().warning());
     }
 
-    private @Nullable ResourceLocation normalizeId(String value) {
-        if (value == null || value.isEmpty() || value.length() > RULE_ID_MAX_LENGTH
-                || !RuleNameInput.allowsCharacters(value)) {
-            return null;
-        }
-        return ResourceLocation.tryParse(TypeLabels.OWN_NAMESPACE + ":" + value);
-    }
 }

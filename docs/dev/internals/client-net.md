@@ -73,7 +73,7 @@
 
 - `RuleEditClientWorkspace#instance`：静态单例 `INSTANCE`；`installSender`、`installSinks` 是转发到该实例的静态方法。
 - `RuleEditClientWorkspace#installSinks`：以 `sinksInstalled` 标志保证幂等，安装 6 个 `RuleEditPayloadRouter` 消费者（快照、分片、回执、进度、目录、寿命）与 `OpenRuleEditorPayload#installOpenEditorPayloadSink`，共 7 个。
-- `RuleEditClientWorkspace#onOpen`：方法入口对空会话标识直接返回；随后构造 `EditorOpenRequest`，校验 `protocolVersion` 等于 `RuleEditProtocol#VERSION`（4）、`RuleSaveStatus#fromId(statusCode)` 等于 `SUCCESS`，不通过时写入 `openFailure` 并返回。
+- `RuleEditClientWorkspace#onOpen`：方法入口只对 `null` 载荷直接返回；随后构造 `EditorOpenRequest`，先处理空会话标识（取锁失败的 `LOCK_BUSY`/`UNAVAILABLE` 等，服务端不带会话号）写入 `openFailure` 并返回，再校验 `protocolVersion` 等于 `RuleEditProtocol#VERSION`（4）、`RuleSaveStatus#fromId(statusCode)` 等于 `SUCCESS`，不通过时同样写入 `openFailure` 并返回。
 - `RuleEditClientWorkspace#onOpen` 的成功路径：写入 `sessionId` 与 `contextRevision`，清空快照、目录缓存与回执，置 `OPENING`，发送 `ConfirmRuleEditorPayload(sessionId, RuleEditProtocol.VERSION)`，置 `ACTIVE`，最后调用 `EditorScreenHooks#open`。
 - `RuleEditClientWorkspace#save`：仅在 `ACTIVE`、会话标识非空、已连接、且两个参数都非空时接受；用 `RuleChangeSetChunker#split` 生成载荷列表，置 `APPLYING` 并把 `saveProgress` 初始化为 `Stage.PREPARING`。
 - `RuleEditClientWorkspace#tick`：状态为 `FREE` 或会话标识为空时直接返回；未连接时 `reset()`；否则按 `RuleEditSessionLimits#HEARTBEAT_INTERVAL_TICKS`（10 秒 = 200 tick）发送 `HeartbeatRuleEditorPayload`。
@@ -96,7 +96,6 @@
 - 目录概念在同一个类里有两种命名：`catalog(RuleCatalogType)` 与字段 `catalogs` 表示最近一页目录响应缓存；`directory(RuleCatalogType)` 与字段 `directories`、内部类 `DirectoryLoad` 表示按类型懒加载并合并分页的完整目录；请求方法名为 `requestCatalog`，重试方法名为 `retryDirectory`。
 - `EditorOpenRequest` 的组件顺序为 `contextRevision` 在前、`protocolVersion` 在后；`OpenRuleEditorPayload` 的顺序为 `protocolVersion` 在前、`contextRevision` 在后，字段名一一对应但声明顺序不同。
 - 两个 record 的空值归一化不同：`EditorOpenRequest` 把空 `statusCode` 归一化为空串，`OpenRuleEditorPayload` 把空 `statusCode` 归一化为 `RuleSaveStatus#UNAVAILABLE.id()`。
-- `RuleEditClientWorkspace#onOpen` 在方法入口已对空 `sessionId` 提前返回，其后仍有一个 `if (payload.sessionId().isEmpty())` 分支写 `openFailure`（注释为取锁失败分支），该分支不可达。
 - 同一包内混用两套日志门面：`RuleEditClientWorkspace` 用 `org.apache.logging.log4j.LogManager`，`EditorScreenHooks` 用 `org.slf4j.LoggerFactory`，两者使用的日志名同为字符串 `"itemdespawntowhat-client-net"`。
 - `RuleSnapshotChunkBuffer` 是包内可见类型（`final class`，无 `public`），`accept` 与 `clear` 也是包内可见；本包对外导出的类型只有另外 5 个与嵌套接口 `PacketSender`。
 - `RuleEditClientWorkspace#DirectoryLoad` 的字段类型写成全限定名 `com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogEntry` 与 `java.util.LinkedHashMap`，这两个类型没有出现在 import 列表中。

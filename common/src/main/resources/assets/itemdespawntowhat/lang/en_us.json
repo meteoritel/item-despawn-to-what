@@ -646,7 +646,7 @@
   "gui.itemdespawntowhat.edit.prompt.id_hint": "namespace:path",
   "gui.itemdespawntowhat.edit.prompt.new_title": "New rule",
   "gui.itemdespawntowhat.edit.prompt.name_hint": "Rule name, e.g. Egg to chicken",
-  "gui.itemdespawntowhat.edit.prompt.name_help": "Names support only lowercase letters, numbers, and underscores.",
+  "gui.itemdespawntowhat.edit.prompt.name_help": "Lowercase letters, numbers and underscores; use namespace:name to set the namespace, otherwise itemdespawntowhat is used.",
   "gui.itemdespawntowhat.edit.prompt.invalid_name": "Enter a valid name.",
   "gui.itemdespawntowhat.edit.rule.conditions": "Conditions",
   "gui.itemdespawntowhat.edit.rule.display_name": "Display name",

@@ -404,7 +404,7 @@ public final class RuleEditClientWorkspace {
 
     // 首份快照由确认应答提供，不再额外请求，避免替换在途请求后重复准备。
     private synchronized void onOpen(@Nullable OpenRuleEditorPayload payload) {
-        if (payload == null || payload.sessionId().isEmpty()) {
+        if (payload == null) {
             return;
         }
         EditorOpenRequest request = new EditorOpenRequest(payload.sessionId(), payload.targetId(),

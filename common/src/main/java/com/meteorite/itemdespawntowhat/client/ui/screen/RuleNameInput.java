@@ -10,15 +10,21 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
 import org.jetbrains.annotations.Nullable;
 
-/** 规则名字输入区，仅展示名称限制并为校验错误预留位置。 */
+/** 规则名字输入区：解析 `<namespace>:<path>` 或单独的 `<path>`，并展示名称限制与校验错误位。 */
 final class RuleNameInput implements UiWidget, UiFocusTarget {
 
     // 宿主默认主题：屏幕按主题取色与绘制原语
     private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
 
+    // 命名空间与路径的分隔符
+    private static final char NAMESPACE_SEPARATOR = ':';
+
+    // 输入框字符上限：完整 id（含命名空间）与单独路径共用同一上限
+    static final int MAX_NAME_LENGTH = 128;
     static final int MODAL_WIDTH = 320;
     private static final int INPUT_HEIGHT = 20;
     private static final int GAP = 4;
@@ -36,9 +42,38 @@ final class RuleNameInput implements UiWidget, UiFocusTarget {
         input.setFilter(RuleNameInput::allowsCharacters);
     }
 
+    /**
+     * 解析玩家输入的规则名：完整的 `<namespace>:<path>` 保留输入命名空间，
+     * 只输入 `<path>` 时补本模组命名空间；任一段为空或未通过字符限制时返回 null。
+     *
+     * @param value 输入框原文，允许为 null
+     * @return 完整规则 id；非法时返回 null
+     */
+    static @Nullable ResourceLocation parseId(@Nullable String value) {
+        if (value == null || value.isEmpty() || value.length() > MAX_NAME_LENGTH || !allowsCharacters(value)) {
+            return null;
+        }
+        int separator = value.indexOf(NAMESPACE_SEPARATOR);
+        if (separator < 0) {
+            return ResourceLocation.tryParse(TypeLabels.OWN_NAMESPACE + NAMESPACE_SEPARATOR + value);
+        }
+        // 冒号前后都必须有内容：单独的前导冒号不构成「带命名空间」的写法
+        if (separator == 0 || separator == value.length() - 1 || value.indexOf(NAMESPACE_SEPARATOR, separator + 1) >= 0) {
+            return null;
+        }
+        return ResourceLocation.tryParse(value);
+    }
+
+    /**
+     * 输入字符限制：单个命名空间或路径段只允许小写字母、数字与下划线；
+     * 完整 id 额外允许一个冒号作为命名空间分隔符，冒号本身不参与路径字符判定。
+     *
+     * @param name 待校验的输入文本
+     * @return 是否允许输入该文本
+     */
     static boolean allowsCharacters(String name) {
         return name.chars().allMatch(character -> character >= 'a' && character <= 'z'
-                || character >= '0' && character <= '9' || character == '_');
+                || character >= '0' && character <= '9' || character == '_' || character == NAMESPACE_SEPARATOR);
     }
 
     UiTextInput input() {

@@ -646,7 +646,7 @@
   "gui.itemdespawntowhat.edit.prompt.id_hint": "命名空间:路径",
   "gui.itemdespawntowhat.edit.prompt.new_title": "新建规则",
   "gui.itemdespawntowhat.edit.prompt.name_hint": "规则名字，例如「鸡蛋变鸡」",
-  "gui.itemdespawntowhat.edit.prompt.name_help": "名称仅支持小写字母、数字和下划线",
+  "gui.itemdespawntowhat.edit.prompt.name_help": "仅支持小写字母、数字和下划线；可用「命名空间:名称」指定命名空间，否则默认使用 itemdespawntowhat",
   "gui.itemdespawntowhat.edit.prompt.invalid_name": "请填写合法的名称。",
   "gui.itemdespawntowhat.edit.rule.conditions": "条件",
   "gui.itemdespawntowhat.edit.rule.display_name": "显示名",

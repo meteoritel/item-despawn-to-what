@@ -89,6 +89,8 @@
 - `RuleEditorScreenEditPage#pollWorkspace`：轮询保存回执与草稿冲突。
 - `RuleEditorScreenListPage#refreshList`：按搜索文本、筛选条件与快照条目重建分类规则树。
 - `RuleEditorScreenListActions` 的条目动作：`RuleEditorScreenListActions#promptNewRule`、`RuleEditorScreenListActions#promptDuplicate`、`RuleEditorScreenListActions#toggleSelectedEnabled`、`RuleEditorScreenListActions#maskSelected`、`RuleEditorScreenListActions#restoreSelected`、`RuleEditorScreenListActions#deleteSelected`。
+- `RuleEditorScreenListActions#promptNewRule`：默认名由 `#nextDefaultRuleName` 生成，`new_rule` 已被快照条目或本次新建占用时依次尝试 `new_rule_1`、`new_rule_2`……取最小空闲序号。
+- `RuleNameInput#parseId`：输入含一个冒号且两端非空时按 `<namespace>:<path>` 原样解析，否则按 `<path>` 补本模组命名空间；含多个冒号或空段返回 `null`。新建与复制共用该解析。
 - `RuleEditorModel#refresh`：消费新快照，绑定磁盘草稿与内存会话。
 - `RuleEditorModel#buildChangeSetJson` / `RuleEditorModel#acceptSaved`：脏规则提交与保存后确认。
 - `RuleEditorModel#tickPersistence` / `RuleEditorModel#persistNow`：草稿的节流落盘与立即落盘；磁盘草稿的读取在构造与 `RuleEditorModel#refresh` 中完成。
@@ -154,7 +156,7 @@
 | `RuleEditorScreenListPage` | 列表页：搜索、筛选、分类规则树、配方预览与底排状态 | `RuleEditorScreenListPage#init`、`RuleEditorScreenListPage#refreshList`、`RuleEditorScreenListPage#render`、`RuleEditorScreenListPage#renderFooter`、`RuleEditorScreenListPage.Host` |
 | `RuleEditorTriggerPage` | 触发页：触发来源、触发时间、条件树摘要与画布页入口 | `RuleEditorTriggerPage#buildTrigger`、`RuleEditorTriggerPage#updateLifespanWindow`、`RuleEditorTriggerPage#sharedConditionSupport`、`RuleEditorTriggerPage#openConditionTree` |
 | `RuleEditorValidation` | 客户端保存前校验：收敛可本地判定的问题 | `RuleEditorValidation#collectIssues`、`RuleEditorValidation#issueRuleId`、`RuleEditorValidation.Host` |
-| `RuleNameInput` | 规则名输入区：名称限制提示与校验错误位 | `RuleNameInput#allowsCharacters`、`RuleNameInput#setProblem`、`RuleNameInput#preferredHeight` |
+| `RuleNameInput` | 规则名输入区：`<namespace>:<path>` / `<path>` 解析、名称限制提示与校验错误位 | `RuleNameInput#parseId`、`RuleNameInput#allowsCharacters`、`RuleNameInput#setProblem`、`RuleNameInput#preferredHeight` |
 | `RulePreviewIcons` | 列表页与动作导航共用的产出图标缓存 | `RulePreviewIcons#clear`、`RulePreviewIcons#action`、`RulePreviewIcons#rule`、`RulePreviewIcons#unavailable` |
 | `RuleRecipeView` | 配方行的只读展示快照 | `RuleRecipeView#summary`、`RuleRecipeView#tooltip`、`RuleRecipeView#render`、`RuleRecipeView#renderRow`、`RuleRecipeView#tagAt` |
 | `RuleSaveOverlay` | 保存遮罩的宿主适配 | `RuleSaveOverlay#render`、`RuleSaveOverlay#mouseClicked`、`RuleSaveOverlay#keyPressed`、`RuleSaveOverlay#requestCancel` |
