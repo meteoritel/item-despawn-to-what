@@ -52,7 +52,7 @@
 
 ### 2.5 内置实现的组织模式
 
-每个内置类型 = 一个**参数 record**（实现 `Effect`/`Condition`）+ `static final ResourceLocation ID` + 静态 `CODEC`/`codec(expressionCodec)` + 静态 `validateParams(...)` + 静态工厂 `effectType(...)`/`conditionType()`；执行/求值实现位于 `exec/`、`eval/` 子包的 `*Executor`/`*Evaluator`。`EffectExecutor.execute` 保持同步执行器的函数式接口；长计算可覆盖默认 `start` 创建独立 `EffectExecution`，由 `EffectTask` 在公共 tick 预算内推进并在完成时一次性回执。支持准备需覆盖 `prepare` 与按准备创建执行状态的重载；只提供 `execute`（含 lambda 注册）的类型沿用默认、不参与准备；效果级 `conditions` 与 `chance` 由成功转化当刻的槽位准备统一判定，准备结果为跳过时执行器直接给出该原因的 `SKIPPED`。
+每个内置类型 = 一个**参数 record**（实现 `Effect`/`Condition`）+ `static final ResourceLocation ID` + 静态 `CODEC`/`codec(expressionCodec)` + 静态 `validateParams(...)` + 静态工厂 `effectType(...)`/`conditionType()`；执行/求值实现位于 `exec/`、`eval/` 子包的 `*Executor`/`*Evaluator`。`EffectExecutor.execute` 保持同步执行器的函数式接口；长计算可覆盖默认 `start` 创建独立 `EffectExecution`，由 `EffectTask` 在公共 tick 预算内推进；真实完成量可按单位经 `EffectContext.reportProgress` 逐次回执：已逐次回执的量不在终态回执里重复计入，没有逐次回执的增量由终态 `appliedUnits` 给出。支持准备需覆盖 `prepare` 与按准备创建执行状态的重载；只提供 `execute`（含 lambda 注册）的类型沿用默认、不参与准备；效果级 `conditions` 与 `chance` 由成功转化当刻的槽位准备统一判定，准备结果为跳过时执行器直接给出该原因的 `SKIPPED`。
 
 > 命名坑：静态工厂**不能叫 `type()`**——接口已有无参实例方法 `type()`，同签名静态方法在 Java 中非法，故统一用 `effectType(...)`/`conditionType()`。
 
@@ -116,7 +116,7 @@
 | # | type | 参数 | 语义 |
 |---|---|---|---|
 | 1 | `spawn_entity` | `variant: item/entity/experience` 必填；各子类参数见下表 | 统一生成掉落物、通用实体或经验；共用概率/延迟/条件 |
-| 2 | `place_block` | `block: TaggedId`（与 `use_source_block` **至少其一**）；`use_source_block: bool`/false；`shape: square\|circle\|cross`/square；`count: int[1,64]`/1；`radius: int[1,32]`/6；`limit: Integer[1,4096]` | 按形状由内向外扩散放置方块，只替换可替换位置、不突破自身半径 |
+| 2 | `place_block` | `block: TaggedId`（与 `use_source_block` **至少其一**）；`use_source_block: bool`/false；`shape: square\|circle\|cross`/square；`count: int[1,64]`/1；`radius: int[1,32]`/6；`limit: Integer[1,4096]` | 按形状由内向外扩散放置方块，只替换可替换位置、不突破自身半径；目标方块与候选偏移由准备固定，邻域计数与放置按预算分批推进，逐块回执真实放置量 |
 | 3 | `loot_table` | `loot_table: ResourceLocation`（必填，**不支持 `#tag`**）；`luck: float[-100,100]`/0 | 以位置为原点开战利品表（CHEST 参数集，`THIS_ENTITY`=源），逐轮开表并分批生成 |
 | 4 | `lightning` | `count: int[1,16]`/1 | 第 1 道保留原点水平坐标，后续散布 r=5，间隔 8 刻；从高度图上方向下求交最上层碰撞或流体表面，贴合半砖与台阶；虚空无表面时回退高度图高度 |
 | 5 | `explosion` | `power: float[0,16]`/3.0；`fire: bool`/false；`visual_only: bool`/false | `visual_only` 只粒子+音效；否则 TNT 交互爆炸 |

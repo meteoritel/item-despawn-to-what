@@ -841,7 +841,7 @@ public final class ConversionRuntime {
                                                      ItemEntity item, BlockPos pos, Vec3 position,
                                                      ItemStack sourceSnapshot, boolean fillOrigin) {
         EffectPreparation preparation = ((EffectType<Effect>) definition).executor()
-                .prepare(effect, level, position, sourceSnapshot, fillOrigin);
+                .prepare(effect, level, position, item, sourceSnapshot, fillOrigin);
         if (preparation == null || preparation.gate() != null) {
             return preparation;
         }
