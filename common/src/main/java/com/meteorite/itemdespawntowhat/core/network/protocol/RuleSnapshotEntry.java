@@ -13,7 +13,8 @@ import java.util.List;
 /**
  * 单条规则的来源视图：客户端据此渲染"生效值 / 基础值 / 覆盖值"三态。
  * origin 取值 overlay/datapack/mixed；status 取值 active/disabled/masked/invalid。
- * category 为作者在规则原始 JSON 顶层的显式分类（覆盖层视图优先于数据包视图），未声明时为 null。
+ * category 为装配后的分类：显式声明优先（覆盖层视图优先于数据包视图），未声明时按生效效果派生；
+ * 无法派生（如已删除条目）时为 null。分类只供列表分组，不参与运行时解码与执行。
  */
 public record RuleSnapshotEntry(ResourceLocation id, String origin, String status,
                                 boolean editable, @Nullable String category,

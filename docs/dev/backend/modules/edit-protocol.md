@@ -11,7 +11,7 @@
 |---|---|
 | `RuleEditProtocol` | 协议版本常量 `VERSION = 5`；握手不一致即拒绝 |
 | `RuleSnapshot` | `{version, context_revision, List<RuleSnapshotEntry> entries, List<RuleIssue> issues}`；`serialize()`/`parse()`。客户端只按 JSON 渲染，不依赖服务端模型类 |
-| `RuleSnapshotEntry` | 单条规则的来源三视图：`{id, origin, status, editable, category, effective, base, overlay, issues}`。`origin ∈ overlay\|datapack\|mixed`，`status ∈ active\|disabled\|masked\|invalid`；`category` 为显式分类，未声明时为 `null` |
+| `RuleSnapshotEntry` | 单条规则的来源三视图：`{id, origin, status, editable, category, effective, base, overlay, issues}`。`origin ∈ overlay\|datapack\|mixed`，`status ∈ active\|disabled\|masked\|invalid`；`category` 为装配后的分类（显式声明优先，未声明时按生效效果派生；无法派生时为 `null`） |
 | `RuleEdit` | `{id, action(UPSERT\|DELETE), rule}`；upsert 必带 rule，id 归一为小写下划线 |
 | `RuleEditChangeSet` | `{expected_version, List<RuleEdit> edits}`；乐观并发基准，`serialize()`/`parse()` |
 | `RuleSaveProgress` | 不可变阶段、计数、当前内容与可取消标记；当前内容最长 512 UTF-16 单元 |
@@ -86,7 +86,7 @@
 
 - **三视图**：`base` 为数据包层原始 JSON，`overlay` 为覆盖层原始 JSON，两者都保留原文（**不做模型往返**）；`effective` 优先取**模型编码结果**（解码成功时权威），失败时退回 `overlay` 或 `base` 原文，保证客户端仍能看到内容。缺失的视图以 JSON `null` 下发，客户端按"无此视图"处理。
 - **`editable` 语义（内容存在标记）**：`editable = base != null || overlay != null`，即该条目在数据包层或覆盖层是否存在非控制条目内容（只被控制条目声明停用 / 删除时为 `false`，**纯数据包规则为 `true`**）；客户端据此决定打开表单编辑还是只展示详情——`status = invalid` 或带 error 级 issue 的条目即使 `editable = true` 也只读展示。
-- **`category`（展示分类）**：读取胜出原始视图（`overlay` 优先于 `base`）顶层的 `category`；缺失、非字符串或空白时为 `null`。只供列表分组，不进入运行时规则模型，不参与解码与执行。
+- **`category`（展示分类）**：读取胜出原始视图（`overlay` 优先于 `base`）顶层的 `category`；缺失、非字符串或空白时由 `RuleCategoryClassifier` 按生效效果的产出类别派生。显式值与派生值不一致时以显式值为准，不产生告警；已删除等无已解码规则的条目无法派生，下发 `null`。只供列表分组，不进入运行时规则模型，不参与解码与执行。
 - **`origin`**：`overlay` / `datapack` / `mixed`（两层都有即 mixed），由 `RuleSourceIndex` 归并结果判定。
 - **`status`**：控制条目声明删除→`masked`、声明停用→`disabled`；否则解码成功→`active`、解码失败→`invalid`。`invalid` 条目会带上 `severity=error` 的 `RuleIssue`（无法定位时兜底 `itemdespawntowhat.edit.issue.decode`）。
 - **`issues`**：把加载/校验问题按 `origin` / `field_path` 关联到具体条目；无法关联的问题作为快照级 issue（`origin=runtime`）下发。

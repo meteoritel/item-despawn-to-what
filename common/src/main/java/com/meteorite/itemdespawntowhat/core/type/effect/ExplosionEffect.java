@@ -11,6 +11,7 @@ import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
+import com.meteorite.itemdespawntowhat.core.model.ProductKind;
 import com.meteorite.itemdespawntowhat.core.model.SimpleEffectType;
 import com.meteorite.itemdespawntowhat.core.type.effect.exec.ExplosionExecutor;
 import com.mojang.serialization.Codec;
@@ -89,7 +90,8 @@ public record ExplosionEffect(
                 return ExplosionExecutor.start(effect, context, preparation);
             }
         };
-        return new SimpleEffectType<>(ID, codec(expressionCodec), ExplosionEffect::validateParams, executor, true);
+        return new SimpleEffectType<>(ID, codec(expressionCodec), ExplosionEffect::validateParams, executor, true,
+                ProductKind.WORLD);
     }
 
     // 参数语义校验；问题写入 issues，不抛异常

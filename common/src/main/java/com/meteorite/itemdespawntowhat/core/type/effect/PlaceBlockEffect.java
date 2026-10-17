@@ -12,6 +12,7 @@ import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
+import com.meteorite.itemdespawntowhat.core.model.ProductKind;
 import com.meteorite.itemdespawntowhat.core.model.SimpleEffectType;
 import com.meteorite.itemdespawntowhat.core.api.RefChecks;
 import com.meteorite.itemdespawntowhat.core.type.EnumCodecs;
@@ -130,7 +131,8 @@ public record PlaceBlockEffect(
                 return PlaceBlockExecutor.start(effect, context, preparation);
             }
         };
-        return new SimpleEffectType<>(ID, codec(expressionCodec), PlaceBlockEffect::validateParams, executor);
+        return new SimpleEffectType<>(ID, codec(expressionCodec), PlaceBlockEffect::validateParams, executor,
+                ProductKind.BLOCK);
     }
 
     // 参数语义校验；问题写入 issues，不抛异常
