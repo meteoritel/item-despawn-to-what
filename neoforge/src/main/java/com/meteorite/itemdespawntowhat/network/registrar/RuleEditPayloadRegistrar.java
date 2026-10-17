@@ -7,6 +7,7 @@ import com.meteorite.itemdespawntowhat.core.network.transport.HeartbeatRuleEdito
 import com.meteorite.itemdespawntowhat.core.network.transport.OpenRuleEditorPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleCatalogPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleSnapshotPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleSourceViewPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleCatalogPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditPayloadRouter;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler;
@@ -15,6 +16,8 @@ import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveProgressPa
 import com.meteorite.itemdespawntowhat.core.network.transport.CancelRuleSavePayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleSourceViewChunkPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleSourceViewPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.SaveRuleChangeSetChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.SaveRuleChangeSetPayload;
 import com.meteorite.itemdespawntowhat.runtime.RuleRuntimeHost;
@@ -89,6 +92,10 @@ public final class RuleEditPayloadRegistrar {
                 (payload, context) -> handleOnServer(context, payload, (player, body) ->
                         RuleEditServerHandler.handleLifespanRequest(player, RuleRuntimeHost.editContext(), body)));
 
+        registrar.playToServer(RequestRuleSourceViewPayload.TYPE, RequestRuleSourceViewPayload.STREAM_CODEC,
+                (payload, context) -> handleOnServer(context, payload, (player, body) ->
+                        RuleEditServerHandler.handleSourceViewRequest(player, RuleRuntimeHost.editContext(), body)));
+
         registrar.playToServer(SaveRuleChangeSetPayload.TYPE, SaveRuleChangeSetPayload.STREAM_CODEC,
                 (payload, context) -> handleOnServer(context, payload, (player, body) ->
                         RuleEditServerHandler.handleChangeSet(player, RuleRuntimeHost.editContext(), body)));
@@ -105,6 +112,14 @@ public final class RuleEditPayloadRegistrar {
         registrar.playToClient(RuleSnapshotChunkPayload.TYPE, RuleSnapshotChunkPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() ->
                         RuleEditPayloadRouter.dispatchChunk(payload)));
+
+        registrar.playToClient(RuleSourceViewPayload.TYPE, RuleSourceViewPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() ->
+                        RuleEditPayloadRouter.dispatchSourceView(payload)));
+
+        registrar.playToClient(RuleSourceViewChunkPayload.TYPE, RuleSourceViewChunkPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() ->
+                        RuleEditPayloadRouter.dispatchSourceViewChunk(payload)));
 
         registrar.playToClient(RuleSaveResultPayload.TYPE, RuleSaveResultPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() ->

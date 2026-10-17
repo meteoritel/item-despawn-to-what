@@ -2,12 +2,14 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
+import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSourceView;
 import java.util.List;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -15,7 +17,8 @@ import net.minecraft.util.FormattedCharSequence;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 基本信息页：只读规则 ID、显示名、启用、优先级与备注。
+ * 基本信息页：只读规则 ID、来源摘要，以及显示名、启用、优先级与备注表单。
+ * 来源摘要只读取已取回的来源视图；请求失败时改为提示来源对照不可用，不影响本页表单编辑。
  */
 final class RuleEditorInfoPage {
 
@@ -25,6 +28,12 @@ final class RuleEditorInfoPage {
     // 主题：与容器共用宿主默认主题
     private static final UiHostTheme THEME = RuleEditorEditPages.THEME;
 
+    // 页面文案前缀
+    private static final String UI = RuleEditorPageSupport.UI;
+
+    // 只读文本块的缩放比例（与 ID 行一致，便于两段文字共用行高口径）
+    private static final float TEXT_SCALE = 0.8F;
+
     RuleEditorInfoPage(RuleEditorEditPages pages) {
         this.pages = pages;
     }
@@ -33,20 +42,24 @@ final class RuleEditorInfoPage {
     void reset() {
         infoForm = null;
         infoIdRect = null;
+        infoSourceRect = null;
     }
 
     @Nullable FormView infoForm;
 
     @Nullable UiRect infoIdRect;
 
+    // 来源摘要（所属层 / 数据包 / 路径，或加载中 / 失败提示）
+    @Nullable UiRect infoSourceRect;
+
     void buildInfo(EditSession session) {
-        // 自上而下：只读规则 ID、显示名、启用、加高的优先级控件、多行备注；
+        // 自上而下：只读规则 ID、来源摘要、显示名、启用、加高的优先级控件、多行备注；
         // 页头只保留当前实际生效名称，页内不再重复说明文案
-        TypeEditorDescriptor descriptor = TypeEditorDescriptor.of(RuleEditorPageSupport.INFO_PAGE, Component.translatable(RuleEditorPageSupport.UI + "tab.info"), List.of(
-                EditorField.optionalText(RuleFields.DISPLAY_NAME, RuleEditorPageSupport.UI + "rule.display_name").withHint(RuleEditorPageSupport.UI + "rule.display_name_hint"),
-                EditorField.bool(RuleFields.ENABLED, RuleEditorPageSupport.UI + "rule.enabled"),
-                EditorField.integerSlider(RuleFields.PRIORITY, RuleEditorPageSupport.UI + "rule.priority", Integer.MIN_VALUE, Integer.MAX_VALUE, -100, 100).optional().withHint(RuleEditorPageSupport.UI + "rule.priority.hint"),
-                EditorField.longText(RuleFields.NOTES, RuleEditorPageSupport.UI + "rule.notes").withHint(RuleEditorPageSupport.UI + "rule.notes_hint")));
+        TypeEditorDescriptor descriptor = TypeEditorDescriptor.of(RuleEditorPageSupport.INFO_PAGE, Component.translatable(UI + "tab.info"), List.of(
+                EditorField.optionalText(RuleFields.DISPLAY_NAME, UI + "rule.display_name").withHint(UI + "rule.display_name_hint"),
+                EditorField.bool(RuleFields.ENABLED, UI + "rule.enabled"),
+                EditorField.integerSlider(RuleFields.PRIORITY, UI + "rule.priority", Integer.MIN_VALUE, Integer.MAX_VALUE, -100, 100).optional().withHint(UI + "rule.priority.hint"),
+                EditorField.longText(RuleFields.NOTES, UI + "rule.notes").withHint(UI + "rule.notes_hint")));
         infoForm = pages.newForm(session, "", descriptor);
         infoForm.useCompactSpacing();
         // 滑条与数字输入同高，备注保留三行可见高度。
@@ -63,8 +76,14 @@ final class RuleEditorInfoPage {
         int width = Math.max(0, area.width() - padding * 2);
         int y = area.y() + padding;
         int idLines = Math.max(1, idTextLines(width).size());
-        infoIdRect = new UiRect(x, y, width, (int) Math.ceil(idLines * (pages.font.lineHeight + 1) * 0.8));
-        y = pages.layoutForm(infoForm, x, infoIdRect.bottom() + 4, width);
+        infoIdRect = new UiRect(x, y, width, scaledHeight(idLines));
+        List<FormattedCharSequence> sourceLines = sourceTextLines(width);
+        if (sourceLines.isEmpty()) {
+            infoSourceRect = null;
+        } else {
+            infoSourceRect = new UiRect(x, infoIdRect.bottom() + 2, width, scaledHeight(sourceLines.size()));
+        }
+        y = pages.layoutForm(infoForm, x, (infoSourceRect == null ? infoIdRect : infoSourceRect).bottom() + 4, width);
         int bottom = y + padding;
         pages.cards.add(new RuleEditorEditPages.PageCard(new UiRect(area.x(), area.y(), area.width(), bottom - area.y()), null));
         return bottom;
@@ -73,19 +92,88 @@ final class RuleEditorInfoPage {
     List<FormattedCharSequence> idTextLines(int width) {
         RuleValue view = pages.currentView();
         String id = view == null ? "" : RuleEditorPageSupport.stringOf(view);
-        return pages.font.split(Component.literal(id), Math.max(8, (int) (width / 0.8)));
+        return pages.font.split(Component.literal(id), Math.max(8, (int) (width / TEXT_SCALE)));
+    }
+
+    // 来源摘要：已取回时展示基底 / 覆盖的层与路径；在途与失败各有提示；新建草稿没有来源
+    private List<FormattedCharSequence> sourceTextLines(int width) {
+        Component summary = sourceSummary();
+        if (summary == null || summary.getString().isBlank()) {
+            return List.of();
+        }
+        return pages.font.split(summary, Math.max(8, (int) (width / TEXT_SCALE)));
+    }
+
+    private @Nullable Component sourceSummary() {
+        EditSession session = pages.host.session();
+        if (session == null) {
+            return null;
+        }
+        String id = session.targetId();
+        EditorWorkspaceView workspace = pages.host.workspace();
+        RuleSourceView view = workspace.sourceView(id);
+        if (view != null) {
+            return describeSource(view);
+        }
+        if (workspace.sourceViewFailed(id)) {
+            return Component.translatable(UI + "source.failed");
+        }
+        if (workspace.sourceViewLoading(id)) {
+            return Component.translatable(UI + "source.loading");
+        }
+        // 本次新建的草稿在服务端还没有来源；已有条目等待请求时也落到这里
+        return Component.translatable(UI + "source.none");
+    }
+
+    // 来源摘要文本：基底与覆盖各一行，省略不存在的层
+    private static Component describeSource(RuleSourceView view) {
+        if (view.isEmpty()) {
+            return Component.translatable(UI + "source.empty");
+        }
+        Component text = Component.empty();
+        if (view.base() != null) {
+            text = Component.translatable(UI + "source.base", layerLabel(view.base()), view.base().path());
+        }
+        if (view.overlay() != null) {
+            Component overlay = Component.translatable(UI + "source.overlay", layerLabel(view.overlay()),
+                    view.overlay().path());
+            text = text.getString().isEmpty() ? overlay : text.copy().append("\n").append(overlay);
+        }
+        return text;
+    }
+
+    // 层的显示名：层标识走本地化，未知标识按原文兜底；数据包 id 跟在层名后
+    private static Component layerLabel(RuleSourceView.View view) {
+        Component layer = Component.translatableWithFallback(UI + "source.layer." + view.layer(), view.layer());
+        return view.packId() == null ? layer : layer.copy().append(" [" + view.packId() + "]");
+    }
+
+    // 缩放后的文本块高度
+    private int scaledHeight(int lines) {
+        return (int) Math.ceil(lines * (pages.font.lineHeight + 1) * TEXT_SCALE);
     }
 
     void renderInfo(GuiGraphics graphics) {
-        if (infoIdRect == null || pages.currentView() == null) {
+        if (pages.currentView() == null) {
+            return;
+        }
+        renderTextBlock(graphics, infoIdRect, idTextLines(infoIdRect == null ? 8 : infoIdRect.width()));
+        if (infoSourceRect != null) {
+            renderTextBlock(graphics, infoSourceRect, sourceTextLines(infoSourceRect.width()));
+        }
+    }
+
+    // 只读文本块：按 TEXT_SCALE 缩放绘制，行高与块高度使用同一口径
+    private void renderTextBlock(GuiGraphics graphics, @Nullable UiRect rect, List<FormattedCharSequence> lines) {
+        if (rect == null || lines.isEmpty()) {
             return;
         }
         graphics.pose().pushPose();
         try {
-            graphics.pose().translate(infoIdRect.x(), infoIdRect.y(), 0);
-            graphics.pose().scale(0.8F, 0.8F, 1);
+            graphics.pose().translate(rect.x(), rect.y(), 0);
+            graphics.pose().scale(TEXT_SCALE, TEXT_SCALE, 1);
             int lineY = 0;
-            for (FormattedCharSequence line : idTextLines(infoIdRect.width())) {
+            for (FormattedCharSequence line : lines) {
                 graphics.drawString(pages.font, line, 0, lineY, THEME.palette().textSecondary(), false);
                 lineY += pages.font.lineHeight + 1;
             }

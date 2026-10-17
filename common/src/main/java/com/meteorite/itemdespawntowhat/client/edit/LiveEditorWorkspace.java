@@ -9,6 +9,7 @@ import com.meteorite.itemdespawntowhat.core.network.protocol.RuleIssue;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveStatus;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveProgress;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshot;
+import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSourceView;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveResultPayload;
 import org.jetbrains.annotations.Nullable;
 
@@ -91,6 +92,31 @@ public final class LiveEditorWorkspace implements EditorWorkspaceView {
     @Override
     public boolean requestCatalog(RuleCatalogType type, @Nullable String filter, int page, int pageSize) {
         return this.workspace().requestCatalog(type, filter, page, pageSize);
+    }
+
+    @Override
+    public void requestSourceView(String ruleId) {
+        this.workspace().requestSourceView(ruleId);
+    }
+
+    @Override
+    public @Nullable RuleSourceView sourceView(String ruleId) {
+        return this.workspace().sourceView(ruleId);
+    }
+
+    @Override
+    public boolean sourceViewLoading(String ruleId) {
+        return this.workspace().sourceViewLoading(ruleId);
+    }
+
+    @Override
+    public boolean sourceViewFailed(String ruleId) {
+        return this.workspace().sourceViewFailed(ruleId);
+    }
+
+    @Override
+    public void retrySourceView(String ruleId) {
+        this.workspace().retrySourceView(ruleId);
     }
 
     /**

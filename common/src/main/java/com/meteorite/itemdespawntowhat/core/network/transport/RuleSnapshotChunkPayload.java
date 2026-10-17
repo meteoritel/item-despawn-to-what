@@ -13,7 +13,7 @@ import org.jetbrains.annotations.NotNull;
  * 服务端对在途分片设有上限，超过 60 秒无进展即丢弃整次传输。
  */
 public record RuleSnapshotChunkPayload(String sessionId, String requestId, String transferId,
-                                       int index, int count, String chunk) implements CustomPacketPayload {
+                                       int index, int count, String chunk) implements RuleChunkPayload {
 
     public static final Type<RuleSnapshotChunkPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(RuleEditLimits.NAMESPACE, "rule_snapshot_chunk")

@@ -225,6 +225,16 @@ final class RuleEditorScreenListActions {
             noSelection();
             return;
         }
+        // 新建草稿在服务端没有原始版本可恢复
+        if (host.model().isCreated(id)) {
+            host.setNotice(Component.translatable(UI + "source.created_restore"), THEME.palette().warning());
+            return;
+        }
+        // 来源视图取回前不提供恢复：恢复需要覆盖层来源作为依据，取回失败时只能用服务端生效视图编辑
+        if (host.workspace().sourceView(id) == null) {
+            host.setNotice(Component.translatable(UI + "source.not_ready"), THEME.palette().warning());
+            return;
+        }
         EditSession session = host.model().openSession(id);
         if (session == null) {
             noSelection();

@@ -144,6 +144,22 @@ public final class RuleEditServerHandler {
     }
 
     /**
+     * 转发来源视图请求：仅当前会话持有者有效，应答来自最近一次快照装配的来源索引。
+     *
+     * @param player 请求玩家
+     * @param context 平台运行时上下文
+     * @param payload 来源视图请求
+     */
+    public static void handleSourceViewRequest(ServerPlayer player, RuleEditServerContext context,
+                                               RequestRuleSourceViewPayload payload) {
+        RuleEditService service = readyService(player, context, sessionId(payload == null ? null : payload.sessionId()));
+        if (service == null || payload == null) {
+            return;
+        }
+        dispatch(context, player, service.requestSourceView(player, payload, tick(player)));
+    }
+
+    /**
      * 转发已授权编辑器的统一参考寿命查询。
      * @param player 请求玩家
      * @param context 平台运行时上下文

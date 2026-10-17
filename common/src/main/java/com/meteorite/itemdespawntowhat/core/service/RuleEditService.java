@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.core.service;
 import com.meteorite.itemdespawntowhat.core.api.Issue;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.IssueSeverity;
+import com.meteorite.itemdespawntowhat.core.load.RuleSourceIndex;
 import com.meteorite.itemdespawntowhat.core.network.catalog.RuleCatalogService;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalog;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
@@ -18,14 +19,18 @@ import com.meteorite.itemdespawntowhat.core.network.transport.HeartbeatRuleEdito
 import com.meteorite.itemdespawntowhat.core.network.transport.OpenRuleEditorPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleCatalogPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleSnapshotPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleSourceViewPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleCatalogPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditChunkAccumulator;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditLimits;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerContext;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveResultPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleSourceViewChunker;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleSourceViewPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.SaveRuleChangeSetChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.SaveRuleChangeSetPayload;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import org.apache.logging.log4j.LogManager;
@@ -71,6 +76,8 @@ public final class RuleEditService {
     private RuleSaveProgress sentProgress;
     private Runnable deferredReload;
     private RuleSnapshotTask pendingSnapshot;
+    // 最近一次快照装配使用的来源分层索引：来源视图按需应答的数据源，不为单条规则再读盘
+    private @Nullable RuleSourceIndex sourceIndex;
     private SnapshotRequest requestedSnapshot;
     private SnapshotRequest deliveringSnapshot;
     private final java.util.ArrayDeque<CustomPacketPayload> snapshotPackets = new java.util.ArrayDeque<>();
@@ -239,6 +246,50 @@ public final class RuleEditService {
                 payload.page(), payload.pageSize());
         return Outbound.of(new RuleCatalogPayload(payload.sessionId(), payload.requestId(),
                 type.id(), catalog.revision(), catalog.serialize(), catalog.lastPage()));
+    }
+
+    /**
+     * C2S 来源视图请求：编辑页打开某条规则时按需取回该规则的基底与覆盖原始内容及来源元数据。
+     * 数据来自最近一次快照装配的来源分层索引，不再读盘；索引未就绪、规则不存在或内容超限时回失败回执。
+     *
+     * @param player 会话持有者
+     * @param payload 来源视图请求
+     * @param tick 服务端活动刻
+     * @return 来源视图应答（整包或分片），或会话失效回执
+     */
+    public Outbound requestSourceView(ServerPlayer player, RequestRuleSourceViewPayload payload, long tick) {
+        if (!sessions.owns(payload.sessionId()) || !sessions.isOwner(player.getUUID())
+                || !sessions.confirmed(payload.sessionId())) {
+            return Outbound.of(sessionLost(payload.sessionId(), player));
+        }
+        sessions.heartbeat(payload.sessionId(), tick);
+        ResourceLocation id = ResourceLocation.tryParse(payload.ruleId());
+        if (id == null) {
+            return Outbound.of(sourceViewFailure(payload, RuleSaveStatus.INVALID_REQUEST));
+        }
+        RuleSourceIndex index = sourceIndex;
+        if (index == null) {
+            return Outbound.of(sourceViewFailure(payload, RuleSaveStatus.UNAVAILABLE));
+        }
+        RuleSourceIndex.Entry entry = null;
+        for (RuleSourceIndex.Entry candidate : index.entries()) {
+            if (candidate.id().equals(id)) { entry = candidate; break; }
+        }
+        if (entry == null) {
+            return Outbound.of(sourceViewFailure(payload, RuleSaveStatus.INVALID_REQUEST));
+        }
+        String json = RuleSnapshotAssembler.sourceView(entry).serialize();
+        List<CustomPacketPayload> packets = RuleSourceViewChunker.split(payload.sessionId(), payload.requestId(), json);
+        if (packets.isEmpty()) {
+            // 超过来源视图总量上限或分片数上限：回结构化失败，不让请求静默消失
+            return Outbound.of(sourceViewFailure(payload, RuleSaveStatus.INVALID_REQUEST));
+        }
+        return Outbound.of(packets);
+    }
+
+    // 来源视图失败回执：空 JSON + 状态码，客户端只按状态码提示
+    private RuleSourceViewPayload sourceViewFailure(RequestRuleSourceViewPayload payload, RuleSaveStatus status) {
+        return new RuleSourceViewPayload(payload.sessionId(), payload.requestId(), status.id(), "");
     }
 
     /**
@@ -523,6 +574,7 @@ public final class RuleEditService {
         deferredReload = null;
         pendingSnapshot = null;
         requestedSnapshot = null;
+        sourceIndex = null;
         snapshotPackets.clear();
         RuleEditChunkAccumulator.clearAll();
         recentResults.clear();
@@ -581,15 +633,17 @@ public final class RuleEditService {
                 requestedSnapshot = null;
                 return;
             }
-            pendingSnapshot = new RuleSnapshotTask(context, server, sessions, current.sessionId(), current.requestId(), packets -> {
+            pendingSnapshot = new RuleSnapshotTask(context, server, sessions, current.sessionId(), current.requestId(), delivery -> {
                 pendingSnapshot = null;
+                // 来源索引与快照同源：即使本次下发被替换，最新装配结果仍可作为来源视图的数据源
+                if (delivery.index() != null) { sourceIndex = delivery.index(); }
                 if (requestedSnapshot != current) { return; }
                 requestedSnapshot = null;
                 deliveringSnapshot = current;
-                if (packets.isEmpty()) {
+                if (delivery.packets().isEmpty()) {
                     snapshotPackets.add(result(current.sessionId(), "", RuleSaveStatus.UNAVAILABLE,
                             "itemdespawntowhat.edit.snapshot_failed", List.of(), List.of(), false, false));
-                } else { snapshotPackets.addAll(packets); }
+                } else { snapshotPackets.addAll(delivery.packets()); }
             });
             pendingSnapshot.schedule();
         }

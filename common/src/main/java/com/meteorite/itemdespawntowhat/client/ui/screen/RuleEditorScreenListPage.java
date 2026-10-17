@@ -205,23 +205,33 @@ final class RuleEditorScreenListPage {
         return new UiButton(THEME, host.font(), Component.translatable(labelKey), variant, action::run).setChipStyle(true);
     }
 
-    /*** 纵向菜单项，避免窄屏和英文长按钮挤出弹窗。 */
-    private record MenuAction(String key, Runnable action) { }
+    /*** 纵向菜单项，避免窄屏和英文长按钮挤出弹窗；enabled=false 的条目只给出原因提示。 */
+    private record MenuAction(String key, boolean enabled, Runnable action) { }
 
     private void openMore() {
-        if (selectedRuleId() == null) { actions.noSelection(); return; }
+        String id = selectedRuleId();
+        if (id == null) { actions.noSelection(); return; }
         UiModal modal = UiModal.create(THEME, host.font()).title(Component.translatable(UI + "button.more"));
         UiListView<MenuAction> list = new UiListView<>(THEME, host.font(),
                 (graphics, rowFont, item, index, row, selected, hovered, focused) -> graphics.drawString(rowFont,
-                        Component.translatable(UI + item.key()), row.x() + 4, row.y() + 4, THEME.palette().textPrimary(), false));
-        String id = selectedRuleId();
-        RuleValue body = id == null ? null : host.model().displayBody(id);
+                        Component.translatable(UI + item.key()), row.x() + 4, row.y() + 4,
+                        item.enabled() ? THEME.palette().textPrimary() : THEME.palette().textDisabled(), false));
+        RuleValue body = host.model().displayBody(id);
         boolean masked = body != null && body.flag(RuleFields.DELETE, false);
-        list.setItems(List.of(new MenuAction(masked ? "button.unmask" : "button.mask", actions::maskSelected),
-                new MenuAction("button.restore", actions::restoreSelected)));
+        // 「恢复原始版本」需要先取回来源视图；新建草稿没有原始版本，列表页也不发起来源视图请求
+        boolean canRestore = !host.model().isCreated(id) && host.workspace().sourceView(id) != null;
+        list.setItems(List.of(new MenuAction(masked ? "button.unmask" : "button.mask", true, actions::maskSelected),
+                new MenuAction("button.restore", canRestore, actions::restoreSelected)));
         list.setRowHeight(20);
         list.setActivateOnSingleClick(true);
-        list.setOnActivate(item -> { host.modals().close(modal); item.action().run(); });
+        list.setOnActivate(item -> {
+            host.modals().close(modal);
+            if (!item.enabled()) {
+                host.setNotice(Component.translatable(UI + "source.not_ready"), THEME.palette().warning());
+                return;
+            }
+            item.action().run();
+        });
         modal.contentWidget(list, 44).cancel(Component.translatable(UI + "button.cancel"));
         modal.preferredWidth(MORE_MODAL_WIDTH).layoutCentered(host.screenWidth(), host.screenHeight());
         host.modals().push(modal);
