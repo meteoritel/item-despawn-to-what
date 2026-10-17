@@ -62,13 +62,13 @@ The **variant** field decides what comes out: `variant` is required and takes `i
 | Field | What it does | Values | Default | Notes |
 |---|---|---|---|---|
 | `item` | Which item to produce | Item id or tag | None, required | A tag takes one random member |
-| `count` | How many items to produce | 1 to 64 | `1` | When the amount is above the stack size of the item, the mod splits it into several stacks |
+| `count` | How many items to produce | 1 to 64 | `1` | When the amount is above the stack size of the item, the mod splits it into several stacks; at most 16 stacks per tick, the rest continue on later ticks |
 
 ```json
 { "type": "itemdespawntowhat:spawn_entity", "variant": "item", "item": "minecraft:rotten_flesh", "count": 1 }
 ```
 
-What you see in game: one piece of rotten flesh lands near the trigger position, within 0.15 blocks horizontally, and players can pick it up right away. The new drop carries protection and a conversion cooldown so that the rules do not consume it again at once; see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
+What you see in game: one piece of rotten flesh lands near the trigger position, within 0.15 blocks horizontally, and players can pick it up right away. Larger amounts arrive over several ticks instead of all at once; which item comes out and how many pieces is decided the moment the conversion succeeds, not later. The new drop carries protection and a conversion cooldown so that the rules do not consume it again at once; see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
 
 ### Variant entity: Entities
 
@@ -90,14 +90,13 @@ Note: item entities (`minecraft:item`) and experience orbs (`minecraft:experienc
 
 | Field | What it does | Values | Default | Notes |
 |---|---|---|---|---|
-| `amount` | Experience points | 1 to 65536 | `1` | The mod fills orbs up to 32767 points each, so anything smaller is one orb, and the remainder goes into the last orb. It spawns at most 16 orbs per batch and keeps going until all points are out |
-| `per_source_item` | Multiply by the source items this group actually paid | `true` / `false` | `false` | `false` gives one `amount` per group; `true` multiplies it by the source items that group actually took |
+| `amount` | Experience points per source item | 1 to 65536 | `1` | The group total is `amount` times the source items that group actually took. The mod fills orbs up to 32767 points each, so anything smaller is one orb, and the remainder goes into the last orb. It spawns at most 16 orbs per batch and keeps going until all points are out |
 
 ```json
 { "type": "itemdespawntowhat:spawn_entity", "variant": "experience", "amount": 100 }
 ```
 
-What you see in game: 100 experience points fit inside one orb, so you see exactly **one** experience orb near the trigger position. Orbs land at random points on a disc of radius 0.5 blocks around the trigger position, raised 0.2 blocks above it. Only a larger amount splits into more orbs: at most 16 orbs per batch, with the next batch waiting at least one more game tick, until all points are out. Each experience effect settles its own group count on its own, and points from different effects or groups never merge. Collect them by walking over them.
+What you see in game: with a group that paid one source item, 100 experience points fit inside one orb, so you see exactly **one** experience orb near the trigger position. Orbs land at random points on a disc of radius 0.5 blocks around the trigger position, raised 0.2 blocks above it. Only a larger amount splits into more orbs: at most 16 orbs per batch, with the next batch waiting at least one more game tick, until all points are out. Each experience effect and each group computes its own points from the source items that group actually took, and points from different effects or groups never merge. Collect them by walking over them.
 
 The number of nearby experience orbs never blocks a group over experience storage. A group that also produces items or generic entities still passes their separate capacity checks.
 
