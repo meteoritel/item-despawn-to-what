@@ -94,8 +94,10 @@ public final class ConsumeFluidExecutor {
             if (result != null) {
                 return result;
             }
-            // 一格方块写入是一个不可抢占单元：预算耗尽即让出、下刻从同一位置续接；
-            // 每成功消耗一格立即经受控进度回执落账，取消时已发生的消耗不会从账目里消失。
+            // 一格方块写入是一个不可抢占单元：预算耗尽即让出、下刻从同一位置续接。
+            // 只有世界写入真的成功才推进完成量并经受控进度回执落账；写入被拒绝时停在原地，
+            // 但是次方块的读取与写入调用已经发生，工作量照记（工作量计尝试，产出计成功）。
+            // 取消时不回滚已发生的消耗，已完成的格数也不会从账目里消失。
             while (consumed < rounds) {
                 if (budget.exhausted()) {
                     return null;
@@ -128,7 +130,8 @@ public final class ConsumeFluidExecutor {
         }
     }
 
-    // 消耗触发位置的一格匹配流体；该位置已无匹配流体时返回 false，且不计费
+    // 消耗触发位置的一格匹配流体：无匹配流体、非源头或世界拒绝该写入都返回 false，不再推进完成量；
+    // 前两种情形连读取前的匹配判定都没通过，第三种则已经发生过一次方块读写尝试，工作量在尝试处记
     private static boolean consumeOne(ServerLevel level, BlockPos pos, ConsumeFluidEffect effect) {
         FluidState fluidState = level.getFluidState(pos);
         if (fluidState.isEmpty() || !matches(effect.fluid(), fluidState)) {
@@ -138,17 +141,16 @@ public final class ConsumeFluidExecutor {
             return false;
         }
         BlockState blockState = level.getBlockState(pos);
-        // 计价：一次方块读取加一次方块写入记 1 个工作单位，与放置类执行器同一口径
+        // 计价：一次方块读取加一次方块写入尝试记 1 个工作单位，与放置类执行器同一口径；
+        // 写入即使被世界拒绝，这次尝试的工作也已经发生，不因返回 false 抹掉
         StepWorkCounter.report(1);
         // 含水方块：只移除含水状态，保留方块本身
         if (blockState.hasProperty(BlockStateProperties.WATERLOGGED)
                 && blockState.getValue(BlockStateProperties.WATERLOGGED)) {
-            level.setBlock(pos, blockState.setValue(BlockStateProperties.WATERLOGGED, false), Block.UPDATE_ALL);
-            return true;
+            return level.setBlock(pos, blockState.setValue(BlockStateProperties.WATERLOGGED, false), Block.UPDATE_ALL);
         }
         // 流体方块或依赖流体存在的方块（气泡柱、海带等）：整体移除
-        level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
-        return true;
+        return level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
     }
 
     // fluid 为空表示任意流体；tag 引用按标签匹配，非 tag 比注册表对象

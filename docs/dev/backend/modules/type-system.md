@@ -141,8 +141,8 @@
 | # | type | 参数 | 语义 |
 |---|---|---|---|
 | 8 | `consume_source` | `counts: Map<TaggedId,int[1,64]>`（可选）；`count: int[1,64]`/1 | 同时是「每组源成本」的声明：整堆源物品在成功转化当刻已转入结算库存，每组开组时由结算层扣减并记账。执行器只按本组已付成本（`groupSourceCost`，缺省取 `count`）回执真实完成量，**不读源实体、不再扣库存**，因此不会重复记账 |
-| 9 | `consume_catalyst` | `items: List<TaggedId>`（必填非空）；`counts: Map<TaggedId,int[1,64]>`（可选）；`count: int[1,64]`/1；`radius: int[1,8]`/1 | 需求、半径与匹配器在派发该效果时按参数定稿，邻域库存的查询、分配与整轮扣减仍按共享预算实时完成：半径内分别支付每个引用的 `counts` 数量，缺省采用 `count`，全部付得起才扣；重叠引用共享库存；`items` 相同的 `catalyst_present` 门槛留空时，本效果（效果级条件）或 `catalyst_cost`（规则级条件）的 `count` 即其有效门槛，见 [催化剂门槛运行投影](../systems/catalyst-threshold-projection.md) |
-| 10 | `consume_fluid` | `fluid: TaggedId`/任意；`require_source: bool`/true | 位置与轮数上界在开组时定稿，逐格消耗在共享预算内推进，每个方块读写单元之前检查预算，用尽即让出、下刻从同一位置续接；每成功消耗一格立即经受控进度回执记一次完成量，终态不重复计数；每轮消耗 1 格（同 tick 同位置通常只消耗 1 格）；含水方块只去 waterlogged，否则整块置 AIR；只作实时存在条件，不参与份数预留；取消不回滚已消耗格，已完成的格数也不会从账目里抹掉 |
+| 9 | `consume_catalyst` | `items: List<TaggedId>`（必填非空）；`counts: Map<TaggedId,int[1,64]>`（可选）；`count: int[1,64]`/1；`radius: int[1,8]`/1 | 需求、半径与匹配器在本效果任务开始执行时按参数定稿，邻域库存的查询、分配与整轮扣减仍按共享预算实时完成：半径内分别支付每个引用的 `counts` 数量，缺省采用 `count`，全部付得起才扣；重叠引用共享库存；`items` 相同的 `catalyst_present` 门槛留空时，本效果（效果级条件）或 `catalyst_cost`（规则级条件）的 `count` 即其有效门槛，见 [催化剂门槛运行投影](../systems/catalyst-threshold-projection.md) |
+| 10 | `consume_fluid` | `fluid: TaggedId`/任意；`require_source: bool`/true | 位置与轮数上界在开组时定稿，逐格消耗在共享预算内推进，每个方块读写单元之前检查预算，用尽即让出、下刻从同一位置续接；每成功消耗一格立即经受控进度回执记一次完成量，终态不重复计数；方块写入被世界拒绝时不推进完成量也不计为已完成，但该次读写尝试的工作量照记（工作量计尝试、产出计成功）；每轮消耗 1 格（同 tick 同位置通常只消耗 1 格）；含水方块只去 waterlogged，否则整块置 AIR；只作实时存在条件，不参与份数预留；取消不回滚已消耗格，已完成的格数也不会从账目里抹掉 |
 
 同一条规则内**同一消耗类型只允许一次**，否则拒载。规则未声明任何 `consume_*` 时隐式消耗 1 个源物品（判定入口 `BuiltinTypeRegistries.perRoundSourceConsumption(Rule, ItemStack)`，详见 [conversion-runtime.md](conversion-runtime.md)）。
 
