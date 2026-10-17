@@ -6,6 +6,7 @@ import com.meteorite.itemdespawntowhat.client.edit.DebugTestRules;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorChangeSet;
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
+import com.meteorite.itemdespawntowhat.client.edit.RuleCategoryAssignment;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.draft.DraftConflict;
@@ -99,7 +100,7 @@ public final class RuleEditorModel {
                 iterator.remove();
                 continue;
             }
-            current.getValue().load(RuleDraft.of(body));
+            current.getValue().load(RuleDraft.of(categorySeeded(entry, body)));
             current.getValue().clearHistory();
         }
         this.createdIds.removeIf(id -> !this.sessions.containsKey(id));
@@ -172,7 +173,7 @@ public final class RuleEditorModel {
         if (body == null) {
             return null;
         }
-        EditSession session = new EditSession(id, RuleDraft.of(body));
+        EditSession session = new EditSession(id, RuleDraft.of(categorySeeded(entry, body)));
         this.sessions.put(id, session);
         // 基线取服务端「生效视图」的深拷贝快照；没有生效视图时记为不存在
         this.captureBaseline(id, entry.effective() == null ? null : RuleDraft.of(entry.effective()).root());
@@ -193,6 +194,20 @@ public final class RuleEditorModel {
         }
         RuleValue candidate = RuleDraft.of(entry.effective()).root();
         return hasRuleBody(candidate) ? candidate : null;
+    }
+
+    /**
+     * 打开会话用的规则体：把快照条目下发的分类补回草稿 JSON。
+     *
+     * <p>生效视图来自模型编码结果，不含 {@code category}；不补回的话，作者手写的分类会在
+     * 保存时丢失。分类以草稿基线形式存在，未改动直接保存不会把规则判为待保存。</p>
+     *
+     * @param entry 快照条目，允许为 null（仅本次新建或已不存在的目标）
+     * @param body 规则体，允许为 null
+     * @return 补回分类后的规则体；无分类可补时原样返回
+     */
+    private static @Nullable RuleValue categorySeeded(@Nullable RuleSnapshotEntry entry, @Nullable RuleValue body) {
+        return RuleCategoryAssignment.seed(body, entry == null ? null : entry.category());
     }
 
     // delete/enabled 控制条目不是完整规则体，不能当作空规则交给表单。
@@ -420,7 +435,7 @@ public final class RuleEditorModel {
                 // 基线缺失（既有草稿未记录基线）或内容确实变了：保守判为远端已变，交给玩家选
                 this.conflicts.put(id, new DraftConflict(id, DraftConflict.Reason.REMOTE_CHANGED));
             }
-            RuleDraft draft = RuleDraft.of(serverBody);
+            RuleDraft draft = RuleDraft.of(categorySeeded(entry, serverBody));
             draft.replaceWith(stored.draftValue());
             draft.setDeleted(stored.deleted());
             EditSession session = new EditSession(id, draft);
@@ -567,7 +582,7 @@ public final class RuleEditorModel {
             this.restoreIds.remove(id);
             return;
         }
-        session.load(RuleDraft.of(serverBody));
+        session.load(RuleDraft.of(categorySeeded(entry, serverBody)));
         session.clearHistory();
         this.createdIds.remove(id);
         this.captureBaseline(id, serverBody);

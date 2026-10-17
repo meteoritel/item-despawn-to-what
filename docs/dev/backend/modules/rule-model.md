@@ -105,7 +105,7 @@ core/api  ←──────────── core/model ──────�
 | `RuleValidation` | util | 规则语义/参数校验（两档入口） | `validate(Rule, IssueCollector, origin)`、`validate(Rule, effectTypes, conditionTypes, issues, origin)`、`validateEffect` / `validateEffectParams`、`validateConditionParams`、`validateSourceEntries` / `validateSourceReference`、`validateCatalystCost`、`validateOutcomes`、`validateConsumptionEffects`、`warnLargeSource`、`describe`、`matchesDirect` |
 | `ConsumptionDefaults` | util | 消耗类效果 id 常量与判定 | `CONSUME_SOURCE_ID` / `CONSUME_CATALYST_ID` / `CONSUME_FLUID_ID`、`isConsumption(ResourceLocation)` |
 | `ProductKind` | enum | 效果产出类别：非产出与内置分类叶子 | `NONE`、`ENTITY_ITEM`、`ENTITY_ENTITY`、`ENTITY_EXPERIENCE`、`BLOCK`、`LOOT`、`WORLD`、`EXTENSION`；`category()` |
-| `RuleCategoryClassifier` | util | 纯分类器：按生效效果与类型注册表派生规则分类 | `MIXED`、`ENTITY_MIXED`、`EXTENSION`、`classify(Rule, TypeRegistry<EffectType<?>>)` |
+| `RuleCategoryClassifier` | util | 纯分类器：按生效效果与类型注册表派生规则分类 | `MIXED`、`ENTITY_MIXED`、`EXTENSION`、`classify(Rule, TypeRegistry<EffectType<?>>)`、`classifyJson(JsonObject, TypeRegistry<EffectType<?>>)` |
 
 ## 4. 关键机制
 

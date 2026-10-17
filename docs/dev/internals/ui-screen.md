@@ -83,10 +83,13 @@
 - `RuleEditorEditPages#rebuild`：`switch (page)` 分派到 `RuleEditorInfoPage#buildInfo`、`RuleEditorInputPage#buildInput`、`RuleEditorTriggerPage#buildTrigger`、`RuleEditorResultsPage#buildResults`。
 - `RuleEditorEditPages#setPage`：切页前记录滚动偏移并结束进行中的交互，切页后清除提示并重建页面。
 - `RuleEditorEditPages#apply`：页面表单动作的 `EditSession#apply` 封装，提交后用 `DraftListInputs#capture` 与 `DraftListInputs#remap` 处理列表路径重排；`RuleEditorModel`、`RuleEditorScreenListActions`、`RuleEditorTriggerPage` 另有直接调用 `EditSession#apply` 的入口。
+- `RuleEditorEditPages#applyStructure`：结构类编辑（增删效果、改产出子类、调整顺序、删除方案）的同一入口，在结构写入后按 `RuleCategoryAssignment#follow` 同步分类；分类写入与结构改动同处一条撤销记录，撤销该次编辑时分类一并回退。
 - `RuleEditorEditPages#reveal`：按草稿路径前缀切到对应页签、候选与效果，并返回待聚焦控件。
 - `RuleEditorPageInput`：页面级输入路由，记录按下归属并只把释放与拖动派发给同一控件；结果页动作列表的拖动排序结果交给 `RuleEditorResultsPage#moveEffect`。
 - `RuleEditorScreenEditPage#save`：提交可见表单后执行 `RuleEditorValidation#collectIssues`，有阻塞问题则定位，否则把变更集交给工作区保存，回执由 `RuleEditorScreenEditPage#pollWorkspace` 轮询。
 - `RuleEditorScreenEditPage#pollWorkspace`：轮询保存回执与草稿冲突。
+- `RuleEditorInfoPage#categoryText`：分类行只读展示当前分类与来源（显式 / 自动），分类名按 `RuleCategorySkeleton#knownLabelKey` 取本地化文本，未知分类按原文显示。
+- `RuleEditorInfoPage#sourceSummary`：来源摘要只读取已取回的来源视图，按就绪 / 在途 / 失败三态呈现；请求失败只影响来源对照，不阻断本页表单编辑。
 - `RuleEditorScreenListPage#refreshList`：按搜索文本、筛选条件与快照条目重建分类规则树；已知分类的层级与顺序来自 `RuleCategorySkeleton`，只消费快照下发的分类，未知分类按原文成组并挂在扩展分组下，已知与未知的子分类统一显示计数。首载分段观测开启时输出 `CLIENT_LIST_REFRESH`（过滤、取体、预览、提示文本、建树、setRoots 与总耗时，`first=true` 表示首份快照后的首次刷新）。
 - `RuleEditorScreen#tick`：每帧消费一次新快照；首载分段观测开启时消费成功会输出 `CLIENT_APPLY`（快照进入模型的 `apply_ms`）。
 - `RuleEditorScreenListActions` 的条目动作：`RuleEditorScreenListActions#promptNewRule`、`RuleEditorScreenListActions#promptDuplicate`、`RuleEditorScreenListActions#toggleSelectedEnabled`、`RuleEditorScreenListActions#maskSelected`、`RuleEditorScreenListActions#restoreSelected`、`RuleEditorScreenListActions#deleteSelected`。
@@ -139,8 +142,8 @@
 | `RuleChangesView` | 变更清单的只读条目快照，复用配方行布局 | `RuleChangesView#preferredHeight`、`RuleChangesView#render`、`RuleChangesView#accessibleName` |
 | `RuleCostBinding` | 消耗类效果在草稿中的只读定位 | `RuleCostBinding#CONSUME_SOURCE`、`RuleCostBinding#CONSUME_CATALYST`、`RuleCostBinding#find`、`RuleCostBinding#consumeSource`、`RuleCostBinding#consumeCatalyst` |
 | `RuleCostBinding.Ref` | 命中的消耗效果位置 | `RuleCostBinding.Ref#listPath`、`RuleCostBinding.Ref#index`、`RuleCostBinding.Ref#path`、`RuleCostBinding.Ref#candidateId`、`RuleCostBinding.Ref#candidateIndex` |
-| `RuleEditorEditPages` | 四个页签的组合视图与共享状态 | `RuleEditorEditPages#page`、`RuleEditorEditPages#setPage`、`RuleEditorEditPages#rebuild`、`RuleEditorEditPages#applyToDraft`、`RuleEditorEditPages#issues`、`RuleEditorEditPages#reveal`、`RuleEditorEditPages#apply` |
-| `RuleEditorInfoPage` | 基本页：只读规则 ID、显示名、启用、优先级与备注 | `RuleEditorInfoPage#buildInfo`、`RuleEditorInfoPage#layoutInfo`、`RuleEditorInfoPage#renderInfo`、`RuleEditorInfoPage#idTextLines` |
+| `RuleEditorEditPages` | 四个页签的组合视图与共享状态 | `RuleEditorEditPages#page`、`RuleEditorEditPages#setPage`、`RuleEditorEditPages#rebuild`、`RuleEditorEditPages#applyToDraft`、`RuleEditorEditPages#issues`、`RuleEditorEditPages#reveal`、`RuleEditorEditPages#apply`、`RuleEditorEditPages#applyStructure` |
+| `RuleEditorInfoPage` | 基本页：只读规则 ID、分类（含来源）与来源摘要，并编辑显示名、启用、优先级与备注 | `RuleEditorInfoPage#buildInfo`、`RuleEditorInfoPage#layoutInfo`、`RuleEditorInfoPage#renderInfo`、`RuleEditorInfoPage#idTextLines`、`RuleEditorInfoPage#categoryTextLines`、`RuleEditorInfoPage#sourceTextLines` |
 | `RuleEditorInputPage` | 输入页：来源与消耗、催化剂与流体的存在条件、消耗参数与门槛 | `RuleEditorInputPage#buildInput`、`RuleEditorInputPage#buildPresenceSection`、`RuleEditorInputPage#onPresenceToggle`、`RuleEditorInputPage#specifySourceCost`、`RuleEditorInputPage#PresenceRow` |
 | `RuleEditorModel` | 按规则 id 的草稿会话模型与持久化 | `RuleEditorModel#refresh`、`RuleEditorModel#openSession`、`RuleEditorModel#dirtyRuleIds`、`RuleEditorModel#buildChangeSetJson`、`RuleEditorModel#tickPersistence`、`RuleEditorModel#resolveConflict` |
 | `RuleEditorOpener` | 编辑器界面实现：打开或关闭规则编辑器屏幕 | `RuleEditorOpener#bootstrap`、`RuleEditorOpener#shutdown`、`RuleEditorOpener#open`、`RuleEditorOpener#close`、`RuleEditorOpener#lastRequest` |

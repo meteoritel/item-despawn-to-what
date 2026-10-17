@@ -3,6 +3,8 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
+import com.meteorite.itemdespawntowhat.client.edit.RuleCategoryAssignment;
+import com.meteorite.itemdespawntowhat.client.edit.RuleCategorySkeleton;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
@@ -17,8 +19,9 @@ import net.minecraft.util.FormattedCharSequence;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 基本信息页：只读规则 ID、来源摘要，以及显示名、启用、优先级与备注表单。
- * 来源摘要只读取已取回的来源视图；请求失败时改为提示来源对照不可用，不影响本页表单编辑。
+ * 基本信息页：只读规则 ID、分类及其来源、来源摘要，以及显示名、启用、优先级与备注表单。
+ * 分类与来源摘要都只读展示；来源摘要只读取已取回的来源视图，请求失败时改为提示来源对照不可用，
+ * 不影响本页表单编辑。
  */
 final class RuleEditorInfoPage {
 
@@ -31,7 +34,7 @@ final class RuleEditorInfoPage {
     // 页面文案前缀
     private static final String UI = RuleEditorPageSupport.UI;
 
-    // 只读文本块的缩放比例（与 ID 行一致，便于两段文字共用行高口径）
+    // 只读文本块的缩放比例（与 ID 行一致，便于各段文字共用行高口径）
     private static final float TEXT_SCALE = 0.8F;
 
     RuleEditorInfoPage(RuleEditorEditPages pages) {
@@ -42,6 +45,8 @@ final class RuleEditorInfoPage {
     void reset() {
         infoForm = null;
         infoIdRect = null;
+        infoCategoryRect = null;
+        infoCategoryLines = null;
         infoSourceRect = null;
     }
 
@@ -49,11 +54,16 @@ final class RuleEditorInfoPage {
 
     @Nullable UiRect infoIdRect;
 
+    @Nullable UiRect infoCategoryRect;
+
+    // 分类行文本：随布局重新派生，避免每帧重复解码效果
+    @Nullable List<FormattedCharSequence> infoCategoryLines;
+
     // 来源摘要（所属层 / 数据包 / 路径，或加载中 / 失败提示）
     @Nullable UiRect infoSourceRect;
 
     void buildInfo(EditSession session) {
-        // 自上而下：只读规则 ID、来源摘要、显示名、启用、加高的优先级控件、多行备注；
+        // 自上而下：只读规则 ID、分类、来源摘要、显示名、启用、加高的优先级控件、多行备注；
         // 页头只保留当前实际生效名称，页内不再重复说明文案
         TypeEditorDescriptor descriptor = TypeEditorDescriptor.of(RuleEditorPageSupport.INFO_PAGE, Component.translatable(UI + "tab.info"), List.of(
                 EditorField.optionalText(RuleFields.DISPLAY_NAME, UI + "rule.display_name").withHint(UI + "rule.display_name_hint"),
@@ -77,13 +87,18 @@ final class RuleEditorInfoPage {
         int y = area.y() + padding;
         int idLines = Math.max(1, idTextLines(width).size());
         infoIdRect = new UiRect(x, y, width, scaledHeight(idLines));
+        // 分类只做只读展示：不进入表单，避免把展示意图变成可随意改动的字段
+        infoCategoryLines = categoryTextLines(width);
+        infoCategoryRect = new UiRect(x, infoIdRect.bottom() + 2, width,
+                scaledHeight(Math.max(1, infoCategoryLines.size())));
         List<FormattedCharSequence> sourceLines = sourceTextLines(width);
         if (sourceLines.isEmpty()) {
             infoSourceRect = null;
         } else {
-            infoSourceRect = new UiRect(x, infoIdRect.bottom() + 2, width, scaledHeight(sourceLines.size()));
+            infoSourceRect = new UiRect(x, infoCategoryRect.bottom() + 2, width, scaledHeight(sourceLines.size()));
         }
-        y = pages.layoutForm(infoForm, x, (infoSourceRect == null ? infoIdRect : infoSourceRect).bottom() + 4, width);
+        y = pages.layoutForm(infoForm, x,
+                (infoSourceRect == null ? infoCategoryRect : infoSourceRect).bottom() + 4, width);
         int bottom = y + padding;
         pages.cards.add(new RuleEditorEditPages.PageCard(new UiRect(area.x(), area.y(), area.width(), bottom - area.y()), null));
         return bottom;
@@ -93,6 +108,24 @@ final class RuleEditorInfoPage {
         RuleValue view = pages.currentView();
         String id = view == null ? "" : RuleEditorPageSupport.stringOf(view);
         return pages.font.split(Component.literal(id), Math.max(8, (int) (width / TEXT_SCALE)));
+    }
+
+    // 分类行：当前分类与来源（显式 / 自动）只读展示
+    List<FormattedCharSequence> categoryTextLines(int width) {
+        RuleValue view = pages.currentView();
+        return pages.font.split(categoryText(view), Math.max(8, (int) (width / TEXT_SCALE)));
+    }
+
+    // 分类文案：未声明分类时展示当前派生值，来源标记区分作者手写与自动派生
+    private static Component categoryText(@Nullable RuleValue view) {
+        String category = RuleCategoryAssignment.declared(view);
+        if (category == null) {
+            category = RuleCategoryAssignment.derive(view);
+        }
+        String labelKey = RuleCategorySkeleton.knownLabelKey(category);
+        Component label = labelKey == null ? Component.literal(category) : Component.translatable(labelKey);
+        Component source = Component.translatable(UI + "info.category.source." + RuleCategoryAssignment.source(view));
+        return Component.translatable(UI + "info.category", label, source);
     }
 
     // 来源摘要：已取回时展示基底 / 覆盖的层与路径；在途与失败各有提示；新建草稿没有来源
@@ -158,6 +191,7 @@ final class RuleEditorInfoPage {
             return;
         }
         renderTextBlock(graphics, infoIdRect, idTextLines(infoIdRect == null ? 8 : infoIdRect.width()));
+        renderTextBlock(graphics, infoCategoryRect, infoCategoryLines == null ? List.of() : infoCategoryLines);
         if (infoSourceRect != null) {
             renderTextBlock(graphics, infoSourceRect, sourceTextLines(infoSourceRect.width()));
         }
