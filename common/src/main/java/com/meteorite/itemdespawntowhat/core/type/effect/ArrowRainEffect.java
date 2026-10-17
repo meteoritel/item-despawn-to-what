@@ -1,5 +1,10 @@
 package com.meteorite.itemdespawntowhat.core.type.effect;
 
+import com.meteorite.itemdespawntowhat.core.api.EffectContext;
+import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
+import com.meteorite.itemdespawntowhat.core.api.EffectExecutor;
+import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
+import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
@@ -15,6 +20,10 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
@@ -128,9 +137,50 @@ public record ArrowRainEffect(
                         conditions.orElse(null))));
     }
 
-    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器
+    /**
+     * 本次箭雨在成功转化当刻固定的输入：只放已经抽定的药水效果，
+     * 或无法解析药水引用时固定下来的失败原因；不冻结任何执行期世界状态。
+     * @param potionEffects 已抽定的药水效果；列表只读、整场序列共用，套用到箭矢时再逐个复制
+     * @param failure 成功转化当刻就无法解析的失败原因；null 表示照常执行
+     */
+    public record Prepared(List<MobEffectInstance> potionEffects, @Nullable String failure)
+            implements EffectPreparation {
+
+        public Prepared {
+            potionEffects = List.copyOf(potionEffects);
+        }
+    }
+
+    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。
+    // 显式实现执行器契约：箭雨序列只能经预算内的执行状态推进，直接 execute 一律拒绝；
+    // 药水效果属标签随机抽取，须在成功转化当刻抽定并随准备结果携带，执行期不再抽取。
     public static EffectType<ArrowRainEffect> effectType(Codec<ConditionExpression> expressionCodec) {
-        return new SimpleEffectType<>(ID, codec(expressionCodec), ArrowRainEffect::validateParams, ArrowRainExecutor::execute, true);
+        EffectExecutor<ArrowRainEffect> executor = new EffectExecutor<>() {
+            @Override
+            public EffectResult execute(ArrowRainEffect effect, EffectContext context) {
+                return ArrowRainExecutor.execute(effect, context);
+            }
+
+            @Override
+            public EffectPreparation prepare(ArrowRainEffect effect, ServerLevel level, Vec3 position,
+                                             ItemStack sourceStack, boolean fillOrigin) {
+                // 只抽取药水引用：次数、拾取模式与基准位置来自效果参数与触发点，执行期世界状态不在此时冻结
+                try {
+                    return new Prepared(ArrowRainExecutor.resolvePotionEffects(effect.potionEffects(), level.random), null);
+                } catch (IllegalStateException failure) {
+                    // 加载期已校验引用，运行期无法解析属可见错误：固定下来按失败回执，不在执行期重试改写结果。
+                    // 缺失消息时退回异常描述，避免与「照常执行」的空原因混同
+                    String reason = failure.getMessage();
+                    return new Prepared(List.of(), reason == null ? failure.toString() : reason);
+                }
+            }
+
+            @Override
+            public EffectExecution start(ArrowRainEffect effect, EffectContext context, @Nullable EffectPreparation preparation) {
+                return ArrowRainExecutor.start(effect, context, preparation);
+            }
+        };
+        return new SimpleEffectType<>(ID, codec(expressionCodec), ArrowRainEffect::validateParams, executor, true);
     }
 
     // 参数语义校验；问题写入 issues，不抛异常

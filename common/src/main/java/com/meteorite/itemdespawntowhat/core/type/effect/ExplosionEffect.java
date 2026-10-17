@@ -1,5 +1,10 @@
 package com.meteorite.itemdespawntowhat.core.type.effect;
 
+import com.meteorite.itemdespawntowhat.core.api.EffectContext;
+import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
+import com.meteorite.itemdespawntowhat.core.api.EffectExecutor;
+import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
+import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
@@ -12,6 +17,9 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -58,9 +66,29 @@ public record ExplosionEffect(
                 new ExplosionEffect(power, fire, visualOnly, delayTicks, chance, conditions.orElse(null))));
     }
 
-    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器
+    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。
+    // 显式实现执行器契约：爆炸只能经预算内的执行状态推进，直接 execute 一律拒绝；
+    // 本类型没有自有的成功时输入，只声明准备阶段以让效果级条件与概率在成功转化当刻判定一次。
     public static EffectType<ExplosionEffect> effectType(Codec<ConditionExpression> expressionCodec) {
-        return new SimpleEffectType<>(ID, codec(expressionCodec), ExplosionEffect::validateParams, ExplosionExecutor::execute, true);
+        EffectExecutor<ExplosionEffect> executor = new EffectExecutor<>() {
+            @Override
+            public EffectResult execute(ExplosionEffect effect, EffectContext context) {
+                return ExplosionExecutor.execute(effect, context);
+            }
+
+            @Override
+            public EffectPreparation prepare(ExplosionEffect effect, ServerLevel level, Vec3 position,
+                                             ItemStack sourceStack, boolean fillOrigin) {
+                // 覆盖半径的区块加载与爆炸本身都属执行期实时量，此时只标记本次参与成功当刻判定
+                return EffectPreparation.ready();
+            }
+
+            @Override
+            public EffectExecution start(ExplosionEffect effect, EffectContext context, @Nullable EffectPreparation preparation) {
+                return ExplosionExecutor.start(effect, context, preparation);
+            }
+        };
+        return new SimpleEffectType<>(ID, codec(expressionCodec), ExplosionEffect::validateParams, executor, true);
     }
 
     // 参数语义校验；问题写入 issues，不抛异常
