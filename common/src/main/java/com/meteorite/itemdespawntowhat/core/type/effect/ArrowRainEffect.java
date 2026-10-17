@@ -22,6 +22,7 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.resources.ResourceLocation;
@@ -163,7 +164,7 @@ public record ArrowRainEffect(
 
             @Override
             public EffectPreparation prepare(ArrowRainEffect effect, ServerLevel level, Vec3 position,
-                                             ItemStack sourceStack, boolean fillOrigin) {
+                                             ItemEntity sourceEntity, ItemStack sourceStack, boolean fillOrigin) {
                 // 只抽取药水引用：次数、拾取模式与基准位置来自效果参数与触发点，执行期世界状态不在此时冻结
                 try {
                     return new Prepared(ArrowRainExecutor.resolvePotionEffects(effect.potionEffects(), level.random), null);

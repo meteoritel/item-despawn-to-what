@@ -18,6 +18,7 @@ import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
@@ -69,7 +70,7 @@ public record LightningEffect(
 
             @Override
             public EffectPreparation prepare(LightningEffect effect, ServerLevel level, Vec3 position,
-                                             ItemStack sourceStack, boolean fillOrigin) {
+                                             ItemEntity sourceEntity, ItemStack sourceStack, boolean fillOrigin) {
                 // 落点高度、地表与区块加载都属执行期实时量，此时只标记本次参与成功当刻判定
                 return EffectPreparation.ready();
             }

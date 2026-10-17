@@ -222,9 +222,12 @@ public final class ArrowRainExecutor {
     /**
      * 解析药水效果引用：非 tag 引用解析失败即抛异常，tag 展开为空则跳过该条。
      * 只在成功转化当刻的准备阶段调用一次，结果随准备结果携带，序列推进期间不再重新抽取。
+     * 返回值是只读列表，元素是原版可变的 {@link MobEffectInstance}；真正复制发生在套用到箭矢时
+     * （生成每支箭都 {@code new MobEffectInstance(potionEffect)}），因此本次抽取结果不会被某支箭的后续修改污染。
      * @param specs 参数中声明的药水效果列表，可为 null
      * @param random 抽取 tag 成员所用的随机源
-     * @return 本次解析出的药水效果实例，元素为不可变值
+     * @return 本次解析出的药水效果实例的只读列表；元素为原版可变实例，套用时逐个复制
+     * @throws IllegalStateException 参数里写的是具体药水 id 却解析不到该药水时抛出（tag 展开为空不抛，只跳过该条）
      */
     public static List<MobEffectInstance> resolvePotionEffects(List<ArrowRainEffect.PotionEffectSpec> specs,
                                                                RandomSource random) {

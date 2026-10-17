@@ -35,7 +35,7 @@ core/api  ←──────────── core/model ──────�
 | `EffectContext` | interface | 效果执行上下文（可产生副作用） | `level()` / `source()` / `sourceStack()` / `position()` / `random()` / `ruleId()` / `rounds()` / `coveredSourceItems()` / `outcomeId()` / `groupIndex()` / `groupCount()` / `groupSourceCost()` / `schedule(int,Runnable)` / `reportProgress(int)` / `safeSpawn()` / `fillOrigin()` / `positionSearchChecksPerTick()` |
 | `ConditionResult` | enum | 条件求值四态 | `MATCH` / `NO_MATCH` / `UNAVAILABLE` / `ERROR`；`isMatch()`（仅 MATCH 为真） |
 | `Evaluability` | enum | 可求值性前置门禁 | `AVAILABLE` / `UNAVAILABLE` |
-| `EffectPreparation` | interface | 成功转化当刻固定的效果输入（按候选 id + 槽序号 + 组序号唯一，同槽不同组各一份） | `gate()`（默认 `null`；非空 = 按该原因记 `SKIPPED`）+ `ready()` / `gated(String)`；类型私有负载由该类型自己的不可变记录实现本接口承载 |
+| `EffectPreparation` | interface | 成功转化当刻固定的效果输入（按候选 id + 槽序号 + 组序号唯一，同槽不同组各一份） | `gate()`（默认 `null`；非空 = 按该原因记 `SKIPPED`）+ `ready()` / `gated(String)`；类型自有负载由该类型自己的准备记录实现本接口承载（记录字段只读；负载元素不保证不可变，使用方套用时自行复制） |
 | `EffectResult` | record | 效果执行回执（结算记账唯一依据） | `outcome`（`APPLIED`/`DEFERRED`/`SKIPPED`/`FAILED`）+ `appliedUnits` + `pendingUnits`（两者均为 `long`）+ `oneShot` + `detail`；`applied(...)` / `deferred(...)` / `skipped(...)` / `failed(...)` / `asOneShot()` / `counted()` |
 | `ClimateSampler` / `ClimateSample` | interface / record | 6 参数气候采样（温度/湿度/大陆性/侵蚀/深度/怪异度） | `sample(BlockPos)` |
 | `TagLookup` | interface | 5 类标签成员查询（方块 / 实体 / 生物群系 / 流体 / 药水效果；物品标签由候选索引展开）；标签不存在返回 false | `blockInTag` / `entityInTag` / `biomeInTag` / `fluidInTag` / `mobEffectInTag` |
