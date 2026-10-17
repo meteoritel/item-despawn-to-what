@@ -19,6 +19,7 @@ import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
@@ -88,7 +89,7 @@ public record WeatherEffect(
 
             @Override
             public EffectPreparation prepare(WeatherEffect effect, ServerLevel level, Vec3 position,
-                                             ItemStack sourceStack, boolean fillOrigin) {
+                                             ItemEntity sourceEntity, ItemStack sourceStack, boolean fillOrigin) {
                 // 采用成功转化当刻固定输入的路径：效果级条件与概率在此后同刻判定并随任务携带；
                 // 天气世界状态（天空光、当前天气）不在此刻冻结，留到执行时实时读取
                 return EffectPreparation.ready();
