@@ -42,7 +42,7 @@ Three things worth knowing:
 - **Work spreads over several ticks**: when one effect has to produce many things, the mod does not stack them all up in a single tick but finishes them over several ticks, with at most 16 item entities per batch, 8 entities per tick, and 128 block positions per tick. Players watch the results appear one batch at a time.
 - **Chance and conditions belong to one effect**: every effect rolls its own `chance` and evaluates its own `conditions`. When one effect fails its roll, the other effects of the same group still run.
 - **One effect failing does not stop the others**: when an effect errors out at run time, for example because an item it refers to no longer exists after a data pack update, the mod records that failure and continues with the next effect. Nothing already done rolls back, and the whole rule is not cancelled. The failure appears in the result; for how to trace it, see [Getting Started](en-01-getting-started).
-- **Timing of the check**: the mod evaluates `conditions` and rolls `chance` at the moment the effect is due to run, after its delay, not when the rule fires.
+- **Timing of the check**: effects that need their input fixed when the conversion succeeds, such as `place_block` (which decides at that moment what to place, where the candidates are and the cap), also evaluate `conditions` and roll `chance` right then; a later delay or an already consumed source item no longer changes the result. Effects without fixed input still evaluate `conditions` and roll `chance` at the moment they are due to run, after their delay.
 - **Every group runs the effects once**: each group that starts runs the effects once, so `count` is the amount for that single run and a loot table rolls once per group. For how a whole stack splits into groups, see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
 - **A cap of 32**: one rule can hold at most 32 effects in total, counting the `effects` of every candidate. A rule above the cap is rejected.
 - **One-shot effects**: `arrow_rain`, `lightning`, `explosion`, and `weather` are one-shot. They play once for a given source, they do not repeat with the group count, and they take no part in the capacity check of a candidate. Each source gets at most one attempt at them: a failed roll, unmet conditions, and a run-time error all count as that one attempt.
@@ -62,13 +62,13 @@ The **variant** field decides what comes out: `variant` is required and takes `i
 | Field | What it does | Values | Default | Notes |
 |---|---|---|---|---|
 | `item` | Which item to produce | Item id or tag | None, required | A tag takes one random member |
-| `count` | How many items to produce | 1 to 64 | `1` | When the amount is above the stack size of the item, the mod splits it into several stacks |
+| `count` | How many items to produce | 1 to 64 | `1` | When the amount is above the stack size of the item, the mod splits it into several stacks; at most 16 stacks per tick, the rest continue on later ticks |
 
 ```json
 { "type": "itemdespawntowhat:spawn_entity", "variant": "item", "item": "minecraft:rotten_flesh", "count": 1 }
 ```
 
-What you see in game: one piece of rotten flesh lands near the trigger position, within 0.15 blocks horizontally, and players can pick it up right away. The new drop carries protection and a conversion cooldown so that the rules do not consume it again at once; see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
+What you see in game: one piece of rotten flesh lands near the trigger position, within 0.15 blocks horizontally, and players can pick it up right away. Larger amounts arrive over several ticks instead of all at once; which item comes out and how many pieces is decided the moment the conversion succeeds, not later. The new drop carries protection and a conversion cooldown so that the rules do not consume it again at once; see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
 
 ### Variant entity: Entities
 
@@ -90,14 +90,13 @@ Note: item entities (`minecraft:item`) and experience orbs (`minecraft:experienc
 
 | Field | What it does | Values | Default | Notes |
 |---|---|---|---|---|
-| `amount` | Experience points | 1 to 65536 | `1` | The mod fills orbs up to 32767 points each, so anything smaller is one orb, and the remainder goes into the last orb. It spawns at most 16 orbs per batch and keeps going until all points are out |
-| `per_source_item` | Multiply by the source items this group actually paid | `true` / `false` | `false` | `false` gives one `amount` per group; `true` multiplies it by the source items that group actually took |
+| `amount` | Experience points per source item | 1 to 65536 | `1` | The group total is `amount` times the source items that group actually took. The mod fills orbs up to 32767 points each, so anything smaller is one orb, and the remainder goes into the last orb. It spawns at most 16 orbs per batch and keeps going until all points are out |
 
 ```json
 { "type": "itemdespawntowhat:spawn_entity", "variant": "experience", "amount": 100 }
 ```
 
-What you see in game: 100 experience points fit inside one orb, so you see exactly **one** experience orb near the trigger position. Orbs land at random points on a disc of radius 0.5 blocks around the trigger position, raised 0.2 blocks above it. Only a larger amount splits into more orbs: at most 16 orbs per batch, with the next batch waiting at least one more game tick, until all points are out. Each experience effect settles its own group count on its own, and points from different effects or groups never merge. Collect them by walking over them.
+What you see in game: with a group that paid one source item, 100 experience points fit inside one orb, so you see exactly **one** experience orb near the trigger position. Orbs land at random points on a disc of radius 0.5 blocks around the trigger position, raised 0.2 blocks above it. Only a larger amount splits into more orbs: at most 16 orbs per batch, with the next batch waiting at least one more game tick, until all points are out. Each experience effect and each group computes its own points from the source items that group actually took, and points from different effects or groups never merge. Collect them by walking over them.
 
 The number of nearby experience orbs never blocks a group over experience storage. A group that also produces items or generic entities still passes their separate capacity checks.
 
@@ -181,7 +180,7 @@ What you see in game: cobblestone fills in from the inside out across a circle o
 { "type": "itemdespawntowhat:loot_table", "loot_table": "minecraft:chests/simple_dungeon", "luck": 0, "chance": 0.5 }
 ```
 
-What you see in game: with a 50 percent chance the mod rolls the simple dungeon chest loot table once and the results scatter near the trigger position. The roll uses the trigger position as its origin and hands the source entity to the table as the acting entity, the same way a chest does. It provides no killer, so entries that need a player kill never apply.
+What you see in game: with a 50 percent chance the mod rolls the simple dungeon chest loot table once and the results scatter near the trigger position. The roll uses the trigger position as its origin and hands the source entity to the table as the acting entity, the same way a chest does. It provides no killer, so entries that need a player kill never apply. The table is rolled exactly once, at the moment the conversion succeeds: a delayed or multi-tick delivery never re-rolls, and an empty roll simply drops nothing.
 
 ## Lightning (lightning)
 
@@ -261,7 +260,7 @@ Consumption effects consume their materials at the moment a group starts: `consu
 }
 ```
 
-What you see in game: the source items this conversion used drop by the stated amount; when fewer items are available the mod takes what it can and never goes below zero. For the implicit consumption that applies when a rule declares no consumption at all, see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
+What you see in game: the source items this conversion used drop by the stated amount. This is the same cost as `source_cost`: settlement takes it from the source stack it already holds, once per group, and the effect itself never takes a second bite. For the implicit consumption that applies when a rule declares no consumption at all, see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
 
 ### Consume Catalyst (consume_catalyst)
 
@@ -293,7 +292,7 @@ What you see in game: the mod takes 1 bone meal from the closest one near the tr
 { "type": "itemdespawntowhat:consume_fluid", "fluid": "minecraft:water", "require_source": true }
 ```
 
-What you see in game: each round the mod takes the water in the trigger block. For waterlogged blocks, such as waterlogged stairs and slabs, it removes only the water and keeps the block. For a plain fluid block it clears the whole block.
+What you see in game: each round the mod takes the water in the trigger block. For waterlogged blocks, such as waterlogged stairs and slabs, it removes only the water and keeps the block. For a plain fluid block it clears the whole block. Each block cleared counts as one real completion; when the server tick budget runs out the effect pauses and continues from the same block on the next tick.
 
 ### How They Relate to Rule-Level Costs
 

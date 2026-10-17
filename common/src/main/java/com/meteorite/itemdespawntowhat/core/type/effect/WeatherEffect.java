@@ -1,5 +1,10 @@
 package com.meteorite.itemdespawntowhat.core.type.effect;
 
+import com.meteorite.itemdespawntowhat.core.api.EffectContext;
+import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
+import com.meteorite.itemdespawntowhat.core.api.EffectExecutor;
+import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
+import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
@@ -13,6 +18,10 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -68,9 +77,30 @@ public record WeatherEffect(
                 new WeatherEffect(mode, durationTicks, thundering, delayTicks, chance, conditions.orElse(null))));
     }
 
-    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器
+    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。
+    // 显式实现准备入口：效果级条件与概率在成功转化当刻判定，天气世界写延后到到期时按固定输入执行；
+    // 需要准备的类型用显式实现覆盖 prepare 与按准备创建执行状态的重载（lambda 只能表达 execute）。
     public static EffectType<WeatherEffect> effectType(Codec<ConditionExpression> expressionCodec) {
-        return new SimpleEffectType<>(ID, codec(expressionCodec), WeatherEffect::validateParams, WeatherExecutor::execute, true);
+        EffectExecutor<WeatherEffect> executor = new EffectExecutor<>() {
+            @Override
+            public EffectResult execute(WeatherEffect effect, EffectContext context) {
+                return WeatherExecutor.execute(effect, context);
+            }
+
+            @Override
+            public EffectPreparation prepare(WeatherEffect effect, ServerLevel level, Vec3 position,
+                                             ItemEntity sourceEntity, ItemStack sourceStack, boolean fillOrigin) {
+                // 采用成功转化当刻固定输入的路径：效果级条件与概率在此后同刻判定并随任务携带；
+                // 天气世界状态（天空光、当前天气）不在此刻冻结，留到执行时实时读取
+                return EffectPreparation.ready();
+            }
+
+            @Override
+            public EffectExecution start(WeatherEffect effect, EffectContext context, @Nullable EffectPreparation preparation) {
+                return WeatherExecutor.start(effect, context, preparation);
+            }
+        };
+        return new SimpleEffectType<>(ID, codec(expressionCodec), WeatherEffect::validateParams, executor, true);
     }
 
     // 参数语义校验；问题写入 issues，不抛异常

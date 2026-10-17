@@ -11,8 +11,6 @@ import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
-import java.util.function.IntConsumer;
-import java.util.function.IntUnaryOperator;
 
 /**
  * 效果执行器共享的引用解析与空间查询助手。
@@ -62,34 +60,40 @@ public final class EffectTargets {
         return center.add(Math.cos(angle) * distance, height, Math.sin(angle) * distance);
     }
 
-    // 实际生成位置可能越过源区块边界；保留实体等区块加载后再加入。
-    static void addEntity(EffectContext context, net.minecraft.world.entity.Entity entity) {
-        addEntity(context, entity, false);
-    }
-
-    // 产物反馈随延迟加入任务保留，箭雨与闪电沿用各自的原版视觉表现。
-    static void addEntityProduct(EffectContext context, net.minecraft.world.entity.Entity entity) {
-        addEntity(context, entity, true);
-    }
-
-    private static void addEntity(EffectContext context, net.minecraft.world.entity.Entity entity, boolean productFeedback) {
+    /**
+     * 立即把实体写入世界，不自行排期：区块未加载时直接返回 false，由调用方按自身节奏重试。
+     * 供在共享预算内逐单位推进、且只在真实写入后才回执完成量的执行器使用；
+     * 回执时机由调用方掌握，本方法不产生任何进度或账目变更。
+     *
+     * @param context         本组执行上下文
+     * @param entity          待加入世界的实体
+     * @param productFeedback 是否播放入世界视觉反馈
+     * @return 已写入世界返回 true；邻区块未加载返回 false
+     */
+    static boolean addEntityNow(EffectContext context, net.minecraft.world.entity.Entity entity, boolean productFeedback) {
         if (!com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks.contains(context.level(), entity.blockPosition())) {
-            context.schedule(20, () -> addEntity(context, entity, productFeedback));
-        } else {
-            if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().prepareOutput(context, entity); }
-            if (!context.level().addFreshEntity(entity)) {
-                throw new IllegalStateException("实体生成被拒绝：规则=" + context.ruleId() + " 类型=" + entity.getType());
-            }
-            if (productFeedback) { VisualFeedback.entitySpawn(context.level(), entity.position()); }
-            if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().outputAdded(context, entity); }
+            return false;
         }
+        if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().prepareOutput(context, entity); }
+        if (!context.level().addFreshEntity(entity)) {
+            throw new IllegalStateException("实体生成被拒绝：规则=" + context.ruleId() + " 类型=" + entity.getType());
+        }
+        if (productFeedback) { VisualFeedback.entitySpawn(context.level(), entity.position()); }
+        if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().outputAdded(context, entity); }
+        return true;
     }
 
-    // 转化产物加入世界：显式区别于其它实体来源，只在这里授予新产物临时保护与冷却；
-    // 授予动作与返还物共用 ReturnItemSpawner.applyGrant，避免两处状态语义漂移
-    static void addConversionProduct(EffectContext context, net.minecraft.world.entity.item.ItemEntity product) {
+    /**
+     * 立即把转化产物写入世界：先授予新产物保护与冷却，再按 {@link #addEntityNow} 加入。
+     * 授予与加入落在同一实体上；未写入时不计完成量，重试和实体生命周期由调用方管理。
+     *
+     * @param context 本组执行上下文
+     * @param product 已构造好的掉落物产物
+     * @return 已写入世界返回 true；邻区块未加载返回 false
+     */
+    static boolean addConversionProductNow(EffectContext context, net.minecraft.world.entity.item.ItemEntity product) {
         ReturnItemSpawner.applyGrant(product, ReturnItemSpawner.Kind.CONVERSION_PRODUCT);
-        addEntityProduct(context, product);
+        return addEntityNow(context, product, true);
     }
 
     // 饱和加法：避免计数溢出为负数
@@ -104,37 +108,4 @@ public final class EffectTargets {
         return product >= Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) product;
     }
 
-    // 大量产出拆为小批次；保留游标继续执行，不因每刻预算丢弃剩余数量。
-    static void forEachStep(EffectContext context, int count, int batchSize, IntConsumer operation) {
-        forEachStep(context, count, batchSize, remaining -> remaining, operation);
-    }
-
-    // 带容量上限的重载：每批实际处理量再受 capacity（剩余容量）夹紧，容量为 0 时不以空批空转
-    static void forEachStep(EffectContext context, int count, int batchSize, IntUnaryOperator capacity, IntConsumer operation) {
-        new StepBatch(context, count, batchSize, capacity, operation).run();
-    }
-
-    /** 分批世界操作的游标；仅由服务端线程访问。 */
-    private static final class StepBatch implements Runnable {
-        private final EffectContext context;
-        private final int count;
-        private final int batchSize;
-        private final IntConsumer operation;
-        private final IntUnaryOperator capacity;
-        private int cursor;
-        private StepBatch(EffectContext context, int count, int batchSize, IntUnaryOperator capacity, IntConsumer operation) {
-            this.context = context; this.count = count; this.batchSize = batchSize; this.operation = operation; this.capacity = capacity;
-        }
-        @Override
-        public void run() {
-            if (!com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks.containsArea(context.level(), BlockPos.containing(context.position()), 1)) {
-                context.schedule(20, this); return;
-            }
-            int available = Math.max(0, capacity.applyAsInt(count - cursor));
-            int end = (int) Math.min(count, (long) cursor + Math.min(batchSize, available));
-            if (end == cursor) { return; }
-            while (cursor < end) { operation.accept(cursor++); }
-            if (cursor < count) { context.schedule(1, this); }
-        }
-    }
 }

@@ -5,7 +5,8 @@ package com.meteorite.itemdespawntowhat.core.api;
  * appliedUnits 为「实际完成量」（物品件数 / 实体个数 / 方块数 / 经验点数 / 世界效果次数），
  * pendingUnits 为「已受理但尚未完成量」（分批生成、延迟生成），
  * 二者由异步批次通过 {@link EffectContext#reportProgress(int)} 逐步收敛。
- * oneShot 标记一次性世界效果：不参与容量计算，对同一源最多尝试一组。
+ * oneShot 只是回执附带的一次性标记，不参与准入判定：某类型是否不参与容量计算、
+ * 同一源最多尝试一组，由该类型注册声明的 `EffectType.oneShot()` 决定。
  */
 public record EffectResult(Outcome outcome, long appliedUnits, long pendingUnits, boolean oneShot, String detail) {
 
@@ -59,7 +60,7 @@ public record EffectResult(Outcome outcome, long appliedUnits, long pendingUnits
         return new EffectResult(Outcome.FAILED, 0, 0, false, reason);
     }
 
-    // 标记为一次性世界效果（运行时按效果类型的注册信息补写）
+    // 标记为一次性世界效果回执：由执行器自行附带，仅供观测，不参与准入判定
     public EffectResult asOneShot() {
         return oneShot ? this : new EffectResult(outcome, appliedUnits, pendingUnits, true, detail);
     }

@@ -51,14 +51,4 @@ public record RuleLoadContext(
         return new RuleLoadContext(resourceManager, overlayRoot, overlayNamespace,
                 registryAccess, effectTypes, conditionTypes, layerResolver, null);
     }
-
-    // 只加载 config 覆盖层（单人本地调试与命令校验使用）
-    public static RuleLoadContext overlayOnly(Path overlayRoot,
-                                              String overlayNamespace,
-                                              RegistryAccess registryAccess,
-                                              TypeRegistry<EffectType<?>> effectTypes,
-                                              TypeRegistry<ConditionType<?>> conditionTypes) {
-        return new RuleLoadContext(null, overlayRoot, overlayNamespace,
-                registryAccess, effectTypes, conditionTypes, PackLayerResolver.allWorld(), null);
-    }
 }

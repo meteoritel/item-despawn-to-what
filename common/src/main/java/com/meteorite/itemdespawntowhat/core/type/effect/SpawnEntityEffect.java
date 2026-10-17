@@ -1,5 +1,10 @@
 package com.meteorite.itemdespawntowhat.core.type.effect;
 
+import com.meteorite.itemdespawntowhat.core.api.EffectContext;
+import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
+import com.meteorite.itemdespawntowhat.core.api.EffectExecutor;
+import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
+import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
@@ -11,6 +16,10 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
 /** 统一实体生成效果：按 variant 分发产物，公共执行字段只定义一次。 */
@@ -29,9 +38,29 @@ public record SpawnEntityEffect(EntityProduct product, int delayTicks, double ch
                 new SpawnEntityEffect(product, delay, chance, conditions.orElse(null))));
     }
 
-    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器
+    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。
+    // 显式实现准备入口：三个产出子类的引用与产出量都在成功转化当刻固定，交付期不再读原源实体。
     public static EffectType<SpawnEntityEffect> effectType(Codec<ConditionExpression> expressionCodec) {
-        return new SimpleEffectType<>(ID, codec(expressionCodec), SpawnEntityEffect::validateParams, SpawnEntityExecutor::execute);
+        EffectExecutor<SpawnEntityEffect> executor = new EffectExecutor<>() {
+            @Override
+            public EffectResult execute(SpawnEntityEffect effect, EffectContext context) {
+                return SpawnEntityExecutor.execute(effect, context);
+            }
+
+            @Override
+            public @Nullable EffectPreparation prepare(SpawnEntityEffect effect, ServerLevel level, Vec3 position,
+                                                       ItemEntity sourceEntity, ItemStack sourceStack,
+                                                       boolean fillOrigin) {
+                return SpawnEntityExecutor.prepare(effect, level, position, sourceEntity, sourceStack, fillOrigin);
+            }
+
+            @Override
+            public EffectExecution start(SpawnEntityEffect effect, EffectContext context,
+                                         @Nullable EffectPreparation preparation) {
+                return SpawnEntityExecutor.start(effect, context, preparation);
+            }
+        };
+        return new SimpleEffectType<>(ID, codec(expressionCodec), SpawnEntityEffect::validateParams, executor);
     }
 
     // 参数语义校验：子类选择必填，随后交给对应子类校验自身字段

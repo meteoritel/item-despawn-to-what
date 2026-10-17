@@ -24,7 +24,7 @@
 各任务种类的实际来源：
 
 - `CONDITION_CHECK` —— `ConversionRuntime.scheduleCheck`（到期检查、退避重试、`deferNaturalExpiry` 的最后一次检查）。
-- `EFFECT` —— `ConversionSettlement`（转化结算：计划 / 派发 / 交付三阶段）与 `RuntimeEffectContext.schedule`（延迟效果）。
+- `EFFECT` —— `ConversionSettlement`（转化结算：计划 / 派发 / 交付三阶段）与 `EffectTask`（单个效果在共享预算内续接的执行状态）。
 - `REBATE` —— `SettlementRecovery`（停服 / 卸载后重启的返还交付）。
 - `MAINTENANCE` —— `RunnableTask` 未指定种类时的缺省，以及 `RuleSaveTask` / `RuleSnapshotTask` 的保存、快照和重载续接。文件 I/O 与 JSON 拼接/解析/装配在串行后台队列中进行，公共预算只推进服务端线程上的步骤。
 - `WORLD_SEARCH` —— 已声明的种类，当前没有任务使用。
@@ -44,7 +44,7 @@ usedWorkUnits >= maxWorkUnitsPerTick        # 全局工作量上限
 - 工作量上限 `maxWorkUnitsPerTick` = `effectiveMaxWorkUnitsPerTick()`（`max_work_units_per_tick`，缺省回退 `max_checks_per_tick`，默认 **512**）。
 - 两者**任一耗尽** `exhausted()` 即为真；调用方必须在**每个任务之间**检查。
 - **扣费口径**：调度器在每步前后开一个**线程隔离的工作量窗口**，步骤内产生的真实世界操作量由执行代码主动上报；每步结束后取「任务步骤回执」与「步骤内上报量」的**较大值**扣费，因此只回执固定值的任务不会再低估自身成本。窗口按深度计数，最外层关闭时汇总，非正数上报与窗口外上报一律忽略。
-- **回执来源**：放置方块、生成实体、生成物品、爆炸四个执行器按真实世界操作量上报；到期搬运固定 `chargeDrain()` = 1` 个工作量并单独计数；`ConversionSettlement` 在容量 / 催化剂查询处还会额外 `charge`（例如每次世界查询 `CAPACITY_QUERY_UNITS = 2`）。
+- **回执来源**：放置方块、生成实体、生成物品、经验产出、战利品交付、爆炸、闪电与箭雨八个执行器按真实世界操作量上报（战利品交付每个真正写入世界的掉落物实体记 1 个工作单位；经验每球真实写入世界后记 1 个工作单位，产出进度另按点数回执）；到期搬运固定 `chargeDrain()` = 1` 个工作量并单独计数；`ConversionSettlement` 在容量 / 催化剂查询处还会额外 `charge`（例如每次世界查询 `CAPACITY_QUERY_UNITS = 2`）。多次事件类效果（闪电 / 箭雨）每步最多完成一次世界操作，之后按内部到期刻让出（闪电间隔 8 刻、箭雨间隔 2 刻、等待区块 20 刻）；单次破坏型爆炸按 `EXPLOSION_WORK_UNITS = 128` 一次性计入，视觉分支不计费。`consume_fluid` 每次真实方块读写尝试按 1 个工作单位上报（写入被拒绝的尝试同样计入，产出另按成功计），`consume_catalyst` 的邻域查询与逐项支付经 `charge` 逐次计费。
 - **提交时机**：耗尽判定是**无副作用纯查询**；超额度截断与「本 tick 已耗尽」标记只在扣费与收尾提交时落地，查询本身不改变预算状态。任何情况下都不越过本 tick 上限。
 
 **效果类的单独限额**：`effects_work_units_per_tick`（默认 64）。`EFFECT` lane 在本 tick 累计消耗的工作量达到该值后，本轮内被跳过，**避免效果类吃掉全部公共额度**而饿死条件检查。

@@ -2,9 +2,6 @@ package com.meteorite.itemdespawntowhat.core.runtime;
 
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerScheduler;
-import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
-import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
-import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
@@ -16,8 +13,8 @@ import java.util.function.IntConsumer;
 
 /**
  * 效果执行上下文的服务端实现。
- * 延迟任务经公共服务器调度器登记，绑定"维度 realm + 位置"；源实体可能已消失，执行器需自行容错。
- * 每个转化组各持有一个实例，异步批次通过进度回执把「已受理」收敛为「已完成」。
+ * 每个转化组各持有一个实例；跨 tick 的推进只经执行状态的 {@code advance} 返回继续请求，
+ * 异步批次通过进度回执把「已受理」收敛为「已完成」。
  */
 public final class RuntimeEffectContext implements EffectContext {
 
@@ -27,7 +24,6 @@ public final class RuntimeEffectContext implements EffectContext {
     private final Vec3 position;
     private final ResourceLocation ruleId;
     private final ServerScheduler scheduler;
-    private final Object realmKey;
     private final int rounds;
     private final int coveredSourceItems;
     private final String outcomeId;
@@ -40,10 +36,10 @@ public final class RuntimeEffectContext implements EffectContext {
 
     // 便捷构造：源物品快照取实体当前堆叠，未注入进度回执，候选级开关取默认值
     public RuntimeEffectContext(ServerLevel level, ItemEntity source, Vec3 position,
-                               ResourceLocation ruleId, ServerScheduler scheduler, Object realmKey,
+                               ResourceLocation ruleId, ServerScheduler scheduler,
                                int rounds, int coveredSourceItems, String outcomeId, int groupIndex,
                                int groupCount, int groupSourceCost) {
-        this(level, source, position, ruleId, scheduler, realmKey, source.getItem().copy(), rounds,
+        this(level, source, position, ruleId, scheduler, source.getItem().copy(), rounds,
                 coveredSourceItems, outcomeId, groupIndex, groupCount, groupSourceCost, null,
                 // 未显式给出候选级开关时沿用默认：安全生成关闭、起点填充开启
                 false, true);
@@ -51,17 +47,17 @@ public final class RuntimeEffectContext implements EffectContext {
 
     // 便捷构造：在上一构造基础上注入进度回执通道，候选级开关仍取默认值
     public RuntimeEffectContext(ServerLevel level, ItemEntity source, Vec3 position,
-                               ResourceLocation ruleId, ServerScheduler scheduler, Object realmKey,
+                               ResourceLocation ruleId, ServerScheduler scheduler,
                                int rounds, int coveredSourceItems, String outcomeId, int groupIndex,
                                int groupCount, int groupSourceCost, IntConsumer progressSink) {
-        this(level, source, position, ruleId, scheduler, realmKey, source.getItem().copy(), rounds,
+        this(level, source, position, ruleId, scheduler, source.getItem().copy(), rounds,
                 coveredSourceItems, outcomeId, groupIndex, groupCount, groupSourceCost, progressSink,
                 false, true);
     }
 
     // 完整构造：显式给出源物品快照（结算任务在计划期就把整堆移出实体，快照必须单独传入）
     public RuntimeEffectContext(ServerLevel level, ItemEntity source, Vec3 position,
-                               ResourceLocation ruleId, ServerScheduler scheduler, Object realmKey,
+                               ResourceLocation ruleId, ServerScheduler scheduler,
                                ItemStack sourceSnapshot, int rounds, int coveredSourceItems, String outcomeId,
                                int groupIndex, int groupCount, int groupSourceCost, IntConsumer progressSink,
                                boolean safeSpawn, boolean fillOrigin) {
@@ -71,7 +67,6 @@ public final class RuntimeEffectContext implements EffectContext {
         this.position = position;
         this.ruleId = ruleId;
         this.scheduler = scheduler;
-        this.realmKey = realmKey;
         this.rounds = Math.max(1, rounds);
         this.coveredSourceItems = Math.max(0, coveredSourceItems);
         this.outcomeId = outcomeId == null ? "default" : outcomeId;
@@ -167,20 +162,4 @@ public final class RuntimeEffectContext implements EffectContext {
         }
     }
 
-    @Override
-    public void schedule(int delayTicks, Runnable task) {
-        // 绝对到期 tick 由当前游戏刻推导：跨 tick 延后但保留原始时间，不会提前执行
-        long dueTick = level.getGameTime() + Math.max(0, delayTicks);
-        RuntimeObserver.current().schedule(source, scheduler, realmKey, ServerTaskKind.EFFECT, dueTick, "effect",
-                () -> runWhenLoaded(task));
-    }
-
-    // 延迟效果等待目标区块加载，不读取或生成未加载区块。
-    private void runWhenLoaded(Runnable task) {
-        if (!LoadedChunks.contains(level, BlockPos.containing(position))) {
-            schedule(20, task);
-            return;
-        }
-        task.run();
-    }
 }

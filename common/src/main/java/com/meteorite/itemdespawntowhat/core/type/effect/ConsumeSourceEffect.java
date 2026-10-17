@@ -1,5 +1,9 @@
 package com.meteorite.itemdespawntowhat.core.type.effect;
 
+import com.meteorite.itemdespawntowhat.core.api.EffectContext;
+import com.meteorite.itemdespawntowhat.core.api.EffectExecutor;
+import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
+import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
@@ -14,6 +18,10 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import java.util.Map;
 
@@ -59,9 +67,25 @@ public record ConsumeSourceEffect(
                 new ConsumeSourceEffect(count, delayTicks, chance, conditions.orElse(null), counts)));
     }
 
-    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器
+    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。
+    // 显式实现准备入口：效果级条件与概率在成功转化当刻判定并随任务携带，源实体清空后不再读取原掉落物；
+    // 本类型的参数与所需数量都是静态的，固定输入只承载跳过判定，不复制由结算层持有的源库存。
     public static EffectType<ConsumeSourceEffect> effectType(Codec<ConditionExpression> expressionCodec) {
-        return new SimpleEffectType<>(ID, codec(expressionCodec), ConsumeSourceEffect::validateParams, ConsumeSourceExecutor::execute);
+        EffectExecutor<ConsumeSourceEffect> executor = new EffectExecutor<>() {
+            @Override
+            public EffectResult execute(ConsumeSourceEffect effect, EffectContext context) {
+                return ConsumeSourceExecutor.execute(effect, context);
+            }
+
+            @Override
+            public EffectPreparation prepare(ConsumeSourceEffect effect, ServerLevel level, Vec3 position,
+                                             ItemEntity sourceEntity, ItemStack sourceStack, boolean fillOrigin) {
+                // 源件数由结算层开组时从持有库存扣减并记账，执行期只经上下文读本组已付成本；
+                // 因此这里不冻结数量，也不保留对源实体的引用
+                return EffectPreparation.ready();
+            }
+        };
+        return new SimpleEffectType<>(ID, codec(expressionCodec), ConsumeSourceEffect::validateParams, executor);
     }
 
     // 参数语义校验；问题写入 issues，不抛异常

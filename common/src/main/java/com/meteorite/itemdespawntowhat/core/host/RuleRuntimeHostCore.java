@@ -47,7 +47,7 @@ import java.util.Objects;
 public final class RuleRuntimeHostCore {
 
     private static final Logger LOGGER = LogManager.getLogger();
-    // 覆盖层缺省命名空间与包层判定 token 都取模组 id
+    // 覆盖层缺省命名空间取模组 id
     private static final String MOD_NAMESPACE = Constants.MOD_ID;
     // 模组级配置文件名（固定位于 config/itemdespawntowhat/ 下）
     private static final String SERVER_CONFIG_FILE = "server.json";
@@ -81,7 +81,7 @@ public final class RuleRuntimeHostCore {
 
     /**
      * 平台差异适配面：两端宿主必须实现且仅需实现的差异集合。
-     * 寿命提供者及其 GUI 参考值的采样与复位是平台能力差异；包层判定按平台可见的模组信息实现。
+     * 寿命提供者及其 GUI 参考值的采样与复位是平台能力差异；包层判定按平台正式注册路径写入的包来源元数据实现。
      */
     public interface PlatformAdapter {
 
@@ -94,11 +94,13 @@ public final class RuleRuntimeHostCore {
         LifespanProvider lifespan(ServerConfig config);
 
         /**
-         * 数据包来源层判定：区分内置模组数据包与世界数据包。
+         * 数据包来源层判定：依据本次实际加载包的来源元数据区分内置模组数据包与世界数据包。
+         * 实现必须在本次 {@code resourceManager} 上构建分类快照，不得查询实时资源管理器状态。
          *
+         * @param resourceManager 本次规则读取使用的数据包资源管理器
          * @return 包层判定器
          */
-        PackLayerResolver packLayerResolver();
+        PackLayerResolver packLayerResolver(ResourceManager resourceManager);
 
         /**
          * 读取启动采样得到的 GUI 参考寿命（tick）：无加载器寿命 API 的平台用它推算自然寿命。
@@ -336,7 +338,8 @@ public final class RuleRuntimeHostCore {
                                     Path overlay,
                                     BuiltinTypeRegistries registries, MinecraftServer server) {
         return RuleLoadContext.full(resourceManager, overlay, MOD_NAMESPACE, registryAccess,
-                registries.effectTypes(), registries.conditionTypes(), platform.packLayerResolver()).withServer(server);
+                registries.effectTypes(), registries.conditionTypes(),
+                platform.packLayerResolver(resourceManager)).withServer(server);
     }
 
     // 基底只在启动/数据包重载时读取，保存后台不接触 ResourceManager 或平台包判定器。

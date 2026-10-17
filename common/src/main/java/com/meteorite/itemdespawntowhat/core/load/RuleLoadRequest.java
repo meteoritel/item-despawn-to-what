@@ -30,20 +30,4 @@ public record RuleLoadRequest<T>(
         Objects.requireNonNull(decoder, "decoder");
         Objects.requireNonNull(layerResolver, "layerResolver");
     }
-
-    // 仅加载数据包层（内置 + 世界数据包）
-    public static <T> RuleLoadRequest<T> datapacks(ResourceManager resourceManager,
-                                                   RuleDecoder<T> decoder,
-                                                   PackLayerResolver layerResolver,
-                                                   String overlayDefaultNamespace) {
-        return new RuleLoadRequest<>(resourceManager, null, overlayDefaultNamespace, decoder, layerResolver);
-    }
-
-    // 仅加载 config 覆盖层
-    public static <T> RuleLoadRequest<T> overlay(Path overlayRoot,
-                                                 String overlayDefaultNamespace,
-                                                 RuleDecoder<T> decoder) {
-        return new RuleLoadRequest<>(null, overlayRoot, overlayDefaultNamespace, decoder,
-                PackLayerResolver.allWorld());
-    }
 }

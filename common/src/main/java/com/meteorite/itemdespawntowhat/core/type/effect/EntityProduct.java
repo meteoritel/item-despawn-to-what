@@ -112,11 +112,10 @@ public sealed interface EntityProduct permits EntityProduct.Item, EntityProduct.
         }
     }
 
-    /** 经验数量按点数计算，倍率取本组实际支付的源物品件数。 */
-    record Experience(int amount, boolean perSourceItem) implements EntityProduct {
+    /** 经验点数按每件参与转化源物品计算：本次产出的总点数 = 每件点数 × 本组实际扣减的源物品件数。 */
+    record Experience(int amount) implements EntityProduct {
         public static final MapCodec<Experience> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-                Codec.intRange(1, 65536).optionalFieldOf("amount", 1).forGetter(Experience::amount),
-                Codec.BOOL.optionalFieldOf("per_source_item", false).forGetter(Experience::perSourceItem)
+                Codec.intRange(1, 65536).optionalFieldOf("amount", 1).forGetter(Experience::amount)
         ).apply(instance, Experience::new));
         @Override public String variant() { return "experience"; }
         @Override public boolean validate(IssueCollector issues, String path) {

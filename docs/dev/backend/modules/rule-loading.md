@@ -29,10 +29,10 @@ config 覆盖层     config/<overlay_directory>/rules/**/*.json
 | `RuleSourceLayer` | 三层枚举与优先级/可写性 | `BUILTIN(0)` < `WORLD(1)` < `OVERLAY(2)`；`priority()` / `displayName()` / `writable()`（仅 OVERLAY 为 true） |
 | `RuleOrigin` | 每条规则的来源坐标（进 `Issue.origin`） | `datapack(layer, packId, location)` / `overlay(relativePath)` / `display()` |
 | `RulePaths` | 路径与字段路径常量 | `DATAPACK_RULES_DIRECTORY="idtw/rules"`、`OVERLAY_RULES_DIRECTORY="rules"`、`RULE_FILE_EXTENSION=".json"`、`stripExtension()`、`joinFieldPath()` |
-| `PackLayerResolver` | 包 id → 层的可注入判定 | `resolve(String packId)`；静态 `allWorld()`（覆盖层/无数据包场景） |
+| `PackLayerResolver` | 包 id → 层的可注入判定 | `resolve(String packId)`；静态 `fromModPacks(resourceManager, modPackNamespace)`（本次加载包来源快照） |
 | `RawRuleEntry` | 解析后、解码前的中间载体（保留原始 JsonObject） | record(id, body, origin, disabled, delete, fieldPath)；`isControl()` |
 | `LoadedRule<T>` | 解码成功条目 + 最终来源 | record(id, origin, value) |
-| `RuleLoadRequest<T>` | 一次加载的输入 | record(5 字段)；工厂 `datapacks()`、`overlay()` |
+| `RuleLoadRequest<T>` | 一次加载的输入 | record(5 字段) |
 | `RuleLoadResult<T>` | 一次加载的输出 | record(rules, issues)；`hasErrors()` / `hasWarnings()` / `formatIssues()` / `allIssues()` |
 | `RuleFileParser` | JSON 文本 → 原始条目（严格策略、id 推导消费、控制字段校验） | `parse(json, origin, derivedId, issues)` |
 | `DatapackRuleReader` | 读内置 + 世界数据包层全部条目并排序 | `read(resourceManager, layerResolver, issues)`；私有 `deriveId(location)` |
@@ -47,7 +47,7 @@ config 覆盖层     config/<overlay_directory>/rules/**/*.json
 
 | 类 | 职责 | 关键成员 |
 |---|---|---|
-| `RuleLoadContext` | 一次加载的全部外部依赖容器 | record(8 字段，含可选 `server`)；`withServer()`、`full()`、`overlayOnly()` |
+| `RuleLoadContext` | 一次加载的全部外部依赖容器 | record(8 字段，含可选 `server`)；`withServer()`、`full()` |
 | `RuleLoadingService` | 装配层：加载、加载+语义校验、来源分层索引、统计/描述 | `load(ctx)`、`loadAndValidate(ctx)`、`sourceIndex(ctx, issues)`、`countByLayer()`、`describeRules()`、`summarize()` |
 | `RuleReferenceValidator` | 服务端**动态**引用校验（维度/群系/战利品表），覆盖顶层 effects 与 outcomes 内 effects | `validate(rule, server, issues, origin)` |
 | `BuiltinTypeRegistries` | 内置类型注册表 + 表达式 Codec 的**规范装配点** | `create()`、`perRoundSourceConsumption(Rule, ItemStack)`、`implicitSourceConsumption()` |
@@ -139,7 +139,7 @@ config 覆盖层     config/<overlay_directory>/rules/**/*.json
 
 ### 6.4 上下文工厂
 
-`RuleLoadContext` 工厂：`full(...)` 不设 server，需 `.withServer(server)`；`overlayOnly()` 用 `PackLayerResolver.allWorld()`，同样不设 server。
+`RuleLoadContext` 只保留完整装配工厂 `full(...)`：不设 server，需 `.withServer(server)`。一次加载的输入由装配层（`RuleLoadingService`）在 `RuleLoadingService#load` 内直接构造。
 
 ## 7. 扩展点
 

@@ -9,7 +9,7 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * 效果执行上下文：由运行时在触发规则时构造，效果执行器只依赖本接口。
- * 延迟任务必须绑定「维度 + 位置」而不是源实体（源实体可能已被消耗或拾取）。
+ * 需要跨 tick 的推进一律由执行状态在共享预算内续接，不另行登记游离的延迟任务。
  * 上下文按「转化组」构造：一轮一组，组内效果共享同一份源成本与候选结果信息。
  */
 public interface EffectContext {
@@ -41,8 +41,8 @@ public interface EffectContext {
     int rounds();
 
     /**
-     * 本组实际扣减的源物品数量（不消耗源物品的规则为整堆数量）。
-     * 需要"按源物品逐个计算"的效果（如实体产出经验子类的 per_source_item）应使用本值而不是 rounds。
+     * 结算层为本组固定的产出计量件数。
+     * 经验产出按本值乘以每件点数算出本组总点数；其它产出类型不按本值缩放。
      */
     int coveredSourceItems();
 
@@ -57,9 +57,6 @@ public interface EffectContext {
 
     // 本组已支付的固定源成本
     int groupSourceCost();
-
-    // 登记延迟任务：0 表示本刻就绪，受预算约束时可顺延。
-    void schedule(int delayTicks, Runnable task);
 
     /**
      * 异步效果的真实产出回执：分批生成真正完成若干个单位时调用。

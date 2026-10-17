@@ -30,11 +30,12 @@ core/api  ←──────────── core/model ──────�
 | 类 | 类型 | 职责 | 关键成员 |
 |---|---|---|---|
 | `ConditionEvaluator<P>` | `@FunctionalInterface` | 条件求值器（**纯谓词**，返回未取反结果） | `boolean test(P, ConditionContext)` |
-| `EffectExecutor<P>` | `@FunctionalInterface` | 效果执行器（只做世界操作，返回真实回执） | `EffectResult execute(P, EffectContext)` |
+| `EffectExecutor<P>` | `@FunctionalInterface` | 效果执行器（只做世界操作，返回真实回执）；支持准备需覆盖 `prepare` 及按准备创建执行状态的重载，只提供 `execute` 的类型沿用默认、不参与准备 | `EffectResult execute(P, EffectContext)`；`prepare(P, ServerLevel, Vec3, ItemEntity, ItemStack, boolean)`（默认 `null` = 无准备阶段；后三个参数依次为成功当刻的源实体、源清空前的库存快照与候选的 `fill_origin`；源实体引用只在准备期有效，不得随固定输入携带）、`start(P, EffectContext, EffectPreparation)` |
 | `ConditionContext` | interface | 条件求值的**只读**上下文 | `level()` / `source()` / `pos()` / `random()` / `tags()` / `climate()` |
-| `EffectContext` | interface | 效果执行上下文（可产生副作用） | `level()` / `source()` / `sourceStack()` / `position()` / `random()` / `ruleId()` / `rounds()` / `coveredSourceItems()` / `outcomeId()` / `groupIndex()` / `groupCount()` / `groupSourceCost()` / `schedule(int,Runnable)` / `reportProgress(int)` / `safeSpawn()` / `fillOrigin()` / `positionSearchChecksPerTick()` |
+| `EffectContext` | interface | 效果执行上下文（可产生副作用） | `level()` / `source()` / `sourceStack()` / `position()` / `random()` / `ruleId()` / `rounds()` / `coveredSourceItems()` / `outcomeId()` / `groupIndex()` / `groupCount()` / `groupSourceCost()` / `reportProgress(int)` / `safeSpawn()` / `fillOrigin()` / `positionSearchChecksPerTick()` |
 | `ConditionResult` | enum | 条件求值四态 | `MATCH` / `NO_MATCH` / `UNAVAILABLE` / `ERROR`；`isMatch()`（仅 MATCH 为真） |
 | `Evaluability` | enum | 可求值性前置门禁 | `AVAILABLE` / `UNAVAILABLE` |
+| `EffectPreparation` | interface | 成功转化当刻固定的效果输入（按候选 id + 槽序号 + 组序号唯一，同槽不同组各一份） | `gate()`（默认 `null`；非空 = 按该原因记 `SKIPPED`）+ `ready()` / `gated(String)`；类型自有负载由该类型自己的准备记录实现本接口承载（记录字段只读；负载元素不保证不可变，使用方套用时自行复制） |
 | `EffectResult` | record | 效果执行回执（结算记账唯一依据） | `outcome`（`APPLIED`/`DEFERRED`/`SKIPPED`/`FAILED`）+ `appliedUnits` + `pendingUnits`（两者均为 `long`）+ `oneShot` + `detail`；`applied(...)` / `deferred(...)` / `skipped(...)` / `failed(...)` / `asOneShot()` / `counted()` |
 | `ClimateSampler` / `ClimateSample` | interface / record | 6 参数气候采样（温度/湿度/大陆性/侵蚀/深度/怪异度） | `sample(BlockPos)` |
 | `TagLookup` | interface | 5 类标签成员查询（方块 / 实体 / 生物群系 / 流体 / 药水效果；物品标签由候选索引展开）；标签不存在返回 false | `blockInTag` / `entityInTag` / `biomeInTag` / `fluidInTag` / `mobEffectInTag` |
