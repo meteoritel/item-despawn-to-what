@@ -26,7 +26,7 @@ import org.jetbrains.annotations.Nullable;
  * 本次次数、散布半径与基准位置在创建执行状态时固定，之后只按各自到期刻逐道推进；
  * 每道闪电真正加入世界后才通过 context.reportProgress(1) 回执真实完成量，
  * 全部落完的终态回执不再重复计入产出，只给出剩余增量 0。
- * 区块未加载时保留尚未落下的这一道，退避后按同一坐标重试，不提前落下也不重新抽取坐标。
+ * 区块未加载时保留尚未落下的这一道，退避后按同一水平坐标重试（地表高度仍在执行期实时求交），不提前落下也不重新抽取坐标。
  * 约定：delay_ticks / chance / 效果级 conditions 由运行时统一处理，本类不再判断；
  * 异常不吞、不捕获，由运行时统一捕获并记录（规则 id + 效果类型 + 位置）。
  */
@@ -143,8 +143,13 @@ public final class LightningExecutor {
                 nextDueTick = now + CHUNK_RETRY_TICKS;
                 return null;
             }
-            strike(level, pendingX, pendingZ);
+            if (!strike(level, pendingX, pendingZ)) {
+                // 两次检查之间该列卸载：保留已确定的水平坐标，退避后按同一坐标重新求地表，不推进次数
+                nextDueTick = now + CHUNK_RETRY_TICKS;
+                return null;
+            }
             context.reportProgress(1);
+            StepWorkCounter.report(1);
             launched++;
             pendingTarget = false;
             nextDueTick = now + INTERVAL_TICKS;
@@ -157,8 +162,14 @@ public final class LightningExecutor {
             return terminal;
         }
 
-        // 在指定水平坐标的地面高度召唤一道闪电
-        private void strike(ServerLevel level, double strikeX, double strikeZ) {
+        /**
+         * 在指定水平坐标的地面高度召唤一道闪电。
+         * @param level 目标世界
+         * @param strikeX 已确定的水平坐标 X
+         * @param strikeZ 已确定的水平坐标 Z
+         * @return 已加入世界返回 true；该列在写入前卸载返回 false
+         */
+        private boolean strike(ServerLevel level, double strikeX, double strikeZ) {
             BlockPos groundPos = level.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING,
                     BlockPos.containing(strikeX, origin.y, strikeZ));
             LightningBolt bolt = EntityType.LIGHTNING_BOLT.create(level);
@@ -174,8 +185,7 @@ public final class LightningExecutor {
             double strikeY = surface.getType() == HitResult.Type.BLOCK ? surface.getLocation().y : groundPos.getY();
             bolt.moveTo(strikeX, strikeY, strikeZ);
             // 生成列已确认加载：此处加入世界是即时完成的，回执才代表真实落雷
-            EffectTargets.addEntity(context, bolt);
-            StepWorkCounter.report(1);
+            return EffectTargets.addEntityNow(context, bolt, false);
         }
     }
 }

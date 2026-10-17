@@ -60,7 +60,7 @@
 
 | 类 | 职责 | 关键成员 |
 |---|---|---|
-| `EffectTargets` | 执行器共享的引用解析与空间查询工具；**不捕获、不吞异常**，硬错误直接抛出交给运行时 | `resolve`（未命中返回 null）/`resolveOrThrow`、`blockBox(center, radius)`（效果式消耗与催化剂固定成本共用的搜索盒）、`addEntity`/`addEntityProduct`/`addConversionProduct`（区块未加载时自行挂 20 刻重试）、`addEntityNow`/`addConversionProductNow`（区块未加载时直接返回 false，由调用方按自身预算节奏重试，并保证回执在真实写入之后）、`randomHorizontalDisc(random, center, radius, height)`（面积均匀的水平圆盘散点，半径按 `radius × √U`）、`saturatedAdd`/`saturatedMultiply`、`forEachStep(...)` |
+| `EffectTargets` | 执行器共享的引用解析与空间查询工具；**不捕获、不吞异常**，硬错误直接抛出交给运行时 | `resolve`（未命中返回 null）/`resolveOrThrow`、`blockBox(center, radius)`（效果式消耗与催化剂固定成本共用的搜索盒）、`addEntityNow`/`addConversionProductNow`（区块未加载时直接返回 false，未写入不计完成量与计费，重试和实体生命周期由调用方管理）、`randomHorizontalDisc(random, center, radius, height)`（面积均匀的水平圆盘散点，半径按 `radius × √U`）、`saturatedAdd`/`saturatedMultiply` |
 | `ReturnItemSpawner` | 掉落物生成统一入口：转化产物与返还物共用「创建 + 授予实体状态 + 加入世界」路径 | `Kind{CONVERSION_PRODUCT, PERMANENT_RETURN}`、`applyGrant`、`spawn`、`deliver`、内部 `PositionSearch`（三级位置搜索：起点附近 → 向上扫描 → 限高以上，跨刻分步） |
 | `VisualFeedback` | 服务端主线程发送原版粒子，并按维度、刻、反馈种类与方块位置限流 | `conversion`、`entitySpawn`、`returnItem` |
 
@@ -117,10 +117,10 @@
 |---|---|---|---|
 | 1 | `spawn_entity` | `variant: item/entity/experience` 必填；各子类参数见下表 | 统一生成掉落物、通用实体或经验；共用概率/延迟/条件。物品与通用实体的产物引用与每轮产出量在成功转化当刻固定（标签成员当时抽定），交付期在共享预算内分批写入，逐单位回执真实完成量 |
 | 2 | `place_block` | `block: TaggedId`（与 `use_source_block` **至少其一**）；`use_source_block: bool`/false；`shape: square\|circle\|cross`/square；`count: int[1,64]`/1；`radius: int[1,32]`/6；`limit: Integer[1,4096]` | 按形状由内向外扩散放置方块，只替换可替换位置、不突破自身半径；目标方块与候选偏移由准备固定，邻域计数与放置按预算分批推进，逐块回执真实放置量 |
-| 3 | `loot_table` | `loot_table: ResourceLocation`（必填，**不支持 `#tag`**）；`luck: float[-100,100]`/0 | 以位置为原点开战利品表（CHEST 参数集，`THIS_ENTITY`=本次源实体）。每组在成功转化当刻各开表并抽取一次，结果随固定输入携带；交付期不再读源实体、不再开表也不再重抽；产物在共享预算内分批写入世界，逐堆回执实际件数，轮次与工作量分别表达，空表给出独立的已完成空结果 |
-| 4 | `lightning` | `count: int[1,16]`/1 | 第 1 道保留原点水平坐标，后续散布 r=5，间隔 8 刻；从高度图上方向下求交最上层碰撞或流体表面，贴合半砖与台阶；虚空无表面时回退高度图高度。执行状态每步最多落一道，每道真正加入世界后经 `reportProgress(1)` 回执，全部落完的终态回执为 `applied(0)` 增量；次数与基准位置取自成功转化当刻的转换、落点散布在执行状态内抽取并保留到真正落下，区块未加载时退避 20 刻重试且不推进次数。本类型无自有的成功时输入，`prepare` 返回 `EffectPreparation.ready()` 只用于让效果级条件与概率在成功转化当刻判定一次 |
+| 3 | `loot_table` | `loot_table: ResourceLocation`（必填，**不支持 `#tag`**）；`luck: float[-100,100]`/0 | 以位置为原点开战利品表（CHEST 参数集，`THIS_ENTITY`=本次源实体）。每组在成功转化当刻各开表并抽取一次，结果随固定输入携带；交付期不再读源实体、不再开表也不再重抽；产物在共享预算内分批写入世界，未写入的产物实体保留到下次推进，逐堆回执实际件数，轮次与工作量分别表达，空表给出独立的已完成空结果 |
+| 4 | `lightning` | `count: int[1,16]`/1 | 第 1 道保留原点水平坐标，后续散布 r=5，间隔 8 刻；从高度图上方向下求交最上层碰撞或流体表面，贴合半砖与台阶；虚空无表面时回退高度图高度。执行状态每步最多落一道，每道真正加入世界后经 `reportProgress(1)` 回执，全部落完的终态回执为 `applied(0)` 增量；次数与基准位置取自成功转化当刻的转换、落点散布在执行状态内抽取并保留到真正落下，区块未加载时退避 20 刻重试且不推进次数、不重新抽取。本类型无自有的成功时输入，`prepare` 返回 `EffectPreparation.ready()` 只用于让效果级条件与概率在成功转化当刻判定一次 |
 | 5 | `explosion` | `power: float[0,16]`/3.0；`fire: bool`/false；`visual_only: bool`/false | `visual_only` 只粒子+音效；否则 TNT 交互爆炸。爆炸是单步不可抢占的原子操作，基准位置取自成功转化当刻的转换；覆盖半径所需区块未加载时退避 20 刻重试，就绪后一步完成并回执 `applied(1)`。破坏型按 `EXPLOSION_WORK_UNITS = 128` 计入本 tick 工作量，`visual_only` 只播粒子与音效、不计世界工作量。本类型无自有的成功时输入，`prepare` 返回 `EffectPreparation.ready()` 只用于让效果级条件与概率在成功转化当刻判定一次 |
-| 6 | `arrow_rain` | `count: int[1,256]`/16；`pickup: disallowed\|allowed\|creative_only`/disallowed；`potion_effects: List<{effect: TaggedId, duration_ticks: int[1,1000000]/100, amplifier: int[0,255]/0}>` | 上方 +80 高度落箭雨，初速度 4.5 格/刻，间隔 2 刻，可携带药水效果。执行状态每步最多生成一支，每支真正加入世界后经 `reportProgress(1)` 回执，全部落完的终态回执为 `applied(0)` 增量；次数与基准位置取自成功转化当刻的转换，落点与水平抖动在执行状态内抽取并保留到真正生成，区块未加载时退避 20 刻重试且不推进次数。`potion_effects` 的标签抽取属随机输入，在成功转化当刻抽定后随本类型专用的准备记录（`ArrowRainEffect.Prepared`）携带，执行期不再解析或重抽；成功当刻无法解析的引用按失败回执，不在执行期改写结果 |
+| 6 | `arrow_rain` | `count: int[1,256]`/16；`pickup: disallowed\|allowed\|creative_only`/disallowed；`potion_effects: List<{effect: TaggedId, duration_ticks: int[1,1000000]/100, amplifier: int[0,255]/0}>` | 上方 +80 高度落箭雨，初速度 4.5 格/刻，间隔 2 刻，可携带药水效果。执行状态每步最多生成一支，每支真正加入世界后经 `reportProgress(1)` 回执，全部落完的终态回执为 `applied(0)` 增量；次数与基准位置取自成功转化当刻的转换，落点在执行状态内抽取，箭矢实体与射向抖动在加入世界前一次构造完成并保留到真正生成，区块未加载时退避 20 刻重试且不推进次数、不重造箭矢。`potion_effects` 的标签抽取属随机输入，在成功转化当刻抽定后随本类型专用的准备记录（`ArrowRainEffect.Prepared`）携带，执行期不再解析或重抽；成功当刻无法解析的引用按失败回执，不在执行期改写结果 |
 | 7 | `weather` | `mode: rain\|clear`（必填）；`duration_ticks: int[1,24000]`/6000；`thundering: bool`/false | 切换维度天气；无天空光维度跳过；已处于目标天气则跳过。效果级条件与概率在成功转化当刻判定并随任务携带，天空光与当前天气在执行时实时读取 |
 
 实体生成的 JSON 字段仍与 `type` 同级，不增加 `product` 包装：
@@ -129,11 +129,11 @@
 |---|---|---|
 | `item` | `item: TaggedId` 必填，`count: int[1,64]` 默认 1 | 物品件数；支持物品标签，成员在成功转化当刻抽定；本组件数 = `count × rounds()`，每批最多写入 16 个实体，逐件回执真实完成量 |
 | `entity` | `entity: TaggedId` 必填，`count: int[1,64]` 默认 1，`age: int` 默认 0 | 实体个数，生物及其他实体；成员在成功转化当刻抽定；本组个数 = `count × rounds()`，每批最多 8 个、每刻候选检查数受配置约束，逐个回执真实完成量；age 仅 AgeableMob 生效；拒绝 item / experience_orb 及含它们的标签 |
-| `experience` | `amount: int[1,65536]` 默认 1 | 每件参与转化源物品的经验点数；本组总点数 = `amount × coveredSourceItems()`，以 `long` 只算一次，避免 `int` 溢出。随后按单球点数上限 `MAX_POINTS_PER_ORB = Short.MAX_VALUE`（32767）逐球装满，余数落在最后一球；每步最多 `ORBS_PER_BATCH = 16` 球，并受公共预算约束：时间耗尽或本步已用额度（含已 `StepWorkCounter.report` 上报、尚未由调度器计费的部分）用尽时立即让出，未发完的部分由执行状态在后续步骤续接，因此分批只限制单步生成量、不截断经验总量，也没有「全局球数硬上限」。每球成功加入世界后才 `reportProgress(点数)` 回执真实完成量，终态回执 `applied(0)` 表示产出已逐球计入、不再重复统计。经验球直接构造 `ExperienceOrb` 并保留原版初速度、拾取与后续同值合并；生成位置为半径 0.5 格、面积均匀的水平极坐标圆盘（`EffectTargets.randomHorizontalDisc`），高度额外抬升 0.2 格。按本组实际扣减件数各自计算，不同行为、不同组的点数不合并 |
+| `experience` | `amount: int[1,65536]` 默认 1 | 每件参与转化源物品的经验点数；本组总点数 = `amount × coveredSourceItems()`，以 `long` 只算一次，避免 `int` 溢出。随后按单球点数上限 `MAX_POINTS_PER_ORB = Short.MAX_VALUE`（32767）逐球装满，余数落在最后一球；每步最多 `ORBS_PER_BATCH = 16` 球，并受公共预算约束：时间耗尽或本步已用额度（含已 `StepWorkCounter.report` 上报、尚未由调度器计费的部分）用尽时立即让出，未发完的部分由执行状态在后续步骤续接，因此分批只限制单步生成量、不截断经验总量，也没有「全局球数硬上限」。每个已构造的经验球在加入世界前保留到下次推进，成功加入后才 `reportProgress(点数)` 回执真实完成量，终态回执 `applied(0)` 表示产出已逐球计入、不再重复统计。经验球直接构造 `ExperienceOrb` 并保留原版初速度、拾取与后续同值合并；生成位置为半径 0.5 格、面积均匀的水平极坐标圆盘（`EffectTargets.randomHorizontalDisc`），高度额外抬升 0.2 格。按本组实际扣减件数各自计算，不同行为、不同组的点数不合并 |
 
 子类外字段、规则中的邻近 `limit/radius`、旧 `spawn_item/spawn_xp` 以及缺少 variant 的旧 spawn_entity 均不兼容。邻近阈值移至 [服务端配置](../systems/config.md)，只覆盖物品与通用实体：经验不受邻近阈值准入，也不因该阈值截断或返还。`place_block` 的 limit/radius 保留。
 
-> **一次性世界效果**（lightning / explosion / arrow_rain / weather）：注册时 `oneShot=true`，执行器回执带 `asOneShot()` 标记，**不乘 `rounds()`**、不参与容量计算，仅含一次性效果的候选对同一源最多尝试一组。实体产出按组展开，其中物品与通用实体子类使用共享配置做开组准入；place_block 保留自身规则容量。见 [conversion-runtime.md](conversion-runtime.md)。
+> **一次性世界效果**（lightning / explosion / arrow_rain / weather）：注册时 `oneShot=true`，**不乘 `rounds()`**、不参与容量计算，仅含一次性效果的候选对同一源最多尝试一组。实体产出按组展开，其中物品与通用实体子类使用共享配置做开组准入；place_block 保留自身规则容量。见 [conversion-runtime.md](conversion-runtime.md)。
 > 候选级字段 `safe_spawn`、`fill_origin` 属于**候选结果**（`core/model/OutcomeCandidate.java`），不在任何单个效果的参数里；执行时经 `EffectContext.safeSpawn()`/`fillOrigin()` 透传给 `spawn_entity` / `place_block`。
 
 ### 5.2 消耗效果（3）
@@ -153,14 +153,14 @@
 | # | 位置 | 内容 |
 |---|---|---|
 | 1 | `core/type/effect/<Xxx>Effect.java` | 参数 record（实现 `Effect`）+ 字段常量 + `codec(expressionCodec)` + `validateParams` + `effectType(...)`（一次性效果传 `oneShot=true`） |
-| 2 | `core/type/effect/exec/<Xxx>Executor.java` | 静态 `execute(P, EffectContext)`，返回 `EffectResult`，只做世界操作 |
+| 2 | `core/type/effect/exec/<Xxx>Executor.java` | 静态 `execute(P, EffectContext)` 返回 `EffectResult`（立即完成的同步世界操作）；需要固定输入或跨 tick 时另给静态 `prepare(...)` 与 `start(P, EffectContext, EffectPreparation)` |
 | 2 | `core/type/BuiltinEffectTypes.java` | 一行 `registry.register(XxxEffect.effectType(expressionCodec))` |
 
 条件类型同理（`condition/` + `condition/eval/` + `BuiltinConditionTypes`）；需要上下文门禁的条件在 `conditionType()` 里追加 `evaluability`。参数里含动态引用（维度 / 群系 / 战利品表一类需查服务端现状的引用）时，在参数 record 上额外实现动态引用校验扩展点，核心校验器与装配链都不用改。**框架代码无需改动**：分发、校验调度、注册表都由既有抽象承担。
 
 三条硬约束：① 不产 null（`Optional` 承载、末步 `orElse(null)`）；② 静态工厂不叫 `type()`；③ 引用字段用 `TaggedId`（支持 `#tag`），只有确无标签语义才用裸 `ResourceLocation`。
 
-执行器/求值器约定：延迟用 `context.schedule(...)`（绑定"维度+位置"，不要求源存活）；随机用 `context.random()`（维度随机）；大量产出在 `start` 返回的 `EffectExecution` 里用游标在共享预算内分批；**不吞异常**，交给运行时隔离记录。
+执行器/求值器约定：延迟、跨 tick 与分批一律在 `start` 返回的 `EffectExecution` 里按自身状态与到期刻在共享预算内推进，不另行登记游离任务，区块未加载时保留已抽取输入或已构造实体、退避后重试；随机用 `context.random()`（维度随机）；**不吞异常**，交给运行时隔离记录。
 
 ## 7. 第三方 Java 扩展 SPI
 

@@ -74,7 +74,7 @@ public final class SpawnEntityExecutor {
     }
 
     /**
-     * 旧式同步入口：本类型需要按批次在共享预算内续接，不提供一次性完成的执行方式。
+     * 同步入口：本类型需要按批次在共享预算内续接，不提供一次性完成的执行方式。
      *
      * @param effect 实体生成效果参数
      * @param context 本组执行上下文

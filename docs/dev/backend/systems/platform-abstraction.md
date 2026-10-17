@@ -23,14 +23,15 @@
 
 ## 3. 窄接口：core 定义，平台实现
 
-core 侧只声明它需要的最小能力，具体实现是内核侧公共宿主核心（`core/host`）的适配器，调用时实时读取；平台宿主只提供差异适配面：
+core 侧只声明它需要的最小能力，具体实现是内核侧公共宿主核心（`core/host`）的适配器；命令与编辑相关的适配器在调用时实时读取，平台宿主只提供差异适配面：
 
 | 窄接口 | 需求方 | 提供方 | 暴露的能力 |
 |---|---|---|---|
 | `RuleCommandContext` | `core/command` | `RuleRuntimeHostCore` 的 `CommandContext` 适配器 | `runtime` / `serverConfig` / `editContext` / `overlayNamespace` / `overlayVersion` / `activeSessionCount` / `reloadRules` |
 | `RuleEditServerContext` | `core/network` | `RuleRuntimeHostCore` 的 `EditContext` 适配器 | `overlayRoot` / `overlayNamespace` / `typeRegistries` / `loadMerged` / `rebuildAndRescan` / `sendTo` / `referenceLifespanTicks` |
+| `PackLayerResolver` | `core/load` | `RuleRuntimeHostCore` 的 `PlatformAdapter.packLayerResolver(ResourceManager)` 适配器 | `resolve(String packId)`；两平台实现在传入的 `ResourceManager` 上经 `fromModPacks(resourceManager, modPackNamespace)` 建快照注入 `core/load`，之后只查已保存的映射，不再实时访问资源管理器 |
 
-好处：`core/command` 与 `core/network` 不必依赖平台运行时类；平台侧也无需把运行时内部状态提升为公共 API。窄接口所有成员都可能返回 null（服务端启动完成前命令树尚未就绪）。
+好处：`core/command`、`core/network` 与 `core/load` 不必依赖平台运行时类；平台侧也无需把运行时内部状态提升为公共 API。命令与编辑适配器的成员都可能返回 null（服务端启动完成前命令树尚未就绪）；包层快照不适用该约定，它只在已保存的映射上解析。
 
 ## 4. 静态 sink：core 不反向依赖 client
 
