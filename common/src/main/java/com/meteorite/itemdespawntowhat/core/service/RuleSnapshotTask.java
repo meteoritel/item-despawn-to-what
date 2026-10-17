@@ -40,6 +40,15 @@ import java.util.function.Consumer;
 final class RuleSnapshotTask implements ServerTask {
     private static final Object SNAPSHOT_REALM = new Object();
     private record Source(byte[] revision, List<RawRuleEntry> entries, RuleSourceIndex index, IssueCollector issues) { }
+
+    /**
+     * 一次快照准备的交付结果：本次要下发/处理的载荷，以及本次装配使用的来源分层索引。
+     * 来源索引随快照一起交付，供编辑页按需生成来源视图，避免为单条规则再读一次磁盘。
+     *
+     * @param packets 整包快照或分片；准备失败时为空列表
+     * @param index   本次装配的来源分层索引；未完成读取或已取消时为 null
+     */
+    record Delivery(List<CustomPacketPayload> packets, @Nullable RuleSourceIndex index) { }
     private final RuleEditServerContext context;
     private final MinecraftServer server;
     private final EditSessionManager sessions;
@@ -47,7 +56,7 @@ final class RuleSnapshotTask implements ServerTask {
     private final RuleSaveReloadContext reloadContext;
     private final String sessionId;
     private final String requestId;
-    private final Consumer<List<CustomPacketPayload>> completion;
+    private final Consumer<Delivery> completion;
     private CompletableFuture<Source> reading;
     private CompletableFuture<List<CustomPacketPayload>> preparing;
     private Source source;
@@ -69,7 +78,7 @@ final class RuleSnapshotTask implements ServerTask {
     private final Map<ResourceLocation, JsonObject> encoded = new LinkedHashMap<>();
 
     RuleSnapshotTask(RuleEditServerContext context, MinecraftServer server, EditSessionManager sessions,
-                     String sessionId, String requestId, Consumer<List<CustomPacketPayload>> completion) {
+                     String sessionId, String requestId, Consumer<Delivery> completion) {
         this.context = context; this.server = server; this.sessions = sessions;
         store = sessions.store();
         this.sessionId = sessionId; this.requestId = requestId; this.completion = completion;
@@ -189,7 +198,8 @@ final class RuleSnapshotTask implements ServerTask {
         if (finished) { return; }
         finished = true;
         if (DebugProfile.enabled()) { logProfile(packets); }
-        completion.accept(packets);
+        Source ready = source;
+        completion.accept(new Delivery(packets, ready == null ? null : ready.index()));
     }
 
     // 首载分段观测：一条日志给出准备阶段的步数、跨 tick 数、线程耗时与下发包数

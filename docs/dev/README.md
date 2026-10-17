@@ -57,7 +57,7 @@
 | [overview.md](overview.md) | 项目定位、平台与版本环境、系统边界（做什么 / 不做什么）、术语入口（指向根 `GLOSSARY.md`） |
 | [architecture.md](architecture.md) | 分层模型、架构关系图、依赖方向铁律、三条数据流、结构性特征 |
 | [layers/server-core.md](layers/server-core.md) | 服务端内核：契约层、模型层、类型与扩展层（含第三方 SPI）、加载与装配层、运行时层（追踪 / 结算 / 实体状态）、调度与共享预算、索引与缓存 |
-| [layers/authoring.md](layers/authoring.md) | 创作与管控：候选目录两段式分工、编辑协议与会话（快照三视图、变更集、独占会话、分片限额、权威落盘）、命令树与权限口径、调试层与场景 |
+| [layers/authoring.md](layers/authoring.md) | 创作与管控：候选目录两段式分工、编辑协议与会话（快照生效视图与按需来源视图、变更集、独占会话、分片限额、权威落盘）、命令树与权限口径、调试层与场景 |
 | [layers/client.md](layers/client.md) | 客户端：协议工作区与开屏入口、草稿与撤销、类型编辑器注册表与回退、UI kit 边界与输入生命周期、主题与控件适配、四页界面契约、已知限制 |
 | [layers/platform.md](layers/platform.md) | 平台接入：三种注入方式、引导与生命周期、事件与 Mixin 原则、两端差异摘要、网络与协议注册、模组级配置分组 |
 | [flows.md](flows.md) | 四条端到端链路概览：规则加载、转化生命周期、编辑保存协议、调试场景 |

@@ -140,6 +140,42 @@ public final class RuleEditPayloadRouter {
         if (sink != null) sink.accept(payload);
     }
 
+    private static volatile Consumer<RuleSourceViewPayload> sourceViewSink;
+
+    /**
+     * 安装客户端来源视图应答消费者，服务端保持为空。
+     * @param sink 应答消费者
+     */
+    public static void installSourceViewSink(Consumer<RuleSourceViewPayload> sink) { sourceViewSink = sink; }
+
+    /**
+     * 分发来源视图应答。
+     * @param payload 来源视图应答
+     */
+    public static void dispatchSourceView(RuleSourceViewPayload payload) {
+        Consumer<RuleSourceViewPayload> sink = sourceViewSink;
+        if (payload != null && sink != null) sink.accept(payload);
+    }
+
+    private static volatile Consumer<RuleSourceViewChunkPayload> sourceViewChunkSink;
+
+    /**
+     * 安装客户端来源视图分片消费者，服务端保持为空。
+     * @param sink 分片消费者
+     */
+    public static void installSourceViewChunkSink(Consumer<RuleSourceViewChunkPayload> sink) {
+        sourceViewChunkSink = sink;
+    }
+
+    /**
+     * 分发来源视图分片。
+     * @param payload 分片载荷
+     */
+    public static void dispatchSourceViewChunk(RuleSourceViewChunkPayload payload) {
+        Consumer<RuleSourceViewChunkPayload> sink = sourceViewChunkSink;
+        if (payload != null && sink != null) sink.accept(payload);
+    }
+
     // 分发目录分页
     public static void dispatchCatalog(RuleCatalogPayload payload) {
         if (payload == null) {

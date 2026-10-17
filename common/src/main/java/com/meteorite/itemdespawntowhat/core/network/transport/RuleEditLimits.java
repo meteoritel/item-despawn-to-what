@@ -51,8 +51,14 @@ public final class RuleEditLimits {
     // S2C 快照单包上限
     public static final int MAX_SNAPSHOT_BYTES = 4 * 1024 * 1024;
 
+    // 单条规则的来源视图（基底 + 覆盖原始 JSON 与元数据）字节上限：与快照总量同量级，超限回失败回执
+    public static final int MAX_SOURCE_VIEW_BYTES = 4 * 1024 * 1024;
+
     // 字符串编解码器的字符数上限：按字节上限折算（UTF-8 单字符最多 4 字节，取字节上限即可覆盖）
     public static final int MAX_SNAPSHOT_CHARS = MAX_SNAPSHOT_BYTES;
+
+    // 来源视图字符串编解码器的字符数上限
+    public static final int MAX_SOURCE_VIEW_CHARS = MAX_SOURCE_VIEW_BYTES;
 
     // 分片字符串编解码器的字符数上限
     public static final int MAX_CHUNK_CHARS = MAX_CHUNK_BYTES;

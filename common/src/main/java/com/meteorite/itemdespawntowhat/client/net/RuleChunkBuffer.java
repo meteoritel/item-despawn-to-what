@@ -1,13 +1,13 @@
 package com.meteorite.itemdespawntowhat.client.net;
 
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditLimits;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotChunkPayload;
 
 /***
- * 快照分片的客户端重组缓冲：同一 transferId 的分片收齐后按 index 顺序拼接为完整 JSON。
- * 同一时刻只保留最近一批分片；会话切换、重复下标、超过 60 秒无进展都会重置缓冲。
+ * 下行文本分片的客户端重组缓冲：同一 transferId 的分片收齐后按 index 顺序拼接为完整 JSON。
+ * 快照与来源视图共用本实现；同一时刻只保留最近一批分片，会话切换、重复下标、超过 60 秒无进展都会重置缓冲。
  */
-final class RuleSnapshotChunkBuffer {
+final class RuleChunkBuffer {
 
     // 当前批次的会话 id
     private String sessionId = "";
@@ -23,7 +23,7 @@ final class RuleSnapshotChunkBuffer {
     private long lastTick;
 
     // 接收一片；收齐返回拼接后的完整 JSON，否则返回 null
-    synchronized String accept(RuleSnapshotChunkPayload payload, long tick) {
+    synchronized String accept(RuleChunkPayload payload, long tick) {
         if (payload == null || payload.transferId().isEmpty() || payload.count() <= 0
                 || payload.count() > RuleEditLimits.MAX_CHUNK_COUNT
                 || payload.index() < 0 || payload.index() >= payload.count()) {
@@ -61,7 +61,7 @@ final class RuleSnapshotChunkBuffer {
     }
 
     // 开启新批次
-    private void start(RuleSnapshotChunkPayload payload, long tick) {
+    private void start(RuleChunkPayload payload, long tick) {
         sessionId = payload.sessionId();
         transferId = payload.transferId();
         count = payload.count();

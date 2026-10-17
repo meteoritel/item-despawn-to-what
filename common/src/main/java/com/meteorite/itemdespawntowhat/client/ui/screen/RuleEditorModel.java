@@ -18,7 +18,6 @@ import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshotEntry;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -150,6 +149,18 @@ public final class RuleEditorModel {
         return this.restoreIds.contains(id);
     }
 
+    /**
+     * 编辑页打开某条规则时按需请求来源视图：只有服务端已有该条目时才有来源可看。
+     * 请求失败或超时只影响来源对照，不影响本页的草稿编辑与保存。
+     *
+     * @param id 规则 id
+     */
+    public void requestSourceView(String id) {
+        if (id != null && this.entries.containsKey(id)) {
+            this.workspace.requestSourceView(id);
+        }
+    }
+
     // 打开（必要时懒创建）某条规则的草稿会话
     public @Nullable EditSession openSession(String id) {
         EditSession existing = this.sessions.get(id);
@@ -175,22 +186,13 @@ public final class RuleEditorModel {
         return session == null ? ruleBody(entries.get(id)) : session.draft().root();
     }
 
-    // 被屏蔽、停用或失效的条目仍可保留规则体；纯控制条目回落到基底。
+    // 条目只带生效视图：服务端在解码失败时已把覆盖或基底原文回退为生效视图
     private static @Nullable RuleValue ruleBody(@Nullable RuleSnapshotEntry entry) {
-        if (entry == null) {
+        if (entry == null || entry.effective() == null) {
             return null;
         }
-        // 核心层视图仍是 JSON 对象：按「生效 / 覆盖 / 基底」顺序转成值视图并跳过控制条目
-        for (var raw : Arrays.asList(entry.effective(), entry.overlay(), entry.base())) {
-            if (raw == null) {
-                continue;
-            }
-            RuleValue candidate = RuleDraft.of(raw).root();
-            if (hasRuleBody(candidate)) {
-                return candidate;
-            }
-        }
-        return null;
+        RuleValue candidate = RuleDraft.of(entry.effective()).root();
+        return hasRuleBody(candidate) ? candidate : null;
     }
 
     // delete/enabled 控制条目不是完整规则体，不能当作空规则交给表单。
