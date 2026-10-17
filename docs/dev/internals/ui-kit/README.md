@@ -1,102 +1,162 @@
-# 客户端 UI kit：边界、公开面与接入索引
+# UI kit 模块入口（`client/ui/kit`）
 
-> 事实来源：`common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/`。
-> 本文是 UI kit 的入口：只覆盖依赖边界、公开面与分册索引；具体契约按需读对应分册，不要把整套分册一次读完。
-> 定位约定：分册按「类名 + 成员名」引用源码，不写行号（行号会随重构漂移）。
-> 相关决策：[ADR-0022](../../../adr/0022-client-ui-kit-adoption.md)（同源引入）、[ADR-0025](../../../adr/0025-reusable-client-ui-kit-boundary.md)（可回流的维护副本与依赖边界）、[ADR-0033](../../../adr/0033-kit-zero-reference-public-api-retention.md)（零引用公开类的保留口径）。
+> 层级：基础组件层；模块路径：`client/ui/kit`；源码目录：`common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit`。
+> 事实来源：本文件「类清单」列出的源码文件。文档与源码不一致时以源码为准。
 
-## 1. 定位与依赖边界
+## 1. 模块索引
 
-kit 是「可回流的维护副本」：宿主可以依赖 kit，kit **绝不反向依赖宿主**。它面向 Minecraft 客户端，不要求成为纯 Java UI 库。
-
-允许依赖：
-
-- Minecraft 客户端通用类型（如 `net.minecraft.client.gui.Font`、`GuiGraphics`、`net.minecraft.network.chat.Component`）；
-- Java 标准库、JOML、LWJGL（按键常量）、JetBrains annotations；
-- 精确允许 `com.mojang.blaze3d.platform.Lighting` 与 `com.mojang.blaze3d.vertex` 下的 `PoseStack`、`VertexConsumer`；不放开它们的父包。
-
-禁止依赖：
-
-- 本模组其它包：`core`、`client.edit`、`client.net`、`client.ui.theme`、`client.ui.screen`、`client.ui.widget`，以及 `Constants`；
-- 平台 API：`net.fabricmc.*`、`net.neoforged.*`；
-- Gson 业务对象：`com.google.gson.*`。
-
-同一 kit 包内的互相引用是允许的。边界由脚本强制校验：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1
-```
-
-- 退出码 0 = 通过；1 = 存在违规；2 = 目录缺失或没有 `.java`（配置错误）。
-- 规则：`import` 白名单为 `java.` / `javax.` / `net.minecraft.` / `org.jetbrains.` / `org.joml.` / `org.lwjgl.`；另精确允许 `com.mojang.blaze3d.platform.Lighting`；`com.meteorite.` 只允许 kit 自身包；`net.fabricmc.` / `net.neoforged.` / `com.google.gson.` 一律禁用；不在 `import` 行上的全限定引用同样扫描（含 javadoc 里的 FQ 名）。
-- 可用 `-KitPath` 指向其它目录做自测：`powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1 -KitPath <目录>`。
-
-## 2. 公开入口分组
-
-| 分组 | 类型 |
-| --- | --- |
-| 内容排版 | `UiDocument`、`UiNode`、`UiIcon`、`UiTransform`、`UiMetrics`、`UiPointer`、`TextMeasurer`、`TextScroll` |
-| 控件与交互 | `UiControl`、`UiControlStyle`、`UiControlGroup`、`UiControlRole`、`UiScrollView`、`UiLinearLayout`、`UiFlowLayout`、`UiTextSelection`、`UiTextHistory`、`UiHistoryDispatcher`、`UiHistoryShortcut` |
-| 实体与加载预览 | `UiEntityPreview`、`UiBlockPreview`、`UiModelBounds`、`UiCarousel`、`UiIcon.Rendered`、`UiSpinner`、`UiProgressBar` |
-| 输入与捕获 | `UiInputContext`、`UiInputTarget`、`UiInputRouter`、`UiInputCapture`、`UiValueInteraction` |
-| 数值与滑块 | `UiNumberPolicy`、`UiNumbers`、`UiSliderWindow`；`UiScalarSlider`、`UiRangeSlider`、`UiRangeValue`、`UiRangeEnd`、`UiCyclicRange` |
-| 滑块样式与样式注入 | `UiSliderStyle`、`UiSliderPainter`、`PixelSliderPainter`、`UiSliderRole`、`UiSliderSkin`、`UiStyleSource` |
-| 焦点 | `UiFocusTarget`、`UiFocusManager` |
-| 灯箱与几何 | `UiLightbox`、`UiImageView`、`LightboxImage`；`UiRect`、`UiTarget`、`UiAction`、`UiNineSlice` |
-| 画布与树布局 | `UiTidyTreeLayout`、`UiDotGrid`、`UiOrthoLink`、`UiRubberBand`、`UiIconSheet`、`UiIconStrip`、`UiFloatingPanel` |
-| 不可变树编辑 | `UiTreePath`、`UiTreeEditor`、`UiTreeMoveInteraction`、`UiTreeCodec` |
-| 导航与绘制层级 | `UiNavigationHistory`、`UiRenderLayers` |
-
-调用示例类：`UiSliderExamples`（无规则语义，只有装配与事件顺序）。
-
-### 2.1 成员变更登记
-
-维护副本的新增与修改成员在本表登记，不再依赖与上游逐文件比对（[ADR-0028](../../../adr/0028-canvas-page-and-flat-skin.md) 决策 5）：
-
-| 类型 | 成员 | 用途与来源 | 宿主接入点 |
-| --- | --- | --- | --- |
-| `UiProgressBar` | `Style`、`reset`、`render` | 外部时间与配色驱动的平滑计数／未知总量进度条，无保存业务或网络依赖 | 保存模态 `RuleSaveOverlay` |
-| `UiIconStrip` | `cellsWidth(List<Item>)` | 静态只读度量：一组可见格子横向覆盖的宽度（最右边缘减最左边缘），零可见格子返回 0。新增成员，上游无对应实现 | 画布页外壳（`ConditionTreeOverlay`）用它把功能栏底板收窄到最后一个图标格之后，右侧空白交还画布 |
-
-## 3. 分册
-
-| 分册 | 什么时候读 | 内容 |
+| 模块 | 代码路径 | 本文章节 |
 |---|---|---|
-| [input-routing.md](input-routing.md) | 接入指针/键盘/滚轮，或排查「释放被谁消费」 | 事件路由顺序、输入上下文与目标契约、捕获与单值操作生命周期、按下归属与弹出层所有者契约 |
-| [value-controls.md](value-controls.md) | 接入滑块/区间/周期控件或调数值策略 | `UiNumberPolicy` 与 `UiSliderWindow`、三类滑块核心、样式注入 |
-| [text-controls.md](text-controls.md) | 接入单行/多行文本、码点上限或文本局部撤销 | `UiTextArea` 与 `UiTextInput` 的共同约定、码点长度上限、程序回填、文本历史与快捷键 |
-| [tree-editing.md](tree-editing.md) | 接入条件树等不可变树的编辑 | `UiTreePath` / `UiTreeEditor`、单节点与批量结构操作、移动捕获、编解码注入 |
-| [rendering-and-preview.md](rendering-and-preview.md) | 接入实体/方块预览、渲染层级或悬停门禁 | 预览 API、模型适框、渲染层级、指针门禁、滚动容器悬停、轮播 |
+| UI kit | `client/ui/kit` | 2 |
 
-## 4. 宿主接入清单
+本包的 67 个公开顶层类型由 6 篇分册覆盖，逐类型的分册归属见第 3 节，分册文档链接见第 4 节。
 
-- 文本、图标、renderer、主题全部由宿主传入；kit 不硬编码 `gui.itemdespawntowhat.*` 等本模组语言 key。
-- HUD/GUI 文本使用本地化 key，并同步 `en_us.json` 与 `zh_cn.json`。
-- 宿主提供指针/键盘快照（`UiInputContext`），不把全局输入状态塞进 kit；路由顺序与「同一事件只被消费一次」见 [input-routing.md](input-routing.md)。
-- 数值控件的合法域与显示窗口分离，显示窗口不得当作提交硬限额；见 [value-controls.md](value-controls.md)。
-- 文本长度上限一律按 Unicode 码点判定；见 [text-controls.md](text-controls.md)。
-- 树编辑只绑定宿主节点，不创建第二份业务树；见 [tree-editing.md](tree-editing.md)。
-- 预览、渲染层级与悬停门禁见 [rendering-and-preview.md](rendering-and-preview.md)。
+## 2. 模块：UI kit
 
-## 5. 校验与拆包就绪门槛
+### 2.1 模块路径
 
-校验顺序（与项目验证协议一致）：
+- 包：`com.meteorite.itemdespawntowhat.client.ui.kit`
+- 源码目录：`common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit`
+- 覆盖：68 个 `.java` 文件（67 个公开顶层类型 + `package-info.java`）
 
-1. 用 IDE 语言服务检查改动的 Java 文件；
-2. `powershell -ExecutionPolicy Bypass -File tools/check-ui-kit-boundaries.ps1` 校验依赖边界（依赖边界须无违规）；
-3. `powershell -ExecutionPolicy Bypass -File tools/dsh-build.ps1 -Tasks "build"`。
+### 2.2 职责
 
-「拆包就绪门槛」（本仓库暂不把 kit 拆成独立 Gradle 模块/子包的理由）：
+- 提供与宿主无关的客户端 UI 基础件：声明式文档排版、固定矩形控件与控件组、布局几何、图标、滚动视口与绘制层级。
+- 通过注入类型接收样式、图标与文本测量：`UiControlStyle`、`UiSliderSkin`、`UiIcon`、`TextMeasurer`，不读全局主题。
+- 定义输入契约、输入捕获、焦点与导航骨架，不持有模态栈。
+- 提供实体、方块、模型预览与灯箱图片查看等可复用渲染入口。
 
-- 依赖边界可自动校验（第 1 节脚本），且当前无违规；
-- 公开 API 有真实宿主示例（`UiSliderExamples`）与接入文档（本目录）；
-- 样式、文本、图标、renderer 均可由外部注入，kit 不含本模组业务；
-- 发布坐标、artifact/version、许可文本、跨 Minecraft 版本与多 loader 发行方式尚未确定，`api/` 与 `internal/` 子包拆分被评估为收益低于迁移成本，因此当前只冻结边界与检查方式，不发布、不用绝对路径依赖来源仓库（与 ADR-0025 一致）。
+### 2.3 对外接口与导出内容
 
-## 6. 已知限制
+成员级签名见各分册的「2.3 对外接口与导出内容」，本表只列出公开类型与分册归属。
 
-- 滑块、区间与周期三类核心均已接线使用：`UiSlider`（委托 `UiScalarSlider`）由表单的数值控件创建，`UiRangeBar` / `UiCyclicTimeBar` 分别委托 `UiRangeSlider` / `UiCyclicRange`，并在触发页的区间与时间条件面板中实例化。
-- 区间与周期核心只提供逻辑与几何，高亮与时间条渲染由宿主完成。
-- 不在 kit 内保证 1.21.1 以外的 Minecraft 版本兼容。
-- 零引用公开面：`UiFloatingPanel`（浮动面板）、`UiNavigationHistory`（导航历史）、`UiLinearLayout`（线性布局）、`UiInputRouter`（输入路由）属通用预留面，`UiSliderExamples` 是滑块装配示例（无规则语义，只有装配与事件顺序）；这 5 个类当前无生产引用，按 [ADR-0033](../../../adr/0033-kit-zero-reference-public-api-retention.md) 保留并登记，不视为悬空。
-- 数值入口两套语义不可互换：容差版 `UiNumbers.plain(double, int)`（按 `INTEGER_TOLERANCE` 消除浮点噪声）用于接受尾数抖动的读数，当前生产消费点是拖动中的滑块读数 `UiScalarSlider.formatValue()`；需要精确还原草稿值的显示点用严格入口 `UiNumbers.plainExact(double, int[, double])`、`isExactIntegral(double, double)`、`trimTrailingZeros(String)`、`roundedText(double)`（取 `Math.round` 语义，不等于 `%.0f` 的 HALF_UP）、`parseFinite(String)` / `parseInt(String)`，表单控件与区间条已改用严格入口。
+| 分组 | 公开类型 | 说明 |
+|---|---|---|
+| 文档与排版 | `UiDocument`、`UiNode`、`UiTransform`、`UiMetrics`、`UiFlowLayout`、`UiLinearLayout` | `UiNode` 内含 `Row`、`InlineIcon`、`Gap`、`Divider`、`FrameSpec`、`Frame`；`UiFlowLayout` 内含 `Wrap`；`UiLinearLayout` 内含 `Axis`、`SizeRule`、`Child` |
+| 控件与控件组 | `UiControl`、`UiControlGroup`、`UiControlStyle`、`UiControlRole`、`UiStyleSource`、`UiIcon`、`UiIconSheet`、`UiIconStrip`、`UiFloatingPanel` | `UiControlStyle` 内含 `State`；`UiIcon` 内含 `Rendered`、`Painter`、`Item`、`Sprite`；`UiIconStrip` 内含 `Orientation`、`Item`；`UiFloatingPanel` 内含 `Dock`、`Content` |
+| 几何与命中 | `UiRect`、`UiTarget`、`UiAction`、`UiNineSlice`、`UiPointer` | `UiTarget` 内含 `Kind`；`UiAction` 是函数式接口 |
+| 滚动与绘制 | `UiScrollView`、`UiRenderLayers`、`UiProgressBar` | `UiProgressBar` 内含 `Style` |
+| 预览与灯箱 | `UiEntityPreview`、`UiBlockPreview`、`UiModelBounds`、`UiCarousel`、`UiSpinner`、`UiLightbox`、`UiImageView`、`LightboxImage` | `UiModelBounds` 内含 `Renderer`；`UiLightbox` 内含 `Labels`、`Gallery`、`Content` |
+| 输入与焦点 | `UiInputContext`、`UiInputTarget`、`UiInputRouter`、`UiInputCapture`、`UiValueInteraction`、`UiFocusTarget`、`UiFocusManager`、`UiNavigationHistory`、`UiHistoryDispatcher` | `UiInputCapture` 内含 `EndReason`、`Target`；`UiInputRouter` 内含 `PointerPhase`；`UiFocusManager` 与 `UiValueInteraction` 各含 `Listener`；`UiHistoryDispatcher` 内含 `KeyHandler` |
+| 数值与滑块 | `UiNumberPolicy`、`UiNumbers`、`UiSliderWindow`、`UiScalarSlider`、`UiRangeSlider`、`UiRangeValue`、`UiRangeEnd`、`UiCyclicRange`、`UiSliderStyle`、`UiSliderPainter`、`UiSliderSkin`、`UiSliderRole`、`PixelSliderPainter`、`UiSliderExamples` | `UiCyclicRange` 内含 `Tick`、`Marker`；`UiSliderPainter` 内含 `Frame`；`UiRangeSlider` 内含 `Listener` |
+| 文本 | `UiTextHistory`、`UiTextSelection`、`UiHistoryShortcut`、`TextMeasurer`、`TextScroll` | `UiTextHistory` 内含 `Snapshot`；`UiTextSelection` 内含 `Target` |
+| 树与画布 | `UiTreeEditor`、`UiTreePath`、`UiTreeCodec`、`UiTreeMoveInteraction`、`UiTidyTreeLayout`、`UiDotGrid`、`UiOrthoLink`、`UiRubberBand` | `UiTreeEditor` 内含 `Adapter`、`Kind`、`Change`、`DropPosition`、`MoveErrors`、`MovePreview`、`Outcome`、`ViewChange`；`UiTreeCodec` 内含 `DecodeResult`；`UiTidyTreeLayout` 内含 `Source` |
+
+### 2.4 依赖关系
+
+- 依赖本模组：无。kit 全部文件的 import 中 `com.meteorite.*` 命中数为 0，包级依赖矩阵也没有以本包为起点的行。
+- 依赖外部：`net.minecraft.`（36 个文件，70 处）、`java.util.`（31 个文件，85 处）、`org.jetbrains.`（28 个文件，29 处）、`org.lwjgl.`（8 个文件，8 处）、`com.mojang.`（3 个文件，4 处）、`org.joml.`（3 个文件，3 处）、`java.math.`（1 个文件，1 处）。
+- 依赖外部（精确类）：`com.mojang.` 的 4 处 import 只涉及 `com.mojang.blaze3d.platform.Lighting`（2 处）、`com.mojang.blaze3d.vertex.PoseStack`（1 处）、`com.mojang.blaze3d.vertex.VertexConsumer`（1 处）。
+- 依赖外部（无 import）：68 个文件中 54 个含 import，14 个不含 import。
+- 被依赖：`client/ui/widget`（25 个文件，127 处）、`client/ui/screen`（20 个文件，61 处）、`client/ui/screen/form`（20 个文件，72 处）、`client/ui/theme`（5 个文件，31 处）、`client/ui/shared`（5 个文件，14 处）、`client/edit`（2 个文件，3 处）、`client/ui/prototype`（1 个文件，3 处）。
+- 边界校验：`tools/check-ui-kit-boundaries.ps1` 扫描本目录全部 `.java` 的 import 与全限定引用；import 白名单为 `java.`、`javax.`、`net.minecraft.`、`org.jetbrains.`、`org.joml.`、`org.lwjgl.`，另精确允许 `com.mojang.blaze3d.platform.Lighting`、`com.mojang.blaze3d.vertex.PoseStack`、`com.mojang.blaze3d.vertex.VertexConsumer`；同包互引允许；`com.meteorite.` 只允许 kit 自身包；`net.fabricmc.`、`net.neoforged.`、`com.google.gson.` 禁用；退出码 0 通过、1 存在违规、2 配置错误。
+
+### 2.5 关键实现位置
+
+- `UiDocument#layout`：把声明式节点排成块几何并缓存，脏标记为假时直接复用。
+- `UiDocument#hit`：与绘制共用同一份块几何，按内容坐标返回命中目标。
+- `UiControl#render`：按自身标志解析交互状态与文字色，只在内容越出矩形时设置裁剪。
+- `UiControlGroup#beginUpdate` / `UiControlGroup#obtain` / `UiControlGroup#endUpdate`：按稳定 key 复用控件实例，结束时丢弃未被复用的控件。
+- `UiTransform#push` 与 `UiTransform#enableScissor`：进入内容变换并按视口设置裁剪。
+- `UiScrollView#push` 与 `UiScrollView#pop`：把绘制切到内容坐标并恢复宿主坐标。
+- `UiFloatingPanel#rebuild`：统一重算停靠位置、折叠高度与内容矩形。
+- `UiIconStrip#relayout`：按可见格子的最大字形统一格子尺寸并重排。
+- `UiRenderLayers#draw`：在相对 z 偏移内执行绘制，并在进出时提交批次、恢复 pose。
+- `UiLightbox#layout`：计算面板、内容视口与控制按钮位置，并按视觉顺序登记焦点目标。
+
+### 2.6 代码现状（可核对）
+
+- 目录下 68 个 `.java` 与 67 个公开顶层类型一一对应，`package-info.java` 是唯一没有类型声明的文件。
+- `package-info.java` 的说明文本记录发布形式与 `api/`、`internal/` 子包拆分两类事项；源码目录没有子包目录，构建脚本也没有 kit 独立模块。
+- 本包 import 中不存在 `com.meteorite.`、`net.fabricmc.`、`net.neoforged.`、`com.google.gson.` 前缀。
+- 注释引用 `OverlayLayer`、`LightboxOverlay`（`UiLightbox`）与 `UiTextPalette`（`UiControlStyle`），全仓没有同名类型声明，命中只出现在 javadoc 与生成产物中。
+- 命中入口命名不统一：`UiDocument#hit`、`UiControl#hit`、`UiIconStrip#hit` 返回 `UiTarget`；`UiControlGroup#controlAt` 与 `UiControlGroup#targetAt` 分别返回控件与目标；`UiScrollView#hitScrollbar`、`UiScrollView#hitThumb` 返回 `boolean`。
+- `UiLightbox` 与 `UiScrollView` 不实现 `UiInputTarget`：前者使用 `mouseClicked(double, double, int)` 与 `mouseScrolled(double, double, double)`，后者使用 `mousePressed(double, double, int)`、`mouseDragged(double)`、`mouseReleased()`。
+- kit 内实现 `UiInputTarget` 的类型是 `UiCyclicRange`、`UiFloatingPanel`、`UiIconStrip`、`UiRangeSlider`、`UiScalarSlider`、`UiTextSelection`。
+- `UiIcon` 与 `UiNode` 是 sealed interface，`permits` 列表固定为内部子类型。
+- `UiControlStyle` 的 JavaDoc 说明 `PARCHMENT` 的普通与悬停背景与 `UiControl` 内的硬编码颜色逐像素相同。
+- 公开成员的说明形式不一致：`UiControl#setBounds` 用行注释、`UiControl#setStyle` 与 `UiRect#right` 没有说明、`UiScrollView#setOffset` 没有 JavaDoc。
+
+## 3. 类清单
+
+| 类型 | 分册 | 源码文件 |
+|---|---|---|
+| `UiDocument` | [document-and-controls.md](document-and-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiDocument.java` |
+| `UiNode` | [document-and-controls.md](document-and-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiNode.java` |
+| `UiMetrics` | [document-and-controls.md](document-and-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiMetrics.java` |
+| `UiTransform` | [document-and-controls.md](document-and-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiTransform.java` |
+| `UiFlowLayout` | [document-and-controls.md](document-and-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiFlowLayout.java` |
+| `UiLinearLayout` | [document-and-controls.md](document-and-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiLinearLayout.java` |
+| `UiControl` | [document-and-controls.md](document-and-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiControl.java` |
+| `UiControlGroup` | [document-and-controls.md](document-and-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiControlGroup.java` |
+| `UiControlStyle` | [document-and-controls.md](document-and-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiControlStyle.java` |
+| `UiControlRole` | [document-and-controls.md](document-and-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiControlRole.java` |
+| `UiStyleSource` | [document-and-controls.md](document-and-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiStyleSource.java` |
+| `UiIcon` | [document-and-controls.md](document-and-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiIcon.java` |
+| `UiIconSheet` | [document-and-controls.md](document-and-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiIconSheet.java` |
+| `UiIconStrip` | [document-and-controls.md](document-and-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiIconStrip.java` |
+| `UiFloatingPanel` | [document-and-controls.md](document-and-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiFloatingPanel.java` |
+| `UiRect` | [document-and-controls.md](document-and-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiRect.java` |
+| `UiTarget` | [document-and-controls.md](document-and-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiTarget.java` |
+| `UiAction` | [document-and-controls.md](document-and-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiAction.java` |
+| `UiNineSlice` | [document-and-controls.md](document-and-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiNineSlice.java` |
+| `UiPointer` | [document-and-controls.md](document-and-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiPointer.java` |
+| `UiScrollView` | [document-and-controls.md](document-and-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiScrollView.java` |
+| `UiRenderLayers` | [document-and-controls.md](document-and-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiRenderLayers.java` |
+| `UiProgressBar` | [document-and-controls.md](document-and-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiProgressBar.java` |
+| `UiEntityPreview` | [rendering-and-preview.md](rendering-and-preview.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiEntityPreview.java` |
+| `UiBlockPreview` | [rendering-and-preview.md](rendering-and-preview.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiBlockPreview.java` |
+| `UiModelBounds` | [rendering-and-preview.md](rendering-and-preview.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiModelBounds.java` |
+| `UiCarousel` | [rendering-and-preview.md](rendering-and-preview.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiCarousel.java` |
+| `UiSpinner` | [rendering-and-preview.md](rendering-and-preview.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiSpinner.java` |
+| `UiLightbox` | [rendering-and-preview.md](rendering-and-preview.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiLightbox.java` |
+| `UiImageView` | [rendering-and-preview.md](rendering-and-preview.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiImageView.java` |
+| `LightboxImage` | [rendering-and-preview.md](rendering-and-preview.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/LightboxImage.java` |
+| `UiInputContext` | [input-routing.md](input-routing.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiInputContext.java` |
+| `UiInputTarget` | [input-routing.md](input-routing.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiInputTarget.java` |
+| `UiInputRouter` | [input-routing.md](input-routing.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiInputRouter.java` |
+| `UiInputCapture` | [input-routing.md](input-routing.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiInputCapture.java` |
+| `UiValueInteraction` | [input-routing.md](input-routing.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiValueInteraction.java` |
+| `UiFocusTarget` | [input-routing.md](input-routing.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiFocusTarget.java` |
+| `UiFocusManager` | [input-routing.md](input-routing.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiFocusManager.java` |
+| `UiNavigationHistory` | [input-routing.md](input-routing.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiNavigationHistory.java` |
+| `UiHistoryDispatcher` | [input-routing.md](input-routing.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiHistoryDispatcher.java` |
+| `UiNumberPolicy` | [value-controls.md](value-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiNumberPolicy.java` |
+| `UiNumbers` | [value-controls.md](value-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiNumbers.java` |
+| `UiSliderWindow` | [value-controls.md](value-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiSliderWindow.java` |
+| `UiScalarSlider` | [value-controls.md](value-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiScalarSlider.java` |
+| `UiRangeSlider` | [value-controls.md](value-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiRangeSlider.java` |
+| `UiRangeValue` | [value-controls.md](value-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiRangeValue.java` |
+| `UiRangeEnd` | [value-controls.md](value-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiRangeEnd.java` |
+| `UiCyclicRange` | [value-controls.md](value-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiCyclicRange.java` |
+| `UiSliderStyle` | [value-controls.md](value-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiSliderStyle.java` |
+| `UiSliderPainter` | [value-controls.md](value-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiSliderPainter.java` |
+| `UiSliderSkin` | [value-controls.md](value-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiSliderSkin.java` |
+| `UiSliderRole` | [value-controls.md](value-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiSliderRole.java` |
+| `PixelSliderPainter` | [value-controls.md](value-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/PixelSliderPainter.java` |
+| `UiSliderExamples` | [value-controls.md](value-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiSliderExamples.java` |
+| `UiTextHistory` | [text-controls.md](text-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiTextHistory.java` |
+| `UiTextSelection` | [text-controls.md](text-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiTextSelection.java` |
+| `UiHistoryShortcut` | [text-controls.md](text-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiHistoryShortcut.java` |
+| `TextMeasurer` | [text-controls.md](text-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/TextMeasurer.java` |
+| `TextScroll` | [text-controls.md](text-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/TextScroll.java` |
+| `UiTreeEditor` | [tree-editing.md](tree-editing.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiTreeEditor.java` |
+| `UiTreePath` | [tree-editing.md](tree-editing.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiTreePath.java` |
+| `UiTreeCodec` | [tree-editing.md](tree-editing.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiTreeCodec.java` |
+| `UiTreeMoveInteraction` | [tree-editing.md](tree-editing.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiTreeMoveInteraction.java` |
+| `UiTidyTreeLayout` | [tree-editing.md](tree-editing.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiTidyTreeLayout.java` |
+| `UiDotGrid` | [tree-editing.md](tree-editing.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiDotGrid.java` |
+| `UiOrthoLink` | [tree-editing.md](tree-editing.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiOrthoLink.java` |
+| `UiRubberBand` | [tree-editing.md](tree-editing.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiRubberBand.java` |
+| `package-info.java` | 本文（第 2 节） | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/package-info.java` |
+
+## 4. 相关文档
+
+- [UI kit 文档与控件分册](document-and-controls.md)
+- [UI kit 输入路由分册](input-routing.md)
+- [UI kit 数值控件分册](value-controls.md)
+- [UI kit 文本分册](text-controls.md)
+- [UI kit 树与画布分册](tree-editing.md)
+- [UI kit 预览与灯箱分册](rendering-and-preview.md)
+- [前端实现文档索引](../README.md)
+- [客户端层职责](../../layers/client.md)

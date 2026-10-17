@@ -25,5 +25,5 @@
 ## 后果
 
 - ADR-0022 决策 6 的圆角卡片禁令由本决策取代；kit 的公开面与差异记录方式见 UI kit 文档。
-- 画布页与表单页各自维护一套视觉规格；画布页规格见[编辑页卡片布局](../dev/internals/editor-card-layout.md)文末。
+- 画布页与表单页各自维护一套视觉规格；页面职责见[编辑器屏幕与模式页](../dev/internals/ui-screen.md)与[表单与叶面板](../dev/internals/ui-screen-form.md)。
 - 新增 kit 公开类需要登记，`tools/check-ui-kit-boundaries.ps1` 仍是唯一强制校验。

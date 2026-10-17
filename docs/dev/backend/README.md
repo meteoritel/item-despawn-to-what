@@ -1,7 +1,7 @@
 # 后端开发者文档地图
 
 > 范围：**Minecraft 1.21.1 / Fabric + NeoForge 的后端**——`common` 的 `core/**` 与两端平台接入层。
-> 不含前端编辑 UI（编辑器已落地；界面契约见 [../internals/editor-pages-contract.md](../internals/editor-pages-contract.md) 与 [../internals/editor-card-layout.md](../internals/editor-card-layout.md)，UI kit 扩展点见 [../internals/ui-kit/README.md](../internals/ui-kit/README.md)）。
+> 不含前端编辑 UI（编辑器已落地；页面层见 [../internals/ui-screen.md](../internals/ui-screen.md) 与 [../internals/ui-screen-form.md](../internals/ui-screen-form.md)，状态层见 [../internals/client-edit.md](../internals/client-edit.md)，UI kit 扩展点见 [../internals/ui-kit/README.md](../internals/ui-kit/README.md)）。
 > 目的：**知道技术路线、能找到类、知道改哪里**。所有结论都能在仓库中逐个核对。
 
 ## 1. 三层视图：同一个后端，三种问题

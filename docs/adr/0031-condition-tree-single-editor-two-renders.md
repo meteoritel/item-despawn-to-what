@@ -1,6 +1,6 @@
 # ADR-0031：条件树编辑收敛为同一控件的两种渲染模式
 
-- 状态：已接受；条件树与四页职责见[编辑器四页契约](../dev/internals/editor-pages-contract.md)。
+- 状态：已接受；条件树与四页职责见[编辑器页面与页签](../dev/internals/ui-screen.md)与[表单与叶面板](../dev/internals/ui-screen-form.md)。
 - 依据：条件树双实现的实测结论，以及用户对「两套条件树控件是否合并」的答复。
 
 ## 背景

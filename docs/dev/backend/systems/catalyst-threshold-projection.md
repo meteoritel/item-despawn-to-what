@@ -1,7 +1,7 @@
 # 横向系统：催化剂门槛运行投影
 
 > 事实来源：`CatalystThresholdProjection`、`RuleIndex`、`CatalystPresentCondition`、`CatalystPresentEvaluator`、`Effect.withConditions`。
-> 相关：[规则模型](../modules/rule-model.md)、[转化运行时](../modules/conversion-runtime.md)、[编辑器职责](../../internals/editor-pages-contract.md)。
+> 相关：[规则模型](../modules/rule-model.md)、[转化运行时](../modules/conversion-runtime.md)、[编辑器页面与页签](../../internals/ui-screen.md)。
 
 ## 声明与有效数量
 

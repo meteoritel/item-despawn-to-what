@@ -1,118 +1,105 @@
-# UI kit：输入路由、捕获与释放归属
+# 输入路由、捕获与值交互（client/ui/kit）
 
-> 事实来源：`client/ui/kit/`（`UiInputRouter`、`UiInputContext`、`UiInputTarget`、`UiInputCapture`、`UiValueInteraction`）与宿主 `client/ui/screen/form/FormView`、`client/ui/widget`。
-> 上承 [UI kit 入口](README.md)。本册只回答「一次输入事件由谁消费、由谁接收释放」。
+> 层级：基础组件层；模块路径：`client/ui/kit`；源码目录：`common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit`。
+> 事实来源：本文件「类清单」列出的源码文件。文档与源码不一致时以源码为准。
 
-## 1. 输入路由顺序
+## 1. 模块索引
 
-每个输入事件只消费一次，按以下顺序询问，任一环节返回 `true` 即停止：
-
-```text
-顶层 modal 作用域（由宿主解析，kit 不持有模态栈）
-  → 该作用域内的捕获目标（UiInputCapture.captured()）
-  → 聚焦控件（UiFocusManager.focused()）
-  → 容器导航（PageUp/PageDown、滚动等）
-```
-
-`UiInputRouter` 固化这个顺序：
-
-- `pressed/dragged/released/scrolled(@Nullable UiInputTarget captureTarget, @Nullable UiInputTarget hitTarget, UiInputContext context[, double scrollY])`：非释放事件先问捕获目标、再问命中控件；`released` 优先交给捕获目标（保证指针拖出控件矩形后仍能收到唯一一次释放），**没有捕获目标时回退派发给命中控件**；`released` 的唯一性最终由宿主容器的按下归属保证（见第 4 节）。
-- `keyPressed/keyReleased(@Nullable UiInputTarget focused, @Nullable UiInputTarget container, int keyCode, int scanCode, int modifiers)`：聚焦控件优先，未消费才交给容器。
-- `charTyped(@Nullable UiInputTarget focused, @Nullable UiInputTarget container, char codePoint, int modifiers)`。
-
-宿主侧现状：`client/ui/screen/form/FormInputRouter#keyPressed`（`FormView#keyPressed` 委托给它）的处理顺序是「picker → 聚焦控件 → 未消费才滚动」，`PAGE_UP`/`PAGE_DOWN` 在聚焦控件之后才处理；`FormInputRouter#keyReleased` 把 key-up 交给聚焦控件，宿主屏幕 `RuleEditorScreen#keyReleased` 再转发给它。kit 侧控件在未显式启用页步长（`setPageStep(n>0)`）时不消费这两个键，因此普通滑块不会与容器滚动冲突。
-事件只消费一次的约定由宿主保证：任何控件返回 true 后，容器与页面级处理都必须立即停止。
-
-本节只约定「一次事件由谁消费」；容器把释放与拖动派发给哪个控件另有一套**按下归属**规则，见第 4 节。
-
-## 2. 输入上下文与目标契约
-
-### 2.1 UiInputContext
-
-```text
-public record UiInputContext(double pointerX, double pointerY, int button,
-                             boolean shift, boolean ctrl, boolean alt)
-```
-
-- `UiInputContext.pointer(double pointerX, double pointerY, int button, int modifiers)`：`modifiers` 为 GLFW 位掩码，直接来自原版事件；
-- `UiInputContext.keys(int modifiers)`：没有指针信息时使用；
-- `UiInputContext.of(...)` / `withPointer(double, double)` / `int modifiers()` / `shiftDown()` / `ctrlDown()` / `altDown()`。
-
-kit 控件不在内部查询全局 Screen/Minecraft 实例，宿主必须在事件入口构造本对象。
-
-### 2.2 UiInputTarget
-
-`UiInputTarget` 是 kit 侧的统一输入契约（全部 `default` 返回 `false`）：`mousePressed/mouseDragged/mouseReleased(UiInputContext)`、`mouseScrolled(UiInputContext, double)`、`keyPressed/keyReleased(int, int, int)`、`charTyped(char, int)`。返回「是否消费」。
-
-宿主控件契约是 `client/ui/widget/UiWidget`，由 `client/ui/widget/UiSlider` 之类的适配层转成 `UiInputContext` 后调用 kit 核心。
-
-## 3. 捕获与单值操作生命周期
-
-### 3.1 UiInputCapture
-
-一个输入作用域同一时刻只允许一个捕获目标：
-
-```text
-capture.begin(target);                    // 开始捕获；已有其它目标时先以 CANCEL 结束它
-capture.isCaptured(); capture.isCapturedBy(target); capture.captured();
-capture.end(UiInputCapture.EndReason.RELEASE);   // 统一结束入口
-```
-
-`EndReason`：`RELEASE`（正常收尾，应提交）、`CANCEL`、`HIDDEN`、`DISABLED`、`UNMOUNTED`、`FOCUS_SCOPE_CHANGED`、`HOST_CLOSED`；`cancels()` 对除 `RELEASE` 外的原因返回 `true`。
-
-具名包装：`release()`、`cancel()`、`endForHidden()`、`endForDisabled()`、`endForUnmount()`、`endForFocusScopeChange()`、`endForHostClose()`。
-
-**宿主要求**：控件被隐藏/禁用/卸载、焦点作用域切换、宿主窗口关闭时必须走统一结束入口（对方是 `UiScalarSlider.endInteraction(EndReason)` / `unmount()` / `onFocusScopeChanged()` / `onHostClosed()`，以及 `setVisible(false)` / `setEnabled(false)` 自动触发的 HIDDEN/DISABLED），否则会残留捕获与未提交预览。
-
-### 3.2 UiValueInteraction
-
-单值控件的一次操作生命周期：
-
-```text
-boolean begin(double startValue, @Nullable Listener listener);
-boolean preview(double value);   // 同值/未开始/非有限值不回调
-boolean commit();                // 无变化返回 false 且不回调
-boolean cancel();                // 回退到 startValue 并回调 cancelled
-```
-
-`Listener`：`began(double)`、`previewed(double, double)`、`committed(double, double)`、`cancelled(double, double)`；`UiValueInteraction.NONE` 是空实现。
-
-三条硬约定：
-
-1. **回填不产生事件**：`UiScalarSlider.setValue(double)` 这类回填直接改值，不回调、不吸附、不产生编辑历史；越界或非有限回填返回 `false` 并置 `isBackfillInvalid()`。
-2. **单动作单提交**：一次拖动/一次按键重复/一次精确编辑恰好 `commit` 一次；方向键重复在 `keyReleased` 合并。
-3. **无变化无历史**：`commit()` 在值未变化时返回 `false`，宿主据此不写历史。
-
-宿主务必区分：`previewed` 只做局部视觉刷新，`committed` 才写状态；`cancelled` 表示已回退，宿主不需要再改状态。
-
-## 4. 按下归属模型
-
-**契约句**：只有真正承接对应按下/捕获的控件消费释放，按钮必须收到自己的释放事件；复合表单遵循同一规则，不为恢复命名按钮写事件绕过特例。
-
-容器级「按下归属」：容器在 `mouseClicked` 命中控件时记录归属（`pressedWidget` / `pressedControl`），`mouseReleased` / `mouseDragged` 只派发给该归属，**没有归属时不派发**；控件自身的 `pressed` 守卫只作控件级兜底。两者叠加的含义：
-
-| 情况 | 释放归属 | 结果 |
+| 模块 | 代码路径 | 本文章节 |
 |---|---|---|
-| 容器记录了归属，且控件这次确实承接了按下 | 该控件 | 恰好消费一次释放（指针拖出矩形后仍收到） |
-| 容器记录了归属，但控件未承接按下 | 该控件 | 控件级守卫返回 false，不误消费 |
-| 容器没有归属（按下发生在容器外等） | 无 | 不派发、不广播、不残留按下态 |
+| 输入路由、捕获与值交互 | `client/ui/kit` | §2 |
 
-各宿主的归属实现（按源码核对）：
+## 2. 模块：输入路由、捕获与值交互
 
-- `FormView`：字段 `pressedWidget` / `pressedControl` 声明在 `FormView`（几何与滚动状态也由它持有），归属逻辑集中在 `client/ui/screen/form/FormInputRouter`，`FormView` 的鼠标与键盘入口全部委托给它。`mouseClicked` 依次询问 picker → 行内 picker 按钮 → 行尾 action 按钮（如「恢复自动命名」）→ 行控件，命中即 `rememberPress`；`mouseReleased` 先取出并清空归属，再只派发一次；`mouseDragged` 同样只给归属；行内 picker 打开时按第 5 节处理。
-- `RuleEditorPageInput`（`client/ui/screen/RuleEditorPageInput`）：字段 `pressedWidget`。`mouseClicked` 先给页面滚动条、再给结果页行内删除，然后遍历 `liveWidgets` 记录归属；`mouseReleased` 先结算拖动排序，再只在归属仍 `isVisible()` 时派发一次并清空，无归属返回 false。`RuleEditorEditPages` 的 `mouseClicked` / `mouseReleased` 只把事件委托给它。
-- 控件级兜底：`UiButton.mouseReleased` 检查 `control.isPressed()`；`UiTextArea` / `UiTextInput` 把鼠标事件委托给 kit 的 `UiTextSelection`，其 `mouseReleased` 返回 `capture.release()`，只有本次确实由它捕获按下才消费。它们共同保证「容器派给我、但我这次没接住按下」时也不消费释放。
-- 复合表单（`TextControl`，`FormControl` 的子类）把同行多类输入合成一次命中：`mouseClicked` 先试预设按钮再给输入控件，`mouseReleased` / `mouseDragged` 只转发给当前可见的那个；释放归属仍由外层容器记录，子控件不重复记账。
+### 2.1 模块路径
 
-## 5. 弹出层所有者契约（行内 picker）
+- 包：`com.meteorite.itemdespawntowhat.client.ui.kit`
+- 源码目录：`common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit`
+- 覆盖类型：9（本分组类型，不含 `package-info.java`；包级说明见 [UI kit 入口](README.md)）
 
-**契约句**：当行内 picker 处于打开状态时，`FormInputRouter` 把鼠标、滚轮与键盘事件直接交给该 picker，picker 即当前唯一事件所有者；关闭后恢复容器归属派发。**这是设计契约，不是例外**——弹出层在其存续期间是唯一所有者；「按钮必须收到自己的释放事件」只在本层未接管时适用。
+本分组覆盖 `UiInputContext`、`UiInputTarget`、`UiInputRouter`、`UiInputCapture`、`UiValueInteraction`、`UiFocusManager`、`UiFocusTarget`、`UiNavigationHistory`、`UiHistoryDispatcher`。
 
-- 原因：下拉/选择层覆盖在表单之上，若仍按「按下归属」派发，释放会被下层控件抢走，选择项点不到；让弹出层独占本层事件是与归属模型一致的更强所有者语义。
-- 与之对应：picker 打开期间容器不再记录新的按下归属（点击先交给 picker），picker 关闭后恢复归属派发，因此不会沿用陈旧所有者。
+### 2.2 职责
 
-## 6. 禁止与反例
+- `UiInputContext` 以显式快照携带指针坐标、按键编号与 Shift/Ctrl/Alt 修饰键；kit 控件不在内部查询全局屏幕或客户端实例。
+- `UiInputTarget` 定义 kit 统一的指针、滚轮、键盘与字符输入契约，每个方法返回「是否消费」。
+- `UiInputRouter` 固化路由顺序：指针事件先问捕获目标、再问命中控件；键盘事件先问聚焦控件、未消费才交给容器导航。
+- `UiInputCapture` 让一个输入作用域同一时刻只有一个捕获目标，并在结束时按 `EndReason` 通知目标。
+- `UiValueInteraction` 记录单值控件一次操作的 begin → preview → commit/cancel 生命周期，并在提交时报告「值是否变化」。
+- `UiFocusManager` 按宿主给出的视觉顺序持有一组可聚焦目标，唯一决定当前焦点，并处理 Tab/Shift+Tab 与 Enter/Space。
+- `UiFocusTarget` 是焦点系统读取可聚焦性、边界、焦点状态与激活语义的适配接口。
+- `UiNavigationHistory` 提供泛型、有界、可按有效性过滤的导航快照历史。
+- `UiHistoryDispatcher` 把撤销/重做快捷键只派发给当前作用域，作用域未消费时转交宿主历史。
 
-- 不得为某个按钮（尤其「恢复自动命名」）在 `mouseReleased` 里加特例绕过归属，也不得把释放广播给所有控件。
-- 不得在未记录归属时转发释放：否则后绘制的控件会吞掉释放，先绘制的按钮会停在按下态。
-- 与第 1 节的分工：`UiInputRouter` 决定「一次事件由谁消费」，容器归属决定「释放与拖动派给谁」；同一事件仍只能被消费一次。
+### 2.3 对外接口与导出内容
+
+| 类型 | 种类 | 公开成员 | 说明 |
+|---|---|---|---|
+| `UiInputContext` | record | `UiInputContext(double, double, int, boolean, boolean, boolean)`；`EMPTY`；`pointer(double, double, int, int)`；`keys(int)`；`of(double, double, int, boolean, boolean, boolean)`；`withPointer(double, double)`；`modifiers()`；`shiftDown()`/`ctrlDown()`/`altDown()` | 一次输入事件的显式上下文；`button` 为 GLFW 鼠标键编号，键盘或程序化调用传 `-1` |
+| `UiInputTarget` | interface | `mousePressed/mouseDragged/mouseReleased(UiInputContext)`；`mouseScrolled(UiInputContext, double)`；`keyPressed/keyReleased(int, int, int)`；`charTyped(char, int)` | 全部方法为 `default` 且返回 `false`；返回 `true` 表示本次事件已被消费 |
+| `UiInputRouter` | final class | `pressed/dragged/released/scrolled(@Nullable UiInputTarget, @Nullable UiInputTarget, UiInputContext[, double])`；`keyPressed/keyReleased(@Nullable UiInputTarget, @Nullable UiInputTarget, int, int, int)`；`charTyped(@Nullable UiInputTarget, @Nullable UiInputTarget, char, int)`；嵌套 `enum PointerPhase {PRESSED, DRAGGED, RELEASED, SCROLLED}` | 私有构造，全部入口为静态方法 |
+| `UiInputCapture` | final class | `begin(Target)`；`isCaptured()`；`isCapturedBy(Target)`；`captured()`；`end(EndReason)`；`release()`/`cancel()`/`endForHidden()`/`endForDisabled()`/`endForUnmount()`/`endForFocusScopeChange()`/`endForHostClose()`；嵌套 `enum EndReason` 与 `interface Target` | `EndReason` 取值 `RELEASE`、`CANCEL`、`HIDDEN`、`DISABLED`、`UNMOUNTED`、`FOCUS_SCOPE_CHANGED`、`HOST_CLOSED`；`EndReason#cancels()` 除 `RELEASE` 外均为 `true` |
+| `UiValueInteraction` | final class | `begin(double, @Nullable Listener)`；`isActive()`；`startValue()`；`currentValue()`；`changed()`；`preview(double)`；`commit()`；`cancel()`；`reset()`；`NONE`；嵌套 `interface Listener` | `Listener`：`began(double)`、`previewed(double, double)`、`committed(double, double)`、`cancelled(double, double)`，均有默认空实现 |
+| `UiFocusManager` | final class | `beginUpdate()`；`add(UiFocusTarget)`；`endUpdate()`；`clear()`；`size()`；`targets()`；`focused()`；`focusedIndex()`；`focusOn(@Nullable UiFocusTarget)`；`clearFocus()`；`focusFirst()`；`moveFocus(int)`；`activateFocused()`；`keyPressed(int, int, int)`；`setEnterActivates(boolean)`；`setSpaceActivates(boolean)`；`setListener(@Nullable Listener)`；嵌套 `interface Listener` | `Listener#focusChanged(@Nullable UiFocusTarget, @Nullable UiFocusTarget)` |
+| `UiFocusTarget` | interface | `canFocus()`；`setFocused(boolean)`；`isFocused()`；`activate()`；`bounds()`；`accessibleName()` | `bounds()` 返回 `UiRect`；`accessibleName()` 可返回 `null` |
+| `UiNavigationHistory<State>` | final class | `UiNavigationHistory(int capacity)`；`push(State)`；`canGoBack(Predicate<State>)`；`back(Predicate<State>, Consumer<State>)`；`clear()` | 容量小于 1 时构造抛 `IllegalArgumentException` |
+| `UiHistoryDispatcher` | final class | `dispatch(int, int, int, KeyHandler, @Nullable Consumer<UiHistoryShortcut>)`；嵌套 `interface KeyHandler` | `KeyHandler#keyPressed(int, int, int)`；私有构造 |
+
+### 2.4 依赖关系
+
+- 依赖本模组：无。本分组 9 个文件均不 import 其它模组包；同包类型直接引用，不产生 import。
+- 依赖外部：`java.util`（3 个文件 import，共 10 处）、`java.util.function`（2 个文件，3 处）、`net.minecraft.network.chat`（1 个文件，1 处，`Component`）、`org.jetbrains.annotations`（6 个文件，6 处，`Nullable`）、`org.lwjgl.glfw`（2 个文件，2 处，`GLFW`）。
+- 被依赖：`client/ui/widget`（17 个文件 import，共 32 处）、`client/ui/screen/form`（18 个文件，29 处）、`client/ui/screen`（10 个文件，16 处）、`client/ui/prototype`（1 个文件，2 处）；合计 46 个文件、79 处。
+
+### 2.5 关键实现位置
+
+- `UiInputRouter#pressed`/`#dragged`/`#scrolled`：转调 `routePointer`，捕获目标消费则不再向下询问，否则交给命中控件；命中控件与捕获目标相同时不重复派发。
+- `UiInputRouter#released`：有捕获目标时只交给捕获目标，其返回值即最终结果，不再回退派发给命中控件；没有捕获目标时交给命中控件。
+- `UiInputRouter#keyPressed`/`#keyReleased`/`#charTyped`：先问聚焦控件，未消费且容器不是同一对象才交给容器。
+- `UiInputRouter#routePointer`/`#dispatch`：按 `PointerPhase` 分派到 `UiInputTarget` 的四个指针方法。
+- `UiInputCapture#begin`：已有其它目标时先以 `CANCEL` 结束旧捕获，再登记新目标；目标相同时直接返回。
+- `UiInputCapture#end`：先清空引用再回调 `Target#captureEnded`，因此回调内重入不会重复结束。
+- `UiValueInteraction#preview`/`#commit`/`#cancel`/`#reset`：维护 `active`、`startValue`、`currentValue` 与 `listener`；`commit` 只在值变化时回调。
+- `UiFocusManager#endUpdate`：仅当 `updating` 为真时用本帧登记结果替换目标列表，随后清空暂存集合并调用 `refresh`。
+- `UiFocusManager#refresh`/`#setFocusedInternal`：目标失效时清除焦点并通知 `Listener`；焦点未变时不重复通知。
+- `UiFocusManager#moveFocus`：只在 `canFocus()` 为真的目标之间移动，支持环绕，无目标时不消费。
+- `UiNavigationHistory#push`/`#back`：`push` 忽略与栈顶相同的快照与恢复期间的写入；`back` 弹出并跳过失效快照，恢复期间置位 `restoring`。
+- `UiHistoryDispatcher#dispatch`：先由 `UiHistoryShortcut#fromKey` 判定是否为历史快捷键，再由当前作用域 `KeyHandler` 消费，未消费时调用宿主 `Consumer`。
+
+### 2.6 代码现状（可核对）
+
+- `UiInputRouter` 与 `UiNavigationHistory` 在 kit 包外没有 import（0 个文件、0 处）；包内除自身外，`UiInputRouter` 只出现在 `package-info.java` 的公开面清单与 `UiSliderExamples` 的 JavaDoc 引用里，`UiNavigationHistory` 只出现在 `package-info.java` 的公开面清单里。
+- `UiInputContext` 对同一状态提供两套访问名：record 访问器 `shift()`/`ctrl()`/`alt()` 与 `shiftDown()`/`ctrlDown()`/`altDown()`。
+- `UiInputTarget` 的七个方法使用行注释而非 JavaDoc。
+- `UiFocusManager#size` 返回目标数量，语义与 `targets().size()` 相同，且没有 `isEmpty()`。
+- `UiFocusManager#add` 在 `beginUpdate` 之外调用时不会被 `endUpdate` 写入目标列表：`endUpdate` 只在 `updating` 为真时替换 `targets`，随后无条件清空 `nextTargets`。
+- `UiFocusManager#keyPressed` 只识别 Tab、Enter、小键盘 Enter 与 Space；Esc 与方向键不属于本类。
+- `UiNavigationHistory` 没有容量或长度读取入口（无 `capacity()`、`size()`），容量仅在构造期校验。
+- `UiNavigationHistory#canGoBack` 会就地移除失效快照（遍历时调用 `removeIf`），带副作用；`back` 同样移除被跳过的失效快照。
+- `UiValueInteraction#cancel` 不修改任何外部状态，只把 `currentValue` 重置为 `startValue` 并回报该值；值的实际回退由控件完成（`UiScalarSlider#finishInteraction`）。
+- `UiValueInteraction#commit` 与 `#cancel` 都会先重置状态再回调，同一次操作后一次调用变为空操作。
+- `UiHistoryDispatcher#dispatch` 对识别到的历史快捷键恒返回 `true`，即使当前作用域未消费且宿主回调为 `null`。
+
+## 3. 类清单
+
+| 类型 | 职责 | 关键成员 |
+|---|---|---|
+| `UiInputContext` | 一次输入事件的上下文快照 | `pointer`、`keys`、`withPointer`、`modifiers` |
+| `UiInputTarget` | kit 统一输入契约 | `mousePressed`、`mouseDragged`、`mouseReleased`、`mouseScrolled`、`keyPressed`、`keyReleased`、`charTyped` |
+| `UiInputRouter` | 固化「捕获 → 命中」「聚焦 → 容器」的路由顺序 | `pressed`、`dragged`、`released`、`scrolled`、`keyPressed`、`charTyped`、`PointerPhase` |
+| `UiInputCapture` | 单捕获登记与统一结束原因 | `begin`、`end`、`EndReason`、`Target#captureEnded` |
+| `UiValueInteraction` | 单值操作生命周期 | `begin`、`preview`、`commit`、`cancel`、`Listener` |
+| `UiFocusManager` | 视觉顺序焦点登记与键盘导航 | `beginUpdate`、`add`、`endUpdate`、`focusOn`、`moveFocus`、`keyPressed` |
+| `UiFocusTarget` | 焦点目标适配接口 | `canFocus`、`setFocused`、`isFocused`、`activate`、`bounds`、`accessibleName` |
+| `UiNavigationHistory` | 有界导航快照历史 | `push`、`canGoBack`、`back`、`clear` |
+| `UiHistoryDispatcher` | 历史快捷键的作用域派发 | `dispatch`、`KeyHandler` |
+
+`package-info.java` 承载包级公开面说明，见 [UI kit 入口](README.md)。
+
+## 4. 相关文档
+
+- [UI kit 入口](README.md)
+- [数值控件与滑块](value-controls.md)
+- [文本历史与文本测量](text-controls.md)
+- [不可变树编辑与画布原语](tree-editing.md)
+- [internals 索引](../README.md)

@@ -1,104 +1,135 @@
-# UI kit：数值策略与滑块核心
+# 数值策略、滑块与区间（client/ui/kit）
 
-> 事实来源：`client/ui/kit/` 的 `UiNumberPolicy`、`UiSliderWindow`、`UiScalarSlider`、`UiRangeSlider`、`UiRangeValue`、`UiRangeEnd`、`UiCyclicRange`、`UiSliderStyle`、`UiSliderPainter`、`PixelSliderPainter`、`UiSliderExamples`；宿主主题 `client/ui/theme/UiTheme`。
-> 上承 [UI kit 入口](README.md)；输入路由与捕获生命周期见 [input-routing.md](input-routing.md)。
+> 层级：基础组件层；模块路径：`client/ui/kit`；源码目录：`common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit`。
+> 事实来源：本文件「类清单」列出的源码文件。文档与源码不一致时以源码为准。
 
-## 1. 数值策略：UiNumberPolicy 与 UiSliderWindow
+## 1. 模块索引
 
-```text
-public record UiNumberPolicy(double min, double max, double coarseStep, double fineStep,
-                             boolean integerOnly, double fineDragFactor)
-```
+| 模块 | 代码路径 | 本文章节 |
+|---|---|---|
+| 数值策略、滑块与区间 | `client/ui/kit` | §2 |
 
-- 表达**合法数值域**：`min`/`max`、粗档 `coarseStep`、细档 `fineStep`、`integerOnly`、细调拖动系数。
-- 构造即校验：非有限边界、`max <= min`、步长 `<= 0`、`fineDragFactor` 不在 `(0, 1]`、整数策略下边界/步长非整数（步长需 `>= 1`）都抛 `IllegalArgumentException`。
-- 工厂：`of(min, max, step)`、`of(min, max, coarseStep, fineStep)`、`integer(min, max, coarseStep)`、`integer(min, max, coarseStep, fineStep)`、`withFineDragFactor(double)`。
-- 取值：`clamp(double)`、`snap(double, boolean fine)`（十进制吸附，消除 0.1 连加尾数）、`snapUnclamped(...)`、`step(boolean)`、`dragValuePerPixel(int trackPixels, double windowSpan, boolean fine)`。
+## 2. 模块：数值策略、滑块与区间
 
-```text
-public record UiSliderWindow(double min, double max)
-```
+### 2.1 模块路径
 
-- 表达**轨道显示窗口**（几何映射），`of` / `span()` / `contains(double)` / `fraction(double)` / `clampFraction(double)` / `valueAt(double)`。
-- `fraction(double)` 故意不钳制：返回 `<0` 或 `>1` 时控件画溢出标记；`valueAt(double)` 先钳制比例，因此点击轨道不会产生窗口外的值。
+- 包：`com.meteorite.itemdespawntowhat.client.ui.kit`
+- 源码目录：`common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit`
+- 覆盖类型：14（本分组类型，不含 `package-info.java`；包级说明见 [UI kit 入口](README.md)）
 
-区别与硬规则：
+本分组覆盖 `UiNumberPolicy`、`UiNumbers`、`UiSliderWindow`、`UiScalarSlider`、`UiRangeSlider`、`UiRangeValue`、`UiRangeEnd`、`UiCyclicRange`、`UiSliderStyle`、`UiSliderPainter`、`UiSliderSkin`、`UiSliderRole`、`PixelSliderPainter`、`UiSliderExamples`。
 
-| 维度 | UiNumberPolicy | UiSliderWindow |
-| --- | --- | --- |
-| 含义 | 哪些值合法、按几档吸附 | 哪一段铺在整条轨道上 |
-| 越界行为 | 钳制 + 报告回填状态 | 不拒绝，只影响几何与溢出标记 |
-| 允许范围 | 提交与校验的唯一依据 | 仅是显示/交互便利 |
+### 2.2 职责
 
-**窗口不得当作提交硬限额**：超出显示窗口但仍在合法域内的值必须可以显示、可以用键盘/精确入口到达；控件打开时绝不因为窗口而钳制合法值。
+- `UiNumberPolicy` 描述「哪些值合法」：合法域、粗细两档步长、整数策略与细调拖动系数，构造期校验全部参数。
+- `UiNumbers` 提供数值与文本互转：显示侧按「整数直出、否则定点小数」，解析侧只接受有限值。
+- `UiSliderWindow` 描述「哪一段铺在整条轨道上」，只参与几何映射，不参与合法性判断。
+- `UiScalarSlider` 是标量滑块核心：一个值、一条轨道、一套输入契约，区分数据回填、用户操作与取消三条通路。
+- `UiRangeSlider` 是双端区间交互核心，只提供逻辑与几何，不绘制；两端都存在时保持 `low <= high`，端点身份不因拖动互换。
+- `UiRangeValue` 是不可变区间状态：两端数值加两个「端点是否存在」标志，缺席端数值恒为 `Double.NaN`。
+- `UiRangeEnd` 是区间端点身份，用于记录「当前端」而不依赖数值比较推断。
+- `UiCyclicRange` 是周期区间交互核心，只提供逻辑与几何；数值折返到 `[0, period)`，`from > to` 表示跨周期。
+- `UiSliderStyle` 是不可变滑块样式：轨道、填充、手柄、禁用、错误、溢出与文字槽用色，加轨道高度、手柄宽度与上下外扩。
+- `UiSliderPainter` 是绘制策略接口，向实现方交付一帧只读几何与状态。
+- `UiSliderSkin` 把样式与画法配成一对，供宿主一次注入。
+- `UiSliderRole` 是滑块外观档位，只描述几何尺度，不描述颜色。
+- `PixelSliderPainter` 是纯色像素画法，不依赖贴图，作为 kit 默认 painter。
+- `UiSliderExamples` 提供三个无规则语义的装配示例，只演示 kit 自身的装配与事件顺序。
 
-## 2. 滑块核心的宿主接入
+### 2.3 对外接口与导出内容
 
-### 2.1 UiScalarSlider（标量滑块与步进）
+| 类型 | 种类 | 公开成员 | 说明 |
+|---|---|---|---|
+| `UiNumberPolicy` | record | `UiNumberPolicy(double, double, double, double, boolean, double)`；`of(double, double, double)`；`of(double, double, double, double)`；`integer(int, int, int)`；`integer(int, int, int, int)`；`withFineDragFactor(double)`；`span()`；`step(boolean)`；`clamp(double)`；`snap(double, boolean)`；`snapUnclamped(double, boolean)`；`dragValuePerPixel(int, double, boolean)` | 分量依次为 `min`、`max`、`coarseStep`、`fineStep`、`integerOnly`、`fineDragFactor` |
+| `UiNumbers` | final class | `INTEGER_TOLERANCE`；`MAX_EXACT_INTEGER`；`MAX_LONG_AS_DOUBLE`；`plain(double, int)`；`plain(double, int, String)`；`isExactIntegral(double, double)`；`plainExact(double, int)`；`plainExact(double, int, double)`；`trimTrailingZeros(String)`；`roundedText(double)`；`parseFinite(String)`；`parseInt(String)` | 常量取值 `1.0E-6D`、`9007199254740992.0D`、`(double) Long.MAX_VALUE`；私有构造 |
+| `UiSliderWindow` | record | `UiSliderWindow(double, double)`；`of(double, double)`；`span()`；`contains(double)`；`fraction(double)`；`clampFraction(double)`；`valueAt(double)` | `fraction` 不钳制，`valueAt` 先钳制比例 |
+| `UiScalarSlider` | final class | 构造 `(UiNumberPolicy)`、`(UiNumberPolicy, UiSliderWindow)`；`policy()`/`setPolicy`；`window()`/`setWindow`；`style()`/`setStyle`；`painter()`/`setPainter`；`value()`/`setValue(double)`/`isBackfillInvalid()`；`setError(boolean)`/`isError()`；`setPageStep(double)`/`pageStep()`；`label()`/`setLabel`；`formatter()`/`setFormatter`；`interactionListener()`/`setInteractionListener`；`isEnabled()`/`setEnabled`；`isVisible()`/`setVisible`；`isHovered()`；`isDragging()`；`formatValue()`；`bounds()`/`setBounds(int, int, int, int)`；`trackLeft/trackRight/trackWidth()`；`valueAtPointer(double)`；`render(GuiGraphics, Font, UiInputContext)`；`endInteraction(EndReason)`；`unmount()`；`onFocusScopeChanged()`；`onHostClosed()` | 实现 `UiFocusTarget`、`UiInputTarget`、`UiInputCapture.Target`；setter 返回 `UiScalarSlider` |
+| `UiRangeSlider` | final class | 构造 `(UiNumberPolicy)`、`(UiNumberPolicy, UiSliderWindow, UiRangeValue)`；`policy()`/`setPolicy`；`window()`/`setWindow`；`value()`/`setValue(UiRangeValue)`/`isBackfillInvalid()`；`selectedEnd()`/`selectEnd(UiRangeEnd)`/`cycleSelectedEnd()`；`setEndPresent(UiRangeEnd, boolean)`；`selectedValue()`/`setSelectedValue(double, boolean)`；`listener()`/`setListener`；`bounds()`/`setBounds`；`trackLeft/trackRight/trackWidth()`；`xOf(double)`；`valueAtPointer(double, boolean)`；`containsPointer(double, double)`；`isDragging()`；`isInteracting()`；`setPageStep(double)`/`pageStep()`；`thumbWidth()`/`setThumbWidth(int)`；`label()`/`setLabel`；`formatter()`/`setFormatter`；`endInteraction(EndReason)`；`unmount()`；`onFocusScopeChanged()`；`onHostClosed()`；`NONE` | 实现 `UiFocusTarget`、`UiInputTarget`、`UiInputCapture.Target`；setter 返回 `void`；嵌套 `interface Listener` |
+| `UiRangeValue` | record | `UiRangeValue(double, double, boolean, boolean)`；`EMPTY`；`of(double, double)`；`single(double, boolean)`；`isPresent(UiRangeEnd)`；`value(UiRangeEnd)`；`withValue(UiRangeEnd, double)`；`withAbsent(UiRangeEnd)`；`isEmpty()`；`bothPresent()` | 构造校验「存在端有限、缺席端为 `NaN`、两端都存在时 `low <= high`」 |
+| `UiRangeEnd` | enum | `LOW`、`HIGH`；`other()` | 端点身份与端点数值分离 |
+| `UiCyclicRange` | final class | 构造 `(double period)`；`period()`/`setPeriod(double)`；`from()`/`to()`；`setRange(double, double)`；`wrap(double)`；`span()`；`isSinglePoint()`；`crossesPeriod()`；`ticks()`/`setTicks(List<Tick>)`；`markers()`/`setMarkers(List<Marker>)`；`tickStep()`/`setTickStep(double)`；`endTick()`；`snapTick(double)`；`selectedEnd()`/`selectEnd(UiRangeEnd)`/`cycleSelectedEnd()`；`selectedTick()`/`setSelectedTick(double)`；`listener()`/`setListener`；`formatter()`/`setFormatter`；`bounds()`/`setBounds`；`thumbWidth()`/`setThumbWidth(int)`；`trackLeft/trackRight/trackWidth()`；`fractionOf(double)`；`xOf(double)`；`tickAtPointer(double)`；`containsPointer(double, double)`；`isDragging()`；`isPressed()`；`endInteraction(EndReason)`；`unmount()`；`onFocusScopeChanged()`；`onHostClosed()`；`NONE` | 嵌套 `record Tick(double, @Nullable Component)`、`record Marker(double, int)`、`interface Listener` |
+| `UiSliderStyle` | record | `UiSliderStyle(...16 个 int...)`；`pixelDefaults()`；`resolveTrack(boolean)`；`resolveFill(boolean)`；`resolveThumb(boolean, boolean)`；`resolveLabelText(boolean, boolean)`；`resolveValueText(boolean, boolean)` | 13 个颜色分量 + `trackHeight`、`thumbWidth`、`thumbOverhang`；构造校验轨道高 `>= 1`、手柄宽 `>= 1`、外扩 `>= 0` |
+| `UiSliderPainter` | interface | `paint(GuiGraphics, Frame)`；嵌套 `record Frame(UiRect, UiRect, UiRect, UiRect, UiRect, UiSliderStyle, boolean, boolean, boolean, boolean, boolean, boolean, boolean, boolean)` | `Frame` 分量顺序为 `bounds`、`track`、`filled`、`thumb`、`textSlot`、`style`、`enabled`、`hovered`、`pressed`、`focused`、`dragging`、`error`、`overflowBelow`、`overflowAbove` |
+| `UiSliderSkin` | record | `UiSliderSkin(UiSliderStyle, UiSliderPainter)`；`pixelDefaults()` | 两个分量都不接受 `null` |
+| `UiSliderRole` | enum | `COMPACT`、`ROOMY` | 紧凑档与宽松档，只表达几何尺度 |
+| `PixelSliderPainter` | final class | `INSTANCE`；`paint(GuiGraphics, Frame)` | 无状态单例，私有构造 |
+| `UiSliderExamples` | final class | `scalarSlider(Component, UiRect, UiValueInteraction.Listener)`；`rangeSlider(Component, UiRect, UiRangeSlider.Listener)`；`cyclicRange(Component, UiRect, double, List<Double>, UiCyclicRange.Listener)` | 私有构造；三个方法都返回装配好的控件 |
 
-```text
-public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInputCapture.Target
-```
+### 2.4 依赖关系
 
-- 构造：`UiScalarSlider(UiNumberPolicy)`（窗口默认等于合法域）或 `UiScalarSlider(UiNumberPolicy, UiSliderWindow)`。
-- 装配：`setStyle(UiSliderStyle)`、`setPainter(UiSliderPainter)`、`setLabel(Component)`、`setFormatter(Function<Double, Component>)`、`setInteractionListener(UiValueInteraction.Listener)`、`setPageStep(double)`、`setError(boolean)`、`setBounds(int, int, int, int)`。
-- 渲染：`render(GuiGraphics, Font, UiInputContext)`（悬停状态从上下文指针更新，绘制交给 painter，文字由控件绘制）。
-- 输入：`mousePressed/mouseDragged/mouseReleased(UiInputContext)`、`keyPressed/keyReleased(int, int, int)`。
-- 键位：`Left/Down` 减、`Right/Up` 加（`Shift` 走细档）；`Home/End` 到显示窗口端点；`PageUp/PageDown` 仅在 `setPageStep(n>0)` 后消费；`Esc` 回退本次操作。
-- 指针：点击轨道定位并捕获；拖动中按/松 `Shift` 重设锚点且值不变；指针移出矩形仍收到释放。
-- 回填：`setValue(double)` 返回是否接受；`isBackfillInvalid()` 报告最近一次回填状态。
-- 结束：`endInteraction(EndReason)`、`unmount()`、`onFocusScopeChanged()`、`onHostClosed()`。
+- 依赖本模组：无。本分组 14 个文件均不 import 其它模组包；同包类型直接引用，不产生 import。
+- 依赖外部：`java.util`（6 个文件 import，共 9 处）、`net.minecraft.client.gui`（3 个文件，4 处，`Font`、`GuiGraphics`）、`net.minecraft.network.chat`（4 个文件，4 处，`Component`）、`java.util.function`（3 个文件，3 处）、`net.minecraft.util`（2 个文件，2 处，`Mth`）、`org.jetbrains.annotations`（4 个文件，4 处，`Nullable`）、`org.lwjgl.glfw`（3 个文件，3 处，`GLFW`）、`java.math`（1 个文件，1 处，`BigDecimal`）。
+- 被依赖：`client/ui/widget`（3 个文件 import，共 16 处）、`client/ui/theme`（4 个文件，11 处）、`client/ui/screen/form`（3 个文件，10 处）、`client/ui/screen`（1 个文件，5 处）；合计 11 个文件、42 处。
 
-### 2.2 UiRangeSlider（双端区间核心）
+### 2.5 关键实现位置
 
-```text
-public final class UiRangeSlider implements UiFocusTarget, UiInputTarget, UiInputCapture.Target
-```
+- `UiNumberPolicy#snapUnclamped`：把值按档吸附到 `min + k * step`；`step == 1.0` 且 `min` 为整数时直接取 `Math.rint`，否则用 `BigDecimal` 的十进制位移计算商与余数。
+- `UiNumberPolicy#snap`：只做域钳制，不按 `UiSliderWindow` 钳制。
+- `UiNumberPolicy#dragValuePerPixel`：`windowSpan / trackPixels`，细调时先把窗口跨度乘以 `fineDragFactor`。
+- `UiNumbers#plain`：整数判定使用 `INTEGER_TOLERANCE` 且要求绝对值不超过 `MAX_EXACT_INTEGER`，命中时用 `Math.round` 直出整数文本。
+- `UiNumbers#plainExact`：无容差，命中 `isExactIntegral` 时按 `long` 直出，否则固定小数位输出；`trimTrailingZeros` 单独提供去尾零。
+- `UiNumbers#parseFinite`/`#parseInt`：去首尾空白、空串判非法、只接受有限值；整数先按 `long` 解析再判 `int` 范围。
+- `UiSliderWindow#fraction`/`#clampFraction`/`#valueAt`：比例不钳制用于绘制溢出标记，钳制只发生在指针位置换算数值时。
+- `UiScalarSlider#setValue`：越出合法域或非有限值时拒绝并置 `backfillInvalid`，不吸附、不回调。
+- `UiScalarSlider#mouseDragged`：以 `dragAnchorPointer`/`dragAnchorValue` 为锚点按像素增量换算，Shift 状态变化时先重设锚点再换算。
+- `UiScalarSlider#adjustByKey`/`#oneShot`：方向键累积到 key-up 才提交；Home/End 与启用后的 PageUp/PageDown 在同一次调用内 begin、preview、commit。
+- `UiScalarSlider#endInteraction`/`#finishInteraction`：`EndReason#cancels()` 为真时写回操作起点值，否则提交。
+- `UiRangeSlider#previewSelected`/`#boundEnd`：候选先吸附再约束到对端之内，低端不越过高端的做法是停在同值。
+- `UiRangeSlider#hitEnd`：两端屏幕距离不超过容差时返回 `null`，由调用方 `cycleSelectedEnd` 切换当前端。
+- `UiRangeSlider#setSelectedValue`/`#oneShotSelected`：值确有变化时在一次调用内完成 begin、preview、commit；值未变化时直接返回，不产生操作记录。
+- `UiCyclicRange#wrap`/`#span`/`#snapTick`：所有刻度先折返到 `[0, period)` 再比较；`span` 返回从起点顺时针到终点的长度。
+- `UiCyclicRange#setPeriod`：替换周期后把 `from`、`to` 折返到新周期内。
+- `UiSliderStyle#resolve*`：按「禁用优先、其次错误/悬停」的顺序解析最终 ARGB。
+- `PixelSliderPainter#paint`：依次绘制轨道、已填充段、文字槽底色、两端溢出标记、手柄与底部错误线。
+- `UiSliderExamples#scalarSlider`/`#rangeSlider`/`#cyclicRange`：演示精确回填、端点选择与宿主注入周期/刻度/标记的装配。
 
-- 值模型 `UiRangeValue(double low, double high, boolean lowPresent, boolean highPresent)`：缺席端数值恒为 `Double.NaN`（绝不编码成 0），两端都存在时恒 `low <= high`；`of` / `single` / `isPresent(UiRangeEnd)` / `value(UiRangeEnd)` / `withValue(UiRangeEnd, double)` / `withAbsent(UiRangeEnd)` / `isEmpty()` / `bothPresent()`。
-- 端点身份 `UiRangeEnd.LOW/HIGH`（`other()`）：拖动到对端只停在同值，**不交换身份**。
-- 构造：`UiRangeSlider(UiNumberPolicy)` 或 `UiRangeSlider(UiNumberPolicy, UiSliderWindow, UiRangeValue)`。
-- 端点操作：`selectedEnd()`、`selectEnd(UiRangeEnd)`、`cycleSelectedEnd()`（重叠端点点击时切换当前端）、`setEndPresent(UiRangeEnd, boolean)`（可选端点，独立于数值 0）、`setSelectedValue(double raw, boolean fine)`（精确编辑当前端，恰好一条操作）、`selectedValue()`。
-- 输入与几何：`mousePressed/mouseDragged/mouseReleased(UiInputContext)`、`keyPressed/keyReleased(int, int, int)`、`containsPointer(double, double)`、`valueAtPointer(double, boolean)`、`xOf(double)`、`trackLeft()/trackRight()/trackWidth()`。
-- 生命周期：`setValue(UiRangeValue)` 回填 + `isBackfillInvalid()`；`setListener(Listener)`（`began/previewed/committed/cancelled` 均传 `UiRangeValue`）；`endInteraction/unmount/onFocusScopeChanged/onHostClosed`。
-- **不做渲染**：本类只提供逻辑与几何，区间/时间条的绘制由宿主完成。
-- `isInteracting()` 同时覆盖鼠标与键盘预览，宿主可据此延后关联输入的提交。宿主 `UiRangeBar.Listener` 转发 `onBegan/onPreviewed/onCommitted/onCancelled`，回填不触发这些回调。
+### 2.6 代码现状（可核对）
 
-### 2.3 UiCyclicRange（周期区间核心）
+- `UiNumbers` 有两套入口：容差版 `plain(double, int)`（按 `INTEGER_TOLERANCE` 消除浮点噪声）与严格版 `plainExact(double, int[, double])`、`isExactIntegral(double, double)`；两者不可互换。
+- 常量取值：`UiNumbers#INTEGER_TOLERANCE` 为 `1.0E-6D`，`#MAX_EXACT_INTEGER` 为 `9007199254740992.0D`（2^53），`#MAX_LONG_AS_DOUBLE` 为 `(double) Long.MAX_VALUE`。
+- 合法域与显示窗口分离：`UiNumberPolicy#snap` 只按域钳制；`UiSliderWindow#fraction` 故意不钳制，`#valueAt` 才钳制比例。
+- 吸附档：`UiNumberPolicy#step(boolean)` 在 `coarseStep` 与 `fineStep` 间选择；`#snapUnclamped` 对非有限输入返回 `min` 而不是 `NaN`。
+- 三个滑块对同一 begin/preview/commit/cancel 契约的实现方式不同：`UiScalarSlider` 委托 `UiValueInteraction`，`UiRangeSlider` 与 `UiCyclicRange` 各自维护 `operationActive` 与 `operationStart`。
+- 取消回退的条件不同：`UiScalarSlider#finishInteraction` 总是写回起点值；`UiRangeSlider#finishOperation` 与 `UiCyclicRange#finishOperation` 在 `listener == null` 时提前返回，未设置 listener 时取消不回退已预览的值。
+- 左键判定写法不一致：`UiScalarSlider#mousePressed` 使用字面量 `0`，`UiRangeSlider#mousePressed` 与 `UiCyclicRange#mousePressed` 使用 `GLFW.GLFW_MOUSE_BUTTON_LEFT`。
+- 端点重叠容差一处具名一处字面量：`UiRangeSlider#OVERLAP_TOLERANCE_PX` 为私有常量 `4`，`UiCyclicRange#hitEnd` 直接写 `4`。
+- `UiScalarSlider#buildFrame` 把 `dragging` 同时传入 `Frame` 的 `pressed` 与 `dragging`，因此 `Frame#pressed` 与 `Frame#dragging` 在标量滑块上恒等。
+- `UiSliderStyle#focusColor` 没有对应的解析方法，`PixelSliderPainter#paint` 也不读取该分量；`UiSliderExamples#cyclicRange` 把它用作 `UiCyclicRange.Marker` 的颜色。
+- setter 返回风格不统一：`UiScalarSlider` 的 setter 返回 `this`，`UiRangeSlider`、`UiCyclicRange` 的对应 setter 返回 `void`。
+- `UiRangeSlider#isInteracting()` 公开「预览进行中」状态；`UiScalarSlider` 的 `UiValueInteraction` 是私有字段，没有同名查询入口。
+- `UiCyclicRange` 不提供 Shift 细调与 PageUp/PageDown：`#mouseDragged` 按 `period / trackWidth` 换算，`#keyPressed` 只处理方向键、Home、End 与 Esc。
+- 同一模块存在两个钳制来源：`UiRangeSlider#valueAtPointer` 使用 `net.minecraft.util.Mth#clamp`，`UiSliderWindow#clampFraction` 使用 `Math.clamp`。
+- `UiRangeValue#withValue` 可能抛 `IllegalArgumentException`（两端都存在且 `low > high`）；`#withAbsent` 把该端数值置为 `NaN`。
+- `UiScalarSlider` 的显示小数位为私有常量 `VALUE_DECIMALS = 2`；无 formatter 时 `formatValue` 调用 `UiNumbers#plain(value, 2)`。
+- `UiCyclicRange#tickStep` 默认为 `1.0`；`endTick()` 返回 `wrap(max(0, period - tickStep))`，End 键落点是最高一格而不是 `period`。
+- `UiRangeSlider#selectEnd` 在目标端不存在时回退到另一端并可能返回 `false`；`UiCyclicRange#selectEnd` 直接记录并返回所选端。
+- `UiSliderExamples` 在 kit 包外没有 import（0 个文件）；它引用 `UiInputRouter` 只出现在 JavaDoc。
 
-```text
-public final class UiCyclicRange implements UiFocusTarget, UiInputTarget, UiInputCapture.Target
-```
+## 3. 类清单
 
-- 周期与两端：`UiCyclicRange(double period)`、`period()/setPeriod(double)`、`from()/to()`、`setRange(double from, double to)`（不强制 `min <= max`，两端都折返到 `[0, period)`）、`wrap(double)`、`span()`、`isSinglePoint()`（同刻）、`crossesPeriod()`（`from > to`，宿主据此高亮跨周期）。
-- 宿主注入：`setTicks(List<Tick>)`（`Tick(double tick, @Nullable Component label)`）、`setMarkers(List<Marker>)`（`Marker(double tick, int color)`）、`setTickStep(double)`（吸附网格，必须为有限正数）、`endTick()`（`END` 键落点）、`snapTick(double)`。
-- 端点与输入：`selectedEnd()/selectEnd(UiRangeEnd)/cycleSelectedEnd()`、`setSelectedTick(double)`（精确编辑当前端，一条操作）、`mousePressed/mouseDragged/mouseReleased(UiInputContext)`、`keyPressed/keyReleased(int, int, int)`、`fractionOf(double)/xOf(double)/tickAtPointer(double)`。
-- **不读取 `Level`、不假定世界时间**：周期、刻度、标记全部由宿主给出；kit 不知道一天/一月多长。
-- **不做渲染**：本类只提供周期、刻度与几何计算，跨周期高亮由宿主绘制。
+| 类型 | 职责 | 关键成员 |
+|---|---|---|
+| `UiNumberPolicy` | 合法数值域、两档步长与整数策略 | `of`、`integer`、`snap`、`snapUnclamped`、`dragValuePerPixel` |
+| `UiNumbers` | 数值与文本互转 | `plain`、`plainExact`、`isExactIntegral`、`parseFinite`、`parseInt` |
+| `UiSliderWindow` | 轨道显示窗口 | `fraction`、`clampFraction`、`valueAt` |
+| `UiScalarSlider` | 标量滑块核心 | `setValue`、`mouseDragged`、`keyPressed`、`endInteraction`、`render` |
+| `UiRangeSlider` | 双端区间交互核心 | `setEndPresent`、`selectEnd`、`setSelectedValue`、`isInteracting` |
+| `UiRangeValue` | 不可变区间状态 | `of`、`single`、`withValue`、`withAbsent` |
+| `UiRangeEnd` | 区间端点身份 | `LOW`、`HIGH`、`other` |
+| `UiCyclicRange` | 周期区间交互核心 | `setRange`、`wrap`、`snapTick`、`setTicks`、`setMarkers` |
+| `UiSliderStyle` | 滑块样式与状态解析 | `pixelDefaults`、`resolveTrack`、`resolveThumb` |
+| `UiSliderPainter` | 滑块绘制策略 | `paint`、`Frame` |
+| `UiSliderSkin` | 样式与画法成对注入 | `pixelDefaults` |
+| `UiSliderRole` | 滑块外观档位 | `COMPACT`、`ROOMY` |
+| `PixelSliderPainter` | 纯色像素画法 | `INSTANCE`、`paint` |
+| `UiSliderExamples` | 无规则语义的装配示例 | `scalarSlider`、`rangeSlider`、`cyclicRange` |
 
-### 2.4 装配示例
+`package-info.java` 承载包级公开面说明，见 [UI kit 入口](README.md)。
 
-`UiSliderExamples` 提供三个无规则语义示例（签名与源码一致）：
+## 4. 相关文档
 
-```text
-UiScalarSlider UiSliderExamples.scalarSlider(Component label, UiRect bounds, UiValueInteraction.Listener listener)
-UiRangeSlider  UiSliderExamples.rangeSlider(Component label, UiRect bounds, UiRangeSlider.Listener listener)
-UiCyclicRange  UiSliderExamples.cyclicRange(Component label, UiRect bounds, double period,
-                                            List<Double> hostTicks, UiCyclicRange.Listener listener)
-```
-
-示例类注释里写明了事件顺序与生命周期要求，可作为接入起点；实际标签由宿主传本地化 `Component`。
-
-## 3. 样式注入
-
-- `UiSliderStyle` 是不可变记录：13 个 ARGB 颜色（`trackColor`、`fillColor`、`thumbColor`、`thumbHoverColor`、`disabledColor`、`focusColor`、`errorColor`、`overflowColor`、`textSlotColor`、`labelTextColor`、`valueTextColor`、`disabledTextColor`、`errorTextColor`）+ 3 个尺寸（`trackHeight`、`thumbWidth`、`thumbOverhang`）；构造期校验尺寸。
-- 取值方法：`resolveTrack(boolean)`、`resolveFill(boolean)`、`resolveThumb(boolean, boolean)`、`resolveLabelText(boolean, boolean)`、`resolveValueText(boolean, boolean)`；无主题宿主可用 `UiSliderStyle.pixelDefaults()`。
-- 画法：`UiSliderPainter.paint(GuiGraphics, Frame)`，`Frame` 携带 `bounds/track/filled/thumb/textSlot/style` 与 `enabled/hovered/pressed/focused/dragging/error/overflowBelow/overflowAbove`；kit 自带 `PixelSliderPainter.INSTANCE`（纯色像素，无贴图）。
-- 宿主主题：`client/ui/theme/UiTheme.sliderStyle()` 把调色板映射成 `UiSliderStyle` 供注入。**kit 不 import 主题包**，样式只能由宿主注入；替换 painter 不影响控件逻辑。
-- 宿主主题的紧凑滑块样式轨高 4、手柄宽 5；区间条的命中宽度跟随注入样式。`PixelSliderPainter` 与宿主复选框不绘制焦点外框，键盘焦点与输入逻辑仍保持启用。
-
-## 4. 宿主要求
-
-- 数值控件的合法域与显示窗口分离：显示窗口只做几何，不得当作提交硬限额。
-- 遵守 [input-routing.md](input-routing.md) §3 的操作生命周期：回填不产生事件、单动作单提交、无变化无历史、取消要回退，隐藏/禁用/卸载/失焦范围切换/关闭时必须释放捕获。
-- 控件文字与标签由宿主传入本地化 `Component`；kit 不提供文案。
+- [UI kit 入口](README.md)
+- [输入路由、捕获与值交互](input-routing.md)
+- [文本历史与文本测量](text-controls.md)
+- [不可变树编辑与画布原语](tree-editing.md)
+- [internals 索引](../README.md)
