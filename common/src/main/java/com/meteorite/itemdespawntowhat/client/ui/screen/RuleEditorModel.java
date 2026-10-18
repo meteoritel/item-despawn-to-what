@@ -39,8 +39,6 @@ public final class RuleEditorModel {
     private final LinkedHashMap<String, EditSession> sessions = new LinkedHashMap<>();
     // 本次会话中新建、服务端快照尚不存在的规则 id
     private final Set<String> createdIds = new LinkedHashSet<>();
-    // 待「恢复原始版本」（删除覆盖层条目）的规则 id
-    private final Set<String> restoreIds = new LinkedHashSet<>();
     // 已消费的快照
     private @Nullable RuleSnapshot seenSnapshot;
     // 已消费的快照版本
@@ -112,7 +110,6 @@ public final class RuleEditorModel {
             current.getValue().clearHistory();
         }
         this.createdIds.removeIf(id -> !this.sessions.containsKey(id));
-        this.restoreIds.removeIf(id -> !this.sessions.containsKey(id));
         this.loaded = true;
         return true;
     }
@@ -151,11 +148,6 @@ public final class RuleEditorModel {
     // 某条规则是否在本次会话中新建
     public boolean isCreated(String id) {
         return this.createdIds.contains(id);
-    }
-
-    // 某条规则是否标记为恢复原始版本
-    public boolean isRestoring(String id) {
-        return this.restoreIds.contains(id);
     }
 
     /**
@@ -247,7 +239,7 @@ public final class RuleEditorModel {
     }
 
     // 新建一条规则草稿
-    public EditSession createSession(String id, RuleValue body) {
+    public void createSession(String id, RuleValue body) {
         // 初始态用「带 id 的默认骨架」，再把传入内容作为一次可撤销的「新建规则」写入：
         // 撤销新建后仍是带 id 的合法骨架，而不是空对象
         RuleDraft draft = RuleDraft.of(BuiltinEditorDefaults.ruleBody(id));
@@ -258,24 +250,15 @@ public final class RuleEditorModel {
         // 新建规则在服务端还没有内容，基线为「不存在」
         this.captureBaseline(id, null);
         this.bindSession(id, session);
-        return session;
     }
 
     // 关闭某条规则的草稿（放弃未保存改动，同时删掉落盘草稿）
     public void dropSession(String id) {
         this.sessions.remove(id);
         this.createdIds.remove(id);
-        this.restoreIds.remove(id);
         this.baselines.remove(id);
         this.conflicts.remove(id);
         this.journal.drop(id);
-    }
-
-    // 标记某条规则为「恢复原始版本」（删除覆盖层条目）
-    public void markRestore(String id) {
-        if (this.sessions.containsKey(id)) {
-            this.restoreIds.add(id);
-        }
     }
 
     // 标记某条规则待删除
@@ -372,8 +355,7 @@ public final class RuleEditorModel {
         List<String> ids = new ArrayList<>();
         for (String id : ruleIds()) {
             EditSession session = this.sessions.get(id);
-            if (session != null && (session.isDirty() || this.createdIds.contains(id)
-                    || this.restoreIds.contains(id))) {
+            if (session != null && (session.isDirty() || this.createdIds.contains(id))) {
                 ids.add(id);
             }
         }
@@ -389,10 +371,6 @@ public final class RuleEditorModel {
     public @Nullable String buildChangeSetJson() {
         EditorChangeSet changeSet = new EditorChangeSet(this.workspace.contextRevision());
         for (String id : dirtyRuleIds()) {
-            if (this.restoreIds.contains(id)) {
-                changeSet.delete(id);
-                continue;
-            }
             EditSession session = this.sessions.get(id);
             if (session == null) {
                 continue;
@@ -416,14 +394,6 @@ public final class RuleEditorModel {
             if (session == null) {
                 continue;
             }
-            if (this.restoreIds.contains(id)) {
-                this.sessions.remove(id);
-                this.createdIds.remove(id);
-                this.baselines.remove(id);
-                this.conflicts.remove(id);
-                this.journal.drop(id);
-                continue;
-            }
             session.load(RuleDraft.of(session.draft().root()));
             session.clearHistory();
             this.createdIds.remove(id);
@@ -432,7 +402,6 @@ public final class RuleEditorModel {
             this.conflicts.remove(id);
             this.journal.drop(id);
         }
-        this.restoreIds.clear();
     }
 
     // ---- P6：草稿落盘 / 恢复 / 冲突 ----
@@ -471,9 +440,6 @@ public final class RuleEditorModel {
             if (stored.created()) {
                 this.createdIds.add(id);
             }
-            if (stored.restore()) {
-                this.restoreIds.add(id);
-            }
             this.sessions.put(id, session);
             this.captureBaseline(id, serverBody);
             this.bindSession(id, session);
@@ -485,14 +451,6 @@ public final class RuleEditorModel {
     // 把会话接到草稿日志：此后每次可撤销操作都会（节流）落盘
     private void bindSession(String id, EditSession session) {
         session.addListener(() -> this.onSessionChanged(id, session));
-        // 「恢复原始版本」只改标记不改 JSON，把标记接到会话历史上才能撤销
-        session.setFlagBridge(() -> this.restoreIds.contains(id), value -> {
-            if (value) {
-                this.restoreIds.add(id);
-            } else {
-                this.restoreIds.remove(id);
-            }
-        });
         if (this.isJournalWorthy(id, session)) {
             this.journal.writeNow(snapshotOf(id, session));
         }
@@ -507,9 +465,9 @@ public final class RuleEditorModel {
         this.journal.markDirty(snapshotOf(id, session));
     }
 
-    // 是否值得落盘：有改动、或本次新建、或标记恢复原始版本
+    // 是否值得落盘：有改动或本次新建
     private boolean isJournalWorthy(String id, EditSession session) {
-        return session.isDirty() || this.createdIds.contains(id) || this.restoreIds.contains(id);
+        return session.isDirty() || this.createdIds.contains(id);
     }
 
     // 当前草稿快照（含基线，供落盘与冲突比较）
@@ -518,7 +476,6 @@ public final class RuleEditorModel {
         return new PersistedDraft(
                 id,
                 this.createdIds.contains(id),
-                this.restoreIds.contains(id),
                 session.draft().isDeleted(),
                 // 落盘载体仍以 JSON 对象表达：值快照经草稿入口转回 JSON
                 baseline == null ? null : RuleDraft.of(baseline).toJson(),
@@ -552,11 +509,6 @@ public final class RuleEditorModel {
         this.journal.flushAll();
     }
 
-    // 待写盘的草稿数量（诊断用）
-    public int pendingDraftCount() {
-        return this.journal.trackedIds().size();
-    }
-
     // 取走写盘失败事件计数（界面只提示一次，避免反复刷）
     public int consumeDraftFailures() {
         return this.journal.consumeFailures();
@@ -572,10 +524,6 @@ public final class RuleEditorModel {
     // 待玩家处理的冲突（保持目标顺序）
     public List<DraftConflict> conflicts() {
         return new ArrayList<>(this.conflicts.values());
-    }
-
-    public boolean hasConflict() {
-        return !this.conflicts.isEmpty();
     }
 
     // 玩家选择：keepDraft=true 保留草稿（把基线重设到服务端当前内容），false 用服务端版本并丢弃草稿
@@ -608,7 +556,6 @@ public final class RuleEditorModel {
         if (this.createdIds.contains(id) || serverBody == null) {
             this.sessions.remove(id);
             this.createdIds.remove(id);
-            this.restoreIds.remove(id);
             return;
         }
         session.load(RuleDraft.of(categorySeeded(entry, serverBody)));

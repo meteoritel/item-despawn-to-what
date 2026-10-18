@@ -66,7 +66,7 @@ final class RuleEditorValidation {
         issueRuleId = host.editingId();
         List<FormIssue> issues = new ArrayList<>();
         EditSession session = host.editingSession();
-        if (session != null && !session.draft().isDeleted() && !host.model().isRestoring(host.editingId())) {
+        if (session != null && !session.draft().isDeleted()) {
             issues.addAll(localIssues(session.draft()));
             issues.addAll(session.pendingInputIssues());
         }
@@ -75,7 +75,7 @@ final class RuleEditorValidation {
                 continue;
             }
             EditSession other = host.model().session(id);
-            if (other != null && !other.draft().isDeleted() && !host.model().isRestoring(id)) {
+            if (other != null && !other.draft().isDeleted()) {
                 List<FormIssue> otherIssues = new ArrayList<>(localIssues(other.draft()));
                 otherIssues.addAll(other.pendingInputIssues());
                 if (issues.stream().noneMatch(FormIssue::blocking) && otherIssues.stream().anyMatch(FormIssue::blocking)) {

@@ -12,8 +12,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.LinkedHashSet;
-import java.util.function.BooleanSupplier;
-import java.util.function.Consumer;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -37,7 +35,6 @@ public final class EditSession {
     public static final String OP_ADD_EFFECT = "gui.itemdespawntowhat.edit.undo.add_effect";
     public static final String OP_REMOVE_EFFECT = "gui.itemdespawntowhat.edit.undo.remove_effect";
     public static final String OP_MOVE_EFFECT = "gui.itemdespawntowhat.edit.undo.move_effect";
-    public static final String OP_RESTORE_ORIGINAL = "gui.itemdespawntowhat.edit.undo.restore_original";
     public static final String OP_CREATE_RULE = "gui.itemdespawntowhat.edit.undo.create_rule";
     public static final String OP_EDIT_CONDITIONS = "gui.itemdespawntowhat.edit.undo.edit_conditions";
     public static final String OP_DELETE_RULE = "gui.itemdespawntowhat.edit.undo.delete_rule";
@@ -134,12 +131,8 @@ public final class EditSession {
         return scope.isEmpty() || path.equals(scope) || path.startsWith(scope + ".") || path.startsWith(scope + "[");
     }
 
-    // 目标级布尔标记的读写桥（「恢复原始版本」这类不改变 JSON 的编辑用它进历史）
-    private @Nullable BooleanSupplier flagReader;
-    private @Nullable Consumer<Boolean> flagWriter;
-
-    // 历史条目：操作标签 + 操作前的完整快照 + 删除标记 + 目标级布尔标记
-    private record Entry(String opKey, JsonObject snapshot, boolean deleted, boolean flag, Map<String, PendingInput> inputs, Map<String, String> paths, Set<String> excludedScopes, Set<String> inverseExcludedScopes) {
+    // 历史条目：操作标签 + 操作前的完整快照 + 删除标记
+    private record Entry(String opKey, JsonObject snapshot, boolean deleted, Map<String, PendingInput> inputs, Map<String, String> paths, Set<String> excludedScopes, Set<String> inverseExcludedScopes) {
     }
 
     public EditSession(String targetId, RuleDraft draft) {
@@ -180,7 +173,6 @@ public final class EditSession {
         JsonObject before = draft.workingView().deepCopy();
         Map<String, PendingInput> inputsBefore = Map.copyOf(pendingInputs);
         boolean deletedBefore = draft.isDeleted();
-        boolean flagBefore = currentFlag();
         Map<String, String> changedPaths = new LinkedHashMap<>();
         Set<String> removedScopes = new LinkedHashSet<>();
         Set<String> addedScopes = new LinkedHashSet<>();
@@ -189,9 +181,9 @@ public final class EditSession {
         transactionAddedScopes = addedScopes;
         try { change.run(); }
         finally { transactionInputPaths = null; transactionRemovedScopes = null; transactionAddedScopes = null; }
-        // 删除标记与目标级标记也算改动：只改标记不改 JSON 的操作同样要能撤销
-        if (!before.equals(draft.workingView()) || deletedBefore != draft.isDeleted() || flagBefore != currentFlag()) {
-            undoStack.push(new Entry(normalize(opKey), before, deletedBefore, flagBefore, inputsBefore, inversePaths(changedPaths), Set.copyOf(addedScopes), Set.copyOf(removedScopes)));
+        // 删除标记也算改动：只改标记不改 JSON 的操作同样要能撤销
+        if (!before.equals(draft.workingView()) || deletedBefore != draft.isDeleted()) {
+            undoStack.push(new Entry(normalize(opKey), before, deletedBefore, inputsBefore, inversePaths(changedPaths), Set.copyOf(addedScopes), Set.copyOf(removedScopes)));
             while (undoStack.size() > HISTORY_LIMIT) {
                 undoStack.removeLast();
             }
@@ -199,24 +191,6 @@ public final class EditSession {
             revision++;
         }
         notifyListeners();
-    }
-
-    // 安装目标级布尔标记的读写桥（由模型提供，读的是模型侧的标记集合）
-    public void setFlagBridge(@Nullable BooleanSupplier reader, @Nullable Consumer<Boolean> writer) {
-        this.flagReader = reader;
-        this.flagWriter = writer;
-    }
-
-    // 当前目标级标记（未安装桥时为 false）
-    private boolean currentFlag() {
-        return this.flagReader != null && this.flagReader.getAsBoolean();
-    }
-
-    // 写回目标级标记
-    private void applyFlag(boolean value) {
-        if (this.flagWriter != null) {
-            this.flagWriter.accept(value);
-        }
     }
 
     // ---- 撤销/重做 ----
@@ -254,11 +228,10 @@ public final class EditSession {
             return false;
         }
         Entry entry = undoStack.pop();
-        redoStack.push(new Entry(entry.opKey(), draft.workingView().deepCopy(), draft.isDeleted(), currentFlag(), Map.copyOf(pendingInputs), inversePaths(entry.paths()), entry.inverseExcludedScopes(), entry.excludedScopes()));
+        redoStack.push(new Entry(entry.opKey(), draft.workingView().deepCopy(), draft.isDeleted(), Map.copyOf(pendingInputs), inversePaths(entry.paths()), entry.inverseExcludedScopes(), entry.excludedScopes()));
         restorePendingInputs(entry);
         draft.replaceWith(entry.snapshot());
         draft.setDeleted(entry.deleted());
-        applyFlag(entry.flag());
         revision++;
         notifyListeners();
         return true;
@@ -269,11 +242,10 @@ public final class EditSession {
             return false;
         }
         Entry entry = redoStack.pop();
-        undoStack.push(new Entry(entry.opKey(), draft.workingView().deepCopy(), draft.isDeleted(), currentFlag(), Map.copyOf(pendingInputs), inversePaths(entry.paths()), entry.inverseExcludedScopes(), entry.excludedScopes()));
+        undoStack.push(new Entry(entry.opKey(), draft.workingView().deepCopy(), draft.isDeleted(), Map.copyOf(pendingInputs), inversePaths(entry.paths()), entry.inverseExcludedScopes(), entry.excludedScopes()));
         restorePendingInputs(entry);
         draft.replaceWith(entry.snapshot());
         draft.setDeleted(entry.deleted());
-        applyFlag(entry.flag());
         revision++;
         notifyListeners();
         return true;

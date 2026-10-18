@@ -99,7 +99,6 @@ final class RuleEditorScreenListPage {
     private static final int SEARCH_MAX_WIDTH = 160;
     private static final int SEARCH_MIN_WIDTH = 80;
     private static final int SEARCH_MAX_LENGTH = 128;
-    private static final int MORE_MODAL_WIDTH = 300;
     private static final int TAG_MODAL_WIDTH = 280;
     private static final int EXPORT_MODAL_WIDTH = 280;
     private static final int EXPORT_ROW_H = 20;
@@ -211,51 +210,19 @@ final class RuleEditorScreenListPage {
         });
         toggleButton = button(UI + "button.enable", UiButtonVariant.SECONDARY, actions::toggleSelectedEnabled);
         UiButton copy = button(UI + "button.duplicate", UiButtonVariant.SECONDARY, actions::promptDuplicate);
-        UiButton more = button(UI + "button.more", UiButtonVariant.SECONDARY, this::openMore);
         UiButton delete = button(UI + "button.delete", UiButtonVariant.DANGER, actions::deleteSelected);
         UiButton export = button(UI + "button.export", UiButtonVariant.SECONDARY, this::openExport);
         applyButton = button(UI + "button.apply", UiButtonVariant.PRIMARY, host::save);
         UiButton changes = button(UI + "button.changes", UiButtonVariant.SECONDARY, host::showChanges);
         selectedButtons.clear();
-        selectedButtons.addAll(List.of(edit, toggleButton, copy, delete, more));
-        globalBar.set(List.of(create, edit, toggleButton, copy, delete, export, more));
+        selectedButtons.addAll(List.of(edit, toggleButton, copy, delete));
+        globalBar.set(List.of(create, edit, toggleButton, copy, delete, export));
         listBar.set(List.of(applyButton, changes));
-        listButtons.addAll(List.of(create, edit, toggleButton, copy, delete, export, more, applyButton, changes));
+        listButtons.addAll(List.of(create, edit, toggleButton, copy, delete, export, applyButton, changes));
     }
 
     private UiButton button(String labelKey, UiButtonVariant variant, Runnable action) {
         return new UiButton(THEME, host.font(), Component.translatable(labelKey), variant, action::run).setChipStyle(true);
-    }
-
-    /*** 纵向菜单项，避免窄屏和英文长按钮挤出弹窗；enabled=false 的条目只给出原因提示。 */
-    private record MenuAction(String key, boolean enabled, Runnable action) { }
-
-    private void openMore() {
-        String id = selectedRuleId();
-        if (id == null) { actions.noSelection(); return; }
-        UiModal modal = UiModal.create(THEME, host.font()).title(Component.translatable(UI + "button.more"));
-        UiListView<MenuAction> list = new UiListView<>(THEME, host.font(),
-                (graphics, rowFont, item, index, row, selected, hovered, focused) -> graphics.drawString(rowFont,
-                        Component.translatable(UI + item.key()), row.x() + 4, row.y() + 4,
-                        item.enabled() ? THEME.palette().textPrimary() : THEME.palette().textDisabled(), false));
-        boolean masked = host.display().snapshot(id).deleteMarked();
-        // 「恢复原始版本」需要先取回来源视图；新建草稿没有原始版本，列表页也不发起来源视图请求
-        boolean canRestore = !host.model().isCreated(id) && host.workspace().sourceView(id) != null;
-        list.setItems(List.of(new MenuAction(masked ? "button.unmask" : "button.mask", true, actions::maskSelected),
-                new MenuAction("button.restore", canRestore, actions::restoreSelected)));
-        list.setRowHeight(20);
-        list.setActivateOnSingleClick(true);
-        list.setOnActivate(item -> {
-            host.modals().close(modal);
-            if (!item.enabled()) {
-                host.setNotice(Component.translatable(UI + "source.not_ready"), THEME.palette().warning());
-                return;
-            }
-            item.action().run();
-        });
-        modal.contentWidget(list, 44).cancel(Component.translatable(UI + "button.cancel"));
-        modal.preferredWidth(MORE_MODAL_WIDTH).layoutCentered(host.screenWidth(), host.screenHeight());
-        host.modals().push(modal);
     }
 
     /*** 导出范围选项：标签、是否含数据包条目与当前可导出的条数。 */

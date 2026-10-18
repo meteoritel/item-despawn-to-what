@@ -35,7 +35,6 @@ final class RuleListDisplaySnapshot {
     private final boolean error;
     private final boolean enabled;
     private final boolean issues;
-    private final boolean deleteMarked;
     private final boolean previewUnavailable;
     private final Component state;
     private final boolean stateVisible;
@@ -49,7 +48,7 @@ final class RuleListDisplaySnapshot {
     RuleListDisplaySnapshot(@Nullable RuleValue body, String title, @Nullable String category,
                             String origin, boolean unfinished, boolean exportable,
                             boolean active, boolean error, boolean enabled, boolean issues,
-                            boolean deleteMarked, boolean previewUnavailable,
+                            boolean previewUnavailable,
                             Component state, boolean stateVisible) {
         this.body = body;
         this.title = title;
@@ -61,7 +60,6 @@ final class RuleListDisplaySnapshot {
         this.error = error;
         this.enabled = enabled;
         this.issues = issues;
-        this.deleteMarked = deleteMarked;
         this.previewUnavailable = previewUnavailable;
         this.state = state;
         this.stateVisible = stateVisible;
@@ -94,7 +92,7 @@ final class RuleListDisplaySnapshot {
         return origin;
     }
 
-    // 是否属于「未完成」草稿分组：本次新建、有未保存改动或待恢复原始版本
+    // 是否属于「未完成」草稿分组：本次新建或有未保存改动
     boolean unfinished() {
         return unfinished;
     }
@@ -104,7 +102,7 @@ final class RuleListDisplaySnapshot {
         return exportable;
     }
 
-    // 当前是否按「启用」显示（草稿改动、新建与恢复中的条目以草稿为准）
+    // 当前是否按「启用」显示（草稿改动与新建的条目以草稿为准）
     boolean active() {
         return active;
     }
@@ -122,11 +120,6 @@ final class RuleListDisplaySnapshot {
     // 条目是否带服务端问题清单（筛选「问题」用）
     boolean issues() {
         return issues;
-    }
-
-    // 是否带覆盖层删除标记
-    boolean deleteMarked() {
-        return deleteMarked;
     }
 
     // 首帧预览是否不可用（悬停提示追加说明用）

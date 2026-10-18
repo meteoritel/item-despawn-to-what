@@ -44,7 +44,7 @@ import org.lwjgl.glfw.GLFW;
 
 /***
  * 规则编辑器主屏。
- * <p>两种模式：规则管理页（列表 / 搜索 / 筛选 / 新建 / 复制 / 停用 / 删除 / 恢复原始）与规则编辑页
+ * <p>两种模式：规则管理页（列表 / 搜索 / 筛选 / 新建 / 复制 / 停用 / 删除）与规则编辑页
  * （基本信息 / 源物品 / 触发条件 / 效果 四个页签）。所有字段编辑走描述符驱动的
  * {@link com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView}，条件树走
  * {@link com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionTreeSummary}，界面任何位置都不出现可编辑 JSON 文本框。
@@ -416,7 +416,7 @@ public final class RuleEditorScreen extends Screen {
         if (editPage.blockNavigation()) {
             return;
         }
-        // 编辑页打开规则时按需取回来源视图；失败或超时只影响来源对照与「恢复原始版本」
+        // 编辑页打开规则时按需取回来源视图；失败或超时只影响来源对照
         model.requestSourceView(id);
         editingId = id;
         mode = Mode.EDIT;

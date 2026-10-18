@@ -17,7 +17,6 @@ import org.jetbrains.annotations.Nullable;
 public record PersistedDraft(
         String targetId,
         boolean created,
-        boolean restore,
         boolean deleted,
         @Nullable JsonObject baseline,
         JsonObject draft,
@@ -44,7 +43,6 @@ public record PersistedDraft(
         json.addProperty("format", FORMAT_VERSION);
         json.addProperty("target_id", targetId);
         json.addProperty("created", created);
-        json.addProperty("restore", restore);
         json.addProperty("deleted", deleted);
         json.addProperty("base_version", baseVersion);
         json.addProperty("base_context_revision", baseContextRevision);
@@ -71,13 +69,12 @@ public record PersistedDraft(
         return new PersistedDraft(
                 json.get("target_id").getAsString(),
                 readBoolean(json, "created"),
-                readBoolean(json, "restore"),
                 readBoolean(json, "deleted"),
                 baseline,
                 draft.getAsJsonObject(),
                 readInt(json, "base_version"),
                 readInt(json, "base_context_revision"),
-                readLong(json, "saved_at"));
+                readSavedAt(json));
     }
 
     // 兼容旧文件：非布尔/非数字一律按缺省值处理
@@ -93,10 +90,11 @@ public record PersistedDraft(
         return json.get(name).getAsInt();
     }
 
-    private static long readLong(JsonObject json, String name) {
-        if (!json.has(name) || !json.get(name).isJsonPrimitive() || !json.get(name).getAsJsonPrimitive().isNumber()) {
+    private static long readSavedAt(JsonObject json) {
+        if (!json.has("saved_at") || !json.get("saved_at").isJsonPrimitive()
+                || !json.get("saved_at").getAsJsonPrimitive().isNumber()) {
             return 0L;
         }
-        return json.get(name).getAsLong();
+        return json.get("saved_at").getAsLong();
     }
 }

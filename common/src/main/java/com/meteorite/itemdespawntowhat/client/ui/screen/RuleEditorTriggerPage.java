@@ -311,7 +311,7 @@ final class RuleEditorTriggerPage {
                 case EditSession.OP_ADD_EFFECT, EditSession.OP_REMOVE_EFFECT, EditSession.OP_MOVE_EFFECT,
                         EditSession.OP_ADD_CANDIDATE, EditSession.OP_REMOVE_CANDIDATE, EditSession.OP_MOVE_CANDIDATE,
                         EditSession.OP_EDIT_CANDIDATE, EditSession.OP_CONVERT_STRUCTURE,
-                        EditSession.OP_RESTORE_ORIGINAL, EditSession.OP_CREATE_RULE, EditSession.OP_DELETE_RULE -> true;
+                        EditSession.OP_CREATE_RULE, EditSession.OP_DELETE_RULE -> true;
                 default -> false;
             };
             if (!ownerPath.isEmpty() && (outerStructure || session.draft().valueAt(ownerPath) == null

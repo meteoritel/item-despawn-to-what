@@ -182,7 +182,6 @@ flowchart TD
 ### 新增撤销操作
 
 - 所有字段与树操作都经 `EditSession.apply(opKey, mutation)` 提交，`opKey` 使用 `EditSession` 的操作常量（`gui.itemdespawntowhat.edit.undo.*`）；新增操作补常量并同步 `en_us` 与 `zh_cn` 语言文件。
-- 不改 JSON 的编辑（例如恢复原始版本）通过 `setFlagBridge` 进入历史，否则不会留下可撤销记录。
 - `load(next)` 会清空历史；历史上限由 `HISTORY_LIMIT` 定义。
 
 ### 接入新的界面实现

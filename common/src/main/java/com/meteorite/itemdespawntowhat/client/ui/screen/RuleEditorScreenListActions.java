@@ -19,7 +19,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 规则管理页的条目动作：新建 / 复制 / 启用 / 屏蔽 / 恢复原始 / 删除，以及这些动作共用的
+ * 规则管理页的条目动作：新建 / 复制 / 启用 / 删除，以及这些动作共用的
  * 规则 ID 命名与弹窗流程。
  *
  * <p>动作只通过 {@link RuleEditorScreenListPage.Host} 读取屏幕能力，选中项由构造时传入的选择器提供；
@@ -199,51 +199,6 @@ final class RuleEditorScreenListActions {
         session.apply(EditSession.OP_SET_FIELD, () -> draft.setBoolean(RuleFields.ENABLED, enabled));
         host.refreshList();
         host.setNotice(Component.translatable(enabled ? UI + "notice.enabled" : UI + "notice.disabled"), THEME.palette().success());
-    }
-
-    void maskSelected() {
-        if (host.rejectWhenFrozen()) {
-            return;
-        }
-        EditSession session = openSelected();
-        if (session == null) {
-            return;
-        }
-        RuleDraft draft = session.draft();
-        boolean masked = !draft.getBoolean(RuleFields.DELETE, false);
-        session.apply(EditSession.OP_SET_FIELD, () -> draft.setBoolean(RuleFields.DELETE, masked));
-        host.refreshList();
-        host.setNotice(Component.translatable(masked ? UI + "notice.masked" : UI + "notice.unmasked"), THEME.palette().success());
-    }
-
-    void restoreSelected() {
-        if (host.rejectWhenFrozen()) {
-            return;
-        }
-        String id = selection.get();
-        if (id == null) {
-            noSelection();
-            return;
-        }
-        // 新建草稿在服务端没有原始版本可恢复
-        if (host.model().isCreated(id)) {
-            host.setNotice(Component.translatable(UI + "source.created_restore"), THEME.palette().warning());
-            return;
-        }
-        // 来源视图取回前不提供恢复：恢复需要覆盖层来源作为依据，取回失败时只能用服务端生效视图编辑
-        if (host.workspace().sourceView(id) == null) {
-            host.setNotice(Component.translatable(UI + "source.not_ready"), THEME.palette().warning());
-            return;
-        }
-        EditSession session = host.model().openSession(id);
-        if (session == null) {
-            noSelection();
-            return;
-        }
-        // 走统一门面：「恢复原始版本」也要能撤销
-        session.apply(EditSession.OP_RESTORE_ORIGINAL, () -> host.model().markRestore(id));
-        host.refreshList();
-        host.setNotice(Component.translatable(UI + "notice.restored"), THEME.palette().success());
     }
 
     void deleteSelected() {

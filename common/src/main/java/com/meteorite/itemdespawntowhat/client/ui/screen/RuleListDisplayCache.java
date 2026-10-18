@@ -15,8 +15,8 @@ import org.jetbrains.annotations.Nullable;
  * 管理页的列表展示快照缓存：按规则 id 保存 {@link RuleListDisplaySnapshot}，一次刷新里每条规则只取一次规则体。
  *
  * <p>失效判定用「内容版本」而不是时间：快照版本（服务端下发新快照视为全部失效）、草稿修订
- * （{@link EditSession#revision()}，每次可撤销编辑、撤销重做与草稿载入都会递增）以及两个目标级标记
- * （本次新建 / 待恢复原始版本）。因此搜索逐键刷新只重算过滤与分组，未变化条目的标题、状态、
+ * （{@link EditSession#revision()}，每次可撤销编辑、撤销重做与草稿载入都会递增）以及本次新建标记。
+ * 因此搜索逐键刷新只重算过滤与分组，未变化条目的标题、状态、
  * 预览与提示直接复用，渲染时也不再触发规则体读取。</p>
  *
  * <p>缓存只为显示服务：不保存草稿，不做校验，也不改变任何编辑语义。</p>
@@ -50,13 +50,12 @@ final class RuleListDisplayCache {
         int version = model.snapshotVersion();
         long revision = sessionRevision(id);
         boolean created = model.isCreated(id);
-        boolean restoring = model.isRestoring(id);
         Cached cached = snapshots.get(id);
-        if (cached != null && cached.current(version, revision, created, restoring)) {
+        if (cached != null && cached.current(version, revision, created)) {
             return cached.snapshot();
         }
         RuleListDisplaySnapshot built = build(id);
-        snapshots.put(id, new Cached(built, version, revision, created, restoring));
+        snapshots.put(id, new Cached(built, version, revision, created));
         return built;
     }
 
@@ -92,7 +91,7 @@ final class RuleListDisplayCache {
         boolean deleteMarked = body != null && body.flag(RuleFields.DELETE, false);
         boolean unfinished = isUnfinished(id, session);
         boolean issues = entry != null && !entry.issues().isEmpty();
-        Component state = stateComponent(id, session, error, active, masked);
+        Component state = stateComponent(session, error, active, masked);
         return new RuleListDisplaySnapshot(
                 body,
                 RuleListDisplaySnapshot.titleOf(id, body),
@@ -104,15 +103,14 @@ final class RuleListDisplayCache {
                 error,
                 isEnabled(body),
                 issues,
-                deleteMarked,
                 RulePreviewIcons.unavailable(body),
                 state == null ? Component.empty() : state,
                 state != null);
     }
 
-    // 未完成分组只表达草稿状态：本次新建、有未保存改动或待恢复原始版本
+    // 未完成分组只表达草稿状态：本次新建或有未保存改动
     private boolean isUnfinished(String id, @Nullable EditSession session) {
-        return session != null && (session.isDirty() || model.isCreated(id) || model.isRestoring(id));
+        return session != null && (session.isDirty() || model.isCreated(id));
     }
 
     // 可导出条目：只导出生效且无问题的已保存规则；未保存草稿、有问题条目与屏蔽/非法条目不导出
@@ -129,12 +127,12 @@ final class RuleListDisplayCache {
     }
 
     // 状态用明确文字，正常启用不占位；错误、草稿改动与屏蔽优先于停用
-    private @Nullable Component stateComponent(String id, @Nullable EditSession session,
+    private @Nullable Component stateComponent(@Nullable EditSession session,
                                                boolean error, boolean active, boolean masked) {
         if (error) {
             return Component.translatable(STATUS_ERROR);
         }
-        if (session != null && (session.isDirty() || model.isRestoring(id))) {
+        if (session != null && session.isDirty()) {
             return Component.translatable(STATUS_PENDING);
         }
         if (masked) {
@@ -148,9 +146,9 @@ final class RuleListDisplayCache {
         return body != null && (!body.has(RuleFields.ENABLED) || body.flag(RuleFields.ENABLED, false));
     }
 
-    // 尚未修改的条目以快照状态为准；改动、恢复与新建条目以当前草稿为准。
+    // 尚未修改的条目以快照状态为准；改动与新建条目以当前草稿为准。
     private boolean isActive(String id, @Nullable RuleSnapshotEntry entry, @Nullable EditSession session) {
-        if (session != null && (session.isDirty() || model.isCreated(id) || model.isRestoring(id))) {
+        if (session != null && (session.isDirty() || model.isCreated(id))) {
             return !session.draft().isDeleted() && session.draft().getBoolean(RuleFields.ENABLED, true);
         }
         return entry == null || RuleSnapshotEntry.STATUS_ACTIVE.equals(entry.status());
@@ -158,11 +156,10 @@ final class RuleListDisplayCache {
 
     // 缓存条目与它建立时的内容版本，变更即失效
     private record Cached(RuleListDisplaySnapshot snapshot, int snapshotVersion, long sessionRevision,
-                          boolean created, boolean restoring) {
+                          boolean created) {
 
-        private boolean current(int version, long revision, boolean isCreated, boolean isRestoring) {
-            return snapshotVersion == version && sessionRevision == revision
-                    && created == isCreated && restoring == isRestoring;
+        private boolean current(int version, long revision, boolean isCreated) {
+            return snapshotVersion == version && sessionRevision == revision && created == isCreated;
         }
     }
 }

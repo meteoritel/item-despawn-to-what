@@ -35,7 +35,7 @@ final class RuleChangesView implements UiWidget, UiFocusTarget {
         // 删除标志独立于规则体，因此仍展示待删除草稿的名称、输入和产出。
         list.setItems(model.dirtyRuleIds().stream().map(id -> {
             EditSession session = model.session(id);
-            String kind = model.isRestoring(id) ? "restore" : model.isCreated(id) ? "create"
+            String kind = model.isCreated(id) ? "create"
                     : session != null && session.draft().isDeleted() ? "remove" : "modify";
             return new Change(labels.apply(id), Component.translatable(UI + "changes." + kind),
                     new RuleRecipeView(model.displayBody(id)));
