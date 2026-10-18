@@ -23,9 +23,11 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.Hot
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -58,6 +60,8 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     private static final int REVEAL_MARGIN = 24;
     private static final int DRAG_START_DISTANCE = 4;
     private static final int DROP_EDGE_DIVISOR = 4;
+    // 条件参数说明的行数较多，比动作说明的默认宽度更宽
+    private static final int CONDITION_TOOLTIP_WIDTH = 300;
 
     // ---- 分组方式小菜单 ----
 
@@ -131,6 +135,9 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     private @Nullable ConditionNode laidOutRoot;
 
     private @Nullable Function<ConditionNode.Leaf, Component> leafSummary;
+    private @Nullable Function<ConditionNode.Leaf, List<UiDescriptionTooltip.Line>> leafTooltip;
+    // 叶节点参数说明只在重建后失效，避免每帧重复生成
+    private final Map<ConditionNode.Leaf, List<UiDescriptionTooltip.Line>> leafTooltipCache = new HashMap<>();
     private List<ConditionTreeContract.TypeOption> typeOptions = List.of();
     private @Nullable ConditionTreeContract.LeafFactory leafFactory;
     private @Nullable Consumer<ConditionNode.Leaf> onEditLeaf;
@@ -189,7 +196,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         renderer = new ConditionGraphRenderer(this.theme, font, graph);
         picker = new UiTypePicker(this.theme, font, Component.translatable("gui.itemdespawntowhat.edit.picker.title"), this::confirmPicker);
         inlinePanel = new ConditionGraphInlinePanel(this.theme, font, graph);
-        tooltip = new UiDescriptionTooltip(this.theme, font);
+        tooltip = new UiDescriptionTooltip(this.theme, font).setMaxWidth(CONDITION_TOOLTIP_WIDTH);
         tree = new UiTreeEditor<>(ConditionTreeNodes.INSTANCE, () -> expression.root(), change -> {
             lastChange = change;
             applyNode(change.after());
@@ -241,6 +248,16 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         this.leafSummary = formatter;
         rebuild();
         return this;
+    }
+
+    /**
+     * 注入叶节点的参数说明行；返回空列表时回落到卡片摘要。
+     *
+     * @param formatter 把条件叶转换成说明行的回调，可为 {@code null} 取消注入
+     */
+    public void setLeafTooltip(@Nullable Function<ConditionNode.Leaf, List<UiDescriptionTooltip.Line>> formatter) {
+        this.leafTooltip = formatter;
+        leafTooltipCache.clear();
     }
 
     public UiConditionGraphEditor setListener(ConditionTreeContract.Listener newListener) {
@@ -722,6 +739,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
 
     // 全量重建：扫描状态、建立包装节点、运行整齐树布局。
     private void rebuild() {
+        leafTooltipCache.clear();
         ConditionNode previousRoot = laidOutRoot;
         ConditionNode root = expression.root();
         laidOutRoot = root;
@@ -752,8 +770,16 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         boolean issue = graph.hasIssue(node);
         List<UiDescriptionTooltip.Line> lines = new ArrayList<>();
         lines.add(new UiDescriptionTooltip.Line(graph.titleLabel(node),
-                issue ? theme.palette().canvasTextDanger() : theme.palette().canvasText()));
-        lines.add(new UiDescriptionTooltip.Line(graph.summaryLabel(node), theme.palette().canvasTextMuted()));
+                issue ? theme.palette().canvasTextDanger() : theme.palette().canvasAccent()));
+        List<UiDescriptionTooltip.Line> details = null;
+        if (leafTooltip != null && node instanceof ConditionNode.Leaf leaf && leaf.condition() != null) {
+            details = leafTooltipCache.computeIfAbsent(leaf, key -> List.copyOf(leafTooltip.apply(key)));
+        }
+        if (details == null || details.isEmpty()) {
+            lines.add(new UiDescriptionTooltip.Line(graph.summaryLabel(node), theme.palette().canvasTextMuted()));
+        } else {
+            lines.addAll(details);
+        }
         Component status = graph.statusLabel(node);
         if (!status.getString().isEmpty()) {
             lines.add(new UiDescriptionTooltip.Line(status, theme.palette().canvasTextDanger()));

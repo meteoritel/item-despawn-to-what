@@ -36,6 +36,7 @@ public final class UiDescriptionTooltip {
 
     private final UiHostTheme theme;
     private final Font font;
+    private int maxWidth = TOOLTIP_MAX_WIDTH;
 
     /**
      * 创建使用宿主浮层配色的说明面板。
@@ -46,6 +47,17 @@ public final class UiDescriptionTooltip {
     public UiDescriptionTooltip(UiHostTheme theme, Font font) {
         this.theme = theme;
         this.font = font;
+    }
+
+    /**
+     * 调整面板的最大宽度，供参数较多的说明使用。
+     *
+     * @param width 期望的最大宽度，低于最小宽度时按最小宽度处理
+     * @return 当前面板，便于链式调用
+     */
+    public UiDescriptionTooltip setMaxWidth(int width) {
+        this.maxWidth = Math.max(TOOLTIP_MIN_WIDTH, width);
+        return this;
     }
 
     /**
@@ -70,8 +82,8 @@ public final class UiDescriptionTooltip {
             contentWidth = Math.max(contentWidth, row.width());
         }
         int minWidth = Math.min(TOOLTIP_MIN_WIDTH, bounds.width() - TOOLTIP_MARGIN * 2);
-        int maxWidth = Math.min(TOOLTIP_MAX_WIDTH, bounds.width() - TOOLTIP_MARGIN * 2);
-        int width = Math.clamp(contentWidth + TOOLTIP_PADDING * 2, minWidth, maxWidth);
+        int widthLimit = Math.min(maxWidth, bounds.width() - TOOLTIP_MARGIN * 2);
+        int width = Math.clamp(contentWidth + TOOLTIP_PADDING * 2, minWidth, widthLimit);
         int height = TOOLTIP_PADDING * 2 + rows.size() * font.lineHeight + (rows.size() - 1) * TOOLTIP_LINE_GAP;
         int x = resolveX(bounds, width, mouseX);
         int y = resolveY(bounds, height, mouseY);
@@ -88,7 +100,7 @@ public final class UiDescriptionTooltip {
 
     // 折行宽度上限：由面板可用宽度决定换行位置，避免折行后再次超出屏幕
     private int textWidthLimit(UiRect bounds) {
-        int available = Math.min(TOOLTIP_MAX_WIDTH, bounds.width() - TOOLTIP_MARGIN * 2);
+        int available = Math.min(maxWidth, bounds.width() - TOOLTIP_MARGIN * 2);
         return Math.max(1, available - TOOLTIP_PADDING * 2);
     }
 

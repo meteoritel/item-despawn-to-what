@@ -186,11 +186,14 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         source.setAccessibleName(Component.translatable(UI + "source_title"));
         editor = new UiConditionGraphEditor(THEME, font).setTypeOptions(support.typeOptions()).setLeafFactory(support.leafFactory());
         editor.setLeafSummary(leaf -> {
-            RuleValue raw = codec.encode(leaf);
-            RuleValue condition = raw != null && raw.isMapping() ? raw.child(RuleFields.CONDITION) : null;
+            RuleValue condition = conditionJson(leaf);
             return condition != null
                     ? NaturalSummary.conditionLeaf(condition)
                     : TypeLabels.conditionLabel(leaf.condition().type());
+        });
+        editor.setLeafTooltip(leaf -> {
+            RuleValue condition = conditionJson(leaf);
+            return condition == null ? List.of() : ConditionDescription.lines(condition, THEME);
         });
         editor.setClipboardActions(this::copyNodes, this::pasteNodes);
         editor.setOnEditLeaf(leaf -> {
@@ -255,6 +258,12 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     }
 
     // ---- 数据绑定 ----
+
+    // 取条件叶对应的条件 JSON：卡片摘要与悬停说明共用同一段编码逻辑
+    private @Nullable RuleValue conditionJson(ConditionNode.Leaf leaf) {
+        RuleValue raw = codec.encode(leaf);
+        return raw != null && raw.isMapping() ? raw.child(RuleFields.CONDITION) : null;
+    }
 
     private void reloadExpression() {
         var result = editor.tree().decode(codec, session.draft().valueAt(scope));

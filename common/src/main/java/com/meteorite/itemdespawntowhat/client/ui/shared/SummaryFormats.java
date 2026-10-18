@@ -6,6 +6,7 @@ import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -45,6 +46,12 @@ public final class SummaryFormats {
     // 布尔短语键后缀
     private static final String TRUE_SUFFIX = ".true";
     private static final String FALSE_SUFFIX = ".false";
+
+    // 世界刻与 24 小时制的换算基数：0 刻为 06:00
+    private static final int TICKS_PER_DAY = 24000;
+    private static final int MINUTES_PER_DAY = 1440;
+    private static final int MINUTES_PER_HOUR = 60;
+    private static final int DAY_START_MINUTE = 360;
 
     // 工具类
     private SummaryFormats() {
@@ -191,6 +198,18 @@ public final class SummaryFormats {
             return FieldNumbers.text(value.asDecimal(0.0D), -1);
         }
         return trimToNull(value.asText(""));
+    }
+
+    /**
+     * 把世界刻换算成 24 小时制时刻文本，0 刻对应 06:00。
+     *
+     * @param ticks 世界刻，可为任意整数，超出一天时按周期取模
+     * @return 形如 {@code 06:00} 的时刻文本
+     */
+    public static String clockText(int ticks) {
+        int minute = Math.floorMod(ticks, TICKS_PER_DAY) * MINUTES_PER_DAY / TICKS_PER_DAY + DAY_START_MINUTE;
+        minute = Math.floorMod(minute, MINUTES_PER_DAY);
+        return String.format(Locale.ROOT, "%02d:%02d", minute / MINUTES_PER_HOUR, minute % MINUTES_PER_HOUR);
     }
 
     // 显示名缺失时的短名：去掉默认命名空间，标签保留 # 前缀

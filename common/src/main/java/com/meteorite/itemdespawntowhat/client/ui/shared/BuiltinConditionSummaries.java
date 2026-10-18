@@ -10,7 +10,6 @@ import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
@@ -65,13 +64,6 @@ public final class BuiltinConditionSummaries {
 
     // ---- 业务默认值 ----
     private static final String MODE_CLIMATE = "climate";
-
-    // ---- 时间换算（与编辑器时间滑条同规则） ----
-    private static final int TICKS_PER_DAY = 24000;
-    private static final int MINUTES_PER_DAY = 1440;
-    private static final int MINUTES_PER_HOUR = 60;
-    // 0 刻对应 06:00，故存在 6 小时偏移
-    private static final int DAY_START_MINUTE = 6 * MINUTES_PER_HOUR;
 
     // 工具类
     private BuiltinConditionSummaries() {
@@ -237,7 +229,7 @@ public final class BuiltinConditionSummaries {
         if (from == null || to == null) {
             return Component.translatable(UNSET_KEY);
         }
-        Component span = SummaryFormats.range(clockText(from), clockText(to));
+        Component span = SummaryFormats.range(SummaryFormats.clockText(from), SummaryFormats.clockText(to));
         Component crossing = SummaryFormats.flag(from > to, TIME_CROSSING_KEY);
         return crossing == null ? span : Component.translatable(TIME_KEY, span, crossing);
     }
@@ -285,13 +277,5 @@ public final class BuiltinConditionSummaries {
         EditorField field = descriptor == null ? null : descriptor.field(FIELD_WEATHER);
         String group = field == null ? null : field.enumGroup();
         return group == null || group.isBlank() ? FIELD_WEATHER : group;
-    }
-
-    // 刻 -> 24 小时制时钟文本；与 client.ui.screen.RuleEditorPanelFactory 的时间滑条同一换算规则，
-    // 因 client/ui/shared 不允许依赖 screen 包，故在此就地实现
-    private static String clockText(int ticks) {
-        int minute = Math.floorMod(ticks, TICKS_PER_DAY) * MINUTES_PER_DAY / TICKS_PER_DAY + DAY_START_MINUTE;
-        minute = Math.floorMod(minute, MINUTES_PER_DAY);
-        return String.format(Locale.ROOT, "%02d:%02d", minute / MINUTES_PER_HOUR, minute % MINUTES_PER_HOUR);
     }
 }
