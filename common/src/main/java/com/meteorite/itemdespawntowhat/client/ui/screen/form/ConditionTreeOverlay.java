@@ -138,7 +138,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     private final UiIconStrip.Item jsonItem;
     private final UiIconStrip.Item helpItem;
     private final UiIconStrip.Item addConditionItem;
-    private final UiIconStrip.Item groupItem;
+    private final UiIconStrip.Item branchItem;
     private final UiIconStrip.Item wrapItem;
 
     private UiRect bounds = new UiRect(0, 0, 0, 0);
@@ -227,9 +227,9 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         functionItems = List.of(undoItem, redoItem, jsonItem, helpItem);
 
         toolColumn = new ConditionTreeChrome.Strip(font, UiIconStrip.Orientation.VERTICAL);
-        // 7 格：分组与包组的 ∧ / ∨ 由画布在 [+] 热区处再选，工具列不再各占两格
+        // 7 格：新建分支与包组的 ∧ / ∨ 由画布在 [+] 热区处再选，工具列不再各占两格
         addConditionItem = addTool(UiHostTheme.ICON_ADD_CONDITION, UI + "button.add", false, editor::beginAddCondition);
-        groupItem = addTool(UiHostTheme.ICON_GROUP_ALL, UI + "button.group", false, editor::beginAddGroupWithKind);
+        branchItem = addTool(UiHostTheme.ICON_NEW_BRANCH, UI + "button.new_branch", false, editor::beginAddGroupWithKind);
         addTool(UiHostTheme.ICON_INVERT, UI + "button.not", true, editor::invertSelection);
         addTool(UiHostTheme.ICON_REMOVE, UI + "button.remove", true, editor::removeSelection);
         addTool(UiHostTheme.ICON_MOVE_UP, UI + "button.up", true, () -> editor.moveSelection(-1));
@@ -651,11 +651,11 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         for (UiIconStrip.Item item : selectionTools) {
             item.setEnabled(hasSelection);
         }
-        // 三个创建类工具的选中态互斥：加条件 / 分组待选 ∧∨ / 包组待选 ∧∨
+        // 三个创建类工具的选中态互斥：加条件 / 新建分支待选 ∧∨ / 包组待选 ∧∨
         boolean adding = treeView && editor.isAddMode();
-        boolean groupPending = adding && editor.isGroupKindPending();
-        addConditionItem.setSelected(treeView && editor.isPickerOpen() || adding && !groupPending);
-        groupItem.setSelected(groupPending);
+        boolean branchPending = adding && editor.isGroupKindPending();
+        addConditionItem.setSelected(treeView && editor.isPickerOpen() || adding && !branchPending);
+        branchItem.setSelected(branchPending);
         wrapItem.setSelected(treeView && editor.isWrapKindPending());
     }
 

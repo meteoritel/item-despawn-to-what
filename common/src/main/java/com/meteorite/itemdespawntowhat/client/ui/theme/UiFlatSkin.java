@@ -45,7 +45,7 @@ public final class UiFlatSkin {
     public static final int ICON_HELP = 4;
     // 工具列
     public static final int ICON_ADD_CONDITION = 5;
-    public static final int ICON_GROUP_ALL = 6;
+    public static final int ICON_NEW_BRANCH = 6;
     public static final int ICON_INVERT = 7;
     public static final int ICON_REMOVE = 8;
     public static final int ICON_MOVE_UP = 9;

@@ -866,7 +866,7 @@
   "gui.itemdespawntowhat.edit.effect.readonly_note_unknown": "This action has no readable type: kept read-only as-is.",
   "gui.itemdespawntowhat.edit.tree.unrestricted": "No conditions — add a condition to restrict this rule",
   "gui.itemdespawntowhat.edit.tree.button.add": "Add condition",
-  "gui.itemdespawntowhat.edit.tree.button.group": "Group",
+  "gui.itemdespawntowhat.edit.tree.button.new_branch": "New branch",
   "gui.itemdespawntowhat.edit.tree.button.wrap": "Wrap",
   "gui.itemdespawntowhat.edit.tree.button.not": "Invert",
   "gui.itemdespawntowhat.edit.tree.button.edit": "Edit",

@@ -37,7 +37,7 @@ public interface UiHostTheme extends UiStyleSource {
     // 页面层经主题消费；本包内暂无调用点
     int ICON_ADD_CONDITION = UiFlatSkin.ICON_ADD_CONDITION;
     // 页面层经主题消费；本包内暂无调用点
-    int ICON_GROUP_ALL = UiFlatSkin.ICON_GROUP_ALL;
+    int ICON_NEW_BRANCH = UiFlatSkin.ICON_NEW_BRANCH;
     // 页面层经主题消费；本包内暂无调用点
     int ICON_INVERT = UiFlatSkin.ICON_INVERT;
     // 页面层经主题消费；本包内暂无调用点

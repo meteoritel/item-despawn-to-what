@@ -37,7 +37,7 @@ ICON_ROWS = [
     "view_json",
     "help",
     "add_condition",
-    "add_group",
+    "new_branch",
     "invert",
     "remove",
     "move_up",
@@ -171,14 +171,19 @@ def _container_brackets(d, color):
     _h(d, 12, 14, 14, color)
 
 
-def icon_add_group(d, c, a):
-    # 方框 + 三个实心方块：添加「全部满足」分组
-    _container_frame(d, c)
-    _group_blocks(d, c, True)
+def icon_new_branch(d, c, a):
+    # 上一下二：顶部节点向左右分叉，表达在当前位置新建一个分支，而不是把条件装进分组
+    _rect(d, 6, 2, 9, 5, c, fill=True)
+    _v(d, 7, 6, 8, c)
+    _h(d, 3, 12, 8, c)
+    _v(d, 3, 9, 10, c)
+    _v(d, 12, 9, 10, c)
+    _rect(d, 1, 11, 4, 14, c, fill=True)
+    _rect(d, 11, 11, 14, 14, c, fill=True)
 
 
 def icon_add_group_any(d, c, a):
-    # 与 icon_add_group 同族，方块改空心：添加「任一满足」分组
+    # 历史备用行：旧版「添加分组」空心方块字形，图集行序保持不变
     _container_frame(d, c)
     _group_blocks(d, c, False)
 
@@ -223,7 +228,7 @@ ICONS = {
     "view_json": icon_view_json,
     "help": icon_help,
     "add_condition": icon_add_condition,
-    "add_group": icon_add_group,
+    "new_branch": icon_new_branch,
     "invert": icon_invert,
     "remove": icon_remove,
     "move_up": icon_move_up,

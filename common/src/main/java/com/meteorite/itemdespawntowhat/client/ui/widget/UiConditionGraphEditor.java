@@ -424,7 +424,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         return addMode;
     }
 
-    /** 添加模式下是否在等用户为「分组」选 ∧ / ∨；为真时「添加条件」格不应显示为选中。 */
+    /** 添加模式下是否在等用户为「新建分支」选 ∧ / ∨；为真时「添加条件」格不应显示为选中。 */
     public boolean isGroupKindPending() {
         return groupKindPending;
     }
@@ -450,7 +450,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     }
 
     /**
-     * 进入「加分组」待选 kind 的添加模式：热区照常出现，点击某个 [+] 后由画布在该热区旁弹出
+     * 进入「新建分支」待选 kind 的添加模式：热区照常出现，点击某个 [+] 后由画布在该热区旁弹出
      * 「全部满足 / 任一满足」小菜单；选定后插入对应容器并保持添加模式，用户可以继续点新容器的大 [+]。
      */
     public boolean beginAddGroupWithKind() {
@@ -1005,7 +1005,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         }
     }
 
-    // 确认分组方式：加分组插入容器并保持添加模式；包组直接对选区执行
+    // 确认分组方式：新建分支插入容器并保持添加模式；包组直接对选区执行
     private void confirmKindMenu() {
         if (!kindMenuOpen) {
             return;

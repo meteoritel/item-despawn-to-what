@@ -866,7 +866,7 @@
   "gui.itemdespawntowhat.edit.effect.readonly_note_unknown": "该行为缺少可识别的 type：原样只读保留。",
   "gui.itemdespawntowhat.edit.tree.unrestricted": "不限制条件；可添加条件",
   "gui.itemdespawntowhat.edit.tree.button.add": "添加条件",
-  "gui.itemdespawntowhat.edit.tree.button.group": "分组",
+  "gui.itemdespawntowhat.edit.tree.button.new_branch": "新建分支",
   "gui.itemdespawntowhat.edit.tree.button.wrap": "包组",
   "gui.itemdespawntowhat.edit.tree.button.not": "取反",
   "gui.itemdespawntowhat.edit.tree.button.edit": "编辑",
