@@ -3,7 +3,6 @@ package com.meteorite.itemdespawntowhat.client.edit;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 /*** 缺少必填项的导航清单；只检查可静态确认的输入与内置产出，不替代服务端校验。 */
 public final class RuleRequirements {
@@ -13,23 +12,17 @@ public final class RuleRequirements {
 
     private static final String UI = "gui.itemdespawntowhat.edit.";
 
-    // 固定成本消耗类效果：不计入「有无产出」判定
-    private static final Set<String> CONSUMPTION_TYPES = Set.of(
-            "itemdespawntowhat:consume_source",
-            "itemdespawntowhat:consume_catalyst",
-            "itemdespawntowhat:consume_fluid");
-
     // 空映射：缺失字段的兜底视图
     private static final RuleValue EMPTY_MAPPING = RuleValue.mapping().build();
 
     private RuleRequirements() { }
 
-    // 界面侧入口：直接以草稿为输入，界面不接触 JSON 类型
+    /** 界面侧入口：直接以草稿为输入，界面不接触 JSON 类型 */
     public static List<Missing> find(RuleDraft draft) {
         return draft == null ? List.of() : find(draft.root());
     }
 
-    // 规则值入口
+    /** 规则值入口 */
     public static List<Missing> find(RuleValue rule) {
         List<Missing> result = new ArrayList<>();
         RuleValue source = mappingOf(rule == null ? null : rule.child("source"));
@@ -56,9 +49,6 @@ public final class RuleRequirements {
         for (int index = 0; index < actions.size(); index++) {
             RuleValue action = mappingOf(actions.get(index));
             String type = text(action, "type");
-            if (CONSUMPTION_TYPES.contains(type)) {
-                continue;
-            }
             String field = switch (type) {
                 case "itemdespawntowhat:spawn_entity" -> switch (text(action, "variant")) {
                     case "item" -> "item";

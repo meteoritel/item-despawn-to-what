@@ -7,7 +7,6 @@ import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
-import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
@@ -21,13 +20,10 @@ import com.meteorite.itemdespawntowhat.core.model.CombinationMode;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionLimits;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
-import com.meteorite.itemdespawntowhat.core.model.Effect;
-import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.type.condition.CatalystPresentCondition;
 import com.meteorite.itemdespawntowhat.core.type.condition.FluidPresentCondition;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import net.minecraft.network.chat.Component;
@@ -62,9 +58,6 @@ final class RuleEditorPageSupport {
     static final ResourceLocation INFO_PAGE = ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "rule_info_page");
     static final ResourceLocation DELAY_PAGE = ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "rule_delay_page");
     static final ResourceLocation CONDITIONS_PAGE = ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "conditions_page");
-    static final ResourceLocation CONSUME_SOURCE_ID = ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "consume_source");
-    static final ResourceLocation CONSUME_CATALYST_ID = ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "consume_catalyst");
-    static final ResourceLocation CONSUME_FLUID_ID = ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "consume_fluid");
 
     static final ResourceLocation CATALYST_PRESENT_ID = CatalystPresentCondition.ID;
     static final ResourceLocation FLUID_PRESENT_ID = FluidPresentCondition.ID;
@@ -102,17 +95,6 @@ final class RuleEditorPageSupport {
         return values.build();
     }
 
-    static TypeEditorDescriptor ownFieldsOnly(TypeEditorDescriptor descriptor) {
-        List<EditorField> fields = new ArrayList<>();
-        for (EditorField field : descriptor.fields()) {
-            if (RuleFields.DELAY_TICKS.equals(field.name()) || RuleFields.CHANCE.equals(field.name()) || RuleFields.CONDITIONS.equals(field.name())) {
-                continue;
-            }
-            fields.add(field);
-        }
-        return TypeEditorDescriptor.of(descriptor.id(), descriptor.label(), fields);
-    }
-
     static @Nullable PresenceLeaf selectedCatalystLeaf(RuleDraft draft) {
         for (PresenceLeaf leaf : ruleLevelPresence(draft.root(), CATALYST_PRESENT_ID)) {
             if (!stringList(draft.valueAt(leaf.fieldPath())).isEmpty()) return leaf;
@@ -120,20 +102,13 @@ final class RuleEditorPageSupport {
         return null;
     }
 
-    static void removeCatalystConsumption(RuleDraft draft) {
-        draft.remove(RuleFields.CATALYST_COST);
-        RuleCostBinding.Ref ref;
-        while ((ref = RuleCostBinding.consumeCatalyst(draft.root())) != null) {
-            draft.removeAt(ref.path());
-        }
-    }
-
     static void addRuleLevelPresence(RuleDraft draft, ResourceLocation type) {
         RuleValue leaf = presenceLeafValue(type);
         if (CATALYST_PRESENT_ID.equals(type)) {
+            RuleValue cost = draft.valueAt(RuleFields.CATALYST_COST);
             RuleValue condition = RuleValue.mapping(leaf.child(RuleFields.CONDITION))
-                    .put(RuleFields.CATALYST_COUNT, RuleValue.integer(CatalystPresentCondition.DEFAULT_COUNT))
-                    .build();
+                    .put(RuleFields.CATALYST_ITEMS, cost == null ? RuleValue.list().build()
+                            : cost.childOr(RuleFields.CATALYST_ITEMS, RuleValue.list().build()).deepCopy()).build();
             leaf = RuleValue.mapping(leaf).put(RuleFields.CONDITION, condition).build();
         }
         RuleValue current = draft.valueAt(RuleFields.CONDITIONS);
@@ -353,115 +328,29 @@ final class RuleEditorPageSupport {
         return form.applyToDraft();
     }
 
-    static void retargetFluidActions(RuleDraft draft, String before, String after) {
-        if (after.isEmpty()) {
-            // 类型被清空属于「任意流体」的中间态，不连带清空移除动作
-            return;
-        }
-        retargetFluidAction(draft, RuleFields.EFFECTS, before, after);
-        RuleValue outcomes = draft.valueAt(RuleFields.OUTCOMES);
-        if (outcomes != null && outcomes.isList()) {
-            for (int index = 0; index < outcomes.size(); index++) {
-                RuleValue candidate = outcomes.item(index);
-                if (candidate != null && candidate.isMapping()) {
-                    retargetFluidAction(draft, DraftPaths.child(DraftPaths.indexPath(RuleFields.OUTCOMES, index),
-                            RuleFields.EFFECTS), before, after);
-                }
-            }
-        }
-    }
-
-    static void retargetFluidAction(RuleDraft draft, String listPath, String before, String after) {
-        RuleValue list = draft.valueAt(listPath);
-        if (list == null || !list.isList()) {
-            return;
-        }
-        RuleValue.Sequence next = RuleValue.list();
-        boolean changed = false;
-        for (RuleValue entry : list.items()) {
-            if (!entry.isMapping() || !CONSUME_FLUID_ID.toString().equals(stringField(entry, RuleFields.TYPE))) {
-                next.add(entry);
-                continue;
-            }
-            String existing = primitiveString(entry.child(RuleFields.FLUID));
-            if (!existing.isEmpty() && !existing.equals(before)) {
-                next.add(entry);
-                continue;
-            }
-            next.add(RuleValue.mapping(entry).put(RuleFields.FLUID, RuleValue.text(after)).build());
-            changed = true;
-        }
-        if (changed) {
-            draft.setAt(listPath, next.build());
-        }
-    }
-
-    static String primitiveString(@Nullable RuleValue element) {
-        return element != null && element.isScalar() ? element.asText() : "";
-    }
-
-    static void retargetCatalystItems(RuleDraft draft, List<String> before, List<String> after) {
+    static void retargetCatalystItems(RuleDraft draft) {
         RuleValue cost = draft.valueAt(RuleFields.CATALYST_COST);
-        if (cost != null && cost.isMapping()) {
+        if (cost == null) cost = RuleValue.mapping().build();
+        if (cost.isMapping()) {
             List<String> references = ruleLevelCatalystItems(draft);
             draft.setAt(RuleFields.CATALYST_COST, RuleValue.mapping(cost)
                     .put(RuleFields.CATALYST_ITEMS, RuleValue.textList(references).build()).build());
-            reconcileQuantities(draft, RuleFields.CATALYST_COST, references, CatalystCost.DEFAULT_COUNT);
-        }
-        retargetConsumptionList(draft, RuleFields.EFFECTS, before, after);
-        RuleValue outcomes = draft.valueAt(RuleFields.OUTCOMES);
-        if (outcomes != null && outcomes.isList()) {
-            for (int index = 0; index < outcomes.size(); index++) {
-                RuleValue candidate = outcomes.item(index);
-                if (candidate == null || !candidate.isMapping()) {
-                    continue;
-                }
-                retargetConsumptionList(draft, DraftPaths.child(DraftPaths.indexPath(RuleFields.OUTCOMES, index),
-                        RuleFields.EFFECTS), before, after);
+            reconcileQuantities(draft, references);
+            RuleValue updated = draft.valueAt(RuleFields.CATALYST_COST);
+            if (updated != null && updated.has(RuleFields.CONSUME_COUNTS)) {
+                draft.setAt(RuleFields.CATALYST_COST, withQuantities(updated, RuleFields.CONSUME_COUNTS,
+                        references, CatalystCost.DEFAULT_COUNT));
             }
         }
     }
 
-    static void retargetConsumptionList(RuleDraft draft, String listPath, List<String> before, List<String> after) {
-        RuleValue list = draft.valueAt(listPath);
-        if (list == null || !list.isList()) {
-            return;
-        }
-        RuleValue.Sequence next = RuleValue.list();
-        boolean changed = false;
-        for (RuleValue entry : list.items()) {
-            RuleValue updated = retargetConsumptionEntry(entry, before, after);
-            changed |= updated != entry;
-            next.add(updated);
-        }
-        if (changed) {
-            draft.setAt(listPath, next.build());
-        }
-    }
-
-    // 重定向单个消耗动作的催化剂引用；无需改动时原样返回
-    private static RuleValue retargetConsumptionEntry(RuleValue element, List<String> before, List<String> after) {
-        if (element == null || !element.isMapping()
-                || !RuleCostBinding.CONSUME_CATALYST.equals(stringField(element, RuleFields.TYPE))) {
-            return element;
-        }
-        List<String> existing = stringList(element.child(RuleFields.CATALYST_ITEMS));
-        if (!existing.isEmpty() && referencesDiffer(existing, before)) {
-            return element;
-        }
-        RuleValue updated = RuleValue.mapping(element)
-                .put(RuleFields.CATALYST_ITEMS, RuleValue.textList(after).build())
-                .build();
-        return withQuantities(updated, RuleFields.ITEM_COUNTS, after, countField(element));
-    }
-
     // 按 ownerPath 写回重建后的计数表；数量字段固定为 item_counts，仅此字段需要与引用列表对账
-    static void reconcileQuantities(RuleDraft draft, String ownerPath, List<String> references, int fallback) {
-        RuleValue owner = draft.valueAt(ownerPath);
+    static void reconcileQuantities(RuleDraft draft, List<String> references) {
+        RuleValue owner = draft.valueAt(RuleFields.CATALYST_COST);
         if (owner == null || !owner.isMapping()) {
             return;
         }
-        draft.setAt(ownerPath, withQuantities(owner, RuleFields.ITEM_COUNTS, references, fallback));
+        draft.setAt(RuleFields.CATALYST_COST, withQuantities(owner, RuleFields.ITEM_COUNTS, references, CatalystCost.DEFAULT_COUNT));
     }
 
     // 按 references 顺序重建 field 计数表：已有计数值原样保留，新键取 max(DEFAULT_COUNT, fallback)
@@ -474,16 +363,6 @@ final class RuleEditorPageSupport {
                     : RuleValue.integer(Math.max(CatalystCost.DEFAULT_COUNT, fallback)));
         }
         return RuleValue.mapping(owner).put(field, next.build()).build();
-    }
-
-    static int countField(@Nullable RuleValue owner) {
-        RuleValue value = owner == null ? null : owner.child(RuleFields.CATALYST_COUNT);
-        return value != null && value.isNumber() ? value.asInteger(CatalystCost.DEFAULT_COUNT)
-                : CatalystCost.DEFAULT_COUNT;
-    }
-
-    static boolean referencesDiffer(List<String> left, List<String> right) {
-        return left.isEmpty() || right.isEmpty() || !new HashSet<>(left).equals(new HashSet<>(right));
     }
 
     static Component presenceHeader(PresenceLeaf leaf) {
@@ -503,31 +382,6 @@ final class RuleEditorPageSupport {
         return new EditorField(field.name(), UI + "rule.catalyst_min_count", field.type(), field.domain(),
                 field.nullable(), field.required(), field.registry(), field.enumGroup(), field.hintKey(),
                 field.subFields(), field.presets(), field.numbers(), field.displayPrecision());
-    }
-
-    static String scopePathOf(String conditionPath) {
-        int marker = conditionPath.indexOf("." + RuleFields.CONDITIONS);
-        return marker < 0 ? RuleFields.CATALYST_COST : conditionPath.substring(0, marker);
-    }
-
-    static @Nullable Effect scopeEffectOf(Rule rule, String conditionPath) {
-        String scope = scopePathOf(conditionPath);
-        if (RuleFields.CATALYST_COST.equals(scope)) {
-            return null;
-        }
-        int effect = indexIn(scope, RuleFields.EFFECTS);
-        if (effect < 0) {
-            return null;
-        }
-        int candidate = indexIn(scope, RuleFields.OUTCOMES);
-        if (candidate < 0) {
-            return effect < rule.effects().size() ? rule.effects().get(effect) : null;
-        }
-        if (candidate >= rule.outcomes().size()) {
-            return null;
-        }
-        List<Effect> effects = rule.outcomes().get(candidate).effects();
-        return effect < effects.size() ? effects.get(effect) : null;
     }
 
     static List<String> stringList(@Nullable RuleValue element) {
@@ -585,39 +439,8 @@ final class RuleEditorPageSupport {
         return element != null && element.isText() ? element.asText() : CombinationMode.ROUND_ROBIN.key();
     }
 
-    static boolean containsAction(@Nullable RuleValue actions, String type, @Nullable String variant) {
-        if (actions == null || !actions.isList()) return false;
-        for (RuleValue entry : actions.items()) {
-            if (!entry.isMapping()) continue;
-            if (!(TypeLabels.OWN_NAMESPACE + ":" + type).equals(RuleCostBinding.typeOf(entry))) continue;
-            RuleValue actual = entry.child("variant");
-            if (variant == null || actual != null && variant.equals(actual.asText())) return true;
-        }
-        return false;
-    }
-
     static boolean isCommonActionField(EditorField field) {
         return List.of("chance", "delay_ticks", "conditions").contains(field.name());
-    }
-
-    static boolean isConsumptionAction(ResourceLocation type) {
-        return CONSUME_SOURCE_ID.equals(type) || CONSUME_CATALYST_ID.equals(type) || CONSUME_FLUID_ID.equals(type);
-    }
-
-    static boolean isInputOwnedConsumptionField(ResourceLocation type, EditorField field) {
-        String name = field.name();
-        if (CONSUME_SOURCE_ID.equals(type)) {
-            return RuleFields.CATALYST_COUNT.equals(name) || RuleFields.ITEM_COUNTS.equals(name);
-        }
-        if (CONSUME_CATALYST_ID.equals(type)) {
-            return RuleFields.CATALYST_ITEMS.equals(name) || RuleFields.CATALYST_COUNT.equals(name)
-                    || RuleFields.ITEM_COUNTS.equals(name) || RuleFields.CATALYST_RADIUS.equals(name);
-        }
-        if (CONSUME_FLUID_ID.equals(type)) {
-            // 流体类型由输入页的存在叶声明；require_source 是移除动作自身的匹配行为，仍可在此编辑
-            return RuleFields.FLUID.equals(name);
-        }
-        return false;
     }
 
     static void show(@Nullable UiWidget widget, boolean visible) {

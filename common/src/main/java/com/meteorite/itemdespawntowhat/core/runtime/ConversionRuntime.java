@@ -122,16 +122,16 @@ public final class ConversionRuntime {
         private long nextCheckTick = -1L;
     }
 
-    // 掉落物追踪状态快照，供开发场景实时日志只读使用
+    /** 掉落物追踪状态快照，供开发场景实时日志只读使用 */
     public record TrackedItemInfo(boolean tracked, int failureCount, boolean locked, long nextCheckTick) {
     }
 
-    // 便捷构造：寿命提供器取原版默认值，自然消失时刻按原版寿命规则推算
+    /** 便捷构造：寿命提供器取原版默认值，自然消失时刻按原版寿命规则推算 */
     public ConversionRuntime(ServerConfig config, BuiltinTypeRegistries types) {
         this(config, types, LifespanProvider.vanillaDefault());
     }
 
-    // 构造运行时：调度器预算从 config 推导，维度状态在首次登记时按需创建
+    /** 构造运行时：调度器预算从 config 推导，维度状态在首次登记时按需创建 */
     public ConversionRuntime(ServerConfig config, BuiltinTypeRegistries types, LifespanProvider lifespanProvider) {
         this.config = config;
         this.types = types;
@@ -140,14 +140,14 @@ public final class ConversionRuntime {
         this.candidateStructureVersions = new CandidateStructureVersions(types);
     }
 
-    // 公共调度器，供开发场景读取跨维度预算与队列指标
+    /** 公共调度器，供开发场景读取跨维度预算与队列指标 */
     public ServerScheduler scheduler() {
         return scheduler;
     }
 
     // ========== 规则生命周期 ==========
 
-    // 规则热替换：重建索引并清空全部追踪状态（由随后的 rescan 重建）
+    /** 规则热替换：重建索引并清空全部追踪状态（由随后的 rescan 重建） */
     public void replaceRules(List<LoadedRule<Rule>> rules, IssueCollector issues) {
         ruleGeneration++;
         savedRescanPending = false;
@@ -169,7 +169,7 @@ public final class ConversionRuntime {
         }
     }
 
-    // 当前生效的规则索引（replaceRules 时整体替换）
+    /** 当前生效的规则索引（replaceRules 时整体替换） */
     public RuleIndex index() {
         return index;
     }
@@ -264,7 +264,7 @@ public final class ConversionRuntime {
 
     // ========== 事件入口（由平台层调用） ==========
 
-    // 掉落物进入世界：仅当存在候选规则时纳入追踪
+    /** 掉落物进入世界：仅当存在候选规则时纳入追踪 */
     public void onItemAdded(ServerLevel level, ItemEntity entity) {
         LevelState state = stateOf(level);
         state.items.put(entity.getId(), entity);
@@ -289,7 +289,7 @@ public final class ConversionRuntime {
                 "candidates", candidates.size(), "lifespan_ticks", lifespanTicks(level, entity)); }
     }
 
-    // 环境致死入口（平台层只在真实致死分支调用）：先按伤害原因归类，不属于三类环境伤害时不请求
+    /** 环境致死入口（平台层只在真实致死分支调用）：先按伤害原因归类，不属于三类环境伤害时不请求 */
     public void requestEnvironmentalConversion(ServerLevel level, ItemEntity item, DamageSource source) {
         TriggerKind kind = DamageClassification.classify(source);
         if (kind != null) {
@@ -300,7 +300,7 @@ public final class ConversionRuntime {
     // 环境销毁的请求入口（自然消失由调度器的到期检查直接调用 attempt，不走本方法）：先补齐本刻的追踪，再交给 attempt 同步判定
     // 环境致死时本方法在 hurt 调用栈内同步执行「条件检查 + 规则选择」（单实体一次，量小）；
     // 效果一律经调度器排队并在共享 tick 预算内执行（见 ConversionSettlement#dispatchEffect）：这是刻意的设计选择，
-    // 环境集中销毁是否把峰值转移到这里，仍需观测。
+    /** 环境集中销毁是否把峰值转移到这里，仍需观测。 */
     public void requestConversion(ServerLevel level, ItemEntity item, TriggerKind kind) {
         if (item == null || kind == null || excluded(item)) {
             return;
@@ -324,7 +324,7 @@ public final class ConversionRuntime {
     }
 
     // 每 tick 推进一次公共预算：所有维度的检查与效果共享同一份时间与工作量额度。
-    // 时钟取主世界游戏刻（各维度 DerivedLevelData 共用同一值），所有维度按同一时刻推进。
+    /** 时钟取主世界游戏刻（各维度 DerivedLevelData 共用同一值），所有维度按同一时刻推进。 */
     public void onServerTick(MinecraftServer server) {
         long gameTime = server.overworld().getGameTime();
         scheduler.tick(gameTime);
@@ -405,17 +405,17 @@ public final class ConversionRuntime {
         activeRecoveries.remove(id);
     }
 
-    // 在飞的返还恢复任务数观测
+    /** 在飞的返还恢复任务数观测 */
     public int activeRecoveryCount() {
         return activeRecoveries.size();
     }
 
-    // 观测：上次恢复扫描中因维度未加载而保持不动的记录数
+    /** 观测：上次恢复扫描中因维度未加载而保持不动的记录数 */
     public long recoverySkippedDimensions() {
         return recoverySkippedDimensions;
     }
 
-    // reload 后回扫已加载实体重建追踪（使热重载对已存在的掉落物同样生效）
+    /** reload 后回扫已加载实体重建追踪（使热重载对已存在的掉落物同样生效） */
     public void rescan(ServerLevel level) {
         LevelState state = stateOf(level);
         state.items.clear();
@@ -434,7 +434,7 @@ public final class ConversionRuntime {
         }
     }
 
-    // 维度卸载：整体释放该维度的状态与任务
+    /** 维度卸载：整体释放该维度的状态与任务 */
     public void clear(ServerLevel level) {
         LevelState removed = levels.remove(level.dimension());
         if (removed != null) {
@@ -448,7 +448,7 @@ public final class ConversionRuntime {
         return catalystReservations;
     }
 
-    // 服务端停止：释放全部状态
+    /** 服务端停止：释放全部状态 */
     public void shutdown() {
         for (LevelState state : levels.values()) {
             state.tracked.clear();
@@ -465,13 +465,13 @@ public final class ConversionRuntime {
 
     // ========== 统计（供开发场景实时日志与性能窗口使用） ==========
 
-    // 该维度当前被追踪的掉落物数量
+    /** 该维度当前被追踪的掉落物数量 */
     public int trackedCount(ServerLevel level) {
         LevelState state = levels.get(level.dimension());
         return state == null ? 0 : state.tracked.size();
     }
 
-    // 单个掉落物的追踪状态（命令层只读）
+    /** 单个掉落物的追踪状态（命令层只读） */
     public TrackedItemInfo debugInfo(ServerLevel level, ItemEntity entity) {
         LevelState state = levels.get(level.dimension());
         TrackedState tracked = state == null ? null : state.tracked.get(entity.getUUID());
@@ -481,7 +481,7 @@ public final class ConversionRuntime {
         return new TrackedItemInfo(true, tracked.failureCount, tracked.locked, tracked.nextCheckTick);
     }
 
-    // 某个掉落物的候选规则（已按优先级 → 条件叶数 → 定义序排序），供 /idtw debug why 使用
+    /** 某个掉落物的候选规则（已按优先级 → 条件叶数 → 定义序排序），供 /idtw debug why 使用 */
     public List<Rule> candidatesFor(ItemEntity entity) {
         if (RuntimeObserver.current().enabled()) {
             // 接缝刻意返回未知元素类型：候选场景的语义是规则列表，在此按契约收窄一次
@@ -492,33 +492,33 @@ public final class ConversionRuntime {
         return index.candidates(itemIdOf(entity));
     }
 
-    // 该维度在调度器中尚未开始的任务数
+    /** 该维度在调度器中尚未开始的任务数 */
     public int pendingTasks(ServerLevel level) {
         return scheduler.pendingCount(level.dimension());
     }
 
-    // 诊断复用实际平台寿命提供器，不能用通用兜底值冒充 NeoForge 当前寿命。
+    /** 诊断复用实际平台寿命提供器，不能用通用兜底值冒充 NeoForge 当前寿命。 */
     public int lifespanTicks(ServerLevel level, ItemEntity item) {
         return Math.max(1, lifespanProvider.lifespanTicks(level, item));
     }
 
-    // 两类队列单独观测，压测时可定位是条件检查还是世界操作形成积压。
+    /** 两类队列单独观测，压测时可定位是条件检查还是世界操作形成积压。 */
     public QueueStats queueStats(ServerLevel level, boolean effects) {
         return scheduler.queueStats(level.dimension(),
                 effects ? ServerTaskKind.EFFECT : ServerTaskKind.CONDITION_CHECK);
     }
 
-    // 任意任务种类的单维度队列观测：把 checks/effects 两类口径扩到返还与维护等全部种类；只读，不改变调度行为
+    /** 任意任务种类的单维度队列观测：把 checks/effects 两类口径扩到返还与维护等全部种类；只读，不改变调度行为 */
     public QueueStats queueStats(ServerLevel level, ServerTaskKind kind) {
         return scheduler.queueStats(level.dimension(), kind);
     }
 
-    // 跨维度合并的调度指标（含预算使用、耗尽原因、按种类与取消计数）
+    /** 跨维度合并的调度指标（含预算使用、耗尽原因、按种类与取消计数） */
     public SchedulerStats schedulerStats() {
         return scheduler.stats();
     }
 
-    // 最近一次推进的预算快照
+    /** 最近一次推进的预算快照 */
     public ServerTickBudgetSnapshot budgetSnapshot() {
         return scheduler.budgetSnapshot();
     }
@@ -664,7 +664,8 @@ public final class ConversionRuntime {
                         "due_age_ticks", dueAge(level, item, rule)); }
                 continue;
             }
-            boolean matched = ExpressionEvaluator.matches(rule.conditions(), context, types.conditionTypes());
+            boolean matched = item.getItem().getCount() >= types.perRoundSourceConsumption(rule, item.getItem())
+                    && ExpressionEvaluator.matches(rule.conditions(), context, types.conditionTypes());
             if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "CANDIDATE", "rule", rule.id(), "matched", matched); }
             if (matched) {
                 return rule;
@@ -673,7 +674,7 @@ public final class ConversionRuntime {
         return null;
     }
 
-    // 调试命令复用实际年龄门槛，避免条件成立却尚未到期时显示为命中。
+    /** 调试命令复用实际年龄门槛，避免条件成立却尚未到期时显示为命中。 */
     public boolean isEligible(ServerLevel level, ItemEntity item, Rule rule) {
         return !excluded(item) && item.getAge() >= dueAge(level, item, rule);
     }
@@ -695,7 +696,7 @@ public final class ConversionRuntime {
             state.tracked.remove(item.getUUID());
             return;
         }
-        // 每组固定源成本 c：显式 source_cost 优先，其次隐式 1 个，再次各 consume_source 之和
+        // 每组固定源成本 c：显式 source_cost 优先，未声明时为 1 个
         int costPerGroup = types.perRoundSourceConsumption(rule, source);
         tracked.locked = true;
         // 成功转化当刻的触发点：位置必须在源实体清空前读取，清空后实体位置不再可信
@@ -906,7 +907,7 @@ public final class ConversionRuntime {
                 || item.getTags().contains(Constants.CONVERTED_TAG);
     }
 
-    // 离开维度或区块卸载时立即取消检查，释放任务捕获对象。
+    /** 离开维度或区块卸载时立即取消检查，释放任务捕获对象。 */
     public void onItemRemoved(ServerLevel level, ItemEntity item) {
         if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "REMOVED", "reason", item.getRemovalReason()); }
         LevelState state = levels.get(level.dimension());
@@ -916,7 +917,7 @@ public final class ConversionRuntime {
         if (tracked != null && tracked.task != null) { tracked.task.cancel(CancelReason.ENTITY_REMOVED); }
     }
 
-    // 自然消失入口只预留最后一次有预算的检查，不在实体 tick 内执行昂贵效果。
+    /** 自然消失入口只预留最后一次有预算的检查，不在实体 tick 内执行昂贵效果。 */
     public boolean deferNaturalExpiry(ServerLevel level, ItemEntity item) {
         if (excluded(item)) { return false; }
         // 回扫可能延后数刻；临近原版消失的物品按新索引及时补追踪，避免等待回扫期间漏转化。

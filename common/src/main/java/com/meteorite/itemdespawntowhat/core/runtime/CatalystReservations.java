@@ -105,9 +105,10 @@ final class CatalystReservations {
 
     // 支付一组催化剂：先按 UUID 重读实体与件数，任一件取不到就整组不扣；
     // 预算耗尽返回 RETRY（同样是整组不扣，下刻重试）；只有全部校验通过才真实 shrink 并回写预留表
-    PayResult payGroup(String owner, ServerLevel level, int perGroup, ServerTickBudget budget) {
+    PayResult payGroup(String owner, ServerLevel level, int perGroup, ServerTickBudget budget,
+                       net.minecraft.world.phys.AABB paymentBounds, java.util.function.BooleanSupplier commitInputs) {
         if (perGroup <= 0) {
-            return PayResult.paid(0);
+            return commitInputs.getAsBoolean() ? PayResult.paid(0) : PayResult.shortfall();
         }
         OwnerHolds ownerHolds = byOwner.get(owner);
         if (ownerHolds == null || ownerHolds.holds().isEmpty()) {
@@ -129,12 +130,14 @@ final class CatalystReservations {
         List<ItemEntity> resolved = new ArrayList<>(plan.size());
         for (Hold take : plan) {
             ItemEntity item = resolve(level, take.itemId());
-            if (item == null || item.getItem().getItem() != take.expectedItem()
+            if (item == null || !item.isAlive() || !paymentBounds.contains(item.position())
+                    || item.getItem().getItem() != take.expectedItem()
                     || item.getItem().getCount() < reservedCount(level.dimension(), take.itemId())) {
                 return PayResult.shortfall();
             }
             resolved.add(item);
         }
+        if (!commitInputs.getAsBoolean()) return PayResult.shortfall();
         // 全部校验通过后真实扣减；空栈实体按原版语义 discard
         for (int i = 0; i < plan.size(); i++) {
             ItemStack stack = resolved.get(i).getItem();

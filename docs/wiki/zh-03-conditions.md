@@ -163,8 +163,8 @@
 | `itemdespawntowhat:y_level` | Y 高度 | 所在高度落在区间内 | `min`、`max` |
 | `itemdespawntowhat:outdoor` | 露天 | 上方没有遮挡、能看到天空 | 无 |
 | `itemdespawntowhat:surrounding_blocks` | 周围方块 | 上下前后左右六个相邻方块匹配 | `up`、`down`、`north`、`south`、`east`、`west` |
-| `itemdespawntowhat:fluid_present` | 存在流体 | 所在位置有指定流体 | `fluid`、`fluids`、`require_source` |
-| `itemdespawntowhat:catalyst_present` | 存在催化剂 | 掉落物所在方块格内有足够催化剂 | `items`、`count`、`counts` |
+| `itemdespawntowhat:fluid_present` | 存在流体 | 所在位置有指定流体 | `fluid`、`fluids` |
+| `itemdespawntowhat:catalyst_present` | 存在催化剂 | 共享半径内有足够催化剂 | `items`、`count`、`counts` |
 
 ## 逐个条件类型
 
@@ -391,10 +391,9 @@
 |---|---|---|---|
 | `fluid` | 单个流体引用 | 流体 id 或 `#` 标签 | 空 |
 | `fluids` | 流体引用列表 | 流体 id 或 `#` 标签数组，命中任意一项即可 | 空 |
-| `require_source` | 是否只认流体源方块 | `true` 或 `false` | `true` |
 
 - `fluid` 与 `fluids` 都省略时表示任意流体，但所在位置必须有流体，否则仍不命中；两者同时写时以 `fluids` 为准。
-- 默认 `require_source` 为 `true`，只匹配流体源方块。想连流动的水一起匹配，把它设为 `false`；此时写 `minecraft:water` 也能匹配流动的水（同一流体的流动变体）。
+- 源流体与流动流体使用同一存在判定；`minecraft:water` 接受同族流动变体。
 - 写 `minecraft:empty` 不会匹配任何实际流体，加载时会给出告警。
 
 ```json
@@ -402,8 +401,7 @@
   "op": "leaf",
   "condition": {
     "type": "itemdespawntowhat:fluid_present",
-    "fluid": "minecraft:water",
-    "require_source": false
+    "fluid": "minecraft:water"
   }
 }
 ```
@@ -412,17 +410,17 @@
 
 ### catalyst_present（存在催化剂）
 
-判断掉落物所在方块格内是否存在足够数量的指定催化剂物品。这是在场检查，不会消耗任何东西。
+判断规则共享半径内是否存在足够数量的指定催化剂物品。这是在场检查，不会消耗任何东西。
 
 | 字段 | 作用 | 取值 | 默认值 |
 |---|---|---|---|
 | `items` | 催化剂引用列表 | 物品 id 或 `#` 标签数组，至少 1 项 | 必填 |
-| `count` | 数量门槛 | 整数 1～64 | 留空则跟随该规则里这种催化剂的消耗量；没有对应消耗配置时按 1 |
+| `count` | 数量门槛 | 整数 1～64 | 留空则采用规则 `catalyst_cost.counts`；未配置引用时为 1 |
 | `counts` | 按引用分别设门槛 | 对象，键必须是 `items` 里出现过的引用，值 1～64 | 空 |
 
 - `items` 里的每一项都要分别达标。
-- 统计范围是掉落物所在方块的 1×1×1 格内，不包含掉落物自己，也不统计已经死亡的实体；同一格内同一物品的多堆会累加。
-- `count` 留空是推荐的写法：它会自动跟随规则里该催化剂的消耗量（规则级 `catalyst_cost` 或效果级 `consume_catalyst`）；两者都没有时才退到 1。留空不会写回文件，你写的声明不会被改动。
+- 统计范围使用规则 `catalyst_cost.radius`，缺省为 1；排除源实体，范围内同类多堆会累加。
+- `count` 留空时采用规则门槛，实际消耗量独立配置；解析值不反写声明。
 - `counts` 里出现没写进 `items` 的引用会报错。
 
 ```json
@@ -447,7 +445,7 @@
 }
 ```
 
-典型场景：材料在场才转化的配方式规则。条件只负责判定，要真的消耗催化剂，还需要配套的消耗效果，见 [效果](zh-04-effects)。
+典型场景：材料在场才转化的配方式规则。条件只负责判定，实际消耗由规则 `catalyst_cost.consume_counts` 控制，见[候选结果与结算](zh-05-outcomes-and-settlement)。
 
 ## 常用组合示例
 
@@ -522,8 +520,7 @@
       "op": "leaf",
       "condition": {
         "type": "itemdespawntowhat:fluid_present",
-        "fluid": "minecraft:water",
-        "require_source": false
+        "fluid": "minecraft:water"
       }
     },
     {

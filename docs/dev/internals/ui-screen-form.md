@@ -45,8 +45,7 @@
 | `CatalogSuggestions` | class | 构造、`suggestions(EditorField)` | 目录候选提供器；实现 `SuggestionProvider` |
 | `SuggestionProvider` | interface | `suggestions(EditorField)` | 输入建议提供者 |
 | `Suggestion` | record | `value`、`label` | 输入建议项 |
-| `ConsumptionSummary` | class | `kind`、`hint`、`hintRule`、`isDuplicate`、`consumeEffectCount` | 消耗语义摘要 |
-| `ConsumptionSummary.Kind` | enum | `IMPLICIT`、`EXPLICIT_SOURCE`、`EXPLICIT`、`DUPLICATE` | 消耗语义类别 |
+| `ConsumptionSummary` | class | `hintRule` | 规则源成本提示 |
 | `NaturalSummary` | class | `rule`、`conditions`、`effects`、`effect`、`conditionLeaf`、`conditionTreeLeaf`、`conditionParams` | 规则、条件与效果的自然语言摘要 |
 | `ReadOnlyTextView` | class | `构造`、`bounds`、`setBounds`、`render`、`mouseClicked`、`mouseReleased`、`mouseDragged`、`mouseScrolled`、`keyPressed`、`canFocus`、`setFocused`、`isFocused`、`activate`、`accessibleName` | 按宽度折行的只读详情视图；实现 `UiWidget`、`UiFocusTarget` |
 
@@ -106,7 +105,6 @@
 - `NumberControl#setWindow`：只调整滑条常用窗口，不修改合法域、草稿值或正在输入的缓冲。
 - `ItemCountsControl#setReferences`：按引用集合重建行，保留既有数量的控件状态。
 - `SublistControl#createRemoveButton`：删除子项后对索引在其后的子表单执行 `FormView#rebase` 以同步输入路径。
-- `ConsumptionSummary#kind`：按三类消耗效果的声明数量返回 `Kind`；`#isDuplicate` 与 `#consumeEffectCount` 复用同一计数口径。
 - `NaturalSummary#conditionTreeLeaf`：条件树摘要使用「条件名（参数摘要）」格式；`#conditionParams` 对内建类型取短摘要，未注册类型按字段名兜底。
 
 ### 2.6 代码现状（可核对）
@@ -115,7 +113,7 @@
 - 缺类级 JavaDoc 的包内控件类：`BoolControl`、`ClimateControl`、`ConditionTreeControl`、`EnumControl`、`ListControl`、`NoteControl`、`RawJsonControl`、`SublistControl`、`TextControl` 均为 `final class ... extends FormControl` 的包内类型，无类级 JavaDoc；其中 8 个文件以 `// ---- ... ----` 分节注释代替类级说明，`ClimateControl` 只有一行 `//` 说明。
 - 其余 26 个文件有类级 JavaDoc，包含全部 13 个公开类型；包内类型中有类级 JavaDoc 的是 `FormControl`、`FormControlRegistry`、`FormRow`、`FormRowLayout`、`FormRowRenderer`、`FormInputRouter`、`FormDraftWriter`、`FormPicker`、`CatalogSelectionControl`、`ConditionTreeChrome`、`ItemCountsControl`、`NumberControl`。
 - 条件树画布页实现在本包：`ConditionTreeOverlay` 位于 `client/ui/screen/form`，不在 `client/ui/screen`；页面层的 `RuleEditorTriggerPage` import 本包的 `ConditionTreeOverlay`、`FormView`、`LeafPanel` 等类型作为画布打开入口。
-- 缺类级 JavaDoc 的嵌套类型：`FormControlRegistry.Factory`、`ConsumptionSummary.Kind`、`ConditionTreeOverlay.FocusSlot`（private）、`ItemCountsControl.Entry`（private static）。
+- 缺类级 JavaDoc 的嵌套类型：`FormControlRegistry.Factory`、`ConditionTreeOverlay.FocusSlot`（private）、`ItemCountsControl.Entry`（private static）。
 - 两套目录与选择入口：`FormPicker` 是本包内 `final class`，由 `FormView#openPicker` 构造、`FormView#closePicker` 关闭；`UiCatalogGrid` 属 `client/ui/widget`，本包没有它的 import，目录由宿主以 `FormView.CatalogOpener` 或 `FormView.SelectionCatalogOpener` 注入。
 - 两套输入入口：`FormInputRouter` 是本包内 `final class`，`FormView` 的七个输入方法全部委托给它；`RuleEditorPageInput` 属 `client/ui/screen`，遍历 `RuleEditorEditPages#liveWidgets` 派发页面级输入；两者互不 import。
 - 类级 JavaDoc 与实现不一致：`FormInputRouter` 的类级 JavaDoc 写派发顺序为「选择框 → 行尾按钮 → 字段控件 → 表单滚动」，`FormInputRouter#mouseClicked` 实际依次遍历 `FormRow#pickers`、`FormRow#actions`、`FormControl`，未在注释中区分前两类按钮。
@@ -142,7 +140,7 @@
 | `ConditionTreeChrome` | kit 原语接入 `UiWidget` 分发的适配层。 | `Strip`、`Inline` |
 | `ConditionTreeControl` | 条件树摘要控件与打开画布按钮；解码失败时保留只读原始 JSON。 | `#load`、`#store`、`#issues`、`#revealPath` |
 | `ConditionTreeOverlay` | 条件树画布页外壳：功能栏、工具列、画布、状态栏与叶参数内联框。 | `#reveal`、`#historyChanged`、`#discardView`、`#unmount` |
-| `ConsumptionSummary` | 消耗语义分类、提示与重复声明判定。 | `#kind`、`#hint`、`#hintRule`、`#isDuplicate`、`#consumeEffectCount` |
+| `ConsumptionSummary` | 规则源成本提示。 | `#hintRule` |
 | `EnumControl` | 枚举字段的分段选择控件。 | `#load`、`#store` |
 | `FormControl` | 表单控件基类、字段控件工厂与文本/数值辅助函数。 | `#create`、`#load`、`#store`、`#issues`、`#revealPath` |
 | `FormControlRegistry` | `EditorFieldType` 到控件工厂的静态登记表。 | `#create` |
@@ -178,3 +176,8 @@
 - [展示工具层](ui-shared.md)
 - [主题层](ui-theme.md)
 - [文档阅读与维护约定](../conventions.md)
+## 输入数量绑定
+
+`RuleEditorInputPage` 将源门槛绑定规则 `source_cost`；催化剂门槛、实际消耗与共享检测半径绑定 `catalyst_cost`。开启催化剂消耗会复制当前门槛到 `consume_counts`，随后独立编辑；关闭移除实际消耗配置。`FormView.pairItemCountRows` 将两个数量字段按物品交错排列，`FormRowLayout` 共用几何与滚动空间，`ItemCountsControl` 继续复用数值滑条与精确输入控件。半径置于催化剂卡片底部。流体消耗开关绑定规则 `consume_fluid`。
+
+仅声明催化剂条件、尚无规则成本对象时，输入页显示原条件门槛；首次输入编辑在同一次撤销记录中建立规则数量对象，并将对应门槛归入规则配置。

@@ -101,7 +101,7 @@ Field by field:
 
 The rule above omits two fields you can ignore for now: `enabled` (already `true` by default; write `false` to keep the rule out of matching) and `triggers` (defaults to `natural` only). For the full description, see [Rule Fields](en-02-rule-basics).
 
-**What happens next**: any `minecraft:chicken` dropped item disappears at second 10 and spawns one `minecraft:rotten_flesh` dropped item in the same place. Because the rule declares no consumption effect, the group consumes one source item by default, which is one chicken. Without such a rule, the chicken waits for its natural despawn and vanilla removes it.
+**What happens next**: any `minecraft:chicken` dropped item disappears at second 10 and spawns one `minecraft:rotten_flesh` dropped item in the same place. Because the rule declares no source cost, the group consumes one source item by default, which is one chicken. Without such a rule, the chicken waits for its natural despawn and vanilla removes it.
 
 ## Making a Rule Take Effect
 

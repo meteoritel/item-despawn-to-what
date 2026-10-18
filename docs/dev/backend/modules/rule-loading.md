@@ -111,7 +111,7 @@ config 覆盖层     config/<overlay_directory>/rules/**/*.json
 
 `RuleCodecs.decoder` 在真正解码前先做三层字段检查：
 
-- **顶层字段白名单** `RuleCodecs.KNOWN_RULE_FIELDS` 共 **18 项**：`id`、`enabled`、`priority`、`display_name`、`notes`、`source`、`conditions`、`trigger_after_seconds`、`effects`、`triggers`、`source_cost`、`catalyst_cost`、`combination`、`outcomes`、`schema_version`、`category`、`disabled`、`delete`。顶层未知字段仅 **WARN**，不阻断加载。
+- **顶层字段白名单** `RuleCodecs.KNOWN_RULE_FIELDS` 共 **19 项**：`id`、`enabled`、`priority`、`display_name`、`notes`、`source`、`conditions`、`trigger_after_seconds`、`effects`、`triggers`、`source_cost`、`catalyst_cost`、`consume_fluid`、`combination`、`outcomes`、`schema_version`、`category`、`disabled`、`delete`。顶层未知字段仅 **WARN**，不阻断加载。
 - **`category`**：可选展示分类，只被快照装配读取（覆盖层视图优先于数据包视图），不进入 `Rule` 模型，解码、校验与执行都不读取它；缺失时装配层按生效效果的产出类别派生。
 - **`outcomes[i]` 元素未知字段为 ERROR**（允许 `id`/`effects`/`safe_spawn`/`fill_origin`）；**`catalyst_cost` 未知字段、非对象写法（旧的整数写法）为 ERROR**。
 - **`schema_version`**：缺省值为 `RuleCodecs.DEFAULT_SCHEMA_VERSION = 1`，当前**仅支持 1**；其它值在 `RuleValidation.validate` 中报 ERROR 拒载。
@@ -129,12 +129,7 @@ config 覆盖层     config/<overlay_directory>/rules/**/*.json
 
 ### 6.3 每轮源消耗
 
-`BuiltinTypeRegistries.perRoundSourceConsumption(Rule, ItemStack)` 决定每轮消耗量，**固定成本优先**：
-
-1. 显式声明 `source_cost` → 按当前源堆叠查引用数量，直接物品优先，再按源列表原序匹配配置数量的标签，缺省 1；
-2. 未声明 `source_cost` 且规则无任何 `consume_*` 效果 → 隐式消耗 1；
-3. 未声明 `source_cost` 但声明 `consume_source` → 按当前源堆叠查 `counts`，缺省采用效果的 `count`；
-4. 只声明其它消耗（如 `consume_fluid`）→ 0（不按堆叠轮次展开）。
+`BuiltinTypeRegistries.perRoundSourceConsumption(Rule, ItemStack)` 读取 `source_cost`：当前源物品直接引用优先，再按源列表顺序匹配已配置数量的标签，未配置时为 1。催化剂与流体开关不改变源门槛与源扣除量。
 
 这是 `rounds` 语义的来源，见 [conversion-runtime.md](conversion-runtime.md)。
 

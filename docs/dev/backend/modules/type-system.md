@@ -7,7 +7,7 @@
 
 - `core/registry`：`TypeRegistry` 的默认实现 `SimpleTypeRegistry`（**注册期可变、`freeze()` 后只读**）+ 两个语义异常。
 - `core/extension`：第三方 SPI `RuleTypeProvider`（经 `META-INF/services` 加载），以及类型可自行实现的扩展点（如动态引用校验）。
-- `core/type`：10 个内置条件、10 个内置效果，以及公共工具 `EnumCodecs`。引用校验统一使用 `core/api/RefChecks`，见 [规则模型与契约](rule-model.md)。
+- `core/type`：10 个内置条件、7 个内置效果，以及公共工具 `EnumCodecs`。引用校验统一使用 `core/api/RefChecks`，见 [规则模型与契约](rule-model.md)。
 - 类型定义形态（`EffectType`/`ConditionType`/`Simple*Type`）与 `Effect`/`Condition` 接口定义在 `core/model`，执行/求值上下文与回执定义在 `core/api`；本文只覆盖注册表、SPI 与内置实现。
 
 ## 2. 类清单
@@ -36,7 +36,7 @@
 |---|---|
 | `EnumCodecs` | `lowerCase(Class<E>)`：枚举取 JSON 统一小写下划线、解析**大小写不敏感**，未知或空取值报错时附可选值列表 |
 | `BuiltinConditionTypes` | 注册 10 个内置条件类型；`create()`（构建并冻结）/`createMutable()`（交由装配器统一冻结） |
-| `BuiltinEffectTypes` | 注册 10 个内置效果类型；`create(expressionCodec)`/`createMutable(expressionCodec)`（效果记录含效果级 `conditions`，需先有表达式 Codec） |
+| `BuiltinEffectTypes` | 注册 7 个内置效果类型；`create(expressionCodec)`/`createMutable(expressionCodec)`（效果记录含效果级 `conditions`，需先有表达式 Codec） |
 
 ### 2.4 类型定义契约（`core/model`，本文引用）
 
@@ -95,8 +95,8 @@
 | 3 | `weather` | `weather: clear\|rain\|thunder`（必填） | clear=无雨无雷；rain=有雨无雷；thunder=仅看雷暴 |
 | 4 | `outdoor` | 无 | `MOTION_BLOCKING_NO_LEAVES` 高度图 ≤ y+1 |
 | 5 | `surrounding_blocks` | `up/down/north/south/east/west: TaggedId`（可空，**六向不可全空**） | 逐方向比对相邻方块，已填方向须全命中 |
-| 6 | `catalyst_present` | `items: List<TaggedId>`（必填非空）；`counts: Map<TaggedId,int[1,64]>`（可选）；`count: int[1,64]`（可选，缺省引用的门槛） | 所在方块格 1×1×1 内每个引用分别达到其有效门槛，全部满足才通过（排除源自身）；`count` 留空 = 门槛跟随同作用域催化剂消耗量，见 [催化剂门槛运行投影](../systems/catalyst-threshold-projection.md) |
-| 7 | `fluid_present` | `fluids: List<TaggedId>`（可选、任一种命中即可）；`fluid: TaggedId`（列表为空时采用，均空=任意）；`require_source: bool`（默认 true） | 非源模式接受同族流动变体；写 `minecraft:empty`（非标签）不会匹配实际流体，校验期只告警；留空列表表示任意流体 |
+| 6 | `catalyst_present` | `items: List<TaggedId>`（必填非空）；`counts: Map<TaggedId,int[1,64]>`（可选）；`count: int[1,64]`（可选，缺省引用的门槛） | 规则共享半径内每个引用分别达到其有效门槛，全部满足才通过（排除源自身）；`count` 留空 = 门槛采用规则 `catalyst_cost.counts`，缺省为 1，见 [催化剂门槛运行投影](../systems/catalyst-threshold-projection.md) |
+| 7 | `fluid_present` | `fluids: List<TaggedId>`（可选、任一种命中即可）；`fluid: TaggedId`（列表为空时采用，均空=任意） | 源与流动流体均接受，同族变体匹配；写 `minecraft:empty`（非标签）不会匹配实际流体，校验期只告警；留空列表表示任意流体 |
 | 8 | `time_of_day` | `from: int[0,23999]`、`to: int[0,23999]`（均必填） | `dayTime mod 24000` 区间；`from>to` 表示跨零点 |
 | 9 | `y_level` | `min/max: Integer ≥ -2048`（可空=不限，无世界高度上限） | Y 坐标区间；min 不得大于 max |
 | 10 | `light_level` | `min/max: Integer[0,15]`（可空=不限） | `getMaxLocalRawBrightness`（天光衰减后与方块光取大）区间；min 不得大于 max |
@@ -138,15 +138,7 @@
 > **一次性世界效果**（lightning / explosion / arrow_rain / weather）：注册时 `oneShot=true`，**不乘 `rounds()`**、不参与容量计算，仅含一次性效果的候选对同一源最多尝试一组。实体产出按组展开，其中物品与通用实体子类使用共享配置做开组准入；place_block 保留自身规则容量。见 [conversion-runtime.md](conversion-runtime.md)。
 > 候选级字段 `safe_spawn`、`fill_origin` 属于**候选结果**（`core/model/OutcomeCandidate.java`），不在任何单个效果的参数里；执行时经 `EffectContext.safeSpawn()`/`fillOrigin()` 透传给 `spawn_entity` / `place_block`。
 
-### 5.2 消耗效果（3）
-
-| # | type | 参数 | 语义 |
-|---|---|---|---|
-| 8 | `consume_source` | `counts: Map<TaggedId,int[1,64]>`（可选）；`count: int[1,64]`/1 | 同时是「每组源成本」的声明：整堆源物品在成功转化当刻已转入结算库存，每组开组时由结算层扣减并记账。执行器只按本组已付成本（`groupSourceCost`，缺省取 `count`）回执真实完成量，**不读源实体、不再扣库存**，因此不会重复记账 |
-| 9 | `consume_catalyst` | `items: List<TaggedId>`（必填非空）；`counts: Map<TaggedId,int[1,64]>`（可选）；`count: int[1,64]`/1；`radius: int[1,8]`/1 | 需求、半径与匹配器在本效果任务开始执行时按参数定稿，邻域库存的查询、分配与整轮扣减仍按共享预算实时完成：半径内分别支付每个引用的 `counts` 数量，缺省采用 `count`，全部付得起才扣；重叠引用共享库存；`items` 相同的 `catalyst_present` 门槛留空时，本效果（效果级条件）或 `catalyst_cost`（规则级条件）的 `count` 即其有效门槛，见 [催化剂门槛运行投影](../systems/catalyst-threshold-projection.md) |
-| 10 | `consume_fluid` | `fluid: TaggedId`/任意；`require_source: bool`/true | 位置与轮数上界在开组时定稿，逐格消耗在共享预算内推进，每个方块读写单元之前检查预算，用尽即让出、下刻从同一位置续接；每成功消耗一格立即经受控进度回执记一次完成量，终态不重复计数；方块写入被世界拒绝时不推进完成量也不计为已完成，但该次读写尝试的工作量照记（工作量计尝试、产出计成功）；每轮消耗 1 格（同 tick 同位置通常只消耗 1 格）；含水方块只去 waterlogged，否则整块置 AIR；只作实时存在条件，不参与份数预留；取消不回滚已消耗格，已完成的格数也不会从账目里抹掉 |
-
-同一条规则内**同一消耗类型只允许一次**，否则拒载。规则未声明任何 `consume_*` 时隐式消耗 1 个源物品（判定入口 `BuiltinTypeRegistries.perRoundSourceConsumption(Rule, ItemStack)`，详见 [conversion-runtime.md](conversion-runtime.md)）。
+输入门槛与消耗属于规则配置，见[规则模型](rule-model.md)与[转化运行时](conversion-runtime.md)。
 
 ## 6. 新增一种类型（步骤摘要）
 

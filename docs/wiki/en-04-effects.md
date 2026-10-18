@@ -2,7 +2,7 @@
 
 This page explains what a rule can do after it fires: which `type` each effect uses, which parameters it takes, and what players see in game.
 
-After a rule fires, the mod runs every effect object in the `effects` array in order: it hands out items, spawns entities, awards experience, places blocks, strikes lightning, changes the weather, or consumes source items. In JSON, **one effect is one object**, and `type` says which effect it is. You can write effects in the top-level `effects` array of a rule or in the `effects` array of a candidate. For conditions, see [Conditions](en-03-conditions); for costs and group settlement, see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
+After a rule fires, the mod runs every effect object in the `effects` array in order: it hands out items, spawns entities, awards experience, places blocks, strikes lightning, or changes the weather. In JSON, **one effect is one object**, and `type` says which effect it is. You can write effects in the top-level `effects` array of a rule or in the `effects` array of a candidate. For conditions, see [Conditions](en-03-conditions); for costs and group settlement, see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
 
 | Effect | `type` | One-shot | What it does |
 |---|---|---|---|
@@ -13,9 +13,6 @@ After a rule fires, the mod runs every effect object in the `effects` array in o
 | Lightning | `itemdespawntowhat:lightning` | Yes | Strikes 1 to 16 bolts |
 | Explosion | `itemdespawntowhat:explosion` | Yes | Blows up once at the trigger position |
 | Weather | `itemdespawntowhat:weather` | Yes | Makes the current dimension rain or clear up |
-| Consume source | `itemdespawntowhat:consume_source` | No | Takes items out of the source stack this conversion used |
-| Consume catalyst | `itemdespawntowhat:consume_catalyst` | No | Consumes the item drops you name near the trigger position |
-| Consume fluid | `itemdespawntowhat:consume_fluid` | No | Consumes the fluid in the trigger block |
 
 This page starts with the fields every effect shares, then walks through the table row by row.
 
@@ -34,7 +31,7 @@ Three things worth knowing:
 
 - **A rejected rule never loads**: when the content of a rule has a problem, the mod does not load it and reports why. A field the effect does not recognize also rejects the rule, and the message carries the field name.
 - To refer to an item, block, entity, fluid, or potion effect, write a concrete id (`minecraft:water`) or a **tag**, which is a reference that starts with `#`, such as `#minecraft:logs`.
-- Tags mean two different things. A producing reference, such as the `item` and `entity` of `spawn_entity`, the `block` of `place_block`, or the `effect` of a potion effect, takes **one random member** every time it runs. A matching reference, such as the `counts` of `consume_source`, the `items` of `consume_catalyst`, or the `fluid` of `consume_fluid`, matches **any member of the tag** and never picks at random.
+- Tags mean two different things. A producing reference, such as the `item` and `entity` of `spawn_entity`, the `block` of `place_block`, or the `effect` of a potion effect, takes **one random member** every time it runs. A matching reference, such as a rule-level `source_cost` or `catalyst_cost` reference, matches **any member of the tag** and never picks at random.
 
 ## How Several Effects Run
 
@@ -236,77 +233,16 @@ What you see in game: the current dimension turns into a thunderstorm at once fo
 
 A few notes: `clear` switches the weather to clear, the mod does not set the weather again when it already matches, which keeps the timer from being refreshed over and over, and dimensions without sky light, such as the Nether, are not affected.
 
-## Consuming Effects
+## Input Consumption
 
-Consumption effects consume their materials at the moment a group starts: `consume_source` consumes source items, `consume_catalyst` consumes item drops near the trigger position, and `consume_fluid` consumes the fluid in the trigger block. They do the same job as the rule-level fixed costs (`source_cost` and `catalyst_cost`), and one rule may use only one spelling for the same material; see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
-
-### Consume Source (consume_source)
-
-`type`: `itemdespawntowhat:consume_source`
-
-| Field | What it does | Values | Default | Notes |
-|---|---|---|---|---|
-| `count` | How many source items to take | 1 to 64 | `1` | Taken from the source items this conversion used |
-| `counts` | Amounts per concrete item | Object whose keys are item ids or tags and whose values are 1 to 64 | Omit | When present the mod takes these amounts from the named items, and every key must also appear in `source` |
-
-```json
-{ "type": "itemdespawntowhat:consume_source", "count": 1 }
-```
-
-```json
-{
-  "type": "itemdespawntowhat:consume_source",
-  "counts": { "minecraft:bone": 2, "#minecraft:coals": 1 }
-}
-```
-
-What you see in game: the source items this conversion used drop by the stated amount. This is the same cost as `source_cost`: settlement takes it from the source stack it already holds, once per group, and the effect itself never takes a second bite. For the implicit consumption that applies when a rule declares no consumption at all, see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
-
-### Consume Catalyst (consume_catalyst)
-
-`type`: `itemdespawntowhat:consume_catalyst`
-
-| Field | What it does | Values | Default | Notes |
-|---|---|---|---|---|
-| `items` | Which item drops to consume | Array, each entry an item id or a tag | None, required and never empty | The mod gathers them within the radius of the trigger position |
-| `count` | How many of each entry to consume | 1 to 64 | `1` | Entries with their own `counts` value are exempt |
-| `radius` | Search radius (blocks) | 1 to 8 | `1` | The search box is `2 x radius + 1` blocks on a side |
-| `counts` | Amounts per concrete item | Object whose keys must appear in `items` | Omit | A key that names an item outside `items` rejects the rule |
-
-```json
-{ "type": "itemdespawntowhat:consume_catalyst", "items": ["minecraft:bone_meal"], "count": 1, "radius": 1 }
-```
-
-What you see in game: the mod takes 1 bone meal from the closest one near the trigger position, within 1 block by default. When the area does not hold the full amount, **the whole effect is skipped and nothing is taken**, rather than a partial amount, and even a skip is recorded in the result. The search skips the source entity of this conversion.
-
-### Consume Fluid (consume_fluid)
-
-`type`: `itemdespawntowhat:consume_fluid`
-
-| Field | What it does | Values | Default | Notes |
-|---|---|---|---|---|
-| `fluid` | Which fluid to consume | Fluid id or tag | Omit for any fluid | When omitted, the mod does not check which fluid is present |
-| `require_source` | Only accept a true fluid source | `true` / `false` | `true` | When false, flowing fluid also counts |
-
-```json
-{ "type": "itemdespawntowhat:consume_fluid", "fluid": "minecraft:water", "require_source": true }
-```
-
-What you see in game: each round the mod takes the water in the trigger block. For waterlogged blocks, such as waterlogged stairs and slabs, it removes only the water and keeps the block. For a plain fluid block it clears the whole block. Each block cleared counts as one real completion; when the server tick budget runs out the effect pauses and continues from the same block on the next tick.
-
-### How They Relate to Rule-Level Costs
-
-- `consume_source` matches `source_cost`: both describe the same source item cost, and one rule may declare only one of them, or the rule is rejected. This keeps the same material from being consumed twice.
-- `consume_catalyst` matches `catalyst_cost`, again an either-or choice.
-- `consume_fluid` has no rule-level counterpart, so it exists only as an effect.
-- Both spellings consume materials **when a group starts**, once per group. When what is on hand does not cover a group, that group does not start and produces nothing, and the leftover source items return to the world as payback.
+Source, catalyst and fluid payments are rule input settings. See [Outcome Candidates and Settlement](en-05-outcomes-and-settlement) for fields and examples. Output effects describe products and world actions.
 
 ## About Limit and Radius
 
 `limit` and `radius` are **parameters of an effect**, written inside a concrete effect object rather than as rule-level fields:
 
 - `limit`: the cap on the number of products, counted within `radius`.
-- `radius`: the meaning depends on the effect. In `place_block` it is the search radius for placement, and in `consume_catalyst` it is the search radius for the item drops to consume. It is also the range that `limit` counts.
+- `radius`: the meaning depends on the effect. In `place_block` it is the search radius for placement. It is also the range that `limit` counts.
 
 A server-level protection also stops a conversion when too many products lie nearby. It works per rule and is independent of the parameters of a single effect; see [Server Configuration](en-07-server-config).
 

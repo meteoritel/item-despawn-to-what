@@ -31,6 +31,7 @@ public record Rule(
         Set<TriggerKind> triggers,
         @Nullable SourceCost sourceCost,
         @Nullable CatalystCost catalystCost,
+        boolean consumeFluid,
         CombinationMode combination,
         List<OutcomeCandidate> outcomes,
         int schemaVersion
@@ -55,22 +56,22 @@ public record Rule(
         return trimmed.isEmpty() ? null : trimmed;
     }
 
-    // 特异性兜底：条件叶总数（同优先级时叶数多者优先）
+    /** 特异性兜底：条件叶总数（同优先级时叶数多者优先） */
     public int complexity() {
         return conditions.leafCount();
     }
 
-    // 是否具备参与运行时匹配的资格：启用且至少有一个可执行候选（顶层 effects 或显式 outcomes）
+    /** 是否具备参与运行时匹配的资格：启用且至少有一个可执行候选（顶层 effects 或显式 outcomes） */
     public boolean isRunnable() {
         return enabled && !effectiveOutcomes().isEmpty();
     }
 
-    // 生效的消失方式：未声明时按 natural 处理
+    /** 生效的消失方式：未声明时按 natural 处理 */
     public Set<TriggerKind> effectiveTriggers() {
         return triggers.isEmpty() ? Set.of(TriggerKind.NATURAL) : triggers;
     }
 
-    // 生效的候选结果：未声明 outcomes 时由顶层 effects 隐式映射为唯一候选 default（供顶层 effects 写法使用）
+    /** 生效的候选结果：未声明 outcomes 时由顶层 effects 隐式映射为唯一候选 default（供顶层 effects 写法使用） */
     public List<OutcomeCandidate> effectiveOutcomes() {
         if (!outcomes.isEmpty()) {
             return outcomes;
@@ -78,7 +79,7 @@ public record Rule(
         return effects.isEmpty() ? List.of() : List.of(OutcomeCandidate.implicit(effects));
     }
 
-    // 规则声明的全部效果（平铺 effects + 各候选内 effects，按声明顺序）
+    /** 规则声明的全部效果（平铺 effects + 各候选内 effects，按声明顺序） */
     public List<Effect> allEffects() {
         List<Effect> all = new ArrayList<>(effects);
         for (OutcomeCandidate candidate : outcomes) {
@@ -87,33 +88,4 @@ public record Rule(
         return List.copyOf(all);
     }
 
-    // 是否在任意层级声明了指定类型的消耗效果
-    public boolean declaresConsumption(ResourceLocation effectType) {
-        for (Effect effect : allEffects()) {
-            if (effectType.equals(effect.type())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    // 是否显式声明了任意消耗效果（consume_source / consume_catalyst / consume_fluid）
-    public boolean declaresAnyConsumption() {
-        for (Effect effect : allEffects()) {
-            if (ConsumptionDefaults.isConsumption(effect.type())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    // 是否显式声明了消耗源物品效果
-    public boolean declaresSourceConsumption() {
-        return declaresConsumption(ConsumptionDefaults.CONSUME_SOURCE_ID);
-    }
-
-    // 未显式声明任何消耗效果时，规则按默认语义隐式消耗源物品
-    public boolean usesImplicitSourceConsumption() {
-        return !declaresAnyConsumption();
-    }
 }

@@ -10,8 +10,9 @@
 |---|---|---|
 | `ConversionRuntime` | 总控：规则索引 + 维度级追踪 + 触发请求 + 排期/退避 + 结算派发 | `onItemAdded`、`requestEnvironmentalConversion`、`requestConversion`、`onServerTick`、`attempt`、`select`、`performConversion`、`deferNaturalExpiry`、`replaceRules`、`applySavedIndex`、`rescan`、`clear`、`shutdown`、`schedulerStats`、`budgetSnapshot` |
 | `ConversionSettlement` | 一次转化的结算任务（计划 → 派发 → 交付），固定成本、完整组、真实账目 | `step`、`plan`、`dispatch`、`deliver`、`abort`、`account`、`capacityGroups` |
-| `CatalystAllocation` | 催化剂共享库存分配 | 按逐引用需求求完整轮次；图构建与搜索可按 tick 预算续跑，输出逐轮支付清单；效果式消耗复用同一有预算分配算法 |
-| `CatalystPaymentExecution` | `consume_catalyst` 效果的跨 tick 付款状态 | 库存采集、共享库存分配、付款清单整理与支付前逐项计费均可续接；扣减前重读完整清单并确认实体仍存活、物品类型、数量和半径，整轮校验后同一主线程步骤内一次扣减 |
+| `CatalystAllocation` | 催化剂共享库存分配 | 按逐引用需求求完整轮次；图构建与搜索可按 tick 预算续跑，输出逐轮支付清单 |
+| `CatalystThresholdCheck` | 每组共享半径门槛检查 | 预算内采集与 max-flow 分配；提交前重读实体、数量和位置 |
+| `FluidSourceResolver` | 接触流体的真实源追溯 | 预算内沿 LEVEL / FALLING 反向遍历，复核路径并消耗最近可对应源 |
 | `EffectTask` | 单效果的预算任务 | 条件与概率仅在任务首次开始时判定，或按成功转化当刻固定的槽位输入跳过判定；`EffectExecution.advance` 返回 null 表示续接；结束与失败先置终态再各通知账目与执行状态一次，取消先置终态但只通知执行状态、不产生回执也不入账；取消丢弃未完成效果，不重放世界操作 |
 | `CatalystReservations` | 运行期催化剂预留表（按维度 + 任务），预留 → 支付三态，不落盘 | `available`、`tryReserve`、`payGroup`、`releaseOwner`、`clear` |
 | `SettlementLedger` | 主世界 `SavedData` 结算账本（进行中 + 已完成记录，带上限裁剪）；提交只维护双索引并标脏，不即时刷盘 | `get`、`find`、`unsettled`、`pendingDeliveryTotal`、`prune` |
@@ -21,7 +22,7 @@
 | `RoundRobinCursors` | 主世界 `SavedData` 轮询游标（规则 id + 维度，持久化） | `get`、`cursor`、`moveTo` |
 | `CandidateStructureVersions` | 按规则实例缓存候选结构摘要（供轮询游标判定结构是否变化） | `versionOf(rule, registries)`、`clear()` |
 | `RuleIndex` | "物品 id → 候选规则"查询结构：直接物品建索引、标签懒展开 | `build`、`candidates`、`ordered` |
-| `CatalystThresholdProjection` | 门槛运行投影：把 `catalyst_present` **留空**的门槛解析为当前消耗配置下的有效值，在 `RuleIndex.build` 内执行 | `project`、`resolveThreshold` |
+| `CatalystThresholdProjection` | 门槛运行投影：把 `catalyst_present` **留空**的门槛解析为规则门槛与共享半径下的有效值，在 `RuleIndex.build` 内执行 | `project`、`resolveThreshold` |
 | `ExpressionEvaluator` | 条件求值入口（`matches` = `evaluate` == MATCH） | `matches`、`evaluate` |
 | `ExpressionTreeEvaluator` | 条件树递归求值，四态（MATCH / NO_MATCH / UNAVAILABLE / ERROR） | `evaluate`、`evaluateNode` |
 | `RuntimeConditionContext` | `ConditionContext` 的服务端 record 实现（纯参数聚合） | 注入按维度复用的 `RuntimeTagLookup` / `RuntimeClimateSampler` |
@@ -69,7 +70,7 @@ delay           = max(0, dueAge - entity.getAge())
 
 `attempt` 依次：实体失效/被排除 → 移除追踪；区块实体 ticking 门禁不满足 → 退避 `checkIntervalTicks`；`locked` → 退避 1 tick；**永久禁转** → 移除追踪；**转化冷却未到期** → 退避剩余冷却；候选为空 → 移除；否则 `select`。
 
-`select` 遍历已排序候选，跳过未声明 `kind` 的规则；**年龄门槛只对 `natural` 且非 expiryPending 生效**（环境致死在当前刻立即判定，与存活时长无关）；`ExpressionEvaluator.matches` 命中即取该条。**同一掉落物只执行优先级最高的一条命中规则**，候选排序（`RuleIndex`）：`优先级 desc → 条件叶数 desc → 定义序`。候选规则在进入索引前已做过催化剂门槛投影（留空门槛解析成当前消耗配置下的有效值），这里读到的已是投影后的条件树，见 [catalyst-threshold-projection.md](../systems/catalyst-threshold-projection.md)。
+`select` 遍历已排序候选，跳过未声明 `kind` 的规则；**年龄门槛只对 `natural` 且非 expiryPending 生效**（环境致死在当前刻立即判定，与存活时长无关）；`ExpressionEvaluator.matches` 命中即取该条。**同一掉落物只执行优先级最高的一条命中规则**，候选排序（`RuleIndex`）：`优先级 desc → 条件叶数 desc → 定义序`。候选规则在进入索引前已做过催化剂门槛投影（留空门槛解析成规则门槛与共享半径下的有效值），这里读到的已是投影后的条件树，见 [catalyst-threshold-projection.md](../systems/catalyst-threshold-projection.md)。
 
 ### 2.5 未命中退避
 
@@ -79,12 +80,12 @@ delay           = max(0, dueAge - entity.getAge())
 
 命中后 `performConversion` 把**整堆源物品转入结算库存**：`held = source.copy()`、`source.setCount(0)`、给实体打持久化 `converted` 标签，写一条 `SettlementRecord` 到账本，并把 `ConversionSettlement` 作为 `EFFECT` 任务立即入队。**「扣减 → 登记 → 调度注册」是一个补偿单元**：调度注册抛异常时整堆库存写回源实体、撤销 `converted` 标签与账本登记，只有全部成功才把所有权交给结算任务；结算任务得到所有权后，中断与失败都不再把库存退回世界。结算任务三阶段：计划 → 派发 → 交付。
 
-- **每组固定源成本** `c = perRoundSourceConsumption(rule, sourceStack)`（`BuiltinTypeRegistries`）四种情形：显式 `source_cost` → 按当前源堆叠取直接物品，否则取 `source.items` 中首个命中的标签，缺省 1；未声明 `source_cost` 且未声明任何 `consume_*` → 隐式 1；未声明 `source_cost` 但声明了 `consume_source` → 各 `consume_source` 对当前源物品数量之和（`counts` 优先、缺省效果 `count`）；只声明其它消耗效果（如 `consume_fluid`）→ 0，表示不按堆叠轮次展开。`source_cost` 与 `consume_source` 由 `RuleValidation` 拒绝同时声明。
+- **每组固定源成本** `c = perRoundSourceConsumption(rule, sourceStack)`：读取显式 `source_cost`，直接物品优先，其次源列表原序首个命中且配置数量的标签，缺省 1。源数量低于门槛时选择器跳过该规则；每个已开始组固定扣除 c。
 - **计划组数** `planned = min(held / c, 催化剂可用组数上界)`（`c ≤ 0` 时按 1 组；未声明 `catalyst_cost` 时上界不设限），**候选容量不参与组数上界**——容量只在开组前复核，不足即截断已开始组数并把剩余源交还（见本节「每组准入」）。统一 `spawn_entity` 的物品与通用实体子类使用服务端 `nearby_products` 阈值，相同 TaggedId 的多个动作合并本组需求；经验子类不参与该阈值，经验按本组实际源成本以 `long` 汇总总点数后，按单球点数上限（32767）装满、每批最多 16 球、批次之间至少隔 1 个 tick 续接交付。仅含一次性动作的候选对同一源封顶一组，混合候选仍可多组。
 - **每组准入**：未开组再次检查真实邻域容量（物品与通用实体；经验不参与），不足时不支付该组成本并返还剩余源。**经验不参与并不意味着整组一定开得出**：同一候选或同一组里还有物品或通用实体产出时，它们仍然受各自容量约束，容量不足同样会阻塞或返还。已开始组不再检查邻近阈值，执行器继续分批完成，允许短暂超额。配置阈值不是硬上限，不清理已生成实体；不同 tag 的重叠集合没有统一硬预留保证，预算/区块/异常中断保持原契约。
 - **同刻容量复用**：每次容量测量记录候选维度，**同一 tick 内同一候选只查一次世界并复用结果**；每步开始时清空复用表（每步归零），避免跨刻沿用旧容量把 room 算大。
 - **候选选择**：每个转化组只选**一个**候选结果。`ROUND_ROBIN`（默认）从游标处依次尝试，`PRIORITY` 取第一个可用候选；容量不足或催化剂不足的候选跳过，**全部候选都无法完成一组时整堆返还、不支付任何成本**。不能把组合模式实现成"全部结果执行、只调先后顺序"。
-- **催化剂固定成本**（`rule.catalystCost()`）：一组结算需分别支付 `items` 各引用的 `counts` 数量，缺省采用 `count`。`CatalystAllocation` 用共享库存分配完整轮次，重叠标签不会重复使用库存；图构建与增广搜索按预算跨 tick 续跑。计划期登记逐轮支付清单并预留（`CatalystReservations.tryReserve`，全有或全无、绝不半预留），**开组时先支付再开组**（`payGroup`：PAID / RETRY / SHORT）；不足则截断组数、释放预留，剩余源走返还（**绝不"少扣照常产出"**）。支付计费进度可跨 tick 保留，真正扣除前重新核对全部实体、物品类型及预留数量。催化剂账目使用本组各引用数量之和，不进源物品守恒式。
+- **催化剂固定成本**（`rule.catalystCost()`）：一组结算先满足 `counts` 门槛，再按各引用 `consume_counts` 实际支付；两者缺省分别为 1 与 0。`CatalystAllocation` 用共享库存分配完整轮次，重叠标签不会重复使用库存；图构建与增广搜索按预算跨 tick 续跑。计划期登记逐轮支付清单并预留（`CatalystReservations.tryReserve`，全有或全无、绝不半预留），**开组时先支付再开组**（`payGroup`：PAID / RETRY / SHORT）；不足则截断组数、释放预留，剩余源走返还（**绝不"少扣照常产出"**）。支付计费进度可跨 tick 保留，真正扣除前重新核对全部实体、物品类型及预留数量。催化剂账目使用本组各引用数量之和，不进源物品守恒式。
 - **数量账目守恒**：设整堆源初始 `N`，每组源成本 `c`，实际开始组数 `g`，则
 
   ```text
@@ -134,7 +135,11 @@ delay           = max(0, dueAge - entity.getAge())
 
 ## 7. 扩展点
 
-催化剂付款仍采用软预算：邻域查询、排序、数组准备及分配算法内部的单次整理操作不可抢占；最终清单复核与整轮扣减也不能跨 tick 拆开。预算续接限制连续搜索与清单整理的工作量，不保证每个原子步骤都小于时间预算。流体消耗按「一格 = 一个单元」推进，每个方块读写之前检查预算，用尽即让出、下刻从同一位置续接；每成功消耗一格立即经受控进度回执记一次完成量，终态回执不再重复计数。`consume_source` 的 `execute` 是单步回执：源消耗已由结算层开组时扣减并记账，执行器只按本组已付成本报告真实完成量。`consume_catalyst` 与 `consume_fluid` 的 `execute` 恒返回 `budget_required` 失败回执，两者经 `start` 返回按 `ServerTickBudget` 续接的执行状态，必须在公共调度器内推进。
+催化剂付款使用软预算：邻域查询、排序与最终整组复核为原子操作，分配器图构建、增广和付款清单整理可跨 tick 续跑。`CatalystThresholdCheck` 每组重新查询共享半径并检查所有引用门槛；`payGroup` 最后复核预留实体的存活、物品类型、件数与半径，再调用输入提交回调。
+
+启用 `consume_fluid` 后，每组从触发方块内的接触流体开始追溯：水平候选要求同流体族且 LEVEL 更低（非 LiquidBlock 使用 amount 更高），FALLING 流体允许向上追溯；碰撞面阻挡和未加载区块停止该方向。遍历最多 512 个节点、路径最多 64 步，候选源按距触发点距离选择最近者。搜索过程受 tick 预算续接，消耗前重读接触类型与完整路径；含水方块清除 WATERLOGGED，其他源方块置 AIR。未找到源、路径失效或写入失败时不开组，剩余源物品返还。
+
+门槛复核、流体写入、催化剂扣除和源库存扣除在同一主线程步骤完成，中间不 yield。流体消耗不按世界流体总量预留份数。催化剂分配 g 组时，每引用需求为 `max(门槛, 消耗) + (g-1)×消耗`，实际预留只包含 `g×消耗`；因此末组开始时仍须满足完整门槛。
 
 - **改排期/退避语义**：改 `ConversionRuntime.scheduleInitial` / `attempt` / `reschedule` 与 `ServerConfig.backoffTicks`。
 - **改规则选择排序**：改 `RuleIndex.RULE_ORDER` 比较键。

@@ -85,7 +85,7 @@ public final class RuleRecipeView {
         for (RuleValue entry : array(object(body.child(RuleFields.SOURCE)).child(RuleFields.SOURCE_ITEMS)).items()) {
             if (entry.isText()) {
                 String reference = entry.asText();
-                sources.add(resource(reference, RuleCatalogType.ITEM, sourceCost(body, effects, reference)));
+                sources.add(resource(reference, RuleCatalogType.ITEM, sourceCost(body, reference)));
             }
         }
         if (sources.isEmpty()) sources.add(placeholder("source_missing"));
@@ -98,17 +98,8 @@ public final class RuleRecipeView {
         collectConditions(body.child("conditions"), false, catalysts, fluids);
         for (RuleValue effect : effects) {
             collectConditions(effect.child("conditions"), false, catalysts, fluids);
-            if ((OWN + "consume_catalyst").equals(text(effect, "type"))) addCatalysts(catalysts, effect, true);
         }
-        // 任意流体消耗可作用于已列出的每种流体；明确引用保留自身范围，不推断标签交集。
-        boolean consumesAnyFluid = false;
-        for (RuleValue effect : effects) {
-            if (!(OWN + "consume_fluid").equals(text(effect, "type"))) continue;
-            String reference = text(effect, "fluid");
-            if (reference.isEmpty()) consumesAnyFluid = true;
-            else fluid(fluids, reference).fluidConsumed = true;
-        }
-        if (consumesAnyFluid) {
+        if (body.flag(RuleFields.CONSUME_FLUID, false)) {
             if (fluids.isEmpty()) fluid(fluids, "");
             fluids.values().forEach(part -> part.fluidConsumed = true);
         }
@@ -184,7 +175,7 @@ public final class RuleRecipeView {
         }
     }
 
-    // 首选图标+名称，窄行改图标关系；超长时悬停横向滚动，离开恢复原序起点。
+    /** 首选图标+名称，窄行改图标关系；超长时悬停横向滚动，离开恢复原序起点。 */
     public void render(GuiGraphics graphics, Font font, UiRect row, int color, boolean hovered) {
         render(graphics, font, row, color, hovered, true);
     }
@@ -253,7 +244,7 @@ public final class RuleRecipeView {
                 + (names ? font.width(part.object().name) : 0) + (part.object().tag == null ? 0 : 9);
     }
 
-    // 命中与绘制共用名字省略和横向滚动口径；只展开实际可见的标签容器。
+    /** 命中与绘制共用名字省略和横向滚动口径；只展开实际可见的标签容器。 */
     public @Nullable TagPreviewIcons.Tag tagAt(Font font, UiRect row, double mouseX, double mouseY) {
         Part part = partAt(font, row, mouseX, mouseY);
         return part == null || part.object() == null ? null : part.object().tag;
@@ -325,13 +316,16 @@ public final class RuleRecipeView {
             ObjectPart part = target.computeIfAbsent(id, ignored -> resource(id, RuleCatalogType.ITEM, 0));
             if (count > 0) {
                 part.quantities.add(count);
-                if (consumed) part.consumedQuantities.add(count);
+                if (consumed) {
+                    int consumeCount = integer(object(owner.child(RuleFields.CONSUME_COUNTS)), id, 0);
+                    if (consumeCount > 0) part.consumedQuantities.add(consumeCount);
+                }
             }
         }
     }
 
-    private static ObjectPart fluid(Map<String, ObjectPart> fluids, String reference) {
-        return fluids.computeIfAbsent(reference, ignored -> reference.isEmpty()
+    private static void fluid(Map<String, ObjectPart> fluids, String reference) {
+        fluids.computeIfAbsent(reference, ignored -> reference.isEmpty()
                 ? new ObjectPart(Component.translatable(UI + "any_fluid"), new UiIcon.Item(new ItemStack(Items.BUCKET)), 0)
                 : resource(reference, RuleCatalogType.FLUID, 0));
     }
@@ -444,18 +438,11 @@ public final class RuleRecipeView {
     private static void appendEffects(List<RuleValue> target, @Nullable RuleValue raw) {
         for (RuleValue entry : array(raw).items()) if (entry.isMapping()) target.add(entry);
     }
-    private static int sourceCost(RuleValue rule, List<RuleValue> effects, String reference) {
+    private static int sourceCost(RuleValue rule, String reference) {
         if (rule.has(RuleFields.SOURCE_COST)) return integer(object(rule.child(RuleFields.SOURCE_COST)), reference, 1);
-        int cost = 0;
-        boolean consumption = false;
-        for (RuleValue effect : effects) {
-            String type = text(effect, "type");
-            consumption |= List.of(OWN + "consume_source", OWN + "consume_catalyst", OWN + "consume_fluid").contains(type);
-            if ((OWN + "consume_source").equals(type)) cost = (int) Math.min(Integer.MAX_VALUE, (long) cost
-                    + integer(object(effect.child(RuleFields.ITEM_COUNTS)), reference, integer(effect, RuleFields.CATALYST_COUNT, 1)));
-        }
-        return consumption ? cost : 1;
+        return 1;
     }
+
     private static String numbers(LinkedHashSet<Integer> values) { return String.join("/", values.stream().map(String::valueOf).toList()); }
     private static RuleValue object(@Nullable RuleValue value) { return value != null && value.isMapping() ? value : RuleValue.mapping().build(); }
     private static RuleValue array(@Nullable RuleValue value) { return value != null && value.isList() ? value : RuleValue.list().build(); }

@@ -21,17 +21,17 @@ public final class BuiltinEditorDefaults {
 
     // 新建规则的默认体：使用 {@link EditorFactories} 的空白规则工厂
     // 只写稳定 id、空的源列表、固定源成本 1、当前结构版本与一个初始候选；
-    // 其余字段（enabled/priority/triggers/combination 等）依赖后端默认，保持省略。
+    /** 其余字段（enabled/priority/triggers/combination 等）依赖后端默认，保持省略。 */
     public static RuleValue ruleBody(String ruleId) {
         return RuleValue.wrap(EditorFactories.blankRule(ruleId));
     }
 
-    // 复制/另存为：深拷贝规则体并换 id；候选同时分配新身份
+    /** 复制/另存为：深拷贝规则体并换 id；候选同时分配新身份 */
     public static RuleValue copyOf(String newRuleId, @Nullable RuleValue source) {
         return RuleValue.wrap(EditorFactories.copyRule(newRuleId, source == null ? null : source.unwrap().getAsJsonObject()));
     }
 
-    // 新建效果的默认体
+    /** 新建效果的默认体 */
     public static RuleValue effectBody(ResourceLocation type) {
         JsonObject body = new JsonObject();
         body.addProperty(RuleFields.TYPE, type.toString());
@@ -40,7 +40,7 @@ public final class BuiltinEditorDefaults {
         return RuleValue.wrap(body);
     }
 
-    // 仅用于展示省略字段的有效默认值（RuleValue 入口：界面层不再持有 JsonElement），不写入草稿。
+    /** 仅用于展示省略字段的有效默认值（RuleValue 入口：界面层不再持有 JsonElement），不写入草稿。 */
     public static @Nullable RuleValue effectiveValue(RuleValue object, String field) {
         if (object != null && object.has(RuleFields.TYPE)) {
             ResourceLocation type = ResourceLocation.tryParse(object.text(RuleFields.TYPE, ""));
@@ -65,7 +65,7 @@ public final class BuiltinEditorDefaults {
         };
     }
 
-    // 新建条件叶的默认节点（含 op=leaf 外壳，可直接交给条件表达式编解码器）
+    /** 新建条件叶的默认节点（含 op=leaf 外壳，可直接交给条件表达式编解码器） */
     public static JsonObject conditionLeafJson(ResourceLocation type) {
         JsonObject condition = new JsonObject();
         condition.addProperty(RuleFields.TYPE, type.toString());
@@ -110,7 +110,6 @@ public final class BuiltinEditorDefaults {
     private static void applyEffectDefaults(JsonObject body, String path) {
         switch (path) {
             // 消耗源物品沿用固定成本默认值。
-            case "consume_source" -> body.addProperty("count", 1);
             case "spawn_entity" -> {
                 body.addProperty("variant", "item");
                 body.addProperty("count", 1);
@@ -135,12 +134,6 @@ public final class BuiltinEditorDefaults {
                 body.addProperty("duration_ticks", 6000);
                 body.addProperty("thundering", false);
             }
-            case "consume_catalyst" -> {
-                body.add("items", new JsonArray());
-                body.addProperty("count", 1);
-                body.addProperty("radius", 1);
-            }
-            case "consume_fluid" -> body.addProperty("require_source", true);
             case "explosion" -> {
                 body.addProperty("power", 3.0F);
                 body.addProperty("fire", false);

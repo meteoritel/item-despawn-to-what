@@ -33,9 +33,9 @@ public final class BuiltinEditorDescriptors {
     // 效果公共字段标签前缀
     private static final String COMMON = FIELD + "common.";
 
-    // 规则基本信息描述符 id（仅界面按名取用）
+    /** 规则基本信息描述符 id（仅界面按名取用） */
     public static final ResourceLocation RULE_DESCRIPTOR = id("rule");
-    // 源物品对象描述符 id（仅界面按名取用）
+    /** 源物品对象描述符 id（仅界面按名取用） */
     public static final ResourceLocation SOURCE_DESCRIPTOR = id("source");
 
     private static volatile boolean bootstrapped;
@@ -44,7 +44,7 @@ public final class BuiltinEditorDescriptors {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    // 幂等注册全部内置描述符；界面初始化时调用
+    /** 幂等注册全部内置描述符；界面初始化时调用 */
     public static void bootstrap() {
         if (bootstrapped) {
             return;
@@ -128,8 +128,7 @@ public final class BuiltinEditorDescriptors {
         ResourceLocation fluid = id("fluid_present");
         ConditionEditorRegistry.register(new TypeEditorDescriptor(fluid, TypeLabels.conditionLabel(fluid), List.of(
                 EditorField.tagList(RuleFields.FLUIDS, h + "fluid_present.fluid", "minecraft:fluid")
-                        .withHint(h + "fluid_present.fluid.hint"),
-                EditorField.bool("require_source", h + "fluid_present.require_source")
+                        .withHint(h + "fluid_present.fluid.hint")
         ), false));
 
         // time_of_day：可跨零点
@@ -221,30 +220,9 @@ public final class BuiltinEditorDescriptors {
                 EditorField.note(h + "weather.note")
         ));
 
-        // consume_source
-        ResourceLocation consumeSource = id("consume_source");
-        registerEffect(consumeSource, List.of(
-                EditorField.itemCounts(RuleFields.ITEM_COUNTS, h + "consume_source.count", 1, 64)
-        ));
-
-        // consume_catalyst
-        ResourceLocation consumeCatalyst = id("consume_catalyst");
-        registerEffect(consumeCatalyst, List.of(
-                EditorField.tagList("items", h + "consume_catalyst.items", "minecraft:item").asRequired(),
-                EditorField.itemCounts(RuleFields.ITEM_COUNTS, h + "consume_catalyst.count", 1, 64),
-                EditorField.integer("radius", h + "consume_catalyst.radius", 1, 8).optional()
-        ));
-
-        // consume_fluid
-        ResourceLocation consumeFluid = id("consume_fluid");
-        registerEffect(consumeFluid, List.of(
-                EditorField.optionalTag("fluid", h + "consume_fluid.fluid", "minecraft:fluid")
-                        .withHint(h + "consume_fluid.fluid.hint"),
-                EditorField.bool("require_source", h + "consume_fluid.require_source")
-        ));
     }
 
-    // 生成选中子类型的参数描述符；公共字段沿用注册表，第三方类型不受影响。
+    /** 生成选中子类型的参数描述符；公共字段沿用注册表，第三方类型不受影响。 */
     public static TypeEditorDescriptor entityDescriptor(String variant) {
         TypeEditorDescriptor base = EffectEditorRegistry.descriptorFor(id("spawn_entity"));
         List<EditorField> fields = new ArrayList<>(entityFields(variant));
@@ -282,7 +260,7 @@ public final class BuiltinEditorDescriptors {
 
     // ---- 规则级与来源对象（不在条件/效果注册表内，界面按需取用） ----
 
-    // 规则基本信息页签的字段描述符
+    /** 规则基本信息页签的字段描述符 */
     public static TypeEditorDescriptor ruleDescriptor() {
         String r = "gui.itemdespawntowhat.edit.rule.";
         return new TypeEditorDescriptor(RULE_DESCRIPTOR, Component.translatable(r + "info"), List.of(
@@ -298,13 +276,13 @@ public final class BuiltinEditorDescriptors {
 
     // ---- 规则级固定成本（可省略字段，界面按需取用） ----
 
-    // 源成本字段描述符 id（仅界面按名取用）
+    /** 源成本字段描述符 id（仅界面按名取用） */
     public static final ResourceLocation SOURCE_COST_DESCRIPTOR = id("source_cost");
 
-    // 催化剂成本对象描述符 id（仅界面按名取用）
+    /** 催化剂成本对象描述符 id（仅界面按名取用） */
     public static final ResourceLocation CATALYST_COST_DESCRIPTOR = id("catalyst_cost");
 
-    // 源固定成本字段：可省略（省略时后端推导）；合法域 1..INT_MAX，常用窗口 1..64
+    /** 源固定成本字段：可省略（省略时后端推导）；合法域 1..INT_MAX，常用窗口 1..64 */
     public static TypeEditorDescriptor sourceCostDescriptor() {
         String r = "gui.itemdespawntowhat.edit.rule.";
         return new TypeEditorDescriptor(SOURCE_COST_DESCRIPTOR, Component.translatable(r + "source_cost"), List.of(
@@ -312,16 +290,22 @@ public final class BuiltinEditorDescriptors {
         ), false);
     }
 
-    // 输入页消耗区只显示每轮数量；物品在存在条件区选择，半径不提供自定义入口。
+    /** 催化剂门槛、可选实际消耗量和规则共享搜索半径。 */
     public static TypeEditorDescriptor catalystCostDescriptor() {
         String r = "gui.itemdespawntowhat.edit.rule.";
         return new TypeEditorDescriptor(CATALYST_COST_DESCRIPTOR, Component.translatable(r + "catalyst_cost"), List.of(
+                EditorField.tagList(RuleFields.CATALYST_ITEMS, "gui.itemdespawntowhat.edit.field.catalyst_present.items", "minecraft:item").asRequired(),
                 EditorField.itemCounts(RuleFields.ITEM_COUNTS, r + "catalyst_cost.count",
-                        CatalystCost.MIN_COUNT, CatalystCost.MAX_COUNT)
+                        CatalystCost.MIN_COUNT, CatalystCost.MAX_COUNT),
+                EditorField.itemCounts(RuleFields.CONSUME_COUNTS, r + "catalyst_cost.consume_count",
+                        CatalystCost.MIN_CONSUME_COUNT, CatalystCost.MAX_COUNT),
+                EditorField.integerSlider(RuleFields.CATALYST_RADIUS, r + "catalyst_cost.radius",
+                        CatalystCost.MIN_RADIUS, CatalystCost.MAX_RADIUS, CatalystCost.DEFAULT_RADIUS,
+                        CatalystCost.MAX_RADIUS)
         ), false);
     }
 
-    // 源物品页签的字段描述符
+    /** 源物品页签的字段描述符 */
     public static TypeEditorDescriptor sourceDescriptor() {
         String r = "gui.itemdespawntowhat.edit.rule.";
         return new TypeEditorDescriptor(SOURCE_DESCRIPTOR, Component.translatable(r + "source"), List.of(

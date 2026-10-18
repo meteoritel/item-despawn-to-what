@@ -39,13 +39,13 @@ import java.util.stream.Stream;
  */
 public final class RuleCodecs {
 
-    // 触发时间默认值：对齐原版掉落物 300 秒的消失直觉
+    /** 触发时间默认值：对齐原版掉落物 300 秒的消失直觉 */
     public static final int DEFAULT_TRIGGER_AFTER_SECONDS = 300;
 
-    // 当前规则契约结构版本；声明其它值一律拒绝
+    /** 当前规则契约结构版本；声明其它值一律拒绝 */
     public static final int DEFAULT_SCHEMA_VERSION = 1;
 
-    // 规则文件允许出现的顶层字段（含覆盖层控制字段）
+    /** 规则文件允许出现的顶层字段（含覆盖层控制字段） */
     public static final Set<String> KNOWN_RULE_FIELDS = Set.of(
             RuleFields.ID,
             RuleFields.ENABLED,
@@ -59,6 +59,7 @@ public final class RuleCodecs {
             RuleFields.TRIGGERS,
             RuleFields.SOURCE_COST,
             RuleFields.CATALYST_COST,
+            RuleFields.CONSUME_FLUID,
             RuleFields.COMBINATION,
             RuleFields.OUTCOMES,
             RuleFields.SCHEMA_VERSION,
@@ -78,8 +79,8 @@ public final class RuleCodecs {
     // 催化剂固定成本对象允许出现的字段；未知字段（含 chance / conditions / delay_ticks）按错误级拒绝
     private static final Set<String> CATALYST_COST_FIELDS = Set.of(
             RuleFields.CATALYST_ITEMS,
-            RuleFields.CATALYST_COUNT,
             RuleFields.ITEM_COUNTS,
+            RuleFields.CONSUME_COUNTS,
             RuleFields.CATALYST_RADIUS
     );
 
@@ -103,7 +104,7 @@ public final class RuleCodecs {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    // 条件树编解码器（递归结构；空表达式编码为空 all_of，解码不接受空对象）
+    /** 条件树编解码器（递归结构；空表达式编码为空 all_of，解码不接受空对象） */
     public static Codec<ConditionExpression> conditionExpressionCodec(TypeRegistry<ConditionType<?>> conditionTypes) {
         Codec<Condition> leafCodec = TypeDispatch.flat(conditionTypes, Condition::type).codec();
         NodeCodecHolder holder = new NodeCodecHolder();
@@ -130,12 +131,12 @@ public final class RuleCodecs {
         };
     }
 
-    // 效果列表编解码器
+    /** 效果列表编解码器 */
     public static Codec<Effect> effectCodec(TypeRegistry<EffectType<?>> effectTypes) {
         return TypeDispatch.flat(effectTypes, Effect::type).codec();
     }
 
-    // 规则编解码器
+    /** 规则编解码器 */
     public static Codec<Rule> codec(TypeRegistry<EffectType<?>> effectTypes,
                                     TypeRegistry<ConditionType<?>> conditionTypes) {
         Codec<ConditionExpression> expressionCodec = conditionExpressionCodec(conditionTypes);
@@ -160,6 +161,7 @@ public final class RuleCodecs {
                         .forGetter(rule -> Optional.ofNullable(rule.sourceCost())),
                 CatalystCost.CODEC.optionalFieldOf(RuleFields.CATALYST_COST)
                         .forGetter(rule -> Optional.ofNullable(rule.catalystCost())),
+                Codec.BOOL.optionalFieldOf(RuleFields.CONSUME_FLUID, Boolean.FALSE).forGetter(Rule::consumeFluid),
                 CombinationMode.CODEC.optionalFieldOf(RuleFields.COMBINATION, CombinationMode.ROUND_ROBIN)
                         .forGetter(Rule::combination),
                 outcomeCodec.listOf().optionalFieldOf(RuleFields.OUTCOMES, List.of())
@@ -168,14 +170,14 @@ public final class RuleCodecs {
                 Codec.INT.optionalFieldOf(RuleFields.SCHEMA_VERSION, DEFAULT_SCHEMA_VERSION)
                         .forGetter(Rule::schemaVersion)
         ).apply(instance, (id, enabled, priority, displayName, notes, source, conditions, triggerAfterSeconds,
-                           triggers, sourceCost, catalystCost, combination, outcomes, effects, schemaVersion) ->
+                           triggers, sourceCost, catalystCost, consumeFluid, combination, outcomes, effects, schemaVersion) ->
                 new Rule(id, enabled, priority, displayName.orElse(null), notes.orElse(null), source, conditions,
                         triggerAfterSeconds, effects, new LinkedHashSet<>(triggers), sourceCost.orElse(null),
-                        catalystCost.orElse(null), combination, outcomes, schemaVersion)));
+                        catalystCost.orElse(null), consumeFluid, combination, outcomes, schemaVersion)));
     }
 
     // 构造加载层可用的解码器；未知顶层字段不阻断加载，但会作为 WARN 进入 IssueCollector。
-    // 条件树规模预检必须发生在递归解码之前：递归下钻由 DFU codec 与条件树自身完成，超深或超规模输入会在解码期击穿调用栈
+    /** 条件树规模预检必须发生在递归解码之前：递归下钻由 DFU codec 与条件树自身完成，超深或超规模输入会在解码期击穿调用栈 */
     public static RuleDecoder<Rule> decoder(RegistryAccess registryAccess,
                                             TypeRegistry<EffectType<?>> effectTypes,
                                             TypeRegistry<ConditionType<?>> conditionTypes) {
@@ -230,9 +232,7 @@ public final class RuleCodecs {
             return;
         }
         if (!raw.isJsonObject()) {
-            issues.error("catalyst_cost 必须是对象 {\"" + RuleFields.CATALYST_ITEMS + "\":[...],\""
-                    + RuleFields.CATALYST_COUNT + "\":1,\"" + RuleFields.CATALYST_RADIUS + "\":1}，"
-                    + "整数写法已废弃", null, RuleFields.CATALYST_COST);
+            issues.error("catalyst_cost 必须为包含 items、counts、consume_counts、radius 的配置对象", null, RuleFields.CATALYST_COST);
             return;
         }
         for (String key : raw.getAsJsonObject().keySet()) {

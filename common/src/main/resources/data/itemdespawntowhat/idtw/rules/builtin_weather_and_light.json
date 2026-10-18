@@ -3,7 +3,7 @@
     "id": "itemdespawntowhat:builtin_thunder_condensation",
     "enabled": true,
     "display_name": "雷暴凝水 / Thunder Condensation",
-    "notes": "内置示例：weather 条件与 y_level 条件同处 all_of；效果演示 weather（改天气）与 consume_fluid（消耗流体）。",
+    "notes": "内置示例：雷暴、高度与水流条件同时满足时，消耗所接触水流对应的水源并改变天气。",
     "source": {
       "items": [
         "minecraft:wet_sponge"
@@ -26,6 +26,13 @@
             "min": 60,
             "max": 320
           }
+        },
+        {
+          "op": "leaf",
+          "condition": {
+            "type": "itemdespawntowhat:fluid_present",
+            "fluid": "minecraft:water"
+          }
         }
       ]
     },
@@ -41,13 +48,9 @@
         "mode": "rain",
         "duration_ticks": 6000,
         "thundering": true
-      },
-      {
-        "type": "itemdespawntowhat:consume_fluid",
-        "fluid": "minecraft:water",
-        "require_source": true
       }
-    ]
+    ],
+    "consume_fluid": true
   },
   {
     "id": "itemdespawntowhat:builtin_dark_blast",
@@ -86,7 +89,9 @@
     "triggers": [
       "natural"
     ],
-    "source_cost": {"minecraft:gunpowder": 1},
+    "source_cost": {
+      "minecraft:gunpowder": 1
+    },
     "combination": "round_robin",
     "schema_version": 1,
     "effects": [

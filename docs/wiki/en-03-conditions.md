@@ -163,8 +163,8 @@ Every `type` carries the namespace prefix `itemdespawntowhat:`. Reference parame
 | `itemdespawntowhat:y_level` | Y level | The height falls inside a range | `min`, `max` |
 | `itemdespawntowhat:outdoor` | Outdoor | Nothing blocks the sky above the drop | None |
 | `itemdespawntowhat:surrounding_blocks` | Surrounding blocks | The six neighboring blocks match | `up`, `down`, `north`, `south`, `east`, `west` |
-| `itemdespawntowhat:fluid_present` | Fluid present | The position contains the named fluid | `fluid`, `fluids`, `require_source` |
-| `itemdespawntowhat:catalyst_present` | Catalyst present | The drop's block cell contains enough catalyst | `items`, `count`, `counts` |
+| `itemdespawntowhat:fluid_present` | Fluid present | The position contains the named fluid | `fluid`, `fluids` |
+| `itemdespawntowhat:catalyst_present` | Catalyst present | The shared radius contains enough catalyst | `items`, `count`, `counts` |
 
 ## Condition Types in Detail
 
@@ -391,10 +391,9 @@ The condition looks at the fluid at the drop's block position.
 |---|---|---|---|
 | `fluid` | One fluid reference | Fluid ID or `#` tag | Empty |
 | `fluids` | Fluid reference list | Fluid IDs or `#` tags; any entry matching is enough | Empty |
-| `require_source` | Whether only fluid source blocks count | `true` or `false` | `true` |
 
 - Leaving out both `fluid` and `fluids` means any fluid, but the position must still contain a fluid or the condition is unsatisfied. When you write both, `fluids` wins.
-- `require_source` defaults to `true`, which matches fluid source blocks only. Set it to `false` to match flowing fluid as well. With that setting, `minecraft:water` also matches flowing water, which is the flowing variant of the same fluid.
+- Both source and flowing fluids match; `minecraft:water` accepts the flowing variant of the same fluid family.
 - Writing `minecraft:empty` matches no real fluid and logs a warning when the rule loads.
 
 ```json
@@ -402,8 +401,7 @@ The condition looks at the fluid at the drop's block position.
   "op": "leaf",
   "condition": {
     "type": "itemdespawntowhat:fluid_present",
-    "fluid": "minecraft:water",
-    "require_source": false
+    "fluid": "minecraft:water"
   }
 }
 ```
@@ -412,17 +410,17 @@ Typical uses: rules that convert while the drop sits in water. Combined with a c
 
 ### catalyst_present (Catalyst present)
 
-The condition decides whether the drop's own block cell contains enough of the named **catalyst** items. It is an on-site check, and it consumes nothing.
+The condition decides whether the shared rule radius contains enough of the named **catalyst** items. It is an on-site check, and it consumes nothing.
 
 | Field | What It Does | Value | Default |
 |---|---|---|---|
 | `items` | Catalyst reference list | Item IDs or `#` tags, at least 1 entry | Required |
-| `count` | Count threshold | Integer from 1 to 64 | When left out, follows what the rule consumes of that catalyst, and 1 when no matching consumption is configured |
+| `count` | Count threshold | Integer from 1 to 64 | Uses rule `catalyst_cost.counts` when omitted, defaulting to 1 per reference |
 | `counts` | Threshold per reference | Object whose keys must appear in `items`, with values from 1 to 64 | Empty |
 
 - Every entry in `items` must reach its own threshold.
-- The mod counts inside the 1×1×1 cell of the drop's block. It excludes the drop itself and excludes dead entities, and it adds up several stacks of the same item in that cell.
-- Leaving `count` out is the recommended form. It follows the amount of that catalyst the rule consumes, taken from the rule-level `catalyst_cost` or the effect-level `consume_catalyst`, and falls back to 1 only when neither exists. Leaving it out never writes back to the file, so your own declaration is left alone.
+- The mod uses rule `catalyst_cost.radius`, defaulting to 1. It excludes the source and dead entities and adds matching stacks together.
+- Omitted `count` uses the rule threshold. Consumption amounts are independent and resolved values are not written back.
 - A key in `counts` that does not appear in `items` is an error.
 
 ```json
@@ -522,8 +520,7 @@ Flowing water with bone meal nearby. The `conditions` field of the built-in rule
       "op": "leaf",
       "condition": {
         "type": "itemdespawntowhat:fluid_present",
-        "fluid": "minecraft:water",
-        "require_source": false
+        "fluid": "minecraft:water"
       }
     },
     {

@@ -128,9 +128,7 @@ The example above uses `source_cost` of 1 chicken per group. Assume this rule ha
 
 ## What Each Group Pays: Fixed Costs and Consumption
 
-A **fixed cost** is a price you pay for every conversion group that opens. Source items and catalysts are both fixed costs, so they take no chance, no condition, and no delay. A rule can declare fixed costs (`source_cost`, `catalyst_cost`) or use **consumption effects** (`consume_source`, `consume_catalyst`, `consume_fluid`) that consume materials when a group opens.
-
-The two forms overlap, but the same material can go in only one of them: `source_cost` and `consume_source` cannot appear in the same rule, and neither can `catalyst_cost` and `consume_catalyst`. A rule that breaks this rule is rejected, which keeps the same material from being consumed twice.
+`source_cost` is both the source threshold and payment for each group, defaulting to 1. Catalyst `counts` are thresholds and `consume_counts` are independent payments. Rule-level `consume_fluid` enables fluid source consumption. Inputs are checked and paid before each group starts.
 
 ### Source Cost (source_cost)
 
@@ -152,45 +150,43 @@ Write an object that maps a source item reference to a positive integer. The num
 - You can list several entries, for example `{ "minecraft:egg": 2, "#minecraft:saplings": 1 }`. The current stack decides which entry applies: the mod first looks for an entry that names the item exactly, then walks `source.items` in definition order for the first matching `#tag` entry, and consumes 1 when nothing matches.
 - The meaning is per group and does not depend on the stack size: a value of 2 opens one group per 2 source items, and a stack of 5 gives 2 groups and returns the remaining item.
 
-### Catalyst Cost (catalyst_cost)
+### Catalyst Thresholds and Payments (catalyst_cost)
 
-| Field | What it does | Values | Default | Notes |
-| --- | --- | --- | --- | --- |
-| `items` | Which catalysts the rule needs | An array of items or `#tags` | — (required, cannot be empty) | The mod collects them within a radius of the trigger position |
-| `count` | How many of each catalyst one group consumes | 1 to 64 | 1 | Except the kinds that `counts` lists separately |
-| `radius` | How far from the trigger position to search for catalysts | 1 to 8 (blocks) | 1 | Includes the block of the trigger position |
-| `counts` | Separate amounts for some catalysts | `{ "reference": number }` | `{}` (all use `count`) | Every key must already appear in `items` |
+| Field | Meaning | Default | Range |
+| --- | --- | --- | --- |
+| `items` | Item or tag references that must each qualify | Required, nonempty | Array |
+| `counts` | Threshold per reference | 1 per missing reference | Object, values 1–64 |
+| `consume_counts` | Payment per reference per group | 0 per missing reference: detection only | Object, values 0–64 |
+| `radius` | Shared detection and payment radius | 1 | 1–8 blocks |
 
-- The catalyst cost accepts only these four fields and must be an object. An empty `items`, a `counts` key that names something outside `items`, or an amount outside its range rejects the rule. Adding `chance`, `conditions`, or `delay_ticks` also rejects the rule, because a fixed cost has no chance to miss and no delay to wait out.
-- The mod consumes every reference in `items` its own amount: two catalysts are both consumed, rather than a single payment for the pair.
-- The mod searches dropped items within `radius` blocks of the trigger position and pays from the closest to the farthest. The source dropped item never counts.
-- The mod consumes the materials before it opens every group, so the cost applies per group rather than once for the whole stack.
-- When the radius does not contain enough items, the group does not open: the mod consumes no source items, produces nothing for that candidate, and returns the remaining part at the end.
+Quantity keys must belong to `items`. Every group checks all thresholds before paying the full consumption amounts. Overlapping item and tag references share inventory allocation. The source entity is excluded. Insufficient inputs stop later groups and return unused source items.
 
-### How Consumption Effects Map to Rule Costs
+```json
+{
+  "catalyst_cost": {
+    "items": ["minecraft:bone_meal"],
+    "counts": {"minecraft:bone_meal": 5},
+    "consume_counts": {"minecraft:bone_meal": 2},
+    "radius": 3
+  }
+}
+```
 
-| Consumption effect | What it consumes | Relation to rule costs |
-| --- | --- | --- |
-| `consume_source` | The source items of each group | Matches `source_cost`, and a rule can declare only one of the two |
-| `consume_catalyst` | The catalysts of each group, within a radius of the trigger position | Matches `catalyst_cost`, and a rule can declare only one of the two |
-| `consume_fluid` | Fluid near the trigger position | Has no rule-level field, so you can only write it as an effect |
+With 7 catalysts, threshold 5 and payment 2, two groups can start: 7→5→3. The third group fails its threshold. Enabling consumption in the input page copies each threshold into a second slider row; the two values can then be edited independently. The shared radius is at the bottom of the card.
 
-- Effect parameters and shared fields, such as `delay_ticks`, `chance`, and `conditions`, are on [Effects](en-04-effects).
-- One rule may declare each consumption effect only once, counting the top-level `effects` together with the `effects` of every candidate. A repeated declaration is rejected.
-- A consumption effect written inside a candidate runs only when that candidate is picked and the group opens.
+### Fluid Source Consumption (consume_fluid)
 
-### Implicit Consumption When You Write Nothing
+Rule-level `"consume_fluid": true` consumes one actual fluid source per group; the default is `false`. Presence conditions accept both source and flowing fluid. Consumption starts at the contacted fluid and traces increasing upstream levels, including upward waterfall paths, choosing the nearest corresponding source. Only loaded chunks are read, with at most 512 visited nodes and 64 steps per path. Missing sources or changed paths stop the group and return unused source items. Waterlogged blocks retain their block body.
 
-**Implicit consumption** applies when a rule declares no consumption effect and no `source_cost` or `catalyst_cost`: the mod then consumes 1 source item before every group it opens, which means one source item buys one output.
+### Default Source Payment
 
-- As soon as you declare any consumption effect or fixed cost, the implicit item no longer stacks on top. You never pay one extra source item on top of a cost you wrote.
-- One common mistake: declaring `consume_catalyst` or `consume_fluid` while writing neither `consume_source` nor `source_cost`. Source items then take no part in splitting the stack, so the whole stack counts as one group and the catalysts or fluid are paid for one group. To convert a stack one item at a time, write `source_cost` or `consume_source`.
+Without `source_cost`, each group's source threshold and payment are 1. Catalyst and fluid settings leave this default at 1.
 
 ## Settlement and Return for the Whole Stack
 
 When a rule picks up a dropped item, the whole stack leaves the world and enters settlement. The mod then works through these steps:
 
-1. **Count the groups**: the number of groups is the stack size divided by the source cost per group, rounded down. When the source cost per group is 0, meaning the rule consumes no source items, the whole stack counts as one group. The **nearby product limits** (`nearby_products`) can lower that number: the mod looks at the items and generic entities this candidate produces and keeps the smaller of the two counts. Experience output takes no part in that count. A candidate that holds only one-shot effects always counts as one group.
+1. **Count the groups**: the number of groups is the stack size divided by the source cost per group, rounded down. The **nearby product limits** (`nearby_products`) can lower that number: the mod looks at the items and generic entities this candidate produces and keeps the smaller of the two counts. Experience output takes no part in that count. A candidate that holds only one-shot effects always counts as one group.
 2. **Open groups one by one**: each conversion group first pays the catalyst cost, when the rule sets `catalyst_cost`, then loses its source items, and then runs every effect of the picked candidate. When any step cannot be paid, that group does not open.
 3. **Return what is left**: the unused part of the stack comes back to the world as dropped items near the trigger position. When no position is free nearby, the mod searches upward and, in the last resort, spawns the items above the build limit so that they fall back down.
 4. **A returned item never converts again**: a returned source item carries permanent protection, so it neither converts again nor splits the stack once more. This keeps the mod out of a loop of return, convert, and return.

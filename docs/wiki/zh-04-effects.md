@@ -13,9 +13,6 @@
 | 闪电 | `itemdespawntowhat:lightning` | 是 | 落下 1 ～ 16 道闪电 |
 | 爆炸 | `itemdespawntowhat:explosion` | 是 | 在触发位置产生一次爆炸 |
 | 天气 | `itemdespawntowhat:weather` | 是 | 让当前维度下雨或放晴 |
-| 消耗源物品 | `itemdespawntowhat:consume_source` | 否 | 从这次用掉的源物品里消耗一些 |
-| 消耗催化剂 | `itemdespawntowhat:consume_catalyst` | 否 | 消耗触发位置附近指定的掉落物 |
-| 消耗流体 | `itemdespawntowhat:consume_fluid` | 否 | 消耗触发位置那一格的流体 |
 
 下面先讲所有效果共用的字段，再按这张表逐种说明。
 
@@ -34,7 +31,7 @@
 
 - **拒载**：这条规则的内容有问题时，模组不会加载它，并给出原因。写了效果不认识的字段同样会被拒载，提示里带字段名。
 - 引用物品、方块、实体、流体、药水效果时，既可以写具体 id（`minecraft:water`），也可以写**标签**（`#` 开头的引用，例如 `#minecraft:logs`）。
-- 标签的含义分两种：产出类引用（`spawn_entity` 的 `item` 和 `entity`、`place_block` 的 `block`、`potion_effects` 的 `effect`）每次执行从中**随机取一个成员**；匹配类引用（`consume_source` 的 `counts`、`consume_catalyst` 的 `items`、`consume_fluid` 的 `fluid`）表示**只要是标签里的任一成员就命中**，不会随机取。
+- 标签的含义分两种：产出类引用（`spawn_entity` 的 `item` 和 `entity`、`place_block` 的 `block`、`potion_effects` 的 `effect`）每次执行从中**随机取一个成员**；匹配类引用（规则 `source_cost` 与 `catalyst_cost` 的物品或标签）表示**只要是标签里的任一成员就命中**，不会随机取。
 
 ## 多个效果怎么执行
 
@@ -236,77 +233,16 @@
 
 几点说明：`clear` 会把天气切换成晴天；已经是目标天气时不会重复设置（不会反复刷新计时）；没有天空光照的维度（例如下界）不会生效。
 
-## 消耗类效果
+## 输入消耗
 
-消耗类效果负责在开组时消耗材料：`consume_source` 消耗源物品、`consume_catalyst` 消耗触发位置附近的掉落物、`consume_fluid` 消耗触发位置那一格的流体。它们和规则级固定成本（`source_cost`、`catalyst_cost`）做的是同一件事，同一条规则里同类东西只能选一种写法，见[候选结果与结算](zh-05-outcomes-and-settlement)。
-
-### 消耗源物品（consume_source）
-
-`type`：`itemdespawntowhat:consume_source`
-
-| 字段 | 作用 | 取值/范围 | 默认 | 说明 |
-|---|---|---|---|---|
-| `count` | 消耗多少件源物品 | 1 ～ 64 | `1` | 从这次转化用掉的源物品里消耗 |
-| `counts` | 按具体物品分别指定数量 | 对象，键为物品 id 或标签，值为 1 ～ 64 | 省略 | 写了就按这里的数量消耗对应物品，键必须是 `source` 里出现过的条目 |
-
-```json
-{ "type": "itemdespawntowhat:consume_source", "count": 1 }
-```
-
-```json
-{
-  "type": "itemdespawntowhat:consume_source",
-  "counts": { "minecraft:bone": 2, "#minecraft:coals": 1 }
-}
-```
-
-配完会发生什么：这次转化用掉的源物品会少掉指定的量；它和 `source_cost` 是同一笔成本，由结算层在每组开始时从这次转化扣下的整堆源物品里扣除，效果执行时不会再扣第二遍。整条规则完全没写任何消耗时的隐式消耗见[候选结果与结算](zh-05-outcomes-and-settlement)。
-
-### 消耗催化剂（consume_catalyst）
-
-`type`：`itemdespawntowhat:consume_catalyst`
-
-| 字段 | 作用 | 取值/范围 | 默认 | 说明 |
-|---|---|---|---|---|
-| `items` | 要消耗哪些掉落物 | 数组，每项是物品 id 或标签 | 无，必填且不能为空 | 在触发位置半径内凑齐 |
-| `count` | 每个条目消耗几个 | 1 ～ 64 | `1` | 被 `counts` 单独指定的条目除外 |
-| `radius` | 搜索半径（格） | 1 ～ 8 | `1` | 搜索盒边长是 `2 × radius + 1` |
-| `counts` | 按具体物品分别指定数量 | 对象，键必须是 `items` 里出现过的项 | 省略 | 引用了没在 `items` 里的物品会导致规则被拒载 |
-
-```json
-{ "type": "itemdespawntowhat:consume_catalyst", "items": ["minecraft:bone_meal"], "count": 1, "radius": 1 }
-```
-
-配完会发生什么：消耗触发位置附近（默认 1 格范围）最近的骨粉 1 个；范围里凑不齐时**整个效果跳过，一个都不消耗**（不会只消耗一半），跳过也会记在结果里。搜索时会避开这次转化本身的源实体。
-
-### 消耗流体（consume_fluid）
-
-`type`：`itemdespawntowhat:consume_fluid`
-
-| 字段 | 作用 | 取值/范围 | 默认 | 说明 |
-|---|---|---|---|---|
-| `fluid` | 消耗哪种流体 | 流体 id 或标签 | 省略 = 任何流体 | 省略时不做存在性判定 |
-| `require_source` | 是否只认真正的流体源 | `true` / `false` | `true` | `false` 时流动中的流体也算 |
-
-```json
-{ "type": "itemdespawntowhat:consume_fluid", "fluid": "minecraft:water", "require_source": true }
-```
-
-配完会发生什么：每轮消耗触发位置的那一格水。被水淹没的方块（含水楼梯、含水台阶之类）只把水去掉、方块本身留着；普通流体方块则整格清空。每消耗一格都算一次真实完成，服务器当刻预算用尽时会先停下，下一刻从同一格继续消耗。
-
-### 与规则级固定成本的关系
-
-- `consume_source` 对应 `source_cost`：两者写的是同一笔源物品成本，同一条规则里只能声明一种，否则规则被拒载（避免同一份东西被记两次账）。
-- `consume_catalyst` 对应 `catalyst_cost`：同样是二选一。
-- `consume_fluid` 没有对应的规则级字段，只能写成效果。
-- 两种写法都在**开组时**发生，每组各付一次；支付不足时这一组不开、不产出，剩下的源物品最后作为返还物回到世界。
+源物品、催化剂与流体的支付由规则输入配置统一控制，字段与示例见[候选结果与结算](zh-05-outcomes-and-settlement)。结果行为页用于配置产出与世界效果。
 
 ## 关于 limit 与 radius
 
 `limit` 和 `radius` 是**效果自己的参数**，写在具体效果对象里，不是规则级字段：
 
 - `limit`：产物数量的上限，统计范围就是 `radius`。
-- `radius`：含义由效果决定——`place_block` 里是放置的搜索半径，`consume_catalyst` 里是要消耗的掉落物的搜索半径；它同时是 `limit` 的统计范围。
+- `radius`：含义由效果决定——`place_block` 里是放置的搜索半径；它同时是 `limit` 的统计范围。
 
 服务器层面还有一套「附近产物太多就不启动转化」的保护（按规则生效，与单个效果的参数无关），见[服务端配置](zh-07-server-config)。
 

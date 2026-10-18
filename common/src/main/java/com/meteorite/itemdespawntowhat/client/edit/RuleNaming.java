@@ -21,12 +21,10 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class RuleNaming {
 
-    // 命名模板键前缀
+    /** 命名模板键前缀 */
     public static final String PREFIX = TypeLabels.UI_PREFIX + "name.";
 
     // 代表项筛选时要跳过的固定成本效果
-    private static final String CONSUME_SOURCE = "consume_source";
-    private static final String CONSUME_CATALYST = "consume_catalyst";
 
     // 工具类
     private RuleNaming() {
@@ -45,12 +43,12 @@ public final class RuleNaming {
         NameSource NONE = id -> null;
     }
 
-    // 规则标题（传草稿视图）
+    /** 规则标题（传草稿视图） */
     public static Component ruleTitle(@Nullable RuleDraft draft, NameSource source) {
         return ruleTitleJson(draft == null ? null : draft.workingView(), source);
     }
 
-    // 规则标题（传动态值对象）：值对象到 JSON 的转换收敛在本包内
+    /** 规则标题（传动态值对象）：值对象到 JSON 的转换收敛在本包内 */
     public static Component ruleTitle(@Nullable RuleValue rule, NameSource source) {
         return ruleTitleJson(rule == null || !rule.isMapping() ? null : rule.unwrap().getAsJsonObject(), source);
     }
@@ -79,7 +77,7 @@ public final class RuleNaming {
         }
     }
 
-    // 源物品短摘要（传动态值对象）
+    /** 源物品短摘要（传动态值对象） */
     public static Component sourceTitle(@Nullable RuleValue rule, NameSource source) {
         return sourceTitleJson(rule == null || !rule.isMapping() ? null : rule.unwrap().getAsJsonObject(), source);
     }
@@ -98,7 +96,7 @@ public final class RuleNaming {
         return Component.translatable(PREFIX + "multi_input", first, others);
     }
 
-    // 结果短摘要（传动态值对象）
+    /** 结果短摘要（传动态值对象） */
     public static Component resultTitle(@Nullable RuleValue rule, NameSource source) {
         return resultTitleJson(rule == null || !rule.isMapping() ? null : rule.unwrap().getAsJsonObject(), source);
     }
@@ -116,7 +114,7 @@ public final class RuleNaming {
         return effectListTitleJson(effects, source);
     }
 
-    // 候选标题（传动态值对象）
+    /** 候选标题（传动态值对象） */
     public static Component candidateTitle(@Nullable RuleValue candidate, int ordinal, NameSource source) {
         return candidateTitleJson(candidate == null || !candidate.isMapping() ? null : candidate.unwrap().getAsJsonObject(), ordinal, source);
     }
@@ -130,7 +128,7 @@ public final class RuleNaming {
         return Component.translatable(PREFIX + "candidate", ordinal, body);
     }
 
-    // 效果列表摘要（传动态值对象）
+    /** 效果列表摘要（传动态值对象） */
     public static Component effectListTitle(@Nullable RuleValue effects, NameSource source) {
         return effectListTitleJson(effects == null || !effects.isList() ? null : effects.unwrap().getAsJsonArray(), source);
     }
@@ -184,9 +182,6 @@ public final class RuleNaming {
             case "arrow_rain" -> Component.translatable(PREFIX + "effect.arrow_rain");
             case "weather" -> Component.translatable(PREFIX + weatherKey(effect));
             case "explosion" -> Component.translatable(PREFIX + "effect.explosion");
-            case "consume_fluid" -> Component.translatable(PREFIX + "effect.consume_fluid");
-            case "consume_source" -> Component.translatable(PREFIX + "effect.consume_source");
-            case "consume_catalyst" -> Component.translatable(PREFIX + "effect.consume_catalyst");
             default -> TypeLabels.effectLabel(type);
         };
     }
@@ -203,7 +198,7 @@ public final class RuleNaming {
     private static JsonObject representative(List<JsonObject> effects) {
         for (JsonObject effect : effects) {
             String path = typePath(effect);
-            if (!CONSUME_SOURCE.equals(path) && !CONSUME_CATALYST.equals(path)) {
+            if (!path.isBlank()) {
                 return effect;
             }
         }

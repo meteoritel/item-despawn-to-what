@@ -9,7 +9,6 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.model.CatalystCost;
-import com.meteorite.itemdespawntowhat.core.type.effect.ConsumeSourceEffect;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -42,15 +41,14 @@ final class FormDraftWriter {
             RuleValue container = view.basePath.isEmpty() ? draft.root() : draft.valueAt(view.basePath);
             if (row.control instanceof ItemCountsControl counts) {
                 RuleValue owner = container != null && container.isMapping() ? container : RuleValue.mapping().build();
-                boolean source = RuleFields.SOURCE_COST.equals(row.field.name())
-                        || RuleValue.text(ConsumeSourceEffect.ID.toString()).equals(owner.child(RuleFields.TYPE));
+                boolean source = RuleFields.SOURCE_COST.equals(row.field.name());
                 RuleValue references = source
                         ? draft.valueAt(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS))
                         : owner.child(RuleFields.CATALYST_ITEMS);
                 List<String> ids = stringReferences(references);
-                int fallback = owner.integer(RuleFields.CATALYST_COUNT, CatalystCost.DEFAULT_COUNT);
+                int fallback = row.field.intMin(CatalystCost.DEFAULT_COUNT);
                 counts.setDefaultCount(fallback);
-                counts.setReferences(ids);
+                if (source || owner.has(RuleFields.CATALYST_ITEMS)) counts.setReferences(ids);
             }
             RuleValue effective = original == null && row.defaultValue != null ? row.defaultValue.get()
                     : original == null && container != null && container.isMapping()
@@ -181,12 +179,10 @@ final class FormDraftWriter {
         view.loadedRevision = view.session.revision();
         if (RuleFields.CATALYST_ITEMS.equals(row.field.name())) {
             // 只刷新数量行，保留其它字段尚未提交的输入。
-            RuleValue owner = view.basePath.isEmpty() ? draft.root() : draft.valueAt(view.basePath);
             for (FormRow quantity : view.rows)
                 if (quantity.control instanceof ItemCountsControl counts) {
                     counts.setReferences(stringReferences(next));
-                    int fallback = owner != null && owner.isMapping() && owner.has(RuleFields.CATALYST_COUNT)
-                            ? owner.integer(RuleFields.CATALYST_COUNT, CatalystCost.DEFAULT_COUNT) : CatalystCost.DEFAULT_COUNT;
+                    int fallback = quantity.field.intMin(CatalystCost.DEFAULT_COUNT);
                     counts.setDefaultCount(fallback);
                     counts.load(draft.valueAt(quantity.path));
                 }

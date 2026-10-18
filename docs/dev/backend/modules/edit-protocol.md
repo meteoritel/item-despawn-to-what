@@ -191,7 +191,7 @@
 
 ## 7. 新契约字段如何进入快照与校验
 
-规则契约（`display_name`、`triggers`、`source_cost`、`catalyst_cost`、`combination`、`outcomes`、`schema_version` 与条件树 `conditions`）通过两条通路进入编辑通道，无需在协议层逐个建字段：
+规则契约（`display_name`、`triggers`、`source_cost`、`catalyst_cost`、`consume_fluid`、`combination`、`outcomes`、`schema_version` 与条件树 `conditions`）通过两条通路进入编辑通道，无需在协议层逐个建字段：
 
 - **快照侧**：覆盖层规则直接下发**文件原始 JSON**，所有字段（含尚未识别的字段）原样保留；数据包/内置规则由 `RuleCodecs` 的模型编码下发，天然覆盖全部契约字段。模型解码成功时 `effective` 用编码结果（权威形态），失败退回原文。
 - **校验侧**：`RuleSubmissionValidator.validateEdit` 是跨 tick 保存逐条复用的完整校验闸门（批量入口 `validate` 也委托它）——对每条 upsert 用 `RuleCodecs.decoder(...)` 做**完整契约解码**（含条件树、新字段、候选结果与固定成本），再跑 `RuleValidation.validate`（语义）与 `RuleReferenceValidator.validate`（动态引用）。任一错误即 `issues.errors` 非空。

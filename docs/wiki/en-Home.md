@@ -33,7 +33,7 @@ To write rules as files instead, read [Getting Started](en-01-getting-started); 
 | [Getting Started](en-01-getting-started) | What the mod does, where the config files go, a minimal working rule, and the steps to make a rule take effect plus a checklist for rules that do nothing. |
 | [Rule Fields](en-02-rule-basics) | Which fields a rule can carry at the top level, what each one does, its values and defaults, and when you need to change it. |
 | [Conditions](en-03-conditions) | How to write `conditions`: the nodes of a condition tree, the parameters of the 10 condition types, and what happens when a condition is unsatisfied or unavailable. |
-| [Effects](en-04-effects) | What a rule can do once it is satisfied: the `type` value and the parameters of each of the 10 effect types, and what you see in game. |
+| [Effects](en-04-effects) | What a rule can do once it is satisfied: the `type` value and the parameters of each of the 7 effect types, and what you see in game. |
 | [Outcome Candidates and Settlement](en-05-outcomes-and-settlement) | The two ways to write `effects` and `outcomes`, round robin between products, the fixed cost and consumption of each group, and how the mod consumes items and returns the remainder. |
 | [Source Layers and Overrides](en-06-layers-and-overrides) | The priority of the three source layers, full replacement with the same `id`, disabling or deleting a built-in rule, and which rule wins when several rules share one dropped item. |
 | [Server Configuration](en-07-server-config) | What each item in `server.json` controls, its default value, and what to change when the server lags or the pace is wrong. |

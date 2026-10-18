@@ -25,7 +25,7 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * 物品数量对象的表单控件：复用数值控件的滑条、精确输入、撤销与错误校验。
- * <p>每个引用只占一行：行首是物品图标与本地化名称，随后是该物品的数量滑条与精确输入；
+ * <p>每个引用使用独立数量行；配对时门槛与消耗上下交错：行首是物品图标与本地化名称，随后是该物品的数量滑条与精确输入；
  * 图标列与名称列宽度全场统一，所有滑条从同一横坐标开始、到同一横坐标结束。
  * <p>名称超过列宽时在名称列内悬停滚动；悬停图标给出完整名称、字段名与引用注册名。
  */
@@ -55,7 +55,16 @@ final class ItemCountsControl extends FormControl {
     private final Runnable onChanged;
     private final Map<String, Entry> entries = new LinkedHashMap<>();
     private RuleValue values = RuleValue.mapping().build();
-    private int defaultCount = DEFAULT_COUNT;
+    private int defaultCount;
+    private int rowStride = 1;
+    private boolean quantityLabel;
+
+    void setPaired(boolean paired) {
+        rowStride = paired ? 2 : 1;
+        quantityLabel = paired;
+    }
+
+    int pairOffset() { return rowHeight() + ROW_GAP; }
     // 最近一次布局使用的行高：命中判定与绘制共用同一份几何
     private int lastRowHeight = ROW_HEIGHT;
     private @Nullable NumberControl pressed;
@@ -64,6 +73,7 @@ final class ItemCountsControl extends FormControl {
         super(field);
         this.font = font;
         this.onChanged = onChanged;
+        this.defaultCount = field.intMin(DEFAULT_COUNT);
     }
 
     // 一个引用对应的一行：数量控件、行首名称与图标、当前布局位置
@@ -119,7 +129,7 @@ final class ItemCountsControl extends FormControl {
     // 每行复用同规格的数值控件：初始数量 1，滑条常用窗口 1..64
     private NumberControl createControl() {
         EditorField number = EditorField.integerSlider(field.name(), field.labelKey(),
-                field.intMin(DEFAULT_COUNT), field.intMax(Integer.MAX_VALUE), DEFAULT_COUNT, INITIAL_SLIDER_MAX);
+                field.intMin(DEFAULT_COUNT), field.intMax(Integer.MAX_VALUE), field.intMin(DEFAULT_COUNT), INITIAL_SLIDER_MAX);
         NumberControl control = java.util.Objects.requireNonNull(NumberControl.create(font, number, () -> {
             markEdited();
             onChanged.run();
@@ -172,7 +182,7 @@ final class ItemCountsControl extends FormControl {
 
     @Override
     int height() {
-        return entries.isEmpty() ? 0 : entries.size() * (rowHeight() + ROW_GAP) - ROW_GAP;
+        return entries.isEmpty() ? 0 : entries.size() * (rowHeight() + ROW_GAP) * rowStride - ROW_GAP;
     }
 
     // 行高与内层数值控件一致：卡片表单为 20，其它密度随控件自身最小高度
@@ -209,7 +219,7 @@ final class ItemCountsControl extends FormControl {
             entry.nameY = rowY + Math.max(0, (rowHeight - font.lineHeight) / 2);
             entry.nameWidth = Math.max(0, labelWidth - ICON_COLUMN - ICON_GAP);
             entry.control.setBounds(contentX, rowY, contentWidth);
-            rowY += rowHeight + ROW_GAP;
+            rowY += (rowHeight + ROW_GAP) * rowStride;
         }
     }
 
@@ -220,7 +230,7 @@ final class ItemCountsControl extends FormControl {
             // 名称超宽时只有悬停才平移：起点与终点各停顿一次后往返，移开即回到起点
             boolean hovered = entry.nameHit(mouseX, mouseY, lastRowHeight);
             entry.scrollTicks = hovered ? entry.scrollTicks + 1 : 0;
-            TextScroll.draw(graphics, renderFont, entry.name.getString(), entry.nameX, entry.nameY,
+            TextScroll.draw(graphics, renderFont, quantityLabel && com.meteorite.itemdespawntowhat.core.api.RuleFields.CONSUME_COUNTS.equals(field.name()) ? label().getString() : entry.name.getString(), entry.nameX, entry.nameY,
                     entry.nameWidth, THEME.palette().textSecondary(), hovered, entry.scrollTicks, false);
             entry.control.render(graphics, renderFont, mouseX, mouseY);
         }

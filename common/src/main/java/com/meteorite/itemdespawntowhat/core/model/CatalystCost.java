@@ -9,10 +9,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 规则级催化剂固定成本：一组结算所需的催化剂物品/标签、数量与可搜索半径。
- * 字段名与取值域与 consume_catalyst 效果（{@code core/type/effect/ConsumeCatalystEffect}）完全一致：
- * items 必填非空且分别支付；counts 为各引用的 1..64 数量，未配置的引用采用 count（默认 1）。
- * radius 可选默认 1（1..8）。
+ * 规则级催化剂配置：同一组物品引用同时声明存在门槛与实际扣除量，并共享搜索半径。
+ * counts 表示门槛，consume_counts 表示实际扣除量；两者不再互相替代。
  * 本类只承载数据与编解码；引用存在性校验在 {@link RuleValidation}，
  * 容量统计、预留与支付在运行时（core/runtime）。
  * 结构上不携带 chance / conditions / delay_ticks：这些字段由 RuleCodecs 的
@@ -20,43 +18,57 @@ import java.util.Map;
  */
 public record CatalystCost(
         List<TaggedId> items,
-        int count,
         int radius,
-        Map<TaggedId, Integer> counts
+        Map<TaggedId, Integer> counts,
+        Map<TaggedId, Integer> consumeCounts
 ) {
 
-    // 数量与半径的默认值与取值区间，与 consume_catalyst 效果保持一致
+    /** 数量与半径的默认值与取值区间 */
     public static final int DEFAULT_COUNT = 1;
     public static final int MIN_COUNT = 1;
+    public static final int MIN_CONSUME_COUNT = 0;
     public static final int MAX_COUNT = 64;
     public static final int DEFAULT_RADIUS = 1;
     public static final int MIN_RADIUS = 1;
     public static final int MAX_RADIUS = 8;
 
-    // 紧凑构造器：列表做防御性拷贝，保持记录不可变（codec 层不产出 null）
+    /** 紧凑构造器：列表做防御性拷贝，保持记录不可变（codec 层不产出 null） */
     public CatalystCost {
         items = items == null ? List.of() : List.copyOf(items);
         counts = Map.copyOf(counts);
+        consumeCounts = Map.copyOf(consumeCounts);
     }
 
-    // 单个引用应支付的数量：counts 未配置该引用时取规则级 count
+    /** 单个引用的存在门槛；未配置时按 1 件处理。 */
     public int countFor(TaggedId item) {
-        return counts.getOrDefault(item, count);
+        return counts.getOrDefault(item, DEFAULT_COUNT);
     }
 
-    // 全部引用（按引用去重后）的数量合计
-    public int totalCount() {
-        return items.stream().distinct().mapToInt(this::countFor).sum();
+    /** 单个引用的实际扣除量；未配置时为 0，表示只检测、不消耗。 */
+    public int consumeCountFor(TaggedId item) {
+        return consumeCounts.getOrDefault(item, 0);
     }
 
-    // 对象编解码：items 必填（缺失由解码报错、空列表由 RuleValidation 报错），count / radius 缺省省略不写
+    /** 全部引用（按引用去重后）的实际扣除数量合计。 */
+    public int totalConsumeCount() {
+        return items.stream().distinct().mapToInt(this::consumeCountFor).sum();
+    }
+
+    /** 将门槛数量投影为一次性支付配置，用于启动前的最低库存检查，不改变原声明。 */
+    public CatalystCost thresholdPaymentProfile() {
+        var thresholds = new java.util.LinkedHashMap<TaggedId, Integer>();
+        items.forEach(item -> thresholds.put(item, countFor(item)));
+        return new CatalystCost(items, radius, thresholds, thresholds);
+    }
+
+    /** 对象编解码：items 必填；门槛缺省为 1，消耗缺省为 0，半径缺省为 1。 */
     public static final Codec<CatalystCost> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             TaggedId.CODEC.listOf().fieldOf(RuleFields.CATALYST_ITEMS).forGetter(CatalystCost::items),
-            Codec.intRange(MIN_COUNT, MAX_COUNT).optionalFieldOf(RuleFields.CATALYST_COUNT, DEFAULT_COUNT)
-                    .forGetter(CatalystCost::count),
             Codec.intRange(MIN_RADIUS, MAX_RADIUS).optionalFieldOf(RuleFields.CATALYST_RADIUS, DEFAULT_RADIUS)
                     .forGetter(CatalystCost::radius),
             Codec.unboundedMap(TaggedId.CODEC, Codec.intRange(MIN_COUNT, MAX_COUNT))
-                    .optionalFieldOf(RuleFields.ITEM_COUNTS, Map.of()).forGetter(CatalystCost::counts)
+                    .optionalFieldOf(RuleFields.ITEM_COUNTS, Map.of()).forGetter(CatalystCost::counts),
+            Codec.unboundedMap(TaggedId.CODEC, Codec.intRange(MIN_CONSUME_COUNT, MAX_COUNT))
+                    .optionalFieldOf(RuleFields.CONSUME_COUNTS, Map.of()).forGetter(CatalystCost::consumeCounts)
     ).apply(instance, CatalystCost::new));
 }

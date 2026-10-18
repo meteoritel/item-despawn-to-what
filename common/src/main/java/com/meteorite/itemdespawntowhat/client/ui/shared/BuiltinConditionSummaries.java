@@ -41,7 +41,6 @@ public final class BuiltinConditionSummaries {
     private static final String SIDE_ENTRY_KEY = COND + "surrounding_blocks.entry";
     private static final String CATALYST_ENTRY_KEY = COND + "catalyst_present.entry";
     private static final String FLUID_ANY_KEY = COND + "fluid_present.any";
-    private static final String FLUID_SOURCE_KEY = COND + "fluid_present.source";
     private static final String TIME_KEY = COND + "time_of_day";
     private static final String TIME_CROSSING_KEY = COND + "time_of_day.crossing";
     private static final String Y_ANY_KEY = COND + "y_level.any";
@@ -54,7 +53,6 @@ public final class BuiltinConditionSummaries {
     private static final String FIELD_WEATHER = "weather";
     private static final String FIELD_ITEMS = "items";
     private static final String FIELD_COUNT = "count";
-    private static final String FIELD_REQUIRE_SOURCE = "require_source";
     private static final String FIELD_FROM = "from";
     private static final String FIELD_TO = "to";
     private static final String FIELD_MIN = "min";
@@ -67,7 +65,6 @@ public final class BuiltinConditionSummaries {
 
     // ---- 业务默认值 ----
     private static final String MODE_CLIMATE = "climate";
-    private static final boolean DEFAULT_REQUIRE_SOURCE = true;
 
     // ---- 时间换算（与编辑器时间滑条同规则） ----
     private static final int TICKS_PER_DAY = 24000;
@@ -230,11 +227,6 @@ public final class BuiltinConditionSummaries {
             }
         }
         parts.add(references == null ? Component.translatable(FLUID_ANY_KEY) : references);
-        Component source = SummaryFormats.flag(
-                condition.flag(FIELD_REQUIRE_SOURCE, DEFAULT_REQUIRE_SOURCE), FLUID_SOURCE_KEY);
-        if (source != null) {
-            parts.add(source);
-        }
         return SummaryFormats.join(parts);
     }
 

@@ -138,8 +138,6 @@
 - 跨层 import（`client/edit` → `client/ui/kit`）：`ConditionTreeJsonCodec.java` import `UiTreeCodec`；`ConditionTreeNodes.java` import `UiTreeEditor`、`UiTreePath`（2 个文件，3 处）。`package-info.java` 只声明「网络收发由 client/net 负责，界面由 client/ui 负责」，未列出这两条跨层依赖。
 - 同概念多命名（条件树 / 条件图）：本包使用 `ConditionTreeNodes`、`ConditionTreeJsonCodec`、`ConditionTreeClipboard`、`ConditionDraftCodec`；基础组件层对应控件名为 `UiConditionGraphEditor`。
 - 同值常量重复定义：`EditorChangeSet#OWN_NAMESPACE`（`itemdespawntowhat`）与 `TypeLabels#OWN_NAMESPACE` 各定义一份。
-- 效果类型字符串分散维护：`RuleRequirements` 以内联字符串定义 `itemdespawntowhat:consume_source` 等消耗类型并在分支中内联其余类型名；`RuleNaming` 用私有常量 `CONSUME_SOURCE`/`CONSUME_CATALYST`。
-- 边界：`RuleRequirements#inspect` 的「是否存在产出」以 `!actions.isEmpty()` 初始化；列表仅含消耗类效果时该方法仍返回 `true`，`RuleRequirements#find` 因此不追加 `required.results`。
 - 缺 JavaDoc 的公开嵌套类型：`RuleValue.Kind`、`ConditionTreeClipboard.ReadResult`；两者的含义只由行注释或类型名表达。
 - 注释风格不一致：`EditSession`、`RuleDraft`、`RuleValue` 的公开成员使用 `//` 行注释；`DraftPaths`、`FieldNumbers` 的公开方法带 JavaDoc 与 `@param`/`@return`。
 - 同一包内对 `TypeRegistry` 的引用方式不一致：`ClientTypeRegistries` 未 import 该类型，方法签名中写全限定名 `com.meteorite.itemdespawntowhat.core.api.TypeRegistry<...>`；其余类 import `TypeRegistry` 后使用短名。

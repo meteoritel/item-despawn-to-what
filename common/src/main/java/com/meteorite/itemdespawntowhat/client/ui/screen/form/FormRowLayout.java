@@ -99,6 +99,9 @@ final class FormRowLayout {
         int visibleRows = 0;
         for (FormRow row : rows) {
             if (!row.visible) continue;
+            if (row.pairedAbove != null && row.pairedAbove.visible) continue;
+            if (row.control instanceof ItemCountsControl counts) counts.setPaired(
+                    row.pairedBelow != null && row.pairedBelow.visible);
             visibleRows++;
             boolean showLabel = row.labelVisible && (minimumControlHeight == 0 || row.control.usesLabelColumn());
             row.narrow = narrow && showLabel;
@@ -138,6 +141,20 @@ final class FormRowLayout {
                 }
             }
             row.contentY = cursor;
+            if (row.pairedBelow != null && row.pairedBelow.visible
+                    && row.control instanceof ItemCountsControl upper
+                    && row.pairedBelow.control instanceof ItemCountsControl lower) {
+                FormRow paired = row.pairedBelow;
+                lower.setPaired(true);
+                paired.contentY = row.contentY;
+                paired.contentHeight = row.contentHeight;
+                paired.controlRelX = row.controlRelX;
+                paired.controlRelY = row.controlRelY + upper.pairOffset();
+                paired.controlWidth = row.controlWidth;
+                paired.labelWidth = 0;
+                paired.narrow = false;
+                paired.labelVisible = false;
+            }
             cursor += row.contentHeight + rowGap;
         }
         return Math.max(0, cursor - (visibleRows == 0 ? 0 : rowGap));

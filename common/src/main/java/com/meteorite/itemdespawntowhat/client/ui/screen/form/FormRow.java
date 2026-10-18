@@ -17,6 +17,8 @@ import org.jetbrains.annotations.Nullable;
  * 渲染与命中再读同一份结果。按钮列表在装配变化时合并一次，避免每帧测量与同步坐标分配临时列表。</p>
  */
 final class FormRow {
+    @org.jetbrains.annotations.Nullable FormRow pairedBelow;
+    @org.jetbrains.annotations.Nullable FormRow pairedAbove;
     boolean loaded;
     boolean wasEditing;
     List<String> loadedInputs = List.of();

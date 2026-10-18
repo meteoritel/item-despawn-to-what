@@ -3,7 +3,7 @@
     "id": "itemdespawntowhat:builtin_catalyst_and_fluid",
     "enabled": true,
     "display_name": "水与骨粉 / Water and Bone Meal",
-    "notes": "内置示例：同一条 all_of 内同时需要流动水条件与催化剂条件；require_source=false 允许流动水。",
+    "notes": "内置示例：水流或水源均满足流体条件；骨粉门槛与每轮实际消耗分别配置，共享检测半径。",
     "source": {
       "items": [
         "minecraft:redstone"
@@ -16,8 +16,7 @@
           "op": "leaf",
           "condition": {
             "type": "itemdespawntowhat:fluid_present",
-            "fluid": "minecraft:water",
-            "require_source": false
+            "fluid": "minecraft:water"
           }
         },
         {
@@ -44,16 +43,20 @@
         "item": "minecraft:glowstone_dust",
         "count": 1,
         "variant": "item"
-      },
-      {
-        "type": "itemdespawntowhat:consume_catalyst",
-        "items": [
-          "minecraft:bone_meal"
-        ],
-        "count": 1,
-        "radius": 1
       }
-    ]
+    ],
+    "catalyst_cost": {
+      "items": [
+        "minecraft:bone_meal"
+      ],
+      "counts": {
+        "minecraft:bone_meal": 1
+      },
+      "consume_counts": {
+        "minecraft:bone_meal": 1
+      },
+      "radius": 1
+    }
   },
   {
     "id": "itemdespawntowhat:builtin_biome_or_time",
@@ -92,7 +95,9 @@
     "triggers": [
       "natural"
     ],
-    "source_cost": {"minecraft:apple": 1},
+    "source_cost": {
+      "minecraft:apple": 1
+    },
     "combination": "round_robin",
     "schema_version": 1,
     "effects": [

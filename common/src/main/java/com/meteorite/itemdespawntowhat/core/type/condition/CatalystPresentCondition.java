@@ -24,29 +24,34 @@ import java.util.Optional;
  * 条件类型 catalyst_present：判断掉落物附近是否存在指定的催化剂物品。
  * 参数 items 为分别必需的物品引用（item id 或 #tag，至少一项）；counts 按引用配置门槛（1..64）。
  * 未配置的引用采用显式 count，count **允许留空**：
- * 留空表示门槛跟随同作用域的催化剂消耗量（规则级 catalyst_cost，或效果级 consume_catalyst），
+ * 留空表示采用规则级 catalyst_cost.counts 的门槛，
  * 由 core/runtime/CatalystThresholdProjection 在构建规则索引时解析成有效值；
- * 找不到可匹配的消耗配置时按 DEFAULT_COUNT（1）处理。
+ * 找不到可匹配的门槛配置时按 DEFAULT_COUNT（1）处理。
  * 留空状态会被解码与编码原样保留，投影只影响运行期有效值，不反写用户声明。
- * 附近扫描范围见 CatalystPresentEvaluator：物品所在方块格的 1×1×1 范围，排除源物品自身与已死亡实体。
+ * 附近扫描范围见 CatalystPresentEvaluator：规则共享 radius 范围，排除源物品自身与已死亡实体。
  * JSON 示例：{ "type": "itemdespawntowhat:catalyst_present", "items": ["minecraft:blaze_powder"] }
  */
 public record CatalystPresentCondition(List<TaggedId> items, @Nullable Integer count,
-                                      Map<TaggedId, Integer> counts) implements Condition {
+                                      Map<TaggedId, Integer> counts, int radius) implements Condition {
 
-    // 类型 id，同时是 JSON 中 type 字段的取值
+    /** 创建采用默认规则半径的声明；运行投影统一填入所属规则半径。 */
+    public CatalystPresentCondition(List<TaggedId> items, @Nullable Integer count, Map<TaggedId, Integer> counts) {
+        this(items, count, counts, com.meteorite.itemdespawntowhat.core.model.CatalystCost.DEFAULT_RADIUS);
+    }
+
+    /** 类型 id，同时是 JSON 中 type 字段的取值 */
     public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("itemdespawntowhat", "catalyst_present");
 
     // 参数 JSON 字段名
     private static final String FIELD_ITEMS = "items";
     private static final String FIELD_COUNT = "count";
 
-    // 数量取值域；DEFAULT_COUNT 是「门槛留空且无匹配消耗配置」时的兜底值，不是解码默认值
+    // 数量取值域；DEFAULT_COUNT 是「门槛留空且无匹配规则配置」时的兜底值，不是解码默认值
     private static final int MIN_COUNT = 1;
     private static final int MAX_COUNT = 64;
     public static final int DEFAULT_COUNT = 1;
 
-    // 参数编解码器：items 缺省为空（由 validateParams 拒绝）；count 缺失即 null，编码时同样省略该字段
+    /** 参数编解码器：items 缺省为空（由 validateParams 拒绝）；count 缺失即 null，编码时同样省略该字段 */
     public static final MapCodec<CatalystPresentCondition> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
             TaggedId.CODEC.listOf().optionalFieldOf(FIELD_ITEMS, List.of()).forGetter(CatalystPresentCondition::items),
             Codec.INT.optionalFieldOf(FIELD_COUNT).forGetter(condition -> Optional.ofNullable(condition.count())),
@@ -54,13 +59,13 @@ public record CatalystPresentCondition(List<TaggedId> items, @Nullable Integer c
                     .optionalFieldOf(RuleFields.ITEM_COUNTS, Map.of()).forGetter(CatalystPresentCondition::counts)
     ).apply(instance, (items, count, counts) -> new CatalystPresentCondition(items, count.orElse(null), counts)));
 
-    // 参数列表不可变
+    /** 参数列表不可变 */
     public CatalystPresentCondition {
         items = List.copyOf(items);
         counts = Map.copyOf(counts);
     }
 
-    // 单个催化剂的判定门槛：counts 未配置该引用时退回 count，count 留空则取 DEFAULT_COUNT
+    /** 单个催化剂的判定门槛：counts 未配置该引用时退回 count，count 留空则取 DEFAULT_COUNT */
     public int countFor(TaggedId item) {
         return counts.getOrDefault(item, count == null ? DEFAULT_COUNT : count);
     }
@@ -71,12 +76,16 @@ public record CatalystPresentCondition(List<TaggedId> items, @Nullable Integer c
         return ID;
     }
 
-    // 条件类型定义，供注册表登记；静态工厂不能叫 type()（与 Condition#type 实例方法签名冲突）
+    /** 条件类型定义，供注册表登记；静态工厂不能叫 type()（与 Condition#type 实例方法签名冲突） */
     public static ConditionType<CatalystPresentCondition> conditionType() {
-        return new SimpleConditionType<>(ID, CODEC, CatalystPresentCondition::validateParams, CatalystPresentEvaluator::test);
+        return new SimpleConditionType<>(ID, CODEC, CatalystPresentCondition::validateParams, CatalystPresentEvaluator::test,
+                (condition, context) -> com.meteorite.itemdespawntowhat.core.api.ChunkPresence.containsArea(
+                        context.level(), context.pos(), condition.radius())
+                        ? com.meteorite.itemdespawntowhat.core.api.Evaluability.AVAILABLE
+                        : com.meteorite.itemdespawntowhat.core.api.Evaluability.UNAVAILABLE);
     }
 
-    // 参数语义校验：items 必填且逐项做注册表存在性校验；count 留空合法，填写时需落在 [1,64]
+    /** 参数语义校验：items 必填且逐项做注册表存在性校验；count 留空合法，填写时需落在 [1,64] */
     public static boolean validateParams(CatalystPresentCondition params, IssueCollector issues, String fieldPath) {
         boolean valid = ParamChecks.notEmpty(params.items(), FIELD_ITEMS, issues,
                 ParamChecks.child(fieldPath, FIELD_ITEMS));

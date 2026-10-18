@@ -59,7 +59,7 @@ public final class CatalystAllocation {
         sink = 1 + references.size() + items.size();
         previous = new Edge[sink + 1];
         parents = new int[sink + 1];
-        high = Math.min(maximumGroups, Integer.MAX_VALUE / Math.max(1, cost.totalCount()));
+        high = Math.min(maximumGroups, Integer.MAX_VALUE / Math.max(1, references.stream().mapToInt(item -> Math.max(cost.countFor(item), cost.consumeCountFor(item))).sum()));
         resetAttempt();
     }
 
@@ -86,7 +86,7 @@ public final class CatalystAllocation {
         for (int group = 0; group < count; group++) {
             Map<Integer, Integer> payment = new LinkedHashMap<>();
             for (int reference = 0; reference < references.size(); reference++) {
-                int needed = cost.countFor(references.get(reference));
+                int needed = cost.consumeCountFor(references.get(reference));
                 for (var pick : remaining.get(reference).entrySet()) {
                     int take = Math.min(needed, pick.getValue());
                     if (take > 0) payment.merge(pick.getKey(), take, Integer::sum);
@@ -103,11 +103,11 @@ public final class CatalystAllocation {
         return result;
     }
 
-    // 效果式消耗按预算整理合并付款清单，预算不足时保留游标，不能被解释为库存不足。
-    List<CatalystReservations.Hold> totalPayment(int rounds, ServerTickBudget budget) {
+    // 按预算整理单轮门槛验证清单，预算不足时保留游标。
+    List<CatalystReservations.Hold> thresholdPlan(ServerTickBudget budget) {
         while (paymentReference < references.size()) {
             if (paymentPicks == null) {
-                paymentNeeded = cost.countFor(references.get(paymentReference)) * rounds;
+                paymentNeeded = cost.consumeCountFor(references.get(paymentReference));
                 paymentPicks = best.get(paymentReference).entrySet().iterator();
             }
             while (paymentNeeded > 0 && paymentPicks.hasNext()) {
@@ -134,6 +134,11 @@ public final class CatalystAllocation {
         return List.copyOf(paymentOutput);
     }
 
+    private int demandFor(TaggedId reference) {
+        int consume = cost.consumeCountFor(reference);
+        return Math.max(cost.countFor(reference), consume) + (attempt - 1) * consume;
+    }
+
     private void resetAttempt() {
         attempt = low + (high - low + 1) / 2;
         graph.clear();
@@ -152,7 +157,7 @@ public final class CatalystAllocation {
             if (referenceCursor < references.size()) {
                 TaggedId reference = references.get(referenceCursor);
                 int node = 1 + referenceCursor;
-                int demand = cost.countFor(reference) * attempt;
+                int demand = demandFor(reference);
                 if (itemCursor == 0) edge(SOURCE, node, demand);
                 if (itemCursor < items.size()) {
                     if (referenceMatches.get(referenceCursor).matches(stacks.get(itemCursor))) {
@@ -211,7 +216,7 @@ public final class CatalystAllocation {
         }
         flow += amount;
         searching = false;
-        if (flow == cost.totalCount() * attempt) finishAttempt(true);
+        if (flow == references.stream().mapToInt(this::demandFor).sum()) finishAttempt(true);
     }
 
     private void finishAttempt(boolean complete) {

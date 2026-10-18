@@ -13,7 +13,6 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -32,7 +31,7 @@ public final class RuleValidation {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    // 校验单条规则（结构维度）；origin 用于问题定位（文件路径或数据包标识）
+    /** 校验单条规则（结构维度）；origin 用于问题定位（文件路径或数据包标识） */
     public static boolean validate(Rule rule, IssueCollector issues, @Nullable String origin) {
         int before = issues.errors().size();
 
@@ -58,7 +57,7 @@ public final class RuleValidation {
                     + "（当前支持 " + RuleCodecs.DEFAULT_SCHEMA_VERSION + "）", origin, RuleFields.SCHEMA_VERSION);
         }
         // 固定成本契约：source_cost 按已选引用配置正整数；catalyst_cost 必须是合法对象
-        // （items 非空且引用存在、count 1..64、radius 1..8）；两者与同名消耗效果互斥，避免重复记账
+        // 催化剂门槛为 1..64、实际消耗为 0..64，全部引用共享 radius 1..8。
         if (rule.sourceCost() != null) {
             for (var amount : rule.sourceCost().counts().entrySet()) {
                 if (amount.getValue() <= 0 || rule.source().entries().stream()
@@ -69,12 +68,6 @@ public final class RuleValidation {
         }
         if (rule.catalystCost() != null) {
             validateCatalystCost(rule.catalystCost(), issues);
-        }
-        if (rule.sourceCost() != null && rule.declaresSourceConsumption()) {
-            issues.error("source_cost 与 consume_source 效果不能同时声明（避免重复记账）", origin, RuleFields.SOURCE_COST);
-        }
-        if (rule.catalystCost() != null && rule.declaresConsumption(ConsumptionDefaults.CONSUME_CATALYST_ID)) {
-            issues.error("catalyst_cost 与 consume_catalyst 效果不能同时声明（避免重复记账）", origin, RuleFields.CATALYST_COST);
         }
         if (rule.displayName() != null
                 && rule.displayName().codePointCount(0, rule.displayName().length()) > ConditionLimits.MAX_DISPLAY_NAME_CODEPOINTS) {
@@ -102,21 +95,12 @@ public final class RuleValidation {
         validateSourceEntries(rule.source(), issues, origin);
         for (EffectSlot slot : slots) {
             validateEffect(slot.effect(), slot.path(), issues, origin);
-            if (slot.effect() instanceof com.meteorite.itemdespawntowhat.core.type.effect.ConsumeSourceEffect consume) {
-                for (TaggedId reference : consume.counts().keySet()) {
-                    if (rule.source().entries().stream().noneMatch(entry -> entry.toTagged().equals(reference))) {
-                        issues.error("数量配置引用了未选择的源物品: " + reference.serialized(), origin,
-                                slot.path() + "." + RuleFields.ITEM_COUNTS);
-                    }
-                }
-            }
         }
         validateOutcomes(rule, issues, origin);
-        validateConsumptionEffects(slots, issues, origin);
         return issues.errors().size() == before;
     }
 
-    // 校验单条规则（结构 + 类型专属参数）；参数非法同样按「该条拒载」处理
+    /** 校验单条规则（结构 + 类型专属参数）；参数非法同样按「该条拒载」处理 */
     public static boolean validate(Rule rule,
                                    TypeRegistry<EffectType<?>> effectTypes,
                                    TypeRegistry<ConditionType<?>> conditionTypes,
@@ -190,24 +174,6 @@ public final class RuleValidation {
         }
     }
 
-    // 消耗类效果重复检测：同一规则内同一消耗效果类型只允许出现一次（跨候选与顶层合并计数）
-    private static void validateConsumptionEffects(List<EffectSlot> slots, IssueCollector issues, @Nullable String origin) {
-        Map<ResourceLocation, Integer> counts = new HashMap<>();
-        Map<ResourceLocation, String> firstPath = new HashMap<>();
-        for (EffectSlot slot : slots) {
-            Effect effect = slot.effect();
-            if (ConsumptionDefaults.isConsumption(effect.type())) {
-                counts.merge(effect.type(), 1, Integer::sum);
-                firstPath.putIfAbsent(effect.type(), slot.path());
-            }
-        }
-        counts.forEach((type, count) -> {
-            if (count > 1) {
-                issues.error("同一规则内重复声明消耗效果 " + type + " 共 " + count + " 次", origin, firstPath.get(type));
-            }
-        });
-    }
-
     // 效果槽位：把顶层 effects 与候选结果内 effects 统一成「路径 + 效果」，供所有校验遍历
     private record EffectSlot(String path, Effect effect) {
     }
@@ -275,22 +241,32 @@ public final class RuleValidation {
     }
 
     // 规则级催化剂固定成本校验：items 必填非空且逐个引用存在（复用效果侧 RefChecks 语义，
-    // 非标签引用未注册即 ERROR、标签缺失只 WARN），count / radius 取值域与 consume_catalyst 一致。
+    // 非标签引用未注册即 ERROR、标签缺失只 WARN），门槛与消耗量为 1..64、共享 radius 为 1..8。
     // 说明：这里复用 ParamChecks / RefChecks，问题条目的 origin 为 null（与效果参数校验一致）。
     private static void validateCatalystCost(CatalystCost cost, IssueCollector issues) {
         String itemsPath = ParamChecks.child(RuleFields.CATALYST_COST, RuleFields.CATALYST_ITEMS);
         ParamChecks.notEmpty(cost.items(), RuleFields.CATALYST_ITEMS, issues, itemsPath);
         RefChecks.checkAll(cost.items(), BuiltInRegistries.ITEM, RuleFields.CATALYST_ITEMS, issues, itemsPath);
-        for (TaggedId item : cost.counts().keySet()) {
+        for (var entry : cost.counts().entrySet()) {
+            TaggedId item = entry.getKey();
+            ParamChecks.inRange(entry.getValue(), CatalystCost.MIN_COUNT, CatalystCost.MAX_COUNT, RuleFields.ITEM_COUNTS,
+                    issues, ParamChecks.child(RuleFields.CATALYST_COST, RuleFields.ITEM_COUNTS));
             if (!cost.items().contains(item)) {
                 issues.error("数量配置引用了未选择的催化剂: " + item.serialized(), null,
                         ParamChecks.child(RuleFields.CATALYST_COST, RuleFields.ITEM_COUNTS));
             }
         }
-        ParamChecks.inRange(cost.count(), CatalystCost.MIN_COUNT, CatalystCost.MAX_COUNT, RuleFields.CATALYST_COUNT,
-                issues, ParamChecks.child(RuleFields.CATALYST_COST, RuleFields.CATALYST_COUNT));
         ParamChecks.inRange(cost.radius(), CatalystCost.MIN_RADIUS, CatalystCost.MAX_RADIUS,
                 RuleFields.CATALYST_RADIUS, issues, ParamChecks.child(RuleFields.CATALYST_COST, RuleFields.CATALYST_RADIUS));
+        for (Map.Entry<TaggedId, Integer> entry : cost.consumeCounts().entrySet()) {
+            if (!cost.items().contains(entry.getKey())) {
+                issues.error("实际消耗数量引用了未选择的催化剂: " + entry.getKey().serialized(), null,
+                        ParamChecks.child(RuleFields.CATALYST_COST, RuleFields.CONSUME_COUNTS));
+            }
+            ParamChecks.inRange(entry.getValue(), CatalystCost.MIN_CONSUME_COUNT, CatalystCost.MAX_COUNT,
+                    RuleFields.CONSUME_COUNTS, issues,
+                    ParamChecks.child(RuleFields.CATALYST_COST, RuleFields.CONSUME_COUNTS));
+        }
     }
 
     // 效果通用字段校验；类型专属参数由注册表感知入口负责
@@ -319,12 +295,12 @@ public final class RuleValidation {
         }
     }
 
-    // 便捷入口：无来源信息的结构校验
+    /** 便捷入口：无来源信息的结构校验 */
     public static boolean validate(Rule rule, IssueCollector issues) {
         return validate(rule, issues, null);
     }
 
-    // 源匹配项数量上限的提示性校验，避免单条规则展开出过多标签
+    /** 源匹配项数量上限的提示性校验，避免单条规则展开出过多标签 */
     public static void warnLargeSource(Rule rule, int threshold, IssueCollector issues, @Nullable String origin) {
         if (rule.source().entries().size() > threshold) {
             issues.warn("source.items 条目数 " + rule.source().entries().size() + " 超过建议上限 " + threshold,
@@ -332,13 +308,13 @@ public final class RuleValidation {
         }
     }
 
-    // 供命令与日志输出使用的规则可读摘要
+    /** 供命令与日志输出使用的规则可读摘要 */
     public static String describe(Rule rule) {
         return rule.id() + " [priority=" + rule.priority() + ", leaves=" + rule.complexity()
                 + ", effects=" + rule.effects().size() + ", trigger=" + rule.triggerAfterSeconds() + "s]";
     }
 
-    // 判定规则是否属于指定物品（不含标签展开，由运行时调用）
+    /** 判定规则是否属于指定物品（不含标签展开，由运行时调用） */
     public static boolean matchesDirect(Rule rule, ResourceLocation itemId) {
         return rule.source().matches(itemId, tagId -> Set.of());
     }

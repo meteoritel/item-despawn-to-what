@@ -7,35 +7,31 @@ import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.OutcomeCandidate;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.type.condition.CatalystPresentCondition;
-import com.meteorite.itemdespawntowhat.core.type.effect.ConsumeCatalystEffect;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 
 /**
- * 催化剂门槛投影：在规则索引构建时补齐 counts / count 均未声明的引用数量。
- * 显式门槛不改写；缺省数量优先采用同作用域成本，其次全规则唯一匹配成本，否则为 1。
- * 规则级成本按引用匹配，效果级及跨作用域成本按 items 集合匹配；数量使用 countFor。
- * 投影只重建受影响的运行期对象，保存仍保持原声明；编辑器按相同函数展示缺省数量。
+ * 将条件叶未声明的门槛投影为规则 catalyst_cost 对应引用的门槛，缺省为 1。
+ * 全部催化剂条件共享规则半径；运行期对象重建不反写保存声明。
  */
 public final class CatalystThresholdProjection {
 
-    // 没有任何可匹配消耗配置时的兜底门槛，与 CatalystPresentCondition 的默认值同源
+    // 没有任何可匹配门槛配置时的兜底门槛，与 CatalystPresentCondition 的默认值同源
     private static final int FALLBACK_THRESHOLD = CatalystPresentCondition.DEFAULT_COUNT;
 
     private CatalystThresholdProjection() {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    // 投影整条规则：规则级条件与全部效果级条件（含候选结果内效果）里的留空门槛都被解析成有效值
+    /** 补齐整条规则的条件门槛与共享半径，仅重建受影响的运行期对象。 */
     public static Rule project(Rule rule) {
-        if (!hasUnfilledThreshold(rule)) {
+        if (rule.catalystCost() == null && !hasUnfilledThreshold(rule)) {
             // 快速路径：没有任何留空门槛时不重建任何对象
             return rule;
         }
-        ConditionExpression conditions = projectExpression(rule.conditions(), rule, null);
+        ConditionExpression conditions = projectExpression(rule.conditions(), rule);
         List<Effect> effects = projectEffects(rule.effects(), rule);
         List<OutcomeCandidate> outcomes = projectOutcomes(rule.outcomes(), rule);
         if (conditions == rule.conditions() && effects == rule.effects() && outcomes == rule.outcomes()) {
@@ -44,68 +40,18 @@ public final class CatalystThresholdProjection {
         // 只替换条件树与效果列表，其余字段（id/优先级/成本/组合模式等）原样保留，排序键不受影响
         return new Rule(rule.id(), rule.enabled(), rule.priority(), rule.displayName(), rule.notes(), rule.source(),
                 conditions, rule.triggerAfterSeconds(), effects, rule.triggers(), rule.sourceCost(),
-                rule.catalystCost(), rule.combination(), outcomes, rule.schemaVersion());
+                rule.catalystCost(), rule.consumeFluid(), rule.combination(), outcomes, rule.schemaVersion());
     }
 
     /**
-     * 解析一个留空门槛的有效数量：先看同作用域消耗配置，再看整条规则范围内是否恰好只有一个 items 相同的配置。
-     * 纯函数、无副作用，运行期投影与编辑器「默认：N」提示共用同一份判定。
-     *
-     * @param rule        门槛所在规则（提供 catalyst_cost 与全部效果）
-     * @param items       条件叶声明的候选物品引用（item id 或 #tag）
-     * @param scopeEffect 承载该条件叶的效果；null 表示条件叶位于规则级条件中
-     * @return 有效门槛，找不到唯一可匹配的消耗配置时返回 DEFAULT_COUNT
+     * 解析单个引用的默认门槛；实际消耗量不参与门槛计算。
+     * @param rule 条件所在规则
+     * @param reference 催化剂引用
+     * @return 规则门槛，未声明该引用时为 1
      */
-    public static int resolveThreshold(Rule rule, List<TaggedId> items, @Nullable Effect scopeEffect) {
-        return items.isEmpty() ? FALLBACK_THRESHOLD : resolveThreshold(rule, items, scopeEffect, items.getFirst());
-    }
-
-    // 按单个引用解析门槛：同作用域成本优先，其次全规则唯一匹配成本，否则退回 DEFAULT_COUNT；编辑器「默认：N」提示与此处共用同一判定
-    public static int resolveThreshold(Rule rule, List<TaggedId> items, @Nullable Effect scopeEffect, TaggedId reference) {
-        // 同作用域优先：效果级条件跟随所在效果自身的消耗量
-        if (scopeEffect instanceof ConsumeCatalystEffect consume && sameItems(items, consume.items())) {
-            return positive(consume.countFor(reference));
-        }
-        // 规则级条件跟随规则级 catalyst_cost
-        if (scopeEffect == null && rule.catalystCost() != null && rule.catalystCost().items().contains(reference)) {
-            return positive(rule.catalystCost().countFor(reference));
-        }
-        // 同作用域无匹配：全规则范围内恰好只有一个 items 相同的消耗配置才敢沿用它的数量；
-        // 多个不同对象或不同作用域的消耗配置不得互相覆盖，此时退回默认值
-        int matched = 0;
-        int resolved = FALLBACK_THRESHOLD;
-        if (rule.catalystCost() != null && sameItems(items, rule.catalystCost().items())) {
-            matched++;
-            resolved = positive(rule.catalystCost().countFor(reference));
-        }
-        for (Effect effect : rule.effects()) {
-            if (effect instanceof ConsumeCatalystEffect consume && sameItems(items, consume.items())) {
-                matched++;
-                resolved = positive(consume.countFor(reference));
-            }
-        }
-        for (OutcomeCandidate outcome : rule.outcomes()) {
-            for (Effect effect : outcome.effects()) {
-                if (effect instanceof ConsumeCatalystEffect consume && sameItems(items, consume.items())) {
-                    matched++;
-                    resolved = positive(consume.countFor(reference));
-                }
-            }
-        }
-        return matched == 1 ? resolved : FALLBACK_THRESHOLD;
-    }
-
-    // items 集合语义比较（顺序无关）；两侧都必须非空，空列表不是合法的催化剂引用
-    private static boolean sameItems(@Nullable List<TaggedId> left, @Nullable List<TaggedId> right) {
-        if (left == null || right == null || left.isEmpty() || right.isEmpty()) {
-            return false;
-        }
-        return new HashSet<>(left).equals(new HashSet<>(right));
-    }
-
-    // 消耗配置的数量越界由校验层拒载；这里只保证不把 0 / 负数当成有效门槛（会让求值器 fail-closed）
-    private static int positive(int count) {
-        return count > 0 ? count : FALLBACK_THRESHOLD;
+    public static int resolveThreshold(Rule rule, TaggedId reference) {
+        return rule.catalystCost() != null && rule.catalystCost().items().contains(reference)
+                ? rule.catalystCost().countFor(reference) : FALLBACK_THRESHOLD;
     }
 
     // 快速判定：整条规则是否存在留空门槛（不存在时投影无任何分配）
@@ -136,8 +82,8 @@ public final class CatalystThresholdProjection {
     // 条件节点内是否存在留空门槛
     private static boolean containsUnfilledThreshold(@Nullable ConditionNode node) {
         if (node instanceof ConditionNode.Leaf(var condition)) {
-            return condition instanceof CatalystPresentCondition(var items, var count, var counts) && count == null
-                    && items.stream().anyMatch(item -> !counts.containsKey(item));
+            return condition instanceof CatalystPresentCondition leaf && leaf.count() == null
+                    && leaf.items().stream().anyMatch(item -> !leaf.counts().containsKey(item));
         }
         if (node instanceof ConditionNode.Inverted(var term)) {
             return containsUnfilledThreshold(term);
@@ -163,50 +109,49 @@ public final class CatalystThresholdProjection {
 
     // 重建条件表达式：无变化时返回原实例；效果级条件为 null 时保持 null
     private static @Nullable ConditionExpression projectExpression(@Nullable ConditionExpression expression,
-                                                                   Rule rule, @Nullable Effect scopeEffect) {
+                                                                   Rule rule) {
         if (expression == null || expression.root() == null) {
             return expression;
         }
-        ConditionNode root = projectNode(expression.root(), rule, scopeEffect);
+        ConditionNode root = projectNode(expression.root(), rule);
         return root == expression.root() ? expression : new ConditionExpression(root);
     }
 
-    // 重建单个条件节点：只有留空门槛的叶会被替换，其余节点无变化时原样返回
-    private static ConditionNode projectNode(ConditionNode node, Rule rule, @Nullable Effect scopeEffect) {
+    // 重建单个催化剂条件的有效数量与共享半径，其余节点按需复用。
+    private static ConditionNode projectNode(ConditionNode node, Rule rule) {
         if (node instanceof ConditionNode.Leaf(var condition)) {
-            if (condition instanceof CatalystPresentCondition(var leafItems, var leafCount, var leafCounts)
-                    && leafCount == null && leafItems.stream().anyMatch(item -> !leafCounts.containsKey(item))) {
-                var counts = new java.util.LinkedHashMap<>(leafCounts);
-                for (TaggedId item : leafItems) {
-                    int fallback = resolveThreshold(rule, leafItems, scopeEffect, item);
-                    counts.putIfAbsent(item, fallback);
+            if (condition instanceof CatalystPresentCondition leaf) {
+                var counts = new java.util.LinkedHashMap<>(leaf.counts());
+                for (TaggedId item : leaf.items()) {
+                    counts.putIfAbsent(item, leaf.count() != null ? leaf.count()
+                            : resolveThreshold(rule, item));
                 }
-                return new ConditionNode.Leaf(new CatalystPresentCondition(leafItems,
-                        FALLBACK_THRESHOLD, counts));
+                int radius = rule.catalystCost() == null ? leaf.radius() : rule.catalystCost().radius();
+                return new ConditionNode.Leaf(new CatalystPresentCondition(leaf.items(), FALLBACK_THRESHOLD, counts, radius));
             }
             return node;
         }
         if (node instanceof ConditionNode.Inverted(var term)) {
-            ConditionNode projected = projectNode(term, rule, scopeEffect);
+            ConditionNode projected = projectNode(term, rule);
             return projected == term ? node : new ConditionNode.Inverted(projected);
         }
         if (node instanceof ConditionNode.AllOf(var terms)) {
-            List<ConditionNode> projected = projectTerms(terms, rule, scopeEffect);
+            List<ConditionNode> projected = projectTerms(terms, rule);
             return projected == terms ? node : new ConditionNode.AllOf(projected);
         }
         if (node instanceof ConditionNode.AnyOf(var terms)) {
-            List<ConditionNode> projected = projectTerms(terms, rule, scopeEffect);
+            List<ConditionNode> projected = projectTerms(terms, rule);
             return projected == terms ? node : new ConditionNode.AnyOf(projected);
         }
         return node;
     }
 
     // 重建子节点列表：至少一个子节点发生变化时才新建列表，避免整树复制
-    private static List<ConditionNode> projectTerms(List<ConditionNode> terms, Rule rule, @Nullable Effect scopeEffect) {
+    private static List<ConditionNode> projectTerms(List<ConditionNode> terms, Rule rule) {
         List<ConditionNode> projected = null;
         for (int index = 0; index < terms.size(); index++) {
             ConditionNode original = terms.get(index);
-            ConditionNode replacement = projectNode(original, rule, scopeEffect);
+            ConditionNode replacement = projectNode(original, rule);
             if (projected == null && replacement != original) {
                 projected = new ArrayList<>(terms.subList(0, index));
             }
@@ -254,7 +199,7 @@ public final class CatalystThresholdProjection {
     // 重建单个效果：条件未变化时原样返回；否则由实现类重建真实效果类型（执行器按具体类型强转，不能用包装类型替代）
     private static Effect projectEffect(Effect effect, Rule rule) {
         ConditionExpression conditions = effect.conditions();
-        ConditionExpression projected = projectExpression(conditions, rule, effect);
+        ConditionExpression projected = projectExpression(conditions, rule);
         return projected == conditions ? effect : effect.withConditions(projected);
     }
 }

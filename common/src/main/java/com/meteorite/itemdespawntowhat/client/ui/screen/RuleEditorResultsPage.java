@@ -258,11 +258,7 @@ final class RuleEditorResultsPage {
                 // 消耗参数的主编辑入口在输入页：结果页动作详情不重复提供类型/数量/半径
                 List<EditorField> primary = new ArrayList<>(descriptor.fields().stream()
                         .filter(field -> !RuleEditorPageSupport.isCommonActionField(field))
-                        .filter(field -> !RuleEditorPageSupport.isInputOwnedConsumptionField(typeId, field))
                         .toList());
-                if (RuleEditorPageSupport.isConsumptionAction(typeId)) {
-                    primary.addFirst(EditorField.note(RuleEditorPageSupport.UI + "effect.consume_params_on_input"));
-                }
                 List<EditorField> advanced = descriptor.fields().stream().filter(RuleEditorPageSupport::isCommonActionField).toList();
                 effectForm = pages.newForm(session, actionPath, new TypeEditorDescriptor(descriptor.id(), descriptor.label(), primary, descriptor.readOnly()));
                 effectForm.useCompactSpacing();
@@ -480,11 +476,6 @@ final class RuleEditorResultsPage {
         // 消耗类的编辑入口在「输入」页，三类消耗动作都不出现在这里，避免与说明行自相矛盾
         List<ResourceLocation> types = new ArrayList<>();
         for (TypeEditorDescriptor descriptor : EffectEditorRegistry.all()) {
-            if (RuleEditorPageSupport.CONSUME_SOURCE_ID.equals(descriptor.id())
-                    || RuleEditorPageSupport.CONSUME_CATALYST_ID.equals(descriptor.id())
-                    || RuleEditorPageSupport.CONSUME_FLUID_ID.equals(descriptor.id())) {
-                continue;
-            }
             types.add(descriptor.id());
         }
         if (types.isEmpty()) {

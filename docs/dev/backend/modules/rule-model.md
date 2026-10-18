@@ -70,7 +70,7 @@ core/api  ←──────────── core/model ──────�
 | `TriggerKind` | enum | 消失方式：`NATURAL` / `FIRE` / `LAVA` / `CACTUS` | `key()`（小写下划线）、`CODEC`（大小写不敏感，未知报错，无静默回退） |
 | `CombinationMode` | enum | 候选组合模式：`ROUND_ROBIN`（缺省）/ `PRIORITY` | `key()`、`CODEC`（大小写不敏感，未知报错） |
 | `SourceCost` | record | 按源物品引用配置每轮消耗 | `counts: Map<TaggedId,Integer>`；`CODEC` 直接编码为数量对象；`forStack` 按当前堆叠取数量，直接物品优先，再按源列表匹配标签，缺省 1 |
-| `CatalystCost` | record | 规则级催化剂固定成本 | `items`(必填非空 `List<TaggedId>`)、`counts`(每引用 1..64)、`count`(缺省引用的数量，默认 1)、`radius`(1..8，默认 1)；`CODEC`；常量 `DEFAULT_COUNT` / `MIN_COUNT` / `MAX_COUNT` / `DEFAULT_RADIUS` / `MIN_RADIUS` / `MAX_RADIUS` |
+| `CatalystCost` | record | 规则级催化剂门槛与消耗 | `items`(必填非空 `List<TaggedId>`)、`counts`(门槛，每引用 1..64，缺省 1)、`consumeCounts`(消耗，每引用 0..64，缺省 0)、`radius`(共享半径 1..8，默认 1)；`CODEC`；常量 `DEFAULT_COUNT` / `MIN_COUNT` / `MAX_COUNT` / `DEFAULT_RADIUS` / `MIN_RADIUS` / `MAX_RADIUS` |
 | `OutcomeCandidate` | record | 候选结果（内含多个共同执行的效果） | `id`（规则内唯一）、`effects`、`safeSpawn`(默认 false)、`fillOrigin`(默认 true)；`codec(Codec<Effect>)`；`IMPLICIT_ID="default"`；`implicit(...)`（把顶层 effects 映射为候选，不写回 JSON） |
 
 ### 3.2 条件树
@@ -94,16 +94,15 @@ core/api  ←──────────── core/model ──────�
 
 > 约定：**参数对象 `P` 同时实现 `Effect`/`Condition`**，分发解码后可直接当规则里的效果/条件叶使用。新增类型必须让参数 record 实现对应接口。
 >
-> `Effect` 接口除 `type()` / `delayTicks()` / `chance()` / `conditions()` 外，还要求实现 `withConditions(@Nullable ConditionExpression)`——返回仅替换效果级条件、其余参数原样保留的新实例。这是为运行期门槛投影扩展的公开 API：执行器按**具体效果类型**强转分发，不能用包装 record 顶替，故由实现类重建真实效果类型（10 个内置效果全部实现），见 [催化剂门槛运行投影](../systems/catalyst-threshold-projection.md)。
+> `Effect` 接口除 `type()` / `delayTicks()` / `chance()` / `conditions()` 外，还要求实现 `withConditions(@Nullable ConditionExpression)`——返回仅替换效果级条件、其余参数原样保留的新实例。这是为运行期门槛投影扩展的公开 API：执行器按**具体效果类型**强转分发，不能用包装 record 顶替，故由实现类重建真实效果类型（7 个内置效果全部实现），见 [催化剂门槛运行投影](../systems/catalyst-threshold-projection.md)。
 
 ### 3.4 编解码与校验
 
 | 类 | 类型 | 职责 | 关键成员 |
 |---|---|---|---|
-| `RuleCodecs` | util | 规则/条件树/效果编解码组装入口 | `DEFAULT_TRIGGER_AFTER_SECONDS=300`、`DEFAULT_SCHEMA_VERSION=1`、`KNOWN_RULE_FIELDS`（18 项）、`OUTCOME_FIELDS`、`CATALYST_COST_FIELDS`、`conditionExpressionCodec(...)`、`effectCodec(...)`、`codec(...)`、`decoder(...)` |
+| `RuleCodecs` | util | 规则/条件树/效果编解码组装入口 | `DEFAULT_TRIGGER_AFTER_SECONDS=300`、`DEFAULT_SCHEMA_VERSION=1`、`KNOWN_RULE_FIELDS`（19 项）、`OUTCOME_FIELDS`、`CATALYST_COST_FIELDS`、`conditionExpressionCodec(...)`、`effectCodec(...)`、`codec(...)`、`decoder(...)` |
 | `CommonFields` | util | 效果/条件共用字段 codec 片段与默认值 | `DEFAULT_DELAY_TICKS=0`、`DEFAULT_CHANCE=1.0`；`delayTicks` / `chance` / `optionalConditions` |
-| `RuleValidation` | util | 规则语义/参数校验（两档入口） | `validate(Rule, IssueCollector, origin)`、`validate(Rule, effectTypes, conditionTypes, issues, origin)`、`validateEffect` / `validateEffectParams`、`validateConditionParams`、`validateSourceEntries` / `validateSourceReference`、`validateCatalystCost`、`validateOutcomes`、`validateConsumptionEffects`、`warnLargeSource`、`describe`、`matchesDirect` |
-| `ConsumptionDefaults` | util | 消耗类效果 id 常量与判定 | `CONSUME_SOURCE_ID` / `CONSUME_CATALYST_ID` / `CONSUME_FLUID_ID`、`isConsumption(ResourceLocation)` |
+| `RuleValidation` | util | 规则语义/参数校验（两档入口） | `validate(Rule, IssueCollector, origin)`、`validate(Rule, effectTypes, conditionTypes, issues, origin)`、`validateEffect` / `validateEffectParams`、`validateConditionParams`、`validateSourceEntries` / `validateSourceReference`、`validateCatalystCost`、`validateOutcomes`、`warnLargeSource`、`describe`、`matchesDirect` |
 | `ProductKind` | enum | 效果产出类别：非产出与内置分类叶子 | `NONE`、`ENTITY_ITEM`、`ENTITY_ENTITY`、`ENTITY_EXPERIENCE`、`BLOCK`、`LOOT`、`WORLD`、`EXTENSION`；`category()` |
 | `RuleCategoryClassifier` | util | 纯分类器：按生效效果与类型注册表派生规则分类 | `MIXED`、`ENTITY_MIXED`、`EXTENSION`、`classify(Rule, TypeRegistry<EffectType<?>>)`、`classifyJson(JsonObject, TypeRegistry<EffectType<?>>)` |
 
@@ -126,7 +125,8 @@ core/api  ←──────────── core/model ──────�
 | `effects` | 数组 | 否 | `[]` | 平铺效果；与 `outcomes` 二选一 |
 | `triggers` | 字符串数组 | 否 | `[]`（视为 `{natural}`） | `natural` / `fire` / `lava` / `cactus` |
 | `source_cost` | object | 否 | 无 | `{物品或 #tag 引用: 每轮数量}`；数量为正整数，引用必须属于 `source.items`，缺省引用为 1 |
-| `catalyst_cost` | object | 否 | 无 | `{items, counts?, count?, radius?}`，整数写法解码报错 |
+| `catalyst_cost` | object | 否 | 无 | `{items, counts?, consume_counts?, radius?}`，整数写法解码报错 |
+| `consume_fluid` | bool | 否 | `false` | 每组开组前沿接触流体追溯并移除一个真实源 |
 | `combination` | 字符串 | 否 | `round_robin` | `round_robin` / `priority` |
 | `outcomes` | 数组 | 否 | `[]` | 候选结果；与顶层 `effects` 二选一 |
 | `schema_version` | int | 否 | `1` | 当前仅支持 1，其它值拒绝 |
@@ -134,7 +134,7 @@ core/api  ←──────────── core/model ──────�
 
 规则必须至少声明 `effects` 或 `outcomes` 之一，且**两者不得同时声明**（`RuleValidation` 拒载）。效果通用字段：`type`（必填）、`delay_ticks`（默认 0，相对规则触发时刻）、`chance`（默认 1.0，域 `[0,1]`）、`conditions`（可选条件树）。条件叶通用字段已无 `negated`（取反见 4.2）。
 
-源物品列表仍是替代匹配；催化剂列表中的每个引用都必须分别通过门槛并分别支付。示例：
+源物品列表仍是替代匹配；催化剂列表中的每个引用都必须分别通过门槛；仅按 `consume_counts` 声明实际支付量。示例：
 
 ```json
 {
@@ -174,7 +174,7 @@ core/api  ←──────────── core/model ──────�
 | 类型内（效果/条件叶） | 不在该类型 `keys()` 内 | **ERROR**（拒载该条） |
 | 条件树节点 | 不在 `op` / `terms` / `term` / `condition` 内 | **ERROR** |
 | `outcomes` 元素 | 不在 `OUTCOME_FIELDS` 内 | **ERROR** |
-| `catalyst_cost` 对象 | 不在 `{items,counts,count,radius}` 内（含 `chance`/`conditions`/`delay_ticks`） | **ERROR** |
+| `catalyst_cost` 对象 | 不在 `{items,counts,consume_counts,radius}` 内（含 `chance`/`conditions`/`delay_ticks`） | **ERROR** |
 | 规则顶层 | 不在 `KNOWN_RULE_FIELDS` 内 | 仅 **WARN**，不阻断加载 |
 
 ### 4.4 不可变与 null 约束
@@ -182,25 +182,21 @@ core/api  ←──────────── core/model ──────�
 - `Rule` / `SourceMatcher` / `SourceEntry` / `ConditionExpression` / `CatalystCost` / `OutcomeCandidate` / `TaggedId` / `Simple*Type` 均为 record，紧凑构造器对集合做防御性拷贝；`triggers` 用 `LinkedHashSet` 保留声明顺序；对外集合返回不可变视图。
 - **Codec 层不得产出 null**：可选字段一律 `Optional` 承载，记录构造最后一步 `orElse(null)`。`CommonFields` 的片段返回 `RecordCodecBuilder`（`forGetter` 绑定所属记录类型）。
 
-### 4.5 固定成本与隐式消耗（语义链起点）
+### 4.5 输入门槛与消耗
 
-`ConsumptionDefaults` 定义三个消耗效果 id（source / catalyst / fluid）。**规则未声明任何 `consume_*` 时按隐式语义消耗 1 个源物品**。`BuiltinTypeRegistries.perRoundSourceConsumption(Rule, ItemStack)` 给出该规则每轮的源消耗量，优先级链：
+`BuiltinTypeRegistries.perRoundSourceConsumption(Rule, ItemStack)` 从 `source_cost` 读取当前源物品每组门槛及扣除量：直接物品优先，其次 `source.items` 原序首个命中且配置数量的标签，缺省为 1。源实体整堆转入结算库存，未开组部分按返还流程交还。
 
-1. 显式 `source_cost` → 根据当前源堆叠查数量：直接物品优先，其次 `source.items` 原序首个命中且配置数量的标签，未配置时为 1；
-2. 未声明 `source_cost` 且未声明任何 `consume_*` → 隐式 `1`；
-3. 未声明 `source_cost` 但显式声明 `consume_source` → 同样按当前源物品查 `counts`，未配置时采用该效果的 `count`；
-4. 只声明了其它消耗效果（如 `consume_fluid`）→ `0`（不按堆叠轮次展开）。
+`catalyst_cost.counts` 为逐引用门槛，`consume_counts` 为独立的逐引用消耗量，缺省分别为 1 与 0。所有引用的检测和消耗都使用同一 `radius`。每轮先复核门槛与完整支付能力，再扣除实际消耗；重叠引用共享库存分配，见 [conversion-runtime.md](conversion-runtime.md)。
 
-判定入口：`Rule.usesImplicitSourceConsumption()` → `BuiltinTypeRegistries.perRoundSourceConsumption(Rule, ItemStack)` → `EffectContext`（`rounds()` / `groupSourceCost()` / `coveredSourceItems()`），详见 [conversion-runtime.md](conversion-runtime.md)。
+`consume_fluid` 为规则级开关；流体存在判定接受源与流动流体，消耗追溯接触水流的实际源，参见同一运行时文档。
 
 ### 4.6 两档校验与工作量上限
 
 | 档 | 入口 | 是否需要注册表 | 内容 |
 |---|---|---|---|
-| 结构档 | `validate(rule, issues, origin)` | 否 | id 合法、`trigger_after_seconds≥0`、`schema_version` 受支持、source 非空、effects/outcomes 至少一个且互斥、`source_cost` 各数量为正且引用已选源物品、`catalyst_cost` 合法、`source_cost` 与 `consume_source` 互斥、`catalyst_cost` 与 `consume_catalyst` 互斥、`display_name` 码点上限、条件树结构、消耗效果不重复、静态物品引用存在、候选 id 非空唯一且 effects 非空 |
+| 结构档 | `validate(rule, issues, origin)` | 否 | id 合法、`trigger_after_seconds≥0`、`schema_version` 受支持、source 非空、effects/outcomes 至少一个且互斥、`source_cost` 各数量为正且引用已选源物品、`catalyst_cost` 合法、`display_name` 码点上限、条件树结构、静态物品引用存在、候选 id 非空唯一且 effects 非空 |
 | 参数档 | `validate(rule, effectTypes, conditionTypes, issues, origin)` | **是** | 在结构档之上，逐效果/逐叶做类型专属 `validateParams`，未注册类型报错 |
 
-成本声明与对应的消耗效果互斥：声明 `source_cost` 后不得再声明 `consume_source`，声明 `catalyst_cost` 后不得再声明 `consume_catalyst`——否则同一份成本会被重复记账，按结构档拒载，字段路径分别指向 `source_cost` / `catalyst_cost`。
 
 上限集中在 `ConditionLimits`（条件树的节点数与深度与契约层解码预算同源，解码期先做一次预算预检、超限整条拒载，模型层校验是解码后的纵深防御）：`effects≤32`、规则级与每个效果级条件树各自 `叶≤128`、`节点≤256`、`深度≤16`、`source` 项（匹配+排除）`≤256`、`display_name≤128` 码点、候选数量 `≤32`。**装配层必须用带注册表的重载**，否则未注册类型与区间类非法参数会被静默放行（见 [rule-loading.md](rule-loading.md)）。
 

@@ -99,9 +99,13 @@ final class ConversionSettlement implements ServerTask {
     // 计划期催化剂候选（由近及远），供共享库存分配与预留使用；未声明 catalyst_cost 时恒为空
     private final List<ItemEntity> catalystPicks = new ArrayList<>();
     private CatalystAllocation catalystAllocation;
+    private CatalystAllocation catalystThresholdAllocation;
     private int[] catalystAvailable;
     private int catalystScanCursor;
     private boolean catalystCollected;
+    private boolean catalystThresholdChecked;
+    private CatalystThresholdCheck groupThreshold;
+    private FluidSourceResolver groupFluid;
 
     private Phase phase = Phase.PLANNING;
     private OutcomeCandidate candidate;
@@ -202,8 +206,8 @@ final class ConversionSettlement implements ServerTask {
         }
     }
 
+    /** 取消回调：中止结算并落盘待返还；ROUND_ROBIN 规则额外记录一条调试日志 */
     @Override
-    // 取消回调：中止结算并落盘待返还；ROUND_ROBIN 规则额外记录一条调试日志
     public void onCancelled(CancelReason reason) {
         if (!abort(reason.name(), false)) {
             return;
@@ -285,17 +289,17 @@ final class ConversionSettlement implements ServerTask {
         pendingCandidateIndex = pick;
         groupCount = planned;
         CatalystCost catalyst = rule.catalystCost();
-        if (catalyst != null
+        if (catalyst != null && catalyst.totalConsumeCount() > 0
                 && reservations().tryReserve(record.id(), level, catalystAllocation.paymentGroups(groupCount)) == null) {
             // 防御：扫描所得可用量与预留结果不一致时整批返还，绝不半预留
             return abandonAll();
         }
         // 组数定稿后先登记催化剂成本再落计划；预留已完成，两者之间没有 yield 点
-        writer.catalystPlan(catalyst == null ? 0 : catalyst.totalCount());
+        writer.catalystPlan(catalyst == null ? 0 : catalyst.totalConsumeCount());
         writer.plan(pendingCandidate.id(), groupCount);
         if (RuntimeObserver.current().enabled() && catalyst != null) {
             RuntimeObserver.current().observe(source, "CATALYST_PLANNED", "record", record.id(), "rule", rule.id(),
-                    "per_group", catalyst.totalCount(), "groups", groupCount, "reserved", groupCount * catalyst.totalCount());
+                    "per_group", catalyst.totalConsumeCount(), "groups", groupCount, "reserved", groupCount * catalyst.totalConsumeCount());
         }
         if (RuntimeObserver.current().enabled()) {
             // 每次结算只观测一条 OUTCOME_PLANNED（candidate = 本结算第一组所选候选，groups = 组数上界）；
@@ -394,6 +398,22 @@ final class ConversionSettlement implements ServerTask {
             catalystAvailable[catalystScanCursor] = reservations().available(level, catalystPicks.get(catalystScanCursor));
             catalystScanCursor++;
         }
+        if (!catalystThresholdChecked) {
+            if (catalystThresholdAllocation == null) {
+                catalystThresholdAllocation = new CatalystAllocation(catalyst.thresholdPaymentProfile(),
+                        catalystPicks, catalystAvailable, 1);
+            }
+            if (!catalystThresholdAllocation.advance(budget)) {
+                return -1;
+            }
+            catalystThresholdChecked = true;
+            if (catalystThresholdAllocation.groups() < 1) {
+                return 0;
+            }
+        }
+        if (catalyst.totalConsumeCount() <= 0) {
+            return Integer.MAX_VALUE;
+        }
         if (catalystAllocation == null) {
             int sourceGroups = record.sourceCostPerGroup() > 0 ? held.getCount() / record.sourceCostPerGroup() : 1;
             catalystAllocation = new CatalystAllocation(catalyst, catalystPicks, catalystAvailable, sourceGroups);
@@ -404,7 +424,7 @@ final class ConversionSettlement implements ServerTask {
     // 触发位置 radius 盒内命中催化剂定义的掉落物，排除源实体；按到触发点距离由近及远排序，
     // 距离相同时按 UUID 兜底，保证与实体遍历顺序无关
     private List<ItemEntity> collectCatalystItems(CatalystCost catalyst) {
-        AABB box = EffectTargets.blockBox(source.blockPosition(), catalyst.radius());
+        AABB box = EffectTargets.blockBox(BlockPos.containing(triggerPosition), catalyst.radius());
         TaggedItemMatch target = TaggedItemMatch.compileAll(catalyst.items());
         List<ItemEntity> found = level.getEntitiesOfClass(ItemEntity.class, box,
                 item -> item != source && !item.isRemoved() && target.matches(item.getItem()));
@@ -504,11 +524,24 @@ final class ConversionSettlement implements ServerTask {
                     pendingCandidate = candidates.get(pick);
                     pendingCandidateIndex = pick;
                 }
-                // 催化剂固定成本支付：先支付再开组；不足则截断组数并释放预留，绝不半支付
+                if (rule.catalystCost() != null) {
+                    if (groupThreshold == null) groupThreshold = new CatalystThresholdCheck(level, source, triggerPosition, rule.catalystCost());
+                    if (!groupThreshold.advance(budget)) return StepResult.yield(1, 1);
+                }
+                if (rule.consumeFluid()) {
+                    if (groupFluid == null) groupFluid = new FluidSourceResolver(level, triggerPosition);
+                    if (!groupFluid.advance(budget)) return StepResult.yield(1, 1);
+                }
+                // 输入统一复核后支付；流体写入与催化剂扣除之间不让出。
+
                 int perGroup = record.catalystCostPerGroup();
-                int paidCatalyst = 0;
-                if (perGroup > 0) {
-                    CatalystReservations.PayResult pay = reservations().payGroup(record.id(), level, perGroup, budget);
+                int paidCatalyst;
+                {
+                    CatalystReservations.PayResult pay = reservations().payGroup(record.id(), level, perGroup, budget,
+                            EffectTargets.blockBox(BlockPos.containing(triggerPosition),
+                                    rule.catalystCost() == null ? 0 : rule.catalystCost().radius()),
+                            () -> (groupThreshold == null || groupThreshold.valid())
+                                    && (groupFluid == null || groupFluid.consume()));
                     if (pay.outcome() == CatalystReservations.PayOutcome.RETRY) {
                         // 本刻预算耗尽：一件不扣、不开组，下刻从头重试
                         return StepResult.yield(1, 1);
@@ -530,6 +563,8 @@ final class ConversionSettlement implements ServerTask {
                     }
                     paidCatalyst = pay.paid();
                 }
+                groupThreshold = null;
+                groupFluid = null;
                 int cost = Math.min(record.sourceCostPerGroup(), held.getCount());
                 if (cost > 0) {
                     // 已开始的组支付完整固定成本，成本从结算库存里扣掉

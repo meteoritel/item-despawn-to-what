@@ -7,17 +7,14 @@ import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleRequirements;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
-import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.model.CatalystCost;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionLimits;
 import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
@@ -51,10 +48,6 @@ final class RuleEditorValidation {
     // 展示名与备注按 Unicode 码点计数的上限（多字节字符不应被 UTF-16 单元数提前算超）
     private static final int MAX_DISPLAY_NAME_CODE_POINTS = 128;
     private static final int MAX_NOTES_CODE_POINTS = 1024;
-    // 消耗效果的本地类型前缀；与固定成本同时声明属于重复记账
-    private static final String CONSUME_PREFIX = TypeLabels.OWN_NAMESPACE + ":consume_";
-    private static final String CONSUME_SOURCE = TypeLabels.OWN_NAMESPACE + ":consume_source";
-    private static final String CONSUME_CATALYST = TypeLabels.OWN_NAMESPACE + ":consume_catalyst";
 
     private final Host host;
     private @Nullable String issueRuleId;
@@ -180,8 +173,7 @@ final class RuleEditorValidation {
         if (sourceCost != null && invalidItemCounts(sourceCost, sourceItems, Integer.MAX_VALUE)) {
             issues.add(issue(RuleFields.SOURCE_COST, UI + "issue.source_cost_not_positive"));
         }
-        // catalyst_cost 契约（与服务端 RuleValidation / RuleCodecs 对齐）：必须是对象 {items, counts?, count?, radius?}，
-        // 整数写法已废弃；items 不能为空、count / radius 只在显式写出时做区间拦截
+        // 规则催化剂配置：门槛和实际消耗分别校验，全部引用共享一个整数半径。
         RuleValue catalystCost = draft.root().child(RuleFields.CATALYST_COST);
         boolean hasCatalystCost = catalystCost != null && !catalystCost.isNull();
         if (hasCatalystCost) {
@@ -198,15 +190,17 @@ final class RuleEditorValidation {
                     issues.add(issue(DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.CATALYST_ITEMS),
                             UI + "issue.catalyst_cost_items_empty"));
                 }
-                RuleValue countElement = catalystCost.child(RuleFields.CATALYST_COUNT);
-                if (isInteger(countElement) && (countElement.asInteger(0) < CatalystCost.MIN_COUNT
-                        || countElement.asInteger(0) > CatalystCost.MAX_COUNT)) {
-                    issues.add(issue(DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.CATALYST_COUNT),
-                            UI + "issue.catalyst_cost_count_out_of_range"));
+                RuleValue consumed = catalystCost.child(RuleFields.CONSUME_COUNTS);
+                if (consumed != null && invalidItemCounts(consumed, listOf(catalystCost.child(RuleFields.CATALYST_ITEMS)),
+                        CatalystCost.MIN_CONSUME_COUNT, CatalystCost.MAX_COUNT)) {
+                    issues.add(issue(DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.CONSUME_COUNTS), UI + "issue.catalyst_consume_count_out_of_range"));
                 }
                 RuleValue radiusElement = catalystCost.child(RuleFields.CATALYST_RADIUS);
-                if (isInteger(radiusElement) && (radiusElement.asInteger(0) < CatalystCost.MIN_RADIUS
-                        || radiusElement.asInteger(0) > CatalystCost.MAX_RADIUS)) {
+                if (radiusElement != null && (!radiusElement.isNumber()
+                        || !Double.isFinite(radiusElement.asDecimal(Double.NaN))
+                        || radiusElement.asDecimal(0) != Math.floor(radiusElement.asDecimal(0))
+                        || radiusElement.asDecimal(0) < CatalystCost.MIN_RADIUS
+                        || radiusElement.asDecimal(0) > CatalystCost.MAX_RADIUS)) {
                     issues.add(issue(DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.CATALYST_RADIUS),
                             UI + "issue.catalyst_cost_radius_out_of_range"));
                 }
@@ -217,36 +211,20 @@ final class RuleEditorValidation {
         if (isInteger(schemaVersion) && schemaVersion.asInteger(0) != RuleCodecs.DEFAULT_SCHEMA_VERSION) {
             issues.add(issue(RuleFields.SCHEMA_VERSION, UI + "issue.schema_version_unsupported"));
         }
-        // 消耗效果统计覆盖顶层 effects 与候选结果内 effects
-        Map<String, Integer> consumption = new LinkedHashMap<>();
-        countConsumption(effects, consumption);
-        for (RuleValue element : outcomes.items()) {
-            if (element.isMapping()) {
-                countConsumption(listOf(element.child(RuleFields.CANDIDATE_EFFECTS)), consumption);
-            }
-        }
-        for (Integer count : consumption.values()) {
-            if (count != null && count > 1) {
-                issues.add(issue(RuleFields.EFFECTS, UI + "issue.duplicate_consumption"));
-            }
-        }
-        // 固定成本与同名消耗效果互斥（重复记账）
-        if (sourceCost != null && consumption.containsKey(CONSUME_SOURCE)) {
-            issues.add(issue(RuleFields.SOURCE_COST, UI + "issue.double_bookkeeping"));
-        }
-        if (hasCatalystCost && consumption.containsKey(CONSUME_CATALYST)) {
-            issues.add(issue(RuleFields.CATALYST_COST, UI + "issue.double_bookkeeping"));
-        }
         return issues;
     }
 
     private static boolean invalidItemCounts(RuleValue raw, RuleValue items, int maximum) {
+        return invalidItemCounts(raw, items, 1, maximum);
+    }
+
+    private static boolean invalidItemCounts(RuleValue raw, RuleValue items, int minimum, int maximum) {
         if (!raw.isMapping()) return true;
         for (var entry : raw.entries().entrySet()) {
             RuleValue value = entry.getValue();
             if (!containsText(items, entry.getKey()) || !isInteger(value)) return true;
             double count = value.asDecimal(Double.NaN);
-            if (!Double.isFinite(count) || count != Math.floor(count) || count < 1 || count > maximum) return true;
+            if (!Double.isFinite(count) || count != Math.floor(count) || count < minimum || count > maximum) return true;
         }
         return false;
     }
@@ -257,23 +235,6 @@ final class RuleEditorValidation {
             if (item.isText() && value.equals(item.asText())) return true;
         }
         return false;
-    }
-
-    // 统计一组效果里的消耗类型（同一消耗效果在规则内只允许出现一次）
-    private static void countConsumption(RuleValue effects, Map<String, Integer> consumption) {
-        for (RuleValue element : effects.items()) {
-            if (!element.isMapping()) {
-                continue;
-            }
-            RuleValue typeElement = element.child(RuleFields.TYPE);
-            if (typeElement == null || !typeElement.isText()) {
-                continue;
-            }
-            String type = typeElement.asText();
-            if (type.startsWith(CONSUME_PREFIX)) {
-                consumption.merge(type, 1, Integer::sum);
-            }
-        }
     }
 
     // 读取草稿中的数组字段：非数组统一按空数组处理

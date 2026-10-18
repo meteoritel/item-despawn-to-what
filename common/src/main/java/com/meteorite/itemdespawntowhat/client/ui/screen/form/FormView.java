@@ -118,7 +118,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
     private @Nullable Runnable changeListener;
     @Nullable BiConsumer<String, RuleValue> fieldWritten;
 
-    // 关联字段在同一次撤销操作内同步；第二个参数为写入前的值。
+    /** 关联字段在同一次撤销操作内同步；第二个参数为写入前的值。 */
     public void setOnFieldWritten(BiConsumer<String, RuleValue> listener) {
         fieldWritten = listener;
     }
@@ -150,7 +150,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         this.basePath = basePath == null ? "" : basePath;
     }
 
-    // 用描述符整体替换字段列表
+    /** 用描述符整体替换字段列表 */
     public FormView setDescriptor(TypeEditorDescriptor descriptor) {
         rows.clear();
         for (EditorField field : descriptor.fields()) {
@@ -159,7 +159,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         return this;
     }
 
-    // 追加一个字段
+    /** 追加一个字段 */
     public FormView addField(EditorField field) {
         var catalogType = FieldCatalogTypes.catalogTypeOf(field);
         boolean iconSelection = catalogSelections && catalogType != null && isCatalogField(field);
@@ -177,7 +177,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         return this;
     }
 
-    // 读取某字段控件当前的未提交值（宿主把缓冲并入自己的编辑步时使用）；字段不存在返回 null
+    /** 读取某字段控件当前的未提交值（宿主把缓冲并入自己的编辑步时使用）；字段不存在返回 null */
     public @Nullable RuleValue pendingValue(String path) {
         for (FormRow row : rows) {
             if (row.path.equals(path)) {
@@ -194,7 +194,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         }
     }
 
-    // 给某个字段行挂行尾操作按钮（例如「恢复自动命名」）；宽度按文本自适应
+    /** 给某个字段行挂行尾操作按钮（例如「恢复自动命名」）；宽度按文本自适应 */
     public FormView setRowAction(String path, UiButton button) {
         for (FormRow row : rows) {
             if (row.path.equals(path)) {
@@ -207,7 +207,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         return this;
     }
 
-    // 覆盖某字段行的控件高度（<=0 恢复默认）；例如基本页加高的优先级控件
+    /** 覆盖某字段行的控件高度（{@code <= 0} 恢复默认）；例如基本页加高的优先级控件 */
     public FormView setRowHeight(String path, int height) {
         for (FormRow row : rows) {
             if (row.path.equals(path)) {
@@ -217,12 +217,12 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         return this;
     }
 
-    // 卡片标题已表达字段含义时省去重复标签。
+    /** 卡片标题已表达字段含义时省去重复标签。 */
     public void hideRowLabel(String path) {
         for (FormRow row : rows) if (row.path.equals(path)) row.labelVisible = false;
     }
 
-    // 隐藏行退出键盘导航与命中，但保存原有字段内容。
+    /** 隐藏行退出键盘导航与命中，但保存原有字段内容。 */
     public void setRowVisible(String path, boolean visible) {
         for (FormRow row : rows) if (row.path.equals(path)) {
             if (row.visible == visible) return;
@@ -236,7 +236,22 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         }
     }
 
-    // 模式相关字段随当前输入和历史回填显示；隐藏行保留原有值与文本缓冲。
+    /**
+     * 将两个物品数量字段按物品逐项交错排布，上行门槛、下行实际消耗；字段写入与撤销仍各自独立。
+     * @param upperPath 上行数量字段路径
+     * @param lowerPath 下行数量字段路径
+     */
+    public void pairItemCountRows(String upperPath, String lowerPath) {
+        FormRow upper = rows.stream().filter(row -> row.path.equals(upperPath)).findFirst().orElse(null);
+        FormRow lower = rows.stream().filter(row -> row.path.equals(lowerPath)).findFirst().orElse(null);
+        if (upper != null && lower != null && upper.control instanceof ItemCountsControl
+                && lower.control instanceof ItemCountsControl) {
+            upper.pairedBelow = lower;
+            lower.pairedAbove = upper;
+        }
+    }
+
+    /** 模式相关字段随当前输入和历史回填显示；隐藏行保留原有值与文本缓冲。 */
     public void setRowVisibility(String path, BooleanSupplier visibility) {
         for (FormRow row : rows) if (row.path.equals(path)) row.visibility = visibility;
         refreshRowVisibility();
@@ -255,7 +270,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         if (changed) layout(viewportX, viewportY, viewportWidth, viewportHeight);
     }
 
-    // 启用开关等含义直观的行不弹出提示。
+    /** 启用开关等含义直观的行不弹出提示。 */
     public void suppressRowTooltip(String path) {
         for (FormRow row : rows) if (row.path.equals(path)) row.tooltipEnabled = false;
     }
@@ -269,7 +284,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         }
     }
 
-    // 动态默认值只用于回填，未编辑时仍保留原字段的省略状态。
+    /** 动态默认值只用于回填，未编辑时仍保留原字段的省略状态。 */
     public void setRowDefaultValue(String path, Supplier<RuleValue> value) {
         for (FormRow row : rows) if (row.path.equals(path)) row.defaultValue = value;
         reload();
@@ -287,24 +302,24 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         }
     }
 
-    // 数量对象按引用身份展示；对象键无需进入草稿的点分路径语法。
+    /** 数量对象按引用身份展示；对象键无需进入草稿的点分路径语法。 */
     public void setItemCountReferences(String path, List<String> references) {
         for (FormRow row : rows) if (row.path.equals(path) && row.control instanceof ItemCountsControl counts) {
             counts.setReferences(references);
         }
     }
 
-    // 只由卡片编辑页启用，弹窗等其它宿主保留原有密度。
+    /** 只由卡片编辑页启用，弹窗等其它宿主保留原有密度。 */
     public void useCardSpacing() {
         minimumControlHeight = 20;
         rowGap = 6;
         for (FormRow row : rows) row.control.setMinimumHeight(minimumControlHeight);
     }
 
-    // 在装配字段之前启用；输入页统一使用目录添加物品和标签。
+    /** 在装配字段之前启用；输入页统一使用目录添加物品和标签。 */
     public void useCatalogSelections() { catalogSelections = true; }
 
-    // 基本页以紧凑密度显示，不重复给可选值添加默认前缀。
+    /** 基本页以紧凑密度显示，不重复给可选值添加默认前缀。 */
     public void useCompactSpacing() {
         minimumControlHeight = 18;
         rowGap = 4;
@@ -312,7 +327,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         for (FormRow row : rows) row.control.setMinimumHeight(minimumControlHeight);
     }
 
-    // 输入被上限拒绝时的即时提示出口
+    /** 输入被上限拒绝时的即时提示出口 */
     public FormView setOnRejectedNotice(@Nullable Consumer<Component> handler) {
         this.rejectedNoticeHandler = handler;
         return this;
@@ -401,7 +416,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         return DraftPaths.child(basePath, relative);
     }
 
-    // 条件树返回相对路径，宿主编辑叶参数时需定位到本表单所在的规则或效果。
+    /** 条件树返回相对路径，宿主编辑叶参数时需定位到本表单所在的规则或效果。 */
     public String draftPath(String relative) {
         return childPath(relative);
     }
@@ -488,7 +503,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         return draftWriter.applyToDraft(true);
     }
 
-    // 把控件值写回草稿；逐字段比较，只有真正变化才记入撤销历史
+    /** 把控件值写回草稿；逐字段比较，只有真正变化才记入撤销历史 */
     public boolean applyToDraft() {
         return draftWriter.applyToDraft(false);
     }
@@ -563,7 +578,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         return child;
     }
 
-    // 本地校验问题清单
+    /** 本地校验问题清单 */
     public List<FormIssue> issues() {
         List<FormIssue> list = new ArrayList<>();
         for (FormRow row : rows) {
@@ -575,7 +590,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         return list;
     }
 
-    // 定位到指定草稿路径的字段：滚动使其整行可见、短暂高亮，返回其首个可聚焦目标（没有则返回 null）
+    /** 定位到指定草稿路径的字段：滚动使其整行可见、短暂高亮，返回其首个可聚焦目标（没有则返回 null） */
     public @Nullable UiFocusTarget revealPath(String path) {
         FormRow row = rowFor(path);
         if (row == null || !row.visible) {
@@ -637,7 +652,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         return matched;
     }
 
-    // Tab 顺序（U 界面把本表登记进 UiFocusManager）
+    /** Tab 顺序（U 界面把本表登记进 UiFocusManager） */
     public List<UiFocusTarget> focusTargets() {
         List<UiFocusTarget> list = new ArrayList<>();
         addFocusTargets(list);
@@ -653,7 +668,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         }
     }
 
-    // 每个字段独立完成编辑，切换到下一字段也提交一次，不按字符记录。
+    /** 每个字段独立完成编辑，切换到下一字段也提交一次，不按字符记录。 */
     public void tick() {
         if (loadedRevision != session.revision()) reload();
         refreshRowVisibility();
@@ -689,17 +704,17 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         return layout(x, y, width, Integer.MAX_VALUE / 4);
     }
 
-    // 页面按实际内容分配空间，避免固定空白与表单互相挤占。
+    /** 页面按实际内容分配空间，避免固定空白与表单互相挤占。 */
     public int preferredHeight(int width) {
         return layoutRows(Math.max(0, width));
     }
 
-    // 保存前检查当前输入；切换页面允许保留非法文本。
+    /** 保存前检查当前输入；切换页面允许保留非法文本。 */
     public @Nullable FormIssue pendingInputIssue() {
         return draftWriter.pendingInputIssue();
     }
 
-    // 布局：返回内容总高度
+    /** 布局：返回内容总高度 */
     public int layout(int x, int y, int width, int height) {
         this.viewportX = x;
         this.viewportY = y;
@@ -762,19 +777,19 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         }
     }
 
-    // 焦点作用域切换（打开模态、切页）：先结束进行中的捕获再换焦点
+    /** 焦点作用域切换（打开模态、切页）：先结束进行中的捕获再换焦点 */
     public void onFocusScopeChanged() {
         retainPendingInputs();
         endInteractions(UiInputCapture.EndReason.FOCUS_SCOPE_CHANGED);
     }
 
-    // 表单从界面卸载
+    /** 表单从界面卸载 */
     public void unmount() {
         retainPendingInputs();
         endInteractions(UiInputCapture.EndReason.UNMOUNTED);
     }
 
-    // 宿主屏幕关闭
+    /** 宿主屏幕关闭 */
     public void onHostClosed() {
         retainPendingInputs();
         endInteractions(UiInputCapture.EndReason.HOST_CLOSED);
@@ -851,7 +866,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
 
 
 
-    // 鼠标位置下的提示：优先显示该字段的校验问题，其次显示字段提示
+    /** 鼠标位置下的提示：优先显示该字段的校验问题，其次显示字段提示 */
     public @Nullable Component tooltipAt(double mouseX, double mouseY) {
         return FormRowRenderer.tooltipAt(mouseX, mouseY, font, rows, viewportX, viewportY, viewportWidth,
                 viewportHeight, scrollOffset);

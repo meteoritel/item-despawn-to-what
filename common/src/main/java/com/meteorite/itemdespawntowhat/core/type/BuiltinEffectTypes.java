@@ -11,9 +11,6 @@ import com.meteorite.itemdespawntowhat.core.type.effect.LightningEffect;
 import com.meteorite.itemdespawntowhat.core.type.effect.ExplosionEffect;
 import com.meteorite.itemdespawntowhat.core.type.effect.ArrowRainEffect;
 import com.meteorite.itemdespawntowhat.core.type.effect.WeatherEffect;
-import com.meteorite.itemdespawntowhat.core.type.effect.ConsumeSourceEffect;
-import com.meteorite.itemdespawntowhat.core.type.effect.ConsumeCatalystEffect;
-import com.meteorite.itemdespawntowhat.core.type.effect.ConsumeFluidEffect;
 import com.mojang.serialization.Codec;
 
 /**
@@ -27,14 +24,14 @@ public final class BuiltinEffectTypes {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    // 构建并冻结内置效果类型注册表
+    /** 构建并冻结内置效果类型注册表 */
     public static TypeRegistry<EffectType<?>> create(Codec<ConditionExpression> expressionCodec) {
         SimpleTypeRegistry<EffectType<?>> registry = createMutable(expressionCodec);
         registry.freeze();
         return registry;
     }
 
-    // 装配器在第三方 SPI 注册结束后统一冻结。
+    /** 装配器在第三方 SPI 注册结束后统一冻结。 */
     public static SimpleTypeRegistry<EffectType<?>> createMutable(Codec<ConditionExpression> expressionCodec) {
         SimpleTypeRegistry<EffectType<?>> registry = new SimpleTypeRegistry<>();
         registry.register(SpawnEntityEffect.effectType(expressionCodec));
@@ -44,9 +41,6 @@ public final class BuiltinEffectTypes {
         registry.register(ExplosionEffect.effectType(expressionCodec));
         registry.register(ArrowRainEffect.effectType(expressionCodec));
         registry.register(WeatherEffect.effectType(expressionCodec));
-        registry.register(ConsumeSourceEffect.effectType(expressionCodec));
-        registry.register(ConsumeCatalystEffect.effectType(expressionCodec));
-        registry.register(ConsumeFluidEffect.effectType(expressionCodec));
         return registry;
     }
 }

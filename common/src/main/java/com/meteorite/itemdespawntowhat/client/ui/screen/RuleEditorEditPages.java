@@ -49,15 +49,15 @@ import org.jetbrains.annotations.Nullable;
  * <p>顶层 effects 展示为单一隐式候选：打开、改别名、改效果都不会自动生成 outcomes；
  * 只有用户新增第二个候选或明确编辑候选专属策略时，才用 {@link RuleDraft#convertToOutcomes(String)}
  * 做一次原子转换（保留原效果对象、一次撤销可整体还原）。
- * <p>消耗类效果（consume_source / consume_catalyst）映射到「输入」页，只更新原效果路径，
- * 不会同时生成规则级固定成本字段；这两类效果不出现在效果选择器里。
+ * <p>输入页编辑规则源数量、催化剂门槛与实际消耗、共享半径及流体源消耗开关；
+ * 结果页编辑产出和世界效果，输入支付统一由结算层执行。
  */
 public final class RuleEditorEditPages {
 
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
     static final UiHostTheme THEME = UiHostThemes.defaultTheme();
 
-    // 页签
+    /** 页签 */
     public enum Page {
 
         // 基本信息
@@ -252,7 +252,7 @@ public final class RuleEditorEditPages {
         return page;
     }
 
-    // 切页：先结束进行中的预览，再重建新页
+    /** 切页：先结束进行中的预览，再重建新页 */
     public void setPage(@Nullable Page next) {
         Page target = next == null ? Page.INFO : next;
         if (target == page) {
@@ -271,7 +271,7 @@ public final class RuleEditorEditPages {
         }
     }
 
-    // 重建当前页的全部控件（草稿结构或选择变化后调用）
+    /** 重建当前页的全部控件（草稿结构或选择变化后调用） */
     public void rebuild() {
         reset();
         EditSession session = host.session();
@@ -355,7 +355,7 @@ public final class RuleEditorEditPages {
 
     // ---- 布局 ----
 
-    // 外层滚动与控件命中使用同一份绝对坐标，不把表单撑进底栏。
+    /** 外层滚动与控件命中使用同一份绝对坐标，不把表单撑进底栏。 */
     public void layout(UiRect area) {
         lastArea = area;
         pageScroll.setViewport(area.x(), area.y(), area.width(), area.height());
@@ -501,7 +501,7 @@ public final class RuleEditorEditPages {
 
     // ---- 状态与提交 ----
 
-    // 提交所有可见表单的待写字段；返回是否有改动
+    /** 提交所有可见表单的待写字段；返回是否有改动 */
     public boolean applyToDraft() {
         if (!enabled) {
             return false;
@@ -516,7 +516,7 @@ public final class RuleEditorEditPages {
         return changed;
     }
 
-    // 收集所有可见表单的校验问题，再补页面级约束（触发来源、候选与效果上限、组合模式）
+    /** 收集所有可见表单的校验问题，再补页面级约束（触发来源、候选与效果上限、组合模式） */
     public List<FormIssue> issues() {
         List<FormIssue> issues = new ArrayList<>();
         for (FormView form : liveForms) {
@@ -532,7 +532,7 @@ public final class RuleEditorEditPages {
     }
 
     // 结束进行中的数值/滑杆交互：提交有效预览、回退无效预览
-    // （FormView.endInteractions 是包级方法，宿主只能走 onFocusScopeChanged 这个公开入口）
+    /** （FormView.endInteractions 是包级方法，宿主只能走 onFocusScopeChanged 这个公开入口） */
     public void endInteractions() {
         pageScroll.mouseReleased();
         for (FormView form : liveForms) {
@@ -542,21 +542,21 @@ public final class RuleEditorEditPages {
         }
     }
 
-    // 宿主关闭屏幕：让表单释放全部捕获与输入状态
+    /** 宿主关闭屏幕：让表单释放全部捕获与输入状态 */
     public void onHostClosed() {
         for (FormView form : liveForms) {
             form.onHostClosed();
         }
     }
 
-    // 宿主离开编辑页（返回管理页）：卸载表单的输入状态
+    /** 宿主离开编辑页（返回管理页）：卸载表单的输入状态 */
     public void unmount() {
         for (FormView form : liveForms) {
             form.unmount();
         }
     }
 
-    // 键盘抬起：把滑杆方向键的按住过程合并为一次提交（屏幕在 EDIT 模式下转发）
+    /** 键盘抬起：把滑杆方向键的按住过程合并为一次提交（屏幕在 EDIT 模式下转发） */
     public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
         boolean handled = false;
         for (FormView form : liveForms) {
@@ -574,7 +574,7 @@ public final class RuleEditorEditPages {
         return false;
     }
 
-    // 聚焦目标（按视觉顺序）
+    /** 聚焦目标（按视觉顺序） */
     public List<UiFocusTarget> focusTargets() {
         List<UiFocusTarget> targets = new ArrayList<>();
         for (UiWidget widget : liveWidgets) {
@@ -588,7 +588,7 @@ public final class RuleEditorEditPages {
         return targets;
     }
 
-    // 冻结/只读时禁用交互
+    /** 冻结/只读时禁用交互 */
     public void setEnabled(boolean next) {
         enabled = next;
         if (!next) ruleEditorResultsPage.typePicker.close();
@@ -598,12 +598,11 @@ public final class RuleEditorEditPages {
     void applyEnabled() {
         RuleValue view = currentView();
         if (ruleEditorInputPage.sourceCostButton != null) {
-            ruleEditorInputPage.sourceCostButton.setEnabled(enabled && RuleCostBinding.consumeSource(view) == null);
+            ruleEditorInputPage.sourceCostButton.setEnabled(enabled);
         }
         if (ruleEditorInputPage.catalystToggle != null) {
             EditSession session = host.session();
-            boolean hasCost = view != null && (view.has(RuleFields.CATALYST_COST)
-                    || RuleCostBinding.consumeCatalyst(view) != null);
+            boolean hasCost = view != null && view.has(RuleFields.CATALYST_COST);
             ruleEditorInputPage.catalystToggle.setEnabled(enabled && (hasCost || session != null
                     && RuleEditorPageSupport.selectedCatalystLeaf(session.draft()) != null));
         }
@@ -612,6 +611,9 @@ public final class RuleEditorEditPages {
         }
         if (ruleEditorInputPage.fluidPresenceToggle != null) {
             ruleEditorInputPage.fluidPresenceToggle.setEnabled(enabled);
+        }
+        if (ruleEditorInputPage.fluidConsumeToggle != null) {
+            ruleEditorInputPage.fluidConsumeToggle.setEnabled(enabled);
         }
         ruleEditorTriggerPage.triggerBoxes.forEach(box -> box.setEnabled(enabled));
         if (ruleEditorResultsPage.variantControl != null) ruleEditorResultsPage.variantControl.setEnabled(enabled);
@@ -786,7 +788,7 @@ public final class RuleEditorEditPages {
 
     // ---- 内部工具 ----
 
-    // 切换前提交合法字段，非法文本留在会话，重建表单后仍可继续填写。
+    /** 切换前提交合法字段，非法文本留在会话，重建表单后仍可继续填写。 */
     public boolean blockNavigation() {
         if (!enabled) return false;
         for (FormView form : liveForms) form.retainPendingInputs();
@@ -795,7 +797,7 @@ public final class RuleEditorEditPages {
         return false;
     }
 
-    // Tab 和问题定位都需把焦点滚进外层页面视口。
+    /** Tab 和问题定位都需把焦点滚进外层页面视口。 */
     public void ensureVisible(UiFocusTarget target) {
         if (lastArea == null || !focusTargets().contains(target)) {
             return;
@@ -867,8 +869,8 @@ public final class RuleEditorEditPages {
             return;
         }
         if (ruleEditorInputPage.catalystToggle != null) {
-            ruleEditorInputPage.catalystToggle.setChecked(view.has(RuleFields.CATALYST_COST)
-                    || RuleCostBinding.consumeCatalyst(view) != null);
+            RuleValue cost = view.child(RuleFields.CATALYST_COST);
+            ruleEditorInputPage.catalystToggle.setChecked(cost != null && cost.has(RuleFields.CONSUME_COUNTS));
         }
         if (ruleEditorInputPage.catalystPresenceToggle != null) {
             ruleEditorInputPage.catalystPresenceToggle.setChecked(
@@ -877,6 +879,9 @@ public final class RuleEditorEditPages {
         if (ruleEditorInputPage.fluidPresenceToggle != null) {
             ruleEditorInputPage.fluidPresenceToggle.setChecked(
                     RuleEditorPageSupport.hasRuleLevelPresence(view, RuleEditorPageSupport.FLUID_PRESENT_ID));
+        }
+        if (ruleEditorInputPage.fluidConsumeToggle != null) {
+            ruleEditorInputPage.fluidConsumeToggle.setChecked(view.flag(RuleFields.CONSUME_FLUID, false));
         }
         List<String> triggers = RuleTriggers.effective(view);
         for (int index = 0; index < ruleEditorTriggerPage.triggerBoxes.size(); index++) {

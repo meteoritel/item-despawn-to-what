@@ -65,8 +65,7 @@ final class SourceCatalystSelectionPolicy implements Function<String, @Nullable 
         if (owner == null || !owner.isMapping()) return false;
         String type = RuleEditorPageSupport.stringField(owner, RuleFields.TYPE);
         return RuleFields.CATALYST_COST.equals(path)
-                || RuleEditorPageSupport.CATALYST_PRESENT_ID.toString().equals(type)
-                || RuleEditorPageSupport.CONSUME_CATALYST_ID.toString().equals(type);
+                || RuleEditorPageSupport.CATALYST_PRESENT_ID.toString().equals(type);
     }
 
     private static void collectCatalysts(RuleValue value, Set<String> out) {
