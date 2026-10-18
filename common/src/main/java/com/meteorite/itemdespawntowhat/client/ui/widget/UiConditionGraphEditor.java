@@ -1592,7 +1592,11 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         if (leaf == null) return;
         lastOpKey = EditSession.OP_ADD_CONDITION;
         boolean inserted = append ? addNode(leaf) : insertNode(parent, index, leaf);
-        if (inserted) revealNode(leaf);
+        if (inserted) {
+            revealNode(leaf);
+            // 新条件尚无参数，直接打开参数框，省去再点一次叶卡片
+            editSelectedLeaf();
+        }
     }
 
     // ---- 树变换 ----

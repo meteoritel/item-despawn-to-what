@@ -32,6 +32,7 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.model.CombinationMode;
 import com.meteorite.itemdespawntowhat.core.model.ConditionLimits;
+import com.meteorite.itemdespawntowhat.core.type.effect.PlaceBlockEffect;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -264,6 +265,7 @@ final class RuleEditorResultsPage {
                 List<EditorField> advanced = descriptor.fields().stream().filter(RuleEditorPageSupport::isCommonActionField).toList();
                 effectForm = pages.newForm(session, actionPath, new TypeEditorDescriptor(descriptor.id(), descriptor.label(), primary, descriptor.readOnly()));
                 effectForm.useCompactSpacing();
+                if (typeId.equals(PlaceBlockEffect.ID)) bindPlaceBlockVisibility(effectForm, session, actionPath);
                 pages.liveForms.add(effectForm);
                 pages.liveWidgets.add(effectForm);
                 if (!advanced.isEmpty()) {
@@ -295,6 +297,26 @@ final class RuleEditorResultsPage {
         if (effectCount > 0) {
             pages.addEffectButton(this::openEffectPicker);
         }
+    }
+
+    /**
+     * 「使用源物品的方块」与固定方块在界面上互斥：勾选后清除固定方块并隐藏该行，
+     * 避免隐藏的固定方块仍按服务端优先级生效。
+     */
+    private void bindPlaceBlockVisibility(FormView form, EditSession session, String actionPath) {
+        String blockPath = DraftPaths.child(actionPath, PlaceBlockEffect.BLOCK_FIELD);
+        String useSourcePath = DraftPaths.child(actionPath, PlaceBlockEffect.USE_SOURCE_BLOCK_FIELD);
+        // 手工 JSON 可能同时写两个字段；固定方块仍生效时保留该行，避免把生效值藏起来
+        form.setRowVisibility(blockPath, () -> !RuleEditorPageSupport.boolOf(
+                session.draft().valueAt(actionPath), PlaceBlockEffect.USE_SOURCE_BLOCK_FIELD, false)
+                || session.draft().valueAt(blockPath) != null);
+        form.setOnFieldWritten((path, before) -> {
+            if (!useSourcePath.equals(path)) return;
+            if (!RuleEditorPageSupport.boolOf(session.draft().valueAt(actionPath),
+                    PlaceBlockEffect.USE_SOURCE_BLOCK_FIELD, false)) return;
+            session.draft().removeAt(blockPath);
+            form.reload();
+        });
     }
 
     private UiButton addPlanButton(String key, UiAction action) {

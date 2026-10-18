@@ -251,6 +251,10 @@ final class RuleEditorInputPage {
             boolean custom = rule.has(RuleFields.SOURCE_COST);
             sourceCostButton.setVisible(!custom);
             sourceCostForm = custom ? pages.newForm(session, "", BuiltinEditorDescriptors.sourceCostDescriptor()) : null;
+            if (sourceCostForm != null) {
+                // 卡片上方已用「源物品消耗」说明字段含义，行内不再重复标签
+                sourceCostForm.hideRowLabel(RuleFields.SOURCE_COST);
+            }
             if (!custom) {
                 costNote = Component.translatable(RuleEditorPageSupport.UI + "cost.auto.one");
             }
