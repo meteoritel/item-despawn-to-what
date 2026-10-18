@@ -23,26 +23,41 @@ authority: tools/check-docs.py
 |---|---|---|
 | 1 | [README.md](../README.md) | 项目定位与使用说明（项目 README），开发者从这里进入文档体系 |
 | 2 | [architecture/](architecture/overview.md) | 系统上下文、模块划分、包职责、依赖规则、跨模块链路 |
-| 3 | [modules/](modules/README.md) | 每个逻辑模块的边界、关键类、核心流程、扩展点 |
+| 3 | [modules/](modules/README.md) | 每个逻辑模块的边界、关键类、核心流程、扩展点；任务命中该模块时再读 |
 | 4 | 源码注释 | 公开类型与方法的契约，用 IDE 查看 |
 | 5 | [api/](api/README.md)、[ops/](ops/configuration.md)、[guides/](guides/code-style.md)、[adr/](adr/README.md)、[agents/](agents/domain.md) | 对外契约、运行配置与故障排查、编码约定、架构决策、agent 工作方式 |
 
-## 阅读路径
+## 任务路由
+
+首访与落点判断先走抽象层；实现层模块文档只在任务落在该模块内部实现时读对应一篇。
 
 ```mermaid
 flowchart LR
-    A[README] --> B[architecture/overview]
-    B --> C[architecture/module-map]
-    C --> D["modules 下的模块文档"]
-    D --> E[api/ 与 ops/]
-    B --> F[architecture/key-flows]
+    A[架构总览] --> B[模块地图]
+    B --> C{任务落在某模块内部实现?}
+    C -->|是| D[该模块文档]
+    C -->|否| E[api / ops / guides 对应事实源]
 ```
 
-- 首次接手：README → 架构总览 → 模块地图 → 你负责的模块。
-- 改规则字段：api/rule-json → modules/rule-model。
-- 新增条件或效果：modules/core-contract → modules/type-system。
-- 改编辑器：modules/authoring → modules/client-editor → modules/ui-kit → modules/client-ui。
-- 排查线上问题：ops/troubleshooting → ops/configuration。
+| 任务 | 先读 | 按需再读 |
+|---|---|---|
+| 首次接触项目、判断改动落点 | [架构总览](architecture/overview.md) | [模块地图](architecture/module-map.md)、[包职责](architecture/package-responsibility.md) |
+| 改依赖方向、平台隔离或端隔离 | [依赖规则](architecture/dependency-rules.md) | [包职责](architecture/package-responsibility.md)、涉及的模块 |
+| 追踪跨模块顺序、判断失败停在哪一步 | [关键链路](architecture/key-flows.md) | 涉及的模块文档 |
+| 改规则字段、形状或校验 | [规则 JSON](api/rule-json.md) | [规则模型](modules/rule-model.md) |
+| 新增条件或效果类型 | [core-contract](modules/core-contract.md)、[类型系统](modules/type-system.md) | [规则 JSON](api/rule-json.md) |
+| 改来源读取、覆盖合并或拒载 | [规则加载](modules/rule-loading.md) | [规则 JSON](api/rule-json.md)、[错误与状态](api/errors.md) |
+| 改追踪、结算、恢复或调度 | [转化运行时](modules/conversion-runtime.md) | [关键链路](architecture/key-flows.md)、[运行配置](ops/configuration.md) |
+| 改编辑会话、覆盖落盘、命令或调试场景 | [编辑与命令](modules/authoring.md) | [编辑协议](api/edit-protocol.md) |
+| 改客户端协议、草稿或类型编辑器 | [客户端编辑器](modules/client-editor.md) | [编辑协议](api/edit-protocol.md) |
+| 改 UI kit 公开面或依赖边界 | [UI kit](modules/ui-kit.md) | [依赖规则](architecture/dependency-rules.md) |
+| 改编辑器界面、主题或控件适配 | [编辑器界面](modules/client-ui.md) | [UI kit](modules/ui-kit.md)、[客户端编辑器](modules/client-editor.md) |
+| 改平台接入、生命周期或配置读取 | [平台模块](modules/platform.md) | [运行配置](ops/configuration.md) |
+| 改编辑协议载荷、分片或回执 | [编辑协议](api/edit-protocol.md) | [错误与状态](api/errors.md) |
+| 处理错误码、保存状态或文案 key | [错误与状态](api/errors.md) | 涉及的模块 |
+| 改 server.json 或排查运行问题 | [运行配置](ops/configuration.md) | [故障排查](ops/troubleshooting.md) |
+| 判定能否采用某设计、查取舍理由 | [ADR 索引](adr/README.md) | [术语表](../GLOSSARY.md) |
+| 改注释、命名或代码组织约定 | [代码风格](guides/code-style.md) | 涉及的模块 |
 
 ## 单一事实源
 

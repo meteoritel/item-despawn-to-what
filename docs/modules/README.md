@@ -10,7 +10,7 @@ authority: settings.gradle、common/core/**、common/client/**、common/platform
 ## TL;DR
 
 - 层 3 的“模块”是按职责划分的逻辑模块，与 Gradle 子项目不是一一对应。
-- 每个模块一篇 README，只回答边界、关键类、核心流程与扩展点。
+- 每个模块一篇 `<module>.md`，只回答边界、关键类、核心流程与扩展点；默认读者是人类开发者，agent 在任务命中该模块时读。
 - 跨模块链路看 [关键链路](../architecture/key-flows.md)，契约细节看 [docs/api](../api/README.md)。
 
 ## 适用对象
@@ -38,7 +38,9 @@ Gradle 侧只有 `common`、`fabric`、`neoforge` 三个子项目；层 3 的模
 
 ## 怎么读
 
-1. 先读 [core-contract](core-contract.md) 了解契约，再读实现模块。
+模块文档在任务落在该模块内部实现时读对应一篇；判断落点先回[架构总览](../architecture/overview.md)与[模块地图](../architecture/module-map.md)。
+
+1. 改契约或跨模块共享类型：读 [core-contract](core-contract.md)，再看使用它的模块。
 2. 改规则字段或校验：读 [rule-model](rule-model.md)，字段语义查 [规则 JSON](../api/rule-json.md)。
 3. 新增条件或效果：读 [type-system](type-system.md)。
 4. 改转化行为：读 [conversion-runtime](conversion-runtime.md)，跨模块顺序查 [关键链路](../architecture/key-flows.md)。

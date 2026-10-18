@@ -5,7 +5,7 @@
 ## 读取规则
 
 探索代码前，读取根目录术语表，并读取与任务相关的 ADR。
-相关开发者文档按 [开发者文档索引](../dev/README.md) 查阅。
+判断改动落点读[架构总览](../architecture/overview.md)；实现层模块文档按任务命中再读，入口见[文档体系](../README.md)。
 
 术语表与 ADR 均已存在；遇到术语缺口时先核对现有用语，再由 `domain-modeling` 确认后写入 `GLOSSARY.md`。
 

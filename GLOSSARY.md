@@ -1,7 +1,7 @@
 # ItemDespawnToWhat 术语表
 
 > 本文件是项目唯一的领域术语表（single-context 布局）：只记录领域词汇、含义与用法边界。
-> 实现事实见[开发者文档](docs/dev/README.md)，设计取舍见 [ADR 索引](docs/adr/README.md)；本文件不复述字段表、限额、状态码数值与类名。
+> 实现事实见[架构总览](docs/architecture/overview.md)与[模块文档索引](docs/modules/README.md)，设计取舍见 [ADR 索引](docs/adr/README.md)；本文件不复述字段表、限额、状态码数值与类名。
 
 ## 条件编辑
 

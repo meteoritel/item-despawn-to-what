@@ -129,13 +129,13 @@ flowchart LR
 
 ## 相关文档
 
+- [文档体系](../README.md)
 - [模块地图](module-map.md)
 - [包职责](package-responsibility.md)
 - [依赖规则](dependency-rules.md)
 - [关键链路](key-flows.md)
-- [模块文档索引](../modules/README.md)
+- [模块文档索引](../modules/README.md)（任务命中某个模块时再读）
 - [规则 JSON](../api/rule-json.md)
 - [编辑协议](../api/edit-protocol.md)
 - [错误与状态码](../api/errors.md)
 - [运行配置](../ops/configuration.md)
-- [文档体系](../README.md)
