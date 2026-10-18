@@ -1,6 +1,6 @@
 # ADR-0038：转化结算的单一状态提交点与库存所有权标记
 
-- 状态：已实施；结算与账本见 [conversion-runtime.md](../dev/backend/modules/conversion-runtime.md)。
+- 状态：已实施；结算与账本见 [conversion-runtime.md](../modules/conversion-runtime.md)。
 - 相关决策：[ADR-0023](0023-triggers-fixed-cost-and-complete-group-settlement.md)（完整组结算与固定成本语义不变，本 ADR 只收口结算状态的写入路径）。
 
 ## 背景

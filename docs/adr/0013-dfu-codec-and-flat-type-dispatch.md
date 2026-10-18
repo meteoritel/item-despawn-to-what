@@ -3,7 +3,7 @@
 - 状态：已实施；实现见 `core/api/TypeDispatch.java`、`core/api/TypeRegistry.java`、`core/api/RuleDecoder.java`。
 
 ## 背景
-旧链路用 Gson + `@SerializedName` 手写序列化：61 个文件、两处独立 Gson 实例、三套并存的校验策略（未知字段拒整文件 / 启动逐条丢弃 / reload 一条非法即整体失败），并且 Gson 默认静默忽略未知字段，配置错误会"静默退化"而不是报错。同时效果与条件是多态类型，需要一个能按 `type` 查注册表的解码入口。
+旧链路用 Gson + `@SerializedName` 手写序列化：各链路各持一套 Gson 实例，校验策略并存在多套（未知字段拒整文件 / 启动逐条丢弃 / reload 一条非法即整体失败），并且 Gson 默认静默忽略未知字段，配置错误会"静默退化"而不是报错。同时效果与条件是多态类型，需要一个能按 `type` 查注册表的解码入口。
 
 ## 决策
 1. **一套 DFU Codec**：规则、效果、条件叶全部用 `RecordCodecBuilder` / `MapCodec` + `RegistryOps`；效果与条件叶经注册表按 `type` 分发。条件表达式的外壳是递归条件树（见 [ADR-0018](0018-condition-tree-contract.md)），分发只作用于条件叶。
@@ -22,4 +22,4 @@
 - 数据包作者获得注册表级校验（引用不存在即报错），错误信息带来源与字段路径。
 - 类型新增/变更只影响自己的 Codec 与校验器，`TypeDispatch` 与注册表不动。
 - 编码未注册类型会抛 `IllegalStateException`（编程错误），GUI 保存路径必须捕获并转成用户可读错误。
-- 类型参数级未知字段检测已落地：`TypeDispatch` 以类型 `codec().keys()` 作为字段白名单；候选结果、`catalyst_cost` 对象与条件树节点另有**错误级**未知字段检查（见 [rule-model.md](../dev/backend/modules/rule-model.md)）。
+- 类型参数级未知字段检测由 `TypeDispatch` 承担：它以类型 `codec().keys()` 作为字段白名单；候选结果、`catalyst_cost` 对象与条件树节点另有**错误级**未知字段检查（见 [rule-model.md](../modules/rule-model.md)）。

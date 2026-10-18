@@ -1,7 +1,7 @@
 # ADR-0023：消失方式触发、固定成本与完整转化组结算
 
-- 状态：已实施（2026-10-03），已通过用户实机验收。
-- 实现见：`core/model/TriggerKind`、`CombinationMode`、`CatalystCost`、`OutcomeCandidate`、`Rule`；`core/runtime/ConversionSettlement`、`CatalystReservations`、`SettlementLedger`、`SettlementRecord`、`SettlementRecovery`、`RoundRobinCursors`；`core/state/DropState`。
+- 状态：已实施。
+- 实现见：`core/model/TriggerKind`、`CombinationMode`、`SourceCost`、`CatalystCost`、`OutcomeCandidate`、`Rule`；`core/runtime/ConversionSettlement`、`CatalystReservations`、`SettlementLedger`、`SettlementRecord`、`SettlementRecovery`、`RoundRobinCursors`；`core/state/DropState`。
 - 替代范围：扩展 [ADR-0012](0012-rule-model-and-effect-list.md) 的规则模型（新增 `triggers` / `source_cost` / `catalyst_cost` / `combination` / `outcomes` / `schema_version`）；取代此前「按堆叠预估 rounds」式结算。
 
 ## 背景
@@ -10,7 +10,7 @@
 
 ## 决策
 
-1. **消失方式集合 `triggers`**：`natural`（默认，未声明时）/ `fire` / `lava` / `cactus`。火 / 岩浆 / 仙人掌由两端**最小 Mixin** 接 `ItemEntity` 致死分支（原版物品销毁回调之前）接管，**即时触发、不等待**；按**最终致死伤害**归因（岩浆优先于火，未知伤害不归为火）。接触危险源、受伤但存活、原版免疫均不触发。Mixin 只做入口，规则匹配与结算仍在 common。
+1. **消失方式集合 `triggers`**：`natural`（默认，未声明时）/ `fire` / `lava` / `cactus`。火 / 岩浆 / 仙人掌由两端**最小 Mixin** 接 `ItemEntity` 致死分支（原版物品销毁回调之前）接管，**即时触发、不等待**；按**最终致死伤害**归因（岩浆优先于火，未知伤害不归为火）；只有原版物品销毁分支（`onDestroyed` 之前）会被接管。Mixin 只做入口，规则匹配与结算仍在 common。
 2. **输入准入与支付**：源成本为正整数，催化剂门槛与实际消耗分开声明，流体按规则开关追溯源方块支付。数量与共享半径契约见 [ADR-0041](0041-input-thresholds-and-consumption.md)；输入支付不携带概率或延迟。
 3. **完整转化组**：每轮 = 一组，组数以 `floor(源量 / 每组源成本)` 为上界；**不按比例拆半组**，不足一组成本不强制产出。组内多个产出效果受**共同的最小完整容量**约束；容量、催化剂或半径内位置不足在**该组开始之前**处理。效果条件不满足或概率落空属于正常结果，仍支付该组，不改选候选、不返还——概率落空不是免费重试。
 4. **候选结果 `outcomes` + 组合模式 `combination`**：一轮一组只选**一个**候选；`round_robin`（默认，按游标依次选取）或 `priority`（取第一个可执行完整一组的候选）。轮询游标按**规则 id + 维度**共享并持久化，不随换源清空。未声明 `outcomes` 时，顶层 `effects` 由 `Rule.effectiveOutcomes()` 隐式映射为唯一候选 `default`（兼容旧格式）。`effects` 与 `outcomes` 不得同时声明。
@@ -28,6 +28,6 @@
 
 ## 后果
 
-- 规则 JSON 契约 **breaking**：旧规则未声明 `triggers` 时仅自然消失；`source_cost` 必须为正、`catalyst_cost` 改为对象写法、`effects` 与 `outcomes` 互斥、新增 `schema_version`（当前仅支持 1）。内置数据包已同步更新，**不提供自动迁移**。
-- 后续 GUI 需能表达触发、固定成本、候选与组合模式；旧 GUI 无法表达新结构时**拒绝可能丢字段的保存**（见 [edit-protocol.md](../dev/backend/modules/edit-protocol.md)）。
+- 规则 JSON 契约 **breaking**：旧规则未声明 `triggers` 时仅自然消失；`source_cost` 必须为正、`catalyst_cost` 为对象写法、`effects` 与 `outcomes` 互斥、新增 `schema_version`（当前仅支持 1）。内置数据包已同步更新，旧规则需按新契约手动改写。
+- GUI 表达触发、固定成本、候选与组合模式；无法表达新结构时**拒绝可能丢字段的保存**（见 [编辑协议](../api/edit-protocol.md)）。
 - 数量守恒与「已开始组不恢复」成为可观测行为，调试场景与结算示例以此为准。

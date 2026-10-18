@@ -1,6 +1,6 @@
 # ADR-0034：调度契约与实现分层
 
-- 状态：已实施；契约与实现分工见 [scheduling-budget.md](../dev/backend/systems/scheduling-budget.md)。
+- 状态：已实施；契约与实现分工见[转化运行时](../modules/conversion-runtime.md)。
 - 相关决策：[ADR-0024](0024-shared-server-tick-budget-scheduler.md)（共享 tick 预算模型本身不变，本 ADR 只调整其类型的归属与依赖方向）。
 
 ## 背景
@@ -14,7 +14,7 @@
 1. **契约归契约层**：`ServerTask`、`ServerTaskKind`、`CancelReason`、`StepResult`、`StepOutcome`、`ServerTickBudget`、`ServerTickBudgetSnapshot`、`RunnableTask`、`TaskQueue`、`ScheduledTaskHandle`、`StepWorkCounter` 定义在契约层的调度子包。
 2. **实现留运行时层**：`ServerScheduler`、`RealmQueues`、`TaskLane`、`ScheduledTask`、`SchedulerConfig`、`SchedulerStats`、`QueueStats`、`KindStats` 留在运行时调度包，只实现契约。
 3. **依赖方向固定为实现依赖契约**：效果与条件的执行器（`core/type/effect/exec`、`core/type/condition`）只依赖契约类型，不引用运行时调度包。
-4. **排期以最小抽象暴露**：跨层排期只给「realm 标识 + 任务 + 到期刻」这一能力（队列抽象与窄接口上的排期方法），不把调度器实例或配置面交出去。
+4. **排期以最小抽象暴露**：跨层排期只给「realm 标识 + 任务 + 延迟刻数」这一能力（队列抽象接收绝对到期刻，窄接口上的排期方法接收相对当前刻的延迟刻数），不把调度器实例或配置面交出去。
 
 ## 考虑过的替代方案
 
@@ -24,6 +24,6 @@
 
 ## 后果
 
-- 契约层文档中新增「调度契约」一族；新增任务种类改契约侧枚举，新增调度策略改运行时实现。
+- 契约层新增「调度契约」一族（`core/api/scheduler/`）；新增任务种类改契约侧枚举，新增调度策略改运行时实现。
 - 效果与条件执行器、平台宿主与网络层不再依赖运行时调度包，可在测试与替换实现时只替换实现侧。
 - 契约层因此承载了「队列」这一抽象，需要持续约束它只表达排期能力，不泄漏实现细节。
