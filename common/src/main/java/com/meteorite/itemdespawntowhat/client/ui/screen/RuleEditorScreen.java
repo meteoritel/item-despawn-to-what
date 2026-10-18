@@ -21,6 +21,8 @@ import com.meteorite.itemdespawntowhat.client.ui.shared.EntityPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostPalette;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCodeView;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiListView;
@@ -812,22 +814,41 @@ public final class RuleEditorScreen extends Screen {
         rebuildFocus();
     }
 
-    // 用户主动关闭：有未保存改动先确认
+    // 用户主动关闭：有未保存改动时提供「暂存到本地」「放弃」「取消」三个选择
     private void closeByUser() {
         if (saving()) { return; }
         if (editPage.blockNavigation()) {
             return;
         }
-        if (model.hasDirty()) {
-            confirm(UI + "confirm.discard_title", UI + "confirm.discard_message", () -> {
-                // 玩家确认放弃：连落盘草稿一起删掉，避免下次打开又「恢复」回来
-                model.discardAllDrafts();
-                editPage.close();
-                workspace.close("screen_closed");
-                this.onClose();
-            });
+        if (!model.hasDirty()) {
+            closeEditor();
             return;
         }
+        UiModal modal = UiModal.create(THEME, font);
+        modal.title(Component.translatable(UI + "confirm.discard_title"));
+        modal.message(Component.translatable(UI + "confirm.discard_message"));
+        modal.addButton(new UiButton(THEME, font, Component.translatable(UI + "button.save_local"),
+                UiButtonVariant.PRIMARY, () -> {
+                    modals.close(modal);
+                    // 先把当前表单输入并入草稿，再立即写盘；关闭流程本身也会再冲刷一次
+                    editPage.applyAllForms();
+                    model.persistNow();
+                    closeEditor();
+                }));
+        modal.addButton(new UiButton(THEME, font, Component.translatable(UI + "button.discard"),
+                UiButtonVariant.DANGER, () -> {
+                    modals.close(modal);
+                    // 玩家确认放弃：连落盘草稿一起删掉，避免下次打开又「恢复」回来
+                    model.discardAllDrafts();
+                    closeEditor();
+                }));
+        modal.cancel(Component.translatable(UI + "button.cancel"));
+        modal.layoutCentered(this.width, this.height);
+        modals.push(modal);
+    }
+
+    // 关闭编辑界面：释放页面、结束工作区会话，再由 onClose 统一冲刷草稿
+    private void closeEditor() {
         editPage.close();
         workspace.close("screen_closed");
         this.onClose();
