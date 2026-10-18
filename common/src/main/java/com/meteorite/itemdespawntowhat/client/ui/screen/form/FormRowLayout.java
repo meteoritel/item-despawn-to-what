@@ -37,9 +37,10 @@ final class FormRowLayout {
     /**
      * 该行标签列实际预留的宽度。
      *
-     * <p>行内自带文字的控件（复选框、物品计数行、条件树）内部还要再分「名称 / 轨道 / 数值」，
-     * 统一列宽会把控件挤窄到看不清条目名，因此这类行按标签文本宽度收窄；其余行保持统一列宽，
-     * 控件左边缘仍对齐。说明行整行显示，不参与标签列对齐。</p>
+     * <p>行内自带文字的控件（复选框、条件树）把标签排在控件内部，整列留给控件也读得出，
+     * 统一列宽只会在窄窗口下白占空间，因此这类行按标签文本宽度收窄；其余行保持统一列宽，
+     * 控件左边缘仍对齐。说明行整行显示，不参与标签列对齐。物品计数行的滑条列由
+     * {@code ItemCountsControl.setSliderColumnOffset} 取本行控件列，与其余行共用同一列。</p>
      *
      * @param row                 当前行
      * @param effectiveLabelWidth 表单统一标签列宽（已按可用宽度收紧）
@@ -103,6 +104,10 @@ final class FormRowLayout {
             if (row.control instanceof ItemCountsControl counts) {
                 boolean paired = row.pairedBelow != null && row.pairedBelow.visible;
                 counts.setPairRole(paired ? ItemCountsControl.PairRole.UPPER : ItemCountsControl.PairRole.NONE);
+                // 滑条列取普通字段行的控件列：滑条与其它行左对齐，组内含义文案留在标签列。
+                // 窄列或紧凑密度下本行自己已经占着标签列，控件内部不再叠加缩进
+                boolean sharesLabelColumn = narrow || !row.labelVisible || minimumControlHeight == 0;
+                counts.setSliderColumnOffset(sharesLabelColumn ? 0 : effectiveLabelWidth + LABEL_GAP);
                 if (paired && row.pairedBelow.control instanceof ItemCountsControl lower) {
                     // 第二行文案取下行字段标签（例如「消耗数量」），由上行统一绘制在物品名下方
                     counts.setSecondRowLabel(lower.label());
@@ -153,8 +158,8 @@ final class FormRowLayout {
                 FormRow paired = row.pairedBelow;
                 lower.setPairRole(ItemCountsControl.PairRole.LOWER);
                 lower.setSecondRowLabel(null);
-                // 两条滑条必须从同一横坐标开始：下行沿用上行算出的名称列宽度
-                lower.setLabelColumnWidth(upper.labelColumnWidth(row.controlWidth));
+                // 两条滑条必须从同一横坐标开始：下行沿用上行实际使用的名称列宽度
+                lower.setLabelColumnWidth(upper.resolvedLabelColumnWidth(row.controlWidth));
                 paired.contentY = row.contentY;
                 paired.contentHeight = row.contentHeight;
                 paired.controlRelX = row.controlRelX;

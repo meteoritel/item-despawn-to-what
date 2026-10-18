@@ -1084,6 +1084,6 @@
   "gui.itemdespawntowhat.edit.debug.delete.title": "Delete all test rules",
   "gui.itemdespawntowhat.edit.debug.delete.message": "This deletes all %s test rule drafts; normal rules are untouched. Continue?",
   "gui.itemdespawntowhat.edit.rule.catalyst_cost.consume_count": "Consumed quantity",
-  "gui.itemdespawntowhat.edit.rule.consume_fluid": "Consume nearest source feeding the contacted fluid",
+  "gui.itemdespawntowhat.edit.rule.consume_fluid": "Consume source",
   "gui.itemdespawntowhat.edit.issue.catalyst_consume_count_out_of_range": "Catalyst consumption must be an integer from 1 to 64 and reference selected items only"
 }

@@ -15,6 +15,8 @@ import org.lwjgl.glfw.GLFW;
 
 /***
  * 复选框：左侧像素勾选框，右侧标签文本（颜色状态一律辅以文字，不只靠颜色区分）。
+ * <p>鼠标交互点限制在左侧方框内（{@link UiRect#centeredSquare}）：点击标签文字或行内空白不会切换，
+ * 避免整行命中带来的误触；键盘焦点与回车、空格切换不受此限制。
  * <p>选中标记当前用 ASCII 字符占位（美术资源 TODO）。
  */
 public final class UiCheckBox implements UiWidget, UiFocusTarget {
@@ -117,9 +119,9 @@ public final class UiCheckBox implements UiWidget, UiFocusTarget {
         if (!visible) {
             return;
         }
-        boolean hovered = enabled && bounds.contains(mouseX, mouseY);
-        int boxY = bounds.y() + Math.max(0, (bounds.height() - BOX_SIZE) / 2);
-        UiRect box = new UiRect(bounds.x(), boxY, BOX_SIZE, BOX_SIZE);
+        // 绘制与命中共用同一份方框几何：只有方框本身响应悬停
+        UiRect box = bounds.centeredSquare(BOX_SIZE);
+        boolean hovered = enabled && box.contains(mouseX, mouseY);
         theme.drawInset(graphics, box);
         if (checked) {
             graphics.fill(box.x() + 2, box.y() + 2, box.right() - 2, box.bottom() - 2,
@@ -137,7 +139,7 @@ public final class UiCheckBox implements UiWidget, UiFocusTarget {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (!visible || !enabled || button != 0 || !bounds.contains(mouseX, mouseY)) {
+        if (!visible || !enabled || button != 0 || !bounds.centeredSquare(BOX_SIZE).contains(mouseX, mouseY)) {
             return false;
         }
         return toggle();

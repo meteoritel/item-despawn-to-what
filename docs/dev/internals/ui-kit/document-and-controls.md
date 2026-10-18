@@ -45,7 +45,7 @@
 | `UiControlStyle` | record | 组件 `background`、`hoverBackground`、`pressedBackground`、`selectedBackground`、`disabledBackground`、`focusOutline`、`scrollbarTrack`、`scrollbarThumb`；常量 `PARCHMENT`、`DARK`；`background(State)`；`State` 为 `NORMAL`、`HOVER`、`PRESSED`、`SELECTED`、`DISABLED` | 控件结构色 token 组 |
 | `UiControlRole` | enum | `SECONDARY`、`PRIMARY`、`DANGER`、`DISABLED`、`LABEL` | 控件语义角色 |
 | `UiStyleSource` | interface | `controlStyle(UiControlRole)`、`sliderSkin(UiSliderRole)` | 宿主样式注入接口 |
-| `UiRect` | record | 组件 `x`、`y`、`width`、`height`；`right`、`bottom`、`contains(double, double)` | 逻辑矩形 |
+| `UiRect` | record | 组件 `x`、`y`、`width`、`height`；`right`、`bottom`、`contains(double, double)`、`centeredSquare(int)` | 逻辑矩形；`centeredSquare` 给出「方框 + 文字」行控件的行内方块几何 |
 | `UiTarget` | record | 组件 `kind`、`index`、`payload`、`rect`、`tooltip`、`action`；`Kind` 为 `ROW`、`ICON` | 唯一命中结果 |
 | `UiAction` | interface | `run()` | 点击行为 |
 | `UiNineSlice` | record | 组件 `texture`、`size`、`corner`；`render(GuiGraphics, UiRect)` | 九宫格贴图绘制 |
@@ -100,6 +100,7 @@
 - `UiDocument#setContent(List<UiNode>)` 用行注释说明构建器计时使用另一个重载；两个入口都调用 `UiMetrics#built` 累加构建计数。
 - `UiTarget` 的紧凑构造器用 `List.copyOf` 复制提示行；`UiNode.Row` 与 `UiNode.InlineIcon` 的提示行逐条复制。
 - `UiPointer#gated` 在门控失败时返回固定屏幕外坐标，其 `x`、`y` 为 `Integer.MIN_VALUE / 2`。
+- `UiRect#centeredSquare(int size)` 取本矩形左边缘为方块左边界、纵向居中，边长按本矩形的宽高取小（`Math.clamp(size, 0, min(width, height))`）；本矩形为空时返回零尺寸方块，调用方不需要自行钳制。
 - 公开成员的说明形式不一致：`UiControl#setBounds` 用行注释、`UiControl#setStyle` 与 `UiRect#right` 没有说明、`UiScrollView#setOffset` 没有 JavaDoc。
 
 ## 3. 类清单
@@ -117,7 +118,7 @@
 | `UiControlStyle` | 控件结构色 token 组：各状态背景、焦点轮廓与滚动条颜色 | `PARCHMENT`、`DARK`、`background` |
 | `UiControlRole` | 控件语义角色枚举，颜色由宿主按角色注入 | `SECONDARY`、`PRIMARY` |
 | `UiStyleSource` | 宿主样式来源：按角色返回控件样式与滑块外观 | `controlStyle`、`sliderSkin` |
-| `UiRect` | 逻辑矩形：右、下边界不参与命中，构造期拒绝负尺寸 | `right`、`contains` |
+| `UiRect` | 逻辑矩形：右、下边界不参与命中，构造期拒绝负尺寸；行内方块供复选框等「方框 + 文字」控件限定交互点 | `right`、`contains`、`centeredSquare` |
 | `UiTarget` | 唯一命中结果：行或行内图标，矩形位于内容坐标 | `Kind`、`tooltip` |
 | `UiAction` | 点击行为函数式接口 | `run` |
 | `UiNineSlice` | 九宫格贴图绘制：四角原生尺寸，边与中心各一次拉伸 | `render` |

@@ -67,6 +67,11 @@ final class ItemCountsControl extends FormControl {
     private @Nullable Component secondRowLabel;
     // 配对下行沿用上行的名称列宽度（0 = 按本控件自身的名称宽度计算）
     private int labelColumnOverride;
+    // 滑条列相对控件左边缘的偏移，由表单行布局注入（0 = 按名称宽度自行计算）
+    private int sliderColumnOffset;
+    // 含义文案的绘制列：与表单标签列同起点，宽度到滑条列之前
+    private int labelTextX;
+    private int labelTextWidth;
 
     /** 物品数量控件的配对角色；配对时物品名只出现一次，其下依次是门槛与消耗两道滑条。 */
     enum PairRole {
@@ -95,6 +100,23 @@ final class ItemCountsControl extends FormControl {
     /** 配对下行沿用上行的名称列宽度：两条滑条必须从同一横坐标开始。 */
     void setLabelColumnWidth(int width) {
         labelColumnOverride = Math.max(0, width);
+    }
+
+    /**
+     * 表单行布局注入滑条列起点：滑条与同表单其它行的控件左边缘对齐，名称列与含义文案随之落位。
+     *
+     * @param offset 滑条列相对控件左边缘的偏移；0 表示按名称宽度自行计算
+     */
+    void setSliderColumnOffset(int offset) {
+        sliderColumnOffset = Math.max(0, offset);
+    }
+
+    /** 实际使用的名称列宽度：注入了滑条列偏移时按偏移反推，否则按名称宽度计算。 */
+    int resolvedLabelColumnWidth(int width) {
+        if (sliderColumnOffset > 0) {
+            return Math.clamp(sliderColumnOffset - NAME_GAP, 0, Math.max(0, width - NAME_GAP));
+        }
+        return labelColumnOverride > 0 ? Math.min(labelColumnOverride, width) : labelColumnWidth(width);
     }
 
     /** 按可用宽度算出名称列宽度；配对下行由 {@link #setLabelColumnWidth} 直接沿用上行的结果。 */
@@ -259,7 +281,10 @@ final class ItemCountsControl extends FormControl {
     @Override
     void setBounds(int x, int y, int width) {
         int rowHeight = rowHeight();
-        int labelWidth = labelColumnOverride > 0 ? Math.min(labelColumnOverride, width) : labelColumnWidth(width);
+        int labelWidth = resolvedLabelColumnWidth(width);
+        // 含义文案从控件左边缘起画：与同表单普通字段的标签同列
+        this.labelTextX = x;
+        this.labelTextWidth = Math.max(0, labelWidth - NAME_GAP);
         int contentX = x + labelWidth + NAME_GAP;
         int contentWidth = Math.max(0, width - labelWidth - NAME_GAP);
         // 精确输入框宽度按各行最大值统一，滑条右端也随之对齐
@@ -304,20 +329,20 @@ final class ItemCountsControl extends FormControl {
             }
             if (pairRole == PairRole.UPPER) {
                 // 两条滑条各配一行含义文案：与各自滑条同一垂直中线，避免上下滑条含义混淆
-                drawRowLabel(graphics, renderFont, label(), entry, entry.rowY);
+                drawRowLabel(graphics, renderFont, label(), entry.rowY);
                 if (secondRowLabel != null && !secondRowLabel.getString().isEmpty()) {
-                    drawRowLabel(graphics, renderFont, secondRowLabel, entry, entry.rowY + lastRowHeight + PAIR_GAP);
+                    drawRowLabel(graphics, renderFont, secondRowLabel, entry.rowY + lastRowHeight + PAIR_GAP);
                 }
             }
             entry.control.render(graphics, renderFont, mouseX, mouseY);
         }
     }
 
-    // 配对行的含义文案画在名称列：滑条列保持两条滑条起止一致
-    private void drawRowLabel(GuiGraphics graphics, Font renderFont, Component text, Entry entry, int rowY) {
+    // 配对行的含义文案画在标签列：滑条列整体让给滑条，两条滑条起止一致且与其它字段同行对齐
+    private void drawRowLabel(GuiGraphics graphics, Font renderFont, Component text, int rowY) {
         int labelY = rowY + Math.max(0, (lastRowHeight - renderFont.lineHeight) / 2);
-        TextScroll.draw(graphics, renderFont, text.getString(), entry.nameX, labelY,
-                entry.nameWidth, THEME.palette().textDisabled(), false, 0, false);
+        TextScroll.draw(graphics, renderFont, text.getString(), labelTextX, labelY,
+                labelTextWidth, THEME.palette().textDisabled(), false, 0, false);
     }
 
     @Override

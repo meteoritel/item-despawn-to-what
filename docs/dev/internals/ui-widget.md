@@ -36,7 +36,7 @@
 | `UiFooterHost` | interface | `setFooterReserved(int right, int height)` | 由弹窗按钮行托管底部行的控件实现。 |
 | `UiButton` | class（`UiWidget`、`UiFocusTarget`） | `UiButton(Font, Component, UiButtonVariant, UiAction)`、`UiButton(UiHostTheme, Font, Component, UiButtonVariant, UiAction)`、`setLabel`、`setIcon`、`setChipStyle`、`setAction`、`setTooltip`、`setEnabled`、`setVisible`、`setAccessibleName`、`label`、`variant`、`isPressed`、`preferredWidth` | 状态与焦点委托 kit 的 `UiControl`。 |
 | `UiButtonVariant` | enum | `PRIMARY`、`SECONDARY`、`DANGER`、`DISABLED`、`role`、`interactive` | 只表达语义；颜色由主题按 `UiControlRole` 给出。 |
-| `UiCheckBox` | class（`UiWidget`、`UiFocusTarget`） | `UiCheckBox(UiHostTheme, Font, Component, boolean)`、`preferredWidth`、`label`、`setLabel`、`isChecked`、`setChecked`、`toggle`、`setOnChanged`、`setEnabled`、`isEnabled`、`setVisible` | `BOX_SIZE` 为 9、`LABEL_GAP` 为 3。`setChecked` 不触发回调，`toggle` 触发。 |
+| `UiCheckBox` | class（`UiWidget`、`UiFocusTarget`） | `UiCheckBox(UiHostTheme, Font, Component, boolean)`、`preferredWidth`、`label`、`setLabel`、`isChecked`、`setChecked`、`toggle`、`setOnChanged`、`setEnabled`、`isEnabled`、`setVisible` | `BOX_SIZE` 为 9、`LABEL_GAP` 为 3。`setChecked` 不触发回调，`toggle` 触发。方框与命中范围都取 `UiRect#centeredSquare(BOX_SIZE)`：鼠标点只认方框，点在标签文字或行内空白不切换。 |
 | `UiTextInput` | class（`UiWidget`、`UiFocusTarget`） | `value`、`setValue`、`clear`、`setMaxLength`、`setFilter`、`setOnOverflow`、`setOnValueChanged`、`setEditable`、`setHint`、`setOnCommit`、`setOnCancel`、`setVisible`、`selectAll`、`moveCursorToStart`、`setAccessibleName`、`endInteraction` | 封装原版 `EditBox`，长度上限按 Unicode 码点判定。 |
 | `UiTextArea` | class（`UiWidget`、`UiFocusTarget`） | `value`、`setValue`、`setMaxLength`、`setEditable`、`setSelectableWhenReadOnly`、`setHint`、`setOnChanged`、`setOnOverflow`、`setOnCancel`、`setRows`、`setAccessibleName`、`setVisible`、`moveCursorToStart`、`height`、`endInteraction` | 封装原版 `MultilineTextField`；超限的这次输入整体回退。 |
 | `UiSlider` | class（`UiWidget`、`UiFocusTarget`、`UiInputTarget`） | `core`、`setRange`、`value`、`min`、`max`、`step`、`setValue`、`trySetValue`、`isBackfillInvalid`、`setLabel`、`setFormatter`、`setOnChanged`、`setEnabled`、`isEnabled`、`setVisible`、`setError`、`isDragging`、`formatValue`、`endInteraction` | `TRACK_HEIGHT` 为 4、`THUMB_WIDTH` 为 3；数值域、窗口、捕获与 preview/commit/cancel 委托 `UiScalarSlider`。 |
@@ -137,6 +137,7 @@
 - 公开方法普遍使用行内 `//` 注释而非 JavaDoc：`UiListView#setItems`、`UiTreeView#setRoots`、`UiSegmentedControl#setOptions`、`UiSlider#setValue` 的前一行均为 `//` 注释，`UiRangeBar#setLabel` 前无任何注释。带 JavaDoc 块的公开方法见 `UiConditionGraphEditor`、`UiListView`、`UiTypePicker`、`UiCatalogGrid`、`UiModal`、`UiModalStack`、`UiRangeBar`、`UiCyclicTimeBar`、`UiDescriptionTooltip`、`UiTextArea`、`UiButton`。
 - `UiNarration` 为私有构造的静态工具类，仅包装 `Minecraft#getNarrator` 的播报，本包其它类型未引用它。
 - `UiCheckBox` 的选中标记以字符绘制，不使用贴图；`UiCheckBox` 只有 `UiHostTheme`、`Font`、标签与初始状态四个构造参数，没有单独的选择标记样式入口。
+- `UiCheckBox#mouseClicked` 只在指针落进方框时切换，方框几何取自 `bounds().centeredSquare(BOX_SIZE)`，与 `render` 悬停判定共用；键盘回车、空格与 `activate` 不受此限制，控件仍可按整行尺寸摆放。
 - `UiWidget` 契约本身不包含焦点、无障碍与历史快捷键成员，这三类能力由 kit 的 `UiFocusTarget`、`UiHistoryShortcut` 等类型另行实现；本包中 `UiModal`、`UiButton`、`UiListView` 等以组合方式接入。
 
 ## 3. 类清单
@@ -152,7 +153,7 @@
 | `UiButton` | 按钮控件：委托 kit 控件处理状态与焦点，绘制主题立体边或胶囊底图。 | `apply`、`setLabel`、`setIcon`、`setChipStyle`、`setAction`、`setTooltip`、`variant`、`isPressed`、`preferredWidth`、`mouseClicked`、`mouseReleased`、`activate` |
 | `UiButtonVariant` | 按钮变体：只表达语义与是否可交互，颜色由主题给出。 | `PRIMARY`、`SECONDARY`、`DANGER`、`DISABLED`、`role`、`interactive` |
 | `UiCatalogGrid` | 目录选择页：搜索框与分列条目列表，底部行由弹窗按钮行托管。 | `PAGE_SIZE`、`setEntries`、`setEntrySource`、`setEntryPolicy`、`setSelection`、`selection`、`setPage`、`setPageLimits`、`setFooterReserved`、`interface Listener`、`enum Scope`、`interface EntryPolicy`、`record Entry`、`record Texts` |
-| `UiCheckBox` | 复选框：左侧像素勾选框与右侧标签文本。 | `BOX_SIZE`、`LABEL_GAP`、`preferredWidth`、`setChecked`、`toggle`、`setOnChanged`、`isChecked` |
+| `UiCheckBox` | 复选框：左侧像素勾选框与右侧标签文本，鼠标命中限制在方框内。 | `BOX_SIZE`、`LABEL_GAP`、`preferredWidth`、`setChecked`、`toggle`、`setOnChanged`、`isChecked` |
 | `UiConditionGraphEditor` | 条件树编辑器：协调结构操作、选择、拖拽、键盘导航与宿主回调。 | `interface InlineEditor`、`tree`、`setTypeOptions`、`setLeafFactory`、`setListener`、`setExpression`、`expression`、`selectedSubtrees`、`beginAddCondition`、`beginAddGroup`、`beginWrapWithKind`、`removeSelection`、`moveSelection`、`pasteNodes`、`setInlineEditor`、`clearInlineEditor`、`resetView`、`fitToContent`、`zoomStep`、`hint` |
 | `UiConditionTreeSummary` | 条件树只读缩进摘要，并作为进入画布编辑器的入口。 | `setExpression`、`expression`、`setOnOpenCanvas`、`issues`、`setTypeOptions`、`setLeafDetail`、`expandAll`、`collapseAll`、`selectedPath`、`selectPath`、`tooltipAt` |
 | `UiCyclicTimeBar` | 昼夜时间条：区间刻域、跨零点与预设由宿主注入。 | `PERIOD`、`DRAG_STEP`、`MIN_TICK`、`MAX_TICK`、`setRange`、`setPresets`、`setTicks`、`setFormatter`、`setPreciseEditor`、`openPrecise`、静态 `baseHeight`、静态 `preferredHeight`、`interface Listener`、`record Texts`、`record Preset` |

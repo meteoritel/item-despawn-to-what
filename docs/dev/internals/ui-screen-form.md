@@ -151,7 +151,7 @@
 | `FormRowLayout` | 行布局与滚动几何计算。 | `#layoutRows`、`#syncBounds`、`#maxScroll` |
 | `FormRowRenderer` | 行标签、说明行、滚动条与悬停提示的绘制与命中。 | `#drawLabel`、`#drawNote`、`#renderScrollbar`、`#tooltipAt` |
 | `FormView` | 表单视图：装配行、布局、输入委托、定位与目录入口。 | `#setDescriptor`、`#addField`、`#layout`、`#applyToDraft`、`#revealPath`、`#openPicker` |
-| `ItemCountsControl` | 物品数量对象控件：每个引用一行滑条与精确输入。 | `#setReferences`、`#setDefaultCount`、`#load`、`#store` |
+| `ItemCountsControl` | 物品数量对象控件：每个引用一行滑条与精确输入；滑条列由表单行布局注入，与其它行的控件同列。 | `#setReferences`、`#setDefaultCount`、`#setSliderColumnOffset`、`#load`、`#store` |
 | `LeafPanel` | 叶面板：附加控件、目录按钮与表单纵向组合，维护 Tab 焦点顺序。 | `#reload`、`#addNote`、`#focusField`、`#contentHeight` |
 | `ListControl` | 字符串与 id 列表控件，按字段类型选择 `UiListEditor` 模式。 | `#load`、`#store`、`#inputText`、`#restoreInputText` |
 | `NaturalSummary` | 规则、条件与效果的自然语言摘要静态工具。 | `#rule`、`#conditions`、`#effects`、`#conditionTreeLeaf`、`#conditionParams` |
@@ -178,6 +178,8 @@
 - [文档阅读与维护约定](../conventions.md)
 ## 输入数量绑定
 
-`RuleEditorInputPage` 将源门槛绑定规则 `source_cost`；催化剂门槛、实际消耗与检测半径绑定 `catalyst_cost`。开启催化剂消耗会复制当前门槛到 `consume_counts`，随后独立编辑；关闭移除实际消耗配置。`FormView.pairItemCountRows` 把两个数量字段按物品配对，`ItemCountsControl` 由 `FormRowLayout` 传入配对角色：上行把物品名与图标放在顶部一行，其下依次排门槛滑条与消耗滑条，两行滑条各配一行含义文案；下行不再重复物品名，只排自己的滑条，上下行共用 `FormRowLayout` 的几何与滚动空间。数量滑条每行代表一次真实支付，滑条窗口下界为 1；精确输入 0 或写回后没有任何正数时视作不消耗，移除 `consume_counts` 并关闭开关。检测半径行与消耗数量行只在勾选「消耗催化剂」后显示，位于催化剂卡片底部。流体消耗开关绑定规则 `consume_fluid`。
+`RuleEditorInputPage` 将源门槛绑定规则 `source_cost`；催化剂门槛、实际消耗与检测半径绑定 `catalyst_cost`。开启催化剂消耗会复制当前门槛到 `consume_counts`，随后独立编辑；关闭移除实际消耗配置。`FormView.pairItemCountRows` 把两个数量字段按物品配对，`ItemCountsControl` 由 `FormRowLayout` 传入配对角色：上行把物品名与图标放在顶部一行，其下依次排门槛滑条与消耗滑条，两行滑条各配一行含义文案；下行不再重复物品名，只排自己的滑条，上下行共用 `FormRowLayout` 的几何与滚动空间。数量滑条每行代表一次真实支付，滑条窗口下界为 1；精确输入 0 或写回后没有任何正数时视作不消耗，移除 `consume_counts` 并关闭开关。检测半径行与消耗数量行只在勾选「消耗催化剂」后显示，位于催化剂卡片底部。流体消耗开关绑定规则 `consume_fluid`，只在存在规则级流体存在条件时出现：没有流体条件就没有可消耗的接触流体；规则里已写入 `consume_fluid` 时仍保留开关，避免值隐藏后无法关闭。关闭流体条件会同时移除 `consume_fluid`。
+
+数量行的滑条列取普通字段行的控件列（`effectiveLabelWidth + FormRowLayout.LABEL_GAP`），由 `FormRowLayout` 通过 `ItemCountsControl#setSliderColumnOffset` 注入，配对下行沿用上行实际使用的名称列宽度。窄列（`availableWidth` 小于 180）或紧凑密度（`minimumControlHeight` 为 0）下本行自己就占着标签列，不再注入偏移，控件沿用按名称宽度自算的列宽。因此同卡片内 `数量门槛`、`消耗数量`、`检测半径` 三行滑条从同一横坐标开始，组内含义文案与普通字段标签同列起画；名称列宽度由注入的偏移反推，名称、图标与滑条起止仍共用一份几何。
 
 仅声明催化剂条件、尚无规则成本对象时，输入页显示原条件门槛；首次输入编辑在同一次撤销记录中建立规则数量对象，并将对应门槛归入规则配置。

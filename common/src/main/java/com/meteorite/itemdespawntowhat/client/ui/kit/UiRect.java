@@ -18,4 +18,19 @@ public record UiRect(int x, int y, int width, int height) {
     public boolean contains(double mouseX, double mouseY) {
         return mouseX >= x && mouseX < right() && mouseY >= y && mouseY < bottom();
     }
+
+    /**
+     * 行内小方块的几何：贴本矩形左边缘、纵向居中。
+     *
+     * <p>「方框 + 文字」这类行内控件（复选框等）用它同时决定绘制矩形与命中范围，
+     * 交互点因此只落在方框内，点击行内文字区域不触发。方框边长超过行高或行宽时按本矩形取小，
+     * 避免方框越出自身行。</p>
+     *
+     * @param size 方块边长
+     * @return 行内方块矩形；边长非正或本矩形为空时返回零尺寸矩形
+     */
+    public UiRect centeredSquare(int size) {
+        int side = Math.clamp(size, 0, Math.min(width, height));
+        return new UiRect(x, y + (height - side) / 2, side, side);
+    }
 }

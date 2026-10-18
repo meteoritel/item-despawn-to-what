@@ -301,9 +301,13 @@ final class RuleEditorInputPage {
             pages.liveWidgets.add(catalystForm);
         }
         buildPresenceSection(session, RuleEditorPageSupport.FLUID_PRESENT_ID, RuleEditorPageSupport.UI + "rule.presence.add_fluid");
+        boolean fluidConsume = rule.flag(RuleFields.CONSUME_FLUID, false);
         fluidConsumeToggle = new UiCheckBox(THEME, pages.font,
-                Component.translatable(RuleEditorPageSupport.UI + "rule.consume_fluid"),
-                rule.flag(RuleFields.CONSUME_FLUID, false));
+                Component.translatable(RuleEditorPageSupport.UI + "rule.consume_fluid"), fluidConsume);
+        // 没有流体存在条件就没有可消耗的接触流体：开关只在启用流体条件后出现；
+        // 规则里已开启时仍保留开关，否则这个值在界面上既看不到也关不掉
+        fluidConsumeToggle.setVisible(fluidConsume
+                || RuleEditorPageSupport.hasRuleLevelPresence(rule, RuleEditorPageSupport.FLUID_PRESENT_ID));
         fluidConsumeToggle.setOnChanged(checked -> pages.apply(EditSession.OP_SET_FIELD,
                 () -> session.draft().setAt(RuleFields.CONSUME_FLUID, RuleValue.flag(checked))));
         pages.liveWidgets.add(fluidConsumeToggle);
@@ -541,7 +545,7 @@ final class RuleEditorInputPage {
         y = pages.layoutForm(catalystForm, x, y, width);
         top = pages.finishCard(area.x(), top, area.width(), y, "card.catalyst");
         y = layoutPresenceSection(RuleEditorPageSupport.FLUID_PRESENT_ID, x, top + RuleEditorPageSupport.CARD_PAD + RuleEditorPageSupport.CARD_HEADER_H, width);
-        if (fluidConsumeToggle != null) {
+        if (fluidConsumeToggle != null && fluidConsumeToggle.isVisible()) {
             fluidConsumeToggle.setBounds(x, y, width, RuleEditorPageSupport.ROW_H);
             y += RuleEditorPageSupport.ROW_H + RuleEditorPageSupport.PAD;
         }

@@ -1084,6 +1084,6 @@
   "gui.itemdespawntowhat.edit.debug.delete.title": "删除全部测试规则",
   "gui.itemdespawntowhat.edit.debug.delete.message": "将删除全部 %s 条测试规则草稿，非测试规则不受影响。确认继续？",
   "gui.itemdespawntowhat.edit.rule.catalyst_cost.consume_count": "消耗数量",
-  "gui.itemdespawntowhat.edit.rule.consume_fluid": "消耗接触流体对应的最近源方块",
+  "gui.itemdespawntowhat.edit.rule.consume_fluid": "消耗源头",
   "gui.itemdespawntowhat.edit.issue.catalyst_consume_count_out_of_range": "催化剂消耗数量必须为 1 到 64 的整数，且只引用已选物品"
 }
