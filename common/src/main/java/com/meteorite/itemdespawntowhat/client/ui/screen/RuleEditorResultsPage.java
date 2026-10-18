@@ -434,7 +434,7 @@ final class RuleEditorResultsPage {
         // 至少保留一个方案，与工具条的禁用边界一致。
         if (!draft.hasOutcomes() || draft.outcomeCount() <= 1) return;
         int index = Math.max(0, candidateIndex);
-        if (!pages.apply(EditSession.OP_REMOVE_CANDIDATE,
+        if (!pages.applyStructure(EditSession.OP_REMOVE_CANDIDATE,
                 () -> draft.removeAt(DraftPaths.indexPath(RuleFields.OUTCOMES, index)))) {
             return;
         }
@@ -508,7 +508,7 @@ final class RuleEditorResultsPage {
         }
         String listPath = ResultStructure.listPath(draft.root(), candidateIndex);
         RuleValue body = BuiltinEditorDefaults.effectBody(type);
-        if (!pages.apply(EditSession.OP_ADD_EFFECT,
+        if (!pages.applyStructure(EditSession.OP_ADD_EFFECT,
                 () -> draft.setAt(DraftPaths.indexPath(listPath, draft.effectCountAt(listPath)), body))) {
             return;
         }
@@ -525,7 +525,7 @@ final class RuleEditorResultsPage {
         if (index < 0 || index >= draft.effectCountAt(listPath)) {
             return;
         }
-        if (!pages.apply(EditSession.OP_REMOVE_EFFECT, () -> draft.removeAt(DraftPaths.indexPath(listPath, index)))) {
+        if (!pages.applyStructure(EditSession.OP_REMOVE_EFFECT, () -> draft.removeAt(DraftPaths.indexPath(listPath, index)))) {
             return;
         }
         // 删除非选中行时保留当前动作；删掉当前行时选中前一行。
@@ -559,7 +559,7 @@ final class RuleEditorResultsPage {
         RuleDraft draft = session.draft();
         String listPath = ResultStructure.listPath(draft.root(), candidateIndex);
         boolean[] moved = {false};
-        if (!pages.apply(EditSession.OP_MOVE_EFFECT, () -> moved[0] = draft.moveInList(listPath, from, to)) || !moved[0]) {
+        if (!pages.applyStructure(EditSession.OP_MOVE_EFFECT, () -> moved[0] = draft.moveInList(listPath, from, to)) || !moved[0]) {
             return;
         }
         effectIndex = to;
@@ -598,7 +598,7 @@ final class RuleEditorResultsPage {
             next.put("count", RuleValue.integer(1));
             if ("entity".equals(variant)) next.put("age", RuleValue.integer(0));
         }
-        if (pages.apply(EditSession.OP_SET_FIELD, () -> session.draft().setAt(path, next.build()))) pages.requestRebuild();
+        if (pages.applyStructure(EditSession.OP_SET_FIELD, () -> session.draft().setAt(path, next.build()))) pages.requestRebuild();
     }
 
     private Component advancedLabel() {

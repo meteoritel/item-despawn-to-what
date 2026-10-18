@@ -96,7 +96,7 @@
 | 命令注册 | `CommandRegistrationCallback.EVENT` | `RegisterCommandsEvent` |
 | 客户端主类 | `ItemDespawnToWhatClient`（`ClientModInitializer`）：S2C 接收器 / 工作区接线 / 界面 bootstrap | 无独立主类，用 `@EventBusSubscriber(Dist.CLIENT)`（`ClientSetup` 在 `FMLClientSetupEvent` 接线工作区与界面） |
 
-协议版本两端对齐（`RuleEditProtocol.VERSION = 4`，NeoForge registrar 从该常量生成版本字符串）。**C2S 与 S2C 的类型都必须在公共初始化注册**，否则专用服务端连接协商会判定通道缺失。
+协议版本两端对齐（`RuleEditProtocol.VERSION = 5`，NeoForge registrar 从该常量生成版本字符串）。**C2S 与 S2C 的类型都必须在公共初始化注册**，否则专用服务端连接协商会判定通道缺失。
 
 ## 6. 掉落物状态与寿命的平台适配
 

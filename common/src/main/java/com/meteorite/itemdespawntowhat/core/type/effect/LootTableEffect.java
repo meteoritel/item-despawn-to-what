@@ -13,6 +13,7 @@ import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
+import com.meteorite.itemdespawntowhat.core.model.ProductKind;
 import com.meteorite.itemdespawntowhat.core.model.SimpleEffectType;
 import com.meteorite.itemdespawntowhat.core.type.effect.exec.LootTableExecutor;
 import com.mojang.serialization.Codec;
@@ -94,7 +95,7 @@ public record LootTableEffect(
                                                  @Nullable EffectPreparation preparation) {
                         return LootTableExecutor.start(effect, context, preparation);
                     }
-                });
+                }, ProductKind.LOOT);
     }
 
     // 参数语义校验；战利品表是否存在由数据包机制保证，此处只校验必填与区间

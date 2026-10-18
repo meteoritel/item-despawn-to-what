@@ -1,8 +1,11 @@
 package com.meteorite.itemdespawntowhat.core.service;
 
+import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.api.Issue;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.IssueSeverity;
+import com.meteorite.itemdespawntowhat.core.debug.DebugProfile;
+import com.meteorite.itemdespawntowhat.core.load.RuleSourceIndex;
 import com.meteorite.itemdespawntowhat.core.network.catalog.RuleCatalogService;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalog;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
@@ -18,14 +21,20 @@ import com.meteorite.itemdespawntowhat.core.network.transport.HeartbeatRuleEdito
 import com.meteorite.itemdespawntowhat.core.network.transport.OpenRuleEditorPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleCatalogPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleSnapshotPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleSourceViewPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleCatalogPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditChunkAccumulator;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditLimits;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerContext;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveResultPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotChunkPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleSourceViewChunker;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleSourceViewPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.SaveRuleChangeSetChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.SaveRuleChangeSetPayload;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import org.apache.logging.log4j.LogManager;
@@ -71,9 +80,18 @@ public final class RuleEditService {
     private RuleSaveProgress sentProgress;
     private Runnable deferredReload;
     private RuleSnapshotTask pendingSnapshot;
+    // 最近一次快照装配使用的来源分层索引：来源视图按需应答的数据源，不为单条规则再读盘
+    private @Nullable RuleSourceIndex sourceIndex;
     private SnapshotRequest requestedSnapshot;
     private SnapshotRequest deliveringSnapshot;
     private final java.util.ArrayDeque<CustomPacketPayload> snapshotPackets = new java.util.ArrayDeque<>();
+    // 首载分段观测：本次投递的起点、总包数、字节与已投递数；关闭时保持零值
+    private long deliveryStartedNanos;
+    private long deliveryStartTick;
+    private long deliveryLastTick;
+    private int deliveryPackets;
+    private long deliveryBytes;
+    private int deliverySent;
     private record SnapshotRequest(UUID owner, String sessionId, String requestId) { }
 
     /**
@@ -242,6 +260,50 @@ public final class RuleEditService {
     }
 
     /**
+     * C2S 来源视图请求：编辑页打开某条规则时按需取回该规则的基底与覆盖原始内容及来源元数据。
+     * 数据来自最近一次快照装配的来源分层索引，不再读盘；索引未就绪、规则不存在或内容超限时回失败回执。
+     *
+     * @param player 会话持有者
+     * @param payload 来源视图请求
+     * @param tick 服务端活动刻
+     * @return 来源视图应答（整包或分片），或会话失效回执
+     */
+    public Outbound requestSourceView(ServerPlayer player, RequestRuleSourceViewPayload payload, long tick) {
+        if (!sessions.owns(payload.sessionId()) || !sessions.isOwner(player.getUUID())
+                || !sessions.confirmed(payload.sessionId())) {
+            return Outbound.of(sessionLost(payload.sessionId(), player));
+        }
+        sessions.heartbeat(payload.sessionId(), tick);
+        ResourceLocation id = ResourceLocation.tryParse(payload.ruleId());
+        if (id == null) {
+            return Outbound.of(sourceViewFailure(payload, RuleSaveStatus.INVALID_REQUEST));
+        }
+        RuleSourceIndex index = sourceIndex;
+        if (index == null) {
+            return Outbound.of(sourceViewFailure(payload, RuleSaveStatus.UNAVAILABLE));
+        }
+        RuleSourceIndex.Entry entry = null;
+        for (RuleSourceIndex.Entry candidate : index.entries()) {
+            if (candidate.id().equals(id)) { entry = candidate; break; }
+        }
+        if (entry == null) {
+            return Outbound.of(sourceViewFailure(payload, RuleSaveStatus.INVALID_REQUEST));
+        }
+        String json = RuleSnapshotAssembler.sourceView(entry).serialize();
+        List<CustomPacketPayload> packets = RuleSourceViewChunker.split(payload.sessionId(), payload.requestId(), json);
+        if (packets.isEmpty()) {
+            // 超过来源视图总量上限或分片数上限：回结构化失败，不让请求静默消失
+            return Outbound.of(sourceViewFailure(payload, RuleSaveStatus.INVALID_REQUEST));
+        }
+        return Outbound.of(packets);
+    }
+
+    // 来源视图失败回执：空 JSON + 状态码，客户端只按状态码提示
+    private RuleSourceViewPayload sourceViewFailure(RequestRuleSourceViewPayload payload, RuleSaveStatus status) {
+        return new RuleSourceViewPayload(payload.sessionId(), payload.requestId(), status.id(), "");
+    }
+
+    /**
      * 获取服务端缓存的参考寿命；尚未采样时保留最近请求并先应答零。
      * @param player 会话持有者
      * @param context 平台参考寿命来源
@@ -358,7 +420,7 @@ public final class RuleEditService {
         sessions.heartbeat(sessionId, tick);
         if (pendingSnapshot != null) { pendingSnapshot.invalidate(); }
         requestedSnapshot = null;
-        snapshotPackets.clear();
+        clearSnapshotPackets("apply");
         savingSessionId = sessionId;
         savingOperationId = operationId;
         savingOwner = player.getUUID();
@@ -523,7 +585,8 @@ public final class RuleEditService {
         deferredReload = null;
         pendingSnapshot = null;
         requestedSnapshot = null;
-        snapshotPackets.clear();
+        sourceIndex = null;
+        clearSnapshotPackets("reset");
         RuleEditChunkAccumulator.clearAll();
         recentResults.clear();
         resultsSessionId = null;
@@ -541,14 +604,15 @@ public final class RuleEditService {
         EditSessionManager.SessionInfo session = sessions.session();
         if (session != null) {
             requestedSnapshot = new SnapshotRequest(session.ownerUuid(), sessionId, requestId);
-            snapshotPackets.clear();
+            clearSnapshotPackets("superseded");
             startSnapshot(server, context);
         }
         return Outbound.EMPTY;
     }
 
     /**
-     * 每 tick 最多交付一片快照；在途快照与待启动请求各最多一个，保存期间暂缓准备。
+     * 每 tick 最多交付 {@link RuleEditLimits#SNAPSHOT_CHUNKS_PER_TICK} 个快照分片包，按入队顺序下发，
+     * 分片顺序与 transferId 语义不变；在途快照与待启动请求各最多一个，保存期间暂缓准备。
      * @param server 当前服务端
      * @param context 平台上下文
      * @return 本 tick 的网络交付，暂无数据时为 null
@@ -558,12 +622,73 @@ public final class RuleEditService {
         if (pendingSave != null) { return null; }
         startSnapshot(server, context);
         if (snapshotPackets.isEmpty() || deliveringSnapshot == null) { return null; }
-        if (!sessions.owns(deliveringSnapshot.sessionId())) { snapshotPackets.clear(); return null; }
+        if (!sessions.owns(deliveringSnapshot.sessionId())) { clearSnapshotPackets("session_lost"); return null; }
         ServerPlayer player = server.getPlayerList().getPlayer(deliveringSnapshot.owner());
         if (!com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler.canEdit(player)) {
-            snapshotPackets.clear(); return null;
+            clearSnapshotPackets("no_permission"); return null;
         }
-        return new SaveReply(player, Outbound.of(snapshotPackets.removeFirst()));
+        int limit = Math.min(RuleEditLimits.SNAPSHOT_CHUNKS_PER_TICK, snapshotPackets.size());
+        List<CustomPacketPayload> packets = new ArrayList<>(limit);
+        for (int index = 0; index < limit; index++) {
+            packets.add(snapshotPackets.removeFirst());
+        }
+        if (DebugProfile.enabled()) {
+            deliverySent += packets.size();
+            deliveryLastTick = server.getTickCount();
+            if (snapshotPackets.isEmpty()) { logDelivery(); }
+        }
+        return new SaveReply(player, Outbound.of(packets));
+    }
+
+    // 本次投递的观测起点：包数与字节一次性统计，逐 tick 只累加已投递数
+    private void startDelivery(List<CustomPacketPayload> packets, long tick) {
+        if (!DebugProfile.enabled()) { return; }
+        deliveryStartedNanos = DebugProfile.start();
+        deliveryStartTick = tick;
+        deliveryLastTick = tick;
+        deliveryPackets = packets.size();
+        deliveryBytes = 0L;
+        deliverySent = 0;
+        for (CustomPacketPayload payload : packets) { deliveryBytes += packetBytes(payload); }
+    }
+
+    // 首载分段观测：投递完成的包数、字节与跨 tick 数，用于声明节拍是否匹配每 tick 包数
+    private void logDelivery() {
+        JsonObject data = new JsonObject();
+        data.addProperty("packets", deliveryPackets);
+        data.addProperty("sent", deliverySent);
+        data.addProperty("bytes", deliveryBytes);
+        long ticks = Math.max(0L, deliveryLastTick - deliveryStartTick);
+        data.addProperty("ticks", ticks);
+        data.addProperty("per_tick", ticks == 0L ? deliveryPackets : (double) deliveryPackets / ticks);
+        data.addProperty("total_ms", DebugProfile.micros(deliveryStartedNanos) / 1000.0);
+        DebugProfile.event(DebugProfile.SCENE_FIRST_LOAD, "SERVER_DELIVER", data);
+    }
+
+    // 丢弃排队中的分片：观测开启且确有未投递分片时记录一次中止
+    private void clearSnapshotPackets(String reason) {
+        if (DebugProfile.enabled() && !snapshotPackets.isEmpty()) {
+            JsonObject data = new JsonObject();
+            data.addProperty("packets", deliveryPackets);
+            data.addProperty("sent", deliverySent);
+            data.addProperty("bytes", deliveryBytes);
+            data.addProperty("ticks", Math.max(0L, deliveryLastTick - deliveryStartTick));
+            data.addProperty("aborted", true);
+            data.addProperty("reason", reason);
+            DebugProfile.event(DebugProfile.SCENE_FIRST_LOAD, "SERVER_DELIVER", data);
+        }
+        snapshotPackets.clear();
+    }
+
+    // 下发字节按 UTF-8 计，与分片阈值口径一致
+    private static long packetBytes(CustomPacketPayload payload) {
+        if (payload instanceof RuleSnapshotPayload direct) {
+            return RuleEditLimits.encodedLength(direct.snapshotJson());
+        }
+        if (payload instanceof RuleSnapshotChunkPayload chunk) {
+            return RuleEditLimits.encodedLength(chunk.chunk());
+        }
+        return 0L;
     }
 
     // 请求到达即开始纯文件工作；保存和在途准备仍串行，Codec 只由公共调度器执行。
@@ -575,15 +700,20 @@ public final class RuleEditService {
                 requestedSnapshot = null;
                 return;
             }
-            pendingSnapshot = new RuleSnapshotTask(context, server, sessions, current.sessionId(), current.requestId(), packets -> {
+            pendingSnapshot = new RuleSnapshotTask(context, server, sessions, current.sessionId(), current.requestId(), delivery -> {
                 pendingSnapshot = null;
+                // 来源索引与快照同源：即使本次下发被替换，最新装配结果仍可作为来源视图的数据源
+                if (delivery.index() != null) { sourceIndex = delivery.index(); }
                 if (requestedSnapshot != current) { return; }
                 requestedSnapshot = null;
                 deliveringSnapshot = current;
-                if (packets.isEmpty()) {
+                if (delivery.packets().isEmpty()) {
                     snapshotPackets.add(result(current.sessionId(), "", RuleSaveStatus.UNAVAILABLE,
                             "itemdespawntowhat.edit.snapshot_failed", List.of(), List.of(), false, false));
-                } else { snapshotPackets.addAll(packets); }
+                } else {
+                    startDelivery(delivery.packets(), server.getTickCount());
+                    snapshotPackets.addAll(delivery.packets());
+                }
             });
             pendingSnapshot.schedule();
         }

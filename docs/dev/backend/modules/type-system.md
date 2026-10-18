@@ -43,9 +43,9 @@
 | 类型 | 形态 | 关键成员 |
 |---|---|---|
 | `TypeDefinition<P>` | interface | `id()`、`MapCodec<P> codec()`、`default boolean validateParams(P, IssueCollector, String fieldPath)`（默认 true） |
-| `EffectType<P extends Effect>` | interface | 继承 `TypeDefinition`，加 `executor()` 与 `default boolean oneShot()`（默认 false） |
+| `EffectType<P extends Effect>` | interface | 继承 `TypeDefinition`，加 `executor()`、`default boolean oneShot()`（默认 false）与 `default ProductKind productKind(P)`（默认 `NONE`，表示非产出） |
 | `ConditionType<P extends Condition>` | interface | 继承 `TypeDefinition`，加 `evaluator()` 与 `default Evaluability evaluability(P, ConditionContext)`（默认 `AVAILABLE`） |
-| `SimpleEffectType<P>` | record | `(id, MapCodec<P>, Validator<P>, EffectExecutor<P>, boolean oneShot)`；四参构造缺省按非一次性效果 |
+| `SimpleEffectType<P>` | record | `(id, MapCodec<P>, Validator<P>, EffectExecutor<P>, boolean oneShot, Function<P, ProductKind> productKind)`；四参构造缺省非一次性、非产出，可传固定 `ProductKind` 或按实例参数解析的 `Function` |
 | `SimpleConditionType<P>` | record | `(id, MapCodec<P>, Validator<P>, ConditionEvaluator<P>, EvaluabilityCheck<P>)`；四参构造缺省 `evaluability` 恒为 `AVAILABLE` |
 
 > 约定：**参数对象 `P` 同时实现 `Effect`/`Condition`**，分发解码后可直接作为规则里的效果/条件叶使用。`Effect` 接口为 `type()`/`delayTicks()`/`chance()`/`conditions()`（`conditions()` 为 `@Nullable`）四项查询方法，外加**必须实现**的 `withConditions(ConditionExpression)`（返回仅替换效果级条件的新实例）与默认实现 `effectiveConditions()`（空值回落 `ConditionExpression.EMPTY`）；`Condition` 接口只剩 `type()`。
@@ -55,6 +55,8 @@
 每个内置类型 = 一个**参数 record**（实现 `Effect`/`Condition`）+ `static final ResourceLocation ID` + 静态 `CODEC`/`codec(expressionCodec)` + 静态 `validateParams(...)` + 静态工厂 `effectType(...)`/`conditionType()`；执行/求值实现位于 `exec/`、`eval/` 子包的 `*Executor`/`*Evaluator`。`EffectExecutor.execute` 保持同步执行器的函数式接口；长计算可覆盖默认 `start` 创建独立 `EffectExecution`，由 `EffectTask` 在公共 tick 预算内推进；真实完成量可按单位经 `EffectContext.reportProgress` 逐次回执：已逐次回执的量不在终态回执里重复计入，没有逐次回执的增量由终态 `appliedUnits` 给出。支持准备需覆盖 `prepare` 与按准备创建执行状态的重载；只提供 `execute`（含 lambda 注册）的类型沿用默认、不参与准备；效果级 `conditions` 与 `chance` 由成功转化当刻的槽位准备统一判定，准备结果为跳过时执行器直接给出该原因的 `SKIPPED`。
 
 > 命名坑：静态工厂**不能叫 `type()`**——接口已有无参实例方法 `type()`，同签名静态方法在 Java 中非法，故统一用 `effectType(...)`/`conditionType()`。
+
+> 产出类别：`ProductKind`（`core/model`）是效果类型声明的封闭枚举，只用于规则列表分组，不参与运行时匹配、结算与优先级。内置产出声明：`spawn_entity` 按 `variant` 返回 `ENTITY_ITEM` / `ENTITY_ENTITY` / `ENTITY_EXPERIENCE`；`place_block` → `BLOCK`；`loot_table` → `LOOT`；`lightning` / `explosion` / `arrow_rain` / `weather` → `WORLD`；三个消耗类型不声明（默认 `NONE`，不影响归类）。派生入口是 `RuleCategoryClassifier`，组合语义与快照装配见 [规则模型与契约](rule-model.md)。
 
 ### 2.6 `core/type/effect/exec` 共享助手
 

@@ -34,7 +34,7 @@
 |---|---|---|---|
 | `RuleEditorScreen` | class | `RuleEditorScreen#setNotice(Component, NoticeLevel)`、`RuleEditorScreen#noticeColor(NoticeLevel)`、`RuleEditorScreen#refreshFromWorkspace()`、`RuleEditorScreen#onClose()`、`RuleEditorScreen#isPauseScreen()`；其余为 `Screen` 生命周期与输入覆盖方法 | 规则编辑器屏幕，`extends Screen`；模式枚举 `Mode` 为 private |
 | `RuleEditorScreen.NoticeLevel` | enum | `RuleEditorScreen.NoticeLevel#INFO`、`RuleEditorScreen.NoticeLevel#WARNING`、`RuleEditorScreen.NoticeLevel#DANGER` | 底部状态提示级别 |
-| `RuleEditorModel` | class | `RuleEditorModel#workspace()`、`RuleEditorModel#refresh()`、`RuleEditorModel#isLoaded()`、`RuleEditorModel#ruleIds()`、`RuleEditorModel#entry(String)`、`RuleEditorModel#session(String)`、`RuleEditorModel#openSession(String)`、`RuleEditorModel#createSession(String, RuleValue)`、`RuleEditorModel#dropSession(String)`、`RuleEditorModel#dirtyRuleIds()`、`RuleEditorModel#buildChangeSetJson()`、`RuleEditorModel#tickPersistence()`、`RuleEditorModel#persistNow()`、`RuleEditorModel#conflicts()`、`RuleEditorModel#resolveConflict(String, boolean)`、`RuleEditorModel#discardAllDrafts()`、`RuleEditorModel#issuesFor(String)` 等 | 按规则 id 的草稿会话模型 |
+| `RuleEditorModel` | class | `RuleEditorModel#workspace()`、`RuleEditorModel#refresh()`、`RuleEditorModel#isLoaded()`、`RuleEditorModel#ruleIds()`、`RuleEditorModel#entry(String)`、`RuleEditorModel#session(String)`、`RuleEditorModel#openSession(String)`、`RuleEditorModel#createSession(String, RuleValue)`、`RuleEditorModel#dropSession(String)`、`RuleEditorModel#dirtyRuleIds()`、`RuleEditorModel#buildChangeSetJson()`、`RuleEditorModel#tickPersistence()`、`RuleEditorModel#persistNow()`、`RuleEditorModel#conflicts()`、`RuleEditorModel#resolveConflict(String, boolean)`、`RuleEditorModel#discardAllDrafts()`、`RuleEditorModel#entryBody(String)` 等 | 按规则 id 的草稿会话模型 |
 | `RuleEditorEditPages` | class | `RuleEditorEditPages#page()`、`RuleEditorEditPages#setPage(Page)`、`RuleEditorEditPages#rebuild()`、`RuleEditorEditPages#layout(UiRect)`、`RuleEditorEditPages#render(GuiGraphics, Font, int, int)`、`RuleEditorEditPages#applyToDraft()`、`RuleEditorEditPages#issues()`、`RuleEditorEditPages#reveal(String)`、`RuleEditorEditPages#blockNavigation()`、`RuleEditorEditPages#setEnabled(boolean)`、`RuleEditorEditPages#focusTargets()`、`RuleEditorEditPages#endInteractions()`、`RuleEditorEditPages#unmount()` 等，输入覆盖方法仅委托 | 四个页签的组合视图 |
 | `RuleEditorEditPages.Page` | enum | `RuleEditorEditPages.Page#INFO`、`RuleEditorEditPages.Page#INPUT`、`RuleEditorEditPages.Page#TRIGGER`、`RuleEditorEditPages.Page#RESULTS`；`RuleEditorEditPages.Page#value()`、`RuleEditorEditPages.Page#of(String)` | 页签标识，取值依次为 `info`、`input`、`trigger`、`results` |
 | `RuleEditorEditPages.Host` | interface | `RuleEditorEditPages.Host#font()`、`#session()`、`#focus()`、`#modals()`、`#onDraftChanged()`、`#onControlsChanged()`、`#notice(Component, int)`、`#suggestions()`、`#conditionEditingSupport()`、`#workspace()`、`#rejectWhenFrozen()`、`#screenWidth()`、`#screenHeight()` | 页签容器向屏幕获取能力的宿主接口 |
@@ -50,7 +50,7 @@
 | `RuleRecipeView` | class | `RuleRecipeView#RuleRecipeView(RuleValue)`、`RuleRecipeView#summary()`、`RuleRecipeView#tooltip()`、`RuleRecipeView#render(GuiGraphics, Font, UiRect, int, boolean)`、`RuleRecipeView#tagAt(Font, UiRect, double, double)` | 配方行的只读展示快照；包级静态方法 `RuleRecipeView#renderRow`、`RuleRecipeView#recipeBounds` 供列表页与变更清单复用 |
 | `TagCarouselView` | class | `TagCarouselView#TagCarouselView(Font, TagPreviewIcons.Tag)`；`UiWidget` 的 `bounds`、`setBounds`、`render`、`mouseClicked`、`mouseDragged`、`mouseReleased`、`mouseScrolled`、`keyPressed`、`charTyped` 覆盖方法 | 标签成员的轮播与列表容器 |
 
-其余 19 个类型为包级可见：`ActionDescription`、`RuleChangesView`、`RuleEditorInfoPage`、`RuleEditorInputPage`、`RuleEditorPageInput`、`RuleEditorPageSupport`、`RuleEditorResultsPage`、`RuleEditorScreenButtonBar`、`RuleEditorScreenDebugPage`、`RuleEditorScreenEditPage`、`RuleEditorScreenListActions`、`RuleEditorScreenListPage`、`RuleEditorTriggerPage`、`RuleEditorValidation`、`RuleNameInput`、`RuleSaveOverlay`、`RuleTriggerView`、`SourceBlacklistPicker`、`SourceCatalystSelectionPolicy`。
+其余 21 个类型为包级可见：`ActionDescription`、`RuleListDisplayCache`、`RuleListDisplaySnapshot`、`RuleChangesView`、`RuleEditorInfoPage`、`RuleEditorInputPage`、`RuleEditorPageInput`、`RuleEditorPageSupport`、`RuleEditorResultsPage`、`RuleEditorScreenButtonBar`、`RuleEditorScreenDebugPage`、`RuleEditorScreenEditPage`、`RuleEditorScreenListActions`、`RuleEditorScreenListPage`、`RuleEditorTriggerPage`、`RuleEditorValidation`、`RuleNameInput`、`RuleSaveOverlay`、`RuleTriggerView`、`SourceBlacklistPicker`、`SourceCatalystSelectionPolicy`。
 
 包级嵌套类型另有 `RuleEditorEditPages.CardHeader`（record）与 `RuleEditorEditPages.PageCard`（static final class）；页面内部还有 `RuleEditorInputPage.PresenceRow`、`RuleEditorPageSupport.PresenceLeaf`、`RuleEditorResultsPage.PlanPager`、`RuleEditorScreenListPage.MenuAction`、`RuleChangesView.Change`、`SourceBlacklistPicker.Group`、`SourceBlacklistPicker.Page`、`SourceBlacklistPicker.Pages`。
 
@@ -83,11 +83,17 @@
 - `RuleEditorEditPages#rebuild`：`switch (page)` 分派到 `RuleEditorInfoPage#buildInfo`、`RuleEditorInputPage#buildInput`、`RuleEditorTriggerPage#buildTrigger`、`RuleEditorResultsPage#buildResults`。
 - `RuleEditorEditPages#setPage`：切页前记录滚动偏移并结束进行中的交互，切页后清除提示并重建页面。
 - `RuleEditorEditPages#apply`：页面表单动作的 `EditSession#apply` 封装，提交后用 `DraftListInputs#capture` 与 `DraftListInputs#remap` 处理列表路径重排；`RuleEditorModel`、`RuleEditorScreenListActions`、`RuleEditorTriggerPage` 另有直接调用 `EditSession#apply` 的入口。
+- `RuleEditorEditPages#applyStructure`：结构类编辑（增删效果、改产出子类、调整顺序、删除方案）的同一入口，在结构写入后按 `RuleCategoryAssignment#follow` 同步分类；分类写入与结构改动同处一条撤销记录，撤销该次编辑时分类一并回退。
 - `RuleEditorEditPages#reveal`：按草稿路径前缀切到对应页签、候选与效果，并返回待聚焦控件。
 - `RuleEditorPageInput`：页面级输入路由，记录按下归属并只把释放与拖动派发给同一控件；结果页动作列表的拖动排序结果交给 `RuleEditorResultsPage#moveEffect`。
 - `RuleEditorScreenEditPage#save`：提交可见表单后执行 `RuleEditorValidation#collectIssues`，有阻塞问题则定位，否则把变更集交给工作区保存，回执由 `RuleEditorScreenEditPage#pollWorkspace` 轮询。
 - `RuleEditorScreenEditPage#pollWorkspace`：轮询保存回执与草稿冲突。
-- `RuleEditorScreenListPage#refreshList`：按搜索文本、筛选条件与快照条目重建分类规则树。
+- `RuleEditorInfoPage#categoryText`：分类行只读展示当前分类与来源（显式 / 自动），分类名按 `RuleCategorySkeleton#knownLabelKey` 取本地化文本，未知分类按原文显示。
+- `RuleEditorInfoPage#sourceSummary`：来源摘要只读取已取回的来源视图，按就绪 / 在途 / 失败三态呈现；请求失败只影响来源对照，不阻断本页表单编辑。
+- `RuleEditorScreenListPage#refreshList`：先按规则 id 取列表展示快照（`RuleListDisplayCache`），再按快照里的标题、状态与搜索文本做过滤与分组，重建分类规则树；已知分类的层级与顺序来自 `RuleCategorySkeleton`，只消费快照下发的分类，未知分类按原文成组并挂在扩展分组下，已知与未知的子分类统一显示计数。配方预览与条件提示不在刷新时构建：行首次可见时由渲染回调向快照索取预览，悬停时生成条件提示，两者都缓存在快照上。首载分段观测开启时输出 `CLIENT_LIST_REFRESH`（过滤、取体、建树、setRoots、`body_fetches`、`reused` 与总耗时，`first=true` 表示首份快照后的首次刷新）。
+- `RuleListDisplayCache#snapshot`：按「快照版本 + 草稿修订 + 新建 / 恢复标记」判定展示快照是否失效；命中时标题、状态、分类、预览与条件提示直接复用，因此搜索逐键刷新只重算过滤与分组。
+- `RuleListDisplaySnapshot#titleOf`：列表行、分类树节点与页头标题共用同一份标题文本。
+- `RuleEditorScreen#tick`：每帧消费一次新快照；首载分段观测开启时消费成功会输出 `CLIENT_APPLY`（快照进入模型的 `apply_ms`）。
 - `RuleEditorScreenListActions` 的条目动作：`RuleEditorScreenListActions#promptNewRule`、`RuleEditorScreenListActions#promptDuplicate`、`RuleEditorScreenListActions#toggleSelectedEnabled`、`RuleEditorScreenListActions#maskSelected`、`RuleEditorScreenListActions#restoreSelected`、`RuleEditorScreenListActions#deleteSelected`。
 - `RuleEditorScreenListActions#promptNewRule`：默认名由 `#nextDefaultRuleName` 生成，`new_rule` 已被快照条目或本次新建占用时依次尝试 `new_rule_1`、`new_rule_2`……取最小空闲序号。
 - `RuleNameInput#parseId`：输入含一个冒号且两端非空时按 `<namespace>:<path>` 原样解析，否则按 `<path>` 补本模组命名空间；含多个冒号或空段返回 `null`。新建与复制共用该解析。
@@ -111,7 +117,7 @@
 
 ### 2.6 代码现状（可核对）
 
-- 该包无 `package-info.java`；31 个类型均有类级 JavaDoc。
+- 该包无 `package-info.java`；33 个类型均有类级 JavaDoc。
 - `RuleEditorModel` 与 `RuleEditorEditPages` 名称分别含 Model 与 Pages，职责不同：前者是数据模型（`LinkedHashMap<String, EditSession>`、`DraftJournal`、`DraftStore`），后者是四个页签的界面组合视图（`Page`、`PageCard`、`UiScrollView`、`FormView` 列表）。
 - 输入路由有两套：`RuleEditorPageInput` 负责页面级派发（当前页控件、页面滚动、结果页动作拖动排序），`client/ui/screen/form` 的 `FormInputRouter` 负责表单内派发（选择框 → 行尾按钮 → 字段控件 → 表单滚动）；`RuleEditorEditPages` 的 `mouseClicked`、`mouseReleased`、`mouseDragged`、`mouseScrolled`、`keyPressed`、`charTyped` 只委托给 `RuleEditorPageInput`。
 - `client/ui/screen` 与 `client/ui/screen/form` 存在职责交叉点：`RuleEditorPageInput#mouseClicked` 直接调用 `RuleEditorEditPages.ruleEditorResultsPage` 的 `RuleEditorResultsPage#clickRemove`，`RuleEditorPageInput#mouseReleased` 直接调用 `RuleEditorResultsPage#moveEffect`；`RuleEditorEditPages` 持有 `FormView` 列表并暴露 `RuleEditorEditPages.Host#suggestions`、`RuleEditorEditPages.Host#conditionEditingSupport` 给表单控件；`RuleEditorPanelFactory` 装配 `LeafPanel`。依赖方向为 `client/ui/screen` → `client/ui/screen/form`，包级依赖统计中无反向边。
@@ -138,8 +144,8 @@
 | `RuleChangesView` | 变更清单的只读条目快照，复用配方行布局 | `RuleChangesView#preferredHeight`、`RuleChangesView#render`、`RuleChangesView#accessibleName` |
 | `RuleCostBinding` | 消耗类效果在草稿中的只读定位 | `RuleCostBinding#CONSUME_SOURCE`、`RuleCostBinding#CONSUME_CATALYST`、`RuleCostBinding#find`、`RuleCostBinding#consumeSource`、`RuleCostBinding#consumeCatalyst` |
 | `RuleCostBinding.Ref` | 命中的消耗效果位置 | `RuleCostBinding.Ref#listPath`、`RuleCostBinding.Ref#index`、`RuleCostBinding.Ref#path`、`RuleCostBinding.Ref#candidateId`、`RuleCostBinding.Ref#candidateIndex` |
-| `RuleEditorEditPages` | 四个页签的组合视图与共享状态 | `RuleEditorEditPages#page`、`RuleEditorEditPages#setPage`、`RuleEditorEditPages#rebuild`、`RuleEditorEditPages#applyToDraft`、`RuleEditorEditPages#issues`、`RuleEditorEditPages#reveal`、`RuleEditorEditPages#apply` |
-| `RuleEditorInfoPage` | 基本页：只读规则 ID、显示名、启用、优先级与备注 | `RuleEditorInfoPage#buildInfo`、`RuleEditorInfoPage#layoutInfo`、`RuleEditorInfoPage#renderInfo`、`RuleEditorInfoPage#idTextLines` |
+| `RuleEditorEditPages` | 四个页签的组合视图与共享状态 | `RuleEditorEditPages#page`、`RuleEditorEditPages#setPage`、`RuleEditorEditPages#rebuild`、`RuleEditorEditPages#applyToDraft`、`RuleEditorEditPages#issues`、`RuleEditorEditPages#reveal`、`RuleEditorEditPages#apply`、`RuleEditorEditPages#applyStructure` |
+| `RuleEditorInfoPage` | 基本页：只读规则 ID、分类（含来源）与来源摘要，并编辑显示名、启用、优先级与备注 | `RuleEditorInfoPage#buildInfo`、`RuleEditorInfoPage#layoutInfo`、`RuleEditorInfoPage#renderInfo`、`RuleEditorInfoPage#idTextLines`、`RuleEditorInfoPage#categoryTextLines`、`RuleEditorInfoPage#sourceTextLines` |
 | `RuleEditorInputPage` | 输入页：来源与消耗、催化剂与流体的存在条件、消耗参数与门槛 | `RuleEditorInputPage#buildInput`、`RuleEditorInputPage#buildPresenceSection`、`RuleEditorInputPage#onPresenceToggle`、`RuleEditorInputPage#specifySourceCost`、`RuleEditorInputPage#PresenceRow` |
 | `RuleEditorModel` | 按规则 id 的草稿会话模型与持久化 | `RuleEditorModel#refresh`、`RuleEditorModel#openSession`、`RuleEditorModel#dirtyRuleIds`、`RuleEditorModel#buildChangeSetJson`、`RuleEditorModel#tickPersistence`、`RuleEditorModel#resolveConflict` |
 | `RuleEditorOpener` | 编辑器界面实现：打开或关闭规则编辑器屏幕 | `RuleEditorOpener#bootstrap`、`RuleEditorOpener#shutdown`、`RuleEditorOpener#open`、`RuleEditorOpener#close`、`RuleEditorOpener#lastRequest` |
@@ -156,6 +162,8 @@
 | `RuleEditorScreenListPage` | 列表页：搜索、筛选、分类规则树、配方预览与底排状态 | `RuleEditorScreenListPage#init`、`RuleEditorScreenListPage#refreshList`、`RuleEditorScreenListPage#render`、`RuleEditorScreenListPage#renderFooter`、`RuleEditorScreenListPage.Host` |
 | `RuleEditorTriggerPage` | 触发页：触发来源、触发时间、条件树摘要与画布页入口 | `RuleEditorTriggerPage#buildTrigger`、`RuleEditorTriggerPage#updateLifespanWindow`、`RuleEditorTriggerPage#sharedConditionSupport`、`RuleEditorTriggerPage#openConditionTree` |
 | `RuleEditorValidation` | 客户端保存前校验：收敛可本地判定的问题 | `RuleEditorValidation#collectIssues`、`RuleEditorValidation#issueRuleId`、`RuleEditorValidation.Host` |
+| `RuleListDisplayCache` | 列表展示快照缓存：按内容版本复用条目的标题、状态、预览与提示，一次刷新只取一次体 | `RuleListDisplayCache#snapshot`、`RuleListDisplayCache#retain`、`RuleListDisplayCache#bodyFetches` |
+| `RuleListDisplaySnapshot` | 一条规则的列表展示快照：规则体、标题、分类、状态与按需构建的预览、条件提示、搜索文本 | `RuleListDisplaySnapshot#titleOf`、`RuleListDisplaySnapshot#preview`、`RuleListDisplaySnapshot#conditionTooltip`、`RuleListDisplaySnapshot#searchText` |
 | `RuleNameInput` | 规则名输入区：`<namespace>:<path>` / `<path>` 解析、名称限制提示与校验错误位 | `RuleNameInput#parseId`、`RuleNameInput#allowsCharacters`、`RuleNameInput#setProblem`、`RuleNameInput#preferredHeight` |
 | `RulePreviewIcons` | 列表页与动作导航共用的产出图标缓存 | `RulePreviewIcons#clear`、`RulePreviewIcons#action`、`RulePreviewIcons#rule`、`RulePreviewIcons#unavailable` |
 | `RuleRecipeView` | 配方行的只读展示快照 | `RuleRecipeView#summary`、`RuleRecipeView#tooltip`、`RuleRecipeView#render`、`RuleRecipeView#renderRow`、`RuleRecipeView#tagAt` |

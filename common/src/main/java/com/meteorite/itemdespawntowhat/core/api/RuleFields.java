@@ -29,6 +29,8 @@ public final class RuleFields {
     public static final String OUTCOMES = "outcomes";
     // 规则契约结构版本（正整数）；当前仅支持 1
     public static final String SCHEMA_VERSION = "schema_version";
+    // 顶层可选展示分类：只被快照装配读取，不进入运行时规则模型，也不参与解码与执行
+    public static final String CATEGORY = "category";
 
     // ===== 候选结果（outcomes 数组元素内部） ===== //
     // 候选标识：规则内唯一

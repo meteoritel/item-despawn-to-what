@@ -4,6 +4,7 @@ import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.api.RefChecks;
+import com.meteorite.itemdespawntowhat.core.model.ProductKind;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.MapCodec;
@@ -29,6 +30,13 @@ public sealed interface EntityProduct permits EntityProduct.Item, EntityProduct.
 
     String variant();
     boolean validate(IssueCollector issues, String path);
+
+    /**
+     * 该产出子类对应的规则分类。
+     *
+     * @return 物品 / 通用实体 / 经验各自的产出类别
+     */
+    ProductKind productKind();
 
     // DFU 分发的 keys 只有判别键，需提供所有子类字段并拒绝当前子类不适用的参数。
     private static MapCodec<EntityProduct> strict(MapCodec<EntityProduct> dispatch) {
@@ -72,6 +80,7 @@ public sealed interface EntityProduct permits EntityProduct.Item, EntityProduct.
                 Codec.intRange(1, 64).optionalFieldOf("count", 1).forGetter(Item::count)
         ).apply(instance, Item::new));
         @Override public String variant() { return "item"; }
+        @Override public ProductKind productKind() { return ProductKind.ENTITY_ITEM; }
         @Override public boolean validate(IssueCollector issues, String path) {
             String field = ParamChecks.child(path, "item");
             boolean valid = ParamChecks.required(item, "item", issues, field);
@@ -89,6 +98,7 @@ public sealed interface EntityProduct permits EntityProduct.Item, EntityProduct.
                 Codec.INT.optionalFieldOf("age", 0).forGetter(Generic::age)
         ).apply(instance, Generic::new));
         @Override public String variant() { return "entity"; }
+        @Override public ProductKind productKind() { return ProductKind.ENTITY_ENTITY; }
         @Override public boolean validate(IssueCollector issues, String path) {
             String field = ParamChecks.child(path, "entity");
             boolean valid = ParamChecks.required(entity, "entity", issues, field);
@@ -118,6 +128,7 @@ public sealed interface EntityProduct permits EntityProduct.Item, EntityProduct.
                 Codec.intRange(1, 65536).optionalFieldOf("amount", 1).forGetter(Experience::amount)
         ).apply(instance, Experience::new));
         @Override public String variant() { return "experience"; }
+        @Override public ProductKind productKind() { return ProductKind.ENTITY_EXPERIENCE; }
         @Override public boolean validate(IssueCollector issues, String path) {
             return ParamChecks.inRange(amount, 1, 65536, "amount", issues, ParamChecks.child(path, "amount"));
         }

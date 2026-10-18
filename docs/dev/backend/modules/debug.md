@@ -1,6 +1,6 @@
 # 功能模块：调试与开发场景（`core/debug`）
 
-> 事实来源：`core/debug/**`（20 个文件）、`core/api/RuntimeObserver.java`（观测接缝）。仅在**加载器 development 环境**启用，发布环境不注册任何 debug 入口。
+> 事实来源：`core/debug/**`（21 个文件）、`core/api/RuntimeObserver.java`（观测接缝）。仅在**加载器 development 环境**启用，发布环境不注册任何 debug 入口。
 > 场景声明与扩展方式见本文 §1、§3 与 [command.md](command.md) §4；端到端链路见 [../flows/debug-scenario-flow.md](../flows/debug-scenario-flow.md)。
 
 ## 1. 类清单
@@ -8,6 +8,7 @@
 | 类 | 职责 | 关键成员 |
 |---|---|---|
 | `DebugMode` | 环境判定 | `ENABLED = Services.PLATFORM.isDevelopmentEnvironment()` |
+| `DebugProfile` | 首载分段观测的默认关闭开关与计时入口 | `enabled()`、`setEnabled(boolean)`、`start()`、`micros(long)`、`event(String, String, JsonObject)`、`SCENE_FIRST_LOAD` |
 | `DebugSessionManager` | 两端已有事件的开发诊断入口 | beginRuntimeTick与tick配对计时；首tick打READY；停服释放计时及场景状态 |
 | `DebugScenarioManager` | 每服务器一轮场景的编排/登记/观察/调度/收尾；UUID → (run, source) 绑定 | `schedule`、`observe`、`converted`、`outputAdded`、`prepareOutput`、`allowsRuntimeLogging` |
 | `DebugRuntimeObserver` | 观测接缝的调试实现：把运行时观测回调接到会话计时与场景编排上 | `enabled`、`inactive`、`observe`、`converted`、`prepareOutput`、`outputAdded`、`schedule`（均转发给 `DebugScenarioManager`） |
@@ -52,9 +53,31 @@
 | `/idtw debug pipeline p3 [最高实体数] [间隔秒]` | 逐级100/250/500/1000，默认最高1000 |
 | `/idtw debug pipeline p4 [实体数] [间隔秒]` | 固定档3组重复，默认100源 |
 | `/idtw debug pipeline` / `help` / `status` / `stop` | 阶段帮助、进度状态或中止后续计划 |
+| `/idtw debug profile [on\|off\|status]` | 首载分段观测开关；无参数与 `status` 只查询，停服自动关闭 |
 | `/idtw debug status` | 场景或活动阶段进度 |
 | `/idtw debug mark <描述>` | 记录肉眼观察（每轮封顶 64 条，单条 ≤160 UTF-16） |
 | `/idtw debug stop` | 停止本轮；活动流水线同时取消后续计划（INCOMPLETE） |
+
+### 3.1 首载分段观测
+
+`/idtw debug profile on` 打开后，从「确认打开」到「列表可用」的链路按阶段输出 `[IDTW_DEBUG] profile scene=first_load event=...` 单行日志；开关默认关闭，关闭时各观测入口只做一次布尔判断，不取时间、不分配对象、不写日志。停服时开关自动回到关闭。
+
+| event | 产出位置 | 关键字段 |
+|---|---|---|
+| `SERVER_PREP` | `RuleSnapshotTask`（请求到达至准备完成） | `entries`、`decoded`、`encoded`、`steps`、`ticks`、`step_ms`（服务端线程累计）、`read_ms`、`assemble_ms`、`packets`、`bytes`、`aborted`、`failed`、`total_ms` |
+| `SERVER_DELIVER` | `RuleEditService#pollSnapshot`（队列投递完毕或被丢弃） | `packets`、`sent`、`bytes`、`ticks`、`per_tick`、`total_ms`；中止时附 `aborted` 与 `reason` |
+| `CLIENT_RECV` | `RuleEditClientWorkspace#onSnapshot` / `#onSnapshotChunk` | `entries`、`version`、`chunked`、`chunks`、`bytes`、`recv_ms`（首片至收齐）、`parse_ms`、`since_open_ms`（确认发出至快照落地） |
+| `CLIENT_APPLY` | `RuleEditorScreen#tick` 消费新快照 | `entries`、`dirty`、`apply_ms` |
+| `CLIENT_LIST_REFRESH` | `RuleEditorScreenListPage#refreshList` | `rules`、`visible`、`snapshot_version`、`filter_index`、`query_chars`、`first`、`body_fetches`、`reused`、`filter_ms`、`body_ms`、`tree_ms`、`set_roots_ms`、`total_ms` |
+
+口径说明：
+
+- `first=true` 的一次 `CLIENT_LIST_REFRESH` 即「列表可用」终点；`CLIENT_RECV.since_open_ms` 给出确认到快照的端到端前半段。
+- `body_ms` 是本次刷新展示快照的累计耗时：条目内容未变时命中缓存，因此只有内容版本变化的规则会真正取体，命中缓存的刷新里该值接近 0。
+- `body_fetches` 是本次刷新实际取体次数，`reused` 是直接复用展示快照的条数；两者相加等于 `rules`，据此核对「一次刷新中每条规则只取一次体」。
+- 配方预览与条件提示不计入 `CLIENT_LIST_REFRESH`：预览只在行首次可见时构建、条件提示只在悬停时生成，构建结果缓存在展示快照上；因此该 event 只覆盖刷新期内的过滤、取体与建树。
+- 三档规模基线：在调试页（Ctrl+F8）把测试规则填充到 10 / 200 / 1000 条，用「应用全部」落盘后关闭并重新打开编辑器——快照只包含已落盘规则；每档记录五个 event 的 `total_ms`，准备阶段另看 `steps`/`ticks`、投递阶段另看 `packets`/`ticks`。同一诊断版本之间才可直接比较。
+- 开关是进程内静态状态：单人（集成服务器）下客户端与服务端同时生效；专用服务器与远程客户端各自运行独立进程，该观测口径以开发客户端的集成服务器为准。
 
 ## 4. 生命周期与清理
 

@@ -75,12 +75,15 @@ public final class EditorFactories {
         return candidate;
     }
 
-    // 复制规则：规则与候选都分配新身份
+    // 复制规则：规则与候选都分配新身份，且不继承原规则的分组意图
     public static JsonObject copyRule(String newRuleId, JsonObject source) {
         if (source == null) {
             return blankRule(newRuleId);
         }
-        return reassignIdentity(newRuleId, source);
+        JsonObject copy = reassignIdentity(newRuleId, source);
+        // 副本不携带继承的分类：保存时按自身产出重新派生，避免模板沿用原规则的特殊分组
+        copy.remove(RuleFields.CATEGORY);
+        return copy;
     }
 
     /**

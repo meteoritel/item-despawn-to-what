@@ -7,6 +7,8 @@ import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveResultPayl
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveProgressPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleSourceViewChunkPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleSourceViewPayload;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleLifespanPayload;
 
@@ -44,6 +46,12 @@ public final class FabricRuleEditClientRegistrar {
 
         ClientPlayNetworking.registerGlobalReceiver(RuleLifespanPayload.TYPE,
                 (payload, context) -> context.client().execute(() -> RuleEditPayloadRouter.dispatchLifespan(payload)));
+
+        ClientPlayNetworking.registerGlobalReceiver(RuleSourceViewPayload.TYPE,
+                (payload, context) -> context.client().execute(() -> RuleEditPayloadRouter.dispatchSourceView(payload)));
+
+        ClientPlayNetworking.registerGlobalReceiver(RuleSourceViewChunkPayload.TYPE,
+                (payload, context) -> context.client().execute(() -> RuleEditPayloadRouter.dispatchSourceViewChunk(payload)));
 
         // 编辑入口：接收器把载荷切到客户端线程，开屏由 RuleEditClientWorkspace 的消费者统一负责
         ClientPlayNetworking.registerGlobalReceiver(OpenRuleEditorPayload.TYPE,

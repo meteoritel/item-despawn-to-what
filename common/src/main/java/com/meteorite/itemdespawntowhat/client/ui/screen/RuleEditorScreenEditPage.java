@@ -4,6 +4,7 @@ import com.meteorite.itemdespawntowhat.client.edit.ClientTypeRegistries;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionEditorRegistry;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
+import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
 import com.meteorite.itemdespawntowhat.client.edit.draft.DraftConflict;
@@ -14,6 +15,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.CatalogSuggestions;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionEditingSupport;
+import com.meteorite.itemdespawntowhat.client.ui.screen.form.ReadOnlyTextView;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.SuggestionProvider;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
@@ -28,6 +30,7 @@ import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleIssue;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveStatus;
+import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSourceView;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -117,6 +120,10 @@ final class RuleEditorScreenEditPage {
     // 布局常量
     private static final int TAB_H = 22;
     private static final int EDIT_PAD = 8;
+    // 来源视图弹窗：说明区与只读 JSON 的可用宽度 / 高度区间
+    private static final int SOURCE_MODAL_WIDTH = 340;
+    private static final int SOURCE_MODAL_MIN_HEIGHT = 48;
+    private static final int SOURCE_MODAL_MAX_HEIGHT = 200;
     private static final String UI = "gui.itemdespawntowhat.edit.";
 
     private final Host host;
@@ -276,8 +283,70 @@ final class RuleEditorScreenEditPage {
         footerButtons.clear();
         footerButtons.add(button(UI + "button.save", UiButtonVariant.PRIMARY, this::save));
         footerButtons.add(button(UI + "button.changes", UiButtonVariant.SECONDARY, host::showChanges));
+        footerButtons.add(button(UI + "button.source_view", UiButtonVariant.SECONDARY, this::showSourceView));
         footerButtons.add(button(UI + "button.back", UiButtonVariant.SECONDARY, host::backToList));
         footerBar.set(footerButtons);
+    }
+
+    // ---- 来源视图 ----
+
+    /**
+     * 打开来源视图弹窗：已取回时展示基底 / 覆盖原文与来源元数据；
+     * 在途只提示加载中，失败或超时时提示来源对照不可用并提供重试；三种状态都不影响表单编辑与保存。
+     */
+    private void showSourceView() {
+        String id = host.editingId();
+        if (id == null) {
+            return;
+        }
+        EditorWorkspaceView workspace = host.workspace();
+        RuleSourceView view = workspace.sourceView(id);
+        UiModal modal = UiModal.create(THEME, host.font())
+                .title(Component.translatable(UI + "source.title", id));
+        if (view != null) {
+            modal.message(Component.translatable(UI + "source.message"));
+            modal.contentWidget(new ReadOnlyTextView(host.font(), Component.literal(sourceViewText(view))),
+                    Math.clamp(host.screenHeight() - 100, SOURCE_MODAL_MIN_HEIGHT, SOURCE_MODAL_MAX_HEIGHT));
+            modal.cancel(Component.translatable(UI + "button.close"));
+        } else if (workspace.sourceViewFailed(id)) {
+            modal.message(Component.translatable(UI + "source.failed"));
+            modal.confirm(Component.translatable(UI + "source.retry"), () -> {
+                workspace.retrySourceView(id);
+                host.setNotice(Component.translatable(UI + "source.retry_sent"), THEME.palette().textSecondary());
+            });
+            modal.cancel(Component.translatable(UI + "button.close"));
+        } else {
+            modal.message(Component.translatable(
+                    workspace.sourceViewLoading(id) ? UI + "source.loading" : UI + "source.none"));
+            modal.cancel(Component.translatable(UI + "button.close"));
+        }
+        modal.preferredWidth(SOURCE_MODAL_WIDTH).layoutCentered(host.screenWidth(), host.screenHeight());
+        host.modals().push(modal);
+    }
+
+    // 来源视图正文：每层一段「层名 [数据包] · 路径」加只读格式化 JSON
+    private static String sourceViewText(RuleSourceView view) {
+        StringBuilder text = new StringBuilder();
+        appendSourceView(text, UI + "source.base", view.base());
+        appendSourceView(text, UI + "source.overlay", view.overlay());
+        if (text.isEmpty()) {
+            text.append(Component.translatable(UI + "source.empty").getString());
+        }
+        return text.toString();
+    }
+
+    // 追加单层来源视图；该层不存在时跳过
+    private static void appendSourceView(StringBuilder text, String key, @Nullable RuleSourceView.View view) {
+        if (view == null) {
+            return;
+        }
+        if (!text.isEmpty()) {
+            text.append("\n\n");
+        }
+        Component layer = Component.translatableWithFallback(UI + "source.layer." + view.layer(), view.layer());
+        Component label = view.packId() == null ? layer : layer.copy().append(" [" + view.packId() + "]");
+        text.append(Component.translatable(key, label, view.path()).getString()).append('\n');
+        text.append(RuleDraft.of(view.body()).root().toPrettyJson());
     }
 
     private UiButton button(String labelKey, UiButtonVariant variant, Runnable action) {

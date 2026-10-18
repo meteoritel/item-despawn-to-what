@@ -8,6 +8,7 @@ import com.meteorite.itemdespawntowhat.core.network.protocol.RuleIssue;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveStatus;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveProgress;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshot;
+import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSourceView;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
@@ -50,6 +51,40 @@ public interface EditorWorkspaceView {
 
     // 请求目录页
     boolean requestCatalog(RuleCatalogType type, @Nullable String filter, int page, int pageSize);
+
+    /**
+     * 按需请求某条规则的来源视图：编辑页打开规则时调用，已就绪或在途时不重复请求。
+     *
+     * @param ruleId 规则 id
+     */
+    void requestSourceView(String ruleId);
+
+    /**
+     * 读取已取回的来源视图。
+     *
+     * @param ruleId 规则 id
+     * @return 来源视图；尚未取回、失败或超时时为 null
+     */
+    @Nullable RuleSourceView sourceView(String ruleId);
+
+    /**
+     * @param ruleId 规则 id
+     * @return 是否正在等待来源视图应答
+     */
+    boolean sourceViewLoading(String ruleId);
+
+    /**
+     * @param ruleId 规则 id
+     * @return 来源视图是否请求失败或超时（来源对照不可用）
+     */
+    boolean sourceViewFailed(String ruleId);
+
+    /**
+     * 重试失败的来源视图请求。
+     *
+     * @param ruleId 规则 id
+     */
+    void retrySourceView(String ruleId);
 
     /**
      * 查询服务端统一参考寿命。

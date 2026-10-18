@@ -27,8 +27,12 @@ RequestRuleSnapshotPayload (C2S)
   → owns + isOwner 校验；未确认的 OPENING 会话不接受快照请求
   → heartbeat(sessionId, tick)            # 续租
   → RuleSnapshotTask：后台读取、核对修订；公共预算逐条解码/编码
-  → 后台装配原始来源三视图与序列化、切片
-  → 小快照直发，大快照每 tick 一片；超总量上限回 UNAVAILABLE
+  → 后台装配条目（生效视图 + has_base / has_overlay 存在标记）与序列化、切片
+  → 小快照直发，大快照每 tick 最多 4 片；超总量上限回 UNAVAILABLE
+RequestRuleSourceViewPayload (C2S)
+  → owns + isOwner + confirmed 校验 → heartbeat
+  → 从最近一次快照装配的 RuleSourceIndex 同步生成来源视图（不再读盘）
+  → 小视图直发，大视图按 UTF-8 字节分片；规则不存在或索引未就绪回失败状态码
 ```
 
 首次打开不额外发送 `RequestRuleSnapshotPayload`；该请求用于主动刷新与保存后的补拉。无保存与在途快照时，请求入口即启动后台读取，不等待 tick 轮询启动；主线程步骤在同一快照内复用解码器与编码 Codec，构建与执行仍受公共预算约束。

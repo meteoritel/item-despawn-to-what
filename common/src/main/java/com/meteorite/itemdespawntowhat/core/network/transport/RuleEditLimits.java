@@ -27,6 +27,12 @@ public final class RuleEditLimits {
     public static final int SAVE_ENTRIES_PER_STEP = 8;
     public static final long SAVE_STEP_BUDGET_NANOS = 1_000_000L;
 
+    // 单次快照步骤最多处理 32 条；只按条数与公共 tick 预算节流，不设单步时间预算。
+    public static final int SNAPSHOT_ENTRIES_PER_STEP = 32;
+
+    // 快照分片投递节拍：每 tick 最多下发 4 片，缩短大快照的投递 tick 数。
+    public static final int SNAPSHOT_CHUNKS_PER_TICK = 4;
+
     // 单片数量上限
     public static final int MAX_CHUNK_COUNT = (MAX_CHANGE_SET_BYTES + MAX_CHUNK_BYTES - 1) / MAX_CHUNK_BYTES;
 
@@ -45,8 +51,14 @@ public final class RuleEditLimits {
     // S2C 快照单包上限
     public static final int MAX_SNAPSHOT_BYTES = 4 * 1024 * 1024;
 
+    // 单条规则的来源视图（基底 + 覆盖原始 JSON 与元数据）字节上限：与快照总量同量级，超限回失败回执
+    public static final int MAX_SOURCE_VIEW_BYTES = 4 * 1024 * 1024;
+
     // 字符串编解码器的字符数上限：按字节上限折算（UTF-8 单字符最多 4 字节，取字节上限即可覆盖）
     public static final int MAX_SNAPSHOT_CHARS = MAX_SNAPSHOT_BYTES;
+
+    // 来源视图字符串编解码器的字符数上限
+    public static final int MAX_SOURCE_VIEW_CHARS = MAX_SOURCE_VIEW_BYTES;
 
     // 分片字符串编解码器的字符数上限
     public static final int MAX_CHUNK_CHARS = MAX_CHUNK_BYTES;

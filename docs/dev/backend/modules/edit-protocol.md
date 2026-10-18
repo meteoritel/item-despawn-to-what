@@ -9,9 +9,10 @@
 
 | 类 | 职责 |
 |---|---|
-| `RuleEditProtocol` | 协议版本常量 `VERSION = 4`；握手不一致即拒绝 |
+| `RuleEditProtocol` | 协议版本常量 `VERSION = 6`；握手不一致即拒绝 |
 | `RuleSnapshot` | `{version, context_revision, List<RuleSnapshotEntry> entries, List<RuleIssue> issues}`；`serialize()`/`parse()`。客户端只按 JSON 渲染，不依赖服务端模型类 |
-| `RuleSnapshotEntry` | 单条规则的来源三视图：`{id, origin, status, editable, effective, base, overlay, issues}`。`origin ∈ overlay\|datapack\|mixed`，`status ∈ active\|disabled\|masked\|invalid` |
+| `RuleSnapshotEntry` | 单条规则的列表视图：`{id, origin, status, editable, category, effective, has_base, has_overlay, issues}`。`origin ∈ overlay\|datapack\|mixed`，`status ∈ active\|disabled\|masked\|invalid`；`category` 为装配后的分类（显式声明优先，未声明时按生效效果派生；无法派生时为 `null`）；`has_base`/`has_overlay` 只表示对应层是否存在非控制条目副本，不再携带内容 |
+| `RuleSourceView` | 按需下发的来源视图：`{id, base, overlay}`；每层为 `{layer, pack, path, body}`，`layer ∈ builtin\|world\|overlay`，`pack` 为数据包 id（覆盖层为 `null`），`body` 保留文件原文；`serialize()`/`parse()` |
 | `RuleEdit` | `{id, action(UPSERT\|DELETE), rule}`；upsert 必带 rule，id 归一为小写下划线 |
 | `RuleEditChangeSet` | `{expected_version, List<RuleEdit> edits}`；乐观并发基准，`serialize()`/`parse()` |
 | `RuleSaveProgress` | 不可变阶段、计数、当前内容与可取消标记；当前内容最长 512 UTF-16 单元 |
@@ -32,6 +33,9 @@
 | `RequestRuleSnapshotPayload` | C2S | `sessionId` / `requestId` |
 | `RequestRuleCatalogPayload` | C2S | `sessionId` / `requestId` / `catalogType` / `filter` / `page` / `pageSize`（`MAX_PAGE_SIZE = 200`） |
 | `RequestRuleLifespanPayload` | C2S | `sessionId` / `requestId` |
+| `RequestRuleSourceViewPayload` | C2S | `sessionId` / `requestId` / `ruleId`；编辑页打开规则时按需请求该规则的来源视图 |
+| `RuleSourceViewPayload` | S2C | `sessionId` / `requestId` / `statusCode` / `sourceViewJson`；失败时 JSON 为空且状态码非 `SUCCESS` |
+| `RuleSourceViewChunkPayload` | S2C | `sessionId` / `requestId` / `transferId` / `index` / `count` / `chunk`；大来源视图的分片 |
 | `RuleLifespanPayload` | S2C | `sessionId` / `requestId` / `lifespanTicks`（普通物品参考寿命；零表示尚未采样） |
 | `SaveRuleChangeSetPayload` | C2S | `sessionId` / `operationId` / `changeSetJson`（直发，≤ `MAX_DIRECT_CHARS`） |
 | `SaveRuleChangeSetChunkPayload` | C2S | `sessionId` / `operationId` / `transferId`(≤64) / `index` / `count` / `chunk`(≤ `MAX_CHUNK_CHARS`) |
@@ -51,10 +55,10 @@
 | `RuleEditTextChunks` | 共享的按 UTF-8 字节切分实现（上下行同一口径） | `splitByUtf8Bytes`、`utf8Length`（包内） |
 | `RuleEditChunkAccumulator` | 上行分片重组：逐片校验、**重复下标以首片为准**、收齐后返回有序分片并复核累计字节，后台按序拼接；过期（1200 tick）清理，在途传输超量时按插入顺序淘汰最早的一条 | `accept`、`isShapeValid`、`expireIdle`、`clear`、`clearAll`、`AcceptResult` |
 | `RuleEditPayloadCodec` | 载荷共用编解码片段（字符串列表 / 可空字符串 / `RuleIssue` 列表）；超限即抛解码异常 | `writeStrings`/`readStrings`、`writeNullableString`/`readNullableString`、`writeIssues`/`readIssues`（包内） |
-| `RuleEditPayloadRouter` | 客户端入站门面：字符串 sink（兼容）+ 结构化 sink（快照 / 分片 / 回执 / 进度 / 目录 / 寿命）；服务端只装载空消费者 | `installSnapshotSink`、`installSnapshotPayloadSink`、`installResultSink`、`installResultPayloadSink`、`installCatalogSink`、`installChunkSink`、`installLifespanSink`、`dispatchSnapshot`、`dispatchResult`、`dispatchChunk`、`dispatchCatalog`、`dispatchLifespan`、`installProgressSink`、`dispatchProgress` |
+| `RuleEditPayloadRouter` | 客户端入站门面：字符串 sink（兼容）+ 结构化 sink（快照 / 分片 / 回执 / 进度 / 目录 / 寿命 / 来源视图）；服务端只装载空消费者 | `installSnapshotSink`、`installSnapshotPayloadSink`、`installResultSink`、`installResultPayloadSink`、`installCatalogSink`、`installChunkSink`、`installLifespanSink`、`installSourceViewSink`、`installSourceViewChunkSink`、`dispatchSnapshot`、`dispatchResult`、`dispatchChunk`、`dispatchCatalog`、`dispatchLifespan`、`dispatchSourceView`、`dispatchSourceViewChunk`、`installProgressSink`、`dispatchProgress` |
 | `OpenRuleEditorPayload` | 承载 `installOpenEditorPayloadSink` / `dispatchOpenEditor`（开屏入口的唯一静态 sink） | `TYPE`、`STREAM_CODEC` |
 | `RuleEditServerContext` | 窄接口：向网络层暴露运行时能力（由公共宿主核心以适配器实现，平台宿主只转发） | `overlayRoot()`、`overlayNamespace()`、`typeRegistries()`、`loadMerged(server)`、`rebuildAndRescan(server)`、`sendTo(player, payload)`、`referenceLifespanTicks()`、`saveReloadContext()`、`scheduleTask(realmKey, task, delayTicks)`、`applySavedIndex(server, index)` |
-| `RuleEditServerHandler` | 服务端处理编排（**薄转发**） | `openEditor`、`handleConfirm`、`handleHeartbeat`、`handleClose`、`handleSnapshotRequest`、`handleCatalogRequest`、`handleLifespanRequest`、`handleChangeSet`、`handleChangeSetChunk`、`handleCancelSave`、`expireIdle`、`clearPlayer`、`reset`、`isReady`、`canEdit`、`sessionManager`/`service` |
+| `RuleEditServerHandler` | 服务端处理编排（**薄转发**） | `openEditor`、`handleConfirm`、`handleHeartbeat`、`handleClose`、`handleSnapshotRequest`、`handleCatalogRequest`、`handleLifespanRequest`、`handleSourceViewRequest`、`handleChangeSet`、`handleChangeSetChunk`、`handleCancelSave`、`expireIdle`、`clearPlayer`、`reset`、`isReady`、`canEdit`、`sessionManager`/`service` |
 
 ### 1.4 `core/network/catalog`
 
@@ -66,7 +70,7 @@
 
 | 类 | 职责 | 关键成员 |
 |---|---|---|
-| `RuleEditService` | 编辑会话的业务编排（打开/确认/心跳/关闭/快照/目录/寿命/保存），只产出"要下发的载荷"，不直接碰网络 | `openEditor`、`confirm`、`heartbeat`、`close`、`requestSnapshot`、`requestCatalog`、`requestLifespan`、`pollLifespan`、`submitChangeSet`、`submitChunk`、`cancelSave`、`pollSaveProgress`、`pollSave`、`expireSessions`、`forceRelease`；幂等表 `recentResults`（最近 16 条） |
+| `RuleEditService` | 编辑会话的业务编排（打开/确认/心跳/关闭/快照/目录/寿命/来源视图/保存），只产出"要下发的载荷"，不直接碰网络 | `openEditor`、`confirm`、`heartbeat`、`close`、`requestSnapshot`、`requestCatalog`、`requestLifespan`、`pollLifespan`、`requestSourceView`、`submitChangeSet`、`submitChunk`、`cancelSave`、`pollSaveProgress`、`pollSave`、`expireSessions`、`forceRelease`；幂等表 `recentResults`（最近 16 条） |
 | `EditSessionManager` | 全局单一目标的会话状态机（FREE/OPENING/ACTIVE/APPLYING），委托文件所有者管理修订号 | `acquire` / `confirm` / `heartbeat` / `owns` / `isOwner` / `confirmed` / `beginApply` / `finishApply` / `release` / `expire` / `version` / `bumpVersion` / `readDiskRevision` / `acceptDiskRevision` |
 | `RuleEditSessionLimits` | 会话时间与权限常量 | `TARGET_ID = itemdespawntowhat:rules`、`OPEN_CONFIRM_WINDOW_SECONDS=15`、`HEARTBEAT_INTERVAL_SECONDS=10`、`LEASE_SECONDS=60`、`REQUIRED_PERMISSION_LEVEL=2`、`MAX_OPERATION_HISTORY=16` |
 | `RuleOverlayStore` | 覆盖层文件工作与修订号的单一所有者：有界串行队列、内容指纹、原子持久化、进展监测、按存档实例隔离的作业登记与停服隔离 | `submit`、`acceptRevision`、`committed`、`flushRevision`、`stalled`、`close`、`requireIdle` |
@@ -75,20 +79,30 @@
 | `RuleSnapshotAssembler` | 来源分层索引 + 当前生效规则 → 下发快照 | `assemble`、`encodeRule`（服务端线程）、`assembleEncoded`（纯 JSON 装配） |
 
 | `RuleSaveTask` | 公共 MAINTENANCE 任务：后台解析/读写、逐条校验、分步发布与回扫 | `step`、`invalidate`、`cancel`、`progress`、`pollCompletion`；后台工作提交给 `RuleOverlayStore` |
-| `RuleSnapshotTask` | 快照读取、逐条解码/编码、后台 JSON 装配与分片 | `step`、`pollCompletion`；每 tick 最多下发一片 |
+| `RuleSnapshotTask` | 快照读取、逐条解码/编码、后台 JSON 装配与分片；完成时同时交付本次装配使用的 `RuleSourceIndex`（来源视图的数据源） | `step`、`pollCompletion`、`Delivery`；每 tick 最多下发 4 片 |
 | `RuleSaveReloadContext` | 启动/数据包重载时发布的原始基底、文件问题与解码上下文 | 对象身份用于识别重载；后台不访问 ResourceManager |
 
 ## 2. 快照形状
 
 快照 = `{version, context_revision, entries[], issues[]}`，标题字段当前都取 `EditSessionManager.version()`（覆盖层修订号）。
 
-条目 `RuleSnapshotEntry(id, origin, status, editable, effective, base, overlay, issues)`：
+条目 `RuleSnapshotEntry(id, origin, status, editable, category, effective, has_base, has_overlay, issues)`：
 
-- **三视图**：`base` 为数据包层原始 JSON，`overlay` 为覆盖层原始 JSON，两者都保留原文（**不做模型往返**）；`effective` 优先取**模型编码结果**（解码成功时权威），失败时退回 `overlay` 或 `base` 原文，保证客户端仍能看到内容。缺失的视图以 JSON `null` 下发，客户端按"无此视图"处理。
-- **`editable` 语义（内容存在标记）**：`editable = base != null || overlay != null`，即该条目在数据包层或覆盖层是否存在非控制条目内容（只被控制条目声明停用 / 删除时为 `false`，**纯数据包规则为 `true`**）；客户端据此决定打开表单编辑还是只展示详情——`status = invalid` 或带 error 级 issue 的条目即使 `editable = true` 也只读展示。
+- **只带生效视图**：`effective` 优先取**模型编码结果**（解码成功时权威），失败时退回 `overlay` 或 `base` 原文，保证客户端仍能看到内容。基底与覆盖内容不再随快照下发，改由来源视图按需请求（见 §2.1）。
+- **存在标记**：`has_base` / `has_overlay` 分别表示数据包层 / 覆盖层是否存在**非控制条目**副本，保留原文语义但不携带内容；控制条目（只声明停用或删除）不计入。
+- **`editable` 语义（内容存在标记）**：`editable = has_base || has_overlay`，即该条目在数据包层或覆盖层是否存在非控制条目内容（只被控制条目声明停用 / 删除时为 `false`，**纯数据包规则为 `true`**）；客户端据此决定打开表单编辑还是只展示详情——`status = invalid` 或带 error 级 issue 的条目即使 `editable = true` 也只读展示。
+- **`category`（展示分类）**：读取胜出原始视图（`overlay` 优先于 `base`）顶层的 `category`；缺失、非字符串或空白时由 `RuleCategoryClassifier` 按生效效果的产出类别派生。显式值与派生值不一致时以显式值为准，不产生告警；已删除等无已解码规则的条目无法派生，下发 `null`。只供列表分组，不进入运行时规则模型，不参与解码与执行。
 - **`origin`**：`overlay` / `datapack` / `mixed`（两层都有即 mixed），由 `RuleSourceIndex` 归并结果判定。
 - **`status`**：控制条目声明删除→`masked`、声明停用→`disabled`；否则解码成功→`active`、解码失败→`invalid`。`invalid` 条目会带上 `severity=error` 的 `RuleIssue`（无法定位时兜底 `itemdespawntowhat.edit.issue.decode`）。
 - **`issues`**：把加载/校验问题按 `origin` / `field_path` 关联到具体条目；无法关联的问题作为快照级 issue（`origin=runtime`）下发。
+
+### 2.1 来源视图按需请求
+
+- **何时请求**：编辑页打开某条规则时，客户端按规则 id 发起来源视图请求；列表页不发起。
+- **数据源**：服务端从最近一次快照装配使用的 `RuleSourceIndex` 同步应答，不为单条规则再读一次磁盘；条目内容为文件原文（**不做模型往返**）。
+- **载荷**：`RuleSourceView{id, base, overlay}`，每层为 `{layer, pack, path, body}`；`layer` 取 `builtin` / `world` / `overlay`，`pack` 为数据包 id（覆盖层为空），`path` 为文件路径。小视图直发整包，超过直发上限按 UTF-8 字节分片。
+- **缓存**：客户端缓存最近 8 条来源视图（访问顺序淘汰），打开规则已命中则不重复请求；快照修订号变化（保存或数据包重载）时整体失效，会话结束清空。
+- **失败降级**：请求沿用会话校验、请求标识配对与超时丢弃；失败或超时只影响来源对照（来源视图弹窗与来源元数据不可用并提示），规则草稿编辑与保存继续可用；「恢复原始版本」在来源视图取回前不可用。
 
 > 控制条目判定必须**判取值而非存在性**：`"disabled": false` 是普通规则。加载层 `readFlag` 与 `RuleSnapshotAssembler` 都遵守该约定；用 `has()` 会把普通规则误当控制条目。
 
@@ -105,9 +119,10 @@
 固定顺序（`RuleEditServerHandler` → `RuleEditService`）：
 
 ```text
+请求来源视图：权限/就绪 → 会话持有与确认校验 → heartbeat → 从最近一次快照的来源索引同步应答（整包或分片）
 请求快照：权限/就绪 → 会话持有与确认校验 → heartbeat → 启动 RuleSnapshotTask 后台读取
   → 后台核对修订与读取覆盖层 → 公共预算逐条解码、校验、编码（同份快照复用编解码器）
-  → 后台装配三视图、序列化与切片 → 每 tick 下发一片
+  → 后台装配条目（生效视图 + 存在标记）、序列化与切片 → 每 tick 最多下发 4 片
 提交变更集：operationId 合法性 → 会话持有校验 → 幂等查表
   → 同一在途 operationId 等待同一结果；其它在途提交拒绝
   → beginApply → 排队 RuleSaveTask
@@ -119,7 +134,7 @@
   → finishApply → 回执；冲突/未重载的最新快照另行排队
 ```
 
-保存与快照步骤最多处理 `SAVE_ENTRIES_PER_STEP=8` 项，同时受公共 tick 预算和 `SAVE_STEP_BUDGET_NANOS=1_000_000`（1ms）步骤软预算约束；让出后最早下一 tick 续接。没有固定编辑条数拒绝门槛，4 MiB 总字节限制仍有效。文件 I/O、JSON 拼接/解析/装配与纯模型索引构建使用进程级单后台线程，待执行队列上限为 `RuleOverlayStore.MAX_BACKGROUND_JOBS=8`；队列满时拒绝新后台工作，不转回主线程执行，尚未写盘的保存回 `UNAVAILABLE`。第三方 Codec、注册表相关校验、任务取消与世界访问均留在服务端线程。单次 Codec、规则查询或原版操作不可抢占，因此不承诺任意单步均小于预算。保存失败在索引发布前保留上一版索引；发布后的回扫失败回 `SAVED_NOT_RELOADED`，不回滚已发布索引。
+保存步骤最多处理 `SAVE_ENTRIES_PER_STEP=8` 项，同时受公共 tick 预算和 `SAVE_STEP_BUDGET_NANOS=1_000_000`（1ms）步骤软预算约束；快照步骤最多处理 `SNAPSHOT_ENTRIES_PER_STEP=32` 项，不设单步时间预算，公共 tick 预算仍是唯一总闸。两类任务让出后最早下一 tick 续接，预算耗尽只延后不丢任务。没有固定编辑条数拒绝门槛，4 MiB 总字节限制仍有效。文件 I/O、JSON 拼接/解析/装配与纯模型索引构建使用进程级单后台线程，待执行队列上限为 `RuleOverlayStore.MAX_BACKGROUND_JOBS=8`；队列满时拒绝新后台工作，不转回主线程执行，尚未写盘的保存回 `UNAVAILABLE`。第三方 Codec、注册表相关校验、任务取消与世界访问均留在服务端线程。单次 Codec、规则查询或原版操作不可抢占，因此不承诺任意单步均小于预算。保存失败在索引发布前保留上一版索引；发布后的回扫失败回 `SAVED_NOT_RELOADED`，不回滚已发布索引。
 
 
 ### 4.1 保存进度与取消
@@ -148,7 +163,7 @@
 
 ### 4.4 网络限额
 
-命名空间 `idtw`。直发 32 000 B；单片 30 000 B；变更集/快照上限均 4 MiB；`MAX_CHUNK_COUNT = ceil(4MiB / 30000)`（=140）；transferId ≤64；每玩家并发 2 个在途传输；空闲超时 60 s（1200 tick）；`MAX_ID_CHARS=64`、`MAX_CODE_CHARS=128`、`MAX_FALLBACK_CHARS=512`、`MAX_MESSAGE_ARGS=8`、`MAX_MESSAGE_ARG_CHARS=256`、`MAX_ISSUES_PER_RESULT=64`；编解码器留 `PACKET_SLACK_BYTES=4096` 余量，超限请求先抵服务端再回 `INVALID_REQUEST`，不直接断连。目录单页上限 200（默认 50）。**长度始终按 UTF-8 字节计**（`encodedLength`），防多字节绕过。
+命名空间 `idtw`。直发 32 000 B；单片 30 000 B；变更集/快照上限均 4 MiB；单条来源视图上限 4 MiB；`MAX_CHUNK_COUNT = ceil(4MiB / 30000)`（=140）；transferId ≤64；每玩家并发 2 个在途传输；空闲超时 60 s（1200 tick）；`MAX_ID_CHARS=64`、`MAX_CODE_CHARS=128`、`MAX_FALLBACK_CHARS=512`、`MAX_MESSAGE_ARGS=8`、`MAX_MESSAGE_ARG_CHARS=256`、`MAX_ISSUES_PER_RESULT=64`；编解码器留 `PACKET_SLACK_BYTES=4096` 余量，超限请求先抵服务端再回 `INVALID_REQUEST`，不直接断连。目录单页上限 200（默认 50）。**长度始终按 UTF-8 字节计**（`encodedLength`），防多字节绕过。
 
 ### 4.5 权威落盘
 
@@ -172,7 +187,7 @@
 
 ## 6. 分片传输
 
-`RuleEditChunkAccumulator.validate` 逐片检查 transferId、下标和单片字节数，并将不可变载荷和字节数封装为只能由校验入口创建的 `ValidatedChunk`。服务层先校验、查询幂等回执，再调用 `acceptValidated` 重组；直接调用 `accept` 也经过同一校验入口。接收阶段复用字节数，重复下标以首片为准且仅首片计入累计值；收齐时按累计字节复核总量并返回有序分片，保存后台再拼接。每玩家至多 2 个在途传输，未收齐不回执，超量回 `INVALID_REQUEST`，空闲 1200 tick 清理。下行快照不超过 32 000 B 时直发，大快照每片 30 000 B、每 tick 一片；总量超过 4 MiB 或总片数超过上限时回结构化失败回执。
+`RuleEditChunkAccumulator.validate` 逐片检查 transferId、下标和单片字节数，并将不可变载荷和字节数封装为只能由校验入口创建的 `ValidatedChunk`。服务层先校验、查询幂等回执，再调用 `acceptValidated` 重组；直接调用 `accept` 也经过同一校验入口。接收阶段复用字节数，重复下标以首片为准且仅首片计入累计值；收齐时按累计字节复核总量并返回有序分片，保存后台再拼接。每玩家至多 2 个在途传输，未收齐不回执，超量回 `INVALID_REQUEST`，空闲 1200 tick 清理。下行快照不超过 32 000 B 时直发，大快照每片 30 000 B、每 tick 最多 4 片；总量超过 4 MiB 或总片数超过上限时回结构化失败回执。启用首载分段观测时，快照准备与分片投递分别输出 `SERVER_PREP` / `SERVER_DELIVER` 分段日志，字段与开关口径见 [debug.md](debug.md) §3.1。
 
 ## 7. 新契约字段如何进入快照与校验
 
@@ -186,7 +201,8 @@
 
 - **改限额**：改 `RuleEditLimits`（注意逐片、总量、快照、并发、超时多处）。
 - **改写盘策略**：改 `RuleOverlayWriter`（保持"整批预备 + 原子替换 + 失败回滚 + 替换前内容闸门"；元数据核对是 `verifyMetadataUnchanged`，逐字节比对是 `verifyContentUnchanged`）。
-- **改快照形状**：改 `RuleSnapshotAssembler`（保持覆盖层用原始 JSON、`editable = base != null || overlay != null`）。
+- **改快照形状**：改 `RuleSnapshotAssembler`（保持覆盖层用原始 JSON、存在标记 `has_base`/`has_overlay` 与 `editable` 同源）。
+- **改来源视图**：改 `RuleSourceView`（协议形状）与 `RuleSnapshotAssembler#sourceView`（来源坐标与原文拷贝）；数据源是快照任务交付的 `RuleSourceIndex`，不要为单条规则增加磁盘读取。
 - **接入新目录类型**：在 `core/catalog` 实现 `RuleCatalogSource` 并登记到 `RuleCatalogSources.builtin`；枚举值加进 `RuleCatalogType`。
 - **新增 payload**：新增协议类 + 在两端注册器登记；C2S 与 S2C **类型**都必须在公共初始化注册，否则连接协商判定通道缺失。
 

@@ -26,6 +26,15 @@ public enum RuleSourceLayer {
         return priority;
     }
 
+    /**
+     * 稳定层标识（小写枚举名）：协议下发与客户端本地化映射使用，不随界面语言变化。
+     *
+     * @return builtin / world / overlay
+     */
+    public String id() {
+        return name().toLowerCase(java.util.Locale.ROOT);
+    }
+
     // 面向命令与日志输出的中文层名
     public String displayName() {
         return displayName;
