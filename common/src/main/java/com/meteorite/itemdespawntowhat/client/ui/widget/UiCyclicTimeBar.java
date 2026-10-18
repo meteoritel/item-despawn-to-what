@@ -6,7 +6,9 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeEnd;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumbers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiValueTextBinding;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import java.util.ArrayList;
@@ -68,6 +70,7 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
     private final Texts texts;
     private final UiCyclicRange core;
     private final UiTextInput precise;
+    private final UiValueTextBinding<Double, String> preciseBinding;
     private final List<Preset> presets = new ArrayList<>();
 
     private @Nullable Listener listener;
@@ -84,6 +87,14 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
 
     // 注入的宿主主题
     private final UiHostTheme theme;
+    /**
+     * 装配世界时间条与精确文本绑定；世界时间刻域和主题由宿主定义。
+     *
+     * @param theme 宿主主题
+     * @param font 文本测量与绘制字体
+     * @param texts 本地化提示
+     * @param listener 可选的宿主提交监听器
+     */
     public UiCyclicTimeBar(UiHostTheme theme, Font font, Texts texts, @Nullable Listener listener) {
         this.theme = UiHostThemes.require(theme);
         this.font = Objects.requireNonNull(font, "font");
@@ -106,6 +117,9 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
         this.precise = new UiTextInput(theme, font, texts.preciseHint());
         this.precise.setMaxLength(16);
         this.precise.setVisible(false);
+        this.preciseBinding = new UiValueTextBinding<>(core::selectedTick,
+                core::setSelectedTick, precise::value, precise::setValue,
+                this::parsePrecise, value -> Integer.toString((int) Math.round(value)), () -> {});
         this.precise.setOnCommit(this::commitPrecise);
         this.precise.setOnCancel(() -> {
             closePrecise();
@@ -437,6 +451,11 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
     // 复合表单可将精确编辑交给已有字段输入，统一缓冲与错误定位。
     public void setPreciseEditor(Consumer<UiRangeEnd> editor) { preciseEditor = editor; }
 
+    /**
+     * 打开当前端的精确输入；宿主提供外部编辑器时将焦点交给该编辑器。
+     *
+     * @return 当前控件是否接受精确编辑请求
+     */
     public boolean openPrecise() {
         if (!enabled || !visible) {
             return false;
@@ -448,26 +467,21 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
         preciseActive = true;
         precise.setVisible(true);
         precise.setFocused(true);
-        precise.setValue(Integer.toString((int) Math.round(core.selectedTick())));
+        preciseBinding.acceptText();
+        preciseBinding.previewValue();
         precise.selectAll();
         return true;
     }
 
     private void commitPrecise(@Nullable String text) {
-        String raw = text == null ? "" : text.trim();
-        int parsed;
-        try {
-            parsed = Integer.parseInt(raw);
-        } catch (NumberFormatException invalid) {
-            closePrecise();
-            return;
-        }
-        if (parsed < MIN_TICK || parsed > MAX_TICK) {
-            closePrecise();
-            return;
-        }
-        core.setSelectedTick(parsed);
+        preciseBinding.commitText(text == null ? "" : text);
         closePrecise();
+    }
+
+    // 合法刻域属于宿主世界时间规则，kit 只负责绑定与周期交互。
+    private @Nullable Double parsePrecise(String text) {
+        Integer parsed = UiNumbers.parseInt(text);
+        return parsed != null && parsed >= MIN_TICK && parsed <= MAX_TICK ? parsed.doubleValue() : null;
     }
 
     private void closePrecise() {

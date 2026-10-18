@@ -206,6 +206,15 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInp
         return hovered;
     }
 
+    /**
+     * 查询拖动或按键预览是否仍在进行，用于收束没有净变化的文本绑定操作。
+     *
+     * @return 是否存在尚未结束的数值操作
+     */
+    public boolean isInteracting() {
+        return interaction.isActive();
+    }
+
     public boolean isDragging() {
         return dragging;
     }

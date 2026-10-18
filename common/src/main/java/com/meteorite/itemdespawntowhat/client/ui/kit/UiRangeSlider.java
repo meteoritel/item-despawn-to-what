@@ -400,6 +400,25 @@ public final class UiRangeSlider implements UiFocusTarget, UiInputTarget, UiInpu
         return true;
     }
 
+    /**
+     * 提交当前端的精确输入；缺失端按合法域与对端约束补齐，已有端保持当前档吸附策略。
+     * <p>补端与改值都通过同一操作生命周期通知监听器，不产生额外宿主提交。
+     *
+     * @param raw 输入数值，必须有限
+     * @param fine 已有端是否使用细调档
+     * @return 控件是否接受输入
+     */
+    public boolean setSelectedValueOrPresent(double raw, boolean fine) {
+        if (!Double.isFinite(raw) || !enabled || dragging) return false;
+        if (value.isPresent(selectedEnd)) return setSelectedValue(raw, fine);
+        if (operationActive) endInteraction(UiInputCapture.EndReason.RELEASE);
+        UiRangeValue candidate = value.withValue(selectedEnd, boundEnd(selectedEnd, policy.clamp(raw)));
+        beginOperation();
+        previewValue(candidate);
+        endInteraction(UiInputCapture.EndReason.RELEASE);
+        return true;
+    }
+
     // 当前端数值；端点不存在时返回 NaN
     public double selectedValue() {
         return this.value.value(this.selectedEnd);

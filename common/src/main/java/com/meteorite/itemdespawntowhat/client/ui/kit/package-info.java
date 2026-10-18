@@ -38,6 +38,8 @@
  *   <li>数值策略：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiNumberPolicy}（合法数值域、粗细档与吸附）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderWindow}（轨道显示窗口，可与数值域不同）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiNumbers}（数值文本互转：整数直出与定点小数、有限值解析）</li>
+ *   <li>数值与文本绑定：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiValueTextBinding}（单值或区间文本的
+ *       双向预览、提交、取消、无净变化收束与程序回填重入保护，转换规则由宿主注入）</li>
  *   <li>滑块：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiScalarSlider}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeSlider}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeValue}、

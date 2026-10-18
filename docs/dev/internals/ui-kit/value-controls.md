@@ -15,12 +15,13 @@
 
 - 包：`com.meteorite.itemdespawntowhat.client.ui.kit`
 - 源码目录：`common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit`
-- 覆盖类型：14（本分组类型，不含 `package-info.java`；包级说明见 [UI kit 入口](README.md)）
+- 覆盖类型：15（本分组类型，不含 `package-info.java`；包级说明见 [UI kit 入口](README.md)）
 
-本分组覆盖 `UiNumberPolicy`、`UiNumbers`、`UiSliderWindow`、`UiScalarSlider`、`UiRangeSlider`、`UiRangeValue`、`UiRangeEnd`、`UiCyclicRange`、`UiSliderStyle`、`UiSliderPainter`、`UiSliderSkin`、`UiSliderRole`、`PixelSliderPainter`、`UiSliderExamples`。
+本分组覆盖 `UiValueTextBinding`、`UiNumberPolicy`、`UiNumbers`、`UiSliderWindow`、`UiScalarSlider`、`UiRangeSlider`、`UiRangeValue`、`UiRangeEnd`、`UiCyclicRange`、`UiSliderStyle`、`UiSliderPainter`、`UiSliderSkin`、`UiSliderRole`、`PixelSliderPainter`、`UiSliderExamples`。
 
 ### 2.2 职责
 
+- `UiValueTextBinding<V, T>` 统一数值与精确文本的双向绑定：宿主注入数值和文本快照读写、解析与格式化、提交通知；支持单值和多端文本。非法或未完成输入保留原文本与最近有效数值，程序回填不触发反向预览。
 - `UiNumberPolicy` 描述「哪些值合法」：合法域、粗细两档步长、整数策略与细调拖动系数，构造期校验全部参数。
 - `UiNumbers` 提供数值与文本互转：显示侧按「整数直出、否则定点小数」，解析侧只接受有限值。
 - `UiSliderWindow` 描述「哪一段铺在整条轨道上」，只参与几何映射，不参与合法性判断。
@@ -40,11 +41,12 @@
 
 | 类型 | 种类 | 公开成员 | 说明 |
 |---|---|---|---|
+| `UiValueTextBinding<V, T>` | final class | 构造 `(Supplier<V>, Predicate<V>, Supplier<T>, Consumer<T>, Function<T, V>, Function<V, T>, Runnable)`；`setText(T)`；`acceptText()`；`previewText()`；`commitText(T)`；`cancelText()`；`beginValueChange()`；`previewValue()`；`commitValue()`；`cancelValue()`；`finishValueChange()` | V 与 T 应为不可变快照；解析返回 `null` 表示暂不可用；写入器返回是否接受 |
 | `UiNumberPolicy` | record | `UiNumberPolicy(double, double, double, double, boolean, double)`；`of(double, double, double)`；`of(double, double, double, double)`；`integer(int, int, int)`；`integer(int, int, int, int)`；`withFineDragFactor(double)`；`span()`；`step(boolean)`；`clamp(double)`；`snap(double, boolean)`；`snapUnclamped(double, boolean)`；`dragValuePerPixel(int, double, boolean)` | 分量依次为 `min`、`max`、`coarseStep`、`fineStep`、`integerOnly`、`fineDragFactor` |
 | `UiNumbers` | final class | `INTEGER_TOLERANCE`；`MAX_EXACT_INTEGER`；`MAX_LONG_AS_DOUBLE`；`plain(double, int)`；`plain(double, int, String)`；`isExactIntegral(double, double)`；`plainExact(double, int)`；`plainExact(double, int, double)`；`trimTrailingZeros(String)`；`roundedText(double)`；`parseFinite(String)`；`parseInt(String)` | 常量取值 `1.0E-6D`、`9007199254740992.0D`、`(double) Long.MAX_VALUE`；私有构造 |
 | `UiSliderWindow` | record | `UiSliderWindow(double, double)`；`of(double, double)`；`span()`；`contains(double)`；`fraction(double)`；`clampFraction(double)`；`valueAt(double)` | `fraction` 不钳制，`valueAt` 先钳制比例 |
-| `UiScalarSlider` | final class | 构造 `(UiNumberPolicy)`、`(UiNumberPolicy, UiSliderWindow)`；`policy()`/`setPolicy`；`window()`/`setWindow`；`style()`/`setStyle`；`painter()`/`setPainter`；`value()`/`setValue(double)`/`isBackfillInvalid()`；`setError(boolean)`/`isError()`；`setPageStep(double)`/`pageStep()`；`label()`/`setLabel`；`formatter()`/`setFormatter`；`interactionListener()`/`setInteractionListener`；`isEnabled()`/`setEnabled`；`isVisible()`/`setVisible`；`isHovered()`；`isDragging()`；`formatValue()`；`bounds()`/`setBounds(int, int, int, int)`；`trackLeft/trackRight/trackWidth()`；`valueAtPointer(double)`；`render(GuiGraphics, Font, UiInputContext)`；`endInteraction(EndReason)`；`unmount()`；`onFocusScopeChanged()`；`onHostClosed()` | 实现 `UiFocusTarget`、`UiInputTarget`、`UiInputCapture.Target`；setter 返回 `UiScalarSlider` |
-| `UiRangeSlider` | final class | 构造 `(UiNumberPolicy)`、`(UiNumberPolicy, UiSliderWindow, UiRangeValue)`；`policy()`/`setPolicy`；`window()`/`setWindow`；`value()`/`setValue(UiRangeValue)`/`isBackfillInvalid()`；`selectedEnd()`/`selectEnd(UiRangeEnd)`/`cycleSelectedEnd()`；`setEndPresent(UiRangeEnd, boolean)`；`selectedValue()`/`setSelectedValue(double, boolean)`；`listener()`/`setListener`；`bounds()`/`setBounds`；`trackLeft/trackRight/trackWidth()`；`xOf(double)`；`valueAtPointer(double, boolean)`；`containsPointer(double, double)`；`isDragging()`；`isInteracting()`；`setPageStep(double)`/`pageStep()`；`thumbWidth()`/`setThumbWidth(int)`；`label()`/`setLabel`；`formatter()`/`setFormatter`；`endInteraction(EndReason)`；`unmount()`；`onFocusScopeChanged()`；`onHostClosed()`；`NONE` | 实现 `UiFocusTarget`、`UiInputTarget`、`UiInputCapture.Target`；setter 返回 `void`；嵌套 `interface Listener` |
+| `UiScalarSlider` | final class | 构造 `(UiNumberPolicy)`、`(UiNumberPolicy, UiSliderWindow)`；`policy()`/`setPolicy`；`window()`/`setWindow`；`style()`/`setStyle`；`painter()`/`setPainter`；`value()`/`setValue(double)`/`isBackfillInvalid()`；`setError(boolean)`/`isError()`；`setPageStep(double)`/`pageStep()`；`label()`/`setLabel`；`formatter()`/`setFormatter`；`interactionListener()`/`setInteractionListener`；`isEnabled()`/`setEnabled`；`isVisible()`/`setVisible`；`isHovered()`；`isDragging()`；`isInteracting()`；`formatValue()`；`bounds()`/`setBounds(int, int, int, int)`；`trackLeft/trackRight/trackWidth()`；`valueAtPointer(double)`；`render(GuiGraphics, Font, UiInputContext)`；`endInteraction(EndReason)`；`unmount()`；`onFocusScopeChanged()`；`onHostClosed()` | 实现 `UiFocusTarget`、`UiInputTarget`、`UiInputCapture.Target`；setter 返回 `UiScalarSlider` |
+| `UiRangeSlider` | final class | 构造 `(UiNumberPolicy)`、`(UiNumberPolicy, UiSliderWindow, UiRangeValue)`；`policy()`/`setPolicy`；`window()`/`setWindow`；`value()`/`setValue(UiRangeValue)`/`isBackfillInvalid()`；`selectedEnd()`/`selectEnd(UiRangeEnd)`/`cycleSelectedEnd()`；`setEndPresent(UiRangeEnd, boolean)`；`selectedValue()`/`setSelectedValue(double, boolean)`；`setSelectedValueOrPresent(double, boolean)`；`listener()`/`setListener`；`bounds()`/`setBounds`；`trackLeft/trackRight/trackWidth()`；`xOf(double)`；`valueAtPointer(double, boolean)`；`containsPointer(double, double)`；`isDragging()`；`isInteracting()`；`setPageStep(double)`/`pageStep()`；`thumbWidth()`/`setThumbWidth(int)`；`label()`/`setLabel`；`formatter()`/`setFormatter`；`endInteraction(EndReason)`；`unmount()`；`onFocusScopeChanged()`；`onHostClosed()`；`NONE` | 实现 `UiFocusTarget`、`UiInputTarget`、`UiInputCapture.Target`；setter 返回 `void`；嵌套 `interface Listener` |
 | `UiRangeValue` | record | `UiRangeValue(double, double, boolean, boolean)`；`EMPTY`；`of(double, double)`；`single(double, boolean)`；`isPresent(UiRangeEnd)`；`value(UiRangeEnd)`；`withValue(UiRangeEnd, double)`；`withAbsent(UiRangeEnd)`；`isEmpty()`；`bothPresent()` | 构造校验「存在端有限、缺席端为 `NaN`、两端都存在时 `low <= high`」 |
 | `UiRangeEnd` | enum | `LOW`、`HIGH`；`other()` | 端点身份与端点数值分离 |
 | `UiCyclicRange` | final class | 构造 `(double period)`；`period()`/`setPeriod(double)`；`from()`/`to()`；`setRange(double, double)`；`wrap(double)`；`span()`；`isSinglePoint()`；`crossesPeriod()`；`ticks()`/`setTicks(List<Tick>)`；`markers()`/`setMarkers(List<Marker>)`；`tickStep()`/`setTickStep(double)`；`endTick()`；`snapTick(double)`；`selectedEnd()`/`selectEnd(UiRangeEnd)`/`cycleSelectedEnd()`；`selectedTick()`/`setSelectedTick(double)`；`listener()`/`setListener`；`formatter()`/`setFormatter`；`bounds()`/`setBounds`；`thumbWidth()`/`setThumbWidth(int)`；`trackLeft/trackRight/trackWidth()`；`fractionOf(double)`；`xOf(double)`；`tickAtPointer(double)`；`containsPointer(double, double)`；`isDragging()`；`isPressed()`；`endInteraction(EndReason)`；`unmount()`；`onFocusScopeChanged()`；`onHostClosed()`；`NONE` | 嵌套 `record Tick(double, @Nullable Component)`、`record Marker(double, int)`、`interface Listener` |
@@ -57,12 +59,17 @@
 
 ### 2.4 依赖关系
 
-- 依赖本模组：无。本分组 14 个文件均不 import 其它模组包；同包类型直接引用，不产生 import。
-- 依赖外部：`java.util`（6 个文件 import，共 9 处）、`net.minecraft.client.gui`（3 个文件，4 处，`Font`、`GuiGraphics`）、`net.minecraft.network.chat`（4 个文件，4 处，`Component`）、`java.util.function`（3 个文件，3 处）、`net.minecraft.util`（2 个文件，2 处，`Mth`）、`org.jetbrains.annotations`（4 个文件，4 处，`Nullable`）、`org.lwjgl.glfw`（3 个文件，3 处，`GLFW`）、`java.math`（1 个文件，1 处，`BigDecimal`）。
-- 被依赖：`client/ui/widget`（3 个文件 import，共 16 处）、`client/ui/theme`（4 个文件，11 处）、`client/ui/screen/form`（3 个文件，10 处）、`client/ui/screen`（1 个文件，5 处）；合计 11 个文件、42 处。
+- 依赖本模组：无。本分组 15 个文件均不 import 其它模组包；同包类型直接引用，不产生 import。
+- 依赖外部：`java.util`（7 个文件 import，共 17 处）、`net.minecraft.client.gui`（3 个文件，4 处，`Font`、`GuiGraphics`）、`net.minecraft.network.chat`（4 个文件，4 处，`Component`）、`java.util.function`（4 个文件，7 处）、`net.minecraft.util`（2 个文件，2 处，`Mth`）、`org.jetbrains.annotations`（5 个文件，5 处，`Nullable`）、`org.lwjgl.glfw`（3 个文件，3 处，`GLFW`）、`java.math`（1 个文件，1 处，`BigDecimal`）。
+- 被依赖：`client/ui/widget`（3 个文件 import，共 19 处）、`client/ui/theme`（4 个文件，11 处）、`client/ui/screen/form`（3 个文件，12 处）、`client/ui/screen`（1 个文件，5 处）；合计 11 个文件、47 处。
 
 ### 2.5 关键实现位置
 
+- `UiValueTextBinding#previewText`：首次文本编辑保存数值与原始文本快照；每次解析成功才回填数值，不规范化用户正在输入的文本。
+- `UiValueTextBinding#commitText` / `#cancelText`：成功提交时规范化显示并通知一次；取消时恢复预览前的数值与文本。装载、失焦保存或撤销恢复后由宿主调用 `acceptText` 更新基线。
+- `UiValueTextBinding#beginValueChange` / `#previewValue` / `#commitValue` / `#cancelValue`：接收滑条生命周期；滑条核心先回退数值，绑定再恢复原始文本。核心因无净变化而不发提交回调时，宿主在交互结束后调用 `finishValueChange`，保留留空端与原始表示。
+- `UiValueTextBinding#commitText` 的写入器有两种装配：普通绑定使用无事件回填写入器并注入提交回调；弹出式精确编辑可使用核心单次操作写入器并注入空提交回调，提交只由核心生命周期发出。
+- `UiRangeSlider#setSelectedValueOrPresent`：已有端复用当前档吸附；缺失端只钳制到合法域与对端之内并补齐，统一发出 begin/preview/commit。
 - `UiNumberPolicy#snapUnclamped`：把值按档吸附到 `min + k * step`；`step == 1.0` 且 `min` 为整数时直接取 `Math.rint`，否则用 `BigDecimal` 的十进制位移计算商与余数。
 - `UiNumberPolicy#snap`：只做域钳制，不按 `UiSliderWindow` 钳制。
 - `UiNumberPolicy#dragValuePerPixel`：`windowSpan / trackPixels`，细调时先把窗口跨度乘以 `fineDragFactor`。
@@ -96,7 +103,7 @@
 - `UiScalarSlider#buildFrame` 把 `dragging` 同时传入 `Frame` 的 `pressed` 与 `dragging`，因此 `Frame#pressed` 与 `Frame#dragging` 在标量滑块上恒等。
 - `UiSliderStyle#focusColor` 没有对应的解析方法，`PixelSliderPainter#paint` 也不读取该分量；`UiSliderExamples#cyclicRange` 把它用作 `UiCyclicRange.Marker` 的颜色。
 - setter 返回风格不统一：`UiScalarSlider` 的 setter 返回 `this`，`UiRangeSlider`、`UiCyclicRange` 的对应 setter 返回 `void`。
-- `UiRangeSlider#isInteracting()` 公开「预览进行中」状态；`UiScalarSlider` 的 `UiValueInteraction` 是私有字段，没有同名查询入口。
+- `UiRangeSlider#isInteracting()` 与 `UiScalarSlider#isInteracting()` 公开「预览进行中」状态，供绑定调用方收束没有净变化的操作。
 - `UiCyclicRange` 不提供 Shift 细调与 PageUp/PageDown：`#mouseDragged` 按 `period / trackWidth` 换算，`#keyPressed` 只处理方向键、Home、End 与 Esc。
 - 同一模块存在两个钳制来源：`UiRangeSlider#valueAtPointer` 使用 `net.minecraft.util.Mth#clamp`，`UiSliderWindow#clampFraction` 使用 `Math.clamp`。
 - `UiRangeValue#withValue` 可能抛 `IllegalArgumentException`（两端都存在且 `low > high`）；`#withAbsent` 把该端数值置为 `NaN`。
@@ -109,6 +116,7 @@
 
 | 类型 | 职责 | 关键成员 |
 |---|---|---|
+| `UiValueTextBinding` | 单值或区间的双向文本绑定与回退快照 | `previewText`、`commitText`、`cancelText`、`beginValueChange`、`finishValueChange` |
 | `UiNumberPolicy` | 合法数值域、两档步长与整数策略 | `of`、`integer`、`snap`、`snapUnclamped`、`dragValuePerPixel` |
 | `UiNumbers` | 数值与文本互转 | `plain`、`plainExact`、`isExactIntegral`、`parseFinite`、`parseInt` |
 | `UiSliderWindow` | 轨道显示窗口 | `fraction`、`clampFraction`、`valueAt` |

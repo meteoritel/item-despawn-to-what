@@ -10,6 +10,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeEnd;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeSlider;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiValueTextBinding;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderPainter;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderStyle;
@@ -88,6 +89,7 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
     private final Texts texts;
     private final UiRangeSlider core;
     private final UiTextInput precise;
+    private final UiValueTextBinding<Double, String> preciseBinding;
     private final UiSliderPainter painter;
     private final UiSliderStyle style;
 
@@ -104,6 +106,16 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
 
     // 注入的宿主主题
     private final UiHostTheme theme;
+    /**
+     * 装配区间条与精确文本绑定；主题、提示文案和提交接收方由宿主注入。
+     *
+     * @param theme 宿主主题
+     * @param font 文本测量与绘制字体
+     * @param policy 数值合法域与交互步长
+     * @param initial 初始区间
+     * @param texts 本地化提示
+     * @param listener 可选的宿主交互监听器
+     */
     public UiRangeBar(UiHostTheme theme, Font font, UiNumberPolicy policy, UiRangeValue initial, Texts texts,
                       @Nullable Listener listener) {
         this.theme = UiHostThemes.require(theme);
@@ -141,6 +153,9 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
         this.precise = new UiTextInput(theme, font, texts.preciseHint());
         this.precise.setMaxLength(24);
         this.precise.setVisible(false);
+        this.preciseBinding = new UiValueTextBinding<>(core::selectedValue,
+                value -> core.setSelectedValueOrPresent(value, false), precise::value, precise::setValue,
+                UiNumbers::parseFinite, this::plainText, () -> {});
         this.precise.setOnCommit(this::commitPrecise);
         this.precise.setOnCancel(() -> {
             closePrecise();
@@ -408,6 +423,11 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
     // 复合表单可将精确编辑交给已有字段输入，统一缓冲与错误定位。
     public void setPreciseEditor(@Nullable Consumer<UiRangeEnd> editor) { preciseEditor = editor; }
 
+    /**
+     * 打开当前端的精确输入；宿主提供外部编辑器时将焦点交给该编辑器。
+     *
+     * @return 当前控件是否接受精确编辑请求
+     */
     public boolean openPrecise() {
         if (!enabled || !visible) {
             return false;
@@ -419,32 +439,14 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
         preciseActive = true;
         precise.setVisible(true);
         precise.setFocused(true);
-        double selected = core.selectedValue();
-        precise.setValue(Double.isFinite(selected) ? plainText(selected) : "");
+        preciseBinding.acceptText();
+        preciseBinding.previewValue();
         precise.selectAll();
         return true;
     }
 
     private void commitPrecise(@Nullable String text) {
-        String raw = text == null ? "" : text.trim();
-        Double parsed = UiNumbers.parseFinite(raw);
-        if (parsed == null) {
-            closePrecise();
-            return;
-        }
-        UiRangeValue current = core.value();
-        if (!current.isPresent(core.selectedEnd())) {
-            // 补齐缺失端：一次回填 + 一次提交，仍是一条撤销记录
-            double bounded = core.policy().clamp(parsed);
-            if (core.selectedEnd() == UiRangeEnd.LOW && current.highPresent()) bounded = Math.min(bounded, current.high());
-            if (core.selectedEnd() == UiRangeEnd.HIGH && current.lowPresent()) bounded = Math.max(bounded, current.low());
-            UiRangeValue next = current.withValue(core.selectedEnd(), bounded);
-            core.setValue(next);
-            closePrecise();
-            fireCommitted(next);
-            return;
-        }
-        core.setSelectedValue(parsed, false);
+        preciseBinding.commitText(text == null ? "" : text);
         closePrecise();
     }
 

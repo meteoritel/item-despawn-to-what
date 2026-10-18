@@ -10,6 +10,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumberPolicy;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumbers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeEnd;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeValue;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiValueTextBinding;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCheckBox;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiRangeBar;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
@@ -46,9 +47,7 @@ final class ClimateControl extends FormControl {
     // 装载时写入两个端点的文本基线
     private String loadedMin = "";
     private String loadedMax = "";
-    private boolean rangeEditing;
-    private String rangeStartMin = "";
-    private String rangeStartMax = "";
+    private final UiValueTextBinding<UiRangeValue, List<String>> binding;
 
     ClimateControl(Font font, EditorField field, Runnable onChanged) {
         super(field);
@@ -75,28 +74,33 @@ final class ClimateControl extends FormControl {
                         Component.translatable("gui.itemdespawntowhat.edit.range.precise")), new UiRangeBar.Listener() {
                     @Override
                     public void onBegan(UiRangeValue value) {
-                        rangeStartMin = minInput.value();
-                        rangeStartMax = maxInput.value();
-                        rangeEditing = true;
+                        binding.beginValueChange();
                     }
 
                     @Override
                     public void onPreviewed(UiRangeValue value) {
-                        updateInputs(value);
+                        binding.previewValue();
                     }
 
                     @Override
                     public void onCommitted(UiRangeValue value) {
-                        rangeEditing = false;
-                        updateInputs(value);
-                        markEdited();
-                        onChanged.run();
+                        binding.commitValue();
                     }
 
                     @Override
                     public void onCancelled(UiRangeValue value) {
-                        restoreRangeInputs();
+                        binding.cancelValue();
                     }
+                });
+        binding = new UiValueTextBinding<>(range.core()::value, range.core()::setValue,
+                () -> List.of(minInput.value(), maxInput.value()), texts -> {
+                    minInput.setValue(texts.getFirst());
+                    maxInput.setValue(texts.get(1));
+                }, this::parseRangeText,
+                value -> List.of(value.lowPresent() ? trimDouble(value.low()) : "",
+                        value.highPresent() ? trimDouble(value.high()) : ""), () -> {
+                    markEdited();
+                    onChanged.run();
                 });
         range.setPreciseEditor(end -> {
             range.setFocused(false);
@@ -111,7 +115,8 @@ final class ClimateControl extends FormControl {
             maxInput.setFocused(false);
             // 首次启用给出完整区间；再次启用保留原来的端点与单端留空状态。
             if (checked && minInput.value().isBlank() && maxInput.value().isBlank()) {
-                updateInputs(fullRange());
+                range.core().setValue(fullRange());
+                binding.previewValue();
                 syncRange();
             }
             updateEnabled();
@@ -169,7 +174,7 @@ final class ClimateControl extends FormControl {
         boolean handled = range.mouseReleased(mouseX, mouseY, button)
                 || minInput.mouseReleased(mouseX, mouseY, button) || maxInput.mouseReleased(mouseX, mouseY, button);
         // 没有净变化的操作不回调提交，仍需结束预览并恢复文本的缺席端。
-        if (handled && rangeEditing) restoreRangeInputs();
+        if (handled) binding.finishValueChange();
         return handled;
     }
 
@@ -178,7 +183,7 @@ final class ClimateControl extends FormControl {
         if (matching.isFocused()) return matching.keyPressed(keyCode, scanCode, modifiers);
         if (range.isFocused()) {
             boolean handled = range.keyPressed(keyCode, scanCode, modifiers);
-            if (rangeEditing && !range.core().isInteracting()) restoreRangeInputs();
+            if (!range.core().isInteracting()) binding.finishValueChange();
             return handled;
         }
         return minInput.keyPressed(keyCode, scanCode, modifiers) || maxInput.keyPressed(keyCode, scanCode, modifiers);
@@ -187,13 +192,14 @@ final class ClimateControl extends FormControl {
     @Override
     boolean keyReleased(int keyCode, int scanCode, int modifiers) {
         boolean handled = range.keyReleased(keyCode, scanCode, modifiers);
-        if (handled && rangeEditing) restoreRangeInputs();
+        if (handled) binding.finishValueChange();
         return handled;
     }
 
     @Override
     void endInteractions(UiInputCapture.EndReason reason) {
         range.endInteraction(reason);
+        binding.finishValueChange();
         minInput.endInteraction(reason);
         maxInput.endInteraction(reason);
     }
@@ -241,6 +247,7 @@ final class ClimateControl extends FormControl {
     void inputAccepted() {
         loadedMin = minInput.value();
         loadedMax = maxInput.value();
+        binding.acceptText();
     }
 
     @Override
@@ -260,6 +267,7 @@ final class ClimateControl extends FormControl {
             rememberLoaded(null);
             loadedMin = minInput.value();
             loadedMax = maxInput.value();
+            binding.acceptText();
             updateEnabled();
             return;
         }
@@ -283,6 +291,7 @@ final class ClimateControl extends FormControl {
         matching.setChecked(value != null && value.isMapping() && (value.has(MIN_FIELD) || value.has(MAX_FIELD)));
         range.core().setValue(fullRange());
         syncRange();
+        binding.acceptText();
         updateEnabled();
     }
 
@@ -298,6 +307,7 @@ final class ClimateControl extends FormControl {
         minInput.setValue(text.get(1));
         maxInput.setValue(text.get(2));
         syncRange();
+        binding.acceptText();
         updateEnabled();
         markEdited();
     }
@@ -309,28 +319,19 @@ final class ClimateControl extends FormControl {
     private UiRangeValue fullRange() { return UiRangeValue.of(lower(), upper()); }
 
     private void syncRange() {
-        Double min = UiNumbers.parseFinite(minInput.value());
-        Double max = UiNumbers.parseFinite(maxInput.value());
-        // 负号和小数点等输入中间态不代表清空端点，保留最近有效的滑条位置。
-        if ((min == null && !minInput.value().isBlank()) || (max == null && !maxInput.value().isBlank())) return;
+        binding.previewText();
+    }
+
+    // 留空端按气候合法域边界预览；非法中间态交由绑定保留最近有效位置。
+    private @Nullable UiRangeValue parseRangeText(List<String> texts) {
+        String lowText = texts.getFirst();
+        String highText = texts.get(1);
+        Double min = UiNumbers.parseFinite(lowText);
+        Double max = UiNumbers.parseFinite(highText);
+        if ((min == null && !lowText.isBlank()) || (max == null && !highText.isBlank())) return null;
         double low = min == null ? lower() : min;
         double high = max == null ? upper() : max;
-        // 非法文本留在精确输入中供校验；不得构造倒置区间或改写草稿。
-        if (low >= lower() && high <= upper() && low <= high) {
-            range.core().setValue(UiRangeValue.of(low, high));
-        }
-    }
-
-    private void updateInputs(UiRangeValue value) {
-        minInput.setValue(value.lowPresent() ? trimDouble(value.low()) : "");
-        maxInput.setValue(value.highPresent() ? trimDouble(value.high()) : "");
-    }
-
-    private void restoreRangeInputs() {
-        minInput.setValue(rangeStartMin);
-        maxInput.setValue(rangeStartMax);
-        rangeEditing = false;
-        syncRange();
+        return low >= lower() && high <= upper() && low <= high ? UiRangeValue.of(low, high) : null;
     }
 
     @Override

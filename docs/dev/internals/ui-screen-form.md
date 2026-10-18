@@ -102,6 +102,7 @@
 - `ConditionTreeChrome.Inline#preferredHeight`：按候选宽度对叶面板做一次测量探针后返回内容高度。
 - `CatalogSuggestions#suggestions`：按字段注册表与字段类型解析目录类型，去重后最多返回 `MAX_SUGGESTIONS` 条候选。
 - `CatalogSelectionControl#arrange`：按名称宽度把卡片排成多行，超过三行时启用内部滚动。
+- `NumberControl` 与 `ClimateControl` 委托 kit `UiValueTextBinding` 管理滑条与精确文本同步、预览与取消快照；单位换算、气候留空端的边界映射、字段校验与草稿保存由表单控件处理。数值操作取消或无净变化时恢复原始文本，保留单端留空和原始数值表示。
 - `NumberControl#setWindow`：只调整滑条常用窗口，不修改合法域、草稿值或正在输入的缓冲。
 - `ItemCountsControl#setReferences`：按引用集合重建行，保留既有数量的控件状态。
 - `SublistControl#createRemoveButton`：删除子项后对索引在其后的子表单执行 `FormView#rebase` 以同步输入路径。

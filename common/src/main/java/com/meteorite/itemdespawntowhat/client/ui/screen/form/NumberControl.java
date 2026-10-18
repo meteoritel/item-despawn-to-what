@@ -16,6 +16,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderSkin;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderWindow;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiValueInteraction;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiValueTextBinding;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
@@ -53,7 +54,6 @@ final class NumberControl extends FormControl {
     private static final String UNIT_LEVEL = "gui.itemdespawntowhat.edit.unit.level";
 
     private final Font font;
-    private final Runnable onChanged;
     private final UiSlider slider;
     private final UiTextInput input;
     private final List<UiButton> presetButtons = new ArrayList<>();
@@ -73,41 +73,11 @@ final class NumberControl extends FormControl {
     private @Nullable RuleValue loaded;
     // 装载时写入输入框的文本基线；未编辑且文本未变时视为「未编辑」
     private String loadedText = "";
-    private boolean settingInput;
-    private boolean textPreviewing;
-    private double textStartValue;
-    private String textStartText = "";
-    private String previousAcceptedText = "";
-
-    // 滑杆交互回调：预览只刷新控件，提交才回调宿主一次
-    private final UiValueInteraction.Listener interactionListener = new UiValueInteraction.Listener() {
-        @Override
-        public void began(double startValue) { textPreviewing = false; }
-        @Override
-        public void previewed(double startValue, double currentValue) {
-            setInputValue(displayText(currentValue));
-            slider.setError(false);
-        }
-
-        @Override
-        public void committed(double startValue, double currentValue) {
-            markEdited();
-            setInputValue(displayText(currentValue));
-            slider.setError(false);
-            onChanged.run();
-        }
-
-        @Override
-        public void cancelled(double startValue, double restoredValue) {
-            setInputValue(displayText(restoredValue));
-            slider.setError(false);
-        }
-    };
+    private final UiValueTextBinding<Double, String> binding;
 
     private NumberControl(Font font, EditorField field, Runnable onChanged, NumericDomain numbers) {
         super(field);
         this.font = font;
-        this.onChanged = onChanged;
         this.integerDomain = numbers.integer();
         this.percentField = field.type() == EditorFieldType.PERCENT;
         this.amplifierField = field.type() == EditorFieldType.AMPLIFIER;
@@ -134,15 +104,47 @@ final class NumberControl extends FormControl {
         this.slider.setFormatter(value -> Component.empty());
         // 不消费 PageUp/PageDown，交给 FormView 做整页滚动
         this.slider.core().setPageStep(0.0D);
-        this.slider.core().setInteractionListener(interactionListener);
         this.slider.core().setValue(neutralValue());
 
         Component hint = hint();
         this.input = new UiTextInput(THEME, font, hint == null ? Component.empty() : hint);
         this.input.setFilter(integerDomain || amplifierField ? FormControl::integerChars
                 : FormControl::decimalChars);
+        this.binding = new UiValueTextBinding<>(slider::value, slider.core()::setValue,
+                input::value, input::setValue, text -> {
+                    RuleValue parsed = parseText(text);
+                    return parsed == null ? null : parsed.asDecimal(0.0D);
+                }, this::displayText, () -> {
+                    markEdited();
+                    onChanged.run();
+                });
+        this.slider.core().setInteractionListener(new UiValueInteraction.Listener() {
+            @Override
+            public void began(double startValue) { binding.beginValueChange(); }
+
+            @Override
+            public void previewed(double startValue, double currentValue) {
+                binding.previewValue();
+                slider.setError(false);
+            }
+
+            @Override
+            public void committed(double startValue, double currentValue) {
+                slider.setError(false);
+                binding.commitValue();
+            }
+
+            @Override
+            public void cancelled(double startValue, double restoredValue) {
+                binding.cancelValue();
+                refreshTextError();
+            }
+        });
         this.input.setOnCommit(this::commitText);
-        this.input.setOnCancel(this::discardTextBuffer);
+        this.input.setOnCancel(() -> {
+            binding.cancelText();
+            refreshTextError();
+        });
         this.input.setOnValueChanged(this::previewText);
         for (EditorPreset preset : field.presets()) {
             UiButton button = new UiButton(THEME, font, Component.translatable(preset.labelKey()),
@@ -366,7 +368,7 @@ final class NumberControl extends FormControl {
 
     @Override
     void load(@Nullable RuleValue value) {
-        textPreviewing = false;
+        binding.acceptText();
         rememberLoaded(value);
         this.loaded = value == null || value.isNull() ? null : value.deepCopy();
         if (loaded == null) {
@@ -401,7 +403,7 @@ final class NumberControl extends FormControl {
             // 必填/不可空字段清空时不删除既有值，交由 issues() 提示（阻止应用）
             boolean keepExisting = loaded != null && (field.required() || !field.nullable());
             if (!keepExisting) {
-                textPreviewing = false;
+                binding.acceptText();
                 markEdited();
                 loaded = null;
                 loadedText = "";
@@ -410,7 +412,7 @@ final class NumberControl extends FormControl {
         }
         RuleValue parsed = parseText(text);
         if (parsed != null) {
-            textPreviewing = false;
+            binding.acceptText();
             markEdited();
             // 失焦提交也更新回退基线，后续非法输入不能回写成更早的装载值。
             loaded = parsed.deepCopy();
@@ -456,6 +458,7 @@ final class NumberControl extends FormControl {
     @Override
     boolean mouseReleased(double mouseX, double mouseY, int button) {
         boolean handled = slider.mouseReleased(mouseX, mouseY, button);
+        if (!slider.core().isInteracting()) binding.finishValueChange();
         return input.mouseReleased(mouseX, mouseY, button) || handled;
     }
 
@@ -468,14 +471,18 @@ final class NumberControl extends FormControl {
     @Override
     boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (slider.isFocused()) {
-            return slider.keyPressed(keyCode, scanCode, modifiers);
+            boolean handled = slider.keyPressed(keyCode, scanCode, modifiers);
+            if (!slider.core().isInteracting()) binding.finishValueChange();
+            return handled;
         }
         return input.isFocused() && input.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
     boolean keyReleased(int keyCode, int scanCode, int modifiers) {
-        return slider.isFocused() && slider.keyReleased(keyCode, scanCode, modifiers);
+        boolean handled = slider.isFocused() && slider.keyReleased(keyCode, scanCode, modifiers);
+        if (handled) binding.finishValueChange();
+        return handled;
     }
 
     @Override
@@ -511,6 +518,7 @@ final class NumberControl extends FormControl {
         RuleValue parsed = parseText(input.value());
         if (parsed != null) slider.core().setValue(parsed.asDecimal(0.0D));
         slider.setError(!input.value().isBlank() && parsed == null);
+        binding.acceptText();
         markEdited();
     }
 
@@ -532,75 +540,38 @@ final class NumberControl extends FormControl {
     @Override
     void endInteractions(UiInputCapture.EndReason reason) {
         slider.endInteraction(reason);
+        binding.finishValueChange();
         input.endInteraction(reason);
     }
 
     // ---- 精确输入与预设 ----
 
-    // Enter 提交：合法则回填滑杆并回调一次，非法则保留缓冲并报错
+    // Enter 提交：非法文本保留在原输入缓冲中，交给宿主校验。
     private void commitText(String text) {
         markEdited();
-        RuleValue parsed = parseText(text);
-        Double number = parsed == null ? null : parsed.asDecimal(0.0D);
-        if (number == null) {
-            slider.setError(true);
-            return;
-        }
-        textPreviewing = false;
-        slider.setError(!slider.core().setValue(number));
-        setInputValue(displayText(number));
-        onChanged.run();
+        slider.setError(!binding.commitText(text));
     }
 
-    // Esc 回退缓冲：丢弃非法/未提交文本，重新显示滑杆当前值
-    private void discardTextBuffer() {
-        if (textPreviewing) {
-            slider.core().setValue(textStartValue);
-            setInputValue(textStartText);
-            textPreviewing = false;
-        } else setInputValue(displayText(slider.value()));
+    private void setInputValue(String text) {
+        binding.setText(text);
+    }
+
+    private void previewText() {
+        if (!input.isFocused()) return;
+        boolean accepted = binding.previewText();
+        if (!accepted && input.value().isBlank() && !field.required()) {
+            slider.core().setValue(neutralValue());
+            slider.setError(false);
+        } else slider.setError(!accepted);
+    }
+
+    private void refreshTextError() {
         slider.setError(!input.value().isBlank() && parseText(input.value()) == null);
     }
 
-    // 程序回填不触发文本预览，避免拖动回写文本时反向重置滑条交互。
-    private void setInputValue(String text) {
-        settingInput = true;
-        try { input.setValue(text); previousAcceptedText = input.value(); }
-        finally { settingInput = false; }
-    }
-
-    // 每个合法输入立即预览滑条；非法或未完成的文本保留在输入框，不写入草稿。
-    private void previewText() {
-        if (settingInput || !input.isFocused()) return;
-        if (!textPreviewing) {
-            textStartValue = slider.value();
-            textStartText = previousAcceptedText;
-            textPreviewing = true;
-        }
-        RuleValue parsed = parseText(input.value());
-        if (parsed != null) {
-            slider.setError(!slider.core().setValue(parsed.asDecimal(0.0D)));
-        } else if (input.value().isBlank() && !field.required()) {
-            slider.core().setValue(neutralValue());
-            slider.setError(false);
-        } else slider.setError(true);
-        previousAcceptedText = input.value();
-    }
-
-    // 预设：按 JSON 单位解析后作为一次提交
+    // 预设共用精确输入的提交通路与单位解析。
     private void applyPreset(String presetValue) {
         markEdited();
-        RuleValue parsed = parseText(presetValue);
-        if (parsed == null) {
-            return;
-        }
-        double number = parsed.asDecimal(0.0D);
-        if (!slider.core().setValue(number)) {
-            slider.setError(true);
-            return;
-        }
-        slider.setError(false);
-        setInputValue(displayText(number));
-        onChanged.run();
+        if (parseText(presetValue) != null) slider.setError(!binding.commitText(presetValue));
     }
 }

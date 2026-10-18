@@ -239,12 +239,24 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
         return bounds;
     }
 
+    /**
+     * 更新布局；文本宽度变化时重算水平视口，保留光标与选择锚点。
+     */
     @Override
     public void setBounds(int x, int y, int width, int height) {
         this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
         editBox.setX(bounds.x() + PADDING_X);
         editBox.setY(bounds.y() + Math.max(PADDING_Y, (bounds.height() - font.lineHeight) / 2));
-        editBox.setWidth(Math.max(1, bounds.width() - PADDING_X * 2));
+        int textWidth = Math.max(1, bounds.width() - PADDING_X * 2);
+        if (textWidth != editBox.getWidth()) {
+            int cursor = editBox.getCursorPosition();
+            int anchor = editBox.anchor();
+            editBox.setWidth(textWidth);
+            // EditBox 扩宽不会清理旧滚动偏移；先归零视口再恢复编辑位置，避免能放下的文本仍缺首字。
+            editBox.moveCursorToStart(false);
+            editBox.setCursorPosition(cursor);
+            editBox.setHighlightPos(anchor);
+        }
         editBox.setHeight(Math.max(1, bounds.height() - PADDING_Y * 2));
     }
 

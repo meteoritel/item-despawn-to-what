@@ -114,6 +114,8 @@
 - `UiButton#apply`：把文本、主题文本色、主题样式、图标、提示行、动作与启用态写入被委托的 `UiControl`；启用态同时受 `UiButtonVariant#interactive` 约束。
 - `UiButton#mouseReleased`：仅在按下由自己记录（`control.isPressed()`）时消费，指针仍在控件内才执行激活。
 - `UiSlider#core`：暴露被委托的 `UiScalarSlider`；`UiSlider#setOnChanged` 桥接到 `UiValueInteraction.Listener#previewed`。
+- `UiTextInput#setBounds`：文本区宽度变化时从起点重算原版 `EditBox` 的水平视口，再恢复光标与选择锚点；能完整容纳的文本从首字显示，宽度不变时保留现有视口。
+- `UiRangeBar` 与 `UiCyclicTimeBar` 的精确输入通过 kit `UiValueTextBinding` 解析、提交与规范化显示；数值更新通过核心单次操作发出提交，绑定本身不再重复通知。
 - `UiRangeBar#core`：暴露被委托的 `UiRangeSlider`；`UiRangeBar.Listener` 的 `onBegan`、`onPreviewed`、`onCommitted`、`onCancelled` 对应一次完整操作。
 - `UiCyclicTimeBar` 的构造：创建 `UiCyclicRange` 并设置刻步长与滑块宽度；渲染读取 `from`、`to`、`isSinglePoint`、`crossesPeriod` 决定显示形态。
 - `UiListView#rowBounds` 与 `UiTreeView#nodeContentBounds`：输出行与节点的屏幕矩形，作为宿主行内绘制与命中的统一坐标来源。
