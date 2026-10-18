@@ -144,7 +144,10 @@ public final class RuleEditorPanelFactory {
                 Component.translatable(UI + "pick.error"), Component.translatable(UI + "pick.prev"),
                 Component.translatable(UI + "pick.next"), Component.translatable(UI + "pick.selected"),
                 Component.translatable(UI + "pick.scope_item"), Component.translatable(UI + "pick.scope_tag"),
-                Component.translatable(UI + "pick.scope_both"), Component.translatable(UI + "pick.clear"));
+                Component.translatable(UI + "pick.scope_both"),
+                Component.translatable(UI + "pick.scope_item_label"),
+                Component.translatable(UI + "pick.scope_tag_label"),
+                Component.translatable(UI + "pick.scope_both_label"), Component.translatable(UI + "pick.clear"));
     }
 
     // 目录标签可能是翻译键或原文：无空格、无冒号且含点号时按翻译键解析

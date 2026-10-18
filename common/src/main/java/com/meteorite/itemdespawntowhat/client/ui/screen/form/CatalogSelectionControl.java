@@ -2,6 +2,8 @@ package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiMarkIcons;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiMarkIcons.Mark;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
@@ -39,6 +41,8 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
     private static final int ICON_TEXT_OFFSET = 24;
     private static final int TEXT_PADDING = 4;
     private static final int REMOVE_AREA_WIDTH = 18;
+    // 删除叉的命中与绘制区域：贴住 chip 右端
+    private static final int REMOVE_HIT_WIDTH = 16;
     private final Font font;
     private final UiScrollView scroll = new UiScrollView();
     private final List<Selection> values = new ArrayList<>();
@@ -117,13 +121,10 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
                                 Math.max(0, chip.width() - textOffset - REMOVE_AREA_WIDTH)),
                         chip.x() + textOffset, chip.y() + (CHIP_HEIGHT - renderFont.lineHeight) / 2,
                         !enabled ? THEME.palette().textDisabled() : chosen ? THEME.palette().textOnDark() : THEME.palette().textPrimary(), false);
-                int crossX = chip.right() - 11;
-                int crossY = chip.y() + 9;
                 int color = enabled && i == hovered ? THEME.palette().danger() : chosen ? THEME.palette().textOnDark() : THEME.palette().textSecondary();
-                for (int pixel = 0; pixel < 5; pixel++) {
-                    graphics.fill(crossX + pixel, crossY + pixel, crossX + pixel + 1, crossY + pixel + 1, color);
-                    graphics.fill(crossX + 4 - pixel, crossY + pixel, crossX + 5 - pixel, crossY + pixel + 1, color);
-                }
+                UiIcon close = UiMarkIcons.icon(Mark.CLOSE, color);
+                close.render(graphics, chip.right() - REMOVE_HIT_WIDTH + (REMOVE_HIT_WIDTH - close.width()) / 2,
+                        chip.y() + (CHIP_HEIGHT - close.height()) / 2);
             }
         } finally { scroll.pop(graphics); }
         scroll.renderScrollbar(graphics, THEME.controlStyle(UiControlRole.SECONDARY));
@@ -209,7 +210,7 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
         int index = indexAt(x, y);
         if (index < 0) return false;
         selected = index;
-        if (scroll.toContentX(x) >= chips.get(index).right() - 16) remove(index);
+        if (scroll.toContentX(x) >= chips.get(index).right() - REMOVE_HIT_WIDTH) remove(index);
         return true;
     }
 

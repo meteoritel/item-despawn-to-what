@@ -15,10 +15,12 @@ import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiAction;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlowLayout;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiMarkIcons;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCheckBox;
@@ -571,8 +573,9 @@ final class RuleEditorResultsPage {
         String trimmed = TextScroll.trimToWidth(pages.font, text, Math.max(1, remove.x() - row.x() - inset - ACTION_REMOVE_INSET));
         graphics.drawString(pages.font, trimmed, row.x() + inset, row.y() + (row.height() - renderFont.lineHeight) / 2,
                 THEME.palette().textPrimary(), false);
-        graphics.drawCenteredString(renderFont, "×", remove.x() + remove.width() / 2,
-                remove.y() + (remove.height() - renderFont.lineHeight) / 2, THEME.palette().danger());
+        UiIcon close = UiMarkIcons.icon(UiMarkIcons.Mark.CLOSE, THEME.palette().danger());
+        close.render(graphics, remove.x() + (remove.width() - close.width()) / 2,
+                remove.y() + (remove.height() - close.height()) / 2);
     }
 
     void switchProduct(String path, String variant) {
@@ -611,9 +614,12 @@ final class RuleEditorResultsPage {
     // 容器统一应用使能后恢复方案数量与位置边界，避免不可用操作被重新启用。
     void updatePlanButtons(boolean enabled) {
         int count = Math.max(1, ResultStructure.candidateCount(pages.currentView()));
+        boolean previousEnabled = enabled && candidateIndex > 0;
+        boolean nextEnabled = enabled && candidateIndex + 1 < count;
         if (planPager != null) {
-            planPager.previous.setEnabled(enabled && candidateIndex > 0);
-            planPager.next.setEnabled(enabled && candidateIndex + 1 < count);
+            planPager.setIconColors(previousEnabled, nextEnabled);
+            planPager.previous.setEnabled(previousEnabled);
+            planPager.next.setEnabled(nextEnabled);
         }
         if (deletePlanButton != null) deletePlanButton.setEnabled(enabled && count > 1);
         if (movePlanUpButton != null) movePlanUpButton.setEnabled(enabled && candidateIndex > 0);
@@ -880,14 +886,21 @@ final class RuleEditorResultsPage {
 
         private PlanPager(int count) {
             label = Component.translatable(RuleEditorPageSupport.UI + "results.plan_page", candidateIndex + 1, count);
-            previous = new UiButton(THEME, pages.font,
-                    Component.translatable(RuleEditorPageSupport.UI + "results.previous_plan_symbol"),
+            previous = new UiButton(THEME, pages.font, Component.empty(),
                     UiButtonVariant.SECONDARY, () -> selectPlanBy(-1)).setChipStyle(true);
-            next = new UiButton(THEME, pages.font,
-                    Component.translatable(RuleEditorPageSupport.UI + "results.next_plan_symbol"),
+            next = new UiButton(THEME, pages.font, Component.empty(),
                     UiButtonVariant.SECONDARY, () -> selectPlanBy(1)).setChipStyle(true);
             previous.setAccessibleName(Component.translatable(RuleEditorPageSupport.UI + "results.previous_plan"));
             next.setAccessibleName(Component.translatable(RuleEditorPageSupport.UI + "results.next_plan"));
+            setIconColors(candidateIndex > 0, candidateIndex + 1 < count);
+        }
+
+        // 标记贴图不带禁用态，只能按可用性换染色；启用色与胶囊文字色保持一致。
+        private void setIconColors(boolean previousEnabled, boolean nextEnabled) {
+            previous.setIcon(UiMarkIcons.icon(UiMarkIcons.Mark.PREVIOUS,
+                    previousEnabled ? THEME.palette().textPrimary() : THEME.palette().textDisabled()));
+            next.setIcon(UiMarkIcons.icon(UiMarkIcons.Mark.NEXT,
+                    nextEnabled ? THEME.palette().textPrimary() : THEME.palette().textDisabled()));
         }
 
         private int preferredWidth() {

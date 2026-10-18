@@ -14,6 +14,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiMarkIcons;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.ProductKind;
 import com.meteorite.itemdespawntowhat.core.model.RuleCategoryClassifier;
@@ -282,19 +283,12 @@ public final class RuleRecipeView {
         } finally { graphics.pose().popPose(); }
     }
 
-    // 透明底橙色五角星：用像素绘制，避免语言或资源包缺少星号字形。
+    // 消耗角标使用主题层五角星贴图；颜色随启用态由调用方传入。
     private static void consumedStar(GuiGraphics graphics, int x, int y, int color) {
         graphics.pose().pushPose();
         try {
             graphics.pose().translate(x, y, UiRenderLayers.FOREGROUND);
-            graphics.fill(3, 0, 4, 2, color);
-            graphics.fill(0, 2, 7, 3, color);
-            graphics.fill(1, 3, 6, 4, color);
-            graphics.fill(2, 4, 5, 5, color);
-            graphics.fill(1, 5, 3, 6, color);
-            graphics.fill(4, 5, 6, 6, color);
-            graphics.fill(0, 6, 2, 7, color);
-            graphics.fill(5, 6, 7, 7, color);
+            UiMarkIcons.icon(UiMarkIcons.Mark.CONSUMED_STAR, color).render(graphics, 0, 0);
         } finally { graphics.pose().popPose(); }
     }
 

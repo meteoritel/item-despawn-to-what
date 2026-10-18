@@ -8,6 +8,8 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiSpinner;
 import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiMarkIcons;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiMarkIcons.Mark;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -25,7 +27,7 @@ import org.lwjgl.glfw.GLFW;
  * 目录选择页（宿主侧通用控件）：物品、标签、流体等所有注册表目录共用同一套页面样板。
  *
  * <p>页面自上而下两段：搜索框（必要时带范围轮询按钮）、可滚动的条目列表；底部一行由宿主弹窗的按钮行托管
- * （见 {@link UiFooterHost}），从左到右是只画 &lt; 与 &gt; 的翻页按钮与页码、状态文字与「清空已选」链接，最右才是弹窗自己的按钮。
+ * （见 {@link UiFooterHost}），从左到右是只画上一页/下一页标记的翻页按钮与页码、状态文字与「清空已选」链接，最右才是弹窗自己的按钮。
  * 条目按「图标 + 名称」逐行排布并按页宽分列，名称超宽时悬停滚动；已选条目整行高亮并在行尾打勾，
  * 键盘方向键移动光标、空格切换选择、Enter 激活、PageUp/PageDown 翻页。</p>
  *
@@ -94,15 +96,16 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     public record Entry(String id, Component label, @Nullable Component subLabel, @Nullable UiIcon icon) {
     }
 
-    // 宿主提供的本地化文本（翻页与范围按钮只画符号，对应文本作为其悬停说明）
+    // 宿主提供的本地化文本（翻页按钮画标记贴图、范围按钮画当前范围的短标签，对应的完整文案作为悬停说明）
     public record Texts(Component searchHint, Component empty, Component loading, Component error,
                         Component prevPage, Component nextPage, Component selection, Component scopeItem,
-                        Component scopeTag, Component scopeBoth, Component clear) {
+                        Component scopeTag, Component scopeBoth, Component scopeItemLabel,
+                        Component scopeTagLabel, Component scopeBothLabel, Component clear) {
 
         // 只替换空结果文案
         public Texts withEmpty(Component next) {
             return new Texts(searchHint, next, loading, error, prevPage, nextPage, selection, scopeItem,
-                    scopeTag, scopeBoth, clear);
+                    scopeTag, scopeBoth, scopeItemLabel, scopeTagLabel, scopeBothLabel, clear);
         }
     }
 
@@ -122,23 +125,17 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     private static final int ICON_BOX = 16;
     private static final int ICON_GAP = 5;
     private static final int PADDING_X = 3;
-    // 行尾选中勾的保留宽度
+    // 行尾标记（不可用 / 已选勾）的保留宽度
     private static final int MARK_WIDTH = 10;
-    private static final String UNAVAILABLE_MARK = "!";
     // 列表内凹面板的边框与滚动条
     private static final int LIST_BORDER = 2;
     private static final int SCROLLBAR_WIDTH = 4;
-    // 翻页按钮只画符号：左右内边距、最小宽度与页码栏最小宽度
+    // 翻页按钮固定宽度、页码与清空链接的左右内边距、页码栏最小宽度
     private static final int PAGER_PADDING = 8;
     private static final int PAGER_SYMBOL_WIDTH = 14;
     private static final int PAGE_LABEL_MIN_WIDTH = 30;
-    private static final String PREV_SYMBOL = "<";
-    private static final String NEXT_SYMBOL = ">";
-    // 工具栏范围按钮：一个按钮轮询「只物品 → 只标签 → 一起」，符号表示当前范围、完整文案进悬停说明
-    private static final int SCOPE_BUTTON_WIDTH = 20;
-    private static final String SCOPE_ITEM_SYMBOL = "◆";
-    private static final String SCOPE_TAG_SYMBOL = "#";
-    private static final String SCOPE_BOTH_SYMBOL = "≡";
+    // 工具栏范围按钮：一个按钮轮询「只物品 → 只标签 → 一起」，按钮上写当前范围的短标签、完整文案进悬停说明
+    private static final int SCOPE_SIDE_PADDING = 4;
     // 滚动条：视觉只有 4 像素，可抓取范围外扩；滑块最矮 8 像素
     private static final int SCROLLBAR_GRAB_MARGIN = 3;
     private static final int MIN_SCROLL_THUMB = 8;
@@ -407,11 +404,11 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         int h = bounds.height();
         int toolbarHeight = Math.min(TOOLBAR_HEIGHT, h);
         this.toolbarRect = new UiRect(x, y, w, toolbarHeight);
-        int scopeWidth = scoped() ? SCOPE_BUTTON_WIDTH : 0;
+        int scopeWidth = scoped() ? scopeButtonWidth() : 0;
         int searchWidth = Math.max(1, w - (scopeWidth > 0 ? scopeWidth + GAP : 0));
         this.searchRect = new UiRect(x, y, searchWidth, toolbarHeight);
         search.setBounds(searchRect.x(), searchRect.y(), Math.max(1, searchRect.width()), searchRect.height());
-        // 范围轮询按钮贴右：显示当前范围符号，点击切到下一个
+        // 范围轮询按钮贴右：显示当前范围短标签，点击切到下一个
         this.scopeRect = new UiRect(x + Math.max(0, w - scopeWidth), y, scopeWidth, toolbarHeight);
 
         // 底部行由弹窗按钮行托管时用自己的高度，否则占满自身底部；右侧让出的宽度归按钮
@@ -428,16 +425,14 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         this.scrollbarRect = new UiRect(listRect.right() - LIST_BORDER - SCROLLBAR_WIDTH, cellsRect.y(),
                 SCROLLBAR_WIDTH, cellsRect.height());
 
-        // 翻页在最左：符号按钮 + 页码；其后是状态文字；最右留给「清空已选」
+        // 翻页在最左：标记按钮 + 页码；其后是状态文字；最右留给「清空已选」
         int buttonHeight = Math.min(theme.rowHeight(), footerRect.height());
         int buttonY = footerRect.y() + Math.max(0, (footerRect.height() - buttonHeight) / 2);
-        int prevWidth = symbolWidth(PREV_SYMBOL);
-        int nextWidth = symbolWidth(NEXT_SYMBOL);
         int pageWidth = Math.clamp(font.width(pageText().getString()) + PAGER_PADDING, PAGE_LABEL_MIN_WIDTH,
                 Math.max(PAGE_LABEL_MIN_WIDTH, footerWidth / 3));
-        this.prevRect = new UiRect(x, buttonY, prevWidth, buttonHeight);
+        this.prevRect = new UiRect(x, buttonY, PAGER_SYMBOL_WIDTH, buttonHeight);
         this.pageRect = new UiRect(prevRect.right() + GAP, buttonY, pageWidth, buttonHeight);
-        this.nextRect = new UiRect(pageRect.right() + GAP, buttonY, nextWidth, buttonHeight);
+        this.nextRect = new UiRect(pageRect.right() + GAP, buttonY, PAGER_SYMBOL_WIDTH, buttonHeight);
         int tailX = nextRect.right() + GAP * 3;
         int tailWidth = Math.max(0, footerRect.right() - tailX);
         // 清空链接的位置与选中项无关地预留出来，选择变化时不触发重新布局
@@ -447,10 +442,6 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         this.statusRect = new UiRect(tailX, footerRect.y(), Math.max(0, clearRect.x() - GAP - tailX),
                 footerRect.height());
         clampScroll();
-    }
-
-    private int symbolWidth(String symbol) {
-        return Math.max(PAGER_SYMBOL_WIDTH, font.width(symbol) + PAGER_PADDING);
     }
 
     // 是否出现范围按钮：只有同时存在物品与标签的目录页才需要
@@ -467,20 +458,29 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         };
     }
 
-    private static String scopeSymbol(Scope scope) {
-        return switch (scope) {
-            case ITEM -> SCOPE_ITEM_SYMBOL;
-            case TAG -> SCOPE_TAG_SYMBOL;
-            case BOTH -> SCOPE_BOTH_SYMBOL;
-        };
-    }
-
     private Component scopeText(Scope scope) {
         return switch (scope) {
             case ITEM -> texts.scopeItem();
             case TAG -> texts.scopeTag();
             case BOTH -> texts.scopeBoth();
         };
+    }
+
+    // 按钮上的短标签：只写当前能搜到哪类条目，点击后整词替换
+    private Component scopeLabel(Scope scope) {
+        return switch (scope) {
+            case ITEM -> texts.scopeItemLabel();
+            case TAG -> texts.scopeTagLabel();
+            case BOTH -> texts.scopeBothLabel();
+        };
+    }
+
+    // 按钮宽度取三种短标签里最宽的一个：切范围时搜索框不跟着抖动
+    private int scopeButtonWidth() {
+        int widest = Math.max(font.width(scopeLabel(Scope.ITEM).getString()),
+                Math.max(font.width(scopeLabel(Scope.TAG).getString()),
+                        font.width(scopeLabel(Scope.BOTH).getString())));
+        return widest + SCOPE_SIDE_PADDING * 2;
     }
 
     // 滚动条命中：内容超过可见行时，抓取范围比 4 像素的视觉宽度宽一点
@@ -646,7 +646,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         theme.drawDivider(graphics, toolbarRect.x(), toolbarRect.bottom(), toolbarRect.width());
     }
 
-    // 范围轮询按钮：符号表示当前范围，点击切到下一个，完整文案只进悬停说明
+    // 范围轮询按钮：按钮上写当前范围短标签，点击切到下一个，完整说明只进悬停提示
     private void drawScopeButton(GuiGraphics graphics, int mouseX, int mouseY) {
         if (policy == null || !policy.scoped() || scopeRect.width() <= 0) {
             return;
@@ -655,8 +655,8 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         graphics.fill(scopeRect.x(), scopeRect.y(), scopeRect.right(), scopeRect.bottom(),
                 hovered ? theme.palette().controlHover() : theme.palette().controlFill());
         theme.drawBevel(graphics, scopeRect, theme.palette().controlBevelLight(), theme.palette().controlBevelDark());
-        String symbol = scopeSymbol(policy.scope());
-        graphics.drawString(font, symbol, scopeRect.x() + Math.max(0, (scopeRect.width() - font.width(symbol)) / 2),
+        String label = scopeLabel(policy.scope()).getString();
+        graphics.drawString(font, label, scopeRect.x() + Math.max(0, (scopeRect.width() - font.width(label)) / 2),
                 scopeRect.y() + Math.max(0, (scopeRect.height() - font.lineHeight) / 2),
                 enabled ? theme.palette().textPrimary() : theme.palette().textDisabled(), false);
     }
@@ -707,10 +707,9 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         TextScroll.draw(graphics, font, label, textX, textY,
                 textWidth, color, enabled && hovered, hovered ? hoverScrollTicks : 0, false);
         if (unavailable) {
-            graphics.drawString(font, UNAVAILABLE_MARK, cell.right() - MARK_WIDTH + 3,
-                    textY, theme.palette().warning(), false);
+            drawRowMark(graphics, Mark.UNAVAILABLE, theme.palette().warning(), cell);
         } else if (chosen) {
-            drawCheck(graphics, cell.right() - MARK_WIDTH + 3, cell.y() + 6);
+            drawRowMark(graphics, Mark.CHECK, theme.palette().accentPressed(), cell);
         }
         if (cursorAt) {
             theme.drawFocusOutline(graphics, cell);
@@ -742,14 +741,11 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         }
     }
 
-    // 行尾选中勾：深蓝像素勾，压在浅蓝选中底上
-    private void drawCheck(GuiGraphics graphics, int x, int y) {
-        int color = theme.palette().accentPressed();
-        graphics.fill(x, y + 3, x + 1, y + 4, color);
-        graphics.fill(x + 1, y + 4, x + 2, y + 5, color);
-        graphics.fill(x + 2, y + 3, x + 3, y + 4, color);
-        graphics.fill(x + 3, y + 2, x + 4, y + 3, color);
-        graphics.fill(x + 4, y + 1, x + 5, y + 2, color);
+    // 行尾标记：在 MARK_WIDTH 宽的行尾槽与 ROW_HEIGHT 行高内居中
+    private void drawRowMark(GuiGraphics graphics, Mark mark, int color, UiRect cell) {
+        UiIcon icon = UiMarkIcons.icon(mark, color);
+        icon.render(graphics, cell.right() - MARK_WIDTH + (MARK_WIDTH - icon.width()) / 2,
+                cell.y() + (ROW_HEIGHT - icon.height()) / 2);
     }
 
     private void drawScrollbar(GuiGraphics graphics) {
@@ -793,8 +789,8 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
             graphics.fill(clearRect.x(), clearY + font.lineHeight - 1, clearRect.x() + font.width(link),
                     clearY + font.lineHeight, color);
         }
-        drawPagerButton(graphics, prevRect, PREV_SYMBOL, canPrev && enabled, mouseX, mouseY);
-        drawPagerButton(graphics, nextRect, NEXT_SYMBOL, canNext && enabled, mouseX, mouseY);
+        drawPagerButton(graphics, prevRect, Mark.PREVIOUS, canPrev && enabled, mouseX, mouseY);
+        drawPagerButton(graphics, nextRect, Mark.NEXT, canNext && enabled, mouseX, mouseY);
         String pages = TextScroll.trimToWidth(font, pageText().getString(), Math.max(1, pageRect.width()));
         graphics.drawString(font, pages,
                 pageRect.x() + Math.max(0, (pageRect.width() - font.width(pages)) / 2),
@@ -802,7 +798,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
                 theme.palette().textPrimary(), false);
     }
 
-    private void drawPagerButton(GuiGraphics graphics, UiRect rect, String symbol, boolean allowed, int mouseX,
+    private void drawPagerButton(GuiGraphics graphics, UiRect rect, Mark mark, boolean allowed, int mouseX,
                                  int mouseY) {
         if (rect.width() <= 0 || rect.height() <= 0) {
             return;
@@ -811,9 +807,10 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(),
                 !allowed ? theme.palette().controlDisabled() : (hovered ? theme.palette().controlHover() : theme.palette().controlFill()));
         theme.drawBevel(graphics, rect, theme.palette().controlBevelLight(), theme.palette().controlBevelDark());
-        graphics.drawString(font, symbol, rect.x() + Math.max(0, (rect.width() - font.width(symbol)) / 2),
-                rect.y() + Math.max(0, (rect.height() - font.lineHeight) / 2),
-                allowed ? theme.palette().textPrimary() : theme.palette().textDisabled(), false);
+        UiIcon icon = UiMarkIcons.icon(mark,
+                allowed ? theme.palette().textPrimary() : theme.palette().textDisabled());
+        icon.render(graphics, rect.x() + Math.max(0, (rect.width() - icon.width()) / 2),
+                rect.y() + Math.max(0, (rect.height() - icon.height()) / 2));
     }
 
     // 底部状态：错误 > 加载 > 空结果；正常时是「分组标签 · 总数 · 已选」，页码由翻页按钮旁的分子分母承担

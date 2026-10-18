@@ -4,6 +4,7 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.EntityPreviewIcons;
+import com.meteorite.itemdespawntowhat.client.ui.shared.EventPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.TagPreviewIcons;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -40,6 +41,9 @@ public final class RulePreviewIcons {
 
     public static @Nullable UiIcon action(@Nullable RuleValue action) {
         if (action == null) return null;
+        // 事件图标按种类前缀建好，不参与下面的动作键缓存；天气多态也不会撞键。
+        UiIcon event = EventPreviewIcons.icon(action);
+        if (event != null) return event;
         String key = text(action, "type") + "/" + text(action, "variant") + "/" + text(action, "item") + "/"
                 + text(action, "entity") + "/" + text(action, "block") + "/" + (action.has("age") ? action.child("age") : "0");
         if (ICONS.containsKey(key)) return ICONS.get(key);
@@ -64,9 +68,7 @@ public final class RulePreviewIcons {
         return switch (type) {
             case "itemdespawntowhat:place_block" -> CatalogPreviewIcons.iconFor(RuleCatalogType.BLOCK, text(action, "block"));
             case "itemdespawntowhat:loot_table" -> new UiIcon.Item(new ItemStack(Items.CHEST));
-            case "itemdespawntowhat:lightning" -> new UiIcon.Item(new ItemStack(Items.LIGHTNING_ROD));
             case "itemdespawntowhat:explosion" -> new UiIcon.Item(new ItemStack(Items.TNT));
-            case "itemdespawntowhat:arrow_rain" -> new UiIcon.Item(new ItemStack(Items.ARROW));
             default -> null;
         };
     }

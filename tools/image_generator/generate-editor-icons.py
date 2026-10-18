@@ -259,7 +259,7 @@ def main() -> None:
     if args.output_dir:
         out_dir = Path(args.output_dir)
     else:
-        repo_root = Path(__file__).resolve().parent.parent
+        repo_root = Path(__file__).resolve().parents[2]
         out_dir = repo_root / "common/src/main/resources/assets/itemdespawntowhat/textures/gui/editor"
     out_dir.mkdir(parents=True, exist_ok=True)
     target = out_dir / f"icons_{args.scheme}.png"
