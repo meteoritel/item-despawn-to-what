@@ -28,6 +28,9 @@ final class RuleListDisplaySnapshot {
     private final @Nullable RuleValue body;
     private final String title;
     private final @Nullable String category;
+    private final String origin;
+    private final boolean unfinished;
+    private final boolean exportable;
     private final boolean active;
     private final boolean error;
     private final boolean enabled;
@@ -44,12 +47,16 @@ final class RuleListDisplaySnapshot {
     private @Nullable String searchText;
 
     RuleListDisplaySnapshot(@Nullable RuleValue body, String title, @Nullable String category,
+                            String origin, boolean unfinished, boolean exportable,
                             boolean active, boolean error, boolean enabled, boolean issues,
                             boolean deleteMarked, boolean previewUnavailable,
                             Component state, boolean stateVisible) {
         this.body = body;
         this.title = title;
         this.category = category;
+        this.origin = origin;
+        this.unfinished = unfinished;
+        this.exportable = exportable;
         this.active = active;
         this.error = error;
         this.enabled = enabled;
@@ -80,6 +87,21 @@ final class RuleListDisplaySnapshot {
     // 快照下发的分类；未声明分类时为 null
     @Nullable String category() {
         return category;
+    }
+
+    // 条目来源：overlay / datapack / mixed；本次新建的草稿按覆盖层来源处理
+    String origin() {
+        return origin;
+    }
+
+    // 是否属于「未完成」草稿分组：本次新建、有未保存改动或待恢复原始版本
+    boolean unfinished() {
+        return unfinished;
+    }
+
+    // 是否可导出为数据包：有可读规则体且不是屏蔽/删除/非法条目
+    boolean exportable() {
+        return exportable;
     }
 
     // 当前是否按「启用」显示（草稿改动、新建与恢复中的条目以草稿为准）

@@ -3,6 +3,8 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
 import com.meteorite.itemdespawntowhat.client.edit.RuleCategorySkeleton;
+import com.meteorite.itemdespawntowhat.client.edit.RulePackExporter;
+import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
@@ -15,11 +17,12 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiListView;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModalStack;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiSegmentedControl;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTreeNode;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTreeView;
 import com.meteorite.itemdespawntowhat.core.debug.DebugProfile;
+import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshotEntry;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -94,11 +97,17 @@ final class RuleEditorScreenListPage {
     // 布局常量
     private static final int ROW_H = 12;
     private static final int SEARCH_MAX_WIDTH = 160;
-    private static final int FILTER_COUNT = 4;
+    private static final int SEARCH_MIN_WIDTH = 80;
     private static final int SEARCH_MAX_LENGTH = 128;
     private static final int MORE_MODAL_WIDTH = 300;
     private static final int TAG_MODAL_WIDTH = 280;
+    private static final int EXPORT_MODAL_WIDTH = 280;
+    private static final int EXPORT_ROW_H = 20;
     private static final int TOOLTIP_RESERVED_LINES = 8;
+    // 状态筛选的轮询顺序：全部 → 已启用 → 已停用
+    private static final String[] STATUS_VALUES = {"all", "enabled", "disabled"};
+    // 来源筛选的轮询顺序：全部 → 覆盖层 → 数据包
+    private static final String[] SOURCE_VALUES = {"all", "overlay", "datapack"};
     // i18n 前缀
     private static final String UI = "gui.itemdespawntowhat.edit.";
 
@@ -107,19 +116,24 @@ final class RuleEditorScreenListPage {
 
     // ---- 列表控件与视图状态 ----
     private @Nullable UiTextInput searchField;
-    private @Nullable UiSegmentedControl filterControl;
+    private @Nullable UiButton statusButton;
+    private @Nullable UiButton sourceButton;
     private @Nullable UiTreeView<String> ruleList;
     private final List<String> visibleIds = new ArrayList<>();
     private final List<UiButton> listButtons = new ArrayList<>();
+    private final List<UiButton> filterButtons = new ArrayList<>();
     private final RuleEditorScreenButtonBar listBar = new RuleEditorScreenButtonBar();
     private final RuleEditorScreenButtonBar globalBar = new RuleEditorScreenButtonBar();
+    private final RuleEditorScreenButtonBar filterBar = new RuleEditorScreenButtonBar(ROW_H, 2, true);
     private final List<UiButton> selectedButtons = new ArrayList<>();
     private @Nullable UiButton toggleButton;
     private @Nullable UiButton applyButton;
     private final Set<String> expandedCategories = new LinkedHashSet<>();
     private String lastQuery = "";
     private String lastTreeQuery = "";
-    private int filterIndex;
+    // 状态筛选下标（0 全部 / 1 已启用 / 2 已停用）与来源筛选下标（0 全部 / 1 覆盖层 / 2 数据包）
+    private int statusFilter;
+    private int sourceFilter;
     // 首载分段观测：首份快照后的首次刷新只记录一次，作为「列表可用」的终点
     private boolean firstReadyLogged;
 
@@ -140,12 +154,7 @@ final class RuleEditorScreenListPage {
         searchField = new UiTextInput(THEME, font, Component.translatable(UI + "list.search"));
         searchField.setMaxLength(SEARCH_MAX_LENGTH);
         searchField.setValue(lastQuery);
-        filterControl = new UiSegmentedControl(THEME, font, filterOptions());
-        filterControl.setSelected(filterOptions().get(filterIndex).value());
-        filterControl.setOnChanged(value -> {
-            filterIndex = indexOfFilter(value);
-            refreshList();
-        });
+        buildFilterButtons();
         ruleList = new UiTreeView<>(THEME, font, (graphics, rowFont, node, row, depth, selected, hovered, focused) -> {
             if (node.value().startsWith("@")) {
                 graphics.drawString(rowFont, TextScroll.trimToWidth(rowFont, node.label().getString(), row.width() - 4),
@@ -158,21 +167,38 @@ final class RuleEditorScreenListPage {
         buildListButtons();
     }
 
-    private List<UiSegmentedControl.Option> filterOptions() {
-        return List.of(
-                new UiSegmentedControl.Option("all", Component.translatable(UI + "filter.all")),
-                new UiSegmentedControl.Option("enabled", Component.translatable(UI + "filter.enabled")),
-                new UiSegmentedControl.Option("disabled", Component.translatable(UI + "filter.disabled")),
-                new UiSegmentedControl.Option("issue", Component.translatable(UI + "filter.issue")));
+    // 筛选按钮：状态与来源各一个轮询按钮，两者取交集
+    private void buildFilterButtons() {
+        statusButton = button(UI + "filter.status_label", UiButtonVariant.SECONDARY, this::cycleStatusFilter);
+        sourceButton = button(UI + "filter.source_label", UiButtonVariant.SECONDARY, this::cycleSourceFilter);
+        filterButtons.clear();
+        filterButtons.addAll(List.of(statusButton, sourceButton));
+        filterBar.set(filterButtons);
+        refreshFilterLabels();
     }
 
-    private int indexOfFilter(String value) {
-        for (int i = 0; i < FILTER_COUNT; i++) {
-            if (filterOptions().get(i).value().equals(value)) {
-                return i;
-            }
+    private void cycleStatusFilter() {
+        statusFilter = (statusFilter + 1) % STATUS_VALUES.length;
+        refreshFilterLabels();
+        refreshList();
+    }
+
+    private void cycleSourceFilter() {
+        sourceFilter = (sourceFilter + 1) % SOURCE_VALUES.length;
+        refreshFilterLabels();
+        refreshList();
+    }
+
+    // 轮询按钮只改显示文案；当前取值直接写进标签，玩家不用展开菜单
+    private void refreshFilterLabels() {
+        if (statusButton != null) {
+            statusButton.setLabel(Component.translatable(UI + "filter.status_label",
+                    Component.translatable(UI + "filter." + STATUS_VALUES[statusFilter])));
         }
-        return 0;
+        if (sourceButton != null) {
+            sourceButton.setLabel(Component.translatable(UI + "filter.source_label",
+                    Component.translatable(UI + "filter.source." + SOURCE_VALUES[sourceFilter])));
+        }
     }
 
     // ---- 按钮 ----
@@ -187,13 +213,14 @@ final class RuleEditorScreenListPage {
         UiButton copy = button(UI + "button.duplicate", UiButtonVariant.SECONDARY, actions::promptDuplicate);
         UiButton more = button(UI + "button.more", UiButtonVariant.SECONDARY, this::openMore);
         UiButton delete = button(UI + "button.delete", UiButtonVariant.DANGER, actions::deleteSelected);
+        UiButton export = button(UI + "button.export", UiButtonVariant.SECONDARY, this::openExport);
         applyButton = button(UI + "button.apply", UiButtonVariant.PRIMARY, host::save);
         UiButton changes = button(UI + "button.changes", UiButtonVariant.SECONDARY, host::showChanges);
         selectedButtons.clear();
         selectedButtons.addAll(List.of(edit, toggleButton, copy, delete, more));
-        globalBar.set(List.of(create, edit, toggleButton, copy, delete, more));
+        globalBar.set(List.of(create, edit, toggleButton, copy, delete, export, more));
         listBar.set(List.of(applyButton, changes));
-        listButtons.addAll(List.of(create, edit, toggleButton, copy, delete, more, applyButton, changes));
+        listButtons.addAll(List.of(create, edit, toggleButton, copy, delete, export, more, applyButton, changes));
     }
 
     private UiButton button(String labelKey, UiButtonVariant variant, Runnable action) {
@@ -229,6 +256,76 @@ final class RuleEditorScreenListPage {
         modal.contentWidget(list, 44).cancel(Component.translatable(UI + "button.cancel"));
         modal.preferredWidth(MORE_MODAL_WIDTH).layoutCentered(host.screenWidth(), host.screenHeight());
         host.modals().push(modal);
+    }
+
+    /*** 导出范围选项：标签、是否含数据包条目与当前可导出的条数。 */
+    private record ExportScope(String scope, String labelKey, String countKey, boolean includeDatapack, int count) { }
+
+    // 导出弹窗：两个范围选项直接显示各自可导出的条数，避免导出后才发现选错范围
+    private void openExport() {
+        UiModal modal = UiModal.create(THEME, host.font()).title(Component.translatable(UI + "export.title"));
+        UiListView<ExportScope> list = new UiListView<>(THEME, host.font(),
+                (graphics, rowFont, item, index, row, selected, hovered, focused) -> {
+                    graphics.drawString(rowFont, Component.translatable(UI + item.labelKey()),
+                            row.x() + 4, row.y() + 6, THEME.palette().textPrimary(), false);
+                    Component count = Component.translatable(UI + item.countKey(), item.count());
+                    graphics.drawString(rowFont, count, row.right() - 4 - rowFont.width(count),
+                            row.y() + 6, THEME.palette().textSecondary(), false);
+                });
+        list.setItems(List.of(
+                new ExportScope(RulePackExporter.SCOPE_OVERLAY, "export.scope_overlay", "export.count", false,
+                        exportCount(false)),
+                new ExportScope(RulePackExporter.SCOPE_ALL, "export.scope_all", "export.count", true,
+                        exportCount(true))));
+        list.setRowHeight(EXPORT_ROW_H);
+        list.setActivateOnSingleClick(true);
+        list.setOnActivate(item -> {
+            host.modals().close(modal);
+            exportRules(item);
+        });
+        modal.message(Component.translatable(UI + "export.message"));
+        modal.contentWidget(list, EXPORT_ROW_H * 2 + 4).cancel(Component.translatable(UI + "button.cancel"));
+        modal.preferredWidth(EXPORT_MODAL_WIDTH).layoutCentered(host.screenWidth(), host.screenHeight());
+        host.modals().push(modal);
+    }
+
+    // 统计某个范围可导出的条数：只算有可读规则体且可导出的条目
+    private int exportCount(boolean includeDatapack) {
+        int count = 0;
+        for (String id : host.model().ruleIds()) {
+            RuleListDisplaySnapshot snapshot = host.display().snapshot(id);
+            if (snapshot.exportable() && (includeDatapack || isOverlayOrigin(snapshot.origin()))) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    // 按范围收集当前显示体（含未保存草稿）并写盘；失败只提示，不改变任何规则状态
+    private void exportRules(ExportScope option) {
+        List<RulePackExporter.RuleEntry> entries = new ArrayList<>();
+        for (String id : host.model().ruleIds()) {
+            RuleListDisplaySnapshot snapshot = host.display().snapshot(id);
+            if (!snapshot.exportable() || (!option.includeDatapack() && !isOverlayOrigin(snapshot.origin()))) {
+                continue;
+            }
+            RuleValue body = host.model().displayBody(id);
+            if (body != null) {
+                entries.add(new RulePackExporter.RuleEntry(id, body));
+            }
+        }
+        if (entries.isEmpty()) {
+            host.setNotice(Component.translatable(UI + "export.empty"), THEME.palette().warning());
+            return;
+        }
+        try {
+            RulePackExporter.Result result = RulePackExporter.export(option.scope(), entries);
+            host.setNotice(Component.translatable(UI + "export.done", result.count(), result.displayPath()),
+                    THEME.palette().success());
+        } catch (IOException exception) {
+            String reason = exception.getMessage() == null ? "" : exception.getMessage();
+            host.setNotice(Component.translatable(UI + "export.failed", reason), THEME.palette().danger());
+        }
     }
 
     // 列表条目操作随选中状态同步；切换按钮只显示下一步动作，布局按当前文案计算。
@@ -270,16 +367,15 @@ final class RuleEditorScreenListPage {
         globalBar.layout(area.y(), area.width());
         globalBar.render(graphics, renderFont, mouseX, mouseY);
         int searchY = area.y() + headerHeight + RuleEditorPageSupport.PAD;
-        int searchWidth = Math.min(SEARCH_MAX_WIDTH, area.width() / 2);
+        int searchWidth = Math.clamp(area.width() / 3, SEARCH_MIN_WIDTH, SEARCH_MAX_WIDTH);
         if (searchField != null) {
             searchField.setBounds(area.x(), searchY, searchWidth, ROW_H);
             searchField.render(graphics, renderFont, mouseX, mouseY);
         }
-        if (filterControl != null) {
-            filterControl.setBounds(area.x() + searchWidth + 2, searchY, area.width() - searchWidth - 2, ROW_H);
-            filterControl.render(graphics, renderFont, mouseX, mouseY);
-        }
-        int listY = searchY + ROW_H + RuleEditorPageSupport.PAD;
+        int filterWidth = Math.max(0, area.width() - searchWidth - 2);
+        filterBar.layout(area.x() + searchWidth + 2, searchY, filterWidth);
+        filterBar.render(graphics, renderFont, mouseX, mouseY);
+        int listY = searchY + Math.max(ROW_H, filterBar.preferredHeight(filterWidth)) + RuleEditorPageSupport.PAD;
         int available = Math.max(0, area.bottom() - listY);
         if (ruleList != null) {
             ruleList.setBounds(area.x(), listY, area.width(), available);
@@ -351,9 +447,12 @@ final class RuleEditorScreenListPage {
             }
         }
         for (String id : visibleIds) {
-            // 只消费展示快照里的分类与标题；未声明或无法派生分类时归入扩展分组
+            // 只消费展示快照里的分类与标题：问题优先归入「有问题」，其次未保存草稿归入「未完成」，
+            // 未声明分类时归入扩展分组；三个分组都无成员时在树上自动隐藏
             RuleListDisplaySnapshot snapshot = host.display().snapshot(id);
-            String category = snapshot.category() == null ? RuleCategorySkeleton.EXTENSION : snapshot.category();
+            String category = hasIssues(snapshot) ? RuleCategorySkeleton.ISSUES
+                    : snapshot.unfinished() ? RuleCategorySkeleton.UNFINISHED
+                    : snapshot.category() == null ? RuleCategorySkeleton.EXTENSION : snapshot.category();
             UiTreeNode<String> group = groups.get(category);
             if (group == null) {
                 group = unknownCategoryNode(groups, category);
@@ -401,7 +500,8 @@ final class RuleEditorScreenListPage {
         data.addProperty("rules", rules);
         data.addProperty("visible", visibleIds.size());
         data.addProperty("snapshot_version", host.model().snapshotVersion());
-        data.addProperty("filter_index", filterIndex);
+        data.addProperty("status_filter", statusFilter);
+        data.addProperty("source_filter", sourceFilter);
         data.addProperty("query_chars", lastQuery == null ? 0 : lastQuery.length());
         data.addProperty("first", firstReady);
         data.addProperty("body_fetches", bodyFetches);
@@ -471,14 +571,36 @@ final class RuleEditorScreenListPage {
                 || snapshot.searchText().contains(query);
     }
 
-    // 筛选只读展示快照，不重新读取规则体
+    // 筛选只读展示快照，不重新读取规则体：状态与来源取交集
     private boolean matchesFilter(RuleListDisplaySnapshot snapshot) {
-        return switch (filterIndex) {
-            case 1 -> snapshot.active();
-            case 2 -> !snapshot.active();
-            case 3 -> snapshot.issues() || snapshot.error();
-            default -> true;
-        };
+        if (statusFilter == 1 && !snapshot.active()) {
+            return false;
+        }
+        if (statusFilter == 2 && snapshot.active()) {
+            return false;
+        }
+        if (sourceFilter == 1 && !isOverlayOrigin(snapshot.origin())) {
+            return false;
+        }
+        if (sourceFilter == 2 && !isDatapackOrigin(snapshot.origin())) {
+            return false;
+        }
+        return true;
+    }
+
+    // 条目是否带问题：服务端校验问题或客户端解码失败，列表页据此归入「有问题」分组
+    private static boolean hasIssues(RuleListDisplaySnapshot snapshot) {
+        return snapshot.issues() || snapshot.error();
+    }
+
+    // 覆盖层筛选含「覆盖层 + 数据包」的混合条目：混合条目的生效视图来自覆盖层
+    private static boolean isOverlayOrigin(String origin) {
+        return RuleSnapshotEntry.ORIGIN_OVERLAY.equals(origin) || RuleSnapshotEntry.ORIGIN_MIXED.equals(origin);
+    }
+
+    // 数据包筛选同样含混合条目：混合条目在数据包层有基底
+    private static boolean isDatapackOrigin(String origin) {
+        return RuleSnapshotEntry.ORIGIN_DATAPACK.equals(origin) || RuleSnapshotEntry.ORIGIN_MIXED.equals(origin);
     }
 
     private @Nullable String selectedRuleId() {
@@ -509,7 +631,7 @@ final class RuleEditorScreenListPage {
         if (searchField != null && searchField.mouseClicked(mouseX, mouseY, button)) {
             return true;
         }
-        if (filterControl != null && filterControl.mouseClicked(mouseX, mouseY, button)) {
+        if (filterBar.mouseClicked(mouseX, mouseY, button)) {
             return true;
         }
         if (ruleList != null && ruleList.mouseClicked(mouseX, mouseY, button)) {
@@ -548,6 +670,7 @@ final class RuleEditorScreenListPage {
     boolean mouseReleased(double mouseX, double mouseY, int button) {
         boolean consumed = ruleList != null && ruleList.mouseReleased(mouseX, mouseY, button);
         consumed |= searchField != null && searchField.mouseReleased(mouseX, mouseY, button);
+        consumed |= filterBar.mouseReleased(mouseX, mouseY, button);
         consumed |= globalBar.mouseReleased(mouseX, mouseY, button);
         consumed |= listBar.mouseReleased(mouseX, mouseY, button);
         return consumed;
@@ -621,8 +744,8 @@ final class RuleEditorScreenListPage {
         if (searchField != null) {
             focus.add(searchField);
         }
-        if (filterControl != null) {
-            focus.add(filterControl);
+        for (UiButton button : filterButtons) {
+            focus.add(button);
         }
         if (ruleList != null) {
             focus.add(ruleList);

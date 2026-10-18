@@ -89,19 +89,43 @@ final class RuleListDisplayCache {
         boolean error = model.hasError(id);
         boolean active = isActive(id, entry, session);
         boolean masked = entry != null && RuleSnapshotEntry.STATUS_MASKED.equals(entry.status());
+        boolean deleteMarked = body != null && body.flag(RuleFields.DELETE, false);
+        boolean unfinished = isUnfinished(id, session);
+        boolean issues = entry != null && !entry.issues().isEmpty();
         Component state = stateComponent(id, session, error, active, masked);
         return new RuleListDisplaySnapshot(
                 body,
                 RuleListDisplaySnapshot.titleOf(id, body),
                 entry == null ? null : entry.category(),
+                entry == null ? RuleSnapshotEntry.ORIGIN_OVERLAY : entry.origin(),
+                unfinished,
+                isExportable(entry, body, deleteMarked, unfinished, issues, error),
                 active,
                 error,
                 isEnabled(body),
-                entry != null && !entry.issues().isEmpty(),
-                body != null && body.flag(RuleFields.DELETE, false),
+                issues,
+                deleteMarked,
                 RulePreviewIcons.unavailable(body),
                 state == null ? Component.empty() : state,
                 state != null);
+    }
+
+    // 未完成分组只表达草稿状态：本次新建、有未保存改动或待恢复原始版本
+    private boolean isUnfinished(String id, @Nullable EditSession session) {
+        return session != null && (session.isDirty() || model.isCreated(id) || model.isRestoring(id));
+    }
+
+    // 可导出条目：只导出生效且无问题的已保存规则；未保存草稿、有问题条目与屏蔽/非法条目不导出
+    private boolean isExportable(@Nullable RuleSnapshotEntry entry, @Nullable RuleValue body,
+                                 boolean deleteMarked, boolean unfinished, boolean issues, boolean error) {
+        if (body == null || deleteMarked || unfinished || issues || error) {
+            return false;
+        }
+        if (entry == null) {
+            return false;
+        }
+        return RuleSnapshotEntry.STATUS_ACTIVE.equals(entry.status())
+                || RuleSnapshotEntry.STATUS_DISABLED.equals(entry.status());
     }
 
     // 状态用明确文字，正常启用不占位；错误、草稿改动与屏蔽优先于停用

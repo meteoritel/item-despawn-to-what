@@ -7,7 +7,9 @@ import org.jetbrains.annotations.Nullable;
  * 规则分类的静态骨架：已知分类的标识、层级、顺序与本地化显示名。
  *
  * <p>列表页按 {@link #roots()} 建树；快照下发的分类不在骨架内时按原文标识动态成组，
- * 挂在 {@link #EXTENSION} 分组下，不中断列表刷新。</p>
+ * 挂在 {@link #EXTENSION} 分组下，不中断列表刷新。{@link #UNFINISHED} 与 {@link #ISSUES}
+ * 只由客户端按草稿状态与校验问题使用，服务端分类器不产出这两个值；{@link #TEMPLATE}
+ * 为随发布提供的模板规则预留。</p>
  */
 public final class RuleCategorySkeleton {
 
@@ -16,9 +18,16 @@ public final class RuleCategorySkeleton {
 
     // 扩展分组：无产出、含未知产出与未知分类都归入这组语义
     public static final String EXTENSION = "extension";
+    // 有问题分组：列表页把带校验问题或解码失败的条目归入这里，服务端分类器不产出该值
+    public static final String ISSUES = "issues";
+    // 未完成分组：列表页把有未保存改动的草稿条目归入这里，服务端分类器不产出该值
+    public static final String UNFINISHED = "unfinished";
+    // 模板分组：为随发布提供的模板规则预留，当前不产生该分类
+    public static final String TEMPLATE = "template";
 
     // 已知分类的层级与顺序：实体父节点下按产出子类细分，其余为顶层分类
     private static final List<Category> ROOTS = List.of(
+            new Category(ISSUES),
             new Category("entity", List.of(
                     new Category("entity.item"),
                     new Category("entity.entity"),
@@ -29,7 +38,9 @@ public final class RuleCategorySkeleton {
             new Category("world"),
             new Category("mixed"),
             new Category(EXTENSION),
-            new Category(DebugTestRules.CATEGORY));
+            new Category(UNFINISHED),
+            new Category(DebugTestRules.CATEGORY),
+            new Category(TEMPLATE));
 
     private RuleCategorySkeleton() {
         throw new UnsupportedOperationException("Utility class");
