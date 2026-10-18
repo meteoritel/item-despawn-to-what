@@ -61,6 +61,8 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     private IntConsumer onSelectionChanged;
     // 激活回调
     private Consumer<T> onActivate;
+    // 焦点变化回调
+    private Consumer<Boolean> onFocusChanged;
     private boolean activateOnSingleClick;
     private boolean selectionMarkerVisible = true;
     private boolean chipRows;
@@ -178,6 +180,16 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     // 设置激活回调
     public UiListView<T> setOnActivate(Consumer<T> callback) {
         this.onActivate = callback;
+        return this;
+    }
+
+    /**
+     * 设置焦点变化回调；宿主据此在列表失焦时收起选中态等。
+     *
+     * @param callback 接收最新焦点状态的消费者
+     */
+    public UiListView<T> setOnFocusChanged(Consumer<Boolean> callback) {
+        this.onFocusChanged = callback;
         return this;
     }
 
@@ -442,7 +454,13 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
 
     @Override
     public void setFocused(boolean focused) {
+        if (this.focused == focused) {
+            return;
+        }
         this.focused = focused;
+        if (onFocusChanged != null) {
+            onFocusChanged.accept(focused);
+        }
     }
 
     @Override

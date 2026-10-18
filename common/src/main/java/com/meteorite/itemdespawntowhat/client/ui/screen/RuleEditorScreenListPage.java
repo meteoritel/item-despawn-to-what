@@ -525,9 +525,11 @@ final class RuleEditorScreenListPage {
         if (tag == null) {
             return false;
         }
+        TagCarouselView view = new TagCarouselView(host.font(), tag);
         host.modals().push(UiModal.create(THEME, host.font()).title(Component.translatable(UI + "tag.title", tag.id()))
-                .contentWidget(new TagCarouselView(host.font(), tag), Math.clamp(host.screenHeight() - 70, 110, 220))
+                .contentWidget(view, Math.clamp(host.screenHeight() - 70, 110, 220))
                 .preferredWidth(TAG_MODAL_WIDTH).cancel(Component.translatable(UI + "button.close"))
+                .onClosed(view::resumePolling)
                 .layoutCentered(host.screenWidth(), host.screenHeight()));
         return true;
     }

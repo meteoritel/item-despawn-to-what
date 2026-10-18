@@ -11,6 +11,7 @@ import net.minecraft.core.Holder;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.BlockItem;
@@ -41,7 +42,7 @@ public final class TagPreviewIcons {
         List<Member> members = id == null ? List.of() : switch (type) {
             case ITEM -> BuiltInRegistries.ITEM.getTag(TagKey.create(Registries.ITEM, id))
                     .map(set -> set.stream().filter(holder -> holder.value() != Items.AIR)
-                            .map(holder -> new Member(holder.value().getDescription(), new UiIcon.Item(new ItemStack(holder.value())))).toList())
+                            .map(holder -> new Member(holder.value().getDescription(), previewIcon(holder.value()))).toList())
                     .orElse(List.of());
             case BLOCK -> BuiltInRegistries.BLOCK.getTag(TagKey.create(Registries.BLOCK, id))
                     .map(set -> set.stream().map(holder -> new Member(holder.value().getName(),
@@ -61,6 +62,15 @@ public final class TagPreviewIcons {
         };
         members = members.stream().filter(member -> member.icon() != null).toList();
         return snapshot(type, raw, members);
+    }
+
+    // 方块物品按方块模型渲染：物品渲染在 GUI 中叠加方向光，交叉平面的两面会被点亮成不同亮度，
+    // 且放大绘制时的非等比缩放会改变法线朝向，使同一模型在不同尺寸下打光不同；方块模型预览不做方向光。
+    private static UiIcon previewIcon(Item item) {
+        if (item instanceof BlockItem blockItem) {
+            return BlockPreviewIcons.icon(BuiltInRegistries.BLOCK.getKey(blockItem.getBlock()).toString());
+        }
+        return new UiIcon.Item(new ItemStack(item));
     }
 
     // 使用源物品对应方块时，将物品标签映射成真正的方块模型，而不是名称牌或空气物品。
