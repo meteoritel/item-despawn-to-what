@@ -134,20 +134,37 @@ public final class RuleEditorPanelFactory {
 
     // ---- 目录面板 ----
 
+    // 只有物品来源的目录页（如源物品黑名单）；按目录类型取文案请走下面的重载
     public static UiCatalogGrid.Texts catalogTexts() {
-        return catalogTexts(false);
+        return catalogTexts(RuleCatalogType.ITEM, false);
     }
 
-    private static UiCatalogGrid.Texts catalogTexts(boolean combined) {
+    // 范围按钮的短标签与悬停说明按当前目录的主分类生成，方块、流体、实体等选择窗不再共用「物品」
+    private static UiCatalogGrid.Texts catalogTexts(RuleCatalogType type, boolean combined) {
+        Component primary = catalogScopeLabel(type);
         return new UiCatalogGrid.Texts(Component.translatable(UI + (combined ? "pick.search_combined" : "pick.search")),
                 Component.translatable(UI + "pick.empty"), Component.translatable(UI + "pick.loading"),
                 Component.translatable(UI + "pick.error"), Component.translatable(UI + "pick.prev"),
                 Component.translatable(UI + "pick.next"), Component.translatable(UI + "pick.selected"),
-                Component.translatable(UI + "pick.scope_item"), Component.translatable(UI + "pick.scope_tag"),
-                Component.translatable(UI + "pick.scope_both"),
-                Component.translatable(UI + "pick.scope_item_label"),
+                Component.translatable(UI + "pick.scope_only", primary), Component.translatable(UI + "pick.scope_tag"),
+                Component.translatable(UI + "pick.scope_with_tags", primary),
+                primary,
                 Component.translatable(UI + "pick.scope_tag_label"),
                 Component.translatable(UI + "pick.scope_both_label"), Component.translatable(UI + "pick.clear"));
+    }
+
+    private static Component catalogScopeLabel(RuleCatalogType type) {
+        return Component.translatable(UI + switch (type) {
+            case ITEM -> "pick.scope_item_label";
+            case BLOCK -> "pick.scope_block_label";
+            case FLUID -> "pick.scope_fluid_label";
+            case ENTITY -> "pick.scope_entity_label";
+            case BIOME -> "pick.scope_biome_label";
+            case LOOT_TABLE -> "pick.scope_loot_table_label";
+            case DIMENSION -> "pick.scope_dimension_label";
+            case MOB_EFFECT -> "pick.scope_mob_effect_label";
+            case TAG -> "pick.scope_tag_label";
+        });
     }
 
     // 目录标签可能是翻译键或原文：无空格、无冒号且含点号时按翻译键解析
@@ -197,14 +214,14 @@ public final class RuleEditorPanelFactory {
         boolean includeTags = combined && field != null && (field.type() == EditorFieldType.TAG || field.type() == EditorFieldType.TAG_LIST);
         workspace.refreshDirectory(type);
         if (includeTags) workspace.refreshDirectory(RuleCatalogType.TAG);
-        // 默认排除规则与「物品 / 标签 / 一起」范围由同一个策略实例持有，页码与总数始终一致
+        // 默认排除规则与「主分类 / 标签 / 一起」范围由同一个策略实例持有，页码与总数始终一致
         CatalogEntryPolicy policy = includeTags ? CatalogEntryPolicy.scoped(type) : CatalogEntryPolicy.fixed(type);
         CatalogMapper mapper = new CatalogMapper();
         mapper.field = field;
         mapper.includeTags = includeTags;
         mapper.policy = policy;
         UiModal modal = UiModal.create(THEME, font);
-        UiCatalogGrid grid = new UiCatalogGrid(THEME, font, multiSelect, includeTags ? catalogTexts(true) : catalogTexts(), new UiCatalogGrid.Listener() {
+        UiCatalogGrid grid = new UiCatalogGrid(THEME, font, multiSelect, catalogTexts(type, includeTags), new UiCatalogGrid.Listener() {
             @Override
             public void onSelectionChanged(List<String> selection) {
                 refreshCatalogConfirm(modal, workspace.active(), selection, unavailableReason);

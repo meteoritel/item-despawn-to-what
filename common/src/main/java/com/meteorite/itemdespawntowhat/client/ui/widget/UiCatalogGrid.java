@@ -38,7 +38,7 @@ import org.lwjgl.glfw.GLFW;
  * （宿主据此走既有目录请求链路），快速切换时由宿主丢弃过时响应。</p>
  *
  * <p>条目策略由宿主通过 {@link EntryPolicy} 注入：宿主在分页前按 {@link EntryPolicy#hidden(String)} 排除
- * 技术性条目与空/流动流体，并按 {@link EntryPolicy#scope()} 取物品或标签；页面只负责范围按钮的轮询与回写，
+ * 技术性条目与空/流动流体，并按 {@link EntryPolicy#scope()} 取主分类或标签；页面只负责范围按钮的轮询与回写，
  * 因此页码、总数与可见条目始终一致。条目源通过 {@link #setEntrySource(Supplier)} 注入，
  * 宿主返回同一缓存实例时不会重建列表。</p>
  */
@@ -65,14 +65,14 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         }
     }
 
-    // 条目范围：只物品 / 只标签 / 一起显示
+    // 条目范围：只主分类条目 / 只标签 / 一起显示
     public enum Scope {
         ITEM, TAG, BOTH
     }
 
     /**
-     * 条目策略：默认不展示哪些条目，以及工具栏上「物品 / 标签 / 一起」的当前范围。
-     * <p>宿主在分页前用 {@link #hidden(String)} 过滤并按 {@link #scope()} 取物品或标签，
+     * 条目策略：默认不展示哪些条目，以及工具栏上「主分类 / 标签 / 一起」的当前范围。
+     * <p>宿主在分页前用 {@link #hidden(String)} 过滤并按 {@link #scope()} 取主分类或标签，
      * 范围状态由页面按钮回写，双方看到同一份事实。</p>
      */
     public interface EntryPolicy {
@@ -86,7 +86,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         // 工具栏范围按钮回写
         void setScope(Scope scope);
 
-        // 是否出现范围按钮：只有同时存在物品与标签的目录页才需要
+        // 是否出现范围按钮：只有同时存在主分类与标签的目录页才需要
         default boolean scoped() {
             return false;
         }
@@ -96,7 +96,8 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     public record Entry(String id, Component label, @Nullable Component subLabel, @Nullable UiIcon icon) {
     }
 
-    // 宿主提供的本地化文本（翻页按钮画标记贴图、范围按钮画当前范围的短标签，对应的完整文案作为悬停说明）
+    // 宿主提供的本地化文本（翻页按钮画标记贴图、范围按钮画当前范围的短标签，对应的完整文案作为悬停说明；
+    // scopeItem / scopeItemLabel 指当前目录的主分类，并不固定是物品）
     public record Texts(Component searchHint, Component empty, Component loading, Component error,
                         Component prevPage, Component nextPage, Component selection, Component scopeItem,
                         Component scopeTag, Component scopeBoth, Component scopeItemLabel,
@@ -134,7 +135,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     private static final int PAGER_PADDING = 8;
     private static final int PAGER_SYMBOL_WIDTH = 14;
     private static final int PAGE_LABEL_MIN_WIDTH = 30;
-    // 工具栏范围按钮：一个按钮轮询「只物品 → 只标签 → 一起」，按钮上写当前范围的短标签、完整文案进悬停说明
+    // 工具栏范围按钮：一个按钮轮询「只主分类 → 只标签 → 一起」，按钮上写当前范围的短标签、完整文案进悬停说明
     private static final int SCOPE_SIDE_PADDING = 4;
     // 滚动条：视觉只有 4 像素，可抓取范围外扩；滑块最矮 8 像素
     private static final int SCROLLBAR_GRAB_MARGIN = 3;
@@ -444,12 +445,12 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         clampScroll();
     }
 
-    // 是否出现范围按钮：只有同时存在物品与标签的目录页才需要
+    // 是否出现范围按钮：只有同时存在主分类与标签的目录页才需要
     private boolean scoped() {
         return policy != null && policy.scoped();
     }
 
-    // 范围轮询顺序：只物品 → 只标签 → 一起
+    // 范围轮询顺序：只主分类 → 只标签 → 一起
     private static Scope nextScope(Scope current) {
         return switch (current) {
             case ITEM -> Scope.TAG;

@@ -7,7 +7,7 @@ import java.util.Set;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 选择页的条目策略：物品与流体的默认排除规则写在同一处，并持有工具栏「物品 / 标签 / 一起」的范围状态。
+ * 选择页的条目策略：物品与流体的默认排除规则写在同一处，并持有工具栏「主分类 / 标签 / 一起」的范围状态。
  *
  * <p>物品排除空气与仅命令可得的技术性条目；流体只保留可放置的源流体——空流体与流动变体一律排除。
  * 标签引用（{@code #} 开头）是标签本身，不参与排除判定。</p>
@@ -48,7 +48,7 @@ public final class CatalogEntryPolicy implements UiCatalogGrid.EntryPolicy {
         return new CatalogEntryPolicy(type == null ? RuleCatalogType.ITEM : type, false);
     }
 
-    // 同时存在物品与同注册表标签的目录：提供「只物品 / 只标签 / 一起」切换
+    // 同时存在主分类与同注册表标签的目录：提供「只主分类 / 只标签 / 一起」切换
     public static CatalogEntryPolicy scoped(@Nullable RuleCatalogType type) {
         return new CatalogEntryPolicy(type == null ? RuleCatalogType.ITEM : type, true);
     }
