@@ -15,11 +15,11 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.CatalogSuggestions;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionEditingSupport;
-import com.meteorite.itemdespawntowhat.client.ui.screen.form.ReadOnlyTextView;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.SuggestionProvider;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeContract;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiCodeView;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
@@ -120,8 +120,8 @@ final class RuleEditorScreenEditPage {
     // 布局常量
     private static final int TAB_H = 22;
     private static final int EDIT_PAD = 8;
-    // 来源视图弹窗：说明区与只读 JSON 的可用宽度 / 高度区间
-    private static final int SOURCE_MODAL_WIDTH = 340;
+    // 来源视图弹窗：只读 JSON 的宽度按「层标题 + 文件路径 + 缩进后的正文」取，高度随屏幕收缩
+    private static final int SOURCE_MODAL_WIDTH = 360;
     private static final int SOURCE_MODAL_MIN_HEIGHT = 48;
     private static final int SOURCE_MODAL_MAX_HEIGHT = 200;
     private static final String UI = "gui.itemdespawntowhat.edit.";
@@ -291,8 +291,8 @@ final class RuleEditorScreenEditPage {
     // ---- 来源视图 ----
 
     /**
-     * 打开来源视图弹窗：已取回时展示基底 / 覆盖原文与来源元数据；
-     * 在途只提示加载中，失败或超时时提示来源对照不可用并提供重试；三种状态都不影响表单编辑与保存。
+     * 打开来源视图弹窗：已取回时按层展示文件原文与来源元数据；
+     * 在途只提示加载中，失败或超时时提示原文不可用并提供重试；三种状态都不影响表单编辑与保存。
      */
     private void showSourceView() {
         String id = host.editingId();
@@ -302,10 +302,9 @@ final class RuleEditorScreenEditPage {
         EditorWorkspaceView workspace = host.workspace();
         RuleSourceView view = workspace.sourceView(id);
         UiModal modal = UiModal.create(THEME, host.font())
-                .title(Component.translatable(UI + "source.title", id));
+                .title(Component.translatable(UI + "source.title"));
         if (view != null) {
-            modal.message(Component.translatable(UI + "source.message"));
-            modal.contentWidget(new ReadOnlyTextView(host.font(), Component.literal(sourceViewText(view))),
+            modal.contentWidget(sourceView(view),
                     Math.clamp(host.screenHeight() - 100, SOURCE_MODAL_MIN_HEIGHT, SOURCE_MODAL_MAX_HEIGHT));
             modal.cancel(Component.translatable(UI + "button.close"));
         } else if (workspace.sourceViewFailed(id)) {
@@ -324,29 +323,27 @@ final class RuleEditorScreenEditPage {
         host.modals().push(modal);
     }
 
-    // 来源视图正文：每层一段「层名 [数据包] · 路径」加只读格式化 JSON
-    private static String sourceViewText(RuleSourceView view) {
-        StringBuilder text = new StringBuilder();
-        appendSourceView(text, UI + "source.base", view.base());
-        appendSourceView(text, UI + "source.overlay", view.overlay());
-        if (text.isEmpty()) {
-            text.append(Component.translatable(UI + "source.empty").getString());
+    // 来源视图正文：每层一个代码块，标题给出层与数据包，副标题给出文件路径
+    private UiCodeView sourceView(RuleSourceView view) {
+        List<UiCodeView.Section> sections = new ArrayList<>();
+        appendSourceSection(sections, view.base());
+        appendSourceSection(sections, view.overlay());
+        UiCodeView code = new UiCodeView(THEME, host.font());
+        if (sections.isEmpty()) {
+            code.setEmptyHint(Component.translatable(UI + "source.empty"));
         }
-        return text.toString();
+        return code.setSections(sections);
     }
 
-    // 追加单层来源视图；该层不存在时跳过
-    private static void appendSourceView(StringBuilder text, String key, @Nullable RuleSourceView.View view) {
+    // 追加单层代码块；该层不存在时跳过
+    private void appendSourceSection(List<UiCodeView.Section> sections, @Nullable RuleSourceView.View view) {
         if (view == null) {
             return;
         }
-        if (!text.isEmpty()) {
-            text.append("\n\n");
-        }
         Component layer = Component.translatableWithFallback(UI + "source.layer." + view.layer(), view.layer());
-        Component label = view.packId() == null ? layer : layer.copy().append(" [" + view.packId() + "]");
-        text.append(Component.translatable(key, label, view.path()).getString()).append('\n');
-        text.append(RuleDraft.of(view.body()).root().toPrettyJson());
+        Component title = view.packId() == null ? layer : layer.copy().append(" [" + view.packId() + "]");
+        sections.add(new UiCodeView.Section(title, Component.literal(view.path()),
+                RuleDraft.of(view.body()).root().toPrettyJson()));
     }
 
     private UiButton button(String labelKey, UiButtonVariant variant, Runnable action) {

@@ -21,7 +21,7 @@ import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
 import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeContract;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionGraphEditor;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextArea;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiCodeView;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
@@ -125,7 +125,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     private final UiConditionGraphEditor editor;
     private final UiTreeCodec<ConditionNode, RuleValue> codec;
     private final ConditionTreeClipboard clipboard;
-    private final UiTextArea source;
+    private final UiCodeView source;
     private final ConditionTreeChrome.Strip functionBar;
     private final ConditionTreeChrome.Strip toolColumn;
     private final List<UiIconStrip.Item> toolItems = new ArrayList<>();
@@ -181,9 +181,8 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         this.changed = changed;
         codec = new ConditionTreeJsonCodec(support.registry());
         clipboard = new ConditionTreeClipboard(support.registry());
-        source = new UiTextArea(THEME, font, Component.translatable(UI + "source_empty"));
-        source.setEditable(false);
-        source.setSelectableWhenReadOnly(true);
+        source = new UiCodeView(THEME, font);
+        source.setEmptyHint(Component.translatable(UI + "source_empty"));
         source.setAccessibleName(Component.translatable(UI + "source_title"));
         editor = new UiConditionGraphEditor(THEME, font).setTypeOptions(support.typeOptions()).setLeafFactory(support.leafFactory());
         editor.setLeafSummary(leaf -> {
@@ -294,9 +293,8 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     private void refreshSource() {
         RuleValue raw = decodeError == null ? editor.tree().encode(codec) : session.draft().valueAt(scope);
         String text = raw == null || raw.isNull() ? "" : raw.toPrettyJson();
-        if (!text.equals(source.value())) {
-            source.setValue(text);
-            source.moveCursorToStart();
+        if (!text.equals(source.text())) {
+            source.setSections(text.isEmpty() ? List.of() : List.of(new UiCodeView.Section(null, null, text)));
         }
     }
 
@@ -348,7 +346,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
 
     // 只读 JSON 的复制入口：整段复制，便于贴到外部编辑器
     private void copySource() {
-        Minecraft.getInstance().keyboardHandler.setClipboard(source.value());
+        Minecraft.getInstance().keyboardHandler.setClipboard(source.text());
     }
 
     private void toggleHelp() {
@@ -902,7 +900,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         if (status == null && session.hasPendingInput(scope)) {
             status = Component.translatable(UI + "pending_input");
         }
-        if (status == null && sourceView && source.value().isEmpty()) {
+        if (status == null && sourceView && source.text().isEmpty()) {
             status = Component.translatable(UI + "source_empty");
         }
         if (status == null && !sourceView && editor.tree().selection().size() > 1) {

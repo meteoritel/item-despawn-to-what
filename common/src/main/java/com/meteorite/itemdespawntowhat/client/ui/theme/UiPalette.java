@@ -108,6 +108,31 @@ public final class UiPalette {
     // 深色底上的文本
     public static final int TEXT_ON_DARK = 0xFFFFFFFF;
 
+    // ---- 只读代码视图 ----
+    // 只读 JSON 在深色内凹底上用一套固定配色：键、字符串、数字、字面量与标点各一色，
+    // 颜色取自常见 IDE 的暗色主题，亮暗关系与 CODE_ 前缀的用途一致。
+
+    // 对象键
+    public static final int CODE_KEY = 0xFF9CDCFE;
+    // 字符串值
+    public static final int CODE_STRING = 0xFFCE9178;
+    // 数字值
+    public static final int CODE_NUMBER = 0xFFB5CEA8;
+    // true / false / null
+    public static final int CODE_LITERAL = 0xFF569CD6;
+    // 标点与结构字符
+    public static final int CODE_PUNCTUATION = 0xFFD4D4D4;
+    // 行号
+    public static final int CODE_GUTTER_TEXT = 0xFF7F7F7F;
+    // 行号栏与正文之间的分隔线
+    public static final int CODE_GUTTER_LINE = 0xFF3C3C3C;
+    // 代码块标题条底色
+    public static final int CODE_SECTION_FILL = 0xFF404040;
+    // 代码块标题（层名与数据包）
+    public static final int CODE_SECTION_TEXT = 0xFFE8E8E8;
+    // 代码块副标题（文件路径）
+    public static final int CODE_PATH_TEXT = 0xFF9A9A9A;
+
     // ---- 滚动条 ----
 
     // 滚动条轨道

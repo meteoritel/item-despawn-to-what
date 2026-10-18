@@ -128,7 +128,7 @@ final class RuleEditorInfoPage {
         return Component.translatable(UI + "info.category", label, source);
     }
 
-    // 来源摘要：已取回时展示基底 / 覆盖的层与路径；在途与失败各有提示；新建草稿没有来源
+    // 来源摘要：已取回时逐层展示层名与文件路径；在途与失败各有提示；新建草稿没有来源
     private List<FormattedCharSequence> sourceTextLines(int width) {
         Component summary = sourceSummary();
         if (summary == null || summary.getString().isBlank()) {
@@ -158,21 +158,25 @@ final class RuleEditorInfoPage {
         return Component.translatable(UI + "source.none");
     }
 
-    // 来源摘要文本：基底与覆盖各一行，省略不存在的层
+    // 来源摘要文本：每层一行「层名 [数据包] · 路径」，省略不存在的层
     private static Component describeSource(RuleSourceView view) {
         if (view.isEmpty()) {
             return Component.translatable(UI + "source.empty");
         }
         Component text = Component.empty();
         if (view.base() != null) {
-            text = Component.translatable(UI + "source.base", layerLabel(view.base()), view.base().path());
+            text = describeLayer(view.base());
         }
         if (view.overlay() != null) {
-            Component overlay = Component.translatable(UI + "source.overlay", layerLabel(view.overlay()),
-                    view.overlay().path());
+            Component overlay = describeLayer(view.overlay());
             text = text.getString().isEmpty() ? overlay : text.copy().append("\n").append(overlay);
         }
         return text;
+    }
+
+    // 单层来源：层与文件位置平铺成一行
+    private static Component describeLayer(RuleSourceView.View view) {
+        return Component.translatable(UI + "source.line", layerLabel(view), view.path());
     }
 
     // 层的显示名：层标识走本地化，未知标识按原文兜底；数据包 id 跟在层名后

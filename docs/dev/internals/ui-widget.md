@@ -15,12 +15,12 @@
 
 - 包：`com.meteorite.itemdespawntowhat.client.ui.widget`
 - 源码目录：`common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/widget`
-- 覆盖：30 个 `.java` 文件（含 `package-info.java`）
+- 覆盖：31 个 `.java` 文件（含 `package-info.java`）
 
 ### 2.2 职责
 
 - 定义 `UiWidget` 渲染与输入契约：`bounds`、`setBounds`、`render` 由实现方给出，鼠标、滚轮、键盘与字符输入以 default 方法返回 false。
-- 在 kit 之上提供可直接装配的控件：按钮与按钮变体、复选框、单行与多行文本输入、数值滑杆、区间条、昼夜时间条、分段选择、类型选择面板、说明提示与旁白适配。
+- 在 kit 之上提供可直接装配的控件：按钮与按钮变体、复选框、单行与多行文本输入、只读代码视图、数值滑杆、区间条、昼夜时间条、分段选择、类型选择面板、说明提示与旁白适配。
 - 提供容器与列表：模态弹窗 `UiModal` 与弹窗栈 `UiModalStack`、可滚动列表 `UiListView`、列表编辑器 `UiListEditor`、树视图 `UiTreeView` 与树节点 `UiTreeNode`、目录选择页 `UiCatalogGrid`、底部行托管接口 `UiFooterHost`。
 - 提供条件树组件：只读缩进摘要 `UiConditionTreeSummary` 与条件树编辑器 `UiConditionGraphEditor`，以及包内使用的布局、绘制、右侧面板与参数面板实现。
 - 条件树的宿主注入契约与结构校验集中在 `ConditionTreeContract` 与 `ConditionTreeInspection`，摘要与画布共用同一份判定。
@@ -39,6 +39,7 @@
 | `UiCheckBox` | class（`UiWidget`、`UiFocusTarget`） | `UiCheckBox(UiHostTheme, Font, Component, boolean)`、`preferredWidth`、`label`、`setLabel`、`isChecked`、`setChecked`、`toggle`、`setOnChanged`、`setEnabled`、`isEnabled`、`setVisible` | `BOX_SIZE` 为 9、`LABEL_GAP` 为 3。`setChecked` 不触发回调，`toggle` 触发。方框与命中范围都取 `UiRect#centeredSquare(BOX_SIZE)`：鼠标点只认方框，点在标签文字或行内空白不切换。 |
 | `UiTextInput` | class（`UiWidget`、`UiFocusTarget`） | `value`、`setValue`、`clear`、`setMaxLength`、`setFilter`、`setOnOverflow`、`setOnValueChanged`、`setEditable`、`setHint`、`setOnCommit`、`setOnCancel`、`setVisible`、`selectAll`、`moveCursorToStart`、`setAccessibleName`、`endInteraction` | 封装原版 `EditBox`，长度上限按 Unicode 码点判定。 |
 | `UiTextArea` | class（`UiWidget`、`UiFocusTarget`） | `value`、`setValue`、`setMaxLength`、`setEditable`、`setSelectableWhenReadOnly`、`setHint`、`setOnChanged`、`setOnOverflow`、`setOnCancel`、`setRows`、`setAccessibleName`、`setVisible`、`moveCursorToStart`、`height`、`endInteraction` | 封装原版 `MultilineTextField`；超限的这次输入整体回退。 |
+| `UiCodeView` | class（`UiWidget`、`UiFocusTarget`） | `UiCodeView(UiHostTheme, Font)`、`record Section(@Nullable Component title, @Nullable Component detail, String body)`、`setSections`、`setEmptyHint`、`setLineNumbers`、`setAccessibleName`、`setVisible`、`text`、`scrollToTop` | `PADDING_X` 为 3、`PADDING_Y` 为 2、`SCROLLBAR_WIDTH` 为 3、`GUTTER_GAP` 为 4、`WHEEL_ROWS` 为 3；只读代码视图，正文按 `UiJsonText` 的五类语法色绘制，行号按区块重计，超宽行软换行。 |
 | `UiSlider` | class（`UiWidget`、`UiFocusTarget`、`UiInputTarget`） | `core`、`setRange`、`value`、`min`、`max`、`step`、`setValue`、`trySetValue`、`isBackfillInvalid`、`setLabel`、`setFormatter`、`setOnChanged`、`setEnabled`、`isEnabled`、`setVisible`、`setError`、`isDragging`、`formatValue`、`endInteraction` | `TRACK_HEIGHT` 为 4、`THUMB_WIDTH` 为 3；数值域、窗口、捕获与 preview/commit/cancel 委托 `UiScalarSlider`。 |
 | `UiRangeBar` | class（`UiWidget`、`UiFocusTarget`） | 静态 `baseHeight`、静态 `preferredHeight`、`core`、`setLabel`、`setEnabled`、`isEnabled`、`setVisible`、`setPreciseEditor`、`openPrecise`、`endInteraction`、`unmount`、`onFocusScopeChanged`、`onHostClosed` | 嵌套 `Listener`（`onBegan`、`onPreviewed`、`onCommitted`、`onCancelled`）与 `Texts`；交互委托 `UiRangeSlider`。 |
 | `UiCyclicTimeBar` | class（`UiWidget`、`UiFocusTarget`） | `setRange`、`setPresets`、`setTicks`、`setFormatter`、`setLabel`、`setEnabled`、`isEnabled`、`setVisible`、静态 `baseHeight`、静态 `preferredHeight`、`setPreciseEditor`、`openPrecise`、`endInteraction`、`unmount`、`onFocusScopeChanged`、`onHostClosed`、`captureEnded` | 常量 `PERIOD` 为 24000.0D、`DRAG_STEP` 为 100.0D、`MIN_TICK` 为 0.0D、`MAX_TICK` 为 23999.0D；嵌套 `Listener`、`Texts`、`Preset`；交互委托 `UiCyclicRange`。 |
@@ -64,8 +65,8 @@
 
 依赖本模组：
 
-- `client/ui/kit`（25 个文件 import，共 127 处）
-- `client/ui/theme`（21 个文件 import，共 37 处）
+- `client/ui/kit`（26 个文件 import，共 133 处）
+- `client/ui/theme`（22 个文件 import，共 39 处）
 - `core/model`（7 个文件 import，共 14 处）
 - `client/edit`（4 个文件 import，共 8 处）
 - `core/api`（2 个文件 import，共 2 处）
@@ -73,12 +74,12 @@
 
 依赖外部：
 
-- `java.util`（21 个文件，59 处）
-- `net.minecraft.client.gui`（23 个文件，45 处）
-- `net.minecraft.network.chat`（25 个文件，26 处）
+- `java.util`（22 个文件，61 处）
+- `net.minecraft.client.gui`（24 个文件，47 处）
+- `net.minecraft.network.chat`（26 个文件，28 处）
 - `java.util.function`（16 个文件，25 处）
-- `org.jetbrains.annotations`（19 个文件，19 处）
-- `org.lwjgl.glfw`（16 个文件，16 处）
+- `org.jetbrains.annotations`（20 个文件，20 处）
+- `org.lwjgl.glfw`（17 个文件，17 处）
 - `net.minecraft.client.gui.screens`（6 个文件，6 处）
 - `net.minecraft.resources`（5 个文件，5 处）
 - `net.minecraft.util`（4 个文件，4 处）
@@ -95,8 +96,8 @@
 
 被依赖：
 
-- `client/ui/screen`（20 个文件 import，共 75 处）
-- `client/ui/screen/form`（19 个文件 import，共 44 处）
+- `client/ui/screen`（20 个文件 import，共 77 处）
+- `client/ui/screen/form`（18 个文件 import，共 42 处）
 - `client/ui/prototype`（1 个文件 import，共 9 处）
 - `fabric` 与 `neoforge` 的源码目录：无 import
 
@@ -124,17 +125,19 @@
 - `ConditionGraphLayout`：维护身份索引、诊断、标签与卡片几何；`ConditionGraphRenderer` 只读取布局与选择状态完成绘制。
 - `ConditionTreeInspection#validateCandidate`：结构校验入口，摘要与画布共用。
 - `UiNarration#focus`：读取 `UiFocusTarget#accessibleName()` 后交给 narrator。
+- `UiCodeView#setSections`：重新分类各块正文、清空已布局行并把滚动位置退回顶部；每个区块按「标题条（`CODE_SECTION_FILL` 底色）、路径副标题、带行号的正文」绘制，块与块之间留一个空行。
+- `UiCodeView` 的正文用 `Font#getSplitter` 按控件宽度软换行，行号只标在逻辑行首行；语法色取主题调色板的 `code*` 项，分类规则来自 kit 的 `UiJsonText`，因此来源视图弹窗、条件树 JSON 视图与损坏规则详情共用同一套配色。
 
 ### 2.6 代码现状（可核对）
 
 - 同一概念存在两种前缀。使用 `ConditionTree*` 的有 `ConditionTreeContract`、`ConditionTreeInspection`、`UiConditionTreeSummary`；使用 `ConditionGraph*` 的有 `ConditionGraphLayout`、`ConditionGraphRenderer`、`ConditionGraphSidePanel`、`ConditionGraphInlinePanel`，以及 `UiConditionGraphEditor`（Graph 位于类名中段）。两种写法并存，本文按类名引用，不合并命名。
 - 组件层并非只承载通用控件：本包对 `client/edit` 有 8 处 import，分布在 4 个文件。`ConditionGraphLayout` 引用 `ConditionTreeNodes`、`OpaqueCondition`、`TypeLabels`；`ConditionGraphRenderer` 引用 `ConditionTreeNodes`；`UiConditionGraphEditor` 引用 `ConditionTreeNodes`、`EditSession`、`OpaqueCondition`；`UiConditionTreeSummary` 引用 `TypeLabels`。
-- 主题依赖集中在 `UiHostTheme` 与 `UiHostThemes`：21 个文件 import `client/ui/theme`，共 37 处。不依赖主题的文件为 `ConditionGraphLayout`、`UiButtonVariant`、`UiNarration`、`UiWidget`，以及无 import 的 `UiFooterHost`。`UiButtonVariant` 只依赖 kit 的 `UiControlRole`。
+- 主题依赖集中在 `UiHostTheme` 与 `UiHostThemes`：22 个文件 import `client/ui/theme`，共 39 处。不依赖主题的文件为 `ConditionGraphLayout`、`UiButtonVariant`、`UiNarration`、`UiWidget`，以及无 import 的 `UiFooterHost`。`UiButtonVariant` 只依赖 kit 的 `UiControlRole`。
 - 三个滑块类都把交互委托给 kit，但暴露程度不同。`UiSlider` 委托 `UiScalarSlider` 并提供 `core()`；`UiRangeBar` 委托 `UiRangeSlider` 并提供 `core()`；`UiCyclicTimeBar` 委托 `UiCyclicRange`，其 `core` 为私有字段，没有对应的公开访问器。
 - `UiDescriptionTooltip` 与 `UiNarration` 不实现 `UiWidget`；`UiTypePicker` 只实现 `UiWidget`，不实现 `UiFocusTarget`，因而不提供 `canFocus`、`activate` 与 `accessibleName`。`UiModalStack#top` 在栈空时返回 null，声明处未使用 `@Nullable`。
 - `UiTypePicker` 的 `setOptions`、`setBounds`、`cancelCapture` 为包级可见，只供同包的 `UiConditionGraphEditor` 调用；其公开入口为构造、`isOpen`、`open`、`close`。
 - `ConditionGraphLayout`、`ConditionGraphRenderer`、`ConditionGraphSidePanel`、`ConditionGraphInlinePanel` 的类声明均无 `public` 修饰符；四者之间的常量与 `drawBorder` 通过静态 import 复用，`ConditionGraphSidePanel` 同时被 `UiTypePicker` 复用。
-- 公开方法普遍使用行内 `//` 注释而非 JavaDoc：`UiListView#setItems`、`UiTreeView#setRoots`、`UiSegmentedControl#setOptions`、`UiSlider#setValue` 的前一行均为 `//` 注释，`UiRangeBar#setLabel` 前无任何注释。带 JavaDoc 块的公开方法见 `UiConditionGraphEditor`、`UiListView`、`UiTypePicker`、`UiCatalogGrid`、`UiModal`、`UiModalStack`、`UiRangeBar`、`UiCyclicTimeBar`、`UiDescriptionTooltip`、`UiTextArea`、`UiButton`。
+- 公开方法普遍使用行内 `//` 注释而非 JavaDoc：`UiListView#setItems`、`UiTreeView#setRoots`、`UiSegmentedControl#setOptions`、`UiSlider#setValue` 的前一行均为 `//` 注释，`UiRangeBar#setLabel` 前无任何注释。带 JavaDoc 块的公开方法见 `UiConditionGraphEditor`、`UiListView`、`UiTypePicker`、`UiCatalogGrid`、`UiModal`、`UiModalStack`、`UiRangeBar`、`UiCyclicTimeBar`、`UiDescriptionTooltip`、`UiTextArea`、`UiCodeView`、`UiButton`。
 - `UiNarration` 为私有构造的静态工具类，仅包装 `Minecraft#getNarrator` 的播报，本包其它类型未引用它。
 - `UiCheckBox` 的选中标记以字符绘制，不使用贴图；`UiCheckBox` 只有 `UiHostTheme`、`Font`、标签与初始状态四个构造参数，没有单独的选择标记样式入口。
 - `UiCheckBox#mouseClicked` 只在指针落进方框时切换，方框几何取自 `bounds().centeredSquare(BOX_SIZE)`，与 `render` 悬停判定共用；键盘回车、空格与 `activate` 不受此限制，控件仍可按整行尺寸摆放。
@@ -153,6 +156,7 @@
 | `UiButton` | 按钮控件：委托 kit 控件处理状态与焦点，绘制主题立体边或胶囊底图。 | `apply`、`setLabel`、`setIcon`、`setChipStyle`、`setAction`、`setTooltip`、`variant`、`isPressed`、`preferredWidth`、`mouseClicked`、`mouseReleased`、`activate` |
 | `UiButtonVariant` | 按钮变体：只表达语义与是否可交互，颜色由主题给出。 | `PRIMARY`、`SECONDARY`、`DANGER`、`DISABLED`、`role`、`interactive` |
 | `UiCatalogGrid` | 目录选择页：搜索框与分列条目列表，底部行由弹窗按钮行托管。 | `PAGE_SIZE`、`setEntries`、`setEntrySource`、`setEntryPolicy`、`setSelection`、`selection`、`setPage`、`setPageLimits`、`setFooterReserved`、`interface Listener`、`enum Scope`、`interface EntryPolicy`、`record Entry`、`record Texts` |
+| `UiCodeView` | 只读代码视图：带行号栏与语法色的 JSON 正文，按区块给出层名与文件路径。 | `record Section`、`setSections`、`setEmptyHint`、`setLineNumbers`、`setAccessibleName`、`text`、`scrollToTop` |
 | `UiCheckBox` | 复选框：左侧像素勾选框与右侧标签文本，鼠标命中限制在方框内。 | `BOX_SIZE`、`LABEL_GAP`、`preferredWidth`、`setChecked`、`toggle`、`setOnChanged`、`isChecked` |
 | `UiConditionGraphEditor` | 条件树编辑器：协调结构操作、选择、拖拽、键盘导航与宿主回调。 | `interface InlineEditor`、`tree`、`setTypeOptions`、`setLeafFactory`、`setListener`、`setExpression`、`expression`、`selectedSubtrees`、`beginAddCondition`、`beginAddGroup`、`beginWrapWithKind`、`removeSelection`、`moveSelection`、`pasteNodes`、`setInlineEditor`、`clearInlineEditor`、`resetView`、`fitToContent`、`zoomStep`、`hint` |
 | `UiConditionTreeSummary` | 条件树只读缩进摘要，并作为进入画布编辑器的入口。 | `setExpression`、`expression`、`setOnOpenCanvas`、`issues`、`setTypeOptions`、`setLeafDetail`、`expandAll`、`collapseAll`、`selectedPath`、`selectPath`、`tooltipAt` |

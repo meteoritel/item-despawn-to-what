@@ -9,7 +9,7 @@
 |---|---|---|
 | UI kit | `client/ui/kit` | 2 |
 
-本包的 68 个公开顶层类型由 6 篇分册覆盖，逐类型的分册归属见第 3 节，分册文档链接见第 4 节。
+本包的 69 个公开顶层类型由 6 篇分册覆盖，逐类型的分册归属见第 3 节，分册文档链接见第 4 节。
 
 ## 2. 模块：UI kit
 
@@ -17,7 +17,7 @@
 
 - 包：`com.meteorite.itemdespawntowhat.client.ui.kit`
 - 源码目录：`common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit`
-- 覆盖：69 个 `.java` 文件（68 个公开顶层类型 + `package-info.java`）
+- 覆盖：70 个 `.java` 文件（69 个公开顶层类型 + `package-info.java`）
 
 ### 2.2 职责
 
@@ -39,16 +39,16 @@
 | 预览与灯箱 | `UiEntityPreview`、`UiBlockPreview`、`UiModelBounds`、`UiCarousel`、`UiSpinner`、`UiLightbox`、`UiImageView`、`LightboxImage` | `UiModelBounds` 内含 `Renderer`；`UiLightbox` 内含 `Labels`、`Gallery`、`Content` |
 | 输入与焦点 | `UiInputContext`、`UiInputTarget`、`UiInputRouter`、`UiInputCapture`、`UiValueInteraction`、`UiFocusTarget`、`UiFocusManager`、`UiNavigationHistory`、`UiHistoryDispatcher` | `UiInputCapture` 内含 `EndReason`、`Target`；`UiInputRouter` 内含 `PointerPhase`；`UiFocusManager` 与 `UiValueInteraction` 各含 `Listener`；`UiHistoryDispatcher` 内含 `KeyHandler` |
 | 数值与滑块 | `UiValueTextBinding`、`UiNumberPolicy`、`UiNumbers`、`UiSliderWindow`、`UiScalarSlider`、`UiRangeSlider`、`UiRangeValue`、`UiRangeEnd`、`UiCyclicRange`、`UiSliderStyle`、`UiSliderPainter`、`UiSliderSkin`、`UiSliderRole`、`PixelSliderPainter`、`UiSliderExamples` | `UiCyclicRange` 内含 `Tick`、`Marker`；`UiSliderPainter` 内含 `Frame`；`UiRangeSlider` 内含 `Listener` |
-| 文本 | `UiTextHistory`、`UiTextSelection`、`UiHistoryShortcut`、`TextMeasurer`、`TextScroll` | `UiTextHistory` 内含 `Snapshot`；`UiTextSelection` 内含 `Target` |
+| 文本 | `UiTextHistory`、`UiTextSelection`、`UiHistoryShortcut`、`TextMeasurer`、`TextScroll`、`UiJsonText` | `UiTextHistory` 内含 `Snapshot`；`UiTextSelection` 内含 `Target`；`UiJsonText` 只做 JSON 词法分类与按类别绘制 |
 | 树与画布 | `UiTreeEditor`、`UiTreePath`、`UiTreeCodec`、`UiTreeMoveInteraction`、`UiTidyTreeLayout`、`UiDotGrid`、`UiOrthoLink`、`UiRubberBand` | `UiTreeEditor` 内含 `Adapter`、`Kind`、`Change`、`DropPosition`、`MoveErrors`、`MovePreview`、`Outcome`、`ViewChange`；`UiTreeCodec` 内含 `DecodeResult`；`UiTidyTreeLayout` 内含 `Source` |
 
 ### 2.4 依赖关系
 
 - 依赖本模组：无。kit 全部文件的 import 中 `com.meteorite.*` 命中数为 0，包级依赖矩阵也没有以本包为起点的行。
-- 依赖外部：`net.minecraft.`（36 个文件，70 处）、`java.util.`（32 个文件，90 处）、`org.jetbrains.`（29 个文件，30 处）、`org.lwjgl.`（8 个文件，8 处）、`com.mojang.`（3 个文件，4 处）、`org.joml.`（3 个文件，3 处）、`java.math.`（1 个文件，1 处）。
+- 依赖外部：`net.minecraft.`（37 个文件，72 处）、`java.util.`（33 个文件，91 处）、`org.jetbrains.`（29 个文件，30 处）、`org.lwjgl.`（8 个文件，8 处）、`com.mojang.`（3 个文件，4 处）、`org.joml.`（3 个文件，3 处）、`java.math.`（1 个文件，1 处）。
 - 依赖外部（精确类）：`com.mojang.` 的 4 处 import 只涉及 `com.mojang.blaze3d.platform.Lighting`（2 处）、`com.mojang.blaze3d.vertex.PoseStack`（1 处）、`com.mojang.blaze3d.vertex.VertexConsumer`（1 处）。
-- 依赖外部（无 import）：69 个文件中 55 个含 import，14 个不含 import。
-- 被依赖：`client/ui/widget`（25 个文件，130 处）、`client/ui/screen`（20 个文件，61 处）、`client/ui/screen/form`（20 个文件，74 处）、`client/ui/theme`（5 个文件，31 处）、`client/ui/shared`（5 个文件，14 处）、`client/edit`（2 个文件，3 处）、`client/ui/prototype`（1 个文件，3 处）。
+- 依赖外部（无 import）：70 个文件中 56 个含 import，14 个不含 import。
+- 被依赖：`client/ui/widget`（26 个文件，133 处）、`client/ui/screen`（20 个文件，61 处）、`client/ui/screen/form`（19 个文件，72 处）、`client/ui/theme`（5 个文件，31 处）、`client/ui/shared`（5 个文件，14 处）、`client/edit`（2 个文件，3 处）、`client/ui/prototype`（1 个文件，3 处）。
 - 边界校验：`tools/check-ui-kit-boundaries.ps1` 扫描本目录全部 `.java` 的 import 与全限定引用；import 白名单为 `java.`、`javax.`、`net.minecraft.`、`org.jetbrains.`、`org.joml.`、`org.lwjgl.`，另精确允许 `com.mojang.blaze3d.platform.Lighting`、`com.mojang.blaze3d.vertex.PoseStack`、`com.mojang.blaze3d.vertex.VertexConsumer`；同包互引允许；`com.meteorite.` 只允许 kit 自身包；`net.fabricmc.`、`net.neoforged.`、`com.google.gson.` 禁用；退出码 0 通过、1 存在违规、2 配置错误。
 
 ### 2.5 关键实现位置
@@ -66,7 +66,7 @@
 
 ### 2.6 代码现状（可核对）
 
-- 目录下 69 个 `.java` 与 68 个公开顶层类型一一对应，`package-info.java` 是唯一没有类型声明的文件。
+- 目录下 70 个 `.java` 与 69 个公开顶层类型一一对应，`package-info.java` 是唯一没有类型声明的文件。
 - `package-info.java` 的说明文本记录发布形式与 `api/`、`internal/` 子包拆分两类事项；源码目录没有子包目录，构建脚本也没有 kit 独立模块。
 - 本包 import 中不存在 `com.meteorite.`、`net.fabricmc.`、`net.neoforged.`、`com.google.gson.` 前缀。
 - 注释引用 `OverlayLayer`、`LightboxOverlay`（`UiLightbox`）与 `UiTextPalette`（`UiControlStyle`），全仓没有同名类型声明，命中只出现在 javadoc 与生成产物中。
@@ -141,6 +141,7 @@
 | `UiHistoryShortcut` | [text-controls.md](text-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiHistoryShortcut.java` |
 | `TextMeasurer` | [text-controls.md](text-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/TextMeasurer.java` |
 | `TextScroll` | [text-controls.md](text-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/TextScroll.java` |
+| `UiJsonText` | [text-controls.md](text-controls.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiJsonText.java` |
 | `UiTreeEditor` | [tree-editing.md](tree-editing.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiTreeEditor.java` |
 | `UiTreePath` | [tree-editing.md](tree-editing.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiTreePath.java` |
 | `UiTreeCodec` | [tree-editing.md](tree-editing.md) | `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/UiTreeCodec.java` |

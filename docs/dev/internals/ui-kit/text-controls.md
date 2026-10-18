@@ -15,9 +15,9 @@
 
 - 包：`com.meteorite.itemdespawntowhat.client.ui.kit`
 - 源码目录：`common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit`
-- 覆盖类型：5（本分组类型，不含 `package-info.java`；包级说明见 [UI kit 入口](README.md)）
+- 覆盖类型：6（本分组类型，不含 `package-info.java`；包级说明见 [UI kit 入口](README.md)）
 
-本分组覆盖 `UiTextHistory`、`UiTextSelection`、`UiHistoryShortcut`、`TextMeasurer`、`TextScroll`。
+本分组覆盖 `UiTextHistory`、`UiTextSelection`、`UiHistoryShortcut`、`TextMeasurer`、`TextScroll`、`UiJsonText`。
 
 ### 2.2 职责
 
@@ -36,12 +36,13 @@
 | `UiHistoryShortcut` | enum | `UNDO`、`REDO`；`fromKey(int, int)` | 非历史快捷键返回 `null` |
 | `TextMeasurer` | interface | `width(Component)`；`lineHeight()`；`of(Font)`；嵌套 `record FontMeasurer(Font)` | `of` 返回 `FontMeasurer`，宽度与行高直接转发原版 `Font` |
 | `TextScroll` | final class | `draw(GuiGraphics, Font, FormattedCharSequence, int, int, int, int, int, boolean, int)`；`draw(GuiGraphics, Font, String, int, int, int, int, boolean, int, boolean)`；`draw(GuiGraphics, Font, String, int, int, int, int, int, boolean, int, boolean)`；`trimToWidth(Font, String, int)` | 私有构造；三个 `draw` 重载的差异是文本类型、是否由调用方提供已测宽度、以及宽度足够时是否居中 |
+| `UiJsonText` | final class | `PUNCTUATION`（`0`）、`KEY`（`1`）、`STRING`（`2`）、`NUMBER`（`3`）、`LITERAL`（`4`）、`KIND_COUNT`（`5`）；`classify(String)`；`paint(GuiGraphics, Font, String, byte[], int[], int, int, int, int)` | 私有构造；`classify` 返回与文本等长的类别表，`paint` 把相邻同类别字符合并绘制；颜色由调用方按类别传入 |
 
 ### 2.4 依赖关系
 
-- 依赖本模组：无。本分组 5 个文件均不 import 其它模组包；同包类型直接引用，不产生 import。
-- 依赖外部：`java.util`（2 个文件 import，共 4 处）、`net.minecraft.client.gui`（2 个文件，3 处，`Font`、`GuiGraphics`）、`net.minecraft.network.chat`（2 个文件，2 处，`Component`）、`net.minecraft.util`（1 个文件，1 处，`FormattedCharSequence`）、`org.jetbrains.annotations`（2 个文件，2 处，`Nullable`）、`org.lwjgl.glfw`（2 个文件，2 处，`GLFW`）。
-- 被依赖：`client/ui/widget`（16 个文件 import，共 21 处）、`client/ui/screen/form`（8 个文件，8 处）、`client/ui/screen`（7 个文件，7 处）；合计 31 个文件、36 处。
+- 依赖本模组：无。本分组 6 个文件均不 import 其它模组包；同包类型直接引用，不产生 import。
+- 依赖外部：`java.util`（3 个文件 import，共 5 处）、`net.minecraft.client.gui`（3 个文件，5 处，`Font`、`GuiGraphics`）、`net.minecraft.network.chat`（2 个文件，2 处，`Component`）、`net.minecraft.util`（1 个文件，1 处，`FormattedCharSequence`）、`org.jetbrains.annotations`（2 个文件，2 处，`Nullable`）、`org.lwjgl.glfw`（2 个文件，2 处，`GLFW`）。
+- 被依赖：`client/ui/widget`（17 个文件 import，共 22 处）、`client/ui/screen/form`（8 个文件，8 处）、`client/ui/screen`（7 个文件，7 处）；合计 32 个文件、37 处。
 
 ### 2.5 关键实现位置
 
@@ -58,6 +59,8 @@
 - `TextScroll#offset`：起点与终点各停顿 `PAUSE_DISTANCE`，中间按 `SPEED` 往返平移，位移以像素为单位。
 - `TextScroll#trimToWidth`：宽度足够原样返回；连 `"..."` 都放不下时退化为纯宽度截断；否则按 `maxWidth - font.width("...")` 截断后补省略号。
 - `TextMeasurer#of`/`FontMeasurer`：`width` 转发 `Font#width(Component)`，`lineHeight` 转发 `Font#lineHeight`。
+- `UiJsonText#classify`：单趟字符扫描；字符串扫到右引号（反斜杠转义连带其下一个字符一起跳过）后再跳过空白，紧跟 `:` 的判为键、其余判为字符串值；`-` 或数字起始按 `NUMBER_CHARS` 收数字；字母裸词只把 `true`、`false`、`null` 判为字面量，其余按标点处理。
+- `UiJsonText#paint`：按类别表把 `[begin, end)` 内的相邻同类别字符合并成一次 `drawString`，逐段累加 `font.width`；类别下标越界或段落越出类别表时按标点色兜底。
 
 ### 2.6 代码现状（可核对）
 
@@ -76,6 +79,8 @@
 - 三个 `draw` 重载并存：`FormattedCharSequence` 版强制调用方传入 `textWidth`；`String` 版分「内部测量」与「调用方提供宽度」两条路径，`centered` 只影响宽度足够时的水平位置。
 - `TextScroll` 的类 JavaDoc 提到 `support/ScrollTextHelper`，仓库内没有该名称的 Java 类型（全仓检索只命中该 JavaDoc 本身）。
 - `UiTextHistory` 用 `Math.clamp` 钳制快照位置，`UiTextSelection` 则直接使用宿主 `Target` 返回的位置，不做二次钳制。
+- `UiJsonText` 只做词法分类与按类别绘制，不持有颜色：类别色由宿主从主题调色板的 `code*` 项取出后传入，控件层 `UiCodeView` 是唯一调用方。
+- 着色规则固定为五类（键、字符串、数字、字面量、标点），来源视图弹窗、条件树 JSON 视图与损坏规则详情共用这一套，不再为单个入口另设配色。
 
 ## 3. 类清单
 
@@ -86,6 +91,7 @@
 | `UiHistoryShortcut` | 撤销/重做快捷键识别 | `fromKey`、`UNDO`、`REDO` |
 | `TextMeasurer` | 字体度量注入 | `width`、`lineHeight`、`of`、`FontMeasurer` |
 | `TextScroll` | 悬停滚动绘制与截断 | `draw`（三重载）、`trimToWidth` |
+| `UiJsonText` | JSON 词法分类与按类别绘制 | `classify`、`paint`、`KIND_COUNT` |
 
 `package-info.java` 承载包级公开面说明，见 [UI kit 入口](README.md)。
 

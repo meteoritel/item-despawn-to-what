@@ -137,6 +137,58 @@ public final class UiHostPalette {
         return UiPalette.PANEL_FILL;
     }
 
+    // ---- 只读代码视图 ----
+
+    // 对象键
+    public int codeKey() {
+        return UiPalette.CODE_KEY;
+    }
+
+    // 字符串值
+    public int codeString() {
+        return UiPalette.CODE_STRING;
+    }
+
+    // 数字值
+    public int codeNumber() {
+        return UiPalette.CODE_NUMBER;
+    }
+
+    // true / false / null
+    public int codeLiteral() {
+        return UiPalette.CODE_LITERAL;
+    }
+
+    // 标点与结构字符
+    public int codePunctuation() {
+        return UiPalette.CODE_PUNCTUATION;
+    }
+
+    // 行号
+    public int codeGutterText() {
+        return UiPalette.CODE_GUTTER_TEXT;
+    }
+
+    // 行号栏分隔线
+    public int codeGutterLine() {
+        return UiPalette.CODE_GUTTER_LINE;
+    }
+
+    // 代码块标题条底色
+    public int codeSectionFill() {
+        return UiPalette.CODE_SECTION_FILL;
+    }
+
+    // 代码块标题
+    public int codeSectionText() {
+        return UiPalette.CODE_SECTION_TEXT;
+    }
+
+    // 代码块副标题（文件路径）
+    public int codePathText() {
+        return UiPalette.CODE_PATH_TEXT;
+    }
+
     // ---- 画布扁平外壳 ----
 
     // 功能栏与工具列描边

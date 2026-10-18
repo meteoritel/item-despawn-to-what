@@ -16,12 +16,12 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryDispatcher;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConsumptionSummary;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.NaturalSummary;
-import com.meteorite.itemdespawntowhat.client.ui.screen.form.ReadOnlyTextView;
 import com.meteorite.itemdespawntowhat.client.ui.shared.BlockPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.EntityPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostPalette;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiCodeView;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiListView;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTypePicker;
@@ -32,6 +32,7 @@ import com.meteorite.itemdespawntowhat.core.network.protocol.RuleIssue;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshotEntry;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.List;
 import java.util.Objects;
 import net.minecraft.Util;
 import net.minecraft.client.gui.Font;
@@ -431,11 +432,13 @@ public final class RuleEditorScreen extends Screen {
     private void showRuleDetails(RuleSnapshotEntry entry) {
         UiModal modal = UiModal.create(THEME, font);
         modal.title(Component.translatable(UI + "detail.rule", entry.id().toString()));
-        modal.message(Component.translatable(UI + (RuleSnapshotEntry.STATUS_INVALID.equals(entry.status())
-                ? "detail.invalid" : "detail.unavailable")));
+        // 说明与原始内容同处一个只读代码块，避免弹窗正文与代码区分成两套排版
+        Component note = Component.translatable(UI + (RuleSnapshotEntry.STATUS_INVALID.equals(entry.status())
+                ? "detail.invalid" : "detail.unavailable"));
         // 核心条目视图仍是 JSON 对象：经草稿入口转为值视图后再美化输出
         String raw = RuleDraft.of(entry.toJson()).root().toPrettyJson();
-        modal.contentWidget(new ReadOnlyTextView(font, Component.literal(raw)), Math.clamp(height - 90, 36, 180));
+        modal.contentWidget(new UiCodeView(THEME, font).setSections(List.of(new UiCodeView.Section(note, null, raw))),
+                Math.clamp(height - 90, 36, 180));
         modal.cancel(Component.translatable(UI + "button.close"));
         modal.layoutCentered(width, height);
         modals.push(modal);

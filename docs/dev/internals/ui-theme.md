@@ -32,12 +32,12 @@
 |---|---|---|---|
 | `UiHostTheme` | interface | 常量 `ICON_UNDO`、`ICON_REDO`、`ICON_VIEW_TREE`、`ICON_VIEW_JSON`、`ICON_HELP`、`ICON_ADD_CONDITION`、`ICON_GROUP_ALL`、`ICON_INVERT`、`ICON_REMOVE`、`ICON_MOVE_UP`、`ICON_MOVE_DOWN`、`ICON_WRAP_ALL`、`ICON_GROUP_ANY`、`ICON_WRAP_ANY`；`palette()`；`padding()`、`rowHeight()`、`textOffset()`、`headerHeight()`、`border()`、`selectMarkerWidth()`；`textColor(boolean)`、`secondaryTextColor()`、`controlTextColor(UiControlRole)`；`controlStyle(UiControlRole)`、`sliderSkin(UiSliderRole)`、`panelStyle()`、`stripStyle()`；`drawWindow`、`drawInset`、`drawHeader`、`drawDivider`、`drawBevel`、`drawFocusOutline`、`drawSelection`、`drawSelectMarker`、`drawScrollTrack`、`drawSegment`、`drawCard`、`drawPanel`、`drawChip`；`icon(int,boolean)`、`drawChrome`、`drawStatusBar`、`drawHelp`、`drawSurface` | 宿主主题契约，继承 `client/ui/kit` 的 `UiStyleSource`；共 32 个方法 |
 | `UiHostThemes` | final class | `defaultTheme()`、`flatTheme()`、`require(UiHostTheme)` | 主题入口；默认主题为像素主题，扁平主题供画布页显式取用 |
-| `UiHostPalette` | final class | `hostPalette()` 与 72 个颜色访问器 | 控件可见的只读语义色视图 |
+| `UiHostPalette` | final class | `hostPalette()` 与 82 个颜色访问器 | 控件可见的只读语义色视图 |
 | `UiPixelTheme` | final class | 实现 `UiHostTheme` 的 32 个方法 | 默认宿主主题，像素外观 |
 | `UiFlatTheme` | final class | 实现 `UiHostTheme` 的 32 个方法 | 扁平宿主主题，画布页外观 |
 | `UiFlatPalette` | final class | 60 个 `public static final int` 颜色常量 | 扁平配色 |
 | `UiFlatSkin` | final class | 14 个 `ICON_*` 常量、`PANEL_STYLE`、`STRIP_STYLE`；`icon(int,boolean)`、`drawSurface`、`drawOutline`、`drawChrome`、`drawStatusBar`、`drawHelp`、`drawFocusOutline` | 图标图集切片与扁平绘制原语 |
-| `UiPalette` | final class | 39 个 `public static final int` 颜色常量 | 灰色像素主题调色板 |
+| `UiPalette` | final class | 49 个 `public static final int` 颜色常量 | 灰色像素主题调色板 |
 | `UiTheme` | final class | `ROW_HEIGHT`、`BORDER`、`PADDING`、`HEADER_HEIGHT`、`TEXT_OFFSET`、`SELECT_MARKER_WIDTH`；`secondaryStyle()`、`primaryStyle()`、`dangerStyle()`、`disabledStyle()`、`labelStyle()`、`sliderStyle()`、`cardSliderStyle()`、`cardSliderPainter()`；13 个绘制方法；`textColor(boolean)`、`secondaryTextColor()`、`inset(UiRect)`、`clampTo(UiRect,UiRect)` | 灰色像素主题的静态入口 |
 | `package-info.java` | 包声明 | — | 声明本包依赖面：kit 与 `client/edit.TypeLabels`，不依赖 core 与平台 API |
 
@@ -82,7 +82,7 @@
 - `UiTheme#inset`：宽或高小于 2 时原样返回，否则内缩 1 像素。
 - `UiTheme#clampTo`：取两矩形交集；无交集时返回容器原点上的零尺寸矩形。
 
-`UiPalette` 的 39 个常量：
+`UiPalette` 的 49 个常量：
 
 | 常量 | 值 | 源码注释给出的用途 |
 |---|---|---|
@@ -123,6 +123,16 @@
 | `TEXT_SECONDARY` | `0xFF4A4A4A` | 次要文本 |
 | `TEXT_DISABLED` | `0xFF7A7A7A` | 禁用文本 |
 | `TEXT_ON_DARK` | `0xFFFFFFFF` | 深色底上的文本 |
+| `CODE_KEY` | `0xFF9CDCFE` | 只读 JSON 的对象键 |
+| `CODE_STRING` | `0xFFCE9178` | 只读 JSON 的字符串值 |
+| `CODE_NUMBER` | `0xFFB5CEA8` | 只读 JSON 的数字值 |
+| `CODE_LITERAL` | `0xFF569CD6` | 只读 JSON 的 `true`、`false` 与 `null` |
+| `CODE_PUNCTUATION` | `0xFFD4D4D4` | 只读 JSON 的标点与结构字符 |
+| `CODE_GUTTER_TEXT` | `0xFF7F7F7F` | 只读代码视图的行号 |
+| `CODE_GUTTER_LINE` | `0xFF3C3C3C` | 只读代码视图的行号栏分隔线 |
+| `CODE_SECTION_FILL` | `0xFF404040` | 只读代码视图的区块标题条底色 |
+| `CODE_SECTION_TEXT` | `0xFFE8E8E8` | 只读代码视图的区块标题文字 |
+| `CODE_PATH_TEXT` | `0xFF9A9A9A` | 只读代码视图的文件路径副标题 |
 | `SCROLL_TRACK` | `0xFF8B8B8B` | 滚动条轨道 |
 | `SCROLL_THUMB` | `0xFFD0D0D0` | 滚动条滑块 |
 
@@ -199,7 +209,7 @@
 - 宿主调色板跨两套调色板取色：`UiHostPalette` 的 `chromeBorder`、`statusText*`、`helpText*`、`panelText`、`panelControlFill` 与 38 个 `canvas*` 访问器取自 `UiFlatPalette`，其余访问器取自 `UiPalette`。
 - 图标资源有两张图集：`common/src/main/resources/assets/itemdespawntowhat/textures/gui/editor/` 下存在 `icons_dark.png` 与 `icons_light.png`；`UiFlatSkin` 只引用 `icons_dark.png`。
 - 调色板注释与常量命名不一致：`UiPalette` 类注释只列出 `WINDOW`、`PANEL`、`CONTROL`、`TEXT`、`SCROLL` 五个前缀；源码中另有 `SLOT_`、`HEADER_`、`LIST_`、`LINK`、`FOCUS_OUTLINE`、`ACCENT_`、`DANGER_`、`SUCCESS`、`WARNING`、`MODAL_DIM`、`TRANSPARENT`、`SHADOW` 等未列出的命名。
-- 缺少 JavaDoc：`UiHostTheme` 的 32 个方法与 14 个常量只有行注释；`UiHostPalette` 只有类级 JavaDoc，72 个颜色访问器无注释；`UiPixelTheme`、`UiFlatTheme` 的重写方法无注释；`UiFlatPalette`、`UiFlatSkin`、`UiPalette`、`UiTheme` 的成员为行注释。
+- 缺少 JavaDoc：`UiHostTheme` 的 32 个方法与 14 个常量只有行注释；`UiHostPalette` 只有类级 JavaDoc，82 个颜色访问器无注释；`UiPixelTheme`、`UiFlatTheme` 的重写方法无注释；`UiFlatPalette`、`UiFlatSkin`、`UiPalette`、`UiTheme` 的成员为行注释。
 - 未引用常量：`UiHostTheme.ICON_GROUP_ANY`、`UiHostTheme.ICON_WRAP_ANY` 带 `@SuppressWarnings("unused")`，源码中没有调用点；其余 12 个 `ICON_*` 由 `ConditionTreeOverlay` 消费。
 - 纯色绘制：`UiTheme#drawBevel` 与 `UiTheme#drawScrollTrack` 的方法注释写明用纯色填充，当前不使用贴图。
 
@@ -209,12 +219,12 @@
 |---|---|---|
 | `UiHostTheme` | 宿主主题契约，控件与屏幕消费的视觉规格注入面 | `palette`、`controlStyle`、`sliderSkin`、`panelStyle`、`stripStyle`、18 个绘制与图标方法 |
 | `UiHostThemes` | 主题入口，装配默认像素主题与扁平主题 | `defaultTheme`、`flatTheme`、`require` |
-| `UiHostPalette` | 控件可见的只读语义色视图 | `hostPalette` 与 72 个颜色访问器 |
+| `UiHostPalette` | 控件可见的只读语义色视图 | `hostPalette` 与 82 个颜色访问器 |
 | `UiPixelTheme` | 默认宿主主题，转发 `UiTheme` 与 `UiPalette` | `controlStyle`、`sliderSkin`、`panelStyle`、`stripStyle` |
 | `UiFlatTheme` | 扁平宿主主题，用 `UiFlatPalette` 与 `UiFlatSkin` | `controlStyle`、`sliderSkin`、`drawBevel`、`drawSegment` |
 | `UiFlatPalette` | 扁平配色常量 | 60 个 ARGB 常量 |
 | `UiFlatSkin` | 图标图集切片与扁平绘制原语 | `icon`、`drawSurface`、`drawOutline`、`drawChrome`、`drawStatusBar`、`drawHelp` |
-| `UiPalette` | 灰色像素主题调色板 | 39 个 ARGB 常量 |
+| `UiPalette` | 灰色像素主题调色板 | 49 个 ARGB 常量 |
 | `UiTheme` | 灰色像素主题的静态入口与度量常量来源 | `ROW_HEIGHT`、`PADDING`、`drawWindow`、`drawCard`、`sliderStyle`、`clampTo` |
 | `package-info.java` | 包声明与依赖面说明 | — |
 

@@ -15,7 +15,7 @@
 
 - 包：`com.meteorite.itemdespawntowhat.client.ui.screen.form`
 - 源码目录：`common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/screen/form`
-- 覆盖：35 个 `.java` 文件（本包无 `package-info.java`）
+- 覆盖：34 个 `.java` 文件（本包无 `package-info.java`）
 
 ### 2.2 职责
 
@@ -47,26 +47,25 @@
 | `Suggestion` | record | `value`、`label` | 输入建议项 |
 | `ConsumptionSummary` | class | `hintRule` | 规则源成本提示 |
 | `NaturalSummary` | class | `rule`、`conditions`、`effects`、`effect`、`conditionLeaf`、`conditionTreeLeaf`、`conditionParams` | 规则、条件与效果的自然语言摘要 |
-| `ReadOnlyTextView` | class | `构造`、`bounds`、`setBounds`、`render`、`mouseClicked`、`mouseReleased`、`mouseDragged`、`mouseScrolled`、`keyPressed`、`canFocus`、`setFocused`、`isFocused`、`activate`、`accessibleName` | 按宽度折行的只读详情视图；实现 `UiWidget`、`UiFocusTarget` |
 
 包内可见类型不导出：`FormControl` 与 `FormControl` 的全部子类、`FormControlRegistry`、`FormRow`、`FormRowLayout`、`FormRowRenderer`、`FormInputRouter`、`FormDraftWriter`、`FormPicker`、`PickerHost`、`ConditionTreeChrome`。
 
 ### 2.4 依赖关系
 
 - 依赖本模组：`client/edit`（27 个文件 import，共 100 处；`EditorField`、`RuleValue`、`EditorFieldType`、`FormIssue`、`EditSession`、`DraftPaths`）
-- 依赖本模组：`client/ui/kit`（20 个文件 import，共 72 处；`UiFocusTarget`、`UiRect`、`TextScroll`、`UiInputCapture`）
-- 依赖本模组：`client/ui/widget`（19 个文件 import，共 44 处；`UiButton`、`UiCheckBox`、`UiConditionGraphEditor`、`UiWidget`）
-- 依赖本模组：`client/ui/theme`（12 个文件 import，共 21 处；`UiHostTheme`、`UiHostThemes`、`UiFlatSkin`）
+- 依赖本模组：`client/ui/kit`（19 个文件 import，共 72 处；`UiFocusTarget`、`UiRect`、`TextScroll`、`UiInputCapture`）
+- 依赖本模组：`client/ui/widget`（18 个文件 import，共 42 处；`UiButton`、`UiCheckBox`、`UiConditionGraphEditor`、`UiWidget`）
+- 依赖本模组：`client/ui/theme`（11 个文件 import，共 19 处；`UiHostTheme`、`UiHostThemes`、`UiFlatSkin`）
 - 依赖本模组：`client/ui/shared`（6 个文件 import，共 13 处；`FieldCatalogTypes`、`CatalogPreviewIcons`、`RuleDisplayLabels`）
 - 依赖本模组：`client/net`（1 个文件 import，共 1 处；`CatalogSuggestions` 引用 `RuleEditClientWorkspace`）
 - 依赖本模组：`core/api`（7 个文件 import，共 7 处；`RuleFields`、`TypeRegistry`）
 - 依赖本模组：`core/model`（4 个文件 import，共 5 处；`ConditionExpression`、`ConditionNode`、`ConditionType`、`CatalystCost`）
 - 依赖本模组：`core/network/protocol`（3 个文件 import，共 5 处；`RuleCatalog`、`RuleCatalogEntry`、`RuleCatalogType`）
 - 依赖本模组：`core/type/effect`（1 个文件 import，共 1 处；`ConsumeSourceEffect`）
-- 依赖外部：`net.minecraft`（27 个文件 import，共 71 处；`Component`、`Font`、`GuiGraphics`、`ResourceLocation`、`FormattedCharSequence`、`Minecraft`、`Screen`）
+- 依赖外部：`net.minecraft`（26 个文件 import，共 67 处；`Component`、`Font`、`GuiGraphics`、`ResourceLocation`、`FormattedCharSequence`、`Minecraft`、`Screen`）
 - 依赖外部：`java.util`（25 个文件 import，共 55 处）
 - 依赖外部：`java.util.function`（8 个文件 import，共 14 处）
-- 依赖外部：`org.jetbrains.annotations`（24 个文件 import，共 24 处；`Nullable`）
+- 依赖外部：`org.jetbrains.annotations`（23 个文件 import，共 23 处；`Nullable`）
 - 依赖外部：`org.lwjgl.glfw`（6 个文件 import，共 6 处；`GLFW`）
 - 被依赖：`client/ui/screen`（11 个文件 import，共 24 处；`FormView`、`LeafPanel`、`NaturalSummary`、`ConsumptionSummary`、`ConditionEditingSupport`、`SuggestionProvider`）
 
@@ -123,7 +122,7 @@
 - `FormView` 的 import 分组不连续：`com.meteorite.itemdespawntowhat.client.ui.widget.UiButton`、`UiButtonVariant`、`UiWidget` 三条 import 位于 `java.util.*` 之后，与文件开头的同模组依赖分组分开。
 - 说明行不写 JSON 的实现分散在三处：`NoteControl#setBounds` 与 `NoteControl#render` 为空实现，`NoteControl#store` 返回 `null`；`FormView#render` 对 `EditorFieldType.NOTE` 行调用 `FormRowRenderer#drawNote`；`FormView#storeObject` 与 `FormView#issues` 都跳过 `NOTE` 字段，`FormView#pathFor` 对 `NOTE` 与 `RAW_JSON` 返回 `basePath`。
 - `FormView#setCatalogOpener` 标注 `@SuppressWarnings("unused")`；它只把追加式入口包装后委托给 `#setSelectionCatalogOpener`，两者共用 `catalogOpener` 字段。
-- 本包 35 个 `.java` 中不含 `package-info.java`，包级说明只出现在各类型 JavaDoc。
+- 本包 34 个 `.java` 中不含 `package-info.java`，包级说明只出现在各类型 JavaDoc。
 
 ## 3. 类清单
 
@@ -159,7 +158,6 @@
 | `NumberControl` | 数值控件：kit 滑杆、行内精确输入与预设按钮。 | `#load`、`#store`、`#setWindow`、`#setValueFromSuggestion` |
 | `PickerHost` | 候选值选择框宿主接口，包内使用。 | `#openPicker` |
 | `RawJsonControl` | 未识别字段的只读 JSON 摘要控件。 | `#load`、`#store`、`#summary` |
-| `ReadOnlyTextView` | 按可用宽度折行并可滚动的只读详情视图。 | `#setBounds`、`#render` |
 | `SublistControl` | 对象数组控件：每项一个子表单，提供添加与逐项删除。 | `#load`、`#store`、`#retainChildInputs`、`#finishInput` |
 | `Suggestion` | 输入建议项：值写回字段，标签给玩家看。 | 组件 `value`、`label` |
 | `SuggestionProvider` | 输入建议提供者接口。 | `#suggestions` |
