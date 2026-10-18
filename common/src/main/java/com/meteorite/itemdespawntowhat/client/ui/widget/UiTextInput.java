@@ -17,6 +17,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.TextColor;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
@@ -76,7 +77,7 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
         this.font = font;
         this.editBox = new TrackedEditBox(font, theme.rowHeight());
         this.editBox.setBordered(false);
-        this.editBox.setHint(hint);
+        this.editBox.setHint(placeholder(hint));
         this.editBox.setTextColor(theme.palette().textOnDark());
         this.editBox.setTextColorUneditable(theme.palette().textDisabled());
         // 长度由码点过滤器控制；程序回填不经过原版截断。
@@ -196,8 +197,23 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
 
     // 设置占位提示
     public UiTextInput setHint(Component hint) {
-        editBox.setHint(hint);
+        editBox.setHint(placeholder(hint));
         return this;
+    }
+
+    /**
+     * 把占位提示染成禁用文本色，与多行输入框的占位提示保持一致。
+     *
+     * <p>原版 {@link EditBox} 绘制提示时复用正文的 {@code textColor}，无法单独指定颜色；
+     * 但组件自带的 {@link net.minecraft.network.chat.Style} 颜色优先于绘制参数，
+     * 因此在这里给提示挂上样式色即可只影响提示，不影响用户实际输入的正文。</p>
+     */
+    private Component placeholder(Component hint) {
+        // 提示为 null 或空时无需着色，避免无意义地构造副本
+        if (hint == null || hint.getString().isEmpty()) {
+            return hint;
+        }
+        return hint.copy().withStyle(hint.getStyle().withColor(TextColor.fromRgb(theme.palette().textDisabled())));
     }
 
     // 设置提交回调
