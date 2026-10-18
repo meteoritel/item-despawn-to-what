@@ -780,7 +780,7 @@
   "gui.itemdespawntowhat.edit.rule.catalyst_cost.items": "Catalyst items",
   "gui.itemdespawntowhat.edit.rule.catalyst_cost.count": "Required quantity",
   "gui.itemdespawntowhat.edit.rule.catalyst_consume": "Consume catalysts",
-  "gui.itemdespawntowhat.edit.rule.catalyst_cost.radius": "Shared detection radius",
+  "gui.itemdespawntowhat.edit.rule.catalyst_cost.radius": "Detection radius",
   "gui.itemdespawntowhat.edit.rule.catalyst_min_count": "Minimum trigger count",
   "gui.itemdespawntowhat.edit.rule.catalyst_min_count_effective": "Default: %s",
   "gui.itemdespawntowhat.edit.rule.presence.add_catalyst": "Enable catalysts",
@@ -1085,5 +1085,5 @@
   "gui.itemdespawntowhat.edit.debug.delete.message": "This deletes all %s test rule drafts; normal rules are untouched. Continue?",
   "gui.itemdespawntowhat.edit.rule.catalyst_cost.consume_count": "Consumed quantity",
   "gui.itemdespawntowhat.edit.rule.consume_fluid": "Consume nearest source feeding the contacted fluid",
-  "gui.itemdespawntowhat.edit.issue.catalyst_consume_count_out_of_range": "Catalyst consumption must be an integer from 0 to 64 and reference selected items only"
+  "gui.itemdespawntowhat.edit.issue.catalyst_consume_count_out_of_range": "Catalyst consumption must be an integer from 1 to 64 and reference selected items only"
 }

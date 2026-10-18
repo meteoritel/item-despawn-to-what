@@ -297,6 +297,7 @@ public final class BuiltinEditorDescriptors {
                 EditorField.tagList(RuleFields.CATALYST_ITEMS, "gui.itemdespawntowhat.edit.field.catalyst_present.items", "minecraft:item").asRequired(),
                 EditorField.itemCounts(RuleFields.ITEM_COUNTS, r + "catalyst_cost.count",
                         CatalystCost.MIN_COUNT, CatalystCost.MAX_COUNT),
+                // 滑条最小为 1；精确输入 0 在输入页按「不消耗」处理（关闭开关并移除该表）
                 EditorField.itemCounts(RuleFields.CONSUME_COUNTS, r + "catalyst_cost.consume_count",
                         CatalystCost.MIN_CONSUME_COUNT, CatalystCost.MAX_COUNT),
                 EditorField.integerSlider(RuleFields.CATALYST_RADIUS, r + "catalyst_cost.radius",

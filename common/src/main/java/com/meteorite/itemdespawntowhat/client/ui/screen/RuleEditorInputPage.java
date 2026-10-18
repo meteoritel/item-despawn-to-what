@@ -263,7 +263,7 @@ final class RuleEditorInputPage {
 
         buildPresenceSection(session, RuleEditorPageSupport.CATALYST_PRESENT_ID, RuleEditorPageSupport.UI + "rule.presence.add_catalyst");
         RuleValue cost = rule.child(RuleFields.CATALYST_COST);
-        boolean catalystOn = cost != null && cost.has(RuleFields.CONSUME_COUNTS);
+        boolean catalystOn = RuleEditorPageSupport.consumesCatalysts(cost);
         boolean catalystEnabled = RuleEditorPageSupport.hasRuleLevelPresence(rule, RuleEditorPageSupport.CATALYST_PRESENT_ID);
         catalystToggle = new UiCheckBox(THEME, pages.font,
                 Component.translatable(RuleEditorPageSupport.UI + "rule.catalyst_consume"), catalystOn);
@@ -274,19 +274,27 @@ final class RuleEditorInputPage {
                 ? pages.newForm(session, RuleFields.CATALYST_COST, BuiltinEditorDescriptors.catalystCostDescriptor()) : null;
         if (catalystForm != null) {
             catalystForm.setRowVisible(DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.CATALYST_ITEMS), !catalystEnabled);
+            String consumePath = DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.CONSUME_COUNTS);
             catalystForm.setOnFieldWritten((path, before) -> {
                 materializeCatalystInput(session);
+                RuleDraft draft = session.draft();
+                // 每轮消耗至少 1 件：写回后没有任何正数等同于不消耗，移除该表并关闭开关
+                if (consumePath.equals(path)
+                        && !RuleEditorPageSupport.consumesCatalysts(draft.valueAt(RuleFields.CATALYST_COST))) {
+                    draft.removeAt(consumePath);
+                    if (catalystToggle != null) catalystToggle.setChecked(false);
+                    return;
+                }
                 if (!path.equals(DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.CATALYST_ITEMS))) return;
-                List<String> references = RuleEditorPageSupport.stringList(session.draft().valueAt(path));
-                RuleEditorPageSupport.reconcileQuantities(session.draft(), references);
-                RuleValue current = session.draft().valueAt(RuleFields.CATALYST_COST);
+                List<String> references = RuleEditorPageSupport.stringList(draft.valueAt(path));
+                RuleEditorPageSupport.reconcileQuantities(draft, references);
+                RuleValue current = draft.valueAt(RuleFields.CATALYST_COST);
                 if (current != null && current.has(RuleFields.CONSUME_COUNTS)) {
-                    session.draft().setAt(RuleFields.CATALYST_COST, RuleEditorPageSupport.withQuantities(current,
+                    draft.setAt(RuleFields.CATALYST_COST, RuleEditorPageSupport.withQuantities(current,
                             RuleFields.CONSUME_COUNTS, references, CatalystCost.DEFAULT_COUNT));
                 }
             });
-            catalystForm.setRowVisibility(DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.CONSUME_COUNTS),
-                    () -> consumesCatalysts(session));
+            bindConsumeVisibility(catalystForm, session);
             catalystForm.pairItemCountRows(DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.ITEM_COUNTS),
                     DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.CONSUME_COUNTS));
             pages.liveForms.add(catalystForm);
@@ -302,8 +310,15 @@ final class RuleEditorInputPage {
     }
 
     private boolean consumesCatalysts(EditSession session) {
-        RuleValue cost = session.draft().valueAt(RuleFields.CATALYST_COST);
-        return cost != null && cost.has(RuleFields.CONSUME_COUNTS);
+        return RuleEditorPageSupport.consumesCatalysts(session.draft().valueAt(RuleFields.CATALYST_COST));
+    }
+
+    /** 催化剂卡片中与消耗绑定的行只在勾选「消耗催化剂」后显示。 */
+    private void bindConsumeVisibility(FormView form, EditSession session) {
+        form.setRowVisibility(DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.CONSUME_COUNTS),
+                () -> consumesCatalysts(session));
+        form.setRowVisibility(DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.CATALYST_RADIUS),
+                () -> consumesCatalysts(session));
     }
 
     void specifySourceCost() {

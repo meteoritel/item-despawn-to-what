@@ -25,16 +25,21 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * 物品数量对象的表单控件：复用数值控件的滑条、精确输入、撤销与错误校验。
- * <p>每个引用使用独立数量行；配对时门槛与消耗上下交错：行首是物品图标与本地化名称，随后是该物品的数量滑条与精确输入；
- * 图标列与名称列宽度全场统一，所有滑条从同一横坐标开始、到同一横坐标结束。
+ * <p>每个引用占用一条数量滑条；配对时物品名只出现一次，其下依次排门槛与消耗两条滑条，
+ * 下行字段不再重复物品名。图标列、名称列与滑条起止横坐标全场统一。
  * <p>名称超过列宽时在名称列内悬停滚动；悬停图标给出完整名称、字段名与引用注册名。
  */
 final class ItemCountsControl extends FormControl {
 
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
     private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
-    // 行间距
+    // 行间距（未配对）：与卡片表单其它行保持一致
     private static final int ROW_GAP = 6;
+    // 配对布局：物品名独占一行，其下门槛与消耗两条滑条紧邻，不同物品之间用条目间距拉开
+    private static final int HEADER_HEIGHT = 16;
+    private static final int HEADER_GAP = 2;
+    private static final int PAIR_GAP = 3;
+    private static final int ITEM_GAP = 10;
     // 滑条行高（与卡片表单的单行高度一致）
     private static final int ROW_HEIGHT = 20;
     // 行首图标列宽度与图标到名称的间距
@@ -56,15 +61,58 @@ final class ItemCountsControl extends FormControl {
     private final Map<String, Entry> entries = new LinkedHashMap<>();
     private RuleValue values = RuleValue.mapping().build();
     private int defaultCount;
-    private int rowStride = 1;
-    private boolean quantityLabel;
+    // 配对角色：上行绘制物品名与两条滑条，下行只绘制自己的滑条
+    private PairRole pairRole = PairRole.NONE;
+    // 下行滑条的含义文案：由上行在第二条滑条前绘制
+    private @Nullable Component secondRowLabel;
+    // 配对下行沿用上行的名称列宽度（0 = 按本控件自身的名称宽度计算）
+    private int labelColumnOverride;
 
-    void setPaired(boolean paired) {
-        rowStride = paired ? 2 : 1;
-        quantityLabel = paired;
+    /** 物品数量控件的配对角色；配对时物品名只出现一次，其下依次是门槛与消耗两道滑条。 */
+    enum PairRole {
+        /** 独立字段：每条滑条各带一次物品名。 */
+        NONE,
+        /** 配对上行：物品名独占一行，其下是上行滑条与下行滑条。 */
+        UPPER,
+        /** 配对下行：物品名、图标与第二行文案均由上行绘制，本控件只排自己的滑条。 */
+        LOWER
     }
 
-    int pairOffset() { return rowHeight() + ROW_GAP; }
+    void setPairRole(PairRole role) {
+        pairRole = role;
+        // 非下行不再沿用上行的列宽；下行在下一次布局时重新接收
+        if (role != PairRole.LOWER) labelColumnOverride = 0;
+    }
+
+    /** 上行设置第二条滑条的含义文案（例如「消耗数量」）。 */
+    void setSecondRowLabel(@Nullable Component label) {
+        secondRowLabel = label;
+    }
+
+    /** 上行控件配对时，第二条滑条起始位置相对本控件顶部的偏移量。 */
+    int pairOffset() { return HEADER_HEIGHT + HEADER_GAP + rowHeight() + PAIR_GAP; }
+
+    /** 配对下行沿用上行的名称列宽度：两条滑条必须从同一横坐标开始。 */
+    void setLabelColumnWidth(int width) {
+        labelColumnOverride = Math.max(0, width);
+    }
+
+    /** 按可用宽度算出名称列宽度；配对下行由 {@link #setLabelColumnWidth} 直接沿用上行的结果。 */
+    int labelColumnWidth(int width) {
+        // 名称列取全场最宽名称（封顶 NAME_MAX_WIDTH），保证滑条上下对齐；
+        // 配对上行还要容纳两道滑条的含义文案，避免文案被名称列宽度截断
+        int nameWidth = 0;
+        for (Entry entry : entries.values()) {
+            nameWidth = Math.max(nameWidth, Math.clamp(font.width(entry.name), 0, NAME_MAX_WIDTH));
+        }
+        if (pairRole != PairRole.NONE) {
+            nameWidth = Math.max(nameWidth, Math.clamp(font.width(label()), 0, NAME_MAX_WIDTH));
+            if (secondRowLabel != null) {
+                nameWidth = Math.max(nameWidth, Math.clamp(font.width(secondRowLabel), 0, NAME_MAX_WIDTH));
+            }
+        }
+        return Math.clamp(ICON_COLUMN + ICON_GAP + nameWidth, 0, Math.max(0, width / NAME_COLUMN_SHARE));
+    }
     // 最近一次布局使用的行高：命中判定与绘制共用同一份几何
     private int lastRowHeight = ROW_HEIGHT;
     private @Nullable NumberControl pressed;
@@ -82,7 +130,9 @@ final class ItemCountsControl extends FormControl {
         private final NumberControl control;
         private final Component name;
         private final @Nullable UiIcon icon;
+        // 滑条行与图标/名称行可能分开：配对上行把物品名放在两条滑条上方
         private int rowY;
+        private int nameRowY;
         private int iconX;
         private int iconY;
         private int nameX;
@@ -100,12 +150,12 @@ final class ItemCountsControl extends FormControl {
 
         // 图标列命中：悬停读取完整名称与引用注册名
         private boolean iconHit(double x, double y, int rowHeight) {
-            return x >= iconX && x < iconX + ICON_COLUMN && y >= rowY && y < rowY + rowHeight;
+            return x >= iconX && x < iconX + ICON_COLUMN && y >= nameRowY && y < nameRowY + rowHeight;
         }
 
         // 名称列命中：悬停滚动超宽名称
         private boolean nameHit(double x, double y, int rowHeight) {
-            return nameWidth > 0 && x >= nameX && x < nameX + nameWidth && y >= rowY && y < rowY + rowHeight;
+            return nameWidth > 0 && x >= nameX && x < nameX + nameWidth && y >= nameRowY && y < nameRowY + rowHeight;
         }
     }
 
@@ -126,10 +176,12 @@ final class ItemCountsControl extends FormControl {
         entries.putAll(next);
     }
 
-    // 每行复用同规格的数值控件：初始数量 1，滑条常用窗口 1..64
+    // 每行复用同规格的数值控件：滑条常用窗口 1..64，滑条停在下界 1；精确输入仍按字段合法域校验
     private NumberControl createControl() {
+        // 每行代表一次真实支付，0 不构成「消耗」：滑条窗口下界取 DEFAULT_COUNT
+        int windowMin = Math.max(DEFAULT_COUNT, field.intMin(DEFAULT_COUNT));
         EditorField number = EditorField.integerSlider(field.name(), field.labelKey(),
-                field.intMin(DEFAULT_COUNT), field.intMax(Integer.MAX_VALUE), field.intMin(DEFAULT_COUNT), INITIAL_SLIDER_MAX);
+                field.intMin(DEFAULT_COUNT), field.intMax(Integer.MAX_VALUE), windowMin, INITIAL_SLIDER_MAX);
         NumberControl control = java.util.Objects.requireNonNull(NumberControl.create(font, number, () -> {
             markEdited();
             onChanged.run();
@@ -182,7 +234,19 @@ final class ItemCountsControl extends FormControl {
 
     @Override
     int height() {
-        return entries.isEmpty() ? 0 : entries.size() * (rowHeight() + ROW_GAP) * rowStride - ROW_GAP;
+        if (entries.isEmpty()) return 0;
+        return entries.size() * itemHeight() + (entries.size() - 1) * itemGap();
+    }
+
+    // 单个物品占用的高度：配对上行含物品名行与两条滑条；下行沿用同一节拍，保证两条滑条逐物品对齐
+    private int itemHeight() {
+        if (pairRole == PairRole.NONE) return rowHeight();
+        return HEADER_HEIGHT + HEADER_GAP + rowHeight() + PAIR_GAP + rowHeight();
+    }
+
+    // 物品间距：独立字段沿用卡片行距；配对时上下行共用同一节拍，避免滑条错位
+    private int itemGap() {
+        return pairRole == PairRole.NONE ? ROW_GAP : ITEM_GAP;
     }
 
     // 行高与内层数值控件一致：卡片表单为 20，其它密度随控件自身最小高度
@@ -195,12 +259,7 @@ final class ItemCountsControl extends FormControl {
     @Override
     void setBounds(int x, int y, int width) {
         int rowHeight = rowHeight();
-        // 名称列取全场最宽名称（封顶 NAME_MAX_WIDTH），保证滑条上下对齐
-        int nameWidth = 0;
-        for (Entry entry : entries.values()) {
-            nameWidth = Math.max(nameWidth, Math.clamp(font.width(entry.name), 0, NAME_MAX_WIDTH));
-        }
-        int labelWidth = Math.clamp(ICON_COLUMN + ICON_GAP + nameWidth, 0, Math.max(0, width / NAME_COLUMN_SHARE));
+        int labelWidth = labelColumnOverride > 0 ? Math.min(labelColumnOverride, width) : labelColumnWidth(width);
         int contentX = x + labelWidth + NAME_GAP;
         int contentWidth = Math.max(0, width - labelWidth - NAME_GAP);
         // 精确输入框宽度按各行最大值统一，滑条右端也随之对齐
@@ -209,31 +268,56 @@ final class ItemCountsControl extends FormControl {
             inputWidth = Math.max(inputWidth, entry.control.preferredInputWidth(contentWidth));
         }
         this.lastRowHeight = rowHeight;
-        int rowY = y;
+        int itemY = y;
         for (Entry entry : entries.values()) {
             entry.control.setInputWidthOverride(inputWidth);
-            entry.rowY = rowY;
+            // 配对上行：物品名独占顶部一行，滑条从名称行下方开始；
+            // 配对下行：滑条对齐上行第二条滑条（由 FormRowLayout 按 pairOffset 摆放），此处从顶部排起
+            int sliderY = pairRole == PairRole.UPPER ? itemY + HEADER_HEIGHT + HEADER_GAP : itemY;
+            entry.rowY = sliderY;
+            // 名称行高度：配对上行用它放物品名；独立字段与下行直接沿用滑条行高
+            int nameRowHeight = pairRole == PairRole.UPPER ? HEADER_HEIGHT : rowHeight;
             entry.iconX = x;
-            entry.iconY = rowY + Math.max(0, (rowHeight - (entry.icon == null ? ICON_COLUMN : entry.icon.height())) / 2);
+            entry.iconY = itemY + Math.max(0, (nameRowHeight - (entry.icon == null ? ICON_COLUMN : entry.icon.height())) / 2);
             entry.nameX = x + ICON_COLUMN + ICON_GAP;
-            entry.nameY = rowY + Math.max(0, (rowHeight - font.lineHeight) / 2);
+            entry.nameY = itemY + Math.max(0, (nameRowHeight - font.lineHeight) / 2);
             entry.nameWidth = Math.max(0, labelWidth - ICON_COLUMN - ICON_GAP);
-            entry.control.setBounds(contentX, rowY, contentWidth);
-            rowY += (rowHeight + ROW_GAP) * rowStride;
+            entry.nameRowY = itemY;
+            entry.control.setBounds(contentX, sliderY, contentWidth);
+            itemY += itemHeight() + itemGap();
         }
     }
 
     @Override
     void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
         for (Entry entry : entries.values()) {
-            if (entry.icon != null) entry.icon.render(graphics, entry.iconX, entry.iconY);
-            // 名称超宽时只有悬停才平移：起点与终点各停顿一次后往返，移开即回到起点
-            boolean hovered = entry.nameHit(mouseX, mouseY, lastRowHeight);
-            entry.scrollTicks = hovered ? entry.scrollTicks + 1 : 0;
-            TextScroll.draw(graphics, renderFont, quantityLabel && com.meteorite.itemdespawntowhat.core.api.RuleFields.CONSUME_COUNTS.equals(field.name()) ? label().getString() : entry.name.getString(), entry.nameX, entry.nameY,
-                    entry.nameWidth, THEME.palette().textSecondary(), hovered, entry.scrollTicks, false);
+            // 配对下行只画滑条：物品名、图标与两行文案都由上行统一绘制
+            if (pairRole != PairRole.LOWER) {
+                if (entry.icon != null) entry.icon.render(graphics, entry.iconX, entry.iconY);
+                // 配对上行时名称行固定高度；独立字段沿用滑条行高，保持原有居中
+                int nameRowHeight = pairRole == PairRole.UPPER ? HEADER_HEIGHT : lastRowHeight;
+                // 名称超宽时只有悬停才平移：起点与终点各停顿一次后往返，移开即回到起点
+                boolean hovered = entry.nameHit(mouseX, mouseY, nameRowHeight);
+                entry.scrollTicks = hovered ? entry.scrollTicks + 1 : 0;
+                TextScroll.draw(graphics, renderFont, entry.name.getString(), entry.nameX, entry.nameY,
+                        entry.nameWidth, THEME.palette().textSecondary(), hovered, entry.scrollTicks, false);
+            }
+            if (pairRole == PairRole.UPPER) {
+                // 两条滑条各配一行含义文案：与各自滑条同一垂直中线，避免上下滑条含义混淆
+                drawRowLabel(graphics, renderFont, label(), entry, entry.rowY);
+                if (secondRowLabel != null && !secondRowLabel.getString().isEmpty()) {
+                    drawRowLabel(graphics, renderFont, secondRowLabel, entry, entry.rowY + lastRowHeight + PAIR_GAP);
+                }
+            }
             entry.control.render(graphics, renderFont, mouseX, mouseY);
         }
+    }
+
+    // 配对行的含义文案画在名称列：滑条列保持两条滑条起止一致
+    private void drawRowLabel(GuiGraphics graphics, Font renderFont, Component text, Entry entry, int rowY) {
+        int labelY = rowY + Math.max(0, (lastRowHeight - renderFont.lineHeight) / 2);
+        TextScroll.draw(graphics, renderFont, text.getString(), entry.nameX, labelY,
+                entry.nameWidth, THEME.palette().textDisabled(), false, 0, false);
     }
 
     @Override
@@ -316,9 +400,13 @@ final class ItemCountsControl extends FormControl {
         entries.values().forEach(entry -> entry.control.endInteractions(reason));
     }
     @Override @Nullable Component tooltipAt(double x, double y) {
+        // 配对下行不绘制图标，提示与悬停滚动都留给上行
+        if (pairRole == PairRole.LOWER) return null;
         // 提示只在图标列弹出：名称列留给悬停滚动，避免提示框盖住正在滚动的名称
+        int nameRowHeight = pairRole == PairRole.UPPER ? HEADER_HEIGHT : lastRowHeight;
+        // 图标命中矩形以名称行为准，与绘制保持同一份几何
         for (Entry entry : entries.values()) {
-            if (entry.iconHit(x, y, lastRowHeight)) {
+            if (entry.iconHit(x, y, nameRowHeight)) {
                 return Component.translatable(QUANTITY_ROW_KEY, entry.name, label()).copy()
                         .append("\n").append(entry.reference);
             }

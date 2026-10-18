@@ -870,7 +870,7 @@ public final class RuleEditorEditPages {
         }
         if (ruleEditorInputPage.catalystToggle != null) {
             RuleValue cost = view.child(RuleFields.CATALYST_COST);
-            ruleEditorInputPage.catalystToggle.setChecked(cost != null && cost.has(RuleFields.CONSUME_COUNTS));
+            ruleEditorInputPage.catalystToggle.setChecked(RuleEditorPageSupport.consumesCatalysts(cost));
         }
         if (ruleEditorInputPage.catalystPresenceToggle != null) {
             ruleEditorInputPage.catalystPresenceToggle.setChecked(

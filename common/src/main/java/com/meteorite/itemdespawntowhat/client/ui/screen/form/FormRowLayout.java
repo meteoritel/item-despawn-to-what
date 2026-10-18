@@ -100,8 +100,14 @@ final class FormRowLayout {
         for (FormRow row : rows) {
             if (!row.visible) continue;
             if (row.pairedAbove != null && row.pairedAbove.visible) continue;
-            if (row.control instanceof ItemCountsControl counts) counts.setPaired(
-                    row.pairedBelow != null && row.pairedBelow.visible);
+            if (row.control instanceof ItemCountsControl counts) {
+                boolean paired = row.pairedBelow != null && row.pairedBelow.visible;
+                counts.setPairRole(paired ? ItemCountsControl.PairRole.UPPER : ItemCountsControl.PairRole.NONE);
+                if (paired && row.pairedBelow.control instanceof ItemCountsControl lower) {
+                    // 第二行文案取下行字段标签（例如「消耗数量」），由上行统一绘制在物品名下方
+                    counts.setSecondRowLabel(lower.label());
+                }
+            }
             visibleRows++;
             boolean showLabel = row.labelVisible && (minimumControlHeight == 0 || row.control.usesLabelColumn());
             row.narrow = narrow && showLabel;
@@ -145,7 +151,10 @@ final class FormRowLayout {
                     && row.control instanceof ItemCountsControl upper
                     && row.pairedBelow.control instanceof ItemCountsControl lower) {
                 FormRow paired = row.pairedBelow;
-                lower.setPaired(true);
+                lower.setPairRole(ItemCountsControl.PairRole.LOWER);
+                lower.setSecondRowLabel(null);
+                // 两条滑条必须从同一横坐标开始：下行沿用上行算出的名称列宽度
+                lower.setLabelColumnWidth(upper.labelColumnWidth(row.controlWidth));
                 paired.contentY = row.contentY;
                 paired.contentHeight = row.contentHeight;
                 paired.controlRelX = row.controlRelX;

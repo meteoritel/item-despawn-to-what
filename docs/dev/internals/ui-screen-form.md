@@ -178,6 +178,6 @@
 - [文档阅读与维护约定](../conventions.md)
 ## 输入数量绑定
 
-`RuleEditorInputPage` 将源门槛绑定规则 `source_cost`；催化剂门槛、实际消耗与共享检测半径绑定 `catalyst_cost`。开启催化剂消耗会复制当前门槛到 `consume_counts`，随后独立编辑；关闭移除实际消耗配置。`FormView.pairItemCountRows` 将两个数量字段按物品交错排列，`FormRowLayout` 共用几何与滚动空间，`ItemCountsControl` 继续复用数值滑条与精确输入控件。半径置于催化剂卡片底部。流体消耗开关绑定规则 `consume_fluid`。
+`RuleEditorInputPage` 将源门槛绑定规则 `source_cost`；催化剂门槛、实际消耗与检测半径绑定 `catalyst_cost`。开启催化剂消耗会复制当前门槛到 `consume_counts`，随后独立编辑；关闭移除实际消耗配置。`FormView.pairItemCountRows` 把两个数量字段按物品配对，`ItemCountsControl` 由 `FormRowLayout` 传入配对角色：上行把物品名与图标放在顶部一行，其下依次排门槛滑条与消耗滑条，两行滑条各配一行含义文案；下行不再重复物品名，只排自己的滑条，上下行共用 `FormRowLayout` 的几何与滚动空间。数量滑条每行代表一次真实支付，滑条窗口下界为 1；精确输入 0 或写回后没有任何正数时视作不消耗，移除 `consume_counts` 并关闭开关。检测半径行与消耗数量行只在勾选「消耗催化剂」后显示，位于催化剂卡片底部。流体消耗开关绑定规则 `consume_fluid`。
 
 仅声明催化剂条件、尚无规则成本对象时，输入页显示原条件门槛；首次输入编辑在同一次撤销记录中建立规则数量对象，并将对应门槛归入规则配置。

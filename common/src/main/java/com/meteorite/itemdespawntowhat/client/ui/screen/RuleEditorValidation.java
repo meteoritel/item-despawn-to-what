@@ -190,6 +190,7 @@ final class RuleEditorValidation {
                     issues.add(issue(DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.CATALYST_ITEMS),
                             UI + "issue.catalyst_cost_items_empty"));
                 }
+                // 契约层允许 0（只检测）；编辑器里写成 0 会在输入页回收为未勾选，不保留该表
                 RuleValue consumed = catalystCost.child(RuleFields.CONSUME_COUNTS);
                 if (consumed != null && invalidItemCounts(consumed, listOf(catalystCost.child(RuleFields.CATALYST_ITEMS)),
                         CatalystCost.MIN_CONSUME_COUNT, CatalystCost.MAX_COUNT)) {

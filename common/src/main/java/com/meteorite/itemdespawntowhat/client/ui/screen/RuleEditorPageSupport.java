@@ -86,6 +86,24 @@ final class RuleEditorPageSupport {
         }
     }
 
+    /**
+     * 规则是否按「消耗催化剂」呈现：{@code consume_counts} 尚未填满时视为已声明，至少一项为正才算消耗。
+     * <p>每轮实际支付的最小单位是 1，表内全为 0 只表示检测、不支付，因此按未勾选呈现；
+     * 空表或形态异常的表保持可见，交由用户补齐或由校验提示，而不是静默隐藏。
+     *
+     * @param cost 规则级 catalyst_cost 对象，可为 null
+     * @return 是否按消耗呈现
+     */
+    static boolean consumesCatalysts(@Nullable RuleValue cost) {
+        RuleValue counts = cost == null ? null : cost.child(RuleFields.CONSUME_COUNTS);
+        if (counts == null) return false;
+        if (!counts.isMapping() || counts.entries().isEmpty()) return true;
+        for (RuleValue value : counts.entries().values()) {
+            if (value.isNumber() && value.asInteger(0) > 0) return true;
+        }
+        return false;
+    }
+
     static RuleValue defaultQuantities(@Nullable RuleValue owner, List<String> references) {
         RuleValue.Mapping values = RuleValue.mapping();
         RuleValue count = owner == null ? null : owner.child(RuleFields.CATALYST_COUNT);

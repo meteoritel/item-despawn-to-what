@@ -780,7 +780,7 @@
   "gui.itemdespawntowhat.edit.rule.catalyst_cost.items": "催化剂物品",
   "gui.itemdespawntowhat.edit.rule.catalyst_cost.count": "数量门槛",
   "gui.itemdespawntowhat.edit.rule.catalyst_consume": "消耗催化剂",
-  "gui.itemdespawntowhat.edit.rule.catalyst_cost.radius": "共同检测半径",
+  "gui.itemdespawntowhat.edit.rule.catalyst_cost.radius": "检测半径",
   "gui.itemdespawntowhat.edit.rule.catalyst_min_count": "最低触发数量",
   "gui.itemdespawntowhat.edit.rule.catalyst_min_count_effective": "默认：%s",
   "gui.itemdespawntowhat.edit.rule.presence.add_catalyst": "启用催化剂",
@@ -1085,5 +1085,5 @@
   "gui.itemdespawntowhat.edit.debug.delete.message": "将删除全部 %s 条测试规则草稿，非测试规则不受影响。确认继续？",
   "gui.itemdespawntowhat.edit.rule.catalyst_cost.consume_count": "消耗数量",
   "gui.itemdespawntowhat.edit.rule.consume_fluid": "消耗接触流体对应的最近源方块",
-  "gui.itemdespawntowhat.edit.issue.catalyst_consume_count_out_of_range": "催化剂消耗数量必须为 0 到 64 的整数，且只引用已选物品"
+  "gui.itemdespawntowhat.edit.issue.catalyst_consume_count_out_of_range": "催化剂消耗数量必须为 1 到 64 的整数，且只引用已选物品"
 }
