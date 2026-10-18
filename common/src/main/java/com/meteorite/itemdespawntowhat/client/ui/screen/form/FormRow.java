@@ -54,6 +54,8 @@ final class FormRow {
     int buttonWrapWidth;
     boolean buttonsBelow;
     boolean narrow;
+    // 布局结论：本行是否绘制字段标签（叠排的独立数量行同样为真）
+    boolean labelShown;
 
     FormRow(EditorField field, String path, FormControl control) {
         this.field = field;

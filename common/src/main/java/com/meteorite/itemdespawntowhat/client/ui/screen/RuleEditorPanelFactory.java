@@ -477,6 +477,8 @@ public final class RuleEditorPanelFactory {
         List<UiButton> buttons = new ArrayList<>();
         List<Runnable> reloadValues = new ArrayList<>();
         RuleDraft draft = session.draft();
+        // 参数框按卡片密度排：数量行因此让出标签列，滑条与其它字段的控件同列
+        form.useCardSpacing();
         // 自带文字的行内控件不显示行标签：同一文案只出现一次，省下的宽度交给控件自身
         for (EditorField field : fields) {
             if (field.type() == EditorFieldType.CLIMATE_RANGE || field.type() == EditorFieldType.BOOLEAN) {

@@ -101,6 +101,7 @@ final class FormRowLayout {
         for (FormRow row : rows) {
             if (!row.visible) continue;
             if (row.pairedAbove != null && row.pairedAbove.visible) continue;
+            boolean stackedCounts = false;
             if (row.control instanceof ItemCountsControl counts) {
                 boolean paired = row.pairedBelow != null && row.pairedBelow.visible;
                 counts.setPairRole(paired ? ItemCountsControl.PairRole.UPPER : ItemCountsControl.PairRole.NONE);
@@ -108,17 +109,22 @@ final class FormRowLayout {
                 // 窄列或紧凑密度下本行自己已经占着标签列，控件内部不再叠加缩进
                 boolean sharesLabelColumn = narrow || !row.labelVisible || minimumControlHeight == 0;
                 counts.setSliderColumnOffset(sharesLabelColumn ? 0 : effectiveLabelWidth + LABEL_GAP);
+                // 独立数量行在卡片密度下把字段名叠到控件上方：标签列整列留给物品图标与滑条
+                stackedCounts = !sharesLabelColumn && !paired;
                 if (paired && row.pairedBelow.control instanceof ItemCountsControl lower) {
                     // 第二行文案取下行字段标签（例如「消耗数量」），由上行统一绘制在物品名下方
                     counts.setSecondRowLabel(lower.label());
                 }
             }
             visibleRows++;
-            boolean showLabel = row.labelVisible && (minimumControlHeight == 0 || row.control.usesLabelColumn());
-            row.narrow = narrow && showLabel;
+            boolean showLabel = row.labelVisible && (minimumControlHeight == 0 || row.control.usesLabelColumn() || stackedCounts);
+            // 叠排行只把字段名放到上方，控件占满整行；其余行按标签列让出控件列
+            boolean sideLabel = showLabel && !stackedCounts;
+            row.labelShown = showLabel;
+            row.narrow = stackedCounts || (narrow && showLabel);
             int rowLabelWidth = rowLabelWidth(row, effectiveLabelWidth, font);
             row.labelWidth = showLabel ? rowLabelWidth : 0;
-            int controlWidth = narrow || !showLabel ? availableWidth : Math.max(0, availableWidth - rowLabelWidth - LABEL_GAP);
+            int controlWidth = sideLabel ? Math.max(0, availableWidth - rowLabelWidth - LABEL_GAP) : availableWidth;
             int reserved = 0;
             for (var pickerButton : row.pickers) reserved += actionWidth(font, pickerButton) + 2;
             for (com.meteorite.itemdespawntowhat.client.ui.widget.UiButton action : row.actions) {
@@ -129,7 +135,7 @@ final class FormRowLayout {
             row.buttonWrapWidth = controlWidth;
             row.controlWidth = Math.max(0, row.buttonsBelow ? controlWidth : controlWidth - reserved);
             row.controlWidth = row.control.preferredWidth(row.controlWidth);
-            row.controlRelX = narrow || !showLabel ? 0 : rowLabelWidth + LABEL_GAP;
+            row.controlRelX = sideLabel ? rowLabelWidth + LABEL_GAP : 0;
             if (row.field.type() == EditorFieldType.NOTE) {
                 row.controlRelY = 0;
                 row.contentHeight = row.control.height();

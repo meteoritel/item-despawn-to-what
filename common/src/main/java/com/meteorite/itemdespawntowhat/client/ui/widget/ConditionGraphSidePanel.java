@@ -14,7 +14,8 @@ import net.minecraft.network.chat.Component;
 
 /** 右侧面板的几何、滑入动画与外观；内容由选择器或参数面板绘制。 */
 final class ConditionGraphSidePanel {
-    private static final int SIDE_PANEL_MAX_WIDTH = 220;
+    // 面板要同时放下标签列、物品图标与名称、滑条与精确输入：按视口宽度的三分之二收缩，给画布留出左三分之一
+    private static final int SIDE_PANEL_MAX_WIDTH = 248;
     static final int SIDE_PANEL_PADDING = 4;
     static final int SIDE_PANEL_HEADER = 14;
     private static final long SIDE_PANEL_ANIM_MS = 160L;
@@ -56,7 +57,7 @@ final class ConditionGraphSidePanel {
     }
 
     UiRect bounds(UiRect viewport) {
-        int width = Math.min(SIDE_PANEL_MAX_WIDTH, viewport.width());
+        int width = Math.min(SIDE_PANEL_MAX_WIDTH, viewport.width() * 2 / 3);
         int slide = Math.round(width * (1.0F - openness));
         return new UiRect(viewport.right() - width + slide, viewport.y(), width, viewport.height());
     }

@@ -92,7 +92,7 @@
 - `ConditionTreeControl#load`、`#store`、`#issues`：条件表达式解码、编码写回；解码失败时 `fallbackRaw` 原样保留为只读值。
 - `ConditionTreeControl#revealPath`：把字段路径转换为树内路径并转交 `ConditionEditContext#open`。
 - `ConditionTreeOverlay#reveal`：按草稿路径定位树内节点或参数字段；`#historyChanged` 只回填不提交。
-- `ConditionTreeOverlay` 的界面组成：功能栏（撤销、重做、JSON 视图、帮助）、竖直工具列 7 格（添加条件、分组、取反、删除、上移、下移、包组）、画布与底部状态栏；右侧面板宽度上限 220、滑入动画 160ms ease-out（`ConditionGraphSidePanel#SIDE_PANEL_MAX_WIDTH`、`#SIDE_PANEL_ANIM_MS`）。
+- `ConditionTreeOverlay` 的界面组成：功能栏（撤销、重做、JSON 视图、帮助）、竖直工具列 7 格（添加条件、分组、取反、删除、上移、下移、包组）、画布与底部状态栏；右侧面板宽度上限 248，并按视口宽度的三分之二收缩，给画布留出左三分之一；滑入动画 160ms ease-out（`ConditionGraphSidePanel#SIDE_PANEL_MAX_WIDTH`、`#SIDE_PANEL_ANIM_MS`）。
 - `UiConditionGraphEditor#transform`：以 `UiTransform.ofScales(0.5, 1.0, 1.5, 2.0)` 提供四档缩放；`Ctrl+0` 适配视图、`Ctrl+Home` 复位、`Ctrl+=` 与 `Ctrl+-` 缩放、`Ctrl+A` / `Ctrl+C` / `Ctrl+V` 全选 / 复制 / 粘贴。
 - `UiConditionGraphEditor#mouseClicked`：空白区左键拖拽平移；`Shift` + 拖拽框选；中键或空格 + 左键平移；内联参数框聚焦时画布快捷键让位。
 - 只读 JSON 视图：功能栏同一按钮在条件树与只读 JSON 之间切换，JSON 文本可整段复制，不写入草稿。
@@ -180,6 +180,6 @@
 
 `RuleEditorInputPage` 将源门槛绑定规则 `source_cost`；催化剂门槛、实际消耗与检测半径绑定 `catalyst_cost`。开启催化剂消耗会复制当前门槛到 `consume_counts`，随后独立编辑；关闭移除实际消耗配置。`FormView.pairItemCountRows` 把两个数量字段按物品配对，`ItemCountsControl` 由 `FormRowLayout` 传入配对角色：上行把物品名与图标放在顶部一行，其下依次排门槛滑条与消耗滑条，两行滑条各配一行含义文案；下行不再重复物品名，只排自己的滑条，上下行共用 `FormRowLayout` 的几何与滚动空间。数量滑条每行代表一次真实支付，滑条窗口下界为 1；精确输入 0 或写回后没有任何正数时视作不消耗，移除 `consume_counts` 并关闭开关。检测半径行与消耗数量行只在勾选「消耗催化剂」后显示，位于催化剂卡片底部。流体消耗开关绑定规则 `consume_fluid`，只在存在规则级流体存在条件时出现：没有流体条件就没有可消耗的接触流体；规则里已写入 `consume_fluid` 时仍保留开关，避免值隐藏后无法关闭。关闭流体条件会同时移除 `consume_fluid`。
 
-数量行的滑条列取普通字段行的控件列（`effectiveLabelWidth + FormRowLayout.LABEL_GAP`），由 `FormRowLayout` 通过 `ItemCountsControl#setSliderColumnOffset` 注入，配对下行沿用上行实际使用的名称列宽度。窄列（`availableWidth` 小于 180）或紧凑密度（`minimumControlHeight` 为 0）下本行自己就占着标签列，不再注入偏移，控件沿用按名称宽度自算的列宽。因此同卡片内 `数量门槛`、`消耗数量`、`检测半径` 三行滑条从同一横坐标开始，组内含义文案与普通字段标签同列起画；名称列宽度由注入的偏移反推，名称、图标与滑条起止仍共用一份几何。
+数量行的滑条列取普通字段行的控件列（`effectiveLabelWidth + FormRowLayout.LABEL_GAP`），由 `FormRowLayout` 通过 `ItemCountsControl#setSliderColumnOffset` 注入，配对下行沿用上行实际使用的名称列宽度。条件树叶参数框由 `RuleEditorPanelFactory#leafPanel` 按卡片密度装配（`FormView#useCardSpacing`），数量行在参数框里同样让出标签列并注入偏移。未配对的数量行（单个物品数量字段）在卡片密度下把字段标签叠到控件上方，标签按整行宽度绘制，控件占满整行并把滑条列对齐到注入的列；窄列与默认密度仍按侧边标签排列。窄列（`availableWidth` 小于 180）或紧凑密度（`minimumControlHeight` 为 0）下本行自己就占着标签列，不再注入偏移，控件沿用按名称宽度自算的列宽。因此同卡片内 `数量门槛`、`消耗数量`、`检测半径` 三行滑条从同一横坐标开始，组内含义文案与普通字段标签同列起画；名称列宽度由注入的偏移反推，名称、图标与滑条起止仍共用一份几何。
 
 仅声明催化剂条件、尚无规则成本对象时，输入页显示原条件门槛；首次输入编辑在同一次撤销记录中建立规则数量对象，并将对应门槛归入规则配置。

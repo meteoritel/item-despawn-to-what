@@ -309,7 +309,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         }
     }
 
-    /** 只由卡片编辑页启用，弹窗等其它宿主保留原有密度。 */
+    /** 卡片编辑页与条件树参数框启用，弹窗等其它宿主保留原有密度。 */
     public void useCardSpacing() {
         minimumControlHeight = 20;
         rowGap = 6;
@@ -822,7 +822,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
                     FormRowRenderer.drawNote(graphics, renderFont, row, screenY, viewportX, THEME);
                     continue;
                 }
-                if (row.labelVisible && (minimumControlHeight == 0 || row.control.usesLabelColumn())) {
+                if (row.labelShown) {
                     FormRowRenderer.drawLabel(graphics, renderFont, row, screenY, viewportX, minimumControlHeight, THEME);
                 }
                 if (row.control instanceof RawJsonControl raw) {

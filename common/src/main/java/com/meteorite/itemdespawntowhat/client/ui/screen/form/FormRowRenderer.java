@@ -116,7 +116,7 @@ final class FormRowRenderer {
             }
             // 标签被裁剪时的通道：行内控件与窄布局同样适用，可用宽度按实际绘制宽度取
             int labelRoom = row.narrow ? row.controlWidth : row.labelWidth;
-            if (row.labelVisible && labelRoom > 0 && font.width(row.control.label()) > labelRoom) {
+            if (row.labelShown && labelRoom > 0 && font.width(row.control.label()) > labelRoom) {
                 return row.control.label();
             }
             return row.control.hint();
