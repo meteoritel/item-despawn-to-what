@@ -18,6 +18,12 @@ import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
  */
 public final class EffectTargets {
 
+    // 产物初速：源物品水平速度低于该阈值视为静止，沿用既有随机散布，避免没有方向信息时凭空造方向
+    private static final double STILL_SOURCE_HORIZONTAL_SPEED = 0.01D;
+    // 静止源产物的水平抖动量与竖直抬升：与既有产物外观保持一致
+    private static final double PRODUCT_SCATTER_VELOCITY = 0.1D;
+    private static final double PRODUCT_LIFT_VELOCITY = 0.2D;
+
     private EffectTargets() {
         throw new UnsupportedOperationException("Utility class");
     }
@@ -94,6 +100,24 @@ public final class EffectTargets {
     static boolean addConversionProductNow(EffectContext context, net.minecraft.world.entity.item.ItemEntity product) {
         ReturnItemSpawner.applyGrant(product, ReturnItemSpawner.Kind.CONVERSION_PRODUCT);
         return addEntityNow(context, product, true);
+    }
+
+    /**
+     * 计算转化产物的初速度：源物品被破坏前仍有水平运动时，水平方向取其反向、竖直方向至少保留既有抬升，
+     * 让抛入的源物品把产物送回玩家一侧，同时避免产物被压进地面；源物品静止时沿用既有随机散布。
+     *
+     * @param context 本组执行上下文，提供成功转化当刻固定的源速度快照
+     * @return 产物初速度
+     */
+    static Vec3 productInitialVelocity(EffectContext context) {
+        Vec3 sourceVelocity = context.sourceVelocity();
+        if (sourceVelocity.horizontalDistanceSqr() < STILL_SOURCE_HORIZONTAL_SPEED * STILL_SOURCE_HORIZONTAL_SPEED) {
+            RandomSource random = context.random();
+            return new Vec3((random.nextDouble() - 0.5D) * PRODUCT_SCATTER_VELOCITY, PRODUCT_LIFT_VELOCITY,
+                    (random.nextDouble() - 0.5D) * PRODUCT_SCATTER_VELOCITY);
+        }
+        // 水平取反把产物抛回来向，竖直取反只用于保留抛入时的下坠/上抛趋势，且不低于既有抬升
+        return new Vec3(-sourceVelocity.x, Math.max(PRODUCT_LIFT_VELOCITY, -sourceVelocity.y), -sourceVelocity.z);
     }
 
     // 饱和加法：避免计数溢出为负数

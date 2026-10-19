@@ -177,41 +177,20 @@ public final class RuleEditorPanelFactory {
     }
 
     // 目录面板弹窗：数据与请求全部走既有工作区链路，翻页/搜索只发意图
-    public static UiModal catalogModal(Font font, EditorWorkspaceView workspace, RuleCatalogType type,
-                                       boolean multiSelect, Component title, int screenWidth, int screenHeight,
-                                       Consumer<List<String>> onPicked) {
-        return catalogModal(font, workspace, type, multiSelect, title, screenWidth, screenHeight, onPicked, null);
-    }
-
-    // 带字段上下文的入口：标签归属和实体产出禁用类型由宿主静态检查。
-    public static UiModal catalogModal(Font font, EditorWorkspaceView workspace, RuleCatalogType type,
-                                       boolean multiSelect, Component title, int screenWidth, int screenHeight,
-                                       Consumer<List<String>> onPicked, @Nullable EditorField field) {
-        return catalogModal(font, workspace, type, multiSelect, title, screenWidth, screenHeight, onPicked, field, false);
-    }
-
-    // 注册表选择合并普通目录与同字段所属注册表的标签，沿用既有目录缓存和协议。
-    public static UiModal catalogModal(Font font, EditorWorkspaceView workspace, RuleCatalogType type,
-                                       boolean multiSelect, Component title, int screenWidth, int screenHeight,
-                                       Consumer<List<String>> onPicked, @Nullable EditorField field, boolean combined) {
-        return catalogModal(font, workspace, type, multiSelect, title, screenWidth, screenHeight,
-                onPicked, field, combined, List.of(), ignored -> null);
-    }
-
     // 字段路径来自实际发起选择的表单行，子表单和条件叶都以同一入口解析互斥范围。
     static UiModal fieldCatalogModal(Font font, EditorWorkspaceView workspace, RuleCatalogType type,
                                      boolean multiSelect, Component title, int screenWidth, int screenHeight,
                                      Consumer<List<String>> onPicked, EditorField field, RuleDraft draft,
                                      String path, List<String> selected) {
         return catalogModal(font, workspace, type, multiSelect, title, screenWidth, screenHeight,
-                onPicked, field, true, selected, SourceCatalystSelectionPolicy.forField(draft, path));
+                onPicked, field, selected, SourceCatalystSelectionPolicy.forField(draft, path));
     }
 
     private static UiModal catalogModal(Font font, EditorWorkspaceView workspace, RuleCatalogType type,
                                         boolean multiSelect, Component title, int screenWidth, int screenHeight,
-                                        Consumer<List<String>> onPicked, @Nullable EditorField field, boolean combined,
+                                        Consumer<List<String>> onPicked, @Nullable EditorField field,
                                         List<String> selected, Function<String, @Nullable Component> unavailableReason) {
-        boolean includeTags = combined && field != null && (field.type() == EditorFieldType.TAG || field.type() == EditorFieldType.TAG_LIST);
+        boolean includeTags = field != null && (field.type() == EditorFieldType.TAG || field.type() == EditorFieldType.TAG_LIST);
         workspace.refreshDirectory(type);
         if (includeTags) workspace.refreshDirectory(RuleCatalogType.TAG);
         // 默认排除规则与「主分类 / 标签 / 一起」范围由同一个策略实例持有，页码与总数始终一致

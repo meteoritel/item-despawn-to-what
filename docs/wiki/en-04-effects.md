@@ -65,7 +65,7 @@ The **variant** field decides what comes out: `variant` is required and takes `i
 { "type": "itemdespawntowhat:spawn_entity", "variant": "item", "item": "minecraft:rotten_flesh", "count": 1 }
 ```
 
-What you see in game: one piece of rotten flesh lands near the trigger position, within 0.15 blocks horizontally, and players can pick it up right away. Larger amounts arrive over several ticks instead of all at once; which item comes out and how many pieces is decided the moment the conversion succeeds, not later. The new drop carries protection and a conversion cooldown so that the rules do not consume it again at once; see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
+What you see in game: one piece of rotten flesh lands near the trigger position and players can pick it up right away. If the source item was still moving horizontally when it was destroyed, the product's horizontal velocity points the opposite way, so it flies back toward the direction the item was thrown from and is easier to pick up; a source item at rest has no direction to mirror, so the product keeps the original small scatter (within 0.15 blocks horizontally). Larger amounts arrive over several ticks instead of all at once; which item comes out and how many pieces is decided the moment the conversion succeeds, not later. The new drop carries protection and a conversion cooldown so that the rules do not consume it again at once; see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
 
 ### Variant entity: Entities
 
@@ -177,7 +177,7 @@ What you see in game: cobblestone fills in from the inside out across a circle o
 { "type": "itemdespawntowhat:loot_table", "loot_table": "minecraft:chests/simple_dungeon", "luck": 0, "chance": 0.5 }
 ```
 
-What you see in game: with a 50 percent chance the mod rolls the simple dungeon chest loot table once and the results scatter near the trigger position. The roll uses the trigger position as its origin and hands the source entity to the table as the acting entity, the same way a chest does. It provides no killer, so entries that need a player kill never apply. The table is rolled exactly once, at the moment the conversion succeeds: a delayed or multi-tick delivery never re-rolls, and an empty roll simply drops nothing.
+What you see in game: with a 50 percent chance the mod rolls the simple dungeon chest loot table once and the results scatter near the trigger position, and each product's horizontal velocity is opposite to the source item's motion when it was destroyed, so it flies back toward the direction the item came from. The roll uses the trigger position as its origin and hands the source entity to the table as the acting entity, the same way a chest does. It provides no killer, so entries that need a player kill never apply. The table is rolled exactly once, at the moment the conversion succeeds: a delayed or multi-tick delivery never re-rolls, and an empty roll simply drops nothing.
 
 ## Lightning (lightning)
 

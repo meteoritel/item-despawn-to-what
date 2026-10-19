@@ -108,8 +108,8 @@ public final class SpawnItemExecutor {
                 ItemEntity entity = new ItemEntity(level,
                         position.x + (level.random.nextDouble() - 0.5) * SCATTER_RADIUS, position.y + SPAWN_HEIGHT,
                         position.z + (level.random.nextDouble() - 0.5) * SCATTER_RADIUS, new ItemStack(item, size));
-                entity.setDeltaMovement((level.random.nextDouble() - 0.5) * 0.1, 0.2,
-                        (level.random.nextDouble() - 0.5) * 0.1);
+                // 初速由源物品被破坏前的运动决定：水平反向，便于捡回抛入的产物
+                entity.setDeltaMovement(EffectTargets.productInitialVelocity(context));
                 // 转化产物：先授予保护与冷却再写入；未写入时不计完成量，也不重复授予
                 if (!EffectTargets.addConversionProductNow(context, entity)) {
                     nextAttemptTick = gameTime + CHUNK_RETRY_TICKS;

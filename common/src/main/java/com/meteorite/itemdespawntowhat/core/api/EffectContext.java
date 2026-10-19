@@ -23,6 +23,12 @@ public interface EffectContext {
     // 触发时的物品栈快照，后续消耗和实体移除不会改变它。
     ItemStack sourceStack();
 
+    // 成功转化当刻固定的源掉落物速度快照：源实体清空或移除后仍可用于计算产物初速。
+    default Vec3 sourceVelocity() {
+        // 默认零速度：未提供快照的实现按静止处理
+        return Vec3.ZERO;
+    }
+
     // 效果作用位置（默认为源掉落物位置）
     Vec3 position();
 

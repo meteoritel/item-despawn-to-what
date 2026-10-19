@@ -699,8 +699,9 @@ public final class ConversionRuntime {
         // 每组固定源成本 c：显式 source_cost 优先，未声明时为 1 个
         int costPerGroup = types.perRoundSourceConsumption(rule, source);
         tracked.locked = true;
-        // 成功转化当刻的触发点：位置必须在源实体清空前读取，清空后实体位置不再可信
+        // 成功转化当刻的触发点与源速度：都必须在源实体清空前读取，清空后位置与运动都不再可信
         Vec3 triggerPosition = item.position();
+        Vec3 triggerVelocity = item.getDeltaMovement();
         // 同一补偿单元内、源实体清空前固定需要先于源实体消失确定输入的类型的本次效果输入：
         // 效果级条件与概率在此判定一次，结果随任务携带，源实体清空后不再重新判定。
         // 判定异常按同一补偿单元处理：整堆源物品写回并保留所有权追踪。
@@ -730,7 +731,7 @@ public final class ConversionRuntime {
                 RuntimeObserver.current().converted(item, rule.id().toString(), estimated);
             }
             ConversionSettlement settlement = new ConversionSettlement(this, scheduler, level, item, rule, held, writer,
-                    triggerPosition, preparations);
+                    triggerPosition, triggerVelocity, preparations);
             scheduler.scheduleAt(level.dimension(), settlement, level.getGameTime());
             transferred = true;
             VisualFeedback.conversion(level, item.position());

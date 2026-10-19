@@ -51,9 +51,6 @@ public final class LootTableExecutor {
     // 产物生成的水平散布半径与抬升高度：与既有产物外观保持一致
     private static final double SCATTER_RADIUS = 0.3;
     private static final double SPAWN_HEIGHT = 0.1;
-    // 产物初速度：水平抖动量与向上分量，与既有产物外观保持一致
-    private static final double SPAWN_SCATTER_VELOCITY = 0.1;
-    private static final double SPAWN_UPWARD_VELOCITY = 0.2;
 
     /**
      * 成功转化当刻固定的本次战利品产物与落点：只保存触发位置快照与已抽取的堆叠副本。
@@ -159,7 +156,7 @@ public final class LootTableExecutor {
         private final List<ItemStack> drops;
         private final BlockPos center;
         private int cursor;
-        // 已构造但尚未加入世界的这一堆产物：散布位置与初速随机已确定，等待区块时不重造
+        // 已构造但尚未加入世界的这一堆产物：散布位置与初速已确定，等待区块时不重造
         private ItemEntity pendingDrop;
         // 邻区块未加载时的下次重试刻，0 表示不等待
         private long nextAttemptTick;
@@ -204,12 +201,11 @@ public final class LootTableExecutor {
                     pendingDrop = new ItemEntity(level,
                             position.x + (level.random.nextDouble() - 0.5) * SCATTER_RADIUS, position.y + SPAWN_HEIGHT,
                             position.z + (level.random.nextDouble() - 0.5) * SCATTER_RADIUS, stack.copy());
-                    pendingDrop.setDeltaMovement((level.random.nextDouble() - 0.5) * SPAWN_SCATTER_VELOCITY,
-                            SPAWN_UPWARD_VELOCITY,
-                            (level.random.nextDouble() - 0.5) * SPAWN_SCATTER_VELOCITY);
+                    // 初速由源物品被破坏前的运动决定：水平反向，便于捡回抛入的产物
+                    pendingDrop.setDeltaMovement(EffectTargets.productInitialVelocity(context));
                 }
                 // 转化产物：走既有显式产物入口，先授予临时保护与冷却再写入世界。
-                // 未写入时保留这堆产物，退避后重试，不重抽散点与初速。
+                // 未写入时保留这堆产物，退避后重试，不重造散点与初速。
                 if (!EffectTargets.addConversionProductNow(context, pendingDrop)) {
                     nextAttemptTick = gameTime + CHUNK_RETRY_TICKS;
                     return null;

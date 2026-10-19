@@ -86,6 +86,8 @@ final class ConversionSettlement implements ServerTask {
     private final ItemStack sourceSnapshot;
     // 成功转化当刻固定的触发点：源实体清空或被移除后仍以此定位触发点
     private final Vec3 triggerPosition;
+    // 成功转化当刻固定的源速度：源实体被移除后产物初速仍由此决定
+    private final Vec3 sourceVelocity;
     // 成功转化当刻固定的效果槽位输入（键 = 候选 id + 槽序号）：源实体清空后仍按固定输入执行
     private final Map<ConversionRuntime.PreparedEffectKey, EffectPreparation> preparations;
     // 账目读取引用：字段变更方法在 SettlementRecord 内私有，本引用不可写；写入一律经 writer
@@ -138,7 +140,7 @@ final class ConversionSettlement implements ServerTask {
     // 构造结算任务：源库存 held 已在触发时刻整堆移出源实体，受控写入句柄由调用方（首次登记方）给出
     ConversionSettlement(ConversionRuntime runtime, ServerScheduler scheduler, ServerLevel level, ItemEntity source,
                          Rule rule, ItemStack held, SettlementRecord.Writer writer, Vec3 triggerPosition,
-                         Map<ConversionRuntime.PreparedEffectKey, EffectPreparation> preparations) {
+                         Vec3 sourceVelocity, Map<ConversionRuntime.PreparedEffectKey, EffectPreparation> preparations) {
         this.runtime = runtime;
         this.scheduler = scheduler;
         this.level = level;
@@ -147,6 +149,7 @@ final class ConversionSettlement implements ServerTask {
         this.held = held;
         this.sourceSnapshot = held.copy();
         this.triggerPosition = triggerPosition == null ? source.position() : triggerPosition;
+        this.sourceVelocity = sourceVelocity == null ? Vec3.ZERO : sourceVelocity;
         this.preparations = preparations == null ? Map.of() : preparations;
         this.writer = writer;
         this.record = writer.record();
@@ -693,8 +696,8 @@ final class ConversionSettlement implements ServerTask {
         int covered = record.sourceCostPerGroup() > 0 ? record.sourceCostPerGroup() : 1;
         // 候选级位置策略（safe_spawn / fill_origin）随组上下文传给执行器；位置用成功转化当刻的固定值
         return new RuntimeEffectContext(level, source, triggerPosition, rule.id(), scheduler,
-                sourceSnapshot, 1, covered, candidate.id(), groupIndex - 1, groupCount, record.sourceCostPerGroup(),
-                sink, candidate.safeSpawn(), candidate.fillOrigin());
+                sourceSnapshot, sourceVelocity, 1, covered, candidate.id(), groupIndex - 1, groupCount,
+                record.sourceCostPerGroup(), sink, candidate.safeSpawn(), candidate.fillOrigin());
     }
 
     // 效果派发：延迟交给调度器；成功转化当刻已固定输入的槽位按本组的固定输入执行，其余在首次执行时统一判定

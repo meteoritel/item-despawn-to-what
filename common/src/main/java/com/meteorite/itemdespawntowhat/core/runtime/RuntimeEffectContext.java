@@ -21,6 +21,7 @@ public final class RuntimeEffectContext implements EffectContext {
     private final ServerLevel level;
     private final ItemEntity source;
     private final ItemStack sourceSnapshot;
+    private final Vec3 sourceVelocity;
     private final Vec3 position;
     private final ResourceLocation ruleId;
     private final ServerScheduler scheduler;
@@ -39,8 +40,8 @@ public final class RuntimeEffectContext implements EffectContext {
                                ResourceLocation ruleId, ServerScheduler scheduler,
                                int rounds, int coveredSourceItems, String outcomeId, int groupIndex,
                                int groupCount, int groupSourceCost) {
-        this(level, source, position, ruleId, scheduler, source.getItem().copy(), rounds,
-                coveredSourceItems, outcomeId, groupIndex, groupCount, groupSourceCost, null,
+        this(level, source, position, ruleId, scheduler, source.getItem().copy(), source.getDeltaMovement(),
+                rounds, coveredSourceItems, outcomeId, groupIndex, groupCount, groupSourceCost, null,
                 // 未显式给出候选级开关时沿用默认：安全生成关闭、起点填充开启
                 false, true);
     }
@@ -50,20 +51,21 @@ public final class RuntimeEffectContext implements EffectContext {
                                ResourceLocation ruleId, ServerScheduler scheduler,
                                int rounds, int coveredSourceItems, String outcomeId, int groupIndex,
                                int groupCount, int groupSourceCost, IntConsumer progressSink) {
-        this(level, source, position, ruleId, scheduler, source.getItem().copy(), rounds,
-                coveredSourceItems, outcomeId, groupIndex, groupCount, groupSourceCost, progressSink,
+        this(level, source, position, ruleId, scheduler, source.getItem().copy(), source.getDeltaMovement(),
+                rounds, coveredSourceItems, outcomeId, groupIndex, groupCount, groupSourceCost, progressSink,
                 false, true);
     }
 
     // 完整构造：显式给出源物品快照（结算任务在计划期就把整堆移出实体，快照必须单独传入）
     public RuntimeEffectContext(ServerLevel level, ItemEntity source, Vec3 position,
                                ResourceLocation ruleId, ServerScheduler scheduler,
-                               ItemStack sourceSnapshot, int rounds, int coveredSourceItems, String outcomeId,
-                               int groupIndex, int groupCount, int groupSourceCost, IntConsumer progressSink,
-                               boolean safeSpawn, boolean fillOrigin) {
+                               ItemStack sourceSnapshot, Vec3 sourceVelocity, int rounds, int coveredSourceItems,
+                               String outcomeId, int groupIndex, int groupCount, int groupSourceCost,
+                               IntConsumer progressSink, boolean safeSpawn, boolean fillOrigin) {
         this.level = level;
         this.source = source;
         this.sourceSnapshot = sourceSnapshot == null ? ItemStack.EMPTY : sourceSnapshot.copy();
+        this.sourceVelocity = sourceVelocity == null ? Vec3.ZERO : sourceVelocity;
         this.position = position;
         this.ruleId = ruleId;
         this.scheduler = scheduler;
@@ -142,6 +144,12 @@ public final class RuntimeEffectContext implements EffectContext {
     @Override
     public Vec3 position() {
         return position;
+    }
+
+    @Override
+    // 返回成功转化当刻固定的快照：源实体移除后不再读取实体本身
+    public Vec3 sourceVelocity() {
+        return sourceVelocity;
     }
 
     @Override
