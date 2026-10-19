@@ -46,6 +46,7 @@ The block below is the complete content the game creates on the first launch, an
   "position_search_checks_per_tick": 16,
   "debug_scenario_prepare_batch_size": 128,
   "debug_scenario_prepare_budget_us": 2000,
+  "max_place_block_radius": 8,
   "nearby_products": {
     "item_limit": 1024,
     "item_radius": 6,
@@ -81,6 +82,7 @@ Time values are in game ticks, and 20 ticks equal 1 second on a normal server.
 | `position_search_checks_per_tick` | How many candidate positions the mod tries per tick when it looks for a spot for a product or a returned item | 1 to 4096 | `16` | Raise it when items stay undelivered because the terrain leaves few spots. Lower it to save performance |
 | `debug_scenario_prepare_batch_size` | Affects only the preparation stage of test scenarios in a development environment, with no effect on normal play | 1 to 100000 | `128` | Players never need to change it |
 | `debug_scenario_prepare_budget_us` | The time cap in microseconds for that same preparation stage | 1 to 100000 microseconds | `2000` | Players never need to change it |
+| `max_place_block_radius` | Largest `radius` a single `place_block` action may use; rules above it are rejected when loaded or saved | 1 and above | `8` | Raise it to let one action cover a wider area, but the cost of one placement grows with the cube of the radius, so keep it modest; lowering it rejects existing rules that now exceed the cap, so edit those rules as well |
 | `nearby_products` | The nearby product limits. The number of products already near the destination decides whether a conversion group can start. See the next section | Object | See the next section | Lower it when piled-up products cause lag. Set the matching limit to `0` to remove the cap |
 
 `new_product_protection_seconds` and `conversion_cooldown_seconds` accept `0`, and no other field does. `server_budget_us` has a minimum of `100`, not `1`. Any value outside its range makes the whole file fall back to the defaults and logs an error, as described in the previous section.

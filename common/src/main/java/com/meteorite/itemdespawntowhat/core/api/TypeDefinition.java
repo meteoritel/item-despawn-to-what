@@ -19,4 +19,20 @@ public interface TypeDefinition<P> {
     default boolean validateParams(P params, IssueCollector issues, String fieldPath) {
         return true;
     }
+
+    /**
+     * 校验运行期上限（由服务端配置决定的参数边界）；默认通过，具体类型按需重写。
+     *
+     * <p>与 {@link #validateParams} 分开：参数自身的合法区间写在规则契约里、与配置无关，
+     * 运行期上限随服务端配置变化，只决定这一条规则能否被加载或保存。</p>
+     *
+     * @param params 该类型已解码的参数对象
+     * @param limits 当前服务端生效的运行期上限
+     * @param issues 问题收集器
+     * @param fieldPath 参数在规则中的字段路径
+     * @return 是否在上限内
+     */
+    default boolean validateRuntimeLimits(P params, RuleRuntimeLimits limits, IssueCollector issues, String fieldPath) {
+        return true;
+    }
 }

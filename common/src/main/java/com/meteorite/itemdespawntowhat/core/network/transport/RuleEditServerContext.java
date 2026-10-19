@@ -65,6 +65,12 @@ public interface RuleEditServerContext {
      */
     int referenceLifespanTicks();
 
+    /**
+     * 读取服务端配置的单次放置半径上限，随开屏载荷下发，仅用于 GUI 半径滑条的取值窗口。
+     * @return max_place_block_radius 的当前取值
+     */
+    int maxPlaceBlockRadius();
+
     // 向指定玩家发送一个自定义负载（S2C）；由平台层实现真实的发包方式
     void sendTo(ServerPlayer player, CustomPacketPayload payload);
 }

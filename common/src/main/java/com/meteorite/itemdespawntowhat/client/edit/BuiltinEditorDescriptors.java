@@ -166,20 +166,23 @@ public final class BuiltinEditorDescriptors {
         registerEffect(id("spawn_entity"), entityFields("item"));
 
         // place_block：block 与 use_source_block 至少一个。
-        // limit 的滑条窗口以默认半径的方框容量为初值，编辑时再按草稿当前 radius 刷新（见结果页的参数页绑定）。
+        // radius 的后端合法域不设静态上界，实际可用上限由服务端配置（max_place_block_radius）在加载/保存时校验；
+        // 滑条窗口先取配置默认值，打开编辑器后再按服务端随开屏载荷下发的上限刷新。
+        // limit 的滑条窗口以默认半径的方框容量为初值，编辑时再按草稿当前 radius 刷新并联动写入新的容量（见结果页绑定）。
         ResourceLocation placeBlock = id("place_block");
         registerEffect(placeBlock, List.of(
                 EditorField.optionalTag("block", h + "place_block.block", "minecraft:block"),
                 EditorField.bool("use_source_block", h + "place_block.use_source_block"),
                 EditorField.enumIn("shape", h + "place_block.shape", "place_block_shape", "square", "circle", "cross").optional(),
                 EditorField.integer("count", h + "place_block.count", 1, 64).optional(),
-                EditorField.integer("radius", h + "place_block.radius", 1, 32).optional(),
+                EditorField.integerSlider(PlaceBlockEffect.RADIUS_FIELD, h + "place_block.radius",
+                        PlaceBlockEffect.MIN_RADIUS, Integer.MAX_VALUE,
+                        PlaceBlockEffect.MIN_RADIUS, ServerConfig.DEFAULT.maxPlaceBlockRadius()).optional(),
                 EditorField.optionalInteger(PlaceBlockEffect.LIMIT_FIELD, h + "place_block.limit",
-                        PlaceBlockEffect.MIN_LIMIT, PlaceBlockEffect.MAX_LIMIT)
-                        .withNumbers(NumericDomain.integers(PlaceBlockEffect.MIN_LIMIT, PlaceBlockEffect.MAX_LIMIT,
+                        PlaceBlockEffect.MIN_LIMIT, Integer.MAX_VALUE)
+                        .withNumbers(NumericDomain.integers(PlaceBlockEffect.MIN_LIMIT, Integer.MAX_VALUE,
                                 PlaceBlockEffect.MIN_LIMIT,
-                                PlaceBlockEffect.limitUpperBound(PlaceBlockEffect.DEFAULT_RADIUS))),
-                EditorField.note(h + "place_block.note")
+                                PlaceBlockEffect.limitUpperBound(PlaceBlockEffect.DEFAULT_RADIUS)))
         ));
 
         // loot_table：战利品表不支持标签

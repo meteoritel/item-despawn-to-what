@@ -611,7 +611,7 @@ public final class RuleEditClientWorkspace {
             return;
         }
         EditorOpenRequest request = new EditorOpenRequest(payload.sessionId(), payload.targetId(),
-                payload.contextRevision(), payload.protocolVersion(), payload.statusCode(),
+                payload.contextRevision(), payload.protocolVersion(), payload.maxPlaceBlockRadius(), payload.statusCode(),
                 payload.messageArgs(), payload.fallbackMessage());
         if (payload.sessionId().isEmpty()) {
             // 取锁失败（LOCK_BUSY/UNAVAILABLE 等，服务端不带会话号）：只记录失败原因供界面提示

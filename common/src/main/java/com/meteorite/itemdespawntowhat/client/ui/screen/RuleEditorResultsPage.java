@@ -12,10 +12,12 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
+import com.meteorite.itemdespawntowhat.client.net.EditorOpenRequest;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiAction;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlowLayout;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLinkedValues;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -30,6 +32,7 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiSegmentedControl;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTypePicker;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
 import com.meteorite.itemdespawntowhat.core.model.CombinationMode;
 import com.meteorite.itemdespawntowhat.core.model.ConditionLimits;
 import com.meteorite.itemdespawntowhat.core.type.effect.PlaceBlockEffect;
@@ -95,7 +98,6 @@ final class RuleEditorResultsPage {
         resultBack = null;
         detailHeaderRect = null;
         emptyDetailRect = null;
-        planStrategyRect = null;
         actionParametersRect = null;
         selectedAction = null;
         effectNoteRect = null;
@@ -143,8 +145,13 @@ final class RuleEditorResultsPage {
 
     private @Nullable UiRect emptyDetailRect;
 
-    private @Nullable UiRect planStrategyRect;
     private @Nullable UiRect actionParametersRect;
+
+    // place_block 的 radius→limit 联动：记录上次绑定的动作路径与会话，用于判断何时清除手动标记
+    private @Nullable String placeBlockLinkPath;
+    private @Nullable EditSession placeBlockLinkSession;
+    // 上限是否已被手动改过：同一动作重建表单后沿用，避免一次手改后又被半径联动覆盖
+    private boolean placeBlockLimitManual;
 
     private boolean revealSelectedEffect;
 
@@ -301,17 +308,25 @@ final class RuleEditorResultsPage {
 
     /**
      * place_block 的字段联动：勾选「使用源物品的方块」后清除固定方块并隐藏该行，
-     * 避免隐藏的固定方块仍按服务端优先级生效；limit 的滑条窗口随同表单 radius 的当前值变化。
+     * 避免隐藏的固定方块仍按服务端优先级生效；radius 变化时把 limit 的滑条窗口改为该半径方框的容量，
+     * 并把 limit 跟随到新的容量上限——limit 一旦被手动改过就不再跟随，直到切换到别的动作或规则。
      */
     private void bindPlaceBlockVisibility(FormView form, EditSession session, String actionPath) {
         String blockPath = DraftPaths.child(actionPath, PlaceBlockEffect.BLOCK_FIELD);
         String useSourcePath = DraftPaths.child(actionPath, PlaceBlockEffect.USE_SOURCE_BLOCK_FIELD);
         String radiusPath = DraftPaths.child(actionPath, PlaceBlockEffect.RADIUS_FIELD);
+        String limitPath = DraftPaths.child(actionPath, PlaceBlockEffect.LIMIT_FIELD);
         // 手工 JSON 可能同时写两个字段；固定方块仍生效时保留该行，避免把生效值藏起来
         form.setRowVisibility(blockPath, () -> !RuleEditorPageSupport.boolOf(
                 session.draft().valueAt(actionPath), PlaceBlockEffect.USE_SOURCE_BLOCK_FIELD, false)
                 || session.draft().valueAt(blockPath) != null);
-        updatePlaceBlockLimitWindow(form, session, actionPath);
+        if (!actionPath.equals(placeBlockLinkPath) || placeBlockLinkSession != session) {
+            placeBlockLinkPath = actionPath;
+            placeBlockLinkSession = session;
+            placeBlockLimitManual = false;
+        }
+        updatePlaceBlockWindows(form, session, actionPath);
+        UiLinkedValues limitLink = placeBlockLimitLink(session, actionPath);
         form.setOnFieldWritten((path, before) -> {
             if (useSourcePath.equals(path)) {
                 if (!RuleEditorPageSupport.boolOf(session.draft().valueAt(actionPath),
@@ -319,11 +334,64 @@ final class RuleEditorResultsPage {
                 session.draft().removeAt(blockPath);
                 form.reload();
                 // 重载会按描述符初值重建控件，radius 的窗口需要再按当前草稿补一次
-                updatePlaceBlockLimitWindow(form, session, actionPath);
+                updatePlaceBlockWindows(form, session, actionPath);
             } else if (radiusPath.equals(path)) {
-                updatePlaceBlockLimitWindow(form, session, actionPath);
+                updatePlaceBlockWindows(form, session, actionPath);
+                // 半径变化后上限跟随到新方框的容量；上限被手动改过则不再覆盖
+                if (limitLink.driverChanged()) form.reload();
+                placeBlockLimitManual = limitLink.manual();
+            } else if (limitPath.equals(path)) {
+                limitLink.followerChanged();
+                placeBlockLimitManual = limitLink.manual();
             }
         });
+    }
+
+    /**
+     * 构造 place_block 的 radius→limit 联动：驱动值是草稿里的 radius，跟随值是草稿里的 limit，
+     * 目标值是 radius 方框内的位置总数；radius 缺失或越界时不联动。
+     *
+     * @param session 当前编辑会话
+     * @param actionPath 动作在草稿中的路径
+     * @return 联动绑定（带回上次记录的手动状态）
+     */
+    private UiLinkedValues placeBlockLimitLink(EditSession session, String actionPath) {
+        String limitPath = DraftPaths.child(actionPath, PlaceBlockEffect.LIMIT_FIELD);
+        UiLinkedValues.Accessor follower = new UiLinkedValues.Accessor() {
+            @Override
+            public double read() {
+                RuleValue action = session.draft().valueAt(actionPath);
+                int fallback = PlaceBlockEffect.limitUpperBound(draftPlaceBlockRadius(session, actionPath));
+                return action == null ? fallback : action.integer(PlaceBlockEffect.LIMIT_FIELD, fallback);
+            }
+
+            @Override
+            public void write(double value) {
+                session.draft().setAt(limitPath, RuleValue.integer((int) Math.round(value)));
+            }
+        };
+        return new UiLinkedValues(UiLinkedValues.readOnly(() -> draftPlaceBlockRadius(session, actionPath)),
+                follower, radius -> PlaceBlockEffect.limitUpperBound((int) Math.round(radius)),
+                placeBlockLimitManual)
+                .followWhen(radius -> radius >= PlaceBlockEffect.MIN_RADIUS
+                        && radius <= serverMaxPlaceBlockRadius());
+    }
+
+    /**
+     * 草稿里 place_block 的 radius：缺失或越界时按默认半径。
+     *
+     * @param session 当前编辑会话
+     * @param actionPath 动作在草稿中的路径
+     * @return 有效半径
+     */
+    private int draftPlaceBlockRadius(EditSession session, String actionPath) {
+        RuleValue action = session.draft().valueAt(actionPath);
+        int radius = action == null ? PlaceBlockEffect.DEFAULT_RADIUS
+                : action.integer(PlaceBlockEffect.RADIUS_FIELD, PlaceBlockEffect.DEFAULT_RADIUS);
+        if (radius < PlaceBlockEffect.MIN_RADIUS || radius > serverMaxPlaceBlockRadius()) {
+            return PlaceBlockEffect.DEFAULT_RADIUS;
+        }
+        return radius;
     }
 
     /**
@@ -334,15 +402,21 @@ final class RuleEditorResultsPage {
      * @param session 当前编辑会话
      * @param actionPath 动作在草稿中的路径
      */
-    private void updatePlaceBlockLimitWindow(FormView form, EditSession session, String actionPath) {
-        RuleValue action = session.draft().valueAt(actionPath);
-        int radius = action == null ? PlaceBlockEffect.DEFAULT_RADIUS
-                : action.integer(PlaceBlockEffect.RADIUS_FIELD, PlaceBlockEffect.DEFAULT_RADIUS);
-        if (radius < PlaceBlockEffect.MIN_RADIUS || radius > PlaceBlockEffect.MAX_RADIUS) {
-            radius = PlaceBlockEffect.DEFAULT_RADIUS;
-        }
+    private void updatePlaceBlockWindows(FormView form, EditSession session, String actionPath) {
+        form.setRowSliderWindow(DraftPaths.child(actionPath, PlaceBlockEffect.RADIUS_FIELD),
+                PlaceBlockEffect.MIN_RADIUS, serverMaxPlaceBlockRadius());
         form.setRowSliderWindow(DraftPaths.child(actionPath, PlaceBlockEffect.LIMIT_FIELD),
-                PlaceBlockEffect.MIN_LIMIT, PlaceBlockEffect.limitUpperBound(radius));
+                PlaceBlockEffect.MIN_LIMIT, PlaceBlockEffect.limitUpperBound(draftPlaceBlockRadius(session, actionPath)));
+    }
+
+    /**
+     * 服务端下发的单次放置半径上限：随开屏载荷到达，截图等没有会话载荷的工作区按配置默认值。
+     *
+     * @return radius 滑条的取值窗口上限
+     */
+    private int serverMaxPlaceBlockRadius() {
+        EditorOpenRequest request = pages.host.workspace().openRequest();
+        return request == null ? ServerConfig.DEFAULT.maxPlaceBlockRadius() : request.maxPlaceBlockRadius();
     }
 
     private UiButton addPlanButton(String key, UiAction action) {
@@ -549,8 +623,18 @@ final class RuleEditorResultsPage {
         }
         String listPath = ResultStructure.listPath(draft.root(), candidateIndex);
         RuleValue body = BuiltinEditorDefaults.effectBody(type);
+        // 服务端上限低于默认半径时，新建动作的半径与上限一并收进上限，避免一出生就非法
+        int placeRadius = Math.min(PlaceBlockEffect.DEFAULT_RADIUS, serverMaxPlaceBlockRadius());
         if (!pages.applyStructure(EditSession.OP_ADD_EFFECT,
-                () -> draft.setAt(DraftPaths.indexPath(listPath, draft.effectCountAt(listPath)), body))) {
+                () -> {
+                    String effectPath = DraftPaths.indexPath(listPath, draft.effectCountAt(listPath));
+                    draft.setAt(effectPath, body);
+                    if (PlaceBlockEffect.ID.equals(type) && placeRadius < PlaceBlockEffect.DEFAULT_RADIUS) {
+                        draft.setAt(DraftPaths.child(effectPath, PlaceBlockEffect.RADIUS_FIELD), RuleValue.integer(placeRadius));
+                        draft.setAt(DraftPaths.child(effectPath, PlaceBlockEffect.LIMIT_FIELD),
+                                RuleValue.integer(PlaceBlockEffect.limitUpperBound(placeRadius)));
+                    }
+                })) {
             return;
         }
         effectIndex = Math.max(0, draft.effectCountAt(listPath) - 1);
@@ -698,7 +782,6 @@ final class RuleEditorResultsPage {
         RuleEditorPageSupport.show(emptyAddButton, detail);
         detailHeaderRect = null;
         emptyDetailRect = null;
-        planStrategyRect = null;
         actionParametersRect = null;
         effectNoteRect = null;
         int y = layoutToolbar(area.x(), area.y(), area.width());
@@ -793,18 +876,14 @@ final class RuleEditorResultsPage {
                 effectNoteRect = new UiRect(contentX, y, contentWidth, RuleEditorPageSupport.LINE_H);
                 y += RuleEditorPageSupport.LINE_H + RuleEditorPageSupport.PAD;
             }
-            y = pages.layoutForm(effectForm, contentX, y, contentWidth);
-            // 方案级生成策略属于常规选项，不随行为高级参数的折叠状态隐藏。
-            if (safeSpawnBox != null || fillOriginBox != null) {
-                planStrategyRect = new UiRect(contentX, y, contentWidth, RuleEditorPageSupport.LINE_H);
-                y += RuleEditorPageSupport.LINE_H + RuleEditorPageSupport.PAD;
-            }
-            if (safeSpawnBox != null) {
-                safeSpawnBox.setBounds(contentX, y, contentWidth, RuleEditorPageSupport.ROW_H);
-                y += RuleEditorPageSupport.ROW_H + RuleEditorPageSupport.PAD;
-            }
+            // 方案级开关属于常规选项，不随行为高级参数的折叠状态隐藏；从方块起点填充放在参数之前
             if (fillOriginBox != null) {
                 fillOriginBox.setBounds(contentX, y, contentWidth, RuleEditorPageSupport.ROW_H);
+                y += RuleEditorPageSupport.ROW_H + RuleEditorPageSupport.PAD;
+            }
+            y = pages.layoutForm(effectForm, contentX, y, contentWidth);
+            if (safeSpawnBox != null) {
+                safeSpawnBox.setBounds(contentX, y, contentWidth, RuleEditorPageSupport.ROW_H);
                 y += RuleEditorPageSupport.ROW_H + RuleEditorPageSupport.PAD;
             }
             if (advancedButton != null) {
@@ -862,8 +941,6 @@ final class RuleEditorResultsPage {
         }
         Component readonlyNote = readonlyEffectNote(pages.currentView());
         if (readonlyNote != null) pages.drawText(graphics, effectNoteRect, readonlyNote, THEME.palette().warning());
-        pages.drawText(graphics, planStrategyRect, Component.translatable(RuleEditorPageSupport.UI + "results.plan_strategy"),
-                THEME.palette().textSecondary());
         pages.drawText(graphics, actionParametersRect, Component.translatable(RuleEditorPageSupport.UI + "results.action_parameters"),
                 THEME.palette().textSecondary());
     }

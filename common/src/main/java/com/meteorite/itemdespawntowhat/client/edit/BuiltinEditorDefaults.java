@@ -47,7 +47,7 @@ public final class BuiltinEditorDefaults {
             if (type != null && TypeLabels.OWN_NAMESPACE.equals(type.getNamespace())) {
                 if ("chance".equals(field)) return RuleValue.decimal(1.0D);
                 if ("delay_ticks".equals(field)) return RuleValue.integer(0);
-                // 放置上限省略表示不限制数量，新建时也不写初值。
+                // 放置上限省略表示不限制数量：旧规则不显示假默认值，新建时由 applyEffectDefaults 写入方框容量。
                 if (PlaceBlockEffect.ID.equals(type) && PlaceBlockEffect.LIMIT_FIELD.equals(field)) return null;
                 RuleValue defaults = effectBody(type);
                 if ("spawn_entity".equals(type.getPath())) {
@@ -120,8 +120,9 @@ public final class BuiltinEditorDefaults {
                 body.addProperty("shape", "square");
                 body.addProperty(PlaceBlockEffect.COUNT_FIELD, PlaceBlockEffect.DEFAULT_COUNT);
                 body.addProperty(PlaceBlockEffect.RADIUS_FIELD, PlaceBlockEffect.DEFAULT_RADIUS);
-                // 不写 limit：省略即不限制数量，写死上界会超出当前半径的滑块窗口而像一条硬上限
-
+                // 上限初值取当前半径方框的容量：滑条停在最大值，半径变化时由界面联动改写
+                body.addProperty(PlaceBlockEffect.LIMIT_FIELD,
+                        PlaceBlockEffect.limitUpperBound(PlaceBlockEffect.DEFAULT_RADIUS));
             }
             case "loot_table" -> body.addProperty("luck", 0.0F);
             case "lightning" -> body.addProperty("count", 1);

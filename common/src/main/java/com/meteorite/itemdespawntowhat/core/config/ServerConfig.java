@@ -4,6 +4,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.RuleDecodeBudget;
+import com.meteorite.itemdespawntowhat.core.api.RuleRuntimeLimits;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.DataResult;
@@ -38,8 +39,8 @@ public record ServerConfig(
         int conversionCooldownSeconds,
         int positionSearchChecksPerTick,
         int debugScenarioPrepareBatchSize,
-        int debugScenarioPrepareBudgetUs
-,
+        int debugScenarioPrepareBudgetUs,
+        int maxPlaceBlockRadius,
         NearbyProductLimits nearbyProducts
 ) {
 
@@ -72,6 +73,9 @@ public record ServerConfig(
     public static final int DEFAULT_DEBUG_SCENARIO_PREPARE_BATCH_SIZE = 128;
     public static final int DEFAULT_DEBUG_SCENARIO_PREPARE_BUDGET_US = 2000;
 
+    // 单次放置半径上限的默认值：放置开销随半径立方增长，默认只放行 1～8
+    public static final int DEFAULT_MAX_PLACE_BLOCK_RADIUS = 8;
+
     // 默认配置，也是缺失字段时的兜底；max_work_units_per_tick 缺省为空表示回退到 max_checks_per_tick
     public static final ServerConfig DEFAULT = new ServerConfig(
             DEFAULT_CHECK_INTERVAL_TICKS,
@@ -89,7 +93,8 @@ public record ServerConfig(
             DEFAULT_CONVERSION_COOLDOWN_SECONDS,
             DEFAULT_POSITION_SEARCH_CHECKS_PER_TICK,
             DEFAULT_DEBUG_SCENARIO_PREPARE_BATCH_SIZE,
-            DEFAULT_DEBUG_SCENARIO_PREPARE_BUDGET_US
+            DEFAULT_DEBUG_SCENARIO_PREPARE_BUDGET_US,
+            DEFAULT_MAX_PLACE_BLOCK_RADIUS
     );
 
     private static final MapCodec<ServerConfig> BASE_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
@@ -132,17 +137,36 @@ public record ServerConfig(
                     .forGetter(ServerConfig::debugScenarioPrepareBudgetUs)
     ).apply(instance, ServerConfig::new));
 
-    // 便捷构造：不含邻近阈值参数，统一取 NearbyProductLimits.DEFAULT
+    // 便捷构造：不含放置半径上限与邻近阈值，分别取默认上限与 NearbyProductLimits.DEFAULT；供 BASE_CODEC 的 16 字段组使用
     @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
     public ServerConfig(int checkIntervalTicks, int backoffMaxTicks, int maxChecksPerTick, String overlayDirectory, int fabricLifespanFallbackTicks, boolean debugLogging, int serverBudgetUs, Optional<Integer> maxWorkUnitsPerTick, int effectsWorkUnitsPerTick, int checkSpreadWindowTicks, int dispatchBatchSize, int newProductProtectionSeconds, int conversionCooldownSeconds, int positionSearchChecksPerTick, int debugScenarioPrepareBatchSize, int debugScenarioPrepareBudgetUs) {
-        this(checkIntervalTicks, backoffMaxTicks, maxChecksPerTick, overlayDirectory, fabricLifespanFallbackTicks, debugLogging, serverBudgetUs, maxWorkUnitsPerTick, effectsWorkUnitsPerTick, checkSpreadWindowTicks, dispatchBatchSize, newProductProtectionSeconds, conversionCooldownSeconds, positionSearchChecksPerTick, debugScenarioPrepareBatchSize, debugScenarioPrepareBudgetUs, NearbyProductLimits.DEFAULT);
+        this(checkIntervalTicks, backoffMaxTicks, maxChecksPerTick, overlayDirectory, fabricLifespanFallbackTicks, debugLogging, serverBudgetUs, maxWorkUnitsPerTick, effectsWorkUnitsPerTick, checkSpreadWindowTicks, dispatchBatchSize, newProductProtectionSeconds, conversionCooldownSeconds, positionSearchChecksPerTick, debugScenarioPrepareBatchSize, debugScenarioPrepareBudgetUs, DEFAULT_MAX_PLACE_BLOCK_RADIUS, NearbyProductLimits.DEFAULT);
     }
 
+    // 便捷构造：不含邻近阈值参数，统一取 NearbyProductLimits.DEFAULT
+    @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
+    public ServerConfig(int checkIntervalTicks, int backoffMaxTicks, int maxChecksPerTick, String overlayDirectory, int fabricLifespanFallbackTicks, boolean debugLogging, int serverBudgetUs, Optional<Integer> maxWorkUnitsPerTick, int effectsWorkUnitsPerTick, int checkSpreadWindowTicks, int dispatchBatchSize, int newProductProtectionSeconds, int conversionCooldownSeconds, int positionSearchChecksPerTick, int debugScenarioPrepareBatchSize, int debugScenarioPrepareBudgetUs, int maxPlaceBlockRadius) {
+        this(checkIntervalTicks, backoffMaxTicks, maxChecksPerTick, overlayDirectory, fabricLifespanFallbackTicks, debugLogging, serverBudgetUs, maxWorkUnitsPerTick, effectsWorkUnitsPerTick, checkSpreadWindowTicks, dispatchBatchSize, newProductProtectionSeconds, conversionCooldownSeconds, positionSearchChecksPerTick, debugScenarioPrepareBatchSize, debugScenarioPrepareBudgetUs, maxPlaceBlockRadius, NearbyProductLimits.DEFAULT);
+    }
+
+    // 单次放置半径上限放在本层：RecordCodecBuilder 单组最多 16 个字段，BASE_CODEC 已是 16 项满额
     public static final Codec<ServerConfig> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             BASE_CODEC.forGetter(value -> value),
+            Codec.intRange(1, Integer.MAX_VALUE)
+                    .optionalFieldOf("max_place_block_radius", DEFAULT_MAX_PLACE_BLOCK_RADIUS)
+                    .forGetter(ServerConfig::maxPlaceBlockRadius),
             NearbyProductLimits.CODEC.optionalFieldOf("nearby_products", NearbyProductLimits.DEFAULT)
                     .forGetter(ServerConfig::nearbyProducts)
-    ).apply(instance, (base, limits) -> new ServerConfig(base.checkIntervalTicks(), base.backoffMaxTicks(), base.maxChecksPerTick(), base.overlayDirectory(), base.fabricLifespanFallbackTicks(), base.debugLogging(), base.serverBudgetUs(), base.maxWorkUnitsPerTick(), base.effectsWorkUnitsPerTick(), base.checkSpreadWindowTicks(), base.dispatchBatchSize(), base.newProductProtectionSeconds(), base.conversionCooldownSeconds(), base.positionSearchChecksPerTick(), base.debugScenarioPrepareBatchSize(), base.debugScenarioPrepareBudgetUs(), limits)));
+    ).apply(instance, (base, maxPlaceBlockRadius, limits) -> new ServerConfig(base.checkIntervalTicks(), base.backoffMaxTicks(), base.maxChecksPerTick(), base.overlayDirectory(), base.fabricLifespanFallbackTicks(), base.debugLogging(), base.serverBudgetUs(), base.maxWorkUnitsPerTick(), base.effectsWorkUnitsPerTick(), base.checkSpreadWindowTicks(), base.dispatchBatchSize(), base.newProductProtectionSeconds(), base.conversionCooldownSeconds(), base.positionSearchChecksPerTick(), base.debugScenarioPrepareBatchSize(), base.debugScenarioPrepareBudgetUs(), maxPlaceBlockRadius, limits)));
+
+    /**
+     * 由本配置换算出的运行期上限：规则加载与保存校验据此拒载超出上限的规则。
+     *
+     * @return 运行期上限
+     */
+    public RuleRuntimeLimits runtimeLimits() {
+        return new RuleRuntimeLimits(maxPlaceBlockRadius);
+    }
 
     // 全局工作量上限：未显式配置时回退到 max_checks_per_tick，保持既有配置意图
     public int effectiveMaxWorkUnitsPerTick() {

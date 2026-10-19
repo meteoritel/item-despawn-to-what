@@ -202,7 +202,8 @@ final class RuleSaveTask implements ServerTask {
             case VALIDATE -> {
                 if (cursor < changes.edits().size()) {
                     IssueCollector local = new IssueCollector();
-                    RuleSubmissionValidator.validateEdit(changes.edits().get(cursor++), server, context.typeRegistries(), local);
+                    RuleSubmissionValidator.validateEdit(changes.edits().get(cursor++), server,
+                            context.typeRegistries(), reloadContext.loadContext().runtimeLimits(), local);
                     appendIssues(local);
                     if (local.hasErrors()) { finish(RuleSaveStatus.VALIDATION_FAILED, local.format()); }
                 } else {
@@ -263,7 +264,8 @@ final class RuleSaveTask implements ServerTask {
                     IssueCollector local = new IssueCollector();
                     var load = reloadContext.loadContext();
                     RuleLoader.decodeEntry(entry, RuleCodecs.decoder(load.registryAccess(), load.effectTypes(), load.conditionTypes()), local)
-                            .filter(rule -> RuleValidation.validate(rule, load.effectTypes(), load.conditionTypes(), local, entry.origin().display())
+                            .filter(rule -> RuleValidation.validate(rule, load.effectTypes(), load.conditionTypes(),
+                                            load.runtimeLimits(), local, entry.origin().display())
                                     && RuleReferenceValidator.validate(rule, server, local, entry.origin().display()))
                             .ifPresent(rule -> decoded.add(new LoadedRule<>(entry.id(), entry.origin(), rule)));
                     appendIssues(local);

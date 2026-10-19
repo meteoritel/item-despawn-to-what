@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.core.model;
 import com.meteorite.itemdespawntowhat.core.api.Issue;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
+import com.meteorite.itemdespawntowhat.core.api.RuleRuntimeLimits;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.api.TypeDefinition;
@@ -21,9 +22,10 @@ import java.util.Set;
 /**
  * 规则语义校验。
  * 统一严格策略：语义非法即由调用方拒载该条规则，其余条目照常加载；所有问题进入 IssueCollector。
- * 两档入口：
+ * 三档入口：
  * - validate(rule, issues, origin)：只做结构校验（不依赖注册表）；
- * - validate(rule, effectTypes, conditionTypes, issues, origin)：结构校验 + 类型专属参数校验。
+ * - validate(rule, effectTypes, conditionTypes, issues, origin)：结构校验 + 类型专属参数校验（运行期上限取默认值）；
+ * - validate(rule, effectTypes, conditionTypes, runtimeLimits, issues, origin)：再加服务端配置决定的运行期上限校验。
  */
 public final class RuleValidation {
 
@@ -106,17 +108,37 @@ public final class RuleValidation {
                                    TypeRegistry<ConditionType<?>> conditionTypes,
                                    IssueCollector issues,
                                    @Nullable String origin) {
+        return validate(rule, effectTypes, conditionTypes, RuleRuntimeLimits.UNLIMITED, issues, origin);
+    }
+
+    /**
+     * 校验单条规则（结构 + 类型专属参数 + 服务端运行期上限）；参数超限同样按「该条拒载」处理。
+     *
+     * @param rule 待校验规则
+     * @param effectTypes 已注册的效果类型
+     * @param conditionTypes 已注册的条件类型
+     * @param runtimeLimits 当前服务端生效的运行期上限（来自配置，不写进规则）
+     * @param issues 问题收集器
+     * @param origin 问题定位来源
+     * @return 是否通过
+     */
+    public static boolean validate(Rule rule,
+                                   TypeRegistry<EffectType<?>> effectTypes,
+                                   TypeRegistry<ConditionType<?>> conditionTypes,
+                                   RuleRuntimeLimits runtimeLimits,
+                                   IssueCollector issues,
+                                   @Nullable String origin) {
         int before = issues.errors().size();
         validate(rule, issues, origin);
-        validateConditionParams(rule.conditions(), conditionTypes, issues, origin, RuleFields.CONDITIONS);
+        validateConditionParams(rule.conditions(), conditionTypes, runtimeLimits, issues, origin, RuleFields.CONDITIONS);
         // 类型专属参数校验覆盖顶层 effects 与候选结果内 effects，路径与 JSON 形状一致
         for (EffectSlot slot : effectSlots(rule)) {
             Effect effect = slot.effect();
             String path = slot.path();
-            validateEffectParams(effect, effectTypes, issues, origin, path);
+            validateEffectParams(effect, effectTypes, runtimeLimits, issues, origin, path);
             ConditionExpression conditions = effect.conditions();
             if (conditions != null) {
-                validateConditionParams(conditions, conditionTypes, issues, origin, path + "." + RuleFields.CONDITIONS);
+                validateConditionParams(conditions, conditionTypes, runtimeLimits, issues, origin, path + "." + RuleFields.CONDITIONS);
             }
         }
         return issues.errors().size() == before;
@@ -124,7 +146,8 @@ public final class RuleValidation {
 
     // 效果类型专属参数校验：类型未注册时给出可读错误
     private static void validateEffectParams(Effect effect, TypeRegistry<EffectType<?>> effectTypes,
-                                             IssueCollector issues, @Nullable String origin, String path) {
+                                             RuleRuntimeLimits runtimeLimits, IssueCollector issues,
+                                             @Nullable String origin, String path) {
         if (effect.type() == null) {
             return;
         }
@@ -133,12 +156,13 @@ public final class RuleValidation {
             issues.error("未注册的效果类型: " + effect.type(), origin, path);
             return;
         }
-        validateTypeParams(definition, effect, issues, origin, path);
+        validateTypeParams(definition, effect, runtimeLimits, issues, origin, path);
     }
 
     // 条件叶类型专属参数校验：沿条件树逐叶展开，路径与 JSON 形状一致（如 conditions.terms[0].condition）
     private static void validateConditionParams(ConditionExpression expression,
                                                 TypeRegistry<ConditionType<?>> conditionTypes,
+                                                RuleRuntimeLimits runtimeLimits,
                                                 IssueCollector issues, @Nullable String origin, String basePath) {
         ConditionTrees.forEachLeaf(expression.root(), basePath, (path, condition) -> {
             if (condition == null || condition.type() == null) {
@@ -150,20 +174,23 @@ public final class RuleValidation {
                 issues.error("未注册的条件类型: " + condition.type(), origin, path);
                 return;
             }
-            validateTypeParams(definition, condition, issues, origin, path);
+            validateTypeParams(definition, condition, runtimeLimits, issues, origin, path);
         });
     }
 
     // 泛型桥接：参数对象即类型定义所声明的 P，运行时安全（validateParams 只读参数）
     @SuppressWarnings("unchecked")
     private static <P> void validateTypeParams(TypeDefinition<P> definition, Object params,
-                                               IssueCollector issues, @Nullable String origin, String path) {
+                                               RuleRuntimeLimits runtimeLimits, IssueCollector issues,
+                                               @Nullable String origin, String path) {
         if (params == null) {
             return;
         }
         // 先收进局部收集器，补好来源后一次性并入；避免边遍历边追加导致重复 Issue
         IssueCollector local = new IssueCollector();
         boolean valid = definition.validateParams((P) params, local, path);
+        // 参数合法但超出服务端运行期上限时同样拒载；上限问题自带可读消息
+        valid &= definition.validateRuntimeLimits((P) params, runtimeLimits, local, path);
         // 若实现只返回 false 而未写入问题，补一条兜底错误，避免错误静默
         if (!valid && local.errors().isEmpty()) {
             local.error("类型 " + definition.id() + " 的参数非法", null, path);

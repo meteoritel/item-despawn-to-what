@@ -149,7 +149,7 @@ public final class RuleEditService {
     }
 
     // 「打开编辑器」唯一入口：先原子取锁，成功或失败都要把结论下发给客户端
-    public synchronized OpenOutcome openEditor(ServerPlayer player, long tick) {
+    public synchronized OpenOutcome openEditor(ServerPlayer player, long tick, int maxPlaceBlockRadius) {
         EditSessionManager.AcquireResult acquired =
                 sessions.acquire(player.getUUID(), player.getName().getString(), tick);
         if (acquired.acquired()) {
@@ -158,6 +158,7 @@ public final class RuleEditService {
                     RuleEditSessionLimits.TARGET_ID,
                     RuleEditProtocol.VERSION,
                     sessions.version(),
+                    maxPlaceBlockRadius,
                     RuleSaveStatus.SUCCESS.id(),
                     List.of(),
                     "Editor opened.");
@@ -169,6 +170,7 @@ public final class RuleEditService {
                 RuleEditSessionLimits.TARGET_ID,
                 RuleEditProtocol.VERSION,
                 sessions.version(),
+                maxPlaceBlockRadius,
                 RuleSaveStatus.LOCK_BUSY.id(),
                 args(holder),
                 "Rules are being edited by " + holder + ".");

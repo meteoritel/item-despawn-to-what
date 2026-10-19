@@ -147,7 +147,8 @@ final class RuleSnapshotTask implements ServerTask {
                 RawRuleEntry entry = source.entries().get(cursor++);
                 var load = reloadContext.loadContext();
                 RuleLoader.decodeEntry(entry, decoder, source.issues())
-                        .filter(rule -> RuleValidation.validate(rule, load.effectTypes(), load.conditionTypes(), source.issues(), entry.origin().display())
+                        .filter(rule -> RuleValidation.validate(rule, load.effectTypes(), load.conditionTypes(),
+                                        load.runtimeLimits(), source.issues(), entry.origin().display())
                                 && RuleReferenceValidator.validate(rule, server, source.issues(), entry.origin().display()))
                         .ifPresent(rule -> {
                             decoded.add(new LoadedRule<>(entry.id(), entry.origin(), rule));

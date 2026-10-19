@@ -46,6 +46,7 @@
   "position_search_checks_per_tick": 16,
   "debug_scenario_prepare_batch_size": 128,
   "debug_scenario_prepare_budget_us": 2000,
+  "max_place_block_radius": 8,
   "nearby_products": {
     "item_limit": 1024,
     "item_radius": 6,
@@ -81,6 +82,7 @@
 | `position_search_checks_per_tick` | 每刻最多尝试多少个候选位置，用来给产物或返还物找落点 | 1～4096 | `16` | 出现东西一直没交出来、落点难找（地形拥挤）时调大；想省性能可调小 |
 | `debug_scenario_prepare_batch_size` | 只影响开发环境测试场景的准备阶段，与正常游玩无关 | 1～100000 | `128` | 普通玩家不用改 |
 | `debug_scenario_prepare_budget_us` | 同上，准备阶段的时间上限（微秒） | 1～100000 微秒 | `2000` | 普通玩家不用改 |
+| `max_place_block_radius` | 单条规则里 `place_block` 的 `radius` 允许的最大值；超过的规则在加载与保存时被拒载 | 1 以上 | `8` | 想让一条规则一次铺得更远就调大，但单次放置开销按半径的立方增长，不要调得过大；调小后超出新上限的既有规则会被拒载，需要同时把规则里的 `radius` 改小 |
 | `nearby_products` | 产物邻近上限，按附近已有的产物数量决定一组转化能不能开始，详见下一节 | 对象 | 见下一节 | 产物堆积过多导致卡顿时调低；想解除数量限制时把对应上限设 `0` |
 
 `new_product_protection_seconds` 与 `conversion_cooldown_seconds` 允许写 `0`，其余字段不能写 `0`；`server_budget_us` 的下限是 `100` 而不是 `1`。任何一项写出范围都会让整份文件回退默认值并在日志报错，见上一节。

@@ -4,6 +4,7 @@ import com.mojang.serialization.DataResult;
 
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
+import com.meteorite.itemdespawntowhat.core.api.RuleRuntimeLimits;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
 import com.meteorite.itemdespawntowhat.core.model.RuleValidation;
@@ -16,9 +17,10 @@ public final class RuleSubmissionValidator {
 
     // 控制条目只允许 id 与一个值为 true 的控制字段；普通条目走完整 Codec 和类型校验。
     public static boolean validate(RuleEditChangeSet changes, net.minecraft.server.MinecraftServer server,
-                                   BuiltinTypeRegistries types, IssueCollector issues) {
+                                   BuiltinTypeRegistries types, RuleRuntimeLimits runtimeLimits,
+                                   IssueCollector issues) {
         for (RuleEdit edit : changes.edits()) {
-            validateEdit(edit, server, types, issues);
+            validateEdit(edit, server, types, runtimeLimits, issues);
         }
         return !issues.hasErrors();
     }
@@ -28,10 +30,12 @@ public final class RuleSubmissionValidator {
      * @param edit 编辑意图
      * @param server 当前服务端
      * @param types 类型注册表
+     * @param runtimeLimits 当前服务端生效的运行期上限
      * @param issues 本批问题收集器
      */
     public static void validateEdit(RuleEdit edit, net.minecraft.server.MinecraftServer server,
-                                    BuiltinTypeRegistries types, IssueCollector issues) {
+                                    BuiltinTypeRegistries types, RuleRuntimeLimits runtimeLimits,
+                                    IssueCollector issues) {
         if (edit.action() == RuleEdit.Action.DELETE) { return; }
         JsonObject body = java.util.Objects.requireNonNull(edit.rule()).deepCopy();
         body.addProperty("id", edit.id().toString());
@@ -48,7 +52,8 @@ public final class RuleSubmissionValidator {
             if (rule == null) {
                 issues.error(decoded.error().map(DataResult.Error::message).orElse("规则解码失败"), edit.id().toString(), null);
             } else {
-                RuleValidation.validate(rule, types.effectTypes(), types.conditionTypes(), issues, edit.id().toString());
+                RuleValidation.validate(rule, types.effectTypes(), types.conditionTypes(), runtimeLimits, issues,
+                        edit.id().toString());
                 RuleReferenceValidator.validate(rule, server, issues, edit.id().toString());
             }
         } catch (RuntimeException | StackOverflowError failure) {

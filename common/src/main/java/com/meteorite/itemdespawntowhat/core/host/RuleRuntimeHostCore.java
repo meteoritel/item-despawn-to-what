@@ -4,6 +4,7 @@ import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.Issue;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.IssueSeverity;
+import com.meteorite.itemdespawntowhat.core.api.RuleRuntimeLimits;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
 import com.meteorite.itemdespawntowhat.core.command.RuleCommandContext;
 import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
@@ -154,7 +155,8 @@ public final class RuleRuntimeHostCore {
             ConversionRuntime newRuntime = new ConversionRuntime(config, registries, platform.lifespan(config));
 
             RuleSaveReloadContext saveContext = captureSaveContext(
-                    context(server.getResourceManager(), server.registryAccess(), overlay, registries, server));
+                    context(server.getResourceManager(), server.registryAccess(), overlay, registries, server,
+                            config.runtimeLimits()));
             RuleLoadResult<Rule> result = RuleLoadingService.loadAndValidate(saveContext.loadContext(), saveContext.baseRules());
             saveContext.baseIssues().forEach(result.issues()::add);
             newRuntime.replaceRules(result.rules(), result.issues());
@@ -217,7 +219,7 @@ public final class RuleRuntimeHostCore {
         }
         try {
             RuleSaveReloadContext saveContext = captureSaveContext(
-                    context(resourceManager, server.registryAccess(), overlay, registries, server));
+                    context(resourceManager, server.registryAccess(), overlay, registries, server, runtimeLimits()));
             RuleLoadResult<Rule> result = RuleLoadingService.loadAndValidate(saveContext.loadContext(), saveContext.baseRules());
             saveContext.baseIssues().forEach(result.issues()::add);
             current.replaceRules(result.rules(), result.issues());
@@ -336,10 +338,17 @@ public final class RuleRuntimeHostCore {
     private RuleLoadContext context(ResourceManager resourceManager,
                                     RegistryAccess registryAccess,
                                     Path overlay,
-                                    BuiltinTypeRegistries registries, MinecraftServer server) {
+                                    BuiltinTypeRegistries registries, MinecraftServer server,
+                                    RuleRuntimeLimits runtimeLimits) {
         return RuleLoadContext.full(resourceManager, overlay, MOD_NAMESPACE, registryAccess,
                 registries.effectTypes(), registries.conditionTypes(),
-                platform.packLayerResolver(resourceManager)).withServer(server);
+                platform.packLayerResolver(resourceManager)).withServer(server).withRuntimeLimits(runtimeLimits);
+    }
+
+    // 当前生效的运行期上限：运行时就绪前没有配置可读，按「不施加限制」处理
+    private RuleRuntimeLimits runtimeLimits() {
+        ServerConfig config = serverConfig;
+        return config == null ? RuleRuntimeLimits.UNLIMITED : config.runtimeLimits();
     }
 
     // 基底只在启动/数据包重载时读取，保存后台不接触 ResourceManager 或平台包判定器。
@@ -395,6 +404,12 @@ public final class RuleRuntimeHostCore {
         }
 
         @Override
+        public int maxPlaceBlockRadius() {
+            ServerConfig config = serverConfig;
+            return config == null ? ServerConfig.DEFAULT.maxPlaceBlockRadius() : config.maxPlaceBlockRadius();
+        }
+
+        @Override
         public void sendTo(ServerPlayer player, CustomPacketPayload payload) {
             // 发包方式由平台层提供（Fabric: ServerPlayNetworking / NeoForge: PacketDistributor）
             Services.PLATFORM.sendToPlayer(player, payload);
@@ -407,7 +422,8 @@ public final class RuleRuntimeHostCore {
             if (overlay == null || registries == null) {
                 return emptyResult();
             }
-            return loadRules(context(server.getResourceManager(), server.registryAccess(), overlay, registries, server));
+            return loadRules(context(server.getResourceManager(), server.registryAccess(), overlay, registries,
+                    server, runtimeLimits()));
         }
 
         @Override

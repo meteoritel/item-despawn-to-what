@@ -72,7 +72,7 @@ public final class RuleLoadingService {
         for (LoadedRule<Rule> entry : loaded.rules()) {
             // 必须使用注册表感知重载：否则未注册引用、区间/结构类非法参数会在装配层被静默放行
             if (RuleValidation.validate(entry.value(), context.effectTypes(), context.conditionTypes(),
-                    loaded.issues(), entry.origin().display())
+                    context.runtimeLimits(), loaded.issues(), entry.origin().display())
                     && (server == null || RuleReferenceValidator.validate(entry.value(), server, loaded.issues(), entry.origin().display()))) {
                 valid.add(entry);
             }

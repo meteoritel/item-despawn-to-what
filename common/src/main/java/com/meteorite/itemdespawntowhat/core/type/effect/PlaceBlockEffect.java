@@ -7,6 +7,7 @@ import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
+import com.meteorite.itemdespawntowhat.core.api.RuleRuntimeLimits;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
@@ -68,24 +69,22 @@ public record PlaceBlockEffect(
     public static final int MAX_COUNT = 64;
     public static final int DEFAULT_RADIUS = 6;
     public static final int MIN_RADIUS = 1;
-    public static final int MAX_RADIUS = 32;
     public static final int MIN_LIMIT = 1;
-    /**
-     * limit 的后端上界：最大半径方框（{@link #MAX_RADIUS}）内的位置总数。
-     * 取该值保证任意半径下把 limit 拉到上界都足以覆盖整个方框；界面滑块的实际窗口随当前半径变化，
-     * 见 {@link #limitUpperBound(int)}。
-     */
-    public static final int MAX_LIMIT = limitUpperBound(MAX_RADIUS);
 
     /**
-     * 半径对应方框内的位置总数，作为该半径下 limit 的滑块窗口上限。
-     * @param radius 放置半径，取值区间为 {@link #MIN_RADIUS}～{@link #MAX_RADIUS}
-     * @return (2 * radius + 1)³，即该半径方框内的位置总数
+     * 半径对应方框内的位置总数，用作该半径下 limit 滑块的窗口上限。
+     *
+     * <p>方框内最多只能容纳这么多个方块，所以 limit 写超过它的值不会拒载，只是从此限不到数量、等价于不限；
+     * 滑块窗口仍按这个容量收窄，窗口外的合法值可以精确输入并保存。radius 自身不设静态上界，
+     * 由服务端配置 max_place_block_radius 在加载与保存校验时限定。</p>
+     *
+     * @param radius 放置半径
+     * @return (2 * radius + 1)³，超出 int 表示范围时取 int 上界
      */
     public static int limitUpperBound(int radius) {
-        int bounded = Math.clamp(radius, MIN_RADIUS, MAX_RADIUS);
-        long span = bounded * 2L + 1L;
-        return (int) (span * span * span);
+        long span = Math.max(radius, MIN_RADIUS) * 2L + 1L;
+        long total = span * span * span;
+        return (int) Math.min(total, Integer.MAX_VALUE);
     }
 
     // 放置形状
@@ -108,9 +107,9 @@ public record PlaceBlockEffect(
                 Shape.CODEC.optionalFieldOf(SHAPE_FIELD, DEFAULT_SHAPE).forGetter(PlaceBlockEffect::shape),
                 Codec.intRange(MIN_COUNT, MAX_COUNT).optionalFieldOf(COUNT_FIELD, DEFAULT_COUNT)
                         .forGetter(PlaceBlockEffect::count),
-                Codec.intRange(MIN_RADIUS, MAX_RADIUS).optionalFieldOf(RADIUS_FIELD, DEFAULT_RADIUS)
+                Codec.intRange(MIN_RADIUS, Integer.MAX_VALUE).optionalFieldOf(RADIUS_FIELD, DEFAULT_RADIUS)
                         .forGetter(PlaceBlockEffect::radius),
-                Codec.intRange(MIN_LIMIT, MAX_LIMIT).optionalFieldOf(LIMIT_FIELD)
+                Codec.intRange(MIN_LIMIT, Integer.MAX_VALUE).optionalFieldOf(LIMIT_FIELD)
                         .forGetter(effect -> Optional.ofNullable(effect.limit())),
                 CommonFields.delayTicks(PlaceBlockEffect::delayTicks),
                 CommonFields.chance(PlaceBlockEffect::chance),
@@ -149,8 +148,8 @@ public record PlaceBlockEffect(
                 return PlaceBlockExecutor.start(effect, context, preparation);
             }
         };
-        return new SimpleEffectType<>(ID, codec(expressionCodec), PlaceBlockEffect::validateParams, executor,
-                ProductKind.BLOCK);
+        return new SimpleEffectType<>(ID, codec(expressionCodec), PlaceBlockEffect::validateParams,
+                PlaceBlockEffect::validateRuntimeLimits, executor, ProductKind.BLOCK);
     }
 
     // 参数语义校验；问题写入 issues，不抛异常
@@ -166,13 +165,36 @@ public record PlaceBlockEffect(
                 ParamChecks.child(fieldPath, BLOCK_FIELD));
         valid &= ParamChecks.inRange(params.count(), MIN_COUNT, MAX_COUNT, COUNT_FIELD, issues,
                 ParamChecks.child(fieldPath, COUNT_FIELD));
-        valid &= ParamChecks.inRange(params.radius(), MIN_RADIUS, MAX_RADIUS, RADIUS_FIELD, issues,
+        valid &= ParamChecks.inRange(params.radius(), MIN_RADIUS, Integer.MAX_VALUE, RADIUS_FIELD, issues,
                 ParamChecks.child(fieldPath, RADIUS_FIELD));
-        if (params.limit() != null) {
-            valid &= ParamChecks.inRange(params.limit(), MIN_LIMIT, MAX_LIMIT, LIMIT_FIELD, issues,
+        if (params.limit() != null && params.limit() < MIN_LIMIT) {
+            issues.error(LIMIT_FIELD + " 不能小于 " + MIN_LIMIT + "，当前为 " + params.limit(), null,
                     ParamChecks.child(fieldPath, LIMIT_FIELD));
+            valid = false;
         }
         return valid;
+    }
+
+    /**
+     * 运行期上限校验：radius 不得超过服务端配置的单次放置半径上限。
+     *
+     * <p>放置开销随半径立方增长，超出上限的规则在加载时即被拒载，避免一条规则拖慢服务端。</p>
+     *
+     * @param params 已解码的放置参数
+     * @param limits 当前服务端生效的运行期上限
+     * @param issues 问题收集器
+     * @param fieldPath 参数在规则中的字段路径
+     * @return 是否在上限内
+     */
+    public static boolean validateRuntimeLimits(PlaceBlockEffect params, RuleRuntimeLimits limits,
+                                                IssueCollector issues, String fieldPath) {
+        int maxRadius = limits.maxPlaceRadius();
+        if (params.radius() <= maxRadius) {
+            return true;
+        }
+        issues.error("radius 超过服务端允许的单次放置半径上限 " + maxRadius
+                        + "（配置项 max_place_block_radius）", null, ParamChecks.child(fieldPath, RADIUS_FIELD));
+        return false;
     }
 
     @Override

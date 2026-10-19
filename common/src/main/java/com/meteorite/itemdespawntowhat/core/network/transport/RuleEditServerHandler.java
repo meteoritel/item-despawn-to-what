@@ -88,7 +88,7 @@ public final class RuleEditServerHandler {
         if (service == null) {
             return null;
         }
-        RuleEditService.OpenOutcome outcome = service.openEditor(player, tick(player));
+        RuleEditService.OpenOutcome outcome = service.openEditor(player, tick(player), context.maxPlaceBlockRadius());
         context.sendTo(player, outcome.payload());
         return outcome;
     }
