@@ -809,6 +809,8 @@ public final class ConversionRuntime {
                                                                     Vec3 position, int potentialGroups,
                                                                     ItemStack sourceSnapshot) {
         Map<PreparedEffectKey, EffectPreparation> preparations = new HashMap<>();
+        // 组间共享的固定输入：同一候选同一槽位只保留首份，各组共用它承载执行期的跨组状态
+        Map<PreparedEffectKey, EffectPreparation> sharedPreparations = new HashMap<>();
         if (potentialGroups <= 0) {
             return preparations;
         }
@@ -821,7 +823,8 @@ public final class ConversionRuntime {
                 if (definition == null) {
                     continue;
                 }
-                // 一次性效果同一源只尝试一组，固定一份即可；其余类型按潜在组各固定一份，随机判定互不复用
+                // 一次性效果同一源只尝试一组，固定一份即可；其余类型按潜在组各固定一份，
+                // 条件与概率判定互不复用，声明可共享的固定输入在组间复用首份
                 int groups = definition.oneShot() ? 1 : potentialGroups;
                 for (int group = 0; group < groups; group++) {
                     EffectPreparation preparation = prepareEffect(definition, effect, level, item, pos, position,
@@ -829,6 +832,15 @@ public final class ConversionRuntime {
                     if (preparation == null) {
                         // 未迁移的类型不在成功转化当刻固定，其条件与概率仍在首次执行时判定
                         break;
+                    }
+                    if (preparation instanceof EffectPreparation.SharedPreparation) {
+                        // 跨组共享的固定输入只保留首份：执行期的邻域计数因此只有一个来源；
+                        // 跳过判定仍按组独立，前面各组已 gated 的结果不会被后面的组复用
+                        EffectPreparation shared = sharedPreparations.putIfAbsent(
+                                new PreparedEffectKey(candidate.id(), slot, 0), preparation);
+                        if (shared != null) {
+                            preparation = shared;
+                        }
                     }
                     preparations.put(new PreparedEffectKey(candidate.id(), slot, group), preparation);
                 }

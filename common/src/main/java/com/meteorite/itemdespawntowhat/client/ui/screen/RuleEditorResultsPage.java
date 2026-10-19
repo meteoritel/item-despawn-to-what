@@ -300,23 +300,49 @@ final class RuleEditorResultsPage {
     }
 
     /**
-     * 「使用源物品的方块」与固定方块在界面上互斥：勾选后清除固定方块并隐藏该行，
-     * 避免隐藏的固定方块仍按服务端优先级生效。
+     * place_block 的字段联动：勾选「使用源物品的方块」后清除固定方块并隐藏该行，
+     * 避免隐藏的固定方块仍按服务端优先级生效；limit 的滑条窗口随同表单 radius 的当前值变化。
      */
     private void bindPlaceBlockVisibility(FormView form, EditSession session, String actionPath) {
         String blockPath = DraftPaths.child(actionPath, PlaceBlockEffect.BLOCK_FIELD);
         String useSourcePath = DraftPaths.child(actionPath, PlaceBlockEffect.USE_SOURCE_BLOCK_FIELD);
+        String radiusPath = DraftPaths.child(actionPath, PlaceBlockEffect.RADIUS_FIELD);
         // 手工 JSON 可能同时写两个字段；固定方块仍生效时保留该行，避免把生效值藏起来
         form.setRowVisibility(blockPath, () -> !RuleEditorPageSupport.boolOf(
                 session.draft().valueAt(actionPath), PlaceBlockEffect.USE_SOURCE_BLOCK_FIELD, false)
                 || session.draft().valueAt(blockPath) != null);
+        updatePlaceBlockLimitWindow(form, session, actionPath);
         form.setOnFieldWritten((path, before) -> {
-            if (!useSourcePath.equals(path)) return;
-            if (!RuleEditorPageSupport.boolOf(session.draft().valueAt(actionPath),
-                    PlaceBlockEffect.USE_SOURCE_BLOCK_FIELD, false)) return;
-            session.draft().removeAt(blockPath);
-            form.reload();
+            if (useSourcePath.equals(path)) {
+                if (!RuleEditorPageSupport.boolOf(session.draft().valueAt(actionPath),
+                        PlaceBlockEffect.USE_SOURCE_BLOCK_FIELD, false)) return;
+                session.draft().removeAt(blockPath);
+                form.reload();
+                // 重载会按描述符初值重建控件，radius 的窗口需要再按当前草稿补一次
+                updatePlaceBlockLimitWindow(form, session, actionPath);
+            } else if (radiusPath.equals(path)) {
+                updatePlaceBlockLimitWindow(form, session, actionPath);
+            }
         });
+    }
+
+    /**
+     * 按草稿当前 radius 设置 limit 行的滑条窗口上限（方框内位置总数）；radius 缺失或非法时按默认半径计算。
+     * 窗口只影响滑块手感，草稿里已有的 limit 值不随之夹取。
+     *
+     * @param form place_block 参数表单
+     * @param session 当前编辑会话
+     * @param actionPath 动作在草稿中的路径
+     */
+    private void updatePlaceBlockLimitWindow(FormView form, EditSession session, String actionPath) {
+        RuleValue action = session.draft().valueAt(actionPath);
+        int radius = action == null ? PlaceBlockEffect.DEFAULT_RADIUS
+                : action.integer(PlaceBlockEffect.RADIUS_FIELD, PlaceBlockEffect.DEFAULT_RADIUS);
+        if (radius < PlaceBlockEffect.MIN_RADIUS || radius > PlaceBlockEffect.MAX_RADIUS) {
+            radius = PlaceBlockEffect.DEFAULT_RADIUS;
+        }
+        form.setRowSliderWindow(DraftPaths.child(actionPath, PlaceBlockEffect.LIMIT_FIELD),
+                PlaceBlockEffect.MIN_LIMIT, PlaceBlockEffect.limitUpperBound(radius));
     }
 
     private UiButton addPlanButton(String key, UiAction action) {

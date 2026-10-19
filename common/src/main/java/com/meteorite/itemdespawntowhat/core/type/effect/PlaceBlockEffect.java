@@ -33,6 +33,8 @@ import java.util.Optional;
 /**
  * place_block：在触发位置按指定形状放置方块。
  * block（TaggedId，可空）与 use_source_block 至少需要其一：前者放置指定方块，后者放置源物品对应的方块。
+ * radius 是本次放置的最大向外扩散边界（放置候选为该范围内的单层位置）；limit（可空，省略表示不限）
+ * 是以触发位置为中心、边长为 2 * radius + 1 的立体方框内同类方块的数量上限，只收窄实际放置量，不扩大边界。
  * 本类只承载参数模型与参数校验。
  */
 public record PlaceBlockEffect(
@@ -68,7 +70,23 @@ public record PlaceBlockEffect(
     public static final int MIN_RADIUS = 1;
     public static final int MAX_RADIUS = 32;
     public static final int MIN_LIMIT = 1;
-    public static final int MAX_LIMIT = 4096;
+    /**
+     * limit 的后端上界：最大半径方框（{@link #MAX_RADIUS}）内的位置总数。
+     * 取该值保证任意半径下把 limit 拉到上界都足以覆盖整个方框；界面滑块的实际窗口随当前半径变化，
+     * 见 {@link #limitUpperBound(int)}。
+     */
+    public static final int MAX_LIMIT = limitUpperBound(MAX_RADIUS);
+
+    /**
+     * 半径对应方框内的位置总数，作为该半径下 limit 的滑块窗口上限。
+     * @param radius 放置半径，取值区间为 {@link #MIN_RADIUS}～{@link #MAX_RADIUS}
+     * @return (2 * radius + 1)³，即该半径方框内的位置总数
+     */
+    public static int limitUpperBound(int radius) {
+        int bounded = Math.clamp(radius, MIN_RADIUS, MAX_RADIUS);
+        long span = bounded * 2L + 1L;
+        return (int) (span * span * span);
+    }
 
     // 放置形状
     public enum Shape {

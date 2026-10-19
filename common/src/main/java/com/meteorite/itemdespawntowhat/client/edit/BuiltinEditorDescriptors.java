@@ -165,7 +165,8 @@ public final class BuiltinEditorDescriptors {
         // 统一实体产出；实际参数表单按子类型生成，不展示不相容字段。
         registerEffect(id("spawn_entity"), entityFields("item"));
 
-        // place_block：block 与 use_source_block 至少一个
+        // place_block：block 与 use_source_block 至少一个。
+        // limit 的滑条窗口以默认半径的方框容量为初值，编辑时再按草稿当前 radius 刷新（见结果页的参数页绑定）。
         ResourceLocation placeBlock = id("place_block");
         registerEffect(placeBlock, List.of(
                 EditorField.optionalTag("block", h + "place_block.block", "minecraft:block"),
@@ -174,7 +175,10 @@ public final class BuiltinEditorDescriptors {
                 EditorField.integer("count", h + "place_block.count", 1, 64).optional(),
                 EditorField.integer("radius", h + "place_block.radius", 1, 32).optional(),
                 EditorField.optionalInteger(PlaceBlockEffect.LIMIT_FIELD, h + "place_block.limit",
-                        PlaceBlockEffect.MIN_LIMIT, PlaceBlockEffect.MAX_LIMIT),
+                        PlaceBlockEffect.MIN_LIMIT, PlaceBlockEffect.MAX_LIMIT)
+                        .withNumbers(NumericDomain.integers(PlaceBlockEffect.MIN_LIMIT, PlaceBlockEffect.MAX_LIMIT,
+                                PlaceBlockEffect.MIN_LIMIT,
+                                PlaceBlockEffect.limitUpperBound(PlaceBlockEffect.DEFAULT_RADIUS))),
                 EditorField.note(h + "place_block.note")
         ));
 

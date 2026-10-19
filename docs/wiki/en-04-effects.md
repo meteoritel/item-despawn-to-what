@@ -143,13 +143,16 @@ What you see in game: after a 10 tick delay the volley starts and drops 32 downw
 | `shape` | Shape of the candidate positions | `square` / `circle` / `cross` | `square` | A square, a circle, or a cross that keeps only the cells along the x axis or the z axis; not case sensitive |
 | `count` | How many blocks to place at most | 1 to 64 | `1` | The mod tries from the inside out |
 | `radius` | Search radius (blocks) | 1 to 32 | `6` | The horizontal range at the same height as the trigger position |
-| `limit` | Cap on the total of this block | 1 to 4096 | Omit for no limit | The mod counts the blocks of the same type already inside the radius, including height, and fills up to the cap |
+| `limit` | Cap on how many of this block may sit in the box | 1 to 274625 | Omit for no limit | The mod counts the blocks of the same type already inside the radius box and fills up to the cap; in the editor the slider maximum follows the radius |
 
 Notes:
 
 - When you write neither field, the rule is rejected with a message about `block` and `use_source_block`. When you write both, `block` wins.
 - Blocks go only at **the same height as the trigger position**; nothing stacks above or below.
 - Only replaceable positions, such as grass and water, are used, and the block needs support. A position that does not fit is skipped, and the mod never steps outside `radius` to reach `count`.
+- Blocks that need a direction or support, such as buttons, torches, and ladders, get the orientation vanilla would give them: the mod tries standing on the floor, then hanging from the ceiling, then attaching to each of the four walls, and places the first orientation that can stand; when none can, that position is skipped.
+- `limit` counts a box centered on the trigger position with side length `2 × radius + 1`: `radius` decides how far the mod may place, `limit` only caps how many, and never widens the area. When one candidate produces several groups of blocks in the same conversion, those groups share one count and one remaining allowance, so the box never ends up holding more than `limit` of the block.
+- The maximum `limit` is the number of positions in the largest radius box, 274625, so any radius can fill its whole box; in the editor the slider maximum follows the current `radius` (it equals that box's position count), and a valid value outside the slider window can still be typed and saved.
 - Whether the trigger position itself takes part depends on the fill origin switch of the candidate; see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
 
 ```json
