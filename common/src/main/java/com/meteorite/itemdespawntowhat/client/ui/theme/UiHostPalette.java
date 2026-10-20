@@ -196,6 +196,11 @@ public final class UiHostPalette {
         return UiFlatPalette.CHROME_BORDER;
     }
 
+    // 功能栏 / 工具列的图标分组线
+    public int chromeDivider() {
+        return UiFlatPalette.CHROME_DIVIDER;
+    }
+
     // 底部状态栏正文
     public int statusText() {
         return UiFlatPalette.STATUS_TEXT;
@@ -266,15 +271,28 @@ public final class UiHostPalette {
         return UiFlatPalette.CANVAS_CARD_FILL;
     }
 
-    public int canvasGroupFill() {
-        return UiFlatPalette.CANVAS_GROUP_FILL;
+    // 卡片标题带：用色阶区分层级，替代原来的横贯分隔线
+    public int canvasCardBand() {
+        return UiFlatPalette.CANVAS_CARD_BAND;
+    }
+
+    // 端点槽位（来源 / 结果）主体与标题带
+    public int canvasEndpointFill() {
+        return UiFlatPalette.CANVAS_ENDPOINT_FILL;
+    }
+
+    public int canvasEndpointBand() {
+        return UiFlatPalette.CANVAS_ENDPOINT_BAND;
     }
 
     public int canvasAllFill() { return UiFlatPalette.CANVAS_ALL_FILL; }
+    public int canvasAllBand() { return UiFlatPalette.CANVAS_ALL_BAND; }
     public int canvasAllText() { return UiFlatPalette.CANVAS_ALL_TEXT; }
     public int canvasAnyFill() { return UiFlatPalette.CANVAS_ANY_FILL; }
+    public int canvasAnyBand() { return UiFlatPalette.CANVAS_ANY_BAND; }
     public int canvasAnyText() { return UiFlatPalette.CANVAS_ANY_TEXT; }
     public int canvasNotFill() { return UiFlatPalette.CANVAS_NOT_FILL; }
+    public int canvasNotBand() { return UiFlatPalette.CANVAS_NOT_BAND; }
     public int canvasNotText() { return UiFlatPalette.CANVAS_NOT_TEXT; }
     public int canvasFlowLink() { return UiFlatPalette.CANVAS_FLOW_LINK; }
 
@@ -316,6 +334,10 @@ public final class UiHostPalette {
 
     public int canvasAccentHover() {
         return UiFlatPalette.CANVAS_ACCENT_HOVER;
+    }
+
+    public int canvasHotspotFill() {
+        return UiFlatPalette.CANVAS_HOTSPOT_FILL;
     }
 
     public int canvasHotspotBorder() {

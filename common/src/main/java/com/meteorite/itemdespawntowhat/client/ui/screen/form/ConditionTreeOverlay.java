@@ -698,6 +698,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
             editor.render(graphics, renderFont, mouseX, mouseY);
         }
         drawShellLines(graphics);
+        drawGroupDividers(graphics);
         renderStatus(graphics);
         if (helpOpen) {
             renderHelp(graphics);
@@ -750,6 +751,46 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         }
     }
 
+    /**
+     * 图标按语义分组：功能栏是「撤销 / 视图 / 帮助」，工具列是「新建 / 结构编辑 / 包组」。
+     * 组间画 1 像素半透明分隔线，一排图标不再是一片没有结构的方格；线画在格子上，只做提示，
+     * 不参与命中判定。
+     */
+    private void drawGroupDividers(GuiGraphics graphics) {
+        int color = CHROME_THEME.palette().chromeDivider();
+        drawVerticalDividers(graphics, functionItems, new int[] {2, 3}, color);
+        drawHorizontalDividers(graphics, toolItems, new int[] {2, 6}, color);
+    }
+
+    // 组边界取该组首格的上/左边缘，短线两端各留 3 像素，避免与外壳描边粘连
+    private static void drawVerticalDividers(GuiGraphics graphics, List<UiIconStrip.Item> items,
+                                             int[] boundaryIndices, int color) {
+        for (int index : boundaryIndices) {
+            if (index <= 0 || index >= items.size()) {
+                continue;
+            }
+            UiRect rect = items.get(index).bounds();
+            if (rect.height() <= 0) {
+                continue;
+            }
+            graphics.fill(rect.x(), rect.y() + 3, rect.x() + SHELL_LINE, rect.bottom() - 3, color);
+        }
+    }
+
+    private static void drawHorizontalDividers(GuiGraphics graphics, List<UiIconStrip.Item> items,
+                                               int[] boundaryIndices, int color) {
+        for (int index : boundaryIndices) {
+            if (index <= 0 || index >= items.size()) {
+                continue;
+            }
+            UiRect rect = items.get(index).bounds();
+            if (rect.width() <= 0) {
+                continue;
+            }
+            graphics.fill(rect.x() + 3, rect.y(), rect.right() - 3, rect.y() + SHELL_LINE, color);
+        }
+    }
+
     // 功能栏底板宽度：量到最后一个图标格的右缘再加 1 像素收尾线，右侧剩余区域交还画布
     private int functionBarPlateWidth() {
         int cellsWidth = UiIconStrip.cellsWidth(functionItems);
@@ -781,6 +822,10 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         graphics.drawString(font, TextScroll.trimToWidth(font, status.getString(),
                         Math.max(0, statusRect.width() - rightWidth - STATUS_TEXT_PAD * 3)),
                 statusRect.x() + STATUS_TEXT_PAD, textY, statusColor(), false);
+        // 状态正文与右侧缩放比例之间加一道组线，两段信息不再连成一片
+        int dividerX = statusRect.right() - rightWidth - STATUS_TEXT_PAD * 2;
+        graphics.fill(dividerX, statusRect.y() + 3, dividerX + SHELL_LINE, statusRect.bottom() - 3,
+                CHROME_THEME.palette().chromeDivider());
         graphics.drawString(font, right.getString(), statusRect.right() - rightWidth - STATUS_TEXT_PAD, textY,
                 CHROME_THEME.palette().statusTextMuted(), false);
     }

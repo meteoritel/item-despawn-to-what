@@ -68,13 +68,10 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     // 菜单与锚点之间的屏幕像素间距
     private static final int KIND_MENU_GAP = 4;
     private static final int KIND_MENU_ROW_HEIGHT = 18;
-    private static final int KIND_MENU_FOOTER = 12;
     // 菜单行文本左右内边距
     private static final int KIND_MENU_PADDING = 4;
     // 菜单最小宽度
     private static final int KIND_MENU_MIN_WIDTH = 56;
-    // 键盘操作提示：与类型选择框共用一套措辞
-    private static final String KIND_MENU_HINT_KEY = "gui.itemdespawntowhat.edit.picker.hint";
 
     /**
      * 参数编辑框的内容契约：几何、绘制与输入坐标一律为 GUI 屏幕坐标，不随画布平移或缩放。
@@ -185,6 +182,10 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     private KindMenuTarget kindMenuTarget = KindMenuTarget.INSERT_GROUP;
     private @Nullable UiRect kindMenuAnchor;
     private int kindMenuIndex;
+    // 指针位置：指针在列表内时高亮跟随鼠标，指针静止则不覆盖键盘选择
+    private boolean kindMenuPointerKnown;
+    private int kindMenuLastMouseX;
+    private int kindMenuLastMouseY;
     private UiRect kindMenuRect = new UiRect(0, 0, 0, 0);
     private UiRect kindMenuListRect = new UiRect(0, 0, 0, 0);
 
@@ -799,9 +800,6 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         if (picker.isOpen()) {
             return Component.translatable("gui.itemdespawntowhat.edit.picker.hint");
         }
-        if (kindMenuOpen) {
-            return Component.translatable(KIND_MENU_HINT_KEY);
-        }
         return Component.translatable("gui.itemdespawntowhat.edit.tree.selection_hint");
     }
 
@@ -835,7 +833,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         try {
             renderer.drawLinks(graphics, tree.selection());
             renderer.drawCards(graphics, renderFont, tree.selection(), hoveredNode);
-            renderer.drawHotspots(graphics, renderFont, hoveredHotspot);
+            renderer.drawHotspots(graphics, hoveredHotspot);
             if (rubberActive) {
                 rubberBand.draw(graphics, theme.palette().canvasRubberFill(), theme.palette().canvasAccent());
             }
@@ -863,6 +861,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         }
         if (kindMenuOpen) {
             updateKindMenuRect();
+            updateKindMenuHover(mouseX, mouseY);
             renderKindMenu(graphics, renderFont);
         }
         List<UiDescriptionTooltip.Line> tip = tooltipAt(mouseX, mouseY);
@@ -894,6 +893,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         kindMenuOpen = false;
         kindMenuAnchor = null;
         kindMenuIndex = 0;
+        kindMenuPointerKnown = false;
     }
 
     // 菜单几何为屏幕坐标：优先放在锚点右侧，放不下改为左侧，并整体夹在画布内
@@ -914,7 +914,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         }
         int maxWidth = Math.max(1, bounds.width() - KIND_MENU_PADDING);
         width = Math.min(width, maxWidth);
-        int height = Math.min(kinds.length * KIND_MENU_ROW_HEIGHT + KIND_MENU_FOOTER, bounds.height());
+        int height = Math.min(kinds.length * KIND_MENU_ROW_HEIGHT + BORDER * 2, bounds.height());
         int x = anchor.right() + KIND_MENU_GAP;
         if (x + width > bounds.right()) {
             x = anchor.x() - KIND_MENU_GAP - width;
@@ -922,9 +922,10 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         x = Math.clamp(x, bounds.x(), Math.max(bounds.x(), bounds.right() - width));
         int y = Math.clamp(anchor.y(), bounds.y(), Math.max(bounds.y(), bounds.bottom() - height));
         kindMenuRect = new UiRect(x, y, width, height);
-        // 高度被小视口压缩时同步压缩列表区，避免提示行画到菜单底框之外
-        int maxListHeight = Math.max(0, height - BORDER * 2 - KIND_MENU_FOOTER);
-        int listHeight = Math.min(kinds.length * KIND_MENU_ROW_HEIGHT, maxListHeight);
+        // 视口过矮时按可用高度裁掉列表区：行高不变，只显示画得下的行
+        int availableListHeight = height - BORDER * 2;
+        int listHeight = availableListHeight <= 0 ? 0
+                : Math.min(kinds.length * KIND_MENU_ROW_HEIGHT, availableListHeight);
         kindMenuListRect = new UiRect(x + BORDER, y + BORDER, Math.max(0, width - BORDER * 2), listHeight);
     }
 
@@ -974,14 +975,10 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             }
             graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont, kinds[index].menuLabel().getString(),
                             Math.max(0, kindMenuRect.width() - KIND_MENU_PADDING * 2)),
-                    kindMenuRect.x() + KIND_MENU_PADDING, rowY + 2,
+                    kindMenuRect.x() + KIND_MENU_PADDING,
+                    rowY + (KIND_MENU_ROW_HEIGHT - renderFont.lineHeight) / 2,
                     current ? theme.palette().canvasPickerText() : theme.palette().canvasPickerTextMuted(), false);
         }
-        graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont,
-                        Component.translatable(KIND_MENU_HINT_KEY).getString(),
-                        Math.max(0, kindMenuRect.width() - KIND_MENU_PADDING * 2)),
-                kindMenuRect.x() + KIND_MENU_PADDING, kindMenuListRect.bottom() + 2,
-                theme.palette().canvasPickerTextMuted(), false);
     }
 
     private void handleKindMenuClick(double mouseX, double mouseY) {
@@ -1002,6 +999,21 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         }
         int row = (int) ((mouseY - kindMenuListRect.y()) / Math.max(1, KIND_MENU_ROW_HEIGHT));
         return row >= 0 && row < GroupKind.values().length ? row : -1;
+    }
+
+    // 弹层高亮跟随指针：指针停在列表里时悬停行即时高亮，移出列表则保留键盘选中的行
+    private void updateKindMenuHover(int mouseX, int mouseY) {
+        boolean moved = !kindMenuPointerKnown || mouseX != kindMenuLastMouseX || mouseY != kindMenuLastMouseY;
+        kindMenuPointerKnown = true;
+        kindMenuLastMouseX = mouseX;
+        kindMenuLastMouseY = mouseY;
+        if (!moved) {
+            return;
+        }
+        int index = kindMenuIndexAt(mouseX, mouseY);
+        if (index >= 0) {
+            kindMenuIndex = index;
+        }
     }
 
     // 键盘：←/→ 或 ↑/↓ 切换，回车确认，Esc 取消

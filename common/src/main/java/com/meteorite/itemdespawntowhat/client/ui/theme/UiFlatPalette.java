@@ -28,6 +28,8 @@ public final class UiFlatPalette {
     public static final int STATUS_TEXT = UiPalette.TEXT_PRIMARY;
     // 状态栏次要文本
     public static final int STATUS_TEXT_MUTED = UiPalette.TEXT_SECONDARY;
+    // 功能栏 / 工具列的图标分组线：半透明，只做结构提示
+    public static final int CHROME_DIVIDER = 0x55303030;
     // 状态栏错误文本
     public static final int STATUS_TEXT_DANGER = UiPalette.DANGER;
     // 状态栏警告文本
@@ -58,37 +60,43 @@ public final class UiFlatPalette {
 
     // ---- 条件树画布 ----
 
-    // 画布底色
-    public static final int CANVAS_FILL = UiPalette.SLOT_FILL;
+    // 画布底色：比卡片深一档，浅色卡片才显浮起
+    public static final int CANVAS_FILL = 0xFF7A7A7A;
     // 画布 1 像素描边
-    public static final int CANVAS_BORDER = UiPalette.SLOT_BORDER_DARK;
-    // 点阵网格
-    public static final int CANVAS_GRID_DOT = UiPalette.SLOT_BORDER_DARK;
-    // 空态提示文字
-    public static final int CANVAS_HINT_TEXT = UiPalette.TEXT_SECONDARY;
+    public static final int CANVAS_BORDER = 0xFF3C3C3C;
+    // 点阵网格：只做轻纹理，不抢卡片
+    public static final int CANVAS_GRID_DOT = 0xFF666666;
+    // 空态提示文字：画布转深后改用浅色，保证可读
+    public static final int CANVAS_HINT_TEXT = 0xFFE2E2E2;
 
-    // 条件叶卡片底色
-    public static final int CANVAS_CARD_FILL = UiPalette.CONTROL_FILL;
-    // 容器卡片底色：比叶深一档
-    public static final int CANVAS_GROUP_FILL = UiPalette.PANEL_FILL;
+    // 条件叶卡片主体底色
+    public static final int CANVAS_CARD_FILL = 0xFFD6D6D6;
+    // 卡片标题带底色：比主体暗一档，用色阶而非分隔线划分层级
+    public static final int CANVAS_CARD_BAND = 0xFFB4B4B4;
+    // 端点槽位（来源 / 结果）主体与标题带：比叶卡更沉，把注意力留给槽位里的值
+    public static final int CANVAS_ENDPOINT_FILL = 0xFFC4C4C4;
+    public static final int CANVAS_ENDPOINT_BAND = 0xFFA2A2A2;
     // 逻辑运算符用固定语义色；选中态只改变描边，不覆盖运算符颜色。
-    public static final int CANVAS_ALL_FILL = 0xFFD9E7FF;
-    public static final int CANVAS_ALL_TEXT = 0xFF234EA0;
-    public static final int CANVAS_ANY_FILL = 0xFFD9F6E4;
-    public static final int CANVAS_ANY_TEXT = 0xFF22643D;
-    public static final int CANVAS_NOT_FILL = 0xFFEADFF8;
-    public static final int CANVAS_NOT_TEXT = 0xFF674193;
+    public static final int CANVAS_ALL_FILL = 0xFFDCE8FB;
+    public static final int CANVAS_ALL_BAND = 0xFFBDD3F0;
+    public static final int CANVAS_ALL_TEXT = 0xFF1E458F;
+    public static final int CANVAS_ANY_FILL = 0xFFD8F3E2;
+    public static final int CANVAS_ANY_BAND = 0xFFB7E0C7;
+    public static final int CANVAS_ANY_TEXT = 0xFF1C5A35;
+    public static final int CANVAS_NOT_FILL = 0xFFECE1FA;
+    public static final int CANVAS_NOT_BAND = 0xFFD3BFEC;
+    public static final int CANVAS_NOT_TEXT = 0xFF563480;
     public static final int CANVAS_FLOW_LINK = 0xFF315E69;
     // 悬停中的卡片底色
-    public static final int CANVAS_CARD_HOVER_FILL = UiPalette.CONTROL_HOVER;
+    public static final int CANVAS_CARD_HOVER_FILL = 0xFFE6E6E6;
     // 选中卡片底色
-    public static final int CANVAS_CARD_SELECTED_FILL = UiPalette.CONTROL_SELECTED;
+    public static final int CANVAS_CARD_SELECTED_FILL = 0xFFCBDAEB;
     // 未选中卡片描边
-    public static final int CANVAS_CARD_BORDER = UiPalette.CONTROL_BEVEL_DARK;
-    // 选中卡片描边
+    public static final int CANVAS_CARD_BORDER = 0xFF3C3C3C;
+    // 选中卡片描边（也是选中卡片外环的颜色）
     public static final int CANVAS_CARD_BORDER_SELECTED = UiPalette.ACCENT;
     // 父子连线（默认）
-    public static final int CANVAS_LINK = UiPalette.PANEL_BORDER_DARK;
+    public static final int CANVAS_LINK = 0xFF474747;
     // 父子连线（任一端被选中）
     public static final int CANVAS_LINK_SELECTED = UiPalette.ACCENT;
 
@@ -105,8 +113,9 @@ public final class UiFlatPalette {
     public static final int CANVAS_ACCENT = UiPalette.ACCENT;
     // 强调色的悬停态
     public static final int CANVAS_ACCENT_HOVER = UiPalette.ACCENT_HOVER;
-    // 热区描边
-    public static final int CANVAS_HOTSPOT_BORDER = UiPalette.CONTROL_BEVEL_LIGHT;
+    // 热区常态底色与描边：与卡片同族，靠加号本身传达动作
+    public static final int CANVAS_HOTSPOT_FILL = 0xFFD6D6D6;
+    public static final int CANVAS_HOTSPOT_BORDER = 0xFF6A6A6A;
     // 拖动浮影底色
     public static final int CANVAS_DRAG_GHOST_FILL = UiPalette.CONTROL_SELECTED;
     // 框选矩形填充（半透明）

@@ -21,27 +21,43 @@ import org.jetbrains.annotations.Nullable;
 
 /** 条件画布的布局与展示数据：集中维护身份索引、诊断、标签和卡片几何。 */
 final class ConditionGraphLayout {
-    private static final int CARD_MIN_WIDTH = 60;
-    private static final int CARD_MAX_WIDTH = 168;
-    static final int CARD_PADDING_X = 4;
-    static final int CARD_PADDING_Y = 2;
-    static final int CARD_ROW_HEIGHT = 10;
-    // 卡片内部：标题带 + 1 像素分隔线 + 固定两行内容区，叶与容器共用同一套纵向分区
-    static final int TITLE_BAND_HEIGHT = CARD_ROW_HEIGHT;
-    static final int CARD_SEPARATOR = 1;
-    static final int CONTENT_ROWS = 2;
-    static final int CARD_HEIGHT = CARD_PADDING_Y * 2 + TITLE_BAND_HEIGHT + CARD_SEPARATOR
-            + CONTENT_ROWS * CARD_ROW_HEIGHT;
+    private static final int CARD_MIN_WIDTH = 64;
+    private static final int CARD_MAX_WIDTH = 176;
+    // 卡片 1 像素描边：文本位置恒按它计算，选中时改为外环，避免内容位移
     static final int BORDER = 1;
-    // 卡片内部各分区的起点：相对卡片顶边，描边与上内边距之后依次是标题带、分隔线和内容区
-    static final int TITLE_BAND_TOP = BORDER + CARD_PADDING_Y;
-    static final int CONTENT_TOP = TITLE_BAND_TOP + TITLE_BAND_HEIGHT + CARD_SEPARATOR;
+    static final int CARD_PADDING_X = 5;
+    // 卡片纵向内边距：标题带之上与内容区之下各留一段，文字不贴描边
+    static final int CARD_PADDING_Y = 2;
+    // 标题带的上内边距
+    static final int TITLE_BAND_PADDING_Y = CARD_PADDING_Y;
+    // 卡片底部内边距：内容行不贴下边框
+    static final int CARD_BOTTOM_PADDING = 2;
+    static final int CARD_ROW_HEIGHT = 11;
+    // 卡片内部：标题带 + 固定两行内容区，叶与容器共用同一套纵向分区；标题带按放大后的标题字高留白
+    static final int TITLE_BAND_HEIGHT = 16;
+    static final int CONTENT_ROWS = 2;
+    // 标题带与内容区之间的空隙：用底色分层之后不再需要 1 像素分隔线
+    static final int BAND_CONTENT_GAP = 2;
+    static final int CARD_HEIGHT = BORDER * 2 + TITLE_BAND_HEIGHT + BAND_CONTENT_GAP
+            + CONTENT_ROWS * CARD_ROW_HEIGHT + CARD_BOTTOM_PADDING;
+    // 卡片内部各分区的起点：相对卡片顶边，描边之后是标题带、空隙和内容区
+    static final int TITLE_BAND_TOP = BORDER + TITLE_BAND_PADDING_Y;
+    // 标题字号放大一号：位图字体没有字号参数，靠 pose 缩放绘制；测宽与绘制共用同一个比例
+    static final float TITLE_TEXT_SCALE = 1.25F;
+    static final int CONTENT_TOP = BORDER + TITLE_BAND_HEIGHT + BAND_CONTENT_GAP;
     private static final int LEVEL_PITCH = CARD_HEIGHT + 18;
     private static final int SIBLING_GAP = 12;
     static final int LOGIC_CUT_CORNER = 6;
+    // 圆角半径：矩形卡统一 3 像素，宽卡（AnyOf）按高度对半但封顶，避免半圆裁掉两端的文字
+    static final int CARD_CORNER_RADIUS = 3;
+    static final int LOGIC_ROUND_MAX_RADIUS = 10;
     private static final int ENDPOINT_GAP = 32;
-    private static final int HOTSPOT_SIZE = 12;
-    private static final int HOTSPOT_LARGE_SIZE = 22;
+    static final int HOTSPOT_SIZE = 14;
+    static final int HOTSPOT_LARGE_SIZE = 28;
+    // 热区命中范围向外放宽的像素：chip 画得紧凑，但点击要够大（50% 缩放下仍有 12 屏幕像素）
+    static final int HOTSPOT_HIT_PADDING = 5;
+    // 标题带右上角结构标记的预留宽度：测宽时一并计入，标记出现时不挤掉标题文字
+    static final int MARK_RESERVE = 8;
     static final String FLOW_HINT_KEY = "gui.itemdespawntowhat.edit.tree.flow_hint";
 
     // 布局用包装节点：节点身份即对象身份，不依赖 ConditionNode 的值相等。
@@ -265,21 +281,24 @@ final class ConditionGraphLayout {
     private void collectHotspots() {
         for (HotspotSlot slot : hotspotSlots) {
             ConditionNode container = slot.container;
+            UiRect card = cardRect(slot);
             if (container == null) {
-                hotspots.add(new Hotspot(null, 0, centered(cardRect(slot))));
+                hotspots.add(new Hotspot(null, 0, centered(card, HOTSPOT_LARGE_SIZE)));
                 continue;
             }
             UiTreePath parent = paths.get(container);
             if (parent == null) {
                 continue;
             }
-            hotspots.add(new Hotspot(parent, ConditionTreeNodes.INSTANCE.children(container).size(), cardRect(slot)));
+            hotspots.add(new Hotspot(parent, ConditionTreeNodes.INSTANCE.children(container).size(),
+                    centered(card, HOTSPOT_SIZE)));
         }
     }
 
-    private static UiRect centered(UiRect card) {
-        return new UiRect(card.x() + (card.width() - HOTSPOT_LARGE_SIZE) / 2,
-                card.y() + (card.height() - HOTSPOT_LARGE_SIZE) / 2, HOTSPOT_LARGE_SIZE, HOTSPOT_LARGE_SIZE);
+    // 热区按方形边长在槽位卡片里居中：槽位是窄条，只有居中才像按钮而不是竖白条
+    private static UiRect centered(UiRect card, int size) {
+        return new UiRect(card.x() + (card.width() - size) / 2,
+                card.y() + (card.height() - size) / 2, size, size);
     }
 
     private int cardWidth(ConditionNode node) {
@@ -287,21 +306,27 @@ final class ConditionGraphLayout {
         if (cached != null) {
             return cached;
         }
-        int measured = font.width(titleLabel(node).getString());
+        int measured = scaledTitleWidth(titleLabel(node));
         for (Component row : summaryRows(node)) {
             measured = Math.max(measured, font.width(row.getString()));
         }
-        measured += (CARD_PADDING_X + BORDER) * 2;
+        measured += (CARD_PADDING_X + BORDER) * 2 + MARK_RESERVE;
         if (isContainer(node)) {
-            measured = Math.max(measured, font.width(operatorLabel(node)) + LOGIC_CUT_CORNER * 2);
+            // 斜切卡的两端尖角会削掉标题带边缘，容器再多留一段斜切宽度
+            measured = Math.max(measured, scaledTitleWidth(operatorLabel(node)) + LOGIC_CUT_CORNER * 2);
         }
         int width = Math.clamp(measured, CARD_MIN_WIDTH, CARD_MAX_WIDTH);
         cardWidths.put(node, width);
         return width;
     }
 
+    // 标题按放大后的宽度测：只量原字号会在放大绘制后被裁掉尾部
+    private int scaledTitleWidth(Component title) {
+        return Math.round(font.width(title.getString()) * TITLE_TEXT_SCALE);
+    }
+
     private int endpointWidth(EndpointSlot endpoint) {
-        int measured = Math.max(font.width(endpoint.title), font.width(endpoint.summary))
+        int measured = Math.max(scaledTitleWidth(endpoint.title), font.width(endpoint.summary))
                 + (CARD_PADDING_X + BORDER) * 2;
         return Math.clamp(measured, CARD_MIN_WIDTH, CARD_MAX_WIDTH);
     }
@@ -367,15 +392,20 @@ final class ConditionGraphLayout {
         if (children.isEmpty()) {
             return Component.translatable("gui.itemdespawntowhat.edit.tree.empty");
         }
-        return Component.translatable("gui.itemdespawntowhat.edit.tree.card.count", children.size());
+        String key = children.size() == 1
+                ? "gui.itemdespawntowhat.edit.tree.card.count.one"
+                : "gui.itemdespawntowhat.edit.tree.card.count";
+        return key.endsWith(".one")
+                ? Component.translatable(key)
+                : Component.translatable(key, children.size());
     }
 
     // 容器内容行 2：运算符的展开说法，与标题带里的单字运算符互为注解
     private Component operatorHintLabel(ConditionNode node) {
         String key = switch (node) {
-            case ConditionNode.AllOf ignored -> "gui.itemdespawntowhat.edit.tree.node.all";
-            case ConditionNode.AnyOf ignored -> "gui.itemdespawntowhat.edit.tree.node.any";
-            default -> "gui.itemdespawntowhat.edit.tree.card.not";
+            case ConditionNode.AllOf ignored -> "gui.itemdespawntowhat.edit.tree.card.hint.all";
+            case ConditionNode.AnyOf ignored -> "gui.itemdespawntowhat.edit.tree.card.hint.any";
+            default -> "gui.itemdespawntowhat.edit.tree.card.hint.not";
         };
         return Component.translatable(key);
     }
@@ -446,7 +476,9 @@ final class ConditionGraphLayout {
 
     @Nullable Hotspot hotspotAt(double localX, double localY) {
         for (Hotspot hotspot : hotspots) {
-            if (hotspot.rect().contains(localX, localY)) {
+            UiRect rect = hotspot.rect();
+            if (localX >= rect.x() - HOTSPOT_HIT_PADDING && localX < rect.right() + HOTSPOT_HIT_PADDING
+                    && localY >= rect.y() - HOTSPOT_HIT_PADDING && localY < rect.bottom() + HOTSPOT_HIT_PADDING) {
                 return hotspot;
             }
         }
