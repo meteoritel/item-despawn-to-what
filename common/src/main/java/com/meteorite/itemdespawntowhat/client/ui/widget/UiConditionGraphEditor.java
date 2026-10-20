@@ -95,21 +95,24 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         boolean isVisible();
     }
 
-    // 分组方式：全部满足 / 任一满足
+    // 分组方式：∧ 全部满足 / ∨ 任一满足
     private enum GroupKind {
-        ALL("gui.itemdespawntowhat.edit.tree.node.all", true),
-        ANY("gui.itemdespawntowhat.edit.tree.node.any", false);
+        ALL("gui.itemdespawntowhat.edit.tree.operator.all", "gui.itemdespawntowhat.edit.tree.node.all", true),
+        ANY("gui.itemdespawntowhat.edit.tree.operator.any", "gui.itemdespawntowhat.edit.tree.node.any", false);
 
+        private final String operatorKey;
         private final String labelKey;
         private final boolean allOf;
 
-        GroupKind(String labelKey, boolean allOf) {
+        GroupKind(String operatorKey, String labelKey, boolean allOf) {
+            this.operatorKey = operatorKey;
             this.labelKey = labelKey;
             this.allOf = allOf;
         }
 
-        Component label() {
-            return Component.translatable(labelKey);
+        // 菜单行同时给出运算符与它展开后的说法，只看到单字「且 / 或」时也能判断含义
+        Component menuLabel() {
+            return Component.translatable(operatorKey).append(" ").append(Component.translatable(labelKey));
         }
     }
 
@@ -129,7 +132,6 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     private boolean visible = true;
     private boolean enabled = true;
     private boolean focused;
-    private boolean addMode;
     private boolean viewInitialized;
     private boolean centerEmptyView;
     private @Nullable ConditionNode laidOutRoot;
@@ -179,11 +181,10 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     private final ConditionGraphInlinePanel inlinePanel;
     private final UiDescriptionTooltip tooltip;
 
-    private boolean groupKindPending;
     private boolean kindMenuOpen;
     private KindMenuTarget kindMenuTarget = KindMenuTarget.INSERT_GROUP;
+    private @Nullable UiRect kindMenuAnchor;
     private int kindMenuIndex;
-    private @Nullable Hotspot kindMenuHotspot;
     private UiRect kindMenuRect = new UiRect(0, 0, 0, 0);
     private UiRect kindMenuListRect = new UiRect(0, 0, 0, 0);
 
@@ -284,8 +285,6 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         picker.cancelCapture();
         move.end(reason);
         if (reason != UiInputCapture.EndReason.RELEASE) {
-            addMode = false;
-            groupKindPending = false;
             closePicker();
             closeKindMenu();
         }
@@ -417,8 +416,6 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         if (!enabled) {
             return false;
         }
-        addMode = false;
-        groupKindPending = false;
         openPicker(new Hotspot(null, 0, bounds));
         pickerAppend = true;
         return true;
@@ -437,17 +434,13 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         if (graph.setEndpoints(sourceSummary, resultSummary)) rebuild();
     }
 
-    public boolean isAddMode() {
-        return addMode;
+    /** 「新建分支」的 ∧ / ∨ 菜单是否打开；为真时该工具格显示为选中。 */
+    public boolean isGroupKindMenuOpen() {
+        return kindMenuOpen && kindMenuTarget == KindMenuTarget.INSERT_GROUP;
     }
 
-    /** 添加模式下是否在等用户为「新建分支」选 ∧ / ∨；为真时「添加条件」格不应显示为选中。 */
-    public boolean isGroupKindPending() {
-        return groupKindPending;
-    }
-
-    /** 是否正在等用户为「包组」选 ∧ / ∨。 */
-    public boolean isWrapKindPending() {
+    /** 「包组」的 ∧ / ∨ 菜单是否打开。 */
+    public boolean isWrapKindMenuOpen() {
         return kindMenuOpen && kindMenuTarget == KindMenuTarget.WRAP_SELECTION;
     }
 
@@ -467,18 +460,23 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     }
 
     /**
-     * 进入「新建分支」待选 kind 的添加模式：热区照常出现，点击某个 [+] 后由画布在该热区旁弹出
-     * 「全部满足 / 任一满足」小菜单；选定后插入对应容器并保持添加模式，用户可以继续点新容器的大 [+]。
+     * 在工具栏「新建分支」按钮旁弹出「且 / 或」菜单：选定后插入一个空分支，并把新建条件窗口直接弹到
+     * 新分支的子项热区上，省去「先插入空分组、再点热区、再选类型」的多余步骤。
+     *
+     * @param anchorScreen 按钮在 GUI 屏幕坐标下的矩形，菜单贴着它弹出
      */
-    public boolean beginAddGroupWithKind() {
+    public boolean beginAddGroupWithKind(UiRect anchorScreen) {
         if (!enabled) {
             return false;
         }
         endInteractions(UiInputCapture.EndReason.CANCEL);
-        addMode = true;
-        groupKindPending = true;
         closePicker();
         closeKindMenu();
+        kindMenuTarget = KindMenuTarget.INSERT_GROUP;
+        kindMenuAnchor = anchorScreen;
+        kindMenuIndex = 0;
+        kindMenuOpen = true;
+        updateKindMenuRect();
         return true;
     }
 
@@ -490,7 +488,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         endInteractions(UiInputCapture.EndReason.CANCEL);
         closePicker();
         kindMenuTarget = KindMenuTarget.WRAP_SELECTION;
-        kindMenuHotspot = null;
+        kindMenuAnchor = null;
         kindMenuIndex = 0;
         kindMenuOpen = true;
         updateKindMenuRect();
@@ -725,7 +723,6 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             endInteractions(UiInputCapture.EndReason.DISABLED);
             focused = false;
             closePicker();
-            addMode = false;
         }
     }
 
@@ -756,7 +753,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
 
     // 悬停提示：标题行 + 摘要行 + 结构标记行，由画布自绘面板呈现（原版 tooltip 不参与）
     private @Nullable List<UiDescriptionTooltip.Line> tooltipAt(double mouseX, double mouseY) {
-        if (!visible || isDragging() || picker.isOpen() || kindMenuOpen || addMode || !bounds.contains(mouseX, mouseY)) {
+        if (!visible || isDragging() || picker.isOpen() || kindMenuOpen || !bounds.contains(mouseX, mouseY)) {
             return null;
         }
         // 内联框自带提示，避免画布卡片提示压住表单
@@ -802,8 +799,8 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         if (picker.isOpen()) {
             return Component.translatable("gui.itemdespawntowhat.edit.picker.hint");
         }
-        if (addMode) {
-            return Component.translatable("gui.itemdespawntowhat.edit.tree.add_placeholder");
+        if (kindMenuOpen) {
+            return Component.translatable(KIND_MENU_HINT_KEY);
         }
         return Component.translatable("gui.itemdespawntowhat.edit.tree.selection_hint");
     }
@@ -828,7 +825,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         boolean overPanel = inlinePanel.contains(mouseX, mouseY);
         ConditionNode hoveredNode = !picker.isOpen() && !kindMenuOpen && !overPanel && inside ? graph.nodeAt(localX, localY) : null;
         // 空树空闲态也要亮出中央大 [+]，让人一眼看出这里可以点
-        Hotspot hoveredHotspot = (addMode || emptyTree) && !picker.isOpen() && !kindMenuOpen && !overPanel && inside
+        Hotspot hoveredHotspot = !picker.isOpen() && !kindMenuOpen && !overPanel && inside
                 ? graph.hotspotAt(localX, localY) : null;
 
         renderer.drawCanvasBackground(graphics, bounds);
@@ -838,9 +835,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         try {
             renderer.drawLinks(graphics, tree.selection());
             renderer.drawCards(graphics, renderFont, tree.selection(), hoveredNode);
-            if (addMode || emptyTree) {
-                renderer.drawHotspots(graphics, renderFont, hoveredHotspot);
-            }
+            renderer.drawHotspots(graphics, renderFont, hoveredHotspot);
             if (rubberActive) {
                 rubberBand.draw(graphics, theme.palette().canvasRubberFill(), theme.palette().canvasAccent());
             }
@@ -851,7 +846,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             graphics.pose().popPose();
             UiTransform.disableScissor(graphics);
         }
-        if (emptyTree && !addMode) {
+        if (emptyTree) {
             renderer.drawEmptyMessage(graphics, renderFont, viewport, transform, emptyMessage);
         }
         if (focused && !picker.isOpen() && !kindMenuOpen) {
@@ -895,18 +890,9 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
 
     // ---- 分组方式小菜单 ----
 
-    private void openGroupKindMenu(Hotspot hotspot) {
-        closePicker();
-        kindMenuTarget = KindMenuTarget.INSERT_GROUP;
-        kindMenuHotspot = hotspot;
-        kindMenuIndex = 0;
-        kindMenuOpen = true;
-        updateKindMenuRect();
-    }
-
     private void closeKindMenu() {
         kindMenuOpen = false;
-        kindMenuHotspot = null;
+        kindMenuAnchor = null;
         kindMenuIndex = 0;
     }
 
@@ -924,7 +910,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         GroupKind[] kinds = GroupKind.values();
         int width = KIND_MENU_MIN_WIDTH;
         for (GroupKind kind : kinds) {
-            width = Math.max(width, font.width(kind.label().getString()) + KIND_MENU_PADDING * 2 + BORDER * 2);
+            width = Math.max(width, font.width(kind.menuLabel().getString()) + KIND_MENU_PADDING * 2 + BORDER * 2);
         }
         int maxWidth = Math.max(1, bounds.width() - KIND_MENU_PADDING);
         width = Math.min(width, maxWidth);
@@ -943,9 +929,9 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     }
 
     private @Nullable UiRect kindMenuAnchorRect() {
+        // 新建分支贴着工具栏按钮弹出；包组贴着选区里树序最靠前的卡片弹出
         if (kindMenuTarget == KindMenuTarget.INSERT_GROUP) {
-            Hotspot hotspot = kindMenuHotspot;
-            return hotspot == null ? null : toScreenRect(hotspot.rect());
+            return kindMenuAnchor;
         }
         ConditionNode first = firstSelectedInOrder();
         UiRect rect = first == null ? null : graph.rect(first);
@@ -986,7 +972,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
                 graphics.fill(kindMenuRect.x() + BORDER, rowY, kindMenuRect.right() - BORDER,
                         rowY + KIND_MENU_ROW_HEIGHT, theme.palette().canvasPickerRowSelected());
             }
-            graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont, kinds[index].label().getString(),
+            graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont, kinds[index].menuLabel().getString(),
                             Math.max(0, kindMenuRect.width() - KIND_MENU_PADDING * 2)),
                     kindMenuRect.x() + KIND_MENU_PADDING, rowY + 2,
                     current ? theme.palette().canvasPickerText() : theme.palette().canvasPickerTextMuted(), false);
@@ -1031,14 +1017,13 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         }
     }
 
-    // 确认分组方式：新建分支插入容器并保持添加模式；包组直接对选区执行
+    // 确认分组方式：新建分支插入后直接把条件类型列表弹到它的子项热区上；包组直接对选区执行
     private void confirmKindMenu() {
         if (!kindMenuOpen) {
             return;
         }
         GroupKind kind = GroupKind.values()[Math.clamp(kindMenuIndex, 0, GroupKind.values().length - 1)];
         KindMenuTarget target = kindMenuTarget;
-        Hotspot hotspot = kindMenuHotspot;
         closeKindMenu();
         if (target == KindMenuTarget.WRAP_SELECTION) {
             wrapSelection(kind.allOf);
@@ -1046,12 +1031,15 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         }
         ConditionNode group = kind.allOf ? new ConditionNode.AllOf(List.of()) : new ConditionNode.AnyOf(List.of());
         lastOpKey = EditSession.OP_ADD_GROUP;
-        if (hotspot == null || !insertNode(hotspot.parent(), hotspot.index(), group)) {
+        if (!addNode(group)) {
             return;
         }
-        // 新容器自带大 [+]，继续保持添加模式让用户接着补子项
-        addMode = true;
-        groupKindPending = false;
+        UiTreePath groupPath = graph.path(group);
+        if (groupPath == null) {
+            return;
+        }
+        // 新分支自带子项热区，直接把类型列表弹出来，省掉玩家再点一次热区的那一步
+        openPicker(new Hotspot(groupPath, 0, bounds));
     }
 
     // ---- 输入 ----
@@ -1087,26 +1075,11 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         endGestureForNewPress();
         double localX = transform.toLocalX(mouseX);
         double localY = transform.toLocalY(mouseY);
-        boolean emptyTree = expression.root() == null;
-        if (addMode || emptyTree) {
-            Hotspot hotspot = graph.hotspotAt(localX, localY);
-            if (hotspot != null) {
-                if (groupKindPending) {
-                    openGroupKindMenu(hotspot);
-                } else {
-                    openPicker(hotspot);
-                }
-                return true;
-            }
-            if (addMode) {
-                // 添加模式下热区之外同样按空白区处理：Shift+拖拽框选，否则平移 / 未位移按点击清空选择
-                if (Screen.hasShiftDown()) {
-                    beginRubberBand(localX, localY);
-                } else {
-                    beginPan(mouseX, mouseY, true);
-                }
-                return true;
-            }
+        // 每个容器卡片下方的 [+] 热区都是新增条件的入口，点它就弹类型列表
+        Hotspot hotspot = graph.hotspotAt(localX, localY);
+        if (hotspot != null) {
+            openPicker(hotspot);
+            return true;
         }
         ConditionNode node = graph.nodeAt(localX, localY);
         if (node == null) {
@@ -1436,14 +1409,6 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             spaceDown = true;
             return true;
         }
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            if (addMode) {
-                addMode = false;
-                closePicker();
-                return true;
-            }
-            return false;
-        }
         if (graph.nodes().isEmpty()) {
             if (keyCode == GLFW.GLFW_KEY_A || keyCode == GLFW.GLFW_KEY_ENTER
                     || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
@@ -1611,7 +1576,6 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         int index = pickerIndex;
         boolean append = pickerAppend;
         closePicker();
-        addMode = false;
         ConditionTreeContract.LeafFactory factory = leafFactory;
         if (factory == null) return;
         ConditionNode leaf = factory.create(type);
@@ -1766,7 +1730,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         }
         ConditionNode node = selectedNode();
         if (node == null) {
-            return !addMode && beginAddCondition();
+            return beginAddCondition();
         }
         if (node instanceof ConditionNode.Leaf) {
             return editSelectedLeaf();

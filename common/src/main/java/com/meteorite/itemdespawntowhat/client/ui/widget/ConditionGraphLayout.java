@@ -253,8 +253,7 @@ final class ConditionGraphLayout {
         for (ConditionNode child : children) {
             wrapped.add(wrap(child));
         }
-        if (isContainer(node) && !children.isEmpty()
-                && ConditionTreeNodes.INSTANCE.childCapacity(node) > children.size()) {
+        if (isContainer(node) && ConditionTreeNodes.INSTANCE.childCapacity(node) > children.size()) {
             HotspotSlot hotspot = new HotspotSlot(node);
             hotspotSlots.add(hotspot);
             wrapped.add(hotspot);
@@ -276,17 +275,6 @@ final class ConditionGraphLayout {
             }
             hotspots.add(new Hotspot(parent, ConditionTreeNodes.INSTANCE.children(container).size(), cardRect(slot)));
         }
-        for (NodeSlot wrapper : graphNodes) {
-            ConditionNode node = wrapper.node;
-            if (!isContainer(node) || !ConditionTreeNodes.INSTANCE.children(node).isEmpty()) {
-                continue;
-            }
-            UiTreePath parent = paths.get(node);
-            if (parent == null) {
-                continue;
-            }
-            hotspots.add(new Hotspot(parent, 0, centered(cardRect(wrapper))));
-        }
     }
 
     private static UiRect centered(UiRect card) {
@@ -299,9 +287,11 @@ final class ConditionGraphLayout {
         if (cached != null) {
             return cached;
         }
-        int measured = Math.max(Math.max(font.width(titleLabel(node).getString()),
-                        font.width(summaryLabel(node).getString())), font.width(statusLabel(node).getString()))
-                + (CARD_PADDING_X + BORDER) * 2;
+        int measured = font.width(titleLabel(node).getString());
+        for (Component row : summaryRows(node)) {
+            measured = Math.max(measured, font.width(row.getString()));
+        }
+        measured += (CARD_PADDING_X + BORDER) * 2;
         if (isContainer(node)) {
             measured = Math.max(measured, font.width(operatorLabel(node)) + LOGIC_CUT_CORNER * 2);
         }
@@ -345,7 +335,7 @@ final class ConditionGraphLayout {
         return label;
     }
 
-    // 内容行 1：叶为参数摘要（未选条件时留空，标题已给出「未选择条件」），容器为分支计数
+    /** 卡片内容区第一行文本：叶为参数摘要，容器为子项计数；卡片宽度测量与悬停提示共用这一段。 */
     Component summaryLabel(ConditionNode node) {
         if (isContainer(node)) {
             return branchCountLabel(node);
@@ -359,24 +349,38 @@ final class ConditionGraphLayout {
         return Component.empty();
     }
 
+    /**
+     * 卡片内容区要绘制的文本行（最多两行）：叶把参数摘要按内容宽折行铺满两行；容器第一行给子项
+     * 计数，第二行说明运算符自身的意思，让「且 / 或 / 非」不必只靠一个字去猜。
+     */
+    List<Component> summaryRows(ConditionNode node) {
+        if (isContainer(node)) {
+            return List.of(branchCountLabel(node), operatorHintLabel(node));
+        }
+        Component summary = summaryLabel(node);
+        return summary.getString().isEmpty() ? List.of() : List.of(summary);
+    }
+
     // 容器内容行 1：子项计数，空容器显示「暂无条件」
     private Component branchCountLabel(ConditionNode node) {
         List<ConditionNode> children = ConditionTreeNodes.INSTANCE.children(node);
         if (children.isEmpty()) {
             return Component.translatable("gui.itemdespawntowhat.edit.tree.empty");
         }
-        return Component.translatable("gui.itemdespawntowhat.edit.tree.drag_many", children.size());
+        return Component.translatable("gui.itemdespawntowhat.edit.tree.card.count", children.size());
     }
 
-    /**
-     * 容器内容行 2：与条件叶共用同一套结构标记判定（渲染器对容器调用本方法、对叶直接调用
-     * {@link #statusLabel(ConditionNode)}，签名保持既有形状）。
-     */
-    Component row2Label(ConditionNode node) {
-        return statusLabel(node);
+    // 容器内容行 2：运算符的展开说法，与标题带里的单字运算符互为注解
+    private Component operatorHintLabel(ConditionNode node) {
+        String key = switch (node) {
+            case ConditionNode.AllOf ignored -> "gui.itemdespawntowhat.edit.tree.node.all";
+            case ConditionNode.AnyOf ignored -> "gui.itemdespawntowhat.edit.tree.node.any";
+            default -> "gui.itemdespawntowhat.edit.tree.card.not";
+        };
+        return Component.translatable(key);
     }
 
-    // 内容行 2（叶）：结构标记，无问题时为空。超限优先于层级较深，避免同一行堆叠两个标记
+    // 结构问题文案：卡片标题带右上角的标记、悬停提示与缩进摘要共用一套判定。超限优先于层级较深，避免同一节点堆叠两个标记
     Component statusLabel(ConditionNode node) {
         NodeInfo info = infos.get(node);
         if (info == null) {
@@ -392,6 +396,12 @@ final class ConditionGraphLayout {
             return Component.translatable("gui.itemdespawntowhat.edit.tree.deep_mark");
         }
         return Component.empty();
+    }
+
+    /** 结构问题是否属于必须修的错误（不完整 / 超限）；「层级较深」只是提示，按提示色画。 */
+    boolean statusSevere(ConditionNode node) {
+        NodeInfo info = infos.get(node);
+        return info != null && (info.incomplete() || info.overflow());
     }
 
     /**

@@ -4,6 +4,7 @@ import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLay
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.CARD_PADDING_X;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.CARD_ROW_HEIGHT;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.CARD_SEPARATOR;
+import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.CONTENT_ROWS;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.CONTENT_TOP;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.FLOW_HINT_KEY;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.LOGIC_CUT_CORNER;
@@ -26,6 +27,7 @@ import java.util.Set;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.FormattedCharSequence;
 import org.jetbrains.annotations.Nullable;
 
 /** 条件画布绘制：读取布局与选择状态，绘制卡片、连线和手势反馈。 */
@@ -39,6 +41,9 @@ final class ConditionGraphRenderer {
     private static final int EMPTY_HINT_GAP = 4;
     private static final int DROP_MARKER_THICKNESS = 2;
     private static final int DRAG_GHOST_GAP = 6;
+    // 标题带右上角的结构问题标记：0 表示不画标记，其余为标记颜色
+    private static final int NO_MARK = 0;
+    private static final int MARK_RESERVE = 8;
     private final UiHostTheme theme;
     private final Font font;
     private final ConditionGraphLayout graph;
@@ -118,6 +123,30 @@ final class ConditionGraphRenderer {
                 drawDownArrow(graphics, childCenterX, childRect.y(), color);
             }
         }
+        drawHotspotLinks(graphics, selection);
+    }
+
+    /**
+     * 容器末尾的 [+] 热区也是它未来的子项位置：给热区画一段来自容器的连线，玩家才能看出这个
+     * 加号长在哪个分支下面。热区不是条件节点，因此不画箭头，与子项连线区分。
+     */
+    private void drawHotspotLinks(GuiGraphics graphics, Set<UiTreePath> selection) {
+        for (Hotspot hotspot : graph.hotspots()) {
+            UiTreePath parentPath = hotspot.parent();
+            if (parentPath == null) {
+                continue;
+            }
+            ConditionNode container = graph.nodeAtPath(parentPath);
+            UiRect parentRect = container == null ? null : graph.rect(container);
+            if (parentRect == null) {
+                continue;
+            }
+            UiRect hotspotRect = hotspot.rect();
+            int color = selection.contains(parentPath)
+                    ? theme.palette().canvasLinkSelected() : theme.palette().canvasLink();
+            UiOrthoLink.drawDown(graphics, parentRect.x() + parentRect.width() / 2, parentRect.bottom(),
+                    hotspotRect.x() + hotspotRect.width() / 2, hotspotRect.y(), LINK_THICKNESS, color);
+        }
     }
 
     private void drawEndpointLink(GuiGraphics graphics, UiRect from, UiRect to) {
@@ -183,8 +212,8 @@ final class ConditionGraphRenderer {
     private void drawEndpoint(GuiGraphics graphics, Font renderFont, Component title, Component summary, UiRect rect) {
         graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), theme.palette().canvasGroupFill());
         drawBorder(graphics, rect, theme.palette().canvasCardBorder());
-        drawTitleBand(graphics, renderFont, title, rect, BORDER, theme.palette().canvasText());
-        drawContentRow(graphics, renderFont, summary, theme.palette().canvasTextMuted(), rect, BORDER, 0);
+        drawTitleBand(graphics, renderFont, title, rect, BORDER, theme.palette().canvasText(), NO_MARK);
+        drawEndpointSummary(graphics, renderFont, summary, rect);
     }
 
     private void drawCard(GuiGraphics graphics, Font renderFont, ConditionNode node, UiRect rect,
@@ -200,10 +229,8 @@ final class ConditionGraphRenderer {
         graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), fill);
         drawBorder(graphics, rect, borderColor(selected, issue, hovered), thickness);
         drawTitleBand(graphics, renderFont, graph.titleLabel(node), rect, thickness,
-                issue ? theme.palette().canvasTextDanger() : theme.palette().canvasText());
-        drawContentRow(graphics, renderFont, graph.summaryLabel(node), theme.palette().canvasText(), rect, thickness, 0);
-        drawContentRow(graphics, renderFont, graph.statusLabel(node), theme.palette().canvasTextDanger(),
-                rect, thickness, 1);
+                issue ? theme.palette().canvasTextDanger() : theme.palette().canvasText(), markColor(node));
+        drawSummaryRows(graphics, renderFont, node, rect, thickness, theme.palette().canvasText());
     }
 
     private void drawLogicCard(GuiGraphics graphics, Font renderFont, ConditionNode node, UiRect rect,
@@ -228,10 +255,8 @@ final class ConditionGraphRenderer {
                 rect.width() - thickness * 2, rect.height() - thickness * 2);
         drawLogicShape(graphics, node, inner, fill);
         drawTitleBand(graphics, renderFont, graph.titleLabel(node), rect, thickness,
-                issue ? theme.palette().canvasTextDanger() : text);
-        drawContentRow(graphics, renderFont, graph.summaryLabel(node), text, rect, thickness, 0);
-        drawContentRow(graphics, renderFont, graph.row2Label(node), theme.palette().canvasTextMuted(),
-                rect, thickness, 1);
+                issue ? theme.palette().canvasTextDanger() : text, markColor(node));
+        drawSummaryRows(graphics, renderFont, node, rect, thickness, text);
     }
 
     /**
@@ -248,29 +273,67 @@ final class ConditionGraphRenderer {
     }
 
     /**
-     * 绘制卡片外壳的标题带与分隔线：标题整行居中，分隔线横跨描边内侧。
-     * 端点、条件叶与容器共用同一套内部纵向分区，超长标题按可用宽度裁剪。
+     * 绘制卡片标题带：标题左对齐，与内容行共用同一条左轴；分隔线横跨描边内侧。结构问题只在
+     * 右上角留一个颜色标记（具体原因看悬停提示），把整行内容区让给参数文本。
      */
     private void drawTitleBand(GuiGraphics graphics, Font renderFont, Component title, UiRect rect,
-                               int thickness, int titleColor) {
+                               int thickness, int titleColor, int markColor) {
+        int reserve = markColor == NO_MARK ? 0 : MARK_RESERVE;
         String text = TextScroll.trimToWidth(renderFont, title.getString(),
-                Math.max(0, rect.width() - (thickness + CARD_PADDING_X) * 2));
-        graphics.drawString(renderFont, text, rect.x() + (rect.width() - renderFont.width(text)) / 2,
+                Math.max(0, rect.width() - (thickness + CARD_PADDING_X) * 2 - reserve));
+        graphics.drawString(renderFont, text, rect.x() + thickness + CARD_PADDING_X,
                 rect.y() + TITLE_BAND_TOP, titleColor, false);
         int separatorY = rect.y() + TITLE_BAND_TOP + TITLE_BAND_HEIGHT;
         graphics.fill(rect.x() + thickness, separatorY, rect.right() - thickness, separatorY + CARD_SEPARATOR,
                 theme.palette().canvasCardBorder());
+        if (markColor != NO_MARK) {
+            String mark = "!";
+            graphics.drawString(renderFont, mark,
+                    rect.right() - thickness - CARD_PADDING_X - renderFont.width(mark),
+                    rect.y() + TITLE_BAND_TOP, markColor, false);
+        }
+    }
+
+    // 标题带右上角的标记颜色：必须修的错误用警示色，只是提示（层级较深）用次要色，无问题不留标记
+    private int markColor(ConditionNode node) {
+        if (graph.statusLabel(node).getString().isEmpty()) {
+            return NO_MARK;
+        }
+        return graph.statusSevere(node) ? theme.palette().canvasTextDanger() : theme.palette().canvasTextMuted();
     }
 
     /**
-     * 绘制内容区第 row 行（0 起）的左对齐文本，超出内容宽按宽度裁剪。
+     * 绘制卡片内容区：把布局给出的文本行按内容宽折行，最多铺满两行——长列表（周围方块、气候
+     * 区间）因此能完整读，不再被单行硬裁成半截。
      */
-    private void drawContentRow(GuiGraphics graphics, Font renderFont, Component content, int color,
-                                UiRect rect, int thickness, int row) {
-        String text = TextScroll.trimToWidth(renderFont, content.getString(),
-                Math.max(0, rect.width() - (thickness + CARD_PADDING_X) * 2));
-        graphics.drawString(renderFont, text, rect.x() + thickness + CARD_PADDING_X,
-                rect.y() + CONTENT_TOP + row * CARD_ROW_HEIGHT, color, false);
+    private void drawSummaryRows(GuiGraphics graphics, Font renderFont, ConditionNode node, UiRect rect,
+                                 int thickness, int color) {
+        int width = Math.max(0, rect.width() - (thickness + CARD_PADDING_X) * 2);
+        if (width == 0) {
+            return;
+        }
+        int row = 0;
+        for (Component content : graph.summaryRows(node)) {
+            if (content.getString().isEmpty()) {
+                continue;
+            }
+            for (FormattedCharSequence line : renderFont.split(content, width)) {
+                if (row >= CONTENT_ROWS) {
+                    return;
+                }
+                graphics.drawString(renderFont, line, rect.x() + thickness + CARD_PADDING_X,
+                        rect.y() + CONTENT_TOP + row * CARD_ROW_HEIGHT, color, false);
+                row++;
+            }
+        }
+    }
+
+    // 端点卡片只有一行摘要：左对齐绘制，超出内容宽按宽度裁剪
+    private void drawEndpointSummary(GuiGraphics graphics, Font renderFont, Component summary, UiRect rect) {
+        String text = TextScroll.trimToWidth(renderFont, summary.getString(),
+                Math.max(0, rect.width() - (BORDER + CARD_PADDING_X) * 2));
+        graphics.drawString(renderFont, text, rect.x() + BORDER + CARD_PADDING_X,
+                rect.y() + CONTENT_TOP, theme.palette().canvasTextMuted(), false);
     }
 
     private static void drawLogicShape(GuiGraphics graphics, ConditionNode node, UiRect rect, int color) {
@@ -302,16 +365,18 @@ final class ConditionGraphRenderer {
         }
     }
 
+    // 热区常显在每张容器卡片下方，静息态只留一个低调的「+」；悬停才用强调色填充，避免整页加号抢走卡片正文的注意力
     void drawHotspots(GuiGraphics graphics, Font renderFont, @Nullable Hotspot hoveredHotspot) {
         for (Hotspot hotspot : graph.hotspots()) {
             UiRect rect = hotspot.rect();
             boolean hovered = hotspot == hoveredHotspot;
             graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(),
-                    hovered ? theme.palette().canvasAccentHover() : theme.palette().canvasAccent());
+                    hovered ? theme.palette().canvasAccentHover() : theme.palette().canvasCardFill());
             drawBorder(graphics, rect, theme.palette().canvasHotspotBorder());
             String mark = "+";
             graphics.drawString(renderFont, mark, rect.x() + (rect.width() - renderFont.width(mark)) / 2,
-                    rect.y() + (rect.height() - renderFont.lineHeight) / 2 + 1, theme.palette().canvasTextOnAccent(), false);
+                    rect.y() + (rect.height() - renderFont.lineHeight) / 2 + 1,
+                    hovered ? theme.palette().canvasTextOnAccent() : theme.palette().canvasAccent(), false);
         }
     }
 

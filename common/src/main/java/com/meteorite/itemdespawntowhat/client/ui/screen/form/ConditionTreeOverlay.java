@@ -230,9 +230,9 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         functionItems = List.of(undoItem, redoItem, jsonItem, helpItem);
 
         toolColumn = new ConditionTreeChrome.Strip(font, UiIconStrip.Orientation.VERTICAL);
-        // 7 格：新建分支与包组的 ∧ / ∨ 由画布在 [+] 热区处再选，工具列不再各占两格
+        // 7 格：新建分支与包组的 ∧ / ∨ 由点击工具格后贴着它弹出的选择菜单决定，工具列不再各占两格
         addConditionItem = addTool(UiHostTheme.ICON_ADD_CONDITION, UI + "button.add", false, editor::beginAddCondition);
-        branchItem = addTool(UiHostTheme.ICON_NEW_BRANCH, UI + "button.new_branch", false, editor::beginAddGroupWithKind);
+        branchItem = addTool(UiHostTheme.ICON_NEW_BRANCH, UI + "button.new_branch", false, this::beginBranchMenu);
         addTool(UiHostTheme.ICON_INVERT, UI + "button.not", true, editor::invertSelection);
         addTool(UiHostTheme.ICON_REMOVE, UI + "button.remove", true, editor::removeSelection);
         addTool(UiHostTheme.ICON_MOVE_UP, UI + "button.up", true, () -> editor.moveSelection(-1));
@@ -247,6 +247,11 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     public EditSession session() { return session; }
 
     public String scope() { return scope; }
+
+    // 「新建分支」以工具格自身的屏幕矩形为锚弹出 ∧ / ∨ 菜单：菜单贴着按钮出现，不必先进入添加模式再点热区
+    private void beginBranchMenu() {
+        editor.beginAddGroupWithKind(branchItem.bounds());
+    }
 
     // 加一个工具格：需要选中节点的进 selectionTools，由布局按选择变化统一使能
     private UiIconStrip.Item addTool(int iconRow, String tooltipKey, boolean needsSelection, Runnable action) {
@@ -660,12 +665,10 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         for (UiIconStrip.Item item : selectionTools) {
             item.setEnabled(hasSelection);
         }
-        // 三个创建类工具的选中态互斥：加条件 / 新建分支待选 ∧∨ / 包组待选 ∧∨
-        boolean adding = treeView && editor.isAddMode();
-        boolean branchPending = adding && editor.isGroupKindPending();
-        addConditionItem.setSelected(treeView && editor.isPickerOpen() || adding && !branchPending);
-        branchItem.setSelected(branchPending);
-        wrapItem.setSelected(treeView && editor.isWrapKindPending());
+        // 创建类工具的选中态取自各自弹出的浮层：类型列表 / 新建分支 ∧∨ / 包组 ∧∨
+        addConditionItem.setSelected(treeView && editor.isPickerOpen());
+        branchItem.setSelected(treeView && editor.isGroupKindMenuOpen());
+        wrapItem.setSelected(treeView && editor.isWrapKindMenuOpen());
     }
 
     // ---- 渲染 ----
@@ -1012,7 +1015,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         UiWidget target = pressed;
         pressed = null;
         boolean consumed = target != null && target.mouseReleased(mouseX, mouseY, button);
-        if (target == toolColumn && (editor.isPickerOpen() || editor.isAddMode() || editor.isWrapKindPending())) {
+        if (target == toolColumn && (editor.isPickerOpen() || editor.isGroupKindMenuOpen() || editor.isWrapKindMenuOpen())) {
             setFocusSlot(FocusSlot.CANVAS);
         }
         if (target == editor) syncSelection();
@@ -1043,7 +1046,12 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
             return true;
         }
         if (!sourceView && editor.hasPopup()) {
-            return editor.keyPressed(keyCode, scanCode, modifiers);
+            boolean handled = editor.keyPressed(keyCode, scanCode, modifiers);
+            // 键盘关闭浮层后工具格选中态要跟着复位；鼠标路径由 mouseReleased 收尾的 layout() 负责
+            if (!editor.hasPopup()) {
+                layout();
+            }
+            return handled;
         }
         // 内联框打开时外壳快捷键让位：先给内联框（经画布），再给画布，最后才是外壳
         boolean inlineOpen = !sourceView && editor.isInlineEditorOpen();
