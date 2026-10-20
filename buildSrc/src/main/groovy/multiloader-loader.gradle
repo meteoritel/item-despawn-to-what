@@ -21,24 +21,32 @@ dependencies {
     commonResources project(path: ':common', configuration: 'commonResources')
 }
 
+// commonJava 暴露的是 common 的源码目录本身，Gradle 会把目录里的每个文件都当成源文件；
+// 这里只取 .java，避免同目录下的非源文件被塞进 javac 入参。
 tasks.named('compileJava', JavaCompile) {
     dependsOn(configurations.commonJava)
-    source(configurations.commonJava)
+    source(configurations.commonJava.asFileTree.matching { include '**/*.java' })
 }
 
 processResources {
     dependsOn(configurations.commonResources)
-    from(configurations.commonResources)
+    from(configurations.commonResources) {
+        exclude '**/.dsh-ops-update-*.lock'
+    }
 }
 
+// 同上：javadoc 读到非源文件时会直接报「无法读取的源文件」并中断构建。
 tasks.named('javadoc', Javadoc).configure {
     dependsOn(configurations.commonJava)
-    source(configurations.commonJava)
+    source(configurations.commonJava.asFileTree.matching { include '**/*.java' })
 }
 
 tasks.named('sourcesJar', Jar) {
     dependsOn(configurations.commonJava)
-    from(configurations.commonJava)
+    // 源包同理只收 .java，避免把更新锁 sidecar 之类的非源文件带进产物。
+    from(configurations.commonJava.asFileTree.matching { include '**/*.java' })
     dependsOn(configurations.commonResources)
-    from(configurations.commonResources)
+    from(configurations.commonResources) {
+        exclude '**/.dsh-ops-update-*.lock'
+    }
 }

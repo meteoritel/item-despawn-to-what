@@ -108,6 +108,8 @@ processResources {
         expand expandProps
     }
     inputs.properties(expandProps)
+    // dsh-ops 的更新锁 sidecar 与目标文件同目录生成，不应被打进资源/产物。
+    exclude '**/.dsh-ops-update-*.lock'
 }
 
 publishing {
