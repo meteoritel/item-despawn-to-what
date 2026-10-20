@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.kit;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Collection;
+import java.util.IdentityHashMap;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -379,6 +380,78 @@ public final class UiTreeEditor<N> {
         Outcome result = accept(before, after, Kind.DELETE, paths, Set.copyOf(sources));
         if (result.changed()) { remapView(paths); setSelection(List.of(), null); }
         return result;
+    }
+
+    /**
+     * 删除选中节点但保留下方分支：被删节点的子项按原顺序上移到它的位置，结构共享让子项保持原节点对象。
+     *
+     * <p>根节点没有父节点承接子项，父节点容量不足时也无法容纳上移后的子项，这两种情况整次拒绝；
+     * 叶子节点没有下方分支，效果与 {@link #deleteMany(Collection)} 相同。</p>
+     *
+     * @param requested 待删除的节点路径，祖先路径覆盖其后代
+     * @return 是否已提交；路径不存在、根节点、父节点放不下或被宿主校验拒绝时不写入
+     */
+    public Outcome deleteKeepingChildren(Collection<UiTreePath> requested) {
+        List<UiTreePath> sources = normalize(requested);
+        beforeEdit.run();
+        N before = root.get();
+        if (sources.isEmpty()) return new Outcome(false, invalidPath);
+        if (sources.stream().anyMatch(path -> query(before, path) == null)) return new Outcome(false, invalidPath);
+        if (!canLift(before, sources)) return new Outcome(false, moveErrors.fullParent());
+        N after = liftChildren(before, sources);
+        Outcome result = accept(before, after, Kind.DELETE, survivingPaths(before, after));
+        if (result.changed()) setSelection(List.of(), null);
+        return result;
+    }
+
+    // 根节点没有父节点；父节点容量不足（例如取反只能容纳一个子项）时也放不下上移的子项
+    private boolean canLift(@Nullable N before, List<UiTreePath> sources) {
+        return sources.stream().allMatch(source -> canLift(before, source));
+    }
+
+    private boolean canLift(@Nullable N before, UiTreePath source) {
+        if (source.indices().isEmpty()) return false;
+        N node = query(before, source);
+        N parent = query(before, source.parent());
+        if (node == null || parent == null) return false;
+        return adapter.acceptsChildren(parent, adapter.children(parent).size() - 1 + adapter.children(node).size());
+    }
+
+    // 逆文档序逐个上移：先处理靠后的兄弟与更深的节点，较前下标才仍然有效
+    private @Nullable N liftChildren(@Nullable N before, List<UiTreePath> sources) {
+        N after = before;
+        for (UiTreePath source : sources.reversed()) {
+            N node = query(after, source);
+            N parent = query(after, source.parent());
+            if (node == null || parent == null) continue;
+            List<N> siblings = new ArrayList<>(adapter.children(parent));
+            int index = lastIndex(source);
+            siblings.remove(index);
+            siblings.addAll(index, adapter.children(node));
+            after = replace(after, source.parent().indices(), 0, adapter.withChildren(parent, siblings));
+        }
+        return after;
+    }
+
+    // 上移后节点对象保持不变：按身份对比前后树即可得到旧路径到新路径的映射，缺失的路径就是被删除的路径
+    private Map<UiTreePath, UiTreePath> survivingPaths(@Nullable N before, @Nullable N after) {
+        Map<N, UiTreePath> oldPaths = new IdentityHashMap<>();
+        Map<N, UiTreePath> newPaths = new IdentityHashMap<>();
+        collectIdentity(before, UiTreePath.ROOT, oldPaths);
+        collectIdentity(after, UiTreePath.ROOT, newPaths);
+        Map<UiTreePath, UiTreePath> paths = new LinkedHashMap<>();
+        oldPaths.forEach((node, path) -> {
+            UiTreePath next = newPaths.get(node);
+            if (next != null && !next.equals(path)) paths.put(path, next);
+        });
+        return paths;
+    }
+
+    private void collectIdentity(@Nullable N node, UiTreePath path, Map<N, UiTreePath> paths) {
+        if (node == null) return;
+        paths.putIfAbsent(node, path);
+        List<N> children = adapter.children(node);
+        for (int index = 0; index < children.size(); index++) collectIdentity(children.get(index), path.child(index), paths);
     }
 
     /** 批量插入不替换既有根，不合并分组；容量或候选失败时整批不写入。 */

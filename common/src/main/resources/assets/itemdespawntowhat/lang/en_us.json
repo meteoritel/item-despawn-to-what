@@ -433,6 +433,8 @@
   "gui.itemdespawntowhat.edit.tree.operator.all": "And",
   "gui.itemdespawntowhat.edit.tree.operator.any": "Or",
   "gui.itemdespawntowhat.edit.tree.operator.not": "Not",
+  "gui.itemdespawntowhat.edit.tree.delete.keep_children": "Only this box; children move up",
+  "gui.itemdespawntowhat.edit.tree.delete.subtree": "This box and everything below",
   "gui.itemdespawntowhat.edit.tree.flow_hint": "Run when the whole tree matches",
   "gui.itemdespawntowhat.edit.tag.supports.biomes": "Matches all biomes in tag %s",
   "gui.itemdespawntowhat.edit.tree.node.source": "Source item",

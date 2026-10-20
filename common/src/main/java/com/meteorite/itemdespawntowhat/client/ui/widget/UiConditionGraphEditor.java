@@ -94,17 +94,15 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
 
     // 分组方式：∧ 全部满足 / ∨ 任一满足
     private enum GroupKind {
-        ALL("gui.itemdespawntowhat.edit.tree.operator.all", "gui.itemdespawntowhat.edit.tree.node.all", true),
-        ANY("gui.itemdespawntowhat.edit.tree.operator.any", "gui.itemdespawntowhat.edit.tree.node.any", false);
+        ALL("gui.itemdespawntowhat.edit.tree.operator.all", "gui.itemdespawntowhat.edit.tree.node.all"),
+        ANY("gui.itemdespawntowhat.edit.tree.operator.any", "gui.itemdespawntowhat.edit.tree.node.any");
 
         private final String operatorKey;
         private final String labelKey;
-        private final boolean allOf;
 
-        GroupKind(String operatorKey, String labelKey, boolean allOf) {
+        GroupKind(String operatorKey, String labelKey) {
             this.operatorKey = operatorKey;
             this.labelKey = labelKey;
-            this.allOf = allOf;
         }
 
         // 菜单行同时给出运算符与它展开后的说法，只看到单字「且 / 或」时也能判断含义
@@ -113,8 +111,14 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         }
     }
 
-    // 「分组 / 包组」小菜单的确认目标
-    private enum KindMenuTarget { INSERT_GROUP, WRAP_SELECTION }
+    // 弹层确认后的动作：分组方式与删除范围共用同一套弹出菜单
+    private enum KindMenuAction { INSERT_ALL, INSERT_ANY, WRAP_ALL, WRAP_ANY, DELETE_KEEP_CHILDREN, DELETE_SUBTREE }
+
+    // 弹层的一行：显示文本与确认动作
+    private record KindMenuEntry(Component label, KindMenuAction action) {}
+
+    // 弹层用途：决定锚点位置与工具栏选中态
+    private enum KindMenuPurpose { INSERT_GROUP, WRAP_SELECTION, DELETE_CONFIRM }
 
     private final Font font;
     private final UiTransform transform = UiTransform.ofScales(0.5, 1.0, 1.5, 2.0);
@@ -179,7 +183,8 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     private final UiDescriptionTooltip tooltip;
 
     private boolean kindMenuOpen;
-    private KindMenuTarget kindMenuTarget = KindMenuTarget.INSERT_GROUP;
+    private KindMenuPurpose kindMenuPurpose = KindMenuPurpose.INSERT_GROUP;
+    private List<KindMenuEntry> kindMenuEntries = List.of();
     private @Nullable UiRect kindMenuAnchor;
     private int kindMenuIndex;
     // 指针位置：指针在列表内时高亮跟随鼠标，指针静止则不覆盖键盘选择
@@ -437,12 +442,17 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
 
     /** 「新建分支」的 ∧ / ∨ 菜单是否打开；为真时该工具格显示为选中。 */
     public boolean isGroupKindMenuOpen() {
-        return kindMenuOpen && kindMenuTarget == KindMenuTarget.INSERT_GROUP;
+        return kindMenuOpen && kindMenuPurpose == KindMenuPurpose.INSERT_GROUP;
     }
 
     /** 「包组」的 ∧ / ∨ 菜单是否打开。 */
     public boolean isWrapKindMenuOpen() {
-        return kindMenuOpen && kindMenuTarget == KindMenuTarget.WRAP_SELECTION;
+        return kindMenuOpen && kindMenuPurpose == KindMenuPurpose.WRAP_SELECTION;
+    }
+
+    /** 删除确认菜单是否打开；为真时删除工具格显示为选中。 */
+    public boolean isDeleteConfirmOpen() {
+        return kindMenuOpen && kindMenuPurpose == KindMenuPurpose.DELETE_CONFIRM;
     }
 
     /** 在当前可添加位置追加一个分组；无参形式默认 ALL。 */
@@ -473,7 +483,9 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         endInteractions(UiInputCapture.EndReason.CANCEL);
         closePicker();
         closeKindMenu();
-        kindMenuTarget = KindMenuTarget.INSERT_GROUP;
+        kindMenuPurpose = KindMenuPurpose.INSERT_GROUP;
+        kindMenuEntries = List.of(new KindMenuEntry(GroupKind.ALL.menuLabel(), KindMenuAction.INSERT_ALL),
+                new KindMenuEntry(GroupKind.ANY.menuLabel(), KindMenuAction.INSERT_ANY));
         kindMenuAnchor = anchorScreen;
         kindMenuIndex = 0;
         kindMenuOpen = true;
@@ -488,7 +500,9 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         }
         endInteractions(UiInputCapture.EndReason.CANCEL);
         closePicker();
-        kindMenuTarget = KindMenuTarget.WRAP_SELECTION;
+        kindMenuPurpose = KindMenuPurpose.WRAP_SELECTION;
+        kindMenuEntries = List.of(new KindMenuEntry(GroupKind.ALL.menuLabel(), KindMenuAction.WRAP_ALL),
+                new KindMenuEntry(GroupKind.ANY.menuLabel(), KindMenuAction.WRAP_ANY));
         kindMenuAnchor = null;
         kindMenuIndex = 0;
         kindMenuOpen = true;
@@ -517,16 +531,68 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         return changed;
     }
 
-    /** 删除选中的最高层子树（根被删除后表达式变为空）。 */
+    /** 删除选中节点；选中项下方还有分支时先弹确认菜单，由玩家选择只删本级还是整支删除。 */
     public boolean removeSelection() {
+        return removeSelection(null);
+    }
+
+    /**
+     * 删除选中节点：下方还有分支时贴着触发按钮弹出确认菜单，否则直接删除。
+     *
+     * @param anchorScreen 触发删除的工具格屏幕矩形；为 {@code null}（键盘删除）时贴着选区卡片弹出
+     */
+    public boolean removeSelection(@Nullable UiRect anchorScreen) {
         if (!enabled || tree.selection().isEmpty()) {
             return false;
         }
         List<UiTreePath> selected = tree.normalizedSelection();
-        UiTreePath parent = selected.isEmpty() || selected.getFirst().indices().isEmpty()
-                ? null : selected.getFirst().parent();
+        if (!canKeepChildren(selected)) {
+            return deleteSelection(false, selected);
+        }
+        endInteractions(UiInputCapture.EndReason.CANCEL);
+        closePicker();
+        closeKindMenu();
+        kindMenuPurpose = KindMenuPurpose.DELETE_CONFIRM;
+        kindMenuEntries = List.of(
+                new KindMenuEntry(Component.translatable("gui.itemdespawntowhat.edit.tree.delete.keep_children"),
+                        KindMenuAction.DELETE_KEEP_CHILDREN),
+                new KindMenuEntry(Component.translatable("gui.itemdespawntowhat.edit.tree.delete.subtree"),
+                        KindMenuAction.DELETE_SUBTREE));
+        kindMenuAnchor = anchorScreen;
+        kindMenuIndex = 0;
+        kindMenuOpen = true;
+        updateKindMenuRect();
+        return true;
+    }
+
+    // 下方分支能否交给父节点：根节点没有父节点，容量不足的父节点（例如取反只能容纳一个子项）也放不下
+    private boolean canKeepChildren(List<UiTreePath> selected) {
+        boolean hasChildren = false;
+        for (UiTreePath path : selected) {
+            ConditionNode node = tree.query(path);
+            if (node == null) continue;
+            List<ConditionNode> lifted = ConditionTreeNodes.INSTANCE.children(node);
+            if (lifted.isEmpty()) continue;
+            hasChildren = true;
+            if (path.indices().isEmpty()) return false;
+            ConditionNode parent = tree.query(path.parent());
+            if (parent == null) return false;
+            if (!ConditionTreeNodes.INSTANCE.acceptsChildren(parent,
+                    ConditionTreeNodes.INSTANCE.children(parent).size() - 1 + lifted.size())) {
+                return false;
+            }
+        }
+        return hasChildren;
+    }
+
+    // keepChildren 为真时保留下方分支并上移，否则删除整个子树
+    private boolean deleteSelection(boolean keepChildren, List<UiTreePath> selected) {
+        if (selected.isEmpty()) {
+            return false;
+        }
+        UiTreePath parent = selected.getFirst().indices().isEmpty() ? null : selected.getFirst().parent();
         lastOpKey = EditSession.OP_DELETE_NODE;
-        boolean changed = accept(tree.deleteMany(selected));
+        boolean changed = accept(keepChildren ? tree.deleteKeepingChildren(selected) : tree.deleteMany(selected));
         if (changed) {
             selectedPath = null;
             if (parent != null && tree.query(parent) != null) {
@@ -892,6 +958,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     private void closeKindMenu() {
         kindMenuOpen = false;
         kindMenuAnchor = null;
+        kindMenuEntries = List.of();
         kindMenuIndex = 0;
         kindMenuPointerKnown = false;
     }
@@ -907,14 +974,19 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             kindMenuRect = new UiRect(0, 0, 0, 0);
             return;
         }
-        GroupKind[] kinds = GroupKind.values();
+        if (kindMenuEntries.isEmpty()) {
+            closeKindMenu();
+            kindMenuRect = new UiRect(0, 0, 0, 0);
+            return;
+        }
+        int rowCount = kindMenuEntries.size();
         int width = KIND_MENU_MIN_WIDTH;
-        for (GroupKind kind : kinds) {
-            width = Math.max(width, font.width(kind.menuLabel().getString()) + KIND_MENU_PADDING * 2 + BORDER * 2);
+        for (KindMenuEntry entry : kindMenuEntries) {
+            width = Math.max(width, font.width(entry.label().getString()) + KIND_MENU_PADDING * 2 + BORDER * 2);
         }
         int maxWidth = Math.max(1, bounds.width() - KIND_MENU_PADDING);
         width = Math.min(width, maxWidth);
-        int height = Math.min(kinds.length * KIND_MENU_ROW_HEIGHT + BORDER * 2, bounds.height());
+        int height = Math.min(rowCount * KIND_MENU_ROW_HEIGHT + BORDER * 2, bounds.height());
         int x = anchor.right() + KIND_MENU_GAP;
         if (x + width > bounds.right()) {
             x = anchor.x() - KIND_MENU_GAP - width;
@@ -925,13 +997,13 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         // 视口过矮时按可用高度裁掉列表区：行高不变，只显示画得下的行
         int availableListHeight = height - BORDER * 2;
         int listHeight = availableListHeight <= 0 ? 0
-                : Math.min(kinds.length * KIND_MENU_ROW_HEIGHT, availableListHeight);
+                : Math.min(rowCount * KIND_MENU_ROW_HEIGHT, availableListHeight);
         kindMenuListRect = new UiRect(x + BORDER, y + BORDER, Math.max(0, width - BORDER * 2), listHeight);
     }
 
     private @Nullable UiRect kindMenuAnchorRect() {
-        // 新建分支贴着工具栏按钮弹出；包组贴着选区里树序最靠前的卡片弹出
-        if (kindMenuTarget == KindMenuTarget.INSERT_GROUP) {
+        // 工具栏触发（新建分支、删除确认）贴着工具格弹出；包组与键盘删除贴着选区里树序最靠前的卡片弹出
+        if (kindMenuAnchor != null) {
             return kindMenuAnchor;
         }
         ConditionNode first = firstSelectedInOrder();
@@ -962,18 +1034,18 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         if (!kindMenuOpen || kindMenuRect.width() <= 0 || kindMenuRect.height() <= 0) {
             return;
         }
-        GroupKind[] kinds = GroupKind.values();
         graphics.fill(kindMenuRect.x(), kindMenuRect.y(), kindMenuRect.right(), kindMenuRect.bottom(),
                 theme.palette().canvasPickerFill());
         drawBorder(graphics, kindMenuRect, theme.palette().canvasPickerBorder());
-        for (int index = 0; index < kinds.length; index++) {
+        for (int index = 0; index < kindMenuEntries.size(); index++) {
             int rowY = kindMenuRect.y() + BORDER + index * KIND_MENU_ROW_HEIGHT;
-            boolean current = index == Math.clamp(kindMenuIndex, 0, kinds.length - 1);
+            boolean current = index == Math.clamp(kindMenuIndex, 0, kindMenuEntries.size() - 1);
             if (current) {
                 graphics.fill(kindMenuRect.x() + BORDER, rowY, kindMenuRect.right() - BORDER,
                         rowY + KIND_MENU_ROW_HEIGHT, theme.palette().canvasPickerRowSelected());
             }
-            graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont, kinds[index].menuLabel().getString(),
+            graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont,
+                            kindMenuEntries.get(index).label().getString(),
                             Math.max(0, kindMenuRect.width() - KIND_MENU_PADDING * 2)),
                     kindMenuRect.x() + KIND_MENU_PADDING,
                     rowY + (KIND_MENU_ROW_HEIGHT - renderFont.lineHeight) / 2,
@@ -998,7 +1070,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             return -1;
         }
         int row = (int) ((mouseY - kindMenuListRect.y()) / Math.max(1, KIND_MENU_ROW_HEIGHT));
-        return row >= 0 && row < GroupKind.values().length ? row : -1;
+        return row >= 0 && row < kindMenuEntries.size() ? row : -1;
     }
 
     // 弹层高亮跟随指针：指针停在列表里时悬停行即时高亮，移出列表则保留键盘选中的行
@@ -1018,30 +1090,41 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
 
     // 键盘：←/→ 或 ↑/↓ 切换，回车确认，Esc 取消
     private void kindMenuKeyPressed(int keyCode) {
+        if (kindMenuEntries.isEmpty()) {
+            closeKindMenu();
+            return;
+        }
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
             closeKindMenu();
         } else if (keyCode == GLFW.GLFW_KEY_LEFT || keyCode == GLFW.GLFW_KEY_UP) {
             kindMenuIndex = Math.max(0, kindMenuIndex - 1);
         } else if (keyCode == GLFW.GLFW_KEY_RIGHT || keyCode == GLFW.GLFW_KEY_DOWN) {
-            kindMenuIndex = Math.min(GroupKind.values().length - 1, kindMenuIndex + 1);
+            kindMenuIndex = Math.min(kindMenuEntries.size() - 1, kindMenuIndex + 1);
         } else if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
             confirmKindMenu();
         }
     }
 
-    // 确认分组方式：新建分支插入后直接把条件类型列表弹到它的子项热区上；包组直接对选区执行
+    // 确认弹层选项：分组方式插入分支或包住选区，删除确认决定删除范围
     private void confirmKindMenu() {
-        if (!kindMenuOpen) {
+        if (!kindMenuOpen || kindMenuEntries.isEmpty()) {
             return;
         }
-        GroupKind kind = GroupKind.values()[Math.clamp(kindMenuIndex, 0, GroupKind.values().length - 1)];
-        KindMenuTarget target = kindMenuTarget;
+        KindMenuAction action = kindMenuEntries.get(Math.clamp(kindMenuIndex, 0, kindMenuEntries.size() - 1)).action();
         closeKindMenu();
-        if (target == KindMenuTarget.WRAP_SELECTION) {
-            wrapSelection(kind.allOf);
-            return;
+        switch (action) {
+            case WRAP_ALL -> wrapSelection(true);
+            case WRAP_ANY -> wrapSelection(false);
+            case DELETE_KEEP_CHILDREN -> deleteSelection(true, tree.normalizedSelection());
+            case DELETE_SUBTREE -> deleteSelection(false, tree.normalizedSelection());
+            case INSERT_ALL -> insertBranch(true);
+            case INSERT_ANY -> insertBranch(false);
         }
-        ConditionNode group = kind.allOf ? new ConditionNode.AllOf(List.of()) : new ConditionNode.AnyOf(List.of());
+    }
+
+    // 新建分支插入后直接把条件类型列表弹到它的子项热区上，省掉玩家再点一次热区的那一步
+    private void insertBranch(boolean allOf) {
+        ConditionNode group = allOf ? new ConditionNode.AllOf(List.of()) : new ConditionNode.AnyOf(List.of());
         lastOpKey = EditSession.OP_ADD_GROUP;
         if (!addNode(group)) {
             return;
@@ -1050,7 +1133,6 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         if (groupPath == null) {
             return;
         }
-        // 新分支自带子项热区，直接把类型列表弹出来，省掉玩家再点一次热区的那一步
         openPicker(new Hotspot(groupPath, 0, bounds));
     }
 
@@ -1355,7 +1437,9 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             return true;
         }
         if (kindMenuOpen) {
-            kindMenuIndex = Math.clamp(kindMenuIndex + (scrollY > 0.0D ? -1 : 1), 0, GroupKind.values().length - 1);
+            if (!kindMenuEntries.isEmpty()) {
+                kindMenuIndex = Math.clamp(kindMenuIndex + (scrollY > 0.0D ? -1 : 1), 0, kindMenuEntries.size() - 1);
+            }
             return true;
         }
         if (inlinePanel.contains(mouseX, mouseY)) {
@@ -1471,7 +1555,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             return picker.charTyped(codePoint);
         }
         if (kindMenuOpen) {
-            // 菜单只有两个固定选项，不接受文本输入
+            // 弹层只接受方向键与回车，不接受文本输入
             return false;
         }
         return inlinePanel.charTyped(codePoint, modifiers);

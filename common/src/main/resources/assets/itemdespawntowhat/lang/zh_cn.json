@@ -433,6 +433,8 @@
   "gui.itemdespawntowhat.edit.tree.operator.all": "且",
   "gui.itemdespawntowhat.edit.tree.operator.any": "或",
   "gui.itemdespawntowhat.edit.tree.operator.not": "非",
+  "gui.itemdespawntowhat.edit.tree.delete.keep_children": "下方条件框上移",
+  "gui.itemdespawntowhat.edit.tree.delete.subtree": "删除整条分支",
   "gui.itemdespawntowhat.edit.tree.flow_hint": "整棵条件树满足后执行",
   "gui.itemdespawntowhat.edit.tag.supports.biomes": "匹配标签 %s 中的所有群系",
   "gui.itemdespawntowhat.edit.tree.node.source": "源物品",

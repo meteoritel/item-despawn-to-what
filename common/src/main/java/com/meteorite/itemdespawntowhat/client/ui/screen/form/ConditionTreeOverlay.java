@@ -139,6 +139,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     private final UiIconStrip.Item helpItem;
     private final UiIconStrip.Item addConditionItem;
     private final UiIconStrip.Item branchItem;
+    private final UiIconStrip.Item removeItem;
     private final UiIconStrip.Item wrapItem;
 
     private UiRect bounds = new UiRect(0, 0, 0, 0);
@@ -234,7 +235,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         addConditionItem = addTool(UiHostTheme.ICON_ADD_CONDITION, UI + "button.add", false, editor::beginAddCondition);
         branchItem = addTool(UiHostTheme.ICON_NEW_BRANCH, UI + "button.new_branch", false, this::beginBranchMenu);
         addTool(UiHostTheme.ICON_INVERT, UI + "button.not", true, editor::invertSelection);
-        addTool(UiHostTheme.ICON_REMOVE, UI + "button.remove", true, editor::removeSelection);
+        removeItem = addTool(UiHostTheme.ICON_REMOVE, UI + "button.remove", true, this::beginRemoveMenu);
         addTool(UiHostTheme.ICON_MOVE_UP, UI + "button.up", true, () -> editor.moveSelection(-1));
         addTool(UiHostTheme.ICON_MOVE_DOWN, UI + "button.down", true, () -> editor.moveSelection(1));
         wrapItem = addTool(UiHostTheme.ICON_WRAP_ALL, UI + "button.wrap", true, editor::beginWrapWithKind);
@@ -251,6 +252,11 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     // 「新建分支」以工具格自身的屏幕矩形为锚弹出 ∧ / ∨ 菜单：菜单贴着按钮出现，不必先进入添加模式再点热区
     private void beginBranchMenu() {
         editor.beginAddGroupWithKind(branchItem.bounds());
+    }
+
+    // 删除确认菜单同样贴着删除工具格弹出，玩家就地选择删除范围
+    private void beginRemoveMenu() {
+        editor.removeSelection(removeItem.bounds());
     }
 
     // 加一个工具格：需要选中节点的进 selectionTools，由布局按选择变化统一使能
@@ -668,6 +674,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         // 创建类工具的选中态取自各自弹出的浮层：类型列表 / 新建分支 ∧∨ / 包组 ∧∨
         addConditionItem.setSelected(treeView && editor.isPickerOpen());
         branchItem.setSelected(treeView && editor.isGroupKindMenuOpen());
+        removeItem.setSelected(treeView && editor.isDeleteConfirmOpen());
         wrapItem.setSelected(treeView && editor.isWrapKindMenuOpen());
     }
 
@@ -1060,7 +1067,8 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         UiWidget target = pressed;
         pressed = null;
         boolean consumed = target != null && target.mouseReleased(mouseX, mouseY, button);
-        if (target == toolColumn && (editor.isPickerOpen() || editor.isGroupKindMenuOpen() || editor.isWrapKindMenuOpen())) {
+        if (target == toolColumn && (editor.isPickerOpen() || editor.isGroupKindMenuOpen()
+                || editor.isWrapKindMenuOpen() || editor.isDeleteConfirmOpen())) {
             setFocusSlot(FocusSlot.CANVAS);
         }
         if (target == editor) syncSelection();
