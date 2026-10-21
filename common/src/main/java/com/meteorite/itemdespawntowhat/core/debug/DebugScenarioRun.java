@@ -378,7 +378,7 @@ final class DebugScenarioRun {
         try {
             // 未命中声明在断言前报告，配置写错时由 faults_remaining 暴露，而不是静默通过
             faults.reportUnused();
-            JsonObject metrics = metrics(liveOutput, remainingSource);
+            JsonObject metrics = metrics(context.runtime(), liveOutput, remainingSource);
             JsonArray checks = probe.checks(metrics);
             boolean passed = true;
             for (var check : checks) {
@@ -422,7 +422,7 @@ final class DebugScenarioRun {
     }
 
     // 运行阶段的实际指标只组装一次，全部场景交给同一断言器消费。
-    private JsonObject metrics(long liveOutput, long remainingSource) {
+    private JsonObject metrics(ConversionRuntime runtime, long liveOutput, long remainingSource) {
         JsonObject data = new JsonObject();
         data.addProperty("created_sources", sources.size());
         data.addProperty("window_present", window == null ? 0 : 1);
@@ -445,6 +445,11 @@ final class DebugScenarioRun {
         data.addProperty("faults_declared", faults.declared());
         data.addProperty("faults_injected", faults.injected());
         data.addProperty("faults_remaining", faults.remaining());
+        // 取消隔离口径：调度器滞留数与按原因取消计数直接读调度器统计，场景据此断言「同批全部取消、无滞留」
+        SchedulerStats scheduler = runtime == null ? null : runtime.schedulerStats();
+        data.addProperty("scheduler_pending", scheduler == null ? -1 : scheduler.pending());
+        data.addProperty("cancelled_rule_reload", scheduler == null ? -1
+                : scheduler.cancelledByReason().getOrDefault(CancelReason.RULE_RELOAD, 0L));
         return data;
     }
 

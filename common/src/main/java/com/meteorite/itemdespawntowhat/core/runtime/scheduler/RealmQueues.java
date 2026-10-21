@@ -4,8 +4,10 @@ import com.meteorite.itemdespawntowhat.core.api.scheduler.CancelReason;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumMap;
+import java.util.List;
 
 /**
  * 单个 realm（维度）的任务队列集合：按任务种类分 lane，所有 lane 共享服务器总预算。
@@ -86,11 +88,14 @@ final class RealmQueues {
         scheduler.countCancelled(reason);
     }
 
+    // 批量取消本 realm 的全部任务：先摘除 lane 索引，再逐条清空，单条 lane 的容器清理由其自身 finally 兜底。
+    // 取消回调可能重新入队，先摘索引可让新任务进入新 lane，不会被本批清理的容器静默丢弃。
     void cancelAll(CancelReason reason) {
-        for (TaskLane lane : lanes.values()) {
+        List<TaskLane> clearing = new ArrayList<>(lanes.values());
+        lanes.clear();
+        for (TaskLane lane : clearing) {
             lane.clear(reason);
         }
-        lanes.clear();
     }
 
     void beginTick() {

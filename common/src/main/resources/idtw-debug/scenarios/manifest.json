@@ -21,6 +21,7 @@
   "run/fault_step",
   "run/fault_reload",
   "run/fault_cancel",
+  "run/cancel_failure",
   "bench/baseline",
   "bench/convert",
   "bench/retry",

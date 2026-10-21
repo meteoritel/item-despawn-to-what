@@ -33,14 +33,18 @@
       "protected_returned_source_items": 0,
       "remaining_catalyst": 0,
       "action_count": 1,
+      "cancelled_rule_reload": 3,
+      "scheduler_pending": 0,
       "faults_declared": 1,
       "faults_injected": 1,
       "faults_remaining": 0,
       "events/FAULT_ARMED": 1,
-      "events/FAULT_CANCEL_EXCEPTION": 1
+      "events/FAULT_CANCEL_EXCEPTION": 1,
+      "events/EFFECT_SCHEDULED": 2
     },
     "outputs": {
-      "minecraft:prismarine_shard": 0
+      "minecraft:prismarine_shard": 0,
+      "minecraft:gold_nugget": 0
     },
     "candidates": {
       "default": "$sources"
@@ -62,6 +66,14 @@
         {
           "type": "itemdespawntowhat:spawn_entity",
           "item": "minecraft:prismarine_shard",
+          "count": 1,
+          "delay_ticks": 100,
+          "chance": 1,
+          "variant": "item"
+        },
+        {
+          "type": "itemdespawntowhat:spawn_entity",
+          "item": "minecraft:gold_nugget",
           "count": 1,
           "delay_ticks": 100,
           "chance": 1,
