@@ -114,6 +114,8 @@ public final class ConversionRuntime {
         private boolean rescanPending;
         private boolean rescanWorldScan;
         private int rescanSteps;
+        // 世界扫描模式在入口一次性收集已加载掉落物引用，步骤按快照分片处理，不跨 tick 迭代实体表
+        private List<ItemEntity> rescanSnapshot;
         private RuntimeTagLookup tags;
         private RuntimeClimateSampler climate;
     }
@@ -241,6 +243,12 @@ public final class ConversionRuntime {
                     ServerLevel world = worlds.get(worldIndex);
                     LevelState state = levels.get(world.dimension());
                     if (state == null || server.getLevel(world.dimension()) != world) {
+                        advanceWorld();
+                        return StepResult.yield(1, 1);
+                    }
+                    // 该维度还有未消化完的世界扫描快照：交给统一的回扫续接任务按快照补齐，避免按 items 游标漏登记
+                    if (state.rescanSnapshot != null) {
+                        rescan(world);
                         advanceWorld();
                         return StepResult.yield(1, 1);
                     }
@@ -451,18 +459,24 @@ public final class ConversionRuntime {
      */
     public void rescan(ServerLevel level) {
         LevelState state = stateOf(level);
-        // 启动或维度加载的世界扫描尚未完成时，有序表可能缺少还没扫到的实体，退回世界扫描模式补齐。
-        enqueueRescan(level, state, state.rescanPending && state.rescanWorldScan);
+        // 还没消化完的世界扫描快照仍然可信：取消任务不会丢掉快照，重载后接着按快照补齐，避免漏登记。
+        enqueueRescan(level, state, state.rescanSnapshot != null);
     }
 
     /**
      * 启动与维度加载回扫：这些实体的 join 事件可能早于运行时装配，必须主动扫描世界补登记。
-     * 扫描按「单步处理有限个未登记实体」推进，每步重扫世界但跳过已登记项，避免跨 tick 持有迭代器。
+     * 入口只收集一次已加载掉落物的引用快照（不改追踪状态），分步任务按快照切片登记，
+     * 既不必每步重扫整维实体，也不跨 tick 持有世界迭代器。
      */
     public void rebuild(ServerLevel level) {
         LevelState state = stateOf(level);
         // 新装配或新加载的维度以世界扫描为准，先丢弃旧登记表，避免把已卸载实体的过期引用当成已处理。
         state.items.clear();
+        List<ItemEntity> snapshot = new java.util.ArrayList<>();
+        for (Entity entity : level.getAllEntities()) {
+            if (entity instanceof ItemEntity item && !item.isRemoved()) { snapshot.add(item); }
+        }
+        state.rescanSnapshot = snapshot;
         enqueueRescan(level, state, true);
     }
 
@@ -490,6 +504,8 @@ public final class ConversionRuntime {
 
     private void finishRescan(ServerLevel level, LevelState state, long token, boolean worldScan) {
         if (state.rescanToken != token) { return; }
+        // 世界扫描完成后丢弃快照：之后的重载只按有序游标，不复用可能已卸载的旧引用
+        if (worldScan) { state.rescanSnapshot = null; }
         if (config.debugLogging()) {
             LOGGER.info("回扫完成：维度 {} 现有 {} 个被追踪掉落物（模式：{}，分步 {}）",
                     level.dimension().location(), state.tracked.size(), worldScan ? "世界扫描" : "有序游标", state.rescanSteps);
@@ -507,6 +523,7 @@ public final class ConversionRuntime {
         private final long token;
         private final boolean worldScan;
         private Integer cursor;
+        private int snapshotIndex;
         private int retries;
 
         private RescanTask(ServerLevel level, LevelState state, long token, boolean worldScan) {
@@ -531,12 +548,13 @@ public final class ConversionRuntime {
             int processed = 0;
             boolean complete = true;
             if (worldScan) {
-                for (Entity entity : level.getAllEntities()) {
+                List<ItemEntity> snapshot = state.rescanSnapshot;
+                int size = snapshot == null ? 0 : snapshot.size();
+                while (snapshotIndex < size) {
                     if (processed >= limit || budget.exhausted()) { complete = false; break; }
-                    if (!(entity instanceof ItemEntity item) || item.isRemoved()) { continue; }
-                    // 已登记说明本轮之前处理过，或该实体由 join 事件直接追踪（不必重复入队检查）
-                    if (state.items.containsKey(item.getId())) { continue; }
-                    onItemAdded(level, item);
+                    ItemEntity item = snapshot.get(snapshotIndex++);
+                    // 快照持有引用期间实体可能已卸载或被移除，跳过即可；重复登记由 onItemAdded 幂等兜底
+                    if (!item.isRemoved()) { onItemAdded(level, item); }
                     processed++;
                 }
             } else {
