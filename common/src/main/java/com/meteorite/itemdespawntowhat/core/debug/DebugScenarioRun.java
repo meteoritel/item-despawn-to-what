@@ -6,6 +6,7 @@ import com.meteorite.itemdespawntowhat.core.command.RuleCommandContext;
 import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
 import com.meteorite.itemdespawntowhat.core.runtime.ConversionRuntime;
 import com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks;
+import com.meteorite.itemdespawntowhat.core.runtime.SettlementLedger;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.CancelReason;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ScheduledTaskHandle;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.SchedulerStats;
@@ -454,6 +455,17 @@ final class DebugScenarioRun {
         data.addProperty("scheduler_pending", scheduler == null ? -1 : scheduler.pending());
         data.addProperty("cancelled_rule_reload", scheduler == null ? -1
                 : scheduler.cancelledByReason().getOrDefault(CancelReason.RULE_RELOAD, 0L));
+        // 账本与运行期恢复口径：中止后待交付量、记录是否已终结、恢复重试与告警可被场景直接断言
+        SettlementLedger ledger = runtime == null ? null : SettlementLedger.get(level);
+        data.addProperty("ledger_records", ledger == null ? -1 : ledger.size());
+        data.addProperty("ledger_unsettled", ledger == null ? -1 : ledger.unsettledCount());
+        data.addProperty("ledger_pending_delivery", ledger == null ? -1 : ledger.pendingDeliveryTotal());
+        ConversionRuntime.SettlementRecoveryStats recovery = runtime == null ? null : runtime.settlementRecoveryStats();
+        data.addProperty("recovery_queued", recovery == null ? -1 : recovery.queueSize());
+        data.addProperty("recovery_attempts", recovery == null ? -1 : recovery.attempts());
+        data.addProperty("recovery_abandoned", recovery == null ? -1 : recovery.abandoned());
+        data.addProperty("recovery_alerts", recovery == null ? -1 : recovery.alerts());
+        data.addProperty("recovery_max_retry_delay_ticks", recovery == null ? -1 : recovery.maxRetryDelayTicks());
         return data;
     }
 

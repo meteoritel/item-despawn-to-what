@@ -212,6 +212,15 @@ public final class DebugScenarioManager {
         if (run != null) { run.faults.prepare(effectType); }
     }
 
+    // 任务步骤开始前的观测点：结算、恢复等任务不经过 schedule 排入，只能在这里注入步骤故障
+    public static void taskStepStarting(MinecraftServer server, ServerTaskKind kind, String tracingName) {
+        if (!DebugMode.ENABLED) { return; }
+        DebugScenarioRun run = ACTIVE.get(server);
+        if (run != null && run.faults.step(kind, tracingName)) {
+            throw new DebugScenarioFaults.InjectedFault("注入的步骤异常：" + kind + "/" + tracingName);
+        }
+    }
+
     // 产物加入前隔离它的规则和合并行为，避免测试产物触发用户的其他规则。
     public static void prepareOutput(EffectContext context, Entity entity) {
         if (!DebugMode.ENABLED || !(entity instanceof ItemEntity item)) { return; }

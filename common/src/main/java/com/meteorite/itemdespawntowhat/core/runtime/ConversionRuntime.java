@@ -54,6 +54,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -103,6 +104,22 @@ public final class ConversionRuntime {
     private boolean recoveryScanned;
     // 观测：上次扫描中因维度未加载而保持不动的记录数（低频读取，供命令与调试输出使用）
     private long recoverySkippedDimensions;
+    // 运行期恢复队列：当前会话内失败的结算不必等到下次启动，按记录去重后以退避重试重新交付。
+    // 专用 realm 不随维度重载/卸载取消，只有停服 scheduler.clear 会一并结束
+    private static final Object RECOVERY_REALM = new Object();
+    // 维度未加载时的复查间隔：不消耗尝试次数，等维度加载后继续
+    private static final long RECOVERY_DIMENSION_RECHECK_TICKS = 20L;
+    private final Map<String, PendingRecovery> pendingRecoveries = new LinkedHashMap<>();
+    // 已启动的恢复尝试次数：由队列推进并在成功/放弃时清理，超限判定依赖它
+    private final Map<String, Integer> recoveryAttempts = new HashMap<>();
+    // 已告警过的记录：超限只提示一次，避免每 tick 刷日志
+    private final Set<String> recoveryAlerted = new HashSet<>();
+    private boolean recoveryDispatchScheduled;
+    @Nullable private MinecraftServer recoveryServer;
+    private long recoveryAttemptsTotal;
+    private long recoveryAbandonedTotal;
+    private long recoveryAlertsTotal;
+    private int recoveryMaxRetryDelayTicks;
 
     // 单个维度的运行时状态；任务本身归公共调度器所有，这里只保存缓存与追踪表
     private static final class LevelState {
@@ -129,6 +146,23 @@ public final class ConversionRuntime {
      */
     public record TrackedItemInfo(boolean tracked, int failureCount, boolean locked, long nextCheckTick,
                                   boolean taskTerminal) {
+    }
+
+    /**
+     * 运行期结算恢复队列快照，供开发场景与诊断命令断言恢复进度。
+     *
+     * @param queueSize 当前排队等待重试的记录数
+     * @param attempts 累计已启动的恢复尝试次数
+     * @param abandoned 超过尝试上限后放弃的次数
+     * @param alerts 超限告警次数（每记录每次会话至多一次）
+     * @param maxRetryDelayTicks 已使用的最大退避 tick
+     */
+    public record SettlementRecoveryStats(int queueSize, long attempts, long abandoned, long alerts,
+                                          int maxRetryDelayTicks) {
+    }
+
+    // 队列项：记录 id + 已启动的尝试次数 + 最早可重试刻 + 最近失败原因
+    private record PendingRecovery(String recordId, int attempts, long readyTick, String reason) {
     }
 
     /** 便捷构造：寿命提供器取原版默认值，自然消失时刻按原版寿命规则推算 */
@@ -418,6 +452,124 @@ public final class ConversionRuntime {
     // 恢复任务收尾（交付完成或取消）后释放幂等位，允许后续扫描重新入队剩余库存
     void onRecoveryFinished(String id) {
         activeRecoveries.remove(id);
+        recoveryAttempts.remove(id);
+        recoveryAlerted.remove(id);
+    }
+
+    // ========== 运行期恢复队列 ==========
+
+    // 结算在当前会话内失败：按记录去重入队，由队列任务在公共预算内按退避重试，不必等到下次启动
+    void enqueueRecovery(MinecraftServer server, String recordId, String reason) {
+        if (pendingRecoveries.containsKey(recordId) || activeRecoveries.contains(recordId)) {
+            return;
+        }
+        recoveryServer = server;
+        pendingRecoveries.put(recordId, new PendingRecovery(recordId,
+                recoveryAttempts.getOrDefault(recordId, 0), scheduler.currentTick(), reason));
+        scheduleRecoveryDispatch();
+    }
+
+    // 恢复失败：未达上限按指数退避重新入队；达到上限后把记录留在账本等下次启动扫描，并只告警一次
+    void onRecoveryFailed(String id, String reason) {
+        activeRecoveries.remove(id);
+        int attempts = recoveryAttempts.getOrDefault(id, 0);
+        if (attempts >= config.settlementRecoveryMaxAttempts()) {
+            recoveryAttempts.remove(id);
+            recoveryAbandonedTotal++;
+            if (recoveryAlerted.add(id)) {
+                recoveryAlertsTotal++;
+                LOGGER.warn("结算恢复超过上限：记录={} 原因={} 已尝试={} 次，保留账本等待下次启动扫描",
+                        id, reason, attempts);
+            }
+            return;
+        }
+        int delay = SettlementRecovery.queueRetryDelayTicks(attempts);
+        recoveryMaxRetryDelayTicks = Math.max(recoveryMaxRetryDelayTicks, delay);
+        pendingRecoveries.put(id, new PendingRecovery(id, attempts, scheduler.currentTick() + delay, reason));
+        LOGGER.warn("结算恢复失败：记录={} 原因={} 已尝试={} 次，{} tick 后重试", id, reason, attempts, delay);
+        scheduleRecoveryDispatch();
+    }
+
+    // 队列空闲时按需排入推进任务；已在跑就不再重复排期
+    private void scheduleRecoveryDispatch() {
+        if (recoveryDispatchScheduled || pendingRecoveries.isEmpty() || recoveryServer == null) {
+            return;
+        }
+        recoveryDispatchScheduled = true;
+        scheduler.scheduleAt(RECOVERY_REALM, new RecoveryDispatchTask(recoveryServer), scheduler.currentTick());
+    }
+
+    /** 运行期结算恢复队列快照，供开发场景断言重试与告警。 */
+    public SettlementRecoveryStats settlementRecoveryStats() {
+        return new SettlementRecoveryStats(pendingRecoveries.size(), recoveryAttemptsTotal,
+                recoveryAbandonedTotal, recoveryAlertsTotal, recoveryMaxRetryDelayTicks);
+    }
+
+    // 队列推进任务：维护车道，受公共预算约束；每 tick 至多启动一条恢复，队列清空即结束，不留常驻空转任务
+    private final class RecoveryDispatchTask implements ServerTask {
+
+        private final MinecraftServer server;
+
+        private RecoveryDispatchTask(MinecraftServer server) {
+            this.server = server;
+        }
+
+        @Override
+        public ServerTaskKind kind() {
+            return ServerTaskKind.MAINTENANCE;
+        }
+
+        @Override
+        public String tracingName() {
+            return "settlement-recovery-queue";
+        }
+
+        @Override
+        public StepResult step(ServerTickBudget budget) {
+            if (pendingRecoveries.isEmpty()) {
+                recoveryDispatchScheduled = false;
+                return StepResult.done(1);
+            }
+            budget.charge(1);
+            long now = scheduler.currentTick();
+            PendingRecovery ready = null;
+            for (PendingRecovery entry : pendingRecoveries.values()) {
+                if (entry.readyTick() <= now) {
+                    ready = entry;
+                    break;
+                }
+            }
+            if (ready == null) {
+                // 记录都还在退避窗口内：下刻再看
+                return StepResult.yield(1, 1);
+            }
+            pendingRecoveries.remove(ready.recordId());
+            SettlementLedger ledger = SettlementLedger.get(server.overworld());
+            SettlementRecord record = ledger.find(ready.recordId());
+            if (record == null || record.completed() || activeRecoveries.contains(record.id())) {
+                return advance();
+            }
+            ServerLevel level = levelOf(server, record.dimension());
+            if (level == null) {
+                // 维度未加载：不消耗尝试次数，稍后复查
+                pendingRecoveries.put(record.id(), new PendingRecovery(record.id(), ready.attempts(),
+                        now + RECOVERY_DIMENSION_RECHECK_TICKS, ready.reason()));
+                return StepResult.yield(1, 1);
+            }
+            recoveryAttempts.put(record.id(), ready.attempts() + 1);
+            recoveryAttemptsTotal++;
+            startRecovery(level, ledger, record);
+            return advance();
+        }
+
+        // 队列清空即结束；还有记录则下刻继续
+        private StepResult advance() {
+            if (pendingRecoveries.isEmpty()) {
+                recoveryDispatchScheduled = false;
+                return StepResult.done(1);
+            }
+            return StepResult.yield(1, 1);
+        }
     }
 
     /** 在飞的返还恢复任务数观测 */
@@ -439,6 +591,8 @@ public final class ConversionRuntime {
         scheduler.cancelRealm(level.dimension(), CancelReason.RULE_RELOAD);
         // 维度加载/重扫时补扫该维度的待返还记录：只交付库存，不恢复既有效果队列（与规则内容无关）
         recoverLevel(level, SettlementLedger.get(level));
+        // 批量取消/加载会把无待交付的记录留在账本，重扫顺带裁剪，避免无恢复价值的记录白占账本
+        SettlementLedger.get(level).prune(level.getGameTime());
         for (Entity entity : level.getAllEntities()) {
             if (entity instanceof ItemEntity item && !item.isRemoved()) {
                 onItemAdded(level, item);
@@ -473,6 +627,12 @@ public final class ConversionRuntime {
         // 预留只在运行期存在：停服清空即可，不产生任何世界写入或件数返还
         catalystReservations.clear();
         activeRecoveries.clear();
+        // 运行期恢复队列只在本次会话有效：停服清空，剩余记录留在账本由下次启动扫描接手
+        pendingRecoveries.clear();
+        recoveryAttempts.clear();
+        recoveryAlerted.clear();
+        recoveryDispatchScheduled = false;
+        recoveryServer = null;
         recoveryScanned = false;
         index = RuleIndex.empty();
         candidateStructureVersions.clear();

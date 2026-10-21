@@ -45,6 +45,7 @@ flowchart TB
 | 覆盖层与平台差异 | 覆盖层目录名、Fabric 端寿命兜底 | `overlay_directory`、`fabric_lifespan_fallback_ticks` | 加载与编辑链路、平台适配 |
 | 实体临时状态 | 新产物保护与转化冷却各持续多久 | `new_product_protection_seconds`、`conversion_cooldown_seconds` | 掉落物状态层 |
 | 邻近阈值 | 同区域同类物品或实体的容量口径 | `nearby_products` 子对象 | 完整组开组判定 |
+| 结算恢复 | 当前会话内结算失败后的重试上限 | `settlement_recovery_max_attempts` | 转化运行时 |
 | 调试 | 常规日志与调试场景准备预算 | `debug_logging`、`debug_scenario_prepare_batch_size`、`debug_scenario_prepare_budget_us` | 调试层 |
 
 取值口径需要注意：以秒为单位的键（新产物保护、转化冷却）允许写 0，表示不授予对应状态时长，其余数值键下限为正整数；`max_work_units_per_tick` 是唯一可选键，缺省时回退到每 tick 检查数的上限值。写违反区间的值会被整体解码失败处理，配置回退默认。
