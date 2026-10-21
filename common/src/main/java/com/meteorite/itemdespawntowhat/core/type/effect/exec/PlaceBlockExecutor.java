@@ -56,8 +56,6 @@ public final class PlaceBlockExecutor {
      * 使整块不含目标方块的区段能被快速跳过；真正读取的位置仍受 {@link #MAX_VISITS_PER_STEP} 与本 tick 预算约束。
      */
     private static final int MAX_PROBES_PER_STEP = 1024;
-    /** 区块未加载时的退避刻数：保留游标与待处理位置，等待区块加载后从断点续接。 */
-    private static final int CHUNK_RETRY_TICKS = 20;
     /** 朝向尝试使用的水平方向顺序：固定顺序让同一位置的摆放结果可复现。 */
     private static final Direction[] HORIZONTALS = {Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST};
     /** 朝向类属性在方块状态里的固定名字：面朝向（贴地/贴墙/贴天花板）与水平朝向。 */
@@ -403,7 +401,7 @@ public final class PlaceBlockExecutor {
                 BlockPos pos = center.offset(offsets.get(cursor));
                 // canSurvive 可能读取相邻方块，边界两侧都须已加载。
                 if (!LoadedChunks.contains(context.level(), pos.offset(-1, 0, -1)) || !LoadedChunks.contains(context.level(), pos.offset(1, 0, 1))) {
-                    readyAt = now + CHUNK_RETRY_TICKS;
+                    readyAt = now + LoadedChunks.RETRY_TICKS;
                     return null;
                 }
                 cursor++;
@@ -514,7 +512,7 @@ public final class PlaceBlockExecutor {
                 BlockPos pos = pending;
                 if (!LoadedChunks.contains(level, pos)) {
                     // 区块未加载：保留待处理位置，退避后再续
-                    deferredUntil = now + CHUNK_RETRY_TICKS;
+                    deferredUntil = now + LoadedChunks.RETRY_TICKS;
                     return reads;
                 }
                 probes++;

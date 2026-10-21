@@ -27,8 +27,6 @@ public final class SpawnXpExecutor {
     private static final int ORBS_PER_BATCH = 16;
     private static final double SCATTER_RADIUS = 0.5;
     private static final double SPAWN_HEIGHT = 0.2;
-    // 邻区块未加载时的重试间隔：不在等待期反复查世界，也不提前记为成功
-    private static final int CHUNK_RETRY_TICKS = 20;
     // 回执说明：同步入口不承担分批，交由预算执行路径推进
     private static final String BUDGET_REQUIRED = "budget_required: experience";
     // 回执说明：成功转化当刻没有固定输入，属于运行时接线缺失，不退回到期重判
@@ -103,7 +101,7 @@ public final class SpawnXpExecutor {
                 return null;
             }
             if (!LoadedChunks.containsArea(context.level(), BlockPos.containing(context.position()), 1)) {
-                nextAttemptTick = gameTime + CHUNK_RETRY_TICKS;
+                nextAttemptTick = gameTime + LoadedChunks.RETRY_TICKS;
                 return null;
             }
             int spawned = 0;
@@ -125,7 +123,7 @@ public final class SpawnXpExecutor {
                 }
                 if (!EffectTargets.addEntityNow(context, pendingOrb, false)) {
                     // 两次检查之间该区块卸载：保留已构造的球，退避后重试，不重抽也不计完成量
-                    nextAttemptTick = gameTime + CHUNK_RETRY_TICKS;
+                    nextAttemptTick = gameTime + LoadedChunks.RETRY_TICKS;
                     return null;
                 }
                 int points = pendingPoints;

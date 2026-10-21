@@ -90,7 +90,7 @@ final class SettlementRecovery implements ServerTask {
             if (outcome == ReturnItemSpawner.Outcome.ADDED) {
                 // 交付成功后才扣减待交付量并落账：账目始终等于「还没交付出去的库存」
                 writer.delivered(stack.getCount());
-                budget.charge(2);
+                budget.charge(SettlementPayment.DELIVERY_WORK_UNITS);
                 delivered++;
                 failures = 0;
                 continue;

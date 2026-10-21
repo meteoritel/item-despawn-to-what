@@ -9,6 +9,12 @@ import net.minecraft.server.level.ServerLevel;
  * 查询无副作用，只判定区块是否已加载，世界读写前使用，禁止为执行规则生成区块。
  */
 public final class LoadedChunks {
+    /**
+     * 区块未加载时效果执行与结算交付的重试间隔（tick）。
+     * 按原版一秒节奏退避：区块加载通常在数秒内完成，逐 tick 重试只会在加载窗口内空转。
+     */
+    public static final int RETRY_TICKS = 20;
+
     private LoadedChunks() {}
 
     // 单个方块的所属区块是否已加载（只读查询，不触发区块生成）

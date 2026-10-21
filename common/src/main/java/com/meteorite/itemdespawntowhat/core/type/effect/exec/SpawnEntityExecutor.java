@@ -44,8 +44,6 @@ public final class SpawnEntityExecutor {
     // 安全搜索范围：水平 ±2（5×5），上下各 2 格，共 125 个候选
     private static final int SEARCH_HORIZONTAL = 2;
     private static final int SEARCH_VERTICAL = 2;
-    // 邻区块未加载时的重试间隔：不在等待期反复查世界，也不提前记为成功
-    private static final int CHUNK_RETRY_TICKS = 20;
     // 回执说明：同步入口不承担分批，交由预算执行路径推进
     private static final String BUDGET_REQUIRED = "budget_required: spawn_entity";
     // 回执说明：成功转化当刻没有固定输入，属于运行时接线缺失，不退回到期重判
@@ -257,7 +255,7 @@ public final class SpawnEntityExecutor {
             // 安全搜索可能读取相邻方块，候选范围比原生成点更宽，需多留一圈区块
             int area = safeSpawn ? SEARCH_HORIZONTAL : 1;
             if (!LoadedChunks.containsArea(level, center, area)) {
-                nextAttemptTick = gameTime + CHUNK_RETRY_TICKS;
+                nextAttemptTick = gameTime + LoadedChunks.RETRY_TICKS;
                 return null;
             }
             // 阈值只检查开组准入，本批继续完成已开始组。
@@ -313,7 +311,7 @@ public final class SpawnEntityExecutor {
                 }
                 if (!spawnOne(hit)) {
                     // 写入前一刻区块不再加载：本步不累计完成量，保留游标带退避重试
-                    nextAttemptTick = gameTime + CHUNK_RETRY_TICKS;
+                    nextAttemptTick = gameTime + LoadedChunks.RETRY_TICKS;
                     return null;
                 }
                 spawned++;

@@ -38,8 +38,6 @@ public final class LootTableExecutor {
     private static final int LOOT_DROPS_PER_STEP = 16;
     // 计价：一个真正写入世界的掉落物实体记 1 个工作单位
     private static final int WORK_UNITS_PER_DROP = 1;
-    // 邻区块未加载时的重试间隔：不在等待期反复查世界，也不提前记为成功
-    private static final int CHUNK_RETRY_TICKS = 20;
     // 回执说明：同步入口不承担分批，交由预算执行路径推进
     private static final String BUDGET_REQUIRED = "budget_required: loot_table";
     // 回执说明：成功转化当刻没有固定输入，属于运行时接线缺失，不退回到期重新抽取
@@ -191,7 +189,7 @@ public final class LootTableExecutor {
             }
             // 掉落物散布半径小于一格，邻区块就绪即可写入
             if (!LoadedChunks.containsArea(level, center, 1)) {
-                nextAttemptTick = gameTime + CHUNK_RETRY_TICKS;
+                nextAttemptTick = gameTime + LoadedChunks.RETRY_TICKS;
                 return null;
             }
             int written = 0;
@@ -213,7 +211,7 @@ public final class LootTableExecutor {
                 // 转化产物：走既有显式产物入口，先授予临时保护与冷却再写入世界。
                 // 未写入时保留这堆产物，退避后重试，不重造散点与初速。
                 if (!EffectTargets.addConversionProductNow(context, pendingDrop)) {
-                    nextAttemptTick = gameTime + CHUNK_RETRY_TICKS;
+                    nextAttemptTick = gameTime + LoadedChunks.RETRY_TICKS;
                     return null;
                 }
                 pendingDrop = null;

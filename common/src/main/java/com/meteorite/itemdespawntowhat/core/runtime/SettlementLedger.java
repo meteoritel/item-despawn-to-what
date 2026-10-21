@@ -49,8 +49,13 @@ public final class SettlementLedger extends SavedData {
     // 恢复游标索引（同样持有可变记录引用）；不改变账本的加入顺序或持久化顺序。
     private final java.util.NavigableMap<String, SettlementRecord> scanIndex = new java.util.TreeMap<>();
 
-    // 取主世界账本（同一 id 全局唯一，维度卸载不影响）
-    // 此处借用 Minecraft 管理的实例，生命周期由游戏负责，不能在此关闭。
+    /**
+     * 取主世界账本：同一 id 全局唯一，维度卸载不影响记录本身。
+     * 实例由 Minecraft 管理并负责生命周期，调用方不得关闭。
+     *
+     * @param level 任意维度，内部统一转到主世界存取
+     * @return 全局共享的账本实例
+     */
     @SuppressWarnings("resource")
     public static SettlementLedger get(ServerLevel level) {
         ServerLevel storage = level.getServer().overworld();
@@ -105,31 +110,55 @@ public final class SettlementLedger extends SavedData {
         }
     }
 
-    // 按 id 查询，未找到返回 null
+    /**
+     * 按 id 查询记录。
+     *
+     * @param id 记录 id
+     * @return 对应记录；不存在时返回 null
+     */
     public SettlementRecord find(String id) {
         return records.get(id);
     }
 
+    /**
+     * @return 账本当前持有的记录数（含已终结但仍在保留窗口内的记录）
+     */
     public int size() {
         return records.size();
     }
 
-    // 字段变更总次数：与提交次数对照可看出步内累积把多少次变更合并成一次落账
+    /**
+     * 字段变更总次数（仅调试观测）：与提交次数对照可看出步内累积把多少次变更合并成一次落账。
+     *
+     * @return 未合并的变更次数累计值
+     */
     public long mutationCount() {
         return mutations;
     }
 
-    // 落账提交总次数
+    /**
+     * 落账提交总次数（仅调试观测）。
+     *
+     * @return 提交次数累计值，一次提交对应一次标脏
+     */
     public long commitCount() {
         return commits;
     }
 
-    // 提交涉及的记录份数（当前一次提交一条记录）
+    /**
+     * 提交涉及的记录份数（仅调试观测）；当前一次提交只携带一条记录。
+     *
+     * @return 已提交记录份数累计值
+     */
     public long committedRecordCount() {
         return committedRecords;
     }
 
-    // 被步内累积合并、未当场落账的变更次数
+    /**
+     * 被步内累积合并、未当场落账的变更次数（仅调试观测）。
+     *
+     * @return 延迟提交的变更次数累计值
+     */
     public long deferredMutationCount() {
         return deferredMutations;
     }
@@ -139,7 +168,11 @@ public final class SettlementLedger extends SavedData {
         return entry == null ? null : entry.getValue();
     }
 
-    // 统计进行中的记录数（未完成且有待返还数据），供调试观测
+    /**
+     * 统计未结清记录数（未完成且有待返还数据），供调试观测。
+     *
+     * @return 未结清记录数
+     */
     public int unsettledCount() {
         int count = 0;
         for (SettlementRecord record : records.values()) {
@@ -150,7 +183,11 @@ public final class SettlementLedger extends SavedData {
         return count;
     }
 
-    // 待恢复记录快照（按加入顺序）：恢复任务只交付这些记录的 pendingDelivery，不重放既有效果队列
+    /**
+     * 待恢复记录快照（按加入顺序）：恢复任务只交付这些记录的 pendingDelivery，不重放既有效果队列。
+     *
+     * @return 需要恢复交付的记录列表
+     */
     public List<SettlementRecord> unsettled() {
         List<SettlementRecord> list = new ArrayList<>();
         for (SettlementRecord record : records.values()) {
@@ -161,7 +198,12 @@ public final class SettlementLedger extends SavedData {
         return list;
     }
 
-    // 指定维度的待恢复记录快照
+    /**
+     * 指定维度的待恢复记录快照。
+     *
+     * @param dimension 维度 id
+     * @return 该维度下需要恢复交付的记录列表
+     */
     public List<SettlementRecord> unsettled(String dimension) {
         List<SettlementRecord> list = new ArrayList<>();
         for (SettlementRecord record : records.values()) {
@@ -172,7 +214,11 @@ public final class SettlementLedger extends SavedData {
         return list;
     }
 
-    // 待交付返还总量（调试观测）：与「已派发未回执」的 pendingUnits 无关
+    /**
+     * 待交付返还总量（仅调试观测）：是还没交付出去的库存，与「已派发未回执」的 pendingUnits 无关。
+     *
+     * @return 全部记录 pendingDelivery 之和
+     */
     public int pendingDeliveryTotal() {
         int total = 0;
         for (SettlementRecord record : records.values()) {
@@ -181,7 +227,11 @@ public final class SettlementLedger extends SavedData {
         return total;
     }
 
-    // 已派发未回执的计划量（调试观测）：不是待返还库存，恢复交付绝不使用
+    /**
+     * 已派发未回执的计划量（仅调试观测）：不是待返还库存，恢复交付绝不使用。
+     *
+     * @return 全部记录 pendingUnits 之和
+     */
     public long pendingUnitsTotal() {
         long total = 0;
         for (SettlementRecord record : records.values()) {
@@ -190,8 +240,12 @@ public final class SettlementLedger extends SavedData {
         return total;
     }
 
-    // 裁剪：已终结且无可交付内容的记录先清理，已完成记录再按 tick 过期，最后按条数上限兜底。
-    // 取消/失败后没有待交付量说明已无恢复价值（有待交付量的记录一律保留），不必白占账本等保留窗口
+    /**
+     * 裁剪账本：已终结且无可交付内容的记录先清理，已完成记录再按 tick 过期，最后按条数上限兜底。
+     * 有待交付量的记录一律保留，它们是恢复依据；取消/失败后没有待交付量说明已无恢复价值。
+     *
+     * @param gameTime 当前游戏刻，用于判定已完成记录是否已过保留窗口
+     */
     public void prune(long gameTime) {
         boolean changed = false;
         // 先判定再成对摘除：记录可变，判定必须发生在摘除之前，快照遍历避免边遍历边改主索引
