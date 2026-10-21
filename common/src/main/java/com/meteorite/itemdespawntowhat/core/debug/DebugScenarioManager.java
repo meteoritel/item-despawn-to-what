@@ -9,9 +9,6 @@ import com.meteorite.itemdespawntowhat.core.api.scheduler.ScheduledTaskHandle;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.TaskQueue;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
-import com.meteorite.itemdespawntowhat.core.api.scheduler.CancelReason;
-import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
-import com.meteorite.itemdespawntowhat.core.api.scheduler.StepResult;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -79,6 +76,8 @@ public final class DebugScenarioManager {
             var definition = DebugScenarioDefinition.create(source.getServer(), context.editContext().typeRegistries(),
                     name, benchmark, entities, BlockPos.containing(origin).getY());
             var run = new DebugScenarioRun(name, benchmark, player.serverLevel(), player.getUUID(), origin, seconds, definition, pipelineId);
+            // 故障在场景启动时武装：声明之后安排的检查与效果任务才可能命中
+            run.armFaults();
             ACTIVE.put(source.getServer(), run);
             JsonObject data = DebugLog.config(context.serverConfig());
             data.addProperty("format", "idtw-scene-v3");
@@ -171,10 +170,8 @@ public final class DebugScenarioManager {
             return queue.scheduleAt(realmKey, new RunnableTask(kind, name, action), dueTick);
         }
         ScheduledTaskHandle[] holder = new ScheduledTaskHandle[1];
-        holder[0] = queue.scheduleAt(realmKey, new RunnableTask(kind, name, () -> {
-            binding.run.tasks.remove(holder[0]);
-            action.run();
-        }), dueTick);
+        holder[0] = queue.scheduleAt(realmKey, new DebugScenarioTask(
+                new RunnableTask(kind, name, action), binding.run, holder, true), dueTick);
         binding.run.tasks.add(holder[0]);
         return holder[0];
     }
@@ -195,30 +192,16 @@ public final class DebugScenarioManager {
             return queue.scheduleAt(realmKey, task, dueTick);
         }
         ScheduledTaskHandle[] holder = new ScheduledTaskHandle[1];
-        holder[0] = queue.scheduleAt(realmKey, new TrackedTask(task, binding.run, holder), dueTick);
+        holder[0] = queue.scheduleAt(realmKey, new DebugScenarioTask(task, binding.run, holder, false), dueTick);
         binding.run.tasks.add(holder[0]);
         return holder[0];
     }
 
-    private record TrackedTask(ServerTask delegate, DebugScenarioRun run, ScheduledTaskHandle[] holder) implements ServerTask {
-
-        @Override public ServerTaskKind kind() { return delegate.kind(); }
-        @Override public String tracingName() { return delegate.tracingName(); }
-        @Override public StepResult step(ServerTickBudget budget) {
-            return delegate.step(budget);
-        }
-        @Override public void onCancelled(CancelReason reason) {
-            try { delegate.onCancelled(reason); }
-            finally { run.tasks.remove(holder[0]); }
-        }
-        @Override public void onFailed(Throwable failure) {
-            try { delegate.onFailed(failure); }
-            finally { run.tasks.remove(holder[0]); }
-        }
-        @Override public void onReleased() {
-            try { delegate.onReleased(); }
-            finally { run.tasks.remove(holder[0]); }
-        }
+    // 重载应用阶段观测点：场景声明的重载故障在此抛异常，由重载链路按失败统一处理
+    public static void reloadApplying(MinecraftServer server) {
+        if (!DebugMode.ENABLED) { return; }
+        DebugScenarioRun run = ACTIVE.get(server);
+        if (run != null) { run.faults.reload(); }
     }
 
     // 产物加入前隔离它的规则和合并行为，避免测试产物触发用户的其他规则。

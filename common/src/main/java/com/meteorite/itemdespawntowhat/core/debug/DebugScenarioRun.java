@@ -45,6 +45,7 @@ final class DebugScenarioRun {
     final List<ItemEntity> outputs = new ArrayList<>();
     final Set<ScheduledTaskHandle> tasks = new HashSet<>();
     final DebugScenarioProbe probe;
+    final DebugScenarioFaults faults;
     private final DebugScenarioActions actions;
     private final Vec3 origin;
     private final int seconds;
@@ -82,6 +83,7 @@ final class DebugScenarioRun {
         this.seconds = seconds;
         this.definition = definition;
         probe = new DebugScenarioProbe(this);
+        faults = new DebugScenarioFaults(this, definition.spec.faults());
         actions = new DebugScenarioActions(this);
     }
 
@@ -332,7 +334,8 @@ final class DebugScenarioRun {
         JsonObject events = new JsonObject();
         counters.forEach(events::addProperty);
         for (String key : List.of("TRACKED", "AGE_NOT_READY", "CONDITION_FALSE", "CONDITION_TRUE", "RETRY", "CONVERT",
-                "OUTPUT_ITEMS", "NATURAL_EXPIRY_DEFERRED", "EXCLUDED", "ERROR", "DUPLICATE_CONVERSION", "UNEXPECTED_OUTPUT")) {
+                "OUTPUT_ITEMS", "NATURAL_EXPIRY_DEFERRED", "EXCLUDED", "ERROR", "DUPLICATE_CONVERSION", "UNEXPECTED_OUTPUT",
+                "FAULT_ARMED", "FAULT_STEP_EXCEPTION", "FAULT_CANCEL_EXCEPTION", "FAULT_RELOAD_FAILURE", "FAULT_UNUSED")) {
             if (!events.has(key)) { events.addProperty(key, 0); }
         }
         data.add("actual_events", events);
@@ -360,6 +363,8 @@ final class DebugScenarioRun {
         }
         String verdict = "INCOMPLETE";
         try {
+            // 未命中声明在断言前报告，配置写错时由 faults_remaining 暴露，而不是静默通过
+            faults.reportUnused();
             JsonObject metrics = metrics(liveOutput, remainingSource);
             JsonArray checks = probe.checks(metrics);
             boolean passed = true;
@@ -418,6 +423,9 @@ final class DebugScenarioRun {
         data.addProperty("first_rule", firstRule);
         data.addProperty("first_output_delay_ticks", firstOutputTick < 0 || firstConversionTick < 0 ? -1 : firstOutputTick - firstConversionTick);
         data.addProperty("action_count", actions.completedCount());
+        data.addProperty("faults_declared", faults.declared());
+        data.addProperty("faults_injected", faults.injected());
+        data.addProperty("faults_remaining", faults.remaining());
         return data;
     }
 
@@ -444,6 +452,15 @@ final class DebugScenarioRun {
 
     // 所有行都带同一编号，IDEA可直接按run过滤。
     void log(String event, JsonObject data) { DebugLog.write(id, (benchmark ? "bench/" : "run/") + name, event, data); }
+
+    // 场景启动时武装声明故障；未声明的场景不产生任何注入开销
+    void armFaults() { faults.arm(); }
+
+    // 故障事件与普通观测事件共用有界计数，断言通过 events/ 前缀消费
+    void fault(String event, JsonObject data) { increment(event, 1); log(event, data); }
+
+    // 重载动作据此区分「注入的预期失败」与真实失败
+    int faultsInjected() { return faults.injected(); }
 
     // 场景只维护有限事件名称的累计计数。
     private void increment(String event, long amount) { counters.merge(event, amount, Long::sum); }

@@ -5,6 +5,7 @@ import com.meteorite.itemdespawntowhat.core.api.Issue;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.IssueSeverity;
 import com.meteorite.itemdespawntowhat.core.api.RuleRuntimeLimits;
+import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
 import com.meteorite.itemdespawntowhat.core.command.RuleCommandContext;
 import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
@@ -223,6 +224,8 @@ public final class RuleRuntimeHostCore {
             RuleLoadResult<Rule> result = RuleLoadingService.loadAndValidate(saveContext.loadContext(), saveContext.baseRules());
             saveContext.baseIssues().forEach(result.issues()::add);
             current.replaceRules(result.rules(), result.issues());
+            // 应用阶段观测点：开发期故障注入在此抛异常，与其它重载异常一样按失败收口；未注入时为空操作
+            RuntimeObserver.current().reloadApplying(server);
             saveReloadContext = saveContext;
             logLoadResult("数据包重载", result);
             for (ServerLevel level : server.getAllLevels()) {

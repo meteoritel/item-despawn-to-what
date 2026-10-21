@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "inputs": {
+    "sources": 1,
+    "stack_size": 1,
+    "catalyst_count": 0,
+    "source_item": "minecraft:paper",
+    "catalyst_item": "minecraft:emerald"
+  },
+  "seconds": 8,
+  "setup": "none",
+  "actions": [],
+  "faults": [
+    {
+      "type": "step_exception",
+      "kind": "CONDITION_CHECK",
+      "name": "check",
+      "count": 1
+    }
+  ],
+  "expected": {
+    "metrics": {
+      "conversions": 0,
+      "remaining_source_items": "$sources",
+      "settlements_completed": 0,
+      "action_count": 0,
+      "faults_declared": 1,
+      "faults_injected": 1,
+      "faults_remaining": 0,
+      "events/FAULT_ARMED": 1,
+      "events/FAULT_STEP_EXCEPTION": 1
+    },
+    "outputs": {
+      "minecraft:prismarine_shard": 0
+    }
+  },
+  "rules": [
+    {
+      "id": "itemdespawntowhat:debug/fault_step",
+      "enabled": true,
+      "priority": 0,
+      "trigger_after_seconds": 2,
+      "source": {
+        "items": [
+          "minecraft:paper"
+        ],
+        "exclude": []
+      },
+      "effects": [
+        {
+          "type": "itemdespawntowhat:spawn_entity",
+          "item": "minecraft:prismarine_shard",
+          "count": 1,
+          "delay_ticks": 0,
+          "chance": 1,
+          "variant": "item"
+        }
+      ]
+    }
+  ]
+}

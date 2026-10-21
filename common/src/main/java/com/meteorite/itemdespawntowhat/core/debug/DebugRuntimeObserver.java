@@ -68,6 +68,11 @@ public final class DebugRuntimeObserver implements RuntimeObserver {
     }
 
     @Override
+    public void reloadApplying(MinecraftServer server) {
+        DebugScenarioManager.reloadApplying(server);
+    }
+
+    @Override
     public ScheduledTaskHandle schedule(ItemEntity source, TaskQueue queue, Object realmKey, ServerTaskKind kind,
                                         long dueTick, String name, Runnable action) {
         return DebugScenarioManager.schedule(source, queue, realmKey, kind, dueTick, name, action);

@@ -129,6 +129,16 @@ public interface RuntimeObserver {
     }
 
     /**
+     * 上报「规则重载进入应用阶段」。默认空实现；实现方只允许以抛出异常表达注入的重载失败，
+     * 不得改变调用方对索引替换结果的处理。调用方在替换规则索引之后、回扫之前调用，
+     * 并把异常与其他重载异常一样按失败收口。
+     *
+     * @param server 当前服务端
+     */
+    default void reloadApplying(MinecraftServer server) {
+    }
+
+    /**
      * 把一个延迟动作排入调度队列。
      * 默认实现直接入队；实现方可以包裹它以追踪场景创建的任务。
      *
