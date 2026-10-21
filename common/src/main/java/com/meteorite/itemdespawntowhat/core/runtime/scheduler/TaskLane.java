@@ -5,6 +5,8 @@ import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -185,19 +187,23 @@ final class TaskLane {
         }
     }
 
-    // 整条队列取消：逐项上报原因后清空容器，不留任何静默丢弃。
+    // 整条队列取消：先摘出全部待取消句柄并清空容器，再逐个取消，保证取消后队列不残留任何槽位。
+    // 取消回调可能再次入队或抛异常，因此容器必须在回调之前归零，且始终在 finally 中清空。
     void clear(CancelReason reason) {
-        for (ArrayDeque<ScheduledTask> bucket : buckets.values()) {
-            for (ScheduledTask handle : bucket) {
-                handle.cancel(reason);
+        List<ScheduledTask> drained = new ArrayList<>();
+        try {
+            for (ArrayDeque<ScheduledTask> bucket : buckets.values()) {
+                drained.addAll(bucket);
             }
+            drained.addAll(ready);
+        } finally {
+            buckets.clear();
+            ready.clear();
+            pending = 0;
         }
-        for (ScheduledTask handle : ready) {
+        for (ScheduledTask handle : drained) {
             handle.cancel(reason);
         }
-        buckets.clear();
-        ready.clear();
-        pending = 0;
     }
 
     // 跨 tick 清理时每步只摘取一个槽位，终态槽位也计入处理额度。

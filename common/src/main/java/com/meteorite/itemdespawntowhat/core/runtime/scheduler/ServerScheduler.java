@@ -367,6 +367,7 @@ public final class ServerScheduler implements TaskQueue {
     }
 
     // 取消某个 realm 的全部任务但保留 realm 本身：用于规则重载后按维度重扫，任务不留静默丢弃。
+    // 与 releaseRealm/clear 共用 RealmQueues 的批量取消实现：先收集句柄、再清空容器、最后逐个取消。
     public void cancelRealm(Object realmKey, CancelReason reason) {
         RealmQueues realm = realms.get(realmKey);
         if (realm != null) {
@@ -403,7 +404,7 @@ public final class ServerScheduler implements TaskQueue {
         };
     }
 
-    // 维度卸载：逐项上报原因后清空该 realm，不留静默丢弃；待返还库存由恢复任务补交。
+    // 维度卸载：先摘除 realm 索引再逐项取消并清空容器，不留静默丢弃；待返还库存由恢复任务补交。
     public void releaseRealm(Object realmKey, CancelReason reason) {
         RealmQueues realm = realms.remove(realmKey);
         if (realm != null) {
@@ -411,12 +412,14 @@ public final class ServerScheduler implements TaskQueue {
         }
     }
 
-    // 停服或规则重载：所有 realm 的任务带原因取消。
+    // 停服或规则重载：所有 realm 的任务带原因取消。先摘除索引再逐个取消，
+    // 取消回调重新登记的任务会落在新的 realm 上，不会被本批清理误删。
     public void clear(CancelReason reason) {
-        for (RealmQueues realm : realms.values()) {
+        List<RealmQueues> clearing = new ArrayList<>(realms.values());
+        realms.clear();
+        for (RealmQueues realm : clearing) {
             realm.cancelAll(reason);
         }
-        realms.clear();
     }
 
     // 跨维度合并的待处理任务数。
