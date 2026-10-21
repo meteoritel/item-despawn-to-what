@@ -28,8 +28,6 @@ public final class SpawnItemExecutor {
      * 故该上界同时是一个调度步骤最多计入的计费单位数。
      */
     private static final int ITEM_SPAWNS_PER_RUN = 16;
-    // 邻区块未加载时的重试间隔：不在等待期反复查世界，也不提前记为成功
-    private static final int CHUNK_RETRY_TICKS = 20;
     // 回执说明：同步入口不承担分批，交由预算执行路径推进
     private static final String BUDGET_REQUIRED = "budget_required: spawn_entity.item";
     // 回执说明：本次产出已按真实写入逐件回执，终态不再重复计入
@@ -92,7 +90,7 @@ public final class SpawnItemExecutor {
                 return null;
             }
             if (!LoadedChunks.containsArea(level, BlockPos.containing(position), 1)) {
-                nextAttemptTick = gameTime + CHUNK_RETRY_TICKS;
+                nextAttemptTick = gameTime + LoadedChunks.RETRY_TICKS;
                 return null;
             }
             int maxStack = Math.max(1, item.getDefaultMaxStackSize());
@@ -112,7 +110,7 @@ public final class SpawnItemExecutor {
                 entity.setDeltaMovement(EffectTargets.productInitialVelocity(context));
                 // 转化产物：先授予保护与冷却再写入；未写入时不计完成量，也不重复授予
                 if (!EffectTargets.addConversionProductNow(context, entity)) {
-                    nextAttemptTick = gameTime + CHUNK_RETRY_TICKS;
+                    nextAttemptTick = gameTime + LoadedChunks.RETRY_TICKS;
                     return null;
                 }
                 // 真实完成量回执：按实际写入世界的件数计

@@ -605,7 +605,7 @@ final class ConversionSettlement implements ServerTask {
                 payment.deliverRemaining(budget, scheduler.config().dispatchBatchSize());
         if (outcome == SettlementPayment.DeliveryOutcome.RETRY) {
             // 区块未加载：本刻未扣减待交付量，由步骤出口对齐后带退避重试
-            return StepResult.retry(1, 20);
+            return StepResult.retry(1, LoadedChunks.RETRY_TICKS);
         }
         if (outcome == SettlementPayment.DeliveryOutcome.YIELD) {
             // 位置搜索预算用尽或批量上限已到：保留待返还、下刻从断点继续，不整批放弃

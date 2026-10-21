@@ -156,6 +156,12 @@ public final class ConversionRuntime {
     /**
      * 掉落物追踪状态快照，供开发场景实时日志只读使用。
      * {@code taskTerminal} 用于核对追踪条目与调度句柄是否自洽：追踪存在但句柄已终态说明排期链已断。
+     *
+     * @param tracked 该掉落物当前是否仍被追踪
+     * @param failureCount 条件检查的连续失败次数
+     * @param locked 是否处于锁定状态（不再改动排期）
+     * @param nextCheckTick 下次到期检查的游戏刻，-1 表示未排期
+     * @param taskTerminal 追踪句柄是否已进入终态
      */
     public record TrackedItemInfo(boolean tracked, int failureCount, boolean locked, long nextCheckTick,
                                   boolean taskTerminal) {

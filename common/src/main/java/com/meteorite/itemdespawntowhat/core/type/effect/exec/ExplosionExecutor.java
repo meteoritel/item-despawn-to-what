@@ -34,8 +34,6 @@ public final class ExplosionExecutor {
      * 该常量只影响计费，不改变爆炸的行为与产出。
      */
     private static final int EXPLOSION_WORK_UNITS = 128;
-    // 等待目标区块加载时的退避刻数
-    private static final int CHUNK_RETRY_TICKS = 20;
     // 拒绝直接调用的原因：没有共享预算的实现无法按 tick 推进
     private static final String BUDGET_REQUIRED = "budget_required";
     // 缺少成功转化当刻固定输入的原因：本类型只能在准备阶段之后执行
@@ -110,7 +108,7 @@ public final class ExplosionExecutor {
             }
             if (!LoadedChunks.containsArea(level, BlockPos.containing(position), requiredRadius)) {
                 // 整片未加载：本次不计入账目，退避后仍在同一基准位置重试
-                nextDueTick = now + CHUNK_RETRY_TICKS;
+                nextDueTick = now + LoadedChunks.RETRY_TICKS;
                 return null;
             }
             if (budget.exhausted()) {

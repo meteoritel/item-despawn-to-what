@@ -19,6 +19,9 @@ final class SettlementPayment {
     // 一步交付的结果语义：全部交完、本刻让出、需要带退避重试
     enum DeliveryOutcome { DONE, YIELD, RETRY }
 
+    // 成功交付一份返还物的计价：位置搜索推进与世界写入各占一个工作单位
+    static final int DELIVERY_WORK_UNITS = 2;
+
     private final ConversionRuntime runtime;
     private final ServerScheduler scheduler;
     private final ServerLevel level;
@@ -77,7 +80,7 @@ final class SettlementPayment {
             }
             held.setCount(held.getCount() - size);
             receipts.delivered(size);
-            budget.charge(2);
+            budget.charge(DELIVERY_WORK_UNITS);
             deliveredNow++;
         }
         return held.getCount() > 0 ? DeliveryOutcome.YIELD : DeliveryOutcome.DONE;
