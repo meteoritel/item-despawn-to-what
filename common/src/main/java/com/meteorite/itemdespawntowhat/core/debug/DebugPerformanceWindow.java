@@ -62,6 +62,9 @@ final class DebugPerformanceWindow {
     private long drainedInWindow;
     private long ticksWithDrainInWindow;
     private long maxDrainedInTick;
+    // 单 tick 工作单位峰值与最大单步工作量：与计费同一口径，用来核实预算消耗跟真实世界操作量同向变化
+    private long peakWorkUnitsInTick;
+    private long maxStepWorkUnits;
     private long backlogClearSamples;
     private long lastBacklogClearTicks = -1L;
     private long maxBacklogClearTicks;
@@ -156,12 +159,14 @@ final class DebugPerformanceWindow {
             if (budget.workUnitsExpired()) { ticksWorkUnitsExhausted++; }
             if (!budget.timeExpired() && !budget.workUnitsExpired()) { ticksUnexhausted++; }
             drainedInWindow += budget.drainedTasks();
+            peakWorkUnitsInTick = Math.max(peakWorkUnitsInTick, budget.usedWorkUnits());
         }
         // 调度器级样本每推进一 tick 只采一次：同一 tick 可能有维度 tick 与服务端 tick 两次采样
         if (lastSchedulerStats.ticks() > lastSampledSchedulerTicks) {
             lastSampledSchedulerTicks = lastSchedulerStats.ticks();
             serverDrainedPerTick.add(lastSchedulerStats.lastDrainedTasks());
             maxDrainedInTick = Math.max(maxDrainedInTick, lastSchedulerStats.lastDrainedTasks());
+            maxStepWorkUnits = Math.max(maxStepWorkUnits, lastSchedulerStats.lastMaxStepWorkUnits());
             if (lastSchedulerStats.lastDrainedTasks() > 0) { ticksWithDrainInWindow++; }
             long readyNow = 0L;
             for (ServerTaskKind kind : ServerTaskKind.values()) {
@@ -191,6 +196,27 @@ final class DebugPerformanceWindow {
                 if (window != null) { window.add(runtime.queueStats(level, kind)); }
             }
         }
+    }
+
+    // 窗口内单 tick 工作单位峰值（预算快照口径，可能在上限处截断）。
+    long peakWorkUnitsInTick() { return peakWorkUnitsInTick; }
+
+    // 窗口内按预算自身标志统计的工作单位耗尽 tick 数。
+    long ticksExhaustedByWorkUnits() { return ticksWorkUnitsExhausted; }
+
+    // 窗口内单 tick 搬运到期任务数的峰值。
+    long maxDrainedTasksInTick() { return maxDrainedInTick; }
+
+    // 窗口内最大单步计费工作量（声明回执与步骤内实际上报的较大者）。
+    long maxStepWorkUnits() { return maxStepWorkUnits; }
+
+    // 窗口内效果 lane 累计计费工作量：按种类累计值取差值，可与步骤内实际上报量对照。
+    long effectsWorkUnitsInWindow() {
+        KindStats current = lastSchedulerStats.perKind().get(ServerTaskKind.EFFECT);
+        KindStats baseline = schedulerBaseline.perKind().get(ServerTaskKind.EFFECT);
+        long now = current == null ? 0L : current.workUnits();
+        long start = baseline == null ? 0L : baseline.workUnits();
+        return delta(now, start);
     }
 
     // 按单调墙钟限制采样，避免低 TPS 时等待数倍时长。
@@ -239,6 +265,8 @@ final class DebugPerformanceWindow {
         serverBudget.addProperty("ticks_exhausted_by_time", ticksTimeExhausted);
         serverBudget.addProperty("ticks_exhausted_by_work_units", ticksWorkUnitsExhausted);
         serverBudget.addProperty("ticks_unexhausted", ticksUnexhausted);
+        serverBudget.addProperty("max_work_units_used_in_tick", peakWorkUnitsInTick);
+        serverBudget.addProperty("max_step_work_units", maxStepWorkUnits);
         data.add("server_budget", serverBudget);
         // 服务器级就绪延迟分布：每 tick 取全维度最大就绪延迟作为一个样本（单位 tick）
         data.add("server_ready_delay_ticks", serverReadyDelayTicks.summary());
@@ -298,6 +326,8 @@ final class DebugPerformanceWindow {
         data.addProperty("last_drained_tasks", now.lastDrainedTasks());
         data.addProperty("drained_ticks", delta(now.drainedTicks(), schedulerBaseline.drainedTicks()));
         data.addProperty("max_drained_in_tick", now.maxDrainedInTick());
+        data.addProperty("last_max_step_work_units", now.lastMaxStepWorkUnits());
+        data.addProperty("max_step_work_units", now.maxStepWorkUnits());
         JsonObject cancelledByReason = new JsonObject();
         for (CancelReason reason : CancelReason.values()) {
             long current = now.cancelledByReason().getOrDefault(reason, 0L);

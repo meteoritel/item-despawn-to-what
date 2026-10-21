@@ -58,6 +58,10 @@ public final class ServerScheduler implements TaskQueue {
     private int rotationCursor;
     // 观测：本 tick 效果类累计消耗的工作量；runTick 累加，finishTick 输出后归零
     private int effectsUsedThisTick;
+    // 观测：单步工作量的本 tick 峰值与历史峰值；与计费同一口径，用于核实工作单位是否跟真实世界操作量同向变化
+    private int maxStepWorkUnitsThisTick;
+    private int lastMaxStepWorkUnits;
+    private int maxStepWorkUnits;
     // 观测：本 tick 结算后的预算载荷已输出，避免同一 tick 重复打印
     private long lastBudgetLogGameTime = Long.MIN_VALUE;
     // 观测：上次预算日志时的累计步骤数，用于计算两次日志之间的步骤增量
@@ -157,9 +161,10 @@ public final class ServerScheduler implements TaskQueue {
                 if (handle == null) {
                     continue;
                 }
-                StepResult result = runStep(lane, handle);
+                // 效果配额按本步计费结果累加，与全局预算、时间软预算共用同一口径；不能用声明回执，否则配额退化为步数
+                int billedWorkUnits = runStep(lane, handle);
                 if (lane.kind() == ServerTaskKind.EFFECT) {
-                    effectsUsedThisTick += result.workUnits();
+                    effectsUsedThisTick += billedWorkUnits;
                 }
                 progressed = true;
             }
@@ -180,7 +185,8 @@ public final class ServerScheduler implements TaskQueue {
     }
 
     // 执行一个任务步骤：异常不中断整轮推进，预算耗尽不是业务失败。
-    private StepResult runStep(TaskLane lane, ScheduledTask handle) {
+    // 返回本步计费工作量（声明回执与步骤内实际上报的较大者），调用方据此累加效果 lane 配额。
+    private int runStep(TaskLane lane, ScheduledTask handle) {
         long started = System.nanoTime();
         StepResult result;
         Throwable stepFailure = null;
@@ -206,6 +212,7 @@ public final class ServerScheduler implements TaskQueue {
         // 计价取「任务回执的工作量」与「步骤内上报的真实世界操作量」的较大者；未上报时与改前一致
         int workUnits = Math.max(result.workUnits(), reportedWorkUnits);
         budget.charge(workUnits);
+        maxStepWorkUnitsThisTick = Math.max(maxStepWorkUnitsThisTick, workUnits);
         long elapsed = System.nanoTime() - started;
         lane.recordStep(elapsed);
         // 观测：按种类累计本 tick 的忙碌微秒，用于跨维度的单类峰值定位
@@ -263,7 +270,7 @@ public final class ServerScheduler implements TaskQueue {
                 }
             }
         }
-        return result;
+        return workUnits;
     }
 
     // 本 tick 参与轮转的 lane：只包含仍有待推进任务（或就绪任务）的队列。
@@ -324,6 +331,10 @@ public final class ServerScheduler implements TaskQueue {
         kindMicrosThisTick.clear();
         ticks++;
         lastSnapshot = budget.snapshot();
+        // 单步峰值先结算成本 tick 样本，日志才能输出本 tick 的值
+        lastMaxStepWorkUnits = maxStepWorkUnitsThisTick;
+        maxStepWorkUnits = Math.max(maxStepWorkUnits, lastMaxStepWorkUnits);
+        maxStepWorkUnitsThisTick = 0;
         logBudgetObservation();
         // 本 tick 已统计完毕，归零避免无任务的 tick 沿用上一 tick 的效果用量
         effectsUsedThisTick = 0;
@@ -348,11 +359,11 @@ public final class ServerScheduler implements TaskQueue {
             readyDelay = Math.max(readyDelay, realm.maxReadyDelay(lastSnapshot.gameTime()));
         }
         LOGGER.info("IDTW_BUDGET tick={} used_ns={} budget_ns={} used_units={} max_units={} effects_units={} "
-                        + "max_effect_units={} steps={} drained={} pending={} ready_delay={} exhausted={}",
+                        + "max_effect_units={} step_max_units={} steps={} drained={} pending={} ready_delay={} exhausted={}",
                 lastSnapshot.gameTime(), lastSnapshot.usedNanos(), lastSnapshot.budgetNanos(),
                 lastSnapshot.usedWorkUnits(), lastSnapshot.maxWorkUnits(), effectsUsedThisTick,
-                config.effectsWorkUnitsPerTick(), stepsThisTick, lastSnapshot.drainedTasks(),
-                pendingCount(), readyDelay, lastSnapshot.exhaustionReason());
+                config.effectsWorkUnitsPerTick(), lastMaxStepWorkUnits, stepsThisTick,
+                lastSnapshot.drainedTasks(), pendingCount(), readyDelay, lastSnapshot.exhaustionReason());
     }
 
     // 取消某个 realm 的全部任务但保留 realm 本身：用于规则重载后按维度重扫，任务不留静默丢弃。
@@ -459,6 +470,7 @@ public final class ServerScheduler implements TaskQueue {
         return new SchedulerStats(ticks, steps, released, failed, drained, cancelledTotal, 0L, exhaustedByTime,
                 exhaustedByWorkUnits, pendingCount(), peakPending, realms.size(), maxReadyDelayTicks, lastBacklogClearTicks,
                 lastMaxReadyDelayTicks, lastDrainedTasks, drainedTicks, maxDrainedInTick,
+                lastMaxStepWorkUnits, maxStepWorkUnits,
                 Map.copyOf(cancelledByReason), Map.copyOf(perKind));
     }
 
