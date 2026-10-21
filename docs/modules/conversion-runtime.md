@@ -75,7 +75,7 @@ flowchart LR
 | `SettlementGroupPlan` / `SettlementCapacityProbe` | 计划与容量 | 候选选择与组数上界（唯一实现）、逐候选容量探测与同刻测量复用 | `ConversionSettlement`、`EffectType.capacityDemand`、`NearbyProductLimits`、`RoundRobinCursors` |
 | `SettlementCatalystStage` | 催化剂编排 | 计划期催化剂上界、预留组与开组前门槛/流体复核对象 | `ConversionSettlement`、`CatalystReservations`、`CatalystThresholdCheck`、`FluidSourceResolver` |
 | `SettlementPayment` / `SettlementReceipts` | 支付与记账 | 开组前输入复核、催化剂支付、返还分批交付；账目唯一写入通道与库存所有权 | `CatalystReservations`、`ReturnItemSpawner`、`SettlementRecord.Writer` |
-| `SettlementLedger` / `SettlementRecord.Writer` | 持久化聚合 | 主世界 `SavedData` 台账；记录状态、计数与待交付量只经 `Writer` 改动，字段变更处同步双索引标脏 | `ConversionRuntime`、`SettlementRecovery`、`ConversionSettlement` |
+| `SettlementLedger` / `SettlementRecord.Writer` | 持久化聚合 | 主世界 `SavedData` 台账；记录状态、计数与待交付量只经 `Writer` 改动，结算步内累积、步末一次提交（写回双索引并标脏），中止/取消/失败与恢复收尾在步外立即提交 | `ConversionRuntime`、`SettlementRecovery`、`ConversionSettlement` |
 | `SettlementRecovery` | 补偿任务 | 只交付记录里的待交付库存，交付成功后才扣减并落账，完成/失败/取消都幂等关闭 | `SettlementLedger`、`ServerScheduler` |
 | `EffectTask` | 并发敏感 | 单个效果的执行包装：一次求值、推进执行、回执入账；终态先摘引用再回执 | `ConversionRuntime.startEffect`、`EffectResult` |
 | `ServerScheduler` / `ServerTickBudget` | 共享预算 | 每服务器一份预算，按维度 realm 与任务种类 lane 公平轮转，按真实世界操作量计费 | 全部任务类型 |
@@ -177,9 +177,9 @@ flowchart TB
 - **准备计费**：每次固定输入（例如开战利品表）按 1 个工作单位上报，准备量因此进入与其它世界操作同一份预算计价，不会被当成零成本勾当。
 - **数量守恒**：转入结算库存的原始数量 = 已扣减成本总量 + 已交付返还 + 待交付返还；成本总量等于每组成本乘以已完成组数。概率落空或条件不满足的组仍计入“已支付组”，回执以 `SKIPPED` 落账而不是从账上抹掉。
 
-容量只在开组前复核，需求聚合同一候选内可重复效果声明的「每轮一组最小产出需求」（`EffectType.capacityDemand`）：具体物品与通用实体按件数累计，产物类型未知的产出（战利品表）按区域物品总量保守计入，经验不占容量；声明是规划下界而非硬截断，实际产出可能更多。搜索盒以成功转化当刻固定的触发点为准，与效果执行器同一口径。同刻同一候选只查一次世界。轮转模式下跨结算共享游标，被跳过的候选不推进游标。
+容量只在开组前复核，需求聚合同一候选内可重复效果声明的「每轮一组最小产出需求」（`EffectType.capacityDemand`）：具体物品与通用实体按件数累计，产物类型未知的产出（战利品表）按区域物品总量保守计入，经验不占容量；声明是规划下界而非硬截断，实际产出可能更多。搜索盒以成功转化当刻固定的触发点为准，与效果执行器同一口径。同刻同一候选只查一次世界；需求表、引用匹配器（含预建标签键）与搜索盒都按候选缓存，同一结算内的多次探测不重复汇总需求或重建匹配器。轮转模式下跨结算共享游标，被跳过的候选不推进游标。
 
-结算的协作结构：聚合根按 `SettlementPhases` 的当前阶段调用对应协作者，并统一处理中止、失败、取消与步骤出口的待交付量对齐。`SettlementGroupPlan` 定组数与逐组选候选，组数上界 `bound`（本地预留与本刻测量取小）是唯一实现，计划期的容量承诺与开组前复核共用它；`SettlementCapacityProbe` 把候选每轮产出折算成可开组数并封装邻近物品/实体计数；`SettlementCatalystStage` 管计划期催化剂上界与预留组，并按 UUID 生成开组前的门槛复核对象；`SettlementPayment` 做开组前输入复核、催化剂支付与返还交付；`SettlementReceipts` 是账目唯一写入通道并持有待交付库存的所有权。派发阶段按「选组 → 支付 → 派发效果」拆成单一语义的步骤：开组受阻按原因分流为让出、重选候选或截断整批，效果槽位逐个派发，任一异常仍回到聚合根收尾。
+结算的协作结构：聚合根按 `SettlementPhases` 的当前阶段调用对应协作者，并统一处理中止、失败、取消与步骤出口的待交付量对齐。`SettlementGroupPlan` 定组数与逐组选候选，组数上界 `bound`（本地预留与本刻测量取小）是唯一实现，计划期的容量承诺与开组前复核共用它；`SettlementCapacityProbe` 把候选每轮产出折算成可开组数并封装邻近物品/实体计数；`SettlementCatalystStage` 管计划期催化剂上界与预留组，并按 UUID 生成开组前的门槛复核对象；`SettlementPayment` 做开组前输入复核、催化剂支付与返还交付；`SettlementReceipts` 是账目唯一写入通道并持有待交付库存的所有权。派发阶段按「选组 → 支付 → 派发效果」拆成单一语义的步骤：开组受阻按原因分流为让出、重选候选或截断整批，效果槽位逐个派发，任一异常仍回到聚合根收尾。账目写入在步内累积、步末合并落账一次，成批返还因此不再按堆提交；战利品固定在成功转化当刻抽取并复制成不可变堆叠列表，执行状态共享该快照，只在写入世界时按堆复制。
 
 ### 4.4 结算记录、恢复与实体状态写入
 

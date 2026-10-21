@@ -29,6 +29,12 @@
       },
       "budget_peak_work_units_in_tick": {
         "max": 512
+      },
+      "settlement_ledger_commits": {
+        "min": "$sources"
+      },
+      "settlement_ledger_deferred_mutations": {
+        "min": "$sources"
       }
     },
     "outputs": {

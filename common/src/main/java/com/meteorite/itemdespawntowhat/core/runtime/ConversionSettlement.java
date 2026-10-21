@@ -177,6 +177,8 @@ final class ConversionSettlement implements ServerTask {
         dispatchedThisStep = 0;
         // 本刻容量查询结果只在同一刻内复用：世界存量在刻间可变，跨刻复用旧的正数测量值会高估 room
         groupPlan.resetStepMeasurements();
+        // 步内累积：本步的账目变更只在 finally 合并落账一次，成批交付因此从「每堆一次提交」降为「每步一次」
+        receipts.beginStep();
         try {
             StepResult result = switch (phases.current()) {
                 case PLANNING -> plan(budget);
@@ -185,8 +187,7 @@ final class ConversionSettlement implements ServerTask {
                 case DELIVERING -> deliver(budget);
                 case DONE -> StepResult.done(1);
             };
-            // 任务内统一状态出口：正常完成、显式中止、预算耗尽提前让出与交付让出都在这里按当前所有权对齐待交付量；
-            // 账目字段本身已由受控写入入口逐次落账，此处不重复提交
+            // 任务内统一状态出口：正常完成、显式中止、预算耗尽提前让出与交付让出都在这里按当前所有权对齐待交付量
             commit();
             return result;
         } catch (RuntimeException failure) {
@@ -194,6 +195,9 @@ final class ConversionSettlement implements ServerTask {
             // 再把异常抛给调度器转 FAILED，避免预留悬空
             abort("exception: " + failure.getClass().getSimpleName(), true);
             throw failure;
+        } finally {
+            // 本步累积的变更无论正常出口、中止还是异常都要落账；取消回调在步外发生，不受本步累积影响
+            receipts.endStep();
         }
     }
 
@@ -618,7 +622,10 @@ final class ConversionSettlement implements ServerTask {
                     "candidate", record.candidateId(), "groups", record.groupCount(),
                     "consumed_sources", record.consumedSources(), "applied_units", record.appliedUnits(),
                     "pending_units", record.pendingUnits(), "returned", record.deliveredReturns(),
-                    "pending_delivery", record.pendingDelivery(), "prepared_groups", preparedGroupCount);
+                    "pending_delivery", record.pendingDelivery(), "prepared_groups", preparedGroupCount,
+                    // 账本写入合并口径：本记录的落账次数与被步内合并的变更次数，供场景核对每步一次提交
+                    "ledger_commits", receipts.commitCount(),
+                    "ledger_deferred_mutations", receipts.deferredMutations());
         }
         if (RuntimeObserver.current().enabled()) {
             RuntimeObserver.current().observe(source, "REBATE_DELIVERED", "record", record.id(), "returned", record.deliveredReturns());

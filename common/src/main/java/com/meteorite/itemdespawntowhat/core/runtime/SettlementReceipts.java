@@ -91,6 +91,25 @@ final class SettlementReceipts {
 
     // 执行器回执入账：已完成、已受理未完成、跳过与失败分别计数，计划量不冒充成功量；
     // 中止后到达的迟到回执由调用方在入口拦截（记录已移交恢复任务，写入会把已终结记录重新登记进账本）
+    /** 进入步内累积：本步的账目变更不逐次落账，由 {@link #endStep()} 在步末合并提交。 */
+    void beginStep() {
+        writer.beginBatch();
+    }
+
+    /** 结束步内累积并落账本步累积的变更；步末无变更时不产生提交。 */
+    void endStep() {
+        writer.endBatch();
+    }
+
+    // 本记录的落账次数与被步内合并的变更次数：随结算完成观测输出
+    int commitCount() {
+        return writer.commitCount();
+    }
+
+    int deferredMutations() {
+        return writer.deferredMutations();
+    }
+
     void apply(EffectResult result) {
         if (result == null) {
             writer.effectFailed();
