@@ -21,9 +21,11 @@
   "run/fault_step",
   "run/fault_reload",
   "run/fault_cancel",
+  "run/scan_cursor",
   "bench/baseline",
   "bench/convert",
   "bench/retry",
   "bench/normal",
-  "bench/converted"
+  "bench/converted",
+  "bench/reload_storm"
 ]

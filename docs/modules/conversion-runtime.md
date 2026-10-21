@@ -34,12 +34,12 @@ authority: common/core/runtime、common/core/state
 
 ### 对外入口
 
-- 追踪生命周期：`ConversionRuntime.onItemAdded`、`rescan(level)`、`replaceRules(...)`、`applySavedIndex(server, prepared)`、`clear(level)`、`shutdown()`。
+- 追踪生命周期：`ConversionRuntime.onItemAdded`、`rescan(level)`、`rebuild(level)`、`replaceRules(...)`、`applySavedIndex(server, prepared)`、`clear(level)`、`shutdown()`。
 - tick 驱动：`onServerTick`，由宿主在服务器 tick 事件中调用。
 - 环境触发：`requestEnvironmentalConversion(level, item, source)`；伤害是否属于可触发类型由 `DamageClassification.classify` 判定。
 - 实体状态：`DropStateStore` 的读取、写入、清除与 `blocksEnvironmentalDamage` 判定；授予入口在效果执行侧的 `ReturnItemSpawner`。
 - 调度：`ServerScheduler` 实现 `TaskQueue`，向运行时暴露维度注册、取消、摘除与全局释放。
-- 观测：`trackedCount`、`debugInfo`、`candidatesFor`、`pendingTasks`、`queueStats`、`schedulerStats`、`budgetSnapshot`、`activeRecoveryCount`、`recoverySkippedDimensions`。
+- 观测：`trackedCount`、`debugInfo`、`candidatesFor`、`pendingTasks`、`queueStats`、`schedulerStats`、`budgetSnapshot`、`activeRecoveryCount`、`recoverySkippedDimensions`、`rescanPending`、`rescanSteps`。
 
 ### 依赖方向
 
@@ -101,7 +101,16 @@ flowchart TB
     J --> K["追踪结束，结算任务接手"]
 ```
 
-追踪的建立是幂等的：已 tracked 且句柄仍有效的实体再次进入 `onItemAdded` 直接返回；`items` 有序表按实体 id 索引，供重载后的回扫游标使用。`converted` 标签标记“已提交转化”的实体，回扫与重复回调都会因此跳过。规则重载与保存后换索引会先清空各维度的追踪表再回扫，回扫按有序 id 游标分步执行，不一次性遍历。
+追踪的建立是幂等的：已 tracked 且句柄仍有效的实体再次进入 `onItemAdded` 直接返回；`items` 有序表按实体 id 索引，供重载后的回扫游标使用。`converted` 标签标记“已提交转化”的实体，回扫与重复回调都会因此跳过。
+
+回扫是分步续接任务，入口只清表并入队，不在服务端线程同步遍历整维实体：
+
+| 入口 | 模式 | 依据 |
+|---|---|---|
+| 启动 `rebuild(level)`、维度加载 `rebuild(level)` | 世界扫描 | 这些实体的 join 事件早于运行时装配，`items` 表不完整，必须扫描世界补登记 |
+| 规则重载 `rescan(level)` | 有序 id 游标 | `items` 表由 join/leave 事件持续维护，按 `higherEntry` 游标逐条重建追踪 |
+
+两种模式单步都只把 `rescan_entities_per_step` 个实体交给 `onItemAdded`，且每步检查共享预算；世界扫描模式逐项跳过已登记实体，跳过项不计工作单位但仍逐项检查时间预算，因此单步耗时仍受本刻预算约束。还有剩余工作就 `yield`，下一 tick 沿用游标继续；普通 `Entity` 迭代器不跨 tick 持有。完成标记按维度保存轮次 token，只有当前一轮的收尾路径（完成、取消、失败终态）能清除，旧一轮的迟到回调不会破坏新一轮状态；同一轮回扫失败只重排一份续接任务，避免多份任务同时推进同一游标。回扫让出期间，自然到期入口对尚未重建追踪的实体直接补一次 `onItemAdded`，临近消失的物品不会因等待回扫而漏转化。
 
 追踪条目与句柄状态保持自洽：句柄已终态（检查失败或被取消）说明排期链已断，该物品不会再被自然检查；实体重新加载进入 `onItemAdded` 时按当前候选补排一次初始检查，自然到期入口则释放追踪并交还原版销毁，物品不会因内部失败而永久留存。
 
@@ -174,6 +183,7 @@ flowchart TB
 - 每步结束按「任务声明回执」与「步骤内实际上报」的较大者计费：上报值是真实世界操作量，声明值只是下限；lane 配额、效果 lane 配额与时间软预算共用这一结果，耗尽后立即结束本刻轮转，剩余任务留到下一刻。
 - 诊断面：`SchedulerStats` 给出最近一 tick 与历史的最大单步计费工作量、按种类的累计工作单位，`ServerTickBudgetSnapshot` 给出本刻工作单位用量与耗尽原因，debug 场景指标可由断言器读取，用于核对预算消耗与真实世界操作量同向变化。
 - 单个任务抛错只把该任务判为失败，不中断整轮；`YIELD`/`RETRY` 走重排并带最小延迟。
+- 回扫续接任务与其它任务共用同一份预算：单步实体上限由 `rescan_entities_per_step` 约束，预算耗尽即让出；完成标记与失败重排都归一为单一路径，不产生并行推进同一游标的副本任务。
 - 维度卸载时把该维度 lane 上的任务逐项取消，取消续接任务自身也跑在预算里；停服整体清空。
 - 预算与批量参数在构造调度器时从 `ServerConfig` 读取一次，改动需要重载或重启服务器。
 
@@ -196,7 +206,7 @@ flowchart TB
 - 同一掉落物只执行优先级最高的一条命中规则；排序规则集中在 `RuleIndex.RULE_ORDER`。
 - 台账不裁剪未结清记录，完成记录在保留窗口与条数上限内可裁。
 - 实体状态挂实体层且用绝对游戏刻；跨存档与区块卸载都按真实时间推进。
-- 长循环与逐实体遍历必须接入调度器（`ServerTaskKind` 选 lane），在 tick 回调里直接全量遍历会越过共享预算。
+- 长循环与逐实体遍历必须接入调度器（`ServerTaskKind` 选 lane），在 tick 回调里直接全量遍历会越过共享预算；整维回扫只能经 `rescan`/`rebuild` 入队分步推进。
 
 ### 改动后的验证
 

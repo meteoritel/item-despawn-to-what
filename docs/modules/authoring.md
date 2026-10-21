@@ -171,6 +171,8 @@ flowchart TB
 - 观测走调试探针与运行时观测入口，输出含平台、版本、机器信息、预期与实际指标，便于横向对比。
 - 故障注入是场景声明的一部分：`faults` 条目按故障类型、任务分类与追踪名选中真实链路中的任务，在步骤执行、取消回调或规则重载应用阶段抛出受控异常。故障只在调试包实现并挂在运行时观测接缝上，未启用调试时生产路径不加载、不分支、不引用。
 - 故障事件进场景日志：`FAULT_ARMED` 记录生效的声明，`FAULT_STEP_EXCEPTION` / `FAULT_CANCEL_EXCEPTION` / `FAULT_RELOAD_FAILURE` 记录每次注入，收尾时未命中的声明记 `FAULT_UNUSED`；预期里用 `events/<事件名>` 断言事件次数，用 `faults_declared` / `faults_injected` / `faults_remaining` 断言注入账目。
+- 场景指标覆盖回扫一致性：`tracked_source_items` 是本轮源中仍被运行时追踪的数量，`rescan_pending` 表示结束时是否仍有分步回扫在推进，`rescan_steps` 是最近一轮回扫已执行的分步数；配合既有的 `scheduler_max_step_work_units` 等预算指标，可断言回扫按有界步推进、让出后继续，且最终追踪数量与实体数量一致。
+- 性能场景默认只允许普通源准备；重载风暴类场景额外允许 `reload` 动作，用来验证重载期间的回扫不会退化成单 tick 全量遍历。其它动作、故障注入与催化剂夹具仍会被拒绝，避免污染负载口径。
 
 ## 5. 扩展点与约束
 

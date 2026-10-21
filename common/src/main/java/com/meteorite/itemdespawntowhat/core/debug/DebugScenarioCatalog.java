@@ -99,8 +99,10 @@ final class DebugScenarioCatalog {
         if (setup == DebugScenarioSpec.Setup.MERGE && (sources != 2 || stack < 2)) {
             throw new IllegalArgumentException("merge准备方式需要2个源且堆叠数至少2：" + key);
         }
-        if (benchmark && (catalyst != 0 || !actions.isEmpty() || !faults.isEmpty() || setup != DebugScenarioSpec.Setup.NONE)) {
-            throw new IllegalArgumentException("性能场景只允许普通源准备，不运行功能动作、故障注入或催化剂夹具：" + key);
+        // 性能场景要验证重载风暴下的回扫分摊，因此只额外放行规则重载动作；其它动作仍会污染负载口径
+        if (benchmark && (catalyst != 0 || !faults.isEmpty() || setup != DebugScenarioSpec.Setup.NONE
+                || actions.stream().anyMatch(action -> action.type() != DebugScenarioSpec.ActionType.RELOAD))) {
+            throw new IllegalArgumentException("性能场景只允许普通源准备与规则重载，不运行其它功能动作、故障注入或催化剂夹具：" + key);
         }
         JsonObject expected = body.getAsJsonObject("expected");
         rejectUnknown(expected, Set.of("metrics", "outputs", "candidates"));

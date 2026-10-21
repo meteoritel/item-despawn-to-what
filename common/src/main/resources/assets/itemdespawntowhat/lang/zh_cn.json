@@ -64,6 +64,8 @@
   "itemdespawntowhat.command.debug.scene.description.run.fault_step": "故障注入：首个条件检查步骤抛异常，不转化，保留1张纸。",
   "itemdespawntowhat.command.debug.scene.description.run.fault_reload": "故障注入：延迟效果入队后规则重载失败，动作记录预期失败，零产出。",
   "itemdespawntowhat.command.debug.scene.description.run.fault_cancel": "故障注入：取消已入队效果时在其取消回调抛异常，重载动作记录预期失败，零产出。",
+  "itemdespawntowhat.command.debug.scene.description.run.scan_cursor": "运行中重载规则：回扫按有界分步续接，结束时16张纸仍全部被追踪。",
+  "itemdespawntowhat.command.debug.scene.description.bench.reload_storm": "1000个实体上连续5次重载规则：每轮回扫按有界分步推进，结束时所有源仍被追踪。",
   "gui.itemdespawntowhat.edit.title": "当前编辑文件",
   "gui.itemdespawntowhat.edit.config_stat_1": "☰ 配置数：%d",
   "gui.itemdespawntowhat.edit.config_stat_2": "★ 配置数：%s (%s + %s)",

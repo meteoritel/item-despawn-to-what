@@ -134,8 +134,9 @@ public final class RuleRuntimeHostCore {
     public RuleCommandContext commandContext() { return commandContext; }
 
     /**
-     * 启动运行时：读配置 → 建注册表 → 加载规则 → 建运行时 → 对全部已加载维度回扫。
-     * 必须等到服务端就绪（全部维度已创建）才能回扫，否则会漏掉启动期已存在的掉落物。
+     * 启动运行时：读配置 → 建注册表 → 加载规则 → 建运行时 → 对全部已加载维度排队回扫。
+     * 必须等到服务端就绪（全部维度已创建）才能回扫，否则会漏掉启动期已存在的掉落物；
+     * 回扫本身是分步续接任务，启动回调只负责入队，不在服务端线程同步遍历整维。
      * 回调链上的可预期异常就地降级：实例回到确定的未启动状态并记录原因，异常不外泄到平台启动流程。
      *
      * @param server 已就绪的服务端
@@ -175,10 +176,11 @@ public final class RuleRuntimeHostCore {
 
             int levelCount = 0;
             for (ServerLevel level : server.getAllLevels()) {
-                newRuntime.rescan(level);
+                // 启动期已加载实体的 join 事件早于运行时装配，必须扫描世界补登记
+                newRuntime.rebuild(level);
                 levelCount++;
             }
-            LOGGER.info("新链路运行时已就绪：覆盖层 {}，已回扫维度 {} 个", overlay, levelCount);
+            LOGGER.info("新链路运行时已就绪：覆盖层 {}，已排队回扫维度 {} 个", overlay, levelCount);
         } catch (RuntimeException failure) {
             degradeStartFailure(failure);
         }
@@ -197,7 +199,7 @@ public final class RuleRuntimeHostCore {
     }
 
     /**
-     * 数据包重载：重建规则索引并回扫全部已加载维度，使已存在的掉落物立即按新规则重选。
+     * 数据包重载：重建规则索引并排队回扫全部已加载维度，使已存在的掉落物按新规则重选。
      * 调用点必须位于服务端线程；运行时未就绪或重载失败时返回 null 并保留上一版索引。
      *
      * @param server 当前服务端
@@ -232,7 +234,7 @@ public final class RuleRuntimeHostCore {
                 current.rescan(level);
             }
             Objects.requireNonNull(RuleEditServerHandler.sessionManager(editContext)).bumpVersion();
-            LOGGER.info("数据包重载完成：规则索引已重建并完成回扫");
+            LOGGER.info("数据包重载完成：规则索引已重建，回扫已排队");
             return result;
         } catch (RuntimeException e) {
             // 重载失败必须保留旧索引继续服务，不能让异常逃逸到事件回调
@@ -301,11 +303,12 @@ public final class RuleRuntimeHostCore {
         }
     }
 
-    // 维度加载：对后加载的维度补一次回扫（启动期维度已由 start 统一回扫）
+    // 维度加载：对后加载的维度排队一次回扫（启动期维度已由 start 统一排队）
     public void levelLoaded(ServerLevel level) {
         ConversionRuntime current = runtime;
         if (current != null) {
-            current.rescan(level);
+            // 刚加载的维度实体表不完整，按世界扫描模式补登记
+            current.rebuild(level);
         }
     }
 

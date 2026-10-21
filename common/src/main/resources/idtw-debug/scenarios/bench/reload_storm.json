@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "inputs": {
+    "sources": 1000,
+    "stack_size": 1,
+    "catalyst_count": 0,
+    "source_item": "minecraft:paper",
+    "catalyst_item": "minecraft:emerald"
+  },
+  "seconds": 30,
+  "setup": "none",
+  "actions": [
+    {
+      "type": "reload",
+      "after_ticks": 80,
+      "after_event": "",
+      "offset_y": 0
+    },
+    {
+      "type": "reload",
+      "after_ticks": 180,
+      "after_event": "",
+      "offset_y": 0
+    },
+    {
+      "type": "reload",
+      "after_ticks": 280,
+      "after_event": "",
+      "offset_y": 0
+    },
+    {
+      "type": "reload",
+      "after_ticks": 380,
+      "after_event": "",
+      "offset_y": 0
+    },
+    {
+      "type": "reload",
+      "after_ticks": 480,
+      "after_event": "",
+      "offset_y": 0
+    }
+  ],
+  "expected": {
+    "metrics": {
+      "conversions": 0,
+      "remaining_source_items": "$source_items",
+      "tracked_source_items": "$sources",
+      "rescan_pending": 0,
+      "rescan_steps": {
+        "min": 60
+      },
+      "scheduler_max_step_work_units": {
+        "max": 64
+      },
+      "budget_peak_work_units_in_tick": {
+        "max": 512
+      },
+      "action_count": 5
+    },
+    "outputs": {
+      "minecraft:prismarine_shard": 0
+    }
+  },
+  "rules": [
+    {
+      "id": "itemdespawntowhat:debug/bench/reload_storm",
+      "enabled": true,
+      "priority": 0,
+      "trigger_after_seconds": 600,
+      "source": {
+        "items": [
+          "minecraft:paper"
+        ],
+        "exclude": []
+      },
+      "effects": [
+        {
+          "type": "itemdespawntowhat:spawn_entity",
+          "item": "minecraft:prismarine_shard",
+          "count": 1,
+          "delay_ticks": 0,
+          "chance": 1,
+          "variant": "item"
+        }
+      ]
+    }
+  ]
+}

@@ -64,6 +64,8 @@
   "itemdespawntowhat.command.debug.scene.description.run.fault_step": "Fault injection: the first condition check step throws; no conversion and the paper remains.",
   "itemdespawntowhat.command.debug.scene.description.run.fault_reload": "Fault injection: rule reload fails after the delayed effect is queued; the action records the expected failure and produces nothing.",
   "itemdespawntowhat.command.debug.scene.description.run.fault_cancel": "Fault injection: cancelling the queued effect throws inside its cancel callback; the reload action records the expected failure and produces nothing.",
+  "itemdespawntowhat.command.debug.scene.description.run.scan_cursor": "Reload rules mid-run: the rescan rebuilds tracking in bounded steps and all 16 paper stay tracked.",
+  "itemdespawntowhat.command.debug.scene.description.bench.reload_storm": "Five rule reloads over 1,000 entities: each rescan advances in bounded steps and every source stays tracked.",
   "gui.itemdespawntowhat.edit.title": "Edit file",
   "gui.itemdespawntowhat.edit.config_stat_1": "☰ Configs: %d",
   "gui.itemdespawntowhat.edit.config_stat_2": "★ Configs: %s (%s + %s)",
