@@ -82,10 +82,10 @@ flowchart LR
 | `ConditionContext` / `ConditionEvaluator` / `ConditionResult` / `Evaluability` | 条件侧扩展点 | 求值器是纯谓词，只读上下文；结果由 `ConditionResult` 承载，只有 `MATCH` 通过、判不了与出错原样穿透取反节点；上下文不足以判定由 `Evaluability` 前置声明 | `core/model/ConditionType` 把三者绑到一个可注册类型；运行时表达式求值器做树聚合 |
 | `EffectExecutor` / `EffectContext` / `EffectExecution` / `EffectPreparation` / `EffectResult` | 效果侧扩展点 | 执行器只做世界操作并返回真实回执；`EffectExecution.advance` 在预算内推进、返回 `null` 表示需续接；`EffectPreparation` 承载成功当刻固定的输入与跳过原因；回执区分完成量与已受理量 | `core/model/EffectType`；运行时的组派发、候选位置策略与结算记账 |
 | `ServerTickBudget` / `StepWorkCounter` | 预算与计价（并发敏感） | 时间上限与全局工作量上限同时生效；`begin` 只由调度器每 tick 调用；`exhausted()` 无副作用，`charge` / `chargeDrain` 记账并提交耗尽标记，`finish` 冻结耗时，`snapshot` 产出只读快照；计价窗口按服务器线程隔离、支持嵌套，由调度器在步骤前后开合，任务按真实完成的世界操作量上报；调度器取回执声明值与上报值的较大者计费，lane 配额与效果配额共用该结果 | 调度实现、每个 `ServerTask.step`、长循环效果执行器 |
-| `ServerTask` / `StepResult` / `StepOutcome` / `ServerTaskKind` / `CancelReason` / `TaskQueue` / `ScheduledTaskHandle` / `RunnableTask` | 调度扩展点与排期请求 | 单步必须有界；回执声明本步工作量（下界为 1）、状态与下次入队延迟；种类用于跨维度公平轮转、效果配额与分类统计；取消原因不得静默丢弃；排期只经 `scheduleAt(realmKey, task, dueTick)`，句柄可读任务、到期刻、分类与终态并精确取消（幂等）；`RunnableTask` 把无参动作适配成固定消耗一步的任务 | `core/runtime/scheduler`；`RuntimeObserver` 的排期包装 |
+| `ServerTask` / `StepResult` / `StepOutcome` / `ServerTaskKind` / `CancelReason` / `TaskQueue` / `ScheduledTaskHandle` / `RunnableTask` | 调度扩展点与排期请求 | 单步必须有界；回执声明本步工作量（下界为 1）、状态与下次入队延迟；种类用于跨维度公平轮转、效果配额与分类统计；取消原因不得静默丢弃；任务终态唯一，失败与取消各有回调：`onFailed` 默认幂等空实现（只记录、不改容器状态，内置任务按需覆写），调度器先把句柄置终态再回调，回调抛异常只记日志、不影响整轮与容器；排期只经 `scheduleAt(realmKey, task, dueTick)`，句柄可读任务、到期刻、分类与终态并精确取消（幂等）；`RunnableTask` 把无参动作适配成固定消耗一步的任务 | `core/runtime/scheduler`；`RuntimeObserver` 的排期包装 |
 | `Issue` / `IssueCollector` / `IssueSeverity` / `ParamChecks` / `RefChecks` | 问题模型与校验助手 | 收集器累积问题并可派生来源继承的子收集器（写入同时落入上游、按默认来源补齐）；严重级决定条目是否拒载；`RefChecks` 对未注册的非标签引用报错、对未绑定的标签数据只告警 | 模型层校验、加载层、装配层 |
 | `RuleDecoder` / `RuleDecodeBudget` / `RuleFields` | 解码入口与规模预算 | 加载层持有 `RuleDecoder`，实现由模型层提供；预算入口先做文本嵌套深度预检、再在进入递归解码前拦截超深/超规模条件树；字段名常量统一从这里取 | `core/load`、`core/model`、命令输出 |
-| `RuntimeObserver` | 观测接缝 | 未注入实现时 `NONE` 让判定返回安全默认值、上报为空操作、排期直接入队；装配期注入一次，运行期只读；重载应用阶段的上报点在规则索引替换后、维度回扫前调用，实现方只允许以抛出异常表达注入失败，调用方按重载失败收口 | `core/debug` 提供实现，平台在服务端装配阶段注入 |
+| `RuntimeObserver` | 观测接缝 | 未注入实现时 `NONE` 让判定返回安全默认值、上报为空操作、排期直接入队；装配期注入一次，运行期只读；重载应用阶段的上报点在规则索引替换后、维度回扫前调用，效果准备阶段的上报点在委托执行器 `prepare` 之前调用，两处实现方都只允许以抛出异常表达注入失败，调用方分别按重载失败、转化补偿单元收口 | `core/debug` 提供实现，平台在服务端装配阶段注入 |
 | `TaggedId` / `TagLookup` / `ClimateSampler` / `ChunkPresence` | 只读引用与查询 | 统一 `id` 与 `#tag` 引用形状；标签成员与气候采样由实现方按位置/维度缓存；`ChunkPresence` 只判定区块是否已加载 | 条件求值器、候选索引、运行时 |
 
 ## 4. 关键流程
@@ -136,7 +136,7 @@ flowchart LR
 - **新增条件类型**：参数 record 实现 `Condition`，实现 `ConditionEvaluator`；需要上下文门禁时覆盖类型定义上的 `evaluability`，判定区块是否就绪用 `ChunkPresence`。注册与冻结流程见 [type-system](type-system.md)。
 - **新增效果类型**：实现 `EffectExecutor.execute` 返回真实回执；需要跨 tick 推进时覆盖 `start` 返回自定义 `EffectExecution`，在 `advance` 内用 `ServerTickBudget` 与 `StepWorkCounter.report` 计价；异步分批产出用 `EffectResult.deferred` 受理、再用 `EffectContext.reportProgress` 收敛为完成量。需要成功当刻固定输入时成对覆盖 `prepare` 与 `start(..., preparation)`。
 - **新增调度任务种类**：在 `ServerTaskKind` 加常量，队列的公平轮转与分类统计按该枚举归类；新增取消路径在 `CancelReason` 加常量。简单的一次性动作直接用 `RunnableTask`。调度实现与配额见 [conversion-runtime](conversion-runtime.md)。
-- **新增观测能力**：实现 `RuntimeObserver` 的对应默认方法，装配期注入实现；需要包裹排期时覆盖 `schedule` 重载。新增注入点只能落在既有上报时机（判定、排期与取消回调、重载应用阶段），生产实现保持空操作。调试侧实现见 [authoring](authoring.md)。
+- **新增观测能力**：实现 `RuntimeObserver` 的对应默认方法，装配期注入实现；需要包裹排期时覆盖 `schedule` 重载。新增注入点只能落在既有上报时机（判定、排期与取消回调、效果准备、重载应用阶段），生产实现保持空操作。调试侧实现见 [authoring](authoring.md)。
 - **新增问题级别或格式**：问题经 `IssueCollector` 写入，严重级取 `IssueSeverity`；字段路径由调用方按 JSON 形状拼接（`ParamChecks.child` / `ParamChecks.index`）。语义与文案约定见 [errors](../api/errors.md)。
 
 ### 约束

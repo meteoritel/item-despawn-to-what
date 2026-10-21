@@ -5,6 +5,7 @@ import com.meteorite.itemdespawntowhat.core.api.scheduler.ScheduledTaskHandle;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.TaskQueue;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -136,6 +137,16 @@ public interface RuntimeObserver {
      * @param server 当前服务端
      */
     default void reloadApplying(MinecraftServer server) {
+    }
+
+    /**
+     * 上报「即将进入某个效果类型的准备阶段」。默认空实现；实现方只允许以抛出异常表达注入的准备失败，
+     * 不得改变调用方对准备结果的处理。调用方在委托效果执行器准备之前调用，异常按转化补偿单元统一收口。
+     *
+     * @param server 当前服务端
+     * @param effectType 正在准备的效果类型标识
+     */
+    default void effectPreparing(MinecraftServer server, ResourceLocation effectType) {
     }
 
     /**

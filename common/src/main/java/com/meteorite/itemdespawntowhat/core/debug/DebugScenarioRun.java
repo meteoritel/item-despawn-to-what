@@ -348,7 +348,8 @@ final class DebugScenarioRun {
         counters.forEach(events::addProperty);
         for (String key : List.of("TRACKED", "AGE_NOT_READY", "CONDITION_FALSE", "CONDITION_TRUE", "RETRY", "CONVERT",
                 "OUTPUT_ITEMS", "NATURAL_EXPIRY_DEFERRED", "EXCLUDED", "ERROR", "DUPLICATE_CONVERSION", "UNEXPECTED_OUTPUT",
-                "FAULT_ARMED", "FAULT_STEP_EXCEPTION", "FAULT_CANCEL_EXCEPTION", "FAULT_RELOAD_FAILURE", "FAULT_UNUSED")) {
+                "FAULT_ARMED", "FAULT_STEP_EXCEPTION", "FAULT_CANCEL_EXCEPTION", "FAULT_PREPARE_EXCEPTION",
+                "FAULT_RELOAD_FAILURE", "FAULT_UNUSED", "CHECK_TASK_FAILED", "CONVERSION_PREPARE_FAILED")) {
             if (!events.has(key)) { events.addProperty(key, 0); }
         }
         data.add("actual_events", events);

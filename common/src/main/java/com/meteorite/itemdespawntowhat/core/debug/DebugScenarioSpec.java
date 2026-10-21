@@ -22,7 +22,7 @@ record DebugScenarioSpec(String key, int sources, int stackSize, int seconds, in
     enum ActionType { MOVE_SOURCE, RELOAD }
 
     /** 开发期可注入的受控故障；只在调试包内实现，生产代码不引用。 */
-    enum FaultType { STEP_EXCEPTION, CANCEL_EXCEPTION, RELOAD_FAILURE }
+    enum FaultType { STEP_EXCEPTION, CANCEL_EXCEPTION, PREPARE_EXCEPTION, RELOAD_FAILURE }
 
     /**
      * 故障声明：按任务分类与追踪名筛选注入目标。

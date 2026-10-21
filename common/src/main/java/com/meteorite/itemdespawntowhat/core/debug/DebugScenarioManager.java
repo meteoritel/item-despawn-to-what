@@ -13,6 +13,7 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
@@ -202,6 +203,13 @@ public final class DebugScenarioManager {
         if (!DebugMode.ENABLED) { return; }
         DebugScenarioRun run = ACTIVE.get(server);
         if (run != null) { run.faults.reload(); }
+    }
+
+    // 效果准备阶段观测点：场景声明的准备故障在此抛异常，由转化补偿单元按失败收口
+    public static void effectPreparing(MinecraftServer server, ResourceLocation effectType) {
+        if (!DebugMode.ENABLED) { return; }
+        DebugScenarioRun run = ACTIVE.get(server);
+        if (run != null) { run.faults.prepare(effectType); }
     }
 
     // 产物加入前隔离它的规则和合并行为，避免测试产物触发用户的其他规则。

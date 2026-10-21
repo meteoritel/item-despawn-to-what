@@ -6,6 +6,7 @@ import com.meteorite.itemdespawntowhat.core.api.scheduler.ScheduledTaskHandle;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.TaskQueue;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -70,6 +71,11 @@ public final class DebugRuntimeObserver implements RuntimeObserver {
     @Override
     public void reloadApplying(MinecraftServer server) {
         DebugScenarioManager.reloadApplying(server);
+    }
+
+    @Override
+    public void effectPreparing(MinecraftServer server, ResourceLocation effectType) {
+        DebugScenarioManager.effectPreparing(server, effectType);
     }
 
     @Override
