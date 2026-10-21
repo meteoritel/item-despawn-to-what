@@ -7,7 +7,8 @@ import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
  * 配置只在构造调度器时读取一次，改动需要重载或重启服务器。
  */
 public record SchedulerConfig(long budgetNanos, int maxWorkUnitsPerTick, int effectsWorkUnitsPerTick,
-                             int checkSpreadWindowTicks, int dispatchBatchSize, int positionSearchChecksPerTick) {
+                             int checkSpreadWindowTicks, int dispatchBatchSize, int positionSearchChecksPerTick,
+                             int cancelsPerStep) {
 
     // 紧凑构造器做下界保护，避免非法配置造成零预算或零搬运。
     public SchedulerConfig {
@@ -17,6 +18,7 @@ public record SchedulerConfig(long budgetNanos, int maxWorkUnitsPerTick, int eff
         checkSpreadWindowTicks = Math.max(1, checkSpreadWindowTicks);
         dispatchBatchSize = Math.max(1, dispatchBatchSize);
         positionSearchChecksPerTick = Math.max(1, positionSearchChecksPerTick);
+        cancelsPerStep = Math.max(1, cancelsPerStep);
     }
 
     // 从模组级服务端配置换算；工作量上限缺省回退到 max_checks_per_tick。
@@ -27,7 +29,8 @@ public record SchedulerConfig(long budgetNanos, int maxWorkUnitsPerTick, int eff
                 config.effectsWorkUnitsPerTick(),
                 config.checkSpreadWindowTicks(),
                 config.dispatchBatchSize(),
-                config.positionSearchChecksPerTick());
+                config.positionSearchChecksPerTick(),
+                config.cancelsPerStep());
     }
 
     public long budgetMicros() {

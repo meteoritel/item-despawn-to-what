@@ -172,6 +172,7 @@ flowchart TB
 - 故障注入是场景声明的一部分：`faults` 条目按故障类型、任务分类、追踪名或效果类型选中真实链路中的任务，在步骤执行、取消回调、效果准备或规则重载应用阶段抛出受控异常。故障只在调试包实现并挂在运行时观测接缝上，未启用调试时生产路径不加载、不分支、不引用。
 - 故障事件进场景日志：`FAULT_ARMED` 记录生效的声明，`FAULT_STEP_EXCEPTION` / `FAULT_CANCEL_EXCEPTION` / `FAULT_PREPARE_EXCEPTION` / `FAULT_RELOAD_FAILURE` 记录每次注入，收尾时未命中的声明记 `FAULT_UNUSED`；预期里用 `events/<事件名>` 断言事件次数，用 `faults_declared` / `faults_injected` / `faults_remaining` 断言注入账目。
 - 场景指标覆盖回扫一致性：`tracked_source_items` 是本轮源中仍被运行时追踪的数量，`rescan_pending` 表示结束时是否仍有分步回扫在推进，`rescan_steps` 是最近一轮回扫已执行的分步数；配合既有的 `scheduler_max_step_work_units` 等预算指标，可断言回扫按有界步推进、让出后继续，且最终追踪数量与实体数量一致。
+- 场景指标覆盖取消清理：`cancelled_rule_reload` / `cancelled_dimension_unload` / `cancelled_server_stop` 是按原因分类的取消计数，`scheduler_cancelled_total` 是总数，`scheduler_max_cancelled_in_tick` 是单 tick 取消峰值（与 `cancels_per_step` 对照），`scheduler_pending` 表示结束时调度器仍有待推进任务；`run/cancel_budget` 据此断言重载取消逐槽推进、单 tick 取消有上限，且回扫重建后全部源按规则转化、无物品丢失。
 - 性能场景默认只允许普通源准备；重载风暴类场景额外允许 `reload` 动作，用来验证重载期间的回扫不会退化成单 tick 全量遍历。其它动作、故障注入与催化剂夹具仍会被拒绝，避免污染负载口径。
 
 ## 5. 扩展点与约束

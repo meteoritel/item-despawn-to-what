@@ -75,6 +75,7 @@ flowchart LR
 | `SettlementRecovery` | 补偿任务 | 只交付记录里的待交付库存，交付成功后才扣减并落账，完成/失败/取消都幂等关闭 | `SettlementLedger`、`ServerScheduler` |
 | `EffectTask` | 并发敏感 | 单个效果的执行包装：一次求值、推进执行、回执入账；终态先摘引用再回执 | `ConversionRuntime.startEffect`、`EffectResult` |
 | `ServerScheduler` / `ServerTickBudget` | 共享预算 | 每服务器一份预算，按维度 realm 与任务种类 lane 公平轮转，按真实世界操作量计费 | 全部任务类型 |
+| `RealmCleanupTask` | 续接清理任务 | 摘除 realm 后把收集到的句柄逐槽取消：每步按 `cancels_per_step` 与单 tick 额度取用，取消回调异常隔离；停服时就地排空 | `ServerScheduler`、`ScheduledTask` |
 | `RuleIndex` / `RoundRobinCursors` / `CandidateStructureVersions` | 索引与游标 | 候选按优先级与条件复杂度排序；跨结算共享轮转游标；候选结构版本用于判定失效 | `ConversionRuntime`、`ConversionSettlement` |
 | `CatalystReservations` | 并发敏感 | 运行期催化剂预留表，按结算 id 预留、支付和释放；不落盘，停服清空 | `ConversionSettlement` |
 | `DropStateStore` / `DropState` | 实体状态 | 保护与冷却、永久禁转的实体层存取；平台差异经 `IPlatformHelper` 承载 | 效果执行侧授予、平台伤害处理、门禁读取 |
@@ -184,8 +185,8 @@ flowchart TB
 - 诊断面：`SchedulerStats` 给出最近一 tick 与历史的最大单步计费工作量、按种类的累计工作单位，`ServerTickBudgetSnapshot` 给出本刻工作单位用量与耗尽原因，debug 场景指标可由断言器读取，用于核对预算消耗与真实世界操作量同向变化。
 - 单个任务抛错只把该任务判为失败，不中断整轮；`YIELD`/`RETRY` 走重排并带最小延迟。
 - 回扫续接任务与其它任务共用同一份预算：单步实体上限由 `rescan_entities_per_step` 约束，预算耗尽即让出；完成标记与失败重排都归一为单一路径，不产生并行推进同一游标的副本任务。
-- 维度卸载时把该维度 lane 上的任务逐项取消，取消续接任务自身也跑在预算里；停服整体清空。
-- 取消回调异常按任务隔离：批量取消先收集待取消句柄、摘除 realm 与 lane 容器，再逐个取消；单个回调抛异常只记日志，不影响同批其它任务。停服、维度卸载与规则重载共用这一实现，取消计数按 `CancelReason` 分类累计。
+- 取消统一走逐槽清理：规则重载摘除全部维度 realm、维度卸载摘除该维度 realm，都只把待取消句柄收集出来，交给调度器自有系统 realm 上的清理任务按 `cancels_per_step` 每步取消；单 tick 取消量同样受该配置约束，取消回调因此摊进后续 tick 的共享预算。停服没有下一 tick，同一实现就地排空，保证取消回调在最终存档前完成。
+- 取消回调异常按任务隔离：`ScheduledTask.cancel` 捕获回调异常只记日志，清理任务继续取消同批其它句柄；取消计数按 `CancelReason` 分类累计，清理完成时输出带原因、取消数、维度数与步数的日志，停服、维度卸载与规则重载因此可从日志与统计上区分。`SchedulerStats` 的 `lastCancelledInTick` / `maxCancelledInTick` 给出单 tick 取消样本。
 - 预算与批量参数在构造调度器时从 `ServerConfig` 读取一次，改动需要重载或重启服务器。
 
 ### 4.6 检查失败与追踪恢复

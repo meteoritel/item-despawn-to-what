@@ -26,6 +26,7 @@
   "run/prepare_failure",
   "run/prepare_failure_expiry",
   "run/scan_cursor",
+  "run/cancel_budget",
   "bench/baseline",
   "bench/convert",
   "bench/retry",
