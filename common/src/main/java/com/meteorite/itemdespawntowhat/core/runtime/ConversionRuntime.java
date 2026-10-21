@@ -51,6 +51,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -656,27 +657,64 @@ public final class ConversionRuntime {
         }
         Rule chosen = select(level, item, candidates, tracked.expiryPending, kind);
         if (chosen == null) {
-            tracked.failureCount++;
+            // 退避资格只取本次触发方式参与且源量够一组的候选：年龄门槛与 select 一致，只在自然触发且非到期补算时生效
+            boolean ageGated = kind == TriggerKind.NATURAL && !tracked.expiryPending;
+            List<Rule> relevant = backoffCandidates(candidates, item, kind);
+            boolean eligible = !ageGated && !relevant.isEmpty();
+            long nextAge = Long.MAX_VALUE;
+            for (Rule rule : relevant) {
+                if (!ageGated) { break; }
+                long due = dueAge(level, item, rule);
+                if (item.getAge() >= due) { eligible = true; }
+                else { nextAge = Math.min(nextAge, due - item.getAge()); }
+            }
+            // 只有相关规则在本刻具备命中资格才算一次失败：纯环境规则与源量不足一组的规则命中不了，不该推高退避档
+            if (eligible) { tracked.failureCount++; }
             if (tracked.expiryPending || pastExpiry(level, item)) {
                 releaseTracking(state, uuid, tracked, CancelReason.TRACKING_RELEASED);
                 if (tracked.expiryPending) { item.discard(); }
-            } else {
-                int delay = config.backoffTicks(tracked.failureCount);
-                long nextAge = Long.MAX_VALUE;
-                boolean eligible = false;
-                for (Rule rule : candidates) {
-                    long due = dueAge(level, item, rule);
-                    if (item.getAge() >= due) { eligible = true; }
-                    else { nextAge = Math.min(nextAge, due - item.getAge()); }
-                }
-                if (!eligible) { tracked.failureCount--; delay = (int) Math.min(nextAge, Integer.MAX_VALUE); }
-                else if (nextAge != Long.MAX_VALUE) { delay = (int) Math.min(delay, nextAge); }
-                reschedule(level, item, tracked, Math.max(1, delay));
+                return;
             }
+            if (relevant.isEmpty()) {
+                // 区分「本触发方式没有规则」与「有规则但源量暂时不足一组」：前者再检查也不会转化，释放追踪；
+                // 后者数量可能随合并增长，保留追踪并按检查间隔等待，且不累加失败计数
+                boolean kindCovered = false;
+                for (Rule rule : candidates) {
+                    if (rule.effectiveTriggers().contains(kind)) { kindCovered = true; break; }
+                }
+                if (!kindCovered) {
+                    // 环境同步入口没有对应规则时保留既有自然排期，不改动句柄
+                    if (kind == TriggerKind.NATURAL) { releaseTracking(state, uuid, tracked, CancelReason.TRACKING_RELEASED); }
+                } else if (kind == TriggerKind.NATURAL) {
+                    reschedule(level, item, tracked, Math.max(1, config.checkIntervalTicks()));
+                }
+                return;
+            }
+            int delay = eligible ? config.backoffTicks(tracked.failureCount) : (int) Math.min(nextAge, Integer.MAX_VALUE);
+            if (eligible && nextAge != Long.MAX_VALUE) { delay = (int) Math.min(delay, nextAge); }
+            reschedule(level, item, tracked, Math.max(1, delay));
             return;
         }
         performConversion(level, state, item, tracked, chosen);
         if (tracked.expiryPending && !item.isRemoved()) { item.discard(); }
+    }
+
+    // 退避资格子集：本次触发方式参与且源数量足够一组。
+    // 不参与本次触发方式的规则（如纯环境规则之于自然检查）和源量不足一组的规则在本刻都不可能命中，
+    // 让它们参与计数会把失败次数与重试间隔推到与本次判定无关的档位。
+    private List<Rule> backoffCandidates(List<Rule> candidates, ItemEntity item, TriggerKind kind) {
+        ItemStack source = item.getItem();
+        List<Rule> relevant = new ArrayList<>(candidates.size());
+        for (Rule rule : candidates) {
+            if (!rule.effectiveTriggers().contains(kind)) {
+                continue;
+            }
+            if (source.getCount() < types.perRoundSourceConsumption(rule, source)) {
+                continue;
+            }
+            relevant.add(rule);
+        }
+        return relevant;
     }
 
     // 是否已到自然消失前一刻（到点后不再重试，交给原版机制）

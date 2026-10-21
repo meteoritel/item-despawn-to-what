@@ -37,6 +37,7 @@
   "itemdespawntowhat.command.debug.scene.help.pipeline": "One-command stage testing: /idtw debug pipeline (default 5-second cooldown); status/stop to inspect or cancel.",
   "itemdespawntowhat.command.debug.scene.description.run.convert": "Basic conversion: 1 paper produces 1 prismarine shard.",
   "itemdespawntowhat.command.debug.scene.description.run.retry": "Fail the height condition and retry, then move the source up 3 blocks: produce 1 shard.",
+  "itemdespawntowhat.command.debug.scene.description.run.backoff_isolation": "Backoff isolation: purely environmental and under-count rules do not feed the backoff; the natural rule is only waited for and the failure count stays 0.",
   "itemdespawntowhat.command.debug.scene.description.run.delay": "Convert 1 paper and produce 1 prismarine shard after a 100-tick delay.",
   "itemdespawntowhat.command.debug.scene.description.run.expiry": "Set source age to one tick before platform lifespan: convert at natural expiry.",
   "itemdespawntowhat.command.debug.scene.description.run.stack": "A stack of 16 paper: one submission, 16 groups, and 16 shards.",
