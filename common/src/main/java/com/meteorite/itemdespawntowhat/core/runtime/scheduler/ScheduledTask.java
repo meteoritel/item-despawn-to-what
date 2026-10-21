@@ -89,10 +89,6 @@ public final class ScheduledTask implements ScheduledTaskHandle {
         this.owner = owner;
     }
 
-    void detach() {
-        this.owner = null;
-    }
-
     // 让出或重试后按新的到期 tick 重新入队。
     void requeue(long dueTick) {
         this.dueTick = dueTick;

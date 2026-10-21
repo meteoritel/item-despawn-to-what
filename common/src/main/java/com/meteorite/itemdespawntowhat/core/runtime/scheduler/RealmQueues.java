@@ -88,14 +88,16 @@ final class RealmQueues {
         scheduler.countCancelled(reason);
     }
 
-    // 批量取消本 realm 的全部任务：先摘除 lane 索引，再逐条清空，单条 lane 的容器清理由其自身 finally 兜底。
-    // 取消回调可能重新入队，先摘索引可让新任务进入新 lane，不会被本批清理的容器静默丢弃。
-    void cancelAll(CancelReason reason) {
-        List<TaskLane> clearing = new ArrayList<>(lanes.values());
+    // 收集本 realm 的全部待取消句柄并清空容器：先摘除 lane 索引，取消回调里重新入队的任务才会落在新 realm，
+    // 不会被本批清理的容器误删；句柄逐个交给清理任务跨 tick 取消，取消量受调度配置约束。
+    List<ScheduledTask> collectHandles() {
+        List<TaskLane> collected = new ArrayList<>(lanes.values());
         lanes.clear();
-        for (TaskLane lane : clearing) {
-            lane.clear(reason);
+        List<ScheduledTask> handles = new ArrayList<>();
+        for (TaskLane lane : collected) {
+            lane.drainInto(handles);
         }
+        return handles;
     }
 
     void beginTick() {
@@ -103,15 +105,6 @@ final class RealmQueues {
             lane.beginTick();
         }
     }
-
-    boolean cancelOne(CancelReason reason) {
-        for (TaskLane lane : lanes.values()) {
-            if (lane.cancelOne(reason)) { return true; }
-        }
-        return false;
-    }
-
-    void detach() { lanes.values().forEach(TaskLane::detach); }
 
     void finishTick() {
         for (TaskLane lane : lanes.values()) {

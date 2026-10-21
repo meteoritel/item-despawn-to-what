@@ -42,7 +42,8 @@ public record ServerConfig(
         int debugScenarioPrepareBudgetUs,
         int maxPlaceBlockRadius,
         NearbyProductLimits nearbyProducts,
-        int rescanEntitiesPerStep
+        int rescanEntitiesPerStep,
+        int cancelsPerStep
 ) {
 
     private static final Logger LOGGER = LogManager.getLogger();
@@ -79,6 +80,10 @@ public record ServerConfig(
 
     // 回扫每步实体上限：与 position_search_checks_per_tick 同量级，万级物品约数十秒扫完，单 tick 仍受共享预算约束
     public static final int DEFAULT_RESCAN_ENTITIES_PER_STEP = 16;
+
+    // 清理任务每步取消上限：取消回调只同步落账、不做世界写入，单步成本很小；默认每步一个可让单 tick 尖峰最小，
+    // 大维度卸载时的取消分散到多个 tick，代价只是取消完成稍晚（取消原因与计数仍逐条可观测）
+    public static final int DEFAULT_CANCELS_PER_STEP = 1;
 
     // 默认配置，也是缺失字段时的兜底；max_work_units_per_tick 缺省为空表示回退到 max_checks_per_tick
     public static final ServerConfig DEFAULT = new ServerConfig(
@@ -144,13 +149,13 @@ public record ServerConfig(
     // 便捷构造：不含放置半径上限与邻近阈值，分别取默认上限与 NearbyProductLimits.DEFAULT；供 BASE_CODEC 的 16 字段组使用
     @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
     public ServerConfig(int checkIntervalTicks, int backoffMaxTicks, int maxChecksPerTick, String overlayDirectory, int fabricLifespanFallbackTicks, boolean debugLogging, int serverBudgetUs, Optional<Integer> maxWorkUnitsPerTick, int effectsWorkUnitsPerTick, int checkSpreadWindowTicks, int dispatchBatchSize, int newProductProtectionSeconds, int conversionCooldownSeconds, int positionSearchChecksPerTick, int debugScenarioPrepareBatchSize, int debugScenarioPrepareBudgetUs) {
-        this(checkIntervalTicks, backoffMaxTicks, maxChecksPerTick, overlayDirectory, fabricLifespanFallbackTicks, debugLogging, serverBudgetUs, maxWorkUnitsPerTick, effectsWorkUnitsPerTick, checkSpreadWindowTicks, dispatchBatchSize, newProductProtectionSeconds, conversionCooldownSeconds, positionSearchChecksPerTick, debugScenarioPrepareBatchSize, debugScenarioPrepareBudgetUs, DEFAULT_MAX_PLACE_BLOCK_RADIUS, NearbyProductLimits.DEFAULT, DEFAULT_RESCAN_ENTITIES_PER_STEP);
+        this(checkIntervalTicks, backoffMaxTicks, maxChecksPerTick, overlayDirectory, fabricLifespanFallbackTicks, debugLogging, serverBudgetUs, maxWorkUnitsPerTick, effectsWorkUnitsPerTick, checkSpreadWindowTicks, dispatchBatchSize, newProductProtectionSeconds, conversionCooldownSeconds, positionSearchChecksPerTick, debugScenarioPrepareBatchSize, debugScenarioPrepareBudgetUs, DEFAULT_MAX_PLACE_BLOCK_RADIUS, NearbyProductLimits.DEFAULT, DEFAULT_RESCAN_ENTITIES_PER_STEP, DEFAULT_CANCELS_PER_STEP);
     }
 
     // 便捷构造：不含邻近阈值参数，统一取 NearbyProductLimits.DEFAULT
     @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
     public ServerConfig(int checkIntervalTicks, int backoffMaxTicks, int maxChecksPerTick, String overlayDirectory, int fabricLifespanFallbackTicks, boolean debugLogging, int serverBudgetUs, Optional<Integer> maxWorkUnitsPerTick, int effectsWorkUnitsPerTick, int checkSpreadWindowTicks, int dispatchBatchSize, int newProductProtectionSeconds, int conversionCooldownSeconds, int positionSearchChecksPerTick, int debugScenarioPrepareBatchSize, int debugScenarioPrepareBudgetUs, int maxPlaceBlockRadius) {
-        this(checkIntervalTicks, backoffMaxTicks, maxChecksPerTick, overlayDirectory, fabricLifespanFallbackTicks, debugLogging, serverBudgetUs, maxWorkUnitsPerTick, effectsWorkUnitsPerTick, checkSpreadWindowTicks, dispatchBatchSize, newProductProtectionSeconds, conversionCooldownSeconds, positionSearchChecksPerTick, debugScenarioPrepareBatchSize, debugScenarioPrepareBudgetUs, maxPlaceBlockRadius, NearbyProductLimits.DEFAULT, DEFAULT_RESCAN_ENTITIES_PER_STEP);
+        this(checkIntervalTicks, backoffMaxTicks, maxChecksPerTick, overlayDirectory, fabricLifespanFallbackTicks, debugLogging, serverBudgetUs, maxWorkUnitsPerTick, effectsWorkUnitsPerTick, checkSpreadWindowTicks, dispatchBatchSize, newProductProtectionSeconds, conversionCooldownSeconds, positionSearchChecksPerTick, debugScenarioPrepareBatchSize, debugScenarioPrepareBudgetUs, maxPlaceBlockRadius, NearbyProductLimits.DEFAULT, DEFAULT_RESCAN_ENTITIES_PER_STEP, DEFAULT_CANCELS_PER_STEP);
     }
 
     // 超出 16 字段的键放在本层：RecordCodecBuilder 单组最多 16 个字段，BASE_CODEC 已是 16 项满额
@@ -163,8 +168,11 @@ public record ServerConfig(
                     .forGetter(ServerConfig::nearbyProducts),
             // 回扫每步实体上限：把整维回扫摊到多个 tick，避免单 tick 处理上万实体
             Codec.intRange(1, 4096).optionalFieldOf("rescan_entities_per_step", DEFAULT_RESCAN_ENTITIES_PER_STEP)
-                    .forGetter(ServerConfig::rescanEntitiesPerStep)
-    ).apply(instance, (base, maxPlaceBlockRadius, limits, rescanEntitiesPerStep) -> new ServerConfig(base.checkIntervalTicks(), base.backoffMaxTicks(), base.maxChecksPerTick(), base.overlayDirectory(), base.fabricLifespanFallbackTicks(), base.debugLogging(), base.serverBudgetUs(), base.maxWorkUnitsPerTick(), base.effectsWorkUnitsPerTick(), base.checkSpreadWindowTicks(), base.dispatchBatchSize(), base.newProductProtectionSeconds(), base.conversionCooldownSeconds(), base.positionSearchChecksPerTick(), base.debugScenarioPrepareBatchSize(), base.debugScenarioPrepareBudgetUs(), maxPlaceBlockRadius, limits, rescanEntitiesPerStep)));
+                    .forGetter(ServerConfig::rescanEntitiesPerStep),
+            // 清理任务每步取消上限：把停服前无法延迟的批量取消摊到多个 tick，避免单 tick 取消尖峰
+            Codec.intRange(1, 4096).optionalFieldOf("cancels_per_step", DEFAULT_CANCELS_PER_STEP)
+                    .forGetter(ServerConfig::cancelsPerStep)
+    ).apply(instance, (base, maxPlaceBlockRadius, limits, rescanEntitiesPerStep, cancelsPerStep) -> new ServerConfig(base.checkIntervalTicks(), base.backoffMaxTicks(), base.maxChecksPerTick(), base.overlayDirectory(), base.fabricLifespanFallbackTicks(), base.debugLogging(), base.serverBudgetUs(), base.maxWorkUnitsPerTick(), base.effectsWorkUnitsPerTick(), base.checkSpreadWindowTicks(), base.dispatchBatchSize(), base.newProductProtectionSeconds(), base.conversionCooldownSeconds(), base.positionSearchChecksPerTick(), base.debugScenarioPrepareBatchSize(), base.debugScenarioPrepareBudgetUs(), maxPlaceBlockRadius, limits, rescanEntitiesPerStep, cancelsPerStep)));
 
     /**
      * 由本配置换算出的运行期上限：规则加载与保存校验据此拒载超出上限的规则。

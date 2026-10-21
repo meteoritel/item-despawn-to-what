@@ -173,10 +173,9 @@ public final class ConversionRuntime {
             state.tags = null;
             state.climate = null;
         }
-        // 按维度统一带原因取消：检查队列与效果队列一并清空，避免跨 reload 残留
-        for (ResourceKey<Level> key : levels.keySet()) {
-            scheduler.cancelRealm(key, CancelReason.RULE_RELOAD);
-        }
+        // 先摘除全部维度 realm 再交给清理任务逐槽取消：本 tick 的轮转立即失效，
+        // 取消量与取消回调都摊进后续 tick 的共享预算，避免重载瞬间同步清空所有维度队列
+        scheduler.scheduleMaintenance(scheduler.detachAll(CancelReason.RULE_RELOAD), 0);
         if (config.debugLogging()) {
             LOGGER.info("规则索引已重建：{} 条可运行规则", index.ordered().size());
         }
@@ -489,8 +488,8 @@ public final class ConversionRuntime {
         state.tracked.clear();
         state.tags = null;
         state.climate = null;
-        // 先登记新一轮 token 再取消旧任务：旧任务 onCancelled 时 token 已不匹配，不会清掉新完成标记。
-        scheduler.cancelRealm(level.dimension(), CancelReason.RULE_RELOAD);
+        // 旧队列已由入口摘除：重载走 replaceRules/applySavedIndex，维度加载走 clear(level) 的卸载清理；
+        // 这里只登记新一轮 token 与新回扫任务，不再同步取消（取消已交给逐槽清理任务）。
         // 维度加载/重扫时补扫该维度的待返还记录：只交付库存，不恢复既有效果队列（与规则内容无关）
         recoverLevel(level, SettlementLedger.get(level));
         scheduler.schedule(level.dimension(), new RescanTask(level, state, token, worldScan), 0);
@@ -596,7 +595,8 @@ public final class ConversionRuntime {
         if (removed != null) {
             removed.tracked.clear();
         }
-        scheduler.releaseRealm(level.dimension(), CancelReason.DIMENSION_UNLOAD);
+        // 维度卸载：摘除该维度 realm，句柄交给清理任务逐槽取消；待返还库存由恢复任务补交
+        scheduler.scheduleMaintenance(scheduler.detachRealm(level.dimension(), CancelReason.DIMENSION_UNLOAD), 0);
     }
 
     // 预留表访问入口：只返回引用；写操作只发生在结算任务与停服兜底里
@@ -610,7 +610,8 @@ public final class ConversionRuntime {
             state.tracked.clear();
         }
         levels.clear();
-        scheduler.clear(CancelReason.SERVER_STOP);
+        // 停服没有下一 tick：就地排空全部句柄，取消回调必须在最终存档前完成
+        scheduler.drainAll(CancelReason.SERVER_STOP);
         // 预留只在运行期存在：停服清空即可，不产生任何世界写入或件数返还
         catalystReservations.clear();
         activeRecoveries.clear();

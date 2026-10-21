@@ -328,6 +328,9 @@ final class DebugPerformanceWindow {
         data.addProperty("max_drained_in_tick", now.maxDrainedInTick());
         data.addProperty("last_max_step_work_units", now.lastMaxStepWorkUnits());
         data.addProperty("max_step_work_units", now.maxStepWorkUnits());
+        // 取消清理的单 tick 样本：与 cancels_per_step 对照，核实取消按有界步推进而非一次清空
+        data.addProperty("last_cancelled_in_tick", now.lastCancelledInTick());
+        data.addProperty("max_cancelled_in_tick", now.maxCancelledInTick());
         JsonObject cancelledByReason = new JsonObject();
         for (CancelReason reason : CancelReason.values()) {
             long current = now.cancelledByReason().getOrDefault(reason, 0L);
