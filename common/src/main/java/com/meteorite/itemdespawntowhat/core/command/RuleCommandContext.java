@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.command;
 
 import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
-import com.meteorite.itemdespawntowhat.core.load.RuleLoadResult;
+import com.meteorite.itemdespawntowhat.core.load.RuleReloadOutcome;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerContext;
 import com.meteorite.itemdespawntowhat.core.runtime.ConversionRuntime;
@@ -33,6 +33,6 @@ public interface RuleCommandContext {
     // 当前活跃编辑会话数
     int activeSessionCount();
 
-    // 重新加载三层规则并重建索引、回扫全部已加载维度；失败时返回 null
-    @Nullable RuleLoadResult<Rule> reloadRules(MinecraftServer server);
+    // 重新加载三层规则并重建索引、回扫全部已加载维度；运行时未就绪时返回 null，重载失败以回执携带结构化问题
+    @Nullable RuleReloadOutcome reloadRules(MinecraftServer server);
 }

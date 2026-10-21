@@ -160,13 +160,47 @@ public final class ConversionRuntime {
 
     // ========== 规则生命周期 ==========
 
-    /** 规则热替换：重建索引并清空全部追踪状态（由随后的 rescan 重建） */
+    /** 规则热替换：重建索引并清空全部追踪状态（由随后的 rescan 重建）；启动等没有并发旧索引的链路使用 */
     public void replaceRules(List<LoadedRule<Rule>> rules, IssueCollector issues) {
+        // 启动装配时运行时尚未对外发布，不需要保护旧索引；候选摘要留给首次结算按需编码
+        publish(RuleIndex.build(rules, issues), Map.of());
+    }
+
+    /**
+     * 预构建规则发布物：只读规则与注册表视图，构建新索引与候选结构摘要，
+     * 不触碰在跑的索引、追踪表与任务队列，因此构建失败时旧规则仍完整可用。
+     *
+     * @param rules 已加载规则
+     * @param issues 问题收集器：构建期问题记录在此，不改动在跑索引
+     * @param registries 当前注册表视图，用于编码候选结构摘要
+     * @return 尚未发布的索引与候选摘要
+     */
+    public PreparedRules prepareRules(List<LoadedRule<Rule>> rules, IssueCollector issues, HolderLookup.Provider registries) {
+        RuleIndex built = RuleIndex.build(rules, issues);
+        List<Rule> runnable = new ArrayList<>(built.ordered().size());
+        for (LoadedRule<Rule> entry : built.ordered()) {
+            runnable.add(entry.value());
+        }
+        return new PreparedRules(built, candidateStructureVersions.prepare(runnable, registries));
+    }
+
+    /**
+     * 原子发布预构建物：单次调用换入索引与候选结构摘要，再清空各维度旧追踪并取消旧队列。
+     * 发布只做内存容器替换，不在方法内构建索引；换入后由调用方逐维排队回扫重建追踪。
+     *
+     * @param prepared 已构建完成的发布物
+     */
+    public void publishRules(PreparedRules prepared) {
+        publish(prepared.index, prepared.candidateVersions);
+    }
+
+    // 换入的唯一实现：索引与候选摘要一次性替换，随后统一失效各维度的追踪与缓存
+    private void publish(RuleIndex preparedIndex, Map<Rule, Integer> candidateVersions) {
         ruleGeneration++;
         savedRescanPending = false;
-        this.index = RuleIndex.build(rules, issues);
-        // 候选结构摘要与规则内容绑定：规则整体替换即失效
-        candidateStructureVersions.clear();
+        this.index = preparedIndex;
+        // 候选结构摘要与规则内容绑定：换索引即换缓存，游标不会复用旧结构判定
+        candidateStructureVersions.install(candidateVersions);
         for (LevelState state : levels.values()) {
             state.tracked.clear();
             // 标签与气候缓存必须随 reload 失效，否则条件求值会读到重新加载前的标签成员
@@ -181,7 +215,21 @@ public final class ConversionRuntime {
         }
     }
 
-    /** 当前生效的规则索引（replaceRules 时整体替换） */
+    /**
+     * 预构建的规则发布物：新索引 + 每条可运行规则的候选结构摘要。
+     * 对调用方不透明：只能在构建它的运行时上发布，发布时一次换入、不重新构建。
+     */
+    public static final class PreparedRules {
+        private final RuleIndex index;
+        private final Map<Rule, Integer> candidateVersions;
+
+        private PreparedRules(RuleIndex index, Map<Rule, Integer> candidateVersions) {
+            this.index = index;
+            this.candidateVersions = candidateVersions;
+        }
+    }
+
+    /** 当前生效的规则索引（replaceRules / publishRules 时整体替换） */
     public RuleIndex index() {
         return index;
     }

@@ -20,7 +20,7 @@
   "run/round_robin",
   "run/source_cost",
   "run/fault_step",
-  "run/fault_reload",
+  "run/reload_failure",
   "run/fault_cancel",
   "run/cancel_failure",
   "run/prepare_failure",

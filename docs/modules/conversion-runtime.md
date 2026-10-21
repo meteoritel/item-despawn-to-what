@@ -34,7 +34,7 @@ authority: common/core/runtime、common/core/state
 
 ### 对外入口
 
-- 追踪生命周期：`ConversionRuntime.onItemAdded`、`rescan(level)`、`rebuild(level)`、`replaceRules(...)`、`applySavedIndex(server, prepared)`、`clear(level)`、`shutdown()`。
+- 追踪生命周期：`ConversionRuntime.onItemAdded`、`rescan(level)`、`rebuild(level)`、`prepareRules(...)`、`publishRules(prepared)`、`replaceRules(...)`、`applySavedIndex(server, prepared)`、`clear(level)`、`shutdown()`。
 - tick 驱动：`onServerTick`，由宿主在服务器 tick 事件中调用。
 - 环境触发：`requestEnvironmentalConversion(level, item, source)`；伤害是否属于可触发类型由 `DamageClassification.classify` 判定。
 - 实体状态：`DropStateStore` 的读取、写入、清除与 `blocksEnvironmentalDamage` 判定；授予入口在效果执行侧的 `ReturnItemSpawner`。
@@ -59,7 +59,7 @@ flowchart LR
 ### 被谁依赖
 
 - 平台层：tick 事件驱动 `onServerTick`；实体加入世界与伤害拦截把入口分别接到 `onItemAdded` 与 `requestEnvironmentalConversion`。
-- 加载与装配层：启动加载、数据包重载与命令重载调 `replaceRules`；编辑器保存成功后调 `applySavedIndex` 换索引。
+- 加载与装配层：启动加载调 `replaceRules`；数据包重载与命令重载先 `prepareRules` 构建、再 `publishRules` 换入；编辑器保存成功后调 `applySavedIndex` 换索引。
 - 效果执行侧：返还效果经 `ReturnItemSpawner` 写实体状态，结算与它共享同一套预留与落账口径。
 - 命令与调试层：查询、预算快照与开发场景观察读取本模块的观测入口。
 
@@ -112,6 +112,8 @@ flowchart TB
 | 规则重载 `rescan(level)` | 有序 id 游标 | `items` 表由 join/leave 事件持续维护，按 `higherEntry` 游标逐条重建追踪 |
 
 两种模式单步都只把 `rescan_entities_per_step` 个实体交给 `onItemAdded`，且每步检查共享预算；世界扫描模式在入口收集一次已加载掉落物的引用快照（不改追踪状态），步骤按快照切片登记，既不跨 tick 持有世界迭代器，也不必每步重扫整维；有序游标模式沿 `items` 的 `higherEntry` 前进。还有剩余工作就 `yield`，下一 tick 继续。世界扫描完成前若再次重载，重载会沿用同一份快照补齐，不会因取消任务漏掉尚未登记的实体。完成标记按维度保存轮次 token，只有当前一轮的收尾路径（完成、取消、失败终态）能清除，旧一轮的迟到回调不会破坏新一轮状态；同一轮回扫失败只重排一份续接任务，避免多份任务同时推进同一游标。回扫让出期间，自然到期入口对尚未重建追踪的实体直接补一次 `onItemAdded`，临近消失的物品不会因等待回扫而漏转化。
+
+数据包重载走「先建后换」：先在构建阶段建好新索引与候选结构摘要，成功后才一次换入并逐维排队回扫；构建期与换入前的失败不改动旧索引、追踪与排队任务，失败以结构化问题回传，回执不声称本次变更已应用。
 
 追踪条目与句柄状态保持自洽：检查任务失败由本模块的失败回调收尾（见 4.6），不会留下指向已终态句柄的追踪；句柄被取消或追踪已不存在时，实体重新加载进入 `onItemAdded` 会按当前候选补排一次初始检查，自然到期入口则释放追踪并交还原版销毁，物品不会因内部失败而永久留存。
 
@@ -215,6 +217,7 @@ flowchart TB
 - 账目只经 `SettlementRecord.Writer` 变更；计划组数不冒充完成组数，回执是唯一成功依据。
 - 取消与异常只登记待返还，世界写入统一交给恢复任务；恢复任务本身不重放旧效果。
 - 检查任务失败必须走失败回调恢复：追踪要么重排到下一次检查、要么释放交还原版，不得让追踪继续指向已终态句柄；恢复不得改动账目，准备阶段失败时源物品尚未扣减。
+- 规则重载先构建后换入：构建期不改动在跑索引与追踪；任何失败都发生在换入前，旧索引、追踪与排队任务保持有效。换入后逐维排队回扫，单维排队异常不影响其余维度；失败回执与日志不得声称旧索引已被替换。
 - 同一掉落物只执行优先级最高的一条命中规则；排序规则集中在 `RuleIndex.RULE_ORDER`。
 - 台账不裁剪未结清记录，完成记录在保留窗口与条数上限内可裁。
 - 实体状态挂实体层且用绝对游戏刻；跨存档与区块卸载都按真实时间推进。
@@ -222,7 +225,7 @@ flowchart TB
 
 ### 改动后的验证
 
-先做 IDE 工作区检查，再执行 `tools/dsh-build.ps1 -Tasks build`，最后由实机验证触发、返还与重载后的回扫；检查失败路径用声明式场景 `run/prepare_failure`（恢复后下一 tick 重试）与 `run/prepare_failure_expiry`（到期失败释放交还原版）核对守恒、追踪恢复与不再永久拦截。涉及结算路径的改动必须同时验证取消与停服场景下的待返还记录能否在下次启动交付完毕；文档链接改动后跑 `python tools/check-docs.py`。
+先做 IDE 工作区检查，再执行 `tools/dsh-build.ps1 -Tasks build`，最后由实机验证触发、返还与重载后的回扫；重载路径用 `run/reload`（成功换入后取消旧结算）与 `run/reload_failure`（换入前失败保留旧规则与追踪，掉落物继续检查并完成转化）核对。检查失败路径用声明式场景 `run/prepare_failure`（恢复后下一 tick 重试）与 `run/prepare_failure_expiry`（到期失败释放交还原版）核对守恒、追踪恢复与不再永久拦截。涉及结算路径的改动必须同时验证取消与停服场景下的待返还记录能否在下次启动交付完毕；文档链接改动后跑 `python tools/check-docs.py`。
 
 ## 6. 数据与配置引用
 
