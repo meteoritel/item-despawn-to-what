@@ -23,6 +23,8 @@
   "run/fault_reload",
   "run/fault_cancel",
   "run/cancel_failure",
+  "run/prepare_failure",
+  "run/prepare_failure_expiry",
   "bench/baseline",
   "bench/convert",
   "bench/retry",

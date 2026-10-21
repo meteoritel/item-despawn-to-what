@@ -335,7 +335,7 @@ public final class ConversionRuntime {
             return;
         }
         if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "ENV_DESTROY_REQUEST", "trigger", kind.key()); }
-        attempt(level, item.getUUID(), kind);
+        attempt(level, item.getUUID(), kind, null);
     }
 
     // 每 tick 推进一次公共预算：所有维度的检查与效果共享同一份时间与工作量额度。
@@ -554,12 +554,13 @@ public final class ConversionRuntime {
         return created;
     }
 
-    // 登记一次到期检查：到期 tick 按当前游戏刻推导为绝对值，保留原始时间不被改写
+    // 登记一次到期检查：到期 tick 按当前游戏刻推导为绝对值，保留原始时间不被改写。
+    // 检查任务自带失败收尾：调度器先把句柄置终态再回调 onFailed，若这里只是普通 Runnable，
+    // 追踪会继续指向一个已终态的句柄，物品既不再被检查、也永久拦住原版到期销毁。
     private ScheduledTaskHandle scheduleCheck(ServerLevel level, ItemEntity entity, int delayTicks) {
         long dueTick = level.getGameTime() + Math.max(0, delayTicks);
-        UUID uuid = entity.getUUID();
-        return RuntimeObserver.current().schedule(entity, scheduler, level.dimension(), ServerTaskKind.CONDITION_CHECK,
-                dueTick, "check", () -> attempt(level, uuid, TriggerKind.NATURAL));
+        return RuntimeObserver.current().schedule(entity, scheduler, level.dimension(), dueTick,
+                new CheckTask(level, entity.getUUID()));
     }
 
     private static ResourceLocation itemIdOf(ItemEntity entity) {
@@ -614,10 +615,103 @@ public final class ConversionRuntime {
         state.tracked.remove(uuid);
     }
 
+    // 一次到期检查的可失败载体：step 抛出异常时由调度器按任务终态收尾并回调 onFailed，
+    // 失败上下文记录本次链路已确定的规则与结算标识，供结构化失败事件指到具体规则与结算。
+    private final class CheckTask implements ServerTask {
+        private final ServerLevel level;
+        private final UUID uuid;
+        private final FailureContext failure = new FailureContext();
+
+        private CheckTask(ServerLevel level, UUID uuid) {
+            this.level = level;
+            this.uuid = uuid;
+        }
+
+        @Override
+        public ServerTaskKind kind() {
+            return ServerTaskKind.CONDITION_CHECK;
+        }
+
+        @Override
+        public String tracingName() {
+            return "check";
+        }
+
+        @Override
+        public StepResult step(ServerTickBudget budget) {
+            attempt(level, uuid, TriggerKind.NATURAL, failure);
+            return StepResult.done(1);
+        }
+
+        @Override
+        public void onFailed(@Nullable Throwable failure) {
+            recoverCheckFailure(level, uuid, this.failure, failure);
+        }
+    }
+
+    // 失败定位上下文：规则在判定命中时确定、结算标识在登记后才有，两者都只是事件字段来源，不改变业务状态
+    private static final class FailureContext {
+        private @Nullable String ruleId;
+        private @Nullable String settlementId;
+    }
+
+    // 检查失败的守恒收尾：追踪要么重排到下一次检查，要么释放交还原版机制。
+    // 失败发生在源物品扣减之前（准备阶段异常在 setCount(0) 之前抛出），所以这里无需返还库存；
+    // 关键是让追踪不再指向已终态的句柄，避免物品既不再被检查、又永久拦住原版到期销毁。
+    private void recoverCheckFailure(ServerLevel level, UUID uuid, FailureContext context, @Nullable Throwable failure) {
+        LevelState state = levels.get(level.dimension());
+        if (state == null) {
+            return;
+        }
+        TrackedState tracked = state.tracked.get(uuid);
+        if (tracked == null) {
+            // 同一 tick 内环境致死、区块卸载等入口可能已释放追踪：失败恢复必须幂等
+            return;
+        }
+        Entity entity = level.getEntity(uuid);
+        if (!(entity instanceof ItemEntity item) || excluded(item)) {
+            releaseTracking(state, uuid, tracked, CancelReason.ENTITY_REMOVED);
+            return;
+        }
+        tracked.failureCount++;
+        // 已到自然消失边缘（含拦截到期后等待下一次检查）：不再重试，直接释放追踪。
+        // 拦截到期时的那次待办销毁在这里补上，否则超龄物品会因一次失败永久留在世界上。
+        if (tracked.expiryPending || pastExpiry(level, item)) {
+            boolean deferredExpiry = tracked.expiryPending;
+            releaseTracking(state, uuid, tracked, CancelReason.TRACKING_RELEASED);
+            if (deferredExpiry) {
+                item.discard();
+            }
+            observeCheckFailure(item, tracked, context, failure, "released", 0);
+            return;
+        }
+        // 首次失败固定下一 tick 重试（一次异常不是业务结论）；连续失败沿用条件未满足的退避序列，防止热循环
+        int delay = tracked.failureCount <= 1 ? 1 : Math.max(1, config.backoffTicks(tracked.failureCount));
+        int remaining = Math.max(1, lifespanProvider.lifespanTicks(level, item) - item.getAge() - 1);
+        delay = Math.min(delay, remaining);
+        reschedule(level, item, tracked, delay);
+        observeCheckFailure(item, tracked, context, failure, "retried", delay);
+    }
+
+    // 检查失败的结构化观测：原因、定位标识与恢复动作都要能独立核对，日志与场景断言共用同一组字段
+    private void observeCheckFailure(ItemEntity item, TrackedState tracked, FailureContext context,
+                                     @Nullable Throwable failure, String recovery, int retryDelayTicks) {
+        if (!RuntimeObserver.current().enabled()) {
+            return;
+        }
+        RuntimeObserver.current().observe(item, "CHECK_TASK_FAILED",
+                "rule", context.ruleId == null ? "" : context.ruleId,
+                "settlement", context.settlementId == null ? "" : context.settlementId,
+                "reason", failure == null ? "failed_without_exception" : failure.toString(),
+                "recovery", recovery,
+                "retry_delay_ticks", retryDelayTicks,
+                "failure_count", tracked.failureCount);
+    }
+
     // 一次到期判定：选规则 → 执行；条件不满足则退避重试（kind 为本次请求的消失方式）
     // 调用点有两类：调度器到期检查（自然消失）与环境致死请求（在 hurt 调用栈内同步调用）；
     // 两者共用同一份追踪、预算与调度器，效果派发统一走 ConversionSettlement。
-    private void attempt(ServerLevel level, UUID uuid, TriggerKind kind) {
+    private void attempt(ServerLevel level, UUID uuid, TriggerKind kind, @Nullable FailureContext context) {
         LevelState state = levels.get(level.dimension());
         if (state == null) {
             return;
@@ -695,7 +789,7 @@ public final class ConversionRuntime {
             reschedule(level, item, tracked, Math.max(1, delay));
             return;
         }
-        performConversion(level, state, item, tracked, chosen);
+        performConversion(level, state, item, tracked, chosen, context);
         if (tracked.expiryPending && !item.isRemoved()) { item.discard(); }
     }
 
@@ -762,12 +856,16 @@ public final class ConversionRuntime {
     // 「扣减 → 登记 → 调度注册」是一个补偿单元：任一步抛异常都把整堆库存写回源实体并撤销登记，
     // 只有全部成功才把所有权交给结算任务（移除所有权追踪，后续交付与恢复依据由记录承担）。
     private void performConversion(ServerLevel level, LevelState state, ItemEntity item,
-                                   TrackedState tracked, Rule rule) {
+                                   TrackedState tracked, Rule rule, @Nullable FailureContext context) {
         ItemStack source = item.getItem();
         int available = source.getCount();
         if (available <= 0) {
             releaseTracking(state, item.getUUID(), tracked, CancelReason.TRACKING_RELEASED);
             return;
+        }
+        // 规则在本方法入口即已确定：任何后续阶段的失败事件都应能指到具体规则
+        if (context != null) {
+            context.ruleId = rule.id().toString();
         }
         // 每组固定源成本 c：显式 source_cost 优先，未声明时为 1 个
         int costPerGroup = types.perRoundSourceConsumption(rule, source);
@@ -785,6 +883,12 @@ public final class ConversionRuntime {
             preparations = prepareEffects(level, item, rule, triggerPosition, potentialGroups, source.copy());
         } catch (RuntimeException failure) {
             tracked.locked = false;
+            // 准备阶段异常发生在源物品扣减之前，守恒天然成立；仍需结构化事件把规则与原因定位下来，
+            // 否则一次准备失败在观测侧只剩调度器日志，无法核对是哪条规则、哪个效果出的问题
+            if (RuntimeObserver.current().enabled()) {
+                RuntimeObserver.current().observe(item, "CONVERSION_PREPARE_FAILED",
+                        "rule", rule.id().toString(), "settlement", "", "reason", failure.toString());
+            }
             throw failure;
         }
         // 首次登记与失败补偿都经受控句柄：账目变更与账本双索引、标脏在同一次调用内完成
@@ -799,6 +903,10 @@ public final class ConversionRuntime {
             writer = SettlementRecord.Writer.register(SettlementLedger.get(level), UUID.randomUUID().toString(),
                     rule.id().toString(), level.dimension().location().toString(), held, available, costPerGroup,
                     true, item.getX(), item.getY(), item.getZ());
+            // 登记之后才有结算标识：此后的失败事件据此指到具体结算，便于与账本核对
+            if (context != null) {
+                context.settlementId = writer.record().id();
+            }
             if (RuntimeObserver.current().enabled()) {
                 int estimated = costPerGroup > 0 ? Math.max(1, available / costPerGroup) : 1;
                 RuntimeObserver.current().converted(item, rule.id().toString(), estimated);
@@ -929,6 +1037,10 @@ public final class ConversionRuntime {
     private @Nullable EffectPreparation prepareEffect(EffectType<?> definition, Effect effect, ServerLevel level,
                                                      ItemEntity item, BlockPos pos, Vec3 position,
                                                      ItemStack sourceSnapshot, boolean fillOrigin) {
+        // 准备阶段注入点：注入失败必须沿转化补偿单元抛出，由检查任务的失败收尾释放或重排追踪
+        if (RuntimeObserver.current().enabled()) {
+            RuntimeObserver.current().effectPreparing(level.getServer(), effect.type());
+        }
         EffectPreparation preparation = ((EffectType<Effect>) definition).executor()
                 .prepare(effect, level, position, item, sourceSnapshot, fillOrigin);
         if (preparation == null || preparation.gate() != null) {

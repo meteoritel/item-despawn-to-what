@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.core.debug;
 
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
+import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
@@ -36,6 +37,13 @@ final class DebugScenarioFaults {
     // 取消回调异常在委托清理前注入：异常沿取消调用链逃逸，用于复现取消隔离缺陷
     boolean cancel(ServerTaskKind kind, String name) {
         return hit(DebugScenarioSpec.FaultType.CANCEL_EXCEPTION, kind, name);
+    }
+
+    // 效果准备阶段异常在委托 prepare 前注入：异常沿转化补偿单元抛出，用于复现检查任务收尾缺陷
+    void prepare(ResourceLocation effectType) {
+        if (hit(DebugScenarioSpec.FaultType.PREPARE_EXCEPTION, null, effectType.toString())) {
+            throw new InjectedFault("注入的效果准备异常：" + effectType);
+        }
     }
 
     // 重载失败在应用新索引后注入：调用方按重载失败统一处理，用于复现失败后状态不一致
@@ -83,6 +91,7 @@ final class DebugScenarioFaults {
         return switch (type) {
             case STEP_EXCEPTION -> "FAULT_STEP_EXCEPTION";
             case CANCEL_EXCEPTION -> "FAULT_CANCEL_EXCEPTION";
+            case PREPARE_EXCEPTION -> "FAULT_PREPARE_EXCEPTION";
             case RELOAD_FAILURE -> "FAULT_RELOAD_FAILURE";
         };
     }

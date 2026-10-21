@@ -89,6 +89,10 @@ final class DebugScenarioCatalog {
                 if (type == DebugScenarioSpec.FaultType.RELOAD_FAILURE && (kind != null || !name.isEmpty())) {
                     throw new IllegalArgumentException("重载失败故障不接受任务筛选：" + key);
                 }
+                // 准备阶段不属于调度任务，只能按效果类型筛选；声明任务分类同样会静默失效
+                if (type == DebugScenarioSpec.FaultType.PREPARE_EXCEPTION && kind != null) {
+                    throw new IllegalArgumentException("准备失败故障不接受任务分类：" + key);
+                }
                 faults.add(new DebugScenarioSpec.Fault(type, kind, name, count));
             }
             if (faults.size() > 8) { throw new IllegalArgumentException("场景故障声明超过8个：" + key); }

@@ -20,18 +20,28 @@
   ],
   "expected": {
     "metrics": {
-      "conversions": 0,
-      "remaining_source_items": "$sources",
-      "settlements_completed": 0,
+      "conversions": "$sources",
+      "remaining_source_items": 0,
+      "groups": "$source_items",
+      "consumed_sources": "$source_items",
+      "returned": 0,
+      "pending_delivery": 0,
+      "settlements_completed": "$sources",
+      "check_failures": 1,
+      "first_check_retry_delay_ticks": 1,
       "action_count": 0,
       "faults_declared": 1,
       "faults_injected": 1,
       "faults_remaining": 0,
       "events/FAULT_ARMED": 1,
-      "events/FAULT_STEP_EXCEPTION": 1
+      "events/FAULT_STEP_EXCEPTION": 1,
+      "events/CHECK_TASK_FAILED": 1
     },
     "outputs": {
-      "minecraft:prismarine_shard": 0
+      "minecraft:prismarine_shard": "$source_items"
+    },
+    "candidates": {
+      "default": "$sources"
     }
   },
   "rules": [
