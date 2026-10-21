@@ -2,14 +2,16 @@ package com.meteorite.itemdespawntowhat.core.debug;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
 import net.minecraft.resources.ResourceLocation;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
 /** 所有功能与性能场景共用的资源契约，规则、输入、动作及断言均由资源声明。 */
 record DebugScenarioSpec(String key, int sources, int stackSize, int seconds, int catalystCount,
                          ResourceLocation sourceItem, ResourceLocation catalystItem, Setup setup,
-                         List<Action> actions, JsonObject expected, JsonArray rules) {
+                         List<Action> actions, List<Fault> faults, JsonObject expected, JsonArray rules) {
     static final int MAX_FUNCTIONAL_SOURCES = 16;
     static final int MAX_BENCHMARK_SOURCES = 1000;
 
@@ -18,6 +20,15 @@ record DebugScenarioSpec(String key, int sources, int stackSize, int seconds, in
 
     /** 场景动作的普通代码入口，新增动作不需要改命令或执行器的场景名分支。 */
     enum ActionType { MOVE_SOURCE, RELOAD }
+
+    /** 开发期可注入的受控故障；只在调试包内实现，生产代码不引用。 */
+    enum FaultType { STEP_EXCEPTION, CANCEL_EXCEPTION, RELOAD_FAILURE }
+
+    /**
+     * 故障声明：按任务分类与追踪名筛选注入目标。
+     * kind 为空表示不限制任务分类，name 为空表示不限制追踪名；count 为本轮最多注入次数。
+     */
+    record Fault(FaultType type, @Nullable ServerTaskKind kind, String name, int count) {}
 
     /** 动作触发门槛：世界刻、真实事件及移动距离。 */
     record Action(ActionType type, int afterTicks, String afterEvent, int offsetY) {}

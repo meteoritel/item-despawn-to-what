@@ -85,7 +85,7 @@ flowchart LR
 | `ServerTask` / `StepResult` / `StepOutcome` / `ServerTaskKind` / `CancelReason` / `TaskQueue` / `ScheduledTaskHandle` / `RunnableTask` | 调度扩展点与排期请求 | 单步必须有界；回执声明本步工作量（下界为 1）、状态与下次入队延迟；种类用于跨维度公平轮转、效果配额与分类统计；取消原因不得静默丢弃；排期只经 `scheduleAt(realmKey, task, dueTick)`，句柄可读任务、到期刻、分类与终态并精确取消（幂等）；`RunnableTask` 把无参动作适配成固定消耗一步的任务 | `core/runtime/scheduler`；`RuntimeObserver` 的排期包装 |
 | `Issue` / `IssueCollector` / `IssueSeverity` / `ParamChecks` / `RefChecks` | 问题模型与校验助手 | 收集器累积问题并可派生来源继承的子收集器（写入同时落入上游、按默认来源补齐）；严重级决定条目是否拒载；`RefChecks` 对未注册的非标签引用报错、对未绑定的标签数据只告警 | 模型层校验、加载层、装配层 |
 | `RuleDecoder` / `RuleDecodeBudget` / `RuleFields` | 解码入口与规模预算 | 加载层持有 `RuleDecoder`，实现由模型层提供；预算入口先做文本嵌套深度预检、再在进入递归解码前拦截超深/超规模条件树；字段名常量统一从这里取 | `core/load`、`core/model`、命令输出 |
-| `RuntimeObserver` | 观测接缝 | 未注入实现时 `NONE` 让判定返回安全默认值、上报为空操作、排期直接入队；装配期注入一次，运行期只读 | `core/debug` 提供实现，平台在服务端装配阶段注入 |
+| `RuntimeObserver` | 观测接缝 | 未注入实现时 `NONE` 让判定返回安全默认值、上报为空操作、排期直接入队；装配期注入一次，运行期只读；重载应用阶段的上报点在规则索引替换后、维度回扫前调用，实现方只允许以抛出异常表达注入失败，调用方按重载失败收口 | `core/debug` 提供实现，平台在服务端装配阶段注入 |
 | `TaggedId` / `TagLookup` / `ClimateSampler` / `ChunkPresence` | 只读引用与查询 | 统一 `id` 与 `#tag` 引用形状；标签成员与气候采样由实现方按位置/维度缓存；`ChunkPresence` 只判定区块是否已加载 | 条件求值器、候选索引、运行时 |
 
 ## 4. 关键流程
@@ -136,7 +136,7 @@ flowchart LR
 - **新增条件类型**：参数 record 实现 `Condition`，实现 `ConditionEvaluator`；需要上下文门禁时覆盖类型定义上的 `evaluability`，判定区块是否就绪用 `ChunkPresence`。注册与冻结流程见 [type-system](type-system.md)。
 - **新增效果类型**：实现 `EffectExecutor.execute` 返回真实回执；需要跨 tick 推进时覆盖 `start` 返回自定义 `EffectExecution`，在 `advance` 内用 `ServerTickBudget` 与 `StepWorkCounter.report` 计价；异步分批产出用 `EffectResult.deferred` 受理、再用 `EffectContext.reportProgress` 收敛为完成量。需要成功当刻固定输入时成对覆盖 `prepare` 与 `start(..., preparation)`。
 - **新增调度任务种类**：在 `ServerTaskKind` 加常量，队列的公平轮转与分类统计按该枚举归类；新增取消路径在 `CancelReason` 加常量。简单的一次性动作直接用 `RunnableTask`。调度实现与配额见 [conversion-runtime](conversion-runtime.md)。
-- **新增观测能力**：实现 `RuntimeObserver` 的对应默认方法，装配期注入实现；需要包裹排期时覆盖 `schedule` 重载。调试侧实现见 [authoring](authoring.md)。
+- **新增观测能力**：实现 `RuntimeObserver` 的对应默认方法，装配期注入实现；需要包裹排期时覆盖 `schedule` 重载。新增注入点只能落在既有上报时机（判定、排期与取消回调、重载应用阶段），生产实现保持空操作。调试侧实现见 [authoring](authoring.md)。
 - **新增问题级别或格式**：问题经 `IssueCollector` 写入，严重级取 `IssueSeverity`；字段路径由调用方按 JSON 形状拼接（`ParamChecks.child` / `ParamChecks.index`）。语义与文案约定见 [errors](../api/errors.md)。
 
 ### 约束

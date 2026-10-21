@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.core.debug;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
 import net.minecraft.resources.ResourceLocation;
 
 import java.io.IOException;
@@ -56,7 +57,7 @@ final class DebugScenarioCatalog {
 
     // 范围与枚举错误在命令注册时显式报告，不等到场景中途才发现。
     private static DebugScenarioSpec parse(String key, JsonObject body) {
-        rejectUnknown(body, Set.of("schema_version", "inputs", "seconds", "setup", "actions", "expected", "rules"));
+        rejectUnknown(body, Set.of("schema_version", "inputs", "seconds", "setup", "actions", "faults", "expected", "rules"));
         if (body.get("schema_version").getAsInt() != 1) { throw new IllegalArgumentException("不支持的场景版本：" + key); }
         JsonObject input = body.getAsJsonObject("inputs");
         rejectUnknown(input, Set.of("sources", "stack_size", "catalyst_count", "source_item", "catalyst_item"));
@@ -74,14 +75,32 @@ final class DebugScenarioCatalog {
                     integer(action, "after_ticks", 0, 6000), action.get("after_event").getAsString(), integer(action, "offset_y", -64, 64)));
         }
         if (actions.size() > 16) { throw new IllegalArgumentException("场景动作超过16个：" + key); }
+        List<DebugScenarioSpec.Fault> faults = new ArrayList<>();
+        if (body.has("faults")) {
+            for (JsonElement element : body.getAsJsonArray("faults")) {
+                JsonObject fault = element.getAsJsonObject();
+                rejectUnknown(fault, Set.of("type", "kind", "name", "count"));
+                var type = DebugScenarioSpec.FaultType.valueOf(fault.get("type").getAsString().toUpperCase(Locale.ROOT));
+                ServerTaskKind kind = fault.has("kind")
+                        ? ServerTaskKind.valueOf(fault.get("kind").getAsString().toUpperCase(Locale.ROOT)) : null;
+                String name = fault.has("name") ? fault.get("name").getAsString() : "";
+                int count = fault.has("count") ? integer(fault, "count", 1, 16) : 1;
+                // 重载失败不绑定具体任务，声明筛选条件只会让配置静默失效
+                if (type == DebugScenarioSpec.FaultType.RELOAD_FAILURE && (kind != null || !name.isEmpty())) {
+                    throw new IllegalArgumentException("重载失败故障不接受任务筛选：" + key);
+                }
+                faults.add(new DebugScenarioSpec.Fault(type, kind, name, count));
+            }
+            if (faults.size() > 8) { throw new IllegalArgumentException("场景故障声明超过8个：" + key); }
+        }
         DebugScenarioSpec.Setup setup = DebugScenarioSpec.Setup.valueOf(body.get("setup").getAsString().toUpperCase(Locale.ROOT));
         if (setup == DebugScenarioSpec.Setup.EXCLUDED && sources != 2) { throw new IllegalArgumentException("excluded准备方式需要2个源：" + key); }
         // 普通堆数量必须多于锁定堆（1 件），原版合并才会稳定地让普通堆成为载体
         if (setup == DebugScenarioSpec.Setup.MERGE && (sources != 2 || stack < 2)) {
             throw new IllegalArgumentException("merge准备方式需要2个源且堆叠数至少2：" + key);
         }
-        if (benchmark && (catalyst != 0 || !actions.isEmpty() || setup != DebugScenarioSpec.Setup.NONE)) {
-            throw new IllegalArgumentException("性能场景只允许普通源准备，不运行功能动作或催化剂夹具：" + key);
+        if (benchmark && (catalyst != 0 || !actions.isEmpty() || !faults.isEmpty() || setup != DebugScenarioSpec.Setup.NONE)) {
+            throw new IllegalArgumentException("性能场景只允许普通源准备，不运行功能动作、故障注入或催化剂夹具：" + key);
         }
         JsonObject expected = body.getAsJsonObject("expected");
         rejectUnknown(expected, Set.of("metrics", "outputs", "candidates"));
@@ -91,7 +110,7 @@ final class DebugScenarioCatalog {
         if (!expected.has("outputs")) { throw new IllegalArgumentException("场景必须声明实物产出预期：" + key); }
         return new DebugScenarioSpec(key, sources, stack, seconds, catalyst,
                 ResourceLocation.parse(input.get("source_item").getAsString()), ResourceLocation.parse(input.get("catalyst_item").getAsString()),
-                setup, List.copyOf(actions), expected, body.getAsJsonArray("rules"));
+                setup, List.copyOf(actions), List.copyOf(faults), expected, body.getAsJsonArray("rules"));
     }
 
     // 不允许未知元数据悄悄失效；规则本体交给正式 Codec 与语义校验。
