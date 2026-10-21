@@ -79,6 +79,11 @@ public final class DebugRuntimeObserver implements RuntimeObserver {
     }
 
     @Override
+    public void taskStepStarting(MinecraftServer server, ServerTaskKind kind, String tracingName) {
+        DebugScenarioManager.taskStepStarting(server, kind, tracingName);
+    }
+
+    @Override
     public ScheduledTaskHandle schedule(ItemEntity source, TaskQueue queue, Object realmKey, ServerTaskKind kind,
                                         long dueTick, String name, Runnable action) {
         return DebugScenarioManager.schedule(source, queue, realmKey, kind, dueTick, name, action);

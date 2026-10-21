@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.runtime;
 
+import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.CancelReason;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerScheduler;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
@@ -13,6 +14,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * 持久返还交付任务：加载或重启后只交付结算记录里的待返还库存，不恢复既有效果队列。
@@ -63,6 +65,10 @@ final class SettlementRecovery implements ServerTask {
 
     @Override
     public StepResult step(ServerTickBudget budget) {
+        // 恢复任务由运行期恢复队列直接排入，不经观察器的排期入口，调试注入的步骤失败在这里进入失败路径
+        if (RuntimeObserver.current().enabled()) {
+            RuntimeObserver.current().taskStepStarting(level.getServer(), kind(), tracingName());
+        }
         if (record.pendingDelivery() <= 0) {
             finish();
             return StepResult.done(1);
@@ -110,15 +116,17 @@ final class SettlementRecovery implements ServerTask {
 
     @Override
     public void onCancelled(CancelReason reason) {
-        close(reason.name());
+        close(reason.name(), false);
     }
 
     @Override
-    public void onFailed(@org.jetbrains.annotations.Nullable Throwable failure) {
-        close(FAILURE_REASON);
+    public void onFailed(@Nullable Throwable failure) {
+        close(FAILURE_REASON, true);
     }
 
-    private void close(String reason) {
+    // 失败与取消共用收尾：保留剩余库存、释放预留并释放幂等位；
+    // failed=true 时把剩余交付交给运行期恢复队列按退避重试，取消则不重排（等下次扫描）
+    private void close(String reason, boolean failed) {
         if (closed) {
             return;
         }
@@ -133,8 +141,12 @@ final class SettlementRecovery implements ServerTask {
                 LOGGER.warn("返还记录写盘失败：id={} reason={}", record.id(), reason, failure);
             }
         } finally {
-            // 即使收尾写盘或预留释放失败，也允许后续扫描重新排期。
-            runtime.onRecoveryFinished(record.id());
+            // 即使收尾写盘或预留释放失败，也必须允许后续扫描或运行期重试重新排期。
+            if (failed) {
+                runtime.onRecoveryFailed(record.id(), reason);
+            } else {
+                runtime.onRecoveryFinished(record.id());
+            }
         }
     }
 
@@ -145,9 +157,14 @@ final class SettlementRecovery implements ServerTask {
         LOGGER.debug("返还交付完成：记录={} 已交付={}", record.id(), record.deliveredReturns());
     }
 
-    // 退避：20/40/80…最高 1200 tick
-    private int retryDelayTicks() {
-        int shift = Math.clamp(failures - 1, 0, 6);
+    // 运行期恢复队列的退避：按已尝试次数指数退避，20/40/80…最高 1200 tick
+    static int queueRetryDelayTicks(int attempts) {
+        int shift = Math.clamp(attempts - 1, 0, 6);
         return Math.min(MAX_RETRY_DELAY_TICKS, BASE_RETRY_DELAY_TICKS << shift);
+    }
+
+    // 交付失败的退避：同一套指数退避口径
+    private int retryDelayTicks() {
+        return queueRetryDelayTicks(failures);
     }
 }

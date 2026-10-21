@@ -37,6 +37,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -196,6 +197,10 @@ final class ConversionSettlement implements ServerTask {
         if (cancelled) {
             return StepResult.done(1);
         }
+        // 结算任务不经观察器的排期入口，调试注入的步骤失败只能在这里进入失败路径
+        if (RuntimeObserver.current().enabled()) {
+            RuntimeObserver.current().taskStepStarting(level.getServer(), kind(), tracingName());
+        }
         dispatchedThisStep = 0;
         // 本刻容量查询结果只在同一刻内复用：世界存量在刻间可变，跨刻复用旧的正数测量值会高估 room
         Arrays.fill(capacityThisStep, CAPACITY_UNKNOWN);
@@ -238,10 +243,26 @@ final class ConversionSettlement implements ServerTask {
         }
     }
 
-    // 中止结算并把待返还量落盘：取消路径（onCancelled）与异常路径（step 的 catch）共用同一条顺序，
-    // 不新造第二份账目口径。顺序：幂等位 → 待返还同步 → 状态记录 → 释放未支付预留 → 写盘 + 观测。
+    /**
+     * 失败回调：结算步骤抛异常时按失败类型区分原因，落盘待返还量并在仍有库存时交给运行期恢复队列。
+     * 恢复队列按记录去重并带退避重试，失败不会在调度器里留下悬挂任务。
+     *
+     * @param failure 失败原因；为 {@code null} 时按通用任务失败处理
+     */
+    @Override
+    public void onFailed(@Nullable Throwable failure) {
+        String reason = failure == null ? "TASK_FAILED" : "exception:" + failure.getClass().getSimpleName();
+        abort(reason, true);
+        if (record.needsRecovery()) {
+            runtime.enqueueRecovery(level.getServer(), record.id(), reason);
+        }
+    }
+
+    // 中止结算并把待返还量落盘：取消路径（onCancelled）与异常路径（step 的 catch、onFailed）共用同一条顺序，
+    // 不新造第二份账目口径。顺序：幂等位 → 待返还同步 → 释放未支付预留 → 状态记录 → 观测。
     // 本方法不做任何世界写入（维度卸载/停服时加入世界不安全，待返还数据留给恢复任务 SettlementRecovery）；
     // 返回 false 表示此前已中止过（幂等，不重复写盘）。failed=true 时记 FAILED 语义，否则记 INTERRUPTED。
+    // 批量取消时单个任务收尾失败不得让同批其它任务漏掉中止：每一步各自兜异常，失败只降级为日志。
     private boolean abort(String reason, boolean failed) {
         if (cancelled) {
             return false;
@@ -249,21 +270,28 @@ final class ConversionSettlement implements ServerTask {
         cancelled = true;
         // 中止即移交库存所有权：剩余库存改由恢复任务交付，本任务不再改写待返还量
         ownsStock = false;
-        if (!record.completed()) {
+        try {
             // 待返还量以任务手里的结算库存为准：重启后只交付这一部分，不重放已开始的组
             writer.syncPendingDelivery(held.getCount());
-            if (failed) {
-                writer.fail(reason, level.getGameTime());
-            } else {
-                writer.interrupt(reason, level.getGameTime());
-            }
-        }
-        // 释放未支付的催化剂预留（计划期登记、开组时转已支付）：无世界写入且幂等
-        reservations().releaseOwner(record.id());
-        try {
-            commit();
         } catch (RuntimeException failure) {
-            LOGGER.warn("结算记录写盘失败：id={} reason={}", record.id(), reason, failure);
+            LOGGER.warn("结算待返还量写盘失败：id={} reason={}", record.id(), reason, failure);
+        }
+        try {
+            // 释放未支付的催化剂预留（计划期登记、开组时转已支付）：无世界写入且幂等
+            reservations().releaseOwner(record.id());
+        } catch (RuntimeException failure) {
+            LOGGER.warn("结算催化剂预留释放失败：id={} reason={}", record.id(), reason, failure);
+        }
+        if (!record.completed()) {
+            try {
+                if (failed) {
+                    writer.fail(reason, level.getGameTime());
+                } else {
+                    writer.interrupt(reason, level.getGameTime());
+                }
+            } catch (RuntimeException failure) {
+                LOGGER.warn("结算终态写盘失败：id={} reason={}", record.id(), reason, failure);
+            }
         }
         if (RuntimeObserver.current().enabled()) {
             RuntimeObserver.current().observe(source, "SETTLEMENT_CANCELLED", "record", record.id(),
@@ -825,6 +853,10 @@ final class ConversionSettlement implements ServerTask {
 
     // 执行器回执入账：已完成、已受理未完成、跳过与失败分别计数，计划量不冒充成功量
     private void account(EffectResult result) {
+        // 中止后到达的迟到回执不得再落账：记录已移交恢复任务，写入会把已终结记录重新登记进账本
+        if (cancelled) {
+            return;
+        }
         if (result == null) {
             writer.effectFailed();
         } else {

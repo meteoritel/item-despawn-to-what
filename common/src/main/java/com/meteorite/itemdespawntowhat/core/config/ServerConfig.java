@@ -44,7 +44,8 @@ public record ServerConfig(
         NearbyProductLimits nearbyProducts,
         int rescanEntitiesPerStep,
         int cancelsPerStep,
-        int prepareGroupsPerStep
+        int prepareGroupsPerStep,
+        int settlementRecoveryMaxAttempts
 ) {
 
     private static final Logger LOGGER = LogManager.getLogger();
@@ -90,6 +91,9 @@ public record ServerConfig(
     // 大堆叠不会在一步里把整批固定输入一次做完
     public static final int DEFAULT_PREPARE_GROUPS_PER_STEP = 8;
 
+    // 结算恢复重试上限默认值：运行期持续失败时最多重试 3 次，超过后保留账本等下次启动全量扫描
+    public static final int DEFAULT_SETTLEMENT_RECOVERY_MAX_ATTEMPTS = 3;
+
     // 默认配置，也是缺失字段时的兜底；max_work_units_per_tick 缺省为空表示回退到 max_checks_per_tick
     public static final ServerConfig DEFAULT = new ServerConfig(
             DEFAULT_CHECK_INTERVAL_TICKS,
@@ -112,7 +116,8 @@ public record ServerConfig(
             NearbyProductLimits.DEFAULT,
             DEFAULT_RESCAN_ENTITIES_PER_STEP,
             DEFAULT_CANCELS_PER_STEP,
-            DEFAULT_PREPARE_GROUPS_PER_STEP
+            DEFAULT_PREPARE_GROUPS_PER_STEP,
+            DEFAULT_SETTLEMENT_RECOVERY_MAX_ATTEMPTS
     );
 
     private static final MapCodec<ServerConfig> BASE_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
@@ -158,13 +163,13 @@ public record ServerConfig(
     // 便捷构造：不含放置半径上限与邻近阈值，分别取默认上限与 NearbyProductLimits.DEFAULT；供 BASE_CODEC 的 16 字段组使用
     @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
     public ServerConfig(int checkIntervalTicks, int backoffMaxTicks, int maxChecksPerTick, String overlayDirectory, int fabricLifespanFallbackTicks, boolean debugLogging, int serverBudgetUs, Optional<Integer> maxWorkUnitsPerTick, int effectsWorkUnitsPerTick, int checkSpreadWindowTicks, int dispatchBatchSize, int newProductProtectionSeconds, int conversionCooldownSeconds, int positionSearchChecksPerTick, int debugScenarioPrepareBatchSize, int debugScenarioPrepareBudgetUs) {
-        this(checkIntervalTicks, backoffMaxTicks, maxChecksPerTick, overlayDirectory, fabricLifespanFallbackTicks, debugLogging, serverBudgetUs, maxWorkUnitsPerTick, effectsWorkUnitsPerTick, checkSpreadWindowTicks, dispatchBatchSize, newProductProtectionSeconds, conversionCooldownSeconds, positionSearchChecksPerTick, debugScenarioPrepareBatchSize, debugScenarioPrepareBudgetUs, DEFAULT_MAX_PLACE_BLOCK_RADIUS, NearbyProductLimits.DEFAULT, DEFAULT_RESCAN_ENTITIES_PER_STEP, DEFAULT_CANCELS_PER_STEP, DEFAULT_PREPARE_GROUPS_PER_STEP);
+        this(checkIntervalTicks, backoffMaxTicks, maxChecksPerTick, overlayDirectory, fabricLifespanFallbackTicks, debugLogging, serverBudgetUs, maxWorkUnitsPerTick, effectsWorkUnitsPerTick, checkSpreadWindowTicks, dispatchBatchSize, newProductProtectionSeconds, conversionCooldownSeconds, positionSearchChecksPerTick, debugScenarioPrepareBatchSize, debugScenarioPrepareBudgetUs, DEFAULT_MAX_PLACE_BLOCK_RADIUS, NearbyProductLimits.DEFAULT, DEFAULT_RESCAN_ENTITIES_PER_STEP, DEFAULT_CANCELS_PER_STEP, DEFAULT_PREPARE_GROUPS_PER_STEP, DEFAULT_SETTLEMENT_RECOVERY_MAX_ATTEMPTS);
     }
 
     // 便捷构造：不含邻近阈值参数，统一取 NearbyProductLimits.DEFAULT
     @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
     public ServerConfig(int checkIntervalTicks, int backoffMaxTicks, int maxChecksPerTick, String overlayDirectory, int fabricLifespanFallbackTicks, boolean debugLogging, int serverBudgetUs, Optional<Integer> maxWorkUnitsPerTick, int effectsWorkUnitsPerTick, int checkSpreadWindowTicks, int dispatchBatchSize, int newProductProtectionSeconds, int conversionCooldownSeconds, int positionSearchChecksPerTick, int debugScenarioPrepareBatchSize, int debugScenarioPrepareBudgetUs, int maxPlaceBlockRadius) {
-        this(checkIntervalTicks, backoffMaxTicks, maxChecksPerTick, overlayDirectory, fabricLifespanFallbackTicks, debugLogging, serverBudgetUs, maxWorkUnitsPerTick, effectsWorkUnitsPerTick, checkSpreadWindowTicks, dispatchBatchSize, newProductProtectionSeconds, conversionCooldownSeconds, positionSearchChecksPerTick, debugScenarioPrepareBatchSize, debugScenarioPrepareBudgetUs, maxPlaceBlockRadius, NearbyProductLimits.DEFAULT, DEFAULT_RESCAN_ENTITIES_PER_STEP, DEFAULT_CANCELS_PER_STEP, DEFAULT_PREPARE_GROUPS_PER_STEP);
+        this(checkIntervalTicks, backoffMaxTicks, maxChecksPerTick, overlayDirectory, fabricLifespanFallbackTicks, debugLogging, serverBudgetUs, maxWorkUnitsPerTick, effectsWorkUnitsPerTick, checkSpreadWindowTicks, dispatchBatchSize, newProductProtectionSeconds, conversionCooldownSeconds, positionSearchChecksPerTick, debugScenarioPrepareBatchSize, debugScenarioPrepareBudgetUs, maxPlaceBlockRadius, NearbyProductLimits.DEFAULT, DEFAULT_RESCAN_ENTITIES_PER_STEP, DEFAULT_CANCELS_PER_STEP, DEFAULT_PREPARE_GROUPS_PER_STEP, DEFAULT_SETTLEMENT_RECOVERY_MAX_ATTEMPTS);
     }
 
     // 超出 16 字段的键放在本层：RecordCodecBuilder 单组最多 16 个字段，BASE_CODEC 已是 16 项满额
@@ -183,8 +188,12 @@ public record ServerConfig(
                     .forGetter(ServerConfig::cancelsPerStep),
             // 结算准备每步组数：把整堆固定输入摊到多个 tick，避免单 tick 一次性准备
             Codec.intRange(1, 4096).optionalFieldOf("prepare_groups_per_step", DEFAULT_PREPARE_GROUPS_PER_STEP)
-                    .forGetter(ServerConfig::prepareGroupsPerStep)
-    ).apply(instance, (base, maxPlaceBlockRadius, limits, rescanEntitiesPerStep, cancelsPerStep, prepareGroupsPerStep) -> new ServerConfig(base.checkIntervalTicks(), base.backoffMaxTicks(), base.maxChecksPerTick(), base.overlayDirectory(), base.fabricLifespanFallbackTicks(), base.debugLogging(), base.serverBudgetUs(), base.maxWorkUnitsPerTick(), base.effectsWorkUnitsPerTick(), base.checkSpreadWindowTicks(), base.dispatchBatchSize(), base.newProductProtectionSeconds(), base.conversionCooldownSeconds(), base.positionSearchChecksPerTick(), base.debugScenarioPrepareBatchSize(), base.debugScenarioPrepareBudgetUs(), maxPlaceBlockRadius, limits, rescanEntitiesPerStep, cancelsPerStep, prepareGroupsPerStep)));
+                    .forGetter(ServerConfig::prepareGroupsPerStep),
+            // 结算恢复重试上限：超过上限后保留账本，等下次启动全量扫描
+            Codec.intRange(1, 100)
+                    .optionalFieldOf("settlement_recovery_max_attempts", DEFAULT_SETTLEMENT_RECOVERY_MAX_ATTEMPTS)
+                    .forGetter(ServerConfig::settlementRecoveryMaxAttempts)
+    ).apply(instance, (base, maxPlaceBlockRadius, limits, rescanEntitiesPerStep, cancelsPerStep, prepareGroupsPerStep, settlementRecoveryMaxAttempts) -> new ServerConfig(base.checkIntervalTicks(), base.backoffMaxTicks(), base.maxChecksPerTick(), base.overlayDirectory(), base.fabricLifespanFallbackTicks(), base.debugLogging(), base.serverBudgetUs(), base.maxWorkUnitsPerTick(), base.effectsWorkUnitsPerTick(), base.checkSpreadWindowTicks(), base.dispatchBatchSize(), base.newProductProtectionSeconds(), base.conversionCooldownSeconds(), base.positionSearchChecksPerTick(), base.debugScenarioPrepareBatchSize(), base.debugScenarioPrepareBudgetUs(), maxPlaceBlockRadius, limits, rescanEntitiesPerStep, cancelsPerStep, prepareGroupsPerStep, settlementRecoveryMaxAttempts)));
 
     /**
      * 由本配置换算出的运行期上限：规则加载与保存校验据此拒载超出上限的规则。

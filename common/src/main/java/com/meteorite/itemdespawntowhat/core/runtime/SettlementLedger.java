@@ -34,6 +34,8 @@ public final class SettlementLedger extends SavedData {
     // 已完成记录的保留上限：先按 tick 过期，再按条数兜底
     private static final int MAX_RECORDS = 512;
     private static final long RETAIN_COMPLETED_TICKS = 6000L;
+    // 条数上限告警的降频刻：上限持续被占满时每个保留窗口只提示一次，避免每 tick 刷日志
+    private long lastCapacityWarnTick = Long.MIN_VALUE;
 
     // 主索引：持有与 scanIndex 相同的可变记录引用，不做写入时拷贝；迭代顺序即加入与持久化顺序。
     // 两张索引只能通过 index / unindex 成对变更，禁止在其它位置单独增删其中一张。
@@ -151,30 +153,41 @@ public final class SettlementLedger extends SavedData {
         return total;
     }
 
-    // 裁剪：已完成且返还交付完毕的记录先按 tick 过期，再按条数上限兜底
+    // 裁剪：已终结且无可交付内容的记录先清理，已完成记录再按 tick 过期，最后按条数上限兜底。
+    // 取消/失败后没有待交付量说明已无恢复价值（有待交付量的记录一律保留），不必白占账本等保留窗口
     public void prune(long gameTime) {
         boolean changed = false;
-        // 先按 tick 判定过期再成对摘除：记录可变，判定必须发生在摘除之前，快照遍历避免边遍历边改主索引
+        // 先判定再成对摘除：记录可变，判定必须发生在摘除之前，快照遍历避免边遍历边改主索引
         for (SettlementRecord record : List.copyOf(records.values())) {
-            boolean expired = record.status() == SettlementRecord.Status.COMPLETED
-                    && record.pendingDelivery() <= 0
-                    && record.finishedTick() >= 0L
-                    && gameTime - record.finishedTick() > RETAIN_COMPLETED_TICKS;
-            if (expired) {
+            if (trimmable(record, gameTime)) {
                 changed |= unindex(record.id());
             }
         }
         while (records.size() > MAX_RECORDS) {
             String victim = null;
             for (Map.Entry<String, SettlementRecord> entry : records.entrySet()) {
-                if (entry.getValue().status() == SettlementRecord.Status.COMPLETED) {
+                SettlementRecord candidate = entry.getValue();
+                if (candidate.pendingDelivery() > 0 || candidate.finishedTick() < 0L) {
+                    continue;
+                }
+                SettlementRecord.Status status = candidate.status();
+                if (status == SettlementRecord.Status.COMPLETED) {
+                    // 已完成记录优先：即使在保留窗口内，硬上限下也允许提前裁掉
                     victim = entry.getKey();
                     break;
                 }
+                if (victim == null && (status == SettlementRecord.Status.INTERRUPTED
+                        || status == SettlementRecord.Status.FAILED)) {
+                    victim = entry.getKey();
+                }
             }
             if (victim == null) {
-                // 上限是硬保护：未结清/中断记录是恢复依据，一条都不能裁，只告警并结束本次裁剪
-                LOGGER.warn("结算账本达到上限 {} 且没有可裁剪的已完成记录，未结清记录全部保留", MAX_RECORDS);
+                // 上限是硬保护：待交付记录是恢复依据，一条都不能裁；告警按保留窗口降频
+                if (lastCapacityWarnTick == Long.MIN_VALUE
+                        || gameTime - lastCapacityWarnTick >= RETAIN_COMPLETED_TICKS) {
+                    LOGGER.warn("结算账本达到上限 {} 且没有可裁剪的已终结记录，未结清记录全部保留", MAX_RECORDS);
+                    lastCapacityWarnTick = gameTime;
+                }
                 break;
             }
             unindex(victim);
@@ -186,6 +199,18 @@ public final class SettlementLedger extends SavedData {
             }
             setDirty();
         }
+    }
+
+    // 单条记录是否已无保留价值：已完成记录按保留窗口过期，取消/失败且无待交付的记录直接清理
+    private boolean trimmable(SettlementRecord record, long gameTime) {
+        if (record.pendingDelivery() > 0 || record.finishedTick() < 0L) {
+            return false;
+        }
+        return switch (record.status()) {
+            case COMPLETED -> gameTime - record.finishedTick() > RETAIN_COMPLETED_TICKS;
+            case INTERRUPTED, FAILED -> true;
+            default -> false;
+        };
     }
 
     @Override
