@@ -42,6 +42,7 @@
   "itemdespawntowhat.command.debug.scene.description.run.stack": "整堆16张纸：提交一次，执行16组，产出16个海晶碎片。",
   "itemdespawntowhat.command.debug.scene.description.run.priority": "两个不同触发年龄的规则：先执行到期较早的基础规则。",
   "itemdespawntowhat.command.debug.scene.description.run.excluded": "检查锁与无限寿命各1个源：不提交、不产出，保留2张纸。",
+  "itemdespawntowhat.command.debug.scene.description.run.death_drop_merge": "1张检查锁纸与4张同类普通纸合并：合并后仍受保护，不提交，保留5张纸。",
   "itemdespawntowhat.command.debug.scene.description.run.reload": "延迟效果入队后真实重载规则：取消本轮结算与效果，零产出。",
   "itemdespawntowhat.command.debug.scene.description.bench.baseline": "空负载基线，默认60秒。",
   "itemdespawntowhat.command.debug.scene.description.bench.convert": "转化负载，默认1000个实体、60秒；可指定实体数与秒数。",

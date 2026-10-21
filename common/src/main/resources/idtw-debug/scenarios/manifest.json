@@ -6,6 +6,7 @@
   "run/stack",
   "run/priority",
   "run/excluded",
+  "run/death_drop_merge",
   "run/reload",
   "run/catalyst_limited",
   "run/catalyst",

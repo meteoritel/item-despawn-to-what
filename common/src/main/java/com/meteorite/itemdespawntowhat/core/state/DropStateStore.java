@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.state;
 
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.platform.Services;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
@@ -89,5 +90,20 @@ public final class DropStateStore {
             return;
         }
         set(entity, get(entity).withPermanentReturn());
+    }
+
+    /**
+     * 合并完成时把源实体状态并入存活载体：临时到期刻取较晚者，死亡掉落的检查锁标记任一来源存在即保留。
+     * 检查锁是实体级标记，作用于合并后的整堆物品；不随合并转移时，受保护堆会成为普通载体并在下一次检查时被转化。
+     */
+    public static void mergeInto(ItemEntity destination, ItemEntity origin) {
+        if (destination == null || origin == null) {
+            return;
+        }
+        set(destination, get(destination).unionTemporary(get(origin)));
+        if (origin.getTags().contains(Constants.CHECK_LOCK_TAG)) {
+            destination.addTag(Constants.CHECK_LOCK_TAG);
+        }
+        clear(origin);
     }
 }

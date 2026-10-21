@@ -187,8 +187,11 @@ final class DebugScenarioRun {
                     || !level.isPositionEntityTicking(BlockPos.containing(position))) {
                 throw new IllegalStateException("场景区域需要已加载且正在推进的区块：" + position);
             }
-            ItemEntity item = new ItemEntity(level, position.x, position.y, position.z, new ItemStack(definition.sourceItem, definition.stackSize));
-            decorate(item);
+            // merge 夹具的 0 号源只放 1 件，普通堆保持整堆数量，原版合并时普通堆必然成为载体
+            int count = definition.spec.setup() == DebugScenarioSpec.Setup.MERGE && number == 0 ? 1 : definition.stackSize;
+            ItemEntity item = new ItemEntity(level, position.x, position.y, position.z, new ItemStack(definition.sourceItem, count));
+            if (definition.spec.setup() == DebugScenarioSpec.Setup.MERGE) { decorateMergeSource(item); }
+            else { decorate(item); }
             if (number == 0) {
                 long earliest = definition.index.ordered().stream().mapToLong(entry ->
                         (long) entry.value().triggerAfterSeconds() * 20).min().orElse(0);
@@ -198,13 +201,13 @@ final class DebugScenarioRun {
             sources.add(item);
             DebugScenarioManager.bind(this, item, true);
             if (!level.addFreshEntity(item)) { throw new IllegalStateException("测试源实体加入世界被拒绝"); }
-            trace("SOURCE_ADDED", item, "initial_count", definition.stackSize);
+            trace("SOURCE_ADDED", item, "initial_count", count);
         }
     }
 
-    // 0.25格网格固定负载密度；独立组件防合并，实体数不会悄悄减少。
+    // 功能场景按准备方式取间距；性能场景用 0.25 格网格固定负载密度，独立组件防合并，实体数不会悄悄减少。
     private Vec3 position(int number) {
-        if (!benchmark) { return origin.add(number * 1.0, 0, 0); }
+        if (!benchmark) { return origin.add(number * definition.spec.gridSpacing(), 0, 0); }
         int width = Math.max(1, (int) Math.ceil(Math.sqrt(definition.sources)));
         int row = number / width;
         return origin.add((number % width - (width - 1) / 2D) * 0.25, 0,
@@ -221,6 +224,14 @@ final class DebugScenarioRun {
         item.setNeverPickUp();
         item.setNoGravity(true);
         item.setDeltaMovement(Vec3.ZERO);
+    }
+
+    // 合并夹具不能带唯一组件或禁止拾取，否则原版合并不成立；拾取延迟与场景时长对齐，测量窗口内玩家拿不走
+    private void decorateMergeSource(ItemEntity item) {
+        item.addTag("idtw_debug_fixture");
+        item.setNoGravity(true);
+        item.setDeltaMovement(Vec3.ZERO);
+        item.setPickUpDelay(seconds * 20);
     }
 
     // 测量期锁定发起者视角：仅在偏离快照阈值时用服务端传送纠正并发包，静止时零开销。
