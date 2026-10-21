@@ -699,11 +699,14 @@ final class ConversionSettlement implements ServerTask {
                 groupThreshold = null;
                 groupFluid = null;
                 int cost = Math.min(record.sourceCostPerGroup(), held.getCount());
+                // 先记账再扣库存：写盘可能抛异常，若先扣库存，abort 按库存回写待交付量时
+                // 这次扣减还没进 consumedSources，守恒会少算 cost 件；groupStarted 只改账目并落账，
+                // 与 setCount 之间没有让出点，扣减本身也不会失败，因此不存在反向缺口
+                writer.groupStarted(cost);
                 if (cost > 0) {
                     // 已开始的组支付完整固定成本，成本从结算库存里扣掉
                     held.setCount(held.getCount() - cost);
                 }
-                writer.groupStarted(cost);
                 // 固定顺序：催化剂已支付、源成本已扣减，才记账
                 writer.catalystGroupPaid(paidCatalyst);
                 // 已开始组的扣减与记账在同一刻完成（两者之间没有让出点），且待交付量在本步骤出口对齐：

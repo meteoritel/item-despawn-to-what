@@ -125,7 +125,8 @@ final class SettlementRecovery implements ServerTask {
     }
 
     // 失败与取消共用收尾：保留剩余库存、释放预留并释放幂等位；
-    // failed=true 时把剩余交付交给运行期恢复队列按退避重试，取消则不重排（等下次扫描）
+    // failed=true 时把剩余交付交给运行期恢复队列按退避重试；取消则交回运行时，由它按记录是否仍需恢复
+    // 决定是否立即重排（reload 会取消在飞恢复，取消后本会话仍需继续交付）
     private void close(String reason, boolean failed) {
         if (closed) {
             return;
@@ -145,7 +146,7 @@ final class SettlementRecovery implements ServerTask {
             if (failed) {
                 runtime.onRecoveryFailed(record.id(), reason);
             } else {
-                runtime.onRecoveryFinished(record.id());
+                runtime.onRecoveryFinished(level.getServer(), record.id());
             }
         }
     }
@@ -153,7 +154,7 @@ final class SettlementRecovery implements ServerTask {
     // 交付结束：记录标记完成并落账，释放幂等位
     private void finish() {
         writer.complete(level.getGameTime());
-        runtime.onRecoveryFinished(record.id());
+        runtime.onRecoveryFinished(level.getServer(), record.id());
         LOGGER.debug("返还交付完成：记录={} 已交付={}", record.id(), record.deliveredReturns());
     }
 
