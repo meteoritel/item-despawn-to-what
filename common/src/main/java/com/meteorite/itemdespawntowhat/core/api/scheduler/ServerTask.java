@@ -14,7 +14,7 @@ public interface ServerTask {
     // 稳定名称，仅用于日志与调试。
     String tracingName();
 
-    // 执行一个有界步骤；返回本轮消耗的工作量与后续安排。
+    // 执行一个有界步骤；返回本步声明的工作量（计价下限）与后续安排，真实成本以步骤内上报量为准。
     StepResult step(ServerTickBudget budget);
 
     // 任务被取消时的通知，实现者可在这里记录业务状态。

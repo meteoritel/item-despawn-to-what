@@ -420,6 +420,12 @@ final class DebugScenarioRun {
         data.addProperty("first_rule", firstRule);
         data.addProperty("first_output_delay_ticks", firstOutputTick < 0 || firstConversionTick < 0 ? -1 : firstOutputTick - firstConversionTick);
         data.addProperty("action_count", actions.completedCount());
+        // 预算指标：让场景用精确值或 min/max 断言「工作单位跟真实世界操作量同向变化」，不依赖人工读日志
+        data.addProperty("budget_peak_work_units_in_tick", window == null ? 0 : window.peakWorkUnitsInTick());
+        data.addProperty("budget_ticks_exhausted_by_work_units", window == null ? 0 : window.ticksExhaustedByWorkUnits());
+        data.addProperty("budget_max_drained_tasks_in_tick", window == null ? 0 : window.maxDrainedTasksInTick());
+        data.addProperty("scheduler_max_step_work_units", window == null ? 0 : window.maxStepWorkUnits());
+        data.addProperty("effects_work_units_in_window", window == null ? 0 : window.effectsWorkUnitsInWindow());
         return data;
     }
 
