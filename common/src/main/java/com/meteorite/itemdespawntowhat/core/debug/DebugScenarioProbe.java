@@ -71,7 +71,8 @@ final class DebugScenarioProbe {
         switch (event) {
             case "OUTCOME_PLANNED" -> candidates.merge(String.valueOf(field(fields, "candidate")), 1L, Long::sum);
             case "SETTLEMENT_COMPLETED" -> {
-                for (String key : List.of("groups", "consumed_sources", "returned", "pending_units", "pending_delivery")) {
+                for (String key : List.of("groups", "consumed_sources", "returned", "pending_units", "pending_delivery",
+                        "prepared_groups")) {
                     Object value = field(fields, key);
                     if (!(value instanceof Number number)) { throw new IllegalStateException("结算事件缺少数值：" + key); }
                     totals.merge(key, number.longValue(), Long::sum);

@@ -27,6 +27,7 @@ import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.StepResult;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.StepOutcome;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.StepWorkCounter;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudgetSnapshot;
 import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
 import com.meteorite.itemdespawntowhat.core.service.BuiltinTypeRegistries;
@@ -1079,10 +1080,11 @@ public final class ConversionRuntime {
         // 效果级条件与概率在此判定一次，结果随任务携带，源实体清空后不再重新判定。
         // 判定异常按同一补偿单元处理：整堆源物品写回并保留所有权追踪。
         Map<PreparedEffectKey, EffectPreparation> preparations;
+        // 领先准备的组数：按可用源算出的组数上界只是理论值，实际准备只做本步允许的组数；
+        // 其余组的固定输入由结算任务在 PREPARING 阶段分组续接，大堆叠的重活不会全压在检查步骤里
+        int leadGroups = Math.min(costPerGroup > 0 ? available / costPerGroup : 1, scheduler.config().prepareGroupsPerStep());
         try {
-            // 潜在组数上界：按可用源与每组固定成本算，尚未选候选、未付催化剂、未派发任何组
-            int potentialGroups = costPerGroup > 0 ? available / costPerGroup : 1;
-            preparations = prepareEffects(level, item, rule, triggerPosition, potentialGroups, source.copy());
+            preparations = prepareEffects(level, item, rule, triggerPosition, leadGroups, source.copy());
         } catch (RuntimeException failure) {
             tracked.locked = false;
             // 准备阶段异常发生在源物品扣减之前，守恒天然成立；仍需结构化事件把规则与原因定位下来，
@@ -1114,7 +1116,7 @@ public final class ConversionRuntime {
                 RuntimeObserver.current().converted(item, rule.id().toString(), estimated);
             }
             ConversionSettlement settlement = new ConversionSettlement(this, scheduler, level, item, rule, held, writer,
-                    triggerPosition, triggerVelocity, preparations);
+                    triggerPosition, triggerVelocity, preparations, leadGroups);
             scheduler.scheduleAt(level.dimension(), settlement, level.getGameTime());
             transferred = true;
             VisualFeedback.conversion(level, item.position());
@@ -1190,13 +1192,14 @@ public final class ConversionRuntime {
 
     // 成功转化当刻为「需要先固定输入」的类型逐槽生成固定输入：条件与概率在这里判定一次，
     // 结果随结算任务携带，源实体清空后不再重新判定。没有准备阶段的类型不产出，保持原有判定时机。
+    // preparedGroups 只是领先准备的组数上界，未覆盖的组由结算任务按组续接准备。
     private Map<PreparedEffectKey, EffectPreparation> prepareEffects(ServerLevel level, ItemEntity item, Rule rule,
-                                                                    Vec3 position, int potentialGroups,
+                                                                    Vec3 position, int preparedGroups,
                                                                     ItemStack sourceSnapshot) {
         Map<PreparedEffectKey, EffectPreparation> preparations = new HashMap<>();
         // 组间共享的固定输入：同一候选同一槽位只保留首份，各组共用它承载执行期的跨组状态
         Map<PreparedEffectKey, EffectPreparation> sharedPreparations = new HashMap<>();
-        if (potentialGroups <= 0) {
+        if (preparedGroups <= 0) {
             return preparations;
         }
         BlockPos pos = BlockPos.containing(position);
@@ -1210,9 +1213,9 @@ public final class ConversionRuntime {
                 }
                 // 一次性效果同一源只尝试一组，固定一份即可；其余类型按潜在组各固定一份，
                 // 条件与概率判定互不复用，声明可共享的固定输入在组间复用首份
-                int groups = definition.oneShot() ? 1 : potentialGroups;
+                int groups = definition.oneShot() ? 1 : preparedGroups;
                 for (int group = 0; group < groups; group++) {
-                    EffectPreparation preparation = prepareEffect(definition, effect, level, item, pos, position,
+                    EffectPreparation preparation = prepareEffectSlot(definition, effect, level, item, pos, position,
                             sourceSnapshot, candidate.fillOrigin());
                     if (preparation == null) {
                         // 未迁移的类型不在成功转化当刻固定，其条件与概率仍在首次执行时判定
@@ -1234,17 +1237,21 @@ public final class ConversionRuntime {
         return preparations;
     }
 
-    // 泛型桥接：准备入口只读效果参数与成功当刻可读的输入
+    // 泛型桥接：准备入口只读效果参数与成功当刻可读的输入。
+    // 结算任务的 PREPARING 阶段按组续接准备时复用同一入口，保证两处的条件、概率与固定输入口径一致。
     @SuppressWarnings("unchecked")
-    private @Nullable EffectPreparation prepareEffect(EffectType<?> definition, Effect effect, ServerLevel level,
-                                                     ItemEntity item, BlockPos pos, Vec3 position,
-                                                     ItemStack sourceSnapshot, boolean fillOrigin) {
+    @Nullable EffectPreparation prepareEffectSlot(EffectType<?> definition, Effect effect, ServerLevel level,
+                                                 ItemEntity item, BlockPos pos, Vec3 position,
+                                                 ItemStack sourceSnapshot, boolean fillOrigin) {
         // 准备阶段注入点：注入失败必须沿转化补偿单元抛出，由检查任务的失败收尾释放或重排追踪
         if (RuntimeObserver.current().enabled()) {
             RuntimeObserver.current().effectPreparing(level.getServer(), effect.type());
         }
         EffectPreparation preparation = ((EffectType<Effect>) definition).executor()
                 .prepare(effect, level, position, item, sourceSnapshot, fillOrigin);
+        // 一次固定输入的准备本身就是一次真实开销（例如开战利品表）：按 1 个工作单位上报，
+        // 让准备量进入调度器计价，而不是被当成零成本勾当
+        StepWorkCounter.report(1);
         if (preparation == null || preparation.gate() != null) {
             return preparation;
         }

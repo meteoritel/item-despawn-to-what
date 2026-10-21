@@ -29,6 +29,7 @@
   "run/cancel_budget",
   "bench/baseline",
   "bench/convert",
+  "bench/heavy_prepare",
   "bench/retry",
   "bench/normal",
   "bench/converted",

@@ -41,6 +41,7 @@ flowchart TB
 |---|---|---|---|
 | 检查与退避 | 多长时间查一次、连续失败如何拉长间隔 | `check_interval_ticks`、`backoff_max_ticks` | 转化运行时 |
 | 共享 tick 预算 | 每 tick 允许多少工作量、效果与搬运各占多少 | `server_budget_us`、`max_work_units_per_tick`、`effects_work_units_per_tick`、`dispatch_batch_size` | 调度器 |
+| 结算准备 | 一次结算每步最多为多少组固定效果输入 | `prepare_groups_per_step` | 结算任务 |
 | 检查平滑与位置搜索 | 到期检查如何摊平、每刻能查多少个候选位置 | `check_spread_window_ticks`、`position_search_checks_per_tick` | 调度器 |
 | 回扫分摊 | 启动、维度加载与规则重载后的整维回扫每步处理多少实体 | `rescan_entities_per_step` | 转化运行时 |
 | 取消清理 | 规则重载、维度卸载与停服前摘除的任务每步取消多少 | `cancels_per_step` | 调度器 |

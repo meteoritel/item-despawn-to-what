@@ -47,6 +47,7 @@ The block below is the complete content the game creates on the first launch, an
   "debug_scenario_prepare_batch_size": 128,
   "debug_scenario_prepare_budget_us": 2000,
   "max_place_block_radius": 8,
+  "prepare_groups_per_step": 8,
   "nearby_products": {
     "item_limit": 1024,
     "item_radius": 6,
@@ -79,6 +80,7 @@ Time values are in game ticks, and 20 ticks equal 1 second on a normal server.
 | `effects_work_units_per_tick` | The per-tick quota reserved for running effects, such as spawning items, placing blocks, and granting experience, so that heavy output does not crowd out the checks | 1 to 100000 | `64` | Raise it when a large batch of products takes too long to appear. Lower it to keep the checks prompt |
 | `check_spread_window_ticks` | When many drops come due at once, the mod spreads those checks over a window of this many game ticks | 1 to 1200 ticks | `20` (1 second) | Raise it when a simultaneous batch causes lag, which is smoother but delays individual conversions. Lower it to keep conversions on time when a single tick can take the load |
 | `dispatch_batch_size` | How many queued conversions the mod advances per tick at most, and it also caps the returned items delivered in one batch | 1 to 100000 | `64` | Raise it when large batches back up |
+| `prepare_groups_per_step` | How many conversion groups one settlement fixes its effect inputs for per tick before it starts paying groups. The remaining groups continue on later ticks | 1 to 4096 | `8` | Raise it to finish heavy preparation sooner at the cost of more per-tick work. Lower it to spread preparation over more ticks |
 | `new_product_protection_seconds` | How many seconds a freshly converted item resists destruction by fire, lava, and cacti | 0 to 3600 seconds | `2` | Raise it when products burn as soon as they appear, for example next to lava. Set `0` to let products be destroyed right away |
 | `conversion_cooldown_seconds` | How many seconds a freshly converted item cannot start another conversion | 0 to 3600 seconds | `5` | Raise it when products convert again immediately under another rule. Set `0` to let a product convert again at once |
 | `position_search_checks_per_tick` | How many candidate positions the mod tries per tick when it looks for a spot for a product or a returned item | 1 to 4096 | `16` | Raise it when items stay undelivered because the terrain leaves few spots. Lower it to save performance |
