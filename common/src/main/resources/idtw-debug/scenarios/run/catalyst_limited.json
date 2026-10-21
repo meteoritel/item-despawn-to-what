@@ -58,7 +58,8 @@
         "items": [
           "minecraft:emerald"
         ],
-        "count": 1,
+        "counts": {"minecraft:emerald": 1},
+        "consume_counts": {"minecraft:emerald": 1},
         "radius": 2
       }
     }

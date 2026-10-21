@@ -23,7 +23,7 @@ authority: common/core/runtime、common/core/state
 - 追踪：为进入世界的掉落物实体建立追踪，按候选规则的最早触发时间与剩余寿命算出首个检查刻。
 - 触发：自然到期由调度器的 `CONDITION_CHECK` 任务推动；环境伤害由两端 `ItemEntityMixin` 经 `RuleRuntimeHost` 转发到 `requestConversion`。
 - 预检查门禁与规则选择：实体有效性、区块 ticking、实体锁、永久禁转、转化冷却、候选存在性，再按排序取首个命中规则。
-- 完整组结算：把整堆转入结算库存，逐组扣减成本、复核候选容量与催化剂门槛、派发效果、返还剩余。
+- 完整组结算：把整堆转入结算库存，逐组扣减成本、复核候选容量与支付条件、派发效果、返还剩余；开组前支付受阻按容量、催化剂、门槛、流体四类原因区分，容量或催化剂真的不够才截断整批。
 - 持久化与恢复：结算记录台账、待返还记录的启动补扫与交付。
 - 实体临时状态：新产物保护与冷却、返还物永久保护与永久禁转。
 - 共享预算实现：`core/runtime/scheduler` 提供 `core/api/scheduler` 契约的实现。
@@ -148,8 +148,10 @@ flowchart TB
     R -->|"失败"| DEL
     R --> PR["PREPARING：按组固定效果输入，每步最多 prepare_groups_per_step 组"]
     PR --> S["DISPATCHING：逐组结算"]
-    S --> T{"开组前复核候选容量与催化剂门槛"}
-    T -->|"容量不足"| U["截断到已开组数，返还剩余"]
+    S --> T{"开组前复核候选容量与支付条件"}
+    T -->|"容量不足 / 催化剂不足"| U["按原因截断到已开组数，返还剩余"]
+    T -->|"门槛或流体不足"| UB["弃当前候选组，重扫其它候选"]
+    UB --> S
     T -->|"预算耗尽"| V["yield，本刻一件不扣"]
     T -->|"通过"| W["groupStarted 落账 → payGroup 扣减 → 派发 EffectTask"]
     W --> S
@@ -164,12 +166,14 @@ flowchart TB
 结算的硬口径：
 
 - **补偿单元**：`source.copy()` 取走整堆、`source.setCount(0)`、打 `converted` 标签、经 `Writer.register` 写记录、把 `ConversionSettlement` 作为 `EFFECT` 任务入队。任一步抛错都在 `finally` 里撤销：弃记录、去标签、把数量写回源堆并保留追踪。
-- **成组对应**：每组固定成本取规则的 `source_cost`（未声明时按源物品计 1）；`payGroup` 返回不足时截断到已开组数并返还剩余，返回预算耗尽时整步 yield 且一件不扣，扣减与产出始终成组对应。每组先 `groupStarted` 落账再扣减库存：落账可能因写盘异常中断，若先扣库存，`abort` 按库存回写的待交付量会漏掉这次扣减对应的已支付成本；两步之间没有让出点，扣减本身也不会失败。催化剂先过门槛再 `consume_counts`，可用组数作为计划组数的上界。
+- **成组对应**：每组固定成本取规则的 `source_cost`（未声明时按源物品计 1）；`payGroup` 返回预算耗尽时整步 yield 且一件不扣，返回催化剂不足时截断到已开组数并返还剩余，返回门槛或流体不足时只弃当前候选组并重扫一次、重扫也开不出一组时才按该原因截断，扣减与产出始终成组对应。每组先 `groupStarted` 落账再扣减库存：落账可能因写盘异常中断，若先扣库存，`abort` 按库存回写的待交付量会漏掉这次扣减对应的已支付成本；两步之间没有让出点，扣减本身也不会失败。催化剂先过门槛再 `consume_counts`，可用组数作为计划组数的上界。
+- **支付受阻原因**：截断时把原因（`capacity_short` / `catalyst_short` / `threshold_short` / `fluid_short`）写入 WARN 日志与 `PAYMENT_BLOCKED` 观测事件（`record` / `rule` / `reason` / `groups_started` / `group_count` / `stopped_groups`），回执与日志因此可区分不足来源；容量与催化剂真的不够才截整批，门槛或流体只是当刻不满足，优先换候选。
+- **催化剂复核口径**：只校验实体存活、物品类型与件数，候选集沿用计划期按共享半径收集的实体并按 UUID 重读；可用量统一取「现存件数 − 其它结算已预留」，计划期上界与开组前复核共用同一口径。位置不参与复核：催化剂被推动或挤出原位不改变归属，只有实体消失、类型变化或件数不足才算不足。
 - **准备成组**：计划组数还受产物容量承诺截断——按候选累计“当前区域还能容纳多少组产物”，只准备确定能支付的那部分，避免整批固定输入准备好却因邻近阈值开不出组而作废。固定输入按「候选 + 槽位 + 组序号」幂等：成功转化当刻只领先固定前 `prepare_groups_per_step` 组（保持准备阶段异常仍在检查步骤内补偿），其余组由结算任务的 PREPARING 阶段每步最多固定同样多组、按组续接；已完成准备的组数与已支付组数可在调试信息的 `prepared_groups` 中核对。
 - **准备计费**：每次固定输入（例如开战利品表）按 1 个工作单位上报，准备量因此进入与其它世界操作同一份预算计价，不会被当成零成本勾当。
 - **数量守恒**：转入结算库存的原始数量 = 已扣减成本总量 + 已交付返还 + 待交付返还；成本总量等于每组成本乘以已完成组数。概率落空或条件不满足的组仍计入“已支付组”，回执以 `SKIPPED` 落账而不是从账上抹掉。
 
-容量只在开组前复核，取值聚合同一候选内可重复效果的物品与实体需求（经验不占容量）；同刻同一候选只查一次世界。轮转模式下跨结算共享游标，被跳过的候选不推进游标。
+容量只在开组前复核，需求聚合同一候选内可重复效果声明的「每轮一组最小产出需求」（`EffectType.capacityDemand`）：具体物品与通用实体按件数累计，产物类型未知的产出（战利品表）按区域物品总量保守计入，经验不占容量；声明是规划下界而非硬截断，实际产出可能更多。同刻同一候选只查一次世界。轮转模式下跨结算共享游标，被跳过的候选不推进游标。
 
 ### 4.4 结算记录、恢复与实体状态写入
 
@@ -214,14 +218,14 @@ flowchart TB
 
 - **新增触发方式**：在 `TriggerKind` 加常量 → 在 `select` 的分派与 `requestConversion` 的入口各接一条 → 同步 `core/model` 的编解码与 `docs/api/rule-json.md` 的取值说明。年龄门槛只对自然触发强制，新触发方式默认走环境口径。
 - **新增组合语义**：在 `CombinationMode` 加常量 → 在 `ConversionSettlement.selectCandidateForGroup` 与 `RoundRobinCursors` 中给出候选推进规则 → 确认游标在“被跳过”与“已定稿”两种情况下行为不同。
-- **新增效果类型**：落在类型系统与效果执行器，本模块只需 `startEffect` 能拿到可入账的 `EffectResult`；一次性效果由 `attemptedOneShots` 去重，同一源只有一次尝试机会。
+- **新增效果类型**：落在类型系统与效果执行器，本模块只需 `startEffect` 能拿到可入账的 `EffectResult`；一次性效果由 `attemptedOneShots` 去重，同一源只有一次尝试机会。参与产物邻近容量约束时在类型定义上覆盖 `capacityDemand`，声明每轮一组最小产出需求（产物类型未知的按保守下界声明，战利品表用 `CapacityDemand.unspecified(1)`）；不覆盖即视为不占容量。
 - **调整返还与恢复策略**：改 `SettlementRecovery` 的交付循环，落账仍只走 `SettlementRecord.Writer`；新增账目字段时同步 `SettlementRecord` 的 Codec 与 `SettlementLedger` 的索引维护。
 - **新增实体状态字段**：在 `DropState` 记录加分量并递增 `VERSION`，持久化通道由 `IPlatformHelper` 在两端的实体数据容器中承载，读写入口只保留 `DropStateStore`。
 
 ### 约束
 
 - 结算提交点是扣减 → 登记 → 调度注册这一段补偿单元；中途失败必须整堆写回并保持零成本。
-- 扣减与产出成组对应：容量或催化剂不足时截断已开始组数并返还剩余，不出现“少扣照常产出”。
+- 扣减与产出成组对应：容量或催化剂不足时截断已开始组数并返还剩余，门槛或流体不足时先弃当前候选组重扫，不出现“少扣照常产出”。
 - 账目只经 `SettlementRecord.Writer` 变更；计划组数不冒充完成组数，回执是唯一成功依据。
 - 取消与异常只登记待返还，世界写入统一交给恢复任务；恢复任务本身不重放旧效果。
 - 检查任务失败必须走失败回调恢复：追踪要么重排到下一次检查、要么释放交还原版，不得让追踪继续指向已终态句柄；恢复不得改动账目，准备阶段失败时源物品尚未扣减。
@@ -233,7 +237,7 @@ flowchart TB
 
 ### 改动后的验证
 
-先做 IDE 工作区检查，再执行 `tools/dsh-build.ps1 -Tasks build`，最后由实机验证触发、返还与重载后的回扫；重载路径用 `run/reload`（成功换入后取消旧结算）与 `run/reload_failure`（换入前失败保留旧规则与追踪，掉落物继续检查并完成转化）核对。检查失败路径用声明式场景 `run/prepare_failure`（恢复后下一 tick 重试）与 `run/prepare_failure_expiry`（到期失败释放交还原版）核对守恒、追踪恢复与不再永久拦截。结算中止与恢复路径用 `run/abort_without_held`（无待交付中止直接终结并裁剪）、`run/settlement_failure_recovery`（当前会话内恢复交付）与 `run/recovery_retry_cap`（退避重试、超限告警一次）核对台账、调度器滞留与恢复计数。涉及结算路径的改动必须同时验证取消与停服场景下的待返还记录能否在下次启动交付完毕；文档链接改动后跑 `python tools/check-docs.py`。
+先做 IDE 工作区检查，再执行 `tools/dsh-build.ps1 -Tasks build`，最后由实机验证触发、返还与重载后的回扫；重载路径用 `run/reload`（成功换入后取消旧结算）与 `run/reload_failure`（换入前失败保留旧规则与追踪，掉落物继续检查并完成转化）核对。检查失败路径用声明式场景 `run/prepare_failure`（恢复后下一 tick 重试）与 `run/prepare_failure_expiry`（到期失败释放交还原版）核对守恒、追踪恢复与不再永久拦截。结算中止与恢复路径用 `run/abort_without_held`（无待交付中止直接终结并裁剪）、`run/settlement_failure_recovery`（当前会话内恢复交付）与 `run/recovery_retry_cap`（退避重试、超限告警一次）核对台账、调度器滞留与恢复计数。支付口径用 `run/catalyst_moved`（催化剂被推离原位仍按预留支付、不整批截断）、`run/catalyst_threshold_edge`（计划期与开组前门槛结论一致）与 `run/loot_table_capacity`（战利品表产出使计划组数受邻近容量约束）核对；既有 `run/catalyst` 与 `run/catalyst_limited` 继续覆盖催化剂充足与耗尽两种基线。涉及结算路径的改动必须同时验证取消与停服场景下的待返还记录能否在下次启动交付完毕；文档链接改动后跑 `python tools/check-docs.py`。
 
 ## 6. 数据与配置引用
 

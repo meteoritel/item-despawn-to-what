@@ -88,6 +88,7 @@ final class DebugScenarioProbe {
                 }
             }
             case "EFFECT_CHANCE_SKIPPED" -> totals.merge("chance_skipped", 1L, Long::sum);
+            case "PAYMENT_BLOCKED" -> totals.merge("payment_blocked_" + field(fields, "reason"), 1L, Long::sum);
             case "EFFECT_SETTLED" -> {
                 if (String.valueOf(field(fields, "outcome")).equals("FAILED")) { totals.merge("failed_effects", 1L, Long::sum); }
             }
@@ -132,6 +133,11 @@ final class DebugScenarioProbe {
             metrics.addProperty(key, totals.getOrDefault(key, 0L));
         }
         metrics.addProperty("check_failures", totals.getOrDefault("check_failures", 0L));
+        // 支付受阻原因分别计数：场景可断言「截断整批时究竟缺的是哪一种资源」
+        for (String key : List.of("payment_blocked_catalyst_short", "payment_blocked_threshold_short",
+                "payment_blocked_fluid_short", "payment_blocked_capacity_short")) {
+            metrics.addProperty(key, totals.getOrDefault(key, 0L));
+        }
         metrics.addProperty("first_check_retry_delay_ticks", firstCheckRetryDelayTicks);
         long returned = returns.stream().filter(Entity::isAlive).mapToLong(item -> item.getItem().getCount()).sum();
         long protectedReturns = returns.stream().filter(Entity::isAlive)

@@ -14,6 +14,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import org.jetbrains.annotations.Nullable;
 
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 
@@ -28,14 +29,23 @@ final class CatalystReservations {
     // 预留项：某维度内某个催化剂实体被某任务占用的件数
     record Hold(UUID itemId, int count, Item expectedItem) {}
 
-    // 支付三态：已支付 / 本刻预算不足需下刻重试 / 可用量不足（含实体已不存在或被扣减）
-    enum PayOutcome { PAID, RETRY, SHORT }
+    // 支付结果：已支付 / 本刻预算不足需下刻重试 / 催化剂可用量不足 / 门槛不足 / 流体不足
+    enum PayOutcome { PAID, RETRY, CATALYST_SHORT, THRESHOLD_SHORT, FLUID_SHORT }
 
-    // 支付结果：三态 + 实际支付件数（RETRY / SHORT 恒为 0）
+    // 支付结果：结果 + 实际支付件数（只有 PAID 可能非零）
     record PayResult(PayOutcome outcome, int paid) {
         static PayResult paid(int paid) { return new PayResult(PayOutcome.PAID, paid); }
         static PayResult retry() { return new PayResult(PayOutcome.RETRY, 0); }
-        static PayResult shortfall() { return new PayResult(PayOutcome.SHORT, 0); }
+        static PayResult blocked(PayOutcome outcome) { return new PayResult(outcome, 0); }
+    }
+
+    /**
+     * 开组前输入复核：返回 null 表示门槛与流体都可支付，返回具体原因表示本组不能开。
+     * 用原因而非布尔值，让结算能区分「催化剂不足」与「门槛或流体在开组当刻不满足」。
+     */
+    @FunctionalInterface
+    interface PaymentInputs {
+        @Nullable PayOutcome commit();
     }
 
     // 某任务持有的预留：维度 + 由近及远的预留项（顺序即支付顺序）
@@ -50,6 +60,14 @@ final class CatalystReservations {
     // 某实体当前可用的未预留件数：实际件数减去已被任何任务预留的部分
     int available(ServerLevel level, ItemEntity item) {
         return Math.max(0, item.getItem().getCount() - reservedCount(level.dimension(), item.getUUID()));
+    }
+
+    // 某实体可供该任务使用的件数：现存件数减去其它任务已预留的部分。
+    // 计划期上界与开组前门槛复核共用这一口径，避免本任务自己的预留把可用量越算越小
+    int availableExcept(ServerLevel level, ItemEntity item, String owner) {
+        return Math.max(0, item.getItem().getCount()
+                - reservedCount(level.dimension(), item.getUUID())
+                + ownReserved(owner, item.getUUID()));
     }
 
     // 该维度当前被任何任务预留的件数合计（只读，供观测与断言）
@@ -103,22 +121,33 @@ final class CatalystReservations {
         return picks;
     }
 
-    // 支付一组催化剂：先按 UUID 重读实体与件数，任一件取不到就整组不扣；
-    // 预算耗尽返回 RETRY（同样是整组不扣，下刻重试）；只有全部校验通过才真实 shrink 并回写预留表
+    /**
+     * 支付一组催化剂：先按 UUID 重读实体与件数，任一件取不到就整组不扣；
+     * 预算耗尽返回 RETRY（同样是整组不扣，下刻重试）；输入复核在真实扣减之前进行，
+     * 不通过时返回对应原因，调用方可据此决定弃组重扫还是截断整批。
+     * 只有全部校验通过才真实 shrink 并回写预留表。
+     *
+     * @param owner  结算记录 id
+     * @param level  源所在维度
+     * @param perGroup 本组应支付的催化剂总件数
+     * @param budget 当前步骤的世界查询预算
+     * @param inputs 门槛与流体的开组前复核
+     * @return 支付结果与原因
+     */
     PayResult payGroup(String owner, ServerLevel level, int perGroup, ServerTickBudget budget,
-                       net.minecraft.world.phys.AABB paymentBounds, java.util.function.BooleanSupplier commitInputs) {
+                       PaymentInputs inputs) {
         if (perGroup <= 0) {
-            return commitInputs.getAsBoolean() ? PayResult.paid(0) : PayResult.shortfall();
+            return commitOrPaid(inputs, 0);
         }
         OwnerHolds ownerHolds = byOwner.get(owner);
         if (ownerHolds == null || ownerHolds.holds().isEmpty()) {
-            return PayResult.shortfall();
+            return PayResult.blocked(PayOutcome.CATALYST_SHORT);
         }
         // 第一遍：只算出本组要从哪些实体各取多少件，不改动任何状态
         List<Hold> plan = ownerHolds.groups().peekFirst();
         if (plan == null || plan.stream().mapToInt(Hold::count).sum() != perGroup) {
-            // 预留总量都不够：记账已损坏，按不足处理并要求调用方释放
-            return PayResult.shortfall();
+            // 预留总量都不够：记账已损坏，按催化剂不足处理并要求调用方释放
+            return PayResult.blocked(PayOutcome.CATALYST_SHORT);
         }
         // 逐实体计费跨 tick 保留进度，避免多物品支付计划反复从头消耗预算。
         while (ownerHolds.progress().charged < plan.size()) {
@@ -127,17 +156,21 @@ final class CatalystReservations {
             ownerHolds.progress().charged++;
         }
         // 真正支付前按 UUID 重读全部实体与件数，任何一件不足都整组不扣。
+        // 位置不参与校验：催化剂被推动或被其它实体挤开不影响预留与支付，只有实体消失或件数不足才算不足。
         List<ItemEntity> resolved = new ArrayList<>(plan.size());
         for (Hold take : plan) {
             ItemEntity item = resolve(level, take.itemId());
-            if (item == null || !item.isAlive() || !paymentBounds.contains(item.position())
+            if (item == null || !item.isAlive()
                     || item.getItem().getItem() != take.expectedItem()
                     || item.getItem().getCount() < reservedCount(level.dimension(), take.itemId())) {
-                return PayResult.shortfall();
+                return PayResult.blocked(PayOutcome.CATALYST_SHORT);
             }
             resolved.add(item);
         }
-        if (!commitInputs.getAsBoolean()) return PayResult.shortfall();
+        PayOutcome blocked = inputs.commit();
+        if (blocked != null) {
+            return PayResult.blocked(blocked);
+        }
         // 全部校验通过后真实扣减；空栈实体按原版语义 discard
         for (int i = 0; i < plan.size(); i++) {
             ItemStack stack = resolved.get(i).getItem();
@@ -150,6 +183,12 @@ final class CatalystReservations {
         ownerHolds.groups().removeFirst();
         ownerHolds.progress().charged = 0;
         return PayResult.paid(perGroup);
+    }
+
+    // 无需催化剂时同样要复核门槛与流体：把输入复核结果折叠进零支付路径
+    private static PayResult commitOrPaid(PaymentInputs inputs, int paid) {
+        PayOutcome blocked = inputs.commit();
+        return blocked == null ? PayResult.paid(paid) : PayResult.blocked(blocked);
     }
 
     // 释放某任务的全部未支付预留（幂等；未知 owner 直接返回，不产生任何世界写入）
@@ -228,6 +267,21 @@ final class CatalystReservations {
     private int reservedCount(ResourceKey<Level> dimension, UUID itemId) {
         Map<UUID, Integer> table = reservedByItem.get(dimension);
         return table == null ? 0 : table.getOrDefault(itemId, 0);
+    }
+
+    // 该任务对某实体的未支付预留件数
+    private int ownReserved(String owner, UUID itemId) {
+        OwnerHolds ownerHolds = byOwner.get(owner);
+        if (ownerHolds == null) {
+            return 0;
+        }
+        int total = 0;
+        for (Hold hold : ownerHolds.holds()) {
+            if (hold.itemId().equals(itemId)) {
+                total += hold.count();
+            }
+        }
+        return total;
     }
 
     private static ItemEntity resolve(ServerLevel level, UUID itemId) {
