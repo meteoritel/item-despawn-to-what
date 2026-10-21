@@ -106,16 +106,20 @@ public final class ConversionRuntime {
     // 观测：上次扫描中因维度未加载而保持不动的记录数（低频读取，供命令与调试输出使用）
     private long recoverySkippedDimensions;
     // 运行期恢复队列：当前会话内失败的结算不必等到下次启动，按记录去重后以退避重试重新交付。
-    // 专用 realm 不随维度重载/卸载取消，只有停服 scheduler.clear 会一并结束
-    private static final Object RECOVERY_REALM = new Object();
-    // 维度未加载时的复查间隔：不消耗尝试次数，等维度加载后继续
+    // 队列推进任务排在调度器自有的系统 realm：它只泵队列、不持有世界写入，规则重载摘除维度 realm 与
+    // 维度卸载都不该打断它；停服随系统 realm 取消，队列状态在同一次停服收尾里清空
+    // 维度未加载时的复查间隔：不消耗恢复尝试次数，等维度加载后继续
     private static final long RECOVERY_DIMENSION_RECHECK_TICKS = 20L;
+    // 维度连续未加载的复查次数上限：达到上限就把记录留在账本交给维度加载回扫或下次启动，避免队列常驻空转
+    private static final int RECOVERY_DIMENSION_RECHECK_LIMIT = 5;
     private final Map<String, PendingRecovery> pendingRecoveries = new LinkedHashMap<>();
     // 已启动的恢复尝试次数：由队列推进并在成功/放弃时清理，超限判定依赖它
     private final Map<String, Integer> recoveryAttempts = new HashMap<>();
     // 已告警过的记录：超限只提示一次，避免每 tick 刷日志
     private final Set<String> recoveryAlerted = new HashSet<>();
     private boolean recoveryDispatchScheduled;
+    // 停服收尾期间不再接受新入队：取消回调仍会把记录写回账本，但排期已经没有必要
+    private boolean stopped;
     @Nullable private MinecraftServer recoveryServer;
     private long recoveryAttemptsTotal;
     private long recoveryAbandonedTotal;
@@ -170,8 +174,8 @@ public final class ConversionRuntime {
                                           int maxRetryDelayTicks) {
     }
 
-    // 队列项：记录 id + 已启动的尝试次数 + 最早可重试刻 + 最近失败原因
-    private record PendingRecovery(String recordId, int attempts, long readyTick, String reason) {
+    // 队列项：记录 id + 已启动的尝试次数 + 最早可重试刻 + 最近失败原因 + 连续未加载维度的复查次数
+    private record PendingRecovery(String recordId, int attempts, long readyTick, String reason, int dimensionMisses) {
     }
 
     /** 便捷构造：寿命提供器取原版默认值，自然消失时刻按原版寿命规则推算 */
@@ -521,23 +525,32 @@ public final class ConversionRuntime {
                 record.id(), record.dimension(), record.pendingDelivery(), position);
     }
 
-    // 恢复任务收尾（交付完成或取消）后释放幂等位，允许后续扫描重新入队剩余库存
-    void onRecoveryFinished(String id) {
+    // 恢复任务收尾（交付完成或取消）后释放幂等位，允许后续扫描重新入队剩余库存。
+    // 取消/中断但仍有待交付时立即交给运行期队列重排：reload 先摘 realm 再逐槽取消，旧任务被取消后
+    // 若只释放幂等位，本会话内就没有人再排这份记录，库存会一直停到下次启动
+    void onRecoveryFinished(MinecraftServer server, String id) {
         activeRecoveries.remove(id);
         recoveryAttempts.remove(id);
         recoveryAlerted.remove(id);
+        if (server == null) {
+            return;
+        }
+        SettlementRecord record = SettlementLedger.get(server.overworld()).find(id);
+        if (record != null && record.needsRecovery()) {
+            enqueueRecovery(server, id, "recovery-cancelled");
+        }
     }
 
     // ========== 运行期恢复队列 ==========
 
     // 结算在当前会话内失败：按记录去重入队，由队列任务在公共预算内按退避重试，不必等到下次启动
     void enqueueRecovery(MinecraftServer server, String recordId, String reason) {
-        if (pendingRecoveries.containsKey(recordId) || activeRecoveries.contains(recordId)) {
+        if (stopped || pendingRecoveries.containsKey(recordId) || activeRecoveries.contains(recordId)) {
             return;
         }
         recoveryServer = server;
         pendingRecoveries.put(recordId, new PendingRecovery(recordId,
-                recoveryAttempts.getOrDefault(recordId, 0), scheduler.currentTick(), reason));
+                recoveryAttempts.getOrDefault(recordId, 0), scheduler.currentTick(), reason, 0));
         scheduleRecoveryDispatch();
     }
 
@@ -557,18 +570,19 @@ public final class ConversionRuntime {
         }
         int delay = SettlementRecovery.queueRetryDelayTicks(attempts);
         recoveryMaxRetryDelayTicks = Math.max(recoveryMaxRetryDelayTicks, delay);
-        pendingRecoveries.put(id, new PendingRecovery(id, attempts, scheduler.currentTick() + delay, reason));
+        pendingRecoveries.put(id, new PendingRecovery(id, attempts, scheduler.currentTick() + delay, reason, 0));
         LOGGER.warn("结算恢复失败：记录={} 原因={} 已尝试={} 次，{} tick 后重试", id, reason, attempts, delay);
         scheduleRecoveryDispatch();
     }
 
-    // 队列空闲时按需排入推进任务；已在跑就不再重复排期
+    // 队列空闲时按需排入推进任务；已在跑就不再重复排期。
+    // 排进系统 realm：规则重载的 detachAll 只摘维度 realm，不会连同队列泵一起取消
     private void scheduleRecoveryDispatch() {
         if (recoveryDispatchScheduled || pendingRecoveries.isEmpty() || recoveryServer == null) {
             return;
         }
         recoveryDispatchScheduled = true;
-        scheduler.scheduleAt(RECOVERY_REALM, new RecoveryDispatchTask(recoveryServer), scheduler.currentTick());
+        scheduler.scheduleMaintenance(new RecoveryDispatchTask(recoveryServer), 0);
     }
 
     /** 运行期结算恢复队列快照，供开发场景断言重试与告警。 */
@@ -623,15 +637,39 @@ public final class ConversionRuntime {
             }
             ServerLevel level = levelOf(server, record.dimension());
             if (level == null) {
-                // 维度未加载：不消耗尝试次数，稍后复查
+                // 维度未加载：不消耗恢复尝试次数，隔一段再复查；连续未加载达到上限就放弃本次会话排队，
+                // 记录留在账本，等该维度加载时的回扫或下次启动扫描接手，避免队列泵长期空转
+                int misses = ready.dimensionMisses() + 1;
+                if (misses >= RECOVERY_DIMENSION_RECHECK_LIMIT) {
+                    if (recoveryAlerted.add(record.id())) {
+                        LOGGER.warn("结算恢复暂缓：记录={} 维度={} 连续 {} 次未加载，保留账本等待维度加载或下次启动扫描",
+                                record.id(), record.dimension(), misses);
+                    }
+                    return advance();
+                }
                 pendingRecoveries.put(record.id(), new PendingRecovery(record.id(), ready.attempts(),
-                        now + RECOVERY_DIMENSION_RECHECK_TICKS, ready.reason()));
+                        now + RECOVERY_DIMENSION_RECHECK_TICKS, ready.reason(), misses));
                 return StepResult.yield(1, 1);
             }
             recoveryAttempts.put(record.id(), ready.attempts() + 1);
             recoveryAttemptsTotal++;
             startRecovery(level, ledger, record);
             return advance();
+        }
+
+        // 队列泵被取消（停服或系统 realm 清理）不会自动重排：复位标志，交由后续入队路径重新排期
+        @Override
+        public void onCancelled(CancelReason reason) {
+            recoveryDispatchScheduled = false;
+        }
+
+        // 队列泵自身失败：复位标志后立即重排，队列里还有记录时不能让它们在本会话永久滞留
+        @Override
+        public void onFailed(@Nullable Throwable failure) {
+            recoveryDispatchScheduled = false;
+            if (!pendingRecoveries.isEmpty()) {
+                scheduleRecoveryDispatch();
+            }
         }
 
         // 队列清空即结束；还有记录则下刻继续
@@ -727,6 +765,8 @@ public final class ConversionRuntime {
         private final boolean worldScan;
         private Integer cursor;
         private int snapshotIndex;
+        // 快照是否已全部登记：世界扫描登记完快照后继续走 items 游标，非世界扫描从一开始就只走游标
+        private boolean snapshotDone;
         private int retries;
 
         private RescanTask(ServerLevel level, LevelState state, long token, boolean worldScan) {
@@ -734,6 +774,7 @@ public final class ConversionRuntime {
             this.state = state;
             this.token = token;
             this.worldScan = worldScan;
+            this.snapshotDone = !worldScan;
         }
 
         @Override public ServerTaskKind kind() { return ServerTaskKind.MAINTENANCE; }
@@ -750,7 +791,7 @@ public final class ConversionRuntime {
             int limit = Math.max(1, config.rescanEntitiesPerStep());
             int processed = 0;
             boolean complete = true;
-            if (worldScan) {
+            if (!snapshotDone) {
                 List<ItemEntity> snapshot = state.rescanSnapshot;
                 int size = snapshot == null ? 0 : snapshot.size();
                 while (snapshotIndex < size) {
@@ -760,17 +801,23 @@ public final class ConversionRuntime {
                     if (!item.isRemoved()) { onItemAdded(level, item); }
                     processed++;
                 }
-            } else {
-                while (true) {
-                    if (processed >= limit || budget.exhausted()) { complete = false; break; }
-                    var next = cursor == null ? state.items.firstEntry() : state.items.higherEntry(cursor);
-                    if (next == null) { break; }
-                    cursor = next.getKey();
-                    ItemEntity item = next.getValue();
-                    // 已移除但离开事件尚未到达的条目跳过，登记表由离开事件兜底清理
-                    if (!item.isRemoved()) { onItemAdded(level, item); }
-                    processed++;
+                if (!complete) {
+                    state.rescanSteps++;
+                    return StepResult.yield(Math.max(1, processed), 1);
                 }
+                snapshotDone = true;
+            }
+            // 快照登记完后继续按 items 游标补齐：快照创建之后才 join 的实体只进了 items、不在快照里，
+            // 重载会清空 tracked，不补这一步它们就再也不会被登记追踪；重复登记由 onItemAdded 幂等兜底
+            while (true) {
+                if (processed >= limit || budget.exhausted()) { complete = false; break; }
+                var next = cursor == null ? state.items.firstEntry() : state.items.higherEntry(cursor);
+                if (next == null) { break; }
+                cursor = next.getKey();
+                ItemEntity item = next.getValue();
+                // 已移除但离开事件尚未到达的条目跳过，登记表由离开事件兜底清理
+                if (!item.isRemoved()) { onItemAdded(level, item); }
+                processed++;
             }
             state.rescanSteps++;
             if (!complete) { return StepResult.yield(Math.max(1, processed), 1); }
@@ -809,6 +856,7 @@ public final class ConversionRuntime {
 
     /** 服务端停止：释放全部状态 */
     public void shutdown() {
+        stopped = true;
         for (LevelState state : levels.values()) {
             state.tracked.clear();
         }
