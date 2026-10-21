@@ -122,8 +122,12 @@ public final class ConversionRuntime {
         private long nextCheckTick = -1L;
     }
 
-    /** 掉落物追踪状态快照，供开发场景实时日志只读使用 */
-    public record TrackedItemInfo(boolean tracked, int failureCount, boolean locked, long nextCheckTick) {
+    /**
+     * 掉落物追踪状态快照，供开发场景实时日志只读使用。
+     * {@code taskTerminal} 用于核对追踪条目与调度句柄是否自洽：追踪存在但句柄已终态说明排期链已断。
+     */
+    public record TrackedItemInfo(boolean tracked, int failureCount, boolean locked, long nextCheckTick,
+                                  boolean taskTerminal) {
     }
 
     /** 便捷构造：寿命提供器取原版默认值，自然消失时刻按原版寿命规则推算 */
@@ -274,12 +278,22 @@ public final class ConversionRuntime {
                     entity.getTags().contains(Constants.CHECK_LOCK_TAG), "unlimited_lifetime", entity.getAge() == -32768); }
             return;
         }
-        List<Rule> candidates = candidatesFor(entity);
-        if (candidates.isEmpty()) {
+        // 已追踪则不再重复排期（ENTITY_LOAD 在区块重新追踪时会重复触发）；
+        // 但句柄已终态说明排期链已断（失败或被取消），实体重新加载是重建追踪的时机，这里补排一次。
+        TrackedState existing = state.tracked.get(entity.getUUID());
+        if (existing != null) {
+            if (existing.task == null || existing.task.terminal()) {
+                List<Rule> candidates = candidatesFor(entity);
+                if (candidates.isEmpty()) {
+                    releaseTracking(state, entity.getUUID(), existing, CancelReason.TRACKING_RELEASED);
+                } else {
+                    scheduleInitial(level, entity, existing, candidates);
+                }
+            }
             return;
         }
-        // 已追踪则不再重复排期（ENTITY_LOAD 在区块重新追踪时会重复触发）
-        if (state.tracked.containsKey(entity.getUUID())) {
+        List<Rule> candidates = candidatesFor(entity);
+        if (candidates.isEmpty()) {
             return;
         }
         TrackedState tracked = new TrackedState();
@@ -476,9 +490,10 @@ public final class ConversionRuntime {
         LevelState state = levels.get(level.dimension());
         TrackedState tracked = state == null ? null : state.tracked.get(entity.getUUID());
         if (tracked == null) {
-            return new TrackedItemInfo(false, 0, false, -1L);
+            return new TrackedItemInfo(false, 0, false, -1L, false);
         }
-        return new TrackedItemInfo(true, tracked.failureCount, tracked.locked, tracked.nextCheckTick);
+        return new TrackedItemInfo(true, tracked.failureCount, tracked.locked, tracked.nextCheckTick,
+                tracked.task != null && tracked.task.terminal());
     }
 
     /** 某个掉落物的候选规则（已按优先级 → 条件叶数 → 定义序排序），供 /idtw debug why 使用 */
@@ -560,22 +575,42 @@ public final class ConversionRuntime {
         }
         long dueAge = Math.min(earliestTrigger, lifespan - 1L);
         long delay = Math.max(0, dueAge - entity.getAge());
-        tracked.nextCheckTick = level.getGameTime() + delay;
-        tracked.task = scheduleCheck(level, entity, (int) Math.min(delay, Integer.MAX_VALUE));
+        replaceCheck(level, entity, tracked, (int) Math.min(delay, Integer.MAX_VALUE), CancelReason.RESCHEDULED);
     }
 
     // 退避重试：条件不满足时不放弃，按退避序列重试直到自然消失
     private void reschedule(ServerLevel level, ItemEntity entity, TrackedState tracked, int delayTicks) {
         int remaining = Math.max(1, lifespanProvider.lifespanTicks(level, entity) - entity.getAge() - 1);
         delayTicks = Math.min(delayTicks, remaining);
-        tracked.nextCheckTick = level.getGameTime() + delayTicks;
-        tracked.task = scheduleCheck(level, entity, delayTicks);
+        replaceCheck(level, entity, tracked, delayTicks, CancelReason.RESCHEDULED);
         if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(entity, "RETRY", "delay_ticks", delayTicks,
                 "failure_count", tracked.failureCount, "next_check_tick", tracked.nextCheckTick); }
         if (config.debugLogging() && RuntimeObserver.current().allowsRuntimeLogging(entity)) {
             LOGGER.info("掉落物 {} 条件未满足，{} tick 后重试（第 {} 次失败）",
                     entity.getUUID(), delayTicks, tracked.failureCount);
         }
+    }
+
+    // 统一重排入口：先按重排原因取消旧句柄，再排新句柄。
+    // 旧句柄可能是环境致死同步路径下仍在队列里的自然检查；只覆盖 tracked.task 会让它变成孤儿，
+    // 到期后再跑一次判定，重复累加失败计数并把退避推高一档。
+    private void replaceCheck(ServerLevel level, ItemEntity entity, TrackedState tracked, int delayTicks,
+                              CancelReason cancelReason) {
+        ScheduledTaskHandle previous = tracked.task;
+        if (previous != null) {
+            previous.cancel(cancelReason);
+        }
+        tracked.nextCheckTick = level.getGameTime() + delayTicks;
+        tracked.task = scheduleCheck(level, entity, delayTicks);
+    }
+
+    // 追踪结束的统一出口：先取消句柄再移除条目，保证环境致死、自然到期释放等同步入口
+    // 不会留下指向已结束追踪的孤儿检查。
+    private void releaseTracking(LevelState state, UUID uuid, TrackedState tracked, CancelReason reason) {
+        if (tracked.task != null) {
+            tracked.task.cancel(reason);
+        }
+        state.tracked.remove(uuid);
     }
 
     // 一次到期判定：选规则 → 执行；条件不满足则退避重试（kind 为本次请求的消失方式）
@@ -592,7 +627,7 @@ public final class ConversionRuntime {
         }
         Entity entity = level.getEntity(uuid);
         if (!(entity instanceof ItemEntity item) || excluded(item)) {
-            state.tracked.remove(uuid);
+            releaseTracking(state, uuid, tracked, CancelReason.ENTITY_REMOVED);
             return;
         }
         if (!level.isPositionEntityTicking(item.blockPosition())) {
@@ -606,7 +641,7 @@ public final class ConversionRuntime {
         // 转化门禁：永久禁转（返还物）在实体生命周期内阻止转化；临时冷却到期前不启动新转化
         DropState dropState = DropStateStore.get(item);
         if (dropState.permanentConversionBan()) {
-            state.tracked.remove(uuid);
+            releaseTracking(state, uuid, tracked, CancelReason.TRACKING_RELEASED);
             return;
         }
         long cooldownRemaining = dropState.cooldownRemaining(level.getGameTime());
@@ -616,14 +651,14 @@ public final class ConversionRuntime {
         }
         List<Rule> candidates = candidatesFor(item);
         if (candidates.isEmpty()) {
-            state.tracked.remove(uuid);
+            releaseTracking(state, uuid, tracked, CancelReason.TRACKING_RELEASED);
             return;
         }
         Rule chosen = select(level, item, candidates, tracked.expiryPending, kind);
         if (chosen == null) {
             tracked.failureCount++;
             if (tracked.expiryPending || pastExpiry(level, item)) {
-                state.tracked.remove(uuid);
+                releaseTracking(state, uuid, tracked, CancelReason.TRACKING_RELEASED);
                 if (tracked.expiryPending) { item.discard(); }
             } else {
                 int delay = config.backoffTicks(tracked.failureCount);
@@ -693,7 +728,7 @@ public final class ConversionRuntime {
         ItemStack source = item.getItem();
         int available = source.getCount();
         if (available <= 0) {
-            state.tracked.remove(item.getUUID());
+            releaseTracking(state, item.getUUID(), tracked, CancelReason.TRACKING_RELEASED);
             return;
         }
         // 每组固定源成本 c：显式 source_cost 优先，未声明时为 1 个
@@ -742,7 +777,9 @@ public final class ConversionRuntime {
         } finally {
             tracked.locked = false;
             if (transferred) {
-                state.tracked.remove(item.getUUID());
+                // 结算任务接手所有权，检查句柄随追踪一起释放：环境致死同步路径此前挂起的检查
+                // 可能仍在队列里，只移除追踪会让它变成孤儿并在后续 tick 空跑一次。
+                releaseTracking(state, item.getUUID(), tracked, CancelReason.TRACKING_RELEASED);
             } else {
                 // 补偿：撤销登记（恢复任务不得再交付这堆库存）、撤销「已转化」标记，
                 // 再把整堆源物品写回源实体并保留所有权追踪，等待下一次转化机会
@@ -926,8 +963,10 @@ public final class ConversionRuntime {
         LevelState state = levels.get(level.dimension());
         if (state == null) { return; }
         state.items.remove(item.getId());
-        TrackedState tracked = state.tracked.remove(item.getUUID());
-        if (tracked != null && tracked.task != null) { tracked.task.cancel(CancelReason.ENTITY_REMOVED); }
+        TrackedState tracked = state.tracked.get(item.getUUID());
+        if (tracked != null) {
+            releaseTracking(state, item.getUUID(), tracked, CancelReason.ENTITY_REMOVED);
+        }
     }
 
     /** 自然消失入口只预留最后一次有预算的检查，不在实体 tick 内执行昂贵效果。 */
@@ -939,12 +978,17 @@ public final class ConversionRuntime {
         if (state == null) { return false; }
         TrackedState tracked = state.tracked.get(item.getUUID());
         if (tracked == null) { return false; }
+        // 转化提交当刻追踪即被释放，因此 tracked 存在等价于尚未提交转化。
+        // 拦截只对有效追踪成立：句柄已终态说明排期链已断（检查失败或被取消），继续拦截会让
+        // 超龄物品永久滞留；释放追踪交还原版销毁，至少按自然寿命消失。
+        if (tracked.task == null || tracked.task.terminal()) {
+            releaseTracking(state, item.getUUID(), tracked, CancelReason.TRACKING_RELEASED);
+            return false;
+        }
         if (!tracked.expiryPending) {
             if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "NATURAL_EXPIRY_DEFERRED"); }
             tracked.expiryPending = true;
-            if (tracked.task != null) { tracked.task.cancel(CancelReason.NATURAL_EXPIRY_DEFERRED); }
-            tracked.nextCheckTick = level.getGameTime();
-            tracked.task = scheduleCheck(level, item, 0);
+            replaceCheck(level, item, tracked, 0, CancelReason.NATURAL_EXPIRY_DEFERRED);
         }
         return true;
     }

@@ -155,6 +155,8 @@ final class DebugScenarioRun {
                     frame.addProperty("source_tracked", info.tracked());
                     frame.addProperty("source_failure_count", info.failureCount());
                     frame.addProperty("source_next_check_tick", info.nextCheckTick());
+                    // 追踪存在但句柄已终态即排期链断开；供环境致死/失败路径核对追踪与句柄是否自洽
+                    frame.addProperty("source_task_terminal", info.taskTerminal());
                 }
             }
             log("FRAME", frame);
