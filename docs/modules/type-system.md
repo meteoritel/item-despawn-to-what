@@ -87,10 +87,11 @@ flowchart TD
 
 1. 写参数 `record` 并实现 `Effect`，同时实现 `withConditions(...)`：返回仅替换效果级条件、其余参数原样保留的新实例（运行期催化剂门槛投影依赖该重建入口）。
 2. 参数 `MapCodec` 以 `codec(expressionCodec)` 形式提供，通用字段（延迟、概率、效果级 `conditions`）复用 `CommonFields` 片段；Codec 在解码期不产出 `null`。
-3. `effectType(expressionCodec)` 返回 `SimpleEffectType`：id + 参数 `MapCodec` + 参数校验器 + `EffectExecutor` + 一次性标记 + 产出类别。
+3. `effectType(expressionCodec)` 返回 `SimpleEffectType`：id + 参数 `MapCodec` + 参数校验器 + `EffectExecutor` + 一次性标记 + 产出类别 + 容量需求解析器。
 4. 执行器放 `exec/`：同步执行只需 `execute`；需要在成功转化当刻固定输入的类型覆盖 `prepare` 与按准备结果创建执行状态的 `start`，长循环在 `start` 返回的执行状态里按共享 tick 预算续接（见 [转化运行时](conversion-runtime.md)）。
 5. 在 `BuiltinEffectTypes.createMutable(expressionCodec)` 增加一条登记。
 6. 声明产出类别（`productKind`）后，含该效果的规则可按类别归组；`productKind` 默认 `ProductKind.NONE`，含这类效果的规则参与归类时按无产出处理（分类装配见 [编辑与落盘](authoring.md)）。
+7. 产物占用邻近容量时通过 `capacityDemand` 声明每轮一组最小产出需求（具体物品/实体件数，或产物类型未知时按区域物品总量的保守下界）；不声明则视为不占容量，结算的容量承诺不会为该效果预留空间。
 
 ### 第三方类型 SPI
 

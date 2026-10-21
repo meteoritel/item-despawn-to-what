@@ -9,6 +9,7 @@ import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.extension.DynamicReferenceCheck;
 import com.meteorite.itemdespawntowhat.core.extension.DynamicReferenceContext;
+import com.meteorite.itemdespawntowhat.core.model.CapacityDemand;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
@@ -68,6 +69,7 @@ public record LootTableEffect(
     // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。
     // 显式实现准备入口与按准备创建执行状态的重载：本次战利品在成功转化当刻开表一次并固定，
     // 交付期不再读取原源实体、不再重开战利品表，也不再次随机抽取。
+    // 容量需求：产物类型未知，按「每组至少 1 件物品」对区域物品总量保守占用容量。
     public static EffectType<LootTableEffect> effectType(Codec<ConditionExpression> expressionCodec) {
         return new SimpleEffectType<>(ID, codec(expressionCodec), LootTableEffect::validateParams,
                 new EffectExecutor<LootTableEffect>() {
@@ -95,7 +97,7 @@ public record LootTableEffect(
                                                  @Nullable EffectPreparation preparation) {
                         return LootTableExecutor.start(effect, context, preparation);
                     }
-                }, ProductKind.LOOT);
+                }, ProductKind.LOOT, params -> CapacityDemand.unspecified(1));
     }
 
     // 参数语义校验；战利品表是否存在由数据包机制保证，此处只校验必填与区间

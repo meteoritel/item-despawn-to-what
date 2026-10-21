@@ -134,7 +134,7 @@ flowchart LR
 ### 扩展点
 
 - **新增条件类型**：参数 record 实现 `Condition`，实现 `ConditionEvaluator`；需要上下文门禁时覆盖类型定义上的 `evaluability`，判定区块是否就绪用 `ChunkPresence`。注册与冻结流程见 [type-system](type-system.md)。
-- **新增效果类型**：实现 `EffectExecutor.execute` 返回真实回执；需要跨 tick 推进时覆盖 `start` 返回自定义 `EffectExecution`，在 `advance` 内用 `ServerTickBudget` 与 `StepWorkCounter.report` 计价；异步分批产出用 `EffectResult.deferred` 受理、再用 `EffectContext.reportProgress` 收敛为完成量。需要成功当刻固定输入时成对覆盖 `prepare` 与 `start(..., preparation)`。
+- **新增效果类型**：实现 `EffectExecutor.execute` 返回真实回执；需要跨 tick 推进时覆盖 `start` 返回自定义 `EffectExecution`，在 `advance` 内用 `ServerTickBudget` 与 `StepWorkCounter.report` 计价；异步分批产出用 `EffectResult.deferred` 受理、再用 `EffectContext.reportProgress` 收敛为完成量。需要成功当刻固定输入时成对覆盖 `prepare` 与 `start(..., preparation)`。参与产物邻近容量约束时按参数覆盖 `EffectType.capacityDemand` 声明每轮一组最小产出需求：产物类型已知的按物品/实体件数声明，产物类型未知的（如战利品表）按保守下界声明，未覆盖即视为不占容量。
 - **新增调度任务种类**：在 `ServerTaskKind` 加常量，队列的公平轮转与分类统计按该枚举归类；新增取消路径在 `CancelReason` 加常量。简单的一次性动作直接用 `RunnableTask`。调度实现与配额见 [conversion-runtime](conversion-runtime.md)。
 - **新增观测能力**：实现 `RuntimeObserver` 的对应默认方法，装配期注入实现；需要包裹排期时覆盖 `schedule` 重载。新增注入点只能落在既有上报时机（判定、排期与取消回调、效果准备、重载应用阶段），生产实现保持空操作。调试侧实现见 [authoring](authoring.md)。
 - **新增问题级别或格式**：问题经 `IssueCollector` 写入，严重级取 `IssueSeverity`；字段路径由调用方按 JSON 形状拼接（`ParamChecks.child` / `ParamChecks.index`）。语义与文案约定见 [errors](../api/errors.md)。

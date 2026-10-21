@@ -19,7 +19,7 @@ record DebugScenarioSpec(String key, int sources, int stackSize, int seconds, in
     enum Setup { NONE, EXPIRY, EXCLUDED, MERGE }
 
     /** 场景动作的普通代码入口，新增动作不需要改命令或执行器的场景名分支。 */
-    enum ActionType { MOVE_SOURCE, RELOAD }
+    enum ActionType { MOVE_SOURCE, MOVE_CATALYST, RELOAD }
 
     /** 开发期可注入的受控故障；只在调试包内实现，生产代码不引用。 */
     enum FaultType { STEP_EXCEPTION, CANCEL_EXCEPTION, PREPARE_EXCEPTION, RELOAD_FAILURE }

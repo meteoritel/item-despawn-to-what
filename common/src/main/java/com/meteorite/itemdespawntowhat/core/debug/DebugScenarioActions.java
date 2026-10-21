@@ -59,6 +59,17 @@ final class DebugScenarioActions {
                     source.setPos(source.getX(), source.getY() + action.offsetY(), source.getZ());
                     run.trace("ACTION", source, "action", "move_source", "offset_y", action.offsetY());
                 }
+                case MOVE_CATALYST -> {
+                    // 只改催化剂位置、不改实体身份：验证支付按 UUID 复核，位置变化不影响预留与门槛
+                    ItemEntity moved = null;
+                    for (ItemEntity item : run.probe.fixtures) {
+                        if (!item.isAlive() || !item.getItem().is(run.definition.catalystItem)) { continue; }
+                        item.setPos(item.getX(), item.getY() + action.offsetY(), item.getZ());
+                        moved = item;
+                    }
+                    if (moved == null) { throw new IllegalStateException("动作执行时催化剂实体已不存在"); }
+                    run.trace("ACTION", moved, "action", "move_catalyst", "offset_y", action.offsetY());
+                }
                 case RELOAD -> {
                     int injectedBefore = run.faultsInjected();
                     var data = run.state();

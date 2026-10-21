@@ -4,6 +4,7 @@ import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
+import com.meteorite.itemdespawntowhat.core.model.CapacityDemand;
 import com.meteorite.itemdespawntowhat.core.model.CatalystCost;
 import com.meteorite.itemdespawntowhat.core.model.CombinationMode;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
@@ -18,8 +19,6 @@ import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.StepResult;
 import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
 import com.meteorite.itemdespawntowhat.core.type.TaggedItemMatch;
-import com.meteorite.itemdespawntowhat.core.type.effect.SpawnEntityEffect;
-import com.meteorite.itemdespawntowhat.core.type.effect.EntityProduct;
 import com.meteorite.itemdespawntowhat.core.config.NearbyProductLimits;
 import com.meteorite.itemdespawntowhat.core.type.effect.exec.EffectTargets;
 import com.meteorite.itemdespawntowhat.core.type.effect.exec.ReturnItemSpawner;
@@ -80,6 +79,20 @@ final class ConversionSettlement implements ServerTask {
     // 结算阶段
     private enum Phase { PLANNING, PREPARING, DISPATCHING, DELIVERING, DONE }
 
+    // 支付受阻原因：截断整批时写入日志与观测，回执据此区分容量、催化剂、门槛与流体不足
+    private enum PayReason {
+        CAPACITY("capacity_short"),
+        CATALYST("catalyst_short"),
+        THRESHOLD("threshold_short"),
+        FLUID("fluid_short");
+
+        private final String id;
+
+        PayReason(String id) { this.id = id; }
+
+        String id() { return id; }
+    }
+
     private final ConversionRuntime runtime;
     private final ServerScheduler scheduler;
     private final ServerLevel level;
@@ -123,6 +136,8 @@ final class ConversionSettlement implements ServerTask {
     private boolean catalystThresholdChecked;
     private CatalystThresholdCheck groupThreshold;
     private FluidSourceResolver groupFluid;
+    // 最近一次因门槛/流体让出的原因：重扫到无候选可开时按该原因截断，便于回执区分四种不足
+    private @Nullable PayReason paymentBlockReason;
 
     private Phase phase = Phase.PLANNING;
     private OutcomeCandidate candidate;
@@ -528,7 +543,9 @@ final class ConversionSettlement implements ServerTask {
                 return -1;
             }
             budget.charge(1);
-            catalystAvailable[catalystScanCursor] = reservations().available(level, catalystPicks.get(catalystScanCursor));
+            // 计划期上界与开组前门槛共用同一口径：现存件数减去其它任务的预留
+            catalystAvailable[catalystScanCursor] = reservations().availableExcept(
+                    level, catalystPicks.get(catalystScanCursor), record.id());
             catalystScanCursor++;
         }
         if (!catalystThresholdChecked) {
@@ -571,25 +588,28 @@ final class ConversionSettlement implements ServerTask {
         return runtime.catalystReservations();
     }
 
-    // 聚合同一物品或通用实体的组内需求；经验不参与邻近产物准入，避免球数导致源物品返还。
+    // 聚合各效果类型声明的每轮一组容量需求；经验不占邻近产物容量，避免球数导致源物品返还。
+    // 声明是下界：产物类型未知的产出（战利品表）按区域物品总量保守计入。
     // 仅含一次性效果的候选不参与容量计算，固定按 1 组处理。
     private int capacityGroups(OutcomeCandidate selected, ServerTickBudget budget) {
         boolean hasOneShot = false;
         boolean hasRepeatable = false;
         Map<TaggedId, Integer> items = new LinkedHashMap<>();
         Map<TaggedId, Integer> entities = new LinkedHashMap<>();
+        int unspecifiedItems = 0;
         for (Effect effect : selected.effects()) {
             EffectType<?> definition = runtime.effectDefinition(effect.type());
             if (definition == null) { continue; }
             if (definition.oneShot()) { hasOneShot = true; continue; }
             hasRepeatable = true;
-            if (effect instanceof SpawnEntityEffect spawn) {
-                switch (spawn.product()) {
-                    case EntityProduct.Item item -> items.merge(item.item(), item.count(), ConversionSettlement::saturatedAdd);
-                    case EntityProduct.Generic entity -> entities.merge(entity.entity(), entity.count(), ConversionSettlement::saturatedAdd);
-                    case EntityProduct.Experience ignored -> { /* 经验仅受执行批次预算约束。 */ }
-                }
+            CapacityDemand demand = capacityDemandOf(definition, effect);
+            for (var item : demand.items().entrySet()) {
+                items.merge(item.getKey(), item.getValue(), ConversionSettlement::saturatedAdd);
             }
+            for (var entity : demand.entities().entrySet()) {
+                entities.merge(entity.getKey(), entity.getValue(), ConversionSettlement::saturatedAdd);
+            }
+            unspecifiedItems = saturatedAdd(unspecifiedItems, demand.unspecifiedItems());
         }
         int groups = Integer.MAX_VALUE;
         NearbyProductLimits limits = runtime.nearbyProducts();
@@ -599,6 +619,13 @@ final class ConversionSettlement implements ServerTask {
                 budget.charge(CAPACITY_QUERY_UNITS);
                 int room = Math.max(0, limits.itemLimit() - countNearbyItems(demand.getKey(), limits.itemLimit(), limits.itemRadius()));
                 groups = Math.min(groups, room / demand.getValue());
+            }
+            // 产物类型未知：按区域全部物品的件数估算占用，room 为 0 时本候选开不出任何组
+            if (unspecifiedItems > 0) {
+                if (budget.exhausted()) { return CAPACITY_PENDING; }
+                budget.charge(CAPACITY_QUERY_UNITS);
+                int room = Math.max(0, limits.itemLimit() - countNearbyAllItems(limits.itemLimit(), limits.itemRadius()));
+                groups = Math.min(groups, room / unspecifiedItems);
             }
         }
         if (limits.entityLimit() > 0) {
@@ -610,6 +637,12 @@ final class ConversionSettlement implements ServerTask {
             }
         }
         return hasOneShot && !hasRepeatable ? 1 : groups;
+    }
+
+    // 效果类型是参数化接口：这里已按 type 字段查表得到类型定义，交由该类型按实例参数声明容量需求
+    @SuppressWarnings("unchecked")
+    private static CapacityDemand capacityDemandOf(EffectType<?> definition, Effect effect) {
+        return ((EffectType<Effect>) definition).capacityDemand(effect);
     }
 
     // 组内需求累加采用饱和值，不允许溢出后绕过阈值。
@@ -641,24 +674,17 @@ final class ConversionSettlement implements ServerTask {
                         return StepResult.yield(1, 1);
                     }
                     if (pick == SELECT_EXHAUSTED) {
-                        // 所有候选都开不出一组：组数截断为已开始组数，剩余源库存走返还路径
-                        // 组数截断经受控入口落账，随后释放未支付预留
-                        int stoppedGroups = groupCount - groupsStarted;
-                        groupCount = groupsStarted;
-                        writer.plan(record.candidateId(), groupCount);
-                        reservations().releaseOwner(record.id());
-                        if (RuntimeObserver.current().enabled()) {
-                            RuntimeObserver.current().observe(source, "OUTCOME_SKIPPED", "record", record.id(), "rule", rule.id(),
-                                    "candidates", candidates.size(), "groups_started", groupsStarted,
-                                    "stopped_groups", stoppedGroups, "reason", "capacity");
-                        }
+                        // 所有候选都开不出一组：截断到已开始组数，剩余源库存走返还路径；
+                        // 若本刻重扫是门槛/流体让出触发的，截断原因沿用该原因，与容量不足区分
+                        truncateGroups(paymentBlockReason == null ? PayReason.CAPACITY : paymentBlockReason);
                         break;
                     }
                     pendingCandidate = candidates.get(pick);
                     pendingCandidateIndex = pick;
                 }
                 if (rule.catalystCost() != null) {
-                    if (groupThreshold == null) groupThreshold = new CatalystThresholdCheck(level, source, triggerPosition, rule.catalystCost());
+                    if (groupThreshold == null) groupThreshold = new CatalystThresholdCheck(
+                            level, triggerPosition, catalystPicks, rule.catalystCost(), reservations(), record.id());
                     if (!groupThreshold.advance(budget)) return StepResult.yield(1, 1);
                 }
                 if (rule.consumeFluid()) {
@@ -671,28 +697,24 @@ final class ConversionSettlement implements ServerTask {
                 int paidCatalyst;
                 {
                     CatalystReservations.PayResult pay = reservations().payGroup(record.id(), level, perGroup, budget,
-                            EffectTargets.blockBox(BlockPos.containing(triggerPosition),
-                                    rule.catalystCost() == null ? 0 : rule.catalystCost().radius()),
-                            () -> (groupThreshold == null || groupThreshold.valid())
-                                    && (groupFluid == null || groupFluid.consume()));
+                            this::commitInputs);
                     if (pay.outcome() == CatalystReservations.PayOutcome.RETRY) {
                         // 本刻预算耗尽：一件不扣、不开组，下刻从头重试
                         return StepResult.yield(1, 1);
                     }
-                    if (pay.outcome() == CatalystReservations.PayOutcome.SHORT) {
-                        // 可用量不足：不开该组（不扣源成本、不派发效果），组数截断为已开始组数，
-                        // 释放未支付预留，剩余源库存走正常返还路径（绝不「少扣照常产出」）
-                        // 组数截断经受控入口落账，随后释放未支付预留
-                        int shortGroups = groupCount - groupsStarted;
-                        groupCount = groupsStarted;
-                        writer.plan(record.candidateId(), groupCount);
-                        reservations().releaseOwner(record.id());
-                        if (RuntimeObserver.current().enabled()) {
-                            RuntimeObserver.current().observe(source, "CATALYST_SHORT", "record", record.id(), "rule", rule.id(),
-                                    "groups_started", groupsStarted, "group_count", groupCount,
-                                    "short_groups", shortGroups, "short_catalyst", shortGroups * perGroup);
-                        }
+                    if (pay.outcome() == CatalystReservations.PayOutcome.CATALYST_SHORT) {
+                        // 真实催化剂不足（实体消失或件数被扣减）：不开该组（不扣源成本、不派发效果），
+                        // 组数截断为已开始组数，释放未支付预留，剩余源库存走正常返还路径（绝不「少扣照常产出」）
+                        truncateGroups(PayReason.CATALYST);
                         break;
+                    }
+                    if (pay.outcome() == CatalystReservations.PayOutcome.THRESHOLD_SHORT
+                            || pay.outcome() == CatalystReservations.PayOutcome.FLUID_SHORT) {
+                        // 门槛或流体在开组当刻不满足：只弃当前候选组并重扫一次，不放整批截断；
+                        // 重扫也开不出一组时才按该原因截断到已开始组数
+                        dropCandidateForPayment(pay.outcome() == CatalystReservations.PayOutcome.THRESHOLD_SHORT
+                                ? PayReason.THRESHOLD : PayReason.FLUID);
+                        continue;
                     }
                     paidCatalyst = pay.paid();
                 }
@@ -722,6 +744,8 @@ final class ConversionSettlement implements ServerTask {
                     cursors.moveTo(cursorKey(), structureVersion, candidates.size(), pendingCandidateIndex + 1);
                 }
                 pendingCandidateIndex = -1;
+                // 本组已开：此前的门槛/流体让出不再是截断原因，后续受阻按新的原因记录
+                paymentBlockReason = null;
                 groupContext = contextForGroup(groupsStarted);
             }
             if (budget.exhausted() || dispatchedThisStep >= batch) {
@@ -750,6 +774,52 @@ final class ConversionSettlement implements ServerTask {
         // 派发结束：待交付量由步骤出口对齐，随后进入交付阶段
         phase = Phase.DELIVERING;
         return StepResult.yield(1, 1);
+    }
+
+    // 组数截断为已开始组数：剩余源库存走返还路径，未支付预留一并释放。
+    // 原因写入日志与观测回执，便于区分容量、催化剂、门槛与流体不足。
+    private void truncateGroups(PayReason reason) {
+        int stoppedGroups = groupCount - groupsStarted;
+        groupCount = groupsStarted;
+        writer.plan(record.candidateId(), groupCount);
+        reservations().releaseOwner(record.id());
+        pendingCandidate = null;
+        pendingCandidateIndex = -1;
+        groupThreshold = null;
+        groupFluid = null;
+        paymentBlockReason = null;
+        LOGGER.warn("结算支付受阻：规则={} 记录={} 原因={} 已开始组={} 截断组={}",
+                rule.id(), record.id(), reason.id(), groupsStarted, stoppedGroups);
+        if (RuntimeObserver.current().enabled()) {
+            RuntimeObserver.current().observe(source, "PAYMENT_BLOCKED", "record", record.id(), "rule", rule.id(),
+                    "reason", reason.id(), "groups_started", groupsStarted, "group_count", groupCount,
+                    "stopped_groups", stoppedGroups);
+        }
+    }
+
+    // 门槛或流体在开组当刻不满足：弃当前候选组并让本结算不再选它（剩余容量置 0 是硬上界），
+    // 随后由派发循环重扫其它候选；同一刻重复查询世界只会得到同一结论，故本结算内不再重试该候选。
+    private void dropCandidateForPayment(PayReason reason) {
+        if (pendingCandidateIndex >= 0) {
+            remainingCapacity[pendingCandidateIndex] = 0;
+        }
+        pendingCandidate = null;
+        pendingCandidateIndex = -1;
+        groupThreshold = null;
+        groupFluid = null;
+        paymentBlockReason = reason;
+    }
+
+    // 开组前的输入复核：门槛与流体任一不满足都返回对应原因，不通过时不扣催化剂、不开组。
+    // 门槛只读，流体 consume 有世界写入，故按门槛在前的顺序复核，避免无谓写入。
+    private @Nullable CatalystReservations.PayOutcome commitInputs() {
+        if (groupThreshold != null && !groupThreshold.valid()) {
+            return CatalystReservations.PayOutcome.THRESHOLD_SHORT;
+        }
+        if (groupFluid != null && !groupFluid.consume()) {
+            return CatalystReservations.PayOutcome.FLUID_SHORT;
+        }
+        return null;
     }
 
     // 一次性效果是否已在同一源请求（本次结算）内尝试过：首次尝试时登记并返回 false；
@@ -895,6 +965,20 @@ final class ConversionSettlement implements ServerTask {
         List<ItemEntity> nearby = new ArrayList<>();
         level.getEntities(EntityTypeTest.forClass(ItemEntity.class), box,
                 item -> item.isAlive() && !item.getItem().isEmpty() && target.matches(item.getItem()), nearby, limit);
+        int total = 0;
+        for (ItemEntity item : nearby) {
+            total = saturatedAdd(total, item.getItem().getCount());
+        }
+        return total;
+    }
+
+    // 邻近物品总量（不区分类别）：产物类型未知的产出（战利品表）只能按区域物品总量保守占用容量。
+    // 收集条数上限取 limit，收满时总量必然 >= limit，room 归零，不会高估可开组数。
+    private int countNearbyAllItems(int limit, int radius) {
+        AABB box = searchBox(radius);
+        List<ItemEntity> nearby = new ArrayList<>();
+        level.getEntities(EntityTypeTest.forClass(ItemEntity.class), box,
+                item -> item.isAlive() && !item.getItem().isEmpty(), nearby, limit);
         int total = 0;
         for (ItemEntity item : nearby) {
             total = saturatedAdd(total, item.getItem().getCount());
