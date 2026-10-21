@@ -110,6 +110,8 @@ public record ServerConfig(
             DEFAULT_DEBUG_SCENARIO_PREPARE_BUDGET_US,
             DEFAULT_MAX_PLACE_BLOCK_RADIUS,
             NearbyProductLimits.DEFAULT,
+            DEFAULT_RESCAN_ENTITIES_PER_STEP,
+            DEFAULT_CANCELS_PER_STEP,
             DEFAULT_PREPARE_GROUPS_PER_STEP
     );
 
