@@ -147,7 +147,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     private @Nullable ConditionTreeContract.Listener listener;
     private @Nullable Runnable copyAction;
     private @Nullable Runnable pasteAction;
-    private Component emptyMessage = Component.translatable("gui.itemdespawntowhat.edit.tree.add_placeholder");
+    private final Component emptyMessage = Component.translatable("gui.itemdespawntowhat.edit.tree.add_placeholder");
 
     private @Nullable UiTreeEditor.Change<ConditionNode> lastChange;
     private @Nullable Component operationError;
@@ -239,22 +239,30 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         return move.isActive() || panning || rubberActive;
     }
 
-    public UiConditionGraphEditor setTypeOptions(List<ConditionTreeContract.TypeOption> options) {
+    /** 注入可创建的条件类型；列表变更后重建画布与类型选择器。 */
+    public void setTypeOptions(List<ConditionTreeContract.TypeOption> options) {
         this.typeOptions = List.copyOf(options);
         picker.setOptions(pickerOptions());
         rebuild();
-        return this;
     }
 
-    public UiConditionGraphEditor setLeafFactory(ConditionTreeContract.LeafFactory factory) {
+    /**
+     * 注入叶节点工厂，由它在类型确认后创建条件叶。
+     *
+     * @param factory 创建回调，可为 {@code null} 取消注入；此时类型确认不会写入节点
+     */
+    public void setLeafFactory(@Nullable ConditionTreeContract.LeafFactory factory) {
         this.leafFactory = factory;
-        return this;
     }
 
-    public UiConditionGraphEditor setLeafSummary(Function<ConditionNode.Leaf, Component> formatter) {
+    /**
+     * 注入卡片摘要格式化；为空时卡片回落到条件类型标签。
+     *
+     * @param formatter 叶节点摘要回调，可为 {@code null} 取消注入
+     */
+    public void setLeafSummary(@Nullable Function<ConditionNode.Leaf, Component> formatter) {
         this.leafSummary = formatter;
         rebuild();
-        return this;
     }
 
     /**
@@ -267,14 +275,22 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         leafTooltipCache.clear();
     }
 
-    public UiConditionGraphEditor setListener(ConditionTreeContract.Listener newListener) {
+    /**
+     * 注入表达式变更回调，宿主据此同步草稿与历史；控件本身不保存正式数据。
+     *
+     * @param newListener 变更回调，可为 {@code null} 取消注入
+     */
+    public void setListener(@Nullable ConditionTreeContract.Listener newListener) {
         this.listener = newListener;
-        return this;
     }
 
-    public UiConditionGraphEditor setOnEditLeaf(Consumer<ConditionNode.Leaf> callback) {
+    /**
+     * 注入叶参数编辑入口；为空时叶节点只能选中，不能打开参数表单。
+     *
+     * @param callback 编辑回调，可为 {@code null} 取消注入
+     */
+    public void setOnEditLeaf(@Nullable Consumer<ConditionNode.Leaf> callback) {
         this.onEditLeaf = callback;
-        return this;
     }
 
     /** 宿主在切页、历史回填、卸载或关闭时取消手势；只有释放可提交移动。 */
@@ -323,11 +339,6 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     public void setClipboardActions(Runnable copy, Runnable paste) {
         copyAction = copy;
         pasteAction = paste;
-    }
-
-    public UiConditionGraphEditor setEmptyMessage(Component message) {
-        this.emptyMessage = message;
-        return this;
     }
 
     public List<UiTreePath> selectedSubtrees() {
@@ -455,11 +466,6 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         return kindMenuOpen && kindMenuPurpose == KindMenuPurpose.DELETE_CONFIRM;
     }
 
-    /** 在当前可添加位置追加一个分组；无参形式默认 ALL。 */
-    public boolean beginAddGroup() {
-        return beginAddGroup(true);
-    }
-
     public boolean beginAddGroup(boolean allOf) {
         if (!enabled) {
             return false;
@@ -476,9 +482,9 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
      *
      * @param anchorScreen 按钮在 GUI 屏幕坐标下的矩形，菜单贴着它弹出
      */
-    public boolean beginAddGroupWithKind(UiRect anchorScreen) {
+    public void beginAddGroupWithKind(UiRect anchorScreen) {
         if (!enabled) {
-            return false;
+            return;
         }
         endInteractions(UiInputCapture.EndReason.CANCEL);
         closePicker();
@@ -490,13 +496,12 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         kindMenuIndex = 0;
         kindMenuOpen = true;
         updateKindMenuRect();
-        return true;
     }
 
-    /** 对当前选中的同父连续节点弹出「全部满足 / 任一满足」包组菜单；无选中时返回 false。 */
-    public boolean beginWrapWithKind() {
+    /** 对当前选中的同父连续节点弹出「全部满足 / 任一满足」包组菜单；无选中时不弹出。 */
+    public void beginWrapWithKind() {
         if (!enabled || tree.selection().isEmpty()) {
-            return false;
+            return;
         }
         endInteractions(UiInputCapture.EndReason.CANCEL);
         closePicker();
@@ -507,7 +512,6 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         kindMenuIndex = 0;
         kindMenuOpen = true;
         updateKindMenuRect();
-        return true;
     }
 
     /** 把选中节点包一层 NOT；多选时包成「NOT（ALL 选中项）」。 */
@@ -604,43 +608,63 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         return changed;
     }
 
-    /** 同级排序：delta 为 -1 / +1，仅单选中节点可移动。 */
-    public boolean moveSelection(int delta) {
-        if (!enabled || delta == 0) {
-            return false;
-        }
+    /**
+     * 同级排序：delta 为 -1 / +1，仅单选中节点可移动。
+     *
+     * <p>可移动性由 {@link #canMoveSelection(int)} 按帧查询，失败原因由 {@link #operationError()} 承载；
+     * 本方法不返回结果，键盘入口调用后直接视为已消费按键。</p>
+     */
+    public void moveSelection(int delta) {
         if (tree.normalizedSelection().size() > 1) {
             operationError = Component.translatable("gui.itemdespawntowhat.edit.tree.move_multiple");
-            return false;
+            return;
+        }
+        if (!canMoveSelection(delta)) {
+            return;
         }
         UiTreePath selected = tree.selected();
         if (selected == null || selected.indices().isEmpty()) {
-            return false;
+            return;
         }
         UiTreePath parent = selected.parent();
-        ConditionNode parentNode = tree.query(parent);
-        List<ConditionNode> terms = termsOf(parentNode);
-        if (terms == null) {
-            return false;
-        }
         int index = selected.indices().getLast();
         int target = index + delta;
-        if (target < 0 || target >= terms.size()) {
-            return false;
-        }
         lastOpKey = EditSession.OP_MOVE_NODE;
         boolean changed = applyAt(parent, node -> swapTerms(node, index, target));
         if (changed) {
             tree.select(parent.child(target));
             followPrimarySelection();
         }
-        return changed;
     }
 
-    /** 把选中的连续同级节点包成 ALL 或 ANY 分组。 */
-    public boolean wrapSelection(boolean all) {
-        if (!enabled) {
+    /**
+     * 当前单选节点能否按 delta 方向与同级节点交换；供工具栏按帧决定上移/下移是否可用。
+     *
+     * <p>只做结构判断，不写入表达式，也不触发校验。</p>
+     */
+    public boolean canMoveSelection(int delta) {
+        if (!enabled || delta == 0) {
             return false;
+        }
+        if (tree.normalizedSelection().size() > 1) {
+            return false;
+        }
+        UiTreePath selected = tree.selected();
+        if (selected == null || selected.indices().isEmpty()) {
+            return false;
+        }
+        List<ConditionNode> terms = termsOf(tree.query(selected.parent()));
+        if (terms == null) {
+            return false;
+        }
+        int target = selected.indices().getLast() + delta;
+        return target >= 0 && target < terms.size();
+    }
+
+    // 把选中的连续同级节点包成 ALL 或 ANY 分组；写入失败时 operationError 已携带原因
+    private void wrapSelection(boolean all) {
+        if (!enabled) {
+            return;
         }
         endInteractions(UiInputCapture.EndReason.CANCEL);
         lastOpKey = EditSession.OP_ADD_GROUP;
@@ -651,7 +675,70 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             followPrimarySelection();
             rebuild();
         }
-        return changed;
+    }
+
+    // Ctrl+D：把选中子树复制为同级后继；根节点没有同级位置，父节点满时整体拒绝
+    private boolean duplicateSelection() {
+        if (!enabled || tree.selection().isEmpty()) {
+            return false;
+        }
+        List<UiTreePath> selected = tree.normalizedSelection();
+        if (selected.stream().anyMatch(path -> path.indices().isEmpty())) {
+            operationError = Component.translatable("gui.itemdespawntowhat.edit.tree.duplicate_root");
+            return false;
+        }
+        for (UiTreePath path : selected) {
+            ConditionNode parent = tree.query(path.parent());
+            if (parent == null || ConditionTreeNodes.INSTANCE.childCapacity(parent)
+                    <= ConditionTreeNodes.INSTANCE.children(parent).size()) {
+                operationError = Component.translatable("gui.itemdespawntowhat.edit.tree.duplicate_full");
+                return false;
+            }
+        }
+        Set<UiTreePath> targets = Set.copyOf(selected);
+        List<ConditionNode> copies = new ArrayList<>();
+        lastOpKey = EditSession.OP_DUPLICATE_NODE;
+        boolean changed = applyAt(UiTreePath.ROOT, root -> {
+            copies.clear();
+            return duplicateWithin(root, UiTreePath.ROOT, targets, copies);
+        });
+        if (!changed) {
+            return false;
+        }
+        rebuild();
+        List<UiTreePath> copyPaths = new ArrayList<>();
+        for (ConditionNode copy : copies) {
+            UiTreePath path = graph.path(copy);
+            if (path != null) {
+                copyPaths.add(path);
+            }
+        }
+        if (!copyPaths.isEmpty()) {
+            tree.setSelection(copyPaths, copyPaths.getLast());
+            followPrimarySelection();
+        }
+        return true;
+    }
+
+    // 递归重建：每个选中节点后插入一份深拷贝，副本同时收集起来供复制后选中
+    private static ConditionNode duplicateWithin(ConditionNode node, UiTreePath path,
+                                                 Set<UiTreePath> targets, List<ConditionNode> copies) {
+        List<ConditionNode> children = ConditionTreeNodes.INSTANCE.children(node);
+        if (children.isEmpty()) {
+            return node;
+        }
+        List<ConditionNode> next = new ArrayList<>(children.size() + targets.size());
+        for (int index = 0; index < children.size(); index++) {
+            ConditionNode child = children.get(index);
+            UiTreePath childPath = path.child(index);
+            next.add(duplicateWithin(child, childPath, targets, copies));
+            if (targets.contains(childPath)) {
+                ConditionNode copy = ConditionTreeNodes.copy(child);
+                copies.add(copy);
+                next.add(copy);
+            }
+        }
+        return ConditionTreeNodes.INSTANCE.withChildren(node, next);
     }
 
     public boolean selectAll() {
@@ -782,6 +869,11 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     @Override
     public boolean isVisible() {
         return visible;
+    }
+
+    /** 编辑器是否可编辑；宿主据此统一使能工具列，而不是从某次点击的返回值反推。 */
+    public boolean isEnabled() {
+        return enabled;
     }
 
     public void setEnabled(boolean next) {
@@ -1476,10 +1568,14 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         boolean control = (modifiers & GLFW.GLFW_MOD_CONTROL) != 0
                 && (modifiers & (GLFW.GLFW_MOD_ALT | GLFW.GLFW_MOD_SUPER)) == 0;
         boolean shift = (modifiers & GLFW.GLFW_MOD_SHIFT) != 0;
+        boolean alt = (modifiers & GLFW.GLFW_MOD_ALT) != 0;
         if (control) {
+            if (shift && keyCode == GLFW.GLFW_KEY_UP) return extendSelection(-1);
+            if (shift && keyCode == GLFW.GLFW_KEY_DOWN) return extendSelection(1);
             if (keyCode == GLFW.GLFW_KEY_A) return selectAll();
             if (keyCode == GLFW.GLFW_KEY_C) return copySelection();
             if (keyCode == GLFW.GLFW_KEY_V) return pasteSelection();
+            if (keyCode == GLFW.GLFW_KEY_D) return duplicateSelection();
             if (keyCode == GLFW.GLFW_KEY_0) {
                 fitToContent();
                 return true;
@@ -1501,6 +1597,10 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             // 内联框打开且未匹配 Ctrl 快捷键：其余按键交给文本框，避免输入字母 / 空格 / 删除误触画布命令
             return false;
         }
+        if (alt && (keyCode == GLFW.GLFW_KEY_UP || keyCode == GLFW.GLFW_KEY_DOWN)) {
+            moveSelection(keyCode == GLFW.GLFW_KEY_UP ? -1 : 1);
+            return true;
+        }
         if (keyCode == GLFW.GLFW_KEY_SPACE) {
             spaceDown = true;
             return true;
@@ -1515,6 +1615,8 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             }
             return false;
         }
+        if (keyCode == GLFW.GLFW_KEY_HOME) return selectSiblingEdge(false);
+        if (keyCode == GLFW.GLFW_KEY_END) return selectSiblingEdge(true);
         if (keyCode == GLFW.GLFW_KEY_UP || keyCode == GLFW.GLFW_KEY_DOWN
                 || keyCode == GLFW.GLFW_KEY_LEFT || keyCode == GLFW.GLFW_KEY_RIGHT) {
             return navigate(keyCode);
@@ -1609,12 +1711,65 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         return tree.query(candidate) == null ? null : candidate;
     }
 
+    // Home / End：跳到同父首尾；无选中时跳到全树首尾
+    private boolean selectSiblingEdge(boolean last) {
+        if (graph.nodes().isEmpty()) {
+            return false;
+        }
+        UiTreePath selected = tree.selected();
+        if (selected == null) {
+            return selectNode(graph.nodes().get(last ? graph.nodes().size() - 1 : 0));
+        }
+        if (selected.indices().isEmpty()) {
+            return false;
+        }
+        List<ConditionNode> terms = termsOf(tree.query(selected.parent()));
+        if (terms == null || terms.isEmpty()) {
+            return false;
+        }
+        return selectNode(terms.get(last ? terms.size() - 1 : 0));
+    }
+
+    // Ctrl+Shift+↑/↓：以锚点为起点，按树序扩展或收缩选区
+    private boolean extendSelection(int step) {
+        if (graph.nodes().isEmpty()) {
+            return false;
+        }
+        if (selectionAnchor == null) {
+            selectionAnchor = tree.selected();
+        }
+        if (selectionAnchor == null) {
+            return false;
+        }
+        ConditionNode anchorNode = tree.query(selectionAnchor);
+        if (anchorNode == null) {
+            return false;
+        }
+        UiTreePath focusedPath = tree.selected();
+        ConditionNode focusedNode = focusedPath == null ? anchorNode : tree.query(focusedPath);
+        int focusIndex = graph.indexOfNode(focusedNode == null ? anchorNode : focusedNode);
+        if (focusIndex < 0) {
+            return false;
+        }
+        int target = Math.clamp(focusIndex + step, 0, graph.nodes().size() - 1);
+        if (target == focusIndex) {
+            return true;
+        }
+        UiTreePath targetPath = graph.path(graph.nodes().get(target));
+        if (targetPath == null) {
+            return false;
+        }
+        selectRange(targetPath, true);
+        return true;
+    }
+
     private boolean selectNode(ConditionNode node) {
         UiTreePath path = graph.path(node);
         if (path == null) {
             return false;
         }
         tree.select(path);
+        selectionAnchor = path;
         followPrimarySelection();
         revealNode(node);
         return true;

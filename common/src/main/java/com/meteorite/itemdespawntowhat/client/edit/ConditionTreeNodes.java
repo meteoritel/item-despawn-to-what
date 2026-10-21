@@ -42,6 +42,34 @@ public final class ConditionTreeNodes implements UiTreeEditor.Adapter<ConditionN
         return node instanceof ConditionNode.Leaf ? 0 : node instanceof ConditionNode.Inverted ? 1 : UNLIMITED_CHILDREN;
     }
 
+    /**
+     * 深拷贝节点树：组合节点逐层重建，叶节点重建为新对象、复用条件参数。
+     *
+     * <p>副本不与原树共享节点身份，可安全插入同一棵布局树；条件参数按不可变对象处理。</p>
+     *
+     * @param node 待复制的节点，可为 {@code null}
+     * @return 结构相同的独立副本；入参为 {@code null} 时返回 {@code null}
+     */
+    public static @Nullable ConditionNode copy(@Nullable ConditionNode node) {
+        if (node == null) {
+            return null;
+        }
+        return switch (node) {
+            case ConditionNode.AllOf all -> new ConditionNode.AllOf(copyTerms(all.terms()));
+            case ConditionNode.AnyOf any -> new ConditionNode.AnyOf(copyTerms(any.terms()));
+            case ConditionNode.Inverted not -> new ConditionNode.Inverted(copy(not.term()));
+            case ConditionNode.Leaf leaf -> new ConditionNode.Leaf(leaf.condition());
+        };
+    }
+
+    private static List<ConditionNode> copyTerms(List<ConditionNode> terms) {
+        List<ConditionNode> copies = new ArrayList<>(terms.size());
+        for (ConditionNode term : terms) {
+            copies.add(java.util.Objects.requireNonNull(copy(term)));
+        }
+        return copies;
+    }
+
     public static @Nullable UiTreePath path(@Nullable String jsonPath) {
         if (jsonPath == null || !jsonPath.startsWith(RuleFields.CONDITIONS)) return null;
         String suffix = jsonPath.substring(RuleFields.CONDITIONS.length());

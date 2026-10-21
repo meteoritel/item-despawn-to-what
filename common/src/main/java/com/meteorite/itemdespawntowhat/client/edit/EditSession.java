@@ -31,6 +31,7 @@ public final class EditSession {
     public static final String OP_WRAP_NOT = "gui.itemdespawntowhat.edit.undo.wrap_not";
     public static final String OP_DELETE_NODE = "gui.itemdespawntowhat.edit.undo.delete_node";
     public static final String OP_MOVE_NODE = "gui.itemdespawntowhat.edit.undo.move_node";
+    public static final String OP_DUPLICATE_NODE = "gui.itemdespawntowhat.edit.undo.duplicate_node";
     public static final String OP_TOGGLE_KIND = "gui.itemdespawntowhat.edit.undo.toggle_kind";
     public static final String OP_ADD_EFFECT = "gui.itemdespawntowhat.edit.undo.add_effect";
     public static final String OP_REMOVE_EFFECT = "gui.itemdespawntowhat.edit.undo.remove_effect";

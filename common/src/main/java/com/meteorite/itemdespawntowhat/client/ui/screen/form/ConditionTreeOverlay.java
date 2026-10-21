@@ -20,6 +20,7 @@ import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
 import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeContract;
+import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeInspection;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionGraphEditor;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCodeView;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
@@ -88,6 +89,10 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     // 提示气泡宽度范围
     private static final int TOOLTIP_MIN_WIDTH = 80;
     private static final int TOOLTIP_MAX_WIDTH = 250;
+    // 只读遮罩：压暗画布，标题与提示保持可读
+    private static final int READONLY_SCRIM = 0xA0000000;
+    private static final int READONLY_TITLE_COLOR = 0xFFFFFFFF;
+    private static final int READONLY_HINT_COLOR = 0xFFB8B8B8;
 
     /** 叶参数表单与承载面板；title 为宿主提供的条件名，内联框当前不绘制标题。 */
     public record Parameters(FormView form, LeafPanel panel, Component title) { }
@@ -140,6 +145,8 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     private final UiIconStrip.Item addConditionItem;
     private final UiIconStrip.Item branchItem;
     private final UiIconStrip.Item removeItem;
+    private final UiIconStrip.Item moveUpItem;
+    private final UiIconStrip.Item moveDownItem;
     private final UiIconStrip.Item wrapItem;
 
     private UiRect bounds = new UiRect(0, 0, 0, 0);
@@ -154,6 +161,8 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     private @Nullable String selectedPath;
     private @Nullable UiWidget pressed;
     private @Nullable Component decodeError;
+    // 下一个待定位的问题下标：F8 或点击状态栏时递增并循环
+    private int nextIssueIndex;
     // 宿主注入的撤销/重做入口；为空时退回本页直接调用会话台账
     private @Nullable Runnable undoAction;
     private @Nullable Runnable redoAction;
@@ -185,7 +194,9 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         source = new UiCodeView(THEME, font);
         source.setEmptyHint(Component.translatable(UI + "source_empty"));
         source.setAccessibleName(Component.translatable(UI + "source_title"));
-        editor = new UiConditionGraphEditor(THEME, font).setTypeOptions(support.typeOptions()).setLeafFactory(support.leafFactory());
+        editor = new UiConditionGraphEditor(THEME, font);
+        editor.setTypeOptions(support.typeOptions());
+        editor.setLeafFactory(support.leafFactory());
         editor.setLeafSummary(leaf -> {
             RuleValue condition = conditionJson(leaf);
             return condition != null
@@ -236,8 +247,8 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         branchItem = addTool(UiHostTheme.ICON_NEW_BRANCH, UI + "button.new_branch", false, this::beginBranchMenu);
         addTool(UiHostTheme.ICON_INVERT, UI + "button.not", true, editor::invertSelection);
         removeItem = addTool(UiHostTheme.ICON_REMOVE, UI + "button.remove", true, this::beginRemoveMenu);
-        addTool(UiHostTheme.ICON_MOVE_UP, UI + "button.up", true, () -> editor.moveSelection(-1));
-        addTool(UiHostTheme.ICON_MOVE_DOWN, UI + "button.down", true, () -> editor.moveSelection(1));
+        moveUpItem = addTool(UiHostTheme.ICON_MOVE_UP, UI + "button.up", false, () -> editor.moveSelection(-1));
+        moveDownItem = addTool(UiHostTheme.ICON_MOVE_DOWN, UI + "button.down", false, () -> editor.moveSelection(1));
         wrapItem = addTool(UiHostTheme.ICON_WRAP_ALL, UI + "button.wrap", true, editor::beginWrapWithKind);
 
         reloadExpression();
@@ -279,6 +290,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     private void reloadExpression() {
         var result = editor.tree().decode(codec, session.draft().valueAt(scope));
         decodeError = result.error();
+        nextIssueIndex = 0;
         editor.setEnabled(result.succeeded());
         if (result.succeeded()) editor.setExpression(new ConditionExpression(result.root()));
         refreshEndpoints();
@@ -664,13 +676,19 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         helpItem.setSelected(helpOpen);
 
         boolean treeView = !sourceView;
-        boolean hasSelection = treeView && !editor.tree().selection().isEmpty();
+        boolean editorEnabled = editor.isEnabled();
+        boolean hasSelection = treeView && editorEnabled && !editor.tree().selection().isEmpty();
         for (UiIconStrip.Item item : toolItems) {
             item.setVisible(treeView);
         }
         for (UiIconStrip.Item item : selectionTools) {
             item.setEnabled(hasSelection);
         }
+        // 创建类工具只受编辑器可用性约束；移动类工具逐格判断当前节点能否移动
+        addConditionItem.setEnabled(treeView && editorEnabled);
+        branchItem.setEnabled(treeView && editorEnabled);
+        moveUpItem.setEnabled(treeView && editor.canMoveSelection(-1));
+        moveDownItem.setEnabled(treeView && editor.canMoveSelection(1));
         // 创建类工具的选中态取自各自弹出的浮层：类型列表 / 新建分支 ∧∨ / 包组 ∧∨
         addConditionItem.setSelected(treeView && editor.isPickerOpen());
         branchItem.setSelected(treeView && editor.isGroupKindMenuOpen());
@@ -703,6 +721,9 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         } else {
             toolColumn.render(graphics, renderFont, mouseX, mouseY);
             editor.render(graphics, renderFont, mouseX, mouseY);
+            if (!editor.isEnabled()) {
+                drawReadOnlyOverlay(graphics);
+            }
         }
         drawShellLines(graphics);
         drawGroupDividers(graphics);
@@ -715,6 +736,20 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
             graphics.renderTooltip(renderFont, renderFont.split(tip,
                     Math.clamp(bounds.width(), TOOLTIP_MIN_WIDTH, TOOLTIP_MAX_WIDTH)), mouseX, mouseY);
         }
+    }
+
+    // 解码失败时画布只读：压暗内容并说明出口，避免工具变灰却没有解释
+    private void drawReadOnlyOverlay(GuiGraphics graphics) {
+        if (canvasRect.width() <= 0 || canvasRect.height() <= 0) {
+            return;
+        }
+        graphics.fill(canvasRect.x(), canvasRect.y(), canvasRect.right(), canvasRect.bottom(), READONLY_SCRIM);
+        int centerX = canvasRect.x() + canvasRect.width() / 2;
+        int centerY = canvasRect.y() + canvasRect.height() / 2;
+        graphics.drawCenteredString(font, Component.translatable(UI + "readonly"),
+                centerX, centerY - font.lineHeight, READONLY_TITLE_COLOR);
+        graphics.drawCenteredString(font, Component.translatable(UI + "readonly.hint"),
+                centerX, centerY + 2, READONLY_HINT_COLOR);
     }
 
     // 外壳底板：整幅先铺画布底色，再给功能栏、工具列与状态栏铺与模态承载面同色的底板。
@@ -935,6 +970,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
                 helpEntry("edit"),
                 helpEntry("select"),
                 helpEntry("move"),
+                helpEntry("issues"),
                 helpEntry("view"),
                 helpEntry("pan"),
                 helpEntry("close"));
@@ -948,6 +984,26 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
 
     /** 帮助浮层的单个条目：左侧动作标签、右侧按宽度折行后的说明。 */
     private record HelpEntry(Component label, Component text) { }
+
+    // F8 / 点击状态栏：按顺序定位下一个问题，到末尾后回到第一个
+    private boolean nextIssue() {
+        List<ConditionTreeInspection.Issue> issues = editor.issues();
+        if (!editor.isEnabled() || issues.isEmpty()) {
+            nextIssueIndex = 0;
+            return false;
+        }
+        if (nextIssueIndex < 0 || nextIssueIndex >= issues.size()) {
+            nextIssueIndex = 0;
+        }
+        ConditionTreeInspection.Issue issue = issues.get(nextIssueIndex);
+        nextIssueIndex = (nextIssueIndex + 1) % issues.size();
+        sourceView = false;
+        layout();
+        setFocusSlot(FocusSlot.CANVAS);
+        editor.selectPath(issue.path());
+        syncSelection(true);
+        return true;
+    }
 
     // 状态栏左侧诊断：解码错误 > 手势提示 > 问题定位 > 未完成输入 > 选择与统计
     private Component statusText() {
@@ -1024,12 +1080,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
             return true;
         }
         if (statusRect.contains(mouseX, mouseY) && !editor.issues().isEmpty()) {
-            sourceView = false;
-            layout();
-            setFocusSlot(FocusSlot.CANVAS);
-            editor.selectPath(editor.issues().getFirst().path());
-            syncSelection(true);
-            return true;
+            return nextIssue();
         }
         if (functionBar.bounds().contains(mouseX, mouseY)) setFocusSlot(FocusSlot.FUNCTION_BAR);
         if (functionBar.mouseClicked(mouseX, mouseY, button)) {
@@ -1111,6 +1162,9 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         if (inlineOpen && editor.keyPressed(keyCode, scanCode, modifiers)) {
             syncSelection();
             return true;
+        }
+        if (keyCode == GLFW.GLFW_KEY_F8) {
+            return nextIssue();
         }
         if (keyCode == GLFW.GLFW_KEY_TAB) {
             cycleFocus((modifiers & GLFW.GLFW_MOD_SHIFT) != 0);
