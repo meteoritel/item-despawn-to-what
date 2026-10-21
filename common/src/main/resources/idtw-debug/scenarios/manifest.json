@@ -27,6 +27,7 @@
   "run/prepare_failure_expiry",
   "bench/baseline",
   "bench/convert",
+  "bench/heavy_prepare",
   "bench/retry",
   "bench/normal",
   "bench/converted"

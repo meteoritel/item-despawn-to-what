@@ -41,6 +41,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -50,12 +51,14 @@ import java.util.function.IntConsumer;
 
 /**
  * 一次转化的结算任务：固定成本、完整组与真实账目。
- * 三个阶段：
- * 1) 计划——按「源库存可支撑组数 × 催化剂上界」定出组数上界，并为第一组选定候选；
- * 2) 派发——每开始一组时独立选候选：轮询从共享游标依次搜索能完成一组的候选，
+ * 四个阶段：
+ * 1) 计划——按「源库存可支撑组数 × 催化剂上界 × 产物容量承诺」定出组数，并为第一组选定候选；
+ * 2) 准备——为承诺的每组固定效果输入：每步最多 prepare_groups_per_step 组，按组续接，
+ *    固定输入按「候选 + 槽位 + 组序号」幂等，已由成功转化当刻领先准备的组直接复用；
+ * 3) 派发——每开始一组时独立选候选：轮询从共享游标依次搜索能完成一组的候选，
  *    确定该组并开组后才推进游标；容量不足的候选跳过，全部候选都开不出一组时停止并返还剩余库存；
  *    逐组从结算库存扣除固定源成本，并把候选内各效果派发一次（延迟交给调度器）；
- * 3) 交付——剩余库存作为返还掉落物分批交还世界，全部交付后才算完成。
+ * 4) 交付——剩余库存作为返还掉落物分批交还世界，全部交付后才算完成。
  * 一次性效果（EffectType.oneShot）：不参与候选数量上限；仅含一次性效果的候选最多一组；
  * 同一源请求内每个一次性效果槽（候选 id + 槽序号）只尝试一次，概率落空或条件不满足也算已尝试，续跑不重试。
  * 真实账目只来自执行器回执（EffectResult 与 reportProgress），计划量不冒充成功量；
@@ -74,7 +77,7 @@ final class ConversionSettlement implements ServerTask {
     private static final int SELECT_EXHAUSTED = -3;
 
     // 结算阶段
-    private enum Phase { PLANNING, DISPATCHING, DELIVERING, DONE }
+    private enum Phase { PLANNING, PREPARING, DISPATCHING, DELIVERING, DONE }
 
     private final ConversionRuntime runtime;
     private final ServerScheduler scheduler;
@@ -88,8 +91,19 @@ final class ConversionSettlement implements ServerTask {
     private final Vec3 triggerPosition;
     // 成功转化当刻固定的源速度：源实体被移除后产物初速仍由此决定
     private final Vec3 sourceVelocity;
-    // 成功转化当刻固定的效果槽位输入（键 = 候选 id + 槽序号）：源实体清空后仍按固定输入执行
+    // 效果槽位固定输入（键 = 候选 id + 槽序号 + 组序号）：前若干组在成功转化当刻领先固定，
+    // 其余组由准备阶段按组续接写入；源实体清空后仍按固定输入执行
     private final Map<ConversionRuntime.PreparedEffectKey, EffectPreparation> preparations;
+    // 组间共享的固定输入（键的组序号恒为 0）：同一候选同一槽位的各组复用首份实例
+    private final Map<ConversionRuntime.PreparedEffectKey, EffectPreparation> sharedPreparations = new HashMap<>();
+    // 成功转化当刻已领先准备的组数：准备阶段从这里续接，不重做已固定的组
+    private final int leadPreparedGroups;
+    // 产物容量承诺进度：按候选累计当前可容纳组数，预算耗尽时跨刻续算
+    private int capacityCommit;
+    private int capacityCommitCursor;
+    // 准备进度：已固定输入的组数与承诺组数
+    private int prepareGroupIndex;
+    private int preparedGroupCount;
     // 账目读取引用：字段变更方法在 SettlementRecord 内私有，本引用不可写；写入一律经 writer
     private final SettlementRecord record;
     // 受控写入句柄：字段变更与落账（双索引 + 标脏）的唯一入口
@@ -140,7 +154,8 @@ final class ConversionSettlement implements ServerTask {
     // 构造结算任务：源库存 held 已在触发时刻整堆移出源实体，受控写入句柄由调用方（首次登记方）给出
     ConversionSettlement(ConversionRuntime runtime, ServerScheduler scheduler, ServerLevel level, ItemEntity source,
                          Rule rule, ItemStack held, SettlementRecord.Writer writer, Vec3 triggerPosition,
-                         Vec3 sourceVelocity, Map<ConversionRuntime.PreparedEffectKey, EffectPreparation> preparations) {
+                         Vec3 sourceVelocity, Map<ConversionRuntime.PreparedEffectKey, EffectPreparation> preparations,
+                         int leadPreparedGroups) {
         this.runtime = runtime;
         this.scheduler = scheduler;
         this.level = level;
@@ -150,7 +165,9 @@ final class ConversionSettlement implements ServerTask {
         this.sourceSnapshot = held.copy();
         this.triggerPosition = triggerPosition == null ? source.position() : triggerPosition;
         this.sourceVelocity = sourceVelocity == null ? Vec3.ZERO : sourceVelocity;
-        this.preparations = preparations == null ? Map.of() : preparations;
+        // 准备阶段要按组续接写入，因此复制成可变映射；领先准备的内容原样带入
+        this.preparations = preparations == null ? new HashMap<>() : new HashMap<>(preparations);
+        this.leadPreparedGroups = Math.max(0, leadPreparedGroups);
         this.writer = writer;
         this.record = writer.record();
         this.cursors = RoundRobinCursors.get(level);
@@ -185,6 +202,7 @@ final class ConversionSettlement implements ServerTask {
         try {
             StepResult result = switch (phase) {
                 case PLANNING -> plan(budget);
+                case PREPARING -> prepare(budget);
                 case DISPATCHING -> dispatch(budget);
                 case DELIVERING -> deliver(budget);
                 case DONE -> StepResult.done(1);
@@ -276,9 +294,16 @@ final class ConversionSettlement implements ServerTask {
             return StepResult.yield(1, 1);
         }
         int planned = Math.min(sourceGroups, catalystLimit);
+        // 产物容量承诺：组数先按「当前区域还能容纳多少组产物」截断。准备成本随组数增长，
+        // 先承诺再准备，才不会把整批固定输入准备好却因邻近阈值开不出组而整批作废。
+        // 预算耗尽时本刻不落决定，已累计的进度跨刻保留。
+        int committed = commitCapacity(planned, budget);
+        if (committed == CAPACITY_PENDING) {
+            return StepResult.yield(1, 1);
+        }
         // 本结算第一组的候选：计划期只落「第一组」的选择，后续组在派发期逐组重选
         int pick = SELECT_EXHAUSTED;
-        if (planned > 0) {
+        if (committed > 0) {
             pick = selectCandidateForGroup(budget);
         }
         if (pick == CAPACITY_PENDING) {
@@ -290,7 +315,7 @@ final class ConversionSettlement implements ServerTask {
         }
         pendingCandidate = candidates.get(pick);
         pendingCandidateIndex = pick;
-        groupCount = planned;
+        groupCount = committed;
         CatalystCost catalyst = rule.catalystCost();
         if (catalyst != null && catalyst.totalConsumeCount() > 0
                 && reservations().tryReserve(record.id(), level, catalystAllocation.paymentGroups(groupCount)) == null) {
@@ -311,8 +336,85 @@ final class ConversionSettlement implements ServerTask {
                     "groups", groupCount, "source_cost_per_group", record.sourceCostPerGroup(), "available", held.getCount(),
                     "structure_version", structureVersion, "cursor_start", rotationStart(), "candidates", candidates.size());
         }
+        // 计划定稿后进入准备：领先准备已覆盖的组直接复用，剩余组按 prepare_groups_per_step 分组续接。
+        // 领先准备已覆盖全部组时不插入 PREPARING 空转步，单组结算的步进节奏与改前一致
+        prepareGroupIndex = Math.min(leadPreparedGroups, groupCount);
+        preparedGroupCount = prepareGroupIndex;
+        phase = prepareGroupIndex >= groupCount ? Phase.DISPATCHING : Phase.PREPARING;
+        return StepResult.yield(1, 1);
+    }
+
+    // 产物容量承诺：按候选顺序累计当前可容纳的产物组数，够 planned 即停。
+    // 预算耗尽返回 CAPACITY_PENDING，游标与累计值跨刻保留，下刻从断点续算；
+    // 已查询过的候选容量记入 remainingCapacity，派发期的本地预留直接复用这份上界。
+    private int commitCapacity(int planned, ServerTickBudget budget) {
+        while (capacityCommitCursor < candidates.size() && capacityCommit < planned) {
+            int index = capacityCommitCursor;
+            int remaining = capacityGroupsAt(index, budget);
+            if (remaining == CAPACITY_PENDING) {
+                return CAPACITY_PENDING;
+            }
+            int cached = remainingCapacity[index];
+            int local = cached == CAPACITY_UNKNOWN ? remaining : Math.min(remaining, cached);
+            remainingCapacity[index] = local;
+            capacityCommit = saturatedAdd(capacityCommit, local);
+            capacityCommitCursor++;
+        }
+        return Math.min(planned, capacityCommit);
+    }
+
+    // 准备：为承诺的每组固定效果输入。每步最多 prepare_groups_per_step 组，组内各候选各槽位逐份固定；
+    // 键按「候选 + 槽位 + 组序号」幂等，跨步续接不重复求值；真实开销由固定输入入口按工作单位上报
+    private StepResult prepare(ServerTickBudget budget) {
+        int perStep = scheduler.config().prepareGroupsPerStep();
+        int preparedThisStep = 0;
+        while (prepareGroupIndex < groupCount) {
+            if (budget.exhausted() || preparedThisStep >= perStep) {
+                return StepResult.yield(1, 1);
+            }
+            prepareGroup(prepareGroupIndex);
+            prepareGroupIndex++;
+            preparedThisStep++;
+            // 逐组推进：中途取消/异常时已固定的组仍是有效输入，恢复路径按组数对齐
+            preparedGroupCount = prepareGroupIndex;
+        }
         phase = Phase.DISPATCHING;
         return StepResult.yield(1, 1);
+    }
+
+    // 固定一组的全部槽位输入：一次性效果只固定第 0 组一份；可共享的固定输入在组间复用首份实例。
+    // 已存在的键直接跳过，因此成功转化当刻的领先准备与准备阶段不会重复求值
+    private void prepareGroup(int groupIndex) {
+        for (OutcomeCandidate candidate : candidates) {
+            List<Effect> effects = candidate.effects();
+            for (int slot = 0; slot < effects.size(); slot++) {
+                Effect effect = effects.get(slot);
+                EffectType<?> definition = runtime.effectDefinition(effect.type());
+                if (definition == null) {
+                    continue;
+                }
+                int targetGroup = definition.oneShot() ? 0 : groupIndex;
+                ConversionRuntime.PreparedEffectKey key =
+                        new ConversionRuntime.PreparedEffectKey(candidate.id(), slot, targetGroup);
+                if (preparations.containsKey(key)) {
+                    continue;
+                }
+                EffectPreparation preparation = runtime.prepareEffectSlot(definition, effect, level, source,
+                        BlockPos.containing(triggerPosition), triggerPosition, sourceSnapshot, candidate.fillOrigin());
+                if (preparation == null) {
+                    // 未迁移的类型不在准备阶段固定输入，其条件与概率仍在首次执行时判定
+                    continue;
+                }
+                if (preparation instanceof EffectPreparation.SharedPreparation) {
+                    EffectPreparation shared = sharedPreparations.putIfAbsent(
+                            new ConversionRuntime.PreparedEffectKey(candidate.id(), slot, 0), preparation);
+                    if (shared != null) {
+                        preparation = shared;
+                    }
+                }
+                preparations.put(key, preparation);
+            }
+        }
     }
 
     // 为本组选候选：轮询从扫描起点依次找剩余容量 >= 1 的候选（首次取共享游标），优先模式从列表首项找；
@@ -671,7 +773,7 @@ final class ConversionSettlement implements ServerTask {
                     "candidate", record.candidateId(), "groups", record.groupCount(),
                     "consumed_sources", record.consumedSources(), "applied_units", record.appliedUnits(),
                     "pending_units", record.pendingUnits(), "returned", record.deliveredReturns(),
-                    "pending_delivery", record.pendingDelivery());
+                    "pending_delivery", record.pendingDelivery(), "prepared_groups", preparedGroupCount);
         }
         if (RuntimeObserver.current().enabled()) {
             RuntimeObserver.current().observe(source, "REBATE_DELIVERED", "record", record.id(), "returned", record.deliveredReturns());

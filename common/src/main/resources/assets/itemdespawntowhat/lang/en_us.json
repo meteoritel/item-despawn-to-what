@@ -47,6 +47,7 @@
   "itemdespawntowhat.command.debug.scene.description.run.reload": "Reload after the delayed effect is queued: cancel the settlement and effects; produce nothing.",
   "itemdespawntowhat.command.debug.scene.description.bench.baseline": "Empty-load baseline, 60 seconds by default.",
   "itemdespawntowhat.command.debug.scene.description.bench.convert": "Conversion load: 1,000 entities and 60 seconds by default; count and duration are configurable.",
+  "itemdespawntowhat.command.debug.scene.description.bench.heavy_prepare": "Heavy preparation load: 1,000 sources with stack 16, a loot table and a conditioned effect that both fail; expects 16,000 paid groups and no output within 60 seconds by default.",
   "itemdespawntowhat.command.debug.scene.description.bench.retry": "Continuous condition failure and retry: 1,000 entities and 60 seconds by default.",
   "itemdespawntowhat.command.debug.scene.description.bench.normal": "Non-converting paper baseline: 1,000 entities and 10 seconds by default; maximum 1,000 source entities.",
   "itemdespawntowhat.command.debug.scene.description.bench.converted": "Paper converts after 5 game seconds: 1,000 entities and 10 seconds by default; maximum 1,000 source entities.",

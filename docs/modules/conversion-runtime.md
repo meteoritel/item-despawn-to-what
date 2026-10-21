@@ -131,9 +131,11 @@ flowchart TB
 flowchart TB
     P["PLANNING：markStarted 并计算结算计划"] --> Q{"库存够一组且候选可用"}
     Q -->|"否"| DEL["DELIVERING：整堆返还，零成本"]
-    Q -->|"是"| R["tryReserve：按组预留催化剂份数"]
+    Q -->|"是"| C["容量承诺：组数先按当前可容纳产物组数截断"]
+    C --> R["tryReserve：按组预留催化剂份数"]
     R -->|"失败"| DEL
-    R --> S["DISPATCHING：逐组结算"]
+    R --> PR["PREPARING：按组固定效果输入，每步最多 prepare_groups_per_step 组"]
+    PR --> S["DISPATCHING：逐组结算"]
     S --> T{"开组前复核候选容量与催化剂门槛"}
     T -->|"容量不足"| U["截断到已开组数，返还剩余"]
     T -->|"预算耗尽"| V["yield，本刻一件不扣"]
@@ -151,6 +153,8 @@ flowchart TB
 
 - **补偿单元**：`source.copy()` 取走整堆、`source.setCount(0)`、打 `converted` 标签、经 `Writer.register` 写记录、把 `ConversionSettlement` 作为 `EFFECT` 任务入队。任一步抛错都在 `finally` 里撤销：弃记录、去标签、把数量写回源堆并保留追踪。
 - **成组对应**：每组固定成本取规则的 `source_cost`（未声明时按源物品计 1）；`payGroup` 返回不足时截断到已开组数并返还剩余，返回预算耗尽时整步 yield 且一件不扣，扣减与产出始终成组对应。催化剂先过门槛再 `consume_counts`，可用组数作为计划组数的上界。
+- **准备成组**：计划组数还受产物容量承诺截断——按候选累计“当前区域还能容纳多少组产物”，只准备确定能支付的那部分，避免整批固定输入准备好却因邻近阈值开不出组而作废。固定输入按「候选 + 槽位 + 组序号」幂等：成功转化当刻只领先固定前 `prepare_groups_per_step` 组（保持准备阶段异常仍在检查步骤内补偿），其余组由结算任务的 PREPARING 阶段每步最多固定同样多组、按组续接；已完成准备的组数与已支付组数可在调试信息的 `prepared_groups` 中核对。
+- **准备计费**：每次固定输入（例如开战利品表）按 1 个工作单位上报，准备量因此进入与其它世界操作同一份预算计价，不会被当成零成本勾当。
 - **数量守恒**：转入结算库存的原始数量 = 已扣减成本总量 + 已交付返还 + 待交付返还；成本总量等于每组成本乘以已完成组数。概率落空或条件不满足的组仍计入“已支付组”，回执以 `SKIPPED` 落账而不是从账上抹掉。
 
 容量只在开组前复核，取值聚合同一候选内可重复效果的物品与实体需求（经验不占容量）；同刻同一候选只查一次世界。轮转模式下跨结算共享游标，被跳过的候选不推进游标。
@@ -171,7 +175,7 @@ flowchart TB
 - 每刻只推进一次，同一刻的重复调用直接返回；开始时锁定期限与工作单位上限。
 - 各维度 lane 与任务种类 lane 公平轮转，搬运额度按到期任务数在检查窗口内分摊，并夹在单刻批量上下限之间。
 - `EFFECT` lane 有独立工作单位配额，避免结算挤占条件检查；该配额按与全局预算相同的单步计费结果累加，不退化为「每刻执行多少步」。
-- 每步结束按「任务声明回执」与「步骤内实际上报」的较大者计费：上报值是真实世界操作量，声明值只是下限；lane 配额、效果 lane 配额与时间软预算共用这一结果，耗尽后立即结束本刻轮转，剩余任务留到下一刻。
+- 每步结束按「任务声明回执」与「步骤内实际上报」的较大者计费：上报值是真实世界操作量，声明值只是下限；lane 配额、效果 lane 配额与时间软预算共用这一结果，耗尽后立即结束本刻轮转，剩余任务留到下一刻。结算准备阶段的固定输入逐份上报工作单位，每步最多处理的组数由 `prepare_groups_per_step` 限制，大堆叠的重准备因此跨多刻摊开。
 - 诊断面：`SchedulerStats` 给出最近一 tick 与历史的最大单步计费工作量、按种类的累计工作单位，`ServerTickBudgetSnapshot` 给出本刻工作单位用量与耗尽原因，debug 场景指标可由断言器读取，用于核对预算消耗与真实世界操作量同向变化。
 - 单个任务抛错只把该任务判为失败，不中断整轮；`YIELD`/`RETRY` 走重排并带最小延迟。
 - 维度卸载时把该维度 lane 上的任务逐项取消，取消续接任务自身也跑在预算里；停服整体清空。
@@ -217,7 +221,7 @@ flowchart TB
 
 - 规则 JSON 的触发方式、固定成本、组合模式与候选结果：[docs/api/rule-json.md](../api/rule-json.md)。
 - Issue 模型与拒载粒度、回执状态文案：[docs/api/errors.md](../api/errors.md)。
-- 预算、批量、退避与检查间隔等运行参数：[docs/ops/configuration.md](../ops/configuration.md)；取值以 `ServerConfig` 与 `SchedulerConfig` 为准。
+- 预算、批量、准备组数、退避与检查间隔等运行参数：[docs/ops/configuration.md](../ops/configuration.md)；取值以 `ServerConfig` 与 `SchedulerConfig` 为准。
 - 效果执行与条件求值契约：[core-contract](core-contract.md)、[type-system](type-system.md)。
 - 规则来源与合并、重载失败保留旧索引：[rule-loading](rule-loading.md)。
 

@@ -41,6 +41,7 @@ flowchart TB
 |---|---|---|---|
 | 检查与退避 | 多长时间查一次、连续失败如何拉长间隔 | `check_interval_ticks`、`backoff_max_ticks` | 转化运行时 |
 | 共享 tick 预算 | 每 tick 允许多少工作量、效果与搬运各占多少 | `server_budget_us`、`max_work_units_per_tick`、`effects_work_units_per_tick`、`dispatch_batch_size` | 调度器 |
+| 结算准备 | 一次结算每步最多为多少组固定效果输入 | `prepare_groups_per_step` | 结算任务 |
 | 检查平滑与位置搜索 | 到期检查如何摊平、每刻能查多少个候选位置 | `check_spread_window_ticks`、`position_search_checks_per_tick` | 调度器 |
 | 覆盖层与平台差异 | 覆盖层目录名、Fabric 端寿命兜底 | `overlay_directory`、`fabric_lifespan_fallback_ticks` | 加载与编辑链路、平台适配 |
 | 实体临时状态 | 新产物保护与转化冷却各持续多久 | `new_product_protection_seconds`、`conversion_cooldown_seconds` | 掉落物状态层 |
