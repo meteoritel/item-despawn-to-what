@@ -274,6 +274,8 @@ public final class RuleRuntimeHostCore {
                 current.rescan(level);
             } catch (RuntimeException e) {
                 if (failure == null) { failure = e; } else { failure.addSuppressed(e); }
+                // 该维度追踪已被换入清空：补排有界重试，避免在下次回扫或维度加载前失联
+                current.retryRescan(level, 1);
             }
         }
         if (failure != null) {

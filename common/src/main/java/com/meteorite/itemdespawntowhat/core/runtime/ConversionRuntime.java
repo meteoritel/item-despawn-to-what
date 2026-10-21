@@ -431,7 +431,7 @@ public final class ConversionRuntime {
     // 环境销毁的请求入口（自然消失由调度器的到期检查直接调用 attempt，不走本方法）：先补齐本刻的追踪，再交给 attempt 同步判定
     // 环境致死时本方法在 hurt 调用栈内同步执行「条件检查 + 规则选择」（单实体一次，量小）；
     // 效果一律经调度器排队并在共享 tick 预算内执行（见 ConversionSettlement#dispatchEffect）：这是刻意的设计选择，
-    /** 环境集中销毁是否把峰值转移到这里，仍需观测。 */
+    // 环境集中销毁是否把峰值转移到这里，仍需观测。
     public void requestConversion(ServerLevel level, ItemEntity item, TriggerKind kind) {
         if (item == null || kind == null || excluded(item)) {
             return;
@@ -723,6 +723,58 @@ public final class ConversionRuntime {
         }
         state.rescanSnapshot = snapshot;
         enqueueRescan(level, state, true);
+    }
+
+    // 排队重试上限：换入已生效时排队失败不能留到下次回扫，重试仍失败只记录，由下次回扫或维度加载兜底
+    private static final int RESCAN_QUEUE_RETRY_LIMIT = 3;
+
+    /**
+     * 换入后回扫排队失败的有界重试：该维度追踪已随换入清空，不补排会失联到下次回扫。
+     * 重试以维护任务入队，不阻塞当前 tick，也不改变已发生的换入结果。
+     *
+     * @param level 排队失败的维度
+     * @param attempt 已失败次数，从 1 起
+     */
+    public void retryRescan(ServerLevel level, int attempt) {
+        scheduler.scheduleMaintenance(new RescanQueueRetry(level, attempt), 1);
+    }
+
+    // 回扫排队重试任务：维护车道占一个预算，失败再排下一份，用尽后只记录，不再占用队列
+    private final class RescanQueueRetry implements ServerTask {
+
+        private final ServerLevel level;
+        private final int attempt;
+
+        private RescanQueueRetry(ServerLevel level, int attempt) {
+            this.level = level;
+            this.attempt = attempt;
+        }
+
+        @Override
+        public ServerTaskKind kind() {
+            return ServerTaskKind.MAINTENANCE;
+        }
+
+        @Override
+        public String tracingName() {
+            return "rescan-queue-retry/" + level.dimension().location();
+        }
+
+        @Override
+        public StepResult step(ServerTickBudget budget) {
+            budget.charge(1);
+            try {
+                rescan(level);
+            } catch (RuntimeException e) {
+                if (attempt >= RESCAN_QUEUE_RETRY_LIMIT) {
+                    LOGGER.error("数据包重载后的回扫排队重试失败，已重试 " + attempt
+                            + " 次；该维度将在下次回扫或维度加载时重建追踪", e);
+                } else {
+                    retryRescan(level, attempt + 1);
+                }
+            }
+            return StepResult.done(1);
+        }
     }
 
     private void enqueueRescan(ServerLevel level, LevelState state, boolean worldScan) {
