@@ -68,6 +68,8 @@
   "itemdespawntowhat.command.debug.scene.description.run.cancel_failure": "3张纸转化后、延迟效果到期前重载：一个取消回调抛异常，其余效果仍全部取消，零产出且调度器无滞留。",
   "itemdespawntowhat.command.debug.scene.description.run.prepare_failure": "故障注入：效果准备阶段抛一次异常，追踪恢复并到下一 tick 重试转化这张纸。",
   "itemdespawntowhat.command.debug.scene.description.run.prepare_failure_expiry": "自然到期时注入故障：效果准备阶段抛异常，追踪释放，纸交还原版销毁而不是被永久拦住。",
+  "itemdespawntowhat.command.debug.scene.description.run.scan_cursor": "运行中重载规则：回扫按有界分步续接，结束时16张纸仍全部被追踪。",
+  "itemdespawntowhat.command.debug.scene.description.bench.reload_storm": "1000个实体上连续5次重载规则：每轮回扫按有界分步推进，结束时所有源仍被追踪。",
   "gui.itemdespawntowhat.edit.title": "当前编辑文件",
   "gui.itemdespawntowhat.edit.config_stat_1": "☰ 配置数：%d",
   "gui.itemdespawntowhat.edit.config_stat_2": "★ 配置数：%s (%s + %s)",

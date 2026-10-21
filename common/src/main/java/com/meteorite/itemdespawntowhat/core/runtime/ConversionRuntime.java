@@ -109,6 +109,14 @@ public final class ConversionRuntime {
         private Map<UUID, TrackedState> tracked = new HashMap<>();
         // 所有已加载掉落物都登记，即使暂时没有匹配规则；有序 id 游标允许跨 tick 回扫。
         private final java.util.NavigableMap<Integer, ItemEntity> items = new java.util.TreeMap<>();
+        // 回扫续接：token 标识当前一轮，完成标记只由 token 匹配的收尾路径清除，避免新旧两轮交错；
+        // worldScan 区分「实体表不完整、需扫世界补登记」与「实体表可信、按有序 id 游标重建追踪」。
+        private long rescanToken;
+        private boolean rescanPending;
+        private boolean rescanWorldScan;
+        private int rescanSteps;
+        // 世界扫描模式在入口一次性收集已加载掉落物引用，步骤按快照分片处理，不跨 tick 迭代实体表
+        private List<ItemEntity> rescanSnapshot;
         private RuntimeTagLookup tags;
         private RuntimeClimateSampler climate;
     }
@@ -208,6 +216,7 @@ public final class ConversionRuntime {
             private int worldIndex;
             private Integer entityCursor;
             private Integer entityLimit;
+            private int retries;
 
             @Override public ServerTaskKind kind() { return ServerTaskKind.MAINTENANCE; }
             @Override public String tracingName() { return "saved-rule-rescan"; }
@@ -238,6 +247,12 @@ public final class ConversionRuntime {
                         advanceWorld();
                         return StepResult.yield(1, 1);
                     }
+                    // 该维度还有未消化完的世界扫描快照：交给统一的回扫续接任务按快照补齐，避免按 items 游标漏登记
+                    if (state.rescanSnapshot != null) {
+                        rescan(world);
+                        advanceWorld();
+                        return StepResult.yield(1, 1);
+                    }
                     if (entityLimit == null) { entityLimit = state.items.isEmpty() ? Integer.MIN_VALUE : state.items.lastKey(); }
                     var next = entityCursor == null ? state.items.firstEntry() : state.items.higherEntry(entityCursor);
                     if (next == null || next.getKey() > entityLimit) { advanceWorld(); }
@@ -247,7 +262,7 @@ public final class ConversionRuntime {
                     }
                     return StepResult.yield(1, 1);
                 }
-                savedRescanPending = false;
+                clearSavedRescan();
                 return StepResult.done(1);
             }
 
@@ -256,12 +271,21 @@ public final class ConversionRuntime {
             @Override public void onCancelled(CancelReason reason) {
                 // 停服必须在 vanilla 最终存档前清理尚未通知的结算任务。
                 for (int i = cleanupIndex; i < cleanup.size(); i++) { cleanup.get(i).onCancelled(reason); }
-                if (generation == ruleGeneration) { savedRescanPending = false; }
+                clearSavedRescan();
             }
 
-            @Override public void onFailed(@org.jetbrains.annotations.Nullable Throwable failure) {
-                // 已发布后的回扫失误仍需清理旧结算队列；正常运行时分步收尾，不集中取消。
-                for (int i = cleanupIndex; i < cleanup.size(); i++) { scheduler.schedule(this, cleanup.get(i), 1); }
+            @Override public void onFailed(@Nullable Throwable failure) {
+                // 已发布后的回扫失误仍需清理旧结算队列；只重排一份续接任务，
+                // 按清理项逐份入队会让同一游标被多份任务推进，剩余清理项由本任务字段顺序消化。
+                if (generation == ruleGeneration && retries++ == 0) {
+                    scheduler.schedule(this, this, 1);
+                    return;
+                }
+                clearSavedRescan();
+            }
+
+            // 完成标记只由本方法清除：旧一代索引的迟到任务不能清掉新一代的回扫标记
+            private void clearSavedRescan() {
                 if (generation == ruleGeneration) { savedRescanPending = false; }
             }
         };
@@ -430,22 +454,139 @@ public final class ConversionRuntime {
         return recoverySkippedDimensions;
     }
 
-    /** reload 后回扫已加载实体重建追踪（使热重载对已存在的掉落物同样生效） */
+    /**
+     * reload 后回扫已加载实体重建追踪（使热重载对已存在的掉落物同样生效）。
+     * 只入队分步续接任务：实体有序表由 join/leave 事件持续维护，按 id 游标重建即可，不再同步遍历整维实体。
+     */
     public void rescan(ServerLevel level) {
         LevelState state = stateOf(level);
+        // 还没消化完的世界扫描快照仍然可信：取消任务不会丢掉快照，重载后接着按快照补齐，避免漏登记。
+        enqueueRescan(level, state, state.rescanSnapshot != null);
+    }
+
+    /**
+     * 启动与维度加载回扫：这些实体的 join 事件可能早于运行时装配，必须主动扫描世界补登记。
+     * 入口只收集一次已加载掉落物的引用快照（不改追踪状态），分步任务按快照切片登记，
+     * 既不必每步重扫整维实体，也不跨 tick 持有世界迭代器。
+     */
+    public void rebuild(ServerLevel level) {
+        LevelState state = stateOf(level);
+        // 新装配或新加载的维度以世界扫描为准，先丢弃旧登记表，避免把已卸载实体的过期引用当成已处理。
         state.items.clear();
+        List<ItemEntity> snapshot = new java.util.ArrayList<>();
+        for (Entity entity : level.getAllEntities()) {
+            if (entity instanceof ItemEntity item && !item.isRemoved()) { snapshot.add(item); }
+        }
+        state.rescanSnapshot = snapshot;
+        enqueueRescan(level, state, true);
+    }
+
+    private void enqueueRescan(ServerLevel level, LevelState state, boolean worldScan) {
+        long token = ++state.rescanToken;
+        state.rescanPending = true;
+        state.rescanWorldScan = worldScan;
+        state.rescanSteps = 0;
         state.tracked.clear();
-        // 重扫会重建追踪，先按维度取消既有任务（检查与效果一起），不留静默丢弃
+        state.tags = null;
+        state.climate = null;
+        // 先登记新一轮 token 再取消旧任务：旧任务 onCancelled 时 token 已不匹配，不会清掉新完成标记。
         scheduler.cancelRealm(level.dimension(), CancelReason.RULE_RELOAD);
         // 维度加载/重扫时补扫该维度的待返还记录：只交付库存，不恢复既有效果队列（与规则内容无关）
         recoverLevel(level, SettlementLedger.get(level));
-        for (Entity entity : level.getAllEntities()) {
-            if (entity instanceof ItemEntity item && !item.isRemoved()) {
-                onItemAdded(level, item);
-            }
-        }
+        scheduler.schedule(level.dimension(), new RescanTask(level, state, token, worldScan), 0);
+    }
+
+    /** 单一路径清除回扫完成标记：只有当前一轮的 token 才能清除，旧一轮的迟到回调不碰新状态 */
+    private void clearRescan(LevelState state, long token) {
+        if (state.rescanToken != token) { return; }
+        state.rescanPending = false;
+        state.rescanWorldScan = false;
+    }
+
+    private void finishRescan(ServerLevel level, LevelState state, long token, boolean worldScan) {
+        if (state.rescanToken != token) { return; }
+        // 世界扫描完成后丢弃快照：之后的重载只按有序游标，不复用可能已卸载的旧引用
+        if (worldScan) { state.rescanSnapshot = null; }
         if (config.debugLogging()) {
-            LOGGER.info("回扫完成：维度 {} 现有 {} 个被追踪掉落物", level.dimension().location(), state.tracked.size());
+            LOGGER.info("回扫完成：维度 {} 现有 {} 个被追踪掉落物（模式：{}，分步 {}）",
+                    level.dimension().location(), state.tracked.size(), worldScan ? "世界扫描" : "有序游标", state.rescanSteps);
+        }
+        clearRescan(state, token);
+    }
+
+    /**
+     * 分步回扫续接任务：单步只处理有限个掉落物，预算耗尽即让出，下一 tick 从游标继续。
+     * 不跨 tick 持有实体迭代器，因为调度期间实体表会被 join/leave 事件修改。
+     */
+    private final class RescanTask implements ServerTask {
+        private final ServerLevel level;
+        private final LevelState state;
+        private final long token;
+        private final boolean worldScan;
+        private Integer cursor;
+        private int snapshotIndex;
+        private int retries;
+
+        private RescanTask(ServerLevel level, LevelState state, long token, boolean worldScan) {
+            this.level = level;
+            this.state = state;
+            this.token = token;
+            this.worldScan = worldScan;
+        }
+
+        @Override public ServerTaskKind kind() { return ServerTaskKind.MAINTENANCE; }
+
+        @Override public String tracingName() {
+            return (worldScan ? "rescan-scan/" : "rescan-cursor/") + level.dimension().location();
+        }
+
+        @Override public StepResult step(ServerTickBudget budget) {
+            if (levels.get(level.dimension()) != state || state.rescanToken != token) {
+                // 维度已卸载或被更新一轮回扫接管：本任务不再触碰状态，完成标记归接管方维护
+                return StepResult.done(1);
+            }
+            int limit = Math.max(1, config.rescanEntitiesPerStep());
+            int processed = 0;
+            boolean complete = true;
+            if (worldScan) {
+                List<ItemEntity> snapshot = state.rescanSnapshot;
+                int size = snapshot == null ? 0 : snapshot.size();
+                while (snapshotIndex < size) {
+                    if (processed >= limit || budget.exhausted()) { complete = false; break; }
+                    ItemEntity item = snapshot.get(snapshotIndex++);
+                    // 快照持有引用期间实体可能已卸载或被移除，跳过即可；重复登记由 onItemAdded 幂等兜底
+                    if (!item.isRemoved()) { onItemAdded(level, item); }
+                    processed++;
+                }
+            } else {
+                while (true) {
+                    if (processed >= limit || budget.exhausted()) { complete = false; break; }
+                    var next = cursor == null ? state.items.firstEntry() : state.items.higherEntry(cursor);
+                    if (next == null) { break; }
+                    cursor = next.getKey();
+                    ItemEntity item = next.getValue();
+                    // 已移除但离开事件尚未到达的条目跳过，登记表由离开事件兜底清理
+                    if (!item.isRemoved()) { onItemAdded(level, item); }
+                    processed++;
+                }
+            }
+            state.rescanSteps++;
+            if (!complete) { return StepResult.yield(Math.max(1, processed), 1); }
+            finishRescan(level, state, token, worldScan);
+            return StepResult.done(1);
+        }
+
+        @Override public void onCancelled(CancelReason reason) {
+            clearRescan(state, token);
+        }
+
+        @Override public void onFailed(@Nullable Throwable failure) {
+            // 同一轮只重排一份：游标与剩余工作都在本任务字段里，多份任务同时推进会让游标交错。
+            if (retries++ == 0 && levels.get(level.dimension()) == state && state.rescanToken == token) {
+                scheduler.schedule(level.dimension(), this, 1);
+                return;
+            }
+            clearRescan(state, token);
         }
     }
 
@@ -484,6 +625,18 @@ public final class ConversionRuntime {
     public int trackedCount(ServerLevel level) {
         LevelState state = levels.get(level.dimension());
         return state == null ? 0 : state.tracked.size();
+    }
+
+    /** 该维度是否仍有分步回扫在推进（供开发场景核对让出与最终一致性） */
+    public boolean rescanPending(ServerLevel level) {
+        LevelState state = levels.get(level.dimension());
+        return state != null && state.rescanPending;
+    }
+
+    /** 该维度最近一轮回扫已执行的分步数（供开发场景核对回扫确实分段推进） */
+    public int rescanSteps(ServerLevel level) {
+        LevelState state = levels.get(level.dimension());
+        return state == null ? 0 : state.rescanSteps;
     }
 
     /** 单个掉落物的追踪状态（命令层只读） */
@@ -1122,10 +1275,10 @@ public final class ConversionRuntime {
     /** 自然消失入口只预留最后一次有预算的检查，不在实体 tick 内执行昂贵效果。 */
     public boolean deferNaturalExpiry(ServerLevel level, ItemEntity item) {
         if (excluded(item)) { return false; }
-        // 回扫可能延后数刻；临近原版消失的物品按新索引及时补追踪，避免等待回扫期间漏转化。
-        if (savedRescanPending) { onItemAdded(level, item); }
         LevelState state = levels.get(level.dimension());
+        // 回扫可能延后数刻；临近原版消失的物品按新索引及时补追踪，避免等待回扫期间漏转化。
         if (state == null) { return false; }
+        if (savedRescanPending || state.rescanPending) { onItemAdded(level, item); }
         TrackedState tracked = state.tracked.get(item.getUUID());
         if (tracked == null) { return false; }
         // 转化提交当刻追踪即被释放，因此 tracked 存在等价于尚未提交转化。

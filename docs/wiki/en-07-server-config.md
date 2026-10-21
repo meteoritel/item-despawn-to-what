@@ -54,7 +54,8 @@ The block below is the complete content the game creates on the first launch, an
     "entity_radius": 6,
     "experience_orb_limit": 64,
     "experience_radius": 6
-  }
+  },
+  "rescan_entities_per_step": 16
 }
 ```
 
@@ -80,6 +81,7 @@ Time values are in game ticks, and 20 ticks equal 1 second on a normal server.
 | `new_product_protection_seconds` | How many seconds a freshly converted item resists destruction by fire, lava, and cacti | 0 to 3600 seconds | `2` | Raise it when products burn as soon as they appear, for example next to lava. Set `0` to let products be destroyed right away |
 | `conversion_cooldown_seconds` | How many seconds a freshly converted item cannot start another conversion | 0 to 3600 seconds | `5` | Raise it when products convert again immediately under another rule. Set `0` to let a product convert again at once |
 | `position_search_checks_per_tick` | How many candidate positions the mod tries per tick when it looks for a spot for a product or a returned item | 1 to 4096 | `16` | Raise it when items stay undelivered because the terrain leaves few spots. Lower it to save performance |
+| `rescan_entities_per_step` | How many loaded drops one step rebuilds when tracking is rebuilt after startup, a dimension load, or a rule reload. The rest continues over later ticks | 1 to 4096 | `16` | Lower it when a server with tens of thousands of drops still hitches on a single tick after startup or a reload. Raise it to finish sooner, at the cost of more work per tick |
 | `debug_scenario_prepare_batch_size` | Affects only the preparation stage of test scenarios in a development environment, with no effect on normal play | 1 to 100000 | `128` | Players never need to change it |
 | `debug_scenario_prepare_budget_us` | The time cap in microseconds for that same preparation stage | 1 to 100000 microseconds | `2000` | Players never need to change it |
 | `max_place_block_radius` | Largest `radius` a single `place_block` action may use; rules above it are rejected when loaded or saved | 1 and above | `8` | Raise it to let one action cover a wider area, but the cost of one placement grows with the cube of the radius, so keep it modest; lowering it rejects existing rules that now exceed the cap, so edit those rules as well |
@@ -197,7 +199,7 @@ Effect: rules now load from `config/my_idtw/rules/`. Move the contents of the ol
 ## Fields You Normally Leave Alone
 
 - `overlay_directory`: change it only when you want a different directory layout, because a mistake stops every overlay rule from loading.
-- `max_checks_per_tick`, `max_work_units_per_tick`, `effects_work_units_per_tick`, `dispatch_batch_size`, `position_search_checks_per_tick`: the defaults suit most servers. Change them only when you see lag or a clear backlog.
+- `max_checks_per_tick`, `max_work_units_per_tick`, `effects_work_units_per_tick`, `dispatch_batch_size`, `position_search_checks_per_tick`, `rescan_entities_per_step`: the defaults suit most servers. Change them only when you see lag or a clear backlog.
 - `fabric_lifespan_fallback_ticks`: used only when the Fabric side cannot read a drop's lifespan.
 - `debug_logging`: turn it on temporarily while you diagnose a problem.
 - `debug_scenario_prepare_batch_size`, `debug_scenario_prepare_budget_us`: these serve test scenarios in a development environment only, and normal play never needs them.

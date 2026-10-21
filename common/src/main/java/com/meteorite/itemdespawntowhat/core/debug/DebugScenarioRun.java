@@ -454,6 +454,14 @@ final class DebugScenarioRun {
         data.addProperty("scheduler_pending", scheduler == null ? -1 : scheduler.pending());
         data.addProperty("cancelled_rule_reload", scheduler == null ? -1
                 : scheduler.cancelledByReason().getOrDefault(CancelReason.RULE_RELOAD, 0L));
+        // 回扫一致性只看本轮源：维度内普通掉落物不属于场景，混进来会让断言随世界内容漂移
+        int trackedSources = 0;
+        for (ItemEntity source : sources) {
+            if (!source.isRemoved() && runtime != null && runtime.debugInfo(level, source).tracked()) { trackedSources++; }
+        }
+        data.addProperty("tracked_source_items", trackedSources);
+        data.addProperty("rescan_pending", runtime != null && runtime.rescanPending(level) ? 1 : 0);
+        data.addProperty("rescan_steps", runtime == null ? 0 : runtime.rescanSteps(level));
         return data;
     }
 
