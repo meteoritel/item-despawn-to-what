@@ -16,10 +16,6 @@ final class SettlementPhases {
         return phase;
     }
 
-    boolean done() {
-        return phase == Phase.DONE;
-    }
-
     // 计划定稿：还有未固定的组就进入准备阶段，否则直接派发
     void beginPreparingOrDispatching(boolean allPrepared) {
         phase = allPrepared ? Phase.DISPATCHING : Phase.PREPARING;

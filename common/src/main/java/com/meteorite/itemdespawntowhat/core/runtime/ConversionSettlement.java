@@ -152,7 +152,7 @@ final class ConversionSettlement implements ServerTask {
                 new SettlementCapacityProbe(runtime, level, this.triggerPosition));
         this.catalystStage = new SettlementCatalystStage(runtime, level, source, this.triggerPosition, rule, held,
                 record.sourceCostPerGroup(), record.id());
-        this.payment = new SettlementPayment(runtime, scheduler, level, source, held, writer);
+        this.payment = new SettlementPayment(runtime, scheduler, level, source, held, receipts);
     }
 
     @Override

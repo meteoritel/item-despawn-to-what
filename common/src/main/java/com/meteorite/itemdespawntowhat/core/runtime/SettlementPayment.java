@@ -24,18 +24,18 @@ final class SettlementPayment {
     private final ServerLevel level;
     private final ItemEntity source;
     private final ItemStack held;
-    private final SettlementRecord.Writer writer;
+    private final SettlementReceipts receipts;
     // 返还位置搜索游标：跨刻保留进度，交付成功后重置
     private ReturnItemSpawner.PositionSearch rebateSearch;
 
     SettlementPayment(ConversionRuntime runtime, ServerScheduler scheduler, ServerLevel level, ItemEntity source,
-                      ItemStack held, SettlementRecord.Writer writer) {
+                      ItemStack held, SettlementReceipts receipts) {
         this.runtime = runtime;
         this.scheduler = scheduler;
         this.level = level;
         this.source = source;
         this.held = held;
-        this.writer = writer;
+        this.receipts = receipts;
     }
 
     // 开组前支付催化剂：门槛与流体统一在提交回调里复核，通过后才真实扣减；返回原因由调用方分流
@@ -76,7 +76,7 @@ final class SettlementPayment {
                 return DeliveryOutcome.YIELD;
             }
             held.setCount(held.getCount() - size);
-            writer.delivered(size);
+            receipts.delivered(size);
             budget.charge(2);
             deliveredNow++;
         }

@@ -64,12 +64,6 @@ final class SettlementCatalystStage {
         return rule.catalystCost();
     }
 
-    // 每组支付件数：未声明 catalyst_cost 时为 0
-    int perGroup() {
-        CatalystCost catalyst = rule.catalystCost();
-        return catalyst == null ? 0 : catalyst.totalConsumeCount();
-    }
-
     // 计划期催化剂上界：未声明 catalyst_cost 直接返回 Integer.MAX_VALUE（不查世界、不预留，纯零开销）；
     // PENDING = 预算耗尽（本刻不落决定，下刻重试）；其余为各引用共享库存分配所得的完整组数上界
     int groupLimit(ServerTickBudget budget) {
