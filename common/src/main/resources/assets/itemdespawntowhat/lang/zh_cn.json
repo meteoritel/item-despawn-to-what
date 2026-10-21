@@ -37,6 +37,7 @@
   "itemdespawntowhat.command.debug.scene.help.pipeline": "一键阶段测试：/idtw debug pipeline（默认轮间冷却5秒）；status/stop 查询或中止。",
   "itemdespawntowhat.command.debug.scene.description.run.convert": "基础转化：1张纸产出1个海晶碎片。",
   "itemdespawntowhat.command.debug.scene.description.run.retry": "高度条件先失败并重试，再移动源3格：最终产出1个海晶碎片。",
+  "itemdespawntowhat.command.debug.scene.description.run.backoff_isolation": "退避隔离：纯环境规则与源量不足一组的规则不参与退避，自然规则未到期时只等待，失败计数保持0。",
   "itemdespawntowhat.command.debug.scene.description.run.delay": "1张纸转化，延迟100 tick产出1个海晶碎片。",
   "itemdespawntowhat.command.debug.scene.description.run.expiry": "源年龄设为平台寿命前1 tick：自然消失入口应触发转化。",
   "itemdespawntowhat.command.debug.scene.description.run.stack": "整堆16张纸：提交一次，执行16组，产出16个海晶碎片。",

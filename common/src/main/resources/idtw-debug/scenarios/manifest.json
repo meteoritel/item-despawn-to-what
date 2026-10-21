@@ -1,6 +1,7 @@
 [
   "run/convert",
   "run/retry",
+  "run/backoff_isolation",
   "run/delay",
   "run/expiry",
   "run/stack",

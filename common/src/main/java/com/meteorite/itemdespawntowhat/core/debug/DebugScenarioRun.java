@@ -378,7 +378,7 @@ final class DebugScenarioRun {
         try {
             // 未命中声明在断言前报告，配置写错时由 faults_remaining 暴露，而不是静默通过
             faults.reportUnused();
-            JsonObject metrics = metrics(liveOutput, remainingSource);
+            JsonObject metrics = metrics(context.runtime(), liveOutput, remainingSource);
             JsonArray checks = probe.checks(metrics);
             boolean passed = true;
             for (var check : checks) {
@@ -422,7 +422,7 @@ final class DebugScenarioRun {
     }
 
     // 运行阶段的实际指标只组装一次，全部场景交给同一断言器消费。
-    private JsonObject metrics(long liveOutput, long remainingSource) {
+    private JsonObject metrics(@Nullable ConversionRuntime runtime, long liveOutput, long remainingSource) {
         JsonObject data = new JsonObject();
         data.addProperty("created_sources", sources.size());
         data.addProperty("window_present", window == null ? 0 : 1);
@@ -436,6 +436,9 @@ final class DebugScenarioRun {
         data.addProperty("first_rule", firstRule);
         data.addProperty("first_output_delay_ticks", firstOutputTick < 0 || firstConversionTick < 0 ? -1 : firstOutputTick - firstConversionTick);
         data.addProperty("action_count", actions.completedCount());
+        // 退避断言面：失败计数只应由本次触发方式参与且源量够一组的规则贡献（窗口结束时读取）
+        data.addProperty("source_failure_count", runtime == null || sources.isEmpty()
+                ? 0 : runtime.debugInfo(level, sources.getFirst()).failureCount());
         // 预算指标：让场景用精确值或 min/max 断言「工作单位跟真实世界操作量同向变化」，不依赖人工读日志
         data.addProperty("budget_peak_work_units_in_tick", window == null ? 0 : window.peakWorkUnitsInTick());
         data.addProperty("budget_ticks_exhausted_by_work_units", window == null ? 0 : window.ticksExhaustedByWorkUnits());
