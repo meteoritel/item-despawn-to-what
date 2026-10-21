@@ -78,6 +78,12 @@ final class DebugScenarioProbe {
                     totals.merge(key, number.longValue(), Long::sum);
                 }
                 totals.merge("settlements_completed", 1L, Long::sum);
+                // 账本写入合并口径随完成事件上报：本场景所有完成结算的记录级落账次数与被步内合并的变更次数
+                for (String key : List.of("ledger_commits", "ledger_deferred_mutations")) {
+                    Object value = field(fields, key);
+                    if (!(value instanceof Number number)) { throw new IllegalStateException("结算事件缺少数值：" + key); }
+                    totals.merge(key, number.longValue(), Long::sum);
+                }
             }
             case "CHECK_TASK_FAILED" -> {
                 totals.merge("check_failures", 1L, Long::sum);
@@ -133,6 +139,10 @@ final class DebugScenarioProbe {
             metrics.addProperty(key, totals.getOrDefault(key, 0L));
         }
         metrics.addProperty("check_failures", totals.getOrDefault("check_failures", 0L));
+        // 账本写入合并口径（本场景聚合）：字段变更次数与被步内合并的变更次数；
+        // 成批交付场景里 deferred 明显大于 0，说明提交确实被合并到步末，而不是每堆一次
+        metrics.addProperty("settlement_ledger_commits", totals.getOrDefault("ledger_commits", 0L));
+        metrics.addProperty("settlement_ledger_deferred_mutations", totals.getOrDefault("ledger_deferred_mutations", 0L));
         // 支付受阻原因分别计数：场景可断言「截断整批时究竟缺的是哪一种资源」
         for (String key : List.of("payment_blocked_catalyst_short", "payment_blocked_threshold_short",
                 "payment_blocked_fluid_short", "payment_blocked_capacity_short")) {

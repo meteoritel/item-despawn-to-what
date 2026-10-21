@@ -290,10 +290,13 @@ public final class SettlementRecord {
      * 结算记录的受控写入句柄：账目字段的唯一变更入口。
      * <p>
      * 记录与账本两张索引持有同一可变引用：字段变更若未配套标脏，后续保存可能不会写入这次变更。
-     * 因此 {@link SettlementRecord} 的变更方法全部私有，调用方只能经本句柄写入，且每个域变更方法都在同一次
-     * 调用内完成「改字段 + 写回双索引 + 标脏」，外部不存在只改字段不落账的漏提交路径：新建用 {@link #register}，
-     * 撤销登记用 {@link #discard}，其余按语义入口调用。是否对齐待交付量、记中断还是失败、截断到几组等业务判断
-     * 仍留在各调用方；本句柄不建立通用事务、不自动刷盘、不自动异常回滚，提交只标脏。
+     * 因此 {@link SettlementRecord} 的变更方法全部私有，调用方只能经本句柄写入。句柄支持两种提交节奏：
+     * 默认每次域变更当场落账；调用 {@link #beginBatch} 后进入步内累积，本步多次变更只标记待提交并计入合并次数，
+     * 由 {@link #endBatch} 在步末合并落账一次，成批交付因此从「每堆一次提交」降为「每步一次」。
+     * 提交只做「写回双索引 + 标脏」，不建立通用事务、不自动刷盘、不自动异常回滚。
+     * 步内未提交的变更在进程崩溃时随内存一起丢失，这与 SavedData 本来按自动保存落盘的粒度一致；
+     * 中止、取消、失败与恢复判定都只在内存账目上成立，收尾路径先提交再返回，因此不依赖「每堆已落盘」。
+     * 新建用 {@link #register}，撤销登记用 {@link #discard}，其余按语义入口调用。
      */
     static final class Writer {
 
@@ -314,6 +317,12 @@ public final class SettlementRecord {
 
         private final SettlementLedger ledger;
         private final SettlementRecord record;
+        // 步内累积开关与待提交标记：步内多次改字段只置一次提交，步末由 endBatch 落账
+        private boolean batching;
+        private boolean pendingCommit;
+        // 本句柄的落账次数与被步内合并、未当场落账的变更次数：随结算完成观测输出，供场景核对提交合并
+        private int commitCount;
+        private int deferredMutations;
 
         private Writer(SettlementLedger ledger, SettlementRecord record) {
             this.ledger = ledger;
@@ -325,10 +334,51 @@ public final class SettlementRecord {
             return record;
         }
 
-        // 落账：把记录当前字段写回账本双索引并标脏；只由本句柄内的变更方法调用，不对调用方暴露，
+        /** 进入步内累积：本步的域变更只标脏，不再逐次落账。 */
+        void beginBatch() {
+            batching = true;
+        }
+
+        /** 结束步内累积并落账本步累积的变更；本步没有变更时不产生提交。 */
+        void endBatch() {
+            if (!batching) {
+                return;
+            }
+            batching = false;
+            if (!pendingCommit) {
+                return;
+            }
+            pendingCommit = false;
+            commit();
+        }
+
+        // 本句柄的落账次数：登记与每次合并落账各计一次
+        int commitCount() {
+            return commitCount;
+        }
+
+        // 本句柄被步内累积合并、未当场落账的变更次数
+        int deferredMutations() {
+            return deferredMutations;
+        }
+
+        // 域变更的统一出口：步内只置待提交并计入合并统计，步外当场落账；
+        // 调用方因此不必在每次变更后自行提交，也不存在漏提交路径
+        private void changed() {
+            ledger.noteMutation(batching);
+            if (batching) {
+                pendingCommit = true;
+                deferredMutations++;
+                return;
+            }
+            commit();
+        }
+
+        // 落账：把记录当前字段写回账本双索引并标脏；只由本句柄内的入口调用，不对调用方暴露，
         // 避免出现「改了字段却忘记提交」的路径
         private void commit() {
             ledger.submit(record);
+            commitCount++;
         }
 
         // 登记失败补偿：把记录从两张索引成对摘除，避免重启后的恢复任务重复交付已写回的库存
@@ -339,82 +389,82 @@ public final class SettlementRecord {
         // 每个入口都在同一次调用内改字段并落账（写回双索引 + 标脏），调用方无需再自行提交
         void plan(String candidateId, int groupCount) {
             record.plan(candidateId, groupCount);
-            commit();
+            changed();
         }
 
         void markStarted(long gameTime) {
             record.markStarted(gameTime);
-            commit();
+            changed();
         }
 
         // 开始一组并落账：调用方已从结算库存扣掉该组固定成本
         void groupStarted(int cost) {
             record.groupStarted(cost);
-            commit();
+            changed();
         }
 
         void catalystPlan(int costPerGroup) {
             record.catalystPlan(costPerGroup);
-            commit();
+            changed();
         }
 
         void catalystGroupPaid(int count) {
             record.catalystGroupPaid(count);
-            commit();
+            changed();
         }
 
         void addApplied(long units) {
             record.addApplied(units);
-            commit();
+            changed();
         }
 
         void addPending(long units) {
             record.addPending(units);
-            commit();
+            changed();
         }
 
         // 进度回执入口：执行器只拿到这条写入通道，本方法自己落账；
         // 只改 applied/pending units，绝不触碰待交付量，因此不覆盖库存所有权与恢复进度
         void addProgress(int units) {
             record.addProgress(units);
-            commit();
+            changed();
         }
 
         void effectSkipped() {
             record.effectSkipped();
-            commit();
+            changed();
         }
 
         void effectFailed() {
             record.effectFailed();
-            commit();
+            changed();
         }
 
         // 返还交付：交付成功后递减待交付并落账，账目始终等于「还没交付出去的库存」
         void delivered(int count) {
             record.delivered(count);
-            commit();
+            changed();
         }
 
         // 用结算库存实际数量对齐待交付量：只由仍持有库存所有权的一方调用，移交后不得再调用
         void syncPendingDelivery(int remaining) {
             record.syncPendingDelivery(remaining);
-            commit();
+            changed();
         }
 
         void complete(long gameTime) {
             record.complete(gameTime);
-            commit();
+            changed();
         }
 
         void interrupt(String reason, long gameTime) {
             record.interrupt(reason, gameTime);
-            commit();
+            changed();
         }
 
         void fail(String reason, long gameTime) {
             record.fail(reason, gameTime);
-            commit();
+            changed();
         }
     }
 }

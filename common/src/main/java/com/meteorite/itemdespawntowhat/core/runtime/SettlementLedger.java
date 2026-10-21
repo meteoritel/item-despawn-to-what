@@ -23,8 +23,8 @@ import java.util.Map;
  * 返回待返还数据的完整恢复由 ConversionRuntime 落地；写入仍只发生在服务端线程。
  * 可变性契约：记录是可变对象，两张索引持有同一个引用，账本不在写入时做快照；
  * 更改变量字段的方法在 {@link SettlementRecord} 内私有，写入统一经 {@link SettlementRecord.Writer}：
- * 变更与「提交标脏」在同一次调用内完成，调用方无法只改字段不落账。SavedData 只在仍为脏时落盘，
- * 故提交后内存账目与后续落盘值一致；提交只标脏不即时刷盘。
+ * 变更与「提交标脏」由该句柄统一发起，调用方无法只改字段不落账；结算任务在步内累积、步末一次提交。
+ * SavedData 只在仍为脏时落盘，故提交后内存账目与后续落盘值一致；提交只标脏不即时刷盘。
  */
 public final class SettlementLedger extends SavedData {
 
@@ -36,6 +36,12 @@ public final class SettlementLedger extends SavedData {
     private static final long RETAIN_COMPLETED_TICKS = 6000L;
     // 条数上限告警的降频刻：上限持续被占满时每个保留窗口只提示一次，避免每 tick 刷日志
     private long lastCapacityWarnTick = Long.MIN_VALUE;
+    // 写入观测（仅调试）：字段变更次数、提交次数、提交的记录份数与被步内合并的变更次数。
+    // 变更次数是一次提交标脏的「未合并口径」，与提交次数对照即可核对步内累积是否生效；不参与业务判定。
+    private long mutations;
+    private long commits;
+    private long committedRecords;
+    private long deferredMutations;
 
     // 主索引：持有与 scanIndex 相同的可变记录引用，不做写入时拷贝；迭代顺序即加入与持久化顺序。
     // 两张索引只能通过 index / unindex 成对变更，禁止在其它位置单独增删其中一张。
@@ -60,7 +66,18 @@ public final class SettlementLedger extends SavedData {
             return;
         }
         index(record);
+        commits++;
+        // 一次提交只携带一条记录；独立计数保留「提交了多少份记录」的口径，批量提交多条时两者才会分叉
+        committedRecords++;
         setDirty();
+    }
+
+    // 域变更计数：step 内累积时由 Writer 以 deferred=true 调用，只改计数，不影响落账与标脏
+    void noteMutation(boolean deferred) {
+        mutations++;
+        if (deferred) {
+            deferredMutations++;
+        }
     }
 
     // 两张索引的唯一写入入口：records 决定加入与持久化顺序，scanIndex 提供恢复游标；调用方不得单独写其中一张
@@ -95,6 +112,26 @@ public final class SettlementLedger extends SavedData {
 
     public int size() {
         return records.size();
+    }
+
+    // 字段变更总次数：与提交次数对照可看出步内累积把多少次变更合并成一次落账
+    public long mutationCount() {
+        return mutations;
+    }
+
+    // 落账提交总次数
+    public long commitCount() {
+        return commits;
+    }
+
+    // 提交涉及的记录份数（当前一次提交一条记录）
+    public long committedRecordCount() {
+        return committedRecords;
+    }
+
+    // 被步内累积合并、未当场落账的变更次数
+    public long deferredMutationCount() {
+        return deferredMutations;
     }
 
     SettlementRecord nextForRecovery(String afterId) {

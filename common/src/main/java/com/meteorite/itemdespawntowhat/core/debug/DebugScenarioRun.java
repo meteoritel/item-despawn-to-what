@@ -474,6 +474,12 @@ final class DebugScenarioRun {
         data.addProperty("ledger_records", ledger == null ? -1 : ledger.size());
         data.addProperty("ledger_unsettled", ledger == null ? -1 : ledger.unsettledCount());
         data.addProperty("ledger_pending_delivery", ledger == null ? -1 : ledger.pendingDeliveryTotal());
+        // 账本写入合并口径（服务端累计）：字段变更次数、落账次数、提交涉及记录份数与被步内合并的变更次数。
+        // 变更次数远大于提交次数即说明步内累积生效；场景内逐条结算的值另由 probe 聚合为 settlement_ledger_*
+        data.addProperty("ledger_mutations", ledger == null ? -1 : ledger.mutationCount());
+        data.addProperty("ledger_commits", ledger == null ? -1 : ledger.commitCount());
+        data.addProperty("ledger_committed_records", ledger == null ? -1 : ledger.committedRecordCount());
+        data.addProperty("ledger_deferred_mutations", ledger == null ? -1 : ledger.deferredMutationCount());
         ConversionRuntime.SettlementRecoveryStats recovery = runtime == null ? null : runtime.settlementRecoveryStats();
         data.addProperty("recovery_queued", recovery == null ? -1 : recovery.queueSize());
         data.addProperty("recovery_attempts", recovery == null ? -1 : recovery.attempts());

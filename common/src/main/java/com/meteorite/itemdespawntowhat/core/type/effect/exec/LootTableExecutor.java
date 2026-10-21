@@ -55,22 +55,28 @@ public final class LootTableExecutor {
     /**
      * 成功转化当刻固定的本次战利品产物与落点：只保存触发位置快照与已抽取的堆叠副本。
      * 不保留 {@link LootParams} 与源实体引用，交付期无需也不得再访问原源实体。
+     * 堆叠列表在构造时复制成不可变快照，此后由执行状态共享持有；交付只在真正写入世界时按堆复制，
+     * 不再为每个执行状态整表深拷贝一次。
      *
      * @param position 成功当刻固定的触发点位置
      * @param drops    本次开表抽取到的非空堆叠，按抽取顺序保存
      */
     public record LootPlan(Vec3 position, List<ItemStack> drops) implements EffectPreparation {
 
-        // 快照隔离：位置复制为不可变值，堆叠逐份复制，外部持有者的改动不会污染已定稿产物
+        // 快照隔离：位置复制为不可变值，堆叠逐份复制后收成不可变列表，外部持有者的改动不会污染已定稿产物
         public LootPlan {
             position = new Vec3(position.x, position.y, position.z);
-            drops = drops.stream().filter(stack -> !stack.isEmpty()).map(ItemStack::copy).toList();
+            drops = List.copyOf(drops.stream().filter(stack -> !stack.isEmpty()).map(ItemStack::copy).toList());
         }
 
-        // 取用时再复制一次：写入世界的过程可能改写堆叠，不能回写到固定输入
+        /**
+         * 交付用的只读快照：列表本身不可变，元素在写入世界时才逐堆复制。
+         *
+         * @return 本组固定的战利品堆叠，按抽取顺序排列
+         */
         @Override
         public List<ItemStack> drops() {
-            return drops.stream().map(ItemStack::copy).toList();
+            return drops;
         }
     }
 

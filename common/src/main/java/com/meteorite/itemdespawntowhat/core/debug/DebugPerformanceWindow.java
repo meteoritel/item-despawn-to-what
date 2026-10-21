@@ -290,10 +290,17 @@ final class DebugPerformanceWindow {
         SettlementLedger ledger = SettlementLedger.get(level);
         data.addProperty("ledger_unsettled", ledger.unsettledCount());
         data.addProperty("ledger_records", ledger.size());
+        // 账本写入合并口径（服务端累计）：变更次数与提交次数对照可核对步内累积是否生效
+        data.addProperty("ledger_mutations", ledger.mutationCount());
+        data.addProperty("ledger_commits", ledger.commitCount());
+        data.addProperty("ledger_deferred_mutations", ledger.deferredMutationCount());
         JsonObject serverRecovery = new JsonObject();
         serverRecovery.addProperty("ledger_unsettled", ledger.unsettledCount());
         serverRecovery.addProperty("ledger_records", ledger.size());
         serverRecovery.addProperty("ledger_pending_delivery_total", ledger.pendingDeliveryTotal());
+        serverRecovery.addProperty("ledger_mutations", ledger.mutationCount());
+        serverRecovery.addProperty("ledger_commits", ledger.commitCount());
+        serverRecovery.addProperty("ledger_deferred_mutations", ledger.deferredMutationCount());
         // 仅调试观测：pendingUnits 是执行器自报的剩余量，绝不参与交付量计算（交付只认 pendingDelivery）
         serverRecovery.addProperty("ledger_pending_units_total_debug_only", ledger.pendingUnitsTotal());
         serverRecovery.addProperty("active_recoveries", runtime.activeRecoveryCount());
