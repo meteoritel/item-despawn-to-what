@@ -208,7 +208,7 @@ public final class RuleRuntimeHostCore {
      * @return 本次加载结果；未就绪或失败时为 null
      */
     public RuleLoadResult<Rule> reload(MinecraftServer server, ResourceManager resourceManager) {
-        RuleReloadOutcome outcome = reloadWithOutcome(server, resourceManager);
+        RuleReloadOutcome<Rule> outcome = reloadWithOutcome(server, resourceManager);
         return outcome == null ? null : outcome.result();
     }
 
@@ -220,7 +220,7 @@ public final class RuleRuntimeHostCore {
      * @param resourceManager 本次重载使用的数据包资源管理器
      * @return 重载回执；运行时未就绪或延后处理时为 null
      */
-    public RuleReloadOutcome reloadWithOutcome(MinecraftServer server, ResourceManager resourceManager) {
+    public RuleReloadOutcome<Rule> reloadWithOutcome(MinecraftServer server, ResourceManager resourceManager) {
         if (server == null) { return null; }
         if (RuleEditServerHandler.deferReload(() -> {
             // 延后到保存收尾执行时重新取当前服务端，避免重载到已停止的实例
@@ -488,7 +488,7 @@ public final class RuleRuntimeHostCore {
         public void rebuildAndRescan(MinecraftServer server) {
             // 与数据包重载共用同一条 apply 路径（Fabric 与 NeoForge 两端口径一致）：
             // 重载失败必须抛异常，让保存流程回 SAVED_NOT_RELOADED（已写盘但未重载）
-            RuleReloadOutcome outcome = reloadWithOutcome(server, server.getResourceManager());
+            RuleReloadOutcome<Rule> outcome = reloadWithOutcome(server, server.getResourceManager());
             if (outcome == null || !outcome.isApplied()) {
                 throw new IllegalStateException("保存后的运行时重载失败"
                         + (outcome == null || outcome.failure() == null ? "" : "：" + outcome.failure().message()));
@@ -532,7 +532,7 @@ public final class RuleRuntimeHostCore {
         }
 
         @Override
-        public RuleReloadOutcome reloadRules(MinecraftServer server) {
+        public RuleReloadOutcome<Rule> reloadRules(MinecraftServer server) {
             return reloadWithOutcome(server, server.getResourceManager());
         }
     }

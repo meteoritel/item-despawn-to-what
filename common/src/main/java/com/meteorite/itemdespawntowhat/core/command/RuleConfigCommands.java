@@ -59,7 +59,7 @@ final class RuleConfigCommands {
     private static int reload(CommandContext<CommandSourceStack> ctx, RuleCommandContext context) {
         if (RuleEditServerHandler.isSaving()) { return RuleCommandTree.saveBusy(ctx); }
         MinecraftServer server = ctx.getSource().getServer();
-        RuleReloadOutcome outcome = context.reloadRules(server);
+        RuleReloadOutcome<Rule> outcome = context.reloadRules(server);
         if (outcome == null) {
             return RuleCommandTree.notReady(ctx);
         }

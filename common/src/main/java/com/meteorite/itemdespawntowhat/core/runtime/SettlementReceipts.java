@@ -89,8 +89,6 @@ final class SettlementReceipts {
         writer.fail(reason, gameTime);
     }
 
-    // 执行器回执入账：已完成、已受理未完成、跳过与失败分别计数，计划量不冒充成功量；
-    // 中止后到达的迟到回执由调用方在入口拦截（记录已移交恢复任务，写入会把已终结记录重新登记进账本）
     /** 进入步内累积：本步的账目变更不逐次落账，由 {@link #endStep()} 在步末合并提交。 */
     void beginStep() {
         writer.beginBatch();
@@ -110,6 +108,8 @@ final class SettlementReceipts {
         return writer.deferredMutations();
     }
 
+    // 执行器回执入账：已完成、已受理未完成、跳过与失败分别计数，计划量不冒充成功量；
+    // 中止后到达的迟到回执由调用方在入口拦截（记录已移交恢复任务，写入会把已终结记录重新登记进账本）
     void apply(EffectResult result) {
         if (result == null) {
             writer.effectFailed();

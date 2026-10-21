@@ -89,7 +89,7 @@ final class SettlementPayment {
     // 返还物加入世界：位置搜索在公共预算内分步推进；区块未加载或生成被拒时保留待返还并重试
     private ReturnItemSpawner.Outcome deliverStack(ItemStack stack, ServerTickBudget budget) {
         if (rebateSearch == null) {
-            // 位置搜索游标按触发时快照位置创建一次，跨刻保留进度；每成功交付一份后重置
+            // 位置搜索游标按源实体位置创建一次，跨刻保留进度；源实体已清空并在下个 tick 移除，位置即触发点
             rebateSearch = new ReturnItemSpawner.PositionSearch(level, source);
         }
         return ReturnItemSpawner.deliver(stack, rebateSearch, budget,

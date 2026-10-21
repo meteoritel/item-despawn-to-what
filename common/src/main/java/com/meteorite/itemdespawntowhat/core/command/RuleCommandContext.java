@@ -34,5 +34,5 @@ public interface RuleCommandContext {
     int activeSessionCount();
 
     // 重新加载三层规则并重建索引、回扫全部已加载维度；运行时未就绪时返回 null，重载失败以回执携带结构化问题
-    @Nullable RuleReloadOutcome reloadRules(MinecraftServer server);
+    @Nullable RuleReloadOutcome<Rule> reloadRules(MinecraftServer server);
 }
