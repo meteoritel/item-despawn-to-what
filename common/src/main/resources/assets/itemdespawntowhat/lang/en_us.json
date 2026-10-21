@@ -74,7 +74,7 @@
   "itemdespawntowhat.command.debug.scene.description.bench.reload_storm": "Five rule reloads over 1,000 entities: each rescan advances in bounded steps and every source stays tracked.",
   "itemdespawntowhat.command.debug.scene.description.run.abort_without_held": "Reload after the delayed effect is queued: the settlement has nothing left to return, so the aborted record is finalised and trimmed immediately; no task is left in the scheduler.",
   "itemdespawntowhat.command.debug.scene.description.run.recovery_retry_cap": "In-session recovery after a settlement step throws: three recovery attempts fail with 20/40-tick backoff, then one alert is logged and the record stays in the ledger for the next startup scan.",
-  "itemdespawntowhat.command.debug.scene.description.run.settlement_failure_recovery": "A settlement step throws once: the in-session recovery queue delivers the 3 paper, the record completes and the ledger has no pending delivery."
+  "itemdespawntowhat.command.debug.scene.description.run.settlement_failure_recovery": "A settlement step throws once: the in-session recovery queue delivers the 3 paper, the record completes and the ledger has no pending delivery.",
   "gui.itemdespawntowhat.edit.title": "Edit file",
   "gui.itemdespawntowhat.edit.config_stat_1": "☰ Configs: %d",
   "gui.itemdespawntowhat.edit.config_stat_2": "★ Configs: %s (%s + %s)",

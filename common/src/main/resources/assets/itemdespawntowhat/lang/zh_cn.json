@@ -74,7 +74,7 @@
   "itemdespawntowhat.command.debug.scene.description.bench.reload_storm": "1000个实体上连续5次重载规则：每轮回扫按有界分步推进，结束时所有源仍被追踪。",
   "itemdespawntowhat.command.debug.scene.description.run.abort_without_held": "延迟效果入队后重载：结算已无待返还库存，中止记录直接终结并被裁剪，调度器无滞留。",
   "itemdespawntowhat.command.debug.scene.description.run.recovery_retry_cap": "结算步骤注入异常后当前会话内恢复：连续3次恢复失败按20/40 tick退避，达到上限后只告警一次，记录留在账本等待下次启动扫描。",
-  "itemdespawntowhat.command.debug.scene.description.run.settlement_failure_recovery": "结算步骤注入一次异常：当前会话内恢复队列交付3张纸，记录完成且账本无待返还。"
+  "itemdespawntowhat.command.debug.scene.description.run.settlement_failure_recovery": "结算步骤注入一次异常：当前会话内恢复队列交付3张纸，记录完成且账本无待返还。",
   "gui.itemdespawntowhat.edit.title": "当前编辑文件",
   "gui.itemdespawntowhat.edit.config_stat_1": "☰ 配置数：%d",
   "gui.itemdespawntowhat.edit.config_stat_2": "★ 配置数：%s (%s + %s)",
