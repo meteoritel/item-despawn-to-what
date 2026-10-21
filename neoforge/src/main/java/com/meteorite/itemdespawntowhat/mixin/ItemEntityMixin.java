@@ -1,6 +1,5 @@
 package com.meteorite.itemdespawntowhat.mixin;
 
-import com.meteorite.itemdespawntowhat.core.state.DropState;
 import com.meteorite.itemdespawntowhat.core.state.DropStateStore;
 import com.meteorite.itemdespawntowhat.runtime.RuleRuntimeHost;
 import net.minecraft.server.level.ServerLevel;
@@ -39,11 +38,9 @@ public abstract class ItemEntityMixin {
         }
     }
 
-    // 临时状态并集（D3）：双方临时到期刻取较晚者写回合并目标，源实体状态清除
+    // 合并后的载体继承双方状态（D3）：临时到期刻取较晚者，死亡掉落的检查锁标记也随合并保留
     @Inject(method = "merge(Lnet/minecraft/world/entity/item/ItemEntity;Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/world/entity/item/ItemEntity;Lnet/minecraft/world/item/ItemStack;)V", at = @At("TAIL"))
-    private static void itemdespawntowhat$unionTemporaryState(ItemEntity destinationEntity, ItemStack destinationStack, ItemEntity originEntity, ItemStack originStack, CallbackInfo ci) {
-        DropState merged = DropStateStore.get(destinationEntity).unionTemporary(DropStateStore.get(originEntity));
-        DropStateStore.set(destinationEntity, merged);
-        DropStateStore.clear(originEntity);
+    private static void itemdespawntowhat$inheritMergeState(ItemEntity destinationEntity, ItemStack destinationStack, ItemEntity originEntity, ItemStack originStack, CallbackInfo ci) {
+        DropStateStore.mergeInto(destinationEntity, originEntity);
     }
 }

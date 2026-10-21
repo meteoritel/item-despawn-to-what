@@ -103,8 +103,8 @@ public final class DebugScenarioManager {
             data.addProperty("warmup_world_ticks", 20);
             data.addProperty("dimension", run.level.dimension().location().toString());
             data.addProperty("origin", origin.toString());
-            data.addProperty("grid_spacing_blocks", benchmark ? 0.25 : 1.0);
-            data.addProperty("merge_disabled_by_unique_component", true);
+            data.addProperty("grid_spacing_blocks", definition.spec.gridSpacing());
+            data.addProperty("merge_disabled_by_unique_component", definition.spec.setup() != DebugScenarioSpec.Setup.MERGE);
             data.addProperty("no_gravity", true);
             data.addProperty("expected_conversions", definition.expectedConversions);
             data.addProperty("expected_output_items", definition.expectedOutput);

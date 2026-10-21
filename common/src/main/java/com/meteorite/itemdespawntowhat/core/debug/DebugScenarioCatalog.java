@@ -76,6 +76,10 @@ final class DebugScenarioCatalog {
         if (actions.size() > 16) { throw new IllegalArgumentException("场景动作超过16个：" + key); }
         DebugScenarioSpec.Setup setup = DebugScenarioSpec.Setup.valueOf(body.get("setup").getAsString().toUpperCase(Locale.ROOT));
         if (setup == DebugScenarioSpec.Setup.EXCLUDED && sources != 2) { throw new IllegalArgumentException("excluded准备方式需要2个源：" + key); }
+        // 普通堆数量必须多于锁定堆（1 件），原版合并才会稳定地让普通堆成为载体
+        if (setup == DebugScenarioSpec.Setup.MERGE && (sources != 2 || stack < 2)) {
+            throw new IllegalArgumentException("merge准备方式需要2个源且堆叠数至少2：" + key);
+        }
         if (benchmark && (catalyst != 0 || !actions.isEmpty() || setup != DebugScenarioSpec.Setup.NONE)) {
             throw new IllegalArgumentException("性能场景只允许普通源准备，不运行功能动作或催化剂夹具：" + key);
         }

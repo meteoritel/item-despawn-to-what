@@ -42,6 +42,7 @@
   "itemdespawntowhat.command.debug.scene.description.run.stack": "A stack of 16 paper: one submission, 16 groups, and 16 shards.",
   "itemdespawntowhat.command.debug.scene.description.run.priority": "Two rules with different due ages: the earlier rule converts first.",
   "itemdespawntowhat.command.debug.scene.description.run.excluded": "A check-locked source and an unlimited-lifetime source: no conversions; both paper remain.",
+  "itemdespawntowhat.command.debug.scene.description.run.death_drop_merge": "1 check-locked paper merges with 4 plain paper of the same item: the merged pile stays protected, so nothing converts and 5 paper remain.",
   "itemdespawntowhat.command.debug.scene.description.run.reload": "Reload after the delayed effect is queued: cancel the settlement and effects; produce nothing.",
   "itemdespawntowhat.command.debug.scene.description.bench.baseline": "Empty-load baseline, 60 seconds by default.",
   "itemdespawntowhat.command.debug.scene.description.bench.convert": "Conversion load: 1,000 entities and 60 seconds by default; count and duration are configurable.",
