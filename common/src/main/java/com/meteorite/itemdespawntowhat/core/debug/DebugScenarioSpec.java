@@ -12,7 +12,8 @@ import java.util.List;
 record DebugScenarioSpec(String key, int sources, int stackSize, int seconds, int catalystCount,
                          ResourceLocation sourceItem, ResourceLocation catalystItem, Setup setup,
                          List<Action> actions, List<Fault> faults, JsonObject expected, JsonArray rules) {
-    static final int MAX_FUNCTIONAL_SOURCES = 16;
+    // 功能场景源上限：取消预算等正确性场景需要成批排队等待取消的检查，取 64；仍远低于性能场景上限。
+    static final int MAX_FUNCTIONAL_SOURCES = 64;
     static final int MAX_BENCHMARK_SOURCES = 1000;
 
     /** 准备阶段的实体操作，不依赖场景名称。MERGE 为合并保护夹具，验证检查锁与普通掉落合并后仍生效。 */
