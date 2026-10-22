@@ -50,8 +50,6 @@ public final class ArrowRainExecutor {
     // 水平抖动幅度
     public static final float HORIZONTAL_JITTER = 0.08F;
 
-    // 等待目标区块加载时的退避刻数
-    private static final int CHUNK_RETRY_TICKS = 20;
     // 序列开始前要求的整片已加载半径：生成位置可能越过源区块边界
     private static final int SERIES_CHUNK_RADIUS = 6;
     // 拒绝直接调用的原因：没有共享预算的实现无法按 tick 推进
@@ -145,7 +143,7 @@ public final class ArrowRainExecutor {
             }
             if (!LoadedChunks.containsArea(level, BlockPos.containing(origin), SERIES_CHUNK_RADIUS)) {
                 // 整片未加载：本次不计入账目，退避后仍在同一基准位置重来
-                nextDueTick = now + CHUNK_RETRY_TICKS;
+                nextDueTick = now + LoadedChunks.RETRY_TICKS;
                 return null;
             }
             if (launched >= count) {
@@ -161,7 +159,7 @@ public final class ArrowRainExecutor {
             BlockPos column = BlockPos.containing(pendingX, origin.y + SPAWN_HEIGHT, pendingZ);
             if (!LoadedChunks.contains(level, column)) {
                 // 生成列未加载：保留这一波的落点，退避后重试，不推进次数
-                nextDueTick = now + CHUNK_RETRY_TICKS;
+                nextDueTick = now + LoadedChunks.RETRY_TICKS;
                 return null;
             }
             if (pendingArrow == null) {
@@ -169,7 +167,7 @@ public final class ArrowRainExecutor {
             }
             if (!EffectTargets.addEntityNow(context, pendingArrow, false)) {
                 // 两次检查之间该列卸载：保留已构造的箭矢，退避后重试，不重抽也不计完成量
-                nextDueTick = now + CHUNK_RETRY_TICKS;
+                nextDueTick = now + LoadedChunks.RETRY_TICKS;
                 return null;
             }
             // 真实写入世界之后才回执与计费

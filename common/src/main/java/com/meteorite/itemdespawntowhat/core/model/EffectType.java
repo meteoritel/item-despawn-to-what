@@ -33,4 +33,17 @@ public interface EffectType<P extends Effect> extends TypeDefinition<P> {
     default ProductKind productKind(P params) {
         return ProductKind.NONE;
     }
+
+    /**
+     * 该效果类型每轮一组的容量需求声明；默认不占容量。
+     *
+     * <p>结算的计划期容量承诺与开组前容量复核读取本声明：声明是每轮一组的最小产出下界，
+     * 产物类型未知的产出（战利品表）按保守口径参与；一次性效果不参与容量计算，无需声明。</p>
+     *
+     * @param params 该类型已解码的参数对象
+     * @return 每轮一组的最小产出需求；非产出返回 {@link CapacityDemand#NONE}
+     */
+    default CapacityDemand capacityDemand(P params) {
+        return CapacityDemand.NONE;
+    }
 }

@@ -4,6 +4,8 @@ import com.meteorite.itemdespawntowhat.core.api.scheduler.CancelReason;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ScheduledTaskHandle;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /**
  * 已入队任务的句柄实现：承载任务本体、当前到期 tick 与可精确取消的状态。
@@ -11,6 +13,8 @@ import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
  * 对外只暴露 {@link ScheduledTaskHandle}，队列归属与生命周期迁移是本实现的内部细节。
  */
 public final class ScheduledTask implements ScheduledTaskHandle {
+
+    private static final Logger LOGGER = LogManager.getLogger("IDTW.Scheduler");
 
     // 任务在队列中的生命周期状态。
     public enum State {
@@ -60,26 +64,29 @@ public final class ScheduledTask implements ScheduledTaskHandle {
     }
 
     // 精确取消：幂等；仅对仍在队列中的任务回退待处理计数。
+    // 取消回调来自任务实现，可能抛异常；批量取消必须继续处理同批其它任务，因此在这里统一隔离。
     public boolean cancel(CancelReason reason) {
         if (terminal()) {
             return false;
         }
         State previous = state;
         state = State.CANCELLED;
-        if (owner != null) {
-            owner.onTaskCancelled(this, previous, reason);
+        try {
+            if (owner != null) {
+                owner.onTaskCancelled(this, previous, reason);
+            }
+            task.onCancelled(reason);
+        } catch (VirtualMachineError fatal) {
+            throw fatal;
+        } catch (Throwable failure) {
+            LOGGER.error("任务取消回调异常：task={} reason={}", task.tracingName(), reason, failure);
         }
-        task.onCancelled(reason);
         return true;
     }
 
     // 由队列在入队时建立归属，出队后归属失效。
     void attach(RealmQueues owner) {
         this.owner = owner;
-    }
-
-    void detach() {
-        this.owner = null;
     }
 
     // 让出或重试后按新的到期 tick 重新入队。

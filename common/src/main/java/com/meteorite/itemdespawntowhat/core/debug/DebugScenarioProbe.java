@@ -32,6 +32,8 @@ final class DebugScenarioProbe {
     private final List<ItemEntity> returns = new ArrayList<>();
     private @Nullable ItemEntity catalyst;
     private boolean prepared;
+    // 首次检查失败后的重试延迟：直接证明失败后真的排到了下一次检查，-1 表示未观察到
+    private long firstCheckRetryDelayTicks = -1L;
 
     // 每轮独立累计，不读取上一轮日志或结算记录。
     DebugScenarioProbe(DebugScenarioRun run) { this.run = run; }
@@ -69,14 +71,30 @@ final class DebugScenarioProbe {
         switch (event) {
             case "OUTCOME_PLANNED" -> candidates.merge(String.valueOf(field(fields, "candidate")), 1L, Long::sum);
             case "SETTLEMENT_COMPLETED" -> {
-                for (String key : List.of("groups", "consumed_sources", "returned", "pending_units", "pending_delivery")) {
+                for (String key : List.of("groups", "consumed_sources", "returned", "pending_units", "pending_delivery",
+                        "prepared_groups")) {
                     Object value = field(fields, key);
                     if (!(value instanceof Number number)) { throw new IllegalStateException("结算事件缺少数值：" + key); }
                     totals.merge(key, number.longValue(), Long::sum);
                 }
                 totals.merge("settlements_completed", 1L, Long::sum);
+                // 账本写入合并口径随完成事件上报：本场景所有完成结算的记录级落账次数与被步内合并的变更次数
+                for (String key : List.of("ledger_commits", "ledger_deferred_mutations")) {
+                    Object value = field(fields, key);
+                    if (!(value instanceof Number number)) { throw new IllegalStateException("结算事件缺少数值：" + key); }
+                    totals.merge(key, number.longValue(), Long::sum);
+                }
+            }
+            case "CHECK_TASK_FAILED" -> {
+                totals.merge("check_failures", 1L, Long::sum);
+                // 释放路径的重试延迟为 0（不重试），只有真的重排才有正值可断言
+                if (firstCheckRetryDelayTicks < 0L && field(fields, "retry_delay_ticks") instanceof Number delay
+                        && delay.longValue() > 0L) {
+                    firstCheckRetryDelayTicks = delay.longValue();
+                }
             }
             case "EFFECT_CHANCE_SKIPPED" -> totals.merge("chance_skipped", 1L, Long::sum);
+            case "PAYMENT_BLOCKED" -> totals.merge("payment_blocked_" + field(fields, "reason"), 1L, Long::sum);
             case "EFFECT_SETTLED" -> {
                 if (String.valueOf(field(fields, "outcome")).equals("FAILED")) { totals.merge("failed_effects", 1L, Long::sum); }
             }
@@ -120,6 +138,17 @@ final class DebugScenarioProbe {
                 "settlements_completed", "chance_skipped", "failed_effects")) {
             metrics.addProperty(key, totals.getOrDefault(key, 0L));
         }
+        metrics.addProperty("check_failures", totals.getOrDefault("check_failures", 0L));
+        // 账本写入合并口径（本场景聚合）：字段变更次数与被步内合并的变更次数；
+        // 成批交付场景里 deferred 明显大于 0，说明提交确实被合并到步末，而不是每堆一次
+        metrics.addProperty("settlement_ledger_commits", totals.getOrDefault("ledger_commits", 0L));
+        metrics.addProperty("settlement_ledger_deferred_mutations", totals.getOrDefault("ledger_deferred_mutations", 0L));
+        // 支付受阻原因分别计数：场景可断言「截断整批时究竟缺的是哪一种资源」
+        for (String key : List.of("payment_blocked_catalyst_short", "payment_blocked_threshold_short",
+                "payment_blocked_fluid_short", "payment_blocked_capacity_short")) {
+            metrics.addProperty(key, totals.getOrDefault(key, 0L));
+        }
+        metrics.addProperty("first_check_retry_delay_ticks", firstCheckRetryDelayTicks);
         long returned = returns.stream().filter(Entity::isAlive).mapToLong(item -> item.getItem().getCount()).sum();
         long protectedReturns = returns.stream().filter(Entity::isAlive)
                 .filter(item -> DropStateStore.get(item).permanentProtection() && DropStateStore.get(item).permanentConversionBan())

@@ -58,6 +58,7 @@ Syntax: `/idtw config reload`
 This command reads the rules from every source again and applies them at once, with the same summary line and issue list as `validate`.
 
 - Dropped items already on the ground are judged again under the new rules, so you do not need to drop them a second time.
+- The new rules are built first and only applied once the build succeeds. If reading or building fails, the old rules and tracking stay effective and the reply states that no rule changes were applied.
 - Run it after every JSON edit, or reload datapacks, or restart the server. Otherwise the game never reads your changes.
 - It reloads rules only and does not read `server.json` again. To change server settings, restart the server; see [Server Configuration](en-07-server-config).
 

@@ -24,7 +24,6 @@ import java.util.function.Consumer;
  * 因此回调重入或回调异常都不会重放世界操作、不会重复入账。
  */
 final class EffectTask implements ServerTask {
-    private static final int CHUNK_RETRY_TICKS = 20;
     private final ConversionRuntime runtime;
     private final ServerLevel level;
     private final ItemEntity source;
@@ -49,7 +48,7 @@ final class EffectTask implements ServerTask {
         if (finished) { return StepResult.done(1); }
         if (budget.exhausted()) { return StepResult.yield(1, 1); }
         if (!LoadedChunks.contains(level, BlockPos.containing(context.position()))) {
-            return StepResult.yield(1, CHUNK_RETRY_TICKS);
+            return StepResult.yield(1, LoadedChunks.RETRY_TICKS);
         }
         if (execution == null) { execution = runtime.startEffect(level, source, context, effect, preparation); }
         if (budget.exhausted()) { return StepResult.yield(1, 1); }

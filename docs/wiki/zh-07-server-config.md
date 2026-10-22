@@ -47,6 +47,7 @@
   "debug_scenario_prepare_batch_size": 128,
   "debug_scenario_prepare_budget_us": 2000,
   "max_place_block_radius": 8,
+  "settlement_recovery_max_attempts": 3,
   "nearby_products": {
     "item_limit": 1024,
     "item_radius": 6,
@@ -54,7 +55,9 @@
     "entity_radius": 6,
     "experience_orb_limit": 64,
     "experience_radius": 6
-  }
+  },
+  "rescan_entities_per_step": 16,
+  "cancels_per_step": 1
 }
 ```
 
@@ -80,8 +83,11 @@
 | `new_product_protection_seconds` | 刚转化出来的物品在多少秒内不会被火、岩浆、仙人掌销毁 | 0～3600 秒 | `2` | 产物常常一出现就被火销毁（例如在岩浆旁转化）就调大；想让产物立刻可被销毁就设 `0` |
 | `conversion_cooldown_seconds` | 刚转化出来的物品在多少秒内不会再次启动转化 | 0～3600 秒 | `5` | 出现产物立刻又被另一条规则转化的连锁时调大；想让产物马上能继续参与转化就设 `0` |
 | `position_search_checks_per_tick` | 每刻最多尝试多少个候选位置，用来给产物或返还物找落点 | 1～4096 | `16` | 出现东西一直没交出来、落点难找（地形拥挤）时调大；想省性能可调小 |
+| `rescan_entities_per_step` | 启动、维度加载与规则重载后重建追踪时，每一步最多处理多少个已加载掉落物；剩余部分留到之后几刻继续 | 1～4096 | `16` | 上万掉落物的服务器在启动或重载后仍感觉单刻卡顿就调小；想更快完成重建就调大，但单刻负担随之上升 |
+| `cancels_per_step` | 规则重载、维度加载卸载与停服前摘除任务时，每一步最多取消多少个排队任务；剩余部分留到之后几刻继续 | 1～4096 | `1` | 规则重载或维度卸载后单刻出现取消尖峰就保持或调小；希望旧队列更快清理完可以调大，但单刻取消回调随之变多 |
 | `debug_scenario_prepare_batch_size` | 只影响开发环境测试场景的准备阶段，与正常游玩无关 | 1～100000 | `128` | 普通玩家不用改 |
 | `debug_scenario_prepare_budget_us` | 同上，准备阶段的时间上限（微秒） | 1～100000 微秒 | `2000` | 普通玩家不用改 |
+| `settlement_recovery_max_attempts` | 运行期结算中途失败时，本次服务器运行内最多重试几次；超过后保留账本，等下次启动扫描再恢复 | 1～100 | `3` | 某个维度长期不可用、希望直接交给下次重启处理时调小；只有失败原因会在几秒内自行消失时才需要调大 |
 | `max_place_block_radius` | 单条规则里 `place_block` 的 `radius` 允许的最大值；超过的规则在加载与保存时被拒载 | 1 以上 | `8` | 想让一条规则一次铺得更远就调大，但单次放置开销按半径的立方增长，不要调得过大；调小后超出新上限的既有规则会被拒载，需要同时把规则里的 `radius` 改小 |
 | `nearby_products` | 产物邻近上限，按附近已有的产物数量决定一组转化能不能开始，详见下一节 | 对象 | 见下一节 | 产物堆积过多导致卡顿时调低；想解除数量限制时把对应上限设 `0` |
 
@@ -197,9 +203,10 @@
 ## 平时不用改的字段
 
 - `overlay_directory`：只有想改目录结构时才动，改错会让覆盖层规则全部失效。
-- `max_checks_per_tick`、`max_work_units_per_tick`、`effects_work_units_per_tick`、`dispatch_batch_size`、`position_search_checks_per_tick`：默认值适合大多数服务器，只有出现卡顿或明显积压时才调。
+- `max_checks_per_tick`、`max_work_units_per_tick`、`effects_work_units_per_tick`、`dispatch_batch_size`、`position_search_checks_per_tick`、`rescan_entities_per_step`、`cancels_per_step`：默认值适合大多数服务器，只有出现卡顿或明显积压时才调。
 - `fabric_lifespan_fallback_ticks`：只有 Fabric 端读不到掉落物寿命时才会用上。
 - `debug_logging`：只在排查问题时临时开启。
+- `settlement_recovery_max_attempts`：默认 `3` 次已覆盖常见的临时失败；只有某个维度会长时间不可用时才需要动它。
 - `debug_scenario_prepare_batch_size`、`debug_scenario_prepare_budget_us`：只服务于开发环境的测试场景，正常游玩永远不用改。
 - `nearby_products` 的默认上限很宽松，正常玩法几乎不会触发；其中经验的两个子字段已不再生效，不必调。
 

@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.core.debug;
 
 import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.command.RuleCommandContext;
+import com.meteorite.itemdespawntowhat.core.load.RuleReloadOutcome;
 import com.meteorite.itemdespawntowhat.core.runtime.ConversionRuntime;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -37,6 +38,10 @@ final class DebugScenarioActions {
                 if (number == 0) { item.addTag(Constants.CHECK_LOCK_TAG); }
                 else { item.setUnlimitedLifetime(); }
             }
+            // 合并夹具：0 号源带死亡掉落检查锁，其余源是同类普通堆，由原版合并链路自行合并
+            case MERGE -> {
+                if (number == 0) { item.addTag(Constants.CHECK_LOCK_TAG); }
+            }
         }
     }
 
@@ -54,11 +59,30 @@ final class DebugScenarioActions {
                     source.setPos(source.getX(), source.getY() + action.offsetY(), source.getZ());
                     run.trace("ACTION", source, "action", "move_source", "offset_y", action.offsetY());
                 }
+                case MOVE_CATALYST -> {
+                    // 只改催化剂位置、不改实体身份：验证支付按 UUID 复核，位置变化不影响预留与门槛
+                    ItemEntity moved = null;
+                    for (ItemEntity item : run.probe.fixtures) {
+                        if (!item.isAlive() || !item.getItem().is(run.definition.catalystItem)) { continue; }
+                        item.setPos(item.getX(), item.getY() + action.offsetY(), item.getZ());
+                        moved = item;
+                    }
+                    if (moved == null) { throw new IllegalStateException("动作执行时催化剂实体已不存在"); }
+                    run.trace("ACTION", moved, "action", "move_catalyst", "offset_y", action.offsetY());
+                }
                 case RELOAD -> {
-                    if (context.reloadRules(run.level.getServer()) == null) { throw new IllegalStateException("场景中的规则重载失败"); }
+                    int injectedBefore = run.faultsInjected();
                     var data = run.state();
                     data.addProperty("overlay_version", context.overlayVersion());
-                    run.log("ACTION_RELOAD", data);
+                    RuleReloadOutcome<?> outcome = context.reloadRules(run.level.getServer());
+                    if (outcome == null || !outcome.isApplied()) {
+                        // 声明了故障的重载失败是本次注入的预期结果：记录后继续断言，不按场景错误中止
+                        if (run.faultsInjected() == injectedBefore) { throw new IllegalStateException("场景中的规则重载失败"); }
+                        data.addProperty("injected_faults", run.faultsInjected() - injectedBefore);
+                        run.log("ACTION_RELOAD_FAILURE", data);
+                    } else {
+                        run.log("ACTION_RELOAD", data);
+                    }
                 }
             }
             completed.add(i);

@@ -38,8 +38,6 @@ public final class LootTableExecutor {
     private static final int LOOT_DROPS_PER_STEP = 16;
     // 计价：一个真正写入世界的掉落物实体记 1 个工作单位
     private static final int WORK_UNITS_PER_DROP = 1;
-    // 邻区块未加载时的重试间隔：不在等待期反复查世界，也不提前记为成功
-    private static final int CHUNK_RETRY_TICKS = 20;
     // 回执说明：同步入口不承担分批，交由预算执行路径推进
     private static final String BUDGET_REQUIRED = "budget_required: loot_table";
     // 回执说明：成功转化当刻没有固定输入，属于运行时接线缺失，不退回到期重新抽取
@@ -55,22 +53,28 @@ public final class LootTableExecutor {
     /**
      * 成功转化当刻固定的本次战利品产物与落点：只保存触发位置快照与已抽取的堆叠副本。
      * 不保留 {@link LootParams} 与源实体引用，交付期无需也不得再访问原源实体。
+     * 堆叠列表在构造时复制成不可变快照，此后由执行状态共享持有；交付只在真正写入世界时按堆复制，
+     * 不再为每个执行状态整表深拷贝一次。
      *
      * @param position 成功当刻固定的触发点位置
      * @param drops    本次开表抽取到的非空堆叠，按抽取顺序保存
      */
     public record LootPlan(Vec3 position, List<ItemStack> drops) implements EffectPreparation {
 
-        // 快照隔离：位置复制为不可变值，堆叠逐份复制，外部持有者的改动不会污染已定稿产物
+        // 快照隔离：位置复制为不可变值，堆叠逐份复制后收成不可变列表，外部持有者的改动不会污染已定稿产物
         public LootPlan {
             position = new Vec3(position.x, position.y, position.z);
-            drops = drops.stream().filter(stack -> !stack.isEmpty()).map(ItemStack::copy).toList();
+            drops = List.copyOf(drops.stream().filter(stack -> !stack.isEmpty()).map(ItemStack::copy).toList());
         }
 
-        // 取用时再复制一次：写入世界的过程可能改写堆叠，不能回写到固定输入
+        /**
+         * 交付用的只读快照：列表本身不可变，元素在写入世界时才逐堆复制。
+         *
+         * @return 本组固定的战利品堆叠，按抽取顺序排列
+         */
         @Override
         public List<ItemStack> drops() {
-            return drops.stream().map(ItemStack::copy).toList();
+            return drops;
         }
     }
 
@@ -185,7 +189,7 @@ public final class LootTableExecutor {
             }
             // 掉落物散布半径小于一格，邻区块就绪即可写入
             if (!LoadedChunks.containsArea(level, center, 1)) {
-                nextAttemptTick = gameTime + CHUNK_RETRY_TICKS;
+                nextAttemptTick = gameTime + LoadedChunks.RETRY_TICKS;
                 return null;
             }
             int written = 0;
@@ -207,7 +211,7 @@ public final class LootTableExecutor {
                 // 转化产物：走既有显式产物入口，先授予临时保护与冷却再写入世界。
                 // 未写入时保留这堆产物，退避后重试，不重造散点与初速。
                 if (!EffectTargets.addConversionProductNow(context, pendingDrop)) {
-                    nextAttemptTick = gameTime + CHUNK_RETRY_TICKS;
+                    nextAttemptTick = gameTime + LoadedChunks.RETRY_TICKS;
                     return null;
                 }
                 pendingDrop = null;

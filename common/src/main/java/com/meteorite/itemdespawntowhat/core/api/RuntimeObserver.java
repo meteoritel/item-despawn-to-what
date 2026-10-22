@@ -5,6 +5,7 @@ import com.meteorite.itemdespawntowhat.core.api.scheduler.ScheduledTaskHandle;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.TaskQueue;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -126,6 +127,38 @@ public interface RuntimeObserver {
      * @param entity 产出物实体
      */
     default void outputAdded(EffectContext context, Entity entity) {
+    }
+
+    /**
+     * 上报「规则重载进入应用阶段」。默认空实现；实现方只允许以抛出异常表达注入的重载失败，
+     * 不得改变调用方对索引替换结果的处理。调用方在新索引构建完成之后、换入之前调用；
+     * 抛出异常时本次重载不换入任何内容，旧索引、追踪与任务队列保持有效。
+     *
+     * @param server 当前服务端
+     */
+    default void reloadApplying(MinecraftServer server) {
+    }
+
+    /**
+     * 上报「即将进入某个效果类型的准备阶段」。默认空实现；实现方只允许以抛出异常表达注入的准备失败，
+     * 不得改变调用方对准备结果的处理。调用方在委托效果执行器准备之前调用，异常按转化补偿单元统一收口。
+     *
+     * @param server 当前服务端
+     * @param effectType 正在准备的效果类型标识
+     */
+    default void effectPreparing(MinecraftServer server, ResourceLocation effectType) {
+    }
+
+    /**
+     * 上报「某个调度任务即将执行一步」。默认空实现；实现方只允许以抛出异常表达注入的步骤失败，
+     * 不得改变调用方对步骤结果的处理。用于结算、恢复等不经过 {@link #schedule} 排入调度器的任务，
+     * 调用方在进入任务步骤逻辑之前调用，异常沿任务失败路径统一收口。
+     *
+     * @param server 当前服务端
+     * @param kind 任务分类
+     * @param tracingName 任务追踪名
+     */
+    default void taskStepStarting(MinecraftServer server, ServerTaskKind kind, String tracingName) {
     }
 
     /**

@@ -1,10 +1,10 @@
 package com.meteorite.itemdespawntowhat.core.runtime.scheduler;
 
-import com.meteorite.itemdespawntowhat.core.api.scheduler.CancelReason;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 
 import java.util.ArrayDeque;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -26,7 +26,6 @@ final class TaskLane {
     private long lastMicros;
     private long maxMicros;
     private long totalVisited;
-    private boolean detached;
 
     TaskLane(Object realmKey, ServerTaskKind kind) {
         this.realmKey = realmKey;
@@ -61,7 +60,6 @@ final class TaskLane {
 
     // 按额度把到期桶中的任务搬入就绪队列：一次只搬一个，搬运本身消耗 1 个工作单位。
     boolean takeDue(long gameTime, ServerTickBudget budget, int allowance) {
-        if (detached) { return false; }
         if (drainedThisTick >= allowance) {
             return false;
         }
@@ -103,7 +101,6 @@ final class TaskLane {
 
     // 取一个就绪任务执行；取消的条目在这里被懒删除。
     ScheduledTask pollReady() {
-        if (detached) { return null; }
         while (!ready.isEmpty()) {
             ScheduledTask head = ready.pollFirst();
             if (head.terminal()) {
@@ -185,33 +182,15 @@ final class TaskLane {
         }
     }
 
-    // 整条队列取消：逐项上报原因后清空容器，不留任何静默丢弃。
-    void clear(CancelReason reason) {
+    // 摘出全部待取消句柄并清空容器：容器必须先归零，取消回调里重新入队的任务才不会被误删；
+    // 句柄由调用方的清理任务跨 tick 逐个取消，不在本方法内触发回调。
+    void drainInto(List<ScheduledTask> out) {
         for (ArrayDeque<ScheduledTask> bucket : buckets.values()) {
-            for (ScheduledTask handle : bucket) {
-                handle.cancel(reason);
-            }
+            out.addAll(bucket);
         }
-        for (ScheduledTask handle : ready) {
-            handle.cancel(reason);
-        }
+        out.addAll(ready);
         buckets.clear();
         ready.clear();
         pending = 0;
     }
-
-    // 跨 tick 清理时每步只摘取一个槽位，终态槽位也计入处理额度。
-    boolean cancelOne(CancelReason reason) {
-        ScheduledTask task = ready.pollFirst();
-        if (task == null) {
-            Map.Entry<Long, ArrayDeque<ScheduledTask>> entry = buckets.firstEntry();
-            if (entry == null) { return false; }
-            task = entry.getValue().pollFirst();
-            if (entry.getValue().isEmpty()) { buckets.pollFirstEntry(); }
-        }
-        if (task != null) { task.cancel(reason); }
-        return true;
-    }
-
-    void detach() { detached = true; }
 }

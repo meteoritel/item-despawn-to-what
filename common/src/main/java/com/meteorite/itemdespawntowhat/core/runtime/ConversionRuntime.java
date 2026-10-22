@@ -27,6 +27,7 @@ import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.StepResult;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.StepOutcome;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.StepWorkCounter;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudgetSnapshot;
 import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
 import com.meteorite.itemdespawntowhat.core.service.BuiltinTypeRegistries;
@@ -51,8 +52,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -102,12 +105,40 @@ public final class ConversionRuntime {
     private boolean recoveryScanned;
     // 观测：上次扫描中因维度未加载而保持不动的记录数（低频读取，供命令与调试输出使用）
     private long recoverySkippedDimensions;
+    // 运行期恢复队列：当前会话内失败的结算不必等到下次启动，按记录去重后以退避重试重新交付。
+    // 队列推进任务排在调度器自有的系统 realm：它只泵队列、不持有世界写入，规则重载摘除维度 realm 与
+    // 维度卸载都不该打断它；停服随系统 realm 取消，队列状态在同一次停服收尾里清空
+    // 维度未加载时的复查间隔：不消耗恢复尝试次数，等维度加载后继续
+    private static final long RECOVERY_DIMENSION_RECHECK_TICKS = 20L;
+    // 维度连续未加载的复查次数上限：达到上限就把记录留在账本交给维度加载回扫或下次启动，避免队列常驻空转
+    private static final int RECOVERY_DIMENSION_RECHECK_LIMIT = 5;
+    private final Map<String, PendingRecovery> pendingRecoveries = new LinkedHashMap<>();
+    // 已启动的恢复尝试次数：由队列推进并在成功/放弃时清理，超限判定依赖它
+    private final Map<String, Integer> recoveryAttempts = new HashMap<>();
+    // 已告警过的记录：超限只提示一次，避免每 tick 刷日志
+    private final Set<String> recoveryAlerted = new HashSet<>();
+    private boolean recoveryDispatchScheduled;
+    // 停服收尾期间不再接受新入队：取消回调仍会把记录写回账本，但排期已经没有必要
+    private boolean stopped;
+    @Nullable private MinecraftServer recoveryServer;
+    private long recoveryAttemptsTotal;
+    private long recoveryAbandonedTotal;
+    private long recoveryAlertsTotal;
+    private int recoveryMaxRetryDelayTicks;
 
     // 单个维度的运行时状态；任务本身归公共调度器所有，这里只保存缓存与追踪表
     private static final class LevelState {
         private Map<UUID, TrackedState> tracked = new HashMap<>();
         // 所有已加载掉落物都登记，即使暂时没有匹配规则；有序 id 游标允许跨 tick 回扫。
         private final java.util.NavigableMap<Integer, ItemEntity> items = new java.util.TreeMap<>();
+        // 回扫续接：token 标识当前一轮，完成标记只由 token 匹配的收尾路径清除，避免新旧两轮交错；
+        // worldScan 区分「实体表不完整、需扫世界补登记」与「实体表可信、按有序 id 游标重建追踪」。
+        private long rescanToken;
+        private boolean rescanPending;
+        private boolean rescanWorldScan;
+        private int rescanSteps;
+        // 世界扫描模式在入口一次性收集已加载掉落物引用，步骤按快照分片处理，不跨 tick 迭代实体表
+        private List<ItemEntity> rescanSnapshot;
         private RuntimeTagLookup tags;
         private RuntimeClimateSampler climate;
     }
@@ -122,8 +153,35 @@ public final class ConversionRuntime {
         private long nextCheckTick = -1L;
     }
 
-    /** 掉落物追踪状态快照，供开发场景实时日志只读使用 */
-    public record TrackedItemInfo(boolean tracked, int failureCount, boolean locked, long nextCheckTick) {
+    /**
+     * 掉落物追踪状态快照，供开发场景实时日志只读使用。
+     * {@code taskTerminal} 用于核对追踪条目与调度句柄是否自洽：追踪存在但句柄已终态说明排期链已断。
+     *
+     * @param tracked 该掉落物当前是否仍被追踪
+     * @param failureCount 条件检查的连续失败次数
+     * @param locked 是否处于锁定状态（不再改动排期）
+     * @param nextCheckTick 下次到期检查的游戏刻，-1 表示未排期
+     * @param taskTerminal 追踪句柄是否已进入终态
+     */
+    public record TrackedItemInfo(boolean tracked, int failureCount, boolean locked, long nextCheckTick,
+                                  boolean taskTerminal) {
+    }
+
+    /**
+     * 运行期结算恢复队列快照，供开发场景与诊断命令断言恢复进度。
+     *
+     * @param queueSize 当前排队等待重试的记录数
+     * @param attempts 累计已启动的恢复尝试次数
+     * @param abandoned 超过尝试上限后放弃的次数
+     * @param alerts 超限告警次数（每记录每次会话至多一次）
+     * @param maxRetryDelayTicks 已使用的最大退避 tick
+     */
+    public record SettlementRecoveryStats(int queueSize, long attempts, long abandoned, long alerts,
+                                          int maxRetryDelayTicks) {
+    }
+
+    // 队列项：记录 id + 已启动的尝试次数 + 最早可重试刻 + 最近失败原因 + 连续未加载维度的复查次数
+    private record PendingRecovery(String recordId, int attempts, long readyTick, String reason, int dimensionMisses) {
     }
 
     /** 便捷构造：寿命提供器取原版默认值，自然消失时刻按原版寿命规则推算 */
@@ -147,29 +205,76 @@ public final class ConversionRuntime {
 
     // ========== 规则生命周期 ==========
 
-    /** 规则热替换：重建索引并清空全部追踪状态（由随后的 rescan 重建） */
+    /** 规则热替换：重建索引并清空全部追踪状态（由随后的 rescan 重建）；启动等没有并发旧索引的链路使用 */
     public void replaceRules(List<LoadedRule<Rule>> rules, IssueCollector issues) {
+        // 启动装配时运行时尚未对外发布，不需要保护旧索引；候选摘要留给首次结算按需编码
+        publish(RuleIndex.build(rules, issues), Map.of());
+    }
+
+    /**
+     * 预构建规则发布物：只读规则与注册表视图，构建新索引与候选结构摘要，
+     * 不触碰在跑的索引、追踪表与任务队列，因此构建失败时旧规则仍完整可用。
+     *
+     * @param rules 已加载规则
+     * @param issues 问题收集器：构建期问题记录在此，不改动在跑索引
+     * @param registries 当前注册表视图，用于编码候选结构摘要
+     * @return 尚未发布的索引与候选摘要
+     */
+    public PreparedRules prepareRules(List<LoadedRule<Rule>> rules, IssueCollector issues, HolderLookup.Provider registries) {
+        RuleIndex built = RuleIndex.build(rules, issues);
+        List<Rule> runnable = new ArrayList<>(built.ordered().size());
+        for (LoadedRule<Rule> entry : built.ordered()) {
+            runnable.add(entry.value());
+        }
+        return new PreparedRules(built, candidateStructureVersions.prepare(runnable, registries));
+    }
+
+    /**
+     * 原子发布预构建物：单次调用换入索引与候选结构摘要，再清空各维度旧追踪并取消旧队列。
+     * 发布只做内存容器替换，不在方法内构建索引；换入后由调用方逐维排队回扫重建追踪。
+     *
+     * @param prepared 已构建完成的发布物
+     */
+    public void publishRules(PreparedRules prepared) {
+        publish(prepared.index, prepared.candidateVersions);
+    }
+
+    // 换入的唯一实现：索引与候选摘要一次性替换，随后统一失效各维度的追踪与缓存
+    private void publish(RuleIndex preparedIndex, Map<Rule, Integer> candidateVersions) {
         ruleGeneration++;
         savedRescanPending = false;
-        this.index = RuleIndex.build(rules, issues);
-        // 候选结构摘要与规则内容绑定：规则整体替换即失效
-        candidateStructureVersions.clear();
+        this.index = preparedIndex;
+        // 候选结构摘要与规则内容绑定：换索引即换缓存，游标不会复用旧结构判定
+        candidateStructureVersions.install(candidateVersions);
         for (LevelState state : levels.values()) {
             state.tracked.clear();
             // 标签与气候缓存必须随 reload 失效，否则条件求值会读到重新加载前的标签成员
             state.tags = null;
             state.climate = null;
         }
-        // 按维度统一带原因取消：检查队列与效果队列一并清空，避免跨 reload 残留
-        for (ResourceKey<Level> key : levels.keySet()) {
-            scheduler.cancelRealm(key, CancelReason.RULE_RELOAD);
-        }
+        // 先摘除全部维度 realm 再交给清理任务逐槽取消：本 tick 的轮转立即失效，
+        // 取消量与取消回调都摊进后续 tick 的共享预算，避免重载瞬间同步清空所有维度队列
+        scheduler.scheduleMaintenance(scheduler.detachAll(CancelReason.RULE_RELOAD), 0);
         if (config.debugLogging()) {
             LOGGER.info("规则索引已重建：{} 条可运行规则", index.ordered().size());
         }
     }
 
-    /** 当前生效的规则索引（replaceRules 时整体替换） */
+    /**
+     * 预构建的规则发布物：新索引 + 每条可运行规则的候选结构摘要。
+     * 对调用方不透明：只能在构建它的运行时上发布，发布时一次换入、不重新构建。
+     */
+    public static final class PreparedRules {
+        private final RuleIndex index;
+        private final Map<Rule, Integer> candidateVersions;
+
+        private PreparedRules(RuleIndex index, Map<Rule, Integer> candidateVersions) {
+            this.index = index;
+            this.candidateVersions = candidateVersions;
+        }
+    }
+
+    /** 当前生效的规则索引（replaceRules / publishRules 时整体替换） */
     public RuleIndex index() {
         return index;
     }
@@ -203,6 +308,7 @@ public final class ConversionRuntime {
             private int worldIndex;
             private Integer entityCursor;
             private Integer entityLimit;
+            private int retries;
 
             @Override public ServerTaskKind kind() { return ServerTaskKind.MAINTENANCE; }
             @Override public String tracingName() { return "saved-rule-rescan"; }
@@ -233,6 +339,12 @@ public final class ConversionRuntime {
                         advanceWorld();
                         return StepResult.yield(1, 1);
                     }
+                    // 该维度还有未消化完的世界扫描快照：交给统一的回扫续接任务按快照补齐，避免按 items 游标漏登记
+                    if (state.rescanSnapshot != null) {
+                        rescan(world);
+                        advanceWorld();
+                        return StepResult.yield(1, 1);
+                    }
                     if (entityLimit == null) { entityLimit = state.items.isEmpty() ? Integer.MIN_VALUE : state.items.lastKey(); }
                     var next = entityCursor == null ? state.items.firstEntry() : state.items.higherEntry(entityCursor);
                     if (next == null || next.getKey() > entityLimit) { advanceWorld(); }
@@ -242,7 +354,7 @@ public final class ConversionRuntime {
                     }
                     return StepResult.yield(1, 1);
                 }
-                savedRescanPending = false;
+                clearSavedRescan();
                 return StepResult.done(1);
             }
 
@@ -251,12 +363,21 @@ public final class ConversionRuntime {
             @Override public void onCancelled(CancelReason reason) {
                 // 停服必须在 vanilla 最终存档前清理尚未通知的结算任务。
                 for (int i = cleanupIndex; i < cleanup.size(); i++) { cleanup.get(i).onCancelled(reason); }
-                if (generation == ruleGeneration) { savedRescanPending = false; }
+                clearSavedRescan();
             }
 
-            @Override public void onFailed(@org.jetbrains.annotations.Nullable Throwable failure) {
-                // 已发布后的回扫失误仍需清理旧结算队列；正常运行时分步收尾，不集中取消。
-                for (int i = cleanupIndex; i < cleanup.size(); i++) { scheduler.schedule(this, cleanup.get(i), 1); }
+            @Override public void onFailed(@Nullable Throwable failure) {
+                // 已发布后的回扫失误仍需清理旧结算队列；只重排一份续接任务，
+                // 按清理项逐份入队会让同一游标被多份任务推进，剩余清理项由本任务字段顺序消化。
+                if (generation == ruleGeneration && retries++ == 0) {
+                    scheduler.schedule(this, this, 1);
+                    return;
+                }
+                clearSavedRescan();
+            }
+
+            // 完成标记只由本方法清除：旧一代索引的迟到任务不能清掉新一代的回扫标记
+            private void clearSavedRescan() {
                 if (generation == ruleGeneration) { savedRescanPending = false; }
             }
         };
@@ -274,12 +395,22 @@ public final class ConversionRuntime {
                     entity.getTags().contains(Constants.CHECK_LOCK_TAG), "unlimited_lifetime", entity.getAge() == -32768); }
             return;
         }
-        List<Rule> candidates = candidatesFor(entity);
-        if (candidates.isEmpty()) {
+        // 已追踪则不再重复排期（ENTITY_LOAD 在区块重新追踪时会重复触发）；
+        // 但句柄已终态说明排期链已断（失败或被取消），实体重新加载是重建追踪的时机，这里补排一次。
+        TrackedState existing = state.tracked.get(entity.getUUID());
+        if (existing != null) {
+            if (existing.task == null || existing.task.terminal()) {
+                List<Rule> candidates = candidatesFor(entity);
+                if (candidates.isEmpty()) {
+                    releaseTracking(state, entity.getUUID(), existing, CancelReason.TRACKING_RELEASED);
+                } else {
+                    scheduleInitial(level, entity, existing, candidates);
+                }
+            }
             return;
         }
-        // 已追踪则不再重复排期（ENTITY_LOAD 在区块重新追踪时会重复触发）
-        if (state.tracked.containsKey(entity.getUUID())) {
+        List<Rule> candidates = candidatesFor(entity);
+        if (candidates.isEmpty()) {
             return;
         }
         TrackedState tracked = new TrackedState();
@@ -300,7 +431,7 @@ public final class ConversionRuntime {
     // 环境销毁的请求入口（自然消失由调度器的到期检查直接调用 attempt，不走本方法）：先补齐本刻的追踪，再交给 attempt 同步判定
     // 环境致死时本方法在 hurt 调用栈内同步执行「条件检查 + 规则选择」（单实体一次，量小）；
     // 效果一律经调度器排队并在共享 tick 预算内执行（见 ConversionSettlement#dispatchEffect）：这是刻意的设计选择，
-    /** 环境集中销毁是否把峰值转移到这里，仍需观测。 */
+    // 环境集中销毁是否把峰值转移到这里，仍需观测。
     public void requestConversion(ServerLevel level, ItemEntity item, TriggerKind kind) {
         if (item == null || kind == null || excluded(item)) {
             return;
@@ -320,7 +451,7 @@ public final class ConversionRuntime {
             return;
         }
         if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "ENV_DESTROY_REQUEST", "trigger", kind.key()); }
-        attempt(level, item.getUUID(), kind);
+        attempt(level, item.getUUID(), kind, null);
     }
 
     // 每 tick 推进一次公共预算：所有维度的检查与效果共享同一份时间与工作量额度。
@@ -400,9 +531,161 @@ public final class ConversionRuntime {
                 record.id(), record.dimension(), record.pendingDelivery(), position);
     }
 
-    // 恢复任务收尾（交付完成或取消）后释放幂等位，允许后续扫描重新入队剩余库存
-    void onRecoveryFinished(String id) {
+    // 恢复任务收尾（交付完成或取消）后释放幂等位，允许后续扫描重新入队剩余库存。
+    // 取消/中断但仍有待交付时立即交给运行期队列重排：reload 先摘 realm 再逐槽取消，旧任务被取消后
+    // 若只释放幂等位，本会话内就没有人再排这份记录，库存会一直停到下次启动
+    void onRecoveryFinished(MinecraftServer server, String id) {
         activeRecoveries.remove(id);
+        recoveryAttempts.remove(id);
+        recoveryAlerted.remove(id);
+        if (server == null) {
+            return;
+        }
+        SettlementRecord record = SettlementLedger.get(server.overworld()).find(id);
+        if (record != null && record.needsRecovery()) {
+            enqueueRecovery(server, id, "recovery-cancelled");
+        }
+    }
+
+    // ========== 运行期恢复队列 ==========
+
+    // 结算在当前会话内失败：按记录去重入队，由队列任务在公共预算内按退避重试，不必等到下次启动
+    void enqueueRecovery(MinecraftServer server, String recordId, String reason) {
+        if (stopped || pendingRecoveries.containsKey(recordId) || activeRecoveries.contains(recordId)) {
+            return;
+        }
+        recoveryServer = server;
+        pendingRecoveries.put(recordId, new PendingRecovery(recordId,
+                recoveryAttempts.getOrDefault(recordId, 0), scheduler.currentTick(), reason, 0));
+        scheduleRecoveryDispatch();
+    }
+
+    // 恢复失败：未达上限按指数退避重新入队；达到上限后把记录留在账本等下次启动扫描，并只告警一次
+    void onRecoveryFailed(String id, String reason) {
+        activeRecoveries.remove(id);
+        int attempts = recoveryAttempts.getOrDefault(id, 0);
+        if (attempts >= config.settlementRecoveryMaxAttempts()) {
+            recoveryAttempts.remove(id);
+            recoveryAbandonedTotal++;
+            if (recoveryAlerted.add(id)) {
+                recoveryAlertsTotal++;
+                LOGGER.warn("结算恢复超过上限：记录={} 原因={} 已尝试={} 次，保留账本等待下次启动扫描",
+                        id, reason, attempts);
+            }
+            return;
+        }
+        int delay = SettlementRecovery.queueRetryDelayTicks(attempts);
+        recoveryMaxRetryDelayTicks = Math.max(recoveryMaxRetryDelayTicks, delay);
+        pendingRecoveries.put(id, new PendingRecovery(id, attempts, scheduler.currentTick() + delay, reason, 0));
+        LOGGER.warn("结算恢复失败：记录={} 原因={} 已尝试={} 次，{} tick 后重试", id, reason, attempts, delay);
+        scheduleRecoveryDispatch();
+    }
+
+    // 队列空闲时按需排入推进任务；已在跑就不再重复排期。
+    // 排进系统 realm：规则重载的 detachAll 只摘维度 realm，不会连同队列泵一起取消
+    private void scheduleRecoveryDispatch() {
+        if (recoveryDispatchScheduled || pendingRecoveries.isEmpty() || recoveryServer == null) {
+            return;
+        }
+        recoveryDispatchScheduled = true;
+        scheduler.scheduleMaintenance(new RecoveryDispatchTask(recoveryServer), 0);
+    }
+
+    /** 运行期结算恢复队列快照，供开发场景断言重试与告警。 */
+    public SettlementRecoveryStats settlementRecoveryStats() {
+        return new SettlementRecoveryStats(pendingRecoveries.size(), recoveryAttemptsTotal,
+                recoveryAbandonedTotal, recoveryAlertsTotal, recoveryMaxRetryDelayTicks);
+    }
+
+    // 队列推进任务：维护车道，受公共预算约束；每 tick 至多启动一条恢复，队列清空即结束，不留常驻空转任务
+    private final class RecoveryDispatchTask implements ServerTask {
+
+        private final MinecraftServer server;
+
+        private RecoveryDispatchTask(MinecraftServer server) {
+            this.server = server;
+        }
+
+        @Override
+        public ServerTaskKind kind() {
+            return ServerTaskKind.MAINTENANCE;
+        }
+
+        @Override
+        public String tracingName() {
+            return "settlement-recovery-queue";
+        }
+
+        @Override
+        public StepResult step(ServerTickBudget budget) {
+            if (pendingRecoveries.isEmpty()) {
+                recoveryDispatchScheduled = false;
+                return StepResult.done(1);
+            }
+            budget.charge(1);
+            long now = scheduler.currentTick();
+            PendingRecovery ready = null;
+            for (PendingRecovery entry : pendingRecoveries.values()) {
+                if (entry.readyTick() <= now) {
+                    ready = entry;
+                    break;
+                }
+            }
+            if (ready == null) {
+                // 记录都还在退避窗口内：下刻再看
+                return StepResult.yield(1, 1);
+            }
+            pendingRecoveries.remove(ready.recordId());
+            SettlementLedger ledger = SettlementLedger.get(server.overworld());
+            SettlementRecord record = ledger.find(ready.recordId());
+            if (record == null || record.completed() || activeRecoveries.contains(record.id())) {
+                return advance();
+            }
+            ServerLevel level = levelOf(server, record.dimension());
+            if (level == null) {
+                // 维度未加载：不消耗恢复尝试次数，隔一段再复查；连续未加载达到上限就放弃本次会话排队，
+                // 记录留在账本，等该维度加载时的回扫或下次启动扫描接手，避免队列泵长期空转
+                int misses = ready.dimensionMisses() + 1;
+                if (misses >= RECOVERY_DIMENSION_RECHECK_LIMIT) {
+                    if (recoveryAlerted.add(record.id())) {
+                        LOGGER.warn("结算恢复暂缓：记录={} 维度={} 连续 {} 次未加载，保留账本等待维度加载或下次启动扫描",
+                                record.id(), record.dimension(), misses);
+                    }
+                    return advance();
+                }
+                pendingRecoveries.put(record.id(), new PendingRecovery(record.id(), ready.attempts(),
+                        now + RECOVERY_DIMENSION_RECHECK_TICKS, ready.reason(), misses));
+                return StepResult.yield(1, 1);
+            }
+            recoveryAttempts.put(record.id(), ready.attempts() + 1);
+            recoveryAttemptsTotal++;
+            startRecovery(level, ledger, record);
+            return advance();
+        }
+
+        // 队列泵被取消（停服或系统 realm 清理）不会自动重排：复位标志，交由后续入队路径重新排期
+        @Override
+        public void onCancelled(CancelReason reason) {
+            recoveryDispatchScheduled = false;
+        }
+
+        // 队列泵自身失败：复位标志后立即重排，队列里还有记录时不能让它们在本会话永久滞留
+        @Override
+        public void onFailed(@Nullable Throwable failure) {
+            recoveryDispatchScheduled = false;
+            if (!pendingRecoveries.isEmpty()) {
+                scheduleRecoveryDispatch();
+            }
+        }
+
+        // 队列清空即结束；还有记录则下刻继续
+        private StepResult advance() {
+            if (pendingRecoveries.isEmpty()) {
+                recoveryDispatchScheduled = false;
+                return StepResult.done(1);
+            }
+            return StepResult.yield(1, 1);
+        }
     }
 
     /** 在飞的返还恢复任务数观测 */
@@ -415,22 +698,202 @@ public final class ConversionRuntime {
         return recoverySkippedDimensions;
     }
 
-    /** reload 后回扫已加载实体重建追踪（使热重载对已存在的掉落物同样生效） */
+    /**
+     * reload 后回扫已加载实体重建追踪（使热重载对已存在的掉落物同样生效）。
+     * 只入队分步续接任务：实体有序表由 join/leave 事件持续维护，按 id 游标重建即可，不再同步遍历整维实体。
+     */
     public void rescan(ServerLevel level) {
         LevelState state = stateOf(level);
+        // 还没消化完的世界扫描快照仍然可信：取消任务不会丢掉快照，重载后接着按快照补齐，避免漏登记。
+        enqueueRescan(level, state, state.rescanSnapshot != null);
+    }
+
+    /**
+     * 启动与维度加载回扫：这些实体的 join 事件可能早于运行时装配，必须主动扫描世界补登记。
+     * 入口只收集一次已加载掉落物的引用快照（不改追踪状态），分步任务按快照切片登记，
+     * 既不必每步重扫整维实体，也不跨 tick 持有世界迭代器。
+     */
+    public void rebuild(ServerLevel level) {
+        LevelState state = stateOf(level);
+        // 新装配或新加载的维度以世界扫描为准，先丢弃旧登记表，避免把已卸载实体的过期引用当成已处理。
         state.items.clear();
+        List<ItemEntity> snapshot = new java.util.ArrayList<>();
+        for (Entity entity : level.getAllEntities()) {
+            if (entity instanceof ItemEntity item && !item.isRemoved()) { snapshot.add(item); }
+        }
+        state.rescanSnapshot = snapshot;
+        enqueueRescan(level, state, true);
+    }
+
+    // 排队重试上限：换入已生效时排队失败不能留到下次回扫，重试仍失败只记录，由下次回扫或维度加载兜底
+    private static final int RESCAN_QUEUE_RETRY_LIMIT = 3;
+
+    /**
+     * 换入后回扫排队失败的有界重试：该维度追踪已随换入清空，不补排会失联到下次回扫。
+     * 重试以维护任务入队，不阻塞当前 tick，也不改变已发生的换入结果。
+     *
+     * @param level 排队失败的维度
+     * @param attempt 已失败次数，从 1 起
+     */
+    public void retryRescan(ServerLevel level, int attempt) {
+        scheduler.scheduleMaintenance(new RescanQueueRetry(level, attempt), 1);
+    }
+
+    // 回扫排队重试任务：维护车道占一个预算，失败再排下一份，用尽后只记录，不再占用队列
+    private final class RescanQueueRetry implements ServerTask {
+
+        private final ServerLevel level;
+        private final int attempt;
+
+        private RescanQueueRetry(ServerLevel level, int attempt) {
+            this.level = level;
+            this.attempt = attempt;
+        }
+
+        @Override
+        public ServerTaskKind kind() {
+            return ServerTaskKind.MAINTENANCE;
+        }
+
+        @Override
+        public String tracingName() {
+            return "rescan-queue-retry/" + level.dimension().location();
+        }
+
+        @Override
+        public StepResult step(ServerTickBudget budget) {
+            budget.charge(1);
+            try {
+                rescan(level);
+            } catch (RuntimeException e) {
+                if (attempt >= RESCAN_QUEUE_RETRY_LIMIT) {
+                    LOGGER.error("数据包重载后的回扫排队重试失败，已重试 " + attempt
+                            + " 次；该维度将在下次回扫或维度加载时重建追踪", e);
+                } else {
+                    retryRescan(level, attempt + 1);
+                }
+            }
+            return StepResult.done(1);
+        }
+    }
+
+    private void enqueueRescan(ServerLevel level, LevelState state, boolean worldScan) {
+        long token = ++state.rescanToken;
+        state.rescanPending = true;
+        state.rescanWorldScan = worldScan;
+        state.rescanSteps = 0;
         state.tracked.clear();
-        // 重扫会重建追踪，先按维度取消既有任务（检查与效果一起），不留静默丢弃
-        scheduler.cancelRealm(level.dimension(), CancelReason.RULE_RELOAD);
+        state.tags = null;
+        state.climate = null;
+        // 旧队列已由入口摘除：重载走 replaceRules/applySavedIndex，维度加载走 clear(level) 的卸载清理；
+        // 这里只登记新一轮 token 与新回扫任务，不再同步取消（取消已交给逐槽清理任务）。
         // 维度加载/重扫时补扫该维度的待返还记录：只交付库存，不恢复既有效果队列（与规则内容无关）
         recoverLevel(level, SettlementLedger.get(level));
-        for (Entity entity : level.getAllEntities()) {
-            if (entity instanceof ItemEntity item && !item.isRemoved()) {
-                onItemAdded(level, item);
-            }
-        }
+        // 批量取消/加载会把无待交付的记录留在账本，重扫前顺带裁剪，避免无恢复价值的记录白占账本
+        SettlementLedger.get(level).prune(level.getGameTime());
+        scheduler.schedule(level.dimension(), new RescanTask(level, state, token, worldScan), 0);
+    }
+
+    /** 单一路径清除回扫完成标记：只有当前一轮的 token 才能清除，旧一轮的迟到回调不碰新状态 */
+    private void clearRescan(LevelState state, long token) {
+        if (state.rescanToken != token) { return; }
+        state.rescanPending = false;
+        state.rescanWorldScan = false;
+    }
+
+    private void finishRescan(ServerLevel level, LevelState state, long token, boolean worldScan) {
+        if (state.rescanToken != token) { return; }
+        // 世界扫描完成后丢弃快照：之后的重载只按有序游标，不复用可能已卸载的旧引用
+        if (worldScan) { state.rescanSnapshot = null; }
         if (config.debugLogging()) {
-            LOGGER.info("回扫完成：维度 {} 现有 {} 个被追踪掉落物", level.dimension().location(), state.tracked.size());
+            LOGGER.info("回扫完成：维度 {} 现有 {} 个被追踪掉落物（模式：{}，分步 {}）",
+                    level.dimension().location(), state.tracked.size(), worldScan ? "世界扫描" : "有序游标", state.rescanSteps);
+        }
+        clearRescan(state, token);
+    }
+
+    /**
+     * 分步回扫续接任务：单步只处理有限个掉落物，预算耗尽即让出，下一 tick 从游标继续。
+     * 不跨 tick 持有实体迭代器，因为调度期间实体表会被 join/leave 事件修改。
+     */
+    private final class RescanTask implements ServerTask {
+        private final ServerLevel level;
+        private final LevelState state;
+        private final long token;
+        private final boolean worldScan;
+        private Integer cursor;
+        private int snapshotIndex;
+        // 快照是否已全部登记：世界扫描登记完快照后继续走 items 游标，非世界扫描从一开始就只走游标
+        private boolean snapshotDone;
+        private int retries;
+
+        private RescanTask(ServerLevel level, LevelState state, long token, boolean worldScan) {
+            this.level = level;
+            this.state = state;
+            this.token = token;
+            this.worldScan = worldScan;
+            this.snapshotDone = !worldScan;
+        }
+
+        @Override public ServerTaskKind kind() { return ServerTaskKind.MAINTENANCE; }
+
+        @Override public String tracingName() {
+            return (worldScan ? "rescan-scan/" : "rescan-cursor/") + level.dimension().location();
+        }
+
+        @Override public StepResult step(ServerTickBudget budget) {
+            if (levels.get(level.dimension()) != state || state.rescanToken != token) {
+                // 维度已卸载或被更新一轮回扫接管：本任务不再触碰状态，完成标记归接管方维护
+                return StepResult.done(1);
+            }
+            int limit = Math.max(1, config.rescanEntitiesPerStep());
+            int processed = 0;
+            boolean complete = true;
+            if (!snapshotDone) {
+                List<ItemEntity> snapshot = state.rescanSnapshot;
+                int size = snapshot == null ? 0 : snapshot.size();
+                while (snapshotIndex < size) {
+                    if (processed >= limit || budget.exhausted()) { complete = false; break; }
+                    ItemEntity item = snapshot.get(snapshotIndex++);
+                    // 快照持有引用期间实体可能已卸载或被移除，跳过即可；重复登记由 onItemAdded 幂等兜底
+                    if (!item.isRemoved()) { onItemAdded(level, item); }
+                    processed++;
+                }
+                if (!complete) {
+                    state.rescanSteps++;
+                    return StepResult.yield(Math.max(1, processed), 1);
+                }
+                snapshotDone = true;
+            }
+            // 快照登记完后继续按 items 游标补齐：快照创建之后才 join 的实体只进了 items、不在快照里，
+            // 重载会清空 tracked，不补这一步它们就再也不会被登记追踪；重复登记由 onItemAdded 幂等兜底
+            while (true) {
+                if (processed >= limit || budget.exhausted()) { complete = false; break; }
+                var next = cursor == null ? state.items.firstEntry() : state.items.higherEntry(cursor);
+                if (next == null) { break; }
+                cursor = next.getKey();
+                ItemEntity item = next.getValue();
+                // 已移除但离开事件尚未到达的条目跳过，登记表由离开事件兜底清理
+                if (!item.isRemoved()) { onItemAdded(level, item); }
+                processed++;
+            }
+            state.rescanSteps++;
+            if (!complete) { return StepResult.yield(Math.max(1, processed), 1); }
+            finishRescan(level, state, token, worldScan);
+            return StepResult.done(1);
+        }
+
+        @Override public void onCancelled(CancelReason reason) {
+            clearRescan(state, token);
+        }
+
+        @Override public void onFailed(@Nullable Throwable failure) {
+            // 同一轮只重排一份：游标与剩余工作都在本任务字段里，多份任务同时推进会让游标交错。
+            if (retries++ == 0 && levels.get(level.dimension()) == state && state.rescanToken == token) {
+                scheduler.schedule(level.dimension(), this, 1);
+                return;
+            }
+            clearRescan(state, token);
         }
     }
 
@@ -440,7 +903,8 @@ public final class ConversionRuntime {
         if (removed != null) {
             removed.tracked.clear();
         }
-        scheduler.releaseRealm(level.dimension(), CancelReason.DIMENSION_UNLOAD);
+        // 维度卸载：摘除该维度 realm，句柄交给清理任务逐槽取消；待返还库存由恢复任务补交
+        scheduler.scheduleMaintenance(scheduler.detachRealm(level.dimension(), CancelReason.DIMENSION_UNLOAD), 0);
     }
 
     // 预留表访问入口：只返回引用；写操作只发生在结算任务与停服兜底里
@@ -450,14 +914,22 @@ public final class ConversionRuntime {
 
     /** 服务端停止：释放全部状态 */
     public void shutdown() {
+        stopped = true;
         for (LevelState state : levels.values()) {
             state.tracked.clear();
         }
         levels.clear();
-        scheduler.clear(CancelReason.SERVER_STOP);
+        // 停服没有下一 tick：就地排空全部句柄，取消回调必须在最终存档前完成
+        scheduler.drainAll(CancelReason.SERVER_STOP);
         // 预留只在运行期存在：停服清空即可，不产生任何世界写入或件数返还
         catalystReservations.clear();
         activeRecoveries.clear();
+        // 运行期恢复队列只在本次会话有效：停服清空，剩余记录留在账本由下次启动扫描接手
+        pendingRecoveries.clear();
+        recoveryAttempts.clear();
+        recoveryAlerted.clear();
+        recoveryDispatchScheduled = false;
+        recoveryServer = null;
         recoveryScanned = false;
         index = RuleIndex.empty();
         candidateStructureVersions.clear();
@@ -471,14 +943,27 @@ public final class ConversionRuntime {
         return state == null ? 0 : state.tracked.size();
     }
 
+    /** 该维度是否仍有分步回扫在推进（供开发场景核对让出与最终一致性） */
+    public boolean rescanPending(ServerLevel level) {
+        LevelState state = levels.get(level.dimension());
+        return state != null && state.rescanPending;
+    }
+
+    /** 该维度最近一轮回扫已执行的分步数（供开发场景核对回扫确实分段推进） */
+    public int rescanSteps(ServerLevel level) {
+        LevelState state = levels.get(level.dimension());
+        return state == null ? 0 : state.rescanSteps;
+    }
+
     /** 单个掉落物的追踪状态（命令层只读） */
     public TrackedItemInfo debugInfo(ServerLevel level, ItemEntity entity) {
         LevelState state = levels.get(level.dimension());
         TrackedState tracked = state == null ? null : state.tracked.get(entity.getUUID());
         if (tracked == null) {
-            return new TrackedItemInfo(false, 0, false, -1L);
+            return new TrackedItemInfo(false, 0, false, -1L, false);
         }
-        return new TrackedItemInfo(true, tracked.failureCount, tracked.locked, tracked.nextCheckTick);
+        return new TrackedItemInfo(true, tracked.failureCount, tracked.locked, tracked.nextCheckTick,
+                tracked.task != null && tracked.task.terminal());
     }
 
     /** 某个掉落物的候选规则（已按优先级 → 条件叶数 → 定义序排序），供 /idtw debug why 使用 */
@@ -538,12 +1023,13 @@ public final class ConversionRuntime {
         return created;
     }
 
-    // 登记一次到期检查：到期 tick 按当前游戏刻推导为绝对值，保留原始时间不被改写
+    // 登记一次到期检查：到期 tick 按当前游戏刻推导为绝对值，保留原始时间不被改写。
+    // 检查任务自带失败收尾：调度器先把句柄置终态再回调 onFailed，若这里只是普通 Runnable，
+    // 追踪会继续指向一个已终态的句柄，物品既不再被检查、也永久拦住原版到期销毁。
     private ScheduledTaskHandle scheduleCheck(ServerLevel level, ItemEntity entity, int delayTicks) {
         long dueTick = level.getGameTime() + Math.max(0, delayTicks);
-        UUID uuid = entity.getUUID();
-        return RuntimeObserver.current().schedule(entity, scheduler, level.dimension(), ServerTaskKind.CONDITION_CHECK,
-                dueTick, "check", () -> attempt(level, uuid, TriggerKind.NATURAL));
+        return RuntimeObserver.current().schedule(entity, scheduler, level.dimension(), dueTick,
+                new CheckTask(level, entity.getUUID()));
     }
 
     private static ResourceLocation itemIdOf(ItemEntity entity) {
@@ -560,16 +1046,14 @@ public final class ConversionRuntime {
         }
         long dueAge = Math.min(earliestTrigger, lifespan - 1L);
         long delay = Math.max(0, dueAge - entity.getAge());
-        tracked.nextCheckTick = level.getGameTime() + delay;
-        tracked.task = scheduleCheck(level, entity, (int) Math.min(delay, Integer.MAX_VALUE));
+        replaceCheck(level, entity, tracked, (int) Math.min(delay, Integer.MAX_VALUE), CancelReason.RESCHEDULED);
     }
 
     // 退避重试：条件不满足时不放弃，按退避序列重试直到自然消失
     private void reschedule(ServerLevel level, ItemEntity entity, TrackedState tracked, int delayTicks) {
         int remaining = Math.max(1, lifespanProvider.lifespanTicks(level, entity) - entity.getAge() - 1);
         delayTicks = Math.min(delayTicks, remaining);
-        tracked.nextCheckTick = level.getGameTime() + delayTicks;
-        tracked.task = scheduleCheck(level, entity, delayTicks);
+        replaceCheck(level, entity, tracked, delayTicks, CancelReason.RESCHEDULED);
         if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(entity, "RETRY", "delay_ticks", delayTicks,
                 "failure_count", tracked.failureCount, "next_check_tick", tracked.nextCheckTick); }
         if (config.debugLogging() && RuntimeObserver.current().allowsRuntimeLogging(entity)) {
@@ -578,10 +1062,125 @@ public final class ConversionRuntime {
         }
     }
 
+    // 统一重排入口：先按重排原因取消旧句柄，再排新句柄。
+    // 旧句柄可能是环境致死同步路径下仍在队列里的自然检查；只覆盖 tracked.task 会让它变成孤儿，
+    // 到期后再跑一次判定，重复累加失败计数并把退避推高一档。
+    private void replaceCheck(ServerLevel level, ItemEntity entity, TrackedState tracked, int delayTicks,
+                              CancelReason cancelReason) {
+        ScheduledTaskHandle previous = tracked.task;
+        if (previous != null) {
+            previous.cancel(cancelReason);
+        }
+        tracked.nextCheckTick = level.getGameTime() + delayTicks;
+        tracked.task = scheduleCheck(level, entity, delayTicks);
+    }
+
+    // 追踪结束的统一出口：先取消句柄再移除条目，保证环境致死、自然到期释放等同步入口
+    // 不会留下指向已结束追踪的孤儿检查。
+    private void releaseTracking(LevelState state, UUID uuid, TrackedState tracked, CancelReason reason) {
+        if (tracked.task != null) {
+            tracked.task.cancel(reason);
+        }
+        state.tracked.remove(uuid);
+    }
+
+    // 一次到期检查的可失败载体：step 抛出异常时由调度器按任务终态收尾并回调 onFailed，
+    // 失败上下文记录本次链路已确定的规则与结算标识，供结构化失败事件指到具体规则与结算。
+    private final class CheckTask implements ServerTask {
+        private final ServerLevel level;
+        private final UUID uuid;
+        private final FailureContext failure = new FailureContext();
+
+        private CheckTask(ServerLevel level, UUID uuid) {
+            this.level = level;
+            this.uuid = uuid;
+        }
+
+        @Override
+        public ServerTaskKind kind() {
+            return ServerTaskKind.CONDITION_CHECK;
+        }
+
+        @Override
+        public String tracingName() {
+            return "check";
+        }
+
+        @Override
+        public StepResult step(ServerTickBudget budget) {
+            attempt(level, uuid, TriggerKind.NATURAL, failure);
+            return StepResult.done(1);
+        }
+
+        @Override
+        public void onFailed(@Nullable Throwable failure) {
+            recoverCheckFailure(level, uuid, this.failure, failure);
+        }
+    }
+
+    // 失败定位上下文：规则在判定命中时确定、结算标识在登记后才有，两者都只是事件字段来源，不改变业务状态
+    private static final class FailureContext {
+        private @Nullable String ruleId;
+        private @Nullable String settlementId;
+    }
+
+    // 检查失败的守恒收尾：追踪要么重排到下一次检查，要么释放交还原版机制。
+    // 失败发生在源物品扣减之前（准备阶段异常在 setCount(0) 之前抛出），所以这里无需返还库存；
+    // 关键是让追踪不再指向已终态的句柄，避免物品既不再被检查、又永久拦住原版到期销毁。
+    private void recoverCheckFailure(ServerLevel level, UUID uuid, FailureContext context, @Nullable Throwable failure) {
+        LevelState state = levels.get(level.dimension());
+        if (state == null) {
+            return;
+        }
+        TrackedState tracked = state.tracked.get(uuid);
+        if (tracked == null) {
+            // 同一 tick 内环境致死、区块卸载等入口可能已释放追踪：失败恢复必须幂等
+            return;
+        }
+        Entity entity = level.getEntity(uuid);
+        if (!(entity instanceof ItemEntity item) || excluded(item)) {
+            releaseTracking(state, uuid, tracked, CancelReason.ENTITY_REMOVED);
+            return;
+        }
+        tracked.failureCount++;
+        // 已到自然消失边缘（含拦截到期后等待下一次检查）：不再重试，直接释放追踪。
+        // 拦截到期时的那次待办销毁在这里补上，否则超龄物品会因一次失败永久留在世界上。
+        if (tracked.expiryPending || pastExpiry(level, item)) {
+            boolean deferredExpiry = tracked.expiryPending;
+            releaseTracking(state, uuid, tracked, CancelReason.TRACKING_RELEASED);
+            if (deferredExpiry) {
+                item.discard();
+            }
+            observeCheckFailure(item, tracked, context, failure, "released", 0);
+            return;
+        }
+        // 首次失败固定下一 tick 重试（一次异常不是业务结论）；连续失败沿用条件未满足的退避序列，防止热循环
+        int delay = tracked.failureCount <= 1 ? 1 : Math.max(1, config.backoffTicks(tracked.failureCount));
+        int remaining = Math.max(1, lifespanProvider.lifespanTicks(level, item) - item.getAge() - 1);
+        delay = Math.min(delay, remaining);
+        reschedule(level, item, tracked, delay);
+        observeCheckFailure(item, tracked, context, failure, "retried", delay);
+    }
+
+    // 检查失败的结构化观测：原因、定位标识与恢复动作都要能独立核对，日志与场景断言共用同一组字段
+    private void observeCheckFailure(ItemEntity item, TrackedState tracked, FailureContext context,
+                                     @Nullable Throwable failure, String recovery, int retryDelayTicks) {
+        if (!RuntimeObserver.current().enabled()) {
+            return;
+        }
+        RuntimeObserver.current().observe(item, "CHECK_TASK_FAILED",
+                "rule", context.ruleId == null ? "" : context.ruleId,
+                "settlement", context.settlementId == null ? "" : context.settlementId,
+                "reason", failure == null ? "failed_without_exception" : failure.toString(),
+                "recovery", recovery,
+                "retry_delay_ticks", retryDelayTicks,
+                "failure_count", tracked.failureCount);
+    }
+
     // 一次到期判定：选规则 → 执行；条件不满足则退避重试（kind 为本次请求的消失方式）
     // 调用点有两类：调度器到期检查（自然消失）与环境致死请求（在 hurt 调用栈内同步调用）；
     // 两者共用同一份追踪、预算与调度器，效果派发统一走 ConversionSettlement。
-    private void attempt(ServerLevel level, UUID uuid, TriggerKind kind) {
+    private void attempt(ServerLevel level, UUID uuid, TriggerKind kind, @Nullable FailureContext context) {
         LevelState state = levels.get(level.dimension());
         if (state == null) {
             return;
@@ -592,7 +1191,7 @@ public final class ConversionRuntime {
         }
         Entity entity = level.getEntity(uuid);
         if (!(entity instanceof ItemEntity item) || excluded(item)) {
-            state.tracked.remove(uuid);
+            releaseTracking(state, uuid, tracked, CancelReason.ENTITY_REMOVED);
             return;
         }
         if (!level.isPositionEntityTicking(item.blockPosition())) {
@@ -606,7 +1205,7 @@ public final class ConversionRuntime {
         // 转化门禁：永久禁转（返还物）在实体生命周期内阻止转化；临时冷却到期前不启动新转化
         DropState dropState = DropStateStore.get(item);
         if (dropState.permanentConversionBan()) {
-            state.tracked.remove(uuid);
+            releaseTracking(state, uuid, tracked, CancelReason.TRACKING_RELEASED);
             return;
         }
         long cooldownRemaining = dropState.cooldownRemaining(level.getGameTime());
@@ -616,32 +1215,69 @@ public final class ConversionRuntime {
         }
         List<Rule> candidates = candidatesFor(item);
         if (candidates.isEmpty()) {
-            state.tracked.remove(uuid);
+            releaseTracking(state, uuid, tracked, CancelReason.TRACKING_RELEASED);
             return;
         }
         Rule chosen = select(level, item, candidates, tracked.expiryPending, kind);
         if (chosen == null) {
-            tracked.failureCount++;
-            if (tracked.expiryPending || pastExpiry(level, item)) {
-                state.tracked.remove(uuid);
-                if (tracked.expiryPending) { item.discard(); }
-            } else {
-                int delay = config.backoffTicks(tracked.failureCount);
-                long nextAge = Long.MAX_VALUE;
-                boolean eligible = false;
-                for (Rule rule : candidates) {
-                    long due = dueAge(level, item, rule);
-                    if (item.getAge() >= due) { eligible = true; }
-                    else { nextAge = Math.min(nextAge, due - item.getAge()); }
-                }
-                if (!eligible) { tracked.failureCount--; delay = (int) Math.min(nextAge, Integer.MAX_VALUE); }
-                else if (nextAge != Long.MAX_VALUE) { delay = (int) Math.min(delay, nextAge); }
-                reschedule(level, item, tracked, Math.max(1, delay));
+            // 退避资格只取本次触发方式参与且源量够一组的候选：年龄门槛与 select 一致，只在自然触发且非到期补算时生效
+            boolean ageGated = kind == TriggerKind.NATURAL && !tracked.expiryPending;
+            List<Rule> relevant = backoffCandidates(candidates, item, kind);
+            boolean eligible = !ageGated && !relevant.isEmpty();
+            long nextAge = Long.MAX_VALUE;
+            for (Rule rule : relevant) {
+                if (!ageGated) { break; }
+                long due = dueAge(level, item, rule);
+                if (item.getAge() >= due) { eligible = true; }
+                else { nextAge = Math.min(nextAge, due - item.getAge()); }
             }
+            // 只有相关规则在本刻具备命中资格才算一次失败：纯环境规则与源量不足一组的规则命中不了，不该推高退避档
+            if (eligible) { tracked.failureCount++; }
+            if (tracked.expiryPending || pastExpiry(level, item)) {
+                releaseTracking(state, uuid, tracked, CancelReason.TRACKING_RELEASED);
+                if (tracked.expiryPending) { item.discard(); }
+                return;
+            }
+            if (relevant.isEmpty()) {
+                // 区分「本触发方式没有规则」与「有规则但源量暂时不足一组」：前者再检查也不会转化，释放追踪；
+                // 后者数量可能随合并增长，保留追踪并按检查间隔等待，且不累加失败计数
+                boolean kindCovered = false;
+                for (Rule rule : candidates) {
+                    if (rule.effectiveTriggers().contains(kind)) { kindCovered = true; break; }
+                }
+                if (!kindCovered) {
+                    // 环境同步入口没有对应规则时保留既有自然排期，不改动句柄
+                    if (kind == TriggerKind.NATURAL) { releaseTracking(state, uuid, tracked, CancelReason.TRACKING_RELEASED); }
+                } else if (kind == TriggerKind.NATURAL) {
+                    reschedule(level, item, tracked, Math.max(1, config.checkIntervalTicks()));
+                }
+                return;
+            }
+            int delay = eligible ? config.backoffTicks(tracked.failureCount) : (int) Math.min(nextAge, Integer.MAX_VALUE);
+            if (eligible && nextAge != Long.MAX_VALUE) { delay = (int) Math.min(delay, nextAge); }
+            reschedule(level, item, tracked, Math.max(1, delay));
             return;
         }
-        performConversion(level, state, item, tracked, chosen);
+        performConversion(level, state, item, tracked, chosen, context);
         if (tracked.expiryPending && !item.isRemoved()) { item.discard(); }
+    }
+
+    // 退避资格子集：本次触发方式参与且源数量足够一组。
+    // 不参与本次触发方式的规则（如纯环境规则之于自然检查）和源量不足一组的规则在本刻都不可能命中，
+    // 让它们参与计数会把失败次数与重试间隔推到与本次判定无关的档位。
+    private List<Rule> backoffCandidates(List<Rule> candidates, ItemEntity item, TriggerKind kind) {
+        ItemStack source = item.getItem();
+        List<Rule> relevant = new ArrayList<>(candidates.size());
+        for (Rule rule : candidates) {
+            if (!rule.effectiveTriggers().contains(kind)) {
+                continue;
+            }
+            if (source.getCount() < types.perRoundSourceConsumption(rule, source)) {
+                continue;
+            }
+            relevant.add(rule);
+        }
+        return relevant;
     }
 
     // 是否已到自然消失前一刻（到点后不再重试，交给原版机制）
@@ -689,12 +1325,16 @@ public final class ConversionRuntime {
     // 「扣减 → 登记 → 调度注册」是一个补偿单元：任一步抛异常都把整堆库存写回源实体并撤销登记，
     // 只有全部成功才把所有权交给结算任务（移除所有权追踪，后续交付与恢复依据由记录承担）。
     private void performConversion(ServerLevel level, LevelState state, ItemEntity item,
-                                   TrackedState tracked, Rule rule) {
+                                   TrackedState tracked, Rule rule, @Nullable FailureContext context) {
         ItemStack source = item.getItem();
         int available = source.getCount();
         if (available <= 0) {
-            state.tracked.remove(item.getUUID());
+            releaseTracking(state, item.getUUID(), tracked, CancelReason.TRACKING_RELEASED);
             return;
+        }
+        // 规则在本方法入口即已确定：任何后续阶段的失败事件都应能指到具体规则
+        if (context != null) {
+            context.ruleId = rule.id().toString();
         }
         // 每组固定源成本 c：显式 source_cost 优先，未声明时为 1 个
         int costPerGroup = types.perRoundSourceConsumption(rule, source);
@@ -706,12 +1346,19 @@ public final class ConversionRuntime {
         // 效果级条件与概率在此判定一次，结果随任务携带，源实体清空后不再重新判定。
         // 判定异常按同一补偿单元处理：整堆源物品写回并保留所有权追踪。
         Map<PreparedEffectKey, EffectPreparation> preparations;
+        // 领先准备的组数：按可用源算出的组数上界只是理论值，实际准备只做本步允许的组数；
+        // 其余组的固定输入由结算任务在 PREPARING 阶段分组续接，大堆叠的重活不会全压在检查步骤里
+        int leadGroups = Math.min(costPerGroup > 0 ? available / costPerGroup : 1, scheduler.config().prepareGroupsPerStep());
         try {
-            // 潜在组数上界：按可用源与每组固定成本算，尚未选候选、未付催化剂、未派发任何组
-            int potentialGroups = costPerGroup > 0 ? available / costPerGroup : 1;
-            preparations = prepareEffects(level, item, rule, triggerPosition, potentialGroups, source.copy());
+            preparations = prepareEffects(level, item, rule, triggerPosition, leadGroups, source.copy());
         } catch (RuntimeException failure) {
             tracked.locked = false;
+            // 准备阶段异常发生在源物品扣减之前，守恒天然成立；仍需结构化事件把规则与原因定位下来，
+            // 否则一次准备失败在观测侧只剩调度器日志，无法核对是哪条规则、哪个效果出的问题
+            if (RuntimeObserver.current().enabled()) {
+                RuntimeObserver.current().observe(item, "CONVERSION_PREPARE_FAILED",
+                        "rule", rule.id().toString(), "settlement", "", "reason", failure.toString());
+            }
             throw failure;
         }
         // 首次登记与失败补偿都经受控句柄：账目变更与账本双索引、标脏在同一次调用内完成
@@ -726,12 +1373,16 @@ public final class ConversionRuntime {
             writer = SettlementRecord.Writer.register(SettlementLedger.get(level), UUID.randomUUID().toString(),
                     rule.id().toString(), level.dimension().location().toString(), held, available, costPerGroup,
                     true, item.getX(), item.getY(), item.getZ());
+            // 登记之后才有结算标识：此后的失败事件据此指到具体结算，便于与账本核对
+            if (context != null) {
+                context.settlementId = writer.record().id();
+            }
             if (RuntimeObserver.current().enabled()) {
                 int estimated = costPerGroup > 0 ? Math.max(1, available / costPerGroup) : 1;
                 RuntimeObserver.current().converted(item, rule.id().toString(), estimated);
             }
             ConversionSettlement settlement = new ConversionSettlement(this, scheduler, level, item, rule, held, writer,
-                    triggerPosition, triggerVelocity, preparations);
+                    triggerPosition, triggerVelocity, preparations, leadGroups);
             scheduler.scheduleAt(level.dimension(), settlement, level.getGameTime());
             transferred = true;
             VisualFeedback.conversion(level, item.position());
@@ -742,7 +1393,9 @@ public final class ConversionRuntime {
         } finally {
             tracked.locked = false;
             if (transferred) {
-                state.tracked.remove(item.getUUID());
+                // 结算任务接手所有权，检查句柄随追踪一起释放：环境致死同步路径此前挂起的检查
+                // 可能仍在队列里，只移除追踪会让它变成孤儿并在后续 tick 空跑一次。
+                releaseTracking(state, item.getUUID(), tracked, CancelReason.TRACKING_RELEASED);
             } else {
                 // 补偿：撤销登记（恢复任务不得再交付这堆库存）、撤销「已转化」标记，
                 // 再把整堆源物品写回源实体并保留所有权追踪，等待下一次转化机会
@@ -805,13 +1458,14 @@ public final class ConversionRuntime {
 
     // 成功转化当刻为「需要先固定输入」的类型逐槽生成固定输入：条件与概率在这里判定一次，
     // 结果随结算任务携带，源实体清空后不再重新判定。没有准备阶段的类型不产出，保持原有判定时机。
+    // preparedGroups 只是领先准备的组数上界，未覆盖的组由结算任务按组续接准备。
     private Map<PreparedEffectKey, EffectPreparation> prepareEffects(ServerLevel level, ItemEntity item, Rule rule,
-                                                                    Vec3 position, int potentialGroups,
+                                                                    Vec3 position, int preparedGroups,
                                                                     ItemStack sourceSnapshot) {
         Map<PreparedEffectKey, EffectPreparation> preparations = new HashMap<>();
         // 组间共享的固定输入：同一候选同一槽位只保留首份，各组共用它承载执行期的跨组状态
         Map<PreparedEffectKey, EffectPreparation> sharedPreparations = new HashMap<>();
-        if (potentialGroups <= 0) {
+        if (preparedGroups <= 0) {
             return preparations;
         }
         BlockPos pos = BlockPos.containing(position);
@@ -825,9 +1479,9 @@ public final class ConversionRuntime {
                 }
                 // 一次性效果同一源只尝试一组，固定一份即可；其余类型按潜在组各固定一份，
                 // 条件与概率判定互不复用，声明可共享的固定输入在组间复用首份
-                int groups = definition.oneShot() ? 1 : potentialGroups;
+                int groups = definition.oneShot() ? 1 : preparedGroups;
                 for (int group = 0; group < groups; group++) {
-                    EffectPreparation preparation = prepareEffect(definition, effect, level, item, pos, position,
+                    EffectPreparation preparation = prepareEffectSlot(definition, effect, level, item, pos, position,
                             sourceSnapshot, candidate.fillOrigin());
                     if (preparation == null) {
                         // 未迁移的类型不在成功转化当刻固定，其条件与概率仍在首次执行时判定
@@ -849,13 +1503,21 @@ public final class ConversionRuntime {
         return preparations;
     }
 
-    // 泛型桥接：准备入口只读效果参数与成功当刻可读的输入
+    // 泛型桥接：准备入口只读效果参数与成功当刻可读的输入。
+    // 结算任务的 PREPARING 阶段按组续接准备时复用同一入口，保证两处的条件、概率与固定输入口径一致。
     @SuppressWarnings("unchecked")
-    private @Nullable EffectPreparation prepareEffect(EffectType<?> definition, Effect effect, ServerLevel level,
-                                                     ItemEntity item, BlockPos pos, Vec3 position,
-                                                     ItemStack sourceSnapshot, boolean fillOrigin) {
+    @Nullable EffectPreparation prepareEffectSlot(EffectType<?> definition, Effect effect, ServerLevel level,
+                                                 ItemEntity item, BlockPos pos, Vec3 position,
+                                                 ItemStack sourceSnapshot, boolean fillOrigin) {
+        // 准备阶段注入点：注入失败必须沿转化补偿单元抛出，由检查任务的失败收尾释放或重排追踪
+        if (RuntimeObserver.current().enabled()) {
+            RuntimeObserver.current().effectPreparing(level.getServer(), effect.type());
+        }
         EffectPreparation preparation = ((EffectType<Effect>) definition).executor()
                 .prepare(effect, level, position, item, sourceSnapshot, fillOrigin);
+        // 一次固定输入的准备本身就是一次真实开销（例如开战利品表）：按 1 个工作单位上报，
+        // 让准备量进入调度器计价，而不是被当成零成本勾当
+        StepWorkCounter.report(1);
         if (preparation == null || preparation.gate() != null) {
             return preparation;
         }
@@ -926,25 +1588,32 @@ public final class ConversionRuntime {
         LevelState state = levels.get(level.dimension());
         if (state == null) { return; }
         state.items.remove(item.getId());
-        TrackedState tracked = state.tracked.remove(item.getUUID());
-        if (tracked != null && tracked.task != null) { tracked.task.cancel(CancelReason.ENTITY_REMOVED); }
+        TrackedState tracked = state.tracked.get(item.getUUID());
+        if (tracked != null) {
+            releaseTracking(state, item.getUUID(), tracked, CancelReason.ENTITY_REMOVED);
+        }
     }
 
     /** 自然消失入口只预留最后一次有预算的检查，不在实体 tick 内执行昂贵效果。 */
     public boolean deferNaturalExpiry(ServerLevel level, ItemEntity item) {
         if (excluded(item)) { return false; }
-        // 回扫可能延后数刻；临近原版消失的物品按新索引及时补追踪，避免等待回扫期间漏转化。
-        if (savedRescanPending) { onItemAdded(level, item); }
         LevelState state = levels.get(level.dimension());
+        // 回扫可能延后数刻；临近原版消失的物品按新索引及时补追踪，避免等待回扫期间漏转化。
         if (state == null) { return false; }
+        if (savedRescanPending || state.rescanPending) { onItemAdded(level, item); }
         TrackedState tracked = state.tracked.get(item.getUUID());
         if (tracked == null) { return false; }
+        // 转化提交当刻追踪即被释放，因此 tracked 存在等价于尚未提交转化。
+        // 拦截只对有效追踪成立：句柄已终态说明排期链已断（检查失败或被取消），继续拦截会让
+        // 超龄物品永久滞留；释放追踪交还原版销毁，至少按自然寿命消失。
+        if (tracked.task == null || tracked.task.terminal()) {
+            releaseTracking(state, item.getUUID(), tracked, CancelReason.TRACKING_RELEASED);
+            return false;
+        }
         if (!tracked.expiryPending) {
             if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "NATURAL_EXPIRY_DEFERRED"); }
             tracked.expiryPending = true;
-            if (tracked.task != null) { tracked.task.cancel(CancelReason.NATURAL_EXPIRY_DEFERRED); }
-            tracked.nextCheckTick = level.getGameTime();
-            tracked.task = scheduleCheck(level, item, 0);
+            replaceCheck(level, item, tracked, 0, CancelReason.NATURAL_EXPIRY_DEFERRED);
         }
         return true;
     }

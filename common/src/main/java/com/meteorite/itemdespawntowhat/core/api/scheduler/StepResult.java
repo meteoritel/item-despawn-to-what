@@ -1,8 +1,9 @@
 package com.meteorite.itemdespawntowhat.core.api.scheduler;
 
 /**
- * 任务单步执行的回执：消耗的工作量单位与下一次入队延迟。
- * 工作量单位是调度器计价口径，至少为 1，保证任何步骤都会被计入预算。
+ * 任务单步执行的回执：声明本步消耗的工作量单位与下一次入队延迟。
+ * 声明值只是计价下限：调度器每步还会读取步骤内通过 {@link StepWorkCounter} 上报的真实世界操作量，取较大者计费。
+ * 下界为 1，保证任何步骤都会被计入预算。
  */
 public record StepResult(StepOutcome outcome, int workUnits, int nextDelayTicks) {
 

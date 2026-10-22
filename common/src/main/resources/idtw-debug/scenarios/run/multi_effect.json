@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "inputs": {
+    "sources": 1,
+    "stack_size": 2,
+    "catalyst_count": 0,
+    "source_item": "minecraft:paper",
+    "catalyst_item": "minecraft:emerald"
+  },
+  "seconds": 12,
+  "setup": "none",
+  "actions": [],
+  "expected": {
+    "metrics": {
+      "groups": 2,
+      "consumed_sources": 2,
+      "returned": 0,
+      "pending_delivery": 0,
+      "settlements_completed": 1,
+      "chance_skipped": 0,
+      "remaining_catalyst": 0,
+      "conversions": 1,
+      "remaining_source_items": 0,
+      "live_returned_source_items": 0,
+      "protected_returned_source_items": 0,
+      "first_output_delay/minecraft:gold_nugget": {
+        "min": 40
+      }
+    },
+    "outputs": {
+      "minecraft:prismarine_shard": 2,
+      "minecraft:gold_nugget": 4
+    },
+    "candidates": {
+      "default": 1
+    }
+  },
+  "rules": [
+    {
+      "id": "itemdespawntowhat:debug/examples/multi_effect",
+      "enabled": true,
+      "priority": 0,
+      "trigger_after_seconds": 2,
+      "source": {
+        "items": [
+          "minecraft:paper"
+        ],
+        "exclude": []
+      },
+      "source_cost": {"minecraft:paper": 1},
+      "effects": [
+        {
+          "type": "itemdespawntowhat:spawn_entity",
+          "item": "minecraft:prismarine_shard",
+          "count": 1,
+          "delay_ticks": 0,
+          "chance": 1,
+          "variant": "item"
+        },
+        {
+          "type": "itemdespawntowhat:spawn_entity",
+          "item": "minecraft:gold_nugget",
+          "count": 2,
+          "delay_ticks": 40,
+          "chance": 1,
+          "variant": "item"
+        }
+      ]
+    }
+  ]
+}

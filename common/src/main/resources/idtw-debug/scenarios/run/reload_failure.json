@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "inputs": {
+    "sources": 1,
+    "stack_size": 1,
+    "catalyst_count": 0,
+    "source_item": "minecraft:paper",
+    "catalyst_item": "minecraft:emerald"
+  },
+  "seconds": 12,
+  "setup": "none",
+  "actions": [
+    {
+      "type": "reload",
+      "after_ticks": 10,
+      "after_event": "",
+      "offset_y": 0
+    }
+  ],
+  "faults": [
+    {
+      "type": "reload_failure",
+      "count": 1
+    }
+  ],
+  "expected": {
+    "metrics": {
+      "conversions": 1,
+      "remaining_source_items": 0,
+      "groups": "$source_items",
+      "consumed_sources": "$source_items",
+      "settlements_completed": 1,
+      "returned": 0,
+      "pending_delivery": 0,
+      "chance_skipped": 0,
+      "live_returned_source_items": 0,
+      "protected_returned_source_items": 0,
+      "remaining_catalyst": 0,
+      "action_count": 1,
+      "faults_declared": 1,
+      "faults_injected": 1,
+      "faults_remaining": 0,
+      "events/FAULT_ARMED": 1,
+      "events/FAULT_RELOAD_FAILURE": 1,
+      "events/SETTLEMENT_CANCELLED": 0
+    },
+    "outputs": {
+      "minecraft:prismarine_shard": "$source_items"
+    },
+    "candidates": {
+      "default": "$sources"
+    }
+  },
+  "rules": [
+    {
+      "id": "itemdespawntowhat:debug/reload_failure",
+      "enabled": true,
+      "priority": 0,
+      "trigger_after_seconds": 2,
+      "source": {
+        "items": [
+          "minecraft:paper"
+        ],
+        "exclude": []
+      },
+      "effects": [
+        {
+          "type": "itemdespawntowhat:spawn_entity",
+          "item": "minecraft:prismarine_shard",
+          "count": 1,
+          "delay_ticks": 0,
+          "chance": 1,
+          "variant": "item"
+        }
+      ]
+    }
+  ]
+}

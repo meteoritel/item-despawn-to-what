@@ -5,12 +5,14 @@ import com.meteorite.itemdespawntowhat.core.api.Issue;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.IssueSeverity;
 import com.meteorite.itemdespawntowhat.core.api.RuleRuntimeLimits;
+import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
 import com.meteorite.itemdespawntowhat.core.command.RuleCommandContext;
 import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
 import com.meteorite.itemdespawntowhat.core.load.DatapackRuleReader;
 import com.meteorite.itemdespawntowhat.core.load.PackLayerResolver;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoadResult;
+import com.meteorite.itemdespawntowhat.core.load.RuleReloadOutcome;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerContext;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler;
@@ -133,8 +135,9 @@ public final class RuleRuntimeHostCore {
     public RuleCommandContext commandContext() { return commandContext; }
 
     /**
-     * 启动运行时：读配置 → 建注册表 → 加载规则 → 建运行时 → 对全部已加载维度回扫。
-     * 必须等到服务端就绪（全部维度已创建）才能回扫，否则会漏掉启动期已存在的掉落物。
+     * 启动运行时：读配置 → 建注册表 → 加载规则 → 建运行时 → 对全部已加载维度排队回扫。
+     * 必须等到服务端就绪（全部维度已创建）才能回扫，否则会漏掉启动期已存在的掉落物；
+     * 回扫本身是分步续接任务，启动回调只负责入队，不在服务端线程同步遍历整维。
      * 回调链上的可预期异常就地降级：实例回到确定的未启动状态并记录原因，异常不外泄到平台启动流程。
      *
      * @param server 已就绪的服务端
@@ -174,10 +177,11 @@ public final class RuleRuntimeHostCore {
 
             int levelCount = 0;
             for (ServerLevel level : server.getAllLevels()) {
-                newRuntime.rescan(level);
+                // 启动期已加载实体的 join 事件早于运行时装配，必须扫描世界补登记
+                newRuntime.rebuild(level);
                 levelCount++;
             }
-            LOGGER.info("新链路运行时已就绪：覆盖层 {}，已回扫维度 {} 个", overlay, levelCount);
+            LOGGER.info("新链路运行时已就绪：覆盖层 {}，已排队回扫维度 {} 个", overlay, levelCount);
         } catch (RuntimeException failure) {
             degradeStartFailure(failure);
         }
@@ -196,7 +200,7 @@ public final class RuleRuntimeHostCore {
     }
 
     /**
-     * 数据包重载：重建规则索引并回扫全部已加载维度，使已存在的掉落物立即按新规则重选。
+     * 数据包重载：重建规则索引并排队回扫全部已加载维度，使已存在的掉落物按新规则重选。
      * 调用点必须位于服务端线程；运行时未就绪或重载失败时返回 null 并保留上一版索引。
      *
      * @param server 当前服务端
@@ -204,6 +208,19 @@ public final class RuleRuntimeHostCore {
      * @return 本次加载结果；未就绪或失败时为 null
      */
     public RuleLoadResult<Rule> reload(MinecraftServer server, ResourceManager resourceManager) {
+        RuleReloadOutcome<Rule> outcome = reloadWithOutcome(server, resourceManager);
+        return outcome == null ? null : outcome.result();
+    }
+
+    /**
+     * 数据包重载的结构化回执版本：失败时带回一条结构化问题，供命令层区分「运行时未就绪」与「重载失败」。
+     * 先构建新索引与候选结构，成功后才一次性换入；任何失败都发生在换入之前，旧索引、追踪与任务队列保持有效。
+     *
+     * @param server 当前服务端
+     * @param resourceManager 本次重载使用的数据包资源管理器
+     * @return 重载回执；运行时未就绪或延后处理时为 null
+     */
+    public RuleReloadOutcome<Rule> reloadWithOutcome(MinecraftServer server, ResourceManager resourceManager) {
         if (server == null) { return null; }
         if (RuleEditServerHandler.deferReload(() -> {
             // 延后到保存收尾执行时重新取当前服务端，避免重载到已停止的实例
@@ -222,19 +239,48 @@ public final class RuleRuntimeHostCore {
                     context(resourceManager, server.registryAccess(), overlay, registries, server, runtimeLimits()));
             RuleLoadResult<Rule> result = RuleLoadingService.loadAndValidate(saveContext.loadContext(), saveContext.baseRules());
             saveContext.baseIssues().forEach(result.issues()::add);
-            current.replaceRules(result.rules(), result.issues());
-            saveReloadContext = saveContext;
-            logLoadResult("数据包重载", result);
-            for (ServerLevel level : server.getAllLevels()) {
-                current.rescan(level);
+            // 先建：构建期只读规则与注册表，新索引与候选结构建好之前不改动在跑的旧索引
+            ConversionRuntime.PreparedRules prepared = current.prepareRules(result.rules(), result.issues(),
+                    server.registryAccess());
+            // 应用阶段观测点：此刻仍在换入前，注入失败时旧索引、追踪与队列完整保留；未注入时为空操作
+            RuntimeObserver.current().reloadApplying(server);
+            // 换入：索引与候选摘要一次替换，各维度旧追踪随之失效，随后由回扫重建
+            current.publishRules(prepared);
+            // 换入之后的收尾不再适用「保留旧索引」语义：索引已经生效，收尾异常只记录、不改变成功回执
+            try {
+                saveReloadContext = saveContext;
+                logLoadResult("数据包重载", result);
+                queueRescans(current, server);
+                Objects.requireNonNull(RuleEditServerHandler.sessionManager(editContext)).bumpVersion();
+                LOGGER.info("数据包重载完成：规则索引已重建，回扫已排队");
+            } catch (RuntimeException e) {
+                LOGGER.error("数据包重载已应用，但换入后的收尾未完成；回扫与编辑会话版本将在下次重载或维度加载时补齐", e);
             }
-            Objects.requireNonNull(RuleEditServerHandler.sessionManager(editContext)).bumpVersion();
-            LOGGER.info("数据包重载完成：规则索引已重建并完成回扫");
-            return result;
+            return RuleReloadOutcome.applied(result);
         } catch (RuntimeException e) {
-            // 重载失败必须保留旧索引继续服务，不能让异常逃逸到事件回调
-            LOGGER.error("数据包重载处理失败，保留上一版规则索引", e);
-            return null;
+            // 失败发生在换入之前：旧索引、追踪与队列保持有效，日志与回执都不得声称本次变更已应用
+            String reason = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+            LOGGER.error("数据包重载失败，已保留上一版规则索引与追踪（本次未应用任何规则变更）", e);
+            return RuleReloadOutcome.failed(Issue.error(
+                    "数据包重载失败，已保留上一版规则索引与追踪（本次未应用任何规则变更）：" + reason, null, null));
+        }
+    }
+
+    // 换入后的收尾：逐维排队回扫。单维异常只记录并继续，避免一个维度的问题让其它的维度排不上回扫
+    private static void queueRescans(ConversionRuntime current, MinecraftServer server) {
+        RuntimeException failure = null;
+        for (ServerLevel level : server.getAllLevels()) {
+            try {
+                current.rescan(level);
+            } catch (RuntimeException e) {
+                if (failure == null) { failure = e; } else { failure.addSuppressed(e); }
+                // 该维度追踪已被换入清空：补排有界重试，避免在下次回扫或维度加载前失联
+                current.retryRescan(level, 1);
+            }
+        }
+        if (failure != null) {
+            // 索引已换入，此时不能再声称保留了旧索引；差异只是回扫排队，留待下次回扫或维度重载补齐
+            LOGGER.error("数据包重载已应用，但部分维度回扫排队失败；这些维度将在下次回扫或维度重载时补齐", failure);
         }
     }
 
@@ -298,11 +344,12 @@ public final class RuleRuntimeHostCore {
         }
     }
 
-    // 维度加载：对后加载的维度补一次回扫（启动期维度已由 start 统一回扫）
+    // 维度加载：对后加载的维度排队一次回扫（启动期维度已由 start 统一排队）
     public void levelLoaded(ServerLevel level) {
         ConversionRuntime current = runtime;
         if (current != null) {
-            current.rescan(level);
+            // 刚加载的维度实体表不完整，按世界扫描模式补登记
+            current.rebuild(level);
         }
     }
 
@@ -443,8 +490,10 @@ public final class RuleRuntimeHostCore {
         public void rebuildAndRescan(MinecraftServer server) {
             // 与数据包重载共用同一条 apply 路径（Fabric 与 NeoForge 两端口径一致）：
             // 重载失败必须抛异常，让保存流程回 SAVED_NOT_RELOADED（已写盘但未重载）
-            if (reload(server, server.getResourceManager()) == null) {
-                throw new IllegalStateException("保存后的运行时重载失败");
+            RuleReloadOutcome<Rule> outcome = reloadWithOutcome(server, server.getResourceManager());
+            if (outcome == null || !outcome.isApplied()) {
+                throw new IllegalStateException("保存后的运行时重载失败"
+                        + (outcome == null || outcome.failure() == null ? "" : "：" + outcome.failure().message()));
             }
         }
     }
@@ -485,8 +534,8 @@ public final class RuleRuntimeHostCore {
         }
 
         @Override
-        public RuleLoadResult<Rule> reloadRules(MinecraftServer server) {
-            return reload(server, server.getResourceManager());
+        public RuleReloadOutcome<Rule> reloadRules(MinecraftServer server) {
+            return reloadWithOutcome(server, server.getResourceManager());
         }
     }
 }

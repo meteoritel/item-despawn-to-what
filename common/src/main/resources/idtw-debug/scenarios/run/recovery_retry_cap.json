@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "inputs": {
+    "sources": 1,
+    "stack_size": 3,
+    "catalyst_count": 0,
+    "source_item": "minecraft:paper",
+    "catalyst_item": "minecraft:emerald"
+  },
+  "seconds": 12,
+  "setup": "none",
+  "actions": [],
+  "faults": [
+    {
+      "type": "step_exception",
+      "kind": "EFFECT",
+      "name": "settlement/itemdespawntowhat:debug/recovery_retry_cap",
+      "count": 1
+    },
+    {
+      "type": "step_exception",
+      "kind": "REBATE",
+      "count": 3
+    }
+  ],
+  "expected": {
+    "metrics": {
+      "conversions": 1,
+      "remaining_source_items": 0,
+      "settlements_completed": 0,
+      "returned": 0,
+      "pending_delivery": 0,
+      "live_returned_source_items": 0,
+      "protected_returned_source_items": 0,
+      "remaining_catalyst": 0,
+      "scheduler_pending": 0,
+      "ledger_records": 1,
+      "ledger_unsettled": 1,
+      "ledger_pending_delivery": 3,
+      "recovery_queued": 0,
+      "recovery_attempts": 3,
+      "recovery_abandoned": 1,
+      "recovery_alerts": 1,
+      "recovery_max_retry_delay_ticks": 40,
+      "faults_declared": 2,
+      "faults_injected": 4,
+      "faults_remaining": 0,
+      "events/FAULT_ARMED": 2,
+      "events/FAULT_STEP_EXCEPTION": 4,
+      "events/SETTLEMENT_CANCELLED": 1
+    },
+    "outputs": {
+      "minecraft:prismarine_shard": 0
+    },
+    "candidates": {
+      "default": "$sources"
+    }
+  },
+  "rules": [
+    {
+      "id": "itemdespawntowhat:debug/recovery_retry_cap",
+      "enabled": true,
+      "priority": 0,
+      "trigger_after_seconds": 2,
+      "source": {
+        "items": [
+          "minecraft:paper"
+        ],
+        "exclude": []
+      },
+      "effects": [
+        {
+          "type": "itemdespawntowhat:spawn_entity",
+          "item": "minecraft:prismarine_shard",
+          "count": 1,
+          "delay_ticks": 0,
+          "chance": 1,
+          "variant": "item"
+        }
+      ]
+    }
+  ]
+}

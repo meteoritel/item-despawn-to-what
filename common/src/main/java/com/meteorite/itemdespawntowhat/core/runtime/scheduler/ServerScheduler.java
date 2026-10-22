@@ -30,6 +30,9 @@ public final class ServerScheduler implements TaskQueue {
 
     private static final Logger LOGGER = LogManager.getLogger("IDTW.Scheduler");
 
+    // 维护任务独占的系统 realm：规则重载会摘除全部维度 realm，清理任务必须留在调度器自有队列里才能跨 tick 续接
+    private static final Object SYSTEM_REALM_KEY = new Object();
+
     private final SchedulerConfig config;
     private final LinkedHashMap<Object, RealmQueues> realms = new LinkedHashMap<>();
     private final ServerTickBudget budget = new ServerTickBudget();
@@ -58,6 +61,14 @@ public final class ServerScheduler implements TaskQueue {
     private int rotationCursor;
     // 观测：本 tick 效果类累计消耗的工作量；runTick 累加，finishTick 输出后归零
     private int effectsUsedThisTick;
+    // 观测：单步工作量的本 tick 峰值与历史峰值；与计费同一口径，用于核实工作单位是否跟真实世界操作量同向变化
+    private int maxStepWorkUnitsThisTick;
+    private int lastMaxStepWorkUnits;
+    private int maxStepWorkUnits;
+    // 观测：本 tick 已取消任务数；清理任务按剩余额度取用，保证单 tick 取消量不超过 cancels_per_step
+    private int cancelledThisTick;
+    private int lastCancelledInTick;
+    private int maxCancelledInTick;
     // 观测：本 tick 结算后的预算载荷已输出，避免同一 tick 重复打印
     private long lastBudgetLogGameTime = Long.MIN_VALUE;
     // 观测：上次预算日志时的累计步骤数，用于计算两次日志之间的步骤增量
@@ -118,6 +129,8 @@ public final class ServerScheduler implements TaskQueue {
             return;
         }
         lastGameTime = gameTime;
+        // 单 tick 取消额度从 tick 起点重新计算，清理任务据此分摊取消量
+        cancelledThisTick = 0;
         budget.begin(gameTime, config.budgetNanos(), config.maxWorkUnitsPerTick());
         for (RealmQueues realm : realms.values()) {
             realm.beginTick();
@@ -157,9 +170,10 @@ public final class ServerScheduler implements TaskQueue {
                 if (handle == null) {
                     continue;
                 }
-                StepResult result = runStep(lane, handle);
+                // 效果配额按本步计费结果累加，与全局预算、时间软预算共用同一口径；不能用声明回执，否则配额退化为步数
+                int billedWorkUnits = runStep(lane, handle);
                 if (lane.kind() == ServerTaskKind.EFFECT) {
-                    effectsUsedThisTick += result.workUnits();
+                    effectsUsedThisTick += billedWorkUnits;
                 }
                 progressed = true;
             }
@@ -180,7 +194,8 @@ public final class ServerScheduler implements TaskQueue {
     }
 
     // 执行一个任务步骤：异常不中断整轮推进，预算耗尽不是业务失败。
-    private StepResult runStep(TaskLane lane, ScheduledTask handle) {
+    // 返回本步计费工作量（声明回执与步骤内实际上报的较大者），调用方据此累加效果 lane 配额。
+    private int runStep(TaskLane lane, ScheduledTask handle) {
         long started = System.nanoTime();
         StepResult result;
         Throwable stepFailure = null;
@@ -206,6 +221,7 @@ public final class ServerScheduler implements TaskQueue {
         // 计价取「任务回执的工作量」与「步骤内上报的真实世界操作量」的较大者；未上报时与改前一致
         int workUnits = Math.max(result.workUnits(), reportedWorkUnits);
         budget.charge(workUnits);
+        maxStepWorkUnitsThisTick = Math.max(maxStepWorkUnitsThisTick, workUnits);
         long elapsed = System.nanoTime() - started;
         lane.recordStep(elapsed);
         // 观测：按种类累计本 tick 的忙碌微秒，用于跨维度的单类峰值定位
@@ -263,7 +279,7 @@ public final class ServerScheduler implements TaskQueue {
                 }
             }
         }
-        return result;
+        return workUnits;
     }
 
     // 本 tick 参与轮转的 lane：只包含仍有待推进任务（或就绪任务）的队列。
@@ -324,6 +340,12 @@ public final class ServerScheduler implements TaskQueue {
         kindMicrosThisTick.clear();
         ticks++;
         lastSnapshot = budget.snapshot();
+        // 单步峰值先结算成本 tick 样本，日志才能输出本 tick 的值
+        lastMaxStepWorkUnits = maxStepWorkUnitsThisTick;
+        maxStepWorkUnits = Math.max(maxStepWorkUnits, lastMaxStepWorkUnits);
+        maxStepWorkUnitsThisTick = 0;
+        lastCancelledInTick = cancelledThisTick;
+        maxCancelledInTick = Math.max(maxCancelledInTick, lastCancelledInTick);
         logBudgetObservation();
         // 本 tick 已统计完毕，归零避免无任务的 tick 沿用上一 tick 的效果用量
         effectsUsedThisTick = 0;
@@ -348,64 +370,77 @@ public final class ServerScheduler implements TaskQueue {
             readyDelay = Math.max(readyDelay, realm.maxReadyDelay(lastSnapshot.gameTime()));
         }
         LOGGER.info("IDTW_BUDGET tick={} used_ns={} budget_ns={} used_units={} max_units={} effects_units={} "
-                        + "max_effect_units={} steps={} drained={} pending={} ready_delay={} exhausted={}",
+                        + "max_effect_units={} step_max_units={} steps={} drained={} pending={} ready_delay={} exhausted={}",
                 lastSnapshot.gameTime(), lastSnapshot.usedNanos(), lastSnapshot.budgetNanos(),
                 lastSnapshot.usedWorkUnits(), lastSnapshot.maxWorkUnits(), effectsUsedThisTick,
-                config.effectsWorkUnitsPerTick(), stepsThisTick, lastSnapshot.drainedTasks(),
-                pendingCount(), readyDelay, lastSnapshot.exhaustionReason());
-    }
-
-    // 取消某个 realm 的全部任务但保留 realm 本身：用于规则重载后按维度重扫，任务不留静默丢弃。
-    public void cancelRealm(Object realmKey, CancelReason reason) {
-        RealmQueues realm = realms.get(realmKey);
-        if (realm != null) {
-            realm.cancelAll(reason);
-        }
+                config.effectsWorkUnitsPerTick(), lastMaxStepWorkUnits, stepsThisTick,
+                lastSnapshot.drainedTasks(), pendingCount(), readyDelay, lastSnapshot.exhaustionReason());
     }
 
     /**
-     * 将维度旧队列从执行轮转中摘除，以续接任务逐项取消；同 key 的新任务进入新队列。
+     * 把维护任务排到调度器自有的系统 realm：清理任务不随维度 realm 摘除而被移除，逐槽取消才能跨 tick 续接。
+     * @param task 维护任务
+     * @param delayTicks 相对当前刻的延迟
+     */
+    public void scheduleMaintenance(ServerTask task, int delayTicks) {
+        schedule(SYSTEM_REALM_KEY, task, delayTicks);
+    }
+
+    /**
+     * 摘除指定 realm 的待取消句柄，交给续接任务逐槽取消；同 key 的新任务进入新队列。
+     * 先收集句柄再摘除 realm：本 tick 的轮转列表已创建，旧队列必须立即停止执行，只剩句柄留给清理任务。
      * @param realmKey 维度标识
      * @param reason 取消原因
-     * @return 每步最多取消一个槽位的清理任务
+     * @return 逐槽取消的清理任务；realm 未登记时立即完成
      */
     public ServerTask detachRealm(Object realmKey, CancelReason reason) {
         RealmQueues detached = realms.remove(realmKey);
-        // 本 tick 的轮转列表已创建；旧 lane 必须立即停止搬运与执行，不能等到下 tick 才退出。
-        if (detached != null) { detached.detach(); }
-        return new ServerTask() {
-            @Override public ServerTaskKind kind() { return ServerTaskKind.MAINTENANCE; }
-            @Override public String tracingName() { return "realm-cleanup/" + realmKey; }
-            @Override public StepResult step(ServerTickBudget tickBudget) {
-                if (detached == null) { return StepResult.done(1); }
-                try {
-                    return detached.cancelOne(reason) ? StepResult.yield(1, 1) : StepResult.done(1);
-                } catch (RuntimeException failure) {
-                    // 槽位已经摘除，记录失误后仍推进其它任务的取消。
-                    LOGGER.error("维度任务清理异常：realm={}", realmKey, failure);
-                    return StepResult.yield(1, 1);
-                }
-            }
-            @Override public void onCancelled(CancelReason cancellation) {
-                if (detached != null) { detached.cancelAll(cancellation); }
-            }
-        };
+        if (detached == null) {
+            return new RealmCleanupTask(this, reason, List.of(), 0);
+        }
+        return new RealmCleanupTask(this, reason, detached.collectHandles(), 1);
     }
 
-    // 维度卸载：逐项上报原因后清空该 realm，不留静默丢弃；待返还库存由恢复任务补交。
-    public void releaseRealm(Object realmKey, CancelReason reason) {
-        RealmQueues realm = realms.remove(realmKey);
-        if (realm != null) {
-            realm.cancelAll(reason);
+    /**
+     * 一次性摘除除系统 realm 外的全部维度 realm：规则重载把所有维度的待取消句柄交给同一个清理任务，
+     * 取消量在调度器级统一分摊，避免逐维度各建一份任务后取消节奏互相穿插、难以观测。
+     * @param reason 取消原因
+     * @return 逐槽取消的清理任务
+     */
+    public ServerTask detachAll(CancelReason reason) {
+        List<RealmQueues> detached = new ArrayList<>();
+        for (Object key : new ArrayList<>(realms.keySet())) {
+            if (key == SYSTEM_REALM_KEY) { continue; }
+            RealmQueues realm = realms.remove(key);
+            if (realm != null) { detached.add(realm); }
         }
+        List<ScheduledTask> handles = new ArrayList<>();
+        for (RealmQueues realm : detached) {
+            handles.addAll(realm.collectHandles());
+        }
+        return new RealmCleanupTask(this, reason, handles, detached.size());
     }
 
-    // 停服或规则重载：所有 realm 的任务带原因取消。
-    public void clear(CancelReason reason) {
-        for (RealmQueues realm : realms.values()) {
-            realm.cancelAll(reason);
-        }
+    /**
+     * 停服兜底：摘除全部 realm（含系统 realm 中尚未跑完的清理任务）并就地排空取消。
+     * 停服没有再下一个 tick，取消回调必须在最终存档前完成，因此这里不走逐 tick 续接。
+     * @param reason 取消原因
+     */
+    public void drainAll(CancelReason reason) {
+        List<RealmQueues> clearing = new ArrayList<>(realms.values());
         realms.clear();
+        List<ScheduledTask> handles = new ArrayList<>();
+        for (RealmQueues realm : clearing) {
+            handles.addAll(realm.collectHandles());
+        }
+        for (ScheduledTask handle : handles) {
+            handle.cancel(reason);
+        }
+    }
+
+    // 本 tick 剩余可取消额度：清理任务每步取用，保证单 tick 取消量不超过 cancels_per_step
+    int cancelAllowanceRemaining() {
+        return Math.max(0, config.cancelsPerStep() - cancelledThisTick);
     }
 
     // 跨维度合并的待处理任务数。
@@ -459,6 +494,7 @@ public final class ServerScheduler implements TaskQueue {
         return new SchedulerStats(ticks, steps, released, failed, drained, cancelledTotal, 0L, exhaustedByTime,
                 exhaustedByWorkUnits, pendingCount(), peakPending, realms.size(), maxReadyDelayTicks, lastBacklogClearTicks,
                 lastMaxReadyDelayTicks, lastDrainedTasks, drainedTicks, maxDrainedInTick,
+                lastMaxStepWorkUnits, maxStepWorkUnits, lastCancelledInTick, maxCancelledInTick,
                 Map.copyOf(cancelledByReason), Map.copyOf(perKind));
     }
 
@@ -468,5 +504,6 @@ public final class ServerScheduler implements TaskQueue {
             return;
         }
         cancelledByReason.merge(reason, 1L, Long::sum);
+        cancelledThisTick++;
     }
 }

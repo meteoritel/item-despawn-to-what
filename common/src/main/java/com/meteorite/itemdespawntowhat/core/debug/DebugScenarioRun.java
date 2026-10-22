@@ -6,6 +6,7 @@ import com.meteorite.itemdespawntowhat.core.command.RuleCommandContext;
 import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
 import com.meteorite.itemdespawntowhat.core.runtime.ConversionRuntime;
 import com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks;
+import com.meteorite.itemdespawntowhat.core.runtime.SettlementLedger;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.CancelReason;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ScheduledTaskHandle;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.SchedulerStats;
@@ -45,6 +46,7 @@ final class DebugScenarioRun {
     final List<ItemEntity> outputs = new ArrayList<>();
     final Set<ScheduledTaskHandle> tasks = new HashSet<>();
     final DebugScenarioProbe probe;
+    final DebugScenarioFaults faults;
     private final DebugScenarioActions actions;
     private final Vec3 origin;
     private final int seconds;
@@ -82,6 +84,7 @@ final class DebugScenarioRun {
         this.seconds = seconds;
         this.definition = definition;
         probe = new DebugScenarioProbe(this);
+        faults = new DebugScenarioFaults(this, definition.spec.faults());
         actions = new DebugScenarioActions(this);
     }
 
@@ -155,6 +158,8 @@ final class DebugScenarioRun {
                     frame.addProperty("source_tracked", info.tracked());
                     frame.addProperty("source_failure_count", info.failureCount());
                     frame.addProperty("source_next_check_tick", info.nextCheckTick());
+                    // 追踪存在但句柄已终态即排期链断开；供环境致死/失败路径核对追踪与句柄是否自洽
+                    frame.addProperty("source_task_terminal", info.taskTerminal());
                 }
             }
             log("FRAME", frame);
@@ -185,8 +190,11 @@ final class DebugScenarioRun {
                     || !level.isPositionEntityTicking(BlockPos.containing(position))) {
                 throw new IllegalStateException("场景区域需要已加载且正在推进的区块：" + position);
             }
-            ItemEntity item = new ItemEntity(level, position.x, position.y, position.z, new ItemStack(definition.sourceItem, definition.stackSize));
-            decorate(item);
+            // merge 夹具的 0 号源只放 1 件，普通堆保持整堆数量，原版合并时普通堆必然成为载体
+            int count = definition.spec.setup() == DebugScenarioSpec.Setup.MERGE && number == 0 ? 1 : definition.stackSize;
+            ItemEntity item = new ItemEntity(level, position.x, position.y, position.z, new ItemStack(definition.sourceItem, count));
+            if (definition.spec.setup() == DebugScenarioSpec.Setup.MERGE) { decorateMergeSource(item); }
+            else { decorate(item); }
             if (number == 0) {
                 long earliest = definition.index.ordered().stream().mapToLong(entry ->
                         (long) entry.value().triggerAfterSeconds() * 20).min().orElse(0);
@@ -196,13 +204,13 @@ final class DebugScenarioRun {
             sources.add(item);
             DebugScenarioManager.bind(this, item, true);
             if (!level.addFreshEntity(item)) { throw new IllegalStateException("测试源实体加入世界被拒绝"); }
-            trace("SOURCE_ADDED", item, "initial_count", definition.stackSize);
+            trace("SOURCE_ADDED", item, "initial_count", count);
         }
     }
 
-    // 0.25格网格固定负载密度；独立组件防合并，实体数不会悄悄减少。
+    // 功能场景按准备方式取间距；性能场景用 0.25 格网格固定负载密度，独立组件防合并，实体数不会悄悄减少。
     private Vec3 position(int number) {
-        if (!benchmark) { return origin.add(number * 1.0, 0, 0); }
+        if (!benchmark) { return origin.add(number * definition.spec.gridSpacing(), 0, 0); }
         int width = Math.max(1, (int) Math.ceil(Math.sqrt(definition.sources)));
         int row = number / width;
         return origin.add((number % width - (width - 1) / 2D) * 0.25, 0,
@@ -219,6 +227,14 @@ final class DebugScenarioRun {
         item.setNeverPickUp();
         item.setNoGravity(true);
         item.setDeltaMovement(Vec3.ZERO);
+    }
+
+    // 合并夹具不能带唯一组件或禁止拾取，否则原版合并不成立；拾取延迟与场景时长对齐，测量窗口内玩家拿不走
+    private void decorateMergeSource(ItemEntity item) {
+        item.addTag("idtw_debug_fixture");
+        item.setNoGravity(true);
+        item.setDeltaMovement(Vec3.ZERO);
+        item.setPickUpDelay(seconds * 20);
     }
 
     // 测量期锁定发起者视角：仅在偏离快照阈值时用服务端传送纠正并发包，静止时零开销。
@@ -332,7 +348,9 @@ final class DebugScenarioRun {
         JsonObject events = new JsonObject();
         counters.forEach(events::addProperty);
         for (String key : List.of("TRACKED", "AGE_NOT_READY", "CONDITION_FALSE", "CONDITION_TRUE", "RETRY", "CONVERT",
-                "OUTPUT_ITEMS", "NATURAL_EXPIRY_DEFERRED", "EXCLUDED", "ERROR", "DUPLICATE_CONVERSION", "UNEXPECTED_OUTPUT")) {
+                "OUTPUT_ITEMS", "NATURAL_EXPIRY_DEFERRED", "EXCLUDED", "ERROR", "DUPLICATE_CONVERSION", "UNEXPECTED_OUTPUT",
+                "FAULT_ARMED", "FAULT_STEP_EXCEPTION", "FAULT_CANCEL_EXCEPTION", "FAULT_PREPARE_EXCEPTION",
+                "FAULT_RELOAD_FAILURE", "FAULT_UNUSED", "CHECK_TASK_FAILED", "CONVERSION_PREPARE_FAILED")) {
             if (!events.has(key)) { events.addProperty(key, 0); }
         }
         data.add("actual_events", events);
@@ -360,7 +378,9 @@ final class DebugScenarioRun {
         }
         String verdict = "INCOMPLETE";
         try {
-            JsonObject metrics = metrics(liveOutput, remainingSource);
+            // 未命中声明在断言前报告，配置写错时由 faults_remaining 暴露，而不是静默通过
+            faults.reportUnused();
+            JsonObject metrics = metrics(context.runtime(), liveOutput, remainingSource);
             JsonArray checks = probe.checks(metrics);
             boolean passed = true;
             for (var check : checks) {
@@ -404,7 +424,7 @@ final class DebugScenarioRun {
     }
 
     // 运行阶段的实际指标只组装一次，全部场景交给同一断言器消费。
-    private JsonObject metrics(long liveOutput, long remainingSource) {
+    private JsonObject metrics(@Nullable ConversionRuntime runtime, long liveOutput, long remainingSource) {
         JsonObject data = new JsonObject();
         data.addProperty("created_sources", sources.size());
         data.addProperty("window_present", window == null ? 0 : 1);
@@ -418,6 +438,54 @@ final class DebugScenarioRun {
         data.addProperty("first_rule", firstRule);
         data.addProperty("first_output_delay_ticks", firstOutputTick < 0 || firstConversionTick < 0 ? -1 : firstOutputTick - firstConversionTick);
         data.addProperty("action_count", actions.completedCount());
+        // 退避断言面：失败计数只应由本次触发方式参与且源量够一组的规则贡献（窗口结束时读取）
+        data.addProperty("source_failure_count", runtime == null || sources.isEmpty()
+                ? 0 : runtime.debugInfo(level, sources.getFirst()).failureCount());
+        // 预算指标：让场景用精确值或 min/max 断言「工作单位跟真实世界操作量同向变化」，不依赖人工读日志
+        data.addProperty("budget_peak_work_units_in_tick", window == null ? 0 : window.peakWorkUnitsInTick());
+        data.addProperty("budget_ticks_exhausted_by_work_units", window == null ? 0 : window.ticksExhaustedByWorkUnits());
+        data.addProperty("budget_max_drained_tasks_in_tick", window == null ? 0 : window.maxDrainedTasksInTick());
+        data.addProperty("scheduler_max_step_work_units", window == null ? 0 : window.maxStepWorkUnits());
+        data.addProperty("effects_work_units_in_window", window == null ? 0 : window.effectsWorkUnitsInWindow());
+        data.addProperty("faults_declared", faults.declared());
+        data.addProperty("faults_injected", faults.injected());
+        data.addProperty("faults_remaining", faults.remaining());
+        // 取消隔离口径：调度器滞留数与按原因取消计数直接读调度器统计，场景据此断言「同批全部取消、无滞留」
+        SchedulerStats scheduler = runtime == null ? null : runtime.schedulerStats();
+        data.addProperty("scheduler_pending", scheduler == null ? -1 : scheduler.pending());
+        data.addProperty("cancelled_rule_reload", scheduler == null ? -1
+                : scheduler.cancelledByReason().getOrDefault(CancelReason.RULE_RELOAD, 0L));
+        data.addProperty("scheduler_cancelled_total", scheduler == null ? -1 : scheduler.cancelled());
+        data.addProperty("scheduler_max_cancelled_in_tick", scheduler == null ? -1 : scheduler.maxCancelledInTick());
+        data.addProperty("cancelled_dimension_unload", scheduler == null ? -1
+                : scheduler.cancelledByReason().getOrDefault(CancelReason.DIMENSION_UNLOAD, 0L));
+        data.addProperty("cancelled_server_stop", scheduler == null ? -1
+                : scheduler.cancelledByReason().getOrDefault(CancelReason.SERVER_STOP, 0L));
+        // 回扫一致性只看本轮源：维度内普通掉落物不属于场景，混进来会让断言随世界内容漂移
+        int trackedSources = 0;
+        for (ItemEntity source : sources) {
+            if (!source.isRemoved() && runtime != null && runtime.debugInfo(level, source).tracked()) { trackedSources++; }
+        }
+        data.addProperty("tracked_source_items", trackedSources);
+        data.addProperty("rescan_pending", runtime != null && runtime.rescanPending(level) ? 1 : 0);
+        data.addProperty("rescan_steps", runtime == null ? 0 : runtime.rescanSteps(level));
+        // 账本与运行期恢复口径：中止后待交付量、记录是否已终结、恢复重试与告警可被场景直接断言
+        SettlementLedger ledger = runtime == null ? null : SettlementLedger.get(level);
+        data.addProperty("ledger_records", ledger == null ? -1 : ledger.size());
+        data.addProperty("ledger_unsettled", ledger == null ? -1 : ledger.unsettledCount());
+        data.addProperty("ledger_pending_delivery", ledger == null ? -1 : ledger.pendingDeliveryTotal());
+        // 账本写入合并口径（服务端累计）：字段变更次数、落账次数、提交涉及记录份数与被步内合并的变更次数。
+        // 变更次数远大于提交次数即说明步内累积生效；场景内逐条结算的值另由 probe 聚合为 settlement_ledger_*
+        data.addProperty("ledger_mutations", ledger == null ? -1 : ledger.mutationCount());
+        data.addProperty("ledger_commits", ledger == null ? -1 : ledger.commitCount());
+        data.addProperty("ledger_committed_records", ledger == null ? -1 : ledger.committedRecordCount());
+        data.addProperty("ledger_deferred_mutations", ledger == null ? -1 : ledger.deferredMutationCount());
+        ConversionRuntime.SettlementRecoveryStats recovery = runtime == null ? null : runtime.settlementRecoveryStats();
+        data.addProperty("recovery_queued", recovery == null ? -1 : recovery.queueSize());
+        data.addProperty("recovery_attempts", recovery == null ? -1 : recovery.attempts());
+        data.addProperty("recovery_abandoned", recovery == null ? -1 : recovery.abandoned());
+        data.addProperty("recovery_alerts", recovery == null ? -1 : recovery.alerts());
+        data.addProperty("recovery_max_retry_delay_ticks", recovery == null ? -1 : recovery.maxRetryDelayTicks());
         return data;
     }
 
@@ -444,6 +512,15 @@ final class DebugScenarioRun {
 
     // 所有行都带同一编号，IDEA可直接按run过滤。
     void log(String event, JsonObject data) { DebugLog.write(id, (benchmark ? "bench/" : "run/") + name, event, data); }
+
+    // 场景启动时武装声明故障；未声明的场景不产生任何注入开销
+    void armFaults() { faults.arm(); }
+
+    // 故障事件与普通观测事件共用有界计数，断言通过 events/ 前缀消费
+    void fault(String event, JsonObject data) { increment(event, 1); log(event, data); }
+
+    // 重载动作据此区分「注入的预期失败」与真实失败
+    int faultsInjected() { return faults.injected(); }
 
     // 场景只维护有限事件名称的累计计数。
     private void increment(String event, long amount) { counters.merge(event, amount, Long::sum); }

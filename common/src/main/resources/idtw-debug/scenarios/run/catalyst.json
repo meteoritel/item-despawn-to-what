@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "inputs": {
+    "sources": 1,
+    "stack_size": 4,
+    "catalyst_count": 4,
+    "source_item": "minecraft:paper",
+    "catalyst_item": "minecraft:emerald"
+  },
+  "seconds": 12,
+  "setup": "none",
+  "actions": [],
+  "expected": {
+    "metrics": {
+      "groups": 4,
+      "consumed_sources": 4,
+      "returned": 0,
+      "pending_delivery": 0,
+      "settlements_completed": 1,
+      "chance_skipped": 0,
+      "remaining_catalyst": 0,
+      "conversions": 1,
+      "remaining_source_items": 0,
+      "live_returned_source_items": 0,
+      "protected_returned_source_items": 0
+    },
+    "outputs": {
+      "minecraft:prismarine_shard": 4
+    },
+    "candidates": {
+      "default": 1
+    }
+  },
+  "rules": [
+    {
+      "id": "itemdespawntowhat:debug/examples/catalyst",
+      "enabled": true,
+      "priority": 0,
+      "trigger_after_seconds": 2,
+      "source": {
+        "items": [
+          "minecraft:paper"
+        ],
+        "exclude": []
+      },
+      "source_cost": {"minecraft:paper": 1},
+      "effects": [
+        {
+          "type": "itemdespawntowhat:spawn_entity",
+          "item": "minecraft:prismarine_shard",
+          "count": 1,
+          "delay_ticks": 0,
+          "chance": 1,
+          "variant": "item"
+        }
+      ],
+      "catalyst_cost": {
+        "items": [
+          "minecraft:emerald"
+        ],
+        "counts": {"minecraft:emerald": 1},
+        "consume_counts": {"minecraft:emerald": 1},
+        "radius": 2
+      }
+    }
+  ]
+}

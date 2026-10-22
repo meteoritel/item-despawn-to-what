@@ -16,5 +16,9 @@ public enum CancelReason {
     // 开发场景主动停止。
     SCENARIO_STOP,
     // 自然寿命延后：物品临近原版消失，既有检查让位给重新排定的预留检查。
-    NATURAL_EXPIRY_DEFERRED
+    NATURAL_EXPIRY_DEFERRED,
+    // 重排：旧检查句柄先被取消，再为新句柄让位；只允许经统一重排入口触发。
+    RESCHEDULED,
+    // 追踪释放：检查已不再适用于该物品（无候选、永久禁转或到期未命中），句柄随追踪一起移除。
+    TRACKING_RELEASED
 }

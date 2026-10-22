@@ -37,8 +37,6 @@ public final class LightningExecutor {
     // 后续闪电的水平散布半径
     public static final double SPREAD_RADIUS = 5.0;
 
-    // 等待目标区块加载时的退避刻数
-    private static final int CHUNK_RETRY_TICKS = 20;
     // 序列开始前要求的整片已加载半径：生成位置可能越过源区块边界
     private static final int SERIES_CHUNK_RADIUS = 6;
     // 拒绝直接调用的原因：没有共享预算的实现无法按 tick 推进
@@ -118,7 +116,7 @@ public final class LightningExecutor {
             }
             if (!LoadedChunks.containsArea(level, BlockPos.containing(origin), SERIES_CHUNK_RADIUS)) {
                 // 整片未加载：本次不计入账目，退避后仍在同一基准位置重来
-                nextDueTick = now + CHUNK_RETRY_TICKS;
+                nextDueTick = now + LoadedChunks.RETRY_TICKS;
                 return null;
             }
             // 每步只落一道：单道世界操作不可抢占，步间让出以遵守共享预算
@@ -140,12 +138,12 @@ public final class LightningExecutor {
             }
             if (!LoadedChunks.contains(level, BlockPos.containing(pendingX, origin.y, pendingZ))) {
                 // 该列未加载：保留这道闪电及其坐标，退避后重试，不推进次数
-                nextDueTick = now + CHUNK_RETRY_TICKS;
+                nextDueTick = now + LoadedChunks.RETRY_TICKS;
                 return null;
             }
             if (!strike(level, pendingX, pendingZ)) {
                 // 两次检查之间该列卸载：保留已确定的水平坐标，退避后按同一坐标重新求地表，不推进次数
-                nextDueTick = now + CHUNK_RETRY_TICKS;
+                nextDueTick = now + LoadedChunks.RETRY_TICKS;
                 return null;
             }
             context.reportProgress(1);

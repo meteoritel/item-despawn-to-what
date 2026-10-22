@@ -1,6 +1,8 @@
 package com.meteorite.itemdespawntowhat.core.command;
 
+import com.meteorite.itemdespawntowhat.core.api.Issue;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoadResult;
+import com.meteorite.itemdespawntowhat.core.load.RuleReloadOutcome;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveStatus;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerContext;
@@ -53,14 +55,22 @@ final class RuleConfigCommands {
                                 .executes(ctx -> editLockRelease(ctx, context))));
     }
 
-    // config reload：重建规则索引并回扫全部维度，回显条数与问题数
+    // config reload：重建规则索引并回扫全部维度，回显条数与问题数；失败时回执写明未应用
     private static int reload(CommandContext<CommandSourceStack> ctx, RuleCommandContext context) {
         if (RuleEditServerHandler.isSaving()) { return RuleCommandTree.saveBusy(ctx); }
         MinecraftServer server = ctx.getSource().getServer();
-        RuleLoadResult<Rule> result = context.reloadRules(server);
-        if (result == null) {
+        RuleReloadOutcome<Rule> outcome = context.reloadRules(server);
+        if (outcome == null) {
             return RuleCommandTree.notReady(ctx);
         }
+        if (!outcome.isApplied()) {
+            Issue failure = outcome.failure();
+            return RuleCommandTree.replyFailure(ctx, RuleCommandText
+                    .of("itemdespawntowhat.command.config.reload.failed")
+                    .kv("message", failure == null ? "" : failure.message())
+                    .build());
+        }
+        RuleLoadResult<Rule> result = outcome.result();
         List<Component> lines = new ArrayList<>();
         lines.add(RuleCommandText.summary("reload", result));
         lines.addAll(RuleCommandText.issues(result));

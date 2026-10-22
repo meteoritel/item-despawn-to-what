@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "inputs": {
+    "sources": 1,
+    "stack_size": 1,
+    "catalyst_count": 0,
+    "source_item": "minecraft:paper",
+    "catalyst_item": "minecraft:emerald"
+  },
+  "seconds": 12,
+  "setup": "expiry",
+  "actions": [],
+  "faults": [
+    {
+      "type": "prepare_exception",
+      "name": "itemdespawntowhat:spawn_entity",
+      "count": 1
+    }
+  ],
+  "expected": {
+    "metrics": {
+      "conversions": 0,
+      "remaining_source_items": 0,
+      "groups": 0,
+      "consumed_sources": 0,
+      "returned": 0,
+      "pending_delivery": 0,
+      "settlements_completed": 0,
+      "check_failures": 1,
+      "first_check_retry_delay_ticks": -1,
+      "pending_scene_checks": 0,
+      "pending_scene_effects": 0,
+      "faults_declared": 1,
+      "faults_injected": 1,
+      "faults_remaining": 0,
+      "events/FAULT_ARMED": 1,
+      "events/FAULT_PREPARE_EXCEPTION": 1,
+      "events/CONVERSION_PREPARE_FAILED": 1,
+      "events/CHECK_TASK_FAILED": 1
+    },
+    "outputs": {
+      "minecraft:prismarine_shard": 0
+    }
+  },
+  "rules": [
+    {
+      "id": "itemdespawntowhat:debug/prepare_failure_expiry",
+      "enabled": true,
+      "priority": 0,
+      "trigger_after_seconds": 3600,
+      "source": {
+        "items": [
+          "minecraft:paper"
+        ],
+        "exclude": []
+      },
+      "effects": [
+        {
+          "type": "itemdespawntowhat:spawn_entity",
+          "item": "minecraft:prismarine_shard",
+          "count": 1,
+          "delay_ticks": 0,
+          "chance": 1,
+          "variant": "item"
+        }
+      ]
+    }
+  ]
+}

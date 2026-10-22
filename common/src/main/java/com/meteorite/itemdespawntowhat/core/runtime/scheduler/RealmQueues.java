@@ -4,8 +4,10 @@ import com.meteorite.itemdespawntowhat.core.api.scheduler.CancelReason;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumMap;
+import java.util.List;
 
 /**
  * 单个 realm（维度）的任务队列集合：按任务种类分 lane，所有 lane 共享服务器总预算。
@@ -86,11 +88,16 @@ final class RealmQueues {
         scheduler.countCancelled(reason);
     }
 
-    void cancelAll(CancelReason reason) {
-        for (TaskLane lane : lanes.values()) {
-            lane.clear(reason);
-        }
+    // 收集本 realm 的全部待取消句柄并清空容器：先摘除 lane 索引，取消回调里重新入队的任务才会落在新 realm，
+    // 不会被本批清理的容器误删；句柄逐个交给清理任务跨 tick 取消，取消量受调度配置约束。
+    List<ScheduledTask> collectHandles() {
+        List<TaskLane> collected = new ArrayList<>(lanes.values());
         lanes.clear();
+        List<ScheduledTask> handles = new ArrayList<>();
+        for (TaskLane lane : collected) {
+            lane.drainInto(handles);
+        }
+        return handles;
     }
 
     void beginTick() {
@@ -98,15 +105,6 @@ final class RealmQueues {
             lane.beginTick();
         }
     }
-
-    boolean cancelOne(CancelReason reason) {
-        for (TaskLane lane : lanes.values()) {
-            if (lane.cancelOne(reason)) { return true; }
-        }
-        return false;
-    }
-
-    void detach() { lanes.values().forEach(TaskLane::detach); }
 
     void finishTick() {
         for (TaskLane lane : lanes.values()) {
