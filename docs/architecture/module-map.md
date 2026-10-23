@@ -38,7 +38,7 @@ authority:
 | [type-system](../modules/type-system.md) | 注册与冻结、第三方 SPI、内置条件与效果的落点 | `common/core/registry`、`common/core/extension`、`common/core/type` | `common` |
 | [rule-loading](../modules/rule-loading.md) | 三层来源读取与合并、拒载、候选索引与催化剂投影 | `common/core/load`、`common/core/service` 的加载装配部分 | `common` |
 | [conversion-runtime](../modules/conversion-runtime.md) | 追踪与触发、预检查、完整组结算、恢复与共享预算 | `common/core/runtime`、`common/core/runtime/scheduler`、`common/core/state` | `common` |
-| [authoring](../modules/authoring.md) | 候选目录、编辑会话与落盘、命令与调试场景 | `common/core/catalog`、`common/core/network`、`common/core/service` 的编辑落盘部分、`common/core/command`、`common/core/debug` | `common` |
+| [authoring](../modules/authoring.md) | 候选目录、编辑会话与落盘、命令与调试场景 | `common/core/catalog`、`common/core/network`、`common/core/service` 的编辑落盘部分、`common/core/command`、`common/src/dev`、`neoforge/src/probe` | `common` |
 | [client-editor](../modules/client-editor.md) | 客户端协议工作区、草稿与撤销、类型编辑器注册表 | `common/client/net`、`common/client/edit` | `common` |
 | [ui-kit](../modules/ui-kit.md) | 声明式 UI kit 的公开面与依赖边界 | `common/client/ui/kit` | `common` |
 | [client-ui](../modules/client-ui.md) | 编辑器界面、主题与控件适配 | `common/client/ui/theme`、`common/client/ui/widget`、`common/client/ui/shared`、`common/client/ui/screen`、`common/client/ui/screen/form`、`common/client/ui/prototype` | `common` |

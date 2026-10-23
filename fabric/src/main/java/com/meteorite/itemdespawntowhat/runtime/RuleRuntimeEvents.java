@@ -1,8 +1,6 @@
 package com.meteorite.itemdespawntowhat.runtime;
 
 import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
-import com.meteorite.itemdespawntowhat.core.debug.DebugRuntimeObserver;
-import com.meteorite.itemdespawntowhat.core.debug.DebugSessionManager;
 
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -32,17 +30,11 @@ public final class RuleRuntimeEvents {
         }
         registered = true;
 
-        // 装配观测接缝：运行时只依赖 core/api 的接口，调试子系统的实现只在这里注入
-        RuntimeObserver.install(new DebugRuntimeObserver());
-
         // 服务端就绪：此时全部维度已创建，可安全回扫；启动期的首次数据包加载不作为重载处理
         ServerLifecycleEvents.SERVER_STARTED.register(RuleRuntimeHost::start);
 
         // 服务端停止：释放全部维度的追踪状态与到期任务
-        ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
-            DebugSessionManager.shutdown(server, RuleRuntimeHost.commandContext());
-            RuleRuntimeHost.shutdown();
-        });
+        ServerLifecycleEvents.SERVER_STOPPING.register(server -> RuleRuntimeHost.shutdown());
 
         // 数据包重载：该回调在服务端线程（handleAsync(server)）触发，成功后重建索引并回扫
         ServerLifecycleEvents.END_DATA_PACK_RELOAD.register((server, resourceManager, success) -> {
@@ -66,10 +58,10 @@ public final class RuleRuntimeEvents {
 
         // 服务器 tick 结束：只推进一次公共预算（所有维度共享）
         ServerTickEvents.END_SERVER_TICK.register(server -> {
-            DebugSessionManager.beginRuntimeTick(server);
+            RuntimeObserver.current().runtimeTickStarted(server);
             RuleRuntimeHost.tickServer(server);
             com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler.tick(server, RuleRuntimeHost.editContext());
-            DebugSessionManager.tick(server, RuleRuntimeHost.commandContext());
+            RuntimeObserver.current().runtimeTickFinished(server);
             if (server.getTickCount() % 20 == 0) {
                 com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler
                         .expireIdle(server, RuleRuntimeHost.editContext());

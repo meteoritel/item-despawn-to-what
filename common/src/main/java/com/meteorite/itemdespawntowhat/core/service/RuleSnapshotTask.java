@@ -21,7 +21,7 @@ import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.StepResult;
-import com.meteorite.itemdespawntowhat.core.debug.DebugProfile;
+import com.meteorite.itemdespawntowhat.core.api.DevelopmentDiagnostics;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotChunkPayload;
 import com.mojang.serialization.Codec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -82,12 +82,12 @@ final class RuleSnapshotTask implements ServerTask {
         this.context = context; this.server = server; this.sessions = sessions;
         store = sessions.store();
         this.sessionId = sessionId; this.requestId = requestId; this.completion = completion;
-        profileStartedNanos = DebugProfile.start();
+        profileStartedNanos = DevelopmentDiagnostics.start();
         profileStartTick = server.getTickCount();
         reloadContext = java.util.Objects.requireNonNull(context.saveReloadContext());
         reading = store.submit("snapshot-read", () -> {
             // 后台读盘与合并的耗时单独计量，不与服务端线程的解码步骤混算
-            long readStarted = DebugProfile.start();
+            long readStarted = DevelopmentDiagnostics.start();
             try {
                 byte[] revision = sessions.readDiskRevision(() -> !cancelled);
                 IssueCollector issues = new IssueCollector();
@@ -100,7 +100,7 @@ final class RuleSnapshotTask implements ServerTask {
                 }
                 return new Source(revision, RuleMerger.merge(entries, issues), RuleSourceIndex.build(entries), issues);
             } finally {
-                profileReadNanos = DebugProfile.micros(readStarted);
+                profileReadNanos = DevelopmentDiagnostics.micros(readStarted);
             }
         });
     }
@@ -112,12 +112,12 @@ final class RuleSnapshotTask implements ServerTask {
 
     // 步骤包装：统计本快照实际被调度的步数与服务端线程耗时，原语义完全交给 advance
     @Override public StepResult step(ServerTickBudget budget) {
-        long started = DebugProfile.start();
+        long started = DevelopmentDiagnostics.start();
         if (started != 0L) { profileSteps++; }
         try {
             return advance(budget);
         } finally {
-            profileStepNanos += DebugProfile.micros(started);
+            profileStepNanos += DevelopmentDiagnostics.micros(started);
         }
     }
 
@@ -168,7 +168,7 @@ final class RuleSnapshotTask implements ServerTask {
                 int capturedVersion = version;
                 preparing = store.submit("snapshot-assemble", () -> {
                     // 后台装配与切分的耗时单独计量，与解码步骤分开对比
-                    long assembleStarted = DebugProfile.start();
+                    long assembleStarted = DevelopmentDiagnostics.start();
                     try {
                         String json = RuleSnapshotAssembler.assembleEncoded(capturedSource.index(), readyRules, effectTypes,
                                 capturedVersion, capturedVersion, readyJson, capturedSource.issues().issues()).serialize();
@@ -181,7 +181,7 @@ final class RuleSnapshotTask implements ServerTask {
                         }
                         return RuleSnapshotChunker.split(sessionId, requestId, json);
                     } finally {
-                        profileAssembleNanos = DebugProfile.micros(assembleStarted);
+                        profileAssembleNanos = DevelopmentDiagnostics.micros(assembleStarted);
                     }
                 });
             }
@@ -198,7 +198,7 @@ final class RuleSnapshotTask implements ServerTask {
     private void complete(List<CustomPacketPayload> packets) {
         if (finished) { return; }
         finished = true;
-        if (DebugProfile.enabled()) { logProfile(packets); }
+        if (DevelopmentDiagnostics.enabled()) { logProfile(packets); }
         Source ready = source;
         completion.accept(new Delivery(packets, ready == null ? null : ready.index()));
     }
@@ -219,8 +219,8 @@ final class RuleSnapshotTask implements ServerTask {
         data.addProperty("failed", profileFailed);
         // 非失败但没有包：请求被取消或超过上限，两种都按中止记录
         data.addProperty("aborted", !profileFailed && packets.isEmpty());
-        data.addProperty("total_ms", DebugProfile.micros(profileStartedNanos) / 1000.0);
-        DebugProfile.event(DebugProfile.SCENE_FIRST_LOAD, "SERVER_PREP", data);
+        data.addProperty("total_ms", DevelopmentDiagnostics.micros(profileStartedNanos) / 1000.0);
+        DevelopmentDiagnostics.event(DevelopmentDiagnostics.SCENE_FIRST_LOAD, "SERVER_PREP", data);
     }
 
     // 下发字节按 UTF-8 计，与分片阈值口径一致

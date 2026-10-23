@@ -65,7 +65,7 @@ flowchart LR
 |---|---|---|
 | 模组入口 | `ModInitializer#onInitialize` 依次注册运行时事件、编辑载荷、命令注册器 | `@Mod` 构造为空，事件由各 `@EventBusSubscriber` 类静态注册 |
 | 服务端启动 | `ServerLifecycleEvents.SERVER_STARTED` 转 `RuleRuntimeHost.start` | `ServerStartedEvent` 转同名方法 |
-| 服务端停止 | `SERVER_STOPPING` 先停调试会话再 `RuleRuntimeHost.shutdown` | `ServerStoppingEvent` 转同名方法 |
+| 服务端停止 | `SERVER_STOPPING` 转 `RuleRuntimeHost.shutdown` | `ServerStoppingEvent` 转同名方法 |
 | 数据包重载 | `END_DATA_PACK_RELOAD`，成功标志为真才重建 | `OnDatapackSyncEvent`，`getPlayer()` 为空时重建（登录同步不重建） |
 | 掉落物进入与离开 | `ServerEntityEvents.ENTITY_LOAD` / `ENTITY_UNLOAD` | `EntityJoinLevelEvent` / `EntityLeaveLevelEvent` |
 | 自然消失 | Mixin 拦截 `ItemEntity#tick` 的 `discard()`，延后判定为真时不丢弃 | `ItemExpireEvent`，延后判定为真时 `addExtraLife`，并在寿命钳制上限前抬升 age |
@@ -80,7 +80,8 @@ flowchart LR
 ### 注册面：网络与命令
 
 - **网络**：载荷命名空间取 `RuleEditLimits.NAMESPACE`，协议版本取 `RuleEditProtocol.VERSION`；两端都在公共初始化路径注册 C2S 与 S2C 两类类型，保证连接协商双向可编码。服务端接收器先切回服务端线程，再交 `RuleEditServerHandler`；S2C 处理器一律经 `RuleEditPayloadRouter` 分发，不引用客户端类。客户端接收器在客户端初始化注册，回调切到客户端主线程。
-- **命令**：平台注册器只把 dispatcher 与 `RuleRuntimeHost.commandContext()` 交给 `RuleCommandTree`；命令分组、权限口径与反馈出口都在命令树内部。
+- **命令**：正式平台注册器把 dispatcher 与 `RuleRuntimeHost.commandContext()` 交给 `RuleCommandTree`；开发命令由 NeoForge `src/probe` 的 `ProbeMod` 另行合并注册。
+- **开发观测**：`ProbeMod` 装配空接缝的实现、推进开发场景并在停服时释放；运行和发布隔离见[后端探针](../guides/backend-probes.md)。
 - **载荷字段、分片与回执语义**：[编辑协议](../api/edit-protocol.md)。
 
 ## 3. 关键类地图
@@ -94,7 +95,7 @@ flowchart LR
 | `Services` / `IPlatformHelper`（common/platform） | 注入入口 | `ServiceLoader` 发现唯一实现；平台名、模组判断、开发环境、配置目录、发包与实体状态读写都以接口方法声明，默认实现给出安全兜底 | 全部调用方 |
 | `FabricPlatformHelper` / `NeoForgePlatformHelper`（两端 platform 包） | 平台能力实现 | 按各自加载器 API 覆盖能力方法 | `Services.PLATFORM` |
 | `RuleRuntimeHost`（两端 runtime 包） | 端适配门面 | 持有 `CORE` 单例，提供静态转发，并把本端 `PlatformAdapter` 交给核心 | `RuleRuntimeEvents`、网络与命令注册器 |
-| `RuleRuntimeEvents`（两端 runtime 包） | 事件接线 | 平台事件转宿主转发方法；Fabric 侧同时驱动编辑会话 tick、空闲过期与调试会话 tick | `RuleRuntimeHost`、`RuleEditServerHandler`、调试会话管理 |
+| `RuleRuntimeEvents`（两端 runtime 包） | 事件接线 | 平台事件转宿主转发方法；同时驱动编辑会话 tick 与空闲过期；开发调试由 NeoForge probe 事件独立驱动 | `RuleRuntimeHost`、`RuleEditServerHandler` |
 | `ItemEntityMixin`、`EntityMixin`、`PlayerMixin`、`ItemLifespanReferenceMixin`（各端 mixin 包） | 最小注入 | 补齐平台事件覆盖不到的路径：自然到期、环境伤害、死亡掉落标记、掉落物合并兼容、参考寿命采样 | `DropStateStore`、死亡掉落标记、`RuleRuntimeHost` |
 | `RuleEditPayloadRegistrar`（两端 network/registrar） | 注册面 | 载荷类型、协议版本、服务端接收器与断线清理；S2C 只经路由器分发 | `RuleEditServerHandler`、`RuleEditPayloadRouter` |
 | `FabricRuleCommandRegistrar` / `NeoForgeRuleCommandRegistrar` | 注册面 | 把命令树挂到平台命令事件 | `RuleCommandTree` |

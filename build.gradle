@@ -4,3 +4,14 @@ plugins {
     // see https://projects.neoforged.net/neoforged/moddevgradle for new versions
     id 'net.neoforged.moddev' version '2.0.49-beta' apply false
 }
+
+// 发布边界检查使用已经生成的各端产物，开发源集只参与编译检查。
+tasks.register('checkProbePackaging', Exec) {
+    dependsOn ':common:assemble', ':fabric:assemble', ':neoforge:assemble'
+    commandLine 'python', rootProject.file('tools/check-probe-packaging.py')
+}
+subprojects {
+    plugins.withId('java') {
+        tasks.named('check') { dependsOn rootProject.tasks.named('checkProbePackaging') }
+    }
+}

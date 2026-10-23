@@ -29,7 +29,7 @@ Gradle 侧只有 `common`、`fabric`、`neoforge` 三个子项目；层 3 的模
 | [type-system](type-system.md) | 注册与冻结、第三方 SPI、内置条件与效果的落点 | `common/core/registry`、`common/core/extension`、`common/core/type` |
 | [rule-loading](rule-loading.md) | 三层来源读取与合并、拒载、候选索引与催化剂投影 | `common/core/load`、`common/core/service` 的加载装配部分 |
 | [conversion-runtime](conversion-runtime.md) | 追踪与触发、预检查、完整组结算、恢复与共享预算 | `common/core/runtime`、`common/core/runtime/scheduler`、`common/core/state` |
-| [authoring](authoring.md) | 候选目录、编辑会话与落盘、命令与调试场景 | `common/core/catalog`、`common/core/network`、`common/core/service` 的编辑落盘部分、`common/core/command`、`common/core/debug` |
+| [authoring](authoring.md) | 候选目录、编辑会话与落盘、命令与调试场景 | `common/core/catalog`、`common/core/network`、`common/core/service` 的编辑落盘部分、`common/core/command`、`common/src/dev`、`neoforge/src/probe` |
 | [client-editor](client-editor.md) | 客户端协议工作区、草稿与撤销、类型编辑器注册表 | `common/client/net`、`common/client/edit` |
 | [ui-kit](ui-kit.md) | 声明式 UI kit 的公开面与依赖边界 | `common/client/ui/kit` |
 | [client-ui](client-ui.md) | 编辑器界面、主题与控件适配 | `common/client/ui/theme`、`common/client/ui/widget`、`common/client/ui/shared`、`common/client/ui/screen`、`common/client/ui/screen/form`、`common/client/ui/prototype` |

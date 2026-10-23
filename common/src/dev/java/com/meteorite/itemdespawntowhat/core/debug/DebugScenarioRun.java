@@ -40,7 +40,7 @@ final class DebugScenarioRun {
     @Nullable JsonObject completedReport;
     final boolean benchmark;
     final ServerLevel level;
-    final UUID initiator;
+    final @Nullable UUID initiator;
     final DebugScenarioDefinition definition;
     final List<ItemEntity> sources = new ArrayList<>();
     final List<ItemEntity> outputs = new ArrayList<>();
@@ -73,7 +73,7 @@ final class DebugScenarioRun {
     private float viewPitch;
 
     // 固定场景参数，测试源使用独立规则索引，不替换用户运行时索引。
-    DebugScenarioRun(String name, boolean benchmark, ServerLevel level, UUID initiator,
+    DebugScenarioRun(String name, boolean benchmark, ServerLevel level, @Nullable UUID initiator,
                      Vec3 origin, int seconds, DebugScenarioDefinition definition, @Nullable String pipelineId) {
         this.name = name;
         this.pipelineId = pipelineId;
@@ -239,7 +239,7 @@ final class DebugScenarioRun {
 
     // 测量期锁定发起者视角：仅在偏离快照阈值时用服务端传送纠正并发包，静止时零开销。
     private ServerPlayer initiatorPlayer() {
-        return level.getServer().getPlayerList().getPlayer(initiator);
+        return initiator == null ? null : level.getServer().getPlayerList().getPlayer(initiator);
     }
 
     private void snapshotInitiatorView() {

@@ -1,7 +1,5 @@
 package com.meteorite.itemdespawntowhat.core.command;
 
-import com.meteorite.itemdespawntowhat.core.debug.RuleDebugCommands;
-import com.meteorite.itemdespawntowhat.core.debug.DebugMode;
 import com.meteorite.itemdespawntowhat.core.service.RuleEditPermissions;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
@@ -11,7 +9,7 @@ import net.minecraft.network.chat.Component;
 
 import java.util.List;
 
-/** /idtw 的唯一命令入口；配置与查询位于 command，诊断入口位于 debug。 */
+/** 正式 /idtw 命令树；配置与查询位于 command，开发诊断由开发源集追加注册。 */
 public final class RuleCommandTree {
 
     // 命令树根节点名，注册到 /idtw 之下
@@ -24,11 +22,10 @@ public final class RuleCommandTree {
     // 把命令树注册到调度器；平台初始化时调用一次
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher, RuleCommandContext context) {
         // 根节点不统一鉴权：edit-lock status 任何玩家可用，
-        // 权限下放到各子分支（config 的写操作与 rule/debug 全部保留 hasAccess）
+        // 权限下放到各子分支（config 的写操作与 rule 保留 hasAccess）
         var root = Commands.literal(ROOT)
                 .then(RuleConfigCommands.build(context))
                 .then(RuleQueryCommands.build(context));
-        if (DebugMode.ENABLED) { root.then(RuleDebugCommands.build(context).requires(RuleCommandTree::hasAccess)); }
         dispatcher.register(root);
     }
 

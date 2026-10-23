@@ -38,6 +38,14 @@ public final class DebugSessionManager {
         return timing == null || timing.tick != server.getTickCount() ? -1 : timing.elapsed;
     }
 
+    /** 在平台运行时返回后封存计时，开发场景在另一个事件回调推进。 */
+    public static void endRuntimeTick(MinecraftServer server) {
+        RuntimeTiming timing = TIMINGS.get(server);
+        if (timing != null && timing.tick == server.getTickCount() && timing.elapsed < 0) {
+            timing.elapsed = Math.max(0, System.nanoTime() - timing.started);
+        }
+    }
+
     // 首次就绪记录当前参数，其后只推进已经由命令创建的场景。
     public static void tick(MinecraftServer server, RuleCommandContext context) {
         if (!DebugMode.ENABLED) { return; }

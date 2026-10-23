@@ -85,7 +85,7 @@ flowchart LR
 | `ServerTask` / `StepResult` / `StepOutcome` / `ServerTaskKind` / `CancelReason` / `TaskQueue` / `ScheduledTaskHandle` / `RunnableTask` | 调度扩展点与排期请求 | 单步必须有界；回执声明本步工作量（下界为 1）、状态与下次入队延迟；种类用于跨维度公平轮转、效果配额与分类统计；取消原因不得静默丢弃；任务终态唯一，失败与取消各有回调：`onFailed` 默认幂等空实现（只记录、不改容器状态，内置任务按需覆写），调度器先把句柄置终态再回调，回调抛异常只记日志、不影响整轮与容器；排期只经 `scheduleAt(realmKey, task, dueTick)`，句柄可读任务、到期刻、分类与终态并精确取消（幂等）；`RunnableTask` 把无参动作适配成固定消耗一步的任务 | `core/runtime/scheduler`；`RuntimeObserver` 的排期包装 |
 | `Issue` / `IssueCollector` / `IssueSeverity` / `ParamChecks` / `RefChecks` | 问题模型与校验助手 | 收集器累积问题并可派生来源继承的子收集器（写入同时落入上游、按默认来源补齐）；严重级决定条目是否拒载；`RefChecks` 对未注册的非标签引用报错、对未绑定的标签数据只告警 | 模型层校验、加载层、装配层 |
 | `RuleDecoder` / `RuleDecodeBudget` / `RuleFields` | 解码入口与规模预算 | 加载层持有 `RuleDecoder`，实现由模型层提供；预算入口先做文本嵌套深度预检、再在进入递归解码前拦截超深/超规模条件树；字段名常量统一从这里取 | `core/load`、`core/model`、命令输出 |
-| `RuntimeObserver` | 观测接缝 | 未注入实现时 `NONE` 让判定返回安全默认值、上报为空操作、排期直接入队；装配期注入一次，运行期只读；重载应用阶段的上报点在规则索引替换后、维度回扫前调用，效果准备阶段的上报点在委托执行器 `prepare` 之前调用，两处实现方都只允许以抛出异常表达注入失败，调用方分别按重载失败、转化补偿单元收口 | `core/debug` 提供实现，平台在服务端装配阶段注入 |
+| `RuntimeObserver` | 观测接缝 | 未注入实现时 `NONE` 让判定返回安全默认值、上报为空操作、排期直接入队；装配期注入一次，运行期只读；重载应用阶段的上报点在新索引准备完成后、替换前调用，效果准备阶段的上报点在委托执行器 `prepare` 之前调用，两处实现方都只允许以抛出异常表达注入失败，调用方分别按重载失败、转化补偿单元收口 | 开发源集 `core/debug` 提供实现，NeoForge `src/probe` 在服务端装配阶段注入 |
 | `TaggedId` / `TagLookup` / `ClimateSampler` / `ChunkPresence` / `ChunkRequirement` | 只读引用与查询 | 统一 `id` 与 `#tag` 引用形状；标签成员与气候采样由实现方按位置/维度缓存；`ChunkPresence` 提供即时只读查询，`ChunkRequirement` 是可跨刻保留的位置或范围需求 | 条件求值器、候选索引、运行时 |
 
 ## 4. 关键流程

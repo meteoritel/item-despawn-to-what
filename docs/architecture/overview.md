@@ -121,7 +121,7 @@ flowchart LR
 ### 可观测性
 
 - 运行时、调度与效果执行只依赖 [RuntimeObserver](../../common/src/main/java/com/meteorite/itemdespawntowhat/core/api/RuntimeObserver.java) 的契约接口；未注入实现时判定为不活跃、上报为空操作、排期直接入队，语义等价「未启用调试」，见 [ADR-0035](../adr/0035-runtime-observation-seam.md)。
-- 观测实现由平台事件装配点在服务端装配阶段注入，替换不改变调度语义。
+- NeoForge 开发源集的事件入口在服务端装配阶段注入观测实现；正式运行使用空契约。开发验证见[后端探针](../guides/backend-probes.md)。
 
 ### 机械校验
 

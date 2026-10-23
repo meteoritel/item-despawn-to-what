@@ -4,8 +4,21 @@ plugins {
     id 'idea'
 }
 
+// 探针只有开发类目录，没有 jar 任务；生产构建始终只发布 main。
+sourceSets {
+    probe {
+        java.srcDir rootProject.file('common/src/dev/java')
+        resources.srcDir rootProject.file('common/src/dev/resources')
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+configurations.probeImplementation.extendsFrom(configurations.implementation)
+configurations.probeCompileOnly.extendsFrom(configurations.compileOnly)
+
 neoForge {
     version = neoforge_version
+    addModdingDependenciesTo(sourceSets.probe)
     // Automatically enable neoforge AccessTransformers if the file exists
     def at = project(':common').file('src/main/resources/META-INF/accesstransformer.cfg')
     if (at.exists()) {
@@ -28,6 +41,15 @@ neoForge {
             server()
             programArgument '--nogui'
         }
+        probeServer {
+            server()
+            sourceSet = sourceSets.probe
+            gameDirectory = file(providers.gradleProperty('probeRunDir').getOrElse('build/probe-run'))
+            programArgument '--nogui'
+            systemProperty 'idtw.probe.suite', providers.gradleProperty('probeSuite').getOrElse('core')
+            systemProperty 'idtw.probe.negative', providers.gradleProperty('probeNegative').getOrElse('false')
+            systemProperty 'idtw.probe.phase', providers.gradleProperty('probePhase').getOrElse('prepare')
+        }
         gameTestServer {
             type = "gameTestServer"
         }
@@ -39,9 +61,13 @@ neoForge {
     mods {
         "${mod_id}" {
             sourceSet sourceSets.main
+            sourceSet sourceSets.probe
         }
     }
 }
+
+// build 同时编译开发工具，尽早发现接缝变化；发布物仍取 main.output。
+tasks.named('check') { dependsOn tasks.named('probeClasses') }
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 

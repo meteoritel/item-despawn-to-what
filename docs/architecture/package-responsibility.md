@@ -113,9 +113,9 @@ flowchart TB
   - 允许：`core/network/protocol` 的只读目录条目与类别类型。
   - 禁止：依赖 `core/network/catalog`、`core/service`。
 - **`core/command`** — `/idtw` 命令树、子分支与文本输出。
-  - 允许：`core/api`、`core/config`、`core/load`、`core/model`、`core/network/protocol`、`core/network/transport`、`core/runtime`、`core/service`、`core/debug`。
+  - 允许：`core/api`、`core/config`、`core/load`、`core/model`、`core/network/protocol`、`core/network/transport`、`core/runtime`、`core/service`。
   - 禁止：依赖客户端包与界面层。
-- **`core/debug`** — 调试档案、开发场景、管线与运行时观测实现。
+- **`core/debug`（`common/src/dev`）** — 调试档案、开发场景、管线与运行时观测实现；由 NeoForge 开发源集编译，发布产物只取 main。
   - 允许：`core/api`（含 scheduler）、`core/command`、`core/config`、`core/load`、`core/model`、`core/runtime`、`core/service`、`core/state`、`platform/Services`。
   - 禁止：依赖客户端包；观测实现只通过 `RuntimeObserver` 契约进入运行时。
 - **`core/host`** — 一次存档生命周期的装配点：启动、数据包重载、停服、维度事件、编辑上下文与网络入口。
@@ -146,14 +146,14 @@ flowchart TB
   - 允许：`core/state` 的状态类型。
   - 禁止：依赖客户端包与平台 loader 专有 API；实现放在两端源集。
 
-两端源集的组织：`runtime` 注册事件与生命周期并把回调转给 `core/host`；`platform` 实现 `platform/services` 的接口；`network` 注册载荷；`client` 提供客户端入口与界面挂载；`mixin` 只做原版方法级介入并把决策交给 `core`；NeoForge 的 `debug` 提供开发期入口。平台源集只做适配，业务判断留在 `core`。
+两端源集的组织：`runtime` 注册事件与生命周期并把回调转给 `core/host`；`platform` 实现 `platform/services` 的接口；`network` 注册载荷；`client` 提供客户端入口与界面挂载；`mixin` 只做原版方法级介入并把决策交给 `core`；NeoForge 的 `src/probe` 提供[开发后端探针](../guides/backend-probes.md)入口和夹具。平台源集只做适配，业务判断留在 `core`。
 
 ## common/client
 
 客户端侧的分层是单向的：`client/net` 面向协议，`client/edit` 组织编辑数据，`client/ui` 负责呈现与交互。
 
 - **`client/net`** — 编辑会话的客户端镜像：打开请求、会话状态、分片缓冲、界面注册槽。
-  - 允许：`core/api`、`core/model`、`core/network/protocol`、`core/debug` 的档案类型、`core/service` 的限额常量、原版客户端类型。
+  - 允许：`core/api`、`core/model`、`core/network/protocol`、`core/service` 的限额常量、原版客户端类型。
   - 禁止：依赖 `client/edit` 与 `client/ui`。界面经 `EditorScreenHooks` 注册槽注入，由客户端入口接线。
 - **`client/edit`** — 客户端工作区与编辑数据：草稿、撤销栈、字段描述符、类型编辑器注册表、条件树编解码与摘要。
   - 允许：`core/api`、`core/model`、`core/network/protocol`、`client/net`、`client/ui/kit` 的树编辑契约、`client/edit/draft`、原版客户端类型。

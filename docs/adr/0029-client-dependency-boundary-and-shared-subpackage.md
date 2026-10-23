@@ -14,7 +14,7 @@
 1. **传输载荷类型只指传输通道类型**：传输通道由 `client/net` 收敛（`RuleEditClientWorkspace` 是 `client/net` 对界面层的唯一入口，上行发送器由客户端初始化注入、在包内单点持有），界面层不接触；`core.network.protocol` 的只读 DTO（快照与条目、问题、目录、保存状态）视为客户端可用契约，界面层可直接使用。界面层仍不得直接构造或发送上行载荷。
 2. **`client/edit` 不依赖界面表现层**：草稿与撤销栈持有的校验问题类型落在 `client/edit` 自身（`FormIssue` 与 `RuleIssueLocator`）；条件节点经 `ConditionTreeNodes` 实现 kit 的 `UiTreeEditor.Adapter`，树编解码经 `ConditionTreeJsonCodec` 实现 `UiTreeCodec`，因此 `client/edit` 只依赖 kit 的树契约，不依赖 `ui/theme`、`ui/widget` 与 `ui/screen`。
 3. **`ui/screen` 与 `ui/screen/form` 单向**：`ui/screen` 使用 `ui/screen/form` 的表单、叶面板与条件树编辑支持，`ui/screen/form` 不引用 `ui/screen`；两者共享的纯值与展示类型放在 `ui/shared`，两侧只向下依赖 `ui/shared`、`ui/theme`、`ui/widget` 与 kit。
-4. **界面层的 JSON 用法限定在调试观测**：模型 JSON 的解析与构造收敛到 `client/edit`（`ConditionTreeJsonCodec` 等），界面只消费模型或转换结果；界面层用 Gson 组装调试事件负载（`DebugProfile` 的 `JsonObject`），不参与模型读写。
+4. **界面层的 JSON 用法限定在调试观测**：模型 JSON 的解析与构造收敛到 `client/edit`（`ConditionTreeJsonCodec` 等），界面只消费模型或转换结果；界面层用 Gson 组装调试事件负载（`DevelopmentDiagnostics` 的 `JsonObject`），不参与模型读写。
 
 ## 考虑过的替代方案
 

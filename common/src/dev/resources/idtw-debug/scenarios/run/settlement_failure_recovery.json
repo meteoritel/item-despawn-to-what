@@ -47,7 +47,7 @@
       "minecraft:prismarine_shard": 0
     },
     "candidates": {
-      "default": "$sources"
+      "default": 0
     }
   },
   "rules": [

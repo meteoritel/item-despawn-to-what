@@ -1,8 +1,6 @@
 package com.meteorite.itemdespawntowhat.runtime;
 
 import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
-import com.meteorite.itemdespawntowhat.core.debug.DebugRuntimeObserver;
-import com.meteorite.itemdespawntowhat.core.debug.DebugSessionManager;
 
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -30,11 +28,6 @@ import static com.meteorite.itemdespawntowhat.ItemDespawnToWhat.MOD_ID;
 @EventBusSubscriber(modid = MOD_ID)
 public final class RuleRuntimeEvents {
 
-    // 装配观测接缝：运行时只依赖 core/api 的接口，调试子系统的实现只在这里注入
-    static {
-        RuntimeObserver.install(new DebugRuntimeObserver());
-    }
-
     private RuleRuntimeEvents() {
         throw new UnsupportedOperationException("Utility class");
     }
@@ -48,7 +41,6 @@ public final class RuleRuntimeEvents {
     // 服务端停止：释放全部维度的追踪状态与到期任务
     @SubscribeEvent
     public static void onServerStopping(ServerStoppingEvent event) {
-        DebugSessionManager.shutdown(event.getServer(), RuleRuntimeHost.commandContext());
         RuleRuntimeHost.shutdown();
     }
 
@@ -109,13 +101,13 @@ public final class RuleRuntimeEvents {
         }
     }
 
-    // 服务器 tick 结束：统一推进一次公共预算（所有维度共享），再跑开发场景与周期性失效清理
+    // 服务器 tick 结束：统一推进一次公共预算（所有维度共享），再处理周期性失效清理
     @SubscribeEvent
     public static void onServerTick(net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) {
-        DebugSessionManager.beginRuntimeTick(event.getServer());
+        RuntimeObserver.current().runtimeTickStarted(event.getServer());
         RuleRuntimeHost.tickServer(event.getServer());
         com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler.tick(event.getServer(), RuleRuntimeHost.editContext());
-        DebugSessionManager.tick(event.getServer(), RuleRuntimeHost.commandContext());
+        RuntimeObserver.current().runtimeTickFinished(event.getServer());
         if (event.getServer().getTickCount() % 20 == 0) {
             com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler
                     .expireIdle(event.getServer(), RuleRuntimeHost.editContext());

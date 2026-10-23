@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """依赖方向校验：平台隔离与端隔离。
 
-扫描仓库内所有 Java 源文件，按 import 语句判定三类违规：
+扫描仓库内所有 Java 源文件，按 import 语句判定四类违规：
 
 1) 平台隔离：加载器 API（net.fabricmc.*、net.neoforged.*）只允许出现在平台源集
    fabric/ 与 neoforge/ 中；
 2) 跨加载器依赖：fabric/ 不得 import net.neoforged.*，neoforge/ 不得 import
    net.fabricmc.*；
 3) 端隔离：客户端类只允许出现在客户端路径，即路径含 /client/ 的源码；其它路径不得
-   import net.minecraft.client.* 与本模组 .client. 包。
+   import net.minecraft.client.* 与本模组 .client. 包；
+4) 开发源集隔离：src/main 不得 import core.debug 与 probe 实现包。
 
 只判定 import 语句：注释与 javadoc 中的全限定名不构成编译期依赖，不计入违规。
 
@@ -70,6 +71,8 @@ def check(root: Path) -> int:
                 continue
             target = match.group(1)
             import_total += 1
+            if '/src/main/' in rel and ('.core.debug.' in target or '.probe.' in target):
+                violations.append((rel, line_no, "开发源集隔离", target))
             loader = None
             for name, prefix in PLATFORM_LOADERS.items():
                 if target.startswith(prefix):

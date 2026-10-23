@@ -4,7 +4,7 @@ import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.api.Issue;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.IssueSeverity;
-import com.meteorite.itemdespawntowhat.core.debug.DebugProfile;
+import com.meteorite.itemdespawntowhat.core.api.DevelopmentDiagnostics;
 import com.meteorite.itemdespawntowhat.core.load.RuleSourceIndex;
 import com.meteorite.itemdespawntowhat.core.network.catalog.RuleCatalogService;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalog;
@@ -630,7 +630,7 @@ public final class RuleEditService {
         for (int index = 0; index < limit; index++) {
             packets.add(snapshotPackets.removeFirst());
         }
-        if (DebugProfile.enabled()) {
+        if (DevelopmentDiagnostics.enabled()) {
             deliverySent += packets.size();
             deliveryLastTick = server.getTickCount();
             if (snapshotPackets.isEmpty()) { logDelivery(); }
@@ -640,8 +640,8 @@ public final class RuleEditService {
 
     // 本次投递的观测起点：包数与字节一次性统计，逐 tick 只累加已投递数
     private void startDelivery(List<CustomPacketPayload> packets, long tick) {
-        if (!DebugProfile.enabled()) { return; }
-        deliveryStartedNanos = DebugProfile.start();
+        if (!DevelopmentDiagnostics.enabled()) { return; }
+        deliveryStartedNanos = DevelopmentDiagnostics.start();
         deliveryStartTick = tick;
         deliveryLastTick = tick;
         deliveryPackets = packets.size();
@@ -659,13 +659,13 @@ public final class RuleEditService {
         long ticks = Math.max(0L, deliveryLastTick - deliveryStartTick);
         data.addProperty("ticks", ticks);
         data.addProperty("per_tick", ticks == 0L ? deliveryPackets : (double) deliveryPackets / ticks);
-        data.addProperty("total_ms", DebugProfile.micros(deliveryStartedNanos) / 1000.0);
-        DebugProfile.event(DebugProfile.SCENE_FIRST_LOAD, "SERVER_DELIVER", data);
+        data.addProperty("total_ms", DevelopmentDiagnostics.micros(deliveryStartedNanos) / 1000.0);
+        DevelopmentDiagnostics.event(DevelopmentDiagnostics.SCENE_FIRST_LOAD, "SERVER_DELIVER", data);
     }
 
     // 丢弃排队中的分片：观测开启且确有未投递分片时记录一次中止
     private void clearSnapshotPackets(String reason) {
-        if (DebugProfile.enabled() && !snapshotPackets.isEmpty()) {
+        if (DevelopmentDiagnostics.enabled() && !snapshotPackets.isEmpty()) {
             JsonObject data = new JsonObject();
             data.addProperty("packets", deliveryPackets);
             data.addProperty("sent", deliverySent);
@@ -673,7 +673,7 @@ public final class RuleEditService {
             data.addProperty("ticks", Math.max(0L, deliveryLastTick - deliveryStartTick));
             data.addProperty("aborted", true);
             data.addProperty("reason", reason);
-            DebugProfile.event(DebugProfile.SCENE_FIRST_LOAD, "SERVER_DELIVER", data);
+            DevelopmentDiagnostics.event(DevelopmentDiagnostics.SCENE_FIRST_LOAD, "SERVER_DELIVER", data);
         }
         snapshotPackets.clear();
     }

@@ -18,11 +18,10 @@ import java.util.List;
  * 运行时观测接缝的调试实现：把生产侧上报的观测点与排期请求转交给调试场景子系统。
  *
  * <p>本类只做转发，不持有场景状态，因此每次调用都是对 {@link DebugScenarioManager} 的等价调用；
- * 由平台运行时在服务端装配阶段注入（见 {@link RuntimeObserver#install(RuntimeObserver)}）。
- * 仅在开发环境（{@link DebugMode#ENABLED}）下才可能产生观测开销，发布环境该常量为 false，
- * 各转发方法在调试子系统内部立即返回。
+ * 由 NeoForge 开发源集在服务端装配阶段注入（见 {@link RuntimeObserver#install(RuntimeObserver)}）。
+ * 本实现与场景资源随开发源集编译，生产运行使用契约层的空实现。
  */
-public final class DebugRuntimeObserver implements RuntimeObserver {
+public class DebugRuntimeObserver implements RuntimeObserver {
 
     /** 创建调试观测实现；无状态，可由装配方按需实例化。 */
     public DebugRuntimeObserver() {
@@ -31,6 +30,18 @@ public final class DebugRuntimeObserver implements RuntimeObserver {
     @Override
     public boolean enabled() {
         return DebugMode.ENABLED;
+    }
+
+    /** 记录生产运行时推进的起点，不把场景准备成本计入运行时。 */
+    @Override
+    public void runtimeTickStarted(MinecraftServer server) {
+        DebugSessionManager.beginRuntimeTick(server);
+    }
+
+    /** 封存同 tick 的运行时成本。 */
+    @Override
+    public void runtimeTickFinished(MinecraftServer server) {
+        DebugSessionManager.endRuntimeTick(server);
     }
 
     @Override

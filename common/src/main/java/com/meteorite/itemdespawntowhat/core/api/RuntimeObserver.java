@@ -58,6 +58,14 @@ public interface RuntimeObserver {
         return false;
     }
 
+    /** 服务端公共运行时推进前的计时边界，默认不采样。 */
+    default void runtimeTickStarted(MinecraftServer server) {
+    }
+
+    /** 服务端公共运行时及协议推进后的计时边界，默认不采样。 */
+    default void runtimeTickFinished(MinecraftServer server) {
+    }
+
     /**
      * 判断服务端当前是否不存在任何观测场景：不存在场景时调用方可以提前放弃追踪。
      *

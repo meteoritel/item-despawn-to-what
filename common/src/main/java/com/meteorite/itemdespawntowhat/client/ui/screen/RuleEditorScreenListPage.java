@@ -20,7 +20,7 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiModalStack;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTreeNode;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTreeView;
-import com.meteorite.itemdespawntowhat.core.debug.DebugProfile;
+import com.meteorite.itemdespawntowhat.core.api.DevelopmentDiagnostics;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshotEntry;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -368,8 +368,8 @@ final class RuleEditorScreenListPage {
             return;
         }
         // 首载分段观测：一次刷新只读一次开关；关闭时除布尔判断外不取时间、不分配对象
-        final boolean profile = DebugProfile.enabled();
-        final long refreshStarted = profile ? DebugProfile.start() : 0L;
+        final boolean profile = DevelopmentDiagnostics.enabled();
+        final long refreshStarted = profile ? DevelopmentDiagnostics.start() : 0L;
         long filterMicros = 0L;
         long bodyMicros = 0L;
         // 未收到首份快照不能判为空；有效空快照和筛选结果为空才使用空列表文案。
@@ -385,18 +385,18 @@ final class RuleEditorScreenListPage {
         for (String id : ruleIds) {
             // 每条规则只在这里取一次体：展示快照同时给出标题、状态、分类与搜索文本；
             // 配方预览与条件提示不在这里构建，由首行可见与悬停时向快照惰性索取
-            long snapshotStarted = profile ? DebugProfile.start() : 0L;
+            long snapshotStarted = profile ? DevelopmentDiagnostics.start() : 0L;
             RuleListDisplaySnapshot snapshot = host.display().snapshot(id);
-            bodyMicros += profile ? DebugProfile.micros(snapshotStarted) : 0L;
-            long filterStarted = profile ? DebugProfile.start() : 0L;
+            bodyMicros += profile ? DevelopmentDiagnostics.micros(snapshotStarted) : 0L;
+            long filterStarted = profile ? DevelopmentDiagnostics.start() : 0L;
             boolean matches = matchesFilter(snapshot) && matchesQuery(id, snapshot, query);
-            filterMicros += profile ? DebugProfile.micros(filterStarted) : 0L;
+            filterMicros += profile ? DevelopmentDiagnostics.micros(filterStarted) : 0L;
             if (!matches) {
                 continue;
             }
             visibleIds.add(id);
         }
-        long treeStarted = profile ? DebugProfile.start() : 0L;
+        long treeStarted = profile ? DevelopmentDiagnostics.start() : 0L;
         if (lastTreeQuery.isBlank()) rememberCategoryState(ruleList.roots());
         lastTreeQuery = lastQuery;
         // 已知分类的层级、顺序与显示名来自静态骨架；未知分类按原文动态成组
@@ -441,8 +441,8 @@ final class RuleEditorScreenListPage {
             }
             if (!parent.children().isEmpty()) nonempty.add(counted(parent));
         }
-        long treeMicros = profile ? DebugProfile.micros(treeStarted) : 0L;
-        long rootsStarted = profile ? DebugProfile.start() : 0L;
+        long treeMicros = profile ? DevelopmentDiagnostics.micros(treeStarted) : 0L;
+        long rootsStarted = profile ? DevelopmentDiagnostics.start() : 0L;
         ruleList.setRoots(nonempty);
         ruleList.setSelectedNode(findNode(nonempty, selectedValue));
         ruleList.setScrollOffset(scrollOffset);
@@ -455,7 +455,7 @@ final class RuleEditorScreenListPage {
             int rules = ruleIds.size();
             long bodyFetches = host.display().bodyFetches() - bodyFetchesBefore;
             logRefresh(refreshStarted, filterMicros, bodyMicros, treeMicros,
-                    DebugProfile.micros(rootsStarted), rules, rules - (int) bodyFetches, bodyFetches, firstReady);
+                    DevelopmentDiagnostics.micros(rootsStarted), rules, rules - (int) bodyFetches, bodyFetches, firstReady);
         }
     }
 
@@ -477,8 +477,8 @@ final class RuleEditorScreenListPage {
         data.addProperty("body_ms", bodyMicros / 1000.0);
         data.addProperty("tree_ms", treeMicros / 1000.0);
         data.addProperty("set_roots_ms", rootsMicros / 1000.0);
-        data.addProperty("total_ms", DebugProfile.micros(refreshStarted) / 1000.0);
-        DebugProfile.event(DebugProfile.SCENE_FIRST_LOAD, "CLIENT_LIST_REFRESH", data);
+        data.addProperty("total_ms", DevelopmentDiagnostics.micros(refreshStarted) / 1000.0);
+        DevelopmentDiagnostics.event(DevelopmentDiagnostics.SCENE_FIRST_LOAD, "CLIENT_LIST_REFRESH", data);
     }
 
     // 刷新时按稳定值恢复目录或规则选择，不依赖重建前的节点实例。

@@ -1,0 +1,8 @@
+{
+  "id": "idtw_probe:base",
+  "enabled": true,
+  "priority": 0,
+  "trigger_after_seconds": 300,
+  "source": {"items": ["minecraft:book"], "exclude": []},
+  "effects": [{"type": "itemdespawntowhat:spawn_entity", "item": "minecraft:prismarine_shard", "count": 1, "delay_ticks": 0, "chance": 1, "variant": "item"}]
+}

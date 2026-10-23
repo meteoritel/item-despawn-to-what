@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.net;
 
 import com.google.gson.JsonObject;
-import com.meteorite.itemdespawntowhat.core.debug.DebugProfile;
+import com.meteorite.itemdespawntowhat.core.api.DevelopmentDiagnostics;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalog;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEditProtocol;
@@ -647,7 +647,7 @@ public final class RuleEditClientWorkspace {
         lastHeartbeatTick = currentTick();
         state = RuleEditClientState.OPENING;
         // 首载起点取确认发出时刻：客户端此后只在等快照，端到端耗时可与同一行日志对读
-        firstLoadStartedNanos = DebugProfile.start();
+        firstLoadStartedNanos = DevelopmentDiagnostics.start();
         send(new ConfirmRuleEditorPayload(sessionId, RuleEditProtocol.VERSION));
         state = RuleEditClientState.ACTIVE;
         EditorScreenHooks.open(request);
@@ -667,9 +667,9 @@ public final class RuleEditClientWorkspace {
 
     // 解析并接纳快照；chunked 表示来自分片重组，仅用于区分接收阶段的观测口径
     private synchronized void applySnapshot(String json, boolean chunked) {
-        long parseStarted = DebugProfile.start();
+        long parseStarted = DevelopmentDiagnostics.start();
         RuleSnapshot parsed = RuleSnapshot.parse(json).result().orElse(null);
-        long parseMicros = DebugProfile.micros(parseStarted);
+        long parseMicros = DevelopmentDiagnostics.micros(parseStarted);
         if (parsed == null) {
             LOGGER.warn("规则快照解析失败: bytes={}", json.length());
             return;
@@ -681,7 +681,7 @@ public final class RuleEditClientWorkspace {
         }
         snapshot = parsed;
         contextRevision = parsed.contextRevision();
-        if (DebugProfile.enabled()) {
+        if (DevelopmentDiagnostics.enabled()) {
             logSnapshotReceived(json, parsed, chunked, parseMicros);
         }
     }
@@ -694,10 +694,10 @@ public final class RuleEditClientWorkspace {
         data.addProperty("chunked", chunked);
         data.addProperty("chunks", chunked ? snapshotRecvChunks : 0);
         data.addProperty("bytes", RuleEditLimits.encodedLength(json));
-        data.addProperty("recv_ms", chunked ? DebugProfile.micros(snapshotRecvStartedNanos) / 1000.0 : 0.0);
+        data.addProperty("recv_ms", chunked ? DevelopmentDiagnostics.micros(snapshotRecvStartedNanos) / 1000.0 : 0.0);
         data.addProperty("parse_ms", parseMicros / 1000.0);
-        data.addProperty("since_open_ms", DebugProfile.micros(firstLoadStartedNanos) / 1000.0);
-        DebugProfile.event(DebugProfile.SCENE_FIRST_LOAD, "CLIENT_RECV", data);
+        data.addProperty("since_open_ms", DevelopmentDiagnostics.micros(firstLoadStartedNanos) / 1000.0);
+        DevelopmentDiagnostics.event(DevelopmentDiagnostics.SCENE_FIRST_LOAD, "CLIENT_RECV", data);
         // 首份快照之后的重载不再计算「打开到快照」，避免把后续保存的等待也算进首载
         firstLoadStartedNanos = 0L;
         snapshotRecvStartedNanos = 0L;
@@ -710,10 +710,10 @@ public final class RuleEditClientWorkspace {
         if (payload == null || !payload.sessionId().equals(sessionId)) {
             return;
         }
-        if (DebugProfile.enabled()) {
+        if (DevelopmentDiagnostics.enabled()) {
             // 新传输批次从首片重新计时，避免把上一批的空闲时间算进本次接收
             if (snapshotRecvStartedNanos == 0L || !payload.transferId().equals(snapshotRecvTransferId)) {
-                snapshotRecvStartedNanos = DebugProfile.start();
+                snapshotRecvStartedNanos = DevelopmentDiagnostics.start();
                 snapshotRecvTransferId = payload.transferId();
                 snapshotRecvChunks = 0;
             }

@@ -58,6 +58,9 @@ flowchart LR
 1. 加载器 API 前缀只允许出现在对应平台源集；
 2. 平台源集之间禁止互引对方的加载器 API；
 3. 客户端类前缀只允许出现在客户端路径与开发客户端源集，其它路径出现即违规。
+4. `src/main` 只依赖生产契约，禁止 import `core/debug` 和探针实现包。
+
+开发实现位于 `common/src/dev` 与 `neoforge/src/probe`，生产观测只经 `core/api/RuntimeObserver`、`DevelopmentDiagnostics`；发布 jar 隔离由[后端探针工作流](../guides/backend-probes.md)的打包任务校验。
 
 运行方式：`python tools/check-isolation.py`（可用 `--root` 指定仓库根）。通过时退出码为 0，存在违规时逐条列出并以 1 退出。
 
@@ -89,10 +92,9 @@ flowchart LR
 | 编辑服务取目录服务 | `core/service/RuleEditService` → `core/network/catalog/RuleCatalogService` | 目录分页在服务端完成，编辑服务只调用 |
 | 编辑服务组装下行载荷 | `core/service/RuleEditService` → `core/network/protocol`、`core/network/transport` | 保存进度、取消与关闭回执按协议载荷下发；编辑服务只组装载荷，不持有连接 |
 | 目录来源以协议 DTO 为载体 | `core/catalog` → `core/network/protocol` | 只读条目类型，协议包不回指目录包 |
-| 编辑链路取调试档案 | `core/service/RuleEditService`、`RuleSnapshotTask` → `core/debug/DebugProfile` | 只在调试档案激活时附加诊断信息 |
 | 实体状态与平台能力互引类型 | `core/state/DropStateStore` ↔ `platform/Services`、`platform/services/IPlatformHelper` | 平台能力接口以 `DropState` 为参数；状态由运行时单向持有 |
 | 编辑数据用 kit 的树编辑契约 | `client/edit` → `client/ui/kit` | 复用 `UiTreeEditor`、`UiTreePath`、`UiTreeCodec`，不引用宿主与主题 |
-| 界面与协议读编辑常量 | `client/net`、`client/ui` → `core/service/RuleEditSessionLimits`、`core/debug/DebugProfile` | 双端共用限额常量与档案类型，避免协议两侧各存一份 |
+| 界面与协议读编辑常量 | `client/net`、`client/ui` → `core/service/RuleEditSessionLimits` | 双端共用限额常量与档案类型，避免协议两侧各存一份 |
 
 ## 相关文档
 

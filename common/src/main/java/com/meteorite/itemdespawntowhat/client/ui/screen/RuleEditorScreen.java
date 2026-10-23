@@ -5,8 +5,8 @@ import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDescriptors;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientState;
-import com.meteorite.itemdespawntowhat.core.debug.DebugMode;
-import com.meteorite.itemdespawntowhat.core.debug.DebugProfile;
+import com.meteorite.itemdespawntowhat.platform.Services;
+import com.meteorite.itemdespawntowhat.core.api.DevelopmentDiagnostics;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
@@ -462,7 +462,7 @@ public final class RuleEditorScreen extends Screen {
 
     // 调试页入口条件：debug 模式开启、停在管理页、未在保存且没有弹层或类型选择器
     private boolean canEnterDebug() {
-        return DebugMode.ENABLED && mode == Mode.LIST && !saving() && modals.isEmpty() && activeTypePicker() == null;
+        return Services.PLATFORM.isDevelopmentEnvironment() && mode == Mode.LIST && !saving() && modals.isEmpty() && activeTypePicker() == null;
     }
 
     // 进入调试页：提示只对切换前的页面成立，与其它模式切换保持一致
@@ -708,10 +708,10 @@ public final class RuleEditorScreen extends Screen {
         lastModalsEmpty = modalsEmpty;
         // F-A：快照是打开屏幕之后才到的（打开时只发出了请求），每帧消费一次；
         // refresh() 内部按快照实例去重，重复调用无副作用
-        long applyStarted = DebugProfile.start();
+        long applyStarted = DevelopmentDiagnostics.start();
         boolean applied = model.refresh();
         if (applied) {
-            logSnapshotApplied(DebugProfile.micros(applyStarted));
+            logSnapshotApplied(DevelopmentDiagnostics.micros(applyStarted));
             listPage.refreshList();
             editPage.rebuildEdit();
             rebuildFocus();
@@ -753,14 +753,14 @@ public final class RuleEditorScreen extends Screen {
 
     // 首载分段观测：快照进入模型（绑定草稿、重建会话）的耗时
     private void logSnapshotApplied(long micros) {
-        if (!DebugProfile.enabled()) {
+        if (!DevelopmentDiagnostics.enabled()) {
             return;
         }
         JsonObject data = new JsonObject();
         data.addProperty("entries", model.ruleIds().size());
         data.addProperty("dirty", model.dirtyRuleIds().size());
         data.addProperty("apply_ms", micros / 1000.0);
-        DebugProfile.event(DebugProfile.SCENE_FIRST_LOAD, "CLIENT_APPLY", data);
+        DevelopmentDiagnostics.event(DevelopmentDiagnostics.SCENE_FIRST_LOAD, "CLIENT_APPLY", data);
     }
 
     // 应用全部按钮与撤销/重做按钮的可用状态与标签

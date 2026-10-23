@@ -34,6 +34,7 @@ public final class DebugScenarioManager {
     private static final Logger LOGGER = LogManager.getLogger("IDTW.Debug");
     private static final String PREFIX = "itemdespawntowhat.command.debug.scene.";
     private static final Map<MinecraftServer, DebugScenarioRun> ACTIVE = new IdentityHashMap<>();
+    private static final Map<MinecraftServer, JsonObject> REPORTS = new IdentityHashMap<>();
     private static final Map<UUID, Binding> ENTITIES = new HashMap<>();
 
     /** UUID绑定区分测试源与产物，测试产物不进入用户规则链路。 */
@@ -47,6 +48,34 @@ public final class DebugScenarioManager {
                             boolean benchmark, int entities, int seconds) {
         if (DebugPipelineManager.active(source.getServer())) { return failure(source, "pipeline_busy"); }
         return startScene(source, context, name, benchmark, entities, seconds, null, null);
+    }
+
+    /** 从隔离开发服务端启动功能场景，不依赖玩家连接或客户端。 */
+    public static int startHeadless(CommandSourceStack source, RuleCommandContext context, String name) {
+        REPORTS.remove(source.getServer());
+        var spec = DebugScenarioCatalog.find(name, false);
+        int result = startScene(source, context, name, false, spec.sources(), spec.seconds(), source.getPosition(), null);
+        DebugScenarioRun run = ACTIVE.get(source.getServer());
+        var runtime = context.runtime();
+        if (result == 1 && run != null && runtime != null) {
+            // 断言仍检查真实累计值；同进程前序场景的已完成记录作为明确基线加入预期。
+            JsonObject expected = run.definition.expected.getAsJsonObject("metrics");
+            JsonObject baseline = new JsonObject();
+            baseline.addProperty("ledger_records", com.meteorite.itemdespawntowhat.core.runtime.SettlementLedger.get(run.level).size());
+            baseline.addProperty("recovery_attempts", runtime.settlementRecoveryStats().attempts());
+            baseline.addProperty("recovery_abandoned", runtime.settlementRecoveryStats().abandoned());
+            baseline.addProperty("recovery_alerts", runtime.settlementRecoveryStats().alerts());
+            for (String key : baseline.keySet()) {
+                if (expected.has(key)) { expected.addProperty(key, expected.get(key).getAsLong() + baseline.get(key).getAsLong()); }
+            }
+            run.log("COUNTER_BASELINE", baseline);
+        }
+        return result;
+    }
+
+    /** 取走已封存的本轮结果；尚未结束时返回 null。 */
+    public static @Nullable JsonObject takeReport(MinecraftServer server) {
+        return REPORTS.remove(server);
     }
 
     // 流水线仅覆盖起点和关联编号，仍使用同一个场景生命周期。
@@ -69,14 +98,17 @@ public final class DebugScenarioManager {
                                   boolean benchmark, int entities, int seconds, @Nullable Vec3 fixedOrigin,
                                   @Nullable String pipelineId) {
         if (!DebugMode.ENABLED) { return failure(source, "development_only"); }
-        if (!(source.getEntity() instanceof ServerPlayer player)) { return failure(source, "player_only"); }
+        ServerPlayer player = source.getEntity() instanceof ServerPlayer value ? value : null;
         if (context.runtime() == null || context.editContext().typeRegistries() == null) { return failure(source, "not_ready"); }
         if (ACTIVE.containsKey(source.getServer())) { return failure(source, "busy"); }
         try {
-            var origin = fixedOrigin == null ? source.getPosition().add(player.getLookAngle().x * 3, 1, player.getLookAngle().z * 3) : fixedOrigin;
+            var origin = fixedOrigin == null && player != null
+                    ? source.getPosition().add(player.getLookAngle().x * 3, 1, player.getLookAngle().z * 3)
+                    : fixedOrigin == null ? source.getPosition() : fixedOrigin;
             var definition = DebugScenarioDefinition.create(source.getServer(), context.editContext().typeRegistries(),
                     name, benchmark, entities, BlockPos.containing(origin).getY());
-            var run = new DebugScenarioRun(name, benchmark, player.serverLevel(), player.getUUID(), origin, seconds, definition, pipelineId);
+            var run = new DebugScenarioRun(name, benchmark, source.getLevel(), player == null ? null : player.getUUID(),
+                    origin, seconds, definition, pipelineId);
             // 故障在场景启动时武装：声明之后安排的检查与效果任务才可能命中
             run.armFaults();
             ACTIVE.put(source.getServer(), run);
@@ -285,6 +317,7 @@ public final class DebugScenarioManager {
     // 发起者离线或停服时继续将结果交付到控制台，并释放静态引用。
     public static void shutdown(MinecraftServer server, RuleCommandContext context) {
         if (ACTIVE.containsKey(server)) { finish(server, context, "server_stopping"); }
+        REPORTS.remove(server);
     }
 
     // 统一结束路径；异常不能阻止正常停服或留下服务器引用。
@@ -295,7 +328,7 @@ public final class DebugScenarioManager {
         try {
             verdict = run.finish(context, reason);
             String displayVerdict = verdict;
-            var player = server.getPlayerList().getPlayer(run.initiator);
+            var player = run.initiator == null ? null : server.getPlayerList().getPlayer(run.initiator);
             var recipient = player == null ? server.createCommandSourceStack() : player.createCommandSourceStack();
             recipient.sendSuccess(() -> Component.translatable(PREFIX + "finished", run.name, run.id,
                     Component.translatable(PREFIX + "verdict." + displayVerdict)), false);
@@ -305,6 +338,7 @@ public final class DebugScenarioManager {
             return 0;
         } finally {
             unbind(run);
+            if (run.completedReport != null) { REPORTS.put(server, run.completedReport.deepCopy()); }
             DebugPipelineManager.sceneFinished(server, run, verdict);
         }
     }
