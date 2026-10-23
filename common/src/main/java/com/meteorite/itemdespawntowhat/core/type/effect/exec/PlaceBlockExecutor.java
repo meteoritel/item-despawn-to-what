@@ -514,12 +514,16 @@ public final class PlaceBlockExecutor {
                     pending = iterator().next().immutable();
                 }
                 BlockPos pos = pending;
+                probes++;
+                if (level.isOutsideBuildHeight(pos.getY())) {
+                    pending = null;
+                    continue;
+                }
                 if (!LoadedChunks.contains(level, pos)) {
                     // 区块未加载：保留待处理位置，退避后再续
                     deferredUntil = now + LoadedChunks.RETRY_TICKS;
                     return reads;
                 }
-                probes++;
                 if (sectionLacks(level, pos, block)) {
                     // 该区段确定不含目标方块：本位置不必读取，也不计工作量
                     pending = null;
