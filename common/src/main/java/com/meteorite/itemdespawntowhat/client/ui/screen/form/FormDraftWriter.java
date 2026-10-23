@@ -6,6 +6,7 @@ import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
+import com.meteorite.itemdespawntowhat.client.edit.RuleCategoryAssignment;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.model.CatalystCost;
@@ -152,12 +153,15 @@ final class FormDraftWriter {
         view.session.clearPendingInput(row.path);
     }
 
-    // 文本提交、卡片移除和目录添加共用写入入口，关联更新不会拆成第二条撤销记录。
+    // 文本提交、卡片移除和目录添加共用写入入口。
     void writeField(FormRow row, @Nullable RuleValue next) {
         RuleDraft draft = view.session.draft();
         RuleValue current = draft.valueAt(row.path);
         if (Objects.equals(current, next)) return;
         RuleValue before = current == null ? null : current.deepCopy();
+        boolean resultField = row.path.startsWith(RuleFields.EFFECTS + "[")
+                || row.path.startsWith(RuleFields.OUTCOMES + "[");
+        String categoryBefore = resultField ? RuleCategoryAssignment.derive(draft.root()) : null;
         view.session.clearPendingInput(row.path);
         view.session.apply(opKeyFor(row), () -> {
             if (next == null) draft.removeAt(row.path);
@@ -175,6 +179,8 @@ final class FormDraftWriter {
                 }
             }
             view.notifyFieldWritten(row.path, before);
+            // 产出参数补齐后才可能解码成功；分类与字段及其关联更新共用一条撤销记录。
+            if (resultField) RuleCategoryAssignment.follow(draft, categoryBefore);
         });
         view.loadedRevision = view.session.revision();
         if (RuleFields.CATALYST_ITEMS.equals(row.field.name())) {
