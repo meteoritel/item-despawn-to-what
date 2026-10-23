@@ -226,15 +226,6 @@ final class TextControl extends FormControl {
         }
     }
 
-    // 默认名称作为可编辑的展示基线；未改动时仍返回原始元素，不将自动名写入 JSON。
-    void displayDefault(Component value) {
-        if (!loadedText.isBlank()) return;
-        loadedText = value.getString();
-        input.setMaxLength(Math.max(textLimit(), loadedText.codePointCount(0, loadedText.length())));
-        input.setValue(loadedText);
-        input.moveCursorToStart();
-    }
-
     @Override
     void load(@Nullable RuleValue value) {
         rememberLoaded(value);

@@ -69,8 +69,6 @@ final class FormDraftWriter {
             row.loaded = true;
             EditSession.PendingInput pending = view.session.pendingInput(row.path);
             if (pending != null) row.control.restoreInputText(pending.text());
-            if (row.defaultText != null && row.control instanceof TextControl text)
-                text.displayDefault(row.defaultText);
         }
     }
 
@@ -201,25 +199,5 @@ final class FormDraftWriter {
             return EditSession.OP_SET_SOURCE;
         }
         return row.control.undoOpKey();
-    }
-
-    /**
-     * 保存前检查当前输入；切换页面允许保留非法文本。
-     *
-     * @return 第一处阻塞性输入问题，没有则 null
-     */
-    @Nullable FormIssue pendingInputIssue() {
-        for (FormRow row : view.rows) {
-            if (!row.visible) continue;
-            row.control.finishInput();
-            if (row.control.hasPendingInput()) {
-                for (FormIssue issue : row.control.issues(row.path)) {
-                    if (issue.blocking()) {
-                        return issue;
-                    }
-                }
-            }
-        }
-        return null;
     }
 }

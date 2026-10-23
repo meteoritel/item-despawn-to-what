@@ -7,7 +7,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
-import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -27,7 +26,6 @@ final class FormRow {
     boolean tooltipEnabled = true;
     // 提示已经明写在控件内（如文本框占位符）时关闭 hint 兜底提示，其余提示通道保持开启
     boolean hintTooltipEnabled = true;
-    @Nullable Component defaultText;
     @Nullable Supplier<RuleValue> defaultValue;
     boolean defaultDisplayed;
     boolean labelVisible = true;

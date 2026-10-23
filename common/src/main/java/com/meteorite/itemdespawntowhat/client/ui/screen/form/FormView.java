@@ -59,18 +59,6 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
     private @Nullable SuggestionProvider suggestionProvider;
     private @Nullable SelectionCatalogOpener catalogOpener;
 
-    /** 字段目录追加入口，供不支持当前选择快照的宿主使用。 */
-    @FunctionalInterface
-    public interface CatalogOpener {
-        /**
-         * 打开目录并追加所选引用。
-         * @param field 字段描述符
-         * @param tags 是否只浏览标签
-         * @param onPicked 新选引用的回调
-         */
-        void open(EditorField field, boolean tags, Consumer<List<String>> onPicked);
-    }
-
     /** 字段目录入口由页面提供，表单传递确切字段路径与当前选择，不访问网络。 */
     @FunctionalInterface
     public interface SelectionCatalogOpener {
@@ -86,32 +74,12 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
     }
 
     /**
-     * 设置追加式目录入口；宿主不需提供完整选择快照。
-     * @param opener 目录入口，null 表示移除入口
-     * @return 当前表单
-     */
-    @SuppressWarnings("unused")
-    public FormView setCatalogOpener(@Nullable CatalogOpener opener) {
-        return setSelectionCatalogOpener(opener == null ? null : (field, path, tags, selected, onPicked) ->
-                opener.open(field, tags, added -> {
-                    if (added.isEmpty()) return;
-                    if (field.type() == EditorFieldType.TAG_LIST || field.type() == EditorFieldType.RL_LIST) {
-                        java.util.LinkedHashSet<String> merged = new java.util.LinkedHashSet<>(selected);
-                        merged.addAll(added);
-                        onPicked.accept(List.copyOf(merged));
-                    } else onPicked.accept(added);
-                }));
-    }
-
-    /**
      * 设置返回完整选择快照的目录入口。
      * @param opener 目录入口，null 表示移除入口
-     * @return 当前表单
      */
-    public FormView setSelectionCatalogOpener(@Nullable SelectionCatalogOpener opener) {
+    public void setSelectionCatalogOpener(@Nullable SelectionCatalogOpener opener) {
         catalogOpener = opener;
         for (FormRow row : rows) { row.pickers.clear(); addPickers(row); }
-        return this;
     }
     private @Nullable ConditionEditingSupport conditionEditingSupport;
     private @Nullable ConditionEditContextFactory conditionContextFactory;
@@ -151,16 +119,15 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
     }
 
     /** 用描述符整体替换字段列表 */
-    public FormView setDescriptor(TypeEditorDescriptor descriptor) {
+    public void setDescriptor(TypeEditorDescriptor descriptor) {
         rows.clear();
         for (EditorField field : descriptor.fields()) {
             addField(field);
         }
-        return this;
     }
 
     /** 追加一个字段 */
-    public FormView addField(EditorField field) {
+    public void addField(EditorField field) {
         var catalogType = FieldCatalogTypes.catalogTypeOf(field);
         boolean iconSelection = catalogSelections && catalogType != null && isCatalogField(field);
         FormRow row = new FormRow(field, pathFor(field), iconSelection
@@ -174,7 +141,6 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         });
         addPickers(row);
         rows.add(row);
-        return this;
     }
 
     /** 读取某字段控件当前的未提交值（宿主把缓冲并入自己的编辑步时使用）；字段不存在返回 null */
@@ -195,7 +161,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
     }
 
     /** 给某个字段行挂行尾操作按钮（例如「恢复自动命名」）；宽度按文本自适应 */
-    public FormView setRowAction(String path, UiButton button) {
+    public void setRowAction(String path, UiButton button) {
         for (FormRow row : rows) {
             if (row.path.equals(path)) {
                 row.actions.clear();
@@ -204,17 +170,15 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
                 break;
             }
         }
-        return this;
     }
 
     /** 覆盖某字段行的控件高度（{@code <= 0} 恢复默认）；例如基本页加高的优先级控件 */
-    public FormView setRowHeight(String path, int height) {
+    public void setRowHeight(String path, int height) {
         for (FormRow row : rows) {
             if (row.path.equals(path)) {
                 row.control.setHeightOverride(height);
             }
         }
-        return this;
     }
 
     /** 卡片标题已表达字段含义时省去重复标签。 */
@@ -284,15 +248,6 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         for (FormRow row : rows) if (row.path.equals(path)) row.hintTooltipEnabled = false;
     }
 
-    // 展示有效默认文本，不修改草稿的字段存在性。
-    @SuppressWarnings("unused")
-    public void setRowDefaultText(String path, Component value) {
-        for (FormRow row : rows) if (row.path.equals(path) && row.control instanceof TextControl text) {
-            row.defaultText = value;
-            text.displayDefault(value);
-        }
-    }
-
     /** 动态默认值只用于回填，未编辑时仍保留原字段的省略状态。 */
     public void setRowDefaultValue(String path, Supplier<RuleValue> value) {
         for (FormRow row : rows) if (row.path.equals(path)) row.defaultValue = value;
@@ -337,9 +292,8 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
     }
 
     /** 输入被上限拒绝时的即时提示出口 */
-    public FormView setOnRejectedNotice(@Nullable Consumer<Component> handler) {
+    public void setOnRejectedNotice(@Nullable Consumer<Component> handler) {
         this.rejectedNoticeHandler = handler;
-        return this;
     }
 
 
@@ -430,31 +384,26 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         return childPath(relative);
     }
 
-    public FormView setSuggestionProvider(@Nullable SuggestionProvider provider) {
+    public void setSuggestionProvider(@Nullable SuggestionProvider provider) {
         this.suggestionProvider = provider;
-        return this;
     }
 
     /**
      * 装配条件编辑的共享定义能力（类型清单、按场景创建、解码注册表）。
      *
      * @param support 共享定义能力，null 时条件树控件只读回退
-     * @return 当前表单
      */
-    public FormView setConditionEditingSupport(@Nullable ConditionEditingSupport support) {
+    public void setConditionEditingSupport(@Nullable ConditionEditingSupport support) {
         this.conditionEditingSupport = support;
-        return this;
     }
 
     /**
      * 装配条件编辑上下文的工厂：按实际字段路径与所属对象路径创建局部目标上下文。
      *
      * @param factory 上下文工厂，null 时不提供条件画布入口
-     * @return 当前表单
      */
-    public FormView setConditionContextFactory(@Nullable ConditionEditContextFactory factory) {
+    public void setConditionContextFactory(@Nullable ConditionEditContextFactory factory) {
         this.conditionContextFactory = factory;
-        return this;
     }
 
     // 条件树控件所用的共享定义能力（可为空，为空时条件字段只读回退）
@@ -468,14 +417,12 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         return conditionContextFactory.create(pathFor(field), basePath);
     }
 
-    public FormView setLabelWidth(int width) {
+    public void setLabelWidth(int width) {
         this.labelWidth = Math.max(0, width);
-        return this;
     }
 
-    public FormView setOnChanged(Runnable listener) {
+    public void setOnChanged(Runnable listener) {
         this.changeListener = listener;
-        return this;
     }
 
     // 完成的滑条、开关和选择操作立即写入；聚焦文本仍只保留缓冲。
@@ -543,17 +490,6 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
     private int rowScreenY(FormRow row) {
         return FormRowLayout.rowScreenY(viewportY, row, scrollOffset);
     }
-
-
-
-
-
-
-
-
-
-
-
 
     // 组装当前控件的对象形态（子列表用）
     RuleValue storeObject() {
@@ -718,11 +654,6 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         return layoutRows(Math.max(0, width));
     }
 
-    /** 保存前检查当前输入；切换页面允许保留非法文本。 */
-    public @Nullable FormIssue pendingInputIssue() {
-        return draftWriter.pendingInputIssue();
-    }
-
     /** 布局：返回内容总高度 */
     public int layout(int x, int y, int width, int height) {
         this.viewportX = x;
@@ -766,12 +697,11 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         return visible;
     }
 
-    public FormView setVisible(boolean newVisible) {
+    public void setVisible(boolean newVisible) {
         this.visible = newVisible;
         if (!newVisible) {
             endInteractions(UiInputCapture.EndReason.HIDDEN);
         }
-        return this;
     }
 
     public void setEnabled(boolean newEnabled) {
@@ -893,10 +823,6 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         List<String> chosen = value == null ? List.of()
                 : value.isList() ? value.textItems() : value.isText() ? List.of(value.asText()) : List.of();
         this.picker = new FormPicker(font, THEME, suggestions, chosen, onPicked, this);
-    }
-
-    public boolean isPickerOpen() {
-        return picker != null;
     }
 
     public void closePicker() {
