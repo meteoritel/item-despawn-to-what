@@ -19,6 +19,8 @@
 
 **权限与占用**：单人世界直接可用；多人服务器需要管理员（权限等级 2）。同一时间只允许一个人编辑，提示已被别人锁定时，等对方关闭编辑器，或让管理员执行 `/idtw config edit-lock release` 释放。
 
+想改用文件写规则，看 [首次使用与生效流程](zh-01-getting-started)：那里有一条照抄就能用的最小规则，也有文件位置与生效步骤。
+
 ## 这一页怎么用
 
 每一篇文档只解决一件事。按下面的顺序读，或者直接跳到你需要的那一张表。
@@ -39,8 +41,8 @@
 | --- | --- |
 | [首次使用与生效流程](zh-01-getting-started) | 这个模组做什么、配置文件放在哪、一条最小可用规则，以及让规则生效的步骤和不生效时的排查清单。 |
 | [规则基础字段](zh-02-rule-basics) | 一条规则顶层能写哪些字段，每个字段的作用、取值与默认值。 |
-| [条件](zh-03-conditions) | `conditions` 怎么写：条件树由哪些节点组成、10 种条件各自要填什么，以及条件不满足时会发生什么。 |
-| [效果](zh-04-effects) | 规则命中后能做什么：7 种效果各自的写法，以及你在游戏里能看到什么。 |
+| [条件](zh-03-conditions) | `conditions` 怎么写：条件树由哪些节点组成、每种条件各自要填什么，以及条件不满足时会发生什么。 |
+| [效果](zh-04-effects) | 规则命中后能做什么：每种效果的写法，以及你在游戏里能看到什么。 |
 | [候选结果与结算](zh-05-outcomes-and-settlement) | `effects` 与 `outcomes` 两种写法、多个结果之间的轮换、每组的消耗，以及整组怎么扣、怎么返还。 |
 | [来源层与覆盖](zh-06-layers-and-overrides) | 三层来源的优先级、怎么用同 id 规则整条替换、怎么停用或删除内置规则，以及多条规则抢同一个掉落物时听谁的。 |
 | [服务端配置](zh-07-server-config) | `server.json` 每一项管什么、默认值是多少，以及卡顿或转化节奏不对时该改哪里。 |
@@ -62,4 +64,4 @@
 | 规则改完没生效，或看不懂报错 | [首次使用与生效流程](zh-01-getting-started)、[命令参考](zh-08-commands) |
 | 编辑器被别的玩家占用 | [命令参考](zh-08-commands) 里的编辑锁一节 |
 
-想了解实现原理与架构，见开发者文档 `docs/dev/`。
+想了解实现原理与架构，见仓库里的 [docs/README.md](https://github.com/meteoritel/item-despawn-to-what/blob/1.21.1/docs/README.md)（文档体系）与 [架构总览](https://github.com/meteoritel/item-despawn-to-what/blob/1.21.1/docs/architecture/overview.md)。

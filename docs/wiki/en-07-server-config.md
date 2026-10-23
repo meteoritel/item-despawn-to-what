@@ -37,7 +37,7 @@ The block below is the complete content the game creates on the first launch, an
   "overlay_directory": "itemdespawntowhat",
   "fabric_lifespan_fallback_ticks": 6000,
   "debug_logging": false,
-  "server_budget_us": 2000,
+  "server_budget_us": 10000,
   "effects_work_units_per_tick": 64,
   "check_spread_window_ticks": 20,
   "dispatch_batch_size": 64,
@@ -47,8 +47,6 @@ The block below is the complete content the game creates on the first launch, an
   "debug_scenario_prepare_batch_size": 128,
   "debug_scenario_prepare_budget_us": 2000,
   "max_place_block_radius": 8,
-  "prepare_groups_per_step": 8,
-  "settlement_recovery_max_attempts": 3,
   "nearby_products": {
     "item_limit": 1024,
     "item_radius": 6,
@@ -58,7 +56,9 @@ The block below is the complete content the game creates on the first launch, an
     "experience_radius": 6
   },
   "rescan_entities_per_step": 16,
-  "cancels_per_step": 1
+  "cancels_per_step": 1,
+  "prepare_groups_per_step": 8,
+  "settlement_recovery_max_attempts": 3
 }
 ```
 
@@ -76,12 +76,12 @@ Time values are in game ticks, and 20 ticks equal 1 second on a normal server.
 | `overlay_directory` | The name of the rule overlay directory, relative to `config/`, so rules live in `config/<this value>/rules/` | Any directory name (string) | `"itemdespawntowhat"` | Change it only to rename the config directory. Move the whole directory with it, or the overlay rules stop loading. The location of `server.json` itself does not change |
 | `fabric_lifespan_fallback_ticks` | Fabric only: the tick count to assume for how long a drop can still live when the mod cannot read its real lifespan | 1 to 72000 ticks | `6000` (5 minutes) | The default matches how long vanilla drops live. Adjust it only when the server changes drop lifespan rules |
 | `debug_logging` | Whether the mod writes its run-time progress to the log, such as a drop whose condition does not hold and how many ticks until the next retry | `true` or `false` | `false` | Turn it on temporarily while you diagnose why something does not convert. Keep it off otherwise, because it floods the log |
-| `server_budget_us` | The time in microseconds the mod may spend per game tick. Work that does not fit continues over the following ticks | 100 to 100000 microseconds | `2000` (about 2 milliseconds) | Lower it for extra safety on a busy server. Raise it when conversions lag and the server has spare capacity |
+| `server_budget_us` | The time in microseconds the mod may spend per game tick. Work that does not fit continues over the following ticks | 100 to 100000 microseconds | `10000` (about 10 milliseconds) | Lower it for extra safety on a busy server. Raise it when conversions lag and the server has spare capacity |
 | `max_work_units_per_tick` | The total work-unit ceiling per tick. It applies together with `server_budget_us`, and whichever comes first wins | 1 to 100000 | Absent, which uses the `max_checks_per_tick` value of `512` | Leave it absent. Write it only when you need to set the work per tick on its own |
 | `effects_work_units_per_tick` | The per-tick quota reserved for running effects, such as spawning items, placing blocks, and granting experience, so that heavy output does not crowd out the checks | 1 to 100000 | `64` | Raise it when a large batch of products takes too long to appear. Lower it to keep the checks prompt |
 | `check_spread_window_ticks` | When many drops come due at once, the mod spreads those checks over a window of this many game ticks | 1 to 1200 ticks | `20` (1 second) | Raise it when a simultaneous batch causes lag, which is smoother but delays individual conversions. Lower it to keep conversions on time when a single tick can take the load |
 | `dispatch_batch_size` | How many queued conversions the mod advances per tick at most, and it also caps the returned items delivered in one batch | 1 to 100000 | `64` | Raise it when large batches back up |
-| `prepare_groups_per_step` | How many conversion groups one settlement fixes its effect inputs for per tick before it starts paying groups. The remaining groups continue on later ticks | 1 to 4096 | `8` | Raise it to finish heavy preparation sooner at the cost of more per-tick work. Lower it to spread preparation over more ticks |
+| `prepare_groups_per_step` | How many groups one step prepares fixed effect inputs for during the preparation stage of a settlement, spreading the preparation of a whole stack over several game ticks | 1 to 4096 groups | `8` | Lower it when many settlements start at once and preparation hitches a single tick. Raise it to start producing sooner for very large stacks, at the cost of more work per tick |
 | `new_product_protection_seconds` | How many seconds a freshly converted item resists destruction by fire, lava, and cacti | 0 to 3600 seconds | `2` | Raise it when products burn as soon as they appear, for example next to lava. Set `0` to let products be destroyed right away |
 | `conversion_cooldown_seconds` | How many seconds a freshly converted item cannot start another conversion | 0 to 3600 seconds | `5` | Raise it when products convert again immediately under another rule. Set `0` to let a product convert again at once |
 | `position_search_checks_per_tick` | How many candidate positions the mod tries per tick when it looks for a spot for a product or a returned item | 1 to 4096 | `16` | Raise it when items stay undelivered because the terrain leaves few spots. Lower it to save performance |
@@ -91,7 +91,7 @@ Time values are in game ticks, and 20 ticks equal 1 second on a normal server.
 | `debug_scenario_prepare_budget_us` | The time cap in microseconds for that same preparation stage | 1 to 100000 microseconds | `2000` | Players never need to change it |
 | `settlement_recovery_max_attempts` | How many times the mod retries a settlement that failed mid-run before giving up for this session and leaving the record for the next startup scan | 1 to 100 | `3` | Lower it when a dimension stays unavailable for long and you would rather let the next restart take over. Raise it only when a settlement fails for reasons that clear up after a few seconds |
 | `max_place_block_radius` | Largest `radius` a single `place_block` action may use; rules above it are rejected when loaded or saved | 1 and above | `8` | Raise it to let one action cover a wider area, but the cost of one placement grows with the cube of the radius, so keep it modest; lowering it rejects existing rules that now exceed the cap, so edit those rules as well |
-| `nearby_products` | The nearby product limits. The number of products already near the destination decides whether a conversion group can start. See the next section | Object | See the next section | Lower it when piled-up products cause lag. Set the matching limit to `0` to remove the cap |
+| `nearby_products` | The nearby product limits. The count of products already nearby, together with the declared output per group, decides how many groups this settlement may open. See the next section | Object | See the next section | Lower it when piled-up products cause lag. Set the matching limit to `0` to remove the cap |
 
 `new_product_protection_seconds` and `conversion_cooldown_seconds` accept `0`, and no other field does. `server_budget_us` has a minimum of `100`, not `1`. Any value outside its range makes the whole file fall back to the defaults and logs an error, as described in the previous section.
 
@@ -205,7 +205,7 @@ Effect: rules now load from `config/my_idtw/rules/`. Move the contents of the ol
 ## Fields You Normally Leave Alone
 
 - `overlay_directory`: change it only when you want a different directory layout, because a mistake stops every overlay rule from loading.
-- `max_checks_per_tick`, `max_work_units_per_tick`, `effects_work_units_per_tick`, `dispatch_batch_size`, `position_search_checks_per_tick`, `rescan_entities_per_step`, `cancels_per_step`: the defaults suit most servers. Change them only when you see lag or a clear backlog.
+- `max_checks_per_tick`, `max_work_units_per_tick`, `effects_work_units_per_tick`, `dispatch_batch_size`, `prepare_groups_per_step`, `position_search_checks_per_tick`, `rescan_entities_per_step`, `cancels_per_step`: the defaults suit most servers. Change them only when you see lag or a clear backlog.
 - `fabric_lifespan_fallback_ticks`: used only when the Fabric side cannot read a drop's lifespan.
 - `debug_logging`: turn it on temporarily while you diagnose a problem.
 - `settlement_recovery_max_attempts`: the default of `3` covers the usual transient failures. Change it only when a dimension is expected to stay unavailable far longer than a few seconds.

@@ -37,7 +37,7 @@
   "overlay_directory": "itemdespawntowhat",
   "fabric_lifespan_fallback_ticks": 6000,
   "debug_logging": false,
-  "server_budget_us": 2000,
+  "server_budget_us": 10000,
   "effects_work_units_per_tick": 64,
   "check_spread_window_ticks": 20,
   "dispatch_batch_size": 64,
@@ -47,7 +47,6 @@
   "debug_scenario_prepare_batch_size": 128,
   "debug_scenario_prepare_budget_us": 2000,
   "max_place_block_radius": 8,
-  "settlement_recovery_max_attempts": 3,
   "nearby_products": {
     "item_limit": 1024,
     "item_radius": 6,
@@ -57,7 +56,9 @@
     "experience_radius": 6
   },
   "rescan_entities_per_step": 16,
-  "cancels_per_step": 1
+  "cancels_per_step": 1,
+  "prepare_groups_per_step": 8,
+  "settlement_recovery_max_attempts": 3
 }
 ```
 
@@ -75,11 +76,12 @@
 | `overlay_directory` | 规则覆盖层目录名，相对 `config/`，即规则放在 `config/<这个值>/rules/` | 任意目录名（字符串） | `"itemdespawntowhat"` | 只有想把覆盖层目录改名时才动；改完要把整个目录一起搬过去，否则覆盖层规则会读不到（`server.json` 自身位置不受影响） |
 | `fabric_lifespan_fallback_ticks` | 仅 Fabric 端：读不到某个掉落物的实际自然寿命时，用这个刻数当作它还能活多久 | 1～72000 刻 | `6000`（5 分钟） | 默认对应原版掉落物的自然消失时间；只有服务器改过掉落物寿命规则时才需要调整 |
 | `debug_logging` | 是否把运行过程写进日志（例如某个掉落物条件未满足、多少刻后重试） | `true` 或 `false` | `false` | 排查为什么没转化时临时设为 `true`；平时保持 `false`，一直打开会刷出大量日志 |
-| `server_budget_us` | 每个游戏刻最多花多少时间处理本模组的工作（微秒）；一次做不完的部分顺延到之后几刻继续 | 100～100000 微秒 | `2000`（约 2 毫秒） | 服务器吃紧、想更保险就调小；转化延迟明显、服务器还有余力就调大 |
+| `server_budget_us` | 每个游戏刻最多花多少时间处理本模组的工作（微秒）；一次做不完的部分顺延到之后几刻继续 | 100～100000 微秒 | `10000`（约 10 毫秒） | 服务器吃紧、想更保险就调小；转化延迟明显、服务器还有余力就调大 |
 | `max_work_units_per_tick` | 每刻处理量总上限，与 `server_budget_us` 同时生效，先到哪个算哪个 | 1～100000 | 不写（按 `max_checks_per_tick` 的值 `512`） | 通常保持不写；只有需要单独设定每刻处理量总上限时才显式填写 |
 | `effects_work_units_per_tick` | 每刻专门留给执行效果的额度上限（生成物品、放置方块、给经验等），避免大批产出把检查工作挤掉 | 1～100000 | `64` | 一次要产出大量东西、却迟迟交不出来时调大；想让检查更及时就调小 |
 | `check_spread_window_ticks` | 大量掉落物同时到期时，把这些检查摊到这么多个游戏刻里完成 | 1～1200 刻 | `20`（1 秒） | 一批东西同时到期造成卡顿时调大（更平缓，但个别转化会稍晚一点）；希望转化尽量准时、单刻压力可接受就调小 |
 | `dispatch_batch_size` | 每刻最多推进多少条排队中的转化，也限制一轮返还交付的数量 | 1～100000 | `64` | 大批量转化处理不过来、积压明显时调大 |
+| `prepare_groups_per_step` | 结算的准备阶段每步最多为多少组转化固定效果输入（例如随机产出的具体物品与落点），把整堆的准备工作摊到多个游戏刻 | 1～4096 组 | `8` | 大批转化同时开始、单刻准备造成卡顿时调小；整堆很大、希望更快开始产出时调大，但单刻负担随之上升 |
 | `new_product_protection_seconds` | 刚转化出来的物品在多少秒内不会被火、岩浆、仙人掌销毁 | 0～3600 秒 | `2` | 产物常常一出现就被火销毁（例如在岩浆旁转化）就调大；想让产物立刻可被销毁就设 `0` |
 | `conversion_cooldown_seconds` | 刚转化出来的物品在多少秒内不会再次启动转化 | 0～3600 秒 | `5` | 出现产物立刻又被另一条规则转化的连锁时调大；想让产物马上能继续参与转化就设 `0` |
 | `position_search_checks_per_tick` | 每刻最多尝试多少个候选位置，用来给产物或返还物找落点 | 1～4096 | `16` | 出现东西一直没交出来、落点难找（地形拥挤）时调大；想省性能可调小 |
@@ -89,7 +91,7 @@
 | `debug_scenario_prepare_budget_us` | 同上，准备阶段的时间上限（微秒） | 1～100000 微秒 | `2000` | 普通玩家不用改 |
 | `settlement_recovery_max_attempts` | 运行期结算中途失败时，本次服务器运行内最多重试几次；超过后保留账本，等下次启动扫描再恢复 | 1～100 | `3` | 某个维度长期不可用、希望直接交给下次重启处理时调小；只有失败原因会在几秒内自行消失时才需要调大 |
 | `max_place_block_radius` | 单条规则里 `place_block` 的 `radius` 允许的最大值；超过的规则在加载与保存时被拒载 | 1 以上 | `8` | 想让一条规则一次铺得更远就调大，但单次放置开销按半径的立方增长，不要调得过大；调小后超出新上限的既有规则会被拒载，需要同时把规则里的 `radius` 改小 |
-| `nearby_products` | 产物邻近上限，按附近已有的产物数量决定一组转化能不能开始，详见下一节 | 对象 | 见下一节 | 产物堆积过多导致卡顿时调低；想解除数量限制时把对应上限设 `0` |
+| `nearby_products` | 产物邻近上限：按附近已有的产物数量与每组声明的产出折算这批能开出几组，详见下一节 | 对象 | 见下一节 | 产物堆积过多导致卡顿时调低；想解除数量限制时把对应上限设 `0` |
 
 `new_product_protection_seconds` 与 `conversion_cooldown_seconds` 允许写 `0`，其余字段不能写 `0`；`server_budget_us` 的下限是 `100` 而不是 `1`。任何一项写出范围都会让整份文件回退默认值并在日志报错，见上一节。
 
@@ -203,7 +205,7 @@
 ## 平时不用改的字段
 
 - `overlay_directory`：只有想改目录结构时才动，改错会让覆盖层规则全部失效。
-- `max_checks_per_tick`、`max_work_units_per_tick`、`effects_work_units_per_tick`、`dispatch_batch_size`、`position_search_checks_per_tick`、`rescan_entities_per_step`、`cancels_per_step`：默认值适合大多数服务器，只有出现卡顿或明显积压时才调。
+- `max_checks_per_tick`、`max_work_units_per_tick`、`effects_work_units_per_tick`、`dispatch_batch_size`、`prepare_groups_per_step`、`position_search_checks_per_tick`、`rescan_entities_per_step`、`cancels_per_step`：默认值适合大多数服务器，只有出现卡顿或明显积压时才调。
 - `fabric_lifespan_fallback_ticks`：只有 Fabric 端读不到掉落物寿命时才会用上。
 - `debug_logging`：只在排查问题时临时开启。
 - `settlement_recovery_max_attempts`：默认 `3` 次已覆盖常见的临时失败；只有某个维度会长时间不可用时才需要动它。

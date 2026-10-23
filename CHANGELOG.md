@@ -11,6 +11,7 @@
 - **触发与结算**：新增消失方式触发（`triggers` 的 `natural` / `fire` / `lava` / `cactus`）；命中后按固定源成本整组结算，可用 `outcomes` 配合 `combination`（`round_robin` / `priority`）声明候选结果。
 - **运行时**：所有维度共享的公共 tick 预算调度器；催化剂门槛在运行投影中派生；实体生成统一为一种按 `variant`（`item` / `entity` / `experience`）分发的效果。
 - **命令**：`/idtw config reload|validate|list|edit|edit-lock` 与 `/idtw rule list|show`。
+- **产物汇总交付**：直接物品产物按候选结果、槽位与物品汇总装箱，同一槽位的多组产出合并交付并保留最晚的原定执行时刻，大批量产出不会逐组生成实体。
 
 ### 移除
 - **旧配置链路退役**：按转化类型划分的旧配置模型与执行器、NeoForge 服务端 TOML 配置（`ModConfigValues` / `itemdespawntowhat-server.toml`）、旧网络同步与旧客户端编辑界面，由统一规则链路与规则编辑器取代。
@@ -23,6 +24,7 @@
 - **Triggers and settlement**: new disappearance-kind triggers (`natural` / `fire` / `lava` / `cactus`); a hit settles a complete group at a fixed source cost, with `outcomes` plus `combination` (`round_robin` / `priority`) for candidate results.
 - **Runtime**: a shared server tick budget scheduler across all dimensions; catalyst thresholds derived in a runtime projection; entity spawn unified into one effect dispatched by `variant` (`item` / `entity` / `experience`).
 - **Commands**: `/idtw config reload|validate|list|edit|edit-lock` and `/idtw rule list|show`.
+- **Batched product delivery**: direct item products are boxed by candidate, slot and item, so groups that share a slot deliver together at the latest scheduled time instead of spawning one entity per group.
 
 ### Removals
 - **Legacy config path retired**: the per-conversion-type config model and executors, the NeoForge server TOML config (`ModConfigValues` / `itemdespawntowhat-server.toml`), the legacy network sync and the legacy client editor UI, replaced by the unified rule pipeline and the rule editor.

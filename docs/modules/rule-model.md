@@ -23,7 +23,7 @@ authority: common/core/model
 - 规则数据形态：`Rule` 与源匹配、固定成本、候选结果、条件表达式等部件。
 - 条件树算法：`ConditionTrees` 的遍历（带 JSON 字段路径）、规模统计与不可变结构变换。
 - 编解码组装：`RuleCodecs`（规则、效果、条件树）、`CommonFields`（共用字段片段）、各记录与枚举自带的 `CODEC`。
-- 语义校验：`RuleValidation` 的两档入口与规模上限判定。
+- 语义校验：`RuleValidation` 的三档入口（结构、类型参数、运行期上限）与规模上限判定。
 - 规模上限常量：`ConditionLimits`，其中条件树的节点数与深度引用契约层解码预算的同一常量。
 - 分类派生：`RuleCategoryClassifier` 按生效效果的产出类别派生规则分类。
 - 类型定义形态：`EffectType`、`ConditionType` 及一行式实现 `SimpleEffectType`、`SimpleConditionType`。
@@ -35,7 +35,7 @@ authority: common/core/model
 ### 对外入口
 
 - 解码与编码：`RuleCodecs.codec(...)`（`Codec<Rule>`）、`effectCodec(...)`、`conditionExpressionCodec(...)`，以及供加载层注入的 `decoder(...)`。
-- 校验：`RuleValidation.validate(...)` 的结构档与注册表档重载（后者额外读取效果与条件类型注册表）。
+- 校验：`RuleValidation.validate(...)` 的结构档；带效果与条件类型注册表、追加类型参数校验的重载；再叠加服务端运行期上限（`RuleRuntimeLimits`）的重载。
 - 数据访问：`Rule` 的派生入口（可运行性、生效消失方式、生效候选、全部效果、特异性）、`ConditionExpression` 的统计与结构合法性、`ConditionTrees` 的遍历与结构变换。
 - 类型扩展：`Effect`、`Condition` 两个参数对象接口，`EffectType`、`ConditionType` 两个类型定义接口，以及一行式实现 `SimpleEffectType`、`SimpleConditionType`。
 - 常量：`RuleCodecs.DEFAULT_TRIGGER_AFTER_SECONDS`、`RuleCodecs.DEFAULT_SCHEMA_VERSION`、`ConditionLimits` 的规模上限、`OutcomeCandidate.IMPLICIT_ID`、`CatalystCost` 与 `SourceCost` 的数量默认值。
@@ -69,7 +69,7 @@ flowchart LR
 |---|---|---|---|
 | `Rule` | 聚合根 | 规则唯一配置单元；紧凑构造器规范化展示名、空条件、空消失方式与空候选；派生 `complexity()`、`isRunnable()`、`effectiveTriggers()`、`effectiveOutcomes()`、`allEffects()` | `RuleCodecs` 解码、`RuleValidation` 校验、运行时索引 |
 | `RuleCodecs` | 编解码入口 | 组装规则 Codec 与递归条件树 Codec；`decoder(...)` 在解码前做顶层未知字段告警、候选结果与 `catalyst_cost` 的未知字段报错、条件树规模预检 | `TypeDispatch`、`RuleDecodeBudget`、`OutcomeCandidate`、各枚举 CODEC |
-| `RuleValidation` | 校验入口 | 结构档检查 id、触发时间、源匹配、`effects`/`outcomes` 二选一、`schema_version`、固定成本、展示名码点、条件树结构与规模；注册表档追加逐效果/逐叶的类型参数校验与未注册类型报错 | `IssueCollector`、`ParamChecks`、`RefChecks`、`TypeRegistry` |
+| `RuleValidation` | 校验入口 | 结构档检查 id、触发时间、源匹配、`effects`/`outcomes` 二选一、`schema_version`、固定成本、展示名码点、条件树结构与规模；注册表档追加逐效果/逐叶的类型参数校验与未注册类型报错；运行期上限档再叠加服务端配置的放置半径上限 | `IssueCollector`、`ParamChecks`、`RefChecks`、`TypeRegistry` |
 | `ConditionExpression` / `ConditionNode` / `ConditionTrees` / `ConditionLimits` | 条件树（数据 + 算法 + 限额） | 表达式只有一个根节点，`null` 表示无条件；节点分组合、取反与条件叶，构造器只做不可变拷贝，非空与规模在 `isStructurallyValid()` 与解码期判定；遍历产出与 JSON 一致的字段路径并统计叶数/节点数/深度，`replaceAt`/`updateTermsAt` 为纯函数结构变换（非法路径返回原树并记 WARN）；叶数、节点数、深度、效果数与源匹配项上限集中在限额常量，节点与深度直接引用 `RuleDecodeBudget` 的同一常量 | `RuleCodecs`、运行时求值器、编辑器、`RuleValidation` |
 | `Effect` / `EffectType` / `SimpleEffectType` / `Condition` / `ConditionType` / `SimpleConditionType` | 类型定义扩展点 | 参数对象实现 `Effect`（类型 id、延迟、概率、效果级条件、`withConditions`）或 `Condition`（类型 id）；`EffectType` 追加执行器、一次性标记、产出类别与每轮一组容量需求（`capacityDemand`），`ConditionType` 追加求值器与可求值性门禁；`Simple*` 用 id + MapCodec + 校验器 + 执行器或求值器一行注册 | `core/api` 的执行器与求值器契约、注册表 |
 | `CommonFields` | 共用字段片段 | 效果通用字段的编解码片段与默认值；片段返回 `RecordCodecBuilder` 以绑定所属记录类型，效果级条件以 `Optional` 承载 | 各效果参数记录 |

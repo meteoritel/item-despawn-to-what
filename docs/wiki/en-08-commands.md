@@ -1,6 +1,6 @@
 # Command Reference (/idtw)
 
-This page lists every player-facing command, the permission each one needs, and how to read the output. Commands only check and reload your configuration; the rules themselves live in JSON files.
+This page lists every player-facing command, the permission each one needs, and how to read the output. Commands only check and reload your configuration; the rules themselves live in JSON files. A development environment also exposes an `/idtw debug` branch for debugging the conversion pipeline; released builds do not register it, so this page does not cover it.
 
 ## Command List
 
@@ -17,11 +17,12 @@ This page lists every player-facing command, the permission each one needs, and 
 
 ## How Permissions Work
 
-- **Permission required**: a singleplayer world always passes. A multiplayer server needs permission level 2 or higher, which is the usual admin or OP level 2.
+- **Permission required**: the owner of a singleplayer save always passes, even without cheats. Anyone else, including friends who join that save over LAN, needs permission level 2 or higher, which is the usual admin or OP level 2.
 - Without permission, the game does not recognize the command, and the client shows the vanilla message for an unknown or incomplete command. The mod adds no explanation.
 - `/idtw config edit-lock status` needs no permission, so every player can check it.
 - `/idtw config edit-lock release` looks only at permission level 2 or higher, not at singleplayer. A singleplayer save without cheats sits at permission level 0, so this command does not work there; the other commands are unaffected.
 - While the server is still starting, a command reports that the rule runtime is not ready yet. Try again a moment later.
+- While the server is saving editor changes, `config validate`, `config reload`, `config list`, `rule list`, and `rule show` reply that the rules are being saved and ask you to retry after the save finishes.
 
 ## The Shared Format of a Check
 
@@ -103,7 +104,7 @@ Raw JSON: {"id":"myrules:chicken_to_rotten_flesh", ... }
 ```
 
 - The summary carries the same fields as `config list`, arranged as one sentence.
-- The JSON on the second line is what the mod assembled from the active rule, so it may differ word for word from the file on disk, for example by dropping defaults or reordering fields. It is the best source when you want to know exactly what the game read.
+- The JSON on the second line depends on the source: for an overlay rule it is the file text, so it matches what is on disk; for a builtin or world datapack rule it is the model re-encoded, so field order and non-default values may differ from the file layout. It is the best source when you want to know exactly what the game read.
 - When no printable content is available, the second line becomes a notice that no raw JSON is available for that ID, because the rule is model-encoded or not editable.
 - When the ID is wrong or missing, the command reports that the rule was not found and returns a failure.
 
@@ -134,6 +135,7 @@ Syntax: `/idtw config edit-lock release`, which needs permission level 2 or high
 
 - When the lock is already free, the command reports that it is already free and changes nothing.
 - When another player holds it, the command forces the lock open and reports the released owner. If that player is online, the editor receives an expired-session notice at once and must take the lock again to continue.
+- When that player is saving or rolling back, the release waits and the reply says the release was requested and the lock stays held until the write finishes.
 
 ## Common Ways to Use the Commands
 

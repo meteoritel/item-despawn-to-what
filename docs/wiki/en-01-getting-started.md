@@ -116,13 +116,13 @@ Two points to remember:
 - **Reload after every file change** (run `/idtw config reload`, or reload datapacks, or restart the server). Otherwise the game never reads your edits.
 - **Only the broken part is rejected**: when the whole file fails to parse as JSON, or when the root is neither a rule object nor a rule array, none of that file takes effect. A field error in one rule rejects only that rule; other rules in the same file still load.
 
-The commands need a singleplayer world, or permission level 2 or higher. For the other commands, see [Command Reference](en-08-commands).
+The commands need you to own the singleplayer save, or to hold permission level 2 or higher. For the other commands, see [Command Reference](en-08-commands).
 
 To edit rules in the built-in editor instead, `/idtw config edit` is an equivalent entry point. A player runs it, and the server opens the editor after taking the edit lock.
 
 ## Built-in Sample Rules
 
-The mod ships 8 sample files that hold 10 rules in the builtin datapack. Six of them are enabled by default so you can observe results right away:
+The mod ships a set of sample rules in the builtin datapack. Some of them are enabled by default, so you can observe results right away:
 
 | Enabled | Rule ID | Effect |
 | --- | --- | --- |

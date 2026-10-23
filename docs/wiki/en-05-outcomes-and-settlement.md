@@ -110,7 +110,7 @@ The value is case-insensitive: `round_robin` and `ROUND_ROBIN` both work. Any ot
 - Every group that opens moves the position one step forward. A whole stack that opens 3 groups therefore moves through 3 candidates in round robin order.
 - The position is saved with the world: it continues after a server restart or a trip out of the world and back, and each dimension keeps its own position.
 - The first candidate in definition order is the starting point. The position restarts from the first candidate when the candidate structure changes, such as a changed candidate `id`, a changed `safe_spawn` or `fill_origin`, or changed effect types and parameters.
-- Round robin picks only candidates that can still open a group. A candidate whose matching products already reached the nearby limit is skipped, so the next pick is not always the next one in definition order.
+- Round robin picks only candidates that can still open a group. A candidate whose output budget is already used up is skipped, so the next pick is not always the next one in definition order.
 
 ### Priority: Candidates in a Fixed Order
 
@@ -186,7 +186,7 @@ Without `source_cost`, each group's source threshold and payment are 1. Catalyst
 
 When a rule picks up a dropped item, the whole stack leaves the world and enters settlement. The mod then works through these steps:
 
-1. **Count the groups**: the number of groups is the stack size divided by the source cost per group, rounded down. The **nearby product limits** (`nearby_products`) can lower that number: the mod looks at the items and generic entities this candidate produces and keeps the smaller of the two counts. Experience output takes no part in that count. A candidate that holds only one-shot effects always counts as one group.
+1. **Count the groups and set the output budget**: the number of groups is the stack size divided by the source cost per group, rounded down. Before the first group opens, the mod derives an **output budget** from `nearby_products` for the candidate: centered on the trigger position as fixed when the conversion succeeds, it counts the matching products already nearby, subtracts them from the limit, divides the room by the output declared per group, and keeps the smaller of that and the group count. The budget is worked out once during planning from the declared amounts, without any probability discount. Opening groups never queries the limit again, products added from elsewhere do not take from the budget, and the final stock may therefore exceed the limit. Experience output does not draw on this capacity; loot tables, whose product types are unknown, count conservatively against the regional item total; a candidate holding only one-shot effects always counts as one group. Candidates in the same settlement that use the same product share one budget.
 2. **Open groups one by one**: each conversion group first pays the catalyst cost, when the rule sets `catalyst_cost`, then loses its source items, and then runs every effect of the picked candidate. When any step cannot be paid, that group does not open.
 3. **Return what is left**: the unused part of the stack comes back to the world as dropped items near the trigger position. When no position is free nearby, the mod searches upward and, in the last resort, spawns the items above the build limit so that they fall back down.
 4. **A returned item never converts again**: a returned source item carries permanent protection, so it neither converts again nor splits the stack once more. This keeps the mod out of a loop of return, convert, and return.
@@ -196,11 +196,12 @@ About counting only real output:
 - The output ledger records only what actually took effect. When an effect in a group produces nothing because its chance missed, its own conditions did not match, or it failed, the mod does not count that group as successful output: a planned amount and a successful amount are two different numbers.
 - A cost that was consumed stays consumed even when the output fails. A missed chance still consumes the source items of that group, so a retry is not free.
 - The other way around, a cost for a group that never opened never happened at all: those source items stay in the stack and come back as returned items.
+- The output budget is debited per opened group: once a group has paid its cost, it takes the share of the budget its declared output needs, and that share stays spent even when a missed chance or an unmet effect condition leaves the group without real output.
 
 About group counts and effect runs:
 
 - Every effect runs once in every conversion group, and `count` is the amount it produces in that one run. A stack that opens several groups runs the effects several times.
-- One-shot effects, meaning `arrow_rain`, `lightning`, `explosion`, and `weather`, are the exception: they run once per source and do not repeat with the group count, and they take no part in the nearby product limit calculation.
+- One-shot effects, meaning `arrow_rain`, `lightning`, `explosion`, and `weather`, are the exception: they run once per source and do not repeat with the group count, and they take no part in the output budget.
 
 About interruption and recovery:
 
@@ -223,12 +224,12 @@ Check in this order:
 1. **The rule was never picked**: when conditions are not satisfied, the mod does not convert the dropped item and retries on a backoff rhythm, from 1 second to 2 seconds to 4 seconds until it reaches the ceiling. The item is either too young or in the wrong place. See [Conditions](en-03-conditions).
 2. **The rule was not loaded or not enabled**: `enabled` is `false`, another rule with the same id from a higher source layer replaces this one, or a wrong JSON field rejects the rule. A rule change takes effect only after a reload. See [Getting Started](en-01-getting-started) and [Source Layers and Overrides](en-06-layers-and-overrides).
 3. **The stack is smaller than one group**: when the stack size is below the source cost per group, a cost of 2 with only 1 item left for example, no group can open. You will see the dropped item vanish on time and a matching stack reappear nearby. That is the return, and the returned item never converts again.
-4. **The nearby product limit is full**: when matching products around the trigger point, meaning items or mobs, already reached the limit from the server configuration, the mod skips every candidate that cannot open its groups in full. When no candidate can open a group, the whole stack returns unchanged. Nearby experience orbs only matter to experience output itself: experience ignores this limit, while the items and generic entities a mixed candidate produces still answer to their own limits. See [Server Configuration](en-07-server-config).
+4. **The output budget is used up**: when the budget worked out before opening is zero or already spent, `priority` moves on to the next candidate and `round_robin` skips this one. When no candidate can open a group, the whole stack returns unchanged. Experience output does not draw on this budget, and the items and generic entities a mixed candidate produces answer to their own limits. See [Server Configuration](en-07-server-config).
 5. **The candidate itself was skipped**: its effect-level `conditions` were not satisfied, or its `chance` missed. The mod still consumes the source items, and you see no output. See [Effects](en-04-effects).
 6. **The output was delayed**: an effect that sets `delay_ticks` produces its output later than the moment the dropped item disappears, which happens with delayed lightning or with mobs that spawn in batches.
 7. **The output landed somewhere else**: a `place_block` effect with `fill_origin` set to `false` never fills the trigger position itself, and a mob spawned with `safe_spawn` may appear on a neighboring block.
 
-A one-line order to troubleshoot: first confirm that the rule itself was picked, meaning it is enabled, loaded, and its conditions are satisfied; then check costs and counts, meaning whether the stack fills a group and whether catalysts are enough; then check the nearby product limits; and only at the end check the conditions, chance, and delay of the effects.
+A one-line order to troubleshoot: first confirm that the rule itself was picked, meaning it is enabled, loaded, and its conditions are satisfied; then check costs and counts, meaning whether the stack fills a group and whether catalysts are enough; then check the output budget; and only at the end check the conditions, chance, and delay of the effects.
 
 ## Related
 

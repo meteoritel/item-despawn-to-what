@@ -47,11 +47,12 @@ flowchart TB
 | 取消清理 | 规则重载、维度卸载与停服前摘除的任务每步取消多少 | `cancels_per_step` | 调度器 |
 | 覆盖层与平台差异 | 覆盖层目录名、Fabric 端寿命兜底 | `overlay_directory`、`fabric_lifespan_fallback_ticks` | 加载与编辑链路、平台适配 |
 | 实体临时状态 | 新产物保护与转化冷却各持续多久 | `new_product_protection_seconds`、`conversion_cooldown_seconds` | 掉落物状态层 |
-| 邻近阈值 | 同区域同类物品或实体的容量口径 | `nearby_products` 子对象 | 完整组开组判定 |
+| 邻近阈值 | 同区域同类物品或实体的容量口径 | `nearby_products` 子对象 | 计划期产出预算（组数上界） |
+| 规则上限 | 规则里 `place_block` 的半径上限，同时决定编辑器半径滑条的窗口 | `max_place_block_radius` | 规则加载与保存校验、编辑器 |
 | 结算恢复 | 当前会话内结算失败后的重试上限 | `settlement_recovery_max_attempts` | 转化运行时 |
 | 调试 | 常规日志与调试场景准备预算 | `debug_logging`、`debug_scenario_prepare_batch_size`、`debug_scenario_prepare_budget_us` | 调试层 |
 
-取值口径需要注意：以秒为单位的键（新产物保护、转化冷却）允许写 0，表示不授予对应状态时长，其余数值键下限为正整数；`max_work_units_per_tick` 是唯一可选键，缺省时回退到每 tick 检查数的上限值。写违反区间的值会被整体解码失败处理，配置回退默认。
+取值口径需要注意：以秒为单位的键（新产物保护、转化冷却）允许写 0，表示不授予对应状态时长，其余数值键下限为正整数；`max_work_units_per_tick` 是唯一不设固定默认值的键，缺省时回退到每 tick 检查数的上限值。写违反区间的值会被整体解码失败处理，配置回退默认。
 
 ## 派生换算
 
@@ -68,7 +69,7 @@ flowchart TB
 
 ## nearby_products
 
-`nearby_products` 是一个嵌套对象，默认值来自 `NearbyProductLimits`。物品与通用实体各自有容量上限与统计半径，上限写 0 表示不对该类做容量检查；半径按方块计。经验球两项保留读写与区间校验，与物品、通用实体的准入口径分开维护。
+`nearby_products` 是一个嵌套对象，默认值来自 `NearbyProductLimits`。物品与通用实体各自有容量上限与统计半径，上限写 0 表示不对该类做容量检查；半径按方块计。经验球两项保留读写与区间校验，开组只按物品与通用实体两项计算。
 
 阈值在计划期按初始区域存量和声明的理论产量确定完整组预算，不按概率折减；预算覆盖之外的源物品返还。生成期间不再查询上限，外部新增产物不挤占额度，允许最终存量超限。实际产量由效果类型决定，未用完的预算不补开组。
 
