@@ -17,14 +17,16 @@ import org.jetbrains.annotations.Nullable;
  * 渲染与命中再读同一份结果。按钮列表在装配变化时合并一次，避免每帧测量与同步坐标分配临时列表。</p>
  */
 final class FormRow {
-    @org.jetbrains.annotations.Nullable FormRow pairedBelow;
-    @org.jetbrains.annotations.Nullable FormRow pairedAbove;
+    @Nullable FormRow pairedBelow;
+    @Nullable FormRow pairedAbove;
     boolean loaded;
     boolean wasEditing;
     List<String> loadedInputs = List.of();
     boolean visible = true;
     @Nullable BooleanSupplier visibility;
     boolean tooltipEnabled = true;
+    // 提示已经明写在控件内（如文本框占位符）时关闭 hint 兜底提示，其余提示通道保持开启
+    boolean hintTooltipEnabled = true;
     @Nullable Component defaultText;
     @Nullable Supplier<RuleValue> defaultValue;
     boolean defaultDisplayed;

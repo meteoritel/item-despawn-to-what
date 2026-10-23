@@ -76,6 +76,9 @@ final class RuleEditorInfoPage {
         infoForm.setRowHeight(RuleFields.PRIORITY, RuleEditorEditPages.PRIORITY_ROW_HEIGHT);
         infoForm.setRowHeight(RuleFields.NOTES, 36);
         infoForm.suppressRowTooltip(RuleFields.ENABLED);
+        // 显示名与备注的提示已作为占位符写在输入框内，悬停不再重复弹出
+        infoForm.suppressRowHintTooltip(RuleFields.DISPLAY_NAME);
+        infoForm.suppressRowHintTooltip(RuleFields.NOTES);
         pages.liveForms.add(infoForm);
         pages.liveWidgets.add(infoForm);
     }

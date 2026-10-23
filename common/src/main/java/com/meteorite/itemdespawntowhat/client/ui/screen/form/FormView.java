@@ -275,6 +275,15 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         for (FormRow row : rows) if (row.path.equals(path)) row.tooltipEnabled = false;
     }
 
+    /**
+     * 关闭该行的 hint 兜底提示，保留校验问题、控件提示与文本/标签被裁剪时的提示。
+     *
+     * <p>用于提示文案已经作为占位符写在文本框内的字段，避免悬停时重复弹出同一段文字。</p>
+     */
+    public void suppressRowHintTooltip(String path) {
+        for (FormRow row : rows) if (row.path.equals(path)) row.hintTooltipEnabled = false;
+    }
+
     // 展示有效默认文本，不修改草稿的字段存在性。
     @SuppressWarnings("unused")
     public void setRowDefaultText(String path, Component value) {

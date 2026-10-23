@@ -119,7 +119,7 @@ final class FormRowRenderer {
             if (row.labelShown && labelRoom > 0 && font.width(row.control.label()) > labelRoom) {
                 return row.control.label();
             }
-            return row.control.hint();
+            return row.hintTooltipEnabled ? row.control.hint() : null;
         }
         return null;
     }
