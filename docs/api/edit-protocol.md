@@ -112,6 +112,7 @@ stateDiagram-v2
 | 直接包上限 | `MAX_DIRECT_PACKET_BYTES` | 整包下发的字节上限，超出改走分片 |
 | 单片上限 | `MAX_CHUNK_BYTES` | 单个分片的 UTF-8 字节上限 |
 | 变更集总量 | `MAX_CHANGE_SET_BYTES` | 分片收齐后的总量上限，超出按请求非法拒绝 |
+| 变更集条数 | `MAX_EDITS_PER_CHANGE_SET` | 单次最多 2048 条编辑；解析时提前拒绝超限，写入入口复核 |
 | 分片数上限 | `MAX_CHUNK_COUNT` | 由总量上限与单片上限推导，客户端重组时同样校验 |
 | 在途传输数 | `MAX_TRANSFERS_PER_PLAYER` | 每名玩家同时保留的分片传输数，超出按插入序淘汰最早一个 |
 | 传输超时 | `TRANSFER_TIMEOUT_MILLIS` | 分片超过该时长无进展即丢弃 |

@@ -10,6 +10,7 @@ import com.meteorite.itemdespawntowhat.core.load.RulePaths;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEdit;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEditChangeSet;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveProgress;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditLimits;
 import net.minecraft.resources.ResourceLocation;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -142,6 +143,10 @@ public final class RuleOverlayWriter {
         Set<Path> dirty = new LinkedHashSet<>();
         List<String> conflicts = new ArrayList<>();
         try {
+            if (changes.edits().size() > RuleEditLimits.MAX_EDITS_PER_CHANGE_SET) {
+                throw new IOException("变更集条数超过上限: "
+                        + RuleEditLimits.MAX_EDITS_PER_CHANGE_SET);
+            }
             requireActive(active);
             safePath(root);
             load(files, active);
