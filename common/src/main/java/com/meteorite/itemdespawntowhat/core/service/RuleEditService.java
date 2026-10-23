@@ -477,11 +477,7 @@ public final class RuleEditService {
         if (!pendingSave.finished()) { return null; }
         RuleSaveResultPayload payload = completedSave;
         sessions.finishApply(savingSessionId, server.getTickCount());
-        if (payload != null && !sessions.owns(savingSessionId)) {
-            payload = result(savingSessionId, savingOperationId, RuleSaveStatus.SESSION_EXPIRED,
-                    RuleSaveStatus.SESSION_EXPIRED.messageKey(), List.of(), payload.issues(),
-                    payload.writtenToDisk(), payload.reloaded());
-        }
+        // 会话释放只结束锁归属；保存任务已确定的终态仍按真实写盘与重载结果返回。
         if (payload != null) { remember(payload); }
         pendingSave = null;
         completedSave = null;
