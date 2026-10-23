@@ -37,6 +37,8 @@ public final class UiDescriptionTooltip {
     private final UiHostTheme theme;
     private final Font font;
     private int maxWidth = TOOLTIP_MAX_WIDTH;
+    private int maxLines = Integer.MAX_VALUE;
+    private Component overflowHint = Component.literal("…");
 
     /**
      * 创建使用宿主浮层配色的说明面板。
@@ -61,6 +63,16 @@ public final class UiDescriptionTooltip {
     }
 
     /**
+     * 限制折行后的正文行数，超出时以宿主给定的查看详情提示收尾。
+     * @param count 包含收尾提示的最大行数，至少为两行
+     * @param hint 超出行数时的本地化提示
+     */
+    public void setMaxLines(int count, Component hint) {
+        maxLines = Math.max(2, count);
+        overflowHint = hint;
+    }
+
+    /**
      * 在宿主可视区域内绘制提示面板。
      *
      * @param graphics 绘制上下文
@@ -73,7 +85,17 @@ public final class UiDescriptionTooltip {
         if (lines.isEmpty() || bounds.width() <= 0 || bounds.height() <= 0) {
             return;
         }
-        List<Row> rows = wrap(lines, textWidthLimit(bounds));
+        int textWidth = textWidthLimit(bounds);
+        List<Row> rows = wrap(lines, textWidth);
+        int visibleLines = Math.clamp(
+                (bounds.height() - TOOLTIP_MARGIN * 2 - TOOLTIP_PADDING * 2 + TOOLTIP_LINE_GAP)
+                        / (font.lineHeight + TOOLTIP_LINE_GAP), 1, maxLines);
+        if (rows.size() > visibleLines) {
+            List<Row> hint = wrap(List.of(new Line(overflowHint, theme.palette().canvasPickerTextMuted())), textWidth);
+            int hintLines = Math.min(hint.size(), visibleLines);
+            rows.subList(visibleLines - hintLines, rows.size()).clear();
+            rows.addAll(hint.subList(0, hintLines));
+        }
         if (rows.isEmpty()) {
             return;
         }

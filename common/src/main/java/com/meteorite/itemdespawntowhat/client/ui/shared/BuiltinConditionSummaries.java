@@ -9,7 +9,9 @@ import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
@@ -160,7 +162,7 @@ public final class BuiltinConditionSummaries {
         if (descriptor == null) {
             return null;
         }
-        List<Component> sides = new ArrayList<>();
+        Map<String, List<Component>> directionsByBlock = new LinkedHashMap<>();
         for (String side : SIDE_FIELDS) {
             EditorField field = descriptor.field(side);
             if (field == null) {
@@ -170,10 +172,12 @@ public final class BuiltinConditionSummaries {
             if (raw.isEmpty()) {
                 continue;
             }
-            sides.add(Component.translatable(SIDE_ENTRY_KEY,
-                    Component.translatable(field.labelKey()),
-                    SummaryFormats.ref(raw, RuleCatalogType.BLOCK)));
+            directionsByBlock.computeIfAbsent(raw, ignored -> new ArrayList<>())
+                    .add(Component.translatable(field.labelKey()));
         }
+        List<Component> sides = new ArrayList<>();
+        directionsByBlock.forEach((block, directions) -> sides.add(Component.translatable(SIDE_ENTRY_KEY,
+                SummaryFormats.join(directions), SummaryFormats.ref(block, RuleCatalogType.BLOCK))));
         if (sides.isEmpty()) {
             return Component.translatable(UNSET_KEY);
         }

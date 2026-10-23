@@ -14,8 +14,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryDispatcher;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConsumptionSummary;
-import com.meteorite.itemdespawntowhat.client.ui.screen.form.NaturalSummary;
 import com.meteorite.itemdespawntowhat.client.ui.shared.BlockPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.EntityPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostPalette;
@@ -24,6 +22,7 @@ import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCodeView;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiDescriptionTooltip;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiListView;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTypePicker;
@@ -36,6 +35,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 import java.util.Objects;
+
 import net.minecraft.Util;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -77,18 +77,24 @@ public final class RuleEditorScreen extends Screen {
     private static final String UI = "gui.itemdespawntowhat.edit.";
 
     // 模式：DEBUG 为开发环境专用页，只在 debug 模式下可从管理页进入
-    private enum Mode { LIST, EDIT, DEBUG }
+    private enum Mode {LIST, EDIT, DEBUG}
 
     /**
      * 底部状态提示的级别：决定提示的绘制形态与存活时长。
      * <p>调用点只表达语义，具体用色由屏幕按级别从主题调色板取，各页面不再自带色值。</p>
      */
     public enum NoticeLevel {
-        /** 操作回执：纯文本绘制，短暂显示后自动清除 */
+        /**
+         * 操作回执：纯文本绘制，短暂显示后自动清除
+         */
         INFO,
-        /** 需要玩家留意的异常：实心色块常驻，直到被新提示替换或页面 / 模态切换 */
+        /**
+         * 需要玩家留意的异常：实心色块常驻，直到被新提示替换或页面 / 模态切换
+         */
         WARNING,
-        /** 危险或失败：形态与 WARNING 一致，改用危险色区分 */
+        /**
+         * 危险或失败：形态与 WARNING 一致，改用危险色区分
+         */
         DANGER
     }
 
@@ -100,7 +106,9 @@ public final class RuleEditorScreen extends Screen {
     private final UiModalStack modals = new UiModalStack(THEME);
     private @Nullable RuleSaveOverlay saveOverlay;
 
-    private boolean saving() { return workspace.state() == RuleEditClientState.APPLYING; }
+    private boolean saving() {
+        return workspace.state() == RuleEditClientState.APPLYING;
+    }
 
     private RuleSaveOverlay saveOverlay() {
         if (saveOverlay == null) {
@@ -112,8 +120,13 @@ public final class RuleEditorScreen extends Screen {
         return saveOverlay;
     }
 
-    /** @return 保存期间禁止 Esc 关闭；断线收尾由工作区控制 */
-    @Override public boolean shouldCloseOnEsc() { return !saving(); }
+    /**
+     * @return 保存期间禁止 Esc 关闭；断线收尾由工作区控制
+     */
+    @Override
+    public boolean shouldCloseOnEsc() {
+        return !saving();
+    }
 
     // 管理页（LIST）、编辑页（EDIT）与调试页（DEBUG）：各自持有控件与视图状态
     private final RuleEditorScreenListPage listPage;
@@ -132,6 +145,7 @@ public final class RuleEditorScreen extends Screen {
     private boolean noticeTruncated;
     // 上一帧绘制的提示区域（悬停命中测试用），未绘制时为 null
     private @Nullable UiRect noticeRect;
+    private @Nullable UiRect truncatedTitleRect;
     // 上一帧是否存在模态（用于识别「模态打开」这一清除时机）
     private boolean lastModalsEmpty = true;
 
@@ -153,56 +167,229 @@ public final class RuleEditorScreen extends Screen {
         this.display = new RuleListDisplayCache(this.model);
         // 管理页宿主适配：把屏幕能力暴露给列表页与条目动作
         RuleEditorScreenListPage.Host listHost = new RuleEditorScreenListPage.Host() {
-            @Override public Font font() { return RuleEditorScreen.this.font; }
-            @Override public UiModalStack modals() { return modals; }
-            @Override public RuleEditorModel model() { return model; }
-            @Override public EditorWorkspaceView workspace() { return RuleEditorScreen.this.workspace; }
-            @Override public int screenWidth() { return RuleEditorScreen.this.width; }
-            @Override public int screenHeight() { return RuleEditorScreen.this.height; }
-            @Override public boolean rejectWhenFrozen() { return RuleEditorScreen.this.rejectWhenFrozen(); }
-            @Override public void setNotice(@Nullable Component message, int color) { RuleEditorScreen.this.setNotice(message, color); }
-            @Override public RuleListDisplayCache display() { return display; }
-            @Override public void openEditor(String id) { RuleEditorScreen.this.openEditor(id); }
-            @Override public void selectInputTab() { editPage.openInputTab(); }
-            @Override public void showChanges() { RuleEditorScreen.this.showChanges(); }
-            @Override public void save() { editPage.save(); }
-            @Override public void confirm(String titleKey, String messageKey, Runnable onConfirm) { RuleEditorScreen.this.confirm(titleKey, messageKey, onConfirm); }
-            @Override public void refreshList() { listPage.refreshList(); }
+            @Override
+            public Font font() {
+                return RuleEditorScreen.this.font;
+            }
+
+            @Override
+            public UiModalStack modals() {
+                return modals;
+            }
+
+            @Override
+            public RuleEditorModel model() {
+                return model;
+            }
+
+            @Override
+            public EditorWorkspaceView workspace() {
+                return RuleEditorScreen.this.workspace;
+            }
+
+            @Override
+            public int screenWidth() {
+                return RuleEditorScreen.this.width;
+            }
+
+            @Override
+            public int screenHeight() {
+                return RuleEditorScreen.this.height;
+            }
+
+            @Override
+            public boolean rejectWhenFrozen() {
+                return RuleEditorScreen.this.rejectWhenFrozen();
+            }
+
+            @Override
+            public void setNotice(@Nullable Component message, int color) {
+                RuleEditorScreen.this.setNotice(message, color);
+            }
+
+            @Override
+            public RuleListDisplayCache display() {
+                return display;
+            }
+
+            @Override
+            public void openEditor(String id) {
+                RuleEditorScreen.this.openEditor(id);
+            }
+
+            @Override
+            public void selectInputTab() {
+                editPage.openInputTab();
+            }
+
+            @Override
+            public void showChanges() {
+                RuleEditorScreen.this.showChanges();
+            }
+
+            @Override
+            public void save() {
+                editPage.save();
+            }
+
+            @Override
+            public void confirm(String titleKey, String messageKey, Runnable onConfirm) {
+                RuleEditorScreen.this.confirm(titleKey, messageKey, onConfirm);
+            }
+
+            @Override
+            public void refreshList() {
+                listPage.refreshList();
+            }
         };
         // 编辑页宿主适配：把屏幕能力暴露给页签组合视图与保存流程
         RuleEditorScreenEditPage.Host editHost = new RuleEditorScreenEditPage.Host() {
-            @Override public Font font() { return RuleEditorScreen.this.font; }
-            @Override public UiFocusManager focus() { return focus; }
-            @Override public UiModalStack modals() { return modals; }
-            @Override public RuleEditorModel model() { return model; }
-            @Override public EditorWorkspaceView workspace() { return RuleEditorScreen.this.workspace; }
-            @Override public @Nullable EditSession session() { return editingSession(); }
-            @Override public @Nullable String editingId() { return editingId; }
-            @Override public boolean isEditMode() { return mode == Mode.EDIT; }
-            @Override public void onDraftChanged() { RuleEditorScreen.this.onDraftChanged(); }
-            @Override public void rebuildFocus() { RuleEditorScreen.this.rebuildFocus(); }
-            @Override public void setNotice(@Nullable Component message, int color) { RuleEditorScreen.this.setNotice(message, color); }
-            @Override public void refreshList() { listPage.refreshList(); }
-            @Override public boolean rejectWhenFrozen() { return RuleEditorScreen.this.rejectWhenFrozen(); }
-            @Override public void openEditor(String id) { RuleEditorScreen.this.openEditor(id); }
-            @Override public void closeScreen() { RuleEditorScreen.this.onClose(); }
-            @Override public void rebuildEditableState() { RuleEditorScreen.this.rebuildEditableState(); }
-            @Override public void showChanges() { RuleEditorScreen.this.showChanges(); }
-            @Override public void backToList() { RuleEditorScreen.this.backToList(); }
-            @Override public int screenWidth() { return RuleEditorScreen.this.width; }
-            @Override public int screenHeight() { return RuleEditorScreen.this.height; }
+            @Override
+            public Font font() {
+                return RuleEditorScreen.this.font;
+            }
+
+            @Override
+            public UiFocusManager focus() {
+                return focus;
+            }
+
+            @Override
+            public UiModalStack modals() {
+                return modals;
+            }
+
+            @Override
+            public RuleEditorModel model() {
+                return model;
+            }
+
+            @Override
+            public EditorWorkspaceView workspace() {
+                return RuleEditorScreen.this.workspace;
+            }
+
+            @Override
+            public @Nullable EditSession session() {
+                return editingSession();
+            }
+
+            @Override
+            public @Nullable String editingId() {
+                return editingId;
+            }
+
+            @Override
+            public boolean isEditMode() {
+                return mode == Mode.EDIT;
+            }
+
+            @Override
+            public void onDraftChanged() {
+                RuleEditorScreen.this.onDraftChanged();
+            }
+
+            @Override
+            public void rebuildFocus() {
+                RuleEditorScreen.this.rebuildFocus();
+            }
+
+            @Override
+            public void setNotice(@Nullable Component message, int color) {
+                RuleEditorScreen.this.setNotice(message, color);
+            }
+
+            @Override
+            public void refreshList() {
+                listPage.refreshList();
+            }
+
+            @Override
+            public boolean rejectWhenFrozen() {
+                return RuleEditorScreen.this.rejectWhenFrozen();
+            }
+
+            @Override
+            public void openEditor(String id) {
+                RuleEditorScreen.this.openEditor(id);
+            }
+
+            @Override
+            public void closeScreen() {
+                RuleEditorScreen.this.onClose();
+            }
+
+            @Override
+            public void rebuildEditableState() {
+                RuleEditorScreen.this.rebuildEditableState();
+            }
+
+            @Override
+            public void showChanges() {
+                RuleEditorScreen.this.showChanges();
+            }
+
+            @Override
+            public void backToList() {
+                RuleEditorScreen.this.backToList();
+            }
+
+            @Override
+            public int screenWidth() {
+                return RuleEditorScreen.this.width;
+            }
+
+            @Override
+            public int screenHeight() {
+                return RuleEditorScreen.this.height;
+            }
         };
         // 调试页宿主适配：只暴露调试页需要的卡片计数、刷新与返回能力
         RuleEditorScreenDebugPage.Host debugHost = new RuleEditorScreenDebugPage.Host() {
-            @Override public Font font() { return RuleEditorScreen.this.font; }
-            @Override public UiModalStack modals() { return modals; }
-            @Override public RuleEditorModel model() { return model; }
-            @Override public EditorWorkspaceView workspace() { return RuleEditorScreen.this.workspace; }
-            @Override public int screenWidth() { return RuleEditorScreen.this.width; }
-            @Override public int screenHeight() { return RuleEditorScreen.this.height; }
-            @Override public void setNotice(@Nullable Component message, int color) { RuleEditorScreen.this.setNotice(message, color); }
-            @Override public void refreshList() { listPage.refreshList(); }
-            @Override public void backToList() { RuleEditorScreen.this.backToList(); }
+            @Override
+            public Font font() {
+                return RuleEditorScreen.this.font;
+            }
+
+            @Override
+            public UiModalStack modals() {
+                return modals;
+            }
+
+            @Override
+            public RuleEditorModel model() {
+                return model;
+            }
+
+            @Override
+            public EditorWorkspaceView workspace() {
+                return RuleEditorScreen.this.workspace;
+            }
+
+            @Override
+            public int screenWidth() {
+                return RuleEditorScreen.this.width;
+            }
+
+            @Override
+            public int screenHeight() {
+                return RuleEditorScreen.this.height;
+            }
+
+            @Override
+            public void setNotice(@Nullable Component message, int color) {
+                RuleEditorScreen.this.setNotice(message, color);
+            }
+
+            @Override
+            public void refreshList() {
+                listPage.refreshList();
+            }
+
+            @Override
+            public void backToList() {
+                RuleEditorScreen.this.backToList();
+            }
         };
         this.listPage = new RuleEditorScreenListPage(listHost);
         this.editPage = new RuleEditorScreenEditPage(editHost);
@@ -257,7 +444,11 @@ public final class RuleEditorScreen extends Screen {
         int actualMouseY = mouseY;
         UiTypePicker picker = mode == Mode.EDIT ? editPage.activeTypePicker() : null;
         boolean saving = saving();
-        if (saving) { saveOverlay(); } else { saveOverlay = null; }
+        if (saving) {
+            saveOverlay();
+        } else {
+            saveOverlay = null;
+        }
         var pointer = com.meteorite.itemdespawntowhat.client.ui.kit.UiPointer.gated(!saving && modals.isEmpty() && picker == null, mouseX, mouseY);
         mouseX = pointer.x();
         mouseY = pointer.y();
@@ -314,14 +505,13 @@ public final class RuleEditorScreen extends Screen {
             Component tip = null;
             if (notice != null && noticeTruncated && noticeRect != null && noticeRect.contains(mouseX, mouseY)) {
                 tip = notice;
-            } else if (mode == Mode.EDIT && mouseY < EDIT_HEADER_H) {
-                EditSession session = editingSession();
-                if (session != null) {
-                    tip = NaturalSummary.rule(session.draft().root()).copy().append("\n")
-                            .append(ConsumptionSummary.hintRule(session.draft().root()));
-                }
+            } else if (mode == Mode.EDIT && truncatedTitleRect != null
+                    && truncatedTitleRect.contains(mouseX, mouseY) && editingId != null) {
+                new UiDescriptionTooltip(THEME, font).render(graphics, new UiRect(0, 0, width, height),
+                        List.of(new UiDescriptionTooltip.Line(Component.literal(labelText(editingId)),
+                                THEME.palette().canvasPickerText())), mouseX, mouseY);
             } else if (mode == Mode.LIST) {
-                tip = listPage.tooltipAt(mouseX, mouseY);
+                listPage.renderDescriptionTooltip(graphics, mouseX, mouseY);
             }
             if (tip != null) {
                 renderTooltip(graphics, tip, mouseX, mouseY);
@@ -343,6 +533,7 @@ public final class RuleEditorScreen extends Screen {
 
     // 顶部标题与状态
     private void drawHeaderText(GuiGraphics graphics) {
+        truncatedTitleRect = null;
         String title = this.getTitle().getString();
         if (mode == Mode.DEBUG) {
             title = Component.translatable(UI + "debug.title").getString();
@@ -351,12 +542,16 @@ public final class RuleEditorScreen extends Screen {
             title = Component.translatable(UI + "header.editing", labelText(editingId)).getString();
         }
         String state = Component.translatable(!workspace.active() ? UI + "state.freezing"
-                : mode == Mode.EDIT ? UI + (model.dirtyRuleIds().isEmpty() ? "state.applied" : "state.unapplied") : UI + "state.active")
+                        : mode == Mode.EDIT ? UI + (model.dirtyRuleIds().isEmpty() ? "state.applied" : "state.unapplied") : UI + "state.active")
                 .getString();
         int padding = mode == Mode.EDIT ? EDIT_PAD : PAD;
         int textY = mode == Mode.EDIT ? (EDIT_HEADER_H - font.lineHeight) / 2 : 3;
         int stateWidth = font.width(state) + 12;
+        String fullTitle = title;
         title = TextScroll.trimToWidth(font, title, Math.max(0, this.width - padding * 2 - stateWidth - PAD));
+        if (mode == Mode.EDIT && !title.equals(fullTitle)) {
+            truncatedTitleRect = new UiRect(padding, textY, font.width(title), font.lineHeight);
+        }
         graphics.drawString(font, title, padding, textY, THEME.palette().headerText(), false);
         if (mode == Mode.EDIT) {
             THEME.drawPanel(graphics, new UiRect(this.width - padding - stateWidth, 4, stateWidth, EDIT_HEADER_H - 8));
@@ -448,7 +643,9 @@ public final class RuleEditorScreen extends Screen {
 
     // 返回管理页：先结束交互并卸载页面，再刷新列表
     private void backToList() {
-        if (saving()) { return; }
+        if (saving()) {
+            return;
+        }
         if (!editPage.unmount()) {
             return;
         }
@@ -505,7 +702,10 @@ public final class RuleEditorScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (saving()) { saveOverlay().mouseClicked(mouseX, mouseY, button); return true; }
+        if (saving()) {
+            saveOverlay().mouseClicked(mouseX, mouseY, button);
+            return true;
+        }
         if (modals.isVisible()) {
             return modals.mouseClicked(mouseX, mouseY, button);
         }
@@ -531,7 +731,10 @@ public final class RuleEditorScreen extends Screen {
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (saving()) { saveOverlay().mouseReleased(mouseX, mouseY, button); return true; }
+        if (saving()) {
+            saveOverlay().mouseReleased(mouseX, mouseY, button);
+            return true;
+        }
         if (modals.isVisible()) {
             return modals.mouseReleased(mouseX, mouseY, button);
         }
@@ -547,7 +750,9 @@ public final class RuleEditorScreen extends Screen {
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        if (saving()) { return true; }
+        if (saving()) {
+            return true;
+        }
         if (modals.isVisible()) {
             return modals.mouseDragged(mouseX, mouseY, button, dragX, dragY);
         }
@@ -568,7 +773,9 @@ public final class RuleEditorScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        if (saving()) { return true; }
+        if (saving()) {
+            return true;
+        }
         if (modals.isVisible()) {
             return modals.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
         }
@@ -598,7 +805,10 @@ public final class RuleEditorScreen extends Screen {
         if (keyCode >= GLFW.GLFW_KEY_F1 && keyCode <= GLFW.GLFW_KEY_F12) {
             return false;
         }
-        if (saving()) { saveOverlay().keyPressed(keyCode, scanCode, modifiers); return true; }
+        if (saving()) {
+            saveOverlay().keyPressed(keyCode, scanCode, modifiers);
+            return true;
+        }
         if (modals.isVisible()) {
             return modals.keyPressed(keyCode, scanCode, modifiers);
         }
@@ -664,7 +874,9 @@ public final class RuleEditorScreen extends Screen {
     // 键盘抬起：把滑杆方向键的按住过程合并为一次提交
     @Override
     public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
-        if (saving()) { return true; }
+        if (saving()) {
+            return true;
+        }
         UiTypePicker picker = activeTypePicker();
         if (!modals.isVisible() && picker != null) return picker.keyReleased(keyCode, scanCode, modifiers);
         if (mode == Mode.EDIT && editPage.keyReleased(keyCode, scanCode, modifiers)) {
@@ -675,7 +887,9 @@ public final class RuleEditorScreen extends Screen {
 
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
-        if (saving()) { return true; }
+        if (saving()) {
+            return true;
+        }
         if (modals.isVisible()) {
             return modals.charTyped(codePoint, modifiers);
         }
@@ -816,7 +1030,9 @@ public final class RuleEditorScreen extends Screen {
 
     // 用户主动关闭：有未保存改动时提供「暂存到本地」「放弃」「取消」三个选择
     private void closeByUser() {
-        if (saving()) { return; }
+        if (saving()) {
+            return;
+        }
         if (editPage.blockNavigation()) {
             return;
         }
@@ -829,19 +1045,19 @@ public final class RuleEditorScreen extends Screen {
         modal.message(Component.translatable(UI + "confirm.discard_message"));
         modal.addButton(new UiButton(THEME, font, Component.translatable(UI + "button.save_local"),
                 UiButtonVariant.PRIMARY, () -> {
-                    modals.close(modal);
-                    // 先把当前表单输入并入草稿，再立即写盘；关闭流程本身也会再冲刷一次
-                    editPage.applyAllForms();
-                    model.persistNow();
-                    closeEditor();
-                }));
+            modals.close(modal);
+            // 先把当前表单输入并入草稿，再立即写盘；关闭流程本身也会再冲刷一次
+            editPage.applyAllForms();
+            model.persistNow();
+            closeEditor();
+        }));
         modal.addButton(new UiButton(THEME, font, Component.translatable(UI + "button.discard"),
                 UiButtonVariant.DANGER, () -> {
-                    modals.close(modal);
-                    // 玩家确认放弃：连落盘草稿一起删掉，避免下次打开又「恢复」回来
-                    model.discardAllDrafts();
-                    closeEditor();
-                }));
+            modals.close(modal);
+            // 玩家确认放弃：连落盘草稿一起删掉，避免下次打开又「恢复」回来
+            model.discardAllDrafts();
+            closeEditor();
+        }));
         modal.cancel(Component.translatable(UI + "button.cancel"));
         modal.layoutCentered(this.width, this.height);
         modals.push(modal);
@@ -855,15 +1071,20 @@ public final class RuleEditorScreen extends Screen {
     }
 
     // 外部切屏或断线也会调用 removed，及时释放预览实体持有的客户端世界。
-    @Override public void removed() {
-        EntityPreviewIcons.clear(); RulePreviewIcons.clear(); BlockPreviewIcons.clear();
+    @Override
+    public void removed() {
+        EntityPreviewIcons.clear();
+        RulePreviewIcons.clear();
+        BlockPreviewIcons.clear();
         super.removed();
     }
 
     // 只关屏，不动工作区会话（工作区由服务端租约与协议驱动）
     @Override
     public void onClose() {
-        if (saving()) { return; }
+        if (saving()) {
+            return;
+        }
         EntityPreviewIcons.clear();
         BlockPreviewIcons.clear();
         editPage.applyAllForms();

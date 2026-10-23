@@ -14,6 +14,7 @@ import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiDescriptionTooltip;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiListView;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModalStack;
@@ -102,7 +103,8 @@ final class RuleEditorScreenListPage {
     private static final int TAG_MODAL_WIDTH = 280;
     private static final int EXPORT_MODAL_WIDTH = 280;
     private static final int EXPORT_ROW_H = 20;
-    private static final int TOOLTIP_RESERVED_LINES = 8;
+    private static final int CONDITION_SUMMARY_LINES = 4;
+    private static final int TOOLTIP_MAX_LINES = 8;
     // 状态筛选的轮询顺序：全部 → 已启用 → 已停用
     private static final String[] STATUS_VALUES = {"all", "enabled", "disabled"};
     // 来源筛选的轮询顺序：全部 → 覆盖层 → 数据包
@@ -675,34 +677,38 @@ final class RuleEditorScreenListPage {
         return false;
     }
 
-    // 悬停在规则条目上时的多行提示；未命中返回 null。
-    @Nullable Component tooltipAt(double mouseX, double mouseY) {
+    // 规则摘要按语义分行：条件正文、状态与不可用提示各自保持主题配色。
+    void renderDescriptionTooltip(GuiGraphics graphics, int mouseX, int mouseY) {
         if (ruleList == null || !ruleList.bounds().contains(mouseX, mouseY)) {
-            return null;
+            return;
         }
         UiTreeNode<String> node = ruleList.nodeAt(mouseX, mouseY);
         if (node == null || node.value().startsWith("@")) {
-            return null;
+            return;
         }
         String id = node.value();
         // 悬停时才向展示快照索取配方预览与条件提示：未悬停的条目不生成提示
         RuleListDisplaySnapshot snapshot = host.display().snapshot(id);
         Component triggerTip = snapshot.preview().triggerTooltipAt(host.font(),
                 RuleRecipeView.recipeBounds(host.font(), ruleList.nodeContentBounds(node)), mouseX, mouseY);
-        if (triggerTip != null) return triggerTip;
         TagPreviewIcons.Tag tag = tagAt(mouseX, mouseY);
-        Component tip = tag == null ? Component.translatable(UI + "recipe.condition_tree").append("\n")
-                .append(snapshot.conditionTooltip(summaryLineBudget()))
-                : tag.tooltip();
-        if (snapshot.stateVisible()) tip = tip.copy().append("\n").append(snapshot.state());
-        if (snapshot.previewUnavailable()) tip = tip.copy()
-                .append("\n").append(Component.translatable(UI + "preview.unavailable"));
-        return tip;
-    }
-
-    // 条件提示的行数预算随窗口高度变化；预算变化时展示快照重建一次提示文本
-    private int summaryLineBudget() {
-        return Math.max(2, host.screenHeight() / host.font().lineHeight - TOOLTIP_RESERVED_LINES);
+        List<UiDescriptionTooltip.Line> lines = new ArrayList<>();
+        int textColor = THEME.palette().canvasPickerText();
+        int mutedColor = THEME.palette().canvasPickerTextMuted();
+        if (triggerTip != null || tag != null) {
+            lines.add(new UiDescriptionTooltip.Line(triggerTip != null ? triggerTip : tag.tooltip(), textColor));
+        } else {
+            lines.add(new UiDescriptionTooltip.Line(Component.translatable(UI + "recipe.condition_tree"), mutedColor));
+            lines.add(new UiDescriptionTooltip.Line(snapshot.conditionTooltip(CONDITION_SUMMARY_LINES), textColor));
+            if (snapshot.stateVisible()) lines.add(new UiDescriptionTooltip.Line(snapshot.state(), mutedColor));
+            if (snapshot.previewUnavailable()) lines.add(new UiDescriptionTooltip.Line(
+                    Component.translatable(UI + "preview.unavailable"), mutedColor));
+        }
+        UiDescriptionTooltip tooltip = new UiDescriptionTooltip(THEME, host.font());
+        if (triggerTip == null && tag == null) {
+            tooltip.setMaxLines(TOOLTIP_MAX_LINES, Component.translatable(UI + "recipe.condition_tree_more"));
+        }
+        tooltip.render(graphics, new UiRect(0, 0, host.screenWidth(), host.screenHeight()), lines, mouseX, mouseY);
     }
 
     // ---- 焦点与使能 ----
