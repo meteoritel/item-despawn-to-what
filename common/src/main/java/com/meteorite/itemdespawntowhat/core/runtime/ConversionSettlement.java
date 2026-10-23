@@ -72,8 +72,8 @@ final class ConversionSettlement implements ServerTask {
         String id() { return id; }
     }
 
-    // 开组三段（选组 → 支付 → 派发效果）的单步结果：开组成功、需要重选候选、本刻让出、截断整批
-    private enum GroupStep { OPENED, RETRY_SELECT, YIELD, TRUNCATE }
+    // 开组状态区分预算让出、区块等待与等待超时，避免把未决输入当成候选不足。
+    private enum GroupStep { OPENED, RETRY_SELECT, YIELD, WAITING_FOR_CHUNKS, FAILED, TRUNCATE }
 
     private final ConversionRuntime runtime;
     private final ServerScheduler scheduler;
@@ -90,8 +90,8 @@ final class ConversionSettlement implements ServerTask {
     // 效果槽位固定输入（键 = 候选 id + 槽序号 + 组序号）：前若干组在成功转化当刻领先固定，
     // 其余组由准备阶段按组续接写入；源实体清空后仍按固定输入执行
     private final Map<ConversionRuntime.PreparedEffectKey, EffectPreparation> preparations;
-    // 组间共享的固定输入（键的组序号恒为 0）：同一候选同一槽位的各组复用首份实例
-    private final Map<ConversionRuntime.PreparedEffectKey, EffectPreparation> sharedPreparations = new HashMap<>();
+    // 同一候选同一槽位连接共享执行状态；可共享固定输入的类型额外复用首份实例。
+    private final PreparedEffectSharing sharedPreparations = new PreparedEffectSharing();
     // 成功转化当刻已领先准备的组数：准备阶段从这里续接，不重做已固定的组
     private final int leadPreparedGroups;
     // 准备进度：已固定输入的组数与承诺组数
@@ -142,6 +142,8 @@ final class ConversionSettlement implements ServerTask {
         this.sourceVelocity = sourceVelocity == null ? Vec3.ZERO : sourceVelocity;
         // 准备阶段要按组续接写入，因此复制成可变映射；领先准备的内容原样带入
         this.preparations = preparations == null ? new HashMap<>() : new HashMap<>(preparations);
+        // 领先准备与后续准备连接到同一份执行状态，跨准备阶段仍遵守同一槽位额度。
+        this.preparations.replaceAll(sharedPreparations::share);
         this.leadPreparedGroups = Math.max(0, leadPreparedGroups);
         this.receipts = new SettlementReceipts(writer);
         this.record = receipts.record();
@@ -389,13 +391,7 @@ final class ConversionSettlement implements ServerTask {
                     // 未迁移的类型不在准备阶段固定输入，其条件与概率仍在首次执行时判定
                     continue;
                 }
-                if (preparation instanceof EffectPreparation.SharedPreparation) {
-                    EffectPreparation shared = sharedPreparations.putIfAbsent(
-                            new ConversionRuntime.PreparedEffectKey(candidate.id(), slot, 0), preparation);
-                    if (shared != null) {
-                        preparation = shared;
-                    }
-                }
+                preparation = sharedPreparations.share(key, preparation);
                 preparations.put(key, preparation);
             }
         }
@@ -423,6 +419,12 @@ final class ConversionSettlement implements ServerTask {
                 GroupStep step = openNextGroup(budget);
                 if (step == GroupStep.YIELD) {
                     return StepResult.yield(1, 1);
+                }
+                if (step == GroupStep.WAITING_FOR_CHUNKS) {
+                    return StepResult.yield(1, LoadedChunks.RETRY_TICKS);
+                }
+                if (step == GroupStep.FAILED) {
+                    return StepResult.failed(1);
                 }
                 if (step == GroupStep.TRUNCATE) {
                     break;
@@ -474,7 +476,14 @@ final class ConversionSettlement implements ServerTask {
         }
         if (rule.catalystCost() != null) {
             if (groupThreshold == null) groupThreshold = catalystStage.thresholdCheck();
-            if (!groupThreshold.advance(budget)) return GroupStep.YIELD;
+            if (!groupThreshold.advance(budget)) {
+                if (groupThreshold.timedOut()) {
+                    // 先按唯一中止出口移交库存，调度器失败回调再登记恢复任务。
+                    abort("catalyst_chunk_wait_timeout", true);
+                    return GroupStep.FAILED;
+                }
+                return groupThreshold.waitingForChunks() ? GroupStep.WAITING_FOR_CHUNKS : GroupStep.YIELD;
+            }
         }
         if (rule.consumeFluid()) {
             if (groupFluid == null) groupFluid = catalystStage.fluidSource();
@@ -665,9 +674,9 @@ final class ConversionSettlement implements ServerTask {
         return definition != null && definition.oneShot() ? 0 : groupIndex;
     }
 
-    // 执行器回执入账：中止后到达的迟到回执不得再落账（记录已移交恢复任务），其余交给回执记账协作者
+    // 终态回执不再落账，避免把已完成或已裁剪的记录重新登记。
     private void account(EffectResult result) {
-        if (cancelled) {
+        if (cancelled || record.completed()) {
             return;
         }
         receipts.apply(result);

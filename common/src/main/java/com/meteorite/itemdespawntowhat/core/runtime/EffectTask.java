@@ -22,8 +22,11 @@ import java.util.function.Consumer;
  * 结束与失败先置终态、摘掉执行状态引用，再各通知账目与执行状态一次；
  * 取消同样先置终态、摘引用，但只通知执行状态，不产生回执也不入账。
  * 因此回调重入或回调异常都不会重放世界操作、不会重复入账。
+ * 触发位置区块连续未加载达到等待上限时给出失败回执并终结，不再保留任务等待重新加载。
  */
 final class EffectTask implements ServerTask {
+    private static final String CHUNK_WAIT_TIMEOUT = "chunk_wait_timeout";
+    private final ChunkWait chunkWait = new ChunkWait();
     private final ConversionRuntime runtime;
     private final ServerLevel level;
     private final ItemEntity source;
@@ -48,8 +51,13 @@ final class EffectTask implements ServerTask {
         if (finished) { return StepResult.done(1); }
         if (budget.exhausted()) { return StepResult.yield(1, 1); }
         if (!LoadedChunks.contains(level, BlockPos.containing(context.position()))) {
+            if (chunkWait.expired(budget.gameTime())) {
+                finish(EffectResult.failed(CHUNK_WAIT_TIMEOUT));
+                return StepResult.done(1);
+            }
             return StepResult.yield(1, LoadedChunks.RETRY_TICKS);
         }
+        chunkWait.reset();
         if (execution == null) { execution = runtime.startEffect(level, source, context, effect, preparation); }
         if (budget.exhausted()) { return StepResult.yield(1, 1); }
         EffectResult result;

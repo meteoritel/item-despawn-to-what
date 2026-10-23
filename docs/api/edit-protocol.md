@@ -38,7 +38,7 @@ stateDiagram-v2
 | 确认窗口 | `RuleEditSessionLimits.OPEN_CONFIRM_WINDOW_SECONDS` | OPENING 会话在此窗口内未确认即回收 |
 | 心跳间隔 | `RuleEditSessionLimits.HEARTBEAT_INTERVAL_SECONDS` | 客户端按此间隔续租，服务端不主动推送续租回执 |
 | 租约 | `RuleEditSessionLimits.LEASE_SECONDS` | ACTIVE 会话在租约内未收到心跳则回收 |
-| 编辑权限 | `RuleEditSessionLimits.REQUIRED_PERMISSION_LEVEL` | 单人存档直接放行，多人存档要求权限等级达到该值 |
+| 编辑权限 | `RuleEditSessionLimits.REQUIRED_PERMISSION_LEVEL` | 单人存档房主直接放行，局域网访客与多人服务器玩家要求权限等级达到该值 |
 
 计时一律使用服务端活动 tick，服务端暂停时不推进。APPLYING 不被租约回收，释放请求延后到保存收尾后执行，保证在途写盘与回滚不被打断。取锁是原子操作：失败时仍然下发打开载荷，`messageArgs` 携带当前持有者，由客户端提示而不是静默失败。
 
@@ -119,6 +119,8 @@ stateDiagram-v2
 | 问题条数与参数 | `MAX_ISSUES_PER_RESULT`、`MAX_MESSAGE_ARGS`、`MAX_MESSAGE_ARG_CHARS` | 回执中问题与文案参数的截断口径 |
 
 超限请求按请求非法回执：网络层给整包留了少量余量，让越界的提交仍能收到结构化结论。
+
+服务端出站的结构化问题按字段字符上限、问题条数与消息参数上限裁剪，截断位置保留完整 Unicode 代理对；入站读取仍按协议上限严格校验。
 
 ## 回执
 

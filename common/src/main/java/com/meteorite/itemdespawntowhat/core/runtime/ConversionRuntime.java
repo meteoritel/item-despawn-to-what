@@ -1464,7 +1464,7 @@ public final class ConversionRuntime {
                                                                     ItemStack sourceSnapshot) {
         Map<PreparedEffectKey, EffectPreparation> preparations = new HashMap<>();
         // 组间共享的固定输入：同一候选同一槽位只保留首份，各组共用它承载执行期的跨组状态
-        Map<PreparedEffectKey, EffectPreparation> sharedPreparations = new HashMap<>();
+        PreparedEffectSharing sharedPreparations = new PreparedEffectSharing();
         if (preparedGroups <= 0) {
             return preparations;
         }
@@ -1487,16 +1487,9 @@ public final class ConversionRuntime {
                         // 未迁移的类型不在成功转化当刻固定，其条件与概率仍在首次执行时判定
                         break;
                     }
-                    if (preparation instanceof EffectPreparation.SharedPreparation) {
-                        // 跨组共享的固定输入只保留首份：执行期的邻域计数因此只有一个来源；
-                        // 跳过判定仍按组独立，前面各组已 gated 的结果不会被后面的组复用
-                        EffectPreparation shared = sharedPreparations.putIfAbsent(
-                                new PreparedEffectKey(candidate.id(), slot, 0), preparation);
-                        if (shared != null) {
-                            preparation = shared;
-                        }
-                    }
-                    preparations.put(new PreparedEffectKey(candidate.id(), slot, group), preparation);
+                    PreparedEffectKey key = new PreparedEffectKey(candidate.id(), slot, group);
+                    preparation = sharedPreparations.share(key, preparation);
+                    preparations.put(key, preparation);
                 }
             }
         }

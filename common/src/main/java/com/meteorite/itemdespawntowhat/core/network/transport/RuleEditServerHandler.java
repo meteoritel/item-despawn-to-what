@@ -3,7 +3,7 @@ package com.meteorite.itemdespawntowhat.core.network.transport;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveStatus;
 import com.meteorite.itemdespawntowhat.core.service.EditSessionManager;
 import com.meteorite.itemdespawntowhat.core.service.RuleEditService;
-import com.meteorite.itemdespawntowhat.core.service.RuleEditSessionLimits;
+import com.meteorite.itemdespawntowhat.core.service.RuleEditPermissions;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -57,7 +57,12 @@ public final class RuleEditServerHandler {
         return context != null && context.overlayRoot() != null && context.typeRegistries() != null;
     }
 
-    // 编辑权限：单人存档直接放行，否则要求权限等级 2
+    /**
+     * 按命令相同口径判定玩家编辑权限。
+     *
+     * @param player 当前玩家；null 表示没有可鉴权的执行者
+     * @return 单人存档房主或权限等级达标时为 true
+     */
     public static boolean canEdit(@Nullable ServerPlayer player) {
         if (player == null) {
             return false;
@@ -66,8 +71,7 @@ public final class RuleEditServerHandler {
         if (server == null) {
             return false;
         }
-        return server.isSingleplayer()
-                || player.createCommandSourceStack().hasPermission(RuleEditSessionLimits.REQUIRED_PERMISSION_LEVEL);
+        return RuleEditPermissions.hasAccess(player.createCommandSourceStack());
     }
 
     // 取当前覆盖层根目录对应的状态机：根目录变化则重建状态机与服务层

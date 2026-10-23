@@ -25,6 +25,9 @@ final class CatalystThresholdCheck {
     private List<ItemEntity> items;
     private CatalystAllocation allocation;
     private List<CatalystReservations.Hold> plan;
+    private final ChunkWait chunkWait = new ChunkWait();
+    private boolean waitingForChunks;
+    private boolean timedOut;
 
     // picks 是计划期按共享半径收集的候选实体；开组前按实体标识重新解析，不再重扫位置盒
     CatalystThresholdCheck(ServerLevel level, Vec3 position, List<ItemEntity> picks, CatalystCost cost,
@@ -39,14 +42,20 @@ final class CatalystThresholdCheck {
 
     // true 表示检查完成；结果在开组提交时由 valid() 读取。
     boolean advance(ServerTickBudget budget) {
+        if (budget.exhausted()) return false;
+        // 跨刻复核也重新检查区域；卸载期间保留未决语义，恢复后重新解析实体。
+        waitingForChunks = !ChunkPresence.containsArea(level, center, cost.radius());
+        if (waitingForChunks) {
+            items = null;
+            allocation = null;
+            plan = null;
+            timedOut = chunkWait.expired(budget.gameTime());
+            return false;
+        }
+        timedOut = false;
+        chunkWait.reset();
         if (items == null) {
-            if (budget.exhausted()) return false;
             budget.charge(1);
-            // 区块未加载时按实体标识解析会得到空结果，先守住计划期同一片区域，避免把未加载误判成门槛不足
-            if (!ChunkPresence.containsArea(level, center, cost.radius())) {
-                plan = List.of();
-                return true;
-            }
             List<ItemEntity> live = new ArrayList<>(picks.size());
             for (ItemEntity pick : picks) {
                 if (!(level.getEntity(pick.getUUID()) instanceof ItemEntity item) || !item.isAlive()) continue;
@@ -62,6 +71,14 @@ final class CatalystThresholdCheck {
         if (allocation.groups() == 0) { plan = List.of(); return true; }
         if (plan == null) plan = allocation.thresholdPlan(budget);
         return plan != null;
+    }
+
+    boolean waitingForChunks() {
+        return waitingForChunks;
+    }
+
+    boolean timedOut() {
+        return timedOut;
     }
 
     // 开组当刻复核：只校验实体仍存在、类型未变且扣除其它任务预留后仍够本组门槛

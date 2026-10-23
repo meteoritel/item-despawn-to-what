@@ -78,11 +78,12 @@ public final class PlaceBlockExecutor {
      * 目标方块解析失败时保留原因，由该槽位真正执行时产出失败回执：准备阶段会遍历未被选中的候选与尚未启动的组，
      * 那里的解析失败不应影响其它候选。
      */
-    public static class PlacementPlan implements EffectPreparation {
+    public static class PlacementPlan implements EffectPreparation.GroupedPreparation {
         private final @Nullable Block block;
         private final List<BlockPos> candidates;
         private final @Nullable Integer limit;
         private final @Nullable String failure;
+        private @Nullable Map<Block, NeighbourCount> counts;
 
         PlacementPlan(@Nullable Block block, List<BlockPos> candidates, @Nullable Integer limit,
                       @Nullable String failure) {
@@ -112,9 +113,28 @@ public final class PlaceBlockExecutor {
             return failure;
         }
 
-        // 跨组共享的邻域账：本份输入不可共享时没有
+        /** 同一槽位按实际抽取的方块共享邻域账，各组仍保留自己的随机目标。 */
+        @Override
+        public void shareStateWith(EffectPreparation.GroupedPreparation first) {
+            if (first instanceof PlacementPlan plan) {
+                if (plan.counts == null) {
+                    plan.counts = new HashMap<>();
+                }
+                counts = plan.counts;
+            }
+        }
+
+        // 邻域账按实际目标方块区分；同类方块跨组只有一份余额。
         @Nullable NeighbourCount sharedCount(BlockPos center, int radius, int target) {
-            return null;
+            long span = radius * 2L + 1L;
+            long cubePositions = span * span * span;
+            if (limit == null || limit - cubePositions >= target) {
+                return null;
+            }
+            if (counts == null) {
+                counts = new HashMap<>();
+            }
+            return counts.computeIfAbsent(block, ignored -> new NeighbourCount(limit, center, radius));
         }
     }
 
@@ -122,29 +142,12 @@ public final class PlaceBlockExecutor {
      * 可跨组共享的固定输入：同一候选同一槽位的各组拿到同一份实例，于是「方框内已有同类方块」只数一遍，
      * limit 余额（含本次已放量）也只有一份账，limit 因此是该方框内所有组共同的上限。
      * 只用于求值不含按组独立随机结果的输入：直接引用与源物品映射都在转化当刻确定；
-     * 标签引用要按随机源取定成员、各组各自取定，因此不共享。
+     * 标签引用按组独立取定成员、固定输入各自保留，邻域账仍按实际目标方块共享。
      */
     private static final class SharedPlacementPlan extends PlacementPlan
             implements EffectPreparation.SharedPreparation {
-        private @Nullable NeighbourCount count;
-
         private SharedPlacementPlan(@Nullable Block block, List<BlockPos> candidates, @Nullable Integer limit) {
             super(block, candidates, limit, null);
-        }
-
-        @Override
-        @Nullable NeighbourCount sharedCount(BlockPos center, int radius, int target) {
-            Integer limit = limit();
-            // 计数只为把计划量压到「limit 减去方框已有量」；整块填满同类方块也压不动时，计数不影响任何结果
-            long span = radius * 2L + 1L;
-            long cubePositions = span * span * span;
-            if (limit == null || limit - cubePositions >= target) {
-                return null;
-            }
-            if (count == null) {
-                count = new NeighbourCount(limit, center, radius);
-            }
-            return count;
         }
     }
 

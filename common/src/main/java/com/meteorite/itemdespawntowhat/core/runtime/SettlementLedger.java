@@ -304,13 +304,20 @@ public final class SettlementLedger extends SavedData {
         };
     }
 
+    /**
+     * 保存账本；单条记录编码失败时告警并跳过，其余记录继续写入。
+     */
     @Override
     public @NotNull CompoundTag save(
             @NotNull CompoundTag tag,
             @NotNull HolderLookup.Provider registries) {
         ListTag list = new ListTag();
         for (SettlementRecord record : records.values()) {
-            list.add(record.save(registries));
+            try {
+                list.add(record.save(registries));
+            } catch (RuntimeException failure) {
+                LOGGER.warn("结算记录保存失败，已跳过：id={}", record.id(), failure);
+            }
         }
         tag.put("records", list);
         return tag;

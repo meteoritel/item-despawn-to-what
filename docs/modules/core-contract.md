@@ -39,7 +39,7 @@ authority: common/core/api、common/core/api/scheduler
 
 - 类型实现者：`TypeDefinition` + `TypeRegistry`，分发由 `TypeDispatch.flat` 完成。
 - 条件类型实现者：`ConditionContext` + `ConditionEvaluator` + `ConditionResult` + `Evaluability`；上下文不足的门禁写在类型自己的 `evaluability` 上。
-- 效果类型实现者：`EffectExecutor` + `EffectContext` + `EffectResult`；需要跨 tick 推进时实现 `EffectExecution`，需要成功当刻固定输入时覆盖 `prepare` 与对应的 `start` 重载。
+- 效果类型实现者：`EffectExecutor` + `EffectContext` + `EffectResult`；需要跨 tick 推进时实现 `EffectExecution`，需要成功当刻固定输入时覆盖 `prepare` 与对应的 `start` 重载；各组固定输入独立、执行状态需共享时使用 `EffectPreparation.GroupedPreparation`。
 - 加载与装配：`RuleDecoder`（单条规则 JSON 解码契约）、`RuleDecodeBudget`（文本与条件树的规模预算）、`RuleFields`（字段名）、`IssueCollector`（问题回流）。
 - 调度任务实现者：`ServerTask` + `StepResult` + `StepOutcome` + `ServerTickBudget`；`TaskQueue` 与 `ScheduledTaskHandle` 用于提排期请求与精确取消。
 - 观测实现者：`RuntimeObserver`（上报点与排期包装）。

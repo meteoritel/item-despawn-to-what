@@ -45,14 +45,20 @@ public final class WeatherExecutor {
     }
 
     // 此处借用 Minecraft 管理的实例，生命周期由游戏负责，不能在此关闭。
-    @SuppressWarnings("resource")
+    /**
+     * 切换到目标天气及雷暴状态；已匹配时保留现有持续时长。
+     *
+     * @param effect 天气和持续时长
+     * @param context 触发维度上下文
+     * @return 实际切换或已匹配的回执
+     */
     public static EffectResult execute(WeatherEffect effect, EffectContext context) {
         ServerLevel level = context.level();
         if (!level.dimensionType().hasSkyLight()) {
             return EffectResult.skipped(NO_SKY_LIGHT);
         }
         if (effect.mode() == WeatherEffect.Mode.RAIN) {
-            if (level.isRaining()) {
+            if (level.isRaining() && level.isThundering() == effect.thundering()) {
                 return EffectResult.skipped(ALREADY_RAINING);
             }
             level.setWeatherParameters(0, effect.durationTicks(), true, effect.thundering());

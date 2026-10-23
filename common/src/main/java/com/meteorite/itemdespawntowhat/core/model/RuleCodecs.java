@@ -177,7 +177,15 @@ public final class RuleCodecs {
     }
 
     // 构造加载层可用的解码器；未知顶层字段不阻断加载，但会作为 WARN 进入 IssueCollector。
-    /** 条件树规模预检必须发生在递归解码之前：递归下钻由 DFU codec 与条件树自身完成，超深或超规模输入会在解码期击穿调用栈 */
+    /**
+     * 构造注册表感知解码器；严格字段与条件树预算预检失败时拒绝当前条目。
+     * 预检在递归解码前执行，避免非法字段静默落入默认值或超深输入击穿调用栈。
+     *
+     * @param registryAccess 当前注册表访问器
+     * @param effectTypes 效果类型注册表
+     * @param conditionTypes 条件类型注册表
+     * @return 同时返回解码结论与结构化问题的解码器
+     */
     public static RuleDecoder<Rule> decoder(RegistryAccess registryAccess,
                                             TypeRegistry<EffectType<?>> effectTypes,
                                             TypeRegistry<ConditionType<?>> conditionTypes) {
@@ -185,8 +193,11 @@ public final class RuleCodecs {
         DynamicOps<JsonElement> ops = RegistryOps.create(JsonOps.INSTANCE, registryAccess);
         return (body, issues) -> {
             warnUnknownFields(body, issues);
-            checkOutcomeFields(body, issues);
-            checkCatalystCostFields(body, issues);
+            boolean fieldsValid = checkOutcomeFields(body, issues);
+            fieldsValid &= checkCatalystCostFields(body, issues);
+            if (!fieldsValid) {
+                return DataResult.error(() -> "候选结果或 catalyst_cost 字段非法");
+            }
             if (!RuleDecodeBudget.checkConditionBudgets(body, issues)) {
                 // 议题已由预检写入，这里同时给出 DataResult 级失败，调用方即使忽略议题也拿不到可用规则
                 return DataResult.error(() -> "条件树规模超出上限: 深度<="
@@ -206,16 +217,18 @@ public final class RuleCodecs {
     }
 
     // 候选结果对象的未知字段：与效果类型一致采用错误级严格检查
-    private static void checkOutcomeFields(JsonObject body, IssueCollector issues) {
+    private static boolean checkOutcomeFields(JsonObject body, IssueCollector issues) {
         JsonElement raw = body.get(RuleFields.OUTCOMES);
         if (raw == null || !raw.isJsonArray()) {
-            return;
+            return true;
         }
+        boolean valid = true;
         int index = 0;
         for (JsonElement element : raw.getAsJsonArray()) {
             if (element.isJsonObject()) {
                 for (String key : element.getAsJsonObject().keySet()) {
                     if (!OUTCOME_FIELDS.contains(key)) {
+                        valid = false;
                         issues.error("候选结果存在未知字段: " + key, null,
                                 RuleFields.OUTCOMES + "[" + index + "]." + key);
                     }
@@ -223,23 +236,27 @@ public final class RuleCodecs {
             }
             index++;
         }
+        return valid;
     }
 
     // 催化剂固定成本：整数写法与对象内未知字段都按错误级拒绝（不做静默兼容）
-    private static void checkCatalystCostFields(JsonObject body, IssueCollector issues) {
+    private static boolean checkCatalystCostFields(JsonObject body, IssueCollector issues) {
         JsonElement raw = body.get(RuleFields.CATALYST_COST);
         if (raw == null) {
-            return;
+            return true;
         }
         if (!raw.isJsonObject()) {
             issues.error("catalyst_cost 必须为包含 items、counts、consume_counts、radius 的配置对象", null, RuleFields.CATALYST_COST);
-            return;
+            return false;
         }
+        boolean valid = true;
         for (String key : raw.getAsJsonObject().keySet()) {
             if (!CATALYST_COST_FIELDS.contains(key)) {
+                valid = false;
                 issues.error("catalyst_cost 存在未知字段: " + key, null, RuleFields.CATALYST_COST + "." + key);
             }
         }
+        return valid;
     }
 
     // 表达式编码：空表达式写成恒真的空 all_of，保证编码结果始终可回读且不产出 null

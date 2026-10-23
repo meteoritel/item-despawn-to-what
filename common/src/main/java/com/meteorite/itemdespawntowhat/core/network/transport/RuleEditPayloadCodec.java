@@ -9,7 +9,7 @@ import java.util.List;
 
 /**
  * 编辑链路载荷的共用编解码片段：字符串列表、可空字符串与结构化问题列表。
- * 全部字段按契约的"先校验长度、不截断"原则编解码，超限即抛解码异常交由连接层断开。
+ * 入站字段严格校验长度；服务端出站的诊断问题按协议限额裁剪，保留完整 Unicode 代理对。
  */
 final class RuleEditPayloadCodec {
 
@@ -43,7 +43,7 @@ final class RuleEditPayloadCodec {
     static void writeNullableString(FriendlyByteBuf buffer, String value) {
         buffer.writeBoolean(value != null);
         if (value != null) {
-            buffer.writeUtf(value, RuleEditLimits.MAX_CODE_CHARS);
+            buffer.writeUtf(diagnosticText(value, RuleEditLimits.MAX_CODE_CHARS), RuleEditLimits.MAX_CODE_CHARS);
         }
     }
 
@@ -54,17 +54,35 @@ final class RuleEditPayloadCodec {
 
     // 写入结构化问题列表
     static void writeIssues(FriendlyByteBuf buffer, List<RuleIssue> issues) {
-        List<RuleIssue> safe = issues == null ? List.of() : issues;
+        List<RuleIssue> safe = issues == null ? List.of()
+                : issues.subList(0, Math.min(issues.size(), RuleEditLimits.MAX_ISSUES_PER_RESULT));
         buffer.writeVarInt(safe.size());
         for (RuleIssue issue : safe) {
-            buffer.writeUtf(issue.severity(), RuleEditLimits.MAX_CODE_CHARS);
+            buffer.writeUtf(diagnosticText(issue.severity(), RuleEditLimits.MAX_CODE_CHARS), RuleEditLimits.MAX_CODE_CHARS);
             writeNullableString(buffer, issue.ruleId());
-            buffer.writeUtf(issue.origin(), RuleEditLimits.MAX_CODE_CHARS);
-            buffer.writeUtf(issue.fieldPath(), RuleEditLimits.MAX_FALLBACK_CHARS);
-            buffer.writeUtf(issue.messageCode(), RuleEditLimits.MAX_CODE_CHARS);
-            writeStrings(buffer, issue.messageArgs());
-            buffer.writeUtf(issue.fallbackMessage(), RuleEditLimits.MAX_FALLBACK_CHARS);
+            buffer.writeUtf(diagnosticText(issue.origin(), RuleEditLimits.MAX_CODE_CHARS), RuleEditLimits.MAX_CODE_CHARS);
+            buffer.writeUtf(diagnosticText(issue.fieldPath(), RuleEditLimits.MAX_FALLBACK_CHARS), RuleEditLimits.MAX_FALLBACK_CHARS);
+            buffer.writeUtf(diagnosticText(issue.messageCode(), RuleEditLimits.MAX_CODE_CHARS), RuleEditLimits.MAX_CODE_CHARS);
+            writeStrings(buffer, issue.messageArgs().stream().limit(RuleEditLimits.MAX_MESSAGE_ARGS)
+                    .map(value -> diagnosticText(value, RuleEditLimits.MAX_MESSAGE_ARG_CHARS)).toList());
+            buffer.writeUtf(diagnosticText(issue.fallbackMessage(), RuleEditLimits.MAX_FALLBACK_CHARS), RuleEditLimits.MAX_FALLBACK_CHARS);
         }
+    }
+
+    // FriendlyByteBuf 按 UTF-16 长度和最多三倍字节数限额；完整代理对的 UTF-8 编码同样满足该字节界限。
+    private static String diagnosticText(String value, int maxChars) {
+        if (value == null) {
+            return "";
+        }
+        if (value.length() <= maxChars) {
+            return value;
+        }
+        int end = maxChars;
+        if (end > 0 && Character.isHighSurrogate(value.charAt(end - 1))
+                && Character.isLowSurrogate(value.charAt(end))) {
+            end--;
+        }
+        return value.substring(0, end);
     }
 
     // 读取结构化问题列表；条数超限视为非法载荷

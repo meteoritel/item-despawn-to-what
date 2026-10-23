@@ -75,7 +75,8 @@ public final class RuleLoader {
         try {
             var result = decoder.decode(decodeBody(entry), local);
             result.error().ifPresent(error -> local.error(error.message(), null, null));
-            decoded = result.result();
+            // ERROR 的拒载粒度是当前条目；其它文件或兄弟条目的错误不影响本条。
+            decoded = local.hasErrors() ? Optional.empty() : result.result();
         } catch (RuntimeException | StackOverflowError e) {
             // 完整堆栈进日志，Issue 里保留类名与首个栈帧，避免异常被折叠成不可定位的字符串；
             // 栈溢出属于 Error，不捕获会直接击穿整次加载，因此与运行时异常同样降级为拒载该条

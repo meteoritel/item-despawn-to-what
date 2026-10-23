@@ -34,7 +34,17 @@ final class SettlementReceipts {
 
     // 进度回执写入通道：执行器只持有写入通道，拿不到可任意变更账目的裸入口
     IntConsumer progressSink() {
-        return writer::addProgress;
+        return units -> {
+            if (acceptsEffects()) {
+                writer.addProgress(units);
+            }
+        };
+    }
+
+    // 完成、中断或失败后库存与恢复均已收尾，迟到回执不得重登记终态记录。
+    private boolean acceptsEffects() {
+        return record.status() == SettlementRecord.Status.PLANNED
+                || record.status() == SettlementRecord.Status.STARTED;
     }
 
     void markStarted(long gameTime) {
@@ -109,8 +119,11 @@ final class SettlementReceipts {
     }
 
     // 执行器回执入账：已完成、已受理未完成、跳过与失败分别计数，计划量不冒充成功量；
-    // 中止后到达的迟到回执由调用方在入口拦截（记录已移交恢复任务，写入会把已终结记录重新登记进账本）
+    // 终态后的迟到回执与进度回执共用门禁，避免重新登记已经终结或裁剪的记录。
     void apply(EffectResult result) {
+        if (!acceptsEffects()) {
+            return;
+        }
         if (result == null) {
             writer.effectFailed();
         } else {

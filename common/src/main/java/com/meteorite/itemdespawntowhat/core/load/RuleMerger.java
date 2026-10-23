@@ -29,21 +29,19 @@ public final class RuleMerger {
     // 合并原始条目：跨层按层优先级升序处理，层内先普通条目后控制条目，返回结果保持 id 首次出现的顺序
     public static List<RawRuleEntry> merge(List<RawRuleEntry> entries, IssueCollector issues) {
         Map<ResourceLocation, RawRuleEntry> merged = new LinkedHashMap<>();
-        for (List<RawRuleEntry> layerEntries : groupByLayerThenControls(entries)) {
-            for (RawRuleEntry entry : layerEntries) {
-                apply(entry, merged, issues);
-            }
+        for (RawRuleEntry entry : orderedEntries(entries)) {
+            apply(entry, merged, issues);
         }
         return List.copyOf(merged.values());
     }
 
     // 按来源层分组（层优先级升序），层内稳定重排为普通条目在前、控制条目在后
-    private static List<List<RawRuleEntry>> groupByLayerThenControls(List<RawRuleEntry> entries) {
+    static List<RawRuleEntry> orderedEntries(List<RawRuleEntry> entries) {
         Map<RuleSourceLayer, List<RawRuleEntry>> buckets = new TreeMap<>(Comparator.comparingInt(RuleSourceLayer::priority));
         for (RawRuleEntry entry : entries) {
             buckets.computeIfAbsent(entry.origin().layer(), layer -> new ArrayList<>()).add(entry);
         }
-        List<List<RawRuleEntry>> result = new ArrayList<>(buckets.size());
+        List<RawRuleEntry> result = new ArrayList<>(entries.size());
         for (List<RawRuleEntry> bucket : buckets.values()) {
             List<RawRuleEntry> normals = new ArrayList<>(bucket.size());
             List<RawRuleEntry> controls = new ArrayList<>();
@@ -51,7 +49,7 @@ public final class RuleMerger {
                 (entry.isControl() ? controls : normals).add(entry);
             }
             normals.addAll(controls);
-            result.add(normals);
+            result.addAll(normals);
         }
         return result;
     }

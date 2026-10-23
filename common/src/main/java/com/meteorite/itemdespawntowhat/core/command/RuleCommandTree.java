@@ -2,12 +2,12 @@ package com.meteorite.itemdespawntowhat.core.command;
 
 import com.meteorite.itemdespawntowhat.core.debug.RuleDebugCommands;
 import com.meteorite.itemdespawntowhat.core.debug.DebugMode;
+import com.meteorite.itemdespawntowhat.core.service.RuleEditPermissions;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.MinecraftServer;
 
 import java.util.List;
 
@@ -32,10 +32,14 @@ public final class RuleCommandTree {
         dispatcher.register(root);
     }
 
-    // 权限口径与 core/network 的编辑会话一致：单人世界放行，否则要求权限等级 ≥2
+    /**
+     * 按编辑协议相同口径判定管理权限。
+     *
+     * @param source 当前命令执行者
+     * @return 单人存档房主或权限等级达标时为 true
+     */
     public static boolean hasAccess(CommandSourceStack source) {
-        MinecraftServer server = source.getServer();
-        return server.isSingleplayer() || source.hasPermission(2);
+        return RuleEditPermissions.hasAccess(source);
     }
 
     // 统一反馈出口：下发可翻译组件，由客户端按玩家语言渲染

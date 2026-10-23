@@ -57,11 +57,16 @@ public final class RuleSourceIndex {
         }
     }
 
-    // 归并原始条目：输入顺序必须是 RuleLoader.loadRaw 的输出顺序（层优先级升序），否则层内胜出者判定会错
+    /**
+     * 按合并器相同的层优先级与层内控制项顺序归并来源视图。
+     *
+     * @param rawEntries 合并前原始条目；同类条目保持输入优先级，null 视为空集合
+     * @return 按规则 id 排序的来源索引
+     */
     public static RuleSourceIndex build(List<RawRuleEntry> rawEntries) {
         Map<ResourceLocation, Builder> builders = new LinkedHashMap<>();
         List<RawRuleEntry> input = rawEntries == null ? List.of() : rawEntries;
-        for (RawRuleEntry raw : input) {
+        for (RawRuleEntry raw : RuleMerger.orderedEntries(input)) {
             ResourceLocation id = raw.id();
             if (id == null) {
                 // 无法确定 id 的条目已被解析层报错，无法归并，直接忽略

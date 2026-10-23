@@ -211,7 +211,7 @@ public final class SettlementRecord {
         tag.putString("rule", ruleId);
         tag.putString("dimension", dimension);
         tag.putString("candidate", candidateId);
-        tag.put("source_stack", source.save(registries));
+        tag.put("source_stack", source.saveOptional(registries));
         tag.putInt("initial_count", initialCount);
         tag.putInt("source_cost", sourceCostPerGroup);
         tag.putInt("group_count", groupCount);
@@ -260,6 +260,10 @@ public final class SettlementRecord {
         record.groupsStarted = tag.getInt("groups_started");
         record.consumedSources = tag.getInt("consumed_sources");
         record.pendingDelivery = tag.getInt("pending_delivery");
+        // 待返还库存必须有可解析的物品模板，坏记录交由账本逐条告警并跳过。
+        if (record.pendingDelivery > 0 && stack.isEmpty()) {
+            throw new IllegalArgumentException("Missing source_stack for pending settlement: " + record.id);
+        }
         record.deliveredReturns = tag.getInt("delivered_returns");
         record.appliedUnits = tag.getLong("applied_units");
         record.pendingUnits = tag.getLong("pending_units");
