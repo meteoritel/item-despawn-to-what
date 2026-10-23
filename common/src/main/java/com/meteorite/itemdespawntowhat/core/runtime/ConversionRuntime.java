@@ -375,8 +375,11 @@ public final class ConversionRuntime {
                 // 已发布后的回扫失误仍需清理旧结算队列；只重排一份续接任务，
                 // 按清理项逐份入队会让同一游标被多份任务推进，剩余清理项由本任务字段顺序消化。
                 if (generation == ruleGeneration && retries++ == 0) {
-                    scheduler.schedule(this, this, 1);
+                    scheduler.scheduleMaintenance(this, 1);
                     return;
+                }
+                for (int i = cleanupIndex; i < cleanup.size(); i++) {
+                    cleanup.get(i).onCancelled(CancelReason.RULE_RELOAD);
                 }
                 clearSavedRescan();
             }
