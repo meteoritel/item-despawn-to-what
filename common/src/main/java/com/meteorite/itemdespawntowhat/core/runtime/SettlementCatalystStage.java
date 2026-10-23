@@ -16,6 +16,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * 催化剂编排：计划期收集触发点半径内的催化剂、按共享库存分配算组数上界，并为每组开组准备门槛复核与流体复核。
@@ -45,6 +46,17 @@ final class SettlementCatalystStage {
     private int scanCursor;
     private boolean collected;
     private boolean thresholdChecked;
+
+    // 排序键在收集时固定：UUID 的无符号字典序与规范字符串顺序一致，比较阶段无需生成字符串。
+    private record CatalystPick(ItemEntity entity, double distanceSquared, UUID uuid) {}
+
+    private static final Comparator<CatalystPick> PICK_ORDER = Comparator
+            .comparingDouble(CatalystPick::distanceSquared)
+            .thenComparing((left, right) -> {
+                int high = Long.compareUnsigned(left.uuid().getMostSignificantBits(), right.uuid().getMostSignificantBits());
+                return high != 0 ? high
+                        : Long.compareUnsigned(left.uuid().getLeastSignificantBits(), right.uuid().getLeastSignificantBits());
+            });
 
     SettlementCatalystStage(ConversionRuntime runtime, ServerLevel level, ItemEntity source, Vec3 triggerPosition,
                             Rule rule, ItemStack held, int sourceCostPerGroup, String recordId) {
@@ -140,8 +152,15 @@ final class SettlementCatalystStage {
         TaggedItemMatch target = TaggedItemMatch.compileAll(catalyst.items());
         List<ItemEntity> found = level.getEntitiesOfClass(ItemEntity.class, box,
                 item -> item != source && !item.isRemoved() && target.matches(item.getItem()));
-        found.sort(Comparator.comparingDouble((ItemEntity item) -> item.position().distanceToSqr(source.position()))
-                .thenComparing((ItemEntity item) -> item.getUUID().toString()));
+        Vec3 origin = source.position();
+        List<CatalystPick> ordered = new ArrayList<>(found.size());
+        for (ItemEntity item : found) {
+            ordered.add(new CatalystPick(item, item.position().distanceToSqr(origin), item.getUUID()));
+        }
+        ordered.sort(PICK_ORDER);
+        for (int index = 0; index < ordered.size(); index++) {
+            found.set(index, ordered.get(index).entity());
+        }
         return found;
     }
 }

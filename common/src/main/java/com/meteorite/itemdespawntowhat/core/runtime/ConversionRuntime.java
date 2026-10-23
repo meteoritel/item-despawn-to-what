@@ -312,6 +312,7 @@ public final class ConversionRuntime {
 
             @Override public ServerTaskKind kind() { return ServerTaskKind.MAINTENANCE; }
             @Override public String tracingName() { return "saved-rule-rescan"; }
+            /** 先完成旧任务清理与恢复扫描，再按共享预算批量重建当前索引的掉落物追踪。 */
             @Override public StepResult step(ServerTickBudget budget) {
                 if (cleanupIndex < cleanup.size()) {
                     if (cleanup.get(cleanupIndex).step(budget).outcome() == StepOutcome.DONE) { cleanupIndex++; }
@@ -346,13 +347,17 @@ public final class ConversionRuntime {
                         return StepResult.yield(1, 1);
                     }
                     if (entityLimit == null) { entityLimit = state.items.isEmpty() ? Integer.MIN_VALUE : state.items.lastKey(); }
-                    var next = entityCursor == null ? state.items.firstEntry() : state.items.higherEntry(entityCursor);
-                    if (next == null || next.getKey() > entityLimit) { advanceWorld(); }
-                    else {
+                    // 与普通回扫共用批量配置，并把本步登记量夹在共享工作量余量内。
+                    int limit = Math.max(1, config.rescanEntitiesPerStep());
+                    int processed = 0;
+                    while (processed < limit && processed < budget.remainingWorkUnits() && !budget.exhausted()) {
+                        var next = entityCursor == null ? state.items.firstEntry() : state.items.higherEntry(entityCursor);
+                        if (next == null || next.getKey() > entityLimit) { advanceWorld(); break; }
                         entityCursor = next.getKey();
                         onItemAdded(world, next.getValue());
+                        processed++;
                     }
-                    return StepResult.yield(1, 1);
+                    return StepResult.yield(Math.max(1, processed), 1);
                 }
                 clearSavedRescan();
                 return StepResult.done(1);

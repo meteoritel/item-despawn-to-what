@@ -128,7 +128,8 @@ public final class PlaceBlockExecutor {
         @Nullable NeighbourCount sharedCount(BlockPos center, int radius, int target) {
             long span = radius * 2L + 1L;
             long cubePositions = span * span * span;
-            if (limit == null || limit - cubePositions >= target) {
+            // 所有放置位置均在统计方框内；limit 覆盖其总容量时，已有量与新增量之和天然不超限。
+            if (target <= 0 || limit == null || limit >= cubePositions) {
                 return null;
             }
             if (counts == null) {

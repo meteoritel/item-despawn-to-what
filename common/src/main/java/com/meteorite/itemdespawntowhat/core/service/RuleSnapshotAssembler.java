@@ -31,11 +31,13 @@ import org.jetbrains.annotations.Nullable;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.BitSet;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.NavigableMap;
+import java.util.TreeMap;
 
 /**
  * 规则快照装配器：把"来源分层索引 + 当前生效规则"组装成下发给客户端的快照。
@@ -109,6 +111,7 @@ public final class RuleSnapshotAssembler {
         }
 
         Map<ResourceLocation, RuleSnapshotEntry> entries = new LinkedHashMap<>();
+        IssueAssociations associatedIssues = new IssueAssociations(index, issues);
 
         // 1) 分层索引条目：唯一能给出 base/overlay/masked/disabled 完整语义的来源
         if (index != null) {
@@ -122,7 +125,7 @@ public final class RuleSnapshotAssembler {
                     effective = overlay != null ? copy(overlay) : copy(base);
                 }
                 String status = status(source, loaded != null);
-                List<RuleIssue> entryIssues = entryIssues(source, issues);
+                List<RuleIssue> entryIssues = associatedIssues.entries.getOrDefault(source.id(), List.of());
                 if (RuleSnapshotEntry.STATUS_INVALID.equals(status) && entryIssues.isEmpty()) {
                     entryIssues = List.of(new RuleIssue(RuleIssue.SEVERITY_ERROR, source.id().toString(),
                             RuleIssue.ORIGIN_RUNTIME, "", ISSUE_DECODE, List.of(), "规则解码失败: " + source.id()));
@@ -149,7 +152,7 @@ public final class RuleSnapshotAssembler {
         }
 
         return new RuleSnapshot(version, contextRevision, List.copyOf(entries.values()),
-                snapshotIssues(issues, index));
+                List.copyOf(associatedIssues.snapshot));
     }
 
     // 简化入口：仅有覆盖层与合并结果时装配（命令查询等只读路径使用）
@@ -239,101 +242,86 @@ public final class RuleSnapshotAssembler {
         return source.controlFromOverlay() ? RuleSnapshotEntry.ORIGIN_OVERLAY : RuleSnapshotEntry.ORIGIN_DATAPACK;
     }
 
-    // 把加载/校验问题按来源与字段路径关联到具体条目
-    private static List<RuleIssue> entryIssues(RuleSourceIndex.Entry source, @Nullable List<Issue> issues) {
-        if (issues == null || issues.isEmpty()) {
-            return List.of();
-        }
-        Set<String> origins = new LinkedHashSet<>();
-        Set<String> paths = new LinkedHashSet<>();
-        // 用 Arrays.asList 而非 List.of：base/overlay/control 允许为 null，List.of 会抛 NPE
-        for (RawRuleEntry raw : Arrays.asList(source.base(), source.overlay(), source.control())) {
-            if (raw == null) {
-                continue;
-            }
-            origins.add(raw.origin().display());
-            if (raw.fieldPath() != null && !raw.fieldPath().isEmpty()) {
-                paths.add(raw.fieldPath());
-            }
-        }
-        List<RuleIssue> matched = new ArrayList<>();
-        for (Issue issue : issues) {
-            if (issue != null && matches(issue, origins, paths)) {
-                matched.add(toRuleIssue(issue, source.id(), origins));
-            }
-        }
-        return List.copyOf(matched);
-    }
+    // 每份快照独占的关联结果：来源精确索引与路径有序索引只构建一次，问题按输入顺序分发。
+    private static final class IssueAssociations {
+        private final Map<ResourceLocation, List<RuleIssue>> entries = new HashMap<>();
+        private final List<RuleIssue> snapshot = new ArrayList<>();
 
-    // 无法关联到任何条目的问题：作为快照级问题下发（origin=runtime）
-    private static List<RuleIssue> snapshotIssues(@Nullable List<Issue> issues, @Nullable RuleSourceIndex index) {
-        if (issues == null || issues.isEmpty()) {
-            return List.of();
-        }
-        List<RuleIssue> result = new ArrayList<>();
-        for (Issue issue : issues) {
-            if (issue == null) {
-                continue;
+        private IssueAssociations(@Nullable RuleSourceIndex index, @Nullable List<Issue> issues) {
+            if (issues == null || issues.isEmpty()) {
+                return;
             }
-            if (index != null && matchesAnyEntry(issue, index)) {
-                continue;
+            List<RuleSourceIndex.Entry> sources = index == null ? List.of() : index.entries();
+            Map<String, List<Integer>> origins = new HashMap<>();
+            NavigableMap<String, List<Integer>> paths = new TreeMap<>();
+            boolean[] overlays = new boolean[sources.size()];
+            for (int number = 0; number < sources.size(); number++) {
+                RuleSourceIndex.Entry source = sources.get(number);
+                // base/overlay/control 允许为空，同一条目多次命中由分发时的 BitSet 合并。
+                for (RawRuleEntry raw : Arrays.asList(source.base(), source.overlay(), source.control())) {
+                    if (raw == null) {
+                        continue;
+                    }
+                    String origin = raw.origin().display();
+                    origins.computeIfAbsent(origin, ignored -> new ArrayList<>()).add(number);
+                    overlays[number] |= origin.startsWith(RuleSourceLayer.OVERLAY.displayName());
+                    if (!raw.fieldPath().isEmpty()) {
+                        paths.computeIfAbsent(raw.fieldPath(), ignored -> new ArrayList<>()).add(number);
+                    }
+                }
             }
-            result.add(new RuleIssue(severityOf(issue), null, RuleIssue.ORIGIN_RUNTIME,
-                    issue.fieldPath() == null ? "" : issue.fieldPath(), ISSUE_LOAD, List.of(),
-                    issue.message() == null ? "" : issue.message()));
-        }
-        return List.copyOf(result);
-    }
-
-    // 该问题是否已关联到某个分层条目
-    private static boolean matchesAnyEntry(Issue issue, RuleSourceIndex index) {
-        for (RuleSourceIndex.Entry source : index.entries()) {
-            Set<String> origins = new LinkedHashSet<>();
-            Set<String> paths = new LinkedHashSet<>();
-            // 用 Arrays.asList 而非 List.of：base/overlay/control 允许为 null，List.of 会抛 NPE
-        for (RawRuleEntry raw : Arrays.asList(source.base(), source.overlay(), source.control())) {
-                if (raw == null) {
+            BitSet matched = new BitSet(sources.size());
+            for (Issue issue : issues) {
+                if (issue == null) {
                     continue;
                 }
-                origins.add(raw.origin().display());
-                if (raw.fieldPath() != null && !raw.fieldPath().isEmpty()) {
-                    paths.add(raw.fieldPath());
+                matched.clear();
+                if (issue.origin() != null && !issue.origin().isEmpty()) {
+                    mark(matched, origins.get(issue.origin()));
+                }
+                matchPaths(matched, paths, issue.fieldPath());
+                if (matched.isEmpty()) {
+                    snapshot.add(new RuleIssue(severityOf(issue), null, RuleIssue.ORIGIN_RUNTIME,
+                            issue.fieldPath() == null ? "" : issue.fieldPath(), ISSUE_LOAD, List.of(),
+                            issue.message() == null ? "" : issue.message()));
+                } else {
+                    for (int number = matched.nextSetBit(0); number >= 0; number = matched.nextSetBit(number + 1)) {
+                        ResourceLocation id = sources.get(number).id();
+                        entries.computeIfAbsent(id, ignored -> new ArrayList<>())
+                                .add(toRuleIssue(issue, id, overlays[number]));
+                    }
                 }
             }
-            if (matches(issue, origins, paths)) {
-                return true;
-            }
         }
-        return false;
-    }
 
-    // 问题定位匹配：来源标识命中，或字段路径命中（含路径前缀）
-    private static boolean matches(Issue issue, Set<String> origins, Set<String> paths) {
-        String issueOrigin = issue.origin();
-        if (issueOrigin != null && !issueOrigin.isEmpty() && origins.contains(issueOrigin)) {
-            return true;
+        // 保留字符串双向前缀语义：逐前缀查祖先，按排序后的连续区间查后代。
+        private static void matchPaths(BitSet matched, NavigableMap<String, List<Integer>> paths,
+                                       @Nullable String issuePath) {
+            if (issuePath == null || issuePath.isEmpty() || paths.isEmpty()) {
+                return;
+            }
+            for (int length = 1; length < issuePath.length(); length++) {
+                mark(matched, paths.get(issuePath.substring(0, length)));
+            }
+            for (Map.Entry<String, List<Integer>> path : paths.tailMap(issuePath, true).entrySet()) {
+                if (!path.getKey().startsWith(issuePath)) {
+                    break;
+                }
+                mark(matched, path.getValue());
+            }
         }
-        String issuePath = issue.fieldPath();
-        if (issuePath != null && !issuePath.isEmpty()) {
-            for (String path : paths) {
-                // 问题路径可能是条目路径本身、其前缀或其后缀，双向匹配避免漏挂问题
-                if (path.equals(issuePath) || path.startsWith(issuePath) || issuePath.startsWith(path)) {
-                    return true;
+
+        private static void mark(BitSet matched, @Nullable List<Integer> numbers) {
+            if (numbers != null) {
+                for (int number : numbers) {
+                    matched.set(number);
                 }
             }
         }
-        return false;
     }
 
     // Issue → RuleIssue：severity 与 ruleId 必须带上
-    private static RuleIssue toRuleIssue(Issue issue, ResourceLocation id, Set<String> origins) {
-        boolean overlay = false;
-        for (String origin : origins) {
-            if (origin != null && origin.startsWith(RuleSourceLayer.OVERLAY.displayName())) {
-                overlay = true;
-                break;
-            }
-        }
+    private static RuleIssue toRuleIssue(Issue issue, ResourceLocation id, boolean overlay) {
         return new RuleIssue(severityOf(issue), id.toString(),
                 overlay ? RuleIssue.ORIGIN_OVERLAY : RuleIssue.ORIGIN_DATAPACK,
                 issue.fieldPath() == null ? "" : issue.fieldPath(),
