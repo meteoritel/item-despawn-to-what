@@ -33,7 +33,7 @@ import java.util.Set;
 import java.util.function.IntConsumer;
 
 /**
- * 一次转化的结算任务：聚合根只负责阶段推进与提交边界，具体工作交给六个协作者。
+ * 一次转化的结算任务：聚合根只负责阶段推进与提交边界，具体工作交给结算协作者。
  * 阶段（{@link SettlementPhases}）：
  * 1) 计划——按「源库存可支撑组数 × 催化剂上界 × 产物容量承诺」定出组数，并为第一组选定候选；
  * 2) 准备——为承诺的每组固定效果输入：每步最多 prepare_groups_per_step 组，按组续接，
@@ -41,13 +41,14 @@ import java.util.function.IntConsumer;
  * 3) 派发——每开始一组时独立选候选：轮询从共享游标依次搜索能完成一组的候选，
  *    确定该组并开组后才推进游标；容量不足的候选跳过，全部候选都开不出一组时停止并返还剩余库存；
  *    逐组从结算库存扣除固定源成本，并把候选内各效果派发一次（延迟交给调度器）；
- * 4) 交付——剩余库存作为返还掉落物分批交还世界，全部交付后才算完成。
+ * 4) 交付——直接物品按候选、槽位与物品汇总装箱，剩余库存分批返还，汇总物品任务收尾后完成。
  * 协作者：
  * - {@link SettlementGroupPlan} 候选与组计划：定组数、逐组选候选，组数上界只有一处实现；
  * - {@link SettlementCapacityProbe} 容量探测：把候选每轮产出折算成可开组数；
  * - {@link SettlementCatalystStage} 催化剂编排：计划期上界、预留组与开组前复核；
  * - {@link SettlementPayment} 支付与交付：开组前输入复核、催化剂扣除与返还交付；
  * - {@link SettlementReceipts} 回执记账：账目的唯一写入通道与库存所有权；
+ * - {@link SettlementItemOutputs} 直接物品汇总：已支付组按物品件数装箱，保留最晚原定执行时刻；
  * - {@link SettlementPhases} 阶段状态机：只维护当前阶段与合法跃迁。
  * 一次性效果（EffectType.oneShot）：不参与候选数量上限；仅含一次性效果的候选最多一组；
  * 同一源请求内每个一次性效果槽（候选 id + 槽序号）只尝试一次，概率落空或条件不满足也算已尝试，续跑不重试。
@@ -125,6 +126,8 @@ final class ConversionSettlement implements ServerTask {
     private int dispatchedThisStep;
     private boolean groupOpen;
     private boolean cancelled;
+    private final SettlementItemOutputs itemOutputs = new SettlementItemOutputs();
+    private int pendingItemBatches;
 
     // 构造结算任务：源库存 held 已在触发时刻整堆移出源实体，受控写入句柄由调用方（首次登记方）给出
     ConversionSettlement(ConversionRuntime runtime, ServerScheduler scheduler, ServerLevel level, ItemEntity source,
@@ -177,8 +180,6 @@ final class ConversionSettlement implements ServerTask {
             RuntimeObserver.current().taskStepStarting(level.getServer(), kind(), tracingName());
         }
         dispatchedThisStep = 0;
-        // 本刻容量查询结果只在同一刻内复用：世界存量在刻间可变，跨刻复用旧的正数测量值会高估 room
-        groupPlan.resetStepMeasurements();
         // 步内累积：本步的账目变更只在 finally 合并落账一次，成批交付因此从「每堆一次提交」降为「每步一次」
         receipts.beginStep();
         try {
@@ -245,6 +246,7 @@ final class ConversionSettlement implements ServerTask {
             return false;
         }
         cancelled = true;
+        itemOutputs.clear();
         // 中止即移交库存所有权：剩余库存改由恢复任务交付，本任务不再改写待返还量
         receipts.giveUpStock();
         try {
@@ -441,23 +443,23 @@ final class ConversionSettlement implements ServerTask {
                 continue;
             }
         }
+        // 所有已支付组都已确定产物，再按桶派发；保留原定延迟，跨组尾堆只交付一次。
+        while (!itemOutputs.isEmpty()) {
+            if (budget.exhausted() || dispatchedThisStep >= batch) {
+                return StepResult.yield(1, 1);
+            }
+            SettlementItemOutputs.Batch output = itemOutputs.next();
+            scheduleItemBatch(output);
+            budget.charge(1);
+            dispatchedThisStep++;
+        }
         // 派发结束：待交付量由步骤出口对齐，随后进入交付阶段
         phases.dispatchingCompleted();
         return StepResult.yield(1, 1);
     }
 
-    // 开组：候选复核 → 选组 → 门槛与流体复核 → 支付 → 记账扣库存。每段单一语义，失败按原因分流
+    // 开组：按剩余预算选组 → 门槛与流体复核 → 支付 → 记账扣库存。每段单一语义，失败按原因分流
     private GroupStep openNextGroup(ServerTickBudget budget) {
-        // 已选但尚未支付成本的候选可能跨刻等待，开组前再次核对邻近存量。
-        if (pendingCandidate != null) {
-            int capacity = groupPlan.measure(pendingCandidateIndex, budget);
-            if (capacity == SettlementGroupPlan.CAPACITY_PENDING) { return GroupStep.YIELD; }
-            groupPlan.bound(pendingCandidateIndex, capacity);
-            if (groupPlan.remaining(pendingCandidateIndex) <= 0) {
-                pendingCandidate = null;
-                pendingCandidateIndex = -1;
-            }
-        }
         if (pendingCandidate == null) {
             // 每组独立选候选：轮询从共享游标搜索能完成一组的候选，容量不足的候选跳过
             int pick = groupPlan.select(budget);
@@ -620,6 +622,10 @@ final class ConversionSettlement implements ServerTask {
             // 位置搜索预算用尽或批量上限已到：保留待返还、下刻从断点继续，不整批放弃
             return StepResult.yield(1, 1);
         }
+        // 汇总物品仍在等待延迟、预算或区块时保留账目写入窗口，真实交付回执到齐后再完成。
+        if (pendingItemBatches > 0) {
+            return StepResult.yield(1, 1);
+        }
         // 返还已全部交付：完成记录并交出库存所有权（此后不再对齐待交付量）
         receipts.complete(level.getGameTime());
         receipts.giveUpStock();
@@ -662,9 +668,29 @@ final class ConversionSettlement implements ServerTask {
             RuntimeObserver.current().observe(source, "EFFECT_SCHEDULED", "effect", effect.type(),
                     "delay_ticks", delay, "chance", effect.chance(), "outcome", candidate.id());
         }
+        long readyTick = level.getGameTime() + delay;
+        if (itemOutputs.collect(candidate.id(), slot, effect, preparation, context, readyTick)) {
+            return;
+        }
         RuntimeObserver.current().schedule(source, scheduler, level.dimension(),
-                level.getGameTime() + delay,
+                readyTick,
                 new EffectTask(runtime, level, source, context, effect, preparation, this::account));
+    }
+
+    // 一个汇总桶只注册一个效果任务；失败与成功都收束等待计数，加入世界的件数由原执行器回执。
+    private void scheduleItemBatch(SettlementItemOutputs.Batch output) {
+        pendingItemBatches++;
+        try {
+            RuntimeObserver.current().schedule(source, scheduler, level.dimension(), output.readyTick(),
+                    new EffectTask(runtime, level, source, output.context(), output.effect(), output.preparation(),
+                            result -> {
+                                pendingItemBatches--;
+                                account(result);
+                            }));
+        } catch (RuntimeException failure) {
+            pendingItemBatches--;
+            throw failure;
+        }
     }
 
     // 固定输入的准备组序号：一次性效果只在首次尝试时固定一份，因此任何组都取第 0 份；

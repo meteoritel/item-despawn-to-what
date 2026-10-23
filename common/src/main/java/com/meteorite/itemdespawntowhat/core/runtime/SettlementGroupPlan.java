@@ -11,10 +11,10 @@ import java.util.List;
 
 /**
  * 候选与组计划：定组数（容量承诺）与逐组选候选。
- * 组数上界只有一个实现（{@link #bound}）：同一候选的「本地预留」与「本刻世界测量」取小，
- * 计划期的容量承诺与开组前的复核共用它，不允许两处各写一份 min 逻辑。
+ * 计划期为各候选查询一次世界存量，按每组理论产出确定预算，后续只递减本地预留。
+ * 组数上界只有一个实现（{@link #bound}）：初始预算与本地剩余取小。
  * 候选剩余组数是只减不增的硬上界，因此已判定为 0 的候选不必再查世界。
- * 世界存量按刻可变：本刻测量结果只在同一刻内复用，跨刻重新查询。
+ * 外部新增产物与本结算的实际成功量都不改写初始预算。
  */
 final class SettlementGroupPlan {
 
@@ -34,8 +34,8 @@ final class SettlementGroupPlan {
     // 各候选剩余可开始组数（下标与 candidates 对齐）：CAPACITY_UNKNOWN = 未查询；
     // Integer.MAX_VALUE = 无限，不递减
     private final int[] remainingCapacity;
-    // 本刻已查询过的候选容量（CAPACITY_UNKNOWN = 本刻未查询）
-    private final int[] capacityThisStep;
+    // 初始容量查询结果：在本次结算生命周期内固定，预算让出不清空。
+    private final int[] initialCapacity;
     private int capacityCommit;
     private int capacityCommitCursor;
     // 轮询扫描起点：-1 = 本结算尚未读取共享游标；确定一组并开组后推进到该候选的下一位
@@ -50,21 +50,16 @@ final class SettlementGroupPlan {
         this.structureVersion = structureVersion;
         this.rotation = rule.combination() == CombinationMode.ROUND_ROBIN && candidates.size() > 1;
         this.remainingCapacity = new int[candidates.size()];
-        this.capacityThisStep = new int[candidates.size()];
+        this.initialCapacity = new int[candidates.size()];
         Arrays.fill(this.remainingCapacity, CAPACITY_UNKNOWN);
-        Arrays.fill(this.capacityThisStep, CAPACITY_UNKNOWN);
+        Arrays.fill(this.initialCapacity, CAPACITY_UNKNOWN);
     }
 
-    // 每步出口清空刻内测量缓存：世界存量在刻间可变，跨刻复用旧的正数测量值会高估 room
-    void resetStepMeasurements() {
-        Arrays.fill(capacityThisStep, CAPACITY_UNKNOWN);
-    }
-
-    // 产物容量承诺：按候选顺序累计当前可容纳的产物组数，够 planned 即停。
+    // 产物容量承诺：在准备与派发之前固定所有候选的初始预算，避免后续选到尚未检测的候选。
     // 预算耗尽返回 CAPACITY_PENDING，游标与累计值跨刻保留，下刻从断点续算；
-    // 已查询过的候选容量记入 remainingCapacity，派发期的复核直接复用这份上界。
+    // 已查询过的候选容量记入 remainingCapacity，派发期只消耗这份预算。
     int commit(int planned, ServerTickBudget budget) {
-        while (capacityCommitCursor < candidates.size() && capacityCommit < planned) {
+        while (capacityCommitCursor < candidates.size()) {
             int index = capacityCommitCursor;
             int remaining = measure(index, budget);
             if (remaining == CAPACITY_PENDING) {
@@ -77,7 +72,7 @@ final class SettlementGroupPlan {
     }
 
     // 为本组选候选：轮询从扫描起点依次找剩余容量 >= 1 的候选（首次取共享游标），优先模式从列表首项找；
-    // 缓存记录本地预留，开组前仍复核世界存量。CAPACITY_PENDING = 预算耗尽需重试，
+    // 只读取初始预算与本地剩余，不在生成途中重查世界。CAPACITY_PENDING = 初始查询尚未完成，
     // SELECT_EXHAUSTED = 所有候选都开不出一组
     int select(ServerTickBudget budget) {
         int size = candidates.size();
@@ -90,7 +85,7 @@ final class SettlementGroupPlan {
             }
             int remaining = measure(index, budget);
             if (remaining == CAPACITY_PENDING) { return CAPACITY_PENDING; }
-            if (bound(index, remaining) <= 0) {
+            if (bound(index, Math.min(remaining, probe.remainingGroups(candidates.get(index)))) <= 0) {
                 continue;
             }
             return index;
@@ -98,23 +93,20 @@ final class SettlementGroupPlan {
         return SELECT_EXHAUSTED;
     }
 
-    // 候选剩余可开组数：同一刻内同一候选只查一次世界，选组与开组前复核复用同一结果。
-    // 派发期刻内唯一的世界写是催化剂支付（只减少物品数），复用刻内更早的测量值不会高估剩余容量；
-    // 预算耗尽（CAPACITY_PENDING）不记入本刻缓存，下刻重新查询
+    // 初始查询只完成一次；查询遇到预算不足时由 probe 保留进度，完成后整个结算复用。
     int measure(int index, ServerTickBudget budget) {
-        int cached = capacityThisStep[index];
+        int cached = initialCapacity[index];
         if (cached != CAPACITY_UNKNOWN) {
             return cached;
         }
         int remaining = probe.groups(candidates.get(index), budget);
         if (remaining != CAPACITY_PENDING) {
-            capacityThisStep[index] = remaining;
+            initialCapacity[index] = remaining;
         }
         return remaining;
     }
 
-    // 组数上界的唯一实现：本地预留与本次测量取小后写回。首次测量（UNKNOWN）直接采用测量值；
-    // 计划期承诺与开组前复核都经由此处，组数截断口径因此只有一份。
+    // 初始预算与本地剩余取小，概率落空、实际少产与外部移走产物都不增加可开始组数。
     int bound(int index, int measured) {
         int cached = remainingCapacity[index];
         int bounded = cached == CAPACITY_UNKNOWN ? measured : Math.min(measured, cached);
@@ -122,13 +114,9 @@ final class SettlementGroupPlan {
         return bounded;
     }
 
-    // 候选当前剩余组数（只读）：未知返回 CAPACITY_UNKNOWN
-    int remaining(int index) {
-        return remainingCapacity[index];
-    }
-
     // 本组开组后占用一个名额：无限候选（MAX_VALUE）不递减，其余只减不增
     void reserve(int index) {
+        probe.reserve(candidates.get(index));
         if (remainingCapacity[index] != Integer.MAX_VALUE) {
             remainingCapacity[index]--;
         }

@@ -72,6 +72,18 @@ public final class SpawnEntityExecutor {
     }
 
     /**
+     * 同一结算槽位已支付各组的物品汇总输入；概率与标签选择已逐组完成。
+     * @param item 固定的物品类型，直接物品产出使用该物品的默认组件
+     * @param count 汇总后的总件数，不再乘执行上下文的轮数
+     */
+    public record ItemBatchPlan(Item item, long count) implements EffectPreparation {
+        public ItemBatchPlan {
+            java.util.Objects.requireNonNull(item, "item");
+            if (count < 0) { throw new IllegalArgumentException("count must be nonnegative"); }
+        }
+    }
+
+    /**
      * 同步入口：本类型需要按批次在共享预算内续接，不提供一次性完成的执行方式。
      *
      * @param effect 实体生成效果参数
@@ -151,6 +163,9 @@ public final class SpawnEntityExecutor {
         }
         if (effect.product() instanceof EntityProduct.Experience experience) {
             return SpawnXpExecutor.start(experience, context, preparation);
+        }
+        if (effect.product() instanceof EntityProduct.Item && preparation instanceof ItemBatchPlan(Item item, long count)) {
+            return SpawnItemExecutor.startBatch(context, item, count);
         }
         if (!(preparation instanceof SpawnPlan plan)) {
             return budget -> EffectResult.failed(MISSING_PREPARATION);

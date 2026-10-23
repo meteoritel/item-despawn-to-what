@@ -60,6 +60,11 @@ public final class SpawnItemExecutor {
      * @return 仅在共享预算内推进的交付状态
      */
     static EffectExecution start(EffectContext context, Item item, int count) {
+        return new ItemDelivery(context, item, EffectTargets.saturatedMultiply(count, context.rounds()));
+    }
+
+    // 汇总输入已经是已支付组的总件数，保留 long 以免聚合后截断产物。
+    static EffectExecution startBatch(EffectContext context, Item item, long count) {
         return new ItemDelivery(context, item, count);
     }
 
@@ -67,15 +72,14 @@ public final class SpawnItemExecutor {
     private static final class ItemDelivery implements EffectExecution {
         private final EffectContext context;
         private final Item item;
-        private int remaining;
+        private long remaining;
         // 邻区块未加载时的下次重试刻，0 表示不等待
         private long nextAttemptTick;
 
-        private ItemDelivery(EffectContext context, Item item, int count) {
+        private ItemDelivery(EffectContext context, Item item, long count) {
             this.context = context;
             this.item = item;
-            // 件数 = 每轮件数 × 本组轮数，轮数由本组固定，执行期不再读取产出参数
-            this.remaining = EffectTargets.saturatedMultiply(count, context.rounds());
+            this.remaining = count;
         }
 
         @Override
@@ -102,7 +106,7 @@ public final class SpawnItemExecutor {
                 if (budget.exhausted() || budget.remainingWorkUnits() - reportedUnits <= 0) {
                     return null;
                 }
-                int size = Math.min(remaining, maxStack);
+                int size = (int) Math.min(remaining, maxStack);
                 ItemEntity entity = new ItemEntity(level,
                         position.x + (level.random.nextDouble() - 0.5) * SCATTER_RADIUS, position.y + SPAWN_HEIGHT,
                         position.z + (level.random.nextDouble() - 0.5) * SCATTER_RADIUS, new ItemStack(item, size));

@@ -97,7 +97,7 @@ Time values are in game ticks, and 20 ticks equal 1 second on a normal server.
 
 ## Nearby Product Limits
 
-Before a conversion group starts, the mod counts how many similar products already sit near the destination. If the count has reached the limit, that group does not start. The source items it would have used are then not consumed, as the notes below explain. A group that has already started is never cut short when the count grows, so it finishes normally and can push the count past the limit. This check covers products only: it counts the items and generic entities a candidate would produce, and nearby experience orbs never stop a group over experience storage. A group that also produces items or generic entities still passes their own capacity checks.
+At the start of a settlement, the mod allocates an output budget from the initial nearby count and the declared theoretical output per group, without discounting probability. With a limit of 100, 90 existing items and one declared item per group, only 10 groups may convert; the remaining source items are returned. Nearby limits are not checked again during generation. Products added elsewhere do not reduce those 10 groups, and the final nearby count may exceed the limit. Actual budget use depends on the conversion type; producing less does not permit extra groups. Items and generic entities use their respective budgets; experience orb counts do not affect admission.
 
 These limits apply to every rule. They are not set per rule.
 
