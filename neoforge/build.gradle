@@ -4,47 +4,6 @@ plugins {
     id 'idea'
 }
 
-def screenshotModId = 'idtw_gui_screenshot'
-def screenshotDirectory = layout.projectDirectory.dir('runs/gui-screenshot')
-def screenshotProperty = { String name, String fallback -> providers.gradleProperty(name).getOrElse(fallback) }
-
-sourceSets {
-    guiScreenshot {
-        compileClasspath += sourceSets.main.output
-        runtimeClasspath += sourceSets.main.output
-    }
-}
-
-configurations {
-    guiScreenshotImplementation.extendsFrom implementation
-    guiScreenshotCompileOnly.extendsFrom compileOnly
-    guiScreenshotRuntimeOnly.extendsFrom runtimeOnly, localRuntime
-}
-
-def prepareGuiScreenshot = tasks.register('prepareGuiScreenshot') {
-    doLast {
-        def directory = screenshotDirectory.asFile
-        directory.mkdirs()
-        // 专用 run 只管理自己的设置，避免截图读取普通客户端的语言、分辨率与草稿。
-        new File(directory, 'options.txt').setText("""lang:${screenshotProperty('guiLanguage', 'zh_cn')}
-guiScale:${screenshotProperty('guiScale', '2')}
-fullscreen:false
-enableVsync:false
-pauseOnLostFocus:false
-onboardAccessibility:false
-""", 'UTF-8')
-        def config = new File(directory, 'config')
-        config.mkdirs()
-        new File(config, 'fml.toml').setText('earlyWindowControl = false\n', 'UTF-8')
-        // 只清理此工具工作目录内的草稿，不让上一轮的页面操作改变 fixture 初态。
-        def drafts = new File(config, 'itemdespawntowhat/client/editor-drafts').canonicalFile
-        if (!drafts.toPath().startsWith(directory.canonicalFile.toPath())) {
-            throw new GradleException('Screenshot draft directory escaped the dedicated run directory')
-        }
-        delete drafts
-    }
-}
-
 neoForge {
     version = neoforge_version
     // Automatically enable neoforge AccessTransformers if the file exists
@@ -81,70 +40,7 @@ neoForge {
         "${mod_id}" {
             sourceSet sourceSets.main
         }
-        "${screenshotModId}" {
-            sourceSet sourceSets.guiScreenshot
-        }
     }
-}
-
-neoForge.addModdingDependenciesTo(sourceSets.guiScreenshot)
-
-// 显式收窄普通 run，防止 ModDevGradle 默认加载全部登记的 mod。
-neoForge.runs.configureEach {
-    loadedMods.set(neoForge.mods.named(mod_id).map { [it] })
-}
-neoForge.runs.register('guiScreenshot') {
-    client()
-    sourceSet = sourceSets.guiScreenshot
-    loadedMods.set(neoForge.mods.named(mod_id).zip(neoForge.mods.named(screenshotModId)) { production, tool -> [production, tool] })
-    gameDirectory = screenshotDirectory
-    taskBefore prepareGuiScreenshot
-    programArguments.addAll '--width', screenshotProperty('guiWidth', '1280'), '--height', screenshotProperty('guiHeight', '720')
-    systemProperty 'idtw.guiScreenshot.screen', screenshotProperty('guiScreen', 'prototype')
-    systemProperty 'idtw.guiScreenshot.output', file(screenshotProperty('guiOutput', 'build/gui-screenshots')).absolutePath
-    systemProperty 'idtw.guiScreenshot.hidden', screenshotProperty('guiHidden', 'false')
-    systemProperty 'idtw.guiScreenshot.frames', screenshotProperty('guiFrames', '5')
-    systemProperty 'idtw.guiScreenshot.timeoutSeconds', screenshotProperty('guiTimeoutSeconds', '120')
-}
-
-def verifyGuiScreenshotIsolation = tasks.register('verifyGuiScreenshotIsolation') {
-    dependsOn tasks.named('jar'), tasks.named('sourcesJar')
-    doLast {
-        def forbidden = ['com/meteorite/itemdespawntowhat/dev/guiscreenshot/', 'gui-screenshot/']
-        [tasks.named('jar').get(), tasks.named('sourcesJar').get()].each { archive ->
-            def entries = zipTree(archive.archiveFile.get().asFile)
-            forbidden.each { prefix ->
-                if (!entries.matching { include "${prefix}**" }.isEmpty()) {
-                    throw new GradleException("GUI screenshot tool leaked into ${archive.name}: ${prefix}")
-                }
-            }
-            entries.matching { include 'META-INF/neoforge.mods.toml' }.files.each { metadata ->
-                if (metadata.getText('UTF-8').contains(screenshotModId)) {
-                    throw new GradleException("GUI screenshot metadata leaked into ${archive.name}")
-                }
-            }
-        }
-        neoForge.runs.findAll { it.name != 'guiScreenshot' }.each { run ->
-            if (run.loadedMods.get().any { it.name == screenshotModId }) {
-                throw new GradleException("GUI screenshot tool leaked into run ${run.name}")
-            }
-        }
-        def screenshotRun = neoForge.runs.named('guiScreenshot').get()
-        if (screenshotRun.loadedMods.get().collect { it.name }.toSet() != [mod_id, screenshotModId].toSet()
-                || screenshotRun.sourceSet.get() != sourceSets.guiScreenshot) {
-            throw new GradleException('Screenshot run must use its dedicated source set and load both required mods')
-        }
-        if (sourceSets.main.runtimeClasspath.files.any { sourceSets.guiScreenshot.output.files.contains(it) }) {
-            throw new GradleException('GUI screenshot output leaked into main runtimeClasspath')
-        }
-        logger.lifecycle('GUI screenshot isolation verified: production archives and ordinary runs are clean.')
-    }
-}
-tasks.named('check') { dependsOn verifyGuiScreenshotIsolation }
-tasks.register('checkGuiScreenshot') {
-    group = 'verification'
-    description = 'Compiles the GUI screenshot tool and verifies production isolation without starting Minecraft.'
-    dependsOn tasks.named('guiScreenshotClasses'), verifyGuiScreenshotIsolation
 }
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }

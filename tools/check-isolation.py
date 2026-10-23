@@ -7,9 +7,8 @@
    fabric/ 与 neoforge/ 中；
 2) 跨加载器依赖：fabric/ 不得 import net.neoforged.*，neoforge/ 不得 import
    net.fabricmc.*；
-3) 端隔离：客户端类只允许出现在客户端路径，即路径含 /client/ 的源码，以及只随客户端
-   加载的开发源集 neoforge/src/guiScreenshot/；其它路径不得 import
-   net.minecraft.client.* 与本模组 .client. 包。
+3) 端隔离：客户端类只允许出现在客户端路径，即路径含 /client/ 的源码；其它路径不得
+   import net.minecraft.client.* 与本模组 .client. 包。
 
 只判定 import 语句：注释与 javadoc 中的全限定名不构成编译期依赖，不计入违规。
 
@@ -30,8 +29,6 @@ EXCLUDED_DIRS = {
 }
 # 平台源集到各自加载器 API 前缀的映射：加载器 API 只允许出现在这里
 PLATFORM_LOADERS = {"fabric": "net.fabricmc.", "neoforge": "net.neoforged."}
-# 不在 /client/ 路径下、但只随客户端加载的开发源集（开发工具，不进入正式产物）
-DEV_CLIENT_PREFIXES = ("neoforge/src/guiScreenshot/",)
 # 判定为客户端类的 import 前缀
 CLIENT_IMPORT_PREFIXES = ("net.minecraft.client.", "com.meteorite.itemdespawntowhat.client.")
 IMPORT_RE = re.compile(r"^\s*import\s+(?:static\s+)?([A-Za-z_][A-Za-z0-9_.]*)\s*;")
@@ -48,8 +45,8 @@ def collect_sources(root: Path) -> list[Path]:
 
 
 def is_client_path(rel: str) -> bool:
-    """判断源文件是否属于客户端侧：路径含 /client/，或属于开发专用客户端源集。"""
-    return "/client/" in "/" + rel or rel.startswith(DEV_CLIENT_PREFIXES)
+    """判断源文件是否属于客户端侧：路径含 /client/。"""
+    return "/client/" in "/" + rel
 
 
 def check(root: Path) -> int:

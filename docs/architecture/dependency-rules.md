@@ -36,14 +36,14 @@ authority:
 | D9 | UI kit 不引用本模组其它包 | `client/ui/kit` 只引用自身包与白名单 | `tools/check-ui-kit-boundaries.ps1` |
 | D10 | 平台隔离 | `net.fabricmc.*`、`net.neoforged.*` 只出现在 `fabric/`、`neoforge/` | `tools/check-isolation.py` |
 | D11 | 跨加载器隔离 | `fabric/` 引用 `net.fabricmc.*`，`neoforge/` 引用 `net.neoforged.*`，两者互不引用对方加载器 API | `tools/check-isolation.py` |
-| D12 | 端隔离 | 客户端类（`net.minecraft.client.*`、`com.meteorite.itemdespawntowhat.client.*`）只出现在路径含 `/client/` 的源码与只随客户端加载的开发源集 `neoforge/src/guiScreenshot/` | `tools/check-isolation.py` |
+| D12 | 端隔离 | 客户端类（`net.minecraft.client.*`、`com.meteorite.itemdespawntowhat.client.*`）只出现在路径含 `/client/` 的源码 | `tools/check-isolation.py` |
 
 ```mermaid
 flowchart LR
     A["新增 import"] --> B{"加载器 API?"}
     B -- "是" --> P["只允许 fabric/ 与 neoforge/"]
     B -- "否" --> C{"客户端类?"}
-    C -- "是" --> D["只允许 /client/ 路径与开发客户端源集"]
+    C -- "是" --> D["只允许 /client/ 路径"]
     C -- "否" --> E{"在 client/ui/kit 内?"}
     E -- "是" --> F["只允许 kit 自身包与白名单"]
     E -- "否" --> G["按包职责表判断方向"]

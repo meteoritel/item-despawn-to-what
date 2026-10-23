@@ -30,7 +30,7 @@ authority:
 | `common/platform` | 平台能力接口与服务定位，两端适配只实现这里的契约 | [platform](../modules/platform.md) |
 | `common/client` | 客户端工作区、编辑器界面与 UI kit | [client-editor](../modules/client-editor.md)、[ui-kit](../modules/ui-kit.md)、[client-ui](../modules/client-ui.md) |
 | 根包 `Constants` | 模组标识与持久化实体标记（模组 id、检查锁标记、已转化标记） | [platform](../modules/platform.md) |
-| `fabric/`、`neoforge/` | 平台源集：`runtime`（事件与生命周期）、`platform`（能力实现）、`network`（载荷注册）、`client`（客户端入口）、`mixin`；NeoForge 侧另有 `debug` 包与 `guiScreenshot` 开发源集 | [platform](../modules/platform.md) |
+| `fabric/`、`neoforge/` | 平台源集：`runtime`（事件与生命周期）、`platform`（能力实现）、`network`（载荷注册）、`client`（客户端入口）、`mixin`；NeoForge 侧另有 `debug` 包 | [platform](../modules/platform.md) |
 
 ## core 的分层
 
@@ -146,7 +146,7 @@ flowchart TB
   - 允许：`core/state` 的状态类型。
   - 禁止：依赖客户端包与平台 loader 专有 API；实现放在两端源集。
 
-两端源集的组织：`runtime` 注册事件与生命周期并把回调转给 `core/host`；`platform` 实现 `platform/services` 的接口；`network` 注册载荷；`client` 提供客户端入口与界面挂载；`mixin` 只做原版方法级介入并把决策交给 `core`；NeoForge 的 `debug` 提供开发期入口，`guiScreenshot` 是独立的截图验证源集。平台源集只做适配，业务判断留在 `core`。
+两端源集的组织：`runtime` 注册事件与生命周期并把回调转给 `core/host`；`platform` 实现 `platform/services` 的接口；`network` 注册载荷；`client` 提供客户端入口与界面挂载；`mixin` 只做原版方法级介入并把决策交给 `core`；NeoForge 的 `debug` 提供开发期入口。平台源集只做适配，业务判断留在 `core`。
 
 ## common/client
 

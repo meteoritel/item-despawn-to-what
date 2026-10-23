@@ -2,7 +2,7 @@
 title: 平台接入层（platform、core/host、core/config、fabric、neoforge）
 layer: 3
 audience: 需要修改加载器接线、平台能力、Mixin 与开发工具链的开发者
-authority: common/src/main/java/com/meteorite/itemdespawntowhat/platform、core/host、core/config；fabric/src/main/**；neoforge/src/main/**；neoforge/src/guiScreenshot/**
+authority: common/src/main/java/com/meteorite/itemdespawntowhat/platform、core/host、core/config；fabric/src/main/**；neoforge/src/main/**
 ---
 
 # 平台接入层
@@ -10,9 +10,9 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/platform、core/
 > **TL;DR**
 > - 公共宿主持有一次存档生命周期的全部运行时状态，两端只实现差异适配面、事件接线与注册。
 > - 平台能力经 `IPlatformHelper` 由 `ServiceLoader` 注入；两端各提供一个实现，能力以接口默认实现兜底。
-> - Fabric 与 NeoForge 的事件能力不同：能走原生事件的走事件，事件覆盖不到的路径用最小 Mixin 补齐；开发截图工具是 neoforge 的独立 source set。
+> - Fabric 与 NeoForge 的事件能力不同：能走原生事件的走事件，事件覆盖不到的路径用最小 Mixin 补齐。
 
-**适用对象**：新增平台能力、调整服务端生命周期接线、补 Mixin、维护客户端接入或开发截图工具的开发者。读之前先看 [架构总览](../architecture/overview.md) 与 [包职责](../architecture/package-responsibility.md)。
+**适用对象**：新增平台能力、调整服务端生命周期接线、补 Mixin 或维护客户端接入的开发者。读之前先看 [架构总览](../architecture/overview.md) 与 [包职责](../architecture/package-responsibility.md)。
 
 ## 1. 模块职责
 
@@ -25,7 +25,6 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/platform、core/
 - **平台能力注入**：`IPlatformHelper` 由 `ServiceLoader` 发现唯一实现，具体能力面见接口本身；实体状态的读写也在这里，两端使用各自的持久化容器。
 - **模组级配置读取**：`ServerConfig.loadOrCreate` 负责 `server.json` 的读取、缺失即落盘与坏文件降级，两端共用同一实现与同一份文件。
 - **两端加载器接入**：入口类、事件订阅、Mixin、网络载荷注册、命令注册、客户端初始化。
-- **开发截图工具**：neoforge 的 `guiScreenshot` source set，用独立 mod id 在专用 run 里渲染界面并出图。
 
 规则读取与合并、运行时调度与结算、编辑会话与落盘、界面渲染分别由 [规则加载](rule-loading.md)、[转化运行时](conversion-runtime.md)、[编辑与落盘](authoring.md)、[编辑器界面](client-ui.md) 负责，本模块只提供它们所需的平台侧入口与生命周期钩子。
 
@@ -40,7 +39,6 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/platform、core/
 - **差异适配面**：`RuleRuntimeHostCore.PlatformAdapter`，两端唯一需要实现的差异集合（寿命提供者、包层判定、参考寿命采样与复位）。
 - **配置聚合**：`ServerConfig` 与 `NearbyProductLimits`，字段语义与默认值见 [服务器配置](../ops/configuration.md)。
 - **客户端接线**：Fabric 的 `client.ItemDespawnToWhatClient` 与 NeoForge 的 `client.register.ClientSetup`。
-- **开发工具**：`GuiScreenshotMod` 与场景工厂注册表 `ScreenshotScreens`。
 
 ### 依赖方向
 
@@ -102,7 +100,6 @@ flowchart LR
 | `FabricRuleCommandRegistrar` / `NeoForgeRuleCommandRegistrar` | 注册面 | 把命令树挂到平台命令事件 | `RuleCommandTree` |
 | `ClientSetup` / `ItemDespawnToWhatClient`（两端 client 包） | 客户端接线 | 注入 sink 与发送器、注册 S2C 接收器、客户端 tick 与界面 opener bootstrap | `RuleEditClientWorkspace`、`EditorScreenHooks` |
 | `ServerConfig`（core/config） | 配置聚合 | 模组级参数与派生换算；缺失即落盘默认值，解析失败记 Issue 并回落默认值 | `RuleRuntimeHostCore`、`ConversionRuntime` |
-| `ScreenshotRunner` / `ScreenshotScreens` / `ScreenshotOptions`（guiScreenshot） | 开发工具 | 无世界截图：计帧、抓帧、写图与结果 JSON、超时退出；场景 id 到 Screen 工厂的注册表 | `GuiScreenshotMod` |
 
 ## 4. 关键流程
 
@@ -186,19 +183,10 @@ flowchart TD
 - 新增载荷：类型、协议版本与两端注册同时补齐；C2S 与 S2C 都必须在公共注册路径声明，否则连接协商会判定通道缺失；S2C 处理器只经 `RuleEditPayloadRouter`。
 - 新增命令：加进 `RuleCommandTree`，平台注册器保持不动。
 
-### 开发截图工具
-
-- **隔离形态**：`neoforge/src/guiScreenshot` 是独立 source set，作为独立 mod（`idtw_gui_screenshot`）只被专用 run 加载；`verifyGuiScreenshotIsolation` 校验正式产物、普通 run 与 `runtimeClasspath` 都不含该工具，`check` 依赖它。
-- **新增场景**：在 `ScreenshotScreens` 的工厂表注册 `id -> Supplier<Screen>`，id 用小写短横线；需要离线数据时实现 `EditorWorkspaceView` 的 fixture（参考 `ScreenshotWorkspace`），由 fixture 提供快照与目录内容。
-- **运行**：`:neoforge:runGuiScreenshot`；`-PguiScreen` 选场景，`-PguiOutput` 选输出目录，`-PguiFrames` 与 `-PguiTimeoutSeconds` 控制帧数与超时，`-PguiHidden` 隐藏窗口，`-PguiLanguage`、`-PguiScale`、`-PguiWidth`、`-PguiHeight` 控制渲染参数。
-- **执行语义**：以屏幕渲染事件计真实绘制帧，在帧结束事件抓取主渲染目标；先写临时文件再原子替换，图片与 `.result.json` 一并产出；成功即停游戏，超时或失败以非零状态退出；运行前清空专用工作目录里的客户端草稿，避免上一轮页面操作改变初态。
-- **约束**：截图模式检测到已加载世界、连接或单人服务端即报错退出；隐藏窗口要求非全屏；资源加载遮罩期间不计帧。
-
 ### 改动后的验证
 
 - 平台接线、Mixin 或平台能力改动：先做 IDE 工作区检查，再跑 `tools/dsh-build.ps1 -Tasks build`，随后分别在两端进游戏验证启动、重载、停服与掉落物行为。
 - 端隔离：`python tools/check-isolation.py`。
-- 截图工具：`:neoforge:checkGuiScreenshot`（编译工具并校验隔离，不启动游戏）。
 - 文档链接：`python tools/check-docs.py`。
 
 ## 6. 数据与配置引用
