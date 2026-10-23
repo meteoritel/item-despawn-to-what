@@ -11,7 +11,7 @@ final class BackendProbeSuite {
 
     static List<String> steps(String suite, String phase) {
         if (suite.equals("performance")) {
-            return List.of("bench:baseline", "bench:convert", "bench:reload_storm");
+            return List.of("bench:baseline", "bench:unmatched", "bench:condition_miss", "bench:convert", "bench:reload_storm");
         }
         if (!suite.equals("core") && !CHAINS.contains(suite)) { throw new IllegalArgumentException("未知链路: " + suite); }
         if (phase.equals("resume")) { return List.of("world:restart"); }

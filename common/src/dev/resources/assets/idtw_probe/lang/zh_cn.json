@@ -102,5 +102,7 @@
   "itemdespawntowhat.command.debug.scene.phase.SETUP": "准备",
   "itemdespawntowhat.command.debug.scene.phase.WARMUP": "预热",
   "itemdespawntowhat.command.debug.scene.phase.MEASURE": "测量",
-  "itemdespawntowhat.command.debug.scene.phase.CLEANUP": "清理"
+  "itemdespawntowhat.command.debug.scene.phase.CLEANUP": "清理",
+  "itemdespawntowhat.command.debug.scene.description.bench.condition_miss": "1000个纸实体命中候选规则，但高度条件恒不满足：实际执行条件检查，零转化。",
+  "itemdespawntowhat.command.debug.scene.description.bench.unmatched": "1000个圆石实体不匹配纸规则：不进入转化检查的物品实体对照。"
 }

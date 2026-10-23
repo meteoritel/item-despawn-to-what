@@ -40,5 +40,7 @@
   "bench/retry",
   "bench/normal",
   "bench/converted",
-  "bench/reload_storm"
+  "bench/reload_storm",
+  "bench/condition_miss",
+  "bench/unmatched"
 ]

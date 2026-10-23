@@ -12,11 +12,25 @@ authority: tools/run-probes.ps1、neoforge/build.gradle、common/src/dev、neofo
 - 运行 `powershell -ExecutionPolicy Bypass -File tools/run-probes.ps1`，在独立存档验证精选核心后端链路，报告失败时退出非零。
 - 探针只在 NeoForge 开发类目录装载；正式 `main` 保留空观测契约，发布物由打包检查约束。
 - GUI、客户端交互和显示由用户手测。
-- `-Chain performance` 运行空基线、千实体转化与重载回扫，生成可直接打开的 `performance.html`，显示阶段耗时、CPU、heap、GC 和调度分类曲线。
+- `-Chain performance` 运行空基线、千实体空白对照、转化与重载回扫，生成可直接打开的 `performance.html`，显示阶段耗时、CPU、heap、GC 和调度分类曲线。
 
 ## 适用对象
 
 需要验证规则加载、物品转化、结算恢复、调度或覆盖层落盘的开发者与 Agent。运行环境是项目现有的 JDK 21、Gradle 与 NeoForge 1.21.1 开发环境。
+
+## 按改动选择验证
+
+先确定改动影响的业务结果，再选择能观察该结果的最小集合；链路与判据见下文核心链路表。
+
+| 改动或目标 | 选择与执行时机 |
+|---|---|
+| 单条核心后端链路的行为修改或问题修复 | 改动稳定并完成 IDEA 与构建检查后，运行对应 `-Chain`；涉及数条独立链路时取相关专项的并集 |
+| 跨链路公共逻辑，如共享调度、服务端生命周期或观测接线 | 运行一轮 `core`，复用其中已包含的专项结果 |
+| 后端性能排查或优化 | 复用相关功能通过报告，按性能工作流采集同配置基线与修改后结果；需要区分运行波动与变化趋势时再重复采样 |
+| 探针实现或工作流维护 | 运行能触达改动的最小集合；重启编排选 `recovery`，性能采样或曲线报告选 `performance`；修改断言或退出码处理时加一次 `-Negative` |
+| 纯文档、语言或 GUI 改动，以及只影响 Fabric 的平台改动 | 执行对应机械校验或平台验证；GUI 交由用户手测 |
+
+所选集合满足报告通过条件、获得任务所需证据后结束验证；负控以预期失败和非零退出为完成条件。代码、配置、负载和验证目标未变化时复用已有报告。后续修改影响已验证链路时重跑相关集合；出现新失败、影响范围扩大或用户明确要求时再扩测。交付节点本身不增加 `core` 或性能运行。
 
 ## 运行工作流
 
@@ -36,11 +50,11 @@ powershell -ExecutionPolicy Bypass -File tools/run-probes.ps1 -Chain save -Negat
 powershell -ExecutionPolicy Bypass -File tools/dsh-build.ps1 -Tasks build
 ```
 
-`-Chain` 接受 `core`、`natural`、`settlement`、`damage`、`recovery`、`loading`、`budget`、`state`、`save`。`-TimeoutSeconds` 设置每次服务端进程的等待上限，默认 900 秒。Gradle 始终经已有构建互斥脚本串行运行。
+`-Chain` 接受 `core`、`natural`、`settlement`、`damage`、`recovery`、`loading`、`budget`、`state`、`save`、`performance`。`-TimeoutSeconds` 设置每次服务端进程的等待上限，默认 900 秒。Gradle 始终经已有构建互斥脚本串行运行。
 
 每次运行创建 `neoforge/build/probe-runs/<运行编号>/`，写入专用平坦世界配置、EULA 和本地服务端配置。服务端绑定 `127.0.0.1`，端口由系统分配；夹具只操作该次运行的存档和 config。该目录保留现场，使用脚本自动生成的目录进行验证。
 
-Agent 的处理顺序：选择与改动相关的链路 → 查看失败断言和真实日志 → 修复 → 重跑相关链路；跨链路改动或交付前运行 `core`。新增场景先写明它能发现的具体故障，再补最少输入与后置断言。
+探针失败时查看失败断言和真实日志，修复后重跑相关链路。新增场景先写明它能发现的具体故障，再补最少输入与后置断言。
 
 ## 核心链路、埋点与判据
 
@@ -113,10 +127,14 @@ python tools/probe-performance-report.py neoforge/build/probe-runs/<本次目录
 | 代表负载 | 规模与测量窗口 | 核心业务判据 |
 |---|---|---|
 | `bench:baseline` | 0 个源，60 秒 | 零转化、零产物，观察空服务端与采样本身的背景成本 |
+| `bench:unmatched` | 1000 个圆石实体，60 秒；规则只匹配纸 | 零转化、零产物、源库存完整、追踪与检查任务为零；作为物品实体自身成本对照 |
+| `bench:condition_miss` | 1000 个纸实体，60 秒；10 秒后检查的高度条件恒不满足 | 零转化、零产物、源库存与追踪完整，`CONDITION_FALSE` 至少 1000 次；作为持续检查但不结算的对照 |
 | `bench:convert` | 1000 个独立源，每堆 1 件，60 秒；触发年龄 10 秒 | 千次结算完成，消费源与生成的实物精确匹配，无待交付余额 |
 | `bench:reload_storm` | 1000 个源，30 秒；五次正式重载 | 五次动作实际执行，回扫排空、源仍完整追踪，步长与工作量符合声明上限 |
 
 场景规模、动作、规则与预期取自 `common/src/dev/resources/idtw-debug/scenarios/bench/`。新增代表负载时先写声明并登记 manifest，再加入 `BackendProbeSuite`；阶段、资源采样与报告无需各场景重复实现。功能场景与性能场景共用生命周期和断言器。
+
+两组空白对照沿用转化场景的实体数量、堆叠数、网格密度、防合并组件与测量时长。先看 `unmatched` 相对空载的进程 CPU 与原版 tick，再看 `condition_miss` 的检查次数、runtime 和调度分类，最后结合 `convert` 评估结算成本。CPU 均值可作同负载差异观察；分位数分别展示，避免把不同场景的 p95 相减当作独立净开销。
 
 ### 时间轴与观测口径
 
@@ -134,7 +152,7 @@ JMX 线程只读取管理指标；世界和 scheduler 数据由服务端线程�
 
 ### 报告与判定
 
-- `performance.html`：独立离线页面，阶段表、共享时间轴曲线、鼠标采样值、环境与负载详情、同负载增幅表；无外部脚本或服务。
+- `performance.html`：独立离线页面，负载汇总对照、阶段表、共享时间轴曲线、鼠标采样值、环境与负载详情、同负载增幅表；无外部脚本或服务。
 - `performance-resources.csv` / `performance-ticks.csv` / `performance-phases.csv`：资源样本、逐 tick 分类与阶段原始数据，均带进程阶段和步骤标识。
 - `performance-summary.json`：测量窗口统计与比较结果。CPU 均值按实际间隔加权，p95 使用 nearest-rank；有 MEASURE 的场景只汇总该窗口，世界链路使用整步。
 - `prepare-report.json` / `resume-report.json` 的 `performance`：原始记录及采样成本；`environment` 包含 Java、OS、处理器数、heap 容量、tick rate、seed、JVM 参数与正式配置；场景 `workload` 包含数量、时长、规则和动作。
@@ -150,7 +168,7 @@ JMX 线程只读取管理指标；世界和 scheduler 数据由服务端线程�
 | GUI 控件、布局、输入焦点、提示文案、草稿交互、S2C 显示与客户端网络分片 | 用户指定手动测试；后端集合集中验证状态与实物 |
 | Fabric 原生事件与加载行为 | 本集合统一 NeoForge；Fabric 参与正常构建和发布隔离检查 |
 | 每个物品、每种条件叶、效果类型和规则字段的所有组合 | 核心场景用代表输入验证选择、接管、结算和交付；修改特定类型时追加一个命中其风险的定向场景 |
-| 随机概率分布、长时间压力、所有预算值与硬件矩阵 | 功能集合采用确定输入；性能集合只选三个代表负载，数值随环境与负载解释 |
+| 随机概率分布、长时间压力、所有预算值与硬件矩阵 | 功能集合采用确定输入；性能集合采用有限代表负载与空白对照，数值随环境与负载解释 |
 | 任意第三方 mod、魔改包和权限插件组合 | 当前独立存档使用项目声明依赖；兼容性问题用对应整合环境重现 |
 | 强制杀进程、磁盘掉电、磁盘满等故障矩阵 | 当前持久化验证使用正常停服后的真实重启；保存事务重点检查部分提交回滚 |
 

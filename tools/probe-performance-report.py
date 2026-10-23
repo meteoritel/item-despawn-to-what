@@ -48,6 +48,7 @@ def summary(run):
         return sum(sample[key] * sample['interval_ms'] for sample in valid) / duration if duration else None
 
     return dict(scope='MEASURE' if measured else 'whole_step', ticks=len(ticks), samples=len(samples),
+                vanilla_p95_ms=percentile([tick['vanilla_ms'] for tick in ticks], .95),
                 runtime_p95_ms=percentile([tick['runtime_ms'] for tick in ticks if tick.get('runtime_ms') is not None], .95),
                 server_tick_p95_ms=percentile([tick['vanilla_ms'] + tick['runtime_ms'] for tick in ticks if tick.get('runtime_ms') is not None], .95),
                 process_cpu_percent_one_core=weighted('process_cpu_percent_one_core'),
@@ -135,7 +136,7 @@ svg{width:100%;height:auto;background:#111b27}text{fill:#aab9c9;font:12px sans-s
 <p>阶段表为独占墙钟耗时，包含等待 tick；CPU 列为阶段内服务端线程 CPU 时间。tick 图使用原版计时加 IDTW 运行时；调度分类属于 runtime 内部，彼此不与 runtime 相加。</p>
 <p>曲线覆盖步骤全程；统计与对比优先使用 MEASURE，世界链路使用整步。报告写盘和序列化在采样窗口外。
 资源采样与逐 tick 记录成本在每步列出。首次 JVM 的 JIT、GC 和机器负载会影响数值，比较时沿用相同负载并重复运行。</p>
-<div id="comparison"></div><main id="runs"></main>
+<div id="overview"></div><div id="comparison"></div><main id="runs"></main>
 <script id="data" type="application/json">__DATA__</script>
 <script>
 const data=JSON.parse(document.getElementById('data').textContent), colors=['#61c9ff','#ffb55c','#75db9a','#d49aff','#ff7f93'];
@@ -158,6 +159,7 @@ function chart(parent,title,rows,series,phases,duration,unit){
  const el=box.querySelector('svg'),cursor=box.querySelector('.cursor'),out=box.querySelector('.readout');
  el.addEventListener('mousemove',e=>{if(!rows.length)return;let target=(e.clientX-el.getBoundingClientRect().left)/el.getBoundingClientRect().width*w;let time=(target-left)/(w-left-right)*xmax;let r=rows.reduce((a,b)=>Math.abs(a.elapsed_ms-time)<Math.abs(b.elapsed_ms-time)?a:b);cursor.setAttribute('x1',x(r.elapsed_ms));cursor.setAttribute('x2',x(r.elapsed_ms));cursor.setAttribute('opacity',.7);out.innerHTML=fmt(r.elapsed_ms/1000)+' s · '+esc(r.phase)+' · '+series.map(s=>esc(s[0])+': '+fmt(s[1](r))).join(' · ');});
 }
+document.getElementById('overview').innerHTML='<section><h2>负载汇总</h2><p>CPU 为测量窗口加权均值，100% = 一个逻辑核；tick 为各组独立 p95。先对照 unmatched 的实体成本，再看 condition_miss 的检查成本和 convert 的结算负载。</p>'+table(['步骤','源数','物品','进程 CPU %','服务端 CPU %','原版 p95 ms','runtime p95 ms','总 tick p95 ms','heap 峰值 MiB'],data.runs.map(r=>{const s=r.summary;return [esc(r.phase+' / '+r.step),fmt(r.workload?.sources),esc(r.workload?.source_item??'未记录'),fmt(s.process_cpu_percent_one_core),fmt(s.server_thread_cpu_percent),fmt(s.vanilla_p95_ms),fmt(s.runtime_p95_ms),fmt(s.server_tick_p95_ms),fmt(s.peak_heap_used_mib)];}))+'</section>';
 if(data.comparison.length){document.getElementById('comparison').innerHTML='<section><h2>与基线比较</h2><p>增幅 = 当前 / 基线 − 1；负值表示下降，单位 %。</p>'+table(['步骤','runtime p95','总 tick p95','进程 CPU','heap 峰值'],data.comparison.map(c=>c.comparable?[esc(c.step),...Object.values(c.delta_percent).map(v=>fmt(v))]:[esc(c.step),esc(c.reason),'','','']))+'</section>';}
 for(const r of data.runs){
  const p=r.performance, node=document.createElement('section');document.getElementById('runs').appendChild(node);

@@ -102,5 +102,7 @@
   "itemdespawntowhat.command.debug.scene.phase.SETUP": "Preparation",
   "itemdespawntowhat.command.debug.scene.phase.WARMUP": "Warmup",
   "itemdespawntowhat.command.debug.scene.phase.MEASURE": "Measurement",
-  "itemdespawntowhat.command.debug.scene.phase.CLEANUP": "Cleanup"
+  "itemdespawntowhat.command.debug.scene.phase.CLEANUP": "Cleanup",
+  "itemdespawntowhat.command.debug.scene.description.bench.condition_miss": "1,000 paper entities have a candidate rule but fail its Y-level condition: no conversion, with real condition checks.",
+  "itemdespawntowhat.command.debug.scene.description.bench.unmatched": "1,000 cobblestone entities do not match the paper rule: item entity control without conversion checks."
 }

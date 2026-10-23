@@ -366,6 +366,7 @@ final class DebugScenarioRun {
         JsonObject workload = new JsonObject();
         workload.addProperty("scenario", definition.spec.key());
         workload.addProperty("sources", definition.sources);
+        workload.addProperty("source_item", definition.spec.sourceItem().toString());
         workload.addProperty("stack_size", definition.stackSize);
         workload.addProperty("seconds", seconds);
         workload.addProperty("warmup_ticks", 20);
