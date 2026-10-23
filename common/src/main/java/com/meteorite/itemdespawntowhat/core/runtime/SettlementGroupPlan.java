@@ -10,7 +10,7 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * 候选与组计划：定组数（容量承诺）与逐组选候选。
+ * 候选与组计划：按初始产出预算定组数，逐组选候选。
  * 计划期为各候选查询一次世界存量，按每组理论产出确定预算，后续只递减本地预留。
  * 组数上界只有一个实现（{@link #bound}）：初始预算与本地剩余取小。
  * 候选剩余组数是只减不增的硬上界，因此已判定为 0 的候选不必再查世界。
@@ -55,7 +55,8 @@ final class SettlementGroupPlan {
         Arrays.fill(this.initialCapacity, CAPACITY_UNKNOWN);
     }
 
-    // 产物容量承诺：在准备与派发之前固定所有候选的初始预算，避免后续选到尚未检测的候选。
+    // 初始产出预算：测完所有候选后才开始派发，交叉扣减表因此覆盖所有候选。
+    // 不按 planned 提前结束，避免后续才测量的候选错过前面已支付组的理论扣减。
     // 预算耗尽返回 CAPACITY_PENDING，游标与累计值跨刻保留，下刻从断点续算；
     // 已查询过的候选容量记入 remainingCapacity，派发期只消耗这份预算。
     int commit(int planned, ServerTickBudget budget) {

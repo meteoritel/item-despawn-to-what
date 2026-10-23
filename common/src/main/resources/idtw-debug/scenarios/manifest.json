@@ -14,6 +14,7 @@
   "run/catalyst_moved",
   "run/catalyst_threshold_edge",
   "run/loot_table_capacity",
+  "run/settlement_item_batching",
   "run/chance_skip",
   "run/condition_tree",
   "run/insufficient",

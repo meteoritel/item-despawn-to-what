@@ -42,9 +42,10 @@ final class DebugScenarioTask implements ServerTask {
             if (run.faults.cancel(kind(), tracingName())) {
                 throw new DebugScenarioFaults.InjectedFault("注入的取消回调异常：" + kind() + "/" + tracingName());
             }
-            delegate.onCancelled(reason);
         } finally {
-            run.tasks.remove(holder[0]);
+            // 注入异常仍沿取消链抛出，委托任务的库存与等待计数必须先完成清理。
+            try { delegate.onCancelled(reason); }
+            finally { run.tasks.remove(holder[0]); }
         }
     }
 

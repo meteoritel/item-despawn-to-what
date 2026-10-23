@@ -34,7 +34,7 @@ final class DebugScenarioFaults {
         return hit(DebugScenarioSpec.FaultType.STEP_EXCEPTION, kind, name);
     }
 
-    // 取消回调异常在委托清理前注入：异常沿取消调用链逃逸，用于复现取消隔离缺陷
+    // 取消回调异常沿调用链抛出以验证隔离；装饰器仍在 finally 中完成委托清理。
     boolean cancel(ServerTaskKind kind, String name) {
         return hit(DebugScenarioSpec.FaultType.CANCEL_EXCEPTION, kind, name);
     }

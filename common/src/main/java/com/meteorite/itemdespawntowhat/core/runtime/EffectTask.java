@@ -20,7 +20,8 @@ import java.util.function.Consumer;
 /**
  * 一次效果的预算任务：创建状态一次，最终回执一次；取消不补做世界写入。
  * 结束与失败先置终态、摘掉执行状态引用，再各通知账目与执行状态一次；
- * 取消同样先置终态、摘引用，但只通知执行状态，不产生回执也不入账。
+ * 取消同样先置终态、摘引用并取消执行状态，不产生回执也不入账。
+ * 终态通知独立于产出回执，汇总批次据此释放所属结算的等待计数。
  * 因此回调重入或回调异常都不会重放世界操作、不会重复入账。
  * 触发位置区块连续未加载达到等待上限时给出失败回执并终结，不再保留任务等待重新加载。
  */
@@ -35,13 +36,21 @@ final class EffectTask implements ServerTask {
     // 成功转化当刻固定的本次输入；null 表示本类型没有准备阶段，条件与概率仍在首次执行时判定
     private final @Nullable EffectPreparation preparation;
     private final Consumer<EffectResult> resultSink;
+    private final Runnable completionSink;
     private EffectExecution execution;
     private boolean finished;
 
     EffectTask(ConversionRuntime runtime, ServerLevel level, ItemEntity source, EffectContext context,
                Effect effect, @Nullable EffectPreparation preparation, Consumer<EffectResult> resultSink) {
+        this(runtime, level, source, context, effect, preparation, resultSink, () -> {});
+    }
+
+    EffectTask(ConversionRuntime runtime, ServerLevel level, ItemEntity source, EffectContext context,
+               Effect effect, @Nullable EffectPreparation preparation, Consumer<EffectResult> resultSink,
+               Runnable completionSink) {
         this.runtime = runtime; this.level = level; this.source = source; this.context = context;
         this.effect = effect; this.preparation = preparation; this.resultSink = resultSink;
+        this.completionSink = completionSink;
     }
 
     @Override public ServerTaskKind kind() { return ServerTaskKind.EFFECT; }
@@ -83,7 +92,11 @@ final class EffectTask implements ServerTask {
         finished = true;
         EffectExecution active = execution;
         execution = null;
-        if (active != null) { active.onCancelled(reason); }
+        try {
+            if (active != null) { active.onCancelled(reason); }
+        } finally {
+            completionSink.run();
+        }
     }
 
     @Override public void onFailed(Throwable failure) {
@@ -100,7 +113,11 @@ final class EffectTask implements ServerTask {
             resultSink.accept(result);
         } finally {
             // 账目回调抛出也必须完成一次执行状态通知，且此后再无路径重入
-            if (active != null) { active.onFinished(result); }
+            try {
+                if (active != null) { active.onFinished(result); }
+            } finally {
+                completionSink.run();
+            }
         }
     }
 }

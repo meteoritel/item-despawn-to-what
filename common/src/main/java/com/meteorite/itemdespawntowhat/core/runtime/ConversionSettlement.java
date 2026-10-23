@@ -16,7 +16,9 @@ import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.OutcomeCandidate;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerScheduler;
+import com.meteorite.itemdespawntowhat.core.type.effect.exec.SpawnEntityExecutor;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
@@ -35,7 +37,7 @@ import java.util.function.IntConsumer;
 /**
  * 一次转化的结算任务：聚合根只负责阶段推进与提交边界，具体工作交给结算协作者。
  * 阶段（{@link SettlementPhases}）：
- * 1) 计划——按「源库存可支撑组数 × 催化剂上界 × 产物容量承诺」定出组数，并为第一组选定候选；
+ * 1) 计划——按源库存、催化剂与初始产出预算的共同上界定出组数，并为第一组选定候选；
  * 2) 准备——为承诺的每组固定效果输入：每步最多 prepare_groups_per_step 组，按组续接，
  *    固定输入按「候选 + 槽位 + 组序号」幂等，已由成功转化当刻领先准备的组直接复用；
  * 3) 派发——每开始一组时独立选候选：轮询从共享游标依次搜索能完成一组的候选，
@@ -246,6 +248,7 @@ final class ConversionSettlement implements ServerTask {
             return false;
         }
         cancelled = true;
+        // 尚未派发的汇总产物随结算中止丢弃；已支付组不恢复执行，返还只覆盖未支付源库存。
         itemOutputs.clear();
         // 中止即移交库存所有权：剩余库存改由恢复任务交付，本任务不再改写待返还量
         receipts.giveUpStock();
@@ -301,8 +304,8 @@ final class ConversionSettlement implements ServerTask {
             return StepResult.yield(1, 1);
         }
         int planned = Math.min(sourceGroups, catalystLimit);
-        // 产物容量承诺：组数先按「当前区域还能容纳多少组产物」截断。准备成本随组数增长，
-        // 先承诺再准备，才不会把整批固定输入准备好却因邻近阈值开不出组而整批作废。
+        // 初始产出预算：组数先按计划期初始存量与声明理论产量截断。准备成本随组数增长，
+        // 先确定预算再准备，准备量由已分配的理论额度约束。
         // 预算耗尽时本刻不落决定，已累计的进度跨刻保留。
         int committed = groupPlan.commit(planned, budget);
         if (committed == SettlementGroupPlan.CAPACITY_PENDING) {
@@ -638,6 +641,7 @@ final class ConversionSettlement implements ServerTask {
                     "consumed_sources", record.consumedSources(), "applied_units", record.appliedUnits(),
                     "pending_units", record.pendingUnits(), "returned", record.deliveredReturns(),
                     "pending_delivery", record.pendingDelivery(), "prepared_groups", preparedGroupCount,
+                    "pending_item_batches", pendingItemBatches,
                     // 账本写入合并口径：本记录的落账次数与被步内合并的变更次数，供场景核对每步一次提交
                     "ledger_commits", receipts.commitCount(),
                     "ledger_deferred_mutations", receipts.deferredMutations());
@@ -677,19 +681,30 @@ final class ConversionSettlement implements ServerTask {
                 new EffectTask(runtime, level, source, context, effect, preparation, this::account));
     }
 
-    // 一个汇总桶只注册一个效果任务；失败与成功都收束等待计数，加入世界的件数由原执行器回执。
+    // 一个汇总桶只注册一个效果任务；终态通知释放等待计数，产出回执只记录真实执行结果。
     private void scheduleItemBatch(SettlementItemOutputs.Batch output) {
         pendingItemBatches++;
         try {
             RuntimeObserver.current().schedule(source, scheduler, level.dimension(), output.readyTick(),
                     new EffectTask(runtime, level, source, output.context(), output.effect(), output.preparation(),
-                            result -> {
+                            this::account, () -> {
                                 pendingItemBatches--;
-                                account(result);
+                                observeItemBatch("ITEM_BATCH_FINISHED", output);
                             }));
         } catch (RuntimeException failure) {
             pendingItemBatches--;
             throw failure;
+        }
+        observeItemBatch("ITEM_BATCH_SCHEDULED", output);
+    }
+
+    // 每桶只在排期与终态各观测一次，等待期间不逐 tick 上报。
+    private void observeItemBatch(String event, SettlementItemOutputs.Batch output) {
+        if (RuntimeObserver.current().enabled()) {
+            SpawnEntityExecutor.ItemBatchPlan batch = output.preparation();
+            RuntimeObserver.current().observe(source, event, "record", record.id(),
+                    "candidate", output.context().outcomeId(), "item", BuiltInRegistries.ITEM.getKey(batch.item()),
+                    "items", batch.count(), "ready_tick", output.readyTick(), "pending_item_batches", pendingItemBatches);
         }
     }
 
