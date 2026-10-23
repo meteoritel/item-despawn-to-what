@@ -74,7 +74,7 @@ final class DebugScenarioActions {
                     int injectedBefore = run.faultsInjected();
                     var data = run.state();
                     data.addProperty("overlay_version", context.overlayVersion());
-                    RuleReloadOutcome<?> outcome = context.reloadRules(run.level.getServer());
+                    RuleReloadOutcome<?> outcome = DebugProbePerformance.operation("RELOAD", () -> context.reloadRules(run.level.getServer()));
                     if (outcome == null || !outcome.isApplied()) {
                         // 声明了故障的重载失败是本次注入的预期结果：记录后继续断言，不按场景错误中止
                         if (run.faultsInjected() == injectedBefore) { throw new IllegalStateException("场景中的规则重载失败"); }

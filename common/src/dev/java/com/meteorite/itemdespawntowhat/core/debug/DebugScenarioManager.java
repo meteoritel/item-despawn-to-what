@@ -50,11 +50,12 @@ public final class DebugScenarioManager {
         return startScene(source, context, name, benchmark, entities, seconds, null, null);
     }
 
-    /** 从隔离开发服务端启动功能场景，不依赖玩家连接或客户端。 */
-    public static int startHeadless(CommandSourceStack source, RuleCommandContext context, String name) {
+    /** 性能与功能无人值守运行共用场景生命周期，参数取自对应声明。 */
+    public static int startHeadless(CommandSourceStack source, RuleCommandContext context, String name, boolean benchmark) {
         REPORTS.remove(source.getServer());
-        var spec = DebugScenarioCatalog.find(name, false);
-        int result = startScene(source, context, name, false, spec.sources(), spec.seconds(), source.getPosition(), null);
+        var spec = DebugScenarioCatalog.find(name, benchmark);
+        DebugProbePerformance.phase("SETUP");
+        int result = startScene(source, context, name, benchmark, spec.sources(), spec.seconds(), source.getPosition(), null);
         DebugScenarioRun run = ACTIVE.get(source.getServer());
         var runtime = context.runtime();
         if (result == 1 && run != null && runtime != null) {

@@ -58,6 +58,16 @@ final class DebugLog {
         data.addProperty("position_search_checks_per_tick", config.positionSearchChecksPerTick());
         data.addProperty("debug_scenario_prepare_batch_size", config.debugScenarioPrepareBatchSize());
         data.addProperty("debug_scenario_prepare_budget_us", config.debugScenarioPrepareBudgetUs());
+        data.addProperty("new_product_protection_seconds", config.newProductProtectionSeconds());
+        data.addProperty("conversion_cooldown_seconds", config.conversionCooldownSeconds());
+        data.addProperty("max_place_block_radius", config.maxPlaceBlockRadius());
+        data.addProperty("rescan_entities_per_step", config.rescanEntitiesPerStep());
+        data.addProperty("cancels_per_step", config.cancelsPerStep());
+        data.addProperty("prepare_groups_per_step", config.prepareGroupsPerStep());
+        data.addProperty("settlement_recovery_max_attempts", config.settlementRecoveryMaxAttempts());
+        data.add("nearby_products", new com.google.gson.GsonBuilder()
+                .setFieldNamingPolicy(com.google.gson.FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+                .create().toJsonTree(config.nearbyProducts()));
         // 字段名沿用既有日志口径：公共预算即队列软预算
         data.addProperty("queue_soft_budget_us", config.serverBudgetUs());
         return data;

@@ -12,6 +12,7 @@ authority: tools/run-probes.ps1、neoforge/build.gradle、common/src/dev、neofo
 - 运行 `powershell -ExecutionPolicy Bypass -File tools/run-probes.ps1`，在独立存档验证精选核心后端链路，报告失败时退出非零。
 - 探针只在 NeoForge 开发类目录装载；正式 `main` 保留空观测契约，发布物由打包检查约束。
 - GUI、客户端交互和显示由用户手测。
+- `-Chain performance` 运行空基线、千实体转化与重载回扫，生成可直接打开的 `performance.html`，显示阶段耗时、CPU、heap、GC 和调度分类曲线。
 
 ## 适用对象
 
@@ -86,9 +87,61 @@ Agent 的处理顺序：选择与改动相关的链路 → 查看失败断言和
 | `neoforge/build.gradle` 的 `probe` 源集 | 编译时依赖正式代码；开发运行合并到同一 mod 类目录，符合 NeoForge 模块包隔离约束 |
 | `RuntimeObserver`、`DevelopmentDiagnostics` | 生产侧空观测契约，开发入口在服务端装配并在停止后释放 |
 | `tools/run-probes.ps1` | 隔离运行、重启编排、超时、报告校验与退出码 |
+| `DebugProbePerformance` | 自动运行逐步启停的独立 JMX 采样、阶段计时、主线程 tick 与分类耗时记录 |
+| `BackendProbeSuite` / `BackendProbeReport` | 精选集合目录、环境配置与结构化检查点；控制器只编排步骤和终态 |
+| `BackendProbeFixtures` | 正式文件规则、源/产物登记、字节快照与精确清理；世界探针只保留业务步骤与断言 |
+| `tools/probe-performance-report.py` | 原始 CSV、离线 HTML、测量窗口汇总和历史目录对比 |
 | `tools/check-probe-packaging.py`、根 `checkProbePackaging` 任务 | 扫描 common / Fabric / NeoForge 的发布 jar、sources jar、javadoc jar；拒绝探针类、夹具资源与开发语言 key |
 
 `main` 的编译类路径只含生产代码；两平台的 jar 任务只使用 `main`。`check` 同时编译 NeoForge 探针、组装各端发布物并检查打包边界。`check-isolation.py` 还拒绝 `src/main` 对开发探针包的 import。
+
+## 性能工作流
+
+```powershell
+# 首次保存基线，目录由脚本输出的 artifacts 给出
+powershell -ExecutionPolicy Bypass -File tools/run-probes.ps1 -Chain performance
+
+# 修改后沿用相同集合，与已保存的运行目录比较
+powershell -ExecutionPolicy Bypass -File tools/run-probes.ps1 -Chain performance -CompareTo neoforge/build/probe-runs/<基线目录>
+
+# 仅重绘已有结果，无需再次启动服务端
+python tools/probe-performance-report.py neoforge/build/probe-runs/<本次目录> --compare-to neoforge/build/probe-runs/<基线目录>
+```
+
+每次运行使用固定 seed 的独立平坦存档。`run-metadata.json` 记录 Git revision、工作区变更、集合与基线目录。完整的 `core` 和单条功能链路也采集性能，适合定位保存、准备或恢复的阶段成本；吞吐比较使用 `performance`，避免逐实体功能日志扰动。
+
+| 代表负载 | 规模与测量窗口 | 核心业务判据 |
+|---|---|---|
+| `bench:baseline` | 0 个源，60 秒 | 零转化、零产物，观察空服务端与采样本身的背景成本 |
+| `bench:convert` | 1000 个独立源，每堆 1 件，60 秒；触发年龄 10 秒 | 千次结算完成，消费源与生成的实物精确匹配，无待交付余额 |
+| `bench:reload_storm` | 1000 个源，30 秒；五次正式重载 | 五次动作实际执行，回扫排空、源仍完整追踪，步长与工作量符合声明上限 |
+
+场景规模、动作、规则与预期取自 `common/src/dev/resources/idtw-debug/scenarios/bench/`。新增代表负载时先写声明并登记 manifest，再加入 `BackendProbeSuite`；阶段、资源采样与报告无需各场景重复实现。功能场景与性能场景共用生命周期和断言器。
+
+### 时间轴与观测口径
+
+| 指标 | 埋点与计算 | 阅读方式 |
+|---|---|---|
+| 阶段墙钟 / 服务端 CPU ms | 步骤启动前开始，`DebugScenarioRun` 切换 SETUP / WARMUP / MEASURE / ASSERT / CLEANUP；世界链路区分准备、等待、检查与清理；保存另外记录初写、回滚、重试及会话；重载用 RELOAD 段 | 墙钟包含跨 tick 等待，CPU 使用服务端线程累计时间差值；阶段互斥，短操作结束恢复父阶段 |
+| JVM 进程 CPU % | 独立线程每 200 ms 读取 `OperatingSystemMXBean.getProcessCpuTime` 的增量，除以实际墙钟间隔 | 100% 为占用一个逻辑核，包含 JIT、GC、后台 I/O 与探针线程；可超过 100% |
+| 服务端线程 CPU % | 同间隔读取 `ThreadMXBean` 中服务端线程累计 CPU 时间 | 与进程 CPU 并列定位主线程和后台成本；Windows CPU 时钟粒度会使短阶段出现 0 ms |
+| heap / non-heap MiB | `MemoryMXBean` 的 heap used、committed、max 以及 non-heap used | 曲线显示 used / committed / non-heap，容量上限单列；heap 口径用于比较 JVM 堆占用 |
+| GC 次数 / ms | 所有 GC MXBean 的累计差值，以步骤开始为基线 | 结合 heap 回落和 tick 尖峰观察回收成本 |
+| 原版 / runtime / 总 tick ms | 正式运行时完成后、场景推进前读取已有 tick 槽与 `runtimeTickNanos` | 总 tick 使用原版 + IDTW；准备、断言等开发工作通过阶段表和 CPU 单独展示 |
+| 调度分类 ms | 同 tick 读取正式 scheduler 的各 kind `lastMicros`，跨维度合并 | 分类属于 runtime 内部；现有窗口仍保留队列、预算、工作量和积压延迟汇总 |
+
+JMX 线程只读取管理指标；世界和 scheduler 数据由服务端线程采集。主线程长操作期间资源曲线继续推进，采样实际间隔保存在原始数据里。首个区间与极短尾区间没有有效 CPU 差值时留空。`sampling_total_ms`、`sampling_max_ms` 和 `tick_recording_total_ms` 展示记录成本；JSON 序列化与报告写盘放在采样窗口外。
+
+### 报告与判定
+
+- `performance.html`：独立离线页面，阶段表、共享时间轴曲线、鼠标采样值、环境与负载详情、同负载增幅表；无外部脚本或服务。
+- `performance-resources.csv` / `performance-ticks.csv` / `performance-phases.csv`：资源样本、逐 tick 分类与阶段原始数据，均带进程阶段和步骤标识。
+- `performance-summary.json`：测量窗口统计与比较结果。CPU 均值按实际间隔加权，p95 使用 nearest-rank；有 MEASURE 的场景只汇总该窗口，世界链路使用整步。
+- `prepare-report.json` / `resume-report.json` 的 `performance`：原始记录及采样成本；`environment` 包含 Java、OS、处理器数、heap 容量、tick rate、seed、JVM 参数与正式配置；场景 `workload` 包含数量、时长、规则和动作。
+
+通过要求：业务断言全部通过，资源与阶段非空；超过一秒的步骤有 tick 与有效 CPU 样本，tick 运行时计时完整；性能场景有全部生命周期阶段，采样线程未报错。脚本对功能失败、采样缺失或异常均返回非零，并保留已有结果。性能数值展示为观测值，统一功能入口使用机器无关的业务断言。
+
+历史比较按进程阶段和步骤配对，核对版本环境、处理器数、heap 容量、tick rate、seed、配置、工作负载和业务 PASS。匹配后展示 runtime p95、总 tick p95、进程 CPU 均值和 heap 峰值的增幅；配置不同明确列出差异。优化前后沿用同一 JVM 参数与负载，分别重复运行，再比较同一指标。曲线采样密度为 200 ms，短时尖峰结合逐 tick 和阶段表定位。
 
 ## 本集合排除的范围
 
@@ -97,7 +150,7 @@ Agent 的处理顺序：选择与改动相关的链路 → 查看失败断言和
 | GUI 控件、布局、输入焦点、提示文案、草稿交互、S2C 显示与客户端网络分片 | 用户指定手动测试；后端集合集中验证状态与实物 |
 | Fabric 原生事件与加载行为 | 本集合统一 NeoForge；Fabric 参与正常构建和发布隔离检查 |
 | 每个物品、每种条件叶、效果类型和规则字段的所有组合 | 核心场景用代表输入验证选择、接管、结算和交付；修改特定类型时追加一个命中其风险的定向场景 |
-| 随机概率分布、长时间压力、所有预算值与硬件性能分位数 | 功能集合采用确定输入；吞吐评估使用现有开发 bench / pipeline 并单独解释机器与负载 |
+| 随机概率分布、长时间压力、所有预算值与硬件矩阵 | 功能集合采用确定输入；性能集合只选三个代表负载，数值随环境与负载解释 |
 | 任意第三方 mod、魔改包和权限插件组合 | 当前独立存档使用项目声明依赖；兼容性问题用对应整合环境重现 |
 | 强制杀进程、磁盘掉电、磁盘满等故障矩阵 | 当前持久化验证使用正常停服后的真实重启；保存事务重点检查部分提交回滚 |
 

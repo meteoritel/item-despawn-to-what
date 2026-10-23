@@ -44,6 +44,7 @@ public final class ProbeMod {
     /** 正式运行时已推进后再推进开发夹具，世界读写仍在服务端线程。 */
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void tick(ServerTickEvent.Post event) {
+        BackendProbe.observeTick(event.getServer());
         DebugSessionManager.tick(event.getServer(), RuleRuntimeHost.commandContext());
         BackendProbe.tick(event.getServer());
     }

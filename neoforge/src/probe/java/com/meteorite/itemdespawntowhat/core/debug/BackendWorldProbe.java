@@ -5,7 +5,6 @@ import com.google.gson.JsonParser;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.RunnableTask;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEdit;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEditChangeSet;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveProgress;
 import com.meteorite.itemdespawntowhat.core.runtime.ProbeLedgerAccess;
@@ -17,12 +16,10 @@ import com.meteorite.itemdespawntowhat.core.service.RuleOverlayWriter;
 import com.meteorite.itemdespawntowhat.core.state.DropState;
 import com.meteorite.itemdespawntowhat.core.state.DropStateStore;
 import com.meteorite.itemdespawntowhat.runtime.RuleRuntimeHost;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.Vec3;
@@ -33,8 +30,9 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
 import java.util.UUID;
+
+import static com.meteorite.itemdespawntowhat.core.debug.BackendProbeFixtures.*;
 
 /** 正式索引与原版实体入口探针；只在独立开发存档中创建少量实物。 */
 final class BackendWorldProbe {
@@ -46,9 +44,7 @@ final class BackendWorldProbe {
     private final long start;
     private final JsonObject metrics = new JsonObject();
     private final DebugScenarioChecks checks = new DebugScenarioChecks(metrics);
-    private final List<ItemEntity> sources = new ArrayList<>();
-    private final List<ItemEntity> outputs = new ArrayList<>();
-    private final List<Path> files = new ArrayList<>();
+    private final BackendProbeFixtures fixtures;
     private final List<ItemEntity> budgetItems = new ArrayList<>();
     private final List<ScheduledTask> budgetTasks = new ArrayList<>();
     private final int[] budgetDeliveries = {0, 0};
@@ -57,6 +53,8 @@ final class BackendWorldProbe {
 
     BackendWorldProbe(MinecraftServer server, String name) throws IOException {
         this.server = server;
+        fixtures = new BackendProbeFixtures(server);
+        DebugProbePerformance.phase("SETUP");
         level = server.overworld();
         this.name = name;
         start = level.getGameTime();
@@ -67,47 +65,47 @@ final class BackendWorldProbe {
                 check("development_datapack_base_loaded", runtime.index().ordered().stream()
                         .anyMatch(rule -> rule.id().toString().equals("idtw_probe:base") && rule.value().triggerAfterSeconds() == 300));
                 // 实体先于新规则存在，成功产出还验证了正式回扫。
-                spawn(Items.PAPER, 0);
-                writeRule("base", "prismarine_shard", 2, "natural");
-                Path broken = ruleRoot().resolve("probe-broken.json");
-                Files.writeString(broken, "{broken"); files.add(broken);
+                fixtures.spawn(Items.PAPER, 0);
+                fixtures.writeRule("base", "prismarine_shard", 2, "natural");
+                Path broken = fixtures.ruleRoot().resolve("probe-broken.json");
+                fixtures.writeFile(broken, "{broken");
                 var outcome = RuleRuntimeHost.commandContext().reloadRules(server);
                 check("reload_applied", outcome != null && outcome.isApplied());
                 check("bad_file_reported", outcome != null && outcome.result() != null && outcome.result().hasErrors());
             }
             case "damage" -> {
-                writeRule("damage", "prismarine_shard", 1, "fire", "lava", "cactus");
-                reload();
+                fixtures.writeRule("damage", "prismarine_shard", 1, "fire", "lava", "cactus");
+                fixtures.reload();
                 for (int i = 0; i < 3; i++) {
-                    ItemEntity source = spawn(Items.PAPER, i * 2);
+                    ItemEntity source = fixtures.spawn(Items.PAPER, i * 2);
                     source.hurt(switch (i) { case 0 -> level.damageSources().inFire(); case 1 -> level.damageSources().lava(); default -> level.damageSources().cactus(); }, 100);
                     check("lethal_source_removed/" + i, !source.isAlive());
                 }
-                ItemEntity nonlethal = spawn(Items.PAPER, 6);
+                ItemEntity nonlethal = fixtures.spawn(Items.PAPER, 6);
                 nonlethal.hurt(level.damageSources().inFire(), 1);
                 check("nonlethal_source_alive", nonlethal.isAlive());
-                ItemEntity unrelated = spawn(Items.PAPER, 8);
+                ItemEntity unrelated = fixtures.spawn(Items.PAPER, 8);
                 unrelated.hurt(level.damageSources().generic(), 100);
                 check("unrelated_damage_removed", !unrelated.isAlive());
             }
             case "state" -> {
-                writeRule("state", "prismarine_shard", 1, "natural"); reload();
-                ItemEntity protectedItem = spawn(Items.STICK, 0);
+                fixtures.writeRule("state", "prismarine_shard", 1, "natural"); fixtures.reload();
+                ItemEntity protectedItem = fixtures.spawn(Items.STICK, 0);
                 DropStateStore.set(protectedItem, new DropState(start + 20, 0, false, false));
                 protectedItem.hurt(level.damageSources().cactus(), 100);
                 check("temporary_damage_protection", protectedItem.isAlive());
-                ItemEntity cooling = spawn(Items.PAPER, 3);
+                ItemEntity cooling = fixtures.spawn(Items.PAPER, 3);
                 DropStateStore.set(cooling, new DropState(0, start + 40, false, false));
-                ItemEntity permanent = spawn(Items.PAPER, 6);
+                ItemEntity permanent = fixtures.spawn(Items.PAPER, 6);
                 DropStateStore.grantPermanentReturn(permanent);
                 permanent.hurt(level.damageSources().lava(), 100);
                 check("permanent_damage_protection", permanent.isAlive());
                 // 普通同组件堆可被原版合并；永久标志不同的两堆保留分离。
-                ItemEntity ordinary = spawn(Items.PAPER, 6);
+                ItemEntity ordinary = fixtures.spawn(Items.PAPER, 6);
                 ordinary.setPos(permanent.position());
                 DropStateStore.set(ordinary, new DropState(0, start + 1000, false, false));
-                ItemEntity firstMerge = spawn(Items.COAL, 10);
-                ItemEntity secondMerge = spawn(Items.COAL, 10);
+                ItemEntity firstMerge = fixtures.spawn(Items.COAL, 10);
+                ItemEntity secondMerge = fixtures.spawn(Items.COAL, 10);
                 DropStateStore.set(firstMerge, new DropState(start + 60, start + 200, false, false));
                 DropStateStore.set(secondMerge, new DropState(start + 80, start + 400, false, false));
                 var saved = secondMerge.saveWithoutId(new net.minecraft.nbt.CompoundTag());
@@ -120,6 +118,7 @@ final class BackendWorldProbe {
             case "restart" -> check("record_loaded", ProbeLedgerAccess.snapshot(server).get("exists").getAsBoolean());
             default -> throw new IllegalArgumentException(name);
         }
+        DebugProbePerformance.phase("WAIT");
     }
 
     JsonObject tick() throws IOException {
@@ -127,38 +126,39 @@ final class BackendWorldProbe {
         if (!middle && elapsed >= 20) {
             middle = true;
             if (name.equals("state")) {
-                checks.equal("cooldown_before_boundary/source_alive", 1, sources.get(1).isAlive() ? 1 : 0);
-                sources.getFirst().hurt(level.damageSources().cactus(), 100);
-                check("protection_at_boundary_expired", !sources.getFirst().isAlive());
+                checks.equal("cooldown_before_boundary/source_alive", 1, fixtures.sources.get(1).isAlive() ? 1 : 0);
+                fixtures.sources.getFirst().hurt(level.damageSources().cactus(), 100);
+                check("protection_at_boundary_expired", !fixtures.sources.getFirst().isAlive());
             }
             if (name.equals("loading")) {
                 // 新文件可加载，但发布前故障必须留下旧索引。
-                writeRule("base", "diamond", 5, "natural");
+                fixtures.writeRule("base", "diamond", 5, "natural");
                 rejectReload = true;
                 var rejected = RuleRuntimeHost.commandContext().reloadRules(server);
                 check("reload_failure_rejected", rejected != null && !rejected.isApplied());
                 check("reload_fault_reached", !rejectReload);
-                spawn(Items.PAPER, 3);
+                fixtures.spawn(Items.PAPER, 3);
             }
-            if (name.equals("restart")) { reload(); reload(); }
+            if (name.equals("restart")) { fixtures.reload(); fixtures.reload(); }
         }
         if (!name.equals("save") && elapsed < 100) { return null; }
+        DebugProbePerformance.phase("ASSERT");
         switch (name) {
             case "loading" -> {
-                checks.equal("live_output/prismarine_shard", 4, count(Items.PRISMARINE_SHARD));
-                checks.equal("live_output/diamond", 0, count(Items.DIAMOND));
-                checks.equal("remaining_sources", 0, liveSources());
+                checks.equal("live_output/prismarine_shard", 4, fixtures.count(Items.PRISMARINE_SHARD));
+                checks.equal("live_output/diamond", 0, fixtures.count(Items.DIAMOND));
+                checks.equal("remaining_sources", 0, fixtures.liveSources());
             }
             case "damage" -> {
-                checks.equal("live_output/three_triggers", 3, count(Items.PRISMARINE_SHARD));
-                checks.equal("nonlethal_not_converted", 1, liveSources());
+                checks.equal("live_output/three_triggers", 3, fixtures.count(Items.PRISMARINE_SHARD));
+                checks.equal("nonlethal_not_converted", 1, fixtures.liveSources());
             }
             case "state" -> {
-                checks.equal("cooldown_eventually_converted", 1, count(Items.PRISMARINE_SHARD));
-                check("permanent_ban_survives", sources.get(2).isAlive());
-                check("different_permanent_flags_do_not_merge", sources.get(2).isAlive() && sources.get(3).isAlive());
-                checks.equal("both_separate_counts", 2, sources.get(2).getItem().getCount() + sources.get(3).getItem().getCount());
-                var merged = sources.subList(4, 6).stream().filter(Entity::isAlive).toList();
+                checks.equal("cooldown_eventually_converted", 1, fixtures.count(Items.PRISMARINE_SHARD));
+                check("permanent_ban_survives", fixtures.sources.get(2).isAlive());
+                check("different_permanent_flags_do_not_merge", fixtures.sources.get(2).isAlive() && fixtures.sources.get(3).isAlive());
+                checks.equal("both_separate_counts", 2, fixtures.sources.get(2).getItem().getCount() + fixtures.sources.get(3).getItem().getCount());
+                var merged = fixtures.sources.subList(4, 6).stream().filter(Entity::isAlive).toList();
                 checks.equal("compatible_stacks_merged", 1, merged.size());
                 if (merged.size() == 1) {
                     checks.equal("merge_quantity", 2, merged.getFirst().getItem().getCount());
@@ -204,77 +204,32 @@ final class BackendWorldProbe {
         return result;
     }
 
-    private Path ruleRoot() throws IOException {
-        Path root = java.util.Objects.requireNonNull(RuleRuntimeHost.commandContext().editContext().overlayRoot()).resolve("rules");
-        Files.createDirectories(root);
-        return root;
-    }
-
-    private void writeRule(String id, String output, int count, String... triggers) throws IOException {
-        Path path = ruleRoot().resolve("probe-" + id + ".json");
-        JsonObject rule = rule(id, output, count, triggers);
-        Files.writeString(path, rule.toString());
-        if (!files.contains(path)) { files.add(path); }
-    }
-
-    private static JsonObject rule(String id, String output, int count, String... triggers) {
-        JsonObject rule = JsonParser.parseString("{\"id\":\"idtw_probe:" + id + "\",\"enabled\":true,\"priority\":1000,"
-                + "\"trigger_after_seconds\":0,\"source\":{\"items\":[\"minecraft:" + "paper" + "\"],\"exclude\":[]},"
-                + "\"effects\":[{\"type\":\"itemdespawntowhat:spawn_entity\",\"item\":\"minecraft:" + output
-                + "\",\"count\":" + count + ",\"delay_ticks\":0,\"chance\":1,\"variant\":\"item\"}]}").getAsJsonObject();
-        var array = new com.google.gson.JsonArray();
-        for (String trigger : triggers) { array.add(trigger); }
-        rule.add("triggers", array);
-        return rule;
-    }
-
-    private ItemEntity spawn(Item type, double offset) {
-        ItemEntity item = new ItemEntity(level, 3 + offset, 100, 8, new ItemStack(type, 1));
-        item.setNoGravity(true);
-        item.setDeltaMovement(Vec3.ZERO);
-        sources.add(item);
-        if (!level.addFreshEntity(item)) { throw new IllegalStateException("实体加入失败"); }
-        return item;
-    }
-
-    private void reload() {
-        var outcome = RuleRuntimeHost.commandContext().reloadRules(server);
-        if (outcome == null || outcome.result() == null || outcome.result().hasErrors()) {
-            throw new IllegalStateException("正式规则重载失败: " + outcome);
-        }
-    }
-
-    private long count(Item type) {
-        long count = outputs.stream().filter(Entity::isAlive).filter(item -> item.getItem().is(type))
-                .mapToLong(item -> item.getItem().getCount()).sum();
-        metrics.addProperty("live/" + type, count);
-        return count;
-    }
-
-    private long liveSources() { return sources.stream().filter(Entity::isAlive).mapToLong(item -> item.getItem().getCount()).sum(); }
-
     private void check(String key, boolean pass) { checks.equal(key, 1, pass ? 1 : 0); }
 
     private void save() throws IOException {
         Path root = Path.of("probe-writer");
         var writer = new RuleOverlayWriter(root, "idtw_probe");
         var initial = new RuleEditChangeSet(0, List.of(edit("a", 1), edit("b", 1)));
-        var result = writer.apply(initial, new IssueCollector());
+        var result = DebugProbePerformance.operation("SAVE_INITIAL", () -> writer.apply(initial, new IssueCollector()));
+        DebugProbePerformance.phase("ASSERT");
         checks.equal("initial_written", 2, result.writtenFiles());
         checks.equal("initial_conflicts", 0, result.conflicts().size());
         Map<String, String> before = snapshot(root);
         boolean[] fault = {false};
         var changed = new RuleEditChangeSet(0, List.of(edit("a", 2), edit("b", 2)));
+        DebugProbePerformance.phase("SAVE_ROLLBACK");
         var failed = writer.apply(changed, new IssueCollector(), () -> true, () -> true, () -> true, progress -> {
             if (!fault[0] && progress.stage() == RuleSaveProgress.Stage.WRITING && progress.completed() == 1) {
                 fault[0] = true; throw new IllegalStateException("probe_second_file_commit");
             }
         });
+        DebugProbePerformance.phase("ASSERT");
         check("second_commit_fault_reached", fault[0]);
         check("failure_reported", !failed.conflicts().isEmpty());
         check("rollback_succeeded", !failed.rollbackFailed());
         check("entire_directory_bytes_restored", before.equals(snapshot(root)));
-        var success = writer.apply(changed, new IssueCollector());
+        var success = DebugProbePerformance.operation("SAVE_RETRY", () -> writer.apply(changed, new IssueCollector()));
+        DebugProbePerformance.phase("ASSERT");
         checks.equal("retry_written", 2, success.writtenFiles());
         checks.equal("retry_conflicts", 0, success.conflicts().size());
         check("retry_changed_files", !before.equals(snapshot(root)));
@@ -282,6 +237,7 @@ final class BackendWorldProbe {
             var actual = JsonParser.parseString(Files.readString(root.resolve("rules/idtw_probe/" + id + ".json"))).getAsJsonObject();
             check("retry_file_content/" + id, actual.equals(rule(id, "prismarine_shard", 2, "natural")));
         }
+        DebugProbePerformance.phase("SAVE_SESSION");
         EditSessionManager sessions = new EditSessionManager(Path.of("probe-session"));
         var first = sessions.acquire(UUID.randomUUID(), "probe", 1);
         check("acquire", first.acquired());
@@ -293,21 +249,6 @@ final class BackendWorldProbe {
         checks.equal("release_deferred_while_applying", 1, sessions.activeSessionCount());
         sessions.finishApply(id, 3);
         checks.equal("release_after_apply", 0, sessions.activeSessionCount());
-    }
-
-    private static RuleEdit edit(String id, int count) {
-        return new RuleEdit(ResourceLocation.fromNamespaceAndPath("idtw_probe", id), RuleEdit.Action.UPSERT,
-                rule(id, "prismarine_shard", count, "natural"));
-    }
-
-    private static Map<String, String> snapshot(Path root) throws IOException {
-        Map<String, String> bytes = new TreeMap<>();
-        try (var paths = Files.walk(root)) {
-            for (Path path : paths.filter(Files::isRegularFile).toList()) {
-                bytes.put(root.relativize(path).toString(), java.util.Base64.getEncoder().encodeToString(Files.readAllBytes(path)));
-            }
-        }
-        return bytes;
     }
 
     private void budget() {
@@ -373,21 +314,16 @@ final class BackendWorldProbe {
     static void prepareRestart(MinecraftServer server) { ProbeLedgerAccess.prepare(server); }
 
     static void outputAdded(ItemEntity source, Entity output) {
-        if (active != null && active.sources.contains(source) && output instanceof ItemEntity item) {
-            active.outputs.add(item);
+        if (active != null && active.fixtures.sources.contains(source) && output instanceof ItemEntity item) {
+            active.fixtures.outputs.add(item);
         }
     }
 
     void close() {
+        DebugProbePerformance.phase("CLEANUP");
         active = null;
         if (name.equals("restart")) { return; }
         budgetItems.forEach(Entity::discard);
-        for (Entity entity : level.getAllEntities()) {
-            if (entity instanceof ItemEntity item) { item.discard(); }
-        }
-        try {
-            for (Path file : files) { Files.deleteIfExists(file); }
-            if (!files.isEmpty()) { reload(); }
-        } catch (IOException failure) { throw new java.io.UncheckedIOException(failure); }
+        fixtures.close();
     }
 }

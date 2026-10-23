@@ -1,12 +1,14 @@
 param(
-    [ValidateSet('core', 'natural', 'settlement', 'damage', 'recovery', 'loading', 'budget', 'state', 'save')]
+    [ValidateSet('core', 'natural', 'settlement', 'damage', 'recovery', 'loading', 'budget', 'state', 'save', 'performance')]
     [string]$Chain = 'core',
     [switch]$Negative,
-    [int]$TimeoutSeconds = 900
+    [int]$TimeoutSeconds = 900,
+    [string]$CompareTo
 )
 # 单入口：隔离存档、串行 Gradle、结构化报告。每次保留现场，失败退出非零。
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
+if ($CompareTo) { $CompareTo = (Resolve-Path -LiteralPath $CompareTo).Path }
 $runName = (Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '-' + $Chain
 $relativeRun = 'build/probe-runs/' + $runName
 $runDirectory = Join-Path $projectRoot ('neoforge/' + $relativeRun)
@@ -15,6 +17,7 @@ New-Item -ItemType Directory -Path $runDirectory | Out-Null
 [IO.File]::WriteAllText((Join-Path $runDirectory 'server.properties'), @"
 level-name=world
 level-type=minecraft:flat
+level-seed=20261023
 generate-structures=false
 online-mode=false
 server-ip=127.0.0.1
@@ -25,6 +28,15 @@ spawn-protection=0
 max-tick-time=120000
 pause-when-empty-seconds=-1
 "@)
+$metadata = [ordered]@{
+    chain = $Chain
+    negative = $Negative.IsPresent
+    seed = 20261023
+    revision = (& git -C $projectRoot rev-parse HEAD)
+    working_tree = @(& git -C $projectRoot status --short)
+    compare_to = $CompareTo
+}
+$metadata | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $runDirectory 'run-metadata.json') -Encoding UTF8
 Write-Output "[probe] artifacts=$runDirectory"
 $negativeProperty = $Negative.IsPresent.ToString().ToLowerInvariant()
 $exitCode = 1
@@ -57,8 +69,8 @@ try {
                 if (-not $check.pass) { Write-Output ("  FAIL {0} expected={1} actual={2}" -f $check.name, $check.expected, $check.actual) }
             }
         }
-        if ($report.verdict -eq 'RESTART_REQUIRED' -and $phase -eq 'prepare' -and @($report.remaining).Count -eq 0) { continue }
-        if ($report.verdict -ne 'PASS' -or @($report.results).Count -eq 0 -or @($report.remaining).Count -ne 0) {
+        $restartRequired = $report.verdict -eq 'RESTART_REQUIRED' -and $phase -eq 'prepare'
+        if (($report.verdict -ne 'PASS' -and -not $restartRequired) -or @($report.results).Count -eq 0 -or @($report.remaining).Count -ne 0) {
             throw "verdict=$($report.verdict) reason=$($report.reason); report=$reportFile"
         }
         foreach ($result in $report.results) {
@@ -66,11 +78,16 @@ try {
                 throw "invalid PASS: $($result.step); report=$reportFile"
             }
         }
+        if ($restartRequired) { continue }
         $exitCode = 0
         break
     }
 } catch {
     Write-Output "[probe] FAIL $_"
 }
+$reportArguments = @((Join-Path $PSScriptRoot 'probe-performance-report.py'), $runDirectory)
+if ($CompareTo) { $reportArguments += @('--compare-to', $CompareTo) }
+& python @reportArguments
+if ($LASTEXITCODE -ne 0) { $exitCode = 1 }
 Write-Output "[probe] exit=$exitCode artifacts=$runDirectory"
 exit $exitCode

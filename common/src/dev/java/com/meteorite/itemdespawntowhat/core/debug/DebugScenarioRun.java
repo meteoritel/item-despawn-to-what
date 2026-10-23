@@ -96,6 +96,7 @@ final class DebugScenarioRun {
             if (sources.size() == definition.sources) {
                 preparedTick = level.getGameTime();
                 phase = "WARMUP";
+                DebugProbePerformance.phase(phase);
                 log("PREPARED", state());
             }
             if (System.nanoTime() - startedNanos > 30_000_000_000L) {
@@ -112,6 +113,7 @@ final class DebugScenarioRun {
             conversionsAtWindowStart = count("CONVERT");
             outputAtWindowStart = count("OUTPUT_ITEMS");
             phase = "MEASURE";
+            DebugProbePerformance.phase(phase);
             lastFrameNanos = System.nanoTime();
             log("MEASURE_BEGIN", state());
             if (benchmark) { snapshotInitiatorView(); updateCountdown(); }
@@ -359,7 +361,18 @@ final class DebugScenarioRun {
 
     // 先封存预期与实际，再取消本轮任务并清理实体；普通队列任务保持原状。
     String finish(RuleCommandContext context, String reason) {
+        DebugProbePerformance.phase("ASSERT");
         JsonObject end = state();
+        JsonObject workload = new JsonObject();
+        workload.addProperty("scenario", definition.spec.key());
+        workload.addProperty("sources", definition.sources);
+        workload.addProperty("stack_size", definition.stackSize);
+        workload.addProperty("seconds", seconds);
+        workload.addProperty("warmup_ticks", 20);
+        workload.addProperty("per_entity_logging", !benchmark);
+        workload.add("rules", definition.parameters);
+        workload.add("actions", new com.google.gson.Gson().toJsonTree(definition.spec.actions()));
+        end.add("workload", workload);
         end.addProperty("stop_reason", reason);
         end.add("expected", definition.expected);
         long liveOutput = outputs.stream().filter(Entity::isAlive).mapToLong(item -> item.getItem().getCount()).sum();
@@ -400,6 +413,7 @@ final class DebugScenarioRun {
         end.addProperty("verdict", verdict);
         if (benchmark) { releaseInitiator(); }
         phase = "CLEANUP";
+        DebugProbePerformance.phase(phase);
         try { cleanup(context.runtime()); }
         catch (RuntimeException failure) {
             end.addProperty("verdict", "INCOMPLETE");
