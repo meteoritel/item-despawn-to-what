@@ -93,6 +93,7 @@ public final class LightningExecutor {
         private double pendingZ;
         private boolean pendingTarget;
         private EffectResult terminal;
+        private boolean waitingForChunks;
 
         StrikeSeries(LightningEffect effect, EffectContext context) {
             this.context = context;
@@ -114,7 +115,9 @@ public final class LightningExecutor {
             if (now < nextDueTick) {
                 return null;
             }
+            waitingForChunks = false;
             if (!LoadedChunks.containsArea(level, BlockPos.containing(origin), SERIES_CHUNK_RADIUS)) {
+                waitingForChunks = true;
                 // 整片未加载：本次不计入账目，退避后仍在同一基准位置重来
                 nextDueTick = now + LoadedChunks.RETRY_TICKS;
                 return null;
@@ -137,11 +140,13 @@ public final class LightningExecutor {
                 pendingTarget = true;
             }
             if (!LoadedChunks.contains(level, BlockPos.containing(pendingX, origin.y, pendingZ))) {
+                waitingForChunks = true;
                 // 该列未加载：保留这道闪电及其坐标，退避后重试，不推进次数
                 nextDueTick = now + LoadedChunks.RETRY_TICKS;
                 return null;
             }
             if (!strike(level, pendingX, pendingZ)) {
+                waitingForChunks = true;
                 // 两次检查之间该列卸载：保留已确定的水平坐标，退避后按同一坐标重新求地表，不推进次数
                 nextDueTick = now + LoadedChunks.RETRY_TICKS;
                 return null;
@@ -152,6 +157,11 @@ public final class LightningExecutor {
             pendingTarget = false;
             nextDueTick = now + INTERVAL_TICKS;
             return launched >= count ? finish() : null;
+        }
+
+        @Override
+        public boolean waitingForChunks() {
+            return waitingForChunks;
         }
 
         // 全部落完：真实完成量已逐道回执，终态只给出剩余增量，不重复累计

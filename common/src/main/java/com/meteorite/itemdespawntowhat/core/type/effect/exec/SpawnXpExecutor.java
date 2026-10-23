@@ -87,6 +87,7 @@ public final class SpawnXpExecutor {
         private int pendingPoints;
         // 邻区块未加载时的下次重试刻，0 表示不等待
         private long nextAttemptTick;
+        private boolean waitingForChunks;
 
         private XpDelivery(EffectContext context, long total) {
             this.context = context;
@@ -100,7 +101,9 @@ public final class SpawnXpExecutor {
             if (gameTime < nextAttemptTick) {
                 return null;
             }
+            waitingForChunks = false;
             if (!LoadedChunks.containsArea(context.level(), BlockPos.containing(context.position()), 1)) {
+                waitingForChunks = true;
                 nextAttemptTick = gameTime + LoadedChunks.RETRY_TICKS;
                 return null;
             }
@@ -122,6 +125,7 @@ public final class SpawnXpExecutor {
                     pendingPoints = points;
                 }
                 if (!EffectTargets.addEntityNow(context, pendingOrb, false)) {
+                    waitingForChunks = true;
                     // 两次检查之间该区块卸载：保留已构造的球，退避后重试，不重抽也不计完成量
                     nextAttemptTick = gameTime + LoadedChunks.RETRY_TICKS;
                     return null;
@@ -146,6 +150,11 @@ public final class SpawnXpExecutor {
             }
             // 实际点数已逐球回执，终态不再重复计入产出
             return EffectResult.applied(0, AWARDED);
+        }
+
+        @Override
+        public boolean waitingForChunks() {
+            return waitingForChunks;
         }
 
         @Override

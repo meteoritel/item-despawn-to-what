@@ -164,6 +164,7 @@ public final class LootTableExecutor {
         private ItemEntity pendingDrop;
         // 邻区块未加载时的下次重试刻，0 表示不等待
         private long nextAttemptTick;
+        private boolean waitingForChunks;
 
         private LootDelivery(EffectContext context, ResourceLocation table, LootPlan plan) {
             this.context = context;
@@ -187,8 +188,10 @@ public final class LootTableExecutor {
             if (gameTime < nextAttemptTick) {
                 return null;
             }
+            waitingForChunks = false;
             // 掉落物散布半径小于一格，邻区块就绪即可写入
             if (!LoadedChunks.containsArea(level, center, 1)) {
+                waitingForChunks = true;
                 nextAttemptTick = gameTime + LoadedChunks.RETRY_TICKS;
                 return null;
             }
@@ -211,6 +214,7 @@ public final class LootTableExecutor {
                 // 转化产物：走既有显式产物入口，先授予临时保护与冷却再写入世界。
                 // 未写入时保留这堆产物，退避后重试，不重造散点与初速。
                 if (!EffectTargets.addConversionProductNow(context, pendingDrop)) {
+                    waitingForChunks = true;
                     nextAttemptTick = gameTime + LoadedChunks.RETRY_TICKS;
                     return null;
                 }
@@ -236,6 +240,11 @@ public final class LootTableExecutor {
                         "z", position.z);
             }
             return EffectResult.applied(0, DELIVERED);
+        }
+
+        @Override
+        public boolean waitingForChunks() {
+            return waitingForChunks;
         }
 
         @Override

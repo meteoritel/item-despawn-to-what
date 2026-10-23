@@ -75,6 +75,7 @@ public final class SpawnItemExecutor {
         private long remaining;
         // 邻区块未加载时的下次重试刻，0 表示不等待
         private long nextAttemptTick;
+        private boolean waitingForChunks;
 
         private ItemDelivery(EffectContext context, Item item, long count) {
             this.context = context;
@@ -93,7 +94,9 @@ public final class SpawnItemExecutor {
             if (gameTime < nextAttemptTick) {
                 return null;
             }
+            waitingForChunks = false;
             if (!LoadedChunks.containsArea(level, BlockPos.containing(position), 1)) {
+                waitingForChunks = true;
                 nextAttemptTick = gameTime + LoadedChunks.RETRY_TICKS;
                 return null;
             }
@@ -114,6 +117,7 @@ public final class SpawnItemExecutor {
                 entity.setDeltaMovement(EffectTargets.productInitialVelocity(context));
                 // 转化产物：先授予保护与冷却再写入；未写入时不计完成量，也不重复授予
                 if (!EffectTargets.addConversionProductNow(context, entity)) {
+                    waitingForChunks = true;
                     nextAttemptTick = gameTime + LoadedChunks.RETRY_TICKS;
                     return null;
                 }
@@ -129,6 +133,11 @@ public final class SpawnItemExecutor {
                 return null;
             }
             return EffectResult.applied(0, BATCHED);
+        }
+
+        @Override
+        public boolean waitingForChunks() {
+            return waitingForChunks;
         }
 
         @Override

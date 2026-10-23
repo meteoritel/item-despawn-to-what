@@ -23,11 +23,12 @@ import java.util.function.Consumer;
  * 取消同样先置终态、摘引用并取消执行状态，不产生回执也不入账。
  * 终态通知独立于产出回执，汇总批次据此释放所属结算的等待计数。
  * 因此回调重入或回调异常都不会重放世界操作、不会重复入账。
- * 触发位置区块连续未加载达到等待上限时给出失败回执并终结，不再保留任务等待重新加载。
+ * 触发位置或执行器目标区块连续未加载达到等待上限时给出失败回执并终结，不再保留任务等待重新加载。
  */
 final class EffectTask implements ServerTask {
     private static final String CHUNK_WAIT_TIMEOUT = "chunk_wait_timeout";
-    private final ChunkWait chunkWait = new ChunkWait();
+    private final ChunkWait originChunkWait = new ChunkWait();
+    private final ChunkWait executionChunkWait = new ChunkWait();
     private final ConversionRuntime runtime;
     private final ServerLevel level;
     private final ItemEntity source;
@@ -60,13 +61,13 @@ final class EffectTask implements ServerTask {
         if (finished) { return StepResult.done(1); }
         if (budget.exhausted()) { return StepResult.yield(1, 1); }
         if (!LoadedChunks.contains(level, BlockPos.containing(context.position()))) {
-            if (chunkWait.expired(budget.gameTime())) {
+            if (originChunkWait.expired(budget.gameTime())) {
                 finish(EffectResult.failed(CHUNK_WAIT_TIMEOUT));
                 return StepResult.done(1);
             }
             return StepResult.yield(1, LoadedChunks.RETRY_TICKS);
         }
-        chunkWait.reset();
+        originChunkWait.reset();
         if (execution == null) { execution = runtime.startEffect(level, source, context, effect, preparation); }
         if (budget.exhausted()) { return StepResult.yield(1, 1); }
         EffectResult result;
@@ -79,7 +80,17 @@ final class EffectTask implements ServerTask {
                     "效果执行失败：规则={} 效果={} 位置={}", context.ruleId(), effect.type(), context.position(), failure);
             result = EffectResult.failed(failure.toString());
         }
-        if (result == null) { return StepResult.yield(1, 1); }
+        if (result == null) {
+            if (execution.waitingForChunks()) {
+                if (executionChunkWait.expired(budget.gameTime())) {
+                    finish(EffectResult.failed(CHUNK_WAIT_TIMEOUT));
+                    return StepResult.done(1);
+                }
+            } else {
+                executionChunkWait.reset();
+            }
+            return StepResult.yield(1, 1);
+        }
         if (RuntimeObserver.current().enabled()) RuntimeObserver.current().observe(source, "EFFECT_EXECUTOR_RETURNED",
                 "effect", effect.type(), "outcome", result.outcome());
         finish(result);

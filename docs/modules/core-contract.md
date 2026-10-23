@@ -80,7 +80,7 @@ flowchart LR
 |---|---|---|---|
 | `TypeDefinition` / `TypeRegistry` / `TypeDispatch` | 注册与分发入口 | 类型定义 = 稳定 id + `MapCodec` + 参数校验；`TypeDispatch.flat` 让类型专属字段与通用字段同处一个 JSON 对象，字段白名单取该类型 `codec().keys()`；编码未注册类型直接抛 `IllegalStateException` | `core/registry` 实现注册表；`core/model` 提供 `EffectType`/`ConditionType` 特化 |
 | `ConditionContext` / `ConditionEvaluator` / `ConditionResult` / `Evaluability` | 条件侧扩展点 | 求值器是纯谓词，只读上下文；结果由 `ConditionResult` 承载，只有 `MATCH` 通过、判不了与出错原样穿透取反节点；上下文不足以判定由 `Evaluability` 前置声明 | `core/model/ConditionType` 把三者绑到一个可注册类型；运行时表达式求值器做树聚合 |
-| `EffectExecutor` / `EffectContext` / `EffectExecution` / `EffectPreparation` / `EffectResult` | 效果侧扩展点 | 执行器只做世界操作并返回真实回执；`EffectExecution.advance` 在预算内推进、返回 `null` 表示需续接；`EffectPreparation` 承载成功当刻固定的输入与跳过原因；回执区分完成量与已受理量 | `core/model/EffectType`；运行时的组派发、候选位置策略与结算记账 |
+| `EffectExecutor` / `EffectContext` / `EffectExecution` / `EffectPreparation` / `EffectResult` | 效果侧扩展点 | 执行器只做世界操作并返回真实回执；`EffectExecution.advance` 在预算内推进、返回 `null` 表示需续接；执行器可通过 `waitingForChunks()` 标记因目标区块未加载而等待，预算让出与正常间隔不属于该状态；`EffectPreparation` 承载成功当刻固定的输入与跳过原因；回执区分完成量与已受理量 | `core/model/EffectType`；运行时的组派发、候选位置策略与结算记账 |
 | `ServerTickBudget` / `StepWorkCounter` | 预算与计价（并发敏感） | 时间上限与全局工作量上限同时生效；`begin` 只由调度器每 tick 调用；`exhausted()` 无副作用，`charge` / `chargeDrain` 记账并提交耗尽标记，`finish` 冻结耗时，`snapshot` 产出只读快照；计价窗口按服务器线程隔离、支持嵌套，由调度器在步骤前后开合，任务按真实完成的世界操作量上报；调度器取回执声明值与上报值的较大者计费，lane 配额与效果配额共用该结果 | 调度实现、每个 `ServerTask.step`、长循环效果执行器 |
 | `ServerTask` / `StepResult` / `StepOutcome` / `ServerTaskKind` / `CancelReason` / `TaskQueue` / `ScheduledTaskHandle` / `RunnableTask` | 调度扩展点与排期请求 | 单步必须有界；回执声明本步工作量（下界为 1）、状态与下次入队延迟；种类用于跨维度公平轮转、效果配额与分类统计；取消原因不得静默丢弃；任务终态唯一，失败与取消各有回调：`onFailed` 默认幂等空实现（只记录、不改容器状态，内置任务按需覆写），调度器先把句柄置终态再回调，回调抛异常只记日志、不影响整轮与容器；排期只经 `scheduleAt(realmKey, task, dueTick)`，句柄可读任务、到期刻、分类与终态并精确取消（幂等）；`RunnableTask` 把无参动作适配成固定消耗一步的任务 | `core/runtime/scheduler`；`RuntimeObserver` 的排期包装 |
 | `Issue` / `IssueCollector` / `IssueSeverity` / `ParamChecks` / `RefChecks` | 问题模型与校验助手 | 收集器累积问题并可派生来源继承的子收集器（写入同时落入上游、按默认来源补齐）；严重级决定条目是否拒载；`RefChecks` 对未注册的非标签引用报错、对未绑定的标签数据只告警 | 模型层校验、加载层、装配层 |
@@ -110,7 +110,7 @@ sequenceDiagram
     loop 同一 tick 预算内可多次
         RT->>BD: 读取余量 / charge
         RT->>EX: advance(budget)
-        EX-->>RT: EffectResult 或 null（下个 tick 续接）
+        EX-->>RT: EffectResult 或 null（下个 tick 续接；区块等待由 waitingForChunks 标记）
     end
     RT->>EX: onFinished(result) 或 onCancelled(reason)
 ```

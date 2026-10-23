@@ -244,6 +244,7 @@ public final class SpawnEntityExecutor {
         private boolean targetReady;
         // 邻区块未加载时的下次重试刻，0 表示不等待
         private long nextAttemptTick;
+        private boolean waitingForChunks;
 
         private EntityDelivery(EffectContext context, EntityType<?> type, int count, int age, boolean safeSpawn) {
             this.context = context;
@@ -266,10 +267,12 @@ public final class SpawnEntityExecutor {
             if (gameTime < nextAttemptTick) {
                 return null;
             }
+            waitingForChunks = false;
             // 每个实体都重新搜索：上一个命中位置可能已被占用；候选检查数按刻累计，用尽即让出并保留搜索游标
             // 安全搜索可能读取相邻方块，候选范围比原生成点更宽，需多留一圈区块
             int area = safeSpawn ? SEARCH_HORIZONTAL : 1;
             if (!LoadedChunks.containsArea(level, center, area)) {
+                waitingForChunks = true;
                 nextAttemptTick = gameTime + LoadedChunks.RETRY_TICKS;
                 return null;
             }
@@ -325,6 +328,7 @@ public final class SpawnEntityExecutor {
                     return null;
                 }
                 if (!spawnOne(hit)) {
+                    waitingForChunks = true;
                     // 写入前一刻区块不再加载：本步不累计完成量，保留游标带退避重试
                     nextAttemptTick = gameTime + LoadedChunks.RETRY_TICKS;
                     return null;
@@ -343,6 +347,11 @@ public final class SpawnEntityExecutor {
             }
             // 真实产出已逐实体回执，终态不再重复计入
             return EffectResult.applied(0, STEPPED);
+        }
+
+        @Override
+        public boolean waitingForChunks() {
+            return waitingForChunks;
         }
 
         @Override

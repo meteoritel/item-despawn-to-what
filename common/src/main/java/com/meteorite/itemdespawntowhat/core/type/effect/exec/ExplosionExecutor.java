@@ -85,6 +85,7 @@ public final class ExplosionExecutor {
         private final int requiredRadius;
         private long nextDueTick;
         private EffectResult terminal;
+        private boolean waitingForChunks;
 
         AtomicExplosion(ExplosionEffect effect, EffectContext context) {
             this.effect = effect;
@@ -106,7 +107,9 @@ public final class ExplosionExecutor {
             if (now < nextDueTick) {
                 return null;
             }
+            waitingForChunks = false;
             if (!LoadedChunks.containsArea(level, BlockPos.containing(position), requiredRadius)) {
+                waitingForChunks = true;
                 // 整片未加载：本次不计入账目，退避后仍在同一基准位置重试
                 nextDueTick = now + LoadedChunks.RETRY_TICKS;
                 return null;
@@ -116,6 +119,11 @@ public final class ExplosionExecutor {
             }
             terminal = explode(level);
             return terminal;
+        }
+
+        @Override
+        public boolean waitingForChunks() {
+            return waitingForChunks;
         }
 
         // 一次不可抢占的原子世界操作；回执在同一调用内确定

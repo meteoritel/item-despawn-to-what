@@ -121,6 +121,7 @@ public final class ArrowRainExecutor {
         // 已构造但尚未加入世界的这一支箭矢：原版 shoot 的射向随机已在构造时确定，等待区块时不重造
         private AbstractArrow pendingArrow;
         private EffectResult terminal;
+        private boolean waitingForChunks;
 
         ArrowSeries(ArrowRainEffect effect, EffectContext context, List<MobEffectInstance> potionEffects) {
             this.context = context;
@@ -141,7 +142,9 @@ public final class ArrowRainExecutor {
             if (now < nextDueTick) {
                 return null;
             }
+            waitingForChunks = false;
             if (!LoadedChunks.containsArea(level, BlockPos.containing(origin), SERIES_CHUNK_RADIUS)) {
+                waitingForChunks = true;
                 // 整片未加载：本次不计入账目，退避后仍在同一基准位置重来
                 nextDueTick = now + LoadedChunks.RETRY_TICKS;
                 return null;
@@ -158,6 +161,7 @@ public final class ArrowRainExecutor {
             }
             BlockPos column = BlockPos.containing(pendingX, origin.y + SPAWN_HEIGHT, pendingZ);
             if (!LoadedChunks.contains(level, column)) {
+                waitingForChunks = true;
                 // 生成列未加载：保留这一波的落点，退避后重试，不推进次数
                 nextDueTick = now + LoadedChunks.RETRY_TICKS;
                 return null;
@@ -166,6 +170,7 @@ public final class ArrowRainExecutor {
                 pendingArrow = build(level);
             }
             if (!EffectTargets.addEntityNow(context, pendingArrow, false)) {
+                waitingForChunks = true;
                 // 两次检查之间该列卸载：保留已构造的箭矢，退避后重试，不重抽也不计完成量
                 nextDueTick = now + LoadedChunks.RETRY_TICKS;
                 return null;
@@ -181,6 +186,11 @@ public final class ArrowRainExecutor {
                 return finish();
             }
             return null;
+        }
+
+        @Override
+        public boolean waitingForChunks() {
+            return waitingForChunks;
         }
 
         // 全部落完：真实完成量已逐波回执，终态只给出剩余增量，不重复累计

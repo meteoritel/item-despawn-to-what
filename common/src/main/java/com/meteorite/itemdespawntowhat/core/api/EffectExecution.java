@@ -18,6 +18,15 @@ public interface EffectExecution {
     @Nullable EffectResult advance(ServerTickBudget budget);
 
     /**
+     * 当前执行是否因目标区块未加载而等待。
+     * 预算让出与效果自身的正常间隔不属于区块等待。
+     * @return 因区块未加载而等待时为 true
+     */
+    default boolean waitingForChunks() {
+        return false;
+    }
+
+    /**
      * 最终回执通知：本执行已产出终态、不会再次推进时调用一次，用于释放执行态持有的资源。
      * 调用方先置终态再通知，实现不得借此回写账目或重放世界操作。
      * @param result 已计入账目的最终回执
