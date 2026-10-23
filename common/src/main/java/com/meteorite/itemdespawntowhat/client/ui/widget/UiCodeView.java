@@ -377,11 +377,11 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
             return;
         }
         int x = bounds.right() - SCROLLBAR_WIDTH - 1;
-        graphics.fill(x, innerY, x + SCROLLBAR_WIDTH, innerY + innerHeight, theme.palette().scrollTrack());
+        theme.drawScrollTrack(graphics, new UiRect(x, innerY, SCROLLBAR_WIDTH, innerHeight));
         int total = totalHeight();
         int thumbHeight = Math.max(8, innerHeight * innerHeight / Math.max(1, total));
         int thumbY = innerY + (innerHeight - thumbHeight) * scrollOffset / maxScroll;
-        graphics.fill(x, thumbY, x + SCROLLBAR_WIDTH, thumbY + thumbHeight, theme.palette().scrollThumb());
+        theme.drawScrollThumb(graphics, new UiRect(x, thumbY, SCROLLBAR_WIDTH, thumbHeight));
     }
 
     // ---- 输入 ----

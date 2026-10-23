@@ -164,6 +164,11 @@ public final class UiPixelTheme implements UiHostTheme {
     }
 
     @Override
+    public void drawScrollThumb(GuiGraphics graphics, UiRect rect) {
+        UiTheme.drawScrollThumb(graphics, rect);
+    }
+
+    @Override
     public void drawSegment(GuiGraphics graphics, UiRect rect, boolean enabled, boolean selected, boolean hovered) {
         UiTheme.drawSegment(graphics, rect, enabled, selected, hovered);
     }

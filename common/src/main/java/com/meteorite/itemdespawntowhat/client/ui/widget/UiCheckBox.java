@@ -126,7 +126,7 @@ public final class UiCheckBox implements UiWidget, UiFocusTarget {
         if (checked) {
             graphics.fill(box.x() + 2, box.y() + 2, box.right() - 2, box.bottom() - 2,
                     enabled ? theme.palette().accent() : theme.palette().controlDisabled());
-            // TODO 美术：勾选图标贴图（当前用 ASCII 字符占位）
+
             graphics.drawString(renderFont, "X", box.x() + 2, box.y() + 1, theme.palette().textOnDark(), false);
         }
         int textX = box.right() + LABEL_GAP;

@@ -140,6 +140,13 @@ public interface UiHostTheme extends UiStyleSource {
     // 水平进度/滚动轨道
     void drawScrollTrack(GuiGraphics graphics, UiRect rect);
 
+    /**
+     * 绘制滚动条滑块（垂直或水平方向通用）。
+     *
+     * @param rect 滑块矩形；宽高不大于 0 时由实现直接忽略
+     */
+    void drawScrollThumb(GuiGraphics graphics, UiRect rect);
+
     // 分段按钮底色
     void drawSegment(GuiGraphics graphics, UiRect rect, boolean enabled, boolean selected, boolean hovered);
 

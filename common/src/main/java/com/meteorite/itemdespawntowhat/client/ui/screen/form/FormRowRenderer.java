@@ -80,7 +80,7 @@ final class FormRowRenderer {
         }
         int thumbHeight = Math.max(MIN_THUMB_HEIGHT, viewportHeight * viewportHeight / Math.max(1, contentHeight));
         int thumbY = viewportY + (viewportHeight - thumbHeight) * scrollOffset / maxScroll;
-        graphics.fill(x, thumbY, x + scrollbarWidth, thumbY + thumbHeight, theme.palette().scrollThumb());
+        theme.drawScrollThumb(graphics, new UiRect(x, thumbY, scrollbarWidth, thumbHeight));
     }
 
     // 鼠标位置下的提示：说明行给完整说明，其它行优先显示校验问题，其次字段提示与完整标签

@@ -223,6 +223,15 @@ public final class UiFlatTheme implements UiHostTheme {
         graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), UiFlatPalette.PANEL_INSET_FILL);
     }
 
+    // 扁平皮肤没有立体边：滑块用控件常态色压在内凹轨道上，靠灰阶差区分
+    @Override
+    public void drawScrollThumb(GuiGraphics graphics, UiRect rect) {
+        if (rect.width() <= 0 || rect.height() <= 0) {
+            return;
+        }
+        graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), UiFlatPalette.PANEL_CONTROL_FILL);
+    }
+
     @Override
     public void drawSegment(GuiGraphics graphics, UiRect rect, boolean enabled, boolean selected, boolean hovered) {
         int fill = !enabled ? UiFlatPalette.PANEL_CONTROL_DISABLED

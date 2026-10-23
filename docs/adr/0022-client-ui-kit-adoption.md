@@ -12,7 +12,7 @@
 1. **同源复制**：从 `D:/system_default/desktop/mc_mod_project/unsuspiciousBlock-1.21.1-multi/common/src/main/java/com/meteorite/unsuspiciousblock/client/ui/kit/` 复制整套 kit 包（含 `package-info` 与全部公开类）到 `common/src/main/java/com/meteorite/itemdespawntowhat/client/ui/kit/`，源提交 `625747e1f34ea957841d7136be4635469687c227`。
 2. **只做机械改写**：仅改 `package` 声明（`com.meteorite.unsuspiciousblock.client.ui.kit` → `com.meteorite.itemdespawntowhat.client.ui.kit`）与 javadoc 中的全限定名；**不改**类名、字段名、方法签名、实现逻辑、常量值与注释语义。
 3. **保持 kit 通用**：kit 不得 import 本项目其他包，不得依赖 `core.model`，不得 import 平台 API，也不得引用 `Constants.MOD_ID`；仅依赖 Minecraft 客户端通用类型、Java 标准库、JOML、LWJGL 与 JetBrains annotations，原版渲染类按 [ADR-0025](0025-reusable-client-ui-kit-boundary.md) 的白名单精确放行（`platform.Lighting`、`vertex.PoseStack`、`vertex.VertexConsumer`）。
-4. **不复制上游贴图资源**：`UiNineSlice` 与 `UiIcon.Sprite` 使用的纹理 id 由调用方提供；本模组自带的九宫格底图与图标图集放在 `textures/gui/editor/`，图标图集由 `tools/image_generator/generate-editor-icons.py` 生成；主题层（`client/ui/theme/`）的窗口、面板与内凹区仍用纯色像素凸凹绘制。
+4. **不复制上游贴图资源**：`UiNineSlice` 与 `UiIcon.Sprite` 使用的纹理 id 由调用方提供；本模组自带的九宫格底图与图标图集放在 `textures/gui/editor/`，图标图集由 `tools/image_generator/generate-editor-icons.py` 生成；主题层（`client/ui/theme/`）的窗口、面板与内凹区的凸凹边由 `chrome.png` 的九宫格掩码按主题色染色绘制，滚动条轨道与滑块同样取自该图集，均由 `tools/image_generator/generate-editor-chrome.py` 生成。
 5. **主题与控件分层**：kit 只提供通用布局/交互原语；灰色像素主题在 `client/ui/theme/`，本模组控件在 `client/ui/widget/`，业务屏幕在 `client/ui/screen/`。
 6. **视觉验收基线**：最低 320×240 GUI 逻辑坐标；小尺寸页签可滚动、参数转单列；大屏扩宽但不留大片空白；颜色必须辅以文字或图标。圆角卡片的取舍与画布页的扁平皮肤见 [ADR-0028](0028-canvas-page-and-flat-skin.md)。
 

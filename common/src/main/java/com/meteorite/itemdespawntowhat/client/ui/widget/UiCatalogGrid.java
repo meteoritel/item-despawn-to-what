@@ -759,10 +759,8 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         int thumbHeight = thumbHeight(rows, visible);
         int maxScroll = rows - visible;
         int thumbY = scrollbarRect.y() + (maxScroll <= 0 ? 0 : (trackHeight - thumbHeight) * scrollRow / maxScroll);
-        graphics.fill(scrollbarRect.x(), scrollbarRect.y(), scrollbarRect.right(), scrollbarRect.bottom(),
-                theme.palette().scrollTrack());
-        graphics.fill(scrollbarRect.x(), thumbY, scrollbarRect.right(), thumbY + thumbHeight,
-                theme.palette().scrollThumb());
+        theme.drawScrollTrack(graphics, scrollbarRect);
+        theme.drawScrollThumb(graphics, new UiRect(scrollbarRect.x(), thumbY, scrollbarRect.width(), thumbHeight));
     }
 
     private void drawFooter(GuiGraphics graphics, int mouseX, int mouseY) {

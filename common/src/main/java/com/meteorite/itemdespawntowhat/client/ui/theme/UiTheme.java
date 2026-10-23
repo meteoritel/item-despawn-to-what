@@ -163,13 +163,84 @@ public final class UiTheme {
         return new UiNineSlice(ResourceLocation.fromNamespaceAndPath("itemdespawntowhat", "textures/gui/editor/" + name + ".png"), 32, 8);
     }
 
+    // ---- 结构贴图：立体边与滚动条共用一张图集 ----
+
+    // 四格 8x8 横向排列，格序与 tools/image_generator/generate-editor-chrome.py 一致
+    private static final ResourceLocation CHROME = ResourceLocation.fromNamespaceAndPath(
+            "itemdespawntowhat", "textures/gui/editor/chrome.png");
+    private static final int CHROME_TILE = 8;
+    // 四条边各占 1 像素，中间区域留给九宫格拉伸
+    private static final int CHROME_CORNER = 1;
+    // 立体边掩码是纯白字形，绘制时按调用方传入的高光/阴影色染色
+    private static final UiNineSlice BEVEL_LIGHT = chrome(0);
+    private static final UiNineSlice BEVEL_DARK = chrome(CHROME_TILE);
+    // 滚动条贴图已按 UiPalette 烘焙颜色，绘制时不再染色
+    private static final UiNineSlice SCROLL_TRACK_TILE = chrome(CHROME_TILE * 2);
+    private static final UiNineSlice SCROLL_THUMB_TILE = chrome(CHROME_TILE * 3);
+
+    private static UiNineSlice chrome(int originU) {
+        return new UiNineSlice(CHROME, originU, 0, CHROME_TILE, CHROME_CORNER, CHROME_TILE * 4, CHROME_TILE);
+    }
+
     private static void drawSurface(GuiGraphics graphics, UiRect rect, UiNineSlice surface) {
         if (rect.width() < 4 || rect.height() < 4) return;
+        drawChrome(graphics, rect, surface);
+    }
+
+    // 烘焙色贴图按原色绘制，不染色
+    private static void drawChrome(GuiGraphics graphics, UiRect rect, UiNineSlice slice) {
+        drawChrome(graphics, rect, slice, 0, false);
+    }
+
+    // 纯白掩码按调用方颜色染色
+    private static void drawTintedChrome(GuiGraphics graphics, UiRect rect, UiNineSlice slice, int color) {
+        drawChrome(graphics, rect, slice, color, true);
+    }
+
+    // 九宫格贴图绘制：透明区域要靠混合保底，批次前后都提交，避免透明写入与状态泄漏。
+    private static void drawChrome(GuiGraphics graphics, UiRect rect, UiNineSlice slice, int color, boolean tinted) {
         graphics.flush();
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
-        try { surface.render(graphics, rect); }
-        finally { graphics.flush(); RenderSystem.disableBlend(); }
+        // getShaderColor 返回渲染系统内部数组本身，setColor 会就地改写它，
+        // 因此必须先取成局部值，否则 finally 读回的是本次染色后的颜色。
+        float[] current = RenderSystem.getShaderColor();
+        float previousRed = current[0];
+        float previousGreen = current[1];
+        float previousBlue = current[2];
+        float previousAlpha = current[3];
+        try {
+            if (tinted) {
+                graphics.setColor(red(color), green(color), blue(color), alpha(color));
+            } else {
+                // 显式归白，避免继承调用方残留的染色
+                graphics.setColor(1.0F, 1.0F, 1.0F, 1.0F);
+            }
+            slice.render(graphics, rect);
+        } finally {
+            try {
+                graphics.flush();
+            } finally {
+                graphics.setColor(previousRed, previousGreen, previousBlue, previousAlpha);
+                RenderSystem.disableBlend();
+            }
+        }
+    }
+
+    private static float red(int color) {
+        return ((color >> 16) & 0xFF) / 255.0F;
+    }
+
+    private static float green(int color) {
+        return ((color >> 8) & 0xFF) / 255.0F;
+    }
+
+    private static float blue(int color) {
+        return (color & 0xFF) / 255.0F;
+    }
+
+    private static float alpha(int color) {
+        return ((color >>> 24) & 0xFF) / 255.0F;
     }
 
     // 浅灰底与柔和单层描边，圆角透明边缘与页面背景自然混合。
@@ -213,16 +284,21 @@ public final class UiTheme {
         graphics.fill(x, y + 1, x + width, y + 2, UiPalette.PANEL_BORDER_LIGHT);
     }
 
-    // 绘制外凸立体边：上/左为高光，下/右为阴影
-    // TODO 美术资源：立体边目前用纯色填充，后续可替换为灰色像素贴图九宫格
+    /**
+     * 绘制外凸立体边：上/左为高光，下/右为阴影。
+     *
+     * <p>两条边各取图集里的一张纯白掩码，绘制时分别染成调用方给出的高光/阴影色，
+     * 因此颜色仍由调色板或主题调用方决定，贴图只负责像素排布。</p>
+     *
+     * @param light 上/左高光色，ARGB
+     * @param dark  下/右阴影色，ARGB
+     */
     public static void drawBevel(GuiGraphics graphics, UiRect rect, int light, int dark) {
         if (rect.width() < 2 || rect.height() < 2) {
             return;
         }
-        graphics.fill(rect.x(), rect.y(), rect.right() - 1, rect.y() + 1, light);
-        graphics.fill(rect.x(), rect.y(), rect.x() + 1, rect.bottom() - 1, light);
-        graphics.fill(rect.x() + 1, rect.bottom() - 1, rect.right(), rect.bottom(), dark);
-        graphics.fill(rect.right() - 1, rect.y() + 1, rect.right(), rect.bottom() - 1, dark);
+        drawTintedChrome(graphics, rect, BEVEL_LIGHT, light);
+        drawTintedChrome(graphics, rect, BEVEL_DARK, dark);
     }
 
     // 绘制键盘焦点轮廓（虚线感：只画四角与中线，避免遮住文字）
@@ -254,13 +330,24 @@ public final class UiTheme {
         graphics.fill(x + 2, midY - 2, x + 3, midY + 3, UiPalette.TEXT_PRIMARY);
     }
 
-    // 绘制水平进度/滚动轨道
-    // TODO 美术资源：滚动条轨道与滑块可替换为像素贴图
+    /**
+     * 绘制滚动条轨道（垂直或水平）。贴图已按调色板烘焙内凹槽的阴影与高光。
+     */
     public static void drawScrollTrack(GuiGraphics graphics, UiRect rect) {
         if (rect.width() <= 0 || rect.height() <= 0) {
             return;
         }
-        graphics.fill(rect.x(), rect.y(), rect.right(), rect.bottom(), UiPalette.SCROLL_TRACK);
+        drawChrome(graphics, rect, SCROLL_TRACK_TILE);
+    }
+
+    /**
+     * 绘制滚动条滑块（垂直或水平）。贴图已按调色板烘焙外凸的高光与阴影。
+     */
+    public static void drawScrollThumb(GuiGraphics graphics, UiRect rect) {
+        if (rect.width() <= 0 || rect.height() <= 0) {
+            return;
+        }
+        drawChrome(graphics, rect, SCROLL_THUMB_TILE);
     }
 
     // ---- 文本颜色 ----
