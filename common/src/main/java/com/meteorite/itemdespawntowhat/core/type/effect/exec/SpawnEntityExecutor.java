@@ -1,15 +1,19 @@
 package com.meteorite.itemdespawntowhat.core.type.effect.exec;
 
+import com.meteorite.itemdespawntowhat.core.api.ChunkRequirement;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
 import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
+import com.meteorite.itemdespawntowhat.core.api.EffectStep;
 import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.StepWorkCounter;
-import com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks;
 import com.meteorite.itemdespawntowhat.core.type.effect.EntityProduct;
 import com.meteorite.itemdespawntowhat.core.type.effect.SpawnEntityEffect;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
@@ -24,13 +28,10 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
-
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
 
 /**
  * 统一实体生成分发入口：按产出子类（物品 / 经验 / 通用实体）分派到对应执行策略。
@@ -155,11 +156,11 @@ public final class SpawnEntityExecutor {
                                         @Nullable EffectPreparation preparation) {
         if (preparation == null) {
             // 迁移到固定输入路径后，缺少固定输入不再退回到期重新取值
-            return budget -> EffectResult.failed(MISSING_PREPARATION);
+            return budget -> EffectStep.done(EffectResult.failed(MISSING_PREPARATION));
         }
         if (preparation.gate() != null) {
             String reason = preparation.gate();
-            return budget -> EffectResult.skipped(reason);
+            return budget -> EffectStep.done(EffectResult.skipped(reason));
         }
         if (effect.product() instanceof EntityProduct.Experience experience) {
             return SpawnXpExecutor.start(experience, context, preparation);
@@ -168,18 +169,18 @@ public final class SpawnEntityExecutor {
             return SpawnItemExecutor.startBatch(context, item, count);
         }
         if (!(preparation instanceof SpawnPlan plan)) {
-            return budget -> EffectResult.failed(MISSING_PREPARATION);
+            return budget -> EffectStep.done(EffectResult.failed(MISSING_PREPARATION));
         }
         if (plan.failure() != null) {
             String failure = plan.failure();
-            return budget -> EffectResult.failed(failure);
+            return budget -> EffectStep.done(EffectResult.failed(failure));
         }
         return switch (effect.product()) {
             case EntityProduct.Item ignored -> SpawnItemExecutor.start(context, plan.item(), plan.count());
             case EntityProduct.Generic entity -> new EntityDelivery(context, plan.entityType(), plan.count(),
                     entity.age(), context.safeSpawn());
             // 经验产出已在上面按自己的固定输入创建执行状态；此处仅为 switch 完整覆盖
-            case EntityProduct.Experience ignored -> budget -> EffectResult.failed(MISSING_PREPARATION);
+            case EntityProduct.Experience ignored -> budget -> EffectStep.done(EffectResult.failed(MISSING_PREPARATION));
         };
     }
 
@@ -231,6 +232,7 @@ public final class SpawnEntityExecutor {
      */
     private static final class EntityDelivery implements EffectExecution {
         private final EffectContext context;
+        private final ChunkRequirement chunks;
         private final EntityType<?> type;
         private final ServerLevel level;
         private final Vec3 origin;
@@ -242,9 +244,7 @@ public final class SpawnEntityExecutor {
         private int searchCursor;
         private @Nullable BlockPos hit;
         private boolean targetReady;
-        // 邻区块未加载时的下次重试刻，0 表示不等待
-        private long nextAttemptTick;
-        private boolean waitingForChunks;
+        private Entity pendingEntity;
 
         private EntityDelivery(EffectContext context, EntityType<?> type, int count, int age, boolean safeSpawn) {
             this.context = context;
@@ -252,6 +252,7 @@ public final class SpawnEntityExecutor {
             this.level = context.level();
             this.origin = context.position();
             this.center = BlockPos.containing(origin);
+            this.chunks = ChunkRequirement.around(center, safeSpawn ? SEARCH_HORIZONTAL : 1);
             this.age = age;
             this.safeSpawn = safeSpawn;
             // 产出量按「参数个数 × 本组轮数」封顶，轮数由本组固定、执行期不重新读取产出参数
@@ -259,23 +260,18 @@ public final class SpawnEntityExecutor {
         }
 
         @Override
-        public @Nullable EffectResult advance(ServerTickBudget budget) {
+        public @Nullable ChunkRequirement requiredChunks() {
+            if (spawned >= target) { return null; }
+            return pendingEntity == null ? chunks : chunks.including(pendingEntity.blockPosition());
+        }
+
+        @Override
+        public EffectStep advance(ServerTickBudget budget) {
             if (spawned >= target) {
-                return EffectResult.applied(0, STEPPED);
+                return EffectStep.done(EffectResult.applied(0, STEPPED));
             }
-            long gameTime = level.getGameTime();
-            if (gameTime < nextAttemptTick) {
-                return null;
-            }
-            waitingForChunks = false;
             // 每个实体都重新搜索：上一个命中位置可能已被占用；候选检查数按刻累计，用尽即让出并保留搜索游标
             // 安全搜索可能读取相邻方块，候选范围比原生成点更宽，需多留一圈区块
-            int area = safeSpawn ? SEARCH_HORIZONTAL : 1;
-            if (!LoadedChunks.containsArea(level, center, area)) {
-                waitingForChunks = true;
-                nextAttemptTick = gameTime + LoadedChunks.RETRY_TICKS;
-                return null;
-            }
             // 阈值只检查开组准入，本批继续完成已开始组。
             int end = (int) Math.min(target, (long) spawned + SPAWNS_PER_RUN);
             int checks = 0;
@@ -287,7 +283,7 @@ public final class SpawnEntityExecutor {
                 // 每个实体写入前都复查双预算：时间耗尽或本步已用额度（含已报告未计费部分）耗尽时让出，
                 // 剩余数量与搜索游标原样保留，下一 tick 重获预算后继续
                 if (budget.exhausted() || budget.remainingWorkUnits() - reportedUnits <= 0) {
-                    return null;
+                    return EffectStep.Yield.INSTANCE;
                 }
                 if (safeSpawn && !targetReady) {
                     while (searchCursor < SEARCH_OFFSETS.size() && checks < checkLimit) {
@@ -306,7 +302,7 @@ public final class SpawnEntityExecutor {
                     }
                     if (hit == null && searchCursor < SEARCH_OFFSETS.size()) {
                         // 搜索未完成（候选上限或预算用尽）：从断点下刻继续，保持「最近优先」语义
-                        return null;
+                        return EffectStep.Yield.INSTANCE;
                     }
                     targetReady = true;
                     if (RuntimeObserver.current().enabled()) {
@@ -321,17 +317,14 @@ public final class SpawnEntityExecutor {
                     }
                 }
                 if (checks >= checkLimit && spawned < end) {
-                    return null;
+                    return EffectStep.Yield.INSTANCE;
                 }
                 // 搜索可能已把本步余量耗尽，写入前再复查一次双预算，避免越过本 tick 额度
                 if (budget.exhausted() || budget.remainingWorkUnits() - reportedUnits <= 0) {
-                    return null;
+                    return EffectStep.Yield.INSTANCE;
                 }
                 if (!spawnOne(hit)) {
-                    waitingForChunks = true;
-                    // 写入前一刻区块不再加载：本步不累计完成量，保留游标带退避重试
-                    nextAttemptTick = gameTime + LoadedChunks.RETRY_TICKS;
-                    return null;
+                    return new EffectStep.AwaitChunks(ChunkRequirement.at(pendingEntity.blockPosition()));
                 }
                 spawned++;
                 // spawnOne 成功时内部已上报 1 个工作单位，同步计入本步已用额度
@@ -343,45 +336,44 @@ public final class SpawnEntityExecutor {
                 }
             }
             if (spawned < target) {
-                return null;
+                return EffectStep.Yield.INSTANCE;
             }
             // 真实产出已逐实体回执，终态不再重复计入
-            return EffectResult.applied(0, STEPPED);
-        }
-
-        @Override
-        public boolean waitingForChunks() {
-            return waitingForChunks;
+            return EffectStep.done(EffectResult.applied(0, STEPPED));
         }
 
         @Override
         public void onFinished(EffectResult result) {
             // 交付完成或已失败：不再持有剩余数量，取消路径也不补做
             spawned = target;
+            pendingEntity = null;
         }
 
         // 生成一个实体：安全搜索命中时用命中方块中心，未开启搜索或回退时沿用原点附近的随机偏移。
         // 返回是否已真正写入世界：未写入时不回执完成量，由调用方带退避重试。
         private boolean spawnOne(@Nullable BlockPos position) {
-            Entity entity = type.create(level);
-            if (entity == null) {
-                throw new IllegalStateException(BuiltInRegistries.ENTITY_TYPE.getKey(type) + " 在该维度无法创建实体");
-            }
-            if (position != null) {
-                entity.moveTo(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D, 0.0F, 0.0F);
-            } else {
-                entity.moveTo(origin.x + (level.random.nextDouble() - 0.5) * 0.5,
-                        origin.y,
-                        origin.z + (level.random.nextDouble() - 0.5) * 0.5,
-                        0.0F, 0.0F);
-            }
-            if (entity instanceof AgeableMob ageableMob) {
-                ageableMob.setAge(age);
+            if (pendingEntity == null) {
+                pendingEntity = type.create(level);
+                if (pendingEntity == null) {
+                    throw new IllegalStateException(BuiltInRegistries.ENTITY_TYPE.getKey(type) + " 在该维度无法创建实体");
+                }
+                if (position != null) {
+                    pendingEntity.moveTo(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D, 0.0F, 0.0F);
+                } else {
+                    pendingEntity.moveTo(origin.x + (level.random.nextDouble() - 0.5) * 0.5,
+                            origin.y,
+                            origin.z + (level.random.nextDouble() - 0.5) * 0.5,
+                            0.0F, 0.0F);
+                }
+                if (pendingEntity instanceof AgeableMob ageableMob) {
+                    ageableMob.setAge(age);
+                }
             }
             // 真实写入世界后才回执：加入失败由运行时统一捕获记为失败，不提前累计完成量
-            if (!EffectTargets.addEntityNow(context, entity, true)) {
+            if (!EffectTargets.addEntityNow(context, pendingEntity, true)) {
                 return false;
             }
+            pendingEntity = null;
             context.reportProgress(1);
             // 计价：一个真正写入世界的实体记 1 个工作单位
             StepWorkCounter.report(1);

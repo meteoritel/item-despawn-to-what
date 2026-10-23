@@ -1,14 +1,17 @@
 package com.meteorite.itemdespawntowhat.core.type.effect.exec;
 
+import com.meteorite.itemdespawntowhat.core.api.ChunkRequirement;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
 import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
+import com.meteorite.itemdespawntowhat.core.api.EffectStep;
 import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.StepWorkCounter;
-import com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks;
 import com.meteorite.itemdespawntowhat.core.type.effect.LootTableEffect;
+import java.util.ArrayList;
+import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
@@ -20,11 +23,9 @@ import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
+
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * loot_table 执行器：在成功转化当刻用真实源实体开表一次并固定产物，随后在共享预算内分批交付。
@@ -137,14 +138,14 @@ public final class LootTableExecutor {
                                         @Nullable EffectPreparation preparation) {
         if (preparation == null) {
             // 迁移到固定输入路径后，缺少固定输入不再退回到期重新抽取
-            return budget -> EffectResult.failed(MISSING_PREPARATION);
+            return budget -> EffectStep.done(EffectResult.failed(MISSING_PREPARATION));
         }
         if (preparation.gate() != null) {
             String reason = preparation.gate();
-            return budget -> EffectResult.skipped(reason);
+            return budget -> EffectStep.done(EffectResult.skipped(reason));
         }
         if (!(preparation instanceof LootPlan plan)) {
-            return budget -> EffectResult.failed(MISSING_PREPARATION);
+            return budget -> EffectStep.done(EffectResult.failed(MISSING_PREPARATION));
         }
         return new LootDelivery(context, effect.lootTable(), plan);
     }
@@ -155,53 +156,46 @@ public final class LootTableExecutor {
      */
     private static final class LootDelivery implements EffectExecution {
         private final EffectContext context;
+        private final ChunkRequirement chunks;
         private final ResourceLocation table;
         private final Vec3 position;
         private final List<ItemStack> drops;
-        private final BlockPos center;
         private int cursor;
         // 已构造但尚未加入世界的这一堆产物：散布位置与初速已确定，等待区块时不重造
         private ItemEntity pendingDrop;
-        // 邻区块未加载时的下次重试刻，0 表示不等待
-        private long nextAttemptTick;
-        private boolean waitingForChunks;
 
         private LootDelivery(EffectContext context, ResourceLocation table, LootPlan plan) {
             this.context = context;
             this.table = table;
             this.position = plan.position();
             this.drops = plan.drops();
-            this.center = BlockPos.containing(this.position);
+            this.chunks = ChunkRequirement.around(BlockPos.containing(this.position), 1);
         }
 
         @Override
-        public @Nullable EffectResult advance(ServerTickBudget budget) {
+        public @Nullable ChunkRequirement requiredChunks() {
+            if (cursor >= drops.size()) { return null; }
+            return pendingDrop == null ? chunks : chunks.including(pendingDrop.blockPosition());
+        }
+
+        @Override
+        public EffectStep advance(ServerTickBudget budget) {
             if (drops.isEmpty()) {
                 // 空表是已完成的空产出：不写世界、不回执件数，用独立结果与「已交付」区分
-                return EffectResult.applied(0, EMPTY_RESULT);
+                return EffectStep.done(EffectResult.applied(0, EMPTY_RESULT));
             }
             if (cursor >= drops.size()) {
-                return EffectResult.applied(0, DELIVERED);
+                return EffectStep.done(EffectResult.applied(0, DELIVERED));
             }
             ServerLevel level = context.level();
-            long gameTime = level.getGameTime();
-            if (gameTime < nextAttemptTick) {
-                return null;
-            }
-            waitingForChunks = false;
             // 掉落物散布半径小于一格，邻区块就绪即可写入
-            if (!LoadedChunks.containsArea(level, center, 1)) {
-                waitingForChunks = true;
-                nextAttemptTick = gameTime + LoadedChunks.RETRY_TICKS;
-                return null;
-            }
             int written = 0;
             // 本步已报告但尚未由调度器计费的额度：单步内 remainingWorkUnits 不会随上报立即减少，需自行扣除
             int reportedUnits = 0;
             while (written < LOOT_DROPS_PER_STEP && cursor < drops.size()) {
                 // 每堆写入前都守一次：时间或本步额度（含已报告未计费部分）耗尽即让出，未交付部分保留到下次推进
                 if (budget.exhausted() || budget.remainingWorkUnits() - reportedUnits <= 0) {
-                    return null;
+                    return EffectStep.Yield.INSTANCE;
                 }
                 ItemStack stack = drops.get(cursor);
                 if (pendingDrop == null) {
@@ -214,9 +208,7 @@ public final class LootTableExecutor {
                 // 转化产物：走既有显式产物入口，先授予临时保护与冷却再写入世界。
                 // 未写入时保留这堆产物，退避后重试，不重造散点与初速。
                 if (!EffectTargets.addConversionProductNow(context, pendingDrop)) {
-                    waitingForChunks = true;
-                    nextAttemptTick = gameTime + LoadedChunks.RETRY_TICKS;
-                    return null;
+                    return new EffectStep.AwaitChunks(ChunkRequirement.at(pendingDrop.blockPosition()));
                 }
                 pendingDrop = null;
                 // 真实完成量回执：按本次实际写入世界的件数计，轮次不在此处放大
@@ -227,7 +219,7 @@ public final class LootTableExecutor {
                 cursor++;
             }
             if (cursor < drops.size()) {
-                return null;
+                return EffectStep.Yield.INSTANCE;
             }
             if (RuntimeObserver.current().enabled()) {
                 // 行为轮数与真实产出件数分别记录：轮次是本组的执行轮数，不代表物品件数
@@ -239,12 +231,7 @@ public final class LootTableExecutor {
                         "y", position.y,
                         "z", position.z);
             }
-            return EffectResult.applied(0, DELIVERED);
-        }
-
-        @Override
-        public boolean waitingForChunks() {
-            return waitingForChunks;
+            return EffectStep.done(EffectResult.applied(0, DELIVERED));
         }
 
         @Override

@@ -181,7 +181,7 @@ flowchart TB
 
 结算的协作结构：聚合根按 `SettlementPhases` 的当前阶段调用对应协作者，并统一处理中止、失败、取消与步骤出口的待交付量对齐。`SettlementGroupPlan` 定组数与逐组选候选，组数上界 `bound`（初始预算与本地剩余取小）是唯一实现，派发期只消耗已分配预算；`SettlementCapacityProbe` 把候选每轮产出折算成可开组数并封装邻近物品/实体计数；`SettlementCatalystStage` 管计划期催化剂上界与预留组，并按 UUID 生成开组前的门槛复核对象；`SettlementPayment` 做开组前输入复核、催化剂支付与返还交付；`SettlementReceipts` 是账目唯一写入通道并持有待交付库存的所有权。派发阶段按「选组 → 支付 → 派发效果」拆成单一语义的步骤：开组受阻按原因分流为让出、重选候选或截断整批，效果槽位逐个派发，任一异常仍回到聚合根收尾。账目写入在步内累积、步末合并落账一次，成批返还因此不再按堆提交；战利品固定在成功转化当刻抽取并复制成不可变堆叠列表，执行状态共享该快照，只在写入世界时按堆复制。
 
-直接物品由 `SettlementItemOutputs` 汇总已支付组的成功固定输入，同一结算、候选、效果槽位与已解析物品共用总件数。条件、概率及标签抽取保持逐组独立；所有组派发后生成一个汇总任务，按堆叠上限拆分并沿用共享预算跨 tick 交付，尾堆只生成一次。汇总交付不早于该桶最晚的原定到期时刻；源返还完成后，结算仍等待汇总物品任务收尾，真实写入量持续记账。执行状态因目标区块未加载而续接时通过 `EffectExecution.waitingForChunks()` 标记，运行时沿用连续 1200 tick 等待上限；预算让出与效果自身的正常间隔不会累计区块等待。超时以失败回执终结效果，并释放结算等待计数。汇总物品任务每个桶在排期时与终态各上报一次 `ITEM_BATCH_SCHEDULED` / `ITEM_BATCH_FINISHED`，字段为 `record`、`candidate`、`item`、`items`、`ready_tick`、`pending_item_batches`；`SETTLEMENT_COMPLETED` 同带 `pending_item_batches`（完成时为零）。调试场景可用 `events/ITEM_BATCH_SCHEDULED` / `events/ITEM_BATCH_FINISHED` 断言排期与收尾；场景结束输出的 `settlement_snapshot` 汇总已完成结算的账目总量（含 `groups`、`prepared_groups`、`pending_delivery`），在飞桶数看事件字段。战利品沿用独立堆叠交付。
+直接物品由 `SettlementItemOutputs` 汇总已支付组的成功固定输入，同一结算、候选、效果槽位与已解析物品共用总件数。条件、概率及标签抽取保持逐组独立；所有组派发后生成一个汇总任务，按堆叠上限拆分并沿用共享预算跨 tick 交付，尾堆只生成一次。汇总交付不早于该桶最晚的原定到期时刻；源返还完成后，结算仍等待汇总物品任务收尾，真实写入量持续记账。执行状态通过 `requiredChunks()` 声明推进所需区块，中途等待返回 `EffectStep.AwaitChunks`；`EffectTask` 在重试刻统一复查区块，沿用连续 1200 tick 等待上限，就绪后从原执行状态续接；共享计数游标由其它组推进时，当前需求替代旧断点请求。`Yield` 和 `Delay` 分别表示预算续接与正常间隔，后者直接按到期刻排期，两者均不累计区块等待。超时以失败回执终结效果，并释放结算等待计数。汇总物品任务每个桶在排期时与终态各上报一次 `ITEM_BATCH_SCHEDULED` / `ITEM_BATCH_FINISHED`，字段为 `record`、`candidate`、`item`、`items`、`ready_tick`、`pending_item_batches`；`SETTLEMENT_COMPLETED` 同带 `pending_item_batches`（完成时为零）。调试场景可用 `events/ITEM_BATCH_SCHEDULED` / `events/ITEM_BATCH_FINISHED` 断言排期与收尾；场景结束输出的 `settlement_snapshot` 汇总已完成结算的账目总量（含 `groups`、`prepared_groups`、`pending_delivery`），在飞桶数看事件字段。战利品沿用独立堆叠交付。
 
 ### 4.4 结算记录、恢复与实体状态写入
 
@@ -218,7 +218,7 @@ flowchart TB
 - **准备阶段注入点**：委托效果执行器 `prepare` 之前上报 `RuntimeObserver.effectPreparing`，实现方只允许以抛出异常表达注入失败；异常沿转化补偿单元抛出，由检查任务的失败收尾按上面的规则恢复。
 - **步骤级注入点**：结算与恢复任务不经过排期接缝，进入步骤逻辑前上报 `RuntimeObserver.taskStepStarting`，实现方只允许以抛出异常表达注入的步骤失败；异常进入任务失败路径，由调度器隔离并触发各自的失败收尾。
 - **中止与待返还**：取消与失败共用同一条中止顺序——幂等位 → 待返还同步 → 释放未支付预留 → 终态记录 → 观测；三步各自兜异常，单步失败只降级为日志，不影响同批其它任务收尾。完成、中止或失败后的迟到效果与进度回执不再落账，避免已终结记录被重新登记；失败原因可区分 `TASK_FAILED`、`exception:<类名>` 与取消原因。
-- **区块等待**：开组前催化剂门槛区域未加载时保持未决，每秒重试；连续等待一分钟后按 `catalyst_chunk_wait_timeout` 失败收尾并移交账本恢复。效果任务的触发位置区块采用相同等待窗口，超时以 `chunk_wait_timeout` 失败回执终结；等待从实际检查到区块未加载时开始，规则声明的效果延迟独立保留。
+- **区块等待**：开组前催化剂门槛区域未加载时保持未决，每秒重试；连续等待一分钟后按 `catalyst_chunk_wait_timeout` 失败收尾并移交账本恢复。效果任务的触发位置与执行器目标分别维护连续等待窗口；固定区域、动态落点、方块逐位置放置与共享邻域计数均由 `EffectTask` 驱动等待，超时以 `chunk_wait_timeout` 失败回执终结；等待从实际检查到区块未加载时开始，规则声明的效果延迟独立保留。催化剂复核与效果任务共用 `ChunkWait` 的就绪/等待/超时判断，各自负责业务收尾；持久返还保留独立退避与账本库存恢复。
 - **容器的自洽不依赖任务覆写回调**：就绪任务在被取去执行时已从待处理计数中移除，失败分支先置终态再回调，回调异常被隔离；因此未覆写失败回调的任务只会缺少业务收尾，不会在调度器容器里留下幽灵句柄或重复通知。
 
 ## 5. 扩展点与约束

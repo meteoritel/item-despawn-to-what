@@ -51,7 +51,7 @@ public interface EffectExecutor<P> {
     default EffectExecution start(P effect, EffectContext context) {
         return budget -> {
             EffectResult result = execute(effect, context);
-            return result == null ? EffectResult.failed("no_result") : result;
+            return EffectStep.done(result == null ? EffectResult.failed("no_result") : result);
         };
     }
 
@@ -66,7 +66,7 @@ public interface EffectExecutor<P> {
     default EffectExecution start(P effect, EffectContext context, @Nullable EffectPreparation preparation) {
         if (preparation != null && preparation.gate() != null) {
             String reason = preparation.gate();
-            return budget -> EffectResult.skipped(reason);
+            return budget -> EffectStep.done(EffectResult.skipped(reason));
         }
         return start(effect, context);
     }

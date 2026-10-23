@@ -1,12 +1,13 @@
 package com.meteorite.itemdespawntowhat.core.type.effect.exec;
 
+import com.meteorite.itemdespawntowhat.core.api.ChunkRequirement;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
 import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
+import com.meteorite.itemdespawntowhat.core.api.EffectStep;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.StepWorkCounter;
-import com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks;
 import com.meteorite.itemdespawntowhat.core.type.effect.EntityProduct;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.ExperienceOrb;
@@ -62,17 +63,17 @@ public final class SpawnXpExecutor {
                                         @Nullable EffectPreparation preparation) {
         if (preparation == null) {
             // 迁移到固定输入路径后，缺少固定输入不再退回到期重新判定
-            return budget -> EffectResult.failed(MISSING_PREPARATION);
+            return budget -> EffectStep.done(EffectResult.failed(MISSING_PREPARATION));
         }
         // 成功转化当刻已判定的跳过原因：直接产出跳过回执，不重判也不生成经验球
         if (preparation.gate() != null) {
             String reason = preparation.gate();
-            return budget -> EffectResult.skipped(reason);
+            return budget -> EffectStep.done(EffectResult.skipped(reason));
         }
         int covered = context.coveredSourceItems();
         long total = covered <= 0 ? 0L : (long) effect.amount() * covered;
         if (total <= 0) {
-            return budget -> EffectResult.skipped(ZERO_AMOUNT);
+            return budget -> EffectStep.done(EffectResult.skipped(ZERO_AMOUNT));
         }
         return new XpDelivery(context, total);
     }
@@ -80,33 +81,28 @@ public final class SpawnXpExecutor {
     /** 单个经验行为的交付游标，仅由服务端线程访问。 */
     private static final class XpDelivery implements EffectExecution {
         private final EffectContext context;
+        private final ChunkRequirement chunks;
         private long remaining;
         private boolean feedbackSent;
         // 已构造但尚未加入世界的这个球：原版构造内的朝向与初速随机已确定，等待区块时不重造
         private ExperienceOrb pendingOrb;
         private int pendingPoints;
-        // 邻区块未加载时的下次重试刻，0 表示不等待
-        private long nextAttemptTick;
-        private boolean waitingForChunks;
 
         private XpDelivery(EffectContext context, long total) {
             this.context = context;
+            this.chunks = ChunkRequirement.around(BlockPos.containing(context.position()), 1);
             this.remaining = total;
         }
 
         @Override
-        public @Nullable EffectResult advance(ServerTickBudget budget) {
+        public @Nullable ChunkRequirement requiredChunks() {
+            if (remaining <= 0) { return null; }
+            return pendingOrb == null ? chunks : chunks.including(pendingOrb.blockPosition());
+        }
+
+        @Override
+        public EffectStep advance(ServerTickBudget budget) {
             // 圆盘可能跨越源区块边界；等待邻区块加载，不生成区块、不提前记为成功
-            long gameTime = context.level().getGameTime();
-            if (gameTime < nextAttemptTick) {
-                return null;
-            }
-            waitingForChunks = false;
-            if (!LoadedChunks.containsArea(context.level(), BlockPos.containing(context.position()), 1)) {
-                waitingForChunks = true;
-                nextAttemptTick = gameTime + LoadedChunks.RETRY_TICKS;
-                return null;
-            }
             int spawned = 0;
             // 本步已报告但尚未由调度器计费的额度：单步内 remainingWorkUnits 不会随上报立即减少，需自行扣除
             int reportedUnits = 0;
@@ -114,7 +110,7 @@ public final class SpawnXpExecutor {
                 // 每球前守一次：时间耗尽，或本步已用额度（含已报告未计费部分）耗尽时本步不再写入世界，
                 // 剩余点数原样留到后续步骤，不截断总量
                 if (budget.exhausted() || budget.remainingWorkUnits() - reportedUnits <= 0) {
-                    return null;
+                    return EffectStep.Yield.INSTANCE;
                 }
                 if (pendingOrb == null) {
                     int points = (int) Math.min(remaining, MAX_POINTS_PER_ORB);
@@ -125,10 +121,7 @@ public final class SpawnXpExecutor {
                     pendingPoints = points;
                 }
                 if (!EffectTargets.addEntityNow(context, pendingOrb, false)) {
-                    waitingForChunks = true;
-                    // 两次检查之间该区块卸载：保留已构造的球，退避后重试，不重抽也不计完成量
-                    nextAttemptTick = gameTime + LoadedChunks.RETRY_TICKS;
-                    return null;
+                    return new EffectStep.AwaitChunks(ChunkRequirement.at(pendingOrb.blockPosition()));
                 }
                 int points = pendingPoints;
                 pendingOrb = null;
@@ -146,15 +139,10 @@ public final class SpawnXpExecutor {
                 }
             }
             if (remaining > 0) {
-                return null;
+                return EffectStep.Yield.INSTANCE;
             }
             // 实际点数已逐球回执，终态不再重复计入产出
-            return EffectResult.applied(0, AWARDED);
-        }
-
-        @Override
-        public boolean waitingForChunks() {
-            return waitingForChunks;
+            return EffectStep.done(EffectResult.applied(0, AWARDED));
         }
 
         @Override

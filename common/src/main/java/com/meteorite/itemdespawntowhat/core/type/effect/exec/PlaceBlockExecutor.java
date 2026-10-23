@@ -1,14 +1,22 @@
 package com.meteorite.itemdespawntowhat.core.type.effect.exec;
 
+import com.meteorite.itemdespawntowhat.core.api.ChunkPresence;
+import com.meteorite.itemdespawntowhat.core.api.ChunkRequirement;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
 import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
+import com.meteorite.itemdespawntowhat.core.api.EffectStep;
 import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.StepWorkCounter;
-import com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks;
 import com.meteorite.itemdespawntowhat.core.type.effect.PlaceBlockEffect;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -17,19 +25,13 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.AttachFace;
 import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import org.jetbrains.annotations.Nullable;
-
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
 
 /**
  * 方块效果的执行器：在共享预算内分批完成邻域计数与放置，形状偏移按参数缓存复用。
@@ -215,14 +217,14 @@ public final class PlaceBlockExecutor {
                                         @Nullable EffectPreparation preparation) {
         if (preparation != null && preparation.gate() != null) {
             String reason = preparation.gate();
-            return budget -> EffectResult.skipped(reason);
+            return budget -> EffectStep.done(EffectResult.skipped(reason));
         }
         if (!(preparation instanceof PlacementPlan plan)) {
-            return budget -> EffectResult.failed(MISSING_PREPARATION + ": " + effect.type());
+            return budget -> EffectStep.done(EffectResult.failed(MISSING_PREPARATION + ": " + effect.type()));
         }
         if (plan.block() == null) {
             String failure = plan.failure() == null ? PLACE_TARGET_UNRESOLVED : plan.failure();
-            return budget -> EffectResult.failed(failure);
+            return budget -> EffectStep.done(EffectResult.failed(failure));
         }
         return new Placement(effect, context, plan);
     }
@@ -279,24 +281,25 @@ public final class PlaceBlockExecutor {
     /**
      * 放置的持续游标：每步最多读取 {@link #MAX_VISITS_PER_STEP} 个方块位置，并在本 tick 时间或工作量耗尽时让出。
      * 每个已处理位置向本 tick 预算回执 1 个工作单位：计数段位置为一次方块读取，放置段位置含读取、放置合法性与 setBlock 写入。
-     * 未完成时 {@code advance} 返回 null 让出本刻，下一次推进从保留的游标继续；区块未加载只推迟推进时机，不改变计划量。
+     * 未完成时返回续接或区块需求，下一次推进从保留的游标继续；区块未加载不改变计划量。
      * 需要计数时计数游标与已数/已放量都在共享账上（见 {@link NeighbourCount}），本类只持有自己的放置游标。
      */
     private static final class Placement implements EffectExecution {
         private final EffectContext context;
         private final Block block;
         private final BlockPos center;
+        private final ChunkRequirement originChunks;
         private final List<BlockPos> offsets;
         private final @Nullable NeighbourCount count;
         private int cursor;
         private int placed;
         private final int target;
-        private long readyAt = Long.MIN_VALUE;
         private @Nullable EffectResult result;
         private Placement(PlaceBlockEffect effect, EffectContext context, PlacementPlan plan) {
             this.context = context;
             this.block = plan.block();
             this.center = BlockPos.containing(context.position());
+            this.originChunks = ChunkRequirement.at(center);
             this.offsets = plan.candidates();
             // 计划上限：count × 本组已付轮数，再受候选位置数封顶；两项都不含随机抽取
             this.target = Math.min(EffectTargets.saturatedMultiply(effect.count(), context.rounds()), plan.candidates().size());
@@ -377,36 +380,43 @@ public final class PlaceBlockExecutor {
         }
 
         @Override
-        public @Nullable EffectResult advance(ServerTickBudget budget) {
-            if (result != null) {
-                return result;
+        public ChunkRequirement requiredChunks() {
+            if (count != null && count.counting()) {
+                BlockPos pending = count.pending;
+                return pending == null || context.level().isOutsideBuildHeight(pending.getY())
+                        ? originChunks : ChunkRequirement.at(pending);
             }
-            long now = context.level().getGameTime();
-            // 区块退避：未到解禁刻直接让出，游标与待处理位置原样保留
-            if (now < readyAt) {
-                return null;
+            return cursor < offsets.size() && placed < allowed()
+                    ? ChunkRequirement.around(center.offset(offsets.get(cursor)), 1) : originChunks;
+        }
+
+        @Override
+        public EffectStep advance(ServerTickBudget budget) {
+            if (result != null) {
+                return EffectStep.done(result);
             }
             int visits = 0;
             // 本步已上报但尚未由调度器计入预算的工作量，用于把单步处理量夹在本 tick 余量内
             int reported = 0;
             if (count != null && count.counting()) {
                 // 计数由先走到这里的一组推进共享账：数完之前任何组都不放置，避免边数边放突破 limit
-                visits += count.advance(context.level(), block, budget, now, MAX_VISITS_PER_STEP - visits);
+                CountStep counted = count.advance(context.level(), block, budget, MAX_VISITS_PER_STEP - visits);
+                visits += counted.reads();
+                if (counted.awaiting() != null) {
+                    return new EffectStep.AwaitChunks(counted.awaiting());
+                }
                 if (count.counting()) {
-                    // 计数未完成或区块未加载：游标留在共享账上，按共享账给出的退避刻续接
-                    readyAt = count.deferredUntil();
-                    return null;
+                    return EffectStep.Yield.INSTANCE;
                 }
             }
             while (cursor < offsets.size() && placed < allowed()) {
                 if (visits >= MAX_VISITS_PER_STEP || reported >= budget.remainingWorkUnits() || budget.exhausted()) {
-                    return null;
+                    return EffectStep.Yield.INSTANCE;
                 }
                 BlockPos pos = center.offset(offsets.get(cursor));
                 // canSurvive 可能读取相邻方块，边界两侧都须已加载。
-                if (!LoadedChunks.contains(context.level(), pos.offset(-1, 0, -1)) || !LoadedChunks.contains(context.level(), pos.offset(1, 0, 1))) {
-                    readyAt = now + LoadedChunks.RETRY_TICKS;
-                    return null;
+                if (!ChunkPresence.containsArea(context.level(), pos, 1)) {
+                    return new EffectStep.AwaitChunks(ChunkRequirement.around(pos, 1));
                 }
                 cursor++;
                 visits++;
@@ -431,9 +441,11 @@ public final class PlaceBlockExecutor {
                         "candidates", offsets.size(), "placed", placed, "target", target);
             }
             result = EffectResult.applied(0, PLACED_BY_STEPS);
-            return result;
+            return EffectStep.done(result);
         }
     }
+
+    private record CountStep(int reads, @Nullable ChunkRequirement awaiting) {}
 
     /**
      * 一次转化内跨组共享的邻域账：方框内已有的同类方块数与本次已放量都只有一份，各组按同一余额分摊 limit。
@@ -450,7 +462,6 @@ public final class PlaceBlockExecutor {
         private int existing;
         private int placed;
         private boolean done;
-        private long deferredUntil = Long.MIN_VALUE;
         // 区段探测缓存：同一区段内的连续位置只查一次调色板
         private boolean probeCached;
         private int probeSectionX;
@@ -469,11 +480,6 @@ public final class PlaceBlockExecutor {
             return !done;
         }
 
-        // 计数因区块未加载推迟到该刻之后再续；未被推迟时为 Long.MIN_VALUE
-        private long deferredUntil() {
-            return deferredUntil;
-        }
-
         // limit 余额：上限减去方框已有量与本次已放量
         private int allowance() {
             return done ? Math.max(0, limit - existing - placed) : 0;
@@ -489,27 +495,23 @@ public final class PlaceBlockExecutor {
          * @param level 触发维度
          * @param block 目标方块
          * @param budget 本 tick 预算
-         * @param now 当前刻
          * @param readCap 本步还能读取的方块数，与放置段共享 {@link #MAX_VISITS_PER_STEP}
-         * @return 本步实际读取的方块数
+         * @return 本步读取量与当前断点需要等待的区块
          */
-        private int advance(ServerLevel level, Block block, ServerTickBudget budget, long now, int readCap) {
+        private CountStep advance(ServerLevel level, Block block, ServerTickBudget budget, int readCap) {
             if (done) {
-                return 0;
-            }
-            if (now < deferredUntil) {
-                return 0;
+                return new CountStep(0, null);
             }
             int reads = 0;
             int probes = 0;
             while (probes < MAX_PROBES_PER_STEP && reads < readCap) {
                 if (budget.exhausted() || reads >= budget.remainingWorkUnits()) {
-                    return reads;
+                    return new CountStep(reads, null);
                 }
                 if (pending == null) {
                     if (!iterator().hasNext()) {
                         done = true;
-                        return reads;
+                        return new CountStep(reads, null);
                     }
                     pending = iterator().next().immutable();
                 }
@@ -519,10 +521,8 @@ public final class PlaceBlockExecutor {
                     pending = null;
                     continue;
                 }
-                if (!LoadedChunks.contains(level, pos)) {
-                    // 区块未加载：保留待处理位置，退避后再续
-                    deferredUntil = now + LoadedChunks.RETRY_TICKS;
-                    return reads;
+                if (!ChunkPresence.contains(level, pos)) {
+                    return new CountStep(reads, ChunkRequirement.at(pos));
                 }
                 if (sectionLacks(level, pos, block)) {
                     // 该区段确定不含目标方块：本位置不必读取，也不计工作量
@@ -538,11 +538,11 @@ public final class PlaceBlockExecutor {
                     if (existing >= limit) {
                         // 已有量已到上限：本次转化不再有可放量，剩余位置不必再数
                         done = true;
-                        return reads;
+                        return new CountStep(reads, null);
                     }
                 }
             }
-            return reads;
+            return new CountStep(reads, null);
         }
 
         // 区段调色板是否确定不含目标方块：不含时该区段的位置可直接跳过

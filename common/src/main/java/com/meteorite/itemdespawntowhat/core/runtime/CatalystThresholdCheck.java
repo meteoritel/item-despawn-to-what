@@ -1,14 +1,14 @@
 package com.meteorite.itemdespawntowhat.core.runtime;
 
-import com.meteorite.itemdespawntowhat.core.api.ChunkPresence;
+import com.meteorite.itemdespawntowhat.core.api.ChunkRequirement;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 import com.meteorite.itemdespawntowhat.core.model.CatalystCost;
+import java.util.ArrayList;
+import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.phys.Vec3;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * 每轮开组前的门槛复核：只校验计划期确定的候选实体是否存活、类型是否未变、件数是否够本组门槛。
@@ -21,7 +21,7 @@ final class CatalystThresholdCheck {
     private final CatalystCost cost;
     private final CatalystReservations reservations;
     private final String owner;
-    private final BlockPos center;
+    private final ChunkRequirement chunks;
     private List<ItemEntity> items;
     private CatalystAllocation allocation;
     private List<CatalystReservations.Hold> plan;
@@ -37,23 +37,23 @@ final class CatalystThresholdCheck {
         this.cost = cost;
         this.reservations = reservations;
         this.owner = owner;
-        center = BlockPos.containing(position);
+        chunks = ChunkRequirement.around(BlockPos.containing(position), cost.radius());
     }
 
     // true 表示检查完成；结果在开组提交时由 valid() 读取。
     boolean advance(ServerTickBudget budget) {
         if (budget.exhausted()) return false;
         // 跨刻复核也重新检查区域；卸载期间保留未决语义，恢复后重新解析实体。
-        waitingForChunks = !ChunkPresence.containsArea(level, center, cost.radius());
+        ChunkWait.Status status = chunkWait.poll(level, chunks, budget.gameTime());
+        waitingForChunks = status != ChunkWait.Status.READY;
         if (waitingForChunks) {
             items = null;
             allocation = null;
             plan = null;
-            timedOut = chunkWait.expired(budget.gameTime());
+            timedOut = status == ChunkWait.Status.TIMED_OUT;
             return false;
         }
         timedOut = false;
-        chunkWait.reset();
         if (items == null) {
             budget.charge(1);
             List<ItemEntity> live = new ArrayList<>(picks.size());

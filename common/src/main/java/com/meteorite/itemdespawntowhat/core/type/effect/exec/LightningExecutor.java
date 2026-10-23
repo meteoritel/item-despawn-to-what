@@ -1,12 +1,13 @@
 package com.meteorite.itemdespawntowhat.core.type.effect.exec;
 
+import com.meteorite.itemdespawntowhat.core.api.ChunkRequirement;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
 import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
+import com.meteorite.itemdespawntowhat.core.api.EffectStep;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.StepWorkCounter;
-import com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks;
 import com.meteorite.itemdespawntowhat.core.type.effect.LightningEffect;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -69,62 +70,56 @@ public final class LightningExecutor {
                                         @Nullable EffectPreparation preparation) {
         if (preparation == null) {
             // 没有准备结果说明调用方绕过了准备阶段：条件与概率无从固定，按失败回执而非静默降级
-            return budget -> EffectResult.failed(
-                    MISSING_PREPARATION + ": " + effect.type() + " @ " + context.ruleId());
+            return budget -> EffectStep.done(EffectResult.failed(
+                    MISSING_PREPARATION + ": " + effect.type() + " @ " + context.ruleId()));
         }
         if (preparation.gate() != null) {
             // 已判定不执行：不重新判定条件或概率，也不做世界写入
             String reason = preparation.gate();
-            return budget -> EffectResult.skipped(reason);
+            return budget -> EffectStep.done(EffectResult.skipped(reason));
         }
         return new StrikeSeries(effect, context);
     }
 
-    /** 闪电序列的推进状态：逐道落下，间隔与区块等待由本状态内的到期刻门控。 */
+    /** 闪电序列的推进状态：逐道落下，区块需求与正常间隔交由调用方排期。 */
     private static final class StrikeSeries implements EffectExecution {
         private final EffectContext context;
+        private final ChunkRequirement chunks;
         private final int count;
         // 成功转化当刻固定的基准位置：后续不再读取源实体
         private final Vec3 origin;
         private int launched;
-        private long nextDueTick;
         // 尚未落下的这一道的水平坐标：等待区块时保留，不重新抽取
         private double pendingX;
         private double pendingZ;
         private boolean pendingTarget;
         private EffectResult terminal;
-        private boolean waitingForChunks;
 
         StrikeSeries(LightningEffect effect, EffectContext context) {
             this.context = context;
             this.count = effect.count();
             this.origin = context.position();
-            this.nextDueTick = context.level().getGameTime();
+            this.chunks = ChunkRequirement.around(BlockPos.containing(origin), SERIES_CHUNK_RADIUS);
         }
 
         @Override
-        public @Nullable EffectResult advance(ServerTickBudget budget) {
+        public ChunkRequirement requiredChunks() {
+            return pendingTarget
+                    ? chunks.including(BlockPos.containing(pendingX, origin.y, pendingZ)) : chunks;
+        }
+
+        @Override
+        public EffectStep advance(ServerTickBudget budget) {
             if (terminal != null) {
-                return terminal;
+                return EffectStep.done(terminal);
             }
             if (launched >= count) {
-                return finish();
+                return EffectStep.done(finish());
             }
             ServerLevel level = context.level();
-            long now = level.getGameTime();
-            if (now < nextDueTick) {
-                return null;
-            }
-            waitingForChunks = false;
-            if (!LoadedChunks.containsArea(level, BlockPos.containing(origin), SERIES_CHUNK_RADIUS)) {
-                waitingForChunks = true;
-                // 整片未加载：本次不计入账目，退避后仍在同一基准位置重来
-                nextDueTick = now + LoadedChunks.RETRY_TICKS;
-                return null;
-            }
             // 每步只落一道：单道世界操作不可抢占，步间让出以遵守共享预算
             if (budget.exhausted()) {
-                return null;
+                return EffectStep.Yield.INSTANCE;
             }
             if (!pendingTarget) {
                 if (launched == 0) {
@@ -139,29 +134,19 @@ public final class LightningExecutor {
                 }
                 pendingTarget = true;
             }
-            if (!LoadedChunks.contains(level, BlockPos.containing(pendingX, origin.y, pendingZ))) {
-                waitingForChunks = true;
-                // 该列未加载：保留这道闪电及其坐标，退避后重试，不推进次数
-                nextDueTick = now + LoadedChunks.RETRY_TICKS;
-                return null;
+            ChunkRequirement targetChunks = ChunkRequirement.at(BlockPos.containing(pendingX, origin.y, pendingZ));
+            if (!targetChunks.isReady(level)) {
+                return new EffectStep.AwaitChunks(targetChunks);
             }
             if (!strike(level, pendingX, pendingZ)) {
-                waitingForChunks = true;
-                // 两次检查之间该列卸载：保留已确定的水平坐标，退避后按同一坐标重新求地表，不推进次数
-                nextDueTick = now + LoadedChunks.RETRY_TICKS;
-                return null;
+                return new EffectStep.AwaitChunks(targetChunks);
             }
             context.reportProgress(1);
             StepWorkCounter.report(1);
             launched++;
             pendingTarget = false;
-            nextDueTick = now + INTERVAL_TICKS;
-            return launched >= count ? finish() : null;
-        }
-
-        @Override
-        public boolean waitingForChunks() {
-            return waitingForChunks;
+            return launched >= count ? EffectStep.done(finish())
+                    : new EffectStep.Delay(level.getGameTime() + INTERVAL_TICKS);
         }
 
         // 全部落完：真实完成量已逐道回执，终态只给出剩余增量，不重复累计

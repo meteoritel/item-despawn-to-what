@@ -7,6 +7,7 @@ import com.meteorite.itemdespawntowhat.core.api.EffectExecutor;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
 import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
+import com.meteorite.itemdespawntowhat.core.api.EffectStep;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
 import com.meteorite.itemdespawntowhat.core.config.NearbyProductLimits;
@@ -51,7 +52,6 @@ import net.minecraft.world.phys.Vec3;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.Nullable;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -1433,35 +1433,35 @@ public final class ConversionRuntime {
                 ConditionContext context = conditionContext(level, item, BlockPos.containing(base.position()));
                 if (!ExpressionEvaluator.matches(conditions, context, types.conditionTypes())) {
                     if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "EFFECT_CONDITION_SKIPPED", "effect", effect.type()); }
-                    return budget -> EffectResult.skipped(CONDITIONS_UNMET);
+                    return budget -> EffectStep.done(EffectResult.skipped(CONDITIONS_UNMET));
                 }
             }
             if (effect.chance() < 1.0D && base.random().nextDouble() >= effect.chance()) {
                 if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "EFFECT_CHANCE_SKIPPED", "effect", effect.type(), "chance", effect.chance()); }
                 // 概率落空仍支付本组固定成本：不免费重试、不返还
-                return budget -> EffectResult.skipped(CHANCE_MISSED);
+                return budget -> EffectStep.done(EffectResult.skipped(CHANCE_MISSED));
             }
         }
         EffectType<?> definition = types.effectTypes().getOrNull(effect.type());
         if (definition == null) {
             if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "ERROR", "effect", effect.type(), "reason", "type_not_registered"); }
             LOGGER.error("规则 {} 引用了未注册的效果类型 {}", base.ruleId(), effect.type());
-            return budget -> EffectResult.failed("type_not_registered");
+            return budget -> EffectStep.done(EffectResult.failed("type_not_registered"));
         }
         try {
             if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "EFFECT_BEGIN", "effect", effect.type()); }
             EffectExecution execution = executorOf(definition).start(effect, base, preparation);
-            return execution == null ? budget -> EffectResult.failed("no_execution") : execution;
+            return execution == null ? budget -> EffectStep.done(EffectResult.failed("no_execution")) : execution;
         } catch (RuntimeException e) {
             if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "ERROR", "effect", effect.type(), "error", e.toString()); }
             LOGGER.error("效果执行失败：规则={} 效果={} 位置={}", base.ruleId(), effect.type(), base.position(), e);
-            return budget -> EffectResult.failed(String.valueOf(e));
+            return budget -> EffectStep.done(EffectResult.failed(String.valueOf(e)));
         }
     }
 
     // 已判定为不执行的固定输入：直接给出带原因的跳过回执，不做世界写入也不重判
     private static EffectExecution gatedExecution(String reason) {
-        return budget -> EffectResult.skipped(reason);
+        return budget -> EffectStep.done(EffectResult.skipped(reason));
     }
 
     // 成功转化当刻为「需要先固定输入」的类型逐槽生成固定输入：条件与概率在这里判定一次，

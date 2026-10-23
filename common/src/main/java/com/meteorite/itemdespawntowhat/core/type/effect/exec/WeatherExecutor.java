@@ -4,6 +4,7 @@ import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
 import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
+import com.meteorite.itemdespawntowhat.core.api.EffectStep;
 import com.meteorite.itemdespawntowhat.core.type.effect.WeatherEffect;
 import net.minecraft.server.level.ServerLevel;
 import org.jetbrains.annotations.Nullable;
@@ -39,9 +40,9 @@ public final class WeatherExecutor {
     public static EffectExecution start(WeatherEffect effect, EffectContext context, @Nullable EffectPreparation preparation) {
         if (preparation != null && preparation.gate() != null) {
             String reason = preparation.gate();
-            return budget -> EffectResult.skipped(reason);
+            return budget -> EffectStep.done(EffectResult.skipped(reason));
         }
-        return budget -> execute(effect, context);
+        return budget -> EffectStep.done(execute(effect, context));
     }
 
     // 此处借用 Minecraft 管理的实例，生命周期由游戏负责，不能在此关闭。

@@ -13,17 +13,18 @@ public interface EffectExecution {
     /**
      * 在公共预算内推进执行，调用方只在获得最终回执后记账。
      * @param budget 当前服务器 tick 的共享预算，不得保存到下次调用
-     * @return 最终真实回执；null 表示尚未完成，需要在后续 tick 续接
+     * @return 完成、预算续接、正常延时或区块等待；必须明确给出推进原因
      */
-    @Nullable EffectResult advance(ServerTickBudget budget);
+    EffectStep advance(ServerTickBudget budget);
 
     /**
-     * 当前执行是否因目标区块未加载而等待。
-     * 预算让出与效果自身的正常间隔不属于区块等待。
-     * @return 因区块未加载而等待时为 true
+     * 声明每次推进前需要的区块；调用方检查就绪后才调用 advance。
+     * 固定范围应缓存该值；逐位置处理途中遇到新需求时返回 EffectStep.AwaitChunks。
+     * 非 null 声明是本次推进的完整需求，替代上次返回的等待请求；共享游标可据此更新断点。
+     * @return 本次推进所需区块；null 时沿用上次等待请求，无等待请求时仅检查触发位置
      */
-    default boolean waitingForChunks() {
-        return false;
+    default @Nullable ChunkRequirement requiredChunks() {
+        return null;
     }
 
     /**

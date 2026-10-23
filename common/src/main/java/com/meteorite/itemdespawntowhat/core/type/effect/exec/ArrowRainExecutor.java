@@ -1,14 +1,17 @@
 package com.meteorite.itemdespawntowhat.core.type.effect.exec;
 
+import com.meteorite.itemdespawntowhat.core.api.ChunkRequirement;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
 import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
+import com.meteorite.itemdespawntowhat.core.api.EffectStep;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.StepWorkCounter;
-import com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks;
 import com.meteorite.itemdespawntowhat.core.type.effect.ArrowRainEffect;
+import java.util.ArrayList;
+import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
@@ -18,11 +21,9 @@ import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.projectile.AbstractArrow;
 import net.minecraft.world.entity.projectile.Arrow;
+
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * arrow_rain 执行器：按间隔在触发位置上方分波生成箭矢，可携带药水效果。
@@ -82,30 +83,31 @@ public final class ArrowRainExecutor {
                                         @Nullable EffectPreparation preparation) {
         if (preparation == null) {
             // 没有准备结果说明调用方绕过了准备阶段：条件与概率无从固定，按失败回执而非静默降级
-            return budget -> EffectResult.failed(
-                    MISSING_PREPARATION + ": " + effect.type() + " @ " + context.ruleId());
+            return budget -> EffectStep.done(EffectResult.failed(
+                    MISSING_PREPARATION + ": " + effect.type() + " @ " + context.ruleId()));
         }
         if (preparation.gate() != null) {
             // 已判定不执行：不重新判定条件或概率，也不做世界写入
             String reason = preparation.gate();
-            return budget -> EffectResult.skipped(reason);
+            return budget -> EffectStep.done(EffectResult.skipped(reason));
         }
         if (!(preparation instanceof ArrowRainEffect.Prepared fixed)) {
             // 准备结果由本类型自己的记录承载；其它实现表示固定输入不匹配，同样不降级执行
-            return budget -> EffectResult.failed(
-                    MISSING_PREPARATION + ": " + effect.type() + " @ " + context.ruleId());
+            return budget -> EffectStep.done(EffectResult.failed(
+                    MISSING_PREPARATION + ": " + effect.type() + " @ " + context.ruleId()));
         }
         if (fixed.failure() != null) {
             // 成功转化当刻就无法解析药水引用：按固定下来的原因失败，执行期不再重试也不改写结果
             String reason = fixed.failure();
-            return budget -> EffectResult.failed(reason);
+            return budget -> EffectStep.done(EffectResult.failed(reason));
         }
         return new ArrowSeries(effect, context, fixed.potionEffects());
     }
 
-    /** 箭雨序列的推进状态：逐波生成，间隔与区块等待由本状态内的到期刻门控。 */
+    /** 箭雨序列的推进状态：逐波生成，区块需求与正常间隔交由调用方排期。 */
     private static final class ArrowSeries implements EffectExecution {
         private final EffectContext context;
+        private final ChunkRequirement chunks;
         private final int count;
         private final AbstractArrow.Pickup pickup;
         // 本次转化准备阶段解析好的药水效果：整场序列共用同一份，不在到期时重抽
@@ -113,7 +115,6 @@ public final class ArrowRainExecutor {
         // 转换当刻固定的基准位置：后续不再读取源实体
         private final Vec3 origin;
         private int launched;
-        private long nextDueTick;
         // 尚未落下的这一波：已抽取的落点保留到真正生成，等待区块时不重抽
         private boolean pendingTarget;
         private double pendingX;
@@ -121,7 +122,6 @@ public final class ArrowRainExecutor {
         // 已构造但尚未加入世界的这一支箭矢：原版 shoot 的射向随机已在构造时确定，等待区块时不重造
         private AbstractArrow pendingArrow;
         private EffectResult terminal;
-        private boolean waitingForChunks;
 
         ArrowSeries(ArrowRainEffect effect, EffectContext context, List<MobEffectInstance> potionEffects) {
             this.context = context;
@@ -129,51 +129,41 @@ public final class ArrowRainExecutor {
             this.pickup = toVanillaPickup(effect.pickup());
             this.potionEffects = potionEffects;
             this.origin = context.position();
-            this.nextDueTick = context.level().getGameTime();
+            this.chunks = ChunkRequirement.around(BlockPos.containing(origin), SERIES_CHUNK_RADIUS);
         }
 
         @Override
-        public @Nullable EffectResult advance(ServerTickBudget budget) {
+        public ChunkRequirement requiredChunks() {
+            return pendingTarget
+                    ? chunks.including(BlockPos.containing(pendingX, origin.y + SPAWN_HEIGHT, pendingZ)) : chunks;
+        }
+
+        @Override
+        public EffectStep advance(ServerTickBudget budget) {
             if (terminal != null) {
-                return terminal;
+                return EffectStep.done(terminal);
             }
             ServerLevel level = context.level();
-            long now = level.getGameTime();
-            if (now < nextDueTick) {
-                return null;
-            }
-            waitingForChunks = false;
-            if (!LoadedChunks.containsArea(level, BlockPos.containing(origin), SERIES_CHUNK_RADIUS)) {
-                waitingForChunks = true;
-                // 整片未加载：本次不计入账目，退避后仍在同一基准位置重来
-                nextDueTick = now + LoadedChunks.RETRY_TICKS;
-                return null;
-            }
             if (launched >= count) {
-                return finish();
+                return EffectStep.done(finish());
             }
             if (budget.exhausted()) {
-                return null;
+                return EffectStep.Yield.INSTANCE;
             }
             if (!pendingTarget) {
                 sampleTarget(level.random);
                 pendingTarget = true;
             }
             BlockPos column = BlockPos.containing(pendingX, origin.y + SPAWN_HEIGHT, pendingZ);
-            if (!LoadedChunks.contains(level, column)) {
-                waitingForChunks = true;
-                // 生成列未加载：保留这一波的落点，退避后重试，不推进次数
-                nextDueTick = now + LoadedChunks.RETRY_TICKS;
-                return null;
+            ChunkRequirement targetChunks = ChunkRequirement.at(column);
+            if (!targetChunks.isReady(level)) {
+                return new EffectStep.AwaitChunks(targetChunks);
             }
             if (pendingArrow == null) {
                 pendingArrow = build(level);
             }
             if (!EffectTargets.addEntityNow(context, pendingArrow, false)) {
-                waitingForChunks = true;
-                // 两次检查之间该列卸载：保留已构造的箭矢，退避后重试，不重抽也不计完成量
-                nextDueTick = now + LoadedChunks.RETRY_TICKS;
-                return null;
+                return new EffectStep.AwaitChunks(targetChunks);
             }
             // 真实写入世界之后才回执与计费
             context.reportProgress(1);
@@ -181,16 +171,10 @@ public final class ArrowRainExecutor {
             launched++;
             pendingTarget = false;
             pendingArrow = null;
-            nextDueTick = now + INTERVAL_TICKS;
             if (launched >= count) {
-                return finish();
+                return EffectStep.done(finish());
             }
-            return null;
-        }
-
-        @Override
-        public boolean waitingForChunks() {
-            return waitingForChunks;
+            return new EffectStep.Delay(level.getGameTime() + INTERVAL_TICKS);
         }
 
         // 全部落完：真实完成量已逐波回执，终态只给出剩余增量，不重复累计

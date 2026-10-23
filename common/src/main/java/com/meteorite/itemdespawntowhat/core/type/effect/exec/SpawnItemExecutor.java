@@ -1,11 +1,12 @@
 package com.meteorite.itemdespawntowhat.core.type.effect.exec;
 
+import com.meteorite.itemdespawntowhat.core.api.ChunkRequirement;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
+import com.meteorite.itemdespawntowhat.core.api.EffectStep;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.StepWorkCounter;
-import com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks;
 import com.meteorite.itemdespawntowhat.core.type.effect.EntityProduct;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -68,38 +69,34 @@ public final class SpawnItemExecutor {
         return new ItemDelivery(context, item, count);
     }
 
-    /** 掉落物的分批交付游标：只保留剩余件数，每批最多 {@link #ITEM_SPAWNS_PER_RUN} 个实体。 */
+    /** 掉落物的分批交付游标：保留剩余件数和未写入的产物，每批最多 {@link #ITEM_SPAWNS_PER_RUN} 个实体。 */
     private static final class ItemDelivery implements EffectExecution {
         private final EffectContext context;
+        private final ChunkRequirement chunks;
         private final Item item;
         private long remaining;
-        // 邻区块未加载时的下次重试刻，0 表示不等待
-        private long nextAttemptTick;
-        private boolean waitingForChunks;
+        private ItemEntity pendingDrop;
 
         private ItemDelivery(EffectContext context, Item item, long count) {
             this.context = context;
+            this.chunks = ChunkRequirement.around(BlockPos.containing(context.position()), 1);
             this.item = item;
             this.remaining = count;
         }
 
         @Override
-        public @Nullable EffectResult advance(ServerTickBudget budget) {
+        public @Nullable ChunkRequirement requiredChunks() {
+            if (remaining <= 0) { return null; }
+            return pendingDrop == null ? chunks : chunks.including(pendingDrop.blockPosition());
+        }
+
+        @Override
+        public EffectStep advance(ServerTickBudget budget) {
             if (remaining <= 0) {
-                return EffectResult.applied(0, BATCHED);
+                return EffectStep.done(EffectResult.applied(0, BATCHED));
             }
             ServerLevel level = context.level();
             Vec3 position = context.position();
-            long gameTime = level.getGameTime();
-            if (gameTime < nextAttemptTick) {
-                return null;
-            }
-            waitingForChunks = false;
-            if (!LoadedChunks.containsArea(level, BlockPos.containing(position), 1)) {
-                waitingForChunks = true;
-                nextAttemptTick = gameTime + LoadedChunks.RETRY_TICKS;
-                return null;
-            }
             int maxStack = Math.max(1, item.getDefaultMaxStackSize());
             // 本步已报告但尚未由调度器计费的额度：单步内 remainingWorkUnits 不会随上报立即减少，需自行扣除
             int reportedUnits = 0;
@@ -107,20 +104,21 @@ public final class SpawnItemExecutor {
             while (written < ITEM_SPAWNS_PER_RUN && remaining > 0) {
                 // 每件写入前都守一次：时间或本步额度（含已报告未计费部分）耗尽即让出，剩余件数保留到下次推进
                 if (budget.exhausted() || budget.remainingWorkUnits() - reportedUnits <= 0) {
-                    return null;
+                    return EffectStep.Yield.INSTANCE;
                 }
                 int size = (int) Math.min(remaining, maxStack);
-                ItemEntity entity = new ItemEntity(level,
-                        position.x + (level.random.nextDouble() - 0.5) * SCATTER_RADIUS, position.y + SPAWN_HEIGHT,
-                        position.z + (level.random.nextDouble() - 0.5) * SCATTER_RADIUS, new ItemStack(item, size));
-                // 初速由源物品被破坏前的运动决定：水平反向，便于捡回抛入的产物
-                entity.setDeltaMovement(EffectTargets.productInitialVelocity(context));
-                // 转化产物：先授予保护与冷却再写入；未写入时不计完成量，也不重复授予
-                if (!EffectTargets.addConversionProductNow(context, entity)) {
-                    waitingForChunks = true;
-                    nextAttemptTick = gameTime + LoadedChunks.RETRY_TICKS;
-                    return null;
+                if (pendingDrop == null) {
+                    pendingDrop = new ItemEntity(level,
+                            position.x + (level.random.nextDouble() - 0.5) * SCATTER_RADIUS, position.y + SPAWN_HEIGHT,
+                            position.z + (level.random.nextDouble() - 0.5) * SCATTER_RADIUS, new ItemStack(item, size));
+                    // 初速由源物品被破坏前的运动决定：水平反向，便于捡回抛入的产物
+                    pendingDrop.setDeltaMovement(EffectTargets.productInitialVelocity(context));
                 }
+                // 转化产物：先授予保护与冷却再写入；未写入时不计完成量，也不重复授予
+                if (!EffectTargets.addConversionProductNow(context, pendingDrop)) {
+                    return new EffectStep.AwaitChunks(ChunkRequirement.at(pendingDrop.blockPosition()));
+                }
+                pendingDrop = null;
                 // 真实完成量回执：按实际写入世界的件数计
                 context.reportProgress(size);
                 // 计价：一个真正写入世界的实体记 1 个工作单位
@@ -130,20 +128,16 @@ public final class SpawnItemExecutor {
                 remaining -= size;
             }
             if (remaining > 0) {
-                return null;
+                return EffectStep.Yield.INSTANCE;
             }
-            return EffectResult.applied(0, BATCHED);
-        }
-
-        @Override
-        public boolean waitingForChunks() {
-            return waitingForChunks;
+            return EffectStep.done(EffectResult.applied(0, BATCHED));
         }
 
         @Override
         public void onFinished(EffectResult result) {
             // 交付完成或已失败：不再持有剩余件数，取消路径也不补做
             remaining = 0;
+            pendingDrop = null;
         }
     }
 }
