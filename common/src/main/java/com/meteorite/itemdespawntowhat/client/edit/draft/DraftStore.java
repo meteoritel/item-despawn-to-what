@@ -46,8 +46,6 @@ public record DraftStore(Path directory) {
         this(Paths.get(DIRECTORY));
     }
 
-    // 测试或自定义目录用
-
     // 写出（覆盖）某个目标的草稿文件：先写同目录临时文件再原子替换，避免崩在半截 JSON 上；
     // 写失败时立即删掉临时文件，避免下次写同一目标前留下无法解释的残留
     public boolean save(PersistedDraft draft) {

@@ -18,6 +18,9 @@ import org.jetbrains.annotations.Nullable;
 /**
  * 规则编辑会话：字段和树操作经由 apply 写入完整规则快照历史。
  * 未完成文本独立保留在会话缓冲，历史恢复同时恢复其节点路径。
+ *
+ * <p>只读会话用于数据包来源的规则：界面仍可浏览草稿，但 {@link #apply} 与撤销/重做
+ * 在最外层直接拒绝写入，避免任何漏禁用的控件改到只读内容。</p>
  */
 public final class EditSession {
 
@@ -63,6 +66,8 @@ public final class EditSession {
     private @Nullable Map<String, String> transactionInputPaths;
     private @Nullable Set<String> transactionRemovedScopes;
     private @Nullable Set<String> transactionAddedScopes;
+    // 只读会话拒绝一切草稿写入；来源变为可写时由宿主重新放行
+    private boolean readOnly;
 
     public long revision() { return revision; }
 
@@ -75,6 +80,10 @@ public final class EditSession {
     }
 
     public void retainPendingInput(String path, List<String> text, List<FormIssue> issues) {
+        // 只读会话不保留未提交输入，避免关闭或切页时把输入缓冲带进只读状态
+        if (readOnly) {
+            return;
+        }
         PendingInput previous = pendingInputs.get(path);
         long identity = previous == null ? ++nextInputIdentity : previous.identity();
         pendingInputs.put(path, new PendingInput(identity, text, issues));
@@ -141,8 +150,38 @@ public final class EditSession {
     }
 
     public EditSession(String targetId, RuleDraft draft) {
+        this(targetId, draft, false);
+    }
+
+    /**
+     * 创建编辑会话。
+     *
+     * @param targetId 编辑目标 id
+     * @param draft    初始草稿
+     * @param readOnly 是否只读；只读会话的 apply 与撤销/重做都不产生写入
+     */
+    public EditSession(String targetId, RuleDraft draft, boolean readOnly) {
         this.targetId = targetId == null ? "" : targetId;
         this.draft = Objects.requireNonNull(draft, "draft");
+        this.readOnly = readOnly;
+    }
+
+    /**
+     * 会话是否只读。
+     *
+     * @return true 表示数据包来源，拒绝写入
+     */
+    public boolean isReadOnly() {
+        return readOnly;
+    }
+
+    /**
+     * 更新只读状态：来源在快照刷新后可能从只读数据包变为含覆盖副本的可写条目。
+     *
+     * @param readOnly 是否只读
+     */
+    public void setReadOnly(boolean readOnly) {
+        this.readOnly = readOnly;
     }
 
     // 编辑目标 id
@@ -174,6 +213,10 @@ public final class EditSession {
     // 所有草稿修改都必须走这里：opKey 为操作标签（i18n key），change 内只做字段写入
     public void apply(String opKey, Runnable change) {
         Objects.requireNonNull(change, "change");
+        // 只读会话是最后一道写入门禁：即使某个控件漏了禁用，也不改动草稿与撤销历史
+        if (readOnly) {
+            return;
+        }
         long stampBefore = draft.mutationStamp();
         // 操作前快照是撤销栈的唯一来源，只能在这里一次性取得；是否真的变化改用变更计数判断，
         // 计数只在内容确实变化时推进，等价于整树相等比较但不再每次重扫整棵 JSON
@@ -231,7 +274,7 @@ public final class EditSession {
     }
 
     public boolean undo() {
-        if (undoStack.isEmpty()) {
+        if (readOnly || undoStack.isEmpty()) {
             return false;
         }
         Entry entry = undoStack.pop();
@@ -245,7 +288,7 @@ public final class EditSession {
     }
 
     public boolean redo() {
-        if (redoStack.isEmpty()) {
+        if (readOnly || redoStack.isEmpty()) {
             return false;
         }
         Entry entry = redoStack.pop();

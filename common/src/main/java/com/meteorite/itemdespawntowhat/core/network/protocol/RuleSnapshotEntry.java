@@ -13,12 +13,15 @@ import java.util.List;
 /**
  * 快照中的一条规则：只携带列表与编辑所需的生效视图、来源、状态、可编辑标记、分类与问题清单，
  * 以及「是否存在基底 / 覆盖副本」两个标记；基底与覆盖内容改由 {@link RuleSourceView} 按需请求下发。
- * origin 取值 overlay/datapack/mixed；status 取值 active/disabled/masked/invalid。
+ * origin 取值 overlay/datapack/mixed，用于列表的来源筛选；source 进一步区分数据包的物理层
+ * （builtin/world/overlay/mixed），客户端据此判定条目是否只读。
+ * status 取值 active/disabled/masked/invalid。
+ * editable 表示来源可写且持有可打开的规则内容：builtin / world 数据包为 false，overlay / mixed 为 true。
  * category 为装配后的分类：显式声明优先（覆盖层视图优先于数据包视图），未声明时按生效效果派生；
  * 无法派生（如已删除条目）时为 null。分类只供列表分组，不参与运行时解码与执行。
  * hasBase/hasOverlay 仅表示该条目在对应层是否有非控制条目副本，不承担内容语义。
  */
-public record RuleSnapshotEntry(ResourceLocation id, String origin, String status,
+public record RuleSnapshotEntry(ResourceLocation id, String origin, String source, String status,
                                 boolean editable, @Nullable String category,
                                 @Nullable JsonObject effective,
                                 boolean hasBase, boolean hasOverlay,
@@ -29,6 +32,14 @@ public record RuleSnapshotEntry(ResourceLocation id, String origin, String statu
     public static final String ORIGIN_DATAPACK = "datapack";
     public static final String ORIGIN_MIXED = "mixed";
 
+    // 物理来源取值：builtin / world 为只读数据包，overlay / mixed 含用户覆盖内容
+    public static final String SOURCE_BUILTIN = "builtin";
+    public static final String SOURCE_WORLD = "world";
+    public static final String SOURCE_OVERLAY = "overlay";
+    public static final String SOURCE_MIXED = "mixed";
+    // 无法判定具体数据包层时的保守回退：按只读处理
+    public static final String SOURCE_DATAPACK = "datapack";
+
     // 状态取值
     public static final String STATUS_ACTIVE = "active";
     public static final String STATUS_DISABLED = "disabled";
@@ -38,6 +49,7 @@ public record RuleSnapshotEntry(ResourceLocation id, String origin, String statu
     // 线上 JSON 字段键
     public static final String KEY_ID = "id";
     public static final String KEY_ORIGIN = "origin";
+    public static final String KEY_SOURCE = "source";
     public static final String KEY_STATUS = "status";
     public static final String KEY_EDITABLE = "editable";
     public static final String KEY_CATEGORY = "category";
@@ -48,9 +60,42 @@ public record RuleSnapshotEntry(ResourceLocation id, String origin, String statu
 
     public RuleSnapshotEntry {
         origin = origin == null || origin.isBlank() ? ORIGIN_DATAPACK : origin;
+        source = normalizeSource(source, origin);
         status = status == null || status.isBlank() ? STATUS_ACTIVE : status;
         category = category == null || category.isBlank() ? null : category;
         issues = issues == null ? List.of() : List.copyOf(issues);
+    }
+
+    /**
+     * 条目是否只读：只有携带用户覆盖内容（overlay / mixed）的来源可写；
+     * builtin / world 数据包与未知来源一律按只读处理，客户端据此禁用编辑与删除。
+     *
+     * @return 是否只读
+     */
+    public boolean readOnly() {
+        return !isWritableSource(source);
+    }
+
+    /**
+     * 来源是否允许 GUI 写入。
+     *
+     * @param source 物理来源标识
+     * @return true 表示 overlay / mixed，false 表示数据包层或未知来源
+     */
+    public static boolean isWritableSource(@Nullable String source) {
+        return SOURCE_OVERLAY.equals(source) || SOURCE_MIXED.equals(source);
+    }
+
+    // 缺失来源时按 origin 回退：只有覆盖与混合来源可写，其余按只读数据包处理
+    private static String normalizeSource(@Nullable String source, String origin) {
+        if (source != null && !source.isBlank()) {
+            return source;
+        }
+        return switch (origin) {
+            case ORIGIN_OVERLAY -> SOURCE_OVERLAY;
+            case ORIGIN_MIXED -> SOURCE_MIXED;
+            default -> SOURCE_DATAPACK;
+        };
     }
 
     // 条目序列化：生效视图缺失时输出 null，客户端按「无此视图」处理；未声明分类同样输出 null
@@ -58,6 +103,7 @@ public record RuleSnapshotEntry(ResourceLocation id, String origin, String statu
         JsonObject json = new JsonObject();
         json.addProperty(KEY_ID, id.toString());
         json.addProperty(KEY_ORIGIN, origin);
+        json.addProperty(KEY_SOURCE, source);
         json.addProperty(KEY_STATUS, status);
         json.addProperty(KEY_EDITABLE, editable);
         if (category == null) {
@@ -99,6 +145,7 @@ public record RuleSnapshotEntry(ResourceLocation id, String origin, String statu
         return new RuleSnapshotEntry(
                 id,
                 string(json, KEY_ORIGIN, ORIGIN_DATAPACK),
+                string(json, KEY_SOURCE, ""),
                 string(json, KEY_STATUS, STATUS_ACTIVE),
                 bool(json, KEY_EDITABLE),
                 category(json),

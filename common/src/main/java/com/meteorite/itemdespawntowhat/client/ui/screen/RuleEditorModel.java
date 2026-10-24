@@ -95,21 +95,38 @@ public final class RuleEditorModel {
         this.collectErrorIds(snapshot);
         // 先绑定磁盘草稿（需要最新快照做整条规则比较），再重绑未被改动的内存会话
         this.applyRestoredDrafts();
-        // 未改动且非本次新建的会话重新绑定到服务端内容
+        // 未改动且非本次新建的会话重新绑定到服务端内容；数据包来源改为只读，
+        // 历史版本遗留的未保存改动在这里丢弃，避免界面上继续显示无法应用的脏状态
         var iterator = this.sessions.entrySet().iterator();
         while (iterator.hasNext()) {
             var current = iterator.next();
-            if (this.createdIds.contains(current.getKey()) || current.getValue().isDirty()) {
+            String id = current.getKey();
+            EditSession session = current.getValue();
+            boolean readOnly = isReadOnly(id);
+            session.setReadOnly(readOnly);
+            if (readOnly && !this.createdIds.contains(id) && session.isDirty()) {
+                RuleValue body = entryBody(id);
+                this.journal.drop(id);
+                if (body == null) {
+                    iterator.remove();
+                    continue;
+                }
+                session.load(RuleDraft.of(categorySeeded(this.entries.get(id), body)));
+                session.clearHistory();
+                // 已按最新快照重绑，无需再走下面的常规重绑
                 continue;
             }
-            RuleSnapshotEntry entry = this.entries.get(current.getKey());
-            RuleValue body = entryBody(current.getKey());
+            if (this.createdIds.contains(id) || session.isDirty()) {
+                continue;
+            }
+            RuleSnapshotEntry entry = this.entries.get(id);
+            RuleValue body = entryBody(id);
             if (body == null) {
                 iterator.remove();
                 continue;
             }
-            current.getValue().load(RuleDraft.of(categorySeeded(entry, body)));
-            current.getValue().clearHistory();
+            session.load(RuleDraft.of(categorySeeded(entry, body)));
+            session.clearHistory();
         }
         this.createdIds.removeIf(id -> !this.sessions.containsKey(id));
         this.loaded = true;
@@ -141,6 +158,20 @@ public final class RuleEditorModel {
         return this.entries.get(id);
     }
 
+    /**
+     * 某条规则是否来自只读数据包（内置或世界数据包）。
+     *
+     * <p>本次新建与已不存在的目标按可写处理；服务端快照未到达时也按可写处理，
+     * 由界面原有的冻结判定兜底。</p>
+     *
+     * @param id 规则 id
+     * @return true 表示只能查看，不能编辑或删除
+     */
+    public boolean isReadOnly(String id) {
+        RuleSnapshotEntry entry = this.entries.get(id);
+        return entry != null && entry.readOnly();
+    }
+
     // 某条规则的草稿会话
     public @Nullable EditSession session(String id) {
         return this.sessions.get(id);
@@ -167,6 +198,7 @@ public final class RuleEditorModel {
     public @Nullable EditSession openSession(String id) {
         EditSession existing = this.sessions.get(id);
         if (existing != null) {
+            existing.setReadOnly(isReadOnly(id));
             return existing;
         }
         RuleSnapshotEntry entry = this.entries.get(id);
@@ -174,7 +206,7 @@ public final class RuleEditorModel {
         if (body == null) {
             return null;
         }
-        EditSession session = new EditSession(id, RuleDraft.of(categorySeeded(entry, body)));
+        EditSession session = new EditSession(id, RuleDraft.of(categorySeeded(entry, body)), isReadOnly(id));
         this.sessions.put(id, session);
         // 基线取服务端「生效视图」；没有生效视图时记为不存在（快照内部会做一次独立拷贝）
         this.captureBaseline(id, entry.effective());
@@ -262,8 +294,11 @@ public final class RuleEditorModel {
         this.journal.drop(id);
     }
 
-    // 标记某条规则待删除
+    // 标记某条规则待删除；只读数据包条目不允许改变删除标记
     public void markDeleted(String id, boolean deleted) {
+        if (isReadOnly(id)) {
+            return;
+        }
         EditSession session = this.sessions.get(id);
         if (session != null) {
             session.apply(EditSession.OP_DELETE_RULE, () -> session.draft().setDeleted(deleted));
@@ -351,12 +386,12 @@ public final class RuleEditorModel {
         return session != null && session.draft().isDeleted();
     }
 
-    // 存在改动的规则 id（保持服务端顺序）
+    // 存在改动的规则 id（保持服务端顺序）；只读条目永远不算待应用改动
     public List<String> dirtyRuleIds() {
         List<String> ids = new ArrayList<>();
         for (String id : ruleIds()) {
             EditSession session = this.sessions.get(id);
-            if (session != null && (session.isDirty() || this.createdIds.contains(id))) {
+            if (session != null && !isReadOnly(id) && (session.isDirty() || this.createdIds.contains(id))) {
                 ids.add(id);
             }
         }
@@ -367,7 +402,7 @@ public final class RuleEditorModel {
     public boolean hasDirty() {
         for (String id : this.sessions.keySet()) {
             EditSession session = this.sessions.get(id);
-            if (session != null && (session.isDirty() || this.createdIds.contains(id))) {
+            if (session != null && !isReadOnly(id) && (session.isDirty() || this.createdIds.contains(id))) {
                 return true;
             }
         }
@@ -382,10 +417,16 @@ public final class RuleEditorModel {
             if (session == null) {
                 continue;
             }
+            // 只读数据包条目没有可提交的写入面；历史版本遗留的脏会话在这里被兜底跳过
+            if (isReadOnly(id)) {
+                continue;
+            }
             RuleDraft draft = session.draft();
             RuleSnapshotEntry entry = this.entries.get(id);
-            boolean overlayOnly = entry != null && RuleSnapshotEntry.ORIGIN_OVERLAY.equals(entry.origin());
-            if (draft.isDeleted() && !this.createdIds.contains(id) && overlayOnly) {
+            // 任何含覆盖副本（mixed）或仅覆盖的条目都能通过删除覆盖层表达删除；
+            // 数据包基底本身不落覆盖层，不能写成带 delete 的完整规则体。
+            boolean overlayOwned = entry != null && !RuleSnapshotEntry.ORIGIN_DATAPACK.equals(entry.origin());
+            if (draft.isDeleted() && !this.createdIds.contains(id) && overlayOwned) {
                 changeSet.delete(id);
             } else {
                 changeSet.upsert(draft);
@@ -423,6 +464,11 @@ public final class RuleEditorModel {
         for (PersistedDraft stored : drafts) {
             String id = stored.targetId();
             if (this.sessions.containsKey(id)) {
+                continue;
+            }
+            // 只读数据包的草稿无法提交：直接丢弃落盘草稿，界面回到服务端内容
+            if (isReadOnly(id)) {
+                this.journal.drop(id);
                 continue;
             }
             RuleSnapshotEntry entry = this.entries.get(id);
@@ -472,9 +518,9 @@ public final class RuleEditorModel {
         this.journal.markDirty(snapshotOf(id, session));
     }
 
-    // 是否值得落盘：有改动或本次新建
+    // 是否值得落盘：有改动或本次新建；只读条目不产生草稿文件
     private boolean isJournalWorthy(String id, EditSession session) {
-        return session.isDirty() || this.createdIds.contains(id);
+        return !isReadOnly(id) && (session.isDirty() || this.createdIds.contains(id));
     }
 
     // 当前草稿快照（含基线，供落盘与冲突比较）
@@ -543,6 +589,11 @@ public final class RuleEditorModel {
     // 玩家选择：keepDraft=true 保留草稿（把基线重设到服务端当前内容），false 用服务端版本并丢弃草稿
     public void resolveConflict(String id, boolean keepDraft) {
         if (this.conflicts.remove(id) == null) {
+            return;
+        }
+        // 只读来源不能保留本地草稿：冲突解决只能回到服务端内容
+        if (isReadOnly(id)) {
+            this.journal.drop(id);
             return;
         }
         EditSession session = this.sessions.get(id);

@@ -94,6 +94,9 @@ final class RuleEditorEditPage {
         // 冻结（会话失效 / 只读）时拒绝写入
         boolean rejectWhenFrozen();
 
+        // 当前编辑目标是否来自只读数据包
+        boolean isReadOnly();
+
         void openEditor(String id);
 
         void closeScreen();
@@ -497,6 +500,10 @@ final class RuleEditorEditPage {
         if (pages != null) {
             pages.setEnabled(editable);
         }
+        // 保存入口与页面控件同属可写面：只读或冻结时一并禁用，避免点后才发现没有改动可提交
+        if (!footerButtons.isEmpty()) {
+            footerButtons.getFirst().setEnabled(editable);
+        }
     }
 
     void tick() {
@@ -560,6 +567,11 @@ final class RuleEditorEditPage {
     // ---- 保存 / 撤销 ----
 
     void save() {
+        // 只读来源没有可提交的写入面：保存按钮已禁用，这里兜底拒绝
+        if (host.isReadOnly()) {
+            host.setNotice(Component.translatable(UI + "notice.readonly_rule"), THEME.palette().warning());
+            return;
+        }
         // F-I：先把当前草稿落盘（写盘本身有 2 秒节流），保证崩溃窗口内的最近编辑不丢
         flushPendingEdits();
         host.model().persistNow();
@@ -606,7 +618,7 @@ final class RuleEditorEditPage {
     }
 
     boolean restoreHistory(UiHistoryShortcut shortcut) {
-        if (!host.isEditMode()) return false;
+        if (!host.isEditMode() || host.isReadOnly()) return false;
         EditSession session = host.session();
         if (session == null) return false;
         long revision = session.revision();
@@ -615,7 +627,7 @@ final class RuleEditorEditPage {
     }
 
     private void undo() {
-        if (host.rejectWhenFrozen()) {
+        if (host.isReadOnly() || host.rejectWhenFrozen()) {
             return;
         }
         flushPendingEdits();
@@ -628,7 +640,7 @@ final class RuleEditorEditPage {
     }
 
     private void redo() {
-        if (host.rejectWhenFrozen()) {
+        if (host.isReadOnly() || host.rejectWhenFrozen()) {
             return;
         }
         flushPendingEdits();

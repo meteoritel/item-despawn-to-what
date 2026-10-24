@@ -191,6 +191,9 @@ final class RuleEditorListActions {
         if (host.rejectWhenFrozen()) {
             return;
         }
+        if (rejectWhenReadOnly()) {
+            return;
+        }
         EditSession session = openSelected();
         if (session == null) {
             return;
@@ -209,6 +212,10 @@ final class RuleEditorListActions {
         String id = selection.get();
         if (id == null) {
             noSelection();
+            return;
+        }
+        if (host.model().isReadOnly(id)) {
+            rejectWhenReadOnly();
             return;
         }
         if (host.model().isCreated(id)) {
@@ -249,6 +256,16 @@ final class RuleEditorListActions {
 
     void noSelection() {
         host.setNotice(Component.translatable(UI + "notice.no_selection"), THEME.palette().warning());
+    }
+
+    // 只读数据包条目没有可写入的覆盖层副本：列表按钮已禁用，这里兜底拒绝并给出原因
+    private boolean rejectWhenReadOnly() {
+        String id = selection.get();
+        if (id == null || !host.model().isReadOnly(id)) {
+            return false;
+        }
+        host.setNotice(Component.translatable(UI + "notice.readonly_rule"), THEME.palette().warning());
+        return true;
     }
 
 }

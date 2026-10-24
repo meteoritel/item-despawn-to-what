@@ -16,8 +16,8 @@
 
 ## 决策
 
-1. **来源目录按 ID 聚合**，至少保留：原始基底 JSON、原始覆盖 JSON、控制条目、加载问题、最终生效状态与服务端排序序号；不得仅由合并后的运行索引反推。快照条目 `RuleSnapshotEntry` 只承载 `effective`、`origin`、`status`、`editable`、`category`、`hasBase`、`hasOverlay` 与 `issues`；基底与覆盖原文经按需请求的 `RuleSourceView` 单独下发（见 [ADR-0040](0040-on-demand-snapshot-source-views.md)）。
-2. **状态区分**：`origin` 取 `overlay` / `datapack` / `mixed`；`status` 取 `active` / `disabled` / `masked` / `invalid`。界面据此区分数据包原始（`datapack` + `hasBase`）、仅覆盖（`overlay`，`hasBase=false`）、覆盖与基底共存（`mixed` + `hasBase`/`hasOverlay`）、停用、屏蔽、非法（`issues` 定位）；`editable` 表示来源目录持有该条目的原始内容，可据此决定是否请求来源视图。
+1. **来源目录按 ID 聚合**，至少保留：原始基底 JSON、原始覆盖 JSON、控制条目、加载问题、最终生效状态与服务端排序序号；不得仅由合并后的运行索引反推。快照条目 `RuleSnapshotEntry` 只承载 `effective`、`origin`、`source`、`status`、`editable`、`category`、`hasBase`、`hasOverlay` 与 `issues`；基底与覆盖原文经按需请求的 `RuleSourceView` 单独下发（见 [ADR-0040](0040-on-demand-snapshot-source-views.md)）。
+2. **状态区分**：`origin` 取 `overlay` / `datapack` / `mixed`；`source` 在数据包内部继续区分 `builtin` / `world`，覆盖与混合来源取 `overlay` / `mixed`；`status` 取 `active` / `disabled` / `masked` / `invalid`。界面据此区分数据包原始（`datapack` + `hasBase`）、仅覆盖（`overlay`，`hasBase=false`）、覆盖与基底共存（`mixed` + `hasBase`/`hasOverlay`）、停用、屏蔽、非法（`issues` 定位）；`editable` 表示来源可写且持有可打开的规则内容；`source` 为 `builtin` / `world` 的条目为 false，界面禁用编辑与删除，只允许查看与复制。
 3. **不可解析或没有可用 ID 的文件只以问题列表呈现**，不制造可编辑的假规则。
 4. **覆盖层语义表**（逐行即行为规范）：
 

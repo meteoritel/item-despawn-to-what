@@ -21,9 +21,10 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/client/net、cli
 - **协议工作区** `RuleEditClientWorkspace`：对服务端状态机的镜像，负责确认、心跳、关闭、快照与目录缓存、下行分片重组、变更集自动分片提交、进度与回执收敛、会话失效时关闭界面。
 - **分片接收** `RuleChunkBuffer`：快照与来源视图共用同一套重组逻辑，同一时刻只保留最近一批分片。
 - **草稿** `RuleDraft` 与 `DraftPaths`：以 JSON 为唯一事实来源的规则草稿，支持路径级读写、条件树编解码，以及 flat effects 与 candidate outcomes 之间的原子转换。
-- **撤销与重做** `EditSession`：把每次编辑压成一条历史记录，恢复快照的同时恢复未完成的文本输入。
+- **撤销与重做** `EditSession`：把每次编辑压成一条历史记录，恢复快照的同时恢复未完成的文本输入；只读会话在 `apply` 与撤销/重做入口直接拒绝写入，作为界面控件禁用之外的写入门禁。
 - **类型编辑器** `TypeEditorRegistry` 与条件/效果的注册表：类型 id 到编辑描述符的映射，未注册类型获得只读回退描述。
 - **草稿持久化** `DraftStore`、`DraftJournal`、`PersistedDraft`、`DraftConflict`：客户端私有目录里的原子落盘、节流写入与恢复时的冲突判定。
+- **只读来源** `RuleEditorModel#isReadOnly`：按快照条目的物理来源判定；只读条目创建只读会话、跳过草稿落盘与变更集组装，快照刷新后来源变化时同步会话的只读位。
 
 编辑器界面的编排（列表、表单、页面模型）在 [界面模块](client-ui.md)，本模块只提供它使用的数据面。
 
@@ -209,6 +210,7 @@ flowchart TD
 - `RuleChunkBuffer` 同一时刻只保留一批分片，批次边界由会话、传输 id 与分片数共同决定。
 - 来源视图缓存与目录加载都有上限与超时，界面重试走 `retrySourceView` / `retryDirectory`，不要自行重发请求。
 - `client/net` 与 `client/edit` 不引用 `client/ui`；页面、主题与控件适配都在界面模块。
+- 只读来源的判定只取快照条目：`source` 为 `builtin` / `world` 的条目不可写；界面禁用只是表现，`EditSession#apply` 与变更集组装仍各自兜底拒绝写入。
 
 ### 改动后的验证
 

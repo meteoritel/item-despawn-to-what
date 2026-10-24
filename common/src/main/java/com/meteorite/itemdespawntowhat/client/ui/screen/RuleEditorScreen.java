@@ -301,6 +301,11 @@ public final class RuleEditorScreen extends Screen {
             }
 
             @Override
+            public boolean isReadOnly() {
+                return RuleEditorScreen.this.isEditReadOnly();
+            }
+
+            @Override
             public void openEditor(String id) {
                 RuleEditorScreen.this.openEditor(id);
             }
@@ -540,8 +545,12 @@ public final class RuleEditorScreen extends Screen {
             // 页头只显示当前实际生效名称；规则 ID 由基本页第一行的只读行单独承担
             title = Component.translatable(UI + "header.editing", labelText(editingId)).getString();
         }
+        // 只读状态只在会话可用时展示；冻结文案优先，避免黄色标签配「冻结中」文字
+        boolean readOnlyState = mode == Mode.EDIT && workspace.active() && isEditReadOnly();
         String state = Component.translatable(!workspace.active() ? UI + "state.freezing"
-                        : mode == Mode.EDIT ? UI + (model.dirtyRuleIds().isEmpty() ? "state.applied" : "state.unapplied") : UI + "state.active")
+                        : readOnlyState ? UI + "state.readonly"
+                        : mode == Mode.EDIT ? UI + (model.dirtyRuleIds().isEmpty() ? "state.applied" : "state.unapplied")
+                        : UI + "state.active")
                 .getString();
         int padding = mode == Mode.EDIT ? EDIT_PAD : PAD;
         int textY = mode == Mode.EDIT ? (EDIT_HEADER_H - font.lineHeight) / 2 : 3;
@@ -552,10 +561,18 @@ public final class RuleEditorScreen extends Screen {
             truncatedTitleRect = new UiRect(padding, textY, font.width(title), font.lineHeight);
         }
         graphics.drawString(font, title, padding, textY, THEME.palette().headerText(), false);
+        int stateColor = THEME.palette().headerText();
         if (mode == Mode.EDIT) {
-            THEME.drawPanel(graphics, new UiRect(this.width - padding - stateWidth, 4, stateWidth, EDIT_HEADER_H - 8));
+            UiRect stateRect = new UiRect(this.width - padding - stateWidth, 4, stateWidth, EDIT_HEADER_H - 8);
+            if (readOnlyState) {
+                // 只读来源用警告色填充状态标签：与底部警告提示同色，替代额外的常驻说明文字
+                THEME.drawSurface(graphics, stateRect, THEME.palette().warning(), THEME.palette().controlBevelDark());
+                stateColor = THEME.palette().textPrimary();
+            } else {
+                THEME.drawPanel(graphics, stateRect);
+            }
         }
-        graphics.drawString(font, state, this.width - padding - font.width(state) - (mode == Mode.EDIT ? 6 : 0), textY, THEME.palette().headerText(), false);
+        graphics.drawString(font, state, this.width - padding - font.width(state) - (mode == Mode.EDIT ? 6 : 0), textY, stateColor, false);
     }
 
     // 底部状态提示：INFO 为纯文本，WARNING / DANGER 为实心色块（颜色与形状双线索）
@@ -602,6 +619,11 @@ public final class RuleEditorScreen extends Screen {
         return editingId == null ? null : model.session(editingId);
     }
 
+    // 当前编辑目标是否来自只读数据包：编辑页据此进入整体只读模式
+    private boolean isEditReadOnly() {
+        return mode == Mode.EDIT && editingId != null && model.isReadOnly(editingId);
+    }
+
     private void openEditor(String id) {
         if (rejectWhenFrozen()) {
             return;
@@ -610,7 +632,8 @@ public final class RuleEditorScreen extends Screen {
             return;
         }
         RuleSnapshotEntry entry = model.entry(id);
-        if (entry != null && (RuleSnapshotEntry.STATUS_INVALID.equals(entry.status()) || !entry.editable()
+        // 只读数据包条目仍进入编辑页（页面整体只读）；只有损坏或没有可打开内容的条目才走详情弹窗
+        if (entry != null && (RuleSnapshotEntry.STATUS_INVALID.equals(entry.status())
                 || entry.issues().stream().anyMatch(issue -> RuleIssue.SEVERITY_ERROR.equals(issue.severity())))) {
             showRuleDetails(entry);
             return;
@@ -1018,7 +1041,8 @@ public final class RuleEditorScreen extends Screen {
 
     // 立即同步页面的使能状态
     private void applyEditableStateNow(boolean editable) {
-        editPage.setPagesEnabled(editable);
+        // 只读数据包条目即使工作区处于 ACTIVE 也只允许浏览：页面控件、保存入口与撤销都关闭
+        editPage.setPagesEnabled(editable && !isEditReadOnly());
         // 列表页动作按钮同属可编辑面：冻结时一并禁用，避免「点了没反应」
         // 保存期间的返回与关闭由保存模态统一拦截，其它冻结状态仍允许退出。
         listPage.setButtonsEnabled(editable);

@@ -7,8 +7,8 @@ package com.meteorite.itemdespawntowhat.core.network.protocol;
  */
 public final class RuleEditProtocol {
 
-    // 协议版本，客户端与服务端必须一致；开屏载荷增加服务端放置半径上限后递增
-    public static final int VERSION = 7;
+    // 协议版本，客户端与服务端必须一致；快照条目增加物理来源（source）后递增
+    public static final int VERSION = 8;
 
     private RuleEditProtocol() {
         throw new UnsupportedOperationException("Utility class");

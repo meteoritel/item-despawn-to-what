@@ -40,7 +40,10 @@ public final class RuleOverlayWriter {
     // 覆盖层文件被外部修改时的统一拒绝文案
     private static final String EXTERNALLY_MODIFIED_MESSAGE = "准备保存时文件已被外部修改: ";
     // 落盘格式：服务端规则文件是给人读的，保留缩进换行；不转义 HTML 字符
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
+    private static final Gson GSON = new GsonBuilder()
+            .setPrettyPrinting()
+            .disableHtmlEscaping()
+            .create();
     /** 写入结果；零文件或存在冲突均不能解释为保存成功。 */
     public record ApplyResult(int writtenFiles, List<String> conflicts, boolean rollbackFailed) {
         /**

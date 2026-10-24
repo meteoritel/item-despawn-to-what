@@ -989,7 +989,7 @@ public final class RuleEditorPageSet {
     // followCategory 为真时在产出变化后同步分类
     private boolean apply(String opKey, Runnable change, boolean followCategory) {
         EditSession session = host.session();
-        if (session == null || host.rejectWhenFrozen()) {
+        if (session == null || !enabled || session.isReadOnly() || host.rejectWhenFrozen()) {
             restoreSwitches();
             return false;
         }

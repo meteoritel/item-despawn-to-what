@@ -135,7 +135,9 @@ final class RuleEditorListPage {
     private final RuleEditorScreenButtonBar globalBar = new RuleEditorScreenButtonBar();
     private final RuleEditorScreenButtonBar filterBar = new RuleEditorScreenButtonBar(ROW_H, 2, true);
     private final List<UiButton> selectedButtons = new ArrayList<>();
+    private @Nullable UiButton editButton;
     private @Nullable UiButton toggleButton;
+    private @Nullable UiButton deleteButton;
     private @Nullable UiButton applyButton;
     private @Nullable UiButton exportButton;
     // 是否有后台导出在途：在途期间导出按钮禁用，避免重复点击叠加写盘
@@ -217,20 +219,20 @@ final class RuleEditorListPage {
     private void buildListButtons() {
         listButtons.clear();
         UiButton create = button(UI + "button.new", UiButtonVariant.PRIMARY, actions::promptNewRule);
-        UiButton edit = button(UI + "button.edit", UiButtonVariant.PRIMARY, () -> {
+        editButton = button(UI + "button.edit", UiButtonVariant.PRIMARY, () -> {
             String id = selectedRuleId(); if (id != null) host.openEditor(id);
         });
         toggleButton = button(UI + "button.enable", UiButtonVariant.SECONDARY, actions::toggleSelectedEnabled);
         UiButton copy = button(UI + "button.duplicate", UiButtonVariant.SECONDARY, actions::promptDuplicate);
-        UiButton delete = button(UI + "button.delete", UiButtonVariant.DANGER, actions::deleteSelected);
+        deleteButton = button(UI + "button.delete", UiButtonVariant.DANGER, actions::deleteSelected);
         exportButton = button(UI + "button.export", UiButtonVariant.SECONDARY, this::openExport);
         applyButton = button(UI + "button.apply", UiButtonVariant.PRIMARY, host::save);
         UiButton changes = button(UI + "button.changes", UiButtonVariant.SECONDARY, host::showChanges);
         selectedButtons.clear();
-        selectedButtons.addAll(List.of(edit, toggleButton, copy, delete));
-        globalBar.set(List.of(create, edit, toggleButton, copy, delete, exportButton));
+        selectedButtons.addAll(List.of(editButton, toggleButton, copy, deleteButton));
+        globalBar.set(List.of(create, editButton, toggleButton, copy, deleteButton, exportButton));
         listBar.set(List.of(applyButton, changes));
-        listButtons.addAll(List.of(create, edit, toggleButton, copy, delete, exportButton, applyButton, changes));
+        listButtons.addAll(List.of(create, editButton, toggleButton, copy, deleteButton, exportButton, applyButton, changes));
         // 重建按钮时不丢在途导出的禁用态（列表刷新可能在导出期间发生）
         if (exporting) {
             exportButton.setEnabled(false);
@@ -352,15 +354,27 @@ final class RuleEditorListPage {
         return ids.size() > shown ? joined + "…" : joined;
     }
 
-    // 列表条目操作随选中状态同步；切换按钮只显示下一步动作，布局按当前文案计算。
+    // 列表条目操作随选中状态同步；只读数据包条目只保留查看与复制，启停和删除禁用。
+    // 切换按钮只显示下一步动作，布局按当前文案计算。
     void updateButtons() {
         String id = selectedRuleId();
+        boolean active = host.workspace().active();
+        boolean selected = id != null;
+        boolean readOnly = selected && host.model().isReadOnly(id);
         for (UiButton button : selectedButtons) {
-            button.setEnabled(host.workspace().active() && id != null);
+            button.setEnabled(active && selected);
         }
+        // 只读条目没有写入面：启停与删除在列表层就不可用，避免点击后才在应用阶段失败
         if (toggleButton != null) {
-            boolean enabled = id != null && host.display().snapshot(id).enabled();
+            toggleButton.setEnabled(active && selected && !readOnly);
+            boolean enabled = selected && host.display().snapshot(id).enabled();
             toggleButton.setLabel(Component.translatable(UI + (enabled ? "button.disable" : "button.enable")));
+        }
+        if (deleteButton != null) {
+            deleteButton.setEnabled(active && selected && !readOnly);
+        }
+        if (editButton != null) {
+            editButton.setLabel(Component.translatable(UI + (readOnly ? "button.view" : "button.edit")));
         }
     }
 
@@ -813,5 +827,7 @@ final class RuleEditorListPage {
             }
             button.setEnabled(editable);
         }
+        // 恢复可编辑态时仍要按当前选中项的来源收窄启停与删除，不能被整体放行覆盖
+        updateButtons();
     }
 }

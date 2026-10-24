@@ -41,12 +41,13 @@ import java.util.TreeMap;
 
 /**
  * 规则快照装配器：把"来源分层索引 + 当前生效规则"组装成下发给客户端的快照。
- * 条目形状：RuleSnapshotEntry(id, origin, status, editable, category, effective, hasBase, hasOverlay, issues)
+ * 条目形状：RuleSnapshotEntry(id, origin, source, status, editable, category, effective, hasBase, hasOverlay, issues)
  * - 条目只携带生效视图与两个存在标记；基底与覆盖内容由 {@link #sourceView(RuleSourceIndex.Entry)} 按需生成；
  * - category 先读取作者在规则原始 JSON 顶层的显式分类（覆盖层视图优先于数据包视图），
  *   未声明时由分类器按生效效果的产出类别派生；两者不一致时以显式值为准；无法派生的条目为空；
  * - effective 优先使用模型编码后的最终结果（解码成功时权威），否则退回原始 JSON；
  * - origin 取 overlay | datapack | mixed，status 取 active | disabled | masked | invalid；
+ * - source 取 builtin | world | overlay | mixed，标识条目内容的物理层：内置/世界数据包为只读，覆盖与混合可写；
  * - 解码失败或校验致命错误时 status=invalid，并在 issues 中带上 severity/ruleId/origin/fieldPath。
  */
 public final class RuleSnapshotAssembler {
@@ -130,8 +131,10 @@ public final class RuleSnapshotAssembler {
                     entryIssues = List.of(new RuleIssue(RuleIssue.SEVERITY_ERROR, source.id().toString(),
                             RuleIssue.ORIGIN_RUNTIME, "", ISSUE_DECODE, List.of(), "规则解码失败: " + source.id()));
                 }
-                entries.put(source.id(), new RuleSnapshotEntry(source.id(), origin(source), status,
-                        source.hasBody(), category(loaded, overlay != null ? overlay : base, effectTypes),
+                String physicalSource = source(source);
+                entries.put(source.id(), new RuleSnapshotEntry(source.id(), origin(source), physicalSource, status,
+                        source.hasBody() && RuleSnapshotEntry.isWritableSource(physicalSource),
+                        category(loaded, overlay != null ? overlay : base, effectTypes),
                         effective, base != null, overlay != null, entryIssues));
             }
         }
@@ -142,13 +145,15 @@ public final class RuleSnapshotAssembler {
             if (body == null) {
                 continue;
             }
-            boolean overlayLayer = leftover.getValue().origin().layer() == RuleSourceLayer.OVERLAY;
+            RuleSourceLayer layer = leftover.getValue().origin().layer();
+            boolean overlayLayer = layer == RuleSourceLayer.OVERLAY;
             String category = RuleCategoryClassifier.classify(leftover.getValue().value(), effectTypes);
-            // 能走到这里的都是已解码出本体的规则，一律可编辑
-            // 原始条目读取异常时没有分层视图：把模型编码结果当作基底内容下发，存在标记按来源层补齐
+            // 原始条目读取异常时没有分层视图：把模型编码结果当作基底内容下发，存在标记与来源按层补齐；
+            // source 保留 builtin/world 与 overlay 的区分，供客户端判定只读。
             entries.put(leftover.getKey(), new RuleSnapshotEntry(leftover.getKey(),
                     overlayLayer ? RuleSnapshotEntry.ORIGIN_OVERLAY : RuleSnapshotEntry.ORIGIN_DATAPACK,
-                    RuleSnapshotEntry.STATUS_ACTIVE, true, category, body, true, overlayLayer, List.of()));
+                    layer.id(), RuleSnapshotEntry.STATUS_ACTIVE,
+                    RuleSnapshotEntry.isWritableSource(layer.id()), category, body, true, overlayLayer, List.of()));
         }
 
         return new RuleSnapshot(version, contextRevision, List.copyOf(entries.values()),
@@ -229,6 +234,30 @@ public final class RuleSnapshotAssembler {
             return RuleSnapshotEntry.STATUS_DISABLED;
         }
         return decoded ? RuleSnapshotEntry.STATUS_ACTIVE : RuleSnapshotEntry.STATUS_INVALID;
+    }
+
+    /**
+     * 物理来源标识：区分内置数据包、世界数据包与用户覆盖内容。
+     * 覆盖副本与数据包基底共存时为 mixed；只有控制条目时按控制条目所在层判定。
+     *
+     * @param source 来源分层条目
+     * @return builtin / world / overlay / mixed
+     */
+    private static String source(RuleSourceIndex.Entry source) {
+        if (source.overlay() != null) {
+            return source.base() != null ? RuleSnapshotEntry.SOURCE_MIXED : RuleSnapshotEntry.SOURCE_OVERLAY;
+        }
+        if (source.base() != null) {
+            return source.base().origin().layer().id();
+        }
+        if (source.control() != null && !source.controlFromOverlay()) {
+            return source.control().origin().layer().id();
+        }
+        if (source.controlFromOverlay()) {
+            return RuleSnapshotEntry.SOURCE_OVERLAY;
+        }
+        // 空条目不存在可写内容：按只读数据包回退，避免误判为可编辑
+        return RuleSnapshotEntry.SOURCE_DATAPACK;
     }
 
     // 来源标识：数据包与覆盖层同时存在即为 mixed

@@ -32,6 +32,8 @@ final class RuleListDisplayCache {
     private static final String STATUS_PENDING = TypeLabels.UI_PREFIX + "recipe.status.pending";
     private static final String STATUS_MASKED = TypeLabels.UI_PREFIX + "recipe.status.masked";
     private static final String STATUS_DISABLED = TypeLabels.UI_PREFIX + "recipe.status.disabled";
+    private static final String STATUS_READONLY = TypeLabels.UI_PREFIX + "recipe.status.readonly";
+    private static final String STATUS_WITH_READONLY = TypeLabels.UI_PREFIX + "recipe.status.with_readonly";
 
     private final RuleEditorModel model;
     private final Map<String, Cached> snapshots = new LinkedHashMap<>();
@@ -93,7 +95,8 @@ final class RuleListDisplayCache {
         boolean deleteMarked = body != null && body.flag(RuleFields.DELETE, false);
         boolean unfinished = isUnfinished(id, session);
         boolean issues = entry != null && !entry.issues().isEmpty();
-        Component state = stateComponent(session, error, active, masked);
+        boolean readOnly = entry != null && entry.readOnly();
+        Component state = stateComponent(session, error, active, masked, readOnly);
         return new RuleListDisplaySnapshot(
                 body,
                 RuleListDisplaySnapshot.titleOf(id, body),
@@ -132,9 +135,20 @@ final class RuleListDisplayCache {
                 || RuleSnapshotEntry.STATUS_DISABLED.equals(entry.status());
     }
 
-    // 状态用明确文字，正常启用不占位；错误、草稿改动与屏蔽优先于停用
+    // 状态用明确文字，正常启用不占位；错误、草稿改动与屏蔽优先于停用；
+    // 只读来源与既有状态并列显示，保证数据包条目在列表里始终有可见标记
     private @Nullable Component stateComponent(@Nullable EditSession session,
-                                               boolean error, boolean active, boolean masked) {
+                                               boolean error, boolean active, boolean masked, boolean readOnly) {
+        Component base = baseStateComponent(session, error, active, masked);
+        if (!readOnly) {
+            return base;
+        }
+        Component readonly = Component.translatable(STATUS_READONLY);
+        return base == null ? readonly : Component.translatable(STATUS_WITH_READONLY, base, readonly);
+    }
+
+    private @Nullable Component baseStateComponent(@Nullable EditSession session,
+                                                   boolean error, boolean active, boolean masked) {
         if (error) {
             return Component.translatable(STATUS_ERROR);
         }
