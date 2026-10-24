@@ -17,6 +17,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiMarkIcons;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
+import com.meteorite.itemdespawntowhat.core.model.OutcomeCandidate;
 import com.meteorite.itemdespawntowhat.core.model.ProductKind;
 import com.meteorite.itemdespawntowhat.core.model.RuleCategoryClassifier;
 import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
@@ -72,6 +73,7 @@ public final class RuleRecipeView {
         private final LinkedHashSet<Integer> quantities = new LinkedHashSet<>();
         private final LinkedHashSet<Integer> consumedQuantities = new LinkedHashSet<>();
         private boolean fluidConsumed;
+        private boolean originFilled;
         private String quantityText = "";
         private @Nullable TagPreviewIcons.Tag tag;
 
@@ -87,10 +89,13 @@ public final class RuleRecipeView {
         private Part(@Nullable ObjectPart object, Component separator) { this(object, separator, false); }
     }
 
+    /** 一条产出效果及其所属候选的起点填充策略；顶层 effects 视为隐式候选。 */
+    private record ResultEffect(RuleValue effect, boolean fillOrigin) { }
+
     public RuleRecipeView(@Nullable RuleValue rule) {
         RuleValue body = object(rule);
         triggerView = new RuleTriggerView(rule);
-        List<RuleValue> effects = effects(body);
+        List<ResultEffect> effects = effects(body);
         List<ObjectPart> sources = new ArrayList<>();
         for (RuleValue entry : array(object(body.child(RuleFields.SOURCE)).child(RuleFields.SOURCE_ITEMS)).items()) {
             if (entry.isText()) {
@@ -115,11 +120,11 @@ public final class RuleRecipeView {
         for (ObjectPart fluid : fluids.values()) { separator("plus"); parts.add(new Part(fluid, Component.empty())); }
         parts.add(new Part(null, Component.translatable(UI + "arrow"), true));
         List<ObjectPart> products = new ArrayList<>();
-        for (RuleValue effect : effects) {
+        for (ResultEffect resultEffect : effects) {
             // 产出判断只读效果类型的产出类别元数据：NONE 为消耗类效果，不进入产出区
-            ProductKind kind = productKind(effect);
+            ProductKind kind = productKind(resultEffect.effect());
             if (kind != ProductKind.NONE) {
-                products.add(product(effect, kind, body));
+                products.add(product(resultEffect.effect(), kind, body, resultEffect.fillOrigin()));
             }
         }
         if (products.isEmpty()) products.add(placeholder(effects.isEmpty() ? "result_missing" : "no_output"));
@@ -222,7 +227,7 @@ public final class RuleRecipeView {
                         graphics.fill(x, row.bottom() - 1, x + size - 2, row.bottom(), 0xFF6688AA);
                     }
                     RulePreviewIcons.render(graphics, value.icon, x, contentY + 1, active);
-                    if (!value.consumedQuantities.isEmpty() || value.fluidConsumed)
+                    if (!value.consumedQuantities.isEmpty() || value.fluidConsumed || value.originFilled)
                         consumedStar(graphics, x + ICON_SIZE - 7, contentY, active ? CONSUMED_COLOR : color);
                     if (!value.quantities.isEmpty()) badge(graphics, font, value.quantityText,
                             x + ICON_SIZE, contentY + 12, active ? 0xFFFFFFFF : color);
@@ -375,7 +380,7 @@ public final class RuleRecipeView {
     }
 
     // 产出展示形态由产出类别决定：实体子类读专有参数，方块产出支持「放置源方块」，其余按效果标题展示
-    private static ObjectPart product(RuleValue effect, ProductKind kind, RuleValue rule) {
+    private static ObjectPart product(RuleValue effect, ProductKind kind, RuleValue rule, boolean fillOrigin) {
         return switch (kind) {
             case ENTITY_ITEM -> resource(text(effect, "item"), RuleCatalogType.ITEM, integer(effect, "count", 1));
             case ENTITY_ENTITY -> {
@@ -388,13 +393,17 @@ public final class RuleRecipeView {
             case ENTITY_EXPERIENCE -> new ObjectPart(Component.translatable(UI + "experience"),
                     RulePreviewIcons.action(effect), integer(effect, "amount", 1));
             case BLOCK -> {
-                if (bool(effect, "use_source_block")) {
-                    ObjectPart part = new ObjectPart(Component.translatable(UI + "source_block"), firstSourceIcon(rule), integer(effect, "count", 1));
+                ObjectPart part;
+                if (RuleValueReads.boolOf(effect, "use_source_block", false)) {
+                    part = new ObjectPart(Component.translatable(UI + "source_block"), firstSourceIcon(rule), integer(effect, "count", 1));
                     String source = firstSource(rule);
                     if (source.startsWith("#")) part.tag = TagPreviewIcons.sourceBlocks(source);
-                    yield part;
+                } else {
+                    part = resource(text(effect, "block"), RuleCatalogType.BLOCK, integer(effect, "count", 1));
                 }
-                yield resource(text(effect, "block"), RuleCatalogType.BLOCK, integer(effect, "count", 1));
+                // 起点填充表示方块会占据触发位置本身，与催化剂/流体的消耗角标同义
+                part.originFilled = fillOrigin;
+                yield part;
             }
             default -> new ObjectPart(RuleNaming.effectTitle(effect, RuleDisplayLabels::label),
                     RulePreviewIcons.action(effect), integer(effect, "count", 0));
@@ -454,14 +463,21 @@ public final class RuleRecipeView {
         return new ObjectPart(name, CatalogPreviewIcons.iconFor(type, raw), quantity);
     }
 
-    private static List<RuleValue> effects(RuleValue rule) {
-        List<RuleValue> result = new ArrayList<>();
-        appendEffects(result, rule.child("effects"));
-        for (RuleValue outcome : array(rule.child("outcomes")).items()) appendEffects(result, object(outcome).child("effects"));
+    // 顶层 effects 对应隐式候选，fill_origin 取后端默认值；outcomes 各自读取候选级开关。
+    private static List<ResultEffect> effects(RuleValue rule) {
+        List<ResultEffect> result = new ArrayList<>();
+        appendEffects(result, rule.child("effects"), OutcomeCandidate.DEFAULT_FILL_ORIGIN);
+        for (RuleValue outcome : array(rule.child("outcomes")).items()) {
+            RuleValue candidate = object(outcome);
+            appendEffects(result, candidate.child("effects"),
+                    RuleValueReads.boolOf(candidate, RuleFields.FILL_ORIGIN, OutcomeCandidate.DEFAULT_FILL_ORIGIN));
+        }
         return result;
     }
-    private static void appendEffects(List<RuleValue> target, @Nullable RuleValue raw) {
-        for (RuleValue entry : array(raw).items()) if (entry.isMapping()) target.add(entry);
+    private static void appendEffects(List<ResultEffect> target, @Nullable RuleValue raw, boolean fillOrigin) {
+        for (RuleValue entry : array(raw).items()) {
+            if (entry.isMapping()) target.add(new ResultEffect(entry, fillOrigin));
+        }
     }
     private static int sourceCost(RuleValue rule, String reference) {
         if (rule.has(RuleFields.SOURCE_COST)) return integer(object(rule.child(RuleFields.SOURCE_COST)), reference, 1);
@@ -485,9 +501,5 @@ public final class RuleRecipeView {
             return fallback;
         }
         return fallback;
-    }
-    private static boolean bool(RuleValue value, String key) {
-        RuleValue raw = value.child(key);
-        return raw != null && raw.isFlag() && raw.asFlag(false);
     }
 }
