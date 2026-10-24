@@ -127,11 +127,6 @@ final class ListControl extends FormControl {
     }
 
     @Override
-    boolean isVisible() {
-        return editor.isVisible();
-    }
-
-    @Override
     void load(@Nullable RuleValue value) {
         rememberLoaded(value);
         List<String> items = new ArrayList<>();
@@ -197,9 +192,4 @@ final class ListControl extends FormControl {
         return ResourceLocation.tryParse(id) != null;
     }
 
-    @Override
-    void setValueFromSuggestion(String value) {
-        markEdited();
-        editor.addItem(value);
-    }
 }

@@ -36,7 +36,7 @@ import org.jetbrains.annotations.Nullable;
  * <p>所有写入都经由 EditSession（统一撤销门面）落到 RuleDraft，控件本身不直接改草稿；
  * 界面不出现任何可编辑的 JSON 文本框，未识别字段原样保留。
  */
-public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
+public final class FormView implements UiWidget {
 
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
     private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
@@ -58,7 +58,6 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
     String basePath;
     long loadedRevision;
     final List<FormRow> rows = new ArrayList<>();
-    private @Nullable SuggestionProvider suggestionProvider;
     private @Nullable SelectionCatalogOpener catalogOpener;
 
     /** 字段目录入口由页面提供，表单传递确切字段路径与当前选择，不访问网络。 */
@@ -94,7 +93,6 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
     }
     // 输入被上限拒绝时的即时提示出口（页面显示 notice）
     private @Nullable Consumer<Component> rejectedNoticeHandler;
-    @Nullable FormPicker picker;
     // 本次按下命中的控件：释放与拖动只派发给它，避免无关控件吞掉释放或残留按下态
     @Nullable UiWidget pressedWidget;
     @Nullable FormControl pressedControl;
@@ -416,10 +414,6 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         return childPath(relative);
     }
 
-    public void setSuggestionProvider(@Nullable SuggestionProvider provider) {
-        this.suggestionProvider = provider;
-    }
-
     /**
      * 装配条件编辑的共享定义能力（类型清单、按场景创建、解码注册表）。
      *
@@ -633,7 +627,6 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         FormView child = new FormView(font, session, childPath(relativePath));
         child.childForm = true;
         if (catalogSelections) child.useCatalogSelections();
-        child.setSuggestionProvider(suggestionProvider);
         child.setConditionEditingSupport(conditionEditingSupport);
         child.setConditionContextFactory(conditionContextFactory);
         child.setSelectionCatalogOpener(catalogOpener);
@@ -883,7 +876,6 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
 
     // 统一结束入口：把「未提交的预览」按原因回退或提交，交由各控件实现
     void endInteractions(UiInputCapture.EndReason reason) {
-        if (picker != null) picker.endInteraction(reason);
         for (FormRow row : rows) {
             row.control.endInteractions(reason);
         }
@@ -939,34 +931,12 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
             FormRowRenderer.renderScrollbar(graphics, viewportX, viewportY, viewportWidth, viewportHeight,
                     contentHeight, scrollOffset, maxScroll(), SCROLLBAR_WIDTH, THEME);
         }
-        if (picker != null) {
-            picker.render(graphics, renderFont, mouseX, mouseY);
-        }
     }
 
     /** 鼠标位置下的提示：优先显示该字段的校验问题，其次显示字段提示 */
     public @Nullable Component tooltipAt(double mouseX, double mouseY) {
         return FormRowRenderer.tooltipAt(mouseX, mouseY, font, rows, viewportX, viewportY, viewportWidth,
                 viewportHeight, scrollOffset);
-    }
-
-    // ---- PickerHost ----
-
-    @Override
-    public void openPicker(EditorField field, Consumer<String> onPicked) {
-        List<Suggestion> suggestions = suggestionProvider == null ? List.of() : suggestionProvider.suggestions(field);
-        if (suggestions == null || suggestions.isEmpty()) {
-            return;
-        }
-        RuleValue value = session.draft().valueAt(childPath(field.name()));
-        List<String> chosen = value == null ? List.of()
-                : value.isList() ? value.textItems() : value.isText() ? List.of(value.asText()) : List.of();
-        this.picker = new FormPicker(font, THEME, suggestions, chosen, onPicked, this);
-    }
-
-    public void closePicker() {
-        if (picker != null) picker.endInteraction(UiInputCapture.EndReason.UNMOUNTED);
-        this.picker = null;
     }
 
     // ---- 输入分发薄封装：实现集中在 FormInputRouter ----
@@ -1011,25 +981,4 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         return inputRouter.charTyped(codePoint, modifiers);
     }
 
-    // ---- FormPicker.Host：选择框只读视口几何，关闭动作走 closePicker ----
-
-    @Override
-    public int viewportX() {
-        return viewportX;
-    }
-
-    @Override
-    public int viewportY() {
-        return viewportY;
-    }
-
-    @Override
-    public int viewportWidth() {
-        return viewportWidth;
-    }
-
-    @Override
-    public int viewportHeight() {
-        return viewportHeight;
-    }
 }

@@ -133,10 +133,6 @@ abstract class FormControl {
         return false;
     }
 
-    boolean isVisible() {
-        return true;
-    }
-
     /**
      * 登记控件几何高度变化回调。
      *
@@ -270,10 +266,6 @@ abstract class FormControl {
         if (rejectedNotice != null && messageKey != null) {
             rejectedNotice.accept(Component.translatable(NOTICE_ISSUE, label(), Component.translatable(messageKey)));
         }
-    }
-
-    // 应用候选值（输入建议选择框回调）
-    void setValueFromSuggestion(String value) {
     }
 
     boolean mouseClicked(double mouseX, double mouseY, int button) {

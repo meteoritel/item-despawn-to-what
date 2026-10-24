@@ -255,11 +255,6 @@ final class ClimateControl extends FormControl {
     }
 
     @Override
-    boolean isVisible() {
-        return minInput.isVisible();
-    }
-
-    @Override
     void load(@Nullable RuleValue value) {
         // 其它轴提交会重载表单；已停用的本轴没有 JSON，仍保留当前面板里的端点。
         if (value == null && originalValue() == null && !matching.isChecked()) {

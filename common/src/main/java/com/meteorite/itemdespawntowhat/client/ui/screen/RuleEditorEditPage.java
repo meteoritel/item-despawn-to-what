@@ -14,9 +14,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.screen.form.CatalogSuggestions;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionEditingSupport;
-import com.meteorite.itemdespawntowhat.client.ui.screen.form.SuggestionProvider;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionTreeContract;
@@ -140,9 +138,6 @@ final class RuleEditorEditPage {
     private final Set<String> promptedConflicts = new LinkedHashSet<>();
     // 已消费的回执序号
     private long seenResultSeq;
-    // 注册表候选建议（惰性创建；创建失败时退化为无建议）
-    private @Nullable SuggestionProvider catalogSuggestions;
-
     // 客户端保存前校验：只读取本页与屏幕暴露的编辑现场
     private final RuleEditorValidation validation = new RuleEditorValidation(new RuleEditorValidation.Host() {
         @Override
@@ -202,11 +197,6 @@ final class RuleEditorEditPage {
         @Override
         public void notice(Component message, int color) {
             host.setNotice(message, color);
-        }
-
-        @Override
-        public SuggestionProvider suggestions() {
-            return suggestionProvider();
         }
 
         @Override
@@ -787,19 +777,7 @@ final class RuleEditorEditPage {
         endInteractions();
     }
 
-    // ---- 建议与条件树支持 ----
-
-    // 建议提供者（注册表候选），构造失败时降级为无建议
-    private SuggestionProvider suggestionProvider() {
-        if (catalogSuggestions == null) {
-            try {
-                catalogSuggestions = new CatalogSuggestions();
-            } catch (RuntimeException | LinkageError error) {
-                // 目录建议是辅助入口；依赖尚不可用时保留空候选，不阻止规则编辑。
-            }
-        }
-        return catalogSuggestions == null ? field -> List.of() : catalogSuggestions;
-    }
+    // ---- 条件树支持 ----
 
     // 条件树的共享定义能力（类型清单、按场景创建、解码注册表）：触发页使用，不捕获表单或导航状态
     private ConditionEditingSupport buildConditionEditingSupport() {

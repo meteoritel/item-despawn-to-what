@@ -30,9 +30,6 @@ final class FormInputRouter {
         if (!view.visible) {
             return false;
         }
-        if (view.picker != null) {
-            return view.picker.mouseClicked(mouseX, mouseY, button);
-        }
         if (!view.enabled || !view.bounds().contains(mouseX, mouseY)) {
             return false;
         }
@@ -70,9 +67,6 @@ final class FormInputRouter {
     }
 
     boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (view.picker != null) {
-            return view.picker.mouseReleased(mouseX, mouseY, button);
-        }
         UiWidget widget = view.pressedWidget;
         FormControl control = view.pressedControl;
         view.pressedWidget = null;
@@ -84,9 +78,6 @@ final class FormInputRouter {
     }
 
     boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        if (view.picker != null) {
-            return view.picker.mouseDragged(mouseX, mouseY, button, dragX, dragY);
-        }
         if (view.pressedWidget != null) {
             return view.pressedWidget.mouseDragged(mouseX, mouseY, button, dragX, dragY);
         }
@@ -94,9 +85,6 @@ final class FormInputRouter {
     }
 
     boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        if (view.picker != null) {
-            return view.picker.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
-        }
         if (!view.visible || !view.bounds().contains(mouseX, mouseY)) {
             return false;
         }
@@ -114,9 +102,6 @@ final class FormInputRouter {
     }
 
     boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (view.picker != null) {
-            return view.picker.keyPressed(keyCode, scanCode, modifiers);
-        }
         // 顺序：聚焦控件优先；方向键与 PageUp/PageDown 都不允许同时改值和滚动
         for (FormRow row : view.rows) {
             if (row.visible && handlesInput(row.control) && row.control.keyPressed(keyCode, scanCode, modifiers)) {
@@ -152,9 +137,6 @@ final class FormInputRouter {
     }
 
     boolean charTyped(char codePoint, int modifiers) {
-        if (view.picker != null) {
-            return view.picker.charTyped(codePoint, modifiers);
-        }
         for (FormRow row : view.rows) {
             if (row.visible && handlesInput(row.control) && row.control.charTyped(codePoint, modifiers)) {
                 view.retainPendingInputs();

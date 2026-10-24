@@ -12,8 +12,8 @@ import org.jetbrains.annotations.Nullable;
 /**
  * 表单行布局与滚动几何：按可用宽度排布每一行（标签列 / 控件 / 行尾按钮），并把结果同步到屏幕坐标。
  *
- * <p>测量与实际摆放共用同一份行状态（{@link FormRow} 的 controlRelX/controlWidth/buttonWrapWidth 等），
- * 因此不会出现「测量一套、命中另一套」的漂移；本类不持有草稿与输入状态。</p>
+ * <p>测量与实际摆放共用 {@link FormRow} 上固化的行状态，因此不会出现「测量一套、命中另一套」的漂移；
+ * 本类不持有草稿与输入状态。</p>
  */
 final class FormRowLayout {
 
@@ -35,19 +35,9 @@ final class FormRowLayout {
         return Math.max(16, font.width(button.label()) + 8);
     }
 
-    /**
-     * 该行标签列实际预留的宽度。
-     *
-     * <p>行内自带文字的控件（复选框、条件树）把标签排在控件内部，整列留给控件也读得出，
-     * 统一列宽只会在窄窗口下白占空间，因此这类行按标签文本宽度收窄；其余行保持统一列宽，
-     * 控件左边缘仍对齐。说明行整行显示，不参与标签列对齐。物品计数行的滑条列由
-     * {@code ItemCountsControl.setSliderColumnOffset} 取本行控件列，与其余行共用同一列。</p>
-     *
-     * @param row                 当前行
-     * @param effectiveLabelWidth 表单统一标签列宽（已按可用宽度收紧）
-     * @param font                文本测量字体
-     * @return 该行预留的标签列宽度
-     */
+    // 该行标签列实际预留的宽度：复选框、条件树把标签画在控件内部，整列留给控件也读得出，
+    // 统一列宽只会在窄窗口下白占空间，因此这类行按标签文本宽度收窄；其余行保持统一列宽，
+    // 控件左缘仍然对齐。说明行整行显示，不参与标签列对齐。
     private static int rowLabelWidth(FormRow row, int effectiveLabelWidth, Font font) {
         if (row.control.usesLabelColumn() || row.field.type() == EditorFieldType.NOTE) {
             return effectiveLabelWidth;
@@ -56,16 +46,9 @@ final class FormRowLayout {
         return Math.min(effectiveLabelWidth, inlineSpan);
     }
 
-    /**
-     * 把测量好的行几何同步到屏幕坐标：只叠加视口原点与滚动偏移。
-     *
-     * <p>按钮换行结果与逐按钮内容坐标在 {@link #layoutRows} 测量时已写入行状态，这里不再测量文本宽度、
-     * 不再分配换行数组与临时矩形，因此静止帧与滚动帧的同步都不触发字体测量。</p>
-     *
-     * @param rows    表单行
-     * @param originX 表单内容原点屏幕 X（控件列左缘基于该值）
-     * @param originY 表单内容原点屏幕 Y（已含视口位置与滚动偏移）
-     */
+    // 把测量好的行几何同步到屏幕坐标：只叠加视口原点与滚动偏移。originX 是控件列左缘对应的屏幕 X，
+    // originY 已含视口位置与滚动偏移。按钮换行结果与逐按钮内容坐标在 layoutRows 测量时已写入行状态，
+    // 这里不测量文本宽度，也不分配换行数组与临时矩形，因此静止帧与滚动帧的同步都不触发字体测量。
     static void syncBounds(List<FormRow> rows, int originX, int originY) {
         for (FormRow row : rows) {
             if (!row.visible) continue;
@@ -81,17 +64,9 @@ final class FormRowLayout {
         }
     }
 
-    /**
-     * 把测量阶段的按钮排布固化成行内容坐标，供后续同步与命中直接读取。
-     *
-     * <p>只在真实几何输入变化（宽度/行高/按钮文本/可见性）触发的测量里执行，因此这里剩余的
-     * 文本测量与换行数组分配不会进入帧循环。</p>
-     *
-     * @param row     目标行
-     * @param font    文本测量字体
-     * @param flow    换行结果；行尾横排按钮为 {@code null}
-     * @param widths  换行按钮宽度；与 {@code flow} 同时给出
-     */
+    // 把测量阶段的按钮排布固化成行内容坐标，供后续同步与命中直接读取；flow 为 null 时按 widths
+    // 逐按钮取宽。只在真实几何输入变化（宽度/行高/按钮文本/可见性）触发的测量里执行，
+    // 剩余的文本测量与换行数组分配不会进入帧循环。
     private static void storeButtonLayout(FormRow row, Font font, @Nullable UiFlowLayout.Wrap flow, int[] widths) {
         int count = row.buttons.size();
         row.ensureButtonLayout(count);
@@ -127,7 +102,7 @@ final class FormRowLayout {
 
     static int layoutRows(List<FormRow> rows, int availableWidth, int labelWidth, int rowGap, int minimumControlHeight, Font font, UiHostTheme theme) {
         boolean narrow = availableWidth < NARROW_WIDTH;
-        int effectiveLabelWidth = narrow ? 0 : Math.min(labelWidth, Math.max(32, availableWidth / 3));
+        int effectiveLabelWidth = narrow ? 0 : Math.clamp(availableWidth / 3, Math.min(32, labelWidth), labelWidth);
         int cursor = 0;
         int visibleRows = 0;
         for (FormRow row : rows) {
@@ -187,14 +162,14 @@ final class FormRowLayout {
                         buttonWidths[index] = Math.min(actionWidth(font, row.buttons.get(index)), controlWidth);
                     }
                     buttonFlow = UiFlowLayout.wrap(buttonWidths, controlWidth, 2, row.buttonHeight);
-                    // 空按钮组沿用旧口径：按一行高度计
+                    // 按钮组为空时也按一行高度计
                     int lines = Math.max(1, buttonFlow.rowCount());
                     row.contentHeight += 2 + lines * row.buttonHeight + (lines - 1) * 2;
                 }
             }
             row.contentY = cursor;
             if (row.field.type() == EditorFieldType.NOTE) {
-                // 说明行不摆行尾按钮，清空缓存避免沿用上一版结构的坐标
+                // 说明行没有行尾按钮：清空缓存，避免沿用上一次排布留下的坐标
                 row.ensureButtonLayout(0);
             } else {
                 storeButtonLayout(row, font, buttonFlow, buttonWidths);

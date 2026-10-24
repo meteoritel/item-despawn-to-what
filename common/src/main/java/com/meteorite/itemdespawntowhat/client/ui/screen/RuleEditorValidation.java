@@ -113,7 +113,7 @@ final class RuleEditorValidation {
             issues.add(issue(RuleFields.OUTCOMES, UI + "issue.outcomes_conflict"));
         }
         // 规则级条件树
-        validateConditionTree(draft, "", RuleFields.CONDITIONS, issues);
+        validateConditionTree(draft, issues);
         // 候选结果：id 非空且唯一、effects 非空
         Set<String> candidateIds = new LinkedHashSet<>();
         for (int i = 0; i < outcomes.size(); i++) {
@@ -131,7 +131,6 @@ final class RuleEditorValidation {
             RuleValue candidateEffects = listOf(element.child(RuleFields.CANDIDATE_EFFECTS));
             if (candidateEffects.isEmpty()) {
                 issues.add(issue(DraftPaths.child(candidatePath, RuleFields.CANDIDATE_EFFECTS), UI + "issue.candidate_effects_empty"));
-                continue;
             }
         }
         RuleValue name = draft.root().child(RuleFields.DISPLAY_NAME);
@@ -230,8 +229,8 @@ final class RuleEditorValidation {
     }
 
     // 校验规则级条件树，问题路径指向 conditions 字段
-    private void validateConditionTree(RuleDraft draft, String draftPath, String issuePath, List<FormIssue> issues) {
-        RuleValue raw = draft.conditionsValueAt(draftPath);
+    private void validateConditionTree(RuleDraft draft, List<FormIssue> issues) {
+        RuleValue raw = draft.conditionsValue();
         if (raw == null) {
             return;
         }
@@ -240,23 +239,23 @@ final class RuleEditorValidation {
             // 只有本地可证结构损坏（不是对象 / 缺 op / op 不是字符串）才阻塞；
             // 未注册或第三方类型只提醒：原数据在草稿里原样保留，服务端才是权威校验方
             if (isStructurallyDamaged(raw)) {
-                issues.add(issue(issuePath, UI + "issue.conditions_decode"));
+                issues.add(issue(RuleFields.CONDITIONS, UI + "issue.conditions_decode"));
             } else {
-                issues.add(warning(issuePath, UI + "issue.conditions_unregistered"));
+                issues.add(warning(RuleFields.CONDITIONS, UI + "issue.conditions_unregistered"));
             }
             return;
         }
         if (!expression.isStructurallyValid()) {
-            issues.add(issue(issuePath, ISSUE + "incomplete_group"));
+            issues.add(issue(RuleFields.CONDITIONS, ISSUE + "incomplete_group"));
         }
         if (expression.leafCount() > ConditionLimits.MAX_LEAVES) {
-            issues.add(issue(issuePath, ISSUE + "too_many_leaves"));
+            issues.add(issue(RuleFields.CONDITIONS, ISSUE + "too_many_leaves"));
         }
         if (expression.nodeCount() > ConditionLimits.MAX_NODES) {
-            issues.add(issue(issuePath, ISSUE + "too_many_nodes"));
+            issues.add(issue(RuleFields.CONDITIONS, ISSUE + "too_many_nodes"));
         }
         if (expression.depth() > ConditionLimits.MAX_DEPTH) {
-            issues.add(issue(issuePath, ISSUE + "too_deep", expression.depth(), ConditionLimits.MAX_DEPTH));
+            issues.add(issue(RuleFields.CONDITIONS, ISSUE + "too_deep", expression.depth(), ConditionLimits.MAX_DEPTH));
         }
     }
 

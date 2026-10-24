@@ -22,7 +22,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionEditingSupport;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
-import com.meteorite.itemdespawntowhat.client.ui.screen.form.SuggestionProvider;
 import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes;
 import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -130,9 +129,6 @@ public final class RuleEditorPageSet {
          * @param color   由提示级别折算出的调色板色值
          */
         void notice(Component message, int color);
-
-        // 输入建议
-        SuggestionProvider suggestions();
 
         // 条件树的共享定义能力（类型清单、按场景创建、解码注册表）
         ConditionEditingSupport conditionEditingSupport();
@@ -324,7 +320,6 @@ public final class RuleEditorPageSet {
         form.useCatalogSelections();
         form.setConditionEditingSupport(ruleEditorTriggerPage.sharedConditionSupport());
         form.setConditionContextFactory(ruleEditorTriggerPage.conditionContextFactory(form));
-        form.setSuggestionProvider(host.suggestions());
         form.setOnChanged(host::onDraftChanged);
         if (page == Page.INPUT) form.setOnChanged(() -> {
             form.applyToDraft();

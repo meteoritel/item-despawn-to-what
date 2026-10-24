@@ -205,11 +205,6 @@ final class TextControl extends FormControl {
         return area != null ? area.isFocused() : input.isFocused();
     }
 
-    @Override
-    boolean isVisible() {
-        return area != null ? area.isVisible() : input.isVisible();
-    }
-
     // 当前文本：备注取自多行编辑框
     private String text() {
         return area != null ? area.value() : input.value();
@@ -310,9 +305,4 @@ final class TextControl extends FormControl {
         reportRejected(tooLongKey());
     }
 
-    @Override
-    void setValueFromSuggestion(String value) {
-        markEdited();
-        setText(value);
-    }
 }

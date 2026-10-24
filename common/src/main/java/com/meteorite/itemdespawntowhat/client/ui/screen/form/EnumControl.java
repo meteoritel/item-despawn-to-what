@@ -69,11 +69,6 @@ final class EnumControl extends FormControl {
     }
 
     @Override
-    boolean isVisible() {
-        return segments.isVisible();
-    }
-
-    @Override
     void load(@Nullable RuleValue value) {
         rememberLoaded(value);
         segments.setSelected(value != null && value.isScalar() ? value.asText() : field.enumValues().isEmpty() ? "" : field.enumValues().getFirst());

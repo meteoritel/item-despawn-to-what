@@ -68,11 +68,6 @@ final class BoolControl extends FormControl {
     }
 
     @Override
-    boolean isVisible() {
-        return checkBox.isVisible();
-    }
-
-    @Override
     void load(@Nullable RuleValue value) {
         rememberLoaded(value);
         boolean checked = value != null && value.isFlag() && value.asFlag(false);

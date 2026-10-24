@@ -439,11 +439,6 @@ final class NumberControl extends FormControl {
     }
 
     @Override
-    void setValueFromSuggestion(String value) {
-        commitText(value);
-    }
-
-    @Override
     boolean mouseClicked(double mouseX, double mouseY, int button) {
         for (UiButton preset : presetButtons) {
             if (preset.mouseClicked(mouseX, mouseY, button)) {
@@ -531,11 +526,6 @@ final class NumberControl extends FormControl {
     @Override
     boolean isEditing() {
         return input.isFocused();
-    }
-
-    @Override
-    boolean isVisible() {
-        return slider.isVisible() && input.isVisible();
     }
 
     @Override

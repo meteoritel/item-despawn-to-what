@@ -219,7 +219,6 @@ final class RuleEditorTriggerPage {
         form.useCatalogSelections();
         form.setConditionEditingSupport(sharedConditionSupport());
         form.setConditionContextFactory(conditionContextFactory(form));
-        form.setSuggestionProvider(pages.host.suggestions());
         form.setOnChanged(() -> {
             form.applyToDraft();
             pages.host.onDraftChanged();
