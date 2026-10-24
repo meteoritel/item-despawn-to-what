@@ -315,7 +315,7 @@ public final class RuleEditorModel {
     public int testRuleCount() {
         int total = 0;
         for (String id : ruleIds()) {
-            if (DebugTestRules.isTestRule(id) && !isDraftDeleted(id)) {
+            if (DebugTestRules.isTestRule(id) && !isDeleteMarked(id)) {
                 total++;
             }
         }
@@ -337,7 +337,7 @@ public final class RuleEditorModel {
             String id = DebugTestRules.ruleId(index);
             if (this.entries.containsKey(id)) {
                 // 服务端已有：仅在草稿被标记删除时恢复，避免覆盖玩家对同序号规则的改动
-                if (isDraftDeleted(id) && openSession(id) != null) {
+                if (isDeleteMarked(id) && openSession(id) != null) {
                     markDeleted(id, false);
                 }
                 continue;
@@ -369,7 +369,7 @@ public final class RuleEditorModel {
                 affected++;
                 continue;
             }
-            if (isDraftDeleted(id)) {
+            if (isDeleteMarked(id)) {
                 continue;
             }
             if (openSession(id) != null) {
@@ -380,8 +380,16 @@ public final class RuleEditorModel {
         return affected;
     }
 
-    // 草稿是否已标记删除（未打开会话的规则按未删除处理）
-    private boolean isDraftDeleted(String id) {
+    /**
+     * 某条规则是否已在草稿中被标记删除。
+     *
+     * <p>删除只是草稿状态：服务端快照在应用前仍包含该条目，列表据此提前隐藏，
+     * 应用成功后由新快照完成真正的移除。未打开会话的规则按未删除处理。</p>
+     *
+     * @param id 规则 id
+     * @return 已打开会话且草稿标记为删除时为 true
+     */
+    public boolean isDeleteMarked(String id) {
         EditSession session = this.sessions.get(id);
         return session != null && session.draft().isDeleted();
     }

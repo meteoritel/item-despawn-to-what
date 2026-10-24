@@ -473,6 +473,11 @@ final class RuleEditorListPage {
         visibleIds.clear();
         String query = lastQuery == null ? "" : lastQuery.toLowerCase(Locale.ROOT).trim();
         for (String id : ruleIds) {
+            // 删除只写草稿、快照在应用前仍含该条目：本地标记删除后立即从列表退出，
+            // 与新建草稿的删除视觉一致；应用成功后由新快照完成真正的移除
+            if (host.model().isDeleteMarked(id)) {
+                continue;
+            }
             // 每条规则只在这里取一次体：展示快照同时给出标题、状态、分类与搜索文本；
             // 配方预览与条件提示不在这里构建，由首行可见与悬停时向快照惰性索取
             long snapshotStarted = profile ? DevelopmentDiagnostics.start() : 0L;

@@ -6,15 +6,14 @@ import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
 /**
- * 规则与候选结果的工厂：空白新建、复制走同一套身份分配与默认体构造。
- * <p>身份分配：规则 id 形如 {@code idtw:rule_<32位小写UUID>}，
- * 候选 id 形如 {@code result_<32位小写UUID>}；复制一律分配全新身份，不做「沿用旧 id」的猜测。
+ * 规则与候选结果的工厂：空白新建、复制走同一套默认体构造与候选身份分配。
+ * <p>规则 id 由调用方给定（界面层取玩家命名后解析出的完整 id），本类不自动生成规则身份；
+ * 候选 id 形如 {@code result_<32位小写UUID>}，复制一律分配全新候选身份，不做「沿用旧 id」的猜测。
  * <p>未改动的后端默认值不写进 JSON：新规则只落 id、source、固定源成本、
  * schema_version 与一个初始候选；enabled / priority / trigger_after_seconds / triggers / combination
  * 全部依赖服务端默认，避免把默认值固化进覆盖层文件。
@@ -22,19 +21,12 @@ import java.util.UUID;
  */
 public final class EditorFactories {
 
-    // 新规则 id 前缀（含命名空间）
-    public static final String RULE_ID_PREFIX = TypeLabels.OWN_NAMESPACE + ":rule_";
-
     // 新候选 id 前缀
     public static final String CANDIDATE_ID_PREFIX = "result_";
 
     // 工具类
     private EditorFactories() {
         throw new UnsupportedOperationException("Utility class");
-    }
-
-    public static String newRuleId() {
-        return RULE_ID_PREFIX + token();
     }
 
     public static String newCandidateId() {
@@ -112,27 +104,5 @@ public final class EditorFactories {
             id = newCandidateId();
         }
         return id;
-    }
-
-    // 规则体内已声明的候选 id 集合
-    public static Set<String> candidateIds(JsonObject body) {
-        Set<String> ids = new LinkedHashSet<>();
-        if (body == null) {
-            return ids;
-        }
-        JsonElement raw = body.get(RuleFields.OUTCOMES);
-        if (!(raw instanceof JsonArray array)) {
-            return ids;
-        }
-        for (JsonElement element : array) {
-            if (!element.isJsonObject()) {
-                continue;
-            }
-            JsonElement id = element.getAsJsonObject().get(RuleFields.CANDIDATE_ID);
-            if (id != null && id.isJsonPrimitive() && id.getAsJsonPrimitive().isString()) {
-                ids.add(id.getAsString());
-            }
-        }
-        return ids;
     }
 }

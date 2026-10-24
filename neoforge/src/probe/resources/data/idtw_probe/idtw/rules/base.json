@@ -3,6 +3,7 @@
   "enabled": true,
   "priority": 0,
   "trigger_after_seconds": 300,
+  "category": "debug",
   "source": {"items": ["minecraft:book"], "exclude": []},
-  "effects": [{"type": "itemdespawntowhat:spawn_entity", "item": "minecraft:prismarine_shard", "count": 1, "delay_ticks": 0, "chance": 1, "variant": "item"}]
+  "effects": [{"type": "idtw:spawn_entity", "item": "minecraft:prismarine_shard", "count": 1, "delay_ticks": 0, "chance": 1, "variant": "item"}]
 }
