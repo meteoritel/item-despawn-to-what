@@ -234,6 +234,8 @@ final class RuleEditorInputPage {
         RuleValue rule = session.draft().root();
         sourceForm = pages.newForm(session, RuleFields.SOURCE, BuiltinEditorDescriptors.sourceDescriptor());
         sourceForm.hideRowLabel(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS));
+        // 卡片标题与列表空态已说明该行用途，悬停不再弹出字段提示遮挡列表
+        sourceForm.suppressRowHintTooltip(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS));
         sourceForm.setOnFieldWritten((path, before) -> {
             if (!path.equals(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS))) return;
             List<String> references = RuleValueReads.stringList(session.draft().valueAt(path));
