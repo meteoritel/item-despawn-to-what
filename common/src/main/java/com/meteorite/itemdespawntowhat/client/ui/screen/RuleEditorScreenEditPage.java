@@ -267,12 +267,7 @@ final class RuleEditorScreenEditPage {
             return;
         }
         if (pages != null) {
-            if (pages.blockNavigation()) {
-                if (tabControl != null) {
-                    tabControl.setSelected(tab.value());
-                }
-                return;
-            }
+            pages.flushPendingEdits();
             pages.setPage(target);
         }
         tab = target;
@@ -423,8 +418,11 @@ final class RuleEditorScreenEditPage {
         }
     }
 
-    boolean blockNavigation() {
-        return pages != null && pages.blockNavigation();
+    // 结算当前页编辑状态；页面不存在时无事可做
+    void flushPendingEdits() {
+        if (pages != null) {
+            pages.flushPendingEdits();
+        }
     }
 
     // 进入新规则的编辑页：页签回到基本信息并丢弃上一份页面状态（候选与效果选择归零）
@@ -444,16 +442,13 @@ final class RuleEditorScreenEditPage {
         }
     }
 
-    // 返回管理页前卸载；页面正在阻塞导航（如未确认的输入）时返回 false
-    boolean unmount() {
+    // 返回管理页前结算编辑状态并卸载页面
+    void unmount() {
         if (pages != null) {
-            if (pages.blockNavigation()) {
-                return false;
-            }
+            pages.flushPendingEdits();
             pages.unmount();
         }
         pages = null;
-        return true;
     }
 
     // 关屏 / 会话失效：结束页面交互并让表单释放捕获与输入状态
@@ -565,10 +560,7 @@ final class RuleEditorScreenEditPage {
 
     void save() {
         // F-I：先把当前草稿落盘（写盘本身有 2 秒节流），保证崩溃窗口内的最近编辑不丢
-        if (blockNavigation()) {
-            return;
-        }
-        applyAllForms();
+        flushPendingEdits();
         host.model().persistNow();
         List<FormIssue> issues = validation.collectIssues();
         // 只有「本地可证非法」才阻塞保存；未注册第三方类型等提醒项不阻塞（服务端才是权威校验方）
@@ -625,9 +617,7 @@ final class RuleEditorScreenEditPage {
         if (host.rejectWhenFrozen()) {
             return;
         }
-        if (blockNavigation()) {
-            return;
-        }
+        flushPendingEdits();
         EditSession session = host.session();
         if (session != null && session.canUndo()) {
             session.undo();
@@ -640,9 +630,7 @@ final class RuleEditorScreenEditPage {
         if (host.rejectWhenFrozen()) {
             return;
         }
-        if (blockNavigation()) {
-            return;
-        }
+        flushPendingEdits();
         EditSession session = host.session();
         if (session != null && session.canRedo()) {
             session.redo();

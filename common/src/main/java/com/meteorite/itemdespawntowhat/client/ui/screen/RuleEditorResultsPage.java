@@ -223,14 +223,7 @@ final class RuleEditorResultsPage {
             if (pages.rebuilding) {
                 return;
             }
-            if (pages.blockNavigation()) {
-                pages.rebuilding = true;
-                if (effectList != null) {
-                    effectList.setSelectedIndex(effectIndex);
-                }
-                pages.rebuilding = false;
-                return;
-            }
+            pages.flushPendingEdits();
             effectIndex = Math.max(0, index);
             pages.requestRebuild();
         });
@@ -284,7 +277,7 @@ final class RuleEditorResultsPage {
                     advancedEffectForm.useCompactSpacing();
                     pages.liveForms.add(advancedEffectForm); pages.liveWidgets.add(advancedEffectForm);
                     advancedButton = new UiButton(THEME, pages.font, advancedLabel(), UiButtonVariant.SECONDARY, () -> {
-                        if (pages.blockNavigation()) return;
+                        pages.flushPendingEdits();
                         showAdvancedEffects = !showAdvancedEffects; pages.requestRebuild();
                     }).setChipStyle(true);
                     pages.liveWidgets.add(advancedButton); pages.buttons.add(advancedButton);
@@ -441,7 +434,7 @@ final class RuleEditorResultsPage {
     }
 
     private void cycleCombination() {
-        if (pages.blockNavigation()) return;
+        pages.flushPendingEdits();
         String current = RuleEditorPageSupport.combinationOf(pages.currentView());
         String next = CombinationMode.ROUND_ROBIN.key().equals(current)
                 ? CombinationMode.PRIORITY.key() : CombinationMode.ROUND_ROBIN.key();
@@ -513,9 +506,7 @@ final class RuleEditorResultsPage {
     }
 
     void duplicateCandidate() {
-        if (pages.blockNavigation()) {
-            return;
-        }
+        pages.flushPendingEdits();
         EditSession session = pages.host.session();
         if (session == null) {
             return;
@@ -598,9 +589,7 @@ final class RuleEditorResultsPage {
     }
 
     void openEffectPicker() {
-        if (pages.blockNavigation()) {
-            return;
-        }
+        pages.flushPendingEdits();
         // 消耗类的编辑入口在「输入」页，三类消耗动作都不出现在这里，避免与说明行自相矛盾
         List<ResourceLocation> types = new ArrayList<>();
         for (TypeEditorDescriptor descriptor : EffectEditorRegistry.all()) {
@@ -676,7 +665,8 @@ final class RuleEditorResultsPage {
     boolean clickRemove(double mouseX, double mouseY, int button) {
         int index = removeIndexAt(mouseX, mouseY);
         if (button != 0 || index < 0) return false;
-        if (!pages.blockNavigation()) removeEffect(index);
+        pages.flushPendingEdits();
+        removeEffect(index);
         return true;
     }
 
@@ -718,7 +708,8 @@ final class RuleEditorResultsPage {
 
     void switchProduct(String path, String variant) {
         EditSession session = pages.host.session();
-        if (session == null || pages.blockNavigation()) return;
+        if (session == null) return;
+        pages.flushPendingEdits();
         RuleValue old = session.draft().valueAt(path);
         if (old == null || !old.isMapping()) return;
         RuleValue.Mapping next = RuleValue.mapping(old);
@@ -739,7 +730,7 @@ final class RuleEditorResultsPage {
     }
 
     private void selectPlanBy(int delta) {
-        if (pages.blockNavigation()) return;
+        pages.flushPendingEdits();
         int count = Math.max(1, ResultStructure.candidateCount(pages.currentView()));
         int target = candidateIndex + delta;
         if (target < 0 || target >= count || target == candidateIndex) return;
@@ -765,7 +756,7 @@ final class RuleEditorResultsPage {
     }
 
     void enterResultStage(int stage) {
-        if (pages.blockNavigation()) return;
+        pages.flushPendingEdits();
         resultStage = Math.clamp(stage, 1, 2);
         pages.pageScroll.setOffset(0);
         pages.requestRebuild();

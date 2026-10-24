@@ -43,13 +43,16 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * 规则编辑页签的组合视图。
- * <p>四页共用同一个 {@link EditSession} 草稿：所有写入都通过 {@link EditSession#apply(String, Runnable)}
- * 提交为一条撤销记录；只读展示（自动标题、路径提示、只读高级区、摘要）不写数据。
- * <p>顶层 effects 展示为单一隐式候选：打开、改别名、改效果都不会自动生成 outcomes；
- * 只有用户新增第二个候选或明确编辑候选专属策略时，才用 {@link RuleDraft#convertToOutcomes(String)}
- * 做一次原子转换（保留原效果对象、一次撤销可整体还原）。
- * <p>输入页编辑规则源数量、催化剂门槛与实际消耗、共享半径及流体源消耗开关；
- * 结果页编辑产出和世界效果，输入支付统一由结算层执行。
+ *
+ * <p>四页共用同一个 {@link EditSession} 草稿，所有写入经 {@link EditSession#apply(String, Runnable)}
+ * 记为一条撤销记录；自动标题、路径提示、只读高级区与摘要只读展示，不写数据。</p>
+ *
+ * <p>顶层 effects 以单一隐式候选展示：打开、改别名、改效果都不生成 outcomes。用户新增第二个候选
+ * 或明确编辑候选专属策略时，才用 {@link RuleDraft#convertToOutcomes(String)} 原子转换一次，
+ * 保留原效果对象，一次撤销可整体还原。</p>
+ *
+ * <p>输入页编辑规则源数量、催化剂门槛与实际消耗、共享半径及流体源消耗开关；结果页编辑产出和
+ * 世界效果。输入支付统一由结算层执行。</p>
  */
 public final class RuleEditorEditPages {
 
@@ -116,7 +119,7 @@ public final class RuleEditorEditPages {
         /**
          * 提示桥接：把提示文本交给屏幕层决定形态与存活时长。
          *
-         * <p>本重载只接受色值，仅服务既有经本接口上报的桥接调用点；新增调用点先表达级别，
+         * <p>本重载只接受色值，只服务既有的桥接调用点。新增调用点先表达级别，
          * 用 {@code RuleEditorScreen.noticeColor(NoticeLevel)} 折算，不在页面里直接比较调色板。</p>
          *
          * @param message 提示文本；null 表示清除
@@ -142,7 +145,7 @@ public final class RuleEditorEditPages {
         int screenHeight();
     }
 
-    // 四个页签的实现：容器只保留共享状态与调度，页面各自持有自己的控件引用
+    // 四个页签的实现：容器只保留共享状态与调度，页面各自持有控件引用
     final RuleEditorInfoPage ruleEditorInfoPage;
     final RuleEditorInputPage ruleEditorInputPage;
     final RuleEditorTriggerPage ruleEditorTriggerPage;
@@ -260,7 +263,7 @@ public final class RuleEditorEditPages {
         scrollOffsets.put(page, pageScroll.offset());
         endInteractions();
         page = target;
-        // 切页后旧页面的提示不再成立：经桥接通知屏幕层清除（消息为 null 即清除，色值沿用 INFO 口径的次要文本色）
+        // 切页后旧提示失效：消息传 null 清除，色值沿用 INFO 级别的次要文本色
         host.notice(null, THEME.palette().textSecondary());
         ruleEditorResultsPage.effectIndex = 0;
         rebuild();
@@ -326,7 +329,7 @@ public final class RuleEditorEditPages {
             }
             host.onDraftChanged();
         });
-        // 输入被长度上限拒绝时立刻显示一条可读提示（字段名：问题）
+        // 输入超过长度上限时立即提示，格式为「字段名：原因」
         form.setOnRejectedNotice(message -> host.notice(message, THEME.palette().danger()));
         form.setSelectionCatalogOpener((field, path, tags, selected, onPicked) -> {
             if (page == Page.INPUT && RuleFields.SOURCE.equals(basePath) && RuleFields.SOURCE_EXCLUDE.equals(field.name())) {
@@ -354,7 +357,7 @@ public final class RuleEditorEditPages {
 
     // ---- 布局 ----
 
-    /** 外层滚动与控件命中使用同一份绝对坐标，不把表单撑进底栏。 */
+    /** 外层滚动与控件命中共用绝对坐标；布局止于滚动区域，不伸入底栏。 */
     public void layout(UiRect area) {
         lastArea = area;
         pageScroll.setViewport(area.x(), area.y(), area.width(), area.height());
@@ -389,7 +392,7 @@ public final class RuleEditorEditPages {
         return y + height + RuleEditorPageSupport.PAD;
     }
 
-    // 内容高度决定卡片高度，额外留白仅用于宽屏结果列表的对齐。
+    // 内容高度决定卡片高度；额外留白用于宽屏结果列表对齐。
     int finishCard(int x, int top, int width, int contentBottom, String titleKey) {
         int bottom = contentBottom + RuleEditorPageSupport.CARD_PAD;
         cards.add(new PageCard(new UiRect(x, top, width, Math.max(RuleEditorPageSupport.CARD_HEADER_H + RuleEditorPageSupport.CARD_PAD * 2, bottom - top)),
@@ -534,8 +537,11 @@ public final class RuleEditorEditPages {
         return issues;
     }
 
-    // 结束进行中的数值/滑杆交互：提交有效预览、回退无效预览
-    /** （FormView.endInteractions 是包级方法，宿主只能走 onFocusScopeChanged 这个公开入口） */
+    /**
+     * 结束进行中的数值/滑杆交互：提交有效预览，回退无效预览。
+     * <p>{@code FormView#endInteractions} 是包级方法，宿主经公开入口
+     * {@link FormView#onFocusScopeChanged()} 触发。</p>
+     */
     public void endInteractions() {
         pageScroll.mouseReleased();
         for (FormView form : liveForms) {
@@ -791,13 +797,24 @@ public final class RuleEditorEditPages {
 
     // ---- 内部工具 ----
 
-    /** 切换前提交合法字段，非法文本留在会话，重建表单后仍可继续填写。 */
-    public boolean blockNavigation() {
-        if (!enabled) return false;
-        for (FormView form : liveForms) form.retainPendingInputs();
+    /**
+     * 结算当前页的编辑状态：提交合法字段、保留非法文本、结束进行中的交互。
+     *
+     * <p>切页、切换候选/效果、结构变更、保存与撤销前调用。非法文本经
+     * {@link EditSession#retainPendingInput(String, List, List)} 留在会话，重建表单后回填，
+     * 因此本方法不阻塞后续操作；冻结（只读/会话失效）时不做任何写入。</p>
+     */
+    public void flushPendingEdits() {
+        if (!enabled) {
+            return;
+        }
+        for (FormView form : liveForms) {
+            form.retainPendingInputs();
+        }
         endInteractions();
-        if (applyToDraft()) host.onDraftChanged();
-        return false;
+        if (applyToDraft()) {
+            host.onDraftChanged();
+        }
     }
 
     /** Tab 和问题定位都需把焦点滚进外层页面视口。 */
@@ -846,10 +863,11 @@ public final class RuleEditorEditPages {
     // followCategory 为真时在产出变化后同步分类
     private boolean apply(String opKey, Runnable change, boolean followCategory) {
         EditSession session = host.session();
-        if (session == null || host.rejectWhenFrozen() || blockNavigation()) {
+        if (session == null || host.rejectWhenFrozen()) {
             restoreSwitches();
             return false;
         }
+        flushPendingEdits();
         DraftListInputs inputs = DraftListInputs.capture(session.draft());
         // 感知默认值的比较基准是变化前的派生值，写入后就取不到了
         String derivedBefore = followCategory ? RuleCategoryAssignment.derive(session.draft().root()) : null;
@@ -865,7 +883,7 @@ public final class RuleEditorEditPages {
         return true;
     }
 
-    // 无效文本阻止结构操作时，仅恢复开关显示，不重建输入控件。
+    // 冻结或会话缺失时恢复开关显示，不重建输入控件。
     void restoreSwitches() {
         RuleValue view = currentView();
         if (view == null) {

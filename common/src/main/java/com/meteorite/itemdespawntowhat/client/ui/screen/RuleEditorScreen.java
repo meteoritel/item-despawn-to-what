@@ -612,9 +612,7 @@ public final class RuleEditorScreen extends Screen {
             setNotice(Component.translatable(UI + "notice.rule_unavailable"), THEME.palette().warning());
             return;
         }
-        if (editPage.blockNavigation()) {
-            return;
-        }
+        editPage.flushPendingEdits();
         // 编辑页打开规则时按需取回来源视图；失败或超时只影响来源对照
         model.requestSourceView(id);
         editingId = id;
@@ -648,9 +646,7 @@ public final class RuleEditorScreen extends Screen {
         if (saving()) {
             return;
         }
-        if (!editPage.unmount()) {
-            return;
-        }
+        editPage.unmount();
         mode = Mode.LIST;
         editingId = null;
         // 页面切换：提示只对切换前的页面成立
