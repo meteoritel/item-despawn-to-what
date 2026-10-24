@@ -173,7 +173,7 @@ final class RuleEditorResultsPage {
         pages.buttons.add(planPager.next);
         resultBack = new UiButton(THEME, pages.font,
                 Component.translatable(RuleEditorPageSupport.UI + "button.result_actions"), UiButtonVariant.SECONDARY,
-                () -> enterResultStage(1));
+                () -> enterResultStage(1)).setChipStyle(true);
         pages.liveWidgets.add(resultBack);
         pages.buttons.add(resultBack);
 
@@ -239,7 +239,7 @@ final class RuleEditorResultsPage {
         if (effectCount > 0) {
             openActionButton = new UiButton(THEME, pages.font,
                     Component.translatable(RuleEditorPageSupport.UI + "button.effect_edit"), UiButtonVariant.SECONDARY,
-                    () -> enterResultStage(2));
+                    () -> enterResultStage(2)).setChipStyle(true);
             pages.liveWidgets.add(openActionButton);
             pages.buttons.add(openActionButton);
         }
@@ -282,7 +282,7 @@ final class RuleEditorResultsPage {
                     advancedButton = new UiButton(THEME, pages.font, advancedLabel(), UiButtonVariant.SECONDARY, () -> {
                         if (pages.blockNavigation()) return;
                         showAdvancedEffects = !showAdvancedEffects; pages.requestRebuild();
-                    });
+                    }).setChipStyle(true);
                     pages.liveWidgets.add(advancedButton); pages.buttons.add(advancedButton);
                 }
             }
@@ -292,7 +292,7 @@ final class RuleEditorResultsPage {
             // 无动作时入口收敛到右卡：工具条不再挂同名按钮，同屏只有一个「添加动作」
             emptyAddButton = new UiButton(THEME, pages.font,
                     Component.translatable(RuleEditorPageSupport.UI + "button.effect_add"),
-                    UiButtonVariant.SECONDARY, this::openEffectPicker);
+                    UiButtonVariant.SECONDARY, this::openEffectPicker).setChipStyle(true);
             pages.liveWidgets.add(emptyAddButton);
             pages.buttons.add(emptyAddButton);
         }
@@ -705,7 +705,9 @@ final class RuleEditorResultsPage {
         String trimmed = TextScroll.trimToWidth(pages.font, text, Math.max(1, remove.x() - row.x() - inset - ACTION_REMOVE_INSET));
         graphics.drawString(pages.font, trimmed, row.x() + inset, row.y() + (row.height() - renderFont.lineHeight) / 2,
                 THEME.palette().textPrimary(), false);
-        UiIcon close = UiMarkIcons.icon(UiMarkIcons.Mark.CLOSE, THEME.palette().danger());
+        // 叉号与目录选中卡保持一致：悬停行才转成危险色，常亮红色会被读成「已有删除待确认」
+        UiIcon close = UiMarkIcons.icon(UiMarkIcons.Mark.CLOSE,
+                hovered ? THEME.palette().danger() : THEME.palette().textSecondary());
         close.render(graphics, remove.x() + (remove.width() - close.width()) / 2,
                 remove.y() + (remove.height() - close.height()) / 2);
     }
@@ -945,43 +947,27 @@ final class RuleEditorResultsPage {
                 THEME.palette().textSecondary());
     }
 
+    // 悬停只补画面上读不到的信息：动作名、叉号、翻页箭头与产品分段都有文字或符号，不再重复解释。
     @Nullable Component tooltipAt(double mouseX, double mouseY) {
         if (typePicker.isOpen()) return null;
-        if (removeIndexAt(mouseX, mouseY) >= 0) return Component.translatable(RuleEditorPageSupport.UI + "button.effect_remove");
-        if (planPager != null) {
-            if (planPager.previous.bounds().contains(mouseX, mouseY))
-                return Component.translatable(RuleEditorPageSupport.UI + "results.previous_plan");
-            if (planPager.next.bounds().contains(mouseX, mouseY))
-                return Component.translatable(RuleEditorPageSupport.UI + "results.next_plan");
-            if (planPager.bounds().contains(mouseX, mouseY))
-                return RuleNaming.candidateTitle(ResultStructure.candidateAt(pages.currentView(), candidateIndex),
-                        candidateIndex + 1, pages.nameSource);
-        }
+        if (planPager != null && planPager.isLabelHovered(mouseX, mouseY))
+            return RuleNaming.candidateTitle(ResultStructure.candidateAt(pages.currentView(), candidateIndex),
+                    candidateIndex + 1, pages.nameSource);
         if (combinationButton != null && combinationButton.bounds().contains(mouseX, mouseY))
             return Component.translatable(RuleEditorPageSupport.UI + "results.combination_help");
         if (deletePlanButton != null && deletePlanButton.bounds().contains(mouseX, mouseY))
-            return Component.translatable(RuleEditorPageSupport.UI + "button.candidate_remove").copy()
-                    .append("\n").append(Component.translatable(RuleEditorPageSupport.UI + "results.remove_undo_hint"));
-        if (variantControl != null && variantControl.isVisible() && variantControl.bounds().contains(mouseX, mouseY))
-            return Component.translatable(RuleEditorPageSupport.UI + "results.product_help");
+            return Component.translatable(RuleEditorPageSupport.UI + "results.remove_undo_hint");
         if (effectNoteRect != null && effectNoteRect.contains(mouseX, mouseY)) return readonlyEffectNote(pages.currentView());
         return null;
     }
 
+    // 描述只挂在详情卡片的标题上：行内动作卡片已有名称与图标，悬停不再重复解释。
     boolean renderDescriptionTooltip(GuiGraphics graphics, int mouseX, int mouseY) {
-        if (typePicker.isOpen()) return false;
-        if (removeIndexAt(mouseX, mouseY) >= 0) return false;
-        RuleValue effect = null;
-        if (effectList != null && effectList.isVisible()) {
-            int index = effectList.itemIndexAt(mouseX, mouseY);
-            RuleValue effects = ResultStructure.effectsAt(pages.currentView(), candidateIndex);
-            if (effects != null && index >= 0 && index < effects.size()) effect = effects.item(index);
-        }
-        if (effect == null && detailHeaderRect != null && detailHeaderRect.contains(mouseX, mouseY)) effect = selectedAction;
-        if (effect == null || !effect.isMapping()) return false;
+        if (typePicker.isOpen() || selectedAction == null || !selectedAction.isMapping()) return false;
+        if (detailHeaderRect == null || !detailHeaderRect.contains(mouseX, mouseY)) return false;
         new UiDescriptionTooltip(THEME, pages.font).render(graphics,
                 new UiRect(0, 0, pages.host.screenWidth(), pages.host.screenHeight()),
-                ActionDescription.lines(effect), mouseX, mouseY);
+                ActionDescription.lines(selectedAction), mouseX, mouseY);
         return true;
     }
 
@@ -1034,6 +1020,11 @@ final class RuleEditorResultsPage {
 
         /** @return 整组的屏幕矩形 */
         @Override public UiRect bounds() { return bounds; }
+
+        /** @return 指针是否落在只读页码上：翻页箭头有图标说明方向，提示只讲当前方案。 */
+        private boolean isLabelHovered(double mouseX, double mouseY) {
+            return labelRect.contains(mouseX, mouseY);
+        }
 
         /**
          * 分配左右按钮与中间页码的同排几何。

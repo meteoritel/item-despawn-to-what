@@ -429,31 +429,35 @@ public final class RuleEditorEditPages {
     }
 
     /**
-     * 绘制卡片头部：左侧蓝条、标题行内的可选图标、加粗标题与底部分隔线。
+     * 绘制卡片头部：左侧蓝条、标题行内的可选图标、标题与底部分隔线。
      * <p>编辑器内所有卡片头部都经此绘制，卡片之间的蓝条位置、标题基线与分隔线 y 坐标因此完全一致；
      * 几何全部相对 {@code headerRect} 计算，调用方只需提供头部矩形与内容。</p>
+     * <p>蓝条、图标与标题都以分隔线以上内容带的中线对齐：图标高度接近文字行两倍，按顶边对齐会明显偏低。</p>
      *
      * @param font       绘制字体：蓝条高度取 {@code font.lineHeight}，标题按剩余宽度换行
      * @param headerRect 头部矩形，高取 {@link RuleEditorPageSupport#CARD_HEADER_H}
-     * @param icon       标题行内图标，可为 null；非空时紧接蓝条之后占位
+     * @param icon       标题行内图标，可为 null；非空时紧接蓝条之后占位，随内容带中线居中
      * @param title      标题文案，以主要文本色显示
      */
     static void drawCardHeader(GuiGraphics graphics, Font font, UiRect headerRect, @Nullable UiIcon icon, Component title) {
         if (headerRect.width() <= 0) {
             return;
         }
-        graphics.fill(headerRect.x(), headerRect.y(), headerRect.x() + HEADER_BAR_WIDTH, headerRect.y() + font.lineHeight,
+        int dividerY = headerRect.y() + headerRect.height() - HEADER_DIVIDER_GAP;
+        int centerY = headerRect.y() + (dividerY - headerRect.y()) / 2;
+        int textY = centerY - font.lineHeight / 2;
+        graphics.fill(headerRect.x(), textY, headerRect.x() + HEADER_BAR_WIDTH, textY + font.lineHeight,
                 THEME.palette().accent());
         int titleX = headerRect.x() + HEADER_BAR_WIDTH + HEADER_TITLE_GAP;
         if (icon != null) {
-            icon.render(graphics, titleX, headerRect.y());
+            icon.render(graphics, titleX, centerY - icon.height() / 2);
             titleX += icon.width() + RuleEditorPageSupport.PAD;
         }
         var titleLines = font.split(title, Math.max(1, headerRect.right() - titleX));
         if (!titleLines.isEmpty()) {
-            graphics.drawString(font, titleLines.getFirst(), titleX, headerRect.y(), THEME.palette().textPrimary(), false);
+            graphics.drawString(font, titleLines.getFirst(), titleX, textY, THEME.palette().textPrimary(), false);
         }
-        THEME.drawDivider(graphics, headerRect.x(), headerRect.y() + headerRect.height() - HEADER_DIVIDER_GAP, headerRect.width());
+        THEME.drawDivider(graphics, headerRect.x(), dividerY, headerRect.width());
     }
 
     public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {
@@ -896,9 +900,10 @@ public final class RuleEditorEditPages {
         }
     }
 
-    // 动作类按钮统一为次操作：每屏唯一的主操作是页脚的「应用更改」
+    // 动作类按钮统一为次操作：每屏唯一的主操作是页脚的「应用更改」；页面内的按钮一律走扁平胶囊样式
     void addEffectButton(UiAction action) {
-        UiButton button = new UiButton(THEME, font, Component.translatable(RuleEditorPageSupport.UI + "button.effect_add"), UiButtonVariant.SECONDARY, action);
+        UiButton button = new UiButton(THEME, font, Component.translatable(RuleEditorPageSupport.UI + "button.effect_add"), UiButtonVariant.SECONDARY, action)
+                .setChipStyle(true);
         effectButtons.add(button);
         liveWidgets.add(button);
     }

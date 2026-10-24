@@ -303,11 +303,11 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
                 && isCatalogField(row.field)) {
             row.pickers.add(new UiButton(THEME, font,
                     Component.translatable("gui.itemdespawntowhat.edit.pick." + (catalogSelections ? "add" : "open")),
-                    UiButtonVariant.SECONDARY, () -> pick(row, false)));
+                    UiButtonVariant.SECONDARY, () -> pick(row, false)).setChipStyle(true));
             if (!catalogSelections && (row.field.type() == EditorFieldType.TAG || row.field.type() == EditorFieldType.TAG_LIST)) row.pickers.add(
                     new UiButton(THEME, font,
                             Component.translatable("gui.itemdespawntowhat.edit.pick.tags"),
-                            UiButtonVariant.SECONDARY, () -> pick(row, true)));
+                            UiButtonVariant.SECONDARY, () -> pick(row, true)).setChipStyle(true));
         }
         row.refreshButtons();
     }

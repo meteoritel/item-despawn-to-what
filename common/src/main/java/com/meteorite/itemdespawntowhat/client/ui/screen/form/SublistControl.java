@@ -39,7 +39,7 @@ final class SublistControl extends FormControl {
                         appendChild(null);
                     }, this::store);
                     onChanged.run();
-                });
+                }).setChipStyle(true);
     }
 
     // 追加一个子表单
@@ -73,7 +73,7 @@ final class SublistControl extends FormControl {
                         }, this::store);
                         owner.notifyChanged();
                     }
-                });
+                }).setChipStyle(true);
     }
 
     // 子项相对路径：字段名[下标]

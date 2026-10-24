@@ -246,7 +246,7 @@ final class RuleEditorInputPage {
         pages.liveWidgets.add(sourceForm);
 
         sourceCostButton = new UiButton(RuleEditorEditPages.THEME, pages.font, Component.translatable(RuleEditorPageSupport.UI + "cost.mode.custom"),
-                UiButtonVariant.SECONDARY, this::specifySourceCost);
+                UiButtonVariant.SECONDARY, this::specifySourceCost).setChipStyle(true);
         {
             boolean custom = rule.has(RuleFields.SOURCE_COST);
             sourceCostButton.setVisible(!custom);
@@ -403,7 +403,7 @@ final class RuleEditorInputPage {
         // 选择卡片自带逐项移除；多个同类型叶保留移除整条条件的入口。
         if (RuleEditorPageSupport.ruleLevelPresence(session.draft().root(), leaf.type()).size() > 1) {
             form.setRowAction(leaf.fieldPath(), new UiButton(RuleEditorEditPages.THEME, pages.font, Component.translatable(RuleEditorPageSupport.UI + "rule.presence.remove"),
-                    UiButtonVariant.SECONDARY, () -> removePresenceLeaf(leaf)));
+                    UiButtonVariant.SECONDARY, () -> removePresenceLeaf(leaf)).setChipStyle(true));
         }
         return form;
     }

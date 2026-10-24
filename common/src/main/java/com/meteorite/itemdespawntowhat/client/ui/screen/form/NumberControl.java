@@ -148,7 +148,7 @@ final class NumberControl extends FormControl {
         this.input.setOnValueChanged(this::previewText);
         for (EditorPreset preset : field.presets()) {
             UiButton button = new UiButton(THEME, font, Component.translatable(preset.labelKey()),
-                    UiButtonVariant.SECONDARY, () -> applyPreset(preset.value()));
+                    UiButtonVariant.SECONDARY, () -> applyPreset(preset.value())).setChipStyle(true);
             presetButtons.add(button);
         }
     }

@@ -121,7 +121,8 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
                                 Math.max(0, chip.width() - textOffset - REMOVE_AREA_WIDTH)),
                         chip.x() + textOffset, chip.y() + (CHIP_HEIGHT - renderFont.lineHeight) / 2,
                         !enabled ? THEME.palette().textDisabled() : chosen ? THEME.palette().textOnDark() : THEME.palette().textPrimary(), false);
-                int color = enabled && i == hovered ? THEME.palette().danger() : chosen ? THEME.palette().textOnDark() : THEME.palette().textSecondary();
+                // 叉号统一用次要文本灰：与行为卡片的叉号同色，悬停才转危险色；选中卡的浅蓝底上白叉号几乎看不见。
+                int color = enabled && i == hovered ? THEME.palette().danger() : THEME.palette().textSecondary();
                 UiIcon close = UiMarkIcons.icon(Mark.CLOSE, color);
                 close.render(graphics, chip.right() - REMOVE_HIT_WIDTH + (REMOVE_HIT_WIDTH - close.width()) / 2,
                         chip.y() + (CHIP_HEIGHT - close.height()) / 2);
@@ -302,14 +303,4 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
     @Override
     public Component accessibleName() { return label(); }
 
-    @Override
-    @Nullable Component tooltipAt(double x, double y) {
-        int index = indexAt(x, y);
-        if (index < 0) return null;
-        Selection entry = values.get(index);
-        // 原版存在显示名完全相同的方块（挂墙/悬挂告示牌），悬停必须能看注册名加以区分
-        return entry.name().copy().append("\n")
-                .append(Component.translatable(UI + "selection.registry_id")).append(" ").append(entry.id())
-                .append("\n").append(Component.translatable(UI + "selection.remove_hint"));
-    }
 }

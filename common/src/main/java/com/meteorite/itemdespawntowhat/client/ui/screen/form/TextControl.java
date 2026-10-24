@@ -82,7 +82,7 @@ final class TextControl extends FormControl {
                         markEdited();
                         setText(preset.value());
                         onChanged.run();
-                    });
+                    }).setChipStyle(true);
             presetButtons.add(button);
         }
     }

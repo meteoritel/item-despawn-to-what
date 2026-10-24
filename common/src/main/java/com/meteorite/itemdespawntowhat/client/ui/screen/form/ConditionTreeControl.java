@@ -89,7 +89,7 @@ final class ConditionTreeControl extends FormControl {
     // 条件卡片提供大屏编辑入口。
     private void addButton(String name, Runnable action) {
         toolbar.add(new UiButton(THEME, font, Component.translatable("gui.itemdespawntowhat.edit.tree.button." + name),
-                UiButtonVariant.SECONDARY, action::run));
+                UiButtonVariant.SECONDARY, action::run).setChipStyle(true));
     }
 
     private int treeHeight() {
