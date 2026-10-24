@@ -45,84 +45,80 @@ import org.lwjgl.glfw.GLFW;
  */
 public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, ConditionTreeContract.Navigation {
 
-    // 每层缩进宽度
     private static final int INDENT_WIDTH = 10;
-    // 展开标记区宽度
     private static final int MARKER_WIDTH = 9;
-    // 标记水平起点（相对标记区左缘）
     private static final int MARKER_INSET = 1;
-    // 展开 / 收起标记的扫描线层数、最大宽度与半高，与 UiTreeView 的像素三角同形同尺寸
+    // 扫描线层数、最大宽度与半高，与 UiTreeView 的像素三角同形同尺寸
     private static final int MARK_SCANLINES = 4;
     private static final int MARK_SPAN = 7;
     private static final int MARK_HALF_HEIGHT = 3;
-    // 层级引导线相对标记区左缘的偏移：对齐上一层标记区中心，使同一分支的引导线连成一条竖线
+    // 对齐上一层标记区中心，使同一分支的引导线连成一条竖线
     private static final int GUIDE_INSET = 6;
-    // 默认行高
     private static final int DEFAULT_ROW_HEIGHT = 12;
 
-    // 展平后的可见行
+    // 展平后的可见行；node 为空表示空组合的占位行
     private record Row(@Nullable ConditionNode node, String path, int depth, int parentIndex,
                        boolean incomplete, boolean overflow, boolean deep) {
     }
 
-    // 注入的宿主主题
     private final UiHostTheme theme;
-    // 滚动与裁剪
     private final UiScrollView scrollView = new UiScrollView();
     private ConditionExpression expression = ConditionExpression.EMPTY;
-    // 控件矩形
     private UiRect bounds = new UiRect(0, 0, 0, 0);
-    // 展平后的可见行
     private final List<Row> rows = new ArrayList<>();
-    // 全树节点信息独立于可见行，折叠不会改变计数和违规标记。
+    // 与可见行分开维护：折叠只影响 rows，不改变节点计数与违规标记
     private final Map<String, Row> allNodes = new HashMap<>();
-    // 折叠的节点路径
     private final Set<String> collapsed = new HashSet<>();
     private final List<ConditionTreeInspection.Issue> issues = new ArrayList<>();
-    // 有违规项的节点路径：按表达式扫描一次算出，绘制时按路径查表，不再逐行扫 issues
+    // 按表达式扫描一次算出，绘制时按路径查表，避免逐行遍历 issues
     private final Set<String> flaggedPaths = new HashSet<>();
-    // 行文案缓存：键为节点路径，值已按行宽裁剪；只在表达式内容、注入选项、语言、字体或行宽变化时重建
+    // 键为节点路径，值已按行宽裁剪；表达式、注入选项、语言、字体或行宽变化时整批失效
     private final Map<String, String> rowLabels = new HashMap<>();
     private int rowLabelsEpoch = -1;
     private @Nullable Font rowLabelsFont;
     private @Nullable Object rowLabelsLanguage;
     private int rowLabelsWidth = -1;
-    // 内容代次：表达式重新校验或宿主注入的类型/参数摘要变化时自增，使行文案缓存失效
+    // 表达式重新校验或注入的类型/参数摘要变化时自增，使行文案缓存失效
     private int contentEpoch;
-    // 空树提示的裁剪结果：与字体、语言、可用宽度一起缓存
+    // 与字体、语言、可用宽度一起缓存
     private String emptyText = "";
     private int emptyTextWidth = -1;
     private @Nullable Font emptyTextFont;
     private @Nullable Object emptyTextLanguage;
-    // 已扫描的表达式，避免重复校验
+    // 避免内容未变时重复校验
     private @Nullable ConditionExpression inspectedExpression;
-    // 选中的节点路径
     private @Nullable String selectedPath;
-    // 悬停行下标，-1 表示无悬停
+    // -1 表示无悬停
     private int hoveredIndex = -1;
-    // 选中行矩形按值复用：选中行每帧要画选中底色与标记，几何不变时不重复分配
+    // 选中行每帧要画两次（底色与标记），几何不变时复用同一矩形
     private UiRect selectedRowRect = new UiRect(0, 0, 0, 0);
-    // 行高
     private int rowHeight = DEFAULT_ROW_HEIGHT;
-    // 条件类型选项
     private List<ConditionTreeContract.TypeOption> typeOptions = List.of();
-    // 空树提示
     private Component emptyMessage = Component.translatable(TypeLabels.UI_PREFIX + "tree.add_placeholder");
-    // 叶条件参数摘要，由宿主注入；为空时叶行只显示条件名
+    // 宿主注入；为空时叶行只显示条件名
     private @Nullable Function<ConditionNode.Leaf, Component> leafDetail;
-    // 进入画布的入口回调，参数为节点的树路径
+    // 参数为节点的树路径
     private @Nullable Consumer<String> onOpenCanvas;
     private boolean focused;
     private boolean visible = true;
-    // 是否可交互（只读摘要中表示是否允许导航与进入画布）
+    // 禁用时拒绝导航与进入画布
     private boolean enabled = true;
 
-    // 字体由 render 接收；保留构造参数以兼容现有组件 API。
+    /**
+     * 创建条件树摘要控件。
+     *
+     * @param theme 宿主主题，不可为 null
+     * @param font  保留以兼容组件构造签名；渲染字体由 {@link #render} 传入
+     */
     public UiConditionTreeSummary(UiHostTheme theme, @SuppressWarnings("unused") Font font) {
         this.theme = UiHostThemes.require(theme);
     }
 
-    // 设置进入画布的入口回调；控件不直接持有编辑器
+    /**
+     * 设置进入画布的入口回调。控件不直接持有编辑器，点击节点时只回调节点路径。
+     *
+     * @param handler 接收节点树路径的回调
+     */
     public UiConditionTreeSummary setOnOpenCanvas(Consumer<String> handler) {
         this.onOpenCanvas = handler;
         return this;
@@ -130,11 +126,20 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
 
     // ---- 数据 ----
 
+    /**
+     * 当前表达式。
+     *
+     * @return 当前表达式；未设置时为 {@link ConditionExpression#EMPTY}
+     */
     public ConditionExpression expression() {
         return expression;
     }
 
-    // 外部设置表达式：不触发变更回调，避免与宿主形成回环
+    /**
+     * 设置表达式并重建可见行。不触发变更回调，避免与宿主形成回环。
+     *
+     * @param newExpression 新表达式；null 按空表达式处理
+     */
     public void setExpression(ConditionExpression newExpression) {
         ConditionExpression next = newExpression == null ? ConditionExpression.EMPTY : newExpression;
         // ConditionExpression 是不可变 record：内容相等时可见行不会变化，跳过整树展平
@@ -145,52 +150,72 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         rebuild();
     }
 
-    // 结构是否完整（空表达式视为合法）
+    /**
+     * 结构是否完整。空表达式视为合法。
+     *
+     * @return 结构合法且没有违规项时为 true
+     */
     public boolean isValid() {
         return expression.isStructurallyValid() && issues.isEmpty();
     }
 
-    public int nodeCount() {
-        return expression.nodeCount();
-    }
-
-    public int leafCount() {
-        return expression.leafCount();
-    }
-
+    /**
+     * 表达式深度。
+     *
+     * @return 根节点深度为 1，空表达式为 0
+     */
     public int depth() {
         return expression.depth();
     }
 
-    // 违规项明细（只读）
+    /**
+     * 违规项明细。
+     *
+     * @return 不可变的违规项快照
+     */
     public List<ConditionTreeInspection.Issue> issues() {
         return List.copyOf(issues);
     }
 
     // ---- 配置 ----
 
-    public UiConditionTreeSummary setTypeOptions(List<ConditionTreeContract.TypeOption> options) {
+    /**
+     * 注入条件类型选项。选项标签参与行文案，重新注入会使文案缓存失效。
+     *
+     * @param options 可选条件类型，不可为 null
+     */
+    public void setTypeOptions(List<ConditionTreeContract.TypeOption> options) {
         this.typeOptions = List.copyOf(options);
-        // 类型标签参与行文案：重新注入后旧缓存不再可信
         contentEpoch++;
-        return this;
     }
 
-    // 设置叶条件的参数摘要（参数值），为空时叶行只显示条件名
-    public UiConditionTreeSummary setLeafDetail(@Nullable Function<ConditionNode.Leaf, Component> detail) {
+    /**
+     * 设置叶条件的参数摘要。回调返回 null 或空文本时，叶行只显示条件名。
+     *
+     * @param detail 参数摘要回调；null 表示不显示参数
+     */
+    public void setLeafDetail(@Nullable Function<ConditionNode.Leaf, Component> detail) {
         this.leafDetail = detail;
-        // 参数摘要由宿主回调提供：换回调后行文案必须重算
+        // 换回调后行文案必须重算
         contentEpoch++;
-        return this;
     }
 
-    public UiConditionTreeSummary setEmptyMessage(Component message) {
+    /**
+     * 设置空树提示文案。
+     *
+     * @param message 提示文案
+     */
+    public void setEmptyMessage(Component message) {
         this.emptyMessage = message;
-        // 空树提示参与裁剪缓存：换文案后下次绘制必须重新裁剪
+        // 文案参与裁剪缓存：下次绘制必须重新裁剪
         emptyTextWidth = -1;
-        return this;
     }
 
+    /**
+     * 设置行高。低于 9 的值按 9 处理。
+     *
+     * @param newRowHeight 新行高，单位为像素
+     */
     public UiConditionTreeSummary setRowHeight(int newRowHeight) {
         int next = Math.max(9, newRowHeight);
         // 行高没变时行几何不变，无需重建可见行
@@ -202,7 +227,11 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         return this;
     }
 
-    // 设置是否可交互；禁用时立即释放焦点
+    /**
+     * 设置是否可交互。禁用时立即释放焦点。
+     *
+     * @param next false 表示只读且不接收键盘操作
+     */
     public void setEnabled(boolean next) {
         enabled = next;
         if (!next) {
@@ -210,6 +239,11 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         }
     }
 
+    /**
+     * 设置是否可见。
+     *
+     * @param newVisible false 时不渲染、不接收输入
+     */
     public UiConditionTreeSummary setVisible(boolean newVisible) {
         this.visible = newVisible;
         return this;
@@ -217,49 +251,42 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
 
     // ---- 视图状态 ----
 
-    // 展开全部
-    public void expandAll() {
-        // 本来就没有折叠节点：可见行不会变化
-        if (collapsed.isEmpty()) {
-            return;
-        }
-        collapsed.clear();
-        rebuild();
-    }
-
-    // 将整棵树折叠为根节点
-    public void collapseAll() {
-        boolean collapseRoot = expression.root() != null;
-        // 已经是目标折叠态：重复点击不重建
-        if (collapsed.size() == (collapseRoot ? 1 : 0) && (!collapseRoot || collapsed.contains(ConditionTreeContract.ROOT_PATH))) {
-            return;
-        }
-        collapsed.clear();
-        if (collapseRoot) {
-            collapsed.add(ConditionTreeContract.ROOT_PATH);
-        }
-        rebuild();
-    }
-
-    // 选中的节点路径
+    /**
+     * 选中的节点路径。
+     *
+     * @return 节点路径；无选中时为 null
+     */
     @Override
     public @Nullable String selectedPath() {
         return selectedPath;
     }
 
-    // 选中的节点
+    /**
+     * 选中的节点。
+     *
+     * @return 选中节点；无选中或选中的是占位行时为 null
+     */
     @Override
     public @Nullable ConditionNode selectedNode() {
         Row row = selectedPath == null ? null : allNodes.get(selectedPath);
         return row == null ? null : row.node();
     }
 
-    // 可见行数
+    /**
+     * 当前可见行数，受折叠影响。
+     *
+     * @return 可见行数
+     */
     public int rowCount() {
         return rows.size();
     }
 
-    // 节点或其参数字段路径均可定位；先展开祖先再滚动到节点。
+    /**
+     * 按路径选中节点。参数为节点路径或其下参数字段路径：命中字段路径时选中最近的祖先节点，
+     * 并展开该节点的所有祖先、滚动到可见位置。
+     *
+     * @param path 条件树路径；null 清除选中
+     */
     @Override
     public void selectPath(@Nullable String path) {
         if (path == null) {
@@ -368,12 +395,16 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
                 ConditionTreeInspection.isOverflow(depth, nodeOrdinal, leafOrdinal),
                 ConditionTreeInspection.isDeep(depth)));
         issues.addAll(ConditionTreeInspection.nodeIssues(node, path, depth, nodeOrdinal, leafOrdinal));
-        if (node instanceof ConditionNode.AllOf all) {
-            inspectTerms(all.terms(), path, depthOffset, counters);
-        } else if (node instanceof ConditionNode.AnyOf any) {
-            inspectTerms(any.terms(), path, depthOffset, counters);
-        } else if (node instanceof ConditionNode.Inverted inverted && inverted.term() != null) {
-            inspect(inverted.term(), path + "." + RuleFields.TERM, depthOffset + 1, counters);
+        switch (node) {
+            case ConditionNode.AllOf(var terms) -> inspectTerms(terms, path, depthOffset, counters);
+            case ConditionNode.AnyOf(var terms) -> inspectTerms(terms, path, depthOffset, counters);
+            case ConditionNode.Inverted(var term) -> {
+                if (term != null) {
+                    inspect(term, path + "." + RuleFields.TERM, depthOffset + 1, counters);
+                }
+            }
+            case ConditionNode.Leaf ignored -> {
+            }
         }
     }
 
@@ -395,22 +426,22 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         if (isCollapsed(path)) {
             return;
         }
-        if (node instanceof ConditionNode.AllOf(var allTerms)) {
-            if (allTerms.isEmpty()) {
-                append(null, path + "." + RuleFields.TERMS + "[0]", depth + 1, index);
+        switch (node) {
+            case ConditionNode.AllOf(var terms) -> appendTerms(terms, path, depth, index);
+            case ConditionNode.AnyOf(var terms) -> appendTerms(terms, path, depth, index);
+            case ConditionNode.Inverted(var term) -> append(term, path + "." + RuleFields.TERM, depth + 1, index);
+            case ConditionNode.Leaf ignored -> {
             }
-            for (int i = 0; i < allTerms.size(); i++) {
-                append(allTerms.get(i), path + "." + RuleFields.TERMS + "[" + i + "]", depth + 1, index);
-            }
-        } else if (node instanceof ConditionNode.AnyOf(var anyTerms)) {
-            if (anyTerms.isEmpty()) {
-                append(null, path + "." + RuleFields.TERMS + "[0]", depth + 1, index);
-            }
-            for (int i = 0; i < anyTerms.size(); i++) {
-                append(anyTerms.get(i), path + "." + RuleFields.TERMS + "[" + i + "]", depth + 1, index);
-            }
-        } else if (node instanceof ConditionNode.Inverted(var invertedTerm)) {
-            append(invertedTerm, path + "." + RuleFields.TERM, depth + 1, index);
+        }
+    }
+
+    // 空组合补一个占位行，其余子项按 terms[i] 路径展开
+    private void appendTerms(List<ConditionNode> terms, String path, int depth, int parentIndex) {
+        if (terms.isEmpty()) {
+            append(null, path + "." + RuleFields.TERMS + "[0]", depth + 1, parentIndex);
+        }
+        for (int i = 0; i < terms.size(); i++) {
+            append(terms.get(i), path + "." + RuleFields.TERMS + "[" + i + "]", depth + 1, parentIndex);
         }
     }
 
@@ -418,6 +449,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         return collapsed.contains(path);
     }
 
+    // 返回该节点此前是否处于折叠态
     private boolean unfold(String path) {
         return collapsed.remove(path);
     }
@@ -445,7 +477,6 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         return -1;
     }
 
-    // 滚动到指定可见行
     private void ensureVisible(int index) {
         if (index < 0 || index >= rows.size()) {
             return;
@@ -453,7 +484,6 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         scrollView.ensureVisible(new UiRect(0, index * rowHeight, Math.max(0, scrollView.viewport().width()), rowHeight));
     }
 
-    // 选中行
     private @Nullable Row selectedRow() {
         if (selectedPath == null) {
             return null;
@@ -462,7 +492,6 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         return index < 0 ? null : rows.get(index);
     }
 
-    // 一屏可见行数
     private int visibleRowCount() {
         return Math.max(1, scrollView.viewport().height() / Math.max(1, rowHeight));
     }
@@ -509,7 +538,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         scrollView.renderScrollbar(graphics, theme.controlStyle(UiControlRole.SECONDARY));
     }
 
-    // 选中行矩形按值复用：同一行每帧要画两次（底色与标记），几何不变时不重复分配
+    // 几何不变时复用同一矩形，避免每帧分配
     private UiRect selectionBounds(int rowY, int rowWidth) {
         if (selectedRowRect.y() != rowY || selectedRowRect.width() != rowWidth || selectedRowRect.height() != rowHeight) {
             selectedRowRect = new UiRect(0, rowY, rowWidth, rowHeight);
@@ -566,7 +595,13 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         }
     }
 
-    // 完整行文案供宿主提示，窄树中截断的文本仍可读取。
+    /**
+     * 悬停行的完整文案，供宿主显示提示；窄树中被截断的文本可由此读取。
+     *
+     * @param mouseX 鼠标横坐标
+     * @param mouseY 鼠标纵坐标
+     * @return 完整行文案；指针不在内容区或无命中行时为 null
+     */
     public @Nullable Component tooltipAt(double mouseX, double mouseY) {
         if (!scrollView.canHoverContent(mouseX, mouseY)) {
             return null;
@@ -575,26 +610,21 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         return index < 0 ? null : rowLabel(rows.get(index));
     }
 
-    // 行文本：组节点用分组名（与「包成组」菜单共用 tree.node.*）与子项数，取反节点用与画布标题共用的运算符名
-    // （tree.operator.not），叶节点显示条件名与参数摘要，并附不完整/超限标记
+    // 组节点用分组名（与「包成组」菜单共用 tree.node.*）与子项数，取反节点用与画布标题共用的运算符名
+    // （tree.operator.not），叶节点显示条件名与参数摘要，并附不完整 / 超限标记
     private Component rowLabel(Row row) {
         ConditionNode node = row.node();
-        Component label;
         if (node == null) {
             return Component.translatable(TypeLabels.UI_PREFIX + "tree.add_placeholder");
-        } else if (node instanceof ConditionNode.AllOf all) {
-            label = Component.translatable(TypeLabels.UI_PREFIX + "tree.group_label",
-                    Component.translatable(TypeLabels.UI_PREFIX + "tree.node.all"), all.terms().size());
-        } else if (node instanceof ConditionNode.AnyOf any) {
-            label = Component.translatable(TypeLabels.UI_PREFIX + "tree.group_label",
-                    Component.translatable(TypeLabels.UI_PREFIX + "tree.node.any"), any.terms().size());
-        } else if (node instanceof ConditionNode.Inverted) {
-            label = Component.translatable(TypeLabels.UI_PREFIX + "tree.operator.not");
-        } else if (node instanceof ConditionNode.Leaf leaf) {
-            label = leafLabel(leaf);
-        } else {
-            label = Component.empty();
         }
+        Component label = switch (node) {
+            case ConditionNode.AllOf(var terms) -> Component.translatable(TypeLabels.UI_PREFIX + "tree.group_label",
+                    Component.translatable(TypeLabels.UI_PREFIX + "tree.node.all"), terms.size());
+            case ConditionNode.AnyOf(var terms) -> Component.translatable(TypeLabels.UI_PREFIX + "tree.group_label",
+                    Component.translatable(TypeLabels.UI_PREFIX + "tree.node.any"), terms.size());
+            case ConditionNode.Inverted ignored -> Component.translatable(TypeLabels.UI_PREFIX + "tree.operator.not");
+            case ConditionNode.Leaf leaf -> leafLabel(leaf);
+        };
         if (row.incomplete()) {
             label = label.copy().append(" ").append(Component.translatable(TypeLabels.UI_PREFIX + "tree.incomplete"));
         }
@@ -785,7 +815,6 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         return false;
     }
 
-    // 上下移动选中行
     private boolean moveSelection(int delta) {
         if (rows.isEmpty()) {
             return false;
@@ -805,7 +834,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         return true;
     }
 
-    // 左键：已展开则折叠，否则跳到父节点
+    // ←：已展开则折叠，否则跳到父节点
     private boolean collapseOrJumpToParent() {
         Row row = selectedRow();
         if (row == null) {
@@ -825,7 +854,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         return false;
     }
 
-    // 右键：已折叠则展开，否则进入第一个子节点
+    // →：已折叠则展开，否则进入第一个子节点
     private boolean expandOrEnterChild() {
         Row row = selectedRow();
         if (row == null) {

@@ -60,8 +60,7 @@ public record LootTableEffect(
                         .forGetter(LootTableEffect::luck),
                 CommonFields.delayTicks(LootTableEffect::delayTicks),
                 CommonFields.chance(LootTableEffect::chance)
-        ).apply(instance, (lootTable, luck, delayTicks, chance) ->
-                new LootTableEffect(lootTable, luck, delayTicks, chance)));
+        ).apply(instance, LootTableEffect::new));
     }
 
     // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。
@@ -70,7 +69,7 @@ public record LootTableEffect(
     // 容量需求：产物类型未知，按「每组至少 1 件物品」对区域物品总量保守占用容量。
     public static EffectType<LootTableEffect> effectType() {
         return new SimpleEffectType<>(ID, codec(), LootTableEffect::validateParams,
-                new EffectExecutor<LootTableEffect>() {
+                new EffectExecutor<>() {
                     @Override
                     public EffectResult execute(LootTableEffect effect, EffectContext context) {
                         return LootTableExecutor.execute(effect, context);
