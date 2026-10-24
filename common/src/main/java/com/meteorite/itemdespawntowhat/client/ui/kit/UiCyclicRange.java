@@ -2,7 +2,6 @@ package com.meteorite.itemdespawntowhat.client.ui.kit;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.function.Function;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 import org.jetbrains.annotations.Nullable;
@@ -18,7 +17,7 @@ import org.lwjgl.glfw.GLFW;
  * 周期、刻度（吸附网格）与标记都由宿主注入：kit 不读取 {@code Level}、不假定现实世界时间，
  * 也不猜测任何一天/一月多长。</p>
  */
-public final class UiCyclicRange implements UiFocusTarget, UiInputTarget, UiInputCapture.Target {
+public final class UiCyclicRange extends AbstractRangeCore implements UiFocusTarget, UiInputTarget, UiInputCapture.Target {
 
     /** 宿主注入的刻度；label 可为空表示只有刻度线。 */
     public record Tick(double tick, @Nullable Component label) {
@@ -28,7 +27,7 @@ public final class UiCyclicRange implements UiFocusTarget, UiInputTarget, UiInpu
     public record Marker(double tick, int color) {
     }
 
-    /** 周期区间交互生命周期回调。 */
+    /** 周期区间交互生命周期监听：一次操作内按 {@code began} → {@code previewed} → {@code committed} / {@code cancelled} 的顺序回调，用于区分预览与最终提交。 */
     @SuppressWarnings("unused")
     public interface Listener {
 
@@ -53,31 +52,15 @@ public final class UiCyclicRange implements UiFocusTarget, UiInputTarget, UiInpu
     public static final Listener NONE = new Listener() {
     };
 
-    private final UiInputCapture capture = new UiInputCapture();
     private double period;
     private double from;
     private double to;
     private double tickStep = 1.0D;
     private List<Tick> ticks = List.of();
     private List<Marker> markers = List.of();
-    private UiRangeEnd selectedEnd = UiRangeEnd.LOW;
     private @Nullable Listener listener;
-    private @Nullable Function<Double, Component> formatter;
-    private @Nullable Component label;
-    private UiRect bounds = new UiRect(0, 0, 0, 0);
-    private boolean enabled = true;
-    private boolean visible = true;
-    private boolean focused;
-    private int thumbWidth = 3;
-    private boolean dragging;
-    private double dragAnchorPointer;
-    private double dragAnchorValue;
-    // 一次操作的起点
-    private boolean operationActive;
     private double startFrom;
     private double startTo;
-    // 合并 key-up 的行为：当前按住的键码
-    private int heldKey = -1;
 
     public UiCyclicRange(double period) {
         this.period = requirePeriod(period);
@@ -177,15 +160,12 @@ public final class UiCyclicRange implements UiFocusTarget, UiInputTarget, UiInpu
         return this.wrap(Math.round(raw / this.tickStep) * this.tickStep);
     }
 
-    public UiRangeEnd selectedEnd() {
-        return this.selectedEnd;
-    }
-
     public UiRangeEnd selectEnd(UiRangeEnd end) {
         this.selectedEnd = Objects.requireNonNull(end, "end");
         return this.selectedEnd;
     }
 
+    @Override
     public UiRangeEnd cycleSelectedEnd() {
         this.selectedEnd = this.selectedEnd.other();
         return this.selectedEnd;
@@ -201,42 +181,6 @@ public final class UiCyclicRange implements UiFocusTarget, UiInputTarget, UiInpu
 
     public void setListener(@Nullable Listener listener) {
         this.listener = listener;
-    }
-
-    public @Nullable Function<Double, Component> formatter() {
-        return this.formatter;
-    }
-
-    public void setFormatter(@Nullable Function<Double, Component> formatter) {
-        this.formatter = formatter;
-    }
-
-    public UiRect bounds() {
-        return this.bounds;
-    }
-
-    public void setBounds(int x, int y, int width, int height) {
-        this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
-    }
-
-    public int thumbWidth() {
-        return this.thumbWidth;
-    }
-
-    public void setThumbWidth(int thumbWidth) {
-        this.thumbWidth = Math.max(1, thumbWidth);
-    }
-
-    public int trackLeft() {
-        return this.bounds.x() + this.thumbWidth;
-    }
-
-    public int trackRight() {
-        return Math.max(this.trackLeft() + 1, this.bounds.right() - this.thumbWidth);
-    }
-
-    public int trackWidth() {
-        return Math.max(1, this.trackRight() - this.trackLeft());
     }
 
     // 刻度在轨道上的比例；刻度已折返，因此总在 [0,1)
@@ -255,15 +199,6 @@ public final class UiCyclicRange implements UiFocusTarget, UiInputTarget, UiInpu
         return Math.min(snapped, this.endTick());
     }
 
-    public boolean containsPointer(double pointerX, double pointerY) {
-        return this.bounds.contains(pointerX, pointerY);
-    }
-
-    // 是否正在拖动
-    public boolean isDragging() {
-        return this.dragging;
-    }
-
     // 当前端是否被按下（供宿主渲染）
     public boolean isPressed() {
         return this.dragging || this.heldKey != -1;
@@ -271,25 +206,9 @@ public final class UiCyclicRange implements UiFocusTarget, UiInputTarget, UiInpu
 
     @Override
     public boolean mousePressed(UiInputContext context) {
-        if (!this.visible || !this.enabled || context.button() != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
+        if (!this.beginPress(context)) {
             return false;
         }
-        if (!this.containsPointer(context.pointerX(), context.pointerY())) {
-            return false;
-        }
-        if (this.dragging) {
-            this.endInteraction(UiInputCapture.EndReason.RELEASE);
-        }
-        UiRangeEnd target = this.hitEnd(context.pointerX());
-        if (target == null) {
-            this.cycleSelectedEnd();
-        } else {
-            this.selectedEnd = target;
-        }
-        this.capture.begin(this);
-        this.dragging = true;
-        this.beginOperation();
-        this.dragAnchorPointer = context.pointerX();
         this.dragAnchorValue = this.selectedTick();
         this.previewSelected(this.tickAtPointer(context.pointerX()));
         // 点击轨道后从预览位置继续拖动，避免回跳到点击前的端点。
@@ -299,7 +218,7 @@ public final class UiCyclicRange implements UiFocusTarget, UiInputTarget, UiInpu
 
     @Override
     public boolean mouseDragged(UiInputContext context) {
-        if (!this.dragging || !this.capture.isCapturedBy(this)) {
+        if (!this.canDrag()) {
             return false;
         }
         double perPixel = this.trackWidth() <= 0 ? 0.0D : this.period / this.trackWidth();
@@ -309,17 +228,8 @@ public final class UiCyclicRange implements UiFocusTarget, UiInputTarget, UiInpu
     }
 
     @Override
-    public boolean mouseReleased(UiInputContext context) {
-        if (!this.dragging) {
-            return false;
-        }
-        this.capture.release();
-        return true;
-    }
-
-    @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!this.visible || !this.enabled) {
+        if (!this.acceptsKey()) {
             return false;
         }
         return switch (keyCode) {
@@ -330,17 +240,6 @@ public final class UiCyclicRange implements UiFocusTarget, UiInputTarget, UiInpu
             case GLFW.GLFW_KEY_ESCAPE -> this.cancelInteraction();
             default -> false;
         };
-    }
-
-    @Override
-    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
-        if (this.heldKey == -1 || keyCode != this.heldKey) {
-            return false;
-        }
-        this.heldKey = -1;
-        // 方向键重复只在 key-up 合并为一次提交
-        this.endInteraction(UiInputCapture.EndReason.RELEASE);
-        return true;
     }
 
     /**
@@ -356,103 +255,20 @@ public final class UiCyclicRange implements UiFocusTarget, UiInputTarget, UiInpu
         return this.oneShotSelected(raw);
     }
 
-    // 统一结束入口：宿主隐藏/禁用/卸载/失焦范围切换/关闭以及释放都走这里
-    public void endInteraction(UiInputCapture.EndReason reason) {
-        Objects.requireNonNull(reason, "reason");
-        this.dragging = false;
-        this.heldKey = -1;
-        if (this.capture.isCapturedBy(this)) {
-            this.capture.end(reason);
-            return;
-        }
-        this.finishOperation(reason);
-    }
-
-    // 控件从界面卸载
-    public void unmount() {
-        this.endInteraction(UiInputCapture.EndReason.UNMOUNTED);
-    }
-
-    // 焦点作用域切换（模态打开、页面切换）
-    public void onFocusScopeChanged() {
-        this.endInteraction(UiInputCapture.EndReason.FOCUS_SCOPE_CHANGED);
-    }
-
-    // 宿主关闭
-    public void onHostClosed() {
-        this.endInteraction(UiInputCapture.EndReason.HOST_CLOSED);
-    }
-
-    @Override
-    public void captureEnded(UiInputCapture.EndReason reason) {
-        this.finishOperation(reason);
-    }
-
-    public boolean isEnabled() {
-        return this.enabled;
-    }
-
-    // 转为禁用时结束未完成的交互（回退）
-    public void setEnabled(boolean enabled) {
-        if (this.enabled && !enabled) {
-            this.endInteraction(UiInputCapture.EndReason.DISABLED);
-        }
-        this.enabled = enabled;
-    }
-
-    public boolean isVisible() {
-        return this.visible;
-    }
-
-    // 转为隐藏时结束未完成的交互（回退）
-    public void setVisible(boolean visible) {
-        if (this.visible && !visible) {
-            this.endInteraction(UiInputCapture.EndReason.HIDDEN);
-        }
-        this.visible = visible;
-    }
-
-    @Override
-    public boolean canFocus() {
-        return this.visible && this.enabled;
-    }
-
-    @Override
-    public void setFocused(boolean focused) {
-        this.focused = focused;
-    }
-
-    @Override
-    public boolean isFocused() {
-        return this.focused;
-    }
-
-    @Override
-    public boolean activate() {
-        return false;
-    }
-
-    @Override
-    public @Nullable Component accessibleName() {
-        return this.label;
-    }
-
-    public @Nullable Component label() {
-        return this.label;
-    }
-
-    public void setLabel(@Nullable Component label) {
-        this.label = label;
-    }
-
     // 命中端点；两端重叠（区分不出）时返回 null，由调用方切换当前端
-    private @Nullable UiRangeEnd hitEnd(double pointerX) {
+    @Override
+    protected @Nullable UiRangeEnd hitEnd(double pointerX) {
         int lowX = this.xOf(this.from);
         int highX = this.xOf(this.to);
-        if (Math.abs(lowX - highX) <= 4) {
+        if (Math.abs(lowX - highX) <= OVERLAP_TOLERANCE_PX) {
             return null;
         }
         return Math.abs(pointerX - lowX) <= Math.abs(pointerX - highX) ? UiRangeEnd.LOW : UiRangeEnd.HIGH;
+    }
+
+    @Override
+    protected boolean canStartPress() {
+        return true;
     }
 
     private boolean adjustByKey(int keyCode, double direction) {
@@ -486,14 +302,6 @@ public final class UiCyclicRange implements UiFocusTarget, UiInputTarget, UiInpu
         return true;
     }
 
-    private boolean cancelInteraction() {
-        if (!this.operationActive && !this.capture.isCapturedBy(this)) {
-            return false;
-        }
-        this.endInteraction(UiInputCapture.EndReason.CANCEL);
-        return true;
-    }
-
     private boolean previewSelected(double raw) {
         double next = this.snapTick(raw);
         if (this.selectedEnd == UiRangeEnd.LOW) {
@@ -513,11 +321,8 @@ public final class UiCyclicRange implements UiFocusTarget, UiInputTarget, UiInpu
         return true;
     }
 
-    private void beginOperation() {
-        if (this.operationActive) {
-            return;
-        }
-        this.operationActive = true;
+    @Override
+    protected void onOperationBegan() {
         this.startFrom = this.from;
         this.startTo = this.to;
         if (this.listener != null) {
@@ -525,18 +330,13 @@ public final class UiCyclicRange implements UiFocusTarget, UiInputTarget, UiInpu
         }
     }
 
-    private void finishOperation(UiInputCapture.EndReason reason) {
-        this.dragging = false;
-        this.heldKey = -1;
-        if (!this.operationActive) {
-            return;
-        }
+    @Override
+    protected void onOperationFinished(UiInputCapture.EndReason reason) {
         double beganFrom = this.startFrom;
         double beganTo = this.startTo;
         double currentFrom = this.from;
         double currentTo = this.to;
         boolean changed = currentFrom != beganFrom || currentTo != beganTo;
-        this.operationActive = false;
         if (this.listener == null) {
             return;
         }

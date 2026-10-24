@@ -81,8 +81,10 @@
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiFloatingPanel}（拖动 / 折叠 / 贴边吸附 / 贴底抽屉）</li>
  * </ul>
  *
- * <p><b>内部实现</b>（同为 {@code public}，但不承诺兼容，宿主不应依赖）：没有独立的内部类型，
- * 内部口径都落在各类的非公开成员上——{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiDocument}
+ * <p><b>内部实现</b>（同为 {@code public}，但不承诺兼容，宿主不应依赖）：公开类型之外只有包内可见的
+ * 共享外壳 {@code AbstractRangeCore}（{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiCyclicRange} 与
+ * {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeSlider} 共同的输入生命周期与容器几何），
+ * 其余内部口径落在各类的非公开成员上——{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiDocument}
  * 的排版缓存与私有几何公式、{@code UiMetrics} 的计时细节等。
  * 它们可以随实现改动而不进变更记录。</p>
  *
