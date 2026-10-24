@@ -108,6 +108,9 @@ public final class RuleEditorScreen extends Screen {
     private final UiModalStack modals = new UiModalStack(THEME);
     private @Nullable RuleSaveOverlay saveOverlay;
 
+    // 草稿冲刷只做一次：关闭路径会连续经过 closeEditor / onClose / removed
+    private boolean released;
+
     private boolean saving() {
         return workspace.state() == RuleEditClientState.APPLYING;
     }
@@ -1031,9 +1034,7 @@ public final class RuleEditorScreen extends Screen {
         if (saving()) {
             return;
         }
-        if (editPage.blockNavigation()) {
-            return;
-        }
+        editPage.flushPendingEdits();
         if (!model.hasDirty()) {
             closeEditor();
             return;
@@ -1061,16 +1062,18 @@ public final class RuleEditorScreen extends Screen {
         modals.push(modal);
     }
 
-    // 关闭编辑界面：释放页面、结束工作区会话，再由 onClose 统一冲刷草稿
+    // 关闭编辑界面：先冲刷草稿再结束工作区会话——会话结束会立刻摘屏并触发 removed，
+    // 之后再改页面就来不及写盘了
     private void closeEditor() {
-        editPage.close();
+        flushDrafts();
         workspace.close("screen_closed");
         this.onClose();
     }
 
-    // 外部切屏或断线也会调用 removed，及时释放预览实体持有的客户端世界。
+    // 外部切屏或断线也会调用 removed：这条路径不走 onClose，未应用的修改必须在这里写盘。
     @Override
     public void removed() {
+        flushDrafts();
         EntityPreviewIcons.clear();
         RulePreviewIcons.clear();
         BlockPreviewIcons.clear();
@@ -1085,11 +1088,20 @@ public final class RuleEditorScreen extends Screen {
         }
         EntityPreviewIcons.clear();
         BlockPreviewIcons.clear();
+        flushDrafts();
+        super.onClose();
+    }
+
+    // 关屏前把未应用的表单输入并入草稿并立即写盘（断线 / 关游戏 / 关界面都能恢复）。
+    // 保存中由服务端回执收尾，这里不碰页面状态；重复调用只生效一次。
+    private void flushDrafts() {
+        if (released || saving()) {
+            return;
+        }
+        released = true;
         editPage.applyAllForms();
         editPage.close();
-        // P6：关屏前把未应用草稿写盘（断线 / 关游戏 / 关界面都能恢复）
         model.persistNow();
-        super.onClose();
     }
 
     // ---- 小工具 ----
