@@ -3,7 +3,6 @@ package com.meteorite.itemdespawntowhat.client.ui.theme;
 import com.meteorite.itemdespawntowhat.client.ui.kit.PixelSliderPainter;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlStyle;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderSkin;
@@ -18,10 +17,10 @@ import net.minecraft.client.gui.GuiGraphics;
  * {@link UiHostThemes#defaultTheme()} 仍是像素外观，其它页面在未显式注入时画面不变。</p>
  *
  * <p>控件可见的调色板与像素主题相同：两种皮肤的差别在控件颜色之外的外壳描边与层次上，
- * 画布色 {@code canvas*} 本就是扁平取值，因此 {@link UiHostPalette} 可直接使用。度量沿用宿主级常量，
- * 行高与内边距与像素皮肤一致；滑块的数值与输入契约不变，仅颜色换成扁平档。</p>
+ * 画布色 {@code canvas*} 本就是扁平取值，因此 {@link UiHostPalette} 可直接使用。度量与共用外壳原语
+ * 继承自 {@link AbstractHostTheme}；滑块的数值与输入契约不变，仅颜色换成扁平档。</p>
  */
-public final class UiFlatTheme implements UiHostTheme {
+public final class UiFlatTheme extends AbstractHostTheme {
 
     // 无状态主题，全局共用一个实例
     static final UiFlatTheme INSTANCE = new UiFlatTheme();
@@ -77,41 +76,6 @@ public final class UiFlatTheme implements UiHostTheme {
     }
 
     @Override
-    public UiHostPalette palette() {
-        return UiHostPalette.hostPalette();
-    }
-
-    @Override
-    public int padding() {
-        return UiTheme.PADDING;
-    }
-
-    @Override
-    public int rowHeight() {
-        return UiTheme.ROW_HEIGHT;
-    }
-
-    @Override
-    public int textOffset() {
-        return UiTheme.TEXT_OFFSET;
-    }
-
-    @Override
-    public int headerHeight() {
-        return UiTheme.HEADER_HEIGHT;
-    }
-
-    @Override
-    public int border() {
-        return UiTheme.BORDER;
-    }
-
-    @Override
-    public int selectMarkerWidth() {
-        return UiTheme.SELECT_MARKER_WIDTH;
-    }
-
-    @Override
     public int textColor(boolean enabled) {
         return enabled ? UiFlatPalette.PANEL_TEXT : UiPalette.TEXT_DISABLED;
     }
@@ -148,12 +112,6 @@ public final class UiFlatTheme implements UiHostTheme {
             case COMPACT -> new UiSliderSkin(COMPACT_SLIDER, PixelSliderPainter.INSTANCE);
             case ROOMY -> new UiSliderSkin(ROOMY_SLIDER, PixelSliderPainter.INSTANCE);
         };
-    }
-
-    // 浮动调板外壳：画布页的浮动调板与面板使用扁平描边样式
-    @Override
-    public UiControlStyle panelStyle() {
-        return UiFlatSkin.PANEL_STYLE;
     }
 
     // 功能栏与工具列格子：扁平反馈样式
@@ -262,28 +220,4 @@ public final class UiFlatTheme implements UiHostTheme {
         UiFlatSkin.drawSurface(graphics, rect, fill, UiFlatPalette.PANEL_BORDER);
     }
 
-    @Override
-    public UiIcon icon(int row, boolean disabled) {
-        return UiFlatSkin.icon(row, disabled);
-    }
-
-    @Override
-    public void drawChrome(GuiGraphics graphics, UiRect rect) {
-        UiFlatSkin.drawChrome(graphics, rect);
-    }
-
-    @Override
-    public void drawStatusBar(GuiGraphics graphics, UiRect rect) {
-        UiFlatSkin.drawStatusBar(graphics, rect);
-    }
-
-    @Override
-    public void drawHelp(GuiGraphics graphics, UiRect rect) {
-        UiFlatSkin.drawHelp(graphics, rect);
-    }
-
-    @Override
-    public void drawSurface(GuiGraphics graphics, UiRect rect, int fill, int border) {
-        UiFlatSkin.drawSurface(graphics, rect, fill, border);
-    }
 }

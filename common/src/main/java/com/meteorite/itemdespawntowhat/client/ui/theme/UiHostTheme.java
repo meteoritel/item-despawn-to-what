@@ -48,14 +48,6 @@ public interface UiHostTheme extends UiStyleSource {
     int ICON_MOVE_DOWN = UiFlatSkin.ICON_MOVE_DOWN;
     // 页面层经主题消费；本包内暂无调用点
     int ICON_WRAP_ALL = UiFlatSkin.ICON_WRAP_ALL;
-    // 页面层经主题消费；本包内暂无调用点
-    // 条件树「任一满足」字形：画布页暂未接入，保留常量供后续宿主使用
-    @SuppressWarnings("unused")
-    int ICON_GROUP_ANY = UiFlatSkin.ICON_GROUP_ANY;
-    // 页面层经主题消费；本包内暂无调用点
-    // 条件树「任一包成组」字形：与 ICON_GROUP_ANY 同批保留
-    @SuppressWarnings("unused")
-    int ICON_WRAP_ANY = UiFlatSkin.ICON_WRAP_ANY;
 
     // 控件可见的调色板
     UiHostPalette palette();
@@ -100,12 +92,6 @@ public interface UiHostTheme extends UiStyleSource {
     // 滑块外观
     @Override
     UiSliderSkin sliderSkin(UiSliderRole role);
-
-    // 浮动调板外壳样式（画布页的面板与条带属于宿主外壳规格，kit 的控件角色不表达它）
-    // 页面层经主题消费；本包内暂无调用点
-    // 浮动调板外壳样式：当前由 widget/screen 侧持有，宿主入口先保留
-    @SuppressWarnings("unused")
-    UiControlStyle panelStyle();
 
     // 功能栏与工具列格子样式（与浮动调板同属宿主外壳）
     // 页面层经主题消费；本包内暂无调用点
@@ -166,12 +152,6 @@ public interface UiHostTheme extends UiStyleSource {
 
     // 取图标图集中的一个图标；disabled 为真时取禁用字形
     UiIcon icon(int row, boolean disabled);
-
-    // 功能栏 / 工具列底板
-    void drawChrome(GuiGraphics graphics, UiRect rect);
-
-    // 底部状态栏底板
-    void drawStatusBar(GuiGraphics graphics, UiRect rect);
 
     // 帮助浮层底板
     // 页面层经主题消费；本包内暂无调用点

@@ -22,8 +22,6 @@ public final class UiFlatPalette {
     public static final int CHROME_FILL = 0xFFB4B4B4;
     // 外壳描边
     public static final int CHROME_BORDER = 0xFF3C3C3C;
-    // 状态栏底色
-    public static final int STATUS_FILL = 0xFF8E8E8E;
     // 状态栏文本
     public static final int STATUS_TEXT = UiPalette.TEXT_PRIMARY;
     // 状态栏次要文本

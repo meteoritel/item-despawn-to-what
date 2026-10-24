@@ -2,7 +2,6 @@ package com.meteorite.itemdespawntowhat.client.ui.theme;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlStyle;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderSkin;
@@ -12,9 +11,10 @@ import net.minecraft.client.gui.GuiGraphics;
  * 默认宿主主题：现行灰色像素外观，绘制与用色逐项转发到既有 {@link UiTheme} 与 {@link UiPalette}。
  *
  * <p>本类是「宿主入口默认提供现行主题」的落点：映射不复制数值，只把静态入口改为
- * 可注入的实例方法，因此既有画面不变，控件与屏幕也不再静态取色。</p>
+ * 可注入的实例方法，因此既有画面不变，控件与屏幕也不再静态取色。度量与共用外壳原语
+ * 继承自 {@link AbstractHostTheme}，本类只保留像素皮肤特有的用色、样式与绘制。</p>
  */
-public final class UiPixelTheme implements UiHostTheme {
+public final class UiPixelTheme extends AbstractHostTheme {
 
     // 无状态主题，全局共用一个实例
     static final UiPixelTheme INSTANCE = new UiPixelTheme();
@@ -22,50 +22,10 @@ public final class UiPixelTheme implements UiHostTheme {
     private UiPixelTheme() {
     }
 
-    @Override
-    public UiHostPalette palette() {
-        return UiHostPalette.hostPalette();
-    }
-
-    // 浮动调板外壳：底色、标题栏、内凹滚动槽与 1 像素描边
-    private static final UiControlStyle PANEL_STYLE = new UiControlStyle(
-            UiPalette.PANEL_FILL, UiPalette.HEADER_FILL, UiPalette.HEADER_FILL, UiPalette.CONTROL_SELECTED,
-            UiPalette.CONTROL_DISABLED, UiPalette.FOCUS_OUTLINE, UiPalette.SLOT_FILL, UiPalette.PANEL_BORDER_DARK);
-
     // 功能栏与工具列格子：常态与控件同底，悬停/按下/选中给出像素反馈
     private static final UiControlStyle STRIP_STYLE = new UiControlStyle(
             UiPalette.CONTROL_FILL, UiPalette.CONTROL_HOVER, UiPalette.CONTROL_PRESSED, UiPalette.CONTROL_SELECTED,
             UiPalette.CONTROL_DISABLED, UiPalette.FOCUS_OUTLINE, UiPalette.SLOT_FILL, UiPalette.CONTROL_BEVEL_DARK);
-
-    @Override
-    public int padding() {
-        return UiTheme.PADDING;
-    }
-
-    @Override
-    public int rowHeight() {
-        return UiTheme.ROW_HEIGHT;
-    }
-
-    @Override
-    public int textOffset() {
-        return UiTheme.TEXT_OFFSET;
-    }
-
-    @Override
-    public int headerHeight() {
-        return UiTheme.HEADER_HEIGHT;
-    }
-
-    @Override
-    public int border() {
-        return UiTheme.BORDER;
-    }
-
-    @Override
-    public int selectMarkerWidth() {
-        return UiTheme.SELECT_MARKER_WIDTH;
-    }
 
     @Override
     public int textColor(boolean enabled) {
@@ -104,12 +64,6 @@ public final class UiPixelTheme implements UiHostTheme {
             case COMPACT -> new UiSliderSkin(UiTheme.sliderStyle(), UiTheme.cardSliderPainter());
             case ROOMY -> new UiSliderSkin(UiTheme.cardSliderStyle(), UiTheme.cardSliderPainter());
         };
-    }
-
-    // 浮动调板外壳：像素页不装配浮动调板，给出同一分工的像素配色以保证接口完整
-    @Override
-    public UiControlStyle panelStyle() {
-        return PANEL_STYLE;
     }
 
     // 功能栏与工具列格子：像素页不使用，配色取控件底色与面板描边
@@ -186,31 +140,5 @@ public final class UiPixelTheme implements UiHostTheme {
     @Override
     public void drawChip(GuiGraphics graphics, UiRect rect, boolean selected, boolean hovered) {
         UiTheme.drawChip(graphics, rect, selected, hovered);
-    }
-
-    // 图标图集与外壳原语由宿主共用实现提供（UiFlatSkin 持有图集与扁平底板）；像素页不装配外壳，取值一致
-    @Override
-    public UiIcon icon(int row, boolean disabled) {
-        return UiFlatSkin.icon(row, disabled);
-    }
-
-    @Override
-    public void drawChrome(GuiGraphics graphics, UiRect rect) {
-        UiFlatSkin.drawChrome(graphics, rect);
-    }
-
-    @Override
-    public void drawStatusBar(GuiGraphics graphics, UiRect rect) {
-        UiFlatSkin.drawStatusBar(graphics, rect);
-    }
-
-    @Override
-    public void drawHelp(GuiGraphics graphics, UiRect rect) {
-        UiFlatSkin.drawHelp(graphics, rect);
-    }
-
-    @Override
-    public void drawSurface(GuiGraphics graphics, UiRect rect, int fill, int border) {
-        UiFlatSkin.drawSurface(graphics, rect, fill, border);
     }
 }

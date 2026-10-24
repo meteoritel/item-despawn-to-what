@@ -10,7 +10,7 @@ import net.minecraft.resources.ResourceLocation;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiNineSlice;
 
-/***
+/**
  * 灰色像素主题。
  * <p>集中提供三样东西：控件样式（{@link UiControlStyle}）、像素边框绘制、文本颜色。
  * 编辑卡片与分段按钮采用抗锯齿圆角底图，其余传统控件保留像素边框。
@@ -275,7 +275,6 @@ public final class UiTheme {
         drawBevel(graphics, rect, UiPalette.PANEL_BORDER_LIGHT, UiPalette.PANEL_BORDER_DARK);
     }
 
-    // 绘制一条水平分隔线
     public static void drawDivider(GuiGraphics graphics, int x, int y, int width) {
         if (width <= 0) {
             return;
