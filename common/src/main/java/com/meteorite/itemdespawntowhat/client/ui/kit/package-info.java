@@ -9,7 +9,8 @@
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTransform}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiMetrics}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.TextMeasurer}、
- *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll}；
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll}、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiJsonText}（JSON 语法着色：按词法分类，供只读代码视图按类别取色）；
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiFlowLayout}（按可用宽度换行的流式排布，
  *       测量与实际摆放共用同一份几何）</li>
  *   <li>控件与交互：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiControl}、
@@ -39,7 +40,8 @@
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderWindow}（轨道显示窗口，可与数值域不同）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiNumbers}（数值文本互转：整数直出与定点小数、有限值解析）</li>
  *   <li>数值与文本绑定：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiValueTextBinding}（单值或区间文本的
- *       双向预览、提交、取消、无净变化收束与程序回填重入保护，转换规则由宿主注入）</li>
+ *       双向预览、提交、取消、无净变化收束与程序回填重入保护，转换规则由宿主注入）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiLinkedValues}（驱动值到跟随值的联动写入、手动改写后停止跟随、resetManual 恢复）</li>
  *   <li>滑块：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiScalarSlider}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeSlider}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeValue}、
@@ -61,6 +63,7 @@
  *   <li>实体与加载预览：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiEntityPreview}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon.Rendered}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSpinner}；实体创建、缓存和兜底由宿主负责</li>
+ *   <li>进度：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiProgressBar}（宿主时间与样式驱动的平滑计数进度与未知总量往返动画）</li>
  *   <li>模型与图标轮播：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiModelBounds}（实际顶点测量与整圈适框）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiBlockPreview}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiCarousel}；数据解析与测量缓存由宿主负责</li>
@@ -96,7 +99,8 @@
  * （退出码 0 通过、1 有违规、2 配置错误）。脚本扫描本目录全部 {@code .java} 的 import 与全限定引用：
  * import 白名单为 {@code java.*} / {@code javax.*} / {@code net.minecraft.*} / {@code org.jetbrains.*} /
  * {@code org.joml.*} / {@code org.lwjgl.*}，另精确允许上述三个渲染类，不放开其父包；同一 kit 包内互相引用允许；本模组其它包与
- * {@code net.fabricmc.*} / {@code net.neoforged.*} / {@code com.google.gson.*} 一律禁用。</p>
+ * {@code net.fabricmc.*} / {@code net.neoforged.*} / {@code com.google.gson.*} 一律禁用；
+ * 同一脚本还核对本文件的登记清单：kit 顶层 {@code public} 类型未出现在本清单或内部实现说明里即失败。</p>
  *
  * <p><b>宿主适配层</b>：{@code client/ui/theme/}（把主题色映射成 {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderStyle} 等 kit 样式后注入）、
  * {@code client/ui/widget/}（把既有控件委托给 kit 核心并保持公开 API 兼容）与 {@code client/ui/prototype/} 属于宿主层，

@@ -7,7 +7,9 @@
       * 允许 kit 自身包内的引用：com.meteorite.itemdespawntowhat.client.ui.kit.*；
       * import 白名单：java.* / javax.* / net.minecraft.* / org.jetbrains.* / org.joml.* / org.lwjgl.*；
       * 禁用：本模组其它包（core、client.edit、client.net、client.ui.theme、client.ui.screen、
-        client.ui.widget 等）、net.fabricmc.*、net.neoforged.*、com.google.gson.*。
+        client.ui.widget 等）、net.fabricmc.*、net.neoforged.*、com.google.gson.*；
+      * 公开面登记：kit 目录下每个顶层 public 类型都必须出现在同目录 package-info.java 的公开面清单里，
+        漏登记同样列为违规，并列出缺失类名。
 
     命中任意一条即列出违规清单并以退出码 1 结束；全部通过则打印通过信息并以退出码 0 结束。
     目录不存在或没有 .java 文件时以退出码 2 结束（按配置错误处理）。
@@ -68,6 +70,11 @@ $violations = New-Object System.Collections.Generic.List[string]
 $scannedFiles = 0
 $scannedImports = 0
 
+# 顶层 public 类型（公开面）与 package-info 登记对账
+$publicTypes = New-Object System.Collections.Generic.List[string]
+$unregisteredTypes = New-Object System.Collections.Generic.List[string]
+$typePattern = '^public\s+(?:(?:final|abstract|sealed|non-sealed|strictfp)\s+)*(?:class|interface|enum|record|@interface)\s+([A-Za-z_][A-Za-z0-9_]*)'
+
 foreach ($file in $files) {
     $scannedFiles++
     $relative = $file.FullName.Substring($rootFull.Length).TrimStart('\', '/')
@@ -75,6 +82,11 @@ foreach ($file in $files) {
     for ($index = 0; $index -lt $lines.Count; $index++) {
         $raw = $lines[$index]
         $lineNo = $index + 1
+
+        # 三、顶层 public 类型：此处只收集，循环结束后与 package-info 对账
+        if ($raw -match $typePattern) {
+            $publicTypes.Add($Matches[1])
+        }
 
         # 一、import 行：按白名单 / 禁用集合逐条判定
         if ($raw -match $importPattern) {
@@ -119,8 +131,25 @@ foreach ($file in $files) {
     }
 }
 
+# 三、公开面登记：package-info 是本包公开面的权威登记
+$packageInfo = Join-Path -Path $kitFull -ChildPath 'package-info.java'
+if (-not (Test-Path -LiteralPath $packageInfo -PathType Leaf)) {
+    Write-Host ('[配置错误] kit 缺少 package-info.java：' + $packageInfo)
+    exit 2
+}
+$packageInfoText = Get-Content -LiteralPath $packageInfo -Raw -Encoding UTF8
+foreach ($typeName in $publicTypes) {
+    if ($packageInfoText -notmatch ('\b' + [regex]::Escape($typeName) + '\b')) {
+        $unregisteredTypes.Add($typeName)
+    }
+}
+foreach ($typeName in $unregisteredTypes) {
+    $violations.Add(('package-info.java [-登记缺失-] 顶层 public 类型 ' + $typeName + ' 未登记'))
+}
+
 Write-Host ('[信息] 扫描目录：' + $kitFull)
 Write-Host ('[信息] 扫描文件：' + $scannedFiles + ' 个，import：' + $scannedImports + ' 条')
+Write-Host ('[信息] 顶层 public 类型：' + $publicTypes.Count + ' 个，package-info 已登记：' + ($publicTypes.Count - $unregisteredTypes.Count) + ' 个')
 
 if ($violations.Count -gt 0) {
     Write-Host ''
@@ -134,5 +163,5 @@ if ($violations.Count -gt 0) {
 }
 
 Write-Host ''
-Write-Host ('[通过] kit 依赖边界检查通过：' + $scannedFiles + ' 个文件，0 处违规。')
+Write-Host ('[通过] kit 依赖边界检查通过：' + $scannedFiles + ' 个文件，' + $publicTypes.Count + ' 个顶层 public 类型全部登记，0 处违规。')
 exit 0
