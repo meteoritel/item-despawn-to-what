@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.kit;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.util.FormattedCharSequence;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -382,7 +383,7 @@ public final class UiDocument {
     }
 
     /** 排版缓存中的块，空白不进入绘制数组。 */
-    private record LayoutBlock(@org.jetbrains.annotations.NotNull UiRect rect, @Nullable RowPaint row,
+    private record LayoutBlock(@NotNull UiRect rect, @Nullable RowPaint row,
                                int dividerColor, @Nullable UiDocument frame) {}
 
     /** 行绘制数据与命中目标共用自然坐标，避免缩放时重建矩形。 */

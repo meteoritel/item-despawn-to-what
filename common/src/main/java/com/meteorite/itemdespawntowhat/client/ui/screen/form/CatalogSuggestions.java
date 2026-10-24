@@ -8,6 +8,7 @@ import com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalog;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogEntry;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
+import java.util.Set;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
@@ -17,7 +18,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-/***
+/**
  * 目录候选提供器：把表单字段（注册表提示串 / 字段名 / 字段类型）映射到服务端来源目录，
  * 让玩家按名字挑选物品、方块、实体、流体、战利品表、群系、维度与标签，而不必手打技术 id。
  * <p>数据来自 {@link RuleEditClientWorkspace} 已缓存的目录页；某类型首次被查询且会话处于
@@ -58,7 +59,7 @@ public final class CatalogSuggestions implements SuggestionProvider {
         }
         Map<String, Suggestion> candidates = new LinkedHashMap<>();
         for (RuleCatalogType type : types) {
-            java.util.Set<String> validTags = type == RuleCatalogType.TAG ? FieldCatalogChoices.tags(field) : null;
+            Set<String> validTags = type == RuleCatalogType.TAG ? FieldCatalogChoices.tags(field) : null;
             for (RuleCatalogEntry entry : entriesOf(type)) {
                 if (type == RuleCatalogType.FLUID
                         && FluidPreviewIcons.isExcluded(entry.id())) continue;

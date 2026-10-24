@@ -12,7 +12,7 @@ public sealed interface UiIcon permits UiIcon.Item, UiIcon.Sprite, UiIcon.Render
     int height();
     void render(GuiGraphics graphics, int x, int y);
 
-    /*** 固定测量尺寸的受控自定义绘制入口，生命周期与失败处理由宿主负责。 */
+    /** 固定测量尺寸的受控自定义绘制入口，生命周期与失败处理由宿主负责。 */
     record Rendered(int width, int height, Painter painter) implements UiIcon {
         public Rendered {
             if (width <= 0 || height <= 0) throw new IllegalArgumentException("Invalid icon size");
@@ -23,7 +23,7 @@ public sealed interface UiIcon permits UiIcon.Item, UiIcon.Sprite, UiIcon.Render
         }
     }
 
-    /*** 绘制器仅接收已有绘制上下文与布局框。 */
+    /** 绘制器仅接收已有绘制上下文与布局框。 */
     @FunctionalInterface
     interface Painter {
         void render(GuiGraphics graphics, UiRect bounds);

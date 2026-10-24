@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.shared;
 
-import com.meteorite.itemdespawntowhat.client.edit.ConditionEditorRegistry;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
+import com.meteorite.itemdespawntowhat.client.edit.EditorRegistries;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
@@ -138,7 +138,7 @@ public final class BuiltinConditionSummaries {
 
     // 周围方块：逐方向「方向 + 方块名」，方向名与方块名都走本地化
     private static @Nullable Component surroundingBlocks(RuleValue condition, ResourceLocation type) {
-        TypeEditorDescriptor descriptor = ConditionEditorRegistry.find(type);
+        TypeEditorDescriptor descriptor = EditorRegistries.CONDITIONS.find(type);
         if (descriptor == null) {
             return null;
         }
@@ -250,14 +250,14 @@ public final class BuiltinConditionSummaries {
 
     // 气候轴名取自描述符标签；描述符缺字段时退回字段名，保证仍可读
     private static Component axisLabel(ResourceLocation type, String axis) {
-        TypeEditorDescriptor descriptor = ConditionEditorRegistry.find(type);
+        TypeEditorDescriptor descriptor = EditorRegistries.CONDITIONS.find(type);
         EditorField field = descriptor == null ? null : descriptor.field(axis);
         return field == null ? Component.literal(axis) : Component.translatable(field.labelKey());
     }
 
     // 天气枚举语言键中的分组名取自描述符，缺省与表单一致地回落字段名
     private static String weatherEnumGroup(ResourceLocation type) {
-        TypeEditorDescriptor descriptor = ConditionEditorRegistry.find(type);
+        TypeEditorDescriptor descriptor = EditorRegistries.CONDITIONS.find(type);
         EditorField field = descriptor == null ? null : descriptor.field(RuleFields.CONDITION_WEATHER);
         String group = field == null ? null : field.enumGroup();
         return group == null || group.isBlank() ? RuleFields.CONDITION_WEATHER : group;

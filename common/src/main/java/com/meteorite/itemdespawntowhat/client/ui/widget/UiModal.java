@@ -17,7 +17,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import org.lwjgl.glfw.GLFW;
 
-/***
+/**
  * 模态弹窗。
  * <p>结构固定为「标题栏 + 内容区 + 按钮栏」。内容可以是纯文本消息、自定义渲染回调，
  * 也可以是任意 {@link UiWidget}（例如列表、树、输入框），由弹窗负责把鼠标、滚轮与键盘事件转发给它。
@@ -26,7 +26,7 @@ import org.lwjgl.glfw.GLFW;
  */
 public final class UiModal implements UiWidget {
 
-    // 内容渲染回调
+    /** 自定义内容渲染回调：只负责绘制内容，内容区矩形与鼠标坐标由弹窗给出；{@code content} 为绝对屏幕坐标。 */
     @FunctionalInterface
     public interface ContentRenderer {
         // 在内容区内渲染；content 为绝对屏幕坐标矩形
@@ -77,7 +77,6 @@ public final class UiModal implements UiWidget {
     private UiAction onCancel;
     // 关闭回调（由弹窗栈注入）
     private Consumer<UiModal> closeHandler;
-    // 是否可见
     private boolean visible = true;
     private Consumer<UiHistoryShortcut> onHistoryChanged = shortcut -> {};
     private Runnable onClosed = () -> {};
@@ -126,20 +125,17 @@ public final class UiModal implements UiWidget {
 
     // ---- 配置 ----
 
-    // 设置标题
     public UiModal title(Component title) {
         this.title = title;
         return this;
     }
 
-    // 设置纯文本消息
     public UiModal message(Component message) {
         this.message = message;
         this.contentHeight = 0;
         return this;
     }
 
-    // 设置自定义内容渲染
     public UiModal content(ContentRenderer renderer, int height) {
         this.contentRenderer = renderer;
         this.contentWidget = null;
@@ -147,7 +143,6 @@ public final class UiModal implements UiWidget {
         return this;
     }
 
-    // 设置自定义内容控件
     public UiModal contentWidget(UiWidget widget, int height) {
         this.contentWidget = widget;
         this.contentRenderer = null;
@@ -155,7 +150,6 @@ public final class UiModal implements UiWidget {
         return this;
     }
 
-    // 设置期望宽度
     public UiModal preferredWidth(int width) {
         this.preferredWidth = Math.max(MIN_WIDTH, width);
         return this;
@@ -191,7 +185,6 @@ public final class UiModal implements UiWidget {
         return this;
     }
 
-    // 设置点击遮罩是否关闭
     public UiModal closeOnBackdrop(boolean closeOnBackdrop) {
         this.closeOnBackdrop = closeOnBackdrop;
         return this;
@@ -203,7 +196,6 @@ public final class UiModal implements UiWidget {
         return this;
     }
 
-    // 设置取消回调
     public UiModal onCancel(UiAction action) {
         this.onCancel = action;
         return this;
@@ -241,12 +233,10 @@ public final class UiModal implements UiWidget {
         return contentRect;
     }
 
-    // 设置关闭回调
     void setCloseHandler(Consumer<UiModal> closeHandler) {
         this.closeHandler = closeHandler;
     }
 
-    // 设置是否可见
     public UiModal setVisible(boolean visible) {
         this.visible = visible;
         return this;

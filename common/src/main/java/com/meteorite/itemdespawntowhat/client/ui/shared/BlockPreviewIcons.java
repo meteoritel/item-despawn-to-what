@@ -6,12 +6,13 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiModelBounds;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import net.minecraft.Util;
+import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
 
-/*** 方块预览的宿主缓存；只对可见模型测量一次，资源或世界切换时失效。 */
+/** 方块预览的宿主缓存；只对可见模型测量一次，资源或世界切换时失效。 */
 public final class BlockPreviewIcons {
     private static final Map<String, Preview> CACHE = new LinkedHashMap<>(32, 0.75F, true);
     private static Object generation;
@@ -19,7 +20,7 @@ public final class BlockPreviewIcons {
     // 没有可见模型（告示牌等由 BlockEntityRenderer 绘制的方块）时的中性占位标记
     private static final UiIcon UNAVAILABLE = CatalogPreviewIcons.unavailableMarker(16, 16);
 
-    /*** 保存默认方块状态和实际顶点范围，失败不在每一帧重复探测。 */
+    /** 保存默认方块状态和实际顶点范围，失败不在每一帧重复探测。 */
     private static final class Preview {
         private final BlockState state;
         private @Nullable UiModelBounds bounds;
@@ -34,7 +35,7 @@ public final class BlockPreviewIcons {
     public static UiIcon icon(String id) {
         return new UiIcon.Rendered(18, 18, (graphics, box) -> {
             Object resources = EntityPreviewIcons.generation();
-            Object nextWorld = net.minecraft.client.Minecraft.getInstance().level;
+            Object nextWorld = Minecraft.getInstance().level;
             if (generation != resources || world != nextWorld) { CACHE.clear(); generation = resources; world = nextWorld; }
             Preview preview = CACHE.computeIfAbsent(normalized(id), key -> {
                 ResourceLocation location = ResourceLocation.tryParse(key);

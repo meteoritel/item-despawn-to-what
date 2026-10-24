@@ -3,7 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.kit;
 import java.util.List;
 import net.minecraft.client.gui.GuiGraphics;
 
-/***
+/**
  * 固定尺寸的图标轮播。
  * <p>默认按固定间隔自动推进；宿主一旦手动选中某一项（点击条目、键盘选择或步进），轮播固定在该项，
  * 直到宿主显式调用 {@link #resume(long)} 恢复自动推进。

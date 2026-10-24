@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
-import com.meteorite.itemdespawntowhat.client.edit.ConditionEditorRegistry;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
+import com.meteorite.itemdespawntowhat.client.edit.EditorRegistries;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
@@ -231,7 +231,7 @@ public final class ConditionDescription {
     // 非内建条件：只读描述符给出只读提示，其余交给通用摘要
     private static List<DescriptionLine> generic(RuleValue condition, ResourceLocation type, int indent) {
         List<DescriptionLine> lines = new ArrayList<>();
-        TypeEditorDescriptor descriptor = ConditionEditorRegistry.find(type);
+        TypeEditorDescriptor descriptor = EditorRegistries.CONDITIONS.find(type);
         if (descriptor != null && descriptor.readOnly()) {
             lines.add(note(UI + "tree.parameters_readonly", indent));
         }
@@ -259,14 +259,14 @@ public final class ConditionDescription {
 
     // 字段标签优先取描述符注册的键，缺字段时按内建条件键名兜底
     private static Component fieldLabel(ResourceLocation type, String field, String fallbackSuffix) {
-        TypeEditorDescriptor descriptor = ConditionEditorRegistry.find(type);
+        TypeEditorDescriptor descriptor = EditorRegistries.CONDITIONS.find(type);
         EditorField editorField = descriptor == null ? null : descriptor.field(field);
         return Component.translatable(editorField == null ? UI + fallbackSuffix : editorField.labelKey());
     }
 
     // 天气枚举键前缀：分组名优先取描述符，缺失时与表单一致地回落
     private static String weatherEnumPrefix(ResourceLocation type) {
-        TypeEditorDescriptor descriptor = ConditionEditorRegistry.find(type);
+        TypeEditorDescriptor descriptor = EditorRegistries.CONDITIONS.find(type);
         EditorField editorField = descriptor == null ? null : descriptor.field(RuleFields.CONDITION_WEATHER);
         String group = editorField == null ? null : editorField.enumGroup();
         return UI + "enum." + (group == null || group.isBlank() ? "weather_kind" : group);

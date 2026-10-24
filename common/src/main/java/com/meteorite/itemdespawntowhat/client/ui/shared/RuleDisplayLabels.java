@@ -1,8 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.shared;
 
-import com.meteorite.itemdespawntowhat.client.edit.ConditionEditorRegistry;
-import com.meteorite.itemdespawntowhat.client.edit.EffectEditorRegistry;
+import com.meteorite.itemdespawntowhat.client.edit.EditorRegistries;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import java.util.Locale;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -15,10 +15,10 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 import org.jetbrains.annotations.Nullable;
 
-/*** 客户端展示名称：直接读取已加载的注册表与语言，不触发目录请求。 */
+/** 客户端展示名称：直接读取已加载的注册表与语言，不触发目录请求。 */
 public final class RuleDisplayLabels {
     private static final String TAG_PREFIX = "#";
-    private static final String TAG_LABEL_KEY = "gui.itemdespawntowhat.edit.tag.label";
+    private static final String TAG_LABEL_KEY = TypeLabels.UI_PREFIX + "tag.label";
     private RuleDisplayLabels() {
         throw new UnsupportedOperationException("Utility class");
     }
@@ -45,9 +45,9 @@ public final class RuleDisplayLabels {
         if (BuiltInRegistries.ENTITY_TYPE.containsKey(id)) {
             return BuiltInRegistries.ENTITY_TYPE.get(id).getDescription();
         }
-        TypeEditorDescriptor descriptor = EffectEditorRegistry.find(id);
+        TypeEditorDescriptor descriptor = EditorRegistries.EFFECTS.find(id);
         if (descriptor == null) {
-            descriptor = ConditionEditorRegistry.find(id);
+            descriptor = EditorRegistries.CONDITIONS.find(id);
         }
         return descriptor == null ? null : descriptor.label();
     }

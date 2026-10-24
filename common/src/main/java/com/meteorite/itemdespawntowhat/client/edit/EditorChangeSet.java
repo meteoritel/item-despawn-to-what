@@ -11,7 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/***
+/**
  * 客户端变更集装配器：把若干草稿装配成一次 {@link RuleEditChangeSet} 提交。
  * 同一规则 id 只保留最后一次编辑；id 缺少命名空间时按本模组命名空间补齐。
  */
@@ -30,12 +30,10 @@ public final class EditorChangeSet {
         this.expectedVersion = expectedVersion;
     }
 
-    // 提交依据的服务端版本
     public int expectedVersion() {
         return this.expectedVersion;
     }
 
-    // 是否没有任何编辑
     public boolean isEmpty() {
         return this.edits.isEmpty();
     }

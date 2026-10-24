@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.prototype;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiPalette;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
@@ -23,7 +24,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
 
-/***
+/**
  * 开发用原型屏。
  * <p>在一屏内展示灰色像素主题与全部通用控件：按钮四种变体、单行文本输入框、
  * 可滚动列表、可展开条件树、模态弹窗与多层弹窗栈。
@@ -244,7 +245,7 @@ public final class UiPrototypeScreen extends Screen {
         }
         graphics.drawString(this.font, Component.translatable("gui.itemdespawntowhat.prototype.section.list"), pad() + 2, this.listLabelY, UiPalette.TEXT_SECONDARY, false);
         graphics.drawString(this.font, Component.translatable("gui.itemdespawntowhat.prototype.section.tree"), (this.treeLabelY == this.listLabelY ? this.conditionTree.bounds().x() : pad()) + 2, this.treeLabelY, UiPalette.TEXT_SECONDARY, false);
-        var pointer = com.meteorite.itemdespawntowhat.client.ui.kit.UiPointer.gated(this.modalStack.isEmpty(), mouseX, mouseY);
+        var pointer = UiPointer.gated(this.modalStack.isEmpty(), mouseX, mouseY);
         int visibleMouseX = pointer.x();
         int visibleMouseY = pointer.y();
         for (UiWidget widget : this.baseWidgets) {
@@ -353,7 +354,6 @@ public final class UiPrototypeScreen extends Screen {
 
     // ---- 弹窗示例 ----
 
-    // 打开演示弹窗
     private void openDemoModal() {
         UiTextInput modalInput = new UiTextInput(this.font, Component.translatable("gui.itemdespawntowhat.prototype.modal.hint"));
         UiModal modal = UiModal.create(this.font)

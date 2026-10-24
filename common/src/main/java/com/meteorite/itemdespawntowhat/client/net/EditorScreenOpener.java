@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.net;
 
-/***
+/**
  * 界面层实现的回调：client/net 只负责在客户端主线程调用，不 import 任何 client/ui 或 client/edit 类。
  */
 public interface EditorScreenOpener {

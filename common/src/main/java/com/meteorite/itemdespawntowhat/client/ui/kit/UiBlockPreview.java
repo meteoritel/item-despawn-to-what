@@ -18,7 +18,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Quaternionf;
 
-/*** 使用真实方块模型和材质，围绕模型中轴旋转；满亮、无环境遮蔽、无方向光。 */
+/** 使用真实方块模型和材质，围绕模型中轴旋转；满亮、无环境遮蔽、无方向光。 */
 public final class UiBlockPreview {
     private static final float PITCH = (float) Math.toRadians(22);
     // 预览统一按满亮取样，与方块在 GUI 中的展示一致

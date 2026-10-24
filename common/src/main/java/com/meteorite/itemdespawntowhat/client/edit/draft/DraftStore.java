@@ -19,7 +19,7 @@ import java.util.Locale;
 import java.util.stream.Stream;
 import org.jetbrains.annotations.Nullable;
 
-/***
+/**
  * 草稿文件仓库：客户端本地目录 {@code config/itemdespawntowhat/client/editor-drafts/}，
  * 一个编辑目标一份 JSON 文件。
  * <p>与游戏目录的关系：Minecraft 的工作目录就是游戏根目录，因此这里用相对路径
@@ -120,7 +120,6 @@ public final class DraftStore {
         deleteQuietly(temporaryOf(target));
     }
 
-    // 清空草稿目录中本模组写出的文件
     public void clear() {
         if (!Files.isDirectory(this.directory)) {
             return;

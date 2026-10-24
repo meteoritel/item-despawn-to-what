@@ -15,7 +15,7 @@ import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
-/***
+/**
  * 分段选择控件：把少量互斥取值渲染成一排等宽按钮（枚举取值用）。
  * <p>选中段用主题的 selected 九宫格（中心色为 {@code CONTROL_SELECTED}）绘制，未选中段用 control 九宫格，
  * 两者底图不同；段内文字统一用 {@code TEXT_PRIMARY}，避免浅蓝选中底上的白字对比度不足。
@@ -33,7 +33,7 @@ public final class UiSegmentedControl implements UiWidget, UiFocusTarget {
     // 键盘焦点指示点距段左边界的像素
     private static final int FOCUS_DOT_INSET = 4;
 
-    /*** 单个分段选项 */
+    /** 单个分段选项：{@code value} 为回传宿主的选择值且必填，{@code label} 为段内文案，为空时用 {@code value} 兜底。 */
     public record Option(String value, Component label) {
         public Option {
             Objects.requireNonNull(value, "value");

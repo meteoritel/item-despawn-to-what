@@ -6,7 +6,7 @@ import net.minecraft.client.renderer.MultiBufferSource;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.NotNull;
 
-/*** 以 renderer 实际提交的顶点测量模型，不使用实体碰撞框或方块形状推断可视范围。 */
+/** 以 renderer 实际提交的顶点测量模型，不使用实体碰撞框或方块形状推断可视范围。 */
 public record UiModelBounds(float centerX, float centerY, float centerZ,
                             float width, float height, float depth) {
     // 绕竖轴整圈共用一个包围直径；俯仰时同时为顶部和底部留出投影空间。
@@ -18,7 +18,7 @@ public record UiModelBounds(float centerX, float centerY, float centerZ,
                 Math.max(0, box.height() - 2) / Math.max(0.01F, projectedHeight)) * 0.90F;
     }
 
-    /*** 测量回调只生成顶点，不提交真实绘制；宿主负责缓存测量结果。 */
+    /** 测量回调只生成顶点，不提交真实绘制；宿主负责缓存测量结果。 */
     @FunctionalInterface
     public interface Renderer {
         void render(PoseStack pose, MultiBufferSource buffers);
@@ -36,7 +36,7 @@ public record UiModelBounds(float centerX, float centerY, float centerZ,
         } catch (RuntimeException exception) { return null; }
     }
 
-    /*** 只累计空间范围，颜色、贴图、法线和光照不影响几何测量。 */
+    /** 只累计空间范围，颜色、贴图、法线和光照不影响几何测量。 */
     private static final class BoundsConsumer implements VertexConsumer {
         private float minX = Float.POSITIVE_INFINITY, minY = Float.POSITIVE_INFINITY, minZ = Float.POSITIVE_INFINITY;
         private float maxX = Float.NEGATIVE_INFINITY, maxY = Float.NEGATIVE_INFINITY, maxZ = Float.NEGATIVE_INFINITY;

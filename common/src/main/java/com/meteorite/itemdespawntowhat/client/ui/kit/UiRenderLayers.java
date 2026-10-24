@@ -2,7 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.kit;
 
 import net.minecraft.client.gui.GuiGraphics;
 
-/*** 同一作用域内统一背景、模型和前景；每层弹窗完整覆盖上一层及其 tooltip。 */
+/** 同一作用域内统一背景、模型和前景；每层弹窗完整覆盖上一层及其 tooltip。 */
 public final class UiRenderLayers {
     public static final int ICON = 20;
     public static final int FOREGROUND = 40;

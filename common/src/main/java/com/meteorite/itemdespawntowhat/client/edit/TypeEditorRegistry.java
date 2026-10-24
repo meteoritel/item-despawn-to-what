@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.client.edit;
 
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -38,7 +39,6 @@ public final class TypeEditorRegistry {
         descriptors.put(id, descriptor);
     }
 
-    // 是否已注册
     public boolean isRegistered(ResourceLocation id) {
         return descriptors.containsKey(id);
     }
@@ -59,12 +59,12 @@ public final class TypeEditorRegistry {
 
     // 全部已注册描述
     public Collection<TypeEditorDescriptor> all() {
-        return java.util.List.copyOf(descriptors.values());
+        return List.copyOf(descriptors.values());
     }
 
     // 全部已注册 id
     public Set<ResourceLocation> ids() {
-        return java.util.Set.copyOf(descriptors.keySet());
+        return Set.copyOf(descriptors.keySet());
     }
 
     // 已注册数量

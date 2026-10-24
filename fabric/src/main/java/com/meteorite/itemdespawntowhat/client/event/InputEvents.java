@@ -11,7 +11,6 @@ public class InputEvents {
     /** 注册客户端 tick 钩子：驱动编辑工作区的会话心跳。 */
     public static void register() {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            // 驱动编辑工作区的会话心跳
             RuleEditClientWorkspace.instance().tick();
         });
     }

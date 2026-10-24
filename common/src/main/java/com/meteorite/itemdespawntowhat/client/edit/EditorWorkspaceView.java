@@ -13,13 +13,12 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
-/***
+/**
  * 界面层使用的编辑工作区只读视图：不暴露任何传输 payload 类型，
  * 界面只按 statusCode 派生出的 {@link RuleSaveStatus} 分支，禁止解析文案。
  */
 public interface EditorWorkspaceView {
 
-    // 当前会话状态
     RuleEditClientState state();
 
     // 是否可编辑（仅 ACTIVE 可编辑）
@@ -100,7 +99,6 @@ public interface EditorWorkspaceView {
      */
     int referenceLifespanTicks();
 
-    // 提交变更集 JSON
     boolean save(@Nullable String operationId, @Nullable String changeSetJson);
 
     /** @return 当前保存进度；无保存或实现不提供进度时为 null */

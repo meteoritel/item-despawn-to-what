@@ -5,7 +5,7 @@ import java.util.Collections;
 import java.util.List;
 import net.minecraft.network.chat.Component;
 
-/***
+/**
  * 树节点。
  * <p>只承载展示数据（业务值、显示文本、子节点、展开状态），
  * 不包含布局与渲染逻辑，几何计算由 {@link UiTreeView} 负责。
@@ -18,7 +18,6 @@ public final class UiTreeNode<T> {
     private final Component label;
     // 子节点
     private final List<UiTreeNode<T>> children = new ArrayList<>();
-    // 是否展开
     private boolean expanded;
 
     public UiTreeNode(T value, Component label) {
@@ -54,23 +53,19 @@ public final class UiTreeNode<T> {
         return Collections.unmodifiableList(children);
     }
 
-    // 是否叶子节点
     public boolean isLeaf() {
         return children.isEmpty();
     }
 
-    // 是否展开
     public boolean isExpanded() {
         return expanded;
     }
 
-    // 设置展开状态
     public UiTreeNode<T> setExpanded(boolean expanded) {
         this.expanded = expanded;
         return this;
     }
 
-    // 切换展开状态
     public UiTreeNode<T> toggleExpanded() {
         this.expanded = !expanded;
         return this;

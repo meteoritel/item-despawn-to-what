@@ -50,6 +50,5 @@ public final class UiNavigationHistory<State> {
         return false;
     }
 
-    /** 清空全部快照。 */
     public void clear() { entries.clear(); }
 }

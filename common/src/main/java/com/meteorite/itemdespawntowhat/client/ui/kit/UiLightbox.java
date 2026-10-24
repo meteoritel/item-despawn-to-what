@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit;
 
+import java.util.Map;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -7,6 +8,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 import java.util.Objects;
+import org.lwjgl.glfw.GLFW;
 
 /**
  * 灯箱外壳：可复用的模态查看器——遮罩、内容视口、标题与描述、控制按钮组、键盘焦点与关闭语义。
@@ -124,7 +126,7 @@ public final class UiLightbox {
     private Content content;
     @Nullable private UiNineSlice surface;
     @Nullable private Component barHint;
-    private java.util.Map<String, UiIcon> icons = java.util.Map.of();
+    private Map<String, UiIcon> icons = Map.of();
     @Nullable private Gallery gallery;
     @Nullable private Font font;
     @Nullable private Component title;
@@ -219,8 +221,8 @@ public final class UiLightbox {
         this.dirty = true;
     }
 
-    public void setIcons(java.util.Map<String, UiIcon> icons) {
-        this.icons = java.util.Map.copyOf(icons);
+    public void setIcons(Map<String, UiIcon> icons) {
+        this.icons = Map.copyOf(icons);
         this.dirty = true;
     }
 
@@ -461,16 +463,16 @@ public final class UiLightbox {
 
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         layoutIfPossible();
-        if (keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE) {
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
             onClose.run();
             return true;
         }
         if (gallery != null && gallery.total() > 1) {
-            if (keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT) {
+            if (keyCode == GLFW.GLFW_KEY_LEFT) {
                 navigate(-1);
                 return true;
             }
-            if (keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_RIGHT) {
+            if (keyCode == GLFW.GLFW_KEY_RIGHT) {
                 navigate(1);
                 return true;
             }

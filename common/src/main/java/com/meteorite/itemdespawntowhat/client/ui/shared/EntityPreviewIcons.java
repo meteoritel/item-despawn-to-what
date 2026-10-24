@@ -17,7 +17,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.Blocks;
 import org.jetbrains.annotations.Nullable;
 
-/*** 宿主的可见实体模型缓存和中性占位标记；上限 256，切服、语言或模型资源变化时失效。 */
+/** 宿主的可见实体模型缓存和中性占位标记；上限 256，切服、语言或模型资源变化时失效。 */
 public final class EntityPreviewIcons {
     private static final int MAX_ENTRIES = 256;
     // 没有可见渲染器（NoopRenderer 等）时的中性占位标记，与方块预览共用
@@ -28,7 +28,7 @@ public final class EntityPreviewIcons {
     private static Object language;
     private static Object models;
 
-    /*** 失败也缓存，避免缺模型实体在每一帧重复创建或抛错。 */
+    /** 失败也缓存，避免缺模型实体在每一帧重复创建或抛错。 */
     private static final class Preview {
         private @Nullable Entity entity;
         private float width;

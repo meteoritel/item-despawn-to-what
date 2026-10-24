@@ -40,7 +40,7 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class RuleValue {
 
-    // 值形态
+    /** 值形态判别：决定 {@link #kind()} 与各 is* 方法走哪条分支；形态按当前元素内容判定，不缓存。 */
     public enum Kind {
         // 显式 null
         NULL,
@@ -362,7 +362,7 @@ public final class RuleValue {
         return element;
     }
 
-    /*** 映射构造器：按插入顺序保存键值，重复键覆盖。 */
+    /** 映射构造器：按插入顺序保存键值，重复键覆盖。 */
     public static final class Mapping {
 
         private final Map<String, RuleValue> values = new LinkedHashMap<>();
@@ -398,7 +398,7 @@ public final class RuleValue {
         }
     }
 
-    /*** 列表构造器：按加入顺序保存元素。 */
+    /** 列表构造器：按加入顺序保存元素。 */
     public static final class Sequence {
 
         private final List<RuleValue> values = new ArrayList<>();

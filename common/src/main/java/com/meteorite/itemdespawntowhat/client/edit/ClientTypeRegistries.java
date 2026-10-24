@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.edit;
 
+import com.mojang.serialization.JsonOps;
+import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
@@ -10,16 +12,16 @@ import com.meteorite.itemdespawntowhat.core.type.BuiltinEffectTypes;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
-/***
+/**
  * 客户端类型注册表持有者：内置条件/效果类型在客户端只建一次，供热加载与条件树控件共用。
  * 本类不引入任何服务端数据，注册表内容与数据包无关（内置类型是编译期固定的）。
  */
 public final class ClientTypeRegistries {
 
     // 内置条件类型注册表（惰性）
-    private static volatile com.meteorite.itemdespawntowhat.core.api.TypeRegistry<ConditionType<?>> conditions;
+    private static volatile TypeRegistry<ConditionType<?>> conditions;
     // 内置效果类型注册表（惰性）
-    private static volatile com.meteorite.itemdespawntowhat.core.api.TypeRegistry<EffectType<?>> effects;
+    private static volatile TypeRegistry<EffectType<?>> effects;
 
     // 工具类
     private ClientTypeRegistries() {
@@ -27,7 +29,7 @@ public final class ClientTypeRegistries {
     }
 
     // 内置条件类型注册表
-    public static com.meteorite.itemdespawntowhat.core.api.TypeRegistry<ConditionType<?>> conditions() {
+    public static TypeRegistry<ConditionType<?>> conditions() {
         var local = conditions;
         if (local == null) {
             synchronized (ClientTypeRegistries.class) {
@@ -42,7 +44,7 @@ public final class ClientTypeRegistries {
     }
 
     // 内置效果类型注册表
-    public static com.meteorite.itemdespawntowhat.core.api.TypeRegistry<EffectType<?>> effects() {
+    public static TypeRegistry<EffectType<?>> effects() {
         var local = effects;
         if (local == null) {
             synchronized (ClientTypeRegistries.class) {
@@ -63,7 +65,7 @@ public final class ClientTypeRegistries {
             return null;
         }
         ConditionExpression parsed = RuleCodecs.conditionExpressionCodec(conditions())
-                .parse(com.mojang.serialization.JsonOps.INSTANCE, body)
+                .parse(JsonOps.INSTANCE, body)
                 .result()
                 .orElse(null);
         if (parsed != null && parsed.root() instanceof ConditionNode.Leaf leaf) {

@@ -127,7 +127,7 @@ final class FormRowLayout {
             int controlWidth = sideLabel ? Math.max(0, availableWidth - rowLabelWidth - LABEL_GAP) : availableWidth;
             int reserved = 0;
             for (var pickerButton : row.pickers) reserved += actionWidth(font, pickerButton) + 2;
-            for (com.meteorite.itemdespawntowhat.client.ui.widget.UiButton action : row.actions) {
+            for (UiButton action : row.actions) {
                 reserved += actionWidth(font, action) + 2;
             }
             row.buttonsBelow = controlWidth - reserved < 64 && reserved > 0;

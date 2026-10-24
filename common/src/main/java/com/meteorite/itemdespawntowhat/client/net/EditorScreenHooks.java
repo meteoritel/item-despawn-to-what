@@ -4,7 +4,7 @@ import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/***
+/**
  * 注册槽：客户端初始化时由界面层注册实现，client/net 通过它有条件地打开/关闭界面。
  * 未注册时只记日志，绝不抛异常；未注册也不影响协议层其它功能。
  */

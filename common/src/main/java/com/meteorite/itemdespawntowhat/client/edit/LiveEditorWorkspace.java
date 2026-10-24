@@ -15,7 +15,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
-/***
+/**
  * {@link EditorWorkspaceView} 的实机实现：包装协议工作区 {@link RuleEditClientWorkspace}，
  * 把传输 payload 收敛在本类内，界面层因此不接触任何 payload 类型。
  */

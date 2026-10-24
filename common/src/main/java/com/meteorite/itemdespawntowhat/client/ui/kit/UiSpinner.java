@@ -2,7 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.kit;
 
 import net.minecraft.client.gui.GuiGraphics;
 
-/*** 由宿主时间驱动的追逐圆点加载动画，无贴图或逐帧资源创建。 */
+/** 由宿主时间驱动的追逐圆点加载动画，无贴图或逐帧资源创建。 */
 public final class UiSpinner {
     private UiSpinner() { }
 

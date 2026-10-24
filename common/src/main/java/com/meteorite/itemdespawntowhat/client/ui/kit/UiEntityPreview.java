@@ -9,7 +9,7 @@ import net.minecraft.world.phys.Vec3;
 import org.joml.Quaternionf;
 import org.jetbrains.annotations.Nullable;
 
-/*** 绘制宿主已创建的实体；不创建、不 tick、不加入世界，也不持有业务缓存。 */
+/** 绘制宿主已创建的实体；不创建、不 tick、不加入世界，也不持有业务缓存。 */
 public final class UiEntityPreview {
     private UiEntityPreview() { }
 

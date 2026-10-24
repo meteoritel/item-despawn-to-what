@@ -8,7 +8,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import org.jetbrains.annotations.Nullable;
 
-/***
+/**
  * 编辑器界面实现：注册到 {@link EditorScreenHooks} 后，client/net 在服务端授权成功时调用。
  * 只负责把 {@link RuleEditorScreen} 切到前台或关闭，不发起/结束会话，不引用任何网络传输负载类型。
  * 打开前工作区已处于 ACTIVE 并已发出快照请求，界面自行轮询工作区取数据。

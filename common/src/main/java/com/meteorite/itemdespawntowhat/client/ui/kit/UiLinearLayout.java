@@ -27,7 +27,7 @@ public final class UiLinearLayout {
     /** 排列方向：子项沿该轴依次排列，另一轴为交叉轴。 */
     public enum Axis { VERTICAL, HORIZONTAL }
 
-    /** 主轴尺寸规则。 */
+    /** 尺寸规则：{@code FIXED} 取给定像素，{@code CONTENT} 取已测尺寸，{@code REMAIN} 使用剩余空间。 */
     public enum SizeRule { FIXED, CONTENT, REMAIN }
 
     /**

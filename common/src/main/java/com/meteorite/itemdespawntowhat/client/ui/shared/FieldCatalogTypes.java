@@ -5,7 +5,7 @@ import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import java.util.Locale;
 import org.jetbrains.annotations.Nullable;
 
-/*** 字段到目录类型的映射：注册表提示优先，其后按字段名兜底，只覆盖能落到目录面板的类型。 */
+/** 字段到目录类型的映射：注册表提示优先，其后按字段名兜底，只覆盖能落到目录面板的类型。 */
 public final class FieldCatalogTypes {
 
     private FieldCatalogTypes() { }

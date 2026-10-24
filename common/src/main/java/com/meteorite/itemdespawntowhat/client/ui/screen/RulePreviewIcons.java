@@ -8,15 +8,17 @@ import com.meteorite.itemdespawntowhat.client.ui.shared.EventPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.TagPreviewIcons;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import com.mojang.blaze3d.systems.RenderSystem;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import org.jetbrains.annotations.Nullable;
 
-/*** 管理页和动作导航共用产出图标；图标只表示类型，文字保留完整方案信息。 */
+/** 管理页和动作导航共用产出图标；图标只表示类型，文字保留完整方案信息。 */
 public final class RulePreviewIcons {
     private static final float DISABLED_BRIGHTNESS = 0.35F;
-    private static final java.util.Map<String, UiIcon> ICONS = new java.util.LinkedHashMap<>(32, 0.75F, true);
+    private static final Map<String, UiIcon> ICONS = new LinkedHashMap<>(32, 0.75F, true);
     private RulePreviewIcons() { }
     public static void clear() { ICONS.clear(); }
 

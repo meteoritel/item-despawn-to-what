@@ -99,11 +99,8 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     // 垂直滚动偏移（像素）
     private int scrollOffset;
-    // 是否绘制行号栏
     private boolean lineNumbers = true;
-    // 是否可见
     private boolean visible = true;
-    // 是否持有焦点
     private boolean focused;
 
     /**
@@ -139,13 +136,11 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
         return this;
     }
 
-    /** 设置空正文时的提示文本。 */
     public UiCodeView setEmptyHint(@Nullable Component emptyHint) {
         this.emptyHint = emptyHint;
         return this;
     }
 
-    /** 设置是否绘制行号栏。 */
     public UiCodeView setLineNumbers(boolean lineNumbers) {
         this.lineNumbers = lineNumbers;
         this.rows = List.of();
@@ -153,13 +148,11 @@ public final class UiCodeView implements UiWidget, UiFocusTarget {
         return this;
     }
 
-    /** 设置无障碍名称。 */
     public UiCodeView setAccessibleName(@Nullable Component accessibleName) {
         this.accessibleName = accessibleName;
         return this;
     }
 
-    /** 设置是否可见。 */
     public UiCodeView setVisible(boolean visible) {
         this.visible = visible;
         return this;

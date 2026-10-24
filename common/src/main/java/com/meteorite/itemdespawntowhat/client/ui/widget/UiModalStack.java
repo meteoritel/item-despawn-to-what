@@ -16,7 +16,7 @@ import org.jetbrains.annotations.Nullable;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 
-/***
+/**
  * 模态弹窗栈。
  * <p>负责：遮罩绘制与淡入淡出、弹窗居中与逐层偏移、焦点在弹窗内部切换、
  * 以及把输入事件只投递给最上层弹窗（下层界面在栈非空时不再收到输入）。
@@ -57,19 +57,16 @@ public final class UiModalStack implements UiWidget {
         focusManager.setSpaceActivates(true);
     }
 
-    // 当前屏幕区域
     public UiRect bounds() {
         return bounds;
     }
 
-    // 更新屏幕区域并重新布局
     @Override
     public void setBounds(int x, int y, int width, int height) {
         this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
         relayout();
     }
 
-    // 是否为空
     public boolean isEmpty() {
         return modals.isEmpty();
     }
@@ -112,7 +109,6 @@ public final class UiModalStack implements UiWidget {
         onScopeChanged = handler;
     }
 
-    // 关闭最上层弹窗
     public boolean closeTop() {
         if (modals.isEmpty()) {
             return false;
@@ -123,7 +119,6 @@ public final class UiModalStack implements UiWidget {
         return true;
     }
 
-    // 关闭指定弹窗
     public void close(UiModal modal) {
         if (modals.remove(modal)) {
             modal.closed();
@@ -132,7 +127,6 @@ public final class UiModalStack implements UiWidget {
         }
     }
 
-    // 清空弹窗
     public void clear() {
         List<UiModal> closing = List.copyOf(modals);
         modals.clear();

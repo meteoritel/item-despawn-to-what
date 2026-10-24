@@ -35,11 +35,15 @@ import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalog;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogEntry;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import net.minecraft.client.gui.Font;
+import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
@@ -241,7 +245,7 @@ public final class RuleEditorPanelFactory {
             grid.setPage(mapper.page, mapper.pageCount);
             grid.setPageLimits(mapper.page > 0, mapper.hasNext);
             // 总数与语言不变时复用同一份状态文案；未知状态的加载/失败提示只在真值变化时下发
-            Object language = net.minecraft.locale.Language.getInstance();
+            Object language = Language.getInstance();
             if (mapper.notedTotal != mapper.total || mapper.notedLanguage != language) {
                 mapper.notedTotal = mapper.total;
                 mapper.notedLanguage = language;
@@ -353,12 +357,12 @@ public final class RuleEditorPanelFactory {
         private int mappedPage = -1;
         private UiCatalogGrid.Scope mappedScope = UiCatalogGrid.Scope.BOTH;
         private List<UiCatalogGrid.Entry> full = List.of();
-        private final java.util.Map<String, TagPreviewIcons.Tag> tagPreviews = new java.util.HashMap<>();
+        private final Map<String, TagPreviewIcons.Tag> tagPreviews = new HashMap<>();
 
         @Nullable
         List<UiCatalogGrid.Entry> map(EditorWorkspaceView workspace, RuleCatalogType type) {
             Object nextResources = EntityPreviewIcons.generation();
-            Object nextLanguage = net.minecraft.locale.Language.getInstance();
+            Object nextLanguage = Language.getInstance();
             if (resources != null && (resources != nextResources || language != nextLanguage)) {
                 workspace.invalidateDirectories(); cached = null;
             }
@@ -378,7 +382,7 @@ public final class RuleEditorPanelFactory {
                 List<UiCatalogGrid.Entry> mapped = new ArrayList<>();
                 boolean withItems = scope != UiCatalogGrid.Scope.TAG;
                 boolean withTags = includeTags && scope != UiCatalogGrid.Scope.ITEM;
-                java.util.Set<String> validTags = field != null && type == RuleCatalogType.TAG ? FieldCatalogChoices.tags(field) : null;
+                Set<String> validTags = field != null && type == RuleCatalogType.TAG ? FieldCatalogChoices.tags(field) : null;
                 for (RuleCatalogEntry entry : withItems ? catalog.entries() : List.<RuleCatalogEntry>of()) {
                     if (policy != null && policy.hidden(entry.id())) continue;
                     if (validTags != null && !validTags.contains(entry.id())) continue;
@@ -398,7 +402,7 @@ public final class RuleEditorPanelFactory {
                     }
                 }
                 if (withTags && tags != null && field != null) {
-                    java.util.Set<String> allowed = FieldCatalogChoices.tags(field);
+                    Set<String> allowed = FieldCatalogChoices.tags(field);
                     for (RuleCatalogEntry entry : tags.entries()) {
                         if (!allowed.contains(entry.id())) continue;
                         var tag = TagPreviewIcons.resolve(type, entry.id());

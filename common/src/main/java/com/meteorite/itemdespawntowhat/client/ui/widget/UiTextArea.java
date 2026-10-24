@@ -74,12 +74,9 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
     private @Nullable Runnable onCancel;
     // 无障碍名称
     private @Nullable Component accessibleName;
-    // 是否可见
     private boolean visible = true;
-    // 是否可编辑
     private boolean editable = true;
     private boolean selectableWhenReadOnly;
-    // 是否持有焦点
     private boolean focused;
     // 程序化写入期间不触发变化回调与长度回退
     private boolean programmatic;
@@ -124,7 +121,6 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
         return field;
     }
 
-    // 当前文本
     public String value() {
         return textField.value();
     }
@@ -152,7 +148,6 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
         this.maxLength = Math.max(0, maxLength);
     }
 
-    // 设置是否可编辑
     public void setEditable(boolean editable) {
         if (!editable && !selectableWhenReadOnly) endInteraction(UiInputCapture.EndReason.DISABLED);
         this.editable = editable;
@@ -164,17 +159,14 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
         this.selectableWhenReadOnly = selectable;
     }
 
-    // 设置占位提示
     public void setHint(@Nullable Component hint) {
         this.hint = hint;
     }
 
-    // 设置文本变化回调
     public void setOnChanged(@Nullable Runnable onChanged) {
         this.onChanged = onChanged;
     }
 
-    // 设置「输入超限被拒绝」回调
     public void setOnOverflow(@Nullable Runnable onOverflow) {
         this.onOverflow = onOverflow;
     }
@@ -184,17 +176,14 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
         this.onCancel = onCancel;
     }
 
-    // 设置可见行数
     public void setRows(int rows) {
         this.rows = Math.max(1, rows);
     }
 
-    // 设置无障碍名称
     public void setAccessibleName(@Nullable Component accessibleName) {
         this.accessibleName = accessibleName;
     }
 
-    // 设置是否可见
     public void setVisible(boolean visible) {
         selection.setVisible(visible);
         this.visible = visible;
@@ -387,7 +376,7 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
             restore(shortcut == UiHistoryShortcut.UNDO ? textHistory.undo() : textHistory.redo());
             return true;
         }
-        if (keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE) {
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
             if (onCancel != null) {
                 onCancel.run();
                 return true;

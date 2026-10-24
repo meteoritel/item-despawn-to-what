@@ -5,6 +5,7 @@ import org.jetbrains.annotations.Nullable;
 
 /** 撤销快捷键只派发到当前作用域；作用域内的文本控件优先，历史由宿主提供。 */
 public final class UiHistoryDispatcher {
+    /** 活动作用域的按键处理：返回 {@code true} 表示已消费，历史快捷键不再派发到其他作用域。 */
     @FunctionalInterface
     public interface KeyHandler {
         boolean keyPressed(int keyCode, int scanCode, int modifiers);

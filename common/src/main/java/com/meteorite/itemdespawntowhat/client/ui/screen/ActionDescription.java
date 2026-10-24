@@ -4,7 +4,7 @@ import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDefaults;
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDescriptors;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
-import com.meteorite.itemdespawntowhat.client.edit.EffectEditorRegistry;
+import com.meteorite.itemdespawntowhat.client.edit.EditorRegistries;
 import com.meteorite.itemdespawntowhat.client.edit.FieldNumbers;
 import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
@@ -31,7 +31,7 @@ final class ActionDescription {
         List<DescriptionLine> lines = new ArrayList<>();
         lines.add(DescriptionLine.title(RuleNaming.effectTitle(action, RuleDisplayLabels::label)));
         ResourceLocation type = ResourceLocation.tryParse(action.text(RuleFields.TYPE, ""));
-        var descriptor = type == null ? null : EffectEditorRegistry.find(type);
+        var descriptor = type == null ? null : EditorRegistries.EFFECTS.find(type);
         if (descriptor == null || descriptor.readOnly()) {
             lines.add(DescriptionLine.note(Component.translatable(UI + "results.description_unavailable"), 0));
             return lines;

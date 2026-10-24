@@ -18,7 +18,7 @@ public final class UiInputRouter {
     private UiInputRouter() {
     }
 
-    /** 指针事件阶段。 */
+    /** 指针事件阶段：按下、拖动、释放与滚轮；{@link UiInputRouter} 按阶段路由到捕获目标或命中控件。 */
     public enum PointerPhase {
         PRESSED,
         DRAGGED,

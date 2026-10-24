@@ -114,17 +114,14 @@ public final class RuleIssueLocator {
                            @Nullable String effectType, int effectIndex,
                            @Nullable String conditionPath) {
 
-        // 是否携带了可用的问题路径
         public boolean known() {
             return rawPath != null && !rawPath.isBlank();
         }
 
-        // 是否定位到了某个候选
         public boolean hasCandidate() {
             return candidateId != null || candidateIndex >= 0;
         }
 
-        // 是否定位到了某个效果
         public boolean hasEffect() {
             return effectType != null || effectIndex >= 0;
         }

@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.kit;
 
+import java.util.Objects;
 import net.minecraft.client.gui.GuiGraphics;
 
 /**
@@ -32,7 +33,7 @@ public final class UiProgressBar {
      * @param style 外部配色
      * @throws NullPointerException style 为 null 时
      */
-    public UiProgressBar(Style style) { this.style = java.util.Objects.requireNonNull(style); }
+    public UiProgressBar(Style style) { this.style = Objects.requireNonNull(style); }
 
     /**
      * 新任务或阶段切换时重置平滑状态，不从上一阶段的计数反向插值。

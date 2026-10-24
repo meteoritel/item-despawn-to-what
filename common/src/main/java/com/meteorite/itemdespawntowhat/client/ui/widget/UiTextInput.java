@@ -21,7 +21,7 @@ import net.minecraft.network.chat.TextColor;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
-/***
+/**
  * 单行文本输入框。
  * <p>封装原版 {@link EditBox}：关闭原版边框，改由主题绘制内凹像素框；
  * 支持占位提示、长度限制、输入过滤、提交（Enter）与取消（Esc）。
@@ -50,7 +50,6 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
     private Runnable onCancel;
     // 无障碍名称
     private Component accessibleName;
-    // 是否可见
     private boolean visible = true;
     // 是否可编辑（原版 EditBox 未暴露读取方法，这里自行记录）
     private boolean editable = true;
@@ -102,18 +101,15 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
         });
     }
 
-    // 当前文本
     public String value() {
         return editBox.getValue();
     }
 
-    // 设置文本
     public UiTextInput setValue(String value) {
         backfill(value == null ? "" : value);
         return this;
     }
 
-    // 清空文本
     public UiTextInput clear() {
         backfill("");
         return this;
@@ -175,19 +171,16 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
         }
     }
 
-    // 设置超限回调
     public UiTextInput setOnOverflow(@Nullable Runnable onOverflow) {
         this.onOverflow = onOverflow;
         return this;
     }
 
-    // 设置「文本被接受并变化」回调
     public UiTextInput setOnValueChanged(@Nullable Runnable onValueChanged) {
         this.onValueChanged = onValueChanged;
         return this;
     }
 
-    // 设置是否可编辑
     public UiTextInput setEditable(boolean editable) {
         if (!editable) endInteraction(UiInputCapture.EndReason.DISABLED);
         this.editable = editable;
@@ -195,7 +188,6 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
         return this;
     }
 
-    // 设置占位提示
     public UiTextInput setHint(Component hint) {
         editBox.setHint(placeholder(hint));
         return this;
@@ -216,19 +208,16 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
         return hint.copy().withStyle(hint.getStyle().withColor(TextColor.fromRgb(theme.palette().textDisabled())));
     }
 
-    // 设置提交回调
     public UiTextInput setOnCommit(Consumer<String> onCommit) {
         this.onCommit = onCommit;
         return this;
     }
 
-    // 设置取消回调
     public UiTextInput setOnCancel(Runnable onCancel) {
         this.onCancel = onCancel;
         return this;
     }
 
-    // 设置是否可见
     public UiTextInput setVisible(boolean visible) {
         selection.setVisible(visible);
         this.visible = visible;
@@ -464,7 +453,6 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
         }
     }
 
-    // 设置无障碍名称
     public UiTextInput setAccessibleName(Component name) {
         this.accessibleName = name;
         return this;

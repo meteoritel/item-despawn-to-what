@@ -20,7 +20,6 @@ public record TypeEditorDescriptor(ResourceLocation id, Component label, List<Ed
         fields = List.copyOf(fields);
     }
 
-    // 注册一个可编辑类型
     public static TypeEditorDescriptor of(ResourceLocation id, Component label, List<EditorField> fields) {
         return new TypeEditorDescriptor(id, label, fields, false);
     }
@@ -35,7 +34,6 @@ public record TypeEditorDescriptor(ResourceLocation id, Component label, List<Ed
         return new TypeEditorDescriptor(id, label, List.of(EditorField.rawJson()), true);
     }
 
-    // 是否声明了同名字段
     public boolean hasField(String name) {
         return field(name) != null;
     }

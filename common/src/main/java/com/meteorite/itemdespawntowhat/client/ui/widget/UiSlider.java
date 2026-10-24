@@ -23,7 +23,7 @@ import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
-/***
+/**
  * 数值滑杆：左侧标签，右侧当前值，中间像素轨道与滑块。
  * <p>数值一律同时显示为文本，颜色不是唯一线索。
  * <p>本类是宿主适配层：数值域、窗口、吸附、捕获、preview/commit/cancel 全部委托给 kit 的
@@ -143,7 +143,6 @@ public final class UiSlider implements UiWidget, UiFocusTarget, UiInputTarget {
         return this;
     }
 
-    // 是否正在拖动
     public boolean isDragging() {
         return this.core.isDragging();
     }
@@ -168,7 +167,6 @@ public final class UiSlider implements UiWidget, UiFocusTarget, UiInputTarget {
         this.core.onHostClosed();
     }
 
-    // 当前值的显示文本
     public Component formatValue() {
         return this.core.formatValue();
     }

@@ -6,7 +6,7 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import org.jetbrains.annotations.Nullable;
 
-/***
+/**
  * 未应用草稿的落盘载体：一个编辑目标一份。
  * <p>除了草稿内容本身，还记录建立草稿时的服务端基线与修订号，用于「整条规则比较」：
  * 重启或断线重连后用服务端最新快照与 {@link #baseline()} 比较，

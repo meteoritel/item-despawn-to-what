@@ -26,7 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/***
+/**
  * 编辑页数据模型：把服务端快照映射成「按规则 id 的草稿会话」。
  * 所有字段与结构编辑都必须经过 {@link EditSession#apply}，保证每个编辑入口都有撤销标签。
  */
@@ -116,7 +116,6 @@ public final class RuleEditorModel {
         return true;
     }
 
-    // 是否已加载过快照
     public boolean isLoaded() {
         return this.loaded;
     }

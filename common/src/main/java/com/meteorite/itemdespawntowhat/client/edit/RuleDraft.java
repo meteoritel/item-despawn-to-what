@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.Set;
 import org.jetbrains.annotations.Nullable;
 
-/***
+/**
  * 规则草稿：original（服务器基线）/ working（工作副本）/ dirty 判断 / 删除标记。
  * <p>JSON 是唯一事实来源：草稿不建立与后端 record 平行的强类型模型，
  * 因此未识别字段与第三方扩展字段都能原样保留。字段修改优先使用
@@ -28,7 +28,6 @@ public final class RuleDraft {
 
     // 服务器下发的原始 JSON，作为 dirty 判定基线
     private final JsonObject original;
-    // 当前工作副本
     private JsonObject working;
     // 覆盖层删除标记（不写入 working，由 {@link #toOverlayJson()} 表达）
     private boolean deleted;
@@ -90,7 +89,6 @@ public final class RuleDraft {
         return copy;
     }
 
-    // 是否标记删除
     public boolean isDeleted() {
         return deleted;
     }
@@ -144,7 +142,6 @@ public final class RuleDraft {
         return element == null ? null : RuleValue.wrap(element);
     }
 
-    // 写入顶层字段值
     public void set(String field, RuleValue value) {
         JsonElement next = value.unwrap();
         if (sameField(field, next)) {
@@ -156,12 +153,10 @@ public final class RuleDraft {
 
     // ---- 顶层字段读写 ----
 
-    // 是否包含字段
     public boolean has(String field) {
         return working.has(field);
     }
 
-    // 删除字段
     public boolean remove(String field) {
         boolean removed = working.remove(field) != null;
         if (removed) {
@@ -198,7 +193,6 @@ public final class RuleDraft {
                 ? element.getAsDouble() : fallback;
     }
 
-    // 写入字符串字段
     public void setString(String field, String value) {
         if (sameField(field, new JsonPrimitive(value))) {
             return;
@@ -207,7 +201,6 @@ public final class RuleDraft {
         this.mutations++;
     }
 
-    // 写入布尔字段
     public void setBoolean(String field, boolean value) {
         if (sameField(field, new JsonPrimitive(value))) {
             return;
@@ -216,7 +209,6 @@ public final class RuleDraft {
         this.mutations++;
     }
 
-    // 写入整数字段
     public void setInt(String field, int value) {
         if (sameField(field, new JsonPrimitive(value))) {
             return;
@@ -225,7 +217,6 @@ public final class RuleDraft {
         this.mutations++;
     }
 
-    // 写入小数字段
     public void setDouble(String field, double value) {
         if (sameField(field, new JsonPrimitive(value))) {
             return;
@@ -504,12 +495,10 @@ public final class RuleDraft {
 
     // ---- 候选结果（outcomes） ----
 
-    // 是否声明了顶层 effects
     public boolean hasFlatEffects() {
         return effectCount() > 0;
     }
 
-    // 是否声明了候选结果
     public boolean hasOutcomes() {
         return outcomeCount() > 0;
     }

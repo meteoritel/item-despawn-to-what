@@ -17,7 +17,7 @@ import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
-/***
+/**
  * 按钮控件。
  * <p>委托 kit 的 {@link UiControl} 处理状态与焦点，按需绘制主题的像素立体边或胶囊底图，
  * 因此同时兼容键盘（Tab / Enter）与鼠标（按下、拖出取消）操作。
@@ -30,7 +30,6 @@ public final class UiButton implements UiWidget, UiFocusTarget {
     private final UiButtonVariant variant;
     // 字体（重新配置文本时需要）
     private final Font font;
-    // 当前文本
     private Component label;
     // 当前图标，可为 null
     private UiIcon icon;
@@ -38,9 +37,7 @@ public final class UiButton implements UiWidget, UiFocusTarget {
     private final List<Component> tooltip = new ArrayList<>();
     // 点击动作，可为 null
     private UiAction action;
-    // 是否启用
     private boolean enabled = true;
-    // 是否可见
     private boolean visible = true;
     private boolean chipStyle;
     private int hoverTicks;
@@ -173,17 +170,14 @@ public final class UiButton implements UiWidget, UiFocusTarget {
         return this;
     }
 
-    // 当前文本
     public Component label() {
         return label;
     }
 
-    // 当前变体
     public UiButtonVariant variant() {
         return variant;
     }
 
-    // 是否处于按下状态
     public boolean isPressed() {
         return control.isPressed();
     }
@@ -304,7 +298,6 @@ public final class UiButton implements UiWidget, UiFocusTarget {
         return control.accessibleName();
     }
 
-    // 设置无障碍名称
     public UiButton setAccessibleName(Component name) {
         control.setAccessibleName(name);
         return this;

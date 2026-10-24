@@ -15,7 +15,7 @@ import org.jetbrains.annotations.Nullable;
 import org.joml.Quaternionf;
 import net.minecraft.tags.FluidTags;
 
-/*** 流体使用真实静态材质与方块染色绘制立体方块；水、岩浆不依赖不可见的方块模型。 */
+/** 流体使用真实静态材质与方块染色绘制立体方块；水、岩浆不依赖不可见的方块模型。 */
 public final class FluidPreviewIcons {
     private static final int ICON_SIZE = 18;
     private static final int FACE_SIZE = 16;

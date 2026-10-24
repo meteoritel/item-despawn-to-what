@@ -13,7 +13,7 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class ResultStructure {
 
-    // 结构类型
+    /** 结果结构判别：决定读取端取隐式单候选还是 outcomes 列表；MIXED 表示顶层 effects 与 outcomes 同时存在。 */
     public enum Kind {
         // 两种结构都没有
         EMPTY,
@@ -30,7 +30,6 @@ public final class ResultStructure {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    // 结构类型
     public static Kind kind(@Nullable RuleValue rule) {
         boolean flat = hasFlat(rule);
         boolean outcomes = hasOutcomes(rule);
@@ -113,7 +112,6 @@ public final class ResultStructure {
         return effectCount(rule, 0);
     }
 
-    // 读取数组字段
     private static @Nullable RuleValue arrayOf(@Nullable RuleValue owner, String name) {
         if (owner == null) {
             return null;

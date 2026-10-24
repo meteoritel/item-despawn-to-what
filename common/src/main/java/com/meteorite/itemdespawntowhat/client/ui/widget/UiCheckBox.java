@@ -13,7 +13,7 @@ import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
-/***
+/**
  * 复选框：左侧像素勾选框，右侧标签文本（颜色状态一律辅以文字，不只靠颜色区分）。
  * <p>鼠标交互点限制在左侧方框内（{@link UiRect#centeredSquare}）：点击标签文字或行内空白不会切换，
  * 避免整行命中带来的误触；键盘焦点与回车、空格切换不受此限制。

@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.theme;
 
-/***
+/**
  * 灰色像素主题调色板。
  * <p>所有颜色集中在这里，方便后续美术统一微调。颜色均为 ARGB 整数，
  * 命名前缀含义：WINDOW 窗口、PANEL 面板、CONTROL 控件、TEXT 文本、SCROLL 滚动条。

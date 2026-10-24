@@ -1,9 +1,9 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDescriptors;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
-import com.meteorite.itemdespawntowhat.client.edit.EffectEditorRegistry;
+import com.meteorite.itemdespawntowhat.client.edit.EditorRegistries;
 import com.meteorite.itemdespawntowhat.client.edit.FieldNumbers;
-import com.meteorite.itemdespawntowhat.client.edit.ConditionEditorRegistry;
 import com.meteorite.itemdespawntowhat.client.edit.JsonSummary;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
@@ -20,14 +20,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-/***
+/**
  * 自然语言摘要：把规则/条件/效果 JSON 渲染成玩家可读的一行中文。
  * 纯只读：不修改草稿，也不依赖后端 record 类型，第三方类型按原始字段名展示。
  */
 public final class NaturalSummary {
 
     // 摘要前缀 key
-    private static final String PREFIX = "gui.itemdespawntowhat.edit.summary.";
+    private static final String PREFIX = TypeLabels.UI_PREFIX + "summary.";
 
     // 工具类
     private NaturalSummary() {
@@ -178,11 +178,11 @@ public final class NaturalSummary {
     // 按描述符顺序渲染类型专属字段；无参条件返回 null
     private static @Nullable Component fields(RuleValue object, ResourceLocation type, String kind) {
         boolean condition = "condition".equals(kind);
-        var descriptor = condition ? ConditionEditorRegistry.descriptorFor(type) : EffectEditorRegistry.descriptorFor(type);
+        var descriptor = condition ? EditorRegistries.CONDITIONS.descriptorFor(type) : EditorRegistries.EFFECTS.descriptorFor(type);
         RuleValue variant = object.child("variant");
         if (!condition && type.equals(ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "spawn_entity"))
                 && variant != null && variant.isScalar()) {
-            descriptor = com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDescriptors.entityDescriptor(variant.asText());
+            descriptor = BuiltinEditorDescriptors.entityDescriptor(variant.asText());
         }
         List<Component> parts = new ArrayList<>();
         if (!descriptor.readOnly()) {

@@ -7,6 +7,7 @@ import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
@@ -32,19 +33,17 @@ public final class EditorFactories {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    // 生成新的规则 id
     public static String newRuleId() {
         return RULE_ID_PREFIX + token();
     }
 
-    // 生成新的候选 id
     public static String newCandidateId() {
         return CANDIDATE_ID_PREFIX + token();
     }
 
     // 32 位小写 UUID（去掉连字符）
     private static String token() {
-        return UUID.randomUUID().toString().replace("-", "").toLowerCase(java.util.Locale.ROOT);
+        return UUID.randomUUID().toString().replace("-", "").toLowerCase(Locale.ROOT);
     }
 
     // 空白规则：一个初始候选、固定源成本 1、当前 schema_version

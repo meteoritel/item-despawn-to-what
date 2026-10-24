@@ -1,13 +1,13 @@
 package com.meteorite.itemdespawntowhat.client.edit.draft;
 
-/***
+/**
  * 草稿与目标不一致的冲突描述。
  * <p>只做「整条规则」级别的判断，不做逐字段合并：字段级三方合并对不懂 JSON 的玩家
  * 没有可解释性，且在界面上无法给出可信的结果。
  */
 public record DraftConflict(String targetId, Reason reason) {
 
-    // 冲突类型
+    /** 冲突分类，决定 {@link #messageSuffix()} 返回的 lang 后缀。 */
     public enum Reason {
         // 原始目标在服务端已不存在（被删除或已回退到无覆盖层）
         TARGET_MISSING,

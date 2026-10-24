@@ -12,6 +12,7 @@ import java.util.List;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 
@@ -198,7 +199,7 @@ final class ListControl extends FormControl {
     private boolean validEntry(String value) {
         if (field.type() == EditorFieldType.STRING_LIST) return true;
         String id = value.startsWith("#") ? value.substring(1) : value;
-        return net.minecraft.resources.ResourceLocation.tryParse(id) != null;
+        return ResourceLocation.tryParse(id) != null;
     }
 
     @Override

@@ -9,6 +9,9 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.jetbrains.annotations.Nullable;
 
 /** 条件节点与通用 Kit 树的适配；参数仍由现有条件模型承载。 */
@@ -65,7 +68,7 @@ public final class ConditionTreeNodes implements UiTreeEditor.Adapter<ConditionN
     private static List<ConditionNode> copyTerms(List<ConditionNode> terms) {
         List<ConditionNode> copies = new ArrayList<>(terms.size());
         for (ConditionNode term : terms) {
-            copies.add(java.util.Objects.requireNonNull(copy(term)));
+            copies.add(Objects.requireNonNull(copy(term)));
         }
         return copies;
     }
@@ -107,10 +110,10 @@ public final class ConditionTreeNodes implements UiTreeEditor.Adapter<ConditionN
             remapInputs(session, change.before(), change.after(), scope);
             return;
         }
-        java.util.Set<String> removed = change.removed().stream().map(path -> jsonPath(change.before(), path, scope))
-                .collect(java.util.stream.Collectors.toSet());
-        java.util.Set<String> added = change.added().stream().map(path -> jsonPath(change.after(), path, scope))
-                .collect(java.util.stream.Collectors.toSet());
+        Set<String> removed = change.removed().stream().map(path -> jsonPath(change.before(), path, scope))
+                .collect(Collectors.toSet());
+        Set<String> added = change.added().stream().map(path -> jsonPath(change.after(), path, scope))
+                .collect(Collectors.toSet());
         session.recordInputStructure(removed, added);
         removed.forEach(session::clearPendingInputs);
         Map<String, String> paths = new LinkedHashMap<>();

@@ -48,7 +48,10 @@ import org.lwjgl.glfw.GLFW;
  */
 public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHost {
 
-    // 交互意图回调（默认实现有意留空：宿主只覆写需要的意图）
+    /**
+     * 交互意图回调：页面只上报意图、不直接改宿主数据，默认实现全部留空，宿主按需覆写。
+     * 搜索接受文本、翻页、选择集变化、Enter 或双击条目时分别回调。
+     */
     @SuppressWarnings("unused")
     public interface Listener {
 
@@ -69,7 +72,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         }
     }
 
-    // 条目范围：只主分类条目 / 只标签 / 一起显示
+    /** 条目范围：只列主分类条目、只列标签或两者同列；范围按钮在此三值间轮询并回写宿主策略。 */
     public enum Scope {
         ITEM, TAG, BOTH
     }
@@ -84,7 +87,6 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         // 该 id 是否属于默认不展示的内容（技术性条目、空与流动流体…）
         boolean hidden(String id);
 
-        // 当前条目范围
         Scope scope();
 
         // 工具栏范围按钮回写
@@ -96,12 +98,17 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         }
     }
 
-    // 一条目录条目：图标可为空（回落文字槽）；subLabel 只供宿主做搜索匹配，页面不渲染
+    /**
+     * 一条目录条目：{@code id} 用于选择集与激活回调，{@code icon} 为空时回落文字槽，
+     * {@code subLabel} 只供宿主搜索匹配、页面不渲染。
+     */
     public record Entry(String id, Component label, @Nullable Component subLabel, @Nullable UiIcon icon) {
     }
 
-    // 宿主提供的本地化文本（翻页按钮画标记贴图、范围按钮画当前范围的短标签，对应的完整文案作为悬停说明；
-    // scopeItem / scopeItemLabel 指当前目录的主分类，并不固定是物品）
+    /**
+     * 目录页的宿主本地化文本：搜索/空/加载/错误/选择状态、翻页按钮的标记贴图、
+     * 范围按钮的短标签与对应悬停文案、清空链接；{@code withEmpty} 返回仅替换空态文案的副本。
+     */
     public record Texts(Component searchHint, Component empty, Component loading, Component error,
                         Component prevPage, Component nextPage, Component selection, Component scopeItem,
                         Component scopeTag, Component scopeBoth, Component scopeItemLabel,

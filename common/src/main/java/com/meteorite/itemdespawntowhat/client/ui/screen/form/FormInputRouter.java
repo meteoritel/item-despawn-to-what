@@ -3,6 +3,8 @@ package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
 import java.util.ArrayList;
 import java.util.List;
 import org.lwjgl.glfw.GLFW;
@@ -42,7 +44,7 @@ final class FormInputRouter {
                     return rememberPress(pickerButton);
                 }
             }
-            for (com.meteorite.itemdespawntowhat.client.ui.widget.UiButton action : row.actions) {
+            for (UiButton action : row.actions) {
                 if (action.mouseClicked(mouseX, mouseY, button)) {
                     return rememberPress(action);
                 }
@@ -55,7 +57,7 @@ final class FormInputRouter {
     }
 
     // 记录本次按下的归属：只允许这个控件接收随后的释放与拖动
-    private boolean rememberPress(com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget widget) {
+    private boolean rememberPress(UiWidget widget) {
         view.pressedWidget = widget;
         view.pressedControl = null;
         return true;
@@ -71,7 +73,7 @@ final class FormInputRouter {
         if (view.picker != null) {
             return view.picker.mouseReleased(mouseX, mouseY, button);
         }
-        com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget widget = view.pressedWidget;
+        UiWidget widget = view.pressedWidget;
         FormControl control = view.pressedControl;
         view.pressedWidget = null;
         view.pressedControl = null;

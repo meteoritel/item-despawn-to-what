@@ -40,9 +40,7 @@ public final class DraftWriter {
     private final Map<String, PersistedDraft> failed = new LinkedHashMap<>();
     // 写盘失败事件计数（连续失败只算一次，界面提示一条）
     private int failures;
-    // 当前是否处于连续失败状态
     private boolean failing;
-    // 写入线程是否存活
     private boolean running;
     // 是否有一条操作正在写盘（已出队但未完成）；读写都在 lock 内
     private boolean busy;
@@ -299,7 +297,6 @@ public final class DraftWriter {
         }
     }
 
-    // 删除一条草稿
     private record Delete(String targetId) implements Command {
 
         @Override
@@ -324,7 +321,6 @@ public final class DraftWriter {
         }
     }
 
-    // 清空草稿目录
     private enum Clear implements Command {
         INSTANCE;
 

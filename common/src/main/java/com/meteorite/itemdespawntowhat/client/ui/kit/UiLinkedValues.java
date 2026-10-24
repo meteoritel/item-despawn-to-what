@@ -127,10 +127,8 @@ public final class UiLinkedValues {
     /** 一侧数值的访问器：read 取当前值，write 落值；落到草稿、控件还是外部状态由宿主决定。 */
     public interface Accessor {
 
-        /** 读取当前值。 */
         double read();
 
-        /** 写入新值。 */
         void write(double value);
     }
 

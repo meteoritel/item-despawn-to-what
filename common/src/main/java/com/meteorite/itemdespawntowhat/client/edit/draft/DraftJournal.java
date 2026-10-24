@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Map;
 import org.jetbrains.annotations.Nullable;
 
-/***
+/**
  * 草稿落盘节流器：内存里记住「哪些目标待写盘」，按时间窗口合并写盘请求。
  * <p>节流窗口 {@link #SAVE_DELAY_MS} 毫秒：连续编辑只在停顿后写一次盘，
  * 避免每次按键/每次结构变换都碰磁盘；界面关闭、会话失效等关键时刻调用
