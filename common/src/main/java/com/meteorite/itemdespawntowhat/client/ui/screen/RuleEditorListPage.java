@@ -43,7 +43,8 @@ import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 规则编辑器「规则管理页」（LIST 模式）：搜索、筛选、分类规则树与配方预览，以及列表底排按钮的状态同步。
+ * 规则编辑器「规则管理页」（LIST 模式）：搜索、筛选、分类规则树与配方预览，
+ * 以及列表底排按钮的状态同步。
  *
  * <p>本类只持有管理页控件与视图状态（选中项、展开分类、每个条目的配方视图），
  * 规则会话与工作区、弹窗栈、提示条、跨模式动作都通过 {@link Host} 暴露的屏幕能力完成；
@@ -109,12 +110,68 @@ final class RuleEditorListPage {
     private static final int EXPORT_ROW_H = 20;
     // 规则摘要面板的行数预算：条件树展开叶节点详情后行数变多，超出仍由面板高度兜底
     private static final int TOOLTIP_MAX_LINES = 16;
-    // 状态筛选的轮询顺序：全部 → 已启用 → 已停用
-    private static final String[] STATUS_VALUES = {"all", "enabled", "disabled"};
-    // 来源筛选的轮询顺序：全部 → 覆盖层 → 数据包
-    private static final String[] SOURCE_VALUES = {"all", "overlay", "datapack"};
     // i18n 前缀
     private static final String UI = TypeLabels.UI_PREFIX;
+
+    /** 状态筛选的轮询顺序：全部 → 启用 → 停用。 */
+    private enum StatusFilter {
+        ALL("all"),
+        ENABLED("enabled"),
+        DISABLED("disabled");
+
+        private final String key;
+
+        StatusFilter(String key) {
+            this.key = key;
+        }
+
+        String key() {
+            return key;
+        }
+
+        StatusFilter next() {
+            StatusFilter[] values = values();
+            return values[(ordinal() + 1) % values.length];
+        }
+
+        boolean matches(RuleListDisplaySnapshot snapshot) {
+            return switch (this) {
+                case ALL -> true;
+                case ENABLED -> snapshot.active();
+                case DISABLED -> !snapshot.active();
+            };
+        }
+    }
+
+    /** 来源筛选的轮询顺序：全部 → 覆盖层 → 数据包；混合条目同时命中两边。 */
+    private enum SourceFilter {
+        ALL("all"),
+        OVERLAY("overlay"),
+        DATAPACK("datapack");
+
+        private final String key;
+
+        SourceFilter(String key) {
+            this.key = key;
+        }
+
+        String key() {
+            return key;
+        }
+
+        SourceFilter next() {
+            SourceFilter[] values = values();
+            return values[(ordinal() + 1) % values.length];
+        }
+
+        boolean matches(RuleListDisplaySnapshot snapshot) {
+            return switch (this) {
+                case ALL -> true;
+                case OVERLAY -> isOverlayOrigin(snapshot.origin());
+                case DATAPACK -> isDatapackOrigin(snapshot.origin());
+            };
+        }
+    }
 
     private final Host host;
     private final RuleEditorListActions actions;
@@ -125,7 +182,8 @@ final class RuleEditorListPage {
     private @Nullable UiButton sourceButton;
     private @Nullable UiTreeView<String> ruleList;
     private final List<String> visibleIds = new ArrayList<>();
-    // 分类行标题裁剪缓存：键为节点身份（每次刷新重建节点后整体清空），值记录测量时的行宽与结果，静止帧不再测文本
+    // 分类行标题裁剪缓存：键为节点身份（每次刷新重建节点后整体清空），
+    // 值记录测量时的行宽与结果，静止帧不再测文本
     private final Map<UiTreeNode<String>, CategoryTitle> categoryTitles = new IdentityHashMap<>();
     private @Nullable Font categoryFont;
     private @Nullable Object categoryLanguage;
@@ -145,9 +203,8 @@ final class RuleEditorListPage {
     private final Set<String> expandedCategories = new LinkedHashSet<>();
     private String lastQuery = "";
     private String lastTreeQuery = "";
-    // 状态筛选下标（0 全部 / 1 已启用 / 2 已停用）与来源筛选下标（0 全部 / 1 覆盖层 / 2 数据包）
-    private int statusFilter;
-    private int sourceFilter;
+    private StatusFilter statusFilter = StatusFilter.ALL;
+    private SourceFilter sourceFilter = SourceFilter.ALL;
     // 首载分段观测：首份快照后的首次刷新只记录一次，作为「列表可用」的终点
     private boolean firstReadyLogged;
 
@@ -172,11 +229,17 @@ final class RuleEditorListPage {
         ruleList = new UiTreeView<>(THEME, font, (graphics, rowFont, node, row, depth, selected, hovered, focused) -> {
             if (node.value().startsWith("@")) {
                 drawCategoryRow(graphics, rowFont, node, row);
-            } else renderRuleRow(graphics, rowFont, node.value(), row, hovered);
+            } else {
+                renderRuleRow(graphics, rowFont, node.value(), row, hovered);
+            }
         });
         ruleList.setRowHeightProvider(node -> font.lineHeight + 4
                 + (node.value().startsWith("@") ? 0 : RuleRecipeView.CONTENT_HEIGHT + 1));
-        ruleList.setOnActivate(node -> { if (!node.value().startsWith("@")) host.openEditor(node.value()); });
+        ruleList.setOnActivate(node -> {
+            if (!node.value().startsWith("@")) {
+                host.openEditor(node.value());
+            }
+        });
         buildListButtons();
     }
 
@@ -191,13 +254,13 @@ final class RuleEditorListPage {
     }
 
     private void cycleStatusFilter() {
-        statusFilter = (statusFilter + 1) % STATUS_VALUES.length;
+        statusFilter = statusFilter.next();
         refreshFilterLabels();
         refreshList();
     }
 
     private void cycleSourceFilter() {
-        sourceFilter = (sourceFilter + 1) % SOURCE_VALUES.length;
+        sourceFilter = sourceFilter.next();
         refreshFilterLabels();
         refreshList();
     }
@@ -206,11 +269,11 @@ final class RuleEditorListPage {
     private void refreshFilterLabels() {
         if (statusButton != null) {
             statusButton.setLabel(Component.translatable(UI + "filter.status_label",
-                    Component.translatable(UI + "filter." + STATUS_VALUES[statusFilter])));
+                    Component.translatable(UI + "filter." + statusFilter.key())));
         }
         if (sourceButton != null) {
             sourceButton.setLabel(Component.translatable(UI + "filter.source_label",
-                    Component.translatable(UI + "filter.source." + SOURCE_VALUES[sourceFilter])));
+                    Component.translatable(UI + "filter.source." + sourceFilter.key())));
         }
     }
 
@@ -220,7 +283,10 @@ final class RuleEditorListPage {
         listButtons.clear();
         UiButton create = button(UI + "button.new", UiButtonVariant.PRIMARY, actions::promptNewRule);
         editButton = button(UI + "button.edit", UiButtonVariant.PRIMARY, () -> {
-            String id = selectedRuleId(); if (id != null) host.openEditor(id);
+            String id = selectedRuleId();
+            if (id != null) {
+                host.openEditor(id);
+            }
         });
         toggleButton = button(UI + "button.enable", UiButtonVariant.SECONDARY, actions::toggleSelectedEnabled);
         UiButton copy = button(UI + "button.duplicate", UiButtonVariant.SECONDARY, actions::promptDuplicate);
@@ -324,7 +390,8 @@ final class RuleEditorListPage {
                 });
     }
 
-    // 后台结果回到客户端线程：先复位导出按钮再显示提示；期间工作区可能已冻结，按当前可编辑态复位
+    // 后台结果回到客户端线程：先复位导出按钮再显示提示；
+    // 期间工作区可能已冻结，按当前可编辑态复位
     private void deliverExport(Runnable notice) {
         Minecraft.getInstance().execute(() -> {
             exporting = false;
@@ -378,7 +445,6 @@ final class RuleEditorListPage {
         }
     }
 
-    // 「应用全部」按钮的可用状态与文案
     void updateApplyButton() {
         if (applyButton == null) {
             return;
@@ -492,7 +558,9 @@ final class RuleEditorListPage {
             visibleIds.add(id);
         }
         long treeStarted = profile ? DevelopmentDiagnostics.start() : 0L;
-        if (lastTreeQuery.isBlank()) rememberCategoryState(ruleList.roots());
+        if (lastTreeQuery.isBlank()) {
+            rememberCategoryState(ruleList.roots());
+        }
         lastTreeQuery = lastQuery;
         // 已知分类的层级、顺序与显示名来自静态骨架；未知分类按原文动态成组
         List<RuleCategorySkeleton.Category> skeleton = RuleCategorySkeleton.roots();
@@ -509,12 +577,9 @@ final class RuleEditorListPage {
             }
         }
         for (String id : visibleIds) {
-            // 只消费展示快照里的分类与标题：问题优先归入「有问题」，其次未保存草稿归入「未完成」，
-            // 未声明分类时归入扩展分组；三个分组都无成员时在树上自动隐藏
+            // 只消费展示快照里的分类与标题
             RuleListDisplaySnapshot snapshot = host.display().snapshot(id);
-            String category = hasIssues(snapshot) ? RuleCategorySkeleton.ISSUES
-                    : snapshot.unfinished() ? RuleCategorySkeleton.UNFINISHED
-                    : snapshot.category() == null ? RuleCategorySkeleton.EXTENSION : snapshot.category();
+            String category = categoryOf(snapshot);
             UiTreeNode<String> group = groups.get(category);
             if (group == null) {
                 group = unknownCategoryNode(groups, category);
@@ -525,16 +590,21 @@ final class RuleEditorListPage {
         for (int index = 0; index < roots.size(); index++) {
             UiTreeNode<String> root = roots.get(index);
             RuleCategorySkeleton.Category definition = skeleton.get(index);
-            // 父分类只收下有内容的子分类；已知与未知的子分类统一带计数，直接声明父分类的规则按叶子保留
+            // 父分类只收下有内容的子分类；已知与未知的子分类统一带计数，
+            // 直接声明父分类的规则按叶子保留
             UiTreeNode<String> parent = categoryNode(definition);
             for (UiTreeNode<String> child : root.children()) {
                 if (child.value().startsWith("@")) {
-                    if (!child.children().isEmpty()) parent.addChild(counted(child));
+                    if (!child.children().isEmpty()) {
+                        parent.addChild(counted(child));
+                    }
                 } else {
                     parent.addChild(child);
                 }
             }
-            if (!parent.children().isEmpty()) nonempty.add(counted(parent));
+            if (!parent.children().isEmpty()) {
+                nonempty.add(counted(parent));
+            }
         }
         long treeMicros = profile ? DevelopmentDiagnostics.micros(treeStarted) : 0L;
         long rootsStarted = profile ? DevelopmentDiagnostics.start() : 0L;
@@ -562,8 +632,8 @@ final class RuleEditorListPage {
         data.addProperty("rules", rules);
         data.addProperty("visible", visibleIds.size());
         data.addProperty("snapshot_version", host.model().snapshotVersion());
-        data.addProperty("status_filter", statusFilter);
-        data.addProperty("source_filter", sourceFilter);
+        data.addProperty("status_filter", statusFilter.key());
+        data.addProperty("source_filter", sourceFilter.key());
         data.addProperty("query_chars", lastQuery == null ? 0 : lastQuery.length());
         data.addProperty("first", firstReady);
         data.addProperty("body_fetches", bodyFetches);
@@ -578,11 +648,17 @@ final class RuleEditorListPage {
 
     // 刷新时按稳定值恢复目录或规则选择，不依赖重建前的节点实例。
     private @Nullable UiTreeNode<String> findNode(List<UiTreeNode<String>> nodes, @Nullable String value) {
-        if (value == null) return null;
+        if (value == null) {
+            return null;
+        }
         for (UiTreeNode<String> node : nodes) {
-            if (value.equals(node.value())) return node;
+            if (value.equals(node.value())) {
+                return node;
+            }
             UiTreeNode<String> child = findNode(node.children(), value);
-            if (child != null) return child;
+            if (child != null) {
+                return child;
+            }
         }
         return null;
     }
@@ -596,7 +672,9 @@ final class RuleEditorListPage {
 
     // 分类计数只统计规则叶；父分类汇总全部子分类，不受展开状态影响。
     private int ruleCount(UiTreeNode<String> node) {
-        if (!node.value().startsWith("@")) return 1;
+        if (!node.value().startsWith("@")) {
+            return 1;
+        }
         return node.children().stream().mapToInt(this::ruleCount).sum();
     }
 
@@ -616,9 +694,15 @@ final class RuleEditorListPage {
 
     private void rememberCategoryState(List<UiTreeNode<String>> nodes) {
         for (UiTreeNode<String> node : nodes) {
-            if (!node.value().startsWith("@")) continue;
+            if (!node.value().startsWith("@")) {
+                continue;
+            }
             String category = node.value().substring(1);
-            if (node.isExpanded()) expandedCategories.add(category); else expandedCategories.remove(category);
+            if (node.isExpanded()) {
+                expandedCategories.add(category);
+            } else {
+                expandedCategories.remove(category);
+            }
             rememberCategoryState(node.children());
         }
     }
@@ -635,19 +719,18 @@ final class RuleEditorListPage {
 
     // 筛选只读展示快照，不重新读取规则体：状态与来源取交集
     private boolean matchesFilter(RuleListDisplaySnapshot snapshot) {
-        if (statusFilter == 1 && !snapshot.active()) {
-            return false;
+        return statusFilter.matches(snapshot) && sourceFilter.matches(snapshot);
+    }
+
+    // 问题优先归入「有问题」，其次未保存草稿归入「未完成」，未声明分类时归入扩展分组
+    private static String categoryOf(RuleListDisplaySnapshot snapshot) {
+        if (hasIssues(snapshot)) {
+            return RuleCategorySkeleton.ISSUES;
         }
-        if (statusFilter == 2 && snapshot.active()) {
-            return false;
+        if (snapshot.unfinished()) {
+            return RuleCategorySkeleton.UNFINISHED;
         }
-        if (sourceFilter == 1 && !isOverlayOrigin(snapshot.origin())) {
-            return false;
-        }
-        if (sourceFilter == 2 && !isDatapackOrigin(snapshot.origin())) {
-            return false;
-        }
-        return true;
+        return snapshot.category() == null ? RuleCategorySkeleton.EXTENSION : snapshot.category();
     }
 
     // 条目是否带问题：服务端校验问题或客户端解码失败，列表页据此归入「有问题」分组
@@ -670,7 +753,6 @@ final class RuleEditorListPage {
         return node == null || node.value().startsWith("@") ? null : node.value();
     }
 
-    // 搜索框内容变化后重新过滤
     private void syncSearch() {
         if (searchField == null) {
             return;
@@ -685,8 +767,12 @@ final class RuleEditorListPage {
     // ---- 指针与键盘委托 ----
 
     void onScopeChanged() {
-        if (searchField != null) searchField.endInteraction(UiInputCapture.EndReason.FOCUS_SCOPE_CHANGED);
-        if (ruleList != null) ruleList.mouseReleased(-1, -1, 0);
+        if (searchField != null) {
+            searchField.endInteraction(UiInputCapture.EndReason.FOCUS_SCOPE_CHANGED);
+        }
+        if (ruleList != null) {
+            ruleList.mouseReleased(-1, -1, 0);
+        }
     }
 
     boolean mouseClicked(double mouseX, double mouseY, int button) {
@@ -720,10 +806,14 @@ final class RuleEditorListPage {
 
     // 指针必须先通过树的内容门禁，再命中配方标签。
     private @Nullable TagPreviewIcons.Tag tagAt(double mouseX, double mouseY) {
-        if (ruleList == null) return null;
+        if (ruleList == null) {
+            return null;
+        }
         UiTreeNode<String> node = ruleList.nodeAt(mouseX, mouseY);
         // 分类节点没有配方预览；命中配方标签时才向展示快照惰性索取预览
-        if (node == null || node.value().startsWith("@")) return null;
+        if (node == null || node.value().startsWith("@")) {
+            return null;
+        }
         UiRect row = ruleList.nodeContentBounds(node);
         // 命中直接复用绘制时的整行区域，配方区几何由 RuleRecipeView 内部同一份口径换算
         return host.display().snapshot(node.value()).preview().tagAt(host.font(), row, mouseX, mouseY);
@@ -739,7 +829,9 @@ final class RuleEditorListPage {
     }
 
     boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        if (searchField != null && searchField.mouseDragged(mouseX, mouseY, button, dragX, dragY)) return true;
+        if (searchField != null && searchField.mouseDragged(mouseX, mouseY, button, dragX, dragY)) {
+            return true;
+        }
         return ruleList != null && ruleList.mouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
