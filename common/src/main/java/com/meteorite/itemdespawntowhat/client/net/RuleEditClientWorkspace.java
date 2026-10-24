@@ -4,24 +4,28 @@ import com.google.gson.JsonObject;
 import com.mojang.serialization.DataResult;
 import com.meteorite.itemdespawntowhat.core.api.DevelopmentDiagnostics;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalog;
+import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogEntry;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEditProtocol;
-import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveStatus;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveProgress;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveProgressPayload;
-import com.meteorite.itemdespawntowhat.core.network.transport.CancelRuleSavePayload;
+import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveStatus;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshot;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSourceView;
+import com.meteorite.itemdespawntowhat.core.network.transport.CancelRuleSavePayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.CloseRuleEditorPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.ConfirmRuleEditorPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.HeartbeatRuleEditorPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.OpenRuleEditorPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleCatalogPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleLifespanPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleSnapshotPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleSourceViewPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleCatalogPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleChangeSetChunker;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditLimits;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditPayloadRouter;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleLifespanPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveProgressPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveResultPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotPayload;
@@ -40,11 +44,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleLifespanPayload;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditLimits;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleLifespanPayload;
 
-/***
+/**
  * 客户端编辑会话工作区：client/net 对界面层的唯一入口。
  * 职责：镜像服务端状态机、维持心跳、提交变更集（自动分片）、接收并缓存快照/目录、组装分片、在会话失效时关闭界面。
  * 约束：本包不 import 任何 client/ui 或 client/edit 类；界面实现由 {@link EditorScreenHooks} 注册，未注册时只记日志。
@@ -52,36 +53,11 @@ import com.meteorite.itemdespawntowhat.core.network.transport.RuleLifespanPayloa
  */
 public final class RuleEditClientWorkspace {
 
-    // 上行发送器：两平台的 ClientPlayNetworking 不同，由客户端初始化时注入
+    /** 上行发送器：两平台的 ClientPlayNetworking 不同，由各平台客户端初始化时注入；未注入时上行载荷被丢弃并记 warn。 */
     public interface PacketSender {
 
-        // 发送上行载荷
         void send(CustomPacketPayload payload);
     }
-
-    // 日志
-    private static final Logger LOGGER = LogManager.getLogger("itemdespawntowhat-client-net");
-
-    // 单例：客户端只存在一个编辑会话
-    private static final RuleEditClientWorkspace INSTANCE = new RuleEditClientWorkspace();
-
-    // 快照分片重组缓冲
-    private final RuleChunkBuffer chunkBuffer = new RuleChunkBuffer();
-
-    // 来源视图缓存上限：只保留最近 8 条，命中不重复请求
-    private static final int SOURCE_VIEW_CACHE_LIMIT = 8;
-    // 来源视图请求超时：超时即降级为「来源对照不可用」，规则编辑与保存不受影响
-    private static final long SOURCE_VIEW_TIMEOUT_MILLIS = 5_000L;
-
-    // 来源视图按需缓存（访问顺序 LRU，最多 8 条）；会话结束整体清空
-    private final Map<String, SourceViewLoad> sourceViews = new LinkedHashMap<>(16, 0.75F, true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<String, SourceViewLoad> eldest) {
-            return size() > SOURCE_VIEW_CACHE_LIMIT;
-        }
-    };
-    // 来源视图分片重组缓冲
-    private final RuleChunkBuffer sourceViewChunks = new RuleChunkBuffer();
 
     /**
      * 单条规则的来源视图加载状态：requestId 非空表示请求在途，view 非空表示已就绪，
@@ -99,14 +75,126 @@ public final class RuleEditClientWorkspace {
         }
     }
 
+    /** 保存合并条目和正在等待的页，失败不丢弃已到达的部分。 */
+    private static final class DirectoryLoad {
+        final LinkedHashMap<String, RuleCatalogEntry> entries = new LinkedHashMap<>();
+        int page;
+        int revision = -1;
+        boolean waiting;
+        boolean failed;
+        boolean complete;
+        boolean validating;
+        long deadline;
+        RuleCatalog snapshot;
+    }
+
+    // ---- 日志与单例 ----
+    // 日志
+    private static final Logger LOGGER = LogManager.getLogger("itemdespawntowhat-client-net");
+
+    // 单例：客户端只存在一个编辑会话
+    private static final RuleEditClientWorkspace INSTANCE = new RuleEditClientWorkspace();
+
+    // ---- 来源视图参数 ----
+    // 来源视图缓存上限：只保留最近 8 条，命中不重复请求
+    private static final int SOURCE_VIEW_CACHE_LIMIT = 8;
+    // 来源视图请求超时：超时即降级为「来源对照不可用」，规则编辑与保存不受影响
+    private static final long SOURCE_VIEW_TIMEOUT_MILLIS = 5_000L;
+
+    // ---- 上行通道 ----
+    // 上行发送器；未注入时所有上行报文丢弃并记日志
+    private @Nullable PacketSender sender;
+
+    // S2C 消费者是否已安装
+    private boolean sinksInstalled;
+
+    // ---- 会话状态 ----
+    private RuleEditClientState state = RuleEditClientState.FREE;
+
+    // 当前会话 id；无会话时为空串
+    private String sessionId = "";
+
+    // 服务端给出的上下文中枢修订号
+    private int contextRevision;
+
+    // 最近一次成功打开的请求（供界面层读取会话参数）
+    private @Nullable EditorOpenRequest openRequest;
+
+    // 最近一次被拒绝的打开请求（如 LOCK_BUSY），供界面层提示持有者
+    private @Nullable EditorOpenRequest openFailure;
+
+    // 最近一次收到的快照
+    private @Nullable RuleSnapshot snapshot;
+
+    // 最近一次快照解析失败的原因；受理新快照或结束会话后清空，供界面区分「还在加载」与「加载失败」
+    private @Nullable String snapshotFailure;
+
+    // 最近一次保存回执
+    private @Nullable RuleSaveResultPayload lastResult;
+    private String savingOperationId = "";
+    private @Nullable RuleSaveProgress saveProgress;
+    private long progressSequence;
+    private boolean cancelRequested;
+    // 最近一次发送心跳的客户端 tick
+    private long lastHeartbeatTick;
+    // 会话收尾重入保护：界面 close 回调里若再次调用本工作区的 close/reset，直接忽略
+    private boolean endingSession;
+
+    // ---- 下行分片重组 ----
+    // 快照分片重组缓冲
+    private final RuleChunkBuffer chunkBuffer = new RuleChunkBuffer();
+    // 来源视图分片重组缓冲
+    private final RuleChunkBuffer sourceViewChunks = new RuleChunkBuffer();
+
+    // ---- 目录与来源视图缓存 ----
+    // 来源视图按需缓存（访问顺序 LRU，最多 8 条）；会话结束整体清空
+    private final Map<String, SourceViewLoad> sourceViews = new LinkedHashMap<>(16, 0.75F, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, SourceViewLoad> eldest) {
+            return size() > SOURCE_VIEW_CACHE_LIMIT;
+        }
+    };
     // 最近一次收到的目录页，按类型缓存
     private final Map<RuleCatalogType, RuleCatalog> catalogs = new EnumMap<>(RuleCatalogType.class);
     // 每种目录最近一次请求的 requestId：用于丢弃过时响应
     private final Map<RuleCatalogType, String> catalogRequestIds = new EnumMap<>(RuleCatalogType.class);
+    // 全目录按类型懒加载，单个类型一次只发送一个 200 条请求。
+    private final Map<RuleCatalogType, DirectoryLoad> directories = new EnumMap<>(RuleCatalogType.class);
 
+    // ---- 首载分段观测 ----
+    // 首载分段观测：确认发出时刻与分片接收进度；关闭开关时不取时间也不计数
+    private long firstLoadStartedNanos;
+    private long snapshotRecvStartedNanos;
+    private String snapshotRecvTransferId = "";
+    private int snapshotRecvChunks;
+
+    // ---- 参考寿命采样缓存 ----
     private String lifespanRequestId = "";
     private int queriedLifespanTicks;
     private @Nullable ClientPacketListener lifespanConnection;
+
+    private RuleEditClientWorkspace() {
+    }
+
+    // 工作区单例
+    public static RuleEditClientWorkspace instance() {
+        return INSTANCE;
+    }
+
+    // 注入/清除上行发送器（客户端初始化时调用）
+    public static void installSender(@Nullable PacketSender sender) {
+        INSTANCE.setSender(sender);
+    }
+
+    // 安装 S2C 消费者：客户端初始化时调用一次；重复调用安全
+    public static void installSinks() {
+        INSTANCE.installRouterSinks();
+    }
+
+    // 生成新的操作 id（服务端据此做幂等）
+    public static String newOperationId() {
+        return UUID.randomUUID().toString();
+    }
 
     /**
      * 获取当前连接的统一参考寿命；首次请求后等待应答，切换规则或源物品均复用缓存。
@@ -128,52 +216,6 @@ public final class RuleEditClientWorkspace {
         }
         return queriedLifespanTicks;
     }
-
-    private synchronized void onLifespan(RuleLifespanPayload payload) {
-        if (!sessionId.isEmpty() && sessionId.equals(payload.sessionId()) && lifespanRequestId.equals(payload.requestId())) {
-            queriedLifespanTicks = Math.max(0, payload.lifespanTicks());
-        }
-    }
-
-    // 上行发送器；未注入时所有上行报文丢弃并记日志
-    private @Nullable PacketSender sender;
-
-    // S2C 消费者是否已安装
-    private boolean sinksInstalled;
-
-    // 当前状态
-    private RuleEditClientState state = RuleEditClientState.FREE;
-
-    // 当前会话 id；无会话时为空串
-    private String sessionId = "";
-
-    // 服务端给出的上下文中枢修订号
-    private int contextRevision;
-
-    // 最近一次成功打开的请求（供界面层读取会话参数）
-    private @Nullable EditorOpenRequest openRequest;
-
-    // 最近一次被拒绝的打开请求（如 LOCK_BUSY），供界面层提示持有者
-    private @Nullable EditorOpenRequest openFailure;
-
-    // 最近一次收到的快照
-    private @Nullable RuleSnapshot snapshot;
-
-    // 最近一次快照解析失败的原因；受理新快照或结束会话后清空，供界面区分「还在加载」与「加载失败」
-    private @Nullable String snapshotFailure;
-
-    // 首载分段观测：确认发出时刻与分片接收进度；关闭开关时不取时间也不计数
-    private long firstLoadStartedNanos;
-    private long snapshotRecvStartedNanos;
-    private String snapshotRecvTransferId = "";
-    private int snapshotRecvChunks;
-
-    // 最近一次保存回执
-    private @Nullable RuleSaveResultPayload lastResult;
-    private String savingOperationId = "";
-    private @Nullable RuleSaveProgress saveProgress;
-    private long progressSequence;
-    private boolean cancelRequested;
 
     /** @return 当前保存进度；无在途保存时为 null */
     public synchronized @Nullable RuleSaveProgress saveProgress() { return saveProgress; }
@@ -198,31 +240,6 @@ public final class RuleEditClientWorkspace {
         return true;
     }
 
-    // 最近一次发送心跳的客户端 tick
-    private long lastHeartbeatTick;
-
-    // 会话收尾重入保护：界面 close 回调里若再次调用本工作区的 close/reset，直接忽略
-    private boolean endingSession;
-
-    private RuleEditClientWorkspace() {
-    }
-
-    // 工作区单例
-    public static RuleEditClientWorkspace instance() {
-        return INSTANCE;
-    }
-
-    // 注入/清除上行发送器（客户端初始化时调用）
-    public static void installSender(@Nullable PacketSender sender) {
-        INSTANCE.setSender(sender);
-    }
-
-    // 安装 S2C 消费者：客户端初始化时调用一次；重复调用安全
-    public static void installSinks() {
-        INSTANCE.installRouterSinks();
-    }
-
-    // 当前会话状态
     public synchronized RuleEditClientState state() {
         return state;
     }
@@ -272,22 +289,6 @@ public final class RuleEditClientWorkspace {
         return type == null ? null : catalogs.get(type);
     }
 
-    // 全目录按类型懒加载，单个类型一次只发送一个 200 条请求。
-    private final Map<RuleCatalogType, DirectoryLoad> directories = new EnumMap<>(RuleCatalogType.class);
-
-    /*** 保存合并条目和正在等待的页，失败不丢弃已到达的部分。 */
-    private static final class DirectoryLoad {
-        final java.util.LinkedHashMap<String, com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogEntry> entries = new java.util.LinkedHashMap<>();
-        int page;
-        int revision = -1;
-        boolean waiting;
-        boolean failed;
-        boolean complete;
-        boolean validating;
-        long deadline;
-        RuleCatalog snapshot;
-    }
-
     public synchronized @Nullable RuleCatalog directory(RuleCatalogType type) {
         if (type == null || sessionId.isEmpty()) return null;
         DirectoryLoad load = directories.computeIfAbsent(type, ignored -> new DirectoryLoad());
@@ -316,35 +317,6 @@ public final class RuleEditClientWorkspace {
     }
 
     public synchronized void invalidateDirectories() { directories.clear(); }
-
-    private void requestDirectory(RuleCatalogType type, DirectoryLoad load) {
-        load.waiting = requestCatalog(type, "", load.page, 200);
-        load.failed = !load.waiting;
-        load.deadline = System.currentTimeMillis() + 15000;
-    }
-
-    private void acceptDirectory(RuleCatalogType type, RuleCatalog catalog) {
-        DirectoryLoad load = directories.get(type);
-        if (load == null || !load.waiting) return;
-        load.waiting = false;
-        if (load.validating && load.revision == catalog.revision()) { load.validating = false; return; }
-        load.validating = false;
-        if (load.revision >= 0 && load.revision != catalog.revision()) {
-            load.entries.clear(); load.page = 0; load.revision = -1; load.snapshot = null; load.complete = false;
-            requestDirectory(type, load); return;
-        }
-        load.revision = catalog.revision();
-        catalog.entries().forEach(entry -> load.entries.putIfAbsent(entry.id(), entry));
-        load.complete = catalog.lastPage();
-        load.snapshot = new RuleCatalog(type, load.revision, List.copyOf(load.entries.values()), load.complete);
-        load.page++;
-        if (!load.complete && state == RuleEditClientState.ACTIVE) requestDirectory(type, load);
-    }
-
-    // 生成新的操作 id（服务端据此做幂等）
-    public static String newOperationId() {
-        return UUID.randomUUID().toString();
-    }
 
     // 请求最新快照：仅在持有会话时有效
     public synchronized boolean requestSnapshot() {
@@ -437,78 +409,6 @@ public final class RuleEditClientWorkspace {
         }
         load.failed = false;
         sendSourceViewRequest(ruleId, load);
-    }
-
-    // 发送来源视图请求；发送失败直接标记失败，避免界面停留在「加载中」
-    private void sendSourceViewRequest(String ruleId, SourceViewLoad load) {
-        String requestId = UUID.randomUUID().toString();
-        load.view = null;
-        load.failed = false;
-        load.deadline = 0L;
-        if (!send(new RequestRuleSourceViewPayload(sessionId, requestId, ruleId))) {
-            load.requestId = "";
-            load.failed = true;
-            return;
-        }
-        load.requestId = requestId;
-        load.deadline = System.currentTimeMillis() + SOURCE_VIEW_TIMEOUT_MILLIS;
-    }
-
-    // 超时丢弃：在途请求超过期限即降级为失败，由界面提示来源对照不可用
-    private static void expireSourceView(SourceViewLoad load) {
-        if (load.loading() && System.currentTimeMillis() > load.deadline) {
-            load.requestId = "";
-            load.failed = true;
-            load.deadline = 0L;
-        }
-    }
-
-    // 收到整包来源视图：按 requestId 配到在途请求上，失败状态或解析失败都标记降级
-    private synchronized void onSourceView(@Nullable RuleSourceViewPayload payload) {
-        if (payload == null || !payload.sessionId().equals(sessionId)) {
-            return;
-        }
-        SourceViewLoad load = pendingSourceView(payload.requestId());
-        if (load == null) {
-            LOGGER.debug("忽略过时的来源视图应答: requestId={}", payload.requestId());
-            return;
-        }
-        load.requestId = "";
-        load.deadline = 0L;
-        RuleSourceView view = RuleSaveStatus.fromId(payload.statusCode()) == RuleSaveStatus.SUCCESS
-                ? RuleSourceView.parse(payload.sourceViewJson()).result().orElse(null)
-                : null;
-        load.view = view;
-        load.failed = view == null;
-        if (view == null) {
-            LOGGER.warn("来源视图取回失败: status={} bytes={}", payload.statusCode(),
-                    payload.sourceViewJson().length());
-        }
-    }
-
-    // 收到来源视图分片：收齐后按整包处理
-    private synchronized void onSourceViewChunk(@Nullable RuleSourceViewChunkPayload payload) {
-        if (payload == null || !payload.sessionId().equals(sessionId)) {
-            return;
-        }
-        String json = sourceViewChunks.accept(payload, currentTick());
-        if (json != null) {
-            onSourceView(new RuleSourceViewPayload(payload.sessionId(), payload.requestId(),
-                    RuleSaveStatus.SUCCESS.id(), json));
-        }
-    }
-
-    // 按请求 id 找在途的来源视图缓存项；找不到即视为过时应答
-    private @Nullable SourceViewLoad pendingSourceView(@Nullable String requestId) {
-        if (requestId == null || requestId.isEmpty()) {
-            return null;
-        }
-        for (SourceViewLoad load : sourceViews.values()) {
-            if (requestId.equals(load.requestId)) {
-                return load;
-            }
-        }
-        return null;
     }
 
     // 请求目录页：仅在持有会话时有效
@@ -612,6 +512,108 @@ public final class RuleEditClientWorkspace {
         RuleEditPayloadRouter.installSourceViewSink(this::onSourceView);
         RuleEditPayloadRouter.installSourceViewChunkSink(this::onSourceViewChunk);
         OpenRuleEditorPayload.installOpenEditorPayloadSink(this::onOpen);
+    }
+
+    private void requestDirectory(RuleCatalogType type, DirectoryLoad load) {
+        load.waiting = requestCatalog(type, "", load.page, 200);
+        load.failed = !load.waiting;
+        load.deadline = System.currentTimeMillis() + 15000;
+    }
+
+    private void acceptDirectory(RuleCatalogType type, RuleCatalog catalog) {
+        DirectoryLoad load = directories.get(type);
+        if (load == null || !load.waiting) return;
+        load.waiting = false;
+        if (load.validating && load.revision == catalog.revision()) { load.validating = false; return; }
+        load.validating = false;
+        if (load.revision >= 0 && load.revision != catalog.revision()) {
+            load.entries.clear(); load.page = 0; load.revision = -1; load.snapshot = null; load.complete = false;
+            requestDirectory(type, load); return;
+        }
+        load.revision = catalog.revision();
+        catalog.entries().forEach(entry -> load.entries.putIfAbsent(entry.id(), entry));
+        load.complete = catalog.lastPage();
+        load.snapshot = new RuleCatalog(type, load.revision, List.copyOf(load.entries.values()), load.complete);
+        load.page++;
+        if (!load.complete && state == RuleEditClientState.ACTIVE) requestDirectory(type, load);
+    }
+
+    // 发送来源视图请求；发送失败直接标记失败，避免界面停留在「加载中」
+    private void sendSourceViewRequest(String ruleId, SourceViewLoad load) {
+        String requestId = UUID.randomUUID().toString();
+        load.view = null;
+        load.failed = false;
+        load.deadline = 0L;
+        if (!send(new RequestRuleSourceViewPayload(sessionId, requestId, ruleId))) {
+            load.requestId = "";
+            load.failed = true;
+            return;
+        }
+        load.requestId = requestId;
+        load.deadline = System.currentTimeMillis() + SOURCE_VIEW_TIMEOUT_MILLIS;
+    }
+
+    // 超时丢弃：在途请求超过期限即降级为失败，由界面提示来源对照不可用
+    private static void expireSourceView(SourceViewLoad load) {
+        if (load.loading() && System.currentTimeMillis() > load.deadline) {
+            load.requestId = "";
+            load.failed = true;
+            load.deadline = 0L;
+        }
+    }
+
+    // 收到整包来源视图：按 requestId 配到在途请求上，失败状态或解析失败都标记降级
+    private synchronized void onSourceView(@Nullable RuleSourceViewPayload payload) {
+        if (payload == null || !payload.sessionId().equals(sessionId)) {
+            return;
+        }
+        SourceViewLoad load = pendingSourceView(payload.requestId());
+        if (load == null) {
+            LOGGER.debug("忽略过时的来源视图应答: requestId={}", payload.requestId());
+            return;
+        }
+        load.requestId = "";
+        load.deadline = 0L;
+        RuleSourceView view = RuleSaveStatus.fromId(payload.statusCode()) == RuleSaveStatus.SUCCESS
+                ? RuleSourceView.parse(payload.sourceViewJson()).result().orElse(null)
+                : null;
+        load.view = view;
+        load.failed = view == null;
+        if (view == null) {
+            LOGGER.warn("来源视图取回失败: status={} bytes={}", payload.statusCode(),
+                    payload.sourceViewJson().length());
+        }
+    }
+
+    // 收到来源视图分片：收齐后按整包处理
+    private synchronized void onSourceViewChunk(@Nullable RuleSourceViewChunkPayload payload) {
+        if (payload == null || !payload.sessionId().equals(sessionId)) {
+            return;
+        }
+        String json = sourceViewChunks.accept(payload, currentTick());
+        if (json != null) {
+            onSourceView(new RuleSourceViewPayload(payload.sessionId(), payload.requestId(),
+                    RuleSaveStatus.SUCCESS.id(), json));
+        }
+    }
+
+    // 按请求 id 找在途的来源视图缓存项；找不到即视为过时应答
+    private @Nullable SourceViewLoad pendingSourceView(@Nullable String requestId) {
+        if (requestId == null || requestId.isEmpty()) {
+            return null;
+        }
+        for (SourceViewLoad load : sourceViews.values()) {
+            if (requestId.equals(load.requestId)) {
+                return load;
+            }
+        }
+        return null;
+    }
+
+    private synchronized void onLifespan(RuleLifespanPayload payload) {
+        if (!sessionId.isEmpty() && sessionId.equals(payload.sessionId()) && lifespanRequestId.equals(payload.requestId())) {
+            queriedLifespanTicks = Math.max(0, payload.lifespanTicks());
+        }
     }
 
     // 首份快照由确认应答提供，不再额外请求，避免替换在途请求后重复准备。
