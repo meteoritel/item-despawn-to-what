@@ -9,7 +9,6 @@ import com.meteorite.itemdespawntowhat.client.edit.FieldNumbers;
 import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
-import com.meteorite.itemdespawntowhat.client.ui.screen.form.NaturalSummary;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine.Tone;
 import com.meteorite.itemdespawntowhat.client.ui.shared.EntityPreviewIcons;
@@ -41,6 +40,8 @@ final class ActionDescription {
             descriptor = BuiltinEditorDescriptors.entityDescriptor(action.text("variant", "item"));
         }
         for (EditorField field : descriptor.fields()) {
+            // 条件不在动作说明里重复：条件树由触发页统一编辑与展示
+            if (field.type() == EditorFieldType.CONDITION_TREE) continue;
             RuleValue value = action.child(field.name());
             if (value == null) value = BuiltinEditorDefaults.effectiveValue(action, field.name());
             Component description = describe(field, value);
@@ -68,10 +69,7 @@ final class ActionDescription {
     }
 
     private static Component describe(EditorField field, RuleValue value) {
-        // 条件缺省代表无条件；其它缺省参数只展示已确认的有效默认值。
-        if (field.type() == EditorFieldType.CONDITION_TREE) {
-            return NaturalSummary.conditions(value);
-        }
+        // 缺省参数只展示已确认的有效默认值。
         if (value == null || value.isNull()) return null;
         return switch (field.type()) {
             case NOTE, RAW_JSON -> null;

@@ -6,6 +6,7 @@ import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorFactories;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
+import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.EffectEditorRegistry;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
@@ -265,11 +266,14 @@ final class RuleEditorResultsPage {
                     variantControl.setOnChanged(value -> switchProduct(actionPath, value));
                     pages.liveWidgets.add(variantControl);
                 }
-                // 消耗参数的主编辑入口在输入页：结果页动作详情不重复提供类型/数量/半径
-                List<EditorField> primary = new ArrayList<>(descriptor.fields().stream()
+                // 消耗参数的主编辑入口在输入页，条件树在触发页：结果页只编辑动作自身的参数与共用补充参数
+                List<EditorField> editable = descriptor.fields().stream()
+                        .filter(field -> field.type() != EditorFieldType.CONDITION_TREE)
+                        .toList();
+                List<EditorField> primary = new ArrayList<>(editable.stream()
                         .filter(field -> !RuleEditorPageSupport.isCommonActionField(field))
                         .toList());
-                List<EditorField> advanced = descriptor.fields().stream().filter(RuleEditorPageSupport::isCommonActionField).toList();
+                List<EditorField> advanced = editable.stream().filter(RuleEditorPageSupport::isCommonActionField).toList();
                 effectForm = pages.newForm(session, actionPath, new TypeEditorDescriptor(descriptor.id(), descriptor.label(), primary, descriptor.readOnly()));
                 effectForm.useCompactSpacing();
                 if (typeId.equals(PlaceBlockEffect.ID)) bindPlaceBlockVisibility(effectForm, session, actionPath);
