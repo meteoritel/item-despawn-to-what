@@ -428,7 +428,7 @@ final class NumberControl extends FormControl {
         String text = input.value().trim();
         if (text.isEmpty()) {
             if (field.required()) {
-                return List.of(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "required")));
+                return List.of(FormIssue.required(path, label()));
             }
             return List.of();
         }

@@ -185,7 +185,7 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
 
     @Override
     List<FormIssue> issues(String path) {
-        if (field.required() && values.isEmpty()) return List.of(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "required")));
+        if (field.required() && values.isEmpty()) return List.of(FormIssue.required(path, label()));
         for (Selection value : values) {
             boolean allowsTags = field.type() == EditorFieldType.TAG || field.type() == EditorFieldType.TAG_LIST;
             if (!allowsTags && value.id().startsWith("#")) {

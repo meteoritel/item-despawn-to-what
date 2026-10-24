@@ -172,7 +172,7 @@ final class ListControl extends FormControl {
     List<FormIssue> issues(String path) {
         List<FormIssue> list = new ArrayList<>();
         if (field.required() && editor.size() == 0) {
-            list.add(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "required")));
+            list.add(FormIssue.required(path, label()));
         }
         String pending = editor.input().value().trim();
         if (!pending.isEmpty() && !validEntry(pending)) {

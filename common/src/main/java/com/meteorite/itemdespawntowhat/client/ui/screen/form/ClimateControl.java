@@ -22,9 +22,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
-
 // 气候参数独立启用；区间条与精确输入共用表单的提交和输入缓冲。
-
 final class ClimateControl extends FormControl {
 
     private static final String MIN_FIELD = "min";
@@ -365,7 +363,7 @@ final class ClimateControl extends FormControl {
         checkEnd(issues, DraftPaths.child(path, MIN_FIELD), minInput.value(), min);
         checkEnd(issues, DraftPaths.child(path, MAX_FIELD), maxInput.value(), max);
         if (minInput.value().isBlank() && maxInput.value().isBlank()) {
-            issues.add(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "required")));
+            issues.add(FormIssue.required(path, label()));
         }
         if (min != null && max != null && min > max) {
             issues.add(FormIssue.error(DraftPaths.child(path, MIN_FIELD), label(),

@@ -13,9 +13,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
-
 // ---- 枚举分段选择 ----
-
 final class EnumControl extends FormControl {
 
     private final UiSegmentedControl segments;
@@ -94,7 +92,7 @@ final class EnumControl extends FormControl {
     @Override
     List<FormIssue> issues(String path) {
         if (field.required() && segments.selected().isBlank()) {
-            return List.of(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "required")));
+            return List.of(FormIssue.required(path, label()));
         }
         return List.of();
     }

@@ -21,9 +21,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
-
 // ---- 单行文本控件（含数值、id、百分比等全部文本型字段） ----
-
 final class TextControl extends FormControl {
 
     // 备注的行数：2–3 行内直接读完，不再依赖单行横向滚动
@@ -288,7 +286,7 @@ final class TextControl extends FormControl {
         String text = raw.trim();
         if (text.isEmpty()) {
             if (field.required()) {
-                return List.of(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "required")));
+                return List.of(FormIssue.required(path, label()));
             }
             return List.of();
         }
