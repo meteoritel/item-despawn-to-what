@@ -49,49 +49,49 @@ public record EditorField(String name, String labelKey, EditorFieldType type, @N
 
     // 必填单行文本
     public static EditorField text(String name, String labelKey) {
-        return create(name, labelKey, EditorFieldType.TEXT, null, false, true, null, null, null, null, null);
+        return create(name, labelKey, EditorFieldType.TEXT, null, false, true, null, null, null, null);
     }
 
     // 可选单行文本
     public static EditorField optionalText(String name, String labelKey) {
-        return create(name, labelKey, EditorFieldType.TEXT, null, true, false, null, null, null, null, null);
+        return create(name, labelKey, EditorFieldType.TEXT, null, true, false, null, null, null, null);
     }
 
     // 可选多行文本
     public static EditorField longText(String name, String labelKey) {
-        return create(name, labelKey, EditorFieldType.LONG_TEXT, null, true, false, null, null, null, null, null);
+        return create(name, labelKey, EditorFieldType.LONG_TEXT, null, true, false, null, null, null, null);
     }
 
     // 必填整数，带后端合法上下界（滑块窗口默认同域）
     public static EditorField integer(String name, String labelKey, int min, int max) {
-        return create(name, labelKey, EditorFieldType.INTEGER, min + ".." + max, false, true, null, null, null,
-                null, null, NumericDomain.integers(min, max), -1);
+        return create(name, labelKey, EditorFieldType.INTEGER, min + ".." + max, false, true, null, null,
+                null, NumericDomain.integers(min, max));
     }
 
     // 可空整数（留空表示不约束），带后端合法上下界
     public static EditorField optionalInteger(String name, String labelKey, int min, int max) {
-        return create(name, labelKey, EditorFieldType.INTEGER, min + ".." + max, true, false, null, null, null,
-                null, null, NumericDomain.integers(min, max), -1);
+        return create(name, labelKey, EditorFieldType.INTEGER, min + ".." + max, true, false, null, null,
+                null, NumericDomain.integers(min, max));
     }
 
     // 整数字段：后端合法域与滑块常用窗口分开记录（窗口不是提交硬限额）
     public static EditorField integerSlider(String name, String labelKey, int min, int max,
                                             int windowMin, int windowMax) {
-        return create(name, labelKey, EditorFieldType.INTEGER, min + ".." + max, false, true, null, null, null,
-                null, null, NumericDomain.integers(min, max, windowMin, windowMax), -1);
+        return create(name, labelKey, EditorFieldType.INTEGER, min + ".." + max, false, true, null, null,
+                null, NumericDomain.integers(min, max, windowMin, windowMax));
     }
 
     // 每个物品引用各自保存数量，滑条默认显示常用范围 1..64。
     public static EditorField itemCounts(String name, String labelKey, int min, int max) {
         return create(name, labelKey, EditorFieldType.ITEM_COUNTS, min + ".." + max,
-                true, false, "minecraft:item", null, null, null, null,
-                NumericDomain.integers(min, max, min, Math.min(max, 64)), -1);
+                true, false, "minecraft:item", null, null,
+                NumericDomain.integers(min, max, min, Math.min(max, 64)));
     }
 
     // 刻数：0 显示「立即」；界面允许按秒显示，但 JSON 仍是完整刻数
     public static EditorField ticks(String name, String labelKey, int min, int max) {
-        return create(name, labelKey, EditorFieldType.TICKS, min + ".." + max, false, true, null, null, null,
-                null, null, NumericDomain.integers(min, max), -1);
+        return create(name, labelKey, EditorFieldType.TICKS, min + ".." + max, false, true, null, null,
+                null, NumericDomain.integers(min, max));
     }
 
     // 必填小数，带上下界（默认步长 0.1 / 精细 0.01）
@@ -102,8 +102,8 @@ public record EditorField(String name, String labelKey, EditorFieldType type, @N
     // 必填小数，带上下界与显式步长
     public static EditorField decimal(String name, String labelKey, double min, double max,
                                       double step, double shiftStep) {
-        return create(name, labelKey, EditorFieldType.DECIMAL, min + ".." + max, false, true, null, null, null,
-                null, null, NumericDomain.decimals(min, max, step, shiftStep), -1);
+        return create(name, labelKey, EditorFieldType.DECIMAL, min + ".." + max, false, true, null, null,
+                null, NumericDomain.decimals(min, max, step, shiftStep));
     }
 
     // 概率字段：JSON 0..1，界面 0..100 百分比；显示按原始精度往返，不做舍入
@@ -113,115 +113,86 @@ public record EditorField(String name, String labelKey, EditorFieldType type, @N
 
     // 概率字段（显式步长档）
     public static EditorField percent(String name, String labelKey, double step, double shiftStep) {
-        return create(name, labelKey, EditorFieldType.PERCENT, "0.0..1.0", false, true, null, null, null,
-                null, null, NumericDomain.decimals(0.0D, 1.0D, step, shiftStep), -1);
+        return create(name, labelKey, EditorFieldType.PERCENT, "0.0..1.0", false, true, null, null,
+                null, NumericDomain.decimals(0.0D, 1.0D, step, shiftStep));
     }
 
     // 药水等级字段：JSON 存 amplifier（0 起算，后端 0..255），界面显示等级 1..256
     public static EditorField amplifier(String name, String labelKey) {
         return create(name, labelKey, EditorFieldType.AMPLIFIER, FieldNumbers.MIN_LEVEL + ".." + FieldNumbers.MAX_LEVEL,
-                false, true, null, null, null, null, null,
-                NumericDomain.integers(0, FieldNumbers.MAX_AMPLIFIER, 0, FieldNumbers.MAX_AMPLIFIER), -1);
+                false, true, null, null, null,
+                NumericDomain.integers(0, FieldNumbers.MAX_AMPLIFIER, 0, FieldNumbers.MAX_AMPLIFIER));
     }
 
     // 布尔开关
     public static EditorField bool(String name, String labelKey) {
-        return create(name, labelKey, EditorFieldType.BOOLEAN, null, false, true, null, null, null, null, null);
+        return create(name, labelKey, EditorFieldType.BOOLEAN, null, false, true, null, null, null, null);
     }
 
-    // 枚举字段，取值由 values 给出（无枚举组名时直接用域值列表）
-    public static EditorField enumOf(String name, String labelKey, String... values) {
-        return create(name, labelKey, EditorFieldType.ENUM, String.join(",", values), false, true, null, null, null, null, null);
-    }
-
-    // 枚举字段（带 i18n 组名；与无组名重载区分，方法名不同避免可变参数歧义）
+    // 枚举字段（带 i18n 组名）
     public static EditorField enumIn(String name, String labelKey, String enumGroup, String... values) {
-        return create(name, labelKey, EditorFieldType.ENUM, String.join(",", values), false, true, null, enumGroup, null, null, null);
-    }
-
-    // 注册表 id 字段（不允许标签）
-    public static EditorField registryId(String name, String labelKey, String registry) {
-        return create(name, labelKey, EditorFieldType.REGISTRY_ID, null, false, true, registry, null, null, null, null);
-    }
-
-    // 可空注册表 id 字段
-    public static EditorField optionalRegistryId(String name, String labelKey, String registry) {
-        return create(name, labelKey, EditorFieldType.REGISTRY_ID, null, true, false, registry, null, null, null, null);
+        return create(name, labelKey, EditorFieldType.ENUM, String.join(",", values), false, true, null, enumGroup,
+                null, null);
     }
 
     // 可带标签的 id 字段
     public static EditorField tag(String name, String labelKey, String registry) {
-        return create(name, labelKey, EditorFieldType.TAG, null, false, true, registry, null, null, null, null);
+        return create(name, labelKey, EditorFieldType.TAG, null, false, true, registry, null, null, null);
     }
 
     // 可空、可带标签的 id 字段
     public static EditorField optionalTag(String name, String labelKey, String registry) {
-        return create(name, labelKey, EditorFieldType.TAG, null, true, false, registry, null, null, null, null);
+        return create(name, labelKey, EditorFieldType.TAG, null, true, false, registry, null, null, null);
     }
 
     // 可带标签的 id 列表
     public static EditorField tagList(String name, String labelKey, String registry) {
-        return create(name, labelKey, EditorFieldType.TAG_LIST, null, true, false, registry, null, null, null, null);
+        return create(name, labelKey, EditorFieldType.TAG_LIST, null, true, false, registry, null, null, null);
     }
 
     // 纯资源位置列表（不给标签模式）
     public static EditorField rlList(String name, String labelKey, String registry) {
-        return create(name, labelKey, EditorFieldType.RL_LIST, null, true, false, registry, null, null, null, null);
-    }
-
-    // 字符串列表
-    public static EditorField stringList(String name, String labelKey) {
-        return create(name, labelKey, EditorFieldType.STRING_LIST, null, true, false, null, null, null, null, null);
+        return create(name, labelKey, EditorFieldType.RL_LIST, null, true, false, registry, null, null, null);
     }
 
     // 资源位置字段（不允许标签）
     public static EditorField resourceLocation(String name, String labelKey) {
-        return create(name, labelKey, EditorFieldType.RESOURCE_LOCATION, null, false, true, null, null, null, null, null);
+        return create(name, labelKey, EditorFieldType.RESOURCE_LOCATION, null, false, true, null, null, null, null);
     }
 
     // 气候区间字段：端点可省略、域 -1..1、窄步长 0.1 / 精细 0.01
     public static EditorField climateRange(String name, String labelKey) {
-        return create(name, labelKey, EditorFieldType.CLIMATE_RANGE, "-1.0..1.0", true, false, null, null, null,
-                null, null, NumericDomain.decimals(-1.0D, 1.0D, 0.1D, 0.01D), -1);
+        return create(name, labelKey, EditorFieldType.CLIMATE_RANGE, "-1.0..1.0", true, false, null, null,
+                null, NumericDomain.decimals(-1.0D, 1.0D, 0.1D, 0.01D));
     }
 
     // 子列表字段（对象数组，字段定义由 subFields 给出）
     public static EditorField subList(String name, String labelKey, EditorField... subFields) {
-        return create(name, labelKey, EditorFieldType.SUBLIST, null, true, false, null, null, null, List.of(subFields), null);
+        return create(name, labelKey, EditorFieldType.SUBLIST, null, true, false, null, null, List.of(subFields), null);
     }
 
     // 条件树字段
     public static EditorField conditionTree(String name, String labelKey) {
-        return create(name, labelKey, EditorFieldType.CONDITION_TREE, null, true, false, null, null, null, null, null);
+        return create(name, labelKey, EditorFieldType.CONDITION_TREE, null, true, false, null, null, null, null);
     }
 
     // 只读说明行（不写入 JSON，label key 即说明文案）
     public static EditorField note(String labelKey) {
-        return create("__note", labelKey, EditorFieldType.NOTE, null, true, false, null, null, null, null, null);
+        return create("__note", labelKey, EditorFieldType.NOTE, null, true, false, null, null, null, null);
     }
 
     // 原始 JSON 只读展示（第三方类型回退）
     public static EditorField rawJson() {
         return create("__raw_json", TypeLabels.UI_PREFIX + "field.raw_json", EditorFieldType.RAW_JSON,
-                null, true, false, null, null, null, null, null);
+                null, true, false, null, null, null, null);
     }
 
     private static EditorField create(String name, String labelKey, EditorFieldType type, @Nullable String domain,
                                       boolean nullable, boolean required, @Nullable String registry,
-                                      @Nullable String enumGroup, @Nullable String hintKey,
-                                      @Nullable List<EditorField> subFields, @Nullable List<EditorPreset> presets) {
-        return create(name, labelKey, type, domain, nullable, required, registry, enumGroup, hintKey, subFields, presets,
-                null, -1);
-    }
-
-    // 带数值域元数据的完整构造
-    private static EditorField create(String name, String labelKey, EditorFieldType type, @Nullable String domain,
-                                      boolean nullable, boolean required, @Nullable String registry,
-                                      @Nullable String enumGroup, @Nullable String hintKey,
-                                      @Nullable List<EditorField> subFields, @Nullable List<EditorPreset> presets,
-                                      @Nullable NumericDomain numbers, int displayPrecision) {
-        return new EditorField(name, labelKey, type, domain, nullable, required, registry, enumGroup, hintKey,
-                subFields, presets, numbers, displayPrecision);
+                                      @Nullable String enumGroup, @Nullable List<EditorField> subFields,
+                                      @Nullable NumericDomain numbers) {
+        return new EditorField(name, labelKey, type, domain, nullable, required, registry, enumGroup, null,
+                subFields, null, numbers, -1);
     }
 
     // ---- 派生 ----
@@ -254,12 +225,6 @@ public record EditorField(String name, String labelKey, EditorFieldType type, @N
     public EditorField withNumbers(@Nullable NumericDomain newNumbers) {
         return new EditorField(name, labelKey, type, domain, nullable, required, registry, enumGroup, hintKey,
                 subFields, presets, newNumbers, displayPrecision);
-    }
-
-    // 替换显示精度（-1 表示最短往返）
-    public EditorField withDisplayPrecision(int precision) {
-        return new EditorField(name, labelKey, type, domain, nullable, required, registry, enumGroup, hintKey,
-                subFields, presets, numbers, precision);
     }
 
     // 枚举取值列表
@@ -313,20 +278,6 @@ public record EditorField(String name, String labelKey, EditorFieldType type, @N
         } catch (NumberFormatException error) {
             return fallback;
         }
-    }
-
-    public boolean hasNumericDomain() {
-        return numericDomain() != null;
-    }
-
-    // 后端合法下界（无域元数据时为 null）
-    public @Nullable Double backendMin() {
-        return numbers == null ? null : numbers.backendMin();
-    }
-
-    // 后端合法上界（无域元数据时为 null）
-    public @Nullable Double backendMax() {
-        return numbers == null ? null : numbers.backendMax();
     }
 
     // 滑块窗口下界（窗口缺省时回落后端域，仍缺省返回 fallback）
