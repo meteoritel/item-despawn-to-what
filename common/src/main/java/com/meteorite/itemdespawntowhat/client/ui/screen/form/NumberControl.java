@@ -7,6 +7,7 @@ import com.meteorite.itemdespawntowhat.client.edit.FieldNumbers;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.NumericDomain;
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumberPolicy;
@@ -30,7 +31,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
-/***
+/**
  * 数值控件：kit 滑杆 + 行内精确输入框。
  * <p>滑杆使用字段的「常用交互窗口」，但提交始终按后端合法域校验：窗口不充当硬限额，
  * 窗口之外的既有合法值照原样显示与精确编辑，绝不在装载时被钳制。
@@ -50,8 +51,8 @@ final class NumberControl extends FormControl {
     // 滑杆与输入框之间的间距
     private static final int GAP = 2;
     // 单位提示的本地化 key
-    private static final String UNIT_SECONDS = "gui.itemdespawntowhat.edit.unit.seconds";
-    private static final String UNIT_LEVEL = "gui.itemdespawntowhat.edit.unit.level";
+    private static final String UNIT_SECONDS = TypeLabels.UI_PREFIX + "unit.seconds";
+    private static final String UNIT_LEVEL = TypeLabels.UI_PREFIX + "unit.level";
 
     private final Font font;
     private final UiSlider slider;

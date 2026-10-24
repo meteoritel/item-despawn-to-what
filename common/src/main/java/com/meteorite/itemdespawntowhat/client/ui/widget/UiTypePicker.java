@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.BORDER;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.CARD_PADDING_X;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.CARD_PADDING_Y;
@@ -234,7 +235,7 @@ public final class UiTypePicker implements UiWidget {
         drawBorder(graphics, searchRect, theme.palette().canvasPickerInputBorder());
         String filter = filterText.toString();
         String searchText = filter.isEmpty()
-                ? Component.translatable("gui.itemdespawntowhat.edit.picker.filter").getString() : filter;
+                ? Component.translatable(TypeLabels.UI_PREFIX + "picker.filter").getString() : filter;
         int searchColor = filter.isEmpty() ? theme.palette().canvasPickerTextDisabled() : theme.palette().canvasTextOnAccent();
         graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont, searchText, searchRect.width() - SEARCH_PADDING * 2 - CARET_WIDTH * 2),
                 searchRect.x() + SEARCH_PADDING, searchRect.y() + SEARCH_PADDING, searchColor, false);
@@ -251,7 +252,7 @@ public final class UiTypePicker implements UiWidget {
         try {
             if (filteredOptions.isEmpty()) {
                 graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont,
-                                Component.translatable("gui.itemdespawntowhat.edit.picker.empty").getString(),
+                                Component.translatable(TypeLabels.UI_PREFIX + "picker.empty").getString(),
                                 rowWidth - CARD_PADDING_X),
                         CARD_PADDING_X, CARD_PADDING_Y, theme.palette().canvasPickerTextMuted(), false);
             } else {

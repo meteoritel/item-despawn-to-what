@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Deque;
 import java.util.List;
 import java.util.LinkedHashMap;
@@ -23,28 +24,31 @@ public final class EditSession {
     // 撤销/重做历史容量上限
     public static final int HISTORY_LIMIT = 100;
 
+    // 操作标签统一前缀：模组文案域 + undo 域
+    private static final String OP_PREFIX = TypeLabels.UI_PREFIX + "undo.";
+
     // 操作标签（i18n key）
-    public static final String OP_SET_FIELD = "gui.itemdespawntowhat.edit.undo.set_field";
-    public static final String OP_SET_SOURCE = "gui.itemdespawntowhat.edit.undo.set_source";
-    public static final String OP_ADD_CONDITION = "gui.itemdespawntowhat.edit.undo.add_condition";
-    public static final String OP_ADD_GROUP = "gui.itemdespawntowhat.edit.undo.add_group";
-    public static final String OP_WRAP_NOT = "gui.itemdespawntowhat.edit.undo.wrap_not";
-    public static final String OP_DELETE_NODE = "gui.itemdespawntowhat.edit.undo.delete_node";
-    public static final String OP_MOVE_NODE = "gui.itemdespawntowhat.edit.undo.move_node";
-    public static final String OP_DUPLICATE_NODE = "gui.itemdespawntowhat.edit.undo.duplicate_node";
-    public static final String OP_TOGGLE_KIND = "gui.itemdespawntowhat.edit.undo.toggle_kind";
-    public static final String OP_ADD_EFFECT = "gui.itemdespawntowhat.edit.undo.add_effect";
-    public static final String OP_REMOVE_EFFECT = "gui.itemdespawntowhat.edit.undo.remove_effect";
-    public static final String OP_MOVE_EFFECT = "gui.itemdespawntowhat.edit.undo.move_effect";
-    public static final String OP_CREATE_RULE = "gui.itemdespawntowhat.edit.undo.create_rule";
-    public static final String OP_EDIT_CONDITIONS = "gui.itemdespawntowhat.edit.undo.edit_conditions";
-    public static final String OP_DELETE_RULE = "gui.itemdespawntowhat.edit.undo.delete_rule";
+    public static final String OP_SET_FIELD = OP_PREFIX + "set_field";
+    public static final String OP_SET_SOURCE = OP_PREFIX + "set_source";
+    public static final String OP_ADD_CONDITION = OP_PREFIX + "add_condition";
+    public static final String OP_ADD_GROUP = OP_PREFIX + "add_group";
+    public static final String OP_WRAP_NOT = OP_PREFIX + "wrap_not";
+    public static final String OP_DELETE_NODE = OP_PREFIX + "delete_node";
+    public static final String OP_MOVE_NODE = OP_PREFIX + "move_node";
+    public static final String OP_DUPLICATE_NODE = OP_PREFIX + "duplicate_node";
+    public static final String OP_TOGGLE_KIND = OP_PREFIX + "toggle_kind";
+    public static final String OP_ADD_EFFECT = OP_PREFIX + "add_effect";
+    public static final String OP_REMOVE_EFFECT = OP_PREFIX + "remove_effect";
+    public static final String OP_MOVE_EFFECT = OP_PREFIX + "move_effect";
+    public static final String OP_CREATE_RULE = OP_PREFIX + "create_rule";
+    public static final String OP_EDIT_CONDITIONS = OP_PREFIX + "edit_conditions";
+    public static final String OP_DELETE_RULE = OP_PREFIX + "delete_rule";
     // 候选结果与结构互斥转换的操作标签
-    public static final String OP_ADD_CANDIDATE = "gui.itemdespawntowhat.edit.undo.add_candidate";
-    public static final String OP_REMOVE_CANDIDATE = "gui.itemdespawntowhat.edit.undo.remove_candidate";
-    public static final String OP_MOVE_CANDIDATE = "gui.itemdespawntowhat.edit.undo.move_candidate";
-    public static final String OP_EDIT_CANDIDATE = "gui.itemdespawntowhat.edit.undo.edit_candidate";
-    public static final String OP_CONVERT_STRUCTURE = "gui.itemdespawntowhat.edit.undo.convert_structure";
+    public static final String OP_ADD_CANDIDATE = OP_PREFIX + "add_candidate";
+    public static final String OP_REMOVE_CANDIDATE = OP_PREFIX + "remove_candidate";
+    public static final String OP_MOVE_CANDIDATE = OP_PREFIX + "move_candidate";
+    public static final String OP_EDIT_CANDIDATE = OP_PREFIX + "edit_candidate";
+    public static final String OP_CONVERT_STRUCTURE = OP_PREFIX + "convert_structure";
 
     // 编辑目标 id（规则 id 或新建规则的目标 id）
     private final String targetId;
@@ -107,7 +111,7 @@ public final class EditSession {
         Map<String, PendingInput> moved = new LinkedHashMap<>();
         for (var entry : pendingInputs.entrySet()) {
             String from = paths.keySet().stream().filter(scope -> within(entry.getKey(), scope))
-                    .max(java.util.Comparator.comparingInt(String::length)).orElse(null);
+                    .max(Comparator.comparingInt(String::length)).orElse(null);
             String path = from == null ? entry.getKey() : paths.get(from) + entry.getKey().substring(from.length());
             moved.put(path, atPath(entry.getValue(), entry.getKey(), path));
         }
@@ -146,7 +150,6 @@ public final class EditSession {
         return targetId;
     }
 
-    // 当前草稿
     public RuleDraft draft() {
         return draft;
     }
@@ -270,7 +273,7 @@ public final class EditSession {
         for (var current : latest.values()) {
             if (entry.excludedScopes().stream().anyMatch(scope -> within(current.getKey(), scope))) continue;
             String mapped = entry.paths().keySet().stream().filter(scope -> within(current.getKey(), scope))
-                    .max(java.util.Comparator.comparingInt(String::length)).orElse(null);
+                    .max(Comparator.comparingInt(String::length)).orElse(null);
             String target = mapped != null ? entry.paths().get(mapped) + current.getKey().substring(mapped.length())
                     : fieldEdit ? current.getKey() : restoredInputPath(current.getKey(), entry.snapshot());
             if (target != null) restored.put(target, atPath(current.getValue(), current.getKey(), target));

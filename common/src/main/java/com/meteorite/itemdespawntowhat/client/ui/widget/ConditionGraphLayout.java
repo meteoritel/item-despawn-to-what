@@ -10,6 +10,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreePath;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -61,7 +62,7 @@ final class ConditionGraphLayout {
     static final int HOTSPOT_HIT_PADDING = 5;
     // 标题带右上角结构标记的预留宽度：测宽时一并计入，标记出现时不挤掉标题文字
     static final int MARK_RESERVE = 8;
-    static final String FLOW_HINT_KEY = "gui.itemdespawntowhat.edit.tree.flow_hint";
+    static final String FLOW_HINT_KEY = TypeLabels.UI_PREFIX + "tree.flow_hint";
     // 流动提示文字与虚线之间的空隙：文字底下还要铺一块画布底色遮断虚线
     static final int FLOW_HINT_GAP = 2;
 
@@ -131,8 +132,8 @@ final class ConditionGraphLayout {
     private final Font font;
     private final UiTidyTreeLayout<GraphNode> layout = new UiTidyTreeLayout<>(LEVEL_PITCH, SIBLING_GAP);
     private final LayoutSource layoutSource = new LayoutSource(this);
-    private final EndpointSlot sourceSlot = new EndpointSlot("gui.itemdespawntowhat.edit.tree.node.source");
-    private final EndpointSlot resultSlot = new EndpointSlot("gui.itemdespawntowhat.edit.tree.node.result");
+    private final EndpointSlot sourceSlot = new EndpointSlot(TypeLabels.UI_PREFIX + "tree.node.source");
+    private final EndpointSlot resultSlot = new EndpointSlot(TypeLabels.UI_PREFIX + "tree.node.result");
     private UiRect sourceRect = new UiRect(0, 0, 0, 0);
     private UiRect resultRect = new UiRect(0, 0, 0, 0);
     private int treeOriginX;
@@ -172,8 +173,8 @@ final class ConditionGraphLayout {
     private ConditionExpression expression = ConditionExpression.EMPTY;
     private List<ConditionTreeContract.TypeOption> typeOptions = List.of();
     private @Nullable Function<ConditionNode.Leaf, Component> leafSummary;
-    private final List<ConditionNode> nodeView = java.util.Collections.unmodifiableList(order);
-    private final List<Hotspot> hotspotView = java.util.Collections.unmodifiableList(hotspots);
+    private final List<ConditionNode> nodeView = Collections.unmodifiableList(order);
+    private final List<Hotspot> hotspotView = Collections.unmodifiableList(hotspots);
 
     ConditionGraphLayout(Font font) { this.font = font; }
 
@@ -510,11 +511,11 @@ final class ConditionGraphLayout {
             return Component.empty();
         }
         Component label = condition == null
-                ? Component.translatable("gui.itemdespawntowhat.edit.tree.leaf_missing")
+                ? Component.translatable(TypeLabels.UI_PREFIX + "tree.leaf_missing")
                 : typeLabel(condition.type());
         if (condition instanceof OpaqueCondition) {
             label = label.copy().append(" ").append(Component.translatable(
-                    "gui.itemdespawntowhat.edit.tree.parameters_readonly"));
+                    TypeLabels.UI_PREFIX + "tree.parameters_readonly"));
         }
         return label;
     }
@@ -551,11 +552,11 @@ final class ConditionGraphLayout {
     private Component branchCountLabel(ConditionNode node) {
         List<ConditionNode> children = ConditionTreeNodes.INSTANCE.children(node);
         if (children.isEmpty()) {
-            return Component.translatable("gui.itemdespawntowhat.edit.tree.empty");
+            return Component.translatable(TypeLabels.UI_PREFIX + "tree.empty");
         }
         String key = children.size() == 1
-                ? "gui.itemdespawntowhat.edit.tree.card.count.one"
-                : "gui.itemdespawntowhat.edit.tree.card.count";
+                ? TypeLabels.UI_PREFIX + "tree.card.count.one"
+                : TypeLabels.UI_PREFIX + "tree.card.count";
         return key.endsWith(".one")
                 ? Component.translatable(key)
                 : Component.translatable(key, children.size());
@@ -564,9 +565,9 @@ final class ConditionGraphLayout {
     // 容器内容行 2：运算符的展开说法，与标题带里的单字运算符互为注解
     private Component operatorHintLabel(ConditionNode node) {
         String key = switch (node) {
-            case ConditionNode.AllOf ignored -> "gui.itemdespawntowhat.edit.tree.card.hint.all";
-            case ConditionNode.AnyOf ignored -> "gui.itemdespawntowhat.edit.tree.card.hint.any";
-            default -> "gui.itemdespawntowhat.edit.tree.card.hint.not";
+            case ConditionNode.AllOf ignored -> TypeLabels.UI_PREFIX + "tree.card.hint.all";
+            case ConditionNode.AnyOf ignored -> TypeLabels.UI_PREFIX + "tree.card.hint.any";
+            default -> TypeLabels.UI_PREFIX + "tree.card.hint.not";
         };
         return Component.translatable(key);
     }
@@ -578,13 +579,13 @@ final class ConditionGraphLayout {
             return Component.empty();
         }
         if (info.incomplete()) {
-            return Component.translatable("gui.itemdespawntowhat.edit.tree.incomplete");
+            return Component.translatable(TypeLabels.UI_PREFIX + "tree.incomplete");
         }
         if (info.overflow()) {
-            return Component.translatable("gui.itemdespawntowhat.edit.tree.overflow_mark");
+            return Component.translatable(TypeLabels.UI_PREFIX + "tree.overflow_mark");
         }
         if (info.deep()) {
-            return Component.translatable("gui.itemdespawntowhat.edit.tree.deep_mark");
+            return Component.translatable(TypeLabels.UI_PREFIX + "tree.deep_mark");
         }
         return Component.empty();
     }
@@ -605,7 +606,7 @@ final class ConditionGraphLayout {
 
     private Component typeLabel(@Nullable ResourceLocation type) {
         if (type == null) {
-            return Component.translatable("gui.itemdespawntowhat.edit.tree.leaf_missing");
+            return Component.translatable(TypeLabels.UI_PREFIX + "tree.leaf_missing");
         }
         for (ConditionTreeContract.TypeOption option : typeOptions) {
             if (option.id().equals(type)) {
@@ -617,9 +618,9 @@ final class ConditionGraphLayout {
 
     Component operatorLabel(ConditionNode node) {
         String key = switch (node) {
-            case ConditionNode.AllOf ignored -> "gui.itemdespawntowhat.edit.tree.operator.all";
-            case ConditionNode.AnyOf ignored -> "gui.itemdespawntowhat.edit.tree.operator.any";
-            case ConditionNode.Inverted ignored -> "gui.itemdespawntowhat.edit.tree.operator.not";
+            case ConditionNode.AllOf ignored -> TypeLabels.UI_PREFIX + "tree.operator.all";
+            case ConditionNode.AnyOf ignored -> TypeLabels.UI_PREFIX + "tree.operator.any";
+            case ConditionNode.Inverted ignored -> TypeLabels.UI_PREFIX + "tree.operator.not";
             default -> throw new IllegalArgumentException("Not a logic node");
         };
         return Component.translatable(key);

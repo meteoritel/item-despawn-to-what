@@ -63,7 +63,7 @@ final class SourceCatalystSelectionPolicy implements Function<String, @Nullable 
 
     private static boolean isCatalystOwner(@Nullable RuleValue owner, String path) {
         if (owner == null || !owner.isMapping()) return false;
-        String type = RuleEditorPageSupport.stringField(owner, RuleFields.TYPE);
+        String type = RuleValueReads.stringField(owner, RuleFields.TYPE);
         return RuleFields.CATALYST_COST.equals(path)
                 || RuleEditorPageSupport.CATALYST_PRESENT_ID.toString().equals(type);
     }

@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
 import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -38,7 +39,7 @@ final class FormRowRenderer {
         int width = row.narrow ? row.controlWidth : row.labelWidth;
         String text = row.control.label().getString();
         if (minimumControlHeight == 0 && row.defaultDisplayed && !row.control.isEdited()) {
-            text = Component.translatable("gui.itemdespawntowhat.edit.default_marker").getString() + text;
+            text = Component.translatable(TypeLabels.UI_PREFIX + "default_marker").getString() + text;
         }
         if (row.field.required()) {
             text = text + " *";

@@ -14,7 +14,7 @@ import org.jetbrains.annotations.Nullable;
 public final class RuleCategorySkeleton {
 
     // 分类显示名的本地化 key 前缀
-    public static final String LABEL_PREFIX = "gui.itemdespawntowhat.edit.category.";
+    public static final String LABEL_PREFIX = TypeLabels.UI_PREFIX + "category.";
 
     // 扩展分组：无产出、含未知产出与未知分类都归入这组语义
     public static final String EXTENSION = "extension";

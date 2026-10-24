@@ -4,6 +4,7 @@ import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
@@ -32,7 +33,7 @@ final class SublistControl extends FormControl {
         this.font = font;
         this.owner = owner;
         this.subFields = field.subFields();
-        this.addButton = new UiButton(THEME, font, Component.translatable("gui.itemdespawntowhat.edit.list.add"),
+        this.addButton = new UiButton(THEME, font, Component.translatable(TypeLabels.UI_PREFIX + "list.add"),
                 UiButtonVariant.SECONDARY, () -> {
                     owner.changeChildStructure(field.name(), () -> {
                         markEdited();
@@ -57,7 +58,7 @@ final class SublistControl extends FormControl {
 
     // 每个子项右侧的删除按钮
     private UiButton createRemoveButton(FormView child) {
-        return new UiButton(THEME, font, Component.translatable("gui.itemdespawntowhat.edit.list.remove"),
+        return new UiButton(THEME, font, Component.translatable(TypeLabels.UI_PREFIX + "list.remove"),
                 UiButtonVariant.DANGER, () -> {
                     int index = children.indexOf(child);
                     if (index >= 0) {

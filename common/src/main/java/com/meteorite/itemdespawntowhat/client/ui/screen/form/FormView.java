@@ -7,6 +7,7 @@ import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
@@ -15,6 +16,7 @@ import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.function.BooleanSupplier;
 import java.util.function.BiConsumer;
@@ -29,7 +31,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
-/***
+/**
  * 描述符驱动的表单视图：把 TypeEditorDescriptor 的字段列表渲染成可滚动的一列控件。
  * <p>所有写入都经由 EditSession（统一撤销门面）落到 RuleDraft，控件本身不直接改草稿；
  * 界面不出现任何可编辑的 JSON 文本框，未识别字段原样保留。
@@ -277,7 +279,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
 
     /** 卡片编辑页与条件树参数框启用，弹窗等其它宿主保留原有密度。 */
     public void useCardSpacing() {
-        minimumControlHeight = 20;
+        minimumControlHeight = FormControl.CARD_CONTROL_HEIGHT;
         rowGap = 6;
         for (FormRow row : rows) row.control.setMinimumHeight(minimumControlHeight);
     }
@@ -304,11 +306,11 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         if (catalogOpener != null && FieldCatalogTypes.catalogTypeOf(row.field) != null
                 && isCatalogField(row.field)) {
             row.pickers.add(new UiButton(THEME, font,
-                    Component.translatable("gui.itemdespawntowhat.edit.pick." + (catalogSelections ? "add" : "open")),
+                    Component.translatable(TypeLabels.UI_PREFIX + "pick." + (catalogSelections ? "add" : "open")),
                     UiButtonVariant.SECONDARY, () -> pick(row, false)).setChipStyle(true));
             if (!catalogSelections && (row.field.type() == EditorFieldType.TAG || row.field.type() == EditorFieldType.TAG_LIST)) row.pickers.add(
                     new UiButton(THEME, font,
-                            Component.translatable("gui.itemdespawntowhat.edit.pick.tags"),
+                            Component.translatable(TypeLabels.UI_PREFIX + "pick.tags"),
                             UiButtonVariant.SECONDARY, () -> pick(row, true)).setChipStyle(true));
         }
         row.refreshButtons();
@@ -326,7 +328,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
             if (row.field.type() == EditorFieldType.TAG_LIST || row.field.type() == EditorFieldType.RL_LIST) {
                 // 文本引用由完整选择替换；未知元素保留，避免目录编辑破坏扩展数据。
                 RuleValue.Sequence array = RuleValue.list();
-                java.util.LinkedHashSet<String> remaining = new java.util.LinkedHashSet<>(ids);
+                LinkedHashSet<String> remaining = new LinkedHashSet<>(ids);
                 if (existing != null && existing.isList()) for (RuleValue element : existing.items()) {
                     if (!element.isText() || remaining.remove(element.asText())) array.add(element.deepCopy());
                 }
@@ -783,7 +785,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
                             left + row.controlWidth, top + row.control.layoutHeight(), THEME.palette().danger());
                 }
                 for (var pickerButton : row.pickers) pickerButton.render(graphics, renderFont, mouseX, mouseY);
-                for (com.meteorite.itemdespawntowhat.client.ui.widget.UiButton action : row.actions) action.render(graphics, renderFont, mouseX, mouseY);
+                for (UiButton action : row.actions) action.render(graphics, renderFont, mouseX, mouseY);
             }
             if (highlightTicks > 0 && highlightPath != null) {
                 for (FormRow row : rows) {

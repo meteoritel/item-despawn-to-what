@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
@@ -16,7 +17,7 @@ import net.minecraft.network.chat.Component;
 /** 变更清单的只读条目快照，与管理列表共用配方行和标题布局。 */
 final class RuleChangesView implements UiWidget, UiFocusTarget {
     private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
-    private static final String UI = "gui.itemdespawntowhat.edit.";
+    private static final String UI = TypeLabels.UI_PREFIX;
     private static final int NOTE_GAP = 4;
     private static final int TOOLTIP_WIDTH = 240;
     private final Font font;

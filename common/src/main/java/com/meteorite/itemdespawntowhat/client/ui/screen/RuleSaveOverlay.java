@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiProgressBar;
@@ -16,13 +17,12 @@ import org.jetbrains.annotations.Nullable;
 
 /** 保存模态的宿主适配；取消只发送信号，终态回执到达前不提供关闭入口。 */
 final class RuleSaveOverlay {
-    private static final String UI = "gui.itemdespawntowhat.edit.save.";
+    private static final String UI = TypeLabels.UI_PREFIX + "save.";
     private static final int PANEL_WIDTH = 340;
     private static final int COLLAPSED_HEIGHT = 128;
     private static final int EXPANDED_HEIGHT = 192;
     private static final int MARGIN = 8;
     private static final int PADDING = 12;
-    private static final int BUTTON_HEIGHT = 18;
     private static final int BAR_HEIGHT = 12;
     private static final int ROW_GAP = 5;
     private final Font font;
@@ -94,9 +94,9 @@ final class RuleSaveOverlay {
                     : Component.translatable(UI + "count", progress.completed(), progress.total());
             drawLine(graphics, count, left, y, innerWidth, false);
             y += font.lineHeight + ROW_GAP;
-            advancedButton.setBounds(left, y, innerWidth, BUTTON_HEIGHT);
+            advancedButton.setBounds(left, y, innerWidth, RuleEditorPageSupport.DIALOG_BUTTON_H);
             advancedButton.render(graphics, font, mouseX, mouseY);
-            y += BUTTON_HEIGHT + ROW_GAP;
+            y += RuleEditorPageSupport.DIALOG_BUTTON_H + ROW_GAP;
             if (advanced) {
                 drawLine(graphics, Component.translatable(UI + "step", Component.translatable(progress.stage().messageKey())),
                         left, y, innerWidth, false);
@@ -108,7 +108,7 @@ final class RuleSaveOverlay {
                     y += font.lineHeight;
                 }
             }
-            cancelButton.setBounds(left, panel.bottom() - PADDING - BUTTON_HEIGHT, innerWidth, BUTTON_HEIGHT);
+            cancelButton.setBounds(left, panel.bottom() - PADDING - RuleEditorPageSupport.DIALOG_BUTTON_H, innerWidth, RuleEditorPageSupport.DIALOG_BUTTON_H);
             cancelButton.render(graphics, font, mouseX, mouseY);
         } finally { graphics.disableScissor(); }
     }

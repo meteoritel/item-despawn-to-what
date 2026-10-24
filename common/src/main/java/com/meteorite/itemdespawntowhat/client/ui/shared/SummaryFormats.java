@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.shared;
 
 import com.meteorite.itemdespawntowhat.client.edit.FieldNumbers;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import java.util.ArrayList;
@@ -29,7 +30,7 @@ import org.jetbrains.annotations.Nullable;
 public final class SummaryFormats {
 
     /** 摘要语言键前缀，与 {@code NaturalSummary} 共用同一命名空间。 */
-    public static final String KEY_PREFIX = "gui.itemdespawntowhat.edit.summary.";
+    public static final String KEY_PREFIX = TypeLabels.UI_PREFIX + "summary.";
 
     /** 列表类摘要最多展示的条目数；超出部分以「共 n 项」提示。 */
     public static final int MAX_ENTRIES = 3;

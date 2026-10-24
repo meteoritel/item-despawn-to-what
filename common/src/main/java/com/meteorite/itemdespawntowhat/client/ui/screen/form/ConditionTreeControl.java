@@ -7,6 +7,7 @@ import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.JsonSummary;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlowLayout;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
@@ -35,8 +36,8 @@ final class ConditionTreeControl extends FormControl {
     @Override
     boolean usesLabelColumn() { return false; }
 
-    // 工具栏自动换行，树高度随内容增长
-    private static final int BUTTON_HEIGHT = 14;
+    // 工具栏自动换行，树高度随内容增长；工具条按钮比表单区按钮矮一档
+    private static final int TOOLBAR_BUTTON_H = 14;
     private final List<UiButton> toolbar = new ArrayList<>();
     private final Font font;
     private int toolbarHeight;
@@ -64,7 +65,7 @@ final class ConditionTreeControl extends FormControl {
         this.font = font;
         this.editor = new UiConditionTreeSummary(THEME, font);
         this.editor.setTypeOptions(support == null ? List.of() : support.typeOptions());
-        this.editor.setEmptyMessage(Component.translatable("gui.itemdespawntowhat.edit.tree.add_placeholder"));
+        this.editor.setEmptyMessage(Component.translatable(TypeLabels.UI_PREFIX + "tree.add_placeholder"));
         // 摘要按「条件名（参数摘要）」展示，与规则列表悬停的条件树文案保持一致
         if (support != null) {
             ConditionTreeJsonCodec codec = new ConditionTreeJsonCodec(support.registry());
@@ -88,7 +89,7 @@ final class ConditionTreeControl extends FormControl {
 
     // 条件卡片提供大屏编辑入口。
     private void addButton(String name, Runnable action) {
-        toolbar.add(new UiButton(THEME, font, Component.translatable("gui.itemdespawntowhat.edit.tree.button." + name),
+        toolbar.add(new UiButton(THEME, font, Component.translatable(TypeLabels.UI_PREFIX + "tree.button." + name),
                 UiButtonVariant.SECONDARY, action::run).setChipStyle(true));
     }
 
@@ -110,7 +111,7 @@ final class ConditionTreeControl extends FormControl {
         if (toolbar.isEmpty() || fallbackRaw != null) {
             return 0;
         }
-        int buttonHeight = usesCardSpacing() ? 20 : BUTTON_HEIGHT;
+        int buttonHeight = usesCardSpacing() ? CARD_CONTROL_HEIGHT : TOOLBAR_BUTTON_H;
         int limit = Math.max(1, width);
         List<UiButton> visible = new ArrayList<>();
         for (UiButton button : toolbar) {
@@ -144,7 +145,7 @@ final class ConditionTreeControl extends FormControl {
         if (fallbackRaw != null) {
             THEME.drawInset(graphics, editor.bounds());
             String text = TextScroll.trimToWidth(font,
-                    Component.translatable("gui.itemdespawntowhat.edit.json.read_only").getString(),
+                    Component.translatable(TypeLabels.UI_PREFIX + "json.read_only").getString(),
                     Math.max(8, editor.bounds().width() - 4));
             graphics.drawString(font, text, editor.bounds().x() + 2, editor.bounds().y() + 2,
                     THEME.palette().textSecondary(), false);

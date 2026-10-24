@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
@@ -15,7 +16,7 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 
-/***
+/**
  * 标签展开容器：上方展示当前成员，默认自动轮播，下方滚动列出全部成员。
  * <p>点击条目立即选中并停止轮播；选中被清除（点击空白处）或列表失焦后才恢复自动轮播。
  */
@@ -24,7 +25,7 @@ public final class TagCarouselView implements UiWidget, UiFocusTarget {
     // 宿主默认主题：屏幕按主题取色与绘制原语
     private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
 
-    private static final String UI = "gui.itemdespawntowhat.edit.tag.";
+    private static final String UI = TypeLabels.UI_PREFIX + "tag.";
     // 预览区高度：轮播图标与名称
     private static final int HEADER_HEIGHT = 76;
     // 成员列表起始偏移

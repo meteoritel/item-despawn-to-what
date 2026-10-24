@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiMarkIcons;
@@ -28,12 +29,12 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
-/*** 注册表字段的紧凑选择卡片：按名称测量宽度并换行，保留滚动、键盘导航与标签轮播。 */
+/** 注册表字段的紧凑选择卡片：按名称测量宽度并换行，保留滚动、键盘导航与标签轮播。 */
 final class CatalogSelectionControl extends FormControl implements UiFocusTarget {
 
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
     private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
-    private static final String UI = "gui.itemdespawntowhat.edit.";
+    private static final String UI = TypeLabels.UI_PREFIX;
     private static final int CHIP_HEIGHT = 24;
     private static final int GAP = 4;
     private static final int MAX_HEIGHT = 3 * (CHIP_HEIGHT + GAP) - GAP;
@@ -54,7 +55,7 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
     private boolean enabled = true;
     private boolean focused;
 
-    /*** 完整保留既有元素，格式错误的条目不会因其它编辑而丢失。 */
+    /** 完整保留既有元素，格式错误的条目不会因其它编辑而丢失。 */
     private record Selection(RuleValue value, String id, Component name, @Nullable UiIcon icon) { }
 
     CatalogSelectionControl(Font font, EditorField field, Runnable onChanged) {

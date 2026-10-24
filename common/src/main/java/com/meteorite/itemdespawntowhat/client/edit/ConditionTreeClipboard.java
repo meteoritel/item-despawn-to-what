@@ -18,6 +18,7 @@ import org.jetbrains.annotations.Nullable;
 
 /** 剪贴板子树列表是编辑器交换格式；不改变正式条件配置，也不包含会话输入缓冲。 */
 public final class ConditionTreeClipboard {
+    /** 剪贴板读取结果：成功时 nodes 非空、error 为 null；失败时 nodes 为空，error 承载提示文案。 */
     public record ReadResult(List<ConditionNode> nodes, @Nullable Component error) {
         public ReadResult { nodes = List.copyOf(nodes); }
     }
@@ -47,7 +48,7 @@ public final class ConditionTreeClipboard {
     }
 
     private static ReadResult invalid() {
-        return new ReadResult(List.of(), Component.translatable("gui.itemdespawntowhat.edit.tree.clipboard_invalid"));
+        return new ReadResult(List.of(), Component.translatable(TypeLabels.UI_PREFIX + "tree.clipboard_invalid"));
     }
 
     // 在递归条件 Codec 前按表达式边界检查树层级，不遍历叶内部的任意参数 JSON。
@@ -59,16 +60,16 @@ public final class ConditionTreeClipboard {
         while (!pending.isEmpty()) {
             Pending current = pending.removeFirst();
             if (++nodes > ConditionLimits.MAX_NODES) return Component.translatable(
-                    "gui.itemdespawntowhat.edit.issue.too_many_nodes", nodes, ConditionLimits.MAX_NODES);
+                    TypeLabels.UI_PREFIX + "issue.too_many_nodes", nodes, ConditionLimits.MAX_NODES);
             if (current.depth() > ConditionLimits.MAX_DEPTH) return Component.translatable(
-                    "gui.itemdespawntowhat.edit.issue.too_deep", current.depth(), ConditionLimits.MAX_DEPTH);
+                    TypeLabels.UI_PREFIX + "issue.too_deep", current.depth(), ConditionLimits.MAX_DEPTH);
             if (!current.raw().isJsonObject()) continue;
             var object = current.raw().getAsJsonObject();
             JsonElement op = object.get(RuleFields.OP);
             if (op == null || !op.isJsonPrimitive() || !op.getAsJsonPrimitive().isString()) continue;
             if (RuleFields.OP_LEAF.equals(op.getAsString())) {
                 if (++leaves > ConditionLimits.MAX_LEAVES) return Component.translatable(
-                        "gui.itemdespawntowhat.edit.issue.too_many_leaves", leaves, ConditionLimits.MAX_LEAVES);
+                        TypeLabels.UI_PREFIX + "issue.too_many_leaves", leaves, ConditionLimits.MAX_LEAVES);
             } else if (RuleFields.OP_INVERTED.equals(op.getAsString())) {
                 JsonElement child = object.get(RuleFields.TERM);
                 if (child != null) pending.addLast(new Pending(child, current.depth() + 1));

@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
+import java.util.Objects;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.BORDER;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.CARD_HEIGHT;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.isContainer;
@@ -99,8 +101,8 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
 
     // 分组方式：∧ 全部满足 / ∨ 任一满足
     private enum GroupKind {
-        ALL("gui.itemdespawntowhat.edit.tree.operator.all", "gui.itemdespawntowhat.edit.tree.node.all"),
-        ANY("gui.itemdespawntowhat.edit.tree.operator.any", "gui.itemdespawntowhat.edit.tree.node.any");
+        ALL(TypeLabels.UI_PREFIX + "tree.operator.all", TypeLabels.UI_PREFIX + "tree.node.all"),
+        ANY(TypeLabels.UI_PREFIX + "tree.operator.any", TypeLabels.UI_PREFIX + "tree.node.any");
 
         private final String operatorKey;
         private final String labelKey;
@@ -152,7 +154,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     private @Nullable ConditionTreeContract.Listener listener;
     private @Nullable Runnable copyAction;
     private @Nullable Runnable pasteAction;
-    private final Component emptyMessage = Component.translatable("gui.itemdespawntowhat.edit.tree.add_placeholder");
+    private final Component emptyMessage = Component.translatable(TypeLabels.UI_PREFIX + "tree.add_placeholder");
 
     private @Nullable UiTreeEditor.Change<ConditionNode> lastChange;
     private @Nullable Component operationError;
@@ -206,21 +208,21 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         this.font = font;
         graph = new ConditionGraphLayout(font);
         renderer = new ConditionGraphRenderer(this.theme, font, graph);
-        picker = new UiTypePicker(this.theme, font, Component.translatable("gui.itemdespawntowhat.edit.picker.title"), this::confirmPicker);
+        picker = new UiTypePicker(this.theme, font, Component.translatable(TypeLabels.UI_PREFIX + "picker.title"), this::confirmPicker);
         inlinePanel = new ConditionGraphInlinePanel(this.theme, font, graph);
         tooltip = new UiDescriptionTooltip(this.theme, font).setMaxWidth(CONDITION_TOOLTIP_WIDTH);
         tree = new UiTreeEditor<>(ConditionTreeNodes.INSTANCE, () -> expression.root(), change -> {
             lastChange = change;
             applyNode(change.after());
         }, ConditionTreeInspection::validateCandidate,
-                Component.translatable("gui.itemdespawntowhat.edit.tree.invalid_path"),
-                Component.translatable("gui.itemdespawntowhat.edit.tree.invalid_parent"));
+                Component.translatable(TypeLabels.UI_PREFIX + "tree.invalid_path"),
+                Component.translatable(TypeLabels.UI_PREFIX + "tree.invalid_parent"));
         tree.setMoveErrors(new UiTreeEditor.MoveErrors(
-                Component.translatable("gui.itemdespawntowhat.edit.tree.move_cycle"),
-                Component.translatable("gui.itemdespawntowhat.edit.tree.move_root_sibling"),
-                Component.translatable("gui.itemdespawntowhat.edit.tree.move_leaf_parent"),
-                Component.translatable("gui.itemdespawntowhat.edit.tree.move_full_parent"),
-                Component.translatable("gui.itemdespawntowhat.edit.tree.move_stale")));
+                Component.translatable(TypeLabels.UI_PREFIX + "tree.move_cycle"),
+                Component.translatable(TypeLabels.UI_PREFIX + "tree.move_root_sibling"),
+                Component.translatable(TypeLabels.UI_PREFIX + "tree.move_leaf_parent"),
+                Component.translatable(TypeLabels.UI_PREFIX + "tree.move_full_parent"),
+                Component.translatable(TypeLabels.UI_PREFIX + "tree.move_stale")));
         move = new UiTreeMoveInteraction<>(tree, result -> {
             armedDrag = null;
             dropTarget = null;
@@ -539,7 +541,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         boolean changed = accept(tree.wrapMany(tree.selection(),
                 nodes -> new ConditionNode.Inverted(nodes.size() == 1 ? nodes.getFirst()
                         : new ConditionNode.AllOf(nodes)),
-                Component.translatable("gui.itemdespawntowhat.edit.tree.wrap_selection")));
+                Component.translatable(TypeLabels.UI_PREFIX + "tree.wrap_selection")));
         if (changed) {
             followPrimarySelection();
             rebuild();
@@ -570,9 +572,9 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         closeKindMenu();
         kindMenuPurpose = KindMenuPurpose.DELETE_CONFIRM;
         kindMenuEntries = List.of(
-                new KindMenuEntry(Component.translatable("gui.itemdespawntowhat.edit.tree.delete.keep_children"),
+                new KindMenuEntry(Component.translatable(TypeLabels.UI_PREFIX + "tree.delete.keep_children"),
                         KindMenuAction.DELETE_KEEP_CHILDREN),
-                new KindMenuEntry(Component.translatable("gui.itemdespawntowhat.edit.tree.delete.subtree"),
+                new KindMenuEntry(Component.translatable(TypeLabels.UI_PREFIX + "tree.delete.subtree"),
                         KindMenuAction.DELETE_SUBTREE));
         kindMenuAnchor = anchorScreen;
         kindMenuIndex = 0;
@@ -628,7 +630,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
      */
     public void moveSelection(int delta) {
         if (tree.normalizedSelection().size() > 1) {
-            operationError = Component.translatable("gui.itemdespawntowhat.edit.tree.move_multiple");
+            operationError = Component.translatable(TypeLabels.UI_PREFIX + "tree.move_multiple");
             return;
         }
         if (!canMoveSelection(delta)) {
@@ -682,7 +684,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         lastOpKey = EditSession.OP_ADD_GROUP;
         boolean changed = accept(tree.wrapMany(tree.selection(),
                 nodes -> all ? new ConditionNode.AllOf(nodes) : new ConditionNode.AnyOf(nodes),
-                Component.translatable("gui.itemdespawntowhat.edit.tree.wrap_selection")));
+                Component.translatable(TypeLabels.UI_PREFIX + "tree.wrap_selection")));
         if (changed) {
             followPrimarySelection();
             rebuild();
@@ -696,14 +698,14 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         }
         List<UiTreePath> selected = tree.normalizedSelection();
         if (selected.stream().anyMatch(path -> path.indices().isEmpty())) {
-            operationError = Component.translatable("gui.itemdespawntowhat.edit.tree.duplicate_root");
+            operationError = Component.translatable(TypeLabels.UI_PREFIX + "tree.duplicate_root");
             return false;
         }
         for (UiTreePath path : selected) {
             ConditionNode parent = tree.query(path.parent());
             if (parent == null || ConditionTreeNodes.INSTANCE.childCapacity(parent)
                     <= ConditionTreeNodes.INSTANCE.children(parent).size()) {
-                operationError = Component.translatable("gui.itemdespawntowhat.edit.tree.duplicate_full");
+                operationError = Component.translatable(TypeLabels.UI_PREFIX + "tree.duplicate_full");
                 return false;
             }
         }
@@ -757,7 +759,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         if (graph.nodes().isEmpty()) {
             return false;
         }
-        List<UiTreePath> all = graph.nodes().stream().map(graph::path).filter(java.util.Objects::nonNull).toList();
+        List<UiTreePath> all = graph.nodes().stream().map(graph::path).filter(Objects::nonNull).toList();
         tree.setSelection(all, tree.selected());
         followPrimarySelection();
         return true;
@@ -799,12 +801,12 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
                 parent = selected.parent();
                 index = selected.indices().getLast() + 1;
             } else {
-                operationError = Component.translatable("gui.itemdespawntowhat.edit.tree.paste_parent");
+                operationError = Component.translatable(TypeLabels.UI_PREFIX + "tree.paste_parent");
                 return;
             }
         }
         if (parent == null && nodes.size() > 1) {
-            operationError = Component.translatable("gui.itemdespawntowhat.edit.tree.paste_root");
+            operationError = Component.translatable(TypeLabels.UI_PREFIX + "tree.paste_root");
             return;
         }
         endInteractions(UiInputCapture.EndReason.CANCEL);
@@ -959,7 +961,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         if (move.isActive()) {
             UiTreeEditor.MovePreview<ConditionNode> preview = move.preview();
             if (preview != null && preview.outcome().error() == null && dropTarget != null) {
-                return Component.translatable("gui.itemdespawntowhat.edit.tree.drop_"
+                return Component.translatable(TypeLabels.UI_PREFIX + "tree.drop_"
                         + preview.position().name().toLowerCase(Locale.ROOT), graph.titleLabel(dropTarget));
             }
             if (operationError != null) {
@@ -967,9 +969,9 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             }
         }
         if (picker.isOpen()) {
-            return Component.translatable("gui.itemdespawntowhat.edit.picker.hint");
+            return Component.translatable(TypeLabels.UI_PREFIX + "picker.hint");
         }
-        return Component.translatable("gui.itemdespawntowhat.edit.tree.selection_hint");
+        return Component.translatable(TypeLabels.UI_PREFIX + "tree.selection_hint");
     }
 
     // ---- 渲染 ----
@@ -1439,7 +1441,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
                 collapseSelectionOnRelease = false;
                 ConditionNode node = tree.query(source);
                 dragLabel = sources.size() > 1
-                        ? Component.translatable("gui.itemdespawntowhat.edit.tree.drag_many", sources.size()).getString()
+                        ? Component.translatable(TypeLabels.UI_PREFIX + "tree.drag_many", sources.size()).getString()
                         : node == null ? "" : graph.titleLabel(node).getString();
             }
         }
@@ -1710,7 +1712,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         if (next == null || tree.query(next) == null) {
             return true;
         }
-        return selectNode(java.util.Objects.requireNonNull(tree.query(next)));
+        return selectNode(Objects.requireNonNull(tree.query(next)));
     }
 
     private @Nullable UiTreePath siblingPath(UiTreePath path, int delta) {
@@ -2005,6 +2007,6 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
 
     @Override
     public Component accessibleName() {
-        return Component.translatable("gui.itemdespawntowhat.edit.tree.accessible_name");
+        return Component.translatable(TypeLabels.UI_PREFIX + "tree.accessible_name");
     }
 }

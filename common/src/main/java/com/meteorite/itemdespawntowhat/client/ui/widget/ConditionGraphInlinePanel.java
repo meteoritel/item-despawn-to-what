@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphSidePanel.SIDE_PANEL_HEADER;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphSidePanel.SIDE_PANEL_PADDING;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
@@ -23,7 +24,7 @@ final class ConditionGraphInlinePanel {
     private boolean captured;
     private final ConditionGraphSidePanel panel;
     private UiRect panelRect = new UiRect(0, 0, 0, 0);
-    private Component title = Component.translatable("gui.itemdespawntowhat.edit.diagram.leaf");
+    private Component title = Component.translatable(TypeLabels.UI_PREFIX + "diagram.leaf");
 
     private final ConditionGraphLayout graph;
     private UiRect bounds = new UiRect(0, 0, 0, 0);

@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
@@ -12,17 +13,18 @@ import java.util.function.Consumer;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
-/***
+/**
  * 列表编辑器：上方是条目列表，下方是一行内嵌文本输入。
  * <p>Enter 把输入内容追加为新条目（或覆盖当前选中项），Delete 删除选中项，Alt+上下移动顺序。
  * <p>条目唯一，重复输入会被拒绝；ID / TAG 模式下只允许资源 ID 字符集。
  */
 public final class UiListEditor implements UiWidget, UiFocusTarget {
 
-    /*** 条目文本模式 */
+    /** 条目文本模式：{@code ID} 与 {@code TAG} 只允许资源 ID 字符集，{@code TAG} 额外接受 #标签；{@code TEXT} 接受任意文本。 */
     public enum Mode {
         // 资源 ID（命名空间:路径）
         ID,
@@ -62,7 +64,7 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
         Objects.requireNonNull(font, "font");
         this.mode = mode == null ? Mode.ID : mode;
         this.registryHint = registryHint;
-        this.input = new UiTextInput(theme, font, Component.translatable("gui.itemdespawntowhat.edit.list.input_hint"));
+        this.input = new UiTextInput(theme, font, Component.translatable(TypeLabels.UI_PREFIX + "list.input_hint"));
         this.input.setMaxLength(MAX_ENTRY_LENGTH);
         this.input.setFilter(this::acceptText);
         this.input.setOnCommit(text -> commitInput());
@@ -162,7 +164,6 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
         return true;
     }
 
-    // 删除当前选中条目
     public boolean removeSelected() {
         editingIndex = -1;
         if (selected < 0 || selected >= items.size()) {
@@ -204,7 +205,7 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
     private void commitInput() {
         String text = input.value().trim();
         String id = mode == Mode.TAG && text.startsWith("#") ? text.substring(1) : text;
-        if (mode != Mode.TEXT && net.minecraft.resources.ResourceLocation.tryParse(id) == null) return;
+        if (mode != Mode.TEXT && ResourceLocation.tryParse(id) == null) return;
         if (text.isEmpty()) {
             return;
         }
@@ -310,7 +311,7 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
         UiRect area = listArea();
         int visibleRows = visibleRowCount();
         if (items.isEmpty()) {
-            String empty = Component.translatable("gui.itemdespawntowhat.edit.list.empty").getString();
+            String empty = Component.translatable(TypeLabels.UI_PREFIX + "list.empty").getString();
             graphics.drawString(renderFont, TextScroll.trimToWidth(renderFont, empty, Math.max(0, area.width() - 2)),
                     area.x() + 1, area.y() + 1, theme.palette().textDisabled(), false);
         } else {
@@ -486,6 +487,6 @@ public final class UiListEditor implements UiWidget, UiFocusTarget {
 
     @Override
     public Component accessibleName() {
-        return Component.translatable("gui.itemdespawntowhat.edit.list.accessible_name");
+        return Component.translatable(TypeLabels.UI_PREFIX + "list.accessible_name");
     }
 }

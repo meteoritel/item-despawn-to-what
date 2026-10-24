@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiSegmentedControl;
 import java.util.ArrayList;
@@ -25,7 +26,7 @@ final class EnumControl extends FormControl {
         List<UiSegmentedControl.Option> options = new ArrayList<>();
         for (String value : field.enumValues()) {
             options.add(new UiSegmentedControl.Option(value,
-                    Component.translatable("gui.itemdespawntowhat.edit.enum." + group + "." + value)));
+                    Component.translatable(TypeLabels.UI_PREFIX + "enum." + group + "." + value)));
         }
         this.segments = new UiSegmentedControl(THEME, font, options);
         this.segments.setOnChanged(value -> {

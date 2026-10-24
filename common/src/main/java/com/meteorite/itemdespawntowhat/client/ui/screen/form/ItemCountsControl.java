@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
 import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
@@ -17,6 +18,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -54,7 +56,7 @@ final class ItemCountsControl extends FormControl {
     private static final int DEFAULT_COUNT = 1;
     private static final int INITIAL_SLIDER_MAX = 64;
     // 悬停提示的「名称 · 字段名」格式 key
-    private static final String QUANTITY_ROW_KEY = "gui.itemdespawntowhat.edit.quantity.row";
+    private static final String QUANTITY_ROW_KEY = TypeLabels.UI_PREFIX + "quantity.row";
 
     private final Font font;
     private final Runnable onChanged;
@@ -204,7 +206,7 @@ final class ItemCountsControl extends FormControl {
         int windowMin = Math.max(DEFAULT_COUNT, field.intMin(DEFAULT_COUNT));
         EditorField number = EditorField.integerSlider(field.name(), field.labelKey(),
                 field.intMin(DEFAULT_COUNT), field.intMax(Integer.MAX_VALUE), windowMin, INITIAL_SLIDER_MAX);
-        NumberControl control = java.util.Objects.requireNonNull(NumberControl.create(font, number, () -> {
+        NumberControl control = Objects.requireNonNull(NumberControl.create(font, number, () -> {
             markEdited();
             onChanged.run();
         }));

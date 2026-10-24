@@ -4,13 +4,13 @@ import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import java.util.ArrayList;
 import java.util.List;
 
-/*** 缺少必填项的导航清单；只检查可静态确认的输入与内置产出，不替代服务端校验。 */
+/** 缺少必填项的导航清单；只检查可静态确认的输入与内置产出，不替代服务端校验。 */
 public final class RuleRequirements {
 
-    /*** 路径用于已有字段定位，标签使用宿主本地化 key。 */
+    /** 路径用于已有字段定位，标签使用宿主本地化 key。 */
     public record Missing(String path, String labelKey) { }
 
-    private static final String UI = "gui.itemdespawntowhat.edit.";
+    private static final String UI = TypeLabels.UI_PREFIX;
 
     // 空映射：缺失字段的兜底视图
     private static final RuleValue EMPTY_MAPPING = RuleValue.mapping().build();

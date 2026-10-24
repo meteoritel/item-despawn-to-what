@@ -202,7 +202,7 @@ public record EditorField(String name, String labelKey, EditorFieldType type, @N
 
     // 原始 JSON 只读展示（第三方类型回退）
     public static EditorField rawJson() {
-        return create("__raw_json", "gui.itemdespawntowhat.edit.field.raw_json", EditorFieldType.RAW_JSON,
+        return create("__raw_json", TypeLabels.UI_PREFIX + "field.raw_json", EditorFieldType.RAW_JSON,
                 null, true, false, null, null, null, null, null);
     }
 
@@ -315,7 +315,6 @@ public record EditorField(String name, String labelKey, EditorFieldType type, @N
         }
     }
 
-    // 是否有有效数值域
     public boolean hasNumericDomain() {
         return numericDomain() != null;
     }

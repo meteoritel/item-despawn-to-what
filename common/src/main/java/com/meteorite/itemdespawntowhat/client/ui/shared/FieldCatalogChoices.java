@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.shared;
 
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import java.util.Set;
 import java.util.stream.Collectors;
 import net.minecraft.client.Minecraft;
@@ -9,7 +10,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.entity.EntityType;
 
-/*** 用客户端已同步的真实标签归属过滤字段选择，不依赖目录的首次命中说明。 */
+/** 用客户端已同步的真实标签归属过滤字段选择，不依赖目录的首次命中说明。 */
 public final class FieldCatalogChoices {
     private FieldCatalogChoices() { }
 
@@ -29,7 +30,7 @@ public final class FieldCatalogChoices {
     }
 
     public static boolean isGenericProduct(EditorField field) {
-        return field.labelKey().equals("gui.itemdespawntowhat.edit.field.spawn_entity.entity");
+        return field.labelKey().equals(TypeLabels.UI_PREFIX + "field.spawn_entity.entity");
     }
 
     private static <T> Set<String> tags(Registry<T> registry, boolean genericProduct) {

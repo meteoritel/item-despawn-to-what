@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionLimits;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
@@ -25,7 +26,7 @@ public final class ConditionTreeInspection {
     private ConditionTreeInspection() {
     }
 
-    // 违规项种类
+    /** 违规项种类：结构检查按种类产出违规项，摘要与画布据此绘制同一套违规标记。 */
     public enum IssueKind {
         // 组合节点没有任何子项
         INCOMPLETE_GROUP,
@@ -39,7 +40,7 @@ public final class ConditionTreeInspection {
         TOO_MANY_LEAVES
     }
 
-    // 违规项：种类 + 节点路径 + 可直接展示的文本
+    /** 一条违规项：种类、违规节点的 JSON 路径与可直接展示的文本；由结构检查产出，调用方只读。 */
     public record Issue(IssueKind kind, String path, Component label) {
     }
 
@@ -79,23 +80,23 @@ public final class ConditionTreeInspection {
         List<Issue> issues = new ArrayList<>();
         if (isIncomplete(node)) {
             issues.add(new Issue(IssueKind.INCOMPLETE_GROUP, path,
-                    Component.translatable("gui.itemdespawntowhat.edit.issue.incomplete_group")));
+                    Component.translatable(TypeLabels.UI_PREFIX + "issue.incomplete_group")));
         }
         if (isLeafMissing(node)) {
             issues.add(new Issue(IssueKind.MISSING_CONDITION, path,
-                    Component.translatable("gui.itemdespawntowhat.edit.issue.missing_condition")));
+                    Component.translatable(TypeLabels.UI_PREFIX + "issue.missing_condition")));
         }
         if (depth > ConditionLimits.MAX_DEPTH) {
             issues.add(new Issue(IssueKind.TOO_DEEP, path, Component.translatable(
-                    "gui.itemdespawntowhat.edit.issue.too_deep", depth, ConditionLimits.MAX_DEPTH)));
+                    TypeLabels.UI_PREFIX + "issue.too_deep", depth, ConditionLimits.MAX_DEPTH)));
         }
         if (nodeOrdinal > ConditionLimits.MAX_NODES) {
             issues.add(new Issue(IssueKind.TOO_MANY_NODES, path, Component.translatable(
-                    "gui.itemdespawntowhat.edit.issue.too_many_nodes", nodeOrdinal, ConditionLimits.MAX_NODES)));
+                    TypeLabels.UI_PREFIX + "issue.too_many_nodes", nodeOrdinal, ConditionLimits.MAX_NODES)));
         }
         if (leafOrdinal > ConditionLimits.MAX_LEAVES) {
             issues.add(new Issue(IssueKind.TOO_MANY_LEAVES, path, Component.translatable(
-                    "gui.itemdespawntowhat.edit.issue.too_many_leaves", leafOrdinal, ConditionLimits.MAX_LEAVES)));
+                    TypeLabels.UI_PREFIX + "issue.too_many_leaves", leafOrdinal, ConditionLimits.MAX_LEAVES)));
         }
         return issues;
     }
@@ -104,15 +105,15 @@ public final class ConditionTreeInspection {
     public static @Nullable Component validateCandidate(@Nullable ConditionNode root) {
         ConditionExpression candidate = new ConditionExpression(root);
         if (candidate.depth() > ConditionLimits.MAX_DEPTH) {
-            return Component.translatable("gui.itemdespawntowhat.edit.issue.too_deep",
+            return Component.translatable(TypeLabels.UI_PREFIX + "issue.too_deep",
                     candidate.depth(), ConditionLimits.MAX_DEPTH);
         }
         if (candidate.nodeCount() > ConditionLimits.MAX_NODES) {
-            return Component.translatable("gui.itemdespawntowhat.edit.issue.too_many_nodes",
+            return Component.translatable(TypeLabels.UI_PREFIX + "issue.too_many_nodes",
                     candidate.nodeCount(), ConditionLimits.MAX_NODES);
         }
         if (candidate.leafCount() > ConditionLimits.MAX_LEAVES) {
-            return Component.translatable("gui.itemdespawntowhat.edit.issue.too_many_leaves",
+            return Component.translatable(TypeLabels.UI_PREFIX + "issue.too_many_leaves",
                     candidate.leafCount(), ConditionLimits.MAX_LEAVES);
         }
         return null;

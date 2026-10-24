@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.RulePackExporter;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshotEntry;
 import java.util.Collection;
@@ -27,10 +28,10 @@ final class RuleListDisplayCache {
     // 无草稿会话时的修订占位值
     private static final long NO_SESSION = -1L;
     // 状态文案 key
-    private static final String STATUS_ERROR = "gui.itemdespawntowhat.edit.recipe.status.error";
-    private static final String STATUS_PENDING = "gui.itemdespawntowhat.edit.recipe.status.pending";
-    private static final String STATUS_MASKED = "gui.itemdespawntowhat.edit.recipe.status.masked";
-    private static final String STATUS_DISABLED = "gui.itemdespawntowhat.edit.recipe.status.disabled";
+    private static final String STATUS_ERROR = TypeLabels.UI_PREFIX + "recipe.status.error";
+    private static final String STATUS_PENDING = TypeLabels.UI_PREFIX + "recipe.status.pending";
+    private static final String STATUS_MASKED = TypeLabels.UI_PREFIX + "recipe.status.masked";
+    private static final String STATUS_DISABLED = TypeLabels.UI_PREFIX + "recipe.status.disabled";
 
     private final RuleEditorModel model;
     private final Map<String, Cached> snapshots = new LinkedHashMap<>();

@@ -32,7 +32,7 @@ public final class JsonSummary {
         }
         int omitted = full.length() - Math.max(0, maxLength);
         return Component.literal(compact(value, maxLength) + " ")
-                .append(Component.translatable("gui.itemdespawntowhat.edit.json.truncated", omitted));
+                .append(Component.translatable(TypeLabels.UI_PREFIX + "json.truncated", omitted));
     }
 
     // 压缩成一行（Gson 的 toString 即紧凑形式）
@@ -54,6 +54,6 @@ public final class JsonSummary {
         }
         int omitted = full.length() - Math.max(0, maxLength);
         return Component.literal(compact(element, maxLength) + " ")
-                .append(Component.translatable("gui.itemdespawntowhat.edit.json.truncated", omitted));
+                .append(Component.translatable(TypeLabels.UI_PREFIX + "json.truncated", omitted));
     }
 }

@@ -24,7 +24,7 @@ public final class ConditionTreeJsonCodec implements UiTreeCodec<ConditionNode, 
         ConditionExpression expression = RuleDraft.decodeConditions(source, types);
         decoded = expression != null;
         if (expression == null) return new DecodeResult<>(null,
-                Component.translatable("gui.itemdespawntowhat.edit.tree.source_invalid"));
+                Component.translatable(TypeLabels.UI_PREFIX + "tree.source_invalid"));
         acceptedRoot = expression.root();
         acceptedJson = source == null || source.isNull() ? null : source.deepCopy();
         return new DecodeResult<>(acceptedRoot, null);

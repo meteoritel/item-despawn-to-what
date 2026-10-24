@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionTreeDescription;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine;
 import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
@@ -24,7 +25,7 @@ import org.jetbrains.annotations.Nullable;
 final class RuleListDisplaySnapshot {
 
     // 未命名规则的回退文案
-    private static final String UNNAMED_KEY = "gui.itemdespawntowhat.edit.recipe.unnamed";
+    private static final String UNNAMED_KEY = TypeLabels.UI_PREFIX + "recipe.unnamed";
 
     private final @Nullable RuleValue body;
     private final String title;
@@ -107,7 +108,6 @@ final class RuleListDisplaySnapshot {
         return active;
     }
 
-    // 是否存在错误级问题
     boolean error() {
         return error;
     }

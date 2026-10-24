@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
@@ -65,7 +66,7 @@ final class FormPicker {
         this.onPicked = onPicked;
         this.chosen = List.copyOf(chosen);
         this.filterInput = new UiTextInput(theme, font,
-                Component.translatable("gui.itemdespawntowhat.edit.picker.filter"));
+                Component.translatable(TypeLabels.UI_PREFIX + "picker.filter"));
         this.filterInput.setOnCommit(text -> confirm());
         applyFilter("");
     }
@@ -126,7 +127,7 @@ final class FormPicker {
         theme.drawWindow(graphics, rect);
         theme.drawHeader(graphics, new UiRect(rect.x(), rect.y(), rect.width(), PICKER_HEADER));
         String title = TextScroll.trimToWidth(renderFont,
-                Component.translatable("gui.itemdespawntowhat.edit.picker.title").getString(),
+                Component.translatable(TypeLabels.UI_PREFIX + "picker.title").getString(),
                 Math.max(4, rect.width() - 4));
         graphics.drawString(renderFont, title, rect.x() + 2, rect.y() + 4, theme.palette().headerText(), false);
         filterInput.setBounds(x + 2, y + PICKER_HEADER, w - 4, PICKER_INPUT - 2);
@@ -150,13 +151,13 @@ final class FormPicker {
         }
         if (filtered.isEmpty()) {
             String text = TextScroll.trimToWidth(renderFont,
-                    Component.translatable("gui.itemdespawntowhat.edit.picker.empty").getString(),
+                    Component.translatable(TypeLabels.UI_PREFIX + "picker.empty").getString(),
                     Math.max(4, listRect.width() - 2));
             graphics.drawString(renderFont, text, listRect.x() + 1, listRect.y() + 2,
                     theme.palette().textDisabled(), false);
         }
         String footer = TextScroll.trimToWidth(renderFont,
-                Component.translatable("gui.itemdespawntowhat.edit.picker.hint").getString(),
+                Component.translatable(TypeLabels.UI_PREFIX + "picker.hint").getString(),
                 Math.max(4, w - 4));
         graphics.drawString(renderFont, footer, x + 2, rect.bottom() - PICKER_FOOTER + 2,
                 theme.palette().textSecondary(), false);

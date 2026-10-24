@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import net.minecraft.network.chat.Component;
 
@@ -10,7 +11,7 @@ public final class ConsumptionSummary {
 
     /** 根据规则是否显式配置源数量，显示对应结算提示。 */
     public static Component hintRule(RuleValue rule) {
-        return Component.translatable("gui.itemdespawntowhat.edit.consumption.hint."
+        return Component.translatable(TypeLabels.UI_PREFIX + "consumption.hint."
                 + (rule.has(RuleFields.SOURCE_COST) ? "fixed" : "implicit"));
     }
 }

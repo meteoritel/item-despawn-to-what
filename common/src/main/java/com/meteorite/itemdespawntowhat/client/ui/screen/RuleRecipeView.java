@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 
 import com.meteorite.itemdespawntowhat.client.edit.ClientTypeRegistries;
@@ -33,13 +34,17 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Block;
 import org.jetbrains.annotations.Nullable;
 
-/*** 配方行的只读展示快照：保留数组顺序，复用图标，角标与完整说明使用同一份数据。 */
+/** 配方行的只读展示快照：保留数组顺序，复用图标，角标与完整说明使用同一份数据。 */
 public final class RuleRecipeView {
-    private static final String UI = "gui.itemdespawntowhat.edit.recipe.";
+    private static final String UI = TypeLabels.UI_PREFIX + "recipe.";
     private static final String OWN = "itemdespawntowhat:";
     private static final int ICON_SIZE = 18;
     private static final int OBJECT_CONTENT_HEIGHT = 20;
@@ -60,7 +65,7 @@ public final class RuleRecipeView {
     private int[] compactWidths = new int[0];
     private int[] nameWidths = new int[0];
 
-    /*** 一项对象及其数量要求；同名催化剂的不同要求保留原顺序，不错误地累加或取最大值。 */
+    /** 一项对象及其数量要求；同名催化剂的不同要求保留原顺序，不错误地累加或取最大值。 */
     private static final class ObjectPart {
         private final Component name;
         private final UiIcon icon;
@@ -423,7 +428,7 @@ public final class RuleRecipeView {
         if (raw.startsWith("#")) return TagPreviewIcons.sourceBlocks(raw).icon();
         ResourceLocation id = ResourceLocation.tryParse(raw);
         var item = id == null ? null : BuiltInRegistries.ITEM.getOptional(id).orElse(null);
-        return item instanceof net.minecraft.world.item.BlockItem blockItem
+        return item instanceof BlockItem blockItem
                 ? BlockPreviewIcons.icon(BuiltInRegistries.BLOCK.getKey(blockItem.getBlock()).toString()) : null;
     }
 
@@ -437,9 +442,9 @@ public final class RuleRecipeView {
         }
         ResourceLocation id = ResourceLocation.tryParse(raw);
         Component name = id == null ? Component.translatable(UI + "object_missing") : switch (type) {
-            case ITEM -> BuiltInRegistries.ITEM.getOptional(id).map(net.minecraft.world.item.Item::getDescription).orElse(Component.literal(raw));
-            case BLOCK -> BuiltInRegistries.BLOCK.getOptional(id).map(net.minecraft.world.level.block.Block::getName).orElse(Component.literal(raw));
-            case ENTITY -> BuiltInRegistries.ENTITY_TYPE.getOptional(id).map(net.minecraft.world.entity.EntityType::getDescription).orElse(Component.literal(raw));
+            case ITEM -> BuiltInRegistries.ITEM.getOptional(id).map(Item::getDescription).orElse(Component.literal(raw));
+            case BLOCK -> BuiltInRegistries.BLOCK.getOptional(id).map(Block::getName).orElse(Component.literal(raw));
+            case ENTITY -> BuiltInRegistries.ENTITY_TYPE.getOptional(id).map(EntityType::getDescription).orElse(Component.literal(raw));
             case FLUID -> {
                 Component label = RuleDisplayLabels.catalogLabel(type, id);
                 yield label == null ? Component.literal(raw) : label;

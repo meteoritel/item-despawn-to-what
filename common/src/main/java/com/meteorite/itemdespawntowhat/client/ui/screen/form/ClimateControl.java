@@ -4,6 +4,7 @@ import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumberPolicy;
@@ -28,7 +29,7 @@ final class ClimateControl extends FormControl {
 
     private static final String MIN_FIELD = "min";
     private static final String MAX_FIELD = "max";
-    private static final String CLIMATE_UI = "gui.itemdespawntowhat.edit.field.climate.";
+    private static final String CLIMATE_UI = TypeLabels.UI_PREFIX + "field.climate.";
     // 复选框自带文案、方框与文字间距只有 3px，立体 inset 主题下描边外扩后几乎贴住文字；
     // 本行不显示行标签，文案是唯一说明，因此前置一个空格（约 4px）保证可见间距
     private static final String TOGGLE_TEXT_INDENT = " ";
@@ -52,9 +53,9 @@ final class ClimateControl extends FormControl {
     ClimateControl(Font font, EditorField field, Runnable onChanged) {
         super(field);
         this.minInput = new UiTextInput(THEME, font,
-                Component.translatable("gui.itemdespawntowhat.edit.field.climate.min"));
+                Component.translatable(TypeLabels.UI_PREFIX + "field.climate.min"));
         this.maxInput = new UiTextInput(THEME, font,
-                Component.translatable("gui.itemdespawntowhat.edit.field.climate.max"));
+                Component.translatable(TypeLabels.UI_PREFIX + "field.climate.max"));
         this.minInput.setFilter(FormControl::decimalChars);
         this.maxInput.setFilter(FormControl::decimalChars);
         this.minInput.setOnCommit(text -> {
@@ -70,8 +71,8 @@ final class ClimateControl extends FormControl {
                 UiNumberPolicy.of(lower(), upper(), STEP, FINE_STEP), fullRange(),
                 new UiRangeBar.Texts(Component.translatable(CLIMATE_UI + MIN_FIELD),
                         Component.translatable(CLIMATE_UI + MAX_FIELD),
-                        Component.translatable("gui.itemdespawntowhat.edit.range.absent"),
-                        Component.translatable("gui.itemdespawntowhat.edit.range.precise")), new UiRangeBar.Listener() {
+                        Component.translatable(TypeLabels.UI_PREFIX + "range.absent"),
+                        Component.translatable(TypeLabels.UI_PREFIX + "range.precise")), new UiRangeBar.Listener() {
                     @Override
                     public void onBegan(UiRangeValue value) {
                         binding.beginValueChange();

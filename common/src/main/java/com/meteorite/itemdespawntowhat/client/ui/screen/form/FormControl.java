@@ -6,6 +6,7 @@ import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.FieldNumbers;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumbers;
@@ -20,9 +21,10 @@ import java.util.function.Predicate;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
-/***
+/**
  * 表单控件基类：一个字段对应一行控件。
  * <p>负责「JSON 值 &lt;-&gt; 控件值」的双向搬运与本地校验；
  * 写入草稿由 FormView 统一经由 EditSession 完成，控件本身不碰草稿。
@@ -35,10 +37,13 @@ abstract class FormControl {
     // 行默认高度（与主题行高一致）
     static final int DEFAULT_HEIGHT = THEME.rowHeight();
 
+    // 卡片表单的单行控件高度：FormView 的卡片密度与条件树工具条都按这个值对齐
+    static final int CARD_CONTROL_HEIGHT = 20;
+
     // 校验问题所用的本地化 key 前缀
-    static final String ISSUE_PREFIX = "gui.itemdespawntowhat.edit.issue.";
+    static final String ISSUE_PREFIX = TypeLabels.UI_PREFIX + "issue.";
     // 即时提示（notice）key：字段名 + 问题文案
-    static final String NOTICE_ISSUE = "gui.itemdespawntowhat.edit.notice.issue";
+    static final String NOTICE_ISSUE = TypeLabels.UI_PREFIX + "notice.issue";
 
     // 定点显示精度与整数直出上界（与迁移前 trimDouble 的 %.4f、1.0E9D 一致）
     static final int DECIMAL_DECIMALS = 4;
@@ -102,7 +107,6 @@ abstract class FormControl {
     // 设置控件矩形（高度按 height() 决定）
     abstract void setBounds(int x, int y, int width);
 
-    // 绘制控件
     abstract void render(GuiGraphics graphics, Font font, int mouseX, int mouseY);
 
     // 把草稿值装载进控件
@@ -208,7 +212,7 @@ abstract class FormControl {
     }
 
     // 复合控件不能用自然高度判断密度：条件树在紧凑表单里也可能很高。
-    final boolean usesCardSpacing() { return minimumHeight >= 20; }
+    final boolean usesCardSpacing() { return minimumHeight >= CARD_CONTROL_HEIGHT; }
 
     // 输入被上限拒绝时的即时提示出口
     final void setRejectedNotice(@Nullable Consumer<Component> rejectedNotice) {
@@ -343,7 +347,7 @@ abstract class FormControl {
 
     static @Nullable RuleValue referenceValue(String text, boolean allowTag) {
         String id = allowTag && text.startsWith("#") ? text.substring(1) : text;
-        return net.minecraft.resources.ResourceLocation.tryParse(id) == null ? null : RuleValue.text(text);
+        return ResourceLocation.tryParse(id) == null ? null : RuleValue.text(text);
     }
 
     static RuleValue literalValue(String text) {

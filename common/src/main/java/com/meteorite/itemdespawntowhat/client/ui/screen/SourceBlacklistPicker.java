@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
@@ -26,13 +27,13 @@ import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.Item;
 import org.jetbrains.annotations.Nullable;
 
-/*** 黑名单仅从源标签的成员中添加具体物品，按标签分页；成员条目只在真正显示时创建。 */
+/** 黑名单仅从源标签的成员中添加具体物品，按标签分页；成员条目只在真正显示时创建。 */
 final class SourceBlacklistPicker {
 
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
     private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
 
-    private static final String UI = "gui.itemdespawntowhat.edit.";
+    private static final String UI = TypeLabels.UI_PREFIX;
 
     private SourceBlacklistPicker() { }
 
@@ -62,7 +63,7 @@ final class SourceBlacklistPicker {
                 });
         grid.setEntryPolicy(policy);
         RuleValue source = rule == null ? null : rule.child(RuleFields.SOURCE);
-        grid.setSelection(source == null ? List.of() : RuleEditorPageSupport.stringList(source.child(RuleFields.SOURCE_EXCLUDE)));
+        grid.setSelection(source == null ? List.of() : RuleValueReads.stringList(source.child(RuleFields.SOURCE_EXCLUDE)));
         grid.setEntrySource(() -> {
             grid.setEnabled(workspace.active());
             if (pages.filtered.isEmpty()) return List.of();
@@ -84,7 +85,7 @@ final class SourceBlacklistPicker {
         return modal;
     }
 
-    /*** 一个源标签的成员：成员 id 第一次需要分页或搜索时才解析，条目与图标只在显示时创建。 */
+    /** 一个源标签的成员：成员 id 第一次需要分页或搜索时才解析，条目与图标只在显示时创建。 */
     private static final class Group {
         private final String tag;
         private final ResourceLocation id;
@@ -150,7 +151,7 @@ final class SourceBlacklistPicker {
         }
     }
 
-    /*** 大标签分为多个子页，每个子页仍只属于一个源标签；条目列表在子页生命周期内复用同一实例。 */
+    /** 大标签分为多个子页，每个子页仍只属于一个源标签；条目列表在子页生命周期内复用同一实例。 */
     private static final class Page {
         private final Group group;
         private final List<String> visible;
@@ -194,7 +195,7 @@ final class SourceBlacklistPicker {
         }
     }
 
-    /*** 缓存标签成员与过滤后的页；搜索与翻页之外不重新解析成员，也不重建未显示的条目。 */
+    /** 缓存标签成员与过滤后的页；搜索与翻页之外不重新解析成员，也不重建未显示的条目。 */
     private static final class Pages {
         private final List<Group> groups = new ArrayList<>();
         private final CatalogEntryPolicy policy;
