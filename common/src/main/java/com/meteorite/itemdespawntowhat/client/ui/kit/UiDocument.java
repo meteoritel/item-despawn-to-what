@@ -60,21 +60,29 @@ public final class UiDocument {
     public int contentWidth() { layout(); return contentWidth; }
     public int contentHeight() { layout(); return contentHeight; }
 
-    // 业务层合并目录、结果、选中项的版本；相同版本不会调用构建器。
+    /** 按内容版本接收文档；相同版本复用已接收内容，父行必须是同列表中位于子行之前的 Row。
+     * @throws IllegalArgumentException 父行下标未指向前面的 Row
+     */
     public void setContent(long newRevision, Supplier<List<UiNode>> builder) {
         if (versioned && revision == newRevision) return;
         long start = metrics.start();
-        content = List.copyOf(builder.get());
+        List<UiNode> next = List.copyOf(builder.get());
+        validateParents(next);
+        content = next;
         revision = newRevision;
         versioned = true;
         dirty = true;
         metrics.built(start);
     }
 
-    // 适用于不使用版本门控的静态文档；构建器计时请使用上面的重载。
+    /** 接收静态文档；父行必须是同列表中位于子行之前的 Row。
+     * @throws IllegalArgumentException 父行下标未指向前面的 Row
+     */
     public void setContent(List<UiNode> nodes) {
         long start = metrics.start();
-        content = List.copyOf(nodes);
+        List<UiNode> next = List.copyOf(nodes);
+        validateParents(next);
+        content = next;
         versioned = false;
         dirty = true;
         metrics.built(start);
@@ -154,6 +162,19 @@ public final class UiDocument {
         contentHeight = y;
         dirty = false;
         metrics.laidOut(start);
+    }
+
+    private static void validateParents(List<UiNode> nodes) {
+        for (int i = 0; i < nodes.size(); i++) {
+            if (nodes.get(i) instanceof UiNode.Frame frame) {
+                validateParents(frame.content());
+            }
+            if (!(nodes.get(i) instanceof UiNode.Row row)) continue;
+            int parent = row.parentRow();
+            if (parent != UiNode.NO_PARENT && (parent >= i || !(nodes.get(parent) instanceof UiNode.Row))) {
+                throw new IllegalArgumentException("Row parent must reference a preceding row: " + i + " -> " + parent);
+            }
+        }
     }
 
     /**

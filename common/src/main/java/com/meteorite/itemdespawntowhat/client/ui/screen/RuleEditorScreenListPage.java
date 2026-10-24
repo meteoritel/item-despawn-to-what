@@ -25,7 +25,6 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiTreeNode;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTreeView;
 import com.meteorite.itemdespawntowhat.core.api.DevelopmentDiagnostics;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshotEntry;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -33,6 +32,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletionException;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -131,6 +132,9 @@ final class RuleEditorScreenListPage {
     private final List<UiButton> selectedButtons = new ArrayList<>();
     private @Nullable UiButton toggleButton;
     private @Nullable UiButton applyButton;
+    private @Nullable UiButton exportButton;
+    // 是否有后台导出在途：在途期间导出按钮禁用，避免重复点击叠加写盘
+    private boolean exporting;
     private final Set<String> expandedCategories = new LinkedHashSet<>();
     private String lastQuery = "";
     private String lastTreeQuery = "";
@@ -215,14 +219,18 @@ final class RuleEditorScreenListPage {
         toggleButton = button(UI + "button.enable", UiButtonVariant.SECONDARY, actions::toggleSelectedEnabled);
         UiButton copy = button(UI + "button.duplicate", UiButtonVariant.SECONDARY, actions::promptDuplicate);
         UiButton delete = button(UI + "button.delete", UiButtonVariant.DANGER, actions::deleteSelected);
-        UiButton export = button(UI + "button.export", UiButtonVariant.SECONDARY, this::openExport);
+        exportButton = button(UI + "button.export", UiButtonVariant.SECONDARY, this::openExport);
         applyButton = button(UI + "button.apply", UiButtonVariant.PRIMARY, host::save);
         UiButton changes = button(UI + "button.changes", UiButtonVariant.SECONDARY, host::showChanges);
         selectedButtons.clear();
         selectedButtons.addAll(List.of(edit, toggleButton, copy, delete));
-        globalBar.set(List.of(create, edit, toggleButton, copy, delete, export));
+        globalBar.set(List.of(create, edit, toggleButton, copy, delete, exportButton));
         listBar.set(List.of(applyButton, changes));
-        listButtons.addAll(List.of(create, edit, toggleButton, copy, delete, export, applyButton, changes));
+        listButtons.addAll(List.of(create, edit, toggleButton, copy, delete, exportButton, applyButton, changes));
+        // 重建按钮时不丢在途导出的禁用态（列表刷新可能在导出期间发生）
+        if (exporting) {
+            exportButton.setEnabled(false);
+        }
     }
 
     private UiButton button(String labelKey, UiButtonVariant variant, Runnable action) {
@@ -272,8 +280,11 @@ final class RuleEditorScreenListPage {
         return count;
     }
 
-    // 按范围收集当前显示体（含未保存草稿）并写盘；失败只提示，不改变任何规则状态
+    // 按范围收集当前显示体（含未保存草稿）后交给后台写盘；失败只提示，不改变任何规则状态
     private void exportRules(ExportScope option) {
+        if (exporting) {
+            return;
+        }
         List<RulePackExporter.RuleEntry> entries = new ArrayList<>();
         for (String id : host.model().ruleIds()) {
             RuleListDisplaySnapshot snapshot = host.display().snapshot(id);
@@ -282,21 +293,56 @@ final class RuleEditorScreenListPage {
             }
             RuleValue body = host.model().displayBody(id);
             if (body != null) {
-                entries.add(new RulePackExporter.RuleEntry(id, body));
+                // 规则值只反映草稿实时内容，跨线程读取不安全：先在客户端线程取成不可变 JSON 文本快照
+                entries.add(new RulePackExporter.RuleEntry(id, body.toJson()));
             }
         }
         if (entries.isEmpty()) {
             host.setNotice(Component.translatable(UI + "export.empty"), THEME.palette().warning());
             return;
         }
-        try {
-            RulePackExporter.Result result = RulePackExporter.export(option.scope(), entries);
-            host.setNotice(Component.translatable(UI + "export.done", result.count(), result.displayPath()),
-                    THEME.palette().success());
-        } catch (IOException exception) {
-            String reason = exception.getMessage() == null ? "" : exception.getMessage();
-            host.setNotice(Component.translatable(UI + "export.failed", reason), THEME.palette().danger());
+        exporting = true;
+        if (exportButton != null) {
+            exportButton.setEnabled(false);
         }
+        RulePackExporter.exportAsync(option.scope(), entries)
+                .thenAccept(result -> deliverExport(() -> host.setNotice(
+                        Component.translatable(UI + "export.done", result.count(), result.displayPath()),
+                        THEME.palette().success())))
+                .exceptionally(error -> {
+                    deliverExport(() -> reportExportFailure(error));
+                    return null;
+                });
+    }
+
+    // 后台结果回到客户端线程：先复位导出按钮再显示提示；期间工作区可能已冻结，按当前可编辑态复位
+    private void deliverExport(Runnable notice) {
+        Minecraft.getInstance().execute(() -> {
+            exporting = false;
+            if (exportButton != null) {
+                exportButton.setEnabled(host.workspace().active());
+            }
+            notice.run();
+        });
+    }
+
+    // 导出失败分两类提示：预检拒绝要列出无法写盘的规则 id，其余按意外错误报告原因
+    private void reportExportFailure(Throwable error) {
+        Throwable cause = error instanceof CompletionException && error.getCause() != null ? error.getCause() : error;
+        if (cause instanceof RulePackExporter.ExportRejectedException rejected) {
+            host.setNotice(Component.translatable(UI + "export.invalid", rejected.ids().size(),
+                    describeIds(rejected.ids())), THEME.palette().danger());
+            return;
+        }
+        String reason = cause.getMessage() == null ? "" : cause.getMessage();
+        host.setNotice(Component.translatable(UI + "export.failed", reason), THEME.palette().danger());
+    }
+
+    // 提示行空间有限：只列前几条，其余以省略号概括
+    private static String describeIds(List<String> ids) {
+        int shown = Math.min(ids.size(), 3);
+        String joined = String.join(", ", ids.subList(0, shown));
+        return ids.size() > shown ? joined + "…" : joined;
     }
 
     // 列表条目操作随选中状态同步；切换按钮只显示下一步动作，布局按当前文案计算。
@@ -733,9 +779,12 @@ final class RuleEditorScreenListPage {
         }
     }
 
-    // 冻结时列表页动作按钮一并禁用（返回按钮不在其中）
+    // 冻结时列表页动作按钮一并禁用（返回按钮不在其中）；在途导出保持禁用，避免写盘期间重新可点
     void setButtonsEnabled(boolean editable) {
         for (UiButton button : listButtons) {
+            if (exporting && button == exportButton) {
+                continue;
+            }
             button.setEnabled(editable);
         }
     }

@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.widget;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeNodes;
 import com.meteorite.itemdespawntowhat.client.edit.OpaqueCondition;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
+import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTidyTreeLayout;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreePath;
@@ -15,8 +16,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import net.minecraft.client.gui.Font;
+import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.FormattedCharSequence;
 import org.jetbrains.annotations.Nullable;
 
 /** 条件画布的布局与展示数据：集中维护身份索引、诊断、标签和卡片几何。 */
@@ -59,6 +62,8 @@ final class ConditionGraphLayout {
     // 标题带右上角结构标记的预留宽度：测宽时一并计入，标记出现时不挤掉标题文字
     static final int MARK_RESERVE = 8;
     static final String FLOW_HINT_KEY = "gui.itemdespawntowhat.edit.tree.flow_hint";
+    // 流动提示文字与虚线之间的空隙：文字底下还要铺一块画布底色遮断虚线
+    static final int FLOW_HINT_GAP = 2;
 
     // 布局用包装节点：节点身份即对象身份，不依赖 ConditionNode 的值相等。
     private abstract static class GraphNode {
@@ -112,6 +117,9 @@ final class ConditionGraphLayout {
     // 单个可添加位置：parent 为 null 表示空树（作为新根写入）
     record Hotspot(@Nullable UiTreePath parent, int index, UiRect rect) {}
 
+    // 卡片文本快照：标题已按卡片宽裁剪、内容行已折行，绘制直接取用
+    record CardText(String title, int titleWidth, boolean container, List<FormattedCharSequence> lines) {}
+
     record NodeInfo(boolean incomplete, boolean overflow, boolean deep,
                     boolean leafMissing, boolean subtreeIssue) {}
 
@@ -143,6 +151,23 @@ final class ConditionGraphLayout {
     // 树序（深度优先前序），Shift 范围选择与键盘导航使用
     private final List<ConditionNode> order = new ArrayList<>();
     private final List<ConditionTreeInspection.Issue> issues = new ArrayList<>();
+    // 标题与内容行文案：本地化文本的构造与折行成本较高，按节点身份缓存到下一轮布局/语言变化
+    private final Map<ConditionNode, Component> titleLabels = new IdentityHashMap<>();
+    private final Map<ConditionNode, List<Component>> summaryRowCache = new IdentityHashMap<>();
+    private final Map<ConditionNode, CardText> cardTexts = new IdentityHashMap<>();
+    // 当前布局根：语言变化时用它就地重排，不重建表达式扫描结果
+    private @Nullable GraphNode layoutRoot;
+    // 文本快照依赖的字体与语言版本：变化后必须重排并重算文本
+    private @Nullable Font textFont;
+    private @Nullable Object textLanguage;
+    private String flowHintText = "";
+    private int flowHintTextWidth;
+    private String sourceTitleText = "";
+    private int sourceTitleWidth;
+    private String resultTitleText = "";
+    private int resultTitleWidth;
+    private String sourceSummaryText = "";
+    private String resultSummaryText = "";
 
     private ConditionExpression expression = ConditionExpression.EMPTY;
     private List<ConditionTreeContract.TypeOption> typeOptions = List.of();
@@ -161,10 +186,6 @@ final class ConditionGraphLayout {
     @Nullable ConditionNode root() { return expression.root(); }
     UiRect sourceRect() { return sourceRect; }
     UiRect resultRect() { return resultRect; }
-    Component sourceTitle() { return sourceSlot.title; }
-    Component sourceSummary() { return sourceSlot.summary; }
-    Component resultTitle() { return resultSlot.title; }
-    Component resultSummary() { return resultSlot.summary; }
     int contentWidth() { return resultRect.right(); }
     int contentHeight() { return Math.max(treeOriginY + layout.contentHeight(), resultRect.bottom()); }
 
@@ -181,7 +202,138 @@ final class ConditionGraphLayout {
         if (sourceSlot.summary.equals(sourceSummary) && resultSlot.summary.equals(resultSummary)) return false;
         sourceSlot.summary = sourceSummary;
         resultSlot.summary = resultSummary;
+        // 端点宽度与摘要文本都取自 summary：先按新值重排端点，再刷新文本快照
+        if (layoutRoot != null) {
+            layoutEndpoints(layoutRoot);
+            hotspots.clear();
+            collectHotspots();
+        }
+        refreshTexts();
         return true;
+    }
+
+    // 端点标题/摘要与流动提示的裁剪结果：绘制路径只读这段文本，不再每帧构造 Component 并裁剪
+    String sourceTitleText() { return sourceTitleText; }
+    int sourceTitleWidth() { return sourceTitleWidth; }
+    String resultTitleText() { return resultTitleText; }
+    int resultTitleWidth() { return resultTitleWidth; }
+    String sourceSummaryText() { return sourceSummaryText; }
+    String resultSummaryText() { return resultSummaryText; }
+    String flowHintText() { return flowHintText; }
+    int flowHintTextWidth() { return flowHintTextWidth; }
+
+    /**
+     * 语言或字体变化会改变本地化文案与测宽结果：此时就地重排并刷新全部文本快照。
+     * 绘制路径每帧都会调用，但只有依赖真正变化时才付出重排成本。
+     */
+    void ensureText() {
+        if (Language.getInstance() == textLanguage && font == textFont) {
+            return;
+        }
+        textLanguage = Language.getInstance();
+        textFont = font;
+        titleLabels.clear();
+        summaryRowCache.clear();
+        cardWidths.clear();
+        refillLeafSummaries();
+        GraphNode root = layoutRoot;
+        if (root != null) {
+            layout.layout(root, layoutSource);
+            layoutEndpoints(root);
+            hotspots.clear();
+            collectHotspots();
+        }
+        refreshTexts();
+    }
+
+    // 叶参数摘要由宿主回调生成，语言变化后需要重跑一遍；节点身份与树序不变
+    private void refillLeafSummaries() {
+        leafSummaries.clear();
+        if (leafSummary == null) {
+            return;
+        }
+        for (ConditionNode node : order) {
+            if (node instanceof ConditionNode.Leaf leaf && leaf.condition() != null) {
+                leafSummaries.put(node, leafSummary.apply(leaf));
+            }
+        }
+    }
+
+    // 文本快照统一在布局完成后重算：卡片文本按需惰性补算，端点与流动提示一次算完
+    private void refreshTexts() {
+        cardTexts.clear();
+        flowHintText = "";
+        flowHintTextWidth = 0;
+        GraphNode root = layoutRoot;
+        if (expression.root() != null && root != null) {
+            int width = Math.max(0, resultRect.x() - cardRect(root).right() - FLOW_HINT_GAP * 6);
+            flowHintText = TextScroll.trimToWidth(font, Component.translatable(FLOW_HINT_KEY).getString(), width);
+            flowHintTextWidth = font.width(flowHintText);
+        }
+        sourceTitleText = endpointTitleText(sourceSlot, sourceRect);
+        sourceTitleWidth = Math.round(font.width(sourceTitleText) * TITLE_TEXT_SCALE);
+        resultTitleText = endpointTitleText(resultSlot, resultRect);
+        resultTitleWidth = Math.round(font.width(resultTitleText) * TITLE_TEXT_SCALE);
+        sourceSummaryText = endpointSummaryText(sourceSlot, sourceRect);
+        resultSummaryText = endpointSummaryText(resultSlot, resultRect);
+    }
+
+    private String endpointTitleText(EndpointSlot endpoint, UiRect rect) {
+        int available = Math.max(0, rect.width() - (BORDER + CARD_PADDING_X) * 2);
+        return TextScroll.trimToWidth(font, endpoint.title.getString(),
+                Math.max(0, (int) (available / TITLE_TEXT_SCALE)));
+    }
+
+    private String endpointSummaryText(EndpointSlot endpoint, UiRect rect) {
+        return TextScroll.trimToWidth(font, endpoint.summary.getString(),
+                Math.max(0, rect.width() - (BORDER + CARD_PADDING_X) * 2));
+    }
+
+    // 卡片标题裁剪结果与内容行折行结果：同一轮布局内不变，按节点身份缓存
+    CardText cardText(ConditionNode node) {
+        CardText cached = cardTexts.get(node);
+        if (cached != null) {
+            return cached;
+        }
+        UiRect rect = rect(node);
+        if (rect == null) {
+            return new CardText("", 0, isContainer(node), List.of());
+        }
+        int reserve = hasStatus(node) ? MARK_RESERVE : 0;
+        int available = Math.max(0, rect.width() - (BORDER + CARD_PADDING_X) * 2 - reserve);
+        String title = TextScroll.trimToWidth(font, titleLabel(node).getString(),
+                Math.max(0, (int) (available / TITLE_TEXT_SCALE)));
+        int titleWidth = Math.round(font.width(title) * TITLE_TEXT_SCALE);
+        int contentWidth = Math.max(0, rect.width() - (BORDER + CARD_PADDING_X) * 2);
+        CardText text = new CardText(title, titleWidth, isContainer(node), splitRows(node, contentWidth));
+        cardTexts.put(node, text);
+        return text;
+    }
+
+    // 内容行按卡片内容宽折行，最多两行；空文本行跳过，与绘制时的可见行计数一致
+    private List<FormattedCharSequence> splitRows(ConditionNode node, int width) {
+        if (width == 0) {
+            return List.of();
+        }
+        List<FormattedCharSequence> lines = new ArrayList<>(CONTENT_ROWS);
+        for (Component content : summaryRows(node)) {
+            if (content.getString().isEmpty()) {
+                continue;
+            }
+            for (FormattedCharSequence line : font.split(content, width)) {
+                if (lines.size() >= CONTENT_ROWS) {
+                    return List.copyOf(lines);
+                }
+                lines.add(line);
+            }
+        }
+        return List.copyOf(lines);
+    }
+
+    // 标题带是否要留结构标记：与 statusLabel 的非空判定保持一致
+    boolean hasStatus(ConditionNode node) {
+        NodeInfo info = infos.get(node);
+        return info != null && (info.incomplete() || info.overflow() || info.deep());
     }
 
     void rebuild(ConditionExpression expression, List<ConditionTreeContract.TypeOption> options,
@@ -200,9 +352,11 @@ final class ConditionGraphLayout {
             inspect(root, UiTreePath.ROOT, 1, new NodeCounts());
             layoutRoot = wrap(root);
         }
+        this.layoutRoot = layoutRoot;
         layout.layout(layoutRoot, layoutSource);
         layoutEndpoints(layoutRoot);
         collectHotspots();
+        refreshTexts();
     }
 
     private void clearLayout() {
@@ -217,6 +371,10 @@ final class ConditionGraphLayout {
         cardWidths.clear();
         order.clear();
         issues.clear();
+        titleLabels.clear();
+        summaryRowCache.clear();
+        cardTexts.clear();
+        layoutRoot = null;
     }
 
     private void layoutEndpoints(GraphNode layoutRoot) {
@@ -341,7 +499,8 @@ final class ConditionGraphLayout {
      * 它的本地化含义不再另起一行，避免同一张卡片把类型名或运算符说两遍。
      */
     Component titleLabel(ConditionNode node) {
-        return isContainer(node) ? operatorLabel(node) : leafTitleLabel(node);
+        return titleLabels.computeIfAbsent(node,
+                key -> isContainer(key) ? operatorLabel(key) : leafTitleLabel(key));
     }
 
     // 叶标题：类型名是该行唯一内容，参数摘要与结构标记分别占内容行 1 与内容行 2
@@ -379,11 +538,13 @@ final class ConditionGraphLayout {
      * 计数，第二行说明运算符自身的意思，让「且 / 或 / 非」不必只靠一个字去猜。
      */
     List<Component> summaryRows(ConditionNode node) {
-        if (isContainer(node)) {
-            return List.of(branchCountLabel(node), operatorHintLabel(node));
-        }
-        Component summary = summaryLabel(node);
-        return summary.getString().isEmpty() ? List.of() : List.of(summary);
+        return summaryRowCache.computeIfAbsent(node, key -> {
+            if (isContainer(key)) {
+                return List.of(branchCountLabel(key), operatorHintLabel(key));
+            }
+            Component summary = summaryLabel(key);
+            return summary.getString().isEmpty() ? List.of() : List.of(summary);
+        });
     }
 
     // 容器内容行 1：子项计数，空容器显示「暂无条件」

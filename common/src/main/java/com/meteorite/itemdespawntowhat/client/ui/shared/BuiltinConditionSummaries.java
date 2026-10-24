@@ -47,26 +47,6 @@ public final class BuiltinConditionSummaries {
     private static final String Y_ANY_KEY = COND + "y_level.any";
     private static final String LIGHT_ANY_KEY = COND + "light_level.any";
 
-    // ---- 条件 JSON 字段名 ----
-    private static final String FIELD_DIMENSIONS = "dimensions";
-    private static final String FIELD_BIOMES = "biomes";
-    private static final String FIELD_MODE = "mode";
-    private static final String FIELD_WEATHER = "weather";
-    private static final String FIELD_ITEMS = "items";
-    private static final String FIELD_COUNT = "count";
-    private static final String FIELD_FROM = "from";
-    private static final String FIELD_TO = "to";
-    private static final String FIELD_MIN = "min";
-    private static final String FIELD_MAX = "max";
-    // 周围方块的六个方向字段名，顺序即卡片展示顺序
-    private static final List<String> SIDE_FIELDS = List.of("up", "down", "north", "south", "east", "west");
-    // 气候模式的六个采样轴，顺序与编辑器表单一致
-    private static final List<String> CLIMATE_AXES =
-            List.of("temperature", "humidity", "continentalness", "erosion", "depth", "weirdness");
-
-    // ---- 业务默认值 ----
-    private static final String MODE_CLIMATE = "climate";
-
     // 工具类
     private BuiltinConditionSummaries() {
         throw new UnsupportedOperationException("Utility class");
@@ -103,15 +83,15 @@ public final class BuiltinConditionSummaries {
 
     // 维度：命中任一即满足，未填维度时不加前缀
     private static Component dimension(RuleValue condition) {
-        Component value = SummaryFormats.refs(condition.child(FIELD_DIMENSIONS), RuleCatalogType.DIMENSION);
+        Component value = SummaryFormats.refs(condition.child(RuleFields.CONDITION_DIMENSIONS), RuleCatalogType.DIMENSION);
         return value == null ? Component.translatable(UNSET_KEY) : Component.translatable(DIMENSION_KEY, value);
     }
 
     // 群系：模式词 + 明细（climate 模式展示气候区间，其余展示群系列表）
     private static Component biome(RuleValue condition, ResourceLocation type) {
-        String mode = condition.text(FIELD_MODE, "");
+        String mode = condition.text(RuleFields.CONDITION_MODE, "");
         Component modeText = SummaryFormats.enumText(mode, BIOME_MODE_KEY);
-        if (MODE_CLIMATE.equals(mode)) {
+        if (RuleFields.CONDITION_MODE_CLIMATE.equals(mode)) {
             Component axes = climateAxes(condition, type);
             return modeText == null ? axes : Component.translatable(BIOME_KEY, modeText, axes);
         }
@@ -122,14 +102,14 @@ public final class BuiltinConditionSummaries {
     // 气候区间：逐轴展示，轴名取描述符标签，缺失轴不影响其余轴
     private static Component climateAxes(RuleValue condition, ResourceLocation type) {
         List<Component> axes = new ArrayList<>();
-        for (String axis : CLIMATE_AXES) {
+        for (String axis : RuleFields.CONDITION_AXES) {
             RuleValue range = condition.child(axis);
             if (range == null) {
                 continue;
             }
             Component text = SummaryFormats.range(
-                    SummaryFormats.numberText(range.child(FIELD_MIN)),
-                    SummaryFormats.numberText(range.child(FIELD_MAX)));
+                    SummaryFormats.numberText(range.child(RuleFields.CONDITION_MIN)),
+                    SummaryFormats.numberText(range.child(RuleFields.CONDITION_MAX)));
             if (text != null) {
                 axes.add(Component.translatable(BIOME_AXIS_KEY, axisLabel(type, axis), text));
             }
@@ -142,13 +122,13 @@ public final class BuiltinConditionSummaries {
 
     // 群系列表：id 或标签都渲染成显示名
     private static Component biomes(RuleValue condition) {
-        Component value = SummaryFormats.refs(condition.child(FIELD_BIOMES), RuleCatalogType.BIOME);
+        Component value = SummaryFormats.refs(condition.child(RuleFields.CONDITION_BIOMES), RuleCatalogType.BIOME);
         return value == null ? Component.translatable(UNSET_KEY) : value;
     }
 
     // 天气：复用表单枚举文案；未选择与取值未知分开处理，避免误报
     private static @Nullable Component weather(RuleValue condition, ResourceLocation type) {
-        String kind = condition.text(FIELD_WEATHER, "");
+        String kind = condition.text(RuleFields.CONDITION_WEATHER, "");
         if (kind.isBlank()) {
             return Component.translatable(WEATHER_UNSET_KEY);
         }
@@ -163,7 +143,7 @@ public final class BuiltinConditionSummaries {
             return null;
         }
         Map<String, List<Component>> directionsByBlock = new LinkedHashMap<>();
-        for (String side : SIDE_FIELDS) {
+        for (String side : RuleFields.CONDITION_SIDES) {
             EditorField field = descriptor.field(side);
             if (field == null) {
                 continue;
@@ -186,12 +166,12 @@ public final class BuiltinConditionSummaries {
 
     // 催化剂：逐物品「物品名 × 数量」；未配数量时只显示物品名（数量跟随同作用域消耗）
     private static Component catalystPresent(RuleValue condition) {
-        RuleValue items = condition.child(FIELD_ITEMS);
+        RuleValue items = condition.child(RuleFields.CONDITION_ITEMS);
         if (items == null || !items.isList()) {
             return Component.translatable(UNSET_KEY);
         }
         RuleValue counts = condition.child(RuleFields.ITEM_COUNTS);
-        int defaultCount = countOf(condition.child(FIELD_COUNT));
+        int defaultCount = countOf(condition.child(RuleFields.CONDITION_COUNT));
         List<Component> entries = new ArrayList<>();
         for (String raw : items.textItems()) {
             int count = countOf(childOf(counts, raw));
@@ -228,8 +208,8 @@ public final class BuiltinConditionSummaries {
 
     // 时间：按 24 小时制展示时钟区间，并说明是否跨零点
     private static Component timeOfDay(RuleValue condition) {
-        Integer from = integerOf(condition.child(FIELD_FROM));
-        Integer to = integerOf(condition.child(FIELD_TO));
+        Integer from = integerOf(condition.child(RuleFields.CONDITION_FROM));
+        Integer to = integerOf(condition.child(RuleFields.CONDITION_TO));
         if (from == null || to == null) {
             return Component.translatable(UNSET_KEY);
         }
@@ -241,8 +221,8 @@ public final class BuiltinConditionSummaries {
     // 数值区间条件：两端都未填时提示该维度任意取值
     private static Component bounded(RuleValue condition, String anyKey) {
         Component value = SummaryFormats.range(
-                SummaryFormats.numberText(condition.child(FIELD_MIN)),
-                SummaryFormats.numberText(condition.child(FIELD_MAX)));
+                SummaryFormats.numberText(condition.child(RuleFields.CONDITION_MIN)),
+                SummaryFormats.numberText(condition.child(RuleFields.CONDITION_MAX)));
         return value == null ? Component.translatable(anyKey) : value;
     }
 
@@ -278,8 +258,8 @@ public final class BuiltinConditionSummaries {
     // 天气枚举语言键中的分组名取自描述符，缺省与表单一致地回落字段名
     private static String weatherEnumGroup(ResourceLocation type) {
         TypeEditorDescriptor descriptor = ConditionEditorRegistry.find(type);
-        EditorField field = descriptor == null ? null : descriptor.field(FIELD_WEATHER);
+        EditorField field = descriptor == null ? null : descriptor.field(RuleFields.CONDITION_WEATHER);
         String group = field == null ? null : field.enumGroup();
-        return group == null || group.isBlank() ? FIELD_WEATHER : group;
+        return group == null || group.isBlank() ? RuleFields.CONDITION_WEATHER : group;
     }
 }

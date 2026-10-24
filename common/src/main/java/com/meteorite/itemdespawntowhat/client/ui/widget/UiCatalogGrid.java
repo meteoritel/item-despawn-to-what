@@ -12,13 +12,16 @@ import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiMarkIcons;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiMarkIcons.Mark;
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import net.minecraft.Util;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import org.jetbrains.annotations.Nullable;
@@ -157,6 +160,9 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     private final UiTextInput search;
     private final List<Entry> entries = new ArrayList<>();
     private final List<String> selection = new ArrayList<>();
+    // 行标签文本缓存：条目对象由宿主目录缓存持有，命中时不再把 Component 逐帧取成 String
+    private final Map<Entry, String> rowLabels = new IdentityHashMap<>();
+    private @Nullable Object rowLabelsLanguage;
 
     private @Nullable Supplier<@Nullable List<Entry>> entrySource;
     private @Nullable List<Entry> sourceCache;
@@ -534,6 +540,9 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         if (next != null) {
             entries.addAll(next);
         }
+        // 条目集合换过一批：旧标签缓存以条目对象身份为键，直接丢弃
+        rowLabels.clear();
+        rowLabelsLanguage = null;
         hoveredIndex = -1;
         hoverScrollTicks = 0;
         clampCursor();
@@ -703,7 +712,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         }
         int textX = cell.x() + PADDING_X + ICON_BOX + ICON_GAP;
         int textWidth = Math.max(0, cell.right() - MARK_WIDTH - textX);
-        String label = rowLabel(entry).getString();
+        String label = rowLabelText(entry);
         int color = enabled && !unavailable ? theme.palette().textPrimary() : theme.palette().textDisabled();
         int textY = cell.y() + Math.max(0, (ROW_HEIGHT - font.lineHeight) / 2);
         TextScroll.draw(graphics, font, label, textX, textY,
@@ -716,6 +725,22 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         if (cursorAt) {
             theme.drawFocusOutline(graphics, cell);
         }
+    }
+
+    // 行标签文本：语言变化会让本地化名称整批失效，其余情况按条目身份复用上一次结果
+    private String rowLabelText(Entry entry) {
+        Object language = Language.getInstance();
+        if (rowLabelsLanguage != language) {
+            rowLabels.clear();
+            rowLabelsLanguage = language;
+        }
+        String cached = rowLabels.get(entry);
+        if (cached != null) {
+            return cached;
+        }
+        String text = rowLabel(entry).getString();
+        rowLabels.put(entry, text);
+        return text;
     }
 
     // 标签名称由共用方法生成，避免目录行和标签快照各添加一次前缀。

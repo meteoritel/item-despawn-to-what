@@ -32,6 +32,11 @@ public final class RuleDraft {
     private JsonObject working;
     // 覆盖层删除标记（不写入 working，由 {@link #toOverlayJson()} 表达）
     private boolean deleted;
+    // 草稿内容变更计数：只在内容真正变化时递增（写入前判等），无变化操作不留撤销记录
+    private long mutations;
+    // 上次判定 dirty 时的变更计数与判定结果（-1 表示尚未判定）
+    private long dirtyMutations = -1L;
+    private boolean dirty;
 
     private RuleDraft(JsonObject original, JsonObject working) {
         this.original = original;
@@ -46,6 +51,17 @@ public final class RuleDraft {
     // 从动态值对象建立草稿（界面层入口）：非映射值按空规则处理
     public static RuleDraft of(RuleValue source) {
         return of(source == null || !source.isMapping() ? new JsonObject() : source.unwrap().getAsJsonObject());
+    }
+
+    // 内容变更计数：只在内容真正变化时推进，供变更检测与脏标记缓存使用
+    long mutationStamp() {
+        return this.mutations;
+    }
+
+    // 顶层字段是否已是给定内容：写入前判等，保证无变化操作不推进计数、不进入撤销栈
+    private boolean sameField(String field, JsonElement value) {
+        JsonElement current = this.working.get(field);
+        return current != null && current.equals(value);
     }
 
     // ---- 基本状态 ----
@@ -79,20 +95,40 @@ public final class RuleDraft {
         return deleted;
     }
 
-    // 设置删除标记
+    // 设置删除标记；标记未变化时不产生改动
     public void setDeleted(boolean deleted) {
+        if (this.deleted == deleted) {
+            return;
+        }
         this.deleted = deleted;
+        this.mutations++;
     }
 
-    // 是否有未保存改动
+    /**
+     * 是否有未保存改动（当前内容偏离原始基线，或标记删除）。
+     *
+     * <p>判定结果按内容变更计数缓存：界面头部与按钮每帧/tick 多次查询脏标记，
+     * 反复执行整棵 JSON 比较会随规则体积线性放大。只有内容真正变化时计数才推进，
+     * 因此缓存始终等于「当前内容是否偏离基线」——撤销回基线、载入新草稿与删除标记翻转都会重算。</p>
+     *
+     * @return 是否有未保存改动
+     */
     public boolean isDirty() {
-        return deleted || !original.equals(working);
+        if (this.dirtyMutations != this.mutations) {
+            this.dirty = this.deleted || !this.original.equals(this.working);
+            this.dirtyMutations = this.mutations;
+        }
+        return this.dirty;
     }
 
-    // 丢弃改动，回到服务器基线
+    // 丢弃改动，回到服务器基线；已与基线一致时不产生改动
     public void revert() {
+        if (!isDirty()) {
+            return;
+        }
         this.working = original.deepCopy();
         this.deleted = false;
+        this.mutations++;
     }
 
     // ---- 值对象读写（界面侧入口） ----
@@ -110,7 +146,12 @@ public final class RuleDraft {
 
     // 写入顶层字段值
     public void set(String field, RuleValue value) {
-        working.add(field, value.unwrap().deepCopy());
+        JsonElement next = value.unwrap();
+        if (sameField(field, next)) {
+            return;
+        }
+        working.add(field, next.deepCopy());
+        this.mutations++;
     }
 
     // ---- 顶层字段读写 ----
@@ -122,7 +163,11 @@ public final class RuleDraft {
 
     // 删除字段
     public boolean remove(String field) {
-        return working.remove(field) != null;
+        boolean removed = working.remove(field) != null;
+        if (removed) {
+            this.mutations++;
+        }
+        return removed;
     }
 
     // 读取字符串，缺失或不是字符串时返回 fallback
@@ -155,22 +200,38 @@ public final class RuleDraft {
 
     // 写入字符串字段
     public void setString(String field, String value) {
+        if (sameField(field, new JsonPrimitive(value))) {
+            return;
+        }
         working.addProperty(field, value);
+        this.mutations++;
     }
 
     // 写入布尔字段
     public void setBoolean(String field, boolean value) {
+        if (sameField(field, new JsonPrimitive(value))) {
+            return;
+        }
         working.addProperty(field, value);
+        this.mutations++;
     }
 
     // 写入整数字段
     public void setInt(String field, int value) {
+        if (sameField(field, new JsonPrimitive(value))) {
+            return;
+        }
         working.addProperty(field, value);
+        this.mutations++;
     }
 
     // 写入小数字段
     public void setDouble(String field, double value) {
+        if (sameField(field, new JsonPrimitive(value))) {
+            return;
+        }
         working.addProperty(field, value);
+        this.mutations++;
     }
 
     // ---- 路径级读写（保留未识别字段的关键） ----
@@ -182,12 +243,27 @@ public final class RuleDraft {
 
     // 按路径写入原始元素（包内私有：界面请使用 setAt）
     private boolean writeAt(String path, JsonElement value) {
-        return write(working, parsePath(path), value);
+        // 与现有内容一致视为已写入：无变化操作不应产生撤销记录
+        if (!isRootPath(path)) {
+            JsonElement current = readAt(path);
+            if (current != null && current.equals(value)) {
+                return true;
+            }
+        }
+        boolean written = write(working, parsePath(path), value);
+        if (written) {
+            this.mutations++;
+        }
+        return written;
     }
 
     // 按路径删除，路径不存在返回 false
     public boolean removeAt(String path) {
-        return remove(working, parsePath(path));
+        boolean removed = remove(working, parsePath(path));
+        if (removed) {
+            this.mutations++;
+        }
+        return removed;
     }
 
     // 按路径读取值；路径不存在返回 null
@@ -287,14 +363,25 @@ public final class RuleDraft {
     // 替换任意位置的条件树；空表达式删除该字段（契约要求不得输出 null）
     public boolean setConditionsAt(String path, ConditionExpression expression, TypeRegistry<ConditionType<?>> conditionTypes) {
         if (expression.isEmpty()) {
-            return isRootPath(path) ? remove(RuleFields.CONDITIONS) : removeAt(path);
+            if (!isRootPath(path)) {
+                return removeAt(path);
+            }
+            boolean removed = remove(RuleFields.CONDITIONS);
+            if (removed) {
+                this.mutations++;
+            }
+            return removed;
         }
         JsonElement encoded = encodeConditionsElement(expression, conditionTypes);
         if (encoded == null) {
             return false;
         }
         if (isRootPath(path)) {
+            if (encoded.equals(working.get(RuleFields.CONDITIONS))) {
+                return true;
+            }
             working.add(RuleFields.CONDITIONS, encoded);
+            this.mutations++;
             return true;
         }
         return writeAt(path, encoded);
@@ -339,6 +426,7 @@ public final class RuleDraft {
     // 用快照整体替换工作副本（撤销/重做与草稿恢复使用，不改变 original 基线）
     public void replaceWith(JsonObject source) {
         this.working = source == null ? new JsonObject() : source.deepCopy();
+        this.mutations++;
     }
 
     // 用动态值对象整体替换工作副本（界面层入口）：非映射值按空规则处理
@@ -410,6 +498,7 @@ public final class RuleDraft {
             for (int index = from; index > to; index--) array.set(index, array.get(index - 1));
         }
         array.set(to, element);
+        this.mutations++;
         return true;
     }
 
@@ -498,12 +587,14 @@ public final class RuleDraft {
         outcomes.add(candidate);
         working.remove(RuleFields.EFFECTS);
         working.add(RuleFields.OUTCOMES, outcomes);
+        this.mutations++;
         return true;
     }
 
     // ---- 编辑层内部入口（包内可见；界面请使用 root()/valueAt()） ----
 
-    // 工作副本引用：撤销快照与落盘在同一包内使用
+    // 工作副本引用：撤销快照与落盘在同一包内使用。只读视图——任何写入都必须走本类 mutator，
+    // 否则变更计数、脏标记缓存与撤销记录都不会更新
     JsonObject workingView() {
         return working;
     }

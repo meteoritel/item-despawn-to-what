@@ -148,6 +148,9 @@ public final class RuleEditorScreen extends Screen {
     private long noticeExpiresAt;
     // 上一帧的提示是否被截断（决定悬停提示是否出现）
     private boolean noticeTruncated;
+
+    // 快照解析失败只提示一次：失败原因清空前不重复打扰
+    private boolean snapshotFailureNotified;
     // 上一帧绘制的提示区域（悬停命中测试用），未绘制时为 null
     private @Nullable UiRect noticeRect;
     private @Nullable UiRect truncatedTitleRect;
@@ -945,6 +948,13 @@ public final class RuleEditorScreen extends Screen {
         model.tickPersistence();
         if (model.consumeDraftFailures() > 0) {
             setNotice(Component.translatable(UI + "notice.draft_save_failed"), THEME.palette().warning());
+        }
+        // 快照解析失败时首载会一直停在「加载中」：用常驻警告让玩家知道当前内容不可用
+        if (workspace.snapshotFailure() == null) {
+            snapshotFailureNotified = false;
+        } else if (!snapshotFailureNotified) {
+            snapshotFailureNotified = true;
+            setNotice(Component.translatable(UI + "notice.snapshot_failed"), NoticeLevel.DANGER);
         }
         int restored = model.consumeRestoredCount();
         if (restored > 0) {

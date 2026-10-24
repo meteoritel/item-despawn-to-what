@@ -26,11 +26,17 @@ import org.jetbrains.annotations.Nullable;
  * {@code config/...} 定位，不依赖任何加载器 API，common 侧可直接使用。
  * <p>该目录是纯客户端状态，绝不写入服务端目录，也不写进服务端 overlay 目录：
  * 编辑锁与覆盖层是服务端的事，草稿只是本机未提交的编辑中间态。
+ * <p>本类只做同步文件操作，不持有队列：读写次序由 {@link DraftWriter} 单线程串行调用保证。
  */
 public final class DraftStore {
 
     // 相对游戏根目录的草稿目录
     public static final String DIRECTORY = "config/itemdespawntowhat/client/editor-drafts";
+
+    // 正式草稿文件后缀
+    private static final String JSON_SUFFIX = ".json";
+    // 写盘临时文件后缀：与正式文件同目录，失败时立即清理，不留半截内容
+    private static final String TEMP_SUFFIX = ".tmp";
 
     // 落盘格式：带缩进便于排查，不转义 HTML 字符
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
@@ -51,16 +57,18 @@ public final class DraftStore {
         return this.directory;
     }
 
-    // 写出（覆盖）某个目标的草稿文件：先写同目录临时文件再原子替换，避免崩在半截 JSON 上
+    // 写出（覆盖）某个目标的草稿文件：先写同目录临时文件再原子替换，避免崩在半截 JSON 上；
+    // 写失败时立即删掉临时文件，避免下次写同一目标前留下无法解释的残留
     public boolean save(PersistedDraft draft) {
         Path target = resolve(draft.targetId());
-        Path temporary = target.resolveSibling(target.getFileName() + ".tmp");
+        Path temporary = temporaryOf(target);
         try {
             Files.createDirectories(this.directory);
             Files.writeString(temporary, GSON.toJson(draft.toJson()) + "\n", StandardCharsets.UTF_8);
             moveInto(temporary, target);
             return true;
         } catch (IOException exception) {
+            deleteQuietly(temporary);
             Constants.LOG.warn("写出编辑草稿失败：{}", draft.targetId(), exception);
             return false;
         }
@@ -84,7 +92,7 @@ public final class DraftStore {
         try (Stream<Path> files = Files.list(this.directory)) {
             List<Path> jsonFiles = files
                     .filter(Files::isRegularFile)
-                    .filter(path -> path.getFileName().toString().endsWith(".json"))
+                    .filter(path -> path.getFileName().toString().endsWith(JSON_SUFFIX))
                     .sorted(Comparator.comparing(path -> path.getFileName().toString()))
                     .toList();
             for (Path file : jsonFiles) {
@@ -101,13 +109,15 @@ public final class DraftStore {
         return drafts;
     }
 
-    // 删除某个目标的草稿文件（不存在也算成功）
+    // 删除某个目标的草稿文件（不存在也算成功）；同目标的临时文件一并清理，覆盖上一次写盘中途留下的残留
     public void delete(String targetId) {
+        Path target = resolve(targetId);
         try {
-            Files.deleteIfExists(resolve(targetId));
+            Files.deleteIfExists(target);
         } catch (IOException exception) {
             Constants.LOG.warn("删除编辑草稿失败：{}", targetId, exception);
         }
+        deleteQuietly(temporaryOf(target));
     }
 
     // 清空草稿目录中本模组写出的文件
@@ -118,7 +128,7 @@ public final class DraftStore {
         try (Stream<Path> files = Files.list(this.directory)) {
             for (Path file : files.filter(Files::isRegularFile).toList()) {
                 String name = file.getFileName().toString();
-                if (name.endsWith(".json") || name.endsWith(".json.tmp")) {
+                if (name.endsWith(JSON_SUFFIX) || name.endsWith(JSON_SUFFIX + TEMP_SUFFIX)) {
                     Files.deleteIfExists(file);
                 }
             }
@@ -157,7 +167,7 @@ public final class DraftStore {
     // 短哈希用于区分只差非法字符的 id（如 idtw:foo/bar 与 idtw:foo_bar 清洗后前缀相同）；
     // id 本身仍存在文件内容里，不需要从文件名反向还原。
     public static String fileName(String targetId) {
-        return sanitize(targetId) + "-" + shortHash(targetId) + ".json";
+        return sanitize(targetId) + "-" + shortHash(targetId) + JSON_SUFFIX;
     }
 
     // 可读前缀：只保留安全字符，空则用下划线占位
@@ -189,5 +199,19 @@ public final class DraftStore {
 
     private Path resolve(String targetId) {
         return this.directory.resolve(fileName(targetId));
+    }
+
+    // 临时文件与正式文件同目录同名，只差后缀：原子替换时不需要跨目录移动
+    private static Path temporaryOf(Path target) {
+        return target.resolveSibling(target.getFileName() + TEMP_SUFFIX);
+    }
+
+    // 清理临时文件：失败只记日志，不掩盖触发清理的原始错误
+    private static void deleteQuietly(Path file) {
+        try {
+            Files.deleteIfExists(file);
+        } catch (IOException exception) {
+            Constants.LOG.warn("清理编辑草稿临时文件失败：{}", file, exception);
+        }
     }
 }

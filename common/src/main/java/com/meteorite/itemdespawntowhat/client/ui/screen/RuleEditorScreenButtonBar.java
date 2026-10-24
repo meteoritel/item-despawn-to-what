@@ -18,6 +18,13 @@ import org.jetbrains.annotations.NotNull;
  */
 final class RuleEditorScreenButtonBar {
 
+    // 上次布局的几何与按钮宽度签名：逐帧重排时相同输入直接跳过测量与换行分配
+    private int generation;
+    private int layoutSignature = Integer.MIN_VALUE;
+    private int layoutX = Integer.MIN_VALUE;
+    private int layoutY = Integer.MIN_VALUE;
+    private int layoutWidth = Integer.MIN_VALUE;
+
     // 默认按钮高度与按钮间距
     private static final int DEFAULT_BUTTON_H = 16;
     private static final int DEFAULT_GAP = 2;
@@ -42,10 +49,11 @@ final class RuleEditorScreenButtonBar {
         this.fillRow = fillRow;
     }
 
-    // 替换按钮集合（按钮实例由调用方创建与持有）
+    // 替换按钮集合（按钮实例由调用方创建与持有）；换代保证新实例一定会重新布局
     void set(List<UiButton> next) {
         buttons.clear();
         buttons.addAll(next);
+        generation++;
     }
 
     // 指定宽度下按钮排所需高度；无可见按钮时为 0
@@ -54,23 +62,11 @@ final class RuleEditorScreenButtonBar {
         if (visible.isEmpty()) {
             return 0;
         }
-        // 宽度非正时沿用「视为单行」的旧口径（与 rows(int) 一致）
+        // 宽度非正时沿用「视为单行」的旧口径（与 layout 的单行判定一致）
         if (width <= 0) {
             return buttonHeight;
         }
         return flowFor(visible, width).height();
-    }
-
-    // 按按钮首选宽度累计换行，估算行数
-    private int rows(int width) {
-        List<UiButton> visible = visibleButtons();
-        if (visible.isEmpty()) {
-            return 0;
-        }
-        if (width <= 0) {
-            return 1;
-        }
-        return flowFor(visible, width).rowCount();
     }
 
     // 可见按钮（kit 不接受可见性概念，下标由宿主映射）
@@ -96,20 +92,40 @@ final class RuleEditorScreenButtonBar {
         return UiFlowLayout.wrap(widthsOf(visible, limit), limit, gap, buttonHeight);
     }
 
+    // 布局输入签名：按钮实例、可见性与首选宽度任一变化都要重排，宽度变化由调用参数一并计入
+    private int signatureOf(int width) {
+        int signature = 31 * (31 + generation) + buttons.size();
+        for (UiButton button : buttons) {
+            boolean visible = button.isVisible();
+            signature = 31 * signature + (visible ? 1 : 0);
+            signature = 31 * signature + (visible ? button.preferredWidth(BUTTON_PAD) : 0);
+        }
+        return 31 * signature + width;
+    }
+
     void layout(int y, int width) {
         layout(RuleEditorPageSupport.PAD, y, width);
     }
 
     // 从 (x, y) 起依次摆放按钮，超出宽度换行；fillRow 在单行时均分剩余宽度
     void layout(int x, int y, int width) {
+        int signature = signatureOf(width);
+        if (signature == layoutSignature && x == layoutX && y == layoutY && width == layoutWidth) {
+            return;
+        }
+        layoutSignature = signature;
+        layoutX = x;
+        layoutY = y;
+        layoutWidth = width;
         int limit = Math.max(MIN_ROW_WIDTH, width);
         List<UiButton> visible = visibleButtons();
         int[] widths = widthsOf(visible, limit);
-        if (fillRow && rows(width) == 1 && widths.length > 0) {
-            int used = 0;
-            for (int itemWidth : widths) {
-                used += itemWidth;
-            }
+        int used = 0;
+        for (int itemWidth : widths) {
+            used += itemWidth;
+        }
+        // 单行口径与换行共用同一累计：总宽加间距仍放得下即为一行
+        if (fillRow && widths.length > 0 && used + (widths.length - 1) * gap <= limit) {
             int extra = Math.max(0, (limit - used - (widths.length - 1) * gap) / widths.length);
             for (int index = 0; index < widths.length; index++) {
                 widths[index] += extra;

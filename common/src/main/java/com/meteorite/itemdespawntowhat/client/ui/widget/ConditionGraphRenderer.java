@@ -6,7 +6,7 @@ import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLay
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.CARD_ROW_HEIGHT;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.CONTENT_ROWS;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.CONTENT_TOP;
-import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.FLOW_HINT_KEY;
+import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.FLOW_HINT_GAP;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.LOGIC_CUT_CORNER;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.LOGIC_ROUND_MAX_RADIUS;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.MARK_RESERVE;
@@ -22,6 +22,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiTransform;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeEditor;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreePath;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.CardText;
 import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.Hotspot;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
 import java.util.ArrayList;
@@ -44,20 +45,22 @@ final class ConditionGraphRenderer {
     private static final int EMPTY_HINT_GAP = 4;
     private static final int DROP_MARKER_THICKNESS = 2;
     private static final int DRAG_GHOST_GAP = 6;
-    // 流动提示文字与虚线之间的空隙：文字底下还要铺一块画布底色遮断虚线
-    private static final int FLOW_HINT_GAP = 2;
     // 标题带右上角的结构问题标记：0 表示不画标记，其余为标记颜色
     private static final int NO_MARK = 0;
+    // 结构标记字形：宽度随字体固定，构造时量一次即可
+    private static final String MARK_TEXT = "!";
     // 选中环：画在卡片外侧，卡片内容与文本位置不因选中而位移
     private static final int SELECTION_RING = 1;
     private final UiHostTheme theme;
     private final Font font;
     private final ConditionGraphLayout graph;
+    private final int markWidth;
 
     ConditionGraphRenderer(UiHostTheme theme, Font font, ConditionGraphLayout graph) {
         this.theme = theme;
         this.font = font;
         this.graph = graph;
+        this.markWidth = font.width(MARK_TEXT);
     }
 
     void drawDotGrid(GuiGraphics graphics, UiTransform transform, UiRect viewport) {
@@ -97,6 +100,8 @@ final class ConditionGraphRenderer {
     }
 
     void drawLinks(GuiGraphics graphics, Set<UiTreePath> selection) {
+        // 语言/字体变化后需要先重排再取几何，否则本轮绘制会用到上一套文本测宽
+        graph.ensureText();
         ConditionNode root = graph.root();
         if (root == null) {
             UiRect hotspot = graph.hotspots().getFirst().rect();
@@ -206,10 +211,8 @@ final class ConditionGraphRenderer {
         int color = theme.palette().canvasFlowLink();
         drawDashedLine(graphics, root.right(), fromY, graph.resultRect().x(), fromY, color);
         // 提示文字压在虚线上会互相干扰：先垫一块画布底色遮断虚线，再在留白里写字
-        Component hint = Component.translatable(FLOW_HINT_KEY);
-        String text = TextScroll.trimToWidth(font, hint.getString(),
-                Math.max(0, graph.resultRect().x() - root.right() - FLOW_HINT_GAP * 6));
-        int textWidth = font.width(text);
+        String text = graph.flowHintText();
+        int textWidth = graph.flowHintTextWidth();
         int hintX = root.right() + (graph.resultRect().x() - root.right() - textWidth) / 2;
         int hintY = fromY - font.lineHeight - FLOW_HINT_GAP * 2;
         // 底板一直铺到虚线所在行：虚线在提示文字下方断开，读起来才不是「文字压在虚线上」
@@ -238,8 +241,11 @@ final class ConditionGraphRenderer {
 
     void drawCards(GuiGraphics graphics, Font renderFont, Set<UiTreePath> selection,
                    @Nullable ConditionNode hoveredNode) {
-        drawEndpoint(graphics, renderFont, graph.sourceTitle(), graph.sourceSummary(), graph.sourceRect());
-        drawEndpoint(graphics, renderFont, graph.resultTitle(), graph.resultSummary(), graph.resultRect());
+        graph.ensureText();
+        drawEndpoint(graphics, renderFont, graph.sourceTitleText(), graph.sourceTitleWidth(),
+                graph.sourceSummaryText(), graph.sourceRect());
+        drawEndpoint(graphics, renderFont, graph.resultTitleText(), graph.resultTitleWidth(),
+                graph.resultSummaryText(), graph.resultRect());
         for (ConditionNode node : graph.nodes()) {
             UiRect rect = graph.rect(node);
             if (rect == null || rect.right() < 0 || rect.bottom() < 0) {
@@ -250,10 +256,11 @@ final class ConditionGraphRenderer {
         }
     }
 
-    private void drawEndpoint(GuiGraphics graphics, Font renderFont, Component title, Component summary, UiRect rect) {
+    private void drawEndpoint(GuiGraphics graphics, Font renderFont, String title, int titleWidth,
+                              String summary, UiRect rect) {
         drawCardBody(graphics, null, rect, theme.palette().canvasEndpointBand(),
                 theme.palette().canvasEndpointFill(), theme.palette().canvasCardBorder());
-        drawCardTitle(graphics, renderFont, title, rect, theme.palette().canvasTextMuted(), NO_MARK);
+        drawCardTitle(graphics, renderFont, title, titleWidth, rect, theme.palette().canvasTextMuted(), NO_MARK);
         drawEndpointSummary(graphics, renderFont, summary, rect);
     }
 
@@ -272,9 +279,10 @@ final class ConditionGraphRenderer {
                 : hovered ? theme.palette().canvasCardHoverFill() : theme.palette().canvasCardFill();
         drawCardBody(graphics, node, rect, theme.palette().canvasCardBand(), fill,
                 borderColor(selected, issue, hovered));
-        drawCardTitle(graphics, renderFont, graph.titleLabel(node), rect,
+        CardText cardText = graph.cardText(node);
+        drawCardTitle(graphics, renderFont, cardText.title(), cardText.titleWidth(), rect,
                 issue ? theme.palette().canvasTextDanger() : theme.palette().canvasText(), markColor(node));
-        drawSummaryRows(graphics, renderFont, node, rect,
+        drawSummaryRows(graphics, renderFont, cardText, rect,
                 theme.palette().canvasText(), theme.palette().canvasTextMuted());
     }
 
@@ -303,9 +311,10 @@ final class ConditionGraphRenderer {
                     theme.palette().canvasCardBorderSelected());
         }
         drawCardBody(graphics, node, rect, band, fill, borderColor(selected, issue, hovered));
-        drawCardTitle(graphics, renderFont, graph.titleLabel(node), rect,
+        CardText cardText = graph.cardText(node);
+        drawCardTitle(graphics, renderFont, cardText.title(), cardText.titleWidth(), rect,
                 issue ? theme.palette().canvasTextDanger() : text, markColor(node));
-        drawSummaryRows(graphics, renderFont, node, rect, text, theme.palette().canvasTextMuted());
+        drawSummaryRows(graphics, renderFont, cardText, rect, text, theme.palette().canvasTextMuted());
     }
 
     /**
@@ -388,13 +397,10 @@ final class ConditionGraphRenderer {
      * 绘制卡片标题带文字：标题水平居中并按 TITLE_TEXT_SCALE 放大一号，结构问题只在右上角留一个
      * 颜色标记（具体原因看悬停提示），两行内容区都留给参数文本。
      */
-    private void drawCardTitle(GuiGraphics graphics, Font renderFont, Component title, UiRect rect,
+    private void drawCardTitle(GuiGraphics graphics, Font renderFont, String text, int textWidth, UiRect rect,
                                int titleColor, int markColor) {
         int reserve = markColor == NO_MARK ? 0 : MARK_RESERVE;
         int available = Math.max(0, rect.width() - (BORDER + CARD_PADDING_X) * 2 - reserve);
-        String text = TextScroll.trimToWidth(renderFont, title.getString(),
-                Math.max(0, (int) (available / TITLE_TEXT_SCALE)));
-        int textWidth = Math.round(renderFont.width(text) * TITLE_TEXT_SCALE);
         int left = rect.x() + BORDER + CARD_PADDING_X;
         int x = left + (available - textWidth) / 2;
         int y = rect.y() + TITLE_BAND_TOP;
@@ -405,16 +411,15 @@ final class ConditionGraphRenderer {
         graphics.drawString(renderFont, text, 0, 0, titleColor, false);
         graphics.pose().popPose();
         if (markColor != NO_MARK) {
-            String mark = "!";
-            graphics.drawString(renderFont, mark,
-                    rect.right() - BORDER - CARD_PADDING_X - renderFont.width(mark),
+            graphics.drawString(renderFont, MARK_TEXT,
+                    rect.right() - BORDER - CARD_PADDING_X - markWidth,
                     y, markColor, false);
         }
     }
 
     // 标题带右上角的标记颜色：必须修的错误用警示色，只是提示（层级较深）用次要色，无问题不留标记
     private int markColor(ConditionNode node) {
-        if (graph.statusLabel(node).getString().isEmpty()) {
+        if (!graph.hasStatus(node)) {
             return NO_MARK;
         }
         return graph.statusSevere(node) ? theme.palette().canvasTextDanger() : theme.palette().canvasTextMuted();
@@ -424,34 +429,19 @@ final class ConditionGraphRenderer {
      * 绘制卡片内容区：把布局给出的文本行按内容宽折行，最多铺满两行——长列表（周围方块、气候
      * 区间）因此能完整读，不再被单行硬裁成半截。容器的运算符释义走次要色，与子项计数分层。
      */
-    private void drawSummaryRows(GuiGraphics graphics, Font renderFont, ConditionNode node, UiRect rect,
+    private void drawSummaryRows(GuiGraphics graphics, Font renderFont, CardText cardText, UiRect rect,
                                  int color, int mutedColor) {
-        int width = Math.max(0, rect.width() - (BORDER + CARD_PADDING_X) * 2);
-        if (width == 0) {
-            return;
-        }
-        boolean container = isContainer(node);
-        int row = 0;
-        for (Component content : graph.summaryRows(node)) {
-            if (content.getString().isEmpty()) {
-                continue;
-            }
+        List<FormattedCharSequence> lines = cardText.lines();
+        boolean container = cardText.container();
+        for (int row = 0; row < lines.size(); row++) {
             int rowColor = container && row > 0 ? mutedColor : color;
-            for (FormattedCharSequence line : renderFont.split(content, width)) {
-                if (row >= CONTENT_ROWS) {
-                    return;
-                }
-                graphics.drawString(renderFont, line, rect.x() + BORDER + CARD_PADDING_X,
-                        rect.y() + CONTENT_TOP + row * CARD_ROW_HEIGHT, rowColor, false);
-                row++;
-            }
+            graphics.drawString(renderFont, lines.get(row), rect.x() + BORDER + CARD_PADDING_X,
+                    rect.y() + CONTENT_TOP + row * CARD_ROW_HEIGHT, rowColor, false);
         }
     }
 
     // 端点卡片只有一行摘要：正文区垂直居中，主色绘制，让槽位里的值成为主角
-    private void drawEndpointSummary(GuiGraphics graphics, Font renderFont, Component summary, UiRect rect) {
-        String text = TextScroll.trimToWidth(renderFont, summary.getString(),
-                Math.max(0, rect.width() - (BORDER + CARD_PADDING_X) * 2));
+    private void drawEndpointSummary(GuiGraphics graphics, Font renderFont, String text, UiRect rect) {
         int y = rect.y() + CONTENT_TOP + (CONTENT_ROWS * CARD_ROW_HEIGHT - renderFont.lineHeight) / 2;
         graphics.drawString(renderFont, text, rect.x() + BORDER + CARD_PADDING_X, y,
                 theme.palette().canvasText(), false);

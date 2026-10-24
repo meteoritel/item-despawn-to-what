@@ -48,22 +48,6 @@ public final class ConditionDescription {
     private static final String UNSET_KEY = SUMMARY + "value_empty";
     private static final String MORE_KEY = SUMMARY + "cond.more";
 
-    // ---- 条件 JSON 字段名 ----
-    private static final String FIELD_DIMENSIONS = "dimensions";
-    private static final String FIELD_MODE = "mode";
-    private static final String FIELD_BIOMES = "biomes";
-    private static final String FIELD_WEATHER = "weather";
-    private static final String FIELD_ITEMS = "items";
-    private static final String FIELD_COUNT = "count";
-    private static final String FIELD_FROM = "from";
-    private static final String FIELD_TO = "to";
-    private static final String FIELD_MIN = "min";
-    private static final String FIELD_MAX = "max";
-    private static final String MODE_CLIMATE = "climate";
-    private static final List<String> SIDE_FIELDS = List.of("up", "down", "north", "south", "east", "west");
-    private static final List<String> CLIMATE_AXES =
-            List.of("temperature", "humidity", "continentalness", "erosion", "depth", "weirdness");
-
     private ConditionDescription() {
         throw new UnsupportedOperationException("Utility class");
     }
@@ -87,7 +71,7 @@ public final class ConditionDescription {
             return generic(condition, type, indent);
         }
         return switch (type.getPath()) {
-            case "dimension" -> refEntries(condition.child(FIELD_DIMENSIONS), RuleCatalogType.DIMENSION, indent);
+            case "dimension" -> refEntries(condition.child(RuleFields.CONDITION_DIMENSIONS), RuleCatalogType.DIMENSION, indent);
             case "biome" -> biome(condition, type, indent);
             case "weather" -> weather(condition, type, indent);
             case "outdoor" -> List.of(note(SUMMARY + "cond.outdoor", indent));
@@ -124,12 +108,12 @@ public final class ConditionDescription {
     // 群系：先显示模式，再按模式显示群系列表或气候区间
     private static List<DescriptionLine> biome(RuleValue condition, ResourceLocation type, int indent) {
         List<DescriptionLine> lines = new ArrayList<>();
-        String mode = condition.text(FIELD_MODE, "");
+        String mode = condition.text(RuleFields.CONDITION_MODE, "");
         Component modeText = SummaryFormats.enumText(mode, SUMMARY + "cond.biome.mode");
-        lines.add(field(fieldLabel(type, FIELD_MODE, "field.biome.mode"), modeText, Tone.VALUE, indent));
-        if (MODE_CLIMATE.equals(mode)) {
+        lines.add(field(fieldLabel(type, RuleFields.CONDITION_MODE, "field.biome.mode"), modeText, Tone.VALUE, indent));
+        if (RuleFields.CONDITION_MODE_CLIMATE.equals(mode)) {
             boolean anyRange = false;
-            for (String axis : CLIMATE_AXES) {
+            for (String axis : RuleFields.CONDITION_AXES) {
                 Component range = rangeOf(condition.child(axis));
                 if (range != null) {
                     lines.add(field(fieldLabel(type, axis, "field.biome." + axis), range, Tone.METRIC, indent));
@@ -140,14 +124,14 @@ public final class ConditionDescription {
                 lines.add(field(Component.translatable(RANGE_LABEL_KEY), null, Tone.NOTE, indent));
             }
         } else {
-            lines.addAll(refEntries(condition.child(FIELD_BIOMES), RuleCatalogType.BIOME, indent));
+            lines.addAll(refEntries(condition.child(RuleFields.CONDITION_BIOMES), RuleCatalogType.BIOME, indent));
         }
         return lines;
     }
 
     // 天气：取值单独一行；未选择或枚举无法识别时显示未设置
     private static List<DescriptionLine> weather(RuleValue condition, ResourceLocation type, int indent) {
-        Component value = SummaryFormats.enumText(condition.text(FIELD_WEATHER, ""), weatherEnumPrefix(type));
+        Component value = SummaryFormats.enumText(condition.text(RuleFields.CONDITION_WEATHER, ""), weatherEnumPrefix(type));
         return List.of(value == null ? note(UNSET_KEY, indent)
                 : DescriptionLine.text(value, Tone.VALUE, indent));
     }
@@ -155,7 +139,7 @@ public final class ConditionDescription {
     // 周围方块：每个已填方向单独一行
     private static List<DescriptionLine> surroundingBlocks(RuleValue condition, ResourceLocation type, int indent) {
         List<DescriptionLine> lines = new ArrayList<>();
-        for (String side : SIDE_FIELDS) {
+        for (String side : RuleFields.CONDITION_SIDES) {
             String raw = condition.text(side, "").trim();
             if (raw.isEmpty()) {
                 continue;
@@ -171,7 +155,7 @@ public final class ConditionDescription {
 
     // 催化剂：逐物品显示「名称 × 数量」，数量优先取 item_counts，其次 count
     private static List<DescriptionLine> catalystPresent(RuleValue condition, int indent) {
-        RuleValue items = condition.child(FIELD_ITEMS);
+        RuleValue items = condition.child(RuleFields.CONDITION_ITEMS);
         if (items == null || !items.isList()) {
             return List.of(note(UNSET_KEY, indent));
         }
@@ -180,7 +164,7 @@ public final class ConditionDescription {
             return List.of(note(UNSET_KEY, indent));
         }
         RuleValue counts = condition.child(RuleFields.ITEM_COUNTS);
-        int defaultCount = countOf(condition.child(FIELD_COUNT));
+        int defaultCount = countOf(condition.child(RuleFields.CONDITION_COUNT));
         List<DescriptionLine> lines = new ArrayList<>();
         if (raws.size() > 1) {
             lines.add(DescriptionLine.section(Component.translatable(ITEMS_HEADING_KEY, raws.size()), indent));
@@ -218,8 +202,8 @@ public final class ConditionDescription {
 
     // 时间：时钟区间与是否跨零点分队两行，区间用数值语气、时段标记用取值语气
     private static List<DescriptionLine> timeOfDay(RuleValue condition, int indent) {
-        Integer from = integerOf(condition.child(FIELD_FROM));
-        Integer to = integerOf(condition.child(FIELD_TO));
+        Integer from = integerOf(condition.child(RuleFields.CONDITION_FROM));
+        Integer to = integerOf(condition.child(RuleFields.CONDITION_TO));
         Component span = from == null || to == null ? null
                 : SummaryFormats.range(SummaryFormats.clockText(from), SummaryFormats.clockText(to));
         if (span == null) {
@@ -283,7 +267,7 @@ public final class ConditionDescription {
     // 天气枚举键前缀：分组名优先取描述符，缺失时与表单一致地回落
     private static String weatherEnumPrefix(ResourceLocation type) {
         TypeEditorDescriptor descriptor = ConditionEditorRegistry.find(type);
-        EditorField editorField = descriptor == null ? null : descriptor.field(FIELD_WEATHER);
+        EditorField editorField = descriptor == null ? null : descriptor.field(RuleFields.CONDITION_WEATHER);
         String group = editorField == null ? null : editorField.enumGroup();
         return UI + "enum." + (group == null || group.isBlank() ? "weather_kind" : group);
     }
@@ -293,8 +277,8 @@ public final class ConditionDescription {
             return null;
         }
         return SummaryFormats.range(
-                SummaryFormats.numberText(range.child(FIELD_MIN)),
-                SummaryFormats.numberText(range.child(FIELD_MAX)));
+                SummaryFormats.numberText(range.child(RuleFields.CONDITION_MIN)),
+                SummaryFormats.numberText(range.child(RuleFields.CONDITION_MAX)));
     }
 
     private static @Nullable ResourceLocation typeOf(RuleValue condition) {

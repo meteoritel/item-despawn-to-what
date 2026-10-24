@@ -298,7 +298,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         this.onEditLeaf = callback;
     }
 
-    /** 宿主在切页、历史回填、卸载或关闭时取消手势；只有释放可提交移动。 */
+    /** 宿主在切页、历史回填、卸载或关闭时取消手势；失去输入作用域时同时释放键盘修饰态，只有正常释放可提交移动。 */
     public void endInteractions(UiInputCapture.EndReason reason) {
         armedDrag = null;
         clickedLeafPath = null;
@@ -308,6 +308,13 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         rubberActive = false;
         rubberBand.clear();
         clearPanState();
+        if (reason == UiInputCapture.EndReason.HIDDEN
+                || reason == UiInputCapture.EndReason.DISABLED
+                || reason == UiInputCapture.EndReason.FOCUS_SCOPE_CHANGED
+                || reason == UiInputCapture.EndReason.UNMOUNTED
+                || reason == UiInputCapture.EndReason.HOST_CLOSED) {
+            spaceDown = false;
+        }
         inlinePanel.cancelCapture();
         picker.cancelCapture();
         move.end(reason);

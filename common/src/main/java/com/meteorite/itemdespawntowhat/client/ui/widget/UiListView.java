@@ -16,6 +16,7 @@ import net.minecraft.Util;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
 import org.lwjgl.glfw.GLFW;
 import org.jetbrains.annotations.Nullable;
 
@@ -432,7 +433,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     // 相对移动选中行
     private void moveSelection(int delta) {
         int base = selectedIndex < 0 ? (delta > 0 ? -1 : items.size()) : selectedIndex;
-        setSelectedIndex(base + delta);
+        setSelectedIndex(Mth.clamp(base + delta, 0, items.size() - 1));
     }
 
     // ---- 焦点 ----

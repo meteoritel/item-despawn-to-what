@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
+import com.meteorite.itemdespawntowhat.client.edit.RulePackExporter;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshotEntry;
@@ -98,7 +99,7 @@ final class RuleListDisplayCache {
                 entry == null ? null : entry.category(),
                 entry == null ? RuleSnapshotEntry.ORIGIN_OVERLAY : entry.origin(),
                 unfinished,
-                isExportable(entry, body, deleteMarked, unfinished, issues, error),
+                isExportable(id, entry, body, deleteMarked, unfinished, issues, error),
                 active,
                 error,
                 isEnabled(body),
@@ -114,12 +115,16 @@ final class RuleListDisplayCache {
     }
 
     // 可导出条目：只导出生效且无问题的已保存规则；未保存草稿、有问题条目与屏蔽/非法条目不导出
-    private boolean isExportable(@Nullable RuleSnapshotEntry entry, @Nullable RuleValue body,
+    private boolean isExportable(String id, @Nullable RuleSnapshotEntry entry, @Nullable RuleValue body,
                                  boolean deleteMarked, boolean unfinished, boolean issues, boolean error) {
         if (body == null || deleteMarked || unfinished || issues || error) {
             return false;
         }
         if (entry == null) {
+            return false;
+        }
+        // 导出要求 id 能写成数据包文件；这条判定与导出预检同一来源，弹窗计数才与实际结果一致
+        if (!RulePackExporter.isWritableId(id)) {
             return false;
         }
         return RuleSnapshotEntry.STATUS_ACTIVE.equals(entry.status())

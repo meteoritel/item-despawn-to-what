@@ -56,13 +56,27 @@ public final class RuleDecodeBudget {
      * @return 解析结果；失败原因可能为 null（底层解析器未给出消息）
      */
     public static ParseResult parse(@Nullable String text) {
+        return parseEnvelope(text, 0);
+    }
+
+    /**
+     * 有界解析带包装层的文档（快照、变更集、来源视图等）：包装结构会在规则体之外附加固定层数，
+     * 直接套用 {@link #MAX_NESTING_DEPTH} 会把接近上限的合法规则体误判为超限，
+     * 因此包装层与规则体分别预算，两者相加才是整篇文本的允许深度。
+     *
+     * @param text          待解析文本；null 视为空文本
+     * @param envelopeDepth 包装结构在规则体之外附加的嵌套层数；负数按 0 处理
+     * @return 解析结果；失败原因可能为 null（底层解析器未给出消息）
+     */
+    public static ParseResult parseEnvelope(@Nullable String text, int envelopeDepth) {
+        int allowed = MAX_NESTING_DEPTH + Math.max(0, envelopeDepth);
         if (text == null) {
             return new ParseResult(null, "文本为空");
         }
         int depth = nestingDepth(text);
-        if (depth > MAX_NESTING_DEPTH) {
+        if (depth > allowed) {
             // 预检发生在解析器之前：超深文本不进 Gson 的递归下降
-            return new ParseResult(null, "JSON 嵌套深度超限: " + depth + " > " + MAX_NESTING_DEPTH);
+            return new ParseResult(null, "JSON 嵌套深度超限: " + depth + " > " + allowed);
         }
         try {
             return new ParseResult(JsonParser.parseString(text), null);

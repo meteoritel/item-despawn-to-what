@@ -10,9 +10,12 @@ import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
+import org.jetbrains.annotations.Nullable;
 
 /***
  * 按钮控件。
@@ -43,6 +46,9 @@ public final class UiButton implements UiWidget, UiFocusTarget {
     private int hoverTicks;
     private static final int CHIP_PADDING = 4;
     private static final int ICON_GAP = 3;
+    // 标签宽度缓存：布局与胶囊绘制都会逐帧问宽度，只在文本或语言变化时重测
+    private int cachedLabelWidth = -1;
+    private @Nullable Object cachedLabelLanguage;
 
     // 注入的宿主主题
     private final UiHostTheme theme;
@@ -57,28 +63,57 @@ public final class UiButton implements UiWidget, UiFocusTarget {
         this.label = label;
         this.variant = variant;
         this.action = action;
-        apply();
+        applyContent();
+        applyState();
     }
 
-    // 把当前字段重新写入 kit 控件
-    private void apply() {
+    // 内容写入 kit 控件：文本、颜色、图标、提示与动作
+    private void applyContent() {
         control.configure(font, label, theme.controlTextColor(variant.role()), icon, tooltip, action);
         control.setStyle(theme.controlStyle(variant.role()));
+    }
+
+    // 状态写入 kit 控件：只改启用与可见，不复制文本、不重建命中目标
+    private void applyState() {
         control.setEnabled(enabled && variant.interactive());
         control.setVisible(visible);
     }
 
-    // 设置文本
+    // 标签文本变了，缓存的宽度失效；语言变化由 labelWidth 的令牌比较兜底
+    private void invalidateLabelWidth() {
+        cachedLabelWidth = -1;
+    }
+
+    // 标签宽度：字体实例不随资源热重载更换，因此以当前语言作为文本失效令牌
+    private int labelWidth() {
+        Object language = Language.getInstance();
+        if (cachedLabelWidth >= 0 && cachedLabelLanguage == language) {
+            return cachedLabelWidth;
+        }
+        cachedLabelWidth = font.width(label);
+        cachedLabelLanguage = language;
+        return cachedLabelWidth;
+    }
+
+    // 设置文本；与当前标签结构相同的组件不触发重配，逐帧刷新因此不产生复制与重测量
     public UiButton setLabel(Component label) {
-        this.label = label;
-        apply();
+        Component next = Objects.requireNonNull(label, "label");
+        if (next.equals(this.label)) {
+            return this;
+        }
+        this.label = next;
+        invalidateLabelWidth();
+        applyContent();
         return this;
     }
 
-    // 设置图标
+    // 设置图标；与当前图标相同的引用不触发重配
     public UiButton setIcon(UiIcon icon) {
+        if (Objects.equals(this.icon, icon)) {
+            return this;
+        }
         this.icon = icon;
-        apply();
+        applyContent();
         return this;
     }
 
@@ -89,36 +124,52 @@ public final class UiButton implements UiWidget, UiFocusTarget {
      * @return 当前按钮
      */
     public UiButton setChipStyle(boolean chipStyle) {
+        if (this.chipStyle == chipStyle) {
+            return this;
+        }
         this.chipStyle = chipStyle;
         return this;
     }
 
-    // 设置点击动作
+    // 设置点击动作；同一动作不触发重配
     public UiButton setAction(UiAction action) {
+        if (this.action == action) {
+            return this;
+        }
         this.action = action;
-        apply();
+        applyContent();
         return this;
     }
 
-    // 设置提示行
+    // 设置提示行；内容未变时不重配控件
     public UiButton setTooltip(Component... lines) {
+        List<Component> next = List.of(lines);
+        if (tooltip.equals(next)) {
+            return this;
+        }
         tooltip.clear();
-        tooltip.addAll(List.of(lines));
-        apply();
+        tooltip.addAll(next);
+        applyContent();
         return this;
     }
 
-    // 设置是否启用
+    // 设置是否启用；状态没变时不动控件，避免逐帧重配
     public UiButton setEnabled(boolean enabled) {
+        if (this.enabled == enabled) {
+            return this;
+        }
         this.enabled = enabled;
-        apply();
+        applyState();
         return this;
     }
 
-    // 设置是否可见
+    // 设置是否可见；状态没变时不动控件，避免逐帧重配
     public UiButton setVisible(boolean visible) {
+        if (this.visible == visible) {
+            return this;
+        }
         this.visible = visible;
-        apply();
+        applyState();
         return this;
     }
 
@@ -139,7 +190,7 @@ public final class UiButton implements UiWidget, UiFocusTarget {
 
     // 按文本宽度计算合适的按钮宽度（含左右内边距与图标）
     public int preferredWidth(int padding) {
-        int width = font.width(label) + padding * 2;
+        int width = labelWidth() + padding * 2;
         if (icon != null) {
             width += icon.width() + ICON_GAP;
         }
@@ -181,7 +232,7 @@ public final class UiButton implements UiWidget, UiFocusTarget {
         else theme.drawSegment(graphics, rect, false, false, false);
         int iconWidth = icon == null ? 0 : icon.width() + ICON_GAP;
         int available = Math.max(0, rect.width() - CHIP_PADDING * 2);
-        int contentWidth = Math.min(available, font.width(label) + iconWidth);
+        int contentWidth = Math.min(available, labelWidth() + iconWidth);
         int x = rect.x() + (rect.width() - contentWidth) / 2;
         // 胶囊按钮在窄布局中仍须把图标与文字裁剪到自身范围。
         graphics.enableScissor(rect.x(), rect.y(), rect.right(), rect.bottom());

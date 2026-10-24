@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDefaults;
 import com.meteorite.itemdespawntowhat.client.edit.DebugTestRules;
@@ -54,8 +55,9 @@ public final class RuleEditorModel {
     private final DraftJournal journal = new DraftJournal(new DraftStore());
     // 从磁盘读回、等待绑定到服务端快照的草稿（按目标 id）
     private final LinkedHashMap<String, PersistedDraft> restored = new LinkedHashMap<>();
-    // 草稿建立时的服务端整条规则基线（null 表示当时服务端没有该规则）
-    private final LinkedHashMap<String, RuleValue> baselines = new LinkedHashMap<>();
+    // 草稿建立时的服务端整条规则基线（按目标 id，缺席表示当时服务端没有该规则）
+    // 只保留 JSON 形态：建立基线时转换一次，落盘快照直接复用，避免每次写盘都重新派生整棵树
+    private final LinkedHashMap<String, JsonObject> baselineJson = new LinkedHashMap<>();
     // 与服务端不一致、等待玩家选择的规则（按目标 id）
     private final LinkedHashMap<String, DraftConflict> conflicts = new LinkedHashMap<>();
     // 本次恢复到的草稿数量（界面提示一次后清空）
@@ -175,8 +177,8 @@ public final class RuleEditorModel {
         }
         EditSession session = new EditSession(id, RuleDraft.of(categorySeeded(entry, body)));
         this.sessions.put(id, session);
-        // 基线取服务端「生效视图」的深拷贝快照；没有生效视图时记为不存在
-        this.captureBaseline(id, entry.effective() == null ? null : RuleDraft.of(entry.effective()).root());
+        // 基线取服务端「生效视图」；没有生效视图时记为不存在（快照内部会做一次独立拷贝）
+        this.captureBaseline(id, entry.effective());
         this.bindSession(id, session);
         return session;
     }
@@ -256,7 +258,7 @@ public final class RuleEditorModel {
     public void dropSession(String id) {
         this.sessions.remove(id);
         this.createdIds.remove(id);
-        this.baselines.remove(id);
+        this.baselineJson.remove(id);
         this.conflicts.remove(id);
         this.journal.drop(id);
     }
@@ -362,9 +364,15 @@ public final class RuleEditorModel {
         return ids;
     }
 
-    // 是否存在任何改动
+    // 是否存在任何改动（页头每帧查询：只遍历已打开的会话，不构造 id 列表）
     public boolean hasDirty() {
-        return !dirtyRuleIds().isEmpty();
+        for (String id : this.sessions.keySet()) {
+            EditSession session = this.sessions.get(id);
+            if (session != null && (session.isDirty() || this.createdIds.contains(id))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // 装配变更集 JSON；无改动返回 null
@@ -398,7 +406,7 @@ public final class RuleEditorModel {
             session.clearHistory();
             this.createdIds.remove(id);
             // 服务端已接受的内容成为新的草稿基线，并删掉落盘草稿
-            this.captureBaseline(id, session.draft().root());
+            this.captureBaseline(id, session.draft().toJson());
             this.conflicts.remove(id);
             this.journal.drop(id);
         }
@@ -441,7 +449,7 @@ public final class RuleEditorModel {
                 this.createdIds.add(id);
             }
             this.sessions.put(id, session);
-            this.captureBaseline(id, serverBody);
+            this.captureBaseline(id, entry == null ? null : entry.effective());
             this.bindSession(id, session);
             this.journal.markDirty(snapshotOf(id, session));
             this.restoredCount++;
@@ -472,22 +480,26 @@ public final class RuleEditorModel {
 
     // 当前草稿快照（含基线，供落盘与冲突比较）
     private PersistedDraft snapshotOf(String id, EditSession session) {
-        RuleValue baseline = this.baselines.get(id);
+        // 基线 JSON 在建立基线时已转换好且此后不再修改，这里直接交给快照，不再重复深拷贝
+        JsonObject baseline = this.baselineJson.get(id);
         return new PersistedDraft(
                 id,
                 this.createdIds.contains(id),
                 session.draft().isDeleted(),
-                // 落盘载体仍以 JSON 对象表达：值快照经草稿入口转回 JSON
-                baseline == null ? null : RuleDraft.of(baseline).toJson(),
+                baseline,
                 session.draft().toJson(),
                 this.snapshotVersion,
                 this.workspace.contextRevision(),
                 System.currentTimeMillis());
     }
 
-    // 记录草稿建立时的服务端整条规则内容
-    private void captureBaseline(String id, @Nullable RuleValue serverBody) {
-        this.baselines.put(id, serverBody == null ? null : serverBody.deepCopy());
+    // 记录草稿建立时的服务端整条规则内容：这里拷一份独立快照，之后不再随快照对象变化
+    private void captureBaseline(String id, @Nullable JsonObject serverBody) {
+        if (serverBody == null) {
+            this.baselineJson.remove(id);
+            return;
+        }
+        this.baselineJson.put(id, serverBody.deepCopy());
     }
 
     // 节流写盘（界面每帧调用）
@@ -495,7 +507,7 @@ public final class RuleEditorModel {
         this.journal.flushDue(System.currentTimeMillis());
     }
 
-    // 立即写盘全部草稿（界面关闭 / 会话失效时调用，保证不丢）
+    // 立即交出全部草稿的写盘任务（界面关闭 / 保存后调用，保证不丢）
     public void persistNow() {
         if (this.draftsDiscarded) {
             return;
@@ -506,7 +518,10 @@ public final class RuleEditorModel {
                 this.journal.writeNow(snapshotOf(id, session));
             }
         }
-        this.journal.flushAll();
+        // 交出剩余条目并等写入完成：这里可能紧接着关闭界面甚至退出游戏，草稿必须已经落盘；
+        // 等待有上限，磁盘异常慢时宁可放弃等待也不卡住客户端线程。
+        // 这次冲刷同时是写盘失败的显式重试入口（后台不会自动循环重试）
+        this.journal.drain(DraftJournal.DRAIN_WAIT_MS);
     }
 
     // 取走写盘失败事件计数（界面只提示一次，避免反复刷）
@@ -536,7 +551,7 @@ public final class RuleEditorModel {
         RuleValue serverBody = entry == null || entry.effective() == null
                 ? null : RuleDraft.of(entry.effective()).root();
         if (keepDraft) {
-            this.captureBaseline(id, serverBody);
+            this.captureBaseline(id, entry == null ? null : entry.effective());
             // 目标已不存在时草稿转为「新建规则」；目标已存在则不再是新建
             if (serverBody == null) {
                 this.createdIds.add(id);
@@ -549,7 +564,7 @@ public final class RuleEditorModel {
             return;
         }
         this.journal.drop(id);
-        this.baselines.remove(id);
+        this.baselineJson.remove(id);
         if (session == null) {
             return;
         }
@@ -561,7 +576,7 @@ public final class RuleEditorModel {
         session.load(RuleDraft.of(categorySeeded(entry, serverBody)));
         session.clearHistory();
         this.createdIds.remove(id);
-        this.captureBaseline(id, serverBody);
+        this.captureBaseline(id, entry.effective());
     }
 
     // 玩家确认放弃全部草稿：删盘且本模型不再写盘

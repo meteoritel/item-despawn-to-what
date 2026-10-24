@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.net;
 
 import com.google.gson.JsonObject;
+import com.mojang.serialization.DataResult;
 import com.meteorite.itemdespawntowhat.core.api.DevelopmentDiagnostics;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalog;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
@@ -158,6 +159,9 @@ public final class RuleEditClientWorkspace {
     // 最近一次收到的快照
     private @Nullable RuleSnapshot snapshot;
 
+    // 最近一次快照解析失败的原因；受理新快照或结束会话后清空，供界面区分「还在加载」与「加载失败」
+    private @Nullable String snapshotFailure;
+
     // 首载分段观测：确认发出时刻与分片接收进度；关闭开关时不取时间也不计数
     private long firstLoadStartedNanos;
     private long snapshotRecvStartedNanos;
@@ -251,6 +255,11 @@ public final class RuleEditClientWorkspace {
     // 最近一次收到的快照；尚未收到时为 null
     public synchronized @Nullable RuleSnapshot snapshot() {
         return snapshot;
+    }
+
+    // 最近一次快照解析失败的原因；没有失败时为 null
+    public synchronized @Nullable String snapshotFailure() {
+        return snapshotFailure;
     }
 
     // 最近一次保存回执；尚未提交过时为 null
@@ -635,6 +644,7 @@ public final class RuleEditClientWorkspace {
         openRequest = request;
         openFailure = null;
         snapshot = null;
+        snapshotFailure = null;
         snapshotRecvStartedNanos = 0L;
         snapshotRecvTransferId = "";
         snapshotRecvChunks = 0;
@@ -668,12 +678,16 @@ public final class RuleEditClientWorkspace {
     // 解析并接纳快照；chunked 表示来自分片重组，仅用于区分接收阶段的观测口径
     private synchronized void applySnapshot(String json, boolean chunked) {
         long parseStarted = DevelopmentDiagnostics.start();
-        RuleSnapshot parsed = RuleSnapshot.parse(json).result().orElse(null);
+        DataResult<RuleSnapshot> outcome = RuleSnapshot.parse(json);
+        RuleSnapshot parsed = outcome.result().orElse(null);
         long parseMicros = DevelopmentDiagnostics.micros(parseStarted);
         if (parsed == null) {
-            LOGGER.warn("规则快照解析失败: bytes={}", json.length());
+            // 首载解析失败会让界面一直停在「加载中」：把原因留给界面做可见提示
+            snapshotFailure = outcome.error().map(error -> error.message()).orElse("未知原因");
+            LOGGER.warn("规则快照解析失败: bytes={} reason={}", json.length(), snapshotFailure);
             return;
         }
+        snapshotFailure = null;
         // 修订变化意味着来源内容可能已被保存或数据包重载改写：来源视图缓存整体失效，按需重新取回
         if (snapshot == null || snapshot.version() != parsed.version()) {
             sourceViews.clear();
@@ -826,6 +840,7 @@ public final class RuleEditClientWorkspace {
             sessionId = "";
             contextRevision = 0;
             snapshot = null;
+            snapshotFailure = null;
             catalogs.clear();
             directories.clear();
             catalogRequestIds.clear();

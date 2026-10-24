@@ -79,6 +79,11 @@ public final class LiveEditorWorkspace implements EditorWorkspaceView {
     }
 
     @Override
+    public @Nullable String snapshotFailure() {
+        return this.workspace().snapshotFailure();
+    }
+
+    @Override
     public @Nullable RuleCatalog catalog(RuleCatalogType type) {
         return this.workspace().catalog(type);
     }

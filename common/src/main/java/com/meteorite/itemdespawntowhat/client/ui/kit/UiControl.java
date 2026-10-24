@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.kit;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import org.jetbrains.annotations.Nullable;
@@ -10,7 +11,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 固定矩形的轻量控件，测量及命中结果只在配置改变时创建，不负责输入分发。
+ * 固定矩形的轻量控件，测量及命中结果只在配置或文本资源改变时创建，不负责输入分发。
  *
  * <p>控件自带语义状态（普通/悬停/按下/选中/禁用/焦点）：颜色从 {@link UiControlStyle} 取，
  * 禁用与不可见的控件不参与命中、动作与焦点序列。状态只影响绘制与命中，不触发重新测量，
@@ -24,6 +25,9 @@ public final class UiControl implements UiFocusTarget {
     private FormattedCharSequence text = FormattedCharSequence.EMPTY;
     private int textWidth;
     private int color;
+    /** 上次测量所用的语言与字体：两者变化后视觉顺序文本与宽度都会变，渲染时按令牌重算。 */
+    private @Nullable Object measuredLanguage;
+    private @Nullable Font measuredFont;
     @Nullable private UiIcon icon;
     private List<Component> tooltip = List.of();
     @Nullable private UiAction action;
@@ -53,6 +57,8 @@ public final class UiControl implements UiFocusTarget {
         // 重建同一标签时不打断滚动：浮层按秒重配控件，逐次归零会看到每秒跳回起点。
         if (!this.label.getString().equals(label.getString())) this.scrollTicks = 0;
         this.label = label.copy();
+        this.measuredFont = font;
+        this.measuredLanguage = Language.getInstance();
         this.text = this.label.getVisualOrderText();
         this.textWidth = font.width(label);
         this.color = color;
@@ -160,6 +166,7 @@ public final class UiControl implements UiFocusTarget {
      */
     public void render(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
         if (!visible) return;
+        refreshMetrics(font);
         boolean hovered = enabled && bounds.contains(mouseX, mouseY);
         graphics.fill(bounds.x(), bounds.y(), bounds.right(), bounds.bottom(), style.background(stateFor(hovered)));
         int iconWidth = icon == null ? 0 : icon.width();
@@ -181,6 +188,16 @@ public final class UiControl implements UiFocusTarget {
             if (clip) UiTransform.disableScissor(graphics);
         }
         if (focused) renderFocusOutline(graphics);
+    }
+
+    // 语言或字体实例变化后标签文本与宽度都会变：这里按令牌廉价重算，宿主不必为语言热切换逐帧重配。
+    private void refreshMetrics(Font font) {
+        Object language = Language.getInstance();
+        if (font == measuredFont && language == measuredLanguage) return;
+        measuredFont = font;
+        measuredLanguage = language;
+        this.text = this.label.getVisualOrderText();
+        this.textWidth = font.width(this.label);
     }
 
     // 需要外层裁剪的条件：图标或文字实际占用的矩形越出控件边界。文本超宽时 TextScroll 自带带内裁剪

@@ -200,10 +200,12 @@ public final class RuleEditorPanelFactory {
         mapper.includeTags = includeTags;
         mapper.policy = policy;
         UiModal modal = UiModal.create(THEME, font);
+        // 确认按钮可用态由目录每帧刷新：值不变时不再重配按钮（重配会复制文本并重建命中目标）
+        ConfirmGate confirmGate = new ConfirmGate();
         UiCatalogGrid grid = new UiCatalogGrid(THEME, font, multiSelect, catalogTexts(type, includeTags), new UiCatalogGrid.Listener() {
             @Override
             public void onSelectionChanged(List<String> selection) {
-                refreshCatalogConfirm(modal, workspace.active(), selection, unavailableReason);
+                refreshCatalogConfirm(modal, workspace.active(), selection, unavailableReason, confirmGate);
             }
 
             @Override
@@ -230,7 +232,7 @@ public final class RuleEditorPanelFactory {
         grid.setUnavailableReason(unavailableReason);
         grid.setEntrySource(() -> {
             boolean active = workspace.active();
-            refreshCatalogConfirm(modal, active, grid.selection(), unavailableReason);
+            refreshCatalogConfirm(modal, active, grid.selection(), unavailableReason, confirmGate);
             if (active != mapper.active) {
                 mapper.active = active;
                 grid.setEnabled(active);
@@ -238,11 +240,25 @@ public final class RuleEditorPanelFactory {
             List<UiCatalogGrid.Entry> mapped = mapper.map(workspace, type);
             grid.setPage(mapper.page, mapper.pageCount);
             grid.setPageLimits(mapper.page > 0, mapper.hasNext);
-            grid.setStatusNote(Component.translatable(UI + "pick.total", mapper.total));
+            // 总数与语言不变时复用同一份状态文案；未知状态的加载/失败提示只在真值变化时下发
+            Object language = net.minecraft.locale.Language.getInstance();
+            if (mapper.notedTotal != mapper.total || mapper.notedLanguage != language) {
+                mapper.notedTotal = mapper.total;
+                mapper.notedLanguage = language;
+                grid.setStatusNote(Component.translatable(UI + "pick.total", mapper.total));
+            }
             grid.setLoading(mapper.cached == null || !mapper.cached.lastPage()
                     || includeTags && (mapper.cachedTags == null || !mapper.cachedTags.lastPage()));
-            grid.setError(workspace.directoryFailed(type) || includeTags && workspace.directoryFailed(RuleCatalogType.TAG)
-                    ? Component.translatable(UI + "pick.retry_hint") : null);
+            String errorState = workspace.directoryFailed(type)
+                    || includeTags && workspace.directoryFailed(RuleCatalogType.TAG) ? "retry" : active ? "" : "frozen";
+            if (!errorState.equals(mapper.errorState)) {
+                mapper.errorState = errorState;
+                grid.setError(switch (errorState) {
+                    case "retry" -> Component.translatable(UI + "pick.retry_hint");
+                    case "frozen" -> Component.translatable(UI + "pick.frozen");
+                    default -> null;
+                });
+            }
             return mapped;
         });
         grid.setOnRetry(() -> {
@@ -275,16 +291,29 @@ public final class RuleEditorPanelFactory {
             if (workspace.active() && selection.stream().noneMatch(id -> unavailableReason.apply(id) != null))
                 onPicked.accept(selection);
         });
-        refreshCatalogConfirm(modal, workspace.active(), grid.selection(), unavailableReason);
+        refreshCatalogConfirm(modal, workspace.active(), grid.selection(), unavailableReason, confirmGate);
         modal.cancel(Component.translatable(UI + "button.cancel"));
         modal.layoutCentered(screenWidth, screenHeight);
         return modal;
     }
 
+    // 确认按钮可用态缓存：目录每帧都刷新它，但按钮重配一次会复制文本、重算宽度并重建命中目标
+    private static final class ConfirmGate {
+        private @Nullable Boolean enabled;
+    }
+
     private static void refreshCatalogConfirm(UiModal modal, boolean active, List<String> selection,
-                                               Function<String, @Nullable Component> unavailableReason) {
-        if (!modal.buttons().isEmpty()) modal.buttons().getFirst().setEnabled(active
-                && selection.stream().noneMatch(id -> unavailableReason.apply(id) != null));
+                                               Function<String, @Nullable Component> unavailableReason,
+                                               ConfirmGate gate) {
+        // 选择与宿主业务状态每帧都可能变，因此每次仍要算出结果，只在结果变化时才推给按钮
+        boolean enabled = active && selection.stream().noneMatch(id -> unavailableReason.apply(id) != null);
+        if (gate.enabled != null && gate.enabled == enabled) {
+            return;
+        }
+        gate.enabled = enabled;
+        if (!modal.buttons().isEmpty()) {
+            modal.buttons().getFirst().setEnabled(enabled);
+        }
     }
 
     // 选择页宽度：屏幕越宽弹窗越宽，但保留窗口感
@@ -316,6 +345,10 @@ public final class RuleEditorPanelFactory {
 
         private Object language;
         private Object resources;
+        // 状态文案与失败提示的已下发值：目录刷新按帧执行，值未变时不重复构造 Component
+        private int notedTotal = -1;
+        private Object notedLanguage;
+        private String errorState = "";
         private String mappedFilter = "";
         private int mappedPage = -1;
         private UiCatalogGrid.Scope mappedScope = UiCatalogGrid.Scope.BOTH;

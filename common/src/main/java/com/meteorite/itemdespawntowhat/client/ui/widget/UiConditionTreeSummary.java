@@ -23,6 +23,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
@@ -82,6 +83,21 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     private final Set<String> collapsed = new HashSet<>();
     // 当前违规项
     private final List<ConditionTreeInspection.Issue> issues = new ArrayList<>();
+    // 有违规项的节点路径：按表达式扫描一次算出，绘制时按路径查表，不再逐行扫 issues
+    private final Set<String> flaggedPaths = new HashSet<>();
+    // 行文案缓存：键为节点路径，值已按行宽裁剪；只在表达式内容、注入选项、语言、字体或行宽变化时重建
+    private final Map<String, String> rowLabels = new HashMap<>();
+    private int rowLabelsEpoch = -1;
+    private @Nullable Font rowLabelsFont;
+    private @Nullable Object rowLabelsLanguage;
+    private int rowLabelsWidth = -1;
+    // 内容代次：表达式重新校验或宿主注入的类型/参数摘要变化时自增，使行文案缓存失效
+    private int contentEpoch;
+    // 空树提示的裁剪结果：与字体、语言、可用宽度一起缓存
+    private String emptyText = "";
+    private int emptyTextWidth = -1;
+    private @Nullable Font emptyTextFont;
+    private @Nullable Object emptyTextLanguage;
     // 已扫描的表达式，避免重复校验
     private @Nullable ConditionExpression inspectedExpression;
     // 选中的节点路径
@@ -156,18 +172,24 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     // 设置条件类型选项
     public UiConditionTreeSummary setTypeOptions(List<ConditionTreeContract.TypeOption> options) {
         this.typeOptions = List.copyOf(options);
+        // 类型标签参与行文案：重新注入后旧缓存不再可信
+        contentEpoch++;
         return this;
     }
 
     // 设置叶条件的参数摘要（参数值），为空时叶行只显示条件名
     public UiConditionTreeSummary setLeafDetail(@Nullable Function<ConditionNode.Leaf, Component> detail) {
         this.leafDetail = detail;
+        // 参数摘要由宿主回调提供：换回调后行文案必须重算
+        contentEpoch++;
         return this;
     }
 
     // 设置空表达式提示
     public UiConditionTreeSummary setEmptyMessage(Component message) {
         this.emptyMessage = message;
+        // 空树提示参与裁剪缓存：换文案后下次绘制必须重新裁剪
+        emptyTextWidth = -1;
         return this;
     }
 
@@ -269,6 +291,8 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
                 inspect(root, ConditionTreeContract.ROOT_PATH, 0, new int[2]);
             }
             inspectedExpression = expression;
+            contentEpoch++;
+            rebuildFlaggedPaths();
         }
         if (root != null) {
             append(root, ConditionTreeContract.ROOT_PATH, 0, -1);
@@ -281,6 +305,22 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         }
         scrollView.setContentHeight(rows.size() * rowHeight);
         scrollView.setScrollbarVisible(rows.size() * rowHeight > scrollView.viewport().height());
+    }
+
+    // 违规标记按节点路径预计算：drawRow 只做一次集合查询，不再对每个可见行扫全部违规项
+    private void rebuildFlaggedPaths() {
+        flaggedPaths.clear();
+        if (issues.isEmpty()) {
+            return;
+        }
+        for (String candidate : allNodes.keySet()) {
+            for (ConditionTreeInspection.Issue issue : issues) {
+                if (issue.path().equals(candidate) || issue.path().startsWith(candidate + ".")) {
+                    flaggedPaths.add(candidate);
+                    break;
+                }
+            }
+        }
     }
 
     // 深度优先扫描完整表达式；占位行不计为真实节点。
@@ -430,7 +470,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         UiRect viewport = scrollView.viewport();
         hoveredIndex = indexAt(mouseX, mouseY);
         if (rows.isEmpty()) {
-            String empty = TextScroll.trimToWidth(renderFont, emptyMessage.getString(), Math.max(0, viewport.width() - 8));
+            String empty = emptyText(renderFont, Math.max(0, viewport.width() - 8));
             graphics.drawString(renderFont, empty, viewport.x() + 4,
                     viewport.y() + Math.max(0, viewport.height() / 2 - 4), theme.palette().textSecondary(), false);
         } else {
@@ -470,10 +510,9 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
             drawMark(graphics, markerX + MARKER_INSET, rowY + rowHeight / 2, !isCollapsed(row.path()));
         }
         int textX = markerX + MARKER_WIDTH;
-        int color = issues.stream().anyMatch(issue -> issue.path().equals(row.path())
-                || issue.path().startsWith(row.path() + ".")) ? theme.palette().danger() : theme.palette().textPrimary();
-        String label = TextScroll.trimToWidth(renderFont, rowLabel(row).getString(),
-                Math.max(0, rowWidth - textX - 2));
+        int color = flaggedPaths.contains(row.path())
+                ? theme.palette().danger() : theme.palette().textPrimary();
+        String label = rowLabelText(row, renderFont, rowWidth, textX);
         graphics.drawString(renderFont, label, textX, rowY + theme.textOffset(), color, false);
     }
 
@@ -540,6 +579,46 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
             label = label.copy().append(" ").append(Component.translatable("gui.itemdespawntowhat.edit.tree.deep_mark"));
         }
         return label;
+    }
+
+    // 行文案按路径缓存：同一行在同一语言、字体与行宽下只构造一次 Component 并裁剪
+    private String rowLabelText(Row row, Font renderFont, int rowWidth, int textX) {
+        ensureRowLabels(renderFont, rowWidth);
+        String cached = rowLabels.get(row.path());
+        if (cached != null) {
+            return cached;
+        }
+        String label = TextScroll.trimToWidth(renderFont, rowLabel(row).getString(),
+                Math.max(0, rowWidth - textX - 2));
+        rowLabels.put(row.path(), label);
+        return label;
+    }
+
+    // 行宽参与裁剪结果，语言参与本地化文本，字体参与测量：任一变化都重建整批行文案
+    private void ensureRowLabels(Font renderFont, int rowWidth) {
+        Object language = Language.getInstance();
+        if (rowLabelsEpoch == contentEpoch && rowLabelsFont == renderFont
+                && rowLabelsLanguage == language && rowLabelsWidth == rowWidth) {
+            return;
+        }
+        rowLabels.clear();
+        rowLabelsEpoch = contentEpoch;
+        rowLabelsFont = renderFont;
+        rowLabelsLanguage = language;
+        rowLabelsWidth = rowWidth;
+    }
+
+    // 空树提示同样只在依赖变化时裁剪：绘制每帧都会走这里
+    private String emptyText(Font renderFont, int width) {
+        Object language = Language.getInstance();
+        if (emptyTextWidth == width && emptyTextFont == renderFont && emptyTextLanguage == language) {
+            return emptyText;
+        }
+        emptyText = TextScroll.trimToWidth(renderFont, emptyMessage.getString(), width);
+        emptyTextWidth = width;
+        emptyTextFont = renderFont;
+        emptyTextLanguage = language;
+        return emptyText;
     }
 
     // 叶标签：条件名（参数摘要）；缺条件或参数摘要为空时只留条件名

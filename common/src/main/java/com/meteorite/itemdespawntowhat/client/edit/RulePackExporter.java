@@ -18,6 +18,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import net.minecraft.SharedConstants;
@@ -35,6 +38,13 @@ import org.jetbrains.annotations.Nullable;
  * <p>导出是客户端的本地文件操作：目标目录相对游戏根目录，与草稿仓库
  * {@link com.meteorite.itemdespawntowhat.client.edit.draft.DraftStore} 的相对路径口径一致，
  * 不依赖加载器 API，也不写入服务端的覆盖层或数据包目录。</p>
+ *
+ * <p><b>导出预检</b>：写盘前先检查全部条目能否落成数据包内的规则文件，任何一条不可写都整体拒绝
+ * （{@link ExportRejectedException}），不会写出一个悄悄少几条规则、却仍报成功的包。</p>
+ *
+ * <p><b>线程约定</b>：{@link RuleValue} 只是草稿的实时视图，导出线程不能读它；调用方在客户端线程
+ * 用 {@link RuleEntry} 取好 JSON 文本快照后交给 {@link #exportAsync}，写盘在单独的守护线程执行，
+ * 结果再回客户端线程处理。</p>
  */
 public final class RulePackExporter {
 
@@ -54,17 +64,27 @@ public final class RulePackExporter {
     // 文件名时间戳
     private static final DateTimeFormatter STAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
 
+    // 后台导出线程：串行执行，避免同一秒内多次导出争用同一个文件名；守护线程不阻止游戏退出
+    private static final ExecutorService WORKER = Executors.newSingleThreadExecutor(task -> {
+        Thread thread = new Thread(task, "itemDespawnToWhat-export");
+        thread.setDaemon(true);
+        return thread;
+    });
+
     private RulePackExporter() {
         throw new UnsupportedOperationException("Utility class");
     }
 
     /**
-     * 待导出一条规则：稳定 id 与当前显示体。
+     * 待导出一条规则：稳定 id 与规则体的 JSON 文本快照。
      *
-     * @param id   规则 id，同时决定数据包内的命名空间与文件路径
-     * @param body 规则体，取列表当前显示的草稿或生效视图
+     * <p>{@link RuleValue} 是草稿的实时视图，跨线程读取会与编辑并发；因此快照在客户端线程取成
+     * 文本（{@link RuleValue#toJson()}），导出线程只处理不可变值。</p>
+     *
+     * @param id       规则 id，同时决定数据包内的命名空间与文件路径
+     * @param bodyJson 规则体的紧凑 JSON 文本，取列表当前显示的草稿或生效视图
      */
-    public record RuleEntry(String id, RuleValue body) {
+    public record RuleEntry(String id, String bodyJson) {
     }
 
     /**
@@ -86,38 +106,94 @@ public final class RulePackExporter {
     }
 
     /**
-     * 把规则写成数据包 zip。
+     * 导出预检失败：至少一条规则无法写成数据包文件，本次整体不写盘。
+     *
+     * <p>异常只携带 id 列表，界面据此拼本地化提示，不在异常里存文案。</p>
+     */
+    public static final class ExportRejectedException extends IOException {
+
+        private final List<String> ids;
+
+        private ExportRejectedException(List<String> ids) {
+            super("Unwritable rule ids: " + String.join(", ", ids));
+            this.ids = List.copyOf(ids);
+        }
+
+        /** @return 预检未通过、因此被拒绝导出的规则 id，按输入顺序 */
+        public List<String> ids() {
+            return ids;
+        }
+    }
+
+    /**
+     * 把规则写成数据包 zip；写盘前先预检全部条目。
      *
      * @param scope   导出范围标识，只用于文件名
      * @param entries 待导出规则；调用方负责按范围过滤
      * @return 写出的文件与实际条数
-     * @throws IOException 目录创建或写文件失败
+     * @throws ExportRejectedException 有条目无法写成数据包文件；此时未创建任何文件
+     * @throws IOException             目录创建或写文件失败
      */
     public static Result export(String scope, List<RuleEntry> entries) throws IOException {
+        List<Prepared> prepared = prepare(entries);
         Path directory = Paths.get(DIRECTORY);
         Files.createDirectories(directory);
         String baseName = "itemdespawntowhat-" + scope + "-" + STAMP.format(LocalDateTime.now());
         Path file = uniquePath(directory, baseName);
-        List<RuleEntry> sorted = new ArrayList<>(entries);
-        sorted.sort(Comparator.comparing(RuleEntry::id));
-        int count = 0;
         try (OutputStream out = Files.newOutputStream(file);
              ZipOutputStream zip = new ZipOutputStream(out, StandardCharsets.UTF_8)) {
             write(zip, "pack.mcmeta", packMeta().toString());
-            for (RuleEntry entry : sorted) {
-                ResourceLocation id = ResourceLocation.tryParse(entry.id());
-                JsonObject body = id == null ? null : ruleJson(entry);
-                if (id == null || body == null || !writablePath(id)) {
-                    continue;
-                }
-                write(zip, rulePath(id), GSON.toJson(body) + "\n");
-                count++;
+            for (Prepared entry : prepared) {
+                write(zip, rulePath(entry.id()), GSON.toJson(entry.body()) + "\n");
             }
         } catch (IOException exception) {
             Files.deleteIfExists(file);
             throw exception;
         }
-        return new Result(file, count);
+        return new Result(file, prepared.size());
+    }
+
+    /**
+     * 在后台线程执行同一次导出。
+     *
+     * <p>条目列表在此处复制一份：调用方随后改动自己的集合不会影响在途导出。</p>
+     *
+     * @param scope   导出范围标识，只用于文件名
+     * @param entries 客户端线程取好的规则快照
+     * @return 完成时给出导出结果的 future，失败时带原始 {@link IOException}
+     */
+    public static CompletableFuture<Result> exportAsync(String scope, List<RuleEntry> entries) {
+        List<RuleEntry> snapshot = List.copyOf(entries);
+        CompletableFuture<Result> future = new CompletableFuture<>();
+        WORKER.execute(() -> {
+            try {
+                future.complete(export(scope, snapshot));
+            // 写盘失败与序列化意外都必须结束 future，否则界面会一直停在导出中的禁用态
+            } catch (IOException | RuntimeException exception) {
+                future.completeExceptionally(exception);
+            }
+        });
+        return future;
+    }
+
+    // 预检：任何条目不可写都整体拒绝，避免写出少几条却仍报成功的包
+    private static List<Prepared> prepare(List<RuleEntry> entries) throws ExportRejectedException {
+        List<Prepared> prepared = new ArrayList<>(entries.size());
+        List<String> rejected = new ArrayList<>();
+        for (RuleEntry entry : entries) {
+            ResourceLocation location = ResourceLocation.tryParse(entry.id());
+            JsonObject body = location == null ? null : ruleJson(entry);
+            if (location == null || body == null || !writablePath(location)) {
+                rejected.add(entry.id());
+                continue;
+            }
+            prepared.add(new Prepared(location, body));
+        }
+        if (!rejected.isEmpty()) {
+            throw new ExportRejectedException(rejected);
+        }
+        prepared.sort(Comparator.comparing(Prepared::id));
+        return prepared;
     }
 
     // 同一秒内重复导出时追加序号，避免覆盖上一次结果
@@ -144,7 +220,7 @@ public final class RulePackExporter {
     // 规则体转对象并强制写回 id；非对象内容无法作为规则导出
     private static @Nullable JsonObject ruleJson(RuleEntry entry) {
         try {
-            JsonElement parsed = JsonParser.parseString(entry.body().toJson());
+            JsonElement parsed = JsonParser.parseString(entry.bodyJson());
             if (!parsed.isJsonObject()) {
                 return null;
             }
@@ -156,10 +232,31 @@ public final class RulePackExporter {
         }
     }
 
-    // 规则 id 的路径部分只接受资源路径字符，并排除上级目录写法
+    /**
+     * 该规则 id 能否写成数据包内的规则文件。
+     *
+     * <p>列表的「可导出」计数与真正的导出入参共用这条判定：否则弹窗显示 N 条、
+     * 实际却会因为 id 非法而整体拒绝导出。</p>
+     *
+     * @param id 规则 id，可为 null
+     * @return 能解析为资源位置且其文件路径可写成规则文件时为 true
+     */
+    public static boolean isWritableId(@Nullable String id) {
+        ResourceLocation location = id == null ? null : ResourceLocation.tryParse(id);
+        return location != null && writablePath(location);
+    }
+
+    // 规则 id 必须逐段可写成文件：只有 "." 与 ".." 段会改变目录层级，a..b 这类含连续点的
+    // 合法名字继续放行；再按归一化边界确认落点仍在 data/<ns>/idtw/rules 之内。
     private static boolean writablePath(ResourceLocation id) {
-        String path = id.getPath();
-        return !path.isBlank() && !path.contains("..");
+        String entry = rulePath(id);
+        for (String segment : entry.split("/", -1)) {
+            if (segment.isEmpty() || segment.equals(".") || segment.equals("..")) {
+                return false;
+            }
+        }
+        Path root = Paths.get("data", id.getNamespace(), RulePaths.DATAPACK_RULES_DIRECTORY).normalize();
+        return Paths.get(entry).normalize().startsWith(root);
     }
 
     // 数据包内规则文件路径：data/<ns>/idtw/rules/<path>.json
@@ -173,5 +270,9 @@ public final class RulePackExporter {
         zip.putNextEntry(new ZipEntry(name));
         zip.write(content.getBytes(StandardCharsets.UTF_8));
         zip.closeEntry();
+    }
+
+    // 已通过预检的一条规则：资源位置与已写回 id 的规则对象
+    private record Prepared(ResourceLocation id, JsonObject body) {
     }
 }

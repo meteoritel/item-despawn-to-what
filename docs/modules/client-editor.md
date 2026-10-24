@@ -124,6 +124,8 @@ sequenceDiagram
 
 来源视图走同一套缓冲：请求带 `requestId`，响应按该 id 与在途请求配对，超时未回则标记失败并允许重试。快照修订号变化时清空来源视图与在途分片缓存，因为来源内容可能已被保存或数据包重载改写。来源视图按需拉取的取舍见 [ADR-0040](../adr/0040-on-demand-snapshot-source-views.md)。
 
+快照包装层（`root → entries[] → entry`）不占规则体的嵌套预算：`RuleDecodeBudget.parseEnvelope` 把包装层深度加进解码上限，避免深层规则体被包装层挤掉。解析失败时工作区记录失败原因并保留上一份快照，屏幕对同一份非法快照只弹一次常驻警告（`gui.itemdespawntowhat.edit.notice.snapshot_failed`），不自动重试；重新打开会话或结束会话时清空该状态。
+
 ### 保存往返
 
 ```mermaid

@@ -39,6 +39,14 @@ public interface EditorWorkspaceView {
     // 最近一次快照
     @Nullable RuleSnapshot snapshot();
 
+    /**
+     * 最近一次快照解析失败的原因；没有失败时为 null。
+     * 界面据此在首载失败时给出可见提示，而不是一直停在「加载中」。
+     *
+     * @return 失败原因文本；快照解析成功、尚未收到或会话已结束时为 null
+     */
+    @Nullable String snapshotFailure();
+
     // 指定类型的目录页
     @Nullable RuleCatalog catalog(RuleCatalogType type);
 

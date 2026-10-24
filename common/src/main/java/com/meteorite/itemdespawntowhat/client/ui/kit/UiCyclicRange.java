@@ -248,10 +248,11 @@ public final class UiCyclicRange implements UiFocusTarget, UiInputTarget, UiInpu
         return this.trackLeft() + (int) Math.round(this.fractionOf(tick) * this.trackWidth());
     }
 
-    // 指针位置对应的刻度并吸附
+    /** 点选轨道按有界刻度吸附，右端停在最后一格；循环步进仍使用 {@link #snapTick(double)}。 */
     public double tickAtPointer(double pointerX) {
         double fraction = Mth.clamp((pointerX - this.trackLeft()) / (double) this.trackWidth(), 0.0D, 1.0D);
-        return this.snapTick(fraction * this.period);
+        double snapped = Math.round(fraction * this.period / this.tickStep) * this.tickStep;
+        return Math.min(snapped, this.endTick());
     }
 
     public boolean containsPointer(double pointerX, double pointerY) {

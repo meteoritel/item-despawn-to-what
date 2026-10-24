@@ -75,28 +75,29 @@ public final class BuiltinEditorDescriptors {
         // dimension：维度白名单（纯资源位置列表，不支持标签）
         ResourceLocation dimension = id("dimension");
         ConditionEditorRegistry.register(new TypeEditorDescriptor(dimension, TypeLabels.conditionLabel(dimension), List.of(
-                EditorField.rlList("dimensions", h + "dimension.dimensions", "minecraft:dimension")
+                EditorField.rlList(RuleFields.CONDITION_DIMENSIONS, h + "dimension.dimensions", "minecraft:dimension")
                     .asRequired()
         ), false));
 
         // biome：exact 用 biomes；climate 用 6 个气候区间
         ResourceLocation biome = id("biome");
         List<EditorField> biomeFields = new ArrayList<>();
-        biomeFields.add(EditorField.enumIn("mode", h + "biome.mode", "biome_mode", "exact", "climate"));
-        biomeFields.add(EditorField.tagList("biomes", h + "biome.biomes", "minecraft:worldgen/biome")
+        biomeFields.add(EditorField.enumIn(RuleFields.CONDITION_MODE, h + "biome.mode", "biome_mode",
+                    RuleFields.CONDITION_MODE_EXACT, RuleFields.CONDITION_MODE_CLIMATE));
+        biomeFields.add(EditorField.tagList(RuleFields.CONDITION_BIOMES, h + "biome.biomes", "minecraft:worldgen/biome")
                 .withHint(h + "biome.biomes.hint"));
-        biomeFields.add(EditorField.climateRange("temperature", h + "biome.temperature"));
-        biomeFields.add(EditorField.climateRange("humidity", h + "biome.humidity"));
-        biomeFields.add(EditorField.climateRange("continentalness", h + "biome.continentalness"));
-        biomeFields.add(EditorField.climateRange("erosion", h + "biome.erosion"));
-        biomeFields.add(EditorField.climateRange("depth", h + "biome.depth"));
-        biomeFields.add(EditorField.climateRange("weirdness", h + "biome.weirdness"));
+        biomeFields.add(EditorField.climateRange(RuleFields.CONDITION_AXIS_TEMPERATURE, h + "biome.temperature"));
+        biomeFields.add(EditorField.climateRange(RuleFields.CONDITION_AXIS_HUMIDITY, h + "biome.humidity"));
+        biomeFields.add(EditorField.climateRange(RuleFields.CONDITION_AXIS_CONTINENTALNESS, h + "biome.continentalness"));
+        biomeFields.add(EditorField.climateRange(RuleFields.CONDITION_AXIS_EROSION, h + "biome.erosion"));
+        biomeFields.add(EditorField.climateRange(RuleFields.CONDITION_AXIS_DEPTH, h + "biome.depth"));
+        biomeFields.add(EditorField.climateRange(RuleFields.CONDITION_AXIS_WEIRDNESS, h + "biome.weirdness"));
         ConditionEditorRegistry.register(new TypeEditorDescriptor(biome, TypeLabels.conditionLabel(biome), biomeFields, false));
 
         // weather：三种天气
         ResourceLocation weather = id("weather");
         ConditionEditorRegistry.register(new TypeEditorDescriptor(weather, TypeLabels.conditionLabel(weather), List.of(
-                EditorField.enumIn("weather", h + "weather.weather", "weather_kind", "clear", "rain", "thunder")
+                EditorField.enumIn(RuleFields.CONDITION_WEATHER, h + "weather.weather", "weather_kind", "clear", "rain", "thunder")
         ), false));
 
         // outdoor：无参数，取反请用父节点 inverted
@@ -108,19 +109,19 @@ public final class BuiltinEditorDescriptors {
         // surrounding_blocks：六个方向至少填一个
         ResourceLocation surrounding = id("surrounding_blocks");
         ConditionEditorRegistry.register(new TypeEditorDescriptor(surrounding, TypeLabels.conditionLabel(surrounding), List.of(
-                EditorField.optionalTag("up", h + "surrounding_blocks.up", "minecraft:block"),
-                EditorField.optionalTag("down", h + "surrounding_blocks.down", "minecraft:block"),
-                EditorField.optionalTag("north", h + "surrounding_blocks.north", "minecraft:block"),
-                EditorField.optionalTag("south", h + "surrounding_blocks.south", "minecraft:block"),
-                EditorField.optionalTag("east", h + "surrounding_blocks.east", "minecraft:block"),
-                EditorField.optionalTag("west", h + "surrounding_blocks.west", "minecraft:block"),
+                EditorField.optionalTag(RuleFields.CONDITION_SIDE_UP, h + "surrounding_blocks.up", "minecraft:block"),
+                EditorField.optionalTag(RuleFields.CONDITION_SIDE_DOWN, h + "surrounding_blocks.down", "minecraft:block"),
+                EditorField.optionalTag(RuleFields.CONDITION_SIDE_NORTH, h + "surrounding_blocks.north", "minecraft:block"),
+                EditorField.optionalTag(RuleFields.CONDITION_SIDE_SOUTH, h + "surrounding_blocks.south", "minecraft:block"),
+                EditorField.optionalTag(RuleFields.CONDITION_SIDE_EAST, h + "surrounding_blocks.east", "minecraft:block"),
+                EditorField.optionalTag(RuleFields.CONDITION_SIDE_WEST, h + "surrounding_blocks.west", "minecraft:block"),
                 EditorField.note(h + "surrounding_blocks.note")
         ), false));
 
         // catalyst_present：催化剂物品与数量
         ResourceLocation catalyst = id("catalyst_present");
         ConditionEditorRegistry.register(new TypeEditorDescriptor(catalyst, TypeLabels.conditionLabel(catalyst), List.of(
-                EditorField.tagList("items", h + "catalyst_present.items", "minecraft:item").asRequired(),
+                EditorField.tagList(RuleFields.CONDITION_ITEMS, h + "catalyst_present.items", "minecraft:item").asRequired(),
                 EditorField.itemCounts(RuleFields.ITEM_COUNTS, h + "catalyst_present.count", 1, 64)
         ), false));
 
@@ -134,25 +135,25 @@ public final class BuiltinEditorDescriptors {
         // time_of_day：可跨零点
         ResourceLocation timeOfDay = id("time_of_day");
         ConditionEditorRegistry.register(new TypeEditorDescriptor(timeOfDay, TypeLabels.conditionLabel(timeOfDay), List.of(
-                EditorField.integer("from", h + "time_of_day.from", 0, 23999),
-                EditorField.integer("to", h + "time_of_day.to", 0, 23999),
+                EditorField.integer(RuleFields.CONDITION_FROM, h + "time_of_day.from", 0, 23999),
+                EditorField.integer(RuleFields.CONDITION_TO, h + "time_of_day.to", 0, 23999),
                 EditorField.note(h + "time_of_day.note")
         ), false));
 
         // Integer.MAX_VALUE 仅表达 int 的存储边界，常用滑条窗口不限制 JSON 参数高度。
         ResourceLocation yLevel = id("y_level");
         ConditionEditorRegistry.register(new TypeEditorDescriptor(yLevel, TypeLabels.conditionLabel(yLevel), List.of(
-                EditorField.optionalInteger("min", h + "y_level.min", YLevelCondition.MIN_Y, Integer.MAX_VALUE)
+                EditorField.optionalInteger(RuleFields.CONDITION_MIN, h + "y_level.min", YLevelCondition.MIN_Y, Integer.MAX_VALUE)
                         .withNumbers(NumericDomain.integers(YLevelCondition.MIN_Y, Integer.MAX_VALUE, Y_LEVEL_SLIDER_MIN, Y_LEVEL_SLIDER_MAX)),
-                EditorField.optionalInteger("max", h + "y_level.max", YLevelCondition.MIN_Y, Integer.MAX_VALUE)
+                EditorField.optionalInteger(RuleFields.CONDITION_MAX, h + "y_level.max", YLevelCondition.MIN_Y, Integer.MAX_VALUE)
                         .withNumbers(NumericDomain.integers(YLevelCondition.MIN_Y, Integer.MAX_VALUE, Y_LEVEL_SLIDER_MIN, Y_LEVEL_SLIDER_MAX))
         ), false));
 
         // light_level：两端全空 = 恒真
         ResourceLocation lightLevel = id("light_level");
         ConditionEditorRegistry.register(new TypeEditorDescriptor(lightLevel, TypeLabels.conditionLabel(lightLevel), List.of(
-                EditorField.optionalInteger("min", h + "light_level.min", 0, 15),
-                EditorField.optionalInteger("max", h + "light_level.max", 0, 15),
+                EditorField.optionalInteger(RuleFields.CONDITION_MIN, h + "light_level.min", 0, 15),
+                EditorField.optionalInteger(RuleFields.CONDITION_MAX, h + "light_level.max", 0, 15),
                 EditorField.note(h + "light_level.note")
         ), false));
     }

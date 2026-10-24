@@ -38,12 +38,16 @@ import com.meteorite.itemdespawntowhat.core.model.CombinationMode;
 import com.meteorite.itemdespawntowhat.core.model.ConditionLimits;
 import com.meteorite.itemdespawntowhat.core.type.effect.PlaceBlockEffect;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.FormattedCharSequence;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -53,6 +57,45 @@ final class RuleEditorResultsPage {
 
     // 所属编辑页容器：共享状态与跨页能力都经它访问
     private final RuleEditorEditPages pages;
+
+    // 效果行展示缓存：会话版本、方案、语言与行宽任一变化才重算，绘制不再逐行解析 JSON、拼图标 key 与裁剪
+    private @Nullable EditSession effectRowSession;
+    private long effectRowRevision = -1;
+    private int effectRowCandidate = -1;
+    private @Nullable Object effectRowLanguage;
+    private int effectRowWidth = -1;
+    private final Map<Integer, EffectRowText> effectRows = new HashMap<>();
+
+    // 只读提示缓存：同一会话版本里结果不变，只有版本/方案/选中动作/语言变化才重算
+    private @Nullable EditSession readonlyNoteSession;
+    private long readonlyNoteRevision = -1;
+    private int readonlyNoteCandidate = -1;
+    private int readonlyNoteEffect = -1;
+    private @Nullable Object readonlyNoteLanguage;
+    private boolean readonlyNoteCached;
+    private @Nullable Component readonlyNoteValue;
+
+    // 详情卡头部缓存：空态、所选动作、语言与字体任一变化才重建
+    private boolean headerCached;
+    private boolean headerEmpty;
+    private @Nullable RuleValue headerAction;
+    private @Nullable Object headerLanguage;
+    private @Nullable RuleEditorEditPages.CardHeader headerValue;
+
+    // 空态引导文案的折行结果：布局与绘制共用，宽度或语言变化才重算
+    private int emptyHelpWidth = -1;
+    private @Nullable Object emptyHelpLanguage;
+    private List<FormattedCharSequence> emptyHelpLines = List.of();
+
+    // 固定文案与组合方式最大宽：语言变化时统一刷新，避免每帧新建 Component 并测宽
+    private @Nullable Object staticTextLanguage;
+    private Component emptyTitleText = Component.empty();
+    private Component actionParametersText = Component.empty();
+    private Component readonlyUnknownText = Component.empty();
+    private int combinationOptionWidth;
+
+    // 一条效果行的绘制数据：文本已裁剪，图标与文本内缩一并缓存
+    private record EffectRowText(String text, @Nullable UiIcon icon, int inset) {}
 
     // 主题：与容器共用宿主默认主题
     private static final UiHostTheme THEME = RuleEditorEditPages.THEME;
@@ -685,25 +728,50 @@ final class RuleEditorResultsPage {
     }
 
     void renderEffectRow(GuiGraphics graphics, Font renderFont, Integer item, int index, UiRect row, boolean selected, boolean hovered, boolean focused) {
-        RuleValue view = pages.currentView();
-        RuleValue array = ResultStructure.effectsAt(view, candidateIndex);
-        RuleValue element = array != null && item >= 0 && item < array.size() ? array.item(item) : null;
-        RuleValue effect = element != null && element.isMapping() ? element : null;
-        Component title = RuleNaming.effectTitle(effect, pages.nameSource);
-        String text = (item + 1) + ". " + title.getString();
-        var icon = RulePreviewIcons.action(effect);
-        int inset = ACTION_CONTENT_INSET + (icon == null ? 0 : DETAIL_ICON_SIZE + ACTION_ICON_TEXT_GAP);
-        if (icon != null) icon.render(graphics, row.x() + ACTION_CONTENT_INSET,
-                row.y() + (row.height() - DETAIL_ICON_SIZE) / 2);
+        EditSession session = pages.host.session();
+        Object language = Language.getInstance();
+        long revision = session == null ? -1 : session.revision();
+        if (effectRowSession != session || effectRowRevision != revision || effectRowCandidate != candidateIndex
+                || effectRowLanguage != language || effectRowWidth != row.width()) {
+            effectRows.clear();
+            effectRowSession = session;
+            effectRowRevision = revision;
+            effectRowCandidate = candidateIndex;
+            effectRowLanguage = language;
+            effectRowWidth = row.width();
+        }
+        EffectRowText cached = effectRows.get(item);
+        if (cached == null) {
+            cached = effectRowText(pages.currentView(), item, row);
+            effectRows.put(item, cached);
+        }
+        if (cached.icon() != null) {
+            cached.icon().render(graphics, row.x() + ACTION_CONTENT_INSET,
+                    row.y() + (row.height() - DETAIL_ICON_SIZE) / 2);
+        }
         UiRect remove = actionRemoveRect(row);
-        String trimmed = TextScroll.trimToWidth(pages.font, text, Math.max(1, remove.x() - row.x() - inset - ACTION_REMOVE_INSET));
-        graphics.drawString(pages.font, trimmed, row.x() + inset, row.y() + (row.height() - renderFont.lineHeight) / 2,
-                THEME.palette().textPrimary(), false);
+        graphics.drawString(pages.font, cached.text(), row.x() + cached.inset(),
+                row.y() + (row.height() - renderFont.lineHeight) / 2, THEME.palette().textPrimary(), false);
         // 叉号与目录选中卡保持一致：悬停行才转成危险色，常亮红色会被读成「已有删除待确认」
         UiIcon close = UiMarkIcons.icon(UiMarkIcons.Mark.CLOSE,
                 hovered ? THEME.palette().danger() : THEME.palette().textSecondary());
         close.render(graphics, remove.x() + (remove.width() - close.width()) / 2,
                 remove.y() + (remove.height() - close.height()) / 2);
+    }
+
+    // 单行展示数据：标题文本、图标与文本内缩一起算好，裁剪宽度按行宽推出
+    private EffectRowText effectRowText(@Nullable RuleValue view, int item, UiRect row) {
+        RuleValue array = ResultStructure.effectsAt(view, candidateIndex);
+        RuleValue element = array != null && item >= 0 && item < array.size() ? array.item(item) : null;
+        RuleValue effect = element != null && element.isMapping() ? element : null;
+        Component title = RuleNaming.effectTitle(effect, pages.nameSource);
+        String text = (item + 1) + ". " + title.getString();
+        UiIcon icon = RulePreviewIcons.action(effect);
+        int inset = ACTION_CONTENT_INSET + (icon == null ? 0 : DETAIL_ICON_SIZE + ACTION_ICON_TEXT_GAP);
+        UiRect remove = actionRemoveRect(row);
+        String trimmed = TextScroll.trimToWidth(pages.font, text,
+                Math.max(1, remove.x() - row.x() - inset - ACTION_REMOVE_INSET));
+        return new EffectRowText(trimmed, icon, inset);
     }
 
     void switchProduct(String path, String variant) {
@@ -811,9 +879,8 @@ final class RuleEditorResultsPage {
         }
         if (combinationButton != null) {
             controls.add(combinationButton);
-            int optionWidth = java.util.Arrays.stream(CombinationMode.values()).mapToInt(mode -> pages.font.width(
-                    Component.translatable(RuleEditorPageSupport.UI + "combination." + mode.key()))).max().orElse(0);
-            sizes.add(Math.min(width, optionWidth + RuleEditorPageSupport.PAD * 2));
+            ensureStaticTexts();
+            sizes.add(Math.min(width, combinationOptionWidth + RuleEditorPageSupport.PAD * 2));
         }
         for (UiButton button : pages.candidateButtons) {
             controls.add(button);
@@ -893,9 +960,8 @@ final class RuleEditorResultsPage {
                 y = pages.layoutForm(advancedEffectForm, contentX, y, contentWidth);
             }
         } else {
-            int messageHeight = pages.font.lineHeight + EMPTY_MESSAGE_GAP + pages.font.split(
-                    Component.translatable(RuleEditorPageSupport.UI + "results.empty_help"), Math.max(1, contentWidth)).size()
-                    * (pages.font.lineHeight + 2);
+            int messageHeight = pages.font.lineHeight + EMPTY_MESSAGE_GAP
+                    + emptyHelpLines(contentWidth).size() * (pages.font.lineHeight + 2);
             y += messageHeight + DETAIL_PADDING;
             if (emptyAddButton != null) {
                 emptyAddButton.setBounds(contentX, y,
@@ -914,22 +980,32 @@ final class RuleEditorResultsPage {
 
     // 右栏头部：空态显示卡片标题，否则显示所选动作的图标与名称
     private RuleEditorEditPages.CardHeader detailHeader() {
-        if (emptyDetailRect != null) {
-            return new RuleEditorEditPages.CardHeader(
-                    Component.translatable(RuleEditorPageSupport.UI + "card.action_detail"), null);
+        boolean empty = emptyDetailRect != null;
+        Object language = Language.getInstance();
+        if (headerCached && headerEmpty == empty && headerAction == selectedAction && headerLanguage == language) {
+            return headerValue;
         }
-        return new RuleEditorEditPages.CardHeader(RuleNaming.effectTitle(selectedAction, pages.nameSource),
-                selectedAction == null ? null : RulePreviewIcons.action(selectedAction));
+        headerCached = true;
+        headerEmpty = empty;
+        headerAction = selectedAction;
+        headerLanguage = language;
+        RuleEditorEditPages.CardHeader next = empty
+                ? new RuleEditorEditPages.CardHeader(
+                        Component.translatable(RuleEditorPageSupport.UI + "card.action_detail"), null)
+                : new RuleEditorEditPages.CardHeader(RuleNaming.effectTitle(selectedAction, pages.nameSource),
+                        selectedAction == null ? null : RulePreviewIcons.action(selectedAction));
+        headerValue = next;
+        return next;
     }
 
     void renderResults(GuiGraphics graphics) {
+        ensureStaticTexts();
         if (emptyDetailRect != null) {
-            var lines = pages.font.split(Component.translatable(RuleEditorPageSupport.UI + "results.empty_help"),
-                    Math.max(1, emptyDetailRect.width()));
+            var lines = emptyHelpLines(emptyDetailRect.width());
             // 空态左上对齐：标题 + 引导句 + 卡内「添加动作」，不再垂直居中留下整块空白
             int y = emptyDetailRect.y();
             pages.drawText(graphics, new UiRect(emptyDetailRect.x(), y, emptyDetailRect.width(), pages.font.lineHeight),
-                    Component.translatable(RuleEditorPageSupport.UI + "results.empty_title"), THEME.palette().textPrimary());
+                    emptyTitleText, THEME.palette().textPrimary());
             y += pages.font.lineHeight + EMPTY_MESSAGE_GAP;
             for (var line : lines) {
                 graphics.drawString(pages.font, line, emptyDetailRect.x(), y, THEME.palette().textSecondary(), false);
@@ -938,8 +1014,7 @@ final class RuleEditorResultsPage {
         }
         Component readonlyNote = readonlyEffectNote(pages.currentView());
         if (readonlyNote != null) pages.drawText(graphics, effectNoteRect, readonlyNote, THEME.palette().warning());
-        pages.drawText(graphics, actionParametersRect, Component.translatable(RuleEditorPageSupport.UI + "results.action_parameters"),
-                THEME.palette().textSecondary());
+        pages.drawText(graphics, actionParametersRect, actionParametersText, THEME.palette().textSecondary());
     }
 
     // 悬停只补画面上读不到的信息：动作名、叉号、翻页箭头与产品分段都有文字或符号，不再重复解释。
@@ -966,20 +1041,67 @@ final class RuleEditorResultsPage {
         return true;
     }
 
+    // 固定文案与组合方式按钮最大宽度：语言切换后一次性刷新，绘制与布局都复用
+    private void ensureStaticTexts() {
+        Object language = Language.getInstance();
+        if (staticTextLanguage == language) {
+            return;
+        }
+        staticTextLanguage = language;
+        emptyTitleText = Component.translatable(RuleEditorPageSupport.UI + "results.empty_title");
+        actionParametersText = Component.translatable(RuleEditorPageSupport.UI + "results.action_parameters");
+        readonlyUnknownText = Component.translatable(RuleEditorPageSupport.UI + "effect.readonly_note_unknown");
+        combinationOptionWidth = java.util.Arrays.stream(CombinationMode.values())
+                .mapToInt(mode -> pages.font.width(
+                        Component.translatable(RuleEditorPageSupport.UI + "combination." + mode.key())))
+                .max().orElse(0);
+    }
+
+    // 空态引导文案按内容宽折行：只有宽度或语言变化才重新 split
+    private List<FormattedCharSequence> emptyHelpLines(int width) {
+        Object language = Language.getInstance();
+        if (emptyHelpWidth == width && emptyHelpLanguage == language) {
+            return emptyHelpLines;
+        }
+        emptyHelpWidth = width;
+        emptyHelpLanguage = language;
+        emptyHelpLines = pages.font.split(
+                Component.translatable(RuleEditorPageSupport.UI + "results.empty_help"), Math.max(1, width));
+        return emptyHelpLines;
+    }
+
     @Nullable Component readonlyEffectNote(@Nullable RuleValue view) {
+        ensureStaticTexts();
+        EditSession session = pages.host.session();
+        Object language = Language.getInstance();
+        long revision = session == null ? -1 : session.revision();
+        if (readonlyNoteCached && readonlyNoteSession == session && readonlyNoteRevision == revision
+                && readonlyNoteCandidate == candidateIndex && readonlyNoteEffect == effectIndex
+                && readonlyNoteLanguage == language) {
+            return readonlyNoteValue;
+        }
+        readonlyNoteCached = true;
+        readonlyNoteSession = session;
+        readonlyNoteRevision = revision;
+        readonlyNoteCandidate = candidateIndex;
+        readonlyNoteEffect = effectIndex;
+        readonlyNoteLanguage = language;
         RuleValue effects = ResultStructure.effectsAt(view, candidateIndex);
         if (effects == null || effectIndex < 0 || effectIndex >= effects.size()) {
+            readonlyNoteValue = null;
             return null;
         }
         String type = RuleCostBinding.typeOf(effects.item(effectIndex));
         ResourceLocation typeId = type == null ? null : ResourceLocation.tryParse(type);
         if (typeId == null) {
-            return Component.translatable(RuleEditorPageSupport.UI + "effect.readonly_note_unknown");
+            readonlyNoteValue = readonlyUnknownText;
+        } else if (EffectEditorRegistry.find(typeId) != null) {
+            readonlyNoteValue = null;
+        } else {
+            readonlyNoteValue = Component.translatable(RuleEditorPageSupport.UI + "effect.readonly_note",
+                    typeId.toString());
         }
-        if (EffectEditorRegistry.find(typeId) != null) {
-            return null;
-        }
-        return Component.translatable(RuleEditorPageSupport.UI + "effect.readonly_note", typeId.toString());
+        return readonlyNoteValue;
     }
 
     /** 方案翻页组：只让左右按钮接收输入，页码与两箭头保持同一行。 */

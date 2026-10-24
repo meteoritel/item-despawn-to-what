@@ -13,7 +13,7 @@ public sealed interface UiNode permits UiNode.Row, UiNode.Gap, UiNode.Divider, U
 
     /**
      * 自然宽度的缩进行，**行首图标**后跟文字，文字后可跟多个各自带命中信息的图标。
-     * {@code parentRow} 是同一内容列表中父行的下标（{@link #NO_PARENT} 表示根行）；
+     * {@code parentRow} 是同一内容列表中位于本行之前的父 Row 下标（{@link #NO_PARENT} 表示根行）；
      * 连线几何由排版阶段按父子矩形推导，构建方只需给出父子关系。
      *
      * @param leading 行首图标（画在缩进之后、文字之前），物品清单每行「图标 + 名称」用它；

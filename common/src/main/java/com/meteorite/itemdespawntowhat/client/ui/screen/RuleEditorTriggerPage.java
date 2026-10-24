@@ -45,9 +45,6 @@ final class RuleEditorTriggerPage {
 
     // 主题：与容器共用宿主默认主题
     private static final UiHostTheme THEME = RuleEditorEditPages.THEME;
-    private static final String BIOME_MODE_FIELD = "mode";
-    private static final String BIOME_IDS_FIELD = "biomes";
-    private static final String CLIMATE_MODE = "climate";
 
     RuleEditorTriggerPage(RuleEditorEditPages pages) {
         this.pages = pages;
@@ -264,10 +261,10 @@ final class RuleEditorTriggerPage {
 
     private static void configureBiomeFields(FormView form, TypeEditorDescriptor descriptor) {
         BooleanSupplier climate = () -> {
-            RuleValue mode = form.pendingValue(form.draftPath(BIOME_MODE_FIELD));
-            return mode != null && mode.isText() && CLIMATE_MODE.equals(mode.asText());
+            RuleValue mode = form.pendingValue(form.draftPath(RuleFields.CONDITION_MODE));
+            return mode != null && mode.isText() && RuleFields.CONDITION_MODE_CLIMATE.equals(mode.asText());
         };
-        form.setRowVisibility(form.draftPath(BIOME_IDS_FIELD), () -> !climate.getAsBoolean());
+        form.setRowVisibility(form.draftPath(RuleFields.CONDITION_BIOMES), () -> !climate.getAsBoolean());
         for (EditorField field : descriptor.fields()) if (field.type() == EditorFieldType.CLIMATE_RANGE) {
             form.setRowVisibility(form.draftPath(field.name()), climate);
         }

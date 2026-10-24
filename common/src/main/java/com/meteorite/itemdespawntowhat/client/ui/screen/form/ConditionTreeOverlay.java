@@ -161,6 +161,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     private @Nullable String parameterType;
     private @Nullable String selectedPath;
     private @Nullable UiWidget pressed;
+    private int pressedButton = -1;
     private @Nullable Component decodeError;
     // 下一个待定位的问题下标：F8 或点击状态栏时递增并循环
     private int nextIssueIndex;
@@ -508,14 +509,12 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         discardView();
     }
 
-    // 历史使外层作用域失效时只卸载旧视图，不再提交该路径的控件值。
+    /** 历史使外层作用域失效时卸载旧视图并释放输入归属，不再提交该路径的控件值。 */
     public void discardView() {
         editor.endInteractions(UiInputCapture.EndReason.UNMOUNTED);
         unmountParameters();
-        pressed = null;
         editor.closePicker();
-        editor.setFocused(false);
-        source.setFocused(false);
+        setFocused(false);
     }
 
     /**
@@ -1064,9 +1063,12 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
 
     // ---- 输入 ----
 
+    /** 其它按键不替换当前捕获；同键再次按下时重新登记，允许恢复遗漏的释放。 */
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (pressed != null && pressedButton != button) return true;
         pressed = null;
+        pressedButton = -1;
         if (helpOpen) {
             // 帮助浮层是模态式的：任何点击先关闭它
             helpOpen = false;
@@ -1077,7 +1079,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         }
         if (!sourceView && editor.hasPopup()) {
             setFocusSlot(FocusSlot.CANVAS);
-            if (editor.mouseClicked(mouseX, mouseY, button)) pressed = editor;
+            if (editor.mouseClicked(mouseX, mouseY, button)) capturePress(editor, button);
             return true;
         }
         if (statusRect.contains(mouseX, mouseY) && !editor.issues().isEmpty()) {
@@ -1085,7 +1087,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         }
         if (functionBar.bounds().contains(mouseX, mouseY)) setFocusSlot(FocusSlot.FUNCTION_BAR);
         if (functionBar.mouseClicked(mouseX, mouseY, button)) {
-            pressed = functionBar;
+            capturePress(functionBar, button);
             return true;
         }
         if (sourceView) {
@@ -1097,27 +1099,30 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
             if (!source.mouseClicked(mouseX, mouseY, button)) {
                 return false;
             }
-            pressed = source;
+            capturePress(source, button);
             return true;
         }
         if (toolColumn.bounds().contains(mouseX, mouseY)) setFocusSlot(FocusSlot.TOOL_COLUMN);
         if (toolColumn.mouseClicked(mouseX, mouseY, button)) {
-            pressed = toolColumn;
+            capturePress(toolColumn, button);
             return true;
         }
         if (canvasRect.contains(mouseX, mouseY)) setFocusSlot(FocusSlot.CANVAS);
         if (editor.mouseClicked(mouseX, mouseY, button)) {
-            pressed = editor;
+            capturePress(editor, button);
             syncSelection();
             return true;
         }
         return false;
     }
 
+    /** 仅将与按下键配对的释放交给捕获目标。 */
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (pressedButton != button) return false;
         UiWidget target = pressed;
         pressed = null;
+        pressedButton = -1;
         boolean consumed = target != null && target.mouseReleased(mouseX, mouseY, button);
         if (target == toolColumn && (editor.isPickerOpen() || editor.isGroupKindMenuOpen()
                 || editor.isWrapKindMenuOpen() || editor.isDeleteConfirmOpen())) {
@@ -1128,9 +1133,11 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         return consumed;
     }
 
+    /** 拖动只派发给持有对应按键的目标。 */
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        return pressed != null && pressed.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+        return pressed != null && pressedButton == button
+                && pressed.mouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
     @Override
@@ -1223,8 +1230,13 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
 
     @Override public boolean isFocused() { return focused; }
 
+    /** 失去整个浮层的焦点时释放输入归属，并将焦点变化传给内部控件。 */
     @Override public void setFocused(boolean value) {
         focused = value;
+        if (!value) {
+            pressed = null;
+            pressedButton = -1;
+        }
         applyFocus();
     }
 
@@ -1235,6 +1247,11 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     private void setFocusSlot(FocusSlot slot) {
         focusSlot = slot;
         applyFocus();
+    }
+
+    private void capturePress(UiWidget target, int button) {
+        pressed = target;
+        pressedButton = button;
     }
 
     private void applyFocus() {

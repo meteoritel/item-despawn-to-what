@@ -124,6 +124,7 @@ public final class UiIconStrip implements UiInputTarget, UiFocusTarget {
 
     // ---------- UiInputTarget ----------
 
+    /** 接收新的左键按压，替换同一图标条上尚未释放的旧按压。 */
     @Override
     public boolean mousePressed(UiInputContext context) {
         if (context.button() != 0) return false;
@@ -131,24 +132,25 @@ public final class UiIconStrip implements UiInputTarget, UiFocusTarget {
         if (index < 0) return false;
         UiControl control = cells.get(index).control;
         if (!control.isHittable()) return false;
+        clearPress();
         control.setPressed(true);
         pressedIndex = index;
         focusedIndex = index;
         return true;
     }
 
-    // 拖动期间保持独占：指针离开格子后仍继续消费，直到释放。
+    /** 已按下格子只消费左键拖动，指针离开格子后仍保持归属。 */
     @Override
     public boolean mouseDragged(UiInputContext context) {
-        return pressedIndex >= 0;
+        return context.button() == GLFW.GLFW_MOUSE_BUTTON_LEFT && pressedIndex >= 0;
     }
 
+    /** 对应左键释放时结束按压，仍命中原格子才激活动作。 */
     @Override
     public boolean mouseReleased(UiInputContext context) {
         if (context.button() != 0 || pressedIndex < 0) return false;
         int pressed = pressedIndex;
-        pressedIndex = -1;
-        for (Item item : cells) item.control.setPressed(false);
+        clearPress();
         // 指针移回同一格才激活；无论是否激活都消费这次释放，避免同一次点击落到画布上。
         if (indexAt(context.pointerX(), context.pointerY()) == pressed) {
             cells.get(pressed).control.activate();
@@ -175,17 +177,25 @@ public final class UiIconStrip implements UiInputTarget, UiFocusTarget {
     @Override
     public boolean canFocus() { return firstFocusableIndex() >= 0; }
 
+    /** 失去焦点作用域时取消尚未释放的格子按压。 */
     @Override
     public void setFocused(boolean focused) {
         this.focused = focused && canFocus();
         if (this.focused && focusedIndex < 0) focusedIndex = firstFocusableIndex();
         if (!this.focused) {
+            clearPress();
             for (Item item : cells) item.control.setFocused(false);
         }
     }
 
     @Override
     public boolean isFocused() { return focused; }
+
+    private void clearPress() {
+        if (pressedIndex < 0) return;
+        cells.get(pressedIndex).control.setPressed(false);
+        pressedIndex = -1;
+    }
 
     @Override
     public boolean activate() {
@@ -296,16 +306,20 @@ public final class UiIconStrip implements UiInputTarget, UiFocusTarget {
             this.control.setStyle(strip.style);
         }
 
+        /** 禁用当前按压格子时取消该次按压，恢复启用后等待新输入。 */
         public void setEnabled(boolean value) {
             if (enabled == value) return;
             enabled = value;
+            if (!value && strip.pressedIndex >= 0 && strip.cells.get(strip.pressedIndex) == this) strip.clearPress();
             control.setEnabled(value);
             applyIcon();
         }
 
+        /** 隐藏当前按压格子时取消该次按压，再更新占位布局。 */
         public void setVisible(boolean value) {
             if (visible == value) return;
             visible = value;
+            if (!value && strip.pressedIndex >= 0 && strip.cells.get(strip.pressedIndex) == this) strip.clearPress();
             control.setVisible(value);
             strip.relayout();
         }

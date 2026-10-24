@@ -171,6 +171,9 @@ public final class EditSession {
     // 所有草稿修改都必须走这里：opKey 为操作标签（i18n key），change 内只做字段写入
     public void apply(String opKey, Runnable change) {
         Objects.requireNonNull(change, "change");
+        long stampBefore = draft.mutationStamp();
+        // 操作前快照是撤销栈的唯一来源，只能在这里一次性取得；是否真的变化改用变更计数判断，
+        // 计数只在内容确实变化时推进，等价于整树相等比较但不再每次重扫整棵 JSON
         JsonObject before = draft.workingView().deepCopy();
         Map<String, PendingInput> inputsBefore = Map.copyOf(pendingInputs);
         boolean deletedBefore = draft.isDeleted();
@@ -183,7 +186,7 @@ public final class EditSession {
         try { change.run(); }
         finally { transactionInputPaths = null; transactionRemovedScopes = null; transactionAddedScopes = null; }
         // 删除标记也算改动：只改标记不改 JSON 的操作同样要能撤销
-        if (!before.equals(draft.workingView()) || deletedBefore != draft.isDeleted()) {
+        if (draft.mutationStamp() != stampBefore || deletedBefore != draft.isDeleted()) {
             undoStack.push(new Entry(normalize(opKey), before, deletedBefore, inputsBefore, inversePaths(changedPaths), Set.copyOf(addedScopes), Set.copyOf(removedScopes)));
             while (undoStack.size() > HISTORY_LIMIT) {
                 undoStack.removeLast();

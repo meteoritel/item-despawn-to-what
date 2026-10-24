@@ -20,6 +20,10 @@ public record RuleSnapshot(int version, int contextRevision, List<RuleSnapshotEn
     public static final String KEY_ENTRIES = "entries";
     public static final String KEY_ISSUES = "issues";
 
+    // 快照包装在规则体之外固定多出 3 层：root → entries[] → entry，effective 即规则体根；
+    // 预算按包装层与规则体分别计算，避免接近深度上限的合法规则体在快照里被判超限
+    private static final int ENVELOPE_DEPTH = 3;
+
     public RuleSnapshot {
         entries = entries == null ? List.of() : List.copyOf(entries);
         issues = issues == null ? List.of() : List.copyOf(issues);
@@ -48,7 +52,7 @@ public record RuleSnapshot(int version, int contextRevision, List<RuleSnapshotEn
         if (text == null || text.isBlank()) {
             return DataResult.error(() -> "快照为空");
         }
-        RuleDecodeBudget.ParseResult parsed = RuleDecodeBudget.parse(text);
+        RuleDecodeBudget.ParseResult parsed = RuleDecodeBudget.parseEnvelope(text, ENVELOPE_DEPTH);
         if (!parsed.ok()) {
             // 统一有界解析入口报出的失败原因
             return DataResult.error(() -> "快照解析失败: " + parsed.failureReason());

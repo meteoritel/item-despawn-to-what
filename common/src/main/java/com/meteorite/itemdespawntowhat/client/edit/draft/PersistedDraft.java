@@ -13,6 +13,9 @@ import org.jetbrains.annotations.Nullable;
  * 不一致即视为外部变更冲突，交由玩家选择保留草稿还是采用服务端版本。
  * <p>字段全部可缺省（缺省即按 false/0/null 处理），损坏的文件由 {@link #fromJson(JsonObject)}
  * 返回 null，由调用方跳过而不是让界面崩掉。
+ * <p>两个 JSON 子树是「构造时交出所有权」的不可变快照：构造方必须传入自己不会再修改的对象
+ * （{@link RuleDraft#toJson()} 或 {@link JsonObject#deepCopy()} 的返回值，以及解析出的独立树）。
+ * 因此本记录可以安全地跨线程交给写入者序列化，序列化时不再重复整树拷贝。
  */
 public record PersistedDraft(
         String targetId,
@@ -48,9 +51,9 @@ public record PersistedDraft(
         json.addProperty("base_context_revision", baseContextRevision);
         json.addProperty("saved_at", savedAt);
         if (baseline != null) {
-            json.add("baseline", baseline.deepCopy());
+            json.add("baseline", baseline);
         }
-        json.add("draft", draft.deepCopy());
+        json.add("draft", draft);
         return json;
     }
 

@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.edit.draft;
 
+import com.meteorite.itemdespawntowhat.Constants;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -11,31 +12,35 @@ import org.jetbrains.annotations.Nullable;
  * <p>节流窗口 {@link #SAVE_DELAY_MS} 毫秒：连续编辑只在停顿后写一次盘，
  * 避免每次按键/每次结构变换都碰磁盘；界面关闭、会话失效等关键时刻调用
  * {@link #flushAll()} 立即写盘，保证草稿不丢。
+ * <p>真正的文件操作由 {@link DraftWriter} 在一条后台线程上串行执行：本类只维护内存状态与到期时间，
+ * 提交给写入者的都是主线程捕获好的 {@link PersistedDraft} 不可变快照，写盘时不再回读实时编辑状态。
+ * 因此调用方可以在渲染或 tick 路径上调用本类的方法，磁盘 I/O 不会占住客户端线程。
  */
 public final class DraftJournal {
 
     // 编辑停顿多久后写盘
     public static final long SAVE_DELAY_MS = 2000L;
+    // 关闭界面/存档等关键点等待写盘完成的上限
+    public static final long DRAIN_WAIT_MS = 1500L;
 
     private final DraftStore store;
+    // 磁盘写入的单写入者：所有 save/delete/clear 都经它按提交顺序串行执行
+    private final DraftWriter writer;
     // 目标 id -> 最近一次待写/已写内容
     private final Map<String, PersistedDraft> entries = new LinkedHashMap<>();
     // 目标 id -> 允许写盘的时间点（毫秒时间戳）
     private final Map<String, Long> pending = new LinkedHashMap<>();
-    // 写盘失败事件计数（一次成功之前的连续失败只算一次，避免界面反复刷同一条提示）
-    private int failures;
-    // 当前是否处于连续失败状态
-    private boolean failing;
 
     public DraftJournal(DraftStore store) {
         this.store = store;
+        this.writer = new DraftWriter(store);
     }
 
     public DraftStore store() {
         return this.store;
     }
 
-    // 从磁盘恢复全部草稿（同 id 保留 saved_at 较新的一份）
+    // 从磁盘恢复全部草稿（同 id 保留 saved_at 较新的一份）；只在写入者空闲时调用（界面打开阶段）
     public List<PersistedDraft> restore() {
         for (PersistedDraft draft : this.store.loadAll()) {
             PersistedDraft current = this.entries.get(draft.targetId());
@@ -54,11 +59,7 @@ public final class DraftJournal {
         return this.entries.get(targetId);
     }
 
-    public List<String> trackedIds() {
-        return new ArrayList<>(this.entries.keySet());
-    }
-
-    // 记录改动并安排延迟写盘
+    // 记录改动并安排延迟写盘：只更新内存状态，真正写盘发生在到期后的 flushDue/flushAll
     public void markDirty(PersistedDraft snapshot) {
         this.entries.put(snapshot.targetId(), snapshot);
         this.pending.put(snapshot.targetId(), System.currentTimeMillis() + SAVE_DELAY_MS);
@@ -66,76 +67,82 @@ public final class DraftJournal {
 
     // 取走并清空写盘失败事件计数（界面提示用）
     public int consumeFailures() {
-        int count = this.failures;
-        this.failures = 0;
-        return count;
+        return this.writer.consumeFailures();
     }
 
-    // 立即写盘单个目标（冲突处理、应用失败后保留草稿等关键时刻）
+    // 显式重试上次写失败的草稿：由玩家的保存/关闭动作触发，后台不会自动重排。
+    // 重试取内存里的最新快照，而不是写入者记住的那份旧内容；已被丢弃的目标不再写回
+    public void retryFailed() {
+        for (PersistedDraft failed : this.writer.takeFailures()) {
+            PersistedDraft latest = this.entries.get(failed.targetId());
+            if (latest != null) {
+                this.writer.submitSave(latest);
+            }
+        }
+    }
+
+    // 立即交出单个目标的写盘任务（冲突处理、应用失败后保留草稿等关键时刻）
     public void writeNow(PersistedDraft snapshot) {
         this.entries.put(snapshot.targetId(), snapshot);
-        persist(snapshot.targetId(), snapshot, System.currentTimeMillis());
+        this.pending.remove(snapshot.targetId());
+        this.writer.submitSave(snapshot);
     }
 
-    // 写盘一个目标：成功则清掉待写标记；失败则重新排入待写队列（下个窗口重试）并记录一次失败事件
-    private boolean persist(String targetId, PersistedDraft snapshot, long now) {
-        if (this.store.save(snapshot)) {
-            this.failing = false;
-            this.pending.remove(targetId);
-            return true;
-        }
-        if (!this.failing) {
-            this.failing = true;
-            this.failures++;
-        }
-        this.pending.put(targetId, now + SAVE_DELAY_MS);
-        return false;
-    }
-
-    // 写入所有到期条目；有写入返回 true
-    public boolean flushDue(long now) {
-        boolean wrote = false;
+    // 交出所有到期条目的写盘任务
+    public void flushDue(long now) {
         for (String targetId : new ArrayList<>(this.pending.keySet())) {
             Long deadline = this.pending.get(targetId);
             if (deadline == null || deadline > now) {
                 continue;
             }
             PersistedDraft snapshot = this.entries.get(targetId);
+            this.pending.remove(targetId);
             if (snapshot == null) {
-                this.pending.remove(targetId);
                 continue;
             }
-            wrote |= persist(targetId, snapshot, now);
+            this.writer.submitSave(snapshot);
         }
-        return wrote;
     }
 
-    // 无视节流窗口立即写盘全部待写条目
+    // 无视节流窗口立即交出全部待写条目（界面关闭时调用）
     public void flushAll() {
-        long now = System.currentTimeMillis();
         for (String targetId : new ArrayList<>(this.pending.keySet())) {
             PersistedDraft snapshot = this.entries.get(targetId);
-            if (snapshot == null) {
-                this.pending.remove(targetId);
-                continue;
+            this.pending.remove(targetId);
+            if (snapshot != null) {
+                this.writer.submitSave(snapshot);
             }
-            persist(targetId, snapshot, now);
         }
     }
 
-    // 丢弃单个目标的草稿（同时删文件）
+    /**
+     * 交出全部待写条目并等待写入完成（有上限）。
+     *
+     * <p>关闭界面与存档时调用：写入始终在后台线程执行，这里只保证进程退出前草稿已经落盘；
+     * 等待有上限，避免磁盘异常时卡住客户端线程。</p>
+     *
+     * @param timeoutMs 最长等待毫秒数
+     */
+    public void drain(long timeoutMs) {
+        flushAll();
+        retryFailed();
+        if (!this.writer.awaitIdle(timeoutMs)) {
+            Constants.LOG.warn("草稿写盘未在 {} 毫秒内完成，剩余任务会继续在后台执行", timeoutMs);
+        }
+    }
+
+    // 丢弃单个目标的草稿（同时删文件）：删除排在已提交的写入之后，同目标合并时删除生效
     public void drop(String targetId) {
         this.entries.remove(targetId);
         this.pending.remove(targetId);
-        this.store.delete(targetId);
+        this.writer.submitDelete(targetId);
     }
 
-    // 丢弃全部草稿（同时删文件）
+    // 丢弃全部草稿（同时删文件）：清空是屏障，先前排队的写入被丢弃，不会把已放弃的草稿写回来；
+    // 顺带清掉 json 与写盘残留的 .tmp，覆盖「条目已不在跟踪表里但文件还在」的情况
     public void dropAll() {
-        for (String targetId : new ArrayList<>(this.entries.keySet())) {
-            this.store.delete(targetId);
-        }
         this.entries.clear();
         this.pending.clear();
+        this.writer.submitClear();
     }
 }
