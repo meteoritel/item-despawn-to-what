@@ -29,7 +29,6 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.AttachFace;
 import net.minecraft.world.level.block.state.properties.Property;
-import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import org.jetbrains.annotations.Nullable;
 
@@ -37,7 +36,8 @@ import org.jetbrains.annotations.Nullable;
  * 方块效果的执行器：在共享预算内分批完成邻域计数与放置，形状偏移按参数缓存复用。
  * 需要按 limit 计数时，同候选同槽位的各组共用一份邻域账：整次转化只扫一遍方框，
  * 并按区段调色板跳过确定不含目标方块的区段；计数完成前各组都只推进计数、不放置。
- * 单个调度步骤最多处理的方块位置数同时是计费上界；区块未加载时保留游标并退避等待，不从候选集合中丢弃位置。
+ * 同目标的多组共享一个候选游标；区段探测与位置读取共用单步工作量上界，
+ * 区块未加载时保留游标并退避等待，不从候选集合中丢弃位置。
  * 每成功放置一个方块通过 {@link EffectContext#reportProgress(int)} 回执 1，真实放置量以逐块回执累加；
  * 终态回执只收束任务，不再重复计入产量。
  * 放置策略：只替换可替换方块（canBeReplaced），并按原版支撑规则为每个候选位置摆正朝向——
@@ -47,17 +47,12 @@ import org.jetbrains.annotations.Nullable;
 public final class PlaceBlockExecutor {
     private static final Map<ShapeKey, List<BlockPos>> OFFSETS = new HashMap<>();
     /**
-     * 单步最多处理的方块位置数：计数段与放置段共享同一上界，取值与语义保持不变，只限制本步处理量。
+     * 单步工作量上界：区段探测、计数位置读取与放置尝试共同计费。
      * 实际单步上界取本值与 {@link ServerTickBudget#remainingWorkUnits()} 的较小者，且本 tick 时间或工作量任一耗尽即让出；
-     * 每个已处理位置按 1 个工作单位回执（见 {@link StepWorkCounter#report(int)}），
+     * 每次区段探测或位置处理按 1 个工作单位回执（见 {@link StepWorkCounter#report(int)}），
      * 因此该上界同时决定一个调度步骤最多向本 tick 预算计入多少工作单位。
      */
     private static final int MAX_VISITS_PER_STEP = 128;
-    /**
-     * 单步最多检查的方框位置数：区段剪枝跳过的位置不读方块、不计工作量，用独立上限约束单步循环时间，
-     * 使整块不含目标方块的区段能被快速跳过；真正读取的位置仍受 {@link #MAX_VISITS_PER_STEP} 与本 tick 预算约束。
-     */
-    private static final int MAX_PROBES_PER_STEP = 1024;
     /** 朝向尝试使用的水平方向顺序：固定顺序让同一位置的摆放结果可复现。 */
     private static final Direction[] HORIZONTALS = {Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST};
     /** 朝向类属性在方块状态里的固定名字：面朝向（贴地/贴墙/贴天花板）与水平朝向。 */
@@ -127,7 +122,7 @@ public final class PlaceBlockExecutor {
         }
 
         // 邻域账按实际目标方块区分；同类方块跨组只有一份余额。
-        @Nullable NeighbourCount sharedCount(BlockPos center, int radius, int target) {
+        @Nullable NeighbourCount sharedCount(BlockPos center, int radius, long target) {
             long span = radius * 2L + 1L;
             long cubePositions = span * span * span;
             // 所有放置位置均在统计方框内；limit 覆盖其总容量时，已有量与新增量之和天然不超限。
@@ -153,6 +148,29 @@ public final class PlaceBlockExecutor {
             super(block, candidates, limit, null);
         }
     }
+
+    /**
+     * 同一候选槽位、同一目标方块的结果预算批次。各组的概率与目标已固定，
+     * 共享一次位置扫描，每组仍按自己的到期刻执行并回执自己的成本进度。
+     */
+    public static final class BatchPlan implements EffectPreparation {
+        private final PlacementPlan plan;
+        private final List<Request> requests = new ArrayList<>();
+        private long resultBudget;
+
+        /** 创建一个尚未排期的批次，固定形状、目标与环境上限。 */
+        public BatchPlan(PlacementPlan plan) {
+            this.plan = plan;
+        }
+
+        /** 添加一组已通过概率判定的结果预算；仅在任务排期前调用。 */
+        public void add(int count, EffectContext context, long readyTick) {
+            requests.add(new Request(count, context, readyTick));
+            resultBudget = Math.addExact(resultBudget, count);
+        }
+    }
+
+    private record Request(int count, EffectContext context, long readyTick) {}
 
     private PlaceBlockExecutor() {}
 
@@ -219,6 +237,9 @@ public final class PlaceBlockExecutor {
             String reason = preparation.gate();
             return budget -> EffectStep.done(EffectResult.skipped(reason));
         }
+        if (preparation instanceof BatchPlan batch) {
+            return new Placement(effect, context, batch.plan, batch);
+        }
         if (!(preparation instanceof PlacementPlan plan)) {
             return budget -> EffectStep.done(EffectResult.failed(MISSING_PREPARATION + ": " + effect.type()));
         }
@@ -226,7 +247,7 @@ public final class PlaceBlockExecutor {
             String failure = plan.failure() == null ? PLACE_TARGET_UNRESOLVED : plan.failure();
             return budget -> EffectStep.done(EffectResult.failed(failure));
         }
-        return new Placement(effect, context, plan);
+        return new Placement(effect, context, plan, null);
     }
 
     // 源物品对应的方块：不同物品栈快照与同一效果参数的组合已由固定输入承载
@@ -292,23 +313,27 @@ public final class PlaceBlockExecutor {
         private final List<BlockPos> offsets;
         private final @Nullable NeighbourCount count;
         private int cursor;
-        private int placed;
-        private final int target;
+        private long placed;
+        private final long target;
+        private final @Nullable BatchPlan batch;
+        private int requestIndex;
+        private int requestPlaced;
         private @Nullable EffectResult result;
-        private Placement(PlaceBlockEffect effect, EffectContext context, PlacementPlan plan) {
+        private Placement(PlaceBlockEffect effect, EffectContext context, PlacementPlan plan, @Nullable BatchPlan batch) {
             this.context = context;
             this.block = plan.block();
             this.center = BlockPos.containing(context.position());
             this.originChunks = ChunkRequirement.at(center);
             this.offsets = plan.candidates();
-            // 计划上限：count × 本组已付轮数，再受候选位置数封顶；两项都不含随机抽取
-            this.target = Math.min(EffectTargets.saturatedMultiply(effect.count(), context.rounds()), plan.candidates().size());
+            // 结果预算独立于环境容量，半径耗尽只终止扫描，不抹掉未消耗的结果预算。
+            this.batch = batch;
+            this.target = batch == null ? (long) effect.count() * context.rounds() : batch.resultBudget;
             this.count = plan.sharedCount(center, effect.radius(), target);
         }
 
-        // 本组还能放多少：不受 limit 约束时为计划上限，否则取计划上限与共享账余额的较小者
-        private int allowed() {
-            return count == null ? target : Math.min(target, count.allowance());
+        // 结果预算与共享环境余额分别检查；共享余额已经扣除了本批成功量。
+        private boolean canPlaceMore() {
+            return placed < target && (count == null || count.allowance() > 0);
         }
 
         // 为候选位置挑一个能站稳的朝向：默认状态站不住时，按原版支撑规则依次尝试地面、天花板与四向贴墙
@@ -386,7 +411,7 @@ public final class PlaceBlockExecutor {
                 return pending == null || context.level().isOutsideBuildHeight(pending.getY())
                         ? originChunks : ChunkRequirement.at(pending);
             }
-            return cursor < offsets.size() && placed < allowed()
+            return cursor < offsets.size() && canPlaceMore()
                     ? ChunkRequirement.around(center.offset(offsets.get(cursor)), 1) : originChunks;
         }
 
@@ -402,6 +427,7 @@ public final class PlaceBlockExecutor {
                 // 计数由先走到这里的一组推进共享账：数完之前任何组都不放置，避免边数边放突破 limit
                 CountStep counted = count.advance(context.level(), block, budget, MAX_VISITS_PER_STEP - visits);
                 visits += counted.reads();
+                reported += counted.reads();
                 if (counted.awaiting() != null) {
                     return new EffectStep.AwaitChunks(counted.awaiting());
                 }
@@ -409,7 +435,10 @@ public final class PlaceBlockExecutor {
                     return EffectStep.Yield.INSTANCE;
                 }
             }
-            while (cursor < offsets.size() && placed < allowed()) {
+            while (cursor < offsets.size() && canPlaceMore()) {
+                if (batch != null && batch.requests.get(requestIndex).readyTick() > budget.gameTime()) {
+                    return new EffectStep.Delay(batch.requests.get(requestIndex).readyTick());
+                }
                 if (visits >= MAX_VISITS_PER_STEP || reported >= budget.remainingWorkUnits() || budget.exhausted()) {
                     return EffectStep.Yield.INSTANCE;
                 }
@@ -431,7 +460,7 @@ public final class PlaceBlockExecutor {
                             count.recordPlaced();
                         }
                         // 真实完成量回执：每成功放置一个方块计 1
-                        context.reportProgress(1);
+                        reportPlaced();
                     }
                 }
             }
@@ -443,31 +472,35 @@ public final class PlaceBlockExecutor {
             result = EffectResult.applied(0, PLACED_BY_STEPS);
             return EffectStep.done(result);
         }
+
+        // 先填满当前组的结果预算，再推进下一组；每组只向自己的成本账回执成功量。
+        private void reportPlaced() {
+            if (batch == null) {
+                context.reportProgress(1);
+                return;
+            }
+            Request request = batch.requests.get(requestIndex);
+            request.context().reportProgress(1);
+            if (++requestPlaced == request.count()) {
+                requestIndex++;
+                requestPlaced = 0;
+            }
+        }
     }
 
     private record CountStep(int reads, @Nullable ChunkRequirement awaiting) {}
 
-    /**
-     * 一次转化内跨组共享的邻域账：方框内已有的同类方块数与本次已放量都只有一份，各组按同一余额分摊 limit。
-     * 计数游标也在这里，因此整个转化只扫一遍方框，而不是每组各扫一遍；计数完成前任何组都不放置。
-     * 区段剪枝：位置所在区段声明确实不含目标方块时跳过该位置，不读方块、不计工作单位，但仍受单步检查数上限约束。
-     * 剪枝只用于计数阶段：此时还没有本效果写入，区段调色板就是计数依据。
-     */
+    /** 同槽位各组共用的环境预算；按区段检查调色板，只遍历含目标方块区段与统计方框的交集。 */
     private static final class NeighbourCount {
         private final int limit;
         private final BlockPos center;
         private final int radius;
+        private @Nullable Iterator<BlockPos> sections;
         private @Nullable Iterator<BlockPos> positions;
         private @Nullable BlockPos pending;
         private int existing;
         private int placed;
         private boolean done;
-        // 区段探测缓存：同一区段内的连续位置只查一次调色板
-        private boolean probeCached;
-        private int probeSectionX;
-        private int probeSectionY;
-        private int probeSectionZ;
-        private boolean probeFound;
 
         private NeighbourCount(int limit, BlockPos center, int radius) {
             this.limit = limit;
@@ -475,100 +508,68 @@ public final class PlaceBlockExecutor {
             this.radius = radius;
         }
 
-        // 是否仍在计数：计数期间各组只推进计数、不放置
-        private boolean counting() {
-            return !done;
-        }
+        private boolean counting() { return !done; }
+        private int allowance() { return done ? Math.max(0, limit - existing - placed) : 0; }
+        private void recordPlaced() { placed++; }
 
-        // limit 余额：上限减去方框已有量与本次已放量
-        private int allowance() {
-            return done ? Math.max(0, limit - existing - placed) : 0;
-        }
-
-        // 记录一次成功放置：各组共用同一份已放量
-        private void recordPlaced() {
-            placed++;
-        }
-
-        /**
-         * 在本步剩余工作量内推进共享计数，数完或到达单步上限后停下。
-         * @param level 触发维度
-         * @param block 目标方块
-         * @param budget 本 tick 预算
-         * @param readCap 本步还能读取的方块数，与放置段共享 {@link #MAX_VISITS_PER_STEP}
-         * @return 本步读取量与当前断点需要等待的区块
-         */
+        // 区段探测和方块读取各计一次工作量；当前区段保留为跨刻的区块等待锚点。
         private CountStep advance(ServerLevel level, Block block, ServerTickBudget budget, int readCap) {
-            if (done) {
-                return new CountStep(0, null);
-            }
-            int reads = 0;
-            int probes = 0;
-            while (probes < MAX_PROBES_PER_STEP && reads < readCap) {
-                if (budget.exhausted() || reads >= budget.remainingWorkUnits()) {
-                    return new CountStep(reads, null);
+            int work = 0;
+            while (!done && work < readCap) {
+                if (budget.exhausted() || work >= budget.remainingWorkUnits()) {
+                    break;
                 }
                 if (pending == null) {
-                    if (!iterator().hasNext()) {
-                        done = true;
-                        return new CountStep(reads, null);
+                    if (sections == null) {
+                        int minY = Math.max(center.getY() - radius, level.getMinBuildHeight());
+                        int maxY = Math.min(center.getY() + radius, level.getMaxBuildHeight() - 1);
+                        if (minY > maxY) {
+                            done = true;
+                            break;
+                        }
+                        sections = BlockPos.betweenClosed(
+                                new BlockPos((center.getX() - radius) >> 4, minY >> 4, (center.getZ() - radius) >> 4),
+                                new BlockPos((center.getX() + radius) >> 4, maxY >> 4, (center.getZ() + radius) >> 4)).iterator();
                     }
-                    pending = iterator().next().immutable();
+                    if (!sections.hasNext()) {
+                        done = true;
+                        break;
+                    }
+                    BlockPos section = sections.next();
+                    pending = new BlockPos(section.getX() << 4, section.getY() << 4, section.getZ() << 4);
                 }
-                BlockPos pos = pending;
-                probes++;
-                if (level.isOutsideBuildHeight(pos.getY())) {
-                    pending = null;
+                if (!ChunkPresence.contains(level, pending)) {
+                    return new CountStep(work, ChunkRequirement.at(pending));
+                }
+                if (positions == null) {
+                    LevelChunkSection section = level.getChunk(pending.getX() >> 4, pending.getZ() >> 4)
+                            .getSection(level.getSectionIndex(pending.getY()));
+                    work++;
+                    StepWorkCounter.report(1);
+                    if (!section.maybeHas(state -> state.is(block))) {
+                        pending = null;
+                        continue;
+                    }
+                    BlockPos min = new BlockPos(Math.max(center.getX() - radius, pending.getX()),
+                            Math.max(Math.max(center.getY() - radius, pending.getY()), level.getMinBuildHeight()),
+                            Math.max(center.getZ() - radius, pending.getZ()));
+                    BlockPos max = new BlockPos(Math.min(center.getX() + radius, pending.getX() + 15),
+                            Math.min(Math.min(center.getY() + radius, pending.getY() + 15), level.getMaxBuildHeight() - 1),
+                            Math.min(center.getZ() + radius, pending.getZ() + 15));
+                    positions = BlockPos.betweenClosed(min, max).iterator();
                     continue;
                 }
-                if (!ChunkPresence.contains(level, pos)) {
-                    return new CountStep(reads, ChunkRequirement.at(pos));
-                }
-                if (sectionLacks(level, pos, block)) {
-                    // 该区段确定不含目标方块：本位置不必读取，也不计工作量
-                    pending = null;
-                    continue;
-                }
-                pending = null;
-                reads++;
-                // 计价：一次方块读取记 1 个工作单位
+                work++;
                 StepWorkCounter.report(1);
-                if (level.getBlockState(pos).is(block)) {
-                    existing++;
-                    if (existing >= limit) {
-                        // 已有量已到上限：本次转化不再有可放量，剩余位置不必再数
-                        done = true;
-                        return new CountStep(reads, null);
-                    }
+                if (level.getBlockState(positions.next()).is(block) && ++existing >= limit) {
+                    done = true;
+                }
+                if (!positions.hasNext()) {
+                    positions = null;
+                    pending = null;
                 }
             }
-            return new CountStep(reads, null);
-        }
-
-        // 区段调色板是否确定不含目标方块：不含时该区段的位置可直接跳过
-        private boolean sectionLacks(ServerLevel level, BlockPos pos, Block block) {
-            int sectionX = pos.getX() >> 4;
-            int sectionY = pos.getY() >> 4;
-            int sectionZ = pos.getZ() >> 4;
-            if (!probeCached || sectionX != probeSectionX || sectionY != probeSectionY || sectionZ != probeSectionZ) {
-                LevelChunk chunk = level.getChunk(sectionX, sectionZ);
-                LevelChunkSection section = chunk.getSection(level.getSectionIndex(pos.getY()));
-                probeFound = section.maybeHas(state -> state.is(block));
-                probeCached = true;
-                probeSectionX = sectionX;
-                probeSectionY = sectionY;
-                probeSectionZ = sectionZ;
-            }
-            return !probeFound;
-        }
-
-        // 方框遍历器：只在第一次推进时创建，坐标按需转成不可变 BlockPos
-        private Iterator<BlockPos> iterator() {
-            if (positions == null) {
-                positions = BlockPos.betweenClosed(center.offset(-radius, -radius, -radius),
-                        center.offset(radius, radius, radius)).iterator();
-            }
-            return positions;
+            return new CountStep(work, null);
         }
     }
 }

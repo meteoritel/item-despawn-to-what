@@ -60,13 +60,16 @@ final class SettlementReceipts {
         writer.catalystPlan(costPerGroup);
     }
 
-    // 先记账再扣库存：写盘可能抛异常，若先扣库存，abort 按库存回写待交付量时
-    // 这次扣减还没进 consumedSources，守恒会少算 cost 件；本方法只改账目并落账
-    void groupStarted(int cost) {
-        writer.groupStarted(cost);
+    // 开组不等于已消费源物品；方块的成本由后续成功回执占用。
+    void groupStarted() {
+        writer.groupStarted();
     }
 
-    // 固定顺序：催化剂已支付、源成本已扣减，才记账
+    void consumeSources(int count) {
+        writer.consumeSources(count);
+    }
+
+    // 催化剂支付后记账，与延迟源成本占用分别记录。
     void catalystGroupPaid(int paid) {
         writer.catalystGroupPaid(paid);
     }

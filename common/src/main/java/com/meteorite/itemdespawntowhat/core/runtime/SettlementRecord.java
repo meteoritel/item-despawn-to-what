@@ -7,7 +7,8 @@ import net.minecraft.world.item.ItemStack;
 
 /**
  * 一次转化的结算记录：计划量、已开始的组、真实完成量与返还交付进度。
- * 账目口径：N = C + 已交付返还 + 尚待交付返还，C = 每组源成本 × 已开始组数；
+ * 账目口径：N = C + 已交付返还 + 尚待交付返还，C 为已实际占用的源成本；
+ * 方块效果按真实放置进度占用源成本，已开始组数与已消费源物品分别记录。
  * appliedUnits 只由执行器回执累加，pendingUnits 是已派发未回执的部分，计划量不冒充成功量。
  * 记录可持久化：无法加入世界的返还留在 pendingDelivery 里，交给恢复任务（SettlementRecovery）逐步交付。
  * 催化剂按单独账目计数（catalystCostPerGroup / catalystGroupsPaid / catalystsConsumed），不进源物品守恒式。
@@ -90,10 +91,14 @@ public final class SettlementRecord {
         startedTick = gameTime;
     }
 
-    // 一组开始：该组的固定源成本已从结算库存扣减（只对已开始的组收费）
-    private void groupStarted(int cost) {
+    // 一组开始只增加次数；源成本由按行为占用的 consumeSources 单独记录。
+    private void groupStarted() {
         groupsStarted++;
-        consumedSources += Math.max(0, cost);
+    }
+
+    private void consumeSources(int count) {
+        consumedSources += count;
+        pendingDelivery -= count;
     }
 
     // 计划期登记每组的催化剂成本（0 表示该规则未声明 catalyst_cost）
@@ -402,8 +407,14 @@ public final class SettlementRecord {
         }
 
         // 开始一组并落账：调用方已从结算库存扣掉该组固定成本
-        void groupStarted(int cost) {
-            record.groupStarted(cost);
+        void groupStarted() {
+            record.groupStarted();
+            changed();
+        }
+
+        // 放置成功后占用源成本，同时更新恢复库存，保存时两个数量始终守恒。
+        void consumeSources(int count) {
+            record.consumeSources(count);
             changed();
         }
 

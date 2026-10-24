@@ -11,6 +11,8 @@ public enum CancelReason {
     DIMENSION_UNLOAD,
     // 停服：所有尚未开始的任务终止。
     SERVER_STOP,
+    // 所属结算中止，子效果必须先终止，再把未消耗库存交给恢复任务。
+    SETTLEMENT_ABORTED,
     // 源实体已被移除。
     ENTITY_REMOVED,
     // 开发场景主动停止。

@@ -9,7 +9,7 @@ authority: common/core/runtime、common/core/state
 
 > **TL;DR**
 > - 本模块把“掉落物存在”推进成一条可排期的链路：追踪实体 → 到点做预检查门禁 → 命中规则后整堆转入结算库存。
-> - 结算按规则声明的固定成本整组进行：每组成本先落账再扣减库存，效果经调度器排队，真实账目只认执行器回执；数量守恒由记录的待交付量承载。
+> - 结算按固定源成本确定组数：方块按实际放置进度占用成本，其余行为按组支付；全部效果终态后返还源余量，真实账目只认执行器回执。
 > - 所有维度与所有任务种类共用一份 `ServerTickBudget`；取消或异常只留一条待返还记录，世界写入交给 `SettlementRecovery`。
 
 **适用对象**：修改触发与结算语义、排查“该转化没转化 / 转化了但货没回来”、调整 tick 预算与退避参数、维护掉落物实体状态的开发者。
@@ -23,7 +23,7 @@ authority: common/core/runtime、common/core/state
 - 追踪：为进入世界的掉落物实体建立追踪，按候选规则的最早触发时间与剩余寿命算出首个检查刻。
 - 触发：自然到期由调度器的 `CONDITION_CHECK` 任务推动；环境伤害由两端 `ItemEntityMixin` 经 `RuleRuntimeHost` 转发到 `requestConversion`。
 - 预检查门禁与规则选择：实体有效性、区块 ticking、实体锁、永久禁转、转化冷却、候选存在性，再按排序取首个命中规则。
-- 完整组结算：把整堆转入结算库存，按初始产出预算逐组扣减成本、复核支付条件、派发效果、返还剩余；开组前支付受阻按容量、催化剂、门槛、流体四类原因区分，容量或催化剂真的不够才截断整批。
+- 完整组结算：把整堆转入结算库存，按初始环境预算定组、复核支付条件、分配源成本、派发效果并按实际占用返还剩余；开组前支付受阻按容量、催化剂、门槛、流体四类原因区分，容量或催化剂真的不够才截断整批。
 - 持久化与恢复：结算记录台账、待返还记录的启动补扫与交付。
 - 实体临时状态：新产物保护与冷却、返还物永久保护与永久禁转。
 - 共享预算实现：`core/runtime/scheduler` 提供 `core/api/scheduler` 契约的实现。
@@ -70,12 +70,13 @@ flowchart LR
 | 类型（`core/runtime`、`core/runtime/scheduler`、`core/state` 下） | 角色 | 职责 | 协作对象 |
 |---|---|---|---|
 | `ConversionRuntime` | 聚合根 | 按维度持有追踪表、物品 id 有序表与标签/气候缓存；负责追踪建立、排期、门禁、选规、发起结算与观测 | `ServerScheduler`、`RuleIndex`、`SettlementLedger`、`DropStateStore` |
-| `ConversionSettlement` | 事务敏感任务 | `EFFECT` 任务的聚合根：只推进阶段（计划/准备/派发/交付）与守住提交边界；取消与异常统一走 `abort` | `SettlementPhases`、`SettlementGroupPlan`、`SettlementCatalystStage`、`SettlementPayment`、`SettlementReceipts`、`SettlementItemOutputs`、`EffectTask` |
+| `ConversionSettlement` | 事务敏感任务 | `EFFECT` 任务的聚合根：只推进阶段（计划/准备/派发/交付）与守住提交边界；取消与异常统一走 `abort` | `SettlementPhases`、`SettlementGroupPlan`、`SettlementCatalystStage`、`SettlementPayment`、`SettlementReceipts`、`SettlementSourceCharge`、`SettlementItemOutputs`、`SettlementBlockOutputs`、`EffectTask` |
 | `SettlementPhases` | 阶段状态机 | 只维护当前阶段与合法跃迁，不读账目也不写世界 | `ConversionSettlement` |
 | `SettlementGroupPlan` / `SettlementCapacityProbe` | 计划与容量 | 候选选择与组数上界（唯一实现）、逐候选容量探测与产出预算（预算耗尽跨刻续算、已完成候选结果复用） | `ConversionSettlement`、`EffectType.capacityDemand`、`NearbyProductLimits`、`RoundRobinCursors` |
 | `SettlementCatalystStage` | 催化剂编排 | 计划期催化剂上界、预留组与开组前门槛/流体复核对象 | `ConversionSettlement`、`CatalystReservations`、`CatalystThresholdCheck`、`FluidSourceResolver` |
 | `SettlementPayment` / `SettlementReceipts` | 支付与记账 | 开组前输入复核、催化剂支付、返还分批交付；账目唯一写入通道与库存所有权 | `CatalystReservations`、`ReturnItemSpawner`、`SettlementRecord.Writer` |
 | `SettlementLedger` / `SettlementRecord.Writer` | 持久化聚合 | 主世界 `SavedData` 台账；记录状态、计数与待交付量只经 `Writer` 改动，结算步内累积、步末一次提交（写回双索引并标脏），中止/取消/失败与恢复收尾在步外立即提交 | `ConversionRuntime`、`SettlementRecovery`、`ConversionSettlement` |
+| `SettlementSourceCharge` / `SettlementBlockOutputs` | 方块结算与汇总 | 同组源成本按最高占用计费；同候选、槽位与目标方块合并为一次扫描，保留每组到期刻与消费回执 | `ConversionSettlement`、`PlaceBlockExecutor.BatchPlan` |
 | `SettlementRecovery` | 补偿任务 | 只交付记录里的待交付库存，交付成功后才扣减并落账，完成/失败/取消都幂等关闭 | `SettlementLedger`、`ServerScheduler` |
 | `EffectTask` | 并发敏感 | 单个效果的执行包装：一次求值、推进执行、回执入账；终态先摘引用再回执 | `ConversionRuntime.startEffect`、`EffectResult` |
 | `ServerScheduler` / `ServerTickBudget` | 共享预算 | 每服务器一份预算，按维度 realm 与任务种类 lane 公平轮转，按真实世界操作量计费 | 全部任务类型 |
@@ -157,31 +158,38 @@ flowchart TB
     T -->|"门槛或流体不足"| UB["弃当前候选组，重扫其它候选"]
     UB --> S
     T -->|"预算耗尽"| V["yield，本刻一件不扣"]
-    T -->|"通过"| W["groupStarted 落账 → payGroup 扣减 → 派发 EffectTask"]
+    T -->|"通过"| W["支付催化剂与流体 → 开组与源成本分配 → 派发效果"]
     W --> S
     S --> X{"组数已用完"}
-    X --> DEL
-    DEL --> Y{"held 交付完毕且汇总物品任务收尾"}
+    X --> WAIT["等待全部效果终态；方块按进度占用源成本"]
+    WAIT --> DEL
+    DEL --> Y{"held 交付完毕"}
     Y -->|"区块卸载"| Z["retry，保留待交付"]
     Y -->|"是"| DONE["complete 落账，记录进入可裁剪区间"]
-    S -.->|"任何步骤异常或取消"| AB["abort：固定顺序登记待返还 + interrupt/fail，不做世界写入"]
+    S -.->|"任何步骤异常或取消"| AB["abort：先取消子任务，再登记待返还 + interrupt/fail"]
 ```
 
 结算的硬口径：
 
 - **补偿单元**：`source.copy()` 取走整堆、`source.setCount(0)`、打 `converted` 标签、经 `Writer.register` 写记录、把 `ConversionSettlement` 作为 `EFFECT` 任务入队。任一步抛错都在 `finally` 里撤销：弃记录、去标签、把数量写回源堆并保留追踪。
-- **成组对应**：每组固定成本取规则的 `source_cost`（未声明时按源物品计 1）；`payGroup` 返回预算耗尽时整步 yield 且一件不扣，返回催化剂不足时截断到已开组数并返还剩余，返回门槛或流体不足时只弃当前候选组并重扫一次、重扫也开不出一组时才按该原因截断，扣减与产出始终成组对应。每组先 `groupStarted` 落账再扣减库存：落账可能因写盘异常中断，若先扣库存，`abort` 按库存回写的待交付量会漏掉这次扣减对应的已支付成本；两步之间没有让出点，扣减本身也不会失败。催化剂先过门槛再 `consume_counts`，可用组数作为计划组数的上界。
+- **成组对应**：固定源成本决定准入与组数上界；开组先复核门槛、催化剂与流体并支付对应输入，`groupStarted` 只记录开始次数。`SettlementSourceCharge` 为每组独立记录实际源占用：方块槽位按 `ceil(成功放置量 × 每组源成本 / 该槽 count)` 计费，同组多槽取最高占用且不重复收费；非方块行为、概率落空及无效固定输入占用完整组成本。每次新增消费通过 `Writer.consumeSources` 同时增加 `consumedSources` 并减少 `pendingDelivery`，随后扣除 held，无让出点。催化剂与流体沿用开组支付。
 - **支付受阻原因**：截断时把原因（`capacity_short` / `catalyst_short` / `threshold_short` / `fluid_short`）写入 WARN 日志与 `PAYMENT_BLOCKED` 观测事件（`record` / `rule` / `reason` / `groups_started` / `group_count` / `stopped_groups`），回执与日志因此可区分不足来源；容量与催化剂真的不够才截整批，门槛或流体只是当刻不满足，优先换候选。
 - **催化剂复核口径**：只校验实体存活、物品类型与件数，候选集沿用计划期按共享半径收集的实体并按 UUID 重读；可用量统一取「现存件数 − 其它结算已预留」，计划期上界与开组前复核共用同一口径。位置不参与复核：催化剂被推动或挤出原位不改变归属，只有实体消失、类型变化或件数不足才算不足。
 - **准备成组**：计划组数先由源量与每组源成本、催化剂可用组数取小，再由产出预算封顶——产出预算按候选完成初始邻近存量查询、按声明的每轮理论产量折算可开组数，测完所有候选后确定，只准备预算覆盖的那部分，避免整批固定输入准备好却因邻近阈值开不出组而作废。固定输入按「候选 + 槽位 + 组序号」幂等：成功转化当刻只领先固定前 `prepare_groups_per_step` 组（保持准备阶段异常仍在检查步骤内补偿），其余组由结算任务的 PREPARING 阶段每步最多固定同样多组、按组续接；实际准备组数与最终开组数在 `SETTLEMENT_COMPLETED` 的 `prepared_groups` 与 `groups` 中可核对。
 - **准备计费**：每次固定输入（例如开战利品表）按 1 个工作单位上报，准备量因此进入与其它世界操作同一份预算计价，不会被当成零成本勾当。
-- **数量守恒**：转入结算库存的原始数量 = 已扣减成本总量 + 已交付返还 + 待交付返还；成本总量等于每组成本乘以已完成组数。概率落空的组仍计入“已支付组”，回执以 `SKIPPED` 落账而不是从账上抹掉。
+- **数量守恒**：转入结算库存的原始数量 = 已扣减成本总量 + 已交付返还 + 待交付返还；成本总量为各组的实际源占用之和，已开始组数与实际消费量分别记录。概率落空的组仍计入“已支付组”，回执以 `SKIPPED` 落账而不是从账上抹掉。
 
-产出预算在计划期根据初始邻近存量确定，生成期间只递减预算，不再查询上限；外部新增产物不挤占额度，允许最终总量超过阈值。预算按声明数量计算，不折减概率；实际是否用满由效果类型决定，少产不补开组。需求聚合同一候选内可重复效果声明的「每轮一组最小产出需求」（`EffectType.capacityDemand`）：具体物品与通用实体按件数累计，产物类型未知的产出（战利品表）按区域物品总量保守计入，经验不占容量；声明是规划下界而非硬截断，实际产出可能更多。搜索盒以成功转化当刻固定的触发点为准，与效果执行器同一口径。各候选仅完成一轮初始查询，查询覆盖全部候选、不按计划组数提前结束；预算耗尽时保留已完成项并跨刻续接，需求表、引用匹配器（含预建标签键）与搜索盒在结算内复用。重叠物品或实体引用在结算内共享理论额度，引用交集与扣减表预计算后复用；类型未知的物品产出按声明下界扣减相关额度。轮转模式下跨结算共享游标，被跳过的候选不推进游标。
+物品、通用实体与战利品的环境预算（产出预算）在计划期根据初始邻近存量确定，生成期间只递减预算，不再查询上限；外部新增产物不挤占额度，允许最终总量超过阈值。预算按声明数量计算，不折减概率；实际是否用满由效果类型决定，少产不补开组。需求聚合同一候选内可重复效果声明的「每轮一组最小产出需求」（`EffectType.capacityDemand`）：具体物品与通用实体按件数累计，产物类型未知的产出（战利品表）按区域物品总量保守计入，经验不占容量；声明是规划下界而非硬截断，实际产出可能更多。搜索盒以成功转化当刻固定的触发点为准，与效果执行器同一口径。各候选仅完成一轮初始查询，查询覆盖全部候选、不按计划组数提前结束；预算耗尽时保留已完成项并跨刻续接，需求表、引用匹配器（含预建标签键）与搜索盒在结算内复用。重叠物品或实体引用在结算内共享理论额度，引用交集与扣减表预计算后复用；类型未知的物品产出按声明下界扣减相关额度。轮转模式下跨结算共享游标，被跳过的候选不推进游标。
 
 结算的协作结构：聚合根按 `SettlementPhases` 的当前阶段调用对应协作者，并统一处理中止、失败、取消与步骤出口的待交付量对齐。`SettlementGroupPlan` 定组数与逐组选候选，组数上界 `bound`（初始预算与本地剩余取小）是唯一实现，派发期只消耗已分配预算；`SettlementCapacityProbe` 把候选每轮产出折算成可开组数并封装邻近物品/实体计数；`SettlementCatalystStage` 管计划期催化剂上界与预留组，并按 UUID 生成开组前的门槛复核对象；`SettlementPayment` 做开组前输入复核、催化剂支付与返还交付；`SettlementReceipts` 是账目唯一写入通道并持有待交付库存的所有权。派发阶段按「选组 → 支付 → 派发效果」拆成单一语义的步骤：开组受阻按原因分流为让出、重选候选或截断整批，效果槽位逐个派发，任一异常仍回到聚合根收尾。账目写入在步内累积、步末合并落账一次，成批返还因此不再按堆提交；战利品固定在成功转化当刻抽取并复制成不可变堆叠列表，执行状态共享该快照，只在写入世界时按堆复制。
 
-直接物品由 `SettlementItemOutputs` 汇总已支付组的成功固定输入，同一结算、候选、效果槽位与已解析物品共用总件数。概率及标签抽取保持逐组独立；所有组派发后生成一个汇总任务，按堆叠上限拆分并沿用共享预算跨 tick 交付，尾堆只生成一次。汇总交付不早于该桶最晚的原定到期时刻；源返还完成后，结算仍等待汇总物品任务收尾，真实写入量持续记账。执行状态通过 `requiredChunks()` 声明推进所需区块，中途等待返回 `EffectStep.AwaitChunks`；`EffectTask` 在重试刻统一复查区块，沿用连续 1200 tick 等待上限，就绪后从原执行状态续接；共享计数游标由其它组推进时，当前需求替代旧断点请求。`Yield` 和 `Delay` 分别表示预算续接与正常间隔，后者直接按到期刻排期，两者均不累计区块等待。超时以失败回执终结效果，并释放结算等待计数。汇总物品任务每个桶在排期时与终态各上报一次 `ITEM_BATCH_SCHEDULED` / `ITEM_BATCH_FINISHED`，字段为 `record`、`candidate`、`item`、`items`、`ready_tick`、`pending_item_batches`；`SETTLEMENT_COMPLETED` 同带 `pending_item_batches`（完成时为零）。调试场景可用 `events/ITEM_BATCH_SCHEDULED` / `events/ITEM_BATCH_FINISHED` 断言排期与收尾；场景结束输出的 `settlement_snapshot` 汇总已完成结算的账目总量（含 `groups`、`prepared_groups`、`pending_delivery`），在飞桶数看事件字段。战利品沿用独立堆叠交付。
+直接物品由 `SettlementItemOutputs` 汇总已支付组的成功固定输入，同一结算、候选、效果槽位与已解析物品共用总件数。概率及标签抽取保持逐组独立；所有组派发后生成一个汇总任务，按堆叠上限拆分并沿用共享预算跨 tick 交付，尾堆只生成一次。汇总交付不早于该桶最晚的原定到期时刻；全部效果任务终态前，结算保留源库存与回执写入窗口；随后交付剩余源库存并完成。执行状态通过 `requiredChunks()` 声明推进所需区块，中途等待返回 `EffectStep.AwaitChunks`；`EffectTask` 在重试刻统一复查区块，沿用连续 1200 tick 等待上限，就绪后从原执行状态续接；共享计数游标由其它组推进时，当前需求替代旧断点请求。`Yield` 和 `Delay` 分别表示预算续接与正常间隔，后者直接按到期刻排期，两者均不累计区块等待。超时以失败回执终结效果，并释放结算等待计数。汇总物品任务每个桶在排期时与终态各上报一次 `ITEM_BATCH_SCHEDULED` / `ITEM_BATCH_FINISHED`，字段为 `record`、`candidate`、`item`、`items`、`ready_tick`、`pending_item_batches`；`SETTLEMENT_COMPLETED` 同带 `pending_item_batches`（完成时为零）。调试场景可用 `events/ITEM_BATCH_SCHEDULED` / `events/ITEM_BATCH_FINISHED` 断言排期与收尾；场景结束输出的 `settlement_snapshot` 汇总已完成结算的账目总量（含 `groups`、`prepared_groups`、`pending_delivery`），在飞桶数看事件字段。战利品沿用独立堆叠交付。
+
+方块的结果预算来自各已准入组的 `count`，环境预算来自 `radius` 内可替换且可支撑的位置及 `limit` 余量。`SettlementBlockOutputs` 按候选、槽位和实际目标方块汇总；每批保留一个候选游标，各组依次填满并在各自到期刻后放置。半径或上限耗尽后终结任务，未占用源成本进入原持久返还路径。例如 10 个源物品、每组成本 1、`count: 2`，成功 6 个方块消耗 3 个源并返还 7 个；成功 7 个消耗 4 个源并返还 6 个。多个方块槽位共享同组成本，不同非方块行为已经占满成本时该组无剩余源可返还。
+
+邻域计数按 chunk section 遍历，调色板不含目标方块时跳过整个区段；其余区段只读取与统计方框的交集。区段探测、位置读取与放置尝试共用每步 128 工作单位上限，同时受公共 tick 剩余额度约束。计数及放置都保留跨刻游标，结果预算与环境余额分别检查，成功量不会在 limit 判定里重复扣减。
+
+所有 `EffectTask` 注册同一终态计数；方块、实体、经验与世界效果的延迟或跨刻回执都在结算终结前入账。中止时先取消本结算持有的子任务句柄，再移交未消耗源库存，防止返还后继续产出。
 
 ### 4.4 结算记录、恢复与实体状态写入
 
@@ -264,4 +272,4 @@ flowchart TB
 - 保存后换索引的编辑链路：[authoring](authoring.md)
 - 跨模块链路总览：[architecture/key-flows](../architecture/key-flows.md)
 - 模块索引：[modules](README.md)
-- 决策：[ADR-0023](../adr/0023-triggers-fixed-cost-and-complete-group-settlement.md)、[ADR-0024](../adr/0024-shared-server-tick-budget-scheduler.md)、[ADR-0034](../adr/0034-scheduler-contract-and-implementation-layering.md)、[ADR-0038](../adr/0038-settlement-single-commit-point.md)、[ADR-0041](../adr/0041-input-thresholds-and-consumption.md)
+- 决策：[ADR-0043](../adr/0043-result-budget-and-source-settlement.md)、[ADR-0024](../adr/0024-shared-server-tick-budget-scheduler.md)、[ADR-0034](../adr/0034-scheduler-contract-and-implementation-layering.md)、[ADR-0038](../adr/0038-settlement-single-commit-point.md)、[ADR-0041](../adr/0041-input-thresholds-and-consumption.md)

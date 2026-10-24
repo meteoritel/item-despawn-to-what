@@ -128,7 +128,7 @@ The example above uses `source_cost` of 1 chicken per group. Assume this rule ha
 
 ## What Each Group Pays: Fixed Costs and Consumption
 
-`source_cost` is both the source threshold and payment for each group, defaulting to 1. Catalyst `counts` are thresholds and `consume_counts` are independent payments. Rule-level `consume_fluid` enables fluid source consumption. Inputs are checked and paid before each group starts.
+`source_cost` is the source threshold and maximum source payment per group, defaulting to 1. Blocks consume source items in proportion to actual placement; other effects pay per group. Catalyst `counts` are thresholds and `consume_counts` are independent payments. Rule-level `consume_fluid` enables fluid source consumption. Inputs are checked, and catalysts and fluids paid, before each group starts.
 
 ### Source Cost (source_cost)
 
@@ -148,7 +148,7 @@ Write an object that maps a source item reference to a positive integer. The num
 
 - Every key must match an entry you wrote in `source.items`, and it must be written the same way: an item where you wrote an item, a `#tag` where you wrote a `#tag`. The number must be a positive integer. A rule that breaks either condition is rejected.
 - You can list several entries, for example `{ "minecraft:egg": 2, "#minecraft:saplings": 1 }`. The current stack decides which entry applies: the mod first looks for an entry that names the item exactly, then walks `source.items` in definition order for the first matching `#tag` entry, and consumes 1 when nothing matches.
-- The meaning is per group and does not depend on the stack size: a value of 2 opens one group per 2 source items, and a stack of 5 gives 2 groups and returns the remaining item.
+- The threshold is per group: a cost of 2 admits at most 2 groups from a stack of 5 and returns at least 1 source item. Block placement also returns source cost left unused when its result budget cannot be exhausted.
 
 ### Catalyst Thresholds and Payments (catalyst_cost)
 
@@ -187,15 +187,15 @@ Without `source_cost`, each group's source threshold and payment are 1. Catalyst
 When a rule picks up a dropped item, the whole stack leaves the world and enters settlement. The mod then works through these steps:
 
 1. **Count the groups and set the output budget**: the number of groups is the stack size divided by the source cost per group, rounded down. Before the first group opens, the mod derives an **output budget** from `nearby_products` for the candidate: centered on the trigger position as fixed when the conversion succeeds, it counts the matching products already nearby, subtracts them from the limit, divides the room by the output declared per group, and keeps the smaller of that and the group count. The budget is worked out once during planning from the declared amounts, without any probability discount. Opening groups never queries the limit again, products added from elsewhere do not take from the budget, and the final stock may therefore exceed the limit. Experience output does not draw on this capacity; loot tables, whose product types are unknown, count conservatively against the regional item total; a candidate holding only one-shot effects always counts as one group. Candidates in the same settlement that use the same product share one budget.
-2. **Open groups one by one**: each conversion group first pays the catalyst cost, when the rule sets `catalyst_cost`, then loses its source items, and then runs every effect of the picked candidate. When any step cannot be paid, that group does not open.
-3. **Return what is left**: the unused part of the stack comes back to the world as dropped items near the trigger position. When no position is free nearby, the mod searches upward and, in the last resort, spawns the items above the build limit so that they fall back down.
+2. **Open groups one by one**: check inputs, pay catalysts and fluid sources, and assign the group its source allowance before dispatching effects. Block placement consumes this allowance as placements succeed; other effects and chance attempts pay the full group cost. A group cannot open when its inputs are insufficient.
+3. **Return what is left**: once every delayed effect ends, unopened inventory and source allowance unused by block placement come back to the world as dropped items near the trigger position. When no position is free nearby, the mod searches upward and, in the last resort, spawns the items above the build limit so that they fall back down.
 4. **A returned item never converts again**: a returned source item carries permanent protection, so it neither converts again nor splits the stack once more. This keeps the mod out of a loop of return, convert, and return.
 
 About counting only real output:
 
 - The output ledger records only what actually took effect. When an effect in a group produces nothing because its chance missed or it failed, the mod does not count that group as successful output: a planned amount and a successful amount are two different numbers.
-- A cost that was consumed stays consumed even when the output fails. A missed chance still consumes the source items of that group, so a retry is not free.
-- The other way around, a cost for a group that never opened never happened at all: those source items stay in the stack and come back as returned items.
+- Consumed cost stays consumed. Missed chances and invalid targets pay the full group cost. Block placement uses `ceil(placed × source_cost ÷ count)` source items per group; multiple block slots share the highest cost used, and a dispatched non-block effect uses the full group cost.
+- Unopened inventory and unused block source allowance remain in settlement. With 10 sources able to place 20 blocks, placing only 6 consumes 3 sources and returns 7. When no position is available or `limit` is already full, all sources return if no other paid behavior uses them.
 - The output budget is debited per opened group: once a group has paid its cost, it takes the share of the budget its declared output needs, and that share stays spent even when a missed chance leaves the group without real output.
 
 About group counts and effect runs:
@@ -207,7 +207,7 @@ About interruption and recovery:
 
 - Leaving the world, stopping the server, or unloading the target dimension never makes the undelivered part vanish. Consumed costs stay on record, and the mod delivers the source items that still owe a return once that dimension loads again. It prefers the original trigger position, and an older save without position data falls back to the area around the spawn point of that dimension.
 - A returned item that cannot be delivered yet, because chunks are still loading, becomes a **pending return**. The mod delivers it once that dimension loads again.
-- The recovery step does one thing only: it hands back the source items that owe a return. It does not run the rule again and does not re-run effects that were already dispatched. Output that was dispatched but has not reported back never counts as a source item that owes a return, so source items and output never pay for each other.
+- The recovery step does one thing only: it hands back the source items that owe a return. It does not run the rule again and does not re-run effects that were already dispatched. Interruption stops child tasks first. Unused block source allowance returns along with unopened inventory; successfully placed blocks remain, with their source cost recorded.
 
 ## Protection and Conversion Ban for Products
 

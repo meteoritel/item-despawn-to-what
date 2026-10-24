@@ -5,6 +5,7 @@ import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.CancelReason;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ScheduledTaskHandle;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
@@ -17,6 +18,8 @@ import com.meteorite.itemdespawntowhat.core.model.OutcomeCandidate;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerScheduler;
 import com.meteorite.itemdespawntowhat.core.type.effect.exec.SpawnEntityExecutor;
+import com.meteorite.itemdespawntowhat.core.type.effect.PlaceBlockEffect;
+import com.meteorite.itemdespawntowhat.core.type.effect.exec.PlaceBlockExecutor;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -26,6 +29,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -41,8 +45,8 @@ import java.util.function.IntConsumer;
  *    固定输入按「候选 + 槽位 + 组序号」幂等，已由成功转化当刻领先准备的组直接复用；
  * 3) 派发——每开始一组时独立选候选：轮询从共享游标依次搜索能完成一组的候选，
  *    确定该组并开组后才推进游标；容量不足的候选跳过，全部候选都开不出一组时停止并返还剩余库存；
- *    逐组从结算库存扣除固定源成本，并把候选内各效果派发一次（延迟交给调度器）；
- * 4) 交付——直接物品按候选、槽位与物品汇总装箱，剩余库存分批返还，汇总物品任务收尾后完成。
+ *    每组分配源成本，方块按实际放置占用，其它行为按组支付；效果延迟交给调度器；
+ * 4) 交付——等待全部效果终态，剩余源库存分批返还后完成。
  * 协作者：
  * - {@link SettlementGroupPlan} 候选与组计划：定组数、逐组选候选，组数上界只有一处实现；
  * - {@link SettlementCapacityProbe} 容量探测：把候选每轮产出折算成可开组数；
@@ -50,6 +54,8 @@ import java.util.function.IntConsumer;
  * - {@link SettlementPayment} 支付与交付：开组前输入复核、催化剂扣除与返还交付；
  * - {@link SettlementReceipts} 回执记账：账目的唯一写入通道与库存所有权；
  * - {@link SettlementItemOutputs} 直接物品汇总：已支付组按物品件数装箱，保留最晚原定执行时刻；
+ * - {@link SettlementBlockOutputs} 方块汇总：同目标共享候选游标，保留逐组到期刻；
+ * - {@link SettlementSourceCharge} 源成本占用：同组效果共享成本，按最高占用递增扣除；
  * - {@link SettlementPhases} 阶段状态机：只维护当前阶段与合法跃迁。
  * 一次性效果（EffectType.oneShot）：不参与候选数量上限；仅含一次性效果的候选最多一组；
  * 同一源请求内每个一次性效果槽（候选 id + 槽序号）只尝试一次，概率落空或条件不满足也算已尝试，续跑不重试。
@@ -128,7 +134,11 @@ final class ConversionSettlement implements ServerTask {
     private boolean groupOpen;
     private boolean cancelled;
     private final SettlementItemOutputs itemOutputs = new SettlementItemOutputs();
+    private final SettlementBlockOutputs blockOutputs = new SettlementBlockOutputs();
     private int pendingItemBatches;
+    private int pendingEffects;
+    private final List<ScheduledTaskHandle> effectTasks = new ArrayList<>();
+    private SettlementSourceCharge sourceCharge;
 
     // 构造结算任务：源库存 held 已在触发时刻整堆移出源实体，受控写入句柄由调用方（首次登记方）给出
     ConversionSettlement(ConversionRuntime runtime, ServerScheduler scheduler, ServerLevel level, ItemEntity source,
@@ -238,7 +248,7 @@ final class ConversionSettlement implements ServerTask {
     }
 
     // 中止结算并把待返还量落盘：取消路径（onCancelled）与异常路径（step 的 catch、onFailed）共用同一条顺序，
-    // 不新造第二份账目口径。顺序：幂等位 → 待返还同步 → 释放未支付预留 → 状态记录 → 观测。
+    // 不新造第二份账目口径。顺序：幂等位 → 取消子任务 → 待返还同步 → 释放未支付预留 → 状态记录 → 观测。
     // 本方法不做任何世界写入（维度卸载/停服时加入世界不安全，待返还数据留给恢复任务 SettlementRecovery）；
     // 返回 false 表示此前已中止过（幂等，不重复写盘）。failed=true 时记 FAILED 语义，否则记 INTERRUPTED。
     // 批量取消时单个任务收尾失败不得让同批其它任务漏掉中止：每一步各自兜异常，失败只降级为日志。
@@ -247,8 +257,14 @@ final class ConversionSettlement implements ServerTask {
             return false;
         }
         cancelled = true;
-        // 尚未派发的汇总产物随结算中止丢弃；已支付组不恢复执行，返还只覆盖未支付源库存。
+        // 先终止已排期的子任务，返还库存移交后不会再发生世界写入。
+        for (ScheduledTaskHandle task : effectTasks) {
+            task.cancel(CancelReason.SETTLEMENT_ABORTED);
+        }
+        effectTasks.clear();
+        // 尚未派发的汇总产物随结算中止丢弃；效果不恢复执行，未消耗源库存统一返还。
         itemOutputs.clear();
+        blockOutputs.clear();
         // 中止即移交库存所有权：剩余库存改由恢复任务交付，本任务不再改写待返还量
         receipts.giveUpStock();
         try {
@@ -455,6 +471,15 @@ final class ConversionSettlement implements ServerTask {
             budget.charge(1);
             dispatchedThisStep++;
         }
+        while (!blockOutputs.isEmpty()) {
+            if (budget.exhausted() || dispatchedThisStep >= batch) {
+                return StepResult.yield(1, 1);
+            }
+            SettlementBlockOutputs.Batch output = blockOutputs.next();
+            scheduleEffect(output.readyTick(), output.context(), output.effect(), output.preparation(), () -> {});
+            budget.charge(1);
+            dispatchedThisStep++;
+        }
         // 派发结束：待交付量由步骤出口对齐，随后进入交付阶段
         phases.dispatchingCompleted();
         return StepResult.yield(1, 1);
@@ -517,19 +542,15 @@ final class ConversionSettlement implements ServerTask {
         int paidCatalyst = pay.paid();
         groupThreshold = null;
         groupFluid = null;
-        int cost = Math.min(record.sourceCostPerGroup(), held.getCount());
-        // 先记账再扣库存：写盘可能抛异常，若先扣库存，abort 按库存回写待交付量时
-        // 这次扣减还没进 consumedSources，守恒会少算 cost 件；groupStarted 只改账目并落账，
-        // 与 setCount 之间没有让出点，扣减本身也不会失败，因此不存在反向缺口
-        receipts.groupStarted(cost);
-        if (cost > 0) {
-            // 已开始的组支付完整固定成本，成本从结算库存里扣掉
-            held.setCount(held.getCount() - cost);
+        int cost = record.sourceCostPerGroup();
+        receipts.groupStarted();
+        sourceCharge = new SettlementSourceCharge(cost, this::consumeSources);
+        if (pendingCandidate.effects().stream().noneMatch(PlaceBlockEffect.class::isInstance)) {
+            sourceCharge.chargeFully();
         }
-        // 固定顺序：催化剂已支付、源成本已扣减，才记账
+        // 催化剂已实际支付；源成本可继续随延迟方块的成功回执扣除。
         receipts.catalystGroupPaid(paidCatalyst);
-        // 已开始组的扣减与记账在同一刻完成（两者之间没有让出点），且待交付量在本步骤出口对齐：
-        // 中途停服重启后，已支付成本的组不会因为未落账而被当作「未开始库存」重复返还
+        // 开组次数与源消费量分开记录；每次源消费同步减少账面待返还量。
         groupsStarted++;
         groupOpen = true;
         effectCursor = 0;
@@ -614,6 +635,10 @@ final class ConversionSettlement implements ServerTask {
 
     // 交付：剩余库存作为返还掉落物分批加入世界；失败/未加载区块时保留待返还并重试
     private StepResult deliver(ServerTickBudget budget) {
+        // 方块预算尚未消费完时库存仍归效果所有；所有任务收尾后才交付剩余源物品。
+        if (pendingEffects > 0) {
+            return StepResult.yield(1, 1);
+        }
         SettlementPayment.DeliveryOutcome outcome =
                 payment.deliverRemaining(budget, scheduler.config().dispatchBatchSize());
         if (outcome == SettlementPayment.DeliveryOutcome.RETRY) {
@@ -624,13 +649,10 @@ final class ConversionSettlement implements ServerTask {
             // 位置搜索预算用尽或批量上限已到：保留待返还、下刻从断点继续，不整批放弃
             return StepResult.yield(1, 1);
         }
-        // 汇总物品仍在等待延迟、预算或区块时保留账目写入窗口，真实交付回执到齐后再完成。
-        if (pendingItemBatches > 0) {
-            return StepResult.yield(1, 1);
-        }
         // 返还已全部交付：完成记录并交出库存所有权（此后不再对齐待交付量）
         receipts.complete(level.getGameTime());
         receipts.giveUpStock();
+        effectTasks.clear();
         // 防御：已完成记录的未支付预留必然为空（取消/不足路径已释放），这里幂等再释放一次
         reservations().releaseOwner(record.id());
         phases.deliveringCompleted();
@@ -655,6 +677,10 @@ final class ConversionSettlement implements ServerTask {
     private EffectContext contextForGroup(int groupIndex) {
         // 进度回执经受控句柄改账目：执行器持有的只是写入通道，拿不到可任意变更账目的裸入口
         IntConsumer sink = receipts.progressSink();
+        return contextForGroup(groupIndex, sink);
+    }
+
+    private EffectContext contextForGroup(int groupIndex, IntConsumer sink) {
         int covered = record.sourceCostPerGroup() > 0 ? record.sourceCostPerGroup() : 1;
         // 候选级位置策略（safe_spawn / fill_origin）随组上下文传给执行器；位置用成功转化当刻的固定值
         return new RuntimeEffectContext(level, source, triggerPosition, rule.id(), scheduler,
@@ -666,6 +692,17 @@ final class ConversionSettlement implements ServerTask {
     private void dispatchEffect(Effect effect, int slot, EffectContext context, int groupIndex) {
         EffectPreparation preparation = preparations.get(
                 new ConversionRuntime.PreparedEffectKey(candidate.id(), slot, preparedGroupIndex(effect, groupIndex)));
+        if (effect instanceof PlaceBlockEffect block) {
+            if (preparation instanceof PlaceBlockExecutor.PlacementPlan plan && plan.block() != null) {
+                context = contextForGroup(groupIndex + 1,
+                        sourceCharge.placementProgress(block.count(), receipts.progressSink()));
+            } else {
+                // 概率落空与无效固定输入仍属于已支付的组尝试。
+                sourceCharge.chargeFully();
+            }
+        } else {
+            sourceCharge.chargeFully();
+        }
         int delay = Math.max(0, effect.delayTicks());
         if (RuntimeObserver.current().enabled()) {
             RuntimeObserver.current().observe(source, "EFFECT_SCHEDULED", "effect", effect.type(),
@@ -675,21 +712,41 @@ final class ConversionSettlement implements ServerTask {
         if (itemOutputs.collect(candidate.id(), slot, effect, preparation, context, readyTick)) {
             return;
         }
-        RuntimeObserver.current().schedule(source, scheduler, level.dimension(),
-                readyTick,
-                new EffectTask(runtime, level, source, context, effect, preparation, this::account));
+        if (blockOutputs.collect(candidate.id(), slot, effect, preparation, context, readyTick)) {
+            return;
+        }
+        scheduleEffect(readyTick, context, effect, preparation, () -> {});
+    }
+
+    // 所有效果共用生命周期计数，延迟方块、实体和世界效果的回执均在结算完成前入账。
+    private void scheduleEffect(long readyTick, EffectContext context, Effect effect,
+                                @Nullable EffectPreparation preparation, Runnable completed) {
+        pendingEffects++;
+        try {
+            effectTasks.add(RuntimeObserver.current().schedule(source, scheduler, level.dimension(), readyTick,
+                    new EffectTask(runtime, level, source, context, effect, preparation, this::account, () -> {
+                        pendingEffects--;
+                        completed.run();
+                    })));
+        } catch (RuntimeException failure) {
+            pendingEffects--;
+            throw failure;
+        }
+    }
+
+    private void consumeSources(int count) {
+        receipts.consumeSources(count);
+        held.shrink(count);
     }
 
     // 一个汇总桶只注册一个效果任务；终态通知释放等待计数，产出回执只记录真实执行结果。
     private void scheduleItemBatch(SettlementItemOutputs.Batch output) {
         pendingItemBatches++;
         try {
-            RuntimeObserver.current().schedule(source, scheduler, level.dimension(), output.readyTick(),
-                    new EffectTask(runtime, level, source, output.context(), output.effect(), output.preparation(),
-                            this::account, () -> {
-                                pendingItemBatches--;
-                                observeItemBatch("ITEM_BATCH_FINISHED", output);
-                            }));
+            scheduleEffect(output.readyTick(), output.context(), output.effect(), output.preparation(), () -> {
+                pendingItemBatches--;
+                observeItemBatch("ITEM_BATCH_FINISHED", output);
+            });
         } catch (RuntimeException failure) {
             pendingItemBatches--;
             throw failure;
