@@ -3,14 +3,16 @@ package com.meteorite.itemdespawntowhat.client.network;
 import com.meteorite.itemdespawntowhat.core.network.transport.OpenRuleEditorPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleCatalogPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditPayloadRouter;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveResultPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleLifespanPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveProgressPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveResultPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSourceViewChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSourceViewPayload;
+import java.util.function.Consumer;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleLifespanPayload;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 
 /**
  * 新链路配置编辑 S2C 载荷的 Fabric 客户端接收器。
@@ -29,32 +31,22 @@ public final class FabricRuleEditClientRegistrar {
      */
     @SuppressWarnings("resource")
     public static void register() {
-        ClientPlayNetworking.registerGlobalReceiver(RuleSnapshotPayload.TYPE,
-                (payload, context) -> context.client().execute(() -> RuleEditPayloadRouter.dispatchSnapshot(payload)));
-
-        ClientPlayNetworking.registerGlobalReceiver(RuleSnapshotChunkPayload.TYPE,
-                (payload, context) -> context.client().execute(() -> RuleEditPayloadRouter.dispatchChunk(payload)));
-
-        ClientPlayNetworking.registerGlobalReceiver(RuleSaveProgressPayload.TYPE,
-                (payload, context) -> context.client().execute(() -> RuleEditPayloadRouter.dispatchProgress(payload)));
-
-        ClientPlayNetworking.registerGlobalReceiver(RuleSaveResultPayload.TYPE,
-                (payload, context) -> context.client().execute(() -> RuleEditPayloadRouter.dispatchResult(payload)));
-
-        ClientPlayNetworking.registerGlobalReceiver(RuleCatalogPayload.TYPE,
-                (payload, context) -> context.client().execute(() -> RuleEditPayloadRouter.dispatchCatalog(payload)));
-
-        ClientPlayNetworking.registerGlobalReceiver(RuleLifespanPayload.TYPE,
-                (payload, context) -> context.client().execute(() -> RuleEditPayloadRouter.dispatchLifespan(payload)));
-
-        ClientPlayNetworking.registerGlobalReceiver(RuleSourceViewPayload.TYPE,
-                (payload, context) -> context.client().execute(() -> RuleEditPayloadRouter.dispatchSourceView(payload)));
-
-        ClientPlayNetworking.registerGlobalReceiver(RuleSourceViewChunkPayload.TYPE,
-                (payload, context) -> context.client().execute(() -> RuleEditPayloadRouter.dispatchSourceViewChunk(payload)));
-
+        receive(RuleSnapshotPayload.TYPE, RuleEditPayloadRouter::dispatchSnapshot);
+        receive(RuleSnapshotChunkPayload.TYPE, RuleEditPayloadRouter::dispatchChunk);
+        receive(RuleSaveProgressPayload.TYPE, RuleEditPayloadRouter::dispatchProgress);
+        receive(RuleSaveResultPayload.TYPE, RuleEditPayloadRouter::dispatchResult);
+        receive(RuleCatalogPayload.TYPE, RuleEditPayloadRouter::dispatchCatalog);
+        receive(RuleLifespanPayload.TYPE, RuleEditPayloadRouter::dispatchLifespan);
+        receive(RuleSourceViewPayload.TYPE, RuleEditPayloadRouter::dispatchSourceView);
+        receive(RuleSourceViewChunkPayload.TYPE, RuleEditPayloadRouter::dispatchSourceViewChunk);
         // 编辑入口：接收器把载荷切到客户端线程，开屏由 RuleEditClientWorkspace 的消费者统一负责
-        ClientPlayNetworking.registerGlobalReceiver(OpenRuleEditorPayload.TYPE,
-                (payload, context) -> context.client().execute(() -> OpenRuleEditorPayload.dispatchOpenEditor(payload)));
+        receive(OpenRuleEditorPayload.TYPE, OpenRuleEditorPayload::dispatchOpenEditor);
+    }
+
+    // 统一接收入口：先把载荷切到客户端线程，再交给分发者，新增载荷时不再复制这段样板
+    private static <P extends CustomPacketPayload> void receive(
+            CustomPacketPayload.Type<P> type, Consumer<P> handler) {
+        ClientPlayNetworking.registerGlobalReceiver(type,
+                (payload, context) -> context.client().execute(() -> handler.accept(payload)));
     }
 }
