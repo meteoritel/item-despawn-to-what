@@ -55,6 +55,10 @@ public final class RuleRecipeView {
     private final UiScrollView clip = new UiScrollView();
     private long hoverStarted;
     private long lastDraw;
+    // 每项宽度只随字体与 parts 变化：字体不变时复用测量结果，避免每帧逐项测文本
+    private @Nullable Font measuredFont;
+    private int[] compactWidths = new int[0];
+    private int[] nameWidths = new int[0];
 
     /*** 一项对象及其数量要求；同名催化剂的不同要求保留原顺序，不错误地累加或取最大值。 */
     private static final class ObjectPart {
@@ -180,8 +184,10 @@ public final class RuleRecipeView {
     }
 
     private void render(GuiGraphics graphics, Font font, UiRect row, int color, boolean hovered, boolean active) {
-        boolean names = width(font, true) <= row.width();
-        int total = width(font, names);
+        int[] withNames = widths(font, true);
+        boolean names = sumWidths(withNames) <= row.width();
+        int[] partWidths = names ? withNames : widths(font, false);
+        int total = sumWidths(partWidths);
         long now = Util.getMillis();
         if (!hovered || lastDraw == 0 || now - lastDraw > 150) hoverStarted = now;
         lastDraw = now;
@@ -195,8 +201,9 @@ public final class RuleRecipeView {
         try {
             int x = row.x() - shift;
             int contentY = row.y() + (row.height() - OBJECT_CONTENT_HEIGHT) / 2;
-            for (Part part : parts) {
-                int size = partWidth(font, part, names);
+            for (int index = 0; index < parts.size(); index++) {
+                Part part = parts.get(index);
+                int size = partWidths[index];
                 if (!hovered && x + size > end) break;
                 if (x >= end) break;
                 if (x + size <= row.x()) { x += size; continue; }
@@ -236,7 +243,31 @@ public final class RuleRecipeView {
         return 0;
     }
 
-    private int width(Font font, boolean names) { return parts.stream().mapToInt(part -> partWidth(font, part, names)).sum(); }
+    // parts 在构造后不再变化，字体实例不变即可整份复用；字体变化时整体重测
+    private int[] widths(Font font, boolean names) {
+        if (font != measuredFont) {
+            int[] compact = new int[parts.size()];
+            int[] withNames = new int[parts.size()];
+            for (int index = 0; index < parts.size(); index++) {
+                Part part = parts.get(index);
+                compact[index] = partWidth(font, part, false);
+                withNames[index] = partWidth(font, part, true);
+            }
+            compactWidths = compact;
+            nameWidths = withNames;
+            measuredFont = font;
+        }
+        return names ? nameWidths : compactWidths;
+    }
+
+    private static int sumWidths(int[] widths) {
+        int sum = 0;
+        for (int width : widths) {
+            sum += width;
+        }
+        return sum;
+    }
+
     private int partWidth(Font font, Part part, boolean names) {
         if (part.transition()) return triggerView.width(font, part.separator());
         return part.object() == null ? font.width(part.separator()) : ICON_SIZE + 3
@@ -252,12 +283,14 @@ public final class RuleRecipeView {
     // 标签命中复用配方绘制的宽度和滚动位移，避免新增箭头宽度后命中错位。
     private @Nullable Part partAt(Font font, UiRect row, double mouseX, double mouseY) {
         if (!row.contains(mouseX, mouseY)) return null;
-        boolean names = width(font, true) <= row.width();
-        int overflow = Math.max(0, width(font, names) - row.width());
+        int[] withNames = widths(font, true);
+        boolean names = sumWidths(withNames) <= row.width();
+        int[] partWidths = names ? withNames : widths(font, false);
+        int overflow = Math.max(0, sumWidths(partWidths) - row.width());
         int x = row.x() - horizontalShift(Util.getMillis(), overflow, true);
-        for (Part part : parts) {
-            int size = partWidth(font, part, names);
-            if (mouseX >= x && mouseX < x + size) return part;
+        for (int index = 0; index < parts.size(); index++) {
+            int size = partWidths[index];
+            if (mouseX >= x && mouseX < x + size) return parts.get(index);
             x += size;
         }
         return null;

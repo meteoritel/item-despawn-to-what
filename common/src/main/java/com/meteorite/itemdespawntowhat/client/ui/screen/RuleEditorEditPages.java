@@ -370,7 +370,12 @@ public final class RuleEditorEditPages {
         }
         pageScroll.setContentHeight(used);
         pageScroll.setScrollbarVisible(used > area.height());
-        layoutPage(new UiRect(area.x(), area.y() - pageScroll.offset(), width, area.height()));
+        // 内容在顶部时第三次布局与第二次参数相同，直接复用，省去每帧一次全页布局；
+        // 滚动后才按偏移重排控件
+        int offset = pageScroll.offset();
+        if (offset != 0) {
+            layoutPage(new UiRect(area.x(), area.y() - offset, width, area.height()));
+        }
     }
 
     private int layoutPage(UiRect area) {

@@ -109,6 +109,8 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
     private int contentHeight;
     boolean visible = true;
     boolean enabled = true;
+    // 子列表里的子表单：只由自己的渲染帧驱动，顶层表单由页面 tick 统一驱动
+    private boolean childForm;
     private @Nullable String highlightPath;
     private int highlightTicks;
 
@@ -510,6 +512,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
     // 新建子表单（子列表的每一项）
     FormView newChildForm(String relativePath, List<EditorField> fields) {
         FormView child = new FormView(font, session, childPath(relativePath));
+        child.childForm = true;
         if (catalogSelections) child.useCatalogSelections();
         child.setSuggestionProvider(suggestionProvider);
         child.setConditionEditingSupport(conditionEditingSupport);
@@ -747,7 +750,9 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         if (!visible) {
             return;
         }
-        tick();
+        // 顶层表单已由页面 tick 驱动，这里只补子列表里不在页面表单清单内的子表单；
+        // 两处都调会让同一表单每帧 tick 两次（高亮衰减加倍、输入整理重复）
+        if (childForm) tick();
         syncBounds();
         graphics.enableScissor(viewportX, viewportY, viewportX + viewportWidth, viewportY + viewportHeight);
         try {
