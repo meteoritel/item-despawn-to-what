@@ -53,8 +53,7 @@ public record LightningEffect(
                         .forGetter(LightningEffect::count),
                 CommonFields.delayTicks(LightningEffect::delayTicks),
                 CommonFields.chance(LightningEffect::chance)
-        ).apply(instance, (count, delayTicks, chance) ->
-                new LightningEffect(count, delayTicks, chance)));
+        ).apply(instance, LightningEffect::new));
     }
 
     // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。

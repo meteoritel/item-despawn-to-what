@@ -26,18 +26,11 @@ final class ListControl extends FormControl {
 
     ListControl(Font font, EditorField field, Runnable onChanged) {
         super(field);
-        UiListEditor.Mode mode;
-        switch (field.type()) {
-            case TAG_LIST:
-                mode = UiListEditor.Mode.TAG;
-                break;
-            case STRING_LIST:
-                mode = UiListEditor.Mode.TEXT;
-                break;
-            default:
-                mode = UiListEditor.Mode.ID;
-                break;
-        }
+        UiListEditor.Mode mode = switch (field.type()) {
+            case TAG_LIST -> UiListEditor.Mode.TAG;
+            case STRING_LIST -> UiListEditor.Mode.TEXT;
+            default -> UiListEditor.Mode.ID;
+        };
         this.editor = new UiListEditor(THEME, font, mode, field.registry());
         this.editor.setOnChanged(items -> {
             markEdited();
@@ -197,6 +190,7 @@ final class ListControl extends FormControl {
         return list;
     }
 
+    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
     private boolean validEntry(String value) {
         if (field.type() == EditorFieldType.STRING_LIST) return true;
         String id = value.startsWith("#") ? value.substring(1) : value;

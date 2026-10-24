@@ -33,8 +33,7 @@ public record SpawnEntityEffect(EntityProduct product, int delayTicks, double ch
                 EntityProduct.CODEC.forGetter(SpawnEntityEffect::product),
                 CommonFields.delayTicks(SpawnEntityEffect::delayTicks),
                 CommonFields.chance(SpawnEntityEffect::chance)
-        ).apply(instance, (product, delay, chance) ->
-                new SpawnEntityEffect(product, delay, chance)));
+        ).apply(instance, SpawnEntityEffect::new));
     }
 
     // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。

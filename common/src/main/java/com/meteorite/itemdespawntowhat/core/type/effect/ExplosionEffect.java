@@ -62,8 +62,7 @@ public record ExplosionEffect(
                         .forGetter(ExplosionEffect::visualOnly),
                 CommonFields.delayTicks(ExplosionEffect::delayTicks),
                 CommonFields.chance(ExplosionEffect::chance)
-        ).apply(instance, (power, fire, visualOnly, delayTicks, chance) ->
-                new ExplosionEffect(power, fire, visualOnly, delayTicks, chance)));
+        ).apply(instance, ExplosionEffect::new));
     }
 
     // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。
