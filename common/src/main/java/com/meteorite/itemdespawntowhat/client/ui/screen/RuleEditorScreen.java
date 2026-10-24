@@ -15,6 +15,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryDispatcher;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.shared.BlockPreviewIcons;
+import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine;
 import com.meteorite.itemdespawntowhat.client.ui.shared.EntityPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostPalette;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -508,8 +509,8 @@ public final class RuleEditorScreen extends Screen {
             } else if (mode == Mode.EDIT && truncatedTitleRect != null
                     && truncatedTitleRect.contains(mouseX, mouseY) && editingId != null) {
                 new UiDescriptionTooltip(THEME, font).render(graphics, new UiRect(0, 0, width, height),
-                        List.of(new UiDescriptionTooltip.Line(Component.literal(labelText(editingId)),
-                                THEME.palette().canvasPickerText())), mouseX, mouseY);
+                        List.of(DescriptionLine.text(Component.literal(labelText(editingId)),
+                                DescriptionLine.Tone.VALUE, 0)), mouseX, mouseY);
             } else if (mode == Mode.LIST) {
                 listPage.renderDescriptionTooltip(graphics, mouseX, mouseY);
             }

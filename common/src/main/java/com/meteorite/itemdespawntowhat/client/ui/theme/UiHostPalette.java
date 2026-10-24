@@ -391,4 +391,21 @@ public final class UiHostPalette {
     public int canvasPickerTextDisabled() {
         return UiFlatPalette.CANVAS_PICKER_TEXT_DISABLED;
     }
+
+    // ---- 悬停说明面板 ----
+
+    // 面板标题与分区标题
+    public int tooltipTitle() {
+        return UiPalette.TOOLTIP_TITLE;
+    }
+
+    // 可度量取值：数值、区间、时刻
+    public int tooltipMetric() {
+        return UiPalette.TOOLTIP_METRIC;
+    }
+
+    // 注册表引用：维度、群系、方块、物品、流体
+    public int tooltipReference() {
+        return UiPalette.TOOLTIP_REFERENCE;
+    }
 }

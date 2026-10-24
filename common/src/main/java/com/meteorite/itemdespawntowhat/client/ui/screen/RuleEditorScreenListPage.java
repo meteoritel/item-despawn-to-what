@@ -9,6 +9,8 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
+import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine;
+import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine.Tone;
 import com.meteorite.itemdespawntowhat.client.ui.shared.TagPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
@@ -103,8 +105,8 @@ final class RuleEditorScreenListPage {
     private static final int TAG_MODAL_WIDTH = 280;
     private static final int EXPORT_MODAL_WIDTH = 280;
     private static final int EXPORT_ROW_H = 20;
-    private static final int CONDITION_SUMMARY_LINES = 4;
-    private static final int TOOLTIP_MAX_LINES = 8;
+    // 规则摘要面板的行数预算：条件树展开叶节点详情后行数变多，超出仍由面板高度兜底
+    private static final int TOOLTIP_MAX_LINES = 16;
     // 状态筛选的轮询顺序：全部 → 已启用 → 已停用
     private static final String[] STATUS_VALUES = {"all", "enabled", "disabled"};
     // 来源筛选的轮询顺序：全部 → 覆盖层 → 数据包
@@ -692,17 +694,21 @@ final class RuleEditorScreenListPage {
         Component triggerTip = snapshot.preview().triggerTooltipAt(host.font(),
                 RuleRecipeView.recipeBounds(host.font(), ruleList.nodeContentBounds(node)), mouseX, mouseY);
         TagPreviewIcons.Tag tag = tagAt(mouseX, mouseY);
-        List<UiDescriptionTooltip.Line> lines = new ArrayList<>();
-        int textColor = THEME.palette().canvasPickerText();
-        int mutedColor = THEME.palette().canvasPickerTextMuted();
+        List<DescriptionLine> lines = new ArrayList<>();
         if (triggerTip != null || tag != null) {
-            lines.add(new UiDescriptionTooltip.Line(triggerTip != null ? triggerTip : tag.tooltip(), textColor));
+            lines.add(DescriptionLine.text(triggerTip != null ? triggerTip : tag.tooltip(), Tone.VALUE, 0));
         } else {
-            lines.add(new UiDescriptionTooltip.Line(Component.translatable(UI + "recipe.condition_tree"), mutedColor));
-            lines.add(new UiDescriptionTooltip.Line(snapshot.conditionTooltip(CONDITION_SUMMARY_LINES), textColor));
-            if (snapshot.stateVisible()) lines.add(new UiDescriptionTooltip.Line(snapshot.state(), mutedColor));
-            if (snapshot.previewUnavailable()) lines.add(new UiDescriptionTooltip.Line(
-                    Component.translatable(UI + "preview.unavailable"), mutedColor));
+            lines.add(DescriptionLine.section(Component.translatable(UI + "recipe.condition_tree"), 0));
+            lines.addAll(snapshot.conditionLines());
+            if (snapshot.previewUnavailable() || snapshot.stateVisible()) {
+                lines.add(DescriptionLine.spacer());
+            }
+            if (snapshot.previewUnavailable()) {
+                lines.add(DescriptionLine.note(Component.translatable(UI + "preview.unavailable"), 0));
+            }
+            if (snapshot.stateVisible()) {
+                lines.add(DescriptionLine.note(snapshot.state(), 0));
+            }
         }
         UiDescriptionTooltip tooltip = new UiDescriptionTooltip(THEME, host.font());
         if (triggerTip == null && tag == null) {

@@ -981,7 +981,7 @@ final class RuleEditorResultsPage {
         if (effect == null || !effect.isMapping()) return false;
         new UiDescriptionTooltip(THEME, pages.font).render(graphics,
                 new UiRect(0, 0, pages.host.screenWidth(), pages.host.screenHeight()),
-                ActionDescription.lines(effect, THEME), mouseX, mouseY);
+                ActionDescription.lines(effect), mouseX, mouseY);
         return true;
     }
 

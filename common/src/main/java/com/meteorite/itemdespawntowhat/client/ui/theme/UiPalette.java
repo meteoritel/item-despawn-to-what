@@ -108,6 +108,16 @@ public final class UiPalette {
     // 深色底上的文本
     public static final int TEXT_ON_DARK = 0xFFFFFFFF;
 
+    // ---- 悬停说明面板 ----
+    // 说明面板画在浅灰浮层底（WINDOW_FILL）上，下列颜色与底色的对比度均不低于 4.8:1，且彼此可区分。
+
+    // 面板标题与分区标题
+    public static final int TOOLTIP_TITLE = 0xFF3E4F66;
+    // 可度量取值：数值、区间、时刻
+    public static final int TOOLTIP_METRIC = 0xFF1F3F6B;
+    // 注册表引用：维度、群系、方块、物品、流体
+    public static final int TOOLTIP_REFERENCE = 0xFF2A5058;
+
     // ---- 只读代码视图 ----
     // 只读 JSON 在深色内凹底上用一套固定配色：键、字符串、数字、字面量与标点各一色，
     // 颜色取自常见 IDE 的暗色主题，亮暗关系与 CODE_ 前缀的用途一致。

@@ -2,10 +2,11 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
-import com.meteorite.itemdespawntowhat.client.ui.screen.form.NaturalSummary;
-import com.meteorite.itemdespawntowhat.client.ui.shared.ConditionTreeTextSummary;
+import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionTreeDescription;
+import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine;
 import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import java.util.List;
 import java.util.Locale;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
@@ -41,8 +42,7 @@ final class RuleListDisplaySnapshot {
 
     // 按需构建的展示产物：三者互不依赖，各自只建一次
     private @Nullable RuleRecipeView preview;
-    private @Nullable Component conditionTooltip;
-    private int conditionTooltipLines = -1;
+    private @Nullable List<DescriptionLine> conditionLines;
     private @Nullable String searchText;
 
     RuleListDisplaySnapshot(@Nullable RuleValue body, String title, @Nullable String category,
@@ -145,15 +145,13 @@ final class RuleListDisplaySnapshot {
         return preview;
     }
 
-    // 条件树提示文本：行数预算随窗口高度变化，预算变化时重建一次
-    Component conditionTooltip(int maxLines) {
-        if (conditionTooltip == null || conditionTooltipLines != maxLines) {
-            conditionTooltip = ConditionTreeTextSummary.format(
-                    body == null ? null : body.child(RuleFields.CONDITIONS), maxLines,
-                    NaturalSummary::conditionTreeLeaf);
-            conditionTooltipLines = maxLines;
+    // 条件树说明行：结构固定，首次悬停时构建一次，行数裁剪交给渲染方
+    List<DescriptionLine> conditionLines() {
+        if (conditionLines == null) {
+            conditionLines = ConditionTreeDescription.lines(
+                    body == null ? null : body.child(RuleFields.CONDITIONS));
         }
-        return conditionTooltip;
+        return conditionLines;
     }
 
     // 搜索用的小写规则体文本（覆盖当前草稿的资源 ID、备注与参数）；首次搜索时构建一次

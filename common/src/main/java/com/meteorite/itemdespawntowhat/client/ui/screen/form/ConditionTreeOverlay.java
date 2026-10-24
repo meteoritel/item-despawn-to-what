@@ -205,7 +205,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         });
         editor.setLeafTooltip(leaf -> {
             RuleValue condition = conditionJson(leaf);
-            return condition == null ? List.of() : ConditionDescription.lines(condition, THEME);
+            return condition == null ? List.of() : ConditionDescription.lines(condition, 1);
         });
         editor.setClipboardActions(this::copyNodes, this::pasteNodes);
         editor.setOnEditLeaf(leaf -> {

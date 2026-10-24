@@ -10,11 +10,11 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.NaturalSummary;
+import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine;
+import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine.Tone;
 import com.meteorite.itemdespawntowhat.client.ui.shared.EntityPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes;
 import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiDescriptionTooltip;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import java.util.ArrayList;
@@ -28,15 +28,13 @@ final class ActionDescription {
 
     private ActionDescription() { }
 
-    static List<UiDescriptionTooltip.Line> lines(RuleValue action, UiHostTheme theme) {
-        List<UiDescriptionTooltip.Line> lines = new ArrayList<>();
-        lines.add(new UiDescriptionTooltip.Line(RuleNaming.effectTitle(action, RuleDisplayLabels::label),
-                theme.palette().canvasText()));
+    static List<DescriptionLine> lines(RuleValue action) {
+        List<DescriptionLine> lines = new ArrayList<>();
+        lines.add(DescriptionLine.title(RuleNaming.effectTitle(action, RuleDisplayLabels::label)));
         ResourceLocation type = ResourceLocation.tryParse(action.text(RuleFields.TYPE, ""));
         var descriptor = type == null ? null : EffectEditorRegistry.find(type);
         if (descriptor == null || descriptor.readOnly()) {
-            lines.add(new UiDescriptionTooltip.Line(Component.translatable(UI + "results.description_unavailable"),
-                    theme.palette().canvasTextMuted()));
+            lines.add(DescriptionLine.note(Component.translatable(UI + "results.description_unavailable"), 0));
             return lines;
         }
         if (TypeLabels.OWN_NAMESPACE.equals(type.getNamespace()) && "spawn_entity".equals(type.getPath())) {
@@ -47,15 +45,26 @@ final class ActionDescription {
             if (value == null) value = BuiltinEditorDefaults.effectiveValue(action, field.name());
             Component description = describe(field, value);
             if (description != null) {
-                lines.add(new UiDescriptionTooltip.Line(Component.translatable(UI + "results.parameter",
-                        Component.translatable(field.labelKey()), description), theme.palette().canvasTextMuted()));
+                lines.add(DescriptionLine.field(Component.translatable(field.labelKey()), description,
+                        toneOf(field), 0));
             }
         }
         if (action.has("entity") && EntityPreviewIcons.unavailable(action.text("entity", ""), action.integer("age", 0))) {
-            lines.add(new UiDescriptionTooltip.Line(Component.translatable(UI + "preview.unavailable"),
-                    theme.palette().canvasTextDanger()));
+            lines.add(DescriptionLine.note(Component.translatable(UI + "preview.unavailable"), 0));
         }
         return lines;
+    }
+
+    // 引用型字段单独着色，让标签与数值在字段列里可被一眼区分；数值与说明保持各自色阶。
+    private static Tone toneOf(EditorField field) {
+        if (FieldCatalogTypes.catalogTypeOf(field) != null) {
+            return Tone.REFERENCE;
+        }
+        return switch (field.type()) {
+            case INTEGER, DECIMAL, PERCENT, TICKS, AMPLIFIER, ITEM_COUNTS, CLIMATE_RANGE -> Tone.METRIC;
+            case NOTE -> Tone.NOTE;
+            default -> Tone.VALUE;
+        };
     }
 
     private static Component describe(EditorField field, RuleValue value) {

@@ -17,6 +17,8 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiTransform;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeEditor;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeMoveInteraction;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreePath;
+import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine;
+import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine.Tone;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.Hotspot;
@@ -138,9 +140,9 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
     private @Nullable ConditionNode laidOutRoot;
 
     private @Nullable Function<ConditionNode.Leaf, Component> leafSummary;
-    private @Nullable Function<ConditionNode.Leaf, List<UiDescriptionTooltip.Line>> leafTooltip;
+    private @Nullable Function<ConditionNode.Leaf, List<DescriptionLine>> leafTooltip;
     // 叶节点参数说明只在重建后失效，避免每帧重复生成
-    private final Map<ConditionNode.Leaf, List<UiDescriptionTooltip.Line>> leafTooltipCache = new HashMap<>();
+    private final Map<ConditionNode.Leaf, List<DescriptionLine>> leafTooltipCache = new HashMap<>();
     private List<ConditionTreeContract.TypeOption> typeOptions = List.of();
     private @Nullable ConditionTreeContract.LeafFactory leafFactory;
     private @Nullable Consumer<ConditionNode.Leaf> onEditLeaf;
@@ -270,7 +272,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
      *
      * @param formatter 把条件叶转换成说明行的回调，可为 {@code null} 取消注入
      */
-    public void setLeafTooltip(@Nullable Function<ConditionNode.Leaf, List<UiDescriptionTooltip.Line>> formatter) {
+    public void setLeafTooltip(@Nullable Function<ConditionNode.Leaf, List<DescriptionLine>> formatter) {
         this.leafTooltip = formatter;
         leafTooltipCache.clear();
     }
@@ -910,8 +912,8 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         viewInitialized = true;
     }
 
-    // 悬停提示：标题行 + 摘要行 + 结构标记行，由画布自绘面板呈现（原版 tooltip 不参与）
-    private @Nullable List<UiDescriptionTooltip.Line> tooltipAt(double mouseX, double mouseY) {
+    // 悬停提示：标题行 + 条件详情行 + 结构标记行，由画布自绘面板呈现（原版 tooltip 不参与）
+    private @Nullable List<DescriptionLine> tooltipAt(double mouseX, double mouseY) {
         if (!visible || isDragging() || picker.isOpen() || kindMenuOpen || !bounds.contains(mouseX, mouseY)) {
             return null;
         }
@@ -924,21 +926,20 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             return null;
         }
         boolean issue = graph.hasIssue(node);
-        List<UiDescriptionTooltip.Line> lines = new ArrayList<>();
-        lines.add(new UiDescriptionTooltip.Line(graph.titleLabel(node),
-                issue ? theme.palette().canvasTextDanger() : theme.palette().canvasAccent()));
-        List<UiDescriptionTooltip.Line> details = null;
+        List<DescriptionLine> lines = new ArrayList<>();
+        lines.add(DescriptionLine.text(graph.titleLabel(node), issue ? Tone.DANGER : Tone.TITLE, 0));
+        List<DescriptionLine> details = null;
         if (leafTooltip != null && node instanceof ConditionNode.Leaf leaf && leaf.condition() != null) {
             details = leafTooltipCache.computeIfAbsent(leaf, key -> List.copyOf(leafTooltip.apply(key)));
         }
         if (details == null || details.isEmpty()) {
-            lines.add(new UiDescriptionTooltip.Line(graph.summaryLabel(node), theme.palette().canvasTextMuted()));
+            lines.add(DescriptionLine.note(graph.summaryLabel(node), 1));
         } else {
             lines.addAll(details);
         }
         Component status = graph.statusLabel(node);
         if (!status.getString().isEmpty()) {
-            lines.add(new UiDescriptionTooltip.Line(status, theme.palette().canvasTextDanger()));
+            lines.add(DescriptionLine.text(status, Tone.DANGER, 0));
         }
         return lines;
     }
@@ -1022,7 +1023,7 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
             updateKindMenuHover(mouseX, mouseY);
             renderKindMenu(graphics, renderFont);
         }
-        List<UiDescriptionTooltip.Line> tip = tooltipAt(mouseX, mouseY);
+        List<DescriptionLine> tip = tooltipAt(mouseX, mouseY);
         if (tip != null) {
             tooltip.render(graphics, bounds, tip, mouseX, mouseY);
         }

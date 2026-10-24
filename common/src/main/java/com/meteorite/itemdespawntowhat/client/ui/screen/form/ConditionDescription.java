@@ -5,9 +5,9 @@ import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
+import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine;
+import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine.Tone;
 import com.meteorite.itemdespawntowhat.client.ui.shared.SummaryFormats;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiDescriptionTooltip;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
@@ -18,16 +18,21 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 条件叶的参数说明：把条件 JSON 拆成「标签：取值」的多行文本，供条件树画布的悬停提示展示。
+ * 条件叶的参数说明：把条件 JSON 拆成按信息类型排版的语义行，供条件画布与规则列表的悬停提示共用。
  *
- * <p><b>职责</b>：只生成参数明细行，不生成标题与结构状态；标题行和问题标记由
- * {@code UiConditionGraphEditor} 统一追加，保证问题颜色不会被值文本覆盖。</p>
+ * <p><b>职责</b>：只生成参数行，不生成标题与结构状态；标题行和问题标记由调用方追加，
+ * 保证问题颜色不会被取值颜色覆盖。</p>
  *
- * <p><b>可读性</b>：内建条件按类型给出玩家语义（时钟、区间、方向、物品数量），一行一个参数；
- * 标签用弱化色、取值用正文色，长列表由 {@link SummaryFormats} 截断并提示总数。
- * 未注册的第三方条件回落到 {@link NaturalSummary#conditionParams(RuleValue)}，无法读取时只提示查看原始 JSON。</p>
+ * <p><b>按信息类型分行</b>：注册表引用按条目逐行列出；区间、时刻与数值按「标签 + 取值」对齐显示；
+ * 方向映射每个已填方向一行；物品数量按「名称 × 数量」的条目展示；枚举取值单独一行；
+ * 无参数条件用一句说明代替空白。列表类条目超过上限时追加总数提示，不隐瞒条目数。</p>
+ *
+ * <p><b>语气</b>：引用用 {@link Tone#REFERENCE}，数值与时刻用 {@link Tone#METRIC}，
+ * 枚举与开关用 {@link Tone#VALUE}，说明与未设置提示用 {@link Tone#NOTE}；具体颜色由渲染方按主题映射。</p>
+ *
+ * <p>未注册的第三方条件回落到 {@link NaturalSummary#conditionParams(RuleValue)}，无法读取时只提示查看原始 JSON。</p>
  */
-final class ConditionDescription {
+public final class ConditionDescription {
 
     // ---- 文案键 ----
     private static final String UI = TypeLabels.UI_PREFIX;
@@ -35,8 +40,13 @@ final class ConditionDescription {
     private static final String SUMMARY = SummaryFormats.KEY_PREFIX;
     private static final String RANGE_LABEL_KEY = TOOLTIP + "range";
     private static final String NOTE_LABEL_KEY = TOOLTIP + "note";
+    private static final String HEIGHT_LABEL_KEY = TOOLTIP + "height";
+    private static final String LIGHT_LABEL_KEY = TOOLTIP + "light";
+    private static final String TIME_SPAN_LABEL_KEY = TOOLTIP + "time_span";
+    private static final String ITEMS_HEADING_KEY = TOOLTIP + "items_heading";
     private static final String UNREADABLE_KEY = TOOLTIP + "unreadable";
     private static final String UNSET_KEY = SUMMARY + "value_empty";
+    private static final String MORE_KEY = SUMMARY + "cond.more";
 
     // ---- 条件 JSON 字段名 ----
     private static final String FIELD_DIMENSIONS = "dimensions";
@@ -62,116 +72,120 @@ final class ConditionDescription {
      * 生成条件叶的参数说明行。
      *
      * @param condition 条件叶的 JSON 对象，可为 {@code null}
-     * @param theme 宿主主题，用于标签与取值的分色
+     * @param indent 基础缩进层级，调用方按标题所在层级给出
      * @return 参数说明行；条件无法读取时返回一条提示，永不返回空列表
      */
-    static List<UiDescriptionTooltip.Line> lines(@Nullable RuleValue condition, UiHostTheme theme) {
+    public static List<DescriptionLine> lines(@Nullable RuleValue condition, int indent) {
         if (condition == null || !condition.isMapping()) {
-            return List.of(note(UNREADABLE_KEY, theme));
+            return List.of(note(UNREADABLE_KEY, indent));
         }
         ResourceLocation type = typeOf(condition);
         if (type == null) {
-            return List.of(note(UNREADABLE_KEY, theme));
+            return List.of(note(UNREADABLE_KEY, indent));
         }
         if (!TypeLabels.OWN_NAMESPACE.equals(type.getNamespace())) {
-            return generic(condition, type, theme);
+            return generic(condition, type, indent);
         }
         return switch (type.getPath()) {
-            case "dimension" -> dimension(condition, type, theme);
-            case "biome" -> biome(condition, type, theme);
-            case "weather" -> weather(condition, type, theme);
-            case "outdoor" -> outdoor(theme);
-            case "surrounding_blocks" -> surroundingBlocks(condition, type, theme);
-            case "catalyst_present" -> catalystPresent(condition, type, theme);
-            case "fluid_present" -> fluidPresent(condition, type, theme);
-            case "time_of_day" -> timeOfDay(condition, theme);
-            case "y_level" -> bounded(condition, "cond.y_level.any", theme);
-            case "light_level" -> bounded(condition, "cond.light_level.any", theme);
-            default -> generic(condition, type, theme);
+            case "dimension" -> refEntries(condition.child(FIELD_DIMENSIONS), RuleCatalogType.DIMENSION, indent);
+            case "biome" -> biome(condition, type, indent);
+            case "weather" -> weather(condition, type, indent);
+            case "outdoor" -> List.of(note(SUMMARY + "cond.outdoor", indent));
+            case "surrounding_blocks" -> surroundingBlocks(condition, type, indent);
+            case "catalyst_present" -> catalystPresent(condition, indent);
+            case "fluid_present" -> fluidPresent(condition, indent);
+            case "time_of_day" -> timeOfDay(condition, indent);
+            case "y_level" -> bounded(condition, "cond.y_level.any", HEIGHT_LABEL_KEY, indent);
+            case "light_level" -> bounded(condition, "cond.light_level.any", LIGHT_LABEL_KEY, indent);
+            default -> generic(condition, type, indent);
         };
     }
 
-    // 维度：命中任意一个维度即满足
-    private static List<UiDescriptionTooltip.Line> dimension(RuleValue condition, ResourceLocation type,
-            UiHostTheme theme) {
-        Component value = SummaryFormats.refs(condition.child(FIELD_DIMENSIONS), RuleCatalogType.DIMENSION);
-        return List.of(row(fieldLabel(type, FIELD_DIMENSIONS, "field.dimension.dimensions"),
-                value == null ? unset() : value, theme));
+    // 注册表引用：一条一行，超过上限时追加总数
+    private static List<DescriptionLine> refEntries(@Nullable RuleValue list, RuleCatalogType type, int indent) {
+        if (list == null || !list.isList()) {
+            return List.of(note(UNSET_KEY, indent));
+        }
+        List<String> raws = list.textItems();
+        if (raws.isEmpty()) {
+            return List.of(note(UNSET_KEY, indent));
+        }
+        List<DescriptionLine> lines = new ArrayList<>();
+        int shown = Math.min(raws.size(), SummaryFormats.MAX_ENTRIES);
+        for (int index = 0; index < shown; index++) {
+            lines.add(DescriptionLine.entry(SummaryFormats.ref(raws.get(index), type), Tone.REFERENCE, indent));
+        }
+        if (raws.size() > shown) {
+            lines.add(DescriptionLine.note(Component.translatable(MORE_KEY, raws.size()), indent));
+        }
+        return lines;
     }
 
     // 群系：先显示模式，再按模式显示群系列表或气候区间
-    private static List<UiDescriptionTooltip.Line> biome(RuleValue condition, ResourceLocation type,
-            UiHostTheme theme) {
-        List<UiDescriptionTooltip.Line> lines = new ArrayList<>();
+    private static List<DescriptionLine> biome(RuleValue condition, ResourceLocation type, int indent) {
+        List<DescriptionLine> lines = new ArrayList<>();
         String mode = condition.text(FIELD_MODE, "");
         Component modeText = SummaryFormats.enumText(mode, SUMMARY + "cond.biome.mode");
-        lines.add(row(fieldLabel(type, FIELD_MODE, "field.biome.mode"),
-                modeText == null ? unset() : modeText, theme));
+        lines.add(field(fieldLabel(type, FIELD_MODE, "field.biome.mode"), modeText, Tone.VALUE, indent));
         if (MODE_CLIMATE.equals(mode)) {
             boolean anyRange = false;
             for (String axis : CLIMATE_AXES) {
                 Component range = rangeOf(condition.child(axis));
                 if (range != null) {
-                    lines.add(row(fieldLabel(type, axis, "field.biome." + axis), range, theme));
+                    lines.add(field(fieldLabel(type, axis, "field.biome." + axis), range, Tone.METRIC, indent));
                     anyRange = true;
                 }
             }
             if (!anyRange) {
-                lines.add(row(Component.translatable(RANGE_LABEL_KEY), unset(), theme));
+                lines.add(field(Component.translatable(RANGE_LABEL_KEY), null, Tone.NOTE, indent));
             }
         } else {
-            Component biomes = SummaryFormats.refs(condition.child(FIELD_BIOMES), RuleCatalogType.BIOME);
-            lines.add(row(fieldLabel(type, FIELD_BIOMES, "field.biome.biomes"),
-                    biomes == null ? unset() : biomes, theme));
+            lines.addAll(refEntries(condition.child(FIELD_BIOMES), RuleCatalogType.BIOME, indent));
         }
         return lines;
     }
 
-    // 天气：未选择或枚举无法识别时统一显示未设置
-    private static List<UiDescriptionTooltip.Line> weather(RuleValue condition, ResourceLocation type,
-            UiHostTheme theme) {
-        String kind = condition.text(FIELD_WEATHER, "");
-        Component value = SummaryFormats.enumText(kind, weatherEnumPrefix(type));
-        return List.of(row(fieldLabel(type, FIELD_WEATHER, "field.weather.weather"),
-                value == null ? unset() : value, theme));
-    }
-
-    // 露天：无参数条件，用一句说明代替空白
-    private static List<UiDescriptionTooltip.Line> outdoor(UiHostTheme theme) {
-        return List.of(row(Component.translatable(NOTE_LABEL_KEY),
-                Component.translatable(SUMMARY + "cond.outdoor"), theme));
+    // 天气：取值单独一行；未选择或枚举无法识别时显示未设置
+    private static List<DescriptionLine> weather(RuleValue condition, ResourceLocation type, int indent) {
+        Component value = SummaryFormats.enumText(condition.text(FIELD_WEATHER, ""), weatherEnumPrefix(type));
+        return List.of(value == null ? note(UNSET_KEY, indent)
+                : DescriptionLine.text(value, Tone.VALUE, indent));
     }
 
     // 周围方块：每个已填方向单独一行
-    private static List<UiDescriptionTooltip.Line> surroundingBlocks(RuleValue condition, ResourceLocation type,
-            UiHostTheme theme) {
-        List<UiDescriptionTooltip.Line> lines = new ArrayList<>();
+    private static List<DescriptionLine> surroundingBlocks(RuleValue condition, ResourceLocation type, int indent) {
+        List<DescriptionLine> lines = new ArrayList<>();
         for (String side : SIDE_FIELDS) {
             String raw = condition.text(side, "").trim();
             if (raw.isEmpty()) {
                 continue;
             }
-            lines.add(row(fieldLabel(type, side, "field.surrounding_blocks." + side),
-                    SummaryFormats.ref(raw, RuleCatalogType.BLOCK), theme));
+            lines.add(field(fieldLabel(type, side, "field.surrounding_blocks." + side),
+                    SummaryFormats.ref(raw, RuleCatalogType.BLOCK), Tone.REFERENCE, indent));
         }
         if (lines.isEmpty()) {
-            lines.add(note(UNSET_KEY, theme));
+            lines.add(note(UNSET_KEY, indent));
         }
         return lines;
     }
 
     // 催化剂：逐物品显示「名称 × 数量」，数量优先取 item_counts，其次 count
-    private static List<UiDescriptionTooltip.Line> catalystPresent(RuleValue condition, ResourceLocation type,
-            UiHostTheme theme) {
-        Component label = fieldLabel(type, FIELD_ITEMS, "field.catalyst_present.items");
+    private static List<DescriptionLine> catalystPresent(RuleValue condition, int indent) {
         RuleValue items = condition.child(FIELD_ITEMS);
         if (items == null || !items.isList()) {
-            return List.of(row(label, unset(), theme));
+            return List.of(note(UNSET_KEY, indent));
+        }
+        List<String> raws = items.textItems();
+        if (raws.isEmpty()) {
+            return List.of(note(UNSET_KEY, indent));
         }
         RuleValue counts = condition.child(RuleFields.ITEM_COUNTS);
         int defaultCount = countOf(condition.child(FIELD_COUNT));
-        List<Component> entries = new ArrayList<>();
-        for (String raw : items.textItems()) {
+        List<DescriptionLine> lines = new ArrayList<>();
+        if (raws.size() > 1) {
+            lines.add(DescriptionLine.section(Component.translatable(ITEMS_HEADING_KEY, raws.size()), indent));
+        }
+        for (String raw : raws) {
             int count = countOf(childOf(counts, raw));
             if (count <= 0) {
                 count = countOf(childOf(counts, canonical(raw)));
@@ -180,96 +194,83 @@ final class ConditionDescription {
                 count = defaultCount;
             }
             Component entry = SummaryFormats.ref(raw, RuleCatalogType.ITEM);
-            entries.add(count > 0
+            Component text = count > 0
                     ? Component.translatable(SUMMARY + "cond.catalyst_present.entry", entry, count)
-                    : entry);
-        }
-        Component value = entries.isEmpty() ? unset() : SummaryFormats.joinCapped(entries, SummaryFormats.MAX_ENTRIES);
-        return List.of(row(label, value, theme));
-    }
-
-    // 流体：列表为空时退回单数 fluid，两者皆空表示任意流体
-    private static List<UiDescriptionTooltip.Line> fluidPresent(RuleValue condition, ResourceLocation type,
-            UiHostTheme theme) {
-        Component value = SummaryFormats.refs(condition.child(RuleFields.FLUIDS), RuleCatalogType.FLUID);
-        if (value == null) {
-            String single = condition.text(RuleFields.FLUID, "").trim();
-            if (!single.isEmpty()) {
-                value = SummaryFormats.ref(single, RuleCatalogType.FLUID);
-            }
-        }
-        if (value == null) {
-            value = Component.translatable(SUMMARY + "cond.fluid_present.any");
-        }
-        return List.of(row(fieldLabel(type, RuleFields.FLUIDS, "field.fluid_present.fluid"), value, theme));
-    }
-
-    // 时间：时钟区间 + 是否跨零点
-    private static List<UiDescriptionTooltip.Line> timeOfDay(RuleValue condition, UiHostTheme theme) {
-        Integer from = integerOf(condition.child(FIELD_FROM));
-        Integer to = integerOf(condition.child(FIELD_TO));
-        Component label = Component.translatable(RANGE_LABEL_KEY);
-        if (from == null || to == null) {
-            return List.of(row(label, unset(), theme));
-        }
-        Component span = SummaryFormats.range(SummaryFormats.clockText(from), SummaryFormats.clockText(to));
-        if (span == null) {
-            return List.of(row(label, unset(), theme));
-        }
-        Component crossing = SummaryFormats.flag(from > to, SUMMARY + "cond.time_of_day.crossing");
-        Component value = crossing == null
-                ? span
-                : Component.translatable(SUMMARY + "cond.time_of_day", span, crossing);
-        return List.of(row(label, value, theme));
-    }
-
-    // 数值区间：两端都未填时显示该维度的「任意」说明
-    private static List<UiDescriptionTooltip.Line> bounded(RuleValue condition, String anyKeySuffix,
-            UiHostTheme theme) {
-        Component value = rangeOf(condition);
-        if (value == null) {
-            value = Component.translatable(SUMMARY + anyKeySuffix);
-        }
-        return List.of(row(Component.translatable(RANGE_LABEL_KEY), value, theme));
-    }
-
-    // 非内建条件：只读描述符给出只读提示，其余交给通用摘要
-    private static List<UiDescriptionTooltip.Line> generic(RuleValue condition, ResourceLocation type,
-            UiHostTheme theme) {
-        List<UiDescriptionTooltip.Line> lines = new ArrayList<>();
-        TypeEditorDescriptor descriptor = ConditionEditorRegistry.find(type);
-        if (descriptor != null && descriptor.readOnly()) {
-            lines.add(note(UI + "tree.parameters_readonly", theme));
-        }
-        Component params = NaturalSummary.conditionParams(condition);
-        if (params != null) {
-            lines.add(row(Component.translatable(NOTE_LABEL_KEY), params, theme));
-        }
-        if (lines.isEmpty()) {
-            lines.add(note(UNREADABLE_KEY, theme));
+                    : entry;
+            lines.add(DescriptionLine.entry(text, Tone.REFERENCE, indent));
         }
         return lines;
     }
 
-    // 一行参数：标签弱化、取值正文色，行色与取值一致
-    private static UiDescriptionTooltip.Line row(Component label, Component value, UiHostTheme theme) {
-        int muted = theme.palette().canvasTextMuted();
-        int text = theme.palette().canvasText();
-        Component line = Component.translatable(SUMMARY + "field",
-                label.copy().withStyle(style -> style.withColor(muted)),
-                value.copy().withStyle(style -> style.withColor(text)));
-        return new UiDescriptionTooltip.Line(line, text);
+    // 流体：列表为空时退回单数 fluid，两者皆空表示任意流体
+    private static List<DescriptionLine> fluidPresent(RuleValue condition, int indent) {
+        RuleValue list = condition.child(RuleFields.FLUIDS);
+        if (list != null && list.isList() && !list.textItems().isEmpty()) {
+            return refEntries(list, RuleCatalogType.FLUID, indent);
+        }
+        String single = condition.text(RuleFields.FLUID, "").trim();
+        if (!single.isEmpty()) {
+            return List.of(DescriptionLine.entry(SummaryFormats.ref(single, RuleCatalogType.FLUID),
+                    Tone.REFERENCE, indent));
+        }
+        return List.of(note(SUMMARY + "cond.fluid_present.any", indent));
     }
 
-    // 纯提示行：整行使用弱化色
-    private static UiDescriptionTooltip.Line note(String key, UiHostTheme theme) {
-        int muted = theme.palette().canvasTextMuted();
-        return new UiDescriptionTooltip.Line(Component.translatable(key).withStyle(style -> style.withColor(muted)),
-                muted);
+    // 时间：时钟区间与是否跨零点分队两行，区间用数值语气、时段标记用取值语气
+    private static List<DescriptionLine> timeOfDay(RuleValue condition, int indent) {
+        Integer from = integerOf(condition.child(FIELD_FROM));
+        Integer to = integerOf(condition.child(FIELD_TO));
+        Component span = from == null || to == null ? null
+                : SummaryFormats.range(SummaryFormats.clockText(from), SummaryFormats.clockText(to));
+        if (span == null) {
+            return List.of(note(UNSET_KEY, indent));
+        }
+        List<DescriptionLine> lines = new ArrayList<>();
+        lines.add(field(Component.translatable(RANGE_LABEL_KEY), span, Tone.METRIC, indent));
+        Component crossing = SummaryFormats.flag(from > to, SUMMARY + "cond.time_of_day.crossing");
+        if (crossing != null) {
+            lines.add(field(Component.translatable(TIME_SPAN_LABEL_KEY), crossing, Tone.VALUE, indent));
+        }
+        return lines;
     }
 
-    private static Component unset() {
-        return Component.translatable(UNSET_KEY);
+    // 数值区间：两端都未填时显示该维度的「任意」说明
+    private static List<DescriptionLine> bounded(RuleValue condition, String anyKeySuffix, String labelKey,
+                                                 int indent) {
+        Component value = rangeOf(condition);
+        if (value == null) {
+            return List.of(note(SUMMARY + anyKeySuffix, indent));
+        }
+        return List.of(field(Component.translatable(labelKey), value, Tone.METRIC, indent));
+    }
+
+    // 非内建条件：只读描述符给出只读提示，其余交给通用摘要
+    private static List<DescriptionLine> generic(RuleValue condition, ResourceLocation type, int indent) {
+        List<DescriptionLine> lines = new ArrayList<>();
+        TypeEditorDescriptor descriptor = ConditionEditorRegistry.find(type);
+        if (descriptor != null && descriptor.readOnly()) {
+            lines.add(note(UI + "tree.parameters_readonly", indent));
+        }
+        Component params = NaturalSummary.conditionParams(condition);
+        if (params != null) {
+            lines.add(DescriptionLine.field(Component.translatable(NOTE_LABEL_KEY), params, Tone.NOTE, indent));
+        }
+        if (lines.isEmpty()) {
+            lines.add(note(UNREADABLE_KEY, indent));
+        }
+        return lines;
+    }
+
+    // 字段行：标签弱化交给渲染方，取值缺失时退化为说明语气
+    private static DescriptionLine field(Component label, @Nullable Component value, Tone tone, int indent) {
+        return value == null
+                ? DescriptionLine.field(label, Component.translatable(UNSET_KEY), Tone.NOTE, indent)
+                : DescriptionLine.field(label, value, tone, indent);
+    }
+
+    // 纯提示行：整行使用弱化语气
+    private static DescriptionLine note(String key, int indent) {
+        return DescriptionLine.note(Component.translatable(key), indent);
     }
 
     // 字段标签优先取描述符注册的键，缺字段时按内建条件键名兜底
