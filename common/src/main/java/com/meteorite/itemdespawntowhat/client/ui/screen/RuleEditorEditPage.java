@@ -1,12 +1,13 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.edit.ClientTypeRegistries;
-import com.meteorite.itemdespawntowhat.client.edit.ConditionEditorRegistry;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
+import com.meteorite.itemdespawntowhat.client.edit.EditorRegistries;
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.edit.draft.DraftConflict;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
@@ -47,16 +48,15 @@ import org.jetbrains.annotations.Nullable;
  * <p>撤销 / 重做保留 Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y 快捷键入口；
  * 条件树弹窗另有自己的撤销 / 重做图标，两者都走同一条会话历史链路。</p>
  *
- * <p>本类持有 {@link RuleEditorEditPages} 组合视图与编辑页控件；会话、工作区、焦点、弹窗与提示条
+ * <p>本类持有 {@link RuleEditorPageSet} 组合视图与编辑页控件；会话、工作区、焦点、弹窗与提示条
  * 通过 {@link Host} 暴露的屏幕能力访问。本地校验交给 {@link RuleEditorValidation}，
  * 模式切换与屏幕生命周期由 {@link RuleEditorScreen} 负责。</p>
  */
-final class RuleEditorScreenEditPage {
+final class RuleEditorEditPage {
 
-    /*** 宿主能力：编辑页只通过这些入口读写屏幕状态与跨模式动作。 */
+    /** 宿主能力：编辑页只通过这些入口读写屏幕状态与跨模式动作。 */
     interface Host {
 
-        // 渲染字体
         Font font();
 
         // 焦点管理器
@@ -74,7 +74,6 @@ final class RuleEditorScreenEditPage {
         // 当前编辑会话（未打开规则时为 null）
         @Nullable EditSession session();
 
-        // 当前编辑的规则 id
         @Nullable String editingId();
 
         // 是否处于编辑模式（列表页为 false）
@@ -95,10 +94,8 @@ final class RuleEditorScreenEditPage {
         // 冻结（会话失效 / 只读）时拒绝写入
         boolean rejectWhenFrozen();
 
-        // 打开指定规则的编辑页
         void openEditor(String id);
 
-        // 关闭屏幕
         void closeScreen();
 
         // 页面重建后按当前工作区状态同步一次使能
@@ -107,7 +104,6 @@ final class RuleEditorScreenEditPage {
         // 草稿改动清单弹窗
         void showChanges();
 
-        // 返回管理页
         void backToList();
 
         // 屏幕宽高
@@ -124,13 +120,13 @@ final class RuleEditorScreenEditPage {
     private static final int SOURCE_MODAL_WIDTH = 360;
     private static final int SOURCE_MODAL_MIN_HEIGHT = 48;
     private static final int SOURCE_MODAL_MAX_HEIGHT = 200;
-    private static final String UI = "gui.itemdespawntowhat.edit.";
+    private static final String UI = TypeLabels.UI_PREFIX;
 
     private final Host host;
 
     // ---- 页签与底排 ----
-    private RuleEditorEditPages.Page tab = RuleEditorEditPages.Page.INFO;
-    private @Nullable RuleEditorEditPages pages;
+    private RuleEditorPageSet.Page tab = RuleEditorPageSet.Page.INFO;
+    private @Nullable RuleEditorPageSet pages;
     private @Nullable UiSegmentedControl tabControl;
     private final List<UiButton> footerButtons = new ArrayList<>();
     private final RuleEditorScreenButtonBar footerBar = new RuleEditorScreenButtonBar(22, 4, true);
@@ -162,13 +158,13 @@ final class RuleEditorScreenEditPage {
         }
 
         @Override
-        public @Nullable RuleEditorEditPages pages() {
+        public @Nullable RuleEditorPageSet pages() {
             return pages;
         }
     });
 
     // 页面宿主适配：把屏幕能力（会话 / 焦点 / 弹窗 / 提示 / 冻结 / 尺寸）暴露给四页编辑流程
-    private final RuleEditorEditPages.Host pagesHost = new RuleEditorEditPages.Host() {
+    private final RuleEditorPageSet.Host pagesHost = new RuleEditorPageSet.Host() {
 
         @Override
         public Font font() {
@@ -236,7 +232,7 @@ final class RuleEditorScreenEditPage {
         }
     };
 
-    RuleEditorScreenEditPage(Host host) {
+    RuleEditorEditPage(Host host) {
         this.host = host;
         this.seenResultSeq = host.workspace().resultSeq();
     }
@@ -253,7 +249,7 @@ final class RuleEditorScreenEditPage {
 
     private List<UiSegmentedControl.Option> tabOptions() {
         List<UiSegmentedControl.Option> options = new ArrayList<>();
-        for (RuleEditorEditPages.Page value : RuleEditorEditPages.Page.values()) {
+        for (RuleEditorPageSet.Page value : RuleEditorPageSet.Page.values()) {
             options.add(new UiSegmentedControl.Option(value.value(),
                     Component.translatable(UI + "tab." + value.value())));
         }
@@ -262,7 +258,7 @@ final class RuleEditorScreenEditPage {
 
     // 切页：先结束进行中的预览并提交有效编辑，再重建目标页
     private void switchTab(String value) {
-        RuleEditorEditPages.Page target = RuleEditorEditPages.Page.of(value);
+        RuleEditorPageSet.Page target = RuleEditorPageSet.Page.of(value);
         if (target == tab) {
             return;
         }
@@ -400,7 +396,7 @@ final class RuleEditorScreenEditPage {
             return;
         }
         if (pages == null) {
-            pages = new RuleEditorEditPages(pagesHost);
+            pages = new RuleEditorPageSet(pagesHost);
         }
         pages.setPage(tab);
         pages.rebuild();
@@ -427,7 +423,7 @@ final class RuleEditorScreenEditPage {
 
     // 进入新规则的编辑页：页签回到基本信息并丢弃上一份页面状态（候选与效果选择归零）
     void openNew() {
-        tab = RuleEditorEditPages.Page.INFO;
+        tab = RuleEditorPageSet.Page.INFO;
         pages = null;
         if (tabControl != null) {
             tabControl.setSelected(tab.value());
@@ -436,7 +432,7 @@ final class RuleEditorScreenEditPage {
 
     // 新建规则后直接切到「输入」页签
     void openInputTab() {
-        switchTab(RuleEditorEditPages.Page.INPUT.value());
+        switchTab(RuleEditorPageSet.Page.INPUT.value());
         if (tabControl != null) {
             tabControl.setSelected(tab.value());
         }
@@ -794,7 +790,7 @@ final class RuleEditorScreenEditPage {
             @Override
             public List<ConditionTreeContract.TypeOption> typeOptions() {
                 List<ConditionTreeContract.TypeOption> options = new ArrayList<>();
-                for (TypeEditorDescriptor descriptor : ConditionEditorRegistry.all()) {
+                for (TypeEditorDescriptor descriptor : EditorRegistries.CONDITIONS.all()) {
                     options.add(new ConditionTreeContract.TypeOption(descriptor.id(), descriptor.label()));
                 }
                 return options;

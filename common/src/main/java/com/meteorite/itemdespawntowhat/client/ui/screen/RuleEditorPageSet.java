@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.edit.DraftListInputs;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
+import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleCategoryAssignment;
@@ -16,6 +17,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlowLayout;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionEditingSupport;
@@ -30,6 +32,8 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModalStack;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import com.meteorite.itemdespawntowhat.core.model.CombinationMode;
+import com.meteorite.itemdespawntowhat.core.model.ConditionLimits;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -54,7 +58,7 @@ import org.jetbrains.annotations.Nullable;
  * <p>输入页编辑规则源数量、催化剂门槛与实际消耗、共享半径及流体源消耗开关；结果页编辑产出和
  * 世界效果。输入支付统一由结算层执行。</p>
  */
-public final class RuleEditorEditPages {
+public final class RuleEditorPageSet {
 
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
     static final UiHostTheme THEME = UiHostThemes.defaultTheme();
@@ -171,7 +175,7 @@ public final class RuleEditorEditPages {
     @Nullable UiRect lastArea;
     final List<PageCard> cards = new ArrayList<>();
 
-    /*** 卡片头部内容：标题必填，图标可选（图标绘制在标题行内、蓝条右侧）。 */
+    /** 卡片头部内容：标题必填，图标可选（图标绘制在标题行内、蓝条右侧）。 */
     record CardHeader(Component title, @Nullable UiIcon icon) {
         CardHeader {
             Objects.requireNonNull(title, "title");
@@ -182,7 +186,7 @@ public final class RuleEditorEditPages {
      * 页面分区的绘制数据，与控件共用滚动坐标。
      * <p>头部内容既可以是构造时的常量标题，也可以在每帧渲染时求值（见 {@link #dynamic}），
      * 卡片之间的头部几何统一由 {@link #headerRect()} 派生，绘制统一走
-     * {@link RuleEditorEditPages#drawCardHeader}。</p>
+     * {@link RuleEditorPageSet#drawCardHeader}。</p>
      */
     static final class PageCard {
 
@@ -238,7 +242,7 @@ public final class RuleEditorEditPages {
     // 输入事件分发与拖动状态
     private final RuleEditorPageInput input;
 
-    public RuleEditorEditPages(Host host) {
+    public RuleEditorPageSet(Host host) {
         this.host = host;
         this.font = host.font();
         this.ruleEditorInfoPage = new RuleEditorInfoPage(this);
@@ -293,7 +297,6 @@ public final class RuleEditorEditPages {
         host.onControlsChanged();
     }
 
-    // 清空当前页控件
     private void reset() {
         liveWidgets.clear();
         liveForms.clear();
@@ -339,8 +342,8 @@ public final class RuleEditorEditPages {
             }
             RuleCatalogType type = tags ? RuleCatalogType.TAG : FieldCatalogTypes.catalogTypeOf(field);
             if (type == null || host.rejectWhenFrozen()) return;
-            boolean multi = field.type() == com.meteorite.itemdespawntowhat.client.edit.EditorFieldType.TAG_LIST
-                    || field.type() == com.meteorite.itemdespawntowhat.client.edit.EditorFieldType.RL_LIST;
+            boolean multi = field.type() == EditorFieldType.TAG_LIST
+                    || field.type() == EditorFieldType.RL_LIST;
             host.modals().push(RuleEditorPanelFactory.fieldCatalogModal(font, host.workspace(), type, multi,
                     Component.translatable(field.labelKey()), host.screenWidth(), host.screenHeight(), onPicked,
                     field, session.draft(), path, selected));
@@ -415,7 +418,7 @@ public final class RuleEditorEditPages {
         for (int index = 0; index < group.size(); index++) {
             widths[index] = Math.clamp(group.get(index).preferredWidth(RuleEditorPageSupport.PAD), Math.min(24, limit), limit);
         }
-        UiFlowLayout.Wrap flow = UiFlowLayout.wrap(widths, limit, RuleEditorPageSupport.BUTTON_GAP, RuleEditorPageSupport.BUTTON_H);
+        UiFlowLayout.Wrap flow = UiFlowLayout.wrap(widths, limit, RuleEditorPageSupport.BUTTON_GAP, RuleEditorPageSupport.FORM_BUTTON_H);
         for (int index = 0; index < group.size(); index++) {
             UiRect offset = flow.bounds(index);
             group.get(index).setBounds(x + offset.x(), y + offset.y(), offset.width(), offset.height());
@@ -430,7 +433,7 @@ public final class RuleEditorEditPages {
     private static final int HEADER_TITLE_GAP = 4;
     private static final int HEADER_DIVIDER_GAP = 5;
 
-    /*** 卡片头部矩形：卡片左上角按内缩偏移、头高固定为 {@link RuleEditorPageSupport#CARD_HEADER_H}，
+    /** 卡片头部矩形：卡片左上角按内缩偏移、头高固定为 {@link RuleEditorPageSupport#CARD_HEADER_H}，
      * 是蓝条、图标、标题与分隔线的唯一位置基准。 */
     static UiRect cardHeaderRect(int x, int y, int width, int inset) {
         return new UiRect(x + inset, y + inset, Math.max(0, width - inset * 2), RuleEditorPageSupport.CARD_HEADER_H);
@@ -472,7 +475,7 @@ public final class RuleEditorEditPages {
         if (lastArea == null || lastArea.height() == 0) {
             return;
         }
-        var pointer = com.meteorite.itemdespawntowhat.client.ui.kit.UiPointer.gated(!pageScroll.isDragging(), mouseX, mouseY);
+        var pointer = UiPointer.gated(!pageScroll.isDragging(), mouseX, mouseY);
         mouseX = pointer.x();
         mouseY = pointer.y();
         graphics.enableScissor(lastArea.x(), lastArea.y(), lastArea.right(), lastArea.bottom());
@@ -537,9 +540,56 @@ public final class RuleEditorEditPages {
         }
         RuleValue view = currentView();
         if (view != null) {
-            RuleEditorPageSupport.addPageIssues(view, issues);
+            addPageIssues(view, issues);
         }
         return issues;
+    }
+
+    // 页面级校验补充：候选与效果上限、气候条件全空、组合方式非法
+    private static void addPageIssues(@Nullable RuleValue rule, List<FormIssue> issues) {
+        int candidates = ResultStructure.candidateCount(rule);
+        int effects = ResultStructure.totalEffectCount(rule);
+        Component limit = Component.translatable(RuleEditorPageSupport.UI + "issue.candidate_limit", ConditionLimits.MAX_EFFECTS);
+        if (candidates > ConditionLimits.MAX_EFFECTS) {
+            issues.add(FormIssue.error(RuleFields.OUTCOMES, Component.translatable(RuleEditorPageSupport.UI + "candidate.section"), limit));
+        } else if (effects > ConditionLimits.MAX_EFFECTS) {
+            issues.add(FormIssue.error(RuleFields.EFFECTS, Component.translatable(RuleEditorPageSupport.UI + "candidate.section"), limit));
+        }
+        if (RuleEditorPanelFactory.climateAllUnbounded(rule)) {
+            Component message = Component.translatable(RuleEditorPageSupport.UI + "issue.climate_empty");
+            issues.add(FormIssue.error(RuleFields.CONDITIONS, Component.translatable(RuleEditorPageSupport.UI + "rule.conditions"), message));
+        }
+        RuleValue combination = rule == null ? null : rule.child(RuleFields.COMBINATION);
+        if (combination != null && combination.isText() && !isKnownCombination(combination.asText())) {
+            Component message = Component.translatable(RuleEditorPageSupport.UI + "issue.combination_invalid");
+            issues.add(FormIssue.error(RuleFields.COMBINATION, Component.translatable(RuleEditorPageSupport.UI + "rule.combination"), message));
+        }
+    }
+
+    private static boolean isKnownCombination(String raw) {
+        if (raw == null) {
+            return false;
+        }
+        String normalized = raw.trim();
+        return CombinationMode.ROUND_ROBIN.key().equals(normalized) || CombinationMode.PRIORITY.key().equals(normalized);
+    }
+
+    // 从草稿路径里取某个数组段的序号（例如 outcomes[1].effects[2] 里的 outcomes 序号）
+    private static int indexIn(String path, String name) {
+        int at = path.indexOf(name + "[");
+        if (at < 0) {
+            return -1;
+        }
+        int start = at + name.length() + 1;
+        int end = path.indexOf(']', start);
+        if (end < 0) {
+            return -1;
+        }
+        try {
+            return Integer.parseInt(path.substring(start, end).trim());
+        } catch (NumberFormatException error) {
+            return -1;
+        }
     }
 
     /**
@@ -618,7 +668,7 @@ public final class RuleEditorEditPages {
             EditSession session = host.session();
             boolean hasCost = view != null && view.has(RuleFields.CATALYST_COST);
             ruleEditorInputPage.catalystToggle.setEnabled(enabled && (hasCost || session != null
-                    && RuleEditorPageSupport.selectedCatalystLeaf(session.draft()) != null));
+                    && PresenceLeaves.selectedCatalystLeaf(session.draft()) != null));
         }
         if (ruleEditorInputPage.catalystPresenceToggle != null) {
             ruleEditorInputPage.catalystPresenceToggle.setEnabled(enabled);
@@ -714,11 +764,11 @@ public final class RuleEditorEditPages {
             ruleEditorResultsPage.resultStage = path.contains("[") ? 2 : 1;
             ruleEditorResultsPage.showAdvancedEffects = path.contains("chance") || path.contains("delay_ticks")
                     || path.contains("conditions");
-            int candidate = RuleEditorPageSupport.indexIn(path, RuleFields.OUTCOMES);
+            int candidate = indexIn(path, RuleFields.OUTCOMES);
             if (candidate >= 0) {
                 ruleEditorResultsPage.candidateIndex = candidate;
             }
-            int effect = RuleEditorPageSupport.indexIn(path, RuleFields.EFFECTS);
+            int effect = indexIn(path, RuleFields.EFFECTS);
             if (effect >= 0) {
                 ruleEditorResultsPage.effectIndex = effect;
             }
@@ -896,15 +946,15 @@ public final class RuleEditorEditPages {
         }
         if (ruleEditorInputPage.catalystToggle != null) {
             RuleValue cost = view.child(RuleFields.CATALYST_COST);
-            ruleEditorInputPage.catalystToggle.setChecked(RuleEditorPageSupport.consumesCatalysts(cost));
+            ruleEditorInputPage.catalystToggle.setChecked(CatalystQuantities.consumesCatalysts(cost));
         }
         if (ruleEditorInputPage.catalystPresenceToggle != null) {
             ruleEditorInputPage.catalystPresenceToggle.setChecked(
-                    RuleEditorPageSupport.hasRuleLevelPresence(view, RuleEditorPageSupport.CATALYST_PRESENT_ID));
+                    PresenceLeaves.hasRuleLevelPresence(view, RuleEditorPageSupport.CATALYST_PRESENT_ID));
         }
         if (ruleEditorInputPage.fluidPresenceToggle != null) {
             ruleEditorInputPage.fluidPresenceToggle.setChecked(
-                    RuleEditorPageSupport.hasRuleLevelPresence(view, RuleEditorPageSupport.FLUID_PRESENT_ID));
+                    PresenceLeaves.hasRuleLevelPresence(view, RuleEditorPageSupport.FLUID_PRESENT_ID));
         }
         if (ruleEditorInputPage.fluidConsumeToggle != null) {
             ruleEditorInputPage.fluidConsumeToggle.setChecked(view.flag(RuleFields.CONSUME_FLUID, false));
@@ -916,10 +966,10 @@ public final class RuleEditorEditPages {
         ruleEditorResultsPage.updateCombinationLabel(view);
         RuleValue candidate = ResultStructure.candidateAt(view, ruleEditorResultsPage.candidateIndex);
         if (ruleEditorResultsPage.safeSpawnBox != null) {
-            ruleEditorResultsPage.safeSpawnBox.setChecked(RuleEditorPageSupport.boolOf(candidate, RuleFields.SAFE_SPAWN, false));
+            ruleEditorResultsPage.safeSpawnBox.setChecked(RuleValueReads.boolOf(candidate, RuleFields.SAFE_SPAWN, false));
         }
         if (ruleEditorResultsPage.fillOriginBox != null) {
-            ruleEditorResultsPage.fillOriginBox.setChecked(RuleEditorPageSupport.boolOf(candidate, RuleFields.FILL_ORIGIN, true));
+            ruleEditorResultsPage.fillOriginBox.setChecked(RuleValueReads.boolOf(candidate, RuleFields.FILL_ORIGIN, true));
         }
     }
 

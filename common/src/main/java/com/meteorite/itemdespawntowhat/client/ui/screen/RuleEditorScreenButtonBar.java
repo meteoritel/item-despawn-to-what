@@ -13,8 +13,8 @@ import org.jetbrains.annotations.NotNull;
  * 规则编辑器按钮排：把一组 {@link UiButton} 按可用宽度自动换行、左对齐排布，并转发渲染与鼠标输入。
  *
  * <p>只持有按钮引用，不读取屏幕状态；几何在 {@link #layout(int, int, int)} 时写入按钮。
- * {@link RuleEditorScreenListPage} 用它承载管理页工具排与列表底排，
- * {@link RuleEditorScreenEditPage} 用它承载编辑页底排。</p>
+ * {@link RuleEditorListPage} 用它承载管理页工具排与列表底排，
+ * {@link RuleEditorEditPage} 用它承载编辑页底排。</p>
  */
 final class RuleEditorScreenButtonBar {
 

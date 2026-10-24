@@ -7,6 +7,7 @@ import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleRequirements;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.model.CatalystCost;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
@@ -25,23 +26,22 @@ import org.jetbrains.annotations.Nullable;
  */
 final class RuleEditorValidation {
 
-    /*** 宿主能力：校验只通过这些入口读取当前编辑现场。 */
+    /** 宿主能力：校验只通过这些入口读取当前编辑现场。 */
     interface Host {
 
         // 当前编辑会话（未打开规则时为 null）
         @Nullable EditSession editingSession();
 
-        // 当前编辑的规则 id
         @Nullable String editingId();
 
         // 规则模型（脏规则与恢复状态）
         RuleEditorModel model();
 
         // 编辑页组合视图（页面级问题）
-        @Nullable RuleEditorEditPages pages();
+        @Nullable RuleEditorPageSet pages();
     }
 
-    private static final String UI = "gui.itemdespawntowhat.edit.";
+    private static final String UI = TypeLabels.UI_PREFIX;
     private static final String ISSUE = UI + "issue.";
     // 顶层效果数量上限
     private static final int MAX_EFFECTS = 32;
@@ -84,7 +84,7 @@ final class RuleEditorValidation {
                 issues.addAll(otherIssues);
             }
         }
-        RuleEditorEditPages pages = host.pages();
+        RuleEditorPageSet pages = host.pages();
         if (pages != null) {
             issues.addAll(pages.issues());
         }

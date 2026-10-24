@@ -5,6 +5,7 @@ import com.meteorite.itemdespawntowhat.client.edit.ClientTypeRegistries;
 import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
+import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
@@ -34,12 +35,12 @@ import org.jetbrains.annotations.Nullable;
 final class RuleEditorInputPage {
 
     // 所属编辑页容器：共享状态与跨页能力都经它访问
-    private final RuleEditorEditPages pages;
+    private final RuleEditorPageSet pages;
 
     // 主题：与容器共用宿主默认主题
-    private static final UiHostTheme THEME = RuleEditorEditPages.THEME;
+    private static final UiHostTheme THEME = RuleEditorPageSet.THEME;
 
-    RuleEditorInputPage(RuleEditorEditPages pages) {
+    RuleEditorInputPage(RuleEditorPageSet pages) {
         this.pages = pages;
     }
 
@@ -70,11 +71,11 @@ final class RuleEditorInputPage {
     final List<PresenceRow> presenceRows = new ArrayList<>();
 
     static final class PresenceRow {
-        final RuleEditorPageSupport.PresenceLeaf leaf;
+        final PresenceLeaves.PresenceLeaf leaf;
         final FormView form;
         @Nullable UiRect headerRect;
 
-        PresenceRow(RuleEditorPageSupport.PresenceLeaf leaf, FormView form) {
+        PresenceRow(PresenceLeaves.PresenceLeaf leaf, FormView form) {
             this.leaf = leaf;
             this.form = form;
         }
@@ -103,7 +104,7 @@ final class RuleEditorInputPage {
     void configureQuantityFields(FormView form, EditSession session, String basePath,
                                          TypeEditorDescriptor descriptor) {
         for (EditorField field : descriptor.fields()) {
-            if (field.type() != com.meteorite.itemdespawntowhat.client.edit.EditorFieldType.ITEM_COUNTS) continue;
+            if (field.type() != EditorFieldType.ITEM_COUNTS) continue;
             String path = DraftPaths.child(basePath, field.name());
             form.setItemCountReferences(path, quantityReferences(session, basePath, field));
             if (!RuleFields.CONSUME_COUNTS.equals(field.name()))
@@ -119,12 +120,12 @@ final class RuleEditorInputPage {
     // 物品数量字段当前绑定的引用条目：与参数表单装配使用同一份读取，避免出现第二份推导
     List<String> quantityReferences(EditSession session, String basePath, EditorField field) {
         if (quantityFromSource(field)) {
-            return RuleEditorPageSupport.stringList(session.draft()
+            return RuleValueReads.stringList(session.draft()
                     .valueAt(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS)));
         }
         if (RuleFields.CATALYST_COST.equals(basePath) && !ownerAt(session, basePath).has(RuleFields.CATALYST_ITEMS))
-            return RuleEditorPageSupport.ruleLevelCatalystItems(session.draft());
-        return RuleEditorPageSupport.stringList(ownerAt(session, basePath).child(RuleFields.CATALYST_ITEMS));
+            return PresenceLeaves.ruleLevelCatalystItems(session.draft());
+        return RuleValueReads.stringList(ownerAt(session, basePath).child(RuleFields.CATALYST_ITEMS));
     }
 
     // 字段所属对象；缺失或非映射时按空对象处理，读取引用与默认值都只看存在的条目
@@ -140,10 +141,10 @@ final class RuleEditorInputPage {
             owner = RuleValue.mapping().build();
         }
         List<String> references = source
-                ? RuleEditorPageSupport.stringList(session.draft().valueAt(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS)))
-                : RuleEditorPageSupport.stringList(owner.child(RuleFields.CATALYST_ITEMS));
-        RuleValue values = RuleEditorPageSupport.defaultQuantities(owner, references);
-        if (!RuleEditorPageSupport.CATALYST_PRESENT_ID.toString().equals(RuleEditorPageSupport.stringField(owner, RuleFields.TYPE))
+                ? RuleValueReads.stringList(session.draft().valueAt(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS)))
+                : RuleValueReads.stringList(owner.child(RuleFields.CATALYST_ITEMS));
+        RuleValue values = CatalystQuantities.defaultQuantities(owner, references);
+        if (!RuleEditorPageSupport.CATALYST_PRESENT_ID.toString().equals(RuleValueReads.stringField(owner, RuleFields.TYPE))
                 || owner.has(RuleFields.CATALYST_COUNT)) {
             return values;
         }
@@ -163,16 +164,16 @@ final class RuleEditorInputPage {
     private RuleValue inputThresholdDefaults(EditSession session) {
         RuleValue cost = ownerAt(session, RuleFields.CATALYST_COST);
         List<String> references = cost.has(RuleFields.CATALYST_ITEMS)
-                ? RuleEditorPageSupport.stringList(cost.child(RuleFields.CATALYST_ITEMS))
-                : RuleEditorPageSupport.ruleLevelCatalystItems(session.draft());
-        RuleValue.Mapping defaults = RuleValue.mapping(RuleEditorPageSupport.defaultQuantities(cost, references));
+                ? RuleValueReads.stringList(cost.child(RuleFields.CATALYST_ITEMS))
+                : PresenceLeaves.ruleLevelCatalystItems(session.draft());
+        RuleValue.Mapping defaults = RuleValue.mapping(CatalystQuantities.defaultQuantities(cost, references));
         if (!cost.has(RuleFields.CATALYST_ITEMS)) {
-            for (RuleEditorPageSupport.PresenceLeaf leaf : RuleEditorPageSupport.ruleLevelPresence(
+            for (PresenceLeaves.PresenceLeaf leaf : PresenceLeaves.ruleLevelPresence(
                     session.draft().root(), RuleEditorPageSupport.CATALYST_PRESENT_ID)) {
                 RuleValue condition = session.draft().valueAt(leaf.conditionPath());
                 if (condition == null) continue;
                 RuleValue counts = condition.childOr(RuleFields.ITEM_COUNTS, RuleValue.mapping().build());
-                for (String reference : RuleEditorPageSupport.stringList(condition.child(RuleFields.CATALYST_ITEMS))) {
+                for (String reference : RuleValueReads.stringList(condition.child(RuleFields.CATALYST_ITEMS))) {
                     RuleValue value = counts.childOr(reference, condition.childOr(RuleFields.CATALYST_COUNT,
                             RuleValue.integer(CatalystCost.DEFAULT_COUNT)));
                     defaults.put(reference, value.deepCopy());
@@ -188,9 +189,9 @@ final class RuleEditorInputPage {
         RuleValue defaults = inputThresholdDefaults(session);
         session.draft().setAt(RuleFields.CATALYST_COST, RuleValue.mapping(cost)
                 .put(RuleFields.CATALYST_ITEMS, RuleValue.textList(
-                        RuleEditorPageSupport.ruleLevelCatalystItems(session.draft())).build())
+                        PresenceLeaves.ruleLevelCatalystItems(session.draft())).build())
                 .put(RuleFields.ITEM_COUNTS, cost.childOr(RuleFields.ITEM_COUNTS, defaults)).build());
-        for (RuleEditorPageSupport.PresenceLeaf leaf : RuleEditorPageSupport.ruleLevelPresence(
+        for (PresenceLeaves.PresenceLeaf leaf : PresenceLeaves.ruleLevelPresence(
                 session.draft().root(), RuleEditorPageSupport.CATALYST_PRESENT_ID)) {
             RuleValue condition = session.draft().valueAt(leaf.conditionPath());
             if (condition != null) session.draft().setAt(leaf.conditionPath(), RuleValue.mapping(condition)
@@ -204,20 +205,20 @@ final class RuleEditorInputPage {
         if (sourceCostForm != null) {
             String path = RuleFields.SOURCE_COST;
             sourceCostForm.setItemCountReferences(path,
-                    RuleEditorPageSupport.stringList(session.draft().valueAt(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS))));
+                    RuleValueReads.stringList(session.draft().valueAt(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS))));
             sourceCostForm.reload();
         }
         for (PresenceRow row : presenceRows) if (row.leaf.catalyst()) {
             row.form.setItemCountReferences(DraftPaths.child(row.leaf.conditionPath(), RuleFields.ITEM_COUNTS),
-                    RuleEditorPageSupport.stringList(session.draft().valueAt(row.leaf.fieldPath())));
+                    RuleValueReads.stringList(session.draft().valueAt(row.leaf.fieldPath())));
             row.form.reload();
         }
         if (catalystForm != null) {
             String base = RuleFields.CATALYST_COST;
             catalystForm.setItemCountReferences(DraftPaths.child(base, RuleFields.CONSUME_COUNTS),
-                    RuleEditorPageSupport.stringList(session.draft().valueAt(DraftPaths.child(base, RuleFields.CATALYST_ITEMS))));
+                    RuleValueReads.stringList(session.draft().valueAt(DraftPaths.child(base, RuleFields.CATALYST_ITEMS))));
             catalystForm.setItemCountReferences(DraftPaths.child(base, RuleFields.ITEM_COUNTS),
-                    RuleEditorPageSupport.stringList(session.draft().valueAt(
+                    RuleValueReads.stringList(session.draft().valueAt(
                             DraftPaths.child(base, RuleFields.CATALYST_ITEMS))));
             catalystForm.reload();
         }
@@ -235,9 +236,9 @@ final class RuleEditorInputPage {
         sourceForm.hideRowLabel(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS));
         sourceForm.setOnFieldWritten((path, before) -> {
             if (!path.equals(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS))) return;
-            List<String> references = RuleEditorPageSupport.stringList(session.draft().valueAt(path));
+            List<String> references = RuleValueReads.stringList(session.draft().valueAt(path));
             if (session.draft().root().has(RuleFields.SOURCE_COST)) {
-                session.draft().replaceWith(RuleEditorPageSupport.withQuantities(session.draft().root(),
+                session.draft().replaceWith(CatalystQuantities.withQuantities(session.draft().root(),
                         RuleFields.SOURCE_COST, references, CatalystCost.DEFAULT_COUNT));
             }
         });
@@ -245,7 +246,7 @@ final class RuleEditorInputPage {
         pages.liveForms.add(sourceForm);
         pages.liveWidgets.add(sourceForm);
 
-        sourceCostButton = new UiButton(RuleEditorEditPages.THEME, pages.font, Component.translatable(RuleEditorPageSupport.UI + "cost.mode.custom"),
+        sourceCostButton = new UiButton(RuleEditorPageSet.THEME, pages.font, Component.translatable(RuleEditorPageSupport.UI + "cost.mode.custom"),
                 UiButtonVariant.SECONDARY, this::specifySourceCost).setChipStyle(true);
         {
             boolean custom = rule.has(RuleFields.SOURCE_COST);
@@ -267,8 +268,8 @@ final class RuleEditorInputPage {
 
         buildPresenceSection(session, RuleEditorPageSupport.CATALYST_PRESENT_ID, RuleEditorPageSupport.UI + "rule.presence.add_catalyst");
         RuleValue cost = rule.child(RuleFields.CATALYST_COST);
-        boolean catalystOn = RuleEditorPageSupport.consumesCatalysts(cost);
-        boolean catalystEnabled = RuleEditorPageSupport.hasRuleLevelPresence(rule, RuleEditorPageSupport.CATALYST_PRESENT_ID);
+        boolean catalystOn = CatalystQuantities.consumesCatalysts(cost);
+        boolean catalystEnabled = PresenceLeaves.hasRuleLevelPresence(rule, RuleEditorPageSupport.CATALYST_PRESENT_ID);
         catalystToggle = new UiCheckBox(THEME, pages.font,
                 Component.translatable(RuleEditorPageSupport.UI + "rule.catalyst_consume"), catalystOn);
         catalystToggle.setVisible(catalystEnabled || cost != null);
@@ -284,17 +285,17 @@ final class RuleEditorInputPage {
                 RuleDraft draft = session.draft();
                 // 每轮消耗至少 1 件：写回后没有任何正数等同于不消耗，移除该表并关闭开关
                 if (consumePath.equals(path)
-                        && !RuleEditorPageSupport.consumesCatalysts(draft.valueAt(RuleFields.CATALYST_COST))) {
+                        && !CatalystQuantities.consumesCatalysts(draft.valueAt(RuleFields.CATALYST_COST))) {
                     draft.removeAt(consumePath);
                     if (catalystToggle != null) catalystToggle.setChecked(false);
                     return;
                 }
                 if (!path.equals(DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.CATALYST_ITEMS))) return;
-                List<String> references = RuleEditorPageSupport.stringList(draft.valueAt(path));
-                RuleEditorPageSupport.reconcileQuantities(draft, references);
+                List<String> references = RuleValueReads.stringList(draft.valueAt(path));
+                CatalystQuantities.reconcileQuantities(draft, references);
                 RuleValue current = draft.valueAt(RuleFields.CATALYST_COST);
                 if (current != null && current.has(RuleFields.CONSUME_COUNTS)) {
-                    draft.setAt(RuleFields.CATALYST_COST, RuleEditorPageSupport.withQuantities(current,
+                    draft.setAt(RuleFields.CATALYST_COST, CatalystQuantities.withQuantities(current,
                             RuleFields.CONSUME_COUNTS, references, CatalystCost.DEFAULT_COUNT));
                 }
             });
@@ -311,14 +312,14 @@ final class RuleEditorInputPage {
         // 没有流体存在条件就没有可消耗的接触流体：开关只在启用流体条件后出现；
         // 规则里已开启时仍保留开关，否则这个值在界面上既看不到也关不掉
         fluidConsumeToggle.setVisible(fluidConsume
-                || RuleEditorPageSupport.hasRuleLevelPresence(rule, RuleEditorPageSupport.FLUID_PRESENT_ID));
+                || PresenceLeaves.hasRuleLevelPresence(rule, RuleEditorPageSupport.FLUID_PRESENT_ID));
         fluidConsumeToggle.setOnChanged(checked -> pages.apply(EditSession.OP_SET_FIELD,
                 () -> session.draft().setAt(RuleFields.CONSUME_FLUID, RuleValue.flag(checked))));
         pages.liveWidgets.add(fluidConsumeToggle);
     }
 
     private boolean consumesCatalysts(EditSession session) {
-        return RuleEditorPageSupport.consumesCatalysts(session.draft().valueAt(RuleFields.CATALYST_COST));
+        return CatalystQuantities.consumesCatalysts(session.draft().valueAt(RuleFields.CATALYST_COST));
     }
 
     /** 催化剂卡片中与消耗绑定的行只在勾选「消耗催化剂」后显示。 */
@@ -335,8 +336,8 @@ final class RuleEditorInputPage {
             return;
         }
         RuleDraft draft = session.draft();
-        pages.apply(EditSession.OP_SET_FIELD, () -> draft.setAt(RuleFields.SOURCE_COST, RuleEditorPageSupport.defaultQuantities(null,
-                RuleEditorPageSupport.stringList(draft.valueAt(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS))))));
+        pages.apply(EditSession.OP_SET_FIELD, () -> draft.setAt(RuleFields.SOURCE_COST, CatalystQuantities.defaultQuantities(null,
+                RuleValueReads.stringList(draft.valueAt(DraftPaths.child(RuleFields.SOURCE, RuleFields.SOURCE_ITEMS))))));
     }
 
     void onCatalystToggle(boolean checked) {
@@ -351,12 +352,12 @@ final class RuleEditorInputPage {
             if (cost == null || !cost.isMapping()) cost = RuleValue.mapping().build();
             if (!cost.has(RuleFields.CATALYST_ITEMS)) {
                 cost = RuleValue.mapping(cost).put(RuleFields.CATALYST_ITEMS,
-                        RuleValue.textList(RuleEditorPageSupport.ruleLevelCatalystItems(draft)).build()).build();
+                        RuleValue.textList(PresenceLeaves.ruleLevelCatalystItems(draft)).build()).build();
                 draft.setAt(RuleFields.CATALYST_COST, cost);
             }
             if (checked) {
-                RuleValue values = RuleEditorPageSupport.withQuantities(cost, RuleFields.ITEM_COUNTS,
-                        RuleEditorPageSupport.stringList(cost.child(RuleFields.CATALYST_ITEMS)), CatalystCost.DEFAULT_COUNT)
+                RuleValue values = CatalystQuantities.withQuantities(cost, RuleFields.ITEM_COUNTS,
+                        RuleValueReads.stringList(cost.child(RuleFields.CATALYST_ITEMS)), CatalystCost.DEFAULT_COUNT)
                         .childOr(RuleFields.ITEM_COUNTS, RuleValue.mapping().build());
                 draft.setAt(DraftPaths.child(RuleFields.CATALYST_COST, RuleFields.CONSUME_COUNTS), values.deepCopy());
             } else {
@@ -366,8 +367,8 @@ final class RuleEditorInputPage {
     }
 
     void buildPresenceSection(EditSession session, ResourceLocation type, String toggleKey) {
-        List<RuleEditorPageSupport.PresenceLeaf> ruleLevel = RuleEditorPageSupport.ruleLevelPresence(session.draft().root(), type);
-        UiCheckBox toggle = new UiCheckBox(RuleEditorEditPages.THEME, pages.font, Component.translatable(toggleKey), !ruleLevel.isEmpty());
+        List<PresenceLeaves.PresenceLeaf> ruleLevel = PresenceLeaves.ruleLevelPresence(session.draft().root(), type);
+        UiCheckBox toggle = new UiCheckBox(RuleEditorPageSet.THEME, pages.font, Component.translatable(toggleKey), !ruleLevel.isEmpty());
         toggle.setOnChanged(checked -> onPresenceToggle(type, checked));
         pages.liveWidgets.add(toggle);
         if (RuleEditorPageSupport.CATALYST_PRESENT_ID.equals(type)) {
@@ -375,7 +376,7 @@ final class RuleEditorInputPage {
         } else {
             fluidPresenceToggle = toggle;
         }
-        for (RuleEditorPageSupport.PresenceLeaf leaf : ruleLevel) {
+        for (PresenceLeaves.PresenceLeaf leaf : ruleLevel) {
             FormView form = presenceForm(session, leaf);
             presenceRows.add(new PresenceRow(leaf, form));
             pages.liveForms.add(form);
@@ -383,7 +384,7 @@ final class RuleEditorInputPage {
         }
     }
 
-    FormView presenceForm(EditSession session, RuleEditorPageSupport.PresenceLeaf leaf) {
+    FormView presenceForm(EditSession session, PresenceLeaves.PresenceLeaf leaf) {
         FormView form = pages.newForm(session, leaf.conditionPath(), presenceDescriptor(leaf));
         form.hideRowLabel(leaf.fieldPath());
         configurePresenceWrites(form, session, leaf);
@@ -401,14 +402,14 @@ final class RuleEditorInputPage {
             pages.host.onDraftChanged();
         });
         // 选择卡片自带逐项移除；多个同类型叶保留移除整条条件的入口。
-        if (RuleEditorPageSupport.ruleLevelPresence(session.draft().root(), leaf.type()).size() > 1) {
-            form.setRowAction(leaf.fieldPath(), new UiButton(RuleEditorEditPages.THEME, pages.font, Component.translatable(RuleEditorPageSupport.UI + "rule.presence.remove"),
+        if (PresenceLeaves.ruleLevelPresence(session.draft().root(), leaf.type()).size() > 1) {
+            form.setRowAction(leaf.fieldPath(), new UiButton(RuleEditorPageSet.THEME, pages.font, Component.translatable(RuleEditorPageSupport.UI + "rule.presence.remove"),
                     UiButtonVariant.SECONDARY, () -> removePresenceLeaf(leaf)).setChipStyle(true));
         }
         return form;
     }
 
-    void configurePresenceWrites(FormView form, EditSession session, RuleEditorPageSupport.PresenceLeaf leaf) {
+    void configurePresenceWrites(FormView form, EditSession session, PresenceLeaves.PresenceLeaf leaf) {
         form.setOnFieldWritten((path, before) -> {
             if (!leaf.fieldPath().equals(path)) return;
             if (leaf.catalyst()) {
@@ -416,12 +417,12 @@ final class RuleEditorInputPage {
                 RuleValue condition = session.draft().valueAt(leaf.conditionPath());
                 if (condition != null) session.draft().setAt(leaf.conditionPath(), RuleValue.mapping(condition)
                         .remove(RuleFields.ITEM_COUNTS).remove(RuleFields.CATALYST_COUNT).build());
-                RuleEditorPageSupport.retargetCatalystItems(session.draft());
+                CatalystQuantities.retargetCatalystItems(session.draft());
             }
         });
     }
 
-    TypeEditorDescriptor presenceDescriptor(RuleEditorPageSupport.PresenceLeaf leaf) {
+    TypeEditorDescriptor presenceDescriptor(PresenceLeaves.PresenceLeaf leaf) {
         List<EditorField> fields = leaf.catalyst()
                 ? List.of(EditorField.tagList(RuleFields.CATALYST_ITEMS, RuleEditorPageSupport.UI + "field.catalyst_present.items", "minecraft:item")
                         .asRequired(),
@@ -439,7 +440,7 @@ final class RuleEditorInputPage {
         RuleDraft draft = session.draft();
         pages.apply(EditSession.OP_SET_FIELD, () -> {
             if (checked) {
-                RuleEditorPageSupport.addRuleLevelPresence(draft, type);
+                PresenceLeaves.addRuleLevelPresence(draft, type);
                 if (RuleEditorPageSupport.CATALYST_PRESENT_ID.equals(type) && !draft.root().has(RuleFields.CATALYST_COST)) {
                     draft.setAt(RuleFields.CATALYST_COST, RuleValue.mapping()
                             .put(RuleFields.CATALYST_ITEMS, RuleValue.list().build())
@@ -448,25 +449,25 @@ final class RuleEditorInputPage {
             } else {
                 if (RuleEditorPageSupport.CATALYST_PRESENT_ID.equals(type)) draft.removeAt(RuleFields.CATALYST_COST);
                 else draft.removeAt(RuleFields.CONSUME_FLUID);
-                RuleEditorPageSupport.removeRuleLevelPresence(draft, type);
+                PresenceLeaves.removeRuleLevelPresence(draft, type);
             }
         });
     }
 
-    void removePresenceLeaf(RuleEditorPageSupport.PresenceLeaf leaf) {
+    void removePresenceLeaf(PresenceLeaves.PresenceLeaf leaf) {
         EditSession session = pages.host.session();
         if (session == null) {
             return;
         }
         RuleDraft draft = session.draft();
         pages.apply(EditSession.OP_SET_FIELD, () -> {
-            RuleEditorPageSupport.removeLeafAt(draft, leaf.path());
-            if (leaf.catalyst()) RuleEditorPageSupport.retargetCatalystItems(draft);
+            PresenceLeaves.removeLeafAt(draft, leaf.path());
+            if (leaf.catalyst()) CatalystQuantities.retargetCatalystItems(draft);
         });
     }
 
-    @Nullable RuleEditorPageSupport.PresenceLeaf findPresenceLeaf(String conditionPath) {
-        for (RuleEditorPageSupport.PresenceLeaf leaf : RuleEditorPageSupport.scanPresenceLeaves(pages.currentView())) {
+    @Nullable PresenceLeaves.PresenceLeaf findPresenceLeaf(String conditionPath) {
+        for (PresenceLeaves.PresenceLeaf leaf : PresenceLeaves.scanPresenceLeaves(pages.currentView())) {
             if (leaf.conditionPath().equals(conditionPath)) {
                 return leaf;
             }
@@ -481,7 +482,7 @@ final class RuleEditorInputPage {
         }
         boolean changed = false;
         for (PresenceRow row : presenceRows) {
-            if (row.form.isVisible() && RuleEditorPageSupport.flushPresenceType(session, row.leaf, row.form)) {
+            if (row.form.isVisible() && PresenceLeaves.flushPresenceType(session, row.leaf, row.form)) {
                 changed = true;
             }
         }
@@ -499,7 +500,7 @@ final class RuleEditorInputPage {
             if (!row.leaf.ruleLevel() || !row.leaf.type().equals(type)) {
                 continue;
             }
-            boolean showHeader = RuleEditorPageSupport.ruleLevelPresence(pages.currentView(), type).size() > 1;
+            boolean showHeader = PresenceLeaves.ruleLevelPresence(pages.currentView(), type).size() > 1;
             row.headerRect = showHeader ? new UiRect(x, cursor, width, RuleEditorPageSupport.LINE_H) : null;
             if (showHeader) cursor += RuleEditorPageSupport.LINE_H;
             cursor = pages.layoutForm(row.form, x, cursor, width);
@@ -513,7 +514,7 @@ final class RuleEditorInputPage {
         if (session == null) {
             return items;
         }
-        for (String reference : RuleEditorPageSupport.stringList(session.draft().valueAt(
+        for (String reference : RuleValueReads.stringList(session.draft().valueAt(
                 DraftPaths.child(conditionPath, RuleFields.CATALYST_ITEMS)))) {
             TaggedId.parse(reference).result().ifPresent(items::add);
         }
@@ -566,7 +567,7 @@ final class RuleEditorInputPage {
         }
         // 存在条件标题行：类型 + 同类型编号 + 作用域，多个同类叶也能逐项辨识
         for (PresenceRow row : presenceRows) {
-            pages.drawText(graphics, row.headerRect, RuleEditorPageSupport.presenceHeader(row.leaf), THEME.palette().textSecondary());
+            pages.drawText(graphics, row.headerRect, PresenceLeaves.presenceHeader(row.leaf), THEME.palette().textSecondary());
         }
     }
 }

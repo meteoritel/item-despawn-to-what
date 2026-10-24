@@ -4,7 +4,10 @@ import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDescriptors;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.net.RuleEditClientState;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiPointer;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiListEditor;
 import com.meteorite.itemdespawntowhat.platform.Services;
 import com.meteorite.itemdespawntowhat.core.api.DevelopmentDiagnostics;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
@@ -21,6 +24,7 @@ import com.meteorite.itemdespawntowhat.client.ui.shared.EntityPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostPalette;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCodeView;
@@ -46,14 +50,14 @@ import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
-/***
+/**
  * 规则编辑器主屏。
  * <p>两种模式：规则管理页（列表 / 搜索 / 筛选 / 新建 / 复制 / 停用 / 删除）与规则编辑页
  * （基本信息 / 源物品 / 触发条件 / 效果 四个页签）。所有字段编辑走描述符驱动的
  * {@link com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView}，条件树走
  * {@link com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionTreeSummary}，界面任何位置都不出现可编辑 JSON 文本框。
- * <p>本类只保留模式切换、屏幕生命周期、布局编排与事件派发：管理页在 {@link RuleEditorScreenListPage}
- * （条目动作在 {@link RuleEditorScreenListActions}），编辑页与保存 / 校验入口在 {@link RuleEditorScreenEditPage}
+ * <p>本类只保留模式切换、屏幕生命周期、布局编排与事件派发：管理页在 {@link RuleEditorListPage}
+ * （条目动作在 {@link RuleEditorListActions}），编辑页与保存 / 校验入口在 {@link RuleEditorEditPage}
  * （本地校验在 {@link RuleEditorValidation}），两者的公共按钮排为 {@link RuleEditorScreenButtonBar}。
  * <p>只有工作区处于 ACTIVE 时可编辑；APPLYING 冻结；工作区进入 FREE 时自行关屏。
  */
@@ -64,7 +68,6 @@ public final class RuleEditorScreen extends Screen {
 
     // 布局常量
     private static final int PAD = 4;
-    private static final int HEADER_H = 14;
     private static final int EDIT_HEADER_H = 24;
     private static final int EDIT_PAD = 8;
     private static final int NOTICE_H = 10;
@@ -76,7 +79,7 @@ public final class RuleEditorScreen extends Screen {
     private static final int CHANGES_MODAL_MAX_HEIGHT = 220;
     private static final int CHANGES_MODAL_SCREEN_MARGIN = 90;
     // i18n 前缀
-    private static final String UI = "gui.itemdespawntowhat.edit.";
+    private static final String UI = TypeLabels.UI_PREFIX;
 
     // 模式：DEBUG 为开发环境专用页，只在 debug 模式下可从管理页进入
     private enum Mode {LIST, EDIT, DEBUG}
@@ -100,47 +103,25 @@ public final class RuleEditorScreen extends Screen {
         DANGER
     }
 
+    // 宿主工作区与屏幕级共享状态
     private final EditorWorkspaceView workspace;
     private final RuleEditorModel model;
     // 列表展示快照缓存：列表页、页头标题与提示共用，避免按帧重复取体
     private final RuleListDisplayCache display;
     private final UiFocusManager focus = new UiFocusManager();
     private final UiModalStack modals = new UiModalStack(THEME);
-    private @Nullable RuleSaveOverlay saveOverlay;
-
-    // 草稿冲刷只做一次：关闭路径会连续经过 closeEditor / onClose / removed
-    private boolean released;
-
-    private boolean saving() {
-        return workspace.state() == RuleEditClientState.APPLYING;
-    }
-
-    private RuleSaveOverlay saveOverlay() {
-        if (saveOverlay == null) {
-            listPage.onScopeChanged();
-            editPage.endInteractions();
-            focus.clearFocus();
-            saveOverlay = new RuleSaveOverlay(font, THEME, workspace);
-        }
-        return saveOverlay;
-    }
-
-    /**
-     * @return 保存期间禁止 Esc 关闭；断线收尾由工作区控制
-     */
-    @Override
-    public boolean shouldCloseOnEsc() {
-        return !saving();
-    }
 
     // 管理页（LIST）、编辑页（EDIT）与调试页（DEBUG）：各自持有控件与视图状态
-    private final RuleEditorScreenListPage listPage;
-    private final RuleEditorScreenEditPage editPage;
-    private final RuleEditorScreenDebugPage debugPage;
+    private final RuleEditorListPage listPage;
+    private final RuleEditorEditPage editPage;
+    private final RuleEditorDebugPage debugPage;
 
-    // 当前模式与编辑对象
+    // 保存遮罩按需创建，null 表示尚未打开
+    private @Nullable RuleSaveOverlay saveOverlay;
+
     private Mode mode = Mode.LIST;
     private @Nullable String editingId;
+
     // 状态提示（保存回执 / 校验失败等）
     private @Nullable Component notice;
     private NoticeLevel noticeLevel = NoticeLevel.INFO;
@@ -148,23 +129,24 @@ public final class RuleEditorScreen extends Screen {
     private long noticeExpiresAt;
     // 上一帧的提示是否被截断（决定悬停提示是否出现）
     private boolean noticeTruncated;
-
-    // 快照解析失败只提示一次：失败原因清空前不重复打扰
-    private boolean snapshotFailureNotified;
     // 上一帧绘制的提示区域（悬停命中测试用），未绘制时为 null
     private @Nullable UiRect noticeRect;
     private @Nullable UiRect truncatedTitleRect;
     // 上一帧是否存在模态（用于识别「模态打开」这一清除时机）
     private boolean lastModalsEmpty = true;
 
+    // 状态同步标志：快照解析失败与冻结只提示一次，草稿修改后列表需刷新
+    private boolean snapshotFailureNotified;
     // 上一帧的可编辑状态（冻结切换时刷新表单使能）
     private boolean lastEditable = true;
-    // 冻结提示只提示一次
     private boolean frozenNotified;
-    // 草稿被修改后需要在下一帧刷新列表
     private boolean listNeedsRefresh;
+
     // 内容区（每帧重算，供命中测试复用）
     private UiRect contentArea = new UiRect(0, 0, 0, 0);
+
+    // 草稿冲刷只做一次：关闭路径会连续经过 closeEditor / onClose / removed
+    private boolean released;
 
     // 构造：由 {@link RuleEditorOpener} 在服务端授权成功后调用
     public RuleEditorScreen(EditorWorkspaceView workspace) {
@@ -174,7 +156,7 @@ public final class RuleEditorScreen extends Screen {
         this.model = new RuleEditorModel(workspace);
         this.display = new RuleListDisplayCache(this.model);
         // 管理页宿主适配：把屏幕能力暴露给列表页与条目动作
-        RuleEditorScreenListPage.Host listHost = new RuleEditorScreenListPage.Host() {
+        RuleEditorListPage.Host listHost = new RuleEditorListPage.Host() {
             @Override
             public Font font() {
                 return RuleEditorScreen.this.font;
@@ -251,7 +233,7 @@ public final class RuleEditorScreen extends Screen {
             }
         };
         // 编辑页宿主适配：把屏幕能力暴露给页签组合视图与保存流程
-        RuleEditorScreenEditPage.Host editHost = new RuleEditorScreenEditPage.Host() {
+        RuleEditorEditPage.Host editHost = new RuleEditorEditPage.Host() {
             @Override
             public Font font() {
                 return RuleEditorScreen.this.font;
@@ -353,7 +335,7 @@ public final class RuleEditorScreen extends Screen {
             }
         };
         // 调试页宿主适配：只暴露调试页需要的卡片计数、刷新与返回能力
-        RuleEditorScreenDebugPage.Host debugHost = new RuleEditorScreenDebugPage.Host() {
+        RuleEditorDebugPage.Host debugHost = new RuleEditorDebugPage.Host() {
             @Override
             public Font font() {
                 return RuleEditorScreen.this.font;
@@ -399,9 +381,9 @@ public final class RuleEditorScreen extends Screen {
                 RuleEditorScreen.this.backToList();
             }
         };
-        this.listPage = new RuleEditorScreenListPage(listHost);
-        this.editPage = new RuleEditorScreenEditPage(editHost);
-        this.debugPage = new RuleEditorScreenDebugPage(debugHost);
+        this.listPage = new RuleEditorListPage(listHost);
+        this.editPage = new RuleEditorEditPage(editHost);
+        this.debugPage = new RuleEditorDebugPage(debugHost);
         modals.setHistoryTarget(editPage::restoreHistory);
         modals.setOnScopeChanged(() -> {
             listPage.onScopeChanged();
@@ -412,7 +394,7 @@ public final class RuleEditorScreen extends Screen {
         focus.setListener((previous, next) -> {
             UiNarration.focus(next);
             focus.setSpaceActivates(!(next instanceof UiTextInput)
-                    && !(next instanceof com.meteorite.itemdespawntowhat.client.ui.widget.UiListEditor));
+                    && !(next instanceof UiListEditor));
             editPage.ensureVisible(next);
         });
         this.model.refresh();
@@ -422,6 +404,14 @@ public final class RuleEditorScreen extends Screen {
     @Override
     public boolean isPauseScreen() {
         return false;
+    }
+
+    /**
+     * @return 保存期间禁止 Esc 关闭；断线收尾由工作区控制
+     */
+    @Override
+    public boolean shouldCloseOnEsc() {
+        return !saving();
     }
 
     // ---- 初始化 ----
@@ -457,14 +447,14 @@ public final class RuleEditorScreen extends Screen {
         } else {
             saveOverlay = null;
         }
-        var pointer = com.meteorite.itemdespawntowhat.client.ui.kit.UiPointer.gated(!saving && modals.isEmpty() && picker == null, mouseX, mouseY);
+        var pointer = UiPointer.gated(!saving && modals.isEmpty() && picker == null, mouseX, mouseY);
         mouseX = pointer.x();
         mouseY = pointer.y();
         int w = this.width;
         int h = this.height;
         modals.setBounds(0, 0, w, h);
         THEME.drawWindow(graphics, new UiRect(0, 0, w, h));
-        int headerHeight = mode == Mode.EDIT ? EDIT_HEADER_H : HEADER_H;
+        int headerHeight = mode == Mode.EDIT ? EDIT_HEADER_H : UiTheme.HEADER_HEIGHT;
         int pagePad = mode == Mode.EDIT ? EDIT_PAD : PAD;
         THEME.drawDivider(graphics, 0, headerHeight, w);
         drawHeaderText(graphics);
@@ -589,6 +579,20 @@ public final class RuleEditorScreen extends Screen {
         THEME.drawSurface(graphics, chip, fill, palette.controlBevelDark());
         graphics.drawString(font, text, chip.x() + NOTICE_CHIP_PAD, y + 1, palette.textPrimary(), false);
         noticeRect = chip;
+    }
+
+    private boolean saving() {
+        return workspace.state() == RuleEditClientState.APPLYING;
+    }
+
+    private RuleSaveOverlay saveOverlay() {
+        if (saveOverlay == null) {
+            listPage.onScopeChanged();
+            editPage.endInteractions();
+            focus.clearFocus();
+            saveOverlay = new RuleSaveOverlay(font, THEME, workspace);
+        }
+        return saveOverlay;
     }
 
     // ---- 模式切换 ----
@@ -1132,7 +1136,7 @@ public final class RuleEditorScreen extends Screen {
     }
 
     /**
-     * 把提示级别折算为编辑页宿主桥接层（{@code RuleEditorEditPages.Host#notice(Component, int)}）的色值。
+     * 把提示级别折算为编辑页宿主桥接层（{@code RuleEditorPageSet.Host#notice(Component, int)}）的色值。
      *
      * <p>桥接层只接受颜色，本方法让页面调用点仍只表达级别，取色集中在屏幕层。</p>
      *

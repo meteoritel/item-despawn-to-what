@@ -26,10 +26,10 @@ import org.jetbrains.annotations.Nullable;
 final class RuleEditorInfoPage {
 
     // 所属编辑页容器：共享状态与跨页能力都经它访问
-    private final RuleEditorEditPages pages;
+    private final RuleEditorPageSet pages;
 
     // 主题：与容器共用宿主默认主题
-    private static final UiHostTheme THEME = RuleEditorEditPages.THEME;
+    private static final UiHostTheme THEME = RuleEditorPageSet.THEME;
 
     // 页面文案前缀
     private static final String UI = RuleEditorPageSupport.UI;
@@ -37,7 +37,7 @@ final class RuleEditorInfoPage {
     // 只读文本块的缩放比例（与 ID 行一致，便于各段文字共用行高口径）
     private static final float TEXT_SCALE = 0.8F;
 
-    RuleEditorInfoPage(RuleEditorEditPages pages) {
+    RuleEditorInfoPage(RuleEditorPageSet pages) {
         this.pages = pages;
     }
 
@@ -73,7 +73,7 @@ final class RuleEditorInfoPage {
         infoForm = pages.newForm(session, "", descriptor);
         infoForm.useCompactSpacing();
         // 滑条与数字输入同高，备注保留三行可见高度。
-        infoForm.setRowHeight(RuleFields.PRIORITY, RuleEditorEditPages.PRIORITY_ROW_HEIGHT);
+        infoForm.setRowHeight(RuleFields.PRIORITY, RuleEditorPageSet.PRIORITY_ROW_HEIGHT);
         infoForm.setRowHeight(RuleFields.NOTES, 36);
         infoForm.suppressRowTooltip(RuleFields.ENABLED);
         // 显示名与备注的提示已作为占位符写在输入框内，悬停不再重复弹出
@@ -103,13 +103,13 @@ final class RuleEditorInfoPage {
         y = pages.layoutForm(infoForm, x,
                 (infoSourceRect == null ? infoCategoryRect : infoSourceRect).bottom() + 4, width);
         int bottom = y + padding;
-        pages.cards.add(new RuleEditorEditPages.PageCard(new UiRect(area.x(), area.y(), area.width(), bottom - area.y()), null));
+        pages.cards.add(new RuleEditorPageSet.PageCard(new UiRect(area.x(), area.y(), area.width(), bottom - area.y()), null));
         return bottom;
     }
 
     List<FormattedCharSequence> idTextLines(int width) {
         RuleValue view = pages.currentView();
-        String id = view == null ? "" : RuleEditorPageSupport.stringOf(view);
+        String id = view == null ? "" : RuleValueReads.stringOf(view);
         return pages.font.split(Component.literal(id), Math.max(8, (int) (width / TEXT_SCALE)));
     }
 

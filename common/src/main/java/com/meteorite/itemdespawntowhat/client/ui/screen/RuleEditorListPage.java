@@ -5,6 +5,7 @@ import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
 import com.meteorite.itemdespawntowhat.client.edit.RuleCategorySkeleton;
 import com.meteorite.itemdespawntowhat.client.edit.RulePackExporter;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
@@ -44,15 +45,14 @@ import org.jetbrains.annotations.Nullable;
  *
  * <p>本类只持有管理页控件与视图状态（选中项、展开分类、每个条目的配方视图），
  * 规则会话与工作区、弹窗栈、提示条、跨模式动作都通过 {@link Host} 暴露的屏幕能力完成；
- * 新建 / 复制 / 启停 / 删除等条目动作在 {@link RuleEditorScreenListActions}，
- * 模式切换、保存入口与编辑页由 {@link RuleEditorScreen} 与 {@link RuleEditorScreenEditPage} 负责。</p>
+ * 新建 / 复制 / 启停 / 删除等条目动作在 {@link RuleEditorListActions}，
+ * 模式切换、保存入口与编辑页由 {@link RuleEditorScreen} 与 {@link RuleEditorEditPage} 负责。</p>
  */
-final class RuleEditorScreenListPage {
+final class RuleEditorListPage {
 
-    /*** 宿主能力：管理页只通过这些入口读写屏幕状态与跨模式动作。 */
+    /** 宿主能力：管理页只通过这些入口读写屏幕状态与跨模式动作。 */
     interface Host {
 
-        // 渲染字体
         Font font();
 
         // 弹窗栈
@@ -78,7 +78,6 @@ final class RuleEditorScreenListPage {
         // 列表展示快照缓存（标题、状态、分类、预览与提示都从同一份快照读）
         RuleListDisplayCache display();
 
-        // 打开编辑页
         void openEditor(String id);
 
         // 新建规则后直接切到「输入」页签
@@ -113,10 +112,10 @@ final class RuleEditorScreenListPage {
     // 来源筛选的轮询顺序：全部 → 覆盖层 → 数据包
     private static final String[] SOURCE_VALUES = {"all", "overlay", "datapack"};
     // i18n 前缀
-    private static final String UI = "gui.itemdespawntowhat.edit.";
+    private static final String UI = TypeLabels.UI_PREFIX;
 
     private final Host host;
-    private final RuleEditorScreenListActions actions;
+    private final RuleEditorListActions actions;
 
     // ---- 列表控件与视图状态 ----
     private @Nullable UiTextInput searchField;
@@ -144,9 +143,9 @@ final class RuleEditorScreenListPage {
     // 首载分段观测：首份快照后的首次刷新只记录一次，作为「列表可用」的终点
     private boolean firstReadyLogged;
 
-    RuleEditorScreenListPage(Host host) {
+    RuleEditorListPage(Host host) {
         this.host = host;
-        this.actions = new RuleEditorScreenListActions(host, this::selectedRuleId);
+        this.actions = new RuleEditorListActions(host, this::selectedRuleId);
     }
 
     // ---- 初始化 ----
@@ -237,7 +236,7 @@ final class RuleEditorScreenListPage {
         return new UiButton(THEME, host.font(), Component.translatable(labelKey), variant, action::run).setChipStyle(true);
     }
 
-    /*** 导出范围选项：标签、是否含数据包条目与当前可导出的条数。 */
+    /** 导出范围选项：标签、是否含数据包条目与当前可导出的条数。 */
     private record ExportScope(String scope, String labelKey, String countKey, boolean includeDatapack, int count) { }
 
     // 导出弹窗：两个范围选项直接显示各自可导出的条数，避免导出后才发现选错范围

@@ -4,6 +4,7 @@ import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDefaults;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
@@ -22,22 +23,22 @@ import org.jetbrains.annotations.Nullable;
  * 规则管理页的条目动作：新建 / 复制 / 启用 / 删除，以及这些动作共用的
  * 规则 ID 命名与弹窗流程。
  *
- * <p>动作只通过 {@link RuleEditorScreenListPage.Host} 读取屏幕能力，选中项由构造时传入的选择器提供；
- * 每次改动草稿后调用宿主的列表刷新入口，由 {@link RuleEditorScreenListPage} 重建规则树。</p>
+ * <p>动作只通过 {@link RuleEditorListPage.Host} 读取屏幕能力，选中项由构造时传入的选择器提供；
+ * 每次改动草稿后调用宿主的列表刷新入口，由 {@link RuleEditorListPage} 重建规则树。</p>
  */
-final class RuleEditorScreenListActions {
+final class RuleEditorListActions {
 
     private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
     private static final String DEFAULT_RULE_NAME = "new_rule";
     private static final String COPY_SUFFIX = "_copy";
     private static final int COPY_BASE_MAX_LENGTH = RuleNameInput.MAX_NAME_LENGTH - COPY_SUFFIX.length()
             - Integer.toString(Integer.MAX_VALUE).length();
-    private static final String UI = "gui.itemdespawntowhat.edit.";
+    private static final String UI = TypeLabels.UI_PREFIX;
 
-    private final RuleEditorScreenListPage.Host host;
+    private final RuleEditorListPage.Host host;
     private final Supplier<@Nullable String> selection;
 
-    RuleEditorScreenListActions(RuleEditorScreenListPage.Host host, Supplier<@Nullable String> selection) {
+    RuleEditorListActions(RuleEditorListPage.Host host, Supplier<@Nullable String> selection) {
         this.host = host;
         this.selection = selection;
     }

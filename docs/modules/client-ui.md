@@ -29,7 +29,7 @@ authority: common/client/ui/theme、common/client/ui/widget、common/client/ui/s
 | `client/ui/screen/form` | 描述符驱动的表单视图、字段控件基类与注册表 |
 | `client/ui/prototype` | 开发期验证 kit、灰色像素主题与通用控件组合效果的原型屏 |
 
-编辑页签契约由 `RuleEditorEditPages.Page` 定义：INFO（基本信息）、INPUT（输入与消耗）、TRIGGER（触发条件）、RESULTS（效果与产物），`Page#of` 把键名解析成页签、未知键回落到 INFO。页签之间共用同一份 `EditSession` 草稿。
+编辑页签契约由 `RuleEditorPageSet.Page` 定义：INFO（基本信息）、INPUT（输入与消耗）、TRIGGER（触发条件）、RESULTS（效果与产物），`Page#of` 把键名解析成页签、未知键回落到 INFO。页签之间共用同一份 `EditSession` 草稿。
 
 ## 2. 模块边界
 
@@ -105,11 +105,11 @@ flowchart TD
 |---|---|---|---|
 | `RuleEditorOpener` | 界面入口 | 提供 `bootstrap`/`shutdown`/`lastRequest` 静态入口，在客户端线程把编辑器切到前台或刷新 | `client/net` 的 hooks 与打开请求 |
 | `RuleEditorScreen` | 屏幕聚合根 | 模式切换（管理模式、编辑模式、调试模式，取值见屏幕内枚举）、屏幕生命周期、布局编排、页内事件派发；工作区进入可编辑态才允许编辑，应用期间冻结，工作区释放时自行关屏 | 管理页、编辑页、调试页、弹窗栈、提示条 |
-| `RuleEditorScreenListPage` | 管理模式 | 搜索、状态/来源轮询筛选、分类树、规则导出与配方预览，列表底排按钮状态同步；只持有管理页控件与视图状态 | 规则会话、目录图标、`RulePackExporter`、`RuleEditorScreenListActions` |
+| `RuleEditorListPage` | 管理模式 | 搜索、状态/来源轮询筛选、分类树、规则导出与配方预览，列表底排按钮状态同步；只持有管理页控件与视图状态 | 规则会话、目录图标、`RulePackExporter`、`RuleEditorListActions` |
 | `RulePackExporter` | 规则导出口 | 把列表可导出的已保存规则写成一个数据包 zip：跳过未保存草稿与有问题条目，清单格式取当前游戏的数据包版本，规则文件按 `data/<ns>/idtw/rules/<path>.json` 落位，id 强制写回 | 列表页导出弹窗、`RulePaths`、`RuleFields` |
-| `RuleEditorEditPages` | 编辑页签组合 | 把页签与共享草稿绑定：所有写入经 `EditSession#apply` 提交为一条撤销记录；顶层效果按单一隐式候选展示 | 页签实现、`FormView`、`RuleEditorValidation` |
-| `RuleEditorScreenEditPage` | 编辑页与保存入口 | 页签切换、类型选择、代码视图、保存与校验入口 | `RuleEditorEditPages`、`UiModalStack` |
-| `RuleEditorScreenDebugPage` | 调试模式 | 按输入数量填充测试规则、一次性删除测试规则；只写草稿，落盘仍由管理页的“应用全部”决定 | `DebugTestRules` |
+| `RuleEditorPageSet` | 编辑页签组合 | 把页签与共享草稿绑定：所有写入经 `EditSession#apply` 提交为一条撤销记录；顶层效果按单一隐式候选展示 | 页签实现、`FormView`、`RuleEditorValidation` |
+| `RuleEditorEditPage` | 编辑页与保存入口 | 页签切换、类型选择、代码视图、保存与校验入口 | `RuleEditorPageSet`、`UiModalStack` |
+| `RuleEditorDebugPage` | 调试模式 | 按输入数量填充测试规则、一次性删除测试规则；只写草稿，落盘仍由管理页的“应用全部”决定 | `DebugTestRules` |
 | `RuleEditorPageInput` | 页内输入分发 | 把按下、释放、拖动、滚动与键盘输入派发给当前页控件，并维护结果页动作列表的拖动排序；按下归属决定释放只发给谁 | 编辑页控件、`FormView` |
 | `RuleEditorPanelFactory` | 面板装配 | 把 kit 控件与目录链路接到规则草稿上；写入一律经调用方给定的 `applyChange` | 叶子面板、`shared` 图标、数值控件 |
 | `FormView` | 表单聚合根 | 按 `TypeEditorDescriptor` 渲染可滚动控件列；写入统一经 `EditSession`；支持定位高亮与内联选择 | `FormDraftWriter`、`FormInputRouter`、`FormControl` |
@@ -174,7 +174,7 @@ flowchart LR
 - **新增事件图标**：事件图集是 `textures/gui/editor/events.png`，由 `tools/image_generator/generate-event-icons.py` 生成，每格 32×32 彩色成品、按 16 像素槽位缩放绘制，不做主题染色；在 `theme` 的 `UiEventIcons.Event` 登记行号，动作到事件的判定收在 `shared/EventPreviewIcons`，新增天象类动作在那里补一支分支。
 - **新增目录类型或预览图标**：在 `shared` 的 `FieldCatalogTypes` 增加字段名兜底、在 `CatalogPreviewIcons` 增加分发分支；新增可预览注册表时按现有预览图标类的形态加宿主缓存类，并只在 `CatalogPreviewIcons` 接线。
 - **新增条件类型**：数据与校验在 `client/edit` 的条件模型上落点（见 [client-editor](client-editor.md)），界面侧在 `ConditionTreeContract` 的类型选项与叶子工厂登记；画布与缩进摘要共用同一份数据与校验。
-- **新增页签或结果页动作**：在 `RuleEditorEditPages.Page` 增加常量并实现对应页面；页面共享的布局常量与描述符 id 放 `RuleEditorPageSupport`，面板装配放 `RuleEditorPanelFactory`。
+- **新增页签或结果页动作**：在 `RuleEditorPageSet.Page` 增加常量并实现对应页面；面板装配放 `RuleEditorPanelFactory`。页面共享的布局常量（页内留白、行高、表单与对话框的按钮高度）、`UI` 文案前缀、3 个页描述符 id 与 2 个存在条件叶类型 id 收在 `RuleEditorPageSupport`，它不持有界面状态、不装配控件；同一层的业务助手按关注点分开：`PresenceLeaves` 管存在条件叶的构造、扫描与增删，`CatalystQuantities` 管催化剂数量表对账，`RuleValueReads` 管 `RuleValue` 的只读取值与缺省回落。
 - **新增主题**：实现 `UiHostTheme`（它本身就是 kit `UiStyleSource` 的宿主侧入口），在 `UiHostThemes` 暴露取用入口；控件经注入取色，新增皮肤只改主题实现。
 - **新增宿主控件**：实现 `UiWidget`，由屏幕统一转发输入；需要模态行为时放进 `UiModalStack`，需要焦点顺序时登记到 `UiFocusManager`。
 - **新增调试能力**：测试规则的身份前缀、分类归属与规则体在 `DebugTestRules` 统一约定，调试页只负责批量填充与按前缀删除。

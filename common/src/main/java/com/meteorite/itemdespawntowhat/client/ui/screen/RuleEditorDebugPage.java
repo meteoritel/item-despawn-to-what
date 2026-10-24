@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.edit.DebugTestRules;
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
@@ -29,12 +30,11 @@ import org.jetbrains.annotations.Nullable;
  * 删除只按前缀匹配，不会影响任何非测试规则。调试页由 {@link RuleEditorScreen} 在
  * debug 模式下按 Ctrl+F8 从管理页进入，控件与视图状态全部留在本类。</p>
  */
-final class RuleEditorScreenDebugPage {
+final class RuleEditorDebugPage {
 
-    /*** 宿主能力：调试页只通过这些入口读写屏幕状态与跨模式动作。 */
+    /** 宿主能力：调试页只通过这些入口读写屏幕状态与跨模式动作。 */
     interface Host {
 
-        // 渲染字体
         Font font();
 
         // 弹窗栈
@@ -57,13 +57,12 @@ final class RuleEditorScreenDebugPage {
         // 重建管理页规则树（草稿改动后的统一刷新入口）
         void refreshList();
 
-        // 返回管理页
         void backToList();
     }
 
     private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
     // 编辑器公共 i18n 前缀；调试页的文案挂在它下面的 debug. 命名空间
-    private static final String EDIT_UI = "gui.itemdespawntowhat.edit.";
+    private static final String EDIT_UI = TypeLabels.UI_PREFIX;
     private static final String UI = EDIT_UI + "debug.";
     // 布局常量
     private static final int INPUT_H = 18;
@@ -83,7 +82,7 @@ final class RuleEditorScreenDebugPage {
     private @Nullable UiButton fillButton;
     private @Nullable UiButton deleteButton;
 
-    RuleEditorScreenDebugPage(Host host) {
+    RuleEditorDebugPage(Host host) {
         this.host = host;
     }
 
@@ -113,12 +112,21 @@ final class RuleEditorScreenDebugPage {
 
     // ---- 动作 ----
 
+    // 数量输入按整数解析；空值与非法字符用调用方给的哨兵值表示
+    private static int intOr(String raw, int fallback) {
+        try {
+            return Integer.parseInt(raw.trim());
+        } catch (NumberFormatException error) {
+            return fallback;
+        }
+    }
+
     // 读取输入框数量；空值与越界一律视为非法
     private int requestedCount() {
         if (countField == null) {
             return INVALID_COUNT;
         }
-        int parsed = RuleEditorPageSupport.intOr(countField.value(), INVALID_COUNT);
+        int parsed = intOr(countField.value(), INVALID_COUNT);
         return parsed < DebugTestRules.MIN_COUNT || parsed > DebugTestRules.MAX_COUNT ? INVALID_COUNT : parsed;
     }
 

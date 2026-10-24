@@ -22,7 +22,7 @@ final class RuleEditorPageInput {
         EFFECT
     }
 
-    private final RuleEditorEditPages pages;
+    private final RuleEditorPageSet pages;
 
     // 本次按下命中的页面控件：释放只派发给它，避免无关控件吞掉释放
     private @Nullable UiWidget pressedWidget;
@@ -34,7 +34,7 @@ final class RuleEditorPageInput {
     private boolean dragActive;
     private double dragStartY;
 
-    RuleEditorPageInput(RuleEditorEditPages pages) {
+    RuleEditorPageInput(RuleEditorPageSet pages) {
         this.pages = pages;
     }
 
@@ -175,7 +175,7 @@ final class RuleEditorPageInput {
         UiListView<?> list = pages.ruleEditorResultsPage.effectList;
         UiRect rect = list == null ? null : list.visibleRowBounds(dragTo);
         if (rect != null) {
-            RuleEditorEditPages.THEME.drawSelection(graphics, rect);
+            RuleEditorPageSet.THEME.drawSelection(graphics, rect);
         }
     }
 

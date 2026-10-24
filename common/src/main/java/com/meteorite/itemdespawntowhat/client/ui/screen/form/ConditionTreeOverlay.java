@@ -48,7 +48,7 @@ import org.lwjgl.glfw.GLFW;
  *
  * <p>与调用方的关系保持既有形状：{@link Parameters}、{@link ParameterFactory}、构造签名，
  * 以及 {@link #historyChanged()} / {@link #discardView()} / {@link #unmount()} / {@link #reveal(String)}
- * 都由 {@code RuleEditorEditPages} 原样调用。参数编辑以共享草稿路径为准，未完成的输入留在会话。</p>
+ * 都由 {@code RuleEditorPageSet} 原样调用。参数编辑以共享草稿路径为准，未完成的输入留在会话。</p>
  */
 public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
 
@@ -59,7 +59,7 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
     private static final UiHostTheme CHROME_THEME = UiHostThemes.flatTheme();
 
     // 本地化前缀：条件树页
-    private static final String UI = "gui.itemdespawntowhat.edit.tree.";
+    private static final String UI = TypeLabels.UI_PREFIX + "tree.";
     // 本地化前缀：规则编辑器（复用既有撤销/重做与通用按钮文案）
     private static final String EDIT_UI = TypeLabels.UI_PREFIX;
 
