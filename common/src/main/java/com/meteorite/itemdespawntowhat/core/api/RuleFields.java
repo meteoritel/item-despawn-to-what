@@ -60,7 +60,7 @@ public final class RuleFields {
     public static final String SOURCE_ITEMS = "items";
     public static final String SOURCE_EXCLUDE = "exclude";
 
-    /** ===== 效果级通用 ===== // */
+    /** ===== 效果通用字段 ===== // */
     public static final String TYPE = "type";
     public static final String DELAY_TICKS = "delay_ticks";
     public static final String CHANCE = "chance";

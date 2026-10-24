@@ -233,7 +233,7 @@ public final class BuiltinEditorDescriptors {
     public static TypeEditorDescriptor entityDescriptor(String variant) {
         TypeEditorDescriptor base = EffectEditorRegistry.descriptorFor(id("spawn_entity"));
         List<EditorField> fields = new ArrayList<>(entityFields(variant));
-        base.fields().stream().filter(field -> List.of("delay_ticks", "chance", "conditions").contains(field.name()))
+        base.fields().stream().filter(field -> List.of("delay_ticks", "chance").contains(field.name()))
                 .forEach(fields::add);
         return new TypeEditorDescriptor(base.id(), base.label(), fields, false);
     }
@@ -253,7 +253,7 @@ public final class BuiltinEditorDescriptors {
         };
     }
 
-    // 效果描述符 = 专属字段 + 公共字段（delay_ticks / chance / conditions）
+    // 效果描述符 = 专属字段 + 公共字段（delay_ticks / chance）；条件只存在于规则级
     private static void registerEffect(ResourceLocation typeId, List<EditorField> ownFields) {
         List<EditorField> fields = new ArrayList<>(ownFields);
         fields.add(EditorField.ticks("delay_ticks", COMMON + "delay_ticks", 0, Integer.MAX_VALUE)
@@ -261,7 +261,6 @@ public final class BuiltinEditorDescriptors {
                 .withNumbers(NumericDomain.integers(0, Integer.MAX_VALUE, 0, 1200))
                 .withHint(COMMON + "delay_ticks.hint"));
         fields.add(EditorField.percent("chance", COMMON + "chance").optional());
-        fields.add(EditorField.conditionTree("conditions", COMMON + "conditions"));
         EffectEditorRegistry.register(new TypeEditorDescriptor(typeId, TypeLabels.effectLabel(typeId), fields, false));
     }
 

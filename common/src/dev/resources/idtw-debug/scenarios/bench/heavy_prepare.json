@@ -19,7 +19,7 @@
       "returned": 0,
       "pending_delivery": 0,
       "settlements_completed": "$sources",
-      "chance_skipped": 0,
+      "chance_skipped": 32000,
       "live_returned_source_items": 0,
       "protected_returned_source_items": 0,
       "remaining_catalyst": 0,
@@ -62,29 +62,15 @@
           "loot_table": "minecraft:chests/simple_dungeon",
           "luck": 0,
           "delay_ticks": 0,
-          "chance": 1,
-          "conditions": {
-            "op": "leaf",
-            "condition": {
-              "type": "itemdespawntowhat:y_level",
-              "min": "$origin_y_plus_3"
-            }
-          }
+          "chance": 0
         },
         {
           "type": "itemdespawntowhat:spawn_entity",
           "item": "minecraft:prismarine_shard",
           "count": 1,
           "delay_ticks": 0,
-          "chance": 1,
-          "variant": "item",
-          "conditions": {
-            "op": "leaf",
-            "condition": {
-              "type": "itemdespawntowhat:y_level",
-              "min": "$origin_y_plus_3"
-            }
-          }
+          "chance": 0,
+          "variant": "item"
         }
       ]
     }

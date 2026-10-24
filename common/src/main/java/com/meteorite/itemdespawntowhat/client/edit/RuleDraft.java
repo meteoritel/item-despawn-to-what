@@ -267,7 +267,7 @@ public final class RuleDraft {
         return setConditionsAt("", expression, conditionTypes);
     }
 
-    // ---- 路径级条件树（效果级 conditions 与规则级共用同一入口）----
+    // ---- 规则级条件树 ----
 
     // 原始条件元素（包内私有：界面请使用 conditionsValueAt）
     private @Nullable JsonElement conditionsElementAt(String path) {

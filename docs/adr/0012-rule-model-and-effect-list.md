@@ -9,7 +9,7 @@
 后端只保留两个领域概念：
 
 1. **规则 (Rule)** 是唯一的配置单元：`id`（ResourceLocation）/ `enabled` / `priority` / `display_name` / `notes` / `source`（源匹配：物品与 `#tag` 列表 + 排除列表）/ `conditions`（**递归条件树**，见 [ADR-0018](0018-condition-tree-contract.md)）/ `trigger_after_seconds` / `effects`（**有序**效果列表）/ `triggers` / `source_cost` / `catalyst_cost` / `consume_fluid` / `combination` / `outcomes` / `schema_version`。
-2. **效果 (Effect)** 是唯一的执行单元：`type` + 类型专属参数 + 通用字段 `delay_ticks` / `chance` / `conditions`；内置效果类型由 `core/type/BuiltinEffectTypes` 统一注册。
+2. **效果 (Effect)** 是唯一的执行单元：`type` + 类型专属参数 + 通用字段 `delay_ticks` / `chance`；内置效果类型由 `core/type/BuiltinEffectTypes` 统一注册。
 3. **选择语义**：同一掉落物只执行**优先级最高的一条**命中规则（priority desc → 条件叶数 desc → 定义序）；规则内效果**全部执行**、不回滚，各自按 `delay_ticks` 入队。
 4. **输入支付统一结算**：源门槛与扣除量、催化剂门槛与实际消耗、流体源消耗由规则输入配置声明，见 [ADR-0041](0041-input-thresholds-and-consumption.md)。
 5. **异常隔离**：单个效果抛异常 → 记录 ERROR（规则 id + 效果类型 + 位置）+ 继续后续效果，整体转化仍视为已发生。

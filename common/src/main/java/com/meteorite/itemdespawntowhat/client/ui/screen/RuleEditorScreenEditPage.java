@@ -800,7 +800,7 @@ final class RuleEditorScreenEditPage {
         return catalogSuggestions == null ? field -> List.of() : catalogSuggestions;
     }
 
-    // 条件树的共享定义能力（类型清单、按场景创建、解码注册表）：页签与效果级条件共用，不捕获表单或导航状态
+    // 条件树的共享定义能力（类型清单、按场景创建、解码注册表）：触发页使用，不捕获表单或导航状态
     private ConditionEditingSupport buildConditionEditingSupport() {
         return new ConditionEditingSupport() {
             @Override

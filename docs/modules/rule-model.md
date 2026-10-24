@@ -71,8 +71,8 @@ flowchart LR
 | `RuleCodecs` | 编解码入口 | 组装规则 Codec 与递归条件树 Codec；`decoder(...)` 在解码前做顶层未知字段告警、候选结果与 `catalyst_cost` 的未知字段报错、条件树规模预检 | `TypeDispatch`、`RuleDecodeBudget`、`OutcomeCandidate`、各枚举 CODEC |
 | `RuleValidation` | 校验入口 | 结构档检查 id、触发时间、源匹配、`effects`/`outcomes` 二选一、`schema_version`、固定成本、展示名码点、条件树结构与规模；注册表档追加逐效果/逐叶的类型参数校验与未注册类型报错；运行期上限档再叠加服务端配置的放置半径上限 | `IssueCollector`、`ParamChecks`、`RefChecks`、`TypeRegistry` |
 | `ConditionExpression` / `ConditionNode` / `ConditionTrees` / `ConditionLimits` | 条件树（数据 + 算法 + 限额） | 表达式只有一个根节点，`null` 表示无条件；节点分组合、取反与条件叶，构造器只做不可变拷贝，非空与规模在 `isStructurallyValid()` 与解码期判定；遍历产出与 JSON 一致的字段路径并统计叶数/节点数/深度，`replaceAt`/`updateTermsAt` 为纯函数结构变换（非法路径返回原树并记 WARN）；叶数、节点数、深度、效果数与源匹配项上限集中在限额常量，节点与深度直接引用 `RuleDecodeBudget` 的同一常量 | `RuleCodecs`、运行时求值器、编辑器、`RuleValidation` |
-| `Effect` / `EffectType` / `SimpleEffectType` / `Condition` / `ConditionType` / `SimpleConditionType` | 类型定义扩展点 | 参数对象实现 `Effect`（类型 id、延迟、概率、效果级条件、`withConditions`）或 `Condition`（类型 id）；`EffectType` 追加执行器、一次性标记、产出类别与每轮一组容量需求（`capacityDemand`），`ConditionType` 追加求值器与可求值性门禁；`Simple*` 用 id + MapCodec + 校验器 + 执行器或求值器一行注册 | `core/api` 的执行器与求值器契约、注册表 |
-| `CommonFields` | 共用字段片段 | 效果通用字段的编解码片段与默认值；片段返回 `RecordCodecBuilder` 以绑定所属记录类型，效果级条件以 `Optional` 承载 | 各效果参数记录 |
+| `Effect` / `EffectType` / `SimpleEffectType` / `Condition` / `ConditionType` / `SimpleConditionType` | 类型定义扩展点 | 参数对象实现 `Effect`（类型 id、延迟、概率）或 `Condition`（类型 id）；`EffectType` 追加执行器、一次性标记、产出类别与每轮一组容量需求（`capacityDemand`），`ConditionType` 追加求值器与可求值性门禁；`Simple*` 用 id + MapCodec + 校验器 + 执行器或求值器一行注册 | `core/api` 的执行器与求值器契约、注册表 |
+| `CommonFields` | 共用字段片段 | 效果通用字段（延迟、概率）的编解码片段与默认值；片段返回 `RecordCodecBuilder` 以绑定所属记录类型 | 各效果参数记录 |
 | `SourceMatcher` / `SourceEntry` / `SourceCost` / `CatalystCost` | 输入声明 | 源匹配含匹配项与排除项（排除优先）；源成本按当前堆叠取数量，直接物品优先、其次按源声明顺序取首个命中标签；催化剂把存在门槛与实付量分开声明并共享半径 | 运行时索引与门槛投影 |
 | `OutcomeCandidate` / `CombinationMode` / `TriggerKind` | 候选与消失方式 | 候选标识规则内唯一，携带共同执行的效果与两个位置开关，未声明候选时顶层效果隐式映射为唯一候选，组合模式决定同组选候选的方式；消失方式取值为小写下划线、解析大小写不敏感、未知取值明确报错，规则未声明时按自然消失处理 | 运行时产出派发与触发路径 |
 | `RuleCategoryClassifier` / `ProductKind` | 分类派生 | 纯函数：按生效效果的产出类别派生分类标识，多根类别与实体子类别各有组合标识，无产出与含未知产出的规则归扩展分组；「未完成」与「有问题」由客户端按草稿状态和校验问题决定，分类器不产出这两个值；草稿 JSON 走逐效果解码的入口 | 快照装配、客户端列表 |
@@ -115,7 +115,7 @@ flowchart LR
 - **扩规则级字段**：在 `RuleFields` 加常量 → 在 `RuleCodecs.codec(...)` 的 `RecordCodecBuilder` 组里加可选字段 → 在 `Rule` 加分量 → 需要的语义检查写进 `RuleValidation` → 同步 `RuleCodecs.KNOWN_RULE_FIELDS`。纯展示字段只加常量与白名单，由快照装配直接读原始 JSON，保持 `Rule` 只承载规则语义字段。
 - **扩枚举取值**：消失方式在 `TriggerKind` 加常量，组合模式在 `CombinationMode` 加常量，两者都沿用 `key()` 的小写下划线序列化与大小写不敏感解析；新增产出类别在 `ProductKind` 加常量并给出分类标识，分类组合语义集中在本模块的分类器里。
 - **扩条件节点类型**：改 `ConditionNode` 的 `permits` 与记录 → 补 `ConditionTrees` 的遍历/统计/结构变换 → 补 `RuleCodecs` 的节点编解码与节点字段白名单 → 同步 `ConditionExpression.isStructurallyValid()` → 若节点会加深树，同步 `RuleDecodeBudget` 的预算遍历，并在 `RuleFields` 补节点字段名。
-- **扩通用效果字段**：改 `CommonFields`，片段保持返回 `RecordCodecBuilder` 并以 `Optional` 承载可空值。
+- **扩通用效果字段**：改 `CommonFields` 的编解码片段与默认值常量，片段保持返回 `RecordCodecBuilder`。
 - **扩校验规则**：写进 `RuleValidation` 对应阶段，问题交给 `IssueCollector`；通用规模上限加到 `ConditionLimits`，属于解码期预算的改 `RuleDecodeBudget` 并由 `ConditionLimits` 引用，保证解码期与校验期同一口径。
 
 ### 约束

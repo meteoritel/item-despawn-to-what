@@ -11,7 +11,6 @@ import com.meteorite.itemdespawntowhat.core.extension.DynamicReferenceCheck;
 import com.meteorite.itemdespawntowhat.core.extension.DynamicReferenceContext;
 import com.meteorite.itemdespawntowhat.core.model.CapacityDemand;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
-import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.ProductKind;
@@ -37,8 +36,7 @@ public record LootTableEffect(
         ResourceLocation lootTable,
         float luck,
         int delayTicks,
-        double chance,
-        @Nullable ConditionExpression conditions
+        double chance
 ) implements Effect, DynamicReferenceCheck {
 
     // 效果类型 id，同时是 JSON 中 type 字段的取值
@@ -54,24 +52,23 @@ public record LootTableEffect(
     public static final float MAX_LUCK = 100.0F;
 
     // 类型专属参数编解码器；通用字段复用 CommonFields 片段（codec 层不得产出 null）
-    public static MapCodec<LootTableEffect> codec(Codec<ConditionExpression> expressionCodec) {
+    public static MapCodec<LootTableEffect> codec() {
         return RecordCodecBuilder.mapCodec(instance -> instance.group(
                 ResourceLocation.CODEC.fieldOf(LOOT_TABLE_FIELD).forGetter(LootTableEffect::lootTable),
                 Codec.floatRange(MIN_LUCK, MAX_LUCK).optionalFieldOf(LUCK_FIELD, DEFAULT_LUCK)
                         .forGetter(LootTableEffect::luck),
                 CommonFields.delayTicks(LootTableEffect::delayTicks),
-                CommonFields.chance(LootTableEffect::chance),
-                CommonFields.optionalConditions(LootTableEffect::conditions, expressionCodec)
-        ).apply(instance, (lootTable, luck, delayTicks, chance, conditions) ->
-                new LootTableEffect(lootTable, luck, delayTicks, chance, conditions.orElse(null))));
+                CommonFields.chance(LootTableEffect::chance)
+        ).apply(instance, (lootTable, luck, delayTicks, chance) ->
+                new LootTableEffect(lootTable, luck, delayTicks, chance)));
     }
 
     // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。
     // 显式实现准备入口与按准备创建执行状态的重载：本次战利品在成功转化当刻开表一次并固定，
     // 交付期不再读取原源实体、不再重开战利品表，也不再次随机抽取。
     // 容量需求：产物类型未知，按「每组至少 1 件物品」对区域物品总量保守占用容量。
-    public static EffectType<LootTableEffect> effectType(Codec<ConditionExpression> expressionCodec) {
-        return new SimpleEffectType<>(ID, codec(expressionCodec), LootTableEffect::validateParams,
+    public static EffectType<LootTableEffect> effectType() {
+        return new SimpleEffectType<>(ID, codec(), LootTableEffect::validateParams,
                 new EffectExecutor<LootTableEffect>() {
                     @Override
                     public EffectResult execute(LootTableEffect effect, EffectContext context) {
@@ -111,7 +108,6 @@ public record LootTableEffect(
 
     /**
      * 动态引用校验：战利品表必须能在服务端已加载的战利品表注册表中查到。
-     * 效果级条件不在此处理，由核心校验器沿条件树逐叶展开。
      *
      * @param context 当前服务端、统一议题收集通道与当前效果的字段路径
      */
@@ -129,9 +125,4 @@ public record LootTableEffect(
         return ID;
     }
 
-    // 效果级条件替换：其余参数原样保留，供运行期门槛投影重建真实效果类型
-    @Override
-    public LootTableEffect withConditions(@Nullable ConditionExpression conditions) {
-        return new LootTableEffect(lootTable, luck, delayTicks, chance, conditions);
-    }
 }

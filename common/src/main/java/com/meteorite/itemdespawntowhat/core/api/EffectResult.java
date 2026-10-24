@@ -50,7 +50,7 @@ public record EffectResult(Outcome outcome, long appliedUnits, long pendingUnits
         return new EffectResult(Outcome.DEFERRED, 0, units, false, detail);
     }
 
-    // 未执行：条件/概率/容量上限/资源不足等，属于已支付组内的正常结果
+    // 未执行：概率落空、容量上限、资源不足等，属于已支付组内的正常结果
     public static EffectResult skipped(String reason) {
         return new EffectResult(Outcome.SKIPPED, 0, 0, false, reason);
     }

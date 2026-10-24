@@ -96,10 +96,8 @@ public final class RuleRecipeView {
         Map<String, ObjectPart> fluids = new LinkedHashMap<>();
         RuleValue cost = object(body.child("catalyst_cost"));
         addCatalysts(catalysts, cost, true);
+        // 催化剂与流体只来自规则级条件树：效果不再声明自己的条件
         collectConditions(body.child("conditions"), false, catalysts, fluids);
-        for (RuleValue effect : effects) {
-            collectConditions(effect.child("conditions"), false, catalysts, fluids);
-        }
         if (body.flag(RuleFields.CONSUME_FLUID, false)) {
             if (fluids.isEmpty()) fluid(fluids, "");
             fluids.values().forEach(part -> part.fluidConsumed = true);

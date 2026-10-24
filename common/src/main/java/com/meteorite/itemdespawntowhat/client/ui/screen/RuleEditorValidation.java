@@ -114,17 +114,7 @@ final class RuleEditorValidation {
         }
         // 规则级条件树
         validateConditionTree(draft, "", RuleFields.CONDITIONS, issues);
-        // 效果级条件树：切到别的效果页签时也要能拦住，否则只在服务端报 VALIDATION_FAILED
-        for (int i = 0; i < effects.size(); i++) {
-            RuleValue element = effects.item(i);
-            if (element == null || !element.isMapping()) {
-                continue;
-            }
-            // 条件树路径需要指向 conditions 元素本身
-            String path = DraftPaths.child(DraftPaths.indexPath(RuleFields.EFFECTS, i), RuleFields.CONDITIONS);
-            validateConditionTree(draft, path, path, issues);
-        }
-        // 候选结果：id 非空且唯一、effects 非空；候选内效果级条件树同样本地校验
+        // 候选结果：id 非空且唯一、effects 非空
         Set<String> candidateIds = new LinkedHashSet<>();
         for (int i = 0; i < outcomes.size(); i++) {
             RuleValue element = outcomes.item(i);
@@ -142,15 +132,6 @@ final class RuleEditorValidation {
             if (candidateEffects.isEmpty()) {
                 issues.add(issue(DraftPaths.child(candidatePath, RuleFields.CANDIDATE_EFFECTS), UI + "issue.candidate_effects_empty"));
                 continue;
-            }
-            for (int j = 0; j < candidateEffects.size(); j++) {
-                RuleValue effect = candidateEffects.item(j);
-                if (effect == null || !effect.isMapping()) {
-                    continue;
-                }
-                String conditionsPath = DraftPaths.child(DraftPaths.indexPath(
-                        DraftPaths.child(candidatePath, RuleFields.CANDIDATE_EFFECTS), j), RuleFields.CONDITIONS);
-                validateConditionTree(draft, conditionsPath, conditionsPath, issues);
             }
         }
         RuleValue name = draft.root().child(RuleFields.DISPLAY_NAME);
@@ -248,7 +229,7 @@ final class RuleEditorValidation {
         return raw != null && raw.isNumber();
     }
 
-    // 校验某条路径下的条件树（规则级传 ""，效果级传 "effects[i]"），问题路径指向 conditions 字段
+    // 校验规则级条件树，问题路径指向 conditions 字段
     private void validateConditionTree(RuleDraft draft, String draftPath, String issuePath, List<FormIssue> issues) {
         RuleValue raw = draft.conditionsValueAt(draftPath);
         if (raw == null) {

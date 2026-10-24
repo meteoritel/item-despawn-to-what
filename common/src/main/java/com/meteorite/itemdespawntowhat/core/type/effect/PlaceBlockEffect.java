@@ -10,7 +10,6 @@ import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.RuleRuntimeLimits;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
-import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.ProductKind;
@@ -46,8 +45,7 @@ public record PlaceBlockEffect(
         int radius,
         @Nullable Integer limit,
         int delayTicks,
-        double chance,
-        @Nullable ConditionExpression conditions
+        double chance
 ) implements Effect {
 
     // 效果类型 id，同时是 JSON 中 type 字段的取值
@@ -98,7 +96,7 @@ public record PlaceBlockEffect(
     }
 
     // 类型专属参数编解码器；通用字段复用 CommonFields 片段（codec 层不得产出 null）
-    public static MapCodec<PlaceBlockEffect> codec(Codec<ConditionExpression> expressionCodec) {
+    public static MapCodec<PlaceBlockEffect> codec() {
         return RecordCodecBuilder.mapCodec(instance -> instance.group(
                 TaggedId.CODEC.optionalFieldOf(BLOCK_FIELD)
                         .forGetter(effect -> Optional.ofNullable(effect.block())),
@@ -112,16 +110,15 @@ public record PlaceBlockEffect(
                 Codec.intRange(MIN_LIMIT, Integer.MAX_VALUE).optionalFieldOf(LIMIT_FIELD)
                         .forGetter(effect -> Optional.ofNullable(effect.limit())),
                 CommonFields.delayTicks(PlaceBlockEffect::delayTicks),
-                CommonFields.chance(PlaceBlockEffect::chance),
-                CommonFields.optionalConditions(PlaceBlockEffect::conditions, expressionCodec)
-        ).apply(instance, (block, useSourceBlock, shape, count, radius, limit, delayTicks, chance, conditions) ->
+                CommonFields.chance(PlaceBlockEffect::chance)
+        ).apply(instance, (block, useSourceBlock, shape, count, radius, limit, delayTicks, chance) ->
                 new PlaceBlockEffect(block.orElse(null), useSourceBlock, shape, count, radius,
-                        limit.orElse(null), delayTicks, chance, conditions.orElse(null))));
+                        limit.orElse(null), delayTicks, chance)));
     }
 
     // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。
     // 显式实现执行状态入口：放置需要按预算分批推进，lambda 只能表达一次同步执行。
-    public static EffectType<PlaceBlockEffect> effectType(Codec<ConditionExpression> expressionCodec) {
+    public static EffectType<PlaceBlockEffect> effectType() {
         EffectExecutor<PlaceBlockEffect> executor = new EffectExecutor<>() {
             @Override
             public EffectResult execute(PlaceBlockEffect effect, EffectContext context) {
@@ -148,7 +145,7 @@ public record PlaceBlockEffect(
                 return PlaceBlockExecutor.start(effect, context, preparation);
             }
         };
-        return new SimpleEffectType<>(ID, codec(expressionCodec), PlaceBlockEffect::validateParams,
+        return new SimpleEffectType<>(ID, codec(), PlaceBlockEffect::validateParams,
                 PlaceBlockEffect::validateRuntimeLimits, executor, ProductKind.BLOCK);
     }
 
@@ -202,9 +199,4 @@ public record PlaceBlockEffect(
         return ID;
     }
 
-    // 效果级条件替换：其余参数原样保留，供运行期门槛投影重建真实效果类型
-    @Override
-    public PlaceBlockEffect withConditions(@Nullable ConditionExpression conditions) {
-        return new PlaceBlockEffect(block, useSourceBlock, shape, count, radius, limit, delayTicks, chance, conditions);
-    }
 }

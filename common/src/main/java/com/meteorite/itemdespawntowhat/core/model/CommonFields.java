@@ -4,11 +4,10 @@ import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 
-import java.util.Optional;
 import java.util.function.Function;
 
 /**
- * 效果与条件共用的字段编解码片段。
+ * 效果通用字段（延迟、概率）的编解码片段。
  * 各具体类型在自己的 RecordCodecBuilder 中直接引用这些片段，避免通用字段在各类型里重复定义。
  * 两点约定：
  * 1) 返回类型必须是 RecordCodecBuilder（而非自由的 MapCodec）：forGetter 的结果绑定在所属记录类型 O 上；
@@ -36,12 +35,4 @@ public final class CommonFields {
         return Codec.doubleRange(0.0D, 1.0D).optionalFieldOf(RuleFields.CHANCE, DEFAULT_CHANCE).forGetter(getter);
     }
 
-    // 效果级条件字段：codec 层以 Optional 承载，调用方在 apply 中用 orElse(null) 落回可空字段
-    public static <O> RecordCodecBuilder<O, Optional<ConditionExpression>> optionalConditions(
-            Function<O, ConditionExpression> getter,
-            Codec<ConditionExpression> expressionCodec
-    ) {
-        return expressionCodec.optionalFieldOf(RuleFields.CONDITIONS)
-                .forGetter(value -> Optional.ofNullable(getter.apply(value)));
-    }
 }

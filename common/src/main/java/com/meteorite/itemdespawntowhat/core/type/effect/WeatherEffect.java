@@ -8,7 +8,6 @@ import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
-import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.ProductKind;
@@ -35,8 +34,7 @@ public record WeatherEffect(
         int durationTicks,
         boolean thundering,
         int delayTicks,
-        double chance,
-        @Nullable ConditionExpression conditions
+        double chance
 ) implements Effect {
 
     // 效果类型 id，同时是 JSON 中 type 字段的取值
@@ -63,7 +61,7 @@ public record WeatherEffect(
     }
 
     // 类型专属参数编解码器；通用字段复用 CommonFields 片段（codec 层不得产出 null）
-    public static MapCodec<WeatherEffect> codec(Codec<ConditionExpression> expressionCodec) {
+    public static MapCodec<WeatherEffect> codec() {
         return RecordCodecBuilder.mapCodec(instance -> instance.group(
                 Mode.CODEC.fieldOf(MODE_FIELD).forGetter(WeatherEffect::mode),
                 Codec.intRange(MIN_DURATION_TICKS, MAX_DURATION_TICKS)
@@ -72,16 +70,15 @@ public record WeatherEffect(
                 Codec.BOOL.optionalFieldOf(THUNDERING_FIELD, DEFAULT_THUNDERING)
                         .forGetter(WeatherEffect::thundering),
                 CommonFields.delayTicks(WeatherEffect::delayTicks),
-                CommonFields.chance(WeatherEffect::chance),
-                CommonFields.optionalConditions(WeatherEffect::conditions, expressionCodec)
-        ).apply(instance, (mode, durationTicks, thundering, delayTicks, chance, conditions) ->
-                new WeatherEffect(mode, durationTicks, thundering, delayTicks, chance, conditions.orElse(null))));
+                CommonFields.chance(WeatherEffect::chance)
+        ).apply(instance, (mode, durationTicks, thundering, delayTicks, chance) ->
+                new WeatherEffect(mode, durationTicks, thundering, delayTicks, chance)));
     }
 
     // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。
-    // 显式实现准备入口：效果级条件与概率在成功转化当刻判定，天气世界写延后到到期时按固定输入执行；
+    // 显式实现准备入口：概率在成功转化当刻判定，天气世界写延后到到期时按固定输入执行；
     // 需要准备的类型用显式实现覆盖 prepare 与按准备创建执行状态的重载（lambda 只能表达 execute）。
-    public static EffectType<WeatherEffect> effectType(Codec<ConditionExpression> expressionCodec) {
+    public static EffectType<WeatherEffect> effectType() {
         EffectExecutor<WeatherEffect> executor = new EffectExecutor<>() {
             @Override
             public EffectResult execute(WeatherEffect effect, EffectContext context) {
@@ -91,7 +88,7 @@ public record WeatherEffect(
             @Override
             public EffectPreparation prepare(WeatherEffect effect, ServerLevel level, Vec3 position,
                                              ItemEntity sourceEntity, ItemStack sourceStack, boolean fillOrigin) {
-                // 采用成功转化当刻固定输入的路径：效果级条件与概率在此后同刻判定并随任务携带；
+                // 采用成功转化当刻固定输入的路径：概率在此后同刻判定并随任务携带；
                 // 天气世界状态（天空光、当前天气）不在此刻冻结，留到执行时实时读取
                 return EffectPreparation.ready();
             }
@@ -101,7 +98,7 @@ public record WeatherEffect(
                 return WeatherExecutor.start(effect, context, preparation);
             }
         };
-        return new SimpleEffectType<>(ID, codec(expressionCodec), WeatherEffect::validateParams, executor, true,
+        return new SimpleEffectType<>(ID, codec(), WeatherEffect::validateParams, executor, true,
                 ProductKind.WORLD);
     }
 
@@ -119,9 +116,4 @@ public record WeatherEffect(
         return ID;
     }
 
-    // 效果级条件替换：其余参数原样保留，供运行期门槛投影重建真实效果类型
-    @Override
-    public WeatherEffect withConditions(@Nullable ConditionExpression conditions) {
-        return new WeatherEffect(mode, durationTicks, thundering, delayTicks, chance, conditions);
-    }
 }

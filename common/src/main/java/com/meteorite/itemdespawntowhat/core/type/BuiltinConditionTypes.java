@@ -17,7 +17,7 @@ import com.meteorite.itemdespawntowhat.core.type.condition.LightLevelCondition;
 /**
  * 内置条件类型注册表。
  * 条件类型之间没有依赖，因此不需要表达式编解码器即可构建；
- * 效果类型因带有「效果级 conditions」字段而需要它，构建顺序为：
+ * 规则级条件树在注册表冻结后用 RuleCodecs.conditionExpressionCodec 构建，构建顺序为：
  * BuiltinConditionTypes → RuleCodecs.conditionExpressionCodec → BuiltinEffectTypes。
  * 说明：静态工厂命名为 conditionType()，因为 Condition 接口已有无参实例方法 type()。
  */

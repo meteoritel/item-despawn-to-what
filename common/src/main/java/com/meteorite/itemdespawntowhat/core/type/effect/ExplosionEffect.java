@@ -8,7 +8,6 @@ import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
-import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.ProductKind;
@@ -34,8 +33,7 @@ public record ExplosionEffect(
         boolean fire,
         boolean visualOnly,
         int delayTicks,
-        double chance,
-        @Nullable ConditionExpression conditions
+        double chance
 ) implements Effect {
 
     // 效果类型 id，同时是 JSON 中 type 字段的取值
@@ -54,7 +52,7 @@ public record ExplosionEffect(
     public static final boolean DEFAULT_VISUAL_ONLY = false;
 
     // 类型专属参数编解码器；通用字段复用 CommonFields 片段（codec 层不得产出 null）
-    public static MapCodec<ExplosionEffect> codec(Codec<ConditionExpression> expressionCodec) {
+    public static MapCodec<ExplosionEffect> codec() {
         return RecordCodecBuilder.mapCodec(instance -> instance.group(
                 Codec.floatRange(MIN_POWER, MAX_POWER).optionalFieldOf(POWER_FIELD, DEFAULT_POWER)
                         .forGetter(ExplosionEffect::power),
@@ -62,16 +60,15 @@ public record ExplosionEffect(
                 Codec.BOOL.optionalFieldOf(VISUAL_ONLY_FIELD, DEFAULT_VISUAL_ONLY)
                         .forGetter(ExplosionEffect::visualOnly),
                 CommonFields.delayTicks(ExplosionEffect::delayTicks),
-                CommonFields.chance(ExplosionEffect::chance),
-                CommonFields.optionalConditions(ExplosionEffect::conditions, expressionCodec)
-        ).apply(instance, (power, fire, visualOnly, delayTicks, chance, conditions) ->
-                new ExplosionEffect(power, fire, visualOnly, delayTicks, chance, conditions.orElse(null))));
+                CommonFields.chance(ExplosionEffect::chance)
+        ).apply(instance, (power, fire, visualOnly, delayTicks, chance) ->
+                new ExplosionEffect(power, fire, visualOnly, delayTicks, chance)));
     }
 
     // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。
     // 显式实现执行器契约：爆炸只能经预算内的执行状态推进，直接 execute 一律拒绝；
-    // 本类型没有自有的成功时输入，只声明准备阶段以让效果级条件与概率在成功转化当刻判定一次。
-    public static EffectType<ExplosionEffect> effectType(Codec<ConditionExpression> expressionCodec) {
+    // 本类型没有自有的成功时输入，只声明准备阶段以让概率在成功转化当刻判定一次。
+    public static EffectType<ExplosionEffect> effectType() {
         EffectExecutor<ExplosionEffect> executor = new EffectExecutor<>() {
             @Override
             public EffectResult execute(ExplosionEffect effect, EffectContext context) {
@@ -90,7 +87,7 @@ public record ExplosionEffect(
                 return ExplosionExecutor.start(effect, context, preparation);
             }
         };
-        return new SimpleEffectType<>(ID, codec(expressionCodec), ExplosionEffect::validateParams, executor, true,
+        return new SimpleEffectType<>(ID, codec(), ExplosionEffect::validateParams, executor, true,
                 ProductKind.WORLD);
     }
 
@@ -105,9 +102,4 @@ public record ExplosionEffect(
         return ID;
     }
 
-    // 效果级条件替换：其余参数原样保留，供运行期门槛投影重建真实效果类型
-    @Override
-    public ExplosionEffect withConditions(@Nullable ConditionExpression conditions) {
-        return new ExplosionEffect(power, fire, visualOnly, delayTicks, chance, conditions);
-    }
 }

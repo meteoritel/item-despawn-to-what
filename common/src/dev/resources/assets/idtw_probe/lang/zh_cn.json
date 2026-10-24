@@ -44,7 +44,7 @@
   "itemdespawntowhat.command.debug.scene.description.run.reload": "延迟效果入队后真实重载规则：取消本轮结算与效果，零产出。",
   "itemdespawntowhat.command.debug.scene.description.bench.baseline": "空负载基线，默认60秒。",
   "itemdespawntowhat.command.debug.scene.description.bench.convert": "转化负载，默认1000个实体、60秒；可指定实体数与秒数。",
-  "itemdespawntowhat.command.debug.scene.description.bench.heavy_prepare": "重准备负载：默认1000个源、每源16张纸，战利品表与条件效果都判定失败；预期支付16000组且零产出，默认60秒内完成。",
+  "itemdespawntowhat.command.debug.scene.description.bench.heavy_prepare": "重准备负载：默认1000个源、每源16张纸，战利品表与物品生成的概率都落空；预期支付16000组且零产出，默认60秒内完成。",
   "itemdespawntowhat.command.debug.scene.description.bench.retry": "持续条件失败与重试，默认1000个实体、60秒。",
   "itemdespawntowhat.command.debug.scene.description.bench.normal": "不转化的纸张对照负载，默认1000个实体、10秒；最多1000个源实体。",
   "itemdespawntowhat.command.debug.scene.description.bench.converted": "5游戏秒后转化的纸张负载，默认1000个实体、10秒；最多1000个源实体。",

@@ -3,8 +3,6 @@ package com.meteorite.itemdespawntowhat.core.runtime;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
-import com.meteorite.itemdespawntowhat.core.model.Effect;
-import com.meteorite.itemdespawntowhat.core.model.OutcomeCandidate;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.type.condition.CatalystPresentCondition;
 import org.jetbrains.annotations.Nullable;
@@ -32,15 +30,13 @@ public final class CatalystThresholdProjection {
             return rule;
         }
         ConditionExpression conditions = projectExpression(rule.conditions(), rule);
-        List<Effect> effects = projectEffects(rule.effects(), rule);
-        List<OutcomeCandidate> outcomes = projectOutcomes(rule.outcomes(), rule);
-        if (conditions == rule.conditions() && effects == rule.effects() && outcomes == rule.outcomes()) {
+        if (conditions == rule.conditions()) {
             return rule;
         }
-        // 只替换条件树与效果列表，其余字段（id/优先级/成本/组合模式等）原样保留，排序键不受影响
+        // 只替换条件树，其余字段（id/优先级/效果列表/组合模式等）原样保留，排序键不受影响
         return new Rule(rule.id(), rule.enabled(), rule.priority(), rule.displayName(), rule.notes(), rule.source(),
-                conditions, rule.triggerAfterSeconds(), effects, rule.triggers(), rule.sourceCost(),
-                rule.catalystCost(), rule.consumeFluid(), rule.combination(), outcomes, rule.schemaVersion());
+                conditions, rule.triggerAfterSeconds(), rule.effects(), rule.triggers(), rule.sourceCost(),
+                rule.catalystCost(), rule.consumeFluid(), rule.combination(), rule.outcomes(), rule.schemaVersion());
     }
 
     /**
@@ -54,27 +50,12 @@ public final class CatalystThresholdProjection {
                 ? rule.catalystCost().countFor(reference) : FALLBACK_THRESHOLD;
     }
 
-    // 快速判定：整条规则是否存在留空门槛（不存在时投影无任何分配）
+    // 快速判定：规则条件树是否存在留空门槛（不存在时投影无任何分配）
     private static boolean hasUnfilledThreshold(Rule rule) {
-        if (containsUnfilledThreshold(rule.conditions())) {
-            return true;
-        }
-        for (Effect effect : rule.effects()) {
-            if (containsUnfilledThreshold(effect.conditions())) {
-                return true;
-            }
-        }
-        for (OutcomeCandidate outcome : rule.outcomes()) {
-            for (Effect effect : outcome.effects()) {
-                if (containsUnfilledThreshold(effect.conditions())) {
-                    return true;
-                }
-            }
-        }
-        return false;
+        return containsUnfilledThreshold(rule.conditions());
     }
 
-    // 条件表达式内是否存在留空门槛；expression 为 null 表示效果未声明效果级条件
+    // 条件表达式内是否存在留空门槛；expression 为 null 表示规则未声明条件
     private static boolean containsUnfilledThreshold(@Nullable ConditionExpression expression) {
         return expression != null && containsUnfilledThreshold(expression.root());
     }
@@ -107,7 +88,7 @@ public final class CatalystThresholdProjection {
         return false;
     }
 
-    // 重建条件表达式：无变化时返回原实例；效果级条件为 null 时保持 null
+    // 重建条件表达式：无变化时返回原实例；未声明条件时保持 null
     private static @Nullable ConditionExpression projectExpression(@Nullable ConditionExpression expression,
                                                                    Rule rule) {
         if (expression == null || expression.root() == null) {
@@ -162,44 +143,4 @@ public final class CatalystThresholdProjection {
         return projected == null ? terms : List.copyOf(projected);
     }
 
-    // 重建顶层效果列表：每个效果的条件作用域就是它自身
-    private static List<Effect> projectEffects(List<Effect> effects, Rule rule) {
-        List<Effect> projected = null;
-        for (int index = 0; index < effects.size(); index++) {
-            Effect original = effects.get(index);
-            Effect replacement = projectEffect(original, rule);
-            if (projected == null && replacement != original) {
-                projected = new ArrayList<>(effects.subList(0, index));
-            }
-            if (projected != null) {
-                projected.add(replacement);
-            }
-        }
-        return projected == null ? effects : List.copyOf(projected);
-    }
-
-    // 重建候选结果列表：只替换内含留空门槛的效果，其余候选原样复用
-    private static List<OutcomeCandidate> projectOutcomes(List<OutcomeCandidate> outcomes, Rule rule) {
-        List<OutcomeCandidate> projected = null;
-        for (int index = 0; index < outcomes.size(); index++) {
-            OutcomeCandidate original = outcomes.get(index);
-            List<Effect> effects = projectEffects(original.effects(), rule);
-            OutcomeCandidate replacement = effects == original.effects() ? original
-                    : new OutcomeCandidate(original.id(), effects, original.safeSpawn(), original.fillOrigin());
-            if (projected == null && replacement != original) {
-                projected = new ArrayList<>(outcomes.subList(0, index));
-            }
-            if (projected != null) {
-                projected.add(replacement);
-            }
-        }
-        return projected == null ? outcomes : List.copyOf(projected);
-    }
-
-    // 重建单个效果：条件未变化时原样返回；否则由实现类重建真实效果类型（执行器按具体类型强转，不能用包装类型替代）
-    private static Effect projectEffect(Effect effect, Rule rule) {
-        ConditionExpression conditions = effect.conditions();
-        ConditionExpression projected = projectExpression(conditions, rule);
-        return projected == conditions ? effect : effect.withConditions(projected);
-    }
 }

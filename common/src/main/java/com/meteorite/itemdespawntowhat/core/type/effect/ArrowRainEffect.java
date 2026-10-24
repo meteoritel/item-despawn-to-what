@@ -9,7 +9,6 @@ import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
-import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.ProductKind;
@@ -42,8 +41,7 @@ public record ArrowRainEffect(
         Pickup pickup,
         @Nullable List<PotionEffectSpec> potionEffects,
         int delayTicks,
-        double chance,
-        @Nullable ConditionExpression conditions
+        double chance
 ) implements Effect {
 
     // 效果类型 id，同时是 JSON 中 type 字段的取值
@@ -124,7 +122,7 @@ public record ArrowRainEffect(
     }
 
     // 类型专属参数编解码器；通用字段复用 CommonFields 片段（codec 层不得产出 null）
-    public static MapCodec<ArrowRainEffect> codec(Codec<ConditionExpression> expressionCodec) {
+    public static MapCodec<ArrowRainEffect> codec() {
         return RecordCodecBuilder.mapCodec(instance -> instance.group(
                 Codec.intRange(MIN_COUNT, MAX_COUNT).optionalFieldOf(COUNT_FIELD, DEFAULT_COUNT)
                         .forGetter(ArrowRainEffect::count),
@@ -132,11 +130,9 @@ public record ArrowRainEffect(
                 PotionEffectSpec.CODEC.codec().listOf().optionalFieldOf(POTION_EFFECTS_FIELD)
                         .forGetter(effect -> Optional.ofNullable(effect.potionEffects())),
                 CommonFields.delayTicks(ArrowRainEffect::delayTicks),
-                CommonFields.chance(ArrowRainEffect::chance),
-                CommonFields.optionalConditions(ArrowRainEffect::conditions, expressionCodec)
-        ).apply(instance, (count, pickup, potionEffects, delayTicks, chance, conditions) ->
-                new ArrowRainEffect(count, pickup, potionEffects.orElse(null), delayTicks, chance,
-                        conditions.orElse(null))));
+                CommonFields.chance(ArrowRainEffect::chance)
+        ).apply(instance, (count, pickup, potionEffects, delayTicks, chance) ->
+                new ArrowRainEffect(count, pickup, potionEffects.orElse(null), delayTicks, chance)));
     }
 
     /**
@@ -156,7 +152,7 @@ public record ArrowRainEffect(
     // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。
     // 显式实现执行器契约：箭雨序列只能经预算内的执行状态推进，直接 execute 一律拒绝；
     // 药水效果属标签随机抽取，须在成功转化当刻抽定并随准备结果携带，执行期不再抽取。
-    public static EffectType<ArrowRainEffect> effectType(Codec<ConditionExpression> expressionCodec) {
+    public static EffectType<ArrowRainEffect> effectType() {
         EffectExecutor<ArrowRainEffect> executor = new EffectExecutor<>() {
             @Override
             public EffectResult execute(ArrowRainEffect effect, EffectContext context) {
@@ -182,7 +178,7 @@ public record ArrowRainEffect(
                 return ArrowRainExecutor.start(effect, context, preparation);
             }
         };
-        return new SimpleEffectType<>(ID, codec(expressionCodec), ArrowRainEffect::validateParams, executor, true,
+        return new SimpleEffectType<>(ID, codec(), ArrowRainEffect::validateParams, executor, true,
                 ProductKind.WORLD);
     }
 
@@ -211,9 +207,4 @@ public record ArrowRainEffect(
         return ID;
     }
 
-    // 效果级条件替换：其余参数原样保留，供运行期门槛投影重建真实效果类型
-    @Override
-    public ArrowRainEffect withConditions(@Nullable ConditionExpression conditions) {
-        return new ArrowRainEffect(count, pickup, potionEffects, delayTicks, chance, conditions);
-    }
 }

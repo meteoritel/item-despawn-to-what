@@ -8,13 +8,11 @@ import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.model.CapacityDemand;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
-import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.ProductKind;
 import com.meteorite.itemdespawntowhat.core.model.SimpleEffectType;
 import com.meteorite.itemdespawntowhat.core.type.effect.exec.SpawnEntityExecutor;
-import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.resources.ResourceLocation;
@@ -25,24 +23,22 @@ import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
 /** 统一实体生成效果：按 variant 分发产物，公共执行字段只定义一次。 */
-public record SpawnEntityEffect(EntityProduct product, int delayTicks, double chance,
-                                @Nullable ConditionExpression conditions) implements Effect {
+public record SpawnEntityEffect(EntityProduct product, int delayTicks, double chance) implements Effect {
     public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("itemdespawntowhat", "spawn_entity");
 
     // 专用参数与公共字段同层编码，方便直接使用子类编辑表单。
-    public static MapCodec<SpawnEntityEffect> codec(Codec<ConditionExpression> expressionCodec) {
+    public static MapCodec<SpawnEntityEffect> codec() {
         return RecordCodecBuilder.mapCodec(instance -> instance.group(
                 EntityProduct.CODEC.forGetter(SpawnEntityEffect::product),
                 CommonFields.delayTicks(SpawnEntityEffect::delayTicks),
-                CommonFields.chance(SpawnEntityEffect::chance),
-                CommonFields.optionalConditions(SpawnEntityEffect::conditions, expressionCodec)
-        ).apply(instance, (product, delay, chance, conditions) ->
-                new SpawnEntityEffect(product, delay, chance, conditions.orElse(null))));
+                CommonFields.chance(SpawnEntityEffect::chance)
+        ).apply(instance, (product, delay, chance) ->
+                new SpawnEntityEffect(product, delay, chance)));
     }
 
     // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。
     // 显式实现准备入口：三个产出子类的引用与产出量都在成功转化当刻固定，交付期不再读原源实体。
-    public static EffectType<SpawnEntityEffect> effectType(Codec<ConditionExpression> expressionCodec) {
+    public static EffectType<SpawnEntityEffect> effectType() {
         EffectExecutor<SpawnEntityEffect> executor = new EffectExecutor<>() {
             @Override
             public EffectResult execute(SpawnEntityEffect effect, EffectContext context) {
@@ -63,7 +59,7 @@ public record SpawnEntityEffect(EntityProduct product, int delayTicks, double ch
             }
         };
         // 产出类别与容量需求都随 variant 变化：物品 / 通用实体 / 经验各自声明自己的产出与占用
-        return new SimpleEffectType<>(ID, codec(expressionCodec), SpawnEntityEffect::validateParams, executor,
+        return new SimpleEffectType<>(ID, codec(), SpawnEntityEffect::validateParams, executor,
                 false, SpawnEntityEffect::productKind, SpawnEntityEffect::capacityDemand);
     }
 
@@ -95,8 +91,4 @@ public record SpawnEntityEffect(EntityProduct product, int delayTicks, double ch
 
     @Override public ResourceLocation type() { return ID; }
 
-    // 效果级条件替换：其余参数原样保留，供运行期门槛投影重建真实效果类型
-    @Override public SpawnEntityEffect withConditions(@Nullable ConditionExpression conditions) {
-        return new SpawnEntityEffect(product, delayTicks, chance, conditions);
-    }
 }

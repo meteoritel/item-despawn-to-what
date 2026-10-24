@@ -193,10 +193,10 @@ When a rule picks up a dropped item, the whole stack leaves the world and enters
 
 About counting only real output:
 
-- The output ledger records only what actually took effect. When an effect in a group produces nothing because its chance missed, its own conditions did not match, or it failed, the mod does not count that group as successful output: a planned amount and a successful amount are two different numbers.
+- The output ledger records only what actually took effect. When an effect in a group produces nothing because its chance missed or it failed, the mod does not count that group as successful output: a planned amount and a successful amount are two different numbers.
 - A cost that was consumed stays consumed even when the output fails. A missed chance still consumes the source items of that group, so a retry is not free.
 - The other way around, a cost for a group that never opened never happened at all: those source items stay in the stack and come back as returned items.
-- The output budget is debited per opened group: once a group has paid its cost, it takes the share of the budget its declared output needs, and that share stays spent even when a missed chance or an unmet effect condition leaves the group without real output.
+- The output budget is debited per opened group: once a group has paid its cost, it takes the share of the budget its declared output needs, and that share stays spent even when a missed chance leaves the group without real output.
 
 About group counts and effect runs:
 
@@ -225,11 +225,11 @@ Check in this order:
 2. **The rule was not loaded or not enabled**: `enabled` is `false`, another rule with the same id from a higher source layer replaces this one, or a wrong JSON field rejects the rule. A rule change takes effect only after a reload. See [Getting Started](en-01-getting-started) and [Source Layers and Overrides](en-06-layers-and-overrides).
 3. **The stack is smaller than one group**: when the stack size is below the source cost per group, a cost of 2 with only 1 item left for example, no group can open. You will see the dropped item vanish on time and a matching stack reappear nearby. That is the return, and the returned item never converts again.
 4. **The output budget is used up**: when the budget worked out before opening is zero or already spent, `priority` moves on to the next candidate and `round_robin` skips this one. When no candidate can open a group, the whole stack returns unchanged. Experience output does not draw on this budget, and the items and generic entities a mixed candidate produces answer to their own limits. See [Server Configuration](en-07-server-config).
-5. **The candidate itself was skipped**: its effect-level `conditions` were not satisfied, or its `chance` missed. The mod still consumes the source items, and you see no output. See [Effects](en-04-effects).
+5. **An effect missed its chance**: its `chance` did not pass. The mod still consumes the source items, and you see no output. See [Effects](en-04-effects).
 6. **The output was delayed**: an effect that sets `delay_ticks` produces its output later than the moment the dropped item disappears, which happens with delayed lightning or with mobs that spawn in batches.
 7. **The output landed somewhere else**: a `place_block` effect with `fill_origin` set to `false` never fills the trigger position itself, and a mob spawned with `safe_spawn` may appear on a neighboring block.
 
-A one-line order to troubleshoot: first confirm that the rule itself was picked, meaning it is enabled, loaded, and its conditions are satisfied; then check costs and counts, meaning whether the stack fills a group and whether catalysts are enough; then check the output budget; and only at the end check the conditions, chance, and delay of the effects.
+A one-line order to troubleshoot: first confirm that the rule itself was picked, meaning it is enabled, loaded, and its conditions are satisfied; then check costs and counts, meaning whether the stack fills a group and whether catalysts are enough; then check the output budget; and only at the end check the chance and delay of the effects.
 
 ## Related
 

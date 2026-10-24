@@ -24,7 +24,7 @@ import org.jetbrains.annotations.Nullable;
  * 也不参与容量计算与组数限制。
  * 基准位置在创建执行状态时固定，之后不再读取源实体；爆炸是一次不可抢占的原子原版操作，
  * 只能在任务之间检查软预算，因此等待区块期间不推进，一旦开始执行就在同一步内完成整次爆炸。
- * 约定：delay_ticks / chance / 效果级 conditions 由运行时统一处理，本类不再判断；
+ * 约定：delay_ticks / chance 由运行时统一处理，本类不再判断；
  * 异常不吞、不捕获，由运行时统一捕获并记录（规则 id + 效果类型 + 位置）。
  */
 public final class ExplosionExecutor {
@@ -64,12 +64,12 @@ public final class ExplosionExecutor {
     public static EffectExecution start(ExplosionEffect effect, EffectContext context,
                                         @Nullable EffectPreparation preparation) {
         if (preparation == null) {
-            // 没有准备结果说明调用方绕过了准备阶段：条件与概率无从固定，按失败回执而非静默降级
+            // 没有准备结果说明调用方绕过了准备阶段：概率无从固定，按失败回执而非静默降级
             return budget -> EffectStep.done(EffectResult.failed(
                     MISSING_PREPARATION + ": " + effect.type() + " @ " + context.ruleId()));
         }
         if (preparation.gate() != null) {
-            // 已判定不执行：不重新判定条件或概率，也不做世界写入
+            // 已判定不执行：不重新判定概率，也不做世界写入
             String reason = preparation.gate();
             return budget -> EffectStep.done(EffectResult.skipped(reason));
         }

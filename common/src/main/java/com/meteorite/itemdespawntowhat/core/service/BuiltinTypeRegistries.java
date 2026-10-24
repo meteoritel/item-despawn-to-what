@@ -16,7 +16,7 @@ import net.minecraft.world.item.ItemStack;
 
 /**
  * 内置类型注册表的规范装配点。
- * 依赖顺序固定：条件类型 → 条件表达式编解码器 → 效果类型（效果记录带有效果级 conditions 字段）。
+ * 装配顺序固定：条件类型冻结 → 条件表达式编解码器 → 效果类型冻结（规则级条件树需要该编解码器）。
  * 运行时引导层直接使用本记录，避免各处重复拼装。
  */
 public record BuiltinTypeRegistries(
@@ -46,8 +46,8 @@ public record BuiltinTypeRegistries(
         providers.forEach(provider -> provider.registerConditions(conditionTypes));
         conditionTypes.freeze();
         Codec<ConditionExpression> expressionCodec = RuleCodecs.conditionExpressionCodec(conditionTypes);
-        var effectTypes = BuiltinEffectTypes.createMutable(expressionCodec);
-        providers.forEach(provider -> provider.registerEffects(effectTypes, expressionCodec));
+        var effectTypes = BuiltinEffectTypes.createMutable();
+        providers.forEach(provider -> provider.registerEffects(effectTypes));
         effectTypes.freeze();
         return new BuiltinTypeRegistries(conditionTypes, effectTypes, expressionCodec);
     }

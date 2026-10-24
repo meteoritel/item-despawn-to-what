@@ -28,7 +28,7 @@ import org.jetbrains.annotations.Nullable;
  * 每道闪电真正加入世界后才通过 context.reportProgress(1) 回执真实完成量，
  * 全部落完的终态回执不再重复计入产出，只给出剩余增量 0。
  * 区块未加载时保留尚未落下的这一道，退避后按同一水平坐标重试（地表高度仍在执行期实时求交），不提前落下也不重新抽取坐标。
- * 约定：delay_ticks / chance / 效果级 conditions 由运行时统一处理，本类不再判断；
+ * 约定：delay_ticks / chance 由运行时统一处理，本类不再判断；
  * 异常不吞、不捕获，由运行时统一捕获并记录（规则 id + 效果类型 + 位置）。
  */
 public final class LightningExecutor {
@@ -69,12 +69,12 @@ public final class LightningExecutor {
     public static EffectExecution start(LightningEffect effect, EffectContext context,
                                         @Nullable EffectPreparation preparation) {
         if (preparation == null) {
-            // 没有准备结果说明调用方绕过了准备阶段：条件与概率无从固定，按失败回执而非静默降级
+            // 没有准备结果说明调用方绕过了准备阶段：概率与抽定输入无从固定，按失败回执而非静默降级
             return budget -> EffectStep.done(EffectResult.failed(
                     MISSING_PREPARATION + ": " + effect.type() + " @ " + context.ruleId()));
         }
         if (preparation.gate() != null) {
-            // 已判定不执行：不重新判定条件或概率，也不做世界写入
+            // 已判定不执行：不重新判定概率，也不做世界写入
             String reason = preparation.gate();
             return budget -> EffectStep.done(EffectResult.skipped(reason));
         }

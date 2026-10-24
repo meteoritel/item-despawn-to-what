@@ -8,7 +8,6 @@ import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
-import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.ProductKind;
@@ -32,8 +31,7 @@ import org.jetbrains.annotations.Nullable;
 public record LightningEffect(
         int count,
         int delayTicks,
-        double chance,
-        @Nullable ConditionExpression conditions
+        double chance
 ) implements Effect {
 
     // 效果类型 id，同时是 JSON 中 type 字段的取值
@@ -48,21 +46,20 @@ public record LightningEffect(
     public static final int MAX_COUNT = 16;
 
     // 类型专属参数编解码器；通用字段复用 CommonFields 片段（codec 层不得产出 null）
-    public static MapCodec<LightningEffect> codec(Codec<ConditionExpression> expressionCodec) {
+    public static MapCodec<LightningEffect> codec() {
         return RecordCodecBuilder.mapCodec(instance -> instance.group(
                 Codec.intRange(MIN_COUNT, MAX_COUNT).optionalFieldOf(COUNT_FIELD, DEFAULT_COUNT)
                         .forGetter(LightningEffect::count),
                 CommonFields.delayTicks(LightningEffect::delayTicks),
-                CommonFields.chance(LightningEffect::chance),
-                CommonFields.optionalConditions(LightningEffect::conditions, expressionCodec)
-        ).apply(instance, (count, delayTicks, chance, conditions) ->
-                new LightningEffect(count, delayTicks, chance, conditions.orElse(null))));
+                CommonFields.chance(LightningEffect::chance)
+        ).apply(instance, (count, delayTicks, chance) ->
+                new LightningEffect(count, delayTicks, chance)));
     }
 
     // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。
     // 显式实现执行器契约：闪电序列只能经预算内的执行状态推进，直接 execute 一律拒绝；
-    // 本类型没有自有的成功时输入，只声明准备阶段以让效果级条件与概率在成功转化当刻判定一次。
-    public static EffectType<LightningEffect> effectType(Codec<ConditionExpression> expressionCodec) {
+    // 本类型没有自有的成功时输入，只声明准备阶段以让概率在成功转化当刻判定一次。
+    public static EffectType<LightningEffect> effectType() {
         EffectExecutor<LightningEffect> executor = new EffectExecutor<>() {
             @Override
             public EffectResult execute(LightningEffect effect, EffectContext context) {
@@ -81,7 +78,7 @@ public record LightningEffect(
                 return LightningExecutor.start(effect, context, preparation);
             }
         };
-        return new SimpleEffectType<>(ID, codec(expressionCodec), LightningEffect::validateParams, executor, true,
+        return new SimpleEffectType<>(ID, codec(), LightningEffect::validateParams, executor, true,
                 ProductKind.WORLD);
     }
 
@@ -96,9 +93,4 @@ public record LightningEffect(
         return ID;
     }
 
-    // 效果级条件替换：其余参数原样保留，供运行期门槛投影重建真实效果类型
-    @Override
-    public LightningEffect withConditions(@Nullable ConditionExpression conditions) {
-        return new LightningEffect(count, delayTicks, chance, conditions);
-    }
 }

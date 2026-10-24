@@ -130,16 +130,10 @@ public final class RuleValidation {
                                    @Nullable String origin) {
         int before = issues.errors().size();
         validate(rule, issues, origin);
-        validateConditionParams(rule.conditions(), conditionTypes, runtimeLimits, issues, origin, RuleFields.CONDITIONS);
+        validateConditionParams(rule.conditions(), conditionTypes, runtimeLimits, issues, origin);
         // 类型专属参数校验覆盖顶层 effects 与候选结果内 effects，路径与 JSON 形状一致
         for (EffectSlot slot : effectSlots(rule)) {
-            Effect effect = slot.effect();
-            String path = slot.path();
-            validateEffectParams(effect, effectTypes, runtimeLimits, issues, origin, path);
-            ConditionExpression conditions = effect.conditions();
-            if (conditions != null) {
-                validateConditionParams(conditions, conditionTypes, runtimeLimits, issues, origin, path + "." + RuleFields.CONDITIONS);
-            }
+            validateEffectParams(slot.effect(), effectTypes, runtimeLimits, issues, origin, slot.path());
         }
         return issues.errors().size() == before;
     }
@@ -163,8 +157,8 @@ public final class RuleValidation {
     private static void validateConditionParams(ConditionExpression expression,
                                                 TypeRegistry<ConditionType<?>> conditionTypes,
                                                 RuleRuntimeLimits runtimeLimits,
-                                                IssueCollector issues, @Nullable String origin, String basePath) {
-        ConditionTrees.forEachLeaf(expression.root(), basePath, (path, condition) -> {
+                                                IssueCollector issues, @Nullable String origin) {
+        ConditionTrees.forEachLeaf(expression.root(), RuleFields.CONDITIONS, (path, condition) -> {
             if (condition == null || condition.type() == null) {
                 issues.error("条件叶缺少条件对象或 type", origin, path);
                 return;
@@ -308,17 +302,6 @@ public final class RuleValidation {
         }
         if (!Double.isFinite(effect.chance()) || effect.chance() < 0.0D || effect.chance() > 1.0D) {
             issues.error("chance 必须在 [0,1] 内: " + effect.chance(), origin, path + "." + RuleFields.CHANCE);
-        }
-        ConditionExpression conditions = effect.conditions();
-        if (conditions != null && (conditions.leafCount() > ConditionLimits.MAX_LEAVES
-                || conditions.nodeCount() > ConditionLimits.MAX_NODES
-                || conditions.depth() > ConditionLimits.MAX_DEPTH)) {
-            issues.error("效果级条件超出上限：叶<=" + ConditionLimits.MAX_LEAVES + "、节点<=" + ConditionLimits.MAX_NODES
-                    + "、深度<=" + ConditionLimits.MAX_DEPTH, origin, path + "." + RuleFields.CONDITIONS);
-        }
-        if (conditions != null && !conditions.isStructurallyValid()) {
-            issues.error("效果级 conditions 结构非法：all_of / any_of 的 terms 不能为空、inverted 必须有 term",
-                    origin, path + "." + RuleFields.CONDITIONS);
         }
     }
 

@@ -36,7 +36,7 @@ final class EffectTask implements ServerTask {
     private final ItemEntity source;
     private final EffectContext context;
     private final Effect effect;
-    // 成功转化当刻固定的本次输入；null 表示本类型没有准备阶段，条件与概率仍在首次执行时判定
+    // 成功转化当刻固定的本次输入；null 表示本类型没有准备阶段，概率仍在首次执行时判定
     private final @Nullable EffectPreparation preparation;
     private final Consumer<EffectResult> resultSink;
     private final Runnable completionSink;
@@ -72,7 +72,7 @@ final class EffectTask implements ServerTask {
         }
         ChunkWait.Status origin = originChunkWait.poll(level, originChunks, now);
         if (origin != ChunkWait.Status.READY) { return waitForChunks(originChunkWait, origin, now); }
-        if (execution == null) { execution = runtime.startEffect(level, source, context, effect, preparation); }
+        if (execution == null) { execution = runtime.startEffect(source, context, effect, preparation); }
         if (budget.exhausted()) { return StepResult.yield(1, 1); }
         EffectStep step;
         try {

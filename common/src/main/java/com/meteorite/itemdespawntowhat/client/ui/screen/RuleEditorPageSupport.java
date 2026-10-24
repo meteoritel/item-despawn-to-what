@@ -458,7 +458,7 @@ final class RuleEditorPageSupport {
     }
 
     static boolean isCommonActionField(EditorField field) {
-        return List.of("chance", "delay_ticks", "conditions").contains(field.name());
+        return List.of("chance", "delay_ticks").contains(field.name());
     }
 
     static void show(@Nullable UiWidget widget, boolean visible) {

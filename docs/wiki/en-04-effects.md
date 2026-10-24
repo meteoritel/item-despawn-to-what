@@ -18,14 +18,13 @@ This page starts with the fields every effect shares, then walks through the tab
 
 ## Fields Every Effect Shares
 
-Every effect object can carry the four fields below. `type` is required and the rest are optional. The parameters of the effect itself, such as `item` or `count`, sit **at the same level** as these four fields. Do not wrap them in another object such as `value`.
+Every effect object can carry the three fields below. `type` is required and the rest are optional. The parameters of the effect itself, such as `item` or `count`, sit **at the same level** as these three fields. Do not wrap them in another object such as `value`.
 
 | Field | What it does | Values | Default | Notes |
 |---|---|---|---|---|
 | `type` | Says which effect this is | An effect id that starts with `itemdespawntowhat:`, listed in the table above | None, required | A wrong name rejects the rule, and the message lists the registered types |
 | `delay_ticks` | How long to wait before running this effect | Integer (unit: ticks, 20 ticks = 1 second) | `0` | Counts from the moment the rule fires; a negative value rejects the rule, and the message names `delay_ticks` |
 | `chance` | The chance this effect passes, rolled when its turn comes | `0.0` to `1.0` | `1.0` | A value outside this range rejects the rule with a message about `chance`; `1` or `1.0` always runs |
-| `conditions` | Controls this one effect and nothing else | A condition tree, written as shown in [Conditions](en-03-conditions) | Omit for no conditions | The mod only evaluates it; the effect is skipped when the conditions fail |
 
 Three things worth knowing:
 
@@ -37,12 +36,12 @@ Three things worth knowing:
 
 - **Effects start in written order**: the object written first starts first. Every effect carries its own delay, so effects do not always finish in written order; an arrow rain that starts early can finish after an explosion that starts later.
 - **Work spreads over several ticks**: when one effect has to produce many things, the mod does not stack them all up in a single tick but finishes them over several ticks, with at most 16 item entities per batch, 8 entities per tick, and 128 block positions per tick. Players watch the results appear one batch at a time.
-- **Chance and conditions belong to one effect**: every effect rolls its own `chance` and evaluates its own `conditions`. When one effect fails its roll, the other effects of the same group still run.
+- **Chance belongs to one effect**: every effect rolls its own `chance`. When one effect fails its roll, the other effects of the same group still run.
 - **One effect failing does not stop the others**: when an effect errors out at run time, for example because an item it refers to no longer exists after a data pack update, the mod records that failure and continues with the next effect. Nothing already done rolls back, and the whole rule is not cancelled. The failure appears in the result; for how to trace it, see [Getting Started](en-01-getting-started).
-- **Timing of the check**: effects that need their input fixed when the conversion succeeds, such as `place_block` (which decides at that moment what to place, where the candidates are and the cap), also evaluate `conditions` and roll `chance` right then; a later delay or an already consumed source item no longer changes the result. Effects without fixed input still evaluate `conditions` and roll `chance` at the moment they are due to run, after their delay.
+- **Timing of the check**: effects that need their input fixed when the conversion succeeds, such as `place_block` (which decides at that moment what to place, where the candidates are and the cap), roll `chance` right then; a later delay or an already consumed source item no longer changes the result. Effects without fixed input still roll `chance` at the moment they are due to run, after their delay.
 - **Every group runs the effects once**: each group that starts runs the effects once, so `count` is the amount for that single run and a loot table rolls once per group. For how a whole stack splits into groups, see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
 - **A cap of 32**: one rule can hold at most 32 effects in total, counting the `effects` of every candidate. A rule above the cap is rejected.
-- **One-shot effects**: `arrow_rain`, `lightning`, `explosion`, and `weather` are one-shot. They play once for a given source, they do not repeat with the group count, and they take no part in the capacity check of a candidate. Each source gets at most one attempt at them: a failed roll, unmet conditions, and a run-time error all count as that one attempt.
+- **One-shot effects**: `arrow_rain`, `lightning`, `explosion`, and `weather` are one-shot. They play once for a given source, they do not repeat with the group count, and they take no part in the capacity check of a candidate. Each source gets at most one attempt at them: a failed roll and a run-time error both count as that one attempt.
 
 ## Entities (spawn_entity)
 

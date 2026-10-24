@@ -49,7 +49,7 @@ authority: common/core/load、common/core/service 的加载装配类（RuleLoadi
 | `core/load/RuleSourceIndex` | 旁路聚合 | 把合并前原始条目归并为 base / overlay / control 三视图 | 快照装配、编辑判定 |
 | `core/load/PackLayerResolver` | 注入的判定点 | 包 id → 来源层；按本次加载包的来源元数据建快照 | 平台引导层 |
 | `core/service/RuleLoadingService` | 装配点 | 构造注册表感知解码器，串起加载、两档校验与命令用统计 | `RuleLoadContext`、`RuleReferenceValidator` |
-| `core/service/RuleReferenceValidator` | 动态引用一档 | 只遍历条件树与效果清单，按 `DynamicReferenceCheck` 分派 | 类型自带的扩展点 |
+| `core/service/RuleReferenceValidator` | 动态引用一档 | 只遍历规则级条件树与效果清单，按 `DynamicReferenceCheck` 分派 | 类型自带的扩展点 |
 | `core/runtime/RuleIndex` | 候选索引聚合根 | 剔除不可运行规则、门槛投影、排序、建立直接索引与标签懒展开 | `ConversionRuntime`、调试场景、保存后重建 |
 | `core/runtime/CatalystThresholdProjection` | 运行期投影 | 把留空门槛解析为当前消耗配置下的有效值与共享半径 | `RuleIndex.build` |
 
@@ -118,7 +118,7 @@ flowchart TD
 ### 两档校验
 
 - 第一档是模型语义校验，使用注册表感知的重载：结构、字段取值、类型专属参数与服务端配置换算出的运行期上限一并检查，未注册类型与区间类非法参数都在这里报错，条款不通过即剔除该条。
-- 第二档是动态引用校验：遍历规则级条件树、顶层效果、候选结果内效果以及效果级条件树，按 `DynamicReferenceCheck` 逐叶分派，判定依据是当前服务端实际已加载的注册表与资源。这一档要求非空服务端；无服务端的装配只做第一档。
+- 第二档是动态引用校验：遍历规则级条件树、顶层效果与候选结果内效果，按 `DynamicReferenceCheck` 逐项分派，判定依据是当前服务端实际已加载的注册表与资源。这一档要求非空服务端；无服务端的装配只做第一档。
 - 两档都不通过则剔除该条，问题保留在结果的问题收集器中，供命令与日志回显。
 
 ### 先建后换与失败保留旧索引
@@ -153,7 +153,7 @@ flowchart TD
 
 - 门槛取值：优先条件叶声明的 `counts`，其次显式 `count`，都未声明时取规则 `catalyst_cost` 中该引用的数量；规则未声明该引用时用 `CatalystPresentCondition.DEFAULT_COUNT`。实际消耗量不参与门槛解析。
 - 共享半径：规则声明 `catalyst_cost` 时取其 `radius`，否则沿用条件叶的 `radius`；半径是运行期属性，不写回保存声明。
-- 无留空门槛时原样复用同一个 `Rule` 实例；有变化时只重建条件树与效果列表，其余字段与排序键保持不变，效果经 `withConditions(...)` 重建真实类型。
+- 无留空门槛时原样复用同一个 `Rule` 实例；有变化时只重建条件树，其余字段（含效果列表）与排序键保持不变。
 - 投影不反写保存声明，重载与保存后重建索引时重新解析；编辑器展示门槛复用同一 `resolveThreshold`，不改写声明。
 
 ### 新增来源层、控制语义与拒载规则

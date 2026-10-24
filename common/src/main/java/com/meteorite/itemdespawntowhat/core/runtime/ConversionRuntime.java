@@ -36,7 +36,6 @@ import com.meteorite.itemdespawntowhat.core.state.DamageClassification;
 import com.meteorite.itemdespawntowhat.core.state.DropState;
 import com.meteorite.itemdespawntowhat.core.state.DropStateStore;
 import com.meteorite.itemdespawntowhat.core.type.effect.exec.VisualFeedback;
-import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceKey;
@@ -68,7 +67,7 @@ import java.util.UUID;
  * - 计时按**绝对存活时间**，条件不满足则退避重试（1s→2s→4s→封顶）；
  * - 状态按维度 key 索引；任务上下文持有维度对象，维度卸载即整体释放；
  * - 同一掉落物只执行优先级最高的一条命中规则，效果列表顺序全执行、异常隔离；
- * - delay_ticks / chance / 效果级 conditions 由本层统一处理，执行器只做"做什么"。
+ * - delay_ticks / chance 由本层统一处理，执行器只做"做什么"。
  */
 public final class ConversionRuntime {
 
@@ -82,8 +81,7 @@ public final class ConversionRuntime {
     private static final int TICKS_PER_SECOND = 20;
     // 结算账本裁剪间隔：1200 tick = 60 秒（已完成记录按 tick 过期，未结清记录一律保留）
     private static final long SETTLEMENT_PRUNE_INTERVAL_TICKS = 1200L;
-    // 效果级条件不满足 / 概率落空的回执与固定输入原因：属已支付组内的正常结果
-    private static final String CONDITIONS_UNMET = "conditions_unmet";
+    // 概率落空的回执与固定输入原因：属已支付组内的正常结果
     private static final String CHANCE_MISSED = "chance_missed";
 
     private final ServerConfig config;
@@ -1351,7 +1349,7 @@ public final class ConversionRuntime {
         Vec3 triggerPosition = item.position();
         Vec3 triggerVelocity = item.getDeltaMovement();
         // 同一补偿单元内、源实体清空前固定需要先于源实体消失确定输入的类型的本次效果输入：
-        // 效果级条件与概率在此判定一次，结果随任务携带，源实体清空后不再重新判定。
+        // 概率在此判定一次，结果随任务携带，源实体清空后不再重新判定。
         // 判定异常按同一补偿单元处理：整堆源物品写回并保留所有权追踪。
         Map<PreparedEffectKey, EffectPreparation> preparations;
         // 领先准备的组数：按可用源算出的组数上界只是理论值，实际准备只做本步允许的组数；
@@ -1416,26 +1414,18 @@ public final class ConversionRuntime {
         }
     }
 
-    // 条件与概率只在开始时判断一次，续接状态归本次效果任务独占。
-    // preparation 非空表示本组输入已在成功转化当刻固定（含条件/概率判定结果），本方法不再重判、也不再读源实体；
+    // 概率只在开始时判断一次，续接状态归本次效果任务独占。
+    // preparation 非空表示本组输入已在成功转化当刻固定（含概率判定结果），本方法不再重判、也不再读源实体；
     // 为空的只有未声明准备阶段的类型，它们保持原有的首次执行时判定时机。
-    EffectExecution startEffect(ServerLevel level, ItemEntity item, EffectContext base, Effect effect,
+    EffectExecution startEffect(ItemEntity item, EffectContext base, Effect effect,
                                 @Nullable EffectPreparation preparation) {
         // 已判定不执行的固定输入：直接给出跳过回执，不重判也不做世界写入
         if (preparation != null && preparation.gate() != null) {
             return gatedExecution(preparation.gate());
         }
-        // 成功转化当刻已固定输入时不就地重判条件/概率；未固定的类型保持原有判定时机
+        // 成功转化当刻已固定输入时不就地重判概率；未固定的类型保持原有判定时机
         boolean preEvaluated = preparation != null;
         if (!preEvaluated) {
-            var conditions = effect.conditions();
-            if (conditions != null && !conditions.isEmpty()) {
-                ConditionContext context = conditionContext(level, item, BlockPos.containing(base.position()));
-                if (!ExpressionEvaluator.matches(conditions, context, types.conditionTypes())) {
-                    if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "EFFECT_CONDITION_SKIPPED", "effect", effect.type()); }
-                    return budget -> EffectStep.done(EffectResult.skipped(CONDITIONS_UNMET));
-                }
-            }
             if (effect.chance() < 1.0D && base.random().nextDouble() >= effect.chance()) {
                 if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "EFFECT_CHANCE_SKIPPED", "effect", effect.type(), "chance", effect.chance()); }
                 // 概率落空仍支付本组固定成本：不免费重试、不返还
@@ -1464,7 +1454,7 @@ public final class ConversionRuntime {
         return budget -> EffectStep.done(EffectResult.skipped(reason));
     }
 
-    // 成功转化当刻为「需要先固定输入」的类型逐槽生成固定输入：条件与概率在这里判定一次，
+    // 成功转化当刻为「需要先固定输入」的类型逐槽生成固定输入：概率在这里判定一次，
     // 结果随结算任务携带，源实体清空后不再重新判定。没有准备阶段的类型不产出，保持原有判定时机。
     // preparedGroups 只是领先准备的组数上界，未覆盖的组由结算任务按组续接准备。
     private Map<PreparedEffectKey, EffectPreparation> prepareEffects(ServerLevel level, ItemEntity item, Rule rule,
@@ -1476,7 +1466,6 @@ public final class ConversionRuntime {
         if (preparedGroups <= 0) {
             return preparations;
         }
-        BlockPos pos = BlockPos.containing(position);
         for (OutcomeCandidate candidate : rule.effectiveOutcomes()) {
             List<Effect> effects = candidate.effects();
             for (int slot = 0; slot < effects.size(); slot++) {
@@ -1486,13 +1475,13 @@ public final class ConversionRuntime {
                     continue;
                 }
                 // 一次性效果同一源只尝试一组，固定一份即可；其余类型按潜在组各固定一份，
-                // 条件与概率判定互不复用，声明可共享的固定输入在组间复用首份
+                // 概率判定互不复用，声明可共享的固定输入在组间复用首份
                 int groups = definition.oneShot() ? 1 : preparedGroups;
                 for (int group = 0; group < groups; group++) {
-                    EffectPreparation preparation = prepareEffectSlot(definition, effect, level, item, pos, position,
+                    EffectPreparation preparation = prepareEffectSlot(definition, effect, level, item, position,
                             sourceSnapshot, candidate.fillOrigin());
                     if (preparation == null) {
-                        // 未迁移的类型不在成功转化当刻固定，其条件与概率仍在首次执行时判定
+                        // 未迁移的类型不在成功转化当刻固定，其概率仍在首次执行时判定
                         break;
                     }
                     PreparedEffectKey key = new PreparedEffectKey(candidate.id(), slot, group);
@@ -1505,10 +1494,10 @@ public final class ConversionRuntime {
     }
 
     // 泛型桥接：准备入口只读效果参数与成功当刻可读的输入。
-    // 结算任务的 PREPARING 阶段按组续接准备时复用同一入口，保证两处的条件、概率与固定输入口径一致。
+    // 结算任务的 PREPARING 阶段按组续接准备时复用同一入口，保证两处的概率与固定输入口径一致。
     @SuppressWarnings("unchecked")
     @Nullable EffectPreparation prepareEffectSlot(EffectType<?> definition, Effect effect, ServerLevel level,
-                                                 ItemEntity item, BlockPos pos, Vec3 position,
+                                                 ItemEntity item, Vec3 position,
                                                  ItemStack sourceSnapshot, boolean fillOrigin) {
         // 准备阶段注入点：注入失败必须沿转化补偿单元抛出，由检查任务的失败收尾释放或重排追踪
         if (RuntimeObserver.current().enabled()) {
@@ -1522,15 +1511,7 @@ public final class ConversionRuntime {
         if (preparation == null || preparation.gate() != null) {
             return preparation;
         }
-        // 条件不满足与概率落空在成功转化当刻就已确定：结果随任务携带，不被后续世界变化改写
-        var conditions = effect.conditions();
-        if (conditions != null && !conditions.isEmpty()) {
-            ConditionContext context = conditionContext(level, item, pos);
-            if (!ExpressionEvaluator.matches(conditions, context, types.conditionTypes())) {
-                if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "EFFECT_CONDITION_SKIPPED", "effect", effect.type()); }
-                return EffectPreparation.gated(CONDITIONS_UNMET);
-            }
-        }
+        // 概率落空在成功转化当刻就已确定：结果随任务携带，不被后续世界变化改写
         if (effect.chance() < 1.0D && level.random.nextDouble() >= effect.chance()) {
             if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(item, "EFFECT_CHANCE_SKIPPED", "effect", effect.type(), "chance", effect.chance()); }
             // 概率落空仍支付本组固定成本：不免费重试、不返还
@@ -1559,13 +1540,8 @@ public final class ConversionRuntime {
         return candidateStructureVersions.versionOf(rule, registries);
     }
 
-    // 条件上下文：标签与气候采样对象按维度复用（各自带缓存）
+    // 规则级条件上下文：标签与气候采样对象按维度复用（各自带缓存）
     private ConditionContext conditionContext(ServerLevel level, ItemEntity item) {
-        return conditionContext(level, item, item.blockPosition());
-    }
-
-    // 指定位置的条件上下文（效果级条件可能作用在非源位置）
-    private ConditionContext conditionContext(ServerLevel level, ItemEntity item, BlockPos pos) {
         LevelState state = stateOf(level);
         if (state.tags == null) {
             state.tags = new RuntimeTagLookup(level);
@@ -1573,7 +1549,7 @@ public final class ConversionRuntime {
         if (state.climate == null) {
             state.climate = new RuntimeClimateSampler(level);
         }
-        return new RuntimeConditionContext(level, item, pos, level.random, state.tags, state.climate);
+        return new RuntimeConditionContext(level, item, item.blockPosition(), level.random, state.tags, state.climate);
     }
 
     // 排除死亡掉落、已提交转化的实体和原版无限寿命物品。

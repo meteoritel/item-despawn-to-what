@@ -17,7 +17,6 @@ import com.meteorite.itemdespawntowhat.core.model.OutcomeCandidate;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerScheduler;
 import com.meteorite.itemdespawntowhat.core.type.effect.exec.SpawnEntityExecutor;
-import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -391,9 +390,9 @@ final class ConversionSettlement implements ServerTask {
                     continue;
                 }
                 EffectPreparation preparation = runtime.prepareEffectSlot(definition, effect, level, source,
-                        BlockPos.containing(triggerPosition), triggerPosition, sourceSnapshot, candidate.fillOrigin());
+                        triggerPosition, sourceSnapshot, candidate.fillOrigin());
                 if (preparation == null) {
-                    // 未迁移的类型不在准备阶段固定输入，其条件与概率仍在首次执行时判定
+                    // 未迁移的类型不在准备阶段固定输入，其概率仍在首次执行时判定
                     continue;
                 }
                 preparation = sharedPreparations.share(key, preparation);

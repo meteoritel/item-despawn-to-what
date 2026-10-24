@@ -18,7 +18,7 @@ public final class ClientTypeRegistries {
 
     // 内置条件类型注册表（惰性）
     private static volatile com.meteorite.itemdespawntowhat.core.api.TypeRegistry<ConditionType<?>> conditions;
-    // 内置效果类型注册表（惰性，依赖条件表达式编解码器）
+    // 内置效果类型注册表（惰性）
     private static volatile com.meteorite.itemdespawntowhat.core.api.TypeRegistry<EffectType<?>> effects;
 
     // 工具类
@@ -48,7 +48,7 @@ public final class ClientTypeRegistries {
             synchronized (ClientTypeRegistries.class) {
                 local = effects;
                 if (local == null) {
-                    local = BuiltinEffectTypes.create(RuleCodecs.conditionExpressionCodec(conditions()));
+                    local = BuiltinEffectTypes.create();
                     effects = local;
                 }
             }
