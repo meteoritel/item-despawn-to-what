@@ -8,6 +8,7 @@ import java.util.List;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * 规则编辑器按钮排：把一组 {@link UiButton} 按可用宽度自动换行、左对齐排布，并转发渲染与鼠标输入。
@@ -24,6 +25,12 @@ final class RuleEditorScreenButtonBar {
     private int layoutX = Integer.MIN_VALUE;
     private int layoutY = Integer.MIN_VALUE;
     private int layoutWidth = Integer.MIN_VALUE;
+
+    // 最近一次流排布结果：测量（preferredHeight）与摆放（layout）共用，签名一致即直接复用
+    // 签名覆盖按钮实例代次、可见性、首选宽度与可用宽度，因此换按钮、切可见性、改文案或改宽度都会重排
+    private @Nullable UiFlowLayout.Wrap flow;
+    private int flowSignature = Integer.MIN_VALUE;
+    private UiButton[] flowVisible = new UiButton[0];
 
     // 默认按钮高度与按钮间距
     private static final int DEFAULT_BUTTON_H = 16;
@@ -58,38 +65,56 @@ final class RuleEditorScreenButtonBar {
 
     // 指定宽度下按钮排所需高度；无可见按钮时为 0
     int preferredHeight(int width) {
-        List<UiButton> visible = visibleButtons();
-        if (visible.isEmpty()) {
-            return 0;
-        }
         // 宽度非正时沿用「视为单行」的旧口径（与 layout 的单行判定一致）
         if (width <= 0) {
-            return buttonHeight;
+            return hasVisible() ? buttonHeight : 0;
         }
-        return flowFor(visible, width).height();
+        return flowFor(width).height();
     }
 
-    // 可见按钮（kit 不接受可见性概念，下标由宿主映射）
-    private List<UiButton> visibleButtons() {
-        List<UiButton> visible = new ArrayList<>();
+    // 是否存在可见按钮（只读扫描，不分配）
+    private boolean hasVisible() {
         for (UiButton button : buttons) {
-            if (button.isVisible()) visible.add(button);
+            if (button.isVisible()) return true;
         }
-        return visible;
+        return false;
     }
 
-    // 按按钮首选宽度量宽（下限 MIN_BUTTON_W、上限可用宽度）
-    private int[] widthsOf(List<UiButton> visible, int limit) {
-        int[] widths = new int[visible.size()];
-        for (int index = 0; index < visible.size(); index++) {
-            widths[index] = Math.clamp(visible.get(index).preferredWidth(BUTTON_PAD), Math.min(MIN_BUTTON_W, limit), limit);
+    // 换行几何：按布局签名缓存，测量与摆放共用同一次结果；签名不变时零分配
+    private UiFlowLayout.Wrap flowFor(int width) {
+        int signature = signatureOf(width);
+        if (flow != null && signature == flowSignature) {
+            return flow;
         }
-        return widths;
-    }
-
-    // 换行几何：测量与实际摆放共用同一次结果
-    private UiFlowLayout.Wrap flowFor(List<UiButton> visible, int limit) {
-        return UiFlowLayout.wrap(widthsOf(visible, limit), limit, gap, buttonHeight);
+        flowSignature = signature;
+        int limit = Math.max(MIN_ROW_WIDTH, width);
+        int count = 0;
+        for (UiButton button : buttons) {
+            if (button.isVisible()) count++;
+        }
+        flowVisible = new UiButton[count];
+        int[] widths = new int[count];
+        int index = 0;
+        for (UiButton button : buttons) {
+            if (!button.isVisible()) continue;
+            flowVisible[index] = button;
+            // 量宽口径：下限 MIN_BUTTON_W、上限可用宽度
+            widths[index] = Math.clamp(button.preferredWidth(BUTTON_PAD), Math.min(MIN_BUTTON_W, limit), limit);
+            index++;
+        }
+        int used = 0;
+        for (int itemWidth : widths) {
+            used += itemWidth;
+        }
+        // 单行口径与换行共用同一累计：总宽加间距仍放得下即为一行
+        if (fillRow && count > 0 && used + (count - 1) * gap <= limit) {
+            int extra = Math.max(0, (limit - used - (count - 1) * gap) / count);
+            for (int itemIndex = 0; itemIndex < count; itemIndex++) {
+                widths[itemIndex] += extra;
+            }
+        }
+        flow = UiFlowLayout.wrap(widths, limit, gap, buttonHeight);
+        return flow;
     }
 
     // 布局输入签名：按钮实例、可见性与首选宽度任一变化都要重排，宽度变化由调用参数一并计入
@@ -117,24 +142,10 @@ final class RuleEditorScreenButtonBar {
         layoutX = x;
         layoutY = y;
         layoutWidth = width;
-        int limit = Math.max(MIN_ROW_WIDTH, width);
-        List<UiButton> visible = visibleButtons();
-        int[] widths = widthsOf(visible, limit);
-        int used = 0;
-        for (int itemWidth : widths) {
-            used += itemWidth;
-        }
-        // 单行口径与换行共用同一累计：总宽加间距仍放得下即为一行
-        if (fillRow && widths.length > 0 && used + (widths.length - 1) * gap <= limit) {
-            int extra = Math.max(0, (limit - used - (widths.length - 1) * gap) / widths.length);
-            for (int index = 0; index < widths.length; index++) {
-                widths[index] += extra;
-            }
-        }
-        UiFlowLayout.Wrap flow = UiFlowLayout.wrap(widths, limit, gap, buttonHeight);
-        for (int index = 0; index < widths.length; index++) {
-            UiRect offset = flow.bounds(index);
-            visible.get(index).setBounds(x + offset.x(), y + offset.y(), offset.width(), offset.height());
+        UiFlowLayout.Wrap currentFlow = flowFor(width);
+        for (int index = 0; index < flowVisible.length; index++) {
+            UiRect offset = currentFlow.bounds(index);
+            flowVisible[index].setBounds(x + offset.x(), y + offset.y(), offset.width(), offset.height());
         }
     }
 

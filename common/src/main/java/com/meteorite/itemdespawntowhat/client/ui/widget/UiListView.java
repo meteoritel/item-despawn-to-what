@@ -75,10 +75,6 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     // 字体由 render 接收；保留构造参数以兼容现有组件 API。
     // 注入的宿主主题
     private final UiHostTheme theme;
-    // 兼容入口：未迁移模块沿用默认宿主主题
-    public UiListView(@SuppressWarnings("unused") Font font, RowRenderer<T> rowRenderer) {
-        this(UiHostThemes.defaultTheme(), font, rowRenderer);
-    }
 
     public UiListView(UiHostTheme theme, @SuppressWarnings("unused") Font font, RowRenderer<T> rowRenderer) {
         this.theme = UiHostThemes.require(theme);

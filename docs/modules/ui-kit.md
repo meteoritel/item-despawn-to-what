@@ -56,7 +56,6 @@ flowchart LR
     SHARED["client/ui/shared"]
     FORM["client/ui/screen/form"]
     SCREEN["client/ui/screen"]
-    PROT["client/ui/prototype"]
     EDIT["client/edit 条件树编解码"]
     KIT --> MC
     KIT --> STD
@@ -65,7 +64,6 @@ flowchart LR
     SHARED --> KIT
     FORM --> KIT
     SCREEN --> KIT
-    PROT --> KIT
     EDIT --> KIT
 ```
 
@@ -78,7 +76,6 @@ flowchart LR
 - `client/ui/shared`：目录图标与条件摘要复用 kit 的图标、滚动与布局原语。
 - `client/ui/screen` 与 `client/ui/screen/form`：页面级装配，持有控件、捕获与焦点管理器。
 - `client/edit`：条件树的编解码与节点适配引用 `UiTreeCodec`、`UiTreeEditor`、`UiTreePath`。
-- `client/ui/prototype`：开发期验证 kit、主题与控件的组合。
 
 ### 宿主注入面
 

@@ -66,10 +66,6 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
 
     // 注入的宿主主题
     private final UiHostTheme theme;
-    // 兼容入口：未迁移模块沿用默认宿主主题
-    public UiTextInput(Font font, Component hint) {
-        this(UiHostThemes.defaultTheme(), font, hint);
-    }
 
     public UiTextInput(UiHostTheme theme, Font font, Component hint) {
         this.theme = UiHostThemes.require(theme);

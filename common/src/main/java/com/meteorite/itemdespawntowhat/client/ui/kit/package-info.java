@@ -103,7 +103,7 @@
  * 同一脚本还核对本文件的登记清单：kit 顶层 {@code public} 类型未出现在本清单或内部实现说明里即失败。</p>
  *
  * <p><b>宿主适配层</b>：{@code client/ui/theme/}（把主题色映射成 {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderStyle} 等 kit 样式后注入）、
- * {@code client/ui/widget/}（把既有控件委托给 kit 核心并保持公开 API 兼容）与 {@code client/ui/prototype/} 属于宿主层，
+ * {@code client/ui/widget/}（把既有控件委托给 kit 核心并保持公开 API 兼容）属于宿主层，
  * 允许依赖项目常量与平台服务；它们依赖 kit，而不是反过来。kit 自身不 import {@code theme} 或 {@code widget}。</p>
  *
  * <p><b>公开行为约定</b>：几何入口对负尺寸一律**钳制**而不是抛异常——{@code UiControl.setBounds} 与

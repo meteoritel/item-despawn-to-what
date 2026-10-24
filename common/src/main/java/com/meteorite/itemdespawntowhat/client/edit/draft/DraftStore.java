@@ -28,7 +28,7 @@ import org.jetbrains.annotations.Nullable;
  * 编辑锁与覆盖层是服务端的事，草稿只是本机未提交的编辑中间态。
  * <p>本类只做同步文件操作，不持有队列：读写次序由 {@link DraftWriter} 单线程串行调用保证。
  */
-public final class DraftStore {
+public record DraftStore(Path directory) {
 
     // 相对游戏根目录的草稿目录
     public static final String DIRECTORY = "config/itemdespawntowhat/client/editor-drafts";
@@ -38,24 +38,15 @@ public final class DraftStore {
     // 写盘临时文件后缀：与正式文件同目录，失败时立即清理，不留半截内容
     private static final String TEMP_SUFFIX = ".tmp";
 
-    // 落盘格式：带缩进便于排查，不转义 HTML 字符
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
-
-    private final Path directory;
+    // 落盘格式：紧凑输出（不缩进）以减少草稿体积与序列化开销，不转义 HTML 字符；
+    // 读取按 JSON 结构解析，旧版带缩进的草稿文件仍能直接读入
+    private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
 
     public DraftStore() {
         this(Paths.get(DIRECTORY));
     }
 
     // 测试或自定义目录用
-    public DraftStore(Path directory) {
-        this.directory = directory;
-    }
-
-    // 草稿目录
-    public Path directory() {
-        return this.directory;
-    }
 
     // 写出（覆盖）某个目标的草稿文件：先写同目录临时文件再原子替换，避免崩在半截 JSON 上；
     // 写失败时立即删掉临时文件，避免下次写同一目标前留下无法解释的残留

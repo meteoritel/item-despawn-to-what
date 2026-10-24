@@ -115,6 +115,18 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
     private boolean childForm;
     private @Nullable String highlightPath;
     private int highlightTicks;
+    // 行几何测量缓存：只有宽度、行结构、可见性或控件高度等真实几何输入变化后重算，
+    // 静止帧与滚动帧直接复用上一次测量结果，避免把测量绑到帧循环上。
+    private boolean measureDirty = true;
+    private int measuredWidth = -1;
+    private int measuredContentHeight;
+    // 屏幕同步缓存：内容原点未变且测量未失效时跳过整表 setBounds，静止帧零逐行同步开销。
+    private int syncedOriginX = Integer.MIN_VALUE;
+    private int syncedOriginY = Integer.MIN_VALUE;
+    // 几何变化出口：页面据此让自己的布局缓存失效，滚动帧因此不必重排页面。
+    private @Nullable Runnable geometryListener;
+    // 高亮框缓存：随同步一起重算，渲染帧不再分配矩形。
+    private @Nullable UiRect highlightBounds;
 
     public FormView(Font font, EditSession session, String basePath) {
         this.font = font;
@@ -138,6 +150,8 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
                 ? new CatalogSelectionControl(font, field, this::notifyChanged)
                 : FormControl.create(font, this, field, this::notifyChanged));
         row.control.setMinimumHeight(minimumControlHeight);
+        // 控件自身高度变化（如条件树摘要行数）经这一出口让行测量与页面布局失效
+        row.control.setOnGeometryChanged(this::invalidateMeasure);
         row.control.setRejectedNotice(message -> {
             if (rejectedNoticeHandler != null) {
                 rejectedNoticeHandler.accept(message);
@@ -145,6 +159,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         });
         addPickers(row);
         rows.add(row);
+        invalidateMeasure();
     }
 
     /** 读取某字段控件当前的未提交值（宿主把缓冲并入自己的编辑步时使用）；字段不存在返回 null */
@@ -171,6 +186,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
                 row.actions.clear();
                 row.actions.add(button);
                 row.refreshButtons();
+                invalidateMeasure();
                 break;
             }
         }
@@ -181,13 +197,17 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         for (FormRow row : rows) {
             if (row.path.equals(path)) {
                 row.control.setHeightOverride(height);
+                invalidateMeasure();
             }
         }
     }
 
     /** 卡片标题已表达字段含义时省去重复标签。 */
     public void hideRowLabel(String path) {
-        for (FormRow row : rows) if (row.path.equals(path)) row.labelVisible = false;
+        for (FormRow row : rows) if (row.path.equals(path)) {
+            row.labelVisible = false;
+            invalidateMeasure();
+        }
     }
 
     /** 隐藏行退出键盘导航与命中，但保存原有字段内容。 */
@@ -201,6 +221,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
                 row.control.addFocusTargets(targets);
                 targets.forEach(target -> target.setFocused(false));
             }
+            invalidateMeasure();
         }
     }
 
@@ -216,6 +237,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
                 && lower.control instanceof ItemCountsControl) {
             upper.pairedBelow = lower;
             lower.pairedAbove = upper;
+            invalidateMeasure();
         }
     }
 
@@ -235,7 +257,10 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
                 changed = true;
             }
         }
-        if (changed) layout(viewportX, viewportY, viewportWidth, viewportHeight);
+        if (changed) {
+            invalidateMeasure();
+            layout(viewportX, viewportY, viewportWidth, viewportHeight);
+        }
     }
 
     /** 启用开关等含义直观的行不弹出提示。 */
@@ -274,6 +299,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
     public void setItemCountReferences(String path, List<String> references) {
         for (FormRow row : rows) if (row.path.equals(path) && row.control instanceof ItemCountsControl counts) {
             counts.setReferences(references);
+            invalidateMeasure();
         }
     }
 
@@ -282,6 +308,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         minimumControlHeight = FormControl.CARD_CONTROL_HEIGHT;
         rowGap = 6;
         for (FormRow row : rows) row.control.setMinimumHeight(minimumControlHeight);
+        invalidateMeasure();
     }
 
     /** 在装配字段之前启用；输入页统一使用目录添加物品和标签。 */
@@ -293,13 +320,13 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         rowGap = 4;
         labelWidth = 64;
         for (FormRow row : rows) row.control.setMinimumHeight(minimumControlHeight);
+        invalidateMeasure();
     }
 
     /** 输入被上限拒绝时的即时提示出口 */
     public void setOnRejectedNotice(@Nullable Consumer<Component> handler) {
         this.rejectedNoticeHandler = handler;
     }
-
 
     // 支持叶子面板在描述符载入后挂接目录入口。
     private void addPickers(FormRow row) {
@@ -366,6 +393,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         });
         loadedRevision = session.revision();
         for (FormRow row : rows) if (row.field.name().equals(relative)) acceptInput(row);
+        invalidateMeasure();
     }
 
     void clearChildInputs(String relative) { session.clearPendingInputs(childPath(relative)); }
@@ -423,6 +451,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
 
     public void setLabelWidth(int width) {
         this.labelWidth = Math.max(0, width);
+        invalidateMeasure();
     }
 
     public void setOnChanged(Runnable listener) {
@@ -431,6 +460,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
 
     // 完成的滑条、开关和选择操作立即写入；聚焦文本仍只保留缓冲。
     void notifyChanged() {
+        invalidateMeasure();
         refreshRowVisibility();
         retainPendingInputs();
         applyToDraft();
@@ -443,12 +473,14 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
 
     public void reload() {
         draftWriter.reload();
+        invalidateMeasure();
         refreshRowVisibility();
         retainPendingInputs();
     }
 
     public void reloadWith(RuleValue object) {
         draftWriter.reloadWith(object);
+        invalidateMeasure();
         refreshRowVisibility();
         retainPendingInputs();
     }
@@ -483,8 +515,93 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         return FormRowLayout.layoutRows(rows, availableWidth, labelWidth, rowGap, minimumControlHeight, font, THEME);
     }
 
+    /**
+     * 登记几何变化回调：行高、可见性、按钮等变化后通知页面让布局缓存失效。
+     *
+     * @param listener 回调；null 表示取消登记
+     */
+    public void setOnGeometryChanged(@Nullable Runnable listener) {
+        this.geometryListener = listener;
+    }
+
+    /** 行几何是否有待重测：页面据此决定是否需要重新布局。 */
+    public boolean needsMeasure() {
+        return measureDirty;
+    }
+
+    /**
+     * 标记行几何失效：下一次测量前不复用缓存，并通知页面重新布局。
+     *
+     * <p>所有可能改变行高度或按钮排布的入口都必须经过这里，页面布局因此只需要在真实几何
+     * 变化时执行一次，而不是每帧重排。</p>
+     */
+    void invalidateMeasure() {
+        measureDirty = true;
+        syncedOriginX = Integer.MIN_VALUE;
+        syncedOriginY = Integer.MIN_VALUE;
+        if (geometryListener != null) {
+            geometryListener.run();
+        }
+    }
+
+    // 按宽度测量行几何：几何输入与宽度都没变时复用缓存
+    private int measureRows(int availableWidth) {
+        int width = Math.max(0, availableWidth);
+        if (!measureDirty && measuredWidth == width) {
+            return measuredContentHeight;
+        }
+        measuredWidth = width;
+        measuredContentHeight = layoutRows(width);
+        measureDirty = false;
+        // 测量重写了行几何，强制下一次同步重新落屏
+        syncedOriginX = Integer.MIN_VALUE;
+        syncedOriginY = Integer.MIN_VALUE;
+        return measuredContentHeight;
+    }
+
+    /**
+     * 视口竖直平移：页面滚动时只改视口原点，行几何与按钮内容坐标保持不变。
+     *
+     * <p>同步阶段只把行原点平移到位，不重新测量文本宽度；页面滚动因此不再触发整页重排。</p>
+     *
+     * @param deltaY 屏幕坐标增量（正数向下）
+     */
+    public void shiftViewportY(int deltaY) {
+        if (deltaY == 0) return;
+        viewportY += deltaY;
+    }
+
+    /**
+     * 把行几何同步到屏幕：只叠加内容原点与滚动偏移。
+     *
+     * <p>原点与测量都没变时直接返回，因此静止帧不做任何逐行 setBounds。</p>
+     */
     void syncBounds() {
-        FormRowLayout.syncBounds(rows, viewportX, viewportY, scrollOffset, font);
+        int originX = viewportX;
+        int originY = viewportY - scrollOffset;
+        if (!measureDirty && originX == syncedOriginX && originY == syncedOriginY) {
+            return;
+        }
+        FormRowLayout.syncBounds(rows, originX, originY);
+        syncedOriginX = originX;
+        syncedOriginY = originY;
+        refreshHighlightBounds();
+    }
+
+    // 高亮框只在同步后重算一次，避免渲染帧每帧分配
+    private void refreshHighlightBounds() {
+        if (highlightTicks <= 0 || highlightPath == null) {
+            highlightBounds = null;
+            return;
+        }
+        for (FormRow row : rows) {
+            if (!row.visible || !row.path.equals(highlightPath)) continue;
+            highlightBounds = new UiRect(viewportX + row.controlRelX - 1,
+                    rowScreenY(row) + row.controlRelY - 1,
+                    row.controlWidth + 2, row.control.layoutHeight() + 2);
+            return;
+        }
+        highlightBounds = null;
     }
 
     int maxScroll() {
@@ -563,9 +680,10 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
             scrollOffset = Math.min(maxScroll(), row.contentY + row.contentHeight - viewportHeight + 2);
         }
         clampScroll();
-        syncBounds();
         this.highlightPath = row.path;
         this.highlightTicks = HIGHLIGHT_TICKS;
+        syncBounds();
+        refreshHighlightBounds();
         if (!conditionEntry) {
             nestedTarget = row.control.revealPath(path, row.path);
         }
@@ -623,6 +741,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         if (loadedRevision != session.revision()) reload();
         refreshRowVisibility();
         if (highlightTicks > 0) highlightTicks--;
+        // 整表只保留一轮输入：本轮收尾的行由下方定点处理，不再重复扫描全表比较文本
         retainPendingInputs();
         for (FormRow row : rows) {
             if (!row.visible) continue;
@@ -633,11 +752,15 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
                     RuleValue next = row.control.store();
                     writeField(row, next);
                     acceptInput(row);
+                } else {
+                    // 收尾可能规范化文本缓冲：只对本次确实结束编辑的行定点重存，避免再扫全表
+                    draftWriter.retainRowInput(row);
                 }
+                // 收尾可能改变控件高度（列表/条件树的折叠展开等），让下一次布局重新测量
+                invalidateMeasure();
             }
             row.wasEditing = editing;
         }
-        retainPendingInputs();
     }
 
     public boolean isEditing() {
@@ -656,7 +779,7 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
 
     /** 页面按实际内容分配空间，避免固定空白与表单互相挤占。 */
     public int preferredHeight(int width) {
-        return layoutRows(Math.max(0, width));
+        return measureRows(width);
     }
 
     /** 布局：返回内容总高度 */
@@ -665,9 +788,9 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         this.viewportY = y;
         this.viewportWidth = Math.max(0, width);
         this.viewportHeight = Math.max(0, height);
-        int used = layoutRows(this.viewportWidth);
+        int used = measureRows(this.viewportWidth);
         if (used > this.viewportHeight && this.viewportWidth > SCROLLBAR_WIDTH * 2) {
-            used = layoutRows(this.viewportWidth - SCROLLBAR_WIDTH);
+            used = measureRows(this.viewportWidth - SCROLLBAR_WIDTH);
         }
         this.contentHeight = used;
         clampScroll();
@@ -675,13 +798,32 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
         return contentHeight;
     }
 
+    /**
+     * 流式排布：按可用宽度测量一次后把视口高度贴合内容高度，供页面表单直接使用。
+     *
+     * <p>替代「先 preferredHeight 再 layout」的两次测量：页面一次调用即可拿全行几何与内容高度，
+     * 且这类表单内不出现滚动条，滚动偏移归零。</p>
+     *
+     * @param x     内容原点屏幕 X
+     * @param y     内容原点屏幕 Y
+     * @param width 可用宽度
+     * @return 内容高度
+     */
+    public int layoutNatural(int x, int y, int width) {
+        this.viewportX = x;
+        this.viewportY = y;
+        this.viewportWidth = Math.max(0, width);
+        int used = measureRows(this.viewportWidth);
+        this.viewportHeight = used;
+        this.contentHeight = used;
+        this.scrollOffset = 0;
+        syncBounds();
+        return used;
+    }
 
     private void clampScroll() {
         this.scrollOffset = Math.clamp(scrollOffset, 0, maxScroll());
     }
-
-
-
 
     public int contentHeight() {
         return contentHeight;
@@ -787,15 +929,8 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
                 for (var pickerButton : row.pickers) pickerButton.render(graphics, renderFont, mouseX, mouseY);
                 for (UiButton action : row.actions) action.render(graphics, renderFont, mouseX, mouseY);
             }
-            if (highlightTicks > 0 && highlightPath != null) {
-                for (FormRow row : rows) {
-                    if (row.visible && row.path.equals(highlightPath)) {
-                        int screenY = rowScreenY(row);
-                        THEME.drawFocusOutline(graphics, new UiRect(viewportX + row.controlRelX - 1,
-                                screenY + row.controlRelY - 1, row.controlWidth + 2, row.control.layoutHeight() + 2));
-                        break;
-                    }
-                }
+            if (highlightTicks > 0 && highlightBounds != null) {
+                THEME.drawFocusOutline(graphics, highlightBounds);
             }
         } finally {
             graphics.disableScissor();
@@ -808,9 +943,6 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
             picker.render(graphics, renderFont, mouseX, mouseY);
         }
     }
-
-
-
 
     /** 鼠标位置下的提示：优先显示该字段的校验问题，其次显示字段提示 */
     public @Nullable Component tooltipAt(double mouseX, double mouseY) {
@@ -841,12 +973,16 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        return inputRouter.mouseClicked(mouseX, mouseY, button);
+        boolean handled = inputRouter.mouseClicked(mouseX, mouseY, button);
+        if (handled) invalidateMeasure();
+        return handled;
     }
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        return inputRouter.mouseReleased(mouseX, mouseY, button);
+        boolean handled = inputRouter.mouseReleased(mouseX, mouseY, button);
+        if (handled) invalidateMeasure();
+        return handled;
     }
 
     @Override
@@ -861,7 +997,9 @@ public final class FormView implements UiWidget, PickerHost, FormPicker.Host {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        return inputRouter.keyPressed(keyCode, scanCode, modifiers);
+        boolean handled = inputRouter.keyPressed(keyCode, scanCode, modifiers);
+        if (handled) invalidateMeasure();
+        return handled;
     }
 
     public boolean keyReleased(int keyCode, int scanCode, int modifiers) {

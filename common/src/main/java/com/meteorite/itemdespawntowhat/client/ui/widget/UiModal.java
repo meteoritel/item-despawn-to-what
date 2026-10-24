@@ -64,6 +64,9 @@ public final class UiModal implements UiWidget {
     private UiRect bounds = new UiRect(0, 0, 0, 0);
     // 内容区矩形（绝对坐标）
     private UiRect contentRect = new UiRect(0, 0, 0, 0);
+    // 上次布局使用的按钮行高度与按钮宽度签名：内容控件布局较重，两者都未变时才允许早退
+    private int appliedFooterHeight = -1;
+    private int appliedButtonWidths = -1;
     // 期望宽度
     private int preferredWidth = DEFAULT_WIDTH;
     private int messageOffset;
@@ -116,11 +119,6 @@ public final class UiModal implements UiWidget {
     // 新建弹窗
     public static UiModal create(UiHostTheme theme, Font font) {
         return new UiModal(theme, font);
-    }
-
-    // 兼容入口：未迁移模块沿用默认宿主主题
-    public static UiModal create(Font font) {
-        return create(UiHostThemes.defaultTheme(), font);
     }
 
     // ---- 配置 ----
@@ -284,20 +282,35 @@ public final class UiModal implements UiWidget {
         setBoundsInternal(x, y, width, height);
     }
 
+    // 目标矩形与按钮行几何都没变时直接返回：弹窗静止帧不重建 bounds/contentRect，也不重排按钮与内容控件。
+    // 按钮可见性或标签宽度会改变按钮行几何，因此把 footerHeight 与按钮宽度签名一起纳入比较，
+    // 避免公开的 buttons() 在运行期变动后仍沿用旧矩形。
     private UiModal setBoundsInternal(int x, int y, int width, int height) {
-        this.bounds = new UiRect(Math.max(0, x), Math.max(0, y), Math.max(1, width), Math.max(BUTTON_HEIGHT, height));
-        int footerHeight = footerHeight(bounds.width());
+        int nextX = Math.max(0, x);
+        int nextY = Math.max(0, y);
+        int nextWidth = Math.max(1, width);
+        int nextHeight = Math.max(BUTTON_HEIGHT, height);
+        int nextFooterHeight = footerHeight(nextWidth);
+        int nextButtonWidths = buttonWidthSignature(theme.padding());
+        if (bounds.x() == nextX && bounds.y() == nextY && bounds.width() == nextWidth
+                && bounds.height() == nextHeight && appliedFooterHeight == nextFooterHeight
+                && appliedButtonWidths == nextButtonWidths) {
+            return this;
+        }
+        this.bounds = new UiRect(nextX, nextY, nextWidth, nextHeight);
+        appliedFooterHeight = nextFooterHeight;
+        appliedButtonWidths = nextButtonWidths;
         // 与按钮同排时把按钮行也算进内容区高度，由内容控件自己让出右侧
-        int inlineExtra = inlineFooter && contentWidget != null ? footerHeight + theme.padding() : 0;
+        int inlineExtra = inlineFooter && contentWidget != null ? nextFooterHeight + theme.padding() : 0;
         this.contentRect = new UiRect(bounds.x() + theme.padding(), bounds.y() + theme.headerHeight() + theme.padding(),
                 Math.max(0, bounds.width() - theme.padding() * 2),
-                Math.max(0, bounds.height() - theme.headerHeight() - theme.padding() * 3 - footerHeight) + inlineExtra);
+                Math.max(0, bounds.height() - theme.headerHeight() - theme.padding() * 3 - nextFooterHeight) + inlineExtra);
         if (contentWidget != null) {
             contentWidget.setBounds(contentRect.x(), contentRect.y(), contentRect.width(), contentRect.height());
         }
         layoutButtons();
         if (inlineFooter && contentWidget instanceof UiFooterHost host) {
-            host.setFooterReserved(inlineFooterReserved(), footerHeight);
+            host.setFooterReserved(inlineFooterReserved(), nextFooterHeight);
         }
         return this;
     }
@@ -329,6 +342,19 @@ public final class UiModal implements UiWidget {
             used += (used == 0 ? 0 : BUTTON_SPACING) + next;
         }
         return rows == 0 ? 0 : rows * BUTTON_HEIGHT + (rows - 1) * BUTTON_SPACING;
+    }
+
+    // 可见按钮的宽度签名：按钮可见性与标签宽度共同决定按钮行换行与宽度，任一变化都必须重排。
+    // preferredWidth 的标签宽度内部已按语言缓存，这里只做整数乘加，不产生分配。
+    private int buttonWidthSignature(int padding) {
+        int signature = 1;
+        for (UiButton button : buttons) {
+            if (!button.isVisible()) {
+                continue;
+            }
+            signature = signature * 31 + button.preferredWidth(padding);
+        }
+        return signature;
     }
 
     // 每行右对齐，按钮不越过弹窗边缘。

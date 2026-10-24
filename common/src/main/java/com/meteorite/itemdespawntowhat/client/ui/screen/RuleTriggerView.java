@@ -11,6 +11,7 @@ import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
@@ -35,6 +36,12 @@ final class RuleTriggerView {
     private static final UiIcon UNKNOWN_ICON = new UiIcon.Item(new ItemStack(Items.BARRIER));
     private final @Nullable String seconds;
     private final List<UiIcon> icons = new ArrayList<>();
+    // 文本宽度只随字体、语言与箭头实例变化：绘制前量一次，静止帧不再测文本
+    private @Nullable Font measuredFont;
+    private @Nullable Object measuredLanguage;
+    private @Nullable Component measuredArrow;
+    private int secondsTextWidth;
+    private int arrowTextWidth;
 
     RuleTriggerView(@Nullable RuleValue rule) {
         List<String> triggers = RuleTriggers.effective(rule);
@@ -57,21 +64,36 @@ final class RuleTriggerView {
     }
 
     int width(Font font, Component arrow) {
-        int timeWidth = seconds == null ? 0 : (int) Math.ceil(font.width(seconds) * TIME_SCALE);
+        measure(font, arrow);
+        int timeWidth = seconds == null ? 0 : (int) Math.ceil(secondsTextWidth * TIME_SCALE);
         int iconWidth = icons.isEmpty() ? 0 : icons.size() * ICON_SIZE + (icons.size() - 1) * ICON_GAP;
-        return Math.max(font.width(arrow), Math.max(timeWidth, iconWidth)) + SIDE_PADDING * 2;
+        return Math.max(arrowTextWidth, Math.max(timeWidth, iconWidth)) + SIDE_PADDING * 2;
+    }
+
+    // 字体或语言变化后宽度全部作废；箭头实例由配方重建，换实例时重测一次
+    private void measure(Font font, Component arrow) {
+        Object language = Language.getInstance();
+        if (font == measuredFont && language == measuredLanguage && arrow == measuredArrow) {
+            return;
+        }
+        measuredFont = font;
+        measuredLanguage = language;
+        measuredArrow = arrow;
+        secondsTextWidth = seconds == null ? 0 : font.width(seconds);
+        arrowTextWidth = font.width(arrow);
     }
 
     void render(GuiGraphics graphics, Font font, UiRect area, Component arrow, int color, boolean active) {
+        measure(font, arrow);
         if (seconds != null) {
             graphics.pose().pushPose();
             try {
-                graphics.pose().translate(area.x() + (area.width() - font.width(seconds) * TIME_SCALE) / 2F, area.y(), 0);
+                graphics.pose().translate(area.x() + (area.width() - secondsTextWidth * TIME_SCALE) / 2F, area.y(), 0);
                 graphics.pose().scale(TIME_SCALE, TIME_SCALE, 1);
                 graphics.drawString(font, seconds, 0, 0, color, false);
             } finally { graphics.pose().popPose(); }
         }
-        graphics.drawString(font, arrow, area.x() + (area.width() - font.width(arrow)) / 2,
+        graphics.drawString(font, arrow, area.x() + (area.width() - arrowTextWidth) / 2,
                 area.y() + TIME_HEIGHT + (ARROW_HEIGHT - font.lineHeight) / 2, color, false);
         int iconWidth = icons.size() * ICON_SIZE + Math.max(0, icons.size() - 1) * ICON_GAP;
         int x = area.x() + (area.width() - iconWidth) / 2;

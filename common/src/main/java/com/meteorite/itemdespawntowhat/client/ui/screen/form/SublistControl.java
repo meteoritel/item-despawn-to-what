@@ -203,8 +203,9 @@ final class SublistControl extends FormControl {
         }
     }
 
+    // 子表单把输入保留在自己的 FormView 里，本控件不再贡献文本
     @Override
-    List<String> inputText() { return List.of(); }
+    void appendInputText(List<String> out) { }
 
     @Override
     void retainChildInputs() {

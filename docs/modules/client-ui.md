@@ -2,17 +2,17 @@
 title: 客户端界面（client/ui 宿主层）
 layer: 3
 audience: 界面开发者、主题与控件适配实现者、字段控件与目录预览扩展者
-authority: common/client/ui/theme、common/client/ui/widget、common/client/ui/shared、common/client/ui/screen、common/client/ui/screen/form、common/client/ui/prototype
+authority: common/client/ui/theme、common/client/ui/widget、common/client/ui/shared、common/client/ui/screen、common/client/ui/screen/form
 ---
 
 # 客户端界面
 
 > **TL;DR**
-> - 这一层把 UI kit 的原语装配成规则编辑器：主题注入、可复用控件、界面中立展示类型、规则管理页与编辑页签、条件画布页、开发原型。
+> - 这一层把 UI kit 的原语装配成规则编辑器：主题注入、可复用控件、界面中立展示类型、规则管理页与编辑页签、条件画布页。
 > - 编辑器只有一个写入口：字段与条件编辑都经 `EditSession` 落草稿，界面按类型描述符装配。
 > - 条件树只有一个编辑入口：画布页；缩进树是只读摘要兼入口。
 
-**适用对象**：改编辑器页面结构、加字段控件、加目录类型或预览图标、换主题、维护原型屏的开发者。
+**适用对象**：改编辑器页面结构、加字段控件、加目录类型或预览图标、换主题的开发者。
 
 ## 1. 模块职责
 
@@ -27,7 +27,6 @@ authority: common/client/ui/theme、common/client/ui/widget、common/client/ui/s
 | `client/ui/shared` | `screen` 与 `screen/form` 共享的纯值与展示类型：目录图标分发、展示名称、字段到目录类型的映射、条件摘要、悬停说明的语义行模型 |
 | `client/ui/screen` | 规则编辑器主屏、管理页、编辑页签、调试页与页内输入分发 |
 | `client/ui/screen/form` | 描述符驱动的表单视图、字段控件基类与注册表 |
-| `client/ui/prototype` | 开发期验证 kit、灰色像素主题与通用控件组合效果的原型屏 |
 
 编辑页签契约由 `RuleEditorPageSet.Page` 定义：INFO（基本信息）、INPUT（输入与消耗）、TRIGGER（触发条件）、RESULTS（效果与产物），`Page#of` 把键名解析成页签、未知键回落到 INFO。页签之间共用同一份 `EditSession` 草稿。
 
@@ -49,7 +48,6 @@ authority: common/client/ui/theme、common/client/ui/widget、common/client/ui/s
 flowchart TD
     SCREEN["client/ui/screen"]
     FORM["client/ui/screen/form"]
-    PROT["client/ui/prototype"]
     WIDGET["client/ui/widget"]
     SHARED["client/ui/shared"]
     THEME["client/ui/theme"]
@@ -60,9 +58,6 @@ flowchart TD
     SCREEN --> WIDGET
     SCREEN --> SHARED
     SCREEN --> THEME
-    PROT --> WIDGET
-    PROT --> THEME
-    PROT --> KIT
     FORM --> WIDGET
     FORM --> SHARED
     FORM --> THEME
@@ -190,7 +185,6 @@ flowchart LR
 - 必填字段在标签右上角加 `*` 角标；缺值时用红色标签与控件下沿的红色警示线表达。
 - 条件树的结构与参数编辑只在画布页完成，缩进树保持只读并作为进入画布的入口（[ADR-0031](../adr/0031-condition-tree-single-editor-two-renders.md)）。条件编辑入口统一在触发页，结果页只编辑动作自身的参数与共用补充参数（概率、延迟），动作说明也不重复条件行。
 - 画布页与画布内联编辑框使用扁平外观，且只在调用方显式注入时生效（[ADR-0028](../adr/0028-canvas-page-and-flat-skin.md)）。
-- 原型屏作为开发验证设施：注册入口与生产入口隔离，生产入口只由服务端授权后的指令触发并先取得独占编辑锁。
 - 上行载荷与传输通道收敛在 `client/net`；界面层消费只读工作区状态与协议 DTO。
 
 ### 改动后的验证

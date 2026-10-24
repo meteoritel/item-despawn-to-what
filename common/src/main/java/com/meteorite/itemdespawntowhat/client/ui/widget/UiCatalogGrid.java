@@ -166,6 +166,8 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     private final Listener listener;
     private final UiTextInput search;
     private final List<Entry> entries = new ArrayList<>();
+    // 条目集合代次：状态文案的「空结果」分支与列表内容都只随集合替换变化
+    private int entriesVersion;
     private final List<String> selection = new ArrayList<>();
     // 行标签文本缓存：条目对象由宿主目录缓存持有，命中时不再把 Component 逐帧取成 String
     private final Map<Entry, String> rowLabels = new IdentityHashMap<>();
@@ -196,6 +198,50 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     private int footerReservedHeight;
     private int footerReservedRight;
 
+    // 上一次布局的输入签名：输入全等时不再重建底栏/列表矩形，也不重测文本宽度
+    private boolean layoutApplied;
+    private int layoutX;
+    private int layoutY;
+    private int layoutWidth;
+    private int layoutHeight;
+    private int layoutFooterRight;
+    private int layoutFooterHeight;
+    private int layoutPage;
+    private int layoutPageCount;
+    private boolean layoutScoped;
+    private @Nullable Object layoutPolicy;
+    private @Nullable Object layoutLanguage;
+    // 页码文本：页码与总页数才决定内容，缓存后布局与绘制都不再每帧构造 Component；
+    // 初值对应 page=0、pageCount=0，与 setPage 从未被调用时的旧页码文本一致。
+    private String pageNumber = "1";
+
+    // 状态文案缓存：只有真实依赖（错误/加载/空结果/页码标签/附加说明/已选数/语言）变化才重建
+    private @Nullable Component statusTextCache;
+    private @Nullable Component statusTextError;
+    private boolean statusTextLoading;
+    private boolean statusTextExplicitLoading;
+    private int statusTextEntriesVersion = -1;
+    private @Nullable Component statusTextPageLabel;
+    private @Nullable Component statusTextNote;
+    private int statusTextSelection = -1;
+    private @Nullable Object statusTextLanguage;
+
+    // 底栏三处文本的裁剪结果：来源文本或可用宽度不变时不再逐字符测宽
+    private String statusTrimmed = "";
+    private @Nullable Component statusTrimmedSource;
+    private int statusTrimmedWidth = -1;
+    private int statusTrimmedOffset = -1;
+    private String pageTrimmed = "";
+    private String pageTrimmedSource = "";
+    private int pageTrimmedWidth = -1;
+    private String clearTrimmed = "";
+    private @Nullable Object clearTrimmedLanguage;
+    private int clearTrimmedWidth = -1;
+
+    // 焦点格与滚动滑块的矩形按值复用：静止帧不重复分配
+    private UiRect focusedCellRect = new UiRect(0, 0, 0, 0);
+    private UiRect scrollThumbRect = new UiRect(0, 0, 0, 0);
+
     private boolean enabled = true;
     private boolean visible = true;
     private boolean focused;
@@ -217,12 +263,12 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
 
     // 宿主可显示标签分组的页名，普通目录继续使用数字页码。
     public void setPageLabel(@Nullable Component label) {
-        pageLabel = label;
+        pageLabel = retainSameText(pageLabel, label);
     }
 
     // 宿主的附加状态文字（例如「共 1204 项」），填空表示不显示。
     public void setStatusNote(@Nullable Component note) {
-        statusNote = note;
+        statusNote = retainSameText(statusNote, note);
     }
 
     // 注入的宿主主题
@@ -276,6 +322,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         if (next != null) {
             this.entries.addAll(next);
         }
+        entriesVersion++;
         clampCursor();
         clampScroll();
         return this;
@@ -331,7 +378,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     }
 
     public UiCatalogGrid setError(@Nullable Component error) {
-        this.error = error;
+        this.error = retainSameText(this.error, error);
         return this;
     }
 
@@ -353,12 +400,19 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     // 页码状态：page 从 0 开始；pageCount <= 0 表示未知（只显示当前页号）
     public UiCatalogGrid setPage(int page, int pageCount) {
         int nextPage = Math.max(0, page);
+        int nextPageCount = Math.max(0, pageCount);
         if (nextPage != this.page) {
             scrollRow = 0;
             cursor = -1;
         }
+        String nextPageNumber = pageNumberText(nextPage, nextPageCount);
         this.page = nextPage;
-        this.pageCount = Math.max(0, pageCount);
+        this.pageCount = nextPageCount;
+        if (!nextPageNumber.equals(pageNumber)) {
+            pageNumber = nextPageNumber;
+            // 页码宽度参与底栏布局：页码真正变化时显式重排一次，不再依赖每帧重排兜底
+            layout(bounds.x(), bounds.y(), bounds.width(), bounds.height());
+        }
         return this;
     }
 
@@ -412,9 +466,21 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         layout(bounds.x(), bounds.y(), bounds.width(), bounds.height());
     }
 
-    // 统一布局：工具栏、列表内凹面板、底部状态下标与翻页按钮都在这里定位
+    // 统一布局：工具栏、列表内凹面板、底部状态下标与翻页按钮都在这里定位。
+    // 布局输入（外框、弹窗让位、页码、范围按钮、策略与语言）全等时直接返回：静止帧不再重建 12 个矩形。
     private void layout(int x, int y, int width, int height) {
-        this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
+        int nextWidth = Math.max(0, width);
+        int nextHeight = Math.max(0, height);
+        boolean nextScoped = scoped();
+        Object language = Language.getInstance();
+        if (layoutApplied && layoutX == x && layoutY == y && layoutWidth == nextWidth
+                && layoutHeight == nextHeight && layoutFooterRight == footerReservedRight
+                && layoutFooterHeight == footerReservedHeight && layoutPage == page
+                && layoutPageCount == pageCount && layoutScoped == nextScoped && layoutPolicy == policy
+                && layoutLanguage == language) {
+            return;
+        }
+        this.bounds = new UiRect(x, y, nextWidth, nextHeight);
         int w = bounds.width();
         int h = bounds.height();
         int toolbarHeight = Math.min(TOOLBAR_HEIGHT, h);
@@ -443,7 +509,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         // 翻页在最左：标记按钮 + 页码；其后是状态文字；最右留给「清空已选」
         int buttonHeight = Math.min(theme.rowHeight(), footerRect.height());
         int buttonY = footerRect.y() + Math.max(0, (footerRect.height() - buttonHeight) / 2);
-        int pageWidth = Math.clamp(font.width(pageText().getString()) + PAGER_PADDING, PAGE_LABEL_MIN_WIDTH,
+        int pageWidth = Math.clamp(font.width(pageNumber) + PAGER_PADDING, PAGE_LABEL_MIN_WIDTH,
                 Math.max(PAGE_LABEL_MIN_WIDTH, footerWidth / 3));
         this.prevRect = new UiRect(x, buttonY, PAGER_SYMBOL_WIDTH, buttonHeight);
         this.pageRect = new UiRect(prevRect.right() + GAP, buttonY, pageWidth, buttonHeight);
@@ -457,6 +523,18 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         this.statusRect = new UiRect(tailX, footerRect.y(), Math.max(0, clearRect.x() - GAP - tailX),
                 footerRect.height());
         clampScroll();
+        layoutX = x;
+        layoutY = y;
+        layoutWidth = nextWidth;
+        layoutHeight = nextHeight;
+        layoutFooterRight = footerReservedRight;
+        layoutFooterHeight = footerReservedHeight;
+        layoutPage = page;
+        layoutPageCount = pageCount;
+        layoutScoped = nextScoped;
+        layoutPolicy = policy;
+        layoutLanguage = language;
+        layoutApplied = true;
     }
 
     // 是否出现范围按钮：只有同时存在主分类与标签的目录页才需要
@@ -547,6 +625,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         if (next != null) {
             entries.addAll(next);
         }
+        entriesVersion++;
         // 条目集合换过一批：旧标签缓存以条目对象身份为键，直接丢弃
         rowLabels.clear();
         rowLabelsLanguage = null;
@@ -597,15 +676,23 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         clampScroll();
     }
 
-    private @Nullable UiRect cellRect(int index) {
-        int columns = columns();
-        int row = index / columns;
-        if (row < scrollRow || row >= scrollRow + visibleRows() || cellsRect.height() <= 0) {
-            return null;
+    // 焦点格矩形按值复用：每帧最多一个焦点格，静止帧不重复分配
+    private UiRect focusRect(int x, int y) {
+        int width = columnWidth();
+        if (focusedCellRect.x() != x || focusedCellRect.y() != y
+                || focusedCellRect.width() != width || focusedCellRect.height() != ROW_HEIGHT) {
+            focusedCellRect = new UiRect(x, y, width, ROW_HEIGHT);
         }
-        int col = index % columns;
-        return new UiRect(cellsRect.x() + col * columnWidth(), cellsRect.y() + (row - scrollRow) * ROW_HEIGHT,
-                columnWidth(), ROW_HEIGHT);
+        return focusedCellRect;
+    }
+
+    // 滚动滑块矩形按值复用：只有滚动位置或轨道尺寸变化时才重建
+    private UiRect scrollThumbRect(int y, int height) {
+        if (scrollThumbRect.x() != scrollbarRect.x() || scrollThumbRect.y() != y
+                || scrollThumbRect.width() != scrollbarRect.width() || scrollThumbRect.height() != height) {
+            scrollThumbRect = new UiRect(scrollbarRect.x(), y, scrollbarRect.width(), height);
+        }
+        return scrollThumbRect;
     }
 
     // 纯查表：不做任何状态写入，供命中与 tooltip 复用
@@ -685,19 +772,18 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         }
         if (cellsRect.width() > 0 && cellsRect.height() > 0) {
             int columns = columns();
+            int columnWidth = columnWidth();
             int lastRow = Math.min(rowCount(), scrollRow + visibleRows());
             for (int row = scrollRow; row < lastRow; row++) {
-                for (int col = 0; col < columns; col++) {
-                    int index = row * columns + col;
+                int cellY = cellsRect.y() + (row - scrollRow) * ROW_HEIGHT;
+                int index = row * columns;
+                for (int col = 0; col < columns; col++, index++) {
                     if (index >= entries.size()) {
                         break;
                     }
-                    UiRect cell = cellRect(index);
-                    if (cell == null) {
-                        continue;
-                    }
-                    drawRow(graphics, entries.get(index), cell, row, index == hoveredIndex,
-                            focused && index == cursor);
+                    // 直接传整数坐标：可见格不再逐个分配矩形对象
+                    drawRow(graphics, entries.get(index), cellsRect.x() + col * columnWidth, cellY,
+                            row, index == hoveredIndex, focused && index == cursor);
                 }
             }
         }
@@ -705,32 +791,34 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     }
 
     // 一行 = 图标 + 名称；已选整行高亮并在行尾打勾，悬停行名称超宽时滚动
-    private void drawRow(GuiGraphics graphics, Entry entry, UiRect cell, int row, boolean hovered, boolean cursorAt) {
+    private void drawRow(GuiGraphics graphics, Entry entry, int cellX, int cellY, int row, boolean hovered,
+                         boolean cursorAt) {
         boolean chosen = isSelected(entry.id());
         boolean unavailable = unavailableReason.apply(entry.id()) != null;
+        int cellRight = cellX + columnWidth();
         int fill = !enabled ? theme.palette().slotFill()
                 : chosen ? theme.palette().controlSelected()
                 : hovered ? theme.palette().controlHover()
                 : (row % 2 == 0 ? theme.palette().slotFill() : theme.palette().listRowOdd());
-        graphics.fill(cell.x(), cell.y(), cell.right(), cell.bottom(), fill);
+        graphics.fill(cellX, cellY, cellRight, cellY + ROW_HEIGHT, fill);
 
         if (entry.icon() != null) {
-            drawIcon(graphics, entry.icon(), cell.x() + PADDING_X, cell.y());
+            drawIcon(graphics, entry.icon(), cellX + PADDING_X, cellY);
         }
-        int textX = cell.x() + PADDING_X + ICON_BOX + ICON_GAP;
-        int textWidth = Math.max(0, cell.right() - MARK_WIDTH - textX);
+        int textX = cellX + PADDING_X + ICON_BOX + ICON_GAP;
+        int textWidth = Math.max(0, cellRight - MARK_WIDTH - textX);
         String label = rowLabelText(entry);
         int color = enabled && !unavailable ? theme.palette().textPrimary() : theme.palette().textDisabled();
-        int textY = cell.y() + Math.max(0, (ROW_HEIGHT - font.lineHeight) / 2);
+        int textY = cellY + Math.max(0, (ROW_HEIGHT - font.lineHeight) / 2);
         TextScroll.draw(graphics, font, label, textX, textY,
                 textWidth, color, enabled && hovered, hovered ? hoverScrollTicks : 0, false);
         if (unavailable) {
-            drawRowMark(graphics, Mark.UNAVAILABLE, theme.palette().warning(), cell);
+            drawRowMark(graphics, Mark.UNAVAILABLE, theme.palette().warning(), cellRight, cellY);
         } else if (chosen) {
-            drawRowMark(graphics, Mark.CHECK, theme.palette().accentPressed(), cell);
+            drawRowMark(graphics, Mark.CHECK, theme.palette().accentPressed(), cellRight, cellY);
         }
         if (cursorAt) {
-            theme.drawFocusOutline(graphics, cell);
+            theme.drawFocusOutline(graphics, focusRect(cellX, cellY));
         }
     }
 
@@ -776,10 +864,10 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
     }
 
     // 行尾标记：在 MARK_WIDTH 宽的行尾槽与 ROW_HEIGHT 行高内居中
-    private void drawRowMark(GuiGraphics graphics, Mark mark, int color, UiRect cell) {
+    private void drawRowMark(GuiGraphics graphics, Mark mark, int color, int cellRight, int rowY) {
         UiIcon icon = UiMarkIcons.icon(mark, color);
-        icon.render(graphics, cell.right() - MARK_WIDTH + (MARK_WIDTH - icon.width()) / 2,
-                cell.y() + (ROW_HEIGHT - icon.height()) / 2);
+        icon.render(graphics, cellRight - MARK_WIDTH + (MARK_WIDTH - icon.width()) / 2,
+                rowY + (ROW_HEIGHT - icon.height()) / 2);
     }
 
     private void drawScrollbar(GuiGraphics graphics) {
@@ -793,7 +881,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         int maxScroll = rows - visible;
         int thumbY = scrollbarRect.y() + (maxScroll <= 0 ? 0 : (trackHeight - thumbHeight) * scrollRow / maxScroll);
         theme.drawScrollTrack(graphics, scrollbarRect);
-        theme.drawScrollThumb(graphics, new UiRect(scrollbarRect.x(), thumbY, scrollbarRect.width(), thumbHeight));
+        theme.drawScrollThumb(graphics, scrollThumbRect(thumbY, thumbHeight));
     }
 
     private void drawFooter(GuiGraphics graphics, int mouseX, int mouseY) {
@@ -808,14 +896,14 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
                     Util.getMillis(), theme.secondaryTextColor());
         }
         int textOffset = busy ? 14 : 0;
-        String trimmed = TextScroll.trimToWidth(font, status.getString(), Math.max(0, statusRect.width() - textOffset));
+        String trimmed = trimmedStatus(status, Math.max(0, statusRect.width() - textOffset), textOffset);
         graphics.drawString(font, trimmed, statusRect.x() + textOffset,
                 statusRect.y() + Math.max(0, (statusRect.height() - font.lineHeight) / 2),
                 error != null ? theme.palette().danger() : theme.palette().textSecondary(), false);
         if (canClear()) {
             boolean hovered = clearRect.contains(mouseX, mouseY);
             int color = hovered ? theme.palette().accentPressed() : theme.palette().link();
-            String link = TextScroll.trimToWidth(font, texts.clear().getString(), Math.max(1, clearRect.width()));
+            String link = trimmedClear(Math.max(1, clearRect.width()));
             int clearY = clearRect.y() + Math.max(0, (clearRect.height() - font.lineHeight) / 2);
             graphics.drawString(font, link, clearRect.x(), clearY, color, false);
             graphics.fill(clearRect.x(), clearY + font.lineHeight - 1, clearRect.x() + font.width(link),
@@ -823,7 +911,7 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         }
         drawPagerButton(graphics, prevRect, Mark.PREVIOUS, canPrev && enabled, mouseX, mouseY);
         drawPagerButton(graphics, nextRect, Mark.NEXT, canNext && enabled, mouseX, mouseY);
-        String pages = TextScroll.trimToWidth(font, pageText().getString(), Math.max(1, pageRect.width()));
+        String pages = trimmedPage(Math.max(1, pageRect.width()));
         graphics.drawString(font, pages,
                 pageRect.x() + Math.max(0, (pageRect.width() - font.width(pages)) / 2),
                 pageRect.y() + Math.max(0, (pageRect.height() - font.lineHeight) / 2),
@@ -845,8 +933,32 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
                 rect.y() + Math.max(0, (rect.height() - icon.height()) / 2));
     }
 
-    // 底部状态：错误 > 加载 > 空结果；正常时是「分组标签 · 总数 · 已选」，页码由翻页按钮旁的分子分母承担
+    // 底部状态：错误 > 加载 > 空结果；正常时是「分组标签 · 总数 · 已选」，页码由翻页按钮旁的分子分母承担。
+    // 依赖未变时复用上一次结果：宿主可能每帧重配页码标签，但文本归一化后实例稳定，这里不会每帧重拼。
     private Component statusText() {
+        Object language = Language.getInstance();
+        if (statusTextCache != null && statusTextLanguage == language
+                && statusTextError == error && statusTextLoading == loading
+                && statusTextExplicitLoading == explicitLoading
+                && statusTextEntriesVersion == entriesVersion
+                && statusTextPageLabel == pageLabel && statusTextNote == statusNote
+                && statusTextSelection == selection.size()) {
+            return statusTextCache;
+        }
+        Component text = buildStatusText();
+        statusTextCache = text;
+        statusTextError = error;
+        statusTextLoading = loading;
+        statusTextExplicitLoading = explicitLoading;
+        statusTextEntriesVersion = entriesVersion;
+        statusTextPageLabel = pageLabel;
+        statusTextNote = statusNote;
+        statusTextSelection = selection.size();
+        statusTextLanguage = language;
+        return text;
+    }
+
+    private Component buildStatusText() {
         if (error != null) {
             return texts.error().copy().append(" ").append(error);
         }
@@ -872,8 +984,56 @@ public final class UiCatalogGrid implements UiWidget, UiFocusTarget, UiFooterHos
         return text.getString().isEmpty() ? part.copy() : text.copy().append(STATUS_SEPARATOR).append(part);
     }
 
-    private Component pageText() {
-        return Component.literal((page + 1) + (pageCount > 0 ? "/" + pageCount : ""));
+    // 页码文本：纯字符串，布局测宽与底栏绘制共用，不再每帧构造 Component
+    private static String pageNumberText(int page, int pageCount) {
+        return (page + 1) + (pageCount > 0 ? "/" + pageCount : "");
+    }
+
+    // 宿主每帧重配状态文案时（例如黑名单页码标签）文本未变就保留旧实例，
+    // 状态文案缓存因此可以按实例身份判断，避免逐帧重建 Component。
+    private static @Nullable Component retainSameText(@Nullable Component current, @Nullable Component next) {
+        if (next == null) {
+            return null;
+        }
+        if (current != null && current.getString().equals(next.getString())) {
+            return current;
+        }
+        return next;
+    }
+
+    // 状态文本裁剪结果按「来源 Component + 可用宽度 + 加载图标偏移」缓存
+    private String trimmedStatus(Component status, int width, int offset) {
+        if (statusTrimmedSource == status && statusTrimmedWidth == width && statusTrimmedOffset == offset) {
+            return statusTrimmed;
+        }
+        statusTrimmed = TextScroll.trimToWidth(font, status.getString(), width);
+        statusTrimmedSource = status;
+        statusTrimmedWidth = width;
+        statusTrimmedOffset = offset;
+        return statusTrimmed;
+    }
+
+    // 页码文本裁剪结果按「页码文本 + 页码按钮宽度」缓存
+    private String trimmedPage(int width) {
+        if (pageTrimmedWidth == width && pageTrimmedSource.equals(pageNumber)) {
+            return pageTrimmed;
+        }
+        pageTrimmed = TextScroll.trimToWidth(font, pageNumber, width);
+        pageTrimmedSource = pageNumber;
+        pageTrimmedWidth = width;
+        return pageTrimmed;
+    }
+
+    // 清空链接裁剪结果按「语言 + 链接区宽度」缓存；语言变化后链接文案与宽度都会变
+    private String trimmedClear(int width) {
+        Object language = Language.getInstance();
+        if (clearTrimmedWidth == width && clearTrimmedLanguage == language) {
+            return clearTrimmed;
+        }
+        clearTrimmed = TextScroll.trimToWidth(font, texts.clear().getString(), width);
+        clearTrimmedLanguage = language;
+        clearTrimmedWidth = width;
+        return clearTrimmed;
     }
 
     private boolean canClear() {

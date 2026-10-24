@@ -27,6 +27,7 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiTreeView;
 import com.meteorite.itemdespawntowhat.core.api.DevelopmentDiagnostics;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshotEntry;
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -37,6 +38,7 @@ import java.util.concurrent.CompletionException;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
@@ -123,6 +125,10 @@ final class RuleEditorListPage {
     private @Nullable UiButton sourceButton;
     private @Nullable UiTreeView<String> ruleList;
     private final List<String> visibleIds = new ArrayList<>();
+    // 分类行标题裁剪缓存：键为节点身份（每次刷新重建节点后整体清空），值记录测量时的行宽与结果，静止帧不再测文本
+    private final Map<UiTreeNode<String>, CategoryTitle> categoryTitles = new IdentityHashMap<>();
+    private @Nullable Font categoryFont;
+    private @Nullable Object categoryLanguage;
     private final List<UiButton> listButtons = new ArrayList<>();
     private final List<UiButton> filterButtons = new ArrayList<>();
     private final RuleEditorScreenButtonBar listBar = new RuleEditorScreenButtonBar();
@@ -163,8 +169,7 @@ final class RuleEditorListPage {
         buildFilterButtons();
         ruleList = new UiTreeView<>(THEME, font, (graphics, rowFont, node, row, depth, selected, hovered, focused) -> {
             if (node.value().startsWith("@")) {
-                graphics.drawString(rowFont, TextScroll.trimToWidth(rowFont, node.label().getString(), row.width() - 4),
-                        row.x() + 2, row.y() + (row.height() - rowFont.lineHeight) / 2, THEME.palette().textSecondary(), false);
+                drawCategoryRow(graphics, rowFont, node, row);
             } else renderRuleRow(graphics, rowFont, node.value(), row, hovered);
         });
         ruleList.setRowHeightProvider(node -> font.lineHeight + 4
@@ -238,6 +243,9 @@ final class RuleEditorListPage {
 
     /** 导出范围选项：标签、是否含数据包条目与当前可导出的条数。 */
     private record ExportScope(String scope, String labelKey, String countKey, boolean includeDatapack, int count) { }
+
+    /** 分类行标题的测量结果：行宽决定裁剪点，行宽变化时重测。 */
+    private record CategoryTitle(int width, String text) { }
 
     // 导出弹窗：两个范围选项直接显示各自可导出的条数，避免导出后才发现选错范围
     private void openExport() {
@@ -404,10 +412,27 @@ final class RuleEditorListPage {
     private void renderRuleRow(GuiGraphics graphics, Font rowFont, String id, UiRect row, boolean hovered) {
         RuleListDisplaySnapshot snapshot = host.display().snapshot(id);
         int color = snapshot.active() ? THEME.palette().textPrimary() : THEME.palette().textDisabled();
-        // 预览随行首见构建并缓存在展示快照上，滚动回来直接复用
-        RuleRecipeView.renderRow(graphics, rowFont, row, snapshot.title(), snapshot.state(), color,
-                snapshot.error() ? THEME.palette().danger() : THEME.palette().textSecondary(),
-                snapshot.preview(), hovered, snapshot.active());
+        // 标题/状态宽度与配方预览都缓存在快照上：绘制只取结果，静止帧不测文本
+        RuleRecipeView.renderRow(graphics, rowFont, row, snapshot, color,
+                snapshot.error() ? THEME.palette().danger() : THEME.palette().textSecondary(), hovered);
+    }
+
+    // 分类行标题只随节点、行宽与字体/语言变化：命中缓存时静止帧不再调用 font.width
+    private void drawCategoryRow(GuiGraphics graphics, Font font, UiTreeNode<String> node, UiRect row) {
+        Object language = Language.getInstance();
+        if (font != categoryFont || language != categoryLanguage) {
+            categoryTitles.clear();
+            categoryFont = font;
+            categoryLanguage = language;
+        }
+        int width = row.width() - 4;
+        CategoryTitle cached = categoryTitles.get(node);
+        if (cached == null || cached.width() != width) {
+            cached = new CategoryTitle(width, TextScroll.trimToWidth(font, node.label().getString(), width));
+            categoryTitles.put(node, cached);
+        }
+        graphics.drawString(font, cached.text(), row.x() + 2, row.y() + (row.height() - font.lineHeight) / 2,
+                THEME.palette().textSecondary(), false);
     }
 
     // ---- 列表维护 ----
@@ -416,6 +441,8 @@ final class RuleEditorListPage {
         if (ruleList == null) {
             return;
         }
+        // 节点在每次刷新时重建，按节点身份的裁剪缓存随旧树一起丢弃
+        categoryTitles.clear();
         // 首载分段观测：一次刷新只读一次开关；关闭时除布尔判断外不取时间、不分配对象
         final boolean profile = DevelopmentDiagnostics.enabled();
         final long refreshStarted = profile ? DevelopmentDiagnostics.start() : 0L;
@@ -679,8 +706,8 @@ final class RuleEditorListPage {
         // 分类节点没有配方预览；命中配方标签时才向展示快照惰性索取预览
         if (node == null || node.value().startsWith("@")) return null;
         UiRect row = ruleList.nodeContentBounds(node);
-        return host.display().snapshot(node.value()).preview().tagAt(host.font(),
-                RuleRecipeView.recipeBounds(host.font(), row), mouseX, mouseY);
+        // 命中直接复用绘制时的整行区域，配方区几何由 RuleRecipeView 内部同一份口径换算
+        return host.display().snapshot(node.value()).preview().tagAt(host.font(), row, mouseX, mouseY);
     }
 
     boolean mouseReleased(double mouseX, double mouseY, int button) {

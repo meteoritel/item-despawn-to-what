@@ -227,13 +227,12 @@ final class ItemCountsControl extends FormControl {
     void setDefaultCount(int count) { defaultCount = count; }
 
     @Override
-    List<String> inputText() {
-        List<String> text = new ArrayList<>();
+    void appendInputText(List<String> out) {
         for (Entry entry : entries.values()) {
-            text.add(entry.reference);
-            text.addAll(entry.control.inputText());
+            out.add(entry.reference);
+            // 子滑条直接并入同一缓冲，避免每个物品一次中间列表
+            entry.control.appendInputText(out);
         }
-        return text;
     }
 
     @Override

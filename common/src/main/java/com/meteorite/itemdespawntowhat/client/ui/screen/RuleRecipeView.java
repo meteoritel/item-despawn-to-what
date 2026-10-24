@@ -32,6 +32,7 @@ import net.minecraft.Util;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
@@ -51,6 +52,8 @@ public final class RuleRecipeView {
     private static final int OBJECT_CONTENT_HEIGHT = 20;
     static final int CONTENT_HEIGHT = RuleTriggerView.HEIGHT;
     private static final int CONSUMED_COLOR = 0xFFFFA500;
+    // 省略号口径与 TextScroll 一致：三颗 ASCII 句点
+    private static final String ELLIPSIS = "...";
     private static final UiIcon UNKNOWN = new UiIcon.Item(new ItemStack(Items.BARRIER));
     // 效果解码器：预览按产出类别元数据判断产出，内置类型固定，进程内只建一次
     private static @Nullable Codec<Effect> effectCodec;
@@ -61,10 +64,14 @@ public final class RuleRecipeView {
     private final UiScrollView clip = new UiScrollView();
     private long hoverStarted;
     private long lastDraw;
-    // 每项宽度只随字体与 parts 变化：字体不变时复用测量结果，避免每帧逐项测文本
+    // 每项宽度只随字体、语言与 parts 变化：令牌不变时复用测量结果，避免每帧逐项测文本
     private @Nullable Font measuredFont;
+    private @Nullable Object measuredLanguage;
     private int[] compactWidths = new int[0];
     private int[] nameWidths = new int[0];
+    private int ellipsisWidth;
+    // 箭头项每帧绘制需要矩形：几何不变时复用同一实例，静止帧不再分配
+    private @Nullable UiRect transitionBounds;
 
     /** 一项对象及其数量要求；同名催化剂的不同要求保留原顺序，不错误地累加或取最大值。 */
     private static final class ObjectPart {
@@ -76,11 +83,23 @@ public final class RuleRecipeView {
         private boolean originFilled;
         private String quantityText = "";
         private @Nullable TagPreviewIcons.Tag tag;
+        // 角标缩放与宽度只随字体变化：首次绘制量一次，之后逐帧直接用结果
+        private @Nullable Font badgeFont;
+        private int badgeWidth;
+        private float badgeScale;
 
         private ObjectPart(Component name, @Nullable UiIcon icon, int quantity) {
             this.name = name;
             this.icon = icon == null ? UNKNOWN : icon;
             if (quantity > 0) quantities.add(quantity);
+        }
+
+        private void measureBadge(Font font) {
+            if (font == badgeFont) return;
+            int natural = Math.max(1, font.width(quantityText));
+            badgeScale = Math.min(0.65F, 18.0F / natural);
+            badgeWidth = (int) Math.ceil(natural * badgeScale);
+            badgeFont = font;
         }
     }
 
@@ -153,25 +172,49 @@ public final class RuleRecipeView {
     public Component summary() { return summary; }
     public Component tooltip() { return tooltip; }
 
-    // 管理树和变更清单共用两行条目：标题与状态在上，输入及产出关系在下。
+    // 变更清单等低频重绘路径没有快照级文本缓存，保留按需测量；这些行始终按启用态绘制
     static void renderRow(GuiGraphics graphics, Font font, UiRect row, String title, Component state,
                           int color, int stateColor, @Nullable RuleRecipeView recipe, boolean hovered) {
-        renderRow(graphics, font, row, title, state, color, stateColor, recipe, hovered, true);
-    }
-
-    static void renderRow(GuiGraphics graphics, Font font, UiRect row, String title, Component state,
-                          int color, int stateColor, @Nullable RuleRecipeView recipe, boolean hovered, boolean active) {
         int stateWidth = font.width(state);
-        graphics.drawString(font, TextScroll.trimToWidth(font, title,
-                Math.max(0, row.width() - stateWidth - 6)), row.x() + 2, row.y() + 2, color, false);
-        if (!state.getString().isBlank()) graphics.drawString(font, state, row.right() - stateWidth - 2,
-                row.y() + 2, stateColor, false);
-        if (recipe != null) recipe.render(graphics, font, recipeBounds(font, row), color, hovered, active);
+        renderTitle(graphics, font, row, TextScroll.trimToWidth(font, title,
+                Math.max(0, row.width() - stateWidth - 6)), stateWidth, state, !state.getString().isBlank(), color, stateColor);
+        renderRecipe(graphics, font, row, recipe, color, hovered, true);
     }
 
-    static UiRect recipeBounds(Font font, UiRect row) {
-        return new UiRect(row.x() + 2, row.y() + font.lineHeight + 3,
-                Math.max(0, row.width() - 4), CONTENT_HEIGHT);
+    /**
+     * 列表行绘制入口：标题宽度与状态宽直接取自快照缓存，静止帧不测量文本、不重建 Component。
+     *
+     * @param graphics   绘制上下文
+     * @param font       当前字体
+     * @param row        整行区域
+     * @param snapshot   该行的展示快照
+     * @param color      标题颜色
+     * @param stateColor 状态颜色
+     * @param hovered    是否悬停在该行
+     */
+    static void renderRow(GuiGraphics graphics, Font font, UiRect row, RuleListDisplaySnapshot snapshot,
+                          int color, int stateColor, boolean hovered) {
+        int stateWidth = snapshot.stateWidth(font);
+        renderTitle(graphics, font, row, snapshot.clippedTitle(font, Math.max(0, row.width() - stateWidth - 6)),
+                stateWidth, snapshot.state(), snapshot.stateVisible(), color, stateColor);
+        renderRecipe(graphics, font, row, snapshot.preview(), color, hovered, snapshot.active());
+    }
+
+    // 状态靠右、标题吃掉剩余宽度，两段文本共用同一基线
+    private static void renderTitle(GuiGraphics graphics, Font font, UiRect row, String title, int stateWidth,
+                                    Component state, boolean stateVisible, int color, int stateColor) {
+        graphics.drawString(font, title, row.x() + 2, row.y() + 2, color, false);
+        if (stateVisible) {
+            graphics.drawString(font, state, row.right() - stateWidth - 2, row.y() + 2, stateColor, false);
+        }
+    }
+
+    // 配方区固定在标题行下方并左右各留 2px；绘制与命中共用这组几何，避免口径漂移
+    private static void renderRecipe(GuiGraphics graphics, Font font, UiRect row, @Nullable RuleRecipeView recipe,
+                                     int color, boolean hovered, boolean active) {
+        if (recipe == null) return;
+        recipe.renderContent(graphics, font, row.x() + 2, row.y() + font.lineHeight + 3,
+                Math.max(0, row.width() - 4), CONTENT_HEIGHT, color, hovered, active);
     }
 
     // 每种对象各占一行；流体不计件数，消耗符号与催化剂共用。
@@ -190,56 +233,68 @@ public final class RuleRecipeView {
 
     /** 首选图标+名称，窄行改图标关系；超长时悬停横向滚动，离开恢复原序起点。 */
     public void render(GuiGraphics graphics, Font font, UiRect row, int color, boolean hovered) {
-        render(graphics, font, row, color, hovered, true);
+        renderContent(graphics, font, row.x(), row.y(), row.width(), row.height(), color, hovered, true);
     }
 
-    private void render(GuiGraphics graphics, Font font, UiRect row, int color, boolean hovered, boolean active) {
+    // 配方内容绘制：坐标全程用整数与局部偏移，静止帧不再构造行矩形或逐项矩形
+    private void renderContent(GuiGraphics graphics, Font font, int areaX, int areaY, int areaWidth, int areaHeight,
+                               int color, boolean hovered, boolean active) {
         int[] withNames = widths(font, true);
-        boolean names = sumWidths(withNames) <= row.width();
+        boolean names = sumWidths(withNames) <= areaWidth;
         int[] partWidths = names ? withNames : widths(font, false);
         int total = sumWidths(partWidths);
         long now = Util.getMillis();
         if (!hovered || lastDraw == 0 || now - lastDraw > 150) hoverStarted = now;
         lastDraw = now;
-        int overflow = Math.max(0, total - row.width());
+        int overflow = Math.max(0, total - areaWidth);
         int shift = horizontalShift(now, overflow, hovered);
-        clip.setViewport(row.x(), row.y(), row.width(), row.height());
-        clip.setContentHeight(row.height());
+        clip.setViewport(areaX, areaY, areaWidth, areaHeight);
+        clip.setContentHeight(areaHeight);
         clip.push(graphics);
-        row = new UiRect(0, 0, row.width(), row.height());
-        int end = row.right() - (overflow > 0 && !hovered ? font.width("...") + 2 : 0);
+        // push 之后是内容坐标（原点在视口左上角），因此下面全部用本地坐标计算
+        int end = areaWidth - (overflow > 0 && !hovered ? ellipsisWidth + 2 : 0);
         try {
-            int x = row.x() - shift;
-            int contentY = row.y() + (row.height() - OBJECT_CONTENT_HEIGHT) / 2;
+            int cursor = -shift;
+            int contentY = (areaHeight - OBJECT_CONTENT_HEIGHT) / 2;
             for (int index = 0; index < parts.size(); index++) {
                 Part part = parts.get(index);
                 int size = partWidths[index];
-                if (!hovered && x + size > end) break;
-                if (x >= end) break;
-                if (x + size <= row.x()) { x += size; continue; }
+                if (!hovered && cursor + size > end) break;
+                if (cursor >= end) break;
+                if (cursor + size <= 0) { cursor += size; continue; }
                 if (part.transition()) triggerView.render(graphics, font,
-                        new UiRect(x, row.y(), size, row.height()), part.separator(), color, active);
-                else if (part.object() == null) graphics.drawString(font, part.separator(), x, contentY + 5, color, false);
+                        transitionBounds(cursor, size, areaHeight), part.separator(), color, active);
+                else if (part.object() == null) graphics.drawString(font, part.separator(), cursor, contentY + 5, color, false);
                 else {
                     ObjectPart value = part.object();
                     if (value.tag != null) {
-                        graphics.fill(x, row.y(), x + size - 2, row.bottom(), 0x224F7299);
-                        graphics.fill(x, row.bottom() - 1, x + size - 2, row.bottom(), 0xFF6688AA);
+                        graphics.fill(cursor, 0, cursor + size - 2, areaHeight, 0x224F7299);
+                        graphics.fill(cursor, areaHeight - 1, cursor + size - 2, areaHeight, 0xFF6688AA);
                     }
-                    RulePreviewIcons.render(graphics, value.icon, x, contentY + 1, active);
+                    RulePreviewIcons.render(graphics, value.icon, cursor, contentY + 1, active);
                     if (!value.consumedQuantities.isEmpty() || value.fluidConsumed || value.originFilled)
-                        consumedStar(graphics, x + ICON_SIZE - 7, contentY, active ? CONSUMED_COLOR : color);
-                    if (!value.quantities.isEmpty()) badge(graphics, font, value.quantityText,
-                            x + ICON_SIZE, contentY + 12, active ? 0xFFFFFFFF : color);
-                    if (names) graphics.drawString(font, value.name, x + ICON_SIZE + 3, contentY + 5, color, false);
+                        consumedStar(graphics, cursor + ICON_SIZE - 7, contentY, active ? CONSUMED_COLOR : color);
+                    if (!value.quantities.isEmpty()) badge(graphics, font, value,
+                            cursor + ICON_SIZE, contentY + 12, active ? 0xFFFFFFFF : color);
+                    if (names) graphics.drawString(font, value.name, cursor + ICON_SIZE + 3, contentY + 5, color, false);
                     if (value.tag != null) for (int step = 0; step < 3; step++)
-                        graphics.fill(x + size - 7 + step, contentY + 7 + step,
-                                x + size - 6 + step, contentY + 12 - step, color);
+                        graphics.fill(cursor + size - 7 + step, contentY + 7 + step,
+                                cursor + size - 6 + step, contentY + 12 - step, color);
                 }
-                x += size;
+                cursor += size;
             }
-            if (overflow > 0 && !hovered) graphics.drawString(font, "...", end + 2, contentY + 5, color, false);
+            if (overflow > 0 && !hovered) graphics.drawString(font, ELLIPSIS, end + 2, contentY + 5, color, false);
         } finally { clip.pop(graphics); }
+    }
+
+    // 箭头项绘制需要矩形：几何不变时复用同一实例，静止帧与滚动外不再分配
+    private UiRect transitionBounds(int x, int width, int height) {
+        UiRect bounds = transitionBounds;
+        if (bounds == null || bounds.x() != x || bounds.width() != width || bounds.height() != height) {
+            bounds = new UiRect(x, 0, width, height);
+            transitionBounds = bounds;
+        }
+        return bounds;
     }
 
     // 起点和终点各停留一秒，避免长配方一进入悬停便跳动。
@@ -253,9 +308,10 @@ public final class RuleRecipeView {
         return 0;
     }
 
-    // parts 在构造后不再变化，字体实例不变即可整份复用；字体变化时整体重测
+    // parts 在构造后不再变化，字体与语言令牌不变即可整份复用；令牌变化时整体重测
     private int[] widths(Font font, boolean names) {
-        if (font != measuredFont) {
+        Object language = Language.getInstance();
+        if (font != measuredFont || language != measuredLanguage) {
             int[] compact = new int[parts.size()];
             int[] withNames = new int[parts.size()];
             for (int index = 0; index < parts.size(); index++) {
@@ -265,7 +321,9 @@ public final class RuleRecipeView {
             }
             compactWidths = compact;
             nameWidths = withNames;
+            ellipsisWidth = font.width(ELLIPSIS);
             measuredFont = font;
+            measuredLanguage = language;
         }
         return names ? nameWidths : compactWidths;
     }
@@ -284,38 +342,47 @@ public final class RuleRecipeView {
                 + (names ? font.width(part.object().name) : 0) + (part.object().tag == null ? 0 : 9);
     }
 
-    /** 命中与绘制共用名字省略和横向滚动口径；只展开实际可见的标签容器。 */
+    /**
+     * 命中与绘制共用名字省略和横向滚动口径；只展开实际可见的标签容器。
+     *
+     * @param font    当前字体
+     * @param row     整行区域（与绘制同一口径）
+     * @param mouseX  鼠标 X 坐标
+     * @param mouseY  鼠标 Y 坐标
+     * @return 命中的标签容器，未命中或该项不是标签时返回 null
+     */
     public @Nullable TagPreviewIcons.Tag tagAt(Font font, UiRect row, double mouseX, double mouseY) {
-        Part part = partAt(font, row, mouseX, mouseY);
-        return part == null || part.object() == null ? null : part.object().tag;
-    }
-
-    // 标签命中复用配方绘制的宽度和滚动位移，避免新增箭头宽度后命中错位。
-    private @Nullable Part partAt(Font font, UiRect row, double mouseX, double mouseY) {
-        if (!row.contains(mouseX, mouseY)) return null;
+        int areaX = row.x() + 2;
+        int areaY = row.y() + font.lineHeight + 3;
+        int areaWidth = Math.max(0, row.width() - 4);
+        if (mouseX < areaX || mouseX >= areaX + areaWidth || mouseY < areaY || mouseY >= areaY + CONTENT_HEIGHT) {
+            return null;
+        }
         int[] withNames = widths(font, true);
-        boolean names = sumWidths(withNames) <= row.width();
+        boolean names = sumWidths(withNames) <= areaWidth;
         int[] partWidths = names ? withNames : widths(font, false);
-        int overflow = Math.max(0, sumWidths(partWidths) - row.width());
-        int x = row.x() - horizontalShift(Util.getMillis(), overflow, true);
+        int overflow = Math.max(0, sumWidths(partWidths) - areaWidth);
+        int x = areaX - horizontalShift(Util.getMillis(), overflow, true);
         for (int index = 0; index < parts.size(); index++) {
             int size = partWidths[index];
-            if (mouseX >= x && mouseX < x + size) return parts.get(index);
+            if (mouseX >= x && mouseX < x + size) {
+                ObjectPart object = parts.get(index).object();
+                return object == null ? null : object.tag;
+            }
             x += size;
         }
         return null;
     }
 
     // 角标位于图标内部，矩阵独立恢复，后续物品和文字不受缩放影响。
-    private static void badge(GuiGraphics graphics, Font font, String text, int right, int y, int color) {
-        float scale = Math.min(0.65F, 18.0F / Math.max(1, font.width(text)));
-        int width = (int) Math.ceil(font.width(text) * scale);
+    private static void badge(GuiGraphics graphics, Font font, ObjectPart value, int right, int y, int color) {
+        value.measureBadge(font);
         graphics.pose().pushPose();
         try {
-            graphics.pose().translate(right - width, y, UiRenderLayers.FOREGROUND);
+            graphics.pose().translate(right - value.badgeWidth, y, UiRenderLayers.FOREGROUND);
             graphics.pose().translate(0, 1, 0);
-            graphics.pose().scale(scale, scale, 1);
-            graphics.drawString(font, text, 0, 0, color, false);
+            graphics.pose().scale(value.badgeScale, value.badgeScale, 1);
+            graphics.drawString(font, value.quantityText, 0, 0, color, false);
         } finally { graphics.pose().popPose(); }
     }
 

@@ -41,7 +41,7 @@ authority:
 | [authoring](../modules/authoring.md) | 候选目录、编辑会话与落盘、命令与调试场景 | `common/core/catalog`、`common/core/network`、`common/core/service` 的编辑落盘部分、`common/core/command`、`common/src/dev`、`neoforge/src/probe` | `common` |
 | [client-editor](../modules/client-editor.md) | 客户端协议工作区、草稿与撤销、类型编辑器注册表 | `common/client/net`、`common/client/edit` | `common` |
 | [ui-kit](../modules/ui-kit.md) | 声明式 UI kit 的公开面与依赖边界 | `common/client/ui/kit` | `common` |
-| [client-ui](../modules/client-ui.md) | 编辑器界面、主题与控件适配 | `common/client/ui/theme`、`common/client/ui/widget`、`common/client/ui/shared`、`common/client/ui/screen`、`common/client/ui/screen/form`、`common/client/ui/prototype` | `common` |
+| [client-ui](../modules/client-ui.md) | 编辑器界面、主题与控件适配 | `common/client/ui/theme`、`common/client/ui/widget`、`common/client/ui/shared`、`common/client/ui/screen`、`common/client/ui/screen/form` | `common` |
 
 ## 对外入口与依赖方
 

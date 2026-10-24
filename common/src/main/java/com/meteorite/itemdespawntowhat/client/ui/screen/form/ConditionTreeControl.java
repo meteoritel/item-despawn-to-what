@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.function.Supplier;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
@@ -42,6 +43,15 @@ final class ConditionTreeControl extends FormControl {
     private final Font font;
     private int toolbarHeight;
     private boolean enabled = true;
+    // 工具栏流排布缓存：按钮集合、可用宽度、行高与语言决定换行结果，只有这些输入变化才重排；
+    // 静止帧只按缓存矩形对齐按钮坐标，不再新建可见列表、宽度数组与换行结果。
+    private final List<UiButton> visibleToolbar = new ArrayList<>();
+    private int[] toolbarWidths = new int[0];
+    private @Nullable UiFlowLayout.Wrap toolbarFlow;
+    private int toolbarLayoutLimit = -1;
+    private int toolbarLayoutButtonHeight = -1;
+    private int toolbarVisibilityMask = -1;
+    private @Nullable Object toolbarLayoutLanguage;
 
     private final UiConditionTreeSummary editor;
     private final @Nullable ConditionEditingSupport support;
@@ -113,25 +123,55 @@ final class ConditionTreeControl extends FormControl {
         }
         int buttonHeight = usesCardSpacing() ? CARD_CONTROL_HEIGHT : TOOLBAR_BUTTON_H;
         int limit = Math.max(1, width);
-        List<UiButton> visible = new ArrayList<>();
+        int mask = 0;
+        for (int index = 0; index < toolbar.size(); index++) {
+            if (toolbar.get(index).isVisible()) {
+                mask |= 1 << index;
+            }
+        }
+        Object language = Language.getInstance();
+        if (toolbarFlow != null && toolbarLayoutLimit == limit && toolbarLayoutButtonHeight == buttonHeight
+                && toolbarVisibilityMask == mask && toolbarLayoutLanguage == language) {
+            placeToolbar(toolbarFlow, x, y);
+            return toolbarHeight;
+        }
+        toolbarLayoutLimit = limit;
+        toolbarLayoutButtonHeight = buttonHeight;
+        toolbarVisibilityMask = mask;
+        toolbarLayoutLanguage = language;
+        visibleToolbar.clear();
         for (UiButton button : toolbar) {
-            if (button.isVisible()) visible.add(button);
+            if (button.isVisible()) {
+                visibleToolbar.add(button);
+            }
         }
-        if (visible.isEmpty()) {
-            return buttonHeight + 2;
+        if (visibleToolbar.isEmpty()) {
+            toolbarFlow = null;
+            toolbarHeight = buttonHeight + 2;
+            return toolbarHeight;
         }
-        int[] widths = new int[visible.size()];
-        for (int index = 0; index < visible.size(); index++) {
-            widths[index] = Math.clamp(visible.get(index).preferredWidth(4), Math.min(24, limit), limit);
+        int size = visibleToolbar.size();
+        if (toolbarWidths.length != size) {
+            toolbarWidths = new int[size];
         }
-        UiFlowLayout.Wrap flow = UiFlowLayout.wrap(widths, limit, 2, buttonHeight);
-        for (int index = 0; index < visible.size(); index++) {
-            UiRect offset = flow.bounds(index);
-            visible.get(index).setBounds(x + offset.x(), y + offset.y(), offset.width(), offset.height());
-            visible.get(index).setEnabled(enabled);
+        for (int index = 0; index < size; index++) {
+            toolbarWidths[index] = Math.clamp(visibleToolbar.get(index).preferredWidth(4), Math.min(24, limit), limit);
         }
+        toolbarFlow = UiFlowLayout.wrap(toolbarWidths, limit, 2, buttonHeight);
         // 返回值含一行尾随间距，kit 的 height() 不含，这里补回
-        return flow.height() + 2;
+        toolbarHeight = toolbarFlow.height() + 2;
+        placeToolbar(toolbarFlow, x, y);
+        return toolbarHeight;
+    }
+
+    // 按缓存的排布结果摆放按钮；按钮自身对相同矩形早退，因此静止帧不产生可见副作用
+    private void placeToolbar(UiFlowLayout.Wrap flow, int x, int y) {
+        for (int index = 0; index < visibleToolbar.size(); index++) {
+            UiRect offset = flow.bounds(index);
+            UiButton button = visibleToolbar.get(index);
+            button.setBounds(x + offset.x(), y + offset.y(), offset.width(), offset.height());
+            button.setEnabled(enabled);
+        }
     }
 
     @Override
@@ -165,13 +205,23 @@ final class ConditionTreeControl extends FormControl {
         if (!enabled || fallbackRaw != null) {
             return false;
         }
+        int heightBefore = height();
+        boolean handled = false;
         for (UiButton target : toolbar) {
             if (target.mouseClicked(mouseX, mouseY, button)) {
-                return true;
+                handled = true;
+                break;
             }
         }
-        // 摘要自身处理命中：点击节点进入画布，展开标记只做折叠展示
-        return editor.mouseClicked(mouseX, mouseY, button);
+        if (!handled) {
+            // 摘要自身处理命中：点击节点进入画布，展开标记只做折叠展示
+            handled = editor.mouseClicked(mouseX, mouseY, button);
+        }
+        // 展开/折叠会改变摘要行数，进而改变本控件高度：真的变了才让行测量失效
+        if (height() != heightBefore) {
+            notifyGeometryChanged();
+        }
+        return handled;
     }
 
     @Override
@@ -229,6 +279,8 @@ final class ConditionTreeControl extends FormControl {
             this.fallbackRaw = null;
             editor.setExpression(expression);
         }
+        // 表达式行数决定控件高度：装载后通知宿主行重测
+        notifyGeometryChanged();
     }
 
     @Override

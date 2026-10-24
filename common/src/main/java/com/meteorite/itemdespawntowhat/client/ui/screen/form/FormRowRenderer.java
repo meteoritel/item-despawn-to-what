@@ -108,8 +108,10 @@ final class FormRowRenderer {
         for (FormRow row : rows) {
             if (!row.visible || !row.tooltipEnabled) continue;
             int screenY = viewportY + row.contentY - scrollOffset;
-            UiRect rect = new UiRect(viewportX, screenY, row.controlWidth + row.controlRelX, row.contentHeight);
-            if (!rect.contains(mouseX, mouseY)) {
+            // 与 UiRect.contains 同口径的半开区间，直接用整数比较，避免逐行创建矩形对象
+            int rowRight = viewportX + row.controlWidth + row.controlRelX;
+            int rowBottom = screenY + row.contentHeight;
+            if (mouseX < viewportX || mouseX >= rowRight || mouseY < screenY || mouseY >= rowBottom) {
                 continue;
             }
             if (row.field.type() == EditorFieldType.NOTE) {

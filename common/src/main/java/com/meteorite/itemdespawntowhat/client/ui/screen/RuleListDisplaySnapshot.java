@@ -3,12 +3,15 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
+import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionTreeDescription;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine;
 import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import java.util.List;
 import java.util.Locale;
+import net.minecraft.client.gui.Font;
+import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
@@ -46,6 +49,13 @@ final class RuleListDisplaySnapshot {
     private @Nullable List<DescriptionLine> conditionLines;
     private @Nullable String searchText;
 
+    // 行首文本的度量缓存：状态宽与标题裁剪只随字体/语言与行宽变化，静止帧不再逐帧测文本
+    private @Nullable Font metricsFont;
+    private @Nullable Object metricsLanguage;
+    private int stateWidth;
+    private int clippedWidth = -1;
+    private String clippedTitle = "";
+
     RuleListDisplaySnapshot(@Nullable RuleValue body, String title, @Nullable String category,
                             String origin, boolean unfinished, boolean exportable,
                             boolean active, boolean error, boolean enabled, boolean issues,
@@ -81,6 +91,47 @@ final class RuleListDisplaySnapshot {
     // 展示标题
     String title() {
         return title;
+    }
+
+    /**
+     * 状态文字在给定字体下的宽度；按字体与语言令牌缓存，绘制不再逐帧测量。
+     *
+     * @param font 当前绘制字体
+     * @return 状态文字宽度（状态为空时为 0）
+     */
+    int stateWidth(Font font) {
+        ensureMetrics(font);
+        return stateWidth;
+    }
+
+    /**
+     * 标题按可用宽度裁剪后的绘制文本；同一快照在同一字体/语言与行宽下只裁剪一次。
+     *
+     * <p>裁剪口径与 {@link TextScroll#trimToWidth} 完全一致，列表页不再另写截断算法。</p>
+     *
+     * @param font  当前绘制字体
+     * @param width 去掉状态文字与间距后的可用宽度
+     * @return 可直接绘制的标题文本
+     */
+    String clippedTitle(Font font, int width) {
+        ensureMetrics(font);
+        if (width != clippedWidth) {
+            clippedWidth = width;
+            clippedTitle = TextScroll.trimToWidth(font, title, width);
+        }
+        return clippedTitle;
+    }
+
+    // 字体或语言变化后状态宽与裁剪结果都会变：整份作废，下次绘制重算一次
+    private void ensureMetrics(Font font) {
+        Object language = Language.getInstance();
+        if (font == metricsFont && language == metricsLanguage) {
+            return;
+        }
+        metricsFont = font;
+        metricsLanguage = language;
+        stateWidth = font.width(state);
+        clippedWidth = -1;
     }
 
     // 快照下发的分类；未声明分类时为 null

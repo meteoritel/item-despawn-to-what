@@ -355,11 +355,15 @@ final class RuleEditorEditPage {
 
     // 编辑页布局：四个页签各自在内容区里排布控件（含窄屏分层）
     void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY, UiRect contentArea) {
-        lastEditArea = new UiRect(contentArea.x(), contentArea.y(), contentArea.width(), contentArea.height());
+        // 内容区只在矩形真的变化时替换记录：静止帧不分配新矩形，也不触发重排
+        if (!contentArea.equals(lastEditArea)) {
+            lastEditArea = new UiRect(contentArea.x(), contentArea.y(), contentArea.width(), contentArea.height());
+        }
         if (pages == null) {
             return;
         }
-        pages.layout(lastEditArea);
+        // 布局按需执行：几何输入未变时这里只命中缓存，渲染帧不再做任何测量
+        pages.ensureLayout(lastEditArea);
         pages.render(graphics, renderFont, mouseX, mouseY);
     }
 
@@ -401,7 +405,8 @@ final class RuleEditorEditPage {
         pages.setPage(tab);
         pages.rebuild();
         if (lastEditArea.width() > 0) {
-            pages.layout(lastEditArea);
+            // 重建后页面已按当前几何排好；这里只补一次缓存命中判断
+            pages.ensureLayout(lastEditArea);
         }
         // 页面控件是刚重建的，按当前工作区状态同步一次使能（APPLYING 期间必须冻结）
         host.rebuildEditableState();

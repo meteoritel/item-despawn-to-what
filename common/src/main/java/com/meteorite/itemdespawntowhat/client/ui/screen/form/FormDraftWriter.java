@@ -65,7 +65,8 @@ final class FormDraftWriter {
             }
             row.control.load(displayed);
             row.control.rememberLoaded(original);
-            row.loadedInputs = row.control.inputText();
+            // 控件外露的是复用缓冲，基线必须复制，否则后续扫描会覆盖已装载文本
+            row.loadedInputs = List.copyOf(row.control.inputText());
             row.loaded = true;
             EditSession.PendingInput pending = view.session.pendingInput(row.path);
             if (pending != null) row.control.restoreInputText(pending.text());
@@ -95,7 +96,7 @@ final class FormDraftWriter {
         for (FormRow row : view.rows) {
             RuleValue value = object.has(row.field.name()) ? object.child(row.field.name()) : null;
             row.control.load(value);
-            row.loadedInputs = row.control.inputText();
+            row.loadedInputs = List.copyOf(row.control.inputText());
             row.loaded = true;
             EditSession.PendingInput pending = view.session.pendingInput(row.path);
             if (pending != null) row.control.restoreInputText(pending.text());
@@ -115,6 +116,22 @@ final class FormDraftWriter {
             if (!text.equals(row.loadedInputs)) {
                 view.session.retainPendingInput(row.path, text, row.visible ? row.control.issues(row.path) : List.of());
             } else view.session.clearPendingInput(row.path);
+        }
+    }
+
+    /**
+     * 只更新一行的会话保留输入：tick 收尾的行在 finishInput 规范化文本后调用，
+     * 因此不必在 tick 末尾再扫全表比较所有行。
+     *
+     * @param row 本次结束编辑的行
+     */
+    void retainRowInput(FormRow row) {
+        if (view.loadedRevision != view.session.revision() || !row.loaded) return;
+        List<String> text = row.control.inputText();
+        if (!text.equals(row.loadedInputs)) {
+            view.session.retainPendingInput(row.path, text, row.visible ? row.control.issues(row.path) : List.of());
+        } else {
+            view.session.clearPendingInput(row.path);
         }
     }
 
@@ -145,7 +162,7 @@ final class FormDraftWriter {
     }
 
     void acceptInput(FormRow row) {
-        row.loadedInputs = row.control.inputText();
+        row.loadedInputs = List.copyOf(row.control.inputText());
         row.control.rememberLoaded(view.session.draft().valueAt(row.path));
         row.control.inputAccepted();
         view.session.clearPendingInput(row.path);
@@ -189,7 +206,12 @@ final class FormDraftWriter {
                     int fallback = quantity.field.intMin(CatalystCost.DEFAULT_COUNT);
                     counts.setDefaultCount(fallback);
                     counts.load(draft.valueAt(quantity.path));
+                    // 定点刷新被重载行的输入基线与会话保留：它们已等于草稿值，不再算待提交输入
+                    quantity.loadedInputs = List.copyOf(quantity.control.inputText());
+                    view.session.clearPendingInput(quantity.path);
                 }
+            // 数量行的图标/滑条高度可能随条目变化，让下一次布局重新测量
+            view.invalidateMeasure();
         }
     }
 

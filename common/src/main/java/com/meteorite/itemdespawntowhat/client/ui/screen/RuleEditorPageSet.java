@@ -174,6 +174,10 @@ public final class RuleEditorPageSet {
     boolean rebuilding;
     @Nullable UiRect lastArea;
     final List<PageCard> cards = new ArrayList<>();
+    // 页面布局缓存：只有页、宽度、行结构与控件高度等真实几何输入变化时才重排，渲染帧与纯滚动帧都不测量
+    private boolean layoutDirty = true;
+    // 已作用到控件上的滚动偏移：偏移变化时只平移已排好的控件
+    private int appliedOffset;
 
     /** 卡片头部内容：标题必填，图标可选（图标绘制在标题行内、蓝条右侧）。 */
     record CardHeader(Component title, @Nullable UiIcon icon) {
@@ -273,7 +277,8 @@ public final class RuleEditorPageSet {
         rebuild();
         pageScroll.setOffset(scrollOffsets.getOrDefault(page, 0));
         if (lastArea != null) {
-            layout(lastArea);
+            // 新页在 rebuild 时已排好，切页只改变滚动位置：平移即可，不再整页重排
+            applyScroll(pageScroll.offset());
         }
     }
 
@@ -314,6 +319,8 @@ public final class RuleEditorPageSet {
     // 表单工厂
     FormView newForm(EditSession session, String basePath, TypeEditorDescriptor descriptor) {
         FormView form = new FormView(font, session, basePath);
+        // 表单行几何变化时让页面布局缓存失效，页面滚动帧因此不必重排
+        form.setOnGeometryChanged(this::invalidateLayout);
         form.useCatalogSelections();
         form.setConditionEditingSupport(ruleEditorTriggerPage.sharedConditionSupport());
         form.setConditionContextFactory(ruleEditorTriggerPage.conditionContextFactory(form));
@@ -360,25 +367,78 @@ public final class RuleEditorPageSet {
 
     // ---- 布局 ----
 
-    /** 外层滚动与控件命中共用绝对坐标；布局止于滚动区域，不伸入底栏。 */
+    /** 页面布局失效：下一次渲染前重排一次；只在真实几何输入变化时调用。 */
+    void invalidateLayout() {
+        layoutDirty = true;
+    }
+
+    /**
+     * 布局按需入口：几何输入变化时才全量重排，纯滚动帧只平移已排好的控件。
+     *
+     * <p>布局与测量不再跟帧绑定：静止帧只复用缓存，滚动帧不测量文本；命中、提示与拖拽预览
+     * 继续读控件自身的屏幕 bounds，与平移后的控件保持同一坐标系。</p>
+     *
+     * @param area 内容视口（屏幕坐标）
+     */
+    public void ensureLayout(UiRect area) {
+        if (area == null || area.height() <= 0) {
+            lastArea = area;
+            return;
+        }
+        if (layoutDirty || lastArea == null || !lastArea.equals(area) || formGeometryChanged()) {
+            layout(area);
+            return;
+        }
+        int offset = pageScroll.offset();
+        if (offset != appliedOffset) {
+            applyScroll(offset);
+        }
+    }
+
+    // 任一可见表单的测量缓存失效即视为页面几何需要重排
+    private boolean formGeometryChanged() {
+        for (FormView form : liveForms) {
+            if (form.isVisible() && form.needsMeasure()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** 全量布局：页、宽度、行结构与控件高度变化时执行；滚动偏移只决定控件最终落位。 */
     public void layout(UiRect area) {
         lastArea = area;
         pageScroll.setViewport(area.x(), area.y(), area.width(), area.height());
         pageScroll.setStep(24);
+        // 先按文档坐标（滚动偏移 0）排布，排完后统一平移到当前滚动位置
+        appliedOffset = 0;
         int used = layoutPage(area) - area.y();
         int width = area.width();
         if (used > area.height()) {
             width = Math.max(0, width - UiScrollView.SCROLLBAR_WIDTH - 2);
             used = layoutPage(new UiRect(area.x(), area.y(), width, area.height())) - area.y();
         }
+        layoutDirty = false;
         pageScroll.setContentHeight(used);
         pageScroll.setScrollbarVisible(used > area.height());
-        // 内容在顶部时第三次布局与第二次参数相同，直接复用，省去每帧一次全页布局；
-        // 滚动后才按偏移重排控件
-        int offset = pageScroll.offset();
-        if (offset != 0) {
-            layoutPage(new UiRect(area.x(), area.y() - offset, width, area.height()));
+        applyScroll(pageScroll.offset());
+    }
+
+    // 滚动帧只平移已排好的控件：表单改视口原点，其余控件加同一位移
+    private void applyScroll(int offset) {
+        int delta = appliedOffset - offset;
+        if (delta != 0) {
+            // 不可见控件同样平移：否则它们下次变为可见时 bounds 仍停在文档坐标，命中会错位
+            for (UiWidget widget : liveWidgets) {
+                if (widget instanceof FormView form) {
+                    form.shiftViewportY(delta);
+                } else {
+                    UiRect bounds = widget.bounds();
+                    widget.setBounds(bounds.x(), bounds.y() + delta, bounds.width(), bounds.height());
+                }
+            }
         }
+        appliedOffset = offset;
     }
 
     private int layoutPage(UiRect area) {
@@ -395,8 +455,8 @@ public final class RuleEditorPageSet {
         if (form == null) {
             return y;
         }
-        int height = form.preferredHeight(width);
-        form.layout(x, y, width, height);
+        // 一次测量同时得到行几何与内容高度，替代「preferredHeight 再 layout」的两次测量
+        int height = form.layoutNatural(x, y, width);
         return y + height + RuleEditorPageSupport.PAD;
     }
 
@@ -478,6 +538,9 @@ public final class RuleEditorPageSet {
         var pointer = UiPointer.gated(!pageScroll.isDragging(), mouseX, mouseY);
         mouseX = pointer.x();
         mouseY = pointer.y();
+        // 卡片与页内文字按文档坐标绘制，滚动由 pose 平移体现：这两类不参与命中，无需坐标换算
+        graphics.pose().pushPose();
+        graphics.pose().translate(0, -appliedOffset, 0);
         graphics.enableScissor(lastArea.x(), lastArea.y(), lastArea.right(), lastArea.bottom());
         try {
             for (PageCard card : cards) {
@@ -493,6 +556,13 @@ public final class RuleEditorPageSet {
                 case TRIGGER -> ruleEditorTriggerPage.renderTrigger(graphics);
                 case RESULTS -> ruleEditorResultsPage.renderResults(graphics);
             }
+        } finally {
+            graphics.disableScissor();
+            graphics.pose().popPose();
+        }
+        // 控件保持屏幕坐标（滚动时已整体平移），命中、提示与拖拽预览因此无需换算
+        graphics.enableScissor(lastArea.x(), lastArea.y(), lastArea.right(), lastArea.bottom());
+        try {
             for (UiWidget widget : liveWidgets) {
                 if (widget.isVisible()) {
                     widget.render(graphics, renderFont, mouseX, mouseY);
@@ -880,7 +950,8 @@ public final class RuleEditorPageSet {
         UiRect rect = target.bounds();
         pageScroll.ensureVisible(new UiRect(rect.x() - lastArea.x(),
                 rect.y() - lastArea.y() + pageScroll.offset(), rect.width(), rect.height()));
-        layout(lastArea);
+        // 只改变滚动位置：平移已排好的控件，不重新测量
+        applyScroll(pageScroll.offset());
     }
 
     void requestRebuild() {

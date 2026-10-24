@@ -4,6 +4,8 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -20,10 +22,22 @@ public final class CatalogPreviewIcons {
 
     // 占位标记的边长上限（与图标槽一致）
     private static final int MARKER_MAX_SIZE = 16;
+    // 图标缓存上限：与实体/方块预览缓存同一口径，超出后淘汰最久未用的项
+    private static final int MAX_CACHED_ICONS = 256;
+    // 物品图标按「类型 + 规范化注册名」复用：目录网格与配方列表共用同一实例，ItemStack 只建一次
+    private static final Map<IconKey, UiIcon> ICONS = new LinkedHashMap<>(32, 0.75F, true);
     // 占位标记取宿主灰阶色，不引入状态色
     private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
 
+    /** 物品图标缓存键；ResourceLocation 自带值语义，两种 id 写法先规范成同一注册名。 */
+    private record IconKey(RuleCatalogType type, ResourceLocation id) { }
+
     private CatalogPreviewIcons() { }
+
+    /** 清空物品图标缓存；物品注册表在运行期不变，资源重载后由宿主按缓存生命周期调用。 */
+    public static void clear() {
+        ICONS.clear();
+    }
 
     /**
      * 无法静态预览时的中性占位标记：等宽描边方框加居中问号。
@@ -77,13 +91,20 @@ public final class CatalogPreviewIcons {
         if (type == RuleCatalogType.ENTITY && !id.startsWith("#")) return EntityPreviewIcons.icon(key.toString(), 0);
         if (type == RuleCatalogType.BLOCK && !id.startsWith("#")) return BlockPreviewIcons.icon(key.toString());
         if (type == RuleCatalogType.FLUID && !id.startsWith("#")) return FluidPreviewIcons.icon(key.toString());
-        ItemStack stack = switch (type) {
-            case ITEM -> stackOf(BuiltInRegistries.ITEM.getOptional(key).orElse(null));
-            case BLOCK -> BuiltInRegistries.BLOCK.getOptional(key).map(block -> stackOf(block.asItem()))
-                    .orElse(ItemStack.EMPTY);
-            default -> ItemStack.EMPTY;
-        };
-        return stack.isEmpty() ? null : new UiIcon.Item(stack);
+        if (type == RuleCatalogType.ITEM) return itemIcon(key);
+        // 方块/实体/流体已在上面走各自缓存；其余目录类型没有图标槽，回落文字展示
+        return null;
+    }
+
+    // 物品图标有界复用：键是注册名而不是 ItemStack，未注册物品的 null 也缓存，避免每帧重查注册表
+    private static @Nullable UiIcon itemIcon(ResourceLocation key) {
+        IconKey cacheKey = new IconKey(RuleCatalogType.ITEM, key);
+        if (ICONS.containsKey(cacheKey)) return ICONS.get(cacheKey);
+        ItemStack stack = stackOf(BuiltInRegistries.ITEM.getOptional(key).orElse(null));
+        UiIcon icon = stack.isEmpty() ? null : new UiIcon.Item(stack);
+        ICONS.put(cacheKey, icon);
+        while (ICONS.size() > MAX_CACHED_ICONS) ICONS.remove(ICONS.keySet().iterator().next());
+        return icon;
     }
 
     private static ItemStack stackOf(@Nullable Item item) {

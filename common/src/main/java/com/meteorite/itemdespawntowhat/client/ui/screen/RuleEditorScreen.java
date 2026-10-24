@@ -19,6 +19,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryDispatcher;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.shared.BlockPreviewIcons;
+import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine;
 import com.meteorite.itemdespawntowhat.client.ui.shared.EntityPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostPalette;
@@ -1089,7 +1090,7 @@ public final class RuleEditorScreen extends Screen {
     public void removed() {
         flushDrafts();
         EntityPreviewIcons.clear();
-        RulePreviewIcons.clear();
+        CatalogPreviewIcons.clear();
         BlockPreviewIcons.clear();
         super.removed();
     }
@@ -1101,6 +1102,7 @@ public final class RuleEditorScreen extends Screen {
             return;
         }
         EntityPreviewIcons.clear();
+        CatalogPreviewIcons.clear();
         BlockPreviewIcons.clear();
         flushDrafts();
         super.onClose();

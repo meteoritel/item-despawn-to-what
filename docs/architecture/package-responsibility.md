@@ -179,14 +179,10 @@ flowchart TB
 - **`client/ui/screen/form`** — 表单控件与叶子面板：行布局、控件注册、条件树面板、草稿写回。
   - 允许：`client/edit`、`client/net`、`client/ui/kit`、`client/ui/theme`、`client/ui/widget`、`client/ui/shared`。
   - 禁止：依赖 `client/ui/screen`；屏幕单向依赖表单，不反向。
-- **`client/ui/prototype`** — 开发期验证界面，用于组合验证 kit、主题与控件。
-  - 允许：`client/ui/kit`、`client/ui/theme`、`client/ui/widget`。
-  - 约束：不注册快捷键；入口只能在服务端授权后、原子取得独占编辑锁时打开。
-
 ## 包职责的维护方式
 
 - 新增包先归入一级包，再决定二级归属；跨模块协作优先落在 `core/api` 契约上。
-- `package-info` 覆盖客户端侧的 `client/edit`、`client/edit/draft`、`client/ui/kit`、`client/ui/widget`、`client/ui/shared`、`client/ui/theme`、`client/ui/prototype`；`core` 侧的包职责以本文与源码为准。
+- `package-info` 覆盖客户端侧的 `client/edit`、`client/edit/draft`、`client/ui/kit`、`client/ui/widget`、`client/ui/shared`、`client/ui/theme`；`core` 侧的包职责以本文与源码为准。
 - 移动类或改包名时，同步本文与 [模块地图](module-map.md)，并运行 `tools/check-docs.py`；涉及跨端与 UI kit 的改动再运行对应脚本，见 [依赖规则](dependency-rules.md)。
 
 ## 相关文档

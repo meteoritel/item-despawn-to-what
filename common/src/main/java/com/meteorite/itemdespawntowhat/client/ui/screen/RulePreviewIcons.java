@@ -10,8 +10,6 @@ import com.meteorite.itemdespawntowhat.client.ui.shared.TagPreviewIcons;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import com.mojang.blaze3d.systems.RenderSystem;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -20,9 +18,7 @@ import org.jetbrains.annotations.Nullable;
 /** 管理页和动作导航共用产出图标；图标只表示类型，文字保留完整方案信息。 */
 public final class RulePreviewIcons {
     private static final float DISABLED_BRIGHTNESS = 0.35F;
-    // 图标缓存上限：列表规模有限，超出后淘汰最久未用的项，避免缓存无限增长
-    private static final int MAX_CACHED_ICONS = 256;
-    // 未填 age 时按成年实体预览；缓存键与图标构造共用这一默认值
+    // 未填 age 时按成年实体预览；图标构造统一使用这一默认值
     private static final int DEFAULT_AGE = 0;
     // 标签引用前缀；具体展开交给 TagPreviewIcons
     private static final String TAG_PREFIX = "#";
@@ -41,11 +37,10 @@ public final class RulePreviewIcons {
     private static final String FIELD_BLOCK = "block";
     private static final String FIELD_AGE = "age";
     private static final String FIELD_USE_SOURCE_BLOCK = "use_source_block";
-    // 源方块图标缓存键前缀；同一条规则的首个源物品决定图标
-    private static final String SOURCE_BLOCK_KEY = "source-block/";
-    private static final Map<String, UiIcon> ICONS = new LinkedHashMap<>(32, 0.75F, true);
+    // 固定图标只建一次：同一动作类型共享同一实例，无需参与任何键查找
+    private static final UiIcon LOOT_TABLE_ICON = new UiIcon.Item(new ItemStack(Items.CHEST));
+    private static final UiIcon EXPLOSION_ICON = new UiIcon.Item(new ItemStack(Items.TNT));
     private RulePreviewIcons() { }
-    public static void clear() { ICONS.clear(); }
 
     // 图标与文本分别处理禁用色；缓冲必须在调色前后提交，避免污染相邻的启用条目。
     static void render(GuiGraphics graphics, UiIcon icon, int x, int y, boolean active) {
@@ -66,41 +61,39 @@ public final class RulePreviewIcons {
         }
     }
 
+    /**
+     * 动作图标：先按类型分派，只读该类型实际用到的参数。
+     *
+     * <p>动作在每次重装快照时都是新的 RuleValue 句柄，节点身份不能跨重装复用；而内容键
+     * 需要把六段参数拼成字符串并在每次调用时付费。因此这里不做键查找，图标实例复用交给
+     * 各类型自己的有界缓存（物品/方块/实体图标缓存上限同为 256）。</p>
+     *
+     * @param action 动作节点
+     * @return 对应图标；未知类型返回 null
+     */
     public static @Nullable UiIcon action(@Nullable RuleValue action) {
         if (action == null) return null;
-        // 事件图标按种类前缀建好，不参与下面的动作键缓存；天气多态也不会撞键。
+        // 事件图标按种类前缀建好，不参与动作分派
         UiIcon event = EventPreviewIcons.icon(action);
         if (event != null) return event;
-        String key = text(action, RuleFields.TYPE) + "/" + text(action, FIELD_VARIANT) + "/" + text(action, FIELD_ITEM) + "/"
-                + text(action, FIELD_ENTITY) + "/" + text(action, FIELD_BLOCK) + "/" + (action.has(FIELD_AGE) ? action.child(FIELD_AGE) : DEFAULT_AGE);
-        if (ICONS.containsKey(key)) return ICONS.get(key);
-        UiIcon icon = createAction(action);
-        ICONS.put(key, icon);
-        trimCache();
-        return icon;
-    }
-
-    // 访问序链表保证淘汰的是最久未用的键；两处写入共用同一上限。
-    private static void trimCache() {
-        while (ICONS.size() > MAX_CACHED_ICONS) ICONS.remove(ICONS.keySet().iterator().next());
-    }
-
-    private static @Nullable UiIcon createAction(@Nullable RuleValue action) {
-        if (action == null) return null;
         String type = text(action, RuleFields.TYPE);
-        if (type.equals(SPAWN_ENTITY_TYPE)) {
+        if (SPAWN_ENTITY_TYPE.equals(type)) {
             return switch (text(action, FIELD_VARIANT)) {
                 case "item" -> CatalogPreviewIcons.iconFor(RuleCatalogType.ITEM, text(action, FIELD_ITEM));
-                case "entity" -> text(action, FIELD_ENTITY).startsWith(TAG_PREFIX) ? TagPreviewIcons.resolve(RuleCatalogType.ENTITY, text(action, FIELD_ENTITY)).icon()
-                        : EntityPreviewIcons.icon(text(action, FIELD_ENTITY), age(action));
+                case "entity" -> {
+                    String entity = text(action, FIELD_ENTITY);
+                    yield entity.startsWith(TAG_PREFIX)
+                            ? TagPreviewIcons.resolve(RuleCatalogType.ENTITY, entity).icon()
+                            : EntityPreviewIcons.icon(entity, age(action));
+                }
                 case "experience" -> EntityPreviewIcons.icon(EXPERIENCE_ORB, DEFAULT_AGE);
                 default -> null;
             };
         }
         return switch (type) {
             case PLACE_BLOCK_TYPE -> CatalogPreviewIcons.iconFor(RuleCatalogType.BLOCK, text(action, FIELD_BLOCK));
-            case LOOT_TABLE_TYPE -> new UiIcon.Item(new ItemStack(Items.CHEST));
-            case EXPLOSION_TYPE -> new UiIcon.Item(new ItemStack(Items.TNT));
+            case LOOT_TABLE_TYPE -> LOOT_TABLE_ICON;
+            case EXPLOSION_TYPE -> EXPLOSION_ICON;
             default -> null;
         };
     }
@@ -116,16 +109,12 @@ public final class RulePreviewIcons {
         return null;
     }
 
+    // 源方块图标由首条源物品决定；直接命中方块图标缓存，不再另建字符串键
     private static @Nullable UiIcon actions(@Nullable RuleValue value, RuleValue rule) {
         if (value != null && value.isList()) for (RuleValue entry : value.items()) {
             if (entry.isMapping()) {
                 if (text(entry, RuleFields.TYPE).equals(PLACE_BLOCK_TYPE) && boolOf(entry.child(FIELD_USE_SOURCE_BLOCK))) {
-                    String key = SOURCE_BLOCK_KEY + RuleRecipeView.firstSource(rule);
-                    if (!ICONS.containsKey(key)) {
-                        ICONS.put(key, RuleRecipeView.firstSourceIcon(rule));
-                        trimCache();
-                    }
-                    return ICONS.get(key);
+                    return RuleRecipeView.firstSourceIcon(rule);
                 }
                 UiIcon icon = action(entry);
                 if (icon != null) return icon;

@@ -54,6 +54,10 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
         final int depth;
         final int top;
         final int height;
+        // 渲染用矩形（内容坐标）：按值更新而不是每次绘制都新建，静止帧因此不逐行分配；
+        // 重建可见行时随行对象一起重建，不会跨行复用旧几何。
+        UiRect rowRect = new UiRect(0, 0, 0, 0);
+        UiRect textRect = new UiRect(0, 0, 0, 0);
 
         VisibleRow(UiTreeNode<N> node, int depth, int top, int height) {
             this.node = node;
@@ -93,10 +97,6 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
     // 字体由 render 接收；保留构造参数以兼容现有组件 API。
     // 注入的宿主主题
     private final UiHostTheme theme;
-    // 兼容入口：未迁移模块沿用默认宿主主题
-    public UiTreeView(@SuppressWarnings("unused") Font font, NodeRenderer<T> nodeRenderer) {
-        this(UiHostThemes.defaultTheme(), font, nodeRenderer);
-    }
 
     public UiTreeView(UiHostTheme theme, @SuppressWarnings("unused") Font font, NodeRenderer<T> nodeRenderer) {
         this.theme = UiHostThemes.require(theme);
@@ -205,10 +205,17 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
         return bounds;
     }
 
+    // 几何不变时不再重设视口：宿主布局每帧对齐控件矩形，重复设置会逐帧分配矩形。
+    // 行数或行高变化由 rebuild() 同步滚动范围，因此早退不会漏掉内容变化。
     @Override
     public void setBounds(int x, int y, int width, int height) {
-        this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
-        scrollView.setViewport(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
+        int nextWidth = Math.max(0, width);
+        int nextHeight = Math.max(0, height);
+        if (bounds.x() == x && bounds.y() == y && bounds.width() == nextWidth && bounds.height() == nextHeight) {
+            return;
+        }
+        this.bounds = new UiRect(x, y, nextWidth, nextHeight);
+        scrollView.setViewport(x + 1, y + 1, Math.max(0, nextWidth - 2), Math.max(0, nextHeight - 2));
         scrollView.setStep(Math.max(1, rowHeight * 2));
         syncScrollRange();
     }
@@ -228,6 +235,25 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
         scrollView.setContentHeight(contentHeight);
         int viewportHeight = scrollView.viewport().height();
         scrollView.setScrollbarVisible(contentHeight > viewportHeight);
+    }
+
+    // 行矩形按值复用：滚动或控件宽度变化时才重建，静止帧不逐行分配
+    private static <N> UiRect rowRect(VisibleRow<N> row, int rowWidth) {
+        if (row.rowRect.y() != row.top || row.rowRect.width() != rowWidth || row.rowRect.height() != row.height) {
+            row.rowRect = new UiRect(0, row.top, rowWidth, row.height);
+        }
+        return row.rowRect;
+    }
+
+    // 文本区矩形按值复用：扣除缩进与展开标记后的剩余区域
+    private static <N> UiRect textRect(VisibleRow<N> row, int rowWidth, int markerX) {
+        int textX = markerX + MARKER_WIDTH;
+        int textWidth = Math.max(0, rowWidth - markerX - MARKER_WIDTH);
+        if (row.textRect.x() != textX || row.textRect.y() != row.top
+                || row.textRect.width() != textWidth || row.textRect.height() != row.height) {
+            row.textRect = new UiRect(textX, row.top, textWidth, row.height);
+        }
+        return row.textRect;
     }
 
     // 递归展平
@@ -334,7 +360,7 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
         for (int i = firstIndex; i < visibleRows.size(); i++) {
             VisibleRow<T> visibleRow = visibleRows.get(i);
             if (visibleRow.top >= scrollView.offset() + viewport.height()) break;
-            UiRect row = new UiRect(0, visibleRow.top, rowWidth, visibleRow.height);
+            UiRect row = rowRect(visibleRow, rowWidth);
             boolean selected = visibleRow.node == selectedNode;
             if (selected) {
                 theme.drawSelection(graphics, row);
@@ -346,8 +372,7 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
                 drawTriangle(graphics, markerX + 1, row.y() + row.height() / 2,
                         visibleRow.node.isExpanded());
             }
-            UiRect textRow = new UiRect(markerX + MARKER_WIDTH, row.y(),
-                    Math.max(0, row.width() - markerX - MARKER_WIDTH), row.height());
+            UiRect textRow = textRect(visibleRow, rowWidth, markerX);
             nodeRenderer.renderNode(graphics, font, visibleRow.node, textRow, visibleRow.depth, selected, i == hoveredIndex, focused);
         }
         scrollView.pop(graphics);

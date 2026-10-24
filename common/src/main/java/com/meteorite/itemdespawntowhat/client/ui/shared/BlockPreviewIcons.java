@@ -3,10 +3,12 @@ package com.meteorite.itemdespawntowhat.client.ui.shared;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiBlockPreview;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiModelBounds;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.block.state.BlockState;
@@ -15,6 +17,8 @@ import org.jetbrains.annotations.Nullable;
 /** 方块预览的宿主缓存；只对可见模型测量一次，资源或世界切换时失效。 */
 public final class BlockPreviewIcons {
     private static final Map<String, Preview> CACHE = new LinkedHashMap<>(32, 0.75F, true);
+    // 图标 wrapper 有界复用：同一注册名在多行预览与多次重装间共享实例，上限与其它图标缓存一致
+    private static final Map<String, UiIcon> ICONS = new LinkedHashMap<>(32, 0.75F, true);
     private static Object generation;
     private static Object world;
     // 没有可见模型（告示牌等由 BlockEntityRenderer 绘制的方块）时的中性占位标记
@@ -30,27 +34,43 @@ public final class BlockPreviewIcons {
     }
 
     private BlockPreviewIcons() { }
-    public static void clear() { CACHE.clear(); generation = null; world = null; }
+    public static void clear() { CACHE.clear(); ICONS.clear(); generation = null; world = null; }
 
     public static UiIcon icon(String id) {
-        return new UiIcon.Rendered(18, 18, (graphics, box) -> {
-            Object resources = EntityPreviewIcons.generation();
-            Object nextWorld = Minecraft.getInstance().level;
-            if (generation != resources || world != nextWorld) { CACHE.clear(); generation = resources; world = nextWorld; }
-            Preview preview = CACHE.computeIfAbsent(normalized(id), key -> {
-                ResourceLocation location = ResourceLocation.tryParse(key);
-                var block = location == null ? null : BuiltInRegistries.BLOCK.getOptional(location).orElse(null);
-                return block == null ? null : new Preview(block.defaultBlockState());
-            });
-            while (CACHE.size() > 256) CACHE.remove(CACHE.keySet().iterator().next());
-            if (preview != null && !preview.failed) {
-                if (!preview.measured) { preview.bounds = UiBlockPreview.measure(preview.state); preview.measured = true; }
-                if (preview.bounds != null && UiBlockPreview.render(graphics, box, preview.state,
-                        (Util.getMillis() % 10000) / 10000F * (float) (Math.PI * 2), preview.bounds)) return;
-                preview.failed = true;
-            }
-            UNAVAILABLE.render(graphics, box.x() + (box.width() - 16) / 2, box.y() + (box.height() - 16) / 2);
+        String key = normalized(id);
+        UiIcon icon = ICONS.computeIfAbsent(key,
+                name -> new UiIcon.Rendered(18, 18, (graphics, box) -> draw(graphics, box, name)));
+        while (ICONS.size() > 256) ICONS.remove(ICONS.keySet().iterator().next());
+        return icon;
+    }
+
+    // wrapper 复用不影响失效：每次绘制都重新取资源代号，世界或资源切换时清空测量缓存
+    private static void draw(GuiGraphics graphics, UiRect box, String id) {
+        Object resources = EntityPreviewIcons.generation();
+        Object nextWorld = Minecraft.getInstance().level;
+        if (generation != resources || world != nextWorld) {
+            CACHE.clear();
+            generation = resources;
+            world = nextWorld;
+        }
+        Preview preview = CACHE.computeIfAbsent(id, key -> {
+            ResourceLocation location = ResourceLocation.tryParse(key);
+            var block = location == null ? null : BuiltInRegistries.BLOCK.getOptional(location).orElse(null);
+            return block == null ? null : new Preview(block.defaultBlockState());
         });
+        while (CACHE.size() > 256) CACHE.remove(CACHE.keySet().iterator().next());
+        if (preview != null && !preview.failed) {
+            if (!preview.measured) {
+                preview.bounds = UiBlockPreview.measure(preview.state);
+                preview.measured = true;
+            }
+            if (preview.bounds != null && UiBlockPreview.render(graphics, box, preview.state,
+                    (Util.getMillis() % 10000) / 10000F * (float) (Math.PI * 2), preview.bounds)) {
+                return;
+            }
+            preview.failed = true;
+        }
+        UNAVAILABLE.render(graphics, box.x() + (box.width() - 16) / 2, box.y() + (box.height() - 16) / 2);
     }
 
     /**

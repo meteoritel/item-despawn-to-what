@@ -14,6 +14,7 @@ import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLay
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.TITLE_BAND_TOP;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.TITLE_TEXT_SCALE;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.isContainer;
+import com.mojang.blaze3d.systems.RenderSystem;
 import com.meteorite.itemdespawntowhat.client.edit.ConditionTreeNodes;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiDotGrid;
@@ -67,8 +68,17 @@ final class ConditionGraphRenderer {
         int step = Math.max(1, (int) Math.round(DOT_BASE_STEP * transform.scale()));
         int gridX = alignToGrid(transform.toScreenX(0), viewport.x(), step);
         int gridY = alignToGrid(transform.toScreenY(0), viewport.y(), step);
-        UiDotGrid.draw(graphics, transform.scale(), gridX, gridY, viewport.right(), viewport.bottom(),
-                DOT_BASE_STEP, theme.palette().canvasGridDot());
+        // 点阵纹理背景透明，混合状态由绘制方按 alpha 贴图口径负责：先提交批次，结束后提交本层并恢复默认关闭
+        graphics.flush();
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        try {
+            UiDotGrid.draw(graphics, transform.scale(), gridX, gridY, viewport.right(), viewport.bottom(),
+                    DOT_BASE_STEP, theme.palette().canvasGridDot());
+        } finally {
+            graphics.flush();
+            RenderSystem.disableBlend();
+        }
     }
 
     private static int alignToGrid(double originScreen, int start, int step) {

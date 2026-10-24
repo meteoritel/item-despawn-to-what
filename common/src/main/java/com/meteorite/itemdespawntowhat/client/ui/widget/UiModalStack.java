@@ -46,10 +46,6 @@ public final class UiModalStack implements UiWidget {
 
     // 注入的宿主主题
     private final UiHostTheme theme;
-    // 兼容入口：未迁移模块沿用默认宿主主题
-    public UiModalStack() {
-        this(UiHostThemes.defaultTheme());
-    }
 
     public UiModalStack(UiHostTheme theme) {
         this.theme = UiHostThemes.require(theme);
@@ -61,9 +57,16 @@ public final class UiModalStack implements UiWidget {
         return bounds;
     }
 
+    // 屏幕区域未变时不再重排：弹窗打开期间的静止帧若反复 relayout，会逐帧重排内容控件（目录网格布局成本很高）。
+    // push/close 与窗口 resize 都走显式 relayout 或传入新矩形，因此早退不会漏掉这三种必须重排的时机。
     @Override
     public void setBounds(int x, int y, int width, int height) {
-        this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
+        int nextWidth = Math.max(0, width);
+        int nextHeight = Math.max(0, height);
+        if (bounds.x() == x && bounds.y() == y && bounds.width() == nextWidth && bounds.height() == nextHeight) {
+            return;
+        }
+        this.bounds = new UiRect(x, y, nextWidth, nextHeight);
         relayout();
     }
 

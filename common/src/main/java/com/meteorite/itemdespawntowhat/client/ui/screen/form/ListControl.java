@@ -46,8 +46,9 @@ final class ListControl extends FormControl {
     }
 
     @Override
-    List<String> inputText() {
-        return List.of(editor.input().value(), Integer.toString(editor.editingIndex()));
+    void appendInputText(List<String> out) {
+        out.add(editor.input().value());
+        out.add(Integer.toString(editor.editingIndex()));
     }
 
     @Override

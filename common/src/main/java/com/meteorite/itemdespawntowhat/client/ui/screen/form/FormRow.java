@@ -38,6 +38,8 @@ final class FormRow {
         buttons.clear();
         buttons.addAll(pickers);
         buttons.addAll(actions);
+        // 按钮数量或顺序变化后旧的内容坐标失效，等下一次布局测量重建
+        buttonLayoutCount = 0;
     }
 
     final EditorField field;
@@ -56,6 +58,43 @@ final class FormRow {
     boolean narrow;
     // 布局结论：本行是否绘制字段标签（叠排的独立数量行同样为真）
     boolean labelShown;
+
+    // 行尾按钮的内容坐标：x 相对控件列左缘，y 相对控件行顶端（不含控件行的竖直偏移）。
+    // 测量时写入一次，渲染同步只叠加屏幕原点，避免每帧重算换行结果与逐按钮文本宽度。
+    // 失效口径：按钮列表/文本、字体或语言度量、表单可用宽度与标签列宽、行高、可见性变化时
+    // 由 FormView 重新测量并覆盖；按钮数量变化时 refreshButtons 清零，避免按旧坐标摆放新按钮。
+    int buttonLayoutCount;
+    int[] buttonLayoutX = new int[0];
+    int[] buttonLayoutY = new int[0];
+    int[] buttonLayoutW = new int[0];
+    int[] buttonLayoutH = new int[0];
+
+    /**
+     * 准备按钮内容坐标缓冲：只在本行按钮数量变化时重建数组，测量路径复用同一份缓冲。
+     *
+     * @param count 本行按钮数量
+     */
+    void ensureButtonLayout(int count) {
+        buttonLayoutCount = count;
+        if (buttonLayoutX.length == count) return;
+        buttonLayoutX = new int[count];
+        buttonLayoutY = new int[count];
+        buttonLayoutW = new int[count];
+        buttonLayoutH = new int[count];
+    }
+
+    /**
+     * 叠排数量行的下行按钮跟随上行：两行按钮列表相同，只需共享同一份内容坐标。
+     *
+     * @param source 上行行状态
+     */
+    void copyButtonLayoutFrom(FormRow source) {
+        buttonLayoutCount = source.buttonLayoutCount;
+        buttonLayoutX = source.buttonLayoutX;
+        buttonLayoutY = source.buttonLayoutY;
+        buttonLayoutW = source.buttonLayoutW;
+        buttonLayoutH = source.buttonLayoutH;
+    }
 
     FormRow(EditorField field, String path, FormControl control) {
         this.field = field;

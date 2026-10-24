@@ -7,6 +7,7 @@ import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import java.util.List;
 import net.minecraft.client.gui.Font;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * 表单行布局与滚动几何：按可用宽度排布每一行（标签列 / 控件 / 行尾按钮），并把结果同步到屏幕坐标。
@@ -55,33 +56,64 @@ final class FormRowLayout {
         return Math.min(effectiveLabelWidth, inlineSpan);
     }
 
-    static void syncBounds(List<FormRow> rows, int viewportX, int viewportY, int scrollOffset, Font font) {
+    /**
+     * 把测量好的行几何同步到屏幕坐标：只叠加视口原点与滚动偏移。
+     *
+     * <p>按钮换行结果与逐按钮内容坐标在 {@link #layoutRows} 测量时已写入行状态，这里不再测量文本宽度、
+     * 不再分配换行数组与临时矩形，因此静止帧与滚动帧的同步都不触发字体测量。</p>
+     *
+     * @param rows    表单行
+     * @param originX 表单内容原点屏幕 X（控件列左缘基于该值）
+     * @param originY 表单内容原点屏幕 Y（已含视口位置与滚动偏移）
+     */
+    static void syncBounds(List<FormRow> rows, int originX, int originY) {
         for (FormRow row : rows) {
             if (!row.visible) continue;
-            int screenY = rowScreenY(viewportY, row, scrollOffset);
-            row.control.setBounds(viewportX + row.controlRelX, screenY + row.controlRelY, row.controlWidth);
-            int startX = viewportX + row.controlRelX;
-            if (row.buttonsBelow) {
-                // 换行按钮组：测量（layoutRows）与实际摆放共用同一次 wrap 结果
-                int[] widths = new int[row.buttons.size()];
-                for (int index = 0; index < row.buttons.size(); index++) {
-                    widths[index] = Math.min(actionWidth(font, row.buttons.get(index)), row.buttonWrapWidth);
-                }
-                UiFlowLayout.Wrap flow = UiFlowLayout.wrap(widths, row.buttonWrapWidth, 2, row.buttonHeight);
-                int originY = screenY + row.controlRelY + row.control.layoutHeight() + 2;
-                for (int index = 0; index < row.buttons.size(); index++) {
-                    UiRect offset = flow.bounds(index);
-                    row.buttons.get(index).setBounds(startX + offset.x(), originY + offset.y(), offset.width(), offset.height());
-                }
-                continue;
+            int screenY = originY + row.contentY;
+            row.control.setBounds(originX + row.controlRelX, screenY + row.controlRelY, row.controlWidth);
+            int buttonLeft = originX + row.controlRelX;
+            int buttonTop = screenY + row.controlRelY;
+            for (int index = 0; index < row.buttonLayoutCount; index++) {
+                row.buttons.get(index).setBounds(buttonLeft + row.buttonLayoutX[index],
+                        buttonTop + row.buttonLayoutY[index],
+                        row.buttonLayoutW[index], row.buttonLayoutH[index]);
             }
-            int cursor = startX + row.controlWidth + 2;
-            int buttonY = screenY + row.controlRelY;
-            for (var action : row.buttons) {
-                int width = Math.min(actionWidth(font, action), row.buttonWrapWidth);
-                action.setBounds(cursor, buttonY, width, row.buttonHeight);
-                cursor += width + 2;
+        }
+    }
+
+    /**
+     * 把测量阶段的按钮排布固化成行内容坐标，供后续同步与命中直接读取。
+     *
+     * <p>只在真实几何输入变化（宽度/行高/按钮文本/可见性）触发的测量里执行，因此这里剩余的
+     * 文本测量与换行数组分配不会进入帧循环。</p>
+     *
+     * @param row     目标行
+     * @param font    文本测量字体
+     * @param flow    换行结果；行尾横排按钮为 {@code null}
+     * @param widths  换行按钮宽度；与 {@code flow} 同时给出
+     */
+    private static void storeButtonLayout(FormRow row, Font font, @Nullable UiFlowLayout.Wrap flow, int[] widths) {
+        int count = row.buttons.size();
+        row.ensureButtonLayout(count);
+        if (flow != null) {
+            for (int index = 0; index < count; index++) {
+                UiRect offset = flow.bounds(index);
+                row.buttonLayoutX[index] = offset.x();
+                // y 相对控件行顶端：换行按钮组从控件底部下方 2px 起排
+                row.buttonLayoutY[index] = row.control.layoutHeight() + 2 + offset.y();
+                row.buttonLayoutW[index] = offset.width();
+                row.buttonLayoutH[index] = offset.height();
             }
+            return;
+        }
+        int cursor = row.controlWidth + 2;
+        for (int index = 0; index < count; index++) {
+            row.buttonLayoutX[index] = cursor;
+            row.buttonLayoutY[index] = 0;
+            row.buttonLayoutW[index] = widths == null
+                    ? Math.min(actionWidth(font, row.buttons.get(index)), row.buttonWrapWidth) : widths[index];
+            row.buttonLayoutH[index] = row.buttonHeight;
+            cursor += row.buttonLayoutW[index] + 2;
         }
     }
 
@@ -101,6 +133,9 @@ final class FormRowLayout {
         for (FormRow row : rows) {
             if (!row.visible) continue;
             if (row.pairedAbove != null && row.pairedAbove.visible) continue;
+            // 本行按钮排布：测量阶段算一次，随内容坐标固化到行上，滚动/同步不再重算
+            UiFlowLayout.Wrap buttonFlow = null;
+            int[] buttonWidths = null;
             boolean stackedCounts = false;
             if (row.control instanceof ItemCountsControl counts) {
                 boolean paired = row.pairedBelow != null && row.pairedBelow.visible;
@@ -147,17 +182,23 @@ final class FormRowLayout {
                 row.contentHeight = Math.max(controlHeight + row.controlRelY, LABEL_LINE_HEIGHT);
                 row.buttonHeight = Math.max(theme.rowHeight(), minimumControlHeight);
                 if (row.buttonsBelow) {
-                    int[] widths = new int[row.buttons.size()];
+                    buttonWidths = new int[row.buttons.size()];
                     for (int index = 0; index < row.buttons.size(); index++) {
-                        widths[index] = Math.min(actionWidth(font, row.buttons.get(index)), controlWidth);
+                        buttonWidths[index] = Math.min(actionWidth(font, row.buttons.get(index)), controlWidth);
                     }
-                    UiFlowLayout.Wrap flow = UiFlowLayout.wrap(widths, controlWidth, 2, row.buttonHeight);
+                    buttonFlow = UiFlowLayout.wrap(buttonWidths, controlWidth, 2, row.buttonHeight);
                     // 空按钮组沿用旧口径：按一行高度计
-                    int lines = Math.max(1, flow.rowCount());
+                    int lines = Math.max(1, buttonFlow.rowCount());
                     row.contentHeight += 2 + lines * row.buttonHeight + (lines - 1) * 2;
                 }
             }
             row.contentY = cursor;
+            if (row.field.type() == EditorFieldType.NOTE) {
+                // 说明行不摆行尾按钮，清空缓存避免沿用上一版结构的坐标
+                row.ensureButtonLayout(0);
+            } else {
+                storeButtonLayout(row, font, buttonFlow, buttonWidths);
+            }
             if (row.pairedBelow != null && row.pairedBelow.visible
                     && row.control instanceof ItemCountsControl upper
                     && row.pairedBelow.control instanceof ItemCountsControl lower) {
@@ -174,6 +215,7 @@ final class FormRowLayout {
                 paired.labelWidth = 0;
                 paired.narrow = false;
                 paired.labelVisible = false;
+                paired.copyButtonLayoutFrom(row);
             }
             cursor += row.contentHeight + rowGap;
         }

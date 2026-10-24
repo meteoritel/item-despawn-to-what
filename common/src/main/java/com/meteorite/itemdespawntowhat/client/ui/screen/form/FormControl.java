@@ -62,6 +62,9 @@ abstract class FormControl {
     private @Nullable RuleValue loadedValue;
     // 用户是否真正交互过（点击/切换/提交/增删改）；程序化回填不置位
     private boolean edited;
+    // 控件高度变化出口：条件树等控件的高度随内容/行数变化，由 FormView 装配行时登记，
+    // 转发到 FormView.invalidateMeasure 使行测量与页面布局缓存失效
+    private @Nullable Runnable geometryListener;
 
     FormControl(EditorField field) {
         this.field = field;
@@ -134,6 +137,25 @@ abstract class FormControl {
         return true;
     }
 
+    /**
+     * 登记控件几何高度变化回调。
+     *
+     * <p>FormView 装配行时统一登记，转发到行测量失效；控件只在自身高度真的变化之后调用
+     * {@link #notifyGeometryChanged()}。</p>
+     *
+     * @param listener 回调；null 表示取消登记
+     */
+    void setOnGeometryChanged(@Nullable Runnable listener) {
+        this.geometryListener = listener;
+    }
+
+    /** 通知宿主行：本控件几何高度已变化，行测量与页面布局需要重算。 */
+    protected void notifyGeometryChanged() {
+        if (geometryListener != null) {
+            geometryListener.run();
+        }
+    }
+
     // 列表等复合控件先结束尚未提交的条目输入。
     void finishInput() {
     }
@@ -147,23 +169,47 @@ abstract class FormControl {
         return false;
     }
 
-    // 文本快照使用控件固定焦点顺序，复合数量、气候输入同样覆盖。
+    // 焦点目标与文本快照缓冲：同一控件每 tick 都要扫描一次输入文本，复用这两个列表
+    // 可把「每行两个 ArrayList」降为零分配；复合控件的覆写实现按同样口径复用自身缓冲。
+    private final List<UiFocusTarget> focusTargetBuffer = new ArrayList<>();
+    private final List<String> inputTextBuffer = new ArrayList<>();
+
+    /**
+     * 文本快照使用控件固定焦点顺序，复合数量、气候输入同样覆盖。
+     *
+     * <p>返回本控件复用的缓冲：调用方只可立即比较或复制（会话保留与装载回填都会复制），
+     * 不得跨调用持有——下一次扫描会清空重填。</p>
+     *
+     * @return 本控件当前输入文本（复用缓冲）
+     */
     List<String> inputText() {
-        List<UiFocusTarget> targets = new ArrayList<>();
-        addFocusTargets(targets);
-        List<String> text = new ArrayList<>();
-        for (UiFocusTarget target : targets) {
-            if (target instanceof UiTextInput input) text.add(input.value());
-            else if (target instanceof UiTextArea area) text.add(area.value());
+        inputTextBuffer.clear();
+        appendInputText(inputTextBuffer);
+        return inputTextBuffer;
+    }
+
+    /**
+     * 按控件固定顺序把当前输入文本追加到 {@code out}。
+     *
+     * <p>复合控件覆写本方法把子控件内容并入同一缓冲，避免逐行新建列表；实现不得假设
+     * {@code out} 为空，也不得持有它。</p>
+     *
+     * @param out 接收容器
+     */
+    void appendInputText(List<String> out) {
+        focusTargetBuffer.clear();
+        addFocusTargets(focusTargetBuffer);
+        for (UiFocusTarget target : focusTargetBuffer) {
+            if (target instanceof UiTextInput input) out.add(input.value());
+            else if (target instanceof UiTextArea area) out.add(area.value());
         }
-        return text;
     }
 
     void restoreInputText(List<String> text) {
-        List<UiFocusTarget> targets = new ArrayList<>();
-        addFocusTargets(targets);
+        focusTargetBuffer.clear();
+        addFocusTargets(focusTargetBuffer);
         int index = 0;
-        for (UiFocusTarget target : targets) {
+        for (UiFocusTarget target : focusTargetBuffer) {
             if (index >= text.size()) break;
             if (target instanceof UiTextInput input) input.setValue(text.get(index++));
             else if (target instanceof UiTextArea area) area.setValue(text.get(index++));

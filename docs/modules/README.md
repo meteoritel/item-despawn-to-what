@@ -32,7 +32,7 @@ Gradle 侧只有 `common`、`fabric`、`neoforge` 三个子项目；层 3 的模
 | [authoring](authoring.md) | 候选目录、编辑会话与落盘、命令与调试场景 | `common/core/catalog`、`common/core/network`、`common/core/service` 的编辑落盘部分、`common/core/command`、`common/src/dev`、`neoforge/src/probe` |
 | [client-editor](client-editor.md) | 客户端协议工作区、草稿与撤销、类型编辑器注册表 | `common/client/net`、`common/client/edit` |
 | [ui-kit](ui-kit.md) | 声明式 UI kit 的公开面与依赖边界 | `common/client/ui/kit` |
-| [client-ui](client-ui.md) | 编辑器界面、主题与控件适配 | `common/client/ui/theme`、`common/client/ui/widget`、`common/client/ui/shared`、`common/client/ui/screen`、`common/client/ui/screen/form`、`common/client/ui/prototype` |
+| [client-ui](client-ui.md) | 编辑器界面、主题与控件适配 | `common/client/ui/theme`、`common/client/ui/widget`、`common/client/ui/shared`、`common/client/ui/screen`、`common/client/ui/screen/form` |
 
 `RuleIndex` 与 `CatalystThresholdProjection` 的实现在 `common/core/runtime`：rule-loading 负责它们的构建入口与顺序，conversion-runtime 负责持有索引与查询，逐包归属见 [包职责](../architecture/package-responsibility.md)。
 

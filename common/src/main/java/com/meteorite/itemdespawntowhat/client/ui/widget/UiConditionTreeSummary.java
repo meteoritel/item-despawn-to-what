@@ -100,6 +100,8 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     private @Nullable String selectedPath;
     // 悬停行下标，-1 表示无悬停
     private int hoveredIndex = -1;
+    // 选中行矩形按值复用：选中行每帧要画选中底色与标记，几何不变时不重复分配
+    private UiRect selectedRowRect = new UiRect(0, 0, 0, 0);
     // 行高
     private int rowHeight = DEFAULT_ROW_HEIGHT;
     // 条件类型选项
@@ -134,7 +136,12 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
 
     // 外部设置表达式：不触发变更回调，避免与宿主形成回环
     public void setExpression(ConditionExpression newExpression) {
-        this.expression = newExpression == null ? ConditionExpression.EMPTY : newExpression;
+        ConditionExpression next = newExpression == null ? ConditionExpression.EMPTY : newExpression;
+        // ConditionExpression 是不可变 record：内容相等时可见行不会变化，跳过整树展平
+        if (next.equals(expression)) {
+            return;
+        }
+        this.expression = next;
         rebuild();
     }
 
@@ -185,7 +192,12 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     }
 
     public UiConditionTreeSummary setRowHeight(int newRowHeight) {
-        this.rowHeight = Math.max(9, newRowHeight);
+        int next = Math.max(9, newRowHeight);
+        // 行高没变时行几何不变，无需重建可见行
+        if (next == rowHeight) {
+            return this;
+        }
+        this.rowHeight = next;
         rebuild();
         return this;
     }
@@ -207,14 +219,23 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
 
     // 展开全部
     public void expandAll() {
+        // 本来就没有折叠节点：可见行不会变化
+        if (collapsed.isEmpty()) {
+            return;
+        }
         collapsed.clear();
         rebuild();
     }
 
     // 将整棵树折叠为根节点
     public void collapseAll() {
+        boolean collapseRoot = expression.root() != null;
+        // 已经是目标折叠态：重复点击不重建
+        if (collapsed.size() == (collapseRoot ? 1 : 0) && (!collapseRoot || collapsed.contains(ConditionTreeContract.ROOT_PATH))) {
+            return;
+        }
         collapsed.clear();
-        if (expression.root() != null) {
+        if (collapseRoot) {
             collapsed.add(ConditionTreeContract.ROOT_PATH);
         }
         rebuild();
@@ -251,9 +272,13 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         if (nodePath == null) {
             return;
         }
-        collapsed.removeIf(ancestor -> nodePath.startsWith(ancestor + "."));
+        boolean collapsedChanged = collapsed.removeIf(ancestor -> nodePath.startsWith(ancestor + "."));
+        boolean selectionChanged = !nodePath.equals(selectedPath);
         selectedPath = nodePath;
-        rebuild();
+        // 只有展开态或选中项真的变化才需要重排可见行；滚动定位始终执行，命中路径语义不变
+        if (collapsedChanged || selectionChanged) {
+            rebuild();
+        }
         ensureVisible(indexOfPath(nodePath));
     }
 
@@ -264,14 +289,23 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
 
     @Override
     public void setBounds(int x, int y, int width, int height) {
-        this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
-        scrollView.setViewport(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
+        int nextWidth = Math.max(0, width);
+        int nextHeight = Math.max(0, height);
+        // 几何是「视图」而不是内容：不变时仅保留现有可见行，不整树展平；
+        // 内容变化统一走 rebuild()，所以早退不会漏掉行数或表达式变更。
+        if (bounds.x() == x && bounds.y() == y && bounds.width() == nextWidth && bounds.height() == nextHeight) {
+            return;
+        }
+        this.bounds = new UiRect(x, y, nextWidth, nextHeight);
+        scrollView.setViewport(x + 1, y + 1, Math.max(0, nextWidth - 2), Math.max(0, nextHeight - 2));
         scrollView.setStep(Math.max(1, rowHeight * 2));
-        rebuild();
+        updateScrollRange();
     }
 
-    // 重新展平可见行并同步滚动范围
+    // 重新展平可见行并同步滚动范围；只在表达式、折叠态、选中路径等内容真的变化时调用
     private void rebuild() {
+        // 行高可能已变（setRowHeight），滚动步长按行高派生，必须与可见行一起刷新
+        scrollView.setStep(Math.max(1, rowHeight * 2));
         rows.clear();
         ConditionNode root = expression.root();
         if (inspectedExpression != expression) {
@@ -293,8 +327,14 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         if (hoveredIndex >= rows.size()) {
             hoveredIndex = -1;
         }
-        scrollView.setContentHeight(rows.size() * rowHeight);
-        scrollView.setScrollbarVisible(rows.size() * rowHeight > scrollView.viewport().height());
+        updateScrollRange();
+    }
+
+    // 内容高度决定树高与滚动条；可见行或行高变化后统一在这里同步，调用方不必各自计算
+    private void updateScrollRange() {
+        int contentHeight = rows.size() * rowHeight;
+        scrollView.setContentHeight(contentHeight);
+        scrollView.setScrollbarVisible(contentHeight > scrollView.viewport().height());
     }
 
     // 违规标记按节点路径预计算：drawRow 只做一次集合查询，不再对每个可见行扫全部违规项
@@ -469,11 +509,20 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         scrollView.renderScrollbar(graphics, theme.controlStyle(UiControlRole.SECONDARY));
     }
 
+    // 选中行矩形按值复用：同一行每帧要画两次（底色与标记），几何不变时不重复分配
+    private UiRect selectionBounds(int rowY, int rowWidth) {
+        if (selectedRowRect.y() != rowY || selectedRowRect.width() != rowWidth || selectedRowRect.height() != rowHeight) {
+            selectedRowRect = new UiRect(0, rowY, rowWidth, rowHeight);
+        }
+        return selectedRowRect;
+    }
+
     private void drawRow(GuiGraphics graphics, Font renderFont, Row row, int index, int rowY, int rowWidth) {
         boolean selected = row.path().equals(selectedPath);
         if (selected) {
-            theme.drawSelection(graphics, new UiRect(0, rowY, rowWidth, rowHeight));
-            theme.drawSelectMarker(graphics, new UiRect(0, rowY, rowWidth, rowHeight));
+            UiRect selection = selectionBounds(rowY, rowWidth);
+            theme.drawSelection(graphics, selection);
+            theme.drawSelectMarker(graphics, selection);
         } else if (index == hoveredIndex) {
             graphics.fill(0, rowY, rowWidth, rowY + rowHeight, theme.palette().controlHover());
         }

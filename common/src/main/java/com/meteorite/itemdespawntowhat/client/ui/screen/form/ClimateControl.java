@@ -295,8 +295,10 @@ final class ClimateControl extends FormControl {
     }
 
     @Override
-    List<String> inputText() {
-        return List.of(Boolean.toString(matching.isChecked()), minInput.value(), maxInput.value());
+    void appendInputText(List<String> out) {
+        out.add(Boolean.toString(matching.isChecked()));
+        out.add(minInput.value());
+        out.add(maxInput.value());
     }
 
     @Override

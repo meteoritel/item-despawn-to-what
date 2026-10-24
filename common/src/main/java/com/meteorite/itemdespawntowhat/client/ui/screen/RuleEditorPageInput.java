@@ -67,8 +67,9 @@ final class RuleEditorPageInput {
                 break;
             }
         }
+        // 命中可能改变行可见性或控件高度；几何未变时这里只命中布局缓存
         if (pages.lastArea != null) {
-            pages.layout(pages.lastArea);
+            pages.ensureLayout(pages.lastArea);
         }
         if (button == 0 && !pages.rebuildPending()) {
             captureDrag(mouseX, mouseY);
@@ -105,7 +106,8 @@ final class RuleEditorPageInput {
         if (pages.pageScroll.isDragging()) {
             pages.pageScroll.mouseDragged(mouseY);
             if (pages.lastArea != null) {
-                pages.layout(pages.lastArea);
+                // 页面滚动只平移已排好的控件，不重新测量
+                pages.ensureLayout(pages.lastArea);
             }
             return true;
         }
@@ -137,7 +139,8 @@ final class RuleEditorPageInput {
         }
         boolean changed = pages.pageScroll.scrollBy(scrollY);
         if (changed && pages.lastArea != null) {
-            pages.layout(pages.lastArea);
+            // 页面滚动只平移已排好的控件，不重新测量
+            pages.ensureLayout(pages.lastArea);
         }
         return changed;
     }
