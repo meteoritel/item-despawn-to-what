@@ -92,6 +92,9 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         boolean keyPressed(int keyCode, int scanCode, int modifiers);
         boolean charTyped(char codePoint, int modifiers);
         boolean isVisible();
+
+        /** @return 参数框内的文本输入正在编辑：画布快捷键必须让位 */
+        boolean capturesKeyboard();
     }
 
     // 分组方式：∧ 全部满足 / ∨ 任一满足
@@ -1566,6 +1569,9 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         }
         // 内联框优先拿键盘：文本框聚焦时画布快捷键必须让位
         if (inlinePanel.keyPressed(keyCode, scanCode, modifiers)) return true;
+        // 文本框没消费的按键（Ctrl+D / Ctrl+0 / Ctrl+± 等）仍属于输入内容，
+        // 不能落到画布命令上，否则输入参数时会复制节点或改动视图
+        if (inlinePanel.capturesKeyboard()) return false;
         boolean control = (modifiers & GLFW.GLFW_MOD_CONTROL) != 0
                 && (modifiers & (GLFW.GLFW_MOD_ALT | GLFW.GLFW_MOD_SUPER)) == 0;
         boolean shift = (modifiers & GLFW.GLFW_MOD_SHIFT) != 0;

@@ -107,6 +107,12 @@ final class ConditionGraphInlinePanel {
         return form != null;
     }
 
+    // 参数框内文本输入正在编辑：画布快捷键让位
+    boolean capturesKeyboard() {
+        InlineEditor editor = form;
+        return editor != null && !closing && editor.capturesKeyboard();
+    }
+
     private void tickAnimation() {
         if (form == null) {
             return;

@@ -290,6 +290,11 @@ public final class LeafPanel implements UiWidget, UiFocusTarget {
         return form.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
 
+    // 参数框内正在输入文本：画布快捷键让位，避免输入字母时触发复制/缩放
+    boolean capturesKeyboard() {
+        return form.isEditing();
+    }
+
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (keyCode == GLFW.GLFW_KEY_TAB) {

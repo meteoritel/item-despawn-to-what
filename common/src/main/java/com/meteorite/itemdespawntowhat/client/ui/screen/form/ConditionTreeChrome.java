@@ -187,5 +187,9 @@ final class ConditionTreeChrome {
         @Override public boolean isVisible() {
             return panel.isVisible();
         }
+
+        @Override public boolean capturesKeyboard() {
+            return panel.capturesKeyboard();
+        }
     }
 }
