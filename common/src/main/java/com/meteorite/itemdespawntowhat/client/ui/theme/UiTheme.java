@@ -370,15 +370,4 @@ public final class UiTheme {
         return new UiRect(rect.x() + 1, rect.y() + 1, rect.width() - 2, rect.height() - 2);
     }
 
-    // 裁剪矩形到父矩形内部
-    public static UiRect clampTo(UiRect rect, UiRect container) {
-        int x1 = Math.max(rect.x(), container.x());
-        int y1 = Math.max(rect.y(), container.y());
-        int x2 = Math.min(rect.right(), container.right());
-        int y2 = Math.min(rect.bottom(), container.bottom());
-        if (x2 <= x1 || y2 <= y1) {
-            return new UiRect(container.x(), container.y(), 0, 0);
-        }
-        return new UiRect(x1, y1, x2 - x1, y2 - y1);
-    }
 }

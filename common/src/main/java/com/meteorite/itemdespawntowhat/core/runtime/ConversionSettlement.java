@@ -44,7 +44,8 @@ import java.util.function.IntConsumer;
  * 2) 准备——为承诺的每组固定效果输入：每步最多 prepare_groups_per_step 组，按组续接，
  *    固定输入按「候选 + 槽位 + 组序号」幂等，已由成功转化当刻领先准备的组直接复用；
  * 3) 派发——每开始一组时独立选候选：轮询从共享游标依次搜索能完成一组的候选，
- *    确定该组并开组后才推进游标；容量不足的候选跳过，全部候选都开不出一组时停止并返还剩余库存；
+ *    确定该组并开组后才推进游标；容量不足的候选跳过，全部候选都开不出一组时
+ *    停止并返还剩余库存；
  *    每组分配源成本，方块按实际放置占用，其它行为按组支付；效果延迟交给调度器；
  * 4) 交付——等待全部效果终态，剩余源库存分批返还后完成。
  * 协作者：
@@ -58,9 +59,11 @@ import java.util.function.IntConsumer;
  * - {@link SettlementSourceCharge} 源成本占用：同组效果共享成本，按最高占用递增扣除；
  * - {@link SettlementPhases} 阶段状态机：只维护当前阶段与合法跃迁。
  * 一次性效果（EffectType.oneShot）：不参与候选数量上限；仅含一次性效果的候选最多一组；
- * 同一源请求内每个一次性效果槽（候选 id + 槽序号）只尝试一次，概率落空或条件不满足也算已尝试，续跑不重试。
+ * 同一源请求内每个一次性效果槽（候选 id + 槽序号）只尝试一次：
+ * 概率落空或条件不满足也算已尝试，续跑不重试。
  * 真实账目只来自执行器回执（EffectResult 与 reportProgress），计划量不冒充成功量；
- * 取消（规则重载/维度卸载/停服）只落一条待返还记录，不在不安全时刻做世界写入，交给恢复任务（SettlementRecovery）交付。
+ * 取消（规则重载/维度卸载/停服）只落一条待返还记录，不在不安全时刻做世界写入，
+ * 交给恢复任务（SettlementRecovery）交付。
  */
 final class ConversionSettlement implements ServerTask {
 
@@ -140,7 +143,8 @@ final class ConversionSettlement implements ServerTask {
     private final List<ScheduledTaskHandle> effectTasks = new ArrayList<>();
     private SettlementSourceCharge sourceCharge;
 
-    // 构造结算任务：源库存 held 已在触发时刻整堆移出源实体，受控写入句柄由调用方（首次登记方）给出
+    // 构造结算任务：源库存 held 已在触发时刻整堆移出源实体，
+    // 受控写入句柄由调用方（首次登记方）给出
     ConversionSettlement(ConversionRuntime runtime, ServerScheduler scheduler, ServerLevel level, ItemEntity source,
                          Rule rule, ItemStack held, SettlementRecord.Writer writer, Vec3 triggerPosition,
                          Vec3 sourceVelocity, Map<ConversionRuntime.PreparedEffectKey, EffectPreparation> preparations,
@@ -191,7 +195,8 @@ final class ConversionSettlement implements ServerTask {
             RuntimeObserver.current().taskStepStarting(level.getServer(), kind(), tracingName());
         }
         dispatchedThisStep = 0;
-        // 步内累积：本步的账目变更只在 finally 合并落账一次，成批交付因此从「每堆一次提交」降为「每步一次」
+        // 步内累积：本步的账目变更只在 finally 合并落账一次，
+        // 成批交付因此从「每堆一次提交」降为「每步一次」
         receipts.beginStep();
         try {
             StepResult result = switch (phases.current()) {
@@ -201,7 +206,8 @@ final class ConversionSettlement implements ServerTask {
                 case DELIVERING -> deliver(budget);
                 case DONE -> StepResult.done(1);
             };
-            // 任务内统一状态出口：正常完成、显式中止、预算耗尽提前让出与交付让出都在这里按当前所有权对齐待交付量
+            // 任务内统一状态出口：正常完成、显式中止、预算耗尽提前让出与交付让出
+            // 都在这里按当前所有权对齐待交付量
             commit();
             return result;
         } catch (RuntimeException failure) {
@@ -210,13 +216,15 @@ final class ConversionSettlement implements ServerTask {
             abort("exception: " + failure.getClass().getSimpleName(), true);
             throw failure;
         } finally {
-            // 本步累积的变更无论正常出口、中止还是异常都要落账；取消回调在步外发生，不受本步累积影响
+            // 本步累积的变更无论正常出口、中止还是异常都要落账；
+            // 取消回调在步外发生，不受本步累积影响
             receipts.endStep();
         }
     }
 
-    // 任务内统一出口：所有权仍在本任务时，把记录的待交付量对齐到手里的结算库存（受控入口会落账）；
-    // 所有权已移交（中止/完成）时不再触碰待交付量，避免覆盖恢复任务推进的交付进度
+    // 任务内统一出口：所有权仍在本任务时，把记录的待交付量对齐到手里的结算库存
+    // （受控入口会落账）；所有权已移交（中止/完成）时不再触碰待交付量，
+    // 避免覆盖恢复任务推进的交付进度
     private void commit() {
         receipts.syncPendingDelivery(held.getCount());
     }
@@ -233,7 +241,8 @@ final class ConversionSettlement implements ServerTask {
     }
 
     /**
-     * 失败回调：结算步骤抛异常时按失败类型区分原因，落盘待返还量并在仍有库存时交给运行期恢复队列。
+     * 失败回调：结算步骤抛异常时按失败类型区分原因，
+     * 落盘待返还量并在仍有库存时交给运行期恢复队列。
      * 恢复队列按记录去重并带退避重试，失败不会在调度器里留下悬挂任务。
      *
      * @param failure 失败原因；为 {@code null} 时按通用任务失败处理
@@ -247,11 +256,14 @@ final class ConversionSettlement implements ServerTask {
         }
     }
 
-    // 中止结算并把待返还量落盘：取消路径（onCancelled）与异常路径（step 的 catch、onFailed）共用同一条顺序，
-    // 不新造第二份账目口径。顺序：幂等位 → 取消子任务 → 待返还同步 → 释放未支付预留 → 状态记录 → 观测。
-    // 本方法不做任何世界写入（维度卸载/停服时加入世界不安全，待返还数据留给恢复任务 SettlementRecovery）；
-    // 返回 false 表示此前已中止过（幂等，不重复写盘）。failed=true 时记 FAILED 语义，否则记 INTERRUPTED。
-    // 批量取消时单个任务收尾失败不得让同批其它任务漏掉中止：每一步各自兜异常，失败只降级为日志。
+    // 中止结算并把待返还量落盘：取消路径（onCancelled）与异常路径（step 的 catch、onFailed）
+    // 共用同一条顺序，不新造第二份账目口径。顺序：幂等位 → 取消子任务 → 待返还同步
+    // → 释放未支付预留 → 状态记录 → 观测。
+    // 本方法不做任何世界写入（维度卸载/停服时加入世界不安全，
+    // 待返还数据留给恢复任务 SettlementRecovery）；返回 false 表示此前已中止过
+    // （幂等，不重复写盘）。failed=true 时记 FAILED 语义，否则记 INTERRUPTED。
+    // 批量取消时单个任务收尾失败不得让同批其它任务漏掉中止：
+    // 每一步各自兜异常，失败只降级为日志。
     private boolean abort(String reason, boolean failed) {
         if (cancelled) {
             return false;
@@ -301,7 +313,8 @@ final class ConversionSettlement implements ServerTask {
         return true;
     }
 
-    // 计划：定组数上界 → 为第一组选候选 → 预留催化剂；预算耗尽时本刻不落决定，保持 PLANNING 下刻重试
+    // 计划：定组数上界 → 为第一组选候选 → 预留催化剂；
+    // 预算耗尽时本刻不落决定，保持 PLANNING 下刻重试
     private StepResult plan(ServerTickBudget budget) {
         budget.charge(1);
         receipts.markStarted(level.getGameTime());
@@ -457,9 +470,7 @@ final class ConversionSettlement implements ServerTask {
                 // 预算耗尽或批量上限让出：返回前由步骤出口按当前所有权对齐待交付量
                 return StepResult.yield(1, 1);
             }
-            if (!dispatchNextEffect(budget)) {
-                continue;
-            }
+            dispatchNextEffect(budget);
         }
         // 所有已支付组都已确定产物，再按桶派发；保留原定延迟，跨组尾堆只交付一次。
         while (!itemOutputs.isEmpty()) {
@@ -504,19 +515,27 @@ final class ConversionSettlement implements ServerTask {
             pendingCandidateIndex = pick;
         }
         if (rule.catalystCost() != null) {
-            if (groupThreshold == null) groupThreshold = catalystStage.thresholdCheck();
-            if (!groupThreshold.advance(budget)) {
-                if (groupThreshold.timedOut()) {
+            if (groupThreshold == null) {
+                groupThreshold = catalystStage.thresholdCheck();
+            }
+            CatalystThresholdCheck threshold = groupThreshold;
+            if (threshold != null && !threshold.advance(budget)) {
+                if (threshold.timedOut()) {
                     // 先按唯一中止出口移交库存，调度器失败回调再登记恢复任务。
                     abort("catalyst_chunk_wait_timeout", true);
                     return GroupStep.FAILED;
                 }
-                return groupThreshold.waitingForChunks() ? GroupStep.WAITING_FOR_CHUNKS : GroupStep.YIELD;
+                return threshold.waitingForChunks() ? GroupStep.WAITING_FOR_CHUNKS : GroupStep.YIELD;
             }
         }
         if (rule.consumeFluid()) {
-            if (groupFluid == null) groupFluid = catalystStage.fluidSource();
-            if (!groupFluid.advance(budget)) return GroupStep.YIELD;
+            if (groupFluid == null) {
+                groupFluid = catalystStage.fluidSource();
+            }
+            FluidSourceResolver fluid = groupFluid;
+            if (fluid != null && !fluid.advance(budget)) {
+                return GroupStep.YIELD;
+            }
         }
         // 输入统一复核后支付；流体写入与催化剂扣除之间不让出。
         CatalystReservations.PayResult pay = payment.pay(budget, record.id(), record.catalystCostPerGroup(),
@@ -527,7 +546,8 @@ final class ConversionSettlement implements ServerTask {
         }
         if (pay.outcome() == CatalystReservations.PayOutcome.CATALYST_SHORT) {
             // 真实催化剂不足（实体消失或件数被扣减）：不开该组（不扣源成本、不派发效果），
-            // 组数截断为已开始组数，释放未支付预留，剩余源库存走正常返还路径（绝不「少扣照常产出」）
+            // 组数截断为已开始组数，释放未支付预留，
+            // 剩余源库存走正常返还路径（绝不「少扣照常产出」）
             truncateGroups(PayReason.CATALYST);
             return GroupStep.TRUNCATE;
         }
@@ -566,12 +586,12 @@ final class ConversionSettlement implements ServerTask {
         return GroupStep.OPENED;
     }
 
-    // 派发本组的下一步：本组效果已派发完时关闭组并返回 false；否则派发一个槽位后返回 true
-    private boolean dispatchNextEffect(ServerTickBudget budget) {
+    // 派发本组的下一步：本组效果已派发完时关闭组，否则派发一个槽位
+    private void dispatchNextEffect(ServerTickBudget budget) {
         List<Effect> effects = candidate.effects();
         if (effectCursor >= effects.size()) {
             groupOpen = false;
-            return false;
+            return;
         }
         int slot = effectCursor++;
         Effect effect = effects.get(slot);
@@ -581,12 +601,11 @@ final class ConversionSettlement implements ServerTask {
                 RuntimeObserver.current().observe(source, "EFFECT_ONESHOT_SKIPPED", "effect", effect.type(),
                         "outcome", candidate.id(), "slot", slot, "group", groupsStarted);
             }
-            return true;
+            return;
         }
         dispatchEffect(effect, slot, groupContext, groupsStarted - 1);
         budget.charge(1);
         dispatchedThisStep++;
-        return true;
     }
 
     // 组数截断为已开始组数：剩余源库存走返还路径，未支付预留一并释放。
@@ -611,7 +630,8 @@ final class ConversionSettlement implements ServerTask {
     }
 
     // 门槛或流体在开组当刻不满足：弃当前候选组并让本结算不再选它（剩余容量置 0 是硬上界），
-    // 随后由派发循环重扫其它候选；同一刻重复查询世界只会得到同一结论，故本结算内不再重试该候选。
+    // 随后由派发循环重扫其它候选；同一刻重复查询世界只会得到同一结论，
+    // 故本结算内不再重试该候选。
     private void dropCandidateForPayment(PayReason reason) {
         if (pendingCandidateIndex >= 0) {
             groupPlan.deny(pendingCandidateIndex);
@@ -663,7 +683,8 @@ final class ConversionSettlement implements ServerTask {
                     "pending_units", record.pendingUnits(), "returned", record.deliveredReturns(),
                     "pending_delivery", record.pendingDelivery(), "prepared_groups", preparedGroupCount,
                     "pending_item_batches", pendingItemBatches,
-                    // 账本写入合并口径：本记录的落账次数与被步内合并的变更次数，供场景核对每步一次提交
+                    // 账本写入合并口径：本记录的落账次数与被步内合并的变更次数，
+                    // 供场景核对每步一次提交
                     "ledger_commits", receipts.commitCount(),
                     "ledger_deferred_mutations", receipts.deferredMutations());
         }
@@ -688,7 +709,8 @@ final class ConversionSettlement implements ServerTask {
                 record.sourceCostPerGroup(), sink, candidate.safeSpawn(), candidate.fillOrigin());
     }
 
-    // 效果派发：延迟交给调度器；成功转化当刻已固定输入的槽位按本组的固定输入执行，其余在首次执行时统一判定
+    // 效果派发：延迟交给调度器；成功转化当刻已固定输入的槽位按本组的固定输入执行，
+    // 其余在首次执行时统一判定
     private void dispatchEffect(Effect effect, int slot, EffectContext context, int groupIndex) {
         EffectPreparation preparation = preparations.get(
                 new ConversionRuntime.PreparedEffectKey(candidate.id(), slot, preparedGroupIndex(effect, groupIndex)));

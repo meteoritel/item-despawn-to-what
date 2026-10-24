@@ -210,11 +210,6 @@ public record ServerConfig(
         return maxWorkUnitsPerTick.orElse(maxChecksPerTick);
     }
 
-    // 公共调度器的软预算纳秒值
-    public long serverBudgetNanos() {
-        return Math.max(1L, serverBudgetUs) * 1000L;
-    }
-
     // 新产物临时保护刻数（20 刻/秒，允许 0）
     public int newProductProtectionTicks() {
         return Math.max(0, newProductProtectionSeconds) * 20;

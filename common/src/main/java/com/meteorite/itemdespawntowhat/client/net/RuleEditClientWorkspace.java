@@ -48,22 +48,25 @@ import java.util.UUID;
 
 /**
  * 客户端编辑会话工作区：client/net 对界面层的唯一入口。
- * 职责：镜像服务端状态机、维持心跳、提交变更集（自动分片）、接收并缓存快照/目录、组装分片、在会话失效时关闭界面。
- * 约束：本包不 import 任何 client/ui 或 client/edit 类；界面实现由 {@link EditorScreenHooks} 注册，未注册时只记日志。
+ * 职责：镜像服务端状态机、维持心跳、提交变更集（自动分片）、
+ * 接收并缓存快照/目录、组装分片、在会话失效时关闭界面。
+ * 约束：本包不 import 任何 client/ui 或 client/edit 类；
+ * 界面实现由 {@link EditorScreenHooks} 注册，未注册时只记日志。
  * 线程：所有方法都在客户端主线程调用（平台接收器已切到客户端线程），内部按单线程加锁。
  */
 public final class RuleEditClientWorkspace {
 
-    /** 上行发送器：两平台的 ClientPlayNetworking 不同，由各平台客户端初始化时注入；未注入时上行载荷被丢弃并记 warn。 */
+    /**
+     * 上行发送器：两平台的 ClientPlayNetworking 不同，由各平台客户端初始化时注入；
+     * 未注入时上行载荷被丢弃并记 warn。
+     */
     public interface PacketSender {
 
         void send(CustomPacketPayload payload);
     }
 
-    /**
-     * 单条规则的来源视图加载状态：requestId 非空表示请求在途，view 非空表示已就绪，
-     * failed 表示请求失败或超时（编辑页据此降级来源对照）。不对外暴露，界面只读三态查询。
-     */
+    // 单条规则的来源视图加载状态：
+    // requestId 非空表示请求在途，view 非空表示已就绪，failed 表示请求失败或超时。
     private static final class SourceViewLoad {
         private String requestId = "";
         private boolean failed;
@@ -76,7 +79,7 @@ public final class RuleEditClientWorkspace {
         }
     }
 
-    /** 保存合并条目和正在等待的页，失败不丢弃已到达的部分。 */
+    // 保存合并条目和正在等待的页，失败不丢弃已到达的部分。
     private static final class DirectoryLoad {
         final LinkedHashMap<String, RuleCatalogEntry> entries = new LinkedHashMap<>();
         int page;
@@ -90,7 +93,6 @@ public final class RuleEditClientWorkspace {
     }
 
     // ---- 日志与单例 ----
-    // 日志
     private static final Logger LOGGER = LogManager.getLogger(Constants.MOD_ID + "-client-net");
 
     // 单例：客户端只存在一个编辑会话
@@ -106,37 +108,29 @@ public final class RuleEditClientWorkspace {
     // 上行发送器；未注入时所有上行报文丢弃并记日志
     private @Nullable PacketSender sender;
 
-    // S2C 消费者是否已安装
     private boolean sinksInstalled;
 
     // ---- 会话状态 ----
     private RuleEditClientState state = RuleEditClientState.FREE;
 
-    // 当前会话 id；无会话时为空串
     private String sessionId = "";
 
-    // 服务端给出的上下文中枢修订号
     private int contextRevision;
 
     // 最近一次成功打开的请求（供界面层读取会话参数）
     private @Nullable EditorOpenRequest openRequest;
 
-    // 最近一次被拒绝的打开请求（如 LOCK_BUSY），供界面层提示持有者
-    private @Nullable EditorOpenRequest openFailure;
-
-    // 最近一次收到的快照
     private @Nullable RuleSnapshot snapshot;
 
-    // 最近一次快照解析失败的原因；受理新快照或结束会话后清空，供界面区分「还在加载」与「加载失败」
+    // 最近一次快照解析失败的原因；受理新快照或结束会话后清空，
+    // 供界面区分「还在加载」与「加载失败」
     private @Nullable String snapshotFailure;
 
-    // 最近一次保存回执
     private @Nullable RuleSaveResultPayload lastResult;
     private String savingOperationId = "";
     private @Nullable RuleSaveProgress saveProgress;
     private long progressSequence;
     private boolean cancelRequested;
-    // 最近一次发送心跳的客户端 tick
     private long lastHeartbeatTick;
     // 会话收尾重入保护：界面 close 回调里若再次调用本工作区的 close/reset，直接忽略
     private boolean endingSession;
@@ -163,7 +157,7 @@ public final class RuleEditClientWorkspace {
     private final Map<RuleCatalogType, DirectoryLoad> directories = new EnumMap<>(RuleCatalogType.class);
 
     // ---- 首载分段观测 ----
-    // 首载分段观测：确认发出时刻与分片接收进度；关闭开关时不取时间也不计数
+    // 确认发出时刻与分片接收进度；关闭开关时不取时间也不计数
     private long firstLoadStartedNanos;
     private long snapshotRecvStartedNanos;
     private String snapshotRecvTransferId = "";
@@ -177,7 +171,7 @@ public final class RuleEditClientWorkspace {
     private RuleEditClientWorkspace() {
     }
 
-    // 工作区单例
+    /** 工作区单例；客户端只存在一个编辑会话。 */
     public static RuleEditClientWorkspace instance() {
         return INSTANCE;
     }
@@ -265,11 +259,6 @@ public final class RuleEditClientWorkspace {
         return openRequest;
     }
 
-    // 最近一次被拒绝的打开请求（如 LOCK_BUSY）；未被拒绝过时为 null
-    public synchronized @Nullable EditorOpenRequest openFailure() {
-        return openFailure;
-    }
-
     // 最近一次收到的快照；尚未收到时为 null
     public synchronized @Nullable RuleSnapshot snapshot() {
         return snapshot;
@@ -319,12 +308,12 @@ public final class RuleEditClientWorkspace {
 
     public synchronized void invalidateDirectories() { directories.clear(); }
 
-    // 请求最新快照：仅在持有会话时有效
-    public synchronized boolean requestSnapshot() {
+    /** 请求最新快照：仅在持有可编辑会话且连接正常时发出。 */
+    public synchronized void requestSnapshot() {
         if (sessionId.isEmpty() || !connected()) {
-            return false;
+            return;
         }
-        return send(new RequestRuleSnapshotPayload(sessionId, UUID.randomUUID().toString()));
+        send(new RequestRuleSnapshotPayload(sessionId, UUID.randomUUID().toString()));
     }
 
     // ---- 来源视图（按需加载） ----
@@ -473,7 +462,6 @@ public final class RuleEditClientWorkspace {
         lifespanConnection = null;
         lastResult = null;
         openRequest = null;
-        openFailure = null;
     }
 
     // 客户端 tick 钩子：按心跳间隔上行心跳
@@ -493,7 +481,6 @@ public final class RuleEditClientWorkspace {
         }
     }
 
-    // 注入发送器
     private synchronized void setSender(@Nullable PacketSender sender) {
         this.sender = sender;
     }
@@ -622,30 +609,26 @@ public final class RuleEditClientWorkspace {
         if (payload == null) {
             return;
         }
-        EditorOpenRequest request = new EditorOpenRequest(payload.sessionId(), payload.targetId(),
-                payload.contextRevision(), payload.protocolVersion(), payload.maxPlaceBlockRadius(), payload.statusCode(),
-                payload.messageArgs(), payload.fallbackMessage());
         if (payload.sessionId().isEmpty()) {
-            // 取锁失败（LOCK_BUSY/UNAVAILABLE 等，服务端不带会话号）：只记录失败原因供界面提示
-            openFailure = request;
+            // 取锁失败（LOCK_BUSY/UNAVAILABLE 等，服务端不带会话号）：只记录日志
             LOGGER.info("服务端未授权编辑: status={} holderArgs={}", payload.statusCode(), payload.messageArgs());
             return;
         }
         if (payload.protocolVersion() != RuleEditProtocol.VERSION) {
-            openFailure = request;
             LOGGER.warn("编辑协议版本不匹配，拒绝打开编辑器: server={} client={}",
                     payload.protocolVersion(), RuleEditProtocol.VERSION);
             return;
         }
         if (RuleSaveStatus.fromId(payload.statusCode()) != RuleSaveStatus.SUCCESS) {
-            openFailure = request;
             LOGGER.info("服务端未授权编辑: status={} holderArgs={}", payload.statusCode(), payload.messageArgs());
             return;
         }
+        EditorOpenRequest request = new EditorOpenRequest(payload.sessionId(), payload.targetId(),
+                payload.contextRevision(), payload.protocolVersion(), payload.maxPlaceBlockRadius(), payload.statusCode(),
+                payload.messageArgs(), payload.fallbackMessage());
         sessionId = payload.sessionId();
         contextRevision = payload.contextRevision();
         openRequest = request;
-        openFailure = null;
         snapshot = null;
         snapshotFailure = null;
         snapshotRecvStartedNanos = 0L;
@@ -666,7 +649,6 @@ public final class RuleEditClientWorkspace {
         EditorScreenHooks.open(request);
     }
 
-    // 收到整包快照
     private synchronized void onSnapshot(@Nullable RuleSnapshotPayload payload) {
         if (payload == null) {
             return;
@@ -686,7 +668,7 @@ public final class RuleEditClientWorkspace {
         long parseMicros = DevelopmentDiagnostics.micros(parseStarted);
         if (parsed == null) {
             // 首载解析失败会让界面一直停在「加载中」：把原因留给界面做可见提示
-            snapshotFailure = outcome.error().map(error -> error.message()).orElse("未知原因");
+            snapshotFailure = outcome.error().map(DataResult.Error::message).orElse("未知原因");
             LOGGER.warn("规则快照解析失败: bytes={} reason={}", json.length(), snapshotFailure);
             return;
         }
@@ -787,14 +769,14 @@ public final class RuleEditClientWorkspace {
             }
             contextRevision = payload.resultVersion();
             // 保存成功/无变化时服务端不附送快照，回到 ACTIVE 后主动补一次快照请求，
-            // 使列表内容与 contextRevision 同源；VERSION_CONFLICT/SAVED_NOT_RELOADED 由服务端随回执推送，不再重复请求
+            // 使列表内容与 contextRevision 同源；VERSION_CONFLICT/SAVED_NOT_RELOADED
+            // 由服务端随回执推送，不再重复请求
             if (state == RuleEditClientState.ACTIVE && needsSnapshotRefresh(status)) {
                 requestSnapshot();
             }
         }
     }
 
-    // 收到目录页
     private synchronized void onCatalog(@Nullable RuleCatalogPayload payload) {
         if (payload == null || !payload.sessionId().equals(sessionId)) {
             return;
@@ -883,7 +865,6 @@ public final class RuleEditClientWorkspace {
         return true;
     }
 
-    // 批量发送上行载荷
     private boolean sendAll(List<CustomPacketPayload> packets) {
         boolean sent = true;
         for (CustomPacketPayload payload : packets) {
