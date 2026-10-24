@@ -23,7 +23,7 @@ authority: common/client/ui/theme、common/client/ui/widget、common/client/ui/s
 | 子包 | 一句话职责 |
 |---|---|
 | `client/ui/theme` | 把灰色像素与扁平两套外观映射成 kit 的样式值，并以 `UiHostTheme` 作为唯一注入入口 |
-| `client/ui/widget` | 在 kit 基础上提供可直接使用的输入框、列表、树、弹窗、按钮变体与条件树控件 |
+| `client/ui/widget` | 在 kit 基础上提供可直接使用的输入框、列表、树、弹窗、按钮变体与条件树控件；滚动控件的行宽与行命中换算（`RowGeometry`）、区间宿主控件的公共外壳（`AbstractBarShell`）也收在这一层 |
 | `client/ui/shared` | `screen` 与 `screen/form` 共享的纯值与展示类型：目录图标分发、展示名称、字段到目录类型的映射、条件摘要、悬停说明的语义行模型 |
 | `client/ui/screen` | 规则编辑器主屏、管理页、编辑页签、调试页与页内输入分发 |
 | `client/ui/screen/form` | 描述符驱动的表单视图、字段控件基类与注册表 |

@@ -12,12 +12,13 @@ import java.util.Collections;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.ToIntFunction;
+import net.minecraft.Util;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
 
-/***
+/**
  * 可展开的树视图控件。
  * <p>由展平后的可见行承载渲染与命中：只有展开节点的后代才会出现在可见行中，
  * 因此键盘上下移动、Home/End、PgUp/PgDn 与鼠标命中都按可见行计算。
@@ -29,7 +30,7 @@ import org.lwjgl.glfw.GLFW;
  */
 public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
 
-    // 行渲染回调
+    /** 树行渲染回调：缩进与展开三角由控件绘制，{@code row} 已扣除展开标记与缩进，可直接绘制节点文本。 */
     @FunctionalInterface
     public interface NodeRenderer<T> {
         // 渲染一行；row 已扣除展开标记与缩进，可直接绘制节点文本
@@ -42,12 +43,10 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
     public static final int MARKER_WIDTH = 9;
     // 默认行高
     public static final int DEFAULT_ROW_HEIGHT = UiHostThemes.defaultTheme().rowHeight();
-    // 滚动条预留宽度（与 kit 的滚动条宽度保持一致）
-    private static final int SCROLLBAR_RESERVE = 4;
     // 双击判定间隔（毫秒）
     private static final long DOUBLE_CLICK_MS = 250L;
 
-    /*** 展平后的可见行及其实际内容坐标，供渲染、命中和滚动共同使用。 */
+    /** 展平后的可见行及其实际内容坐标，供渲染、命中和滚动共同使用。 */
     private static final class VisibleRow<N> {
         // 节点
         final UiTreeNode<N> node;
@@ -85,9 +84,7 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
     private Consumer<UiTreeNode<T>> onSelectionChanged;
     // 激活回调
     private Consumer<UiTreeNode<T>> onActivate;
-    // 是否持有键盘焦点
     private boolean focused;
-    // 是否可见
     private boolean visible = true;
     // 按节点身份判定双击，展开后行下标变化不会误激活其它节点。
     private long lastClickTime;
@@ -130,7 +127,6 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
         return Collections.unmodifiableList(roots);
     }
 
-    // 设置行高
     public UiTreeView<T> setRowHeight(int rowHeight) {
         this.rowHeight = Math.max(9, rowHeight);
         scrollView.setStep(Math.max(1, this.rowHeight * 2));
@@ -148,25 +144,21 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
     public int scrollOffset() { return scrollView.offset(); }
     public void setScrollOffset(int offset) { scrollView.setOffset(offset); }
 
-    // 设置空树提示
     public UiTreeView<T> setEmptyMessage(Component message) {
         this.emptyMessage = message;
         return this;
     }
 
-    // 设置选中变化回调
     public UiTreeView<T> setOnSelectionChanged(Consumer<UiTreeNode<T>> callback) {
         this.onSelectionChanged = callback;
         return this;
     }
 
-    // 设置激活回调
     public UiTreeView<T> setOnActivate(Consumer<UiTreeNode<T>> callback) {
         this.onActivate = callback;
         return this;
     }
 
-    // 设置是否可见
     public UiTreeView<T> setVisible(boolean visible) {
         this.visible = visible;
         return this;
@@ -193,7 +185,6 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
         return selectedNode;
     }
 
-    // 设置选中节点
     public UiTreeView<T> setSelectedNode(UiTreeNode<T> node) {
         if (selectedNode == node) {
             ensureVisibleFor(node);
@@ -251,23 +242,12 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
         }
     }
 
-    // 内容区可用宽度（扣除滚动条）
-    private int contentWidth() {
-        int width = scrollView.viewport().width();
-        if (scrollView.isScrollbarVisible()) {
-            width -= SCROLLBAR_RESERVE;
-        }
-        return Math.max(0, width);
-    }
-
-    // 屏幕坐标换算为内容坐标下的可见行下标
+    // 屏幕坐标换算为内容坐标下的可见行下标；行高是否等高由 indexAtContentY 的二分决定
     private int indexAt(double mouseX, double mouseY) {
-        UiRect viewport = scrollView.viewport();
         if (!scrollView.canHoverContent(mouseX, mouseY)) {
             return -1;
         }
-        int contentY = (int) (mouseY - viewport.y()) + scrollView.offset();
-        return indexAtContentY(contentY);
+        return indexAtContentY(RowGeometry.contentY(scrollView, mouseY));
     }
 
     // 非等高行按累计位置二分查找，鼠标与翻页不再按固定行高猜测。
@@ -295,7 +275,7 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
             int inset = row.depth * INDENT_WIDTH + MARKER_WIDTH;
             return new UiRect(scrollView.viewport().x() + inset,
                     scrollView.viewport().y() + row.top - scrollView.offset(),
-                    Math.max(0, contentWidth() - inset), row.height);
+                    Math.max(0, RowGeometry.contentWidth(scrollView) - inset), row.height);
         }
         return new UiRect(0, 0, 0, 0);
     }
@@ -348,7 +328,7 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
             return;
         }
         int hoveredIndex = indexAt(mouseX, mouseY);
-        int rowWidth = contentWidth();
+        int rowWidth = RowGeometry.contentWidth(scrollView);
         scrollView.push(graphics);
         int firstIndex = Math.max(0, indexAtContentY(scrollView.offset()));
         for (int i = firstIndex; i < visibleRows.size(); i++) {
@@ -408,7 +388,7 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
         UiRect viewport = scrollView.viewport();
         int contentX = (int) (mouseX - viewport.x());
         int markerX = visibleRow.depth * INDENT_WIDTH;
-        long now = net.minecraft.Util.getMillis();
+        long now = Util.getMillis();
         boolean doubleClick = visibleRow.node == lastClickNode && now - lastClickTime <= DOUBLE_CLICK_MS;
         lastClickNode = visibleRow.node;
         lastClickTime = now;

@@ -20,7 +20,7 @@ import net.minecraft.util.Mth;
 import org.lwjgl.glfw.GLFW;
 import org.jetbrains.annotations.Nullable;
 
-/***
+/**
  * 可滚动列表控件。
  * <p>提供选中、悬停、键盘导航（上下 / Home / End / PgUp / PgDn）、滚轮与滚动条拖拽；
  * 行内容由调用方通过 {@link RowRenderer} 决定，控件只负责背景、选中标记与命中判定。
@@ -28,7 +28,7 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class UiListView<T> implements UiWidget, UiFocusTarget {
 
-    // 行渲染回调
+    /** 行渲染回调：背景、选中/悬停/焦点标记与命中由控件处理，行内容由调用方绘制；{@code row} 已为左侧选中标记预留空间。 */
     @FunctionalInterface
     public interface RowRenderer<T> {
         // 渲染一行；row 已为左侧选中标记预留空间
@@ -39,8 +39,6 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     public static final int DEFAULT_ROW_HEIGHT = UiHostThemes.defaultTheme().rowHeight();
     // 双击判定间隔（毫秒）
     private static final long DOUBLE_CLICK_MS = 250L;
-    // 滚动条预留宽度（与 kit 的滚动条宽度保持一致）
-    private static final int SCROLLBAR_RESERVE = 4;
     private static final int CHIP_ROW_GAP = 4;
 
     // 行渲染器
@@ -68,9 +66,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
     private boolean activateOnSingleClick;
     private boolean selectionMarkerVisible = true;
     private boolean chipRows;
-    // 是否持有键盘焦点
     private boolean focused;
-    // 是否可见
     private boolean visible = true;
     // 上次点击时间与下标（双击判定）
     private long lastClickTime;
@@ -122,7 +118,6 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         return selectedIndex >= 0 && selectedIndex < items.size() ? items.get(selectedIndex) : null;
     }
 
-    // 设置选中行
     public UiListView<T> setSelectedIndex(int index) {
         int clamped = index < 0 || index >= items.size() ? -1 : index;
         if (clamped == selectedIndex) {
@@ -137,7 +132,6 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         return this;
     }
 
-    // 设置行高
     public UiListView<T> setRowHeight(int rowHeight) {
         this.rowHeight = Math.max(9, rowHeight);
         scrollView.setStep(Math.max(1, this.rowHeight * 2));
@@ -145,13 +139,11 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         return this;
     }
 
-    // 设置空列表提示
     public UiListView<T> setEmptyMessage(Component message) {
         this.emptyMessage = message;
         return this;
     }
 
-    // 设置选中变化回调
     public UiListView<T> setOnSelectionChanged(IntConsumer callback) {
         this.onSelectionChanged = callback;
         return this;
@@ -179,7 +171,6 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         updateContentSize();
     }
 
-    // 设置激活回调
     public UiListView<T> setOnActivate(Consumer<T> callback) {
         this.onActivate = callback;
         return this;
@@ -195,7 +186,6 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         return this;
     }
 
-    // 设置是否可见
     public UiListView<T> setVisible(boolean visible) {
         this.visible = visible;
         return this;
@@ -237,30 +227,18 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         return chipRows ? Math.max(1, rowHeight - CHIP_ROW_GAP) : rowHeight;
     }
 
-    // 内容区可用宽度（扣除滚动条）
-    private int contentWidth() {
-        int width = scrollView.viewport().width();
-        if (scrollView.isScrollbarVisible()) {
-            width -= SCROLLBAR_RESERVE;
-        }
-        return Math.max(0, width);
-    }
-
-    // 屏幕坐标换算为内容坐标下的行下标
+    // 屏幕坐标换算为内容坐标下的行下标；chip 行的行内容比行距矮，行间留白不算命中
     private int indexAt(double mouseX, double mouseY) {
-        UiRect viewport = scrollView.viewport();
         if (!scrollView.canHoverContent(mouseX, mouseY)) {
             return -1;
         }
-        int contentY = (int) (mouseY - viewport.y()) + scrollView.offset();
-        if (contentY % rowHeight >= rowContentHeight()) return -1;
-        int index = contentY / Math.max(1, rowHeight);
-        return index >= 0 && index < items.size() ? index : -1;
+        return RowGeometry.fixedRowIndex(RowGeometry.contentY(scrollView, mouseY),
+                rowHeight, rowContentHeight(), items.size());
     }
 
     // 命中数据行时排除滚动条，空白区域返回无条目。
     public int itemIndexAt(double mouseX, double mouseY) {
-        return scrollView.hitScrollbar(mouseX, mouseY) ? -1 : indexAt(mouseX, mouseY);
+        return indexAt(mouseX, mouseY);
     }
 
     public boolean isDraggingScrollbar() { return scrollView.isDragging(); }
@@ -275,7 +253,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         if (index < 0 || index >= items.size()) return null;
         UiRect viewport = scrollView.viewport();
         return new UiRect(viewport.x(), viewport.y() + index * rowHeight - scrollView.offset(),
-                contentWidth(), rowContentHeight());
+                RowGeometry.contentWidth(scrollView), rowContentHeight());
     }
 
     // 供宿主绘制行级覆盖层；返回与实际视口相交的可见矩形。
@@ -285,7 +263,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
         UiRect viewport = scrollView.viewport();
         int start = Math.max(row.y(), viewport.y());
         int end = Math.min(row.bottom(), viewport.bottom());
-        return end > start ? new UiRect(viewport.x(), start, contentWidth(), end - start) : null;
+        return end > start ? new UiRect(viewport.x(), start, RowGeometry.contentWidth(scrollView), end - start) : null;
     }
 
     // 拖动排序使用视口偏移；指针越出列表时钳制到首尾条目。
@@ -318,7 +296,7 @@ public final class UiListView<T> implements UiWidget, UiFocusTarget {
             return;
         }
         int hoveredIndex = itemIndexAt(mouseX, mouseY);
-        int rowWidth = contentWidth();
+        int rowWidth = RowGeometry.contentWidth(scrollView);
         scrollView.push(graphics);
         for (int i = 0; i < items.size(); i++) {
             int rowY = i * rowHeight;

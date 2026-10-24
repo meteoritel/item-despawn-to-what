@@ -1,30 +1,25 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumberPolicy;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumbers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeEnd;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeSlider;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiValueTextBinding;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderPainter;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderStyle;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderWindow;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiValueTextBinding;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import java.util.Objects;
-import java.util.function.Consumer;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.glfw.GLFW;
 
 /**
  * 区间条（宿主侧控件）。
@@ -34,7 +29,7 @@ import org.lwjgl.glfw.GLFW;
  * <p>无约束端不编码成 0：缺失的一端显示为文字提示，玩家可用精确输入补齐该端（一次提交）。
  * 需要关闭某一端的宿主可直接用 {@link #core()} 的 {@code setEndPresent}。
  */
-public final class UiRangeBar implements UiWidget, UiFocusTarget {
+public final class UiRangeBar extends AbstractBarShell<UiRangeSlider> {
 
     /** 区间的预览、提交与取消回调；预览不应写入配置历史。 */
     public interface Listener {
@@ -67,45 +62,22 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
         }
     }
 
-    // 宿主提供的本地化文本
+    /** 区间输入栏的宿主本地化文本：两端标签、缺端提示与精确输入提示。 */
     public record Texts(Component lowEnd, Component highEnd, Component absentHint, Component preciseHint) {
     }
 
-    private static final int LABEL_HEIGHT = 10;
-    private static final int TRACK_ROW_HEIGHT = 12;
     private static final int VALUE_SLOT_WIDTH = 54;
 
     // 取值文本的小数位数（与迁移前 %.2f 一致）
     private static final int VALUE_DECIMALS = 2;
 
-    // 独立提示行的高度（聚焦时显示精确输入的按键提示）
-    private static final int HINT_HEIGHT = 9;
-    // 提示与相邻文字之间的留白
-    private static final int HINT_GAP = 4;
-    // 行内提示可用的最小宽度：再窄就不显示，避免只画出半截文字
-    private static final int MIN_HINT_WIDTH = 64;
-
-    private final Font font;
     private final Texts texts;
-    private final UiRangeSlider core;
-    private final UiTextInput precise;
     private final UiValueTextBinding<Double, String> preciseBinding;
     private final UiSliderPainter painter;
     private final UiSliderStyle style;
 
     private final @Nullable Listener listener;
-    private UiRect bounds = new UiRect(0, 0, 0, 0);
-    private UiRect trackRow = new UiRect(0, 0, 0, 0);
-    // 独立提示行；宿主高度不足时为 null（提示改在标签行内显示）
-    private @Nullable UiRect hintRow;
-    private boolean enabled = true;
-    private boolean visible = true;
-    private boolean focused;
-    private boolean preciseActive;
-    private @Nullable Consumer<UiRangeEnd> preciseEditor;
 
-    // 注入的宿主主题
-    private final UiHostTheme theme;
     /**
      * 装配区间条与精确文本绑定；主题、提示文案和提交接收方由宿主注入。
      *
@@ -118,15 +90,14 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
      */
     public UiRangeBar(UiHostTheme theme, Font font, UiNumberPolicy policy, UiRangeValue initial, Texts texts,
                       @Nullable Listener listener) {
-        this.theme = UiHostThemes.require(theme);
+        super(theme, font, Objects.requireNonNull(texts, "texts").preciseHint(), 24,
+                new UiRangeSlider(Objects.requireNonNull(policy, "policy"),
+                        new UiSliderWindow(policy.min(), policy.max()),
+                        initial == null ? UiRangeValue.EMPTY : initial));
+        this.texts = texts;
+        this.listener = listener;
         this.painter = theme.sliderSkin(UiSliderRole.COMPACT).painter();
         this.style = theme.sliderSkin(UiSliderRole.COMPACT).style();
-        this.font = Objects.requireNonNull(font, "font");
-        Objects.requireNonNull(policy, "policy");
-        this.texts = Objects.requireNonNull(texts, "texts");
-        this.listener = listener;
-        this.core = new UiRangeSlider(policy, new UiSliderWindow(policy.min(), policy.max()),
-                initial == null ? UiRangeValue.EMPTY : initial);
         this.core.setThumbWidth(style.thumbWidth());
         this.core.setListener(new UiRangeSlider.Listener() {
             @Override
@@ -150,17 +121,9 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
                 closePrecise();
             }
         });
-        this.precise = new UiTextInput(theme, font, texts.preciseHint());
-        this.precise.setMaxLength(24);
-        this.precise.setVisible(false);
         this.preciseBinding = new UiValueTextBinding<>(core::selectedValue,
                 value -> core.setSelectedValueOrPresent(value, false), precise::value, precise::setValue,
                 UiNumbers::parseFinite, this::plainText, () -> {});
-        this.precise.setOnCommit(this::commitPrecise);
-        this.precise.setOnCancel(() -> {
-            closePrecise();
-            this.core.endInteraction(UiInputCapture.EndReason.CANCEL);
-        });
     }
 
     /**
@@ -194,48 +157,22 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
     }
 
     public UiRangeBar setEnabled(boolean enabled) {
-        this.enabled = enabled;
-        this.core.setEnabled(enabled);
-        if (!enabled) {
-            closePrecise();
-        }
+        applyEnabled(enabled);
         return this;
-    }
-
-    public boolean isEnabled() {
-        return enabled;
     }
 
     public UiRangeBar setVisible(boolean visible) {
-        this.visible = visible;
-        this.core.setVisible(visible);
-        if (!visible) {
-            closePrecise();
-        }
+        applyVisible(visible);
         return this;
-    }
-
-    @Override
-    public UiRect bounds() {
-        return bounds;
     }
 
     @Override
     public void setBounds(int x, int y, int width, int height) {
-        this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
-        int rowHeight = Math.min(TRACK_ROW_HEIGHT, Math.max(4, bounds.height() - LABEL_HEIGHT));
-        this.trackRow = new UiRect(x, y + LABEL_HEIGHT, bounds.width(), rowHeight);
+        int rowHeight = layoutRows(x, y, width, height);
         // 高度预算够时提示独占一行；不够时留空，提示改在标签行内绘制
-        int usedHeight = LABEL_HEIGHT + rowHeight;
-        this.hintRow = bounds.height() - usedHeight >= HINT_HEIGHT
-                ? new UiRect(x, y + usedHeight, bounds.width(), HINT_HEIGHT) : null;
-        this.core.setBounds(trackRow.x(), trackRow.y(), trackRow.width(), trackRow.height());
-        this.precise.setBounds(x, trackRow.bottom(), Math.max(24, bounds.width()), theme.rowHeight());
-    }
-
-    @Override
-    public boolean isVisible() {
-        return visible;
+        layoutHintRow(LABEL_HEIGHT + rowHeight);
+        layoutCoreBounds();
+        layoutPreciseRow(trackRow.bottom());
     }
 
     // ---- 渲染 ----
@@ -252,14 +189,14 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
         if (preciseActive) {
             precise.render(graphics, renderFont, mouseX, mouseY);
         } else {
-            drawHint(graphics, value);
+            drawHintRow(graphics, hintText(value));
         }
     }
 
     private void drawLabelRow(GuiGraphics graphics, boolean inlineHint) {
         Component label = core.label();
         UiRangeValue value = core.value();
-        Component shown = Component.translatable("gui.itemdespawntowhat.edit.range.value",
+        Component shown = Component.translatable(TypeLabels.UI_PREFIX + "range.value",
                 formatValue(value.low()), formatValue(value.high()));
         int valueWidth = Math.min(bounds.width(), Math.max(VALUE_SLOT_WIDTH, font.width(shown)));
         int labelEnd = bounds.x();
@@ -273,21 +210,10 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
                 Math.max(1, label == null ? bounds.width() : valueWidth));
         int valueX = Math.max(bounds.x(), bounds.right() - font.width(valueText));
         if (inlineHint) {
-            drawInlineHint(graphics, labelEnd, valueX, value);
+            drawInlineHint(graphics, labelEnd, valueX, hintText(value));
         }
         graphics.drawString(font, valueText, valueX, bounds.y(),
                 enabled ? theme.palette().textPrimary() : theme.palette().textDisabled(), false);
-    }
-
-    // 标签行内的聚焦提示：占用标签与取值文本之间的空白，宽度不足时整体略过
-    private void drawInlineHint(GuiGraphics graphics, int labelEnd, int valueX, UiRangeValue value) {
-        int start = labelEnd + HINT_GAP;
-        int available = valueX - HINT_GAP - start;
-        if (available < MIN_HINT_WIDTH) {
-            return;
-        }
-        String text = TextScroll.trimToWidth(font, hintText(value).getString(), available);
-        graphics.drawString(font, text, start, bounds.y(), theme.palette().textDisabled(), false);
     }
 
     // 聚焦时的按键提示：两端齐全提示精确输入，缺端时提示回车补端
@@ -339,16 +265,6 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
         graphics.drawString(font, text, x, trackRow.bottom() - 9, theme.palette().textDisabled(), false);
     }
 
-    private void drawHint(GuiGraphics graphics, UiRangeValue value) {
-        UiRect row = hintRow;
-        if (!focused || row == null) {
-            // 没有独立提示行时提示已在标签行内绘制，此处不能再画以免压住轨道
-            return;
-        }
-        String text = TextScroll.trimToWidth(font, hintText(value).getString(), Math.max(1, row.width()));
-        graphics.drawString(font, text, row.x(), row.y(), theme.palette().textDisabled(), false);
-    }
-
     private Component formatValue(double value) {
         if (!Double.isFinite(value)) {
             return Component.literal("-");
@@ -356,111 +272,13 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
         return Component.literal(UiNumbers.plainExact(value, VALUE_DECIMALS, UiNumbers.MAX_LONG_AS_DOUBLE));
     }
 
-    // ---- 输入 ----
-
-    @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (!visible || !enabled) {
-            return false;
-        }
-        if (preciseActive && precise.mouseClicked(mouseX, mouseY, button)) {
-            return true;
-        }
-        if (!bounds.contains(mouseX, mouseY)) {
-            return false;
-        }
-        closePrecise();
-        return core.mousePressed(context(mouseX, mouseY, button));
-    }
-
-    @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        if (core.isDragging()) {
-            return core.mouseDragged(context(mouseX, mouseY, button));
-        }
-        return preciseActive && precise.mouseDragged(mouseX, mouseY, button, dragX, dragY);
-    }
-
-    @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (core.isDragging()) {
-            return core.mouseReleased(context(mouseX, mouseY, button));
-        }
-        return preciseActive && precise.mouseReleased(mouseX, mouseY, button);
-    }
-
-    @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!visible || !enabled) {
-            return false;
-        }
-        if (preciseActive && precise.keyPressed(keyCode, scanCode, modifiers)) {
-            return true;
-        }
-        if (core.keyPressed(keyCode, scanCode, modifiers)) {
-            return true;
-        }
-        if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
-            return openPrecise();
-        }
-        return false;
-    }
-
-    @Override
-    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
-        if (preciseActive && precise.keyReleased(keyCode, scanCode, modifiers)) {
-            return true;
-        }
-        return core.keyReleased(keyCode, scanCode, modifiers);
-    }
-
-    @Override
-    public boolean charTyped(char codePoint, int modifiers) {
-        return preciseActive && precise.charTyped(codePoint, modifiers);
-    }
-
-    // 打开当前端的精确输入行；当前端缺失时同样可输入，提交即补齐该端
-    // 复合表单可将精确编辑交给已有字段输入，统一缓冲与错误定位。
-    public void setPreciseEditor(@Nullable Consumer<UiRangeEnd> editor) { preciseEditor = editor; }
-
-    /**
-     * 打开当前端的精确输入；宿主提供外部编辑器时将焦点交给该编辑器。
-     *
-     * @return 当前控件是否接受精确编辑请求
-     */
-    public boolean openPrecise() {
-        if (!enabled || !visible) {
-            return false;
-        }
-        if (preciseEditor != null) {
-            preciseEditor.accept(core.selectedEnd());
-            return true;
-        }
-        preciseActive = true;
-        precise.setVisible(true);
-        precise.setFocused(true);
-        preciseBinding.acceptText();
-        preciseBinding.previewValue();
-        precise.selectAll();
-        return true;
-    }
-
-    private void commitPrecise(@Nullable String text) {
-        preciseBinding.commitText(text == null ? "" : text);
-        closePrecise();
-    }
+    // ---- 精确输入 ----
 
     private String plainText(double value) {
         if (!Double.isFinite(value)) {
             return "";
         }
         return UiNumbers.plainExact(value, VALUE_DECIMALS, UiNumbers.MAX_LONG_AS_DOUBLE);
-    }
-
-    private void closePrecise() {
-        preciseActive = false;
-        precise.setVisible(false);
-        precise.setFocused(false);
     }
 
     private void fireCommitted(UiRangeValue value) {
@@ -470,44 +288,12 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
         }
     }
 
-    private static UiInputContext context(double mouseX, double mouseY, int button) {
-        int modifiers = 0;
-        if (Screen.hasShiftDown()) {
-            modifiers |= GLFW.GLFW_MOD_SHIFT;
-        }
-        if (Screen.hasControlDown()) {
-            modifiers |= GLFW.GLFW_MOD_CONTROL;
-        }
-        if (Screen.hasAltDown()) {
-            modifiers |= GLFW.GLFW_MOD_ALT;
-        }
-        return UiInputContext.pointer(mouseX, mouseY, button, modifiers);
-    }
-
     // ---- 焦点与生命周期 ----
 
+    // 区间条把失焦视为焦点作用域切换，核心随之结束进行中的交互
     @Override
-    public boolean canFocus() {
-        return visible && enabled;
-    }
-
-    @Override
-    public void setFocused(boolean focused) {
-        if (this.focused && !focused) core.onFocusScopeChanged();
-        this.focused = focused;
-        if (!focused) {
-            closePrecise();
-        }
-    }
-
-    @Override
-    public boolean isFocused() {
-        return focused;
-    }
-
-    @Override
-    public boolean activate() {
-        return openPrecise();
+    protected void onFocusLost() {
+        core.onFocusScopeChanged();
     }
 
     @Override
@@ -518,24 +304,55 @@ public final class UiRangeBar implements UiWidget, UiFocusTarget {
                 + ", " + formatValue(value.highPresent() ? value.high() : Double.NaN).getString() + "]");
     }
 
-    // 宿主隐藏/禁用/卸载/失焦范围切换/关闭时统一结束预览
-    public void endInteraction(UiInputCapture.EndReason reason) {
+    @Override
+    protected UiValueTextBinding<Double, String> preciseBinding() {
+        return preciseBinding;
+    }
+
+    // ---- kit 核心适配 ----
+
+    @Override
+    protected boolean coreDragging() {
+        return core.isDragging();
+    }
+
+    @Override
+    protected void coreSetBounds(int x, int y, int width, int height) {
+        core.setBounds(x, y, width, height);
+    }
+
+    @Override
+    protected void coreSetEnabled(boolean enabled) {
+        core.setEnabled(enabled);
+    }
+
+    @Override
+    protected void coreSetVisible(boolean visible) {
+        core.setVisible(visible);
+    }
+
+    @Override
+    protected void coreEndInteraction(UiInputCapture.EndReason reason) {
         core.endInteraction(reason);
-        closePrecise();
     }
 
-    public void unmount() {
+    @Override
+    protected void coreUnmount() {
         core.unmount();
-        closePrecise();
     }
 
-    public void onFocusScopeChanged() {
+    @Override
+    protected void coreOnFocusScopeChanged() {
         core.onFocusScopeChanged();
-        closePrecise();
     }
 
-    public void onHostClosed() {
+    @Override
+    protected void coreOnHostClosed() {
         core.onHostClosed();
-        closePrecise();
+    }
+
+    @Override
+    protected UiRangeEnd coreSelectedEnd() {
+        return core.selectedEnd();
     }
 }

@@ -74,7 +74,7 @@ flowchart LR
 ### 被谁依赖
 
 - `client/ui/theme`：把主题色与度量映射成 kit 的样式值后注入，是 `UiStyleSource` 在本项目的实现侧。
-- `client/ui/widget`：把可复用控件委托给 kit 核心（数值、文本、树、图标条），对外保持既有调用签名。
+- `client/ui/widget`：把可复用控件委托给 kit 核心（数值、文本、树、图标条），对外保持既有调用签名。滚动控件的行宽、屏幕到内容的纵向换算与固定行高命中共用本层 `RowGeometry`，滚动条预留宽度直接取 `UiScrollView.SCROLLBAR_WIDTH`；两个区间宿主控件（`UiCyclicTimeBar`、`UiRangeBar`）共用 `AbstractBarShell`，其内核 `AbstractRangeCore` 在 kit 内为包内可见，不进 kit 公开面。
 - `client/ui/shared`：目录图标与条件摘要复用 kit 的图标、滚动与布局原语。
 - `client/ui/screen` 与 `client/ui/screen/form`：页面级装配，持有控件、捕获与焦点管理器。
 - `client/edit`：条件树的编解码与节点适配引用 `UiTreeCodec`、`UiTreeEditor`、`UiTreePath`。

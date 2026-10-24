@@ -29,7 +29,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
-/***
+/**
  * 条件树缩进摘要：只读展示树干、叶条件名与参数摘要，并作为进入画布编辑器的入口。
  * <p>本控件不提供结构编辑、拖拽与参数输入：点击节点只选中该节点并通过
  * {@link #setOnOpenCanvas(Consumer)} 通知宿主打开画布；展开标记用于折叠展示，不改变结构。
@@ -59,8 +59,6 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     private static final int GUIDE_INSET = 6;
     // 默认行高
     private static final int DEFAULT_ROW_HEIGHT = 12;
-    // 滚动条预留宽度（与 kit 滚动条宽度保持一致）
-    private static final int SCROLLBAR_RESERVE = 6;
 
     // 展平后的可见行
     private record Row(@Nullable ConditionNode node, String path, int depth, int parentIndex,
@@ -71,7 +69,6 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     private final UiHostTheme theme;
     // 滚动与裁剪
     private final UiScrollView scrollView = new UiScrollView();
-    // 当前条件表达式
     private ConditionExpression expression = ConditionExpression.EMPTY;
     // 控件矩形
     private UiRect bounds = new UiRect(0, 0, 0, 0);
@@ -81,7 +78,6 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     private final Map<String, Row> allNodes = new HashMap<>();
     // 折叠的节点路径
     private final Set<String> collapsed = new HashSet<>();
-    // 当前违规项
     private final List<ConditionTreeInspection.Issue> issues = new ArrayList<>();
     // 有违规项的节点路径：按表达式扫描一次算出，绘制时按路径查表，不再逐行扫 issues
     private final Set<String> flaggedPaths = new HashSet<>();
@@ -109,14 +105,12 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     // 条件类型选项
     private List<ConditionTreeContract.TypeOption> typeOptions = List.of();
     // 空树提示
-    private Component emptyMessage = Component.translatable("gui.itemdespawntowhat.edit.tree.add_placeholder");
+    private Component emptyMessage = Component.translatable(TypeLabels.UI_PREFIX + "tree.add_placeholder");
     // 叶条件参数摘要，由宿主注入；为空时叶行只显示条件名
     private @Nullable Function<ConditionNode.Leaf, Component> leafDetail;
     // 进入画布的入口回调，参数为节点的树路径
     private @Nullable Consumer<String> onOpenCanvas;
-    // 是否持有键盘焦点
     private boolean focused;
-    // 是否可见
     private boolean visible = true;
     // 是否可交互（只读摘要中表示是否允许导航与进入画布）
     private boolean enabled = true;
@@ -134,7 +128,6 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
 
     // ---- 数据 ----
 
-    // 当前表达式
     public ConditionExpression expression() {
         return expression;
     }
@@ -169,7 +162,6 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
 
     // ---- 配置 ----
 
-    // 设置条件类型选项
     public UiConditionTreeSummary setTypeOptions(List<ConditionTreeContract.TypeOption> options) {
         this.typeOptions = List.copyOf(options);
         // 类型标签参与行文案：重新注入后旧缓存不再可信
@@ -185,7 +177,6 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         return this;
     }
 
-    // 设置空表达式提示
     public UiConditionTreeSummary setEmptyMessage(Component message) {
         this.emptyMessage = message;
         // 空树提示参与裁剪缓存：换文案后下次绘制必须重新裁剪
@@ -193,7 +184,6 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         return this;
     }
 
-    // 设置行高
     public UiConditionTreeSummary setRowHeight(int newRowHeight) {
         this.rowHeight = Math.max(9, newRowHeight);
         rebuild();
@@ -396,24 +386,13 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         collapsed.add(path);
     }
 
-    // 内容区可用宽度（扣除滚动条）
-    private int contentWidth() {
-        int width = scrollView.viewport().width();
-        if (scrollView.isScrollbarVisible()) {
-            width -= SCROLLBAR_RESERVE;
-        }
-        return Math.max(0, width);
-    }
-
-    // 屏幕坐标换算为可见行下标
+    // 屏幕坐标换算为可见行下标；行内容与行距同为 rowHeight，固定行高直接整除
     private int indexAt(double mouseX, double mouseY) {
-        UiRect viewport = scrollView.viewport();
-        if (!viewport.contains(mouseX, mouseY)) {
+        if (!scrollView.canHoverContent(mouseX, mouseY)) {
             return -1;
         }
-        int contentY = (int) (mouseY - viewport.y()) + scrollView.offset();
-        int index = contentY / Math.max(1, rowHeight);
-        return index >= 0 && index < rows.size() ? index : -1;
+        return RowGeometry.fixedRowIndex(RowGeometry.contentY(scrollView, mouseY),
+                rowHeight, rowHeight, rows.size());
     }
 
     // 路径对应的可见行下标，未找到返回 -1
@@ -448,7 +427,6 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         return Math.max(1, scrollView.viewport().height() / Math.max(1, rowHeight));
     }
 
-    // 是否有子节点
     private static boolean hasChildren(@Nullable ConditionNode node) {
         return node instanceof ConditionNode.Inverted || node instanceof ConditionNode.AllOf
                 || node instanceof ConditionNode.AnyOf;
@@ -474,7 +452,7 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
             graphics.drawString(renderFont, empty, viewport.x() + 4,
                     viewport.y() + Math.max(0, viewport.height() / 2 - 4), theme.palette().textSecondary(), false);
         } else {
-            int rowWidth = contentWidth();
+            int rowWidth = RowGeometry.contentWidth(scrollView);
             scrollView.push(graphics);
             for (int i = 0; i < rows.size(); i++) {
                 int rowY = i * rowHeight;
@@ -491,7 +469,6 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         scrollView.renderScrollbar(graphics, theme.controlStyle(UiControlRole.SECONDARY));
     }
 
-    // 绘制一行
     private void drawRow(GuiGraphics graphics, Font renderFont, Row row, int index, int rowY, int rowWidth) {
         boolean selected = row.path().equals(selectedPath);
         if (selected) {
@@ -555,28 +532,28 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
         ConditionNode node = row.node();
         Component label;
         if (node == null) {
-            return Component.translatable("gui.itemdespawntowhat.edit.tree.add_placeholder");
+            return Component.translatable(TypeLabels.UI_PREFIX + "tree.add_placeholder");
         } else if (node instanceof ConditionNode.AllOf all) {
-            label = Component.translatable("gui.itemdespawntowhat.edit.tree.group_label",
-                    Component.translatable("gui.itemdespawntowhat.edit.tree.node.all"), all.terms().size());
+            label = Component.translatable(TypeLabels.UI_PREFIX + "tree.group_label",
+                    Component.translatable(TypeLabels.UI_PREFIX + "tree.node.all"), all.terms().size());
         } else if (node instanceof ConditionNode.AnyOf any) {
-            label = Component.translatable("gui.itemdespawntowhat.edit.tree.group_label",
-                    Component.translatable("gui.itemdespawntowhat.edit.tree.node.any"), any.terms().size());
+            label = Component.translatable(TypeLabels.UI_PREFIX + "tree.group_label",
+                    Component.translatable(TypeLabels.UI_PREFIX + "tree.node.any"), any.terms().size());
         } else if (node instanceof ConditionNode.Inverted) {
-            label = Component.translatable("gui.itemdespawntowhat.edit.tree.operator.not");
+            label = Component.translatable(TypeLabels.UI_PREFIX + "tree.operator.not");
         } else if (node instanceof ConditionNode.Leaf leaf) {
             label = leafLabel(leaf);
         } else {
             label = Component.empty();
         }
         if (row.incomplete()) {
-            label = label.copy().append(" ").append(Component.translatable("gui.itemdespawntowhat.edit.tree.incomplete"));
+            label = label.copy().append(" ").append(Component.translatable(TypeLabels.UI_PREFIX + "tree.incomplete"));
         }
         if (row.overflow()) {
-            label = label.copy().append(" ").append(Component.translatable("gui.itemdespawntowhat.edit.tree.overflow_mark"));
+            label = label.copy().append(" ").append(Component.translatable(TypeLabels.UI_PREFIX + "tree.overflow_mark"));
         } else if (row.deep()) {
             // 超限时已有超限标记，避免同一行堆叠两个标记
-            label = label.copy().append(" ").append(Component.translatable("gui.itemdespawntowhat.edit.tree.deep_mark"));
+            label = label.copy().append(" ").append(Component.translatable(TypeLabels.UI_PREFIX + "tree.deep_mark"));
         }
         return label;
     }
@@ -625,19 +602,19 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
     private Component leafLabel(ConditionNode.Leaf leaf) {
         Condition condition = leaf.condition();
         if (condition == null) {
-            return Component.translatable("gui.itemdespawntowhat.edit.tree.leaf_missing");
+            return Component.translatable(TypeLabels.UI_PREFIX + "tree.leaf_missing");
         }
         Component name = typeLabel(condition.type());
         Function<ConditionNode.Leaf, Component> detail = leafDetail;
         Component params = detail == null ? null : detail.apply(leaf);
         return params == null || params.getString().isEmpty()
-                ? name : Component.translatable("gui.itemdespawntowhat.edit.summary.leaf", name, params);
+                ? name : Component.translatable(TypeLabels.UI_PREFIX + "summary.leaf", name, params);
     }
 
     // 条件类型标签：优先使用宿主注入的选项标签，其次走本地化 key，最后回退原始 id
     private Component typeLabel(@Nullable ResourceLocation type) {
         if (type == null) {
-            return Component.translatable("gui.itemdespawntowhat.edit.tree.leaf_missing");
+            return Component.translatable(TypeLabels.UI_PREFIX + "tree.leaf_missing");
         }
         for (ConditionTreeContract.TypeOption option : typeOptions) {
             if (option.id().equals(type)) {
@@ -848,6 +825,6 @@ public final class UiConditionTreeSummary implements UiWidget, UiFocusTarget, Co
 
     @Override
     public Component accessibleName() {
-        return Component.translatable("gui.itemdespawntowhat.edit.tree.accessible_name");
+        return Component.translatable(TypeLabels.UI_PREFIX + "tree.accessible_name");
     }
 }

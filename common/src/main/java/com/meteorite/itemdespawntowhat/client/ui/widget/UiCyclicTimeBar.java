@@ -2,23 +2,18 @@ package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiCyclicRange;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeEnd;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumbers;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiRangeEnd;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiValueTextBinding;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
-import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.function.Consumer;
 import java.util.function.Function;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
@@ -30,19 +25,19 @@ import org.lwjgl.glfw.GLFW;
  * <p>0 刻对应 Minecraft 06:00 的换算由宿主的 formatter 提供，本类不假设世界时间。
  * <p>预设（全天/白天/夜间）由宿主注入，点击即一次提交。
  */
-public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
+public final class UiCyclicTimeBar extends AbstractBarShell<UiCyclicRange> {
 
-    // 一次完整操作结束（拖动释放、方向键抬起、精确输入提交、预设点击）时回调
+    /** 区间提交回调：拖动释放、方向键抬起、精确输入提交与预设点击时回调一次最终刻域，预览过程不回调。 */
     public interface Listener {
 
         void onCommitted(double fromTick, double toTick);
     }
 
-    // 宿主注入的本地化文本
+    /** 时间条提示文案：单点区间、跨零点与精确输入提示，由宿主提供本地化文本。 */
     public record Texts(Component singlePoint, Component wrapHint, Component preciseHint) {
     }
 
-    // 宿主注入的预设区间
+    /** 宿主注入的预设区间：点击即按该区间提交一次，不经过拖动预览。 */
     public record Preset(Component label, double fromTick, double toTick) {
     }
 
@@ -54,39 +49,17 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
     public static final double MIN_TICK = 0.0D;
     public static final double MAX_TICK = 23999.0D;
 
-    private static final int LABEL_HEIGHT = 10;
-    private static final int TRACK_ROW_HEIGHT = 12;
     private static final int PRESET_HEIGHT = 12;
     private static final int TRACK_COLOR_HEIGHT = 4;
     private static final int TICK_LABEL_MIN_GAP = 16;
-    // 独立提示行的高度（聚焦时显示精确输入的按键提示）
-    private static final int HINT_HEIGHT = 9;
-    // 提示与相邻文字之间的留白
-    private static final int HINT_GAP = 4;
-    // 行内提示可用的最小宽度：再窄就不显示，避免只画出半截文字
-    private static final int MIN_HINT_WIDTH = 64;
 
-    private final Font font;
     private final Texts texts;
-    private final UiCyclicRange core;
-    private final UiTextInput precise;
     private final UiValueTextBinding<Double, String> preciseBinding;
     private final List<Preset> presets = new ArrayList<>();
 
     private @Nullable Listener listener;
-    private UiRect bounds = new UiRect(0, 0, 0, 0);
-    private UiRect trackRow = new UiRect(0, 0, 0, 0);
     private UiRect presetRow = new UiRect(0, 0, 0, 0);
-    // 独立提示行；宿主高度不足时为 null（提示改在标签行内显示）
-    private @Nullable UiRect hintRow;
-    private boolean enabled = true;
-    private boolean visible = true;
-    private boolean focused;
-    private boolean preciseActive;
-    private @Nullable Consumer<UiRangeEnd> preciseEditor;
 
-    // 注入的宿主主题
-    private final UiHostTheme theme;
     /**
      * 装配世界时间条与精确文本绑定；世界时间刻域和主题由宿主定义。
      *
@@ -96,11 +69,9 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
      * @param listener 可选的宿主提交监听器
      */
     public UiCyclicTimeBar(UiHostTheme theme, Font font, Texts texts, @Nullable Listener listener) {
-        this.theme = UiHostThemes.require(theme);
-        this.font = Objects.requireNonNull(font, "font");
-        this.texts = Objects.requireNonNull(texts, "texts");
+        super(theme, font, Objects.requireNonNull(texts, "texts").preciseHint(), 16, new UiCyclicRange(PERIOD));
+        this.texts = texts;
         this.listener = listener;
-        this.core = new UiCyclicRange(PERIOD);
         this.core.setTickStep(DRAG_STEP);
         this.core.setThumbWidth(3);
         this.core.setListener(new UiCyclicRange.Listener() {
@@ -114,17 +85,9 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
                 closePrecise();
             }
         });
-        this.precise = new UiTextInput(theme, font, texts.preciseHint());
-        this.precise.setMaxLength(16);
-        this.precise.setVisible(false);
         this.preciseBinding = new UiValueTextBinding<>(core::selectedTick,
-                core::setSelectedTick, precise::value, precise::setValue,
-                this::parsePrecise, value -> Integer.toString((int) Math.round(value)), () -> {});
-        this.precise.setOnCommit(this::commitPrecise);
-        this.precise.setOnCancel(() -> {
-            closePrecise();
-            this.core.endInteraction(UiInputCapture.EndReason.CANCEL);
-        });
+                core::setSelectedTick, precise::value, precise::setValue, UiCyclicTimeBar::parsePrecise,
+                value -> Integer.toString((int) Math.round(value)), () -> {});
     }
 
     // 回填区间：不吸附、不回调、不产生历史
@@ -158,45 +121,24 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
     }
 
     public UiCyclicTimeBar setEnabled(boolean enabled) {
-        this.enabled = enabled;
-        this.core.setEnabled(enabled);
-        if (!enabled) {
-            closePrecise();
-        }
+        applyEnabled(enabled);
         return this;
-    }
-
-    public boolean isEnabled() {
-        return enabled;
     }
 
     public UiCyclicTimeBar setVisible(boolean visible) {
-        this.visible = visible;
-        this.core.setVisible(visible);
-        if (!visible) {
-            closePrecise();
-        }
+        applyVisible(visible);
         return this;
-    }
-
-    @Override
-    public UiRect bounds() {
-        return bounds;
     }
 
     @Override
     public void setBounds(int x, int y, int width, int height) {
-        this.bounds = new UiRect(x, y, Math.max(0, width), Math.max(0, height));
-        int rowHeight = Math.min(TRACK_ROW_HEIGHT, Math.max(4, bounds.height() - LABEL_HEIGHT));
-        this.trackRow = new UiRect(x, y + LABEL_HEIGHT, bounds.width(), rowHeight);
+        int rowHeight = layoutRows(x, y, width, height);
         this.presetRow = new UiRect(x, trackRow.bottom(), bounds.width(),
                 Math.min(PRESET_HEIGHT, Math.max(0, bounds.bottom() - trackRow.bottom())));
         // 高度预算够时提示独占一行；不够时留空，提示改在标签行内绘制
-        int usedHeight = LABEL_HEIGHT + rowHeight + presetRow.height();
-        this.hintRow = bounds.height() - usedHeight >= HINT_HEIGHT
-                ? new UiRect(x, y + usedHeight, bounds.width(), HINT_HEIGHT) : null;
-        this.core.setBounds(trackRow.x(), trackRow.y(), trackRow.width(), trackRow.height());
-        this.precise.setBounds(x, presetRow.bottom(), Math.max(24, bounds.width()), theme.rowHeight());
+        layoutHintRow(LABEL_HEIGHT + rowHeight + presetRow.height());
+        layoutCoreBounds();
+        layoutPreciseRow(presetRow.bottom());
     }
 
     /**
@@ -219,11 +161,6 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
         return baseHeight() + HINT_HEIGHT;
     }
 
-    @Override
-    public boolean isVisible() {
-        return visible;
-    }
-
     // ---- 渲染 ----
 
     @Override
@@ -237,8 +174,8 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
         drawPresets(graphics, mouseX, mouseY);
         if (preciseActive) {
             precise.render(graphics, renderFont, mouseX, mouseY);
-        } else if (hintRow != null && focused) {
-            drawHintRow(graphics);
+        } else {
+            drawHintRow(graphics, texts.preciseHint());
         }
     }
 
@@ -255,31 +192,10 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
                 Math.max(1, bounds.width() - font.width(trimmed) - HINT_GAP));
         int rightX = Math.max(bounds.x(), bounds.right() - font.width(right));
         if (inlineHint) {
-            drawInlineHint(graphics, bounds.x() + font.width(trimmed), rightX);
+            drawInlineHint(graphics, bounds.x() + font.width(trimmed), rightX, texts.preciseHint());
         }
         graphics.drawString(font, right, rightX, bounds.y(),
                 enabled ? theme.palette().textPrimary() : theme.palette().textDisabled(), false);
-    }
-
-    // 标签行内的聚焦提示：占用标签与区间文字之间的空白，宽度不足时整体略过
-    private void drawInlineHint(GuiGraphics graphics, int labelEnd, int rightX) {
-        int start = labelEnd + HINT_GAP;
-        int available = rightX - HINT_GAP - start;
-        if (available < MIN_HINT_WIDTH) {
-            return;
-        }
-        String text = TextScroll.trimToWidth(font, texts.preciseHint().getString(), available);
-        graphics.drawString(font, text, start, bounds.y(), theme.palette().textDisabled(), false);
-    }
-
-    // 宿主机给足高度时的独立提示行
-    private void drawHintRow(GuiGraphics graphics) {
-        UiRect row = hintRow;
-        if (row == null) {
-            return;
-        }
-        String text = TextScroll.trimToWidth(font, texts.preciseHint().getString(), Math.max(1, row.width()));
-        graphics.drawString(font, text, row.x(), row.y(), theme.palette().textDisabled(), false);
     }
 
     private void drawTrack(GuiGraphics graphics) {
@@ -361,72 +277,23 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
 
     // ---- 输入 ----
 
+    // 时间条只响应左键
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (!visible || !enabled || button != GLFW.GLFW_MOUSE_BUTTON_LEFT) {
-            return false;
-        }
-        if (preciseActive && precise.mouseClicked(mouseX, mouseY, button)) {
-            return true;
-        }
+    protected boolean acceptsClick(int button) {
+        return button == GLFW.GLFW_MOUSE_BUTTON_LEFT;
+    }
+
+    // 预设按钮在边界判定之前命中，一次点击即一次提交
+    @Override
+    protected boolean handleShellClick(double mouseX, double mouseY, int button) {
         Preset preset = presetAt(mouseX, mouseY);
-        if (preset != null) {
-            closePrecise();
-            core.setRange(preset.fromTick(), preset.toTick());
-            fireCommitted(preset.fromTick(), preset.toTick());
-            return true;
-        }
-        if (!bounds.contains(mouseX, mouseY)) {
+        if (preset == null) {
             return false;
         }
         closePrecise();
-        return core.mousePressed(context(mouseX, mouseY, button));
-    }
-
-    @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-        if (core.isDragging()) {
-            return core.mouseDragged(context(mouseX, mouseY, button));
-        }
-        return preciseActive && precise.mouseDragged(mouseX, mouseY, button, dragX, dragY);
-    }
-
-    @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (core.isDragging()) {
-            return core.mouseReleased(context(mouseX, mouseY, button));
-        }
-        return preciseActive && precise.mouseReleased(mouseX, mouseY, button);
-    }
-
-    @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (!visible || !enabled) {
-            return false;
-        }
-        if (preciseActive && precise.keyPressed(keyCode, scanCode, modifiers)) {
-            return true;
-        }
-        if (core.keyPressed(keyCode, scanCode, modifiers)) {
-            return true;
-        }
-        if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
-            return openPrecise();
-        }
-        return false;
-    }
-
-    @Override
-    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
-        if (preciseActive && precise.keyReleased(keyCode, scanCode, modifiers)) {
-            return true;
-        }
-        return core.keyReleased(keyCode, scanCode, modifiers);
-    }
-
-    @Override
-    public boolean charTyped(char codePoint, int modifiers) {
-        return preciseActive && precise.charTyped(codePoint, modifiers);
+        core.setRange(preset.fromTick(), preset.toTick());
+        fireCommitted(preset.fromTick(), preset.toTick());
+        return true;
     }
 
     private @Nullable Preset presetAt(double mouseX, double mouseY) {
@@ -447,47 +314,10 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
         return null;
     }
 
-    // 打开当前端的精确输入（允许任意合法刻）
-    // 复合表单可将精确编辑交给已有字段输入，统一缓冲与错误定位。
-    public void setPreciseEditor(Consumer<UiRangeEnd> editor) { preciseEditor = editor; }
-
-    /**
-     * 打开当前端的精确输入；宿主提供外部编辑器时将焦点交给该编辑器。
-     *
-     * @return 当前控件是否接受精确编辑请求
-     */
-    public boolean openPrecise() {
-        if (!enabled || !visible) {
-            return false;
-        }
-        if (preciseEditor != null) {
-            preciseEditor.accept(core.selectedEnd());
-            return true;
-        }
-        preciseActive = true;
-        precise.setVisible(true);
-        precise.setFocused(true);
-        preciseBinding.acceptText();
-        preciseBinding.previewValue();
-        precise.selectAll();
-        return true;
-    }
-
-    private void commitPrecise(@Nullable String text) {
-        preciseBinding.commitText(text == null ? "" : text);
-        closePrecise();
-    }
-
     // 合法刻域属于宿主世界时间规则，kit 只负责绑定与周期交互。
-    private @Nullable Double parsePrecise(String text) {
+    private static @Nullable Double parsePrecise(String text) {
         Integer parsed = UiNumbers.parseInt(text);
         return parsed != null && parsed >= MIN_TICK && parsed <= MAX_TICK ? parsed.doubleValue() : null;
-    }
-
-    private void closePrecise() {
-        preciseActive = false;
-        precise.setVisible(false);
-        precise.setFocused(false);
     }
 
     private void fireCommitted(double from, double to) {
@@ -497,72 +327,66 @@ public final class UiCyclicTimeBar implements UiWidget, UiFocusTarget {
         }
     }
 
-    private static UiInputContext context(double mouseX, double mouseY, int button) {
-        int modifiers = 0;
-        if (Screen.hasShiftDown()) {
-            modifiers |= GLFW.GLFW_MOD_SHIFT;
-        }
-        if (Screen.hasControlDown()) {
-            modifiers |= GLFW.GLFW_MOD_CONTROL;
-        }
-        if (Screen.hasAltDown()) {
-            modifiers |= GLFW.GLFW_MOD_ALT;
-        }
-        return UiInputContext.pointer(mouseX, mouseY, button, modifiers);
-    }
-
-    // ---- 焦点与生命周期 ----
-
-    @Override
-    public boolean canFocus() {
-        return visible && enabled;
-    }
-
-    @Override
-    public void setFocused(boolean focused) {
-        this.focused = focused;
-        if (!focused) {
-            closePrecise();
-        }
-    }
-
-    @Override
-    public boolean isFocused() {
-        return focused;
-    }
-
-    @Override
-    public boolean activate() {
-        return openPrecise();
-    }
-
     @Override
     public Component accessibleName() {
         return Component.empty().append(tickText(core.from()) + " -> " + tickText(core.to())
                 + (core.crossesPeriod() ? " " + texts.wrapHint().getString() : ""));
     }
 
-    public void endInteraction(UiInputCapture.EndReason reason) {
-        core.endInteraction(reason);
-        closePrecise();
+    @Override
+    protected UiValueTextBinding<Double, String> preciseBinding() {
+        return preciseBinding;
     }
 
-    public void unmount() {
-        core.unmount();
-        closePrecise();
-    }
-
-    public void onFocusScopeChanged() {
-        core.onFocusScopeChanged();
-        closePrecise();
-    }
-
-    public void onHostClosed() {
-        core.onHostClosed();
-        closePrecise();
-    }
-
+    // 捕获结束只收尾 kit 核心；精确输入行由生命周期入口统一关闭，不在此重复处理
     public void captureEnded(UiInputCapture.EndReason reason) {
         core.captureEnded(reason);
+    }
+
+    // ---- kit 核心适配 ----
+
+    @Override
+    protected boolean coreDragging() {
+        return core.isDragging();
+    }
+
+    @Override
+    protected void coreSetBounds(int x, int y, int width, int height) {
+        core.setBounds(x, y, width, height);
+    }
+
+    @Override
+    protected void coreSetEnabled(boolean enabled) {
+        core.setEnabled(enabled);
+    }
+
+    @Override
+    protected void coreSetVisible(boolean visible) {
+        core.setVisible(visible);
+    }
+
+    @Override
+    protected void coreEndInteraction(UiInputCapture.EndReason reason) {
+        core.endInteraction(reason);
+    }
+
+    @Override
+    protected void coreUnmount() {
+        core.unmount();
+    }
+
+    @Override
+    protected void coreOnFocusScopeChanged() {
+        core.onFocusScopeChanged();
+    }
+
+    @Override
+    protected void coreOnHostClosed() {
+        core.onHostClosed();
+    }
+
+    @Override
+    protected UiRangeEnd coreSelectedEnd() {
+        return core.selectedEnd();
     }
 }
