@@ -35,7 +35,7 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/client/net、cli
 - **界面注册**：`EditorScreenHooks.setOpener(EditorScreenOpener)`；工作区在会话建立时 `open(EditorOpenRequest)`，会话失效时 `close()`，opener 未注册只记日志。
 - **平台接线**：`RuleEditClientWorkspace.instance()` 的 `installSinks()` 与 `installSender(PacketSender)`，由两端客户端初始化调用。
 - **编辑数据**：`RuleDraft`、`EditSession`、`DraftPaths`、`DraftJournal`，供界面模块组装草稿生命周期。
-- **类型编辑器扩展**：`ConditionEditorRegistry.register`、`EffectEditorRegistry.register`，参数是 `TypeEditorDescriptor`。
+- **类型编辑器扩展**：`EditorRegistries.CONDITIONS.register`、`EditorRegistries.EFFECTS.register`，参数是 `TypeEditorDescriptor`。
 
 ### 依赖方向
 
@@ -71,7 +71,7 @@ flowchart LR
 | `EditSession`（client/edit） | 撤销聚合根 | 每次编辑压入快照历史，维护撤销与重做栈、脏标记与未完成输入 | `RuleDraft`、界面表单 |
 | `RuleDraft`（client/edit） | 草稿聚合根 | 保存服务器基线、工作副本与删除标记；路径级读写与条件树、候选结构处理 | `DraftPaths`、条件编解码、界面表单 |
 | `DraftPaths`（client/edit） | 路径工具 | 草稿 JSON 的字段与数组路径解析、读写、删除；必要时创建中间容器 | `RuleDraft` |
-| `TypeEditorRegistry` / `ConditionEditorRegistry` / `EffectEditorRegistry`（client/edit） | 扩展点 | 类型 id 到编辑描述符的注册表；未注册类型返回只读回退描述 | 界面表单、内置类型表 |
+| `TypeEditorRegistry` / `EditorRegistries`（client/edit） | 扩展点 | 类型 id 到编辑描述符的注册表；未注册类型返回只读回退描述 | 界面表单、内置类型表 |
 | `ClientTypeRegistries`（client/edit） | 客户端类型表 | 内置条件与效果类型的惰性单例，内容来自代码常量而非数据包 | 注册表、条件编解码 |
 | `DraftJournal`（client/edit/draft） | 落盘调度 | 跟踪脏草稿、节流写盘、失败重排与一次性失败上报 | `DraftStore`、界面模型 |
 | `DraftStore` / `PersistedDraft` / `DraftConflict`（client/edit/draft） | 持久化 | 客户端私有目录的原子读写、磁盘格式与版本、恢复时的冲突原因 | `DraftJournal`、界面模型 |
@@ -177,7 +177,7 @@ flowchart TD
 
 ### 新增类型编辑器
 
-- 条件类型注册到 `ConditionEditorRegistry`，效果类型注册到 `EffectEditorRegistry`；描述符用 `TypeEditorDescriptor.of(id, label, fields...)` 构造，字段类型取 `EditorFieldType`。
+- 条件类型注册到 `EditorRegistries.CONDITIONS`，效果类型注册到 `EditorRegistries.EFFECTS`；描述符用 `TypeEditorDescriptor.of(id, label, fields...)` 构造，字段类型取 `EditorFieldType`。
 - 未注册类型不会中断编辑：`descriptorFor` 返回只读回退描述，展示原始 JSON 并原样保留未识别字段，第三方扩展类型因此可见且不会被写坏。
 - 重复注册同一 id 抛 `IllegalStateException`；内置类型表由 `ClientTypeRegistries` 提供，与服务端数据包无关。
 - 新增编辑器时同步 `en_us` 与 `zh_cn` 语言文件里的类型标签，回退标签使用注册表构造时传入的 key。

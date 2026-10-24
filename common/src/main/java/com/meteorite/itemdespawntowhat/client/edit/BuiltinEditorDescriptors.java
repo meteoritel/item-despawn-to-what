@@ -11,11 +11,11 @@ import com.meteorite.itemdespawntowhat.core.service.RuleEditSessionLimits;
 import com.meteorite.itemdespawntowhat.core.type.condition.YLevelCondition;
 import com.meteorite.itemdespawntowhat.core.type.effect.PlaceBlockEffect;
 
-/***
+/**
  * 内置条件/效果编辑器描述符表：10 个条件 + 10 个效果各注册一条描述符。
  * <p>字段名取自 core 的 {@link RuleFields} 常量与 core 类型定义的 JSON 字段，取值域与 core 侧参数一致；
  * 界面通过通用表单引擎按描述符渲染，不写 22 个手写表单类。
- * <p>未在此注册的第三方类型由 {@link ConditionEditorRegistry}/{@link EffectEditorRegistry}
+ * <p>未在此注册的第三方类型由 {@link EditorRegistries#CONDITIONS}/{@link EditorRegistries#EFFECTS}
  * 回退为只读 JSON 摘要，且草稿原样保留未识别字段。
  */
 public final class BuiltinEditorDescriptors {
@@ -29,9 +29,11 @@ public final class BuiltinEditorDescriptors {
             (int) (ServerConfig.DEFAULT_FABRIC_LIFESPAN_FALLBACK_TICKS / RuleEditSessionLimits.TICKS_PER_SECOND);
 
     // 字段标签前缀
-    private static final String FIELD = "gui.itemdespawntowhat.edit.field.";
+    private static final String FIELD = TypeLabels.UI_PREFIX + "field.";
     // 效果公共字段标签前缀
     private static final String COMMON = FIELD + "common.";
+    // 规则级标签前缀
+    private static final String RULE = TypeLabels.UI_PREFIX + "rule.";
 
     /** 规则基本信息描述符 id（仅界面按名取用） */
     public static final ResourceLocation RULE_DESCRIPTOR = id("rule");
@@ -70,11 +72,11 @@ public final class BuiltinEditorDescriptors {
     // ---- 条件 ----
 
     private static void registerConditions() {
-        String h = "gui.itemdespawntowhat.edit.field.";
+        String h = FIELD;
 
         // dimension：维度白名单（纯资源位置列表，不支持标签）
         ResourceLocation dimension = id("dimension");
-        ConditionEditorRegistry.register(new TypeEditorDescriptor(dimension, TypeLabels.conditionLabel(dimension), List.of(
+        EditorRegistries.CONDITIONS.register(new TypeEditorDescriptor(dimension, TypeLabels.conditionLabel(dimension), List.of(
                 EditorField.rlList(RuleFields.CONDITION_DIMENSIONS, h + "dimension.dimensions", "minecraft:dimension")
                     .asRequired()
         ), false));
@@ -92,23 +94,23 @@ public final class BuiltinEditorDescriptors {
         biomeFields.add(EditorField.climateRange(RuleFields.CONDITION_AXIS_EROSION, h + "biome.erosion"));
         biomeFields.add(EditorField.climateRange(RuleFields.CONDITION_AXIS_DEPTH, h + "biome.depth"));
         biomeFields.add(EditorField.climateRange(RuleFields.CONDITION_AXIS_WEIRDNESS, h + "biome.weirdness"));
-        ConditionEditorRegistry.register(new TypeEditorDescriptor(biome, TypeLabels.conditionLabel(biome), biomeFields, false));
+        EditorRegistries.CONDITIONS.register(new TypeEditorDescriptor(biome, TypeLabels.conditionLabel(biome), biomeFields, false));
 
         // weather：三种天气
         ResourceLocation weather = id("weather");
-        ConditionEditorRegistry.register(new TypeEditorDescriptor(weather, TypeLabels.conditionLabel(weather), List.of(
+        EditorRegistries.CONDITIONS.register(new TypeEditorDescriptor(weather, TypeLabels.conditionLabel(weather), List.of(
                 EditorField.enumIn(RuleFields.CONDITION_WEATHER, h + "weather.weather", "weather_kind", "clear", "rain", "thunder")
         ), false));
 
         // outdoor：无参数，取反请用父节点 inverted
         ResourceLocation outdoor = id("outdoor");
-        ConditionEditorRegistry.register(new TypeEditorDescriptor(outdoor, TypeLabels.conditionLabel(outdoor), List.of(
+        EditorRegistries.CONDITIONS.register(new TypeEditorDescriptor(outdoor, TypeLabels.conditionLabel(outdoor), List.of(
                 EditorField.note(h + "outdoor.note")
         ), false));
 
         // surrounding_blocks：六个方向至少填一个
         ResourceLocation surrounding = id("surrounding_blocks");
-        ConditionEditorRegistry.register(new TypeEditorDescriptor(surrounding, TypeLabels.conditionLabel(surrounding), List.of(
+        EditorRegistries.CONDITIONS.register(new TypeEditorDescriptor(surrounding, TypeLabels.conditionLabel(surrounding), List.of(
                 EditorField.optionalTag(RuleFields.CONDITION_SIDE_UP, h + "surrounding_blocks.up", "minecraft:block"),
                 EditorField.optionalTag(RuleFields.CONDITION_SIDE_DOWN, h + "surrounding_blocks.down", "minecraft:block"),
                 EditorField.optionalTag(RuleFields.CONDITION_SIDE_NORTH, h + "surrounding_blocks.north", "minecraft:block"),
@@ -120,21 +122,21 @@ public final class BuiltinEditorDescriptors {
 
         // catalyst_present：催化剂物品与数量
         ResourceLocation catalyst = id("catalyst_present");
-        ConditionEditorRegistry.register(new TypeEditorDescriptor(catalyst, TypeLabels.conditionLabel(catalyst), List.of(
+        EditorRegistries.CONDITIONS.register(new TypeEditorDescriptor(catalyst, TypeLabels.conditionLabel(catalyst), List.of(
                 EditorField.tagList(RuleFields.CONDITION_ITEMS, h + "catalyst_present.items", "minecraft:item").asRequired(),
                 EditorField.itemCounts(RuleFields.ITEM_COUNTS, h + "catalyst_present.count", 1, 64)
         ), false));
 
         // fluid_present：留空 = 任意流体
         ResourceLocation fluid = id("fluid_present");
-        ConditionEditorRegistry.register(new TypeEditorDescriptor(fluid, TypeLabels.conditionLabel(fluid), List.of(
+        EditorRegistries.CONDITIONS.register(new TypeEditorDescriptor(fluid, TypeLabels.conditionLabel(fluid), List.of(
                 EditorField.tagList(RuleFields.FLUIDS, h + "fluid_present.fluid", "minecraft:fluid")
                         .withHint(h + "fluid_present.fluid.hint")
         ), false));
 
         // time_of_day：可跨零点
         ResourceLocation timeOfDay = id("time_of_day");
-        ConditionEditorRegistry.register(new TypeEditorDescriptor(timeOfDay, TypeLabels.conditionLabel(timeOfDay), List.of(
+        EditorRegistries.CONDITIONS.register(new TypeEditorDescriptor(timeOfDay, TypeLabels.conditionLabel(timeOfDay), List.of(
                 EditorField.integer(RuleFields.CONDITION_FROM, h + "time_of_day.from", 0, 23999),
                 EditorField.integer(RuleFields.CONDITION_TO, h + "time_of_day.to", 0, 23999),
                 EditorField.note(h + "time_of_day.note")
@@ -142,7 +144,7 @@ public final class BuiltinEditorDescriptors {
 
         // Integer.MAX_VALUE 仅表达 int 的存储边界，常用滑条窗口不限制 JSON 参数高度。
         ResourceLocation yLevel = id("y_level");
-        ConditionEditorRegistry.register(new TypeEditorDescriptor(yLevel, TypeLabels.conditionLabel(yLevel), List.of(
+        EditorRegistries.CONDITIONS.register(new TypeEditorDescriptor(yLevel, TypeLabels.conditionLabel(yLevel), List.of(
                 EditorField.optionalInteger(RuleFields.CONDITION_MIN, h + "y_level.min", YLevelCondition.MIN_Y, Integer.MAX_VALUE)
                         .withNumbers(NumericDomain.integers(YLevelCondition.MIN_Y, Integer.MAX_VALUE, Y_LEVEL_SLIDER_MIN, Y_LEVEL_SLIDER_MAX)),
                 EditorField.optionalInteger(RuleFields.CONDITION_MAX, h + "y_level.max", YLevelCondition.MIN_Y, Integer.MAX_VALUE)
@@ -151,7 +153,7 @@ public final class BuiltinEditorDescriptors {
 
         // light_level：两端全空 = 恒真
         ResourceLocation lightLevel = id("light_level");
-        ConditionEditorRegistry.register(new TypeEditorDescriptor(lightLevel, TypeLabels.conditionLabel(lightLevel), List.of(
+        EditorRegistries.CONDITIONS.register(new TypeEditorDescriptor(lightLevel, TypeLabels.conditionLabel(lightLevel), List.of(
                 EditorField.optionalInteger(RuleFields.CONDITION_MIN, h + "light_level.min", 0, 15),
                 EditorField.optionalInteger(RuleFields.CONDITION_MAX, h + "light_level.max", 0, 15),
                 EditorField.note(h + "light_level.note")
@@ -161,7 +163,7 @@ public final class BuiltinEditorDescriptors {
     // ---- 效果 ----
 
     private static void registerEffects() {
-        String h = "gui.itemdespawntowhat.edit.field.";
+        String h = FIELD;
 
         // 统一实体产出；实际参数表单按子类型生成，不展示不相容字段。
         registerEffect(id("spawn_entity"), entityFields("item"));
@@ -232,7 +234,7 @@ public final class BuiltinEditorDescriptors {
 
     /** 生成选中子类型的参数描述符；公共字段沿用注册表，第三方类型不受影响。 */
     public static TypeEditorDescriptor entityDescriptor(String variant) {
-        TypeEditorDescriptor base = EffectEditorRegistry.descriptorFor(id("spawn_entity"));
+        TypeEditorDescriptor base = EditorRegistries.EFFECTS.descriptorFor(id("spawn_entity"));
         List<EditorField> fields = new ArrayList<>(entityFields(variant));
         base.fields().stream().filter(field -> List.of("delay_ticks", "chance").contains(field.name()))
                 .forEach(fields::add);
@@ -245,8 +247,8 @@ public final class BuiltinEditorDescriptors {
                     EditorField.tag("entity", FIELD + "spawn_entity.entity", "minecraft:entity_type"),
                     EditorField.integer("count", FIELD + "spawn_entity.count", 1, 64).optional(),
                     EditorField.integerSlider("age", FIELD + "spawn_entity.age", Integer.MIN_VALUE, Integer.MAX_VALUE, -24000, 24000)
-                            .optional().withPresets(new EditorPreset("-24000", "gui.itemdespawntowhat.edit.preset.baby"),
-                                    new EditorPreset("0", "gui.itemdespawntowhat.edit.preset.adult")));
+                            .optional().withPresets(new EditorPreset("-24000", TypeLabels.UI_PREFIX + "preset.baby"),
+                                    new EditorPreset("0", TypeLabels.UI_PREFIX + "preset.adult")));
             case "experience" -> List.of(
                     EditorField.integer("amount", FIELD + "spawn_xp.amount", 1, 65536).optional());
             default -> List.of(EditorField.tag("item", FIELD + "spawn_item.item", "minecraft:item"),
@@ -262,14 +264,14 @@ public final class BuiltinEditorDescriptors {
                 .withNumbers(NumericDomain.integers(0, Integer.MAX_VALUE, 0, 1200))
                 .withHint(COMMON + "delay_ticks.hint"));
         fields.add(EditorField.percent("chance", COMMON + "chance").optional());
-        EffectEditorRegistry.register(new TypeEditorDescriptor(typeId, TypeLabels.effectLabel(typeId), fields, false));
+        EditorRegistries.EFFECTS.register(new TypeEditorDescriptor(typeId, TypeLabels.effectLabel(typeId), fields, false));
     }
 
     // ---- 规则级与来源对象（不在条件/效果注册表内，界面按需取用） ----
 
     /** 规则基本信息页签的字段描述符 */
     public static TypeEditorDescriptor ruleDescriptor() {
-        String r = "gui.itemdespawntowhat.edit.rule.";
+        String r = RULE;
         return new TypeEditorDescriptor(RULE_DESCRIPTOR, Component.translatable(r + "info"), List.of(
                 EditorField.bool(RuleFields.ENABLED, r + "enabled"),
                 EditorField.integerSlider(RuleFields.PRIORITY, r + "priority", Integer.MIN_VALUE, Integer.MAX_VALUE, -100, 100)
@@ -291,7 +293,7 @@ public final class BuiltinEditorDescriptors {
 
     /** 源固定成本字段：可省略（省略时后端推导）；合法域 1..INT_MAX，常用窗口 1..64 */
     public static TypeEditorDescriptor sourceCostDescriptor() {
-        String r = "gui.itemdespawntowhat.edit.rule.";
+        String r = RULE;
         return new TypeEditorDescriptor(SOURCE_COST_DESCRIPTOR, Component.translatable(r + "source_cost"), List.of(
                 EditorField.itemCounts(RuleFields.SOURCE_COST, r + "source_cost", 1, Integer.MAX_VALUE)
         ), false);
@@ -299,9 +301,9 @@ public final class BuiltinEditorDescriptors {
 
     /** 催化剂门槛、可选实际消耗量和规则共享搜索半径。 */
     public static TypeEditorDescriptor catalystCostDescriptor() {
-        String r = "gui.itemdespawntowhat.edit.rule.";
+        String r = RULE;
         return new TypeEditorDescriptor(CATALYST_COST_DESCRIPTOR, Component.translatable(r + "catalyst_cost"), List.of(
-                EditorField.tagList(RuleFields.CATALYST_ITEMS, "gui.itemdespawntowhat.edit.field.catalyst_present.items", "minecraft:item").asRequired(),
+                EditorField.tagList(RuleFields.CATALYST_ITEMS, FIELD + "catalyst_present.items", "minecraft:item").asRequired(),
                 EditorField.itemCounts(RuleFields.ITEM_COUNTS, r + "catalyst_cost.count",
                         CatalystCost.MIN_COUNT, CatalystCost.MAX_COUNT),
                 // 滑条最小为 1；精确输入 0 在输入页按「不消耗」处理（关闭开关并移除该表）
@@ -315,7 +317,7 @@ public final class BuiltinEditorDescriptors {
 
     /** 源物品页签的字段描述符 */
     public static TypeEditorDescriptor sourceDescriptor() {
-        String r = "gui.itemdespawntowhat.edit.rule.";
+        String r = RULE;
         return new TypeEditorDescriptor(SOURCE_DESCRIPTOR, Component.translatable(r + "source"), List.of(
                 EditorField.tagList("items", r + "source.items", "minecraft:item")
                         .asRequired()

@@ -3,11 +3,12 @@ package com.meteorite.itemdespawntowhat.client.edit;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
 import com.meteorite.itemdespawntowhat.core.type.effect.PlaceBlockEffect;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
-/***
+/**
  * 内置类型的新建初值与省略字段的展示默认值。
  * 必填的 id、标签与列表留空，由表单校验定位；新建初值不代表已保存规则的缺省语义，
  * {@link #effectiveValue(RuleValue, String)} 按后端语义展示省略字段。
@@ -36,7 +37,7 @@ public final class BuiltinEditorDefaults {
         JsonObject body = new JsonObject();
         body.addProperty(RuleFields.TYPE, type.toString());
         applyEffectDefaults(body, type.getPath());
-        fillDescriptorDefaults(body, EffectEditorRegistry.descriptorFor(type));
+        fillDescriptorDefaults(body, EditorRegistries.EFFECTS.descriptorFor(type));
         return RuleValue.wrap(body);
     }
 
@@ -60,7 +61,7 @@ public final class BuiltinEditorDefaults {
         return switch (field) {
             case "enabled" -> RuleValue.flag(true);
             case "priority" -> RuleValue.integer(0);
-            case "trigger_after_seconds" -> RuleValue.integer(com.meteorite.itemdespawntowhat.core.model.RuleCodecs.DEFAULT_TRIGGER_AFTER_SECONDS);
+            case "trigger_after_seconds" -> RuleValue.integer(RuleCodecs.DEFAULT_TRIGGER_AFTER_SECONDS);
             default -> null;
         };
     }
@@ -70,7 +71,7 @@ public final class BuiltinEditorDefaults {
         JsonObject condition = new JsonObject();
         condition.addProperty(RuleFields.TYPE, type.toString());
         applyConditionDefaults(condition, type.getPath());
-        fillDescriptorDefaults(condition, ConditionEditorRegistry.descriptorFor(type));
+        fillDescriptorDefaults(condition, EditorRegistries.CONDITIONS.descriptorFor(type));
         JsonObject leaf = new JsonObject();
         leaf.addProperty(RuleFields.OP, RuleFields.OP_LEAF);
         leaf.add(RuleFields.CONDITION, condition);
