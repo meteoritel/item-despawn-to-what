@@ -31,13 +31,13 @@
 
 ### 条件叶（leaf）
 
-`leaf` 的 `condition` 是一个由 `type` 和该类型自己的参数组成的对象，`type` 一律带命名空间前缀 `itemdespawntowhat:`：
+`leaf` 的 `condition` 是一个由 `type` 和该类型自己的参数组成的对象，`type` 一律带命名空间前缀 `idtw:`：
 
 ```json
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:dimension",
+    "type": "idtw:dimension",
     "dimensions": ["minecraft:overworld"]
   }
 }
@@ -49,12 +49,12 @@
 {
   "op": "all_of",
   "terms": [
-    { "op": "leaf", "condition": { "type": "itemdespawntowhat:outdoor" } },
+    { "op": "leaf", "condition": { "type": "idtw:outdoor" } },
     {
       "op": "inverted",
       "term": {
         "op": "leaf",
-        "condition": { "type": "itemdespawntowhat:weather", "weather": "thunder" }
+        "condition": { "type": "idtw:weather", "weather": "thunder" }
       }
     }
   ]
@@ -77,14 +77,14 @@
       {
         "op": "leaf",
         "condition": {
-          "type": "itemdespawntowhat:biome",
+          "type": "idtw:biome",
           "mode": "exact",
           "biomes": ["#minecraft:is_forest"]
         }
       },
       {
         "op": "leaf",
-        "condition": { "type": "itemdespawntowhat:time_of_day", "from": 13000, "to": 23000 }
+        "condition": { "type": "idtw:time_of_day", "from": 13000, "to": 23000 }
       }
     ]
   },
@@ -151,20 +151,20 @@
 
 ## 条件类型速查
 
-`type` 一律带命名空间前缀 `itemdespawntowhat:`。引用类参数（物品、方块、流体、群系）除 `dimension` 外都支持 `#` 开头的标签写法，例如 `"#minecraft:logs"`。
+`type` 一律带命名空间前缀 `idtw:`。引用类参数（物品、方块、流体、群系）除 `dimension` 外都支持 `#` 开头的标签写法，例如 `"#minecraft:logs"`。
 
 | `type` | 中文名 | 作用 | 参数 |
 |---|---|---|---|
-| `itemdespawntowhat:dimension` | 维度 | 掉落物在指定维度之一 | `dimensions` |
-| `itemdespawntowhat:biome` | 生物群系 | 群系匹配，或气候参数落在区间内 | `mode`、`biomes`、六个气候区间 |
-| `itemdespawntowhat:time_of_day` | 时间 | 世界时间落在区间内 | `from`、`to` |
-| `itemdespawntowhat:weather` | 天气 | 当前天气等于指定值 | `weather` |
-| `itemdespawntowhat:light_level` | 光照等级 | 所在位置的光照等级落在区间内 | `min`、`max` |
-| `itemdespawntowhat:y_level` | Y 高度 | 所在高度落在区间内 | `min`、`max` |
-| `itemdespawntowhat:outdoor` | 露天 | 上方没有遮挡、能看到天空 | 无 |
-| `itemdespawntowhat:surrounding_blocks` | 周围方块 | 上下前后左右六个相邻方块匹配 | `up`、`down`、`north`、`south`、`east`、`west` |
-| `itemdespawntowhat:fluid_present` | 存在流体 | 所在位置有指定流体 | `fluid`、`fluids` |
-| `itemdespawntowhat:catalyst_present` | 存在催化剂 | 共享半径内有足够催化剂 | `items`、`count`、`counts` |
+| `idtw:dimension` | 维度 | 掉落物在指定维度之一 | `dimensions` |
+| `idtw:biome` | 生物群系 | 群系匹配，或气候参数落在区间内 | `mode`、`biomes`、六个气候区间 |
+| `idtw:time_of_day` | 时间 | 世界时间落在区间内 | `from`、`to` |
+| `idtw:weather` | 天气 | 当前天气等于指定值 | `weather` |
+| `idtw:light_level` | 光照等级 | 所在位置的光照等级落在区间内 | `min`、`max` |
+| `idtw:y_level` | Y 高度 | 所在高度落在区间内 | `min`、`max` |
+| `idtw:outdoor` | 露天 | 上方没有遮挡、能看到天空 | 无 |
+| `idtw:surrounding_blocks` | 周围方块 | 上下前后左右六个相邻方块匹配 | `up`、`down`、`north`、`south`、`east`、`west` |
+| `idtw:fluid_present` | 存在流体 | 所在位置有指定流体 | `fluid`、`fluids` |
+| `idtw:catalyst_present` | 存在催化剂 | 共享半径内有足够催化剂 | `items`、`count`、`counts` |
 
 ## 逐个条件类型
 
@@ -182,7 +182,7 @@
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:dimension",
+    "type": "idtw:dimension",
     "dimensions": ["minecraft:overworld", "minecraft:the_end"]
   }
 }
@@ -215,7 +215,7 @@
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:biome",
+    "type": "idtw:biome",
     "mode": "exact",
     "biomes": ["#minecraft:is_forest"]
   }
@@ -226,7 +226,7 @@
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:biome",
+    "type": "idtw:biome",
     "mode": "climate",
     "temperature": { "min": 0.2 },
     "humidity": { "max": -0.2 }
@@ -252,7 +252,7 @@
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:time_of_day",
+    "type": "idtw:time_of_day",
     "from": 13000,
     "to": 23000
   }
@@ -281,7 +281,7 @@
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:weather",
+    "type": "idtw:weather",
     "weather": "thunder"
   }
 }
@@ -304,7 +304,7 @@
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:light_level",
+    "type": "idtw:light_level",
     "max": 7
   }
 }
@@ -329,7 +329,7 @@
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:y_level",
+    "type": "idtw:y_level",
     "max": 0
   }
 }
@@ -347,7 +347,7 @@
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:outdoor"
+    "type": "idtw:outdoor"
   }
 }
 ```
@@ -375,7 +375,7 @@
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:surrounding_blocks",
+    "type": "idtw:surrounding_blocks",
     "down": "#minecraft:logs"
   }
 }
@@ -400,13 +400,13 @@
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:fluid_present",
+    "type": "idtw:fluid_present",
     "fluid": "minecraft:water"
   }
 }
 ```
 
-典型场景：泡在水里才转化的规则；与存在催化剂条件组合，做出水加骨粉这类配方（模组自带的内置规则 `itemdespawntowhat:builtin_catalyst_and_fluid` 就用了这个组合）。
+典型场景：泡在水里才转化的规则；与存在催化剂条件组合，做出水加骨粉这类配方（模组自带的内置规则 `idtw:builtin_catalyst_and_fluid` 就用了这个组合）。
 
 ### catalyst_present（存在催化剂）
 
@@ -427,7 +427,7 @@
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:catalyst_present",
+    "type": "idtw:catalyst_present",
     "items": ["minecraft:bone_meal"],
     "count": 1
   }
@@ -438,7 +438,7 @@
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:catalyst_present",
+    "type": "idtw:catalyst_present",
     "items": ["minecraft:redstone", "minecraft:glowstone_dust"],
     "counts": { "minecraft:redstone": 4, "minecraft:glowstone_dust": 1 }
   }
@@ -459,10 +459,10 @@
   "terms": [
     {
       "op": "leaf",
-      "condition": { "type": "itemdespawntowhat:time_of_day", "from": 13000, "to": 23000 }
+      "condition": { "type": "idtw:time_of_day", "from": 13000, "to": 23000 }
     },
-    { "op": "leaf", "condition": { "type": "itemdespawntowhat:weather", "weather": "rain" } },
-    { "op": "leaf", "condition": { "type": "itemdespawntowhat:weather", "weather": "thunder" } }
+    { "op": "leaf", "condition": { "type": "idtw:weather", "weather": "rain" } },
+    { "op": "leaf", "condition": { "type": "idtw:weather", "weather": "thunder" } }
   ]
 }
 ```
@@ -473,7 +473,7 @@
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:biome",
+    "type": "idtw:biome",
     "mode": "exact",
     "biomes": ["#minecraft:is_taiga", "minecraft:swamp"]
   }
@@ -486,8 +486,8 @@
 {
   "op": "all_of",
   "terms": [
-    { "op": "leaf", "condition": { "type": "itemdespawntowhat:y_level", "max": 20 } },
-    { "op": "leaf", "condition": { "type": "itemdespawntowhat:light_level", "max": 7 } }
+    { "op": "leaf", "condition": { "type": "idtw:y_level", "max": 20 } },
+    { "op": "leaf", "condition": { "type": "idtw:light_level", "max": 7 } }
   ]
 }
 ```
@@ -502,15 +502,15 @@
       "op": "inverted",
       "term": {
         "op": "leaf",
-        "condition": { "type": "itemdespawntowhat:dimension", "dimensions": ["minecraft:overworld"] }
+        "condition": { "type": "idtw:dimension", "dimensions": ["minecraft:overworld"] }
       }
     },
-    { "op": "inverted", "term": { "op": "leaf", "condition": { "type": "itemdespawntowhat:outdoor" } } }
+    { "op": "inverted", "term": { "op": "leaf", "condition": { "type": "idtw:outdoor" } } }
   ]
 }
 ```
 
-流动水里、旁边有骨粉（模组自带的内置规则 `itemdespawntowhat:builtin_catalyst_and_fluid` 的 `conditions` 就是这么写的，可以直接照抄）：
+流动水里、旁边有骨粉（模组自带的内置规则 `idtw:builtin_catalyst_and_fluid` 的 `conditions` 就是这么写的，可以直接照抄）：
 
 ```json
 {
@@ -519,14 +519,14 @@
     {
       "op": "leaf",
       "condition": {
-        "type": "itemdespawntowhat:fluid_present",
+        "type": "idtw:fluid_present",
         "fluid": "minecraft:water"
       }
     },
     {
       "op": "leaf",
       "condition": {
-        "type": "itemdespawntowhat:catalyst_present",
+        "type": "idtw:catalyst_present",
         "items": ["minecraft:bone_meal"],
         "count": 1
       }
@@ -541,7 +541,7 @@
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:surrounding_blocks",
+    "type": "idtw:surrounding_blocks",
     "up": "#minecraft:logs",
     "down": "#minecraft:logs",
     "north": "#minecraft:logs",

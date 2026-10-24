@@ -64,7 +64,7 @@
       },
       "effects": [
         {
-          "type": "itemdespawntowhat:spawn_entity",
+          "type": "idtw:spawn_entity",
           "item": "minecraft:prismarine_shard",
           "count": 1,
           "delay_ticks": 100,
@@ -72,7 +72,7 @@
           "variant": "item"
         },
         {
-          "type": "itemdespawntowhat:spawn_entity",
+          "type": "idtw:spawn_entity",
           "item": "minecraft:gold_nugget",
           "count": 1,
           "delay_ticks": 100,

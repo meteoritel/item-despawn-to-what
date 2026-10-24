@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.type.condition;
 
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
@@ -11,12 +12,12 @@ import net.minecraft.resources.ResourceLocation;
 /**
  * 条件类型 outdoor：判断掉落物是否暴露在天空下（露天）。
  * 无类型专属参数；叶级取反不受支持，取反请用条件树的 { "op": "inverted", "term": ... }。
- * JSON 示例：{ "op": "leaf", "condition": { "type": "itemdespawntowhat:outdoor" } }
+ * JSON 示例：{ "op": "leaf", "condition": { "type": "idtw:outdoor" } }
  */
 public record OutdoorCondition() implements Condition {
 
     // 类型 id，同时是 JSON 中 type 字段的取值
-    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("itemdespawntowhat", "outdoor");
+    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(Constants.ID_NAMESPACE, "outdoor");
 
     // 参数编解码器：无参数，解码时忽略对象内容（未知字段仍由类型分发层拦截）
     public static final MapCodec<OutdoorCondition> CODEC = MapCodec.unit(new OutdoorCondition());

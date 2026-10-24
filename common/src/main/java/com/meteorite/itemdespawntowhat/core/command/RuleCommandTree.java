@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.command;
 
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.service.RuleEditPermissions;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
@@ -13,7 +14,7 @@ import java.util.List;
 public final class RuleCommandTree {
 
     // 命令树根节点名，注册到 /idtw 之下
-    public static final String ROOT = "idtw";
+    public static final String ROOT = Constants.ID_NAMESPACE;
 
     private RuleCommandTree() {
         throw new UnsupportedOperationException("Utility class");

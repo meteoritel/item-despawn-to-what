@@ -6,13 +6,13 @@ After a rule fires, the mod runs every effect object in the `effects` array in o
 
 | Effect | `type` | One-shot | What it does |
 |---|---|---|---|
-| Entities | `itemdespawntowhat:spawn_entity` | No | Hands out items, spawns entities, or awards experience |
-| Arrow rain | `itemdespawntowhat:arrow_rain` | Yes | Drops a volley of arrows from above the trigger position, with optional potion effects |
-| Place block | `itemdespawntowhat:place_block` | No | Places blocks near the trigger position |
-| Loot table | `itemdespawntowhat:loot_table` | No | Rolls a loot table and drops the results |
-| Lightning | `itemdespawntowhat:lightning` | Yes | Strikes 1 to 16 bolts |
-| Explosion | `itemdespawntowhat:explosion` | Yes | Blows up once at the trigger position |
-| Weather | `itemdespawntowhat:weather` | Yes | Makes the current dimension rain or clear up |
+| Entities | `idtw:spawn_entity` | No | Hands out items, spawns entities, or awards experience |
+| Arrow rain | `idtw:arrow_rain` | Yes | Drops a volley of arrows from above the trigger position, with optional potion effects |
+| Place block | `idtw:place_block` | No | Places blocks near the trigger position |
+| Loot table | `idtw:loot_table` | No | Rolls a loot table and drops the results |
+| Lightning | `idtw:lightning` | Yes | Strikes 1 to 16 bolts |
+| Explosion | `idtw:explosion` | Yes | Blows up once at the trigger position |
+| Weather | `idtw:weather` | Yes | Makes the current dimension rain or clear up |
 
 This page starts with the fields every effect shares, then walks through the table row by row.
 
@@ -22,7 +22,7 @@ Every effect object can carry the three fields below. `type` is required and the
 
 | Field | What it does | Values | Default | Notes |
 |---|---|---|---|---|
-| `type` | Says which effect this is | An effect id that starts with `itemdespawntowhat:`, listed in the table above | None, required | A wrong name rejects the rule, and the message lists the registered types |
+| `type` | Says which effect this is | An effect id that starts with `idtw:`, listed in the table above | None, required | A wrong name rejects the rule, and the message lists the registered types |
 | `delay_ticks` | How long to wait before running this effect | Integer (unit: ticks, 20 ticks = 1 second) | `0` | Counts from the moment the rule fires; a negative value rejects the rule, and the message names `delay_ticks` |
 | `chance` | The chance this effect passes, rolled when its turn comes | `0.0` to `1.0` | `1.0` | A value outside this range rejects the rule with a message about `chance`; `1` or `1.0` always runs |
 
@@ -45,7 +45,7 @@ Three things worth knowing:
 
 ## Entities (spawn_entity)
 
-`type`: `itemdespawntowhat:spawn_entity`
+`type`: `idtw:spawn_entity`
 
 The **variant** field decides what comes out: `variant` is required and takes `item`, `entity`, or `experience`. The parameters of the variant sit at the same level as `type` and `variant`.
 
@@ -61,7 +61,7 @@ The **variant** field decides what comes out: `variant` is required and takes `i
 | `count` | How many items to produce | 1 to 64 | `1` | When the amount is above the stack size of the item, the mod splits it into several stacks; at most 16 stacks per tick, the rest continue on later ticks |
 
 ```json
-{ "type": "itemdespawntowhat:spawn_entity", "variant": "item", "item": "minecraft:rotten_flesh", "count": 1 }
+{ "type": "idtw:spawn_entity", "variant": "item", "item": "minecraft:rotten_flesh", "count": 1 }
 ```
 
 What you see in game: one piece of rotten flesh lands near the trigger position and players can pick it up right away. If the source item was still moving horizontally when it was destroyed, the product's horizontal velocity points the opposite way, so it flies back toward the direction the item was thrown from and is easier to pick up; a source item at rest has no direction to mirror, so the product keeps the original small scatter (within 0.15 blocks horizontally). Larger amounts arrive over several ticks instead of all at once; which item comes out and how many pieces is decided the moment the conversion succeeds, not later. The new drop carries protection and a conversion cooldown so that the rules do not consume it again at once; see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
@@ -75,7 +75,7 @@ What you see in game: one piece of rotten flesh lands near the trigger position 
 | `age` | Age | Integer, positive or negative | `0` | Applies only to mobs that grow up, such as farm animals and villagers; `0` is an adult and `-24000` is a newborn |
 
 ```json
-{ "type": "itemdespawntowhat:spawn_entity", "variant": "entity", "entity": "minecraft:chicken", "count": 1, "age": -24000 }
+{ "type": "idtw:spawn_entity", "variant": "entity", "entity": "minecraft:chicken", "count": 1, "age": -24000 }
 ```
 
 What you see in game: a baby chicken spawns near the trigger position. With `safe_spawn` on, the mod searches the 5x5x5 block box centered on the trigger position, 125 blocks in all, from near to far for a spot the entity can stand on. When it finds none, it falls back to the area around the trigger position. This switch is off by default.
@@ -89,7 +89,7 @@ Note: item entities (`minecraft:item`) and experience orbs (`minecraft:experienc
 | `amount` | Experience points per source item | 1 to 65536 | `1` | The group total is `amount` times the source items that group actually took. The mod fills orbs up to 32767 points each, so anything smaller is one orb, and the remainder goes into the last orb. It spawns at most 16 orbs per batch and keeps going until all points are out |
 
 ```json
-{ "type": "itemdespawntowhat:spawn_entity", "variant": "experience", "amount": 100 }
+{ "type": "idtw:spawn_entity", "variant": "experience", "amount": 100 }
 ```
 
 What you see in game: with a group that paid one source item, 100 experience points fit inside one orb, so you see exactly **one** experience orb near the trigger position. Orbs land at random points on a disc of radius 0.5 blocks around the trigger position, raised 0.2 blocks above it. Only a larger amount splits into more orbs: at most 16 orbs per batch, with the next batch waiting at least one more game tick, until all points are out. Each experience effect and each group computes its own points from the source items that group actually took, and points from different effects or groups never merge. Collect them by walking over them.
@@ -98,7 +98,7 @@ The number of nearby experience orbs never blocks a group over experience storag
 
 ## Arrow Rain (arrow_rain)
 
-`type`: `itemdespawntowhat:arrow_rain`
+`type`: `idtw:arrow_rain`
 
 | Field | What it does | Values | Default | Notes |
 |---|---|---|---|---|
@@ -115,12 +115,12 @@ Each entry in `potion_effects`:
 | `amplifier` | Level | 0 to 255 | `0` | `0` is level I and `1` is level II |
 
 ```json
-{ "type": "itemdespawntowhat:arrow_rain", "count": 32, "pickup": "allowed", "delay_ticks": 10 }
+{ "type": "idtw:arrow_rain", "count": 32, "pickup": "allowed", "delay_ticks": 10 }
 ```
 
 ```json
 {
-  "type": "itemdespawntowhat:arrow_rain",
+  "type": "idtw:arrow_rain",
   "count": 16,
   "pickup": "creative_only",
   "potion_effects": [
@@ -133,7 +133,7 @@ What you see in game: after a 10 tick delay the volley starts and drops 32 downw
 
 ## Place Block (place_block)
 
-`type`: `itemdespawntowhat:place_block`
+`type`: `idtw:place_block`
 
 | Field | What it does | Values | Default | Notes |
 |---|---|---|---|---|
@@ -159,20 +159,20 @@ Notes:
 - Whether the trigger position itself takes part depends on the fill origin switch of the candidate; see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
 
 ```json
-{ "type": "itemdespawntowhat:place_block", "use_source_block": true, "shape": "square", "count": 1, "radius": 1 }
+{ "type": "idtw:place_block", "use_source_block": true, "shape": "square", "count": 1, "radius": 1 }
 ```
 
 What you see in game: the block that matches the source item this run used appears within 1 block of the trigger position, at most 1 block.
 
 ```json
-{ "type": "itemdespawntowhat:place_block", "block": "minecraft:cobblestone", "shape": "circle", "count": 32, "radius": 4, "limit": 64 }
+{ "type": "idtw:place_block", "block": "minecraft:cobblestone", "shape": "circle", "count": 32, "radius": 4, "limit": 64 }
 ```
 
 What you see in game: cobblestone fills in from the inside out across a circle of radius 4 around the trigger position, up to 32 blocks. When that volume already holds 64 cobblestone, the mod places nothing at all.
 
 ## Loot Table (loot_table)
 
-`type`: `itemdespawntowhat:loot_table`
+`type`: `idtw:loot_table`
 
 | Field | What it does | Values | Default | Notes |
 |---|---|---|---|---|
@@ -180,28 +180,28 @@ What you see in game: cobblestone fills in from the inside out across a circle o
 | `luck` | Luck value | `-100` to `100` | `0` | Affects entries that carry a luck check and may be negative |
 
 ```json
-{ "type": "itemdespawntowhat:loot_table", "loot_table": "minecraft:chests/simple_dungeon", "luck": 0, "chance": 0.5 }
+{ "type": "idtw:loot_table", "loot_table": "minecraft:chests/simple_dungeon", "luck": 0, "chance": 0.5 }
 ```
 
 What you see in game: with a 50 percent chance the mod rolls the simple dungeon chest loot table once and the results scatter near the trigger position, and each product's horizontal velocity is opposite to the source item's motion when it was destroyed, so it flies back toward the direction the item came from. The roll uses the trigger position as its origin and hands the source entity to the table as the acting entity, the same way a chest does. It provides no killer, so entries that need a player kill never apply. The table is rolled exactly once, at the moment the conversion succeeds: a delayed or multi-tick delivery never re-rolls, and an empty roll simply drops nothing.
 
 ## Lightning (lightning)
 
-`type`: `itemdespawntowhat:lightning`
+`type`: `idtw:lightning`
 
 | Field | What it does | Values | Default | Notes |
 |---|---|---|---|---|
 | `count` | How many bolts | 1 to 16 | `1` | 8 ticks (0.4 seconds) between bolts |
 
 ```json
-{ "type": "itemdespawntowhat:lightning", "count": 1, "delay_ticks": 20 }
+{ "type": "idtw:lightning", "count": 1, "delay_ticks": 20 }
 ```
 
 What you see in game: after a 1 second delay one bolt strikes, identical to vanilla lightning, so it deals damage and sets blocks on fire. With `count: 3`, the first bolt keeps the trigger's horizontal coordinates and the other two scatter randomly within 5 blocks. Bolts land on the topmost collision or fluid surface, including slabs and stairs; an underground trigger still strikes the surface above. In the void, where no surface exists, bolts use the heightmap height.
 
 ## Explosion (explosion)
 
-`type`: `itemdespawntowhat:explosion`
+`type`: `idtw:explosion`
 
 | Field | What it does | Values | Default | Notes |
 |---|---|---|---|---|
@@ -210,20 +210,20 @@ What you see in game: after a 1 second delay one bolt strikes, identical to vani
 | `visual_only` | Visuals only, with no world change | `true` / `false` | `false` | When true, the mod plays particles and sound without breaking blocks or hurting entities |
 
 ```json
-{ "type": "itemdespawntowhat:explosion", "power": 2, "fire": true, "visual_only": false }
+{ "type": "idtw:explosion", "power": 2, "fire": true, "visual_only": false }
 ```
 
 What you see in game: an explosion of power 2 goes off at the trigger position, breaking blocks and leaving fire behind.
 
 ```json
-{ "type": "itemdespawntowhat:explosion", "power": 4, "visual_only": true }
+{ "type": "idtw:explosion", "power": 4, "visual_only": true }
 ```
 
 What you see in game: only the particles and the sound of an explosion, with no effect on the world or on entities. This suits a loud but harmless show.
 
 ## Weather (weather)
 
-`type`: `itemdespawntowhat:weather`
+`type`: `idtw:weather`
 
 | Field | What it does | Values | Default | Notes |
 |---|---|---|---|---|
@@ -232,7 +232,7 @@ What you see in game: only the particles and the sound of an explosion, with no 
 | `thundering` | Whether to make it a thunderstorm | `true` / `false` | `false` | Applies only with `rain` |
 
 ```json
-{ "type": "itemdespawntowhat:weather", "mode": "rain", "duration_ticks": 6000, "thundering": true }
+{ "type": "idtw:weather", "mode": "rain", "duration_ticks": 6000, "thundering": true }
 ```
 
 What you see in game: the current dimension turns into a thunderstorm at once for 6000 ticks (5 minutes).

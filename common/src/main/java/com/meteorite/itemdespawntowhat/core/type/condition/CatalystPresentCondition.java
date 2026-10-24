@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.type.condition;
 
+import com.meteorite.itemdespawntowhat.Constants;
+
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
@@ -29,7 +31,7 @@ import java.util.Optional;
  * 找不到可匹配的门槛配置时按 DEFAULT_COUNT（1）处理。
  * 留空状态会被解码与编码原样保留，投影只影响运行期有效值，不反写用户声明。
  * 附近扫描范围见 CatalystPresentEvaluator：规则共享 radius 范围，排除源物品自身与已死亡实体。
- * JSON 示例：{ "type": "itemdespawntowhat:catalyst_present", "items": ["minecraft:blaze_powder"] }
+ * JSON 示例：{ "type": "idtw:catalyst_present", "items": ["minecraft:blaze_powder"] }
  */
 public record CatalystPresentCondition(List<TaggedId> items, @Nullable Integer count,
                                       Map<TaggedId, Integer> counts, int radius) implements Condition {
@@ -40,7 +42,7 @@ public record CatalystPresentCondition(List<TaggedId> items, @Nullable Integer c
     }
 
     /** 类型 id，同时是 JSON 中 type 字段的取值 */
-    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("itemdespawntowhat", "catalyst_present");
+    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(Constants.ID_NAMESPACE, "catalyst_present");
 
     // 参数 JSON 字段名
     private static final String FIELD_ITEMS = "items";

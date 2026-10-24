@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.type.effect;
 
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecutor;
@@ -38,7 +39,7 @@ public record WeatherEffect(
 ) implements Effect {
 
     // 效果类型 id，同时是 JSON 中 type 字段的取值
-    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("itemdespawntowhat", "weather");
+    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(Constants.ID_NAMESPACE, "weather");
 
     // 类型专属参数字段名
     public static final String MODE_FIELD = "mode";

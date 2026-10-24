@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.service;
 
+import com.meteorite.itemdespawntowhat.Constants;
+
 /**
  * 独占编辑会话的时间与权限常量。
  * 所有时间常量以"服务端活动 tick"为单位（20 tick = 1 秒），暂停时租约不流逝。
@@ -16,7 +18,7 @@ public final class RuleEditSessionLimits {
     public static final int LEASE_SECONDS = 60;
 
     // 独占编辑目标标识（全局唯一，不再按玩家维度隔离）
-    public static final String TARGET_ID = "itemdespawntowhat:rules";
+    public static final String TARGET_ID = Constants.MOD_ID + ":rules";
 
     // 打开编辑器所需的权限等级
     public static final int REQUIRED_PERMISSION_LEVEL = 2;

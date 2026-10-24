@@ -30,7 +30,7 @@
   "id": "myrules:chicken_to_rotten_flesh",
   "source": { "items": ["minecraft:chicken"] },
   "effects": [
-    { "type": "itemdespawntowhat:spawn_entity", "variant": "item", "item": "minecraft:rotten_flesh", "count": 1 }
+    { "type": "idtw:spawn_entity", "variant": "item", "item": "minecraft:rotten_flesh", "count": 1 }
   ]
 }
 ```
@@ -49,7 +49,7 @@
   "notes": "和内置示例同样 300 秒，但只在主世界生效。",
   "source": { "items": ["minecraft:chicken"] },
   "effects": [
-    { "type": "itemdespawntowhat:spawn_entity", "variant": "item", "item": "minecraft:rotten_flesh", "count": 1 }
+    { "type": "idtw:spawn_entity", "variant": "item", "item": "minecraft:rotten_flesh", "count": 1 }
   ]
 }
 ```
@@ -69,7 +69,7 @@
   "enabled": false,
   "source": { "items": ["minecraft:chicken"] },
   "effects": [
-    { "type": "itemdespawntowhat:spawn_entity", "variant": "item", "item": "minecraft:rotten_flesh", "count": 1 }
+    { "type": "idtw:spawn_entity", "variant": "item", "item": "minecraft:rotten_flesh", "count": 1 }
   ]
 }
 ```
@@ -107,7 +107,7 @@
   },
   "trigger_after_seconds": 60,
   "effects": [
-    { "type": "itemdespawntowhat:place_block", "use_source_block": true, "shape": "square", "count": 1, "radius": 1 }
+    { "type": "idtw:place_block", "use_source_block": true, "shape": "square", "count": 1, "radius": 1 }
   ]
 }
 ```
@@ -133,7 +133,7 @@
   "priority": 10,
   "source": { "items": ["minecraft:chicken"] },
   "effects": [
-    { "type": "itemdespawntowhat:spawn_entity", "variant": "item", "item": "minecraft:diamond", "count": 1 }
+    { "type": "idtw:spawn_entity", "variant": "item", "item": "minecraft:diamond", "count": 1 }
   ]
 }
 ```
@@ -168,7 +168,7 @@
   "source": { "items": ["minecraft:arrow"] },
   "triggers": ["fire", "lava"],
   "effects": [
-    { "type": "itemdespawntowhat:arrow_rain", "count": 16, "pickup": "allowed" }
+    { "type": "idtw:arrow_rain", "count": 16, "pickup": "allowed" }
   ]
 }
 ```
@@ -205,7 +205,7 @@
   "source": { "items": ["minecraft:chicken"] },
   "trigger_after_seconds": 10,
   "effects": [
-    { "type": "itemdespawntowhat:spawn_entity", "variant": "item", "item": "minecraft:rotten_flesh", "count": 1 }
+    { "type": "idtw:spawn_entity", "variant": "item", "item": "minecraft:rotten_flesh", "count": 1 }
   ]
 }
 ```
@@ -234,7 +234,7 @@
   "triggers": ["natural", "fire"],
   "trigger_after_seconds": 60,
   "effects": [
-    { "type": "itemdespawntowhat:place_block", "use_source_block": true, "shape": "square", "count": 1, "radius": 1 }
+    { "type": "idtw:place_block", "use_source_block": true, "shape": "square", "count": 1, "radius": 1 }
   ]
 }
 ```

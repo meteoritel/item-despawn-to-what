@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.debug;
 
 import com.google.gson.JsonObject;
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.runtime.ConversionRuntime;
 import com.meteorite.itemdespawntowhat.core.runtime.RuleIndex;
 import com.meteorite.itemdespawntowhat.core.runtime.SettlementLedger;
@@ -239,8 +240,8 @@ final class DebugPerformanceWindow {
         data.addProperty("queue_scope_dimension", level.dimension().location().toString());
         data.add("server_tick_cost", serverTimes.summary());
         data.add("vanilla_tick_cost", vanillaTimes.summary());
-        data.add("idtw_runtime_cost", runtimeTimes.summary());
-        data.addProperty("tick_cost_scope", "vanilla_tick_plus_idtw_runtime");
+        data.add(Constants.ID_NAMESPACE + "_runtime_cost", runtimeTimes.summary());
+        data.addProperty("tick_cost_scope", "vanilla_tick_plus_" + Constants.ID_NAMESPACE + "_runtime");
         data.addProperty("tick_timing_complete", missingTimingTicks == 0);
         data.addProperty("tick_timing_missing_ticks", missingTimingTicks);
         // 本维度（level 级）切片：字段名保持既有口径，便于与基线逐字段对照

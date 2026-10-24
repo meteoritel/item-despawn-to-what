@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.type.condition;
 
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.Evaluability;
@@ -22,7 +23,7 @@ import java.util.Optional;
  * 条件类型 surrounding_blocks：按掉落物上/下/北/南/东/西六个相邻方块的引用匹配。
  * 每个方向可空（null = 该方向不限制），引用支持方块 id 或 #tag，允许同一方向多方向叠加；
  * 六个方向全空视为无意义的条件，直接报错。
- * JSON 示例：{ "type": "itemdespawntowhat:surrounding_blocks", "down": "#minecraft:logs" }
+ * JSON 示例：{ "type": "idtw:surrounding_blocks", "down": "#minecraft:logs" }
  */
 public record SurroundingBlocksCondition(
         TaggedId up,
@@ -34,7 +35,7 @@ public record SurroundingBlocksCondition(
 ) implements Condition {
 
     // 类型 id，同时是 JSON 中 type 字段的取值
-    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("itemdespawntowhat", "surrounding_blocks");
+    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(Constants.ID_NAMESPACE, "surrounding_blocks");
 
     // 参数 JSON 字段名
     private static final String FIELD_UP = "up";

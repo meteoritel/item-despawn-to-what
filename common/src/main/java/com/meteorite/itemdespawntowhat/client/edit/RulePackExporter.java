@@ -5,6 +5,7 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.load.RulePaths;
 import java.io.IOException;
@@ -49,7 +50,7 @@ import org.jetbrains.annotations.Nullable;
 public final class RulePackExporter {
 
     // 导出目录（相对游戏根目录）
-    public static final String DIRECTORY = "itemdespawntowhat-exports";
+    public static final String DIRECTORY = Constants.MOD_ID + "-exports";
 
     // 导出范围标识：只导出覆盖层条目 / 覆盖层与数据包条目
     public static final String SCOPE_OVERLAY = "overlay";
@@ -138,7 +139,7 @@ public final class RulePackExporter {
         List<Prepared> prepared = prepare(entries);
         Path directory = Paths.get(DIRECTORY);
         Files.createDirectories(directory);
-        String baseName = "itemdespawntowhat-" + scope + "-" + STAMP.format(LocalDateTime.now());
+        String baseName = Constants.MOD_ID + "-" + scope + "-" + STAMP.format(LocalDateTime.now());
         Path file = uniquePath(directory, baseName);
         try (OutputStream out = Files.newOutputStream(file);
              ZipOutputStream zip = new ZipOutputStream(out, StandardCharsets.UTF_8)) {

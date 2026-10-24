@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.edit;
 
 import com.google.gson.JsonObject;
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEdit;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEditChangeSet;
@@ -17,8 +18,8 @@ import java.util.Map;
  */
 public final class EditorChangeSet {
 
-    // 本模组命名空间
-    public static final String OWN_NAMESPACE = "itemdespawntowhat";
+    // 本模组规则 id 的短命名空间
+    public static final String OWN_NAMESPACE = Constants.ID_NAMESPACE;
 
     // 提交依据的服务端版本
     private final int expectedVersion;

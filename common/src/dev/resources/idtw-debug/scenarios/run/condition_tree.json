@@ -46,7 +46,7 @@
       "source_cost": {"minecraft:paper": 1},
       "effects": [
         {
-          "type": "itemdespawntowhat:spawn_entity",
+          "type": "idtw:spawn_entity",
           "item": "minecraft:prismarine_shard",
           "count": 1,
           "delay_ticks": 0,
@@ -63,14 +63,14 @@
               {
                 "op": "leaf",
                 "condition": {
-                  "type": "itemdespawntowhat:y_level",
+                  "type": "idtw:y_level",
                   "min": 2048
                 }
               },
               {
                 "op": "leaf",
                 "condition": {
-                  "type": "itemdespawntowhat:y_level",
+                  "type": "idtw:y_level",
                   "min": -2048
                 }
               }
@@ -81,7 +81,7 @@
             "term": {
               "op": "leaf",
               "condition": {
-                "type": "itemdespawntowhat:y_level",
+                "type": "idtw:y_level",
                 "min": 2048
               }
             }

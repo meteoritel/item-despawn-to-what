@@ -68,7 +68,7 @@
       "id": "rotten_flesh",
       "effects": [
         {
-          "type": "itemdespawntowhat:spawn_entity",
+          "type": "idtw:spawn_entity",
           "variant": "item",
           "item": "minecraft:rotten_flesh",
           "count": 1
@@ -79,7 +79,7 @@
       "id": "chick",
       "effects": [
         {
-          "type": "itemdespawntowhat:spawn_entity",
+          "type": "idtw:spawn_entity",
           "variant": "entity",
           "entity": "minecraft:chicken",
           "age": -24000,

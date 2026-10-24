@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.core.config;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.RuleDecodeBudget;
 import com.meteorite.itemdespawntowhat.core.api.RuleRuntimeLimits;
@@ -54,7 +55,7 @@ public record ServerConfig(
     public static final int DEFAULT_CHECK_INTERVAL_TICKS = 20;
     public static final int DEFAULT_BACKOFF_MAX_TICKS = 100;
     public static final int DEFAULT_MAX_CHECKS_PER_TICK = 512;
-    public static final String DEFAULT_OVERLAY_DIRECTORY = "itemdespawntowhat";
+    public static final String DEFAULT_OVERLAY_DIRECTORY = Constants.MOD_ID;
     public static final int DEFAULT_FABRIC_LIFESPAN_FALLBACK_TICKS = 6000;
     public static final boolean DEFAULT_DEBUG_LOGGING = false;
 

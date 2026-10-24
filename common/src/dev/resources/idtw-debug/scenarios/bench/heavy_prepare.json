@@ -58,14 +58,14 @@
       },
       "effects": [
         {
-          "type": "itemdespawntowhat:loot_table",
+          "type": "idtw:loot_table",
           "loot_table": "minecraft:chests/simple_dungeon",
           "luck": 0,
           "delay_ticks": 0,
           "chance": 0
         },
         {
-          "type": "itemdespawntowhat:spawn_entity",
+          "type": "idtw:spawn_entity",
           "item": "minecraft:prismarine_shard",
           "count": 1,
           "delay_ticks": 0,

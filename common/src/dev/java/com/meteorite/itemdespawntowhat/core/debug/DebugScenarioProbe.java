@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.core.debug;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ScheduledTaskHandle;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
 import com.meteorite.itemdespawntowhat.core.state.DropStateStore;
@@ -110,7 +111,7 @@ final class DebugScenarioProbe {
     private void captureReturns() {
         if (run.benchmark) { return; }
         CompoundTag marker = new CompoundTag();
-        marker.putString("idtw_debug_run", run.id);
+        marker.putString(Constants.ID_NAMESPACE + "_debug_run", run.id);
         for (Entity entity : run.level.getAllEntities()) {
             if (!(entity instanceof ItemEntity item) || !item.isAlive() || !item.getItem().is(run.definition.sourceItem)
                     || run.sources.contains(item) || run.outputs.contains(item) || fixtures.contains(item)) { continue; }

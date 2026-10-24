@@ -1,11 +1,13 @@
 package com.meteorite.itemdespawntowhat.probe;
 
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.DevelopmentDiagnostics;
 import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
 import com.meteorite.itemdespawntowhat.core.debug.BackendProbe;
 import com.meteorite.itemdespawntowhat.core.debug.DebugProfile;
 import com.meteorite.itemdespawntowhat.core.debug.BackendRuntimeObserver;
 import com.meteorite.itemdespawntowhat.core.debug.DebugSessionManager;
+import com.meteorite.itemdespawntowhat.core.command.RuleCommandTree;
 import com.meteorite.itemdespawntowhat.core.debug.RuleDebugCommands;
 import com.meteorite.itemdespawntowhat.runtime.RuleRuntimeHost;
 import net.minecraft.commands.Commands;
@@ -19,7 +21,7 @@ import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 /** 只由 NeoForge 开发类目录提供的事件入口，发布产物没有此类。 */
-@EventBusSubscriber(modid = "itemdespawntowhat")
+@EventBusSubscriber(modid = Constants.MOD_ID)
 public final class ProbeMod {
     private ProbeMod() {}
 
@@ -38,7 +40,7 @@ public final class ProbeMod {
     /** 开发命令与正式根命令合并，生产命令树没有探针依赖。 */
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void commands(RegisterCommandsEvent event) {
-        event.getDispatcher().register(Commands.literal("idtw").then(RuleDebugCommands.build(RuleRuntimeHost.commandContext())));
+        event.getDispatcher().register(Commands.literal(RuleCommandTree.ROOT).then(RuleDebugCommands.build(RuleRuntimeHost.commandContext())));
     }
 
     /** 正式运行时已推进后再推进开发夹具，世界读写仍在服务端线程。 */

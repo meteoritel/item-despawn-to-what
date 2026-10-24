@@ -90,7 +90,7 @@ public final class RuleDebugCommands {
     private static int examples(CommandSourceStack source) {
         for (boolean benchmark : List.of(false, true)) {
             for (DebugScenarioSpec spec : DebugScenarioCatalog.entries(benchmark)) {
-                String command = "/idtw debug " + spec.key().replace('/', ' ');
+                String command = "/" + RuleCommandTree.ROOT + " debug " + spec.key().replace('/', ' ');
                 source.sendSuccess(() -> Component.translatable(PREFIX + "example.entry", command,
                         Component.translatable(spec.descriptionKey())), false);
             }

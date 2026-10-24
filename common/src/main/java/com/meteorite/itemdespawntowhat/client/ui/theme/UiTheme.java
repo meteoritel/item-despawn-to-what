@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.theme;
 
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlStyle;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiSliderStyle;
@@ -160,14 +161,14 @@ public final class UiTheme {
 
     // 小尺寸底图只拉伸边与中心，圆角保持尺寸，不形成整条白色高光。
     private static UiNineSlice surface(String name) {
-        return new UiNineSlice(ResourceLocation.fromNamespaceAndPath("itemdespawntowhat", "textures/gui/editor/" + name + ".png"), 32, 8);
+        return new UiNineSlice(ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "textures/gui/editor/" + name + ".png"), 32, 8);
     }
 
     // ---- 结构贴图：立体边与滚动条共用一张图集 ----
 
     // 四格 8x8 横向排列，格序与 tools/image_generator/generate-editor-chrome.py 一致
     private static final ResourceLocation CHROME = ResourceLocation.fromNamespaceAndPath(
-            "itemdespawntowhat", "textures/gui/editor/chrome.png");
+            Constants.MOD_ID, "textures/gui/editor/chrome.png");
     private static final int CHROME_TILE = 8;
     // 四条边各占 1 像素，中间区域留给九宫格拉伸
     private static final int CHROME_CORNER = 1;

@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.net;
 
+import com.meteorite.itemdespawntowhat.Constants;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,7 +12,7 @@ import org.slf4j.LoggerFactory;
 public final class EditorScreenHooks {
 
     // 日志
-    private static final Logger LOGGER = LoggerFactory.getLogger("itemdespawntowhat-client-net");
+    private static final Logger LOGGER = LoggerFactory.getLogger(Constants.MOD_ID + "-client-net");
 
     // 当前注册的界面实现；未注册或已注销时为 null
     private static volatile EditorScreenOpener opener;

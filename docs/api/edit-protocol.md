@@ -80,8 +80,8 @@ stateDiagram-v2
 {
   "expected_version": 12,
   "edits": [
-    { "id": "itemdespawntowhat:example", "action": "upsert", "rule": { } },
-    { "id": "itemdespawntowhat:removed", "action": "delete" }
+    { "id": "idtw:example", "action": "upsert", "rule": { } },
+    { "id": "idtw:removed", "action": "delete" }
   ]
 }
 ```

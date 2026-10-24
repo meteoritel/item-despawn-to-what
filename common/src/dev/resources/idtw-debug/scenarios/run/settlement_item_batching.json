@@ -47,7 +47,7 @@
       "source_cost": { "minecraft:paper": 2 },
       "effects": [
         {
-          "type": "itemdespawntowhat:spawn_entity",
+          "type": "idtw:spawn_entity",
           "variant": "item",
           "item": "minecraft:stone",
           "count": 10,
@@ -55,7 +55,7 @@
           "chance": 1
         },
         {
-          "type": "itemdespawntowhat:spawn_entity",
+          "type": "idtw:spawn_entity",
           "variant": "item",
           "item": "minecraft:stone",
           "count": 1,
@@ -63,7 +63,7 @@
           "chance": 1
         },
         {
-          "type": "itemdespawntowhat:spawn_entity",
+          "type": "idtw:spawn_entity",
           "variant": "item",
           "item": "minecraft:diamond_sword",
           "count": 2,

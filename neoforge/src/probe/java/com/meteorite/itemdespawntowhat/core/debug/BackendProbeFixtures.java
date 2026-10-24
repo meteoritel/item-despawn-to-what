@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.core.debug;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEdit;
 import com.meteorite.itemdespawntowhat.runtime.RuleRuntimeHost;
 import net.minecraft.resources.ResourceLocation;
@@ -25,6 +26,8 @@ import java.util.TreeMap;
 
 /** 世界探针共用的规则、实体与文件夹具；清理只触达本轮登记对象。 */
 final class BackendProbeFixtures {
+    // 探针专用命名空间，避免与正式规则命名空间混用
+    static final String PROBE_NAMESPACE = Constants.ID_NAMESPACE + "_probe";
     final List<ItemEntity> sources = new ArrayList<>();
     final List<ItemEntity> outputs = new ArrayList<>();
     private final List<Path> files = new ArrayList<>();
@@ -49,9 +52,9 @@ final class BackendProbeFixtures {
     }
 
     static JsonObject rule(String id, String output, int count, String... triggers) {
-        JsonObject rule = JsonParser.parseString("{\"id\":\"idtw_probe:" + id + "\",\"enabled\":true,\"priority\":1000,"
+        JsonObject rule = JsonParser.parseString("{\"id\":\"" + PROBE_NAMESPACE + ":" + id + "\",\"enabled\":true,\"priority\":1000,"
                 + "\"trigger_after_seconds\":0,\"source\":{\"items\":[\"minecraft:paper\"],\"exclude\":[]},"
-                + "\"effects\":[{\"type\":\"itemdespawntowhat:spawn_entity\",\"item\":\"minecraft:" + output
+                + "\"effects\":[{\"type\":\"" + Constants.ID_NAMESPACE + ":spawn_entity\",\"item\":\"minecraft:" + output
                 + "\",\"count\":" + count + ",\"delay_ticks\":0,\"chance\":1,\"variant\":\"item\"}]}").getAsJsonObject();
         JsonArray array = new JsonArray();
         for (String trigger : triggers) { array.add(trigger); }
@@ -60,7 +63,7 @@ final class BackendProbeFixtures {
     }
 
     static RuleEdit edit(String id, int count) {
-        return new RuleEdit(ResourceLocation.fromNamespaceAndPath("idtw_probe", id), RuleEdit.Action.UPSERT,
+        return new RuleEdit(ResourceLocation.fromNamespaceAndPath(PROBE_NAMESPACE, id), RuleEdit.Action.UPSERT,
                 rule(id, "prismarine_shard", count, "natural"));
     }
 

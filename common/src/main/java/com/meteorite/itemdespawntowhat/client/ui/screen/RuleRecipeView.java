@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 
@@ -47,7 +48,7 @@ import org.jetbrains.annotations.Nullable;
 /** 配方行的只读展示快照：保留数组顺序，复用图标，角标与完整说明使用同一份数据。 */
 public final class RuleRecipeView {
     private static final String UI = TypeLabels.UI_PREFIX + "recipe.";
-    private static final String OWN = "itemdespawntowhat:";
+    private static final String OWN = Constants.ID_NAMESPACE + ":";
     private static final int ICON_SIZE = 18;
     private static final int OBJECT_CONTENT_HEIGHT = 20;
     static final int CONTENT_HEIGHT = RuleTriggerView.HEIGHT;

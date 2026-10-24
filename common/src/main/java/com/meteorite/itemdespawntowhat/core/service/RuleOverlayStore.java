@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.service;
 
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.load.RulePaths;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -113,7 +114,7 @@ final class RuleOverlayStore {
         int target;
         synchronized (this) { target = version; }
         Files.createDirectories(root);
-        Path temporary = Files.createTempFile(root, ".idtw-version-", ".tmp");
+        Path temporary = Files.createTempFile(root, "." + Constants.ID_NAMESPACE + "-version-", ".tmp");
         try {
             Files.writeString(temporary, Integer.toString(target), StandardCharsets.UTF_8);
             try { Files.move(temporary, versionFile, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING); }

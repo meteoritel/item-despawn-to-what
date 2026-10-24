@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.edit;
 
+import com.meteorite.itemdespawntowhat.Constants;
 import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -17,8 +18,8 @@ public final class TypeLabels {
     // 界面文本前缀
     public static final String UI_PREFIX = "gui.itemdespawntowhat.edit.";
 
-    // 本模组命名空间
-    public static final String OWN_NAMESPACE = "itemdespawntowhat";
+    // 本模组类型 id 与规则 id 的短命名空间
+    public static final String OWN_NAMESPACE = Constants.ID_NAMESPACE;
 
     private TypeLabels() {
     }

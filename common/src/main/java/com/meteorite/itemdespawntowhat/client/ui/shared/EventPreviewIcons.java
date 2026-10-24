@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.shared;
 
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiEventIcons;
@@ -14,9 +15,9 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class EventPreviewIcons {
 
-    private static final String TYPE_LIGHTNING = "itemdespawntowhat:lightning";
-    private static final String TYPE_ARROW_RAIN = "itemdespawntowhat:arrow_rain";
-    private static final String TYPE_WEATHER = "itemdespawntowhat:weather";
+    private static final String TYPE_LIGHTNING = Constants.ID_NAMESPACE + ":lightning";
+    private static final String TYPE_ARROW_RAIN = Constants.ID_NAMESPACE + ":arrow_rain";
+    private static final String TYPE_WEATHER = Constants.ID_NAMESPACE + ":weather";
     private static final String FIELD_TYPE = "type";
     private static final String FIELD_MODE = "mode";
     private static final String FIELD_THUNDERING = "thundering";

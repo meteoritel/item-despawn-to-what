@@ -54,13 +54,13 @@ ItemDespawnToWhat 会在掉落物的**消失方式**发生时，按你写的规�
 
 | 规则文件路径 | 推导出的 id |
 | --- | --- |
-| `config/itemdespawntowhat/rules/myrules/chicken_to_rotten_flesh.json` | `itemdespawntowhat:myrules/chicken_to_rotten_flesh` |
-| `config/itemdespawntowhat/rules/egg_hatch.json` | `itemdespawntowhat:egg_hatch` |
+| `config/itemdespawntowhat/rules/myrules/chicken_to_rotten_flesh.json` | `idtw:myrules/chicken_to_rotten_flesh` |
+| `config/itemdespawntowhat/rules/egg_hatch.json` | `idtw:egg_hatch` |
 | 数据包 `data/myreload/idtw/rules/crops/bean.json` | `myreload:crops/bean` |
 
 要点：
 
-- 覆盖层推导时，命名空间固定为模组命名空间 `itemdespawntowhat`，路径取 `rules/` 之后的相对路径去掉 `.json`。
+- 覆盖层推导时，命名空间固定为规则命名空间 `idtw`，路径取 `rules/` 之后的相对路径去掉 `.json`。
 - 数据包层推导时，命名空间取该文件所在数据包的命名空间，路径取 `idtw/rules/` 之后的相对路径去掉 `.json`。
 - 想让 id 干净可控，就在 JSON 里显式写 `id`，这时文件名可以任意取。
 - 文件里是一个**规则数组**（多条规则）时，每条都必须显式写 `id`，否则该条会被**拒载**（读取时被拒绝、不参与加载）。
@@ -81,7 +81,7 @@ ItemDespawnToWhat 会在掉落物的**消失方式**发生时，按你写的规�
   "trigger_after_seconds": 10,
   "effects": [
     {
-      "type": "itemdespawntowhat:spawn_entity",
+      "type": "idtw:spawn_entity",
       "variant": "item",
       "item": "minecraft:rotten_flesh",
       "count": 1

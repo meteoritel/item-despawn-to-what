@@ -5,6 +5,7 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.RuleDecodeBudget;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
@@ -34,7 +35,7 @@ public final class RuleOverlayWriter {
     // 备份文件后缀：备份供管理员手工恢复，成功路径保留最新备份
     private static final String BACKUP_SUFFIX = ".bak";
     // 备份轮换暂存前缀：为新备份腾出位置时先把既有备份改名到这里
-    private static final String ROTATED_BACKUP_PREFIX = ".idtw-bak-";
+    private static final String ROTATED_BACKUP_PREFIX = "." + Constants.ID_NAMESPACE + "-bak-";
     // 暂存文件统一后缀
     private static final String TEMPORARY_SUFFIX = ".tmp";
     // 覆盖层文件被外部修改时的统一拒绝文案
@@ -341,7 +342,7 @@ public final class RuleOverlayWriter {
                 Files.createDirectories(file.path.getParent());
                 // 删空的文件参与同一批备份与回滚，但不再生成空数组占用规则路径。
                 if (file.liveEntries > 0) {
-                    Path temp = Files.createTempFile(file.path.getParent(), ".idtw-", TEMPORARY_SUFFIX);
+                    Path temp = Files.createTempFile(file.path.getParent(), "." + Constants.ID_NAMESPACE + "-", TEMPORARY_SUFFIX);
                     temporary.put(file, temp);
                     Files.writeString(temp, GSON.toJson(file.content()), StandardCharsets.UTF_8);
                 }
@@ -372,7 +373,7 @@ public final class RuleOverlayWriter {
                 try {
                     if (file.original == null) { Files.deleteIfExists(file.path); }
                     else {
-                        Path restore = Files.createTempFile(file.path.getParent(), ".idtw-restore-", TEMPORARY_SUFFIX);
+                        Path restore = Files.createTempFile(file.path.getParent(), "." + Constants.ID_NAMESPACE + "-restore-", TEMPORARY_SUFFIX);
                         try { Files.write(restore, file.original); move(restore, file.path); }
                         finally { Files.deleteIfExists(restore); }
                     }

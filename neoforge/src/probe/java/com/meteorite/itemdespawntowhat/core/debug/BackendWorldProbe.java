@@ -63,7 +63,8 @@ final class BackendWorldProbe {
             case "loading" -> {
                 var runtime = java.util.Objects.requireNonNull(RuleRuntimeHost.commandContext().runtime());
                 check("development_datapack_base_loaded", runtime.index().ordered().stream()
-                        .anyMatch(rule -> rule.id().toString().equals("idtw_probe:base") && rule.value().triggerAfterSeconds() == 300));
+                        .anyMatch(rule -> rule.id().toString().equals(BackendProbeFixtures.PROBE_NAMESPACE + ":base")
+                                && rule.value().triggerAfterSeconds() == 300));
                 // 实体先于新规则存在，成功产出还验证了正式回扫。
                 fixtures.spawn(Items.PAPER, 0);
                 fixtures.writeRule("base", "prismarine_shard", 2, "natural");
@@ -208,7 +209,7 @@ final class BackendWorldProbe {
 
     private void save() throws IOException {
         Path root = Path.of("probe-writer");
-        var writer = new RuleOverlayWriter(root, "idtw_probe");
+        var writer = new RuleOverlayWriter(root, BackendProbeFixtures.PROBE_NAMESPACE);
         var initial = new RuleEditChangeSet(0, List.of(edit("a", 1), edit("b", 1)));
         var result = DebugProbePerformance.operation("SAVE_INITIAL", () -> writer.apply(initial, new IssueCollector()));
         DebugProbePerformance.phase("ASSERT");
@@ -234,7 +235,8 @@ final class BackendWorldProbe {
         checks.equal("retry_conflicts", 0, success.conflicts().size());
         check("retry_changed_files", !before.equals(snapshot(root)));
         for (String id : List.of("a", "b")) {
-            var actual = JsonParser.parseString(Files.readString(root.resolve("rules/idtw_probe/" + id + ".json"))).getAsJsonObject();
+            var actual = JsonParser.parseString(Files.readString(
+                    root.resolve("rules/" + BackendProbeFixtures.PROBE_NAMESPACE + "/" + id + ".json"))).getAsJsonObject();
             check("retry_file_content/" + id, actual.equals(rule(id, "prismarine_shard", 2, "natural")));
         }
         DebugProbePerformance.phase("SAVE_SESSION");

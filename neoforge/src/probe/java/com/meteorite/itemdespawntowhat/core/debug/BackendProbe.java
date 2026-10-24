@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.debug;
 
 import com.google.gson.JsonObject;
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.runtime.RuleRuntimeHost;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.phys.Vec3;
@@ -25,13 +26,13 @@ public final class BackendProbe {
 
     /** 仅显式 probeServer 运行配置启动自动化，普通开发游戏保留手动命令。 */
     public static void tick(MinecraftServer server) {
-        if (ended || System.getProperty("idtw.probe.suite") == null) { return; }
+        if (ended || System.getProperty(Constants.ID_NAMESPACE + ".probe.suite") == null) { return; }
         try {
             if (!started) {
                 if (server.getTickCount() < 20) { return; }
                 started = true;
-                suite = System.getProperty("idtw.probe.suite");
-                steps = BackendProbeSuite.steps(suite, System.getProperty("idtw.probe.phase", "prepare"));
+                suite = System.getProperty(Constants.ID_NAMESPACE + ".probe.suite");
+                steps = BackendProbeSuite.steps(suite, System.getProperty(Constants.ID_NAMESPACE + ".probe.phase", "prepare"));
                 report = new BackendProbeReport(server, suite, steps);
                 server.overworld().setChunkForced(0, 0, true);
                 server.overworld().getChunk(0, 0);
@@ -42,7 +43,7 @@ public final class BackendProbe {
             else { result = DebugScenarioManager.takeReport(server); }
             if (result != null) {
                 result.addProperty("step", steps.get(cursor));
-                if (Boolean.getBoolean("idtw.probe.negative") && cursor == 0) {
+                if (Boolean.getBoolean(Constants.ID_NAMESPACE + ".probe.negative") && cursor == 0) {
                     var checks = new DebugScenarioChecks(new JsonObject());
                     checks.equal("negative_control/intentionally_wrong", 1, 0);
                     result.getAsJsonArray("checks").addAll(checks.results());
@@ -56,7 +57,7 @@ public final class BackendProbe {
                 if (!result.get("verdict").getAsString().equals("PASS")) { finish(server, "FAIL", "assertion_failed"); return; }
                 cursor++;
                 if (cursor == steps.size()) {
-                    boolean restart = !System.getProperty("idtw.probe.phase", "prepare").equals("resume")
+                    boolean restart = !System.getProperty(Constants.ID_NAMESPACE + ".probe.phase", "prepare").equals("resume")
                             && (suite.equals("core") || suite.equals("recovery"));
                     if (restart) { BackendWorldProbe.prepareRestart(server); }
                     finish(server, restart ? "RESTART_REQUIRED" : "PASS", "completed");

@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.core.debug;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonArray;
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.command.RuleCommandContext;
 import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
 import com.meteorite.itemdespawntowhat.core.runtime.ConversionRuntime;
@@ -222,10 +223,10 @@ final class DebugScenarioRun {
     // 防捡取与合并，不改地形、天气和时间；额外组件只附在本轮实体上。
     void decorate(ItemEntity item) {
         CompoundTag marker = new CompoundTag();
-        marker.putString("idtw_debug_run", id);
-        marker.putString("idtw_debug_entity", item.getUUID().toString());
+        marker.putString(Constants.ID_NAMESPACE + "_debug_run", id);
+        marker.putString(Constants.ID_NAMESPACE + "_debug_entity", item.getUUID().toString());
         item.getItem().set(DataComponents.CUSTOM_DATA, CustomData.of(marker));
-        item.addTag("idtw_debug_fixture");
+        item.addTag(Constants.ID_NAMESPACE + "_debug_fixture");
         item.setNeverPickUp();
         item.setNoGravity(true);
         item.setDeltaMovement(Vec3.ZERO);
@@ -233,7 +234,7 @@ final class DebugScenarioRun {
 
     // 合并夹具不能带唯一组件或禁止拾取，否则原版合并不成立；拾取延迟与场景时长对齐，测量窗口内玩家拿不走
     private void decorateMergeSource(ItemEntity item) {
-        item.addTag("idtw_debug_fixture");
+        item.addTag(Constants.ID_NAMESPACE + "_debug_fixture");
         item.setNoGravity(true);
         item.setDeltaMovement(Vec3.ZERO);
         item.setPickUpDelay(seconds * 20);

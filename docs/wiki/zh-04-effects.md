@@ -6,13 +6,13 @@
 
 | 效果 | `type` | 一次性 | 一句话 |
 |---|---|---|---|
-| 实体产出 | `itemdespawntowhat:spawn_entity` | 否 | 给出物品、生成实体或放出经验 |
-| 箭雨 | `itemdespawntowhat:arrow_rain` | 是 | 从触发位置上方落下一阵箭，可带药水效果 |
-| 放置方块 | `itemdespawntowhat:place_block` | 否 | 在触发位置附近摆下方块 |
-| 生成战利品 | `itemdespawntowhat:loot_table` | 否 | 按战利品表产出一批掉落物 |
-| 闪电 | `itemdespawntowhat:lightning` | 是 | 落下 1 ～ 16 道闪电 |
-| 爆炸 | `itemdespawntowhat:explosion` | 是 | 在触发位置产生一次爆炸 |
-| 天气 | `itemdespawntowhat:weather` | 是 | 让当前维度下雨或放晴 |
+| 实体产出 | `idtw:spawn_entity` | 否 | 给出物品、生成实体或放出经验 |
+| 箭雨 | `idtw:arrow_rain` | 是 | 从触发位置上方落下一阵箭，可带药水效果 |
+| 放置方块 | `idtw:place_block` | 否 | 在触发位置附近摆下方块 |
+| 生成战利品 | `idtw:loot_table` | 否 | 按战利品表产出一批掉落物 |
+| 闪电 | `idtw:lightning` | 是 | 落下 1 ～ 16 道闪电 |
+| 爆炸 | `idtw:explosion` | 是 | 在触发位置产生一次爆炸 |
+| 天气 | `idtw:weather` | 是 | 让当前维度下雨或放晴 |
 
 下面先讲所有效果共用的字段，再按这张表逐种说明。
 
@@ -22,7 +22,7 @@
 
 | 字段 | 作用 | 取值/范围 | 默认 | 说明 |
 |---|---|---|---|---|
-| `type` | 这是哪一种效果 | `itemdespawntowhat:` 开头的效果 id，取值见上面的效果类型总览 | 无，必填 | 写错名字的规则会被拒载，提示里会列出已注册的类型 |
+| `type` | 这是哪一种效果 | `idtw:` 开头的效果 id，取值见上面的效果类型总览 | 无，必填 | 写错名字的规则会被拒载，提示里会列出已注册的类型 |
 | `delay_ticks` | 隔多久才执行这个效果 | 整数（单位：刻，20 刻 = 1 秒） | `0` | 从规则命中开始算；写负数会被拒载，提示「delay_ticks 不能为负数」 |
 | `chance` | 执行到这个效果时掷一次的成功概率 | `0.0` ～ `1.0` | `1.0` | 超出这个范围会被拒载，提示「chance 必须在 [0,1] 内」；`1` 或 `1.0` 表示必定发生 |
 
@@ -45,7 +45,7 @@
 
 ## 实体产出（spawn_entity）
 
-`type`：`itemdespawntowhat:spawn_entity`
+`type`：`idtw:spawn_entity`
 
 用**产出子类**决定产出什么：`variant` 必填，取 `item`（物品）、`entity`（实体）、`experience`（经验）之一；子类自己的参数与 `type`、`variant` 写在同一层。
 
@@ -61,7 +61,7 @@
 | `count` | 产出件数 | 1 ～ 64 | `1` | 超过该物品的堆叠上限时自动拆成多堆；每刻最多写入 16 堆，剩下的接着写 |
 
 ```json
-{ "type": "itemdespawntowhat:spawn_entity", "variant": "item", "item": "minecraft:rotten_flesh", "count": 1 }
+{ "type": "idtw:spawn_entity", "variant": "item", "item": "minecraft:rotten_flesh", "count": 1 }
 ```
 
 配完会发生什么：一份腐肉落在触发位置附近，玩家可以直接捡走。源物品被破坏前仍在水平移动时，产物的水平初速与源物品被破坏前的水平速度相反，会朝抛入的来向飞回，更容易落在玩家这一侧；源物品静止时没有可用的方向信息，仍按原有小范围散落（水平偏移不超过 0.15 格）。要产出的东西比较多时会分几刻陆续落地，不会在同一刻全部堆出来；触发那一刻就决定了产出哪种物品、产出多少件，之后不会再改主意。新产出的掉落物会带上保护和转化冷却，不会马上又被规则消耗，见[候选结果与结算](zh-05-outcomes-and-settlement)。
@@ -75,7 +75,7 @@
 | `age` | 年龄 | 整数，可正可负 | `0` | 只对能长大的生物生效（家畜、村民等）；`0` 是成年，`-24000` 相当于刚出生 |
 
 ```json
-{ "type": "itemdespawntowhat:spawn_entity", "variant": "entity", "entity": "minecraft:chicken", "count": 1, "age": -24000 }
+{ "type": "idtw:spawn_entity", "variant": "entity", "entity": "minecraft:chicken", "count": 1, "age": -24000 }
 ```
 
 配完会发生什么：在触发位置附近生成一只幼年鸡。开了 `safe_spawn` 时，模组会在触发位置上下左右各 2 格（5×5×5，共 125 个格子）里由近到远找一个能站的地方；挑不到就退回触发位置附近。这个开关默认关闭。
@@ -89,7 +89,7 @@
 | `amount` | 每件参与转化源物品的经验点数 | 1 ～ 65536 | `1` | 本组总点数 = `amount` × 本组实际扣减的源物品件数；按单球最多 32767 点逐颗装满（不足 32767 就只有一颗），余数落在最后一颗；每批最多 16 颗，发完为止 |
 
 ```json
-{ "type": "itemdespawntowhat:spawn_entity", "variant": "experience", "amount": 100 }
+{ "type": "idtw:spawn_entity", "variant": "experience", "amount": 100 }
 ```
 
 配完会发生什么：本组只扣了 1 件源物品时 100 点经验装不满一颗球的上限，所以只飞出 **1 颗**经验球，玩家捡起来就进账。经验球在触发位置半径 0.5 格的圆盘内随机落点，落点高度抬高 0.2 格；超过单球上限才分颗，每批最多 16 颗、下一批至少等到下一个游戏刻继续发，直到发完。每个经验行为、每个组都按本组实际扣减的源物品件数各自计算点数，不同行为、不同组的点数不合并。经验球数量本身不参与任何邻近上限判定：附近经验球再多，也不会让这一组因经验存量而开不出来。
@@ -98,7 +98,7 @@
 
 ## 箭雨（arrow_rain）
 
-`type`：`itemdespawntowhat:arrow_rain`
+`type`：`idtw:arrow_rain`
 
 | 字段 | 作用 | 取值/范围 | 默认 | 说明 |
 |---|---|---|---|---|
@@ -115,12 +115,12 @@
 | `amplifier` | 等级 | 0 ～ 255 | `0` | `0` 表示 I 级，`1` 表示 II 级 |
 
 ```json
-{ "type": "itemdespawntowhat:arrow_rain", "count": 32, "pickup": "allowed", "delay_ticks": 10 }
+{ "type": "idtw:arrow_rain", "count": 32, "pickup": "allowed", "delay_ticks": 10 }
 ```
 
 ```json
 {
-  "type": "itemdespawntowhat:arrow_rain",
+  "type": "idtw:arrow_rain",
   "count": 16,
   "pickup": "creative_only",
   "potion_effects": [
@@ -133,7 +133,7 @@
 
 ## 放置方块（place_block）
 
-`type`：`itemdespawntowhat:place_block`
+`type`：`idtw:place_block`
 
 | 字段 | 作用 | 取值/范围 | 默认 | 说明 |
 |---|---|---|---|---|
@@ -159,20 +159,20 @@
 - 触发位置本身是否参与放置由候选结果的填充起点开关决定，见[候选结果与结算](zh-05-outcomes-and-settlement)。
 
 ```json
-{ "type": "itemdespawntowhat:place_block", "use_source_block": true, "shape": "square", "count": 1, "radius": 1 }
+{ "type": "idtw:place_block", "use_source_block": true, "shape": "square", "count": 1, "radius": 1 }
 ```
 
 配完会发生什么：把这次用掉的源物品对应的方块摆在触发位置附近 1 格范围内（最多 1 个）。
 
 ```json
-{ "type": "itemdespawntowhat:place_block", "block": "minecraft:cobblestone", "shape": "circle", "count": 32, "radius": 4, "limit": 64 }
+{ "type": "idtw:place_block", "block": "minecraft:cobblestone", "shape": "circle", "count": 32, "radius": 4, "limit": 64 }
 ```
 
 配完会发生什么：在触发位置周围半径 4 格的圆形范围里由内向外补鹅卵石，最多 32 个；如果这个立体范围里的鹅卵石已经有 64 个，就一个都不放。
 
 ## 生成战利品（loot_table）
 
-`type`：`itemdespawntowhat:loot_table`
+`type`：`idtw:loot_table`
 
 | 字段 | 作用 | 取值/范围 | 默认 | 说明 |
 |---|---|---|---|---|
@@ -180,28 +180,28 @@
 | `luck` | 幸运值 | `-100` ～ `100` | `0` | 影响表里带幸运判定的条目，可以写负数 |
 
 ```json
-{ "type": "itemdespawntowhat:loot_table", "loot_table": "minecraft:chests/simple_dungeon", "luck": 0, "chance": 0.5 }
+{ "type": "idtw:loot_table", "loot_table": "minecraft:chests/simple_dungeon", "luck": 0, "chance": 0.5 }
 ```
 
 配完会发生什么：有一半概率开一次「简单地牢箱子」的战利品表，抽到的东西散落在触发位置附近。源物品被破坏前仍在水平移动时，每件产物的水平初速与源物品被破坏前的水平速度相反，会朝抛入的来向飞回。开表时以触发位置为原点，并把源实体作为「当前实体」交给战利品表；口径与箱子一致，不提供击杀者信息，所以「被玩家击杀」这类条目不会被选中，也就不会产出。开表只在触发那一刻做一次：之后即使延迟落地或分几刻陆续掉落，也不会重新抽一次，抽到空表时就什么也不掉。
 
 ## 闪电（lightning）
 
-`type`：`itemdespawntowhat:lightning`
+`type`：`idtw:lightning`
 
 | 字段 | 作用 | 取值/范围 | 默认 | 说明 |
 |---|---|---|---|---|
 | `count` | 闪电数量 | 1 ～ 16 | `1` | 每道间隔 8 刻（0.4 秒） |
 
 ```json
-{ "type": "itemdespawntowhat:lightning", "count": 1, "delay_ticks": 20 }
+{ "type": "idtw:lightning", "count": 1, "delay_ticks": 20 }
 ```
 
 配完会发生什么：延迟 1 秒后打下 1 道与原版雷击相同的闪电（能造成伤害、点燃方块）。写 `count: 3` 时，第 1 道沿触发位置的水平坐标落下，后两道在周围 5 格内随机散开，落点贴合最上层方块的碰撞表面或流体表面，包括半砖和台阶；地下触发时仍落在上方表面。虚空没有可接触表面时使用高度图高度。
 
 ## 爆炸（explosion）
 
-`type`：`itemdespawntowhat:explosion`
+`type`：`idtw:explosion`
 
 | 字段 | 作用 | 取值/范围 | 默认 | 说明 |
 |---|---|---|---|---|
@@ -210,20 +210,20 @@
 | `visual_only` | 只放光效不动世界 | `true` / `false` | `false` | `true` 时只播粒子与音效，不破坏方块、不伤人 |
 
 ```json
-{ "type": "itemdespawntowhat:explosion", "power": 2, "fire": true, "visual_only": false }
+{ "type": "idtw:explosion", "power": 2, "fire": true, "visual_only": false }
 ```
 
 配完会发生什么：在触发位置炸出一次威力 2 的爆炸，会破坏方块并留下火。
 
 ```json
-{ "type": "itemdespawntowhat:explosion", "power": 4, "visual_only": true }
+{ "type": "idtw:explosion", "power": 4, "visual_only": true }
 ```
 
 配完会发生什么：只有爆炸的粒子与音效，世界和实体都不受影响——适合做声势浩大但无害的演出。
 
 ## 天气（weather）
 
-`type`：`itemdespawntowhat:weather`
+`type`：`idtw:weather`
 
 | 字段 | 作用 | 取值/范围 | 默认 | 说明 |
 |---|---|---|---|---|
@@ -232,7 +232,7 @@
 | `thundering` | 是否雷暴 | `true` / `false` | `false` | 只在 `rain` 时有效 |
 
 ```json
-{ "type": "itemdespawntowhat:weather", "mode": "rain", "duration_ticks": 6000, "thundering": true }
+{ "type": "idtw:weather", "mode": "rain", "duration_ticks": 6000, "thundering": true }
 ```
 
 配完会发生什么：当前维度立刻转成雷暴，持续 6000 刻（5 分钟）。

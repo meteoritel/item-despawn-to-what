@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.theme;
 
-import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.gui.GuiGraphics;
@@ -20,7 +20,7 @@ public final class UiMarkIcons {
 
     // 标记图集：与 icons_dark.png 同目录，纯白字形
     private static final ResourceLocation SHEET = ResourceLocation.fromNamespaceAndPath(
-            TypeLabels.OWN_NAMESPACE, "textures/gui/editor/marks.png");
+            Constants.MOD_ID, "textures/gui/editor/marks.png");
     // 单元格边长与行数：行数参与 UV 除数，必须与生成脚本一致
     private static final int CELL = 16;
     private static final int ROWS = 6;

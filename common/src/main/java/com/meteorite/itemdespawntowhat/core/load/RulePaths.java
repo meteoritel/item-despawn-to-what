@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.load;
 
+import com.meteorite.itemdespawntowhat.Constants;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -9,7 +10,7 @@ import org.jetbrains.annotations.Nullable;
 public final class RulePaths {
 
     // 数据包内的规则目录（相对 data/<ns>/）
-    public static final String DATAPACK_RULES_DIRECTORY = "idtw/rules";
+    public static final String DATAPACK_RULES_DIRECTORY = Constants.ID_NAMESPACE + "/rules";
 
     // config 覆盖层内的规则目录（相对 config/itemdespawntowhat/）
     public static final String OVERLAY_RULES_DIRECTORY = "rules";

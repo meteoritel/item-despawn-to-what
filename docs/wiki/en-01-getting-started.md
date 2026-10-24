@@ -54,13 +54,13 @@ The derivation depends on where the file lives:
 
 | Rule file path | Derived ID |
 | --- | --- |
-| `config/itemdespawntowhat/rules/myrules/chicken_to_rotten_flesh.json` | `itemdespawntowhat:myrules/chicken_to_rotten_flesh` |
-| `config/itemdespawntowhat/rules/egg_hatch.json` | `itemdespawntowhat:egg_hatch` |
+| `config/itemdespawntowhat/rules/myrules/chicken_to_rotten_flesh.json` | `idtw:myrules/chicken_to_rotten_flesh` |
+| `config/itemdespawntowhat/rules/egg_hatch.json` | `idtw:egg_hatch` |
 | Datapack `data/myreload/idtw/rules/crops/bean.json` | `myreload:crops/bean` |
 
 Key points:
 
-- For the overlay, the namespace is always the mod namespace `itemdespawntowhat`, and the path is the relative path after `rules/` with `.json` removed.
+- For the overlay, the namespace is always the rule namespace `idtw`, and the path is the relative path after `rules/` with `.json` removed.
 - For a datapack, the namespace is the pack's own namespace, and the path is the relative path after `idtw/rules/` with `.json` removed.
 - To keep IDs clean and predictable, write `id` in the JSON. The file name then does not matter.
 - When the file holds an array of several rules, every entry must declare `id`. Otherwise the mod rejects that entry at load.
@@ -81,7 +81,7 @@ Save this content as `config/itemdespawntowhat/rules/myrules/chicken_to_rotten_f
   "trigger_after_seconds": 10,
   "effects": [
     {
-      "type": "itemdespawntowhat:spawn_entity",
+      "type": "idtw:spawn_entity",
       "variant": "item",
       "item": "minecraft:rotten_flesh",
       "count": 1

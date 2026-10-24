@@ -70,7 +70,7 @@
       },
       "effects": [
         {
-          "type": "itemdespawntowhat:spawn_entity",
+          "type": "idtw:spawn_entity",
           "item": "minecraft:prismarine_shard",
           "count": 1,
           "delay_ticks": 0,

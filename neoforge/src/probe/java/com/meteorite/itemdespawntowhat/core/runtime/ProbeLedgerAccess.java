@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.runtime;
 
 import com.google.gson.JsonObject;
+import com.meteorite.itemdespawntowhat.Constants;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
@@ -10,7 +11,7 @@ import net.minecraft.world.item.component.CustomData;
 
 /** 开发夹具在真实 SavedData 边界构造中断库存，不扩大生产账本的写接口。 */
 public final class ProbeLedgerAccess {
-    private static final String ID = "idtw_probe_restart";
+    private static final String ID = Constants.ID_NAMESPACE + "_probe_restart";
 
     private ProbeLedgerAccess() {}
 
@@ -21,7 +22,7 @@ public final class ProbeLedgerAccess {
         marker.putBoolean(ID, true);
         stack.set(DataComponents.CUSTOM_DATA, CustomData.of(marker));
         var writer = SettlementRecord.Writer.register(SettlementLedger.get(server.overworld()), ID,
-                "idtw_probe:restart", "minecraft:overworld", stack, 7, 1, true, 8, 100, 8);
+                Constants.ID_NAMESPACE + "_probe:restart", "minecraft:overworld", stack, 7, 1, true, 8, 100, 8);
         writer.interrupt("probe_restart_fixture", server.overworld().getGameTime());
     }
 

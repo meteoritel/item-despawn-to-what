@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.core.debug;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
 import net.minecraft.resources.ResourceLocation;
 
@@ -18,7 +19,7 @@ import java.util.Set;
 
 /** 开发专用场景目录：manifest 是场景注册的唯一来源，发布环境不读取资源。 */
 final class DebugScenarioCatalog {
-    static final String ROOT = "/idtw-debug/scenarios/";
+    static final String ROOT = "/" + Constants.ID_NAMESPACE + "-debug/scenarios/";
 
     /** 延迟到首次开发命令注册时读取，避免发布环境解析场景资源。 */
     private static final class Holder {

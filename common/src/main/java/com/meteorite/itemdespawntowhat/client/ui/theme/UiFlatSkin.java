@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.theme;
 
-import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlStyle;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIconSheet;
@@ -28,7 +28,7 @@ public final class UiFlatSkin {
 
     // 深色字形图集：现有主题是浅灰底，默认使用这一套
     private static final ResourceLocation ICON_SHEET_TEXTURE = ResourceLocation.fromNamespaceAndPath(
-            TypeLabels.OWN_NAMESPACE, "textures/gui/editor/icons_dark.png");
+            Constants.MOD_ID, "textures/gui/editor/icons_dark.png");
     // 单元格 16×16，2 列状态，14 行图标；行数与列数必须显式给出，切片按贴图真实尺寸换算 UV
     private static final int ICON_CELL = 16;
     private static final int ICON_COLUMNS = 2;

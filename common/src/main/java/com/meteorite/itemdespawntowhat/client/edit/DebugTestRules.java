@@ -50,7 +50,7 @@ public final class DebugTestRules {
      * 第 index 条测试规则的 id。
      *
      * @param index 序号，从 1 开始
-     * @return 形如 {@code itemdespawntowhat:debug_test_1} 的规则 id
+     * @return 形如 {@code idtw:debug_test_1} 的规则 id
      */
     public static String ruleId(int index) {
         return QUALIFIED_ID_PREFIX + index;

@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.core.debug;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.command.RuleCommandContext;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -81,7 +82,8 @@ final class DebugPipelineRun {
             data.addProperty("tick_p95_us", window.getAsJsonObject("server_tick_cost").get("p95_us").getAsLong());
             data.addProperty("tick_cost_scope", window.get("tick_cost_scope").getAsString());
             data.addProperty("vanilla_tick_p95_us", window.getAsJsonObject("vanilla_tick_cost").get("p95_us").getAsLong());
-            data.addProperty("idtw_runtime_p95_us", window.getAsJsonObject("idtw_runtime_cost").get("p95_us").getAsLong());
+            data.addProperty(Constants.ID_NAMESPACE + "_runtime_p95_us",
+                    window.getAsJsonObject(Constants.ID_NAMESPACE + "_runtime_cost").get("p95_us").getAsLong());
             data.addProperty("checks_p95_us", window.getAsJsonObject("checks").get("p95_us").getAsLong());
             data.addProperty("effects_p95_us", window.getAsJsonObject("effects").get("p95_us").getAsLong());
         }

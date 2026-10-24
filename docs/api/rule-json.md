@@ -29,6 +29,8 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/core/api/RuleFie
 
 文件以 `.json` 结尾，内容可以是单个规则对象，也可以是规则对象数组。同一文件内多条规则共享文件路径，因此每条必须显式声明 `id`；单个对象的文件在缺 `id` 时可由文件路径推导，命名空间取默认命名空间，路径去掉扩展名并转成资源路径。
 
+规则缺省 ID 的命名空间为 `idtw`。显式声明的规则 `id` 可使用任意合法命名空间。
+
 ```mermaid
 flowchart TB
     A[内置数据包条目] --> D[层内排序]

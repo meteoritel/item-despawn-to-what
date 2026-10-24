@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.core.debug;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.meteorite.itemdespawntowhat.Constants;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -20,7 +21,7 @@ final class DebugPipelineCatalog {
     static final int DEFAULT_GAP_SECONDS = 5;
     static final int MIN_GAP_SECONDS = 3;
     static final int MAX_GAP_SECONDS = 30;
-    private static final String ROOT = "/idtw-debug/pipelines/";
+    private static final String ROOT = "/" + Constants.ID_NAMESPACE + "-debug/pipelines/";
 
     /** 无数量参数、固定数量及逐档数量上限三种阶段参数。 */
     enum Quantity { NONE, FIXED, CEILING }

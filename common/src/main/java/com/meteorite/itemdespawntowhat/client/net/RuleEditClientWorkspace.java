@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.client.net;
 
 import com.google.gson.JsonObject;
 import com.mojang.serialization.DataResult;
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.DevelopmentDiagnostics;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalog;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogEntry;
@@ -90,7 +91,7 @@ public final class RuleEditClientWorkspace {
 
     // ---- 日志与单例 ----
     // 日志
-    private static final Logger LOGGER = LogManager.getLogger("itemdespawntowhat-client-net");
+    private static final Logger LOGGER = LogManager.getLogger(Constants.MOD_ID + "-client-net");
 
     // 单例：客户端只存在一个编辑会话
     private static final RuleEditClientWorkspace INSTANCE = new RuleEditClientWorkspace();

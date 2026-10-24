@@ -1,7 +1,9 @@
 package com.meteorite.itemdespawntowhat.core.debug;
 
 import com.google.gson.JsonObject;
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.command.RuleCommandContext;
+import com.meteorite.itemdespawntowhat.core.command.RuleCommandTree;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
@@ -38,7 +40,7 @@ final class DebugPipelineManager {
                 || stage.quantity() == DebugPipelineCatalog.Quantity.FIXED && entities < 1
                 || stage.quantity() == DebugPipelineCatalog.Quantity.CEILING && entities < 100) { return failure(source, "invalid_parameters"); }
         // 只解析不执行1001命令，验证命令边界不会创建测试实体。
-        var rejected = source.getServer().getCommands().getDispatcher().parse("idtw debug bench normal 1001 10", source);
+        var rejected = source.getServer().getCommands().getDispatcher().parse(RuleCommandTree.ROOT + " debug bench normal 1001 10", source);
         if (!rejected.getReader().canRead() && rejected.getExceptions().isEmpty()) { return failure(source, "boundary_failed"); }
         var run = new DebugPipelineRun(stage, player, entities, gap);
         ACTIVE.put(source.getServer(), run);
@@ -117,9 +119,9 @@ final class DebugPipelineManager {
         for (var level : server.getAllLevels()) {
             for (var entity : level.getAllEntities()) {
                 if (!(entity instanceof ItemEntity item) || !item.isAlive()) { continue; }
-                if (item.getTags().contains("idtw_debug_fixture")) { return true; }
+                if (item.getTags().contains(Constants.ID_NAMESPACE + "_debug_fixture")) { return true; }
                 var data = item.getItem().get(DataComponents.CUSTOM_DATA);
-                if (data != null && data.copyTag().contains("idtw_debug_run")) { return true; }
+                if (data != null && data.copyTag().contains(Constants.ID_NAMESPACE + "_debug_run")) { return true; }
             }
         }
         return false;

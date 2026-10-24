@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.runtime;
 
+import com.meteorite.itemdespawntowhat.Constants;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -30,7 +31,7 @@ public final class SettlementLedger extends SavedData {
 
     private static final Logger LOGGER = LogManager.getLogger();
     // 数据存储 id（主世界）
-    private static final String DATA_ID = "itemdespawntowhat_settlements";
+    private static final String DATA_ID = Constants.MOD_ID + "_settlements";
     // 已完成记录的保留上限：先按 tick 过期，再按条数兜底
     private static final int MAX_RECORDS = 512;
     private static final long RETAIN_COMPLETED_TICKS = 6000L;

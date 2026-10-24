@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.type.condition;
 
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
@@ -17,12 +18,12 @@ import java.util.Optional;
  * 条件类型 light_level：按掉落物所在位置的光照等级（0..15）区间匹配。
  * 参数 min / max 均可空（null = 该端不限制），取值域 [0,15]，且 min 不得大于 max。
  * 光照口径：LevelReader#getMaxLocalRawBrightness（天空光按时间衰减后与方块光取较大值），见 LightLevelEvaluator。
- * JSON 示例：{ "type": "itemdespawntowhat:light_level", "max": 7 }
+ * JSON 示例：{ "type": "idtw:light_level", "max": 7 }
  */
 public record LightLevelCondition(Integer min, Integer max) implements Condition {
 
     // 类型 id，同时是 JSON 中 type 字段的取值
-    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("itemdespawntowhat", "light_level");
+    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(Constants.ID_NAMESPACE, "light_level");
 
     // 参数 JSON 字段名
     private static final String FIELD_MIN = "min";

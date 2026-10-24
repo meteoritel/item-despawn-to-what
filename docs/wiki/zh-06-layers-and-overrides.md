@@ -45,7 +45,7 @@
   "schema_version": 1,
   "effects": [
     {
-      "type": "itemdespawntowhat:spawn_entity",
+      "type": "idtw:spawn_entity",
       "item": "minecraft:rotten_flesh",
       "count": 1,
       "variant": "item"
@@ -75,7 +75,7 @@
   "schema_version": 1,
   "effects": [
     {
-      "type": "itemdespawntowhat:spawn_entity",
+      "type": "idtw:spawn_entity",
       "item": "minecraft:gold_ingot",
       "count": 1,
       "variant": "item"
@@ -95,7 +95,7 @@
 ### 覆盖层文件的 id 从哪来
 
 - 文件里显式写了 `id`：就用它。
-- 整个文件只含一条规则、又省略了 `id`：由文件路径推导，形如 `itemdespawntowhat:<去掉 .json 的相对路径>`；放在子目录里时子目录名也算进去，例如 `rules/mypack/chicken_to_gold.json` 推导出 `itemdespawntowhat:mypack/chicken_to_gold`。
+- 整个文件只含一条规则、又省略了 `id`：由文件路径推导，形如 `idtw:<去掉 .json 的相对路径>`；放在子目录里时子目录名也算进去，例如 `rules/mypack/chicken_to_gold.json` 推导出 `idtw:mypack/chicken_to_gold`。
 - 文件里是一个规则数组（多条规则）：每条都必须自己写 `id`，缺 `id` 的那条会被拒载并报错。
 - 同一个文件里出现两个相同 `id`：后出现的那条被拒载。
 - 想覆盖内置或数据包里的规则，写下的 `id` 必须和目标完全一样；写错一个字符就是新增了一条规则，两份会同时存在。`id` 里只能用小写字母、数字和 `_`、`-`、`.`、`/`，写成大写会让这条规则被拒载。
@@ -177,7 +177,7 @@
   ],
   "effects": [
     {
-      "type": "itemdespawntowhat:spawn_entity",
+      "type": "idtw:spawn_entity",
       "item": "minecraft:gold_ingot",
       "count": 1,
       "variant": "item"

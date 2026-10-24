@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.type.condition;
 
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
@@ -15,12 +16,12 @@ import net.minecraft.resources.ResourceLocation;
  * 条件类型 time_of_day：按世界时间（0..23999 刻）区间匹配。
  * 参数 from / to 必填且均在 [0,23999]；跨零点用 from > to 表达（如 22000 → 2000），不视为错误。
  * 世界时间读取与区间判定见 TimeOfDayEvaluator（把 dayTime 取模到一天之内）。
- * JSON 示例：{ "type": "itemdespawntowhat:time_of_day", "from": 13000, "to": 23000 }
+ * JSON 示例：{ "type": "idtw:time_of_day", "from": 13000, "to": 23000 }
  */
 public record TimeOfDayCondition(int from, int to) implements Condition {
 
     // 类型 id，同时是 JSON 中 type 字段的取值
-    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("itemdespawntowhat", "time_of_day");
+    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(Constants.ID_NAMESPACE, "time_of_day");
 
     // 参数 JSON 字段名
     private static final String FIELD_FROM = "from";

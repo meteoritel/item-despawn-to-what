@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.edit;
 
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import java.util.ArrayList;
 import java.util.List;
@@ -50,14 +51,14 @@ public final class RuleRequirements {
             RuleValue action = mappingOf(actions.get(index));
             String type = text(action, "type");
             String field = switch (type) {
-                case "itemdespawntowhat:spawn_entity" -> switch (text(action, "variant")) {
+                case Constants.ID_NAMESPACE + ":spawn_entity" -> switch (text(action, "variant")) {
                     case "item" -> "item";
                     case "entity" -> "entity";
                     case "experience" -> "";
                     default -> "variant";
                 };
-                case "itemdespawntowhat:place_block" -> usesSourceBlock(action) ? "" : "block";
-                case "itemdespawntowhat:loot_table" -> "loot_table";
+                case Constants.ID_NAMESPACE + ":place_block" -> usesSourceBlock(action) ? "" : "block";
+                case Constants.ID_NAMESPACE + ":loot_table" -> "loot_table";
                 default -> "";
             };
             if (!field.isEmpty() && text(action, field).isBlank()) {

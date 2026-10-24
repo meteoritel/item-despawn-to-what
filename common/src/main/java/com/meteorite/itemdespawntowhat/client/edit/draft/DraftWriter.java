@@ -163,7 +163,7 @@ public final class DraftWriter {
             return;
         }
         this.running = true;
-        Thread thread = new Thread(this::drainLoop, "itemdespawntowhat-draft-writer");
+        Thread thread = new Thread(this::drainLoop, Constants.MOD_ID + "-draft-writer");
         thread.setDaemon(true);
         thread.start();
     }

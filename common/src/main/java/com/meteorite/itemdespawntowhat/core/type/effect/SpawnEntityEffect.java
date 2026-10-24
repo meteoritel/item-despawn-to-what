@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.type.effect;
 
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecutor;
@@ -24,7 +25,7 @@ import org.jetbrains.annotations.Nullable;
 
 /** 统一实体生成效果：按 variant 分发产物，公共执行字段只定义一次。 */
 public record SpawnEntityEffect(EntityProduct product, int delayTicks, double chance) implements Effect {
-    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("itemdespawntowhat", "spawn_entity");
+    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(Constants.ID_NAMESPACE, "spawn_entity");
 
     // 专用参数与公共字段同层编码，方便直接使用子类编辑表单。
     public static MapCodec<SpawnEntityEffect> codec() {

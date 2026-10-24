@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.type.condition;
 
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.extension.DynamicReferenceCheck;
@@ -21,12 +22,12 @@ import java.util.List;
  * 参数 dimensions 为维度 id 列表，至少一项；命中任意一项即成立。
  * 维度属于动态注册表（不在 BuiltInRegistries 中），本层只做语法与数量校验，
  * 存在性复核留给的运行时/命令层（那里能拿到 RegistryAccess）。
- * JSON 示例：{ "type": "itemdespawntowhat:dimension", "dimensions": ["minecraft:overworld"] }
+ * JSON 示例：{ "type": "idtw:dimension", "dimensions": ["minecraft:overworld"] }
  */
 public record DimensionCondition(List<ResourceLocation> dimensions) implements Condition, DynamicReferenceCheck {
 
     // 类型 id，同时是 JSON 中 type 字段的取值
-    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("itemdespawntowhat", "dimension");
+    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(Constants.ID_NAMESPACE, "dimension");
 
     // 参数 JSON 字段名
     private static final String FIELD_DIMENSIONS = "dimensions";

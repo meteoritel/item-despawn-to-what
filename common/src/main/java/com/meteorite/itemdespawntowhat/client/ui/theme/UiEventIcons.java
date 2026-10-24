@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.theme;
 
-import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.resources.ResourceLocation;
@@ -19,7 +19,7 @@ public final class UiEventIcons {
 
     // 事件图集：与编辑器其它贴图同目录
     private static final ResourceLocation SHEET = ResourceLocation.fromNamespaceAndPath(
-            TypeLabels.OWN_NAMESPACE, "textures/gui/editor/events.png");
+            Constants.MOD_ID, "textures/gui/editor/events.png");
     // 创作画布边长与行数：行数参与 UV 除数，必须与生成脚本一致
     private static final int CELL = 32;
     private static final int ROWS = 5;

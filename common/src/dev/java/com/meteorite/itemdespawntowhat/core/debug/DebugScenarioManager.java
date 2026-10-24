@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.debug;
 
 import com.google.gson.JsonObject;
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.command.RuleCommandContext;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
@@ -114,8 +115,8 @@ public final class DebugScenarioManager {
             run.armFaults();
             ACTIVE.put(source.getServer(), run);
             JsonObject data = DebugLog.config(context.serverConfig());
-            data.addProperty("format", "idtw-scene-v3");
-            data.addProperty("tick_cost_scope", "vanilla_tick_plus_idtw_runtime");
+            data.addProperty("format", Constants.ID_NAMESPACE + "-scene-v3");
+            data.addProperty("tick_cost_scope", "vanilla_tick_plus_" + Constants.ID_NAMESPACE + "_runtime");
             if (pipelineId != null) { data.addProperty("pipeline", pipelineId); }
             data.addProperty("rule_source", "development-memory");
             data.addProperty("builtin_datapack", false);

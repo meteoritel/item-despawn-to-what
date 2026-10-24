@@ -31,13 +31,13 @@ Three things that are easy to get wrong:
 
 ### Condition Leaf (leaf)
 
-The `condition` of a `leaf` is an object built from `type` and the parameters of that type. Every `type` carries the namespace prefix `itemdespawntowhat:`:
+The `condition` of a `leaf` is an object built from `type` and the parameters of that type. Every `type` carries the namespace prefix `idtw:`:
 
 ```json
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:dimension",
+    "type": "idtw:dimension",
     "dimensions": ["minecraft:overworld"]
   }
 }
@@ -49,12 +49,12 @@ The `condition` of a `leaf` is an object built from `type` and the parameters of
 {
   "op": "all_of",
   "terms": [
-    { "op": "leaf", "condition": { "type": "itemdespawntowhat:outdoor" } },
+    { "op": "leaf", "condition": { "type": "idtw:outdoor" } },
     {
       "op": "inverted",
       "term": {
         "op": "leaf",
-        "condition": { "type": "itemdespawntowhat:weather", "weather": "thunder" }
+        "condition": { "type": "idtw:weather", "weather": "thunder" }
       }
     }
   ]
@@ -77,14 +77,14 @@ This example means "outdoors, and not a thunderstorm".
       {
         "op": "leaf",
         "condition": {
-          "type": "itemdespawntowhat:biome",
+          "type": "idtw:biome",
           "mode": "exact",
           "biomes": ["#minecraft:is_forest"]
         }
       },
       {
         "op": "leaf",
-        "condition": { "type": "itemdespawntowhat:time_of_day", "from": 13000, "to": 23000 }
+        "condition": { "type": "idtw:time_of_day", "from": 13000, "to": 23000 }
       }
     ]
   },
@@ -151,20 +151,20 @@ A rule whose condition can never be satisfied gives no warning at all: the item 
 
 ## Condition Types at a Glance
 
-Every `type` carries the namespace prefix `itemdespawntowhat:`. Reference parameters, meaning items, blocks, fluids, and biomes, accept the `#` tag form except in `dimension`, for example `"#minecraft:logs"`.
+Every `type` carries the namespace prefix `idtw:`. Reference parameters, meaning items, blocks, fluids, and biomes, accept the `#` tag form except in `dimension`, for example `"#minecraft:logs"`.
 
 | `type` | Name | What It Does | Parameters |
 |---|---|---|---|
-| `itemdespawntowhat:dimension` | Dimension | The drop is in one of the listed dimensions | `dimensions` |
-| `itemdespawntowhat:biome` | Biome | The biome matches, or the climate parameters fall inside the ranges | `mode`, `biomes`, six climate ranges |
-| `itemdespawntowhat:time_of_day` | Time of day | The world time falls inside a range | `from`, `to` |
-| `itemdespawntowhat:weather` | Weather | The current weather equals the given value | `weather` |
-| `itemdespawntowhat:light_level` | Light level | The light level at the position falls inside a range | `min`, `max` |
-| `itemdespawntowhat:y_level` | Y level | The height falls inside a range | `min`, `max` |
-| `itemdespawntowhat:outdoor` | Outdoor | Nothing blocks the sky above the drop | None |
-| `itemdespawntowhat:surrounding_blocks` | Surrounding blocks | The six neighboring blocks match | `up`, `down`, `north`, `south`, `east`, `west` |
-| `itemdespawntowhat:fluid_present` | Fluid present | The position contains the named fluid | `fluid`, `fluids` |
-| `itemdespawntowhat:catalyst_present` | Catalyst present | The shared radius contains enough catalyst | `items`, `count`, `counts` |
+| `idtw:dimension` | Dimension | The drop is in one of the listed dimensions | `dimensions` |
+| `idtw:biome` | Biome | The biome matches, or the climate parameters fall inside the ranges | `mode`, `biomes`, six climate ranges |
+| `idtw:time_of_day` | Time of day | The world time falls inside a range | `from`, `to` |
+| `idtw:weather` | Weather | The current weather equals the given value | `weather` |
+| `idtw:light_level` | Light level | The light level at the position falls inside a range | `min`, `max` |
+| `idtw:y_level` | Y level | The height falls inside a range | `min`, `max` |
+| `idtw:outdoor` | Outdoor | Nothing blocks the sky above the drop | None |
+| `idtw:surrounding_blocks` | Surrounding blocks | The six neighboring blocks match | `up`, `down`, `north`, `south`, `east`, `west` |
+| `idtw:fluid_present` | Fluid present | The position contains the named fluid | `fluid`, `fluids` |
+| `idtw:catalyst_present` | Catalyst present | The shared radius contains enough catalyst | `items`, `count`, `counts` |
 
 ## Condition Types in Detail
 
@@ -182,7 +182,7 @@ Only dimension IDs are accepted. The `#` tag form is not supported.
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:dimension",
+    "type": "idtw:dimension",
     "dimensions": ["minecraft:overworld", "minecraft:the_end"]
   }
 }
@@ -215,7 +215,7 @@ The condition matches the biome at the drop's block position, and `mode` picks h
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:biome",
+    "type": "idtw:biome",
     "mode": "exact",
     "biomes": ["#minecraft:is_forest"]
   }
@@ -226,7 +226,7 @@ The condition matches the biome at the drop's block position, and `mode` picks h
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:biome",
+    "type": "idtw:biome",
     "mode": "climate",
     "temperature": { "min": 0.2 },
     "humidity": { "max": -0.2 }
@@ -252,7 +252,7 @@ The condition matches a range of world time. One day is 24000 ticks.
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:time_of_day",
+    "type": "idtw:time_of_day",
     "from": 13000,
     "to": 23000
   }
@@ -281,7 +281,7 @@ A thunderstorm therefore never matches `rain`. To accept both rain and thunder, 
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:weather",
+    "type": "idtw:weather",
     "weather": "thunder"
   }
 }
@@ -304,7 +304,7 @@ Light level here means the larger of the time-adjusted sky light and the block l
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:light_level",
+    "type": "idtw:light_level",
     "max": 7
   }
 }
@@ -329,7 +329,7 @@ With both ends omitted the condition is always satisfied, which is legal but poi
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:y_level",
+    "type": "idtw:y_level",
     "max": 0
   }
 }
@@ -347,7 +347,7 @@ To decide, the mod reads the highest "motion blocking, no leaves" heightmap surf
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:outdoor"
+    "type": "idtw:outdoor"
   }
 }
 ```
@@ -375,7 +375,7 @@ The condition matches the six blocks next to the drop: up, down, north, south, e
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:surrounding_blocks",
+    "type": "idtw:surrounding_blocks",
     "down": "#minecraft:logs"
   }
 }
@@ -400,13 +400,13 @@ The condition looks at the fluid at the drop's block position.
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:fluid_present",
+    "type": "idtw:fluid_present",
     "fluid": "minecraft:water"
   }
 }
 ```
 
-Typical uses: rules that convert while the drop sits in water. Combined with a catalyst condition, this builds recipes such as water plus bone meal. The built-in rule `itemdespawntowhat:builtin_catalyst_and_fluid` uses this combination.
+Typical uses: rules that convert while the drop sits in water. Combined with a catalyst condition, this builds recipes such as water plus bone meal. The built-in rule `idtw:builtin_catalyst_and_fluid` uses this combination.
 
 ### catalyst_present (Catalyst present)
 
@@ -427,7 +427,7 @@ The condition decides whether the shared rule radius contains enough of the name
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:catalyst_present",
+    "type": "idtw:catalyst_present",
     "items": ["minecraft:bone_meal"],
     "count": 1
   }
@@ -438,7 +438,7 @@ The condition decides whether the shared rule radius contains enough of the name
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:catalyst_present",
+    "type": "idtw:catalyst_present",
     "items": ["minecraft:redstone", "minecraft:glowstone_dust"],
     "counts": { "minecraft:redstone": 4, "minecraft:glowstone_dust": 1 }
   }
@@ -459,10 +459,10 @@ Night or rain, whichever matches. A thunderstorm does not count as `rain`, so li
   "terms": [
     {
       "op": "leaf",
-      "condition": { "type": "itemdespawntowhat:time_of_day", "from": 13000, "to": 23000 }
+      "condition": { "type": "idtw:time_of_day", "from": 13000, "to": 23000 }
     },
-    { "op": "leaf", "condition": { "type": "itemdespawntowhat:weather", "weather": "rain" } },
-    { "op": "leaf", "condition": { "type": "itemdespawntowhat:weather", "weather": "thunder" } }
+    { "op": "leaf", "condition": { "type": "idtw:weather", "weather": "rain" } },
+    { "op": "leaf", "condition": { "type": "idtw:weather", "weather": "thunder" } }
   ]
 }
 ```
@@ -473,7 +473,7 @@ Certain biomes only, covering a whole group at once:
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:biome",
+    "type": "idtw:biome",
     "mode": "exact",
     "biomes": ["#minecraft:is_taiga", "minecraft:swamp"]
   }
@@ -486,8 +486,8 @@ Below a given height and in the dark:
 {
   "op": "all_of",
   "terms": [
-    { "op": "leaf", "condition": { "type": "itemdespawntowhat:y_level", "max": 20 } },
-    { "op": "leaf", "condition": { "type": "itemdespawntowhat:light_level", "max": 7 } }
+    { "op": "leaf", "condition": { "type": "idtw:y_level", "max": 20 } },
+    { "op": "leaf", "condition": { "type": "idtw:light_level", "max": 7 } }
   ]
 }
 ```
@@ -502,15 +502,15 @@ Not in the Overworld, and indoors, which shows how to use inverting nodes:
       "op": "inverted",
       "term": {
         "op": "leaf",
-        "condition": { "type": "itemdespawntowhat:dimension", "dimensions": ["minecraft:overworld"] }
+        "condition": { "type": "idtw:dimension", "dimensions": ["minecraft:overworld"] }
       }
     },
-    { "op": "inverted", "term": { "op": "leaf", "condition": { "type": "itemdespawntowhat:outdoor" } } }
+    { "op": "inverted", "term": { "op": "leaf", "condition": { "type": "idtw:outdoor" } } }
   ]
 }
 ```
 
-Flowing water with bone meal nearby. The `conditions` field of the built-in rule `itemdespawntowhat:builtin_catalyst_and_fluid` is written exactly this way, so you can copy it:
+Flowing water with bone meal nearby. The `conditions` field of the built-in rule `idtw:builtin_catalyst_and_fluid` is written exactly this way, so you can copy it:
 
 ```json
 {
@@ -519,14 +519,14 @@ Flowing water with bone meal nearby. The `conditions` field of the built-in rule
     {
       "op": "leaf",
       "condition": {
-        "type": "itemdespawntowhat:fluid_present",
+        "type": "idtw:fluid_present",
         "fluid": "minecraft:water"
       }
     },
     {
       "op": "leaf",
       "condition": {
-        "type": "itemdespawntowhat:catalyst_present",
+        "type": "idtw:catalyst_present",
         "items": ["minecraft:bone_meal"],
         "count": 1
       }
@@ -541,7 +541,7 @@ Logs on all six sides, where every direction you fill in must match:
 {
   "op": "leaf",
   "condition": {
-    "type": "itemdespawntowhat:surrounding_blocks",
+    "type": "idtw:surrounding_blocks",
     "up": "#minecraft:logs",
     "down": "#minecraft:logs",
     "north": "#minecraft:logs",

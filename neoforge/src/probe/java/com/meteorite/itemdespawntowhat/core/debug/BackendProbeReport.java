@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.runtime.RuleRuntimeHost;
 import net.minecraft.server.MinecraftServer;
 
@@ -40,9 +41,9 @@ final class BackendProbeReport {
 
     void write(String verdict, String reason, JsonObject interruptedPerformance) {
         JsonObject report = new JsonObject();
-        report.addProperty("format", "idtw-backend-probe-v1");
+        report.addProperty("format", Constants.ID_NAMESPACE + "-backend-probe-v1");
         report.addProperty("suite", suite);
-        report.addProperty("phase", System.getProperty("idtw.probe.phase", "prepare"));
+        report.addProperty("phase", System.getProperty(Constants.ID_NAMESPACE + ".probe.phase", "prepare"));
         report.addProperty("verdict", verdict);
         report.addProperty("reason", reason);
         report.add("environment", environment);

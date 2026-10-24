@@ -31,7 +31,7 @@ import org.jetbrains.annotations.Nullable;
 public record DraftStore(Path directory) {
 
     // 相对游戏根目录的草稿目录
-    public static final String DIRECTORY = "config/itemdespawntowhat/client/editor-drafts";
+    public static final String DIRECTORY = "config/" + Constants.MOD_ID + "/client/editor-drafts";
 
     // 正式草稿文件后缀
     private static final String JSON_SUFFIX = ".json";

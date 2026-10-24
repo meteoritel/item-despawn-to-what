@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.type.condition;
 
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.RefChecks;
@@ -30,8 +31,8 @@ import java.util.Optional;
  * 采样入口为 ServerChunkCache.randomState().sampler()，采样点为掉落物所在方块位置，采样结果按位置缓存。
  * 生物群系属于动态注册表（不在 BuiltInRegistries 中），validateParams 只做语法与模式相关校验，
  * 群系 id / tag 的存在性复核留给运行时/命令层（那里能拿到 RegistryAccess）。
- * JSON 示例（exact）：{ "type": "itemdespawntowhat:biome", "mode": "exact", "biomes": ["#minecraft:is_forest"] }
- * JSON 示例（climate）：{ "type": "itemdespawntowhat:biome", "mode": "climate", "temperature": { "min": 0.2 } }
+ * JSON 示例（exact）：{ "type": "idtw:biome", "mode": "exact", "biomes": ["#minecraft:is_forest"] }
+ * JSON 示例（climate）：{ "type": "idtw:biome", "mode": "climate", "temperature": { "min": 0.2 } }
  */
 public record BiomeCondition(
         Mode mode,
@@ -45,7 +46,7 @@ public record BiomeCondition(
 ) implements Condition, DynamicReferenceCheck {
 
     // 类型 id，同时是 JSON 中 type 字段的取值
-    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("itemdespawntowhat", "biome");
+    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(Constants.ID_NAMESPACE, "biome");
 
     // 参数 JSON 字段名
     private static final String FIELD_MODE = "mode";

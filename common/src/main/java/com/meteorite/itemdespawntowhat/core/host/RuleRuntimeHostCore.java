@@ -50,8 +50,8 @@ import java.util.Objects;
 public final class RuleRuntimeHostCore {
 
     private static final Logger LOGGER = LogManager.getLogger();
-    // 覆盖层缺省命名空间取模组 id
-    private static final String MOD_NAMESPACE = Constants.MOD_ID;
+    // 规则缺省 id 使用短命名空间
+    private static final String RULE_NAMESPACE = Constants.ID_NAMESPACE;
     // 模组级配置文件名（固定位于 config/itemdespawntowhat/ 下）
     private static final String SERVER_CONFIG_FILE = "server.json";
 
@@ -387,7 +387,7 @@ public final class RuleRuntimeHostCore {
                                     Path overlay,
                                     BuiltinTypeRegistries registries, MinecraftServer server,
                                     RuleRuntimeLimits runtimeLimits) {
-        return RuleLoadContext.full(resourceManager, overlay, MOD_NAMESPACE, registryAccess,
+        return RuleLoadContext.full(resourceManager, overlay, RULE_NAMESPACE, registryAccess,
                 registries.effectTypes(), registries.conditionTypes(),
                 platform.packLayerResolver(resourceManager)).withServer(server).withRuntimeLimits(runtimeLimits);
     }
@@ -437,7 +437,7 @@ public final class RuleRuntimeHostCore {
 
         @Override
         public String overlayNamespace() {
-            return MOD_NAMESPACE;
+            return RULE_NAMESPACE;
         }
 
         @Override
@@ -518,7 +518,7 @@ public final class RuleRuntimeHostCore {
 
         @Override
         public String overlayNamespace() {
-            return MOD_NAMESPACE;
+            return RULE_NAMESPACE;
         }
 
         @Override

@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.type.condition;
 
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
@@ -17,12 +18,12 @@ import java.util.Optional;
  * 条件类型 y_level：按掉落物的 Y 坐标区间匹配。
  * 参数 min / max 均可空（null = 该端不限制），不得低于 -2048，且 min 不得大于 max。
  * 不按世界限高设置参数上限，以兼容其它模组扩展的世界高度；参数仍使用 int 表示。
- * JSON 示例：{ "type": "itemdespawntowhat:y_level", "min": 60 }
+ * JSON 示例：{ "type": "idtw:y_level", "min": 60 }
  */
 public record YLevelCondition(Integer min, Integer max) implements Condition {
 
     // 类型 id，同时是 JSON 中 type 字段的取值
-    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("itemdespawntowhat", "y_level");
+    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(Constants.ID_NAMESPACE, "y_level");
 
     // 参数 JSON 字段名
     private static final String FIELD_MIN = "min";

@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.network.transport;
 
+import com.meteorite.itemdespawntowhat.Constants;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -9,7 +10,7 @@ import java.nio.charset.StandardCharsets;
 public final class RuleEditLimits {
 
     // payload 的 ResourceLocation 命名空间
-    public static final String NAMESPACE = "idtw";
+    public static final String NAMESPACE = Constants.ID_NAMESPACE;
 
     // 单包直发上限（内容字节）：serverbound 整包上限 32767，扣掉包头开销后取 32000
     public static final int MAX_DIRECT_PACKET_BYTES = 32_000;

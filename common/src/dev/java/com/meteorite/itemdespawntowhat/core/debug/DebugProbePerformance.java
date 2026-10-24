@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.core.debug;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
 import com.meteorite.itemdespawntowhat.core.runtime.ConversionRuntime;
 import net.minecraft.server.MinecraftServer;
@@ -158,7 +159,7 @@ final class DebugProbePerformance {
     private JsonObject report() {
         Gson gson = new Gson();
         JsonObject data = new JsonObject();
-        data.addProperty("format", "idtw-probe-performance-v1");
+        data.addProperty("format", Constants.ID_NAMESPACE + "-probe-performance-v1");
         data.addProperty("sample_interval_ms", SAMPLE_INTERVAL_MS);
         data.addProperty("sampling_error", samplingError);
         data.addProperty("sampling_total_ms", millis(samplingNanos));

@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.type.condition;
 
+import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
@@ -15,12 +16,12 @@ import net.minecraft.resources.ResourceLocation;
  * 条件类型 weather：按掉落物所在维度当前的天气匹配。
  * 参数 weather 必填，取值为 clear / rain / thunder（解析大小写不敏感，输出统一小写）。
  * 实际天气判定见 WeatherEvaluator（clear 需无雨无雷、rain 需有雨无雷、thunder 只看雷暴）。
- * JSON 示例：{ "type": "itemdespawntowhat:weather", "weather": "thunder" }
+ * JSON 示例：{ "type": "idtw:weather", "weather": "thunder" }
  */
 public record WeatherCondition(Kind weather) implements Condition {
 
     // 类型 id，同时是 JSON 中 type 字段的取值
-    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("itemdespawntowhat", "weather");
+    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(Constants.ID_NAMESPACE, "weather");
 
     // 参数 JSON 字段名
     private static final String FIELD_WEATHER = "weather";

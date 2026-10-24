@@ -45,7 +45,7 @@ Example: the built-in rule `itemdespawntowhat:builtin_item_to_item` turns a chic
   "schema_version": 1,
   "effects": [
     {
-      "type": "itemdespawntowhat:spawn_entity",
+      "type": "idtw:spawn_entity",
       "item": "minecraft:rotten_flesh",
       "count": 1,
       "variant": "item"
@@ -75,7 +75,7 @@ Save the next file as `config/itemdespawntowhat/rules/chicken_to_gold.json`. It 
   "schema_version": 1,
   "effects": [
     {
-      "type": "itemdespawntowhat:spawn_entity",
+      "type": "idtw:spawn_entity",
       "item": "minecraft:gold_ingot",
       "count": 1,
       "variant": "item"
@@ -95,7 +95,7 @@ What happens after this change:
 ### Where the Rule ID Comes From
 
 - The file declares an `id`: the mod uses it.
-- The file holds exactly one rule and omits `id`: the mod derives the ID from the file path, in the form `itemdespawntowhat:<relative path without .json>`. Subdirectory names count too, so `rules/mypack/chicken_to_gold.json` becomes `itemdespawntowhat:mypack/chicken_to_gold`.
+- The file holds exactly one rule and omits `id`: the mod derives the ID from the file path, in the form `idtw:<relative path without .json>`. Subdirectory names count too, so `rules/mypack/chicken_to_gold.json` becomes `idtw:mypack/chicken_to_gold`.
 - The file holds a rule array (several rules): every entry must declare its own `id`, and an entry without one is rejected at load and reports an error.
 - Two entries in the same file share an `id`: the later one is rejected at load.
 - To override a built-in or datapack rule, your `id` must match the target exactly. One wrong character adds a new rule, and both rules stay. Use only lowercase letters, digits, and `_`, `-`, `.`, `/` in an `id`; an uppercase letter makes the mod reject that rule.
@@ -177,7 +177,7 @@ Use `priority` to control the result. The built-in rule `itemdespawntowhat:built
   ],
   "effects": [
     {
-      "type": "itemdespawntowhat:spawn_entity",
+      "type": "idtw:spawn_entity",
       "item": "minecraft:gold_ingot",
       "count": 1,
       "variant": "item"

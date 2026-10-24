@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.type.condition;
 
+import com.meteorite.itemdespawntowhat.Constants;
+
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
@@ -21,12 +23,12 @@ import java.util.List;
  * 条件类型 fluid_present：判断掉落物所在位置的流体类型。
  * fluids 为可选引用列表，命中其中任一种即可；列表为空时采用 fluid，二者均空表示任意流体。
  * 源流体与流动流体均按同一流体族匹配。
- * JSON 示例：{ "type": "itemdespawntowhat:fluid_present", "fluids": ["minecraft:water", "minecraft:lava"] }
+ * JSON 示例：{ "type": "idtw:fluid_present", "fluids": ["minecraft:water", "minecraft:lava"] }
  */
 public record FluidPresentCondition(TaggedId fluid, List<TaggedId> fluids) implements Condition {
 
     /** 类型 id，同时是 JSON 中 type 字段的取值 */
-    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath("itemdespawntowhat", "fluid_present");
+    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(Constants.ID_NAMESPACE, "fluid_present");
 
     // 参数 JSON 字段名
     private static final String FIELD_FLUID = "fluid";
