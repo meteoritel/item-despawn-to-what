@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
@@ -70,7 +71,7 @@ public final class TagCarouselView implements UiWidget, UiFocusTarget {
         int index = tag.carousel().index(Util.getMillis());
         if (index >= 0) {
             Component name = tag.members().get(index).name();
-            UiRenderLayers.draw(graphics, UiRenderLayers.FOREGROUND, () -> graphics.drawCenteredString(font,
+            UiRenderLayers.draw(graphics, UiRenderLayers.FOREGROUND, () -> UiFlatText.drawCentered(graphics, font,
                     TextScroll.trimToWidth(font, name.getString(), bounds.width() - 8),
                     bounds.x() + bounds.width() / 2, bounds.y() + 60, THEME.palette().textPrimary()));
         }

@@ -10,7 +10,6 @@ import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostPalette;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import java.util.ArrayList;
 import java.util.List;
-import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -26,7 +25,7 @@ import org.jetbrains.annotations.Nullable;
  * {@link #setMaxWidth(int)} 约束；定位优先落在指针右下，越界时翻到左上。</p>
  *
  * <p><b>取色</b>：本类只按 {@link Tone} 从宿主调色板取色，条件与动作不各自挑颜色；
- * 标题与分区标题额外加粗，用来和取值行区分层次。</p>
+ * 全 GUI 不使用字体加粗与阴影，标题、分区标题与取值行只靠颜色和缩进区分层次。</p>
  *
  * <p><b>行数</b>：面板高度受宿主可视区域约束，超出时从末尾按语义行整行裁掉并以查看详情提示收尾；
  * 间距行不占行数预算，单独出现在首尾时会被丢弃。</p>
@@ -236,7 +235,7 @@ public final class UiDescriptionTooltip {
             }
             int left = TOOLTIP_PADDING + line.indent() * TOOLTIP_INDENT;
             int color = colorOf(line.tone());
-            Component text = styled(line);
+            Component text = line.text();
             int topGap = line.kind() == Kind.SECTION && !first ? TOOLTIP_SECTION_GAP : 0;
             if (line.kind() == Kind.FIELD) {
                 int valueX = left + labelColumn + TOOLTIP_LABEL_GAP;
@@ -271,14 +270,6 @@ public final class UiDescriptionTooltip {
             rows.add(new Row(null, 0, 0, sequences.get(index), left, font.width(sequences.get(index)), color,
                     font.lineHeight, index == 0 ? topGap : 0, false));
         }
-    }
-
-    // 标题与分区标题加粗；取值不加粗，避免整块面板过重
-    private static Component styled(DescriptionLine line) {
-        if (line.tone() == Tone.TITLE || line.tone() == Tone.SECTION) {
-            return line.text().copy().withStyle(ChatFormatting.BOLD);
-        }
-        return line.text();
     }
 
     private int colorOf(Tone tone) {

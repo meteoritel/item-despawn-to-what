@@ -132,7 +132,7 @@ public final class UiControlGroup {
     public void renderTooltip(GuiGraphics graphics, Font font, int x, int y) {
         UiTarget target = targetAt(x, y);
         if (target != null && !target.tooltip().isEmpty()) {
-            graphics.renderComponentTooltip(font, target.tooltip(), x, y);
+            UiFlatText.componentTooltip(graphics, font, target.tooltip(), Math.max(1, graphics.guiWidth() - 16), x, y);
         }
     }
 

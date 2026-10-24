@@ -251,12 +251,7 @@ public final class RuleRecipeView {
         return part == null || part.object() == null ? null : part.object().tag;
     }
 
-    @Nullable Component triggerTooltipAt(Font font, UiRect row, double mouseX, double mouseY) {
-        Part part = partAt(font, row, mouseX, mouseY);
-        return part != null && part.transition() ? triggerView.tooltip() : null;
-    }
-
-    // 标签与触发信息共用配方绘制的宽度和滚动位移，避免新增箭头宽度后命中错位。
+    // 标签命中复用配方绘制的宽度和滚动位移，避免新增箭头宽度后命中错位。
     private @Nullable Part partAt(Font font, UiRect row, double mouseX, double mouseY) {
         if (!row.contains(mouseX, mouseY)) return null;
         boolean names = width(font, true) <= row.width();
@@ -279,7 +274,7 @@ public final class RuleRecipeView {
             graphics.pose().translate(right - width, y, UiRenderLayers.FOREGROUND);
             graphics.pose().translate(0, 1, 0);
             graphics.pose().scale(scale, scale, 1);
-            graphics.drawString(font, text, 0, 0, color, true);
+            graphics.drawString(font, text, 0, 0, color, false);
         } finally { graphics.pose().popPose(); }
     }
 

@@ -117,6 +117,7 @@ flowchart TD
 | `UiHostTheme` / `UiHostThemes` | 主题注入入口 | 调色板、度量、文本色、控件样式、滑块皮肤、结构绘制与图标行号；默认入口给出像素外观，扁平外观由调用方显式取用 | 全部控件与屏幕 |
 | `UiWidget` / `UiModalStack` | 控件与弹窗契约 | 控件统一渲染与输入契约，坐标为 GUI 逻辑坐标；弹窗栈只把输入投给最上层，并管理焦点与历史快捷键 | 屏幕、`UiFocusManager` |
 | `ConditionTreeContract` / `UiConditionGraphEditor` / `UiConditionTreeSummary` / `ConditionTreeOverlay` | 条件树界面家族 | 同一份条件数据与校验的两种展示；契约提供类型选项、叶子工厂、变更监听与选中路径同步 | 条件模型、`FormView`、`ConditionTreeChrome` |
+| `UiFlatText` | 文本绘制原语 | 无阴影的居中、折行文本与悬停提示面板；GUI 不使用字体阴影与加粗，标题只靠颜色、缩进与分区间距区分层次 | kit 的 `UiRenderLayers`、各控件与页面 |
 | `UiSlider` / `UiRangeBar` / `UiTextInput` | 控件适配 | 对外保持既有调用签名，内部把交互委托给 kit 的数值与文本契约；提交时机由宿主回调决定 | kit 数值/文本契约、主题 |
 
 ## 4. 关键流程
@@ -183,6 +184,7 @@ flowchart LR
 - 草稿单写入口：所有写入经 `EditSession#apply`，一次完整操作一条撤销记录；面板工厂与控件只装配、只搬运值。
 - 界面按描述符装配；JSON 的解析与构造收敛在 `client/edit`，界面消费模型或转换结果。
 - 主题只表达视觉，控件只表达交互语义；控件通过注入取色，不静态读取主题类。
+- 全 GUI 不使用字体阴影与加粗：需要居中、折行或悬停提示文本时统一走 `UiFlatText`，原版的 `drawCenteredString`、`drawWordWrap`、`renderTooltip` 会把暗色阴影叠在浅色底板上；信息层次由字体颜色、缩进与分区间距表达。
 - 条件树的结构与参数编辑只在画布页完成，缩进树保持只读并作为进入画布的入口（[ADR-0031](../adr/0031-condition-tree-single-editor-two-renders.md)）。
 - 画布页与画布内联编辑框使用扁平外观，且只在调用方显式注入时生效（[ADR-0028](../adr/0028-canvas-page-and-flat-skin.md)）。
 - 原型屏作为开发验证设施：注册入口与生产入口隔离，生产入口只由服务端授权后的指令触发并先取得独占编辑锁。

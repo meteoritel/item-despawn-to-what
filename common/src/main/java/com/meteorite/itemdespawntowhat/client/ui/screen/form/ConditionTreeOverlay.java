@@ -9,6 +9,7 @@ import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIconStrip;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
@@ -733,8 +734,8 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         }
         Component tip = tooltipAt(mouseX, mouseY);
         if (tip != null) {
-            graphics.renderTooltip(renderFont, renderFont.split(tip,
-                    Math.clamp(bounds.width(), TOOLTIP_MIN_WIDTH, TOOLTIP_MAX_WIDTH)), mouseX, mouseY);
+            UiFlatText.tooltip(graphics, renderFont, tip,
+                    Math.clamp(bounds.width(), TOOLTIP_MIN_WIDTH, TOOLTIP_MAX_WIDTH), mouseX, mouseY);
         }
     }
 
@@ -746,9 +747,9 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         graphics.fill(canvasRect.x(), canvasRect.y(), canvasRect.right(), canvasRect.bottom(), READONLY_SCRIM);
         int centerX = canvasRect.x() + canvasRect.width() / 2;
         int centerY = canvasRect.y() + canvasRect.height() / 2;
-        graphics.drawCenteredString(font, Component.translatable(UI + "readonly"),
+        UiFlatText.drawCentered(graphics, font, Component.translatable(UI + "readonly"),
                 centerX, centerY - font.lineHeight, READONLY_TITLE_COLOR);
-        graphics.drawCenteredString(font, Component.translatable(UI + "readonly.hint"),
+        UiFlatText.drawCentered(graphics, font, Component.translatable(UI + "readonly.hint"),
                 centerX, centerY + 2, READONLY_HINT_COLOR);
     }
 

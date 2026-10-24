@@ -288,10 +288,10 @@ public final class UiLightbox {
         if (hoveredControl == null) {
             UiTarget target = content.hit(mouseX, mouseY);
             if (target != null && !target.tooltip().isEmpty()) {
-                graphics.renderComponentTooltip(font, target.tooltip(), mouseX, mouseY);
+                UiFlatText.componentTooltip(graphics, font, target.tooltip(), Math.max(1, graphics.guiWidth() - 16), mouseX, mouseY);
             }
         } else if (!hoveredControl.tooltip().isEmpty()) {
-            graphics.renderComponentTooltip(font, hoveredControl.tooltip(), mouseX, mouseY);
+            UiFlatText.componentTooltip(graphics, font, hoveredControl.tooltip(), Math.max(1, graphics.guiWidth() - 16), mouseX, mouseY);
         }
     }
 

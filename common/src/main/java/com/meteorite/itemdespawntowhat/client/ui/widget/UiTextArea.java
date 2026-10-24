@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
@@ -244,7 +245,7 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
         graphics.enableScissor(innerX, innerY, innerX + innerWidth + SCROLLBAR_WIDTH, innerY + innerHeight);
         try {
             if (textField.value().isEmpty() && !focused && hint != null) {
-                graphics.drawWordWrap(renderFont, hint, innerX, innerY, innerWidth, theme.palette().textDisabled());
+                UiFlatText.drawWrapped(graphics, renderFont, hint, innerX, innerY, innerWidth, theme.palette().textDisabled());
             } else {
                 renderLines(graphics, renderFont, innerX, innerY, innerHeight);
             }

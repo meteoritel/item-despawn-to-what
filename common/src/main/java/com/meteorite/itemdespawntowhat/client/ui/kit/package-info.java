@@ -65,6 +65,7 @@
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiBlockPreview}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiCarousel}；数据解析与测量缓存由宿主负责</li>
  *   <li>绘制与悬停作用域：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers}（补偿原版物品深度、前景和模态层）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiFlatText}（无阴影的居中、折行文本与悬停提示面板）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiPointer}（只给当前交互层真实坐标）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView#canHoverContent(double, double)}（滚动条拖动期间屏蔽内容命中）</li>
  *   <li>命中与几何：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiRect}、

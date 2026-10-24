@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -69,12 +70,9 @@ final class RuleChangesView implements UiWidget, UiFocusTarget {
         int index = list.itemIndexAt(mouseX, mouseY);
         if (index < 0) return;
         Change change = list.items().get(index);
-        UiRect row = list.visibleRowBounds(index);
-        Component tip = row == null ? null : change.recipe().triggerTooltipAt(rowFont,
-                RuleRecipeView.recipeBounds(rowFont, row), mouseX, mouseY);
-        if (tip == null) tip = Component.literal(change.title()).append("\n").append(change.recipe().tooltip())
+        Component tip = Component.literal(change.title()).append("\n").append(change.recipe().tooltip())
                 .append("\n").append(change.kind());
-        graphics.renderTooltip(rowFont, rowFont.split(tip, Math.clamp(bounds.width(), 1, TOOLTIP_WIDTH)), mouseX, mouseY);
+        UiFlatText.tooltip(graphics, rowFont, tip, Math.clamp(bounds.width(), 1, TOOLTIP_WIDTH), mouseX, mouseY);
     }
 
     /** 将鼠标按下交给列表处理选择和滚动条。 */

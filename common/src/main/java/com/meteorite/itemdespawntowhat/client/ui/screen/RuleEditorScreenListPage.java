@@ -679,7 +679,8 @@ final class RuleEditorScreenListPage {
         return false;
     }
 
-    // 规则摘要按语义分行：条件正文、状态与不可用提示各自保持主题配色。
+    // 规则条目整行都进入条件提示的悬停范围；配方标签框优先，只有没命中标签时才展开条件树。
+    // 条件正文、状态与不可用提示按语义分行，各自保持主题配色。
     void renderDescriptionTooltip(GuiGraphics graphics, int mouseX, int mouseY) {
         if (ruleList == null || !ruleList.bounds().contains(mouseX, mouseY)) {
             return;
@@ -691,12 +692,10 @@ final class RuleEditorScreenListPage {
         String id = node.value();
         // 悬停时才向展示快照索取配方预览与条件提示：未悬停的条目不生成提示
         RuleListDisplaySnapshot snapshot = host.display().snapshot(id);
-        Component triggerTip = snapshot.preview().triggerTooltipAt(host.font(),
-                RuleRecipeView.recipeBounds(host.font(), ruleList.nodeContentBounds(node)), mouseX, mouseY);
         TagPreviewIcons.Tag tag = tagAt(mouseX, mouseY);
         List<DescriptionLine> lines = new ArrayList<>();
-        if (triggerTip != null || tag != null) {
-            lines.add(DescriptionLine.text(triggerTip != null ? triggerTip : tag.tooltip(), Tone.VALUE, 0));
+        if (tag != null) {
+            lines.add(DescriptionLine.text(tag.tooltip(), Tone.VALUE, 0));
         } else {
             lines.add(DescriptionLine.section(Component.translatable(UI + "recipe.condition_tree"), 0));
             lines.addAll(snapshot.conditionLines());
@@ -711,7 +710,7 @@ final class RuleEditorScreenListPage {
             }
         }
         UiDescriptionTooltip tooltip = new UiDescriptionTooltip(THEME, host.font());
-        if (triggerTip == null && tag == null) {
+        if (tag == null) {
             tooltip.setMaxLines(TOOLTIP_MAX_LINES, Component.translatable(UI + "recipe.condition_tree_more"));
         }
         tooltip.render(graphics, new UiRect(0, 0, host.screenWidth(), host.screenHeight()), lines, mouseX, mouseY);

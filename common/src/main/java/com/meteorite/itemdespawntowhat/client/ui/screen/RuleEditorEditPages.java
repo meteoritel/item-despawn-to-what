@@ -36,7 +36,6 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Supplier;
-import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -437,7 +436,7 @@ public final class RuleEditorEditPages {
      * @param font       绘制字体：蓝条高度取 {@code font.lineHeight}，标题按剩余宽度换行
      * @param headerRect 头部矩形，高取 {@link RuleEditorPageSupport#CARD_HEADER_H}
      * @param icon       标题行内图标，可为 null；非空时紧接蓝条之后占位
-     * @param title      标题文案，加粗显示
+     * @param title      标题文案，以主要文本色显示
      */
     static void drawCardHeader(GuiGraphics graphics, Font font, UiRect headerRect, @Nullable UiIcon icon, Component title) {
         if (headerRect.width() <= 0) {
@@ -450,7 +449,7 @@ public final class RuleEditorEditPages {
             icon.render(graphics, titleX, headerRect.y());
             titleX += icon.width() + RuleEditorPageSupport.PAD;
         }
-        var titleLines = font.split(title.copy().withStyle(ChatFormatting.BOLD), Math.max(1, headerRect.right() - titleX));
+        var titleLines = font.split(title, Math.max(1, headerRect.right() - titleX));
         if (!titleLines.isEmpty()) {
             graphics.drawString(font, titleLines.getFirst(), titleX, headerRect.y(), THEME.palette().textPrimary(), false);
         }

@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlRole;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
@@ -342,7 +343,7 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
         theme.drawInset(graphics, bounds);
         UiRect viewport = scrollView.viewport();
         if (visibleRows.isEmpty()) {
-            graphics.drawCenteredString(font, emptyMessage, viewport.x() + viewport.width() / 2,
+            UiFlatText.drawCentered(graphics, font, emptyMessage, viewport.x() + viewport.width() / 2,
                     viewport.y() + Math.max(0, viewport.height() / 2 - 4), theme.palette().textSecondary());
             return;
         }

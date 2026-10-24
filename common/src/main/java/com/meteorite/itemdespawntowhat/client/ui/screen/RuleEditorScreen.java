@@ -10,6 +10,7 @@ import com.meteorite.itemdespawntowhat.core.api.DevelopmentDiagnostics;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryDispatcher;
@@ -527,9 +528,9 @@ public final class RuleEditorScreen extends Screen {
         }
     }
 
-    // Component 的单行 tooltip 重载不处理换行；先按窗口宽度拆行再交给原版定位。
+    // Component 的单行 tooltip 重载不处理换行；按窗口宽度折行后交给无阴影提示面板定位。
     private void renderTooltip(GuiGraphics graphics, Component tip, int mouseX, int mouseY) {
-        graphics.renderTooltip(font, font.split(tip, Math.clamp(width - 16, 1, 240)), mouseX, mouseY);
+        UiFlatText.tooltip(graphics, font, tip, Math.clamp(width - 16, 1, 240), mouseX, mouseY);
     }
 
     // 顶部标题与状态
