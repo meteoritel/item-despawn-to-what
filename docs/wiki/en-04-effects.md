@@ -78,7 +78,7 @@ What you see in game: one piece of rotten flesh lands near the trigger position 
 { "type": "idtw:spawn_entity", "variant": "entity", "entity": "minecraft:chicken", "count": 1, "age": -24000 }
 ```
 
-What you see in game: a baby chicken spawns near the trigger position. With `safe_spawn` on, the mod searches the 5x5x5 block box centered on the trigger position, 125 blocks in all, from near to far for a spot the entity can stand on. When it finds none, it falls back to the area around the trigger position. This switch is off by default.
+What you see in game: a baby chicken spawns near the trigger position. With `safe_spawn` on, the mod searches the 5x5x5 block box centered on the trigger position, 125 blocks in all, from near to far for a spot the entity can stand on where neither its feet nor its head is a hazardous block. When it finds none, the conversion fails and the source items come back through the return path during delivery. This switch is off by default.
 
 Note: item entities (`minecraft:item`) and experience orbs (`minecraft:experience_orb`) do not belong here. Use the two dedicated variants instead, or the rule is rejected.
 

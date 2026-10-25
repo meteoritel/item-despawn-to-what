@@ -35,10 +35,13 @@ An outcome candidate accepts only these four fields. One extra field rejects the
 ### Safe Spawning (safe_spawn)
 
 - `false` (the default): the mod does not look for a spot and places the mob at the position of the dropped item, with a small random offset on the horizontal axes.
-- `true`: the mod scans a box centered on the trigger position, 2 blocks to each horizontal side and 2 blocks up and down (5×5×5, 125 positions), from the closest position to the farthest, and takes the first position where a mob can stand: inside the world border, allowed by the vanilla spawn rules of that mob, no block inside the spawn collision box, and no fire, lava, or cactus at the feet or the head. The mob appears in the center of that block.
-- When no position is safe, the mod falls back to spawning near the trigger position with the same small random offset. A missing safe spot never cancels the spawn.
+- `true`: the mod scans a box centered on the trigger position, 2 blocks to each horizontal side and 2 blocks up and down (5×5×5, 125 positions), from the closest position to the farthest, and takes the first position where a mob can stand: inside the world border, not over the void, allowed by the vanilla spawn rules of that mob, no block inside the spawn collision box, and no hazardous block at the feet or the head. The mob appears in the center of that block.
+- Hazardous blocks follow the damage categories of vanilla pathfinding: lava (block and fluid), fire and soul fire, magma block, campfire and soul campfire, lava cauldron, cactus, sweet berry bush, wither rose, pointed dripstone, and powder snow. The rule does not depend on the mob type: one position gives the same verdict for every product.
+- The void covers two cases: a position below the world bottom, and a position sitting on the world bottom with no standable block between it and the bottom. Higher unsupported positions are left to gravity and the ground check, without scanning the whole column.
 - This switch works only for spawning mobs. Spawning items or experience ignores it.
 - The search runs across several ticks: the mod checks a limited number of positions per tick, a number the server configuration controls, and continues on the next tick when a batch is unfinished. A mob can therefore appear slightly later than an item.
+- Within one delivery each position is checked at most once: a hit position belongs to that mob, and later mobs only check positions not tried yet. Chunk loading is trimmed to the searched range instead of a fixed circle.
+- When no position in the searched range is safe, the conversion fails: with no mob spawned, the effect fails and the source cost already paid for this group comes back, with the source items returned to the world through the normal return path during delivery. When some mobs were already spawned before the search ran out, the effect ends with the real output, spawning nothing more and returning nothing.
 
 ### Filling the Origin Block (fill_origin)
 
@@ -194,7 +197,7 @@ When a rule picks up a dropped item, the whole stack leaves the world and enters
 About counting only real output:
 
 - The output ledger records only what actually took effect. When an effect in a group produces nothing because its chance missed or it failed, the mod does not count that group as successful output: a planned amount and a successful amount are two different numbers.
-- Consumed cost stays consumed. Missed chances and invalid targets pay the full group cost. Block placement uses `ceil(placed × source_cost ÷ count)` source items per group; multiple block slots share the highest cost used, and a dispatched non-block effect uses the full group cost.
+- Consumed cost stays consumed. Missed chances and invalid targets pay the full group cost. Block placement uses `ceil(placed × source_cost ÷ count)` source items per group; multiple block slots share the highest cost used, and a dispatched non-block effect uses the full group cost. The one exception is mob spawning with `safe_spawn`: when the candidate holds only that one effect, no safe position exists in the searched range, and no mob was spawned, the group cost comes back and is not counted as consumed. A group with other effects, or one that already spawned part of its mobs, pays as usual.
 - Unopened inventory and unused block source allowance remain in settlement. With 10 sources able to place 20 blocks, placing only 6 consumes 3 sources and returns 7. When no position is available or `limit` is already full, all sources return if no other paid behavior uses them.
 - The output budget is debited per opened group: once a group has paid its cost, it takes the share of the budget its declared output needs, and that share stays spent even when a missed chance leaves the group without real output.
 
