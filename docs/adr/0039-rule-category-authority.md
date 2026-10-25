@@ -1,7 +1,7 @@
 # ADR-0039：规则分类组的判定归属
 
 - 状态：已实施。
-- 相关决策：[ADR-0020](0020-source-catalog-and-overlay-control-entries.md)（来源目录与状态语义不变）；[ADR-0019](0019-exclusive-edit-session-and-target-lock.md)（协议版本化握手与回执状态码沿用）；[ADR-0040](0040-on-demand-snapshot-source-views.md)（快照条目结构与来源视图按需下发）。
+- 相关决策：[ADR-0020](0020-source-catalog-and-overlay-merge.md)（来源目录与状态语义不变）；[ADR-0019](0019-exclusive-edit-session-and-target-lock.md)（协议版本化握手与回执状态码沿用）；[ADR-0040](0040-on-demand-snapshot-source-views.md)（快照条目结构与来源视图按需下发）。
 - 术语：规则分类组见 [GLOSSARY.md](../../GLOSSARY.md)。
 
 ## 背景

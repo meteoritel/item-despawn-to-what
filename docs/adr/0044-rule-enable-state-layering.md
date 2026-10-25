@@ -1,12 +1,12 @@
 # ADR-0044：规则启用状态分层为内容默认值与本服状态
 
-- 状态：已接受（尚未落地）。
-- 影响面：`core/model/Rule`（`enabled` 字段的语义）、`core/load/RuleLoader`、`RuleMerger`、`RuleFileParser`、`RuleSourceIndex`、`core/service/RuleSnapshotAssembler`、`RuleSubmissionValidator`、`RuleOverlayWriter`；`core/network/protocol/RuleSnapshotEntry` 与 `RuleEditProtocol`；客户端 `client/edit/EditSession`、`client/ui/screen/RuleEditorModel`、`RuleEditorListActions`、`RuleEditorListPage`、`RuleEditorEditPage`。
-- 相关：三层作用域与覆盖合并见 [ADR-0014](0014-three-layer-scope-and-overlay-merge.md)；来源目录与停用 / 屏蔽控制条目见 [ADR-0020](0020-source-catalog-and-overlay-control-entries.md)（停用与屏蔽部分由本决策取代）；术语见 [GLOSSARY.md](../../GLOSSARY.md)。
+- 状态：已实施。
+- 影响面：`core/model/Rule`（`enabled` 字段的语义）、`core/load/RuleLoader`、`RuleMerger`、`RuleFileParser`、`RuleSourceIndex`、`core/service/RuleSnapshotAssembler`、`RuleSubmissionValidator`、`RuleOverlayWriter`、`core/state/RuleEnableState`、`RuleEnableApplyService`、命令层；`core/network/protocol/RuleSnapshotEntry` 与 `RuleEditProtocol`；客户端 `client/edit/EditSession`、`client/edit/EditorChangeSet`、`client/edit/draft/PersistedDraft`、`client/ui/screen/RuleEditorModel`、`RuleEditorListActions`、`RuleEditorListPage`、`RuleEditorEditPage`、`RuleEditorInfoPage`、`RuleListDisplayCache`。
+- 相关：三层作用域与覆盖合并见 [ADR-0014](0014-three-layer-scope-and-overlay-merge.md)；来源目录与覆盖层合并语义见 [ADR-0020](0020-source-catalog-and-overlay-merge.md)；术语见 [GLOSSARY.md](../../GLOSSARY.md)。
 
 ## 背景
 
-`enabled` 目前是规则内容里的字段，同时承担「作者希望默认是否启用」与「当前存档里是否生效」两种语义。数据包基底不可写，基底规则的启用状态无法在不改内容的前提下按存档切换；用覆盖控制条目表达停用，又把控制面塞进内容层：控制条目不携带内容却要占用覆盖层文件，快照里出现被注入 `enabled=false` 的伪内容，条目来源在「只读」与「可写」之间摇摆，删除遮蔽还要额外回收文件。
+`enabled` 一度同时承担「作者希望默认是否启用」与「当前存档里是否生效」两种语义。数据包基底不可写，基底规则的启用状态无法在不改内容的前提下按存档切换；用覆盖控制条目表达停用，又把控制面塞进内容层：控制条目不携带内容却要占用覆盖层文件，快照里出现被注入 `enabled=false` 的伪内容，条目来源在「只读」与「可写」之间摇摆，删除遮蔽还要额外回收文件。
 
 ## 决策
 
@@ -34,4 +34,4 @@
 - 界面上「默认启用」与「本服启用」必须同时可见、可区分，单开关无法表达两层语义。
 - 导出的规则文件只含默认启用，与运行时生效状态可能不同；需要按存档阅读的场合应以本服状态为准。
 - 控制条目相关代码路径、校验分支与 `MASKED` 状态整体退出，覆盖层只保留普通规则。
-- 快照协议字段与版本需要调整，客户端与服务端按协议版本协商后使用新字段。
+- 快照协议字段与协议版本随之调整，客户端与服务端按协议版本协商后使用新字段。

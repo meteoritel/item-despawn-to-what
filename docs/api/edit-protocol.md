@@ -2,7 +2,7 @@
 title: 编辑协议契约
 layer: 5
 audience: 实现或排查规则编辑器链路的开发者
-authority: common/src/main/java/com/meteorite/itemdespawntowhat/core/network/protocol、core/network/transport、core/service/RuleEditService.java、core/service/EditSessionManager.java、core/service/RuleSaveTask.java
+authority: common/src/main/java/com/meteorite/itemdespawntowhat/core/network/protocol、core/network/transport、core/service/RuleEditService.java、core/service/EditSessionManager.java、core/service/RuleSaveTask.java、core/service/RuleEnableApplyService.java、core/state/RuleEnableState.java
 ---
 
 # 编辑协议契约
@@ -44,7 +44,7 @@ stateDiagram-v2
 
 ## 握手与协议版本
 
-`RuleEditProtocol.VERSION` 是协议版本。打开载荷携带服务端版本与目标标识，客户端在收到打开载荷时比对版本与状态码；确认载荷再把客户端版本回传，服务端在确认入口再次比对。版本不一致按请求非法处理，并带上专门的文案 key，提示双方版本不同，避免用错位的字段解释载荷。
+`RuleEditProtocol.VERSION` 是协议版本，当前取值为 9：快照条目的启用三值、变更集的启停动作与这一版字段形态绑定，字段或动作集合变化时递增。打开载荷携带服务端版本与目标标识，客户端在收到打开载荷时比对版本与状态码；确认载荷再把客户端版本回传，服务端在确认入口再次比对。版本不一致按请求非法处理，并带上专门的文案 key，提示双方版本不同，避免用错位的字段解释载荷。
 
 ## 载荷家族
 
@@ -65,7 +65,11 @@ stateDiagram-v2
 
 ## 快照与来源视图
 
-快照是客户端视图的唯一来源：确认成功后服务端自动下发首份快照，保存回执为版本冲突或已写盘未重载时再补拉。快照条目携带来源层（`origin`）、物理来源（`source`：builtin / world / overlay / mixed，其中 overlay / mixed 表示含用户覆盖内容）、状态、可编辑标记、分类、生效视图与逐条问题，条目形状与状态取值见 `RuleSnapshotEntry`。内置数据包与世界数据包来源为只读，只有含覆盖内容的 overlay / mixed 可编辑与删除。
+快照是客户端视图的唯一来源：确认成功后服务端自动下发首份快照，保存回执为版本冲突或已写盘未重载时再补拉。快照条目携带来源层（`origin`）、物理来源（`source`：builtin / world / overlay / mixed，其中 overlay / mixed 表示含用户覆盖内容）、状态（`active` / `disabled` / `invalid`）、分类、生效视图与逐条问题，条目形状与状态取值见 `RuleSnapshotEntry`。
+
+启用信息分三值：`default_enabled` 是规则 JSON 里的默认启用，`enabled` 是本服实际生效值，`enabled_override` 是本服覆盖，取 `null` 表示该 id 没有本服覆盖、生效值继承默认。保存把覆盖改回默认时摘除记录，快照随之回到 `enabled_override` 为 `null`。
+
+`editable` 只描述内容可写：含覆盖内容的 overlay / mixed 为真，内置数据包与世界数据包为假。条目能否停用由本服启用状态决定，与 `editable` 无关；能否删除覆盖条目同样只看 `source`。
 
 - 整包放得下就直接下发；否则按 UTF-8 字节切分，每 tick 限量投递，客户端按 `transferId` 与下标重组。
 - 快照装配失败或内容为空时回环境不可用状态码，并带上快照失败的文案 key。
@@ -81,28 +85,37 @@ stateDiagram-v2
   "expected_version": 12,
   "edits": [
     { "id": "idtw:example", "action": "upsert", "rule": { } },
-    { "id": "idtw:removed", "action": "delete" }
+    { "id": "idtw:removed", "action": "delete" },
+    { "id": "idtw:toggled", "action": "disable" }
   ]
 }
 ```
 
-`action` 取值由 `RuleEdit.Action` 定义：`upsert` 携带与文件同形的完整规则对象，`delete` 只带 id。变更集只表达意图，服务端以磁盘文件为准逐 id 增删改，未涉及的条目、未知字段与坏 JSON 文件都原样保留。
+`action` 取值由 `RuleEdit.Action` 定义，分两类。内容动作读写覆盖层文件：`upsert` 携带与文件同形的完整规则对象，`delete` 只带 id、删除覆盖层中该 id 的普通条目，覆盖层没有该条目时整批不产生文件改动。启用动作 `enable` / `disable` / `reset` 只带 id，把该 id 的本服启用状态设为本服启用、本服停用或恢复默认（摘除本服记录）；启用动作携带 `rule` 按请求非法拒绝。
 
-版本戳由 `expected_version` 与服务端当前修订号比对，不一致整批拒绝并回最新修订号，客户端据此拉取新快照。空变更集按无变化回执处理，不触发落盘。
+同一 id 可以同时带内容动作与启用动作，两类改动在同一次提交内一起生效。变更集只表达意图，服务端以磁盘文件为准逐 id 增删改，未涉及的条目、未知字段与坏 JSON 文件都原样保留。
+
+版本戳由 `expected_version` 与服务端当前修订号比对，不一致整批拒绝并回最新修订号，客户端据此拉取新快照。比对只针对含内容动作的变更集：纯启停批次不改写文件，不比对版本，也不推进修订号。空变更集按无变化回执处理，不触发落盘。
+
+## 应用与回扫
+
+校验通过后整批应用：内容动作由覆盖层写入器落盘，启用动作写入按存档保存的本服启用状态，再统一重建规则索引。内容没有实际改动、只有启用状态变化时同样重建索引；两者都没有变化回无变化，不发布索引。
+
+重建索引复用保存任务已捕捉的数据包基底与当前覆盖层，不重读数据包。发布后回扫在公共预算内分步推进：先清理各维度旧队列与在跑任务，再推进结算恢复扫描，最后逐维度重建掉落物追踪。回扫完成前回执保持已写盘未重载；运行时上下文不可用或回扫调度失败时回环境不可用。
 
 ## 幂等与并发
 
 每次保存由客户端生成 `operationId`。服务端保留最近的操作回执，同一个 `operationId` 重发时直接回放上次结论，不重复写盘；会话切换时回执表清空。
 
 - 已有在途保存时，同一 `operationId` 的重复提交不再触发新保存，由在途操作的终态统一作答；不同 `operationId` 按请求非法拒绝，并提示正在应用。
-- 在途保存按阶段推进：准备、校验、预备文件、写盘、回滚、读盘、解码、索引、应用、取消，阶段与计数通过进度载荷节流下发，客户端只用于展示。
+- 在途保存按阶段推进：准备、校验、预备文件、写盘、回滚、读盘、解码、索引、应用、取消，阶段与计数通过进度载荷节流下发，客户端只用于展示。纯启停批次在校验后直接进入应用：索引在应用入口内重建，不经过写盘、读盘、解码与索引阶段。
 - 取锁失败、确认超时、心跳失效、失去权限属于会话类失败，回执会把会话置为失效；取消请求只发出信号，回滚结束前独占锁仍保持。
 - 玩家断开时清理分片传输；在途保存请求延后释放，其余会话按租约回收。
 - 保存回执沿用保存任务已确定的终态；完成时释放会话不覆盖写盘与重载结果。
 
 ## 版本戳推进
 
-覆盖层修订号由 `RuleOverlayStore` 分配并持久化到覆盖层根目录的 `.edit_version`：保存写盘成功、数据包重载完成都会推进修订，保存与快照在读取覆盖层之后以磁盘上的修订号校正当前会话版本。保存准备阶段用覆盖层文件的大小与修改时间判定是否被外部改动，替换前再整份比对内容；任一处不符即中止本次保存并回滚，避免覆盖他人写入的内容。
+覆盖层修订号由 `RuleOverlayStore` 分配并持久化到覆盖层根目录的 `.edit_version`：保存写盘成功、数据包重载完成都会推进修订，保存与快照在读取覆盖层之后以磁盘上的修订号校正当前会话版本。修订号只跟踪覆盖层内容，启停状态保存在存档数据里，写入启用状态不推进修订号。保存准备阶段用覆盖层文件的大小与修改时间判定是否被外部改动，替换前再整份比对内容；任一处不符即中止本次保存并回滚，避免覆盖他人写入的内容。
 
 ## 分片与限额
 

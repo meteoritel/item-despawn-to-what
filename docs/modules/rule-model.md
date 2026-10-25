@@ -133,7 +133,7 @@ flowchart LR
 
 ## 6. 数据与配置引用
 
-- 规则 JSON 的顶层形状、字段、默认值与来源覆盖控制条目：[`docs/api/rule-json.md`](../api/rule-json.md)。
+- 规则 JSON 的顶层形状、字段、默认值与覆盖层条目语义：[`docs/api/rule-json.md`](../api/rule-json.md)。
 - Issue 模型、严重级与拒载粒度：[`docs/api/errors.md`](../api/errors.md)。
 - 编辑器草稿、变更集与保存协议：[`docs/api/edit-protocol.md`](../api/edit-protocol.md)。
 - server.json 的配置项由宿主装配读取并注入运行时，取值与默认值见 [`docs/ops/configuration.md`](../ops/configuration.md)。

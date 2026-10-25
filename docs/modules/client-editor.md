@@ -9,22 +9,24 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/client/net、cli
 
 > **TL;DR**
 > - `client/net` 镜像服务端的编辑状态机：确认会话、心跳、接收快照与目录、提交分片化的变更集、收敛保存回执。
-> - `client/edit` 只组织客户端数据：JSON 是草稿的唯一事实来源，撤销历史按操作前后的草稿快照记录，未提交的编辑落盘到客户端目录。
-> - 界面通过只读视图 `EditorWorkspaceView` 与注册槽 `EditorScreenHooks` 接入，界面实现由外部注册。
+> - `client/edit` 只组织客户端数据：JSON 是草稿的唯一事实来源，撤销历史按操作前后的草稿快照记录，未提交的内容与启停意图落盘到客户端目录。
+> - 只读条目的内容在沙盒会话里改：控件与撤销照常可用，内容不落盘、不进变更集，离开编辑页即丢弃；启停意图不受这条约束，照常提交。
 
 **适用对象**：调整编辑协议客户端行为、新增类型编辑器、修改草稿持久化或撤销语义的开发者。载荷字段、分片规则与回执语义见 [编辑协议](../api/edit-protocol.md)，服务端侧的会话与落盘见 [编辑与落盘](authoring.md)。
 
 ## 1. 模块职责
 
-一句话边界：把服务端的编辑会话投影成界面可用的只读视图，并保管“尚未提交的编辑”（草稿、撤销历史、落盘恢复）。
+一句话边界：把服务端的编辑会话投影成界面可用的只读视图，并保管“尚未提交的编辑”（草稿、启停意图、撤销历史、落盘恢复）。
 
 - **协议工作区** `RuleEditClientWorkspace`：对服务端状态机的镜像，负责确认、心跳、关闭、快照与目录缓存、下行分片重组、变更集自动分片提交、进度与回执收敛、会话失效时关闭界面。
 - **分片接收** `RuleChunkBuffer`：快照与来源视图共用同一套重组逻辑，同一时刻只保留最近一批分片。
-- **草稿** `RuleDraft` 与 `DraftPaths`：以 JSON 为唯一事实来源的规则草稿，支持路径级读写、条件树编解码，以及 flat effects 与 candidate outcomes 之间的原子转换。
-- **撤销与重做** `EditSession`：把每次编辑压成一条历史记录，恢复快照的同时恢复未完成的文本输入；只读会话在 `apply` 与撤销/重做入口直接拒绝写入，作为界面控件禁用之外的写入门禁。
+- **草稿** `RuleDraft` 与 `DraftPaths`：以 JSON 为唯一事实来源的规则草稿，支持路径级读写、条件树编解码，以及 flat effects 与 candidate outcomes 之间的原子转换；删除意图不写进工作副本，组装变更集时转成 `delete` 动作。
+- **撤销与重做** `EditSession`：把每次编辑压成一条历史记录，恢复快照的同时恢复未完成的文本输入。会话本身不区分只读：只读条目的内容同样可改，改动只存在于当前界面生命周期。
+- **变更集** `EditorChangeSet`：按 id 收集内容动作与启停动作，两类分开去重，序列化成一份载荷提交；只读条目的内容动作不进来，启停动作照常进来。
 - **类型编辑器** `TypeEditorRegistry` 与条件/效果的注册表：类型 id 到编辑描述符的映射，未注册类型获得只读回退描述。
-- **草稿持久化** `DraftStore`、`DraftJournal`、`PersistedDraft`、`DraftConflict`：客户端私有目录里的原子落盘、节流写入与恢复时的冲突判定。
-- **只读来源** `RuleEditorModel#isReadOnly`：按快照条目的物理来源判定；只读条目创建只读会话、跳过草稿落盘与变更集组装，快照刷新后来源变化时同步会话的只读位。
+- **草稿持久化** `DraftStore`、`DraftJournal`、`PersistedDraft`、`DraftConflict`：客户端私有目录里的原子落盘、节流写入与恢复时的冲突判定；记录里除草稿内容外还带本次待应用的启停意图，内容为空对象表示这条记录只承载意图。
+- **只读约束** `RuleEditorModel#isReadOnly`：按快照条目的物理来源判定，只表示内容不可写。只读条目的内容在草稿日志与变更集组装两处被跳过，能不能启停与这条判定无关。
+- **启停意图** `RuleEditorModel` 的意图表：按条目记录待应用的启停动作，并与快照里的本服覆盖、规则默认启用合成生效值（意图 ?? 本服覆盖 ?? 默认启用），供列表与编辑页读取。
 
 编辑器界面的编排（列表、表单、页面模型）在 [界面模块](client-ui.md)，本模块只提供它使用的数据面。
 
@@ -35,7 +37,7 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/client/net、cli
 - **界面读取面**：`EditorWorkspaceView`，只暴露方法而不暴露任何网络载荷类型；实机实现是 `LiveEditorWorkspace`，单例包装协议工作区。
 - **界面注册**：`EditorScreenHooks.setOpener(EditorScreenOpener)`；工作区在会话建立时 `open(EditorOpenRequest)`，会话失效时 `close()`，opener 未注册只记日志。
 - **平台接线**：`RuleEditClientWorkspace.instance()` 的 `installSinks()` 与 `installSender(PacketSender)`，由两端客户端初始化调用。
-- **编辑数据**：`RuleDraft`、`EditSession`、`DraftPaths`、`DraftJournal`，供界面模块组装草稿生命周期。
+- **编辑数据**：`RuleDraft`、`EditSession`、`EditorChangeSet`、`DraftPaths`、`DraftJournal`，供界面模块组装草稿与变更集。
 - **类型编辑器扩展**：`EditorRegistries.CONDITIONS.register`、`EditorRegistries.EFFECTS.register`，参数是 `TypeEditorDescriptor`。
 
 ### 依赖方向
@@ -44,7 +46,7 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/client/net、cli
 flowchart LR
     UI["client/ui"] --> VIEW["client/edit：EditorWorkspaceView"]
     UI --> HOOKS["client/net：EditorScreenHooks"]
-    UI --> DATA["client/edit：RuleDraft、EditSession、DraftJournal"]
+    UI --> DATA["client/edit：RuleDraft、EditSession、EditorChangeSet、DraftJournal"]
     DATA --> NET["client/net：RuleEditClientWorkspace"]
     NET --> CORE["core 公开类型：api、model、network transport"]
     DATA --> CORE
@@ -69,8 +71,9 @@ flowchart LR
 | `RuleChunkBuffer`（client/net） | 分片重组 | 按会话、传输 id 与分片数识别批次，按序号去重拼接；超时无进展即作废旧批次 | 工作区、快照与来源视图 |
 | `EditorWorkspaceView` / `LiveEditorWorkspace`（client/edit） | 只读视图 | 界面只读面；`LiveEditorWorkspace` 把载荷收敛在工作区内部，按 `resultSeq` 暴露最新回执 | 界面模块、协议工作区 |
 | `EditorScreenHooks` / `EditorScreenOpener` / `EditorOpenRequest`（client/net） | 界面注册槽 | 会话建立与失效时通知界面；请求字段与服务端打开载荷一一对应 | 界面模块 |
-| `EditSession`（client/edit） | 撤销聚合根 | 每次编辑压入快照历史，维护撤销与重做栈、脏标记与未完成输入 | `RuleDraft`、界面表单 |
+| `EditSession`（client/edit） | 撤销聚合根 | 每次编辑压入快照历史，维护撤销与重做栈、脏标记与未完成输入；不区分只读条目 | `RuleDraft`、界面表单 |
 | `RuleDraft`（client/edit） | 草稿聚合根 | 保存服务器基线、工作副本与删除标记；路径级读写与条件树、候选结构处理 | `DraftPaths`、条件编解码、界面表单 |
+| `EditorChangeSet`（client/edit） | 变更集组装 | 按 id 收集内容动作与启停动作，分别去重后序列化成一份提交载荷 | `RuleEdit`、`RuleEditorModel` |
 | `DraftPaths`（client/edit） | 路径工具 | 草稿 JSON 的字段与数组路径解析、读写、删除；必要时创建中间容器 | `RuleDraft` |
 | `TypeEditorRegistry` / `EditorRegistries`（client/edit） | 扩展点 | 类型 id 到编辑描述符的注册表；未注册类型返回只读回退描述 | 界面表单、内置类型表 |
 | `ClientTypeRegistries`（client/edit） | 客户端类型表 | 内置条件与效果类型的惰性单例，内容来自代码常量而非数据包 | 注册表、条件编解码 |
@@ -162,17 +165,37 @@ flowchart TD
     D --> E{"有冲突?"}
     E -->|是| F["按冲突原因提示，不覆盖用户草稿"]
     E -->|否| G["继续编辑"]
-    G --> H["EditSession.apply：记录快照历史"]
-    H --> I{"值得落盘?"}
-    I -->|是| J["标记脏草稿 → 节流写盘"]
-    I -->|否| K["丢弃该目标的草稿记录"]
-    J --> L["会话关闭或失效：立即写盘并冲刷"]
+    G --> H{"条目内容只读?"}
+    H -->|是| S["沙盒会话：不标脏、不落盘、不进变更集"]
+    H -->|否| I["EditSession.apply：记录快照历史"]
+    I --> J{"值得落盘?"}
+    J -->|是| K["标记脏草稿 → 节流写盘"]
+    J -->|否| L["丢弃该目标的草稿记录"]
+    S --> R["离开编辑页：丢弃沙盒内容"]
+    K --> M["会话关闭或失效：立即写盘并冲刷"]
 ```
 
-- 撤销的粒度是“一条编辑操作”：操作压栈前先取工作副本快照，只有 JSON、删除标记或目标级开关确实变化才入栈，超过历史上限丢弃最旧记录，新操作清空重做栈。
+- 撤销的粒度是“一条编辑操作”：操作压栈前先取工作副本快照，只有 JSON 或删除标记确实变化才入栈，超过历史上限丢弃最旧记录，新操作清空重做栈。
 - 未完成的文本输入单独缓存，撤销与重做在恢复快照的同时恢复对应的输入位置。
 - 冲突判定在整条规则粒度：目标是否仍在服务端、按新建保存时服务端是否已有同名目标、服务端内容是否仍等于草稿记录的基线；原因由 `DraftConflict.Reason` 表达，新增原因需同步 `messageSuffix` 与文案 key。
 - 关闭界面时若有未保存改动，弹窗提供「暂存到本地」「放弃」「取消」：暂存先合并当前表单输入并立即写盘，再结束会话并关屏；放弃删除本次载入的全部草稿文件；取消留在编辑页。
+
+### 只读条目的沙盒会话
+
+- 只读条目的内容与可写条目走同一套会话与撤销栈：控件可写，撤销与重做照常工作，改动只影响当前界面生命周期。
+- 沙盒内容不写入草稿日志、不计入脏标记、不进入变更集，因此保存与应用按钮的可用状态只由可写内容与启停意图决定。
+- 返回列表、切换编辑目标或关闭界面即丢弃沙盒内容；再次打开看到的是服务端内容。
+- 快照刷新时按“是否已在改”分流：会话里已有未应用的内容改动就保留会话，否则静默回滚到新快照内容并清空历史；未应用的启停意图不受影响。
+- 启停与复制对只读条目开放：启停走意图表，复制把沙盒内容转成新的覆盖层条目。删除仍只对内容可写的条目开放。
+
+### 启停意图
+
+- 意图取值是启用、停用、恢复默认三种动作，另有“无意图”。意图属于本服状态，与规则内容分开记录。
+- 开关的目标值与默认启用相同时，客户端不留显式覆盖：服务端本来没有覆盖就直接摘除意图，已有覆盖则改为恢复默认。这样「回到继承默认」与「显式设成和默认相同的值」在界面上是两件事。
+- 生效值 = 意图 ?? 快照里的本服覆盖 ?? 默认启用；列表状态、行置灰与基本页开关都读这个合成值。
+- 意图随草稿记录落盘（字段 `enable_intent`），重启客户端后恢复为待应用状态；快照刷新不清除意图，保存成功后清除。
+- 只读条目的内容不进草稿记录，意图照常落盘，并计入脏标记与列表的「未完成」分组。
+- 组装变更集时内容动作与启停动作同批提交，服务端先写内容再落状态；复制为新规则时让副本的生效状态与源条目一致，副本默认值本来就相同时不留意图。
 
 ## 5. 扩展点与约束
 
@@ -186,6 +209,7 @@ flowchart TD
 ### 新增撤销操作
 
 - 所有字段与树操作都经 `EditSession.apply(opKey, mutation)` 提交，`opKey` 使用 `EditSession` 的操作常量（`gui.itemdespawntowhat.edit.undo.*`）；新增操作补常量并同步 `en_us` 与 `zh_cn` 语言文件。
+- 启停开关改的是意图表与脏标记，不写表单字段、不进撤销栈。
 - `load(next)` 会清空历史；历史上限由 `HISTORY_LIMIT` 定义。
 
 ### 接入新的界面实现
@@ -201,6 +225,7 @@ flowchart TD
 ### 草稿格式演进
 
 - `PersistedDraft` 带格式版本号，新增字段时在 `toJson` 与 `fromJson` 同步；缺失的可选字段按缺省值读取，缺少目标 id 或草稿体的记录被丢弃。
+- 启停意图是可选字段，缺字段、写成非字符串或动作名无法识别时按“无意图”读取；只承载意图的记录草稿内容写成空对象。
 - 文件名由 `DraftStore.fileName` 从目标 id 派生（清洗 + 短哈希），写入先落到同目录临时文件再原子替换。
 - 目录固定为游戏根目录下的 `config/itemdespawntowhat/client/editor-drafts`，不写服务端目录与覆盖层目录。
 
@@ -210,22 +235,25 @@ flowchart TD
 - `RuleChunkBuffer` 同一时刻只保留一批分片，批次边界由会话、传输 id 与分片数共同决定。
 - 来源视图缓存与目录加载都有上限与超时，界面重试走 `retrySourceView` / `retryDirectory`，不要自行重发请求。
 - `client/net` 与 `client/edit` 不引用 `client/ui`；页面、主题与控件适配都在界面模块。
-- 只读来源的判定只取快照条目：`source` 为 `builtin` / `world` 的条目不可写；界面禁用只是表现，`EditSession#apply` 与变更集组装仍各自兜底拒绝写入。
+- 只读判定只取快照条目的来源：`source` 为 `builtin` / `world` 的条目内容不可写。只读约束落在草稿持久化与变更集组装两处，会话与控件层对只读条目照常可写。
+- 沙盒内容与启停意图是两条不同的持久化路径：前者只存在于会话内存，需要留下时走「复制为新规则」；后者随草稿记录保存并在应用时提交。
 
 ### 改动后的验证
 
 - 编译：先做 IDE 工作区检查，再跑 `tools/dsh-build.ps1 -Tasks build`。
 - 隔离：`python tools/check-isolation.py`（客户端不引入加载器专有 API，`core` 不引用客户端）。
-- 实机：单人世界与专用服务端各走一遍打开、编辑、保存、取消、断线重连与草稿恢复。
+- 实机：单人世界与专用服务端各走一遍打开、编辑、保存、取消、断线重连、草稿恢复与只读条目的沙盒会话。
 - 文档：`python tools/check-docs.py`。
 
 ## 6. 数据与配置引用
 
 - 载荷字段、分片、版本戳、幂等与回执语义：[编辑协议](../api/edit-protocol.md)。
 - 保存状态、消息 key 与问题等级：[错误与状态码](../api/errors.md)。
-- 规则 JSON 的字段语义：[规则 JSON](../api/rule-json.md)。
+- 规则 JSON 的字段语义与默认启用：[规则 JSON](../api/rule-json.md)。
 - 模组级配置与派生换算：[服务器配置](../ops/configuration.md)（草稿目录是客户端状态目录，不参与模组级配置）。
 - 会话独占与目标锁：[ADR-0019](../adr/0019-exclusive-edit-session-and-target-lock.md)。
+- 启用状态分层：[ADR-0044](../adr/0044-rule-enable-state-layering.md)。
+- 只读条目的沙盒编辑：[ADR-0045](../adr/0045-readonly-sandbox-editing.md)。
 - 来源视图的按需拉取：[ADR-0040](../adr/0040-on-demand-snapshot-source-views.md)。
 
 ## 相关文档

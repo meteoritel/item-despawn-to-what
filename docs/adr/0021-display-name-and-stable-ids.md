@@ -32,4 +32,4 @@
 - 所有 `new Rule(...)` 调用点必须按新字段顺序更新：解码构造在 `RuleCodecs`，运行期投影构造在 `core/runtime/CatalystThresholdProjection`（逐字段保留）。
 - 界面把 `display_name` 作为标题、把 id 作为副标题/技术标识展示；保存不改 id。
 - 超过 128 code point 的回显走校验错误，不得截断后写入。
-- 覆盖文件名与 id 的映射关系固化，改名操作必须显式提示其「新建 + 删除」后果（与 [ADR-0020](0020-source-catalog-and-overlay-control-entries.md) 的覆盖语义配合）。
+- 覆盖文件名与 id 的映射关系固化，改名操作必须显式提示其「新建 + 删除」后果（与 [ADR-0020](0020-source-catalog-and-overlay-merge.md) 的覆盖语义配合）。

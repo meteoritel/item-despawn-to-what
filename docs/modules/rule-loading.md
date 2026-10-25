@@ -12,6 +12,7 @@ authority: common/core/load、common/core/service 的加载装配类（RuleLoadi
 - 三层来源读成原始条目，按 id 合并，经注入的解码器解码，再过两档校验，得到可运行规则集。
 - 拒载分文件级与条目级；读取不完整时抛异常，由调用方保留上一版索引。
 - 合并结果进入 `RuleIndex` 前完成催化剂门槛投影；索引随重载整体替换，缓存一并丢弃。
+- 装配末端注入本服启用状态：生效值取「本服覆盖 ?? 默认启用」，只重建运行时对象，不改规则内容。
 
 ## 适用对象
 
@@ -19,7 +20,7 @@ authority: common/core/load、common/core/service 的加载装配类（RuleLoadi
 
 ## 1. 模块职责
 
-本模块把三层规则文件装配成模型对象并完成校验，再把规则集整理成「物品 → 候选规则」的查询结构。
+本模块把三层规则文件装配成模型对象并完成校验，再把规则集整理成「物品 → 候选规则」的查询结构。装配末端按本服启用状态覆盖每条规则的生效启用值，这一步只作用于运行时对象。
 
 `core/load` 不 import `core/model`：它以泛型与 `RuleDecoder` 注入的方式表达模型，`RuleLoadingService` 是加载层与模型层之间的唯一桥接。加载链本身无缓存、无单例、不管理生命周期，这些属于运行时（见 [转化运行时](conversion-runtime.md)）。
 
@@ -27,7 +28,7 @@ authority: common/core/load、common/core/service 的加载装配类（RuleLoadi
 
 | 方向 | 内容 |
 |---|---|
-| 对外入口 | `RuleLoader`（`load` / `loadRaw` / `decodeEntry`）、`RuleLoadingService`（`load` / `loadAndValidate` / `sourceIndex` / `countByLayer` / `describeRules` / `summarize`）、`RuleLoadContext` 与 `RuleLoadRequest` / `RuleLoadResult`、`RuleSourceIndex.build`、`RuleIndex.build` |
+| 对外入口 | `RuleLoader`（`load` / `loadRaw` / `decodeEntry`）、`RuleLoadingService`（`load` / `loadAndValidate` / `applyEnableState` / `sourceIndex` / `countByLayer` / `describeRules` / `summarize`）、`RuleLoadContext` 与 `RuleLoadRequest` / `RuleLoadResult`、`RuleSourceIndex.build`、`RuleIndex.build` |
 | 依赖 | `core/api` 的 `IssueCollector` / `RuleDecoder` / 字段常量与解码预算、DFU Codec；`PackLayerResolver` 由平台注入，`RuleDecoder` 由模型层注入，类型注册表来自[类型系统](type-system.md) |
 | 被依赖 | 宿主启动与数据包重载、保存后的重载、调试场景装配、命令与日志回显 |
 | 边界之外 | 快照装配与落盘见 [编辑与落盘](authoring.md)；索引发布、缓存失效与结算见 [转化运行时](conversion-runtime.md) |
@@ -41,14 +42,15 @@ authority: common/core/load、common/core/service 的加载装配类（RuleLoadi
 | 类/包 | 角色 | 职责 | 协作对象 |
 |---|---|---|---|
 | `core/load/RuleLoader` | 加载入口与聚合根 | 读取 → 合并 → 逐条解码；解码异常降级为该条拒载 | `DatapackRuleReader`、`OverlayRuleReader`、`RuleMerger`、`RuleDecoder` |
-| `core/load/RuleFileParser` | 文件解析 | 单条对象或规则数组两种形状、id 解析、控制字段校验 | 两个读取器 |
+| `core/load/RuleFileParser` | 文件解析 | 单条对象或规则数组两种形状、id 解析 | 两个读取器 |
 | `core/load/DatapackRuleReader` | 数据包层读取 | 取回同名文件在所有包中的副本，按层与包优先级显式排序 | `PackLayerResolver`、`ResourceManager` |
 | `core/load/OverlayRuleReader` | 覆盖层读取 | 扫描 `config/<覆盖层目录>/rules`，按绝对路径排序并推导缺省 id | `RulePaths` |
-| `core/load/RuleMerger` | 合并聚合根 | 按 id 合并，消费 `disabled` / `delete` 控制条目 | `RawRuleEntry`、`IssueCollector` |
+| `core/load/RuleMerger` | 合并聚合根 | 按 id 合并，后出现的条目整条胜出 | `RawRuleEntry`、`IssueCollector` |
 | `core/load/RuleSourceLayer`、`RuleOrigin` | 来源模型 | 三层与优先级、可写性；来源可读标识进入 `Issue.origin` | 全部读写与诊断路径 |
-| `core/load/RuleSourceIndex` | 旁路聚合 | 把合并前原始条目归并为 base / overlay / control 三视图 | 快照装配、编辑判定 |
+| `core/load/RuleSourceIndex` | 旁路聚合 | 把合并前原始条目归并为 base / overlay 两视图 | 快照装配、编辑判定 |
 | `core/load/PackLayerResolver` | 注入的判定点 | 包 id → 来源层；按本次加载包的来源元数据建快照 | 平台引导层 |
-| `core/service/RuleLoadingService` | 装配点 | 构造注册表感知解码器，串起加载、两档校验与命令用统计 | `RuleLoadContext`、`RuleReferenceValidator` |
+| `core/service/RuleLoadingService` | 装配点 | 构造注册表感知解码器，串起加载、两档校验与启用状态注入 | `RuleLoadContext`、`RuleReferenceValidator` |
+| `core/state/RuleEnableState` | 本服启用状态 | 按存档保存每个 id 的布尔覆盖，缺席表示继承默认 | `RuleLoadContext` 的启用解析器、保存与命令链路 |
 | `core/service/RuleReferenceValidator` | 动态引用一档 | 只遍历规则级条件树与效果清单，按 `DynamicReferenceCheck` 分派 | 类型自带的扩展点 |
 | `core/runtime/RuleIndex` | 候选索引聚合根 | 剔除不可运行规则、门槛投影、排序、建立直接索引与标签懒展开 | `ConversionRuntime`、调试场景、保存后重建 |
 | `core/runtime/CatalystThresholdProjection` | 运行期投影 | 把留空门槛解析为当前消耗配置下的有效值与共享半径 | `RuleIndex.build` |
@@ -60,14 +62,15 @@ flowchart TD
     A["DatapackRuleReader<br/>data/&lt;ns&gt;/idtw/rules"] --> S["显式排序<br/>层优先级 → 包优先级 → 文件路径 → 文件内顺序"]
     B["OverlayRuleReader<br/>config 覆盖层/rules"] --> S
     S --> P["RuleFileParser<br/>单条对象或规则数组 → RawRuleEntry"]
-    P --> M["RuleMerger.merge<br/>按 id 合并，消费控制条目"]
-    M --> D["RuleLoader.decodeEntry<br/>剔除控制字段、补齐推导 id"]
+    P --> M["RuleMerger.merge<br/>按 id 合并"]
+    M --> D["RuleLoader.decodeEntry<br/>补齐推导 id"]
     D --> C["RuleDecoder<br/>注册表感知的 RuleCodecs.decoder"]
     C --> V1["第一档：RuleValidation<br/>结构、字段取值、类型专属参数"]
     V1 --> V2["第二档：RuleReferenceValidator<br/>动态引用"]
     V2 --> R["RuleLoadResult<br/>可运行规则 + 问题收集器"]
-    R --> I["RuleIndex.build<br/>剔除不可运行 → 门槛投影 → 排序 → 建索引"]
-    P -.->|"旁路：合并前原始条目"| SI["RuleSourceIndex.build<br/>base / overlay / control 视图"]
+    R --> E["RuleLoadingService.applyEnableState<br/>本服覆盖 ?? 默认启用"]
+    E --> I["RuleIndex.build<br/>剔除不可运行 → 门槛投影 → 排序 → 建索引"]
+    P -.->|"旁路：合并前原始条目"| SI["RuleSourceIndex.build<br/>base / overlay 视图"]
     SI -.->|"快照装配与编辑判定"| SN["编辑与落盘模块"]
 ```
 
@@ -75,7 +78,8 @@ flowchart TD
 
 - 读取顺序是显式排序结果，不依赖文件系统或资源枚举顺序。
 - 合并结果保持 id 首次出现的顺序；最终来源标识取该条最后生效的条目。
-- 解码前的加工：剔除 `disabled` / `delete` 控制字段、补齐由文件路径推导的 id、被停用的条目注入 `enabled=false`。
+- 解码前的加工只有补齐由文件路径推导的 id：条目内容整条来自最后生效的那一层。
+- 注入启用状态发生在两档校验之后：按 id 取本服覆盖，覆盖值与该条默认启用不同时重建规则对象，其余字段与 JSON 副本保持不变。
 - 索引构建的排序键是「优先级降序 → 条件叶数降序 → 定义序」，第三条由稳定排序兜底。
 
 ## 5. 扩展点与约束
@@ -86,17 +90,18 @@ flowchart TD
 
 - 数据包层：扫描 `data/<ns>/idtw/rules/**/*.json`，对每个资源位置取回全部包的同名副本，逐包展开，避免高优先级包遮蔽低优先级包里的其它规则。
 - 覆盖层：扫描 `config/<覆盖层目录>/rules/**/*.json`，按文件绝对路径排序。
-- 合并：不同 id 叠加；同 id 后者胜；同一层内先应用普通条目、再应用控制条目，因此停用与删除语义不受文件名字典序影响。
+- 合并：不同 id 叠加；同 id 后者整条胜出，层内按文件路径与文件内顺序决定先后，与文件名字典序无关。
 - 层判定由引导层注入的 `PackLayerResolver` 给出，它只产出内置数据包与世界数据包；快照只覆盖本次资源管理器已加载的包，快照外或来源存在歧义时一律按世界数据包处理。来源元数据缺失不做降级：错层会改变优先级，交由加载失败边界处理。
 
-### 控制条目语义
+### 启用状态注入
 
-- `disabled: true`：保留同 id 基底的内容，最终来源记为控制条目，解码前注入 `enabled=false`；找不到同 id 基底时报 WARN 并忽略该条。
-- `delete: true`：移除同 id 条目，幂等；基底不存在时不做任何事。
-- 控制条目只识别 `id` / `disabled` / `delete`，夹带其它字段时报 WARN 且其余字段被忽略。
-- 判定按取值：`disabled: false` 是普通规则。
-- 同一条同时声明 `disabled` 与 `delete`、或控制字段出现在数据包层，该条拒载。
-- 新建规则表达「不参与运行」用规则级 `enabled: false`；控制条目表达的是对基底规则的覆盖意图。
+启用状态是每份存档各自的本服状态，不属于规则内容，也不参与合并。
+
+- `RuleEnableState` 以 SavedData 形式挂在主世界数据存储上，按 id 记录布尔覆盖；没有记录的 id 继承规则 `enabled`，不保存默认值副本，恢复默认即摘除记录。
+- 装配经 `RuleLoadContext` 携带的启用解析器取覆盖值，宿主装配时把它接上存档状态；解析器缺省时按 JSON 默认启用装配。
+- `RuleLoadingService.applyEnableState` 在解码与两档校验之后逐条求值：覆盖值缺失或与该条默认值相同时复用原对象，不同时用 `Rule.withEnabled` 重建 record。规则对象的内容与 JSON 副本保持加载时的样子。
+- 生效值 = 本服覆盖 ?? 默认启用；运行期剔除不可运行规则与快照展示的生效状态都按这个值判断。
+- 存档里保留、但本次合并结果中不存在的 id 在注入阶段被忽略，记录本身保留，供命令查看与清理，见 [编辑与落盘](authoring.md)。
 
 ### id 推导
 
@@ -110,7 +115,7 @@ flowchart TD
 
 文件级（整个文件拒载）：JSON 文本非法、文本嵌套深度超过解析预算、文件为空、顶层既非规则对象也非规则数组、文件读取失败。
 
-条目级（仅该条拒载）：条目不是 JSON 对象、id 缺失/类型非法/无法解析、多条目文件省略 id、控制字段类型非法或语义冲突、控制字段出现在数据包层、同文件内 id 重复、合并阶段 id 为空、条件树超出深度或节点预算、解码失败、两档校验未通过。
+条目级（仅该条拒载）：条目不是 JSON 对象、id 缺失/类型非法/无法解析、多条目文件省略 id、同文件内 id 重复、合并阶段 id 为空、条件树超出深度或节点预算、解码失败、两档校验未通过。
 
 - 解码异常的降级边界：`RuntimeException` 与 `StackOverflowError` 都降级为该条拒载，完整堆栈进日志，议题里保留异常类名与首个栈帧，避免异常被折叠成不可定位的字符串。
 - 所有问题都携带来源标识与字段路径；错误级别、文案与状态码的权威定义在 [错误与状态码](../api/errors.md)。
@@ -130,11 +135,11 @@ flowchart TD
 
 ### 来源索引（旁路）
 
-`RuleSourceIndex.build` 不参与主流水线：它按 id 把合并前的原始条目归并成 base（数据包层胜出条目）、overlay（覆盖层胜出条目）、control（最后一次控制条目）三视图，并记录控制条目是否仍为该 id 的最后一次声明。
+`RuleSourceIndex.build` 不参与主流水线：它按 id 把合并前的原始条目归并成 base（数据包层胜出条目）与 overlay（覆盖层胜出条目）两视图。
 
-- 输入顺序由 `build` 内部按合并器口径归一化（同层普通条目在前、控制条目在后），调用方不必预先按层排序；同层同类内仍是输入顺序的后者胜。
+- 输入顺序由 `build` 内部按合并器口径归一化，调用方不必预先按层排序；同层内仍是输入顺序的后者胜。
 - 用途是快照装配判定来源与状态、分别下发 base / overlay 视图，以及编辑时的落点判定。
-- 它不读文件、不解码、不校验；被覆盖或停用的基底因此得以保留，供可恢复的编辑使用。
+- 它不读文件、不解码、不校验；被覆盖的基底条目因此得以保留，供编辑与恢复使用。
 
 ### 候选索引构建
 
@@ -156,10 +161,9 @@ flowchart TD
 - 无留空门槛时原样复用同一个 `Rule` 实例；有变化时只重建条件树，其余字段（含效果列表）与排序键保持不变。
 - 投影不反写保存声明，重载与保存后重建索引时重新解析；编辑器展示门槛复用同一 `resolveThreshold`，不改写声明。
 
-### 新增来源层、控制语义与拒载规则
+### 新增来源层与拒载规则
 
-- 新增来源层：扩 `RuleSourceLayer`（优先级与可写性）、读取侧排序键、`RuleSourceIndex` 的三视图划分，以及覆盖层写入目标；一处遗漏会让层优先级或快照状态判断失真。
-- 新增控制条目语义：在 `RuleFileParser` 的控制字段校验、`RuleMerger` 的应用分支、`RuleSourceIndex` 的 control 视图三处同步，并确认快照状态语义。
+- 新增来源层：扩 `RuleSourceLayer`（优先级与可写性）、读取侧排序键、`RuleSourceIndex` 的 base / overlay 归并，以及覆盖层写入目标；一处遗漏会让层优先级或快照来源判断失真。
 - 新增拒载规则：往 `IssueCollector` 写入问题时带上来源标识与字段路径，文案与错误码统一维护在 [错误与状态码](../api/errors.md)。
 - 新增规则字段或类型：不落在本模块，按 [规则 JSON](../api/rule-json.md) 与[类型系统](type-system.md) 的步骤改。
 
@@ -167,7 +171,7 @@ flowchart TD
 
 - 包优先级取自 `listPacks()` 的顺序；未登记的包按最低包优先级参与排序，并按包各告警一次；优先级表读取失败时告警并按文件路径退化排序。
 - `core/load` 不 import `core/model`，模型能力一律经注入获得。
-- 合并结果中 `delete` 恒为 `false`；`disabled` 表示该规则已被覆盖层停用。
+- 合并结果只承载规则内容：启用状态在装配末端注入，加载链路不回写规则文件。
 - 加载结果是只读视图：规则列表不可变，问题收集器本身可变，加载完成后按只读方式使用。
 - 改动后依次运行：`python tools/check-docs.py`、`tools/dsh-build.ps1 -Tasks build`，再做实机验证；加载结果的 `summarize` 与 `describeRules` 可直接用于命令回显和日志确认。
 
@@ -175,7 +179,8 @@ flowchart TD
 
 | 事实 | 唯一落点 |
 |---|---|
-| 规则 JSON 顶层形状、三层来源目录与控制条目语义、扩字段/扩类型方式 | [规则 JSON](../api/rule-json.md) |
+| 规则 JSON 顶层形状、三层来源目录、`enabled` 默认启用语义、扩字段/扩类型方式 | [规则 JSON](../api/rule-json.md) |
+| 本服启用状态的存档形态、保存与孤儿清理 | [编辑与落盘](authoring.md) |
 | 问题级别、错误码、拒载粒度与文案 key | [错误与状态码](../api/errors.md) |
 | 覆盖层目录等 `server.json` 配置项与默认值生成 | [运行配置](../ops/configuration.md) |
 | 三层作用域与按 id 覆盖合并的决策 | [ADR-0014](../adr/0014-three-layer-scope-and-overlay-merge.md) |

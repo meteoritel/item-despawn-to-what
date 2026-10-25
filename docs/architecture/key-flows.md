@@ -30,7 +30,7 @@ authority:
 flowchart TB
     T["触发：服务端就绪 / 数据包重载 / 命令重载 / 保存完成"] --> H["组装 RuleLoadContext<br/>层解析器 · 注册表 · 配置"]
     H --> D["core/load：读数据包层与覆盖层<br/>DatapackRuleReader · OverlayRuleReader"]
-    D --> M["RuleMerger.merge<br/>按层优先级 · 同 id 后者胜 · 控制条目"]
+    D --> M["RuleMerger.merge<br/>按层优先级 · 同 id 后者整条胜"]
     M --> E["逐条解码<br/>RuleCodecs · RuleValidation"]
     E --> V["RuleReferenceValidator<br/>动态引用校验"]
     V --> I["RuleIndex.build<br/>仅可运行规则 · 候选排序"]
@@ -42,7 +42,7 @@ flowchart TB
 **关键契约**
 
 - 来源层从低到高为内置数据包、世界数据包、config 覆盖层；同 id 由高层覆盖低层，合并结果保留最终生效来源。
-- 同一来源层内先应用普通条目、再应用控制条目，因此停用（`disabled`）与删除（`delete`）的语义不依赖文件名顺序；覆盖层的停用保留基底内容并记为覆盖层来源，删除是幂等的。
+- 同一来源层内按文件路径与文件内顺序决定先后，同 id 的后者整条胜出；合并只处理规则内容，启用状态在装配末端按本服覆盖注入。
 - `core/load` 不认识规则模型：模型以 `RuleDecoder` 注入，加载层只产出原始条目与泛型加载结果。
 - 候选索引只收可运行规则（启用且至少一个可执行候选），同一 id 只生效一条；候选按优先级降序、同优先级按条件叶数、再按声明顺序排序。
 - 索引整体替换：替换时标签展开缓存随索引失效，并按维度取消旧任务、清空追踪后回扫，不静默丢弃在途任务。

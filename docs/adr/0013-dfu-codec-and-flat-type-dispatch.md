@@ -11,7 +11,7 @@
 3. **类型定义自带编解码与校验**：`TypeDefinition<P>` = `id()` + `codec()` + `validateParams()`；`EffectType` 附加 `executor()`，`ConditionType` 附加 `evaluator()`，一次查表同时拿到三者。
 4. **可空字段经 Optional 中转**：DFU 的 `DataResult` 内部用 `Optional.of`，任何 codec 产出 null 都会在解码期抛 NPE；可空字段一律以 `Optional` 承载，在记录构造的最后一步 `orElse(null)`。
 5. **统一严格校验**：文件解析失败 → 整文件拒载；单条语义非法 → 该条拒载，其余照常；启动与 reload 行为一致；不做任何隐式写回。
-6. 加载层的注入边界是 `JsonObject`（`core/api/RuleDecoder`），因为它要在解码前补齐推导 id、剔除 `disabled`/`delete` 控制字段；模型与运行时仍全程 DFU Codec。
+6. 加载层的注入边界是 `JsonObject`（`core/api/RuleDecoder`），因为它要在解码前补齐由文件路径推导的 id；模型与运行时仍全程 DFU Codec。
 
 ## 考虑过的替代方案
 - **沿用 Gson + 手写分支**：改动小，但注册表分发、注册表感知的类型校验（物品/方块/流体引用是否存在）都要自己重写一遍，且无法复用原版 Codec 的持有人解析。否决。

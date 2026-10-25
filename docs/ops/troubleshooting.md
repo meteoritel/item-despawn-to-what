@@ -23,7 +23,7 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/core/service/Rul
 |---|---|---|
 | 1 | `/idtw config list`、`/idtw config validate` 的输出 | 规则是否被合并进来、校验是否通过 |
 | 2 | 日志中的 Issue 行 | WARN 表示条目保留但有可疑内容（例如未知顶层字段）；ERROR 表示条目被拒载 |
-| 3 | 规则的 `enabled` 与控制条目 | 覆盖层写了停用控制条目时，基底内容保留但不运行 |
+| 3 | 规则的默认启用与本服启用状态 | `/idtw rule list` 的启用列是本服生效值；本服停用过时用 `/idtw rule <id> default` 恢复默认 |
 | 4 | 同物品的更高优先级规则 | 候选按 优先级降序、条件复杂度降序、定义序 排序，第一条命中即执行，后面的规则不再判定 |
 | 5 | `trigger_after_seconds` 与存活时长 | 自然消失的年龄门槛是秒数换算的 tick，且不超过自然消失前一刻 |
 | 6 | `triggers` 是否包含当前消失方式 | 规则未声明消失方式时按自然消失参与判定 |
@@ -78,7 +78,6 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/core/service/Rul
 | 条件树深度或节点数超出上限 | 条件表达式规模超过解码预算 | 拆分条件或改写为等价的小树 |
 | 规则文件顶层必须是规则对象或规则数组 | 文件形状不对 | 改为对象或数组 |
 | 同文件内规则 id 重复 | 数组中同 id 出现多次 | 合并为一条 |
-| 控制条目只识别 id 与控制键 | 控制条目带了其它字段 | 删掉多余字段 |
 | 运行时启动失败，已降级为未启动状态 | 引导阶段失败，规则转换与编辑功能本轮不可用 | 按日志根因修复后重启，世界仍可加载 |
 
 无法获取数据包优先级表时只在层内退化为按文件路径排序，加载继续进行。
