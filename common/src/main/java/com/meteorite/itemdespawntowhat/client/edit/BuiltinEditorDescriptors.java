@@ -246,7 +246,9 @@ public final class BuiltinEditorDescriptors {
             case "entity" -> List.of(
                     EditorField.tag("entity", FIELD + "spawn_entity.entity", "minecraft:entity_type"),
                     EditorField.integer("count", FIELD + "spawn_entity.count", 1, 64).optional(),
-                    EditorField.integerSlider("age", FIELD + "spawn_entity.age", Integer.MIN_VALUE, Integer.MAX_VALUE, -24000, 24000)
+                    // 年龄窗口只覆盖幼年到成年：0 是成年，-24000 是刚出生的幼年；合法域仍是 int 全域，
+                    // 因为年龄在规则 JSON 里由数据包或手写直接给出，不应因界面窗口限制而无法载入
+                    EditorField.integerSlider("age", FIELD + "spawn_entity.age", Integer.MIN_VALUE, Integer.MAX_VALUE, -24000, 0)
                             .optional().withPresets(new EditorPreset("-24000", TypeLabels.UI_PREFIX + "preset.baby"),
                                     new EditorPreset("0", TypeLabels.UI_PREFIX + "preset.adult")));
             case "experience" -> List.of(

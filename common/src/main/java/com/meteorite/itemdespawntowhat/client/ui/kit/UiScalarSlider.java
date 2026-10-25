@@ -25,7 +25,8 @@ import org.lwjgl.glfw.GLFW;
  * 宿主 {@link #setPageStep(double)} 启用大步时消费，未启用时返回 false 交给容器导航。</p>
  *
  * <p>指针：点击轨道定位，随后以该点为锚点拖动；指针离开矩形仍收到释放；拖动中按或松 Shift 会重设
- * 锚点并保持当前值不变，只改变后续灵敏度。</p>
+ * 锚点并保持当前值不变，只改变后续灵敏度。所有用户操作的预览值都收在显示窗口内（指针停在窗口
+ * 端点，键盘从窗口外的既有值出发时只朝窗口方向收），窗口外的合法值只经数据回填与精确输入进入。</p>
  *
  * <p>本类只依赖 kit 与客户端通用类型：默认绘制使用 {@link UiSliderPainter} 与 {@link UiSliderStyle}，
  * 宿主可替换成主题化或贴图实现。</p>
@@ -442,15 +443,36 @@ public final class UiScalarSlider implements UiFocusTarget, UiInputTarget, UiInp
         return true;
     }
 
-    // 预览新值；同值不回调，保证无变化不产生历史
+    // 预览新值；同值不回调，保证无变化不产生历史。用户操作一律先收进显示窗口，提交仍用精确值
     private boolean preview(double next) {
-        if (!Double.isFinite(next) || next == value) {
+        double target = clampToWindow(next);
+        if (!Double.isFinite(target) || target == value) {
             return false;
         }
-        value = next;
+        value = target;
         backfillInvalid = false;
         interaction.preview(value);
         return true;
+    }
+
+    /**
+     * 把用户操作的预览值限制在显示窗口内。
+     *
+     * <p>显示窗口是交互范围而不是合法域：数据回填与宿主精确输入仍可给出窗口外的合法值。
+     * 指针被钳在窗口内，拖动越过两端时停在窗口端点；键盘从窗口外的既有值出发时只允许朝窗口
+     * 方向收，不允许继续向外推，避免一次方向键把老值推到更远的位置。</p>
+     *
+     * @param next 用户操作算出的目标值
+     * @return 收进显示窗口后的值
+     */
+    private double clampToWindow(double next) {
+        if (dragging) {
+            return Math.clamp(next, window.min(), window.max());
+        }
+        double anchor = interaction.isActive() ? interaction.startValue() : value;
+        double lower = Math.min(window.min(), anchor);
+        double upper = Math.max(window.max(), anchor);
+        return Math.clamp(next, lower, upper);
     }
 
     /**

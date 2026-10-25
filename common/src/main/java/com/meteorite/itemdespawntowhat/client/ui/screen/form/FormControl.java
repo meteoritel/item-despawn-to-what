@@ -10,8 +10,10 @@ import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiNumbers;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextArea;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
 import java.util.ArrayList;
@@ -305,6 +307,26 @@ abstract class FormControl {
 
     // 统一结束入口：宿主隐藏/禁用/卸载/失焦作用域切换/关闭时回退未提交的交互
     void endInteractions(UiInputCapture.EndReason reason) {
+    }
+
+    /**
+     * 取消代收按下的子按钮残留的按下态。
+     *
+     * <p>复合控件把子按钮的按下事件转发给自己接收（{@link #mouseClicked} 返回 true 后，
+     * 宿主记录的按下归属是复合控件而不是子按钮），因此宿主走统一结束入口时子按钮可能永远等不到
+     * 释放事件。{@link UiButton} 没有对外的按下态复位方法，按下态只能经由「在按钮矩形外释放」
+     * 这条既有取消路径清除，这里据此补一次矩形外释放。</p>
+     *
+     * @param buttons 由本控件代收按下的子按钮
+     */
+    static void cancelButtonPresses(List<UiButton> buttons) {
+        for (UiButton button : buttons) {
+            if (!button.isPressed()) {
+                continue;
+            }
+            UiRect bounds = button.bounds();
+            button.mouseReleased(bounds.x() - 1, bounds.y() - 1, 0);
+        }
     }
 
     // ---- 工厂：按字段类型挑选控件 ----

@@ -16,11 +16,14 @@ import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.function.BooleanSupplier;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
@@ -59,6 +62,8 @@ public final class FormView implements UiWidget {
     long loadedRevision;
     final List<FormRow> rows = new ArrayList<>();
     private @Nullable SelectionCatalogOpener catalogOpener;
+    // 字段名 → 目录条目可见范围：只影响该字段那一次目录浏览，不改字段值
+    private final Map<String, Predicate<String>> catalogFilters = new HashMap<>();
 
     /** 字段目录入口由页面提供，表单传递确切字段路径与当前选择，不访问网络。 */
     @FunctionalInterface
@@ -81,6 +86,29 @@ public final class FormView implements UiWidget {
     public void setSelectionCatalogOpener(@Nullable SelectionCatalogOpener opener) {
         catalogOpener = opener;
         for (FormRow row : rows) { row.pickers.clear(); addPickers(row); }
+    }
+
+    /**
+     * 设置某个字段的目录条目可见范围：目录弹窗只列出过滤器接受的资源引用。
+     * <p>范围只影响浏览，不改变字段值与已有选择；标签条目无法判定成员，由过滤器自行决定是否保留。
+     * @param fieldName 字段名（如实体字段 entity）
+     * @param filter 条目过滤器，null 表示不限
+     */
+    public void setCatalogFilter(String fieldName, @Nullable Predicate<String> filter) {
+        if (filter == null) {
+            catalogFilters.remove(fieldName);
+        } else {
+            catalogFilters.put(fieldName, filter);
+        }
+    }
+
+    /**
+     * 读取某个字段的目录条目可见范围。
+     * @param fieldName 字段名
+     * @return 过滤器，未设置时返回 null
+     */
+    public @Nullable Predicate<String> catalogFilter(String fieldName) {
+        return catalogFilters.get(fieldName);
     }
     private @Nullable ConditionEditingSupport conditionEditingSupport;
     private @Nullable ConditionEditContextFactory conditionContextFactory;

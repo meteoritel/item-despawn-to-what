@@ -48,6 +48,12 @@ final class NumberControl extends FormControl {
 
     // 行内精确输入框的最小宽度
     private static final int MIN_INPUT_WIDTH = 34;
+    // 滑条的最小可拖动宽度：极窄行里优先保住滑条，输入框按需退让
+    private static final int MIN_SLIDER_WIDTH = 12;
+    // 输入框文本区 = 控件宽度 - 左右内边距（UiTextInput 关闭原版边框后仍保留 3 像素）
+    private static final int INPUT_PADDING_X = 3;
+    // 文本区末尾余量：给尾部光标与数字进位留白
+    private static final int TEXT_SLACK = 4;
     // 滑杆与输入框之间的间距
     private static final int GAP = 2;
     // 单位提示的本地化 key
@@ -320,7 +326,12 @@ final class NumberControl extends FormControl {
         int sliderX = x + unitWidth;
         int available = Math.max(24, width - reserved - unitWidth);
         int inputWidth = inputWidth(available);
-        int sliderWidth = Math.max(12, available - inputWidth - GAP);
+        int sliderWidth = available - inputWidth - GAP;
+        if (sliderWidth < MIN_SLIDER_WIDTH) {
+            // 极窄行：输入框已放不下窗口端点，先保住滑条的最小可拖动宽度，两者不重叠
+            inputWidth = Math.max(0, available - GAP - MIN_SLIDER_WIDTH);
+            sliderWidth = Math.max(MIN_SLIDER_WIDTH, available - inputWidth - GAP);
+        }
         slider.setBounds(sliderX, y, sliderWidth, rowHeight);
         input.setBounds(sliderX + sliderWidth + GAP, y, inputWidth, rowHeight);
         // 预设按钮保持默认高度，在加高的行里垂直居中，保证仍可点击
@@ -333,11 +344,21 @@ final class NumberControl extends FormControl {
         }
     }
 
-    // 输入框宽度：按当前文本取样，夹在最小宽度与可用宽度三分之一之间
+    // 输入框宽度：按窗口端点与当前文本取样，夹在最小可读宽度与可用宽度三分之一之间。
+    // 三分之一只是常规上限：窗口端点（拖动可达的常用值）必须完整可见，否则原版 EditBox
+    // 放不下文本会退到尾部只画子串，-24000 只剩 4000；因此上限不低于窗口端点所需宽度。
     private int inputWidth(int available) {
-        int sample = Math.max(font.width(displayText(slider.value())) + 10, inputWidthOverride);
-        int limit = Math.max(MIN_INPUT_WIDTH, available / 3);
-        return Math.clamp(sample, MIN_INPUT_WIDTH, limit);
+        int windowText = windowTextWidth();
+        int minimum = Math.max(MIN_INPUT_WIDTH, windowText + INPUT_PADDING_X * 2 + TEXT_SLACK);
+        int textWidth = Math.max(font.width(displayText(slider.value())), windowText);
+        int sample = Math.max(textWidth + INPUT_PADDING_X * 2 + TEXT_SLACK, inputWidthOverride);
+        int limit = Math.max(minimum, available / 3);
+        return Math.clamp(sample, minimum, limit);
+    }
+
+    // 滑条窗口两端显示文本的宽度：拖动只能落在窗口内，端点是用户最常看到的取值
+    private int windowTextWidth() {
+        return Math.max(font.width(displayText(windowMin)), font.width(displayText(windowMax)));
     }
 
     // 行内输入框的期望宽度：对齐布局在设置覆盖前用各行最大值统一宽度
@@ -453,9 +474,16 @@ final class NumberControl extends FormControl {
 
     @Override
     boolean mouseReleased(double mouseX, double mouseY, int button) {
-        boolean handled = slider.mouseReleased(mouseX, mouseY, button);
+        // 预设 chip 的按下由本控件代收（FormInputRouter 记录的按下归属是本控件），释放必须转发回
+        // 同一个按钮，否则 UiButton 的 activate() 永不执行，chip 点了没反应
+        boolean handled = false;
+        for (UiButton preset : presetButtons) {
+            handled |= preset.mouseReleased(mouseX, mouseY, button);
+        }
+        handled |= slider.mouseReleased(mouseX, mouseY, button);
         if (!slider.core().isInteracting()) binding.finishValueChange();
-        return input.mouseReleased(mouseX, mouseY, button) || handled;
+        handled |= input.mouseReleased(mouseX, mouseY, button);
+        return handled;
     }
 
     @Override
@@ -530,6 +558,8 @@ final class NumberControl extends FormControl {
 
     @Override
     void endInteractions(UiInputCapture.EndReason reason) {
+        // 隐藏/禁用/卸载/关闭不会收到释放事件，chip 的按下态要在这里清掉，否则会一直停在按下外观
+        cancelButtonPresses(presetButtons);
         slider.endInteraction(reason);
         binding.finishValueChange();
         input.endInteraction(reason);

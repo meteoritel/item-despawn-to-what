@@ -42,6 +42,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import net.minecraft.client.gui.Font;
 import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
@@ -186,14 +187,27 @@ public final class RuleEditorPanelFactory {
                                      boolean multiSelect, Component title, int screenWidth, int screenHeight,
                                      Consumer<List<String>> onPicked, EditorField field, RuleDraft draft,
                                      String path, List<String> selected) {
+        return fieldCatalogModal(font, workspace, type, multiSelect, title, screenWidth, screenHeight,
+                onPicked, field, draft, path, selected, null);
+    }
+
+    /**
+     * 打开字段目录，并只列出条目过滤器接受的资源引用。
+     * @param entryFilter 条目过滤器，null 表示不限；只作用于资源条目，标签条目不受限制
+     */
+    static UiModal fieldCatalogModal(Font font, EditorWorkspaceView workspace, RuleCatalogType type,
+                                     boolean multiSelect, Component title, int screenWidth, int screenHeight,
+                                     Consumer<List<String>> onPicked, EditorField field, RuleDraft draft,
+                                     String path, List<String> selected, @Nullable Predicate<String> entryFilter) {
         return catalogModal(font, workspace, type, multiSelect, title, screenWidth, screenHeight,
-                onPicked, field, selected, SourceCatalystSelectionPolicy.forField(draft, path));
+                onPicked, field, selected, SourceCatalystSelectionPolicy.forField(draft, path), entryFilter);
     }
 
     private static UiModal catalogModal(Font font, EditorWorkspaceView workspace, RuleCatalogType type,
                                         boolean multiSelect, Component title, int screenWidth, int screenHeight,
                                         Consumer<List<String>> onPicked, @Nullable EditorField field,
-                                        List<String> selected, Function<String, @Nullable Component> unavailableReason) {
+                                        List<String> selected, Function<String, @Nullable Component> unavailableReason,
+                                        @Nullable Predicate<String> entryFilter) {
         boolean includeTags = field != null && (field.type() == EditorFieldType.TAG || field.type() == EditorFieldType.TAG_LIST);
         workspace.refreshDirectory(type);
         if (includeTags) workspace.refreshDirectory(RuleCatalogType.TAG);
@@ -203,6 +217,7 @@ public final class RuleEditorPanelFactory {
         mapper.field = field;
         mapper.includeTags = includeTags;
         mapper.policy = policy;
+        mapper.entryFilter = entryFilter;
         UiModal modal = UiModal.create(THEME, font);
         // 确认按钮可用态由目录每帧刷新：值不变时不再重配按钮（重配会复制文本并重建命中目标）
         ConfirmGate confirmGate = new ConfirmGate();
@@ -339,6 +354,8 @@ public final class RuleEditorPanelFactory {
         private boolean includeTags;
         private @Nullable EditorField field;
         private @Nullable CatalogEntryPolicy policy;
+        // 条目可见范围：只作用于资源条目，标签条目不受限制
+        private @Nullable Predicate<String> entryFilter;
         private @Nullable List<UiCatalogGrid.Entry> entries;
         private boolean active = true;
         private int page;
@@ -386,6 +403,7 @@ public final class RuleEditorPanelFactory {
                 for (RuleCatalogEntry entry : withItems ? catalog.entries() : List.<RuleCatalogEntry>of()) {
                     if (policy != null && policy.hidden(entry.id())) continue;
                     if (validTags != null && !validTags.contains(entry.id())) continue;
+                    if (entryFilter != null && !entryFilter.test(entry.id())) continue;
                     if (type == RuleCatalogType.ENTITY && field != null && FieldCatalogChoices.isGenericProduct(field)
                             && (entry.id().equals("minecraft:item") || entry.id().equals("minecraft:experience_orb"))) continue;
                     String sub = validTags == null ? entry.subLabel() : Component.translatable(field.labelKey()).getString();

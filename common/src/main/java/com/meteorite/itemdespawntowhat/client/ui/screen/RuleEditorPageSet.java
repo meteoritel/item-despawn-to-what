@@ -36,6 +36,7 @@ import com.meteorite.itemdespawntowhat.core.model.ConditionLimits;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Supplier;
@@ -177,6 +178,8 @@ public final class RuleEditorPageSet {
     private boolean layoutDirty = true;
     // 已作用到控件上的滚动偏移：偏移变化时只平移已排好的控件
     private int appliedOffset;
+    // 控件在文档坐标（未滚动）下的矩形：滚动帧据此重算屏幕坐标，复合控件不会因子控件同列平移两次
+    private final IdentityHashMap<UiWidget, UiRect> documentBounds = new IdentityHashMap<>();
 
     /** 卡片头部内容：标题必填，图标可选（图标绘制在标题行内、蓝条右侧）。 */
     record CardHeader(Component title, @Nullable UiIcon icon) {
@@ -307,6 +310,7 @@ public final class RuleEditorPageSet {
         buttons.clear();
         candidateButtons.clear();
         effectButtons.clear();
+        documentBounds.clear();
         // 页面各自的控件引用由页面清理，容器只维护共享状态
         ruleEditorInfoPage.reset();
         ruleEditorInputPage.reset();
@@ -351,7 +355,7 @@ public final class RuleEditorPageSet {
                     || field.type() == EditorFieldType.RL_LIST;
             host.modals().push(RuleEditorPanelFactory.fieldCatalogModal(font, host.workspace(), type, multi,
                     Component.translatable(field.labelKey()), host.screenWidth(), host.screenHeight(), onPicked,
-                    field, session.draft(), path, selected));
+                    field, session.draft(), path, selected, form.catalogFilter(field.name())));
         });
         form.setDescriptor(descriptor);
         form.reload();
@@ -416,13 +420,16 @@ public final class RuleEditorPageSet {
             width = Math.max(0, width - UiScrollView.SCROLLBAR_WIDTH - 2);
             used = layoutPage(new UiRect(area.x(), area.y(), width, area.height())) - area.y();
         }
+        captureDocumentBounds();
         layoutDirty = false;
         pageScroll.setContentHeight(used);
         pageScroll.setScrollbarVisible(used > area.height());
         applyScroll(pageScroll.offset());
     }
 
-    // 滚动帧只平移已排好的控件：表单改视口原点，其余控件加同一位移
+    // 滚动帧只平移已排好的控件：表单改视口原点，其余控件按文档坐标重算屏幕坐标。
+    // 复合控件的 setBounds 会把子控件一起摆到文档位置，若子控件也在 liveWidgets 里，
+    // 再按增量平移就会叠加两次（方案翻页箭头曾因此与页码错位），因此这里一律用绝对坐标。
     private void applyScroll(int offset) {
         int delta = appliedOffset - offset;
         if (delta != 0) {
@@ -430,13 +437,31 @@ public final class RuleEditorPageSet {
             for (UiWidget widget : liveWidgets) {
                 if (widget instanceof FormView form) {
                     form.shiftViewportY(delta);
-                } else {
+                    continue;
+                }
+                UiRect document = documentBounds.get(widget);
+                if (document == null) {
                     UiRect bounds = widget.bounds();
                     widget.setBounds(bounds.x(), bounds.y() + delta, bounds.width(), bounds.height());
+                } else {
+                    widget.setBounds(document.x(), document.y() - offset, document.width(), document.height());
                 }
             }
         }
         appliedOffset = offset;
+    }
+
+    // 记录文档坐标：布局收尾、施加滚动偏移之前调用，滚动帧据此重算屏幕坐标
+    private void captureDocumentBounds() {
+        documentBounds.clear();
+        for (UiWidget widget : liveWidgets) {
+            documentBounds.put(widget, widget.bounds());
+        }
+    }
+
+    /** 已作用到控件上的滚动偏移：页面自绘文字的命中判定要把指针坐标换算回文档坐标。 */
+    int scrollOffset() {
+        return appliedOffset;
     }
 
     private int layoutPage(UiRect area) {
@@ -748,7 +773,6 @@ public final class RuleEditorPageSet {
             ruleEditorInputPage.fluidConsumeToggle.setEnabled(enabled);
         }
         ruleEditorTriggerPage.triggerBoxes.forEach(box -> box.setEnabled(enabled));
-        if (ruleEditorResultsPage.variantControl != null) ruleEditorResultsPage.variantControl.setEnabled(enabled);
         if (ruleEditorResultsPage.combinationButton != null) {
             ruleEditorResultsPage.combinationButton.setEnabled(enabled && ResultStructure.hasOutcomes(view));
         }

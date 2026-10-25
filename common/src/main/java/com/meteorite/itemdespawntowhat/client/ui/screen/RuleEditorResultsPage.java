@@ -21,6 +21,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiLinkedValues;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
+import com.meteorite.itemdespawntowhat.client.ui.shared.EntityTraits;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiMarkIcons;
@@ -29,7 +30,6 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiCheckBox;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiDescriptionTooltip;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiListView;
-import com.meteorite.itemdespawntowhat.client.ui.widget.UiSegmentedControl;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTypePicker;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
@@ -92,6 +92,7 @@ final class RuleEditorResultsPage {
     private @Nullable Object staticTextLanguage;
     private Component emptyTitleText = Component.empty();
     private Component actionParametersText = Component.empty();
+    private Component productKindText = Component.empty();
     private Component readonlyUnknownText = Component.empty();
     private int combinationOptionWidth;
 
@@ -102,7 +103,7 @@ final class RuleEditorResultsPage {
     private static final UiHostTheme THEME = RuleEditorPageSet.THEME;
     private static final int NAVIGATION_MIN_WIDTH = 128;
     private static final int NAVIGATION_MAX_WIDTH = 184;
-    private static final int DETAIL_MIN_WIDTH = 212;
+    private static final int DETAIL_MIN_WIDTH = 240;
     private static final int ACTION_ROW_HEIGHT = 28;
     private static final int ACTION_CONTENT_INSET = 4;
     private static final int ACTION_ICON_TEXT_GAP = 4;
@@ -111,8 +112,10 @@ final class RuleEditorResultsPage {
     private static final int ACTION_LIST_MIN_HEIGHT = ACTION_ROW_HEIGHT * 2 + 2;
     private static final int TOOLBAR_HEIGHT = 24;
     private static final int DETAIL_HEADER_HEIGHT = 26;
+    // 动作参数表的标签列宽：产物行复用它，轮询按钮才能与下面的表单控件左对齐
+    private static final int DETAIL_LABEL_WIDTH = 64;
     private static final int DETAIL_ICON_SIZE = 18;
-    private static final int DETAIL_PADDING = 6;
+    private static final int DETAIL_PADDING = 8;
     private static final int EMPTY_MESSAGE_GAP = 8;
     RuleEditorResultsPage(RuleEditorPageSet pages) {
         this.pages = pages;
@@ -137,7 +140,8 @@ final class RuleEditorResultsPage {
         movePlanDownButton = null;
         effectList = null;
         effectForm = null;
-        variantControl = null;
+        productButton = null;
+        productLabelRect = null;
         advancedEffectForm = null;
         advancedButton = null;
         resultBack = null;
@@ -169,7 +173,11 @@ final class RuleEditorResultsPage {
 
     @Nullable FormView effectForm;
 
-    @Nullable UiSegmentedControl variantControl;
+    // 产物档位轮询按钮：档位不落盘，由草稿 variant 与选中实体的能力派生；productPath 记录档位所属的动作路径
+    @Nullable UiButton productButton;
+    private @Nullable String productPath;
+    private EntityProductStop productStop = EntityProductStop.ITEM;
+    private @Nullable UiRect productLabelRect;
 
     @Nullable FormView advancedEffectForm;
 
@@ -227,10 +235,29 @@ final class RuleEditorResultsPage {
         int selectedIndex = Math.clamp(effectIndex, 0, Math.max(0, actions == null ? 0 : actions.size() - 1));
         RuleValue selected = actions == null ? null : actions.item(selectedIndex);
         ResourceLocation selectedType = selected == null ? null : ResourceLocation.tryParse(selected.text(RuleFields.TYPE, ""));
-        boolean generic = ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "spawn_entity").equals(selectedType)
-                && "entity".equals(selected.text("variant", "item"));
+        String listPath = ResultStructure.listPath(rule, candidateIndex);
+        String actionPath = DraftPaths.indexPath(listPath, selectedIndex);
+        boolean spawnEntity = ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "spawn_entity").equals(selectedType)
+                && selected.isMapping();
+        if (spawnEntity) {
+            // 草稿只能区分粗粒度产物；生物与其他实体共用 variant=entity，空选择也无法自证档位，
+            // 所以同一动作内保留轮询结果。保留的前提是草稿 variant 仍与当前档位一致：撤销/重做
+            // 把 variant 改回去时必须按草稿重派，否则界面档位会与草稿 variant 互相矛盾
+            EntityProductStop derived = EntityProductStop.of(selected.text("variant", "item"), entitySelectionIsMob(actionPath));
+            boolean keepStop = actionPath.equals(productPath) && productStop.variant().equals(derived.variant());
+            if (!keepStop) {
+                productStop = derived;
+            }
+            productPath = actionPath;
+        } else {
+            productPath = null;
+        }
+        boolean mobProduct = spawnEntity && productStop == EntityProductStop.MOB;
+        // 安全生成只对生物档提供；其它实体档若手写 safe_spawn 仍显示勾选框，避免把生效值藏起来
+        boolean showSafeSpawn = spawnEntity && (mobProduct
+                || RuleValueReads.boolOf(candidate, RuleFields.SAFE_SPAWN, false));
         boolean blocks = ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "place_block").equals(selectedType);
-        if (generic) {
+        if (showSafeSpawn) {
             safeSpawnBox = new UiCheckBox(RuleEditorPageSet.THEME, pages.font, Component.translatable(RuleEditorPageSupport.UI + "candidate.safe_spawn"), RuleValueReads.boolOf(candidate, RuleFields.SAFE_SPAWN, false));
             safeSpawnBox.setOnChanged(checked -> setCandidateStrategy(RuleFields.SAFE_SPAWN, checked));
             pages.liveWidgets.add(safeSpawnBox);
@@ -247,7 +274,6 @@ final class RuleEditorResultsPage {
             pages.buttons.add(combinationButton);
         }
 
-        String listPath = ResultStructure.listPath(rule, candidateIndex);
         int effectCount = ResultStructure.effectCount(rule, candidateIndex);
         effectIndex = Math.clamp(effectIndex, 0, Math.max(0, effectCount - 1));
         effectList = new UiListView<>(RuleEditorPageSet.THEME, pages.font, this::renderEffectRow);
@@ -289,19 +315,16 @@ final class RuleEditorResultsPage {
             ResourceLocation typeId = type == null ? null : ResourceLocation.tryParse(type);
             selectedAction = element != null && element.isMapping() ? element : null;
             if (typeId != null) {
-                String actionPath = DraftPaths.indexPath(listPath, effectIndex);
                 TypeEditorDescriptor descriptor = EditorRegistries.EFFECTS.descriptorFor(typeId);
                 if (typeId.equals(ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "spawn_entity"))
                         && element.isMapping()) {
-                    String variant = element.text("variant", "item");
-                    descriptor = BuiltinEditorDescriptors.entityDescriptor(variant);
-                    variantControl = new UiSegmentedControl(RuleEditorPageSet.THEME, pages.font, List.of(
-                            new UiSegmentedControl.Option("item", Component.translatable(RuleEditorPageSupport.UI + "results.product.item")),
-                            new UiSegmentedControl.Option("entity", Component.translatable(RuleEditorPageSupport.UI + "results.product.entity")),
-                            new UiSegmentedControl.Option("experience", Component.translatable(RuleEditorPageSupport.UI + "results.product.experience"))));
-                    variantControl.setSelected(variant);
-                    variantControl.setOnChanged(value -> switchProduct(actionPath, value));
-                    pages.liveWidgets.add(variantControl);
+                    descriptor = BuiltinEditorDescriptors.entityDescriptor(productStop.variant());
+                    productButton = new UiButton(THEME, pages.font, productLabel(productStop), UiButtonVariant.SECONDARY,
+                            () -> cycleProduct(actionPath)).setChipStyle(true);
+                    productButton.setTooltip(Component.translatable(RuleEditorPageSupport.UI + "results.product_switch"));
+                    productButton.setAccessibleName(Component.translatable(RuleEditorPageSupport.UI + "results.product_switch"));
+                    pages.liveWidgets.add(productButton);
+                    pages.buttons.add(productButton);
                 }
                 // 消耗参数的主编辑入口在输入页，条件树在触发页：结果页只编辑动作自身的参数与共用补充参数
                 List<EditorField> editable = descriptor.fields().stream()
@@ -312,13 +335,15 @@ final class RuleEditorResultsPage {
                         .toList());
                 List<EditorField> advanced = editable.stream().filter(RuleEditorResultsPage::isCommonActionField).toList();
                 effectForm = pages.newForm(session, actionPath, new TypeEditorDescriptor(descriptor.id(), descriptor.label(), primary, descriptor.readOnly()));
-                effectForm.useCompactSpacing();
+                // 卡片放宽后用卡片行距与更窄的标签列：实体与年龄行的控件才拿得到足够宽度
+                effectForm.setLabelWidth(DETAIL_LABEL_WIDTH);
                 if (typeId.equals(PlaceBlockEffect.ID)) bindPlaceBlockVisibility(effectForm, session, actionPath);
+                else if (spawnEntity) bindEntityProductUi(effectForm, session, actionPath);
                 pages.liveForms.add(effectForm);
                 pages.liveWidgets.add(effectForm);
                 if (!advanced.isEmpty()) {
                     advancedEffectForm = pages.newForm(session, actionPath, new TypeEditorDescriptor(descriptor.id(), descriptor.label(), advanced, false));
-                    advancedEffectForm.useCompactSpacing();
+                    advancedEffectForm.setLabelWidth(DETAIL_LABEL_WIDTH);
                     pages.liveForms.add(advancedEffectForm); pages.liveWidgets.add(advancedEffectForm);
                     advancedButton = new UiButton(THEME, pages.font, advancedLabel(), UiButtonVariant.SECONDARY, () -> {
                         pages.flushPendingEdits();
@@ -352,7 +377,6 @@ final class RuleEditorResultsPage {
         if (widget instanceof UiButton button) button.setVisible(visible);
         else if (widget instanceof UiListView<?> list) list.setVisible(visible);
         else if (widget instanceof FormView form) form.setVisible(visible);
-        else if (widget instanceof UiSegmentedControl segments) segments.setVisible(visible);
         else if (widget instanceof UiCheckBox box) box.setVisible(visible);
     }
 
@@ -789,22 +813,80 @@ final class RuleEditorResultsPage {
         return new EffectRowText(trimmed, icon, inset);
     }
 
-    void switchProduct(String path, String variant) {
+    // 轮询产物档位：切换失败时保留原档位，避免界面档位与草稿 variant 不一致
+    void cycleProduct(String actionPath) {
+        EntityProductStop next = productStop.next();
+        if (applyProductStop(actionPath, next)) {
+            productStop = next;
+            pages.requestRebuild();
+        }
+    }
+
+    // 档位不落盘：只重写 variant 与该档位专属字段的默认值，其余字段按描述符重新生成
+    private boolean applyProductStop(String path, EntityProductStop stop) {
         EditSession session = pages.host.session();
-        if (session == null) return;
+        if (session == null) return false;
         pages.flushPendingEdits();
         RuleValue old = session.draft().valueAt(path);
-        if (old == null || !old.isMapping()) return;
+        if (old == null || !old.isMapping()) return false;
         RuleValue.Mapping next = RuleValue.mapping(old);
         for (String field : List.of("item", "entity", "count", "age", "amount")) next.remove(field);
-        next.put("variant", RuleValue.text(variant));
-        if ("experience".equals(variant)) {
+        next.put("variant", RuleValue.text(stop.variant()));
+        if (stop == EntityProductStop.EXPERIENCE) {
             next.put("amount", RuleValue.integer(1));
         } else {
             next.put("count", RuleValue.integer(1));
-            if ("entity".equals(variant)) next.put("age", RuleValue.integer(0));
+            if (stop == EntityProductStop.MOB) next.put("age", RuleValue.integer(0));
         }
-        if (pages.applyStructure(EditSession.OP_SET_FIELD, () -> session.draft().setAt(path, next.build()))) pages.requestRebuild();
+        return pages.applyStructure(EditSession.OP_SET_FIELD, () -> session.draft().setAt(path, next.build()));
+    }
+
+    // 档位名直接写在轮询按钮上，不加箭头或图标
+    private static Component productLabel(EntityProductStop stop) {
+        return Component.translatable(RuleEditorPageSupport.UI + stop.labelKey());
+    }
+
+    // 目录条目按档位过滤：标签条目无法判定成员，两个实体档都保留
+    private boolean catalogEntryAllowed(String id) {
+        if (id.isEmpty() || id.startsWith("#")) return true;
+        boolean wantsMob = productStop == EntityProductStop.MOB;
+        return wantsMob == EntityTraits.isMob(id);
+    }
+
+    // 空选择与标签引用无法判定能力：按保守口径当作生物，也保留年龄行
+    private boolean entitySelectionIsMob(String actionPath) {
+        List<String> ids = entitySelection(actionPath);
+        return ids.isEmpty() || ids.stream().anyMatch(id -> id.startsWith("#") || EntityTraits.isMob(id));
+    }
+
+    // 选中实体里只要有一个可能吃年龄就保留年龄行，否则整行隐藏
+    private boolean selectedEntityHasAge(String actionPath) {
+        if (productStop != EntityProductStop.MOB) return false;
+        List<String> ids = entitySelection(actionPath);
+        return ids.isEmpty() || ids.stream().anyMatch(id -> id.startsWith("#") || EntityTraits.isAgeable(id));
+    }
+
+    // 草稿里的实体引用：字段可能是单个引用或引用列表
+    private List<String> entitySelection(String actionPath) {
+        EditSession session = pages.host.session();
+        if (session == null) return List.of();
+        RuleValue element = session.draft().valueAt(actionPath);
+        RuleValue entity = element == null || !element.isMapping() ? null : element.child("entity");
+        if (entity == null) return List.of();
+        return entity.isList() ? entity.textItems() : List.of(entity.asText(""));
+    }
+
+    // 实体选择变化后决定年龄行是否出现；不再需要年龄时在同一条撤销里清掉该字段
+    private void bindEntityProductUi(FormView form, EditSession session, String actionPath) {
+        String entityPath = DraftPaths.child(actionPath, "entity");
+        String agePath = DraftPaths.child(actionPath, "age");
+        form.setRowVisibility(agePath, () -> selectedEntityHasAge(actionPath));
+        form.setCatalogFilter("entity", this::catalogEntryAllowed);
+        form.setOnFieldWritten((path, previous) -> {
+            if (!entityPath.equals(path)) return;
+            if (!selectedEntityHasAge(actionPath)) session.draft().removeAt(agePath);
+            form.reload();
+        });
     }
 
     private Component advancedLabel() {
@@ -856,7 +938,7 @@ final class RuleEditorResultsPage {
         show(safeSpawnBox, detail);
         show(fillOriginBox, detail);
         show(effectForm, detail);
-        show(variantControl, detail);
+        show(productButton, detail);
         show(advancedButton, detail);
         show(advancedEffectForm, detail && showAdvancedEffects);
         show(emptyAddButton, detail);
@@ -864,6 +946,7 @@ final class RuleEditorResultsPage {
         emptyDetailRect = null;
         actionParametersRect = null;
         effectNoteRect = null;
+        productLabelRect = null;
         int y = layoutToolbar(area.x(), area.y(), area.width());
         if (!split) {
             if (detail && resultBack != null) {
@@ -947,8 +1030,12 @@ final class RuleEditorResultsPage {
         int y = top + DETAIL_HEADER_HEIGHT + DETAIL_PADDING;
         boolean empty = effectList == null || effectList.size() == 0;
         if (!empty) {
-            if (variantControl != null) {
-                variantControl.setBounds(contentX, y, contentWidth, TOOLBAR_HEIGHT);
+            if (productButton != null) {
+                // 产物行与下面的表单同列：标题占标签列，轮询按钮铺满控件列，名称直接写在按钮上
+                int buttonX = contentX + DETAIL_LABEL_WIDTH + RuleEditorPageSupport.PAD;
+                productLabelRect = new UiRect(contentX, y + (TOOLBAR_HEIGHT - pages.font.lineHeight) / 2,
+                        DETAIL_LABEL_WIDTH, pages.font.lineHeight);
+                productButton.setBounds(buttonX, y, Math.max(0, contentX + contentWidth - buttonX), TOOLBAR_HEIGHT);
                 y += TOOLBAR_HEIGHT + RuleEditorPageSupport.PAD;
             }
             if (readonlyEffectNote(pages.currentView()) != null) {
@@ -1029,6 +1116,7 @@ final class RuleEditorResultsPage {
         }
         Component readonlyNote = readonlyEffectNote(pages.currentView());
         if (readonlyNote != null) pages.drawText(graphics, effectNoteRect, readonlyNote, THEME.palette().warning());
+        pages.drawText(graphics, productLabelRect, productKindText, THEME.palette().textSecondary());
         pages.drawText(graphics, actionParametersRect, actionParametersText, THEME.palette().textSecondary());
     }
 
@@ -1042,14 +1130,20 @@ final class RuleEditorResultsPage {
             return Component.translatable(RuleEditorPageSupport.UI + "results.combination_help");
         if (deletePlanButton != null && deletePlanButton.bounds().contains(mouseX, mouseY))
             return Component.translatable(RuleEditorPageSupport.UI + "results.remove_undo_hint");
-        if (effectNoteRect != null && effectNoteRect.contains(mouseX, mouseY)) return readonlyEffectNote(pages.currentView());
+        if (effectNoteRect != null && hitsDocumentRect(effectNoteRect, mouseX, mouseY))
+            return readonlyEffectNote(pages.currentView());
         return null;
+    }
+
+    // 页面自绘文字的矩形停在文档坐标（绘制时由滚动位姿统一平移），命中判定要把指针换算回文档坐标
+    private boolean hitsDocumentRect(UiRect rect, double mouseX, double mouseY) {
+        return rect.contains(mouseX, mouseY + pages.scrollOffset());
     }
 
     // 描述只挂在详情卡片的标题上：行内动作卡片已有名称与图标，悬停不再重复解释。
     boolean renderDescriptionTooltip(GuiGraphics graphics, int mouseX, int mouseY) {
         if (typePicker.isOpen() || selectedAction == null || !selectedAction.isMapping()) return false;
-        if (detailHeaderRect == null || !detailHeaderRect.contains(mouseX, mouseY)) return false;
+        if (detailHeaderRect == null || !hitsDocumentRect(detailHeaderRect, mouseX, mouseY)) return false;
         new UiDescriptionTooltip(THEME, pages.font).render(graphics,
                 new UiRect(0, 0, pages.host.screenWidth(), pages.host.screenHeight()),
                 ActionDescription.lines(selectedAction), mouseX, mouseY);
@@ -1065,6 +1159,7 @@ final class RuleEditorResultsPage {
         staticTextLanguage = language;
         emptyTitleText = Component.translatable(RuleEditorPageSupport.UI + "results.empty_title");
         actionParametersText = Component.translatable(RuleEditorPageSupport.UI + "results.action_parameters");
+        productKindText = Component.translatable(RuleEditorPageSupport.UI + "results.product_kind");
         readonlyUnknownText = Component.translatable(RuleEditorPageSupport.UI + "effect.readonly_note_unknown");
         combinationOptionWidth = Arrays.stream(CombinationMode.values())
                 .mapToInt(mode -> pages.font.width(

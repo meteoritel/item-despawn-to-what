@@ -140,11 +140,21 @@ final class TextControl extends FormControl {
 
     @Override
     boolean mouseReleased(double mouseX, double mouseY, int button) {
-        return area != null ? area.mouseReleased(mouseX, mouseY, button) : input.mouseReleased(mouseX, mouseY, button);
+        // 预设 chip 的按下由本控件代收（FormInputRouter 记录的按下归属是本控件），释放必须转发回
+        // 同一个按钮，否则 UiButton 的 activate() 永不执行，chip 点了没反应
+        boolean handled = false;
+        for (UiButton preset : presetButtons) {
+            handled |= preset.mouseReleased(mouseX, mouseY, button);
+        }
+        boolean fieldHandled = area != null ? area.mouseReleased(mouseX, mouseY, button)
+                : input.mouseReleased(mouseX, mouseY, button);
+        return handled | fieldHandled;
     }
 
     @Override
     void endInteractions(UiInputCapture.EndReason reason) {
+        // 隐藏/禁用/卸载/关闭不会收到释放事件，chip 的按下态要在这里清掉，否则会一直停在按下外观
+        cancelButtonPresses(presetButtons);
         input.endInteraction(reason);
         if (area != null) area.endInteraction(reason);
     }
