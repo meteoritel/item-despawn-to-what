@@ -24,7 +24,7 @@ public interface EffectType<P extends Effect> extends TypeDefinition<P> {
     /**
      * 该效果类型的产出类别；默认 {@link ProductKind#NONE}，表示非产出。
      *
-     * <p>产出子类随参数变化的类型（如统一实体生成按 variant 生成物品 / 通用实体 / 经验）
+     * <p>产出子类随参数变化的类型（如统一实体生成按 variant 生成物品 / 生物 / 其他实体 / 经验）
      * 重写本方法读取实例参数后返回；新增效果类型只需声明产出类别即可参与分类。</p>
      *
      * @param params 该类型已解码的参数对象

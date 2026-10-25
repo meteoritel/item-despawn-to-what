@@ -58,7 +58,7 @@ public record SpawnEntityEffect(EntityProduct product, int delayTicks, double ch
                 return SpawnEntityExecutor.start(effect, context, preparation);
             }
         };
-        // 产出类别与容量需求都随 variant 变化：物品 / 通用实体 / 经验各自声明自己的产出与占用
+        // 产出类别与容量需求都随 variant 变化：物品 / 生物 / 其他实体 / 经验各自声明自己的产出与占用
         return new SimpleEffectType<>(ID, codec(), SpawnEntityEffect::validateParams, executor,
                 false, SpawnEntityEffect::productKind, SpawnEntityEffect::capacityDemand);
     }
@@ -68,13 +68,14 @@ public record SpawnEntityEffect(EntityProduct product, int delayTicks, double ch
         return effect.product() == null ? ProductKind.EXTENSION : effect.product().productKind();
     }
 
-    // 容量需求声明：物品按件数、通用实体按个数计入邻近上限；经验只受执行批次预算约束，不占邻近容量
+    // 容量需求声明：物品按件数、实体按个数计入邻近上限；经验只受执行批次预算约束，不占邻近容量
     private static CapacityDemand capacityDemand(SpawnEntityEffect effect) {
         if (effect.product() == null) {
             return CapacityDemand.NONE;
         }
         return switch (effect.product()) {
             case EntityProduct.Item item -> CapacityDemand.item(item.item(), item.count());
+            case EntityProduct.Mob mob -> CapacityDemand.entity(mob.entity(), mob.count());
             case EntityProduct.Generic entity -> CapacityDemand.entity(entity.entity(), entity.count());
             case EntityProduct.Experience ignored -> CapacityDemand.NONE;
         };

@@ -4,13 +4,13 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * 结果页「生成实体」动作的产物档位。
- * <p>档位只服务于界面与目录范围：规则 JSON 里生物与其他实体都写 variant = entity，
- * 到底是生物还是其他实体由选中的实体类型派生，因此档位不落盘、不进协议。
+ * <p>档位与规则 JSON 的产出子类一一对应：掉落物 / 生物 / 其他实体 / 经验。档位本身不落盘、不进协议，
+ * 切换档位只改写 variant 与该档位专属字段的默认值。
  * <p>轮询顺序即枚举声明顺序：掉落物、生物、其他实体、经验。
  */
 public enum EntityProductStop {
     ITEM("item", "results.product.item"),
-    MOB("entity", "results.product.mob"),
+    MOB("mob", "results.product.mob"),
     OTHER_ENTITY("entity", "results.product.other_entity"),
     EXPERIENCE("experience", "results.product.experience");
 
@@ -39,16 +39,14 @@ public enum EntityProductStop {
     }
 
     /**
-     * 由草稿的产物子类型与选中实体的能力反推档位。
-     * @param variant 草稿产物子类型；缺失按掉落物处理
-     * @param entityIsMob 选中实体是否为生物；没有选中实体时按生物处理，保证空选择也能进入生物档
+     * 由草稿的产物子类型反推档位。
+     * @param variant 草稿产物子类型；缺失或未知取值按掉落物处理
      */
-    public static EntityProductStop of(@Nullable String variant, boolean entityIsMob) {
-        if (EXPERIENCE.variant.equals(variant)) {
-            return EXPERIENCE;
-        }
-        if (MOB.variant.equals(variant)) {
-            return entityIsMob ? MOB : OTHER_ENTITY;
+    public static EntityProductStop of(@Nullable String variant) {
+        for (EntityProductStop stop : values()) {
+            if (stop.variant.equals(variant)) {
+                return stop;
+            }
         }
         return ITEM;
     }

@@ -149,7 +149,7 @@ public final class RuleNaming {
 
     /**
      * 单个效果的短标题。
-     * <p>本模组 10 种效果类型走本地化短标题；spawn_entity 的 item/entity/experience 是同一类型的三个变体。
+     * <p>本模组 10 种效果类型走本地化短标题；spawn_entity 的 item/mob/entity/experience 是同一类型的四个变体。
      * 第三方或未知类型走 {@link TypeLabels#effectLabel(ResourceLocation)}
      * （其自身已有 literal(id) 兜底）。
      */
@@ -171,6 +171,7 @@ public final class RuleNaming {
         return switch (type.getPath()) {
             case "spawn_entity" -> switch (string(effect, "variant", "")) {
                 case "item" -> withLabel(PREFIX + "effect.spawn_item", effect, "item", source, type);
+                case "mob" -> withLabel(PREFIX + "effect.spawn_mob", effect, "entity", source, type);
                 case "experience" -> Component.translatable(PREFIX + "effect.spawn_xp");
                 default -> withLabel(PREFIX + "effect.spawn_entity", effect, "entity", source, type);
             };

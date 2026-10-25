@@ -243,14 +243,18 @@ public final class BuiltinEditorDescriptors {
 
     private static List<EditorField> entityFields(String variant) {
         return switch (variant) {
-            case "entity" -> List.of(
-                    EditorField.tag("entity", FIELD + "spawn_entity.entity", "minecraft:entity_type"),
+            case "mob" -> List.of(
+                    EditorField.tag("entity", FIELD + "spawn_entity.mob", "minecraft:entity_type"),
                     EditorField.integer("count", FIELD + "spawn_entity.count", 1, 64).optional(),
-                    // 年龄窗口只覆盖幼年到成年：0 是成年，-24000 是刚出生的幼年；合法域仍是 int 全域，
-                    // 因为年龄在规则 JSON 里由数据包或手写直接给出，不应因界面窗口限制而无法载入
-                    EditorField.integerSlider("age", FIELD + "spawn_entity.age", Integer.MIN_VALUE, Integer.MAX_VALUE, -24000, 0)
+                    // 年龄只表达幼年到成年：0 是成年，-24000 是刚出生；合法域与滑条窗口一致，
+                    // 与 EntityProduct.Mob 的 codec 区间相同，正值（繁殖冷却）在载入期就会被拒
+                    EditorField.integerSlider("age", FIELD + "spawn_entity.age", -24000, 0, -24000, 0)
                             .optional().withPresets(new EditorPreset("-24000", TypeLabels.UI_PREFIX + "preset.baby"),
                                     new EditorPreset("0", TypeLabels.UI_PREFIX + "preset.adult")));
+            // 其他实体不含生物：年龄只对 Mob 的 AgeableMob 生效，因此本档位没有年龄字段
+            case "entity" -> List.of(
+                    EditorField.tag("entity", FIELD + "spawn_entity.entity", "minecraft:entity_type"),
+                    EditorField.integer("count", FIELD + "spawn_entity.count", 1, 64).optional());
             case "experience" -> List.of(
                     EditorField.integer("amount", FIELD + "spawn_xp.amount", 1, 65536).optional());
             default -> List.of(EditorField.tag("item", FIELD + "spawn_item.item", "minecraft:item"),

@@ -173,9 +173,8 @@ final class RuleEditorResultsPage {
 
     @Nullable FormView effectForm;
 
-    // 产物档位轮询按钮：档位不落盘，由草稿 variant 与选中实体的能力派生；productPath 记录档位所属的动作路径
+    // 产物档位轮询按钮：档位与草稿 variant 一一对应，重建时按草稿重派，不进协议也不额外落盘
     @Nullable UiButton productButton;
-    private @Nullable String productPath;
     private EntityProductStop productStop = EntityProductStop.ITEM;
     private @Nullable UiRect productLabelRect;
 
@@ -240,17 +239,8 @@ final class RuleEditorResultsPage {
         boolean spawnEntity = ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "spawn_entity").equals(selectedType)
                 && selected.isMapping();
         if (spawnEntity) {
-            // 草稿只能区分粗粒度产物；生物与其他实体共用 variant=entity，空选择也无法自证档位，
-            // 所以同一动作内保留轮询结果。保留的前提是草稿 variant 仍与当前档位一致：撤销/重做
-            // 把 variant 改回去时必须按草稿重派，否则界面档位会与草稿 variant 互相矛盾
-            EntityProductStop derived = EntityProductStop.of(selected.text("variant", "item"), entitySelectionIsMob(actionPath));
-            boolean keepStop = actionPath.equals(productPath) && productStop.variant().equals(derived.variant());
-            if (!keepStop) {
-                productStop = derived;
-            }
-            productPath = actionPath;
-        } else {
-            productPath = null;
+            // 档位与草稿 variant 一一对应：重建时直接按草稿重派，撤销/重做也不会出现界面档位与草稿矛盾
+            productStop = EntityProductStop.of(selected.text("variant", "item"));
         }
         boolean mobProduct = spawnEntity && productStop == EntityProductStop.MOB;
         // 安全生成只对生物档提供；其它实体档若手写 safe_spawn 仍显示勾选框，避免把生效值藏起来
@@ -853,13 +843,7 @@ final class RuleEditorResultsPage {
         return wantsMob == EntityTraits.isMob(id);
     }
 
-    // 空选择与标签引用无法判定能力：按保守口径当作生物，也保留年龄行
-    private boolean entitySelectionIsMob(String actionPath) {
-        List<String> ids = entitySelection(actionPath);
-        return ids.isEmpty() || ids.stream().anyMatch(id -> id.startsWith("#") || EntityTraits.isMob(id));
-    }
-
-    // 选中实体里只要有一个可能吃年龄就保留年龄行，否则整行隐藏
+    // 选中实体里只要有一个可能吃年龄就保留年龄行，否则整行隐藏；年龄只属于生物档
     private boolean selectedEntityHasAge(String actionPath) {
         if (productStop != EntityProductStop.MOB) return false;
         List<String> ids = entitySelection(actionPath);

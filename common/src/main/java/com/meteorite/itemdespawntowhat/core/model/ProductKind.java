@@ -14,7 +14,9 @@ public enum ProductKind {
     NONE(null),
     // 物品产出
     ENTITY_ITEM("entity.item"),
-    // 通用实体产出
+    // 生物产出
+    ENTITY_MOB("entity.mob"),
+    // 其他实体产出
     ENTITY_ENTITY("entity.entity"),
     // 经验产出
     ENTITY_EXPERIENCE("entity.experience"),

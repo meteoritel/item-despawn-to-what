@@ -80,7 +80,7 @@ public final class RulePreviewIcons {
         if (SPAWN_ENTITY_TYPE.equals(type)) {
             return switch (text(action, FIELD_VARIANT)) {
                 case "item" -> CatalogPreviewIcons.iconFor(RuleCatalogType.ITEM, text(action, FIELD_ITEM));
-                case "entity" -> {
+                case "entity", "mob" -> {
                     String entity = text(action, FIELD_ENTITY);
                     yield entity.startsWith(TAG_PREFIX)
                             ? TagPreviewIcons.resolve(RuleCatalogType.ENTITY, entity).icon()
@@ -135,7 +135,7 @@ public final class RulePreviewIcons {
         }
         if (first == null || !text(first, RuleFields.TYPE).equals(SPAWN_ENTITY_TYPE)) return false;
         return switch (text(first, FIELD_VARIANT)) {
-            case "entity" -> EntityPreviewIcons.unavailable(text(first, FIELD_ENTITY), age(first));
+            case "entity", "mob" -> EntityPreviewIcons.unavailable(text(first, FIELD_ENTITY), age(first));
             case "experience" -> EntityPreviewIcons.unavailable(EXPERIENCE_ORB, DEFAULT_AGE);
             default -> false;
         };

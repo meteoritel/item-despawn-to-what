@@ -7,6 +7,7 @@ import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.EffectStep;
 import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
+import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.StepWorkCounter;
 import com.meteorite.itemdespawntowhat.core.type.effect.EntityProduct;
@@ -34,9 +35,9 @@ import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 统一实体生成分发入口：按产出子类（物品 / 经验 / 通用实体）分派到对应执行策略。
- * 物品与通用实体在成功转化当刻固定产物引用与产出量，随后在共享预算内分批交付；
- * 通用实体的安全位置搜索有界（5×5×5 共 125 个候选，垂直方向权重更高），同一次交付内每个候选只判定一次、
+ * 统一实体生成分发入口：按产出子类（物品 / 生物 / 其他实体 / 经验）分派到对应执行策略。
+ * 物品与实体产出在成功转化当刻固定产物引用与产出量，随后在共享预算内分批交付；
+ * 实体的安全位置搜索有界（5×5×5 共 125 个候选，垂直方向权重更高），同一次交付内每个候选只判定一次、
  * 命中位置只向后推进；搜索范围内没有任何安全落点时本次效果失败，不再回退到原点附近。
  */
 public final class SpawnEntityExecutor {
@@ -72,11 +73,11 @@ public final class SpawnEntityExecutor {
 
     /**
      * 成功转化当刻固定的本次产出输入：已解析的产物引用与每轮产出量。
-     * 物品产出的 count 为件数，通用实体产出的 count 为个数，两者单位不同且都保持参数原值；
+     * 物品产出的 count 为件数，实体产出的 count 为个数，两者单位不同且都保持参数原值；
      * failure 非空表示引用在成功转化当刻已无法解析，该槽位执行时直接给出失败回执。
      *
-     * @param item       物品产出解析出的物品；通用实体与失败情形为 null
-     * @param entityType 通用实体产出解析出的实体类型；物品与失败情形为 null
+     * @param item       物品产出解析出的物品；实体产出与失败情形为 null
+     * @param entityType 实体产出解析出的实体类型；物品与失败情形为 null
      * @param count      参数声明的每轮产出量（件数或个数），本组总量由交付态乘以组轮数得出
      * @param failure    引用解析失败的原因；成功固定时为 null
      */
@@ -109,7 +110,7 @@ public final class SpawnEntityExecutor {
 
     /**
      * 在成功转化当刻固定本次产出：解析产物引用并取定每轮产出量。
-     * 物品与通用实体的标签成员在此刻抽定，执行期不再向注册表随机取值，也不读取原源实体；
+     * 物品与实体的标签成员在此刻抽定，执行期不再向注册表随机取值，也不读取原源实体；
      * 经验产出的点数依赖本组实际扣减的源物品件数，因此只登记参与判定，不带固定负载。
      * 引用解析失败不抛出：失败原因随固定输入携带，等该槽位执行时再给失败回执，不影响同批其它候选。
      *
@@ -126,7 +127,9 @@ public final class SpawnEntityExecutor {
                                                       boolean fillOrigin) {
         return switch (effect.product()) {
             case EntityProduct.Item item -> planItem(item, level);
-            case EntityProduct.Generic entity -> planEntity(entity, level);
+            // 生物与其他实体共用实体产出计划：年龄只影响交付时写入 AgeableMob，不参与选址
+            case EntityProduct.Mob mob -> planEntity(mob.entity(), mob.count(), level);
+            case EntityProduct.Generic entity -> planEntity(entity.entity(), entity.count(), level);
             case EntityProduct.Experience ignored -> EffectPreparation.ready();
         };
     }
@@ -141,22 +144,22 @@ public final class SpawnEntityExecutor {
         }
     }
 
-    // 通用实体产出的固定输入：标签成员在此刻抽定，并沿用专用子类拒载判据
-    private static SpawnPlan planEntity(EntityProduct.Generic product, ServerLevel level) {
+    // 实体产出的固定输入：标签成员在此刻抽定，并沿用专用子类拒载判据
+    private static SpawnPlan planEntity(TaggedId reference, int count, ServerLevel level) {
         try {
-            EntityType<?> type = EffectTargets.resolveOrThrow(product.entity(), BuiltInRegistries.ENTITY_TYPE,
+            EntityType<?> type = EffectTargets.resolveOrThrow(reference, BuiltInRegistries.ENTITY_TYPE,
                     level.random, "entity");
-            if (EntityProduct.Generic.isSpecial(type)) {
+            if (EntityProduct.isSpecial(type)) {
                 throw new IllegalStateException("掉落物和经验球必须使用专用产出子类");
             }
-            return new SpawnPlan(null, type, product.count(), null);
+            return new SpawnPlan(null, type, count, null);
         } catch (IllegalStateException failure) {
-            return new SpawnPlan(null, null, product.count(), failure.getMessage());
+            return new SpawnPlan(null, null, count, failure.getMessage());
         }
     }
 
     /**
-     * 按成功转化当刻固定的输入创建执行状态：物品与通用实体在共享预算内分批交付，
+     * 按成功转化当刻固定的输入创建执行状态：物品与实体在共享预算内分批交付，
      * 经验产出沿用按源物品计点的既有执行状态。
      *
      * @param effect      实体生成效果参数
@@ -189,8 +192,10 @@ public final class SpawnEntityExecutor {
         }
         return switch (effect.product()) {
             case EntityProduct.Item ignored -> SpawnItemExecutor.start(context, plan.item(), plan.count());
-            case EntityProduct.Generic entity -> new EntityDelivery(context, plan.entityType(), plan.count(),
-                    entity.age(), context.safeSpawn());
+            case EntityProduct.Mob mob -> new EntityDelivery(context, plan.entityType(), plan.count(),
+                    mob.age(), context.safeSpawn());
+            case EntityProduct.Generic ignored -> new EntityDelivery(context, plan.entityType(), plan.count(),
+                    0, context.safeSpawn());
             // 经验产出已在上面按自己的固定输入创建执行状态；此处仅为 switch 完整覆盖
             case EntityProduct.Experience ignored -> budget -> EffectStep.done(EffectResult.failed(MISSING_PREPARATION));
         };
@@ -281,7 +286,7 @@ public final class SpawnEntityExecutor {
     }
 
     /**
-     * 通用实体的分批交付游标：每批最多 {@link #SPAWNS_PER_RUN} 个实体、每刻候选检查数受配置约束，
+     * 实体产出的分批交付游标：每批最多 {@link #SPAWNS_PER_RUN} 个实体、每刻候选检查数受配置约束，
      * 时间或工作量预算耗尽即让出。安全搜索的候选游标在整次交付内单调前进，已判定失败的候选不再复查；
      * 搜索范围内没有安全落点时按已生成数量收尾：一个都没生成按失败回执，已生成部分按真实产出结束。
      */

@@ -97,7 +97,7 @@ Time values are in game ticks, and 20 ticks equal 1 second on a normal server.
 
 ## Nearby Product Limits
 
-At the start of a settlement, the mod allocates an output budget from the initial nearby count and the declared theoretical output per group, without discounting probability. With a limit of 100, 90 existing items and one declared item per group, only 10 groups may convert; the remaining source items are returned. Nearby limits are not checked again during generation. Products added elsewhere do not reduce those 10 groups, and the final nearby count may exceed the limit. Actual budget use depends on the conversion type; producing less does not permit extra groups. Items and generic entities use their respective budgets; experience orb counts do not affect admission.
+At the start of a settlement, the mod allocates an output budget from the initial nearby count and the declared theoretical output per group, without discounting probability. With a limit of 100, 90 existing items and one declared item per group, only 10 groups may convert; the remaining source items are returned. Nearby limits are not checked again during generation. Products added elsewhere do not reduce those 10 groups, and the final nearby count may exceed the limit. Actual budget use depends on the conversion type; producing less does not permit extra groups. Items and entities (mobs and other entities) use their respective budgets; experience orb counts do not affect admission.
 
 These limits apply to every rule. They are not set per rule.
 
@@ -112,13 +112,13 @@ These limits apply to every rule. They are not set per rule.
 
 Notes:
 
-- `0` turns the matching check off, which means no limit. Of the three `*_limit` fields, only the item and generic entity ones still work; the experience one is kept but does nothing. Only `item_radius` and `entity_radius` are real counting radii, and neither accepts `0`. `experience_radius` still accepts 1 to 32, but its value has no effect.
+- `0` turns the matching check off, which means no limit. Of the three `*_limit` fields, only the item and entity ones still work; the experience one is kept but does nothing. Only `item_radius` and `entity_radius` are real counting radii, and neither accepts `0`. `experience_radius` still accepts 1 to 32, but its value has no effect.
 - A limit only decides whether a new conversion group can start. It is not a hard ceiling on what exists nearby, and it does not keep the count at or below the limit.
 - A group stopped by a limit consumes no source items. The source items that cannot start a group go through the return path, as described in [Outcome Candidates and Settlement](en-05-outcomes-and-settlement). A returned item never converts again, so the surplus does not queue up for a later slot.
-- Lowering a limit makes conversions easier to postpone, and heavy product buildup can stop output for a long time. When the item and generic entity limits are both in use, the tightest one decides.
+- Lowering a limit makes conversions easier to postpone, and heavy product buildup can stop output for a long time. When the item and entity limits are both in use, the tightest one decides.
 - The two experience fields exist only so that existing config files keep loading. Within their allowed ranges, no value you write there changes conversion behavior.
 
-Example: lift the nearby count limits for items and generic entities while the other settings keep their defaults. The two experience fields already do nothing, so leave them out:
+Example: lift the nearby count limits for items and entities while the other settings keep their defaults. The two experience fields already do nothing, so leave them out:
 
 ```json
 {

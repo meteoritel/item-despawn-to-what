@@ -53,7 +53,7 @@ public final class RuleRequirements {
             String field = switch (type) {
                 case Constants.ID_NAMESPACE + ":spawn_entity" -> switch (text(action, "variant")) {
                     case "item" -> "item";
-                    case "entity" -> "entity";
+                    case "entity", "mob" -> "entity";
                     case "experience" -> "";
                     default -> "variant";
                 };

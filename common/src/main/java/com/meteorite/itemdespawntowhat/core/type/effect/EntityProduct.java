@@ -22,9 +22,9 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 /** 实体产出子类：专用参数独立建模，公共执行字段由外层效果承载。 */
-public sealed interface EntityProduct permits EntityProduct.Item, EntityProduct.Generic, EntityProduct.Experience {
+public sealed interface EntityProduct permits EntityProduct.Item, EntityProduct.Mob, EntityProduct.Generic, EntityProduct.Experience {
     MapCodec<EntityProduct> CODEC = strict(Codec.STRING.comapFlatMap(value -> switch (value) {
-        case "item", "entity", "experience" -> DataResult.success(value);
+        case "item", "mob", "entity", "experience" -> DataResult.success(value);
         default -> DataResult.error(() -> "未知实体产出子类: " + value);
     }, value -> value).dispatchMap("variant", EntityProduct::variant, EntityProduct::codecFor));
 
@@ -34,7 +34,7 @@ public sealed interface EntityProduct permits EntityProduct.Item, EntityProduct.
     /**
      * 该产出子类对应的规则分类。
      *
-     * @return 物品 / 通用实体 / 经验各自的产出类别
+     * @return 物品 / 生物 / 其他实体 / 经验各自的产出类别
      */
     ProductKind productKind();
 
@@ -43,7 +43,7 @@ public sealed interface EntityProduct permits EntityProduct.Item, EntityProduct.
         return new MapCodec<>() {
             @Override public <T> Stream<T> keys(DynamicOps<T> ops) {
                 return Stream.concat(Stream.of(ops.createString("variant")),
-                        Stream.of(Item.CODEC, Generic.CODEC, Experience.CODEC).flatMap(codec -> codec.keys(ops))).distinct();
+                        Stream.of(Item.CODEC, Mob.CODEC, Generic.CODEC, Experience.CODEC).flatMap(codec -> codec.keys(ops))).distinct();
             }
             @Override public <T> DataResult<EntityProduct> decode(DynamicOps<T> ops, MapLike<T> input) {
                 return dispatch.decode(ops, input).flatMap(product -> {
@@ -67,6 +67,7 @@ public sealed interface EntityProduct permits EntityProduct.Item, EntityProduct.
     private static MapCodec<? extends EntityProduct> codecFor(String variant) {
         return switch (variant) {
             case "item" -> Item.CODEC;
+            case "mob" -> Mob.CODEC;
             case "entity" -> Generic.CODEC;
             case "experience" -> Experience.CODEC;
             default -> throw new IllegalArgumentException("未知实体产出子类: " + variant);
@@ -90,36 +91,73 @@ public sealed interface EntityProduct permits EntityProduct.Item, EntityProduct.
         }
     }
 
-    /** 通用实体包含生物和其他实体，特殊产物固定走专用入口。 */
-    record Generic(TaggedId entity, int count, int age) implements EntityProduct {
+    /**
+     * 其他实体：不含生物、掉落物与经验球，因此不携带年龄。
+     *
+     * <p>界面在该档位只提供非生物实体；手写规则 JSON 不做生物归属强校验——加载期没有世界上下文，
+     * 且实体标签可能混含生物，强校验会让合法的标签引用随机失败。
+     */
+    record Generic(TaggedId entity, int count) implements EntityProduct {
         public static final MapCodec<Generic> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
                 TaggedId.CODEC.fieldOf("entity").forGetter(Generic::entity),
-                Codec.intRange(1, 64).optionalFieldOf("count", 1).forGetter(Generic::count),
-                Codec.INT.optionalFieldOf("age", 0).forGetter(Generic::age)
+                Codec.intRange(1, 64).optionalFieldOf("count", 1).forGetter(Generic::count)
         ).apply(instance, Generic::new));
         @Override public String variant() { return "entity"; }
         @Override public ProductKind productKind() { return ProductKind.ENTITY_ENTITY; }
         @Override public boolean validate(IssueCollector issues, String path) {
-            String field = ParamChecks.child(path, "entity");
-            boolean valid = ParamChecks.required(entity, "entity", issues, field);
-            valid &= RefChecks.check(entity, BuiltInRegistries.ENTITY_TYPE, "entity", issues, field);
-            valid &= ParamChecks.inRange(count, 1, 64, "count", issues, ParamChecks.child(path, "count"));
-            if (entity != null) {
-                boolean special = entity.tag()
-                        ? BuiltInRegistries.ENTITY_TYPE.getTag(TagKey.create(Registries.ENTITY_TYPE, entity.id()))
-                            .map(tag -> tag.stream().anyMatch(holder -> isSpecial(holder.value()))).orElse(false)
-                        : BuiltInRegistries.ENTITY_TYPE.getOptional(entity.id()).map(Generic::isSpecial).orElse(false);
-                if (special) {
-                    issues.error("掉落物和经验球请使用对应的专用产出子类", null, field);
-                    valid = false;
-                }
-            }
+            return checkSpawnable(entity, count, issues, path);
+        }
+    }
+
+    /**
+     * 生物：只有 Mob 及其子类可能读取年龄，因此年龄只属于本子类。
+     *
+     * <p>运行时只对 {@link net.minecraft.world.entity.AgeableMob} 写入年龄；史莱姆、恶魂等非 AgeableMob
+     * 的生物可以生成，但不会体现年龄差异。
+     */
+    record Mob(TaggedId entity, int count, int age) implements EntityProduct {
+        /** 幼年起始年龄：与 {@link net.minecraft.world.entity.AgeableMob} 的幼年起点一致。 */
+        public static final int BABY_AGE = -24000;
+        /** 成年年龄。 */
+        public static final int ADULT_AGE = 0;
+
+        public static final MapCodec<Mob> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
+                TaggedId.CODEC.fieldOf("entity").forGetter(Mob::entity),
+                Codec.intRange(1, 64).optionalFieldOf("count", 1).forGetter(Mob::count),
+                Codec.intRange(BABY_AGE, ADULT_AGE).optionalFieldOf("age", 0).forGetter(Mob::age)
+        ).apply(instance, Mob::new));
+        @Override public String variant() { return "mob"; }
+        @Override public ProductKind productKind() { return ProductKind.ENTITY_MOB; }
+        @Override public boolean validate(IssueCollector issues, String path) {
+            boolean valid = checkSpawnable(entity, count, issues, path);
+            // 年龄只表达「幼年到成年」：正值是成年个体的繁殖冷却，不属于生成语义，一律拒载
+            valid &= ParamChecks.inRange(age, BABY_AGE, ADULT_AGE, "age", issues, ParamChecks.child(path, "age"));
             return valid;
         }
-        // 防止标签运行期变更后绕过专用入口约束。
-        public static boolean isSpecial(EntityType<?> type) {
-            return type == EntityType.ITEM || type == EntityType.EXPERIENCE_ORB;
+    }
+
+    // 生物档与其他实体档共用的实体参数校验：引用存在、数量范围，且不得指向掉落物/经验球。
+    private static boolean checkSpawnable(TaggedId entity, int count, IssueCollector issues, String path) {
+        String field = ParamChecks.child(path, "entity");
+        boolean valid = ParamChecks.required(entity, "entity", issues, field);
+        valid &= RefChecks.check(entity, BuiltInRegistries.ENTITY_TYPE, "entity", issues, field);
+        valid &= ParamChecks.inRange(count, 1, 64, "count", issues, ParamChecks.child(path, "count"));
+        if (entity != null) {
+            boolean special = entity.tag()
+                    ? BuiltInRegistries.ENTITY_TYPE.getTag(TagKey.create(Registries.ENTITY_TYPE, entity.id()))
+                        .map(tag -> tag.stream().anyMatch(holder -> isSpecial(holder.value()))).orElse(false)
+                    : BuiltInRegistries.ENTITY_TYPE.getOptional(entity.id()).map(EntityProduct::isSpecial).orElse(false);
+            if (special) {
+                issues.error("掉落物和经验球请使用对应的专用产出子类", null, field);
+                valid = false;
+            }
         }
+        return valid;
+    }
+
+    // 防止标签运行期变更后绕过专用入口约束。
+    static boolean isSpecial(EntityType<?> type) {
+        return type == EntityType.ITEM || type == EntityType.EXPERIENCE_ORB;
     }
 
     /** 经验点数按每件参与转化源物品计算：本次产出的总点数 = 每件点数 × 本组实际扣减的源物品件数。 */

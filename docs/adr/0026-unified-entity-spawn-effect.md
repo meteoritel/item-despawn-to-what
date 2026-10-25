@@ -1,6 +1,8 @@
 # ADR-0026：统一实体生成效果，按产出子类分发
 
 > 状态：已实施；实现见 `core/type/effect/SpawnEntityEffect.java` 与 [类型系统](../modules/type-system.md)。
+>
+> 当前状态：产出子类为 `item` / `mob` / `entity` / `experience` 四档。`mob` 承载生物与年龄（参数为 `entity` + `count` + `age`），`entity` 是其他实体（参数为 `entity` + `count`；年龄只属于 `mob`）。实体分类树在 `entity` 根下分 `entity.item` / `entity.mob` / `entity.entity` / `entity.experience`，同一条规则含多个实体子类时归 `entity.mixed`。
 
 掉落物生成、通用实体生成与经验生成合并为一种实体生成效果，按产出子类分发：`SpawnEntityEffect` 持有 sealed `EntityProduct`，由 `variant` 分派 item / entity / experience。通用实体子类覆盖生物与其他实体；掉落物与经验球固定走专用子类，通用实体子类拒绝 `minecraft:item` 与 `minecraft:experience_orb`。数量按物品件数、实体个数、经验点数计量；经验点数按每件源物品的定义值乘以本组实际扣减的源物品件数计算，各子类的数量直接取自自身参数。JSON 使用扁平字段，见[类型系统](../modules/type-system.md)。
 

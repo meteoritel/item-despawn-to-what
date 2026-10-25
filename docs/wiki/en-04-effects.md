@@ -30,7 +30,7 @@ Three things worth knowing:
 
 - **A rejected rule never loads**: when the content of a rule has a problem, the mod does not load it and reports why. A field the effect does not recognize also rejects the rule, and the message carries the field name.
 - To refer to an item, block, entity, fluid, or potion effect, write a concrete id (`minecraft:water`) or a **tag**, which is a reference that starts with `#`, such as `#minecraft:logs`.
-- Tags mean two different things. A producing reference, such as the `item` and `entity` of `spawn_entity`, the `block` of `place_block`, or the `effect` of a potion effect, takes **one random member** every time it runs. A matching reference, such as a rule-level `source_cost` or `catalyst_cost` reference, matches **any member of the tag** and never picks at random.
+- Tags mean two different things. A producing reference, such as the `item`, `mob`, and `entity` of `spawn_entity`, the `block` of `place_block`, or the `effect` of a potion effect, takes **one random member** every time it runs. A matching reference, such as a rule-level `source_cost` or `catalyst_cost` reference, matches **any member of the tag** and never picks at random.
 
 ## How Several Effects Run
 
@@ -47,11 +47,13 @@ Three things worth knowing:
 
 `type`: `idtw:spawn_entity`
 
-The **variant** field decides what comes out: `variant` is required and takes `item`, `entity`, or `experience`. The parameters of the variant sit at the same level as `type` and `variant`.
+The **variant** field decides what comes out: `variant` is required and takes `item` (drops), `mob` (mobs), `entity` (other entities), or `experience` (experience). The parameters of the variant sit at the same level as `type` and `variant`.
 
 | Field | What it does | Values | Default | Notes |
 |---|---|---|---|---|
-| `variant` | Which variant to use | `item` / `entity` / `experience` | None, required | Leaving it out rejects the rule, and the message asks for an outcome variant |
+| `variant` | Which variant to use | `item` / `mob` / `entity` / `experience` | None, required | Leaving it out rejects the rule, and the message asks for an outcome variant |
+
+Rule categories follow the variant: `entity.item`, `entity.mob`, `entity.entity`, and `entity.experience`; a rule that uses several entity variants lands in `entity.mixed`.
 
 ### Variant item: Items
 
@@ -66,21 +68,34 @@ The **variant** field decides what comes out: `variant` is required and takes `i
 
 What you see in game: one piece of rotten flesh lands near the trigger position and players can pick it up right away. If the source item was still moving horizontally when it was destroyed, the product's horizontal velocity points the opposite way, so it flies back toward the direction the item was thrown from and is easier to pick up; a source item at rest has no direction to mirror, so the product keeps the original small scatter (within 0.15 blocks horizontally). Larger amounts arrive over several ticks instead of all at once; which item comes out and how many pieces is decided the moment the conversion succeeds, not later. The new drop carries protection and a conversion cooldown so that the rules do not consume it again at once; see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
 
-### Variant entity: Entities
+### Variant mob: Mobs
 
 | Field | What it does | Values | Default | Notes |
 |---|---|---|---|---|
-| `entity` | Which entity to spawn | Entity type id or tag | None, required | When a candidate turns on `safe_spawn`, the mod first looks for a spot to stand on nearby; see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement) |
-| `count` | How many entities to spawn | 1 to 64 | `1` | The mod spawns at most 8 per tick and continues on later ticks |
-| `age` | Age | Integer, positive or negative | `0` | Applies only to mobs that grow up, such as farm animals and villagers; `0` is an adult and `-24000` is a newborn |
+| `entity` | Which mob to spawn | Mob id or tag | None, required | When a candidate turns on `safe_spawn`, the mod first looks for a spot to stand on nearby; see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement) |
+| `count` | How many mobs to spawn | 1 to 64 | `1` | The mod spawns at most 8 per tick and continues on later ticks |
+| `age` | Age | Integer from `-24000` to `0` | `0` | Applies only to mobs that grow up, such as farm animals and villagers; `0` is an adult and `-24000` is a newborn; a value outside this range rejects the rule when it loads |
 
 ```json
-{ "type": "idtw:spawn_entity", "variant": "entity", "entity": "minecraft:chicken", "count": 1, "age": -24000 }
+{ "type": "idtw:spawn_entity", "variant": "mob", "entity": "minecraft:chicken", "count": 1, "age": -24000 }
 ```
 
 What you see in game: a baby chicken spawns near the trigger position. With `safe_spawn` on, the mod searches the 5x5x5 block box centered on the trigger position, 125 blocks in all, from near to far for a spot the entity can stand on where neither its feet nor its head is a hazardous block. When it finds none, the conversion fails and the source items come back through the return path during delivery. This switch is off by default.
 
-Note: item entities (`minecraft:item`) and experience orbs (`minecraft:experience_orb`) do not belong here. Use the two dedicated variants instead, or the rule is rejected.
+### Variant entity: Other entities
+
+| Field | What it does | Values | Default | Notes |
+|---|---|---|---|---|
+| `entity` | Which entity to spawn | Entity type id or tag | None, required | Mobs go in the `mob` variant; `safe_spawn` works for this variant too, see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement) |
+| `count` | How many entities to spawn | 1 to 64 | `1` | The mod spawns at most 8 per tick and continues on later ticks |
+
+```json
+{ "type": "idtw:spawn_entity", "variant": "entity", "entity": "minecraft:minecart", "count": 2 }
+```
+
+What you see in game: 2 minecarts spawn near the trigger position with a small random horizontal offset. With `safe_spawn` on, the mod looks for a spot the entity can stand on where neither its feet nor its head is a hazardous block, and the conversion fails when it finds none.
+
+Note: both `mob` and `entity` reject `minecraft:item` and `minecraft:experience_orb`; drops and experience orbs use the dedicated `item` and `experience` variants, and a wrong reference rejects the rule. The editor filters the entity picker by variant, while hand-written rule JSON is not checked against the mob split at load time: loading has no world context and a tag may mix mobs with other entities, so a strict check would make valid tag references fail at random.
 
 ### Variant experience: Experience
 
@@ -94,7 +109,7 @@ Note: item entities (`minecraft:item`) and experience orbs (`minecraft:experienc
 
 What you see in game: with a group that paid one source item, 100 experience points fit inside one orb, so you see exactly **one** experience orb near the trigger position. Orbs land at random points on a disc of radius 0.5 blocks around the trigger position, raised 0.2 blocks above it. Only a larger amount splits into more orbs: at most 16 orbs per batch, with the next batch waiting at least one more game tick, until all points are out. Each experience effect and each group computes its own points from the source items that group actually took, and points from different effects or groups never merge. Collect them by walking over them.
 
-The number of nearby experience orbs never blocks a group over experience storage. A group that also produces items or generic entities still passes their separate capacity checks.
+The number of nearby experience orbs never blocks a group over experience storage. A group that also produces items or entities still passes their separate capacity checks.
 
 ## Arrow Rain (arrow_rain)
 

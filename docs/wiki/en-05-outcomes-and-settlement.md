@@ -27,21 +27,21 @@ A rule must answer what it converts into. There are two ways to write that answe
 | --- | --- | --- | --- | --- |
 | `id` | The name of this candidate | A non-empty string, unique inside one rule | — (required) | A candidate built from `effects` uses `default` |
 | `effects` | The effects this candidate runs | An array of effects | — (required, cannot be empty) | Effect types and parameters are on [Effects](en-04-effects) |
-| `safe_spawn` | Whether to look for a safe spot before spawning a mob | `true` / `false` | `false` | Affects only the `entity` variant of `spawn_entity` |
+| `safe_spawn` | Whether to look for a safe spot before spawning a mob or another entity | `true` / `false` | `false` | Affects only the `mob` and `entity` variants of `spawn_entity` |
 | `fill_origin` | Whether `place_block` may fill the trigger position itself | `true` / `false` | `true` | Affects only `place_block` |
 
 An outcome candidate accepts only these four fields. One extra field rejects the rule.
 
 ### Safe Spawning (safe_spawn)
 
-- `false` (the default): the mod does not look for a spot and places the mob at the position of the dropped item, with a small random offset on the horizontal axes.
-- `true`: the mod scans a box centered on the trigger position, 2 blocks to each horizontal side and 2 blocks up and down (5×5×5, 125 positions), from the closest position to the farthest, and takes the first position where a mob can stand: inside the world border, not over the void, allowed by the vanilla spawn rules of that mob, no block inside the spawn collision box, and no hazardous block at the feet or the head. The mob appears in the center of that block.
-- Hazardous blocks follow the damage categories of vanilla pathfinding: lava (block and fluid), fire and soul fire, magma block, campfire and soul campfire, lava cauldron, cactus, sweet berry bush, wither rose, pointed dripstone, and powder snow. The rule does not depend on the mob type: one position gives the same verdict for every product.
+- `false` (the default): the mod does not look for a spot and places the entity at the position of the dropped item, with a small random offset on the horizontal axes.
+- `true`: the mod scans a box centered on the trigger position, 2 blocks to each horizontal side and 2 blocks up and down (5×5×5, 125 positions), from the closest position to the farthest, and takes the first position where an entity can stand: inside the world border, not over the void, allowed by the vanilla spawn rules of that entity, no block inside the spawn collision box, and no hazardous block at the feet or the head. The entity appears in the center of that block.
+- Hazardous blocks follow the damage categories of vanilla pathfinding: lava (block and fluid), fire and soul fire, magma block, campfire and soul campfire, lava cauldron, cactus, sweet berry bush, wither rose, pointed dripstone, and powder snow. The rule does not depend on the entity type: one position gives the same verdict for every product.
 - The void covers two cases: a position below the world bottom, and a position sitting on the world bottom with no standable block between it and the bottom. Higher unsupported positions are left to gravity and the ground check, without scanning the whole column.
-- This switch works only for spawning mobs. Spawning items or experience ignores it.
-- The search runs across several ticks: the mod checks a limited number of positions per tick, a number the server configuration controls, and continues on the next tick when a batch is unfinished. A mob can therefore appear slightly later than an item.
-- Within one delivery each position is checked at most once: a hit position belongs to that mob, and later mobs only check positions not tried yet. Chunk loading is trimmed to the searched range instead of a fixed circle.
-- When no position in the searched range is safe, the conversion fails: with no mob spawned, the effect fails and the source cost already paid for this group comes back, with the source items returned to the world through the normal return path during delivery. When some mobs were already spawned before the search ran out, the effect ends with the real output, spawning nothing more and returning nothing.
+- This switch works only for spawning mobs and other entities; spawning items or experience ignores it.
+- The search runs across several ticks: the mod checks a limited number of positions per tick, a number the server configuration controls, and continues on the next tick when a batch is unfinished. An entity can therefore appear slightly later than an item.
+- Within one delivery each position is checked at most once: a hit position belongs to that entity, and later entities only check positions not tried yet. Chunk loading is trimmed to the searched range instead of a fixed circle.
+- When no position in the searched range is safe, the conversion fails: with no entity spawned, the effect fails and the source cost already paid for this group comes back, with the source items returned to the world through the normal return path during delivery. When some entities were already spawned before the search ran out, the effect ends with the real output, spawning nothing more and returning nothing.
 
 ### Filling the Origin Block (fill_origin)
 
@@ -83,7 +83,7 @@ Save this file as `config/itemdespawntowhat/rules/myrules/chicken_two_forms.json
       "effects": [
         {
           "type": "idtw:spawn_entity",
-          "variant": "entity",
+          "variant": "mob",
           "entity": "minecraft:chicken",
           "age": -24000,
           "count": 1
@@ -197,7 +197,7 @@ When a rule picks up a dropped item, the whole stack leaves the world and enters
 About counting only real output:
 
 - The output ledger records only what actually took effect. When an effect in a group produces nothing because its chance missed or it failed, the mod does not count that group as successful output: a planned amount and a successful amount are two different numbers.
-- Consumed cost stays consumed. Missed chances and invalid targets pay the full group cost. Block placement uses `ceil(placed × source_cost ÷ count)` source items per group; multiple block slots share the highest cost used, and a dispatched non-block effect uses the full group cost. The one exception is mob spawning with `safe_spawn`: when the candidate holds only that one effect, no safe position exists in the searched range, and no mob was spawned, the group cost comes back and is not counted as consumed. A group with other effects, or one that already spawned part of its mobs, pays as usual.
+- Consumed cost stays consumed. Missed chances and invalid targets pay the full group cost. Block placement uses `ceil(placed × source_cost ÷ count)` source items per group; multiple block slots share the highest cost used, and a dispatched non-block effect uses the full group cost. The one exception is entity spawning with `safe_spawn`: when the candidate holds only that one effect, no safe position exists in the searched range, and no entity was spawned, the group cost comes back and is not counted as consumed. A group with other effects, or one that already spawned part of its entities, pays as usual.
 - Unopened inventory and unused block source allowance remain in settlement. With 10 sources able to place 20 blocks, placing only 6 consumes 3 sources and returns 7. When no position is available or `limit` is already full, all sources return if no other paid behavior uses them.
 - The output budget is debited per opened group: once a group has paid its cost, it takes the share of the budget its declared output needs, and that share stays spent even when a missed chance leaves the group without real output.
 
@@ -227,10 +227,10 @@ Check in this order:
 1. **The rule was never picked**: when conditions are not satisfied, the mod does not convert the dropped item and retries on a backoff rhythm, from 1 second to 2 seconds to 4 seconds until it reaches the ceiling. The item is either too young or in the wrong place. See [Conditions](en-03-conditions).
 2. **The rule was not loaded or not enabled**: `enabled` is `false` and this save has not switched it on, another rule with the same id from a higher source layer replaces this one, or a wrong JSON field rejects the rule. A rule change takes effect only after a reload. See [Getting Started](en-01-getting-started) and [Source Layers and Overrides](en-06-layers-and-overrides).
 3. **The stack is smaller than one group**: when the stack size is below the source cost per group, a cost of 2 with only 1 item left for example, no group can open. You will see the dropped item vanish on time and a matching stack reappear nearby. That is the return, and the returned item never converts again.
-4. **The output budget is used up**: when the budget worked out before opening is zero or already spent, `priority` moves on to the next candidate and `round_robin` skips this one. When no candidate can open a group, the whole stack returns unchanged. Experience output does not draw on this budget, and the items and generic entities a mixed candidate produces answer to their own limits. See [Server Configuration](en-07-server-config).
+4. **The output budget is used up**: when the budget worked out before opening is zero or already spent, `priority` moves on to the next candidate and `round_robin` skips this one. When no candidate can open a group, the whole stack returns unchanged. Experience output does not draw on this budget, and the items and entities a mixed candidate produces answer to their own limits. See [Server Configuration](en-07-server-config).
 5. **An effect missed its chance**: its `chance` did not pass. The mod still consumes the source items, and you see no output. See [Effects](en-04-effects).
 6. **The output was delayed**: an effect that sets `delay_ticks` produces its output later than the moment the dropped item disappears, which happens with delayed lightning or with mobs that spawn in batches.
-7. **The output landed somewhere else**: a `place_block` effect with `fill_origin` set to `false` never fills the trigger position itself, and a mob spawned with `safe_spawn` may appear on a neighboring block.
+7. **The output landed somewhere else**: a `place_block` effect with `fill_origin` set to `false` never fills the trigger position itself, and an entity spawned with `safe_spawn` may appear on a neighboring block.
 
 A one-line order to troubleshoot: first confirm that the rule itself was picked, meaning it is enabled, loaded, and its conditions are satisfied; then check costs and counts, meaning whether the stack fills a group and whether catalysts are enough; then check the output budget; and only at the end check the chance and delay of the effects.
 

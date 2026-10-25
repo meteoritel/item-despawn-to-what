@@ -129,7 +129,7 @@ public final class SpawnXpExecutor {
                 remaining -= points;
                 // 真实完成量回执：球已加入世界后才累计点数
                 context.reportProgress(points);
-                // 计价：一个真正写入世界的实体记 1 个工作单位，与物品、通用实体产出同一口径
+                // 计价：一个真正写入世界的实体记 1 个工作单位，与物品、实体产出同一口径
                 StepWorkCounter.report(1);
                 reportedUnits++;
                 spawned++;

@@ -451,7 +451,7 @@ public final class RuleRecipeView {
     private static ObjectPart product(RuleValue effect, ProductKind kind, RuleValue rule, boolean fillOrigin) {
         return switch (kind) {
             case ENTITY_ITEM -> resource(text(effect, "item"), RuleCatalogType.ITEM, integer(effect, "count", 1));
-            case ENTITY_ENTITY -> {
+            case ENTITY_ENTITY, ENTITY_MOB -> {
                 ObjectPart part = resource(text(effect, "entity"), RuleCatalogType.ENTITY, integer(effect, "count", 1));
                 // 标签引用保留标签图标；具体实体改用动作图标
                 if (!text(effect, "entity").startsWith("#")) part = new ObjectPart(part.name,

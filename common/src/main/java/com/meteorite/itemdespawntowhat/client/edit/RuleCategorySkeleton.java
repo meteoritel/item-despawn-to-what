@@ -30,6 +30,7 @@ public final class RuleCategorySkeleton {
             new Category(ISSUES),
             new Category("entity", List.of(
                     new Category("entity.item"),
+                    new Category("entity.mob"),
                     new Category("entity.entity"),
                     new Category("entity.experience"),
                     new Category("entity.mixed"))),
