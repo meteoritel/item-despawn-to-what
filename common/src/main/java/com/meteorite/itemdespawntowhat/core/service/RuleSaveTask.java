@@ -178,7 +178,7 @@ final class RuleSaveTask implements ServerTask {
             if (apply != null) { apply.onFailed(failure); }
             Throwable cause = failure instanceof CompletionException && failure.getCause() != null ? failure.getCause() : failure;
             org.apache.logging.log4j.LogManager.getLogger().error("规则保存步骤失败：phase={}", phase, cause);
-            finish(written ? RuleSaveStatus.SAVED_NOT_RELOADED
+            finish(written || phase == Phase.APPLY ? RuleSaveStatus.SAVED_NOT_RELOADED
                     : cause instanceof RejectedExecutionException ? RuleSaveStatus.UNAVAILABLE
                     : phase == Phase.REQUEST && cause instanceof IllegalArgumentException
                     ? RuleSaveStatus.INVALID_REQUEST : RuleSaveStatus.WRITE_FAILED, cause.toString());
@@ -193,10 +193,14 @@ final class RuleSaveTask implements ServerTask {
                 Request value = request.join();
                 changes = value.changes(); diskRevision = value.revision(); request = null;
                 if (changes.isEmpty()) { finish(RuleSaveStatus.NO_CHANGES, ""); return true; }
-                sessions.acceptDiskRevision(diskRevision, false);
-                int version = sessions.version();
-                if (changes.expectedVersion() != version) { finish(RuleSaveStatus.VERSION_CONFLICT, ""); }
-                else if (reloadContext == null || context.typeRegistries() == null) { finish(RuleSaveStatus.UNAVAILABLE, ""); }
+                if (changes.hasContentEdits()) {
+                    // 内容动作才推进内容修订号并参与草稿冲突；纯启停批次不碰这两项
+                    sessions.acceptDiskRevision(diskRevision, false);
+                    if (changes.expectedVersion() != sessions.version()) {
+                        finish(RuleSaveStatus.VERSION_CONFLICT, ""); return true;
+                    }
+                }
+                if (reloadContext == null || context.typeRegistries() == null) { finish(RuleSaveStatus.UNAVAILABLE, ""); }
                 else { phase = Phase.VALIDATE; }
             }
             case VALIDATE -> {
@@ -206,6 +210,14 @@ final class RuleSaveTask implements ServerTask {
                             context.typeRegistries(), reloadContext.loadContext().runtimeLimits(), local);
                     appendIssues(local);
                     if (local.hasErrors()) { finish(RuleSaveStatus.VALIDATION_FAILED, local.format()); }
+                } else if (!changes.hasContentEdits()) {
+                    // 纯启停批次：写状态后按保存链路的轻量路径重建索引并发布，回扫在 APPLY 步骤推进；
+                    // 索引用这份任务已捕捉的数据包基底重建，不重读数据包。
+                    RuleEnableApplyService.Outcome outcome = RuleEnableApplyService.apply(server, context,
+                            changes.enableEdits());
+                    if (outcome.changed() == 0) { finish(RuleSaveStatus.NO_CHANGES, ""); }
+                    else if (outcome.rescan() == null) { finish(RuleSaveStatus.UNAVAILABLE, ""); }
+                    else { apply = outcome.rescan(); phase = Phase.APPLY; }
                 } else {
                     RuleEditChangeSet submitted = changes;
                     byte[] expectedRevision = diskRevision.clone();
@@ -236,8 +248,11 @@ final class RuleSaveTask implements ServerTask {
                     finish(RuleSaveStatus.CANCELLED, "");
                 } else if (!result.result().conflicts().isEmpty() || result.issues().hasErrors()) {
                     finish(RuleSaveStatus.WRITE_FAILED, result.issues().format());
-                } else if (!written) { finish(RuleSaveStatus.NO_CHANGES, ""); }
-                else {
+                } else {
+                    // 内容已原子提交（written=false 表示内容本身没有实际变化），紧接着写同批的启用状态：
+                    // 两者在同一提交阶段生效，随后统一重建索引回扫。
+                    int stateChanges = RuleEnableApplyService.commitState(server, changes.enableEdits());
+                    if (!written && stateChanges == 0) { finish(RuleSaveStatus.NO_CHANGES, ""); return true; }
                     byte[] committedRevision = diskRevision.clone();
                     raw = store.submit("save-reload-read", () -> {
                         IssueCollector local = new IssueCollector();
@@ -271,7 +286,9 @@ final class RuleSaveTask implements ServerTask {
                     appendIssues(local);
                 } else {
                     // 纯模型索引构建没有世界访问，后台使用的模型集合不再由服务端线程修改。
-                    List<LoadedRule<Rule>> readyRules = List.copyOf(decoded);
+                    // 先注入「本服覆盖 ?? 默认启用」：否则刚保存的规则会按 JSON 默认值生效，与加载链路分叉
+                    List<LoadedRule<Rule>> readyRules = List.copyOf(RuleLoadingService.applyEnableState(
+                            reloadContext.loadContext(), decoded));
                     byte[] indexedRevision = diskRevision.clone();
                     prepared = store.submit("save-index", () -> {
                         RuleIndex index = RuleIndex.build(readyRules, new IssueCollector());
@@ -349,7 +366,7 @@ final class RuleSaveTask implements ServerTask {
         try {
             if (write != null) { acceptWrite(write.join()); }
             boolean rollbackFailed = write != null && write.join().result().rollbackFailed();
-            finish(written ? RuleSaveStatus.SAVED_NOT_RELOADED
+            finish(written || apply != null ? RuleSaveStatus.SAVED_NOT_RELOADED
                             : pendingFailure == null && !rollbackFailed ? RuleSaveStatus.CANCELLED : RuleSaveStatus.WRITE_FAILED,
                     pendingFailure == null ? "保存调度已取消，请检查回滚结果" : pendingFailure.toString());
         } catch (RuntimeException failure) {

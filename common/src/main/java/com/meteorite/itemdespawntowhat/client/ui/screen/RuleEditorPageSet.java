@@ -136,7 +136,10 @@ public final class RuleEditorPageSet {
         // 编辑工作区只读视图（目录面板与只读状态查询）
         EditorWorkspaceView workspace();
 
-        // 冻结（会话失效/只读）时拒绝写入
+        // 编辑页数据模型（基本页据此读取本服启停状态）
+        RuleEditorModel model();
+
+        // 冻结（会话失效）时拒绝写入
         boolean rejectWhenFrozen();
 
         // 屏幕宽高
@@ -717,7 +720,7 @@ public final class RuleEditorPageSet {
         return targets;
     }
 
-    /** 冻结/只读时禁用交互 */
+    /** 冻结时禁用交互；只读内容不在这里禁用控件（沙盒可写） */
     public void setEnabled(boolean next) {
         enabled = next;
         if (!next) ruleEditorResultsPage.typePicker.close();
@@ -768,6 +771,13 @@ public final class RuleEditorPageSet {
             button.setEnabled(enabled);
         }
         ruleEditorResultsPage.updatePlanButtons(enabled);
+        // 基本页的本服开关与「恢复默认」按钮有各自的可用条件，上面的统一使能会覆盖它们，最后再同步一次
+        ruleEditorInfoPage.applyServerState(enabled);
+    }
+
+    // 只同步基本页的本服控件：内容字段变化可能改变生效状态（无覆盖时生效=默认启用）
+    void refreshServerState() {
+        ruleEditorInfoPage.applyServerState(enabled);
     }
 
     public void tick() {
@@ -984,7 +994,7 @@ public final class RuleEditorPageSet {
     // followCategory 为真时在产出变化后同步分类
     private boolean apply(String opKey, Runnable change, boolean followCategory) {
         EditSession session = host.session();
-        if (session == null || !enabled || session.isReadOnly() || host.rejectWhenFrozen()) {
+        if (session == null || !enabled || host.rejectWhenFrozen()) {
             restoreSwitches();
             return false;
         }

@@ -38,7 +38,6 @@ final class RuleListDisplaySnapshot {
     private final boolean exportable;
     private final boolean active;
     private final boolean error;
-    private final boolean enabled;
     private final boolean issues;
     private final boolean previewUnavailable;
     private final Component state;
@@ -58,7 +57,7 @@ final class RuleListDisplaySnapshot {
 
     RuleListDisplaySnapshot(@Nullable RuleValue body, String title, @Nullable String category,
                             String origin, boolean unfinished, boolean exportable,
-                            boolean active, boolean error, boolean enabled, boolean issues,
+                            boolean active, boolean error, boolean issues,
                             boolean previewUnavailable,
                             Component state, boolean stateVisible) {
         this.body = body;
@@ -69,7 +68,6 @@ final class RuleListDisplaySnapshot {
         this.exportable = exportable;
         this.active = active;
         this.error = error;
-        this.enabled = enabled;
         this.issues = issues;
         this.previewUnavailable = previewUnavailable;
         this.state = state;
@@ -149,23 +147,18 @@ final class RuleListDisplaySnapshot {
         return unfinished;
     }
 
-    // 是否可导出为数据包：有可读规则体且不是屏蔽/删除/非法条目
+    // 是否可导出为数据包：有可读规则体，且未被标记删除、不是非法条目
     boolean exportable() {
         return exportable;
     }
 
-    // 当前是否按「启用」显示（草稿改动与新建的条目以草稿为准）
+    // 当前是否按「启用」显示：由生效启用状态决定（含本服覆盖与未应用意图）
     boolean active() {
         return active;
     }
 
     boolean error() {
         return error;
-    }
-
-    // 规则体自身是否声明为启用（列表切换按钮据此显示下一步动作）
-    boolean enabled() {
-        return enabled;
     }
 
     // 条目是否带服务端问题清单（筛选「问题」用）

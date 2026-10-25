@@ -301,11 +301,6 @@ public final class RuleEditorScreen extends Screen {
             }
 
             @Override
-            public boolean isReadOnly() {
-                return RuleEditorScreen.this.isEditReadOnly();
-            }
-
-            @Override
             public void openEditor(String id) {
                 RuleEditorScreen.this.openEditor(id);
             }

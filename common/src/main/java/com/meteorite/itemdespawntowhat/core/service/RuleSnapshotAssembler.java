@@ -19,6 +19,7 @@ import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.model.RuleCategoryClassifier;
 import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleIssue;
+import com.meteorite.itemdespawntowhat.core.state.RuleEnableResolver;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshot;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshotEntry;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSourceView;
@@ -41,12 +42,15 @@ import java.util.TreeMap;
 
 /**
  * 规则快照装配器：把"来源分层索引 + 当前生效规则"组装成下发给客户端的快照。
- * 条目形状：RuleSnapshotEntry(id, origin, source, status, editable, category, effective, hasBase, hasOverlay, issues)
+ * 条目形状：RuleSnapshotEntry(id, origin, source, status, editable, defaultEnabled, enabled, enabledOverride,
+ * category, effective, hasBase, hasOverlay, issues)
  * - 条目只携带生效视图与两个存在标记；基底与覆盖内容由 {@link #sourceView(RuleSourceIndex.Entry)} 按需生成；
  * - category 先读取作者在规则原始 JSON 顶层的显式分类（覆盖层视图优先于数据包视图），
  *   未声明时由分类器按生效效果的产出类别派生；两者不一致时以显式值为准；无法派生的条目为空；
  * - effective 优先使用模型编码后的最终结果（解码成功时权威），否则退回原始 JSON；
- * - origin 取 overlay | datapack | mixed，status 取 active | disabled | masked | invalid；
+ * - 启用三值：defaultEnabled 取规则内容声明值（原始 JSON 的 enabled，缺失时按默认启用），
+ *   enabledOverride 取本服状态层记录（null 表示继承默认），enabled 为二者的生效结果；
+ * - origin 取 overlay | datapack | mixed，status 按生效启用值取 active | disabled | invalid；
  * - source 取 builtin | world | overlay | mixed，标识条目内容的物理层：内置/世界数据包为只读，覆盖与混合可写；
  * - 解码失败或校验致命错误时 status=invalid，并在 issues 中带上 severity/ruleId/origin/fieldPath。
  */
@@ -73,7 +77,8 @@ public final class RuleSnapshotAssembler {
                                         int contextRevision,
                                         TypeRegistry<EffectType<?>> effectTypes,
                                         TypeRegistry<ConditionType<?>> conditionTypes,
-                                        @Nullable List<Issue> issues) {
+                                        @Nullable List<Issue> issues,
+                                        @Nullable RuleEnableResolver enableResolver) {
         Map<ResourceLocation, JsonObject> encoded = new LinkedHashMap<>();
         if (merged != null) {
             for (LoadedRule<Rule> loaded : merged) {
@@ -83,7 +88,7 @@ public final class RuleSnapshotAssembler {
                 }
             }
         }
-        return assembleEncoded(index, merged, effectTypes, version, contextRevision, encoded, issues);
+        return assembleEncoded(index, merged, effectTypes, version, contextRevision, encoded, issues, enableResolver);
     }
 
     /**
@@ -95,13 +100,15 @@ public final class RuleSnapshotAssembler {
      * @param contextRevision 上下文版本
      * @param encoded 规则 id 对应的模型编码结果
      * @param issues 加载与校验问题
+     * @param enableResolver 本服启用状态解析器；为 null 时按「全部继承默认」装配
      * @return 完整规则快照
      */
     public static RuleSnapshot assembleEncoded(RuleSourceIndex index, List<LoadedRule<Rule>> merged,
                                                TypeRegistry<EffectType<?>> effectTypes,
                                                int version, int contextRevision,
                                                Map<ResourceLocation, JsonObject> encoded,
-                                               @Nullable List<Issue> issues) {
+                                               @Nullable List<Issue> issues,
+                                               @Nullable RuleEnableResolver enableResolver) {
         Map<ResourceLocation, LoadedRule<Rule>> remaining = new LinkedHashMap<>();
         if (merged != null) {
             for (LoadedRule<Rule> loaded : merged) {
@@ -114,7 +121,7 @@ public final class RuleSnapshotAssembler {
         Map<ResourceLocation, RuleSnapshotEntry> entries = new LinkedHashMap<>();
         IssueAssociations associatedIssues = new IssueAssociations(index, issues);
 
-        // 1) 分层索引条目：唯一能给出 base/overlay/masked/disabled 完整语义的来源
+        // 1) 分层索引条目：唯一能给出 base/overlay 完整来源语义的入口
         if (index != null) {
             for (RuleSourceIndex.Entry source : index.entries()) {
                 LoadedRule<Rule> loaded = remaining.remove(source.id());
@@ -125,7 +132,10 @@ public final class RuleSnapshotAssembler {
                     // 解码失败（或该 id 只被控制条目接管）时退回原始 JSON，保证客户端仍能看到内容
                     effective = overlay != null ? copy(overlay) : copy(base);
                 }
-                String status = status(source, loaded != null);
+                boolean defaultEnabled = defaultEnabled(loaded, overlay != null ? overlay : base);
+                Boolean enabledOverride = override(enableResolver, source.id());
+                boolean enabled = enabledOverride == null ? defaultEnabled : enabledOverride;
+                String status = status(loaded != null, enabled);
                 List<RuleIssue> entryIssues = associatedIssues.entries.getOrDefault(source.id(), List.of());
                 if (RuleSnapshotEntry.STATUS_INVALID.equals(status) && entryIssues.isEmpty()) {
                     entryIssues = List.of(new RuleIssue(RuleIssue.SEVERITY_ERROR, source.id().toString(),
@@ -134,6 +144,7 @@ public final class RuleSnapshotAssembler {
                 String physicalSource = source(source);
                 entries.put(source.id(), new RuleSnapshotEntry(source.id(), origin(source), physicalSource, status,
                         source.hasBody() && RuleSnapshotEntry.isWritableSource(physicalSource),
+                        defaultEnabled, enabled, enabledOverride,
                         category(loaded, overlay != null ? overlay : base, effectTypes),
                         effective, base != null, overlay != null, entryIssues));
             }
@@ -148,12 +159,16 @@ public final class RuleSnapshotAssembler {
             RuleSourceLayer layer = leftover.getValue().origin().layer();
             boolean overlayLayer = layer == RuleSourceLayer.OVERLAY;
             String category = RuleCategoryClassifier.classify(leftover.getValue().value(), effectTypes);
+            boolean defaultEnabled = defaultEnabled(leftover.getValue(), body);
+            Boolean enabledOverride = override(enableResolver, leftover.getKey());
+            boolean enabled = enabledOverride == null ? defaultEnabled : enabledOverride;
             // 原始条目读取异常时没有分层视图：把模型编码结果当作基底内容下发，存在标记与来源按层补齐；
             // source 保留 builtin/world 与 overlay 的区分，供客户端判定只读。
             entries.put(leftover.getKey(), new RuleSnapshotEntry(leftover.getKey(),
                     overlayLayer ? RuleSnapshotEntry.ORIGIN_OVERLAY : RuleSnapshotEntry.ORIGIN_DATAPACK,
-                    layer.id(), RuleSnapshotEntry.STATUS_ACTIVE,
-                    RuleSnapshotEntry.isWritableSource(layer.id()), category, body, true, overlayLayer, List.of()));
+                    layer.id(), status(true, enabled),
+                    RuleSnapshotEntry.isWritableSource(layer.id()), defaultEnabled, enabled, enabledOverride,
+                    category, body, true, overlayLayer, List.of()));
         }
 
         return new RuleSnapshot(version, contextRevision, List.copyOf(entries.values()),
@@ -167,11 +182,12 @@ public final class RuleSnapshotAssembler {
                                         int version,
                                         TypeRegistry<EffectType<?>> effectTypes,
                                         TypeRegistry<ConditionType<?>> conditionTypes,
-                                        List<String> issues) {
+                                        List<String> issues,
+                                        @Nullable RuleEnableResolver enableResolver) {
         IssueCollector collector = new IssueCollector();
         List<RawRuleEntry> raw = OverlayRuleReader.read(overlayRoot, overlayNamespace, collector);
         RuleSnapshot snapshot = assemble(RuleSourceIndex.build(raw), merged, version, version,
-                effectTypes, conditionTypes, collector.issues());
+                effectTypes, conditionTypes, collector.issues(), enableResolver);
         if (issues == null || issues.isEmpty()) {
             return snapshot;
         }
@@ -225,20 +241,31 @@ public final class RuleSnapshotAssembler {
         return category.isBlank() ? null : category;
     }
 
-    // 条目状态：删贴（masked）与停用（disabled）优先，其次看解码是否成功
-    private static String status(RuleSourceIndex.Entry source, boolean decoded) {
-        if (source.deleted()) {
-            return RuleSnapshotEntry.STATUS_MASKED;
+    // 条目状态：内容非法优先（无法执行也无从启停），否则按本服生效启用值取 active / disabled
+    private static String status(boolean decoded, boolean enabled) {
+        if (!decoded) {
+            return RuleSnapshotEntry.STATUS_INVALID;
         }
-        if (source.disabled()) {
-            return RuleSnapshotEntry.STATUS_DISABLED;
+        return enabled ? RuleSnapshotEntry.STATUS_ACTIVE : RuleSnapshotEntry.STATUS_DISABLED;
+    }
+
+    // 默认启用值：原始 JSON 的 enabled 声明优先，缺失或非布尔时退回解码值（解码器按默认启用补齐）
+    private static boolean defaultEnabled(@Nullable LoadedRule<Rule> loaded, @Nullable JsonObject raw) {
+        JsonElement flag = raw == null ? null : raw.get(RuleFields.ENABLED);
+        if (flag != null && flag.isJsonPrimitive() && flag.getAsJsonPrimitive().isBoolean()) {
+            return flag.getAsBoolean();
         }
-        return decoded ? RuleSnapshotEntry.STATUS_ACTIVE : RuleSnapshotEntry.STATUS_INVALID;
+        return loaded != null ? loaded.value().enabled() : RuleCodecs.DEFAULT_ENABLED;
+    }
+
+    // 本服覆盖：null 表示没有记录（继承默认），与「显式设成和默认相同」区分
+    private static @Nullable Boolean override(@Nullable RuleEnableResolver resolver, ResourceLocation id) {
+        return resolver == null ? null : resolver.overrideFor(id);
     }
 
     /**
      * 物理来源标识：区分内置数据包、世界数据包与用户覆盖内容。
-     * 覆盖副本与数据包基底共存时为 mixed；只有控制条目时按控制条目所在层判定。
+     * 覆盖副本与数据包基底共存时为 mixed，只有其一则取该层。
      *
      * @param source 来源分层条目
      * @return builtin / world / overlay / mixed
@@ -250,12 +277,6 @@ public final class RuleSnapshotAssembler {
         if (source.base() != null) {
             return source.base().origin().layer().id();
         }
-        if (source.control() != null && !source.controlFromOverlay()) {
-            return source.control().origin().layer().id();
-        }
-        if (source.controlFromOverlay()) {
-            return RuleSnapshotEntry.SOURCE_OVERLAY;
-        }
         // 空条目不存在可写内容：按只读数据包回退，避免误判为可编辑
         return RuleSnapshotEntry.SOURCE_DATAPACK;
     }
@@ -265,10 +286,7 @@ public final class RuleSnapshotAssembler {
         if (source.overlay() != null) {
             return source.base() != null ? RuleSnapshotEntry.ORIGIN_MIXED : RuleSnapshotEntry.ORIGIN_OVERLAY;
         }
-        if (source.base() != null) {
-            return RuleSnapshotEntry.ORIGIN_DATAPACK;
-        }
-        return source.controlFromOverlay() ? RuleSnapshotEntry.ORIGIN_OVERLAY : RuleSnapshotEntry.ORIGIN_DATAPACK;
+        return RuleSnapshotEntry.ORIGIN_DATAPACK;
     }
 
     // 每份快照独占的关联结果：来源精确索引与路径有序索引只构建一次，问题按输入顺序分发。
@@ -286,8 +304,8 @@ public final class RuleSnapshotAssembler {
             boolean[] overlays = new boolean[sources.size()];
             for (int number = 0; number < sources.size(); number++) {
                 RuleSourceIndex.Entry source = sources.get(number);
-                // base/overlay/control 允许为空，同一条目多次命中由分发时的 BitSet 合并。
-                for (RawRuleEntry raw : Arrays.asList(source.base(), source.overlay(), source.control())) {
+                // base/overlay 允许为空，同一条目多次命中由分发时的 BitSet 合并。
+                for (RawRuleEntry raw : Arrays.asList(source.base(), source.overlay())) {
                     if (raw == null) {
                         continue;
                     }

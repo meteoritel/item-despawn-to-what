@@ -14,6 +14,7 @@ import com.meteorite.itemdespawntowhat.client.edit.draft.DraftConflict;
 import com.meteorite.itemdespawntowhat.client.edit.draft.DraftJournal;
 import com.meteorite.itemdespawntowhat.client.edit.draft.DraftStore;
 import com.meteorite.itemdespawntowhat.client.edit.draft.PersistedDraft;
+import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEdit;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleIssue;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshot;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshotEntry;
@@ -29,6 +30,9 @@ import java.util.Set;
 /**
  * 编辑页数据模型：把服务端快照映射成「按规则 id 的草稿会话」。
  * 所有字段与结构编辑都必须经过 {@link EditSession#apply}，保证每个编辑入口都有撤销标签。
+ * <p>内容只读（数据包来源）的条目打开的是沙盒会话：内容只在界面生命周期内存在，
+ * 既不落盘也不进变更集；但本服启停意图独立于内容保存在本模型与草稿文件里，
+ * 因此内容只读的条目同样能改启停、复制为新规则。</p>
  */
 public final class RuleEditorModel {
 
@@ -50,6 +54,10 @@ public final class RuleEditorModel {
     private final Set<String> errorIds = new LinkedHashSet<>();
     // 生效视图的规则体缓存：同一快照版本内每条规则只做一次深拷贝
     private final Map<String, RuleValue> effectiveBodies = new LinkedHashMap<>();
+    // 本服启停意图（按 id）：内容只读的条目也能改启停，意图必须独立于沙盒内容存在
+    private final LinkedHashMap<String, RuleEdit.Action> enableIntents = new LinkedHashMap<>();
+    // 启停意图变更计数：意图不推进会话修订号，列表显示缓存据此判断失效
+    private int intentRevision;
 
     // 草稿落盘日志（跨界面关闭 / 断线 / 重启恢复）
     private final DraftJournal journal = new DraftJournal(new DraftStore());
@@ -95,27 +103,30 @@ public final class RuleEditorModel {
         this.collectErrorIds(snapshot);
         // 先绑定磁盘草稿（需要最新快照做整条规则比较），再重绑未被改动的内存会话
         this.applyRestoredDrafts();
-        // 未改动且非本次新建的会话重新绑定到服务端内容；数据包来源改为只读，
-        // 历史版本遗留的未保存改动在这里丢弃，避免界面上继续显示无法应用的脏状态
+        // 沙盒会话（内容只读）静默回滚到服务端内容：沙盒内容本来就不可提交，
+        // 快照刷新不需要征求确认，也不能借此丢掉尚未应用的启停意图
         var iterator = this.sessions.entrySet().iterator();
         while (iterator.hasNext()) {
             var current = iterator.next();
             String id = current.getKey();
             EditSession session = current.getValue();
-            boolean readOnly = isReadOnly(id);
-            session.setReadOnly(readOnly);
-            if (readOnly && !this.createdIds.contains(id) && session.isDirty()) {
+            if (isReadOnly(id) && !this.createdIds.contains(id)) {
                 RuleValue body = entryBody(id);
-                this.journal.drop(id);
                 if (body == null) {
                     iterator.remove();
+                    if (!this.enableIntents.containsKey(id)) {
+                        this.journal.drop(id);
+                    }
                     continue;
                 }
-                session.load(RuleDraft.of(categorySeeded(this.entries.get(id), body)));
-                session.clearHistory();
-                // 已按最新快照重绑，无需再走下面的常规重绑
+                // 玩家正在沙盒里改内容时保留会话，等离开编辑页再统一丢弃
+                if (!session.isDirty()) {
+                    session.load(RuleDraft.of(categorySeeded(this.entries.get(id), body)));
+                    session.clearHistory();
+                }
                 continue;
             }
+            // 未改动且非本次新建的会话重新绑定到服务端内容
             if (this.createdIds.contains(id) || session.isDirty()) {
                 continue;
             }
@@ -159,17 +170,232 @@ public final class RuleEditorModel {
     }
 
     /**
-     * 某条规则是否来自只读数据包（内置或世界数据包）。
+     * 某条规则的内容是否只读（内置或世界数据包来源）。
+     *
+     * <p>只读只约束内容：条目仍可在编辑页里沙盒编辑，也能改本服启停与复制；
+     * 沙盒内容不落盘、不进变更集，删除也仍然拒绝。</p>
      *
      * <p>本次新建与已不存在的目标按可写处理；服务端快照未到达时也按可写处理，
      * 由界面原有的冻结判定兜底。</p>
      *
      * @param id 规则 id
-     * @return true 表示只能查看，不能编辑或删除
+     * @return true 表示内容改动只存在于当前界面会话，不会保存
      */
     public boolean isReadOnly(String id) {
         RuleSnapshotEntry entry = this.entries.get(id);
         return entry != null && entry.readOnly();
+    }
+
+    // ---- 本服启停状态（默认启用 / 本服覆盖 / 恢复默认） ----
+
+    /**
+     * 某条规则的默认启用状态：规则 JSON 的 {@code enabled} 字段。
+     *
+     * <p>可写条目在已打开会话时读草稿内容（表单里的改动属于内容改动）；只读条目的会话是沙盒，
+     * 其内容改动不会保存、也不代表服务端状态，因此仍读服务端快照，避免界面假象污染生效状态。</p>
+     *
+     * @param id 规则 id
+     * @return 默认启用状态
+     */
+    public boolean defaultEnabled(String id) {
+        EditSession session = this.sessions.get(id);
+        if (session != null && !isReadOnly(id)) {
+            return session.draft().getBoolean(RuleFields.ENABLED, true);
+        }
+        RuleSnapshotEntry entry = this.entries.get(id);
+        return entry == null || entry.defaultEnabled();
+    }
+
+    /**
+     * 某条规则在本服的生效启用状态：有未应用的意图时按意图解析，否则本服覆盖优先于默认启用。
+     *
+     * @param id 规则 id
+     * @return 服务端视角下的生效启用状态
+     */
+    public boolean effectiveEnabled(String id) {
+        RuleEdit.Action intent = this.enableIntents.get(id);
+        if (intent != null) {
+            return switch (intent) {
+                case ENABLE -> true;
+                case DISABLE -> false;
+                // RESET 表示本服不再保留覆盖，回到内容里的默认启用
+                default -> defaultEnabled(id);
+            };
+        }
+        RuleSnapshotEntry entry = this.entries.get(id);
+        if (entry != null && entry.enabledOverride() != null) {
+            return entry.enabledOverride();
+        }
+        return defaultEnabled(id);
+    }
+
+    /**
+     * 某条规则待提交的启停意图。
+     *
+     * @param id 规则 id
+     * @return enable/disable/reset；null 表示没有未应用的启停改动
+     */
+    public @Nullable RuleEdit.Action enableIntent(String id) {
+        return this.enableIntents.get(id);
+    }
+
+    /**
+     * 某条规则是否带本服启用覆盖（含未应用的意图）：列表行「（本服）」后缀与「恢复默认」按钮据此显示。
+     *
+     * @param id 规则 id
+     * @return true 表示生效状态来自本服记录而非默认启用
+     */
+    public boolean hasEnabledOverride(String id) {
+        RuleEdit.Action intent = this.enableIntents.get(id);
+        if (intent != null) {
+            return intent != RuleEdit.Action.RESET;
+        }
+        RuleSnapshotEntry entry = this.entries.get(id);
+        return entry != null && entry.enabledOverride() != null;
+    }
+
+    /**
+     * 切换某条规则在本服的启用状态。
+     *
+     * <p>目标值等于默认启用时改用 reset 消除冗余覆盖；本次新建的规则在服务端还没有条目，
+     * 直接改内容里的 {@code enabled} 字段，否则意图要等内容保存后才有着落。</p>
+     *
+     * @param id 规则 id
+     * @return 实际采用的启停动作；条目不存在且没有会话时为 null
+     */
+    public @Nullable RuleEdit.Action toggleEnabled(String id) {
+        RuleSnapshotEntry entry = this.entries.get(id);
+        if (entry == null || this.createdIds.contains(id)) {
+            EditSession session = this.sessions.get(id);
+            if (session == null) {
+                return null;
+            }
+            boolean enabled = !session.draft().getBoolean(RuleFields.ENABLED, true);
+            session.apply(EditSession.OP_SET_FIELD,
+                    () -> session.draft().setBoolean(RuleFields.ENABLED, enabled));
+            return enabled ? RuleEdit.Action.ENABLE : RuleEdit.Action.DISABLE;
+        }
+        // 列表页直接点启停时还没有会话：先按服务端内容打开，草稿才会带上内容与基线
+        ensureSessionForIntent(id);
+        boolean target = !effectiveEnabled(id);
+        if (target == defaultEnabled(id)) {
+            // 回到默认启用即消除覆盖；服务端本来没有覆盖时连意图都不需要留
+            if (entry.enabledOverride() == null) {
+                this.enableIntents.remove(id);
+                this.intentRevision++;
+                this.republishIntent(id);
+                return RuleEdit.Action.RESET;
+            }
+            this.enableIntents.put(id, RuleEdit.Action.RESET);
+            this.intentRevision++;
+            this.republishIntent(id);
+            return RuleEdit.Action.RESET;
+        }
+        RuleEdit.Action action = target ? RuleEdit.Action.ENABLE : RuleEdit.Action.DISABLE;
+        this.enableIntents.put(id, action);
+        this.intentRevision++;
+        this.republishIntent(id);
+        return action;
+    }
+
+    /**
+     * 恢复某条规则的本服启用状态为默认：清除本服覆盖。
+     *
+     * @param id 规则 id
+     */
+    public void resetEnabled(String id) {
+        ensureSessionForIntent(id);
+        RuleSnapshotEntry entry = this.entries.get(id);
+        if (entry == null || entry.enabledOverride() == null) {
+            this.enableIntents.remove(id);
+        } else {
+            this.enableIntents.put(id, RuleEdit.Action.RESET);
+        }
+        this.intentRevision++;
+        this.republishIntent(id);
+    }
+
+    /**
+     * 按生效状态设置某条规则的启停意图。
+     *
+     * <p>复制为新规则时用它把源条目的本服覆盖带到新 id：副本的内容可能与源不同，
+     * 只有写同样的意图才能让副本的生效状态与源一致。</p>
+     *
+     * @param id 规则 id
+     * @param enabled 期望的生效启用状态
+     */
+    public void setEnableIntent(String id, boolean enabled) {
+        ensureSessionForIntent(id);
+        if (enabled == defaultEnabled(id)) {
+            this.enableIntents.remove(id);
+        } else {
+            this.enableIntents.put(id, enabled ? RuleEdit.Action.ENABLE : RuleEdit.Action.DISABLE);
+        }
+        this.intentRevision++;
+        this.republishIntent(id);
+    }
+
+    // 启停意图变更计数：列表显示缓存按它判断是否需要重建
+    public int intentRevision() {
+        return this.intentRevision;
+    }
+
+    /**
+     * 丢弃沙盒会话（内容只读条目的会话）：内容回到服务端版本，启停意图保留。
+     *
+     * <p>沙盒内容既不落盘也不进变更集，离开编辑页、切换条目或关闭界面时就该消失；
+     * 保留意图是为了不丢玩家刚点过的启停操作。</p>
+     *
+     * @param keep 需要保留会话的规则 id（正在编辑的条目）；null 表示全部丢弃
+     */
+    public void dropSandboxSessions(@Nullable String keep) {
+        for (String id : new ArrayList<>(this.sessions.keySet())) {
+            if (id.equals(keep) || !isReadOnly(id) || this.createdIds.contains(id)) {
+                continue;
+            }
+            RuleValue body = entryBody(id);
+            boolean keepDraft = this.enableIntents.containsKey(id);
+            if (body == null) {
+                this.sessions.remove(id);
+            } else {
+                EditSession session = this.sessions.get(id);
+                if (session == null) {
+                    continue;
+                }
+                session.load(RuleDraft.of(categorySeeded(this.entries.get(id), body)));
+                session.clearHistory();
+            }
+            if (!keepDraft) {
+                this.journal.drop(id);
+            }
+        }
+    }
+
+    // 记录启停意图前确保可写条目已有会话：草稿落盘要带服务端内容与基线，
+    // 否则重启恢复会把「只有意图、内容为空」的草稿当成凭空出现的空规则并误判冲突。
+    private void ensureSessionForIntent(String id) {
+        if (this.createdIds.contains(id) || this.sessions.containsKey(id) || isReadOnly(id)) {
+            return;
+        }
+        openSession(id);
+    }
+
+    // 意图变化后同步草稿日志：只读条目没有可写内容，草稿文件只为意图存在；
+    // 可写条目没有会话说明快照里没有可读内容，写出的草稿只会变成空内容假象，直接丢弃
+    private void republishIntent(String id) {
+        if (this.draftsDiscarded) {
+            return;
+        }
+        EditSession session = this.sessions.get(id);
+        if (session == null && !isReadOnly(id)) {
+            this.journal.drop(id);
+            return;
+        }
+        if (this.isJournalWorthy(id, session)) {
+            this.journal.markDirty(snapshotOf(id, session));
+        } else {
+            this.journal.drop(id);
+        }
     }
 
     // 某条规则的草稿会话
@@ -198,7 +424,6 @@ public final class RuleEditorModel {
     public @Nullable EditSession openSession(String id) {
         EditSession existing = this.sessions.get(id);
         if (existing != null) {
-            existing.setReadOnly(isReadOnly(id));
             return existing;
         }
         RuleSnapshotEntry entry = this.entries.get(id);
@@ -206,7 +431,7 @@ public final class RuleEditorModel {
         if (body == null) {
             return null;
         }
-        EditSession session = new EditSession(id, RuleDraft.of(categorySeeded(entry, body)), isReadOnly(id));
+        EditSession session = new EditSession(id, RuleDraft.of(categorySeeded(entry, body)));
         this.sessions.put(id, session);
         // 基线取服务端「生效视图」；没有生效视图时记为不存在（快照内部会做一次独立拷贝）
         this.captureBaseline(id, entry.effective());
@@ -291,6 +516,9 @@ public final class RuleEditorModel {
         this.createdIds.remove(id);
         this.baselineJson.remove(id);
         this.conflicts.remove(id);
+        if (this.enableIntents.remove(id) != null) {
+            this.intentRevision++;
+        }
         this.journal.drop(id);
     }
 
@@ -394,12 +622,17 @@ public final class RuleEditorModel {
         return session != null && session.draft().isDeleted();
     }
 
-    // 存在改动的规则 id（保持服务端顺序）；只读条目永远不算待应用改动
+    // 存在改动的规则 id（保持服务端顺序）：内容改动与启停意图都算；沙盒内容不算
     public List<String> dirtyRuleIds() {
         List<String> ids = new ArrayList<>();
         for (String id : ruleIds()) {
-            EditSession session = this.sessions.get(id);
-            if (session != null && !isReadOnly(id) && (session.isDirty() || this.createdIds.contains(id))) {
+            if (this.enableIntents.containsKey(id) || hasContentDirty(id)) {
+                ids.add(id);
+            }
+        }
+        // 服务端已移除的条目仍可能留着未应用的启停意图，提交时一并带上
+        for (String id : this.enableIntents.keySet()) {
+            if (!ids.contains(id)) {
                 ids.add(id);
             }
         }
@@ -408,13 +641,21 @@ public final class RuleEditorModel {
 
     // 是否存在任何改动（页头每帧查询：只遍历已打开的会话，不构造 id 列表）
     public boolean hasDirty() {
+        if (!this.enableIntents.isEmpty()) {
+            return true;
+        }
         for (String id : this.sessions.keySet()) {
-            EditSession session = this.sessions.get(id);
-            if (session != null && !isReadOnly(id) && (session.isDirty() || this.createdIds.contains(id))) {
+            if (hasContentDirty(id)) {
                 return true;
             }
         }
         return false;
+    }
+
+    // 内容是否有待应用的改动：沙盒内容只存在于界面，永远不算
+    private boolean hasContentDirty(String id) {
+        EditSession session = this.sessions.get(id);
+        return session != null && !isReadOnly(id) && (session.isDirty() || this.createdIds.contains(id));
     }
 
     // 装配变更集 JSON；无改动返回 null
@@ -422,32 +663,38 @@ public final class RuleEditorModel {
         EditorChangeSet changeSet = new EditorChangeSet(this.workspace.contextRevision());
         for (String id : dirtyRuleIds()) {
             EditSession session = this.sessions.get(id);
-            if (session == null) {
-                continue;
+            // 沙盒内容不进变更集：只读条目只提交启停意图
+            if (session != null && hasContentDirty(id)) {
+                RuleDraft draft = session.draft();
+                RuleSnapshotEntry entry = this.entries.get(id);
+                // 任何含覆盖副本（mixed）或仅覆盖的条目都能通过删除覆盖层表达删除；
+                // 数据包基底本身不落覆盖层，不能写成带 delete 的完整规则体。
+                boolean overlayOwned = entry != null && !RuleSnapshotEntry.ORIGIN_DATAPACK.equals(entry.origin());
+                if (draft.isDeleted() && !this.createdIds.contains(id) && overlayOwned) {
+                    changeSet.delete(id);
+                } else {
+                    changeSet.upsert(draft);
+                }
             }
-            // 只读数据包条目没有可提交的写入面；历史版本遗留的脏会话在这里被兜底跳过
-            if (isReadOnly(id)) {
-                continue;
-            }
-            RuleDraft draft = session.draft();
-            RuleSnapshotEntry entry = this.entries.get(id);
-            // 任何含覆盖副本（mixed）或仅覆盖的条目都能通过删除覆盖层表达删除；
-            // 数据包基底本身不落覆盖层，不能写成带 delete 的完整规则体。
-            boolean overlayOwned = entry != null && !RuleSnapshotEntry.ORIGIN_DATAPACK.equals(entry.origin());
-            if (draft.isDeleted() && !this.createdIds.contains(id) && overlayOwned) {
-                changeSet.delete(id);
-            } else {
-                changeSet.upsert(draft);
+            // 启停动作与内容动作同批提交：服务端先写内容再落状态
+            RuleEdit.Action intent = this.enableIntents.get(id);
+            if (intent != null) {
+                changeSet.state(id, intent);
             }
         }
         return changeSet.isEmpty() ? null : changeSet.serialize();
     }
 
-    // 保存成功后收敛草稿：服务端内容成为新的基线
+    // 保存成功后收敛草稿：服务端内容成为新的基线，已提交的启停意图转为服务端覆盖
     public void acceptSaved() {
         for (String id : dirtyRuleIds()) {
             EditSession session = this.sessions.get(id);
-            if (session == null) {
+            if (this.enableIntents.remove(id) != null) {
+                this.intentRevision++;
+            }
+            // 只读条目的内容不进变更集，收敛时只清掉已应用的意图
+            if (session == null || isReadOnly(id)) {
+                this.journal.drop(id);
                 continue;
             }
             session.load(RuleDraft.of(session.draft().root()));
@@ -474,9 +721,17 @@ public final class RuleEditorModel {
             if (this.sessions.containsKey(id)) {
                 continue;
             }
-            // 只读数据包的草稿无法提交：直接丢弃落盘草稿，界面回到服务端内容
+            // 只读条目的内容属沙盒、无法提交：只恢复本服启停意图，不建会话也不判内容冲突
             if (isReadOnly(id)) {
-                this.journal.drop(id);
+                RuleEdit.Action intent = stored.enableIntent();
+                if (intent == null) {
+                    this.journal.drop(id);
+                    continue;
+                }
+                this.enableIntents.put(id, intent);
+                this.intentRevision++;
+                this.journal.markDirty(snapshotOf(id, null));
+                this.restoredCount++;
                 continue;
             }
             RuleSnapshotEntry entry = this.entries.get(id);
@@ -500,6 +755,10 @@ public final class RuleEditorModel {
             EditSession session = new EditSession(id, draft);
             if (stored.created()) {
                 this.createdIds.add(id);
+            }
+            if (stored.enableIntent() != null) {
+                this.enableIntents.put(id, stored.enableIntent());
+                this.intentRevision++;
             }
             this.sessions.put(id, session);
             this.captureBaseline(id, entry == null ? null : entry.effective());
@@ -526,21 +785,30 @@ public final class RuleEditorModel {
         this.journal.markDirty(snapshotOf(id, session));
     }
 
-    // 是否值得落盘：有改动或本次新建；只读条目不产生草稿文件
-    private boolean isJournalWorthy(String id, EditSession session) {
-        return !isReadOnly(id) && (session.isDirty() || this.createdIds.contains(id));
+    // 是否值得落盘：有内容改动、本次新建或存在启停意图；只读条目的沙盒内容不产生草稿。
+    // 可写条目没有会话说明服务端没有可读内容，只写意图会落出「内容为空」的假草稿，重启时被误判冲突。
+    private boolean isJournalWorthy(String id, @Nullable EditSession session) {
+        if (this.enableIntents.containsKey(id)) {
+            return session != null || isReadOnly(id);
+        }
+        return session != null && !isReadOnly(id) && (session.isDirty() || this.createdIds.contains(id));
     }
 
-    // 当前草稿快照（含基线，供落盘与冲突比较）
-    private PersistedDraft snapshotOf(String id, EditSession session) {
+    // 当前草稿快照（含基线与启停意图，供落盘与冲突比较）
+    private PersistedDraft snapshotOf(String id, @Nullable EditSession session) {
         // 基线 JSON 在建立基线时已转换好且此后不再修改，这里直接交给快照，不再重复深拷贝
         JsonObject baseline = this.baselineJson.get(id);
+        boolean readOnly = isReadOnly(id);
+        // 沙盒内容不落盘：只读条目只保留启停意图，草稿内容写空对象
+        JsonObject content = readOnly || session == null ? new JsonObject() : session.draft().toJson();
+        boolean deleted = !readOnly && session != null && session.draft().isDeleted();
         return new PersistedDraft(
                 id,
                 this.createdIds.contains(id),
-                session.draft().isDeleted(),
+                deleted,
+                this.enableIntents.get(id),
                 baseline,
-                session.draft().toJson(),
+                content,
                 this.snapshotVersion,
                 this.workspace.contextRevision(),
                 System.currentTimeMillis());
@@ -565,9 +833,12 @@ public final class RuleEditorModel {
         if (this.draftsDiscarded) {
             return;
         }
-        for (String id : new ArrayList<>(this.sessions.keySet())) {
+        // 只有启停意图的条目没有会话，也要落盘
+        Set<String> ids = new LinkedHashSet<>(this.sessions.keySet());
+        ids.addAll(this.enableIntents.keySet());
+        for (String id : ids) {
             EditSession session = this.sessions.get(id);
-            if (session != null && this.isJournalWorthy(id, session)) {
+            if (this.isJournalWorthy(id, session)) {
                 this.journal.writeNow(snapshotOf(id, session));
             }
         }
@@ -599,9 +870,13 @@ public final class RuleEditorModel {
         if (this.conflicts.remove(id) == null) {
             return;
         }
-        // 只读来源不能保留本地草稿：冲突解决只能回到服务端内容
+        // 只读来源不能保留本地草稿：冲突解决只能回到服务端内容，仅保留启停意图
         if (isReadOnly(id)) {
-            this.journal.drop(id);
+            if (this.enableIntents.containsKey(id)) {
+                this.journal.markDirty(snapshotOf(id, null));
+            } else {
+                this.journal.drop(id);
+            }
             return;
         }
         EditSession session = this.sessions.get(id);
@@ -643,6 +918,8 @@ public final class RuleEditorModel {
         this.journal.dropAll();
         this.conflicts.clear();
         this.restored.clear();
+        this.enableIntents.clear();
+        this.intentRevision++;
         this.restoredCount = 0;
     }
 

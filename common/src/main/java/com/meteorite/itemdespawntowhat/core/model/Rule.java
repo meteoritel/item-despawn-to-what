@@ -88,4 +88,19 @@ public record Rule(
         return List.copyOf(all);
     }
 
+    /**
+     * 以新的生效启用值重建规则，其余字段与标识保持不变。
+     * 加载链路用它把「本服启用状态 ?? 默认启用」注入运行时对象，不修改规则内容的 JSON 副本。
+     *
+     * @param value 生效启用值
+     * @return 启用值不同时为重建的新实例；相同时返回自身
+     */
+    public Rule withEnabled(boolean value) {
+        if (enabled == value) {
+            return this;
+        }
+        return new Rule(id, value, priority, displayName, notes, source, conditions, triggerAfterSeconds, effects,
+                triggers, sourceCost, catalystCost, consumeFluid, combination, outcomes, schemaVersion);
+    }
+
 }

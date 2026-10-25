@@ -2,7 +2,6 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDefaults;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
-import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
@@ -12,7 +11,7 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
-import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEdit;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import net.minecraft.network.chat.Component;
@@ -155,6 +154,8 @@ final class RuleEditorListActions {
             return;
         }
         RuleValue body = session.draft().root().deepCopy();
+        // 源条目的生效启停状态在复制时一并带走：副本内容可能与源不同，只带意图才不会丢覆盖
+        boolean sourceEnabled = host.model().effectiveEnabled(sourceId);
         String sourceName = ResourceLocation.parse(sourceId).getPath();
         String copyBase = sourceName.replaceAll("[^a-z0-9_]", "_");
         copyBase = copyBase.substring(0, Math.min(copyBase.length(), COPY_BASE_MAX_LENGTH));
@@ -180,6 +181,7 @@ final class RuleEditorListActions {
                 return false;
             }
             host.model().createSession(key, BuiltinEditorDefaults.copyOf(key, body));
+            host.model().setEnableIntent(key, sourceEnabled);
             host.refreshList();
             host.openEditor(key);
             host.setNotice(null, THEME.palette().textSecondary());
@@ -187,22 +189,34 @@ final class RuleEditorListActions {
         });
     }
 
+    /**
+     * 切换选中条目的本服启停状态。
+     *
+     * <p>内容只读的条目同样可切：只读约束的是内容，不是启停。目标值等于默认启用时改用
+     * reset 消除冗余覆盖，因此提示按模型返回的动作给出。</p>
+     */
     void toggleSelectedEnabled() {
         if (host.rejectWhenFrozen()) {
             return;
         }
-        if (rejectWhenReadOnly()) {
+        String id = selection.get();
+        if (id == null) {
+            noSelection();
             return;
         }
-        EditSession session = openSelected();
-        if (session == null) {
+        RuleEdit.Action action = host.model().toggleEnabled(id);
+        if (action == null) {
+            noSelection();
             return;
         }
-        RuleDraft draft = session.draft();
-        boolean enabled = !draft.getBoolean(RuleFields.ENABLED, true);
-        session.apply(EditSession.OP_SET_FIELD, () -> draft.setBoolean(RuleFields.ENABLED, enabled));
         host.refreshList();
-        host.setNotice(Component.translatable(enabled ? UI + "notice.enabled" : UI + "notice.disabled"), THEME.palette().success());
+        // 新建规则在服务端还没有条目：这时切换的是内容里的默认启用，不该用「（本服）」反馈
+        if (host.model().isCreated(id)) {
+            return;
+        }
+        String notice = action == RuleEdit.Action.ENABLE ? "notice.enabled"
+                : action == RuleEdit.Action.DISABLE ? "notice.disabled" : "notice.reset_default";
+        host.setNotice(Component.translatable(UI + notice), THEME.palette().success());
     }
 
     void deleteSelected() {
@@ -215,7 +229,7 @@ final class RuleEditorListActions {
             return;
         }
         if (host.model().isReadOnly(id)) {
-            rejectWhenReadOnly();
+            host.setNotice(Component.translatable(UI + "notice.readonly_delete"), THEME.palette().warning());
             return;
         }
         if (host.model().isCreated(id)) {
@@ -240,32 +254,8 @@ final class RuleEditorListActions {
         });
     }
 
-    // 打开选中项会话；无选中或会话不可用时给出提示并返回 null
-    private @Nullable EditSession openSelected() {
-        String id = selection.get();
-        if (id == null) {
-            noSelection();
-            return null;
-        }
-        EditSession session = host.model().openSession(id);
-        if (session == null) {
-            noSelection();
-        }
-        return session;
-    }
-
     void noSelection() {
         host.setNotice(Component.translatable(UI + "notice.no_selection"), THEME.palette().warning());
-    }
-
-    // 只读数据包条目没有可写入的覆盖层副本：列表按钮已禁用，这里兜底拒绝并给出原因
-    private boolean rejectWhenReadOnly() {
-        String id = selection.get();
-        if (id == null || !host.model().isReadOnly(id)) {
-            return false;
-        }
-        host.setNotice(Component.translatable(UI + "notice.readonly_rule"), THEME.palette().warning());
-        return true;
     }
 
 }

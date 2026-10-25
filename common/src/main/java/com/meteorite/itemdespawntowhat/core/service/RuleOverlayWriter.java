@@ -165,6 +165,8 @@ public final class RuleOverlayWriter {
                 requireActive(active);
                 progress.accept(new RuleSaveProgress(RuleSaveProgress.Stage.PREPARING_FILES, processed++,
                         changes.edits().size(), change.id().toString(), true));
+                // 启用状态动作只改本服状态层，不产生文件改动；同 id 可以同时出现内容动作与状态动作
+                if (!change.contentEdit()) { continue; }
                 if (!seen.add(change.id())) { throw new IOException("重复编辑规则: " + change.id()); }
                 Path target = target(change.id());
                 Location location = locate(locations, change.id());

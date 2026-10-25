@@ -29,7 +29,7 @@ public final class RuleDraft {
     // 服务器下发的原始 JSON，作为 dirty 判定基线
     private final JsonObject original;
     private JsonObject working;
-    // 覆盖层删除标记（不写入 working，由 {@link #toOverlayJson()} 表达）
+    // 覆盖层删除意图（不写入 working，提交时转换为 DELETE 动作）
     private boolean deleted;
     // 草稿内容变更计数：只在内容真正变化时递增（写入前判等），无变化操作不留撤销记录
     private long mutations;
@@ -80,13 +80,9 @@ public final class RuleDraft {
         return working.deepCopy();
     }
 
-    // 覆盖层保存形态：标记删除时附加 delete=true
+    // 覆盖层保存形态：删除意图由变更集的 DELETE 动作表达，规则体本身不再携带控制字段
     public JsonObject toOverlayJson() {
-        JsonObject copy = working.deepCopy();
-        if (deleted) {
-            copy.addProperty(RuleFields.DELETE, true);
-        }
-        return copy;
+        return working.deepCopy();
     }
 
     public boolean isDeleted() {

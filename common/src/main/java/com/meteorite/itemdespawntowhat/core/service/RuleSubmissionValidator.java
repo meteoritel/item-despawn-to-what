@@ -15,7 +15,7 @@ import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEditChangeSet;
 public final class RuleSubmissionValidator {
     private RuleSubmissionValidator() {}
 
-    // 控制条目只允许 id 与一个值为 true 的控制字段；普通条目走完整 Codec 和类型校验。
+    // 内容动作 upsert 走完整 Codec 与类型校验；delete 与启用状态动作只认 id，无需内容校验。
     public static boolean validate(RuleEditChangeSet changes, net.minecraft.server.MinecraftServer server,
                                    BuiltinTypeRegistries types, RuleRuntimeLimits runtimeLimits,
                                    IssueCollector issues) {
@@ -36,16 +36,10 @@ public final class RuleSubmissionValidator {
     public static void validateEdit(RuleEdit edit, net.minecraft.server.MinecraftServer server,
                                     BuiltinTypeRegistries types, RuleRuntimeLimits runtimeLimits,
                                     IssueCollector issues) {
-        if (edit.action() == RuleEdit.Action.DELETE) { return; }
+        // 删除只改覆盖层内容的有无；启停只改本服状态层，两者都没有可解码的规则内容
+        if (!edit.contentEdit() || edit.action() == RuleEdit.Action.DELETE) { return; }
         JsonObject body = java.util.Objects.requireNonNull(edit.rule()).deepCopy();
         body.addProperty("id", edit.id().toString());
-        if (body.has("disabled") || body.has("delete")) {
-            String field = body.has("delete") ? "delete" : "disabled";
-            boolean valid = body.size() == 2 && body.get(field).isJsonPrimitive()
-                    && body.get(field).getAsJsonPrimitive().isBoolean() && body.get(field).getAsBoolean();
-            if (!valid) { issues.error("控制条目只能包含 id 和一个值为 true 的 disabled/delete 字段", edit.id().toString(), field); }
-            return;
-        }
         try {
             var decoded = RuleCodecs.decoder(server.registryAccess(), types.effectTypes(), types.conditionTypes()).decode(body, issues);
             Rule rule = decoded.result().orElse(null);

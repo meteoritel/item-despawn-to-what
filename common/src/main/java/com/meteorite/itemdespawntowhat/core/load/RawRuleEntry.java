@@ -8,10 +8,9 @@ import java.util.Objects;
 
 /**
  * 文件解析后、模型解码前的原始规则条目。
- * body 始终保留文件中的原始 JSON（不提前丢弃字段）；disabled / delete 是覆盖层控制字段，
- * 由合并阶段消费，不作为规则字段解码。
- * 合并前的条目中，disabled / delete 表示"声明"；合并结果中 delete 恒为 false，
- * disabled 表示"该规则已被覆盖层停用"（解码时据此注入 enabled=false）。
+ * body 始终保留文件中的原始 JSON（不提前丢弃字段）；启用状态属本服状态层，不在条目里表达，
+ * 因此同一条目在不同存档里可以有不同的生效启用值。disabled / delete 不再是控制字段，
+ * 出现时按普通未知字段处理，只告警、不影响合并与解码。
  */
 public record RawRuleEntry(
         // 有效 id：文件中显式声明，或由文件路径推导；无法确定时为 null
@@ -20,10 +19,6 @@ public record RawRuleEntry(
         JsonObject body,
         // 来源标识
         RuleOrigin origin,
-        // 是否声明 disabled 控制字段
-        boolean disabled,
-        // 是否声明 delete 控制字段
-        boolean delete,
         // 该条在本文件中的位置（数组元素形如 [2]，单条对象文件为空串）
         String fieldPath
 ) {
@@ -32,10 +27,5 @@ public record RawRuleEntry(
         Objects.requireNonNull(body, "body");
         Objects.requireNonNull(origin, "origin");
         fieldPath = fieldPath == null ? "" : fieldPath;
-    }
-
-    // 是否为覆盖层控制条目：只表达停用 / 删除，不携带规则内容
-    public boolean isControl() {
-        return disabled || delete;
     }
 }

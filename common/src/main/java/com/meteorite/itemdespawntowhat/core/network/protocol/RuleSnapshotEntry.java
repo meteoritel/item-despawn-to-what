@@ -15,14 +15,18 @@ import java.util.List;
  * 以及「是否存在基底 / 覆盖副本」两个标记；基底与覆盖内容改由 {@link RuleSourceView} 按需请求下发。
  * origin 取值 overlay/datapack/mixed，用于列表的来源筛选；source 进一步区分数据包的物理层
  * （builtin/world/overlay/mixed），客户端据此判定条目是否只读。
- * status 取值 active/disabled/masked/invalid。
- * editable 表示来源可写且持有可打开的规则内容：builtin / world 数据包为 false，overlay / mixed 为 true。
+ * status 取生效值语义：active（生效启用）/ disabled（生效停用）/ invalid（内容非法）。
+ * editable 只表示内容可写：来源可写且持有可打开的规则内容；启停对所有条目可用，不受它限制。
+ * defaultEnabled 是规则内容声明的默认启用值，enabled 是本服生效值（本服覆盖 ?? 默认启用），
+ * enabledOverride 是本服覆盖值：null 表示继承默认，非 null 表示本服显式设过（含与默认相同的情况）。
  * category 为装配后的分类：显式声明优先（覆盖层视图优先于数据包视图），未声明时按生效效果派生；
- * 无法派生（如已删除条目）时为 null。分类只供列表分组，不参与运行时解码与执行。
- * hasBase/hasOverlay 仅表示该条目在对应层是否有非控制条目副本，不承担内容语义。
+ * 无法派生时为 null。分类只供列表分组，不参与运行时解码与执行。
+ * hasBase/hasOverlay 仅表示该条目在对应层是否有副本，不承担内容语义。
  */
 public record RuleSnapshotEntry(ResourceLocation id, String origin, String source, String status,
-                                boolean editable, @Nullable String category,
+                                boolean editable,
+                                boolean defaultEnabled, boolean enabled, @Nullable Boolean enabledOverride,
+                                @Nullable String category,
                                 @Nullable JsonObject effective,
                                 boolean hasBase, boolean hasOverlay,
                                 List<RuleIssue> issues) {
@@ -40,10 +44,9 @@ public record RuleSnapshotEntry(ResourceLocation id, String origin, String sourc
     // 无法判定具体数据包层时的保守回退：按只读处理
     public static final String SOURCE_DATAPACK = "datapack";
 
-    // 状态取值
+    // 状态取值：按生效启用值判定，invalid 表示内容非法
     public static final String STATUS_ACTIVE = "active";
     public static final String STATUS_DISABLED = "disabled";
-    public static final String STATUS_MASKED = "masked";
     public static final String STATUS_INVALID = "invalid";
 
     // 线上 JSON 字段键
@@ -52,6 +55,9 @@ public record RuleSnapshotEntry(ResourceLocation id, String origin, String sourc
     public static final String KEY_SOURCE = "source";
     public static final String KEY_STATUS = "status";
     public static final String KEY_EDITABLE = "editable";
+    public static final String KEY_DEFAULT_ENABLED = "default_enabled";
+    public static final String KEY_ENABLED = "enabled";
+    public static final String KEY_ENABLED_OVERRIDE = "enabled_override";
     public static final String KEY_CATEGORY = "category";
     public static final String KEY_EFFECTIVE = "effective";
     public static final String KEY_HAS_BASE = "has_base";
@@ -106,6 +112,13 @@ public record RuleSnapshotEntry(ResourceLocation id, String origin, String sourc
         json.addProperty(KEY_SOURCE, source);
         json.addProperty(KEY_STATUS, status);
         json.addProperty(KEY_EDITABLE, editable);
+        json.addProperty(KEY_DEFAULT_ENABLED, defaultEnabled);
+        json.addProperty(KEY_ENABLED, enabled);
+        if (enabledOverride == null) {
+            json.add(KEY_ENABLED_OVERRIDE, JsonNull.INSTANCE);
+        } else {
+            json.addProperty(KEY_ENABLED_OVERRIDE, enabledOverride);
+        }
         if (category == null) {
             json.add(KEY_CATEGORY, JsonNull.INSTANCE);
         } else {
@@ -147,11 +160,14 @@ public record RuleSnapshotEntry(ResourceLocation id, String origin, String sourc
                 string(json, KEY_ORIGIN, ORIGIN_DATAPACK),
                 string(json, KEY_SOURCE, ""),
                 string(json, KEY_STATUS, STATUS_ACTIVE),
-                bool(json, KEY_EDITABLE),
+                bool(json, KEY_EDITABLE, false),
+                bool(json, KEY_DEFAULT_ENABLED, true),
+                bool(json, KEY_ENABLED, true),
+                override(json),
                 category(json),
                 object(json, KEY_EFFECTIVE),
-                bool(json, KEY_HAS_BASE),
-                bool(json, KEY_HAS_OVERLAY),
+                bool(json, KEY_HAS_BASE, false),
+                bool(json, KEY_HAS_OVERLAY, false),
                 issues);
     }
 
@@ -173,11 +189,22 @@ public record RuleSnapshotEntry(ResourceLocation id, String origin, String sourc
         return fallback;
     }
 
-    // 读取布尔字段；缺失或非布尔返回 false
-    private static boolean bool(JsonObject json, String key) {
-        return json.has(key) && json.get(key).isJsonPrimitive()
-                && json.get(key).getAsJsonPrimitive().isBoolean()
-                && json.get(key).getAsBoolean();
+    // 读取布尔字段；缺失或非布尔返回给定默认值
+    private static boolean bool(JsonObject json, String key, boolean fallback) {
+        JsonElement value = json.get(key);
+        if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isBoolean()) {
+            return fallback;
+        }
+        return value.getAsBoolean();
+    }
+
+    // 读取可空布尔：null 或非布尔表示没有本服覆盖
+    private static @Nullable Boolean override(JsonObject json) {
+        JsonElement value = json.get(KEY_ENABLED_OVERRIDE);
+        if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isBoolean()) {
+            return null;
+        }
+        return value.getAsBoolean();
     }
 
     // 读取对象字段；缺失或非对象返回 null

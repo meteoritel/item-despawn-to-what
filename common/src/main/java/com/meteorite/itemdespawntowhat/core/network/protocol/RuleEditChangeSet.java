@@ -24,6 +24,16 @@ public record RuleEditChangeSet(int expectedVersion, List<RuleEdit> edits) {
         return edits.isEmpty();
     }
 
+    // 启用状态动作（enable/disable/reset）：只改本服状态层，不推进内容修订号
+    public List<RuleEdit> enableEdits() {
+        return edits.stream().filter(RuleEdit::enableEdit).toList();
+    }
+
+    // 是否含内容动作
+    public boolean hasContentEdits() {
+        return edits.stream().anyMatch(RuleEdit::contentEdit);
+    }
+
     // 序列化为协议 JSON 文本（网络包只传这一个字符串）
     public String serialize() {
         JsonObject root = new JsonObject();

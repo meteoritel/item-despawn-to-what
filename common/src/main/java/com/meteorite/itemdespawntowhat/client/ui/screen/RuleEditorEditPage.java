@@ -89,11 +89,8 @@ final class RuleEditorEditPage {
         // 重建管理页规则树
         void refreshList();
 
-        // 冻结（会话失效 / 只读）时拒绝写入
+        // 冻结（会话失效）时拒绝写入
         boolean rejectWhenFrozen();
-
-        // 当前编辑目标是否来自只读数据包
-        boolean isReadOnly();
 
         void openEditor(String id);
 
@@ -133,6 +130,8 @@ final class RuleEditorEditPage {
     private final RuleEditorScreenButtonBar footerBar = new RuleEditorScreenButtonBar(22, 4, true);
     // 编辑内容区（每帧重算；切页与问题定位复用同一份布局）
     private UiRect lastEditArea = new UiRect(0, 0, 0, 0);
+    // 页面控件是否可写（会话冻结时为 false）：保存按钮的可用状态据此与脏标记合成
+    private boolean controlsEnabled = true;
 
     // 草稿冲突：已弹过冲突窗的目标 id（避免每帧重复弹；解决后移除）
     private final Set<String> promptedConflicts = new LinkedHashSet<>();
@@ -207,6 +206,11 @@ final class RuleEditorEditPage {
         @Override
         public EditorWorkspaceView workspace() {
             return host.workspace();
+        }
+
+        @Override
+        public RuleEditorModel model() {
+            return host.model();
         }
 
         @Override
@@ -487,26 +491,34 @@ final class RuleEditorEditPage {
     }
 
     void setPagesEnabled(boolean editable) {
+        this.controlsEnabled = editable;
         if (pages != null) {
             pages.setEnabled(editable);
         }
-        // 保存入口与页面控件同属可写面：只读或冻结时一并禁用，避免点后才发现没有改动可提交
-        if (!footerButtons.isEmpty()) {
-            footerButtons.getFirst().setEnabled(editable);
-        }
+        // 沙盒编辑同样可写：只读条目不在这里禁用控件，内容与启停都允许改
+        updateHistoryButtons();
     }
 
     void tick() {
         if (host.isEditMode() && pages != null) {
             pages.tick();
+            // 内容里的「默认启用」可能被改：本服开关显示的是生效状态，需要跟着刷新
+            pages.refreshServerState();
         }
     }
 
-    // 底排「保存」按钮的可用状态与标签（撤销 / 重做已移出底排，仅保留快捷键入口）
+    // 底排「保存」按钮的可用状态与标签：只有存在待应用改动时才可点，无改动时显示「无改动」。
+    // 沙盒内容本身不产生脏，因此只读条目在没改启停时自然保持禁用。
     void updateHistoryButtons() {
-        if (!footerButtons.isEmpty()) {
-            footerButtons.getFirst().setLabel(Component.translatable(UI + "button.apply_changes", host.model().dirtyRuleIds().size()));
+        if (footerButtons.isEmpty()) {
+            return;
         }
+        UiButton save = footerButtons.getFirst();
+        boolean dirty = host.model().hasDirty();
+        save.setEnabled(this.controlsEnabled && dirty);
+        save.setLabel(dirty
+                ? Component.translatable(UI + "button.apply_changes", host.model().dirtyRuleIds().size())
+                : Component.translatable(UI + "button.no_changes"));
     }
 
     // ---- 输入委托 ----
@@ -557,11 +569,6 @@ final class RuleEditorEditPage {
     // ---- 保存 / 撤销 ----
 
     void save() {
-        // 只读来源没有可提交的写入面：保存按钮已禁用，这里兜底拒绝
-        if (host.isReadOnly()) {
-            host.setNotice(Component.translatable(UI + "notice.readonly_rule"), THEME.palette().warning());
-            return;
-        }
         // F-I：先把当前草稿落盘（写盘本身有 2 秒节流），保证崩溃窗口内的最近编辑不丢
         flushPendingEdits();
         host.model().persistNow();
@@ -608,7 +615,7 @@ final class RuleEditorEditPage {
     }
 
     boolean restoreHistory(UiHistoryShortcut shortcut) {
-        if (!host.isEditMode() || host.isReadOnly()) return false;
+        if (!host.isEditMode()) return false;
         EditSession session = host.session();
         if (session == null) return false;
         long revision = session.revision();
@@ -617,7 +624,7 @@ final class RuleEditorEditPage {
     }
 
     private void undo() {
-        if (host.isReadOnly() || host.rejectWhenFrozen()) {
+        if (host.rejectWhenFrozen()) {
             return;
         }
         flushPendingEdits();
@@ -630,7 +637,7 @@ final class RuleEditorEditPage {
     }
 
     private void redo() {
-        if (host.isReadOnly() || host.rejectWhenFrozen()) {
+        if (host.rejectWhenFrozen()) {
             return;
         }
         flushPendingEdits();

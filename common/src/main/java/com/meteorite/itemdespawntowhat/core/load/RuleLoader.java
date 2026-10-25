@@ -106,19 +106,15 @@ public final class RuleLoader {
         }
     }
 
-    // 构造交给 RuleDecoder 的对象：保留原始 body，另行复制一份并补齐 id、剔除控制字段
+    // 构造交给 RuleDecoder 的对象：保留原始 body，另行复制一份并补齐 id。
+    // 历史控制字段（disabled / delete）不再剔除：解码层按普通未知字段告警，不影响加载与合并。
     private static JsonObject decodeBody(RawRuleEntry entry) {
         JsonObject body = entry.body().deepCopy();
-        body.remove(RuleFields.DISABLED);
-        body.remove(RuleFields.DELETE);
         ResourceLocation id = entry.id();
         if (id != null && !body.has(RuleFields.ID)) {
             body.addProperty(RuleFields.ID, id.toString());
         }
-        // 被覆盖层停用的基底规则：交给模型前显式置 enabled=false
-        if (entry.disabled()) {
-            body.addProperty(RuleFields.ENABLED, false);
-        }
+        // 启用状态不写回解码输入：运行时生效值由 RuleLoadingService 用「本服覆盖 ?? 默认启用」注入
         return body;
     }
 }

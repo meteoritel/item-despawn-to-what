@@ -3,7 +3,7 @@ package com.meteorite.itemdespawntowhat.core.api;
 import java.util.List;
 
 /**
- * 规则、效果、条件叶与覆盖层控制字段的 JSON 字段名常量。
+ * 规则、效果与条件叶的 JSON 字段名常量。
  * 模型层、加载层与命令输出必须统一引用本类，禁止在业务代码中散落字面量。
  */
 public final class RuleFields {
@@ -132,12 +132,6 @@ public final class RuleFields {
     public static final List<String> CONDITION_AXES = List.of(
             CONDITION_AXIS_TEMPERATURE, CONDITION_AXIS_HUMIDITY, CONDITION_AXIS_CONTINENTALNESS,
             CONDITION_AXIS_EROSION, CONDITION_AXIS_DEPTH, CONDITION_AXIS_WEIRDNESS);
-
-    // ===== 覆盖层控制字段 ===== //
-    /** 覆盖层声明 disabled=true 表示停用同 id 的基底规则（规则本身仍可被读取） */
-    public static final String DISABLED = "disabled";
-    /** 覆盖层声明 delete=true 表示删除同 id 的基底规则 */
-    public static final String DELETE = "delete";
 
     private RuleFields() {
         throw new UnsupportedOperationException("Utility class");

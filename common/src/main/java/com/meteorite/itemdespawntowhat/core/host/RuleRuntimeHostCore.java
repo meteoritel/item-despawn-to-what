@@ -25,6 +25,7 @@ import com.meteorite.itemdespawntowhat.core.service.RuleLoadContext;
 import com.meteorite.itemdespawntowhat.core.service.RuleLoadingService;
 import com.meteorite.itemdespawntowhat.core.service.RuleSaveReloadContext;
 import com.meteorite.itemdespawntowhat.core.state.DropStateStore;
+import com.meteorite.itemdespawntowhat.core.state.RuleEnableState;
 import com.meteorite.itemdespawntowhat.platform.Services;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -381,15 +382,19 @@ public final class RuleRuntimeHostCore {
                 .resolve(SERVER_CONFIG_FILE);
     }
 
-    // 组装一次加载所需的全部外部依赖：数据包资源管理器 + 覆盖层 + 注册表 + 包层判定
+    // 组装一次加载所需的全部外部依赖：数据包资源管理器 + 覆盖层 + 注册表 + 包层判定 + 本服启用状态
     private RuleLoadContext context(ResourceManager resourceManager,
                                     RegistryAccess registryAccess,
                                     Path overlay,
                                     BuiltinTypeRegistries registries, MinecraftServer server,
                                     RuleRuntimeLimits runtimeLimits) {
         return RuleLoadContext.full(resourceManager, overlay, RULE_NAMESPACE, registryAccess,
-                registries.effectTypes(), registries.conditionTypes(),
-                platform.packLayerResolver(resourceManager)).withServer(server).withRuntimeLimits(runtimeLimits);
+                        registries.effectTypes(), registries.conditionTypes(),
+                        platform.packLayerResolver(resourceManager))
+                .withServer(server)
+                .withRuntimeLimits(runtimeLimits)
+                // 本服启用状态随存档保存：加载时用「覆盖 ?? 默认启用」重建运行时规则，不写回规则内容
+                .withEnableState(RuleEnableState.get(server.overworld()));
     }
 
     // 当前生效的运行期上限：运行时就绪前没有配置可读，按「不施加限制」处理

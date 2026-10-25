@@ -10,8 +10,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 规则来源分层索引：把合并前的原始条目按 id 归并为 base（数据包层）/ overlay（覆盖层）/ control（停用·删除控制条目）三层视图。
- * 供快照装配器判定 origin（overlay|datapack|mixed）与 status（active|disabled|masked），并分别下发 base 与 overlay 视图。
+ * 规则来源分层索引：把合并前的原始条目按 id 归并为 base（数据包层）/ overlay（覆盖层）两层视图。
+ * 供快照装配器判定来源与内容可写性，并分别下发 base 与 overlay 视图。
+ * 启用状态不在这里计算：它属于本服状态层，由快照装配时按「本服覆盖 ?? 默认启用」另行下发。
  * 本类不读文件、不解码、不校验，只做归并；层内"后者胜"的顺序语义与 RuleMerger 保持一致。
  */
 public final class RuleSourceIndex {
@@ -23,23 +24,10 @@ public final class RuleSourceIndex {
         this.entries = entries;
     }
 
-    // 单条规则的分层视图：base 为数据包层胜出条目，overlay 为覆盖层胜出条目，control 为最后一次控制条目
+    // 单条规则的分层视图：base 为数据包层胜出条目，overlay 为覆盖层胜出条目
     public record Entry(ResourceLocation id,
                         @Nullable RawRuleEntry base,
-                        @Nullable RawRuleEntry overlay,
-                        @Nullable RawRuleEntry control,
-                        boolean controlWins,
-                        boolean controlFromOverlay) {
-
-        // 是否声明删除（且该控制条目仍是该 id 的最后一次声明）
-        public boolean deleted() {
-            return controlWins && control != null && control.delete();
-        }
-
-        // 是否声明停用（且该控制条目仍是该 id 的最后一次声明）
-        public boolean disabled() {
-            return controlWins && control != null && control.disabled();
-        }
+                        @Nullable RawRuleEntry overlay) {
 
         // 是否携带可下发的规则内容
         public boolean hasBody() {
@@ -58,7 +46,7 @@ public final class RuleSourceIndex {
     }
 
     /**
-     * 按合并器相同的层优先级与层内控制项顺序归并来源视图。
+     * 按合并器相同的层优先级归并来源视图。
      *
      * @param rawEntries 合并前原始条目；同类条目保持输入优先级，null 视为空集合
      * @return 按规则 id 排序的来源索引
@@ -73,29 +61,20 @@ public final class RuleSourceIndex {
                 continue;
             }
             Builder builder = builders.computeIfAbsent(id, ignored -> new Builder());
-            boolean fromOverlay = raw.origin().layer() == RuleSourceLayer.OVERLAY;
-            if (raw.isControl()) {
-                builder.control = raw;
-                builder.controlWins = true;
-                builder.controlFromOverlay = fromOverlay;
-            } else if (fromOverlay) {
+            if (raw.origin().layer() == RuleSourceLayer.OVERLAY) {
                 builder.overlay = raw;
-                builder.controlWins = false;
             } else {
                 builder.base = raw;
-                builder.controlWins = false;
             }
         }
 
         List<Entry> entries = new ArrayList<>(builders.size());
         for (Map.Entry<ResourceLocation, Builder> bucket : builders.entrySet()) {
             Builder builder = bucket.getValue();
-            if (builder.base == null && builder.overlay == null && builder.control == null) {
+            if (builder.base == null && builder.overlay == null) {
                 continue;
             }
-            Entry entry = new Entry(bucket.getKey(), builder.base, builder.overlay, builder.control,
-                    builder.controlWins, builder.controlFromOverlay);
-            entries.add(entry);
+            entries.add(new Entry(bucket.getKey(), builder.base, builder.overlay));
         }
         entries.sort(Comparator.comparing(entry -> entry.id().toString()));
         return new RuleSourceIndex(List.copyOf(entries));
@@ -110,8 +89,5 @@ public final class RuleSourceIndex {
     private static final class Builder {
         private @Nullable RawRuleEntry base;
         private @Nullable RawRuleEntry overlay;
-        private @Nullable RawRuleEntry control;
-        private boolean controlWins;
-        private boolean controlFromOverlay;
     }
 }

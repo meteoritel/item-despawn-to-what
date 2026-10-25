@@ -2,8 +2,10 @@ package com.meteorite.itemdespawntowhat.client.edit.draft;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.meteorite.itemdespawntowhat.client.edit.EditorChangeSet;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
+import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEdit;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -16,19 +18,22 @@ import org.jetbrains.annotations.Nullable;
  * <p>两个 JSON 子树是「构造时交出所有权」的不可变快照：构造方必须传入自己不会再修改的对象
  * （{@link RuleDraft#toJson()} 或 {@link JsonObject#deepCopy()} 的返回值，以及解析出的独立树）。
  * 因此本记录可以安全地跨线程交给写入者序列化，序列化时不再重复整树拷贝。
+ * <p>只读条目的内容属沙盒，不落盘；但它仍可能需要保留本服启停意图，
+ * 因此 {@link #enableIntent()} 独立于草稿内容存在：内容为空对象时表示这条记录只承载启停意图。
  */
 public record PersistedDraft(
         String targetId,
         boolean created,
         boolean deleted,
+        @Nullable RuleEdit.Action enableIntent,
         @Nullable JsonObject baseline,
         JsonObject draft,
         int baseVersion,
         int baseContextRevision,
         long savedAt) {
 
-    // 落盘格式版本：将来结构变更时可据此迁移或丢弃
-    public static final int FORMAT_VERSION = 1;
+    // 落盘格式版本：2 起记录本服启停意图；将来结构变更时可据此迁移或丢弃
+    public static final int FORMAT_VERSION = 2;
 
     // 建立草稿时的服务端基线（动态值快照）；缺省返回 null
     public @Nullable RuleValue baselineValue() {
@@ -47,6 +52,9 @@ public record PersistedDraft(
         json.addProperty("target_id", targetId);
         json.addProperty("created", created);
         json.addProperty("deleted", deleted);
+        if (enableIntent != null) {
+            json.addProperty("enable_intent", enableIntent.id());
+        }
         json.addProperty("base_version", baseVersion);
         json.addProperty("base_context_revision", baseContextRevision);
         json.addProperty("saved_at", savedAt);
@@ -73,6 +81,7 @@ public record PersistedDraft(
                 json.get("target_id").getAsString(),
                 readBoolean(json, "created"),
                 readBoolean(json, "deleted"),
+                readEnableIntent(json),
                 baseline,
                 draft.getAsJsonObject(),
                 readInt(json, "base_version"),
@@ -84,6 +93,16 @@ public record PersistedDraft(
     private static boolean readBoolean(JsonObject json, String name) {
         return json.has(name) && json.get(name).isJsonPrimitive() && json.get(name).getAsJsonPrimitive().isBoolean()
                 && json.get(name).getAsBoolean();
+    }
+
+    // 缺失或无法识别的启停意图按「无意图」处理，旧版本草稿因此可以直接沿用
+    private static @Nullable RuleEdit.Action readEnableIntent(JsonObject json) {
+        if (!json.has("enable_intent") || !json.get("enable_intent").isJsonPrimitive()
+                || !json.get("enable_intent").getAsJsonPrimitive().isString()) {
+            return null;
+        }
+        RuleEdit.Action action = RuleEdit.Action.fromId(json.get("enable_intent").getAsString());
+        return EditorChangeSet.isStateAction(action) ? action : null;
     }
 
     private static int readInt(JsonObject json, String name) {

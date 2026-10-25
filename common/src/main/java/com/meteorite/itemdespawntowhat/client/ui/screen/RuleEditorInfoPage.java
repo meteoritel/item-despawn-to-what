@@ -10,7 +10,10 @@ import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.FormView;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEdit;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSourceView;
 import java.util.List;
 import net.minecraft.client.gui.GuiGraphics;
@@ -19,9 +22,12 @@ import net.minecraft.util.FormattedCharSequence;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 基本信息页：只读规则 ID、分类及其来源、来源摘要，以及显示名、启用、优先级与备注表单。
+ * 基本信息页：只读规则 ID、分类及其来源、来源摘要，以及显示名、默认启用、优先级与备注表单。
  * 分类与来源摘要都只读展示；来源摘要只读取已取回的来源视图，请求失败时改为提示来源对照不可用，
  * 不影响本页表单编辑。
+ *
+ * <p>「默认启用」是内容字段，改它属于沙盒内的内容改动；右侧另挂本服两态开关与「恢复默认」，
+ * 它们改的是本服启用状态，两者互不污染：开关与按钮不进入表单字段，因此不会给内容字段加改动标注。</p>
  */
 final class RuleEditorInfoPage {
 
@@ -44,6 +50,8 @@ final class RuleEditorInfoPage {
     // 清理本页持有的控件引用（重建/切页时由容器调用）
     void reset() {
         infoForm = null;
+        serverToggle = null;
+        resetButton = null;
         infoIdRect = null;
         infoCategoryRect = null;
         infoCategoryLines = null;
@@ -51,6 +59,12 @@ final class RuleEditorInfoPage {
     }
 
     @Nullable FormView infoForm;
+
+    // 本服两态开关：标签直接显示生效状态，点击切换
+    @Nullable UiButton serverToggle;
+
+    // 恢复默认：仅当条目带本服启用覆盖时可点
+    @Nullable UiButton resetButton;
 
     @Nullable UiRect infoIdRect;
 
@@ -79,8 +93,74 @@ final class RuleEditorInfoPage {
         // 显示名与备注的提示已作为占位符写在输入框内，悬停不再重复弹出
         infoForm.suppressRowHintTooltip(RuleFields.DISPLAY_NAME);
         infoForm.suppressRowHintTooltip(RuleFields.NOTES);
+        // 默认启用行右侧并排放本服开关与「恢复默认」：它们改的是本服状态，不属于表单内容字段
+        serverToggle = new UiButton(THEME, pages.font, Component.empty(), UiButtonVariant.SECONDARY,
+                this::toggleServerEnabled);
+        resetButton = new UiButton(THEME, pages.font, Component.translatable(UI + "button.reset_default"),
+                UiButtonVariant.SECONDARY, this::resetServerEnabled);
+        infoForm.addRowAction(RuleFields.ENABLED, serverToggle);
+        infoForm.addRowAction(RuleFields.ENABLED, resetButton);
         pages.liveForms.add(infoForm);
         pages.liveWidgets.add(infoForm);
+    }
+
+    /**
+     * 同步本服开关与「恢复默认」按钮的文案与可用状态。
+     *
+     * <p>页面统一使能会把行尾动作一并置为可用，所以页面集在 applyEnabled 末尾再调一次本方法，
+     * 让「恢复默认」只在确有本服覆盖时可点。</p>
+     *
+     * @param editable 当前页面是否可写（会话冻结时为 false）
+     */
+    void applyServerState(boolean editable) {
+        if (serverToggle == null || resetButton == null) {
+            return;
+        }
+        EditSession session = pages.host.session();
+        if (session == null) {
+            serverToggle.setEnabled(false);
+            resetButton.setEnabled(false);
+            return;
+        }
+        String id = session.targetId();
+        RuleEditorModel model = pages.host.model();
+        boolean effective = model.effectiveEnabled(id);
+        serverToggle.setLabel(Component.translatable(UI + (effective ? "button.server_enabled" : "button.server_disabled")));
+        serverToggle.setEnabled(editable);
+        resetButton.setEnabled(editable && model.hasEnabledOverride(id));
+    }
+
+    // 本服两态开关：切换后重建页面（新建规则改的是内容字段），提示按实际动作给出
+    private void toggleServerEnabled() {
+        EditSession session = pages.host.session();
+        if (session == null) {
+            return;
+        }
+        RuleEdit.Action action = pages.host.model().toggleEnabled(session.targetId());
+        if (action == null) {
+            return;
+        }
+        pages.host.onDraftChanged();
+        pages.requestRebuild();
+        // 新建规则切的是内容里的默认启用（内容动作），不套用本服启停的反馈文案
+        if (pages.host.model().isCreated(session.targetId())) {
+            return;
+        }
+        String notice = action == RuleEdit.Action.ENABLE ? "notice.enabled"
+                : action == RuleEdit.Action.DISABLE ? "notice.disabled" : "notice.reset_default";
+        pages.host.notice(Component.translatable(UI + notice), THEME.palette().success());
+    }
+
+    // 恢复默认：清除本服启用覆盖
+    private void resetServerEnabled() {
+        EditSession session = pages.host.session();
+        if (session == null) {
+            return;
+        }
+        pages.host.model().resetEnabled(session.targetId());
+        pages.host.onDraftChanged();
+        pages.requestRebuild();
+        pages.host.notice(Component.translatable(UI + "notice.reset_default"), THEME.palette().success());
     }
 
     int layoutInfo(UiRect area) {

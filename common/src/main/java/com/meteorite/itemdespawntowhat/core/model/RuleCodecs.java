@@ -45,7 +45,10 @@ public final class RuleCodecs {
     /** 当前规则契约结构版本；声明其它值一律拒绝 */
     public static final int DEFAULT_SCHEMA_VERSION = 1;
 
-    /** 规则文件允许出现的顶层字段（含覆盖层控制字段） */
+    /** 规则内容未声明 enabled 时的默认启用值：默认启用是本服状态缺席时的继承值 */
+    public static final boolean DEFAULT_ENABLED = true;
+
+    /** 规则文件允许出现的顶层字段；启用状态不在此列，它由本服状态层单独保存 */
     public static final Set<String> KNOWN_RULE_FIELDS = Set.of(
             RuleFields.ID,
             RuleFields.ENABLED,
@@ -63,9 +66,7 @@ public final class RuleCodecs {
             RuleFields.COMBINATION,
             RuleFields.OUTCOMES,
             RuleFields.SCHEMA_VERSION,
-            RuleFields.CATEGORY,
-            RuleFields.DISABLED,
-            RuleFields.DELETE
+            RuleFields.CATEGORY
     );
 
     // 候选结果对象允许出现的字段（未知字段与效果类型一致，采用错误级严格检查）
@@ -144,7 +145,7 @@ public final class RuleCodecs {
         Codec<OutcomeCandidate> outcomeCodec = OutcomeCandidate.codec(effectCodec);
         return RecordCodecBuilder.create(instance -> instance.group(
                 ResourceLocation.CODEC.fieldOf(RuleFields.ID).forGetter(Rule::id),
-                Codec.BOOL.optionalFieldOf(RuleFields.ENABLED, Boolean.TRUE).forGetter(Rule::enabled),
+                Codec.BOOL.optionalFieldOf(RuleFields.ENABLED, DEFAULT_ENABLED).forGetter(Rule::enabled),
                 Codec.INT.optionalFieldOf(RuleFields.PRIORITY, 0).forGetter(Rule::priority),
                 Codec.STRING.optionalFieldOf(RuleFields.DISPLAY_NAME)
                         .forGetter(rule -> Optional.ofNullable(rule.displayName())),

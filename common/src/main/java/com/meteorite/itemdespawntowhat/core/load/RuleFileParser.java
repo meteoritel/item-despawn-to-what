@@ -17,7 +17,9 @@ import java.util.Set;
  * 规则文件解析：把一份 JSON 文本转换为原始条目列表。
  * 支持"单条规则对象"与"规则数组"两种文件形状；id 优先取字段，缺省由文件路径推导为 &lt;ns&gt;:&lt;相对路径去扩展名&gt;。
  * 统一严格策略：整个文件解析失败（非法 JSON / 嵌套深度超限 / 顶层类型错误）→ 整文件拒载；
- * 单条语义非法（id 非法、控制字段非法、同文件 id 重复等）→ 仅该条拒载，其余照常。
+ * 单条语义非法（id 非法、同文件 id 重复等）→ 仅该条拒载，其余照常。
+ * 解析层不再识别任何覆盖控制字段：disabled / delete 等写法按普通未知字段保留在 body 里，
+ * 交由解码层按未知字段告警，加载行为与普通规则一致。
  */
 public final class RuleFileParser {
 
@@ -96,26 +98,7 @@ public final class RuleFileParser {
         if (id == null) {
             return null;
         }
-
-        Boolean disabled = readFlag(body, RuleFields.DISABLED, origin, fieldPath, issues);
-        Boolean delete = readFlag(body, RuleFields.DELETE, origin, fieldPath, issues);
-        if (disabled == null || delete == null) {
-            return null;
-        }
-        if (disabled && delete) {
-            issues.error("disabled 与 delete 不能同时为 true", origin.display(), fieldPath);
-            return null;
-        }
-        if ((disabled || delete) && origin.layer() != RuleSourceLayer.OVERLAY) {
-            issues.error("disabled / delete 是覆盖层控制字段，只能出现在 " + RuleSourceLayer.OVERLAY.displayName(),
-                    origin.display(), fieldPath);
-            return null;
-        }
-        if ((disabled || delete) && !isControlOnly(body)) {
-            issues.warn("控制条目只识别 " + RuleFields.ID + " / " + RuleFields.DISABLED + " / " + RuleFields.DELETE
-                    + "，其余字段被忽略", origin.display(), fieldPath);
-        }
-        return new RawRuleEntry(id, body, origin, disabled, delete, fieldPath);
+        return new RawRuleEntry(id, body, origin, fieldPath);
     }
 
     // 解析 id：优先取字段，缺省时（仅单条文件）由文件路径推导
@@ -152,30 +135,4 @@ public final class RuleFileParser {
         return derivedId;
     }
 
-    // 读取布尔控制字段；缺省为 false，类型非法则报错拒载（返回 null）
-    private static @Nullable Boolean readFlag(JsonObject body,
-                                              String field,
-                                              RuleOrigin origin,
-                                              String fieldPath,
-                                              IssueCollector issues) {
-        if (!body.has(field)) {
-            return Boolean.FALSE;
-        }
-        JsonElement element = body.get(field);
-        if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isBoolean()) {
-            issues.error(field + " 必须是布尔值", origin.display(), RulePaths.joinFieldPath(fieldPath, field));
-            return null;
-        }
-        return element.getAsBoolean();
-    }
-
-    // 判断对象是否只含控制字段与 id
-    private static boolean isControlOnly(JsonObject body) {
-        for (String key : body.keySet()) {
-            if (!RuleFields.ID.equals(key) && !RuleFields.DISABLED.equals(key) && !RuleFields.DELETE.equals(key)) {
-                return false;
-            }
-        }
-        return true;
-    }
 }

@@ -14,11 +14,9 @@ import java.util.TreeMap;
  * 覆盖合并：按 id 逐条合并三层来源的原始条目。
  * 语义：
  * 1. 不同 id 叠加；
- * 2. 同 id 后者胜（跨层顺序由层优先级决定：内置 → 世界数据包 → 覆盖层）；
- * 3. 覆盖层的 disabled=true 停用同 id 基底规则（保留基底内容，标记为已停用，最终来源记为覆盖层）；
- * 4. 覆盖层的 delete=true 删除同 id 基底规则（幂等，基底不存在时不做任何事）。
- * 同一来源层内一律先应用普通规则条目、再应用控制条目（disabled/delete），
- * 因此停用/删除语义不依赖文件名的字典序；合并结果保留每条规则最终生效的来源标识。
+ * 2. 同 id 后者胜（跨层顺序由层优先级决定：内置 → 世界数据包 → 覆盖层）。
+ * 合并结果保留每条规则最终生效的来源标识；启用状态不参与合并，
+ * 它属于本服状态层，在解码后按「本服覆盖 ?? 默认启用」注入运行时对象。
  */
 public final class RuleMerger {
 
@@ -26,7 +24,7 @@ public final class RuleMerger {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    // 合并原始条目：跨层按层优先级升序处理，层内先普通条目后控制条目，返回结果保持 id 首次出现的顺序
+    // 合并原始条目：跨层按层优先级升序处理，返回结果保持 id 首次出现的顺序
     public static List<RawRuleEntry> merge(List<RawRuleEntry> entries, IssueCollector issues) {
         Map<ResourceLocation, RawRuleEntry> merged = new LinkedHashMap<>();
         for (RawRuleEntry entry : orderedEntries(entries)) {
@@ -35,7 +33,7 @@ public final class RuleMerger {
         return List.copyOf(merged.values());
     }
 
-    // 按来源层分组（层优先级升序），层内稳定重排为普通条目在前、控制条目在后
+    // 按来源层分组（层优先级升序）：层内顺序即文件读取顺序，后读到的同 id 条目胜出
     static List<RawRuleEntry> orderedEntries(List<RawRuleEntry> entries) {
         Map<RuleSourceLayer, List<RawRuleEntry>> buckets = new TreeMap<>(Comparator.comparingInt(RuleSourceLayer::priority));
         for (RawRuleEntry entry : entries) {
@@ -43,37 +41,16 @@ public final class RuleMerger {
         }
         List<RawRuleEntry> result = new ArrayList<>(entries.size());
         for (List<RawRuleEntry> bucket : buckets.values()) {
-            List<RawRuleEntry> normals = new ArrayList<>(bucket.size());
-            List<RawRuleEntry> controls = new ArrayList<>();
-            for (RawRuleEntry entry : bucket) {
-                (entry.isControl() ? controls : normals).add(entry);
-            }
-            normals.addAll(controls);
-            result.addAll(normals);
+            result.addAll(bucket);
         }
         return result;
     }
 
-    // 应用单条条目：普通条目覆盖，delete 移除，disabled 停用同 id 基底规则
+    // 应用单条条目：同 id 后到者覆盖先到者，缺 id 的条目拒载
     private static void apply(RawRuleEntry entry, Map<ResourceLocation, RawRuleEntry> merged, IssueCollector issues) {
         ResourceLocation id = entry.id();
         if (id == null) {
             issues.error("规则缺少 id，已拒载", entry.origin().display(), entry.fieldPath());
-            return;
-        }
-        if (entry.delete()) {
-            merged.remove(id);
-            return;
-        }
-        if (entry.disabled()) {
-            RawRuleEntry base = merged.get(id);
-            if (base == null) {
-                issues.warn("disabled 声明找不到同 id 的基底规则，已忽略",
-                        entry.origin().display(), entry.fieldPath());
-                return;
-            }
-            // 保留基底内容，但最终状态与来源以控制条目为准
-            merged.put(id, new RawRuleEntry(id, base.body(), entry.origin(), true, false, entry.fieldPath()));
             return;
         }
         merged.put(id, entry);

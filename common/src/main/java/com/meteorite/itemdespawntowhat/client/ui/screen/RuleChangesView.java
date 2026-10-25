@@ -9,6 +9,7 @@ import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiListView;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
+import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEdit;
 import java.util.function.Function;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -37,10 +38,21 @@ final class RuleChangesView implements UiWidget, UiFocusTarget {
         // 删除标志独立于规则体，因此仍展示待删除草稿的名称、输入和产出。
         list.setItems(model.dirtyRuleIds().stream().map(id -> {
             EditSession session = model.session(id);
-            String kind = model.isCreated(id) ? "create"
-                    : session != null && session.draft().isDeleted() ? "remove" : "modify";
-            return new Change(labels.apply(id), Component.translatable(UI + "changes." + kind),
-                    new RuleRecipeView(model.displayBody(id)));
+            // 一条规则可以同时带内容动作与启停动作，清单里并排写出两段，避免只看到一半改动
+            boolean contentDirty = model.isCreated(id)
+                    || session != null && !model.isReadOnly(id) && session.isDirty();
+            Component kind = Component.empty();
+            if (contentDirty) {
+                String contentKind = model.isCreated(id) ? "create"
+                        : session != null && session.draft().isDeleted() ? "remove" : "modify";
+                kind = Component.translatable(UI + "changes." + contentKind);
+            }
+            RuleEdit.Action intent = model.enableIntent(id);
+            if (intent != null) {
+                Component stateKind = Component.translatable(UI + "changes." + intent.id());
+                kind = kind.getString().isEmpty() ? stateKind : kind.copy().append(" + ").append(stateKind);
+            }
+            return new Change(labels.apply(id), kind, new RuleRecipeView(model.displayBody(id)));
         }).toList());
         list.setEmptyMessage(Component.translatable(UI + "notice.no_changes"));
     }

@@ -165,13 +165,16 @@ final class RuleSnapshotTask implements ServerTask {
                 List<LoadedRule<Rule>> readyRules = List.copyOf(decoded);
                 Map<ResourceLocation, JsonObject> readyJson = Map.copyOf(encoded);
                 var effectTypes = reloadContext.loadContext().effectTypes();
+                // 启用三值按本服状态层计算；这里只读快照，不改运行时对象
+                var enableResolver = reloadContext.loadContext().enableResolver();
                 int capturedVersion = version;
                 preparing = store.submit("snapshot-assemble", () -> {
                     // 后台装配与切分的耗时单独计量，与解码步骤分开对比
                     long assembleStarted = DevelopmentDiagnostics.start();
                     try {
                         String json = RuleSnapshotAssembler.assembleEncoded(capturedSource.index(), readyRules, effectTypes,
-                                capturedVersion, capturedVersion, readyJson, capturedSource.issues().issues()).serialize();
+                                capturedVersion, capturedVersion, readyJson, capturedSource.issues().issues(),
+                                enableResolver).serialize();
                         if (!java.util.Arrays.equals(capturedSource.revision(), sessions.readDiskRevision(() -> !cancelled))) {
                             throw new IllegalStateException("快照准备期间覆盖层修订已变化");
                         }

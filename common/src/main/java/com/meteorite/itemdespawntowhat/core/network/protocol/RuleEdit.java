@@ -5,17 +5,25 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 一条规则变更：upsert 携带完整规则 JSON（与文件中的规则对象同形），delete 只带 id。
+ * 一条规则变更：upsert 携带完整规则 JSON（与文件中的规则对象同形），其余动作只带 id。
+ * 内容动作（upsert/delete）改覆盖层内容并推进内容修订号；启用状态动作（enable/disable/reset）
+ * 只改本服启用状态层，不改规则文件、不推进内容修订号，因此不参与草稿冲突。
  * 传输形状与覆盖层文件中的规则对象保持一致，便于服务端直接落盘。
  */
 public record RuleEdit(ResourceLocation id, Action action, @Nullable JsonObject rule) {
 
     // 变更类型
     public enum Action {
-        // 新增或整体覆盖同 id 规则
+        // 新增或整体覆盖同 id 规则（内容动作）
         UPSERT,
-        // 删除同 id 规则
-        DELETE;
+        // 删除覆盖层该 id 的普通条目（内容动作）
+        DELETE,
+        // 本服启用（状态动作）
+        ENABLE,
+        // 本服停用（状态动作）
+        DISABLE,
+        // 删除本服覆盖记录、恢复默认启用（状态动作）
+        RESET;
 
         // JSON 取值（小写下划线）
         public String id() {
@@ -46,6 +54,20 @@ public record RuleEdit(ResourceLocation id, Action action, @Nullable JsonObject 
         if (action == Action.UPSERT && rule == null) {
             throw new IllegalArgumentException("upsert 变更必须携带规则内容: " + id);
         }
+        if (action != Action.UPSERT && rule != null) {
+            // 非内容动作只认 id：多余规则内容会让「改状态」与「改内容」边界失效
+            throw new IllegalArgumentException(action.id() + " 变更不能携带规则内容: " + id);
+        }
+    }
+
+    // 是否为改覆盖层内容的动作（决定是否参与内容修订号与草稿冲突）
+    public boolean contentEdit() {
+        return action == Action.UPSERT || action == Action.DELETE;
+    }
+
+    // 是否为改本服启用状态的动作
+    public boolean enableEdit() {
+        return action == Action.ENABLE || action == Action.DISABLE || action == Action.RESET;
     }
 
     // 序列化为协议 JSON

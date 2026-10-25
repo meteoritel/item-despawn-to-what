@@ -5,6 +5,7 @@ import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
 import com.meteorite.itemdespawntowhat.core.load.PackLayerResolver;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
+import com.meteorite.itemdespawntowhat.core.state.RuleEnableResolver;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.server.packs.resources.ResourceManager;
 import org.jetbrains.annotations.Nullable;
@@ -26,7 +27,8 @@ public record RuleLoadContext(
         TypeRegistry<ConditionType<?>> conditionTypes,
         PackLayerResolver layerResolver,
         @Nullable net.minecraft.server.MinecraftServer server,
-        RuleRuntimeLimits runtimeLimits
+        RuleRuntimeLimits runtimeLimits,
+        @Nullable RuleEnableResolver enableResolver
 ) {
 
     public RuleLoadContext {
@@ -41,7 +43,7 @@ public record RuleLoadContext(
     // 平台运行时附加当前服务端，动态引用以实际已加载内容为准。
     public RuleLoadContext withServer(net.minecraft.server.MinecraftServer currentServer) {
         return new RuleLoadContext(resourceManager, overlayRoot, overlayNamespace, registryAccess,
-                effectTypes, conditionTypes, layerResolver, currentServer, runtimeLimits);
+                effectTypes, conditionTypes, layerResolver, currentServer, runtimeLimits, enableResolver);
     }
 
     /**
@@ -52,7 +54,18 @@ public record RuleLoadContext(
      */
     public RuleLoadContext withRuntimeLimits(RuleRuntimeLimits limits) {
         return new RuleLoadContext(resourceManager, overlayRoot, overlayNamespace, registryAccess,
-                effectTypes, conditionTypes, layerResolver, server, limits);
+                effectTypes, conditionTypes, layerResolver, server, limits, enableResolver);
+    }
+
+    /**
+     * 附加本服启用状态：加载时用「本服覆盖 ?? 默认启用」重建运行时规则对象，不改规则内容的 JSON 副本。
+     *
+     * @param resolver 本服启用状态解析器；为 null 表示不注入，运行时直接使用默认启用
+     * @return 仅替换启用状态解析器的新上下文
+     */
+    public RuleLoadContext withEnableState(@Nullable RuleEnableResolver resolver) {
+        return new RuleLoadContext(resourceManager, overlayRoot, overlayNamespace, registryAccess,
+                effectTypes, conditionTypes, layerResolver, server, runtimeLimits, resolver);
     }
 
     // 同时加载内置/世界数据包与 config 覆盖层
@@ -64,6 +77,6 @@ public record RuleLoadContext(
                                        TypeRegistry<ConditionType<?>> conditionTypes,
                                        PackLayerResolver layerResolver) {
         return new RuleLoadContext(resourceManager, overlayRoot, overlayNamespace,
-                registryAccess, effectTypes, conditionTypes, layerResolver, null, RuleRuntimeLimits.UNLIMITED);
+                registryAccess, effectTypes, conditionTypes, layerResolver, null, RuleRuntimeLimits.UNLIMITED, null);
     }
 }

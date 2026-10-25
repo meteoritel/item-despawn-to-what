@@ -190,6 +190,18 @@ public final class FormView implements UiWidget {
         }
     }
 
+    /** 追加一个行尾操作按钮：同一行可有多个动作，例如基本页的「本服开关」与「恢复默认」 */
+    public void addRowAction(String path, UiButton button) {
+        for (FormRow row : rows) {
+            if (row.path.equals(path)) {
+                row.actions.add(button);
+                row.refreshButtons();
+                invalidateMeasure();
+                break;
+            }
+        }
+    }
+
     /** 覆盖某字段行的控件高度（{@code <= 0} 恢复默认）；例如基本页加高的优先级控件 */
     public void setRowHeight(String path, int height) {
         for (FormRow row : rows) {

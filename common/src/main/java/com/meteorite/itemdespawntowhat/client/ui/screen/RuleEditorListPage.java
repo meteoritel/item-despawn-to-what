@@ -421,27 +421,28 @@ final class RuleEditorListPage {
         return ids.size() > shown ? joined + "…" : joined;
     }
 
-    // 列表条目操作随选中状态同步；只读数据包条目只保留查看与复制，启停和删除禁用。
+    // 列表条目操作随选中状态同步：启停对任何条目可用（只读的是内容，不是启停），
+    // 删除仍只对内容可写的条目开放，编辑恒为「编辑」并打开沙盒。
     // 切换按钮只显示下一步动作，布局按当前文案计算。
     void updateButtons() {
         String id = selectedRuleId();
         boolean active = host.workspace().active();
         boolean selected = id != null;
-        boolean readOnly = selected && host.model().isReadOnly(id);
+        boolean contentReadOnly = selected && host.model().isReadOnly(id);
         for (UiButton button : selectedButtons) {
             button.setEnabled(active && selected);
         }
-        // 只读条目没有写入面：启停与删除在列表层就不可用，避免点击后才在应用阶段失败
         if (toggleButton != null) {
-            toggleButton.setEnabled(active && selected && !readOnly);
-            boolean enabled = selected && host.display().snapshot(id).enabled();
+            toggleButton.setEnabled(active && selected);
+            // 按生效状态决定下一步动作：本服覆盖与未应用意图都算在内
+            boolean enabled = selected && host.model().effectiveEnabled(id);
             toggleButton.setLabel(Component.translatable(UI + (enabled ? "button.disable" : "button.enable")));
         }
         if (deleteButton != null) {
-            deleteButton.setEnabled(active && selected && !readOnly);
+            deleteButton.setEnabled(active && selected && !contentReadOnly);
         }
         if (editButton != null) {
-            editButton.setLabel(Component.translatable(UI + (readOnly ? "button.view" : "button.edit")));
+            editButton.setLabel(Component.translatable(UI + "button.edit"));
         }
     }
 
@@ -449,8 +450,11 @@ final class RuleEditorListPage {
         if (applyButton == null) {
             return;
         }
-        applyButton.setEnabled(host.workspace().active() && host.model().hasDirty());
-        applyButton.setLabel(Component.translatable(UI + "button.apply_changes", host.model().dirtyRuleIds().size()));
+        boolean dirty = host.model().hasDirty();
+        applyButton.setEnabled(host.workspace().active() && dirty);
+        applyButton.setLabel(dirty
+                ? Component.translatable(UI + "button.apply_changes", host.model().dirtyRuleIds().size())
+                : Component.translatable(UI + "button.no_changes"));
     }
 
     // ---- 渲染 ----

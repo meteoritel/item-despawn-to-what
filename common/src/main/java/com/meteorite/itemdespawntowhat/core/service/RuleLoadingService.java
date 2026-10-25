@@ -14,6 +14,7 @@ import com.meteorite.itemdespawntowhat.core.load.RuleSourceLayer;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
 import com.meteorite.itemdespawntowhat.core.model.RuleValidation;
+import com.meteorite.itemdespawntowhat.core.state.RuleEnableResolver;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -39,7 +40,7 @@ public final class RuleLoadingService {
         RuleLoadRequest<Rule> request = new RuleLoadRequest<>(
                 context.resourceManager(), context.overlayRoot(), context.overlayNamespace(),
                 decoder, context.layerResolver());
-        return RuleLoader.load(request);
+        return applyEnableState(context, RuleLoader.load(request));
     }
 
     // 加载 + 语义校验：语义非法的规则被剔除，问题保留在结果的问题收集器中
@@ -63,7 +64,40 @@ public final class RuleLoadingService {
         for (RawRuleEntry entry : com.meteorite.itemdespawntowhat.core.load.RuleMerger.merge(raw, issues)) {
             RuleLoader.decodeEntry(entry, decoder, issues).ifPresent(rule -> decoded.add(new LoadedRule<>(entry.id(), entry.origin(), rule)));
         }
-        return validateLoaded(context, new RuleLoadResult<>(List.copyOf(decoded), issues));
+        return validateLoaded(context, applyEnableState(context,
+                new RuleLoadResult<>(List.copyOf(decoded), issues)));
+    }
+
+    /**
+     * 运行时启用注入：生效启用 = 本服覆盖 ?? 默认启用。
+     * 只重建运行时规则对象，不改解码用的 JSON 副本，因此快照、导出与复制看到的仍是规则文件内容。
+     * 保存后的轻量重建复用同一口径，避免「刚保存的规则按 JSON 默认值生效」这类分叉。
+     *
+     * @param context 当前加载上下文（提供本服启用状态）
+     * @param rules   解码后的规则；其 enabled 视为规则内容声明的默认值
+     * @return 注入生效启用值后的规则列表
+     */
+    public static List<LoadedRule<Rule>> applyEnableState(RuleLoadContext context, List<LoadedRule<Rule>> rules) {
+        RuleEnableResolver resolver = context.enableResolver();
+        if (resolver == null || rules.isEmpty()) {
+            return rules;
+        }
+        List<LoadedRule<Rule>> result = new ArrayList<>(rules.size());
+        for (LoadedRule<Rule> entry : rules) {
+            Rule rule = entry.value();
+            Boolean override = resolver.overrideFor(rule.id());
+            if (override == null || override == rule.enabled()) {
+                result.add(entry);
+            } else {
+                result.add(new LoadedRule<>(entry.id(), entry.origin(), rule.withEnabled(override)));
+            }
+        }
+        return List.copyOf(result);
+    }
+
+    // 加载结果级注入：保留原问题收集器
+    private static RuleLoadResult<Rule> applyEnableState(RuleLoadContext context, RuleLoadResult<Rule> loaded) {
+        return new RuleLoadResult<>(applyEnableState(context, loaded.rules()), loaded.issues());
     }
 
     private static RuleLoadResult<Rule> validateLoaded(RuleLoadContext context, RuleLoadResult<Rule> loaded) {
@@ -81,7 +115,7 @@ public final class RuleLoadingService {
     }
 
     // 重建来源分层索引：数据包层原始条目在前、覆盖层原始条目在后（层优先级升序）
-    // 保留被覆盖/停用/屏蔽的原始基底，供快照装配（RuleSnapshotAssembler）与编辑判定使用
+    // 保留数据包与覆盖层的原始条目，供快照装配（RuleSnapshotAssembler）与编辑判定使用
     public static RuleSourceIndex sourceIndex(RuleLoadContext context, IssueCollector issues) {
         List<RawRuleEntry> raw = new ArrayList<>();
         if (context.resourceManager() != null && context.layerResolver() != null) {
