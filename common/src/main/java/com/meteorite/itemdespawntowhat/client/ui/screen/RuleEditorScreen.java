@@ -540,7 +540,7 @@ public final class RuleEditorScreen extends Screen {
             // 页头只显示当前实际生效名称；规则 ID 由基本页第一行的只读行单独承担
             title = Component.translatable(UI + "header.editing", labelText(editingId)).getString();
         }
-        // 只读状态只在会话可用时展示；冻结文案优先，避免黄色标签配「冻结中」文字
+        // 只读状态只在会话可用时展示；冻结文案优先，且与只读彻底分开（冻结说的是会话不可写，只读说的是内容不保存）
         boolean readOnlyState = mode == Mode.EDIT && workspace.active() && isEditReadOnly();
         String state = Component.translatable(!workspace.active() ? UI + "state.freezing"
                         : readOnlyState ? UI + "state.readonly"
@@ -549,7 +549,8 @@ public final class RuleEditorScreen extends Screen {
                 .getString();
         int padding = mode == Mode.EDIT ? EDIT_PAD : PAD;
         int textY = mode == Mode.EDIT ? (EDIT_HEADER_H - font.lineHeight) / 2 : 3;
-        int stateWidth = font.width(state) + 12;
+        // 只读标签带一句完整说明，需要更宽的底色才不显得局促
+        int stateWidth = font.width(state) + (readOnlyState ? 20 : 12);
         String fullTitle = title;
         title = TextScroll.trimToWidth(font, title, Math.max(0, this.width - padding * 2 - stateWidth - PAD));
         if (mode == Mode.EDIT && !title.equals(fullTitle)) {
@@ -614,7 +615,7 @@ public final class RuleEditorScreen extends Screen {
         return editingId == null ? null : model.session(editingId);
     }
 
-    // 当前编辑目标是否来自只读数据包：编辑页据此进入整体只读模式
+    // 当前编辑目标的内容是否只读：编辑页据此显示沙盒标识；控件仍可写
     private boolean isEditReadOnly() {
         return mode == Mode.EDIT && editingId != null && model.isReadOnly(editingId);
     }
@@ -627,7 +628,7 @@ public final class RuleEditorScreen extends Screen {
             return;
         }
         RuleSnapshotEntry entry = model.entry(id);
-        // 只读数据包条目仍进入编辑页（页面整体只读）；只有损坏或没有可打开内容的条目才走详情弹窗
+        // 只读数据包条目也进入编辑页（内容走沙盒会话）；只有损坏或没有可打开内容的条目才走详情弹窗
         if (entry != null && (RuleSnapshotEntry.STATUS_INVALID.equals(entry.status())
                 || entry.issues().stream().anyMatch(issue -> RuleIssue.SEVERITY_ERROR.equals(issue.severity())))) {
             showRuleDetails(entry);
@@ -642,6 +643,8 @@ public final class RuleEditorScreen extends Screen {
             return;
         }
         editPage.flushPendingEdits();
+        // 切换编辑目标即丢弃上一个只读条目的沙盒内容；当前目标的会话保留（启停意图不受影响）
+        model.dropSandboxSessions(id);
         // 编辑页打开规则时按需取回来源视图；失败或超时只影响来源对照
         model.requestSourceView(id);
         editingId = id;
@@ -676,6 +679,8 @@ public final class RuleEditorScreen extends Screen {
             return;
         }
         editPage.unmount();
+        // 离开编辑页：只读条目的沙盒内容全部丢弃，未应用的启停意图保留
+        model.dropSandboxSessions(null);
         mode = Mode.LIST;
         editingId = null;
         // 页面切换：提示只对切换前的页面成立
@@ -1036,8 +1041,8 @@ public final class RuleEditorScreen extends Screen {
 
     // 立即同步页面的使能状态
     private void applyEditableStateNow(boolean editable) {
-        // 只读数据包条目即使工作区处于 ACTIVE 也只允许浏览：页面控件、保存入口与撤销都关闭
-        editPage.setPagesEnabled(editable && !isEditReadOnly());
+        // 只读条目的页面控件同样可写：只读只约束内容落盘，不约束控件
+        editPage.setPagesEnabled(editable);
         // 列表页动作按钮同属可编辑面：冻结时一并禁用，避免「点了没反应」
         // 保存期间的返回与关闭由保存模态统一拦截，其它冻结状态仍允许退出。
         listPage.setButtonsEnabled(editable);
@@ -1136,6 +1141,8 @@ public final class RuleEditorScreen extends Screen {
         released = true;
         editPage.applyAllForms();
         editPage.close();
+        // 关屏前丢弃沙盒内容：它们不进变更集，也没有必要留在内存里
+        model.dropSandboxSessions(null);
         model.persistNow();
     }
 
