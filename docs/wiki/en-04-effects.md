@@ -80,7 +80,7 @@ What you see in game: one piece of rotten flesh lands near the trigger position 
 { "type": "idtw:spawn_entity", "variant": "mob", "entity": "minecraft:chicken", "count": 1, "age": -24000 }
 ```
 
-What you see in game: a baby chicken spawns near the trigger position. With `safe_spawn` on, the mod searches the 5x5x5 block box centered on the trigger position, 125 blocks in all, from near to far for a spot the entity can stand on where neither its feet nor its head is a hazardous block. When it finds none, the conversion fails and the source items come back through the return path during delivery. This switch is off by default.
+What you see in game: a baby chicken spawns near the trigger position. With `safe_spawn` on, the mod searches the 5x5x5 block box centered on the trigger position, 125 blocks in all, from near to far for a spot: a completely safe spot is taken at once, and when every remaining candidate is hazardous it takes the least hazardous spot. Only when none of the remaining candidates can host the entity does the conversion fail, and the source items come back through the return path during delivery. This switch is off by default; the exact rules are on [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
 
 ### Variant entity: Other entities
 
@@ -93,9 +93,9 @@ What you see in game: a baby chicken spawns near the trigger position. With `saf
 { "type": "idtw:spawn_entity", "variant": "entity", "entity": "minecraft:minecart", "count": 2 }
 ```
 
-What you see in game: 2 minecarts spawn near the trigger position with a small random horizontal offset. With `safe_spawn` on, the mod looks for a spot the entity can stand on where neither its feet nor its head is a hazardous block, and the conversion fails when it finds none.
+What you see in game: 2 minecarts spawn near the trigger position with a small random horizontal offset. With `safe_spawn` on, the mod picks a spot from near to far in the same way, taking a completely safe spot first and the least hazardous one when every remaining candidate is hazardous, and the conversion fails only when none of the remaining candidates can host the entity.
 
-Note: both `mob` and `entity` reject `minecraft:item` and `minecraft:experience_orb`; drops and experience orbs use the dedicated `item` and `experience` variants, and a wrong reference rejects the rule. The editor filters the entity picker by variant, while hand-written rule JSON is not checked against the mob split at load time: loading has no world context and a tag may mix mobs with other entities, so a strict check would make valid tag references fail at random.
+Note: both `mob` and `entity` reject `minecraft:item` and `minecraft:experience_orb`; drops and experience orbs use the dedicated `item` and `experience` variants, and a wrong reference rejects the rule. Types that cannot be summoned (`minecraft:player`, `minecraft:fishing_bobber`) and technical presentation entities (falling block, block / item / text display, marker, interaction, area effect cloud, lightning bolt, eye of ender, ominous item spawner) cannot be products either: they never show up in the editor list and hand-written JSON is rejected at load time. The editor filters the entity picker by variant, while hand-written rule JSON is not checked against the mob split at load time: loading has no world context and a tag may mix mobs with other entities, so a strict check would make valid tag references fail at random.
 
 ### Variant experience: Experience
 

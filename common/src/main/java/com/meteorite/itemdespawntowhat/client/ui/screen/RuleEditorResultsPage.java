@@ -836,9 +836,10 @@ final class RuleEditorResultsPage {
         return Component.translatable(RuleEditorPageSupport.UI + stop.labelKey());
     }
 
-    // 目录条目按档位过滤：标签条目无法判定成员，两个实体档都保留
+    // 目录条目按档位过滤：技术性/不可召唤类型两档都不出现；标签条目无法判定成员，两个实体档都保留
     private boolean catalogEntryAllowed(String id) {
         if (id.isEmpty() || id.startsWith("#")) return true;
+        if (EntityTraits.isExcluded(id)) return false;
         boolean wantsMob = productStop == EntityProductStop.MOB;
         return wantsMob == EntityTraits.isMob(id);
     }

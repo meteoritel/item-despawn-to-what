@@ -38,7 +38,8 @@ import org.jetbrains.annotations.Nullable;
  * 统一实体生成分发入口：按产出子类（物品 / 生物 / 其他实体 / 经验）分派到对应执行策略。
  * 物品与实体产出在成功转化当刻固定产物引用与产出量，随后在共享预算内分批交付；
  * 实体的安全位置搜索有界（5×5×5 共 125 个候选，垂直方向权重更高），同一次交付内每个候选只判定一次、
- * 命中位置只向后推进；搜索范围内没有任何安全落点时本次效果失败，不再回退到原点附近。
+ * 命中位置只向后推进；候选按危险度评分挑选：完全安全的落点立即命中，整片范围都有危险时取危险度最低的落点生成，
+ * 只有候选全部不可生成（虚空、被方块堵死、越界）时本次效果才按失败处理。
  */
 public final class SpawnEntityExecutor {
 
@@ -50,14 +51,30 @@ public final class SpawnEntityExecutor {
     // 关闭安全生成时的区块需求半径：沿用「原点附近随机偏移落点」的既有行为
     private static final int FALLBACK_CHUNK_RADIUS = 1;
     /**
-     * 安全选址失败原因：搜索范围内没有任何安全落点。
+     * 安全选址失败原因：整片候选都不可生成（虚空、被方块堵死、越界）。
      * 结算层据此把本组已支付的源成本退回，因此该字符串是跨层契约，不得改写。
      */
     public static final String NO_SAFE_SPAWN_POSITION = "no_safe_spawn_position";
-    // 已生成部分实体后才发现无安全落点：真实产出已逐单位回执，终态只做普通收尾，不回退也不返还
+    // 已生成部分实体后才发现整片候选都不可生成：真实产出已逐单位回执，终态只做普通收尾，不回退也不返还
     private static final String NO_SAFE_SPAWN_POSITION_PARTIAL = NO_SAFE_SPAWN_POSITION + ":partial";
-    // 虚空判定的向下探测层数：只覆盖世界底部这一段，更高的悬空落点交给重力与地面判定
-    private static final int VOID_FALL_PROBE = 8;
+    // 落点危险度：0 表示完全安全的落点，分数越高越危险；达到 FATAL 表示该落点根本不能生成
+    private static final int SCORE_FATAL = 1_000_000;
+    // 伤害方块的分值：按原版寻路的减分与伤害语义从重到轻排列
+    private static final int SCORE_LAVA = 400;
+    private static final int SCORE_FIRE = 300;
+    private static final int SCORE_LAVA_CAULDRON = 250;
+    private static final int SCORE_MAGMA_BLOCK = 200;
+    private static final int SCORE_WITHER_ROSE = 150;
+    private static final int SCORE_CACTUS = 120;
+    private static final int SCORE_POINTED_DRIPSTONE = 100;
+    private static final int SCORE_SWEET_BERRY_BUSH = 60;
+    private static final int SCORE_POWDER_SNOW = 50;
+    // 悬空惩罚：脚下第 d 格才有着落方块时记 (d - 1) × 10，掉落伤害随悬空高度增加
+    private static final int SCORE_FALL_PER_BLOCK = 10;
+    // 不满足该实体原版放置要求属于软惩罚：仍可生成，只是不在它本来的地面或水域环境
+    private static final int SCORE_PLACEMENT_MISMATCH = 40;
+    // 无落点探测层数：脚下连续这么多格都站不住就视为虚空或深空，不再逐格往下扫描整列
+    private static final int GROUND_PROBE = 8;
     // 回执说明：同步入口不承担分批，交由预算执行路径推进
     private static final String BUDGET_REQUIRED = "budget_required: spawn_entity";
     // 回执说明：成功转化当刻没有固定输入，属于运行时接线缺失，不退回到期重判
@@ -104,7 +121,9 @@ public final class SpawnEntityExecutor {
      * @param context 本组执行上下文
      * @return 恒为要求走预算执行路径的失败回执
      */
-    public static EffectResult execute(SpawnEntityEffect effect, EffectContext context) {
+    // 形参由效果类型的分发签名固定，同步入口不读取其中任何参数
+    public static EffectResult execute(@SuppressWarnings("unused") SpawnEntityEffect effect,
+                                       @SuppressWarnings("unused") EffectContext context) {
         return EffectResult.failed(BUDGET_REQUIRED);
     }
 
@@ -122,9 +141,11 @@ public final class SpawnEntityExecutor {
      * @param fillOrigin   候选的位置策略；本类型不使用
      * @return 本次产出的固定输入
      */
-    public static @Nullable EffectPreparation prepare(SpawnEntityEffect effect, ServerLevel level, Vec3 position,
-                                                      ItemEntity sourceEntity, ItemStack sourceStack,
-                                                      boolean fillOrigin) {
+    public static @Nullable EffectPreparation prepare(SpawnEntityEffect effect, ServerLevel level,
+                                                      @SuppressWarnings("unused") Vec3 position,
+                                                      @SuppressWarnings("unused") ItemEntity sourceEntity,
+                                                      @SuppressWarnings("unused") ItemStack sourceStack,
+                                                      @SuppressWarnings("unused") boolean fillOrigin) {
         return switch (effect.product()) {
             case EntityProduct.Item item -> planItem(item, level);
             // 生物与其他实体共用实体产出计划：年龄只影响交付时写入 AgeableMob，不参与选址
@@ -171,94 +192,144 @@ public final class SpawnEntityExecutor {
                                         @Nullable EffectPreparation preparation) {
         if (preparation == null) {
             // 迁移到固定输入路径后，缺少固定输入不再退回到期重新取值
-            return budget -> EffectStep.done(EffectResult.failed(MISSING_PREPARATION));
+            return missingPreparation();
         }
         if (preparation.gate() != null) {
             String reason = preparation.gate();
             return budget -> EffectStep.done(EffectResult.skipped(reason));
         }
-        if (effect.product() instanceof EntityProduct.Experience experience) {
-            return SpawnXpExecutor.start(experience, context, preparation);
-        }
-        if (effect.product() instanceof EntityProduct.Item && preparation instanceof ItemBatchPlan(Item item, long count)) {
-            return SpawnItemExecutor.startBatch(context, item, count);
-        }
-        if (!(preparation instanceof SpawnPlan plan)) {
-            return budget -> EffectStep.done(EffectResult.failed(MISSING_PREPARATION));
-        }
-        if (plan.failure() != null) {
-            String failure = plan.failure();
-            return budget -> EffectStep.done(EffectResult.failed(failure));
-        }
         return switch (effect.product()) {
-            case EntityProduct.Item ignored -> SpawnItemExecutor.start(context, plan.item(), plan.count());
-            case EntityProduct.Mob mob -> new EntityDelivery(context, plan.entityType(), plan.count(),
-                    mob.age(), context.safeSpawn());
-            case EntityProduct.Generic ignored -> new EntityDelivery(context, plan.entityType(), plan.count(),
-                    0, context.safeSpawn());
-            // 经验产出已在上面按自己的固定输入创建执行状态；此处仅为 switch 完整覆盖
-            case EntityProduct.Experience ignored -> budget -> EffectStep.done(EffectResult.failed(MISSING_PREPARATION));
+            case EntityProduct.Experience experience -> SpawnXpExecutor.start(experience, context, preparation);
+            case EntityProduct.Item ignored when preparation instanceof ItemBatchPlan(Item item, long count) ->
+                    SpawnItemExecutor.startBatch(context, item, count);
+            case EntityProduct.Item ignored -> fromPlan(preparation,
+                    (item, entityType, count) -> SpawnItemExecutor.start(context, item, count));
+            case EntityProduct.Mob mob -> fromPlan(preparation,
+                    (item, entityType, count) -> new EntityDelivery(context, entityType, count,
+                            mob.age(), context.safeSpawn()));
+            case EntityProduct.Generic ignored -> fromPlan(preparation,
+                    (item, entityType, count) -> new EntityDelivery(context, entityType, count,
+                            0, context.safeSpawn()));
         };
     }
 
-    // 落点判据：世界边界 + 不落在虚空 + 类型自身的地面/水域要求 + 完整生成碰撞箱 + 脚部与头部的危险方块
-    private static boolean isSafeSpawnPosition(EntityType<?> type, ServerLevel level, BlockPos pos) {
-        if (!level.getWorldBorder().isWithinBounds(pos)) {
-            return false;
+    // 物品与实体产出的固定输入都携带「已解析产物 + 每轮产出量」，按产出子类取用其一；
+    // 引用解析失败与固定输入缺失都按失败回执，不退回执行期重新取值
+    private static EffectExecution fromPlan(EffectPreparation preparation, SpawnPlanFactory factory) {
+        if (preparation instanceof SpawnPlan(Item item, EntityType<?> entityType, int count, String failure)) {
+            if (failure != null) {
+                return failedExecution(failure);
+            }
+            return factory.create(item, entityType, count);
         }
-        if (isOverVoid(level, pos)) {
-            return false;
-        }
-        // 未登记放置类型的实体回退为「不限制」，仍由碰撞箱与危险方块判据把关
-        if (!SpawnPlacements.isSpawnPositionOk(type, level, pos)) {
-            return false;
+        return missingPreparation();
+    }
+
+    // 固定输入缺失属于运行时接线缺失，直接失败而不是到期重新判定
+    private static EffectExecution missingPreparation() {
+        return budget -> EffectStep.done(EffectResult.failed(MISSING_PREPARATION));
+    }
+
+    // 引用在成功转化当刻已无法解析：按当刻记录的原因失败
+    private static EffectExecution failedExecution(String detail) {
+        return budget -> EffectStep.done(EffectResult.failed(detail));
+    }
+
+    // 从 SpawnPlan 创建执行状态：物品产出用 item，实体产出用 entityType
+    @FunctionalInterface
+    private interface SpawnPlanFactory {
+        EffectExecution create(@Nullable Item item, @Nullable EntityType<?> entityType, int count);
+    }
+
+    /**
+     * 候选落点的危险度评分：0 表示完全安全，分数越高越危险，{@link #SCORE_FATAL} 表示该落点根本不能生成。
+     * 不可生成的三类硬边界是「没地方站」：越界、下方探测不到落点（虚空或深空）、生成碰撞箱与方块相交（被方块堵死）；
+     * 其余情形（伤害方块、悬空高度、不符合原版放置要求）只累加分数，供整片范围都有危险时挑最轻的一个。
+     *
+     * @param type  产物实体类型，决定生成碰撞箱与原版放置要求
+     * @param level 目标维度
+     * @param pos   候选落点
+     * @return 危险度分数
+     */
+    private static int spawnScore(EntityType<?> type, ServerLevel level, BlockPos pos) {
+        if (!level.getWorldBorder().isWithinBounds(pos) || pos.getY() < level.getMinBuildHeight()) {
+            return SCORE_FATAL;
         }
         // 用实体类型的生成碰撞箱检查完整体积，不创建实体（避免触发入世界副作用）
         AABB box = type.getSpawnAABB(pos.getX() + 0.5D, pos.getY(), pos.getZ() + 0.5D);
         if (!level.noCollision(box)) {
-            return false;
+            return SCORE_FATAL;
         }
-        // 脚部与头部都不得是危险方块
-        if (isHazardous(level, pos)) {
-            return false;
+        int groundDistance = groundDistance(level, pos);
+        // 脚下方探测范围内没有可落脚的位置：虚空或深空，实体只会一直下坠
+        if (groundDistance == 0) {
+            return SCORE_FATAL;
         }
-        return !isHazardous(level, pos.above());
+        int score = (groundDistance - 1) * SCORE_FALL_PER_BLOCK;
+        // 未登记放置类型的实体回退为「不限制」，不满足时只记一次轻罚
+        if (!SpawnPlacements.isSpawnPositionOk(type, level, pos)) {
+            score += SCORE_PLACEMENT_MISMATCH;
+        }
+        score += hazardScore(level, pos) + hazardScore(level, pos.above());
+        // 脚下的承托方块也可能是伤害方块（岩浆池上方、火堆顶面），实体落上去同样受伤
+        score += hazardScore(level, pos.atY(pos.getY() - groundDistance));
+        return score;
     }
 
-    // 虚空：落点低于世界下界，或落点位于世界底部且向下直到下界都没有可踏脚的方块（实体会直接坠出世界）。
-    // 只在底部 VOID_FALL_PROBE 层内逐格探测，更高的悬空落点交给重力与地面判定，不在这里扫描整列。
-    private static boolean isOverVoid(ServerLevel level, BlockPos pos) {
+    // 脚下方最近的落脚距离：1 表示正下方就站得住，0 表示探测范围内全是空气（虚空或深空）。
+    // 非空气方块要有碰撞体积或本身是液体才算站得住：草、雪层一类的装饰方块不承托实体。
+    private static int groundDistance(ServerLevel level, BlockPos pos) {
         int floor = level.getMinBuildHeight();
-        if (pos.getY() < floor) {
-            return true;
-        }
-        if (pos.getY() > floor + VOID_FALL_PROBE) {
-            return false;
-        }
-        for (int y = pos.getY() - 1; y >= floor; y--) {
-            if (!level.getBlockState(pos.atY(y)).isAir()) {
-                return false;
+        for (int distance = 1; distance <= GROUND_PROBE; distance++) {
+            int y = pos.getY() - distance;
+            if (y < floor) {
+                return 0;
+            }
+            BlockPos below = pos.atY(y);
+            BlockState state = level.getBlockState(below);
+            if (state.isAir()) {
+                continue;
+            }
+            if (!state.getCollisionShape(level, below).isEmpty() || !level.getFluidState(below).isEmpty()) {
+                return distance;
             }
         }
-        return true;
+        return 0;
     }
 
-    // 脚部与头部的危险方块，按原版 WalkNodeEvaluator.getPathTypeFromState 的分类收敛：
-    // 熔岩流体与熔岩方块、火/灵魂火、岩浆块、营火/灵魂营火、熔岩炼药锅属于燃烧伤害（DAMAGE_FIRE 一类），
-    // 仙人掌与甜浆果丛属于 DAMAGE_OTHER，凋灵玫瑰与滴水石锥属于 DAMAGE_CAUTIOUS，细雪属于 POWDER_SNOW。
+    // 单个方块位置的伤害分值：按原版寻路的减分与伤害语义从重到轻收敛
+    // （熔岩 > 火与营火 > 岩浆块 > 凋灵玫瑰 > 仙人掌 > 滴水石锥 > 甜浆果丛 > 细雪）。
     // 判据与实体类型无关：原版 EntityType.isBlockDangerous 会按火焰免疫豁免，这里不豁免，同一落点对任何产物给出同一结论。
-    private static boolean isHazardous(ServerLevel level, BlockPos pos) {
-        BlockState state = level.getBlockState(pos);
+    private static int hazardScore(ServerLevel level, BlockPos pos) {
         if (level.getFluidState(pos).is(FluidTags.LAVA)) {
-            return true;
+            return SCORE_LAVA;
         }
-        if (state.is(BlockTags.FIRE) || state.is(Blocks.LAVA) || state.is(Blocks.MAGMA_BLOCK)
-                || state.is(Blocks.LAVA_CAULDRON) || state.is(BlockTags.CAMPFIRES)) {
-            return true;
+        BlockState state = level.getBlockState(pos);
+        if (state.is(Blocks.LAVA)) {
+            return SCORE_LAVA;
         }
-        return state.is(Blocks.CACTUS) || state.is(Blocks.SWEET_BERRY_BUSH)
-                || state.is(Blocks.WITHER_ROSE) || state.is(Blocks.POINTED_DRIPSTONE)
-                || state.is(Blocks.POWDER_SNOW);
+        if (state.is(Blocks.LAVA_CAULDRON)) {
+            return SCORE_LAVA_CAULDRON;
+        }
+        if (state.is(BlockTags.FIRE) || state.is(BlockTags.CAMPFIRES)) {
+            return SCORE_FIRE;
+        }
+        if (state.is(Blocks.MAGMA_BLOCK)) {
+            return SCORE_MAGMA_BLOCK;
+        }
+        if (state.is(Blocks.WITHER_ROSE)) {
+            return SCORE_WITHER_ROSE;
+        }
+        if (state.is(Blocks.CACTUS)) {
+            return SCORE_CACTUS;
+        }
+        if (state.is(Blocks.POINTED_DRIPSTONE)) {
+            return SCORE_POINTED_DRIPSTONE;
+        }
+        if (state.is(Blocks.SWEET_BERRY_BUSH)) {
+            return SCORE_SWEET_BERRY_BUSH;
+        }
+        return state.is(Blocks.POWDER_SNOW) ? SCORE_POWDER_SNOW : 0;
     }
 
     // 安全搜索真正覆盖的区块半径（区块数）：候选水平半径加上生成碰撞箱半宽，按 16 格一个区块向上取整。
@@ -287,8 +358,9 @@ public final class SpawnEntityExecutor {
 
     /**
      * 实体产出的分批交付游标：每批最多 {@link #SPAWNS_PER_RUN} 个实体、每刻候选检查数受配置约束，
-     * 时间或工作量预算耗尽即让出。安全搜索的候选游标在整次交付内单调前进，已判定失败的候选不再复查；
-     * 搜索范围内没有安全落点时按已生成数量收尾：一个都没生成按失败回执，已生成部分按真实产出结束。
+     * 时间或工作量预算耗尽即让出。安全搜索的候选游标在整次交付内单调前进，已判定过的候选不再复查；
+     * 完全安全的候选直接命中，整片范围都有危险时按危险度从低到高依次取用；
+     * 所有候选都不可生成时按已生成数量收尾：一个都没生成按失败回执，已生成部分按真实产出结束。
      */
     private static final class EntityDelivery implements EffectExecution {
         private final EffectContext context;
@@ -303,10 +375,18 @@ public final class SpawnEntityExecutor {
         private int spawned;
         // 下一个待判定的候选序号：整次交付内只前进不回退，保证同一候选最多判定一次
         private int searchCursor;
-        // 当前实体的安全落点；positionResolved 为 true 且此处为 null 表示搜索范围内已无安全落点
+        // 可生成但带危险的候选：整片候选都有危险时按危险度从低到高依次取用；致命候选不进入此表
+        private final List<FallbackCandidate> fallbacks = new ArrayList<>();
+        // 当前实体的落点；positionResolved 为 true 且此处为 null 表示整片候选都不可生成
         private @Nullable BlockPos hit;
+        // 命中候选的危险度：0 表示完全安全，大于 0 表示本次命中来自危险度回退
+        private int hitScore;
         private boolean positionResolved;
         private Entity pendingEntity;
+
+        // 可生成但带危险的候选：危险度分数与落点
+        private record FallbackCandidate(int score, BlockPos pos) {
+        }
 
         private EntityDelivery(EffectContext context, EntityType<?> type, int count, int age, boolean safeSpawn) {
             this.context = context;
@@ -325,7 +405,7 @@ public final class SpawnEntityExecutor {
         @Override
         public @Nullable ChunkRequirement requiredChunks() {
             if (spawned >= target) { return null; }
-            // 已确定没有安全落点：下一步就收尾，不再等待任何区块
+            // 已确定整片候选都不可生成：下一步就收尾，不再等待任何区块
             if (safeSpawn && positionResolved && hit == null) { return null; }
             return pendingEntity == null ? chunks : chunks.including(pendingEntity.blockPosition());
         }
@@ -348,34 +428,32 @@ public final class SpawnEntityExecutor {
                     return EffectStep.Yield.INSTANCE;
                 }
                 if (safeSpawn && !positionResolved) {
-                    // 快速路径：候选表首项就是原点本身，绝大多数情况一次判定即中，不进入候选表遍历
+                    // 快速路径：候选表首项就是原点本身，原点完全安全时一次判定即中，不进入候选表遍历
                     if (searchCursor == 0) {
                         searchCursor = 1;
                         checks++;
                         // 计价：每检查一个候选点（含地面判据与碰撞箱、危险方块读取）记 1 个工作单位
                         StepWorkCounter.report(1);
                         reportedUnits++;
-                        if (isSafeSpawnPosition(type, level, center)) {
-                            hit = center;
-                            positionResolved = true;
-                        }
+                        consider(center);
                     }
                     while (!positionResolved && checks < checkLimit) {
                         if (budget.exhausted() || budget.remainingWorkUnits() - reportedUnits <= 0) {
                             break;
                         }
                         if (searchCursor >= SEARCH_OFFSETS.size()) {
+                            // 候选表遍历完毕：没有完全安全的落点时按危险度从低到高取可生成候选
                             positionResolved = true;
+                            FallbackCandidate fallback = takeLeastHazard();
+                            hit = fallback != null ? fallback.pos() : null;
+                            hitScore = fallback != null ? fallback.score() : -1;
                             break;
                         }
                         BlockPos candidate = center.offset(SEARCH_OFFSETS.get(searchCursor++));
                         checks++;
                         StepWorkCounter.report(1);
                         reportedUnits++;
-                        if (isSafeSpawnPosition(type, level, candidate)) {
-                            hit = candidate;
-                            positionResolved = true;
-                        }
+                        consider(candidate);
                     }
                     if (!positionResolved) {
                         // 搜索未完成（候选上限或预算用尽）：从断点下刻继续，保持「最近优先」语义
@@ -401,6 +479,7 @@ public final class SpawnEntityExecutor {
                 reportedUnits++;
                 // 命中的格子已被本实体占用：游标继续向后推进，下一个实体只判定未用过的候选
                 hit = null;
+                hitScore = 0;
                 positionResolved = false;
             }
             if (spawned < target) {
@@ -410,7 +489,36 @@ public final class SpawnEntityExecutor {
             return EffectStep.done(EffectResult.applied(0, STEPPED));
         }
 
-        // 搜索范围内没有任何安全落点：一个实体都没生成时整次效果按失败回执（不登记完成量），
+        // 判定一个候选：完全安全（0 分）立即命中；否则记进可生成候选表，等整片候选遍历完按分数取用。
+        // 致命候选不进入候选表，回退落点因此一定「下方有可落脚方块、没有被方块堵死」
+        private void consider(BlockPos candidate) {
+            int score = spawnScore(type, level, candidate);
+            if (score == 0) {
+                hit = candidate;
+                hitScore = 0;
+                positionResolved = true;
+                return;
+            }
+            if (score < SCORE_FATAL) {
+                fallbacks.add(new FallbackCandidate(score, candidate));
+            }
+        }
+
+        // 取剩余候选里危险度最低的一个：同分取先判定的，保证落点可复现；表空表示整片候选都不可生成
+        private @Nullable FallbackCandidate takeLeastHazard() {
+            int bestIndex = -1;
+            int bestScore = SCORE_FATAL;
+            for (int index = 0; index < fallbacks.size(); index++) {
+                FallbackCandidate candidate = fallbacks.get(index);
+                if (candidate.score() < bestScore) {
+                    bestScore = candidate.score();
+                    bestIndex = index;
+                }
+            }
+            return bestIndex < 0 ? null : fallbacks.remove(bestIndex);
+        }
+
+        // 整片候选都不可生成（虚空、被方块堵死、越界）：一个实体都没生成时整次效果按失败回执（不登记完成量），
         // 已生成部分只按真实产出结束，避免「生成 + 整单失败」双记
         private EffectStep noSafePositionStep() {
             return spawned == 0
@@ -418,7 +526,8 @@ public final class SpawnEntityExecutor {
                     : EffectStep.done(EffectResult.applied(0, NO_SAFE_SPAWN_POSITION_PARTIAL));
         }
 
-        // 每次落点搜索结束时观测一条：candidates_checked 为整次交付累计判定过的候选数
+        // 每次落点搜索结束时观测一条：candidates_checked 为整次交付累计判定过的候选数，
+        // score 为命中候选的危险度（-1 表示没有命中），least_hazard_fallback 标记本次命中是否来自危险度回退
         private void observeSearch() {
             if (!RuntimeObserver.current().enabled()) {
                 return;
@@ -429,6 +538,8 @@ public final class SpawnEntityExecutor {
                     "hit", hit != null,
                     "exhausted", hit == null,
                     "spawned", spawned,
+                    "score", hit != null ? hitScore : -1,
+                    "least_hazard_fallback", hit != null && hitScore > 0,
                     "x", hit != null ? hit.getX() : center.getX(),
                     "y", hit != null ? hit.getY() : center.getY(),
                     "z", hit != null ? hit.getZ() : center.getZ());

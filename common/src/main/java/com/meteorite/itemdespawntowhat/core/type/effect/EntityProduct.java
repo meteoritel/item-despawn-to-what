@@ -19,6 +19,7 @@ import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.EntityType;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 /** 实体产出子类：专用参数独立建模，公共执行字段由外层效果承载。 */
@@ -143,21 +144,54 @@ public sealed interface EntityProduct permits EntityProduct.Item, EntityProduct.
         valid &= RefChecks.check(entity, BuiltInRegistries.ENTITY_TYPE, "entity", issues, field);
         valid &= ParamChecks.inRange(count, 1, 64, "count", issues, ParamChecks.child(path, "count"));
         if (entity != null) {
-            boolean special = entity.tag()
-                    ? BuiltInRegistries.ENTITY_TYPE.getTag(TagKey.create(Registries.ENTITY_TYPE, entity.id()))
-                        .map(tag -> tag.stream().anyMatch(holder -> isSpecial(holder.value()))).orElse(false)
-                    : BuiltInRegistries.ENTITY_TYPE.getOptional(entity.id()).map(EntityProduct::isSpecial).orElse(false);
-            if (special) {
+            if (matchesAny(entity, EntityProduct::isSpecial)) {
                 issues.error("掉落物和经验球请使用对应的专用产出子类", null, field);
+                valid = false;
+            } else if (matchesAny(entity, EntityProduct::isExcludedEntityProduct)) {
+                issues.error("该实体类型不能作为转化产物：它不可召唤，或是展示、标记一类的技术性实体", null, field);
                 valid = false;
             }
         }
         return valid;
     }
 
+    // 标签在运行期可能变更成员，所以引用里的每个类型都要按同一口径判定。
+    private static boolean matchesAny(TaggedId entity, Predicate<EntityType<?>> predicate) {
+        if (entity.tag()) {
+            return BuiltInRegistries.ENTITY_TYPE.getTag(TagKey.create(Registries.ENTITY_TYPE, entity.id()))
+                    .map(tag -> tag.stream().anyMatch(holder -> predicate.test(holder.value())))
+                    .orElse(false);
+        }
+        EntityType<?> type = BuiltInRegistries.ENTITY_TYPE.getOptional(entity.id()).orElse(null);
+        return type != null && predicate.test(type);
+    }
+
     // 防止标签运行期变更后绕过专用入口约束。
     static boolean isSpecial(EntityType<?> type) {
         return type == EntityType.ITEM || type == EntityType.EXPERIENCE_ORB;
+    }
+
+    // 技术性实体：展示、标记与瞬态表现类，作为转化产物没有意义
+    Set<EntityType<?>> TECHNICAL_ENTITIES = Set.of(
+            EntityType.FALLING_BLOCK,
+            EntityType.BLOCK_DISPLAY,
+            EntityType.ITEM_DISPLAY,
+            EntityType.TEXT_DISPLAY,
+            EntityType.MARKER,
+            EntityType.INTERACTION,
+            EntityType.AREA_EFFECT_CLOUD,
+            EntityType.LIGHTNING_BOLT,
+            EntityType.EYE_OF_ENDER,
+            EntityType.OMINOUS_ITEM_SPAWNER);
+
+    /**
+     * 该实体类型能否作为转化产物。
+     *
+     * <p>掉落物与经验球有专用产出子类；不可召唤的类型（玩家、浮漂）与技术性表现实体都不作为产物。
+     * 界面按同一份判定过滤选择列表，这里保证手写规则 JSON 也会在加载期被拒载。
+     */
+    static boolean isExcludedEntityProduct(EntityType<?> type) {
+        return isSpecial(type) || !type.canSummon() || TECHNICAL_ENTITIES.contains(type);
     }
 
     /** 经验点数按每件参与转化源物品计算：本次产出的总点数 = 每件点数 × 本组实际扣减的源物品件数。 */

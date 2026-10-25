@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.shared;
 
+import com.meteorite.itemdespawntowhat.core.type.effect.EntityProduct;
 import java.util.HashMap;
 import java.util.Map;
 import net.minecraft.client.Minecraft;
@@ -18,6 +19,8 @@ import org.jetbrains.annotations.Nullable;
  * 判定是否写入年龄的口径一致。MobCategory 不能用于分类：MISC 同时包含村民、铁傀儡与盔甲架。
  * <p>结果只随客户端世界换代失效：实体类型注册表可能被数据包改动，换世界后必须重判。
  * 不在世界内、id 无法解析或原型实例化抛错时返回 UNKNOWN，界面按保守口径处理（视为生物且吃年龄）。
+ * <p>「能不能作为产物」的判定在 {@link EntityProduct#isExcludedEntityProduct}：不可召唤类型与技术性实体
+ * 不进任何一档列表，也不需要世界上下文，因此单独由 {@link #isExcluded(String)} 提供。
  */
 public final class EntityTraits {
     // 单次会话内可能出现的实体类型数量上限：超出后不再写缓存，避免被异常 id 撑大
@@ -57,6 +60,24 @@ public final class EntityTraits {
      */
     public static boolean isAgeable(@Nullable String id) {
         return traits(id).ageable();
+    }
+
+    /**
+     * 类型 id 能否作为转化产物：不可召唤类型（玩家、浮漂）与技术性实体（展示、标记、瞬态表现）返回 false。
+     *
+     * <p>判定只依赖实体类型注册表，不需要世界上下文，因此不受「不在世界内」的保守口径影响。
+     * @param id 实体类型 id；空值或解析失败返回 true（不额外排除，交给加载期校验）
+     */
+    public static boolean isExcluded(@Nullable String id) {
+        if (id == null || id.isBlank()) {
+            return false;
+        }
+        ResourceLocation key = ResourceLocation.tryParse(id);
+        if (key == null) {
+            return false;
+        }
+        EntityType<?> type = BuiltInRegistries.ENTITY_TYPE.getOptional(key).orElse(null);
+        return type != null && EntityProduct.isExcludedEntityProduct(type);
     }
 
     /**
@@ -100,6 +121,10 @@ public final class EntityTraits {
             EntityType<?> type = BuiltInRegistries.ENTITY_TYPE.getOptional(key).orElse(null);
             if (type == null) {
                 return null;
+            }
+            // 排除类型不实例化：玩家这类没有工厂的类型会直接失败，而且它们本来就进不了列表
+            if (EntityProduct.isExcludedEntityProduct(type)) {
+                return new Traits(false, false);
             }
             Entity prototype = type.create(level);
             if (prototype == null) {
