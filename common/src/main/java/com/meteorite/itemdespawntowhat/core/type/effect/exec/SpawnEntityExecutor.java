@@ -572,8 +572,8 @@ public final class SpawnEntityExecutor {
                     ageableMob.setAge(age);
                 }
             }
-            // 真实写入世界后才回执：加入失败由运行时统一捕获记为失败，不提前累计完成量
-            if (!EffectTargets.addEntityNow(context, pendingEntity, true)) {
+            // 真实写入世界后才回执：加入失败由运行时统一捕获记为失败，不提前累计完成量；产物带新产物环境伤害保护
+            if (!EffectTargets.addEntityProductNow(context, pendingEntity)) {
                 return false;
             }
             pendingEntity = null;

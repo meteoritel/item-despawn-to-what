@@ -33,6 +33,7 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.model.CombinationMode;
 import com.meteorite.itemdespawntowhat.core.model.ConditionLimits;
+import com.meteorite.itemdespawntowhat.core.model.OutcomeCandidate;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -1066,7 +1067,7 @@ public final class RuleEditorPageSet {
         ruleEditorResultsPage.updateCombinationLabel(view);
         RuleValue candidate = ResultStructure.candidateAt(view, ruleEditorResultsPage.candidateIndex);
         if (ruleEditorResultsPage.safeSpawnBox != null) {
-            ruleEditorResultsPage.safeSpawnBox.setChecked(RuleValueReads.boolOf(candidate, RuleFields.SAFE_SPAWN, false));
+            ruleEditorResultsPage.safeSpawnBox.setChecked(RuleValueReads.boolOf(candidate, RuleFields.SAFE_SPAWN, OutcomeCandidate.DEFAULT_SAFE_SPAWN));
         }
         if (ruleEditorResultsPage.fillOriginBox != null) {
             ruleEditorResultsPage.fillOriginBox.setChecked(RuleValueReads.boolOf(candidate, RuleFields.FILL_ORIGIN, true));

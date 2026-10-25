@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.runtime;
 import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
 
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -89,14 +90,12 @@ public final class RuleRuntimeEvents {
 
     // 三类环境伤害保护（D2/D4）：原版 Entity#isInvulnerableTo 调用时触发，
     // 只豁免 in_fire/on_fire/lava/cactus（D1），且仅在保护期内；其余伤害原样放行。
+    // 覆盖全部产物实体：掉落物读持久化状态，生物等读内存态保护；未持有保护的实体按普通伤害放行。
     @SubscribeEvent
     public static void onInvulnerabilityCheck(EntityInvulnerabilityCheckEvent event) {
-        // 只处理掉落物：避免为其它实体创建持久数据，也避免无谓的状态读取
-        if (!(event.getEntity() instanceof ItemEntity item)) {
-            return;
-        }
-        if (item.level() instanceof ServerLevel level
-                && DropStateStore.blocksEnvironmentalDamage(item, event.getSource(), level.getGameTime())) {
+        Entity entity = event.getEntity();
+        if (entity.level() instanceof ServerLevel level
+                && DropStateStore.blocksEnvironmentalDamage(entity, event.getSource(), level.getGameTime())) {
             event.setInvulnerable(true);
         }
     }

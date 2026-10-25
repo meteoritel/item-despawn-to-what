@@ -6,10 +6,17 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
 /**
  * 实体层掉落物状态的读写门面：所有调用点只经这里访问平台持久化实现。
  * 平台差异由 IPlatformHelper 承载（NeoForge: Entity#getPersistentData；Fabric: Data Attachment）。
  * 持续时间（新产物保护、转化冷却）由平台引导时通过 {@link #configure} 注入；0 表示不授予。
+ *
+ * <p>产物实体里只有掉落物需要跨存档、跨合并保留状态；生物、载具等其它产物的新产物保护只活几秒，
+ * 用内存表按实体 UUID 记到期刻，不往实体上写持久数据。</p>
  */
 public final class DropStateStore {
 
@@ -17,6 +24,10 @@ public final class DropStateStore {
     private static volatile int newProductProtectionTicks;
     // 转化冷却刻数（0 表示不授予）
     private static volatile int conversionCooldownTicks;
+    // 非掉落物产物实体的保护到期刻：实体 UUID 到游戏刻，只存在于内存
+    private static final Map<UUID, Long> entityProductProtection = new ConcurrentHashMap<>();
+    // 内存保护表规模超过该值时做一次过期剔除，避免长期运行后表只增不减
+    private static final int ENTITY_PROTECTION_PRUNE_SIZE = 256;
 
     private DropStateStore() {
         throw new UnsupportedOperationException("Utility class");
@@ -26,6 +37,8 @@ public final class DropStateStore {
     public static void configure(int protectionTicks, int cooldownTicks) {
         newProductProtectionTicks = Math.max(0, protectionTicks);
         conversionCooldownTicks = Math.max(0, cooldownTicks);
+        // 停服/换服时清空内存保护，避免游戏刻基线变化后旧到期刻误判
+        entityProductProtection.clear();
     }
 
     // 当前生效的新产物保护刻数（诊断用）
@@ -57,31 +70,67 @@ public final class DropStateStore {
         if (entity != null) {
             // 直接传 null 清除，不构造中间状态
             Services.PLATFORM.setDropState(entity, null);
+            entityProductProtection.remove(entity.getUUID());
         }
     }
 
-    // 三类环境伤害且实体处于保护期：本次伤害完全不生效（判定必须先于原版扣血）
+    // 三类环境伤害且产物实体处于保护期：本次伤害完全不生效（判定必须先于原版扣血）
     public static boolean blocksEnvironmentalDamage(Entity entity, DamageSource source, long gameTime) {
-        if (!DamageClassification.isEnvironmental(source)) {
+        if (entity == null || !DamageClassification.isEnvironmental(source)) {
             return false;
         }
-        return get(entity).isProtected(gameTime);
+        if (entity instanceof ItemEntity) {
+            // 掉落物读持久化状态：临时保护与永久返还要跨存档、跨合并保留
+            return get(entity).isProtected(gameTime);
+        }
+        Long protectionUntil = entityProductProtection.get(entity.getUUID());
+        if (protectionUntil == null) {
+            return false;
+        }
+        if (gameTime < protectionUntil) {
+            return true;
+        }
+        entityProductProtection.remove(entity.getUUID(), protectionUntil);
+        return false;
     }
 
-    // 授予新产物状态：临时保护 + 临时冷却，只在转化产物生成点显式调用
-    public static void grantNewProduct(ItemEntity entity) {
+    /**
+     * 授予新产物状态，只在转化产物生成点显式调用。
+     * 掉落物写临时保护与转化冷却（冷却用于挡住转化检查）；其它产物实体只记内存态临时保护，
+     * 它们不参与转化检查，也不需要跨存档保留。
+     *
+     * @param entity 刚生成的产物实体
+     */
+    public static void grantNewProduct(Entity entity) {
         if (entity == null) {
             return;
         }
         int protectionTicks = newProductProtectionTicks;
-        int cooldownTicks = conversionCooldownTicks;
-        if (protectionTicks <= 0 && cooldownTicks <= 0) {
+        if (entity instanceof ItemEntity item) {
+            int cooldownTicks = conversionCooldownTicks;
+            if (protectionTicks <= 0 && cooldownTicks <= 0) {
+                return;
+            }
+            long now = item.level().getGameTime();
+            long protectionUntil = protectionTicks > 0 ? now + protectionTicks : 0L;
+            long cooldownUntil = cooldownTicks > 0 ? now + cooldownTicks : 0L;
+            set(item, get(item).withTemporary(protectionUntil, cooldownUntil));
+            return;
+        }
+        if (protectionTicks <= 0) {
             return;
         }
         long now = entity.level().getGameTime();
-        long protectionUntil = protectionTicks > 0 ? now + protectionTicks : 0L;
-        long cooldownUntil = cooldownTicks > 0 ? now + cooldownTicks : 0L;
-        set(entity, get(entity).withTemporary(protectionUntil, cooldownUntil));
+        entityProductProtection.put(entity.getUUID(), now + protectionTicks);
+        pruneEntityProtection(now);
+    }
+
+    // 内存保护表按到期刻剔除：表规模由同一时刻在场产物数量决定，只有超过阈值才扫一次
+    private static void pruneEntityProtection(long gameTime) {
+        if (entityProductProtection.size() <= ENTITY_PROTECTION_PRUNE_SIZE) {
+            return;
+        }
+        entityProductProtection.values().removeIf(until -> until <= gameTime);
     }
 
     // 授予返还物状态：永久保护 + 永久禁转（返还交付时调用）

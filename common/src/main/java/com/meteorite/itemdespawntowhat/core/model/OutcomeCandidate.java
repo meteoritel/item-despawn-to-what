@@ -8,7 +8,7 @@ import java.util.List;
 
 /**
  * 候选结果：转化组的候选之一，内含多个共同执行的效果。
- * 候选标识在规则内唯一；safe_spawn（安全生成位置）默认 false，fill_origin（起点填充）默认 true。
+ * 候选标识在规则内唯一；safe_spawn（安全生成位置）默认 true，fill_origin（起点填充）默认 true。
  * 本类只负责承载、往返与本层校验，两个开关的执行侧语义由产出执行器实现。
  */
 public record OutcomeCandidate(
@@ -20,8 +20,8 @@ public record OutcomeCandidate(
 
     // 顶层 effects 隐式映射出的候选标识
     public static final String IMPLICIT_ID = "default";
-    // 安全生成位置默认关闭（沿用原点行为）
-    public static final boolean DEFAULT_SAFE_SPAWN = false;
+    // 安全生成位置默认开启：实体产物默认落到附近可站立、危险度最低的格子
+    public static final boolean DEFAULT_SAFE_SPAWN = true;
     // 起点填充默认开启
     public static final boolean DEFAULT_FILL_ORIGIN = true;
 

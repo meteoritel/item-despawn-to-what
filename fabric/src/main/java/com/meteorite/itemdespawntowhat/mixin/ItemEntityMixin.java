@@ -14,8 +14,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Fabric 端缺少自然消失事件、实体状态事件与伤害事件，用最小注入补齐：
- * 自然到期 discard 拦截、三类环境伤害保护、真实致死分支请求转化、合并兼容。
+ * Fabric 端缺少自然消失事件与伤害事件，用最小注入补齐：
+ * 自然到期 discard 拦截、真实致死分支请求转化、合并兼容；环境伤害保护在 {@link EntityMixin}。
  */
 @Mixin(ItemEntity.class)
 public abstract class ItemEntityMixin {
@@ -24,18 +24,6 @@ public abstract class ItemEntityMixin {
     private void itemdespawntowhat$beforeNaturalExpiry(ItemEntity item) {
         if (!(item.level() instanceof ServerLevel level) || !RuleRuntimeHost.deferNaturalExpiry(level, item)) {
             item.discard();
-        }
-    }
-
-    // 三类环境伤害保护：判定在原版扣血前，返回 false 与「免疫」语义一致，其余伤害原样放行（D2/D4）
-    @Inject(method = "hurt(Lnet/minecraft/world/damagesource/DamageSource;F)Z", at = @At("HEAD"), cancellable = true)
-    private void itemdespawntowhat$protectFromEnvironment(DamageSource source, float amount, CallbackInfoReturnable<Boolean> cir) {
-        ItemEntity self = (ItemEntity) (Object) this;
-        if (!(self.level() instanceof ServerLevel level)) {
-            return;
-        }
-        if (DropStateStore.blocksEnvironmentalDamage(self, source, level.getGameTime())) {
-            cir.setReturnValue(false);
         }
     }
 

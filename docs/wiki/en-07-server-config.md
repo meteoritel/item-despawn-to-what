@@ -82,7 +82,7 @@ Time values are in game ticks, and 20 ticks equal 1 second on a normal server.
 | `check_spread_window_ticks` | When many drops come due at once, the mod spreads those checks over a window of this many game ticks | 1 to 1200 ticks | `20` (1 second) | Raise it when a simultaneous batch causes lag, which is smoother but delays individual conversions. Lower it to keep conversions on time when a single tick can take the load |
 | `dispatch_batch_size` | How many queued conversions the mod advances per tick at most, and it also caps the returned items delivered in one batch | 1 to 100000 | `64` | Raise it when large batches back up |
 | `prepare_groups_per_step` | How many groups one step prepares fixed effect inputs for during the preparation stage of a settlement, spreading the preparation of a whole stack over several game ticks | 1 to 4096 groups | `8` | Lower it when many settlements start at once and preparation hitches a single tick. Raise it to start producing sooner for very large stacks, at the cost of more work per tick |
-| `new_product_protection_seconds` | How many seconds a freshly converted item resists destruction by fire, lava, and cacti | 0 to 3600 seconds | `2` | Raise it when products burn as soon as they appear, for example next to lava. Set `0` to let products be destroyed right away |
+| `new_product_protection_seconds` | How many seconds a freshly converted product (dropped item, mob, or other entity) resists destruction by fire, lava, and cacti | 0 to 3600 seconds | `2` | Raise it when products burn as soon as they appear, for example next to lava. Set `0` to let products be destroyed right away |
 | `conversion_cooldown_seconds` | How many seconds a freshly converted item cannot start another conversion | 0 to 3600 seconds | `5` | Raise it when products convert again immediately under another rule. Set `0` to let a product convert again at once |
 | `position_search_checks_per_tick` | How many candidate positions the mod tries per tick when it looks for a spot for a product or a returned item | 1 to 4096 | `16` | Raise it when items stay undelivered because the terrain leaves few spots. Lower it to save performance |
 | `rescan_entities_per_step` | How many loaded drops one step rebuilds when tracking is rebuilt after startup, a dimension load, or a rule reload. The rest continues over later ticks | 1 to 4096 | `16` | Lower it when a server with tens of thousands of drops still hitches on a single tick after startup or a reload. Raise it to finish sooner, at the cost of more work per tick |
@@ -131,12 +131,14 @@ Example: lift the nearby count limits for items and entities while the other set
 
 ## Product Protection and Conversion Cooldown
 
-These two settings affect only newly produced items. Returned items follow other rules, as the note at the end of this section explains.
+`new_product_protection_seconds` covers every product: dropped items, mobs, and other entities. `conversion_cooldown_seconds` affects dropped items only, because entity products take part in no conversion. Returned items follow other rules, as the note at the end of this section explains.
 
 | Field | What It Does | Default | What `0` Means |
 |---|---|---|---|
-| `new_product_protection_seconds` | A freshly produced item resists destruction by fire, lava, and cacti for this long. Other damage sources are unaffected | `2` seconds | No protection. A product can burn, sink into lava, or break on a cactus as soon as it appears |
+| `new_product_protection_seconds` | A freshly produced product resists destruction by fire, lava, and cacti for this long. Other damage sources are unaffected | `2` seconds | No protection. A product can burn, sink into lava, or break on a cactus as soon as it appears |
 | `conversion_cooldown_seconds` | A freshly produced item cannot start another conversion for this long, which prevents a product from converting on immediately under another rule | `5` seconds | No cooldown. A product that matches a rule converts again right away |
+
+Protection for mobs and other entities is not written to entity data: it is kept in memory under the entity identity and ends when the entity unloads or the server restarts. Those products take part in no conversion, so they have no cooldown.
 
 The two settings are independent, so you can set them separately:
 

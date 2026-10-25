@@ -69,7 +69,7 @@ flowchart LR
 | 数据包重载 | `END_DATA_PACK_RELOAD`，成功标志为真才重建 | `OnDatapackSyncEvent`，`getPlayer()` 为空时重建（登录同步不重建） |
 | 掉落物进入与离开 | `ServerEntityEvents.ENTITY_LOAD` / `ENTITY_UNLOAD` | `EntityJoinLevelEvent` / `EntityLeaveLevelEvent` |
 | 自然消失 | Mixin 拦截 `ItemEntity#tick` 的 `discard()`，延后判定为真时不丢弃 | `ItemExpireEvent`，延后判定为真时 `addExtraLife`，并在寿命钳制上限前抬升 age |
-| 环境伤害保护 | Mixin 在 `hurt` 头部按状态短路 | `EntityInvulnerabilityCheckEvent` 设置免疫 |
+| 环境伤害保护 | Mixin 在 `Entity#isInvulnerableTo` 头部按状态直接判免疫 | `EntityInvulnerabilityCheckEvent` 设置免疫 |
 | 死亡背包排除标记 | `EntityMixin` 与 `PlayerMixin` 在掉落物入世界前打标记 | `LivingDropsEvent` 给每个掉落加排除标记 |
 | 实体状态持久化 | Fabric Attachment API 的持久化附件（写入 `fabric:attachments`） | `getPersistentData()` 的 NBT 复合标签 |
 | 参考寿命采样 | 运行期首次比较寿命常量时采样，未采到时用配置里的兜底刻数 | 启动时就地构造参考掉落物读取 `lifespan` |
@@ -174,7 +174,7 @@ flowchart TD
 ### Mixin 使用原则
 
 - 只给平台事件覆盖不到的路径加注入，注入点选最小语义点（方法头部短路、指定调用点、常量表达式替换），不整体替换方法体。
-- 已有原生事件的路径不再用 Mixin 重复实现：自然消失、环境伤害保护、死亡掉落标记在两端各走一条路径，Mixin 只补事件覆盖不到的分支（`onDestroyed` 分支与合并兼容）。
+- 已有原生事件的路径不再用 Mixin 重复实现：自然消失、环境伤害保护、死亡掉落标记在两端各走一条路径，Mixin 只补事件覆盖不到的分支（Fabric 端的环境伤害保护注入 `Entity#isInvulnerableTo`、`onDestroyed` 分支与合并兼容）。
 - 合并兼容的语义集中在公共状态门面 `DropStateStore`：永久标志不一致时拒绝合并；合并完成时临时状态取并集，死亡掉落的检查锁标记随存活载体保留。两端 `ItemEntityMixin` 只调用同一入口，不各写一份判定。
 - Mixin 配置声明 `injectors.defaultRequire`，目标方法消失时启动即失败；新增注入必须同步 `itemdespawntowhat.mixins.json`。
 - Mixin 目标只取原版与世界逻辑类，不注入客户端类，保证专用服务端不加载客户端代码。

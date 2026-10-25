@@ -27,15 +27,15 @@ A rule must answer what it converts into. There are two ways to write that answe
 | --- | --- | --- | --- | --- |
 | `id` | The name of this candidate | A non-empty string, unique inside one rule | — (required) | A candidate built from `effects` uses `default` |
 | `effects` | The effects this candidate runs | An array of effects | — (required, cannot be empty) | Effect types and parameters are on [Effects](en-04-effects) |
-| `safe_spawn` | Whether to look for a safe spot before spawning a mob or another entity | `true` / `false` | `false` | Affects only the `mob` and `entity` variants of `spawn_entity` |
+| `safe_spawn` | Whether to look for a safe spot before spawning a mob or another entity | `true` / `false` | `true` | Affects only the `mob` and `entity` variants of `spawn_entity` |
 | `fill_origin` | Whether `place_block` may fill the trigger position itself | `true` / `false` | `true` | Affects only `place_block` |
 
 An outcome candidate accepts only these four fields. One extra field rejects the rule.
 
 ### Safe Spawning (safe_spawn)
 
-- `false` (the default): the mod does not look for a spot and places the entity at the position of the dropped item, with a small random offset on the horizontal axes.
-- `true`: the mod scans a box centered on the trigger position, 2 blocks to each horizontal side and 2 blocks up and down (5×5×5, 125 positions), from the closest position to the farthest, and picks one spot per entity: a completely safe position is used at once, and when every remaining candidate is hazardous it takes the least hazardous one, so later entities take the next least hazardous positions. The entity appears in the center of that block.
+- `true` (the default): the mod scans a box centered on the trigger position, 2 blocks to each horizontal side and 2 blocks up and down (5×5×5, 125 positions), from the closest position to the farthest, and picks one spot per entity: a completely safe position is used at once, and when every remaining candidate is hazardous it takes the least hazardous one, so later entities take the next least hazardous positions. The entity appears in the center of that block.
+- `false`: the mod does not look for a spot and places the entity at the position of the dropped item, with a small random offset on the horizontal axes.
 - The verdict has two levels. These cases skip the position outright: outside the world border; below the world bottom; the spawn collision box intersecting a block; no standable block within the probe below the feet (void or deep space). Every other case only accumulates a hazard score, which compares positions when every remaining candidate is hazardous.
 - Hazardous blocks score by severity, from the heaviest to the lightest: lava (block and fluid) > fire and campfire > lava cauldron > magma block > wither rose > cactus > pointed dripstone > sweet berry bush > powder snow. The feet, the head, and the supporting block below the feet are scored separately and added up. A hanging position scores higher the farther down the ground below lies. A position that misses the vanilla placement requirements of that entity (ground or water type) adds one light penalty. The rule does not depend on the entity type: one position gives the same verdict for every product.
 - The conversion fails only when none of the remaining candidates can host the entity: with no entity spawned, the effect fails and the source cost already paid for this group comes back, with the source items returned to the world through the normal return path during delivery. When some entities were already spawned before the remaining candidates turned out unusable, the effect ends with the real output, spawning nothing more and returning nothing.
@@ -215,10 +215,12 @@ About interruption and recovery:
 ## Protection and Conversion Ban for Products
 
 - A freshly produced dropped item is a **new product**, and it receives two temporary states: **environmental damage protection** (`new_product_protection_seconds`, 2 seconds by default) and a **conversion cooldown** (`conversion_cooldown_seconds`, 5 seconds by default).
+- A spawned mob or other entity product gets the environmental damage protection too and ignores fire, lava, and cactus. It takes part in no conversion, so it gets no cooldown.
 - During protection the item ignores environmental damage from fire, lava, and cactus. During the cooldown the mod never picks it for conversion again; once the cooldown ends it can take part again.
 - When both times are set to 0, the mod writes no state at all and the new product behaves like any other dropped item.
 - Returned items receive the permanent version instead: permanent environmental damage protection and a permanent conversion ban. Such a dropped item never converts again for the rest of its life.
 - These states live on the dropped item entity, not on the item itself. Pick a new product up and drop it again, and you get a fresh dropped item without protection or cooldown that can convert again.
+- Protection for mobs and other entities is kept in memory for a few seconds under the entity identity only, and it ends when the entity unloads or the server restarts.
 
 ## When a Conversion Seems Not to Happen
 

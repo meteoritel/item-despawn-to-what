@@ -17,7 +17,7 @@ import java.util.UUID;
  * <p>未改动的后端默认值不写进 JSON：新规则只落 id、source、固定源成本、
  * schema_version 与一个初始候选；enabled / priority / trigger_after_seconds / triggers / combination
  * 全部依赖服务端默认，避免把默认值固化进覆盖层文件。
- * <p>safe_spawn 与 fill_origin 也不写入，保持后端默认（false / true）。
+ * <p>safe_spawn 与 fill_origin 也不写入，保持后端默认（安全生成开启、起点填充开启）。
  */
 public final class EditorFactories {
 

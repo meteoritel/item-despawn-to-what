@@ -36,6 +36,7 @@ import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
 import com.meteorite.itemdespawntowhat.core.model.CombinationMode;
 import com.meteorite.itemdespawntowhat.core.model.ConditionLimits;
+import com.meteorite.itemdespawntowhat.core.model.OutcomeCandidate;
 import com.meteorite.itemdespawntowhat.core.type.effect.PlaceBlockEffect;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -243,12 +244,12 @@ final class RuleEditorResultsPage {
             productStop = EntityProductStop.of(selected.text("variant", "item"));
         }
         boolean mobProduct = spawnEntity && productStop == EntityProductStop.MOB;
-        // 安全生成只对生物档提供；其它实体档若手写 safe_spawn 仍显示勾选框，避免把生效值藏起来
+        // 安全生成只对生物档提供；其它实体档若显式开启 safe_spawn 仍显示勾选框，避免把生效值藏起来
         boolean showSafeSpawn = spawnEntity && (mobProduct
                 || RuleValueReads.boolOf(candidate, RuleFields.SAFE_SPAWN, false));
         boolean blocks = ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, "place_block").equals(selectedType);
         if (showSafeSpawn) {
-            safeSpawnBox = new UiCheckBox(RuleEditorPageSet.THEME, pages.font, Component.translatable(RuleEditorPageSupport.UI + "candidate.safe_spawn"), RuleValueReads.boolOf(candidate, RuleFields.SAFE_SPAWN, false));
+            safeSpawnBox = new UiCheckBox(RuleEditorPageSet.THEME, pages.font, Component.translatable(RuleEditorPageSupport.UI + "candidate.safe_spawn"), RuleValueReads.boolOf(candidate, RuleFields.SAFE_SPAWN, OutcomeCandidate.DEFAULT_SAFE_SPAWN));
             safeSpawnBox.setOnChanged(checked -> setCandidateStrategy(RuleFields.SAFE_SPAWN, checked));
             pages.liveWidgets.add(safeSpawnBox);
         }

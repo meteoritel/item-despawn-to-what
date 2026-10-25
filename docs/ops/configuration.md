@@ -46,7 +46,7 @@ flowchart TB
 | 回扫分摊 | 启动、维度加载与规则重载后的整维回扫每步处理多少实体 | `rescan_entities_per_step` | 转化运行时 |
 | 取消清理 | 规则重载、维度卸载与停服前摘除的任务每步取消多少 | `cancels_per_step` | 调度器 |
 | 覆盖层与平台差异 | 覆盖层目录名、Fabric 端寿命兜底 | `overlay_directory`、`fabric_lifespan_fallback_ticks` | 加载与编辑链路、平台适配 |
-| 实体临时状态 | 新产物保护与转化冷却各持续多久 | `new_product_protection_seconds`、`conversion_cooldown_seconds` | 掉落物状态层 |
+| 实体临时状态 | 新产物保护与转化冷却各持续多久；保护覆盖全部产物，冷却只作用于掉落物 | `new_product_protection_seconds`、`conversion_cooldown_seconds` | 掉落物状态层 |
 | 邻近阈值 | 同区域同类物品或实体的容量口径 | `nearby_products` 子对象 | 计划期产出预算（组数上界） |
 | 规则上限 | 规则里 `place_block` 的半径上限，同时决定编辑器半径滑条的窗口 | `max_place_block_radius` | 规则加载与保存校验、编辑器 |
 | 结算恢复 | 当前会话内结算失败后的重试上限 | `settlement_recovery_max_attempts` | 转化运行时 |

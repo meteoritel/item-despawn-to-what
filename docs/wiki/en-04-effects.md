@@ -72,7 +72,7 @@ What you see in game: one piece of rotten flesh lands near the trigger position 
 
 | Field | What it does | Values | Default | Notes |
 |---|---|---|---|---|
-| `entity` | Which mob to spawn | Mob id or tag | None, required | When a candidate turns on `safe_spawn`, the mod first looks for a spot to stand on nearby; see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement) |
+| `entity` | Which mob to spawn | Mob id or tag | None, required | Candidates have `safe_spawn` on by default, so the mod first looks for a spot to stand on nearby; see [Outcome Candidates and Settlement](en-05-outcomes-and-settlement) |
 | `count` | How many mobs to spawn | 1 to 64 | `1` | The mod spawns at most 8 per tick and continues on later ticks |
 | `age` | Age | Integer from `-24000` to `0` | `0` | Applies only to mobs that grow up, such as farm animals and villagers; `0` is an adult and `-24000` is a newborn; a value outside this range rejects the rule when it loads |
 
@@ -80,7 +80,7 @@ What you see in game: one piece of rotten flesh lands near the trigger position 
 { "type": "idtw:spawn_entity", "variant": "mob", "entity": "minecraft:chicken", "count": 1, "age": -24000 }
 ```
 
-What you see in game: a baby chicken spawns near the trigger position. With `safe_spawn` on, the mod searches the 5x5x5 block box centered on the trigger position, 125 blocks in all, from near to far for a spot: a completely safe spot is taken at once, and when every remaining candidate is hazardous it takes the least hazardous spot. Only when none of the remaining candidates can host the entity does the conversion fail, and the source items come back through the return path during delivery. This switch is off by default; the exact rules are on [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
+What you see in game: a baby chicken spawns near the trigger position. With `safe_spawn` on by default, the mod searches the 5x5x5 block box centered on the trigger position, 125 blocks in all, from near to far for a spot: a completely safe spot is taken at once, and when every remaining candidate is hazardous it takes the least hazardous spot. Only when none of the remaining candidates can host the entity does the conversion fail, and the source items come back through the return path during delivery. The exact rules are on [Outcome Candidates and Settlement](en-05-outcomes-and-settlement).
 
 ### Variant entity: Other entities
 
@@ -93,7 +93,7 @@ What you see in game: a baby chicken spawns near the trigger position. With `saf
 { "type": "idtw:spawn_entity", "variant": "entity", "entity": "minecraft:minecart", "count": 2 }
 ```
 
-What you see in game: 2 minecarts spawn near the trigger position with a small random horizontal offset. With `safe_spawn` on, the mod picks a spot from near to far in the same way, taking a completely safe spot first and the least hazardous one when every remaining candidate is hazardous, and the conversion fails only when none of the remaining candidates can host the entity.
+What you see in game: 2 minecarts spawn near the trigger position with a small random horizontal offset. With `safe_spawn` on by default, the mod picks a spot from near to far in the same way, taking a completely safe spot first and the least hazardous one when every remaining candidate is hazardous, and the conversion fails only when none of the remaining candidates can host the entity.
 
 Note: both `mob` and `entity` reject `minecraft:item` and `minecraft:experience_orb`; drops and experience orbs use the dedicated `item` and `experience` variants, and a wrong reference rejects the rule. Types that cannot be summoned (`minecraft:player`, `minecraft:fishing_bobber`) and technical presentation entities (falling block, block / item / text display, marker, interaction, area effect cloud, lightning bolt, eye of ender, ominous item spawner) cannot be products either: they never show up in the editor list and hand-written JSON is rejected at load time. The editor filters the entity picker by variant, while hand-written rule JSON is not checked against the mob split at load time: loading has no world context and a tag may mix mobs with other entities, so a strict check would make valid tag references fail at random.
 

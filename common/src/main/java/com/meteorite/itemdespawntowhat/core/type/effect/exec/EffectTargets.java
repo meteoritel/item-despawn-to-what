@@ -11,6 +11,7 @@ import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
+import com.meteorite.itemdespawntowhat.core.state.DropStateStore;
 
 /**
  * 效果执行器共享的引用解析与空间查询助手。
@@ -99,6 +100,19 @@ public final class EffectTargets {
      */
     static boolean addConversionProductNow(EffectContext context, net.minecraft.world.entity.item.ItemEntity product) {
         ReturnItemSpawner.applyGrant(product, ReturnItemSpawner.Kind.CONVERSION_PRODUCT);
+        return addEntityNow(context, product, true);
+    }
+
+    /**
+     * 立即把实体类转化产物写入世界：先授予新产物保护，再按 {@link #addEntityNow} 加入。
+     * 保护只对三类环境伤害生效（岩浆、火、仙人掌），且只在保护期内；其它产物的保护不写实体持久数据。
+     *
+     * @param context 本组执行上下文
+     * @param product 已构造好的产物实体
+     * @return 已写入世界返回 true；邻区块未加载返回 false
+     */
+    static boolean addEntityProductNow(EffectContext context, net.minecraft.world.entity.Entity product) {
+        DropStateStore.grantNewProduct(product);
         return addEntityNow(context, product, true);
     }
 
