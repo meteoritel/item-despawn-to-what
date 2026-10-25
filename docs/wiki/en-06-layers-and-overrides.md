@@ -1,6 +1,6 @@
 # Source Layers and Overrides
 
-This page explains where the mod reads rules from, which layer wins, how to disable or delete a built-in rule, and which rule runs when several rules match the same dropped item.
+This page explains where the mod reads rules from, which layer wins, how to take over a built-in rule from the overlay, how to switch a rule on or off for one save, and which rule runs when several rules match the same dropped item.
 
 The mod reads rules from three places and applies them together, and each place is a **source layer** (`builtin`, `world`, `overlay`). A **built-in datapack** (`builtin`) ships inside the mod, and a mod update replaces it. A **world datapack** (`world`) is a datapack you add to the world save. A **config overlay** (`overlay`) is a file under `config/itemdespawntowhat/rules/`, and it is the only layer you write by hand. Priority is fixed: config overlay > world datapack > built-in datapack.
 
@@ -100,55 +100,49 @@ What happens after this change:
 - Two entries in the same file share an `id`: the later one is rejected at load.
 - To override a built-in or datapack rule, your `id` must match the target exactly. One wrong character adds a new rule, and both rules stay. Use only lowercase letters, digits, and `_`, `-`, `.`, `/` in an `id`; an uppercase letter makes the mod reject that rule.
 
-## Override Control Entries: Disable and Delete
+## Overlay Entries: Full Takeover
 
-An **override control entry** (`disabled`, `delete`) is a short file that carries an `id` plus control fields and acts on the **datapack base**, the matching rule in the built-in datapack or a world datapack. The entry itself holds no rule content.
+Every entry in the overlay is a **full rule** that uses the same fields and validation as a built-in or datapack rule:
 
-| Field | What it does | Values | Default | Notes |
-| --- | --- | --- | --- | --- |
-| `disabled` | Disables the matching base rule. The content stays and stops running. | `true` / `false` | `false` | The rule still appears in the `/idtw config list` output, and that line shows `enabled=false`. |
-| `delete` | Deletes the matching base rule and removes it from the active rule list. | `true` / `false` | `false` | Repeating it has no side effect. If no base rule exists, nothing happens. |
+- Writing a rule with the same `id` takes the rule over: the overlay entry replaces the whole base rule, and fields you leave out fall back to their defaults (see the previous section).
+- Undoing a takeover means removing the overlay entry: delete the whole file, or remove that entry from a rule array, and the original built-in or datapack rule comes back unchanged. Change the `id` instead, and the entry becomes a new rule.
+- When a config file carries an unregistered top-level field, loading reports a warning and keeps that field as written; the rule is still parsed as a full rule and its other fields apply as usual.
 
-To disable one built-in example, save this file as `config/itemdespawntowhat/rules/off_arrow_rain.json`:
+## Switching Rules On and Off Per Save: Local Enable State
 
-```json
-{
-  "id": "itemdespawntowhat:builtin_arrow_rain",
-  "disabled": true
-}
-```
+Whether a rule runs is decided by two things:
 
-To delete another built-in example, save this file as `config/itemdespawntowhat/rules/remove_sapling.json`:
+- `enabled` inside the rule content is the **default enable state**: whether the author wants the rule on or off by default.
+- The effective value is the setting this save holds for that rule, or the default enable state when the save holds none. That setting is the **local enable state**, and it is stored with the save rather than written into rule files.
 
-```json
-{
-  "id": "itemdespawntowhat:builtin_item_to_block",
-  "delete": true
-}
-```
+Change it with commands (they need permission; the host of a singleplayer world always passes):
 
-Here is the difference between the two, and which one to pick:
+| Command | What it does |
+| --- | --- |
+| `/idtw rule <id> disable` | Turns the rule off in this save only; the rule content stays as written |
+| `/idtw rule <id> enable` | Turns the rule back on in this save |
+| `/idtw rule <id> default` | Drops the save's setting so the rule follows its default enable state again |
 
-- **`disabled` only stops the rule.** The base rule content stays, so a later mod update still changes its parameters, but it no longer takes part in a conversion. `/idtw config list` and `/idtw rule list` still show it as not enabled. To restore it, delete the control entry.
-- **`delete` removes the rule.** This `id` no longer appears in the active rule list, and you can restore it only by writing a full rule yourself.
-- Both act **only on the matching base rule**. They do not affect other `id` values and never remove files from a datapack or the mod itself.
-- A disabled rule reports the layer and the file of the control entry, meaning the file you wrote in the overlay, not the original built-in or datapack file.
-- You can also disable a rule by writing a full rule with the same `id` in the overlay and setting `enabled: false`. It also stops running, and the difference is that you fix the content yourself, so later changes to the base rule no longer reach it. Use `disabled` for a quick temporary stop, and use a full override to take the rule over.
+- Switching a rule off affects only whether it runs: content, priority, and conditions are read from the file as written, so a mod or datapack update still changes them.
+- The setting travels with the save: another save or another server keeps its own state, and every player on a multiplayer server shares the same local state.
+- A disabled rule still appears in `/idtw config list` and `/idtw rule list`, and that line shows "enabled=false".
+- When the rule content disappears, for example because you deleted the overlay file or a datapack no longer provides the ID, the save's setting has no rule left to apply to and loading ignores it. `/idtw rule orphans` lists those records and `/idtw rule orphans clear` removes them. If the rule comes back later, an uncleared record applies again; a cleared one follows the default enable state.
 
-Follow these rules when you write a control entry:
+What you want to do, and the tool for it:
 
-- `disabled` and `delete` accept only `true` or `false`. Any other value makes the mod reject that entry.
-- One entry cannot set both to `true`; the mod rejects that entry.
-- Control fields belong in a config overlay. A datapack rule that uses them is rejected at load.
-- Fields other than `id`, `disabled`, and `delete` are ignored and produce a warning, so leave `source` and `effects` out of a control entry.
-- When `disabled` finds no matching base rule, the mod ignores it and prints a warning. When `delete` finds no base rule, nothing happens and the mod reports no error.
+| I want to... | Use |
+| --- | --- |
+| Replace all the content of a built-in or datapack rule | Write a full rule with the same `id` in the overlay |
+| Undo a takeover and return to the built-in or datapack version | Delete the overlay file or the array entry |
+| Turn a rule off for now, keeping its content and restoring it later | The local enable commands |
+| Change the default switch state for new saves | `enabled` inside the rule JSON |
 
 ## Application Order Inside One Layer
 
 1. **Between layers**: the mod always works from the built-in datapack to the world datapack to the config overlay, whatever the file names are.
-2. **Inside one layer**: plain rule entries are applied first, then control entries (`disabled` / `delete`). The file that holds a control entry and its file name do not change the result, because the entry always reaches the rules read earlier in the same layer.
-3. **The same ID several times in one layer** (all plain entries): a later file wins. In a datapack layer the packs are compared first, so the higher-priority pack comes later and wins, then the file path decides; in the overlay the file path decides.
-4. **The merged order**: it equals the order in which each `id` is first read (the built-in datapack, then the world datapack, then the config overlay, and the file order above inside a layer). That order is the **definition order** used in the next section.
+2. **The same ID several times in one layer**: a later file wins. In a datapack layer the packs are compared first, so the higher-priority pack comes later and wins, then the file path decides; in the overlay the file path decides.
+3. **The merged order**: it equals the order in which each `id` is first read (the built-in datapack, then the world datapack, then the config overlay, and the file order above inside a layer). That order is the **definition order** used in the next section.
+4. **The enable state stays out of the merge**: the merge produces rule content in the order above, and the save's switch settings are applied to each rule afterwards, at the end of assembly.
 
 ## When Several Rules Match the Same Dropped Item
 
@@ -198,6 +192,8 @@ These three commands answer that question, and each one requires a singleplayer 
 - `/idtw rule list` prints a shorter list (`id`, source layer, enabled state, origin). Use it to scan many rules quickly.
 - `/idtw rule show <id>` prints one rule (priority, trigger seconds, effect count, enabled state) plus its raw JSON. For an overlay rule you see your own file text, and for a datapack rule you see an equivalent JSON text you can copy and edit.
 
+The enabled state in all three commands is the **effective value for this save** (the local setting, or `enabled` from the rule content when the save holds none). Change it with `/idtw rule <id> enable|disable|default`; the full syntax is in [Command Reference](en-08-commands).
+
 One line of `/idtw config list` looks like this:
 
 ```text
@@ -215,7 +211,7 @@ Check these in order:
 1. **File location and extension.** An overlay file must sit under `config/itemdespawntowhat/rules/` (subdirectories are allowed) and end in `.json`. A datapack file must sit under `data/<namespace>/idtw/rules/`.
 2. **An `id` that matches the target exactly.** One wrong character adds a new rule, and both rules stay, so nothing is overridden.
 3. **A successful load.** Run `/idtw config validate` or `/idtw config list` and read the errors and warnings, which name the source and the field path. A JSON syntax error, an empty file, or a top level that is neither a rule object nor a rule array makes the mod reject the whole file. An error inside one rule stops only that rule.
-4. **A legal control entry.** `disabled` and `delete` must be booleans, must not both be `true`, and belong in an overlay. When `disabled` finds no matching base rule, the mod ignores it and prints a warning.
+4. **A rule switched off in this save.** `enabled` in the rule content is only the default; the local setting for this save wins. Read the enabled column of `/idtw config list`, which shows the effective value, and use `/idtw rule <id> default` to drop the local setting.
 5. **Another rule taking over.** One dropped item runs one rule, so check for a rule with a higher priority or more condition leaves that also covers this item. Use `/idtw config list` and read the priority and the origin.
 6. **A reload after the change.** See [Getting Started](en-01-getting-started).
 

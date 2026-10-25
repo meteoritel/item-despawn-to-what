@@ -139,13 +139,13 @@ ItemDespawnToWhat 会在掉落物的**消失方式**发生时，按你写的规�
 
 **怎么查看**：用 `/idtw config list` 逐条列出生效规则，每行给出 id、来源层、优先级、触发秒数、效果数与是否启用；也可以直接打开数据包里的 `data/itemdespawntowhat/idtw/rules/` 阅读示例原文。
 
-**怎么停用或删除**：内置规则只读，不能直接改它；要在 config 覆盖层用同 id 的**覆盖控制条目**停用或删除，写法与合并规则见 [来源层与覆盖](zh-06-layers-and-overrides)。
+**想改哪条的内置行为**：内置规则只读，改它要在 config 覆盖层写一份同 `id` 的完整规则整条接管；只想临时关掉某条则用 `/idtw rule <id> disable`，按存档生效。写法与合并规则见 [来源层与覆盖](zh-06-layers-and-overrides)。
 
 ## 规则不生效？按顺序排查
 
 1. **文件位置对不对**：必须在 `config/itemdespawntowhat/rules/` 之下，或数据包的 `data/<命名空间>/idtw/rules/` 之下，扩展名是 `.json`。放错目录等于没放。
 2. **JSON 合法吗**：语法错误、多余逗号、顶层既不是规则对象也不是规则数组，都会让整个文件不生效，`validate` 会报「JSON 解析失败」或「规则文件顶层必须是规则对象或规则数组」。
-3. **`enabled` 是不是 `false`**：为 `false` 的规则仍在加载清单里（`config list` 会显示「启用=false」），但不参与匹配；被覆盖层停用过的内置规则同样显示为未启用。
+3. **这条规则是不是被关掉了**：规则里的 `enabled` 是默认启用，为 `false` 的规则仍加载但不参与匹配（`config list` 显示「启用=false」）；本存档也可以单独停用某条，生效值同样显示在「启用」列，用 `/idtw rule <id> default` 回退到默认。
 4. **`source` 匹配得上吗**：物品 id 的拼写、命名空间与标签名都要正确，写错的静态物品 id 会让该条被拒载；也别漏看 `exclude` 是不是把你想要的物品排除了。
 5. **消失方式与时间对不对**：`triggers` 没写就只有 `natural`；要观察被火烧、被岩浆或仙人掌销毁，必须把对应取值写进 `triggers`。`trigger_after_seconds` 超过该掉落物的实际存活时间时，它会先自然消失，等不到触发。
 6. **条件满足了吗**：`conditions` 里任何一个条件不命中，这条规则就不会被选中。条件类型与语义见 [条件](zh-03-conditions)。

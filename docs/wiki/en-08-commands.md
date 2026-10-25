@@ -11,6 +11,11 @@ This page lists every player-facing command, the permission each one needs, and 
 | `/idtw config list` | Lists the active rules one by one with priority, trigger seconds, and effect count | Permission required | No |
 | `/idtw rule list` | Prints a compact list of the active rules | Permission required | No |
 | `/idtw rule show <id>` | Prints the JSON of a rule as it is active now | Permission required | No |
+| `/idtw rule <id> enable` | Switches the rule on in this save; rule files stay untouched | Permission required | Yes |
+| `/idtw rule <id> disable` | Switches the rule off in this save; rule files stay untouched | Permission required | Yes |
+| `/idtw rule <id> default` | Drops the save's setting for the rule so it follows the default enable state | Permission required | Yes |
+| `/idtw rule orphans` | Lists the save's switch records that no longer have a matching rule | Permission required | No |
+| `/idtw rule orphans clear` | Removes those orphan records | Permission required | No, it only clears records |
 | `/idtw config edit` | Opens the graphical editor | Permission required, and a player must run it | Yes, after a save |
 | `/idtw config edit-lock status` | Shows who holds the edit lock | Every player | No |
 | `/idtw config edit-lock release` | Forces the edit lock open | Permission level 2 or higher | No, it only releases the lock |
@@ -22,7 +27,7 @@ This page lists every player-facing command, the permission each one needs, and 
 - `/idtw config edit-lock status` needs no permission, so every player can check it.
 - `/idtw config edit-lock release` looks only at permission level 2 or higher, not at singleplayer. A singleplayer save without cheats sits at permission level 0, so this command does not work there; the other commands are unaffected.
 - While the server is still starting, a command reports that the rule runtime is not ready yet. Try again a moment later.
-- While the server is saving editor changes, `config validate`, `config reload`, `config list`, `rule list`, and `rule show` reply that the rules are being saved and ask you to retry after the save finishes.
+- While the server is saving editor changes, `config validate`, `config reload`, `config list`, `rule list`, `rule show`, `rule <id> enable|disable|default`, and `rule orphans` reply that the rules are being saved and ask you to retry after the save finishes.
 
 ## The Shared Format of a Check
 
@@ -76,7 +81,7 @@ myrules:chicken_to_rotten_flesh | layer=overlay | priority=0 | trigger=10s | eff
 
 - `layer` is one of the English layer names `builtin`, `world`, or `overlay`. `origin` is the layer name plus the source pack ID and the file path; for the overlay it gives the path relative to `config/itemdespawntowhat`.
 - `priority` repeats the `priority` field and reads `0` when the rule omits it. `trigger` is the `trigger_after_seconds` value in seconds. `effects` counts the entries in the top-level `effects` list; a rule that declares only `outcomes` shows `0` here, because effects inside an outcome candidate do not count.
-- A rule with `enabled=false` still appears in the list; it does not take part in matching.
+- A rule with `enabled=false` still appears in the list; it does not take part in matching. This column is the **effective value for this save**: the local switch setting wins, and the rule's `enabled` applies when the save holds no setting.
 - When the same ID exists in several layers, only the one that wins appears. For how the layers merge, see [Source Layers and Overrides](en-06-layers-and-overrides).
 
 ## /idtw rule list and /idtw rule show
@@ -108,13 +113,42 @@ Raw JSON: {"id":"myrules:chicken_to_rotten_flesh", ... }
 - When no printable content is available, the second line becomes a notice that no raw JSON is available for that ID, because the rule is model-encoded or not editable.
 - When the ID is wrong or missing, the command reports that the rule was not found and returns a failure.
 
+## /idtw rule <id> enable|disable|default
+
+Syntax: `/idtw rule <id> enable`, `/idtw rule <id> disable`, or `/idtw rule <id> default`, with `<id>` written as in `rule show`.
+
+- `disable` switches the rule off in this save only and `enable` switches it back on. The rule content, its source, and its priority stay as written, and no overlay file is created.
+- `default` drops the save's setting so the rule follows `enabled` in its JSON again.
+- The setting is stored with the save, so every player on a multiplayer server shares it, while another save or server keeps its own.
+- A successful write rebuilds the index through the same path as a save and rescans every dimension, so dropped items already on the ground are judged again under the new state. When the state is stored but the runtime reload fails, the reply says it takes effect after the next reload.
+- The three success replies report that the rule was enabled in this save, disabled in this save, or returned to its default enable state. `default` on a rule that already follows the default reports that it already does.
+- A missing `<id>` reports that the rule was not found, and the command returns a failure.
+
+## /idtw rule orphans and /idtw rule orphans clear
+
+After you delete an overlay entry, or a datapack stops providing an ID, the save's switch record for that ID has no rule left. Loading ignores those records but keeps them until they are cleaned up.
+
+Syntax: `/idtw rule orphans` lists them, and `/idtw rule orphans clear` removes them.
+
+- The list starts with the record count and then prints one line per record as `id | enabled=…`. With no orphan records the command reports that there are none.
+- Clearing removes only orphan records, leaves the switch state of existing rules alone, and reports how many records it removed.
+- If the rule comes back later, an uncleared record applies again; a cleared one follows the rule's default enable state.
+- While the runtime is not ready, the command reports that the rule runtime is not ready yet and asks you to wait for server startup.
+
 ## /idtw config edit and the Edit Lock
 
-`/idtw config edit` opens the graphical editor. The server takes the exclusive edit lock before it opens, and the editor's own controls are outside the scope of this page.
+`/idtw config edit` opens the graphical editor. The server takes the exclusive edit lock before it opens. The editor's enable controls match the enable commands, as described in "Enable Controls in the Editor".
 
 - Only an in-game player can run it. The console sees a message that the subcommand can only be run by a player.
 - Without edit permission, the command reports that you do not have permission to edit the overlay rules.
 - When another player holds the lock, the command names that player and points you to `/idtw config edit-lock status`. When the lock moves to you, it reports that the editor entry was sent to you.
+
+### Enable Controls in the Editor
+
+- **Enable / Disable** in the rule list and **Server: enabled / Server: disabled** on the Basic tab change this save's setting, exactly like `/idtw rule <id> enable|disable`. Click **Save** to submit them together with content changes.
+- **Enabled by default** on the Basic tab is a content field: changing it writes the value into the rule file. **Reset to default** on the same row drops this save's setting so the rule follows **Enabled by default** again.
+- A **(local server)** suffix on a list row means the rule has its own setting in this save; a disabled row is greyed out.
+- Read-only entries from a datapack can still be switched on or off. When the editor shows **Read-only · changes are not saved**, content changes are not written back and the enable state still follows this save.
 
 ### /idtw config edit-lock status
 

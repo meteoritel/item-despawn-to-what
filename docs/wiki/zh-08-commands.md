@@ -11,6 +11,11 @@
 | `/idtw config list` | 逐条列出生效规则，含优先级、触发秒数、效果数 | 需要权限 | 否 |
 | `/idtw rule list` | 生效规则的紧凑清单 | 需要权限 | 否 |
 | `/idtw rule show <id>` | 输出某条规则当前生效内容的 JSON | 需要权限 | 否 |
+| `/idtw rule <id> enable` | 在本存档启用这条规则，规则文件不动 | 需要权限 | 是 |
+| `/idtw rule <id> disable` | 在本存档停用这条规则，规则文件不动 | 需要权限 | 是 |
+| `/idtw rule <id> default` | 删掉本存档对这条规则的启停设置，回退到规则里的默认启用 | 需要权限 | 是 |
+| `/idtw rule orphans` | 列出已经没有对应规则的本服启停记录 | 需要权限 | 否 |
+| `/idtw rule orphans clear` | 清理这些无主记录 | 需要权限 | 否，只清记录 |
 | `/idtw config edit` | 打开图形编辑器的入口 | 需要权限，且只能由玩家执行 | 保存后是 |
 | `/idtw config edit-lock status` | 查看编辑锁现在在谁手里 | 所有玩家 | 否 |
 | `/idtw config edit-lock release` | 强制释放编辑锁 | 权限等级 ≥2 | 否，只释放锁 |
@@ -22,7 +27,7 @@
 - `/idtw config edit-lock status` 不要求权限，任何玩家都能查。
 - `/idtw config edit-lock release` 只看权限等级是否 ≥2，不看是不是单人世界；单人存档没开作弊时权限等级为 0，所以这条命令用不了，其它命令不受影响。
 - 服务端还没启动完成时，命令会提示「……尚未就绪，请等待服务端启动完成」，稍后再试即可。
-- 服务端正在保存编辑器改动时，`config validate`、`config reload`、`config list`、`rule list`、`rule show` 会提示「规则正在保存，请等待保存结束后重试。」，等这次保存收尾再执行。
+- 服务端正在保存编辑器改动时，`config validate`、`config reload`、`config list`、`rule list`、`rule show`、`rule <id> enable|disable|default`、`rule orphans` 会提示「规则正在保存，请等待保存结束后重试。」，等这次保存收尾再执行。
 
 ## 一次检查回显的通用格式
 
@@ -76,7 +81,7 @@ myrules:chicken_to_rotten_flesh | 来源层=overlay | 优先级=0 | 触发=10 �
 
 - `来源层` 是 `builtin`、`world`、`overlay` 三个英文层名之一；`出处` 是层名加上来源数据包标识与文件路径，覆盖层则给出相对 `config/itemdespawntowhat` 的路径。
 - `优先级` 是规则里的 `priority`，没写就是 `0`；`触发` 是 `trigger_after_seconds` 的秒数；`效果` 是最外层 `effects` 列表里的效果个数（只写 `outcomes` 的规则这里是 `0`，写在候选结果里的效果不计入这一列）。
-- `启用=false` 的规则仍在清单里，只是不参与匹配。
+- `启用=false` 的规则仍在清单里，只是不参与匹配。这一列是**本存档的生效值**（本服启停设置优先，未设置时取规则里的 `enabled`）。
 - 同一个 id 在多层都有时，只显示最终生效的那一条；想看合并规则见 [来源层与覆盖](zh-06-layers-and-overrides)。
 
 ## /idtw rule list 与 /idtw rule show
@@ -108,13 +113,42 @@ myrules:chicken_to_rotten_flesh | 来源层=overlay | 启用=true | 出处=confi
 - 拿不到可输出的内容时，第二行会换成提示「<id> 没有可输出的原始 JSON（由模型编码或不可编辑）。」。
 - id 写错或不存在时提示「未找到规则 <id>」，本次命令按失败返回。
 
+## /idtw rule <id> enable|disable|default
+
+语法：`/idtw rule <id> enable`、`/idtw rule <id> disable`、`/idtw rule <id> default`，`<id>` 的写法与 `rule show` 相同。
+
+- `disable` 只在本存档停用这条规则，`enable` 重新启用；规则内容、来源与优先级都不变，也不产生覆盖层文件。
+- `default` 删掉本存档的设置，让这条规则重新跟随规则 JSON 里的 `enabled`（默认启用）。
+- 设置按存档保存，多人服务器上所有玩家共享；换存档、换服务器各自独立。
+- 写入成功后按保存链路重建索引并回扫全部维度，已经在地上的掉落物按新状态重新判断。状态已保存但运行时重载失败时，回显会说明会在下次重载后生效。
+- 回显对应三种成功结果：「规则 <id> 已在本服启用。」「规则 <id> 已在本服停用。」「规则 <id> 已恢复默认启用状态。」；`default` 遇到本来就继承默认的情况提示「规则 <id> 本来就继承默认启用状态。」。
+- `<id>` 不存在时提示「未找到规则 <id>。」，本次命令按失败返回。
+
+## /idtw rule orphans 与 /idtw rule orphans clear
+
+删掉覆盖层条目、或数据包不再提供某个 id 之后，这个 id 在本存档的启停记录就没有对应规则了。加载时这些记录被忽略，但会保留下来，直到被清理。
+
+语法：`/idtw rule orphans` 列出它们，`/idtw rule orphans clear` 清理。
+
+- 列表先给出条数，再逐行给出 `id | 启用=…`；没有无主记录时提示「没有无主本服启用状态记录。」。
+- 清理只删这些无主记录，仍存在规则的启停状态不受影响，回显清理条数。
+- 规则后来又出现时，未清理的旧记录会重新生效；清理过则按规则里的默认启用。
+- 运行时尚未就绪时提示「新链路规则运行时尚未就绪，请等待服务端启动完成。」。
+
 ## /idtw config edit 与编辑锁
 
-`/idtw config edit` 是打开图形编辑器的入口，服务端会先取得独占的编辑锁再打开它；编辑器里的具体操作不在本页范围。
+`/idtw config edit` 是打开图形编辑器的入口，服务端会先取得独占的编辑锁再打开它。编辑器里的启停控件与下面的启停命令等价，见「编辑器里的启停控制」。
 
 - 只能由游戏内玩家执行，控制台执行会提示「该子命令只能由玩家执行。」。
 - 没有编辑权限时提示「你没有编辑覆盖层规则的权限。」。
 - 锁已被别人持有时，会提示「规则编辑器已被 <玩家> 锁定，可用 /idtw config edit-lock status 查看。」；取到锁时提示「已向 <玩家> 发送编辑入口。」。
+
+### 编辑器里的启停控制
+
+- 列表页的「启用 / 停用」与基本页的「本服：启用 / 停用」改的都是本存档的设置，效果等同 `/idtw rule <id> enable|disable`；改完点「保存」才提交，并随规则内容一起生效。
+- 基本页的「默认启用」是规则内容字段，改它会把值写进规则文件；同一行的「恢复默认」删掉本存档的设置，让规则重新跟随「默认启用」。
+- 列表行的「（本服）」说明这条规则在本存档有单独设置；停用的行整行置灰。
+- 内容只读的条目（来自数据包）同样可以改启停；编辑页右上角显示「只读 · 改动不会保存」时，内容改动不写回，启停按本服状态生效。
 
 ### /idtw config edit-lock status
 

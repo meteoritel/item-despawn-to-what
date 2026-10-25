@@ -23,7 +23,7 @@ The fields `effects`, `outcomes`, `combination`, `source_cost`, and `catalyst_co
 - **What it does**: identifies one rule. The mod merges sources by ID at load time, so only one rule with a given ID ends up active. Commands, the editor, and error messages all use it to locate a rule.
 - **Values and ranges**: a string in the form `namespace:path`, for example `myrules:chicken_to_rotten_flesh`. The namespace and the path accept only lowercase letters, digits, underscores, dots, and hyphens, and the path can use `/` to nest.
 - **Default**: it is optional. The mod derives it from the file path only when the file holds a single rule. Every entry in a multi-rule file must declare `id`, or the mod rejects that entry at load. For the derivation rules, see [Getting Started](en-01-getting-started).
-- **When to change it**: when you name a new rule; when you want to disable or replace an existing rule through the overlay, which requires the exact same ID (see [Source Layers and Overrides](en-06-layers-and-overrides)); or when you move a rule from one file to another.
+- **When to change it**: when you name a new rule; when you want to take an existing rule over through the overlay, which requires the exact same ID (see [Source Layers and Overrides](en-06-layers-and-overrides)); or when you move a rule from one file to another.
 
 ```json
 {
@@ -56,12 +56,13 @@ The fields `effects`, `outcomes`, `combination`, `source_cost`, and `catalyst_co
 
 These two fields affect display only. Changing them does not change what the rule matches, when it fires, or what it produces.
 
-## enabled: The Switch
+## enabled: The Default Enable State
 
-- **What it does**: with `false`, the mod still reads the rule and still lists it in `/idtw config list`, but the rule takes no part in matching, which temporarily turns it off.
+- **What it does**: the **default enable state** of the rule, meaning whether a new save (or a save that never set this rule itself) runs it. A rule with `false` is still read and still listed in `/idtw config list`, but it takes no part in matching.
 - **Values and ranges**: `true` or `false`. Any other type, such as the string `false`, rejects that rule at load.
 - **Default**: `true`.
-- **When to change it**: to turn a rule off while you watch the rest, or to keep a working rule around without using it. To turn off a builtin rule for good, use an overlay control entry rather than editing the builtin file, which is read-only (see [Source Layers and Overrides](en-06-layers-and-overrides)).
+- **What overrides it**: the save's local enable state wins. Switch a rule on or off in game with `/idtw rule <id> enable|disable|default`; the setting is stored with the save and never written back to the JSON. See [Source Layers and Overrides](en-06-layers-and-overrides).
+- **When to change it**: to ship a rule that starts out off (sample rules, or configuration meant for specific saves). To turn a rule off only in your own save, use the commands above.
 
 ```json
 {

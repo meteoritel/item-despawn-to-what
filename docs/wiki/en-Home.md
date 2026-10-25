@@ -12,7 +12,8 @@ The editor ships with example rules, so you can play without writing any file fi
 
 - **New rule** builds one from scratch;
 - **Duplicate** copies an example to adjust;
-- **Enable / Disable** decides whether a rule takes part;
+- **Enable / Disable** in the list switches a rule on or off for this save;
+- **Enabled by default** on the Basic tab is the rule's own default, and **Reset to default** drops this save's setting;
 - click **Save**, and the change takes effect right away.
 
 When you are not sure what a field or button does, hover over it.
@@ -44,7 +45,7 @@ Each page solves one problem. Read them in the order below, or jump straight to 
 | [Conditions](en-03-conditions) | How to write `conditions`: which nodes a condition tree has, what each condition type needs, and what happens when conditions are not satisfied. |
 | [Effects](en-04-effects) | What a rule can do once it is satisfied: how to write each effect type, and what you see in game. |
 | [Outcome Candidates and Settlement](en-05-outcomes-and-settlement) | The two ways to write `effects` and `outcomes`, rotation between results, the cost of each group, and how a whole stack is settled and returned. |
-| [Source Layers and Overrides](en-06-layers-and-overrides) | The priority of the three source layers, replacing a rule by id, disabling or deleting a built-in rule, and which rule wins when several rules share one dropped item. |
+| [Source Layers and Overrides](en-06-layers-and-overrides) | The priority of the three source layers, replacing a built-in rule by id, switching a rule on or off per save, and which rule wins when several rules share one dropped item. |
 | [Server Configuration](en-07-server-config) | What each item in `server.json` controls and its default, and what to change when the server lags or the pace is wrong. |
 | [Command Reference](en-08-commands) | Every command, the permission each one requires, and how to read its output. |
 
@@ -58,7 +59,7 @@ Each page solves one problem. Read them in the order below, or jump straight to 
 | Convert only under certain conditions (dimension, biome, time, weather, height, light level...) | [Conditions](en-03-conditions) |
 | Change how long the wait is, or trigger on fire, lava, or cactus destruction | [Rule Fields](en-02-rule-basics) |
 | Make one rule run before other rules | [Rule Fields](en-02-rule-basics) |
-| Disable or delete a built-in example rule | [Source Layers and Overrides](en-06-layers-and-overrides) |
+| Override or switch off a built-in example rule | [Source Layers and Overrides](en-06-layers-and-overrides) |
 | Make one item alternate between results, or add a cost to a conversion | [Outcome Candidates and Settlement](en-05-outcomes-and-settlement) |
 | Fix server lag, conversions that fire too often, or too many products piling up | [Server Configuration](en-07-server-config) |
 | Find out why a rule change did nothing, or read an error message | [Getting Started](en-01-getting-started), [Command Reference](en-08-commands) |

@@ -139,13 +139,13 @@ The mod ships a set of sample rules in the builtin datapack. Some of them are en
 
 **How to inspect them**: run `/idtw config list` to list the active rules one by one. Each line shows the ID, source layer, priority, trigger seconds, effect count, and enabled state. You can also open `data/itemdespawntowhat/idtw/rules/` in the datapack and read the samples.
 
-**How to disable or delete them**: builtin rules are read-only, so you cannot edit them directly. Use an **override control entry** with the same ID in the config overlay to disable or delete one. For that syntax and the merge rules, see [Source Layers and Overrides](en-06-layers-and-overrides).
+**How to change one**: builtin rules are read-only, so a change means writing a full rule with the same `id` in the config overlay and taking the rule over. To switch one off for now, run `/idtw rule <id> disable`, which applies to this save. For the syntax and the merge rules, see [Source Layers and Overrides](en-06-layers-and-overrides).
 
 ## Rule Not Working? Check in Order
 
 1. **Is the file in the right place?** It must sit under `config/itemdespawntowhat/rules/` or under `data/<namespace>/idtw/rules/` in a datapack, with the extension `.json`. A file in the wrong folder does nothing.
 2. **Is the JSON valid?** A syntax error, a stray comma, or a root that is neither a rule object nor a rule array keeps the whole file out, and `validate` reports "JSON 解析失败" or "规则文件顶层必须是规则对象或规则数组".
-3. **Is `enabled` set to `false`?** A disabled rule still appears in the load list (`config list` shows "启用=false"), but it does not take part in matching. A builtin rule you disabled through an overlay also shows as not enabled.
+3. **Is the rule switched off?** `enabled` in the content is the default; a rule with `false` still loads but does not take part in matching (`config list` shows "启用=false"). A save can also switch a rule off on its own, and that effective value shows in the same column; run `/idtw rule <id> default` to follow the default again.
 4. **Does `source` match?** Check the spelling of the item ID, its namespace, and the tag name. An unknown static item ID rejects that rule. Also check that `exclude` is not removing the item you want.
 5. **Are the trigger kind and timing right?** With no `triggers` field, only `natural` applies. To watch a burn, a lava, or a cactus case, list that value in `triggers`. When `trigger_after_seconds` is longer than the item actually survives, the item despawns first and the rule never fires.
 6. **Are the conditions met?** If any condition in `conditions` fails, the mod never picks that rule. For condition types and semantics, see [Conditions](en-03-conditions).
