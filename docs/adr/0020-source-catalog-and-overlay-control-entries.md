@@ -3,6 +3,7 @@
 - 状态：已实施；实现见 `core/load/RuleSourceIndex.java`、`core/service/RuleSnapshotAssembler.java`、`core/network/protocol/RuleSnapshotEntry.java`、`core/network/protocol/RuleSourceView.java` 与[编辑协议](../api/edit-protocol.md)。
 - 依据：加载与合并链路沿用 [ADR-0014](0014-three-layer-scope-and-overlay-merge.md)；来源目录、应用流程与覆盖文件形态为本决策内容。
 - 相关术语：`GLOSSARY.md` 中的「来源层」「覆盖层」「数据包基底」「覆盖控制条目」「来源标识」。
+- 现行决策：启用语义与停用 / 屏蔽控制条目见 [ADR-0044](0044-rule-enable-state-layering.md)。
 
 ## 背景
 
