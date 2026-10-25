@@ -2,6 +2,8 @@ package com.meteorite.itemdespawntowhat.client.ui.widget;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
@@ -20,7 +22,7 @@ import org.lwjgl.glfw.GLFW;
  * <p>选中段用主题的 selected 九宫格（中心色为 {@code CONTROL_SELECTED}）绘制，未选中段用 control 九宫格，
  * 两者底图不同；段内文字统一用 {@code TEXT_PRIMARY}，避免浅蓝选中底上的白字对比度不足。
  */
-public final class UiSegmentedControl implements UiWidget, UiFocusTarget {
+public final class UiSegmentedControl implements UiWidget, UiFocusTarget, UiLayoutSource {
 
     // 最外侧左右各留的缩进（像素）
     private static final int EDGE_INSET = 1;
@@ -181,6 +183,28 @@ public final class UiSegmentedControl implements UiWidget, UiFocusTarget {
             }
         }
         return -1;
+    }
+
+    /**
+     * 导出分段控件的只读排版快照：每个候选项一个 CONTROL，矩形取该段均分后的真实命中区。
+     *
+     * <p>段矩形同时决定命中，快照里的中心点必然落在该段上，探针据此点击与真实输入走同一条路径；
+     * 带宽按段宽扣掉段内左右留白，与绘制时的裁剪口径一致，因此 {@code clipped()} 反映画面。
+     * 控件不可见或没有候选项时不报节点，调用方无需区分空控件与未实现。</p>
+     */
+    @Override
+    public List<UiLayoutNode> layoutNodes() {
+        if (!visible || options.isEmpty()) {
+            return List.of();
+        }
+        List<UiLayoutNode> nodes = new ArrayList<>(options.size());
+        for (int i = 0; i < options.size(); i++) {
+            UiRect segment = segmentRect(i);
+            Component label = options.get(i).label();
+            nodes.add(new UiLayoutNode(UiLayoutNode.Kind.CONTROL, segment, label, font.width(label),
+                    Math.max(0, segment.width() - LABEL_INSET), enabled, true, List.of()));
+        }
+        return nodes;
     }
 
     @Override

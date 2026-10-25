@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.widget;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import java.util.Objects;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.BORDER;
+import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.CARD_PADDING_X;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.CARD_HEIGHT;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphLayout.isContainer;
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphRenderer.drawBorder;
@@ -13,6 +14,8 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRubberBand;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTransform;
@@ -56,7 +59,7 @@ import org.lwjgl.glfw.GLFW;
  * {@link #setInlineEditor(InlineEditor, UiTreePath)} 装载条件叶参数；候选修改经绑定回调交回宿主，
  * 控件不持有正式保存入口。缩进摘要 {@link UiConditionTreeSummary} 共用条件数据与校验，保持只读。</p>
  */
-public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, ConditionTreeContract.Navigation {
+public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, UiLayoutSource, ConditionTreeContract.Navigation {
 
     // 视图定位与手势阈值使用 GUI 屏幕像素。
     private static final int FIT_PADDING = 12;
@@ -878,6 +881,55 @@ public final class UiConditionGraphEditor implements UiWidget, UiFocusTarget, Co
         transform.setViewport(bounds.x(), bounds.y(), bounds.width(), bounds.height());
         picker.setBounds(bounds);
         inlinePanel.setBounds(bounds);
+    }
+
+    /**
+     * 导出画布的只读排版快照：源物品与结果两个端点、每张卡片、空树占位，以及打开时的类型选择面板。
+     *
+     * <p>画布内部矩形经 {@link #toScreenRect(UiRect)} 换算成 GUI 坐标，与绘制、命中共用同一条变换，
+     * 节点矩形中心因此落在真正可点的位置。卡片文案取 {@link ConditionGraphLayout#cardText}，即绘制时
+     * 按卡片宽裁剪过的那份标题与宽度，探针断言的字与玩家看到的一致；内容行与悬停详情属于悬停信息，
+     * 不进快照。空树时只上报画布自身的加条件热点（占位提示画在它上方），点它的中心即可新增条件。
+     * 参数面板由宿主条件树浮层并入快照，这里不重复上报。</p>
+     */
+    @Override
+    public List<UiLayoutNode> layoutNodes() {
+        if (!visible || bounds.width() <= 0 || bounds.height() <= 0) {
+            return List.of();
+        }
+        graph.ensureText();
+        List<UiLayoutNode> nodes = new ArrayList<>();
+        addEndpoint(nodes, graph.sourceRect(), graph.sourceTitleText(), graph.sourceTitleWidth());
+        addEndpoint(nodes, graph.resultRect(), graph.resultTitleText(), graph.resultTitleWidth());
+        for (ConditionNode node : graph.nodes()) {
+            UiRect rect = graph.rect(node);
+            if (rect == null) {
+                continue;
+            }
+            ConditionGraphLayout.CardText text = graph.cardText(node);
+            nodes.add(new UiLayoutNode(UiLayoutNode.Kind.CONTROL, toScreenRect(rect),
+                    Component.literal(text.title()), text.titleWidth(), titleBudget(rect),
+                    enabled, true, List.of()));
+        }
+        if (graph.root() == null && !graph.hotspots().isEmpty()) {
+            UiRect hotspot = graph.hotspots().getFirst().rect();
+            nodes.add(new UiLayoutNode(UiLayoutNode.Kind.CONTROL, toScreenRect(hotspot), emptyMessage,
+                    font.width(emptyMessage), titleBudget(hotspot), enabled, true, List.of()));
+        }
+        if (picker.isOpen()) {
+            nodes.addAll(picker.layoutNodes());
+        }
+        return nodes;
+    }
+
+    // 端点与卡片共用同一条标题留白：左右边距各一份，剩余宽度就是绘制时可用的文案宽
+    private int titleBudget(UiRect content) {
+        return Math.max(0, content.width() - (BORDER + CARD_PADDING_X) * 2);
+    }
+
+    private void addEndpoint(List<UiLayoutNode> nodes, UiRect content, String title, int titleWidth) {
+        nodes.add(new UiLayoutNode(UiLayoutNode.Kind.CONTROL, toScreenRect(content),
+                Component.literal(title), titleWidth, titleBudget(content), enabled, true, List.of()));
     }
 
     @Override

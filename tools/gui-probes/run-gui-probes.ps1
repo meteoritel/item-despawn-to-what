@@ -1,7 +1,7 @@
 ﻿# GUI 探针编排：准备 dev 运行目录、拉起真实客户端、驱动用例、收证据、还原现场。
 #
 # 只在本机跑：需要真实 GL 桌面会话，跑完还原 options.txt 并停掉自己拉起的客户端。
-# 客户端已开着时用 -NoLaunch 直接连，本地迭代更快。
+# -Reuse 复用已运行的客户端：不拉新进程、不改写/还原 options.txt，等价于 -NoLaunch 且不杀进程。
 param(
     [string]$RunDir = "",
     [string]$Cases = "",
@@ -10,7 +10,8 @@ param(
     [int]$WaitClient = 240,
     [switch]$NoLaunch,
     [switch]$KeepClient,
-    [switch]$SkipSetup
+    [switch]$SkipSetup,
+    [switch]$Reuse
 )
 
 $ErrorActionPreference = "Stop"
@@ -18,6 +19,9 @@ $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $runRoot = Join-Path $repoRoot "neoforge/build/gui-runs"
 if ([string]::IsNullOrWhiteSpace($RunDir)) {
     $RunDir = Join-Path $runRoot (Get-Date -Format "yyyyMMdd-HHmmss")
+} elseif (-not [System.IO.Path]::IsPathRooted($RunDir)) {
+    # 相对名字一律落在 gui-runs 下：证据目录集中，不随调用者的当前目录漂移。
+    $RunDir = Join-Path $runRoot $RunDir
 }
 $RunDir = [System.IO.Path]::GetFullPath($RunDir)
 New-Item -ItemType Directory -Force -Path $RunDir | Out-Null
@@ -68,9 +72,11 @@ function Restore-Options {
 
 $client = $null
 $exitCode = 0
-Set-Options
+$launch = -not ($NoLaunch -or $Reuse)
+# 只有真正拉起客户端才碰 options.txt：复用会话时改它会把现场搞脏。
+if ($launch) { Set-Options }
 try {
-    if (-not $NoLaunch) {
+    if ($launch) {
         $clientLog = Join-Path $RunDir "client.log"
         $clientErr = Join-Path $RunDir "client.err.log"
         Write-Host "[gui-probes] 启动客户端，日志 $clientLog"
@@ -99,8 +105,21 @@ try {
         Write-Host "[gui-probes] 停止客户端进程树 pid=$($client.Id)"
         & taskkill /PID $client.Id /T /F 2>$null | Out-Null
     }
-    Restore-Options
+    if ($launch) { Restore-Options }
 }
 
 Write-Host "[gui-probes] 证据目录 $RunDir"
+$summaryPath = Join-Path $RunDir "gui-summary.json"
+if (Test-Path $summaryPath) {
+    $guiSummary = Get-Content $summaryPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($guiSummary.shots) {
+        Write-Host "[gui-probes] 截图 $($guiSummary.shots.count) 张"
+        if ($guiSummary.shots.contact_sheet) {
+            Write-Host "[gui-probes] contact sheet $($guiSummary.shots.contact_sheet)"
+        }
+        if ($guiSummary.shots.list) {
+            Write-Host "[gui-probes] 截图清单 $($guiSummary.shots.list)"
+        }
+    }
+}
 exit $exitCode

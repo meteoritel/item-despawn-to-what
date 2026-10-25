@@ -14,15 +14,15 @@
     "verdict": "pass" | "warn" | "fail" | "skip" | "error",
     "detail": str,                                  # 可选说明
     "checks": [{"name": str, "expected": str, "actual": str, "pass": bool}],
-    "artifacts": [{                                 # 可选截图
+    "artifacts": [{                                 # 可选证据文件
         "name": str,
         "path": str,
-        "png_bytes": bytes,                         # 可选；有则 base64 内嵌
-        "rects": [{"x": int, "y": int, "w": int, "h": int, "label": str}],  # 可选元素矩形叠层
-        "kind": "image" | "file",                   # 可选；file 只列出证据文件路径
+        "png_bytes": bytes,                         # 只给拼图用，不进报告
+        "kind": "screenshot" | "json",
     }],
   }
 - env：环境一致性块（os / java / 分辨率 / gui_scale / 截图时间等）。
+- shots：截图证据块（contact sheet 字节 + 截图清单），只列证据，不判定图像异同。
 
 输出：(html, summary)。summary["verdict"] 是 pass / warn / fail / skip 之一，供编排层换算
 退出码；明细计数见 passed / warned / failed / skipped / errors / total_checks / passed_checks。
@@ -103,7 +103,6 @@ article.case h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 10p
 table.checks tr.bad { background: #fff5f5; }
 table.checks tr.bad td:last-child { color: #cf222e; font-weight: 600; }
 table.checks tr.ok td:last-child { color: #1a7f37; }
-.shots { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 12px; }
 .shot { margin: 0; max-width: 100%; overflow: auto; }
 .shot-frame {
   position: relative; display: inline-block; line-height: 0;
@@ -120,6 +119,13 @@ p.file { margin: 6px 0; font-size: 12px; color: #57606a; }
   background: #0969da; color: #fff; font: 11px/16px "Cascadia Mono", Consolas, monospace;
   font-style: normal; white-space: nowrap;
 }
+h3 { margin: 18px 0 8px; font-size: 14px; }
+.files { margin-top: 12px; }
+details > summary.section-title {
+  font-size: 16px; font-weight: 600; cursor: pointer; list-style-position: outside;
+}
+details[open] > summary.section-title { margin-bottom: 12px; }
+table.perf th { width: 160px; }
 """
 
 
@@ -152,6 +158,112 @@ def _badge(verdict: str) -> str:
     return '<span class="badge ' + verdict + '">' + _VERDICT_LABELS[verdict] + "</span>"
 
 
+_PHASE_LABELS = (
+    ("install_ms", "安装 prelude"),
+    ("wait_client_ms", "等待客户端"),
+    ("setup_ms", "前置 setup"),
+    ("cases_ms", "用例"),
+    ("sheet_ms", "截图拼图"),
+    ("report_ms", "渲染报告"),
+)
+
+
+def _milliseconds(value: object) -> str:
+    return "%d ms" % int(float(value or 0))
+
+
+def _size(width: object, height: object) -> str:
+    return "%d×%d" % (int(width or 0), int(height or 0))
+
+
+def _embedded_image(alt: str, png: object, width: object = None, height: object = None) -> str:
+    """内嵌 PNG；字节由调用方读好传入，渲染层不做文件 IO。"""
+    if not png:
+        return '<span class="no-png">未内嵌图片</span>'
+    attributes = ' alt="' + _escape(alt) + '"'
+    if width and height:
+        attributes += ' width="' + str(int(width)) + '" height="' + str(int(height)) + '"'
+    encoded = base64.b64encode(bytes(png)).decode("ascii")
+    return '<img src="data:image/png;base64,' + encoded + '"' + attributes + ">"
+
+
+def _shots_section(shots):
+    """截图区块：内嵌 contact sheet 总览 + 每张截图的清单；不做任何图像比对判定。"""
+    if not shots:
+        return ""
+    items = shots.get("shots") or []
+    parts = ['<section><h2>截图</h2>',
+             '<div class="counts"><span>截图 <b>' + str(shots.get("count", len(items)))
+             + "</b></span>" + "<span>拼图耗时 <b>" + _milliseconds(shots.get("sheet_ms"))
+             + "</b></span></div>"]
+    if shots.get("contact_sheet"):
+        parts.append('<h3>contact sheet</h3><figure class="shot"><div class="shot-frame">'
+                     + _embedded_image("contact sheet", shots.get("png_bytes"))
+                     + "</div><figcaption><b>contact sheet</b><code>"
+                     + _escape(shots["contact_sheet"]) + "</code></figcaption></figure>")
+    if items:
+        rows = "".join(
+            "<tr><td>" + str(shot.get("index", 0)) + "</td>"
+            + "<td>" + _escape(shot.get("case", "")) + "</td>"
+            + "<td>" + _escape(shot.get("name", "")) + "</td>"
+            + "<td>" + _size(shot.get("width"), shot.get("height")) + " @"
+            + _escape(shot.get("scale", "")) + "</td>"
+            + "<td><code>" + _escape(shot.get("path", "")) + "</code></td></tr>"
+            for shot in items)
+        parts.append('<table class="checks"><thead><tr><th>#</th><th>用例</th><th>截图</th>'
+                     "<th>逻辑尺寸</th><th>文件</th></tr></thead><tbody>" + rows + "</tbody></table>")
+    else:
+        parts.append('<p class="empty">本轮没有截图，contact sheet 为空网格</p>')
+    if shots.get("list_path"):
+        parts.append('<p class="file">截图清单 <code>' + _escape(shots["list_path"]) + "</code></p>")
+    parts.append("</section>")
+    return "\n".join(parts)
+
+
+def _performance_section(metrics: dict[str, Any] | None) -> str:
+    """性能区块：折叠展示 phases、eval RTT、settle 汇总与每用例耗时。"""
+    if not metrics:
+        return ""
+    phases = metrics.get("phases") or {}
+    evals = metrics.get("evals") or {}
+    settle = metrics.get("settle") or {}
+    shots = metrics.get("shots") or {}
+    rows = [("总耗时", _milliseconds(metrics.get("total_ms")))]
+    rows += [(label, _milliseconds(phases.get(key))) for key, label in _PHASE_LABELS]
+    rows += [
+        ("eval 次数", evals.get("count", 0)),
+        ("RTT 平均", "%.1f ms" % float(evals.get("rtt_avg_ms") or 0)),
+        ("RTT 最大", "%.1f ms" % float(evals.get("rtt_max_ms") or 0)),
+        ("RTT 合计", "%.1f ms" % float(evals.get("rtt_total_ms") or 0)),
+        ("settle 次数", settle.get("count", 0)),
+        ("settle 等待", _milliseconds(settle.get("waited_ms"))),
+        ("settle 轮询", settle.get("polls", 0)),
+        ("settle 超时", settle.get("timeouts", 0)),
+        ("截图张数", shots.get("count", 0)),
+        ("截图耗时", _milliseconds(shots.get("shot_ms"))),
+    ]
+    rows_html = "".join("<tr><th>" + _escape(label) + "</th><td>" + _escape(text) + "</td></tr>"
+                        for label, text in rows)
+    parts = ['<section><details><summary class="section-title">性能</summary>',
+             '<table class="kv perf"><tbody>' + rows_html + "</tbody></table>"]
+    cases = metrics.get("cases") or []
+    if cases:
+        head = ("<thead><tr><th>用例</th><th>耗时</th><th>eval</th><th>细项</th>"
+                "<th>截图</th><th>settle</th><th>截图耗时</th></tr></thead>")
+        body = "".join(
+            "<tr><td>" + _escape(case.get("name", "")) + "</td>"
+            + "<td>" + _milliseconds(case.get("duration_ms")) + "</td>"
+            + "<td>" + str(case.get("evals", 0)) + "</td>"
+            + "<td>" + str(case.get("checks", 0)) + "</td>"
+            + "<td>" + str(case.get("shots", 0)) + "</td>"
+            + "<td>" + _milliseconds(case.get("settle_ms")) + "</td>"
+            + "<td>" + _milliseconds(case.get("shot_ms")) + "</td></tr>"
+            for case in cases)
+        parts.append('<table class="checks perf">' + head + "<tbody>" + body + "</tbody></table>")
+    parts.append("</details></section>")
+    return "\n".join(parts)
+
+
 def _kv_table(items: dict[str, Any], empty_text: str) -> str:
     if not items:
         return '<p class="empty">' + _escape(empty_text) + "</p>"
@@ -179,29 +291,12 @@ def _check_table(checks: list[dict[str, Any]]) -> str:
             "</thead><tbody>" + "".join(rows) + "</tbody></table>")
 
 
-def _rect(rect: dict[str, Any]) -> str:
-    style = "left:{0}px;top:{1}px;width:{2}px;height:{3}px".format(
-        int(rect.get("x", 0)), int(rect.get("y", 0)),
-        int(rect.get("w", 0)), int(rect.get("h", 0)),
-    )
-    label = _escape(rect.get("label", ""))
-    return '<span class="rect" style="' + style + '">' + ("<i>" + label + "</i>" if label else "") + "</span>"
-
-
 def _artifact(artifact: dict[str, Any]) -> str:
+    """用例内的证据只列路径：截图本身在「截图」区与 contact sheet 里，不重复内嵌。"""
     name = _escape(artifact.get("name", "截图"))
     path = _escape(artifact.get("path", ""))
-    if artifact.get("kind") == "file":
-        return '<p class="file">证据 <b>' + name + "</b><code>" + path + "</code></p>"
-    caption = "<figcaption><b>" + name + "</b><code>" + path + "</code></figcaption>"
-    png = artifact.get("png_bytes")
-    if not png:
-        return ('<figure class="shot"><div class="shot-frame"><span class="no-png">未内嵌 PNG</span></div>'
-                + caption + "</figure>")
-    overlay = "".join(_rect(rect) for rect in artifact.get("rects") or [])
-    encoded = base64.b64encode(bytes(png)).decode("ascii")
-    return ('<figure class="shot"><div class="shot-frame"><img src="data:image/png;base64,' + encoded
-            + '" alt="' + name + '">' + overlay + "</div>" + caption + "</figure>")
+    label = "截图" if artifact.get("kind") == "screenshot" else "证据"
+    return '<p class="file">' + label + ' <b>' + name + "</b><code>" + path + "</code></p>"
 
 
 def _case_section(index: int, case: dict[str, Any]) -> str:
@@ -215,7 +310,7 @@ def _case_section(index: int, case: dict[str, Any]) -> str:
     parts.append(_check_table(case.get("checks") or []))
     artifacts = case.get("artifacts") or []
     if artifacts:
-        parts.append('<div class="shots">' + "".join(_artifact(item) for item in artifacts) + "</div>")
+        parts.append('<div class="files">' + "".join(_artifact(item) for item in artifacts) + "</div>")
     parts.append("</article>")
     return "\n".join(parts)
 
@@ -281,30 +376,51 @@ def _hero(run_metadata: dict[str, Any], summary: dict[str, Any]) -> str:
             + '<div class="overall ' + overall + '-bg">' + _VERDICT_LABELS[overall] + "</div></header>")
 
 
+# 只给渲染用的重字段不进 HTML 数据块：截图字节与元素矩形叠层已由「截图」区承载。
+_HEAVY_ARTIFACT_KEYS = ("png_bytes", "rects")
+
+
 def _jsonable_case(case: dict[str, Any]) -> dict[str, Any]:
     data = {key: value for key, value in case.items() if key != "artifacts"}
     data["artifacts"] = [
-        {key: value for key, value in artifact.items() if key != "png_bytes"}
+        {key: value for key, value in artifact.items() if key not in _HEAVY_ARTIFACT_KEYS}
         for artifact in case.get("artifacts") or []
     ]
     return data
 
 
+def _jsonable_shots(shots: dict[str, Any] | None) -> dict[str, Any] | None:
+    """数据块里的截图证据：去掉 contact sheet 字节，路径与尺寸保留。"""
+    if not shots:
+        return None
+    return {key: value for key, value in shots.items() if key != "png_bytes"}
+
+
 def _data_script(run_metadata: dict[str, Any], env: dict[str, Any],
-                 summary: dict[str, Any], cases: list[dict[str, Any]]) -> str:
+                 summary: dict[str, Any], cases: list[dict[str, Any]],
+                 shots: dict[str, Any] | None = None,
+                 metrics: dict[str, Any] | None = None) -> str:
     payload = {
         "run": run_metadata,
         "env": env,
         "summary": summary,
         "cases": [_jsonable_case(case) for case in cases],
     }
+    if shots is not None:
+        payload["shots"] = _jsonable_shots(shots)
+    if metrics is not None:
+        payload["metrics"] = metrics
     text = json.dumps(payload, ensure_ascii=False, indent=2, default=str).replace("</", "<\\/")
     return '<script type="application/json" id="gui-probe-data">\n' + text + "\n</script>"
 
 
 def render_report(run_metadata: dict[str, Any], cases: list[dict[str, Any]],
-                  env: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    """渲染自包含 HTML 并汇总判定，返回 (html, summary)。"""
+                  env: dict[str, Any], shots: dict[str, Any] | None = None,
+                  metrics: dict[str, Any] | None = None) -> tuple[str, dict[str, Any]]:
+    """渲染自包含 HTML 并汇总判定，返回 (html, summary)。
+
+    shots / metrics 为可选证据块：缺省时渲染结果与只有用例明细的旧报告一致。
+    """
     summary = _summarize(cases)
     body = "\n".join(_case_section(index, case) for index, case in enumerate(cases, start=1))
     document = "\n".join([
@@ -321,10 +437,12 @@ def render_report(run_metadata: dict[str, Any], cases: list[dict[str, Any]],
         "<body>",
         _hero(run_metadata, summary),
         '<section><h2>环境</h2>' + _kv_table(env, "未提供环境信息") + "</section>",
-        '<section><h2>运行元数据</h2>' + _kv_table(run_metadata, "未提供运行元数据") + "</section>",
+        _shots_section(shots),
+        _performance_section(metrics),
         '<section><h2>用例明细</h2>'
         + (body if cases else '<p class="empty">本次运行没有用例</p>') + "</section>",
-        _data_script(run_metadata, env, summary, cases),
+        '<section><h2>运行元数据</h2>' + _kv_table(run_metadata, "未提供运行元数据") + "</section>",
+        _data_script(run_metadata, env, summary, cases, shots, metrics),
         "</body>",
         "</html>",
         "",

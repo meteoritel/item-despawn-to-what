@@ -20,7 +20,7 @@ import java.util.Objects;
  * <p>{@link #setBounds} 后立即重排，不需要再调用布局方法；不可见的格子不占槽位。
  * 所有格子共用统一尺寸（取可见项图标的最大宽高），因此切换字形不会让图标错位。</p>
  */
-public final class UiIconStrip implements UiInputTarget, UiFocusTarget {
+public final class UiIconStrip implements UiInputTarget, UiFocusTarget, UiLayoutSource {
 
     /** 排列方向：水平功能栏沿 x 排布，竖直工具列沿 y 排布。 */
     public enum Orientation { HORIZONTAL, VERTICAL }
@@ -103,6 +103,29 @@ public final class UiIconStrip implements UiInputTarget, UiFocusTarget {
             right = Math.max(right, rect.right());
         }
         return left == Integer.MAX_VALUE ? 0 : Math.max(0, right - left);
+    }
+
+    /**
+     * 导出图标条的只读排版快照：每个可见格子一个 CONTROL，矩形取该格的真实命中矩形。
+     *
+     * <p>格子只有图标、没有标签，文案因此取 {@link UiControl#accessibleName()}——它回退到
+     * tooltip 首行，正是玩家悬停时看到的名称，探针无需另建一张文案表。不可见格子在重排时已被
+     * 压成 0×0，这里直接跳过，避免把空矩形当成可点区域报给调用方；{@code enabled} 取格子的
+     * 启用态，选中态只影响绘制，不参与快照。</p>
+     */
+    @Override
+    public List<UiLayoutNode> layoutNodes() {
+        List<UiLayoutNode> nodes = new ArrayList<>(cells.size());
+        for (Item item : cells) {
+            UiControl control = item.control;
+            if (!control.isVisible()) continue;
+            Component name = control.accessibleName();
+            if (name == null) name = Component.empty();
+            UiRect rect = control.bounds();
+            nodes.add(new UiLayoutNode(UiLayoutNode.Kind.CONTROL, rect, name, font.width(name),
+                    rect.width(), control.isEnabled(), true, List.of()));
+        }
+        return nodes;
     }
 
     /** 绘制全部可见格子；{@code mouseX/mouseY} 为宿主 GUI 逻辑坐标。 */

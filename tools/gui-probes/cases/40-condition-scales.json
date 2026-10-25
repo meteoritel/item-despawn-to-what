@@ -1,0 +1,132 @@
+{
+  "name": "condition-scales",
+  "description": "1x/2x/3x 三档 GUI 缩放各打开一次条件编辑画布（3x 用 1920x1080 窗口保持逻辑宽 640）：标题文案来自语言文件、模态完整落在窗口内，截图留证。",
+  "window": {
+    "width": 1280,
+    "height": 720,
+    "scale": 2
+  },
+  "settle": {
+    "timeout_ms": 2500
+  },
+  "steps": [
+    {
+      "do": "__gp.resize(1280, 720, 1)"
+    },
+    {
+      "do": "__gp.clickWidget(__gp.lang('gui.itemdespawntowhat.edit.tab.trigger'))"
+    },
+    {
+      "do": "__gp.clickWidget(__gp.lang('gui.itemdespawntowhat.edit.tree.button.open'))"
+    },
+    {
+      "check": {
+        "name": "1x 条件画布标题来自语言文件",
+        "expr": "__gp.textNodes().join(' ')",
+        "expected_lang": "gui.itemdespawntowhat.edit.tree.title",
+        "lang": "en_us",
+        "contains": true
+      }
+    },
+    {
+      "check": {
+        "name": "1x 条件画布模态完整落在窗口内",
+        "expr": "(function(){var m = __gp.rects().filter(function(n){return n.kind === 'MODAL';});if (m.length === 0) return 'no-modal';var w = __gp.window();return (m[0].x >= 0 && m[0].y >= 0 && m[0].x + m[0].w <= w.logicalWidth && m[0].y + m[0].h <= w.logicalHeight);})()",
+        "expected": true
+      }
+    },
+    {
+      "shot": "40-condition-1x.png"
+    },
+    {
+      "do": "__gp.clickWidgetLast(__gp.lang('gui.itemdespawntowhat.edit.button.back'))"
+    },
+    {
+      "check": {
+        "name": "1x Back 关闭条件编辑画布",
+        "expr": "__gp.textNodes().join(' ').indexOf(__gp.lang('gui.itemdespawntowhat.edit.tree.title')) < 0",
+        "expected": true
+      }
+    },
+    {
+      "do": "__gp.resize(1280, 720, 2)"
+    },
+    {
+      "do": "__gp.clickWidget(__gp.lang('gui.itemdespawntowhat.edit.tab.trigger'))"
+    },
+    {
+      "do": "__gp.clickWidget(__gp.lang('gui.itemdespawntowhat.edit.tree.button.open'))"
+    },
+    {
+      "check": {
+        "name": "2x 条件画布标题来自语言文件",
+        "expr": "__gp.textNodes().join(' ')",
+        "expected_lang": "gui.itemdespawntowhat.edit.tree.title",
+        "lang": "en_us",
+        "contains": true
+      }
+    },
+    {
+      "check": {
+        "name": "2x 条件画布模态完整落在窗口内",
+        "expr": "(function(){var m = __gp.rects().filter(function(n){return n.kind === 'MODAL';});if (m.length === 0) return 'no-modal';var w = __gp.window();return (m[0].x >= 0 && m[0].y >= 0 && m[0].x + m[0].w <= w.logicalWidth && m[0].y + m[0].h <= w.logicalHeight);})()",
+        "expected": true
+      }
+    },
+    {
+      "shot": "40-condition-2x.png"
+    },
+    {
+      "do": "__gp.clickWidgetLast(__gp.lang('gui.itemdespawntowhat.edit.button.back'))"
+    },
+    {
+      "check": {
+        "name": "2x Back 关闭条件编辑画布",
+        "expr": "__gp.textNodes().join(' ').indexOf(__gp.lang('gui.itemdespawntowhat.edit.tree.title')) < 0",
+        "expected": true
+      }
+    },
+    {
+      "do": "__gp.resize(1920, 1080, 3)"
+    },
+    {
+      "do": "__gp.clickWidget(__gp.lang('gui.itemdespawntowhat.edit.tab.trigger'))"
+    },
+    {
+      "do": "__gp.clickWidget(__gp.lang('gui.itemdespawntowhat.edit.tree.button.open'))"
+    },
+    {
+      "check": {
+        "name": "3x 条件画布标题来自语言文件",
+        "expr": "__gp.textNodes().join(' ')",
+        "expected_lang": "gui.itemdespawntowhat.edit.tree.title",
+        "lang": "en_us",
+        "contains": true
+      }
+    },
+    {
+      "check": {
+        "name": "3x 条件画布模态完整落在窗口内",
+        "expr": "(function(){var m = __gp.rects().filter(function(n){return n.kind === 'MODAL';});if (m.length === 0) return 'no-modal';var w = __gp.window();return (m[0].x >= 0 && m[0].y >= 0 && m[0].x + m[0].w <= w.logicalWidth && m[0].y + m[0].h <= w.logicalHeight);})()",
+        "expected": true
+      }
+    },
+    {
+      "shot": "40-condition-3x.png"
+    },
+    {
+      "do": "__gp.clickWidgetLast(__gp.lang('gui.itemdespawntowhat.edit.button.back'))"
+    },
+    {
+      "check": {
+        "name": "3x Back 关闭条件编辑画布",
+        "expr": "__gp.textNodes().join(' ').indexOf(__gp.lang('gui.itemdespawntowhat.edit.tree.title')) < 0",
+        "expected": true
+      }
+    },
+    {
+      "dump": "40-condition-scales.json",
+      "expr": "__gp.layout()"
+    }
+  ]
+}

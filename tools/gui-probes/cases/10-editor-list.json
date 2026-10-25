@@ -1,0 +1,53 @@
+{
+  "name": "editor-list",
+  "description": "回到编辑器列表页：标题、新建按钮与搜索占位按语言文件真值核对，截图留证。",
+  "window": {
+    "width": 1280,
+    "height": 720,
+    "scale": 2
+  },
+  "settle": {
+    "timeout_ms": 2000
+  },
+  "steps": [
+    {
+      "do": "__gp.clickWidgetLast(__gp.lang('gui.itemdespawntowhat.edit.button.back'))"
+    },
+    {
+      "do": "__gp.clickWidgetLast(__gp.lang('gui.itemdespawntowhat.edit.button.back'))"
+    },
+    {
+      "check": {
+        "name": "列表页标题来自语言文件",
+        "expr": "__gp.screenInfo().title",
+        "expected_lang": "gui.itemdespawntowhat.edit.title",
+        "lang": "en_us"
+      }
+    },
+    {
+      "check": {
+        "name": "列表页有新建规则按钮",
+        "expr": "__gp.textNodes().join(' ')",
+        "expected_lang": "gui.itemdespawntowhat.edit.button.new",
+        "lang": "en_us",
+        "contains": true
+      }
+    },
+    {
+      "check": {
+        "name": "列表页有搜索框占位",
+        "expr": "__gp.textNodes().join(' ')",
+        "expected_lang": "gui.itemdespawntowhat.edit.list.search",
+        "lang": "en_us",
+        "contains": true
+      }
+    },
+    {
+      "shot": "10-editor-list.png"
+    },
+    {
+      "dump": "10-editor-list.json",
+      "expr": "__gp.layout()"
+    }
+  ]
+}

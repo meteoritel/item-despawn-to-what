@@ -9,9 +9,12 @@ import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphSid
 import static com.meteorite.itemdespawntowhat.client.ui.widget.ConditionGraphSidePanel.SIDE_PANEL_PADDING;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlRole;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.Consumer;
@@ -22,7 +25,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.lwjgl.glfw.GLFW;
 
 /** 条件与行为共用的右侧类型选择面板：统一搜索、键盘选择、滚动与滑入外观。 */
-public final class UiTypePicker implements UiWidget {
+public final class UiTypePicker implements UiWidget, UiLayoutSource {
     /**
      * 一条可选择的类型。
      *
@@ -50,6 +53,7 @@ public final class UiTypePicker implements UiWidget {
     private int lastMouseY;
 
     private final UiHostTheme theme;
+    private final Font font;
     private final Component title;
     private final Consumer<ResourceLocation> onConfirm;
     private List<Option> typeOptions = List.of();
@@ -66,6 +70,7 @@ public final class UiTypePicker implements UiWidget {
     public UiTypePicker(UiHostTheme theme, Font font, Component title, Consumer<ResourceLocation> onConfirm) {
         this.title = title;
         this.theme = theme;
+        this.font = font;
         this.onConfirm = onConfirm;
         panel = new ConditionGraphSidePanel(theme, font);
     }
@@ -167,6 +172,56 @@ public final class UiTypePicker implements UiWidget {
         scroll.mouseReleased();
         panel.reset();
         pointerKnown = false;
+    }
+
+    /**
+     * 导出选择面板的只读排版快照：标题一行、搜索行、以及每个真正画得出来的候选项一行。
+     *
+     * <p>选项行只报落在列表视口内的那些：面板是滚动视口，视口外的行既不可见也点不到，
+     * 把它们的矩形报出去会让探针照着一个屏幕外的坐标点击。行矩形按「列表左上 + 行序号 × 行高 −
+     * 当前偏移」换算成 GUI 坐标，与 {@code indexAt} 的命中口径同源；探针点行中心即命中同一项。
+     * 面板关闭或几何尚未就绪时返回空列表。</p>
+     */
+    @Override
+    public List<UiLayoutNode> layoutNodes() {
+        if (!open || panelRect.width() <= 0 || panelRect.height() <= 0) {
+            return List.of();
+        }
+        List<UiLayoutNode> nodes = new ArrayList<>();
+        nodes.add(row(new UiRect(panelRect.x() + SIDE_PANEL_PADDING, panelRect.y(),
+                panelRect.width() - SIDE_PANEL_PADDING * 2, SIDE_PANEL_HEADER), title));
+        String filter = filterText.toString();
+        Component search = filter.isEmpty()
+                ? Component.translatable(TypeLabels.UI_PREFIX + "picker.filter") : Component.literal(filter);
+        nodes.add(new UiLayoutNode(UiLayoutNode.Kind.TEXT_INPUT, searchRect, search, font.width(search),
+                Math.max(0, searchRect.width() - SEARCH_PADDING * 2), true, true, List.of()));
+        if (filteredOptions.isEmpty()) {
+            nodes.add(row(new UiRect(listRect.x(), listRect.y(), listRect.width(),
+                    Math.min(PICKER_ROW_HEIGHT, listRect.height())),
+                    Component.translatable(TypeLabels.UI_PREFIX + "picker.empty")));
+            return nodes;
+        }
+        int rowWidth = listRect.width() - (scroll.isScrollbarVisible() ? UiScrollView.SCROLLBAR_WIDTH + BORDER : 0);
+        int first = scroll.offset() / PICKER_ROW_HEIGHT;
+        int end = Math.min(filteredOptions.size(),
+                (scroll.offset() + listRect.height() + PICKER_ROW_HEIGHT - 1) / PICKER_ROW_HEIGHT);
+        for (int optionIndex = first; optionIndex < end; optionIndex++) {
+            int rowY = listRect.y() + optionIndex * PICKER_ROW_HEIGHT - scroll.offset();
+            // 最后一行可能只露出一半：矩形按剩余高度截断，中心点仍落在视口内
+            int height = Math.min(PICKER_ROW_HEIGHT, listRect.bottom() - rowY);
+            if (height <= 0) continue;
+            Component label = filteredOptions.get(optionIndex).label();
+            nodes.add(new UiLayoutNode(UiLayoutNode.Kind.CONTROL,
+                    new UiRect(listRect.x(), rowY, Math.max(0, rowWidth), height),
+                    label, font.width(label), Math.max(0, rowWidth - CARD_PADDING_X * 2), true, true, List.of()));
+        }
+        return nodes;
+    }
+
+    // 只读文本行：带宽取矩形宽度，不参与命中也不改变面板状态
+    private UiLayoutNode row(UiRect rect, Component text) {
+        return new UiLayoutNode(UiLayoutNode.Kind.ROW, rect, text, font.width(text),
+                rect.width(), true, true, List.of());
     }
 
     private void refreshFilter() {

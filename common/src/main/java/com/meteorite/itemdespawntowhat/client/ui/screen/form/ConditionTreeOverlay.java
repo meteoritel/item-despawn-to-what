@@ -13,6 +13,8 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIconStrip;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreeCodec;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTreePath;
@@ -50,7 +52,7 @@ import org.lwjgl.glfw.GLFW;
  * 以及 {@link #historyChanged()} / {@link #discardView()} / {@link #unmount()} / {@link #reveal(String)}
  * 都由 {@code RuleEditorPageSet} 原样调用。参数编辑以共享草稿路径为准，未完成的输入留在会话。</p>
  */
-public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
+public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLayoutSource {
 
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
@@ -694,6 +696,49 @@ public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget {
         branchItem.setSelected(treeView && editor.isGroupKindMenuOpen());
         removeItem.setSelected(treeView && editor.isDeleteConfirmOpen());
         wrapItem.setSelected(treeView && editor.isWrapKindMenuOpen());
+    }
+
+    /**
+     * 组装画布页的只读排版快照：功能栏、工具列、画布、内联参数表单与状态栏两段文案。
+     *
+     * <p>四块内容各自导出自己的节点，本类只按绘制顺序拼装，不重算任何几何——快照矩形因此与画面一致。
+     * 内联参数框只在展开时并入，收起动画中的表单已移出可视区；状态栏文案取与绘制同一份
+     * {@link #statusText()} / {@link #statusRight()}，左侧按绘制时的可用宽度裁剪，探针断言的是
+     * 屏幕上真实出现的字。只读视图（JSON 源码）下画布隐藏，画布自身不报节点。</p>
+     */
+    @Override
+    public List<UiLayoutNode> layoutNodes() {
+        if (bounds.width() <= 0 || bounds.height() <= 0) {
+            return List.of();
+        }
+        List<UiLayoutNode> nodes = new ArrayList<>();
+        nodes.addAll(functionBar.layoutNodes());
+        nodes.addAll(toolColumn.layoutNodes());
+        nodes.addAll(editor.layoutNodes());
+        if (inlineEditor != null && editor.isInlineEditorOpen()) {
+            nodes.addAll(inlineEditor.layoutNodes());
+        }
+        addStatusNodes(nodes);
+        return nodes;
+    }
+
+    // 状态栏两段：左侧诊断按绘制时的可用宽度裁剪，右侧缩放比例右对齐
+    private void addStatusNodes(List<UiLayoutNode> nodes) {
+        if (statusRect.height() <= 0) {
+            return;
+        }
+        Component right = statusRight();
+        int rightWidth = font.width(right.getString());
+        Component status = statusText();
+        int leftBudget = Math.max(0, statusRect.width() - rightWidth - STATUS_TEXT_PAD * 3);
+        String leftText = TextScroll.trimToWidth(font, status.getString(), leftBudget);
+        nodes.add(new UiLayoutNode(UiLayoutNode.Kind.ROW,
+                new UiRect(statusRect.x() + STATUS_TEXT_PAD, statusRect.y(), leftBudget, statusRect.height()),
+                Component.literal(leftText), font.width(leftText), leftBudget, true, true, List.of()));
+        nodes.add(new UiLayoutNode(UiLayoutNode.Kind.ROW,
+                new UiRect(statusRect.right() - rightWidth - STATUS_TEXT_PAD, statusRect.y(),
+                        Math.max(0, rightWidth), statusRect.height()),
+                right, rightWidth, Math.max(0, rightWidth), true, true, List.of()));
     }
 
     // ---- 渲染 ----

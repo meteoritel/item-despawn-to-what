@@ -14,7 +14,6 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
-import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionEditingSupport;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -367,13 +366,17 @@ final class RuleEditorEditPage {
     }
 
     /**
-     * 导出编辑页当前可见控件的快照。
+     * 导出编辑页当前可见控件的快照：页签、页内控件与页脚按钮条。
      *
-     * <p>页签控件不是 {@link UiLayoutSource}，页签文案因此不在快照里；页内控件由
-     * {@link RuleEditorPageSet} 汇总（表单沿焦点目标展开到输入框与行尾按钮），底排来自页脚按钮条。</p>
+     * <p>页签排在最前，因为它是同屏唯一能在四个页面之间切换的控件；页内控件由
+     * {@link RuleEditorPageSet} 汇总（表单沿焦点目标展开到输入框与行尾按钮），底排来自页脚按钮条。
+     * 页签矩形来自上一次布局，未初始化的页签不报节点。</p>
      */
     List<UiLayoutNode> layoutNodes() {
         List<UiLayoutNode> nodes = new ArrayList<>();
+        if (tabControl != null) {
+            nodes.addAll(tabControl.layoutNodes());
+        }
         if (pages != null) {
             nodes.addAll(pages.layoutNodes());
         }

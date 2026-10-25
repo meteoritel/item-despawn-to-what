@@ -1,0 +1,113 @@
+{
+  "name": "editor-new-rule",
+  "description": "真实点击 New rule 打开命名弹窗；点内容区聚焦后先用退格清空输入，断言确认按钮变灰（键盘输入确实落到真实控件、校验随之联动），再输入唯一名字、断言确认按钮恢复，点 Confirm 进入编辑页；页签按语言文件真值核对，截图留证。",
+  "window": {
+    "width": 1280,
+    "height": 720,
+    "scale": 2
+  },
+  "settle": {
+    "timeout_ms": 2000
+  },
+  "steps": [
+    {
+      "do": "__gp.clickWidget(__gp.lang('gui.itemdespawntowhat.edit.button.new'))"
+    },
+    {
+      "check": {
+        "name": "出现新建规则弹窗标题",
+        "expr": "__gp.textNodes().join(' ')",
+        "expected_lang": "gui.itemdespawntowhat.edit.prompt.new_title",
+        "lang": "en_us",
+        "contains": true
+      }
+    },
+    {
+      "check": {
+        "name": "弹窗有确认按钮",
+        "expr": "__gp.textNodes().join(' ')",
+        "expected_lang": "gui.itemdespawntowhat.edit.button.confirm",
+        "lang": "en_us",
+        "contains": true
+      }
+    },
+    {
+      "do": "__gp.clickKindAt('FRAME', 40, 10)"
+    },
+    {
+      "do": "(function(){__gp.key(269,0,0);for(var i=0;i<40;i++){__gp.key(259,0,0);}return 'cleared';})()"
+    },
+    {
+      "check": {
+        "name": "名字清空后确认按钮变灰",
+        "expr": "(function(){var n=__gp.findClickable(__gp.lang('gui.itemdespawntowhat.edit.button.confirm'));return n===null?'missing':(n.enabled?'enabled':'disabled');})()",
+        "expected": "disabled"
+      }
+    },
+    {
+      "do": "(function(){__gp.typeText('probe_' + (Date.now() % 100000));return 'typed';})()"
+    },
+    {
+      "check": {
+        "name": "输入合法名字后确认按钮恢复",
+        "expr": "(function(){var n=__gp.findClickable(__gp.lang('gui.itemdespawntowhat.edit.button.confirm'));return n===null?'missing':(n.enabled?'enabled':'disabled');})()",
+        "expected": "enabled"
+      }
+    },
+    {
+      "shot": "20-new-rule-prompt.png"
+    },
+    {
+      "do": "__gp.clickWidget(__gp.lang('gui.itemdespawntowhat.edit.button.confirm'))"
+    },
+    {
+      "check": {
+        "name": "编辑页有 Basic 页签",
+        "expr": "__gp.textNodes().join(' ')",
+        "expected_lang": "gui.itemdespawntowhat.edit.tab.info",
+        "lang": "en_us",
+        "contains": true
+      }
+    },
+    {
+      "check": {
+        "name": "编辑页有 Trigger 页签",
+        "expr": "__gp.textNodes().join(' ')",
+        "expected_lang": "gui.itemdespawntowhat.edit.tab.trigger",
+        "lang": "en_us",
+        "contains": true
+      }
+    },
+    {
+      "check": {
+        "name": "编辑页有 Results 页签",
+        "expr": "__gp.textNodes().join(' ')",
+        "expected_lang": "gui.itemdespawntowhat.edit.tab.results",
+        "lang": "en_us",
+        "contains": true
+      }
+    },
+    {
+      "check": {
+        "name": "命名弹窗已关闭",
+        "expr": "(function(){return __gp.textNodes().join(' ').indexOf(__gp.lang('gui.itemdespawntowhat.edit.prompt.new_title'))>=0?'open':'closed';})()",
+        "expected": "closed"
+      }
+    },
+    {
+      "check": {
+        "name": "编辑页标题来自语言文件",
+        "expr": "__gp.screenInfo().title",
+        "expected_lang": "gui.itemdespawntowhat.edit.title",
+        "lang": "en_us"
+      }
+    },
+    {
+      "shot": "20-editor-edit-page.png"
+    },
+    {
+      "dump": "20-editor-edit-page.json",
+      "expr": "__gp.layout()"
+    }
+  ]
+}

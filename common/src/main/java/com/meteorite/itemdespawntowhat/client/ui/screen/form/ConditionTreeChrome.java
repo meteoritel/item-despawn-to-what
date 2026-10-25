@@ -5,11 +5,14 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIconStrip;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTarget;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiConditionGraphEditor;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiWidget;
+import java.util.List;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -45,7 +48,7 @@ final class ConditionTreeChrome {
     }
 
     /** 图标条：水平功能栏与竖直工具列共用；方向键由 kit 自己处理，Enter/Space 走上层 activate。 */
-    static final class Strip implements UiWidget, UiFocusTarget {
+    static final class Strip implements UiWidget, UiFocusTarget, UiLayoutSource {
 
         private final UiIconStrip strip;
 
@@ -112,6 +115,9 @@ final class ConditionTreeChrome {
         @Override public boolean activate() { return strip.activate(); }
 
         @Override public @Nullable Component accessibleName() { return strip.accessibleName(); }
+
+        /** 转发图标条快照：适配层不重写几何与文案，两端始终一致。 */
+        @Override public List<UiLayoutNode> layoutNodes() { return strip.layoutNodes(); }
     }
 
     /**
@@ -190,6 +196,16 @@ final class ConditionTreeChrome {
 
         @Override public boolean capturesKeyboard() {
             return panel.capturesKeyboard();
+        }
+
+        /**
+         * 参数表单的只读快照：面板可见时才导出，收起动画中的表单矩形已在画面之外。
+         *
+         * <p>表单自身给出 GUI 屏幕坐标，适配层只做可见性判断，不重算几何；内联框契约没有快照通道，
+         * 由 {@link ConditionTreeOverlay} 在组装快照时按需调用本方法。</p>
+         */
+        List<UiLayoutNode> layoutNodes() {
+            return panel.isVisible() ? form.layoutNodes() : List.of();
         }
     }
 }

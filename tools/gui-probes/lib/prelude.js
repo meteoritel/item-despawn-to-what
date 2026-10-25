@@ -1,17 +1,33 @@
-// GUI 探针的客户端原语集合：每次 eval 由驱动脚本前置注入，供 case 步骤调用。
+// GUI 探针的客户端原语集合：由驱动在会话内安装一次，之后每次 eval 只发表达式本身。
 // 只做「取得真实状态 / 走真实输入路径 / 截图 / 导出布局快照」，不含任何断言与期望值。
+// 版本号与 run.py 的 PRELUDE_VERSION 一一对应：驱动发现会话里装的是旧版本会重装，
+// 复用同一个客户端会话换 RunDir 时才能同时换掉证据目录与新增原语。
 var __gp = (function () {
+  var VERSION = 7;
   var MC = Java.loadClass('net.minecraft.client.Minecraft').getInstance();
   var SS = Java.loadClass('net.minecraft.client.Screenshot');
   var File = Java.loadClass('java.io.File');
   var CH = Java.loadClass('net.neoforged.neoforge.client.ClientHooks');
   var GLFW = Java.loadClass('org.lwjgl.glfw.GLFW');
   var Integer = Java.loadClass('java.lang.Integer');
+  var NativeImage = Java.loadClass('com.mojang.blaze3d.platform.NativeImage');
   var Workspace = Java.loadClass('com.meteorite.itemdespawntowhat.client.net.RuleEditClientWorkspace');
-  var DIR = __gpRunDir;
+  var Language = Java.loadClass('net.minecraft.locale.Language');
 
+  // 证据目录由驱动以 var __gpRunDir 注入；每次调用时现读，保证同一个会话换 RunDir 后路径跟着走。
   function join(name) {
-    return DIR + '/' + name;
+    return String(__gpRunDir) + '/' + name;
+  }
+
+  // 本次求值内的布局缓存：begin() 清空，同一 eval 里多次读布局只构建一次。
+  var cachedLayout = null;
+  var cachedFlat = null;
+  var beganAt = 0;
+
+  function begin() {
+    beganAt = Date.now();
+    cachedLayout = null;
+    cachedFlat = null;
   }
 
   function windowInfo() {
@@ -33,14 +49,39 @@ var __gp = (function () {
     return windowInfo();
   }
 
+  function stemOf(name) {
+    var text = String(name);
+    return text.substring(text.length - 4).toLowerCase() === '.png'
+      ? text.substring(0, text.length - 4) : text;
+  }
+
+  // 截图：写全尺寸 PNG 与逻辑分辨率缩略图，一次求值返回元数据。
+  // takeScreenshot 取的是上一帧已完成的帧缓冲，调用方要在动作与截图之间隔开至少两帧。
   function shot(name) {
+    var started = Date.now();
+    var scale = windowInfo().scale;
+    if (!scale || scale < 1) scale = 1;
     var file = new File(join(name));
     file.getParentFile().mkdirs();
     var img = SS.takeScreenshot(MC.getMainRenderTarget());
+    var thumb = null;
     try {
       img.writeToFile(file);
-      return { path: join(name), width: img.getWidth(), height: img.getHeight() };
+      var fullWidth = img.getWidth();
+      var fullHeight = img.getHeight();
+      var thumbWidth = Math.max(1, Math.round(fullWidth / scale));
+      var thumbHeight = Math.max(1, Math.round(fullHeight / scale));
+      thumb = new NativeImage(thumbWidth, thumbHeight, false);
+      img.resizeSubRectTo(0, 0, fullWidth, fullHeight, thumb);
+      var thumbName = stemOf(name) + '-thumb.png';
+      thumb.writeToFile(new File(join(thumbName)));
+      return {
+        path: join(name), thumb: join(thumbName),
+        width: fullWidth, height: fullHeight, scale: scale,
+        rects: null, shot_ms: Date.now() - started
+      };
     } finally {
+      if (thumb !== null) thumb.close();
       img.close();
     }
   }
@@ -115,7 +156,7 @@ var __gp = (function () {
 
   // 自绘界面的按钮不在原版控件树里，只存在于排版快照；原版界面则只有 children()。两处都找。
   function findClickable(label) {
-    var nodes = flat(layout());
+    var nodes = flatCached();
     for (var i = 0; i < nodes.length; i++) {
       var n = nodes[i];
       if (n.text === label && (n.kind === 'CONTROL' || n.kind === 'TEXT_INPUT' || n.kind === 'ROW')) return n;
@@ -140,6 +181,32 @@ var __gp = (function () {
       if (w !== null) return click(w.x + w.width / 2, w.y + w.height / 2, 0);
     }
     return { handled: false, reason: 'widget-not-found:' + labels.join('|'), widgets: widgets() };
+  }
+
+  // 按节点种类点第一处可见节点：模态内容区、自绘画布这类没有文案的节点也只能这样真实点到。
+  function clickKindAt(kind, dx, dy) {
+    var nodes = flatCached();
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      if (n.kind !== kind || n.visible === false || n.width <= 0 || n.height <= 0) continue;
+      var x = n.x + (dx === undefined ? n.width / 2 : dx);
+      var y = n.y + (dy === undefined ? n.height / 2 : dy);
+      return click(x, y, 0);
+    }
+    return { handled: false, reason: 'kind-not-found:' + kind };
+  }
+
+  // 同名文案在页面与模态里各有一个时（例如页脚 Back 与模态 Back），取快照里靠后的那个：模态节点排在页面节点之后。
+  function clickWidgetLast(label) {
+    var nodes = flatCached();
+    var found = null;
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      if (n.text !== label || n.visible === false) continue;
+      if (n.kind === 'CONTROL' || n.kind === 'TEXT_INPUT' || n.kind === 'ROW') found = n;
+    }
+    if (found === null) return { handled: false, reason: 'widget-not-found:' + label };
+    return click(found.x + found.width / 2, found.y + found.height / 2, 0);
   }
 
   function screenName() {
@@ -225,27 +292,9 @@ var __gp = (function () {
     }
   }
 
-  function rects(kinds) {
-    var wanted = kinds === undefined ? null : kinds;
-    var nodes = flat(layout());
-    var out = [];
-    for (var i = 0; i < nodes.length; i++) {
-      var n = nodes[i];
-      if (n.kind === 'ERROR') continue;
-      if (n.width <= 0 || n.height <= 0) continue;
-      if (wanted !== null && wanted.indexOf(n.kind) < 0) continue;
-      out.push({ x: n.x, y: n.y, w: n.width, h: n.height, label: n.text });
-    }
-    return out;
-  }
-
-  function textNodes() {
-    var nodes = flat(layout());
-    var out = [];
-    for (var i = 0; i < nodes.length; i++) {
-      if (nodes[i].text) out.push(nodes[i].text);
-    }
-    return out;
+  function layoutCached() {
+    if (cachedLayout === null) cachedLayout = layout();
+    return cachedLayout;
   }
 
   function flat(nodes) {
@@ -256,6 +305,81 @@ var __gp = (function () {
       for (var k = 0; k < kids.length; k++) out.push(kids[k]);
     }
     return out;
+  }
+
+  function flatCached() {
+    if (cachedFlat === null) cachedFlat = flat(layoutCached());
+    return cachedFlat;
+  }
+
+  function hashText(text) {
+    var h = 5381;
+    for (var i = 0; i < text.length; i++) {
+      h = ((h * 33) ^ text.charCodeAt(i)) | 0;
+    }
+    return (h >>> 0).toString(16);
+  }
+
+  // 轻量状态指纹：只覆盖可见节点的几何与文案，供驱动轮询判断界面是否已稳定。
+  function probeKey() {
+    var nodes = flatCached();
+    var parts = [];
+    var count = 0;
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      if (!n.visible || n.width <= 0 || n.height <= 0) continue;
+      count++;
+      parts.push(n.kind + ',' + n.x + ',' + n.y + ',' + n.width + ',' + n.height + ','
+        + n.text + ',' + (n.enabled ? 1 : 0));
+    }
+    var w = windowInfo();
+    return { s: screenName(), w: w.logicalWidth, h: w.logicalHeight, k: hashText(parts.join('|')), n: count };
+  }
+
+  // 批量求值：一次 eval 跑多条表达式，逐项捕获异常；表达式以字符串传入，按顺序求值。
+  function evalAll(expressions) {
+    var out = [];
+    for (var i = 0; i < expressions.length; i++) {
+      try {
+        out.push({ ok: true, value: eval(String(expressions[i])) });
+      } catch (e) {
+        out.push({ ok: false, error: String(e) });
+      }
+    }
+    return out;
+  }
+
+  function rects(kinds) {
+    var wanted = kinds === undefined ? null : kinds;
+    var nodes = flatCached();
+    var out = [];
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      if (n.kind === 'ERROR') continue;
+      if (n.width <= 0 || n.height <= 0) continue;
+      if (wanted !== null && wanted.indexOf(n.kind) < 0) continue;
+      out.push({ kind: n.kind, x: n.x, y: n.y, w: n.width, h: n.height, label: n.text });
+    }
+    return out;
+  }
+
+  function textNodes() {
+    var nodes = flatCached();
+    var out = [];
+    for (var i = 0; i < nodes.length; i++) {
+      if (nodes[i].text) out.push(nodes[i].text);
+    }
+    return out;
+  }
+
+  // 语言文件真值：按 key 取客户端当前语言下的展示文案。用例用它定位点击目标，
+  // 这样中英文客户端都能点中同一个按钮，也不必把展示文案写进脚本。
+  function lang(key) {
+    try {
+      return String(Language.getInstance().getOrDefault(String(key)));
+    } catch (e) {
+      return '';
+    }
   }
 
   function screenInfo() {
@@ -311,8 +435,30 @@ var __gp = (function () {
     return { path: join(name), bytes: Files.size(path) };
   }
 
+  function fps() {
+    try {
+      var value = MC.getFps();
+      return typeof value === 'number' ? Math.round(value) : 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  // 轻量运行时信息：eval 内耗时从 begin() 起算，fps 与帧缓冲尺寸供驱动算截图前的帧间隔。
+  function runtime() {
+    var w = windowInfo();
+    return {
+      fps: fps(),
+      eval_ms: beganAt ? (Date.now() - beganAt) : 0,
+      fbWidth: w.fbWidth, fbHeight: w.fbHeight,
+      logicalWidth: w.logicalWidth, logicalHeight: w.logicalHeight, scale: w.scale
+    };
+  }
+
   return {
+    __version: VERSION,
     mc: MC,
+    begin: begin,
     window: windowInfo,
     resize: resize,
     shot: shot,
@@ -325,17 +471,26 @@ var __gp = (function () {
     findClickable: findClickable,
     clickWidget: clickWidget,
     clickWidgetAny: clickWidgetAny,
+    clickWidgetLast: clickWidgetLast,
+    clickKindAt: clickKindAt,
     screenName: screenName,
     menuStep: menuStep,
     editorStep: editorStep,
     layout: layout,
+    layoutCached: layoutCached,
     flat: flat,
+    flatCached: flatCached,
+    probeKey: probeKey,
+    evalAll: evalAll,
     rects: rects,
     textNodes: textNodes,
+    lang: lang,
     screenInfo: screenInfo,
     state: state,
     workspace: workspace,
     openEditor: openEditor,
-    dumpJson: dumpJson
+    dumpJson: dumpJson,
+    fps: fps,
+    runtime: runtime
   };
 })();
