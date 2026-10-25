@@ -142,7 +142,7 @@ final class RuleListDisplaySnapshot {
         return origin;
     }
 
-    // 是否属于「未完成」草稿分组：本次新建或有未保存改动
+    // 是否属于「未完成」草稿分组：本次新建或有未保存的内容改动
     boolean unfinished() {
         return unfinished;
     }

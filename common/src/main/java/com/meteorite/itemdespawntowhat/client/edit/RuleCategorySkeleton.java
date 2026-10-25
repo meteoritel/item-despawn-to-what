@@ -20,7 +20,7 @@ public final class RuleCategorySkeleton {
     public static final String EXTENSION = "extension";
     // 有问题分组：列表页把带校验问题或解码失败的条目归入这里，服务端分类器不产出该值
     public static final String ISSUES = "issues";
-    // 未完成分组：列表页把有未保存改动的草稿条目归入这里，服务端分类器不产出该值
+    // 未完成分组：列表页把有未保存内容改动的草稿条目归入这里，服务端分类器不产出该值
     public static final String UNFINISHED = "unfinished";
     // 模板分组：为随发布提供的模板规则预留，当前不产生该分类
     public static final String TEMPLATE = "template";

@@ -116,10 +116,10 @@ final class RuleListDisplayCache {
                 state != null);
     }
 
-    // 未完成分组只表达待应用的改动：内容改动、本次新建或未应用的启停意图；沙盒内容不算
+    // 未完成分组只表达内容草稿：内容改动或本次新建；启停意图只改行状态与置灰，不改变分类归属，
+    // 沙盒内容不算
     private boolean isUnfinished(String id, @Nullable EditSession session) {
-        return model.isCreated(id) || model.enableIntent(id) != null
-                || contentPending(id, session);
+        return model.isCreated(id) || contentPending(id, session);
     }
 
     // 内容是否有待应用的改动：沙盒内容只存在于界面，永远不算

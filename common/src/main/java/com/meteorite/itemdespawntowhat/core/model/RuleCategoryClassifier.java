@@ -20,7 +20,7 @@ import java.util.Set;
  * 无产出或含 {@link ProductKind#EXTENSION} 归 {@link #EXTENSION}。未声明产出类别的效果
  * （默认 {@link ProductKind#NONE}）不参与归类，只有这类效果的规则按无产出处理。</p>
  *
- * <p>客户端列表把有未保存改动的草稿条目单独归入「未完成」分组；该分组只表达草稿状态，
+ * <p>客户端列表把有未保存内容改动的草稿条目单独归入「未完成」分组；该分组只表达草稿状态，
  * 不进入本分类器的判定，本类也不产出该值。</p>
  */
 public final class RuleCategoryClassifier {
