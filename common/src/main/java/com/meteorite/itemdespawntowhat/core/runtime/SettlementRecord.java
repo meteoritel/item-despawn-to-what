@@ -101,6 +101,17 @@ public final class SettlementRecord {
         pendingDelivery -= count;
     }
 
+    // 失败组退回源成本：与 consumeSources 严格相反，占用回退且回到待返还量；
+    // 占用夹到已有上限，绝不出现负值
+    private void returnSources(int count) {
+        int returned = Math.clamp(count, 0, Math.max(0, consumedSources));
+        if (returned <= 0) {
+            return;
+        }
+        consumedSources -= returned;
+        pendingDelivery += returned;
+    }
+
     // 计划期登记每组的催化剂成本（0 表示该规则未声明 catalyst_cost）
     private void catalystPlan(int costPerGroup) {
         this.catalystCostPerGroup = Math.max(0, costPerGroup);
@@ -415,6 +426,12 @@ public final class SettlementRecord {
         // 放置成功后占用源成本，同时更新恢复库存，保存时两个数量始终守恒。
         void consumeSources(int count) {
             record.consumeSources(count);
+            changed();
+        }
+
+        // 失败组退回源成本：占用回退、待返还量增加，与 consumeSources 相反
+        void returnSources(int count) {
+            record.returnSources(count);
             changed();
         }
 

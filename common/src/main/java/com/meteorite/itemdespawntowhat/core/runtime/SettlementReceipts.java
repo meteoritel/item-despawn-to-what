@@ -42,7 +42,7 @@ final class SettlementReceipts {
     }
 
     // 完成、中断或失败后库存与恢复均已收尾，迟到回执不得重登记终态记录。
-    private boolean acceptsEffects() {
+    boolean acceptsEffects() {
         return record.status() == SettlementRecord.Status.PLANNED
                 || record.status() == SettlementRecord.Status.STARTED;
     }
@@ -67,6 +67,11 @@ final class SettlementReceipts {
 
     void consumeSources(int count) {
         writer.consumeSources(count);
+    }
+
+    // 失败组退回源成本：只回退占用并写回待返还量，实物仍由交付阶段返还
+    void returnSources(int count) {
+        writer.returnSources(count);
     }
 
     // 催化剂支付后记账，与延迟源成本占用分别记录。

@@ -142,6 +142,16 @@ final class ConversionSettlement implements ServerTask {
     private int pendingEffects;
     private final List<ScheduledTaskHandle> effectTasks = new ArrayList<>();
     private SettlementSourceCharge sourceCharge;
+    // 每组已占用的源成本与候选：延迟回执可能晚于后续组开组，退款按组号取本组登记，
+    // 不读会被下一组覆盖的 sourceCharge / candidate 字段
+    private final Map<Integer, GroupCharge> groupCharges = new HashMap<>();
+
+    /**
+     * 单组的源成本占用与候选登记，组号 0 起。
+     * 安全选址失败的回执可能在后续组开组之后才到，退款只按组号取这里的快照。
+     */
+    private record GroupCharge(SettlementSourceCharge charge, OutcomeCandidate candidate) {
+    }
 
     // 构造结算任务：源库存 held 已在触发时刻整堆移出源实体，
     // 受控写入句柄由调用方（首次登记方）给出
@@ -564,7 +574,9 @@ final class ConversionSettlement implements ServerTask {
         groupFluid = null;
         int cost = record.sourceCostPerGroup();
         receipts.groupStarted();
-        sourceCharge = new SettlementSourceCharge(cost, this::consumeSources);
+        // 本组占用登记：失败退款按组号找回，组号取当前 0 起的开组序号
+        sourceCharge = new SettlementSourceCharge(cost, this::consumeSources, this::returnSources);
+        groupCharges.put(groupsStarted, new GroupCharge(sourceCharge, pendingCandidate));
         if (pendingCandidate.effects().stream().noneMatch(PlaceBlockEffect.class::isInstance)) {
             sourceCharge.chargeFully();
         }
@@ -745,8 +757,10 @@ final class ConversionSettlement implements ServerTask {
                                 @Nullable EffectPreparation preparation, Runnable completed) {
         pendingEffects++;
         try {
+            // 回执带上本组上下文：失败退款要按组号定位，不能用会被覆盖的当前字段
             effectTasks.add(RuntimeObserver.current().schedule(source, scheduler, level.dimension(), readyTick,
-                    new EffectTask(runtime, level, source, context, effect, preparation, this::account, () -> {
+                    new EffectTask(runtime, level, source, context, effect, preparation,
+                            result -> account(context, result), () -> {
                         pendingEffects--;
                         completed.run();
                     })));
@@ -759,6 +773,20 @@ final class ConversionSettlement implements ServerTask {
     private void consumeSources(int count) {
         receipts.consumeSources(count);
         held.shrink(count);
+    }
+
+    // 失败退款：占用回退并等额退回结算库存，实物仍由交付阶段按既有返还通道写出世界。
+    // 库存不得超过开结算时的源快照，超出说明退款重复或数量算错
+    private void returnSources(int count) {
+        if (count <= 0) {
+            return;
+        }
+        receipts.returnSources(count);
+        held.grow(count);
+        if (held.getCount() > sourceSnapshot.getCount()) {
+            throw new IllegalStateException("退款后的结算库存超过源快照：held=" + held.getCount()
+                    + " snapshot=" + sourceSnapshot.getCount());
+        }
     }
 
     // 一个汇总桶只注册一个效果任务；终态通知释放等待计数，产出回执只记录真实执行结果。
@@ -794,17 +822,46 @@ final class ConversionSettlement implements ServerTask {
     }
 
     // 终态回执不再落账，避免把已完成或已裁剪的记录重新登记。
-    private void account(EffectResult result) {
+    private void account(EffectContext context, EffectResult result) {
         if (cancelled || record.completed()) {
             return;
         }
         receipts.apply(result);
+        // 失败退款在回执入账之后：效果计数照常记为失败，只把本组源成本退回库存
+        refundFailedGroup(context, result);
         // 回执只更新本记录的效果计数（applied/pending units），不触碰待交付量；
         // 这里沿用任务出口是为了在仍持有库存时补一次所有权对齐
         commit();
         if (result != null && RuntimeObserver.current().enabled()) {
             RuntimeObserver.current().observe(source, "EFFECT_SETTLED", "outcome", result.outcome(),
                     "applied", result.appliedUnits(), "pending", result.pendingUnits(), "detail", result.detail());
+        }
+    }
+
+    // 安全选址失败且本组只有这一个效果时，把本组已扣的源成本原样退回结算库存：
+    // 一个实体都没生成，等于本组尝试没有产物，不应白扣源物品；
+    // 多效果组（其它效果可能已产出）、概率落空与其它失败原因一律照常付费，不退款。
+    private void refundFailedGroup(EffectContext context, @Nullable EffectResult result) {
+        // 中止/完成后的迟到回执不得退款：库存所有权已移交恢复任务
+        if (!receipts.acceptsEffects() || result == null || result.outcome() != EffectResult.Outcome.FAILED
+                || !SpawnEntityExecutor.NO_SAFE_SPAWN_POSITION.equals(result.detail())) {
+            return;
+        }
+        // 延迟回执可能晚于后续组开组：按回执所在组号取登记，不读当前字段
+        int group = context.groupIndex();
+        GroupCharge entry = groupCharges.get(group);
+        if (entry == null || entry.candidate().effects().size() != 1) {
+            return;
+        }
+        int refunded = entry.charge().releaseCharged();
+        if (refunded <= 0) {
+            return;
+        }
+        groupCharges.remove(group);
+        if (RuntimeObserver.current().enabled()) {
+            RuntimeObserver.current().observe(source, "SOURCE_REFUNDED", "record", record.id(),
+                    "candidate", entry.candidate().id(), "group", group, "count", refunded,
+                    "reason", SpawnEntityExecutor.NO_SAFE_SPAWN_POSITION);
         }
     }
 
