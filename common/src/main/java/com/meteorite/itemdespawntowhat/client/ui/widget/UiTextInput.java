@@ -3,6 +3,8 @@ package com.meteorite.itemdespawntowhat.client.ui.widget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextSelection;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
@@ -10,6 +12,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextHistory;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import net.minecraft.client.gui.Font;
@@ -27,7 +30,7 @@ import org.lwjgl.glfw.GLFW;
  * 支持占位提示、长度限制、输入过滤、提交（Enter）与取消（Esc）。
  * <p>点击输入框可定位光标并拖动选择；焦点顺序由宿主的 {@code UiFocusManager} 统一维护。
  */
-public final class UiTextInput implements UiWidget, UiFocusTarget {
+public final class UiTextInput implements UiWidget, UiFocusTarget, UiLayoutSource {
 
     // 左右内边距
     private static final int PADDING_X = 3;
@@ -264,6 +267,24 @@ public final class UiTextInput implements UiWidget, UiFocusTarget {
     @Override
     public boolean isVisible() {
         return visible;
+    }
+
+    /**
+     * 导出输入框的排版快照。
+     *
+     * <p>文案取当前输入值；输入为空时退回占位提示，与屏幕上的可见内容一致。
+     * 带宽扣除左右内边距，探针据此判断长文本是否被横向滚动裁切。</p>
+     */
+    @Override
+    public List<UiLayoutNode> layoutNodes() {
+        if (!visible || bounds.width() <= 0 || bounds.height() <= 0) {
+            return List.of();
+        }
+        String text = value();
+        Component content = text.isEmpty() ? accessibleName : Component.literal(text);
+        int budget = Math.max(0, bounds.width() - PADDING_X * 2);
+        return List.of(new UiLayoutNode(UiLayoutNode.Kind.TEXT_INPUT, bounds, content, font.width(content),
+                budget, editable, true, List.of()));
     }
 
     @Override

@@ -17,6 +17,8 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryDispatcher;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.shared.BlockPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons;
@@ -40,6 +42,7 @@ import com.meteorite.itemdespawntowhat.core.network.protocol.RuleIssue;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSnapshotEntry;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -62,7 +65,7 @@ import org.lwjgl.glfw.GLFW;
  * （本地校验在 {@link RuleEditorValidation}），两者的公共按钮排为 {@link RuleEditorScreenButtonBar}。
  * <p>只有工作区处于 ACTIVE 时可编辑；APPLYING 冻结；工作区进入 FREE 时自行关屏。
  */
-public final class RuleEditorScreen extends Screen {
+public final class RuleEditorScreen extends Screen implements UiLayoutSource {
 
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
     private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
@@ -528,6 +531,25 @@ public final class RuleEditorScreen extends Screen {
     // Component 的单行 tooltip 重载不处理换行；按窗口宽度折行后交给无阴影提示面板定位。
     private void renderTooltip(GuiGraphics graphics, Component tip, int mouseX, int mouseY) {
         UiFlatText.tooltip(graphics, font, tip, Math.clamp(width - 16, 1, 240), mouseX, mouseY);
+    }
+
+    /**
+     * 导出当前界面层的排版快照：当前模式的页面控件在前，模态层在后。
+     *
+     * <p>只导出当前模式：另两个页面在切换后不再重排，其控件矩形会停留在上一次的屏幕位置，
+     * 报出来会让探针误以为那部分内容仍然可见。坐标已是屏幕 GUI 坐标——页面每帧按内容区重排，
+     * 滚动也在页面内部结算完毕。保存遮罩与类型选择器不在控件树上，不在此快照内。</p>
+     */
+    @Override
+    public List<UiLayoutNode> layoutNodes() {
+        List<UiLayoutNode> nodes = new ArrayList<>();
+        switch (mode) {
+            case LIST -> nodes.addAll(listPage.layoutNodes());
+            case EDIT -> nodes.addAll(editPage.layoutNodes());
+            case DEBUG -> nodes.addAll(debugPage.layoutNodes());
+        }
+        nodes.addAll(modals.layoutNodes());
+        return nodes;
     }
 
     // 顶部标题与状态

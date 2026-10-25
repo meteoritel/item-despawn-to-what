@@ -17,6 +17,8 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlowLayout;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
@@ -553,6 +555,25 @@ public final class RuleEditorPageSet {
             graphics.drawString(font, titleLines.getFirst(), titleX, textY, THEME.palette().textPrimary(), false);
         }
         THEME.drawDivider(graphics, headerRect.x(), dividerY, headerRect.width());
+    }
+
+    /**
+     * 导出当前页控件的排版快照。
+     *
+     * <p>liveWidgets 在 {@link #rebuild()} 里按当前页重建，滚动偏移也由内部 applyScroll 写进了
+     * 各控件的屏幕坐标，因此这里只转发实现 {@link UiLayoutSource} 的控件，不重排也不换算。
+     * 按钮会同时出现在 liveWidgets 与按钮列表里，按实例身份去重，避免探针读到重复矩形。</p>
+     */
+    List<UiLayoutNode> layoutNodes() {
+        List<UiLayoutNode> nodes = new ArrayList<>();
+        IdentityHashMap<UiWidget, Boolean> seen = new IdentityHashMap<>();
+        for (UiWidget widget : liveWidgets) {
+            if (seen.put(widget, Boolean.TRUE) != null || !(widget instanceof UiLayoutSource source)) {
+                continue;
+            }
+            nodes.addAll(source.layoutNodes());
+        }
+        return nodes;
     }
 
     public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY) {

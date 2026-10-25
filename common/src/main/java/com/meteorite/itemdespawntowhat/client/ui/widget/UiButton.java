@@ -4,6 +4,8 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiAction;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiControl;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -22,7 +24,7 @@ import org.jetbrains.annotations.Nullable;
  * <p>委托 kit 的 {@link UiControl} 处理状态与焦点，按需绘制主题的像素立体边或胶囊底图，
  * 因此同时兼容键盘（Tab / Enter）与鼠标（按下、拖出取消）操作。
  */
-public final class UiButton implements UiWidget, UiFocusTarget {
+public final class UiButton implements UiWidget, UiFocusTarget, UiLayoutSource {
 
     // 被委托的 kit 控件
     private final UiControl control = new UiControl();
@@ -185,6 +187,24 @@ public final class UiButton implements UiWidget, UiFocusTarget {
             width += icon.width() + ICON_GAP;
         }
         return width;
+    }
+
+    /**
+     * 导出按钮的排版快照。
+     *
+     * <p>文本带宽取控件内容宽：胶囊按钮要扣掉左右内边距，普通按钮按整宽算，
+     * 这样外部探针能直接看出标签在当前宽度下是否被裁切。不可见或尚未布局（宽高为 0）
+     * 时不产出节点，避免报出屏幕上并不存在的矩形。</p>
+     */
+    @Override
+    public List<UiLayoutNode> layoutNodes() {
+        UiRect rect = bounds();
+        if (!visible || rect.width() <= 0 || rect.height() <= 0) {
+            return List.of();
+        }
+        int budget = chipStyle ? Math.max(0, rect.width() - CHIP_PADDING * 2) : rect.width();
+        return List.of(new UiLayoutNode(UiLayoutNode.Kind.CONTROL, rect, label, labelWidth(), budget,
+                control.isEnabled(), true, List.of()));
     }
 
     @Override

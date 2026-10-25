@@ -3,6 +3,8 @@ package com.meteorite.itemdespawntowhat.client.ui.widget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryDispatcher;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiPointer;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRenderLayers;
@@ -22,7 +24,7 @@ import net.minecraft.client.gui.GuiGraphics;
  * 以及把输入事件只投递给最上层弹窗（下层界面在栈非空时不再收到输入）。
  * <p>调用方先渲染自己的底层界面，再调用 {@link #render}，遮罩会盖在底层之上。
  */
-public final class UiModalStack implements UiWidget {
+public final class UiModalStack implements UiWidget, UiLayoutSource {
 
     // 淡入帧数
     public static final int FADE_TICKS = 4;
@@ -87,6 +89,23 @@ public final class UiModalStack implements UiWidget {
     // 全部弹窗（只读，底到顶）
     public List<UiModal> modals() {
         return Collections.unmodifiableList(modals);
+    }
+
+    /**
+     * 导出弹窗栈的排版快照：按层序（底到顶）展开每个弹窗。
+     *
+     * <p>栈空时返回空列表，调用方无需判断界面是否有模态层。</p>
+     */
+    @Override
+    public List<UiLayoutNode> layoutNodes() {
+        if (modals.isEmpty()) {
+            return List.of();
+        }
+        List<UiLayoutNode> nodes = new ArrayList<>(modals.size());
+        for (UiModal modal : modals) {
+            nodes.addAll(modal.layoutNodes());
+        }
+        return nodes;
     }
 
     // 弹窗内部焦点管理器

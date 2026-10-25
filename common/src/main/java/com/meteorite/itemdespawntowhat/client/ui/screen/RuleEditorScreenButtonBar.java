@@ -1,6 +1,8 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlowLayout;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import java.util.ArrayList;
@@ -17,7 +19,7 @@ import org.jetbrains.annotations.Nullable;
  * {@link RuleEditorListPage} 用它承载管理页工具排与列表底排，
  * {@link RuleEditorEditPage} 用它承载编辑页底排。</p>
  */
-final class RuleEditorScreenButtonBar {
+final class RuleEditorScreenButtonBar implements UiLayoutSource {
 
     // 上次布局的几何与按钮宽度签名：逐帧重排时相同输入直接跳过测量与换行分配
     private int generation;
@@ -155,6 +157,20 @@ final class RuleEditorScreenButtonBar {
                 button.render(graphics, renderFont, mouseX, mouseY);
             }
         }
+    }
+
+    /**
+     * 导出按钮排的快照：按绘制顺序拼接可见按钮。
+     *
+     * <p>换行结果在排版时已写进各按钮的 bounds，这里不重新流排：探针在任何帧调用都读到屏幕上那一份几何。</p>
+     */
+    @Override
+    public List<UiLayoutNode> layoutNodes() {
+        List<UiLayoutNode> nodes = new ArrayList<>(buttons.size());
+        for (UiButton button : buttons) {
+            nodes.addAll(button.layoutNodes());
+        }
+        return nodes;
     }
 
     boolean mouseClicked(double mouseX, double mouseY, int button) {

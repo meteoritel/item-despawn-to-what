@@ -75,6 +75,10 @@
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTarget}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiAction}、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiNineSlice}</li>
+ *   <li>只读排版快照：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode}（矩形、文案、文本测量宽度与带宽；
+ *       {@code clipped()} 表示这行被带宽裁过）、
+ *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource}（宿主与控件把当前排版导成 GUI 坐标快照）；
+ *       快照只读，不参与绘制与命中</li>
  *   <li>画布原语：{@link com.meteorite.itemdespawntowhat.client.ui.kit.UiTidyTreeLayout}（固定层高清量树布局）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiDotGrid}（随缩放换步长的点阵网格）、
  *       {@link com.meteorite.itemdespawntowhat.client.ui.kit.UiOrthoLink}（正交折线）、

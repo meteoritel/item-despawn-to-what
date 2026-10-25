@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.client.ui.kit;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -165,6 +166,42 @@ public final class UiDocument {
         metrics.laidOut(start);
     }
 
+    /** 导出一份只读排版快照；坐标为本文档内容坐标，不含视口平移。 */
+    public List<UiLayoutNode> layoutNodes() {
+        return layoutNodes(0, 0);
+    }
+
+    /**
+     * 导出一份只读排版快照，全部节点矩形按 {@code (dx, dy)} 平移。
+     * 子文档的块坐标相对自身内容原点，宿主并回父文档坐标时用这里的偏移量结算。
+     */
+    public List<UiLayoutNode> layoutNodes(int dx, int dy) {
+        layout();
+        List<UiLayoutNode> nodes = new ArrayList<>(blocks.length);
+        for (LayoutBlock block : blocks) {
+            UiRect rect = offset(block.rect(), dx, dy);
+            if (block.row() != null) {
+                RowPaint row = block.row();
+                nodes.add(new UiLayoutNode(UiLayoutNode.Kind.ROW, rect, row.label(), row.textWidth(),
+                        row.textBand(), true, true, List.of()));
+            } else if (block.frame() != null) {
+                UiDocument child = block.frame();
+                UiRect viewport = child.viewport();
+                nodes.add(new UiLayoutNode(UiLayoutNode.Kind.FRAME, rect, Component.empty(), 0, 0, true, true,
+                        child.layoutNodes(dx + viewport.x(), dy + viewport.y())));
+            } else {
+                nodes.add(new UiLayoutNode(UiLayoutNode.Kind.DIVIDER, rect, Component.empty(), 0, 0,
+                        true, true, List.of()));
+            }
+        }
+        return nodes;
+    }
+
+    private static UiRect offset(UiRect rect, int dx, int dy) {
+        if (dx == 0 && dy == 0) return rect;
+        return new UiRect(rect.x() + dx, rect.y() + dy, rect.width(), rect.height());
+    }
+
     private static void validateParents(List<UiNode> nodes) {
         for (int i = 0; i < nodes.size(); i++) {
             if (nodes.get(i) instanceof UiNode.Frame frame) {
@@ -221,6 +258,7 @@ public final class UiDocument {
     }
 
     private LayoutBlock layoutRow(UiNode.Row row, int index, int y, @Nullable BranchPaint branch) {
+        Component label = row.text();
         int height = rowHeight(row);
         int cursor = row.indent() + PADDING;
         @Nullable UiIcon leadingIcon = null;
@@ -255,7 +293,7 @@ public final class UiDocument {
         }
         UiRect rect = new UiRect(row.indent(), y, x + PADDING - row.indent(), height);
         UiTarget target = new UiTarget(UiTarget.Kind.ROW, index, row.payload(), rect, row.tooltip(), row.action());
-        RowPaint paint = new RowPaint(row.text().getVisualOrderText(), row.color(), textX,
+        RowPaint paint = new RowPaint(row.text().getVisualOrderText(), label, row.color(), textX,
                 y + (height - measurer.lineHeight()) / 2, textWidth, textBudget,
                 leadingIcon, leadingTarget, target, icons, iconTargets, branch);
         return new LayoutBlock(rect, paint, 0, null);
@@ -387,7 +425,7 @@ public final class UiDocument {
                                int dividerColor, @Nullable UiDocument frame) {}
 
     /** 行绘制数据与命中目标共用自然坐标，避免缩放时重建矩形。 */
-    private record RowPaint(FormattedCharSequence text, int color, int textX, int textY,
+    private record RowPaint(FormattedCharSequence text, Component label, int color, int textX, int textY,
                             int textWidth, int textBand, @Nullable UiIcon leading, @Nullable UiTarget leadingTarget,
                             UiTarget target, UiIcon[] icons, UiTarget[] iconTargets,
                             @Nullable BranchPaint branch) {}

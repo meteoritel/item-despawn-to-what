@@ -13,6 +13,8 @@ import com.meteorite.itemdespawntowhat.client.net.RuleEditClientState;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.screen.form.ConditionEditingSupport;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -362,6 +364,21 @@ final class RuleEditorEditPage {
         // 布局按需执行：几何输入未变时这里只命中缓存，渲染帧不再做任何测量
         pages.ensureLayout(lastEditArea);
         pages.render(graphics, renderFont, mouseX, mouseY);
+    }
+
+    /**
+     * 导出编辑页当前可见控件的快照。
+     *
+     * <p>页签控件不是 {@link UiLayoutSource}，页签文案因此不在快照里；页内控件由
+     * {@link RuleEditorPageSet} 汇总（表单沿焦点目标展开到输入框与行尾按钮），底排来自页脚按钮条。</p>
+     */
+    List<UiLayoutNode> layoutNodes() {
+        List<UiLayoutNode> nodes = new ArrayList<>();
+        if (pages != null) {
+            nodes.addAll(pages.layoutNodes());
+        }
+        nodes.addAll(footerBar.layoutNodes());
+        return nodes;
     }
 
     int footerHeight(int width) {

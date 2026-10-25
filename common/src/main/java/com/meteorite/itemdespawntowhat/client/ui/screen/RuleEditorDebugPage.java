@@ -5,6 +5,7 @@ import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
@@ -176,6 +177,20 @@ final class RuleEditorDebugPage {
     }
 
     // ---- 渲染 ----
+
+    /**
+     * 导出调试页当前可见控件的快照。
+     *
+     * <p>页内摘要与说明是直接绘制的文字，不在控件树里，快照只含数量输入框与底排按钮。</p>
+     */
+    List<UiLayoutNode> layoutNodes() {
+        List<UiLayoutNode> nodes = new ArrayList<>();
+        if (countField != null) {
+            nodes.addAll(countField.layoutNodes());
+        }
+        nodes.addAll(bottomBar.layoutNodes());
+        return nodes;
+    }
 
     int footerHeight(int width) {
         return bottomBar.preferredHeight(width);

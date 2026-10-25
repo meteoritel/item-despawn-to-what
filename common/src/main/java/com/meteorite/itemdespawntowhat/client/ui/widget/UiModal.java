@@ -4,6 +4,8 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiAction;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
@@ -220,6 +222,32 @@ public final class UiModal implements UiWidget {
      */
     public List<UiButton> buttons() {
         return Collections.unmodifiableList(buttons);
+    }
+
+    /**
+     * 导出弹窗的排版快照：MODAL 节点覆盖整窗外框，子节点为内容控件与页脚按钮。
+     *
+     * <p>内容控件实现 {@link UiLayoutSource} 时才递归展开；文本内容与自绘内容渲染器不在控件树里，
+     * 此时只报一个覆盖内容区的 FRAME 节点，让探针仍能读到内容区几何。文案取标题，带宽按标题栏
+     * 可用宽度算，标题过长时探针可据此发现。</p>
+     */
+    List<UiLayoutNode> layoutNodes() {
+        if (!visible) {
+            return List.of();
+        }
+        List<UiLayoutNode> children = new ArrayList<>();
+        if (contentWidget instanceof UiLayoutSource source) {
+            children.addAll(source.layoutNodes());
+        } else if (contentWidget != null) {
+            children.add(new UiLayoutNode(UiLayoutNode.Kind.FRAME, contentRect, Component.empty(), 0, 0,
+                    true, true, List.of()));
+        }
+        for (UiButton button : buttons) {
+            children.addAll(button.layoutNodes());
+        }
+        int headerBudget = Math.max(0, bounds.width() - theme.padding() * 2);
+        return List.of(new UiLayoutNode(UiLayoutNode.Kind.MODAL, bounds, title, font.width(title),
+                headerBudget, true, true, List.copyOf(children)));
     }
 
     public boolean closeOnBackdrop() {

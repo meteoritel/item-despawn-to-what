@@ -3,6 +3,8 @@ package com.meteorite.itemdespawntowhat.client.ui.widget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiControlRole;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiScrollView;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -28,7 +30,7 @@ import org.lwjgl.glfw.GLFW;
  * </ul>
  * 行内容和高度由调用方决定；缩进与展开三角由本控件绘制，渲染和命中共用累计行高。
  */
-public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
+public final class UiTreeView<T> implements UiWidget, UiFocusTarget, UiLayoutSource {
 
     /** 树行渲染回调：缩进与展开三角由控件绘制，{@code row} 已扣除展开标记与缩进，可直接绘制节点文本。 */
     @FunctionalInterface
@@ -94,12 +96,14 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
     private long lastClickTime;
     private UiTreeNode<T> lastClickNode;
 
-    // 字体由 render 接收；保留构造参数以兼容现有组件 API。
     // 注入的宿主主题
     private final UiHostTheme theme;
+    // 行文本测量字体：渲染时宿主传同一实例，快照导出靠它量文案宽度
+    private final Font font;
 
-    public UiTreeView(UiHostTheme theme, @SuppressWarnings("unused") Font font, NodeRenderer<T> nodeRenderer) {
+    public UiTreeView(UiHostTheme theme, Font font, NodeRenderer<T> nodeRenderer) {
         this.theme = UiHostThemes.require(theme);
+        this.font = font;
         this.nodeRenderer = nodeRenderer;
     }
 
@@ -196,6 +200,39 @@ public final class UiTreeView<T> implements UiWidget, UiFocusTarget {
             onSelectionChanged.accept(selectedNode);
         }
         return this;
+    }
+
+    /**
+     * 导出树的排版快照：TREE 节点覆盖控件外框，子节点是按当前滚动偏移换算后的可见行。
+     *
+     * <p>只报与视口相交的行：滚动出去的节点在屏幕上不可见，报出会误导外部探针。
+     * 行矩形把内容坐标加上视口原点再减去滚动偏移，得到与渲染完全一致的 GUI 坐标；
+     * 文本带宽取扣除缩进与展开标记后的宽度，与 {@code textRect} 的绘制口径同源。</p>
+     */
+    @Override
+    public List<UiLayoutNode> layoutNodes() {
+        if (!visible || bounds.width() <= 0 || bounds.height() <= 0) {
+            return List.of();
+        }
+        UiRect viewport = scrollView.viewport();
+        if (viewport.width() <= 0 || viewport.height() <= 0) {
+            return List.of();
+        }
+        int rowWidth = RowGeometry.contentWidth(scrollView);
+        int offset = scrollView.offset();
+        List<UiLayoutNode> rows = new ArrayList<>();
+        for (VisibleRow<T> row : visibleRows) {
+            if (row.top + row.height <= offset || row.top >= offset + viewport.height()) {
+                continue;
+            }
+            UiRect text = textRect(row, rowWidth, row.depth * INDENT_WIDTH);
+            Component label = row.node.label();
+            rows.add(new UiLayoutNode(UiLayoutNode.Kind.ROW,
+                    new UiRect(viewport.x() + text.x(), viewport.y() + row.top - offset, text.width(), text.height()),
+                    label, font.width(label), text.width(), true, true, List.of()));
+        }
+        return List.of(new UiLayoutNode(UiLayoutNode.Kind.TREE, bounds, Component.empty(), 0, 0,
+                true, true, List.copyOf(rows)));
     }
 
     // ---- 布局 ----

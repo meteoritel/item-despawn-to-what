@@ -1,0 +1,134 @@
+{
+  "name": "editor-adr0022-scales",
+  "description": "ADR-0022 验收基线：1x/2x/3x 三档缩放下逻辑坐标均为 320x240，控件不越界、文案不超出控件、同级按钮不重叠。",
+  "settle_ms": 700,
+  "steps": [
+    {
+      "do": "__gp.resize(320, 240, 1)"
+    },
+    {
+      "wait_ms": 700
+    },
+    {
+      "check": {
+        "name": "1x 缩放下逻辑宽为 320",
+        "expr": "__gp.window().logicalWidth",
+        "expected": 320
+      }
+    },
+    {
+      "check": {
+        "name": "1x 缩放下逻辑高为 240",
+        "expr": "__gp.window().logicalHeight",
+        "expected": 240
+      }
+    },
+    {
+      "check": {
+        "name": "1x 缩放下控件不越界",
+        "expr": "__gp.flat(__gp.layout()).filter(function(n){var w=__gp.window();return (n.kind==='CONTROL'||n.kind==='TREE')&&(n.x<0||n.y<0||n.x+n.width>w.logicalWidth||n.y+n.height>w.logicalHeight);}).length",
+        "expected": 0
+      }
+    },
+    {
+      "check": {
+        "name": "1x 缩放下控件文案不溢出",
+        "expr": "__gp.flat(__gp.layout()).filter(function(n){return (n.kind==='CONTROL'||n.kind==='TEXT_INPUT')&&n.textWidth>n.width;}).length",
+        "expected": 0
+      }
+    },
+    {
+      "check": {
+        "name": "1x 缩放下同级按钮不重叠",
+        "expr": "(function(){var bad=0;function walk(list){for(var i=0;i<list.length;i++){var kids=list[i].children;for(var m=0;m<kids.length;m++){for(var n=m+1;n<kids.length;n++){var c=kids[m],d=kids[n];if(c.kind!=='CONTROL'||d.kind!=='CONTROL')continue;if(c.x<d.x+d.width&&d.x<c.x+c.width&&c.y<d.y+d.height&&d.y<c.y+c.height)bad++;}}walk(kids);}}walk(__gp.layout());return bad;})()",
+        "expected": 0
+      }
+    },
+    {
+      "shot": "20-scale-1x.png",
+      "rects": "__gp.rects(['CONTROL','TREE'])"
+    },
+    {
+      "do": "__gp.resize(640, 480, 2)"
+    },
+    {
+      "wait_ms": 700
+    },
+    {
+      "check": {
+        "name": "2x 缩放下逻辑宽为 320",
+        "expr": "__gp.window().logicalWidth",
+        "expected": 320
+      }
+    },
+    {
+      "check": {
+        "name": "2x 缩放下控件不越界",
+        "expr": "__gp.flat(__gp.layout()).filter(function(n){var w=__gp.window();return (n.kind==='CONTROL'||n.kind==='TREE')&&(n.x<0||n.y<0||n.x+n.width>w.logicalWidth||n.y+n.height>w.logicalHeight);}).length",
+        "expected": 0
+      }
+    },
+    {
+      "check": {
+        "name": "2x 缩放下控件文案不溢出",
+        "expr": "__gp.flat(__gp.layout()).filter(function(n){return (n.kind==='CONTROL'||n.kind==='TEXT_INPUT')&&n.textWidth>n.width;}).length",
+        "expected": 0
+      }
+    },
+    {
+      "check": {
+        "name": "2x 缩放下同级按钮不重叠",
+        "expr": "(function(){var bad=0;function walk(list){for(var i=0;i<list.length;i++){var kids=list[i].children;for(var m=0;m<kids.length;m++){for(var n=m+1;n<kids.length;n++){var c=kids[m],d=kids[n];if(c.kind!=='CONTROL'||d.kind!=='CONTROL')continue;if(c.x<d.x+d.width&&d.x<c.x+c.width&&c.y<d.y+d.height&&d.y<c.y+c.height)bad++;}}walk(kids);}}walk(__gp.layout());return bad;})()",
+        "expected": 0
+      }
+    },
+    {
+      "shot": "20-scale-2x.png",
+      "rects": "__gp.rects(['CONTROL','TREE'])"
+    },
+    {
+      "do": "__gp.resize(960, 720, 3)"
+    },
+    {
+      "wait_ms": 700
+    },
+    {
+      "check": {
+        "name": "3x 缩放下逻辑宽为 320",
+        "expr": "__gp.window().logicalWidth",
+        "expected": 320
+      }
+    },
+    {
+      "check": {
+        "name": "3x 缩放下控件不越界",
+        "expr": "__gp.flat(__gp.layout()).filter(function(n){var w=__gp.window();return (n.kind==='CONTROL'||n.kind==='TREE')&&(n.x<0||n.y<0||n.x+n.width>w.logicalWidth||n.y+n.height>w.logicalHeight);}).length",
+        "expected": 0
+      }
+    },
+    {
+      "check": {
+        "name": "3x 缩放下控件文案不溢出",
+        "expr": "__gp.flat(__gp.layout()).filter(function(n){return (n.kind==='CONTROL'||n.kind==='TEXT_INPUT')&&n.textWidth>n.width;}).length",
+        "expected": 0
+      }
+    },
+    {
+      "check": {
+        "name": "3x 缩放下同级按钮不重叠",
+        "expr": "(function(){var bad=0;function walk(list){for(var i=0;i<list.length;i++){var kids=list[i].children;for(var m=0;m<kids.length;m++){for(var n=m+1;n<kids.length;n++){var c=kids[m],d=kids[n];if(c.kind!=='CONTROL'||d.kind!=='CONTROL')continue;if(c.x<d.x+d.width&&d.x<c.x+c.width&&c.y<d.y+d.height&&d.y<c.y+c.height)bad++;}}walk(kids);}}walk(__gp.layout());return bad;})()",
+        "expected": 0
+      }
+    },
+    {
+      "shot": "20-scale-3x.png",
+      "rects": "__gp.rects(['CONTROL','TREE'])"
+    },
+    {
+      "do": "__gp.resize(640, 480, 2)"
+    },
+    {
+      "wait_ms": 500
+    }
+  ]
+}

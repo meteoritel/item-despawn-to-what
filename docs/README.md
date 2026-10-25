@@ -49,6 +49,7 @@ flowchart LR
 | 改来源读取、覆盖合并或拒载 | [规则加载](modules/rule-loading.md) | [规则 JSON](api/rule-json.md)、[错误与状态](api/errors.md) |
 | 改追踪、结算、恢复或调度 | [转化运行时](modules/conversion-runtime.md) | [关键链路](architecture/key-flows.md)、[运行配置](ops/configuration.md) |
 | 运行或扩展后端开发探针 | [后端探针](guides/backend-probes.md) | [编辑与命令](modules/authoring.md) |
+| 运行或扩展 GUI 探针 | [GUI 探针](guides/gui-probes.md) | [编辑器界面](modules/client-ui.md)、[UI kit](modules/ui-kit.md) |
 | 改编辑会话、覆盖落盘、命令或调试场景 | [编辑与命令](modules/authoring.md) | [编辑协议](api/edit-protocol.md) |
 | 改客户端协议、草稿或类型编辑器 | [客户端编辑器](modules/client-editor.md) | [编辑协议](api/edit-protocol.md) |
 | 改 UI kit 公开面或依赖边界 | [UI kit](modules/ui-kit.md) | [依赖规则](architecture/dependency-rules.md) |

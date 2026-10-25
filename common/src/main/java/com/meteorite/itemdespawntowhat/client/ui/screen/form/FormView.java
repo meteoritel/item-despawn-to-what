@@ -11,12 +11,15 @@ import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -39,7 +42,7 @@ import org.jetbrains.annotations.Nullable;
  * <p>所有写入都经由 EditSession（统一撤销门面）落到 RuleDraft，控件本身不直接改草稿；
  * 界面不出现任何可编辑的 JSON 文本框，未识别字段原样保留。
  */
-public final class FormView implements UiWidget {
+public final class FormView implements UiWidget, UiLayoutSource {
 
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
     private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
@@ -767,6 +770,39 @@ public final class FormView implements UiWidget {
             out.addAll(row.pickers);
             out.addAll(row.actions);
         }
+    }
+
+    /**
+     * 导出表单的排版快照：按行顺序收集当前可见的字段控件与行尾按钮。
+     *
+     * <p>表单布局已经把控件矩形写成屏幕坐标，滚动时由 {@link #shiftViewportY} 平移视口，
+     * 因此直接沿行的焦点目标收集，不再做坐标换算。复合控件（条件树、目录选择等）只暴露
+     * 自身的焦点目标，其内部行不在焦点顺序里，快照不展开这些内部行。</p>
+     */
+    @Override
+    public List<UiLayoutNode> layoutNodes() {
+        if (!visible) {
+            return List.of();
+        }
+        List<UiLayoutNode> nodes = new ArrayList<>();
+        List<UiFocusTarget> targets = new ArrayList<>();
+        IdentityHashMap<UiFocusTarget, Boolean> seen = new IdentityHashMap<>();
+        for (FormRow row : rows) {
+            if (!row.visible) {
+                continue;
+            }
+            targets.clear();
+            row.control.addFocusTargets(targets);
+            targets.addAll(row.pickers);
+            targets.addAll(row.actions);
+            for (UiFocusTarget target : targets) {
+                if (seen.put(target, Boolean.TRUE) != null || !(target instanceof UiLayoutSource source)) {
+                    continue;
+                }
+                nodes.addAll(source.layoutNodes());
+            }
+        }
+        return nodes;
     }
 
     /** 每个字段独立完成编辑，切换到下一字段也提交一次，不按字符记录。 */

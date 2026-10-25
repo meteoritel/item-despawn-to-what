@@ -4,6 +4,8 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlatText;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputContext;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutSource;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiTextSelection;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiHistoryShortcut;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
@@ -29,7 +31,7 @@ import org.lwjgl.glfw.GLFW;
  * <p>与 {@link UiTextInput} 的分工：单行短文本仍走原版 {@code EditBox}；需要同时看到多行或允许换行的字段用本控件。
  * <p>长度上限按 Unicode 码点计数，超限的这一次输入整体回退，不会把半个代理对或超过上限的整段文本写进草稿。
  */
-public final class UiTextArea implements UiWidget, UiFocusTarget {
+public final class UiTextArea implements UiWidget, UiFocusTarget, UiLayoutSource {
 
     // 左右内边距
     private static final int PADDING_X = 3;
@@ -216,6 +218,25 @@ public final class UiTextArea implements UiWidget, UiFocusTarget {
     @Override
     public boolean isVisible() {
         return visible;
+    }
+
+    /**
+     * 导出多行输入框的排版快照。
+     *
+     * <p>多行内容不拆成子节点：节点文案只报首行（空内容时退回占位提示），
+     * 宽度按控件内容宽计，探针仍能判断当前行是否横向被裁。纵向可见行数由矩形高度给出。</p>
+     */
+    @Override
+    public List<UiLayoutNode> layoutNodes() {
+        if (!visible || bounds.width() <= 0 || bounds.height() <= 0) {
+            return List.of();
+        }
+        String text = value();
+        String firstLine = text.isEmpty() ? "" : text.split("\n", 2)[0];
+        Component content = firstLine.isEmpty() && hint != null ? hint : Component.literal(firstLine);
+        int budget = Math.max(0, bounds.width() - PADDING_X * 2);
+        return List.of(new UiLayoutNode(UiLayoutNode.Kind.TEXT_INPUT, bounds, content, font.width(content),
+                budget, editable, true, List.of()));
     }
 
     @Override

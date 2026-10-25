@@ -9,6 +9,7 @@ import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusManager;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
+import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine;
 import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine.Tone;
@@ -489,6 +490,25 @@ final class RuleEditorListPage {
             ruleList.setBounds(area.x(), listY, area.width(), available);
             ruleList.render(graphics, renderFont, mouseX, mouseY);
         }
+    }
+
+    /**
+     * 导出管理页当前可见控件的快照。
+     *
+     * <p>顺序与绘制顺序一致：工具排、搜索框、筛选排、规则树、底排。只读渲染时写好的矩形，
+     * 不触发重新布局，探针在任意帧调用都拿到与屏幕一致的几何。</p>
+     */
+    List<UiLayoutNode> layoutNodes() {
+        List<UiLayoutNode> nodes = new ArrayList<>(globalBar.layoutNodes());
+        if (searchField != null) {
+            nodes.addAll(searchField.layoutNodes());
+        }
+        nodes.addAll(filterBar.layoutNodes());
+        if (ruleList != null) {
+            nodes.addAll(ruleList.layoutNodes());
+        }
+        nodes.addAll(listBar.layoutNodes());
+        return nodes;
     }
 
     // 名称和状态放第一行；原注册名位置改为图标配方，不显示内部规则 ID。

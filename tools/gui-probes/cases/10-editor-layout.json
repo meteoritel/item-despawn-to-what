@@ -1,0 +1,71 @@
+{
+  "name": "editor-layout-nodes",
+  "description": "真实会话下打开编辑器，读取 kit 的只读排版快照，确认快照能反映真实规则与真实文案。",
+  "window": {
+    "width": 640,
+    "height": 480,
+    "scale": 2
+  },
+  "settle_ms": 700,
+  "steps": [
+    {
+      "check": {
+        "name": "界面是规则编辑器",
+        "expr": "__gp.screenName()",
+        "expected": "RuleEditorScreen"
+      }
+    },
+    {
+      "check": {
+        "name": "工作区处于可编辑会话",
+        "expr": "__gp.workspace().state",
+        "expected": "ACTIVE"
+      }
+    },
+    {
+      "check": {
+        "name": "快照里有真实规则条目",
+        "expr": "__gp.workspace().entries > 0",
+        "expected": true
+      }
+    },
+    {
+      "check": {
+        "name": "布局快照非空",
+        "expr": "__gp.flat(__gp.layout()).length > 0",
+        "expected": true
+      }
+    },
+    {
+      "check": {
+        "name": "布局快照不含错误节点",
+        "expr": "__gp.flat(__gp.layout()).filter(function(n){return (n.kind==='ERROR');}).length",
+        "expected": 0
+      }
+    },
+    {
+      "check": {
+        "name": "布局快照里有控件与树节点",
+        "expr": "__gp.flat(__gp.layout()).filter(function(n){return (n.kind==='CONTROL');}).length > 0 && __gp.flat(__gp.layout()).filter(function(n){return (n.kind==='TREE');}).length > 0",
+        "expected": true
+      }
+    },
+    {
+      "check": {
+        "name": "可见文案包含新建规则按钮（英文语言文件真值）",
+        "expr": "__gp.textNodes().join(' ')",
+        "expected_lang": "gui.itemdespawntowhat.edit.button.new",
+        "lang": "en_us",
+        "contains": true
+      }
+    },
+    {
+      "shot": "10-editor-layout.png",
+      "rects": "__gp.rects(['CONTROL','TEXT_INPUT','TREE'])"
+    },
+    {
+      "dump": "10-editor-layout.json",
+      "expr": "__gp.layout()"
+    }
+  ]
+}
