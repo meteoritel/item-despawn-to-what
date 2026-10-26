@@ -84,8 +84,7 @@ public record WeatherEffect(
                 THUNDERING.fieldFor(WeatherEffect::thundering),
                 CommonFields.DELAY_TICKS.fieldFor(WeatherEffect::delayTicks),
                 CommonFields.CHANCE.fieldFor(WeatherEffect::chance)
-        ).apply(instance, (mode, durationTicks, thundering, delayTicks, chance) ->
-                new WeatherEffect(mode, durationTicks, thundering, delayTicks, chance)));
+        ).apply(instance, WeatherEffect::new));
     }
 
     // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。

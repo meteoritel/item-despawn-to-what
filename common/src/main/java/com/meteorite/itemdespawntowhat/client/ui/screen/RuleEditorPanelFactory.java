@@ -405,13 +405,13 @@ public final class RuleEditorPanelFactory {
                     if (entryFilter != null && !entryFilter.test(entry.id())) continue;
                     if (type == RuleCatalogType.ENTITY && field != null && FieldCatalogChoices.isGenericProduct(field)
                             && (entry.id().equals("minecraft:item") || entry.id().equals("minecraft:experience_orb"))) continue;
-                    String sub = validTags == null ? entry.subLabel() : Component.translatable(field.labelKey()).getString();
                     if (type == RuleCatalogType.TAG) {
                         RuleCatalogType memberType = field == null ? RuleCatalogType.ITEM : FieldCatalogTypes.catalogTypeOf(field);
                         var tag = TagPreviewIcons.resolve(memberType == null ? RuleCatalogType.ITEM : memberType, entry.id());
                         tagPreviews.put(entry.id(), tag);
                         mapped.add(new UiCatalogGrid.Entry(entry.id(), tag.label(), null, tag.icon()));
                     } else {
+                        String sub = entry.subLabel();
                         ResourceLocation id = ResourceLocation.tryParse(entry.id());
                         Component fluidLabel = type == RuleCatalogType.FLUID && id != null ? FluidPreviewIcons.label(id) : null;
                         mapped.add(new UiCatalogGrid.Entry(entry.id(), fluidLabel == null ? catalogLabel(entry.label()) : fluidLabel,
@@ -522,10 +522,10 @@ public final class RuleEditorPanelFactory {
      * @param onChange   变更后刷新视图（表单重载/宿主刷新）
      * @param pushModal  推入目录弹窗
      */
-    public static LeafPanel leafPanel(Font font, FormView form, EditSession session, List<EditorField> fields,
-                                      String basePath, Consumer<Runnable> applyChange, Runnable onChange,
-                                      Consumer<UiModal> pushModal, EditorShell shell, EditorWorkspaceView workspace, int screenWidth,
-                                      int screenHeight) {
+    static LeafPanel leafPanel(Font font, FormView form, EditSession session, List<EditorField> fields,
+                               String basePath, Consumer<Runnable> applyChange, Runnable onChange,
+                               Consumer<UiModal> pushModal, EditorShell shell, EditorWorkspaceView workspace, int screenWidth,
+                               int screenHeight) {
         List<UiWidget> extras = new ArrayList<>();
         List<UiButton> buttons = new ArrayList<>();
         List<Runnable> reloadValues = new ArrayList<>();

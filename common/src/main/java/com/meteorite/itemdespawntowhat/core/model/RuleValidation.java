@@ -9,7 +9,6 @@ import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.api.TypeDefinition;
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
 import com.meteorite.itemdespawntowhat.core.api.RefChecks;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.core.registries.BuiltInRegistries;
 import org.jetbrains.annotations.Nullable;
 
@@ -307,24 +306,5 @@ public final class RuleValidation {
     /** 便捷入口：无来源信息的结构校验 */
     public static boolean validate(Rule rule, IssueCollector issues) {
         return validate(rule, issues, null);
-    }
-
-    /** 源匹配项数量上限的提示性校验，避免单条规则展开出过多标签 */
-    public static void warnLargeSource(Rule rule, int threshold, IssueCollector issues, @Nullable String origin) {
-        if (rule.source().entries().size() > threshold) {
-            issues.warn("source.items 条目数 " + rule.source().entries().size() + " 超过建议上限 " + threshold,
-                    origin, SourceMatcher.fieldPath(SourceMatcher.ITEMS_FIELD));
-        }
-    }
-
-    /** 供命令与日志输出使用的规则可读摘要 */
-    public static String describe(Rule rule) {
-        return rule.id() + " [priority=" + rule.priority() + ", leaves=" + rule.complexity()
-                + ", effects=" + rule.effects().size() + ", trigger=" + rule.triggerAfterSeconds() + "s]";
-    }
-
-    /** 判定规则是否属于指定物品（不含标签展开，由运行时调用） */
-    public static boolean matchesDirect(Rule rule, ResourceLocation itemId) {
-        return rule.source().matches(itemId, tagId -> Set.of());
     }
 }
