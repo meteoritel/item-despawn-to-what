@@ -34,7 +34,7 @@ flowchart TB
     M --> E["逐条解码<br/>RuleCodecs · RuleValidation"]
     E --> V["RuleReferenceValidator<br/>动态引用校验"]
     V --> I["RuleIndex.build<br/>仅可运行规则 · 候选排序"]
-    I --> A["ConversionRuntime.replaceRules<br/>提交点：索引整体替换 · 取消旧任务 · 全维度回扫"]
+    I --> A["ConversionRuntime 发布<br/>replaceRules（启动）· publish / publishDecoded<br/>提交点：索引整体替换 · 逐维取消旧任务 · 逐维排队回扫"]
     E -.问题.-> O["IssueCollector<br/>错误与告警分级"]
     V -.问题.-> O
 ```
@@ -61,7 +61,7 @@ flowchart TB
 - 索引是不可变对象，整体替换；同一输入重复加载得到同一索引，重复触发不产生叠加状态。
 - 启动期的首次数据包加载不按重载处理，避免把冷启动当成变更。
 - 回扫任务带待回扫标记，重复入队被合并为一次。
-- 保存后的索引由后台预建、公共预算内应用，应用与回扫在同一任务里推进，失败不留半套索引。
+- 保存后的索引由后台预建，发布入口在公共预算内换入并逐维排队回扫；保存任务等到回扫收尾才回成功，失败不留半套索引。
 
 ## 转化生命周期
 

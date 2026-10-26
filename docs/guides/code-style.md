@@ -28,6 +28,8 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat 下的公开类�
 
 ### 不该写的注释
 
+**避免过度注释**
+
 - 复述代码行为的注释，例如给一个自解释的赋值再写一句同样的中文。
 - 修改历史、日期、版本注记与个人署名。
 - 指向 Markdown 文档的路径：文档会迁移，注释会随代码走，两者各自维护。

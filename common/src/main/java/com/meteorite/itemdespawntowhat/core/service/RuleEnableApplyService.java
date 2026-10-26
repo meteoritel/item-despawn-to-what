@@ -30,9 +30,6 @@ import java.util.List;
  */
 public final class RuleEnableApplyService {
 
-    // 状态应用的回扫任务单独占一个 realm：新的启停提交替换上一次尚未完成回扫，与内容保存互不干扰
-    private static final Object ENABLE_REALM = new Object();
-
     private RuleEnableApplyService() {
         throw new UnsupportedOperationException("Utility class");
     }
@@ -41,9 +38,9 @@ public final class RuleEnableApplyService {
      * 一次启停应用的结果。
      *
      * @param changed 实际发生变化的记录数；0 表示提交前后状态一致
-     * @param rescan  已发布新索引后需要推进的全维度回扫任务；运行时上下文不可用时为 null
+     * @param publication 已发布新索引后等待回扫收尾的观测任务；未进入运行时为 null
      */
-    public record Outcome(int changed, @Nullable ServerTask rescan) { }
+    public record Outcome(int changed, @Nullable ServerTask publication) { }
 
     /**
      * 写入一批启用状态动作（同一 id 多次写入按顺序后者胜）。
@@ -74,13 +71,13 @@ public final class RuleEnableApplyService {
     }
 
     /**
-     * 提交启用状态并按轻量路径应用：重建索引后发布，返回需要推进的全维度回扫任务。
+     * 提交启用状态并按轻量路径应用：重建索引后发布，回扫由运行时自行排队。
      * 命令与纯启停批次没有可分层推进的 tick 预算，因此索引重建一次完成；规则量受运行期上限约束。
      *
      * @param server  当前服务端
      * @param context 编辑运行上下文；需要保存链路已捕捉的数据包基底
      * @param edits   启用状态动作
-     * @return 应用结果；状态无变化时 rescan 为 null
+     * @return 应用结果；状态无变化或未进入运行时时为 null 发布任务
      */
     public static Outcome apply(MinecraftServer server, RuleEditServerContext context, List<RuleEdit> edits) {
         int changed = commitState(server, edits);
@@ -91,17 +88,7 @@ public final class RuleEnableApplyService {
         if (index == null) {
             return new Outcome(changed, null);
         }
-        return new Outcome(changed, context.applySavedIndex(server, index));
-    }
-
-    /**
-     * 把回扫任务交给公共调度器，在下一 tick 开始清理旧队列并逐维回扫。
-     *
-     * @param context 编辑运行上下文
-     * @param rescan  {@link #apply} 返回的回扫任务
-     */
-    public static void scheduleRescan(RuleEditServerContext context, ServerTask rescan) {
-        context.scheduleTask(ENABLE_REALM, rescan, 1);
+        return new Outcome(changed, context.publishIndex(server, index));
     }
 
     // 用保存链路缓存的数据包基底 + 当前覆盖层重建运行期索引；启用状态按「本服覆盖 ?? 默认启用」注入

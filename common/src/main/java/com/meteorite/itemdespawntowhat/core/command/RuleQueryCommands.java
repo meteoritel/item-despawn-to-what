@@ -191,7 +191,7 @@ final class RuleQueryCommands {
                 "itemdespawntowhat.command.rule.orphans.cleared").kv("count", removed).build());
     }
 
-    // 状态写入与轻量重建共用 RuleEnableApplyService：不重读数据包，索引重建后由调度器回扫全部维度
+    // 状态写入与轻量重建共用 RuleEnableApplyService：不重读数据包，索引重建后由运行时发布并排队回扫
     private static int applyAndReply(CommandContext<CommandSourceStack> ctx, RuleCommandContext context,
                                      MinecraftServer server, List<RuleEdit> edits,
                                      Component success, @Nullable Component noChange) {
@@ -200,12 +200,11 @@ final class RuleQueryCommands {
         if (outcome.changed() == 0) {
             return RuleCommandTree.reply(ctx, noChange == null ? success : noChange);
         }
-        if (outcome.rescan() == null) {
+        if (outcome.publication() == null) {
             // 状态已随存档保存，但运行时上下文不可用：明确告知本次没有进入运行时
             return RuleCommandTree.replyFailure(ctx, RuleCommandText.of(
                     "itemdespawntowhat.command.rule.enable.not_applied").kv("message", "").build());
         }
-        RuleEnableApplyService.scheduleRescan(context.editContext(), outcome.rescan());
         return RuleCommandTree.reply(ctx, success);
     }
 

@@ -32,9 +32,6 @@ public interface RuleEditServerContext {
     // 执行一次三层加载 + 语义校验（只读，不改变运行时索引）
     RuleLoadResult<Rule> loadMerged(MinecraftServer server);
 
-    // 规则落盘后重建索引并对全部已加载维度回扫
-    void rebuildAndRescan(MinecraftServer server);
-
     /**
      * 获取当前数据包基底的保存重载快照；仅在服务端线程调用。
      * @return 基底快照，运行时未就绪时为 null
@@ -52,12 +49,12 @@ public interface RuleEditServerContext {
     void scheduleTask(Object realmKey, ServerTask task, int delayTicks);
 
     /**
-     * 发布准备好的索引，并返回跨 tick 取消旧任务与回扫的续接任务。
+     * 发布已解码的索引：换入索引、候选结构摘要整表失效，并逐维排队回扫。
      * @param server 当前服务端
      * @param index 后台基于校验后模型准备的索引
-     * @return 服务端线程上的续接任务
+     * @return 发布收尾观测任务；保存链路在公共预算内推进它
      */
-    ServerTask applySavedIndex(MinecraftServer server, RuleIndex index);
+    ServerTask publishIndex(MinecraftServer server, RuleIndex index);
 
     /**
      * 读取服务端缓存的普通物品参考寿命，仅用于 GUI 滑条窗口。

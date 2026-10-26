@@ -34,7 +34,7 @@ authority: common/core/runtime、common/core/state
 
 ### 对外入口
 
-- 追踪生命周期：`ConversionRuntime.onItemAdded`、`rescan(level)`、`rebuild(level)`、`prepareRules(...)`、`publishRules(prepared)`、`replaceRules(...)`、`applySavedIndex(server, prepared)`、`clear(level)`、`shutdown()`。
+- 追踪生命周期：`ConversionRuntime.onItemAdded`、`rescan(level)`、`rebuild(level)`、`prepareRules(...)`、`publish(server, prepared)`、`publishDecoded(server, index)`、`replaceRules(...)`、`clear(level)`、`shutdown()`。
 - tick 驱动：`onServerTick`，由宿主在服务器 tick 事件中调用。
 - 环境触发：`requestEnvironmentalConversion(level, item, source)`；伤害是否属于可触发类型由 `DamageClassification.classify` 判定。
 - 实体状态：`DropStateStore` 的读取、写入、清除与 `blocksEnvironmentalDamage` 判定；授予入口在效果执行侧的 `ReturnItemSpawner`。
@@ -59,7 +59,7 @@ flowchart LR
 ### 被谁依赖
 
 - 平台层：tick 事件驱动 `onServerTick`；实体加入世界与伤害拦截把入口分别接到 `onItemAdded` 与 `requestEnvironmentalConversion`。
-- 加载与装配层：启动加载调 `replaceRules`；数据包重载与命令重载先 `prepareRules` 构建、再 `publishRules` 换入；编辑器保存成功后调 `applySavedIndex` 换索引。
+- 加载与装配层：启动加载调 `replaceRules`（只换入，随后逐维 `rebuild` 扫描世界）；数据包重载与命令重载先 `prepareRules` 构建、再 `publish` 换入；编辑器保存与启停成功后调 `publishDecoded` 换入。三条路径的换入与逐维排队回扫都在运行时内部完成，调用方只交规则集或已解码索引。
 - 效果执行侧：返还效果经 `ReturnItemSpawner` 写实体状态，结算与它共享同一套预留与落账口径。
 - 命令与调试层：查询、预算快照与开发场景观察读取本模块的观测入口。
 
@@ -118,7 +118,7 @@ flowchart TB
 
 两种模式单步都只把 `rescan_entities_per_step` 个实体交给 `onItemAdded`，且每步检查共享预算；世界扫描模式在入口收集一次已加载掉落物的引用快照（不改追踪状态），步骤按快照切片登记，既不跨 tick 持有世界迭代器，也不必每步重扫整维；有序游标模式沿 `items` 的 `higherEntry` 前进。还有剩余工作就 `yield`，下一 tick 继续。世界扫描完成前若再次重载，重载会沿用同一份快照补齐，不会因取消任务漏掉尚未登记的实体；快照登记完成后同一任务继续沿 `items` 的 `higherEntry` 游标全量补一遍（快照创建之后 join 的实体只在这里出现）——重载会清空追踪表，这些实体不在快照里，不补这一步它们就再也不会有追踪，重复登记由 `onItemAdded` 幂等兜底，两类来源都不会漏。完成标记按维度保存轮次 token，只有当前一轮的收尾路径（完成、取消、失败终态）能清除，旧一轮的迟到回调不会破坏新一轮状态；同一轮回扫失败只重排一份续接任务，避免多份任务同时推进同一游标。回扫让出期间，自然到期入口对尚未重建追踪的实体直接补一次 `onItemAdded`，临近消失的物品不会因等待回扫而漏转化。
 
-数据包重载走「先建后换」：先在构建阶段建好新索引与候选结构摘要，成功后才一次换入并逐维排队回扫；构建期与换入前的失败不改动旧索引、追踪与排队任务，失败以结构化问题回传，回执不声称本次变更已应用。
+数据包重载走「先建后换」：先在构建阶段建好新索引与候选结构摘要，成功后才一次换入并逐维排队回扫——换入、候选摘要替换与回扫排队都由发布入口完成；构建期与换入前的失败不改动旧索引、追踪与排队任务，失败以结构化问题回传，回执不声称本次变更已应用。
 
 追踪条目与句柄状态保持自洽：检查任务失败由本模块的失败回调收尾（见 4.6），不会留下指向已终态句柄的追踪；句柄被取消或追踪已不存在时，实体重新加载进入 `onItemAdded` 会按当前候选补排一次初始检查，自然到期入口则释放追踪并交还原版销毁，物品不会因内部失败而永久留存。
 
@@ -198,7 +198,7 @@ flowchart TB
 - 首 tick 做一次全局补扫；未加载维度跳过并计数，等维度可用时由回扫补做。恢复任务带幂等标记，同一记录不会被重复启动。
 - 恢复只交付待交付库存，交付成功后才扣减并落账；旧效果队列不重放。交付按退避重试，区块卸载时保留待交付量等下次。
 - 运行期恢复队列：结算在当前会话内失败后按记录去重入队，由调度器自有系统 realm 上的维护任务推进——它只泵队列、不持有世界写入，规则重载摘除维度 realm 与维度卸载都不打断它，停服随系统 realm 一并取消并清空队列；泵被取消或自身失败都复位排期标志，失败时队列非空还会立即重排，不会留下永久「已排期」状态。每 tick 至多启动一条恢复并占用公共预算，失败按指数退避重新入队，达到 `settlement_recovery_max_attempts` 后放弃、保留账本等下次启动扫描，超限告警对每条记录只记一次。记录所在维度未加载时不消耗恢复尝试次数、每 20 tick 复查一次，连续 5 次仍未加载就把记录留在账本交给维度加载回扫或下次启动，避免队列泵长期空转。
-- 在飞恢复被取消时（reload 会摘除维度 realm 并逐槽取消）不会丢库存：取消回调释放幂等位后立即按记录是否仍需恢复重新入队，本会话内继续退避交付；`applySavedIndex` 路径的恢复扫描按幂等位去重，取消后的重排同样由这条回调兜底。
+- 在飞恢复被取消时（reload 会摘除维度 realm 并逐槽取消）不会丢库存：取消回调释放幂等位后立即按记录是否仍需恢复重新入队，本会话内继续退避交付；发布路径的恢复扫描按幂等位去重，取消后的重排同样由这条回调兜底。
 - 台账裁剪针对“已完成、无待交付、已记完成刻且超过保留窗口”的记录，再清理“已终结（中断/失败）且无待交付”的记录：后者已无恢复价值，不设保留窗口；未结清记录始终保留，条数上限告警按保留窗口降频。
 - 返还交付经 `ReturnItemSpawner` 生成产物，并授予永久保护与永久禁转；新产物落入世界时授予临时保护与临时冷却，时长由配置注入，参数为 0 时不授予。
 - 状态只挂实体、不写进 `ItemStack`：拾取即实体消亡，重丢得到普通掉落物。时间字段是绝对游戏刻，区块卸载不暂停、重启后继续计时。

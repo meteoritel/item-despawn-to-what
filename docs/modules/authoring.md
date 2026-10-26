@@ -26,7 +26,7 @@ authority: common/core/catalog、common/core/network、common/core/service、com
 - 变更集：接收完整文本或分片、幂等回放、版本戳比对。
 - 落盘：逐条校验、临时文件写入、原子替换、失败逆序回滚与备份复原。
 - 本服启用状态：按存档保存每个 id 的启停覆盖，保存与命令共用同一应用入口。
-- 保存后一致性：重读、解码、注入启用状态、重建索引并把新索引交给运行时，随后回扫；版本戳只在内容成功写盘时推进。
+- 保存后一致性：重读、解码、注入启用状态、重建索引后交给运行时发布——换入与逐维排队回扫都在运行时内部，保存任务等到回扫收尾；版本戳只在内容成功写盘时推进。
 - 命令面与权限口径：`/idtw` 命令树的组装、分区鉴权与统一反馈出口。
 - 开发调试：声明文件驱动的场景与流水线，复用真实链路并输出可对比的观测。
 
@@ -76,8 +76,8 @@ flowchart LR
 | `EditSessionManager` / `RuleEditSessionLimits` | 目标锁 | 单目标全局唯一会话的状态机；租约、心跳与申请窗口以服务端活动 tick 计时；版本戳读写委托覆盖层存储 | `RuleOverlayStore`、`RuleEditService` |
 | `RuleOverlayStore` | 文件侧并发边界 | 后台文件调用队列、磁盘修订指纹、覆盖层根目录就绪与停滞检测 | `RuleOverlayWriter`、`RuleSaveTask`、`RuleSnapshotTask` |
 | `RuleOverlayWriter` | 原子落盘 | 加载原始字节、按规则 id 建位置索引、临时文件写入、元数据与内容两段复核、`.bak` 备份、原子替换与唯一提交确认点、失败逆序回滚 | `RuleSaveTask`、`RuleOverlayStore` |
-| `RuleSaveTask` | 保存编排 | 续接任务：请求、校验、写入、提交启用状态、重读、解码、建索引、应用；纯启停批次走校验后直达索引重建的轻量路径；每步受预算与会话有效性约束，取消与失效给出确定终态 | `RuleSubmissionValidator`、`RuleOverlayWriter`、`RuleEnableApplyService`、`RuleIndex`、运行时换索引 |
-| `RuleEnableApplyService` | 启用状态应用 | 提交同批启停动作、按已捕捉的基底重建索引、安排回扫；内容与状态都不变时回答无变化 | `RuleEnableState`、`RuleLoadingService`、`RuleIndex`、运行时换索引 |
+| `RuleSaveTask` | 保存编排 | 续接任务：请求、校验、写入、提交启用状态、重读、解码、建索引、发布；纯启停批次走校验后直达索引重建的轻量路径；每步受预算与会话有效性约束，取消与失效给出确定终态 | `RuleSubmissionValidator`、`RuleOverlayWriter`、`RuleEnableApplyService`、`RuleIndex`、运行时发布 |
+| `RuleEnableApplyService` | 启用状态应用 | 提交同批启停动作、按已捕捉的基底重建索引并交给运行时发布；内容与状态都不变时回答无变化 | `RuleEnableState`、`RuleLoadingService`、`RuleIndex`、运行时发布 |
 | `RuleSnapshotTask` / `RuleSnapshotAssembler` | 快照 | 后台读盘与合并、逐条解码与编码、装配生效视图与来源分层索引、按字节阈值直发或分片 | `RuleEditService`、`RuleSourceIndex` |
 | `RuleTextChunker` / `RuleChunkPayload` / `RuleChunkAssembly` | 分片公共层 | 按通道的字节档位决定直发或分片、单片校验、批次身份与收齐判定；服务端装配器与客户端缓冲共用 | `RuleEditService`、`RuleSnapshotTask`、客户端 `RuleChunkBuffer` |
 | `RuleEditChunkAccumulator` / `RuleEditLimits` | 分片与限额 | 按玩家保留在途批次（每玩家上限、超出淘汰最早）、收齐后复核总量、空闲过期与清理 | `RuleEditService` |
@@ -148,7 +148,7 @@ flowchart TB
     D -->|"是"| E["VALIDATE：逐条校验新增/更新/删除"]
     E -->|"存在错误"| R2["整批拒绝：校验失败，附问题清单"]
     V2 -->|"存在错误"| R2
-    V2 -->|"通过"| S0["APPLY：写入本服启用状态 → 用已捕捉的基底重建索引 → 换入并回扫"]
+    V2 -->|"通过"| S0["APPLY：写入本服启用状态 → 用已捕捉的基底重建索引 → 发布（换入 + 逐维排队回扫）"]
     E --> F["WRITE：加载原始字节与位置索引"]
     F --> G["临时文件写入 → 元数据复核 → .bak 备份 → 内容复核 → 原子替换"]
     G --> H{"唯一提交确认点"}
@@ -156,7 +156,7 @@ flowchart TB
     H -->|"通过"| S1["提交同批本服启用状态"]
     S1 --> I["READ：重读合并，比对磁盘指纹"]
     I --> J["DECODE + INDEX：解码校验、注入启用状态、构建新索引"]
-    J --> K["APPLY：换运行时索引"]
+    J --> K["APPLY：发布换入，等回扫收尾"]
     K --> L["回执 + 按需刷新快照"]
     S0 --> L
 ```
@@ -174,7 +174,7 @@ flowchart TB
 - 根节点不统一鉴权：编辑锁状态查询对所有玩家开放，权限下放到各子分支，避免“查看”也被权限挡住。
 - 编辑与写操作沿用同一口径：单人存档房主直接放行，其余执行者按权限等级判定；权限来源统一为 `RuleEditPermissions.hasAccess`，命令分支经 `requires` 接入，网络侧由 `RuleEditServerHandler.sessions(...)` 注入为 `canEdit` 谓词交给 `EditAdmission`，开放局域网后的访客按权限等级判定。
 - 编辑命令要求玩家实体：先判权限再取锁，取锁失败时回显持有者；强制释放需要编辑权限等级，原持有者在线时收到会话过期回执；会话处于在途保存时，改由保存收尾的终态回执携带。
-- 读取、重载、启停与孤儿清理子命令在保存进行中回“保存忙碌”，避开文件替换窗口；启停与孤儿清理在应用成功后安排回扫，运行时未就绪时明确回答未应用。
+- 读取、重载、启停与孤儿清理子命令在保存进行中回“保存忙碌”，避开文件替换窗口；启停与孤儿清理在应用成功后由运行时换入并排队回扫，运行时未就绪时明确回答未应用。
 - 反馈统一走命令层的本地化出口：成功与失败都按语言 key 组装，缺省参数带裁剪上限。
 
 ### 4.6 调试场景与流水线

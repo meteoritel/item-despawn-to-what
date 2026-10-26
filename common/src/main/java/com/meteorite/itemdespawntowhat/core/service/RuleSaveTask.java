@@ -212,13 +212,13 @@ final class RuleSaveTask implements ServerTask {
                     appendIssues(local);
                     if (local.hasErrors()) { finish(RuleSaveStatus.VALIDATION_FAILED, local.format()); }
                 } else if (!changes.hasContentEdits()) {
-                    // 纯启停批次：写状态后按保存链路的轻量路径重建索引并发布，回扫在 APPLY 步骤推进；
+                    // 纯启停批次：写状态后按保存链路的轻量路径重建索引并发布，APPLY 步骤等待回扫收尾；
                     // 索引用这份任务已捕捉的数据包基底重建，不重读数据包。
                     RuleEnableApplyService.Outcome outcome = RuleEnableApplyService.apply(server, context,
                             changes.enableEdits());
                     if (outcome.changed() == 0) { finish(RuleSaveStatus.NO_CHANGES, ""); }
-                    else if (outcome.rescan() == null) { finish(RuleSaveStatus.UNAVAILABLE, ""); }
-                    else { apply = outcome.rescan(); phase = Phase.APPLY; }
+                    else if (outcome.publication() == null) { finish(RuleSaveStatus.UNAVAILABLE, ""); }
+                    else { apply = outcome.publication(); phase = Phase.APPLY; }
                 } else {
                     RuleEditChangeSet submitted = changes;
                     byte[] expectedRevision = diskRevision.clone();
@@ -303,7 +303,7 @@ final class RuleSaveTask implements ServerTask {
             }
             case INDEX -> {
                 if (!prepared.isDone()) { return false; }
-                apply = context.applySavedIndex(server, prepared.join()); prepared = null;
+                apply = context.publishIndex(server, prepared.join()); prepared = null;
                 phase = Phase.APPLY;
             }
             case APPLY -> {

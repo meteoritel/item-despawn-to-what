@@ -246,12 +246,11 @@ public final class RuleRuntimeHostCore {
             // 应用阶段观测点：此刻仍在换入前，注入失败时旧索引、追踪与队列完整保留；未注入时为空操作
             RuntimeObserver.current().reloadApplying(server);
             // 换入：索引与候选摘要一次替换，各维度旧追踪随之失效，随后由回扫重建
-            current.publishRules(prepared);
+            current.publish(server, prepared);
             // 换入之后的收尾不再适用「保留旧索引」语义：索引已经生效，收尾异常只记录、不改变成功回执
             try {
                 saveReloadContext = saveContext;
                 logLoadResult("数据包重载", result);
-                queueRescans(current, server);
                 Objects.requireNonNull(RuleEditServerHandler.sessionManager(editContext)).bumpVersion();
                 LOGGER.info("数据包重载完成：规则索引已重建，回扫已排队");
             } catch (RuntimeException e) {
@@ -264,24 +263,6 @@ public final class RuleRuntimeHostCore {
             LOGGER.error("数据包重载失败，已保留上一版规则索引与追踪（本次未应用任何规则变更）", e);
             return RuleReloadOutcome.failed(Issue.error(
                     "数据包重载失败，已保留上一版规则索引与追踪（本次未应用任何规则变更）：" + reason, null, null));
-        }
-    }
-
-    // 换入后的收尾：逐维排队回扫。单维异常只记录并继续，避免一个维度的问题让其它的维度排不上回扫
-    private static void queueRescans(ConversionRuntime current, MinecraftServer server) {
-        RuntimeException failure = null;
-        for (ServerLevel level : server.getAllLevels()) {
-            try {
-                current.rescan(level);
-            } catch (RuntimeException e) {
-                if (failure == null) { failure = e; } else { failure.addSuppressed(e); }
-                // 该维度追踪已被换入清空：补排有界重试，避免在下次回扫或维度加载前失联
-                current.retryRescan(level, 1);
-            }
-        }
-        if (failure != null) {
-            // 索引已换入，此时不能再声称保留了旧索引；差异只是回扫排队，留待下次回扫或维度重载补齐
-            LOGGER.error("数据包重载已应用，但部分维度回扫排队失败；这些维度将在下次回扫或维度重载时补齐", failure);
         }
     }
 
@@ -487,19 +468,8 @@ public final class RuleRuntimeHostCore {
         }
 
         @Override
-        public ServerTask applySavedIndex(MinecraftServer server, RuleIndex index) {
-            return Objects.requireNonNull(runtime).applySavedIndex(server, index);
-        }
-
-        @Override
-        public void rebuildAndRescan(MinecraftServer server) {
-            // 与数据包重载共用同一条 apply 路径（Fabric 与 NeoForge 两端口径一致）：
-            // 重载失败必须抛异常，让保存流程回 SAVED_NOT_RELOADED（已写盘但未重载）
-            RuleReloadOutcome<Rule> outcome = reloadWithOutcome(server, server.getResourceManager());
-            if (outcome == null || !outcome.isApplied()) {
-                throw new IllegalStateException("保存后的运行时重载失败"
-                        + (outcome == null || outcome.failure() == null ? "" : "：" + outcome.failure().message()));
-            }
+        public ServerTask publishIndex(MinecraftServer server, RuleIndex index) {
+            return Objects.requireNonNull(runtime).publishDecoded(server, index);
         }
     }
 
