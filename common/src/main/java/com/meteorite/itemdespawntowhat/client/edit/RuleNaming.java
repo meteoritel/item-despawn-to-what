@@ -43,20 +43,12 @@ public final class RuleNaming {
         NameSource NONE = id -> null;
     }
 
-    /** 规则标题（传草稿视图） */
-    public static Component ruleTitle(@Nullable RuleDraft draft, NameSource source) {
-        return ruleTitleJson(draft == null ? null : draft.workingView(), source);
-    }
-
     /** 规则标题（传动态值对象）：值对象到 JSON 的转换收敛在本包内 */
     public static Component ruleTitle(@Nullable RuleValue rule, NameSource source) {
         return ruleTitleJson(rule == null || !rule.isMapping() ? null : rule.unwrap().getAsJsonObject(), source);
     }
 
-    /**
-     * 规则标题：display_name → 自动模板 → 安全兜底（id 文本）。
-     * <p>多候选规则用候选轮询/优先模板，其余（含顶层单结果）用单结果模板。
-     */
+    // 规则标题：display_name → 自动模板 → 安全兜底（id 文本）。
     private static Component ruleTitleJson(@Nullable JsonObject rule, NameSource source) {
         if (rule == null) {
             return Component.translatable(PREFIX + "unfinished_no_result");
@@ -67,7 +59,7 @@ public final class RuleNaming {
                 return Component.literal(displayName.trim());
             }
             Component sourcePart = sourceTitleJson(rule, source);
-            int candidates = sizeOf(rule, RuleFields.OUTCOMES);
+            int candidates = sizeOf(rule);
             if (candidates > 1) {
                 return Component.translatable(PREFIX + multiResultKey(rule), sourcePart, candidates);
             }
@@ -84,7 +76,7 @@ public final class RuleNaming {
 
     // 源物品短摘要：未选源 → 未完成占位；多项 → 多输入模板
     private static Component sourceTitleJson(@Nullable JsonObject rule, NameSource source) {
-        List<JsonElement> entries = entries(rule, RuleFields.SOURCE, RuleFields.SOURCE_ITEMS);
+        List<JsonElement> entries = entries(rule);
         if (entries.isEmpty()) {
             return Component.translatable(PREFIX + "unfinished_no_source");
         }
@@ -126,11 +118,6 @@ public final class RuleNaming {
                 ? Component.translatable(PREFIX + "unfinished_no_result")
                 : effectListTitleJson(effects, source);
         return Component.translatable(PREFIX + "candidate", ordinal, body);
-    }
-
-    /** 效果列表摘要（传动态值对象） */
-    public static Component effectListTitle(@Nullable RuleValue effects, NameSource source) {
-        return effectListTitleJson(effects == null || !effects.isList() ? null : effects.unwrap().getAsJsonArray(), source);
     }
 
     // 效果列表摘要：代表项 + 「另有 n 项」
@@ -175,7 +162,7 @@ public final class RuleNaming {
                 case "experience" -> Component.translatable(PREFIX + "effect.spawn_xp");
                 default -> withLabel(PREFIX + "effect.spawn_entity", effect, "entity", source, type);
             };
-            case "place_block" -> booleanOf(effect, "use_source_block", false)
+            case "place_block" -> booleanOf(effect, "use_source_block")
                     ? Component.translatable(PREFIX + "effect.place_block_source")
                     : withLabel(PREFIX + "effect.place_block", effect, "block", source, type);
             case "loot_table" -> Component.translatable(PREFIX + "effect.loot_table");
@@ -218,7 +205,7 @@ public final class RuleNaming {
         if ("clear".equalsIgnoreCase(mode)) {
             return "effect.weather_clear";
         }
-        return booleanOf(effect, "thundering", false) ? "effect.weather_thunder" : "effect.weather_rain";
+        return booleanOf(effect, "thundering") ? "effect.weather_thunder" : "effect.weather_rain";
     }
 
     // 效果类型 path（无法解析时返回空串）
@@ -258,10 +245,10 @@ public final class RuleNaming {
         return Component.literal(id);
     }
 
-    // 取对象字段中的源条目数组
-    private static List<JsonElement> entries(@Nullable JsonObject rule, String field, String listField) {
-        JsonObject container = asObject(rule == null ? null : rule.get(field));
-        JsonArray array = arrayOf(container, listField);
+    // 取 source.items 中的源条目数组
+    private static List<JsonElement> entries(@Nullable JsonObject rule) {
+        JsonObject container = asObject(rule == null ? null : rule.get(RuleFields.SOURCE));
+        JsonArray array = arrayOf(container, RuleFields.SOURCE_ITEMS);
         List<JsonElement> out = new ArrayList<>();
         if (array == null) {
             return out;
@@ -274,9 +261,9 @@ public final class RuleNaming {
         return out;
     }
 
-    // 数组长度（非数组按 0）
-    private static int sizeOf(@Nullable JsonObject object, String field) {
-        JsonArray array = arrayOf(object, field);
+    // outcomes 数组长度（非数组按 0）
+    private static int sizeOf(@Nullable JsonObject object) {
+        JsonArray array = arrayOf(object, RuleFields.OUTCOMES);
         return array == null ? 0 : array.size();
     }
 
@@ -317,12 +304,12 @@ public final class RuleNaming {
         return fallback;
     }
 
-    // 读布尔字段（缺省时返回 fallback）
-    private static boolean booleanOf(JsonObject object, String field, boolean fallback) {
+    // 读布尔字段（缺省或类型不符按 false）
+    private static boolean booleanOf(JsonObject object, String field) {
         JsonElement element = object.get(field);
         if (element != null && element.isJsonPrimitive() && element.getAsJsonPrimitive().isBoolean()) {
             return element.getAsBoolean();
         }
-        return fallback;
+        return false;
     }
 }
