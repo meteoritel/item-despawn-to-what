@@ -74,7 +74,8 @@ stateDiagram-v2
 - 整包放得下就直接下发；否则按 UTF-8 字节切分，每 tick 限量投递，客户端按 `transferId` 与下标重组。
 - 快照装配失败或内容为空时回环境不可用状态码，并带上快照失败的文案 key。
 - 来源视图直接取最近一次快照装配出的分层索引，不重新读盘；索引尚未就绪时回环境不可用，规则 id 非法或条目不存在时回请求非法。
-- 下行文本分片共用一套视图接口（`RuleChunkPayload`）：`sessionId`、`requestId`、`transferId`、下标、总数与文本。客户端重组缓冲在会话切换、重复下标或超时无进展时重置。
+- 分片共用一条记录 `RuleChunkPayload`：`sessionId`、`correlationId`、`transferId`、下标、总数与文本；通道由类上的类型常量区分（快照 / 来源视图 / 变更集）。`correlationId` 在两条下行通道是 `requestId`，在上行变更集是 `operationId`。
+- 切分、校验与重组各只有一处实现：`RuleTextChunker.split(Family, …)` 按通道的字节档位决定直发还是分片，`RuleChunkAssembly` 校验单片并判定批次身份与是否收齐，服务端装配器 `RuleEditChunkAccumulator` 与客户端缓冲 `RuleChunkBuffer` 都复用它们。客户端重组缓冲在会话切换、批次身份变化或超时无进展时重置。
 
 ## 变更集
 

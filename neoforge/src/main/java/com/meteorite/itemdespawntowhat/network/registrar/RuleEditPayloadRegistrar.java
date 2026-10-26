@@ -9,16 +9,14 @@ import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleCatalog
 import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleSnapshotPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleSourceViewPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleCatalogPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditPayloadRouter;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveResultPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveProgressPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.CancelRuleSavePayload;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotPayload;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleSourceViewChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSourceViewPayload;
-import com.meteorite.itemdespawntowhat.core.network.transport.SaveRuleChangeSetChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.SaveRuleChangeSetPayload;
 import com.meteorite.itemdespawntowhat.runtime.RuleRuntimeHost;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -100,7 +98,7 @@ public final class RuleEditPayloadRegistrar {
                 (payload, context) -> handleOnServer(context, payload, (player, body) ->
                         RuleEditServerHandler.handleChangeSet(player, RuleRuntimeHost.editContext(), body)));
 
-        registrar.playToServer(SaveRuleChangeSetChunkPayload.TYPE, SaveRuleChangeSetChunkPayload.STREAM_CODEC,
+        registrar.playToServer(RuleChunkPayload.CHANGE_SET, RuleChunkPayload.codec(RuleChunkPayload.CHANGE_SET),
                 (payload, context) -> handleOnServer(context, payload, (player, body) ->
                         RuleEditServerHandler.handleChangeSetChunk(player, RuleRuntimeHost.editContext(), body)));
 
@@ -109,7 +107,7 @@ public final class RuleEditPayloadRegistrar {
                 (payload, context) -> context.enqueueWork(() ->
                         RuleEditPayloadRouter.dispatchSnapshot(payload)));
 
-        registrar.playToClient(RuleSnapshotChunkPayload.TYPE, RuleSnapshotChunkPayload.STREAM_CODEC,
+        registrar.playToClient(RuleChunkPayload.SNAPSHOT, RuleChunkPayload.codec(RuleChunkPayload.SNAPSHOT),
                 (payload, context) -> context.enqueueWork(() ->
                         RuleEditPayloadRouter.dispatchChunk(payload)));
 
@@ -117,9 +115,9 @@ public final class RuleEditPayloadRegistrar {
                 (payload, context) -> context.enqueueWork(() ->
                         RuleEditPayloadRouter.dispatchSourceView(payload)));
 
-        registrar.playToClient(RuleSourceViewChunkPayload.TYPE, RuleSourceViewChunkPayload.STREAM_CODEC,
+        registrar.playToClient(RuleChunkPayload.SOURCE_VIEW, RuleChunkPayload.codec(RuleChunkPayload.SOURCE_VIEW),
                 (payload, context) -> context.enqueueWork(() ->
-                        RuleEditPayloadRouter.dispatchSourceViewChunk(payload)));
+                        RuleEditPayloadRouter.dispatchChunk(payload)));
 
         registrar.playToClient(RuleSaveResultPayload.TYPE, RuleSaveResultPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() ->

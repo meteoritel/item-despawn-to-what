@@ -202,8 +202,8 @@ public final class RuleEditServerHandler {
 
     // C2S 变更集分片
     public static void handleChangeSetChunk(ServerPlayer player, RuleEditServerContext context,
-                                            SaveRuleChangeSetChunkPayload payload) {
-        RuleEditService service = readyService(player, context, sessionId(payload == null ? null : payload.sessionId()), payload == null ? "" : payload.operationId());
+                                            RuleChunkPayload payload) {
+        RuleEditService service = readyService(player, context, sessionId(payload == null ? null : payload.sessionId()), payload == null ? "" : payload.correlationId());
         if (service == null || payload == null) {
             return;
         }

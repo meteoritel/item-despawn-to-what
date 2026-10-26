@@ -8,15 +8,13 @@ import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleCatalog
 import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleSnapshotPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleSourceViewPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleCatalogPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveResultPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveProgressPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.CancelRuleSavePayload;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotPayload;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleSourceViewChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSourceViewPayload;
-import com.meteorite.itemdespawntowhat.core.network.transport.SaveRuleChangeSetChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.SaveRuleChangeSetPayload;
 import com.meteorite.itemdespawntowhat.runtime.RuleRuntimeHost;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
@@ -58,15 +56,15 @@ public final class RuleEditPayloadRegistrar {
         PayloadTypeRegistry.playC2S().register(RequestRuleLifespanPayload.TYPE, RequestRuleLifespanPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(RequestRuleSourceViewPayload.TYPE, RequestRuleSourceViewPayload.STREAM_CODEC);
         PayloadTypeRegistry.playC2S().register(SaveRuleChangeSetPayload.TYPE, SaveRuleChangeSetPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playC2S().register(SaveRuleChangeSetChunkPayload.TYPE, SaveRuleChangeSetChunkPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playC2S().register(RuleChunkPayload.CHANGE_SET, RuleChunkPayload.codec(RuleChunkPayload.CHANGE_SET));
         PayloadTypeRegistry.playS2C().register(OpenRuleEditorPayload.TYPE, OpenRuleEditorPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(RuleSnapshotPayload.TYPE, RuleSnapshotPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playS2C().register(RuleSnapshotChunkPayload.TYPE, RuleSnapshotChunkPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playS2C().register(RuleChunkPayload.SNAPSHOT, RuleChunkPayload.codec(RuleChunkPayload.SNAPSHOT));
         PayloadTypeRegistry.playS2C().register(RuleSaveResultPayload.TYPE, RuleSaveResultPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(RuleCatalogPayload.TYPE, RuleCatalogPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(RuleLifespanPayload.TYPE, RuleLifespanPayload.STREAM_CODEC);
         PayloadTypeRegistry.playS2C().register(RuleSourceViewPayload.TYPE, RuleSourceViewPayload.STREAM_CODEC);
-        PayloadTypeRegistry.playS2C().register(RuleSourceViewChunkPayload.TYPE, RuleSourceViewChunkPayload.STREAM_CODEC);
+        PayloadTypeRegistry.playS2C().register(RuleChunkPayload.SOURCE_VIEW, RuleChunkPayload.codec(RuleChunkPayload.SOURCE_VIEW));
 
         // 服务端接收器：统一切到服务端线程后交给共享 handler，平台侧只做薄转发
         ServerPlayNetworking.registerGlobalReceiver(CancelRuleSavePayload.TYPE,
@@ -105,7 +103,7 @@ public final class RuleEditPayloadRegistrar {
                 (payload, context) -> context.server().execute(() ->
                         RuleEditServerHandler.handleChangeSet(context.player(), RuleRuntimeHost.editContext(), payload)));
 
-        ServerPlayNetworking.registerGlobalReceiver(SaveRuleChangeSetChunkPayload.TYPE,
+        ServerPlayNetworking.registerGlobalReceiver(RuleChunkPayload.CHANGE_SET,
                 (payload, context) -> context.server().execute(() ->
                         RuleEditServerHandler.handleChangeSetChunk(context.player(), RuleRuntimeHost.editContext(), payload)));
 

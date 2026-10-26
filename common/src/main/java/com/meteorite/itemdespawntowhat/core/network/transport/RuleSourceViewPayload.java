@@ -7,11 +7,11 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * S2C：来源视图应答。小的来源视图直发整包，超限时改发 {@link RuleSourceViewChunkPayload} 分片。
+ * S2C：来源视图应答。小的来源视图直发整包，超限时改发 {@link RuleChunkPayload} 分片。
  * requestId 原样回带，客户端据此把应答配到请求上；失败时 sourceViewJson 为空且 statusCode 非 SUCCESS。
  */
 public record RuleSourceViewPayload(String sessionId, String requestId, String statusCode, String sourceViewJson)
-        implements CustomPacketPayload {
+        implements RuleTextPayload {
 
     public static final Type<RuleSourceViewPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(RuleEditLimits.NAMESPACE, "rule_source_view")
@@ -43,6 +43,11 @@ public record RuleSourceViewPayload(String sessionId, String requestId, String s
                 buffer.readUtf(RuleEditLimits.MAX_ID_CHARS),
                 buffer.readUtf(RuleEditLimits.MAX_CODE_CHARS),
                 buffer.readUtf(RuleEditLimits.MAX_SOURCE_VIEW_CHARS + RuleEditLimits.PACKET_SLACK_BYTES));
+    }
+
+    @Override
+    public String text() {
+        return sourceViewJson;
     }
 
     @Override

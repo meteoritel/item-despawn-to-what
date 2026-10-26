@@ -68,7 +68,7 @@ flowchart LR
 |---|---|---|---|
 | `RuleEditClientWorkspace`（client/net） | 聚合根·并发敏感 | 会话状态机镜像、心跳、快照/目录/来源视图缓存、分片重组、变更集提交、回执收敛、连接断开即重置 | `RuleEditClientState`、`RuleChunkBuffer`、`RuleEditPayloadRouter`、`EditorScreenHooks` |
 | `RuleEditClientState`（client/net） | 状态枚举 | 工作区对外可见的阶段；界面据此决定是否显示编辑控件与是否允许提交 | 界面层、工作区 |
-| `RuleChunkBuffer`（client/net） | 分片重组 | 按会话、传输 id 与分片数识别批次，按序号去重拼接；超时无进展即作废旧批次 | 工作区、快照与来源视图 |
+| `RuleChunkBuffer`（client/net） | 分片重组 | 复用 `RuleChunkAssembly` 校验单片并判定批次身份与是否收齐；同一时刻只保留一批，超时无进展即作废 | 工作区、快照与来源视图 |
 | `EditorWorkspaceView` / `LiveEditorWorkspace`（client/edit） | 只读视图 | 界面只读面；`LiveEditorWorkspace` 把载荷收敛在工作区内部，按 `resultSeq` 暴露最新回执 | 界面模块、协议工作区 |
 | `EditorScreenHooks` / `EditorScreenOpener` / `EditorOpenRequest`（client/net） | 界面注册槽 | 会话建立与失效时通知界面；请求字段与服务端打开载荷一一对应 | 界面模块 |
 | `EditSession`（client/edit） | 撤销聚合根 | 每次编辑压入快照历史，维护撤销与重做栈、脏标记与未完成输入；不区分只读条目 | `RuleDraft`、界面表单 |
@@ -237,7 +237,7 @@ flowchart TD
 ### 约束
 
 - 只在客户端主线程调用工作区；跨线程写入会破坏状态机与缓存一致性。
-- `RuleChunkBuffer` 同一时刻只保留一批分片，批次边界由会话、传输 id 与分片数共同决定。
+- `RuleChunkBuffer` 同一时刻只保留一批分片，批次边界由会话、关联 id、传输 id 与分片数共同决定。
 - 来源视图缓存与目录加载都有上限与超时，界面重试走 `retrySourceView` / `retryDirectory`，不要自行重发请求。
 - `client/net` 与 `client/edit` 不引用 `client/ui`；页面、主题与控件适配都在界面模块。
 - 客户端不重复声明参数形状：字段名、值域、默认值与新建初值只在 `core` 的类型声明里，客户端只做投影与展示差异。

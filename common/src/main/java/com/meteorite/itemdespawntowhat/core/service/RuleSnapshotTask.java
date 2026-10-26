@@ -14,15 +14,13 @@ import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
 import com.meteorite.itemdespawntowhat.core.model.RuleValidation;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditLimits;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerContext;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotChunker;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotPayload;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.CancelReason;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.StepResult;
 import com.meteorite.itemdespawntowhat.core.api.DevelopmentDiagnostics;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotChunkPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleTextChunker;
 import com.mojang.serialization.Codec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
@@ -180,11 +178,7 @@ final class RuleSnapshotTask implements ServerTask {
                         if (!java.util.Arrays.equals(capturedSource.revision(), sessions.readDiskRevision(() -> !cancelled))) {
                             throw new IllegalStateException("快照准备期间覆盖层修订已变化");
                         }
-                        if (RuleEditLimits.encodedLength(json) > RuleEditLimits.MAX_SNAPSHOT_BYTES) { return List.of(); }
-                        if (RuleEditLimits.encodedLength(json) <= RuleEditLimits.MAX_DIRECT_PACKET_BYTES) {
-                            return List.of(new RuleSnapshotPayload(sessionId, requestId, json));
-                        }
-                        return RuleSnapshotChunker.split(sessionId, requestId, json);
+                        return RuleTextChunker.split(RuleTextChunker.Family.SNAPSHOT, sessionId, requestId, json);
                     } finally {
                         profileAssembleNanos = DevelopmentDiagnostics.micros(assembleStarted);
                     }
@@ -220,25 +214,12 @@ final class RuleSnapshotTask implements ServerTask {
         data.addProperty("read_ms", profileReadNanos / 1000.0);
         data.addProperty("assemble_ms", profileAssembleNanos / 1000.0);
         data.addProperty("packets", packets.size());
-        data.addProperty("bytes", packetsBytes(packets));
+        data.addProperty("bytes", RuleTextChunker.encodedBytes(packets));
         data.addProperty("failed", profileFailed);
         // 非失败但没有包：请求被取消或超过上限，两种都按中止记录
         data.addProperty("aborted", !profileFailed && packets.isEmpty());
         data.addProperty("total_ms", DevelopmentDiagnostics.micros(profileStartedNanos) / 1000.0);
         DevelopmentDiagnostics.event(DevelopmentDiagnostics.SCENE_FIRST_LOAD, "SERVER_PREP", data);
-    }
-
-    // 下发字节按 UTF-8 计，与分片阈值口径一致
-    private static long packetsBytes(List<CustomPacketPayload> packets) {
-        long bytes = 0L;
-        for (CustomPacketPayload payload : packets) {
-            if (payload instanceof RuleSnapshotPayload direct) {
-                bytes += RuleEditLimits.encodedLength(direct.snapshotJson());
-            } else if (payload instanceof RuleSnapshotChunkPayload chunk) {
-                bytes += RuleEditLimits.encodedLength(chunk.chunk());
-            }
-        }
-        return bytes;
     }
 
     @Override public void onCancelled(CancelReason reason) { invalidate(); }

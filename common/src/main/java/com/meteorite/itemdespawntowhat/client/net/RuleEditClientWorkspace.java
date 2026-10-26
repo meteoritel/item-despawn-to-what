@@ -22,20 +22,20 @@ import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleLifespa
 import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleSnapshotPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleSourceViewPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleCatalogPayload;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleChangeSetChunker;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditLimits;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditPayloadRouter;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleLifespanPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveProgressPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveResultPayload;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotPayload;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleSourceViewChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSourceViewPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleTextChunker;
 import com.meteorite.itemdespawntowhat.core.service.RuleEditSessionLimits;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.ResourceLocation;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.Nullable;
@@ -424,7 +424,8 @@ public final class RuleEditClientWorkspace {
         if (operationId == null || operationId.isEmpty() || changeSetJson == null || changeSetJson.isEmpty()) {
             return false;
         }
-        List<CustomPacketPayload> packets = RuleChangeSetChunker.split(sessionId, operationId, changeSetJson);
+        List<CustomPacketPayload> packets = RuleTextChunker.split(RuleTextChunker.Family.CHANGE_SET, sessionId,
+                operationId, changeSetJson);
         if (packets.isEmpty()) {
             LOGGER.warn("变更集为空或超过上限，未提交: bytes={}",
                     RuleEditLimits.encodedLength(changeSetJson));
@@ -492,14 +493,30 @@ public final class RuleEditClientWorkspace {
         }
         sinksInstalled = true;
         RuleEditPayloadRouter.installSnapshotPayloadSink(this::onSnapshot);
-        RuleEditPayloadRouter.installChunkSink(this::onSnapshotChunk);
+        RuleEditPayloadRouter.installChunkSink(this::onChunk);
         RuleEditPayloadRouter.installResultPayloadSink(this::onResult);
         RuleEditPayloadRouter.installProgressSink(this::onProgress);
         RuleEditPayloadRouter.installCatalogSink(this::onCatalog);
         RuleEditPayloadRouter.installLifespanSink(this::onLifespan);
         RuleEditPayloadRouter.installSourceViewSink(this::onSourceView);
-        RuleEditPayloadRouter.installSourceViewChunkSink(this::onSourceViewChunk);
         OpenRuleEditorPayload.installOpenEditorPayloadSink(this::onOpen);
+    }
+
+    /**
+     * 分片统一入口：快照、来源视图与变更集共用一条消费者，按 {@link RuleChunkPayload#type()} 的通道 id 分派到各自的重组缓冲。
+     * 未知通道直接忽略，避免把别的通道的分片误喂进某个缓冲而挤掉在途批次。
+     * @param payload 分片载荷
+     */
+    private synchronized void onChunk(@Nullable RuleChunkPayload payload) {
+        if (payload == null) {
+            return;
+        }
+        ResourceLocation typeId = payload.type().id();
+        if (RuleChunkPayload.SNAPSHOT.id().equals(typeId)) {
+            onSnapshotChunk(payload);
+        } else if (RuleChunkPayload.SOURCE_VIEW.id().equals(typeId)) {
+            onSourceViewChunk(payload);
+        }
     }
 
     private void requestDirectory(RuleCatalogType type, DirectoryLoad load) {
@@ -574,13 +591,13 @@ public final class RuleEditClientWorkspace {
     }
 
     // 收到来源视图分片：收齐后按整包处理
-    private synchronized void onSourceViewChunk(@Nullable RuleSourceViewChunkPayload payload) {
+    private synchronized void onSourceViewChunk(@Nullable RuleChunkPayload payload) {
         if (payload == null || !payload.sessionId().equals(sessionId)) {
             return;
         }
         String json = sourceViewChunks.accept(payload, currentTick());
         if (json != null) {
-            onSourceView(new RuleSourceViewPayload(payload.sessionId(), payload.requestId(),
+            onSourceView(new RuleSourceViewPayload(payload.sessionId(), payload.correlationId(),
                     RuleSaveStatus.SUCCESS.id(), json));
         }
     }
@@ -705,7 +722,7 @@ public final class RuleEditClientWorkspace {
     }
 
     // 收到快照分片：收齐后按整包处理
-    private synchronized void onSnapshotChunk(@Nullable RuleSnapshotChunkPayload payload) {
+    private synchronized void onSnapshotChunk(@Nullable RuleChunkPayload payload) {
         if (payload == null || !payload.sessionId().equals(sessionId)) {
             return;
         }

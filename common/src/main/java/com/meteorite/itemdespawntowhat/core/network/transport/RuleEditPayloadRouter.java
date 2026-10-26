@@ -4,40 +4,27 @@ import java.util.function.Consumer;
 
 /**
  * S2C 载荷的客户端门面：服务端侧只装载空消费者，注册回调时静默丢弃。
- * 保留字符串消费者以兼容既有客户端实现，另提供结构化消费者供界面层使用。
+ * 大文本一律经 {@link #installChunkSink} / {@link #dispatchChunk} 这一条分片入口进出，
+ * 直发整包另有独立消费者，两者由发送端决定走哪边。
  */
 public final class RuleEditPayloadRouter {
 
-    // 原始 JSON 快照消费者（字符串签名版本，供既有客户端注册代码使用）
-    private static volatile Consumer<String> snapshotSink;
     // 结构化快照消费者
     private static volatile Consumer<RuleSnapshotPayload> structuredSnapshotSink;
-    // 原始回执文本消费者（字符串签名版本，供既有客户端注册代码使用）
-    private static volatile Consumer<String> resultSink;
     // 结构化回执消费者
     private static volatile Consumer<RuleSaveResultPayload> structuredResultSink;
     // 目录分页消费者
     private static volatile Consumer<RuleCatalogPayload> catalogSink;
-    // 快照分片消费者
-    private static volatile Consumer<RuleSnapshotChunkPayload> chunkSink;
+    // 分片消费者，快照、来源视图与变更集三个通道共用
+    private static volatile Consumer<RuleChunkPayload> chunkSink;
 
     private RuleEditPayloadRouter() {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    // 安装/清除原始快照 JSON 消费者
-    public static void installSnapshotSink(Consumer<String> sink) {
-        snapshotSink = sink;
-    }
-
     // 安装/清除结构化快照消费者
     public static void installSnapshotPayloadSink(Consumer<RuleSnapshotPayload> sink) {
         structuredSnapshotSink = sink;
-    }
-
-    // 安装/清除原始回执文本消费者
-    public static void installResultSink(Consumer<String> sink) {
-        resultSink = sink;
     }
 
     // 安装/清除结构化回执消费者
@@ -50,31 +37,32 @@ public final class RuleEditPayloadRouter {
         catalogSink = sink;
     }
 
-    // 安装/清除快照分片消费者
-    public static void installChunkSink(Consumer<RuleSnapshotChunkPayload> sink) {
+    /**
+     * 安装分片消费者：三个分片通道共用这一条入口，通道差异由调用方按 {@link RuleChunkPayload#type()} 自行区分。
+     * @param sink 分片消费者，null 表示清除
+     */
+    public static void installChunkSink(Consumer<RuleChunkPayload> sink) {
         chunkSink = sink;
     }
 
-    // 分发快照分片
-    public static void dispatchChunk(RuleSnapshotChunkPayload payload) {
+    /**
+     * 分发一片文本分片；未安装消费者时静默丢弃，服务端正是以此形成空实现。
+     * @param payload 分片载荷，null 时忽略
+     */
+    public static void dispatchChunk(RuleChunkPayload payload) {
         if (payload == null) {
             return;
         }
-        Consumer<RuleSnapshotChunkPayload> sink = chunkSink;
+        Consumer<RuleChunkPayload> sink = chunkSink;
         if (sink != null) {
             sink.accept(payload);
         }
     }
 
-    // 分发原始快照 JSON
-    public static void dispatchSnapshot(String json) {
-        Consumer<String> sink = snapshotSink;
-        if (sink != null) {
-            sink.accept(json);
-        }
-    }
-
-    // 分发结构化快照：先给结构化消费者，再给原始 JSON 消费者
+    /**
+     * 分发整包快照：只有不超过直发上限的文本走这里，更大的由 {@link RuleTextChunker} 切片后走 {@link #dispatchChunk}。
+     * @param payload 快照载荷，null 时忽略
+     */
     public static void dispatchSnapshot(RuleSnapshotPayload payload) {
         if (payload == null) {
             return;
@@ -83,18 +71,12 @@ public final class RuleEditPayloadRouter {
         if (structured != null) {
             structured.accept(payload);
         }
-        dispatchSnapshot(payload.snapshotJson());
     }
 
-    // 分发原始回执文本
-    public static void dispatchResult(String text) {
-        Consumer<String> sink = resultSink;
-        if (sink != null) {
-            sink.accept(text);
-        }
-    }
-
-    // 分发结构化回执：先给结构化消费者，再把状态码作为文本给兼容消费者
+    /**
+     * 分发整包保存回执：状态码由回执载荷自身承载。
+     * @param payload 回执载荷，null 时忽略
+     */
     public static void dispatchResult(RuleSaveResultPayload payload) {
         if (payload == null) {
             return;
@@ -103,7 +85,6 @@ public final class RuleEditPayloadRouter {
         if (structured != null) {
             structured.accept(payload);
         }
-        dispatchResult(payload.statusCode());
     }
 
     private static volatile Consumer<RuleSaveProgressPayload> progressSink;
@@ -154,25 +135,6 @@ public final class RuleEditPayloadRouter {
      */
     public static void dispatchSourceView(RuleSourceViewPayload payload) {
         Consumer<RuleSourceViewPayload> sink = sourceViewSink;
-        if (payload != null && sink != null) sink.accept(payload);
-    }
-
-    private static volatile Consumer<RuleSourceViewChunkPayload> sourceViewChunkSink;
-
-    /**
-     * 安装客户端来源视图分片消费者，服务端保持为空。
-     * @param sink 分片消费者
-     */
-    public static void installSourceViewChunkSink(Consumer<RuleSourceViewChunkPayload> sink) {
-        sourceViewChunkSink = sink;
-    }
-
-    /**
-     * 分发来源视图分片。
-     * @param payload 分片载荷
-     */
-    public static void dispatchSourceViewChunk(RuleSourceViewChunkPayload payload) {
-        Consumer<RuleSourceViewChunkPayload> sink = sourceViewChunkSink;
         if (payload != null && sink != null) sink.accept(payload);
     }
 

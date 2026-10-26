@@ -9,10 +9,10 @@ import org.jetbrains.annotations.NotNull;
 /**
  * C2S：客户端提交规则变更集。
  * operationId 由客户端生成，服务端对同一会话保留最近 16 个用于幂等；
- * 超过直发上限的变更集走 {@link SaveRuleChangeSetChunkPayload} 分片。
+ * 超过直发上限的变更集走 {@link RuleChunkPayload} 分片。
  */
 public record SaveRuleChangeSetPayload(String sessionId, String operationId, String changeSetJson)
-        implements CustomPacketPayload {
+        implements RuleTextPayload {
 
     public static final Type<SaveRuleChangeSetPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(RuleEditLimits.NAMESPACE, "save_rule_change_set")
@@ -40,6 +40,11 @@ public record SaveRuleChangeSetPayload(String sessionId, String operationId, Str
                 buffer.readUtf(RuleEditLimits.MAX_ID_CHARS),
                 buffer.readUtf(RuleEditLimits.MAX_ID_CHARS),
                 buffer.readUtf(RuleEditLimits.MAX_DIRECT_CHARS + RuleEditLimits.PACKET_SLACK_BYTES));
+    }
+
+    @Override
+    public String text() {
+        return changeSetJson;
     }
 
     @Override

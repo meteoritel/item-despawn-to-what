@@ -11,7 +11,7 @@ import org.jetbrains.annotations.NotNull;
  * requestId 原样回带，客户端据此把响应配到请求上。
  */
 public record RuleSnapshotPayload(String sessionId, String requestId, String snapshotJson)
-        implements CustomPacketPayload {
+        implements RuleTextPayload {
 
     public static final Type<RuleSnapshotPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(RuleEditLimits.NAMESPACE, "rule_snapshot")
@@ -39,6 +39,11 @@ public record RuleSnapshotPayload(String sessionId, String requestId, String sna
                 buffer.readUtf(RuleEditLimits.MAX_ID_CHARS),
                 buffer.readUtf(RuleEditLimits.MAX_ID_CHARS),
                 buffer.readUtf(RuleEditLimits.MAX_SNAPSHOT_CHARS + RuleEditLimits.PACKET_SLACK_BYTES));
+    }
+
+    @Override
+    public String text() {
+        return snapshotJson;
     }
 
     @Override

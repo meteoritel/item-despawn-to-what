@@ -79,7 +79,8 @@ flowchart LR
 | `RuleSaveTask` | 保存编排 | 续接任务：请求、校验、写入、提交启用状态、重读、解码、建索引、应用；纯启停批次走校验后直达索引重建的轻量路径；每步受预算与会话有效性约束，取消与失效给出确定终态 | `RuleSubmissionValidator`、`RuleOverlayWriter`、`RuleEnableApplyService`、`RuleIndex`、运行时换索引 |
 | `RuleEnableApplyService` | 启用状态应用 | 提交同批启停动作、按已捕捉的基底重建索引、安排回扫；内容与状态都不变时回答无变化 | `RuleEnableState`、`RuleLoadingService`、`RuleIndex`、运行时换索引 |
 | `RuleSnapshotTask` / `RuleSnapshotAssembler` | 快照 | 后台读盘与合并、逐条解码与编码、装配生效视图与来源分层索引、按字节阈值直发或分片 | `RuleEditService`、`RuleSourceIndex` |
-| `RuleEditChunkAccumulator` / `RuleEditLimits` | 分片与限额 | 按玩家与传输号重组分片、UTF-8 字节计量、重复下标以首片为准、空闲过期与在途数量上限 | `RuleEditService` |
+| `RuleTextChunker` / `RuleChunkPayload` / `RuleChunkAssembly` | 分片公共层 | 按通道的字节档位决定直发或分片、单片校验、批次身份与收齐判定；服务端装配器与客户端缓冲共用 | `RuleEditService`、`RuleSnapshotTask`、客户端 `RuleChunkBuffer` |
+| `RuleEditChunkAccumulator` / `RuleEditLimits` | 分片与限额 | 按玩家保留在途批次（每玩家上限、超出淘汰最早）、收齐后复核总量、空闲过期与清理 | `RuleEditService` |
 | `RuleCatalogSources` / `RuleCatalogService` | 候选目录 | 数据源给出全量与修订号；服务做大小写不敏感过滤、分页与按“类别 + 修订号”缓存 | `RuleCatalogType`、客户端列表、保存后失效 |
 | `RuleCommandTree`（含 config / rule 命令组） | 命令面 | 组装根树、把权限下放到子分支、统一本地化反馈出口 | `RuleEditServerHandler`、`RuleSnapshotAssembler` |
 | `RuleDebugCommands` / `DebugScenarioManager` / `DebugPipelineManager` | 调试 | 开发环境场景与流水线的启动、推进、收尾；声明目录是唯一注册来源；复用正式编解码与真实运行时 | `RuleRuntimeHost` 观测钩子 |
@@ -195,7 +196,7 @@ flowchart TB
 ### 扩展点
 
 - **新增候选类别**：在 `RuleCatalogType` 加常量 → 在 `RuleCatalogSources` 增加对应数据源（实现 `type()`、`revision()`、`all()`）→ 客户端列表按类别渲染，图标缺省走客户端占位。修订号必须满足“内容不变则值不变、与顺序无关”。
-- **新增协议载荷**：在 `core/network/protocol` 定义载荷 → 在 `RuleEditPayloadRouter` 注册路由 → 在 `RuleEditService` 加服务端处理并复用会话校验与回执组装 → 客户端工作区对接。
+- **新增协议载荷**：在 `core/network/protocol` 定义载荷 → 在 `RuleEditPayloadRouter` 注册路由 → 在 `RuleEditService` 加服务端处理并复用会话校验与回执组装 → 客户端工作区对接。载荷是可能超出包上限的整段文本时不要另写切分：给 `RuleTextChunker.Family` 加一档并实现其 `direct(...)`，分片下发与两端重组沿同一条链路完成。
 - **新增保存前校验**：写进 `RuleSubmissionValidator`，逐条产出带字段路径的 Issue；结构档、类型参数档与运行期上限档三档校验仍由 `core/model` 提供。
 - **新增限额**：网络与后台任务限额加到 `RuleEditLimits`，会话时钟与权限加到 `RuleEditSessionLimits`；两者分别是“字节与条数”和“tick 与权限”的单一落点。
 - **新增调试场景或流水线**：只在声明目录里加清单与步骤文件，不改命令树；需要新动作类型时同步动作枚举与推进逻辑。新增故障类型时同步故障枚举与注入点，注入点只能落在运行时观测接缝（判定、排期与取消回调、效果准备、重载应用阶段），生产实现保持空操作。

@@ -2,13 +2,12 @@ package com.meteorite.itemdespawntowhat.client.network;
 
 import com.meteorite.itemdespawntowhat.core.network.transport.OpenRuleEditorPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleCatalogPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditPayloadRouter;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleLifespanPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveProgressPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveResultPayload;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotPayload;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleSourceViewChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSourceViewPayload;
 import java.util.function.Consumer;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
@@ -29,16 +28,16 @@ public final class FabricRuleEditClientRegistrar {
      * 注册 S2C 接收器；同一通道重复注册只会覆盖处理器，不会抛异常。
      * 网络回调借用游戏客户端；这里只调度任务，不负责关闭 Minecraft 实例。
      */
-    @SuppressWarnings("resource")
+
     public static void register() {
         receive(RuleSnapshotPayload.TYPE, RuleEditPayloadRouter::dispatchSnapshot);
-        receive(RuleSnapshotChunkPayload.TYPE, RuleEditPayloadRouter::dispatchChunk);
+        receive(RuleChunkPayload.SNAPSHOT, RuleEditPayloadRouter::dispatchChunk);
         receive(RuleSaveProgressPayload.TYPE, RuleEditPayloadRouter::dispatchProgress);
         receive(RuleSaveResultPayload.TYPE, RuleEditPayloadRouter::dispatchResult);
         receive(RuleCatalogPayload.TYPE, RuleEditPayloadRouter::dispatchCatalog);
         receive(RuleLifespanPayload.TYPE, RuleEditPayloadRouter::dispatchLifespan);
         receive(RuleSourceViewPayload.TYPE, RuleEditPayloadRouter::dispatchSourceView);
-        receive(RuleSourceViewChunkPayload.TYPE, RuleEditPayloadRouter::dispatchSourceViewChunk);
+        receive(RuleChunkPayload.SOURCE_VIEW, RuleEditPayloadRouter::dispatchChunk);
         // 编辑入口：接收器把载荷切到客户端线程，开屏由 RuleEditClientWorkspace 的消费者统一负责
         receive(OpenRuleEditorPayload.TYPE, OpenRuleEditorPayload::dispatchOpenEditor);
     }

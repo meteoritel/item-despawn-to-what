@@ -23,15 +23,14 @@ import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleCatalog
 import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleSnapshotPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleSourceViewPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleCatalogPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleChunkAssembly;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleChunkPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditChunkAccumulator;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditLimits;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerContext;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveResultPayload;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotChunkPayload;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleSnapshotPayload;
-import com.meteorite.itemdespawntowhat.core.network.transport.RuleSourceViewChunker;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSourceViewPayload;
-import com.meteorite.itemdespawntowhat.core.network.transport.SaveRuleChangeSetChunkPayload;
+import com.meteorite.itemdespawntowhat.core.network.transport.RuleTextChunker;
 import com.meteorite.itemdespawntowhat.core.network.transport.SaveRuleChangeSetPayload;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
@@ -292,7 +291,8 @@ public final class RuleEditService {
             return Outbound.of(sourceViewFailure(payload, RuleSaveStatus.INVALID_REQUEST));
         }
         String json = RuleSnapshotAssembler.sourceView(entry).serialize();
-        List<CustomPacketPayload> packets = RuleSourceViewChunker.split(payload.sessionId(), payload.requestId(), json);
+        List<CustomPacketPayload> packets = RuleTextChunker.split(
+                RuleTextChunker.Family.SOURCE_VIEW, payload.sessionId(), payload.requestId(), json);
         if (packets.isEmpty()) {
             // 超过来源视图总量上限或分片数上限：回结构化失败，不让请求静默消失
             return Outbound.of(sourceViewFailure(payload, RuleSaveStatus.INVALID_REQUEST));
@@ -357,26 +357,35 @@ public final class RuleEditService {
                 payload::changeSetJson, tick);
     }
 
-    // C2S 分片：先校验会话，再重组；收齐后复用直发保存流程
+    /**
+     * C2S 分片提交：先校验会话与单片形状，再按 transferId 重组；收齐后复用直发保存流程。
+     * 形状非法与收齐后总量超限都回结构化失败，未收齐时无回执、由客户端超时处理。
+     * @param player 请求玩家
+     * @param context 平台运行时上下文
+     * @param server 当前服务端
+     * @param payload 变更集分片
+     * @param tick 服务端活动刻
+     * @return 回执；未收齐时为空集合
+     */
     public Outbound submitChunk(ServerPlayer player, RuleEditServerContext context, MinecraftServer server,
-                                SaveRuleChangeSetChunkPayload payload, long tick) {
+                                RuleChunkPayload payload, long tick) {
         EditAdmission.Refusal refusal = EditAdmission.refusal(admission.admitMember(player, payload.sessionId()));
         if (refusal != null) {
-            if (abortReplayedSave(player, payload.sessionId(), payload.operationId())) { return Outbound.EMPTY; }
-            return Outbound.of(lost(refusal, payload.sessionId(), payload.operationId()));
+            if (abortReplayedSave(player, payload.sessionId(), payload.correlationId())) { return Outbound.EMPTY; }
+            return Outbound.of(lost(refusal, payload.sessionId(), payload.correlationId()));
         }
-        RuleEditChunkAccumulator.ValidatedChunk validated = RuleEditChunkAccumulator.validate(payload);
+        RuleChunkAssembly.Chunk validated = RuleChunkAssembly.validate(payload);
         if (validated == null) {
-            return Outbound.of(result(payload.sessionId(), payload.operationId(), RuleSaveStatus.INVALID_REQUEST,
+            return Outbound.of(result(payload.sessionId(), payload.correlationId(), RuleSaveStatus.INVALID_REQUEST,
                     RuleSaveStatus.INVALID_REQUEST.messageKey(), args("chunk"), List.of(), false, false));
         }
-        RuleSaveResultPayload previous = recentResult(payload.sessionId(), payload.operationId());
+        RuleSaveResultPayload previous = recentResult(payload.sessionId(), payload.correlationId());
         if (previous != null) { return Outbound.of(previous); }
         sessions.heartbeat(payload.sessionId(), tick);
         RuleEditChunkAccumulator.AcceptResult accepted = RuleEditChunkAccumulator.acceptValidated(player, validated, tick);
         if (accepted.rejected()) {
             // 收齐后超过变更集总量上限：必须回结构化回执，不能让请求静默消失
-            return Outbound.of(result(payload.sessionId(), payload.operationId(), RuleSaveStatus.INVALID_REQUEST,
+            return Outbound.of(result(payload.sessionId(), payload.correlationId(), RuleSaveStatus.INVALID_REQUEST,
                     RuleSaveStatus.INVALID_REQUEST.messageKey(), args("change set too large"),
                     List.of(), false, false));
         }
@@ -384,7 +393,7 @@ public final class RuleEditService {
             // 未收齐：不回执，等待剩余分片或由客户端超时处理
             return Outbound.EMPTY;
         }
-        return submit(player, context, server, payload.sessionId(), payload.operationId(), () -> String.join("", accepted.chunks()), tick);
+        return submit(player, context, server, payload.sessionId(), payload.correlationId(), accepted::json, tick);
     }
 
     // 保存主流程
@@ -672,7 +681,7 @@ public final class RuleEditService {
         deliveryPackets = packets.size();
         deliveryBytes = 0L;
         deliverySent = 0;
-        for (CustomPacketPayload payload : packets) { deliveryBytes += packetBytes(payload); }
+        for (CustomPacketPayload payload : packets) { deliveryBytes += RuleTextChunker.encodedBytes(payload); }
     }
 
     // 首载分段观测：投递完成的包数、字节与跨 tick 数，用于声明节拍是否匹配每 tick 包数
@@ -701,17 +710,6 @@ public final class RuleEditService {
             DevelopmentDiagnostics.event(DevelopmentDiagnostics.SCENE_FIRST_LOAD, "SERVER_DELIVER", data);
         }
         snapshotPackets.clear();
-    }
-
-    // 下发字节按 UTF-8 计，与分片阈值口径一致
-    private static long packetBytes(CustomPacketPayload payload) {
-        if (payload instanceof RuleSnapshotPayload direct) {
-            return RuleEditLimits.encodedLength(direct.snapshotJson());
-        }
-        if (payload instanceof RuleSnapshotChunkPayload chunk) {
-            return RuleEditLimits.encodedLength(chunk.chunk());
-        }
-        return 0L;
     }
 
     // 请求到达即开始纯文件工作；保存和在途准备仍串行，Codec 只由公共调度器执行。
