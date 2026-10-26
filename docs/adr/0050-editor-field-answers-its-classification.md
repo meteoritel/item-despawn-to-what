@@ -12,7 +12,7 @@
 
 ## 决策
 
-1. **分类问题由字段自己回答**：`EditorField` 提供一组公开布尔谓词（`isNote`、`isRawJson`、`isDisplayOnly`、`isConditionTree`、`isText`、`isLongText`、`isNumeric`、`isIntegerLike`、`isTicks`、`isPercent`、`isAmplifier`、`isBoolean`、`isEnum`、`isReference`、`isCatalogReference`、`allowsTags`、`isTagList`、`isStringList`、`isListShaped`、`isMultiCatalog`、`isItemCounts`、`isClimateRange`、`isSublist`、`hidesRowLabel`），调用方只问字段，不再对 `EditorFieldType` 做 switch 或枚举比较。
+1. **分类问题由字段自己回答**：`EditorField` 提供一组公开布尔谓词（`isNote`、`isRawJson`、`isDisplayOnly`、`isConditionTree`、`isText`、`isLongText`、`isNumeric`、`isIntegerLike`、`isTicks`、`isPercent`、`isAmplifier`、`isBoolean`、`isEnum`、`isReference`、`isCatalogReference`、`allowsTags`、`isTagList`、`isStringList`、`isListShaped`、`isMultiCatalog`、`isItemCounts`、`isClimateRange`、`isSublist`、`isObject`、`hidesRowLabel`），调用方只问字段，不再对 `EditorFieldType` 做 switch 或枚举比较。
 2. **谓词落在 `client/edit` 的 `EditorField`**：分类属于字段契约而非某个控件；`client/edit` 与界面层都能读，谓词实现内部集中映射枚举值，不引入新的依赖方向。
 3. **列表形态只由声明类型判定**：`isListShaped` 取 `TAG_LIST`、`RL_LIST`、`STRING_LIST`，删除按字段名后缀猜测的启发式。
 4. **控件注册表保留类型键**：`FormControlRegistry` 仍以 `EditorFieldType` 选择控件工厂，因为实例化必须覆盖全部取值；这是注册表职责，不是调用方分类。

@@ -8,7 +8,6 @@ import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.api.param.EnumSpec;
 import com.meteorite.itemdespawntowhat.core.api.param.NestedSpec;
 import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
-import com.meteorite.itemdespawntowhat.core.api.param.ParamShape;
 import com.meteorite.itemdespawntowhat.core.api.param.RefListSpec;
 import com.meteorite.itemdespawntowhat.core.extension.DynamicReferenceCheck;
 import com.meteorite.itemdespawntowhat.core.extension.DynamicReferenceContext;
@@ -76,24 +75,18 @@ public record BiomeCondition(
             .enforceNonEmpty()
             .hint("biome.biomes.hint")
             .initial(List.of());
-    public static final NestedSpec<ClimateRange> TEMPERATURE = NestedSpec
-            .nullable(FIELD_TEMPERATURE, ClimateRange.CODEC)
-            .shape(ParamShape.CLIMATE_RANGE);
-    public static final NestedSpec<ClimateRange> HUMIDITY = NestedSpec
-            .nullable(FIELD_HUMIDITY, ClimateRange.CODEC)
-            .shape(ParamShape.CLIMATE_RANGE);
-    public static final NestedSpec<ClimateRange> CONTINENTALNESS = NestedSpec
-            .nullable(FIELD_CONTINENTALNESS, ClimateRange.CODEC)
-            .shape(ParamShape.CLIMATE_RANGE);
-    public static final NestedSpec<ClimateRange> EROSION = NestedSpec
-            .nullable(FIELD_EROSION, ClimateRange.CODEC)
-            .shape(ParamShape.CLIMATE_RANGE);
-    public static final NestedSpec<ClimateRange> DEPTH = NestedSpec
-            .nullable(FIELD_DEPTH, ClimateRange.CODEC)
-            .shape(ParamShape.CLIMATE_RANGE);
-    public static final NestedSpec<ClimateRange> WEIRDNESS = NestedSpec
-            .nullable(FIELD_WEIRDNESS, ClimateRange.CODEC)
-            .shape(ParamShape.CLIMATE_RANGE);
+    public static final NestedSpec<ClimateRange> TEMPERATURE =
+            NestedSpec.climate(FIELD_TEMPERATURE, ClimateRange.CODEC);
+    public static final NestedSpec<ClimateRange> HUMIDITY =
+            NestedSpec.climate(FIELD_HUMIDITY, ClimateRange.CODEC);
+    public static final NestedSpec<ClimateRange> CONTINENTALNESS =
+            NestedSpec.climate(FIELD_CONTINENTALNESS, ClimateRange.CODEC);
+    public static final NestedSpec<ClimateRange> EROSION =
+            NestedSpec.climate(FIELD_EROSION, ClimateRange.CODEC);
+    public static final NestedSpec<ClimateRange> DEPTH =
+            NestedSpec.climate(FIELD_DEPTH, ClimateRange.CODEC);
+    public static final NestedSpec<ClimateRange> WEIRDNESS =
+            NestedSpec.climate(FIELD_WEIRDNESS, ClimateRange.CODEC);
     public static final ParamList PARAMS = ParamList.of(MODE, BIOMES, TEMPERATURE, HUMIDITY, CONTINENTALNESS,
             EROSION, DEPTH, WEIRDNESS);
 

@@ -81,11 +81,16 @@ public record EditorField(String name, String labelKey, EditorFieldType type, @N
                 null, NumericDomain.integers(min, max, windowMin, windowMax));
     }
 
-    // 每个物品引用各自保存数量，滑条默认显示常用范围 1..64。
-    public static EditorField itemCounts(String name, String labelKey, int min, int max) {
+    // 注册表引用各自保存数量，滑条默认显示常用范围 1..64；注册表决定候选与展示名。
+    public static EditorField itemCounts(String name, String labelKey, String registry, int min, int max) {
         return create(name, labelKey, EditorFieldType.ITEM_COUNTS, min + ".." + max,
-                true, false, "minecraft:item", null, null,
+                true, false, registry, null, null,
                 NumericDomain.integers(min, max, min, Math.min(max, 64)));
+    }
+
+    // 物品数量字段：沿用物品注册表提示
+    public static EditorField itemCounts(String name, String labelKey, int min, int max) {
+        return itemCounts(name, labelKey, "minecraft:item", min, max);
     }
 
     // 刻数：0 显示「立即」；界面允许按秒显示，但 JSON 仍是完整刻数
@@ -106,15 +111,16 @@ public record EditorField(String name, String labelKey, EditorFieldType type, @N
                 null, NumericDomain.decimals(min, max, step, shiftStep));
     }
 
-    // 概率字段：JSON 0..1，界面 0..100 百分比；显示按原始精度往返，不做舍入
-    public static EditorField percent(String name, String labelKey) {
-        return percent(name, labelKey, 0.01D, 0.001D);
+    // 百分比字段：JSON 按声明域取值，界面显示原值 ×100；显示按原始精度往返，不做舍入
+    public static EditorField percent(String name, String labelKey, double min, double max) {
+        return percent(name, labelKey, min, max, 0.01D, 0.001D);
     }
 
-    // 概率字段（显式步长档）
-    public static EditorField percent(String name, String labelKey, double step, double shiftStep) {
-        return create(name, labelKey, EditorFieldType.PERCENT, "0.0..1.0", false, true, null, null,
-                null, NumericDomain.decimals(0.0D, 1.0D, step, shiftStep));
+    // 百分比字段（显式步长档）
+    public static EditorField percent(String name, String labelKey, double min, double max,
+                                      double step, double shiftStep) {
+        return create(name, labelKey, EditorFieldType.PERCENT, min + ".." + max, false, true, null, null,
+                null, NumericDomain.decimals(min, max, step, shiftStep));
     }
 
     // 药水等级字段：JSON 存 amplifier（0 起算，后端 0..255），界面显示等级 1..256
@@ -169,6 +175,12 @@ public record EditorField(String name, String labelKey, EditorFieldType type, @N
     // 子列表字段（对象数组，字段定义由 subFields 给出）
     public static EditorField subList(String name, String labelKey, EditorField... subFields) {
         return create(name, labelKey, EditorFieldType.SUBLIST, null, true, false, null, null, List.of(subFields), null);
+    }
+
+    // 单个嵌套对象字段：subFields 描述对象内部字段
+    public static EditorField object(String name, String labelKey, EditorField... subFields) {
+        return create(name, labelKey, EditorFieldType.OBJECT, null, true, false, null, null,
+                List.of(subFields), null);
     }
 
     // 条件树字段
@@ -301,6 +313,11 @@ public record EditorField(String name, String labelKey, EditorFieldType type, @N
 
     public boolean isSublist() {
         return type == EditorFieldType.SUBLIST;
+    }
+
+    // 单个嵌套对象：展示为固定子表单，不提供增删
+    public boolean isObject() {
+        return type == EditorFieldType.OBJECT;
     }
 
     // 行标签由控件自带绘制（气候范围与布尔开关），表单不再预留标签列

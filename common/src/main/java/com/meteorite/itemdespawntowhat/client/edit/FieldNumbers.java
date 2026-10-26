@@ -8,7 +8,7 @@ import org.jetbrains.annotations.Nullable;
 /**
  * 数值字段的文本与 JSON 值互转。
  * <ul>
- *   <li>概率按原始精度往返：0.123456 显示为 12.3456%，写回仍是 0.123456；</li>
+ *   <li>百分比按原始精度往返：JSON 0.123456 显示为 12.3456%，写回仍是 0.123456；</li>
  *   <li>刻数按十进制换算秒（0.05 秒为最小可表示单位），秒×20 不是整数时拒绝而不是静默取整；</li>
  *   <li>trigger_after_seconds 本身存秒，直接按秒解析，不经过刻数换算；</li>
  *   <li>药水等级：JSON 存 amplifier（0 起算），界面显示 1..256，写回减一。</li>
@@ -37,15 +37,15 @@ public final class FieldNumbers {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    // 概率：JSON 0..1 → 界面百分比文本，保留原始精度（不做 %.1f 舍入）
-    public static String percentText(double chance) {
-        if (!Double.isFinite(chance)) {
-            return Double.toString(chance);
+    // 百分比：JSON 数值 → 界面文本（×100），保留原始精度（不做 %.1f 舍入）
+    public static String percentText(double value) {
+        if (!Double.isFinite(value)) {
+            return Double.toString(value);
         }
-        return plain(BigDecimal.valueOf(chance).multiply(BigDecimal.valueOf(100))) + "%";
+        return plain(BigDecimal.valueOf(value).multiply(BigDecimal.valueOf(100))) + "%";
     }
 
-    // 界面百分比文本 → JSON 0..1；空或非法返回 null（取值域校验交给调用方）
+    // 界面百分比文本 → JSON 数值；空或非法返回 null（取值域校验交给调用方）
     public static @Nullable Double parsePercent(@Nullable String text) {
         BigDecimal value = parseDecimal(text);
         if (value == null) {

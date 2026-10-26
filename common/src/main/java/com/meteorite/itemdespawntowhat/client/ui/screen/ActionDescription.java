@@ -92,7 +92,10 @@ final class ActionDescription {
             return Component.literal(Integer.toString(FieldNumbers.levelOf(value.asInteger(0))));
         }
         if (field.isItemCounts()) {
-            return counts(value);
+            return counts(field, value);
+        }
+        if (field.isObject()) {
+            return object(field, value);
         }
         if (field.isSublist()) {
             return sublist(field, value);
@@ -107,14 +110,20 @@ final class ActionDescription {
         return value.isScalar() ? Component.literal(value.asText()) : null;
     }
 
-    private static Component counts(RuleValue value) {
+    private static Component counts(EditorField field, RuleValue value) {
         if (value.isScalar()) return Component.literal(value.asText());
         if (!value.isMapping()) return null;
         List<Component> parts = new ArrayList<>();
         for (var entry : value.entries().entrySet()) {
-            parts.add(Component.translatable(UI + "results.quantity", itemLabel(entry.getKey()), entry.getValue().asText()));
+            parts.add(Component.translatable(UI + "results.quantity", itemLabel(field, entry.getKey()),
+                    entry.getValue().asText()));
         }
         return join(parts);
+    }
+
+    private static Component object(EditorField field, RuleValue value) {
+        if (!value.isMapping()) return null;
+        return join(fieldValues(field, value));
     }
 
     private static Component sublist(EditorField field, RuleValue value) {
@@ -122,15 +131,20 @@ final class ActionDescription {
         List<Component> parts = new ArrayList<>();
         for (RuleValue item : value.items()) {
             if (!item.isMapping()) continue;
-            List<Component> fields = new ArrayList<>();
-            for (EditorField child : field.subFields()) {
-                Component text = describe(child, item.child(child.name()));
-                if (text != null) fields.add(Component.translatable(UI + "results.parameter",
-                        Component.translatable(child.labelKey()), text));
-            }
-            parts.add(join(fields));
+            parts.add(join(fieldValues(field, item)));
         }
         return join(parts);
+    }
+
+    // 对象内部字段的展示：子字段沿用同一套描述规则
+    private static List<Component> fieldValues(EditorField field, RuleValue value) {
+        List<Component> fields = new ArrayList<>();
+        for (EditorField child : field.subFields()) {
+            Component text = describe(child, value.child(child.name()));
+            if (text != null) fields.add(Component.translatable(UI + "results.parameter",
+                    Component.translatable(child.labelKey()), text));
+        }
+        return fields;
     }
 
     private static Component reference(EditorField field, String text) {
@@ -141,9 +155,10 @@ final class ActionDescription {
         return label == null ? Component.literal(text) : label;
     }
 
-    private static Component itemLabel(String text) {
+    private static Component itemLabel(EditorField field, String text) {
         ResourceLocation id = ResourceLocation.tryParse(text);
-        Component label = id == null ? null : RuleDisplayLabels.catalogLabel(RuleCatalogType.ITEM, id);
+        RuleCatalogType catalog = FieldCatalogTypes.catalogTypeOf(field);
+        Component label = id == null || catalog == null ? null : RuleDisplayLabels.catalogLabel(catalog, id);
         return label == null ? Component.literal(text) : label;
     }
 

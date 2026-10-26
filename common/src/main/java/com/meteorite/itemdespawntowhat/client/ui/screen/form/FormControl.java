@@ -438,10 +438,10 @@ abstract class FormControl {
         return RuleValue.decimal(value);
     }
 
-    // 界面百分比文本写回草稿小数（0..1）：十进制解析，保留原始精度
-    static @Nullable RuleValue percentValue(String text) {
+    // 界面百分比文本写回草稿小数：按声明域校验，十进制解析并保留原始精度
+    static @Nullable RuleValue percentValue(String text, double min, double max) {
         Double value = FieldNumbers.parsePercent(text);
-        if (value == null || value < 0.0D || value > 1.0D) {
+        if (value == null || value < min || value > max) {
             return null;
         }
         return RuleValue.decimal(value);

@@ -39,7 +39,7 @@ final class FormDraftWriter {
         for (FormRow row : view.rows) {
             RuleValue original = draft.valueAt(row.path);
             RuleValue container = view.basePath.isEmpty() ? draft.root() : draft.valueAt(view.basePath);
-            if (row.control instanceof ItemCountsControl counts) {
+            if (row.control instanceof ItemCountsControl counts && isCatalystQuantityField(row.field.name())) {
                 RuleValue owner = container != null && container.isMapping() ? container : RuleValue.mapping().build();
                 boolean source = RuleFields.SOURCE_COST.equals(row.field.name());
                 RuleValue references = source
@@ -78,6 +78,13 @@ final class FormDraftWriter {
             if (fluid != null) return RuleValue.list().add(fluid.deepCopy()).build();
         }
         return BuiltinEditorDefaults.effectiveValue(owner, field);
+    }
+
+    // 只有规则级催化剂/来源成本字段与引用列表联动；其它 MapSpec 由控件沿用草稿自身的键
+    private static boolean isCatalystQuantityField(String fieldName) {
+        return RuleFields.SOURCE_COST.equals(fieldName)
+                || RuleFields.ITEM_COUNTS.equals(fieldName)
+                || RuleFields.CONSUME_COUNTS.equals(fieldName);
     }
 
     private static List<String> stringReferences(@Nullable RuleValue raw) {
@@ -200,7 +207,8 @@ final class FormDraftWriter {
         if (RuleFields.CATALYST_ITEMS.equals(row.field.name())) {
             // 只刷新数量行，保留其它字段尚未提交的输入。
             for (FormRow quantity : view.rows)
-                if (quantity.control instanceof ItemCountsControl counts) {
+                if (quantity.control instanceof ItemCountsControl counts
+                        && isCatalystQuantityField(quantity.field.name())) {
                     counts.setReferences(stringReferences(next));
                     int fallback = quantity.field.intMin(CatalystCost.DEFAULT_COUNT);
                     counts.setDefaultCount(fallback);

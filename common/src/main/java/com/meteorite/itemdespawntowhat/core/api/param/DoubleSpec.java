@@ -10,7 +10,8 @@ import java.util.function.Function;
 
 /**
  * 双精度浮点参数声明：值域在解码期与语义校验两处都按 [min, max] 生效。
- * <p>概率字段用它声明（JSON 0..1），界面百分比换算由 {@link ParamUnit#PERCENT} 表达。</p>
+ * <p>概率字段常用它声明（JSON 0..1），界面百分比换算由 {@link ParamUnit#PERCENT} 表达；
+ * 换算只改变显示单位，取值域仍以声明的 min/max 为准。</p>
  */
 public record DoubleSpec(ParamMeta meta, double min, double max, double codecDefault) implements ParamSpec {
 

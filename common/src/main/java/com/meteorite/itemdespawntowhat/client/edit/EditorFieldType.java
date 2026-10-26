@@ -34,7 +34,7 @@ public enum EditorFieldType {
     STRING_LIST,
     // 气候区间 [-1,1]，两端可空
     CLIMATE_RANGE,
-    // 概率：JSON 存 0..1，界面显示 0..100 保留一位小数
+    // 百分比：JSON 按声明域取值，界面显示原值 ×100
     PERCENT,
     // 药水等级：JSON 存 amplifier（0 起算），界面输入 1..255 并以罗马数字显示
     AMPLIFIER,
@@ -42,6 +42,8 @@ public enum EditorFieldType {
     TICKS,
     // 子列表（例如 arrow_rain.potion_effects）：自身是对象数组
     SUBLIST,
+    // 单个嵌套对象：自身是映射，内部字段由 subFields 描述
+    OBJECT,
     // 条件树（条件编辑器与效果编辑器共用同一控件）
     CONDITION_TREE,
     // 只读说明行，不写入 JSON

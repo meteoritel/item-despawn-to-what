@@ -11,7 +11,8 @@ import java.util.function.Function;
 
 /**
  * 注册表引用到整数的映射参数声明（如按物品/标签指定消耗数量）。
- * <p>键的真实性由类型在 validateParams 里查 RefChecks；值的区间在解码期即生效。</p>
+ * <p>键的真实性由类型在 validateParams 里查 RefChecks；编辑器按 {@code keyRegistry} 取候选与展示名，
+ * 值的区间在解码期即生效。</p>
  */
 public record MapSpec(ParamMeta meta, String keyRegistry, int minValue, int maxValue) implements ParamSpec {
 

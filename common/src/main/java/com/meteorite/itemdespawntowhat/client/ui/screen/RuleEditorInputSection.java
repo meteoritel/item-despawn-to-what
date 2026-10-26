@@ -103,12 +103,20 @@ final class RuleEditorInputSection {
     void configureQuantityFields(FormView form, EditSession session, String basePath,
                                          TypeEditorDescriptor descriptor) {
         for (EditorField field : descriptor.fields()) {
-            if (!field.isItemCounts()) continue;
+            if (!isQuantityField(field)) continue;
             String path = DraftPaths.child(basePath, field.name());
             form.setItemCountReferences(path, quantityReferences(session, basePath, field));
             if (!RuleFields.CONSUME_COUNTS.equals(field.name()))
                 form.setRowDefaultValue(path, () -> quantityDefaults(session, basePath, quantityFromSource(field)));
         }
+    }
+
+    // 只有规则级催化剂/来源成本字段与引用列表联动；通用 MapSpec 由控件沿用草稿自身的键
+    private static boolean isQuantityField(EditorField field) {
+        return field.isItemCounts()
+                && (RuleFields.SOURCE_COST.equals(field.name())
+                || RuleFields.ITEM_COUNTS.equals(field.name())
+                || RuleFields.CONSUME_COUNTS.equals(field.name()));
     }
 
     // 物品数量字段的取值来源：来源成本对象或催化剂成本对象。

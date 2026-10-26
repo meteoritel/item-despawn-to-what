@@ -70,9 +70,13 @@ final class FormControlRegistry {
             return new TextControl(font, field, FormControl::decimalChars, text -> FormControl.boundedDouble(text, min, max),
                     FormControl::decimalOf, onChanged, FormControl.ISSUE_PREFIX + "invalid_number");
         });
-        map.put(EditorFieldType.PERCENT, (font, owner, field, onChanged) ->
-                new TextControl(font, field, FormControl::decimalChars, FormControl::percentValue, FormControl::percentText,
-                        onChanged, FormControl.ISSUE_PREFIX + "invalid_number"));
+        map.put(EditorFieldType.PERCENT, (font, owner, field, onChanged) -> {
+            double min = field.doubleMin(0.0D);
+            double max = field.doubleMax(1.0D);
+            return new TextControl(font, field, FormControl::decimalChars,
+                    text -> FormControl.percentValue(text, min, max), FormControl::percentText,
+                    onChanged, FormControl.ISSUE_PREFIX + "invalid_number");
+        });
         map.put(EditorFieldType.AMPLIFIER, (font, owner, field, onChanged) ->
                 new TextControl(font, field, FormControl::integerChars, FormControl::amplifierValue, FormControl::amplifierText,
                         onChanged, FormControl.ISSUE_PREFIX + "invalid_number"));
@@ -85,6 +89,7 @@ final class FormControlRegistry {
         map.put(EditorFieldType.CONDITION_TREE, (font, owner, field, onChanged) ->
                 new ConditionTreeControl(font, field, owner.conditionEditingSupport(), () -> owner.conditionContext(field)));
         map.put(EditorFieldType.SUBLIST, SublistControl::new);
+        map.put(EditorFieldType.OBJECT, NestedObjectControl::new);
         map.put(EditorFieldType.RAW_JSON, (font, owner, field, onChanged) -> new RawJsonControl(field));
         map.put(EditorFieldType.NOTE, (font, owner, field, onChanged) -> new NoteControl(field));
         return Map.copyOf(map);

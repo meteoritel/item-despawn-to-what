@@ -12,6 +12,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiIcon;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiInputCapture;
 import com.meteorite.itemdespawntowhat.client.ui.shared.CatalogPreviewIcons;
+import com.meteorite.itemdespawntowhat.client.ui.shared.FieldCatalogTypes;
 import com.meteorite.itemdespawntowhat.client.ui.shared.RuleDisplayLabels;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleCatalogType;
 import java.util.ArrayList;
@@ -26,10 +27,11 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 物品数量对象的表单控件：复用数值控件的滑条、精确输入、撤销与错误校验。
- * <p>每个引用占用一条数量滑条；配对时物品名只出现一次，其下依次排门槛与消耗两条滑条，
- * 下行字段不再重复物品名。图标列、名称列与滑条起止横坐标全场统一。
- * <p>名称超过列宽时在名称列内悬停滚动；悬停图标给出完整名称、字段名与引用注册名。
+ * 注册表引用数量对象的表单控件：复用数值控件的滑条、精确输入、撤销与错误校验。
+ * <p>每个引用占用一条数量滑条；配对时引用名只出现一次，其下依次排门槛与消耗两条滑条，
+ * 下行字段不再重复引用名。图标列、名称列与滑条起止横坐标全场统一。
+ * <p>候选与展示名由字段声明的注册表决定；未由宿主绑定候选时，直接沿用草稿里已有的键。
+ * 名称超过列宽时在名称列内悬停滚动；悬停图标给出完整名称、字段名与引用注册名。
  */
 final class ItemCountsControl extends FormControl {
 
@@ -60,9 +62,12 @@ final class ItemCountsControl extends FormControl {
 
     private final Font font;
     private final Runnable onChanged;
+    private final @Nullable RuleCatalogType catalogType;
     private final Map<String, Entry> entries = new LinkedHashMap<>();
     private RuleValue values = RuleValue.mapping().build();
     private int defaultCount;
+    // 宿主绑定候选后只展示绑定集合；未绑定（通用 MapSpec）时沿用草稿已有键
+    private boolean referencesBound;
     // 配对角色：上行绘制物品名与两条滑条，下行只绘制自己的滑条
     private PairRole pairRole = PairRole.NONE;
     // 下行滑条的含义文案：由上行在第二条滑条前绘制
@@ -145,6 +150,7 @@ final class ItemCountsControl extends FormControl {
         super(field);
         this.font = font;
         this.onChanged = onChanged;
+        this.catalogType = FieldCatalogTypes.catalogTypeOf(field);
         this.defaultCount = field.intMin(DEFAULT_COUNT);
     }
 
@@ -184,6 +190,12 @@ final class ItemCountsControl extends FormControl {
     }
 
     void setReferences(List<String> references) {
+        referencesBound = true;
+        replaceEntries(references);
+    }
+
+    // 重建条目集合；已有条目复用控件，新条目按当前装载值初始化
+    private void replaceEntries(List<String> references) {
         List<String> unique = references.stream().distinct().toList();
         if (new ArrayList<>(entries.keySet()).equals(unique)) return;
         Map<String, Entry> next = new LinkedHashMap<>();
@@ -191,7 +203,7 @@ final class ItemCountsControl extends FormControl {
             Entry entry = entries.get(reference);
             if (entry == null) {
                 entry = new Entry(reference, createControl(), displayName(reference),
-                        CatalogPreviewIcons.iconFor(RuleCatalogType.ITEM, reference));
+                        CatalogPreviewIcons.iconFor(catalogType, reference));
                 entry.control.load(values.childOr(reference, RuleValue.integer(defaultCount)));
             }
             next.put(reference, entry);
@@ -214,13 +226,14 @@ final class ItemCountsControl extends FormControl {
         return control;
     }
 
-    // 名称取本地化物品名；标签与未知引用保留原始注册名，悬停提示可读完整内容
-    private static Component displayName(String reference) {
+    // 名称按字段声明的注册表取本地化名称；标签与未知引用保留原始注册名，悬停提示可读完整内容
+    private Component displayName(String reference) {
         if (reference.startsWith("#")) {
             return RuleDisplayLabels.tagLabel(reference);
         }
         ResourceLocation id = ResourceLocation.tryParse(reference);
-        Component label = id == null ? null : RuleDisplayLabels.label(id);
+        Component label = id == null || catalogType == null ? null
+                : RuleDisplayLabels.catalogLabel(catalogType, id);
         return label == null ? Component.literal(reference) : label;
     }
 
@@ -350,6 +363,10 @@ final class ItemCountsControl extends FormControl {
     void load(@Nullable RuleValue value) {
         rememberLoaded(value);
         values = value != null && value.isMapping() ? value.deepCopy() : RuleValue.mapping().build();
+        // 通用映射没有外部引用列表时，直接展示草稿里已有的键；宿主绑定后仍以绑定集合为准
+        if (!referencesBound) {
+            replaceEntries(new ArrayList<>(values.entries().keySet()));
+        }
         for (Entry entry : entries.values()) {
             entry.control.load(values.childOr(entry.reference, RuleValue.integer(defaultCount)));
         }

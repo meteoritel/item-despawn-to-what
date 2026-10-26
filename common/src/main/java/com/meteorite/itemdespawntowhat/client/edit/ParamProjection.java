@@ -56,7 +56,8 @@ public final class ParamProjection {
             case FloatSpec floatSpec -> decimalField(floatSpec.name(), label, floatSpec.min(), floatSpec.max(),
                     floatSpec.editorRequired());
             case DoubleSpec doubleSpec -> doubleField(doubleSpec, label);
-            case BoolSpec boolSpec -> EditorField.bool(boolSpec.name(), label);
+            case BoolSpec boolSpec -> requiredByEditor(
+                    EditorField.bool(boolSpec.name(), label), boolSpec.editorRequired());
             case EnumSpec<?> enumSpec -> enumField(enumSpec, label);
             case RefSpec refSpec -> refField(refSpec, label);
             case RefListSpec refListSpec -> requiredByEditor(
@@ -66,9 +67,9 @@ public final class ParamProjection {
             case ResLocListSpec resLocListSpec -> requiredByEditor(
                     EditorField.rlList(resLocListSpec.name(), label, resLocListSpec.registry()),
                     resLocListSpec.editorRequired());
-            case MapSpec mapSpec -> EditorField.itemCounts(mapSpec.name(), label, mapSpec.minValue(),
-                    mapSpec.maxValue());
-            case NestedSpec<?> nestedSpec -> nestedField(nestedSpec, label);
+            case MapSpec mapSpec -> EditorField.itemCounts(mapSpec.name(), label, mapSpec.keyRegistry(),
+                    mapSpec.minValue(), mapSpec.maxValue());
+            case NestedSpec<?> nestedSpec -> nestedField(nestedSpec, label, typeId);
             case NestedListSpec<?> nestedListSpec -> nestedListField(nestedListSpec, label, typeId);
         };
         if (spec.hintSuffix() != null) {
@@ -117,10 +118,10 @@ public final class ParamProjection {
         return requiredByEditor(field, spec.editorRequired());
     }
 
-    // 双精度：概率用百分比字段（JSON 仍是 0..1），其余用小数
+    // 双精度：百分比字段按声明域换算显示，其余用小数
     private static EditorField doubleField(DoubleSpec spec, String label) {
         EditorField field = spec.unit() == ParamUnit.PERCENT
-                ? EditorField.percent(spec.name(), label)
+                ? EditorField.percent(spec.name(), label, spec.min(), spec.max())
                 : EditorField.decimal(spec.name(), label, spec.min(), spec.max());
         return requiredByEditor(field, spec.editorRequired());
     }
@@ -136,25 +137,31 @@ public final class ParamProjection {
         return requiredByEditor(field, spec.editorRequired());
     }
 
-    // 单个注册表引用：必填用不可空选择器，可空用可留空选择器
+    // 单个注册表引用：可空字段用可留空选择器，再按声明的编辑器必填标记调整
     private static EditorField refField(RefSpec spec, String label) {
-        return spec.nullable()
+        EditorField field = spec.nullable()
                 ? EditorField.optionalTag(spec.name(), label, spec.registry())
                 : EditorField.tag(spec.name(), label, spec.registry());
+        return requiredByEditor(field, spec.editorRequired());
     }
 
-    // 嵌套对象：目前只有气候区间一种编辑器形态
-    private static EditorField nestedField(NestedSpec<?> spec, String label) {
+    // 嵌套对象：气候区间用专用控件，普通对象按自身字段声明投影为固定子表单
+    private static EditorField nestedField(NestedSpec<?> spec, String label, ResourceLocation typeId) {
         if (spec.shape() == ParamShape.CLIMATE_RANGE) {
             return EditorField.climateRange(spec.name(), label);
         }
-        return EditorField.subList(spec.name(), label);
+        if (spec.fields().isEmpty()) {
+            throw new IllegalArgumentException("参数 " + spec.name() + " 的嵌套对象缺少编辑器字段声明");
+        }
+        List<EditorField> subFields = fields(spec.fields(), typeId);
+        return EditorField.object(spec.name(), label, subFields.toArray(EditorField[]::new));
     }
 
     // 嵌套对象列表：子字段沿用元素自己的参数声明
     private static EditorField nestedListField(NestedListSpec<?> spec, String label, ResourceLocation typeId) {
         List<EditorField> subFields = fields(spec.fields(), typeId);
-        return EditorField.subList(spec.name(), label, subFields.toArray(EditorField[]::new));
+        return requiredByEditor(EditorField.subList(spec.name(), label, subFields.toArray(EditorField[]::new)),
+                spec.editorRequired());
     }
 
     // 按声明的编辑器必填标记调整字段

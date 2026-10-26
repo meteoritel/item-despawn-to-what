@@ -616,6 +616,23 @@ public final class RuleEditorPanelFactory {
                     }
                 }
             }
+            if (field.isObject() && carriesObjectField(field, fieldAt, fieldPath)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // 嵌套对象的内部字段路径也由所在表单承载，避免问题定位落到面板之外
+    private static boolean carriesObjectField(EditorField field, String fieldAt, String fieldPath) {
+        for (EditorField child : field.subFields()) {
+            String childAt = join(fieldAt, child.name());
+            if (fieldPath.equals(childAt)) {
+                return true;
+            }
+            if (child.isObject() && carriesObjectField(child, childAt, fieldPath)) {
+                return true;
+            }
         }
         return false;
     }
