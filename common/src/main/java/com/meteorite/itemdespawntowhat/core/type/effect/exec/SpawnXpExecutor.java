@@ -7,9 +7,9 @@ import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.EffectStep;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
-import com.meteorite.itemdespawntowhat.core.api.scheduler.StepWorkCounter;
 import com.meteorite.itemdespawntowhat.core.type.effect.EntityProduct;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
@@ -78,79 +78,78 @@ public final class SpawnXpExecutor {
         return new XpDelivery(context, total);
     }
 
-    /** 单个经验行为的交付游标，仅由服务端线程访问。 */
-    private static final class XpDelivery implements EffectExecution {
-        private final EffectContext context;
+    /**
+     * 单个经验行为的交付游标，仅由服务端线程访问。
+     * 已构造但尚未加入世界的球由交付循环持有：原版构造内的朝向与初速随机已确定，等待区块时不重造。
+     */
+    private static final class XpDelivery extends DeliveryExecution {
         private final ChunkRequirement chunks;
         private long remaining;
         private boolean feedbackSent;
-        // 已构造但尚未加入世界的这个球：原版构造内的朝向与初速随机已确定，等待区块时不重造
-        private ExperienceOrb pendingOrb;
-        private int pendingPoints;
 
         private XpDelivery(EffectContext context, long total) {
-            this.context = context;
+            super(context);
             this.chunks = ChunkRequirement.around(BlockPos.containing(context.position()), 1);
             this.remaining = total;
         }
 
         @Override
-        public @Nullable ChunkRequirement requiredChunks() {
-            if (remaining <= 0) { return null; }
-            return pendingOrb == null ? chunks : chunks.including(pendingOrb.blockPosition());
+        protected @Nullable ChunkRequirement declaredRequirement() {
+            // 交付结束即不再需要区块；待写经验球所在区块由基类并入声明
+            return remaining <= 0 ? null : chunks;
         }
 
         @Override
-        public EffectStep advance(ServerTickBudget budget) {
-            // 圆盘可能跨越源区块边界；等待邻区块加载，不生成区块、不提前记为成功
-            int spawned = 0;
-            // 本步已报告但尚未由调度器计费的额度：单步内 remainingWorkUnits 不会随上报立即减少，需自行扣除
-            int reportedUnits = 0;
-            while (spawned < ORBS_PER_BATCH && remaining > 0) {
-                // 每球前守一次：时间耗尽，或本步已用额度（含已报告未计费部分）耗尽时本步不再写入世界，
-                // 剩余点数原样留到后续步骤，不截断总量
-                if (budget.exhausted() || budget.remainingWorkUnits() - reportedUnits <= 0) {
-                    return EffectStep.Yield.INSTANCE;
-                }
-                if (pendingOrb == null) {
-                    int points = (int) Math.min(remaining, MAX_POINTS_PER_ORB);
-                    Vec3 position = EffectTargets.randomHorizontalDisc(context.random(), context.position(),
-                            SCATTER_RADIUS, SPAWN_HEIGHT);
-                    // award 会再次按原版面额拆球；直接构造保留原版初速度、拾取和后续同值合并。
-                    pendingOrb = new ExperienceOrb(context.level(), position.x, position.y, position.z, points);
-                    pendingPoints = points;
-                }
-                if (!EffectTargets.addEntityNow(context, pendingOrb, false)) {
-                    return new EffectStep.AwaitChunks(ChunkRequirement.at(pendingOrb.blockPosition()));
-                }
-                int points = pendingPoints;
-                pendingOrb = null;
-                pendingPoints = 0;
-                remaining -= points;
-                // 真实完成量回执：球已加入世界后才累计点数
-                context.reportProgress(points);
-                // 计价：一个真正写入世界的实体记 1 个工作单位，与物品、实体产出同一口径
-                StepWorkCounter.report(1);
-                reportedUnits++;
-                spawned++;
-                if (!feedbackSent) {
-                    VisualFeedback.entitySpawn(context.level(), context.position());
-                    feedbackSent = true;
-                }
+        protected Production produce(ServerTickBudget budget) {
+            if (remaining <= 0) {
+                // 没有待写单位：直接给出终态，不额外写世界
+                return new Production.Finished(result());
             }
-            if (remaining > 0) {
-                return EffectStep.Yield.INSTANCE;
+            int points = (int) Math.min(remaining, MAX_POINTS_PER_ORB);
+            Vec3 position = EffectTargets.randomHorizontalDisc(context.random(), context.position(),
+                    SCATTER_RADIUS, SPAWN_HEIGHT);
+            // award 会再次按原版面额拆球；直接构造保留原版初速度、拾取和后续同值合并。
+            ExperienceOrb orb = new ExperienceOrb(context.level(), position.x, position.y, position.z, points);
+            return new Production.Next(new Unit(orb, points));
+        }
+
+        @Override
+        protected boolean write(Entity entity) {
+            // 圆盘可能跨越源区块边界：写入失败只表示目标区块未加载，球留到下次推进
+            return EffectTargets.addEntityNow(context, entity, false);
+        }
+
+        @Override
+        protected void onUnitWritten(Unit unit) {
+            // 完成量就是这颗球实际携带的点数
+            remaining -= unit.appliedUnits();
+            if (!feedbackSent) {
+                VisualFeedback.entitySpawn(context.level(), context.position());
+                feedbackSent = true;
             }
+        }
+
+        @Override
+        protected int unitsPerStep() {
+            // 不足一批时按精确的剩余球数收窄：最后一球写完即在同一次推进里返回终态，不额外让出一步
+            return (int) Math.min(ORBS_PER_BATCH, Math.ceilDiv(remaining, MAX_POINTS_PER_ORB));
+        }
+
+        @Override
+        protected long intervalTicks() {
+            // 本步还有额度就继续写，用尽或写满一批后由基类 Yield 到下一 tick
+            return 0;
+        }
+
+        @Override
+        protected boolean isComplete() {
+            return remaining <= 0;
+        }
+
+        @Override
+        protected EffectResult result() {
             // 实际点数已逐球回执，终态不再重复计入产出
-            return EffectStep.done(EffectResult.applied(0, AWARDED));
-        }
-
-        @Override
-        public void onFinished(EffectResult result) {
-            // 交付完成或已失败：不再持有剩余点数与已构造未写入的球，取消路径也不补做
-            remaining = 0;
-            pendingOrb = null;
-            pendingPoints = 0;
+            return EffectResult.applied(0, AWARDED);
         }
     }
 }

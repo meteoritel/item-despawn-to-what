@@ -8,7 +8,6 @@ import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.EffectStep;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
-import com.meteorite.itemdespawntowhat.core.api.scheduler.StepWorkCounter;
 import com.meteorite.itemdespawntowhat.core.type.effect.ArrowRainEffect;
 import java.util.ArrayList;
 import java.util.List;
@@ -18,6 +17,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.projectile.AbstractArrow;
 import net.minecraft.world.entity.projectile.Arrow;
@@ -91,22 +91,24 @@ public final class ArrowRainExecutor {
             String reason = preparation.gate();
             return budget -> EffectStep.done(EffectResult.skipped(reason));
         }
-        if (!(preparation instanceof ArrowRainEffect.Prepared fixed)) {
+        if (!(preparation instanceof ArrowRainEffect.Prepared(List<MobEffectInstance> potionEffects, String reason))) {
             // 准备结果由本类型自己的记录承载；其它实现表示固定输入不匹配，同样不降级执行
             return budget -> EffectStep.done(EffectResult.failed(
                     MISSING_PREPARATION + ": " + effect.type() + " @ " + context.ruleId()));
         }
-        if (fixed.failure() != null) {
+        if (reason != null) {
             // 成功转化当刻就无法解析药水引用：按固定下来的原因失败，执行期不再重试也不改写结果
-            String reason = fixed.failure();
             return budget -> EffectStep.done(EffectResult.failed(reason));
         }
-        return new ArrowSeries(effect, context, fixed.potionEffects());
+        return new ArrowSeries(effect, context, potionEffects);
     }
 
-    /** 箭雨序列的推进状态：逐波生成，区块需求与正常间隔交由调用方排期。 */
-    private static final class ArrowSeries implements EffectExecution {
-        private final EffectContext context;
+    /**
+     * 箭雨序列的推进状态：逐波生成，区块等待、计费与回执交由交付循环统一处理。
+     * 落点在产出阶段一次抽定、箭矢在写入前一次构造，二者都跨等待保留：区块未就绪只返回等待，
+     * 不重抽落点、也不重建已构造的箭矢；每支箭矢真正加入世界之后才回执完成量。
+     */
+    private static final class ArrowSeries extends DeliveryExecution {
         private final ChunkRequirement chunks;
         private final int count;
         private final AbstractArrow.Pickup pickup;
@@ -119,12 +121,9 @@ public final class ArrowRainExecutor {
         private boolean pendingTarget;
         private double pendingX;
         private double pendingZ;
-        // 已构造但尚未加入世界的这一支箭矢：原版 shoot 的射向随机已在构造时确定，等待区块时不重造
-        private AbstractArrow pendingArrow;
-        private EffectResult terminal;
 
         ArrowSeries(ArrowRainEffect effect, EffectContext context, List<MobEffectInstance> potionEffects) {
-            this.context = context;
+            super(context);
             this.count = effect.count();
             this.pickup = toVanillaPickup(effect.pickup());
             this.potionEffects = potionEffects;
@@ -132,55 +131,64 @@ public final class ArrowRainExecutor {
             this.chunks = ChunkRequirement.around(BlockPos.containing(origin), SERIES_CHUNK_RADIUS);
         }
 
+        // 无待写落点时只声明整片已加载范围；抽样后并入落点所在列，与等待时返回的需求一致
         @Override
-        public ChunkRequirement requiredChunks() {
-            return pendingTarget
-                    ? chunks.including(BlockPos.containing(pendingX, origin.y + SPAWN_HEIGHT, pendingZ)) : chunks;
+        protected @Nullable ChunkRequirement declaredRequirement() {
+            return pendingTarget ? chunks.including(targetColumn()) : chunks;
         }
 
+        // 产出这一波待写入的箭矢：落点抽样与箭矢构造都在区块就绪之后进行，等待期间不重抽也不重建
         @Override
-        public EffectStep advance(ServerTickBudget budget) {
-            if (terminal != null) {
-                return EffectStep.done(terminal);
-            }
+        protected Production produce(ServerTickBudget budget) {
             ServerLevel level = context.level();
-            if (launched >= count) {
-                return EffectStep.done(finish());
-            }
-            if (budget.exhausted()) {
-                return EffectStep.Yield.INSTANCE;
-            }
             if (!pendingTarget) {
                 sampleTarget(level.random);
                 pendingTarget = true;
             }
-            BlockPos column = BlockPos.containing(pendingX, origin.y + SPAWN_HEIGHT, pendingZ);
-            ChunkRequirement targetChunks = ChunkRequirement.at(column);
+            ChunkRequirement targetChunks = ChunkRequirement.at(targetColumn());
             if (!targetChunks.isReady(level)) {
-                return new EffectStep.AwaitChunks(targetChunks);
+                return new Production.Await(targetChunks);
             }
-            if (pendingArrow == null) {
-                pendingArrow = build(level);
-            }
-            if (!EffectTargets.addEntityNow(context, pendingArrow, false)) {
-                return new EffectStep.AwaitChunks(targetChunks);
-            }
-            // 真实写入世界之后才回执与计费
-            context.reportProgress(1);
-            StepWorkCounter.report(1);
+            return new Production.Next(new Unit(build(level), 1));
+        }
+
+        // 真正写入世界：区块在写入前卸载时返回 false，这一支箭矢由交付循环保留到下次推进
+        @Override
+        protected boolean write(Entity entity) {
+            return EffectTargets.addEntityNow(context, entity, false);
+        }
+
+        @Override
+        protected void onUnitWritten(Unit unit) {
             launched++;
             pendingTarget = false;
-            pendingArrow = null;
-            if (launched >= count) {
-                return EffectStep.done(finish());
-            }
-            return new EffectStep.Delay(level.getGameTime() + INTERVAL_TICKS);
+        }
+
+        @Override
+        protected boolean isComplete() {
+            return launched >= count;
         }
 
         // 全部落完：真实完成量已逐波回执，终态只给出剩余增量，不重复累计
-        private EffectResult finish() {
-            terminal = EffectResult.applied(0, "arrow_series").asOneShot();
-            return terminal;
+        @Override
+        protected EffectResult result() {
+            return EffectResult.applied(0, "arrow_series").asOneShot();
+        }
+
+        // 单步只落一波：单次实体写入不可抢占，波间用正常间隔让出
+        @Override
+        protected int unitsPerStep() {
+            return 1;
+        }
+
+        @Override
+        protected long intervalTicks() {
+            return INTERVAL_TICKS;
+        }
+
+        // 这一波要写入的区块列：由落点与生成高度算定，等待区块与写入都按同一列
+        private BlockPos targetColumn() {
+            return BlockPos.containing(pendingX, origin.y + SPAWN_HEIGHT, pendingZ);
         }
 
         // 抽取这一波的落点：等待区块期间保留，不重复抽取

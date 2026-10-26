@@ -4,12 +4,11 @@ import com.meteorite.itemdespawntowhat.core.api.ChunkRequirement;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
-import com.meteorite.itemdespawntowhat.core.api.EffectStep;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
-import com.meteorite.itemdespawntowhat.core.api.scheduler.StepWorkCounter;
 import com.meteorite.itemdespawntowhat.core.type.effect.EntityProduct;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -25,7 +24,7 @@ public final class SpawnItemExecutor {
 
     /**
      * 单批最多写入的掉落物实体数：行为上界，取值与语义保持不变，只限制单步产出量。
-     * 每个真正写入世界的 ItemEntity 按 1 个工作单位回执（见 {@link StepWorkCounter#report(int)}），
+     * 每个真正写入世界的 ItemEntity 由交付循环按 1 个工作单位计费，
      * 故该上界同时是一个调度步骤最多计入的计费单位数。
      */
     private static final int ITEM_SPAWNS_PER_RUN = 16;
@@ -69,75 +68,81 @@ public final class SpawnItemExecutor {
         return new ItemDelivery(context, item, count);
     }
 
-    /** 掉落物的分批交付游标：保留剩余件数和未写入的产物，每批最多 {@link #ITEM_SPAWNS_PER_RUN} 个实体。 */
-    private static final class ItemDelivery implements EffectExecution {
-        private final EffectContext context;
-        private final ChunkRequirement chunks;
+    /**
+     * 掉落物的分批交付游标：保留剩余件数，每批最多 {@link #ITEM_SPAWNS_PER_RUN} 个实体。
+     * 待写实体由交付循环持有，本类只描述每叠产物怎么造、怎么写入与完成量口径。
+     */
+    private static final class ItemDelivery extends DeliveryExecution {
         private final Item item;
+        private final ChunkRequirement chunks;
+        private final int maxStack;
         private long remaining;
-        private ItemEntity pendingDrop;
 
         private ItemDelivery(EffectContext context, Item item, long count) {
-            this.context = context;
-            this.chunks = ChunkRequirement.around(BlockPos.containing(context.position()), 1);
+            super(context);
             this.item = item;
+            this.chunks = ChunkRequirement.around(BlockPos.containing(context.position()), 1);
+            // 单件堆叠上限是物品的固定属性：一次算定，产出与单步收窄共用同一口径
+            this.maxStack = Math.max(1, item.getDefaultMaxStackSize());
             this.remaining = count;
         }
 
         @Override
-        public @Nullable ChunkRequirement requiredChunks() {
-            if (remaining <= 0) { return null; }
-            return pendingDrop == null ? chunks : chunks.including(pendingDrop.blockPosition());
+        protected @Nullable ChunkRequirement declaredRequirement() {
+            // 交付结束即不再需要区块；待写实体所在区块由基类并入声明
+            return remaining <= 0 ? null : chunks;
         }
 
         @Override
-        public EffectStep advance(ServerTickBudget budget) {
+        protected Production produce(ServerTickBudget budget) {
             if (remaining <= 0) {
-                return EffectStep.done(EffectResult.applied(0, BATCHED));
+                // 没有待写单位：直接给出终态，不额外写世界
+                return new Production.Finished(result());
             }
+            int size = (int) Math.min(remaining, maxStack);
             ServerLevel level = context.level();
             Vec3 position = context.position();
-            int maxStack = Math.max(1, item.getDefaultMaxStackSize());
-            // 本步已报告但尚未由调度器计费的额度：单步内 remainingWorkUnits 不会随上报立即减少，需自行扣除
-            int reportedUnits = 0;
-            int written = 0;
-            while (written < ITEM_SPAWNS_PER_RUN && remaining > 0) {
-                // 每件写入前都守一次：时间或本步额度（含已报告未计费部分）耗尽即让出，剩余件数保留到下次推进
-                if (budget.exhausted() || budget.remainingWorkUnits() - reportedUnits <= 0) {
-                    return EffectStep.Yield.INSTANCE;
-                }
-                int size = (int) Math.min(remaining, maxStack);
-                if (pendingDrop == null) {
-                    pendingDrop = new ItemEntity(level,
-                            position.x + (level.random.nextDouble() - 0.5) * SCATTER_RADIUS, position.y + SPAWN_HEIGHT,
-                            position.z + (level.random.nextDouble() - 0.5) * SCATTER_RADIUS, new ItemStack(item, size));
-                    // 初速由源物品被破坏前的运动决定：水平反向，便于捡回抛入的产物
-                    pendingDrop.setDeltaMovement(EffectTargets.productInitialVelocity(context));
-                }
-                // 转化产物：先授予保护与冷却再写入；未写入时不计完成量，也不重复授予
-                if (!EffectTargets.addConversionProductNow(context, pendingDrop)) {
-                    return new EffectStep.AwaitChunks(ChunkRequirement.at(pendingDrop.blockPosition()));
-                }
-                pendingDrop = null;
-                // 真实完成量回执：按实际写入世界的件数计
-                context.reportProgress(size);
-                // 计价：一个真正写入世界的实体记 1 个工作单位
-                StepWorkCounter.report(1);
-                reportedUnits++;
-                written++;
-                remaining -= size;
-            }
-            if (remaining > 0) {
-                return EffectStep.Yield.INSTANCE;
-            }
-            return EffectStep.done(EffectResult.applied(0, BATCHED));
+            ItemEntity drop = new ItemEntity(level,
+                    position.x + (level.random.nextDouble() - 0.5) * SCATTER_RADIUS, position.y + SPAWN_HEIGHT,
+                    position.z + (level.random.nextDouble() - 0.5) * SCATTER_RADIUS, new ItemStack(item, size));
+            // 初速由源物品被破坏前的运动决定：水平反向，便于捡回抛入的产物
+            drop.setDeltaMovement(EffectTargets.productInitialVelocity(context));
+            return new Production.Next(new Unit(drop, size));
         }
 
         @Override
-        public void onFinished(EffectResult result) {
-            // 交付完成或已失败：不再持有剩余件数，取消路径也不补做
-            remaining = 0;
-            pendingDrop = null;
+        protected boolean write(Entity entity) {
+            // 转化产物：先授予保护与冷却再写入；未写入时不计完成量，也不重复授予
+            return EffectTargets.addConversionProductNow(context, (ItemEntity) entity);
+        }
+
+        @Override
+        protected void onUnitWritten(Unit unit) {
+            // 完成量就是这一叠实际写入世界的件数
+            remaining -= unit.appliedUnits();
+        }
+
+        @Override
+        protected int unitsPerStep() {
+            // 不足一批时按精确的剩余实体数收窄：最后一件写完即在同一次推进里返回终态，不额外让出一步
+            return (int) Math.min(ITEM_SPAWNS_PER_RUN, Math.ceilDiv(remaining, maxStack));
+        }
+
+        @Override
+        protected long intervalTicks() {
+            // 本步还有额度就继续写，用尽或写满一批后由基类 Yield 到下一 tick
+            return 0;
+        }
+
+        @Override
+        protected boolean isComplete() {
+            return remaining <= 0;
+        }
+
+        @Override
+        protected EffectResult result() {
+            // 件数已逐叠回执，终态只收束任务
+            return EffectResult.applied(0, BATCHED);
         }
     }
 }

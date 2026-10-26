@@ -9,7 +9,6 @@ import com.meteorite.itemdespawntowhat.core.api.EffectStep;
 import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
-import com.meteorite.itemdespawntowhat.core.api.scheduler.StepWorkCounter;
 import com.meteorite.itemdespawntowhat.core.type.effect.EntityProduct;
 import com.meteorite.itemdespawntowhat.core.type.effect.SpawnEntityEffect;
 import java.util.ArrayList;
@@ -361,9 +360,12 @@ public final class SpawnEntityExecutor {
      * 时间或工作量预算耗尽即让出。安全搜索的候选游标在整次交付内单调前进，已判定过的候选不再复查；
      * 完全安全的候选直接命中，整片范围都有危险时按危险度从低到高依次取用；
      * 所有候选都不可生成时按已生成数量收尾：一个都没生成按失败回执，已生成部分按真实产出结束。
+     *
+     * <p>区块等待、写前写后的预算双检、逐单位回执与收尾清理由 {@link DeliveryExecution} 承担，
+     * 这里只描述实体怎么造出来、写到哪里、按什么节奏推进。候选点的检查额度只在本步有效，
+     * 每步开头由基类的 {@code onStepStart()} 重置，用完就返回 {@code Busy} 让出，下个 tick 从断点继续。
      */
-    private static final class EntityDelivery implements EffectExecution {
-        private final EffectContext context;
+    private static final class EntityDelivery extends DeliveryExecution {
         private final ChunkRequirement chunks;
         private final EntityType<?> type;
         private final ServerLevel level;
@@ -382,14 +384,16 @@ public final class SpawnEntityExecutor {
         // 命中候选的危险度：0 表示完全安全，大于 0 表示本次命中来自危险度回退
         private int hitScore;
         private boolean positionResolved;
-        private Entity pendingEntity;
+        // 本步已做的候选判定数与本步判定上限：随步重置，避免把「每刻检查上限」累成整次交付上限
+        private int checks;
+        private int checkLimit;
 
         // 可生成但带危险的候选：危险度分数与落点
         private record FallbackCandidate(int score, BlockPos pos) {
         }
 
         private EntityDelivery(EffectContext context, EntityType<?> type, int count, int age, boolean safeSpawn) {
-            this.context = context;
+            super(context);
             this.type = type;
             this.level = context.level();
             this.origin = context.position();
@@ -403,90 +407,69 @@ public final class SpawnEntityExecutor {
         }
 
         @Override
-        public @Nullable ChunkRequirement requiredChunks() {
+        protected @Nullable ChunkRequirement declaredRequirement() {
             if (spawned >= target) { return null; }
             // 已确定整片候选都不可生成：下一步就收尾，不再等待任何区块
             if (safeSpawn && positionResolved && hit == null) { return null; }
-            return pendingEntity == null ? chunks : chunks.including(pendingEntity.blockPosition());
+            return chunks;
         }
 
         @Override
-        public EffectStep advance(ServerTickBudget budget) {
+        protected void onStepStart() {
+            checks = 0;
+            checkLimit = Math.max(1, context.positionSearchChecksPerTick());
+        }
+
+        // 产出下一个待写入世界的实体：安全落点未定时先在有界候选表里搜索，检查额度按步计费
+        @Override
+        protected Production produce(ServerTickBudget budget) {
             if (spawned >= target) {
-                return EffectStep.done(EffectResult.applied(0, STEPPED));
+                return new Production.Finished(EffectResult.applied(0, STEPPED));
             }
-            int end = (int) Math.min(target, (long) spawned + SPAWNS_PER_RUN);
-            int checks = 0;
-            // 本步已报告但尚未由调度器计费的额度：单步内 remainingWorkUnits 不会随上报立即减少，需自行扣除
-            int reportedUnits = 0;
-            // 每刻候选检查上限来自配置（position_search_checks_per_tick），未完成则下刻从断点继续
-            int checkLimit = Math.max(1, context.positionSearchChecksPerTick());
-            while (spawned < end) {
-                // 每个实体写入前都复查双预算：时间耗尽或本步已用额度（含已报告未计费部分）耗尽时让出，
-                // 剩余数量与搜索游标原样保留，下一 tick 重获预算后继续
-                if (budget.exhausted() || budget.remainingWorkUnits() - reportedUnits <= 0) {
-                    return EffectStep.Yield.INSTANCE;
+            if (safeSpawn && !positionResolved) {
+                // 快速路径：候选表首项就是原点本身，原点完全安全时一次判定即中，不进入候选表遍历
+                if (searchCursor == 0) {
+                    searchCursor = 1;
+                    checks++;
+                    // 计价：每检查一个候选点（含地面判据与碰撞箱、危险方块读取）记 1 个工作单位
+                    spend();
+                    consider(center);
                 }
-                if (safeSpawn && !positionResolved) {
-                    // 快速路径：候选表首项就是原点本身，原点完全安全时一次判定即中，不进入候选表遍历
-                    if (searchCursor == 0) {
-                        searchCursor = 1;
-                        checks++;
-                        // 计价：每检查一个候选点（含地面判据与碰撞箱、危险方块读取）记 1 个工作单位
-                        StepWorkCounter.report(1);
-                        reportedUnits++;
-                        consider(center);
+                while (!positionResolved && checks < checkLimit) {
+                    if (outOfBudget(budget)) {
+                        break;
                     }
-                    while (!positionResolved && checks < checkLimit) {
-                        if (budget.exhausted() || budget.remainingWorkUnits() - reportedUnits <= 0) {
-                            break;
-                        }
-                        if (searchCursor >= SEARCH_OFFSETS.size()) {
-                            // 候选表遍历完毕：没有完全安全的落点时按危险度从低到高取可生成候选
-                            positionResolved = true;
-                            FallbackCandidate fallback = takeLeastHazard();
-                            hit = fallback != null ? fallback.pos() : null;
-                            hitScore = fallback != null ? fallback.score() : -1;
-                            break;
-                        }
-                        BlockPos candidate = center.offset(SEARCH_OFFSETS.get(searchCursor++));
-                        checks++;
-                        StepWorkCounter.report(1);
-                        reportedUnits++;
-                        consider(candidate);
+                    if (searchCursor >= SEARCH_OFFSETS.size()) {
+                        // 候选表遍历完毕：没有完全安全的落点时按危险度从低到高取可生成候选
+                        positionResolved = true;
+                        FallbackCandidate fallback = takeLeastHazard();
+                        hit = fallback != null ? fallback.pos() : null;
+                        hitScore = fallback != null ? fallback.score() : -1;
+                        break;
                     }
-                    if (!positionResolved) {
-                        // 搜索未完成（候选上限或预算用尽）：从断点下刻继续，保持「最近优先」语义
-                        return EffectStep.Yield.INSTANCE;
-                    }
-                    observeSearch();
-                    if (hit == null) {
-                        return noSafePositionStep();
-                    }
+                    BlockPos candidate = center.offset(SEARCH_OFFSETS.get(searchCursor++));
+                    checks++;
+                    spend();
+                    consider(candidate);
                 }
-                if (checks >= checkLimit && spawned < end) {
-                    return EffectStep.Yield.INSTANCE;
+                if (!positionResolved) {
+                    // 搜索未完成（候选上限或预算用尽）：从断点下刻继续，保持「最近优先」语义
+                    return new Production.Busy();
                 }
-                // 搜索可能已把本步余量耗尽，写入前再复查一次双预算，避免越过本 tick 额度
-                if (budget.exhausted() || budget.remainingWorkUnits() - reportedUnits <= 0) {
-                    return EffectStep.Yield.INSTANCE;
+                observeSearch();
+                if (hit == null) {
+                    return new Production.Finished(noSafePositionResult());
                 }
-                if (!spawnOne(hit)) {
-                    return new EffectStep.AwaitChunks(ChunkRequirement.at(pendingEntity.blockPosition()));
-                }
-                spawned++;
-                // spawnOne 成功时内部已上报 1 个工作单位，同步计入本步已用额度
-                reportedUnits++;
-                // 命中的格子已被本实体占用：游标继续向后推进，下一个实体只判定未用过的候选
-                hit = null;
-                hitScore = 0;
-                positionResolved = false;
             }
-            if (spawned < target) {
-                return EffectStep.Yield.INSTANCE;
+            // 本步候选检查额度已用尽：先把写入推到下一步，保证单步的检查代价有上界
+            if (checks >= checkLimit) {
+                return new Production.Busy();
             }
-            // 真实产出已逐实体回执，终态不再重复计入
-            return EffectStep.done(EffectResult.applied(0, STEPPED));
+            // 搜索可能已把本步余量耗尽，写前复查预算；回执与计费由基类在真实写入后统一处理
+            if (outOfBudget(budget)) {
+                return new Production.Busy();
+            }
+            return new Production.Next(new Unit(createEntity(hit), 1));
         }
 
         // 判定一个候选：完全安全（0 分）立即命中；否则记进可生成候选表，等整片候选遍历完按分数取用。
@@ -520,10 +503,10 @@ public final class SpawnEntityExecutor {
 
         // 整片候选都不可生成（虚空、被方块堵死、越界）：一个实体都没生成时整次效果按失败回执（不登记完成量），
         // 已生成部分只按真实产出结束，避免「生成 + 整单失败」双记
-        private EffectStep noSafePositionStep() {
+        private EffectResult noSafePositionResult() {
             return spawned == 0
-                    ? EffectStep.done(EffectResult.failed(NO_SAFE_SPAWN_POSITION))
-                    : EffectStep.done(EffectResult.applied(0, NO_SAFE_SPAWN_POSITION_PARTIAL));
+                    ? EffectResult.failed(NO_SAFE_SPAWN_POSITION)
+                    : EffectResult.applied(0, NO_SAFE_SPAWN_POSITION_PARTIAL);
         }
 
         // 每次落点搜索结束时观测一条：candidates_checked 为整次交付累计判定过的候选数，
@@ -545,42 +528,62 @@ public final class SpawnEntityExecutor {
                     "z", hit != null ? hit.getZ() : center.getZ());
         }
 
-        @Override
-        public void onFinished(EffectResult result) {
-            // 交付完成或已失败：不再持有剩余数量，取消路径也不补做
-            spawned = target;
-            pendingEntity = null;
+        // 构造待写入世界的实体：安全搜索命中时用命中方块中心，未开启安全生成时沿用原点附近的随机偏移
+        private Entity createEntity(@Nullable BlockPos position) {
+            Entity entity = type.create(level);
+            if (entity == null) {
+                throw new IllegalStateException(BuiltInRegistries.ENTITY_TYPE.getKey(type) + " 在该维度无法创建实体");
+            }
+            if (position != null) {
+                entity.moveTo(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D, 0.0F, 0.0F);
+            } else {
+                entity.moveTo(origin.x + (level.random.nextDouble() - 0.5) * 0.5,
+                        origin.y,
+                        origin.z + (level.random.nextDouble() - 0.5) * 0.5,
+                        0.0F, 0.0F);
+            }
+            if (entity instanceof AgeableMob ageableMob) {
+                ageableMob.setAge(age);
+            }
+            return entity;
         }
 
-        // 生成一个实体：安全搜索命中时用命中方块中心，未开启安全生成时沿用原点附近的随机偏移。
-        // 返回是否已真正写入世界：未写入时不回执完成量，由调用方带退避重试。
-        private boolean spawnOne(@Nullable BlockPos position) {
-            if (pendingEntity == null) {
-                pendingEntity = type.create(level);
-                if (pendingEntity == null) {
-                    throw new IllegalStateException(BuiltInRegistries.ENTITY_TYPE.getKey(type) + " 在该维度无法创建实体");
-                }
-                if (position != null) {
-                    pendingEntity.moveTo(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D, 0.0F, 0.0F);
-                } else {
-                    pendingEntity.moveTo(origin.x + (level.random.nextDouble() - 0.5) * 0.5,
-                            origin.y,
-                            origin.z + (level.random.nextDouble() - 0.5) * 0.5,
-                            0.0F, 0.0F);
-                }
-                if (pendingEntity instanceof AgeableMob ageableMob) {
-                    ageableMob.setAge(age);
-                }
-            }
-            // 真实写入世界后才回执：加入失败由运行时统一捕获记为失败，不提前累计完成量；产物带新产物环境伤害保护
-            if (!EffectTargets.addEntityProductNow(context, pendingEntity)) {
-                return false;
-            }
-            pendingEntity = null;
-            context.reportProgress(1);
-            // 计价：一个真正写入世界的实体记 1 个工作单位
-            StepWorkCounter.report(1);
-            return true;
+        // 真实写入世界：加入失败由运行时统一捕获记为失败，不提前累计完成量；产物带新产物环境伤害保护
+        @Override
+        protected boolean write(Entity entity) {
+            return EffectTargets.addEntityProductNow(context, entity);
+        }
+
+        @Override
+        protected boolean isComplete() {
+            return spawned >= target;
+        }
+
+        // 真实产出已逐实体回执，终态不再重复计入
+        @Override
+        protected EffectResult result() {
+            return EffectResult.applied(0, STEPPED);
+        }
+
+        // 单步写入上限同时按剩余数量收敛：最后一批写到目标即出循环，终态不因预算正好用尽而拖到下一 tick
+        @Override
+        protected int unitsPerStep() {
+            return Math.min(SPAWNS_PER_RUN, target - spawned);
+        }
+
+        // 单位之间没有最小间隔：本步还有余量就继续，用尽或写完一批后立即 Yield 续接
+        @Override
+        protected long intervalTicks() {
+            return 0L;
+        }
+
+        @Override
+        protected void onUnitWritten(Unit unit) {
+            spawned++;
+            // 命中的格子已被本实体占用：游标继续向后推进，下一个实体只判定未用过的候选
+            hit = null;
+            hitScore = 0;
+            positionResolved = false;
         }
     }
 }

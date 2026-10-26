@@ -90,7 +90,7 @@ flowchart TD
 1. 写参数 `record` 并实现 `Effect`。
 2. 声明参数：按 JSON 字段顺序写 spec 常量并聚合为 `PARAMS`，通用字段直接引用 `CommonFields.EFFECT_PARAMS` 里的声明；Codec 字段构件取自声明，解码期不产出 `null`。
 3. `effectType()` 返回 `SimpleEffectType`：id + 参数 `MapCodec` + 参数校验器 + `PARAMS` + `EffectExecutor` + 一次性标记 + 产出类别 + 容量需求解析器。
-4. 执行器放 `exec/`：同步执行只需 `execute`；需要在成功转化当刻固定输入的类型覆盖 `prepare` 与按准备结果创建执行状态的 `start`，长循环在 `start` 返回的执行状态里按共享 tick 预算续接（见 [转化运行时](conversion-runtime.md)）。固定范围覆盖 `EffectExecution.requiredChunks()` 声明 `ChunkRequirement`；处理中途遇到未加载区块返回 `EffectStep.AwaitChunks`，预算或批次上限用 `Yield`，正常间隔用 `Delay`，最终回执用 `Done`。区块检查、重试刻与超时由运行时处理；执行状态保留随机目标、游标与已完成量。具体契约见 [契约层核心](core-contract.md)。
+4. 执行器放 `exec/`：同步执行只需 `execute`；需要在成功转化当刻固定输入的类型覆盖 `prepare` 与按准备结果创建执行状态的 `start`，长循环在 `start` 返回的执行状态里按共享 tick 预算续接（见 [转化运行时](conversion-runtime.md)）；逐个实体写入、按区块就绪度与预算节奏续接的交付改为继承 `exec/DeliveryExecution`，只提供 `declaredRequirement`、`produce`、`write`、`isComplete`、`result`、`unitsPerStep`、`intervalTicks` 与 `onUnitWritten`，队列、区块等待、预算双检与逐单位回执由基类统一实现。固定范围覆盖 `EffectExecution.requiredChunks()` 声明 `ChunkRequirement`；处理中途遇到未加载区块返回 `EffectStep.AwaitChunks`，预算或批次上限用 `Yield`，正常间隔用 `Delay`，最终回执用 `Done`。区块检查、重试刻与超时由运行时处理；执行状态保留随机目标、游标与已完成量。具体契约见 [契约层核心](core-contract.md)。
 5. 在 `BuiltinEffectTypes.createMutable()` 增加一条登记。
 6. 声明产出类别（`productKind`）后，含该效果的规则可按类别归组；`productKind` 默认 `ProductKind.NONE`，含这类效果的规则参与归类时按无产出处理（分类装配见 [编辑与落盘](authoring.md)）。内置 `spawn_entity` 按产出子类声明产出类别：掉落物、生物、其他实体与经验分别对应 `entity.item`、`entity.mob`、`entity.entity`、`entity.experience`；同一条规则含多个实体子类时归 `entity.mixed`。
 7. 产物占用邻近容量时通过 `capacityDemand` 声明每轮一组最小产出需求（具体物品/实体件数，或产物类型未知时按区域物品总量的保守下界）；不声明则视为不占容量，计划期产出预算不为该效果计需求。

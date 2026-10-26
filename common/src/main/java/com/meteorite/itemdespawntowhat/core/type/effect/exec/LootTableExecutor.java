@@ -8,7 +8,6 @@ import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.EffectStep;
 import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
-import com.meteorite.itemdespawntowhat.core.api.scheduler.StepWorkCounter;
 import com.meteorite.itemdespawntowhat.core.type.effect.LootTableEffect;
 import java.util.ArrayList;
 import java.util.List;
@@ -17,6 +16,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.storage.loot.LootParams;
@@ -37,8 +37,6 @@ public final class LootTableExecutor {
 
     // 单个调度步骤最多写入的掉落物实体数：行为上界，只限制单步产出量
     private static final int LOOT_DROPS_PER_STEP = 16;
-    // 计价：一个真正写入世界的掉落物实体记 1 个工作单位
-    private static final int WORK_UNITS_PER_DROP = 1;
     // 回执说明：同步入口不承担分批，交由预算执行路径推进
     private static final String BUDGET_REQUIRED = "budget_required: loot_table";
     // 回执说明：成功转化当刻没有固定输入，属于运行时接线缺失，不退回到期重新抽取
@@ -153,19 +151,17 @@ public final class LootTableExecutor {
     /**
      * 战利品交付游标：每批最多 {@link #LOOT_DROPS_PER_STEP} 个掉落物实体，
      * 时间或工作量预算耗尽即让出并保留未交付部分，下一次推进从断点继续。
+     * 已构造但尚未加入世界的这一堆产物由交付循环持有，等待区块时不重造散点与初速。
      */
-    private static final class LootDelivery implements EffectExecution {
-        private final EffectContext context;
+    private static final class LootDelivery extends DeliveryExecution {
         private final ChunkRequirement chunks;
         private final ResourceLocation table;
         private final Vec3 position;
         private final List<ItemStack> drops;
         private int cursor;
-        // 已构造但尚未加入世界的这一堆产物：散布位置与初速已确定，等待区块时不重造
-        private ItemEntity pendingDrop;
 
         private LootDelivery(EffectContext context, ResourceLocation table, LootPlan plan) {
-            this.context = context;
+            super(context);
             this.table = table;
             this.position = plan.position();
             this.drops = plan.drops();
@@ -173,73 +169,77 @@ public final class LootTableExecutor {
         }
 
         @Override
-        public @Nullable ChunkRequirement requiredChunks() {
-            if (cursor >= drops.size()) { return null; }
-            return pendingDrop == null ? chunks : chunks.including(pendingDrop.blockPosition());
+        protected @Nullable ChunkRequirement declaredRequirement() {
+            // 交付结束即不再需要区块；待写堆叠所在区块由基类并入声明
+            return isComplete() ? null : chunks;
         }
 
         @Override
-        public EffectStep advance(ServerTickBudget budget) {
-            if (drops.isEmpty()) {
-                // 空表是已完成的空产出：不写世界、不回执件数，用独立结果与「已交付」区分
-                return EffectStep.done(EffectResult.applied(0, EMPTY_RESULT));
+        protected Production produce(ServerTickBudget budget) {
+            if (isComplete()) {
+                // 没有待写单位：空表与已交付由终态结果区分
+                return new Production.Finished(result());
             }
-            if (cursor >= drops.size()) {
-                return EffectStep.done(EffectResult.applied(0, DELIVERED));
-            }
+            ItemStack stack = drops.get(cursor);
             ServerLevel level = context.level();
-            // 掉落物散布半径小于一格，邻区块就绪即可写入
-            int written = 0;
-            // 本步已报告但尚未由调度器计费的额度：单步内 remainingWorkUnits 不会随上报立即减少，需自行扣除
-            int reportedUnits = 0;
-            while (written < LOOT_DROPS_PER_STEP && cursor < drops.size()) {
-                // 每堆写入前都守一次：时间或本步额度（含已报告未计费部分）耗尽即让出，未交付部分保留到下次推进
-                if (budget.exhausted() || budget.remainingWorkUnits() - reportedUnits <= 0) {
-                    return EffectStep.Yield.INSTANCE;
-                }
-                ItemStack stack = drops.get(cursor);
-                if (pendingDrop == null) {
-                    pendingDrop = new ItemEntity(level,
-                            position.x + (level.random.nextDouble() - 0.5) * SCATTER_RADIUS, position.y + SPAWN_HEIGHT,
-                            position.z + (level.random.nextDouble() - 0.5) * SCATTER_RADIUS, stack.copy());
-                    // 初速由源物品被破坏前的运动决定：水平反向，便于捡回抛入的产物
-                    pendingDrop.setDeltaMovement(EffectTargets.productInitialVelocity(context));
-                }
-                // 转化产物：走既有显式产物入口，先授予临时保护与冷却再写入世界。
-                // 未写入时保留这堆产物，退避后重试，不重造散点与初速。
-                if (!EffectTargets.addConversionProductNow(context, pendingDrop)) {
-                    return new EffectStep.AwaitChunks(ChunkRequirement.at(pendingDrop.blockPosition()));
-                }
-                pendingDrop = null;
-                // 真实完成量回执：按本次实际写入世界的件数计，轮次不在此处放大
-                context.reportProgress(stack.getCount());
-                StepWorkCounter.report(WORK_UNITS_PER_DROP);
-                reportedUnits++;
-                written++;
-                cursor++;
-            }
-            if (cursor < drops.size()) {
-                return EffectStep.Yield.INSTANCE;
-            }
-            if (RuntimeObserver.current().enabled()) {
-                // 行为轮数与真实产出件数分别记录：轮次是本组的执行轮数，不代表物品件数
-                RuntimeObserver.current().observe(context.source(), "LOOT_TABLE_RESULT",
-                        "table", table,
-                        "drops", drops.size(),
-                        "rounds", context.rounds(),
-                        "x", position.x,
-                        "y", position.y,
-                        "z", position.z);
-            }
-            return EffectStep.done(EffectResult.applied(0, DELIVERED));
+            ItemEntity drop = new ItemEntity(level,
+                    position.x + (level.random.nextDouble() - 0.5) * SCATTER_RADIUS, position.y + SPAWN_HEIGHT,
+                    position.z + (level.random.nextDouble() - 0.5) * SCATTER_RADIUS, stack.copy());
+            // 初速由源物品被破坏前的运动决定：水平反向，便于捡回抛入的产物
+            drop.setDeltaMovement(EffectTargets.productInitialVelocity(context));
+            return new Production.Next(new Unit(drop, stack.getCount()));
         }
 
         @Override
-        public void onFinished(EffectResult result) {
-            // 正常完成或失败：不再持有未交付部分与已构造未写入的产物。
-            // 取消不经过本回调，由任务摘掉执行状态后不再推进
-            cursor = drops.size();
-            pendingDrop = null;
+        protected boolean write(Entity entity) {
+            // 转化产物：走既有显式产物入口，先授予临时保护与冷却再写入世界；未写入时保留这堆产物
+            return EffectTargets.addConversionProductNow(context, (ItemEntity) entity);
+        }
+
+        @Override
+        protected void onUnitWritten(Unit unit) {
+            cursor++;
+            if (cursor >= drops.size()) {
+                observeDelivered();
+            }
+        }
+
+        @Override
+        protected int unitsPerStep() {
+            // 不足一批时按精确的剩余堆数收窄：最后一堆写完即在同一次推进里返回终态，不额外让出一步
+            return Math.min(LOOT_DROPS_PER_STEP, drops.size() - cursor);
+        }
+
+        @Override
+        protected long intervalTicks() {
+            // 本步还有额度就继续写，用尽或写满一批后由基类 Yield 到下一 tick
+            return 0;
+        }
+
+        @Override
+        protected boolean isComplete() {
+            return cursor >= drops.size();
+        }
+
+        @Override
+        protected EffectResult result() {
+            // 空表是已完成的空产出，与「已交付」区分
+            return EffectResult.applied(0, drops.isEmpty() ? EMPTY_RESULT : DELIVERED);
+        }
+
+        // 完成前观测：最后一批真实写入之后、终态回执之前上报一次，与原实现同在一次推进内
+        private void observeDelivered() {
+            if (!RuntimeObserver.current().enabled()) {
+                return;
+            }
+            // 行为轮数与真实产出件数分别记录：轮次是本组的执行轮数，不代表物品件数
+            RuntimeObserver.current().observe(context.source(), "LOOT_TABLE_RESULT",
+                    "table", table,
+                    "drops", drops.size(),
+                    "rounds", context.rounds(),
+                    "x", position.x,
+                    "y", position.y,
+                    "z", position.z);
         }
     }
 }
