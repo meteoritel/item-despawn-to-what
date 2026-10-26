@@ -1,33 +1,40 @@
 # ItemDespawnToWhat
 
-让掉落物在 自然消失 / 火 / 岩浆 / 仙人掌销毁**时，按自定义规则变成其他的东西。
+让即将消失的掉落物按规则变成别的东西。
 
-支持 Minecraft **1.21.1 / Fabric / NeoForge** 。
+模组运行在 Minecraft 1.21.1 上，同时提供 Fabric 与 NeoForge 两个版本。掉落物自然消失、被火烧毁、被岩浆吞掉或被仙人掌扎掉时，规则决定它是否转化、在什么条件下转化，以及转化出什么：物品、生物、方块、经验、天气或爆炸。
 
-## 开始使用
+规则可以在游戏内编辑器里直接修改（进入世界后输入 `/idtw config edit`），也可以写成 JSON 放在 `config` 覆盖层或数据包里。
 
-1. 启动一次游戏或服务器，生成 `config/itemdespawntowhat/server.json`。
-2. 在 `config/itemdespawntowhat/rules/` 下新建 JSON；也可用数据包的 `data/<命名空间>/idtw/rules/**.json` 提供只读规则。
-3. 执行 `/idtw config validate` 查看错误，再执行 `/idtw config reload` 应用规则。
+## 文档
 
-例如，鸡肉存活 10 秒后变为腐肉：
+| 你的目标 | 入口 |
+|---|---|
+| 安装模组、写第一条规则、查命令与配置 | [玩家指南](docs/wiki/Home.md)（[中文](docs/wiki/zh-Home.md) · [English](docs/wiki/en-Home.md)） |
+| 首次接触代码，判断改动落在哪一层 | [文档体系](docs/README.md)、[架构总览](docs/architecture/overview.md) |
+| 新增条件或效果、修改运行时 | [模块文档索引](docs/modules/README.md)、[关键链路](docs/architecture/key-flows.md) |
+| 写规则、对接规则文件格式 | [规则 JSON 契约](docs/api/rule-json.md) |
+| 调整服务端参数、排查运行问题 | [运行配置](docs/ops/configuration.md)、[故障排查](docs/ops/troubleshooting.md) |
+| 查术语与设计取舍 | [术语表](GLOSSARY.md)、[ADR 索引](docs/adr/README.md) |
 
-```json
-{
-  "id": "myrules:chicken_to_rotten_flesh",
-  "source": { "items": ["minecraft:chicken"] },
-  "trigger_after_seconds": 10,
-  "effects": [
-    { "type": "itemdespawntowhat:spawn_entity", "variant": "item", "item": "minecraft:rotten_flesh", "count": 1 }
-  ]
-}
+## 安装
+
+1. 为 Minecraft 1.21.1 安装 Fabric Loader 或 NeoForge。
+2. 从 Releases 下载对应加载器的 jar，放进 `mods/`。
+3. Fabric 端同时安装 Fabric API。
+
+需要 Java 21。
+
+## 从源码构建
+
+需要 JDK 21：
+
+```powershell
+./gradlew build
 ```
 
-规则可用 `triggers` 声明触发方式（缺省仅 `natural` 自然消失；也可加 `fire` / `lava` / `cactus`，被对应方式销毁时即时触发）。命中后按**固定源成本整组结算**：每组消耗 `source_cost` 个源物品（未声明时为 1），产出按“完整组”展开，输入不足一组时剩余源物品返还；一组内多个效果共同执行，也可用 `outcomes` 声明多个候选结果、按 `combination`（`round_robin` 轮询为默认 / `priority` 优先）选取。`consume_fluid` 控制每组是否消耗一个真实流体源，`catalyst_cost.consume_counts` 控制催化剂的实际扣除量；源物品本身始终按 `source_cost` 每组扣除。条件不满足时退避重试，计时依据实际存活年龄。
+Windows 下可用 `gradlew.bat build`。构建产物位于 `fabric/build/libs/` 与 `neoforge/build/libs/`，发布用 jar 是不带 `-sources`、`-javadoc` 后缀的那个。
 
-规则优先级为 **config 覆盖层 > 世界数据包 > 内置数据包**。同 id 覆盖；不同 id 的候选按优先级、条件叶数与定义顺序选择，最终执行一条。内置数据包提供一组示例规则，其中一部分默认启用，进游戏就能看到效果（如鸡肉 300 秒后变腐肉）；如需纯净环境，可在 `config` 覆盖层停用或移除内置数据包。
+## 许可证
 
-
-## 开发验证
-
-后端核心链路使用 NeoForge 独立开发探针：`powershell -ExecutionPolicy Bypass -File tools/run-probes.ps1`。运行结果与隔离存档保留在 `neoforge/build/probe-runs/`；探针源集与夹具从发布 jar 排除，GUI 由用户手测。链路选择、断言和报告定位见[后端探针工作流](docs/guides/backend-probes.md)。
+[MIT](LICENSE.txt)
