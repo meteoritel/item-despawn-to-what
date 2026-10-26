@@ -55,7 +55,7 @@ authority:
 | type-system | `SimpleTypeRegistry`、`RuleTypeProvider`、`BuiltinConditionTypes`、`BuiltinEffectTypes` | rule-loading（注册表装配）、conversion-runtime（求值与执行）、authoring（引用校验） |
 | rule-loading | `RuleLoader`、`RuleLoadingService`、`RuleSourceLayer`、`RuleMerger` | conversion-runtime、authoring、platform |
 | conversion-runtime | `ConversionRuntime`、`RuleIndex`、`ServerScheduler`、`SettlementLedger` | authoring（只读索引）、core/host、command、debug |
-| authoring | `RuleEditServerHandler`、`RuleEditService`、`EditSessionManager`、`RuleCommandTree`、`RuleCatalogService` | client-editor 与 client-ui（协议与限额）、platform（编辑上下文） |
+| authoring | `RuleEditServerHandler`、`RuleEditService`、`EditAdmission`、`EditSessionManager`、`RuleCommandTree`、`RuleCatalogService` | client-editor 与 client-ui（协议与限额）、platform（编辑上下文） |
 | client-editor | `RuleEditClientWorkspace`、`TypeEditorRegistry`、`EditorWorkspaceView` | client-ui |
 | ui-kit | `UiDocument`、`UiControl`、`UiTreeEditor`、`UiInputRouter`、`UiSliderSkin` | client-ui、client-editor（树编辑契约） |
 | client-ui | `RuleEditorScreen`、`EditorScreenHooks` 的实现、`UiHostThemes` | platform 客户端入口（挂载界面） |

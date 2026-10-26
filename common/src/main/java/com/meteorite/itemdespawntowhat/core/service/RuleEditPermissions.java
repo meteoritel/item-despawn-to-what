@@ -20,4 +20,14 @@ public final class RuleEditPermissions {
                 || source.getEntity() instanceof ServerPlayer player
                 && source.getServer().isSingleplayerOwner(player.getGameProfile());
     }
+
+    /**
+     * 只按权限等级判定，不含单人存档房主捷径：供不区分执行业者身份的管理动作使用。
+     *
+     * @param source 命令执行上下文
+     * @return 权限等级达标时为 true
+     */
+    public static boolean isAdmin(CommandSourceStack source) {
+        return source.hasPermission(RuleEditSessionLimits.REQUIRED_PERMISSION_LEVEL);
+    }
 }

@@ -9,8 +9,8 @@ import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerCont
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleSaveResultPayload;
 import com.meteorite.itemdespawntowhat.core.service.EditSessionManager;
+import com.meteorite.itemdespawntowhat.core.service.RuleEditPermissions;
 import com.meteorite.itemdespawntowhat.core.service.RuleEditService;
-import com.meteorite.itemdespawntowhat.core.service.RuleEditSessionLimits;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
@@ -51,7 +51,7 @@ final class RuleConfigCommands {
                 .then(Commands.literal("edit-lock")
                         .then(Commands.literal("status").executes(ctx -> editLockStatus(ctx, context)))
                         .then(Commands.literal("release")
-                                .requires(source -> source.hasPermission(RuleEditSessionLimits.REQUIRED_PERMISSION_LEVEL))
+                                .requires(RuleEditPermissions::isAdmin)
                                 .executes(ctx -> editLockRelease(ctx, context))));
     }
 
@@ -87,11 +87,6 @@ final class RuleConfigCommands {
         if (!RuleEditServerHandler.isReady(editContext)) {
             return RuleCommandTree.notReady(ctx);
         }
-        if (!RuleEditServerHandler.canEdit(player)) {
-            return RuleCommandTree.replyFailure(ctx,
-                    RuleCommandText.of("itemdespawntowhat.edit.no_permission").build());
-        }
-
         // 唯一入口：先取锁，成功才发打开载荷；失败同样要下发 LOCK_BUSY 载荷让客户端提示持有者
         RuleEditService.OpenOutcome outcome = RuleEditServerHandler.openEditor(player, editContext);
         if (outcome == null) {

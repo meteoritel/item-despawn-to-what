@@ -48,6 +48,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Predicate;
 import com.meteorite.itemdespawntowhat.core.network.transport.RequestRuleLifespanPayload;
 import com.meteorite.itemdespawntowhat.core.network.transport.RuleLifespanPayload;
 
@@ -63,6 +64,8 @@ public final class RuleEditService {
 
     // 会话状态机与版本戳
     private final EditSessionManager sessions;
+    // 统一准入：会话号 → 持有者 → 确认状态 → 编辑权限
+    private final EditAdmission admission;
     // 幂等回执：同一会话最近 MAX_OPERATION_HISTORY 个 operationId -> 上次回执
     private final Map<String, RuleSaveResultPayload> recentResults = new LinkedHashMap<>();
     // 幂等表所属会话；会话变化即整体失效
@@ -103,8 +106,9 @@ public final class RuleEditService {
 
 
     // 构造编排服务：会话状态机由调用方注入；网络与加载依赖一律经方法参数传入
-    public RuleEditService(EditSessionManager sessions) {
+    public RuleEditService(EditSessionManager sessions, Predicate<ServerPlayer> permitted) {
         this.sessions = Objects.requireNonNull(sessions, "sessions");
+        this.admission = new EditAdmission(sessions, Objects.requireNonNull(permitted, "permitted"));
     }
 
     // 底层的会话状态机（命令层查询状态用）
@@ -186,31 +190,31 @@ public final class RuleEditService {
                     args(Integer.toString(RuleEditProtocol.VERSION), Integer.toString(payload.protocolVersion())),
                     List.of(), false, false));
         }
-        if (!sessions.owns(payload.sessionId())) {
-            return Outbound.of(sessionLost(payload.sessionId(), player));
-        }
-        if (!sessions.isOwner(player.getUUID())) {
-            return Outbound.of(result(payload.sessionId(), "", RuleSaveStatus.LOCK_NOT_OWNED,
-                    RuleSaveStatus.LOCK_NOT_OWNED.messageKey(), List.of(), List.of(), false, false));
+        EditAdmission.Refusal refusal = EditAdmission.refusal(admission.admitOwner(player, payload.sessionId()));
+        if (refusal != null) {
+            return Outbound.of(lost(refusal, payload.sessionId(), ""));
         }
         if (!sessions.confirm(payload.sessionId(), tick)) {
-            return Outbound.of(sessionLost(payload.sessionId(), player));
+            return Outbound.of(sessionExpired(payload.sessionId(), ""));
         }
         return snapshotOutbound(context, server, payload.sessionId(), "");
     }
 
     // C2S 心跳：成功不回执，失败回 SESSION_EXPIRED（客户端据此回到未持有状态）
     public Outbound heartbeat(ServerPlayer player, HeartbeatRuleEditorPayload payload, long tick) {
-        if (sessions.heartbeat(payload.sessionId(), tick) && sessions.isOwner(player.getUUID())) {
-            return Outbound.EMPTY;
+        EditAdmission.Refusal refusal = EditAdmission.refusal(admission.admitMember(player, payload.sessionId()));
+        if (refusal != null) {
+            return Outbound.of(lost(refusal, payload.sessionId(), ""));
         }
-        return Outbound.of(sessionLost(payload.sessionId(), player));
+        sessions.heartbeat(payload.sessionId(), tick);
+        return Outbound.EMPTY;
     }
 
     // C2S 关闭：保存期间延后释放，回滚与清理结束后才发送终态
     public Outbound close(ServerPlayer player, CloseRuleEditorPayload payload) {
-        if (!sessions.owns(payload.sessionId()) || !sessions.isOwner(player.getUUID())) {
-            return Outbound.of(sessionLost(payload.sessionId(), player));
+        EditAdmission.Refusal refusal = EditAdmission.refusal(admission.admitMember(player, payload.sessionId()));
+        if (refusal != null) {
+            return Outbound.of(lost(refusal, payload.sessionId(), ""));
         }
         if (pendingSave != null) { forceRelease(); return Outbound.EMPTY; }
         sessions.release();
@@ -221,12 +225,10 @@ public final class RuleEditService {
     // C2S 快照请求：必须是当前会话持有者
     public Outbound requestSnapshot(ServerPlayer player, RuleEditServerContext context, MinecraftServer server,
                                     RequestRuleSnapshotPayload payload, long tick) {
-        if (!sessions.owns(payload.sessionId()) || !sessions.isOwner(player.getUUID())) {
-            return Outbound.of(sessionLost(payload.sessionId(), player));
-        }
-        if (!sessions.confirmed(payload.sessionId())) {
+        EditAdmission.Refusal refusal = EditAdmission.refusal(admission.admitConfirmed(player, payload.sessionId()));
+        if (refusal != null) {
             // 未确认的 OPENING 会话不接受快照请求，避免绕过确认握手
-            return Outbound.of(sessionLost(payload.sessionId(), player));
+            return Outbound.of(lost(refusal, payload.sessionId(), ""));
         }
         sessions.heartbeat(payload.sessionId(), tick);
         return snapshotOutbound(context, server, payload.sessionId(), payload.requestId());
@@ -234,12 +236,10 @@ public final class RuleEditService {
 
     // C2S 目录请求：按来源分层缓存分页下发；来源实现为空时返回空目录 + lastPage=true
     public Outbound requestCatalog(ServerPlayer player, RequestRuleCatalogPayload payload, long tick) {
-        if (!sessions.owns(payload.sessionId()) || !sessions.isOwner(player.getUUID())) {
-            return Outbound.of(sessionLost(payload.sessionId(), player));
-        }
-        if (!sessions.confirmed(payload.sessionId())) {
+        EditAdmission.Refusal refusal = EditAdmission.refusal(admission.admitConfirmed(player, payload.sessionId()));
+        if (refusal != null) {
             // 会话状态优先于请求参数：未确认的 OPENING 会话不接受目录请求
-            return Outbound.of(sessionLost(payload.sessionId(), player));
+            return Outbound.of(lost(refusal, payload.sessionId(), ""));
         }
         if (payload.page() < 0 || payload.pageSize() <= 0
                 || payload.pageSize() > RequestRuleCatalogPayload.MAX_PAGE_SIZE) {
@@ -271,9 +271,9 @@ public final class RuleEditService {
      * @return 来源视图应答（整包或分片），或会话失效回执
      */
     public Outbound requestSourceView(ServerPlayer player, RequestRuleSourceViewPayload payload, long tick) {
-        if (!sessions.owns(payload.sessionId()) || !sessions.isOwner(player.getUUID())
-                || !sessions.confirmed(payload.sessionId())) {
-            return Outbound.of(sessionLost(payload.sessionId(), player));
+        EditAdmission.Refusal refusal = EditAdmission.refusal(admission.admitConfirmed(player, payload.sessionId()));
+        if (refusal != null) {
+            return Outbound.of(lost(refusal, payload.sessionId(), ""));
         }
         sessions.heartbeat(payload.sessionId(), tick);
         ResourceLocation id = ResourceLocation.tryParse(payload.ruleId());
@@ -315,9 +315,9 @@ public final class RuleEditService {
      */
     public Outbound requestLifespan(ServerPlayer player, RuleEditServerContext context,
             RequestRuleLifespanPayload payload, long tick) {
-        if (!sessions.owns(payload.sessionId()) || !sessions.isOwner(player.getUUID())
-                || !sessions.confirmed(payload.sessionId())) {
-            return Outbound.of(sessionLost(payload.sessionId(), player));
+        EditAdmission.Refusal refusal = EditAdmission.refusal(admission.admitConfirmed(player, payload.sessionId()));
+        if (refusal != null) {
+            return Outbound.of(lost(refusal, payload.sessionId(), ""));
         }
         sessions.heartbeat(payload.sessionId(), tick);
         int ticks = context.referenceLifespanTicks();
@@ -336,15 +336,14 @@ public final class RuleEditService {
         RequestRuleLifespanPayload pending = pendingLifespan;
         UUID owner = lifespanOwner;
         if (pending == null || owner == null) return null;
-        if (!sessions.owns(pending.sessionId()) || !sessions.isOwner(owner)
-                || !sessions.confirmed(pending.sessionId())) {
+        ServerPlayer player = server.getPlayerList().getPlayer(owner);
+        if (EditAdmission.refusal(admission.admitConfirmed(player, pending.sessionId())) != null) {
             pendingLifespan = null;
             lifespanOwner = null;
             return null;
         }
         int ticks = context.referenceLifespanTicks();
         if (ticks == 0) return null;
-        ServerPlayer player = server.getPlayerList().getPlayer(owner);
         pendingLifespan = null;
         lifespanOwner = null;
         return player == null ? null : new LifespanReply(player,
@@ -361,8 +360,10 @@ public final class RuleEditService {
     // C2S 分片：先校验会话，再重组；收齐后复用直发保存流程
     public Outbound submitChunk(ServerPlayer player, RuleEditServerContext context, MinecraftServer server,
                                 SaveRuleChangeSetChunkPayload payload, long tick) {
-        if (!sessions.owns(payload.sessionId()) || !sessions.isOwner(player.getUUID())) {
-            return Outbound.of(sessionLost(payload.sessionId(), player, payload.operationId()));
+        EditAdmission.Refusal refusal = EditAdmission.refusal(admission.admitMember(player, payload.sessionId()));
+        if (refusal != null) {
+            if (abortReplayedSave(player, payload.sessionId(), payload.operationId())) { return Outbound.EMPTY; }
+            return Outbound.of(lost(refusal, payload.sessionId(), payload.operationId()));
         }
         RuleEditChunkAccumulator.ValidatedChunk validated = RuleEditChunkAccumulator.validate(payload);
         if (validated == null) {
@@ -395,12 +396,11 @@ public final class RuleEditService {
             return Outbound.of(result(sessionId, operationId, RuleSaveStatus.INVALID_REQUEST,
                     RuleSaveStatus.INVALID_REQUEST.messageKey(), args("operationId"), List.of(), false, false));
         }
-        if (!sessions.owns(sessionId)) {
-            return Outbound.of(sessionLost(sessionId, player, operationId));
-        }
-        if (!sessions.isOwner(player.getUUID())) {
-            return Outbound.of(result(sessionId, operationId, RuleSaveStatus.LOCK_NOT_OWNED,
-                    RuleSaveStatus.LOCK_NOT_OWNED.messageKey(), List.of(), List.of(), false, false));
+        EditAdmission.Refusal refusal = EditAdmission.refusal(admission.admitConfirmed(player, sessionId));
+        if (refusal != null) {
+            // 在途保存期间的重发不新增回执：先中止该次保存，由收尾统一回终态
+            if (abortReplayedSave(player, sessionId, operationId)) { return Outbound.EMPTY; }
+            return Outbound.of(lost(refusal, sessionId, operationId));
         }
 
         // 幂等：同一 operationId 直接回放上次回执，不重复写盘
@@ -418,7 +418,8 @@ public final class RuleEditService {
             return Outbound.of(result(sessionId, operationId, RuleSaveStatus.UNAVAILABLE,
                     RuleSaveStatus.UNAVAILABLE.messageKey(), List.of(), List.of(), false, false));
         }
-        if (!sessions.beginApply(sessionId)) { return Outbound.of(sessionLost(sessionId, player, operationId)); }
+        // 准入已通过；此处失败来自 ACTIVE→APPLYING 状态迁移被拒，回 SESSION_EXPIRED
+        if (!sessions.beginApply(sessionId)) { return Outbound.of(sessionExpired(sessionId, operationId)); }
         sessions.heartbeat(sessionId, tick);
         if (pendingSnapshot != null) { pendingSnapshot.invalidate(); }
         requestedSnapshot = null;
@@ -429,7 +430,7 @@ public final class RuleEditService {
         progressTick = tick - PROGRESS_INTERVAL_TICKS;
         progressSequence = 0;
         sentProgress = null;
-        pendingSave = new RuleSaveTask(sessions, context, server, sessionId, player.getUUID(), json, outcome -> {
+        pendingSave = new RuleSaveTask(sessions, admission, context, server, sessionId, player.getUUID(), json, outcome -> {
             if (outcome.written()) { RuleCatalogService.invalidate(); }
             completedSave = result(sessionId, operationId, outcome.status(), outcome.status().messageKey(),
                     switch (outcome.status()) {
@@ -468,11 +469,15 @@ public final class RuleEditService {
         sessions.store().flushRevision();
         if (pendingSave == null) { return null; }
         pendingSave.pollCompletion();
-        if (!sessions.owns(savingSessionId)) { pendingSave.invalidate(); }
         ServerPlayer owner = server.getPlayerList().getPlayer(savingOwner);
-        if (!com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler.canEdit(owner)) {
+        EditAdmission.Refusal refusal = EditAdmission.refusal(admission.admitMember(owner, savingSessionId));
+        if (refusal != null) {
             pendingSave.invalidate();
-            sessions.release();
+            // 玩家离线或失权后回执已无接收者，释放会话让下一位玩家取锁
+            if (refusal.reason() == EditAdmission.Reason.PLAYER_ABSENT
+                    || refusal.reason() == EditAdmission.Reason.NO_PERMISSION) {
+                sessions.release();
+            }
         }
         if (!pendingSave.finished()) { return null; }
         RuleSaveResultPayload payload = completedSave;
@@ -484,7 +489,7 @@ public final class RuleEditService {
         Runnable reload = deferredReload;
         deferredReload = null;
         if (reload != null) { reload.run(); }
-        if (payload != null && sessions.owns(payload.sessionId())
+        if (payload != null && EditAdmission.refusal(admission.admitSession(payload.sessionId())) == null
                 && (reload != null || RuleSaveStatus.VERSION_CONFLICT.id().equals(payload.statusCode())
                     || RuleSaveStatus.SAVED_NOT_RELOADED.id().equals(payload.statusCode()))) {
             requestedSnapshot = new SnapshotRequest(savingOwner, payload.sessionId(), "");
@@ -499,7 +504,8 @@ public final class RuleEditService {
      * @return 在途保存无立即终态；未开始写盘或已完成的操作可直接交付取消／幂等回执
      */
     public Outbound cancelSave(ServerPlayer player, CancelRuleSavePayload payload) {
-        if (!sessions.owns(payload.sessionId()) || !sessions.isOwner(player.getUUID())) { return Outbound.EMPTY; }
+        // 取消只撤回本人仍在途的请求，不新增写权限，因此只判会话号与持有者
+        if (EditAdmission.refusal(admission.admitOwner(player, payload.sessionId())) != null) { return Outbound.EMPTY; }
         if (pendingSave != null) {
             if (payload.sessionId().equals(savingSessionId) && payload.operationId().equals(savingOperationId)) {
                 pendingSave.cancel();
@@ -526,7 +532,7 @@ public final class RuleEditService {
             return null;
         }
         ServerPlayer player = server.getPlayerList().getPlayer(savingOwner);
-        if (!com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler.canEdit(player)) { return null; }
+        if (EditAdmission.refusal(admission.admitMember(player, savingSessionId)) != null) { return null; }
         RuleSaveProgress progress = pendingSave.progress();
         if (progress.equals(sentProgress)) { return null; }
         sentProgress = progress;
@@ -565,6 +571,24 @@ public final class RuleEditService {
     public synchronized EditSessionManager.SessionInfo forceRelease() {
         if (pendingSave != null) { pendingSave.invalidate(); }
         return sessions.release();
+    }
+
+    /**
+     * 在途保存期间重发同一操作：释放会话，调用方随后回 UNAVAILABLE。
+     * 判定依据是服务层记录的在途会话号与持有者。
+     *
+     * @param player 请求玩家
+     * @param sessionId 请求会话号
+     * @param operationId 请求操作号
+     * @return 是否确有同一请求在途并被中止
+     */
+    public synchronized boolean abortReplayedSave(ServerPlayer player, String sessionId, String operationId) {
+        if (pendingSave == null || !sessionId.equals(savingSessionId) || !player.getUUID().equals(savingOwner)
+                || operationId.isEmpty()) {
+            return false;
+        }
+        forceRelease();
+        return true;
     }
 
     // 玩家断开：保存期间请求延后释放并等待回滚；其它会话由原租约回收
@@ -620,10 +644,11 @@ public final class RuleEditService {
         if (pendingSave != null) { return null; }
         startSnapshot(server, context);
         if (snapshotPackets.isEmpty() || deliveringSnapshot == null) { return null; }
-        if (!sessions.owns(deliveringSnapshot.sessionId())) { clearSnapshotPackets("session_lost"); return null; }
         ServerPlayer player = server.getPlayerList().getPlayer(deliveringSnapshot.owner());
-        if (!com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler.canEdit(player)) {
-            clearSnapshotPackets("no_permission"); return null;
+        EditAdmission.Refusal refusal = EditAdmission.refusal(admission.admitMember(player, deliveringSnapshot.sessionId()));
+        if (refusal != null) {
+            clearSnapshotPackets(refusal.reason().name().toLowerCase(java.util.Locale.ROOT));
+            return null;
         }
         int limit = Math.min(RuleEditLimits.SNAPSHOT_CHUNKS_PER_TICK, snapshotPackets.size());
         List<CustomPacketPayload> packets = new ArrayList<>(limit);
@@ -694,11 +719,12 @@ public final class RuleEditService {
         if (pendingSave != null) { return; }
         if (requestedSnapshot != null && pendingSnapshot == null) {
             SnapshotRequest current = requestedSnapshot;
-            if (!sessions.owns(current.sessionId()) || context.saveReloadContext() == null) {
+            if (EditAdmission.refusal(admission.admitSession(current.sessionId())) != null
+                || context.saveReloadContext() == null) {
                 requestedSnapshot = null;
                 return;
             }
-            pendingSnapshot = new RuleSnapshotTask(context, server, sessions, current.sessionId(), current.requestId(), delivery -> {
+            pendingSnapshot = new RuleSnapshotTask(context, server, sessions, admission, current.sessionId(), current.requestId(), delivery -> {
                 pendingSnapshot = null;
                 // 来源索引与快照同源：即使本次下发被替换，最新装配结果仍可作为来源视图的数据源
                 if (delivery.index() != null) { sourceIndex = delivery.index(); }
@@ -717,15 +743,16 @@ public final class RuleEditService {
         }
     }
 
-    // 会话已失效的统一回执
-    private RuleSaveResultPayload sessionLost(String sessionId, ServerPlayer player) {
-        return sessionLost(sessionId, player, "");
+    // 准入拒绝的统一回执：状态码与文案 key 由 EditAdmission 决定，这里只补会话号与操作号
+    private RuleSaveResultPayload lost(EditAdmission.Refusal refusal, String sessionId, String operationId) {
+        return result(sessionId, operationId, refusal.status(), refusal.messageCode(),
+                List.of(), List.of(), false, false);
     }
 
-    private RuleSaveResultPayload sessionLost(String sessionId, ServerPlayer player, String operationId) {
-        RuleSaveStatus status = sessions.isOwner(player.getUUID())
-                ? RuleSaveStatus.SESSION_EXPIRED : RuleSaveStatus.LOCK_NOT_OWNED;
-        return result(sessionId, operationId, status, status.messageKey(), List.of(), List.of(), false, false);
+    // 准入已通过但会话状态机拒绝推进（例如已进入 APPLYING）：按会话过期回执
+    private RuleSaveResultPayload sessionExpired(String sessionId, String operationId) {
+        return result(sessionId, operationId, RuleSaveStatus.SESSION_EXPIRED,
+                RuleSaveStatus.SESSION_EXPIRED.messageKey(), List.of(), List.of(), false, false);
     }
 
     // 组装回执载荷

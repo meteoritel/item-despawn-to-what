@@ -19,7 +19,7 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/core/network/pro
 
 ## 会话与目标锁
 
-编辑目标由 `RuleEditSessionLimits.TARGET_ID` 标识，全局只有一个。会话状态机与版本戳由 `EditSessionManager` 持有，网络入口 `RuleEditServerHandler` 只做就绪、权限与转发。
+编辑目标由 `RuleEditSessionLimits.TARGET_ID` 标识，全局只有一个。会话状态机与版本戳由 `EditSessionManager` 持有，准入顺序与拒绝状态码由 `core/service/EditAdmission` 唯一决定；网络入口 `RuleEditServerHandler` 只做就绪判定与转发。
 
 ```mermaid
 stateDiagram-v2
@@ -110,6 +110,7 @@ stateDiagram-v2
 - 已有在途保存时，同一 `operationId` 的重复提交不再触发新保存，由在途操作的终态统一作答；不同 `operationId` 按请求非法拒绝，并提示正在应用。
 - 在途保存按阶段推进：准备、校验、预备文件、写盘、回滚、读盘、解码、索引、应用、取消，阶段与计数通过进度载荷节流下发，客户端只用于展示。纯启停批次在校验后直接进入应用：索引在应用入口内重建，不经过写盘、读盘、解码与索引阶段。
 - 取锁失败、确认超时、心跳失效、失去权限属于会话类失败，回执会把会话置为失效；取消请求只发出信号，回滚结束前独占锁仍保持。
+- 权限拒绝 `NO_PERMISSION` 与会话类失败（`SESSION_EXPIRED`、`LOCK_NOT_OWNED`、`LOCK_BUSY`）在客户端同属会话失效分支，仅文案不同。
 - 玩家断开时清理分片传输；在途保存请求延后释放，其余会话按租约回收。
 - 保存回执沿用保存任务已确定的终态；完成时释放会话不覆盖写盘与重载结果。
 

@@ -52,6 +52,7 @@ final class RuleSnapshotTask implements ServerTask {
     private final RuleEditServerContext context;
     private final MinecraftServer server;
     private final EditSessionManager sessions;
+    private final EditAdmission admission;
     private final RuleOverlayStore store;
     private final RuleSaveReloadContext reloadContext;
     private final String sessionId;
@@ -78,8 +79,8 @@ final class RuleSnapshotTask implements ServerTask {
     private final Map<ResourceLocation, JsonObject> encoded = new LinkedHashMap<>();
 
     RuleSnapshotTask(RuleEditServerContext context, MinecraftServer server, EditSessionManager sessions,
-                     String sessionId, String requestId, Consumer<Delivery> completion) {
-        this.context = context; this.server = server; this.sessions = sessions;
+                     EditAdmission admission, String sessionId, String requestId, Consumer<Delivery> completion) {
+        this.context = context; this.server = server; this.sessions = sessions; this.admission = admission;
         store = sessions.store();
         this.sessionId = sessionId; this.requestId = requestId; this.completion = completion;
         profileStartedNanos = DevelopmentDiagnostics.start();
@@ -123,7 +124,8 @@ final class RuleSnapshotTask implements ServerTask {
 
     private StepResult advance(ServerTickBudget budget) {
         if (finished) { return StepResult.done(1); }
-        if (cancelled || !sessions.owns(sessionId) || context.saveReloadContext() != reloadContext) {
+        if (cancelled || EditAdmission.refusal(admission.admitSession(sessionId)) != null
+                || context.saveReloadContext() != reloadContext) {
             invalidate();
             pollCompletion();
             return finished ? StepResult.done(1) : StepResult.yield(1, 1);

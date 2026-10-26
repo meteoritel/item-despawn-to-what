@@ -46,6 +46,7 @@ final class RuleSaveTask implements ServerTask {
     private record RawReload(List<RawRuleEntry> entries, IssueCollector issues) { }
 
     private final EditSessionManager sessions;
+    private final EditAdmission admission;
     private final RuleOverlayStore store;
     private final RuleEditServerContext context;
     private final MinecraftServer server;
@@ -76,9 +77,10 @@ final class RuleSaveTask implements ServerTask {
     private final List<LoadedRule<Rule>> decoded = new ArrayList<>();
     private ServerTask apply;
 
-    RuleSaveTask(EditSessionManager sessions, RuleEditServerContext context, MinecraftServer server,
+    RuleSaveTask(EditSessionManager sessions, EditAdmission admission, RuleEditServerContext context, MinecraftServer server,
                  String sessionId, java.util.UUID owner, java.util.function.Supplier<String> text, Consumer<Outcome> completion) {
         this.sessions = sessions;
+        this.admission = admission;
         this.store = sessions.store();
         this.context = context;
         this.server = server;
@@ -141,8 +143,9 @@ final class RuleSaveTask implements ServerTask {
     @Override public StepResult step(ServerTickBudget budget) {
         if (phase == Phase.DONE) { return StepResult.done(1); }
         var player = server.getPlayerList().getPlayer(owner);
-        if (!sessions.owns(sessionId) || !sessions.isOwner(owner)
-                || !com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler.canEdit(player)) {
+        // 本步准入拒绝：中止时据此决定终态
+        EditAdmission.Refusal refusal = EditAdmission.refusal(admission.admitMember(player, sessionId));
+        if (refusal != null) {
             invalidate();
         }
         try {
@@ -160,9 +163,7 @@ final class RuleSaveTask implements ServerTask {
                     return StepResult.done(1);
                 }
                 RuleSaveStatus status = written ? RuleSaveStatus.SAVED_NOT_RELOADED
-                        : !sessions.owns(sessionId) || player == null ? RuleSaveStatus.SESSION_EXPIRED
-                        : !com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerHandler.canEdit(player)
-                        ? RuleSaveStatus.NO_PERMISSION : RuleSaveStatus.CANCELLED;
+                        : refusal != null ? refusal.status() : RuleSaveStatus.CANCELLED;
                 finish(status, "保存请求已取消");
                 return StepResult.done(1);
             }

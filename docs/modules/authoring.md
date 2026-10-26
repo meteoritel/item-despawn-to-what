@@ -36,7 +36,7 @@ authority: common/core/catalog、common/core/network、common/core/service、com
 
 ### 对外入口
 
-- 网络入口：`RuleEditPayloadRouter` 按载荷类型路由到 `RuleEditServerHandler`；后者是按覆盖层根目录缓存的薄转发层，并在每 tick 投递 `pollSaveProgress`、`pollSave`、`pollSnapshot`，由 `expireIdle` 回收超时会话。
+- 网络入口：`RuleEditPayloadRouter` 按载荷类型路由到 `RuleEditServerHandler`；后者按覆盖层根目录缓存，只做就绪判定与转发，会话号、持有者与权限由 `EditAdmission` 统一判定，并在每 tick 投递 `pollSaveProgress`、`pollSave`、`pollSnapshot`，由 `expireIdle` 回收超时会话。
 - 命令入口：`RuleCommandTree.register()` 注册 `idtw` 根节点，`config` 与 `rule` 子树常驻，`debug` 子树在开发环境挂载。
 - 服务端服务：`RuleEditService` 只产出不可变的下发载荷列表，网络层负责发送；`EditSessionManager` 持有会话；`RuleOverlayStore` 承载后台文件调用与磁盘修订指纹。
 - 目录入口：`RuleCatalogService` 的分页查询与失效，数据来自 `RuleCatalogSources`。
@@ -70,8 +70,9 @@ flowchart LR
 
 | 类型（`core/catalog`、`core/network`、`core/service`、`core/command`、`core/debug` 下） | 角色 | 职责 | 协作对象 |
 |---|---|---|---|
-| `RuleEditServerHandler` | 入口门面 | 按覆盖层根目录缓存会话管理器与服务；逐包转发；`canEdit` 与就绪判定；每 tick 轮询与超时回收 | `RuleEditService`、`EditSessionManager`、`RuleEditServerContext` |
-| `RuleEditService` | 应用服务 | 会话持有者校验、幂等回放、分片收齐判定、构造保存任务、组装回执、按需安排新快照；只产出待下发载荷 | `EditSessionManager`、`RuleSaveTask`、`RuleSnapshotTask`、`RuleCatalogService` |
+| `RuleEditServerHandler` | 入口门面 | 按覆盖层根目录缓存会话管理器与服务；逐包转发；就绪判定；在唯一构造点注入 `canEdit` 权限谓词；每 tick 轮询与超时回收 | `RuleEditService`、`EditSessionManager`、`RuleEditServerContext` |
+| `EditAdmission` | 准入判定 | 按 owns → isOwner → confirmed → permission 固定顺序准入；`Reason` 表统一映射拒绝状态码与文案 key；调用方只组装载荷 | `EditSessionManager`、`RuleEditService` |
+| `RuleEditService` | 应用服务 | 按准入结论校验会话归属、幂等回放、分片收齐判定、构造保存任务、组装回执（含准入拒绝回执）、按需安排新快照；只产出待下发载荷 | `EditSessionManager`、`RuleSaveTask`、`RuleSnapshotTask`、`RuleCatalogService` |
 | `EditSessionManager` / `RuleEditSessionLimits` | 目标锁 | 单目标全局唯一会话的状态机；租约、心跳与申请窗口以服务端活动 tick 计时；版本戳读写委托覆盖层存储 | `RuleOverlayStore`、`RuleEditService` |
 | `RuleOverlayStore` | 文件侧并发边界 | 后台文件调用队列、磁盘修订指纹、覆盖层根目录就绪与停滞检测 | `RuleOverlayWriter`、`RuleSaveTask`、`RuleSnapshotTask` |
 | `RuleOverlayWriter` | 原子落盘 | 加载原始字节、按规则 id 建位置索引、临时文件写入、元数据与内容两段复核、`.bak` 备份、原子替换与唯一提交确认点、失败逆序回滚 | `RuleSaveTask`、`RuleOverlayStore` |
@@ -127,7 +128,7 @@ stateDiagram-v2
 - **幂等**：同一会话内以操作标识回放结果，重复提交不再二次落盘；幂等表按会话整体失效。
 - **版本戳推进**：成功保存与成功重载都推进版本；快照装配与保存重读前后都比对磁盘指纹，中途变化即判失败而不是覆盖别人的改动。
 - **在途互斥**：已有保存在进行时，同一操作回空结果、不同操作按协议拒绝。
-- **会话边界**：所有入口先校验会话号与持有者，会话失效或无权限的请求在触达文件系统前就被拒绝。
+- **会话边界**：所有入口经 `EditAdmission` 按 owns → isOwner → confirmed → permission 顺序准入，会话失效或无权限的请求在触达文件系统前就被拒绝。
 - **条数限额**：变更集解析与覆盖层写入入口共同校验 `RuleEditLimits.MAX_EDITS_PER_CHANGE_SET`，单次最多 2048 条编辑。
 - **保存终态**：保存任务决定写盘与重载结果；结束时的会话释放只清锁归属，回执保留任务终态。
 
@@ -170,7 +171,7 @@ flowchart TB
 ### 4.5 命令权限口径
 
 - 根节点不统一鉴权：编辑锁状态查询对所有玩家开放，权限下放到各子分支，避免“查看”也被权限挡住。
-- 编辑与写操作沿用同一口径：单人存档房主直接放行，其余执行者按权限等级判定；命令与网络层 `canEdit` 共用 `RuleEditPermissions`，开放局域网后的访客按权限等级判定。
+- 编辑与写操作沿用同一口径：单人存档房主直接放行，其余执行者按权限等级判定；权限来源统一为 `RuleEditPermissions.hasAccess`，命令分支经 `requires` 接入，网络侧由 `RuleEditServerHandler.sessions(...)` 注入为 `canEdit` 谓词交给 `EditAdmission`，开放局域网后的访客按权限等级判定。
 - 编辑命令要求玩家实体：先判权限再取锁，取锁失败时回显持有者；强制释放需要编辑权限等级，原持有者在线时收到会话过期回执；会话处于在途保存时，改由保存收尾的终态回执携带。
 - 读取、重载、启停与孤儿清理子命令在保存进行中回“保存忙碌”，避开文件替换窗口；启停与孤儿清理在应用成功后安排回扫，运行时未就绪时明确回答未应用。
 - 反馈统一走命令层的本地化出口：成功与失败都按语言 key 组装，缺省参数带裁剪上限。

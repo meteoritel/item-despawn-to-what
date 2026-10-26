@@ -79,7 +79,7 @@ public final class RuleEditServerHandler {
         Path root = Objects.requireNonNull(context.overlayRoot(), "overlayRoot");
         if (sessionManager == null || !root.equals(sessionOverlayRoot)) {
             sessionManager = new EditSessionManager(root);
-            editService = new RuleEditService(sessionManager);
+            editService = new RuleEditService(sessionManager, RuleEditServerHandler::canEdit);
             sessionOverlayRoot = root;
         }
         return sessionManager;
@@ -218,7 +218,7 @@ public final class RuleEditServerHandler {
         }
         RuleEditService.Expired expired = editService.expireSessions(server, server.getTickCount());
         RuleEditService.LifespanReply reply = editService.pollLifespan(server, context);
-        if (reply != null && canEdit(reply.player())) context.sendTo(reply.player(), reply.payload());
+        if (reply != null) context.sendTo(reply.player(), reply.payload());
         if (expired.target() != null) {
             dispatch(context, expired.target(), expired.outbound());
         }
@@ -271,7 +271,7 @@ public final class RuleEditServerHandler {
         sessionOverlayRoot = null;
     }
 
-    // 就绪 + 权限 + 服务层三重检查；失败时把结构化回执直接发给玩家
+    // 就绪检查与转发；会话号、持有者与权限由服务层准入判定
     private static @Nullable RuleEditService readyService(ServerPlayer player, @Nullable RuleEditServerContext context,
                                                           String sessionId) {
         return readyService(player, context, sessionId, "");
@@ -283,34 +283,28 @@ public final class RuleEditServerHandler {
             LOGGER.warn("编辑请求被忽略：运行时上下文不可用");
             return null;
         }
-        if ((!isReady(context) || !canEdit(player)) && !operationId.isEmpty()
-                && editService != null && editService.saving() && sessionManager != null
-                && sessionManager.owns(sessionId) && sessionManager.isOwner(player.getUUID())) {
-            // 重发在途保存不能提前返回 NO_PERMISSION/UNAVAILABLE；原操作终态统一在收尾后发送。
-            editService.forceRelease();
-            return null;
-        }
         if (!isReady(context)) {
-            sendResult(context, player, sessionId, operationId, RuleSaveStatus.UNAVAILABLE);
-            return null;
-        }
-        if (!canEdit(player)) {
-            sendResult(context, player, sessionId, operationId, RuleSaveStatus.NO_PERMISSION);
+            // 重发在途保存不提前回 UNAVAILABLE：先中止该次保存，终态统一在收尾后发送
+            if (editService != null && editService.abortReplayedSave(player, sessionId, operationId)) {
+                return null;
+            }
+            sendUnavailable(context, player, sessionId, operationId);
             return null;
         }
         RuleEditService service = service(context);
         if (service == null) {
-            sendResult(context, player, sessionId, operationId, RuleSaveStatus.UNAVAILABLE);
+            sendUnavailable(context, player, sessionId, operationId);
             return null;
         }
         return service;
     }
 
-    // 发送入口拒绝回执；保存请求保留原操作号，以便客户端配对
-    private static void sendResult(RuleEditServerContext context, ServerPlayer player, String sessionId,
-                                   String operationId, RuleSaveStatus status) {
-        context.sendTo(player, RuleSaveResultPayload.of(sessionId(sessionId), operationId, status,
-                status.messageKey(), List.of(), 0, false, false, List.of()));
+    // 运行时不可用回执；保存请求保留原操作号，以便客户端配对
+    private static void sendUnavailable(RuleEditServerContext context, ServerPlayer player, String sessionId,
+                                        String operationId) {
+        context.sendTo(player, RuleSaveResultPayload.of(sessionId(sessionId), operationId,
+                RuleSaveStatus.UNAVAILABLE, RuleSaveStatus.UNAVAILABLE.messageKey(),
+                List.of(), 0, false, false, List.of()));
     }
 
     // 按顺序下发一次请求产生的全部载荷
