@@ -1,5 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.api;
 
+import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
 import com.mojang.serialization.MapCodec;
 import net.minecraft.resources.ResourceLocation;
 
@@ -14,6 +15,11 @@ public interface TypeDefinition<P> {
 
     // 该类型专属参数的编解码器（扁平字段，与规则/效果通用字段处在同一对象中）
     MapCodec<P> codec();
+
+    // 该类型参数的声明；默认没有参数（第三方类型沿用只读 JSON 回退）
+    default ParamList params() {
+        return ParamList.EMPTY;
+    }
 
     // 校验类型专属参数的语义合法性；默认通过，具体类型按需重写
     default boolean validateParams(P params, IssueCollector issues, String fieldPath) {

@@ -70,7 +70,7 @@ flowchart LR
 - 加载层只持有 `RuleDecoder` 与 `IssueCollector`，与模型层保持解耦。
 - 装配层用它把解码器、校验器与问题收集器串起来。
 - 运行时的表达式求值、组派发与结算用条件/效果契约；调度实现用 `core/api/scheduler`。
-- 命令、调试与编辑协议复用 `Issue` 的文本化与字段路径；客户端编辑器复用 `RuleFields`、`TypeDispatch` 与条件表达式编解码。
+- 命令、调试与编辑协议复用 `Issue` 的文本化与字段路径；客户端编辑器复用 `RuleFields`、`TypeDispatch`、条件表达式编解码与类型参数声明（`params()`）。
 
 ## 3. 关键类地图
 
@@ -78,7 +78,8 @@ flowchart LR
 
 | 契约（`core/api` 下） | 角色 | 职责 | 协作对象 |
 |---|---|---|---|
-| `TypeDefinition` / `TypeRegistry` / `TypeDispatch` | 注册与分发入口 | 类型定义 = 稳定 id + `MapCodec` + 参数校验；`TypeDispatch.flat` 让类型专属字段与通用字段同处一个 JSON 对象，字段白名单取该类型 `codec().keys()`；编码未注册类型直接抛 `IllegalStateException` | `core/registry` 实现注册表；`core/model` 提供 `EffectType`/`ConditionType` 特化 |
+| `TypeDefinition` / `TypeRegistry` / `TypeDispatch` | 注册与分发入口 | 类型定义 = 稳定 id + `MapCodec` + 参数校验 + 参数声明（`params()`）；`TypeDispatch.flat` 让类型专属字段与通用字段同处一个 JSON 对象，字段白名单取该类型 `codec().keys()`；编码未注册类型直接抛 `IllegalStateException` | `core/registry` 实现注册表；`core/model` 提供 `EffectType`/`ConditionType` 特化 |
+| `ParamSpec` / `ParamList`（`core/api/param`） | 参数声明 | 单字段的类型、wire 存在性、值域、默认值、新建初值、单位与编辑器投影元数据；`fieldFor` 生成 Codec 字段构件，`check` 做单字段校验，`ParamList` 保序聚合 | 各内置类型的 `PARAMS`；客户端 `ParamProjection` 与新建初值派生 |
 | `ConditionContext` / `ConditionEvaluator` / `ConditionResult` / `Evaluability` | 条件侧扩展点 | 求值器是纯谓词，只读上下文；结果由 `ConditionResult` 承载，只有 `MATCH` 通过、判不了与出错原样穿透取反节点；上下文不足以判定由 `Evaluability` 前置声明 | `core/model/ConditionType` 把三者绑到一个可注册类型；运行时表达式求值器做树聚合 |
 | `EffectExecutor` / `EffectContext` / `EffectExecution` / `EffectStep` / `EffectPreparation` / `EffectResult` | 效果侧扩展点 | 执行器只做世界操作并返回真实回执；`EffectExecution.advance` 返回 `EffectStep`，明确区分完成、预算续接、正常延时和区块等待；`requiredChunks()` 声明本次完整需求并替代旧断点请求，中途等待返回 `AwaitChunks`，运行时统一检查、排期和超时；`EffectPreparation` 承载成功当刻固定的输入与跳过原因；回执区分完成量与已受理量 | `core/model/EffectType`；运行时的组派发、候选位置策略与结算记账 |
 | `ServerTickBudget` / `StepWorkCounter` | 预算与计价（并发敏感） | 时间上限与全局工作量上限同时生效；`begin` 只由调度器每 tick 调用；`exhausted()` 无副作用，`charge` / `chargeDrain` 记账并提交耗尽标记，`finish` 冻结耗时，`snapshot` 产出只读快照；计价窗口按服务器线程隔离、支持嵌套，由调度器在步骤前后开合，任务按真实完成的世界操作量上报；调度器取回执声明值与上报值的较大者计费，lane 配额与效果配额共用该结果 | 调度实现、每个 `ServerTask.step`、长循环效果执行器 |

@@ -3,6 +3,8 @@ package com.meteorite.itemdespawntowhat.core.type.condition;
 import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
+import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
+import com.meteorite.itemdespawntowhat.core.api.param.ResLocListSpec;
 import com.meteorite.itemdespawntowhat.core.extension.DynamicReferenceCheck;
 import com.meteorite.itemdespawntowhat.core.extension.DynamicReferenceContext;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
@@ -32,11 +34,19 @@ public record DimensionCondition(List<ResourceLocation> dimensions) implements C
     // 参数 JSON 字段名
     private static final String FIELD_DIMENSIONS = "dimensions";
 
+    // 参数声明：wire 上可省略（缺省空表），语义上至少一项
+    public static final ResLocListSpec DIMENSIONS = ResLocListSpec
+            .defaultedEmpty(FIELD_DIMENSIONS, "minecraft:dimension")
+            .requireNonEmpty()
+            .initial(List.of());
+    public static final ParamList PARAMS = ParamList.of(DIMENSIONS);
+
     // 参数编解码器：叶级取反不受支持（改用条件树的 inverted 节点）；列表缺省为空，缺失由 validateParams 给出可读错误
-    public static final MapCodec<DimensionCondition> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-            ResourceLocation.CODEC.listOf().optionalFieldOf(FIELD_DIMENSIONS, List.of())
-                    .forGetter(DimensionCondition::dimensions)
-    ).apply(instance, DimensionCondition::new));
+    public static MapCodec<DimensionCondition> codec() {
+        return RecordCodecBuilder.mapCodec(instance -> instance.group(
+                DIMENSIONS.fieldFor(DimensionCondition::dimensions)
+        ).apply(instance, DimensionCondition::new));
+    }
 
     // 参数列表不可变
     public DimensionCondition {
@@ -51,13 +61,13 @@ public record DimensionCondition(List<ResourceLocation> dimensions) implements C
 
     // 条件类型定义，供注册表登记；静态工厂不能叫 type()（与 Condition#type 实例方法签名冲突）
     public static ConditionType<DimensionCondition> conditionType() {
-        return new SimpleConditionType<>(ID, CODEC, DimensionCondition::validateParams, DimensionEvaluator::test);
+        return new SimpleConditionType<>(ID, codec(), DimensionCondition::validateParams, DimensionEvaluator::test,
+                PARAMS);
     }
 
     // 参数语义校验：维度列表必填
     public static boolean validateParams(DimensionCondition params, IssueCollector issues, String fieldPath) {
-        return ParamChecks.notEmpty(params.dimensions(), FIELD_DIMENSIONS, issues,
-                ParamChecks.child(fieldPath, FIELD_DIMENSIONS));
+        return DIMENSIONS.check(params.dimensions(), issues, fieldPath);
     }
 
     /**

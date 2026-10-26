@@ -6,6 +6,9 @@ import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
+import com.meteorite.itemdespawntowhat.core.api.param.RefListSpec;
+import com.meteorite.itemdespawntowhat.core.api.param.RefSpec;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleConditionType;
@@ -35,11 +38,23 @@ public record FluidPresentCondition(TaggedId fluid, List<TaggedId> fluids) imple
     // minecraft:empty 在流体注册表中存在，但永远不可能匹配到任何实际流体
     private static final ResourceLocation EMPTY_FLUID = ResourceLocation.withDefaultNamespace("empty");
 
+    // 参数声明：fluid 为历史单值字段（可空），fluids 为优先使用的列表；两者共用同一组界面文案
+    public static final RefSpec FLUID = RefSpec.nullable(FIELD_FLUID, "minecraft:fluid")
+            .label("fluid_present.fluid")
+            .hidden();
+    public static final RefListSpec FLUIDS = RefListSpec
+            .defaultedEmpty(RuleFields.FLUIDS, "minecraft:fluid")
+            .label("fluid_present.fluid")
+            .hint("fluid_present.fluid.hint");
+    public static final ParamList PARAMS = ParamList.of(FLUID, FLUIDS);
+
     /** 参数编解码器：fluid 缺省为 null（任意流体）。 */
-    public static final MapCodec<FluidPresentCondition> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-            TaggedId.CODEC.optionalFieldOf(FIELD_FLUID).forGetter(value -> Optional.ofNullable(value.fluid())),
-            TaggedId.CODEC.listOf().optionalFieldOf(RuleFields.FLUIDS, List.of()).forGetter(FluidPresentCondition::fluids)
-    ).apply(instance, (fluid, fluids) -> new FluidPresentCondition(fluid.orElse(null), fluids)));
+    public static MapCodec<FluidPresentCondition> codec() {
+        return RecordCodecBuilder.mapCodec(instance -> instance.group(
+                FLUID.fieldForNullable(value -> Optional.ofNullable(value.fluid())),
+                FLUIDS.fieldFor(FluidPresentCondition::fluids)
+        ).apply(instance, (fluid, fluids) -> new FluidPresentCondition(fluid.orElse(null), fluids)));
+    }
 
     public FluidPresentCondition {
         fluids = List.copyOf(fluids);
@@ -58,7 +73,8 @@ public record FluidPresentCondition(TaggedId fluid, List<TaggedId> fluids) imple
 
     /** 条件类型定义，供注册表登记；静态工厂不能叫 type()（与 Condition#type 实例方法签名冲突） */
     public static ConditionType<FluidPresentCondition> conditionType() {
-        return new SimpleConditionType<>(ID, CODEC, FluidPresentCondition::validateParams, FluidPresentEvaluator::test);
+        return new SimpleConditionType<>(ID, codec(), FluidPresentCondition::validateParams, FluidPresentEvaluator::test,
+                PARAMS);
     }
 
     /** 参数语义校验：fluid 为空表示任意流体（合法）；非空时做注册表存在性校验并提示 empty 的无效用法 */

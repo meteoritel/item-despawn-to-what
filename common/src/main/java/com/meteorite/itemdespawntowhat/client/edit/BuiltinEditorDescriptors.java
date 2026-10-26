@@ -1,28 +1,27 @@
 package com.meteorite.itemdespawntowhat.client.edit;
 
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import com.meteorite.itemdespawntowhat.core.api.TypeDefinition;
+import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
 import com.meteorite.itemdespawntowhat.core.model.CatalystCost;
+import com.meteorite.itemdespawntowhat.core.service.RuleEditSessionLimits;
+import com.meteorite.itemdespawntowhat.core.type.effect.EntityProduct;
+import com.meteorite.itemdespawntowhat.core.type.effect.PlaceBlockEffect;
+import com.meteorite.itemdespawntowhat.core.type.effect.SpawnEntityEffect;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
-import com.meteorite.itemdespawntowhat.core.service.RuleEditSessionLimits;
-import com.meteorite.itemdespawntowhat.core.type.condition.YLevelCondition;
-import com.meteorite.itemdespawntowhat.core.type.effect.PlaceBlockEffect;
 
 /**
- * 内置条件/效果编辑器描述符表：10 个条件 + 10 个效果各注册一条描述符。
- * <p>字段名取自 core 的 {@link RuleFields} 常量与 core 类型定义的 JSON 字段，取值域与 core 侧参数一致；
- * 界面通过通用表单引擎按描述符渲染，不写 22 个手写表单类。
+ * 内置条件/效果编辑器描述符表：每个内置类型注册一条描述符。
+ * <p>字段由 core 侧的类型参数声明经 {@link ParamProjection} 投影得到，此处只补充参数声明之外的
+ * 界面元素（说明行）与运行期配置相关的窗口覆盖；因此新增参数只需在 core 侧声明一次。
  * <p>未在此注册的第三方类型由 {@link EditorRegistries#CONDITIONS}/{@link EditorRegistries#EFFECTS}
  * 回退为只读 JSON 摘要，且草稿原样保留未识别字段。
  */
 public final class BuiltinEditorDescriptors {
-    /** 高度条件滑条的常用下界；既有超出窗口的合法参数仍保留。 */
-    public static final int Y_LEVEL_SLIDER_MIN = -64;
-    /** 高度条件滑条的常用上界。 */
-    public static final int Y_LEVEL_SLIDER_MAX = 512;
 
     /** 寿命应答未抵达时的滑条窗口，沿用服务端默认自然寿命并换算为秒。 */
     public static final int DEFAULT_TRIGGER_WINDOW_SECONDS =
@@ -30,8 +29,6 @@ public final class BuiltinEditorDescriptors {
 
     // 字段标签前缀
     private static final String FIELD = TypeLabels.UI_PREFIX + "field.";
-    // 效果公共字段标签前缀
-    private static final String COMMON = FIELD + "common.";
     // 规则级标签前缀
     private static final String RULE = TypeLabels.UI_PREFIX + "rule.";
 
@@ -39,6 +36,16 @@ public final class BuiltinEditorDescriptors {
     public static final ResourceLocation RULE_DESCRIPTOR = id("rule");
     /** 源物品对象描述符 id（仅界面按名取用） */
     public static final ResourceLocation SOURCE_DESCRIPTOR = id("source");
+
+    // 纯说明行：不写入 JSON，只能由描述符表补充
+    private static final Map<ResourceLocation, List<EditorField>> CONDITION_NOTES = Map.of(
+            id("outdoor"), List.of(EditorField.note(FIELD + "outdoor.note")),
+            id("surrounding_blocks"), List.of(EditorField.note(FIELD + "surrounding_blocks.note")),
+            id("time_of_day"), List.of(EditorField.note(FIELD + "time_of_day.note")),
+            id("light_level"), List.of(EditorField.note(FIELD + "light_level.note")));
+
+    private static final Map<ResourceLocation, List<EditorField>> EFFECT_NOTES = Map.of(
+            id("weather"), List.of(EditorField.note(FIELD + "weather.note")));
 
     private static volatile boolean bootstrapped;
 
@@ -69,208 +76,66 @@ public final class BuiltinEditorDescriptors {
         return ResourceLocation.fromNamespaceAndPath(TypeLabels.OWN_NAMESPACE, path);
     }
 
-    // ---- 条件 ----
+    // ---- 条件与效果 ----
 
     private static void registerConditions() {
-        String h = FIELD;
-
-        // dimension：维度白名单（纯资源位置列表，不支持标签）
-        ResourceLocation dimension = id("dimension");
-        EditorRegistries.CONDITIONS.register(new TypeEditorDescriptor(dimension, TypeLabels.conditionLabel(dimension), List.of(
-                EditorField.rlList(RuleFields.CONDITION_DIMENSIONS, h + "dimension.dimensions", "minecraft:dimension")
-                    .asRequired()
-        ), false));
-
-        // biome：exact 用 biomes；climate 用 6 个气候区间
-        ResourceLocation biome = id("biome");
-        List<EditorField> biomeFields = new ArrayList<>();
-        biomeFields.add(EditorField.enumIn(RuleFields.CONDITION_MODE, h + "biome.mode", "biome_mode",
-                    RuleFields.CONDITION_MODE_EXACT, RuleFields.CONDITION_MODE_CLIMATE));
-        biomeFields.add(EditorField.tagList(RuleFields.CONDITION_BIOMES, h + "biome.biomes", "minecraft:worldgen/biome")
-                .withHint(h + "biome.biomes.hint"));
-        biomeFields.add(EditorField.climateRange(RuleFields.CONDITION_AXIS_TEMPERATURE, h + "biome.temperature"));
-        biomeFields.add(EditorField.climateRange(RuleFields.CONDITION_AXIS_HUMIDITY, h + "biome.humidity"));
-        biomeFields.add(EditorField.climateRange(RuleFields.CONDITION_AXIS_CONTINENTALNESS, h + "biome.continentalness"));
-        biomeFields.add(EditorField.climateRange(RuleFields.CONDITION_AXIS_EROSION, h + "biome.erosion"));
-        biomeFields.add(EditorField.climateRange(RuleFields.CONDITION_AXIS_DEPTH, h + "biome.depth"));
-        biomeFields.add(EditorField.climateRange(RuleFields.CONDITION_AXIS_WEIRDNESS, h + "biome.weirdness"));
-        EditorRegistries.CONDITIONS.register(new TypeEditorDescriptor(biome, TypeLabels.conditionLabel(biome), biomeFields, false));
-
-        // weather：三种天气
-        ResourceLocation weather = id("weather");
-        EditorRegistries.CONDITIONS.register(new TypeEditorDescriptor(weather, TypeLabels.conditionLabel(weather), List.of(
-                EditorField.enumIn(RuleFields.CONDITION_WEATHER, h + "weather.weather", "weather_kind", "clear", "rain", "thunder")
-        ), false));
-
-        // outdoor：无参数，取反请用父节点 inverted
-        ResourceLocation outdoor = id("outdoor");
-        EditorRegistries.CONDITIONS.register(new TypeEditorDescriptor(outdoor, TypeLabels.conditionLabel(outdoor), List.of(
-                EditorField.note(h + "outdoor.note")
-        ), false));
-
-        // surrounding_blocks：六个方向至少填一个
-        ResourceLocation surrounding = id("surrounding_blocks");
-        EditorRegistries.CONDITIONS.register(new TypeEditorDescriptor(surrounding, TypeLabels.conditionLabel(surrounding), List.of(
-                EditorField.optionalTag(RuleFields.CONDITION_SIDE_UP, h + "surrounding_blocks.up", "minecraft:block"),
-                EditorField.optionalTag(RuleFields.CONDITION_SIDE_DOWN, h + "surrounding_blocks.down", "minecraft:block"),
-                EditorField.optionalTag(RuleFields.CONDITION_SIDE_NORTH, h + "surrounding_blocks.north", "minecraft:block"),
-                EditorField.optionalTag(RuleFields.CONDITION_SIDE_SOUTH, h + "surrounding_blocks.south", "minecraft:block"),
-                EditorField.optionalTag(RuleFields.CONDITION_SIDE_EAST, h + "surrounding_blocks.east", "minecraft:block"),
-                EditorField.optionalTag(RuleFields.CONDITION_SIDE_WEST, h + "surrounding_blocks.west", "minecraft:block"),
-                EditorField.note(h + "surrounding_blocks.note")
-        ), false));
-
-        // catalyst_present：催化剂物品与数量
-        ResourceLocation catalyst = id("catalyst_present");
-        EditorRegistries.CONDITIONS.register(new TypeEditorDescriptor(catalyst, TypeLabels.conditionLabel(catalyst), List.of(
-                EditorField.tagList(RuleFields.CONDITION_ITEMS, h + "catalyst_present.items", "minecraft:item").asRequired(),
-                EditorField.itemCounts(RuleFields.ITEM_COUNTS, h + "catalyst_present.count", 1, 64)
-        ), false));
-
-        // fluid_present：留空 = 任意流体
-        ResourceLocation fluid = id("fluid_present");
-        EditorRegistries.CONDITIONS.register(new TypeEditorDescriptor(fluid, TypeLabels.conditionLabel(fluid), List.of(
-                EditorField.tagList(RuleFields.FLUIDS, h + "fluid_present.fluid", "minecraft:fluid")
-                        .withHint(h + "fluid_present.fluid.hint")
-        ), false));
-
-        // time_of_day：可跨零点
-        ResourceLocation timeOfDay = id("time_of_day");
-        EditorRegistries.CONDITIONS.register(new TypeEditorDescriptor(timeOfDay, TypeLabels.conditionLabel(timeOfDay), List.of(
-                EditorField.integer(RuleFields.CONDITION_FROM, h + "time_of_day.from", 0, 23999),
-                EditorField.integer(RuleFields.CONDITION_TO, h + "time_of_day.to", 0, 23999),
-                EditorField.note(h + "time_of_day.note")
-        ), false));
-
-        // Integer.MAX_VALUE 仅表达 int 的存储边界，常用滑条窗口不限制 JSON 参数高度。
-        ResourceLocation yLevel = id("y_level");
-        EditorRegistries.CONDITIONS.register(new TypeEditorDescriptor(yLevel, TypeLabels.conditionLabel(yLevel), List.of(
-                EditorField.optionalInteger(RuleFields.CONDITION_MIN, h + "y_level.min", YLevelCondition.MIN_Y, Integer.MAX_VALUE)
-                        .withNumbers(NumericDomain.integers(YLevelCondition.MIN_Y, Integer.MAX_VALUE, Y_LEVEL_SLIDER_MIN, Y_LEVEL_SLIDER_MAX)),
-                EditorField.optionalInteger(RuleFields.CONDITION_MAX, h + "y_level.max", YLevelCondition.MIN_Y, Integer.MAX_VALUE)
-                        .withNumbers(NumericDomain.integers(YLevelCondition.MIN_Y, Integer.MAX_VALUE, Y_LEVEL_SLIDER_MIN, Y_LEVEL_SLIDER_MAX))
-        ), false));
-
-        // light_level：两端全空 = 恒真
-        ResourceLocation lightLevel = id("light_level");
-        EditorRegistries.CONDITIONS.register(new TypeEditorDescriptor(lightLevel, TypeLabels.conditionLabel(lightLevel), List.of(
-                EditorField.optionalInteger(RuleFields.CONDITION_MIN, h + "light_level.min", 0, 15),
-                EditorField.optionalInteger(RuleFields.CONDITION_MAX, h + "light_level.max", 0, 15),
-                EditorField.note(h + "light_level.note")
-        ), false));
+        for (TypeDefinition<?> type : ClientTypeRegistries.conditions().all()) {
+            register(EditorRegistries.CONDITIONS, type, TypeLabels.conditionLabel(type.id()),
+                    CONDITION_NOTES.getOrDefault(type.id(), List.of()));
+        }
     }
 
-    // ---- 效果 ----
-
     private static void registerEffects() {
-        String h = FIELD;
+        for (TypeDefinition<?> type : ClientTypeRegistries.effects().all()) {
+            register(EditorRegistries.EFFECTS, type, TypeLabels.effectLabel(type.id()),
+                    EFFECT_NOTES.getOrDefault(type.id(), List.of()));
+        }
+    }
 
-        // 统一实体产出；实际参数表单按子类型生成，不展示不相容字段。
-        registerEffect(id("spawn_entity"), entityFields("item"));
+    private static void register(TypeEditorRegistry registry, TypeDefinition<?> type, Component label,
+                                  List<EditorField> notes) {
+        registry.register(new TypeEditorDescriptor(type.id(), label, fields(type, notes), false));
+    }
 
-        // place_block：block 与 use_source_block 至少一个。
-        // radius 的后端合法域不设静态上界，实际可用上限由服务端配置（max_place_block_radius）在加载/保存时校验；
-        // 滑条窗口先取配置默认值，打开编辑器后再按服务端随开屏载荷下发的上限刷新。
-        // limit 的滑条窗口以默认半径的方框容量为初值，编辑时再按草稿当前 radius 刷新并联动写入新的容量（见结果页绑定）。
-        ResourceLocation placeBlock = id("place_block");
-        registerEffect(placeBlock, List.of(
-                EditorField.optionalTag("block", h + "place_block.block", "minecraft:block"),
-                EditorField.bool("use_source_block", h + "place_block.use_source_block"),
-                EditorField.enumIn("shape", h + "place_block.shape", "place_block_shape", "square", "circle", "cross").optional(),
-                EditorField.integer("count", h + "place_block.count", 1, 64).optional(),
-                EditorField.integerSlider(PlaceBlockEffect.RADIUS_FIELD, h + "place_block.radius",
+    // 参数投影 + 说明行；说明行插在公共字段（delay_ticks/chance）之前，与专属字段保持同组
+    private static List<EditorField> fields(TypeDefinition<?> type, List<EditorField> notes) {
+        List<EditorField> fields = new ArrayList<>(ParamProjection.fields(type.params(), type.id()));
+        if (type.id().equals(id("place_block"))) {
+            widenRadiusWindow(fields);
+        }
+        int insertAt = fields.size();
+        for (int index = 0; index < fields.size(); index++) {
+            String name = fields.get(index).name();
+            if (RuleFields.DELAY_TICKS.equals(name) || RuleFields.CHANCE.equals(name)) {
+                insertAt = index;
+                break;
+            }
+        }
+        fields.addAll(insertAt, notes);
+        return fields;
+    }
+
+    // 半径的后端合法域不设静态上界，实际可用上限由服务端配置在加载/保存时校验；
+    // 滑条窗口先取配置默认值，打开编辑器后再按服务端随开屏载荷下发的上限刷新。
+    private static void widenRadiusWindow(List<EditorField> fields) {
+        for (int index = 0; index < fields.size(); index++) {
+            EditorField field = fields.get(index);
+            if (PlaceBlockEffect.RADIUS_FIELD.equals(field.name())) {
+                fields.set(index, field.withNumbers(NumericDomain.integers(
                         PlaceBlockEffect.MIN_RADIUS, Integer.MAX_VALUE,
-                        PlaceBlockEffect.MIN_RADIUS, ServerConfig.DEFAULT.maxPlaceBlockRadius()).optional(),
-                EditorField.optionalInteger(PlaceBlockEffect.LIMIT_FIELD, h + "place_block.limit",
-                        PlaceBlockEffect.MIN_LIMIT, Integer.MAX_VALUE)
-                        .withNumbers(NumericDomain.integers(PlaceBlockEffect.MIN_LIMIT, Integer.MAX_VALUE,
-                                PlaceBlockEffect.MIN_LIMIT,
-                                PlaceBlockEffect.limitUpperBound(PlaceBlockEffect.DEFAULT_RADIUS)))
-        ));
-
-        // loot_table：战利品表不支持标签
-        ResourceLocation lootTable = id("loot_table");
-        registerEffect(lootTable, List.of(
-                EditorField.resourceLocation("loot_table", h + "loot_table.loot_table"),
-                EditorField.decimal("luck", h + "loot_table.luck", -100.0D, 100.0D).optional()
-        ));
-
-        // lightning
-        ResourceLocation lightning = id("lightning");
-        registerEffect(lightning, List.of(
-                EditorField.integer("count", h + "lightning.count", 1, 16).optional()
-        ));
-
-        // explosion
-        ResourceLocation explosion = id("explosion");
-        registerEffect(explosion, List.of(
-                EditorField.decimal("power", h + "explosion.power", 0.0D, 16.0D).optional(),
-                EditorField.bool("fire", h + "explosion.fire"),
-                EditorField.bool("visual_only", h + "explosion.visual_only")
-        ));
-
-        // arrow_rain：药水效果子列表
-        ResourceLocation arrowRain = id("arrow_rain");
-        registerEffect(arrowRain, List.of(
-                EditorField.integer("count", h + "arrow_rain.count", 1, 256).optional(),
-                EditorField.enumIn("pickup", h + "arrow_rain.pickup", "arrow_rain_pickup", "disallowed", "allowed", "creative_only").optional(),
-                EditorField.subList("potion_effects", h + "arrow_rain.potion_effects",
-                        EditorField.tag("effect", h + "arrow_rain.effect", "minecraft:mob_effect"),
-                        EditorField.integer("duration_ticks", h + "arrow_rain.duration_ticks", 1, 1000000).optional(),
-                        EditorField.amplifier("amplifier", h + "arrow_rain.amplifier").optional())
-                        .withHint(h + "arrow_rain.potion_effects.hint")
-        ));
-
-        // weather（效果）：mode=clear 时 thundering 无效
-        ResourceLocation weatherEffect = id("weather");
-        registerEffect(weatherEffect, List.of(
-                EditorField.enumIn("mode", h + "weather.mode", "weather_effect_mode", "rain", "clear"),
-                EditorField.integer("duration_ticks", h + "weather.duration_ticks", 1, 24000).optional(),
-                EditorField.bool("thundering", h + "weather.thundering"),
-                EditorField.note(h + "weather.note")
-        ));
-
+                        PlaceBlockEffect.MIN_RADIUS, ServerConfig.DEFAULT.maxPlaceBlockRadius())));
+                return;
+            }
+        }
     }
 
     /** 生成选中子类型的参数描述符；公共字段沿用注册表，第三方类型不受影响。 */
     public static TypeEditorDescriptor entityDescriptor(String variant) {
-        TypeEditorDescriptor base = EditorRegistries.EFFECTS.descriptorFor(id("spawn_entity"));
-        List<EditorField> fields = new ArrayList<>(entityFields(variant));
-        base.fields().stream().filter(field -> List.of("delay_ticks", "chance").contains(field.name()))
-                .forEach(fields::add);
-        return new TypeEditorDescriptor(base.id(), base.label(), fields, false);
-    }
-
-    private static List<EditorField> entityFields(String variant) {
-        return switch (variant) {
-            case "mob" -> List.of(
-                    EditorField.tag("entity", FIELD + "spawn_entity.mob", "minecraft:entity_type"),
-                    EditorField.integer("count", FIELD + "spawn_entity.count", 1, 64).optional(),
-                    // 年龄只表达幼年到成年：0 是成年，-24000 是刚出生；合法域与滑条窗口一致，
-                    // 与 EntityProduct.Mob 的 codec 区间相同，正值（繁殖冷却）在载入期就会被拒
-                    EditorField.integerSlider("age", FIELD + "spawn_entity.age", -24000, 0, -24000, 0)
-                            .optional().withPresets(new EditorPreset("-24000", TypeLabels.UI_PREFIX + "preset.baby"),
-                                    new EditorPreset("0", TypeLabels.UI_PREFIX + "preset.adult")));
-            // 其他实体不含生物：年龄只对 Mob 的 AgeableMob 生效，因此本档位没有年龄字段
-            case "entity" -> List.of(
-                    EditorField.tag("entity", FIELD + "spawn_entity.entity", "minecraft:entity_type"),
-                    EditorField.integer("count", FIELD + "spawn_entity.count", 1, 64).optional());
-            case "experience" -> List.of(
-                    EditorField.integer("amount", FIELD + "spawn_xp.amount", 1, 65536).optional());
-            default -> List.of(EditorField.tag("item", FIELD + "spawn_item.item", "minecraft:item"),
-                    EditorField.integer("count", FIELD + "spawn_item.count", 1, 64).optional());
-        };
-    }
-
-    // 效果描述符 = 专属字段 + 公共字段（delay_ticks / chance）；条件只存在于规则级
-    private static void registerEffect(ResourceLocation typeId, List<EditorField> ownFields) {
-        List<EditorField> fields = new ArrayList<>(ownFields);
-        fields.add(EditorField.ticks("delay_ticks", COMMON + "delay_ticks", 0, Integer.MAX_VALUE)
-                .optional()
-                .withNumbers(NumericDomain.integers(0, Integer.MAX_VALUE, 0, 1200))
-                .withHint(COMMON + "delay_ticks.hint"));
-        fields.add(EditorField.percent("chance", COMMON + "chance").optional());
-        EditorRegistries.EFFECTS.register(new TypeEditorDescriptor(typeId, TypeLabels.effectLabel(typeId), fields, false));
+        ResourceLocation typeId = id("spawn_entity");
+        List<EditorField> fields = new ArrayList<>(
+                ParamProjection.fields(EntityProduct.variantParams(variant), typeId));
+        fields.addAll(ParamProjection.fields(SpawnEntityEffect.PARAMS, typeId));
+        return new TypeEditorDescriptor(typeId, TypeLabels.effectLabel(typeId), fields, false);
     }
 
     // ---- 规则级与来源对象（不在条件/效果注册表内，界面按需取用） ----

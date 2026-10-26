@@ -1,19 +1,31 @@
 package com.meteorite.itemdespawntowhat.client.edit;
 
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import com.meteorite.itemdespawntowhat.core.api.TypeDefinition;
+import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
+import com.meteorite.itemdespawntowhat.core.api.param.ParamSpec;
 import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
+import com.meteorite.itemdespawntowhat.core.type.effect.EntityProduct;
 import com.meteorite.itemdespawntowhat.core.type.effect.PlaceBlockEffect;
+import com.meteorite.itemdespawntowhat.core.type.effect.SpawnEntityEffect;
+import java.util.List;
+import java.util.Map;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 /**
  * 内置类型的新建初值与省略字段的展示默认值。
- * 必填的 id、标签与列表留空，由表单校验定位；新建初值不代表已保存规则的缺省语义，
- * {@link #effectiveValue(RuleValue, String)} 按后端语义展示省略字段。
+ * <p>新建初值来自 core 侧参数声明的 initialValue，省略字段的展示默认值来自 defaultValue；
+ * 两者都不代表已保存规则的缺省语义，只用于新建预填与界面提示。
  */
 public final class BuiltinEditorDefaults {
+
+    // 实体产出子类字段名（由产出分发器引入，不属于任何参数声明）
+    private static final String VARIANT = "variant";
 
     // 工具类
     private BuiltinEditorDefaults() {
@@ -36,8 +48,20 @@ public final class BuiltinEditorDefaults {
     public static RuleValue effectBody(ResourceLocation type) {
         JsonObject body = new JsonObject();
         body.addProperty(RuleFields.TYPE, type.toString());
-        applyEffectDefaults(body, type.getPath());
-        fillDescriptorDefaults(body, EditorRegistries.EFFECTS.descriptorFor(type));
+        TypeDefinition<?> definition = ClientTypeRegistries.effects().getOrNull(type);
+        if (definition != null) {
+            if (SpawnEntityEffect.ID.equals(type)) {
+                body.addProperty(VARIANT, EntityProduct.DEFAULT_VARIANT);
+                writeInitials(body, EntityProduct.variantParams(EntityProduct.DEFAULT_VARIANT));
+            } else {
+                writeInitials(body, definition.params());
+            }
+        }
+        if (PlaceBlockEffect.ID.equals(type)) {
+            // 上限初值取当前半径方框的容量：滑条停在最大值，半径变化时由界面联动改写
+            body.addProperty(PlaceBlockEffect.LIMIT_FIELD,
+                    PlaceBlockEffect.limitUpperBound(PlaceBlockEffect.DEFAULT_RADIUS));
+        }
         return RuleValue.wrap(body);
     }
 
@@ -46,16 +70,19 @@ public final class BuiltinEditorDefaults {
         if (object != null && object.has(RuleFields.TYPE)) {
             ResourceLocation type = ResourceLocation.tryParse(object.text(RuleFields.TYPE, ""));
             if (type != null && TypeLabels.OWN_NAMESPACE.equals(type.getNamespace())) {
-                if ("chance".equals(field)) return RuleValue.decimal(1.0D);
-                if ("delay_ticks".equals(field)) return RuleValue.integer(0);
-                // 放置上限省略表示不限制数量：旧规则不显示假默认值，新建时由 applyEffectDefaults 写入方框容量。
-                if (PlaceBlockEffect.ID.equals(type) && PlaceBlockEffect.LIMIT_FIELD.equals(field)) return null;
-                RuleValue defaults = effectBody(type);
-                if ("spawn_entity".equals(type.getPath())) {
-                    if ("amount".equals(field)) return RuleValue.integer(1);
-                    if ("age".equals(field)) return RuleValue.integer(0);
+                TypeDefinition<?> definition = ClientTypeRegistries.effects().getOrNull(type);
+                if (definition != null) {
+                    ParamSpec spec = definition.params().get(field);
+                    if (spec == null && SpawnEntityEffect.ID.equals(type)) {
+                        // variant 由产出分发决定，不属于外层参数声明；按当前子类展示默认值
+                        String variant = object.text(VARIANT, EntityProduct.DEFAULT_VARIANT);
+                        spec = EntityProduct.variantParams(variant).get(field);
+                    }
+                    if (spec != null) {
+                        return toRuleValue(spec.defaultValue());
+                    }
+                    return null;
                 }
-                return defaults.child(field);
             }
         }
         return switch (field) {
@@ -70,107 +97,66 @@ public final class BuiltinEditorDefaults {
     public static JsonObject conditionLeafJson(ResourceLocation type) {
         JsonObject condition = new JsonObject();
         condition.addProperty(RuleFields.TYPE, type.toString());
-        applyConditionDefaults(condition, type.getPath());
-        fillDescriptorDefaults(condition, EditorRegistries.CONDITIONS.descriptorFor(type));
+        TypeDefinition<?> definition = ClientTypeRegistries.conditions().getOrNull(type);
+        if (definition != null) {
+            writeInitials(condition, definition.params());
+        }
         JsonObject leaf = new JsonObject();
         leaf.addProperty(RuleFields.OP, RuleFields.OP_LEAF);
         leaf.add(RuleFields.CONDITION, condition);
         return leaf;
     }
 
-    // 条件类型的文档默认值
-    private static void applyConditionDefaults(JsonObject body, String path) {
-        switch (path) {
-            case "weather" -> body.addProperty("weather", "clear");
-            case "time_of_day" -> {
-                body.addProperty("from", 0);
-                body.addProperty("to", 23999);
-            }
-            case "y_level" -> {
-                // 新增高度条件必须带明确约束，不创建两端留空的恒真叶。
-                body.addProperty("min", BuiltinEditorDescriptors.Y_LEVEL_SLIDER_MIN);
-                body.addProperty("max", BuiltinEditorDescriptors.Y_LEVEL_SLIDER_MAX);
-            }
-            case "light_level", "outdoor", "fluid_present", "surrounding_blocks" -> {
-                // 无默认参数：以上类型要么无参，要么留空即为「不约束」/待用户选择
-            }
-            case "dimension" -> body.add("dimensions", new JsonArray());
-            case "biome" -> {
-                body.addProperty("mode", "exact");
-                body.add("biomes", new JsonArray());
-            }
-            // 新叶不预写门槛：count 缺失表示「未填写」，由运行投影按消耗配置解析默认值
-            case "catalyst_present" -> body.add("items", new JsonArray());
-            default -> {
-                // 第三方条件类型：只给 type，其余交给只读回退或用户填写
+    // 把声明里的新建初值写入 JSON；没有初值的字段保持省略，交给校验定位
+    private static void writeInitials(JsonObject body, ParamList params) {
+        for (ParamList.ParamValue value : params.initialValues()) {
+            JsonElement element = toJson(value.value());
+            if (element != null) {
+                body.add(value.name(), element);
             }
         }
     }
 
-    // 新建效果的界面初值。
-    private static void applyEffectDefaults(JsonObject body, String path) {
-        switch (path) {
-            // 消耗源物品沿用固定成本默认值。
-            case "spawn_entity" -> {
-                body.addProperty("variant", "item");
-                body.addProperty("count", 1);
-            }
-            case "place_block" -> {
-                // block 与 use_source_block 至少要有一个：use_source_block 后端默认 false，保持缺省语义
-                body.addProperty(PlaceBlockEffect.USE_SOURCE_BLOCK_FIELD, PlaceBlockEffect.DEFAULT_USE_SOURCE_BLOCK);
-                body.addProperty("shape", "square");
-                body.addProperty(PlaceBlockEffect.COUNT_FIELD, PlaceBlockEffect.DEFAULT_COUNT);
-                body.addProperty(PlaceBlockEffect.RADIUS_FIELD, PlaceBlockEffect.DEFAULT_RADIUS);
-                // 上限初值取当前半径方框的容量：滑条停在最大值，半径变化时由界面联动改写
-                body.addProperty(PlaceBlockEffect.LIMIT_FIELD,
-                        PlaceBlockEffect.limitUpperBound(PlaceBlockEffect.DEFAULT_RADIUS));
-            }
-            case "loot_table" -> body.addProperty("luck", 0.0F);
-            case "lightning" -> body.addProperty("count", 1);
-            case "arrow_rain" -> {
-                body.addProperty("count", 16);
-                body.addProperty("pickup", "disallowed");
-                body.add("potion_effects", new JsonArray());
-            }
-            case "weather" -> {
-                body.addProperty("mode", "rain");
-                body.addProperty("duration_ticks", 6000);
-                body.addProperty("thundering", false);
-            }
-            case "explosion" -> {
-                body.addProperty("power", 3.0F);
-                body.addProperty("fire", false);
-                body.addProperty("visual_only", false);
-            }
-            default -> {
-                // 第三方效果类型：只给 type
-            }
+    // 声明里的初值/默认值转为 JSON；无法表达的形态返回 null（不写入）
+    private static @Nullable JsonElement toJson(@Nullable Object value) {
+        if (value == null) {
+            return null;
         }
-    }
-
-    // 用描述符补齐仍然缺失的「必填且可推导」字段：枚举取首值、布尔取假、数值取下界
-    private static void fillDescriptorDefaults(JsonObject body, TypeEditorDescriptor descriptor) {
-        if (descriptor == null || descriptor.readOnly()) {
-            return;
-        }
-        for (EditorField field : descriptor.fields()) {
-            if (RuleFields.TYPE.equals(field.name()) || body.has(field.name()) || !field.required()) {
-                continue;
-            }
-            switch (field.type()) {
-                case BOOLEAN -> body.addProperty(field.name(), false);
-                case ENUM -> {
-                    var values = field.enumValues();
-                    if (!values.isEmpty()) {
-                        body.addProperty(field.name(), values.getFirst());
+        return switch (value) {
+            case Boolean flag -> new JsonPrimitive(flag);
+            case Integer number -> new JsonPrimitive(number);
+            case Long number -> new JsonPrimitive(number);
+            case Float number -> new JsonPrimitive(number);
+            case Double number -> new JsonPrimitive(number);
+            case Enum<?> constant -> new JsonPrimitive(constant.name().toLowerCase(java.util.Locale.ROOT));
+            case String text -> new JsonPrimitive(text);
+            case List<?> list -> {
+                JsonArray array = new JsonArray();
+                for (Object item : list) {
+                    JsonElement element = toJson(item);
+                    if (element != null) {
+                        array.add(element);
                     }
                 }
-                case INTEGER, TICKS, AMPLIFIER -> body.addProperty(field.name(), field.intMin(0));
-                case DECIMAL, PERCENT -> body.addProperty(field.name(), field.doubleMin(0.0D));
-                default -> {
-                    // 文本/资源位置/列表类必填字段不猜值，交给本地校验定位
-                }
+                yield array;
             }
-        }
+            case Map<?, ?> map -> {
+                JsonObject object = new JsonObject();
+                for (Map.Entry<?, ?> entry : map.entrySet()) {
+                    JsonElement element = toJson(entry.getValue());
+                    if (element != null) {
+                        object.add(String.valueOf(entry.getKey()), element);
+                    }
+                }
+                yield object;
+            }
+            default -> null;
+        };
+    }
+
+    // JSON 元素转规则值；null 表示该字段没有可展示的默认值
+    private static @Nullable RuleValue toRuleValue(@Nullable Object value) {
+        JsonElement element = toJson(value);
+        return element == null ? null : RuleValue.wrap(element);
     }
 }

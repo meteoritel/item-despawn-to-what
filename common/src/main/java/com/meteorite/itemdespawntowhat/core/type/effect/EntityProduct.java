@@ -4,6 +4,10 @@ import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.api.RefChecks;
+import com.meteorite.itemdespawntowhat.core.api.param.IntSpec;
+import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
+import com.meteorite.itemdespawntowhat.core.api.param.ParamPreset;
+import com.meteorite.itemdespawntowhat.core.api.param.RefSpec;
 import com.meteorite.itemdespawntowhat.core.model.ProductKind;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
@@ -29,8 +33,27 @@ public sealed interface EntityProduct permits EntityProduct.Item, EntityProduct.
         default -> DataResult.error(() -> "未知实体产出子类: " + value);
     }, value -> value).dispatchMap("variant", EntityProduct::variant, EntityProduct::codecFor));
 
+    // 新建规则时默认的产出子类
+    String DEFAULT_VARIANT = "item";
+
     String variant();
     boolean validate(IssueCollector issues, String path);
+
+    // 产出子类对应的参数声明
+    default ParamList params() {
+        return variantParams(variant());
+    }
+
+    // 按 variant 取参数声明；未知子类没有声明
+    static ParamList variantParams(String variant) {
+        return switch (variant) {
+            case "item" -> Item.PARAMS;
+            case "mob" -> Mob.PARAMS;
+            case "entity" -> Generic.PARAMS;
+            case "experience" -> Experience.PARAMS;
+            default -> ParamList.EMPTY;
+        };
+    }
 
     /**
      * 该产出子类对应的规则分类。
@@ -77,17 +100,26 @@ public sealed interface EntityProduct permits EntityProduct.Item, EntityProduct.
 
     /** 掉落物数量按物品件数计算。 */
     record Item(TaggedId item, int count) implements EntityProduct {
+        public static final String ITEM_FIELD = "item";
+        public static final String COUNT_FIELD = "count";
+        public static final RefSpec ITEM = RefSpec.required(ITEM_FIELD, "minecraft:item")
+                .label("spawn_item.item");
+        public static final IntSpec COUNT = IntSpec.defaulted(COUNT_FIELD, 1, 1, 64)
+                .initial(1)
+                .label("spawn_item.count");
+        public static final ParamList PARAMS = ParamList.of(ITEM, COUNT);
+
         public static final MapCodec<Item> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-                TaggedId.CODEC.fieldOf("item").forGetter(Item::item),
-                Codec.intRange(1, 64).optionalFieldOf("count", 1).forGetter(Item::count)
+                ITEM.fieldFor(Item::item),
+                COUNT.fieldFor(Item::count)
         ).apply(instance, Item::new));
         @Override public String variant() { return "item"; }
         @Override public ProductKind productKind() { return ProductKind.ENTITY_ITEM; }
         @Override public boolean validate(IssueCollector issues, String path) {
-            String field = ParamChecks.child(path, "item");
-            boolean valid = ParamChecks.required(item, "item", issues, field);
-            valid &= RefChecks.check(item, BuiltInRegistries.ITEM, "item", issues, field);
-            valid &= ParamChecks.inRange(count, 1, 64, "count", issues, ParamChecks.child(path, "count"));
+            String field = ParamChecks.child(path, ITEM_FIELD);
+            boolean valid = ITEM.check(item, issues, path);
+            valid &= RefChecks.check(item, BuiltInRegistries.ITEM, ITEM_FIELD, issues, field);
+            valid &= COUNT.check(count, issues, path);
             return valid;
         }
     }
@@ -99,14 +131,23 @@ public sealed interface EntityProduct permits EntityProduct.Item, EntityProduct.
      * 且实体标签可能混含生物，强校验会让合法的标签引用随机失败。
      */
     record Generic(TaggedId entity, int count) implements EntityProduct {
+        public static final String ENTITY_FIELD = "entity";
+        public static final String COUNT_FIELD = "count";
+        public static final RefSpec ENTITY = RefSpec.required(ENTITY_FIELD, "minecraft:entity_type")
+                .label("spawn_entity.entity");
+        public static final IntSpec COUNT = IntSpec.defaulted(COUNT_FIELD, 1, 1, 64)
+                .initial(1)
+                .label("spawn_entity.count");
+        public static final ParamList PARAMS = ParamList.of(ENTITY, COUNT);
+
         public static final MapCodec<Generic> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-                TaggedId.CODEC.fieldOf("entity").forGetter(Generic::entity),
-                Codec.intRange(1, 64).optionalFieldOf("count", 1).forGetter(Generic::count)
+                ENTITY.fieldFor(Generic::entity),
+                COUNT.fieldFor(Generic::count)
         ).apply(instance, Generic::new));
         @Override public String variant() { return "entity"; }
         @Override public ProductKind productKind() { return ProductKind.ENTITY_ENTITY; }
         @Override public boolean validate(IssueCollector issues, String path) {
-            return checkSpawnable(entity, count, issues, path);
+            return checkSpawnable(entity, count, ENTITY, COUNT, issues, path);
         }
     }
 
@@ -122,27 +163,43 @@ public sealed interface EntityProduct permits EntityProduct.Item, EntityProduct.
         /** 成年年龄。 */
         public static final int ADULT_AGE = 0;
 
+        public static final String ENTITY_FIELD = "entity";
+        public static final String COUNT_FIELD = "count";
+        public static final String AGE_FIELD = "age";
+        public static final RefSpec ENTITY = RefSpec.required(ENTITY_FIELD, "minecraft:entity_type")
+                .label("spawn_entity.mob");
+        public static final IntSpec COUNT = IntSpec.defaulted(COUNT_FIELD, 1, 1, 64)
+                .initial(1)
+                .label("spawn_entity.count");
+        public static final IntSpec AGE = IntSpec.defaulted(AGE_FIELD, ADULT_AGE, BABY_AGE, ADULT_AGE)
+                .window(BABY_AGE, ADULT_AGE)
+                .label("spawn_entity.age")
+                .presets(new ParamPreset(String.valueOf(BABY_AGE), "preset.baby"),
+                        new ParamPreset(String.valueOf(ADULT_AGE), "preset.adult"));
+        public static final ParamList PARAMS = ParamList.of(ENTITY, COUNT, AGE);
+
         public static final MapCodec<Mob> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-                TaggedId.CODEC.fieldOf("entity").forGetter(Mob::entity),
-                Codec.intRange(1, 64).optionalFieldOf("count", 1).forGetter(Mob::count),
-                Codec.intRange(BABY_AGE, ADULT_AGE).optionalFieldOf("age", 0).forGetter(Mob::age)
+                ENTITY.fieldFor(Mob::entity),
+                COUNT.fieldFor(Mob::count),
+                AGE.fieldFor(Mob::age)
         ).apply(instance, Mob::new));
         @Override public String variant() { return "mob"; }
         @Override public ProductKind productKind() { return ProductKind.ENTITY_MOB; }
         @Override public boolean validate(IssueCollector issues, String path) {
-            boolean valid = checkSpawnable(entity, count, issues, path);
+            boolean valid = checkSpawnable(entity, count, ENTITY, COUNT, issues, path);
             // 年龄只表达「幼年到成年」：正值是成年个体的繁殖冷却，不属于生成语义，一律拒载
-            valid &= ParamChecks.inRange(age, BABY_AGE, ADULT_AGE, "age", issues, ParamChecks.child(path, "age"));
+            valid &= AGE.check(age, issues, path);
             return valid;
         }
     }
 
     // 生物档与其他实体档共用的实体参数校验：引用存在、数量范围，且不得指向掉落物/经验球。
-    private static boolean checkSpawnable(TaggedId entity, int count, IssueCollector issues, String path) {
-        String field = ParamChecks.child(path, "entity");
-        boolean valid = ParamChecks.required(entity, "entity", issues, field);
-        valid &= RefChecks.check(entity, BuiltInRegistries.ENTITY_TYPE, "entity", issues, field);
-        valid &= ParamChecks.inRange(count, 1, 64, "count", issues, ParamChecks.child(path, "count"));
+    private static boolean checkSpawnable(TaggedId entity, int count, RefSpec entitySpec, IntSpec countSpec,
+                                          IssueCollector issues, String path) {
+        String field = ParamChecks.child(path, entitySpec.name());
+        boolean valid = entitySpec.check(entity, issues, path);
+        valid &= RefChecks.check(entity, BuiltInRegistries.ENTITY_TYPE, entitySpec.name(), issues, field);
+        valid &= countSpec.check(count, issues, path);
         if (entity != null) {
             if (matchesAny(entity, EntityProduct::isSpecial)) {
                 issues.error("掉落物和经验球请使用对应的专用产出子类", null, field);
@@ -196,13 +253,19 @@ public sealed interface EntityProduct permits EntityProduct.Item, EntityProduct.
 
     /** 经验点数按每件参与转化源物品计算：本次产出的总点数 = 每件点数 × 本组实际扣减的源物品件数。 */
     record Experience(int amount) implements EntityProduct {
+        public static final String AMOUNT_FIELD = "amount";
+        public static final IntSpec AMOUNT = IntSpec.defaulted(AMOUNT_FIELD, 1, 1, 65536)
+                .initial(1)
+                .label("spawn_xp.amount");
+        public static final ParamList PARAMS = ParamList.of(AMOUNT);
+
         public static final MapCodec<Experience> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-                Codec.intRange(1, 65536).optionalFieldOf("amount", 1).forGetter(Experience::amount)
+                AMOUNT.fieldFor(Experience::amount)
         ).apply(instance, Experience::new));
         @Override public String variant() { return "experience"; }
         @Override public ProductKind productKind() { return ProductKind.ENTITY_EXPERIENCE; }
         @Override public boolean validate(IssueCollector issues, String path) {
-            return ParamChecks.inRange(amount, 1, 65536, "amount", issues, ParamChecks.child(path, "amount"));
+            return AMOUNT.check(amount, issues, path);
         }
     }
 }

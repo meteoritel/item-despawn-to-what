@@ -8,6 +8,9 @@ import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
+import com.meteorite.itemdespawntowhat.core.api.param.FloatSpec;
+import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
+import com.meteorite.itemdespawntowhat.core.api.param.ResLocSpec;
 import com.meteorite.itemdespawntowhat.core.extension.DynamicReferenceCheck;
 import com.meteorite.itemdespawntowhat.core.extension.DynamicReferenceContext;
 import com.meteorite.itemdespawntowhat.core.model.CapacityDemand;
@@ -17,7 +20,6 @@ import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.ProductKind;
 import com.meteorite.itemdespawntowhat.core.model.SimpleEffectType;
 import com.meteorite.itemdespawntowhat.core.type.effect.exec.LootTableExecutor;
-import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.registries.Registries;
@@ -52,14 +54,20 @@ public record LootTableEffect(
     public static final float MIN_LUCK = -100.0F;
     public static final float MAX_LUCK = 100.0F;
 
+    // 参数声明：类型专属字段在前，通用字段复用 CommonFields 的声明
+    public static final ResLocSpec LOOT_TABLE = ResLocSpec.required(LOOT_TABLE_FIELD);
+    public static final FloatSpec LUCK = FloatSpec.defaulted(LUCK_FIELD, DEFAULT_LUCK, MIN_LUCK, MAX_LUCK)
+            .initial(DEFAULT_LUCK);
+    public static final ParamList PARAMS = ParamList.of(LOOT_TABLE, LUCK, CommonFields.DELAY_TICKS,
+            CommonFields.CHANCE);
+
     // 类型专属参数编解码器；通用字段复用 CommonFields 片段（codec 层不得产出 null）
     public static MapCodec<LootTableEffect> codec() {
         return RecordCodecBuilder.mapCodec(instance -> instance.group(
-                ResourceLocation.CODEC.fieldOf(LOOT_TABLE_FIELD).forGetter(LootTableEffect::lootTable),
-                Codec.floatRange(MIN_LUCK, MAX_LUCK).optionalFieldOf(LUCK_FIELD, DEFAULT_LUCK)
-                        .forGetter(LootTableEffect::luck),
-                CommonFields.delayTicks(LootTableEffect::delayTicks),
-                CommonFields.chance(LootTableEffect::chance)
+                LOOT_TABLE.fieldFor(LootTableEffect::lootTable),
+                LUCK.fieldFor(LootTableEffect::luck),
+                CommonFields.DELAY_TICKS.fieldFor(LootTableEffect::delayTicks),
+                CommonFields.CHANCE.fieldFor(LootTableEffect::chance)
         ).apply(instance, LootTableEffect::new));
     }
 
@@ -94,15 +102,13 @@ public record LootTableEffect(
                                                  @Nullable EffectPreparation preparation) {
                         return LootTableExecutor.start(effect, context, preparation);
                     }
-                }, ProductKind.LOOT, params -> CapacityDemand.unspecified(1));
+                }, ProductKind.LOOT, params -> CapacityDemand.unspecified(1), PARAMS);
     }
 
     // 参数语义校验；战利品表是否存在由数据包机制保证，此处只校验必填与区间
     public static boolean validateParams(LootTableEffect params, IssueCollector issues, String fieldPath) {
-        boolean valid = ParamChecks.required(params.lootTable(), LOOT_TABLE_FIELD, issues,
-                ParamChecks.child(fieldPath, LOOT_TABLE_FIELD));
-        valid &= ParamChecks.inRange(params.luck(), MIN_LUCK, MAX_LUCK, LUCK_FIELD, issues,
-                ParamChecks.child(fieldPath, LUCK_FIELD));
+        boolean valid = LOOT_TABLE.check(params.lootTable(), issues, fieldPath);
+        valid &= LUCK.check(params.luck(), issues, fieldPath);
         return valid;
     }
 

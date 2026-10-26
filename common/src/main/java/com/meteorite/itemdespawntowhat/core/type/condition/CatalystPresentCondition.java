@@ -6,12 +6,15 @@ import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
+import com.meteorite.itemdespawntowhat.core.api.param.IntSpec;
+import com.meteorite.itemdespawntowhat.core.api.param.MapSpec;
+import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
+import com.meteorite.itemdespawntowhat.core.api.param.RefListSpec;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleConditionType;
 import com.meteorite.itemdespawntowhat.core.api.RefChecks;
 import com.meteorite.itemdespawntowhat.core.type.condition.eval.CatalystPresentEvaluator;
-import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -53,13 +56,25 @@ public record CatalystPresentCondition(List<TaggedId> items, @Nullable Integer c
     private static final int MAX_COUNT = 64;
     public static final int DEFAULT_COUNT = 1;
 
+    // 参数声明：items 至少一项；count 为可留空的单值门槛（解码宽、校验严）；counts 按引用配置门槛
+    public static final RefListSpec ITEMS = RefListSpec
+            .defaultedEmpty(FIELD_ITEMS, "minecraft:item")
+            .requireNonEmpty()
+            .initial(List.of());
+    public static final IntSpec COUNT = IntSpec.nullable(FIELD_COUNT, MIN_COUNT, MAX_COUNT).widened().hidden();
+    public static final MapSpec COUNTS = MapSpec
+            .defaultedEmpty(RuleFields.ITEM_COUNTS, "minecraft:item", MIN_COUNT, MAX_COUNT)
+            .label("catalyst_present.count");
+    public static final ParamList PARAMS = ParamList.of(ITEMS, COUNT, COUNTS);
+
     /** 参数编解码器：items 缺省为空（由 validateParams 拒绝）；count 缺失即 null，编码时同样省略该字段 */
-    public static final MapCodec<CatalystPresentCondition> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-            TaggedId.CODEC.listOf().optionalFieldOf(FIELD_ITEMS, List.of()).forGetter(CatalystPresentCondition::items),
-            Codec.INT.optionalFieldOf(FIELD_COUNT).forGetter(condition -> Optional.ofNullable(condition.count())),
-            Codec.unboundedMap(TaggedId.CODEC, Codec.intRange(MIN_COUNT, MAX_COUNT))
-                    .optionalFieldOf(RuleFields.ITEM_COUNTS, Map.of()).forGetter(CatalystPresentCondition::counts)
-    ).apply(instance, (items, count, counts) -> new CatalystPresentCondition(items, count.orElse(null), counts)));
+    public static MapCodec<CatalystPresentCondition> codec() {
+        return RecordCodecBuilder.mapCodec(instance -> instance.group(
+                ITEMS.fieldFor(CatalystPresentCondition::items),
+                COUNT.fieldForNullable(condition -> Optional.ofNullable(condition.count())),
+                COUNTS.fieldFor(CatalystPresentCondition::counts)
+        ).apply(instance, (items, count, counts) -> new CatalystPresentCondition(items, count.orElse(null), counts)));
+    }
 
     /** 参数列表不可变 */
     public CatalystPresentCondition {
@@ -80,21 +95,18 @@ public record CatalystPresentCondition(List<TaggedId> items, @Nullable Integer c
 
     /** 条件类型定义，供注册表登记；静态工厂不能叫 type()（与 Condition#type 实例方法签名冲突） */
     public static ConditionType<CatalystPresentCondition> conditionType() {
-        return new SimpleConditionType<>(ID, CODEC, CatalystPresentCondition::validateParams, CatalystPresentEvaluator::test,
+        return new SimpleConditionType<>(ID, codec(), CatalystPresentCondition::validateParams, CatalystPresentEvaluator::test,
                 (condition, context) -> com.meteorite.itemdespawntowhat.core.api.ChunkPresence.containsArea(
                         context.level(), context.pos(), condition.radius())
                         ? com.meteorite.itemdespawntowhat.core.api.Evaluability.AVAILABLE
-                        : com.meteorite.itemdespawntowhat.core.api.Evaluability.UNAVAILABLE);
+                        : com.meteorite.itemdespawntowhat.core.api.Evaluability.UNAVAILABLE,
+                PARAMS);
     }
 
     /** 参数语义校验：items 必填且逐项做注册表存在性校验；count 留空合法，填写时需落在 [1,64] */
     public static boolean validateParams(CatalystPresentCondition params, IssueCollector issues, String fieldPath) {
-        boolean valid = ParamChecks.notEmpty(params.items(), FIELD_ITEMS, issues,
-                ParamChecks.child(fieldPath, FIELD_ITEMS));
-        if (params.count() != null) {
-            valid &= ParamChecks.inRange(params.count(), MIN_COUNT, MAX_COUNT, FIELD_COUNT, issues,
-                    ParamChecks.child(fieldPath, FIELD_COUNT));
-        }
+        boolean valid = ITEMS.check(params.items(), issues, fieldPath);
+        valid &= COUNT.check(params.count(), issues, fieldPath);
         valid &= RefChecks.checkAll(params.items(), BuiltInRegistries.ITEM, FIELD_ITEMS, issues,
                 ParamChecks.child(fieldPath, FIELD_ITEMS));
         for (TaggedId item : params.counts().keySet()) {

@@ -2,7 +2,8 @@ package com.meteorite.itemdespawntowhat.core.type.condition;
 
 import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
-import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
+import com.meteorite.itemdespawntowhat.core.api.param.EnumSpec;
+import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleConditionType;
@@ -26,10 +27,18 @@ public record WeatherCondition(Kind weather) implements Condition {
     // 参数 JSON 字段名
     private static final String FIELD_WEATHER = "weather";
 
+    // 参数声明：weather 必填；新建规则预写 clear，与编辑器「未填写」的空白叶区分开
+    public static final EnumSpec<Kind> WEATHER = EnumSpec
+            .required(FIELD_WEATHER, EnumCodecs.lowerCase(Kind.class), "weather_kind", Kind.values())
+            .initial(Kind.CLEAR);
+    public static final ParamList PARAMS = ParamList.of(WEATHER);
+
     // 参数编解码器：weather 必填
-    public static final MapCodec<WeatherCondition> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-            EnumCodecs.lowerCase(Kind.class).fieldOf(FIELD_WEATHER).forGetter(WeatherCondition::weather)
-    ).apply(instance, WeatherCondition::new));
+    public static MapCodec<WeatherCondition> codec() {
+        return RecordCodecBuilder.mapCodec(instance -> instance.group(
+                WEATHER.fieldFor(WeatherCondition::weather)
+        ).apply(instance, WeatherCondition::new));
+    }
 
     // 条件类型 id
     @Override
@@ -39,13 +48,13 @@ public record WeatherCondition(Kind weather) implements Condition {
 
     // 条件类型定义，供注册表登记；静态工厂不能叫 type()（与 Condition#type 实例方法签名冲突）
     public static ConditionType<WeatherCondition> conditionType() {
-        return new SimpleConditionType<>(ID, CODEC, WeatherCondition::validateParams, WeatherEvaluator::test);
+        return new SimpleConditionType<>(ID, codec(), WeatherCondition::validateParams, WeatherEvaluator::test,
+                PARAMS);
     }
 
     // 参数语义校验：天气取值必填（codec 已拦截缺失，这里兜底程序化构造）
     public static boolean validateParams(WeatherCondition params, IssueCollector issues, String fieldPath) {
-        return ParamChecks.required(params.weather(), FIELD_WEATHER, issues,
-                ParamChecks.child(fieldPath, FIELD_WEATHER));
+        return WEATHER.check(params.weather(), issues, fieldPath);
     }
 
     /**

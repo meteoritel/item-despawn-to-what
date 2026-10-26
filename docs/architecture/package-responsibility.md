@@ -58,12 +58,15 @@ flowchart TB
 
 ### 契约与模型
 
-- **`core/api`** — 跨模块共享的契约：条件求值与效果执行、类型注册与分发、`Issue` 收集、解码预算、规则字段常量、观测接缝、区块与标签查询。
+- **`core/api`** — 跨模块共享的契约：条件求值与效果执行、类型注册与分发、`Issue` 收集、解码预算、规则字段常量、观测接缝、区块与标签查询、类型参数声明。
   - 允许：JDK 与原版契约类型（`ResourceLocation`、`Codec` 等）、`core/api/scheduler`。
   - 禁止：依赖其它 `core` 包。契约是底层，被引用而不引用。
 - **`core/api/scheduler`** — 调度契约：任务种类、取消原因、步进结果、tick 预算与统计快照。
   - 允许：JDK。
   - 禁止：依赖实现包。实现方在 `core/runtime/scheduler`，方向由实现指向契约。
+- **`core/api/param`** — 类型参数声明：字段名、wire 存在性、值域、默认值、新建初值与编辑器投影元数据；单字段的 Codec 构件与校验由声明派生。
+  - 允许：JDK、原版契约类型与 `core/api` 自身。
+  - 禁止：依赖其它 `core` 包与客户端包；声明只描述单字段，跨字段与引用校验留在类型内。
 - **`core/model`** — 规则的数据形态：`Rule` 与来源匹配、条件树、效果与候选结果、Codec 与语义校验。
   - 允许：`core/api`。
   - 禁止：依赖注册表、类型实现、加载与运行时。需要注册表的解码与校验能力由 `core/api` 的注入式契约承担。
@@ -155,7 +158,7 @@ flowchart TB
 - **`client/net`** — 编辑会话的客户端镜像：打开请求、会话状态、分片缓冲、界面注册槽。
   - 允许：`core/api`、`core/model`、`core/network/protocol`、`core/service` 的限额常量、原版客户端类型。
   - 禁止：依赖 `client/edit` 与 `client/ui`。界面经 `EditorScreenHooks` 注册槽注入，由客户端入口接线。
-- **`client/edit`** — 客户端工作区与编辑数据：草稿、撤销栈、字段描述符、类型编辑器注册表、条件树编解码与摘要。
+- **`client/edit`** — 客户端工作区与编辑数据：草稿、撤销栈、类型参数投影与字段描述符、类型编辑器注册表、条件树编解码与摘要。
   - 允许：`core/api`、`core/model`、`core/network/protocol`、`client/net`、`client/ui/kit` 的树编辑契约、`client/edit/draft`、原版客户端类型。
   - 禁止：依赖 `client/ui` 的宿主子包（`theme`、`widget`、`shared`、`screen`、`screen/form`）；不发起网络请求、不打开界面。
 - **`client/edit/draft`** — 未应用的编辑草稿落盘、重启与断线恢复、冲突判定。

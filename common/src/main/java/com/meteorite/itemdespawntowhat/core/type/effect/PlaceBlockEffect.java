@@ -10,6 +10,11 @@ import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.RuleRuntimeLimits;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
+import com.meteorite.itemdespawntowhat.core.api.param.BoolSpec;
+import com.meteorite.itemdespawntowhat.core.api.param.EnumSpec;
+import com.meteorite.itemdespawntowhat.core.api.param.IntSpec;
+import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
+import com.meteorite.itemdespawntowhat.core.api.param.RefSpec;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
@@ -96,22 +101,37 @@ public record PlaceBlockEffect(
         public static final Codec<Shape> CODEC = EnumCodecs.lowerCase(Shape.class);
     }
 
+    // 参数声明：类型专属字段在前，通用字段复用 CommonFields 的声明；limit 的滑块窗口按默认半径的方框容量取上限
+    public static final RefSpec BLOCK = RefSpec.nullable(BLOCK_FIELD, "minecraft:block");
+    public static final BoolSpec USE_SOURCE_BLOCK = BoolSpec.defaulted(USE_SOURCE_BLOCK_FIELD, DEFAULT_USE_SOURCE_BLOCK)
+            .initial(DEFAULT_USE_SOURCE_BLOCK);
+    public static final EnumSpec<Shape> SHAPE = EnumSpec
+            .defaulted(SHAPE_FIELD, Shape.CODEC, DEFAULT_SHAPE, "place_block_shape", Shape.values())
+            .editorRequired(false)
+            .initial(DEFAULT_SHAPE);
+    public static final IntSpec COUNT = IntSpec.defaulted(COUNT_FIELD, DEFAULT_COUNT, MIN_COUNT, MAX_COUNT)
+            .initial(DEFAULT_COUNT);
+    public static final IntSpec RADIUS = IntSpec
+            .defaulted(RADIUS_FIELD, DEFAULT_RADIUS, MIN_RADIUS, Integer.MAX_VALUE)
+            .initial(DEFAULT_RADIUS)
+            .window(MIN_RADIUS, Integer.MAX_VALUE);
+    public static final IntSpec LIMIT = IntSpec.nullable(LIMIT_FIELD, MIN_LIMIT, Integer.MAX_VALUE)
+            .bounded()
+            .window(MIN_LIMIT, limitUpperBound(DEFAULT_RADIUS));
+    public static final ParamList PARAMS = ParamList.of(BLOCK, USE_SOURCE_BLOCK, SHAPE, COUNT, RADIUS, LIMIT,
+            CommonFields.DELAY_TICKS, CommonFields.CHANCE);
+
     // 类型专属参数编解码器；通用字段复用 CommonFields 片段（codec 层不得产出 null）
     public static MapCodec<PlaceBlockEffect> codec() {
         return RecordCodecBuilder.mapCodec(instance -> instance.group(
-                TaggedId.CODEC.optionalFieldOf(BLOCK_FIELD)
-                        .forGetter(effect -> Optional.ofNullable(effect.block())),
-                Codec.BOOL.optionalFieldOf(USE_SOURCE_BLOCK_FIELD, DEFAULT_USE_SOURCE_BLOCK)
-                        .forGetter(PlaceBlockEffect::useSourceBlock),
-                Shape.CODEC.optionalFieldOf(SHAPE_FIELD, DEFAULT_SHAPE).forGetter(PlaceBlockEffect::shape),
-                Codec.intRange(MIN_COUNT, MAX_COUNT).optionalFieldOf(COUNT_FIELD, DEFAULT_COUNT)
-                        .forGetter(PlaceBlockEffect::count),
-                Codec.intRange(MIN_RADIUS, Integer.MAX_VALUE).optionalFieldOf(RADIUS_FIELD, DEFAULT_RADIUS)
-                        .forGetter(PlaceBlockEffect::radius),
-                Codec.intRange(MIN_LIMIT, Integer.MAX_VALUE).optionalFieldOf(LIMIT_FIELD)
-                        .forGetter(effect -> Optional.ofNullable(effect.limit())),
-                CommonFields.delayTicks(PlaceBlockEffect::delayTicks),
-                CommonFields.chance(PlaceBlockEffect::chance)
+                BLOCK.fieldForNullable(effect -> Optional.ofNullable(effect.block())),
+                USE_SOURCE_BLOCK.fieldFor(PlaceBlockEffect::useSourceBlock),
+                SHAPE.fieldFor(PlaceBlockEffect::shape),
+                COUNT.fieldFor(PlaceBlockEffect::count),
+                RADIUS.fieldFor(PlaceBlockEffect::radius),
+                LIMIT.fieldForNullable(effect -> Optional.ofNullable(effect.limit())),
+                CommonFields.DELAY_TICKS.fieldFor(PlaceBlockEffect::delayTicks),
+                CommonFields.CHANCE.fieldFor(PlaceBlockEffect::chance)
         ).apply(instance, (block, useSourceBlock, shape, count, radius, limit, delayTicks, chance) ->
                 new PlaceBlockEffect(block.orElse(null), useSourceBlock, shape, count, radius,
                         limit.orElse(null), delayTicks, chance)));
@@ -147,13 +167,12 @@ public record PlaceBlockEffect(
             }
         };
         return new SimpleEffectType<>(ID, codec(), PlaceBlockEffect::validateParams,
-                PlaceBlockEffect::validateRuntimeLimits, executor, ProductKind.BLOCK);
+                PlaceBlockEffect::validateRuntimeLimits, executor, ProductKind.BLOCK, PARAMS);
     }
 
     // 参数语义校验；问题写入 issues，不抛异常
     public static boolean validateParams(PlaceBlockEffect params, IssueCollector issues, String fieldPath) {
-        boolean valid = ParamChecks.required(params.shape(), SHAPE_FIELD, issues,
-                ParamChecks.child(fieldPath, SHAPE_FIELD));
+        boolean valid = SHAPE.check(params.shape(), issues, fieldPath);
         if (params.block() == null && !params.useSourceBlock()) {
             issues.error("block 与 use_source_block 至少需要其一，否则没有可放置的方块", null,
                     ParamChecks.child(fieldPath, BLOCK_FIELD));
@@ -161,10 +180,8 @@ public record PlaceBlockEffect(
         }
         valid &= RefChecks.check(params.block(), BuiltInRegistries.BLOCK, BLOCK_FIELD, issues,
                 ParamChecks.child(fieldPath, BLOCK_FIELD));
-        valid &= ParamChecks.inRange(params.count(), MIN_COUNT, MAX_COUNT, COUNT_FIELD, issues,
-                ParamChecks.child(fieldPath, COUNT_FIELD));
-        valid &= ParamChecks.inRange(params.radius(), MIN_RADIUS, Integer.MAX_VALUE, RADIUS_FIELD, issues,
-                ParamChecks.child(fieldPath, RADIUS_FIELD));
+        valid &= COUNT.check(params.count(), issues, fieldPath);
+        valid &= RADIUS.check(params.radius(), issues, fieldPath);
         if (params.limit() != null && params.limit() < MIN_LIMIT) {
             issues.error(LIMIT_FIELD + " 不能小于 " + MIN_LIMIT + "，当前为 " + params.limit(), null,
                     ParamChecks.child(fieldPath, LIMIT_FIELD));

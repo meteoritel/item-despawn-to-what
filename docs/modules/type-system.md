@@ -40,7 +40,8 @@ authority: common/core/registry、common/core/extension、common/core/type，装
 | 类/包 | 角色 | 职责 | 协作对象 |
 |---|---|---|---|
 | `core/registry/SimpleTypeRegistry` | 注册表实现 | 注册期用保序映射登记；`freeze()` 构造不可变快照并以 `volatile` 发布；重复 id 与冻结后注册各自抛出语义异常 | 全部查询方、`BuiltinTypeRegistries` |
-| `core/api/TypeRegistry`、`core/api/TypeDefinition` | 契约 | 注册与查询接口；类型定义由 id、参数 `MapCodec` 与参数校验组成 | 契约细节见 [核心契约](core-contract.md) |
+| `core/api/TypeRegistry`、`core/api/TypeDefinition` | 契约 | 注册与查询接口；类型定义由 id、参数 `MapCodec`、参数校验与参数声明组成 | 契约细节见 [核心契约](core-contract.md) |
+| `core/api/param` 的 `ParamSpec`、`ParamList` | 参数声明 | 每个参数只声明一次：字段名、wire 存在性、值域、默认值、新建初值与编辑器元数据；Codec 字段构件与单字段校验由声明派生 | 各内置类型的 `PARAMS`；客户端 `ParamProjection` |
 | `core/extension/RuleTypeProvider` | 第三方 SPI | 两阶段默认方法：先注册条件类型，再注册效果类型 | `BuiltinTypeRegistries.create()` |
 | `core/extension/DynamicReferenceCheck`、`DynamicReferenceContext` | 扩展点 | 参数对象申报「须依赖服务端已加载内容才能判定的引用」，由核心校验器遍历分派 | `RuleReferenceValidator`（[规则加载](rule-loading.md)） |
 | `core/type/BuiltinConditionTypes`、`core/type/BuiltinEffectTypes` | 内置类型装载 | `createMutable()` 逐条登记内置类型并交给装配点统一冻结；`create(...)` 用于直接构建并冻结的场景 | `BuiltinTypeRegistries` |
@@ -75,19 +76,20 @@ flowchart TD
 
 目录：参数记录放 `common/src/main/java/com/meteorite/itemdespawntowhat/core/type/condition/`，求值器放同层的 `eval/`。
 
-1. 写参数 `record` 并实现 `Condition`；该类型需要动态引用校验时同时实现 `DynamicReferenceCheck`。
-2. 提供 `static final ResourceLocation ID`（同时是 JSON 中 `type` 的取值）、参数 `MapCodec`、`validateParams(...)`，以及返回 `ConditionType` 的静态工厂。静态工厂命名为 `conditionType()`，因为 `Condition` 已有无参实例方法 `type()`。
-3. 求值器实现 `ConditionEvaluator`：它是纯谓词，只给原始判定，不承担消耗；上下文不足时由类型经 `evaluability(...)` 申报 `UNAVAILABLE`。
-4. 在 `BuiltinConditionTypes.createMutable(...)` 增加一条 `registry.register(...)`；冻结由装配点统一完成，不要在类型内部冻结。
-5. 该类型的 JSON 字段语义写入 [规则 JSON](../api/rule-json.md)。
+1. 写参数 `record` 并实现 `Condition`；需要动态引用校验时同时实现 `DynamicReferenceCheck`。
+2. 在同一记录里声明参数：按 JSON 字段顺序写 spec 常量（`IntSpec`、`RefSpec` 等，承载字段名、wire 存在性、值域、默认值、新建初值与编辑器元数据），再聚合为 `PARAMS`；Codec 用 `spec.fieldFor` / `fieldForNullable`，单字段校验用 `spec.check`，跨字段与模式相关校验留在 `validateParams`。
+3. 提供 `static final ResourceLocation ID`（同时是 JSON 中 `type` 的取值）、参数 `MapCodec`、`validateParams(...)`，以及返回 `ConditionType` 的静态工厂（传 `PARAMS`）。静态工厂命名为 `conditionType()`，因为 `Condition` 已有无参实例方法 `type()`。
+4. 求值器实现 `ConditionEvaluator`：它是纯谓词，只给原始判定，不承担消耗；上下文不足时由类型经 `evaluability(...)` 申报 `UNAVAILABLE`。
+5. 在 `BuiltinConditionTypes.createMutable(...)` 增加一条 `registry.register(...)`；冻结由装配点统一完成，不要在类型内部冻结。
+6. 该类型的 JSON 字段语义写入 [规则 JSON](../api/rule-json.md)。
 
 ### 新增内置效果类型
 
 目录：参数记录放 `core/type/effect/`，执行器放同层的 `exec/`。
 
 1. 写参数 `record` 并实现 `Effect`。
-2. 参数 `MapCodec` 以无参 `codec()` 形式提供，通用字段（延迟、概率）复用 `CommonFields` 片段；Codec 在解码期不产出 `null`。
-3. `effectType()` 返回 `SimpleEffectType`：id + 参数 `MapCodec` + 参数校验器 + `EffectExecutor` + 一次性标记 + 产出类别 + 容量需求解析器。
+2. 声明参数：按 JSON 字段顺序写 spec 常量并聚合为 `PARAMS`，通用字段直接引用 `CommonFields.EFFECT_PARAMS` 里的声明；Codec 字段构件取自声明，解码期不产出 `null`。
+3. `effectType()` 返回 `SimpleEffectType`：id + 参数 `MapCodec` + 参数校验器 + `PARAMS` + `EffectExecutor` + 一次性标记 + 产出类别 + 容量需求解析器。
 4. 执行器放 `exec/`：同步执行只需 `execute`；需要在成功转化当刻固定输入的类型覆盖 `prepare` 与按准备结果创建执行状态的 `start`，长循环在 `start` 返回的执行状态里按共享 tick 预算续接（见 [转化运行时](conversion-runtime.md)）。固定范围覆盖 `EffectExecution.requiredChunks()` 声明 `ChunkRequirement`；处理中途遇到未加载区块返回 `EffectStep.AwaitChunks`，预算或批次上限用 `Yield`，正常间隔用 `Delay`，最终回执用 `Done`。区块检查、重试刻与超时由运行时处理；执行状态保留随机目标、游标与已完成量。具体契约见 [契约层核心](core-contract.md)。
 5. 在 `BuiltinEffectTypes.createMutable()` 增加一条登记。
 6. 声明产出类别（`productKind`）后，含该效果的规则可按类别归组；`productKind` 默认 `ProductKind.NONE`，含这类效果的规则参与归类时按无产出处理（分类装配见 [编辑与落盘](authoring.md)）。内置 `spawn_entity` 按产出子类声明产出类别：掉落物、生物、其他实体与经验分别对应 `entity.item`、`entity.mob`、`entity.entity`、`entity.experience`；同一条规则含多个实体子类时归 `entity.mixed`。
@@ -111,6 +113,7 @@ flowchart TD
 - 类型 id 同时是 JSON `type` 的取值；未注册类型的编解码属编程错误，由分发层报错（见 [规则模型](rule-model.md)）。
 - `all()` / `ids()` 在注册期也返回快照，调用方拿到的集合不会随之后的注册变化；输出顺序即注册顺序。
 - 类型参数的枚举取值统一走 `EnumCodecs`，新增枚举取值时无需另写解析。
+- 每个类型的参数只声明一次：值域、默认值、新建初值与编辑器窗口不写在 Codec、校验器或客户端表里；客户端描述符与新建初值由声明投影。
 - 改动后依次运行：`python tools/check-docs.py`、`tools/dsh-build.ps1 -Tasks build`，再做实机验证；类型注册冲突会在启动装配时立即暴露。
 
 ## 6. 数据与配置引用
@@ -122,6 +125,7 @@ flowchart TD
 | 运行期可配置项（类型注册不受其影响） | [运行配置](../ops/configuration.md) |
 | 扁平类型分发与条件树形状的决策 | [ADR-0013](../adr/0013-dfu-codec-and-flat-type-dispatch.md) |
 | 动态引用校验放在参数对象上的决策 | [ADR-0036](../adr/0036-dynamic-reference-check-extension-point.md) |
+| 类型参数只声明一次、编解码与编辑器共同消费的决策 | [ADR-0049](../adr/0049-single-parameter-declaration.md) |
 
 ## 相关文档
 

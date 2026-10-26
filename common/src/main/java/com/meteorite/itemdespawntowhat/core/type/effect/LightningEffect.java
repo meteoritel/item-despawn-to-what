@@ -7,14 +7,14 @@ import com.meteorite.itemdespawntowhat.core.api.EffectExecutor;
 import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
-import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
+import com.meteorite.itemdespawntowhat.core.api.param.IntSpec;
+import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.ProductKind;
 import com.meteorite.itemdespawntowhat.core.model.SimpleEffectType;
 import com.meteorite.itemdespawntowhat.core.type.effect.exec.LightningExecutor;
-import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.resources.ResourceLocation;
@@ -46,13 +46,18 @@ public record LightningEffect(
     public static final int MIN_COUNT = 1;
     public static final int MAX_COUNT = 16;
 
+    // 参数声明：类型专属字段在前，通用字段复用 CommonFields 的声明
+    public static final IntSpec COUNT = IntSpec
+            .defaulted(COUNT_FIELD, DEFAULT_COUNT, MIN_COUNT, MAX_COUNT)
+            .initial(DEFAULT_COUNT);
+    public static final ParamList PARAMS = ParamList.of(COUNT, CommonFields.DELAY_TICKS, CommonFields.CHANCE);
+
     // 类型专属参数编解码器；通用字段复用 CommonFields 片段（codec 层不得产出 null）
     public static MapCodec<LightningEffect> codec() {
         return RecordCodecBuilder.mapCodec(instance -> instance.group(
-                Codec.intRange(MIN_COUNT, MAX_COUNT).optionalFieldOf(COUNT_FIELD, DEFAULT_COUNT)
-                        .forGetter(LightningEffect::count),
-                CommonFields.delayTicks(LightningEffect::delayTicks),
-                CommonFields.chance(LightningEffect::chance)
+                COUNT.fieldFor(LightningEffect::count),
+                CommonFields.DELAY_TICKS.fieldFor(LightningEffect::delayTicks),
+                CommonFields.CHANCE.fieldFor(LightningEffect::chance)
         ).apply(instance, LightningEffect::new));
     }
 
@@ -79,13 +84,12 @@ public record LightningEffect(
             }
         };
         return new SimpleEffectType<>(ID, codec(), LightningEffect::validateParams, executor, true,
-                ProductKind.WORLD);
+                ProductKind.WORLD, PARAMS);
     }
 
     // 参数语义校验；问题写入 issues，不抛异常
     public static boolean validateParams(LightningEffect params, IssueCollector issues, String fieldPath) {
-        return ParamChecks.inRange(params.count(), MIN_COUNT, MAX_COUNT, COUNT_FIELD, issues,
-                ParamChecks.child(fieldPath, COUNT_FIELD));
+        return COUNT.check(params.count(), issues, fieldPath);
     }
 
     @Override

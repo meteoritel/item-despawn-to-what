@@ -7,14 +7,15 @@ import com.meteorite.itemdespawntowhat.core.api.EffectExecutor;
 import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
-import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
+import com.meteorite.itemdespawntowhat.core.api.param.BoolSpec;
+import com.meteorite.itemdespawntowhat.core.api.param.FloatSpec;
+import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.ProductKind;
 import com.meteorite.itemdespawntowhat.core.model.SimpleEffectType;
 import com.meteorite.itemdespawntowhat.core.type.effect.exec.ExplosionExecutor;
-import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.resources.ResourceLocation;
@@ -52,16 +53,24 @@ public record ExplosionEffect(
     public static final boolean DEFAULT_FIRE = false;
     public static final boolean DEFAULT_VISUAL_ONLY = false;
 
+    // 参数声明：类型专属字段在前，通用字段复用 CommonFields 的声明
+    public static final FloatSpec POWER = FloatSpec
+            .defaulted(POWER_FIELD, DEFAULT_POWER, MIN_POWER, MAX_POWER)
+            .initial(DEFAULT_POWER);
+    public static final BoolSpec FIRE = BoolSpec.defaulted(FIRE_FIELD, DEFAULT_FIRE).initial(DEFAULT_FIRE);
+    public static final BoolSpec VISUAL_ONLY = BoolSpec.defaulted(VISUAL_ONLY_FIELD, DEFAULT_VISUAL_ONLY)
+            .initial(DEFAULT_VISUAL_ONLY);
+    public static final ParamList PARAMS = ParamList.of(POWER, FIRE, VISUAL_ONLY,
+            CommonFields.DELAY_TICKS, CommonFields.CHANCE);
+
     // 类型专属参数编解码器；通用字段复用 CommonFields 片段（codec 层不得产出 null）
     public static MapCodec<ExplosionEffect> codec() {
         return RecordCodecBuilder.mapCodec(instance -> instance.group(
-                Codec.floatRange(MIN_POWER, MAX_POWER).optionalFieldOf(POWER_FIELD, DEFAULT_POWER)
-                        .forGetter(ExplosionEffect::power),
-                Codec.BOOL.optionalFieldOf(FIRE_FIELD, DEFAULT_FIRE).forGetter(ExplosionEffect::fire),
-                Codec.BOOL.optionalFieldOf(VISUAL_ONLY_FIELD, DEFAULT_VISUAL_ONLY)
-                        .forGetter(ExplosionEffect::visualOnly),
-                CommonFields.delayTicks(ExplosionEffect::delayTicks),
-                CommonFields.chance(ExplosionEffect::chance)
+                POWER.fieldFor(ExplosionEffect::power),
+                FIRE.fieldFor(ExplosionEffect::fire),
+                VISUAL_ONLY.fieldFor(ExplosionEffect::visualOnly),
+                CommonFields.DELAY_TICKS.fieldFor(ExplosionEffect::delayTicks),
+                CommonFields.CHANCE.fieldFor(ExplosionEffect::chance)
         ).apply(instance, ExplosionEffect::new));
     }
 
@@ -88,13 +97,12 @@ public record ExplosionEffect(
             }
         };
         return new SimpleEffectType<>(ID, codec(), ExplosionEffect::validateParams, executor, true,
-                ProductKind.WORLD);
+                ProductKind.WORLD, PARAMS);
     }
 
     // 参数语义校验；问题写入 issues，不抛异常
     public static boolean validateParams(ExplosionEffect params, IssueCollector issues, String fieldPath) {
-        return ParamChecks.inRange(params.power(), MIN_POWER, MAX_POWER, POWER_FIELD, issues,
-                ParamChecks.child(fieldPath, POWER_FIELD));
+        return POWER.check(params.power(), issues, fieldPath);
     }
 
     @Override

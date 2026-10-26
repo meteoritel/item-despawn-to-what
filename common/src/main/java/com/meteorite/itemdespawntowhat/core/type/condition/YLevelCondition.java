@@ -3,11 +3,12 @@ package com.meteorite.itemdespawntowhat.core.type.condition;
 import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
+import com.meteorite.itemdespawntowhat.core.api.param.IntSpec;
+import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleConditionType;
 import com.meteorite.itemdespawntowhat.core.type.condition.eval.YLevelEvaluator;
-import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.resources.ResourceLocation;
@@ -32,11 +33,28 @@ public record YLevelCondition(Integer min, Integer max) implements Condition {
     /** 高度参数的合法下限，供校验与编辑器域描述共用。 */
     public static final int MIN_Y = -2048;
 
+    // 新建规则的高度初值：与编辑器滑条窗口一致，避免新建出两端留空的恒真叶
+    private static final int INITIAL_MIN = -64;
+    private static final int INITIAL_MAX = 512;
+
+    // 参数声明：解码期接受任意整数，下界语义由 validateMinimum 保留自定义文案；滑条窗口不是提交硬限额
+    public static final IntSpec MIN = IntSpec.nullable(FIELD_MIN, MIN_Y, Integer.MAX_VALUE)
+            .widened()
+            .window(INITIAL_MIN, INITIAL_MAX)
+            .initial(INITIAL_MIN);
+    public static final IntSpec MAX = IntSpec.nullable(FIELD_MAX, MIN_Y, Integer.MAX_VALUE)
+            .widened()
+            .window(INITIAL_MIN, INITIAL_MAX)
+            .initial(INITIAL_MAX);
+    public static final ParamList PARAMS = ParamList.of(MIN, MAX);
+
     // 参数编解码器：两端均可选，缺省为 null
-    public static final MapCodec<YLevelCondition> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-            Codec.INT.optionalFieldOf(FIELD_MIN).forGetter(value -> Optional.ofNullable(value.min())),
-            Codec.INT.optionalFieldOf(FIELD_MAX).forGetter(value -> Optional.ofNullable(value.max()))
-    ).apply(instance, (min, max) -> new YLevelCondition(min.orElse(null), max.orElse(null))));
+    public static MapCodec<YLevelCondition> codec() {
+        return RecordCodecBuilder.mapCodec(instance -> instance.group(
+                MIN.fieldForNullable(value -> Optional.ofNullable(value.min())),
+                MAX.fieldForNullable(value -> Optional.ofNullable(value.max()))
+        ).apply(instance, (min, max) -> new YLevelCondition(min.orElse(null), max.orElse(null))));
+    }
 
     // 条件类型 id
     @Override
@@ -46,7 +64,8 @@ public record YLevelCondition(Integer min, Integer max) implements Condition {
 
     // 条件类型定义，供注册表登记；静态工厂不能叫 type()（与 Condition#type 实例方法签名冲突）
     public static ConditionType<YLevelCondition> conditionType() {
-        return new SimpleConditionType<>(ID, CODEC, YLevelCondition::validateParams, YLevelEvaluator::test);
+        return new SimpleConditionType<>(ID, codec(), YLevelCondition::validateParams, YLevelEvaluator::test,
+                PARAMS);
     }
 
     /**

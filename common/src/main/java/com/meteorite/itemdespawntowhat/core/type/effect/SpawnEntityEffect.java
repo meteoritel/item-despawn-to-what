@@ -7,6 +7,7 @@ import com.meteorite.itemdespawntowhat.core.api.EffectExecutor;
 import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
+import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
 import com.meteorite.itemdespawntowhat.core.model.CapacityDemand;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
@@ -27,12 +28,15 @@ import org.jetbrains.annotations.Nullable;
 public record SpawnEntityEffect(EntityProduct product, int delayTicks, double chance) implements Effect {
     public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(Constants.ID_NAMESPACE, "spawn_entity");
 
+    // 类型自身没有专属参数：产出子类的字段由 EntityProduct.PARAMS 按 variant 声明
+    public static final ParamList PARAMS = CommonFields.EFFECT_PARAMS;
+
     // 专用参数与公共字段同层编码，方便直接使用子类编辑表单。
     public static MapCodec<SpawnEntityEffect> codec() {
         return RecordCodecBuilder.mapCodec(instance -> instance.group(
                 EntityProduct.CODEC.forGetter(SpawnEntityEffect::product),
-                CommonFields.delayTicks(SpawnEntityEffect::delayTicks),
-                CommonFields.chance(SpawnEntityEffect::chance)
+                CommonFields.DELAY_TICKS.fieldFor(SpawnEntityEffect::delayTicks),
+                CommonFields.CHANCE.fieldFor(SpawnEntityEffect::chance)
         ).apply(instance, SpawnEntityEffect::new));
     }
 
@@ -60,7 +64,7 @@ public record SpawnEntityEffect(EntityProduct product, int delayTicks, double ch
         };
         // 产出类别与容量需求都随 variant 变化：物品 / 生物 / 其他实体 / 经验各自声明自己的产出与占用
         return new SimpleEffectType<>(ID, codec(), SpawnEntityEffect::validateParams, executor,
-                false, SpawnEntityEffect::productKind, SpawnEntityEffect::capacityDemand);
+                false, SpawnEntityEffect::productKind, SpawnEntityEffect::capacityDemand, PARAMS);
     }
 
     // 分类器读取的产出类别；缺少产出子类的规则无法加载，按未知产出兜底

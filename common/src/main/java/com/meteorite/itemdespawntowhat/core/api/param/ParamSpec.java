@@ -1,0 +1,92 @@
+package com.meteorite.itemdespawntowhat.core.api.param;
+
+import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.List;
+
+/**
+ * 单个类型参数的唯一事实来源：字段名、wire presence、取值域、默认值、新建初值与编辑器投影信息。
+ * <p>codec、语义校验、编辑器描述符与新建初值四个读点都从同一份声明取值，避免同一事实写多遍后漂移。</p>
+ * <p>声明只覆盖单字段事实：跨字段关系（区间顺序、模式相关必填）、注册表引用存在性与服务端运行期上限
+ * 仍由各类型的 validateParams / validateRuntimeLimits 负责。</p>
+ */
+public sealed interface ParamSpec permits IntSpec, FloatSpec, DoubleSpec, BoolSpec, EnumSpec, RefSpec,
+        RefListSpec, ResLocSpec, ResLocListSpec, MapSpec, NestedSpec, NestedListSpec {
+
+    // 声明元数据
+    ParamMeta meta();
+
+    // JSON 字段名
+    default String name() {
+        return meta().name();
+    }
+
+    // JSON 出现形态
+    default ParamPresence presence() {
+        return meta().presence();
+    }
+
+    // 语义单位
+    default ParamUnit unit() {
+        return meta().unit();
+    }
+
+    // 编辑器特殊形态
+    default ParamShape shape() {
+        return meta().shape();
+    }
+
+    // label key 片段：非 null 表示完整后缀，null 表示按「类型片段.字段名」推导
+    default @Nullable String labelSuffix() {
+        return meta().labelSuffix();
+    }
+
+    // 提示文案 key 片段；null 表示无提示
+    default @Nullable String hintSuffix() {
+        return meta().hintSuffix();
+    }
+
+    // 新建规则的初值；null 表示不预写该字段
+    default @Nullable Object initialValue() {
+        return meta().initialValue();
+    }
+
+    // 编辑器是否强制填写
+    default boolean editorRequired() {
+        return meta().editorRequired();
+    }
+
+    /** 该参数是否在编辑器中展示 */
+    default boolean editorVisible() {
+        return meta().editorVisible();
+    }
+
+    // 数值字段的常用取值按钮
+    default List<ParamPreset> presets() {
+        return meta().presets();
+    }
+
+    // 是否必填
+    default boolean required() {
+        return presence() == ParamPresence.REQUIRED;
+    }
+
+    // 是否可空
+    default boolean nullable() {
+        return presence() == ParamPresence.NULLABLE;
+    }
+
+    // 省略该字段时后端采用的默认值；必填与可空字段没有默认值
+    @Nullable Object defaultValue();
+
+    /**
+     * 单字段语义校验：值域与必填；跨字段关系由类型自己校验。
+     *
+     * @param value 参数值；可空字段可能为 null
+     * @param issues 问题收集器
+     * @param fieldPath 该参数对象在规则中的字段路径
+     * @return 是否合法
+     */
+    boolean check(@Nullable Object value, IssueCollector issues, String fieldPath);
+}

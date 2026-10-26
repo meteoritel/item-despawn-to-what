@@ -25,7 +25,7 @@ authority:
 
 | # | 约束 | 允许方向 | 固化手段 |
 |---|---|---|---|
-| D1 | 契约包只被引用 | `core/api`、`core/api/scheduler` 只依赖 JDK、原版契约类型与自身 | 编译期（契约包内无对其它 `core` 包的 import）+ 评审 |
+| D1 | 契约包只被引用 | `core/api`、`core/api/scheduler`、`core/api/param` 只依赖 JDK、原版契约类型与自身 | 编译期（契约包内无对其它 `core` 包的 import）+ 评审 |
 | D2 | 模型只依赖契约 | `core/model` → `core/api` | 编译期 + 评审 |
 | D3 | 类型系统不依赖编辑面 | `core/registry`、`core/extension`、`core/type` → 契约、模型与只读辅助类型 | 编译期 + [已知例外](#已知例外) |
 | D4 | 加载层不认识模型 | `core/load` → `core/api`；模型以 `RuleDecoder` 注入 | 编译期 + 评审 |

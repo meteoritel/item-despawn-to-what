@@ -7,7 +7,10 @@ import com.meteorite.itemdespawntowhat.core.api.EffectExecutor;
 import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
-import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
+import com.meteorite.itemdespawntowhat.core.api.param.BoolSpec;
+import com.meteorite.itemdespawntowhat.core.api.param.EnumSpec;
+import com.meteorite.itemdespawntowhat.core.api.param.IntSpec;
+import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
@@ -61,17 +64,26 @@ public record WeatherEffect(
         public static final Codec<Mode> CODEC = EnumCodecs.lowerCase(Mode.class);
     }
 
+    // 参数声明：类型专属字段在前，通用字段复用 CommonFields 的声明
+    public static final EnumSpec<Mode> MODE = EnumSpec
+            .required(MODE_FIELD, Mode.CODEC, "weather_effect_mode", Mode.values())
+            .initial(Mode.RAIN);
+    public static final IntSpec DURATION_TICKS = IntSpec
+            .defaulted(DURATION_TICKS_FIELD, DEFAULT_DURATION_TICKS, MIN_DURATION_TICKS, MAX_DURATION_TICKS)
+            .initial(DEFAULT_DURATION_TICKS);
+    public static final BoolSpec THUNDERING = BoolSpec.defaulted(THUNDERING_FIELD, DEFAULT_THUNDERING)
+            .initial(DEFAULT_THUNDERING);
+    public static final ParamList PARAMS = ParamList.of(MODE, DURATION_TICKS, THUNDERING,
+            CommonFields.DELAY_TICKS, CommonFields.CHANCE);
+
     // 类型专属参数编解码器；通用字段复用 CommonFields 片段（codec 层不得产出 null）
     public static MapCodec<WeatherEffect> codec() {
         return RecordCodecBuilder.mapCodec(instance -> instance.group(
-                Mode.CODEC.fieldOf(MODE_FIELD).forGetter(WeatherEffect::mode),
-                Codec.intRange(MIN_DURATION_TICKS, MAX_DURATION_TICKS)
-                        .optionalFieldOf(DURATION_TICKS_FIELD, DEFAULT_DURATION_TICKS)
-                        .forGetter(WeatherEffect::durationTicks),
-                Codec.BOOL.optionalFieldOf(THUNDERING_FIELD, DEFAULT_THUNDERING)
-                        .forGetter(WeatherEffect::thundering),
-                CommonFields.delayTicks(WeatherEffect::delayTicks),
-                CommonFields.chance(WeatherEffect::chance)
+                MODE.fieldFor(WeatherEffect::mode),
+                DURATION_TICKS.fieldFor(WeatherEffect::durationTicks),
+                THUNDERING.fieldFor(WeatherEffect::thundering),
+                CommonFields.DELAY_TICKS.fieldFor(WeatherEffect::delayTicks),
+                CommonFields.CHANCE.fieldFor(WeatherEffect::chance)
         ).apply(instance, (mode, durationTicks, thundering, delayTicks, chance) ->
                 new WeatherEffect(mode, durationTicks, thundering, delayTicks, chance)));
     }
@@ -100,15 +112,13 @@ public record WeatherEffect(
             }
         };
         return new SimpleEffectType<>(ID, codec(), WeatherEffect::validateParams, executor, true,
-                ProductKind.WORLD);
+                ProductKind.WORLD, PARAMS);
     }
 
     // 参数语义校验；问题写入 issues，不抛异常
     public static boolean validateParams(WeatherEffect params, IssueCollector issues, String fieldPath) {
-        boolean valid = ParamChecks.required(params.mode(), MODE_FIELD, issues,
-                ParamChecks.child(fieldPath, MODE_FIELD));
-        valid &= ParamChecks.inRange(params.durationTicks(), MIN_DURATION_TICKS, MAX_DURATION_TICKS,
-                DURATION_TICKS_FIELD, issues, ParamChecks.child(fieldPath, DURATION_TICKS_FIELD));
+        boolean valid = MODE.check(params.mode(), issues, fieldPath);
+        valid &= DURATION_TICKS.check(params.durationTicks(), issues, fieldPath);
         return valid;
     }
 

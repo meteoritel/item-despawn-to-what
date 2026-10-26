@@ -2,12 +2,12 @@ package com.meteorite.itemdespawntowhat.core.type.condition;
 
 import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
-import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
+import com.meteorite.itemdespawntowhat.core.api.param.IntSpec;
+import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
 import com.meteorite.itemdespawntowhat.core.model.Condition;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.SimpleConditionType;
 import com.meteorite.itemdespawntowhat.core.type.condition.eval.TimeOfDayEvaluator;
-import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.resources.ResourceLocation;
@@ -31,11 +31,22 @@ public record TimeOfDayCondition(int from, int to) implements Condition {
     private static final int MIN_TICK = 0;
     private static final int MAX_TICK = 23999;
 
+    // 参数声明：codec 接受任意整数（沿用「解码宽、校验严」），语义校验落在 [0,23999]；新建规则预写整日区间
+    public static final IntSpec FROM = IntSpec.required(FIELD_FROM, MIN_TICK, MAX_TICK)
+            .widened()
+            .initial(MIN_TICK);
+    public static final IntSpec TO = IntSpec.required(FIELD_TO, MIN_TICK, MAX_TICK)
+            .widened()
+            .initial(MAX_TICK);
+    public static final ParamList PARAMS = ParamList.of(FROM, TO);
+
     // 参数编解码器：from / to 均必填
-    public static final MapCodec<TimeOfDayCondition> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-            Codec.INT.fieldOf(FIELD_FROM).forGetter(TimeOfDayCondition::from),
-            Codec.INT.fieldOf(FIELD_TO).forGetter(TimeOfDayCondition::to)
-    ).apply(instance, TimeOfDayCondition::new));
+    public static MapCodec<TimeOfDayCondition> codec() {
+        return RecordCodecBuilder.mapCodec(instance -> instance.group(
+                FROM.fieldFor(TimeOfDayCondition::from),
+                TO.fieldFor(TimeOfDayCondition::to)
+        ).apply(instance, TimeOfDayCondition::new));
+    }
 
     // 条件类型 id
     @Override
@@ -45,15 +56,14 @@ public record TimeOfDayCondition(int from, int to) implements Condition {
 
     // 条件类型定义，供注册表登记；静态工厂不能叫 type()（与 Condition#type 实例方法签名冲突）
     public static ConditionType<TimeOfDayCondition> conditionType() {
-        return new SimpleConditionType<>(ID, CODEC, TimeOfDayCondition::validateParams, TimeOfDayEvaluator::test);
+        return new SimpleConditionType<>(ID, codec(), TimeOfDayCondition::validateParams, TimeOfDayEvaluator::test,
+                PARAMS);
     }
 
     // 参数语义校验：两端都必须落在 [0,23999]；from > to 表示跨零点，合法
     public static boolean validateParams(TimeOfDayCondition params, IssueCollector issues, String fieldPath) {
-        boolean valid = ParamChecks.inRange(params.from(), MIN_TICK, MAX_TICK, FIELD_FROM, issues,
-                ParamChecks.child(fieldPath, FIELD_FROM));
-        valid &= ParamChecks.inRange(params.to(), MIN_TICK, MAX_TICK, FIELD_TO, issues,
-                ParamChecks.child(fieldPath, FIELD_TO));
+        boolean valid = FROM.check(params.from(), issues, fieldPath);
+        valid &= TO.check(params.to(), issues, fieldPath);
         return valid;
     }
 }

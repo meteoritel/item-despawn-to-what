@@ -4,11 +4,12 @@ import com.meteorite.itemdespawntowhat.core.api.ConditionContext;
 import com.meteorite.itemdespawntowhat.core.api.ConditionEvaluator;
 import com.meteorite.itemdespawntowhat.core.api.Evaluability;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
+import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
 import com.mojang.serialization.MapCodec;
 import net.minecraft.resources.ResourceLocation;
 
 /**
- * 由「id + 参数编解码器 + 参数校验器 + 求值器 + 可求值性检查」组成的通用条件类型定义。
+ * 由「id + 参数编解码器 + 参数校验器 + 求值器 + 可求值性检查 + 参数声明」组成的通用条件类型定义。
  * 内置条件类型用它一行完成注册；不需要上下文门禁的类型用四参构造，可求值性恒为 AVAILABLE。
  */
 public record SimpleConditionType<P extends Condition>(
@@ -16,15 +17,38 @@ public record SimpleConditionType<P extends Condition>(
         MapCodec<P> codec,
         Validator<P> validator,
         ConditionEvaluator<P> evaluator,
-        EvaluabilityCheck<P> evaluabilityCheck
+        EvaluabilityCheck<P> evaluabilityCheck,
+        ParamList params
 ) implements ConditionType<P> {
 
-    // 四参构造：可求值性恒为 AVAILABLE
+    public SimpleConditionType {
+        params = params == null ? ParamList.EMPTY : params;
+    }
+
+    // 四参构造：可求值性恒为 AVAILABLE，未声明参数
     public SimpleConditionType(ResourceLocation id,
                                MapCodec<P> codec,
                                Validator<P> validator,
                                ConditionEvaluator<P> evaluator) {
-        this(id, codec, validator, evaluator, (params, context) -> Evaluability.AVAILABLE);
+        this(id, codec, validator, evaluator, (params, context) -> Evaluability.AVAILABLE, ParamList.EMPTY);
+    }
+
+    // 五参构造：只声明可求值性检查，未声明参数
+    public SimpleConditionType(ResourceLocation id,
+                               MapCodec<P> codec,
+                               Validator<P> validator,
+                               ConditionEvaluator<P> evaluator,
+                               EvaluabilityCheck<P> evaluabilityCheck) {
+        this(id, codec, validator, evaluator, evaluabilityCheck, ParamList.EMPTY);
+    }
+
+    // 五参构造：声明参数，可求值性恒为 AVAILABLE
+    public SimpleConditionType(ResourceLocation id,
+                               MapCodec<P> codec,
+                               Validator<P> validator,
+                               ConditionEvaluator<P> evaluator,
+                               ParamList params) {
+        this(id, codec, validator, evaluator, (params2, context) -> Evaluability.AVAILABLE, params);
     }
 
     @Override

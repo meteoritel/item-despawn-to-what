@@ -9,6 +9,12 @@ import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
+import com.meteorite.itemdespawntowhat.core.api.param.EnumSpec;
+import com.meteorite.itemdespawntowhat.core.api.param.IntSpec;
+import com.meteorite.itemdespawntowhat.core.api.param.NestedListSpec;
+import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
+import com.meteorite.itemdespawntowhat.core.api.param.ParamUnit;
+import com.meteorite.itemdespawntowhat.core.api.param.RefSpec;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
 import com.meteorite.itemdespawntowhat.core.model.Effect;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
@@ -97,41 +103,56 @@ public record ArrowRainEffect(
         public static final int MIN_AMPLIFIER = 0;
         public static final int MAX_AMPLIFIER = 255;
 
+        // 单项药水效果的参数声明
+        public static final RefSpec EFFECT = RefSpec.required(EFFECT_FIELD, "minecraft:mob_effect");
+        public static final IntSpec DURATION_TICKS = IntSpec
+                .defaulted(DURATION_TICKS_FIELD, DEFAULT_DURATION_TICKS, MIN_DURATION_TICKS, MAX_DURATION_TICKS);
+        public static final IntSpec AMPLIFIER = IntSpec
+                .defaulted(AMPLIFIER_FIELD, DEFAULT_AMPLIFIER, MIN_AMPLIFIER, MAX_AMPLIFIER)
+                .unit(ParamUnit.LEVEL);
+        public static final ParamList PARAMS = ParamList.of(EFFECT, DURATION_TICKS, AMPLIFIER);
+
         // 药水效果编解码器
         public static final MapCodec<PotionEffectSpec> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-                TaggedId.CODEC.fieldOf(EFFECT_FIELD).forGetter(PotionEffectSpec::effect),
-                Codec.intRange(MIN_DURATION_TICKS, MAX_DURATION_TICKS)
-                        .optionalFieldOf(DURATION_TICKS_FIELD, DEFAULT_DURATION_TICKS)
-                        .forGetter(PotionEffectSpec::durationTicks),
-                Codec.intRange(MIN_AMPLIFIER, MAX_AMPLIFIER)
-                        .optionalFieldOf(AMPLIFIER_FIELD, DEFAULT_AMPLIFIER)
-                        .forGetter(PotionEffectSpec::amplifier)
+                EFFECT.fieldFor(PotionEffectSpec::effect),
+                DURATION_TICKS.fieldFor(PotionEffectSpec::durationTicks),
+                AMPLIFIER.fieldFor(PotionEffectSpec::amplifier)
         ).apply(instance, PotionEffectSpec::new));
 
         // 单项药水效果的语义校验；问题写入 issues，不抛异常
         public static boolean validateParams(PotionEffectSpec params, IssueCollector issues, String fieldPath) {
             String effectPath = ParamChecks.child(fieldPath, EFFECT_FIELD);
-            boolean valid = ParamChecks.required(params.effect(), EFFECT_FIELD, issues, effectPath);
+            boolean valid = EFFECT.check(params.effect(), issues, fieldPath);
             valid &= RefChecks.check(params.effect(), BuiltInRegistries.MOB_EFFECT, EFFECT_FIELD,
                     issues, effectPath);
-            valid &= ParamChecks.inRange(params.durationTicks(), MIN_DURATION_TICKS, MAX_DURATION_TICKS,
-                    DURATION_TICKS_FIELD, issues, ParamChecks.child(fieldPath, DURATION_TICKS_FIELD));
-            valid &= ParamChecks.inRange(params.amplifier(), MIN_AMPLIFIER, MAX_AMPLIFIER, AMPLIFIER_FIELD,
-                    issues, ParamChecks.child(fieldPath, AMPLIFIER_FIELD));
+            valid &= DURATION_TICKS.check(params.durationTicks(), issues, fieldPath);
+            valid &= AMPLIFIER.check(params.amplifier(), issues, fieldPath);
             return valid;
         }
     }
 
+    // 参数声明：类型专属字段在前，通用字段复用 CommonFields 的声明
+    public static final IntSpec COUNT = IntSpec.defaulted(COUNT_FIELD, DEFAULT_COUNT, MIN_COUNT, MAX_COUNT)
+            .initial(DEFAULT_COUNT);
+    public static final EnumSpec<Pickup> PICKUP = EnumSpec
+            .defaulted(PICKUP_FIELD, Pickup.CODEC, DEFAULT_PICKUP, "arrow_rain_pickup", Pickup.values())
+            .editorRequired(false)
+            .initial(DEFAULT_PICKUP);
+    public static final NestedListSpec<PotionEffectSpec> POTION_EFFECTS = NestedListSpec
+            .nullable(POTION_EFFECTS_FIELD, PotionEffectSpec.CODEC.codec(), PotionEffectSpec.PARAMS)
+            .hint("arrow_rain.potion_effects.hint")
+            .initial(List.of());
+    public static final ParamList PARAMS = ParamList.of(COUNT, PICKUP, POTION_EFFECTS,
+            CommonFields.DELAY_TICKS, CommonFields.CHANCE);
+
     // 类型专属参数编解码器；通用字段复用 CommonFields 片段（codec 层不得产出 null）
     public static MapCodec<ArrowRainEffect> codec() {
         return RecordCodecBuilder.mapCodec(instance -> instance.group(
-                Codec.intRange(MIN_COUNT, MAX_COUNT).optionalFieldOf(COUNT_FIELD, DEFAULT_COUNT)
-                        .forGetter(ArrowRainEffect::count),
-                Pickup.CODEC.optionalFieldOf(PICKUP_FIELD, DEFAULT_PICKUP).forGetter(ArrowRainEffect::pickup),
-                PotionEffectSpec.CODEC.codec().listOf().optionalFieldOf(POTION_EFFECTS_FIELD)
-                        .forGetter(effect -> Optional.ofNullable(effect.potionEffects())),
-                CommonFields.delayTicks(ArrowRainEffect::delayTicks),
-                CommonFields.chance(ArrowRainEffect::chance)
+                COUNT.fieldFor(ArrowRainEffect::count),
+                PICKUP.fieldFor(ArrowRainEffect::pickup),
+                POTION_EFFECTS.fieldForNullable(effect -> Optional.ofNullable(effect.potionEffects())),
+                CommonFields.DELAY_TICKS.fieldFor(ArrowRainEffect::delayTicks),
+                CommonFields.CHANCE.fieldFor(ArrowRainEffect::chance)
         ).apply(instance, (count, pickup, potionEffects, delayTicks, chance) ->
                 new ArrowRainEffect(count, pickup, potionEffects.orElse(null), delayTicks, chance)));
     }
@@ -180,15 +201,13 @@ public record ArrowRainEffect(
             }
         };
         return new SimpleEffectType<>(ID, codec(), ArrowRainEffect::validateParams, executor, true,
-                ProductKind.WORLD);
+                ProductKind.WORLD, PARAMS);
     }
 
     // 参数语义校验；问题写入 issues，不抛异常
     public static boolean validateParams(ArrowRainEffect params, IssueCollector issues, String fieldPath) {
-        boolean valid = ParamChecks.inRange(params.count(), MIN_COUNT, MAX_COUNT, COUNT_FIELD, issues,
-                ParamChecks.child(fieldPath, COUNT_FIELD));
-        valid &= ParamChecks.required(params.pickup(), PICKUP_FIELD, issues,
-                ParamChecks.child(fieldPath, PICKUP_FIELD));
+        boolean valid = COUNT.check(params.count(), issues, fieldPath);
+        valid &= PICKUP.check(params.pickup(), issues, fieldPath);
         if (params.potionEffects() != null) {
             String effectsPath = ParamChecks.child(fieldPath, POTION_EFFECTS_FIELD);
             for (int index = 0; index < params.potionEffects().size(); index++) {
