@@ -72,12 +72,15 @@ final class FormDraftWriter {
         }
     }
 
-    private static @Nullable RuleValue effectiveValue(RuleValue owner, String field) {
+    private @Nullable RuleValue effectiveValue(RuleValue owner, String field) {
         if (RuleFields.FLUIDS.equals(field) && owner.has(RuleFields.FLUID)) {
             RuleValue fluid = owner.child(RuleFields.FLUID);
             if (fluid != null) return RuleValue.list().add(fluid.deepCopy()).build();
         }
-        return BuiltinEditorDefaults.effectiveValue(owner, field);
+        // 条件叶的参数对象在固定 condition 键下，按路径选择表，允许条件和效果复用同一类型 id。
+        return view.basePath.equals(RuleFields.CONDITION) || view.basePath.endsWith("." + RuleFields.CONDITION)
+                ? BuiltinEditorDefaults.effectiveConditionValue(owner, field)
+                : BuiltinEditorDefaults.effectiveValue(owner, field);
     }
 
     // 只有规则级催化剂/来源成本字段与引用列表联动；其它 MapSpec 由控件沿用草稿自身的键

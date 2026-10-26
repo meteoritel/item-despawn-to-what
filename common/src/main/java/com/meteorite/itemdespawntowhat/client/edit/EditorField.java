@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.edit;
 
+import com.meteorite.itemdespawntowhat.core.api.param.ClimateDomain;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -166,10 +168,12 @@ public record EditorField(String name, String labelKey, EditorFieldType type, @N
         return create(name, labelKey, EditorFieldType.RESOURCE_LOCATION, null, false, true, null, null, null, null);
     }
 
-    // 气候区间字段：端点可省略、域 -1..1、窄步长 0.1 / 精细 0.01
+    /** 气候区间字段的端点域与交互步长来自 core 共享声明。 */
     public static EditorField climateRange(String name, String labelKey) {
-        return create(name, labelKey, EditorFieldType.CLIMATE_RANGE, "-1.0..1.0", true, false, null, null,
-                null, NumericDomain.decimals(-1.0D, 1.0D, 0.1D, 0.01D));
+        NumericDomain numbers = NumericDomain.decimals(ClimateDomain.MIN.min(), ClimateDomain.MAX.max(),
+                ClimateDomain.STEP, ClimateDomain.FINE_STEP);
+        return create(name, labelKey, EditorFieldType.CLIMATE_RANGE, numbers.domainText(), true, false, null, null,
+                null, numbers);
     }
 
     // 子列表字段（对象数组，字段定义由 subFields 给出）

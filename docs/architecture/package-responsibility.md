@@ -159,7 +159,7 @@ flowchart TB
   - 允许：`core/api`、`core/model`、`core/network/protocol`、`core/service` 的限额常量、原版客户端类型。
   - 禁止：依赖 `client/edit` 与 `client/ui`。界面经 `EditorScreenHooks` 注册槽注入，由客户端入口接线。
 - **`client/edit`** — 客户端工作区与编辑数据：草稿、撤销栈、类型参数投影与字段描述符、类型编辑器注册表、条件树编解码与摘要。
-  - 允许：`core/api`、`core/model`、`core/network/protocol`、`client/net`、`client/ui/kit` 的树编辑契约、`client/edit/draft`、原版客户端类型。
+  - 允许：`core/api`、`core/model`、`core/network/protocol`、`core/service/BuiltinTypeRegistries` 的装配记录、`client/net`、`client/ui/kit` 的树编辑契约、`client/edit/draft`、原版客户端类型。
   - 禁止：依赖 `client/ui` 的宿主子包（`theme`、`widget`、`shared`、`screen`、`screen/form`）；不发起网络请求、不打开界面。
 - **`client/edit/draft`** — 未应用的编辑草稿落盘、重启与断线恢复、冲突判定。
   - 允许：`core` 的公开类型与原版客户端类型。

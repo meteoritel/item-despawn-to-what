@@ -5,6 +5,7 @@ import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.RefChecks;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
+import com.meteorite.itemdespawntowhat.core.api.param.ClimateDomain;
 import com.meteorite.itemdespawntowhat.core.api.param.EnumSpec;
 import com.meteorite.itemdespawntowhat.core.api.param.NestedSpec;
 import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
@@ -61,10 +62,6 @@ public record BiomeCondition(
     private static final String FIELD_EROSION = "erosion";
     private static final String FIELD_DEPTH = "depth";
     private static final String FIELD_WEIRDNESS = "weirdness";
-
-    // 气候参数取值域（与原版 MultiNoiseBiomeSource 的量纲一致）
-    private static final double CLIMATE_MIN = -1.0D;
-    private static final double CLIMATE_MAX = 1.0D;
 
     // 参数声明：mode 决定哪部分参与匹配；biomes 的「非空」只在 exact 模式生效（模式相关校验留在 validateParams）
     public static final EnumSpec<Mode> MODE = EnumSpec
@@ -187,15 +184,7 @@ public record BiomeCondition(
             return true;
         }
         String path = ParamChecks.child(fieldPath, field);
-        boolean valid = true;
-        if (range.min() != null) {
-            valid &= ParamChecks.inRange(range.min(), CLIMATE_MIN, CLIMATE_MAX, field + "." + ClimateRange.MIN_FIELD,
-                    issues, ParamChecks.child(path, ClimateRange.MIN_FIELD));
-        }
-        if (range.max() != null) {
-            valid &= ParamChecks.inRange(range.max(), CLIMATE_MIN, CLIMATE_MAX, field + "." + ClimateRange.MAX_FIELD,
-                    issues, ParamChecks.child(path, ClimateRange.MAX_FIELD));
-        }
+        boolean valid = ClimateDomain.check(range.min(), range.max(), issues, path);
         valid &= ParamChecks.orderedRange(range.min(), range.max(), field, issues, path);
         return valid;
     }

@@ -98,6 +98,7 @@ public record IntSpec(ParamMeta meta, int min, int max, int codecDefault, boolea
         return valueCodec().optionalFieldOf(name()).forGetter(getter);
     }
 
+    /** 校验字段的出现形态与声明值域，并以声明名称定位问题。 */
     @Override
     public boolean check(@Nullable Object value, IssueCollector issues, String fieldPath) {
         String path = ParamChecks.child(fieldPath, name());
@@ -105,6 +106,11 @@ public record IntSpec(ParamMeta meta, int min, int max, int codecDefault, boolea
             return !required() || ParamChecks.required(null, name(), issues, path);
         }
         return ParamChecks.inRange((Integer) value, min, max, name(), issues, path);
+    }
+
+    /** 使用声明值域校验整数，并保留业务专用的错误文案。 */
+    public boolean check(int value, IssueCollector issues, String fieldPath, String message) {
+        return ParamChecks.inRange(value, min, max, issues, ParamChecks.child(fieldPath, name()), message);
     }
 
     @Override

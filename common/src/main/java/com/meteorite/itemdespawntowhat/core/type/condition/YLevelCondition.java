@@ -37,7 +37,7 @@ public record YLevelCondition(Integer min, Integer max) implements Condition {
     private static final int INITIAL_MIN = -64;
     private static final int INITIAL_MAX = 512;
 
-    // 参数声明：解码期接受任意整数，下界语义由 validateMinimum 保留自定义文案；滑条窗口不是提交硬限额
+    // 参数声明：解码期接受任意整数，语义校验消费声明值域；滑条窗口不是提交硬限额
     public static final IntSpec MIN = IntSpec.nullable(FIELD_MIN, MIN_Y, Integer.MAX_VALUE)
             .widened()
             .window(INITIAL_MIN, INITIAL_MAX)
@@ -79,22 +79,15 @@ public record YLevelCondition(Integer min, Integer max) implements Condition {
     public static boolean validateParams(YLevelCondition params, IssueCollector issues, String fieldPath) {
         boolean valid = true;
         if (params.min() != null) {
-            valid &= validateMinimum(params.min(), FIELD_MIN, issues,
-                    ParamChecks.child(fieldPath, FIELD_MIN));
+            valid &= MIN.check(params.min(), issues, fieldPath,
+                    FIELD_MIN + " 不得低于 " + MIN.min() + "，当前为 " + params.min());
         }
         if (params.max() != null) {
-            valid &= validateMinimum(params.max(), FIELD_MAX, issues,
-                    ParamChecks.child(fieldPath, FIELD_MAX));
+            valid &= MAX.check(params.max(), issues, fieldPath,
+                    FIELD_MAX + " 不得低于 " + MAX.min() + "，当前为 " + params.max());
         }
         valid &= ParamChecks.orderedRange(params.min(), params.max(), FIELD_MIN + "/" + FIELD_MAX, issues, fieldPath);
         return valid;
     }
 
-    private static boolean validateMinimum(int value, String field, IssueCollector issues, String path) {
-        if (value < MIN_Y) {
-            issues.error(field + " 不得低于 " + MIN_Y + "，当前为 " + value, null, path);
-            return false;
-        }
-        return true;
-    }
 }

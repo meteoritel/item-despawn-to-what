@@ -31,7 +31,7 @@ authority: common/core/registry、common/core/extension、common/core/type，装
 | 依赖 | `core/api` 的类型与注册契约、`core/model` 的类型定义接口与参数对象接口、DFU `MapCodec` |
 | 被依赖 | 宿主启动（装配类型注册表并交给加载与运行时）、规则加载（解码与校验时按 `type` 查表）、编辑与快照装配（类型元数据参与候选与分类） |
 
-注册表在服务端启动装配时建立并冻结；数据包重载复用同一份已冻结注册表，类型集合不随规则文件变化。
+服务端在启动装配时建立并冻结注册表，数据包重载复用同一份实例；客户端首次使用本地类型表时复用相同装配流程并缓存结果。类型集合由已安装的模组提供。
 
 ## 3. 关键类地图
 
@@ -42,10 +42,10 @@ authority: common/core/registry、common/core/extension、common/core/type，装
 | `core/registry/SimpleTypeRegistry` | 注册表实现 | 注册期用保序映射登记；`freeze()` 构造不可变快照并以 `volatile` 发布；重复 id 与冻结后注册各自抛出语义异常 | 全部查询方、`BuiltinTypeRegistries` |
 | `core/api/TypeRegistry`、`core/api/TypeDefinition` | 契约 | 注册与查询接口；类型定义由 id、参数 `MapCodec`、参数校验与参数声明组成 | 契约细节见 [核心契约](core-contract.md) |
 | `core/api/param` 的 `ParamSpec`、`ParamList` | 参数声明 | 每个参数只声明一次：字段名、wire 存在性、值域、默认值、新建初值与编辑器元数据；Codec 字段构件与单字段校验由声明派生 | 各内置类型的 `PARAMS`；客户端 `ParamProjection` |
-| `core/extension/RuleTypeProvider` | 第三方 SPI | 两阶段默认方法：先注册条件类型，再注册效果类型 | `BuiltinTypeRegistries.create()` |
+| `core/extension/RuleTypeProvider` | 第三方 SPI | 两侧各自装配时先注册条件类型，再注册效果类型 | `BuiltinTypeRegistries.create()` |
 | `core/extension/DynamicReferenceCheck`、`DynamicReferenceContext` | 扩展点 | 参数对象申报「须依赖服务端已加载内容才能判定的引用」，由核心校验器遍历分派 | `RuleReferenceValidator`（[规则加载](rule-loading.md)） |
 | `core/type/BuiltinConditionTypes`、`core/type/BuiltinEffectTypes` | 内置类型装载 | `createMutable()` 逐条登记内置类型并交给装配点统一冻结；`create(...)` 用于直接构建并冻结的场景 | `BuiltinTypeRegistries` |
-| `core/service/BuiltinTypeRegistries` | 装配聚合点 | 固定「条件冻结 → 条件表达式 Codec → 效果冻结」顺序，SPI 在两处冻结前插入 | 宿主启动、规则加载 |
+| `core/service/BuiltinTypeRegistries` | 装配聚合点 | 固定「条件冻结 → 条件表达式 Codec → 效果冻结」顺序，SPI 在两处冻结前插入 | 宿主启动、规则加载、客户端类型表 |
 | `core/type/EnumCodecs` | 公共工具 | 枚举取值统一小写下划线形式、解析大小写不敏感、未知取值报错时附可选值 | 各内置类型的参数 Codec |
 
 ## 4. 关键流程
@@ -101,6 +101,8 @@ flowchart TD
 2. 调用时机就是 `BuiltinTypeRegistries.create()`：内置条件登记之后、`conditionTypes.freeze()` 之前调 `registerConditions`；内置效果登记之后、`effectTypes.freeze()` 之前调 `registerEffects`。
 3. 多个 provider 按实现类名排序后依次调用，跨端与跨次启动顺序稳定。
 4. 注册的 id 自带命名空间；与已注册 id 冲突会抛 `DuplicateTypeException`，注册表不做覆盖。
+5. 客户端安装同一 provider 后，`ClientTypeRegistries` 复用该装配流程。非空 `params()` 自动生成表单、初值与默认值，必填字段的新建预填由 `initialValue` 提供；定制描述符入口见[客户端编辑器](client-editor.md#新增类型编辑器)。
+6. provider 的注册方法只建立类型定义，可在客户端和服务端分别装配，类加载与注册独立于当前世界和服务端实例。
 
 ### 动态引用校验扩展点
 

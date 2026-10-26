@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
+import com.meteorite.itemdespawntowhat.client.edit.NumericDomain;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
@@ -17,6 +18,7 @@ import com.meteorite.itemdespawntowhat.client.ui.widget.UiRangeBar;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -34,10 +36,7 @@ final class ClimateControl extends FormControl {
     private static final int TOGGLE_HEIGHT = 16;
     private static final int RANGE_HEIGHT = 24;
     private static final int GAP = 2;
-    private static final double CLIMATE_MIN = -1.0D;
-    private static final double CLIMATE_MAX = 1.0D;
-    private static final double STEP = 0.1D;
-    private static final double FINE_STEP = 0.01D;
+    private final NumericDomain numbers;
     private final UiCheckBox matching;
     private final UiRangeBar range;
     private final UiTextInput minInput;
@@ -50,6 +49,7 @@ final class ClimateControl extends FormControl {
 
     ClimateControl(Font font, EditorField field, Runnable onChanged) {
         super(field);
+        numbers = Objects.requireNonNull(field.numbers(), "气候字段需要数值域声明");
         this.minInput = new UiTextInput(THEME, font,
                 Component.translatable(TypeLabels.UI_PREFIX + "field.climate.min"));
         this.maxInput = new UiTextInput(THEME, font,
@@ -66,7 +66,7 @@ final class ClimateControl extends FormControl {
         });
         matching = new UiCheckBox(THEME, font, toggleLabel(), false);
         range = new UiRangeBar(THEME, font,
-                UiNumberPolicy.of(lower(), upper(), STEP, FINE_STEP), fullRange(),
+                UiNumberPolicy.of(lower(), upper(), numbers.step(), numbers.shiftStep()), fullRange(),
                 new UiRangeBar.Texts(Component.translatable(CLIMATE_UI + MIN_FIELD),
                         Component.translatable(CLIMATE_UI + MAX_FIELD),
                         Component.translatable(TypeLabels.UI_PREFIX + "range.absent"),
@@ -272,10 +272,10 @@ final class ClimateControl extends FormControl {
             RuleValue low = value.child(MIN_FIELD);
             RuleValue high = value.child(MAX_FIELD);
             if (low != null && low.isNumber()) {
-                min = low.asDecimal(CLIMATE_MIN);
+                min = low.asDecimal(lower());
             }
             if (high != null && high.isNumber()) {
-                max = high.asDecimal(CLIMATE_MAX);
+                max = high.asDecimal(upper());
             }
         }
         this.loadedMin = min == null ? "" : trimDouble(min);
@@ -308,9 +308,9 @@ final class ClimateControl extends FormControl {
         markEdited();
     }
 
-    private double lower() { return field.doubleMin(CLIMATE_MIN); }
+    private double lower() { return Objects.requireNonNull(numbers.backendMin()); }
 
-    private double upper() { return field.doubleMax(CLIMATE_MAX); }
+    private double upper() { return Objects.requireNonNull(numbers.backendMax()); }
 
     private UiRangeValue fullRange() { return UiRangeValue.of(lower(), upper()); }
 

@@ -27,7 +27,7 @@ public record NestedSpec<T>(ParamMeta meta, Codec<T> codec, ParamList fields) im
         return new NestedSpec<>(ParamMeta.of(name, ParamPresence.NULLABLE, false), codec, fields);
     }
 
-    // 气候区间：两端可空的专用编辑器形态
+    /** 气候区间：两端可空，后端与编辑器共同消费 {@link ClimateDomain} 的端点与交互域。 */
     public static <T> NestedSpec<T> climate(String name, Codec<T> codec) {
         return new NestedSpec<>(ParamMeta.of(name, ParamPresence.NULLABLE, false)
                 .withShape(ParamShape.CLIMATE_RANGE), codec, ParamList.EMPTY);

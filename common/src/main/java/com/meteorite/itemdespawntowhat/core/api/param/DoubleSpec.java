@@ -51,6 +51,7 @@ public record DoubleSpec(ParamMeta meta, double min, double max, double codecDef
         return Codec.doubleRange(min, max);
     }
 
+    /** 校验字段的出现形态、有限性与声明值域。 */
     @Override
     public boolean check(@Nullable Object value, IssueCollector issues, String fieldPath) {
         String path = ParamChecks.child(fieldPath, name());
@@ -58,6 +59,11 @@ public record DoubleSpec(ParamMeta meta, double min, double max, double codecDef
             return !required() || ParamChecks.required(null, name(), issues, path);
         }
         return ParamChecks.inRange((Double) value, min, max, name(), issues, path);
+    }
+
+    /** 使用声明值域校验有限双精度值，并保留业务专用的错误文案。 */
+    public boolean check(double value, IssueCollector issues, String fieldPath, String message) {
+        return ParamChecks.inRange(value, min, max, issues, ParamChecks.child(fieldPath, name()), message);
     }
 
     @Override

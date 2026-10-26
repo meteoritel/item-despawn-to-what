@@ -15,7 +15,7 @@ import com.mojang.serialization.Codec;
 import net.minecraft.world.item.ItemStack;
 
 /**
- * 内置类型注册表的规范装配点。
+ * 内置与 SPI 扩展类型注册表的规范装配点，供服务端与客户端各自装配。
  * 装配顺序固定：条件类型冻结 → 条件表达式编解码器 → 效果类型冻结（规则级条件树需要该编解码器）。
  * 运行时引导层直接使用本记录，避免各处重复拼装。
  */
@@ -37,7 +37,7 @@ public record BuiltinTypeRegistries(
         return 1;
     }
 
-    /** 构建并冻结全部内置类型注册表 */
+    /** 按 provider 类名稳定排序，构建并冻结内置与 SPI 扩展类型表。 */
     public static BuiltinTypeRegistries create() {
         var providers = ServiceLoader.load(RuleTypeProvider.class).stream()
                 .sorted(Comparator.comparing(provider -> provider.type().getName()))

@@ -15,11 +15,10 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
 /**
- * 内置条件/效果编辑器描述符表：每个内置类型注册一条描述符。
+ * 条件/效果编辑器描述符装配表：为客户端已发现且具有参数声明的类型自动注册表单。
  * <p>字段由 core 侧的类型参数声明经 {@link ParamProjection} 投影得到，此处只补充参数声明之外的
  * 界面元素（说明行）与运行期配置相关的窗口覆盖；因此新增参数只需在 core 侧声明一次。
- * <p>未在此注册的第三方类型由 {@link EditorRegistries#CONDITIONS}/{@link EditorRegistries#EFFECTS}
- * 回退为只读 JSON 摘要，且草稿原样保留未识别字段。
+ * <p>手动预注册的描述符优先；内置无参类型保留说明行，其余空声明或本地未发现的类型回退为只读 JSON 摘要。
  */
 public final class BuiltinEditorDescriptors {
 
@@ -53,7 +52,7 @@ public final class BuiltinEditorDescriptors {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    /** 幂等注册全部内置描述符；界面初始化时调用 */
+    /** 幂等注册内置与本地 SPI 类型的表单描述符；界面初始化时调用。 */
     public static void bootstrap() {
         if (bootstrapped) {
             return;
@@ -94,6 +93,9 @@ public final class BuiltinEditorDescriptors {
 
     private static void register(TypeEditorRegistry registry, TypeDefinition<?> type, Component label,
                                   List<EditorField> notes) {
+        if (registry.isRegistered(type.id()) || type.params().isEmpty() && notes.isEmpty()) {
+            return;
+        }
         registry.register(new TypeEditorDescriptor(type.id(), label, fields(type, notes), false));
     }
 

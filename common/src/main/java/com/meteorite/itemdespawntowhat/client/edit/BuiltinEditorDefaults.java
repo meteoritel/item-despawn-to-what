@@ -4,9 +4,11 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.api.TypeDefinition;
+import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
 import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
 import com.meteorite.itemdespawntowhat.core.api.param.ParamSpec;
 import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
+import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.type.effect.EntityProduct;
 import com.meteorite.itemdespawntowhat.core.type.effect.PlaceBlockEffect;
 import com.meteorite.itemdespawntowhat.core.type.effect.SpawnEntityEffect;
@@ -16,7 +18,7 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 内置类型的新建初值与省略字段的展示默认值。
+ * 客户端已发现类型的新建初值与省略字段的展示默认值。
  * <p>新建初值来自 core 侧参数声明的 initialValue，省略字段的展示默认值来自 defaultValue；
  * 两者都不代表已保存规则的缺省语义，只用于新建预填与界面提示。
  */
@@ -63,15 +65,25 @@ public final class BuiltinEditorDefaults {
         return RuleValue.wrap(body);
     }
 
-    /** 仅用于展示省略字段的有效默认值（RuleValue 入口：界面层不再持有 JsonElement），不写入草稿。 */
+    /** 展示效果或规则省略字段的默认值；效果类型按完整 id 查询本地类型表。 */
     public static @Nullable RuleValue effectiveValue(RuleValue object, String field) {
+        return effectiveValue(object, field, ClientTypeRegistries.effects());
+    }
+
+    /** 展示条件省略字段的声明默认值；条件与效果的 id 命名空间分别查询。 */
+    public static @Nullable RuleValue effectiveConditionValue(RuleValue object, String field) {
+        return effectiveValue(object, field, ClientTypeRegistries.conditions());
+    }
+
+    private static @Nullable RuleValue effectiveValue(RuleValue object, String field,
+                                                       TypeRegistry<? extends TypeDefinition<?>> types) {
         if (object != null && object.has(RuleFields.TYPE)) {
             ResourceLocation type = ResourceLocation.tryParse(object.text(RuleFields.TYPE, ""));
-            if (type != null && TypeLabels.OWN_NAMESPACE.equals(type.getNamespace())) {
-                TypeDefinition<?> definition = ClientTypeRegistries.effects().getOrNull(type);
+            if (type != null) {
+                TypeDefinition<?> definition = types.getOrNull(type);
                 if (definition != null) {
                     ParamSpec spec = definition.params().get(field);
-                    if (spec == null && SpawnEntityEffect.ID.equals(type)) {
+                    if (spec == null && definition instanceof EffectType<?> && SpawnEntityEffect.ID.equals(type)) {
                         // variant 由产出分发决定，不属于外层参数声明；按当前子类展示默认值
                         String variant = object.text(VARIANT, EntityProduct.DEFAULT_VARIANT);
                         spec = EntityProduct.variantParams(variant).get(field);
@@ -91,14 +103,15 @@ public final class BuiltinEditorDefaults {
         };
     }
 
-    /** 新建条件叶的默认节点（含 op=leaf 外壳，可直接交给条件表达式编解码器） */
-    public static JsonObject conditionLeafJson(ResourceLocation type) {
+    /** 新建本地已发现条件类型的默认节点；未知类型返回 null，已知类型按声明写入初值。 */
+    public static @Nullable JsonObject conditionLeafJson(ResourceLocation type) {
+        TypeDefinition<?> definition = ClientTypeRegistries.conditions().getOrNull(type);
+        if (definition == null) {
+            return null;
+        }
         JsonObject condition = new JsonObject();
         condition.addProperty(RuleFields.TYPE, type.toString());
-        TypeDefinition<?> definition = ClientTypeRegistries.conditions().getOrNull(type);
-        if (definition != null) {
-            writeInitials(condition, definition.params());
-        }
+        writeInitials(condition, definition.params());
         JsonObject leaf = new JsonObject();
         leaf.addProperty(RuleFields.OP, RuleFields.OP_LEAF);
         leaf.add(RuleFields.CONDITION, condition);

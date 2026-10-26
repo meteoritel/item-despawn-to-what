@@ -21,7 +21,7 @@ public final class CommonFields {
     // 效果概率默认值：1.0（必定执行）
     public static final double DEFAULT_CHANCE = 1.0D;
 
-    // 效果延迟字段（刻）：解码期接受任意非负整数，语义校验按 [0, 1200] 限制
+    // 效果延迟字段（刻）：语义允许任意非负整数，0..1200 仅为滑条常用窗口
     public static final IntSpec DELAY_TICKS = IntSpec.defaulted(RuleFields.DELAY_TICKS, DEFAULT_DELAY_TICKS,
                     0, Integer.MAX_VALUE)
             .widened()

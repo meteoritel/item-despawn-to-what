@@ -25,7 +25,7 @@ import java.util.List;
  * 把 core 侧的类型参数声明投影成编辑器字段描述。
  * <p>字段顺序、label/hint key、可空与必填、取值域与滑块窗口都由同一份 {@link ParamList} 推导，
  * 客户端不再逐类型手写字段表；因此新增参数只需在 core 侧声明一次。</p>
- * <p>第三方类型没有参数声明，仍由 {@link EditorRegistries} 回退为只读 JSON 摘要。</p>
+ * <p>本地 SPI 类型沿用相同投影入口；空参数声明由 {@link EditorRegistries} 回退为只读 JSON 摘要。</p>
  */
 public final class ParamProjection {
 

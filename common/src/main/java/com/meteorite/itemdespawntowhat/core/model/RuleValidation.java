@@ -297,12 +297,11 @@ public final class RuleValidation {
             issues.error("效果缺少 type", origin, path);
             return;
         }
-        if (effect.delayTicks() < 0) {
-            issues.error("delay_ticks 不能为负数: " + effect.delayTicks(), origin, path + "." + RuleFields.DELAY_TICKS);
-        }
-        if (!Double.isFinite(effect.chance()) || effect.chance() < 0.0D || effect.chance() > 1.0D) {
-            issues.error("chance 必须在 [0,1] 内: " + effect.chance(), origin, path + "." + RuleFields.CHANCE);
-        }
+        IssueCollector scoped = issues.originScoped(origin);
+        CommonFields.DELAY_TICKS.check(effect.delayTicks(), scoped, path,
+                "delay_ticks 不能为负数: " + effect.delayTicks());
+        CommonFields.CHANCE.check(effect.chance(), scoped, path,
+                "chance 必须在 [0,1] 内: " + effect.chance());
     }
 
     /** 便捷入口：无来源信息的结构校验 */

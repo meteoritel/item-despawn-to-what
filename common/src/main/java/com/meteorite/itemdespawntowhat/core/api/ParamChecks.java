@@ -23,19 +23,31 @@ public final class ParamChecks {
         return true;
     }
 
-    // 整型区间
+    /** 校验整数的闭区间值域，错误定位到指定字段路径。 */
     public static boolean inRange(int value, int min, int max, String field, IssueCollector issues, String path) {
+        return inRange(value, min, max, issues, path,
+                field + " 必须在 [" + min + ", " + max + "] 内，当前为 " + value);
+    }
+
+    /** 按声明区间校验整数，同时保留调用方的业务错误文案与字段路径。 */
+    public static boolean inRange(int value, int min, int max, IssueCollector issues, String path, String message) {
         if (value < min || value > max) {
-            issues.error(field + " 必须在 [" + min + ", " + max + "] 内，当前为 " + value, null, path);
+            issues.error(message, null, path);
             return false;
         }
         return true;
     }
 
-    // 浮点区间
+    /** 校验有限浮点值的闭区间值域，NaN 与无穷值均作为错误上报。 */
     public static boolean inRange(double value, double min, double max, String field, IssueCollector issues, String path) {
-        if (value < min || value > max) {
-            issues.error(field + " 必须在 [" + min + ", " + max + "] 内，当前为 " + value, null, path);
+        return inRange(value, min, max, issues, path,
+                field + " 必须在 [" + min + ", " + max + "] 内，当前为 " + value);
+    }
+
+    /** 校验有限浮点值及其声明区间，同时保留调用方的业务错误文案与字段路径。 */
+    public static boolean inRange(double value, double min, double max, IssueCollector issues, String path, String message) {
+        if (!Double.isFinite(value) || value < min || value > max) {
+            issues.error(message, null, path);
             return false;
         }
         return true;
