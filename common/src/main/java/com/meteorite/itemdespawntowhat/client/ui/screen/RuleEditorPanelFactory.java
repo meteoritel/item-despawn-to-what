@@ -3,7 +3,6 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
-import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
@@ -208,7 +207,7 @@ public final class RuleEditorPanelFactory {
                                         Consumer<List<String>> onPicked, @Nullable EditorField field,
                                         List<String> selected, Function<String, @Nullable Component> unavailableReason,
                                         @Nullable Predicate<String> entryFilter) {
-        boolean includeTags = field != null && (field.type() == EditorFieldType.TAG || field.type() == EditorFieldType.TAG_LIST);
+        boolean includeTags = field != null && field.allowsTags();
         workspace.refreshDirectory(type);
         if (includeTags) workspace.refreshDirectory(RuleCatalogType.TAG);
         // 默认排除规则与「主分类 / 标签 / 一起」范围由同一个策略实例持有，页码与总数始终一致
@@ -535,13 +534,13 @@ public final class RuleEditorPanelFactory {
         form.useCardSpacing();
         // 自带文字的行内控件不显示行标签：同一文案只出现一次，省下的宽度交给控件自身
         for (EditorField field : fields) {
-            if (field.type() == EditorFieldType.CLIMATE_RANGE || field.type() == EditorFieldType.BOOLEAN) {
+            if (field.hidesRowLabel()) {
                 form.hideRowLabel(join(basePath, field.name()));
             }
         }
         EditorField from = field(fields, "from");
         EditorField to = field(fields, "to");
-        if (from != null && to != null && isIntegerLike(from) && isIntegerLike(to)
+        if (from != null && to != null && from.isIntegerLike() && to.isIntegerLike()
                 && from.intMin(0) == TIME_MIN && from.intMax(TIME_MAX) == TIME_MAX) {
             UiCyclicTimeBar bar = timeBar(font, draft, from, to, basePath, applyChange, onChange);
             extras.add(bar);
@@ -553,7 +552,7 @@ public final class RuleEditorPanelFactory {
         RuleValue condition = draft.valueAt(basePath);
         boolean heightCondition = condition != null && Y_LEVEL_ID.toString()
                 .equals(condition.text(RuleFields.TYPE, ""));
-        if (min != null && max != null && isIntegerLike(min) && isIntegerLike(max)) {
+        if (min != null && max != null && min.isIntegerLike() && max.isIntegerLike()) {
             UiRangeBar bar = intRangeBar(font, draft, min, max, basePath, applyChange, onChange);
             if (heightCondition) {
                 form.setRowVisible(join(basePath, min.name()), false);
@@ -564,33 +563,22 @@ public final class RuleEditorPanelFactory {
             reloadValues.add(() -> bar.core().setValue(integerRange(draft, min, max, basePath)));
         }
         form.setSelectionCatalogOpener((field, path, tags, selected, picked) -> pushModal.accept(fieldCatalogModal(font, shell, workspace,
-                tags ? RuleCatalogType.TAG : FieldCatalogTypes.catalogTypeOf(field), isListField(field),
+                tags ? RuleCatalogType.TAG : FieldCatalogTypes.catalogTypeOf(field), field.isListShaped(),
                 Component.translatable(field.labelKey()), screenWidth, screenHeight, picked, field, draft, path, selected)));
         LeafPanel panel = new LeafPanel(font, form, extras, buttons, reloadValues);
         int extraIndex = 0;
-        if (from != null && to != null && isIntegerLike(from) && isIntegerLike(to)
+        if (from != null && to != null && from.isIntegerLike() && to.isIntegerLike()
                 && from.intMin(0) == TIME_MIN && from.intMax(TIME_MAX) == TIME_MAX) {
             UiCyclicTimeBar bar = (UiCyclicTimeBar) extras.get(extraIndex++);
             bar.setPreciseEditor(end -> panel.focusField(join(basePath,
                     end == UiRangeEnd.LOW ? from.name() : to.name())));
         }
-        if (!heightCondition && min != null && max != null && isIntegerLike(min) && isIntegerLike(max)) {
+        if (!heightCondition && min != null && max != null && min.isIntegerLike() && max.isIntegerLike()) {
             UiRangeBar bar = (UiRangeBar) extras.get(extraIndex);
             bar.setPreciseEditor(end -> panel.focusField(join(basePath,
                     end == UiRangeEnd.LOW ? min.name() : max.name())));
         }
         return panel;
-    }
-
-    private static boolean isIntegerLike(EditorField field) {
-        return field.type() == EditorFieldType.INTEGER || field.type() == EditorFieldType.TICKS;
-    }
-
-    private static boolean isListField(EditorField field) {
-        return switch (field.type()) {
-            case TAG_LIST, RL_LIST, STRING_LIST -> true;
-            default -> field.name().endsWith("s");
-        };
     }
 
     private static @Nullable EditorField field(List<EditorField> fields, String name) {
@@ -616,12 +604,12 @@ public final class RuleEditorPanelFactory {
             if (fieldPath.equals(fieldAt)) {
                 return true;
             }
-            if (field.type() == EditorFieldType.CLIMATE_RANGE
+            if (field.isClimateRange()
                     && (fieldPath.equals(join(fieldAt, RANGE_MIN_FIELD))
                     || fieldPath.equals(join(fieldAt, RANGE_MAX_FIELD)))) {
                 return true;
             }
-            if (field.type() == EditorFieldType.ITEM_COUNTS) {
+            if (field.isItemCounts()) {
                 for (String reference : itemReferences.apply(field)) {
                     if (fieldPath.equals(join(fieldAt, reference))) {
                         return true;

@@ -77,6 +77,7 @@ flowchart LR
 | `DraftPaths`（client/edit） | 路径工具 | 草稿 JSON 的字段与数组路径解析、读写、删除；必要时创建中间容器 | `RuleDraft` |
 | `TypeEditorRegistry` / `EditorRegistries`（client/edit） | 扩展点 | 类型 id 到编辑描述符的注册表；未注册类型返回只读回退描述 | 界面表单、内置类型表 |
 | `ParamProjection`（client/edit） | 参数投影 | 把 core 的类型参数声明投影成 `EditorField` 列表：顺序等于声明顺序，标签 key 由类型 id 与字段名派生，窗口、单位、精度与枚举分组取自声明，不显示的参数跳过 | `BuiltinEditorDescriptors`、`TypeEditorDescriptor` |
+| `EditorField`（client/edit） | 字段契约 | 描述字段名、标签 key、类型、值域与编辑器元数据；是否列表、是否数值、是否说明行、是否可带标签等分类问题由字段自己的谓词回答，调用方不再 switch `EditorFieldType` | `ParamProjection`、界面表单控件 |
 | `BuiltinEditorDescriptors` / `BuiltinEditorDefaults`（client/edit） | 内置描述符与新建初值 | 遍历客户端类型表按 `params()` 投影注册描述符，并为少数类型补说明行与半径窗口；新建条目按 `initialValues()` 写初值，`place_block` 的 `limit` 依半径派生 | `ClientTypeRegistries`、`ParamProjection`、`EditorRegistries` |
 | `ClientTypeRegistries`（client/edit） | 客户端类型表 | 内置条件与效果类型的惰性单例，内容来自代码常量而非数据包 | 注册表、条件编解码 |
 | `DraftJournal`（client/edit/draft） | 落盘调度 | 跟踪脏草稿、节流写盘、失败重排与一次性失败上报 | `DraftStore`、界面模型 |
@@ -205,6 +206,7 @@ flowchart TD
 
 - 内置类型的描述符与新建初值由类型参数声明投影生成（见[类型系统](type-system.md) 的新增类型步骤），不在客户端手写字段表；声明无法表达的展示差异（说明行、依赖同对象的动态初值）才写成客户端的小表。
 - 条件类型注册到 `EditorRegistries.CONDITIONS`，效果类型注册到 `EditorRegistries.EFFECTS`；描述符用 `TypeEditorDescriptor.of(id, label, fields...)` 构造，字段类型取 `EditorFieldType`。
+- 界面层按 `EditorField` 的分类谓词判断字段归类（列表、数值、说明行、可带标签等），不对 `EditorFieldType` 做 switch；新增 `EditorFieldType` 取值时同步补谓词实现。
 - 未注册类型或参数声明为空的类型不会中断编辑：`descriptorFor` 返回只读回退描述，展示原始 JSON 并原样保留未识别字段，第三方扩展类型因此可见且不会被写坏。
 - 重复注册同一 id 抛 `IllegalStateException`；内置类型表由 `ClientTypeRegistries` 提供，与服务端数据包无关。
 - 新增编辑器时同步 `en_us` 与 `zh_cn` 语言文件里的类型标签，回退标签使用注册表构造时传入的 key。
@@ -239,6 +241,7 @@ flowchart TD
 - 来源视图缓存与目录加载都有上限与超时，界面重试走 `retrySourceView` / `retryDirectory`，不要自行重发请求。
 - `client/net` 与 `client/edit` 不引用 `client/ui`；页面、主题与控件适配都在界面模块。
 - 客户端不重复声明参数形状：字段名、值域、默认值与新建初值只在 `core` 的类型声明里，客户端只做投影与展示差异。
+- 字段形态由 `EditorField` 谓词回答，界面层不以字段名后缀等文本特征推断归类。
 - 只读判定只取快照条目的来源：`source` 为 `builtin` / `world` 的条目内容不可写。只读约束落在草稿持久化与变更集组装两处，会话与控件层对只读条目照常可写。
 - 沙盒内容与启停意图是两条不同的持久化路径：前者只存在于会话内存，需要留下时走「复制为新规则」；后者随草稿记录保存并在应用时提交。
 

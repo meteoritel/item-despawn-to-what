@@ -5,7 +5,6 @@ import com.meteorite.itemdespawntowhat.client.edit.ClientTypeRegistries;
 import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
-import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
@@ -104,7 +103,7 @@ final class RuleEditorInputSection {
     void configureQuantityFields(FormView form, EditSession session, String basePath,
                                          TypeEditorDescriptor descriptor) {
         for (EditorField field : descriptor.fields()) {
-            if (field.type() != EditorFieldType.ITEM_COUNTS) continue;
+            if (!field.isItemCounts()) continue;
             String path = DraftPaths.child(basePath, field.name());
             form.setItemCountReferences(path, quantityReferences(session, basePath, field));
             if (!RuleFields.CONSUME_COUNTS.equals(field.name()))

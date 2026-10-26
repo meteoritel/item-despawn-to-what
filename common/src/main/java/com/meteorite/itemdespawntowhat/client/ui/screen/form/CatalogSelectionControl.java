@@ -6,7 +6,6 @@ import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiMarkIcons;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiMarkIcons.Mark;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
-import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
@@ -175,7 +174,7 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
     @Override
     @Nullable RuleValue store() {
         if (!isEdited()) return originalValue();
-        boolean multiple = field.type() == EditorFieldType.TAG_LIST || field.type() == EditorFieldType.RL_LIST;
+        boolean multiple = field.isMultiCatalog();
         if (!multiple) return values.isEmpty() ? null : values.getFirst().value().deepCopy();
         if (values.isEmpty() && field.nullable()) return null;
         RuleValue.Sequence result = RuleValue.list();
@@ -187,7 +186,7 @@ final class CatalogSelectionControl extends FormControl implements UiFocusTarget
     List<FormIssue> issues(String path) {
         if (field.required() && values.isEmpty()) return List.of(FormIssue.required(path, label()));
         for (Selection value : values) {
-            boolean allowsTags = field.type() == EditorFieldType.TAG || field.type() == EditorFieldType.TAG_LIST;
+            boolean allowsTags = field.allowsTags();
             if (!allowsTags && value.id().startsWith("#")) {
                 return List.of(FormIssue.error(path, label(), Component.translatable(ISSUE_PREFIX + "invalid_id")));
             }

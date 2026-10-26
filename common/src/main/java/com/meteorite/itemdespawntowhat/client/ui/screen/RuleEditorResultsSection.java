@@ -6,7 +6,6 @@ import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorFactories;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
-import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.EditorRegistries;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
@@ -319,7 +318,7 @@ final class RuleEditorResultsSection {
                 }
                 // 消耗参数的主编辑入口在输入页，条件树在触发页：结果页只编辑动作自身的参数与共用补充参数
                 List<EditorField> editable = descriptor.fields().stream()
-                        .filter(field -> field.type() != EditorFieldType.CONDITION_TREE)
+                        .filter(field -> !field.isConditionTree())
                         .toList();
                 List<EditorField> primary = new ArrayList<>(editable.stream()
                         .filter(field -> !isCommonActionField(field))

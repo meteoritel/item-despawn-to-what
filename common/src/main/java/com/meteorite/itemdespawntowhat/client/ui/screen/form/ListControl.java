@@ -1,7 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
-import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
@@ -26,11 +25,8 @@ final class ListControl extends FormControl {
 
     ListControl(Font font, EditorField field, Runnable onChanged) {
         super(field);
-        UiListEditor.Mode mode = switch (field.type()) {
-            case TAG_LIST -> UiListEditor.Mode.TAG;
-            case STRING_LIST -> UiListEditor.Mode.TEXT;
-            default -> UiListEditor.Mode.ID;
-        };
+        UiListEditor.Mode mode = field.isTagList() ? UiListEditor.Mode.TAG
+                : field.isStringList() ? UiListEditor.Mode.TEXT : UiListEditor.Mode.ID;
         this.editor = new UiListEditor(THEME, font, mode, field.registry());
         this.editor.setOnChanged(items -> {
             markEdited();
@@ -187,7 +183,7 @@ final class ListControl extends FormControl {
 
     @SuppressWarnings("BooleanMethodIsAlwaysInverted")
     private boolean validEntry(String value) {
-        if (field.type() == EditorFieldType.STRING_LIST) return true;
+        if (field.isStringList()) return true;
         String id = value.startsWith("#") ? value.substring(1) : value;
         return ResourceLocation.tryParse(id) != null;
     }

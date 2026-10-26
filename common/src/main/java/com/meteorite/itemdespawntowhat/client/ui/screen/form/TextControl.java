@@ -1,7 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
-import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.EditorPreset;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
@@ -60,7 +59,7 @@ final class TextControl extends FormControl {
         this.input.setOnOverflow(this::notifyTooLong);
         // 下一次被接受的输入变化即清除超限提示
         this.input.setOnValueChanged(() -> this.rejectedOverflow = false);
-        if (field.type() == EditorFieldType.LONG_TEXT) {
+        if (field.isLongText()) {
             // 备注使用真正的多行编辑框：支持换行、选择与滚动；单行输入框隐藏但保留装载基线
             this.area = new UiTextArea(THEME, font, hint);
             this.area.setRows(NOTES_ROWS);
@@ -252,8 +251,8 @@ final class TextControl extends FormControl {
 
     // 普通文本和备注分别使用声明的编辑长度，资源 ID 沿用原输入范围。
     private int textLimit() {
-        return field.type() == EditorFieldType.LONG_TEXT ? 1024
-                : field.type() == EditorFieldType.TEXT ? 128 : 256;
+        return field.isLongText() ? 1024
+                : field.isText() ? 128 : 256;
     }
 
     @Override
@@ -262,9 +261,9 @@ final class TextControl extends FormControl {
         if (value.equals(loadedText)) {
             return originalValue();
         }
-        String text = field.type() == EditorFieldType.LONG_TEXT ? value : value.trim();
+        String text = field.isLongText() ? value : value.trim();
         // 未编辑且文本仍等于装载基线：原样回写原始元素（缺失即 null），applyToDraft 跳过该字段
-        if (field.type() != EditorFieldType.LONG_TEXT && !isEdited() && text.equals(loadedText.trim())) {
+        if (!field.isLongText() && !isEdited() && text.equals(loadedText.trim())) {
             return originalValue();
         }
         if (text.isEmpty()) {
@@ -303,7 +302,7 @@ final class TextControl extends FormControl {
 
     // 超限提示 key：备注与显示名各有专属文案；其它文本字段没有专属文案，不提示
     private @Nullable String tooLongKey() {
-        if (field.type() == EditorFieldType.LONG_TEXT) {
+        if (field.isLongText()) {
             return ISSUE_PREFIX + "notes_too_long";
         }
         return RuleFields.DISPLAY_NAME.equals(field.name()) ? ISSUE_PREFIX + "display_name_too_long" : null;

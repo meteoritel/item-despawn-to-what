@@ -3,7 +3,6 @@ package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDefaults;
 import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
-import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleCategoryAssignment;
@@ -141,7 +140,7 @@ final class FormDraftWriter {
         RuleDraft draft = view.session.draft();
         boolean written = false;
         for (FormRow row : view.rows) {
-            if (!row.visible || row.field.type() == EditorFieldType.NOTE || row.path.isEmpty()) {
+            if (!row.visible || row.field.isNote() || row.path.isEmpty()) {
                 continue;
             }
             if (finish) row.control.finishInput();

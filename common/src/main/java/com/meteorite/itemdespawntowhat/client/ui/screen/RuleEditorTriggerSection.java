@@ -2,7 +2,6 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
-import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.EditorRegistries;
 import com.meteorite.itemdespawntowhat.client.edit.RuleDraft;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
@@ -228,8 +227,7 @@ final class RuleEditorTriggerSection {
         form.setSelectionCatalogOpener((field, fieldPath, tags, selected, onPicked) -> {
             RuleCatalogType type = tags ? RuleCatalogType.TAG : FieldCatalogTypes.catalogTypeOf(field);
             if (type == null || !pages.shell.editable()) return;
-            boolean multi = field.type() == EditorFieldType.TAG_LIST
-                    || field.type() == EditorFieldType.RL_LIST;
+            boolean multi = field.isMultiCatalog();
             pages.modals.push(RuleEditorPanelFactory.fieldCatalogModal(pages.font, pages.shell, pages.workspace, type, multi,
                     Component.translatable(field.labelKey()), pages.shell.screenWidth(), pages.shell.screenHeight(), onPicked,
                     field, session.draft(), fieldPath, selected));
@@ -265,7 +263,7 @@ final class RuleEditorTriggerSection {
             return mode != null && mode.isText() && RuleFields.CONDITION_MODE_CLIMATE.equals(mode.asText());
         };
         form.setRowVisibility(form.draftPath(RuleFields.CONDITION_BIOMES), () -> !climate.getAsBoolean());
-        for (EditorField field : descriptor.fields()) if (field.type() == EditorFieldType.CLIMATE_RANGE) {
+        for (EditorField field : descriptor.fields()) if (field.isClimateRange()) {
             form.setRowVisibility(form.draftPath(field.name()), climate);
         }
     }

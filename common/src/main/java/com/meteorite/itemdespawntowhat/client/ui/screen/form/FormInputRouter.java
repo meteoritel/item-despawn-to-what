@@ -1,6 +1,5 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
-import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFocusTarget;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
@@ -107,7 +106,7 @@ final class FormInputRouter {
             if (row.visible && handlesInput(row.control) && row.control.keyPressed(keyCode, scanCode, modifiers)) {
                 view.retainPendingInputs();
                 if ((keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER)
-                        && row.field.type() != EditorFieldType.LONG_TEXT
+                        && !row.field.isLongText()
                         && row.control.issues(row.path).stream().noneMatch(FormIssue::blocking)) {
                     view.writeField(row, row.control.store());
                     view.acceptInput(row);

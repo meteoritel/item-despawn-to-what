@@ -195,6 +195,119 @@ public record EditorField(String name, String labelKey, EditorFieldType type, @N
                 subFields, null, numbers, -1);
     }
 
+    // ---- 分类谓词 ----
+
+    // 调用方按语义提问，不再自行 switch EditorFieldType；新增取值只需在谓词里补一处。
+
+    public boolean isNote() {
+        return type == EditorFieldType.NOTE;
+    }
+
+    public boolean isRawJson() {
+        return type == EditorFieldType.RAW_JSON;
+    }
+
+    // 只读展示行：不承载字段值，不写入 JSON，也不参与校验
+    public boolean isDisplayOnly() {
+        return isNote() || isRawJson();
+    }
+
+    // 条件树由触发页统一编辑，不进入动作参数说明与结果页表单
+    public boolean isConditionTree() {
+        return type == EditorFieldType.CONDITION_TREE;
+    }
+
+    public boolean isText() {
+        return type == EditorFieldType.TEXT;
+    }
+
+    public boolean isLongText() {
+        return type == EditorFieldType.LONG_TEXT;
+    }
+
+    public boolean isNumeric() {
+        return type == EditorFieldType.INTEGER || type == EditorFieldType.TICKS
+                || type == EditorFieldType.DECIMAL || type == EditorFieldType.PERCENT
+                || type == EditorFieldType.AMPLIFIER;
+    }
+
+    // 区间条与循环时间条按整数处理，与 DECIMAL/PERCENT 的数值控件不同
+    public boolean isIntegerLike() {
+        return type == EditorFieldType.INTEGER || type == EditorFieldType.TICKS;
+    }
+
+    // JSON 存完整刻数；0 显示「立即」，界面可按秒显示
+    public boolean isTicks() {
+        return type == EditorFieldType.TICKS;
+    }
+
+    // JSON 存 0..1，界面按百分比显示
+    public boolean isPercent() {
+        return type == EditorFieldType.PERCENT;
+    }
+
+    // JSON 存 amplifier（0 起算），界面显示等级
+    public boolean isAmplifier() {
+        return type == EditorFieldType.AMPLIFIER;
+    }
+
+    public boolean isBoolean() {
+        return type == EditorFieldType.BOOLEAN;
+    }
+
+    public boolean isEnum() {
+        return type == EditorFieldType.ENUM;
+    }
+
+    public boolean isReference() {
+        return type == EditorFieldType.RESOURCE_LOCATION || type == EditorFieldType.REGISTRY_ID
+                || type == EditorFieldType.TAG;
+    }
+
+    // 可由目录面板挑选的引用或引用列表
+    public boolean isCatalogReference() {
+        return isReference() || type == EditorFieldType.TAG_LIST || type == EditorFieldType.RL_LIST;
+    }
+
+    public boolean allowsTags() {
+        return type == EditorFieldType.TAG || type == EditorFieldType.TAG_LIST;
+    }
+
+    public boolean isTagList() {
+        return type == EditorFieldType.TAG_LIST;
+    }
+
+    public boolean isStringList() {
+        return type == EditorFieldType.STRING_LIST;
+    }
+
+    public boolean isListShaped() {
+        return type == EditorFieldType.TAG_LIST || type == EditorFieldType.RL_LIST
+                || type == EditorFieldType.STRING_LIST;
+    }
+
+    // 目录多选列表；字符串列表不参与目录挑选
+    public boolean isMultiCatalog() {
+        return type == EditorFieldType.TAG_LIST || type == EditorFieldType.RL_LIST;
+    }
+
+    public boolean isItemCounts() {
+        return type == EditorFieldType.ITEM_COUNTS;
+    }
+
+    public boolean isClimateRange() {
+        return type == EditorFieldType.CLIMATE_RANGE;
+    }
+
+    public boolean isSublist() {
+        return type == EditorFieldType.SUBLIST;
+    }
+
+    // 行标签由控件自带绘制（气候范围与布尔开关），表单不再预留标签列
+    public boolean hidesRowLabel() {
+        return type == EditorFieldType.CLIMATE_RANGE || type == EditorFieldType.BOOLEAN;
+    }
+
     // ---- 派生 ----
 
     // 变为可空字段

@@ -3,7 +3,6 @@ package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 import com.meteorite.itemdespawntowhat.client.edit.DraftPaths;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
-import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeEditorDescriptor;
@@ -174,7 +173,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
     /** 追加一个字段 */
     public void addField(EditorField field) {
         var catalogType = FieldCatalogTypes.catalogTypeOf(field);
-        boolean iconSelection = catalogSelections && catalogType != null && isCatalogField(field);
+        boolean iconSelection = catalogSelections && catalogType != null && field.isCatalogReference();
         FormRow row = new FormRow(field, pathFor(field), iconSelection
                 ? new CatalogSelectionControl(font, field, this::notifyChanged)
                 : FormControl.create(font, this, field, this::notifyChanged));
@@ -372,11 +371,11 @@ public final class FormView implements UiWidget, UiLayoutSource {
     // 支持叶子面板在描述符载入后挂接目录入口。
     private void addPickers(FormRow row) {
         if (catalogOpener != null && FieldCatalogTypes.catalogTypeOf(row.field) != null
-                && isCatalogField(row.field)) {
+                && row.field.isCatalogReference()) {
             row.pickers.add(new UiButton(THEME, font,
                     Component.translatable(TypeLabels.UI_PREFIX + "pick." + (catalogSelections ? "add" : "open")),
                     UiButtonVariant.SECONDARY, () -> pick(row, false)).setChipStyle(true));
-            if (!catalogSelections && (row.field.type() == EditorFieldType.TAG || row.field.type() == EditorFieldType.TAG_LIST)) row.pickers.add(
+            if (!catalogSelections && row.field.allowsTags()) row.pickers.add(
                     new UiButton(THEME, font,
                             Component.translatable(TypeLabels.UI_PREFIX + "pick.tags"),
                             UiButtonVariant.SECONDARY, () -> pick(row, true)).setChipStyle(true));
@@ -393,7 +392,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
         catalogOpener.open(row.field, row.path, tags, selected, ids -> {
             if (!enabled) return;
             RuleValue value;
-            if (row.field.type() == EditorFieldType.TAG_LIST || row.field.type() == EditorFieldType.RL_LIST) {
+            if (row.field.isMultiCatalog()) {
                 // 文本引用由完整选择替换；未知元素保留，避免目录编辑破坏扩展数据。
                 RuleValue.Sequence array = RuleValue.list();
                 LinkedHashSet<String> remaining = new LinkedHashSet<>(ids);
@@ -411,16 +410,9 @@ public final class FormView implements UiWidget, UiLayoutSource {
         });
     }
 
-    private static boolean isCatalogField(EditorField field) {
-        return switch (field.type()) {
-            case TAG, TAG_LIST, RESOURCE_LOCATION, REGISTRY_ID, RL_LIST -> true;
-            default -> false;
-        };
-    }
-
     // 字段在草稿中的路径：原始 JSON 行与说明行指向所在对象本身
     private String pathFor(EditorField field) {
-        if (field.type() == EditorFieldType.RAW_JSON || field.type() == EditorFieldType.NOTE) {
+        if (field.isDisplayOnly()) {
             return basePath;
         }
         return childPath(field.name());
@@ -653,7 +645,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
     RuleValue storeObject() {
         RuleValue.Mapping object = RuleValue.mapping();
         for (FormRow row : rows) {
-            if (row.field.type() == EditorFieldType.NOTE || row.field.type() == EditorFieldType.RAW_JSON) {
+            if (row.field.isDisplayOnly()) {
                 continue;
             }
             RuleValue value = row.control.issues(row.path).stream().anyMatch(FormIssue::blocking)
@@ -685,7 +677,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
     public List<FormIssue> issues() {
         List<FormIssue> list = new ArrayList<>();
         for (FormRow row : rows) {
-            if (!row.visible || row.field.type() == EditorFieldType.NOTE) {
+            if (!row.visible || row.field.isNote()) {
                 continue;
             }
             list.addAll(row.control.issues(row.path));
@@ -743,7 +735,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
         }
         FormRow matched = null;
         for (FormRow row : rows) {
-            if (row.field.type() == EditorFieldType.NOTE) {
+            if (row.field.isNote()) {
                 continue;
             }
             if (path.equals(row.path) || path.startsWith(row.path + ".")) {
@@ -974,7 +966,7 @@ public final class FormView implements UiWidget, UiLayoutSource {
                 if (screenY + row.contentHeight < viewportY || screenY > viewportY + viewportHeight) {
                     continue;
                 }
-                if (row.field.type() == EditorFieldType.NOTE) {
+                if (row.field.isNote()) {
                     FormRowRenderer.drawNote(graphics, renderFont, row, screenY, viewportX, THEME);
                     continue;
                 }

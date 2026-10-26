@@ -3,7 +3,6 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDefaults;
 import com.meteorite.itemdespawntowhat.client.edit.BuiltinEditorDescriptors;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
-import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.EditorRegistries;
 import com.meteorite.itemdespawntowhat.client.edit.FieldNumbers;
 import com.meteorite.itemdespawntowhat.client.edit.RuleNaming;
@@ -41,7 +40,7 @@ final class ActionDescription {
         }
         for (EditorField field : descriptor.fields()) {
             // 条件不在动作说明里重复：条件树由触发页统一编辑与展示
-            if (field.type() == EditorFieldType.CONDITION_TREE) continue;
+            if (field.isConditionTree()) continue;
             RuleValue value = action.child(field.name());
             if (value == null) value = BuiltinEditorDefaults.effectiveValue(action, field.name());
             Component description = describe(field, value);
@@ -61,31 +60,51 @@ final class ActionDescription {
         if (FieldCatalogTypes.catalogTypeOf(field) != null) {
             return Tone.REFERENCE;
         }
-        return switch (field.type()) {
-            case INTEGER, DECIMAL, PERCENT, TICKS, AMPLIFIER, ITEM_COUNTS, CLIMATE_RANGE -> Tone.METRIC;
-            case NOTE -> Tone.NOTE;
-            default -> Tone.VALUE;
-        };
+        if (field.isNote()) {
+            return Tone.NOTE;
+        }
+        if (field.isNumeric() || field.isItemCounts() || field.isClimateRange()) {
+            return Tone.METRIC;
+        }
+        return Tone.VALUE;
     }
 
     private static Component describe(EditorField field, RuleValue value) {
         // 缺省参数只展示已确认的有效默认值。
         if (value == null || value.isNull()) return null;
-        return switch (field.type()) {
-            case NOTE, RAW_JSON -> null;
-            case BOOLEAN -> Component.translatable(UI + "results.value." + (value.asFlag(false) ? "yes" : "no"));
-            case ENUM -> Component.translatable(UI + "enum." + field.enumGroup() + "." + value.asText());
-            case PERCENT -> Component.literal(FieldNumbers.percentText(value.asDecimal(1.0D)));
-            case TICKS -> value.asInteger(0) == 0 ? Component.translatable(UI + "results.immediate")
+        if (field.isDisplayOnly()) {
+            return null;
+        }
+        if (field.isBoolean()) {
+            return Component.translatable(UI + "results.value." + (value.asFlag(false) ? "yes" : "no"));
+        }
+        if (field.isEnum()) {
+            return Component.translatable(UI + "enum." + field.enumGroup() + "." + value.asText());
+        }
+        if (field.isPercent()) {
+            return Component.literal(FieldNumbers.percentText(value.asDecimal(1.0D)));
+        }
+        if (field.isTicks()) {
+            return value.asInteger(0) == 0 ? Component.translatable(UI + "results.immediate")
                     : Component.translatable(UI + "results.seconds", FieldNumbers.ticksToSecondsText(value.asInteger(0)));
-            case AMPLIFIER -> Component.literal(Integer.toString(FieldNumbers.levelOf(value.asInteger(0))));
-            case ITEM_COUNTS -> counts(value);
-            case SUBLIST -> sublist(field, value);
-            case TAG, REGISTRY_ID, RESOURCE_LOCATION -> reference(field, value.asText());
-            case TAG_LIST, RL_LIST, STRING_LIST -> value.isList()
+        }
+        if (field.isAmplifier()) {
+            return Component.literal(Integer.toString(FieldNumbers.levelOf(value.asInteger(0))));
+        }
+        if (field.isItemCounts()) {
+            return counts(value);
+        }
+        if (field.isSublist()) {
+            return sublist(field, value);
+        }
+        if (field.isReference()) {
+            return reference(field, value.asText());
+        }
+        if (field.isListShaped()) {
+            return value.isList()
                     ? join(value.items().stream().map(item -> reference(field, item.asText())).toList()) : null;
-            default -> value.isScalar() ? Component.literal(value.asText()) : null;
-        };
+        }
+        return value.isScalar() ? Component.literal(value.asText()) : null;
     }
 
     private static Component counts(RuleValue value) {

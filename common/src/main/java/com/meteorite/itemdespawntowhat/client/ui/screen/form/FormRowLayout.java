@@ -1,6 +1,5 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
-import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiFlowLayout;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
@@ -39,7 +38,7 @@ final class FormRowLayout {
     // 统一列宽只会在窄窗口下白占空间，因此这类行按标签文本宽度收窄；其余行保持统一列宽，
     // 控件左缘仍然对齐。说明行整行显示，不参与标签列对齐。
     private static int rowLabelWidth(FormRow row, int effectiveLabelWidth, Font font) {
-        if (row.control.usesLabelColumn() || row.field.type() == EditorFieldType.NOTE) {
+        if (row.control.usesLabelColumn() || row.field.isNote()) {
             return effectiveLabelWidth;
         }
         int inlineSpan = Math.max(MIN_INLINE_LABEL_WIDTH, font.width(row.control.label()));
@@ -146,7 +145,7 @@ final class FormRowLayout {
             row.controlWidth = Math.max(0, row.buttonsBelow ? controlWidth : controlWidth - reserved);
             row.controlWidth = row.control.preferredWidth(row.controlWidth);
             row.controlRelX = sideLabel ? rowLabelWidth + LABEL_GAP : 0;
-            if (row.field.type() == EditorFieldType.NOTE) {
+            if (row.field.isNote()) {
                 row.controlRelY = 0;
                 row.contentHeight = row.control.height();
             } else {
@@ -168,7 +167,7 @@ final class FormRowLayout {
                 }
             }
             row.contentY = cursor;
-            if (row.field.type() == EditorFieldType.NOTE) {
+            if (row.field.isNote()) {
                 // 说明行没有行尾按钮：清空缓存，避免沿用上一次排布留下的坐标
                 row.ensureButtonLayout(0);
             } else {

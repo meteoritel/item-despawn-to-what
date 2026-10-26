@@ -2,7 +2,6 @@ package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
-import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.FieldNumbers;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleValue;
@@ -333,7 +332,7 @@ abstract class FormControl {
 
     static FormControl create(Font font, FormView owner, EditorField field, Runnable onChanged) {
         // 数值字段优先走「滑杆 + 行内精确输入」，域元数据不足时仍回退文本控件
-        if (isNumericType(field.type())) {
+        if (field.isNumeric()) {
             NumberControl numeric = NumberControl.create(font, field, onChanged);
             if (numeric != null) {
                 return numeric;
@@ -437,13 +436,6 @@ abstract class FormControl {
             return null;
         }
         return RuleValue.decimal(value);
-    }
-
-    // 是否数值型字段（滑杆 + 行内精确输入）
-    static boolean isNumericType(EditorFieldType type) {
-        return type == EditorFieldType.INTEGER || type == EditorFieldType.TICKS
-                || type == EditorFieldType.DECIMAL || type == EditorFieldType.PERCENT
-                || type == EditorFieldType.AMPLIFIER;
     }
 
     // 界面百分比文本写回草稿小数（0..1）：十进制解析，保留原始精度

@@ -1,7 +1,6 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
 import com.meteorite.itemdespawntowhat.client.edit.EditorField;
-import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.EditorPreset;
 import com.meteorite.itemdespawntowhat.client.edit.FieldNumbers;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
@@ -86,9 +85,9 @@ final class NumberControl extends FormControl {
         super(field);
         this.font = font;
         this.integerDomain = numbers.integer();
-        this.percentField = field.type() == EditorFieldType.PERCENT;
-        this.amplifierField = field.type() == EditorFieldType.AMPLIFIER;
-        this.ticksField = field.type() == EditorFieldType.TICKS;
+        this.percentField = field.isPercent();
+        this.amplifierField = field.isAmplifier();
+        this.ticksField = field.isTicks();
         this.domainMin = domainMinOf(field, numbers);
         this.domainMax = domainMaxOf(field, numbers);
         double windowLow = field.sliderMin(domainMin);

@@ -1,6 +1,5 @@
 package com.meteorite.itemdespawntowhat.client.ui.screen.form;
 
-import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.TypeLabels;
 import com.meteorite.itemdespawntowhat.client.ui.kit.TextScroll;
@@ -114,7 +113,7 @@ final class FormRowRenderer {
             if (mouseX < viewportX || mouseX >= rowRight || mouseY < screenY || mouseY >= rowBottom) {
                 continue;
             }
-            if (row.field.type() == EditorFieldType.NOTE) {
+            if (row.field.isNote()) {
                 // 说明行按整行宽绘制，被裁剪时给出完整说明；它不参与校验问题与字段提示
                 Component note = ((NoteControl) row.control).note();
                 return font.width(note) > row.controlWidth ? note : null;

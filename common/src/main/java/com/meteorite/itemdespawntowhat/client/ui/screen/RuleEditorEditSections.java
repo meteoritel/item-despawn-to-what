@@ -2,7 +2,6 @@ package com.meteorite.itemdespawntowhat.client.ui.screen;
 
 import com.meteorite.itemdespawntowhat.client.edit.DraftListInputs;
 import com.meteorite.itemdespawntowhat.client.edit.EditSession;
-import com.meteorite.itemdespawntowhat.client.edit.EditorFieldType;
 import com.meteorite.itemdespawntowhat.client.edit.EditorWorkspaceView;
 import com.meteorite.itemdespawntowhat.client.edit.FormIssue;
 import com.meteorite.itemdespawntowhat.client.edit.RuleCategoryAssignment;
@@ -312,8 +311,7 @@ final class RuleEditorEditSections {
             }
             RuleCatalogType type = tags ? RuleCatalogType.TAG : FieldCatalogTypes.catalogTypeOf(field);
             if (type == null || !shell.editable()) return;
-            boolean multi = field.type() == EditorFieldType.TAG_LIST
-                    || field.type() == EditorFieldType.RL_LIST;
+            boolean multi = field.isMultiCatalog();
             modals.push(RuleEditorPanelFactory.fieldCatalogModal(font, shell, workspace, type, multi,
                     Component.translatable(field.labelKey()), shell.screenWidth(), shell.screenHeight(), onPicked,
                     field, session.draft(), path, selected, form.catalogFilter(field.name())));
