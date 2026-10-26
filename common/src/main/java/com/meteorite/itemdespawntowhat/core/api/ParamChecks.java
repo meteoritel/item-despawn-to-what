@@ -53,15 +53,6 @@ public final class ParamChecks {
         return true;
     }
 
-    // 必须为正数
-    public static boolean positive(int value, String field, IssueCollector issues, String path) {
-        if (value <= 0) {
-            issues.error(field + " 必须为正数，当前为 " + value, null, path);
-            return false;
-        }
-        return true;
-    }
-
     // 集合非空
     public static boolean notEmpty(@Nullable Collection<?> values, String field, IssueCollector issues, String path) {
         if (values == null || values.isEmpty()) {

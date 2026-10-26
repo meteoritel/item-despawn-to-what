@@ -6,22 +6,18 @@ import java.math.RoundingMode;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 数值字段的文本与 JSON 值互转。
+ * 数值字段的文本与 JSON 值互转，纯函数、无客户端状态：显示与解析共用同一套规则，
+ * 显示格式不反写舍入值。
  * <ul>
  *   <li>百分比按原始精度往返：JSON 0.123456 显示为 12.3456%，写回仍是 0.123456；</li>
- *   <li>刻数按十进制换算秒（0.05 秒为最小可表示单位），秒×20 不是整数时拒绝而不是静默取整；</li>
- *   <li>trigger_after_seconds 本身存秒，直接按秒解析，不经过刻数换算；</li>
+ *   <li>刻数按十进制换算秒，秒×20 不是整数时拒绝而不是静默取整；</li>
  *   <li>药水等级：JSON 存 amplifier（0 起算），界面显示 1..256，写回减一。</li>
  * </ul>
- * <p>纯函数、无客户端状态：显示与解析共用同一套规则，保证「显示格式不反写舍入值」。
  */
 public final class FieldNumbers {
 
     // 一秒对应的刻数
     public static final double TICKS_PER_SECOND = 20.0D;
-
-    // 秒模式下最小可表示的秒步长
-    public static final double MIN_SECONDS_STEP = 0.05D;
 
     // amplifier 的后端上界（0 起算）
     public static final int MAX_AMPLIFIER = 255;
@@ -32,7 +28,6 @@ public final class FieldNumbers {
     // 界面等级上界：amplifier 255 对应等级 256
     public static final int MAX_LEVEL = MAX_AMPLIFIER + 1;
 
-    // 工具类
     private FieldNumbers() {
         throw new UnsupportedOperationException("Utility class");
     }
@@ -71,19 +66,6 @@ public final class FieldNumbers {
         }
         try {
             return ticks.intValueExact();
-        } catch (ArithmeticException error) {
-            return null;
-        }
-    }
-
-    // 触发秒数字段：本身就是秒，按整数秒解析，不做刻数换算
-    public static @Nullable Integer parseSecondsDirect(@Nullable String text) {
-        BigDecimal value = parseDecimal(text);
-        if (value == null || value.stripTrailingZeros().scale() > 0) {
-            return null;
-        }
-        try {
-            return value.intValueExact();
         } catch (ArithmeticException error) {
             return null;
         }

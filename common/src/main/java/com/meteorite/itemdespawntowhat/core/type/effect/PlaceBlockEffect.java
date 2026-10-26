@@ -78,7 +78,7 @@ public record PlaceBlockEffect(
     /**
      * 半径对应方框内的位置总数，用作该半径下 limit 滑块的窗口上限。
      *
-     * <p>方框内最多只能容纳这么多个方块，所以 limit 写超过它的值不会拒载，只是从此限不到数量、等价于不限；
+     * <p>方框内最多只能容纳这么多个方块，limit 超过该容量时仍可保存，但实际限不到数量、等价于不限；
      * 滑块窗口仍按这个容量收窄，窗口外的合法值可以精确输入并保存。radius 自身不设静态上界，
      * 由服务端配置 max_place_block_radius 在加载与保存校验时限定。</p>
      *
@@ -121,7 +121,7 @@ public record PlaceBlockEffect(
     public static final ParamList PARAMS = ParamList.of(BLOCK, USE_SOURCE_BLOCK, SHAPE, COUNT, RADIUS, LIMIT,
             CommonFields.DELAY_TICKS, CommonFields.CHANCE);
 
-    // 类型专属参数编解码器；通用字段复用 CommonFields 片段（codec 层不得产出 null）
+    // 类型专属参数编解码器；通用字段复用 CommonFields 片段，可空字段经 Optional 进入 codec
     public static MapCodec<PlaceBlockEffect> codec() {
         return RecordCodecBuilder.mapCodec(instance -> instance.group(
                 BLOCK.fieldForNullable(effect -> Optional.ofNullable(effect.block())),
@@ -147,16 +147,16 @@ public record PlaceBlockEffect(
             }
 
             @Override
-            public @Nullable EffectPreparation prepare(PlaceBlockEffect effect, ServerLevel level, Vec3 position,
-                                                       ItemEntity sourceEntity, ItemStack sourceStack,
-                                                       boolean fillOrigin) {
-                // 目标方块在此刻按组固定：tag 成员与源物品映射都不再随执行时机变化，候选偏移走跨调用缓存
+            public EffectPreparation prepare(PlaceBlockEffect effect, ServerLevel level, Vec3 position,
+                                             ItemEntity sourceEntity, ItemStack sourceStack,
+                                             boolean fillOrigin) {
+                // 目标方块在成功转化当刻按组固定：tag 成员与源物品映射不随执行时机变化，候选偏移走跨调用缓存
                 return PlaceBlockExecutor.plan(effect, level, sourceStack, fillOrigin);
             }
 
             @Override
             public EffectExecution start(PlaceBlockEffect effect, EffectContext context) {
-                // 无固定输入入口同样不做到期重新解析：目标方块只在成功转化当刻按组固定
+                // 无固定输入入口：目标方块只在成功转化当刻按组固定，不重新解析
                 return PlaceBlockExecutor.start(effect, context);
             }
 

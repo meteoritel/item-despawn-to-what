@@ -17,7 +17,7 @@ import org.jetbrains.annotations.Nullable;
 /**
  * 经验产出执行器：先按本组实际扣减的源物品件数算出总点数，再按单球安全点数分批生成。
  * 总点数只算一次：每件源物品的点数 × 本组实际扣减件数，不随分批重复计算，也不因邻近经验球数量拒绝或截断。
- * 条件、概率与延迟由运行时处理，不跨行为或转化组合并经验。
+ * 条件、概率与延迟由运行时处理，经验不跨行为或转化组合并。
  * 每球成功加入世界后回执真实点数；未完成部分与已构造但尚未写入的球留到后续步骤继续，取消后不补做。
  */
 public final class SpawnXpExecutor {
@@ -40,13 +40,15 @@ public final class SpawnXpExecutor {
     }
 
     /**
-     * 同步入口：经验产出需要跨步骤续接，不提供一次性完成的执行方式。
+     * 同步入口：经验产出按批次在共享预算内续接，由预算执行路径推进。
      *
      * @param effect 经验参数
      * @param context 本组执行上下文
      * @return 恒为要求走预算执行路径的失败回执
      */
-    public static EffectResult execute(EntityProduct.Experience effect, EffectContext context) {
+    // 形参由效果类型的分发签名固定，同步入口不读取其中任何参数
+    public static EffectResult execute(@SuppressWarnings("unused") EntityProduct.Experience effect,
+                                       @SuppressWarnings("unused") EffectContext context) {
         return EffectResult.failed(BUDGET_REQUIRED);
     }
 
@@ -56,13 +58,13 @@ public final class SpawnXpExecutor {
      *
      * @param effect 经验点数参数
      * @param context 本组执行上下文
-     * @param preparation 成功转化当刻固定的输入；为跳过时不生成任何经验球
+     * @param preparation 成功转化当刻固定的输入；null 表示接线缺失，gate 有值表示已判定跳过
      * @return 仅供本次效果使用的执行状态
      */
     public static EffectExecution start(EntityProduct.Experience effect, EffectContext context,
                                         @Nullable EffectPreparation preparation) {
         if (preparation == null) {
-            // 迁移到固定输入路径后，缺少固定输入不再退回到期重新判定
+            // 缺少固定输入属于接线缺失：直接失败，不重新判定
             return budget -> EffectStep.done(EffectResult.failed(MISSING_PREPARATION));
         }
         // 成功转化当刻已判定的跳过原因：直接产出跳过回执，不重判也不生成经验球
@@ -108,7 +110,7 @@ public final class SpawnXpExecutor {
             int points = (int) Math.min(remaining, MAX_POINTS_PER_ORB);
             Vec3 position = EffectTargets.randomHorizontalDisc(context.random(), context.position(),
                     SCATTER_RADIUS, SPAWN_HEIGHT);
-            // award 会再次按原版面额拆球；直接构造保留原版初速度、拾取和后续同值合并。
+            // award 会再次按面额拆球；直接构造保留原版初速度、拾取和后续同值合并。
             ExperienceOrb orb = new ExperienceOrb(context.level(), position.x, position.y, position.z, points);
             return new Production.Next(new Unit(orb, points));
         }
@@ -121,7 +123,7 @@ public final class SpawnXpExecutor {
 
         @Override
         protected void onUnitWritten(Unit unit) {
-            // 完成量就是这颗球实际携带的点数
+            // 回执量取这颗球实际携带的点数
             remaining -= unit.appliedUnits();
             if (!feedbackSent) {
                 VisualFeedback.entitySpawn(context.level(), context.position());

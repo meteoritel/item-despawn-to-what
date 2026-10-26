@@ -17,13 +17,13 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * 掉落物产出子类执行器：产出量按物品件数计算，在共享预算内按件数分批写入世界。
- * 产物引用与每轮件数在成功转化当刻固定，执行期不再读原源实体、也不再重新抽取引用。
+ * 产物引用与每轮件数在成功转化当刻固定，执行期只读固定产物，不访问源实体、不重新抽取引用。
  * 每个真正写入世界的掉落物按件数回执真实完成量，终态只收束任务。
  */
 public final class SpawnItemExecutor {
 
     /**
-     * 单批最多写入的掉落物实体数：行为上界，取值与语义保持不变，只限制单步产出量。
+     * 单批最多写入的掉落物实体数：行为上界，只限制单步产出量。
      * 每个真正写入世界的 ItemEntity 由交付循环按 1 个工作单位计费，
      * 故该上界同时是一个调度步骤最多计入的计费单位数。
      */
@@ -32,7 +32,7 @@ public final class SpawnItemExecutor {
     private static final String BUDGET_REQUIRED = "budget_required: spawn_entity.item";
     // 回执说明：本次产出已按真实写入逐件回执，终态不再重复计入
     private static final String BATCHED = "batched";
-    // 产物生成的水平散布半径与抬升高度：与既有产物外观保持一致
+    // 产物生成的水平散布半径与抬升高度
     private static final double SCATTER_RADIUS = 0.3;
     private static final double SPAWN_HEIGHT = 0.1;
 
@@ -41,13 +41,15 @@ public final class SpawnItemExecutor {
     }
 
     /**
-     * 同步入口：本类型需要按批次在共享预算内续接，不提供一次性完成的执行方式。
+     * 同步入口：掉落物产出按批次在共享预算内续接，由预算执行路径推进。
      *
      * @param effect  物品产出参数
      * @param context 本组执行上下文
      * @return 恒为要求走预算执行路径的失败回执
      */
-    public static EffectResult execute(EntityProduct.Item effect, EffectContext context) {
+    // 形参由效果类型的分发签名固定，同步入口不读取其中任何参数
+    public static EffectResult execute(@SuppressWarnings("unused") EntityProduct.Item effect,
+                                       @SuppressWarnings("unused") EffectContext context) {
         return EffectResult.failed(BUDGET_REQUIRED);
     }
 

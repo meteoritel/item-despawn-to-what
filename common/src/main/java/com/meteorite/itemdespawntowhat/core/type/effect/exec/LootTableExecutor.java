@@ -29,9 +29,9 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * loot_table 执行器：在成功转化当刻用真实源实体开表一次并固定产物，随后在共享预算内分批交付。
- * 交付期不再读取源实体、不再打开战利品表，也不再次随机抽取；空表是已完成的空结果。
- * 真实完成量按实际写入世界的物品件数逐堆回执，行为轮数与世界工作量分别表达；
- * 区块未加载时保留已构造的这堆产物，退避后重试，不重抽散点与初速。
+ * 交付期只读固定产物，不访问源实体、不重开战利品表、不再次随机抽取；空表属于已完成的空结果。
+ * 回执按实际写入世界的物品件数逐堆记录，行为轮数与真实产出件数分别表达。
+ * 区块未加载时保留已构造的产物，退避后重试，散点与初速保持不变。
  */
 public final class LootTableExecutor {
 
@@ -51,9 +51,8 @@ public final class LootTableExecutor {
 
     /**
      * 成功转化当刻固定的本次战利品产物与落点：只保存触发位置快照与已抽取的堆叠副本。
-     * 不保留 {@link LootParams} 与源实体引用，交付期无需也不得再访问原源实体。
-     * 堆叠列表在构造时复制成不可变快照，此后由执行状态共享持有；交付只在真正写入世界时按堆复制，
-     * 不再为每个执行状态整表深拷贝一次。
+     * 不保留 {@link LootParams} 与源实体引用，交付期不访问源实体。
+     * 堆叠列表在构造时复制成不可变快照，由执行状态共享持有；写入世界时才按堆复制，避免整表深拷贝。
      *
      * @param position 成功当刻固定的触发点位置
      * @param drops    本次开表抽取到的非空堆叠，按抽取顺序保存
@@ -82,20 +81,22 @@ public final class LootTableExecutor {
     }
 
     /**
-     * 同步入口：本类型的产物必须在成功转化当刻开表固定后再按批次交付，此处不提供一次性完成的执行方式。
+     * 同步入口：本类型的产物在成功转化当刻开表固定，随后按批次交付，入口恒返回要求走预算执行路径的失败回执。
      *
      * @param effect  战利品表效果参数
      * @param context 本组执行上下文
-     * @return 恒为要求走预算执行路径的失败回执
+     * @return 要求走预算执行路径的失败回执
      */
-    public static EffectResult execute(LootTableEffect effect, EffectContext context) {
+    // 形参由效果类型的分发签名固定，同步入口不读取其中任何参数
+    public static EffectResult execute(@SuppressWarnings("unused") LootTableEffect effect,
+                                       @SuppressWarnings("unused") EffectContext context) {
         return EffectResult.failed(BUDGET_REQUIRED);
     }
 
     /**
      * 在成功转化当刻用真实源实体开表一次，把本次产物固定下来。
-     * 源实体只在本次调用内作为 {@code THIS_ENTITY} 参数参与求值，随后会被清空并被移除；
-     * 抽取结果逐份复制后随固定输入携带，交付期不再重开战利品表，也不再次随机抽取。
+     * 源实体只在本次调用内作为 {@code THIS_ENTITY} 参数参与求值，随后被清空并移除；
+     * 抽取结果逐份复制后随固定输入携带，交付期不重开战利品表，也不再次随机抽取。
      *
      * @param effect       战利品表效果参数
      * @param level        触发维度，提供战利品表注册表
@@ -105,9 +106,11 @@ public final class LootTableExecutor {
      * @param fillOrigin   候选的位置策略；本类型不使用
      * @return 本次战利品产物的固定输入
      */
-    public static @Nullable EffectPreparation prepare(LootTableEffect effect, ServerLevel level, Vec3 position,
-                                                      ItemEntity sourceEntity, ItemStack sourceStack,
-                                                      boolean fillOrigin) {
+    // 形参由效果类型的准备签名固定，本类型只读取参数、维度、触发点与源实体
+    public static EffectPreparation prepare(LootTableEffect effect, ServerLevel level, Vec3 position,
+                                            ItemEntity sourceEntity,
+                                            @SuppressWarnings("unused") ItemStack sourceStack,
+                                            @SuppressWarnings("unused") boolean fillOrigin) {
         LootTable lootTable = level.getServer().reloadableRegistries().getLootTable(
                 ResourceKey.create(Registries.LOOT_TABLE, effect.lootTable()));
         LootParams params = new LootParams.Builder(level)
@@ -135,7 +138,7 @@ public final class LootTableExecutor {
     public static EffectExecution start(LootTableEffect effect, EffectContext context,
                                         @Nullable EffectPreparation preparation) {
         if (preparation == null) {
-            // 迁移到固定输入路径后，缺少固定输入不再退回到期重新抽取
+            // 缺少固定输入属于接线缺失：直接失败，不重新抽取
             return budget -> EffectStep.done(EffectResult.failed(MISSING_PREPARATION));
         }
         if (preparation.gate() != null) {
@@ -192,7 +195,7 @@ public final class LootTableExecutor {
 
         @Override
         protected boolean write(Entity entity) {
-            // 转化产物：走既有显式产物入口，先授予临时保护与冷却再写入世界；未写入时保留这堆产物
+            // 转化产物：走显式产物入口，先授予临时保护与冷却再写入世界；未写入时保留这堆产物
             return EffectTargets.addConversionProductNow(context, (ItemEntity) entity);
         }
 
@@ -227,12 +230,12 @@ public final class LootTableExecutor {
             return EffectResult.applied(0, drops.isEmpty() ? EMPTY_RESULT : DELIVERED);
         }
 
-        // 完成前观测：最后一批真实写入之后、终态回执之前上报一次，与原实现同在一次推进内
+        // 完成前观测：最后一批真实写入之后、终态回执之前上报一次
         private void observeDelivered() {
             if (!RuntimeObserver.current().enabled()) {
                 return;
             }
-            // 行为轮数与真实产出件数分别记录：轮次是本组的执行轮数，不代表物品件数
+            // 行为轮数与真实产出件数分别记录：轮次只表示本组执行轮数
             RuntimeObserver.current().observe(context.source(), "LOOT_TABLE_RESULT",
                     "table", table,
                     "drops", drops.size(),
