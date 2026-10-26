@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Supplier;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
@@ -26,21 +27,6 @@ import org.jetbrains.annotations.Nullable;
  */
 final class RuleEditorValidation {
 
-    /** 宿主能力：校验只通过这些入口读取当前编辑现场。 */
-    interface Host {
-
-        // 当前编辑会话（未打开规则时为 null）
-        @Nullable EditSession editingSession();
-
-        @Nullable String editingId();
-
-        // 规则模型（脏规则与恢复状态）
-        RuleEditorModel model();
-
-        // 编辑页组合视图（页面级问题）
-        @Nullable RuleEditorPageSet pages();
-    }
-
     private static final String UI = TypeLabels.UI_PREFIX;
     private static final String ISSUE = UI + "issue.";
     // 顶层效果数量上限
@@ -49,11 +35,15 @@ final class RuleEditorValidation {
     private static final int MAX_DISPLAY_NAME_CODE_POINTS = 128;
     private static final int MAX_NOTES_CODE_POINTS = 1024;
 
-    private final Host host;
+    private final EditorShell shell;
+    private final RuleEditorModel model;
+    private final Supplier<@Nullable RuleEditorEditSections> pages;
     private @Nullable String issueRuleId;
 
-    RuleEditorValidation(Host host) {
-        this.host = host;
+    RuleEditorValidation(EditorShell shell, RuleEditorModel model, Supplier<@Nullable RuleEditorEditSections> pages) {
+        this.shell = shell;
+        this.model = model;
+        this.pages = pages;
     }
 
     // 最近一次阻塞问题所属规则（与当前编辑对象不同时用于跳转）
@@ -63,18 +53,18 @@ final class RuleEditorValidation {
 
     // 汇总当前编辑对象、其余脏规则与页面视图的问题；页面级问题已由页面自行判定
     List<FormIssue> collectIssues() {
-        issueRuleId = host.editingId();
+        issueRuleId = shell.editingId();
         List<FormIssue> issues = new ArrayList<>();
-        EditSession session = host.editingSession();
+        EditSession session = shell.editingSession();
         if (session != null && !session.draft().isDeleted()) {
             issues.addAll(localIssues(session.draft()));
             issues.addAll(session.pendingInputIssues());
         }
-        for (String id : host.model().dirtyRuleIds()) {
-            if (id.equals(host.editingId())) {
+        for (String id : model.dirtyRuleIds()) {
+            if (id.equals(shell.editingId())) {
                 continue;
             }
-            EditSession other = host.model().session(id);
+            EditSession other = model.session(id);
             if (other != null && !other.draft().isDeleted()) {
                 List<FormIssue> otherIssues = new ArrayList<>(localIssues(other.draft()));
                 otherIssues.addAll(other.pendingInputIssues());
@@ -84,9 +74,9 @@ final class RuleEditorValidation {
                 issues.addAll(otherIssues);
             }
         }
-        RuleEditorPageSet pages = host.pages();
-        if (pages != null) {
-            issues.addAll(pages.issues());
+        RuleEditorEditSections current = pages.get();
+        if (current != null) {
+            issues.addAll(current.issues());
         }
         return issues;
     }

@@ -51,7 +51,7 @@ final class SourceBlacklistPicker {
         return List.copyOf(tags);
     }
 
-    static UiModal modal(Font font, EditorWorkspaceView workspace, @Nullable RuleValue rule, int width, int height,
+    static UiModal modal(Font font, EditorShell shell, EditorWorkspaceView workspace, @Nullable RuleValue rule, int width, int height,
                          Consumer<List<String>> onPicked) {
         CatalogEntryPolicy policy = CatalogEntryPolicy.fixed(RuleCatalogType.ITEM);
         Pages pages = new Pages(sourceTags(rule), policy);
@@ -65,7 +65,7 @@ final class SourceBlacklistPicker {
         RuleValue source = rule == null ? null : rule.child(RuleFields.SOURCE);
         grid.setSelection(source == null ? List.of() : RuleValueReads.stringList(source.child(RuleFields.SOURCE_EXCLUDE)));
         grid.setEntrySource(() -> {
-            grid.setEnabled(workspace.active());
+            grid.setEnabled(shell.editable());
             if (pages.filtered.isEmpty()) return List.of();
             Page page = pages.filtered.get(pages.index);
             grid.setPage(pages.index, pages.filtered.size());
@@ -78,7 +78,7 @@ final class SourceBlacklistPicker {
         modal.inlineFooter();
         modal.contentWidget(grid, RuleEditorPanelFactory.pickerBodyHeight(height));
         modal.confirm(Component.translatable(UI + "button.confirm"), () -> {
-            if (workspace.active()) onPicked.accept(grid.selection());
+            if (shell.editable()) onPicked.accept(grid.selection());
         });
         modal.cancel(Component.translatable(UI + "button.cancel"));
         modal.layoutCentered(width, height);

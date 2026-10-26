@@ -22,7 +22,7 @@ final class RuleEditorPageInput {
         EFFECT
     }
 
-    private final RuleEditorPageSet pages;
+    private final RuleEditorEditSections pages;
 
     // 本次按下命中的页面控件：释放只派发给它，避免无关控件吞掉释放
     private @Nullable UiWidget pressedWidget;
@@ -34,7 +34,7 @@ final class RuleEditorPageInput {
     private boolean dragActive;
     private double dragStartY;
 
-    RuleEditorPageInput(RuleEditorPageSet pages) {
+    RuleEditorPageInput(RuleEditorEditSections pages) {
         this.pages = pages;
     }
 
@@ -54,7 +54,7 @@ final class RuleEditorPageInput {
             return true;
         }
         // 行内删除先于列表选中与拖动排序，避免叉号触发双击激活或拖动。
-        if (pages.ruleEditorResultsPage.clickRemove(mouseX, mouseY, button)) {
+        if (pages.resultsSection.clickRemove(mouseX, mouseY, button)) {
             pages.flushRebuild();
             return true;
         }
@@ -89,7 +89,7 @@ final class RuleEditorPageInput {
             dragFrom = -1;
             dragTo = -1;
             if (active && from >= 0 && to >= 0 && from != to) {
-                pages.ruleEditorResultsPage.moveEffect(from, to);
+                pages.resultsSection.moveEffect(from, to);
                 pages.flushRebuild();
                 return true;
             }
@@ -175,10 +175,10 @@ final class RuleEditorPageInput {
         if (!dragActive) {
             return;
         }
-        UiListView<?> list = pages.ruleEditorResultsPage.effectList;
+        UiListView<?> list = pages.resultsSection.effectList;
         UiRect rect = list == null ? null : list.visibleRowBounds(dragTo);
         if (rect != null) {
-            RuleEditorPageSet.THEME.drawSelection(graphics, rect);
+            RuleEditorEditSections.THEME.drawSelection(graphics, rect);
         }
     }
 
@@ -190,9 +190,9 @@ final class RuleEditorPageInput {
         dragActive = false;
         UiListView<?> list = null;
         DragKind kind = DragKind.NONE;
-        if (pages.ruleEditorResultsPage.effectList != null && pages.ruleEditorResultsPage.effectList.isVisible()
-                && pages.ruleEditorResultsPage.effectList.bounds().contains(mouseX, mouseY)) {
-            list = pages.ruleEditorResultsPage.effectList;
+        if (pages.resultsSection.effectList != null && pages.resultsSection.effectList.isVisible()
+                && pages.resultsSection.effectList.bounds().contains(mouseX, mouseY)) {
+            list = pages.resultsSection.effectList;
             kind = DragKind.EFFECT;
         }
         if (list == null || list.itemIndexAt(mouseX, mouseY) < 0) {
@@ -205,7 +205,7 @@ final class RuleEditorPageInput {
 
     // 指针位置对应的行下标
     private int rowIndexAt(double mouseY) {
-        UiListView<?> list = pages.ruleEditorResultsPage.effectList;
+        UiListView<?> list = pages.resultsSection.effectList;
         if (list == null || list.size() == 0) {
             return -1;
         }

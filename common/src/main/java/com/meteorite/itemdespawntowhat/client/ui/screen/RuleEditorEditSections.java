@@ -61,13 +61,13 @@ import org.jetbrains.annotations.Nullable;
  * <p>输入页编辑规则源数量、催化剂门槛与实际消耗、共享半径及流体源消耗开关；结果页编辑产出和
  * 世界效果。输入支付统一由结算层执行。</p>
  */
-public final class RuleEditorPageSet {
+final class RuleEditorEditSections {
 
     // 宿主默认主题：屏幕从主题入口取样式后注入本类装配的控件
     static final UiHostTheme THEME = UiHostThemes.defaultTheme();
 
     /** 页签 */
-    public enum Page {
+    enum EditSection {
 
         // 基本信息
         INFO("info"),
@@ -80,7 +80,7 @@ public final class RuleEditorPageSet {
 
         private final String value;
 
-        Page(String value) {
+        EditSection(String value) {
             this.value = value;
         }
 
@@ -90,8 +90,8 @@ public final class RuleEditorPageSet {
         }
 
         // 由标识解析，未知回落基本信息
-        public static Page of(@Nullable String value) {
-            for (Page page : values()) {
+        public static EditSection of(@Nullable String value) {
+            for (EditSection page : values()) {
                 if (page.value.equals(value)) {
                     return page;
                 }
@@ -100,65 +100,18 @@ public final class RuleEditorPageSet {
         }
     }
 
-    /**
-     * 宿主能力：页面只通过本接口访问屏幕、焦点、弹窗栈、建议与条件树支持，不反向持有屏幕类型。
-     */
-    public interface Host {
-
-        // 字体
-        Font font();
-
-        // 当前编辑会话（未打开规则时为 null）
-        @Nullable EditSession session();
-
-        // 焦点管理器
-        UiFocusManager focus();
-
-        // 弹窗栈
-        UiModalStack modals();
-
-        // 草稿已变更（屏幕据此刷新列表）
-        void onDraftChanged();
-
-        // 控件重建后同步宿主的焦点目标。
-        void onControlsChanged();
-
-        /**
-         * 提示桥接：把提示文本交给屏幕层决定形态与存活时长。
-         *
-         * <p>本重载只接受色值，只服务既有的桥接调用点。新增调用点先表达级别，
-         * 用 {@code RuleEditorScreen.noticeColor(NoticeLevel)} 折算，不在页面里直接比较调色板。</p>
-         *
-         * @param message 提示文本；null 表示清除
-         * @param color   由提示级别折算出的调色板色值
-         */
-        void notice(Component message, int color);
-
-        // 条件树的共享定义能力（类型清单、按场景创建、解码注册表）
-        ConditionEditingSupport conditionEditingSupport();
-
-        // 编辑工作区只读视图（目录面板与只读状态查询）
-        EditorWorkspaceView workspace();
-
-        // 编辑页数据模型（基本页据此读取本服启停状态）
-        RuleEditorModel model();
-
-        // 冻结（会话失效）时拒绝写入
-        boolean rejectWhenFrozen();
-
-        // 屏幕宽高
-        int screenWidth();
-
-        int screenHeight();
-    }
-
     // 四个页签的实现：容器只保留共享状态与调度，页面各自持有控件引用
-    final RuleEditorInfoPage ruleEditorInfoPage;
-    final RuleEditorInputPage ruleEditorInputPage;
-    final RuleEditorTriggerPage ruleEditorTriggerPage;
-    final RuleEditorResultsPage ruleEditorResultsPage;
+    final RuleEditorInfoSection infoSection;
+    final RuleEditorInputSection inputSection;
+    final RuleEditorTriggerSection triggerSection;
+    final RuleEditorResultsSection resultsSection;
 
-    final Host host;
+    final EditorShell shell;
+    final RuleEditorModel model;
+    final EditorWorkspaceView workspace;
+    final UiModalStack modals;
+    final UiFocusManager focus;
+    final ConditionEditingSupport conditionEditingSupport;
     final Font font;
     final List<UiWidget> liveWidgets = new ArrayList<>();
     final List<FormView> liveForms = new ArrayList<>();
@@ -170,9 +123,8 @@ public final class RuleEditorPageSet {
     final RuleNaming.NameSource nameSource = RuleDisplayLabels::label;
 
     final UiScrollView pageScroll = new UiScrollView();
-    private final EnumMap<Page, Integer> scrollOffsets = new EnumMap<>(Page.class);
-    private Page page = Page.INFO;
-    private boolean enabled = true;
+    private final EnumMap<EditSection, Integer> scrollOffsets = new EnumMap<>(EditSection.class);
+    private EditSection page = EditSection.INFO;
     private boolean pendingRebuild;
     boolean rebuilding;
     @Nullable UiRect lastArea;
@@ -195,7 +147,7 @@ public final class RuleEditorPageSet {
      * 页面分区的绘制数据，与控件共用滚动坐标。
      * <p>头部内容既可以是构造时的常量标题，也可以在每帧渲染时求值（见 {@link #dynamic}），
      * 卡片之间的头部几何统一由 {@link #headerRect()} 派生，绘制统一走
-     * {@link RuleEditorPageSet#drawCardHeader}。</p>
+     * {@link RuleEditorEditSections#drawCardHeader}。</p>
      */
     static final class PageCard {
 
@@ -251,25 +203,31 @@ public final class RuleEditorPageSet {
     // 输入事件分发与拖动状态
     private final RuleEditorPageInput input;
 
-    public RuleEditorPageSet(Host host) {
-        this.host = host;
-        this.font = host.font();
-        this.ruleEditorInfoPage = new RuleEditorInfoPage(this);
-        this.ruleEditorInputPage = new RuleEditorInputPage(this);
-        this.ruleEditorTriggerPage = new RuleEditorTriggerPage(this);
-        this.ruleEditorResultsPage = new RuleEditorResultsPage(this);
+    RuleEditorEditSections(EditorShell shell, RuleEditorModel model, EditorWorkspaceView workspace, Font font,
+            UiModalStack modals, UiFocusManager focus, ConditionEditingSupport conditionEditingSupport) {
+        this.shell = shell;
+        this.model = model;
+        this.workspace = workspace;
+        this.font = font;
+        this.modals = modals;
+        this.focus = focus;
+        this.conditionEditingSupport = conditionEditingSupport;
+        this.infoSection = new RuleEditorInfoSection(this);
+        this.inputSection = new RuleEditorInputSection(this);
+        this.triggerSection = new RuleEditorTriggerSection(this);
+        this.resultsSection = new RuleEditorResultsSection(this);
         this.input = new RuleEditorPageInput(this);
     }
 
     // ---- 页签与重建 ----
 
-    public Page page() {
+    public EditSection page() {
         return page;
     }
 
     /** 切页：先结束进行中的预览，再重建新页 */
-    public void setPage(@Nullable Page next) {
-        Page target = next == null ? Page.INFO : next;
+    public void setPage(@Nullable EditSection next) {
+        EditSection target = next == null ? EditSection.INFO : next;
         if (target == page) {
             return;
         }
@@ -277,8 +235,8 @@ public final class RuleEditorPageSet {
         endInteractions();
         page = target;
         // 切页后旧提示失效：消息传 null 清除，色值沿用 INFO 级别的次要文本色
-        host.notice(null, THEME.palette().textSecondary());
-        ruleEditorResultsPage.effectIndex = 0;
+        shell.setNotice(null,EditorShell.NoticeLevel.INFO);
+        resultsSection.effectIndex = 0;
         rebuild();
         pageScroll.setOffset(scrollOffsets.getOrDefault(page, 0));
         if (lastArea != null) {
@@ -290,21 +248,21 @@ public final class RuleEditorPageSet {
     /** 重建当前页的全部控件（草稿结构或选择变化后调用） */
     public void rebuild() {
         reset();
-        EditSession session = host.session();
+        EditSession session = shell.editingSession();
         if (session == null) {
             return;
         }
         switch (page) {
-            case INFO -> ruleEditorInfoPage.buildInfo(session);
-            case INPUT -> ruleEditorInputPage.buildInput(session);
-            case TRIGGER -> ruleEditorTriggerPage.buildTrigger(session);
-            case RESULTS -> ruleEditorResultsPage.buildResults(session);
+            case INFO -> infoSection.buildInfo(session);
+            case INPUT -> inputSection.buildInput(session);
+            case TRIGGER -> triggerSection.buildTrigger(session);
+            case RESULTS -> resultsSection.buildResults(session);
         }
         applyEnabled();
         if (lastArea != null) {
             layout(lastArea);
         }
-        host.onControlsChanged();
+        shell.rebuildFocus();
     }
 
     private void reset() {
@@ -315,10 +273,10 @@ public final class RuleEditorPageSet {
         effectButtons.clear();
         documentBounds.clear();
         // 页面各自的控件引用由页面清理，容器只维护共享状态
-        ruleEditorInfoPage.reset();
-        ruleEditorInputPage.reset();
-        ruleEditorTriggerPage.reset();
-        ruleEditorResultsPage.reset();
+        infoSection.reset();
+        inputSection.reset();
+        triggerSection.reset();
+        resultsSection.reset();
         input.resetDrag();
     }
 
@@ -328,42 +286,42 @@ public final class RuleEditorPageSet {
         // 表单行几何变化时让页面布局缓存失效，页面滚动帧因此不必重排
         form.setOnGeometryChanged(this::invalidateLayout);
         form.useCatalogSelections();
-        form.setConditionEditingSupport(ruleEditorTriggerPage.sharedConditionSupport());
-        form.setConditionContextFactory(ruleEditorTriggerPage.conditionContextFactory(form));
-        form.setOnChanged(host::onDraftChanged);
-        if (page == Page.INPUT) form.setOnChanged(() -> {
+        form.setConditionEditingSupport(triggerSection.sharedConditionSupport());
+        form.setConditionContextFactory(triggerSection.conditionContextFactory(form));
+        form.setOnChanged(shell::draftChanged);
+        if (page == EditSection.INPUT) form.setOnChanged(() -> {
             form.applyToDraft();
-            if (form == ruleEditorInputPage.sourceForm) {
-                ruleEditorInputPage.updateBlacklistVisibility();
-                ruleEditorInputPage.refreshQuantityReferences();
+            if (form == inputSection.sourceForm) {
+                inputSection.updateBlacklistVisibility();
+                inputSection.refreshQuantityReferences();
             }
-            if (form == ruleEditorInputPage.catalystForm) {
-                for (RuleEditorInputPage.PresenceRow row : ruleEditorInputPage.presenceRows) {
+            if (form == inputSection.catalystForm) {
+                for (RuleEditorInputSection.PresenceRow row : inputSection.presenceRows) {
                     if (row.leaf.catalyst()) row.form.reload();
                 }
             }
-            host.onDraftChanged();
+            shell.draftChanged();
         });
         // 输入超过长度上限时立即提示，格式为「字段名：原因」
-        form.setOnRejectedNotice(message -> host.notice(message, THEME.palette().danger()));
+        form.setOnRejectedNotice(message -> shell.setNotice(message,EditorShell.NoticeLevel.DANGER));
         form.setSelectionCatalogOpener((field, path, tags, selected, onPicked) -> {
-            if (page == Page.INPUT && RuleFields.SOURCE.equals(basePath) && RuleFields.SOURCE_EXCLUDE.equals(field.name())) {
-                if (!host.rejectWhenFrozen()) host.modals().push(SourceBlacklistPicker.modal(font, host.workspace(), session.draft().root(),
-                        host.screenWidth(), host.screenHeight(), onPicked));
+            if (page == EditSection.INPUT && RuleFields.SOURCE.equals(basePath) && RuleFields.SOURCE_EXCLUDE.equals(field.name())) {
+                if (shell.editable()) modals.push(SourceBlacklistPicker.modal(font, shell, workspace, session.draft().root(),
+                        shell.screenWidth(), shell.screenHeight(), onPicked));
                 return;
             }
             RuleCatalogType type = tags ? RuleCatalogType.TAG : FieldCatalogTypes.catalogTypeOf(field);
-            if (type == null || host.rejectWhenFrozen()) return;
+            if (type == null || !shell.editable()) return;
             boolean multi = field.type() == EditorFieldType.TAG_LIST
                     || field.type() == EditorFieldType.RL_LIST;
-            host.modals().push(RuleEditorPanelFactory.fieldCatalogModal(font, host.workspace(), type, multi,
-                    Component.translatable(field.labelKey()), host.screenWidth(), host.screenHeight(), onPicked,
+            modals.push(RuleEditorPanelFactory.fieldCatalogModal(font, shell, workspace, type, multi,
+                    Component.translatable(field.labelKey()), shell.screenWidth(), shell.screenHeight(), onPicked,
                     field, session.draft(), path, selected, form.catalogFilter(field.name())));
         });
         form.setDescriptor(descriptor);
         form.reload();
         form.useCardSpacing();
-        ruleEditorInputPage.configureQuantityFields(form, session, basePath, descriptor);
+        inputSection.configureQuantityFields(form, session, basePath, descriptor);
         return form;
     }
 
@@ -470,10 +428,10 @@ public final class RuleEditorPageSet {
     private int layoutPage(UiRect area) {
         cards.clear();
         return switch (page) {
-            case INFO -> ruleEditorInfoPage.layoutInfo(area);
-            case INPUT -> ruleEditorInputPage.layoutInput(area);
-            case TRIGGER -> ruleEditorTriggerPage.layoutTrigger(area);
-            case RESULTS -> ruleEditorResultsPage.layoutResults(area);
+            case INFO -> infoSection.layoutInfo(area);
+            case INPUT -> inputSection.layoutInput(area);
+            case TRIGGER -> triggerSection.layoutTrigger(area);
+            case RESULTS -> resultsSection.layoutResults(area);
         };
     }
 
@@ -596,10 +554,10 @@ public final class RuleEditorPageSet {
                 }
             }
             switch (page) {
-                case INFO -> ruleEditorInfoPage.renderInfo(graphics);
-                case INPUT -> ruleEditorInputPage.renderInput(graphics);
-                case TRIGGER -> ruleEditorTriggerPage.renderTrigger(graphics);
-                case RESULTS -> ruleEditorResultsPage.renderResults(graphics);
+                case INFO -> infoSection.renderInfo(graphics);
+                case INPUT -> inputSection.renderInput(graphics);
+                case TRIGGER -> triggerSection.renderTrigger(graphics);
+                case RESULTS -> resultsSection.renderResults(graphics);
             }
         } finally {
             graphics.disableScissor();
@@ -632,11 +590,11 @@ public final class RuleEditorPageSet {
 
     /** 提交所有可见表单的待写字段；返回是否有改动 */
     public boolean applyToDraft() {
-        if (!enabled) {
+        if (!shell.editable()) {
             return false;
         }
         // 存在条件的类型改写必须先落盘，才能与关联消耗配置的重指向合并为一次可撤销操作
-        boolean changed = ruleEditorInputPage.flushPresenceTypes();
+        boolean changed = inputSection.flushPresenceTypes();
         for (FormView form : liveForms) {
             if (form.isVisible() && form.commitPendingInputs()) {
                 changed = true;
@@ -746,7 +704,7 @@ public final class RuleEditorPageSet {
         if (handled) {
             return true;
         }
-        UiFocusTarget focused = host.focus().focused();
+        UiFocusTarget focused = focus.focused();
         if (focused instanceof UiWidget widget) {
             return widget.keyReleased(keyCode, scanCode, modifiers);
         }
@@ -768,66 +726,67 @@ public final class RuleEditorPageSet {
     }
 
     /** 冻结时禁用交互；只读内容不在这里禁用控件（沙盒可写） */
-    public void setEnabled(boolean next) {
-        enabled = next;
-        if (!next) ruleEditorResultsPage.typePicker.close();
+    void syncEditableState() {
+        boolean editable = shell.editable();
+        if (!editable) resultsSection.typePicker.close();
         applyEnabled();
     }
 
     void applyEnabled() {
+        boolean editable = shell.editable();
         RuleValue view = currentView();
-        if (ruleEditorInputPage.sourceCostButton != null) {
-            ruleEditorInputPage.sourceCostButton.setEnabled(enabled);
+        if (inputSection.sourceCostButton != null) {
+            inputSection.sourceCostButton.setEnabled(editable);
         }
-        if (ruleEditorInputPage.catalystToggle != null) {
-            EditSession session = host.session();
+        if (inputSection.catalystToggle != null) {
+            EditSession session = shell.editingSession();
             boolean hasCost = view != null && view.has(RuleFields.CATALYST_COST);
-            ruleEditorInputPage.catalystToggle.setEnabled(enabled && (hasCost || session != null
+            inputSection.catalystToggle.setEnabled(editable && (hasCost || session != null
                     && PresenceLeaves.selectedCatalystLeaf(session.draft()) != null));
         }
-        if (ruleEditorInputPage.catalystPresenceToggle != null) {
-            ruleEditorInputPage.catalystPresenceToggle.setEnabled(enabled);
+        if (inputSection.catalystPresenceToggle != null) {
+            inputSection.catalystPresenceToggle.setEnabled(editable);
         }
-        if (ruleEditorInputPage.fluidPresenceToggle != null) {
-            ruleEditorInputPage.fluidPresenceToggle.setEnabled(enabled);
+        if (inputSection.fluidPresenceToggle != null) {
+            inputSection.fluidPresenceToggle.setEnabled(editable);
         }
-        if (ruleEditorInputPage.fluidConsumeToggle != null) {
-            ruleEditorInputPage.fluidConsumeToggle.setEnabled(enabled);
+        if (inputSection.fluidConsumeToggle != null) {
+            inputSection.fluidConsumeToggle.setEnabled(editable);
         }
-        ruleEditorTriggerPage.triggerBoxes.forEach(box -> box.setEnabled(enabled));
-        if (ruleEditorResultsPage.combinationButton != null) {
-            ruleEditorResultsPage.combinationButton.setEnabled(enabled && ResultStructure.hasOutcomes(view));
+        triggerSection.triggerBoxes.forEach(box -> box.setEnabled(editable));
+        if (resultsSection.combinationButton != null) {
+            resultsSection.combinationButton.setEnabled(editable && ResultStructure.hasOutcomes(view));
         }
-        if (ruleEditorResultsPage.safeSpawnBox != null) {
-            ruleEditorResultsPage.safeSpawnBox.setEnabled(enabled);
+        if (resultsSection.safeSpawnBox != null) {
+            resultsSection.safeSpawnBox.setEnabled(editable);
         }
-        if (ruleEditorResultsPage.fillOriginBox != null) {
-            ruleEditorResultsPage.fillOriginBox.setEnabled(enabled);
+        if (resultsSection.fillOriginBox != null) {
+            resultsSection.fillOriginBox.setEnabled(editable);
         }
         for (FormView form : liveForms) {
-            form.setEnabled(enabled);
+            form.setEnabled(editable);
         }
         for (UiButton button : buttons) {
-            button.setEnabled(enabled);
+            button.setEnabled(editable);
         }
         for (UiButton button : candidateButtons) {
-            button.setEnabled(enabled);
+            button.setEnabled(editable);
         }
         for (UiButton button : effectButtons) {
-            button.setEnabled(enabled);
+            button.setEnabled(editable);
         }
-        ruleEditorResultsPage.updatePlanButtons(enabled);
+        resultsSection.updatePlanButtons(editable);
         // 基本页的本服开关与「恢复默认」按钮有各自的可用条件，上面的统一使能会覆盖它们，最后再同步一次
-        ruleEditorInfoPage.applyServerState(enabled);
+        infoSection.applyServerState(editable);
     }
 
     // 只同步基本页的本服控件：内容字段变化可能改变生效状态（无覆盖时生效=默认启用）
     void refreshServerState() {
-        ruleEditorInfoPage.applyServerState(enabled);
+        infoSection.applyServerState(shell.editable());
     }
 
     public void tick() {
-        ruleEditorTriggerPage.updateLifespanWindow();
+        triggerSection.updateLifespanWindow();
         for (FormView form : liveForms) {
             form.tick();
         }
@@ -843,8 +802,8 @@ public final class RuleEditorPageSet {
      * @return 是否已绘制说明面板
      */
     public boolean renderDescriptionTooltip(GuiGraphics graphics, int mouseX, int mouseY) {
-        return page == Page.RESULTS && !pageScroll.isDragging() && pageScroll.contains(mouseX, mouseY)
-                && ruleEditorResultsPage.renderDescriptionTooltip(graphics, mouseX, mouseY);
+        return page == EditSection.RESULTS && !pageScroll.isDragging() && pageScroll.contains(mouseX, mouseY)
+                && resultsSection.renderDescriptionTooltip(graphics, mouseX, mouseY);
     }
 
     public @Nullable Component tooltipAt(double mouseX, double mouseY) {
@@ -861,7 +820,7 @@ public final class RuleEditorPageSet {
                 return tooltip;
             }
         }
-        return page == Page.RESULTS ? ruleEditorResultsPage.tooltipAt(mouseX, mouseY) : null;
+        return page == EditSection.RESULTS ? resultsSection.tooltipAt(mouseX, mouseY) : null;
     }
 
     /**
@@ -881,55 +840,55 @@ public final class RuleEditorPageSet {
             }
         }
         if (path.startsWith(RuleFields.OUTCOMES) || path.startsWith(RuleFields.EFFECTS)) {
-            page = Page.RESULTS;
-            ruleEditorResultsPage.resultStage = path.contains("[") ? 2 : 1;
-            ruleEditorResultsPage.showAdvancedEffects = path.contains("chance") || path.contains("delay_ticks")
+            page = EditSection.RESULTS;
+            resultsSection.resultStage = path.contains("[") ? 2 : 1;
+            resultsSection.showAdvancedEffects = path.contains("chance") || path.contains("delay_ticks")
                     || path.contains("conditions");
             int candidate = indexIn(path, RuleFields.OUTCOMES);
             if (candidate >= 0) {
-                ruleEditorResultsPage.candidateIndex = candidate;
+                resultsSection.candidateIndex = candidate;
             }
             int effect = indexIn(path, RuleFields.EFFECTS);
             if (effect >= 0) {
-                ruleEditorResultsPage.effectIndex = effect;
+                resultsSection.effectIndex = effect;
             }
             rebuild();
-            if (ruleEditorResultsPage.effectForm != null) {
-                UiFocusTarget target = ruleEditorResultsPage.effectForm.revealPath(path);
-                return target != null ? target : ruleEditorResultsPage.advancedEffectForm == null ? null
-                        : ruleEditorResultsPage.advancedEffectForm.revealPath(path);
+            if (resultsSection.effectForm != null) {
+                UiFocusTarget target = resultsSection.effectForm.revealPath(path);
+                return target != null ? target : resultsSection.advancedEffectForm == null ? null
+                        : resultsSection.advancedEffectForm.revealPath(path);
             }
             return null;
         }
         if (inField(path, RuleFields.CONDITIONS) || inField(path, RuleFields.TERMS)) {
-            page = Page.TRIGGER;
+            page = EditSection.TRIGGER;
             rebuild();
-            return ruleEditorTriggerPage.conditionsForm == null ? null : ruleEditorTriggerPage.conditionsForm.revealPath(path);
+            return triggerSection.conditionsForm == null ? null : triggerSection.conditionsForm.revealPath(path);
         }
         if (path.startsWith(RuleFields.TRIGGERS) || path.startsWith(RuleFields.TRIGGER_AFTER_SECONDS)) {
-            page = Page.TRIGGER;
+            page = EditSection.TRIGGER;
             rebuild();
             // 触发来源问题直接聚焦第一个勾选框；延迟秒数问题落到延迟表单
-            if (path.startsWith(RuleFields.TRIGGERS) && !ruleEditorTriggerPage.triggerBoxes.isEmpty()) {
-                return ruleEditorTriggerPage.triggerBoxes.getFirst();
+            if (path.startsWith(RuleFields.TRIGGERS) && !triggerSection.triggerBoxes.isEmpty()) {
+                return triggerSection.triggerBoxes.getFirst();
             }
-            return ruleEditorTriggerPage.delayForm == null ? null : ruleEditorTriggerPage.delayForm.revealPath(path);
+            return triggerSection.delayForm == null ? null : triggerSection.delayForm.revealPath(path);
         }
         if (path.startsWith(RuleFields.COMBINATION)) {
-            page = Page.RESULTS;
+            page = EditSection.RESULTS;
             rebuild();
-            return ruleEditorResultsPage.combinationButton;
+            return resultsSection.combinationButton;
         }
         if (path.startsWith(RuleFields.SOURCE) || path.startsWith(RuleFields.CATALYST_COST)) {
-            page = Page.INPUT;
+            page = EditSection.INPUT;
             rebuild();
-            FormView target = path.startsWith(RuleFields.CATALYST_COST) ? ruleEditorInputPage.catalystForm
-                    : path.startsWith(RuleFields.SOURCE_COST) ? ruleEditorInputPage.sourceCostForm : ruleEditorInputPage.sourceForm;
+            FormView target = path.startsWith(RuleFields.CATALYST_COST) ? inputSection.catalystForm
+                    : path.startsWith(RuleFields.SOURCE_COST) ? inputSection.sourceCostForm : inputSection.sourceForm;
             return target == null ? null : target.revealPath(path);
         }
-        page = Page.INFO;
+        page = EditSection.INFO;
         rebuild();
-        return ruleEditorInfoPage.infoForm == null ? null : ruleEditorInfoPage.infoForm.revealPath(path);
+        return infoSection.infoForm == null ? null : infoSection.infoForm.revealPath(path);
     }
 
     // 问题路径是否落在某字段内：等于字段本身，或字段后接「.」「[」的子项；
@@ -981,7 +940,7 @@ public final class RuleEditorPageSet {
      * 因此本方法不阻塞后续操作；冻结（只读/会话失效）时不做任何写入。</p>
      */
     public void flushPendingEdits() {
-        if (!enabled) {
+        if (!shell.editable()) {
             return;
         }
         for (FormView form : liveForms) {
@@ -989,7 +948,7 @@ public final class RuleEditorPageSet {
         }
         endInteractions();
         if (applyToDraft()) {
-            host.onDraftChanged();
+            shell.draftChanged();
         }
     }
 
@@ -1039,8 +998,8 @@ public final class RuleEditorPageSet {
 
     // followCategory 为真时在产出变化后同步分类
     private boolean apply(String opKey, Runnable change, boolean followCategory) {
-        EditSession session = host.session();
-        if (session == null || !enabled || host.rejectWhenFrozen()) {
+        EditSession session = shell.editingSession();
+        if (session == null || !shell.editable()) {
             restoreSwitches();
             return false;
         }
@@ -1055,7 +1014,7 @@ public final class RuleEditorPageSet {
                 RuleCategoryAssignment.follow(session.draft(), derivedBefore);
             }
         });
-        host.onDraftChanged();
+        shell.draftChanged();
         requestRebuild();
         return true;
     }
@@ -1066,32 +1025,32 @@ public final class RuleEditorPageSet {
         if (view == null) {
             return;
         }
-        if (ruleEditorInputPage.catalystToggle != null) {
+        if (inputSection.catalystToggle != null) {
             RuleValue cost = view.child(RuleFields.CATALYST_COST);
-            ruleEditorInputPage.catalystToggle.setChecked(CatalystQuantities.consumesCatalysts(cost));
+            inputSection.catalystToggle.setChecked(CatalystQuantities.consumesCatalysts(cost));
         }
-        if (ruleEditorInputPage.catalystPresenceToggle != null) {
-            ruleEditorInputPage.catalystPresenceToggle.setChecked(
+        if (inputSection.catalystPresenceToggle != null) {
+            inputSection.catalystPresenceToggle.setChecked(
                     PresenceLeaves.hasRuleLevelPresence(view, RuleEditorPageSupport.CATALYST_PRESENT_ID));
         }
-        if (ruleEditorInputPage.fluidPresenceToggle != null) {
-            ruleEditorInputPage.fluidPresenceToggle.setChecked(
+        if (inputSection.fluidPresenceToggle != null) {
+            inputSection.fluidPresenceToggle.setChecked(
                     PresenceLeaves.hasRuleLevelPresence(view, RuleEditorPageSupport.FLUID_PRESENT_ID));
         }
-        if (ruleEditorInputPage.fluidConsumeToggle != null) {
-            ruleEditorInputPage.fluidConsumeToggle.setChecked(view.flag(RuleFields.CONSUME_FLUID, false));
+        if (inputSection.fluidConsumeToggle != null) {
+            inputSection.fluidConsumeToggle.setChecked(view.flag(RuleFields.CONSUME_FLUID, false));
         }
         List<String> triggers = RuleTriggers.effective(view);
-        for (int index = 0; index < ruleEditorTriggerPage.triggerBoxes.size(); index++) {
-            ruleEditorTriggerPage.triggerBoxes.get(index).setChecked(triggers.contains(RuleTriggers.known().get(index)));
+        for (int index = 0; index < triggerSection.triggerBoxes.size(); index++) {
+            triggerSection.triggerBoxes.get(index).setChecked(triggers.contains(RuleTriggers.known().get(index)));
         }
-        ruleEditorResultsPage.updateCombinationLabel(view);
-        RuleValue candidate = ResultStructure.candidateAt(view, ruleEditorResultsPage.candidateIndex);
-        if (ruleEditorResultsPage.safeSpawnBox != null) {
-            ruleEditorResultsPage.safeSpawnBox.setChecked(RuleValueReads.boolOf(candidate, RuleFields.SAFE_SPAWN, OutcomeCandidate.DEFAULT_SAFE_SPAWN));
+        resultsSection.updateCombinationLabel(view);
+        RuleValue candidate = ResultStructure.candidateAt(view, resultsSection.candidateIndex);
+        if (resultsSection.safeSpawnBox != null) {
+            resultsSection.safeSpawnBox.setChecked(RuleValueReads.boolOf(candidate, RuleFields.SAFE_SPAWN, OutcomeCandidate.DEFAULT_SAFE_SPAWN));
         }
-        if (ruleEditorResultsPage.fillOriginBox != null) {
-            ruleEditorResultsPage.fillOriginBox.setChecked(RuleValueReads.boolOf(candidate, RuleFields.FILL_ORIGIN, true));
+        if (resultsSection.fillOriginBox != null) {
+            resultsSection.fillOriginBox.setChecked(RuleValueReads.boolOf(candidate, RuleFields.FILL_ORIGIN, true));
         }
     }
 
@@ -1104,7 +1063,7 @@ public final class RuleEditorPageSet {
     }
 
     @Nullable RuleValue currentView() {
-        EditSession session = host.session();
+        EditSession session = shell.editingSession();
         return session == null ? null : session.draft().root();
     }
 }

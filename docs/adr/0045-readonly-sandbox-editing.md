@@ -1,7 +1,7 @@
 # ADR-0045：只读条目改为沙盒编辑
 
 - 状态：已实施。
-- 影响面：`client/edit/EditSession`（字段写入与撤销 / 重做对只读条目开放）、`client/edit/EditorChangeSet`（内容动作与启停动作分开组装）、`client/edit/draft/PersistedDraft`（启停意图随草稿记录落盘）、`client/ui/screen/RuleEditorModel`（只读判定、草稿日志与变更集过滤、启停意图表）、`RuleEditorListActions`、`RuleEditorListPage`、`RuleEditorEditPage`、`RuleEditorInfoPage`、`RuleEditorScreen`（模式标识与页面使能）、`RuleListDisplayCache`。
+- 影响面：`client/edit/EditSession`（字段写入与撤销 / 重做对只读条目开放）、`client/edit/EditorChangeSet`（内容动作与启停动作分开组装）、`client/edit/draft/PersistedDraft`（启停意图随草稿记录落盘）、`client/ui/screen/RuleEditorModel`（只读判定、草稿日志与变更集过滤、启停意图表）、`RuleEditorListActions`、`RuleEditorListPage`、`RuleEditorEditPage`、`RuleEditorInfoSection`、`RuleEditorScreen` 与 `EditorShell`（活动页、可编辑判定与提示级别）、`RuleListDisplayCache`。
 - 相关：启用状态分层见 [ADR-0044](0044-rule-enable-state-layering.md)；客户端草稿与编辑会话见 [客户端编辑器](../modules/client-editor.md)；界面落点见 [编辑器界面](../modules/client-ui.md)；术语见 [GLOSSARY.md](../../GLOSSARY.md)。
 
 ## 背景
@@ -32,4 +32,4 @@
 - 会话层门禁消失，只读约束收敛到草稿存储与变更集组装两处。
 - 沙盒改动关闭界面即丢失且不弹确认，只读模式标识是唯一提示，必须始终可见。
 - 草稿存储只保留可写条目的内容与只读条目的启停意图，冲突恢复只处理可写内容。
-- 列表行与基本页必须同时表达默认启用与本服启用状态，单个开关表达不了两层语义。
+- 列表行与基本信息分区必须同时表达默认启用与本服启用状态，单个开关表达不了两层语义。

@@ -32,15 +32,15 @@ import org.jetbrains.annotations.Nullable;
 /**
  * 输入页：来源与消耗、催化剂与流体的存在条件、消耗参数与门槛提示。
  */
-final class RuleEditorInputPage {
+final class RuleEditorInputSection {
 
     // 所属编辑页容器：共享状态与跨页能力都经它访问
-    private final RuleEditorPageSet pages;
+    private final RuleEditorEditSections pages;
 
     // 主题：与容器共用宿主默认主题
-    private static final UiHostTheme THEME = RuleEditorPageSet.THEME;
+    private static final UiHostTheme THEME = RuleEditorEditSections.THEME;
 
-    RuleEditorInputPage(RuleEditorPageSet pages) {
+    RuleEditorInputSection(RuleEditorEditSections pages) {
         this.pages = pages;
     }
 
@@ -200,7 +200,7 @@ final class RuleEditorInputPage {
     }
 
     void refreshQuantityReferences() {
-        EditSession session = pages.host.session();
+        EditSession session = pages.shell.editingSession();
         if (session == null) return;
         if (sourceCostForm != null) {
             String path = RuleFields.SOURCE_COST;
@@ -222,7 +222,7 @@ final class RuleEditorInputPage {
                             DraftPaths.child(base, RuleFields.CATALYST_ITEMS))));
             catalystForm.reload();
         }
-        pages.host.onControlsChanged();
+        pages.shell.rebuildFocus();
     }
 
     void updateBlacklistVisibility() {
@@ -248,7 +248,7 @@ final class RuleEditorInputPage {
         pages.liveForms.add(sourceForm);
         pages.liveWidgets.add(sourceForm);
 
-        sourceCostButton = new UiButton(RuleEditorPageSet.THEME, pages.font, Component.translatable(RuleEditorPageSupport.UI + "cost.mode.custom"),
+        sourceCostButton = new UiButton(RuleEditorEditSections.THEME, pages.font, Component.translatable(RuleEditorPageSupport.UI + "cost.mode.custom"),
                 UiButtonVariant.SECONDARY, this::specifySourceCost).setChipStyle(true);
         {
             boolean custom = rule.has(RuleFields.SOURCE_COST);
@@ -333,7 +333,7 @@ final class RuleEditorInputPage {
     }
 
     void specifySourceCost() {
-        EditSession session = pages.host.session();
+        EditSession session = pages.shell.editingSession();
         if (session == null) {
             return;
         }
@@ -343,7 +343,7 @@ final class RuleEditorInputPage {
     }
 
     void onCatalystToggle(boolean checked) {
-        EditSession session = pages.host.session();
+        EditSession session = pages.shell.editingSession();
         if (session == null) {
             return;
         }
@@ -370,7 +370,7 @@ final class RuleEditorInputPage {
 
     void buildPresenceSection(EditSession session, ResourceLocation type, String toggleKey) {
         List<PresenceLeaves.PresenceLeaf> ruleLevel = PresenceLeaves.ruleLevelPresence(session.draft().root(), type);
-        UiCheckBox toggle = new UiCheckBox(RuleEditorPageSet.THEME, pages.font, Component.translatable(toggleKey), !ruleLevel.isEmpty());
+        UiCheckBox toggle = new UiCheckBox(RuleEditorEditSections.THEME, pages.font, Component.translatable(toggleKey), !ruleLevel.isEmpty());
         toggle.setOnChanged(checked -> onPresenceToggle(type, checked));
         pages.liveWidgets.add(toggle);
         if (RuleEditorPageSupport.CATALYST_PRESENT_ID.equals(type)) {
@@ -393,19 +393,19 @@ final class RuleEditorInputPage {
         // 类型改写立即落盘（类型 + 关联消耗配置重指向 = 同一次可撤销操作）；此处不重建页面，
         // 目录选择可连续多次回调，重建会让后续选择写进已卸载的控件
         form.setOnChanged(() -> {
-            EditSession current = pages.host.session();
-            if (current == null || pages.host.rejectWhenFrozen()) {
+            EditSession current = pages.shell.editingSession();
+            if (current == null || !pages.shell.editable()) {
                 return;
             }
             form.applyToDraft();
             refreshQuantityReferences();
             pages.applyEnabled();
             // 目录选择已在同一次字段写入中提交，仍需通知宿主刷新规则摘要。
-            pages.host.onDraftChanged();
+            pages.shell.draftChanged();
         });
         // 选择卡片自带逐项移除；多个同类型叶保留移除整条条件的入口。
         if (PresenceLeaves.ruleLevelPresence(session.draft().root(), leaf.type()).size() > 1) {
-            form.setRowAction(leaf.fieldPath(), new UiButton(RuleEditorPageSet.THEME, pages.font, Component.translatable(RuleEditorPageSupport.UI + "rule.presence.remove"),
+            form.setRowAction(leaf.fieldPath(), new UiButton(RuleEditorEditSections.THEME, pages.font, Component.translatable(RuleEditorPageSupport.UI + "rule.presence.remove"),
                     UiButtonVariant.SECONDARY, () -> removePresenceLeaf(leaf)).setChipStyle(true));
         }
         return form;
@@ -435,7 +435,7 @@ final class RuleEditorInputPage {
     }
 
     void onPresenceToggle(ResourceLocation type, boolean checked) {
-        EditSession session = pages.host.session();
+        EditSession session = pages.shell.editingSession();
         if (session == null) {
             return;
         }
@@ -457,7 +457,7 @@ final class RuleEditorInputPage {
     }
 
     void removePresenceLeaf(PresenceLeaves.PresenceLeaf leaf) {
-        EditSession session = pages.host.session();
+        EditSession session = pages.shell.editingSession();
         if (session == null) {
             return;
         }
@@ -478,7 +478,7 @@ final class RuleEditorInputPage {
     }
 
     boolean flushPresenceTypes() {
-        EditSession session = pages.host.session();
+        EditSession session = pages.shell.editingSession();
         if (session == null) {
             return false;
         }
@@ -511,7 +511,7 @@ final class RuleEditorInputPage {
     }
 
     List<TaggedId> taggedItems(String conditionPath) {
-        EditSession session = pages.host.session();
+        EditSession session = pages.shell.editingSession();
         List<TaggedId> items = new ArrayList<>();
         if (session == null) {
             return items;

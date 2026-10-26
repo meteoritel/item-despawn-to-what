@@ -183,11 +183,11 @@ public final class RuleEditorPanelFactory {
 
     // 目录面板弹窗：数据与请求全部走既有工作区链路，翻页/搜索只发意图
     // 字段路径来自实际发起选择的表单行，子表单和条件叶都以同一入口解析互斥范围。
-    static UiModal fieldCatalogModal(Font font, EditorWorkspaceView workspace, RuleCatalogType type,
+    static UiModal fieldCatalogModal(Font font, EditorShell shell, EditorWorkspaceView workspace, RuleCatalogType type,
                                      boolean multiSelect, Component title, int screenWidth, int screenHeight,
                                      Consumer<List<String>> onPicked, EditorField field, RuleDraft draft,
                                      String path, List<String> selected) {
-        return fieldCatalogModal(font, workspace, type, multiSelect, title, screenWidth, screenHeight,
+        return fieldCatalogModal(font, shell, workspace, type, multiSelect, title, screenWidth, screenHeight,
                 onPicked, field, draft, path, selected, null);
     }
 
@@ -195,15 +195,15 @@ public final class RuleEditorPanelFactory {
      * 打开字段目录，并只列出条目过滤器接受的资源引用。
      * @param entryFilter 条目过滤器，null 表示不限；只作用于资源条目，标签条目不受限制
      */
-    static UiModal fieldCatalogModal(Font font, EditorWorkspaceView workspace, RuleCatalogType type,
+    static UiModal fieldCatalogModal(Font font, EditorShell shell, EditorWorkspaceView workspace, RuleCatalogType type,
                                      boolean multiSelect, Component title, int screenWidth, int screenHeight,
                                      Consumer<List<String>> onPicked, EditorField field, RuleDraft draft,
                                      String path, List<String> selected, @Nullable Predicate<String> entryFilter) {
-        return catalogModal(font, workspace, type, multiSelect, title, screenWidth, screenHeight,
+        return catalogModal(font, shell, workspace, type, multiSelect, title, screenWidth, screenHeight,
                 onPicked, field, selected, SourceCatalystSelectionPolicy.forField(draft, path), entryFilter);
     }
 
-    private static UiModal catalogModal(Font font, EditorWorkspaceView workspace, RuleCatalogType type,
+    private static UiModal catalogModal(Font font, EditorShell shell, EditorWorkspaceView workspace, RuleCatalogType type,
                                         boolean multiSelect, Component title, int screenWidth, int screenHeight,
                                         Consumer<List<String>> onPicked, @Nullable EditorField field,
                                         List<String> selected, Function<String, @Nullable Component> unavailableReason,
@@ -224,7 +224,7 @@ public final class RuleEditorPanelFactory {
         UiCatalogGrid grid = new UiCatalogGrid(THEME, font, multiSelect, catalogTexts(type, includeTags), new UiCatalogGrid.Listener() {
             @Override
             public void onSelectionChanged(List<String> selection) {
-                refreshCatalogConfirm(modal, workspace.active(), selection, unavailableReason, confirmGate);
+                refreshCatalogConfirm(modal, shell.editable(), selection, unavailableReason, confirmGate);
             }
 
             @Override
@@ -250,7 +250,7 @@ public final class RuleEditorPanelFactory {
         grid.setSelection(selected);
         grid.setUnavailableReason(unavailableReason);
         grid.setEntrySource(() -> {
-            boolean active = workspace.active();
+            boolean active = shell.editable();
             refreshCatalogConfirm(modal, active, grid.selection(), unavailableReason, confirmGate);
             if (active != mapper.active) {
                 mapper.active = active;
@@ -296,7 +296,7 @@ public final class RuleEditorPanelFactory {
             }
             return null;
         });
-        if (!workspace.active()) {
+        if (!shell.editable()) {
             grid.setEnabled(false);
             grid.setError(Component.translatable(UI + "pick.frozen"));
         }
@@ -307,10 +307,10 @@ public final class RuleEditorPanelFactory {
         modal.contentWidget(grid, pickerBodyHeight(screenHeight));
         modal.confirm(Component.translatable(UI + "button.confirm"), () -> {
             List<String> selection = grid.selection();
-            if (workspace.active() && selection.stream().noneMatch(id -> unavailableReason.apply(id) != null))
+            if (shell.editable() && selection.stream().noneMatch(id -> unavailableReason.apply(id) != null))
                 onPicked.accept(selection);
         });
-        refreshCatalogConfirm(modal, workspace.active(), grid.selection(), unavailableReason, confirmGate);
+        refreshCatalogConfirm(modal, shell.editable(), grid.selection(), unavailableReason, confirmGate);
         modal.cancel(Component.translatable(UI + "button.cancel"));
         modal.layoutCentered(screenWidth, screenHeight);
         return modal;
@@ -525,7 +525,7 @@ public final class RuleEditorPanelFactory {
      */
     public static LeafPanel leafPanel(Font font, FormView form, EditSession session, List<EditorField> fields,
                                       String basePath, Consumer<Runnable> applyChange, Runnable onChange,
-                                      Consumer<UiModal> pushModal, EditorWorkspaceView workspace, int screenWidth,
+                                      Consumer<UiModal> pushModal, EditorShell shell, EditorWorkspaceView workspace, int screenWidth,
                                       int screenHeight) {
         List<UiWidget> extras = new ArrayList<>();
         List<UiButton> buttons = new ArrayList<>();
@@ -563,7 +563,7 @@ public final class RuleEditorPanelFactory {
             extras.add(bar);
             reloadValues.add(() -> bar.core().setValue(integerRange(draft, min, max, basePath)));
         }
-        form.setSelectionCatalogOpener((field, path, tags, selected, picked) -> pushModal.accept(fieldCatalogModal(font, workspace,
+        form.setSelectionCatalogOpener((field, path, tags, selected, picked) -> pushModal.accept(fieldCatalogModal(font, shell, workspace,
                 tags ? RuleCatalogType.TAG : FieldCatalogTypes.catalogTypeOf(field), isListField(field),
                 Component.translatable(field.labelKey()), screenWidth, screenHeight, picked, field, draft, path, selected)));
         LeafPanel panel = new LeafPanel(font, form, extras, buttons, reloadValues);

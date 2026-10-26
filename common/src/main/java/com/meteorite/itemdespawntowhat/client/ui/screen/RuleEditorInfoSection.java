@@ -29,13 +29,13 @@ import org.jetbrains.annotations.Nullable;
  * <p>「默认启用」是内容字段，改它属于沙盒内的内容改动；右侧另挂本服两态开关与「恢复默认」，
  * 它们改的是本服启用状态，两者互不污染：开关与按钮不进入表单字段，因此不会给内容字段加改动标注。</p>
  */
-final class RuleEditorInfoPage {
+final class RuleEditorInfoSection {
 
     // 所属编辑页容器：共享状态与跨页能力都经它访问
-    private final RuleEditorPageSet pages;
+    private final RuleEditorEditSections pages;
 
     // 主题：与容器共用宿主默认主题
-    private static final UiHostTheme THEME = RuleEditorPageSet.THEME;
+    private static final UiHostTheme THEME = RuleEditorEditSections.THEME;
 
     // 页面文案前缀
     private static final String UI = RuleEditorPageSupport.UI;
@@ -43,7 +43,7 @@ final class RuleEditorInfoPage {
     // 只读文本块的缩放比例（与 ID 行一致，便于各段文字共用行高口径）
     private static final float TEXT_SCALE = 0.8F;
 
-    RuleEditorInfoPage(RuleEditorPageSet pages) {
+    RuleEditorInfoSection(RuleEditorEditSections pages) {
         this.pages = pages;
     }
 
@@ -87,7 +87,7 @@ final class RuleEditorInfoPage {
         infoForm = pages.newForm(session, "", descriptor);
         infoForm.useCompactSpacing();
         // 滑条与数字输入同高，备注保留三行可见高度。
-        infoForm.setRowHeight(RuleFields.PRIORITY, RuleEditorPageSet.PRIORITY_ROW_HEIGHT);
+        infoForm.setRowHeight(RuleFields.PRIORITY, RuleEditorEditSections.PRIORITY_ROW_HEIGHT);
         infoForm.setRowHeight(RuleFields.NOTES, 36);
         infoForm.suppressRowTooltip(RuleFields.ENABLED);
         // 显示名与备注的提示已作为占位符写在输入框内，悬停不再重复弹出
@@ -116,14 +116,14 @@ final class RuleEditorInfoPage {
         if (serverToggle == null || resetButton == null) {
             return;
         }
-        EditSession session = pages.host.session();
+        EditSession session = pages.shell.editingSession();
         if (session == null) {
             serverToggle.setEnabled(false);
             resetButton.setEnabled(false);
             return;
         }
         String id = session.targetId();
-        RuleEditorModel model = pages.host.model();
+        RuleEditorModel model = pages.model;
         boolean effective = model.effectiveEnabled(id);
         serverToggle.setLabel(Component.translatable(UI + (effective ? "button.server_enabled" : "button.server_disabled")));
         serverToggle.setEnabled(editable);
@@ -132,35 +132,35 @@ final class RuleEditorInfoPage {
 
     // 本服两态开关：切换后重建页面（新建规则改的是内容字段），提示按实际动作给出
     private void toggleServerEnabled() {
-        EditSession session = pages.host.session();
+        EditSession session = pages.shell.editingSession();
         if (session == null) {
             return;
         }
-        RuleEdit.Action action = pages.host.model().toggleEnabled(session.targetId());
+        RuleEdit.Action action = pages.model.toggleEnabled(session.targetId());
         if (action == null) {
             return;
         }
-        pages.host.onDraftChanged();
+        pages.shell.draftChanged();
         pages.requestRebuild();
         // 新建规则切的是内容里的默认启用（内容动作），不套用本服启停的反馈文案
-        if (pages.host.model().isCreated(session.targetId())) {
+        if (pages.model.isCreated(session.targetId())) {
             return;
         }
         String notice = action == RuleEdit.Action.ENABLE ? "notice.enabled"
                 : action == RuleEdit.Action.DISABLE ? "notice.disabled" : "notice.reset_default";
-        pages.host.notice(Component.translatable(UI + notice), THEME.palette().success());
+        pages.shell.setNotice(Component.translatable(UI + notice),EditorShell.NoticeLevel.SUCCESS);
     }
 
     // 恢复默认：清除本服启用覆盖
     private void resetServerEnabled() {
-        EditSession session = pages.host.session();
+        EditSession session = pages.shell.editingSession();
         if (session == null) {
             return;
         }
-        pages.host.model().resetEnabled(session.targetId());
-        pages.host.onDraftChanged();
+        pages.model.resetEnabled(session.targetId());
+        pages.shell.draftChanged();
         pages.requestRebuild();
-        pages.host.notice(Component.translatable(UI + "notice.reset_default"), THEME.palette().success());
+        pages.shell.setNotice(Component.translatable(UI + "notice.reset_default"),EditorShell.NoticeLevel.SUCCESS);
     }
 
     int layoutInfo(UiRect area) {
@@ -183,7 +183,7 @@ final class RuleEditorInfoPage {
         y = pages.layoutForm(infoForm, x,
                 (infoSourceRect == null ? infoCategoryRect : infoSourceRect).bottom() + 4, width);
         int bottom = y + padding;
-        pages.cards.add(new RuleEditorPageSet.PageCard(new UiRect(area.x(), area.y(), area.width(), bottom - area.y()), null));
+        pages.cards.add(new RuleEditorEditSections.PageCard(new UiRect(area.x(), area.y(), area.width(), bottom - area.y()), null));
         return bottom;
     }
 
@@ -221,12 +221,12 @@ final class RuleEditorInfoPage {
     }
 
     private @Nullable Component sourceSummary() {
-        EditSession session = pages.host.session();
+        EditSession session = pages.shell.editingSession();
         if (session == null) {
             return null;
         }
         String id = session.targetId();
-        EditorWorkspaceView workspace = pages.host.workspace();
+        EditorWorkspaceView workspace = pages.workspace;
         RuleSourceView view = workspace.sourceView(id);
         if (view != null) {
             return describeSource(view);

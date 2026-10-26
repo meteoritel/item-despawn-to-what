@@ -10,10 +10,12 @@ import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
+import com.meteorite.itemdespawntowhat.client.ui.widget.UiModalStack;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiTextInput;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEdit;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import net.minecraft.client.gui.Font;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
@@ -22,8 +24,8 @@ import org.jetbrains.annotations.Nullable;
  * 规则管理页的条目动作：新建 / 复制 / 启用 / 删除，以及这些动作共用的
  * 规则 ID 命名与弹窗流程。
  *
- * <p>动作只通过 {@link RuleEditorListPage.Host} 读取屏幕能力，选中项由构造时传入的选择器提供；
- * 每次改动草稿后调用宿主的列表刷新入口，由 {@link RuleEditorListPage} 重建规则树。</p>
+ * <p>动作只通过 {@link EditorShell} 的命令改状态，选中项由构造时传入的选择器提供；
+ * 每次改动草稿后调用外壳的列表刷新入口，由 {@link RuleEditorListPage} 重建规则树。</p>
  */
 final class RuleEditorListActions {
 
@@ -34,16 +36,23 @@ final class RuleEditorListActions {
             - Integer.toString(Integer.MAX_VALUE).length();
     private static final String UI = TypeLabels.UI_PREFIX;
 
-    private final RuleEditorListPage.Host host;
+    private final EditorShell shell;
+    private final RuleEditorModel model;
+    private final Font font;
+    private final UiModalStack modals;
     private final Supplier<@Nullable String> selection;
 
-    RuleEditorListActions(RuleEditorListPage.Host host, Supplier<@Nullable String> selection) {
-        this.host = host;
+    RuleEditorListActions(EditorShell shell, RuleEditorModel model, Font font, UiModalStack modals,
+            Supplier<@Nullable String> selection) {
+        this.shell = shell;
+        this.model = model;
+        this.font = font;
+        this.modals = modals;
         this.selection = selection;
     }
 
     void promptNewRule() {
-        if (host.rejectWhenFrozen()) {
+        if (!shell.editable()) {
             return;
         }
         promptRuleName("prompt.new_title", nextDefaultRuleName(), this::createRule);
@@ -67,18 +76,18 @@ final class RuleEditorListActions {
             return false;
         }
         String key = id.toString();
-        return host.model().entry(key) != null || host.model().isCreated(key);
+        return model.entry(key) != null || model.isCreated(key);
     }
 
     private void promptRuleName(String titleKey, String initial, Predicate<String> onSubmit) {
-        RuleNameInput content = new RuleNameInput(host.font());
+        RuleNameInput content = new RuleNameInput(font);
         UiTextInput input = content.input();
         input.setMaxLength(RuleNameInput.MAX_NAME_LENGTH);
         input.setValue(initial);
-        UiModal modal = UiModal.create(THEME, host.font()).title(Component.translatable(UI + titleKey))
+        UiModal modal = UiModal.create(THEME, font).title(Component.translatable(UI + titleKey))
                 .preferredWidth(RuleNameInput.MODAL_WIDTH);
         modal.contentWidget(content, content.preferredHeight());
-        UiButton confirmButton = new UiButton(THEME, host.font(), Component.translatable(UI + "button.confirm"),
+        UiButton confirmButton = new UiButton(THEME, font, Component.translatable(UI + "button.confirm"),
                 UiButtonVariant.PRIMARY, null);
         Runnable validate = () -> {
             Component problem = ruleNameProblem(input.value());
@@ -88,7 +97,7 @@ final class RuleEditorListActions {
         Runnable submit = () -> {
             validate.run();
             if (ruleNameProblem(input.value()) == null && onSubmit.test(input.value())) {
-                host.modals().close(modal);
+                modals.close(modal);
             }
         };
         confirmButton.setAction(submit::run);
@@ -96,10 +105,10 @@ final class RuleEditorListActions {
         input.setOnCommit(value -> submit.run());
         modal.addButton(confirmButton).cancel(Component.translatable(UI + "button.cancel"));
         validate.run();
-        modal.layoutCentered(host.screenWidth(), host.screenHeight());
-        host.modals().push(modal);
+        modal.layoutCentered(shell.screenWidth(), shell.screenHeight());
+        modals.push(modal);
         // 登记暂时禁用的按钮，输入合法后仍可通过 Tab 到达确认按钮。
-        UiFocusManager modalFocus = host.modals().focusManager();
+        UiFocusManager modalFocus = modals.focusManager();
         modalFocus.beginUpdate();
         modalFocus.add(content);
         for (UiButton button : modal.buttons()) {
@@ -118,29 +127,29 @@ final class RuleEditorListActions {
     }
 
     private boolean createRule(String value) {
-        if (host.rejectWhenFrozen()) {
+        if (!shell.editable()) {
             return false;
         }
         ResourceLocation id = RuleNameInput.parseId(value);
         if (id == null) {
-            host.setNotice(Component.translatable(UI + "notice.invalid_id"), THEME.palette().danger());
+            shell.setNotice(Component.translatable(UI + "notice.invalid_id"), EditorShell.NoticeLevel.DANGER);
             return false;
         }
         String key = id.toString();
-        if (host.model().entry(key) != null || host.model().isCreated(key)) {
-            host.setNotice(Component.translatable(UI + "notice.duplicate_id"), THEME.palette().danger());
+        if (model.entry(key) != null || model.isCreated(key)) {
+            shell.setNotice(Component.translatable(UI + "notice.duplicate_id"), EditorShell.NoticeLevel.DANGER);
             return false;
         }
-        host.model().createSession(key, BuiltinEditorDefaults.ruleBody(key));
-        host.refreshList();
-        host.openEditor(key);
-        host.selectInputTab();
-        host.setNotice(null, THEME.palette().textSecondary());
+        model.createSession(key, BuiltinEditorDefaults.ruleBody(key));
+        shell.refreshList();
+        shell.openEditor(key);
+        shell.openInputTab();
+        shell.setNotice(null, EditorShell.NoticeLevel.INFO);
         return true;
     }
 
     void promptDuplicate() {
-        if (host.rejectWhenFrozen()) {
+        if (!shell.editable()) {
             return;
         }
         String sourceId = selection.get();
@@ -148,14 +157,14 @@ final class RuleEditorListActions {
             noSelection();
             return;
         }
-        EditSession session = host.model().openSession(sourceId);
+        EditSession session = model.openSession(sourceId);
         if (session == null) {
             noSelection();
             return;
         }
         RuleValue body = session.draft().root().deepCopy();
         // 源条目的生效启停状态在复制时一并带走：副本内容可能与源不同，只带意图才不会丢覆盖
-        boolean sourceEnabled = host.model().effectiveEnabled(sourceId);
+        boolean sourceEnabled = model.effectiveEnabled(sourceId);
         String sourceName = ResourceLocation.parse(sourceId).getPath();
         String copyBase = sourceName.replaceAll("[^a-z0-9_]", "_");
         copyBase = copyBase.substring(0, Math.min(copyBase.length(), COPY_BASE_MAX_LENGTH));
@@ -167,24 +176,24 @@ final class RuleEditorListActions {
         }
         promptRuleName("prompt.duplicate_title", candidate, value -> {
             // 弹窗期间可能已被冻结（应用在途 / 会话结束），提交前再确认一次
-            if (host.rejectWhenFrozen()) {
+            if (!shell.editable()) {
                 return false;
             }
             ResourceLocation id = RuleNameInput.parseId(value);
             if (id == null) {
-                host.setNotice(Component.translatable(UI + "notice.invalid_id"), THEME.palette().danger());
+                shell.setNotice(Component.translatable(UI + "notice.invalid_id"), EditorShell.NoticeLevel.DANGER);
                 return false;
             }
             String key = id.toString();
-            if (host.model().entry(key) != null || host.model().isCreated(key)) {
-                host.setNotice(Component.translatable(UI + "notice.duplicate_id"), THEME.palette().danger());
+            if (model.entry(key) != null || model.isCreated(key)) {
+                shell.setNotice(Component.translatable(UI + "notice.duplicate_id"), EditorShell.NoticeLevel.DANGER);
                 return false;
             }
-            host.model().createSession(key, BuiltinEditorDefaults.copyOf(key, body));
-            host.model().setEnableIntent(key, sourceEnabled);
-            host.refreshList();
-            host.openEditor(key);
-            host.setNotice(null, THEME.palette().textSecondary());
+            model.createSession(key, BuiltinEditorDefaults.copyOf(key, body));
+            model.setEnableIntent(key, sourceEnabled);
+            shell.refreshList();
+            shell.openEditor(key);
+            shell.setNotice(null, EditorShell.NoticeLevel.INFO);
             return true;
         });
     }
@@ -196,7 +205,7 @@ final class RuleEditorListActions {
      * reset 消除冗余覆盖，因此提示按模型返回的动作给出。</p>
      */
     void toggleSelectedEnabled() {
-        if (host.rejectWhenFrozen()) {
+        if (!shell.editable()) {
             return;
         }
         String id = selection.get();
@@ -204,23 +213,23 @@ final class RuleEditorListActions {
             noSelection();
             return;
         }
-        RuleEdit.Action action = host.model().toggleEnabled(id);
+        RuleEdit.Action action = model.toggleEnabled(id);
         if (action == null) {
             noSelection();
             return;
         }
-        host.refreshList();
+        shell.refreshList();
         // 新建规则在服务端还没有条目：这时切换的是内容里的默认启用，不该用「（本服）」反馈
-        if (host.model().isCreated(id)) {
+        if (model.isCreated(id)) {
             return;
         }
         String notice = action == RuleEdit.Action.ENABLE ? "notice.enabled"
                 : action == RuleEdit.Action.DISABLE ? "notice.disabled" : "notice.reset_default";
-        host.setNotice(Component.translatable(UI + notice), THEME.palette().success());
+        shell.setNotice(Component.translatable(UI + notice), EditorShell.NoticeLevel.SUCCESS);
     }
 
     void deleteSelected() {
-        if (host.rejectWhenFrozen()) {
+        if (!shell.editable()) {
             return;
         }
         String id = selection.get();
@@ -228,34 +237,36 @@ final class RuleEditorListActions {
             noSelection();
             return;
         }
-        if (host.model().isReadOnly(id)) {
-            host.setNotice(Component.translatable(UI + "notice.readonly_delete"), THEME.palette().warning());
+        if (model.isReadOnly(id)) {
+            shell.setNotice(Component.translatable(UI + "notice.readonly_delete"), EditorShell.NoticeLevel.WARNING);
             return;
         }
-        if (host.model().isCreated(id)) {
-            host.confirm(UI + "confirm.delete_title", UI + "confirm.delete_draft_message", () -> {
-                if (host.rejectWhenFrozen()) {
+        if (model.isCreated(id)) {
+            shell.confirm(Component.translatable(UI + "confirm.delete_title"),
+                Component.translatable(UI + "confirm.delete_draft_message"), () -> {
+                if (!shell.editable()) {
                     return;
                 }
-                host.model().dropSession(id);
-                host.refreshList();
-                host.setNotice(Component.translatable(UI + "notice.deleted"), THEME.palette().success());
+                model.dropSession(id);
+                shell.refreshList();
+                shell.setNotice(Component.translatable(UI + "notice.deleted"), EditorShell.NoticeLevel.SUCCESS);
             });
             return;
         }
-        host.confirm(UI + "confirm.delete_title", UI + "confirm.delete_message", () -> {
-            if (host.rejectWhenFrozen()) {
+        shell.confirm(Component.translatable(UI + "confirm.delete_title"),
+                Component.translatable(UI + "confirm.delete_message"), () -> {
+            if (!shell.editable()) {
                 return;
             }
-            host.model().openSession(id);
-            host.model().markDeleted(id, true);
-            host.refreshList();
-            host.setNotice(Component.translatable(UI + "notice.deleted"), THEME.palette().success());
+            model.openSession(id);
+            model.markDeleted(id, true);
+            shell.refreshList();
+            shell.setNotice(Component.translatable(UI + "notice.deleted"), EditorShell.NoticeLevel.SUCCESS);
         });
     }
 
     void noSelection() {
-        host.setNotice(Component.translatable(UI + "notice.no_selection"), THEME.palette().warning());
+        shell.setNotice(Component.translatable(UI + "notice.no_selection"), EditorShell.NoticeLevel.WARNING);
     }
 
 }

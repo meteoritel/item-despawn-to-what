@@ -1,7 +1,7 @@
 # ADR-0044：规则启用状态分层为内容默认值与本服状态
 
 - 状态：已实施。
-- 影响面：`core/model/Rule`（`enabled` 字段的语义）、`core/load/RuleLoader`、`RuleMerger`、`RuleFileParser`、`RuleSourceIndex`、`core/service/RuleSnapshotAssembler`、`RuleSubmissionValidator`、`RuleOverlayWriter`、`core/state/RuleEnableState`、`RuleEnableApplyService`、命令层；`core/network/protocol/RuleSnapshotEntry` 与 `RuleEditProtocol`；客户端 `client/edit/EditSession`、`client/edit/EditorChangeSet`、`client/edit/draft/PersistedDraft`、`client/ui/screen/RuleEditorModel`、`RuleEditorListActions`、`RuleEditorListPage`、`RuleEditorEditPage`、`RuleEditorInfoPage`、`RuleListDisplayCache`。
+- 影响面：`core/model/Rule`（`enabled` 字段的语义）、`core/load/RuleLoader`、`RuleMerger`、`RuleFileParser`、`RuleSourceIndex`、`core/service/RuleSnapshotAssembler`、`RuleSubmissionValidator`、`RuleOverlayWriter`、`core/state/RuleEnableState`、`RuleEnableApplyService`、命令层；`core/network/protocol/RuleSnapshotEntry` 与 `RuleEditProtocol`；客户端 `client/edit/EditSession`、`client/edit/EditorChangeSet`、`client/edit/draft/PersistedDraft`、`client/ui/screen/RuleEditorModel`、`RuleEditorListActions`、`RuleEditorListPage`、`RuleEditorEditPage`、`RuleEditorInfoSection`、`RuleListDisplayCache`。
 - 相关：三层作用域与覆盖合并见 [ADR-0014](0014-three-layer-scope-and-overlay-merge.md)；来源目录与覆盖层合并语义见 [ADR-0020](0020-source-catalog-and-overlay-merge.md)；术语见 [GLOSSARY.md](../../GLOSSARY.md)。
 
 ## 背景

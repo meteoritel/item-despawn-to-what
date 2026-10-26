@@ -50,7 +50,7 @@ import org.lwjgl.glfw.GLFW;
  *
  * <p>与调用方的关系保持既有形状：{@link Parameters}、{@link ParameterFactory}、构造签名，
  * 以及 {@link #historyChanged()} / {@link #discardView()} / {@link #unmount()} / {@link #reveal(String)}
- * 都由 {@code RuleEditorPageSet} 原样调用。参数编辑以共享草稿路径为准，未完成的输入留在会话。</p>
+ * 都由 {@code RuleEditorEditSections} 原样调用。参数编辑以共享草稿路径为准，未完成的输入留在会话。</p>
  */
 public final class ConditionTreeOverlay implements UiWidget, UiFocusTarget, UiLayoutSource {
 

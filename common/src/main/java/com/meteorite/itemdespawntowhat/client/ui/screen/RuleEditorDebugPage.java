@@ -9,6 +9,7 @@ import com.meteorite.itemdespawntowhat.client.ui.kit.UiLayoutNode;
 import com.meteorite.itemdespawntowhat.client.ui.kit.UiRect;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiModal;
@@ -28,37 +29,27 @@ import org.jetbrains.annotations.Nullable;
  * 规则是否落盘仍由管理页的「应用全部」决定，因此本页不提供保存入口。</p>
  *
  * <p>测试规则的身份前缀、分类归属与规则体由 {@link DebugTestRules} 统一约定，
- * 删除只按前缀匹配，不会影响任何非测试规则。调试页由 {@link RuleEditorScreen} 在
+ * 删除只按前缀匹配，不会影响任何非测试规则。调试页由 {@link EditorShell} 在
  * debug 模式下按 Ctrl+F8 从管理页进入，控件与视图状态全部留在本类。</p>
  */
-final class RuleEditorDebugPage {
+final class RuleEditorDebugPage implements EditorPage {
 
-    /** 宿主能力：调试页只通过这些入口读写屏幕状态与跨模式动作。 */
-    interface Host {
+    // ---- 页面度量与标题状态：屏幕按这些声明统一排版，页不自己算窗口几何 ----
 
-        Font font();
+    public int headerHeight() {
+        return UiTheme.HEADER_HEIGHT;
+    }
 
-        // 弹窗栈
-        UiModalStack modals();
+    public int pagePadding() {
+        return RuleEditorPageSupport.PAD;
+    }
 
-        // 规则模型（快照、草稿会话与脏规则）
-        RuleEditorModel model();
+    public String title() {
+        return Component.translatable(UI + "title").getString();
+    }
 
-        // 编辑工作区只读视图
-        EditorWorkspaceView workspace();
-
-        // 屏幕宽高
-        int screenWidth();
-
-        int screenHeight();
-
-        // 底部提示条
-        void setNotice(@Nullable Component message, int color);
-
-        // 重建管理页规则树（草稿改动后的统一刷新入口）
-        void refreshList();
-
-        void backToList();
+    public String stateLabel() {
+        return Component.translatable(EDIT_UI + (shell.editable() ? "state.active" : "state.freezing")).getString();
     }
 
     private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
@@ -75,7 +66,11 @@ final class RuleEditorDebugPage {
     private static final int COUNT_MAX_LENGTH = 4;
     private static final int INVALID_COUNT = -1;
 
-    private final Host host;
+    private final EditorShell shell;
+    private final RuleEditorModel model;
+    private final EditorWorkspaceView workspace;
+    private final Font font;
+    private final UiModalStack modals;
 
     private @Nullable UiTextInput countField;
     private final RuleEditorScreenButtonBar bottomBar = new RuleEditorScreenButtonBar();
@@ -83,15 +78,20 @@ final class RuleEditorDebugPage {
     private @Nullable UiButton fillButton;
     private @Nullable UiButton deleteButton;
 
-    RuleEditorDebugPage(Host host) {
-        this.host = host;
+    RuleEditorDebugPage(EditorShell shell, RuleEditorModel model, EditorWorkspaceView workspace, Font font,
+            UiModalStack modals) {
+        this.shell = shell;
+        this.model = model;
+        this.workspace = workspace;
+        this.font = font;
+        this.modals = modals;
     }
 
     // ---- 初始化 ----
 
     // 控件只创建一次；窗口缩放不重建，输入缓冲与焦点因此保持不变。
-    void init() {
-        Font font = host.font();
+    public void init() {
+        Font font = this.font;
         countField = new UiTextInput(THEME, font, Component.translatable(UI + "count_hint"));
         countField.setMaxLength(COUNT_MAX_LENGTH);
         // 只接受数字：非法字符整体拒绝，避免把非数字交给数量解析
@@ -100,15 +100,15 @@ final class RuleEditorDebugPage {
         countField.setOnCommit(value -> fillTestRules());
         fillButton = button(UI + "button.fill", UiButtonVariant.PRIMARY, this::fillTestRules);
         deleteButton = button(UI + "button.delete_all", UiButtonVariant.DANGER, this::confirmDeleteAll);
-        UiButton back = button(EDIT_UI + "button.back", UiButtonVariant.SECONDARY, host::backToList);
+        UiButton back = button(EDIT_UI + "button.back", UiButtonVariant.SECONDARY, shell::backToList);
         bottomBar.set(List.of(fillButton, deleteButton, back));
         buttons.clear();
         buttons.addAll(List.of(fillButton, deleteButton, back));
-        updateButtons();
+    updateButtons();
     }
 
     private UiButton button(String labelKey, UiButtonVariant variant, Runnable action) {
-        return new UiButton(THEME, host.font(), Component.translatable(labelKey), variant, action::run).setChipStyle(true);
+        return new UiButton(THEME, font, Component.translatable(labelKey), variant, action::run).setChipStyle(true);
     }
 
     // ---- 动作 ----
@@ -135,45 +135,45 @@ final class RuleEditorDebugPage {
     private void fillTestRules() {
         int count = requestedCount();
         if (count == INVALID_COUNT) {
-            host.setNotice(Component.translatable(UI + "notice.count_invalid",
-                    DebugTestRules.MIN_COUNT, DebugTestRules.MAX_COUNT), RuleEditorScreen.noticeColor(RuleEditorScreen.NoticeLevel.WARNING));
+            shell.setNotice(Component.translatable(UI + "notice.count_invalid",
+                    DebugTestRules.MIN_COUNT, DebugTestRules.MAX_COUNT),EditorShell.NoticeLevel.WARNING);
             return;
         }
-        int created = host.model().createTestRules(count);
-        host.refreshList();
-        updateButtons();
-        host.setNotice(created > 0
-                ? Component.translatable(UI + "notice.filled", created, host.model().testRuleCount())
+        int created = model.createTestRules(count);
+        shell.refreshList();
+    updateButtons();
+        shell.setNotice(created > 0
+                ? Component.translatable(UI + "notice.filled", created, model.testRuleCount())
                 : Component.translatable(UI + "notice.fill_noop", count),
-                RuleEditorScreen.noticeColor(created > 0
-                        ? RuleEditorScreen.NoticeLevel.INFO : RuleEditorScreen.NoticeLevel.WARNING));
+created > 0
+                        ? EditorShell.NoticeLevel.INFO : EditorShell.NoticeLevel.WARNING);
     }
 
     // 删除全部测试规则草稿前二次确认，数量为 0 时直接提示
     private void confirmDeleteAll() {
-        int total = host.model().testRuleCount();
+        int total = model.testRuleCount();
         if (total <= 0) {
-            host.setNotice(Component.translatable(UI + "notice.delete_noop"),
-                    RuleEditorScreen.noticeColor(RuleEditorScreen.NoticeLevel.WARNING));
+            shell.setNotice(Component.translatable(UI + "notice.delete_noop"),
+EditorShell.NoticeLevel.WARNING);
             return;
         }
-        UiModal modal = UiModal.create(THEME, host.font())
-                .title(Component.translatable(UI + "delete.title"))
+        UiModal modal = UiModal.create(THEME, font)
+    .title(Component.translatable(UI + "delete.title"))
                 .message(Component.translatable(UI + "delete.message", total))
                 .confirm(Component.translatable(EDIT_UI + "button.confirm"), this::deleteTestRules)
                 .cancel(Component.translatable(EDIT_UI + "button.cancel"));
-        modal.preferredWidth(Math.clamp(host.screenWidth() - 40, MODAL_MIN_WIDTH, MODAL_MAX_WIDTH));
-        modal.layoutCentered(host.screenWidth(), host.screenHeight());
-        host.modals().push(modal);
+        modal.preferredWidth(Math.clamp(shell.screenWidth() - 40, MODAL_MIN_WIDTH, MODAL_MAX_WIDTH));
+        modal.layoutCentered(shell.screenWidth(), shell.screenHeight());
+        modals.push(modal);
     }
 
     // 删除全部测试规则草稿；只按 id 前缀匹配，非测试规则不受影响
     private void deleteTestRules() {
-        int affected = host.model().deleteTestRules();
-        host.refreshList();
-        updateButtons();
-        host.setNotice(Component.translatable(UI + "notice.deleted", affected, host.model().testRuleCount()),
-                RuleEditorScreen.noticeColor(RuleEditorScreen.NoticeLevel.INFO));
+        int affected = model.deleteTestRules();
+        shell.refreshList();
+    updateButtons();
+        shell.setNotice(Component.translatable(UI + "notice.deleted", affected, model.testRuleCount()),
+EditorShell.NoticeLevel.INFO);
     }
 
     // ---- 渲染 ----
@@ -183,7 +183,7 @@ final class RuleEditorDebugPage {
      *
      * <p>页内摘要与说明是直接绘制的文字，不在控件树里，快照只含数量输入框与底排按钮。</p>
      */
-    List<UiLayoutNode> layoutNodes() {
+    public List<UiLayoutNode> layoutNodes() {
         List<UiLayoutNode> nodes = new ArrayList<>();
         if (countField != null) {
             nodes.addAll(countField.layoutNodes());
@@ -192,18 +192,18 @@ final class RuleEditorDebugPage {
         return nodes;
     }
 
-    int footerHeight(int width) {
+    public int footerHeight(int width) {
         return bottomBar.preferredHeight(width);
     }
 
-    void renderFooter(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY, int x, int y, int width) {
-        bottomBar.layout(x, y, width);
-        bottomBar.render(graphics, renderFont, mouseX, mouseY);
+    public void renderFooter(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY, UiRect footer) {
+        bottomBar.layout(footer.x(), footer.y(), footer.width());
+    bottomBar.render(graphics, renderFont, mouseX, mouseY);
     }
 
     // 调试页布局：数量摘要、数量输入与只写草稿的说明
-    void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY, UiRect area) {
-        updateButtons();
+    public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY, UiRect area) {
+    updateButtons();
         int y = area.y();
         graphics.drawString(renderFont, summary(), area.x(), y, THEME.palette().textPrimary(), false);
         y += renderFont.lineHeight + RuleEditorPageSupport.PAD;
@@ -214,7 +214,7 @@ final class RuleEditorDebugPage {
         int fieldWidth = Math.clamp(area.width() - labelWidth - RuleEditorPageSupport.PAD, 0, COUNT_FIELD_MAX_WIDTH);
         if (countField != null) {
             countField.setBounds(area.x() + labelWidth + RuleEditorPageSupport.PAD, y, fieldWidth, INPUT_H);
-            countField.render(graphics, renderFont, mouseX, mouseY);
+    countField.render(graphics, renderFont, mouseX, mouseY);
         }
         y += INPUT_H + RuleEditorPageSupport.PAD;
         int hintColor = THEME.palette().textSecondary();
@@ -230,66 +230,59 @@ final class RuleEditorDebugPage {
 
     // 数量反馈：测试规则 / 全部规则 / 待应用分别计数
     private Component summary() {
-        return Component.translatable(UI + "summary", host.model().testRuleCount(),
-                host.model().ruleIds().size(), host.model().dirtyRuleIds().size());
+        return Component.translatable(UI + "summary", model.testRuleCount(),
+                model.ruleIds().size(), model.dirtyRuleIds().size());
     }
 
     // ---- 指针与键盘委托 ----
 
-    void onScopeChanged() {
+    public void onScopeChanged() {
         if (countField != null) {
             countField.endInteraction(UiInputCapture.EndReason.FOCUS_SCOPE_CHANGED);
         }
     }
 
-    boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (countField != null && countField.mouseClicked(mouseX, mouseY, button)) {
             return true;
         }
-        return bottomBar.mouseClicked(mouseX, mouseY, button);
+    return bottomBar.mouseClicked(mouseX, mouseY, button);
     }
 
-    boolean mouseReleased(double mouseX, double mouseY, int button) {
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
         boolean consumed = countField != null && countField.mouseReleased(mouseX, mouseY, button);
         consumed |= bottomBar.mouseReleased(mouseX, mouseY, button);
         return consumed;
     }
 
-    boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
         return countField != null && countField.mouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
-    boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         return countField != null && countField.isFocused() && countField.keyPressed(keyCode, scanCode, modifiers);
     }
 
-    boolean charTyped(char codePoint, int modifiers) {
+    public boolean charTyped(char codePoint, int modifiers) {
         return countField != null && countField.isFocused() && countField.charTyped(codePoint, modifiers);
     }
 
     // ---- 状态同步 ----
 
     // 每帧同步按钮可用状态：冻结时全部禁用，没有测试规则时删除按钮禁用
-    void updateButtons() {
-        boolean editable = host.workspace().active();
-        boolean hasTestRules = host.model().testRuleCount() > 0;
+    public void updateButtons() {
+        boolean editable = shell.editable();
+        buttons.forEach(button -> button.setEnabled(editable));
+        boolean hasTestRules = model.testRuleCount() > 0;
         if (fillButton != null) {
-            fillButton.setEnabled(editable);
+    fillButton.setEnabled(editable);
         }
         if (deleteButton != null) {
-            deleteButton.setEnabled(editable && hasTestRules);
+    deleteButton.setEnabled(editable && hasTestRules);
         }
     }
 
-    // 冻结切换时由屏幕统一刷新使能状态
-    void setButtonsEnabled(boolean editable) {
-        for (UiButton button : buttons) {
-            button.setEnabled(editable);
-        }
-        updateButtons();
-    }
-
-    void addFocusTargets(UiFocusManager focus) {
+    public void addFocusTargets(UiFocusManager focus) {
         if (countField != null) {
             focus.add(countField);
         }

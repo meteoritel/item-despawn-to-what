@@ -16,6 +16,7 @@ import com.meteorite.itemdespawntowhat.client.ui.shared.DescriptionLine.Tone;
 import com.meteorite.itemdespawntowhat.client.ui.shared.TagPreviewIcons;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostTheme;
 import com.meteorite.itemdespawntowhat.client.ui.theme.UiHostThemes;
+import com.meteorite.itemdespawntowhat.client.ui.theme.UiTheme;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButton;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiButtonVariant;
 import com.meteorite.itemdespawntowhat.client.ui.widget.UiDescriptionTooltip;
@@ -48,56 +49,24 @@ import org.jetbrains.annotations.Nullable;
  * 以及列表底排按钮的状态同步。
  *
  * <p>本类只持有管理页控件与视图状态（选中项、展开分类、每个条目的配方视图），
- * 规则会话与工作区、弹窗栈、提示条、跨模式动作都通过 {@link Host} 暴露的屏幕能力完成；
+ * 规则会话与工作区、弹窗栈、提示条、跨模式动作都通过 {@link EditorShell} 的命令完成；
  * 新建 / 复制 / 启停 / 删除等条目动作在 {@link RuleEditorListActions}，
- * 模式切换、保存入口与编辑页由 {@link RuleEditorScreen} 与 {@link RuleEditorEditPage} 负责。</p>
+ * 页面切换与保存入口由 {@link EditorShell} 路由，编辑页负责本地保存编排。</p>
  */
-final class RuleEditorListPage {
+final class RuleEditorListPage implements EditorPage {
 
-    /** 宿主能力：管理页只通过这些入口读写屏幕状态与跨模式动作。 */
-    interface Host {
+    // ---- 页面度量与标题状态：屏幕按这些声明统一排版，页不自己算窗口几何 ----
 
-        Font font();
+    public int headerHeight() {
+        return UiTheme.HEADER_HEIGHT;
+    }
 
-        // 弹窗栈
-        UiModalStack modals();
+    public int pagePadding() {
+        return RuleEditorPageSupport.PAD;
+    }
 
-        // 规则模型（快照、草稿会话与脏规则）
-        RuleEditorModel model();
-
-        // 编辑工作区只读视图
-        EditorWorkspaceView workspace();
-
-        // 屏幕宽高
-        int screenWidth();
-
-        int screenHeight();
-
-        // 冻结（会话失效 / 只读）时拒绝写入
-        boolean rejectWhenFrozen();
-
-        // 底部提示条
-        void setNotice(@Nullable Component message, int color);
-
-        // 列表展示快照缓存（标题、状态、分类、预览与提示都从同一份快照读）
-        RuleListDisplayCache display();
-
-        void openEditor(String id);
-
-        // 新建规则后直接切到「输入」页签
-        void selectInputTab();
-
-        // 草稿改动清单弹窗
-        void showChanges();
-
-        // 提交当前草稿（与编辑页保存按钮同一入口）
-        void save();
-
-        // 确认弹窗
-        void confirm(String titleKey, String messageKey, Runnable onConfirm);
-
-        // 重建规则树（条目动作改动草稿后的统一刷新入口）
-        void refreshList();
+    public String stateLabel() {
+        return Component.translatable(UI + (shell.editable() ? "state.active" : "state.freezing")).getString();
     }
 
     private static final UiHostTheme THEME = UiHostThemes.defaultTheme();
@@ -174,7 +143,12 @@ final class RuleEditorListPage {
         }
     }
 
-    private final Host host;
+    private final EditorShell shell;
+    private final RuleEditorModel model;
+    private final RuleListDisplayCache display;
+    private final Font font;
+    private final UiModalStack modals;
+    private final EditorWorkspaceView workspace;
     private final RuleEditorListActions actions;
 
     // ---- 列表控件与视图状态 ----
@@ -209,9 +183,15 @@ final class RuleEditorListPage {
     // 首载分段观测：首份快照后的首次刷新只记录一次，作为「列表可用」的终点
     private boolean firstReadyLogged;
 
-    RuleEditorListPage(Host host) {
-        this.host = host;
-        this.actions = new RuleEditorListActions(host, this::selectedRuleId);
+    RuleEditorListPage(EditorShell shell, RuleEditorModel model, RuleListDisplayCache display, Font font,
+            UiModalStack modals, EditorWorkspaceView workspace) {
+        this.shell = shell;
+        this.model = model;
+        this.display = display;
+        this.font = font;
+        this.modals = modals;
+        this.workspace = workspace;
+        this.actions = new RuleEditorListActions(shell, model, font, modals, this::selectedRuleId);
     }
 
     // ---- 初始化 ----
@@ -221,8 +201,8 @@ final class RuleEditorListPage {
         return ruleList != null;
     }
 
-    void init() {
-        Font font = host.font();
+    public void init() {
+        Font font = this.font;
         searchField = new UiTextInput(THEME, font, Component.translatable(UI + "list.search"));
         searchField.setMaxLength(SEARCH_MAX_LENGTH);
         searchField.setValue(lastQuery);
@@ -238,7 +218,7 @@ final class RuleEditorListPage {
                 + (node.value().startsWith("@") ? 0 : RuleRecipeView.CONTENT_HEIGHT + 1));
         ruleList.setOnActivate(node -> {
             if (!node.value().startsWith("@")) {
-                host.openEditor(node.value());
+                shell.openEditor(node.value());
             }
         });
         buildListButtons();
@@ -286,15 +266,15 @@ final class RuleEditorListPage {
         editButton = button(UI + "button.edit", UiButtonVariant.PRIMARY, () -> {
             String id = selectedRuleId();
             if (id != null) {
-                host.openEditor(id);
+                shell.openEditor(id);
             }
         });
         toggleButton = button(UI + "button.enable", UiButtonVariant.SECONDARY, actions::toggleSelectedEnabled);
         UiButton copy = button(UI + "button.duplicate", UiButtonVariant.SECONDARY, actions::promptDuplicate);
         deleteButton = button(UI + "button.delete", UiButtonVariant.DANGER, actions::deleteSelected);
         exportButton = button(UI + "button.export", UiButtonVariant.SECONDARY, this::openExport);
-        applyButton = button(UI + "button.apply", UiButtonVariant.PRIMARY, host::save);
-        UiButton changes = button(UI + "button.changes", UiButtonVariant.SECONDARY, host::showChanges);
+        applyButton = button(UI + "button.apply", UiButtonVariant.PRIMARY, shell::save);
+        UiButton changes = button(UI + "button.changes", UiButtonVariant.SECONDARY, shell::showChanges);
         selectedButtons.clear();
         selectedButtons.addAll(List.of(editButton, toggleButton, copy, deleteButton));
         globalBar.set(List.of(create, editButton, toggleButton, copy, deleteButton, exportButton));
@@ -302,12 +282,12 @@ final class RuleEditorListPage {
         listButtons.addAll(List.of(create, editButton, toggleButton, copy, deleteButton, exportButton, applyButton, changes));
         // 重建按钮时不丢在途导出的禁用态（列表刷新可能在导出期间发生）
         if (exporting) {
-            exportButton.setEnabled(false);
+    exportButton.setEnabled(false);
         }
     }
 
     private UiButton button(String labelKey, UiButtonVariant variant, Runnable action) {
-        return new UiButton(THEME, host.font(), Component.translatable(labelKey), variant, action::run).setChipStyle(true);
+        return new UiButton(THEME, font, Component.translatable(labelKey), variant, action::run).setChipStyle(true);
     }
 
     /** 导出范围选项：标签、是否含数据包条目与当前可导出的条数。 */
@@ -318,8 +298,8 @@ final class RuleEditorListPage {
 
     // 导出弹窗：两个范围选项直接显示各自可导出的条数，避免导出后才发现选错范围
     private void openExport() {
-        UiModal modal = UiModal.create(THEME, host.font()).title(Component.translatable(UI + "export.title"));
-        UiListView<ExportScope> list = new UiListView<>(THEME, host.font(),
+        UiModal modal = UiModal.create(THEME, font).title(Component.translatable(UI + "export.title"));
+        UiListView<ExportScope> list = new UiListView<>(THEME, font,
                 (graphics, rowFont, item, index, row, selected, hovered, focused) -> {
                     graphics.drawString(rowFont, Component.translatable(UI + item.labelKey()),
                             row.x() + 4, row.y() + 6, THEME.palette().textPrimary(), false);
@@ -335,20 +315,20 @@ final class RuleEditorListPage {
         list.setRowHeight(EXPORT_ROW_H);
         list.setActivateOnSingleClick(true);
         list.setOnActivate(item -> {
-            host.modals().close(modal);
+            modals.close(modal);
             exportRules(item);
         });
         modal.message(Component.translatable(UI + "export.message"));
         modal.contentWidget(list, EXPORT_ROW_H * 2 + 4).cancel(Component.translatable(UI + "button.cancel"));
-        modal.preferredWidth(EXPORT_MODAL_WIDTH).layoutCentered(host.screenWidth(), host.screenHeight());
-        host.modals().push(modal);
+        modal.preferredWidth(EXPORT_MODAL_WIDTH).layoutCentered(shell.screenWidth(), shell.screenHeight());
+        modals.push(modal);
     }
 
     // 统计某个范围可导出的条数：只算有可读规则体且可导出的条目
     private int exportCount(boolean includeDatapack) {
         int count = 0;
-        for (String id : host.model().ruleIds()) {
-            RuleListDisplaySnapshot snapshot = host.display().snapshot(id);
+        for (String id : model.ruleIds()) {
+            RuleListDisplaySnapshot snapshot = display.snapshot(id);
             if (snapshot.exportable() && (includeDatapack || isOverlayOrigin(snapshot.origin()))) {
                 count++;
             }
@@ -362,29 +342,29 @@ final class RuleEditorListPage {
             return;
         }
         List<RulePackExporter.RuleEntry> entries = new ArrayList<>();
-        for (String id : host.model().ruleIds()) {
-            RuleListDisplaySnapshot snapshot = host.display().snapshot(id);
+        for (String id : model.ruleIds()) {
+            RuleListDisplaySnapshot snapshot = display.snapshot(id);
             if (!snapshot.exportable() || (!option.includeDatapack() && !isOverlayOrigin(snapshot.origin()))) {
                 continue;
             }
-            RuleValue body = host.model().displayBody(id);
+            RuleValue body = model.displayBody(id);
             if (body != null) {
                 // 规则值只反映草稿实时内容，跨线程读取不安全：先在客户端线程取成不可变 JSON 文本快照
                 entries.add(new RulePackExporter.RuleEntry(id, body.toJson()));
             }
         }
         if (entries.isEmpty()) {
-            host.setNotice(Component.translatable(UI + "export.empty"), THEME.palette().warning());
+            shell.setNotice(Component.translatable(UI + "export.empty"),EditorShell.NoticeLevel.WARNING);
             return;
         }
         exporting = true;
         if (exportButton != null) {
-            exportButton.setEnabled(false);
+    exportButton.setEnabled(false);
         }
         RulePackExporter.exportAsync(option.scope(), entries)
-                .thenAccept(result -> deliverExport(() -> host.setNotice(
+                .thenAccept(result -> deliverExport(() -> shell.setNotice(
                         Component.translatable(UI + "export.done", result.count(), result.displayPath()),
-                        THEME.palette().success())))
+EditorShell.NoticeLevel.SUCCESS)))
                 .exceptionally(error -> {
                     deliverExport(() -> reportExportFailure(error));
                     return null;
@@ -397,7 +377,7 @@ final class RuleEditorListPage {
         Minecraft.getInstance().execute(() -> {
             exporting = false;
             if (exportButton != null) {
-                exportButton.setEnabled(host.workspace().active());
+    exportButton.setEnabled(shell.editable());
             }
             notice.run();
         });
@@ -407,12 +387,12 @@ final class RuleEditorListPage {
     private void reportExportFailure(Throwable error) {
         Throwable cause = error instanceof CompletionException && error.getCause() != null ? error.getCause() : error;
         if (cause instanceof RulePackExporter.ExportRejectedException rejected) {
-            host.setNotice(Component.translatable(UI + "export.invalid", rejected.ids().size(),
-                    describeIds(rejected.ids())), THEME.palette().danger());
+            shell.setNotice(Component.translatable(UI + "export.invalid", rejected.ids().size(),
+                    describeIds(rejected.ids())),EditorShell.NoticeLevel.DANGER);
             return;
         }
         String reason = cause.getMessage() == null ? "" : cause.getMessage();
-        host.setNotice(Component.translatable(UI + "export.failed", reason), THEME.palette().danger());
+        shell.setNotice(Component.translatable(UI + "export.failed", reason),EditorShell.NoticeLevel.DANGER);
     }
 
     // 提示行空间有限：只列前几条，其余以省略号概括
@@ -425,70 +405,77 @@ final class RuleEditorListPage {
     // 列表条目操作随选中状态同步：启停对任何条目可用（只读的是内容，不是启停），
     // 删除仍只对内容可写的条目开放，编辑恒为「编辑」并打开沙盒。
     // 切换按钮只显示下一步动作，布局按当前文案计算。
-    void updateButtons() {
+    public void updateButtons() {
         String id = selectedRuleId();
-        boolean active = host.workspace().active();
+        boolean active = shell.editable();
+        for (UiButton button : listButtons) {
+            if (!(exporting && button == exportButton)) {
+                button.setEnabled(active);
+            }
+        }
         boolean selected = id != null;
-        boolean contentReadOnly = selected && host.model().isReadOnly(id);
+        boolean contentReadOnly = selected && model.isReadOnly(id);
         for (UiButton button : selectedButtons) {
-            button.setEnabled(active && selected);
+    button.setEnabled(active && selected);
         }
         if (toggleButton != null) {
-            toggleButton.setEnabled(active && selected);
+    toggleButton.setEnabled(active && selected);
             // 按生效状态决定下一步动作：本服覆盖与未应用意图都算在内
-            boolean enabled = selected && host.model().effectiveEnabled(id);
+            boolean enabled = selected && model.effectiveEnabled(id);
             toggleButton.setLabel(Component.translatable(UI + (enabled ? "button.disable" : "button.enable")));
         }
         if (deleteButton != null) {
-            deleteButton.setEnabled(active && selected && !contentReadOnly);
+    deleteButton.setEnabled(active && selected && !contentReadOnly);
         }
         if (editButton != null) {
             editButton.setLabel(Component.translatable(UI + "button.edit"));
         }
+        updateApplyButton();
     }
 
-    void updateApplyButton() {
+    // 「应用全部」按钮的可用状态与标签跟随脏状态，与其余动作按钮同批结算
+    private void updateApplyButton() {
         if (applyButton == null) {
             return;
         }
-        boolean dirty = host.model().hasDirty();
-        applyButton.setEnabled(host.workspace().active() && dirty);
+        boolean dirty = model.hasDirty();
+    applyButton.setEnabled(shell.editable() && dirty);
         applyButton.setLabel(dirty
-                ? Component.translatable(UI + "button.apply_changes", host.model().dirtyRuleIds().size())
+                ? Component.translatable(UI + "button.apply_changes", model.dirtyRuleIds().size())
                 : Component.translatable(UI + "button.no_changes"));
     }
 
     // ---- 渲染 ----
 
-    int footerHeight(int width) {
+    public int footerHeight(int width) {
         return listBar.preferredHeight(width);
     }
 
-    void renderFooter(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY, int y, int width) {
-        listBar.layout(y, width);
-        listBar.render(graphics, renderFont, mouseX, mouseY);
+    public void renderFooter(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY, UiRect footer) {
+        listBar.layout(footer.y(), footer.width());
+    listBar.render(graphics, renderFont, mouseX, mouseY);
     }
 
     // 管理页布局：工具排、搜索框与筛选、规则树
-    void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY, UiRect area) {
-        updateButtons();
+    public void render(GuiGraphics graphics, Font renderFont, int mouseX, int mouseY, UiRect area) {
+    updateButtons();
         int headerHeight = globalBar.preferredHeight(area.width());
         globalBar.layout(area.y(), area.width());
-        globalBar.render(graphics, renderFont, mouseX, mouseY);
+    globalBar.render(graphics, renderFont, mouseX, mouseY);
         int searchY = area.y() + headerHeight + RuleEditorPageSupport.PAD;
         int searchWidth = Math.clamp(area.width() / 3, SEARCH_MIN_WIDTH, SEARCH_MAX_WIDTH);
         if (searchField != null) {
             searchField.setBounds(area.x(), searchY, searchWidth, ROW_H);
-            searchField.render(graphics, renderFont, mouseX, mouseY);
+    searchField.render(graphics, renderFont, mouseX, mouseY);
         }
         int filterWidth = Math.max(0, area.width() - searchWidth - 2);
         filterBar.layout(area.x() + searchWidth + 2, searchY, filterWidth);
-        filterBar.render(graphics, renderFont, mouseX, mouseY);
+    filterBar.render(graphics, renderFont, mouseX, mouseY);
         int listY = searchY + Math.max(ROW_H, filterBar.preferredHeight(filterWidth)) + RuleEditorPageSupport.PAD;
         int available = Math.max(0, area.bottom() - listY);
         if (ruleList != null) {
             ruleList.setBounds(area.x(), listY, area.width(), available);
-            ruleList.render(graphics, renderFont, mouseX, mouseY);
+    ruleList.render(graphics, renderFont, mouseX, mouseY);
         }
     }
 
@@ -498,7 +485,7 @@ final class RuleEditorListPage {
      * <p>顺序与绘制顺序一致：工具排、搜索框、筛选排、规则树、底排。只读渲染时写好的矩形，
      * 不触发重新布局，探针在任意帧调用都拿到与屏幕一致的几何。</p>
      */
-    List<UiLayoutNode> layoutNodes() {
+    public List<UiLayoutNode> layoutNodes() {
         List<UiLayoutNode> nodes = new ArrayList<>(globalBar.layoutNodes());
         if (searchField != null) {
             nodes.addAll(searchField.layoutNodes());
@@ -514,7 +501,7 @@ final class RuleEditorListPage {
     // 名称和状态放第一行；原注册名位置改为图标配方，不显示内部规则 ID。
     // 一帧内只读展示快照：不读规则体、不逐帧重算状态。
     private void renderRuleRow(GuiGraphics graphics, Font rowFont, String id, UiRect row, boolean hovered) {
-        RuleListDisplaySnapshot snapshot = host.display().snapshot(id);
+        RuleListDisplaySnapshot snapshot = display.snapshot(id);
         int color = snapshot.active() ? THEME.palette().textPrimary() : THEME.palette().textDisabled();
         // 标题/状态宽度与配方预览都缓存在快照上：绘制只取结果，静止帧不测文本
         RuleRecipeView.renderRow(graphics, rowFont, row, snapshot, color,
@@ -553,25 +540,25 @@ final class RuleEditorListPage {
         long filterMicros = 0L;
         long bodyMicros = 0L;
         // 未收到首份快照不能判为空；有效空快照和筛选结果为空才使用空列表文案。
-        ruleList.setEmptyMessage(Component.translatable(UI + (host.model().isLoaded() ? "list.empty" : "list.loading")));
+        ruleList.setEmptyMessage(Component.translatable(UI + (model.isLoaded() ? "list.empty" : "list.loading")));
         String selectedValue = ruleList.selectedNode() == null ? null : ruleList.selectedNode().value();
         int scrollOffset = ruleList.scrollOffset();
-        List<String> ruleIds = host.model().ruleIds();
+        List<String> ruleIds = model.ruleIds();
         // 只保留仍在列表里的条目，缓存随规则集合一起收敛
-        host.display().retain(ruleIds);
-        long bodyFetchesBefore = host.display().bodyFetches();
+        display.retain(ruleIds);
+        long bodyFetchesBefore = display.bodyFetches();
         visibleIds.clear();
         String query = lastQuery == null ? "" : lastQuery.toLowerCase(Locale.ROOT).trim();
         for (String id : ruleIds) {
             // 删除只写草稿、快照在应用前仍含该条目：本地标记删除后立即从列表退出，
             // 与新建草稿的删除视觉一致；应用成功后由新快照完成真正的移除
-            if (host.model().isDeleteMarked(id)) {
+            if (model.isDeleteMarked(id)) {
                 continue;
             }
             // 每条规则只在这里取一次体：展示快照同时给出标题、状态、分类与搜索文本；
             // 配方预览与条件提示不在这里构建，由首行可见与悬停时向快照惰性索取
             long snapshotStarted = profile ? DevelopmentDiagnostics.start() : 0L;
-            RuleListDisplaySnapshot snapshot = host.display().snapshot(id);
+            RuleListDisplaySnapshot snapshot = display.snapshot(id);
             bodyMicros += profile ? DevelopmentDiagnostics.micros(snapshotStarted) : 0L;
             long filterStarted = profile ? DevelopmentDiagnostics.start() : 0L;
             boolean matches = matchesFilter(snapshot) && matchesQuery(id, snapshot, query);
@@ -602,7 +589,7 @@ final class RuleEditorListPage {
         }
         for (String id : visibleIds) {
             // 只消费展示快照里的分类与标题
-            RuleListDisplaySnapshot snapshot = host.display().snapshot(id);
+            RuleListDisplaySnapshot snapshot = display.snapshot(id);
             String category = categoryOf(snapshot);
             UiTreeNode<String> group = groups.get(category);
             if (group == null) {
@@ -636,13 +623,13 @@ final class RuleEditorListPage {
         ruleList.setSelectedNode(findNode(nonempty, selectedValue));
         ruleList.setScrollOffset(scrollOffset);
         // 首份快照后的首次刷新即「列表可用」，与开关状态无关地只认一次
-        boolean firstReady = host.model().isLoaded() && !firstReadyLogged;
+        boolean firstReady = model.isLoaded() && !firstReadyLogged;
         if (firstReady) {
             firstReadyLogged = true;
         }
         if (profile) {
             int rules = ruleIds.size();
-            long bodyFetches = host.display().bodyFetches() - bodyFetchesBefore;
+            long bodyFetches = display.bodyFetches() - bodyFetchesBefore;
             logRefresh(refreshStarted, filterMicros, bodyMicros, treeMicros,
                     DevelopmentDiagnostics.micros(rootsStarted), rules, rules - (int) bodyFetches, bodyFetches, firstReady);
         }
@@ -655,7 +642,7 @@ final class RuleEditorListPage {
         JsonObject data = new JsonObject();
         data.addProperty("rules", rules);
         data.addProperty("visible", visibleIds.size());
-        data.addProperty("snapshot_version", host.model().snapshotVersion());
+        data.addProperty("snapshot_version", model.snapshotVersion());
         data.addProperty("status_filter", statusFilter.key());
         data.addProperty("source_filter", sourceFilter.key());
         data.addProperty("query_chars", lastQuery == null ? 0 : lastQuery.length());
@@ -790,16 +777,20 @@ final class RuleEditorListPage {
 
     // ---- 指针与键盘委托 ----
 
-    void onScopeChanged() {
+    public void onScopeChanged() {
         if (searchField != null) {
             searchField.endInteraction(UiInputCapture.EndReason.FOCUS_SCOPE_CHANGED);
         }
         if (ruleList != null) {
-            ruleList.mouseReleased(-1, -1, 0);
+    ruleList.mouseReleased(-1, -1, 0);
         }
     }
 
-    boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // 配方标签在整行命中之前优先：标签框很窄，先给树会吃掉这次点击
+        if (button == 0 && openTagDetails(mouseX, mouseY)) {
+            return true;
+        }
         if (searchField != null && searchField.mouseClicked(mouseX, mouseY, button)) {
             return true;
         }
@@ -809,22 +800,22 @@ final class RuleEditorListPage {
         if (ruleList != null && ruleList.mouseClicked(mouseX, mouseY, button)) {
             return true;
         }
-        return globalBar.mouseClicked(mouseX, mouseY, button)
+    return globalBar.mouseClicked(mouseX, mouseY, button)
                 || listBar.mouseClicked(mouseX, mouseY, button);
     }
 
-    // 点击配方标签：打开标签轮播弹窗；未命中标签时返回 false 交回屏幕继续命中测试。
-    boolean openTagDetails(double mouseX, double mouseY) {
+    // 点击配方标签：打开标签轮播弹窗；未命中标签时返回 false 继续本页命中测试。
+    private boolean openTagDetails(double mouseX, double mouseY) {
         TagPreviewIcons.Tag tag = tagAt(mouseX, mouseY);
         if (tag == null) {
             return false;
         }
-        TagCarouselView view = new TagCarouselView(host.font(), tag);
-        host.modals().push(UiModal.create(THEME, host.font()).title(Component.translatable(UI + "tag.title", tag.id()))
-                .contentWidget(view, Math.clamp(host.screenHeight() - 70, 110, 220))
+        TagCarouselView view = new TagCarouselView(font, tag);
+        modals.push(UiModal.create(THEME, font).title(Component.translatable(UI + "tag.title", tag.id()))
+                .contentWidget(view, Math.clamp(shell.screenHeight() - 70, 110, 220))
                 .preferredWidth(TAG_MODAL_WIDTH).cancel(Component.translatable(UI + "button.close"))
                 .onClosed(view::resumePolling)
-                .layoutCentered(host.screenWidth(), host.screenHeight()));
+                .layoutCentered(shell.screenWidth(), shell.screenHeight()));
         return true;
     }
 
@@ -840,10 +831,10 @@ final class RuleEditorListPage {
         }
         UiRect row = ruleList.nodeContentBounds(node);
         // 命中直接复用绘制时的整行区域，配方区几何由 RuleRecipeView 内部同一份口径换算
-        return host.display().snapshot(node.value()).preview().tagAt(host.font(), row, mouseX, mouseY);
+        return display.snapshot(node.value()).preview().tagAt(font, row, mouseX, mouseY);
     }
 
-    boolean mouseReleased(double mouseX, double mouseY, int button) {
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
         boolean consumed = ruleList != null && ruleList.mouseReleased(mouseX, mouseY, button);
         consumed |= searchField != null && searchField.mouseReleased(mouseX, mouseY, button);
         consumed |= filterBar.mouseReleased(mouseX, mouseY, button);
@@ -852,24 +843,27 @@ final class RuleEditorListPage {
         return consumed;
     }
 
-    boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
         if (searchField != null && searchField.mouseDragged(mouseX, mouseY, button, dragX, dragY)) {
             return true;
         }
         return ruleList != null && ruleList.mouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
-    boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         return ruleList != null && ruleList.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
 
-    // 历史快捷键派发路径：搜索框优先消费，不触发列表刷新。
-    boolean searchKeyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // 搜索框优先消费输入，其余按键交给规则树
+        return searchKeyPressed(keyCode, scanCode, modifiers) || listKeyPressed(keyCode, scanCode, modifiers);
+    }
+
+    private boolean searchKeyPressed(int keyCode, int scanCode, int modifiers) {
         return searchField != null && searchField.isFocused() && searchField.keyPressed(keyCode, scanCode, modifiers);
     }
 
-    // 列表页普通按键：搜索框消费后同步过滤；否则交给规则树。
-    boolean listKeyPressed(int keyCode, int scanCode, int modifiers) {
+    private boolean listKeyPressed(int keyCode, int scanCode, int modifiers) {
         if (searchField != null && searchField.isFocused()
                 && searchField.keyPressed(keyCode, scanCode, modifiers)) {
             syncSearch();
@@ -878,7 +872,7 @@ final class RuleEditorListPage {
         return ruleList != null && ruleList.isFocused() && ruleList.keyPressed(keyCode, scanCode, modifiers);
     }
 
-    boolean charTyped(char codePoint, int modifiers) {
+    public boolean charTyped(char codePoint, int modifiers) {
         if (searchField != null && searchField.isFocused() && searchField.charTyped(codePoint, modifiers)) {
             syncSearch();
             return true;
@@ -888,17 +882,17 @@ final class RuleEditorListPage {
 
     // 规则条目整行都进入条件提示的悬停范围；配方标签框优先，只有没命中标签时才展开条件树。
     // 条件正文、状态与不可用提示按语义分行，各自保持主题配色。
-    void renderDescriptionTooltip(GuiGraphics graphics, int mouseX, int mouseY) {
+    public boolean renderDescriptionTooltip(GuiGraphics graphics, int mouseX, int mouseY) {
         if (ruleList == null || !ruleList.bounds().contains(mouseX, mouseY)) {
-            return;
+            return false;
         }
         UiTreeNode<String> node = ruleList.nodeAt(mouseX, mouseY);
         if (node == null || node.value().startsWith("@")) {
-            return;
+            return false;
         }
         String id = node.value();
         // 悬停时才向展示快照索取配方预览与条件提示：未悬停的条目不生成提示
-        RuleListDisplaySnapshot snapshot = host.display().snapshot(id);
+        RuleListDisplaySnapshot snapshot = display.snapshot(id);
         TagPreviewIcons.Tag tag = tagAt(mouseX, mouseY);
         List<DescriptionLine> lines = new ArrayList<>();
         if (tag != null) {
@@ -916,16 +910,17 @@ final class RuleEditorListPage {
                 lines.add(DescriptionLine.note(snapshot.state(), 0));
             }
         }
-        UiDescriptionTooltip tooltip = new UiDescriptionTooltip(THEME, host.font());
+        UiDescriptionTooltip tooltip = new UiDescriptionTooltip(THEME, font);
         if (tag == null) {
             tooltip.setMaxLines(TOOLTIP_MAX_LINES, Component.translatable(UI + "recipe.condition_tree_more"));
         }
-        tooltip.render(graphics, new UiRect(0, 0, host.screenWidth(), host.screenHeight()), lines, mouseX, mouseY);
+    tooltip.render(graphics, new UiRect(0, 0, shell.screenWidth(), shell.screenHeight()), lines, mouseX, mouseY);
+        return true;
     }
 
     // ---- 焦点与使能 ----
 
-    void addFocusTargets(UiFocusManager focus) {
+    public void addFocusTargets(UiFocusManager focus) {
         if (searchField != null) {
             focus.add(searchField);
         }
@@ -940,15 +935,4 @@ final class RuleEditorListPage {
         }
     }
 
-    // 冻结时列表页动作按钮一并禁用（返回按钮不在其中）；在途导出保持禁用，避免写盘期间重新可点
-    void setButtonsEnabled(boolean editable) {
-        for (UiButton button : listButtons) {
-            if (exporting && button == exportButton) {
-                continue;
-            }
-            button.setEnabled(editable);
-        }
-        // 恢复可编辑态时仍要按当前选中项的来源收窄启停与删除，不能被整体放行覆盖
-        updateButtons();
-    }
 }

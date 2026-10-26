@@ -39,15 +39,15 @@ import com.meteorite.itemdespawntowhat.core.service.RuleEditSessionLimits;
 /**
  * 触发与条件页：触发来源、触发时间、条件树摘要与画布页入口，以及条件叶参数弹窗。
  */
-final class RuleEditorTriggerPage {
+final class RuleEditorTriggerSection {
 
     // 所属编辑页容器：共享状态与跨页能力都经它访问
-    private final RuleEditorPageSet pages;
+    private final RuleEditorEditSections pages;
 
     // 主题：与容器共用宿主默认主题
-    private static final UiHostTheme THEME = RuleEditorPageSet.THEME;
+    private static final UiHostTheme THEME = RuleEditorEditSections.THEME;
 
-    RuleEditorTriggerPage(RuleEditorPageSet pages) {
+    RuleEditorTriggerSection(RuleEditorEditSections pages) {
         this.pages = pages;
     }
 
@@ -74,7 +74,7 @@ final class RuleEditorTriggerPage {
         RuleValue rule = session.draft().root();
         List<String> effective = RuleTriggers.effective(rule);
         for (String value : RuleTriggers.known()) {
-            UiCheckBox box = new UiCheckBox(RuleEditorPageSet.THEME, pages.font, Component.translatable(RuleEditorPageSupport.UI + "trigger." + value), effective.contains(value));
+            UiCheckBox box = new UiCheckBox(RuleEditorEditSections.THEME, pages.font, Component.translatable(RuleEditorPageSupport.UI + "trigger." + value), effective.contains(value));
             box.setOnChanged(checked -> onTriggerToggled());
             triggerBoxes.add(box);
             pages.liveWidgets.add(box);
@@ -94,9 +94,9 @@ final class RuleEditorTriggerPage {
     }
 
     void updateLifespanWindow() {
-        EditSession session = pages.host.session();
+        EditSession session = pages.shell.editingSession();
         if (delayForm == null || session == null) return;
-        int ticks = pages.host.workspace().referenceLifespanTicks();
+        int ticks = pages.workspace.referenceLifespanTicks();
         // 整数秒向上取整保证不足一秒的寿命也可拖动；常用窗口不钳制既有触发值。
         int seconds = ticks <= 0 ? BuiltinEditorDescriptors.DEFAULT_TRIGGER_WINDOW_SECONDS
                 : (int) Math.ceil((double) ticks / RuleEditSessionLimits.TICKS_PER_SECOND);
@@ -104,7 +104,7 @@ final class RuleEditorTriggerPage {
     }
 
     void onTriggerToggled() {
-        EditSession session = pages.host.session();
+        EditSession session = pages.shell.editingSession();
         if (session == null) {
             return;
         }
@@ -125,7 +125,7 @@ final class RuleEditorTriggerPage {
 
     // 共享的条件定义与按场景创建：不捕获表单、树或导航状态，可单独装配
     ConditionEditingSupport sharedConditionSupport() {
-        ConditionEditingSupport base = pages.host.conditionEditingSupport();
+        ConditionEditingSupport base = pages.conditionEditingSupport;
         return new ConditionEditingSupport() {
             @Override
             public List<ConditionTreeContract.TypeOption> typeOptions() {
@@ -157,7 +157,7 @@ final class RuleEditorTriggerPage {
             public void closeView(ConditionTreeOverlay view) {
                 view.unmount();
                 host.reload();
-                pages.host.onDraftChanged();
+                pages.shell.draftChanged();
             }
 
             @Override
@@ -214,43 +214,43 @@ final class RuleEditorTriggerPage {
             descriptor = new TypeEditorDescriptor(descriptor.id(), descriptor.label(),
                     CatalystQuantities.relabelCatalystThreshold(descriptor.fields()), descriptor.readOnly());
         }
-        PresenceLeaves.PresenceLeaf presence = catalystLeaf ? pages.ruleEditorInputPage.findPresenceLeaf(path) : null;
+        PresenceLeaves.PresenceLeaf presence = catalystLeaf ? pages.inputSection.findPresenceLeaf(path) : null;
         FormView form = new FormView(pages.font, session, path);
         form.useCatalogSelections();
         form.setConditionEditingSupport(sharedConditionSupport());
         form.setConditionContextFactory(conditionContextFactory(form));
         form.setOnChanged(() -> {
             form.applyToDraft();
-            pages.host.onDraftChanged();
+            pages.shell.draftChanged();
         });
         // 输入被长度上限拒绝时立刻显示一条可读提示（字段名：问题）
-        form.setOnRejectedNotice(message -> pages.host.notice(message, THEME.palette().danger()));
+        form.setOnRejectedNotice(message -> pages.shell.setNotice(message,EditorShell.NoticeLevel.DANGER));
         form.setSelectionCatalogOpener((field, fieldPath, tags, selected, onPicked) -> {
             RuleCatalogType type = tags ? RuleCatalogType.TAG : FieldCatalogTypes.catalogTypeOf(field);
-            if (type == null || pages.host.rejectWhenFrozen()) return;
+            if (type == null || !pages.shell.editable()) return;
             boolean multi = field.type() == EditorFieldType.TAG_LIST
                     || field.type() == EditorFieldType.RL_LIST;
-            pages.host.modals().push(RuleEditorPanelFactory.fieldCatalogModal(pages.font, pages.host.workspace(), type, multi,
-                    Component.translatable(field.labelKey()), pages.host.screenWidth(), pages.host.screenHeight(), onPicked,
+            pages.modals.push(RuleEditorPanelFactory.fieldCatalogModal(pages.font, pages.shell, pages.workspace, type, multi,
+                    Component.translatable(field.labelKey()), pages.shell.screenWidth(), pages.shell.screenHeight(), onPicked,
                     field, session.draft(), fieldPath, selected));
         });
         form.setDescriptor(descriptor);
         form.reload();
         if (BiomeCondition.ID.equals(leaf.condition().type())) configureBiomeFields(form, descriptor);
-        pages.ruleEditorInputPage.configureQuantityFields(form, session, path, descriptor);
-        PresenceLeaves.PresenceLeaf linked = pages.ruleEditorInputPage.findPresenceLeaf(path);
-        if (linked != null && linked.ruleLevel()) pages.ruleEditorInputPage.configurePresenceWrites(form, session, linked);
+        pages.inputSection.configureQuantityFields(form, session, path, descriptor);
+        PresenceLeaves.PresenceLeaf linked = pages.inputSection.findPresenceLeaf(path);
+        if (linked != null && linked.ruleLevel()) pages.inputSection.configurePresenceWrites(form, session, linked);
         // 已知条件类型附带区间条（昼夜/高度光照）与注册表字段的目录按钮；
         // 面板自身负责子控件的事件转发与 Tab 顺序，普通数值字段仍由表单承载
         LeafPanel content = RuleEditorPanelFactory.leafPanel(pages.font, form, session, descriptor.fields(),
                 path, change -> {
                     form.commitPendingInputs();
                     session.apply(EditSession.OP_SET_FIELD, change);
-                    pages.host.onDraftChanged();
+                    pages.shell.draftChanged();
                 }, () -> {
                     form.reload();
-                    pages.host.onDraftChanged();
-                }, pages.host.modals()::push, pages.host.workspace(), pages.host.screenWidth(), pages.host.screenHeight());
+                    pages.shell.draftChanged();
+                }, pages.modals::push, pages.shell, pages.workspace, pages.shell.screenWidth(), pages.shell.screenHeight());
         String noteKey = catalystLeaf ? RuleEditorPageSupport.UI + "rule.catalyst_all_required"
                 : RuleEditorPageSupport.FLUID_PRESENT_ID.equals(leaf.condition().type()) ? RuleEditorPageSupport.UI + "field.fluid_present.fluid.hint" : null;
         LeafPanel panel = noteKey == null ? content : content.addNote(() -> Component.translatable(noteKey));
@@ -272,8 +272,8 @@ final class RuleEditorTriggerPage {
 
     boolean openConditionTree(ConditionHostCoordination coordination, String scope, String ownerPath,
                               @Nullable String fieldPath) {
-        EditSession session = pages.host.session();
-        if (session == null || pages.host.rejectWhenFrozen()) return false;
+        EditSession session = pages.shell.editingSession();
+        if (session == null || !pages.shell.editable()) return false;
         coordination.prepareHost();
         RuleValue owners = RuleValueReads.conditionOwnerShape(session.draft().root());
         ConditionTreeOverlay overlay = new ConditionTreeOverlay(pages.font, session, scope, sharedConditionSupport(),
@@ -289,17 +289,17 @@ final class RuleEditorTriggerPage {
                         if (leaf.condition() == null) return false;
                         TypeEditorDescriptor descriptor = EditorRegistries.CONDITIONS.descriptorFor(leaf.condition().type());
                         return RuleEditorPanelFactory.carriesField(descriptor.fields(), conditionPath, fieldPath,
-                                field -> pages.ruleEditorInputPage.quantityReferences(session, conditionPath, field));
+                                field -> pages.inputSection.quantityReferences(session, conditionPath, field));
                     }
-                }, pages.host::onDraftChanged);
+                }, pages.shell::draftChanged);
         int chromeReserve = THEME.headerHeight() + THEME.padding() * 3 + UiModal.BUTTON_HEIGHT;
-        UiModal modal = UiModal.create(RuleEditorPageSet.THEME, pages.font).title(Component.translatable(RuleEditorPageSupport.UI + "tree.title"))
-                .preferredWidth(Math.max(UiModal.MIN_WIDTH, pages.host.screenWidth() - RuleEditorPageSupport.TREE_OVERLAY_MARGIN))
-                .contentWidget(overlay, Math.max(0, pages.host.screenHeight() - RuleEditorPageSupport.TREE_OVERLAY_MARGIN - chromeReserve));
+        UiModal modal = UiModal.create(RuleEditorEditSections.THEME, pages.font).title(Component.translatable(RuleEditorPageSupport.UI + "tree.title"))
+                .preferredWidth(Math.max(UiModal.MIN_WIDTH, pages.shell.screenWidth() - RuleEditorPageSupport.TREE_OVERLAY_MARGIN))
+                .contentWidget(overlay, Math.max(0, pages.shell.screenHeight() - RuleEditorPageSupport.TREE_OVERLAY_MARGIN - chromeReserve));
         // 功能栏的撤销/重做按钮与 Ctrl+Z 走同一条历史链路
         overlay.setHistoryActions(
-                () -> pages.host.modals().requestHistory(UiHistoryShortcut.UNDO),
-                () -> pages.host.modals().requestHistory(UiHistoryShortcut.REDO));
+                () -> pages.modals.requestHistory(UiHistoryShortcut.UNDO),
+                () -> pages.modals.requestHistory(UiHistoryShortcut.REDO));
         modal.onClosed(() -> coordination.closeView(overlay));
         modal.onHistoryChanged(shortcut -> {
             String operation = shortcut == UiHistoryShortcut.UNDO
@@ -314,12 +314,12 @@ final class RuleEditorTriggerPage {
             if (!ownerPath.isEmpty() && (outerStructure || session.draft().valueAt(ownerPath) == null
                     || !owners.equals(RuleValueReads.conditionOwnerShape(session.draft().root())))) {
                 modal.onClosed(() -> coordination.discardView(overlay));
-                pages.host.modals().close(modal);
+                pages.modals.close(modal);
             } else overlay.historyChanged();
         });
         modal.cancel(Component.translatable(RuleEditorPageSupport.UI + "button.back"));
-        modal.layoutCentered(pages.host.screenWidth(), pages.host.screenHeight());
-        pages.host.modals().push(modal);
+        modal.layoutCentered(pages.shell.screenWidth(), pages.shell.screenHeight());
+        pages.modals.push(modal);
         if (fieldPath != null) overlay.reveal(fieldPath);
         return true;
     }
