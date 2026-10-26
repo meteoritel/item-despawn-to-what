@@ -112,7 +112,8 @@ public record IntSpec(ParamMeta meta, int min, int max, int codecDefault, boolea
         return presence() == ParamPresence.DEFAULTED ? codecDefault : null;
     }
 
-    private Codec<Integer> valueCodec() {
+    @Override
+    public Codec<Integer> valueCodec() {
         return codecBounded ? Codec.intRange(min, max) : Codec.INT;
     }
 

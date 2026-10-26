@@ -34,7 +34,12 @@ public record NestedSpec<T>(ParamMeta meta, Codec<T> codec) implements ParamSpec
 
     // 可空嵌套对象：返回 Optional，由调用方在 apply 时 orElse(null)
     public <O> RecordCodecBuilder<O, Optional<T>> fieldForNullable(Function<O, Optional<T>> getter) {
-        return codec.optionalFieldOf(name()).forGetter(getter);
+        return valueCodec().optionalFieldOf(name()).forGetter(getter);
+    }
+
+    @Override
+    public Codec<T> valueCodec() {
+        return codec;
     }
 
     @Override

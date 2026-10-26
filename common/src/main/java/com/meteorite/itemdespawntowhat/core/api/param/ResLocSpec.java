@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.core.api.param;
 
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
+import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
@@ -28,7 +29,12 @@ public record ResLocSpec(ParamMeta meta) implements ParamSpec {
     }
 
     public <O> RecordCodecBuilder<O, ResourceLocation> fieldFor(Function<O, ResourceLocation> getter) {
-        return ResourceLocation.CODEC.fieldOf(name()).forGetter(getter);
+        return valueCodec().fieldOf(name()).forGetter(getter);
+    }
+
+    @Override
+    public Codec<ResourceLocation> valueCodec() {
+        return ResourceLocation.CODEC;
     }
 
     @Override

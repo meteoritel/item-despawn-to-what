@@ -65,24 +65,18 @@ public final class ParamList {
         List<ParamValue> values = new ArrayList<>();
         for (ParamSpec spec : specs) {
             if (spec.initialValue() != null) {
-                values.add(new ParamValue(spec.name(), spec.initialValue()));
+                values.add(new ParamValue(spec, spec.initialValue()));
             }
         }
         return values;
     }
 
-    // 省略字段时展示用的默认值（只含带默认值的参数，按声明顺序）
-    public List<ParamValue> defaultValues() {
-        List<ParamValue> values = new ArrayList<>();
-        for (ParamSpec spec : specs) {
-            if (spec.defaultValue() != null) {
-                values.add(new ParamValue(spec.name(), spec.defaultValue()));
-            }
-        }
-        return values;
-    }
+    /** 参数声明与取值：用于新建初值；编码时直接取声明自带的 wire codec。 */
+    public record ParamValue(ParamSpec spec, @Nullable Object value) {
 
-    /** 参数名与取值：用于新建初值与省略字段的展示默认值。 */
-    public record ParamValue(String name, @Nullable Object value) {
+        /** 字段名，等同 {@code spec.name()}。 */
+        public String name() {
+            return spec.name();
+        }
     }
 }

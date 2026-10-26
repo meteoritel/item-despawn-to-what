@@ -42,7 +42,12 @@ public record DoubleSpec(ParamMeta meta, double min, double max, double codecDef
     }
 
     public <O> RecordCodecBuilder<O, Double> fieldFor(Function<O, Double> getter) {
-        return Codec.doubleRange(min, max).optionalFieldOf(name(), codecDefault).forGetter(getter);
+        return valueCodec().optionalFieldOf(name(), codecDefault).forGetter(getter);
+    }
+
+    @Override
+    public Codec<Double> valueCodec() {
+        return Codec.doubleRange(min, max);
     }
 
     @Override

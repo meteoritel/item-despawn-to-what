@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.api.param;
 
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
+import com.mojang.serialization.Codec;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
@@ -79,6 +80,13 @@ public sealed interface ParamSpec permits IntSpec, FloatSpec, DoubleSpec, BoolSp
 
     // 省略该字段时后端采用的默认值；必填与可空字段没有默认值
     @Nullable Object defaultValue();
+
+    /**
+     * 参数 wire 值的编解码器（不含字段包装与 presence）。
+     * <p>新建初值与省略字段默认值的编辑器投影都从这里编码，避免编辑器再维护一套 Java 对象到 JSON 的转换规则；
+     * 声明因此同时约束 wire 形态与预填形态。</p>
+     */
+    Codec<?> valueCodec();
 
     /**
      * 单字段语义校验：值域与必填；跨字段关系由类型自己校验。

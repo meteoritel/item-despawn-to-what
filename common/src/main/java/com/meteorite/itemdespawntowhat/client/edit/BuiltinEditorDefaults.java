@@ -1,9 +1,7 @@
 package com.meteorite.itemdespawntowhat.client.edit;
 
-import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonPrimitive;
 import com.meteorite.itemdespawntowhat.core.api.RuleFields;
 import com.meteorite.itemdespawntowhat.core.api.TypeDefinition;
 import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
@@ -12,8 +10,8 @@ import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
 import com.meteorite.itemdespawntowhat.core.type.effect.EntityProduct;
 import com.meteorite.itemdespawntowhat.core.type.effect.PlaceBlockEffect;
 import com.meteorite.itemdespawntowhat.core.type.effect.SpawnEntityEffect;
-import java.util.List;
-import java.util.Map;
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.JsonOps;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
@@ -79,7 +77,7 @@ public final class BuiltinEditorDefaults {
                         spec = EntityProduct.variantParams(variant).get(field);
                     }
                     if (spec != null) {
-                        return toRuleValue(spec.defaultValue());
+                        return toRuleValue(spec, spec.defaultValue());
                     }
                     return null;
                 }
@@ -107,56 +105,29 @@ public final class BuiltinEditorDefaults {
         return leaf;
     }
 
-    // 把声明里的新建初值写入 JSON；没有初值的字段保持省略，交给校验定位
+    // 把声明里的新建初值按各自的 wire codec 写入 JSON；没有初值的字段保持省略，交给校验定位
     private static void writeInitials(JsonObject body, ParamList params) {
         for (ParamList.ParamValue value : params.initialValues()) {
-            JsonElement element = toJson(value.value());
+            JsonElement element = encode(value.spec(), value.value());
             if (element != null) {
                 body.add(value.name(), element);
             }
         }
     }
 
-    // 声明里的初值/默认值转为 JSON；无法表达的形态返回 null（不写入）
-    private static @Nullable JsonElement toJson(@Nullable Object value) {
+    // 用声明自带的 codec 编码初值/默认值，避免编辑器维护第二套类型转换规则；编码失败返回 null（不写入）
+    private static @Nullable JsonElement encode(ParamSpec spec, @Nullable Object value) {
         if (value == null) {
             return null;
         }
-        return switch (value) {
-            case Boolean flag -> new JsonPrimitive(flag);
-            case Integer number -> new JsonPrimitive(number);
-            case Long number -> new JsonPrimitive(number);
-            case Float number -> new JsonPrimitive(number);
-            case Double number -> new JsonPrimitive(number);
-            case Enum<?> constant -> new JsonPrimitive(constant.name().toLowerCase(java.util.Locale.ROOT));
-            case String text -> new JsonPrimitive(text);
-            case List<?> list -> {
-                JsonArray array = new JsonArray();
-                for (Object item : list) {
-                    JsonElement element = toJson(item);
-                    if (element != null) {
-                        array.add(element);
-                    }
-                }
-                yield array;
-            }
-            case Map<?, ?> map -> {
-                JsonObject object = new JsonObject();
-                for (Map.Entry<?, ?> entry : map.entrySet()) {
-                    JsonElement element = toJson(entry.getValue());
-                    if (element != null) {
-                        object.add(String.valueOf(entry.getKey()), element);
-                    }
-                }
-                yield object;
-            }
-            default -> null;
-        };
+        @SuppressWarnings("unchecked")
+        Codec<Object> codec = (Codec<Object>) spec.valueCodec();
+        return codec.encodeStart(JsonOps.INSTANCE, value).result().orElse(null);
     }
 
-    // JSON 元素转规则值；null 表示该字段没有可展示的默认值
-    private static @Nullable RuleValue toRuleValue(@Nullable Object value) {
-        JsonElement element = toJson(value);
+    // 规则值出口：null 表示该字段没有可展示的默认值
+    private static @Nullable RuleValue toRuleValue(ParamSpec spec, @Nullable Object value) {
+        JsonElement element = encode(spec, value);
         return element == null ? null : RuleValue.wrap(element);
     }
 }

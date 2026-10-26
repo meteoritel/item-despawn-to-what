@@ -30,8 +30,12 @@ public record MapSpec(ParamMeta meta, String keyRegistry, int minValue, int maxV
 
     public <O> RecordCodecBuilder<O, Map<TaggedId, Integer>> fieldFor(
             Function<O, Map<TaggedId, Integer>> getter) {
-        Codec<Map<TaggedId, Integer>> codec = Codec.unboundedMap(TaggedId.CODEC, Codec.intRange(minValue, maxValue));
-        return codec.optionalFieldOf(name(), Map.of()).forGetter(getter);
+        return valueCodec().optionalFieldOf(name(), Map.of()).forGetter(getter);
+    }
+
+    @Override
+    public Codec<Map<TaggedId, Integer>> valueCodec() {
+        return Codec.unboundedMap(TaggedId.CODEC, Codec.intRange(minValue, maxValue));
     }
 
     @Override
@@ -40,7 +44,7 @@ public record MapSpec(ParamMeta meta, String keyRegistry, int minValue, int maxV
     }
 
     @Override
-    public @Nullable Object defaultValue() {
+    public Object defaultValue() {
         return Map.of();
     }
 

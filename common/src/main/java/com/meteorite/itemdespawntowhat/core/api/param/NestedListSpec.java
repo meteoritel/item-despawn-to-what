@@ -39,7 +39,12 @@ public record NestedListSpec<T>(ParamMeta meta, Codec<T> codec, ParamList fields
     // 可空嵌套列表：返回 Optional，由调用方在 apply 时 orElse(null)
     public <O> RecordCodecBuilder<O, Optional<List<T>>> fieldForNullable(
             Function<O, Optional<List<T>>> getter) {
-        return codec.listOf().optionalFieldOf(name()).forGetter(getter);
+        return valueCodec().optionalFieldOf(name()).forGetter(getter);
+    }
+
+    @Override
+    public Codec<List<T>> valueCodec() {
+        return codec.listOf();
     }
 
     @Override

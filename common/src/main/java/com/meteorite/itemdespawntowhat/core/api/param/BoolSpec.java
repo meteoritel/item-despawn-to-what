@@ -35,7 +35,12 @@ public record BoolSpec(ParamMeta meta, boolean codecDefault) implements ParamSpe
     }
 
     public <O> RecordCodecBuilder<O, Boolean> fieldFor(Function<O, Boolean> getter) {
-        return Codec.BOOL.optionalFieldOf(name(), codecDefault).forGetter(getter);
+        return valueCodec().optionalFieldOf(name(), codecDefault).forGetter(getter);
+    }
+
+    @Override
+    public Codec<Boolean> valueCodec() {
+        return Codec.BOOL;
     }
 
     @Override

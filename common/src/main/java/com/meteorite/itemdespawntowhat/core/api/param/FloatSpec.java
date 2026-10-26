@@ -38,7 +38,12 @@ public record FloatSpec(ParamMeta meta, float min, float max, float codecDefault
     }
 
     public <O> RecordCodecBuilder<O, Float> fieldFor(Function<O, Float> getter) {
-        return Codec.floatRange(min, max).optionalFieldOf(name(), codecDefault).forGetter(getter);
+        return valueCodec().optionalFieldOf(name(), codecDefault).forGetter(getter);
+    }
+
+    @Override
+    public Codec<Float> valueCodec() {
+        return Codec.floatRange(min, max);
     }
 
     @Override

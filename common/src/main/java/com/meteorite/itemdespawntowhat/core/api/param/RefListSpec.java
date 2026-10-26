@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.core.api.param;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
+import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import org.jetbrains.annotations.Nullable;
 
@@ -44,7 +45,12 @@ public record RefListSpec(ParamMeta meta, String registry, boolean nonEmpty) imp
     }
 
     public <O> RecordCodecBuilder<O, List<TaggedId>> fieldFor(Function<O, List<TaggedId>> getter) {
-        return TaggedId.CODEC.listOf().optionalFieldOf(name(), List.of()).forGetter(getter);
+        return valueCodec().optionalFieldOf(name(), List.of()).forGetter(getter);
+    }
+
+    @Override
+    public Codec<List<TaggedId>> valueCodec() {
+        return TaggedId.CODEC.listOf();
     }
 
     @Override
@@ -56,7 +62,7 @@ public record RefListSpec(ParamMeta meta, String registry, boolean nonEmpty) imp
     }
 
     @Override
-    public @Nullable Object defaultValue() {
+    public Object defaultValue() {
         return List.of();
     }
 

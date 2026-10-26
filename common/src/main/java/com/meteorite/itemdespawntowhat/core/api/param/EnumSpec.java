@@ -63,8 +63,13 @@ public record EnumSpec<E extends Enum<E>>(ParamMeta meta, Codec<E> codec, List<E
 
     public <O> RecordCodecBuilder<O, E> fieldFor(Function<O, E> getter) {
         return presence() == ParamPresence.REQUIRED
-                ? codec.fieldOf(name()).forGetter(getter)
-                : codec.optionalFieldOf(name(), codecDefault).forGetter(getter);
+                ? valueCodec().fieldOf(name()).forGetter(getter)
+                : valueCodec().optionalFieldOf(name(), codecDefault).forGetter(getter);
+    }
+
+    @Override
+    public Codec<E> valueCodec() {
+        return codec;
     }
 
     @Override

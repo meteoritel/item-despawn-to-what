@@ -3,6 +3,7 @@ package com.meteorite.itemdespawntowhat.core.api.param;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
+import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import org.jetbrains.annotations.Nullable;
 
@@ -33,7 +34,7 @@ public record RefSpec(ParamMeta meta, String registry) implements ParamSpec {
         return withMeta(meta.withHint(suffix));
     }
 
-    public RefSpec initial(Object value) {
+    public RefSpec initial(TaggedId value) {
         return withMeta(meta.withInitial(value));
     }
 
@@ -47,13 +48,18 @@ public record RefSpec(ParamMeta meta, String registry) implements ParamSpec {
     }
 
     public <O> RecordCodecBuilder<O, TaggedId> fieldFor(Function<O, TaggedId> getter) {
-        return TaggedId.CODEC.fieldOf(name()).forGetter(getter);
+        return valueCodec().fieldOf(name()).forGetter(getter);
     }
 
     // 可空引用：返回 Optional，由调用方在 apply 时 orElse(null)
     public <O> RecordCodecBuilder<O, Optional<TaggedId>> fieldForNullable(
             Function<O, Optional<TaggedId>> getter) {
-        return TaggedId.CODEC.optionalFieldOf(name()).forGetter(getter);
+        return valueCodec().optionalFieldOf(name()).forGetter(getter);
+    }
+
+    @Override
+    public Codec<TaggedId> valueCodec() {
+        return TaggedId.CODEC;
     }
 
     @Override
