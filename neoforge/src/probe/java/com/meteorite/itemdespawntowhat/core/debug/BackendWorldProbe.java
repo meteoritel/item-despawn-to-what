@@ -8,6 +8,7 @@ import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleEditChangeSet;
 import com.meteorite.itemdespawntowhat.core.network.protocol.RuleSaveProgress;
 import com.meteorite.itemdespawntowhat.core.runtime.ProbeLedgerAccess;
+import com.meteorite.itemdespawntowhat.core.api.scheduler.ScheduledTaskHandle;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ScheduledTask;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.SchedulerConfig;
 import com.meteorite.itemdespawntowhat.core.runtime.scheduler.ServerScheduler;
@@ -46,7 +47,7 @@ final class BackendWorldProbe {
     private final DebugScenarioChecks checks = new DebugScenarioChecks(metrics);
     private final BackendProbeFixtures fixtures;
     private final List<ItemEntity> budgetItems = new ArrayList<>();
-    private final List<ScheduledTask> budgetTasks = new ArrayList<>();
+    private final List<ScheduledTaskHandle> budgetTasks = new ArrayList<>();
     private final int[] budgetDeliveries = {0, 0};
     private int budgetEarly;
     private boolean middle;
@@ -172,7 +173,8 @@ final class BackendWorldProbe {
                 checks.equal("host_nether_delivered", 20, budgetDeliveries[1]);
                 checks.equal("host_no_early_output", 0, budgetEarly);
                 checks.equal("host_live_items", 40, budgetItems.stream().filter(Entity::isAlive).mapToLong(item -> item.getItem().getCount()).sum());
-                checks.equal("host_handles_done", 40, budgetTasks.stream().filter(task -> task.state() == ScheduledTask.State.DONE).count());
+                // 与上面的两维度成功交付计数共同核验：每个 RunnableTask 完成业务后进入终态。
+                checks.equal("host_handles_done", 40, budgetTasks.stream().filter(ScheduledTaskHandle::terminal).count());
             }
             case "restart" -> {
                 JsonObject ledger = ProbeLedgerAccess.snapshot(server);
@@ -296,7 +298,7 @@ final class BackendWorldProbe {
             target.setChunkForced(0, 0, true);
             target.getChunk(0, 0);
             for (int i = 0; i < 20; i++) {
-                budgetTasks.add(runtime.scheduler().scheduleAt(target.dimension(), new RunnableTask(
+                budgetTasks.add(runtime.scheduleAt(target.dimension(), new RunnableTask(
                         i % 2 == 0 ? ServerTaskKind.EFFECT : ServerTaskKind.CONDITION_CHECK, "probe_host_budget", () -> {
                     if (level.getGameTime() < start + 5) { budgetEarly++; }
                     ItemEntity item = new ItemEntity(target, 8, 100, 8, new ItemStack(Items.BEDROCK));

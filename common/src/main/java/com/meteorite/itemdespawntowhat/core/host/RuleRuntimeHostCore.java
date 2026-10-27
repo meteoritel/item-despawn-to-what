@@ -467,7 +467,7 @@ public final class RuleRuntimeHostCore {
 
         @Override
         public void scheduleTask(Object realmKey, ServerTask task, int delayTicks) {
-            Objects.requireNonNull(runtime).scheduler().schedule(realmKey, task, delayTicks);
+            Objects.requireNonNull(runtime).scheduleTask(realmKey, task, delayTicks);
         }
 
         @Override

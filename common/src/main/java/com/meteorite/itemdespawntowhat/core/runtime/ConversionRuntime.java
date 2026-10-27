@@ -163,9 +163,14 @@ public final class ConversionRuntime {
         this.gate = new ConversionGate(config, types, lifespanProvider, this::candidatesFor, this::conditionContext);
     }
 
-    /** 公共调度器，供开发场景读取跨维度预算与队列指标 */
-    public ServerScheduler scheduler() {
-        return scheduler;
+    /** 按共享调度时钟登记相对延迟任务，返回查询与取消句柄。 */
+    public ScheduledTaskHandle scheduleTask(Object realmKey, ServerTask task, int delayTicks) {
+        return scheduler.schedule(realmKey, task, delayTicks);
+    }
+
+    /** 按绝对游戏刻登记任务，保留调用方给定的到期时间。 */
+    public ScheduledTaskHandle scheduleAt(Object realmKey, ServerTask task, long dueTick) {
+        return scheduler.scheduleAt(realmKey, task, dueTick);
     }
 
     // ========== 规则生命周期 ==========
