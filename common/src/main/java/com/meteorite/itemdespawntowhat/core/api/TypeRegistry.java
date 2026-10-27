@@ -8,13 +8,10 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * 类型注册表契约：效果类型与条件类型共用同一套注册与查询语义。
- * 实现必须保证注册完成后对外呈现为不可变视图（见 core/registry 的实现）。
+ * 类型注册表的查询契约：装配器向消费者发布冻结后的不可变视图。
+ * 注册窗口的查询能力由 TypeRegistrar 扩展，运行时消费者不持有注册或冻结能力。
  */
 public interface TypeRegistry<T extends TypeDefinition<?>> {
-
-    // 注册一个类型定义；重复 id 必须抛出异常而不是静默覆盖
-    void register(T definition);
 
     // 查询类型定义，不存在时返回空
     Optional<T> find(ResourceLocation id);

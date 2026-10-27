@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.service;
 
+import com.meteorite.itemdespawntowhat.core.type.BuiltinTypeRegistries;
+
 import com.mojang.serialization.DataResult;
 
 import com.google.gson.JsonObject;

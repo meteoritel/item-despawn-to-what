@@ -50,9 +50,9 @@ authority:
 | 逻辑模块 | 对外入口（代表性） | 主要依赖方 |
 |---|---|---|
 | platform | `RuleRuntimeHostCore.PlatformAdapter`、`Services` | 全部 `core` 包（经契约与宿主）、两端源集 |
-| core-contract | `RuntimeObserver`、`RuleDecoder`、`ConditionEvaluator`、`EffectExecutor`、`TypeRegistry`、`IssueCollector`、`ServerTickBudget` | 其它全部逻辑模块 |
+| core-contract | `RuntimeObserver`、`RuleDecoder`、`ConditionEvaluator`、`EffectExecutor`、`TypeRegistry`、`TypeRegistrar`、`IssueCollector`、`ServerTickBudget` | 其它全部逻辑模块 |
 | rule-model | `Rule`、`SourceMatcher`、`ConditionExpression`、`RuleCodecs`、`RuleValidation` | type-system、conversion-runtime、authoring、client-editor |
-| type-system | `SimpleTypeRegistry`、`RuleTypeProvider`、`BuiltinConditionTypes`、`BuiltinEffectTypes` | rule-loading（注册表装配）、conversion-runtime（求值与执行）、authoring（引用校验） |
+| type-system | `BuiltinTypeRegistries`、`SimpleTypeRegistry`、`RuleTypeProvider`、`BuiltinConditionTypes`、`BuiltinEffectTypes` | rule-loading（注册表装配）、conversion-runtime（求值与执行）、authoring（引用校验） |
 | rule-loading | `RuleLoader`、`RuleLoadingService`、`RuleSourceLayer`、`RuleMerger` | conversion-runtime、authoring、platform |
 | conversion-runtime | `ConversionRuntime`、`RuleIndex`、`ServerScheduler`、`SettlementLedger` | authoring（只读索引）、core/host、command、debug |
 | authoring | `AuthoringHost`、`RuleEditChannels`、`RuleEditTransport`、`RuleEditService`、`EditAdmission`、`EditSessionManager`、`RuleCommandTree`、`RuleCatalogService` | client-editor 与 client-ui（协议与限额）、platform（编辑上下文） |

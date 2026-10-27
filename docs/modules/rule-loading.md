@@ -2,7 +2,7 @@
 title: 规则加载与装配
 layer: 3
 audience: 维护规则来源、合并与校验链路的开发者，以及需要理解候选索引如何建立的开发者
-authority: common/core/load、common/core/service 的加载装配类（RuleLoadingService、RuleReferenceValidator、RuleLoadContext、BuiltinTypeRegistries）、common/core/runtime/{RuleIndex, CatalystThresholdProjection}
+authority: common/core/load、common/core/service 的加载装配类（RuleLoadingService、RuleReferenceValidator、RuleLoadContext）、common/core/runtime/{RuleIndex, CatalystThresholdProjection}
 ---
 
 # 规则加载与装配

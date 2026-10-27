@@ -12,7 +12,7 @@ import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
 import com.meteorite.itemdespawntowhat.core.model.RuleValidation;
 import com.meteorite.itemdespawntowhat.core.runtime.RuleIndex;
-import com.meteorite.itemdespawntowhat.core.service.BuiltinTypeRegistries;
+import com.meteorite.itemdespawntowhat.core.type.BuiltinTypeRegistries;
 import com.mojang.serialization.JsonOps;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.RegistryOps;

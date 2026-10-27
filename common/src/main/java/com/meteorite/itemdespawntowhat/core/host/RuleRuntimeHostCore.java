@@ -19,7 +19,7 @@ import com.meteorite.itemdespawntowhat.core.network.transport.RuleEditServerCont
 import com.meteorite.itemdespawntowhat.core.runtime.ConversionRuntime;
 import com.meteorite.itemdespawntowhat.core.runtime.LifespanProvider;
 import com.meteorite.itemdespawntowhat.core.runtime.RuleIndex;
-import com.meteorite.itemdespawntowhat.core.service.BuiltinTypeRegistries;
+import com.meteorite.itemdespawntowhat.core.type.BuiltinTypeRegistries;
 import com.meteorite.itemdespawntowhat.core.service.RuleOverlayStore;
 import com.meteorite.itemdespawntowhat.core.service.RuleEditService;
 import com.meteorite.itemdespawntowhat.core.service.RuleLoadContext;

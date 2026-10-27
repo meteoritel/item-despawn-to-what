@@ -6,7 +6,7 @@ import com.meteorite.itemdespawntowhat.core.model.ConditionExpression;
 import com.meteorite.itemdespawntowhat.core.model.ConditionNode;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
-import com.meteorite.itemdespawntowhat.core.service.BuiltinTypeRegistries;
+import com.meteorite.itemdespawntowhat.core.type.BuiltinTypeRegistries;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 

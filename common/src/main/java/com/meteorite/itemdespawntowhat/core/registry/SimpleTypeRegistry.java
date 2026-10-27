@@ -2,6 +2,7 @@ package com.meteorite.itemdespawntowhat.core.registry;
 
 import com.meteorite.itemdespawntowhat.core.api.TypeDefinition;
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
+import com.meteorite.itemdespawntowhat.core.api.TypeRegistrar;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.Collection;
@@ -15,32 +16,15 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * {@link TypeRegistry} 的默认实现：注册期可变，{@link #freeze()} 之后不可变。
+ * 单线程类型装配 builder：注册时保序，冻结后发布独立的只读视图。
+ * <p>内置登记与 SPI 只持有 {@link TypeRegistrar}；装配所有者调用 {@link #freeze()}，
+ * 消费方仅持有返回的 {@link TypeRegistry}。冻结后注册抛出 {@link RegistryFrozenException}，
+ * 重复 id 抛出 {@link DuplicateTypeException}，两种失败均不改变已发布内容。</p>
+ * <p>注册与冻结由同一装配线程执行；冻结视图以 volatile 安全发布，可跨线程查询。</p>
  *
- * <p><b>生命周期与并发约定</b>
- * <ul>
- * <li><b>注册期</b>：只允许<b>单个线程</b>调用 {@link #register}，此阶段不保证并发读安全；</li>
- *   <li><b>冻结</b>：由执行注册的同一线程调用 {@link #freeze()}，内部结构被替换为不可变快照；</li>
- *   <li><b>冻结后</b>：{@link #find}、{@link #require}、{@link #all}、{@link #ids} 可被任意线程并发调用，
- *       注册表内容不再变化（快照通过 volatile 字段安全发布）。</li>
- * </ul>
- *
- * <p><b>语义约束</b>
- * <ul>
- *   <li>重复 id 立即抛 {@link DuplicateTypeException}，绝不静默覆盖；</li>
- *   <li>冻结后再注册抛 {@link RegistryFrozenException}；</li>
- *   <li>注册顺序被保留，{@link #all} 与 {@link #ids} 按注册先后返回
- *       （供"定义序"作为规则优先级的兜底排序依据）。</li>
- * </ul>
- *
- * <p><b>与接口的关系</b>：{@link TypeRegistry} 接口层面<b>不承诺只读</b>（{@link #register} 始终在契约内），
- * 冻结语义完全由本实现保证——冻结后再注册会在运行期抛 {@link RegistryFrozenException}。
- *
- * <p>本类属于与 core/api 同层的通用基础设施，不感知任何具体类型；内置类型注册表见 {@code BuiltinTypeRegistries}。
- *
- * @param <T> 注册的类型定义（效果类型或条件类型的公共形态）
+ * @param <T> 注册的类型定义
  */
-public final class SimpleTypeRegistry<T extends TypeDefinition<?>> implements TypeRegistry<T> {
+public final class SimpleTypeRegistry<T extends TypeDefinition<?>> implements TypeRegistrar<T> {
 
     // 注册期唯一可变结构：键为类型 id，LinkedHashMap 保留注册顺序
     private final Map<ResourceLocation, T> registering = new LinkedHashMap<>();
@@ -105,26 +89,20 @@ public final class SimpleTypeRegistry<T extends TypeDefinition<?>> implements Ty
         return Collections.unmodifiableSet(new LinkedHashSet<>(registering.keySet()));
     }
 
-    // 冻结注册表：生成不可变快照并发布；重复调用无副作用
-    // 必须由执行注册的同一线程调用；调用之后 register 抛 RegistryFrozenException
-    public synchronized void freeze() {
-        if (frozen != null) {
-            return;
+    /**
+     * 关闭注册窗口并返回保序、不可变的查询视图；重复调用返回同一视图。
+     * 必须由执行注册的装配线程调用。
+     *
+     * @return 仅暴露查询能力的冻结视图
+     */
+    public synchronized TypeRegistry<T> freeze() {
+        if (frozen == null) {
+            Map<ResourceLocation, T> byId = Collections.unmodifiableMap(new LinkedHashMap<>(registering));
+            Set<ResourceLocation> ids = Collections.unmodifiableSet(new LinkedHashSet<>(byId.keySet()));
+            frozen = new FrozenView<>(byId, List.copyOf(byId.values()), ids);
+            registering.clear();
         }
-        Map<ResourceLocation, T> byId = Collections.unmodifiableMap(new LinkedHashMap<>(registering));
-        Set<ResourceLocation> ids = Collections.unmodifiableSet(new LinkedHashSet<>(byId.keySet()));
-        frozen = new FrozenView<>(byId, List.copyOf(byId.values()), ids);
-    }
-
-    // 注册表是否已冻结
-    public boolean isFrozen() {
-        return frozen != null;
-    }
-
-    // 已注册的类型数量（注册期与冻结后均可用）
-    public int size() {
-        FrozenView<T> snapshot = frozen;
-        return snapshot != null ? snapshot.byId().size() : registering.size();
+        return frozen;
     }
 
     // 当前可读映射：冻结后为不可变快照，注册期为单线程可变映射
@@ -133,38 +111,23 @@ public final class SimpleTypeRegistry<T extends TypeDefinition<?>> implements Ty
         return snapshot != null ? snapshot.byId() : registering;
     }
 
-    // 冻结快照：查询用哈希表 + 按注册顺序的只读视图，一旦构造不再变化
-    private static final class FrozenView<T extends TypeDefinition<?>> {
-
-        // 按 id 查询用
-        private final Map<ResourceLocation, T> byId;
-
-        // 按注册顺序的类型列表
-        private final List<T> ordered;
-
-        // 按注册顺序的 id 集合
-        private final Set<ResourceLocation> ids;
-
-        // 直接持有已构建好的三类只读视图，不做任何拷贝或校验
-        private FrozenView(Map<ResourceLocation, T> byId, List<T> ordered, Set<ResourceLocation> ids) {
-            this.byId = byId;
-            this.ordered = ordered;
-            this.ids = ids;
+    // 保留查询映射与定义顺序，不暴露任何注册能力。
+    private record FrozenView<T extends TypeDefinition<?>>(
+            Map<ResourceLocation, T> byId, List<T> ordered, Set<ResourceLocation> ids) implements TypeRegistry<T> {
+        @Override
+        public Optional<T> find(ResourceLocation id) {
+            return Optional.ofNullable(id == null ? null : byId.get(id));
         }
 
-        // 按 id 查询用映射
-        private Map<ResourceLocation, T> byId() {
-            return byId;
+        @Override
+        public T require(ResourceLocation id) {
+            return find(id).orElseThrow(() -> new IllegalStateException(
+                    "未注册的类型 id: " + id + "，已注册的类型: " + ids));
         }
 
-        // 按注册顺序的类型列表
-        private List<T> ordered() {
+        @Override
+        public Collection<T> all() {
             return ordered;
-        }
-
-        // 按注册顺序的 id 集合
-        private Set<ResourceLocation> ids() {
-            return ids;
         }
     }
 }

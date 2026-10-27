@@ -1,8 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.type;
 
-import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
+import com.meteorite.itemdespawntowhat.core.api.TypeRegistrar;
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
-import com.meteorite.itemdespawntowhat.core.registry.SimpleTypeRegistry;
 import com.meteorite.itemdespawntowhat.core.type.condition.DimensionCondition;
 import com.meteorite.itemdespawntowhat.core.type.condition.BiomeCondition;
 import com.meteorite.itemdespawntowhat.core.type.condition.WeatherCondition;
@@ -27,16 +26,8 @@ public final class BuiltinConditionTypes {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    // 构建并冻结内置条件类型注册表
-    public static TypeRegistry<ConditionType<?>> create() {
-        SimpleTypeRegistry<ConditionType<?>> registry = createMutable();
-        registry.freeze();
-        return registry;
-    }
-
-    // 装配器在第三方 SPI 注册结束后统一冻结。
-    public static SimpleTypeRegistry<ConditionType<?>> createMutable() {
-        SimpleTypeRegistry<ConditionType<?>> registry = new SimpleTypeRegistry<>();
+    /** 将内置类型登记到装配器提供的窗口；本方法不负责冻结。 */
+    public static void registerInto(TypeRegistrar<ConditionType<?>> registry) {
         registry.register(DimensionCondition.conditionType());
         registry.register(BiomeCondition.conditionType());
         registry.register(WeatherCondition.conditionType());
@@ -47,6 +38,5 @@ public final class BuiltinConditionTypes {
         registry.register(TimeOfDayCondition.conditionType());
         registry.register(YLevelCondition.conditionType());
         registry.register(LightLevelCondition.conditionType());
-        return registry;
     }
 }

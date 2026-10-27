@@ -31,7 +31,7 @@ import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTaskKind;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.StepWorkCounter;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudgetSnapshot;
 import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
-import com.meteorite.itemdespawntowhat.core.service.BuiltinTypeRegistries;
+import com.meteorite.itemdespawntowhat.core.type.BuiltinTypeRegistries;
 import com.meteorite.itemdespawntowhat.core.state.DamageClassification;
 import com.meteorite.itemdespawntowhat.core.type.effect.exec.VisualFeedback;
 import net.minecraft.core.HolderLookup;

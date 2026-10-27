@@ -4,7 +4,7 @@ import com.google.gson.JsonElement;
 import com.meteorite.itemdespawntowhat.core.model.OutcomeCandidate;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
-import com.meteorite.itemdespawntowhat.core.service.BuiltinTypeRegistries;
+import com.meteorite.itemdespawntowhat.core.type.BuiltinTypeRegistries;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DynamicOps;
 import com.mojang.serialization.JsonOps;

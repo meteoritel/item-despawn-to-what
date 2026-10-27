@@ -1,5 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.service;
 
+import com.meteorite.itemdespawntowhat.core.type.BuiltinTypeRegistries;
+
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTask;
 import com.meteorite.itemdespawntowhat.core.load.RuleLoadResult;
 import com.meteorite.itemdespawntowhat.core.load.RuleSourceIndex;

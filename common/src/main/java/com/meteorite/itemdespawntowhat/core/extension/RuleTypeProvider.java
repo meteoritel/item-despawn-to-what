@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.extension;
 
-import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
+import com.meteorite.itemdespawntowhat.core.api.TypeRegistrar;
 
 import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
@@ -13,9 +13,9 @@ import com.meteorite.itemdespawntowhat.core.model.EffectType;
  */
 public interface RuleTypeProvider {
 
-    // 第一阶段登记条件类型；规则级条件树的 Codec 在冻结后构建。
-    default void registerConditions(@SuppressWarnings("unused") TypeRegistry<ConditionType<?>> registry) {}
+    /** 第一阶段登记条件类型；装配器封口后才构建规则级条件树 Codec。 */
+    default void registerConditions(@SuppressWarnings("unused") TypeRegistrar<ConditionType<?>> registry) {}
 
-    // 第二阶段登记效果类型；效果参数独立于规则级条件表达式。
-    default void registerEffects(@SuppressWarnings("unused") TypeRegistry<EffectType<?>> registry) {}
+    /** 第二阶段登记效果类型；注册窗口由装配器关闭。 */
+    default void registerEffects(@SuppressWarnings("unused") TypeRegistrar<EffectType<?>> registry) {}
 }

@@ -6,7 +6,7 @@ import com.meteorite.itemdespawntowhat.core.api.scheduler.CancelReason;
 import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.model.TriggerKind;
-import com.meteorite.itemdespawntowhat.core.service.BuiltinTypeRegistries;
+import com.meteorite.itemdespawntowhat.core.type.BuiltinTypeRegistries;
 import com.meteorite.itemdespawntowhat.core.state.DropState;
 import com.meteorite.itemdespawntowhat.core.state.DropStateStore;
 import net.minecraft.server.level.ServerLevel;

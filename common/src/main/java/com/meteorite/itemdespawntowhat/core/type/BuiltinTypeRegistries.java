@@ -1,4 +1,4 @@
-package com.meteorite.itemdespawntowhat.core.service;
+package com.meteorite.itemdespawntowhat.core.type;
 
 import com.meteorite.itemdespawntowhat.core.api.TypeRegistry;
 import com.meteorite.itemdespawntowhat.core.extension.RuleTypeProvider;
@@ -9,8 +9,7 @@ import com.meteorite.itemdespawntowhat.core.model.ConditionType;
 import com.meteorite.itemdespawntowhat.core.model.EffectType;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.model.RuleCodecs;
-import com.meteorite.itemdespawntowhat.core.type.BuiltinConditionTypes;
-import com.meteorite.itemdespawntowhat.core.type.BuiltinEffectTypes;
+import com.meteorite.itemdespawntowhat.core.registry.SimpleTypeRegistry;
 import com.mojang.serialization.Codec;
 import net.minecraft.world.item.ItemStack;
 
@@ -42,13 +41,15 @@ public record BuiltinTypeRegistries(
         var providers = ServiceLoader.load(RuleTypeProvider.class).stream()
                 .sorted(Comparator.comparing(provider -> provider.type().getName()))
                 .map(ServiceLoader.Provider::get).toList();
-        var conditionTypes = BuiltinConditionTypes.createMutable();
-        providers.forEach(provider -> provider.registerConditions(conditionTypes));
-        conditionTypes.freeze();
+        var conditions = new SimpleTypeRegistry<ConditionType<?>>();
+        BuiltinConditionTypes.registerInto(conditions);
+        providers.forEach(provider -> provider.registerConditions(conditions));
+        TypeRegistry<ConditionType<?>> conditionTypes = conditions.freeze();
         Codec<ConditionExpression> expressionCodec = RuleCodecs.conditionExpressionCodec(conditionTypes);
-        var effectTypes = BuiltinEffectTypes.createMutable();
-        providers.forEach(provider -> provider.registerEffects(effectTypes));
-        effectTypes.freeze();
+        var effects = new SimpleTypeRegistry<EffectType<?>>();
+        BuiltinEffectTypes.registerInto(effects);
+        providers.forEach(provider -> provider.registerEffects(effects));
+        TypeRegistry<EffectType<?>> effectTypes = effects.freeze();
         return new BuiltinTypeRegistries(conditionTypes, effectTypes, expressionCodec);
     }
 }

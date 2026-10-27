@@ -64,7 +64,7 @@ flowchart TB
 - **`core/api/scheduler`** — 调度契约：任务种类、取消原因、步进结果、tick 预算与统计快照。
   - 允许：JDK。
   - 禁止：依赖实现包。实现方在 `core/runtime/scheduler`，方向由实现指向契约。
-- **`core/api/param`** — 类型参数声明：字段名、wire 存在性、值域、默认值、新建初值与编辑器投影元数据；单字段的 Codec 构件与校验由声明派生。
+- **`core/api/param`** — 类型参数声明：字段名、wire 存在性、值域、默认值、新建初值与编辑器投影元数据；typed getter 绑定字段后，Codec 构件与批量校验共用同一取值关系。
   - 允许：JDK、原版契约类型与 `core/api` 自身。
   - 禁止：依赖其它 `core` 包与客户端包；声明只描述单字段，跨字段与引用校验留在类型内。
 - **`core/model`** — 规则的数据形态：`Rule` 与来源匹配、条件树、效果与候选结果、Codec 与语义校验。
@@ -93,7 +93,7 @@ flowchart TB
 ### 运行时
 
 - **`core/runtime`** — 运行时聚合：规则索引、掉落物追踪与触发、表达求值、结算与恢复、催化剂预留、出生点搜索、共享调度器。
-  - 允许：`core/api`（含 scheduler）、`core/config`、`core/load`、`core/model`、`core/state`、`core/type`；`core/service` 的内置类型注册表装配类型（`BuiltinTypeRegistries`）。
+  - 允许：`core/api`（含 scheduler）、`core/config`、`core/load`、`core/model`、`core/state`、`core/type`。
   - 禁止：依赖 `core/command`、`core/debug`、`core/network`、客户端包。命令与调试是运行时的使用方。
 - **`core/runtime/scheduler`** — 调度器实现：单实例、每 tick 推进一次、时间软预算与工作量上限、维度级队列与统计。
   - 允许：`core/api/scheduler`。禁止：依赖规则模型与加载。调度器不认识规则，只认识任务。
@@ -130,7 +130,7 @@ flowchart TB
 
 | 链路段 | 归属模块 | 覆盖的职责面 |
 |---|---|---|
-| 加载装配 | [rule-loading](../modules/rule-loading.md) | 加载链路装配点（自身不做缓存、不做单例、不管生命周期）、加载依赖容器、动态引用校验、内置类型注册表装配 |
+| 加载装配 | [rule-loading](../modules/rule-loading.md) | 加载链路装配点（自身不做缓存、不做单例、不管生命周期）、加载依赖容器、动态引用校验 |
 | 提交校验与基底快照 | [authoring](../modules/authoring.md) | 写入前的提交校验（网络保存与配置迁移共用）、保存期间的数据包基底只读快照与身份判定 |
 | 会话与落盘 | [authoring](../modules/authoring.md) | 独占会话状态机、由覆盖层存储持有的内容修订、准入判定（`EditAdmission`：会话号 → 持有者 → 确认 → 权限的唯一顺序与拒绝状态码）、编辑编排（校验 → 写盘 → 重载 → 回执）、覆盖层文件工作唯一所有者、逐 id 写入与回滚、保存续接任务 |
 | 快照与限额 | [authoring](../modules/authoring.md) | 快照续接与装配、会话窗口/权限等级/任务预算常量；`core/service/edit` 持有 Request/Reply 与双端只读编辑模型 |
@@ -156,7 +156,7 @@ flowchart TB
   - 允许：`core/api`、`core/model`、`core/network/transport`、`core/network/protocol`、`core/catalog`、`core/service/edit`、`core/service` 的限额常量、原版客户端类型。
   - 禁止：依赖 `client/edit` 与 `client/ui`。界面经 `EditorScreenHooks` 注册槽注入，由客户端入口接线。
 - **`client/edit`** — 客户端工作区与编辑数据：草稿、撤销栈、类型参数投影与字段描述符、类型编辑器注册表、条件树编解码与摘要。
-  - 允许：`core/api`、`core/model`、`core/catalog`、`core/service/edit`、`core/service/BuiltinTypeRegistries` 的装配记录、`client/net`、`client/ui/kit` 的树编辑契约、`client/edit/draft`、原版客户端类型。
+  - 允许：`core/api`、`core/model`、`core/catalog`、`core/service/edit`、`core/type/BuiltinTypeRegistries` 的冻结装配记录、`client/net`、`client/ui/kit` 的树编辑契约、`client/edit/draft`、原版客户端类型。
   - 禁止：依赖 `client/ui` 的宿主子包（`theme`、`widget`、`shared`、`screen`、`screen/form`）；不发起网络请求、不打开界面。
 - **`client/edit/draft`** — 未应用的编辑草稿落盘、重启与断线恢复、冲突判定。
   - 允许：`core` 的公开类型与原版客户端类型。
