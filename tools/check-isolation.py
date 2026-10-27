@@ -15,8 +15,9 @@
 6) 编辑注册入口遍历 RuleEditChannels，平台 adapter 仅使用声明中的类型和处理器。
 7) 契约只依赖自身，模型只依赖契约与自身；类型装配器位于 core/type。
 8) client/edit 只依赖 UI kit 的公开契约，表单控件留在 client/ui。
+9) client/net 不依赖 edit/ui；screen 根包的业务字段声明统一由 edit 提供。
 
-只判定 import 语句：注释与 javadoc 中的全限定名不构成编译期依赖，不计入违规。
+依赖只判定 import；业务字段工厂只扫描 screen 根包中的代码行，form 内的控件适配不受此约束。
 
 退出码：0 = 通过；1 = 存在违规；2 = 配置错误（未找到 Java 源文件）。
 用法：python tools/check-isolation.py [--root <仓库根目录>]
@@ -94,6 +95,11 @@ def check(root: Path) -> int:
             for line_no, line in enumerate(text.splitlines(), 1):
                 if re.search(r"\b\w*Payload\.(?:TYPE|STREAM_CODEC|CHANGE_SET|SNAPSHOT|SOURCE_VIEW)\b", line):
                     violations.append((rel, line_no, "通道声明消费", "载荷类型与 codec 统一在 RuleEditChannels 声明"))
+        # screen 负责组装表单，不再声明业务字段；form 的数值子控件适配另有职责。
+        if "/client/ui/screen/" in rel and source.parent.name == "screen":
+            code = re.sub(r"/\*.*?\*/|//[^\n]*", lambda match: "\n" * match.group(0).count("\n"), text, flags=re.S)
+            for match in re.finditer(r"\bEditorField\.\s*\w+\s*\(", code):
+                violations.append((rel, code.count("\n", 0, match.start()) + 1, "业务字段归属", "固定字段声明由 client/edit 提供"))
         for line_no, line in enumerate(text.splitlines(), 1):
             match = IMPORT_RE.match(line)
             if not match:
@@ -107,6 +113,9 @@ def check(root: Path) -> int:
                 violations.append((rel, line_no, "模型依赖方向", target))
             if "/client/edit/" in rel and target.startswith(PROJECT_UI) and not target.startswith(PROJECT_UI + "kit."):
                 violations.append((rel, line_no, "编辑数据分层", target))
+            if "/client/net/" in rel and target.startswith((
+                    "com.meteorite.itemdespawntowhat.client.edit.", PROJECT_UI)):
+                violations.append((rel, line_no, "工作区依赖方向", target))
             if target == PROJECT_CORE + "service.BuiltinTypeRegistries":
                 violations.append((rel, line_no, "类型装配归属", target))
             if ("/core/service/" in rel or "/core/catalog/" in rel) and target.startswith((
