@@ -50,7 +50,7 @@ public record BiomeCondition(
         ClimateRange weirdness
 ) implements Condition, DynamicReferenceCheck {
 
-    // 类型 id，同时是 JSON 中 type 字段的取值
+    /** 类型 id，同时是 JSON 中 type 字段的取值 */
     public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(Constants.ID_NAMESPACE, "biome");
 
     // 参数 JSON 字段名
@@ -69,7 +69,6 @@ public record BiomeCondition(
             .initial(Mode.EXACT);
     public static final RefListSpec BIOMES = RefListSpec
             .defaultedEmpty(FIELD_BIOMES, "minecraft:worldgen/biome")
-            .enforceNonEmpty()
             .hint("biome.biomes.hint")
             .initial(List.of());
     public static final NestedSpec<ClimateRange> TEMPERATURE =
@@ -84,20 +83,27 @@ public record BiomeCondition(
             NestedSpec.climate(FIELD_DEPTH, ClimateRange.CODEC);
     public static final NestedSpec<ClimateRange> WEIRDNESS =
             NestedSpec.climate(FIELD_WEIRDNESS, ClimateRange.CODEC);
-    public static final ParamList PARAMS = ParamList.of(MODE, BIOMES, TEMPERATURE, HUMIDITY, CONTINENTALNESS,
-            EROSION, DEPTH, WEIRDNESS);
+    public static final ParamList<BiomeCondition> PARAMS = ParamList.of(
+            MODE.bind(BiomeCondition::mode),
+            BIOMES.bind(BiomeCondition::biomes),
+            TEMPERATURE.bind(BiomeCondition::temperature),
+            HUMIDITY.bind(BiomeCondition::humidity),
+            CONTINENTALNESS.bind(BiomeCondition::continentalness),
+            EROSION.bind(BiomeCondition::erosion),
+            DEPTH.bind(BiomeCondition::depth),
+            WEIRDNESS.bind(BiomeCondition::weirdness));
 
-    // 参数编解码器：mode 必填，其余字段缺省为空，哪部分必填由 validateParams 判定
+    /** 参数编解码器：mode 必填，其余字段缺省为空，哪部分必填由 validateParams 判定 */
     public static MapCodec<BiomeCondition> codec() {
         return RecordCodecBuilder.mapCodec(instance -> instance.group(
-                MODE.fieldFor(BiomeCondition::mode),
-                BIOMES.fieldFor(BiomeCondition::biomes),
-                TEMPERATURE.fieldForNullable(value -> Optional.ofNullable(value.temperature())),
-                HUMIDITY.fieldForNullable(value -> Optional.ofNullable(value.humidity())),
-                CONTINENTALNESS.fieldForNullable(value -> Optional.ofNullable(value.continentalness())),
-                EROSION.fieldForNullable(value -> Optional.ofNullable(value.erosion())),
-                DEPTH.fieldForNullable(value -> Optional.ofNullable(value.depth())),
-                WEIRDNESS.fieldForNullable(value -> Optional.ofNullable(value.weirdness()))
+                PARAMS.field(MODE),
+                PARAMS.field(BIOMES),
+                PARAMS.nullableField(TEMPERATURE),
+                PARAMS.nullableField(HUMIDITY),
+                PARAMS.nullableField(CONTINENTALNESS),
+                PARAMS.nullableField(EROSION),
+                PARAMS.nullableField(DEPTH),
+                PARAMS.nullableField(WEIRDNESS)
         ).apply(instance, (mode, biomes, temperature, humidity, continentalness, erosion, depth, weirdness) ->
                 new BiomeCondition(mode, biomes, temperature.orElse(null), humidity.orElse(null),
                         continentalness.orElse(null), erosion.orElse(null), depth.orElse(null), weirdness.orElse(null))));
@@ -114,22 +120,22 @@ public record BiomeCondition(
         return ID;
     }
 
-    // 条件类型定义，供注册表登记；静态工厂不能叫 type()（与 Condition#type 实例方法签名冲突）
+    /** 条件类型定义，供注册表登记；静态工厂不能叫 type()（与 Condition#type 实例方法签名冲突） */
     public static ConditionType<BiomeCondition> conditionType() {
         return new SimpleConditionType<>(ID, codec(), BiomeCondition::validateParams, BiomeEvaluator::test, PARAMS);
     }
 
-    // 参数语义校验：mode 决定哪部分必填，未参与匹配的那部分给出告警而非错误
+    /** 参数语义校验：mode 决定哪部分必填，未参与匹配的那部分给出告警而非错误 */
     public static boolean validateParams(BiomeCondition params, IssueCollector issues, String fieldPath) {
-        boolean valid = MODE.check(params.mode(), issues, fieldPath);
         if (params.mode() == Mode.EXACT) {
-            valid &= BIOMES.check(params.biomes(), issues, fieldPath);
+            boolean valid = ParamChecks.notEmpty(params.biomes(), FIELD_BIOMES, issues, ParamChecks.child(fieldPath, FIELD_BIOMES));
             if (hasClimateRange(params)) {
                 issues.warn("mode=exact 时气候参数区间不参与匹配，已忽略", null, fieldPath);
             }
             return valid;
         }
         if (params.mode() == Mode.CLIMATE) {
+            boolean valid = true;
             if (!hasClimateRange(params)) {
                 issues.error("mode=climate 时 temperature/humidity/continentalness/erosion/depth/weirdness 至少需要一个区间",
                         null, fieldPath);
@@ -146,7 +152,7 @@ public record BiomeCondition(
             valid &= validateRange(params.weirdness(), FIELD_WEIRDNESS, issues, fieldPath);
             return valid;
         }
-        return valid;
+        return true;
     }
 
     /**
@@ -210,13 +216,13 @@ public record BiomeCondition(
         private static final String MIN_FIELD = "min";
         private static final String MAX_FIELD = "max";
 
-        // 参数编解码器
+        /** 参数编解码器 */
         public static final MapCodec<ClimateRange> MAP_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
                 Codec.DOUBLE.optionalFieldOf(MIN_FIELD).forGetter(range -> Optional.ofNullable(range.min())),
                 Codec.DOUBLE.optionalFieldOf(MAX_FIELD).forGetter(range -> Optional.ofNullable(range.max()))
         ).apply(instance, (min, max) -> new ClimateRange(min.orElse(null), max.orElse(null))));
 
-        // 以 Codec 形式暴露，供上层做可选字段引用
+        /** 以 Codec 形式暴露，供上层做可选字段引用 */
         public static final Codec<ClimateRange> CODEC = MAP_CODEC.codec();
     }
 }

@@ -36,7 +36,6 @@ import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
-import java.util.Optional;
 
 /**
  * arrow_rain：在触发位置上方生成一阵箭雨。
@@ -51,7 +50,7 @@ public record ArrowRainEffect(
         double chance
 ) implements Effect {
 
-    // 效果类型 id，同时是 JSON 中 type 字段的取值
+    /** 效果类型 id，同时是 JSON 中 type 字段的取值 */
     public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(Constants.ID_NAMESPACE, "arrow_rain");
 
     // 类型专属参数字段名
@@ -76,7 +75,7 @@ public record ArrowRainEffect(
         ALLOWED,
         CREATIVE_ONLY;
 
-        // JSON 取值：小写下划线，解析大小写不敏感
+        /** JSON 取值：小写下划线，解析大小写不敏感 */
         public static final Codec<Pickup> CODEC = EnumCodecs.lowerCase(Pickup.class);
     }
 
@@ -103,35 +102,33 @@ public record ArrowRainEffect(
         public static final int MIN_AMPLIFIER = 0;
         public static final int MAX_AMPLIFIER = 255;
 
-        // 单项药水效果的参数声明
+        /** 单项药水效果的参数声明 */
         public static final RefSpec EFFECT = RefSpec.required(EFFECT_FIELD, "minecraft:mob_effect");
         public static final IntSpec DURATION_TICKS = IntSpec
                 .defaulted(DURATION_TICKS_FIELD, DEFAULT_DURATION_TICKS, MIN_DURATION_TICKS, MAX_DURATION_TICKS);
         public static final IntSpec AMPLIFIER = IntSpec
                 .defaulted(AMPLIFIER_FIELD, DEFAULT_AMPLIFIER, MIN_AMPLIFIER, MAX_AMPLIFIER)
                 .unit(ParamUnit.LEVEL);
-        public static final ParamList PARAMS = ParamList.of(EFFECT, DURATION_TICKS, AMPLIFIER);
+        public static final ParamList<PotionEffectSpec> PARAMS = ParamList.of(
+                EFFECT.bind(PotionEffectSpec::effect),
+                DURATION_TICKS.bind(PotionEffectSpec::durationTicks),
+                AMPLIFIER.bind(PotionEffectSpec::amplifier));
 
-        // 药水效果编解码器
+        /** 药水效果编解码器 */
         public static final MapCodec<PotionEffectSpec> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-                EFFECT.fieldFor(PotionEffectSpec::effect),
-                DURATION_TICKS.fieldFor(PotionEffectSpec::durationTicks),
-                AMPLIFIER.fieldFor(PotionEffectSpec::amplifier)
+                PARAMS.field(EFFECT),
+                PARAMS.field(DURATION_TICKS),
+                PARAMS.field(AMPLIFIER)
         ).apply(instance, PotionEffectSpec::new));
 
-        // 单项药水效果的语义校验；问题写入 issues，不抛异常
-        public static boolean validateParams(PotionEffectSpec params, IssueCollector issues, String fieldPath) {
+        /** 校验声明值域之外的状态效果引用；数值与存在性由嵌套声明检查。 */
+        public static boolean validateReferences(PotionEffectSpec params, IssueCollector issues, String fieldPath) {
             String effectPath = ParamChecks.child(fieldPath, EFFECT_FIELD);
-            boolean valid = EFFECT.check(params.effect(), issues, fieldPath);
-            valid &= RefChecks.check(params.effect(), BuiltInRegistries.MOB_EFFECT, EFFECT_FIELD,
-                    issues, effectPath);
-            valid &= DURATION_TICKS.check(params.durationTicks(), issues, fieldPath);
-            valid &= AMPLIFIER.check(params.amplifier(), issues, fieldPath);
-            return valid;
+            return RefChecks.check(params.effect(), BuiltInRegistries.MOB_EFFECT, EFFECT_FIELD, issues, effectPath);
         }
     }
 
-    // 参数声明：类型专属字段在前，通用字段复用 CommonFields 的声明
+    /** 参数声明：类型专属字段在前，通用字段复用 CommonFields 的声明 */
     public static final IntSpec COUNT = IntSpec.defaulted(COUNT_FIELD, DEFAULT_COUNT, MIN_COUNT, MAX_COUNT)
             .initial(DEFAULT_COUNT);
     public static final EnumSpec<Pickup> PICKUP = EnumSpec
@@ -142,17 +139,16 @@ public record ArrowRainEffect(
             .nullable(POTION_EFFECTS_FIELD, PotionEffectSpec.CODEC.codec(), PotionEffectSpec.PARAMS)
             .hint("arrow_rain.potion_effects.hint")
             .initial(List.of());
-    public static final ParamList PARAMS = ParamList.of(COUNT, PICKUP, POTION_EFFECTS,
-            CommonFields.DELAY_TICKS, CommonFields.CHANCE);
+    public static final ParamList<ArrowRainEffect> PARAMS = ParamList.of(COUNT.bind(ArrowRainEffect::count), PICKUP.bind(ArrowRainEffect::pickup), POTION_EFFECTS.bind(ArrowRainEffect::potionEffects)).plus(CommonFields.EFFECT_PARAMS);
 
-    // 类型专属参数编解码器；通用字段复用 CommonFields 片段（codec 层不得产出 null）
+    /** 类型专属参数编解码器；通用字段复用 CommonFields 片段（codec 层不得产出 null） */
     public static MapCodec<ArrowRainEffect> codec() {
         return RecordCodecBuilder.mapCodec(instance -> instance.group(
-                COUNT.fieldFor(ArrowRainEffect::count),
-                PICKUP.fieldFor(ArrowRainEffect::pickup),
-                POTION_EFFECTS.fieldForNullable(effect -> Optional.ofNullable(effect.potionEffects())),
-                CommonFields.DELAY_TICKS.fieldFor(ArrowRainEffect::delayTicks),
-                CommonFields.CHANCE.fieldFor(ArrowRainEffect::chance)
+                PARAMS.field(COUNT),
+                PARAMS.field(PICKUP),
+                PARAMS.nullableField(POTION_EFFECTS),
+                PARAMS.field(CommonFields.DELAY_TICKS),
+                PARAMS.field(CommonFields.CHANCE)
         ).apply(instance, (count, pickup, potionEffects, delayTicks, chance) ->
                 new ArrowRainEffect(count, pickup, potionEffects.orElse(null), delayTicks, chance)));
     }
@@ -171,9 +167,7 @@ public record ArrowRainEffect(
         }
     }
 
-    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。
-    // 显式实现执行器契约：箭雨序列只能经预算内的执行状态推进，直接 execute 一律拒绝；
-    // 药水效果属标签随机抽取，须在成功转化当刻抽定并随准备结果携带，执行期不再抽取。
+    /** 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。；显式实现执行器契约：箭雨序列只能经预算内的执行状态推进，直接 execute 一律拒绝；；药水效果属标签随机抽取，须在成功转化当刻抽定并随准备结果携带，执行期不再抽取。 */
     public static EffectType<ArrowRainEffect> effectType() {
         EffectExecutor<ArrowRainEffect> executor = new EffectExecutor<>() {
             @Override
@@ -204,18 +198,16 @@ public record ArrowRainEffect(
                 ProductKind.WORLD, PARAMS);
     }
 
-    // 参数语义校验；问题写入 issues，不抛异常
+    /** 校验药水效果的注册表引用；字段值域与必填由 PARAMS 统一检查。 */
     public static boolean validateParams(ArrowRainEffect params, IssueCollector issues, String fieldPath) {
-        boolean valid = COUNT.check(params.count(), issues, fieldPath);
-        valid &= PICKUP.check(params.pickup(), issues, fieldPath);
+        boolean valid = true;
         if (params.potionEffects() != null) {
             String effectsPath = ParamChecks.child(fieldPath, POTION_EFFECTS_FIELD);
             for (int index = 0; index < params.potionEffects().size(); index++) {
                 PotionEffectSpec spec = params.potionEffects().get(index);
                 String specPath = ParamChecks.index(effectsPath, index);
-                valid &= ParamChecks.required(spec, POTION_EFFECTS_FIELD, issues, specPath);
                 if (spec != null) {
-                    valid &= PotionEffectSpec.validateParams(spec, issues, specPath);
+                    valid &= PotionEffectSpec.validateReferences(spec, issues, specPath);
                 }
             }
         }

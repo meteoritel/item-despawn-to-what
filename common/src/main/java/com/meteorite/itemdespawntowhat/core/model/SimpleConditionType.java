@@ -18,36 +18,43 @@ public record SimpleConditionType<P extends Condition>(
         Validator<P> validator,
         ConditionEvaluator<P> evaluator,
         EvaluabilityCheck<P> evaluabilityCheck,
-        ParamList params
+        ParamList<? super P> params
 ) implements ConditionType<P> {
 
     public SimpleConditionType {
-        params = params == null ? ParamList.EMPTY : params;
+        validator = validator == null ? (value, issues, path) -> true : validator;
+        params = params == null ? ParamList.empty() : params;
     }
 
-    // 四参构造：可求值性恒为 AVAILABLE，未声明参数
+    /** 只有声明校验、无需额外语义判断的条件类型。 */
+    public SimpleConditionType(ResourceLocation id, MapCodec<P> codec, ConditionEvaluator<P> evaluator,
+                               ParamList<? super P> params) {
+        this(id, codec, null, evaluator, (value, context) -> Evaluability.AVAILABLE, params);
+    }
+
+    /** 四参构造：可求值性恒为 AVAILABLE，未声明参数 */
     public SimpleConditionType(ResourceLocation id,
                                MapCodec<P> codec,
                                Validator<P> validator,
                                ConditionEvaluator<P> evaluator) {
-        this(id, codec, validator, evaluator, (params, context) -> Evaluability.AVAILABLE, ParamList.EMPTY);
+        this(id, codec, validator, evaluator, (params, context) -> Evaluability.AVAILABLE, ParamList.empty());
     }
 
-    // 五参构造：只声明可求值性检查，未声明参数
+    /** 五参构造：只声明可求值性检查，未声明参数 */
     public SimpleConditionType(ResourceLocation id,
                                MapCodec<P> codec,
                                Validator<P> validator,
                                ConditionEvaluator<P> evaluator,
                                EvaluabilityCheck<P> evaluabilityCheck) {
-        this(id, codec, validator, evaluator, evaluabilityCheck, ParamList.EMPTY);
+        this(id, codec, validator, evaluator, evaluabilityCheck, ParamList.empty());
     }
 
-    // 五参构造：声明参数，可求值性恒为 AVAILABLE
+    /** 五参构造：声明参数，可求值性恒为 AVAILABLE */
     public SimpleConditionType(ResourceLocation id,
                                MapCodec<P> codec,
                                Validator<P> validator,
                                ConditionEvaluator<P> evaluator,
-                               ParamList params) {
+                               ParamList<? super P> params) {
         this(id, codec, validator, evaluator, (params2, context) -> Evaluability.AVAILABLE, params);
     }
 

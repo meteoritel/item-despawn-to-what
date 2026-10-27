@@ -3,12 +3,10 @@ package com.meteorite.itemdespawntowhat.core.api.param;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.mojang.serialization.Codec;
-import com.mojang.serialization.codecs.RecordCodecBuilder;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 import java.util.Locale;
-import java.util.function.Function;
 
 /**
  * 枚举参数声明：字段名、wire 取值集合与编辑器枚举组名记录在一处。
@@ -16,7 +14,7 @@ import java.util.function.Function;
  * 编辑器据 {@link #wireValues()} 生成选项、据 {@link #enumGroup()} 取组标签。</p>
  */
 public record EnumSpec<E extends Enum<E>>(ParamMeta meta, Codec<E> codec, List<E> values, String enumGroup,
-                                        @Nullable E codecDefault) implements ParamSpec {
+                                        @Nullable E codecDefault) implements ParamSpec<E> {
 
     public EnumSpec {
         if (values.isEmpty()) {
@@ -61,19 +59,13 @@ public record EnumSpec<E extends Enum<E>>(ParamMeta meta, Codec<E> codec, List<E
         return values.stream().map(value -> value.name().toLowerCase(Locale.ROOT)).toList();
     }
 
-    public <O> RecordCodecBuilder<O, E> fieldFor(Function<O, E> getter) {
-        return presence() == ParamPresence.REQUIRED
-                ? valueCodec().fieldOf(name()).forGetter(getter)
-                : valueCodec().optionalFieldOf(name(), codecDefault).forGetter(getter);
-    }
-
     @Override
     public Codec<E> valueCodec() {
         return codec;
     }
 
     @Override
-    public boolean check(@Nullable Object value, IssueCollector issues, String fieldPath) {
+    public boolean check(@Nullable E value, IssueCollector issues, String fieldPath) {
         if (!required()) {
             return true;
         }
@@ -81,8 +73,8 @@ public record EnumSpec<E extends Enum<E>>(ParamMeta meta, Codec<E> codec, List<E
     }
 
     @Override
-    public @Nullable Object defaultValue() {
-        return presence() == ParamPresence.DEFAULTED ? codecDefault : null;
+    public @Nullable E defaultValue() {
+        return meta.defaultValue(codecDefault);
     }
 
     private EnumSpec<E> withMeta(ParamMeta value) {

@@ -23,7 +23,6 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * 条件类型 catalyst_present：判断掉落物附近是否存在指定的催化剂物品。
@@ -65,14 +64,17 @@ public record CatalystPresentCondition(List<TaggedId> items, @Nullable Integer c
     public static final MapSpec COUNTS = MapSpec
             .defaultedEmpty(RuleFields.ITEM_COUNTS, "minecraft:item", MIN_COUNT, MAX_COUNT)
             .label("catalyst_present.count");
-    public static final ParamList PARAMS = ParamList.of(ITEMS, COUNT, COUNTS);
+    public static final ParamList<CatalystPresentCondition> PARAMS = ParamList.of(
+            ITEMS.bind(CatalystPresentCondition::items),
+            COUNT.bind(CatalystPresentCondition::count),
+            COUNTS.bind(CatalystPresentCondition::counts));
 
     /** 参数编解码器：items 缺省为空（由 validateParams 拒绝）；count 缺失即 null，编码时同样省略该字段 */
     public static MapCodec<CatalystPresentCondition> codec() {
         return RecordCodecBuilder.mapCodec(instance -> instance.group(
-                ITEMS.fieldFor(CatalystPresentCondition::items),
-                COUNT.fieldForNullable(condition -> Optional.ofNullable(condition.count())),
-                COUNTS.fieldFor(CatalystPresentCondition::counts)
+                PARAMS.field(ITEMS),
+                PARAMS.nullableField(COUNT),
+                PARAMS.field(COUNTS)
         ).apply(instance, (items, count, counts) -> new CatalystPresentCondition(items, count.orElse(null), counts)));
     }
 
@@ -105,9 +107,7 @@ public record CatalystPresentCondition(List<TaggedId> items, @Nullable Integer c
 
     /** 参数语义校验：items 必填且逐项做注册表存在性校验；count 留空合法，填写时需落在 [1,64] */
     public static boolean validateParams(CatalystPresentCondition params, IssueCollector issues, String fieldPath) {
-        boolean valid = ITEMS.check(params.items(), issues, fieldPath);
-        valid &= COUNT.check(params.count(), issues, fieldPath);
-        valid &= RefChecks.checkAll(params.items(), BuiltInRegistries.ITEM, FIELD_ITEMS, issues,
+        boolean valid = RefChecks.checkAll(params.items(), BuiltInRegistries.ITEM, FIELD_ITEMS, issues,
                 ParamChecks.child(fieldPath, FIELD_ITEMS));
         for (TaggedId item : params.counts().keySet()) {
             if (!params.items().contains(item)) {

@@ -13,8 +13,6 @@ import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.resources.ResourceLocation;
 
-import java.util.Optional;
-
 /**
  * 条件类型 y_level：按掉落物的 Y 坐标区间匹配。
  * 参数 min / max 均可空（null = 该端不限制），不得低于 -2048，且 min 不得大于 max。
@@ -23,7 +21,7 @@ import java.util.Optional;
  */
 public record YLevelCondition(Integer min, Integer max) implements Condition {
 
-    // 类型 id，同时是 JSON 中 type 字段的取值
+    /** 类型 id，同时是 JSON 中 type 字段的取值 */
     public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(Constants.ID_NAMESPACE, "y_level");
 
     // 参数 JSON 字段名
@@ -37,7 +35,7 @@ public record YLevelCondition(Integer min, Integer max) implements Condition {
     private static final int INITIAL_MIN = -64;
     private static final int INITIAL_MAX = 512;
 
-    // 参数声明：解码期接受任意整数，语义校验消费声明值域；滑条窗口不是提交硬限额
+    /** 参数声明：解码期接受任意整数，语义校验消费声明值域；滑条窗口不是提交硬限额 */
     public static final IntSpec MIN = IntSpec.nullable(FIELD_MIN, MIN_Y, Integer.MAX_VALUE)
             .widened()
             .window(INITIAL_MIN, INITIAL_MAX)
@@ -46,13 +44,15 @@ public record YLevelCondition(Integer min, Integer max) implements Condition {
             .widened()
             .window(INITIAL_MIN, INITIAL_MAX)
             .initial(INITIAL_MAX);
-    public static final ParamList PARAMS = ParamList.of(MIN, MAX);
+    public static final ParamList<YLevelCondition> PARAMS = ParamList.of(
+            MIN.bind(YLevelCondition::min),
+            MAX.bind(YLevelCondition::max));
 
-    // 参数编解码器：两端均可选，缺省为 null
+    /** 参数编解码器：两端均可选，缺省为 null */
     public static MapCodec<YLevelCondition> codec() {
         return RecordCodecBuilder.mapCodec(instance -> instance.group(
-                MIN.fieldForNullable(value -> Optional.ofNullable(value.min())),
-                MAX.fieldForNullable(value -> Optional.ofNullable(value.max()))
+                PARAMS.nullableField(MIN),
+                PARAMS.nullableField(MAX)
         ).apply(instance, (min, max) -> new YLevelCondition(min.orElse(null), max.orElse(null))));
     }
 
@@ -62,32 +62,22 @@ public record YLevelCondition(Integer min, Integer max) implements Condition {
         return ID;
     }
 
-    // 条件类型定义，供注册表登记；静态工厂不能叫 type()（与 Condition#type 实例方法签名冲突）
+    /** 条件类型定义，供注册表登记；静态工厂不能叫 type()（与 Condition#type 实例方法签名冲突） */
     public static ConditionType<YLevelCondition> conditionType() {
         return new SimpleConditionType<>(ID, codec(), YLevelCondition::validateParams, YLevelEvaluator::test,
                 PARAMS);
     }
 
     /**
-     * 校验高度参数下界和区间顺序；世界限高不构成参数上限。
+     * 校验声明检查之外的区间顺序；端点值域由参数声明统一检查。
      *
      * @param params 待校验的高度区间
      * @param issues 参数问题收集器
      * @param fieldPath 当前条件的字段路径
-     * @return 两个端点及区间顺序是否均合法
+     * @return 区间顺序是否合法
      */
     public static boolean validateParams(YLevelCondition params, IssueCollector issues, String fieldPath) {
-        boolean valid = true;
-        if (params.min() != null) {
-            valid &= MIN.check(params.min(), issues, fieldPath,
-                    FIELD_MIN + " 不得低于 " + MIN.min() + "，当前为 " + params.min());
-        }
-        if (params.max() != null) {
-            valid &= MAX.check(params.max(), issues, fieldPath,
-                    FIELD_MAX + " 不得低于 " + MAX.min() + "，当前为 " + params.max());
-        }
-        valid &= ParamChecks.orderedRange(params.min(), params.max(), FIELD_MIN + "/" + FIELD_MAX, issues, fieldPath);
-        return valid;
+        return ParamChecks.orderedRange(params.min(), params.max(), FIELD_MIN + "/" + FIELD_MAX, issues, fieldPath);
     }
 
 }

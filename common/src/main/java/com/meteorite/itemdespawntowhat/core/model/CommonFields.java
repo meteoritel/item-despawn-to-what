@@ -36,7 +36,8 @@ public final class CommonFields {
             .label("common.chance");
 
     // 效果参数声明的公共尾部（延迟 + 概率），具体类型按「专属字段 + 公共字段」拼接
-    public static final ParamList EFFECT_PARAMS = ParamList.of(DELAY_TICKS, CHANCE);
+    public static final ParamList<Effect> EFFECT_PARAMS = ParamList.of(
+            DELAY_TICKS.bind(Effect::delayTicks), CHANCE.bind(Effect::chance));
 
     private CommonFields() {
         throw new UnsupportedOperationException("Utility class");

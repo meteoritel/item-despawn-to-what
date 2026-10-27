@@ -6,7 +6,6 @@ import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecutor;
 import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
-import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.param.IntSpec;
 import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
 import com.meteorite.itemdespawntowhat.core.model.CommonFields;
@@ -35,7 +34,7 @@ public record LightningEffect(
         double chance
 ) implements Effect {
 
-    // 效果类型 id，同时是 JSON 中 type 字段的取值
+    /** 效果类型 id，同时是 JSON 中 type 字段的取值 */
     public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(Constants.ID_NAMESPACE, "lightning");
 
     // 类型专属参数字段名
@@ -50,20 +49,18 @@ public record LightningEffect(
     public static final IntSpec COUNT = IntSpec
             .defaulted(COUNT_FIELD, DEFAULT_COUNT, MIN_COUNT, MAX_COUNT)
             .initial(DEFAULT_COUNT);
-    public static final ParamList PARAMS = ParamList.of(COUNT, CommonFields.DELAY_TICKS, CommonFields.CHANCE);
+    public static final ParamList<LightningEffect> PARAMS = ParamList.of(COUNT.bind(LightningEffect::count)).plus(CommonFields.EFFECT_PARAMS);
 
-    // 类型专属参数编解码器；通用字段复用 CommonFields 片段（codec 层不得产出 null）
+    /** 类型专属参数编解码器；通用字段复用 CommonFields 片段（codec 层不得产出 null） */
     public static MapCodec<LightningEffect> codec() {
         return RecordCodecBuilder.mapCodec(instance -> instance.group(
-                COUNT.fieldFor(LightningEffect::count),
-                CommonFields.DELAY_TICKS.fieldFor(LightningEffect::delayTicks),
-                CommonFields.CHANCE.fieldFor(LightningEffect::chance)
+                PARAMS.field(COUNT),
+                PARAMS.field(CommonFields.DELAY_TICKS),
+                PARAMS.field(CommonFields.CHANCE)
         ).apply(instance, LightningEffect::new));
     }
 
-    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。
-    // 显式实现执行器契约：闪电序列只能经预算内的执行状态推进，直接 execute 一律拒绝；
-    // 本类型没有自有的成功时输入，只声明准备阶段以让概率在成功转化当刻判定一次。
+    /** 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。；显式实现执行器契约：闪电序列只能经预算内的执行状态推进，直接 execute 一律拒绝；；本类型没有自有的成功时输入，只声明准备阶段以让概率在成功转化当刻判定一次。 */
     public static EffectType<LightningEffect> effectType() {
         EffectExecutor<LightningEffect> executor = new EffectExecutor<>() {
             @Override
@@ -83,13 +80,8 @@ public record LightningEffect(
                 return LightningExecutor.start(effect, context, preparation);
             }
         };
-        return new SimpleEffectType<>(ID, codec(), LightningEffect::validateParams, executor, true,
+        return new SimpleEffectType<>(ID, codec(), executor, true,
                 ProductKind.WORLD, PARAMS);
-    }
-
-    // 参数语义校验；问题写入 issues，不抛异常
-    public static boolean validateParams(LightningEffect params, IssueCollector issues, String fieldPath) {
-        return COUNT.check(params.count(), issues, fieldPath);
     }
 
     @Override

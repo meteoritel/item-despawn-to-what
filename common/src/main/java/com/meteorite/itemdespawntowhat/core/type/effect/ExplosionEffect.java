@@ -6,7 +6,6 @@ import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecutor;
 import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
-import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.param.BoolSpec;
 import com.meteorite.itemdespawntowhat.core.api.param.FloatSpec;
 import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
@@ -38,7 +37,7 @@ public record ExplosionEffect(
         double chance
 ) implements Effect {
 
-    // 效果类型 id，同时是 JSON 中 type 字段的取值
+    /** 效果类型 id，同时是 JSON 中 type 字段的取值 */
     public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(Constants.ID_NAMESPACE, "explosion");
 
     // 类型专属参数字段名
@@ -60,23 +59,20 @@ public record ExplosionEffect(
     public static final BoolSpec FIRE = BoolSpec.defaulted(FIRE_FIELD, DEFAULT_FIRE).initial(DEFAULT_FIRE);
     public static final BoolSpec VISUAL_ONLY = BoolSpec.defaulted(VISUAL_ONLY_FIELD, DEFAULT_VISUAL_ONLY)
             .initial(DEFAULT_VISUAL_ONLY);
-    public static final ParamList PARAMS = ParamList.of(POWER, FIRE, VISUAL_ONLY,
-            CommonFields.DELAY_TICKS, CommonFields.CHANCE);
+    public static final ParamList<ExplosionEffect> PARAMS = ParamList.of(POWER.bind(ExplosionEffect::power), FIRE.bind(ExplosionEffect::fire), VISUAL_ONLY.bind(ExplosionEffect::visualOnly)).plus(CommonFields.EFFECT_PARAMS);
 
-    // 类型专属参数编解码器；通用字段复用 CommonFields 片段（codec 层不得产出 null）
+    /** 类型专属参数编解码器；通用字段复用 CommonFields 片段（codec 层不得产出 null） */
     public static MapCodec<ExplosionEffect> codec() {
         return RecordCodecBuilder.mapCodec(instance -> instance.group(
-                POWER.fieldFor(ExplosionEffect::power),
-                FIRE.fieldFor(ExplosionEffect::fire),
-                VISUAL_ONLY.fieldFor(ExplosionEffect::visualOnly),
-                CommonFields.DELAY_TICKS.fieldFor(ExplosionEffect::delayTicks),
-                CommonFields.CHANCE.fieldFor(ExplosionEffect::chance)
+                PARAMS.field(POWER),
+                PARAMS.field(FIRE),
+                PARAMS.field(VISUAL_ONLY),
+                PARAMS.field(CommonFields.DELAY_TICKS),
+                PARAMS.field(CommonFields.CHANCE)
         ).apply(instance, ExplosionEffect::new));
     }
 
-    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。
-    // 显式实现执行器契约：爆炸只能经预算内的执行状态推进，直接 execute 一律拒绝；
-    // 本类型没有自有的成功时输入，只声明准备阶段以让概率在成功转化当刻判定一次。
+    /** 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。；显式实现执行器契约：爆炸只能经预算内的执行状态推进，直接 execute 一律拒绝；；本类型没有自有的成功时输入，只声明准备阶段以让概率在成功转化当刻判定一次。 */
     public static EffectType<ExplosionEffect> effectType() {
         EffectExecutor<ExplosionEffect> executor = new EffectExecutor<>() {
             @Override
@@ -96,13 +92,8 @@ public record ExplosionEffect(
                 return ExplosionExecutor.start(effect, context, preparation);
             }
         };
-        return new SimpleEffectType<>(ID, codec(), ExplosionEffect::validateParams, executor, true,
+        return new SimpleEffectType<>(ID, codec(), executor, true,
                 ProductKind.WORLD, PARAMS);
-    }
-
-    // 参数语义校验；问题写入 issues，不抛异常
-    public static boolean validateParams(ExplosionEffect params, IssueCollector issues, String fieldPath) {
-        return POWER.check(params.power(), issues, fieldPath);
     }
 
     @Override

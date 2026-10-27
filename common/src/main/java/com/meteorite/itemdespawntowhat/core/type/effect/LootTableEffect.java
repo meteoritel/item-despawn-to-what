@@ -6,7 +6,6 @@ import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecutor;
 import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
-import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.param.FloatSpec;
 import com.meteorite.itemdespawntowhat.core.api.param.ParamList;
@@ -42,7 +41,7 @@ public record LootTableEffect(
         double chance
 ) implements Effect, DynamicReferenceCheck {
 
-    // 效果类型 id，同时是 JSON 中 type 字段的取值
+    /** 效果类型 id，同时是 JSON 中 type 字段的取值 */
     public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(Constants.ID_NAMESPACE, "loot_table");
 
     // 类型专属参数字段名
@@ -54,37 +53,32 @@ public record LootTableEffect(
     public static final float MIN_LUCK = -100.0F;
     public static final float MAX_LUCK = 100.0F;
 
-    // 参数声明：类型专属字段在前，通用字段复用 CommonFields 的声明
+    /** 参数声明：类型专属字段在前，通用字段复用 CommonFields 的声明 */
     public static final ResLocSpec LOOT_TABLE = ResLocSpec.required(LOOT_TABLE_FIELD);
     public static final FloatSpec LUCK = FloatSpec.defaulted(LUCK_FIELD, DEFAULT_LUCK, MIN_LUCK, MAX_LUCK)
             .initial(DEFAULT_LUCK);
-    public static final ParamList PARAMS = ParamList.of(LOOT_TABLE, LUCK, CommonFields.DELAY_TICKS,
-            CommonFields.CHANCE);
+    public static final ParamList<LootTableEffect> PARAMS = ParamList.of(LOOT_TABLE.bind(LootTableEffect::lootTable), LUCK.bind(LootTableEffect::luck)).plus(CommonFields.EFFECT_PARAMS);
 
-    // 类型专属参数编解码器；通用字段复用 CommonFields 片段（codec 层不得产出 null）
+    /** 类型专属参数编解码器；通用字段复用 CommonFields 片段（codec 层不得产出 null） */
     public static MapCodec<LootTableEffect> codec() {
         return RecordCodecBuilder.mapCodec(instance -> instance.group(
-                LOOT_TABLE.fieldFor(LootTableEffect::lootTable),
-                LUCK.fieldFor(LootTableEffect::luck),
-                CommonFields.DELAY_TICKS.fieldFor(LootTableEffect::delayTicks),
-                CommonFields.CHANCE.fieldFor(LootTableEffect::chance)
+                PARAMS.field(LOOT_TABLE),
+                PARAMS.field(LUCK),
+                PARAMS.field(CommonFields.DELAY_TICKS),
+                PARAMS.field(CommonFields.CHANCE)
         ).apply(instance, LootTableEffect::new));
     }
 
-    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。
-    // 显式实现准备入口与按准备创建执行状态的重载：本次战利品在成功转化当刻开表一次并固定，
-    // 交付期不再读取原源实体、不再重开战利品表，也不再次随机抽取。
-    // 容量需求：产物类型未知，按「每组至少 1 件物品」对区域物品总量保守占用容量。
+    /** 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。；显式实现准备入口与按准备创建执行状态的重载：本次战利品在成功转化当刻开表一次并固定，；交付期不再读取原源实体、不再重开战利品表，也不再次随机抽取。；容量需求：产物类型未知，按「每组至少 1 件物品」对区域物品总量保守占用容量。 */
     public static EffectType<LootTableEffect> effectType() {
-        return new SimpleEffectType<>(ID, codec(), LootTableEffect::validateParams,
-                new EffectExecutor<>() {
+        return new SimpleEffectType<>(ID, codec(), new EffectExecutor<>() {
                     @Override
                     public EffectResult execute(LootTableEffect effect, EffectContext context) {
                         return LootTableExecutor.execute(effect, context);
                     }
 
                     @Override
-                    public @Nullable EffectPreparation prepare(LootTableEffect effect, ServerLevel level, Vec3 position,
+                    public EffectPreparation prepare(LootTableEffect effect, ServerLevel level, Vec3 position,
                                                                ItemEntity sourceEntity, ItemStack sourceStack,
                                                                boolean fillOrigin) {
                         // 战利品求值需要真实源实体作为 THIS_ENTITY，故这一步必须在源实体清空之前完成
@@ -103,13 +97,6 @@ public record LootTableEffect(
                         return LootTableExecutor.start(effect, context, preparation);
                     }
                 }, ProductKind.LOOT, params -> CapacityDemand.unspecified(1), PARAMS);
-    }
-
-    // 参数语义校验；战利品表是否存在由数据包机制保证，此处只校验必填与区间
-    public static boolean validateParams(LootTableEffect params, IssueCollector issues, String fieldPath) {
-        boolean valid = LOOT_TABLE.check(params.lootTable(), issues, fieldPath);
-        valid &= LUCK.check(params.luck(), issues, fieldPath);
-        return valid;
     }
 
     /**

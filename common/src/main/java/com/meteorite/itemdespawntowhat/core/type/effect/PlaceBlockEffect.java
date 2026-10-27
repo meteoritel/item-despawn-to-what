@@ -34,8 +34,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Optional;
-
 /**
  * place_block：在触发位置按指定形状放置方块。
  * block（TaggedId，可空）与 use_source_block 至少需要其一：前者放置指定方块，后者放置源物品对应的方块。
@@ -54,7 +52,7 @@ public record PlaceBlockEffect(
         double chance
 ) implements Effect {
 
-    // 效果类型 id，同时是 JSON 中 type 字段的取值
+    /** 效果类型 id，同时是 JSON 中 type 字段的取值 */
     public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(Constants.ID_NAMESPACE, "place_block");
 
     // 类型专属参数字段名
@@ -97,11 +95,11 @@ public record PlaceBlockEffect(
         CIRCLE,
         CROSS;
 
-        // JSON 取值：小写下划线，解析大小写不敏感
+        /** JSON 取值：小写下划线，解析大小写不敏感 */
         public static final Codec<Shape> CODEC = EnumCodecs.lowerCase(Shape.class);
     }
 
-    // 参数声明：类型专属字段在前，通用字段复用 CommonFields 的声明；limit 的滑块窗口按默认半径的方框容量取上限
+    /** 参数声明：类型专属字段在前，通用字段复用 CommonFields 的声明；limit 的滑块窗口按默认半径的方框容量取上限 */
     public static final RefSpec BLOCK = RefSpec.nullable(BLOCK_FIELD, "minecraft:block");
     public static final BoolSpec USE_SOURCE_BLOCK = BoolSpec.defaulted(USE_SOURCE_BLOCK_FIELD, DEFAULT_USE_SOURCE_BLOCK)
             .initial(DEFAULT_USE_SOURCE_BLOCK);
@@ -118,27 +116,25 @@ public record PlaceBlockEffect(
     public static final IntSpec LIMIT = IntSpec.nullable(LIMIT_FIELD, MIN_LIMIT, Integer.MAX_VALUE)
             .bounded()
             .window(MIN_LIMIT, limitUpperBound(DEFAULT_RADIUS));
-    public static final ParamList PARAMS = ParamList.of(BLOCK, USE_SOURCE_BLOCK, SHAPE, COUNT, RADIUS, LIMIT,
-            CommonFields.DELAY_TICKS, CommonFields.CHANCE);
+    public static final ParamList<PlaceBlockEffect> PARAMS = ParamList.of(BLOCK.bind(PlaceBlockEffect::block), USE_SOURCE_BLOCK.bind(PlaceBlockEffect::useSourceBlock), SHAPE.bind(PlaceBlockEffect::shape), COUNT.bind(PlaceBlockEffect::count), RADIUS.bind(PlaceBlockEffect::radius), LIMIT.bind(PlaceBlockEffect::limit)).plus(CommonFields.EFFECT_PARAMS);
 
-    // 类型专属参数编解码器；通用字段复用 CommonFields 片段，可空字段经 Optional 进入 codec
+    /** 类型专属参数编解码器；通用字段复用 CommonFields 片段，可空字段经 Optional 进入 codec */
     public static MapCodec<PlaceBlockEffect> codec() {
         return RecordCodecBuilder.mapCodec(instance -> instance.group(
-                BLOCK.fieldForNullable(effect -> Optional.ofNullable(effect.block())),
-                USE_SOURCE_BLOCK.fieldFor(PlaceBlockEffect::useSourceBlock),
-                SHAPE.fieldFor(PlaceBlockEffect::shape),
-                COUNT.fieldFor(PlaceBlockEffect::count),
-                RADIUS.fieldFor(PlaceBlockEffect::radius),
-                LIMIT.fieldForNullable(effect -> Optional.ofNullable(effect.limit())),
-                CommonFields.DELAY_TICKS.fieldFor(PlaceBlockEffect::delayTicks),
-                CommonFields.CHANCE.fieldFor(PlaceBlockEffect::chance)
+                PARAMS.nullableField(BLOCK),
+                PARAMS.field(USE_SOURCE_BLOCK),
+                PARAMS.field(SHAPE),
+                PARAMS.field(COUNT),
+                PARAMS.field(RADIUS),
+                PARAMS.nullableField(LIMIT),
+                PARAMS.field(CommonFields.DELAY_TICKS),
+                PARAMS.field(CommonFields.CHANCE)
         ).apply(instance, (block, useSourceBlock, shape, count, radius, limit, delayTicks, chance) ->
                 new PlaceBlockEffect(block.orElse(null), useSourceBlock, shape, count, radius,
                         limit.orElse(null), delayTicks, chance)));
     }
 
-    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。
-    // 显式实现执行状态入口：放置需要按预算分批推进，lambda 只能表达一次同步执行。
+    /** 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。；显式实现执行状态入口：放置需要按预算分批推进，lambda 只能表达一次同步执行。 */
     public static EffectType<PlaceBlockEffect> effectType() {
         EffectExecutor<PlaceBlockEffect> executor = new EffectExecutor<>() {
             @Override
@@ -170,9 +166,9 @@ public record PlaceBlockEffect(
                 PlaceBlockEffect::validateRuntimeLimits, executor, ProductKind.BLOCK, PARAMS);
     }
 
-    // 参数语义校验；问题写入 issues，不抛异常
+    /** 参数语义校验；问题写入 issues，不抛异常 */
     public static boolean validateParams(PlaceBlockEffect params, IssueCollector issues, String fieldPath) {
-        boolean valid = SHAPE.check(params.shape(), issues, fieldPath);
+        boolean valid = true;
         if (params.block() == null && !params.useSourceBlock()) {
             issues.error("block 与 use_source_block 至少需要其一，否则没有可放置的方块", null,
                     ParamChecks.child(fieldPath, BLOCK_FIELD));
@@ -180,13 +176,7 @@ public record PlaceBlockEffect(
         }
         valid &= RefChecks.check(params.block(), BuiltInRegistries.BLOCK, BLOCK_FIELD, issues,
                 ParamChecks.child(fieldPath, BLOCK_FIELD));
-        valid &= COUNT.check(params.count(), issues, fieldPath);
-        valid &= RADIUS.check(params.radius(), issues, fieldPath);
-        if (params.limit() != null && params.limit() < MIN_LIMIT) {
-            issues.error(LIMIT_FIELD + " 不能小于 " + MIN_LIMIT + "，当前为 " + params.limit(), null,
-                    ParamChecks.child(fieldPath, LIMIT_FIELD));
-            valid = false;
-        }
+
         return valid;
     }
 

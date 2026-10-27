@@ -3,12 +3,7 @@ package com.meteorite.itemdespawntowhat.core.api.param;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.mojang.serialization.Codec;
-import com.mojang.serialization.MapCodec;
-import com.mojang.serialization.codecs.RecordCodecBuilder;
 import org.jetbrains.annotations.Nullable;
-
-import java.util.Optional;
-import java.util.function.Function;
 
 /**
  * 整数参数声明：覆盖必填、可省略与可空三种出现形态。
@@ -16,7 +11,7 @@ import java.util.function.Function;
  * 为假时解码期接受任意整数、由 {@link #check} 在语义校验阶段报错（条件类型沿用这种「解码宽、校验严」的形态）。</p>
  */
 public record IntSpec(ParamMeta meta, int min, int max, int codecDefault, boolean codecBounded,
-                      @Nullable Integer windowMin, @Nullable Integer windowMax) implements ParamSpec {
+                      @Nullable Integer windowMin, @Nullable Integer windowMax) implements ParamSpec<Integer> {
 
     public IntSpec {
         if (min > max) {
@@ -84,28 +79,14 @@ public record IntSpec(ParamMeta meta, int min, int max, int codecDefault, boolea
         return new IntSpec(meta, this.min, this.max, codecDefault, codecBounded, min, max);
     }
 
-    // 按 presence 生成字段构造器：必填用 fieldOf，可省略用带默认值的 optionalFieldOf
-    public <O> RecordCodecBuilder<O, Integer> fieldFor(Function<O, Integer> getter) {
-        Codec<Integer> codec = valueCodec();
-        MapCodec<Integer> field = presence() == ParamPresence.REQUIRED
-                ? codec.fieldOf(name())
-                : codec.optionalFieldOf(name(), codecDefault);
-        return field.forGetter(getter);
-    }
-
-    // 可空字段：返回 Optional，由调用方在 apply 时 orElse(null)
-    public <O> RecordCodecBuilder<O, Optional<Integer>> fieldForNullable(Function<O, Optional<Integer>> getter) {
-        return valueCodec().optionalFieldOf(name()).forGetter(getter);
-    }
-
     /** 校验字段的出现形态与声明值域，并以声明名称定位问题。 */
     @Override
-    public boolean check(@Nullable Object value, IssueCollector issues, String fieldPath) {
+    public boolean check(@Nullable Integer value, IssueCollector issues, String fieldPath) {
         String path = ParamChecks.child(fieldPath, name());
         if (value == null) {
             return !required() || ParamChecks.required(null, name(), issues, path);
         }
-        return ParamChecks.inRange((Integer) value, min, max, name(), issues, path);
+        return ParamChecks.inRange(value, min, max, name(), issues, path);
     }
 
     /** 使用声明值域校验整数，并保留业务专用的错误文案。 */
@@ -114,8 +95,8 @@ public record IntSpec(ParamMeta meta, int min, int max, int codecDefault, boolea
     }
 
     @Override
-    public @Nullable Object defaultValue() {
-        return presence() == ParamPresence.DEFAULTED ? codecDefault : null;
+    public @Nullable Integer defaultValue() {
+        return meta.defaultValue(codecDefault);
     }
 
     @Override

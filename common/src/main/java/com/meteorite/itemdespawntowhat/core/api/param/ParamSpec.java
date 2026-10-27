@@ -5,6 +5,7 @@ import com.mojang.serialization.Codec;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * 单个类型参数的唯一事实来源：字段名、wire presence、取值域、默认值、新建初值与编辑器投影信息。
@@ -12,7 +13,7 @@ import java.util.List;
  * <p>声明只覆盖单字段事实：跨字段关系（区间顺序、模式相关必填）、注册表引用存在性与服务端运行期上限
  * 仍由各类型的 validateParams / validateRuntimeLimits 负责。</p>
  */
-public sealed interface ParamSpec permits IntSpec, FloatSpec, DoubleSpec, BoolSpec, EnumSpec, RefSpec,
+public sealed interface ParamSpec<V> permits IntSpec, FloatSpec, DoubleSpec, BoolSpec, EnumSpec, RefSpec,
         RefListSpec, ResLocSpec, ResLocListSpec, MapSpec, NestedSpec, NestedListSpec {
 
     // 声明元数据
@@ -79,14 +80,14 @@ public sealed interface ParamSpec permits IntSpec, FloatSpec, DoubleSpec, BoolSp
     }
 
     // 省略该字段时后端采用的默认值；必填与可空字段没有默认值
-    @Nullable Object defaultValue();
+    @Nullable V defaultValue();
 
     /**
      * 参数 wire 值的编解码器（不含字段包装与 presence）。
      * <p>新建初值与省略字段默认值的编辑器投影都从这里编码，避免编辑器再维护一套 Java 对象到 JSON 的转换规则；
      * 声明因此同时约束 wire 形态与预填形态。</p>
      */
-    Codec<?> valueCodec();
+    Codec<V> valueCodec();
 
     /**
      * 单字段语义校验：值域与必填；跨字段关系由类型自己校验。
@@ -96,5 +97,16 @@ public sealed interface ParamSpec permits IntSpec, FloatSpec, DoubleSpec, BoolSp
      * @param fieldPath 该参数对象在规则中的字段路径
      * @return 是否合法
      */
-    boolean check(@Nullable Object value, IssueCollector issues, String fieldPath);
+    boolean check(@Nullable V value, IssueCollector issues, String fieldPath);
+
+    /**
+     * 将声明与所属参数对象的取值绑定；codec 字段和批量校验共用该 getter。
+     *
+     * @param getter 从参数对象读取本字段的函数，可空字段直接返回 null
+     * @return 不可变字段绑定
+     */
+    default <P> ParamBinding<P, V> bind(Function<? super P, ? extends V> getter) {
+        return new ParamBinding<>(this, getter);
+    }
+
 }

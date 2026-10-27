@@ -6,7 +6,6 @@ import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecutor;
 import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
-import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.param.BoolSpec;
 import com.meteorite.itemdespawntowhat.core.api.param.EnumSpec;
 import com.meteorite.itemdespawntowhat.core.api.param.IntSpec;
@@ -41,7 +40,7 @@ public record WeatherEffect(
         double chance
 ) implements Effect {
 
-    // 效果类型 id，同时是 JSON 中 type 字段的取值
+    /** 效果类型 id，同时是 JSON 中 type 字段的取值 */
     public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(Constants.ID_NAMESPACE, "weather");
 
     // 类型专属参数字段名
@@ -60,7 +59,7 @@ public record WeatherEffect(
         RAIN,
         CLEAR;
 
-        // JSON 取值：小写下划线，解析大小写不敏感
+        /** JSON 取值：小写下划线，解析大小写不敏感 */
         public static final Codec<Mode> CODEC = EnumCodecs.lowerCase(Mode.class);
     }
 
@@ -73,23 +72,20 @@ public record WeatherEffect(
             .initial(DEFAULT_DURATION_TICKS);
     public static final BoolSpec THUNDERING = BoolSpec.defaulted(THUNDERING_FIELD, DEFAULT_THUNDERING)
             .initial(DEFAULT_THUNDERING);
-    public static final ParamList PARAMS = ParamList.of(MODE, DURATION_TICKS, THUNDERING,
-            CommonFields.DELAY_TICKS, CommonFields.CHANCE);
+    public static final ParamList<WeatherEffect> PARAMS = ParamList.of(MODE.bind(WeatherEffect::mode), DURATION_TICKS.bind(WeatherEffect::durationTicks), THUNDERING.bind(WeatherEffect::thundering)).plus(CommonFields.EFFECT_PARAMS);
 
-    // 类型专属参数编解码器；通用字段复用 CommonFields 片段（codec 层不得产出 null）
+    /** 类型专属参数编解码器；通用字段复用 CommonFields 片段（codec 层不得产出 null） */
     public static MapCodec<WeatherEffect> codec() {
         return RecordCodecBuilder.mapCodec(instance -> instance.group(
-                MODE.fieldFor(WeatherEffect::mode),
-                DURATION_TICKS.fieldFor(WeatherEffect::durationTicks),
-                THUNDERING.fieldFor(WeatherEffect::thundering),
-                CommonFields.DELAY_TICKS.fieldFor(WeatherEffect::delayTicks),
-                CommonFields.CHANCE.fieldFor(WeatherEffect::chance)
+                PARAMS.field(MODE),
+                PARAMS.field(DURATION_TICKS),
+                PARAMS.field(THUNDERING),
+                PARAMS.field(CommonFields.DELAY_TICKS),
+                PARAMS.field(CommonFields.CHANCE)
         ).apply(instance, WeatherEffect::new));
     }
 
-    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。
-    // 显式实现准备入口：概率在成功转化当刻判定，天气世界写延后到到期时按固定输入执行；
-    // 需要准备的类型用显式实现覆盖 prepare 与按准备创建执行状态的重载（lambda 只能表达 execute）。
+    /** 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。；显式实现准备入口：概率在成功转化当刻判定，天气世界写延后到到期时按固定输入执行；；需要准备的类型用显式实现覆盖 prepare 与按准备创建执行状态的重载（lambda 只能表达 execute）。 */
     public static EffectType<WeatherEffect> effectType() {
         EffectExecutor<WeatherEffect> executor = new EffectExecutor<>() {
             @Override
@@ -110,15 +106,8 @@ public record WeatherEffect(
                 return WeatherExecutor.start(effect, context, preparation);
             }
         };
-        return new SimpleEffectType<>(ID, codec(), WeatherEffect::validateParams, executor, true,
+        return new SimpleEffectType<>(ID, codec(), executor, true,
                 ProductKind.WORLD, PARAMS);
-    }
-
-    // 参数语义校验；问题写入 issues，不抛异常
-    public static boolean validateParams(WeatherEffect params, IssueCollector issues, String fieldPath) {
-        boolean valid = MODE.check(params.mode(), issues, fieldPath);
-        valid &= DURATION_TICKS.check(params.durationTicks(), issues, fieldPath);
-        return valid;
     }
 
     @Override

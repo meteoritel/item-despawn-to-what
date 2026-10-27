@@ -40,18 +40,18 @@ public sealed interface EntityProduct permits EntityProduct.Item, EntityProduct.
     boolean validate(IssueCollector issues, String path);
 
     // 产出子类对应的参数声明
-    default ParamList params() {
+    default ParamList<?> params() {
         return variantParams(variant());
     }
 
     // 按 variant 取参数声明；未知子类没有声明
-    static ParamList variantParams(String variant) {
+    static ParamList<?> variantParams(String variant) {
         return switch (variant) {
             case "item" -> Item.PARAMS;
             case "mob" -> Mob.PARAMS;
             case "entity" -> Generic.PARAMS;
             case "experience" -> Experience.PARAMS;
-            default -> ParamList.EMPTY;
+            default -> ParamList.empty();
         };
     }
 
@@ -107,19 +107,18 @@ public sealed interface EntityProduct permits EntityProduct.Item, EntityProduct.
         public static final IntSpec COUNT = IntSpec.defaulted(COUNT_FIELD, 1, 1, 64)
                 .initial(1)
                 .label("spawn_item.count");
-        public static final ParamList PARAMS = ParamList.of(ITEM, COUNT);
+        public static final ParamList<Item> PARAMS = ParamList.of(ITEM.bind(Item::item), COUNT.bind(Item::count));
 
         public static final MapCodec<Item> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-                ITEM.fieldFor(Item::item),
-                COUNT.fieldFor(Item::count)
+                PARAMS.field(ITEM),
+                PARAMS.field(COUNT)
         ).apply(instance, Item::new));
         @Override public String variant() { return "item"; }
         @Override public ProductKind productKind() { return ProductKind.ENTITY_ITEM; }
         @Override public boolean validate(IssueCollector issues, String path) {
             String field = ParamChecks.child(path, ITEM_FIELD);
-            boolean valid = ITEM.check(item, issues, path);
+            boolean valid = PARAMS.check(this, issues, path);
             valid &= RefChecks.check(item, BuiltInRegistries.ITEM, ITEM_FIELD, issues, field);
-            valid &= COUNT.check(count, issues, path);
             return valid;
         }
     }
@@ -138,16 +137,20 @@ public sealed interface EntityProduct permits EntityProduct.Item, EntityProduct.
         public static final IntSpec COUNT = IntSpec.defaulted(COUNT_FIELD, 1, 1, 64)
                 .initial(1)
                 .label("spawn_entity.count");
-        public static final ParamList PARAMS = ParamList.of(ENTITY, COUNT);
+        public static final ParamList<Generic> PARAMS = ParamList.of(
+                ENTITY.bind(Generic::entity),
+                COUNT.bind(Generic::count));
 
         public static final MapCodec<Generic> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-                ENTITY.fieldFor(Generic::entity),
-                COUNT.fieldFor(Generic::count)
+                PARAMS.field(ENTITY),
+                PARAMS.field(COUNT)
         ).apply(instance, Generic::new));
         @Override public String variant() { return "entity"; }
         @Override public ProductKind productKind() { return ProductKind.ENTITY_ENTITY; }
         @Override public boolean validate(IssueCollector issues, String path) {
-            return checkSpawnable(entity, count, ENTITY, COUNT, issues, path);
+            boolean valid = PARAMS.check(this, issues, path);
+            valid &= checkSpawnable(entity, ENTITY_FIELD, issues, path);
+            return valid;
         }
     }
 
@@ -176,30 +179,30 @@ public sealed interface EntityProduct permits EntityProduct.Item, EntityProduct.
                 .label("spawn_entity.age")
                 .presets(new ParamPreset(String.valueOf(BABY_AGE), "preset.baby"),
                         new ParamPreset(String.valueOf(ADULT_AGE), "preset.adult"));
-        public static final ParamList PARAMS = ParamList.of(ENTITY, COUNT, AGE);
+        public static final ParamList<Mob> PARAMS = ParamList.of(
+                ENTITY.bind(Mob::entity),
+                COUNT.bind(Mob::count),
+                AGE.bind(Mob::age));
 
         public static final MapCodec<Mob> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-                ENTITY.fieldFor(Mob::entity),
-                COUNT.fieldFor(Mob::count),
-                AGE.fieldFor(Mob::age)
+                PARAMS.field(ENTITY),
+                PARAMS.field(COUNT),
+                PARAMS.field(AGE)
         ).apply(instance, Mob::new));
         @Override public String variant() { return "mob"; }
         @Override public ProductKind productKind() { return ProductKind.ENTITY_MOB; }
         @Override public boolean validate(IssueCollector issues, String path) {
-            boolean valid = checkSpawnable(entity, count, ENTITY, COUNT, issues, path);
-            // 年龄只表达「幼年到成年」：正值是成年个体的繁殖冷却，不属于生成语义，一律拒载
-            valid &= AGE.check(age, issues, path);
+            boolean valid = PARAMS.check(this, issues, path);
+            valid &= checkSpawnable(entity, ENTITY_FIELD, issues, path);
             return valid;
         }
     }
 
-    // 生物档与其他实体档共用的实体参数校验：引用存在、数量范围，且不得指向掉落物/经验球。
-    private static boolean checkSpawnable(TaggedId entity, int count, RefSpec entitySpec, IntSpec countSpec,
+    // 生物档与其他实体档共用的引用与类别检查；数量和年龄由各自声明校验。
+    private static boolean checkSpawnable(TaggedId entity, String fieldName,
                                           IssueCollector issues, String path) {
-        String field = ParamChecks.child(path, entitySpec.name());
-        boolean valid = entitySpec.check(entity, issues, path);
-        valid &= RefChecks.check(entity, BuiltInRegistries.ENTITY_TYPE, entitySpec.name(), issues, field);
-        valid &= countSpec.check(count, issues, path);
+        String field = ParamChecks.child(path, fieldName);
+        boolean valid = RefChecks.check(entity, BuiltInRegistries.ENTITY_TYPE, fieldName, issues, field);
         if (entity != null) {
             if (matchesAny(entity, EntityProduct::isSpecial)) {
                 issues.error("掉落物和经验球请使用对应的专用产出子类", null, field);
@@ -257,15 +260,15 @@ public sealed interface EntityProduct permits EntityProduct.Item, EntityProduct.
         public static final IntSpec AMOUNT = IntSpec.defaulted(AMOUNT_FIELD, 1, 1, 65536)
                 .initial(1)
                 .label("spawn_xp.amount");
-        public static final ParamList PARAMS = ParamList.of(AMOUNT);
+        public static final ParamList<Experience> PARAMS = ParamList.of(AMOUNT.bind(Experience::amount));
 
         public static final MapCodec<Experience> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-                AMOUNT.fieldFor(Experience::amount)
+                PARAMS.field(AMOUNT)
         ).apply(instance, Experience::new));
         @Override public String variant() { return "experience"; }
         @Override public ProductKind productKind() { return ProductKind.ENTITY_EXPERIENCE; }
         @Override public boolean validate(IssueCollector issues, String path) {
-            return AMOUNT.check(amount, issues, path);
+            return PARAMS.check(this, issues, path);
         }
     }
 }

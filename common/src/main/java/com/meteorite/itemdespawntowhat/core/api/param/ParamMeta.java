@@ -1,6 +1,9 @@
 package com.meteorite.itemdespawntowhat.core.api.param;
 
 import org.jetbrains.annotations.Nullable;
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.MapCodec;
+import java.util.Optional;
 
 import java.util.List;
 import java.util.Objects;
@@ -78,4 +81,24 @@ public record ParamMeta(
         return new ParamMeta(name, presence, unit, shape, labelSuffix, hintSuffix, initialValue,
                 editorRequired, editorVisible, List.of(values));
     }
+
+    /** 从 wire presence 派生非空字段构件；可空字段使用 nullableField。 */
+    public <V> MapCodec<V> field(Codec<V> codec, @Nullable V defaultValue) {
+        return switch (presence) {
+            case REQUIRED -> codec.fieldOf(name);
+            case DEFAULTED -> codec.optionalFieldOf(name, Objects.requireNonNull(defaultValue));
+            case NULLABLE -> throw new IllegalStateException("可空参数应使用 nullableField: " + name);
+        };
+    }
+
+    /** 可空字段在 codec 层经 Optional 中转，记录构造时才落为 null。 */
+    public <V> MapCodec<Optional<V>> nullableField(Codec<V> codec) {
+        return codec.optionalFieldOf(name);
+    }
+
+    /** 只有可省略字段拥有缺省值，必填与可空字段返回 null。 */
+    public <V> @Nullable V defaultValue(V value) {
+        return presence == ParamPresence.DEFAULTED ? value : null;
+    }
+
 }

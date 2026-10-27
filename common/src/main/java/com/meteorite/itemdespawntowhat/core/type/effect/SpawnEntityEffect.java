@@ -28,20 +28,19 @@ import org.jetbrains.annotations.Nullable;
 public record SpawnEntityEffect(EntityProduct product, int delayTicks, double chance) implements Effect {
     public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(Constants.ID_NAMESPACE, "spawn_entity");
 
-    // 类型自身没有专属参数：产出子类的字段由 EntityProduct.PARAMS 按 variant 声明
-    public static final ParamList PARAMS = CommonFields.EFFECT_PARAMS;
+    /** 类型自身没有专属参数：产出子类的字段由 EntityProduct.PARAMS 按 variant 声明 */
+    public static final ParamList<SpawnEntityEffect> PARAMS = ParamList.<SpawnEntityEffect>empty().plus(CommonFields.EFFECT_PARAMS);
 
-    // 专用参数与公共字段同层编码，方便直接使用子类编辑表单。
+    /** 专用参数与公共字段同层编码，方便直接使用子类编辑表单。 */
     public static MapCodec<SpawnEntityEffect> codec() {
         return RecordCodecBuilder.mapCodec(instance -> instance.group(
                 EntityProduct.CODEC.forGetter(SpawnEntityEffect::product),
-                CommonFields.DELAY_TICKS.fieldFor(SpawnEntityEffect::delayTicks),
-                CommonFields.CHANCE.fieldFor(SpawnEntityEffect::chance)
+                PARAMS.field(CommonFields.DELAY_TICKS),
+                PARAMS.field(CommonFields.CHANCE)
         ).apply(instance, SpawnEntityEffect::new));
     }
 
-    // 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。
-    // 显式实现准备入口：三个产出子类的引用与产出量都在成功转化当刻固定，交付期不再读原源实体。
+    /** 效果类型定义：id + 参数编解码器 + 参数校验器 + 服务端执行器。；显式实现准备入口：三个产出子类的引用与产出量都在成功转化当刻固定，交付期不再读原源实体。 */
     public static EffectType<SpawnEntityEffect> effectType() {
         EffectExecutor<SpawnEntityEffect> executor = new EffectExecutor<>() {
             @Override
@@ -85,7 +84,7 @@ public record SpawnEntityEffect(EntityProduct product, int delayTicks, double ch
         };
     }
 
-    // 参数语义校验：子类选择必填，随后交给对应子类校验自身字段
+    /** 参数语义校验：子类选择必填，随后交给对应子类校验自身字段 */
     public static boolean validateParams(SpawnEntityEffect effect, IssueCollector issues, String path) {
         if (effect.product() == null) {
             issues.error("请选择实体产出子类", null, path + ".variant");

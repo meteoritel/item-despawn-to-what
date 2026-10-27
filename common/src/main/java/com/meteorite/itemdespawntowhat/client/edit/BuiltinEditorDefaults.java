@@ -82,7 +82,7 @@ public final class BuiltinEditorDefaults {
             if (type != null) {
                 TypeDefinition<?> definition = types.getOrNull(type);
                 if (definition != null) {
-                    ParamSpec spec = definition.params().get(field);
+                    ParamSpec<?> spec = definition.params().get(field);
                     if (spec == null && definition instanceof EffectType<?> && SpawnEntityEffect.ID.equals(type)) {
                         // variant 由产出分发决定，不属于外层参数声明；按当前子类展示默认值
                         String variant = object.text(VARIANT, EntityProduct.DEFAULT_VARIANT);
@@ -119,7 +119,7 @@ public final class BuiltinEditorDefaults {
     }
 
     // 把声明里的新建初值按各自的 wire codec 写入 JSON；没有初值的字段保持省略，交给校验定位
-    private static void writeInitials(JsonObject body, ParamList params) {
+    private static void writeInitials(JsonObject body, ParamList<?> params) {
         for (ParamList.ParamValue value : params.initialValues()) {
             JsonElement element = encode(value.spec(), value.value());
             if (element != null) {
@@ -129,7 +129,7 @@ public final class BuiltinEditorDefaults {
     }
 
     // 用声明自带的 codec 编码初值/默认值，避免编辑器维护第二套类型转换规则；编码失败返回 null（不写入）
-    private static @Nullable JsonElement encode(ParamSpec spec, @Nullable Object value) {
+    private static @Nullable JsonElement encode(ParamSpec<?> spec, @Nullable Object value) {
         if (value == null) {
             return null;
         }
@@ -139,7 +139,7 @@ public final class BuiltinEditorDefaults {
     }
 
     // 规则值出口：null 表示该字段没有可展示的默认值
-    private static @Nullable RuleValue toRuleValue(ParamSpec spec, @Nullable Object value) {
+    private static @Nullable RuleValue toRuleValue(ParamSpec<?> spec, @Nullable Object value) {
         JsonElement element = encode(spec, value);
         return element == null ? null : RuleValue.wrap(element);
     }

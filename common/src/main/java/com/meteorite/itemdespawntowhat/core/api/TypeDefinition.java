@@ -17,11 +17,11 @@ public interface TypeDefinition<P> {
     MapCodec<P> codec();
 
     // 该类型参数的声明；默认没有参数（第三方类型沿用只读 JSON 回退）
-    default ParamList params() {
-        return ParamList.EMPTY;
+    default ParamList<? super P> params() {
+        return ParamList.empty();
     }
 
-    // 校验类型专属参数的语义合法性；默认通过，具体类型按需重写
+    /** 声明检查之外的业务语义钩子；规则校验入口先执行 params 的批量检查，再调用本方法。 */
     default boolean validateParams(P params, IssueCollector issues, String fieldPath) {
         return true;
     }

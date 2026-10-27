@@ -19,7 +19,6 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 
-import java.util.Optional;
 import java.util.List;
 
 /**
@@ -38,7 +37,7 @@ public record FluidPresentCondition(TaggedId fluid, List<TaggedId> fluids) imple
     // minecraft:empty 在流体注册表中存在，但永远不可能匹配到任何实际流体
     private static final ResourceLocation EMPTY_FLUID = ResourceLocation.withDefaultNamespace("empty");
 
-    // 参数声明：fluid 为历史单值字段（可空），fluids 为优先使用的列表；两者共用同一组界面文案
+    /** 参数声明：fluid 为历史单值字段（可空），fluids 为优先使用的列表；两者共用同一组界面文案 */
     public static final RefSpec FLUID = RefSpec.nullable(FIELD_FLUID, "minecraft:fluid")
             .label("fluid_present.fluid")
             .hidden();
@@ -46,13 +45,15 @@ public record FluidPresentCondition(TaggedId fluid, List<TaggedId> fluids) imple
             .defaultedEmpty(RuleFields.FLUIDS, "minecraft:fluid")
             .label("fluid_present.fluid")
             .hint("fluid_present.fluid.hint");
-    public static final ParamList PARAMS = ParamList.of(FLUID, FLUIDS);
+    public static final ParamList<FluidPresentCondition> PARAMS = ParamList.of(
+            FLUID.bind(FluidPresentCondition::fluid),
+            FLUIDS.bind(FluidPresentCondition::fluids));
 
     /** 参数编解码器：fluid 缺省为 null（任意流体）。 */
     public static MapCodec<FluidPresentCondition> codec() {
         return RecordCodecBuilder.mapCodec(instance -> instance.group(
-                FLUID.fieldForNullable(value -> Optional.ofNullable(value.fluid())),
-                FLUIDS.fieldFor(FluidPresentCondition::fluids)
+                PARAMS.nullableField(FLUID),
+                PARAMS.field(FLUIDS)
         ).apply(instance, (fluid, fluids) -> new FluidPresentCondition(fluid.orElse(null), fluids)));
     }
 

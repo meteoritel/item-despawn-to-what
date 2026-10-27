@@ -37,9 +37,9 @@ public final class ParamProjection {
     }
 
     // 投影整组参数；顺序即声明顺序，也就是表单展示顺序
-    public static List<EditorField> fields(ParamList params, ResourceLocation typeId) {
+    public static List<EditorField> fields(ParamList<?> params, ResourceLocation typeId) {
         List<EditorField> fields = new ArrayList<>();
-        for (ParamSpec spec : params.all()) {
+        for (ParamSpec<?> spec : params.all()) {
             if (!spec.editorVisible()) {
                 continue;
             }
@@ -49,7 +49,7 @@ public final class ParamProjection {
     }
 
     // 投影单个参数
-    public static EditorField field(ParamSpec spec, ResourceLocation typeId) {
+    public static EditorField field(ParamSpec<?> spec, ResourceLocation typeId) {
         String label = labelKey(spec, typeId);
         EditorField field = switch (spec) {
             case IntSpec intSpec -> intField(intSpec, label);
@@ -84,7 +84,7 @@ public final class ParamProjection {
     }
 
     // 字段 label key：显式后缀优先，否则按「类型片段.字段名」推导
-    public static String labelKey(ParamSpec spec, ResourceLocation typeId) {
+    public static String labelKey(ParamSpec<?> spec, ResourceLocation typeId) {
         String suffix = spec.labelSuffix() != null
                 ? spec.labelSuffix()
                 : TypeLabels.typeSegment(typeId) + "." + spec.name();

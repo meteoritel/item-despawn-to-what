@@ -4,17 +4,15 @@ import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.mojang.serialization.Codec;
-import com.mojang.serialization.codecs.RecordCodecBuilder;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
-import java.util.function.Function;
 
 /**
  * 注册表引用列表参数声明：列表字段缺省为空表，可标记为非空必填。
  * <p>列表内每一项是否真实存在由类型在 validateParams 里查 RefChecks。</p>
  */
-public record RefListSpec(ParamMeta meta, String registry, boolean nonEmpty) implements ParamSpec {
+public record RefListSpec(ParamMeta meta, String registry, boolean nonEmpty) implements ParamSpec<List<TaggedId>> {
 
     // 可省略列表：缺失为空表
     public static RefListSpec defaultedEmpty(String name, String registry) {
@@ -44,25 +42,21 @@ public record RefListSpec(ParamMeta meta, String registry, boolean nonEmpty) imp
         return withMeta(meta.withInitial(value));
     }
 
-    public <O> RecordCodecBuilder<O, List<TaggedId>> fieldFor(Function<O, List<TaggedId>> getter) {
-        return valueCodec().optionalFieldOf(name(), List.of()).forGetter(getter);
-    }
-
     @Override
     public Codec<List<TaggedId>> valueCodec() {
         return TaggedId.CODEC.listOf();
     }
 
     @Override
-    public boolean check(@Nullable Object value, IssueCollector issues, String fieldPath) {
+    public boolean check(@Nullable List<TaggedId> value, IssueCollector issues, String fieldPath) {
         if (!nonEmpty) {
             return true;
         }
-        return ParamChecks.notEmpty((List<?>) value, name(), issues, ParamChecks.child(fieldPath, name()));
+        return ParamChecks.notEmpty(value, name(), issues, ParamChecks.child(fieldPath, name()));
     }
 
     @Override
-    public Object defaultValue() {
+    public List<TaggedId> defaultValue() {
         return List.of();
     }
 

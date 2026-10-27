@@ -4,17 +4,13 @@ import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.mojang.serialization.Codec;
-import com.mojang.serialization.codecs.RecordCodecBuilder;
 import org.jetbrains.annotations.Nullable;
-
-import java.util.Optional;
-import java.util.function.Function;
 
 /**
  * 单个注册表引用参数声明（物品、方块、实体、流体等）。
  * <p>注册表名只用于编辑器选择器的候选范围；引用是否真实存在由类型在 validateParams 里查 RefChecks。</p>
  */
-public record RefSpec(ParamMeta meta, String registry) implements ParamSpec {
+public record RefSpec(ParamMeta meta, String registry) implements ParamSpec<TaggedId> {
 
     // 必填引用
     public static RefSpec required(String name, String registry) {
@@ -47,15 +43,7 @@ public record RefSpec(ParamMeta meta, String registry) implements ParamSpec {
         return withMeta(meta.withEditorVisible(false));
     }
 
-    public <O> RecordCodecBuilder<O, TaggedId> fieldFor(Function<O, TaggedId> getter) {
-        return valueCodec().fieldOf(name()).forGetter(getter);
-    }
-
     // 可空引用：返回 Optional，由调用方在 apply 时 orElse(null)
-    public <O> RecordCodecBuilder<O, Optional<TaggedId>> fieldForNullable(
-            Function<O, Optional<TaggedId>> getter) {
-        return valueCodec().optionalFieldOf(name()).forGetter(getter);
-    }
 
     @Override
     public Codec<TaggedId> valueCodec() {
@@ -63,7 +51,7 @@ public record RefSpec(ParamMeta meta, String registry) implements ParamSpec {
     }
 
     @Override
-    public boolean check(@Nullable Object value, IssueCollector issues, String fieldPath) {
+    public boolean check(@Nullable TaggedId value, IssueCollector issues, String fieldPath) {
         if (!required()) {
             return true;
         }
@@ -71,7 +59,7 @@ public record RefSpec(ParamMeta meta, String registry) implements ParamSpec {
     }
 
     @Override
-    public @Nullable Object defaultValue() {
+    public @Nullable TaggedId defaultValue() {
         return null;
     }
 

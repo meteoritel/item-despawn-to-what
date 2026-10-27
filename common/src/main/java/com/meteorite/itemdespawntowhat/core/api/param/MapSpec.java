@@ -1,20 +1,19 @@
 package com.meteorite.itemdespawntowhat.core.api.param;
 
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
+import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
 import com.mojang.serialization.Codec;
-import com.mojang.serialization.codecs.RecordCodecBuilder;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Map;
-import java.util.function.Function;
 
 /**
  * 注册表引用到整数的映射参数声明（如按物品/标签指定消耗数量）。
  * <p>键的真实性由类型在 validateParams 里查 RefChecks；编辑器按 {@code keyRegistry} 取候选与展示名，
- * 值的区间在解码期即生效。</p>
+ * 值的区间在 codec 与声明校验中保持一致。</p>
  */
-public record MapSpec(ParamMeta meta, String keyRegistry, int minValue, int maxValue) implements ParamSpec {
+public record MapSpec(ParamMeta meta, String keyRegistry, int minValue, int maxValue) implements ParamSpec<Map<TaggedId, Integer>> {
 
     // 可省略映射：缺失为空表
     public static MapSpec defaultedEmpty(String name, String keyRegistry, int minValue, int maxValue) {
@@ -29,23 +28,27 @@ public record MapSpec(ParamMeta meta, String keyRegistry, int minValue, int maxV
         return withMeta(meta.withHint(suffix));
     }
 
-    public <O> RecordCodecBuilder<O, Map<TaggedId, Integer>> fieldFor(
-            Function<O, Map<TaggedId, Integer>> getter) {
-        return valueCodec().optionalFieldOf(name(), Map.of()).forGetter(getter);
-    }
-
     @Override
     public Codec<Map<TaggedId, Integer>> valueCodec() {
         return Codec.unboundedMap(TaggedId.CODEC, Codec.intRange(minValue, maxValue));
     }
 
     @Override
-    public boolean check(@Nullable Object value, IssueCollector issues, String fieldPath) {
-        return true;
+    public boolean check(@Nullable Map<TaggedId, Integer> value, IssueCollector issues, String fieldPath) {
+        if (value == null) {
+            return !required() || ParamChecks.required(null, name(), issues, ParamChecks.child(fieldPath, name()));
+        }
+        boolean valid = true;
+        String path = ParamChecks.child(fieldPath, name());
+        for (Map.Entry<TaggedId, Integer> entry : value.entrySet()) {
+            valid &= ParamChecks.inRange(entry.getValue(), minValue, maxValue, name(), issues,
+                    ParamChecks.child(path, entry.getKey().serialized()));
+        }
+        return valid;
     }
 
     @Override
-    public Object defaultValue() {
+    public Map<TaggedId, Integer> defaultValue() {
         return Map.of();
     }
 

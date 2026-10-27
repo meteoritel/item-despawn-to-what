@@ -3,17 +3,14 @@ package com.meteorite.itemdespawntowhat.core.api.param;
 import com.meteorite.itemdespawntowhat.core.api.IssueCollector;
 import com.meteorite.itemdespawntowhat.core.api.ParamChecks;
 import com.mojang.serialization.Codec;
-import com.mojang.serialization.codecs.RecordCodecBuilder;
 import org.jetbrains.annotations.Nullable;
-
-import java.util.function.Function;
 
 /**
  * 双精度浮点参数声明：值域在解码期与语义校验两处都按 [min, max] 生效。
  * <p>概率字段常用它声明（JSON 0..1），界面百分比换算由 {@link ParamUnit#PERCENT} 表达；
  * 换算只改变显示单位，取值域仍以声明的 min/max 为准。</p>
  */
-public record DoubleSpec(ParamMeta meta, double min, double max, double codecDefault) implements ParamSpec {
+public record DoubleSpec(ParamMeta meta, double min, double max, double codecDefault) implements ParamSpec<Double> {
 
     public DoubleSpec {
         if (min > max) {
@@ -42,10 +39,6 @@ public record DoubleSpec(ParamMeta meta, double min, double max, double codecDef
         return withMeta(meta.withInitial(value));
     }
 
-    public <O> RecordCodecBuilder<O, Double> fieldFor(Function<O, Double> getter) {
-        return valueCodec().optionalFieldOf(name(), codecDefault).forGetter(getter);
-    }
-
     @Override
     public Codec<Double> valueCodec() {
         return Codec.doubleRange(min, max);
@@ -53,12 +46,12 @@ public record DoubleSpec(ParamMeta meta, double min, double max, double codecDef
 
     /** 校验字段的出现形态、有限性与声明值域。 */
     @Override
-    public boolean check(@Nullable Object value, IssueCollector issues, String fieldPath) {
+    public boolean check(@Nullable Double value, IssueCollector issues, String fieldPath) {
         String path = ParamChecks.child(fieldPath, name());
         if (value == null) {
             return !required() || ParamChecks.required(null, name(), issues, path);
         }
-        return ParamChecks.inRange((Double) value, min, max, name(), issues, path);
+        return ParamChecks.inRange(value, min, max, name(), issues, path);
     }
 
     /** 使用声明值域校验有限双精度值，并保留业务专用的错误文案。 */
@@ -67,8 +60,8 @@ public record DoubleSpec(ParamMeta meta, double min, double max, double codecDef
     }
 
     @Override
-    public @Nullable Object defaultValue() {
-        return presence() == ParamPresence.DEFAULTED ? codecDefault : null;
+    public @Nullable Double defaultValue() {
+        return meta.defaultValue(codecDefault);
     }
 
     private DoubleSpec withMeta(ParamMeta value) {

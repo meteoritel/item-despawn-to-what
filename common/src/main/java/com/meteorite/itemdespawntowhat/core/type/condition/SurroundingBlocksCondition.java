@@ -19,8 +19,6 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Optional;
-
 /**
  * 条件类型 surrounding_blocks：按掉落物上/下/北/南/东/西六个相邻方块的引用匹配。
  * 每个方向可空（null = 该方向不限制），引用支持方块 id 或 #tag，允许同一方向多方向叠加；
@@ -36,7 +34,7 @@ public record SurroundingBlocksCondition(
         TaggedId west
 ) implements Condition {
 
-    // 类型 id，同时是 JSON 中 type 字段的取值
+    /** 类型 id，同时是 JSON 中 type 字段的取值 */
     public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(Constants.ID_NAMESPACE, "surrounding_blocks");
 
     // 参数 JSON 字段名
@@ -47,24 +45,30 @@ public record SurroundingBlocksCondition(
     private static final String FIELD_EAST = "east";
     private static final String FIELD_WEST = "west";
 
-    // 参数声明：六个方向均可空，null 表示该方向不限制；注册表存在性校验留在 validateParams
+    /** 参数声明：六个方向均可空，null 表示该方向不限制；注册表存在性校验留在 validateParams */
     public static final RefSpec UP = RefSpec.nullable(FIELD_UP, "minecraft:block");
     public static final RefSpec DOWN = RefSpec.nullable(FIELD_DOWN, "minecraft:block");
     public static final RefSpec NORTH = RefSpec.nullable(FIELD_NORTH, "minecraft:block");
     public static final RefSpec SOUTH = RefSpec.nullable(FIELD_SOUTH, "minecraft:block");
     public static final RefSpec EAST = RefSpec.nullable(FIELD_EAST, "minecraft:block");
     public static final RefSpec WEST = RefSpec.nullable(FIELD_WEST, "minecraft:block");
-    public static final ParamList PARAMS = ParamList.of(UP, DOWN, NORTH, SOUTH, EAST, WEST);
+    public static final ParamList<SurroundingBlocksCondition> PARAMS = ParamList.of(
+            UP.bind(SurroundingBlocksCondition::up),
+            DOWN.bind(SurroundingBlocksCondition::down),
+            NORTH.bind(SurroundingBlocksCondition::north),
+            SOUTH.bind(SurroundingBlocksCondition::south),
+            EAST.bind(SurroundingBlocksCondition::east),
+            WEST.bind(SurroundingBlocksCondition::west));
 
-    // 参数编解码器：六个方向均可选，缺省为 null
+    /** 参数编解码器：六个方向均可选，缺省为 null */
     public static MapCodec<SurroundingBlocksCondition> codec() {
         return RecordCodecBuilder.mapCodec(instance -> instance.group(
-                UP.fieldForNullable(value -> Optional.ofNullable(value.up())),
-                DOWN.fieldForNullable(value -> Optional.ofNullable(value.down())),
-                NORTH.fieldForNullable(value -> Optional.ofNullable(value.north())),
-                SOUTH.fieldForNullable(value -> Optional.ofNullable(value.south())),
-                EAST.fieldForNullable(value -> Optional.ofNullable(value.east())),
-                WEST.fieldForNullable(value -> Optional.ofNullable(value.west()))
+                PARAMS.nullableField(UP),
+                PARAMS.nullableField(DOWN),
+                PARAMS.nullableField(NORTH),
+                PARAMS.nullableField(SOUTH),
+                PARAMS.nullableField(EAST),
+                PARAMS.nullableField(WEST)
         ).apply(instance, (up, down, north, south, east, west) -> new SurroundingBlocksCondition(
                 up.orElse(null), down.orElse(null), north.orElse(null),
                 south.orElse(null), east.orElse(null), west.orElse(null))));
@@ -76,8 +80,7 @@ public record SurroundingBlocksCondition(
         return ID;
     }
 
-    // 条件类型定义，供注册表登记；静态工厂不能叫 type()（与 Condition#type 实例方法签名冲突）
-    // 周围区块未全部加载时无法判定，通过可求值性门禁返回 UNAVAILABLE，而不是把「判不了」当成「不成立」
+    /** 条件类型定义，供注册表登记；静态工厂不能叫 type()（与 Condition#type 实例方法签名冲突）；周围区块未全部加载时无法判定，通过可求值性门禁返回 UNAVAILABLE，而不是把「判不了」当成「不成立」 */
     public static ConditionType<SurroundingBlocksCondition> conditionType() {
         return new SimpleConditionType<>(ID, codec(), SurroundingBlocksCondition::validateParams, SurroundingBlocksEvaluator::test,
                 (params, context) -> ChunkPresence.containsArea(context.level(), context.pos(), 1)
@@ -85,7 +88,7 @@ public record SurroundingBlocksCondition(
                 PARAMS);
     }
 
-    // 参数语义校验：六个方向不能全空；非空方向做注册表存在性校验
+    /** 参数语义校验：六个方向不能全空；非空方向做注册表存在性校验 */
     public static boolean validateParams(SurroundingBlocksCondition params, IssueCollector issues, String fieldPath) {
         boolean anyPresent = params.up() != null
                 || params.down() != null
