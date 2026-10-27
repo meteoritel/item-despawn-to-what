@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.runtime;
 
 import com.meteorite.itemdespawntowhat.core.command.RuleCommandContext;
+import com.meteorite.itemdespawntowhat.core.host.RuleRuntimeDiagnosticsContext;
 import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
 import com.meteorite.itemdespawntowhat.core.host.RuleRuntimeHostCore;
 import com.meteorite.itemdespawntowhat.core.load.PackLayerResolver;
@@ -80,6 +81,11 @@ public final class RuleRuntimeHost {
     // 命令层入口：以窄接口暴露运行时、模组级配置与编辑层统计
     public static RuleCommandContext commandContext() {
         return CORE.commandContext();
+    }
+
+    /** 开发场景与诊断工具使用的扩展宿主能力。 */
+    public static RuleRuntimeDiagnosticsContext diagnosticsContext() {
+        return CORE.diagnosticsContext();
     }
 
     // 服务端就绪：读配置 → 建注册表 → 加载规则 → 建运行时 → 对全部已加载维度回扫

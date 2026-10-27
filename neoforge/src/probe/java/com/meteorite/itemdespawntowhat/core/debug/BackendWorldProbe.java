@@ -61,7 +61,7 @@ final class BackendWorldProbe {
         active = this;
         switch (name) {
             case "loading" -> {
-                var runtime = java.util.Objects.requireNonNull(RuleRuntimeHost.commandContext().runtime());
+                var runtime = java.util.Objects.requireNonNull(RuleRuntimeHost.diagnosticsContext().runtime());
                 check("development_datapack_base_loaded", runtime.index().ordered().stream()
                         .anyMatch(rule -> rule.id().toString().equals(BackendProbeFixtures.PROBE_NAMESPACE + ":base")
                                 && rule.value().triggerAfterSeconds() == 300));
@@ -70,7 +70,7 @@ final class BackendWorldProbe {
                 fixtures.writeRule("base", "prismarine_shard", 2, "natural");
                 Path broken = fixtures.ruleRoot().resolve("probe-broken.json");
                 fixtures.writeFile(broken, "{broken");
-                var outcome = RuleRuntimeHost.commandContext().reloadRules(server);
+                var outcome = RuleRuntimeHost.diagnosticsContext().reloadRules(server);
                 check("reload_applied", outcome != null && outcome.isApplied());
                 check("bad_file_reported", outcome != null && outcome.result() != null && outcome.result().hasErrors());
             }
@@ -135,7 +135,7 @@ final class BackendWorldProbe {
                 // 新文件可加载，但发布前故障必须留下旧索引。
                 fixtures.writeRule("base", "diamond", 5, "natural");
                 rejectReload = true;
-                var rejected = RuleRuntimeHost.commandContext().reloadRules(server);
+                var rejected = RuleRuntimeHost.diagnosticsContext().reloadRules(server);
                 check("reload_failure_rejected", rejected != null && !rejected.isApplied());
                 check("reload_fault_reached", !rejectReload);
                 fixtures.spawn(Items.PAPER, 3);
@@ -288,7 +288,7 @@ final class BackendWorldProbe {
         checks.equal("nether_completed", 20, delivered[1]);
         checks.equal("no_early_execution", 0, early[0]);
         checks.equal("all_handles_done", 40, handles.stream().filter(handle -> handle.state() == ScheduledTask.State.DONE).count());
-        var runtime = java.util.Objects.requireNonNull(RuleRuntimeHost.commandContext().runtime());
+        var runtime = java.util.Objects.requireNonNull(RuleRuntimeHost.diagnosticsContext().runtime());
         for (int dimension = 0; dimension < 2; dimension++) {
             int index = dimension;
             ServerLevel target = java.util.Objects.requireNonNull(server.getLevel(dimension == 0

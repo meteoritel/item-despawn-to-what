@@ -3,7 +3,7 @@ package com.meteorite.itemdespawntowhat.core.debug;
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.Constants;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
-import com.meteorite.itemdespawntowhat.core.command.RuleCommandContext;
+import com.meteorite.itemdespawntowhat.core.host.RuleRuntimeDiagnosticsContext;
 import com.meteorite.itemdespawntowhat.core.model.Rule;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.RunnableTask;
 import com.meteorite.itemdespawntowhat.core.api.scheduler.ScheduledTaskHandle;
@@ -44,15 +44,15 @@ public final class DebugScenarioManager {
     // 工具类不创建实例。
     private DebugScenarioManager() {}
 
-    // 开发指令直接创建场景，不读取历史日志，也不写入用户配置。
-    public static int start(CommandSourceStack source, RuleCommandContext context, String name,
+    /** 开发指令直接创建场景，不读取历史日志，也不写入用户配置。 */
+    public static int start(CommandSourceStack source, RuleRuntimeDiagnosticsContext context, String name,
                             boolean benchmark, int entities, int seconds) {
         if (DebugPipelineManager.active(source.getServer())) { return failure(source, "pipeline_busy"); }
         return startScene(source, context, name, benchmark, entities, seconds, null, null);
     }
 
     /** 性能与功能无人值守运行共用场景生命周期，参数取自对应声明。 */
-    public static int startHeadless(CommandSourceStack source, RuleCommandContext context, String name, boolean benchmark) {
+    public static int startHeadless(CommandSourceStack source, RuleRuntimeDiagnosticsContext context, String name, boolean benchmark) {
         REPORTS.remove(source.getServer());
         var spec = DebugScenarioCatalog.find(name, benchmark);
         DebugProbePerformance.phase("SETUP");
@@ -81,7 +81,7 @@ public final class DebugScenarioManager {
     }
 
     // 流水线仅覆盖起点和关联编号，仍使用同一个场景生命周期。
-    static int startPipeline(CommandSourceStack source, RuleCommandContext context, String name,
+    static int startPipeline(CommandSourceStack source, RuleRuntimeDiagnosticsContext context, String name,
                              boolean benchmark, int entities, int seconds, Vec3 origin, String pipelineId) {
         return startScene(source, context, name, benchmark, entities, seconds, origin, pipelineId);
     }
@@ -90,13 +90,13 @@ public final class DebugScenarioManager {
     static @Nullable DebugScenarioRun activeRun(MinecraftServer server) { return ACTIVE.get(server); }
 
     // 中止流水线拥有的场景，防止误结束独立手动场景。
-    static void stopPipelineScene(MinecraftServer server, RuleCommandContext context, String reason) {
+    static void stopPipelineScene(MinecraftServer server, RuleRuntimeDiagnosticsContext context, String reason) {
         var run = ACTIVE.get(server);
         if (run != null && run.pipelineId != null) { finish(server, context, reason); }
     }
 
     // 所有场景共用开发环境、数量、准备与启动失败处理。
-    private static int startScene(CommandSourceStack source, RuleCommandContext context, String name,
+    private static int startScene(CommandSourceStack source, RuleRuntimeDiagnosticsContext context, String name,
                                   boolean benchmark, int entities, int seconds, @Nullable Vec3 fixedOrigin,
                                   @Nullable String pipelineId) {
         if (!DebugMode.ENABLED) { return failure(source, "development_only"); }
@@ -272,8 +272,8 @@ public final class DebugScenarioManager {
         if (binding != null) { binding.run.outputAdded(item); }
     }
 
-    // 现有双平台tick事件转发到同一推进器；维度失效或异常时结束并清理。
-    public static void tick(MinecraftServer server, RuleCommandContext context) {
+    /** 现有双平台tick事件转发到同一推进器；维度失效或异常时结束并清理。 */
+    public static void tick(MinecraftServer server, RuleRuntimeDiagnosticsContext context) {
         DebugScenarioRun run = ACTIVE.get(server);
         if (run == null) { return; }
         try {
@@ -289,8 +289,8 @@ public final class DebugScenarioManager {
         }
     }
 
-    // 手动停止只结束本轮负载，提前停止的结果明确为INCOMPLETE。
-    public static int stop(CommandSourceStack source, RuleCommandContext context) {
+    /** 手动停止只结束本轮负载，提前停止的结果明确为INCOMPLETE。 */
+    public static int stop(CommandSourceStack source, RuleRuntimeDiagnosticsContext context) {
         if (DebugPipelineManager.active(source.getServer())) { return DebugPipelineManager.stop(source, context); }
         if (!ACTIVE.containsKey(source.getServer())) { return failure(source, "not_running"); }
         return finish(source.getServer(), context, "manual_stop");
@@ -316,14 +316,14 @@ public final class DebugScenarioManager {
         return 1;
     }
 
-    // 发起者离线或停服时继续将结果交付到控制台，并释放静态引用。
-    public static void shutdown(MinecraftServer server, RuleCommandContext context) {
+    /** 发起者离线或停服时继续将结果交付到控制台，并释放静态引用。 */
+    public static void shutdown(MinecraftServer server, RuleRuntimeDiagnosticsContext context) {
         if (ACTIVE.containsKey(server)) { finish(server, context, "server_stopping"); }
         REPORTS.remove(server);
     }
 
     // 统一结束路径；异常不能阻止正常停服或留下服务器引用。
-    private static int finish(MinecraftServer server, RuleCommandContext context, String reason) {
+    private static int finish(MinecraftServer server, RuleRuntimeDiagnosticsContext context, String reason) {
         DebugScenarioRun run = ACTIVE.remove(server);
         if (run == null) { return 0; }
         String verdict = "INCOMPLETE";

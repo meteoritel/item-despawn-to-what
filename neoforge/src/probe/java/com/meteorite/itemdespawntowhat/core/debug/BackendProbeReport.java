@@ -36,7 +36,7 @@ final class BackendProbeReport {
         environment.add("jvm_arguments", GSON.toJsonTree(ManagementFactory.getRuntimeMXBean().getInputArguments()));
         environment.add("jvm_tuning", GSON.toJsonTree(ManagementFactory.getRuntimeMXBean().getInputArguments().stream()
                 .filter(argument -> argument.startsWith("-X")).toList()));
-        environment.add("config", DebugLog.config(RuleRuntimeHost.commandContext().serverConfig()));
+        environment.add("config", DebugLog.config(RuleRuntimeHost.diagnosticsContext().serverConfig()));
     }
 
     void write(String verdict, String reason, JsonObject interruptedPerformance) {

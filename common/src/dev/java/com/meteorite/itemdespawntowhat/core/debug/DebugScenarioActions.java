@@ -1,7 +1,8 @@
 package com.meteorite.itemdespawntowhat.core.debug;
 
 import com.meteorite.itemdespawntowhat.core.state.DropStateStore;
-import com.meteorite.itemdespawntowhat.core.command.RuleCommandContext;
+
+import com.meteorite.itemdespawntowhat.core.host.RuleRuntimeDiagnosticsContext;
 import com.meteorite.itemdespawntowhat.core.load.RuleReloadOutcome;
 import com.meteorite.itemdespawntowhat.core.runtime.ConversionRuntime;
 import net.minecraft.nbt.CompoundTag;
@@ -46,7 +47,7 @@ final class DebugScenarioActions {
     }
 
     // 每个动作最多执行一次，以真实事件和世界刻共同决定触发。
-    void tick(RuleCommandContext context) {
+    void tick(RuleRuntimeDiagnosticsContext context) {
         var actions = run.definition.spec.actions();
         for (int i = 0; i < actions.size(); i++) {
             var action = actions.get(i);

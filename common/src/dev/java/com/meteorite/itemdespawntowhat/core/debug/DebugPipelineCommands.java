@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.debug;
 
-import com.meteorite.itemdespawntowhat.core.command.RuleCommandContext;
+import com.meteorite.itemdespawntowhat.core.host.RuleRuntimeDiagnosticsContext;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.minecraft.commands.CommandSourceStack;
@@ -15,7 +15,7 @@ final class DebugPipelineCommands {
     private DebugPipelineCommands() {}
 
     // 权限与开发环境由父级debug命令统一限制。
-    static LiteralArgumentBuilder<CommandSourceStack> build(RuleCommandContext context) {
+    static LiteralArgumentBuilder<CommandSourceStack> build(RuleRuntimeDiagnosticsContext context) {
         var root = Commands.literal("pipeline").executes(ctx -> help(ctx.getSource()))
                 .then(Commands.literal("help").executes(ctx -> help(ctx.getSource())))
                 .then(Commands.literal("status").executes(ctx -> DebugPipelineManager.status(ctx.getSource())))

@@ -71,8 +71,8 @@ public final class RuleRuntimeHostCore {
 
     // 网络编辑层入口：以窄接口暴露运行时的覆盖层路径与重建能力
     private final RuleEditServerContext editContext = new EditContext();
-    // 命令层入口：以窄接口暴露运行时、模组级配置与编辑层统计
-    private final RuleCommandContext commandContext = new CommandContext();
+    // 同一宿主适配器按正式命令与开发诊断分别授予能力
+    private final RuleRuntimeDiagnosticsContext commandContext = new CommandContext();
 
     /**
      * 创建一次存档生命周期的宿主实现。
@@ -134,6 +134,9 @@ public final class RuleRuntimeHostCore {
      * @return 命令层所需的运行时能力视图；未启动时各项能力返回空值
      */
     public RuleCommandContext commandContext() { return commandContext; }
+
+    /** 开发场景与诊断工具所需的宿主能力。 */
+    public RuleRuntimeDiagnosticsContext diagnosticsContext() { return commandContext; }
 
     /**
      * 启动运行时：读配置 → 建注册表 → 加载规则 → 建运行时 → 对全部已加载维度排队回扫。
@@ -474,7 +477,12 @@ public final class RuleRuntimeHostCore {
     }
 
     // 命令层能力适配器：状态都在宿主实例上，调用时实时读取
-    private final class CommandContext implements RuleCommandContext {
+    private final class CommandContext implements RuleRuntimeDiagnosticsContext {
+
+        @Override
+        public boolean available() {
+            return runtime != null;
+        }
 
         @Override
         public ConversionRuntime runtime() {
@@ -500,12 +508,6 @@ public final class RuleRuntimeHostCore {
         public int overlayVersion() {
             EditSessionManager sessions = RuleEditServerHandler.sessionManager(editContext);
             return sessions == null ? -1 : sessions.version();
-        }
-
-        @Override
-        public int activeSessionCount() {
-            EditSessionManager sessions = RuleEditServerHandler.sessionManager(editContext);
-            return sessions == null ? 0 : sessions.activeSessionCount();
         }
 
         @Override

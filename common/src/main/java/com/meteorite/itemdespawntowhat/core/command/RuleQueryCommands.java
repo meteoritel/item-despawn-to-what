@@ -154,7 +154,7 @@ final class RuleQueryCommands {
     private static int orphans(CommandContext<CommandSourceStack> ctx, RuleCommandContext context) {
         if (RuleEditServerHandler.isSaving()) { return RuleCommandTree.saveBusy(ctx); }
         // 运行时未就绪时规则集合不可信，若照常判定会把全部记录误报成无主
-        if (context.runtime() == null) { return RuleCommandTree.notReady(ctx); }
+        if (!context.available()) { return RuleCommandTree.notReady(ctx); }
         RuleLoadResult<Rule> merged = load(ctx, context);
         if (merged == null) {
             return RuleCommandTree.notReady(ctx);
@@ -180,7 +180,7 @@ final class RuleQueryCommands {
     // rule orphans clear：只清理无主记录，不影响仍存在规则的启停状态
     private static int clearOrphans(CommandContext<CommandSourceStack> ctx, RuleCommandContext context) {
         if (RuleEditServerHandler.isSaving()) { return RuleCommandTree.saveBusy(ctx); }
-        if (context.runtime() == null) { return RuleCommandTree.notReady(ctx); }
+        if (!context.available()) { return RuleCommandTree.notReady(ctx); }
         RuleLoadResult<Rule> merged = load(ctx, context);
         if (merged == null) {
             return RuleCommandTree.notReady(ctx);

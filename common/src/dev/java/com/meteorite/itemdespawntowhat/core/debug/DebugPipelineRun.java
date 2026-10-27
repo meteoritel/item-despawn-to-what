@@ -3,7 +3,7 @@ package com.meteorite.itemdespawntowhat.core.debug;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.Constants;
-import com.meteorite.itemdespawntowhat.core.command.RuleCommandContext;
+import com.meteorite.itemdespawntowhat.core.host.RuleRuntimeDiagnosticsContext;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.phys.Vec3;
@@ -40,7 +40,7 @@ final class DebugPipelineRun {
     }
 
     // 等待和推进均使用主线程tick，不阻塞或另建定时线程。
-    boolean tick(ServerPlayer player, RuleCommandContext context) {
+    boolean tick(ServerPlayer player, RuleRuntimeDiagnosticsContext context) {
         if (phase.equals("RUNNING")) { return false; }
         if (phase.equals("COOLDOWN") && (System.nanoTime() < dueNanos || level.getGameTime() < dueWorldTick)) { return false; }
         if (DebugPipelineManager.hasFixtures(level.getServer())) { throw new IllegalStateException("residual_fixtures"); }

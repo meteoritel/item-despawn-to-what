@@ -1,7 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.debug;
 
 import com.google.gson.JsonObject;
-import com.meteorite.itemdespawntowhat.core.command.RuleCommandContext;
+import com.meteorite.itemdespawntowhat.core.host.RuleRuntimeDiagnosticsContext;
 import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
 import com.meteorite.itemdespawntowhat.platform.Services;
 import net.minecraft.server.MinecraftServer;
@@ -28,7 +28,7 @@ final class DebugLog {
     }
 
     // 启动参数只记录一次，不扫描磁盘规则、不读取历史日志。
-    static void ready(MinecraftServer server, RuleCommandContext context) {
+    static void ready(MinecraftServer server, RuleRuntimeDiagnosticsContext context) {
         JsonObject data = config(context.serverConfig());
         data.addProperty("development", true);
         data.addProperty("platform", Services.PLATFORM.getPlatformName());

@@ -2,7 +2,7 @@ package com.meteorite.itemdespawntowhat.core.debug;
 
 import com.google.gson.JsonObject;
 import com.meteorite.itemdespawntowhat.Constants;
-import com.meteorite.itemdespawntowhat.core.command.RuleCommandContext;
+import com.meteorite.itemdespawntowhat.core.host.RuleRuntimeDiagnosticsContext;
 import com.meteorite.itemdespawntowhat.core.command.RuleCommandTree;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.component.DataComponents;
@@ -26,7 +26,7 @@ final class DebugPipelineManager {
     static boolean active(MinecraftServer server) { return DebugMode.ENABLED && ACTIVE.containsKey(server); }
 
     // 创建有限计划，不执行 mcfunction 或修改全局规则；每一步仍走既有场景后端。
-    static int start(CommandSourceStack source, RuleCommandContext context, String name, int entities, int gap) {
+    static int start(CommandSourceStack source, RuleRuntimeDiagnosticsContext context, String name, int entities, int gap) {
         if (!DebugMode.ENABLED) { return failure(source, "development_only"); }
         if (!(source.getEntity() instanceof ServerPlayer player)) { return failure(source, "player_only"); }
         if (active(source.getServer()) || !DebugScenarioManager.inactive(source.getServer())) { return failure(source, "busy"); }
@@ -56,7 +56,7 @@ final class DebugPipelineManager {
     }
 
     // 复用已有两平台开发tick，无定时线程，无额外Mixin。
-    static void tick(MinecraftServer server, RuleCommandContext context) {
+    static void tick(MinecraftServer server, RuleRuntimeDiagnosticsContext context) {
         var run = ACTIVE.get(server);
         if (run == null) { return; }
         ServerPlayer player = server.getPlayerList().getPlayer(run.initiator);
@@ -92,7 +92,7 @@ final class DebugPipelineManager {
     }
 
     // stop 子命令：冷却期间也能取消后续计划。
-    static int stop(CommandSourceStack source, RuleCommandContext context) {
+    static int stop(CommandSourceStack source, RuleRuntimeDiagnosticsContext context) {
         if (!active(source.getServer())) { return failure(source, "not_running"); }
         halt(source.getServer(), context, "manual_stop");
         return 1;
@@ -110,7 +110,7 @@ final class DebugPipelineManager {
     }
 
     // 先撤销阶段计划再关闭平台运行时，避免停服回调启动下一步。
-    static void shutdown(MinecraftServer server, RuleCommandContext context) {
+    static void shutdown(MinecraftServer server, RuleRuntimeDiagnosticsContext context) {
         if (active(server)) { halt(server, context, "server_stopping"); }
     }
 
@@ -128,7 +128,7 @@ final class DebugPipelineManager {
     }
 
     // 中止本轮并保留真实INCOMPLETE结果；回调只记结果，不推进后续步骤。
-    private static void halt(MinecraftServer server, RuleCommandContext context, String reason) {
+    private static void halt(MinecraftServer server, RuleRuntimeDiagnosticsContext context, String reason) {
         var run = ACTIVE.get(server);
         if (run == null) { return; }
         run.cancelling = true;

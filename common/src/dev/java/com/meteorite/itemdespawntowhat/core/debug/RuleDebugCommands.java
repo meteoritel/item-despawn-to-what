@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.debug;
 
-import com.meteorite.itemdespawntowhat.core.command.RuleCommandContext;
+import com.meteorite.itemdespawntowhat.core.host.RuleRuntimeDiagnosticsContext;
 import com.meteorite.itemdespawntowhat.core.command.RuleCommandTree;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -19,8 +19,8 @@ public final class RuleDebugCommands {
     // 工具类不创建实例。
     private RuleDebugCommands() {}
 
-    // 所有名称由同一 manifest 提供，保持已有字面量补全和权限判断。
-    public static LiteralArgumentBuilder<CommandSourceStack> build(RuleCommandContext context) {
+    /** 所有名称由同一 manifest 提供，保持已有字面量补全和权限判断。 */
+    public static LiteralArgumentBuilder<CommandSourceStack> build(RuleRuntimeDiagnosticsContext context) {
         var functional = Commands.literal("run");
         var benchmarks = Commands.literal("bench");
         DebugScenarioCatalog.entries(false).forEach(spec -> register(functional, context, spec));
@@ -40,7 +40,7 @@ public final class RuleDebugCommands {
     }
 
     // 功能场景与空负载允许改时长，非空性能负载额外允许改实体数；均使用声明默认值。
-    private static void register(LiteralArgumentBuilder<CommandSourceStack> parent, RuleCommandContext context, DebugScenarioSpec spec) {
+    private static void register(LiteralArgumentBuilder<CommandSourceStack> parent, RuleRuntimeDiagnosticsContext context, DebugScenarioSpec spec) {
         var command = Commands.literal(spec.name()).executes(ctx ->
                 DebugScenarioManager.start(ctx.getSource(), context, spec.name(), spec.benchmark(), spec.sources(), spec.seconds()));
         if (spec.benchmark() && spec.sources() > 0) {

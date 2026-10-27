@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.debug;
 
-import com.meteorite.itemdespawntowhat.core.command.RuleCommandContext;
+import com.meteorite.itemdespawntowhat.core.host.RuleRuntimeDiagnosticsContext;
 import net.minecraft.server.MinecraftServer;
 
 import java.util.Collections;
@@ -46,8 +46,8 @@ public final class DebugSessionManager {
         }
     }
 
-    // 首次就绪记录当前参数，其后只推进已经由命令创建的场景。
-    public static void tick(MinecraftServer server, RuleCommandContext context) {
+    /** 首次就绪记录当前参数，其后只推进已经由命令创建的场景。 */
+    public static void tick(MinecraftServer server, RuleRuntimeDiagnosticsContext context) {
         if (!DebugMode.ENABLED) { return; }
         RuntimeTiming timing = TIMINGS.get(server);
         if (timing != null && timing.tick == server.getTickCount() && timing.elapsed < 0) {
@@ -58,8 +58,8 @@ public final class DebugSessionManager {
         DebugPipelineManager.tick(server, context);
     }
 
-    // 场景清理必须先于平台运行时关闭，才能取消本轮延迟任务。
-    public static void shutdown(MinecraftServer server, RuleCommandContext context) {
+    /** 场景清理必须先于平台运行时关闭，才能取消本轮延迟任务。 */
+    public static void shutdown(MinecraftServer server, RuleRuntimeDiagnosticsContext context) {
         if (!DebugMode.ENABLED) { return; }
         try {
             DebugPipelineManager.shutdown(server, context);

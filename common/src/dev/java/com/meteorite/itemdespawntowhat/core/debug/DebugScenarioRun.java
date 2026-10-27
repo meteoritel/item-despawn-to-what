@@ -3,7 +3,7 @@ package com.meteorite.itemdespawntowhat.core.debug;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonArray;
 import com.meteorite.itemdespawntowhat.Constants;
-import com.meteorite.itemdespawntowhat.core.command.RuleCommandContext;
+import com.meteorite.itemdespawntowhat.core.host.RuleRuntimeDiagnosticsContext;
 import com.meteorite.itemdespawntowhat.core.config.ServerConfig;
 import com.meteorite.itemdespawntowhat.core.runtime.ConversionRuntime;
 import com.meteorite.itemdespawntowhat.core.runtime.LoadedChunks;
@@ -90,7 +90,7 @@ final class DebugScenarioRun {
     }
 
     // 每秒输出计数和当前队列，不重复计算分位数或扫描世界实体。
-    boolean tick(RuleCommandContext context) {
+    boolean tick(RuleRuntimeDiagnosticsContext context) {
         ConversionRuntime runtime = java.util.Objects.requireNonNull(context.runtime());
         if (phase.equals("SETUP")) {
             prepare(context);
@@ -172,7 +172,7 @@ final class DebugScenarioRun {
     }
 
     // 源数量与准备软预算由 server.json 的 debug_scenario_prepare_batch_size / debug_scenario_prepare_budget_us 提供；准备耗时不混入测量窗口。
-    private void prepare(RuleCommandContext context) {
+    private void prepare(RuleRuntimeDiagnosticsContext context) {
         ConversionRuntime runtime = java.util.Objects.requireNonNull(context.runtime());
         if (definition.spec.catalystCount() > 0 && (!LoadedChunks.containsArea(level, BlockPos.containing(origin), 1)
                 || !level.isPositionEntityTicking(BlockPos.containing(origin)))) {
@@ -361,7 +361,7 @@ final class DebugScenarioRun {
     }
 
     // 先封存预期与实际，再取消本轮任务并清理实体；普通队列任务保持原状。
-    String finish(RuleCommandContext context, String reason) {
+    String finish(RuleRuntimeDiagnosticsContext context, String reason) {
         DebugProbePerformance.phase("ASSERT");
         JsonObject end = state();
         JsonObject workload = new JsonObject();
