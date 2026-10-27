@@ -32,7 +32,7 @@ authority:
 | D5 | 运行时聚合向下依赖 | `core/runtime` → 契约、配置、加载、模型、状态、类型 | 编译期 + [已知例外](#已知例外) |
 | D6 | 命令、调试、网络是使用方 | `core/command`、`core/debug`、`core/network` → 运行时与编辑服务 | 编译期 + 评审 |
 | D7 | 宿主是唯一向上装配点 | `core/host` → `core` 其余包与 `platform/Services` | 编译期 + 评审 |
-| D8 | 客户端单向分层 | `client/net` → 协议；`client/edit` → `client/net` 与 `client/ui/kit`；`client/ui` → `client/edit`、`client/net` | `tools/check-isolation.py` + 评审 |
+| D8 | 客户端单向分层 | `client/net` → 协议与业务模型；`client/edit` → core 与 `client/ui/kit`；`client/ui` → `client/edit`、`client/net` | `tools/check-isolation.py` + 评审 |
 | D9 | UI kit 不引用本模组其它包 | `client/ui/kit` 只引用自身包与白名单 | `tools/check-ui-kit-boundaries.ps1` |
 | D10 | 平台隔离 | `net.fabricmc.*`、`net.neoforged.*` 只出现在 `fabric/`、`neoforge/` | `tools/check-isolation.py` |
 | D11 | 跨加载器隔离 | `fabric/` 引用 `net.fabricmc.*`，`neoforge/` 引用 `net.neoforged.*`，两者互不引用对方加载器 API | `tools/check-isolation.py` |
@@ -54,7 +54,7 @@ flowchart LR
 
 ### `tools/check-isolation.py`
 
-扫描仓库内全部 Java 源文件，只按 import 语句判定（注释与 javadoc 中的全限定名不构成编译期依赖）：
+扫描仓库内全部 Java 源文件；依赖按 import 判定，注册入口与字段声明归属另外按代码位置检查：
 
 1. 加载器 API 前缀只允许出现在对应平台源集；
 2. 平台源集之间禁止互引对方的加载器 API；
@@ -64,6 +64,7 @@ flowchart LR
 6. Fabric 公共/客户端与 NeoForge 注册入口须遍历统一通道声明，消费其中的 type、codec 与 handler；逐载荷类型常量回流到 adapter 会被拒绝。
 7. `core/api` 对本模组 core 代码只引用自身；`core/model` 只引用契约与自身；内置装配器归 `core/type`。
 8. `client/edit` 的 UI 依赖限定为 `client/ui/kit`，控件和表单工厂归 `client/ui`。
+9. `client/net` 禁止依赖 `client/edit` 与 `client/ui`。screen 根包不调用 `EditorField` 工厂声明业务字段；form 内从既有字段派生单项控件的适配保留。
 
 编辑通道的 id 唯一、处理器齐备、同方向 direct/chunk 配对由 `RuleEditChannels` 初始化校验，平台注册器共同遍历该声明。
 
