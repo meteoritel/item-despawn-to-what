@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.runtime;
 
-import com.meteorite.itemdespawntowhat.Constants;
+import com.meteorite.itemdespawntowhat.core.state.DropStateStore;
+
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
@@ -9,10 +10,10 @@ import net.minecraft.world.entity.player.Player;
 public final class PlayerDeathDrops {
     private PlayerDeathDrops() {}
 
-    // 标记必须先于实体入世界；普通玩家丢物品与生物死亡掉落不会命中。
+    /** 标记必须先于实体入世界；只排除玩家死亡掉落。 */
     public static void mark(Entity owner, ItemEntity item) {
         if (owner instanceof Player player && player.isDeadOrDying()) {
-            item.addTag(Constants.CHECK_LOCK_TAG);
+            DropStateStore.excludeDeathDrop(item);
         }
     }
 }

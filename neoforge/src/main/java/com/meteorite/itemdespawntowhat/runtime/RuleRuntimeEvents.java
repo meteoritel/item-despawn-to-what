@@ -15,7 +15,6 @@ import net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
 import net.neoforged.neoforge.event.entity.item.ItemExpireEvent;
 import net.minecraft.world.entity.player.Player;
-import com.meteorite.itemdespawntowhat.Constants;
 import net.neoforged.neoforge.event.level.LevelEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
@@ -66,7 +65,7 @@ public final class RuleRuntimeEvents {
     @SubscribeEvent
     public static void onDeathDrops(LivingDropsEvent event) {
         if (event.getEntity() instanceof Player) {
-            event.getDrops().forEach(item -> item.addTag(Constants.CHECK_LOCK_TAG));
+            event.getDrops().forEach(DropStateStore::excludeDeathDrop);
         }
     }
 

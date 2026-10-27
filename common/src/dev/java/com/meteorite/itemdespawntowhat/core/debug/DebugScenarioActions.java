@@ -1,6 +1,6 @@
 package com.meteorite.itemdespawntowhat.core.debug;
 
-import com.meteorite.itemdespawntowhat.Constants;
+import com.meteorite.itemdespawntowhat.core.state.DropStateStore;
 import com.meteorite.itemdespawntowhat.core.command.RuleCommandContext;
 import com.meteorite.itemdespawntowhat.core.load.RuleReloadOutcome;
 import com.meteorite.itemdespawntowhat.core.runtime.ConversionRuntime;
@@ -35,12 +35,12 @@ final class DebugScenarioActions {
                 item.load(saved);
             }
             case EXCLUDED -> {
-                if (number == 0) { item.addTag(Constants.CHECK_LOCK_TAG); }
+                if (number == 0) { DropStateStore.excludeDeathDrop(item); }
                 else { item.setUnlimitedLifetime(); }
             }
             // 合并夹具：0 号源带死亡掉落检查锁，其余源是同类普通堆，由原版合并链路自行合并
             case MERGE -> {
-                if (number == 0) { item.addTag(Constants.CHECK_LOCK_TAG); }
+                if (number == 0) { DropStateStore.excludeDeathDrop(item); }
             }
         }
     }

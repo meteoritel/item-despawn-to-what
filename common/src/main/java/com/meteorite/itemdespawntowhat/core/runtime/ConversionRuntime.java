@@ -1,6 +1,7 @@
 package com.meteorite.itemdespawntowhat.core.runtime;
 
-import com.meteorite.itemdespawntowhat.Constants;
+import com.meteorite.itemdespawntowhat.core.state.DropState;
+import com.meteorite.itemdespawntowhat.core.state.DropStateStore;
 import com.meteorite.itemdespawntowhat.core.api.ConditionContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecutor;
@@ -250,8 +251,11 @@ public final class ConversionRuntime {
         state.rescan.register(entity);
         if (publication.index().isEmpty() && RuntimeObserver.current().inactive(level.getServer())) { return; }
         if (excluded(entity)) {
-            if (RuntimeObserver.current().enabled()) { RuntimeObserver.current().observe(entity, "EXCLUDED", "death_locked",
-                    entity.getTags().contains(Constants.CHECK_LOCK_TAG), "unlimited_lifetime", entity.getAge() == -32768); }
+            if (RuntimeObserver.current().enabled()) {
+                DropState dropState = DropStateStore.get(entity);
+                RuntimeObserver.current().observe(entity, "EXCLUDED", "death_locked", dropState.deathDropExcluded(),
+                        "conversion_committed", dropState.conversionCommitted(), "unlimited_lifetime", entity.getAge() == -32768);
+            }
             return;
         }
         // 已追踪则不再重复排期（ENTITY_LOAD 在区块重新追踪时会重复触发）；
@@ -740,7 +744,7 @@ public final class ConversionRuntime {
             // 所有权转移：整堆进入结算库存，源实体本刻清空（扣减时间点保持在源实体清空的本刻）
             ItemStack held = source.copy();
             source.setCount(0);
-            item.addTag(Constants.CONVERTED_TAG);
+            DropStateStore.setConversionCommitted(item, true);
             // 记录源位置：重启后源实体已不存在，返还交付只能以记录位置为搜索起点
             writer = SettlementRecord.Writer.register(SettlementLedger.get(level), UUID.randomUUID().toString(),
                     rule.id().toString(), level.dimension().location().toString(), held, available, costPerGroup,
@@ -774,7 +778,7 @@ public final class ConversionRuntime {
                 if (writer != null) {
                     writer.discard();
                 }
-                item.removeTag(Constants.CONVERTED_TAG);
+                DropStateStore.setConversionCommitted(item, false);
                 source.setCount(available);
             }
         }
@@ -920,9 +924,11 @@ public final class ConversionRuntime {
 
     // 排除死亡掉落、已提交转化的实体和原版无限寿命物品。
     private static boolean excluded(ItemEntity item) {
-        return item.isRemoved() || item.getItem().isEmpty() || item.getAge() == -32768
-                || item.getTags().contains(Constants.CHECK_LOCK_TAG)
-                || item.getTags().contains(Constants.CONVERTED_TAG);
+        if (item.isRemoved() || item.getItem().isEmpty() || item.getAge() == -32768) {
+            return true;
+        }
+        DropState state = DropStateStore.get(item);
+        return state.deathDropExcluded() || state.conversionCommitted();
     }
 
     /** 离开维度或区块卸载时立即取消检查，释放任务捕获对象。 */

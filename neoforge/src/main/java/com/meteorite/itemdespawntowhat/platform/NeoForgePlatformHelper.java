@@ -57,6 +57,7 @@ public class NeoForgePlatformHelper implements IPlatformHelper {
                 .result().orElse(DropState.NONE);
     }
 
+    /** 写入实体状态；编码失败向调用方抛出，保留旧状态与兼容标记。 */
     @Override
     public void setDropState(Entity entity, DropState state) {
         CompoundTag root = entity.getPersistentData();
@@ -65,7 +66,7 @@ public class NeoForgePlatformHelper implements IPlatformHelper {
             root.remove(DROP_STATE_KEY);
             return;
         }
-        DropState.CODEC.encodeStart(NbtOps.INSTANCE, state)
-                .result().ifPresent(tag -> root.put(DROP_STATE_KEY, tag));
+        Tag encoded = DropState.CODEC.encodeStart(NbtOps.INSTANCE, state).getOrThrow();
+        root.put(DROP_STATE_KEY, encoded);
     }
 }
