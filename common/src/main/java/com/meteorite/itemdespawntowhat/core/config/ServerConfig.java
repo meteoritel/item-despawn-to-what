@@ -25,28 +25,13 @@ import java.util.Optional;
  * 与规则配置分离：这里是服务器性能与运维参数，两端共用同一实现与同一份文件。
  */
 public record ServerConfig(
-        int checkIntervalTicks,
-        int backoffMaxTicks,
-        int maxChecksPerTick,
+        Scheduling scheduling,
+        BoundedTasks boundedTasks,
+        EntityState entityState,
+        Positioning positioning,
+        Debug debug,
         String overlayDirectory,
-        int fabricLifespanFallbackTicks,
-        boolean debugLogging,
-        int serverBudgetUs,
-        Optional<Integer> maxWorkUnitsPerTick,
-        int effectsWorkUnitsPerTick,
-        int checkSpreadWindowTicks,
-        int dispatchBatchSize,
-        int newProductProtectionSeconds,
-        int conversionCooldownSeconds,
-        int positionSearchChecksPerTick,
-        int debugScenarioPrepareBatchSize,
-        int debugScenarioPrepareBudgetUs,
-        int maxPlaceBlockRadius,
-        NearbyProductLimits nearbyProducts,
-        int rescanEntitiesPerStep,
-        int cancelsPerStep,
-        int prepareGroupsPerStep,
-        int settlementRecoveryMaxAttempts
+        NearbyProductLimits nearbyProducts
 ) {
 
     private static final Logger LOGGER = LogManager.getLogger();
@@ -95,106 +80,288 @@ public record ServerConfig(
     // 结算恢复重试上限默认值：运行期持续失败时最多重试 3 次，超过后保留账本等下次启动全量扫描
     public static final int DEFAULT_SETTLEMENT_RECOVERY_MAX_ATTEMPTS = 3;
 
-    // 默认配置，也是缺失字段时的兜底；max_work_units_per_tick 缺省为空表示回退到 max_checks_per_tick
-    public static final ServerConfig DEFAULT = new ServerConfig(
-            DEFAULT_CHECK_INTERVAL_TICKS,
-            DEFAULT_BACKOFF_MAX_TICKS,
-            DEFAULT_MAX_CHECKS_PER_TICK,
-            DEFAULT_OVERLAY_DIRECTORY,
-            DEFAULT_FABRIC_LIFESPAN_FALLBACK_TICKS,
-            DEFAULT_DEBUG_LOGGING,
-            DEFAULT_SERVER_BUDGET_US,
-            Optional.empty(),
-            DEFAULT_EFFECTS_WORK_UNITS_PER_TICK,
-            DEFAULT_CHECK_SPREAD_WINDOW_TICKS,
-            DEFAULT_DISPATCH_BATCH_SIZE,
-            DEFAULT_NEW_PRODUCT_PROTECTION_SECONDS,
-            DEFAULT_CONVERSION_COOLDOWN_SECONDS,
-            DEFAULT_POSITION_SEARCH_CHECKS_PER_TICK,
-            DEFAULT_DEBUG_SCENARIO_PREPARE_BATCH_SIZE,
-            DEFAULT_DEBUG_SCENARIO_PREPARE_BUDGET_US,
-            DEFAULT_MAX_PLACE_BLOCK_RADIUS,
-            NearbyProductLimits.DEFAULT,
-            DEFAULT_RESCAN_ENTITIES_PER_STEP,
-            DEFAULT_CANCELS_PER_STEP,
-            DEFAULT_PREPARE_GROUPS_PER_STEP,
-            DEFAULT_SETTLEMENT_RECOVERY_MAX_ATTEMPTS
-    );
+    /**
+     * 公共调度预算与检查节奏；Java 内分组，JSON 字段仍平铺在根对象。
+     * @param checkIntervalTicks 检查间隔刻数
+     * @param backoffMaxTicks 退避上限刻数
+     * @param maxChecksPerTick 每 tick 检查上限，也是工作量键缺省时的回退值
+     * @param serverBudgetUs 共享时间软预算，单位微秒
+     * @param maxWorkUnitsPerTick 显式工作量上限；空值回退到 maxChecksPerTick
+     * @param effectsWorkUnitsPerTick 效果类工作量上限
+     * @param checkSpreadWindowTicks 检查平滑窗口刻数
+     * @param dispatchBatchSize 派发搬运批量上限
+     */
+    public record Scheduling(
+            int checkIntervalTicks,
+            int backoffMaxTicks,
+            int maxChecksPerTick,
+            int serverBudgetUs,
+            Optional<Integer> maxWorkUnitsPerTick,
+            int effectsWorkUnitsPerTick,
+            int checkSpreadWindowTicks,
+            int dispatchBatchSize
+    ) {
+        /** 本组缺省配置。 */
+        public static final Scheduling DEFAULT = new Scheduling(
+                DEFAULT_CHECK_INTERVAL_TICKS,
+                DEFAULT_BACKOFF_MAX_TICKS,
+                DEFAULT_MAX_CHECKS_PER_TICK,
+                DEFAULT_SERVER_BUDGET_US,
+                Optional.empty(),
+                DEFAULT_EFFECTS_WORK_UNITS_PER_TICK,
+                DEFAULT_CHECK_SPREAD_WINDOW_TICKS,
+                DEFAULT_DISPATCH_BATCH_SIZE
+        );
 
-    private static final MapCodec<ServerConfig> BASE_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-            Codec.intRange(1, 1200).optionalFieldOf("check_interval_ticks", DEFAULT_CHECK_INTERVAL_TICKS)
-                    .forGetter(ServerConfig::checkIntervalTicks),
-            Codec.intRange(1, 72000).optionalFieldOf("backoff_max_ticks", DEFAULT_BACKOFF_MAX_TICKS)
-                    .forGetter(ServerConfig::backoffMaxTicks),
-            Codec.intRange(1, 100000).optionalFieldOf("max_checks_per_tick", DEFAULT_MAX_CHECKS_PER_TICK)
-                    .forGetter(ServerConfig::maxChecksPerTick),
+        private static final MapCodec<Scheduling> MAP_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
+                Codec.intRange(1, 1200).optionalFieldOf("check_interval_ticks", DEFAULT_CHECK_INTERVAL_TICKS)
+                        .forGetter(Scheduling::checkIntervalTicks),
+                Codec.intRange(1, 72000).optionalFieldOf("backoff_max_ticks", DEFAULT_BACKOFF_MAX_TICKS)
+                        .forGetter(Scheduling::backoffMaxTicks),
+                Codec.intRange(1, 100000).optionalFieldOf("max_checks_per_tick", DEFAULT_MAX_CHECKS_PER_TICK)
+                        .forGetter(Scheduling::maxChecksPerTick),
+                Codec.intRange(100, 100000).optionalFieldOf("server_budget_us", DEFAULT_SERVER_BUDGET_US)
+                        .forGetter(Scheduling::serverBudgetUs),
+                Codec.intRange(1, 100000).optionalFieldOf("max_work_units_per_tick")
+                        .forGetter(Scheduling::maxWorkUnitsPerTick),
+                Codec.intRange(1, 100000).optionalFieldOf("effects_work_units_per_tick", DEFAULT_EFFECTS_WORK_UNITS_PER_TICK)
+                        .forGetter(Scheduling::effectsWorkUnitsPerTick),
+                Codec.intRange(1, 1200).optionalFieldOf("check_spread_window_ticks", DEFAULT_CHECK_SPREAD_WINDOW_TICKS)
+                        .forGetter(Scheduling::checkSpreadWindowTicks),
+                Codec.intRange(1, 100000).optionalFieldOf("dispatch_batch_size", DEFAULT_DISPATCH_BATCH_SIZE)
+                        .forGetter(Scheduling::dispatchBatchSize)
+        ).apply(instance, Scheduling::new));
+    }
+
+    /**
+     * 有界后台任务的单步上限与恢复次数；Java 内分组，JSON 字段仍平铺在根对象。
+     * @param rescanEntitiesPerStep 回扫每步实体上限
+     * @param cancelsPerStep 清理每步取消上限
+     * @param prepareGroupsPerStep 结算准备每步组数
+     * @param settlementRecoveryMaxAttempts 恢复交付重试上限
+     */
+    public record BoundedTasks(
+            int rescanEntitiesPerStep,
+            int cancelsPerStep,
+            int prepareGroupsPerStep,
+            int settlementRecoveryMaxAttempts
+    ) {
+        /** 本组缺省配置。 */
+        public static final BoundedTasks DEFAULT = new BoundedTasks(
+                DEFAULT_RESCAN_ENTITIES_PER_STEP,
+                DEFAULT_CANCELS_PER_STEP,
+                DEFAULT_PREPARE_GROUPS_PER_STEP,
+                DEFAULT_SETTLEMENT_RECOVERY_MAX_ATTEMPTS
+        );
+
+        private static final MapCodec<BoundedTasks> MAP_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
+                Codec.intRange(1, 4096).optionalFieldOf("rescan_entities_per_step", DEFAULT_RESCAN_ENTITIES_PER_STEP)
+                        .forGetter(BoundedTasks::rescanEntitiesPerStep),
+                Codec.intRange(1, 4096).optionalFieldOf("cancels_per_step", DEFAULT_CANCELS_PER_STEP)
+                        .forGetter(BoundedTasks::cancelsPerStep),
+                Codec.intRange(1, 4096).optionalFieldOf("prepare_groups_per_step", DEFAULT_PREPARE_GROUPS_PER_STEP)
+                        .forGetter(BoundedTasks::prepareGroupsPerStep),
+                Codec.intRange(1, 100).optionalFieldOf("settlement_recovery_max_attempts", DEFAULT_SETTLEMENT_RECOVERY_MAX_ATTEMPTS)
+                        .forGetter(BoundedTasks::settlementRecoveryMaxAttempts)
+        ).apply(instance, BoundedTasks::new));
+    }
+
+    /**
+     * 实体生命周期与新产物状态时长；Java 内分组，JSON 字段仍平铺在根对象。
+     * @param fabricLifespanFallbackTicks Fabric 寿命回退刻数
+     * @param newProductProtectionSeconds 新产物保护秒数，0 表示关闭
+     * @param conversionCooldownSeconds 转化冷却秒数，0 表示关闭
+     */
+    public record EntityState(
+            int fabricLifespanFallbackTicks,
+            int newProductProtectionSeconds,
+            int conversionCooldownSeconds
+    ) {
+        /** 本组缺省配置。 */
+        public static final EntityState DEFAULT = new EntityState(
+                DEFAULT_FABRIC_LIFESPAN_FALLBACK_TICKS,
+                DEFAULT_NEW_PRODUCT_PROTECTION_SECONDS,
+                DEFAULT_CONVERSION_COOLDOWN_SECONDS
+        );
+
+        private static final MapCodec<EntityState> MAP_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
+                Codec.intRange(1, 72000).optionalFieldOf("fabric_lifespan_fallback_ticks", DEFAULT_FABRIC_LIFESPAN_FALLBACK_TICKS)
+                        .forGetter(EntityState::fabricLifespanFallbackTicks),
+                Codec.intRange(0, 3600).optionalFieldOf("new_product_protection_seconds", DEFAULT_NEW_PRODUCT_PROTECTION_SECONDS)
+                        .forGetter(EntityState::newProductProtectionSeconds),
+                Codec.intRange(0, 3600).optionalFieldOf("conversion_cooldown_seconds", DEFAULT_CONVERSION_COOLDOWN_SECONDS)
+                        .forGetter(EntityState::conversionCooldownSeconds)
+        ).apply(instance, EntityState::new));
+    }
+
+    /**
+     * 位置搜索与方块放置范围；Java 内分组，JSON 字段仍平铺在根对象。
+     * @param positionSearchChecksPerTick 每 tick 位置候选检查上限
+     * @param maxPlaceBlockRadius 规则允许的最大放置半径
+     */
+    public record Positioning(
+            int positionSearchChecksPerTick,
+            int maxPlaceBlockRadius
+    ) {
+        /** 本组缺省配置。 */
+        public static final Positioning DEFAULT = new Positioning(
+                DEFAULT_POSITION_SEARCH_CHECKS_PER_TICK,
+                DEFAULT_MAX_PLACE_BLOCK_RADIUS
+        );
+
+        private static final MapCodec<Positioning> MAP_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
+                Codec.intRange(1, 4096).optionalFieldOf("position_search_checks_per_tick", DEFAULT_POSITION_SEARCH_CHECKS_PER_TICK)
+                        .forGetter(Positioning::positionSearchChecksPerTick),
+                Codec.intRange(1, Integer.MAX_VALUE).optionalFieldOf("max_place_block_radius", DEFAULT_MAX_PLACE_BLOCK_RADIUS)
+                        .forGetter(Positioning::maxPlaceBlockRadius)
+        ).apply(instance, Positioning::new));
+    }
+
+    /**
+     * 日志与调试场景准备预算；Java 内分组，JSON 字段仍平铺在根对象。
+     * @param debugLogging 调试日志开关
+     * @param debugScenarioPrepareBatchSize 每 tick 准备源数量上限
+     * @param debugScenarioPrepareBudgetUs 准备软预算，单位微秒
+     */
+    public record Debug(
+            boolean debugLogging,
+            int debugScenarioPrepareBatchSize,
+            int debugScenarioPrepareBudgetUs
+    ) {
+        /** 本组缺省配置。 */
+        public static final Debug DEFAULT = new Debug(
+                DEFAULT_DEBUG_LOGGING,
+                DEFAULT_DEBUG_SCENARIO_PREPARE_BATCH_SIZE,
+                DEFAULT_DEBUG_SCENARIO_PREPARE_BUDGET_US
+        );
+
+        private static final MapCodec<Debug> MAP_CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
+                Codec.BOOL.optionalFieldOf("debug_logging", DEFAULT_DEBUG_LOGGING)
+                        .forGetter(Debug::debugLogging),
+                Codec.intRange(1, 100000).optionalFieldOf("debug_scenario_prepare_batch_size", DEFAULT_DEBUG_SCENARIO_PREPARE_BATCH_SIZE)
+                        .forGetter(Debug::debugScenarioPrepareBatchSize),
+                Codec.intRange(1, 100000).optionalFieldOf("debug_scenario_prepare_budget_us", DEFAULT_DEBUG_SCENARIO_PREPARE_BUDGET_US)
+                        .forGetter(Debug::debugScenarioPrepareBudgetUs)
+        ).apply(instance, Debug::new));
+    }
+
+    /** 缺失字段取对应组默认值；工作量上限未配置时保留空值以执行检查上限回退。 */
+    public static final ServerConfig DEFAULT = new ServerConfig(
+            Scheduling.DEFAULT, BoundedTasks.DEFAULT, EntityState.DEFAULT, Positioning.DEFAULT, Debug.DEFAULT,
+            DEFAULT_OVERLAY_DIRECTORY, NearbyProductLimits.DEFAULT);
+
+    /** 五组 MapCodec 直接合并键，只有 nearby_products 保留独立嵌套对象。 */
+    public static final Codec<ServerConfig> CODEC = RecordCodecBuilder.create(instance -> instance.group(
+            Scheduling.MAP_CODEC.forGetter(ServerConfig::scheduling),
+            BoundedTasks.MAP_CODEC.forGetter(ServerConfig::boundedTasks),
+            EntityState.MAP_CODEC.forGetter(ServerConfig::entityState),
+            Positioning.MAP_CODEC.forGetter(ServerConfig::positioning),
+            Debug.MAP_CODEC.forGetter(ServerConfig::debug),
             Codec.STRING.optionalFieldOf("overlay_directory", DEFAULT_OVERLAY_DIRECTORY)
                     .forGetter(ServerConfig::overlayDirectory),
-            Codec.intRange(1, 72000).optionalFieldOf("fabric_lifespan_fallback_ticks", DEFAULT_FABRIC_LIFESPAN_FALLBACK_TICKS)
-                    .forGetter(ServerConfig::fabricLifespanFallbackTicks),
-            Codec.BOOL.optionalFieldOf("debug_logging", DEFAULT_DEBUG_LOGGING)
-                    .forGetter(ServerConfig::debugLogging),
-            Codec.intRange(100, 100000).optionalFieldOf("server_budget_us", DEFAULT_SERVER_BUDGET_US)
-                    .forGetter(ServerConfig::serverBudgetUs),
-            // 可选键：缺失时回退到 max_checks_per_tick，避免既有配置被无条件压低预算
-            Codec.intRange(1, 100000).optionalFieldOf("max_work_units_per_tick")
-                    .forGetter(ServerConfig::maxWorkUnitsPerTick),
-            Codec.intRange(1, 100000).optionalFieldOf("effects_work_units_per_tick", DEFAULT_EFFECTS_WORK_UNITS_PER_TICK)
-                    .forGetter(ServerConfig::effectsWorkUnitsPerTick),
-            Codec.intRange(1, 1200).optionalFieldOf("check_spread_window_ticks", DEFAULT_CHECK_SPREAD_WINDOW_TICKS)
-                    .forGetter(ServerConfig::checkSpreadWindowTicks),
-            Codec.intRange(1, 100000).optionalFieldOf("dispatch_batch_size", DEFAULT_DISPATCH_BATCH_SIZE)
-                    .forGetter(ServerConfig::dispatchBatchSize),
-            // 实体状态：允许 0 表示不授予保护/冷却，所以下限为 0（其余键下限均为 1）
-            Codec.intRange(0, 3600).optionalFieldOf("new_product_protection_seconds", DEFAULT_NEW_PRODUCT_PROTECTION_SECONDS)
-                    .forGetter(ServerConfig::newProductProtectionSeconds),
-            Codec.intRange(0, 3600).optionalFieldOf("conversion_cooldown_seconds", DEFAULT_CONVERSION_COOLDOWN_SECONDS)
-                    .forGetter(ServerConfig::conversionCooldownSeconds),
-            // 位置搜索每刻候选检查上限：0 会让搜索停摆，故下限为 1
-            Codec.intRange(1, 4096).optionalFieldOf("position_search_checks_per_tick", DEFAULT_POSITION_SEARCH_CHECKS_PER_TICK)
-                    .forGetter(ServerConfig::positionSearchChecksPerTick),
-            // 只影响 debug 场景的准备阶段（每 tick 源数量上限、准备软预算），不参与 server_budget_us
-            Codec.intRange(1, 100000).optionalFieldOf("debug_scenario_prepare_batch_size", DEFAULT_DEBUG_SCENARIO_PREPARE_BATCH_SIZE)
-                    .forGetter(ServerConfig::debugScenarioPrepareBatchSize),
-            // 单位微秒：2000us 即 2_000_000 纳秒
-            Codec.intRange(1, 100000).optionalFieldOf("debug_scenario_prepare_budget_us", DEFAULT_DEBUG_SCENARIO_PREPARE_BUDGET_US)
-                    .forGetter(ServerConfig::debugScenarioPrepareBudgetUs)
+            NearbyProductLimits.CODEC.optionalFieldOf("nearby_products", NearbyProductLimits.DEFAULT)
+                    .forGetter(ServerConfig::nearbyProducts)
     ).apply(instance, ServerConfig::new));
 
-    // 便捷构造：不含放置半径上限与邻近阈值，分别取默认上限与 NearbyProductLimits.DEFAULT；供 BASE_CODEC 的 16 字段组使用
-    @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
-    public ServerConfig(int checkIntervalTicks, int backoffMaxTicks, int maxChecksPerTick, String overlayDirectory, int fabricLifespanFallbackTicks, boolean debugLogging, int serverBudgetUs, Optional<Integer> maxWorkUnitsPerTick, int effectsWorkUnitsPerTick, int checkSpreadWindowTicks, int dispatchBatchSize, int newProductProtectionSeconds, int conversionCooldownSeconds, int positionSearchChecksPerTick, int debugScenarioPrepareBatchSize, int debugScenarioPrepareBudgetUs) {
-        this(checkIntervalTicks, backoffMaxTicks, maxChecksPerTick, overlayDirectory, fabricLifespanFallbackTicks, debugLogging, serverBudgetUs, maxWorkUnitsPerTick, effectsWorkUnitsPerTick, checkSpreadWindowTicks, dispatchBatchSize, newProductProtectionSeconds, conversionCooldownSeconds, positionSearchChecksPerTick, debugScenarioPrepareBatchSize, debugScenarioPrepareBudgetUs, DEFAULT_MAX_PLACE_BLOCK_RADIUS, NearbyProductLimits.DEFAULT, DEFAULT_RESCAN_ENTITIES_PER_STEP, DEFAULT_CANCELS_PER_STEP, DEFAULT_PREPARE_GROUPS_PER_STEP, DEFAULT_SETTLEMENT_RECOVERY_MAX_ATTEMPTS);
+    /** 检查间隔刻数。 */
+    public int checkIntervalTicks() {
+        return scheduling.checkIntervalTicks();
     }
 
-    // 便捷构造：不含邻近阈值参数，统一取 NearbyProductLimits.DEFAULT
-    @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
-    public ServerConfig(int checkIntervalTicks, int backoffMaxTicks, int maxChecksPerTick, String overlayDirectory, int fabricLifespanFallbackTicks, boolean debugLogging, int serverBudgetUs, Optional<Integer> maxWorkUnitsPerTick, int effectsWorkUnitsPerTick, int checkSpreadWindowTicks, int dispatchBatchSize, int newProductProtectionSeconds, int conversionCooldownSeconds, int positionSearchChecksPerTick, int debugScenarioPrepareBatchSize, int debugScenarioPrepareBudgetUs, int maxPlaceBlockRadius) {
-        this(checkIntervalTicks, backoffMaxTicks, maxChecksPerTick, overlayDirectory, fabricLifespanFallbackTicks, debugLogging, serverBudgetUs, maxWorkUnitsPerTick, effectsWorkUnitsPerTick, checkSpreadWindowTicks, dispatchBatchSize, newProductProtectionSeconds, conversionCooldownSeconds, positionSearchChecksPerTick, debugScenarioPrepareBatchSize, debugScenarioPrepareBudgetUs, maxPlaceBlockRadius, NearbyProductLimits.DEFAULT, DEFAULT_RESCAN_ENTITIES_PER_STEP, DEFAULT_CANCELS_PER_STEP, DEFAULT_PREPARE_GROUPS_PER_STEP, DEFAULT_SETTLEMENT_RECOVERY_MAX_ATTEMPTS);
+    /** 退避上限刻数。 */
+    public int backoffMaxTicks() {
+        return scheduling.backoffMaxTicks();
     }
 
-    // 超出 16 字段的键放在本层：RecordCodecBuilder 单组最多 16 个字段，BASE_CODEC 已是 16 项满额
-    public static final Codec<ServerConfig> CODEC = RecordCodecBuilder.create(instance -> instance.group(
-            BASE_CODEC.forGetter(value -> value),
-            Codec.intRange(1, Integer.MAX_VALUE)
-                    .optionalFieldOf("max_place_block_radius", DEFAULT_MAX_PLACE_BLOCK_RADIUS)
-                    .forGetter(ServerConfig::maxPlaceBlockRadius),
-            NearbyProductLimits.CODEC.optionalFieldOf("nearby_products", NearbyProductLimits.DEFAULT)
-                    .forGetter(ServerConfig::nearbyProducts),
-            // 回扫每步实体上限：把整维回扫摊到多个 tick，避免单 tick 处理上万实体
-            Codec.intRange(1, 4096).optionalFieldOf("rescan_entities_per_step", DEFAULT_RESCAN_ENTITIES_PER_STEP)
-                    .forGetter(ServerConfig::rescanEntitiesPerStep),
-            // 清理任务每步取消上限：把停服前无法延迟的批量取消摊到多个 tick，避免单 tick 取消尖峰
-            Codec.intRange(1, 4096).optionalFieldOf("cancels_per_step", DEFAULT_CANCELS_PER_STEP)
-                    .forGetter(ServerConfig::cancelsPerStep),
-            // 结算准备每步组数：把整堆固定输入摊到多个 tick，避免单 tick 一次性准备
-            Codec.intRange(1, 4096).optionalFieldOf("prepare_groups_per_step", DEFAULT_PREPARE_GROUPS_PER_STEP)
-                    .forGetter(ServerConfig::prepareGroupsPerStep),
-            // 结算恢复重试上限：超过上限后保留账本，等下次启动全量扫描
-            Codec.intRange(1, 100)
-                    .optionalFieldOf("settlement_recovery_max_attempts", DEFAULT_SETTLEMENT_RECOVERY_MAX_ATTEMPTS)
-                    .forGetter(ServerConfig::settlementRecoveryMaxAttempts)
-    ).apply(instance, (base, maxPlaceBlockRadius, limits, rescanEntitiesPerStep, cancelsPerStep, prepareGroupsPerStep, settlementRecoveryMaxAttempts) -> new ServerConfig(base.checkIntervalTicks(), base.backoffMaxTicks(), base.maxChecksPerTick(), base.overlayDirectory(), base.fabricLifespanFallbackTicks(), base.debugLogging(), base.serverBudgetUs(), base.maxWorkUnitsPerTick(), base.effectsWorkUnitsPerTick(), base.checkSpreadWindowTicks(), base.dispatchBatchSize(), base.newProductProtectionSeconds(), base.conversionCooldownSeconds(), base.positionSearchChecksPerTick(), base.debugScenarioPrepareBatchSize(), base.debugScenarioPrepareBudgetUs(), maxPlaceBlockRadius, limits, rescanEntitiesPerStep, cancelsPerStep, prepareGroupsPerStep, settlementRecoveryMaxAttempts)));
+    /** 每 tick 检查上限，也是工作量键缺省时的回退值。 */
+    public int maxChecksPerTick() {
+        return scheduling.maxChecksPerTick();
+    }
+
+    /** 共享时间软预算，单位微秒。 */
+    public int serverBudgetUs() {
+        return scheduling.serverBudgetUs();
+    }
+
+    /** 显式工作量上限；空值回退到 maxChecksPerTick。 */
+    public Optional<Integer> maxWorkUnitsPerTick() {
+        return scheduling.maxWorkUnitsPerTick();
+    }
+
+    /** 效果类工作量上限。 */
+    public int effectsWorkUnitsPerTick() {
+        return scheduling.effectsWorkUnitsPerTick();
+    }
+
+    /** 检查平滑窗口刻数。 */
+    public int checkSpreadWindowTicks() {
+        return scheduling.checkSpreadWindowTicks();
+    }
+
+    /** 派发搬运批量上限。 */
+    public int dispatchBatchSize() {
+        return scheduling.dispatchBatchSize();
+    }
+
+    /** 回扫每步实体上限。 */
+    public int rescanEntitiesPerStep() {
+        return boundedTasks.rescanEntitiesPerStep();
+    }
+
+    /** 清理每步取消上限。 */
+    public int cancelsPerStep() {
+        return boundedTasks.cancelsPerStep();
+    }
+
+    /** 结算准备每步组数。 */
+    public int prepareGroupsPerStep() {
+        return boundedTasks.prepareGroupsPerStep();
+    }
+
+    /** 恢复交付重试上限。 */
+    public int settlementRecoveryMaxAttempts() {
+        return boundedTasks.settlementRecoveryMaxAttempts();
+    }
+
+    /** Fabric 寿命回退刻数。 */
+    public int fabricLifespanFallbackTicks() {
+        return entityState.fabricLifespanFallbackTicks();
+    }
+
+    /** 新产物保护秒数，0 表示关闭。 */
+    public int newProductProtectionSeconds() {
+        return entityState.newProductProtectionSeconds();
+    }
+
+    /** 转化冷却秒数，0 表示关闭。 */
+    public int conversionCooldownSeconds() {
+        return entityState.conversionCooldownSeconds();
+    }
+
+    /** 每 tick 位置候选检查上限。 */
+    public int positionSearchChecksPerTick() {
+        return positioning.positionSearchChecksPerTick();
+    }
+
+    /** 规则允许的最大放置半径。 */
+    public int maxPlaceBlockRadius() {
+        return positioning.maxPlaceBlockRadius();
+    }
+
+    /** 调试日志开关。 */
+    public boolean debugLogging() {
+        return debug.debugLogging();
+    }
+
+    /** 每 tick 准备源数量上限。 */
+    public int debugScenarioPrepareBatchSize() {
+        return debug.debugScenarioPrepareBatchSize();
+    }
+
+    /** 准备软预算，单位微秒。 */
+    public int debugScenarioPrepareBudgetUs() {
+        return debug.debugScenarioPrepareBudgetUs();
+    }
 
     /**
      * 由本配置换算出的运行期上限：规则加载与保存校验据此拒载超出上限的规则。
@@ -202,22 +369,22 @@ public record ServerConfig(
      * @return 运行期上限
      */
     public RuleRuntimeLimits runtimeLimits() {
-        return new RuleRuntimeLimits(maxPlaceBlockRadius);
+        return new RuleRuntimeLimits(maxPlaceBlockRadius());
     }
 
-    // 全局工作量上限：未显式配置时回退到 max_checks_per_tick，保持既有配置意图
+    /** 未显式配置工作量上限时，回退到 max_checks_per_tick。 */
     public int effectiveMaxWorkUnitsPerTick() {
-        return maxWorkUnitsPerTick.orElse(maxChecksPerTick);
+        return maxWorkUnitsPerTick().orElse(maxChecksPerTick());
     }
 
-    // 新产物临时保护刻数（20 刻/秒，允许 0）
+    /** 新产物临时保护刻数，20 刻/秒，允许 0。 */
     public int newProductProtectionTicks() {
-        return Math.max(0, newProductProtectionSeconds) * 20;
+        return Math.max(0, newProductProtectionSeconds()) * 20;
     }
 
-    // 转化冷却刻数（20 刻/秒，允许 0）
+    /** 转化冷却刻数，20 刻/秒，允许 0。 */
     public int conversionCooldownTicks() {
-        return Math.max(0, conversionCooldownSeconds) * 20;
+        return Math.max(0, conversionCooldownSeconds()) * 20;
     }
 
     // 从文件读取；文件不存在时写出默认配置并返回默认值，解析失败时记录问题并返回默认值
@@ -265,12 +432,12 @@ public record ServerConfig(
         Files.writeString(file, json.toString(), StandardCharsets.UTF_8);
     }
 
-    // 退避序列：1s → 2s → 4s → 封顶 backoffMaxTicks（失败次数从 0 开始）
+    /** 按检查间隔指数退避，封顶 backoffMaxTicks；失败次数从 0 开始。 */
     public int backoffTicks(int failureCount) {
-        int base = Math.max(1, checkIntervalTicks);
+        int base = Math.max(1, checkIntervalTicks());
         // 指数退避并以 backoffMaxTicks 封顶：间隔较小时也会收敛到上限
         int shift = Math.clamp(failureCount - 1, 0, 20);
         long ticks = (long) base << shift;
-        return (int) Math.min(ticks, backoffMaxTicks);
+        return (int) Math.min(ticks, backoffMaxTicks());
     }
 }

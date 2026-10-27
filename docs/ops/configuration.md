@@ -10,7 +10,7 @@ authority: common/src/main/java/com/meteorite/itemdespawntowhat/core/config/Serv
 ## TL;DR
 
 - 模组级服务端配置固定位于 `config/itemdespawntowhat/server.json`，两端共用同一份实现与同一个文件。
-- 文件缺失或损坏时写回默认值并继续启动；未知键被忽略，缺失键取默认值。
+- 文件缺失时写出默认配置，解析失败时报告问题并按默认值启动；未知键被忽略，缺失键取默认值。
 - 配置在运行时启动时读取一次，改完重启服务端生效；规则重载不重新读取本文件。
 
 ## 适用对象
@@ -35,7 +35,7 @@ flowchart TB
 
 ## 字段分组
 
-键名、默认值与合法区间都在 `ServerConfig` 的 Codec 里定义，下文按职责分组说明，不复制完整字段表。
+键名、默认值与合法区间都在 `ServerConfig` 的 Codec 里定义。Java 内按调度、有界任务、实体状态、位置与调试分组，各组 MapCodec 直接平铺组合；`overlay_directory` 留在顶层，`nearby_products` 保持嵌套对象。下文按使用职责说明，完整键表见[服务端配置](../wiki/zh-07-server-config.md)。
 
 | 分组 | 回答的问题 | 代表键 | 消费方 |
 |---|---|---|---|
@@ -75,12 +75,12 @@ flowchart TB
 
 ## 新增参数
 
-1. 在 `ServerConfig` 的 record 分量里加字段。
-2. 在 Codec 里加 `optionalFieldOf`（需要区间就用区间校验），缺省值指向 `DEFAULT` 的对应分量。
-3. 在 `DEFAULT` 里给出默认值；需要派生换算时加方法，而不是在调用点写字面量。
+1. 将字段加入 `ServerConfig` 中所属职责组的 record。
+2. 在该组 MapCodec 加 `optionalFieldOf` 并声明取值区间，键仍平铺在根对象。
+3. 在该组 `DEFAULT` 给出默认值；聚合层按需提供访问委托和派生换算。
 4. 若参数替换了既有硬编码常量，确认消费方改为读取配置，并在[架构总览](../architecture/overview.md)相关链路里保持口径一致。
 
-新增键不能只改 Java 而漏掉 Codec：那样解码会整体失败并回退默认，表现为所有配置项回到默认值。
+组 MapCodec 直接参与顶层组合；新增键时同步组声明、Codec 与中英文配置键表。
 
 ## 相关文档
 

@@ -100,7 +100,7 @@ flowchart LR
 | `RuleEditPayloadRegistrar`（两端 network/registrar） | 注册面 | 载荷类型、协议版本、服务端接收器与断线清理；S2C 只经路由器分发 | `RuleEditServerHandler`、`RuleEditPayloadRouter` |
 | `FabricRuleCommandRegistrar` / `NeoForgeRuleCommandRegistrar` | 注册面 | 把命令树挂到平台命令事件 | `RuleCommandTree` |
 | `ClientSetup` / `ItemDespawnToWhatClient`（两端 client 包） | 客户端接线 | 安装发送器、注册 S2C 接收器与连接绑定/解绑、客户端 tick 与界面 opener bootstrap | `RuleEditClientWorkspace`、`EditorScreenHooks` |
-| `ServerConfig`（core/config） | 配置聚合 | 模组级参数与派生换算；缺失即落盘默认值，解析失败记 Issue 并回落默认值 | `RuleRuntimeHostCore`、`ConversionRuntime` |
+| `ServerConfig`（core/config） | 配置聚合 | 以有名 record 分组聚合调度、有界任务、实体状态、位置与调试参数，MapCodec 平铺组合并保留原配置键；派生换算集中于聚合；缺失即落盘默认值，解析失败记 Issue 并回落默认值 | `RuleRuntimeHostCore`、`ConversionRuntime` |
 
 ## 4. 关键流程
 

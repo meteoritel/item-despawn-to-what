@@ -27,7 +27,7 @@ You can indent and wrap the file however you like. The game writes it as one com
 
 ## Default Configuration
 
-The block below is the complete content the game creates on the first launch, and it is also the same as leaving every setting at its default:
+The following lists the complete default values. The Codec omits keys equal to their defaults when saving. Configuration keys remain flat, with `nearby_products` as a nested object:
 
 ```json
 {
