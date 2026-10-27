@@ -100,6 +100,30 @@ def check(root: Path) -> int:
             code = re.sub(r"/\*.*?\*/|//[^\n]*", lambda match: "\n" * match.group(0).count("\n"), text, flags=re.S)
             for match in re.finditer(r"\bEditorField\.\s*\w+\s*\(", code):
                 violations.append((rel, code.count("\n", 0, match.start()) + 1, "业务字段归属", "固定字段声明由 client/edit 提供"))
+        # 编辑页面依赖装配产物与明确协作者，字段配置使用句柄，活草稿仅在会话回调内提供。
+        if "/client/" in rel:
+            code = re.sub(r"/\*.*?\*/|//[^\n]*", lambda match: "\n" * match.group(0).count("\n"), text, flags=re.S)
+            if source.name in {"RuleEditorInfoSection.java", "RuleEditorInputSection.java",
+                               "RuleEditorTriggerSection.java", "RuleEditorResultsSection.java"}:
+                for match in re.finditer(r"\bRuleEditorEditSections\s+\w+", code):
+                    violations.append((rel, code.count("\n", 0, match.start()) + 1,
+                                       "分区依赖方向", "分区只依赖明确协作者，不持有组合容器"))
+            if "/client/ui/screen/" in rel:
+                for match in re.finditer(r"\.draft\s*\(", code):
+                    violations.append((rel, code.count("\n", 0, match.start()) + 1,
+                                       "会话写权限", "只读查询使用会话值，写入使用 apply 回调"))
+            if source.name == "EditSession.java":
+                for match in re.finditer(r"\b(?:public|protected)\s+RuleDraft\s+\w+\s*\(", code):
+                    violations.append((rel, code.count("\n", 0, match.start()) + 1,
+                                       "会话写权限", "会话不公开活草稿 getter"))
+            if source.name == "FormView.java":
+                old_config = (r"(?:setRowAction|addRowAction|setRowHeight|hideRowLabel|setRowVisible|"
+                              r"pairItemCountRows|setRowVisibility|suppressRowTooltip|suppressRowHintTooltip|"
+                              r"setRowDefaultValue|setRowSliderWindow|setItemCountReferences|setCatalogFilter|"
+                              r"catalogFilter|pendingValue)")
+                for match in re.finditer(r"\bpublic\s+(?:@Nullable\s+)?[\w<>?]+\s+" + old_config + r"\s*\(String\s", code):
+                    violations.append((rel, code.count("\n", 0, match.start()) + 1,
+                                       "字段行身份", "行配置通过 FormField，不使用路径或字段名寻址"))
         for line_no, line in enumerate(text.splitlines(), 1):
             match = IMPORT_RE.match(line)
             if not match:
