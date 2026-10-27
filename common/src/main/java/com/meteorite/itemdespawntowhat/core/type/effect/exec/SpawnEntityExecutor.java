@@ -8,7 +8,6 @@ import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.EffectStep;
 import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
-import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 import com.meteorite.itemdespawntowhat.core.type.effect.EntityProduct;
 import com.meteorite.itemdespawntowhat.core.type.effect.SpawnEntityEffect;
 import java.util.ArrayList;
@@ -422,7 +421,7 @@ public final class SpawnEntityExecutor {
 
         // 产出下一个待写入世界的实体：安全落点未定时先在有界候选表里搜索，检查额度按步计费
         @Override
-        protected Production produce(ServerTickBudget budget) {
+        protected Production produce(StepBudget budget) {
             if (spawned >= target) {
                 return new Production.Finished(EffectResult.applied(0, STEPPED));
             }
@@ -432,11 +431,11 @@ public final class SpawnEntityExecutor {
                     searchCursor = 1;
                     checks++;
                     // 计价：每检查一个候选点（含地面判据与碰撞箱、危险方块读取）记 1 个工作单位
-                    spend();
+                    budget.spend();
                     consider(center);
                 }
                 while (!positionResolved && checks < checkLimit) {
-                    if (outOfBudget(budget)) {
+                    if (budget.exhausted()) {
                         break;
                     }
                     if (searchCursor >= SEARCH_OFFSETS.size()) {
@@ -449,7 +448,7 @@ public final class SpawnEntityExecutor {
                     }
                     BlockPos candidate = center.offset(SEARCH_OFFSETS.get(searchCursor++));
                     checks++;
-                    spend();
+                    budget.spend();
                     consider(candidate);
                 }
                 if (!positionResolved) {
@@ -466,7 +465,7 @@ public final class SpawnEntityExecutor {
                 return new Production.Busy();
             }
             // 搜索可能已把本步余量耗尽，写前复查预算；回执与计费由基类在真实写入后统一处理
-            if (outOfBudget(budget)) {
+            if (budget.exhausted()) {
                 return new Production.Busy();
             }
             return new Production.Next(new Unit(createEntity(hit), 1));

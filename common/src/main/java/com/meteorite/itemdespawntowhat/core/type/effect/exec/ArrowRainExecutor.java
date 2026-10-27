@@ -7,7 +7,6 @@ import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.EffectStep;
 import com.meteorite.itemdespawntowhat.core.api.TaggedId;
-import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 import com.meteorite.itemdespawntowhat.core.type.effect.ArrowRainEffect;
 import java.util.ArrayList;
 import java.util.List;
@@ -139,7 +138,7 @@ public final class ArrowRainExecutor {
 
         // 产出这一波待写入的箭矢：落点抽样与箭矢构造都在区块就绪之后进行，等待期间不重抽也不重建
         @Override
-        protected Production produce(ServerTickBudget budget) {
+        protected Production produce(StepBudget budget) {
             ServerLevel level = context.level();
             if (!pendingTarget) {
                 sampleTarget(level.random);

@@ -6,7 +6,6 @@ import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
 import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.EffectStep;
-import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 import com.meteorite.itemdespawntowhat.core.type.effect.LightningEffect;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -113,7 +112,7 @@ public final class LightningExecutor {
 
         // 产出这一道待写入的闪电：水平坐标抽定后跨等待保留；区块就绪才创建实体，地表高度留到写入时求交
         @Override
-        protected Production produce(ServerTickBudget budget) {
+        protected Production produce(StepBudget budget) {
             if (!pendingTarget) {
                 sampleTarget();
                 pendingTarget = true;

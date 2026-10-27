@@ -4,7 +4,6 @@ import com.meteorite.itemdespawntowhat.core.api.ChunkRequirement;
 import com.meteorite.itemdespawntowhat.core.api.EffectContext;
 import com.meteorite.itemdespawntowhat.core.api.EffectExecution;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
-import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 import com.meteorite.itemdespawntowhat.core.type.effect.EntityProduct;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -96,7 +95,7 @@ public final class SpawnItemExecutor {
         }
 
         @Override
-        protected Production produce(ServerTickBudget budget) {
+        protected Production produce(StepBudget budget) {
             if (remaining <= 0) {
                 // 没有待写单位：直接给出终态，不额外写世界
                 return new Production.Finished(result());

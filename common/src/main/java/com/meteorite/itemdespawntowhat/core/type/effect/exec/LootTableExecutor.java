@@ -7,7 +7,6 @@ import com.meteorite.itemdespawntowhat.core.api.EffectPreparation;
 import com.meteorite.itemdespawntowhat.core.api.EffectResult;
 import com.meteorite.itemdespawntowhat.core.api.EffectStep;
 import com.meteorite.itemdespawntowhat.core.api.RuntimeObserver;
-import com.meteorite.itemdespawntowhat.core.api.scheduler.ServerTickBudget;
 import com.meteorite.itemdespawntowhat.core.type.effect.LootTableEffect;
 import java.util.ArrayList;
 import java.util.List;
@@ -178,7 +177,7 @@ public final class LootTableExecutor {
         }
 
         @Override
-        protected Production produce(ServerTickBudget budget) {
+        protected Production produce(StepBudget budget) {
             if (isComplete()) {
                 // 没有待写单位：空表与已交付由终态结果区分
                 return new Production.Finished(result());

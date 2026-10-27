@@ -305,7 +305,7 @@ public final class PlaceBlockExecutor {
      * 未完成时返回续接或区块需求，下一次推进从保留的游标继续；区块未加载不改变计划量。
      * 需要计数时计数游标与已数/已放量都在共享账上（见 {@link NeighbourCount}），本类只持有自己的放置游标。
      */
-    private static final class Placement implements EffectExecution {
+    private static final class Placement extends BoundedExecution {
         private final EffectContext context;
         private final Block block;
         private final BlockPos center;
@@ -318,7 +318,6 @@ public final class PlaceBlockExecutor {
         private final @Nullable BatchPlan batch;
         private int requestIndex;
         private int requestPlaced;
-        private @Nullable EffectResult result;
         private Placement(PlaceBlockEffect effect, EffectContext context, PlacementPlan plan, @Nullable BatchPlan batch) {
             this.context = context;
             this.block = plan.block();
@@ -416,61 +415,58 @@ public final class PlaceBlockExecutor {
         }
 
         @Override
-        public EffectStep advance(ServerTickBudget budget) {
-            if (result != null) {
-                return EffectStep.done(result);
-            }
-            int visits = 0;
-            // 本步已上报但尚未由调度器计入预算的工作量，用于把单步处理量夹在本 tick 余量内
-            int reported = 0;
+        protected int workUnitsPerStep() {
+            return MAX_VISITS_PER_STEP;
+        }
+
+        @Override
+        protected Advancement advanceStep(StepBudget budget) {
             if (count != null && count.counting()) {
-                // 计数由先走到这里的一组推进共享账：数完之前任何组都不放置，避免边数边放突破 limit
-                CountStep counted = count.advance(context.level(), block, budget, MAX_VISITS_PER_STEP - visits);
-                visits += counted.reads();
-                reported += counted.reads();
-                if (counted.awaiting() != null) {
-                    return new EffectStep.AwaitChunks(counted.awaiting());
+                // 计数和放置组合使用同一额度，计数完成前各组都不写入。
+                ChunkRequirement awaiting = count.advance(context.level(), block, budget);
+                if (awaiting != null) {
+                    return stop(new EffectStep.AwaitChunks(awaiting));
                 }
                 if (count.counting()) {
-                    return EffectStep.Yield.INSTANCE;
+                    return stop(EffectStep.Yield.INSTANCE);
                 }
             }
-            while (cursor < offsets.size() && canPlaceMore()) {
-                if (batch != null && batch.requests.get(requestIndex).readyTick() > budget.gameTime()) {
-                    return new EffectStep.Delay(batch.requests.get(requestIndex).readyTick());
-                }
-                if (visits >= MAX_VISITS_PER_STEP || reported >= budget.remainingWorkUnits() || budget.exhausted()) {
-                    return EffectStep.Yield.INSTANCE;
-                }
-                BlockPos pos = center.offset(offsets.get(cursor));
-                // canSurvive 可能读取相邻方块，边界两侧都须已加载。
-                if (!ChunkPresence.containsArea(context.level(), pos, 1)) {
-                    return new EffectStep.AwaitChunks(ChunkRequirement.around(pos, 1));
-                }
-                cursor++;
-                visits++;
-                reported++;
-                // 计价：一个候选位置的读取与放置尝试记 1 个工作单位
-                StepWorkCounter.report(1);
-                if (context.level().getBlockState(pos).canBeReplaced()) {
-                    BlockState state = orientedState(pos);
-                    if (state != null && context.level().setBlock(pos, state, Block.UPDATE_ALL)) {
-                        placed++;
-                        if (count != null) {
-                            count.recordPlaced();
-                        }
-                        // 真实完成量回执：每成功放置一个方块计 1
-                        reportPlaced();
+            if (cursor >= offsets.size() || !canPlaceMore()) {
+                return stop(EffectStep.done(EffectResult.applied(0, PLACED_BY_STEPS)));
+            }
+            if (batch != null && batch.requests.get(requestIndex).readyTick() > budget.gameTime()) {
+                return stop(new EffectStep.Delay(batch.requests.get(requestIndex).readyTick()));
+            }
+            if (budget.exhausted()) {
+                return stop(EffectStep.Yield.INSTANCE);
+            }
+            BlockPos pos = center.offset(offsets.get(cursor));
+            // canSurvive 可能读取相邻方块，等待时不推进候选游标。
+            if (!ChunkPresence.containsArea(context.level(), pos, 1)) {
+                return stop(new EffectStep.AwaitChunks(ChunkRequirement.around(pos, 1)));
+            }
+            cursor++;
+            // 一次候选尝试统一计费；不可替换、无支撑和写入失败都继续下一个候选。
+            budget.spend();
+            if (context.level().getBlockState(pos).canBeReplaced()) {
+                BlockState state = orientedState(pos);
+                if (state != null && context.level().setBlock(pos, state, Block.UPDATE_ALL)) {
+                    placed++;
+                    if (count != null) {
+                        count.recordPlaced();
                     }
+                    reportPlaced();
                 }
             }
-            // 放置结束：记录真实成功数、计划上限与候选数，便于验收与排查半径不足
+            return Advancement.Continue.INSTANCE;
+        }
+
+        @Override
+        protected void beforeFinish() {
             if (RuntimeObserver.current().enabled()) {
                 RuntimeObserver.current().observe(context.source(), "PLACE_BLOCK_RESULT",
                         "candidates", offsets.size(), "placed", placed, "target", target);
             }
-            result = EffectResult.applied(0, PLACED_BY_STEPS);
-            return EffectStep.done(result);
         }
 
         // 先填满当前组的结果预算，再推进下一组；每组只向自己的成本账回执成功量。
@@ -487,8 +483,6 @@ public final class PlaceBlockExecutor {
             }
         }
     }
-
-    private record CountStep(int reads, @Nullable ChunkRequirement awaiting) {}
 
     /** 同槽位各组共用的环境预算；按区段检查调色板，只遍历含目标方块区段与统计方框的交集。 */
     private static final class NeighbourCount {
@@ -513,10 +507,9 @@ public final class PlaceBlockExecutor {
         private void recordPlaced() { placed++; }
 
         // 区段探测和方块读取各计一次工作量；当前区段保留为跨刻的区块等待锚点。
-        private CountStep advance(ServerLevel level, Block block, ServerTickBudget budget, int readCap) {
-            int work = 0;
-            while (!done && work < readCap) {
-                if (budget.exhausted() || work >= budget.remainingWorkUnits()) {
+        private @Nullable ChunkRequirement advance(ServerLevel level, Block block, StepBudget budget) {
+            while (!done) {
+                if (budget.exhausted()) {
                     break;
                 }
                 if (pending == null) {
@@ -539,13 +532,12 @@ public final class PlaceBlockExecutor {
                     pending = new BlockPos(section.getX() << 4, section.getY() << 4, section.getZ() << 4);
                 }
                 if (!ChunkPresence.contains(level, pending)) {
-                    return new CountStep(work, ChunkRequirement.at(pending));
+                    return ChunkRequirement.at(pending);
                 }
                 if (positions == null) {
                     LevelChunkSection section = level.getChunk(pending.getX() >> 4, pending.getZ() >> 4)
                             .getSection(level.getSectionIndex(pending.getY()));
-                    work++;
-                    StepWorkCounter.report(1);
+                    budget.spend();
                     if (!section.maybeHas(state -> state.is(block))) {
                         pending = null;
                         continue;
@@ -559,8 +551,7 @@ public final class PlaceBlockExecutor {
                     positions = BlockPos.betweenClosed(min, max).iterator();
                     continue;
                 }
-                work++;
-                StepWorkCounter.report(1);
+                budget.spend();
                 if (level.getBlockState(positions.next()).is(block) && ++existing >= limit) {
                     done = true;
                 }
@@ -569,7 +560,7 @@ public final class PlaceBlockExecutor {
                     pending = null;
                 }
             }
-            return new CountStep(work, null);
+            return null;
         }
     }
 }
