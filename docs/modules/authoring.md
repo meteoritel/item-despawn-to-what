@@ -72,7 +72,7 @@ flowchart LR
 | 类型（`core/catalog`、`core/network`、`core/service`、`core/command`、`core/debug` 下） | 角色 | 职责 | 协作对象 |
 |---|---|---|---|
 | `RuleEditServerHandler` | 入口门面 | 按覆盖层根目录缓存会话管理器与服务；逐包转发；就绪判定；在唯一构造点注入 `canEdit` 权限谓词；每 tick 轮询与超时回收 | `RuleEditService`、`EditSessionManager`、`RuleEditServerContext` |
-| `EditAdmission` | 准入判定 | 按 owns → isOwner → confirmed → permission 固定顺序准入；`Reason` 表统一映射拒绝状态码与文案 key；调用方只组装载荷 | `EditSessionManager`、`RuleEditService` |
+| `EditAdmission` | 准入判定 | 玩家请求基于单份会话快照，按会话号 → 持有者 → 确认 → 权限顺序判定，返回拒绝原因与状态码；内部续接检查会话匹配，回执文案由状态码派生 | `EditSessionManager`、`RuleEditService` |
 | `RuleEditService` | 应用服务 | 按准入结论校验会话归属、幂等回放、分片收齐判定、构造保存任务、组装回执（含准入拒绝回执）、按需安排新快照；只产出待下发载荷 | `EditSessionManager`、`RuleSaveTask`、`RuleSnapshotTask`、`RuleCatalogService` |
 | `EditSessionManager` / `RuleEditSessionLimits` | 目标锁 | 单目标全局唯一会话的状态机；租约、心跳与申请窗口以服务端活动 tick 计时；版本戳读写委托覆盖层存储 | `RuleOverlayStore`、`RuleEditService` |
 | `RuleOverlayStore` | 文件侧并发边界 | 后台文件调用队列、磁盘修订指纹、覆盖层根目录就绪与停滞检测 | `RuleOverlayWriter`、`RuleSaveTask`、`RuleSnapshotTask` |

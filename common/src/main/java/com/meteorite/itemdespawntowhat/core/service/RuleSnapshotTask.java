@@ -122,7 +122,7 @@ final class RuleSnapshotTask implements ServerTask {
 
     private StepResult advance(ServerTickBudget budget) {
         if (finished) { return StepResult.done(1); }
-        if (cancelled || EditAdmission.refusal(admission.admitSession(sessionId)) != null
+        if (cancelled || !admission.sessionMatches(sessionId)
                 || context.saveReloadContext() != reloadContext) {
             invalidate();
             pollCompletion();

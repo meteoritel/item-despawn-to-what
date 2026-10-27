@@ -189,7 +189,7 @@ public final class RuleEditService {
                     args(Integer.toString(RuleEditProtocol.VERSION), Integer.toString(payload.protocolVersion())),
                     List.of(), false, false));
         }
-        EditAdmission.Refusal refusal = EditAdmission.refusal(admission.admitOwner(player, payload.sessionId()));
+        EditAdmission.Refusal refusal = admission.admitOwner(player, payload.sessionId());
         if (refusal != null) {
             return Outbound.of(lost(refusal, payload.sessionId(), ""));
         }
@@ -201,7 +201,7 @@ public final class RuleEditService {
 
     // C2S 心跳：成功不回执，失败回 SESSION_EXPIRED（客户端据此回到未持有状态）
     public Outbound heartbeat(ServerPlayer player, HeartbeatRuleEditorPayload payload, long tick) {
-        EditAdmission.Refusal refusal = EditAdmission.refusal(admission.admitMember(player, payload.sessionId()));
+        EditAdmission.Refusal refusal = admission.admitMember(player, payload.sessionId());
         if (refusal != null) {
             return Outbound.of(lost(refusal, payload.sessionId(), ""));
         }
@@ -211,7 +211,7 @@ public final class RuleEditService {
 
     // C2S 关闭：保存期间延后释放，回滚与清理结束后才发送终态
     public Outbound close(ServerPlayer player, CloseRuleEditorPayload payload) {
-        EditAdmission.Refusal refusal = EditAdmission.refusal(admission.admitMember(player, payload.sessionId()));
+        EditAdmission.Refusal refusal = admission.admitMember(player, payload.sessionId());
         if (refusal != null) {
             return Outbound.of(lost(refusal, payload.sessionId(), ""));
         }
@@ -224,7 +224,7 @@ public final class RuleEditService {
     // C2S 快照请求：必须是当前会话持有者
     public Outbound requestSnapshot(ServerPlayer player, RuleEditServerContext context, MinecraftServer server,
                                     RequestRuleSnapshotPayload payload, long tick) {
-        EditAdmission.Refusal refusal = EditAdmission.refusal(admission.admitConfirmed(player, payload.sessionId()));
+        EditAdmission.Refusal refusal = admission.admitConfirmed(player, payload.sessionId());
         if (refusal != null) {
             // 未确认的 OPENING 会话不接受快照请求，避免绕过确认握手
             return Outbound.of(lost(refusal, payload.sessionId(), ""));
@@ -235,7 +235,7 @@ public final class RuleEditService {
 
     // C2S 目录请求：按来源分层缓存分页下发；来源实现为空时返回空目录 + lastPage=true
     public Outbound requestCatalog(ServerPlayer player, RequestRuleCatalogPayload payload, long tick) {
-        EditAdmission.Refusal refusal = EditAdmission.refusal(admission.admitConfirmed(player, payload.sessionId()));
+        EditAdmission.Refusal refusal = admission.admitConfirmed(player, payload.sessionId());
         if (refusal != null) {
             // 会话状态优先于请求参数：未确认的 OPENING 会话不接受目录请求
             return Outbound.of(lost(refusal, payload.sessionId(), ""));
@@ -270,7 +270,7 @@ public final class RuleEditService {
      * @return 来源视图应答（整包或分片），或会话失效回执
      */
     public Outbound requestSourceView(ServerPlayer player, RequestRuleSourceViewPayload payload, long tick) {
-        EditAdmission.Refusal refusal = EditAdmission.refusal(admission.admitConfirmed(player, payload.sessionId()));
+        EditAdmission.Refusal refusal = admission.admitConfirmed(player, payload.sessionId());
         if (refusal != null) {
             return Outbound.of(lost(refusal, payload.sessionId(), ""));
         }
@@ -315,7 +315,7 @@ public final class RuleEditService {
      */
     public Outbound requestLifespan(ServerPlayer player, RuleEditServerContext context,
             RequestRuleLifespanPayload payload, long tick) {
-        EditAdmission.Refusal refusal = EditAdmission.refusal(admission.admitConfirmed(player, payload.sessionId()));
+        EditAdmission.Refusal refusal = admission.admitConfirmed(player, payload.sessionId());
         if (refusal != null) {
             return Outbound.of(lost(refusal, payload.sessionId(), ""));
         }
@@ -337,7 +337,7 @@ public final class RuleEditService {
         UUID owner = lifespanOwner;
         if (pending == null || owner == null) return null;
         ServerPlayer player = server.getPlayerList().getPlayer(owner);
-        if (EditAdmission.refusal(admission.admitConfirmed(player, pending.sessionId())) != null) {
+        if (admission.admitConfirmed(player, pending.sessionId()) != null) {
             pendingLifespan = null;
             lifespanOwner = null;
             return null;
@@ -369,7 +369,7 @@ public final class RuleEditService {
      */
     public Outbound submitChunk(ServerPlayer player, RuleEditServerContext context, MinecraftServer server,
                                 RuleChunkPayload payload, long tick) {
-        EditAdmission.Refusal refusal = EditAdmission.refusal(admission.admitMember(player, payload.sessionId()));
+        EditAdmission.Refusal refusal = admission.admitMember(player, payload.sessionId());
         if (refusal != null) {
             if (abortReplayedSave(player, payload.sessionId(), payload.correlationId())) { return Outbound.EMPTY; }
             return Outbound.of(lost(refusal, payload.sessionId(), payload.correlationId()));
@@ -405,7 +405,7 @@ public final class RuleEditService {
             return Outbound.of(result(sessionId, operationId, RuleSaveStatus.INVALID_REQUEST,
                     RuleSaveStatus.INVALID_REQUEST.messageKey(), args("operationId"), List.of(), false, false));
         }
-        EditAdmission.Refusal refusal = EditAdmission.refusal(admission.admitConfirmed(player, sessionId));
+        EditAdmission.Refusal refusal = admission.admitConfirmed(player, sessionId);
         if (refusal != null) {
             // 在途保存期间的重发不新增回执：先中止该次保存，由收尾统一回终态
             if (abortReplayedSave(player, sessionId, operationId)) { return Outbound.EMPTY; }
@@ -479,7 +479,7 @@ public final class RuleEditService {
         if (pendingSave == null) { return null; }
         pendingSave.pollCompletion();
         ServerPlayer owner = server.getPlayerList().getPlayer(savingOwner);
-        EditAdmission.Refusal refusal = EditAdmission.refusal(admission.admitMember(owner, savingSessionId));
+        EditAdmission.Refusal refusal = admission.admitMember(owner, savingSessionId);
         if (refusal != null) {
             pendingSave.invalidate();
             // 玩家离线或失权后回执已无接收者，释放会话让下一位玩家取锁
@@ -498,7 +498,7 @@ public final class RuleEditService {
         Runnable reload = deferredReload;
         deferredReload = null;
         if (reload != null) { reload.run(); }
-        if (payload != null && EditAdmission.refusal(admission.admitSession(payload.sessionId())) == null
+        if (payload != null && admission.sessionMatches(payload.sessionId())
                 && (reload != null || RuleSaveStatus.VERSION_CONFLICT.id().equals(payload.statusCode())
                     || RuleSaveStatus.SAVED_NOT_RELOADED.id().equals(payload.statusCode()))) {
             requestedSnapshot = new SnapshotRequest(savingOwner, payload.sessionId(), "");
@@ -514,7 +514,7 @@ public final class RuleEditService {
      */
     public Outbound cancelSave(ServerPlayer player, CancelRuleSavePayload payload) {
         // 取消只撤回本人仍在途的请求，不新增写权限，因此只判会话号与持有者
-        if (EditAdmission.refusal(admission.admitOwner(player, payload.sessionId())) != null) { return Outbound.EMPTY; }
+        if (admission.admitOwner(player, payload.sessionId()) != null) { return Outbound.EMPTY; }
         if (pendingSave != null) {
             if (payload.sessionId().equals(savingSessionId) && payload.operationId().equals(savingOperationId)) {
                 pendingSave.cancel();
@@ -541,7 +541,7 @@ public final class RuleEditService {
             return null;
         }
         ServerPlayer player = server.getPlayerList().getPlayer(savingOwner);
-        if (EditAdmission.refusal(admission.admitMember(player, savingSessionId)) != null) { return null; }
+        if (admission.admitMember(player, savingSessionId) != null) { return null; }
         RuleSaveProgress progress = pendingSave.progress();
         if (progress.equals(sentProgress)) { return null; }
         sentProgress = progress;
@@ -654,7 +654,7 @@ public final class RuleEditService {
         startSnapshot(server, context);
         if (snapshotPackets.isEmpty() || deliveringSnapshot == null) { return null; }
         ServerPlayer player = server.getPlayerList().getPlayer(deliveringSnapshot.owner());
-        EditAdmission.Refusal refusal = EditAdmission.refusal(admission.admitMember(player, deliveringSnapshot.sessionId()));
+        EditAdmission.Refusal refusal = admission.admitMember(player, deliveringSnapshot.sessionId());
         if (refusal != null) {
             clearSnapshotPackets(refusal.reason().name().toLowerCase(java.util.Locale.ROOT));
             return null;
@@ -717,7 +717,7 @@ public final class RuleEditService {
         if (pendingSave != null) { return; }
         if (requestedSnapshot != null && pendingSnapshot == null) {
             SnapshotRequest current = requestedSnapshot;
-            if (EditAdmission.refusal(admission.admitSession(current.sessionId())) != null
+            if (!admission.sessionMatches(current.sessionId())
                 || context.saveReloadContext() == null) {
                 requestedSnapshot = null;
                 return;
@@ -743,7 +743,7 @@ public final class RuleEditService {
 
     // 准入拒绝的统一回执：状态码与文案 key 由 EditAdmission 决定，这里只补会话号与操作号
     private RuleSaveResultPayload lost(EditAdmission.Refusal refusal, String sessionId, String operationId) {
-        return result(sessionId, operationId, refusal.status(), refusal.messageCode(),
+        return result(sessionId, operationId, refusal.status(), refusal.status().messageKey(),
                 List.of(), List.of(), false, false);
     }
 

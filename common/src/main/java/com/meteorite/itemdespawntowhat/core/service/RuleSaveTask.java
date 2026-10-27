@@ -144,7 +144,7 @@ final class RuleSaveTask implements ServerTask {
         if (phase == Phase.DONE) { return StepResult.done(1); }
         var player = server.getPlayerList().getPlayer(owner);
         // 本步准入拒绝：中止时据此决定终态
-        EditAdmission.Refusal refusal = EditAdmission.refusal(admission.admitMember(player, sessionId));
+        EditAdmission.Refusal refusal = admission.admitMember(player, sessionId);
         if (refusal != null) {
             invalidate();
         }
